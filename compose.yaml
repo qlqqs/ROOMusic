@@ -1,0 +1,55 @@
+name: roomusic
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    ports:
+      # 开发依赖仅供本机访问，避免数据库端口暴露到局域网。
+      - "127.0.0.1:${PG_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: "${PG_DATABASE:-roomusic}"
+      POSTGRES_USER: "${PG_USER:-roomusic}"
+      POSTGRES_PASSWORD: "${PG_PASSWORD:?请在 .env 中设置 PG_PASSWORD}"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-roomusic} -d ${PG_DATABASE:-roomusic}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:8-alpine
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.45.0
+    ports:
+      - "127.0.0.1:${MEILI_PORT:-7700}:7700"
+    environment:
+      MEILI_ENV: development
+      MEILI_MASTER_KEY: "${MEILI_MASTER_KEY:?请在 .env 中设置 MEILI_MASTER_KEY}"
+      MEILI_NO_ANALYTICS: "true"
+    volumes:
+      - meilisearch-data:/meili_data
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:7700/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:
+  meilisearch-data:

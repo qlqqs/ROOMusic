@@ -1,0 +1,24 @@
+# 本地环境变量和敏感配置
+.env
+.env.*
+!.env.example
+
+# 本地音乐库与运行期数据
+/music/
+/data/
+/appdata/
+
+# 构建与依赖产物
+/node_modules/
+/dist/
+/build/
+/coverage/
+/roomusic
+*.exe
+*.log
+*.tmp
+
+# 编辑器配置
+.idea/
+.vscode/
+*.swp

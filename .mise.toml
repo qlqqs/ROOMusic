@@ -1,0 +1,23 @@
+[tools]
+go = "1.25.10"
+node = "24.16.0"
+
+[tasks.env-up]
+description = "启动本地开发依赖（PostgreSQL / Redis / Meilisearch）"
+run = "docker compose up -d --wait"
+
+[tasks.env-down]
+description = "停止本地开发依赖"
+run = "docker compose down"
+
+[tasks.env-logs]
+description = "查看本地开发依赖日志"
+run = "docker compose logs -f postgres redis meilisearch"
+
+[tasks.env-check]
+description = "检查工具链和 Compose 配置"
+run = '''
+mise current
+docker compose config --quiet
+docker compose ps
+'''
