@@ -1,0 +1,4 @@
+
+{"file":"backend/cmd/roomusic/config.go","reason":"公网 URL 与安全 Cookie 的启动配置及严格来源校验"}
+{"file":"frontend/vite.config.ts","reason":"开发 API 代理与热更新入口"}
+{"file":"backend/migrations/0002_core_slice.sql","reason":"setup_state 重置边界与业务表清理顺序"}

@@ -48,6 +48,25 @@ mise run env-up
 mise run env-check
 ```
 
+## 快捷开发工作流
+
+复制 `.env.example` 为 `.env` 并填写本地 PostgreSQL 密码后，可用一条命令启动 PostgreSQL、Go 后端和 Vite 前端：
+
+```bash
+make dev
+```
+
+前端开发地址为 `http://localhost:5173`，后端地址为 `http://localhost:8080`。React 修改由 Vite 热更新；Go 或迁移文件修改会自动重启后端。按 `Ctrl-C` 会同时停止两个开发进程，PostgreSQL 容器保持运行。
+
+如需重新体验首次初始化流程，开发环境可清空业务数据：
+
+```bash
+make dev-reset
+# 或 CONFIRM=1 make dev-reset（跳过交互确认）
+```
+
+该命令会删除用户、会话、目录、扫描结果和操作日志，但保留数据库迁移；`ROOMUSIC_ENV=production` 时会拒绝执行。
+
 查看日志或停止依赖：
 
 ```bash
