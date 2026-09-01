@@ -1,25 +1,46 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
+	"path"
+	"strings"
 	"time"
 )
 
-// frontendAssets is populated by the production build when assets are copied
-// into backend/web. The development server remains the preferred local loop.
+// frontendAssets is populated by the production build in this package's web
+// directory. The development server remains the preferred local loop.
+//
 //go:embed web
 var frontendAssets embed.FS
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	config, configErr := loadServerConfig()
+	if configErr != nil {
+		logger.Error("roomusic configuration invalid", "event", "platform.config.invalid", "error", configErr)
+		os.Exit(1)
+	}
+	database, databaseErr := openDatabase(context.Background(), config.DatabaseURL)
+	if databaseErr != nil {
+		logger.Error("roomusic database unavailable", "event", "platform.database.unavailable", "error", databaseErr)
+	}
+	if database != nil {
+		defer database.connection.Close()
+	}
+	var requestHandler http.Handler = buildHandler(logger, database)
+	if database != nil {
+		requestHandler = buildApplicationHandler(config, database, logger)
+	}
 	server := &http.Server{
-		Addr:              configuredAddress(),
-		Handler:           buildHandler(logger),
+		Addr:              config.Address,
+		Handler:           requestHandler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -37,10 +58,13 @@ func configuredAddress() string {
 	return ":8080"
 }
 
-func buildHandler(logger *slog.Logger) http.Handler {
+func buildHandler(logger *slog.Logger, database *databaseState) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthHandler)
-	mux.HandleFunc("GET /readyz", readinessHandler)
+	mux.HandleFunc("GET /readyz", func(responseWriter http.ResponseWriter, _ *http.Request) {
+		statusCode, status := readinessStatus(database)
+		writeJSON(responseWriter, statusCode, map[string]string{"status": status})
+	})
 	mux.Handle("/", productionFrontendHandler())
 
 	return requestIDMiddleware(logger, mux)
@@ -57,21 +81,44 @@ func readinessHandler(responseWriter http.ResponseWriter, _ *http.Request) {
 }
 
 func productionFrontendHandler() http.Handler {
-	fileServer := http.FileServer(http.FS(frontendAssets))
+	webAssets, err := fs.Sub(frontendAssets, "web")
+	if err != nil {
+		panic(fmt.Errorf("load embedded frontend assets: %w", err))
+	}
+	fileServer := http.FileServer(http.FS(webAssets))
 	return http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
-		if request.URL.Path == "/" {
-			request.URL.Path = "/web/index.html"
-		} else {
-			request.URL.Path = "/web" + request.URL.Path
+		requestedPath := strings.TrimPrefix(path.Clean(request.URL.Path), "/")
+		if requestedPath == "." || requestedPath == "" {
+			serveEmbeddedIndex(responseWriter, webAssets)
+			return
 		}
+		if _, statError := fs.Stat(webAssets, requestedPath); statError != nil {
+			if strings.HasPrefix(requestedPath, "assets/") {
+				http.NotFound(responseWriter, request)
+				return
+			}
+			serveEmbeddedIndex(responseWriter, webAssets)
+			return
+		}
+		request.URL.Path = "/" + requestedPath
 		fileServer.ServeHTTP(responseWriter, request)
 	})
+}
+
+func serveEmbeddedIndex(responseWriter http.ResponseWriter, webAssets fs.FS) {
+	indexHTML, err := fs.ReadFile(webAssets, "index.html")
+	if err != nil {
+		http.Error(responseWriter, "frontend unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	responseWriter.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = responseWriter.Write(indexHTML)
 }
 
 func requestIDMiddleware(logger *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
 		requestID := request.Header.Get("X-Request-ID")
-		if requestID == "" {
+		if !requestIDPattern.MatchString(requestID) {
 			requestID = fmt.Sprintf("req-%d", time.Now().UnixNano())
 		}
 		responseWriter.Header().Set("X-Request-ID", requestID)
