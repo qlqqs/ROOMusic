@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 3
+- **Total Sessions**: 4
 - **Last Active**: 2026-09-01
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~73 | Active |
+| `journal-1.md` | ~95 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 4 | 2026-09-01 | 完成 PostgreSQL 基础搜索 | `5ea3141` | `main` |
 | 3 | 2026-09-01 | 完成扫描格式与 CUE 扩展 | `edf7120` | `main` |
 | 2 | 2026-09-01 | 完成 Core 0 首个可浏览纵向切片 | `4111d69` | `main` |
 | 1 | 2026-09-01 | Bootstrap ROOMusic Core 0 development guidelines | `94b3e3f` | `main` |
