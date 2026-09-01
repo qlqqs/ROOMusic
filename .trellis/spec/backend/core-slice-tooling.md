@@ -16,3 +16,8 @@ UTF-8/UTF-16、单一已知音频 `FILE`、`TRACK nn AUDIO` 与合法 `INDEX 01`
 数字和引用路径错误都归类为 unsupported 诊断。CUE 虚拟来源键必须包含规范化
 引用文件与 track 编号，确保 FILE 变更不会复用旧 Track 身份；解析失败不得触发
 missing 对账或阻塞其他合法文件。
+
+搜索合同：`GET /api/v1/releases` 的可选 `q` 参数先 trim，最多 200 字节；非空值
+通过参数化 `ILIKE` 匹配 Release 标题、艺术家和关联 Track 标题，并转义 `%`、`_`
+和 `~`。COUNT 与分页列表必须复用同一过滤条件，结果保持 `title, artist, id` 稳定
+排序；查询失败返回安全错误和 request ID，不改变扫描或目录状态。

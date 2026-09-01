@@ -1,0 +1,4 @@
+{"file":"backend/cmd/roomusic/application.go","reason":"现有 Release 列表 REST handler、分页 SQL、鉴权和 DTO 边界"}
+{"file":"frontend/src/main.tsx","reason":"现有浏览页状态、Release 加载和 URL/表单交互入口"}
+{"file":"frontend/src/api.ts","reason":"Release DTO runtime decoder 与 API 请求边界"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"PostgreSQL 查询、参数化 SQL 和分页一致性约束"}

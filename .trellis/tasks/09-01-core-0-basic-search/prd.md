@@ -1,19 +1,53 @@
-# Core 0 搜索与封面体验
+# Core 0 PostgreSQL 基础搜索
 
-## Goal
+## 目标
 
-增加 PostgreSQL 基础搜索、release-level 封面发现存储和鉴权展示闭环
+在现有 Release Graph 读模型上提供可解释、稳定分页的 PostgreSQL 基础搜索，让管理员能够按发行版本标题、艺术家和曲目标题查找本地扫描结果。
 
-## Requirements
+## 背景与约束
 
-- TBD
+- 前置切片已提供 `GET /api/v1/releases`、Release 详情 DTO、来源观察和管理员会话。
+- PostgreSQL 是唯一搜索权威；不引入 Redis、Meilisearch、GraphQL 或独立索引服务。
+- 搜索只读，不修改 Release、Medium、Track 或来源文件。
+- 结果必须投影现有权威图谱，不能创建搜索专用实体或绕过现有授权。
+- 原始服务器路径、诊断内部信息和认证凭据不得出现在响应或前端。
 
-## Acceptance Criteria
+## 需求
 
-- [ ] TBD
+### R1. REST 搜索
 
-## Notes
+- 扩展 `GET /api/v1/releases` 支持可选 `q` 查询参数，并保留现有分页参数。
+- `q` 去除首尾空白；空值等价于无搜索条件。搜索至少覆盖 Release `title`、`artist` 以及关联 Track `title`，匹配不区分大小写。
+- 结果按稳定顺序 `title ASC, artist ASC, id ASC` 返回，分页参数有上限并拒绝非法值。
+- 未登录返回 401；查询错误返回稳定错误结构和 `request_id`。
 
-- Keep `prd.md` focused on requirements, constraints, and acceptance criteria.
-- Lightweight tasks can remain PRD-only.
-- For complex tasks, add `design.md` for technical design and `implement.md` for execution planning before `task.py start`.
+### R2. 前端搜索
+
+- 浏览页提供搜索输入，提交或回车更新 URL 查询状态并重新加载第一页。
+- 搜索期间显示 loading、空结果、错误和恢复状态；清空搜索恢复完整列表。
+- 前端只消费已解码的 Release DTO，不保存或拼接 bearer token，不显示原始路径。
+
+### R3. 性能与兼容
+
+- 搜索 SQL 使用参数化查询和必要的 `EXISTS`/连接条件，避免 N+1 查询和全库内存加载。
+- 无 `q` 时现有 Release 列表结果、排序、分页和详情行为保持不变。
+- 搜索词不匹配时不执行 missing 对账，也不改变扫描状态或图谱身份。
+
+## 验收标准
+
+- [ ] 按 Release 标题、艺术家、Track 标题的大小写不敏感搜索返回正确 Release。
+- [ ] 空白、空查询、特殊字符和超长查询有明确且安全的行为。
+- [ ] 分页结果稳定，边界页和非法参数有自动化验证。
+- [ ] 未登录、数据库错误和无结果状态均返回/展示可恢复结果。
+- [ ] 既有无查询参数的 Release 列表、详情和 FLAC/MP3/CUE 来源身份回归测试通过。
+- [ ] 前端搜索状态写入 URL，刷新后可复现，且不泄露服务器路径或 token。
+
+## 范围外
+
+- Meilisearch、全文检索分词、拼音/模糊排序、搜索索引和异步索引任务。
+- 封面发现、存储和鉴权资源接口（由 `core-0-release-artwork` 子任务负责）。
+- 普通用户角色、收藏、播放、歌词、metadata 编辑和文件操作。
+
+## 阻塞问题
+
+无。技术未知项通过现有 SQL/DTO 代码检查后延期为实现阶段的局部性能验证。

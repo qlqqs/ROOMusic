@@ -266,12 +266,29 @@ func (application *roomusicApplication) listReleases(responseWriter http.Respons
 		writeAPIError(responseWriter, request, http.StatusBadRequest, "invalid_pagination", "分页参数无效")
 		return
 	}
+	searchQuery, searchError := parseReleaseSearch(request)
+	if searchError != nil {
+		writeAPIError(responseWriter, request, http.StatusBadRequest, "invalid_query", "搜索条件无效")
+		return
+	}
+	whereClause := ""
+	queryArgs := []any{}
+	if searchQuery != "" {
+		whereClause = ` WHERE (title ILIKE '%' || $1 || '%' ESCAPE '~' OR artist ILIKE '%' || $1 || '%' ESCAPE '~' OR EXISTS (
+			SELECT 1 FROM media JOIN tracks ON tracks.medium_id = media.id
+			WHERE media.release_id = releases.id AND tracks.title ILIKE '%' || $1 || '%' ESCAPE '~'
+		))`
+		queryArgs = append(queryArgs, escapeLikePattern(searchQuery))
+	}
 	var total int
-	if err := application.database.connection.QueryRowContext(request.Context(), "SELECT COUNT(*) FROM releases").Scan(&total); err != nil {
+	countQuery := "SELECT COUNT(*) FROM releases" + whereClause
+	if err := application.database.connection.QueryRowContext(request.Context(), countQuery, queryArgs...).Scan(&total); err != nil {
 		writeAPIError(responseWriter, request, 503, "database_unavailable", "服务暂不可用")
 		return
 	}
-	rows, err := application.database.connection.QueryContext(request.Context(), "SELECT id::text,title,artist FROM releases ORDER BY title,artist,id LIMIT $1 OFFSET $2", pageSize, (page-1)*pageSize)
+	listQuery := "SELECT id::text,title,artist FROM releases" + whereClause + " ORDER BY title,artist,id LIMIT $" + strconv.Itoa(len(queryArgs)+1) + " OFFSET $" + strconv.Itoa(len(queryArgs)+2)
+	listArgs := append(append([]any{}, queryArgs...), pageSize, (page-1)*pageSize)
+	rows, err := application.database.connection.QueryContext(request.Context(), listQuery, listArgs...)
 	if err != nil {
 		writeAPIError(responseWriter, request, 503, "database_unavailable", "服务暂不可用")
 		return
@@ -291,6 +308,20 @@ func (application *roomusicApplication) listReleases(responseWriter http.Respons
 		return
 	}
 	writeJSON(responseWriter, 200, map[string]any{"items": items, "pagination": map[string]int{"page": page, "page_size": pageSize, "total": total}})
+}
+
+func parseReleaseSearch(request *http.Request) (string, error) {
+	query := strings.TrimSpace(request.URL.Query().Get("q"))
+	if len(query) > 200 {
+		return "", fmt.Errorf("query too long")
+	}
+	return query, nil
+}
+
+func escapeLikePattern(query string) string {
+	query = strings.ReplaceAll(query, `~`, `~~`)
+	query = strings.ReplaceAll(query, `%`, `~%`)
+	return strings.ReplaceAll(query, `_`, `~_`)
 }
 
 func parsePagination(request *http.Request) (int, int, error) {
