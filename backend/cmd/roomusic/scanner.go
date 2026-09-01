@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -203,6 +205,9 @@ func (application *roomusicApplication) scanRoot(context context.Context, scanID
 				return diagnosticError
 			}
 		}
+		if artworkError := application.saveArtwork(context, root, relativePath, observation); artworkError != nil {
+			application.recordDiagnostic(context, scanID, relativePath, "artwork_failure", "封面处理失败")
+		}
 		return nil
 	})
 	if err != nil {
@@ -277,6 +282,88 @@ func (application *roomusicApplication) saveObservation(context context.Context,
 		return fmt.Errorf("save observation: %w", err)
 	}
 	return transaction.Commit()
+}
+
+func (application *roomusicApplication) saveArtwork(ctx context.Context, root registeredRoot, relativePath string, observation audioObservation) error {
+	directory := filepath.Dir(filepath.Join(root.Path, filepath.FromSlash(relativePath)))
+	data, mimeType := observation.Artwork, observation.ArtworkMIME
+	sourceType := "embedded"
+	if len(data) == 0 {
+		sourceType = "folder"
+		data, mimeType = discoverFolderArtwork(directory)
+	}
+	if len(data) == 0 {
+		return nil
+	}
+	if len(data) > 16<<20 {
+		return fmt.Errorf("artwork too large")
+	}
+	if mimeType == "" {
+		mimeType = sniffArtworkMIME(data)
+	}
+	if mimeType == "" {
+		return fmt.Errorf("unsupported artwork")
+	}
+	width, height := artworkDimensions(data, mimeType)
+	if width <= 0 || height <= 0 {
+		return fmt.Errorf("invalid artwork")
+	}
+	hash := fmt.Sprintf("%x", sha256.Sum256(data))
+	key := hash + "." + strings.TrimPrefix(strings.TrimPrefix(mimeType, "image/"), "x-")
+	if err := os.MkdirAll(filepath.Join(application.config.DataDirectory, "artwork"), 0o750); err != nil {
+		return err
+	}
+	path := filepath.Join(application.config.DataDirectory, "artwork", key)
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		if err := os.WriteFile(path, data, 0o640); err != nil {
+			return err
+		}
+	}
+	var releaseID string
+	if err := application.database.connection.QueryRowContext(ctx, "SELECT id::text FROM releases WHERE source_root_id=$1::uuid AND relative_directory=$2", root.ID, filepath.ToSlash(filepath.Dir(relativePath))).Scan(&releaseID); err != nil {
+		return err
+	}
+	_, err := application.database.connection.ExecContext(ctx, `INSERT INTO release_artworks(release_id,content_hash,mime_type,width,height,storage_key,source_type) VALUES($1::uuid,$2,$3,$4,$5,$6,$7) ON CONFLICT(release_id) DO UPDATE SET content_hash=EXCLUDED.content_hash,mime_type=EXCLUDED.mime_type,width=EXCLUDED.width,height=EXCLUDED.height,storage_key=EXCLUDED.storage_key,source_type=EXCLUDED.source_type`, releaseID, hash, mimeType, width, height, key, sourceType)
+	return err
+}
+
+func artworkDimensions(data []byte, mimeType string) (int, int) {
+	if mimeType == "image/png" && len(data) >= 24 {
+		return int(binary.BigEndian.Uint32(data[16:20])), int(binary.BigEndian.Uint32(data[20:24]))
+	}
+	if mimeType == "image/gif" && len(data) >= 10 {
+		return int(binary.LittleEndian.Uint16(data[6:8])), int(binary.LittleEndian.Uint16(data[8:10]))
+	}
+	return 1, 1
+}
+
+func discoverFolderArtwork(directory string) ([]byte, string) {
+	for _, name := range []string{"cover.jpg", "cover.jpeg", "cover.png", "cover.webp", "folder.jpg", "folder.jpeg", "folder.png", "front.jpg", "front.jpeg", "front.png"} {
+		data, err := os.ReadFile(filepath.Join(directory, name))
+		if err != nil {
+			continue
+		}
+		if mime := sniffArtworkMIME(data); mime != "" {
+			return data, mime
+		}
+	}
+	return nil, ""
+}
+
+func sniffArtworkMIME(data []byte) string {
+	if len(data) >= 3 && data[0] == 0xff && data[1] == 0xd8 && data[2] == 0xff {
+		return "image/jpeg"
+	}
+	if len(data) >= 8 && string(data[:8]) == "\x89PNG\r\n\x1a\n" {
+		return "image/png"
+	}
+	if len(data) >= 6 && (string(data[:6]) == "GIF87a" || string(data[:6]) == "GIF89a") {
+		return "image/gif"
+	}
+	if len(data) >= 12 && string(data[:4]) == "RIFF" && string(data[8:12]) == "WEBP" {
+		return "image/webp"
+	}
+	return ""
 }
 
 func (application *roomusicApplication) markMissing(context context.Context, scanID string, rootIDs []string) error {

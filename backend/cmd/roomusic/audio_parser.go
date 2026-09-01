@@ -20,6 +20,8 @@ type audioObservation struct {
 	SourceKind              string
 	Inferred                bool
 	InferredFields          map[string]bool
+	Artwork                 []byte
+	ArtworkMIME             string
 }
 
 type cueTrack struct {
@@ -375,6 +377,27 @@ func parseID3Frames(data []byte, observation *audioObservation) {
 		}
 		frame := data[offset : offset+frameSize]
 		offset += frameSize
+		if frameID == "APIC" {
+			if len(frame) > 4 {
+				pos := 1
+				for pos < len(frame) && frame[pos] != 0 {
+					pos++
+				}
+				pos++
+				if pos < len(frame) {
+					pos++
+					for pos < len(frame) && frame[pos] != 0 {
+						pos++
+					}
+					pos++
+					if pos < len(frame) {
+						observation.Artwork = append([]byte(nil), frame[pos:]...)
+						observation.ArtworkMIME = strings.Trim(string(frame[1:pos-1]), "\x00")
+					}
+				}
+			}
+			continue
+		}
 		if frameID != "TIT2" && frameID != "TPE1" && frameID != "TALB" && frameID != "TRCK" && frameID != "TPOS" {
 			continue
 		}

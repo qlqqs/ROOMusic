@@ -55,6 +55,7 @@ func buildApplicationHandler(config serverConfig, database *databaseState, logge
 	mux.HandleFunc("GET /api/v1/scans/{id}/diagnostics", application.diagnostics)
 	mux.HandleFunc("GET /api/v1/releases", application.listReleases)
 	mux.HandleFunc("GET /api/v1/releases/{id}", application.releaseDetail)
+	mux.HandleFunc("GET /api/v1/artworks/{id}", application.artworkResource)
 	mux.Handle("/", productionFrontendHandler())
 	return requestIDMiddleware(logger, mux)
 }
@@ -357,6 +358,13 @@ type releaseMediumDTO struct {
 	Tracks   []releaseTrackDTO `json:"tracks"`
 }
 
+type releaseArtworkDTO struct {
+	ResourceID string `json:"resource_id"`
+	MIME       string `json:"mime"`
+	Width      int    `json:"width"`
+	Height     int    `json:"height"`
+}
+
 func (application *roomusicApplication) releaseDetail(responseWriter http.ResponseWriter, request *http.Request) {
 	if _, err := application.authenticatedUser(request); err != nil {
 		application.writeAuthenticationError(responseWriter, request)
@@ -364,6 +372,7 @@ func (application *roomusicApplication) releaseDetail(responseWriter http.Respon
 	}
 	releaseID := request.PathValue("id")
 	var title, artist string
+	var artwork releaseArtworkDTO
 	if err := application.database.connection.QueryRowContext(request.Context(), "SELECT title,artist FROM releases WHERE id=$1::uuid", releaseID).Scan(&title, &artist); err != nil {
 		if err == sql.ErrNoRows {
 			writeAPIError(responseWriter, request, 404, "not_found", "发行版本不存在")
@@ -403,5 +412,35 @@ func (application *roomusicApplication) releaseDetail(responseWriter http.Respon
 		writeAPIError(responseWriter, request, 503, "database_error", "无法读取发行版本详情")
 		return
 	}
-	writeJSON(responseWriter, 200, map[string]any{"id": releaseID, "title": title, "artist": artist, "media": media})
+	_ = application.database.connection.QueryRowContext(request.Context(), "SELECT storage_key,mime_type,width,height FROM release_artworks WHERE release_id=$1::uuid", releaseID).Scan(&artwork.ResourceID, &artwork.MIME, &artwork.Width, &artwork.Height)
+	result := map[string]any{"id": releaseID, "title": title, "artist": artist, "media": media}
+	if artwork.ResourceID != "" {
+		result["artwork"] = artwork
+	}
+	writeJSON(responseWriter, 200, result)
+}
+
+func (application *roomusicApplication) artworkResource(w http.ResponseWriter, r *http.Request) {
+	if _, err := application.authenticatedUser(r); err != nil {
+		application.writeAuthenticationError(w, r)
+		return
+	}
+	var key, mime string
+	if err := application.database.connection.QueryRowContext(r.Context(), "SELECT storage_key,mime_type FROM release_artworks WHERE storage_key=$1", r.PathValue("id")).Scan(&key, &mime); err != nil {
+		writeAPIError(w, r, http.StatusNotFound, "not_found", "封面不存在")
+		return
+	}
+	if filepath.Base(key) != key {
+		writeAPIError(w, r, http.StatusNotFound, "not_found", "封面不存在")
+		return
+	}
+	b, err := os.ReadFile(filepath.Join(application.config.DataDirectory, "artwork", key))
+	if err != nil {
+		writeAPIError(w, r, http.StatusNotFound, "not_found", "封面不存在")
+		return
+	}
+	w.Header().Set("Content-Type", mime)
+	w.Header().Set("Cache-Control", "private, max-age=86400")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(b)
 }

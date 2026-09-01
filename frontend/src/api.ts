@@ -13,7 +13,8 @@ export type PaginationDTO = { page: number; page_size: number; total: number };
 export type ReleaseListDTO = { items: ReleaseSummaryDTO[]; pagination: PaginationDTO };
 export type TrackDTO = { id: string; title: string; artist: string; position: number; source: string };
 export type MediumDTO = { id: string; position: number; title: string; tracks: TrackDTO[] };
-export type ReleaseDetailDTO = ReleaseSummaryDTO & { media: MediumDTO[] };
+export type ReleaseArtworkDTO = { resource_id: string; mime: string; width: number; height: number };
+export type ReleaseDetailDTO = ReleaseSummaryDTO & { media: MediumDTO[]; artwork?: ReleaseArtworkDTO };
 
 type Decoder<ResponseDTO> = (input: unknown) => ResponseDTO;
 type UnknownObject = { [key: string]: unknown };
@@ -128,8 +129,10 @@ export function decodeReleaseList(input: unknown): ReleaseListDTO {
 export function decodeReleaseDetail(input: unknown): ReleaseDetailDTO {
   const object = requireObject(input, "release detail");
   const summary = decodeReleaseSummary(object);
+  const artworkObject = object.artwork === undefined ? undefined : requireObject(object.artwork, "artwork");
   return {
     ...summary,
+    artwork: artworkObject ? { resource_id: requireNonEmptyString(artworkObject.resource_id, "artwork.resource_id"), mime: requireNonEmptyString(artworkObject.mime, "artwork.mime"), width: requireNonNegativeInteger(artworkObject.width, "artwork.width", 1), height: requireNonNegativeInteger(artworkObject.height, "artwork.height", 1) } : undefined,
     media: requireArray(object.media, "media").map((item) => {
       const medium = requireObject(item, "medium");
       return {
