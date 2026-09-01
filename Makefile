@@ -3,6 +3,9 @@
 dev:
 	./scripts/dev.sh
 
+prod:
+	./scripts/prod.sh
+
 dev-reset:
 	./scripts/dev-reset.sh
 

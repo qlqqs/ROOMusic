@@ -30,10 +30,10 @@ Go 与 Node.js 在宿主机运行；PostgreSQL、Redis 和 Meilisearch 由 Docke
 mise install
 ```
 
-如需重建本地配置：
+如需重建本地开发配置：
 
 ```bash
-cp .env.example .env
+cp .env.example .env.dev
 ```
 
 启动依赖：
@@ -53,10 +53,18 @@ mise run env-check
 复制 `.env.example` 为 `.env` 并填写本地 PostgreSQL 密码后，可用一条命令启动 PostgreSQL、Go 后端和 Vite 前端：
 
 ```bash
-make dev
+./scripts/dev.sh
 ```
 
-前端开发地址为 `http://localhost:5173`，后端地址为 `http://localhost:8080`。React 修改由 Vite 热更新；Go 或迁移文件修改会自动重启后端。按 `Ctrl-C` 会同时停止两个开发进程，PostgreSQL 容器保持运行。
+前端开发地址为 `http://localhost:5173`，后端地址为 `http://localhost:8080`。React 修改由 Vite 热更新；Go 或迁移文件修改会自动重启后端。按 `Ctrl-C` 会同时停止两个开发进程，PostgreSQL 容器保持运行。也可使用 `make dev` 作为便利入口。
+
+生产环境使用无后缀 `.env`，由 Go 单体直接提供 `8080`：
+
+```bash
+./scripts/prod.sh
+```
+
+生产配置必须设置 `ROOMUSIC_SECURE_COOKIES=true`。生产脚本不会启动 Vite，也不要求安装 Make。
 
 如需重新体验首次初始化流程，开发环境可清空业务数据：
 
