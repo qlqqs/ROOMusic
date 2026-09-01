@@ -2,9 +2,10 @@
 
 ## Status
 
-There is no frontend package or test configuration yet. The initial scaffold
-must pin its Node/package-manager setup, expose the canonical scripts below (or
-document equivalent names), and update this guide with the selected tools.
+当前前端 package 位于 `frontend/`，使用 npm + `package-lock.json`、Vite、
+TypeScript、ESLint 和 Vitest。Node 版本由 `.mise.toml` 管理；安装使用
+`npm ci`。仓库目前没有 formatter 或自动化 accessibility runner，相关门禁仍
+需在后续工具选型后补充。
 
 The current [README](../../../README.md) establishes Node.js 24.16.0 through the
 repository development toolchain. Do not rely on an undocumented global version.
@@ -16,7 +17,7 @@ repository development toolchain. Do not rely on an undocumented global version.
 - Separate server, URL, local, form, and session state.
 - Keep components accessible and focused on rendering/intent.
 - Keep side effects in feature hooks/API clients with cancellation and cleanup.
-- Handle loading, empty, stale, error, permission, conflict, cancelled, and
+- Handle loading, empty, stale, error, permission, conflict, canceled, and
   incomplete states that apply to the workflow.
 - Keep backend authority visible: the UI handles denied responses and never
   substitutes a role check for security.
@@ -70,12 +71,11 @@ cover media must not overlap or resize the surrounding layout unexpectedly.
 Automated accessibility output is a signal, not proof. Critical workflows require
 keyboard and screen-reader-semantic review.
 
-## Planned Scripts
+## 当前脚本
 
-The first scaffold should provide stable package scripts equivalent to:
+当前 package 已提供以下稳定脚本：
 
 ```text
-format:check
 lint
 typecheck
 test
@@ -109,4 +109,4 @@ every Track at once may compile but violates ownership, type, security, state,
 and scale contracts.
 
 See [Engineering Principles](../guides/engineering-principles.md) and the
-[Core 0 acceptance criteria](../../tasks/08-31-roomusic-core-0-rebuild/prd.md).
+[Core 0 acceptance criteria](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md).

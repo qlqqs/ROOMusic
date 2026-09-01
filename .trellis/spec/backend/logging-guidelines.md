@@ -3,8 +3,8 @@
 ## Contract
 
 Core 0 emits structured JSON logs to stdout/stderr for container collection.
-The concrete Go logging package has not been selected. The event schema and
-redaction rules below are stable regardless of implementation.
+当前使用 Go 标准库 `log/slog` 的 JSON handler 输出结构化日志；事件 schema 和
+脱敏规则仍独立于具体实现。
 
 Logs explain runtime behavior. They do not replace scan-run history, source
 observations, Change Sets, or Operation Journal records, all of which are
@@ -131,6 +131,6 @@ structured and correlated; it does not expose panic detail to REST clients.
 - Claiming Redis or Meilisearch health is required for the Core 0 application.
 
 These requirements come from the
-[Core 0 observability contract](../../tasks/08-31-roomusic-core-0-rebuild/prd.md)
+[Core 0 observability contract](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md)
 and the repository-local
 [large-library product context](../guides/product-goals.md).

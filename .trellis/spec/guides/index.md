@@ -1,8 +1,8 @@
 # ROOMusic Shared Engineering Guides
 
 These guides apply to every package before the backend- or frontend-specific
-rules. They are project contracts for the upcoming Core 0 implementation, not
-claims that application code already exists.
+rules. They are project contracts for the current Core 0 implementation and its
+documented future boundaries.
 
 ## Read First
 
@@ -47,7 +47,7 @@ policy owner.
 
 ## Evidence
 
-- [Core 0 PRD](../../tasks/08-31-roomusic-core-0-rebuild/prd.md)
+- [Core 0 PRD](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md)
 - [Current README](../../../README.md)
 - [Architecture canvas](../../../docs/architecture/roomusic-modular-plugin-architecture.canvas.tsx)
 - [Inherited V0 product goals and phase decisions](./product-goals.md)

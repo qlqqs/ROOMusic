@@ -24,6 +24,22 @@ API 文档、Trellis 任务文档、说明性注释和运维文档。代码标�
   TypeScript files are chosen from the actual use cases and may evolve within
   their owning module.
 
+## Core 0 当前实现树
+
+当前可运行代码仍采用过渡单体结构：
+
+```text
+backend/cmd/roomusic/*.go   # HTTP、身份、扫描、目录和 catalog 过渡实现
+backend/migrations/*.sql    # embed.FS 按序执行的 SQL
+frontend/src/main.tsx       # React 页面与本地状态编排
+frontend/src/api.ts         # REST DTO、decoder 和 transport
+frontend/src/styles.css     # 工作台样式与响应式布局
+```
+
+下方 `backend/internal/*` 与 `frontend/src/features/*` 仅是目标能力边界。
+在第二个真实消费者、路由边界或独立生命周期形成前，不为目录对称性进行
+大规模拆分。
+
 ## Repository-level modules
 
 ```text

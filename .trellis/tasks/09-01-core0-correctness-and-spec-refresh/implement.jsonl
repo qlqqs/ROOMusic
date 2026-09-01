@@ -1,0 +1,16 @@
+{"file": ".trellis/spec/guides/index.md", "reason": "共享工程规则入口，约束跨层修复与证据链"}
+{"file": ".trellis/spec/guides/product-goals.md", "reason": "Core 0 范围、只读音乐库和延期能力边界"}
+{"file": ".trellis/spec/guides/modular-design.md", "reason": "后端/前端能力所有权与最小变更原则"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "REST、数据库、扫描和 UI 合同的跨层追踪"}
+{"file": ".trellis/spec/backend/index.md", "reason": "后端当前边界、授权和执行前检查"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "事务、错误、扫描和回归测试门槛"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "PostgreSQL 事务、revision、missing 对账和迁移边界"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "稳定错误码、扫描终态和安全响应"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "request ID、脱敏和扫描观测约束"}
+{"file": ".trellis/spec/backend/core-slice-tooling.md", "reason": "当前 Go/前端工具链及 Core 0 合同"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端边界、同源部署和当前工作流"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "runtime decoder、DTO 和禁止 raw cast"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质量、可访问性和测试门槛"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "请求生命周期、轮询和过期响应处理"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "组件状态、焦点和可访问性"}
+{"file": ".trellis/spec/frontend/player-design-guidelines.md", "reason": "播放器布局、断点和演示边界"}

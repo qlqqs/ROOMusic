@@ -2,10 +2,10 @@
 
 ## Status And Intent
 
-No frontend source tree exists yet. Use this planned feature-oriented layout when
-the React/TypeScript application is initialized. Create only directories needed
-by implemented Core 0 behavior; the tree is a boundary guide, not an instruction
-to generate empty scaffolding.
+当前 Core 0 是扁平过渡结构：`src/main.tsx` 集中页面编排，`src/api.ts` 集中
+REST DTO/decoder，`src/styles.css` 集中样式。下面的 feature-oriented layout
+是目标边界；只有出现第二个真实消费者或明确路由边界时才拆分，不能为了匹配
+目录示例生成空文件夹。
 
 ## Planned Layout
 
@@ -123,4 +123,4 @@ proxy to the Go REST API.
 
 This structure mirrors backend capability ownership in
 [Modular Design](../guides/modular-design.md) and the current
-[Core 0 PRD](../../tasks/08-31-roomusic-core-0-rebuild/prd.md).
+[Core 0 PRD](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md).

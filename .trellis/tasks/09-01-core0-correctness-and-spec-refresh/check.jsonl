@@ -1,0 +1,12 @@
+{"file": ".trellis/spec/guides/index.md", "reason": "检查跨层规范入口与规则优先级"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "检查 API/数据库/扫描/UI 数据流一致性"}
+{"file": ".trellis/spec/backend/index.md", "reason": "检查后端边界和安全合同"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "检查实现、测试和并发门槛"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "检查事务、revision、迁移和 missing 规则"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "检查错误 envelope、终态和安全映射"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "检查日志字段、相关 ID 和脱敏"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "检查前端部署/REST/状态边界"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "检查 decoder、类型和 wire 兼容"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "检查前端测试与可访问性"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "检查 UI 状态、焦点和 aria 行为"}
+{"file": ".trellis/spec/frontend/player-design-guidelines.md", "reason": "检查播放器响应式与演示能力边界"}

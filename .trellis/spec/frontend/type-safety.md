@@ -8,9 +8,8 @@ optional-property access unless a documented tool constraint blocks them. Do not
 weaken compiler settings to integrate one feature.
 
 External data enters as `unknown` and becomes trusted only through one runtime
-decoder at the owning boundary. No runtime validation library has been selected;
-choose and document one when the REST client is implemented rather than adding
-several feature-local solutions.
+decoder at the owning boundary. 当前 Core 0 使用 `frontend/src/api.ts` 中的手写
+decoder，暂未引入运行时校验库；禁止以 raw cast 绕过角色、枚举或必填字段检查。
 
 ## Type Ownership
 
@@ -38,7 +37,7 @@ const scanStatuses = [
   "running",
   "succeeded",
   "failed",
-  "cancelled",
+  "canceled",
   "incomplete",
 ] as const;
 
@@ -74,7 +73,7 @@ that needs a decision.
 Distinguish:
 
 - absent, null, empty, and unavailable;
-- failed, cancelled, and incomplete scans;
+- failed, canceled, and incomplete scans;
 - loading initial data from refreshing stale data;
 - permission denial from authentication expiry;
 - revision conflict from generic validation failure;
@@ -118,4 +117,4 @@ When changing a REST field or enum, search backend presenter, API documentation,
 decoder, DTO, feature mapping, components, tests, and cached/persisted state.
 Follow the [Cross-Layer Thinking Guide](../guides/cross-layer-thinking-guide.md).
 The current REST and security scope comes from the
-[Core 0 PRD](../../tasks/08-31-roomusic-core-0-rebuild/prd.md).
+[Core 0 PRD](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md).

@@ -7,9 +7,9 @@ connect a typed feature API client to components, synchronize URL/local state,
 or manage a lifecycle such as scan polling. They do not become service locators
 or alternative business-policy engines.
 
-The data-fetching/cache library has not been selected. The initial frontend task
-must choose one mechanism and document it; do not mix ad hoc `useEffect` fetches
-with a cache library across features.
+当前 Core 0 未引入 data-fetching/cache 库，使用原生 `useEffect`、`useState` 和
+`requestApi`。后续若选择缓存机制，必须在迁移任务中统一边界，不能与 ad hoc
+请求混用。
 
 ## Planned Layers
 
@@ -86,7 +86,7 @@ switch (scan.status) {
   case "running":
   case "succeeded":
   case "failed":
-  case "cancelled":
+  case "canceled":
   case "incomplete":
     return renderScanState(scan);
 }

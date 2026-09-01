@@ -91,7 +91,7 @@ Core 0 is the smallest useful local-library loop:
    first reversible example.
 
 The authoritative acceptance behavior is in the current
-[Core 0 PRD](../../tasks/08-31-roomusic-core-0-rebuild/prd.md).
+[Core 0 PRD](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md).
 
 ## Permanent Invariants
 
@@ -106,7 +106,7 @@ These rules survive later phases and adapter changes:
 - Versions remain distinct, and multi-disc releases use multiple Medium
   entities. Weak title, artist, year, or folder similarity cannot perform an
   authoritative cross-directory merge.
-- A failed, cancelled, offline, permission-denied, or incomplete scan cannot
+- A failed, canceled, offline, permission-denied, or incomplete scan cannot
   mark previously observed sources missing. Only a complete successful scan can
   perform negative reconciliation.
 - Plugins, providers, Agents, and execution adapters use published capabilities;

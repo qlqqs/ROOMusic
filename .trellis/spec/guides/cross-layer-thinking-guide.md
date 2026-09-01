@@ -72,7 +72,7 @@ Before a cross-layer change:
 - [ ] Define stable identity, revision, idempotency, and correlation fields.
 - [ ] Decide transaction and partial-failure behavior.
 - [ ] Decide what ordinary users may see; exclude secrets and raw server paths.
-- [ ] Decide loading, empty, stale, conflict, cancelled, and failure UI states.
+- [ ] Decide loading, empty, stale, conflict, canceled, and failure UI states.
 - [ ] Confirm Redis, Meilisearch, Agent, playback, and plugins are not accidental
       Core 0 dependencies.
 - [ ] For a future Agent operation, keep approval state, execution state, and
@@ -117,5 +117,5 @@ stores a managed asset reference rather than a large image binary.
   projection the source of truth.
 
 The current cross-layer acceptance paths are defined in the
-[Core 0 PRD](../../tasks/08-31-roomusic-core-0-rebuild/prd.md); phase boundaries
+[Core 0 PRD](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md); phase boundaries
 are summarized in [Product Goals](./product-goals.md).

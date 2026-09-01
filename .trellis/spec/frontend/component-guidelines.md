@@ -17,7 +17,8 @@ ReleaseRoute
   -> EvidenceSummary
 ```
 
-This is a planned pattern; no component or UI library has been selected yet.
+这是目标组合模式。当前 Core 0 使用原生 React + CSS，没有额外组件或 icon 库；
+引入新库必须有具体需求并在规范中记录。
 
 ## Props And Contracts
 
@@ -49,7 +50,7 @@ Add stale/retrying where the selected server-state mechanism can distinguish
 them. Administrative mutations also show pending, success, revision conflict,
 permission loss, and failure without losing the user's context.
 
-Scan views distinguish pending, running, succeeded, failed, cancelled, and
+Scan views distinguish pending, running, succeeded, failed, canceled, and
 incomplete. Do not label an incomplete scan successful, and do not imply that a
 failed scan removed missing music.
 
@@ -137,4 +138,4 @@ exact incidental DOM tree.
 
 See [Hook Guidelines](./hook-guidelines.md),
 [Type Safety](./type-safety.md), and the
-[Core 0 UI requirements](../../tasks/08-31-roomusic-core-0-rebuild/prd.md).
+[Core 0 UI requirements](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md).

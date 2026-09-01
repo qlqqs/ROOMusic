@@ -1,6 +1,6 @@
 # ROOMusic
 
-ROOMusic 正在从最小可运行版本重新构建。当前仓库只建立本地开发环境，不迁移 V0 中已经膨胀的应用容器、AI worker、operator、release overlay 或业务配置。
+ROOMusic 当前提供可运行的 Core 0 本地开发与同源生产闭环，不迁移 V0 中已经膨胀的应用容器、AI worker、operator、release overlay 或业务配置。
 
 ## 软件目标
 
@@ -50,7 +50,7 @@ mise run env-check
 
 ## 快捷开发工作流
 
-复制 `.env.example` 为 `.env` 并填写本地 PostgreSQL 密码后，可用一条命令启动 PostgreSQL、Go 后端和 Vite 前端：
+默认复制 `.env.example` 为 `.env.dev`（或通过 `ROOMUSIC_ENV_FILE` 指定配置）并填写本地 PostgreSQL 密码，可用一条命令启动 PostgreSQL、Go 后端和 Vite 前端：
 
 ```bash
 ./scripts/dev.sh
