@@ -159,3 +159,26 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 ### Status
 
 [OK] **Completed**
+
+
+## Session 8: 完成 Core 0 最终集成验收
+<!-- trellis-session: v=2 fp=e4aca6aa54f184f7 -->
+
+**Date**: 2026-09-01
+**Task**: 完成 Core 0 最终集成验收
+**Branch**: `main`
+
+### Summary
+
+补齐真实 PostgreSQL 权限矩阵和目录事务集成测试，修复全新迁移重复列、JSONB 参数绑定及操作错误分类问题；复验后端、前端、生产构建和 Compose 门禁，归档补测子任务与 Core 0 父任务。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1013177` | chore(core): refresh embedded frontend assets |
+| `ca4671a` | test(core): verify authorization and root transactions |
+
+### Status
+
+[OK] **Completed**
