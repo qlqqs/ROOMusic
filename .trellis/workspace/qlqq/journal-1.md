@@ -71,3 +71,25 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 ### Status
 
 [OK] **Completed**
+
+
+## Session 4: 完成 PostgreSQL 基础搜索
+<!-- trellis-session: v=2 fp=ed48783a4f4bc3f6 -->
+
+**Date**: 2026-09-01
+**Task**: 完成 PostgreSQL 基础搜索
+**Branch**: `main`
+
+### Summary
+
+为 Release 列表增加参数化 PostgreSQL 搜索，覆盖 Release 标题、艺术家和 Track 标题；加入分页一致性、通配符转义、URL 搜索状态及前端 loading/empty/error/retry。通过 Go 与前端质量门禁。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5ea3141` | feat(core): add PostgreSQL release search |
+
+### Status
+
+[OK] **Completed**
