@@ -49,7 +49,7 @@ policy owner.
 
 - [Core 0 PRD](../../tasks/08-31-roomusic-core-0-rebuild/prd.md)
 - [Current README](../../../README.md)
-- [Architecture canvas](../../../roomusic-modular-plugin-architecture.canvas.tsx)
+- [Architecture canvas](../../../docs/architecture/roomusic-modular-plugin-architecture.canvas.tsx)
 - [Inherited V0 product goals and phase decisions](./product-goals.md)
 
 The original V0 planning workspace is historical input, not a required sibling

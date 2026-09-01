@@ -1,0 +1,10 @@
+{"file": ".trellis/spec/guides/product-goals.md", "reason": "Core 0 product outcome and permanent safety invariants"}
+{"file": ".trellis/spec/guides/modular-design.md", "reason": "Capability ownership and modular monolith dependency rules"}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development contract and linked layer guidance"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend pre-development contract and Core 0 UI boundaries"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Migration, transaction, scan reconciliation and session storage rules"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Stable REST errors and incomplete scan failure semantics"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Correlation and sensitive path/token redaction rules"}
+{"file": "docs/architecture/architecture-decisions.md", "reason": "Stable machine-readable architecture rules and module ownership"}
+{"file": "docs/architecture/roomusic-modular-plugin-architecture.canvas.tsx", "reason": "Visual dependency boundaries and future extension isolation"}
+{"file": "docs/architecture/roomusic-full-architecture-tree.canvas.tsx", "reason": "Full repository-level capability tree"}

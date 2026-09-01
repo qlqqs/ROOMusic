@@ -5,7 +5,7 @@
   "description": "从 ROOMusic-V0 继承产品目标与必要边界，在当前最小仓库规划一个精简、完整、可运行的前后端初代核心",
   "status": "planning",
   "dev_type": null,
-  "scope": null,
+  "scope": "release-parent",
   "package": null,
   "priority": "P2",
   "creator": "qlqq",
@@ -18,9 +18,18 @@
   "commit": null,
   "pr_url": null,
   "subtasks": [],
-  "children": [],
+  "children": [
+    "09-01-core-0-first-browse-slice",
+    "09-01-core-0-format-cue-expansion",
+    "09-01-core-0-basic-search",
+    "09-01-core-0-private-multi-user",
+    "09-01-core-0-root-operation-governance",
+    "09-01-core-0-release-artwork"
+  ],
   "parent": null,
   "relatedFiles": [],
   "notes": "",
-  "meta": {}
+  "meta": {
+    "implementation_target": "false"
+  }
 }

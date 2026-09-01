@@ -2,11 +2,24 @@
 
 ## Goal
 
-从 `ROOMusic-V0` 继承已确认的产品目标、数据语义和安全边界，在当前最小仓库中重新构建一个精简、完整、可运行的前后端初代核心。Core 0 必须先形成可使用的本地音乐库闭环，再以清晰的边界逐步扩展 Agent、播放、元数据治理和运维能力，不能把 V0 已经膨胀的实现整体搬回新仓库。
+作为 Core 0 的版本级父任务，从 `ROOMusic-V0` 继承已确认的产品目标、数据语义和安全边界，并通过可独立规划、实现和验收的子任务，在当前最小仓库中重新构建一个精简、完整、可运行的前后端初代核心。本任务维护源需求、子任务边界、跨任务不变量和最终集成验收，不直接作为产品代码实现目标。
 
 ## User Value
 
 用户可以在自己的 NAS 或本地环境中启动 ROOMusic，注册音乐目录，安全地进行只读扫描，并通过 Web 前端浏览以发行版本为中心的音乐库。系统应能解释关键元数据来自哪里，并能在后续扩展中安全承载 Assistant、Steward 和 Operator 三种不同权限模式，而不是依赖无法恢复的黑盒操作。
+
+## Delivery Map
+
+子任务按照下列顺序交付；父子关系表达范围归属，前置依赖以此处和各子任务 PRD 为准：
+
+1. `09-01-core-0-first-browse-slice`：首个端到端纵向切片，交付单管理员初始化与登录、受限目录注册、FLAC/MP3 只读扫描、最小 Release Graph 和 Web 浏览详情。
+2. `09-01-core-0-basic-search`：在稳定读模型上增加 PostgreSQL 基础搜索与筛选。
+3. `09-01-core-0-format-cue-expansion`：增加 OGG、Opus、WAV、常见 CUE 和扩展多碟样本。
+4. `09-01-core-0-release-artwork`：增加 release-level 封面发现、受控存储与鉴权展示。
+5. `09-01-core-0-private-multi-user`：增加普通用户管理、禁用、会话撤销和只读权限矩阵。
+6. `09-01-core-0-root-operation-governance`：基于真实目录操作增加 revision、幂等、审计事件和具体恢复语义。
+
+首个纵向切片通过后才开始后续能力。后续子任务可按依赖和风险进一步拆分，不得为了满足父任务一次性验收而回到单次大交付。
 
 ## Background and Confirmed Facts
 
@@ -159,5 +172,6 @@
 
 ## Planning Notes
 
-- 这是跨后端、前端、数据库和 Agent 边界的复杂任务，最终需要补充 `design.md` 和 `implement.md`，并在开始实现前完成最终规划审查。
-- 当前仍处于 Trellis Phase 1 planning；在规划摘要获得明确批准前，不启动任务、不修改产品代码。
+- 这是版本级父任务，不直接执行产品代码；每个复杂子任务必须拥有自己的 `prd.md`、`design.md` 和 `implement.md`。
+- Assistant、Steward、Operator 在 Core 0 中只作为长期权限和执行边界约束，不创建 Agent runtime、Mode Kernel、Tool Registry 或审批状态机。
+- 当前仍处于 Trellis Phase 1 planning；应审查并启动拥有下一项实际交付的子任务，而不是启动父任务。
