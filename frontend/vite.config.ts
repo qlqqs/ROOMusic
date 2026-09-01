@@ -9,4 +9,12 @@ export default defineConfig({
     outDir: "../backend/cmd/roomusic/web",
     emptyOutDir: true,
   },
+  // Vite's server settings are ignored by production builds. Keeping this
+  // here also covers panels and scripts that invoke `vite` without a config
+  // override during development.
+  server: {
+    port: 5173,
+    allowedHosts: true,
+    proxy: { "/api": "http://localhost:8080" },
+  },
 });
