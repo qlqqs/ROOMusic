@@ -194,7 +194,7 @@ func (application *roomusicApplication) listRoots(responseWriter http.ResponseWr
 			writeAPIError(responseWriter, request, 503, "database_error", "无法读取目录")
 			return
 		}
-		roots = append(roots, map[string]any{"id": id, "path": filepath.Base(path), "status": status, "revision": revision, "created_at": created, "updated_at": updated})
+		roots = append(roots, map[string]any{"id": id, "path": filepath.Base(path), "name": filepath.Base(path), "status": status, "revision": revision, "created_at": created, "updated_at": updated})
 	}
 	if rowsErr := rows.Err(); rowsErr != nil {
 		writeAPIError(responseWriter, request, 503, "database_error", "无法读取目录")
@@ -236,14 +236,15 @@ func (application *roomusicApplication) addRoot(responseWriter http.ResponseWrit
 	id := createIdentifier()
 	var createdID string
 	var rev int64
-	err = tx.QueryRowContext(request.Context(), "INSERT INTO library_roots(id,path) VALUES($1::uuid,$2) ON CONFLICT(path) DO UPDATE SET path=EXCLUDED.path RETURNING id::text,revision", id, safePath).Scan(&createdID, &rev)
+	var status string
+	err = tx.QueryRowContext(request.Context(), "INSERT INTO library_roots(id,path) VALUES($1::uuid,$2) ON CONFLICT(path) DO UPDATE SET path=EXCLUDED.path RETURNING id::text,revision,status", id, safePath).Scan(&createdID, &rev, &status)
 	if err != nil {
 		writeAPIError(responseWriter, request, 500, "database_error", "无法注册目录")
 		return
 	}
-	result := map[string]any{"id": createdID, "name": filepath.Base(safePath), "status": "active", "revision": rev}
+	result := map[string]any{"id": createdID, "name": filepath.Base(safePath), "status": status, "revision": rev}
 	body, _ := json.Marshal(result)
-	_, err = tx.ExecContext(request.Context(), `INSERT INTO library_root_operations(id,root_id,actor_id,operation_type,status,idempotency_key,fingerprint,result_revision,before_state,after_state,response,request_id) VALUES($1,$2::uuid,$3::uuid,'create','succeeded',$4,$5,$6,'{}',jsonb_build_object('status','active','revision',$6::bigint),$7::jsonb,$8)`, createIdentifier(), createdID, actor.ID, key, fingerprint, rev, string(body), request.Header.Get("X-Request-ID"))
+	_, err = tx.ExecContext(request.Context(), `INSERT INTO library_root_operations(id,root_id,actor_id,operation_type,status,idempotency_key,fingerprint,result_revision,before_state,after_state,response,request_id) VALUES($1,$2::uuid,$3::uuid,'create','succeeded',$4,$5,$6,'{}',jsonb_build_object('status',$9,'revision',$6::bigint),$7::jsonb,$8)`, createIdentifier(), createdID, actor.ID, key, fingerprint, rev, string(body), request.Header.Get("X-Request-ID"), status)
 	if err != nil {
 		application.writeRootOperationPersistenceError(responseWriter, request, err)
 		return
@@ -523,7 +524,7 @@ func (application *roomusicApplication) updateUser(w http.ResponseWriter, r *htt
 	if !application.requireSameOrigin(w, r) {
 		return
 	}
-	actor, ok := application.requireAdmin(w, r)
+	_, ok := application.requireAdmin(w, r)
 	if !ok {
 		return
 	}
@@ -535,21 +536,84 @@ func (application *roomusicApplication) updateUser(w http.ResponseWriter, r *htt
 		return
 	}
 	id := r.PathValue("id")
-	if *in.Disabled {
-		var admins int
-		_ = application.database.connection.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM users WHERE role='admin' AND disabled_at IS NULL").Scan(&admins)
-		var role string
-		_ = application.database.connection.QueryRowContext(r.Context(), "SELECT role FROM users WHERE id=$1::uuid", id).Scan(&role)
-		if role == "admin" && admins <= 1 {
+	tx, err := application.database.connection.BeginTx(r.Context(), nil)
+	if err != nil {
+		writeAPIError(w, r, 503, "database_unavailable", "服务暂不可用")
+		return
+	}
+	defer tx.Rollback()
+	// Lock administrator rows first so concurrent last-admin checks share one order.
+	adminRows, queryErr := tx.QueryContext(r.Context(), "SELECT id FROM users WHERE role='admin' AND disabled_at IS NULL FOR UPDATE")
+	if queryErr != nil {
+		writeAPIError(w, r, 503, "database_unavailable", "服务暂不可用")
+		return
+	}
+	admins := 0
+	for adminRows.Next() {
+		admins++
+	}
+	rowsErr := adminRows.Err()
+	adminRows.Close()
+	if rowsErr != nil {
+		writeAPIError(w, r, 503, "database_unavailable", "服务暂不可用")
+		return
+	}
+	var role string
+	var currentlyDisabled bool
+	err = tx.QueryRowContext(r.Context(), "SELECT role, disabled_at IS NOT NULL FROM users WHERE id=$1::uuid FOR UPDATE", id).Scan(&role, &currentlyDisabled)
+	if err == sql.ErrNoRows {
+		writeAPIError(w, r, 404, "not_found", "用户不存在")
+		return
+	}
+	if err != nil {
+		writeAPIError(w, r, 503, "database_unavailable", "服务暂不可用")
+		return
+	}
+	if *in.Disabled && !currentlyDisabled && role == "admin" {
+		if admins <= 1 {
 			writeAPIError(w, r, 409, "last_admin", "不能禁用最后一个管理员")
 			return
 		}
-		_, _ = application.database.connection.ExecContext(r.Context(), "UPDATE users SET disabled_at=NOW() WHERE id=$1::uuid", id)
-		_, _ = application.database.connection.ExecContext(r.Context(), "UPDATE sessions SET revoked_at=NOW() WHERE user_id=$1::uuid AND revoked_at IS NULL", id)
-	} else {
-		_, _ = application.database.connection.ExecContext(r.Context(), "UPDATE users SET disabled_at=NULL WHERE id=$1::uuid", id)
 	}
-	_ = actor
+	if *in.Disabled {
+		var result sql.Result
+		result, err = tx.ExecContext(r.Context(), "UPDATE users SET disabled_at=NOW() WHERE id=$1::uuid", id)
+		if err == nil {
+			if affected, affectedErr := result.RowsAffected(); affectedErr != nil {
+				err = affectedErr
+			} else if affected != 1 {
+				err = sql.ErrNoRows
+			}
+		}
+	} else {
+		var result sql.Result
+		result, err = tx.ExecContext(r.Context(), "UPDATE users SET disabled_at=NULL WHERE id=$1::uuid", id)
+		if err == nil {
+			if affected, affectedErr := result.RowsAffected(); affectedErr != nil {
+				err = affectedErr
+			} else if affected != 1 {
+				err = sql.ErrNoRows
+			}
+		}
+	}
+	if err != nil {
+		if err == sql.ErrNoRows {
+			writeAPIError(w, r, 404, "not_found", "用户不存在")
+			return
+		}
+		writeAPIError(w, r, 503, "database_unavailable", "无法更新用户")
+		return
+	}
+	if *in.Disabled {
+		if _, err = tx.ExecContext(r.Context(), "UPDATE sessions SET revoked_at=NOW() WHERE user_id=$1::uuid AND revoked_at IS NULL", id); err != nil {
+			writeAPIError(w, r, 503, "database_unavailable", "无法撤销会话")
+			return
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		writeAPIError(w, r, 503, "database_unavailable", "无法更新用户")
+		return
+	}
 	writeJSON(w, 200, map[string]bool{"disabled": *in.Disabled})
 }
 func (application *roomusicApplication) revokeUserSessions(w http.ResponseWriter, r *http.Request) {

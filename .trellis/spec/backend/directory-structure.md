@@ -2,11 +2,9 @@
 
 ## Status And Intent
 
-No backend tree exists yet. The layout below is the planned Core 0 convention to
-apply when the Go module is initialized. It organizes by business capability and
-keeps frameworks and providers at the edge. If implementation reveals a better
-shape, update this guide and the design decision before introducing a competing
-layout.
+当前 Go module 位于 `backend/`，Core 0 实际代码暂集中在
+`backend/cmd/roomusic/*.go`，迁移位于 `backend/migrations/`。下方按能力分层的
+结构是目标约定；实现尚未满足拆分触发条件时不要创建空目录或伪接口。
 
 ## Planned Layout
 
@@ -125,4 +123,4 @@ repositories directory.
   a future directory.
 
 The capability map follows [Modular Design](../guides/modular-design.md) and the
-current [Core 0 PRD](../../tasks/08-31-roomusic-core-0-rebuild/prd.md).
+current [Core 0 PRD](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md).

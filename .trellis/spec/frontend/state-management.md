@@ -7,9 +7,9 @@ remain server state, shareable filters remain URL state, transient interaction
 remains local component state, and authentication authority remains on the
 backend.
 
-No state library has been selected. The initial frontend scaffold must select
-one server-state/cache mechanism and document any separate client-state need.
-Do not add a global store by default.
+当前 Core 0 未引入状态库或 query/cache 层；server state 由页面 effect 加载，
+URL 搜索参数由 History API 管理，短生命周期交互使用本地 `useState`。不得把
+该过渡实现误认为目标全局 store，也不得默认新增状态库。
 
 ## State Categories
 
@@ -34,7 +34,7 @@ not a second editable source of truth.
 - Refetch or invalidate the smallest affected resource after a mutation.
 - Treat 401, 403, 409, and 503 as distinct states.
 - Scan progress derives from the durable scan-run resource. A local percentage
-  cannot redefine succeeded/failed/cancelled/incomplete.
+  cannot redefine succeeded/failed/canceled/incomplete.
 - PostgreSQL remains the Core 0 authority. The frontend must not assume
   Meilisearch lag, Redis task semantics, or subscriptions.
 
@@ -132,4 +132,4 @@ documented proxy/credentials setup, not a second auth scheme.
 
 See [Hook Guidelines](./hook-guidelines.md),
 [Cross-Layer Thinking](../guides/cross-layer-thinking-guide.md), and the
-[Core 0 PRD](../../tasks/08-31-roomusic-core-0-rebuild/prd.md).
+[Core 0 PRD](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md).

@@ -194,6 +194,24 @@ func TestMissingReconciliationRequiresSuccessfulTerminalState(t *testing.T) {
 	}
 }
 
+func TestScannerOnlyDiagnosesKnownUnsupportedAudioExtensions(t *testing.T) {
+	for _, extension := range []string{".flac", ".mp3", ".ogg", ".opus", ".wav"} {
+		if !isSupportedAudioExtension(extension) {
+			t.Fatalf("supported extension %s was not recognized", extension)
+		}
+	}
+	for _, extension := range []string{".aac", ".m4a", ".ape", ".dsf"} {
+		if !isAudioCandidateExtension(extension) {
+			t.Fatalf("unsupported audio extension %s was not recognized", extension)
+		}
+	}
+	for _, extension := range []string{".jpg", ".png", ".txt", ".nfo"} {
+		if isAudioCandidateExtension(extension) {
+			t.Fatalf("non-audio extension %s was treated as an unsupported audio file", extension)
+		}
+	}
+}
+
 func TestTrackSourceIdentityIsStableOnlyForSameRootAndPath(t *testing.T) {
 	originalIdentity, err := createTrackSourceIdentity("root-one", "album/./song.mp3")
 	if err != nil {

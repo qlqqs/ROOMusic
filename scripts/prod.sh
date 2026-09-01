@@ -15,4 +15,4 @@ export ROOMUSIC_HTTP_ADDR="${ROOMUSIC_HTTP_ADDR:-:8080}"
 if [[ "${ROOMUSIC_SKIP_BUILD:-0}" != "1" ]]; then
   (cd "$ROOT_DIR/frontend" && npm run build)
 fi
-exec go run "$ROOT_DIR/backend/cmd/roomusic"
+exec go -C "$ROOT_DIR/backend" run ./cmd/roomusic

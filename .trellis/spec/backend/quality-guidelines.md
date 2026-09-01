@@ -2,9 +2,10 @@
 
 ## Status
 
-There is no Go module or test suite yet. These are required gates for the Core 0
-scaffold and subsequent work. The first backend setup change must expose
-repeatable repository commands and update this file with their exact names.
+当前后端使用 Go module 和测试套件；核心门禁为 `gofmt`、`go test ./...`、
+`go vet ./...`、`go build ./...`，数据库集成测试通过
+`ROOMUSIC_TEST_DATABASE_URL` 控制是否连接 PostgreSQL。未配置该变量时测试会
+明确跳过，不能把跳过结果当作事务证据。
 
 ## Design Requirements
 
@@ -115,4 +116,4 @@ safe errors/logs, and tests.
 
 See [Engineering Principles](../guides/engineering-principles.md),
 [Modular Design](../guides/modular-design.md), and the
-[Core 0 PRD](../../tasks/08-31-roomusic-core-0-rebuild/prd.md).
+[Core 0 PRD](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md).

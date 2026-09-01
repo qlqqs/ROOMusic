@@ -2,10 +2,9 @@
 
 ## Status And Goals
 
-The Go error implementation has not been selected yet. Core 0 requires stable
-error semantics across domain, application, adapters, REST, logs, and frontend.
-Use standard Go wrapping and `errors.Is`/`errors.As` semantics unless a later
-documented choice provides equivalent behavior.
+当前 Go 实现使用标准 error wrapping，并在 REST 边界输出稳定错误 envelope。
+Core 0 的错误语义跨 domain、application、adapter、REST、日志和前端保持一致；
+新增错误必须沿用分类码与 `errors.Is`/`errors.As` 语义。
 
 Errors must preserve enough cause for operators while exposing only safe,
 actionable information to users.
@@ -101,7 +100,7 @@ contract is classification plus wrapped cause, not a specific error package.
 
 ## Async And Scan Failures
 
-A scan run has explicit pending/running/succeeded/failed/cancelled/incomplete
+A scan run has explicit pending/running/succeeded/failed/canceled/incomplete
 states. Per-file parse failures and skipped formats are bounded diagnostics
 linked to the scan run. They must not disappear into logs or silently become a
 successful observation.
@@ -137,4 +136,4 @@ bad input or environmental failure.
 - Including absolute music paths in ordinary-user errors.
 
 See [Logging Guidelines](./logging-guidelines.md), [Database Guidelines](./database-guidelines.md),
-and the [Core 0 PRD](../../tasks/08-31-roomusic-core-0-rebuild/prd.md).
+and the [Core 0 PRD](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md).

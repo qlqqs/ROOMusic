@@ -16,14 +16,17 @@ describe("Core 0 API decoders", () => {
     expect(decodeSetupStatus({ setup_required: true })).toEqual({ setup_required: true });
     expect(decodeSession({ username: "admin", role: "admin" })).toEqual({ username: "admin", role: "admin" });
     expect(decodeCreatedLibraryRoot({ id: "root-1", name: "Music", status: "active", revision: 1 })).toEqual({ id: "root-1", name: "Music", status: "active", revision: 1 });
+    expect(decodeCreatedLibraryRoot({ id: "root-1", name: "Music", status: "disabled", revision: 2 })).toEqual({ id: "root-1", name: "Music", status: "disabled", revision: 2 });
     expect(decodeLibraryRootList({ items: [{ id: "root-1", path: "Music", status: "active", revision: 1, created_at: "2026-09-01T08:00:00Z", updated_at: "2026-09-01T08:00:00Z" }] })).toEqual({
-      items: [{ id: "root-1", path: "Music", status: "active", revision: 1, created_at: "2026-09-01T08:00:00Z", updated_at: "2026-09-01T08:00:00Z" }],
+      items: [{ id: "root-1", path: "Music", name: "Music", status: "active", revision: 1, created_at: "2026-09-01T08:00:00Z", updated_at: "2026-09-01T08:00:00Z" }],
     });
   });
 
   it("rejects malformed identity and root fields", () => {
     expect(() => decodeSetupStatus({ setup_required: "yes" })).toThrow();
     expect(() => decodeSession({ username: "" })).toThrow();
+    expect(() => decodeSession({ username: "admin" })).toThrow();
+    expect(() => decodeSession({ username: "admin", role: "owner" })).toThrow();
     expect(() => decodeLibraryRootList({ items: [{ id: "root-1", path: "Music" }] })).toThrow();
   });
 

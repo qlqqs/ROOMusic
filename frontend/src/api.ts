@@ -1,9 +1,11 @@
 export type SetupStatusDTO = { setup_required: boolean };
 export type SessionDTO = { username: string; role: "admin" | "user" };
 export type UserDTO = { id: string; username: string; role: "admin" | "user"; disabled: boolean; created_at: string };
+export type CreatedUserDTO = { id: string; username: string; role: "user" };
+export type UpdatedUserDTO = { disabled: boolean };
 export type RootOperationDTO = { id: string; root_id?: string; operation: string; status: string; revision?: number; error_code?: string; created_at: string };
 export type LibraryRootDTO = { id: string; path: string; name?: string; status: "active" | "disabled"; revision: number; created_at: string; updated_at: string };
-export type CreatedLibraryRootDTO = { id: string; name: string; status: "active"; revision: number };
+export type CreatedLibraryRootDTO = { id: string; name: string; status: "active" | "disabled"; revision: number };
 export type UpdatedLibraryRootDTO = { id: string; path: string; status: "active" | "disabled"; revision: number };
 
 const scanStatuses = ["running", "succeeded", "failed", "canceled", "incomplete"] as const;
@@ -63,8 +65,19 @@ export function decodeSetupStatus(input: unknown): SetupStatusDTO {
 
 export function decodeSession(input: unknown): SessionDTO {
   const object = requireObject(input, "session");
-  const roleValue = object.role === undefined ? "admin" : requireNonEmptyString(object.role, "role"); const role = roleValue as "admin" | "user"; if (role !== "admin" && role !== "user") throw new Error("unknown role");
+  const roleValue = requireNonEmptyString(object.role, "role");
+  if (roleValue !== "admin" && roleValue !== "user") throw new Error("unknown role");
+  const role: SessionDTO["role"] = roleValue;
   return { username: requireNonEmptyString(object.username, "username"), role };
+}
+export function decodeCreatedUser(input: unknown): CreatedUserDTO {
+  const object = requireObject(input, "created user");
+  if (object.role !== "user") throw new Error("created user role must be user");
+  return { id: requireNonEmptyString(object.id, "id"), username: requireNonEmptyString(object.username, "username"), role: "user" };
+}
+export function decodeUpdatedUser(input: unknown): UpdatedUserDTO {
+  const object = requireObject(input, "updated user");
+  return { disabled: requireBoolean(object.disabled, "disabled") };
 }
 export function decodeUserList(input: unknown): {items: UserDTO[]} { const object=requireObject(input,"user list"); return {items: requireArray(object.items,"items").map(item=>{const u=requireObject(item,"user"); const role=requireNonEmptyString(u.role,"role"); if(role!=="admin"&&role!=="user") throw new Error("unknown role"); return {id:requireNonEmptyString(u.id,"id"),username:requireNonEmptyString(u.username,"username"),role,disabled:requireBoolean(u.disabled,"disabled"),created_at:requireTimestamp(u.created_at,"created_at")};})}; }
 
@@ -94,6 +107,7 @@ export function decodeLibraryRootList(input: unknown): { items: LibraryRootDTO[]
       return {
         id: requireNonEmptyString(root.id, "id"),
         path: requireNonEmptyString(root.path, "path"),
+        name: requireNonEmptyString(root.name ?? root.path, "name"),
         status,
         revision: requireSafeInteger(root.revision, "revision", 1),
         created_at: requireTimestamp(root.created_at, "created_at"),
@@ -105,8 +119,9 @@ export function decodeLibraryRootList(input: unknown): { items: LibraryRootDTO[]
 
 export function decodeCreatedLibraryRoot(input: unknown): CreatedLibraryRootDTO {
   const object = requireObject(input, "created library root");
-  if (object.status !== "active") throw new Error("created root must be active");
-  return { id: requireNonEmptyString(object.id, "id"), name: requireNonEmptyString(object.name, "name"), status: "active", revision: requireSafeInteger(object.revision, "revision", 1) };
+  const status = requireNonEmptyString(object.status, "status");
+  if (status !== "active" && status !== "disabled") throw new Error("unknown root status");
+  return { id: requireNonEmptyString(object.id, "id"), name: requireNonEmptyString(object.name, "name"), status, revision: requireSafeInteger(object.revision, "revision", 1) };
 }
 
 export function decodeUpdatedLibraryRoot(input: unknown): UpdatedLibraryRootDTO {

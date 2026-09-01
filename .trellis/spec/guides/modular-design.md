@@ -115,5 +115,5 @@ repository does not decide whether the caller is an administrator.
 
 The visual intent is summarized by the
 [architecture canvas](../../../docs/architecture/roomusic-modular-plugin-architecture.canvas.tsx),
-while the [Core 0 PRD](../../tasks/08-31-roomusic-core-0-rebuild/prd.md) remains
+while the [Core 0 PRD](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md) remains
 authoritative for behavior.

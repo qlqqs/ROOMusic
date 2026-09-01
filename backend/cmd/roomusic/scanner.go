@@ -185,7 +185,11 @@ func (application *roomusicApplication) scanRoot(context context.Context, scanID
 			}
 			return nil
 		}
-		if extension != ".flac" && extension != ".mp3" && extension != ".ogg" && extension != ".opus" && extension != ".wav" {
+		if !isSupportedAudioExtension(extension) {
+			if !isAudioCandidateExtension(extension) {
+				return nil
+			}
+			complete = false
 			if diagnosticError := application.recordDiagnostic(context, scanID, relativePath, "unsupported_format", "不支持的音频格式"); diagnosticError != nil {
 				return diagnosticError
 			}
@@ -217,6 +221,24 @@ func (application *roomusicApplication) scanRoot(context context.Context, scanID
 		return errors.New("incomplete root")
 	}
 	return nil
+}
+
+func isSupportedAudioExtension(extension string) bool {
+	switch extension {
+	case ".flac", ".mp3", ".ogg", ".opus", ".wav":
+		return true
+	default:
+		return false
+	}
+}
+
+func isAudioCandidateExtension(extension string) bool {
+	switch extension {
+	case ".aac", ".aif", ".aiff", ".ape", ".dff", ".dsf", ".m4a", ".mka", ".wma":
+		return true
+	default:
+		return false
+	}
 }
 
 func safeRelativePath(root, path string) string {
@@ -255,10 +277,14 @@ func (application *roomusicApplication) saveObservation(context context.Context,
 			_, err = transaction.ExecContext(context, "INSERT INTO releases(id,group_id,title,artist,source_root_id,relative_directory) VALUES($1::uuid,$2::uuid,$3,$4,$5::uuid,$6)", releaseID, groupID, observation.Album, observation.Artist, root.ID, directory)
 		}
 		if err == nil {
-			_, err = transaction.ExecContext(context, "INSERT INTO media(id,release_id,position) VALUES($1::uuid,$2::uuid,1)", mediumID, releaseID)
+			_, err = transaction.ExecContext(context, "INSERT INTO media(id,release_id,position) VALUES($1::uuid,$2::uuid,$3)", mediumID, releaseID, observation.DiscNumber)
 		}
 	} else if err == nil {
-		err = transaction.QueryRowContext(context, "SELECT id::text FROM media WHERE release_id=$1::uuid ORDER BY position LIMIT 1", releaseID).Scan(&mediumID)
+		err = transaction.QueryRowContext(context, "SELECT id::text FROM media WHERE release_id=$1::uuid AND position=$2 ORDER BY id LIMIT 1", releaseID, observation.DiscNumber).Scan(&mediumID)
+		if err == sql.ErrNoRows {
+			mediumID = createIdentifier()
+			_, err = transaction.ExecContext(context, "INSERT INTO media(id,release_id,position) VALUES($1::uuid,$2::uuid,$3)", mediumID, releaseID, observation.DiscNumber)
+		}
 	}
 	if err != nil {
 		return err

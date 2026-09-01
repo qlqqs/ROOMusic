@@ -2,11 +2,11 @@
 
 ## Status
 
-The repository does not yet contain a React/TypeScript application. These files
-define planned Core 0 contracts rather than describing implemented components or
-selected libraries. The first frontend scaffold must record its package manager,
-build tool, router, data-fetching/cache mechanism, runtime decoder, styling
-approach, test runner, and exact quality commands.
+当前 Core 0 已有 React + TypeScript + Vite 前端，代码暂集中在
+`frontend/src/main.tsx`、`frontend/src/api.ts` 和 `frontend/src/styles.css`。
+请求使用原生 `fetch`/Cookie credentials，响应由手写 runtime decoder 校验，
+测试使用 Vitest，静态检查使用 ESLint；尚未引入 router、query/cache 或 UI 库。
+目标 feature 分层仍是后续演进方向，不代表当前目录已经存在。
 
 ## Pre-Development Checklist
 
@@ -36,6 +36,7 @@ Before writing or reviewing frontend code:
 | [Type Safety](./type-safety.md) | Strict TypeScript, DTO decoding, and exhaustive domain states |
 | [Quality Guidelines](./quality-guidelines.md) | Tests, accessibility, gates, and forbidden shortcuts |
 | [播放器设计规范](./player-design-guidelines.md) | 工作台视觉层级、响应式布局、播放交互与可访问性 |
+| [Core 0 当前运行合同](../backend/core0-runtime-contracts.md) | REST、环境、扫描、事务与跨层安全合同 |
 
 ## Quality Check
 
@@ -46,7 +47,7 @@ Before declaring frontend work complete:
       exists, record the missing command rather than inventing one.
 - [ ] Verify raw REST payloads are decoded once at the feature API boundary,
       types are exhaustive, and state has one clear owner.
-- [ ] Verify loading, empty, stale, conflict, cancelled, and error states that
+- [ ] Verify loading, empty, stale, conflict, canceled, and error states that
       apply to the workflow are visible and recoverable.
 - [ ] Verify semantic HTML, keyboard interaction, labels, focus behavior, and
       narrow and desktop layouts for touched screens.
@@ -69,7 +70,7 @@ Before declaring frontend work complete:
   authority.
 - Core screens cover initialization/login as applicable, library browse, Release
   detail with Medium/Track structure, basic search, directory/scan administration,
-  and loading, empty, stale, conflict, cancelled, and error states.
+  and loading, empty, stale, conflict, canceled, and error states.
 - The UI displays safe resource identities and evidence. It never receives or
   constructs arbitrary host filesystem paths for ordinary users.
 - Redis, Meilisearch, Agent runtime, runtime plugins, playback, PWA offline
@@ -101,6 +102,6 @@ browse flows into marketing-style pages.
 
 ## Evidence
 
-- [Core 0 UI acceptance behavior](../../tasks/08-31-roomusic-core-0-rebuild/prd.md)
+- [Core 0 UI acceptance behavior](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md)
 - [Current development environment](../../../README.md)
 - [Inherited product audience and long-term direction](../guides/product-goals.md)

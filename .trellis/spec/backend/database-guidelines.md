@@ -7,9 +7,10 @@ PostgreSQL 18 is the only required business authority for Core 0. The current
 may be running for development, but application startup, sessions, scanning,
 search, and the user-visible Core 0 loop must work without them.
 
-No ORM, query generator, migration tool, or PostgreSQL driver has been selected
-in this repository. Record those choices when the backend is initialized; do not
-silently copy the V0 stack.
+当前实现使用 `database/sql` + `pgx/v5`，迁移通过 `embed.FS` 按
+`backend/migrations/*.sql` 排序执行；未引入 ORM、query generator 或外部迁移
+工具。现有执行器每次启动重放幂等 SQL，尚未按 `schema_migrations` 跳过或加锁，
+该治理列为后续技术债。
 
 ## Ownership And Access
 
@@ -126,4 +127,4 @@ scans cannot mark sources missing.
 - Treating Operation Journal, scan history, and runtime logs as one table.
 
 These rules implement the transaction and authority requirements in the
-[Core 0 PRD](../../tasks/08-31-roomusic-core-0-rebuild/prd.md).
+[Core 0 PRD](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md).

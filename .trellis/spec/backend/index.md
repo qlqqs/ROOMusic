@@ -2,10 +2,10 @@
 
 ## Status
 
-The repository does not yet contain a Go application. These documents define
-the approved Core 0 implementation contract. Replace a planned detail only
-through an explicit design decision and update the affected guide in the same
-change.
+当前仓库已有 Go Core 0 应用，入口位于 `backend/cmd/roomusic`，使用
+`net/http`、`database/sql + pgx/v5`、`embed.FS` 迁移、bcrypt 和 `log/slog`。
+代码仍是过渡单体；下文的 `internal/*` 分层是目标架构，只有在真实边界形成后
+才拆分。
 
 Core 0 is a modular monolith: one Go application, versioned REST, in-process scan
 coordination, PostgreSQL as the only required business authority, and a read-only
@@ -38,6 +38,7 @@ Before writing or reviewing backend code:
 | [Database Guidelines](./database-guidelines.md) | PostgreSQL ownership, transactions, migrations, revisions, and idempotency |
 | [Error Handling](./error-handling.md) | Classified application errors and stable REST responses |
 | [Logging Guidelines](./logging-guidelines.md) | Structured JSON events, correlation, and redaction |
+| [Core 0 当前运行合同](./core0-runtime-contracts.md) | 当前 REST、环境、事务、扫描和跨层安全合同 |
 | [Music Steward And Operation Guidelines](./agent-and-operation-guidelines.md) | Agent modes, Review Subagent, tools, Change Sets, and recovery |
 | [Quality Guidelines](./quality-guidelines.md) | Focused code, forbidden coupling, tests, and gates |
 
@@ -102,7 +103,7 @@ itself, runs a repository update, and returns the database row directly.
 
 ## Source Evidence
 
-- [Core 0 requirements](../../tasks/08-31-roomusic-core-0-rebuild/prd.md)
+- [Core 0 requirements](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md)
 - [Current environment README](../../../README.md)
 - [Current Compose services](../../../compose.yaml)
 - [Architecture canvas](../../../docs/architecture/roomusic-modular-plugin-architecture.canvas.tsx)
