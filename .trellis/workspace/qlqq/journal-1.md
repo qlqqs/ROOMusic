@@ -205,3 +205,25 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 ### Status
 
 [OK] **Completed**
+
+
+## Session 10: Core 0 运行契约修复与规范刷新
+<!-- trellis-session: v=2 fp=18b137fc36871dd1 -->
+
+**Date**: 2026-09-01
+**Task**: Core 0 运行契约修复与规范刷新
+**Branch**: `main`
+
+### Summary
+
+修复生产启动脚本路径、前端响应解码与焦点可访问性、用户启停事务和最后管理员保护、扫描不支持格式与多碟媒体归属；刷新 Trellis 前后端及架构规范，登记迁移执行器与持久化扫描取消为后续技术债。已通过前后端质量门禁、Compose、脚本和 Trellis 校验。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a15487f` | fix(core): harden runtime contracts and refresh trellis specs |
+
+### Status
+
+[OK] **Completed**
