@@ -93,3 +93,25 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 ### Status
 
 [OK] **Completed**
+
+
+## Session 5: 完成 Release 封面体验
+<!-- trellis-session: v=2 fp=bdf90a9341598c1a -->
+
+**Date**: 2026-09-01
+**Task**: 完成 Release 封面体验
+**Branch**: `main`
+
+### Summary
+
+增加 release-level 封面迁移、内嵌/目录发现、hash 幂等 data 存储、鉴权资源 API 和前端详情展示；封面失败隔离于音频扫描。通过 Go、前端、Compose 与 diff 质量门禁。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `26d4ffb` | feat(core): add release artwork storage |
+
+### Status
+
+[OK] **Completed**
