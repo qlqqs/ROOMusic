@@ -1,5 +1,6 @@
 export type SetupStatusDTO = { setup_required: boolean };
-export type SessionDTO = { username: string };
+export type SessionDTO = { username: string; role: "admin" | "user" };
+export type UserDTO = { id: string; username: string; role: "admin" | "user"; disabled: boolean; created_at: string };
 export type LibraryRootDTO = { id: string; path: string; created_at: string };
 export type CreatedLibraryRootDTO = { id: string; name: string };
 
@@ -60,8 +61,10 @@ export function decodeSetupStatus(input: unknown): SetupStatusDTO {
 
 export function decodeSession(input: unknown): SessionDTO {
   const object = requireObject(input, "session");
-  return { username: requireNonEmptyString(object.username, "username") };
+  const roleValue = object.role === undefined ? "admin" : requireNonEmptyString(object.role, "role"); const role = roleValue as "admin" | "user"; if (role !== "admin" && role !== "user") throw new Error("unknown role");
+  return { username: requireNonEmptyString(object.username, "username"), role };
 }
+export function decodeUserList(input: unknown): {items: UserDTO[]} { const object=requireObject(input,"user list"); return {items: requireArray(object.items,"items").map(item=>{const u=requireObject(item,"user"); const role=requireNonEmptyString(u.role,"role"); if(role!=="admin"&&role!=="user") throw new Error("unknown role"); return {id:requireNonEmptyString(u.id,"id"),username:requireNonEmptyString(u.username,"username"),role,disabled:requireBoolean(u.disabled,"disabled"),created_at:requireTimestamp(u.created_at,"created_at")};})}; }
 
 export function decodeLibraryRootList(input: unknown): { items: LibraryRootDTO[] } {
   const object = requireObject(input, "library root list");

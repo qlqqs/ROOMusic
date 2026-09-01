@@ -48,6 +48,10 @@ func buildApplicationHandler(config serverConfig, database *databaseState, logge
 	mux.HandleFunc("POST /api/v1/auth/login", application.login)
 	mux.HandleFunc("POST /api/v1/auth/logout", application.logout)
 	mux.HandleFunc("GET /api/v1/auth/me", application.me)
+	mux.HandleFunc("GET /api/v1/users", application.listUsers)
+	mux.HandleFunc("POST /api/v1/users", application.createUser)
+	mux.HandleFunc("PATCH /api/v1/users/{id}", application.updateUser)
+	mux.HandleFunc("POST /api/v1/users/{id}/sessions/revoke", application.revokeUserSessions)
 	mux.HandleFunc("GET /api/v1/library-roots", application.listRoots)
 	mux.HandleFunc("POST /api/v1/library-roots", application.addRoot)
 	mux.HandleFunc("POST /api/v1/scans", application.startScan)
@@ -99,7 +103,7 @@ func (application *roomusicApplication) setupAdmin(responseWriter http.ResponseW
 		return
 	}
 	userID := createIdentifier()
-	if _, err = tx.ExecContext(request.Context(), "INSERT INTO users (id, username, password_hash) VALUES ($1::uuid,$2,$3)", userID, input.Username, passwordHash); err != nil {
+	if _, err = tx.ExecContext(request.Context(), "INSERT INTO users (id, username, password_hash, role) VALUES ($1::uuid,$2,$3,'admin')", userID, input.Username, passwordHash); err != nil {
 		writeAPIError(responseWriter, request, 409, "setup_closed", "管理员初始化已完成")
 		return
 	}
@@ -111,7 +115,7 @@ func (application *roomusicApplication) setupAdmin(responseWriter http.ResponseW
 		writeAPIError(responseWriter, request, 409, "setup_closed", "管理员初始化已完成")
 		return
 	}
-	writeJSON(responseWriter, 201, map[string]string{"username": input.Username})
+	writeJSON(responseWriter, 201, map[string]string{"username": input.Username, "role": "admin"})
 }
 
 func decodeJSON(responseWriter http.ResponseWriter, request *http.Request, destination any) bool {
@@ -133,8 +137,8 @@ func (application *roomusicApplication) login(responseWriter http.ResponseWriter
 	if !decodeJSON(responseWriter, request, &input) {
 		return
 	}
-	var userID, passwordHash string
-	err := application.database.connection.QueryRowContext(request.Context(), "SELECT id::text,password_hash FROM users WHERE username=$1", input.Username).Scan(&userID, &passwordHash)
+	var userID, passwordHash, role string
+	err := application.database.connection.QueryRowContext(request.Context(), "SELECT id::text,password_hash,role FROM users WHERE username=$1 AND disabled_at IS NULL", input.Username).Scan(&userID, &passwordHash, &role)
 	if err != nil || !verifyPassword(passwordHash, input.Password) {
 		writeAPIError(responseWriter, request, 401, "invalid_credentials", "用户名或密码错误")
 		return
@@ -146,7 +150,7 @@ func (application *roomusicApplication) login(responseWriter http.ResponseWriter
 		return
 	}
 	application.setSessionCookie(responseWriter, token)
-	writeJSON(responseWriter, 200, map[string]string{"username": input.Username})
+	writeJSON(responseWriter, 200, map[string]string{"username": input.Username, "role": role})
 }
 
 func (application *roomusicApplication) logout(responseWriter http.ResponseWriter, request *http.Request) {
@@ -160,23 +164,16 @@ func (application *roomusicApplication) logout(responseWriter http.ResponseWrite
 	writeJSON(responseWriter, 200, map[string]bool{"logged_out": true})
 }
 func (application *roomusicApplication) me(responseWriter http.ResponseWriter, request *http.Request) {
-	var username string
-	userID, err := application.authenticatedUser(request)
+	user, err := application.currentUser(request)
 	if err != nil {
 		application.writeAuthenticationError(responseWriter, request)
 		return
 	}
-	err = application.database.connection.QueryRowContext(request.Context(), "SELECT username FROM users WHERE id=$1::uuid", userID).Scan(&username)
-	if err != nil {
-		application.writeAuthenticationError(responseWriter, request)
-		return
-	}
-	writeJSON(responseWriter, 200, map[string]string{"username": username})
+	writeJSON(responseWriter, 200, map[string]string{"username": user.Username, "role": user.Role})
 }
 
 func (application *roomusicApplication) listRoots(responseWriter http.ResponseWriter, request *http.Request) {
-	if _, err := application.authenticatedUser(request); err != nil {
-		application.writeAuthenticationError(responseWriter, request)
+	if _, ok := application.requireAdmin(responseWriter, request); !ok {
 		return
 	}
 	rows, err := application.database.connection.QueryContext(request.Context(), "SELECT id::text,path,created_at FROM library_roots ORDER BY path")
@@ -206,8 +203,7 @@ func (application *roomusicApplication) addRoot(responseWriter http.ResponseWrit
 	if !application.requireSameOrigin(responseWriter, request) {
 		return
 	}
-	if _, err := application.authenticatedUser(request); err != nil {
-		application.writeAuthenticationError(responseWriter, request)
+	if _, ok := application.requireAdmin(responseWriter, request); !ok {
 		return
 	}
 	var input struct {
@@ -443,4 +439,99 @@ func (application *roomusicApplication) artworkResource(w http.ResponseWriter, r
 	w.Header().Set("Cache-Control", "private, max-age=86400")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(b)
+}
+
+func (application *roomusicApplication) listUsers(w http.ResponseWriter, r *http.Request) {
+	if _, ok := application.requireAdmin(w, r); !ok {
+		return
+	}
+	rows, err := application.database.connection.QueryContext(r.Context(), "SELECT id::text,username,role,disabled_at,created_at FROM users ORDER BY username")
+	if err != nil {
+		writeAPIError(w, r, 503, "database_unavailable", "服务暂不可用")
+		return
+	}
+	defer rows.Close()
+	items := []map[string]any{}
+	for rows.Next() {
+		var id, username, role string
+		var disabled sql.NullTime
+		var created time.Time
+		if rows.Scan(&id, &username, &role, &disabled, &created) != nil {
+			continue
+		}
+		items = append(items, map[string]any{"id": id, "username": username, "role": role, "disabled": disabled.Valid, "created_at": created})
+	}
+	writeJSON(w, 200, map[string]any{"items": items})
+}
+func (application *roomusicApplication) createUser(w http.ResponseWriter, r *http.Request) {
+	if !application.requireSameOrigin(w, r) {
+		return
+	}
+	if _, ok := application.requireAdmin(w, r); !ok {
+		return
+	}
+	var in struct{ Username, Password string }
+	if !decodeJSON(w, r, &in) || strings.TrimSpace(in.Username) == "" || len(in.Password) < 12 {
+		writeAPIError(w, r, 400, "invalid_input", "用户名不能为空，密码至少需要 12 个字符")
+		return
+	}
+	hash, err := hashPassword(in.Password)
+	if err != nil {
+		writeAPIError(w, r, 500, "internal_error", "无法创建用户")
+		return
+	}
+	id := createIdentifier()
+	_, err = application.database.connection.ExecContext(r.Context(), "INSERT INTO users(id,username,password_hash,role) VALUES($1::uuid,$2,$3,'user')", id, in.Username, hash)
+	if err != nil {
+		writeAPIError(w, r, 409, "username_taken", "用户名已存在")
+		return
+	}
+	writeJSON(w, 201, map[string]string{"id": id, "username": in.Username, "role": "user"})
+}
+func (application *roomusicApplication) updateUser(w http.ResponseWriter, r *http.Request) {
+	if !application.requireSameOrigin(w, r) {
+		return
+	}
+	actor, ok := application.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	var in struct {
+		Disabled *bool `json:"disabled"`
+	}
+	if !decodeJSON(w, r, &in) || in.Disabled == nil {
+		writeAPIError(w, r, 400, "invalid_input", "缺少禁用状态")
+		return
+	}
+	id := r.PathValue("id")
+	if *in.Disabled {
+		var admins int
+		_ = application.database.connection.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM users WHERE role='admin' AND disabled_at IS NULL").Scan(&admins)
+		var role string
+		_ = application.database.connection.QueryRowContext(r.Context(), "SELECT role FROM users WHERE id=$1::uuid", id).Scan(&role)
+		if role == "admin" && admins <= 1 {
+			writeAPIError(w, r, 409, "last_admin", "不能禁用最后一个管理员")
+			return
+		}
+		_, _ = application.database.connection.ExecContext(r.Context(), "UPDATE users SET disabled_at=NOW() WHERE id=$1::uuid", id)
+		_, _ = application.database.connection.ExecContext(r.Context(), "UPDATE sessions SET revoked_at=NOW() WHERE user_id=$1::uuid AND revoked_at IS NULL", id)
+	} else {
+		_, _ = application.database.connection.ExecContext(r.Context(), "UPDATE users SET disabled_at=NULL WHERE id=$1::uuid", id)
+	}
+	_ = actor
+	writeJSON(w, 200, map[string]bool{"disabled": *in.Disabled})
+}
+func (application *roomusicApplication) revokeUserSessions(w http.ResponseWriter, r *http.Request) {
+	if !application.requireSameOrigin(w, r) {
+		return
+	}
+	if _, ok := application.requireAdmin(w, r); !ok {
+		return
+	}
+	_, err := application.database.connection.ExecContext(r.Context(), "UPDATE sessions SET revoked_at=NOW() WHERE user_id=$1::uuid AND revoked_at IS NULL", r.PathValue("id"))
+	if err != nil {
+		writeAPIError(w, r, 503, "database_unavailable", "无法撤销会话")
+		return
+	}
+	writeJSON(w, 200, map[string]bool{"revoked": true})
 }

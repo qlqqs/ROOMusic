@@ -40,17 +40,35 @@ func generateSessionToken() string {
 	return hex.EncodeToString(tokenBytes)
 }
 
+type authUser struct{ ID, Username, Role string }
+
 func (application *roomusicApplication) authenticatedUser(request *http.Request) (string, error) {
+	u, err := application.currentUser(request)
+	return u.ID, err
+}
+func (application *roomusicApplication) currentUser(request *http.Request) (authUser, error) {
 	cookie, err := request.Cookie(sessionCookieName)
 	if err != nil || cookie.Value == "" {
-		return "", errors.New("authentication required")
+		return authUser{}, errors.New("authentication required")
 	}
-	var userID string
-	err = application.database.connection.QueryRowContext(request.Context(), `SELECT user_id::text FROM sessions WHERE token_hash=$1 AND revoked_at IS NULL AND expires_at > NOW()`, hashSessionToken(cookie.Value)).Scan(&userID)
+	var user authUser
+	err = application.database.connection.QueryRowContext(request.Context(), `SELECT u.id::text,u.username,u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at > NOW() AND u.disabled_at IS NULL`, hashSessionToken(cookie.Value)).Scan(&user.ID, &user.Username, &user.Role)
 	if err != nil {
-		return "", errors.New("authentication required")
+		return authUser{}, errors.New("authentication required")
 	}
-	return userID, nil
+	return user, nil
+}
+func (application *roomusicApplication) requireAdmin(w http.ResponseWriter, r *http.Request) (authUser, bool) {
+	u, err := application.currentUser(r)
+	if err != nil {
+		application.writeAuthenticationError(w, r)
+		return authUser{}, false
+	}
+	if u.Role != "admin" {
+		writeAPIError(w, r, http.StatusForbidden, "forbidden", "需要管理员权限")
+		return authUser{}, false
+	}
+	return u, true
 }
 
 func (application *roomusicApplication) writeAuthenticationError(responseWriter http.ResponseWriter, request *http.Request) {
