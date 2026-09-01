@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.dev
 
 # 本地音乐库与运行期数据
 /music/

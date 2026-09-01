@@ -2,9 +2,15 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${ROOMUSIC_ENV_FILE:-$ROOT_DIR/.env.dev}"
+[[ -f "$ENV_FILE" ]] || { echo "缺少开发配置：$ENV_FILE" >&2; exit 1; }
+set -a
+# shellcheck disable=SC1090
+source "$ENV_FILE"
+set +a
 requested_environment="${ROOMUSIC_ENV:-}"
 requested_database_url="${ROOMUSIC_DATABASE_URL:-}"
-if [[ -f "$ROOT_DIR/.env" ]]; then
+if [[ -f "$ROOT_DIR/.env" && "${ROOMUSIC_ENV_FILE:-}" == "$ROOT_DIR/.env" ]]; then
   set -a
   # shellcheck disable=SC1091
   source "$ROOT_DIR/.env"
@@ -33,7 +39,7 @@ start_backend() {
 }
 
 start_backend
-(cd "$ROOT_DIR/frontend" && exec npm run dev -- --host 127.0.0.1) &
+(cd "$ROOT_DIR/frontend" && exec npm run dev -- --host 0.0.0.0) &
 frontend_pid=$!
 
 last_fingerprint=""
