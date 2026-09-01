@@ -1,4 +1,5 @@
 /* global URL, URLSearchParams, window, crypto */
+/* eslint-disable no-irregular-whitespace */
 import { FormEvent, StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -56,6 +57,8 @@ function App() {
   const [releaseRetry, setReleaseRetry] = useState(0);
   const [scan, setScan] = useState<ScanStatusDTO | ScanStartDTO | null>(null);
   const [message, setMessage] = useState("");
+  const [nowPlaying, setNowPlaying] = useState<ReleaseDetailDTO["media"][number]["tracks"][number] | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
   useEffect(() => {
     void requestApi("/api/v1/setup/status", decodeSetupStatus)
       .then((status) => {
@@ -229,6 +232,10 @@ function App() {
     window.history.pushState({}, "", url);
     setSearchQuery("");
   }
+  function playTrack(track: ReleaseDetailDTO["media"][number]["tracks"][number]) {
+    setNowPlaying(track);
+    setIsPlaying(true);
+  }
   if (setupRequired === null)
     return (
       <main className="shell">
@@ -264,140 +271,16 @@ function App() {
         {message && <p role="alert">{message}</p>}
       </main>
     );
-  return (
-    <main className="shell">
-      <p className="eyebrow">{session.role === "admin" ? "管理员" : "用户"} · {session.username}</p>
-      <h1>ROOMusic</h1>
-      {session.role === "admin" && <>
-      <section aria-label="用户管理">
-        <h2>用户管理</h2>
-        <form onSubmit={createUser}>
-          <label>新用户 <input value={newUsername} onChange={(e) => setNewUsername(e.target.value)} /></label>
-          <label>初始密码 <input type="password" minLength={12} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} /></label>
-          <button type="submit">创建普通用户</button>
-        </form>
-        <ul>{users.map((user) => <li key={user.id}>{user.username} · {user.role} · {user.disabled ? "已禁用" : "正常"} <button type="button" onClick={() => void toggleUser(user)}>{user.disabled ? "启用" : "禁用"}</button> <button type="button" onClick={() => void revokeUser(user)}>撤销会话</button></li>)}</ul>
-      </section>
-      <form onSubmit={registerRoot}>
-        <label>
-          音乐目录
-          <input
-            placeholder="允许的音乐目录路径"
-            value={libraryPath}
-            onChange={(event) => setLibraryPath(event.target.value)}
-          />
-        </label>
-        <button type="submit">注册目录</button>
-      </form>
-      <h2>已注册目录</h2>
-      {libraryRoots.length === 0 ? (
-        <p>尚未注册音乐目录</p>
-      ) : (
-        <ul>
-          {libraryRoots.map((root) => (
-            <li key={root.id}>{root.path} · {root.status} · r{root.revision} <button type="button" onClick={() => void changeRoot(root)}>{root.status === "active" ? "停用" : "恢复"}</button></li>
-          ))}
-        </ul>
-      )}
-      <button
-        type="button"
-        onClick={startScan}
-        disabled={scan?.status === "running"}
-      >
-        扫描音乐库
-      </button>{" "}
-      </>}
-      {session.role === "admin" && <section aria-label="目录操作历史"><h2>目录操作历史</h2>{operations.length === 0 ? <p>暂无操作记录</p> : <ul>{operations.map((item) => <li key={item.id}>{item.operation} · {item.status}{item.revision ? ` · revision ${item.revision}` : ""}{item.error_code ? ` · ${item.error_code}` : ""} · {new Date(item.created_at).toLocaleString()}</li>)}</ul>}</section>}
-      <button type="button" onClick={() => void logout()}>
-        退出登录
-      </button>
-      {scan && <p role="status">扫描状态：{scan.status}</p>}
-      <h2>发行版本</h2>
-      <form onSubmit={submitSearch}>
-        <label>
-          搜索发行版本
-          <input
-            value={searchInput}
-            onChange={(event) => setSearchInput(event.target.value)}
-            placeholder="标题、艺术家或曲目"
-          />
-        </label>
-        <button type="submit">搜索</button>
-        {searchQuery && (
-          <button type="button" onClick={clearSearch}>
-            清空
-          </button>
-        )}
-      </form>
-      {releaseLoading ? (
-        <p role="status">正在加载发行版本...</p>
-      ) : releaseError ? (
-        <p role="alert">
-          {releaseError}{" "}
-          <button
-            type="button"
-            onClick={() => setReleaseRetry((retry) => retry + 1)}
-          >
-            重试
-          </button>
-        </p>
-      ) : (
-        <>
-          <p>共 {releaseTotal} 个发行版本</p>
-          {releases.length === 0 ? (
-            <p>暂无匹配的发行版本</p>
-          ) : (
-            <ul>
-              {releases.map((release) => (
-                <li key={release.id}>
-                  <button
-                    type="button"
-                    onClick={() => void showRelease(release.id)}
-                  >
-                    {release.title} · {release.artist}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </>
-      )}
-      {selectedRelease && (
-        <section aria-label="发行版本详情">
-          <h2>{selectedRelease.title}</h2>
-          <p>{selectedRelease.artist}</p>
-          {selectedRelease.artwork && (
-            <img
-              src={`/api/v1/artworks/${encodeURIComponent(selectedRelease.artwork.resource_id)}`}
-              alt={`${selectedRelease.title} 封面`}
-              width={selectedRelease.artwork.width}
-              height={selectedRelease.artwork.height}
-            />
-          )}
-          {selectedRelease.media.map((medium) => (
-            <section key={medium.id} aria-label={`碟片 ${medium.position}`}>
-              <h3>
-                碟片 {medium.position} · {medium.title}
-              </h3>
-              {medium.tracks.length === 0 ? (
-                <p>此碟片暂无曲目</p>
-              ) : (
-                <ol>
-                  {medium.tracks.map((track) => (
-                    <li key={track.id}>
-                      {track.position}. {track.title} · {track.artist}{" "}
-                      <small>来源：{track.source}</small>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </section>
-          ))}
-        </section>
-      )}
-      {message && <p role="alert">{message}</p>}
-    </main>
-  );
+  return <main className="app-shell">
+    <aside className="sidebar"><div className="brand"><span className="brand-mark">R</span><span>ROOMusic</span></div><p className="side-label">工作区</p><nav><a className="nav-item active" href="#library">◈ <span>媒体库</span><b>{releaseTotal}</b></a><a className="nav-item" href="#queue">≡ <span>播放队列</span></a>{session.role === "admin" && <a className="nav-item" href="#admin">⚙ <span>管理中心</span></a>}</nav><div className="sidebar-bottom"><div className="profile"><span className="avatar">{session.username.slice(0, 1).toUpperCase()}</span><div><strong>{session.username}</strong><small>{session.role === "admin" ? "管理员" : "成员"}</small></div></div><button className="ghost-button" type="button" onClick={() => void logout()}>退出登录</button></div></aside>
+    <section className="workspace"><header className="topbar"><form className="searchbar" onSubmit={submitSearch}><span>⌕</span><label className="sr-only" htmlFor="library-search">搜索音乐库</label><input id="library-search" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="搜索艺术家、专辑或曲目" />{searchQuery && <button type="button" onClick={clearSearch}>清除</button>}</form><span className="sync-state"><i /> {scan?.status === "running" ? "正在扫描" : "已同步"}</span></header>
+      {message && <p className="toast" role="alert">{message}</p>}
+      <div className="content-grid"><section className="library-panel" id="library"><div className="section-heading"><div><p className="eyebrow">私人音乐库</p><h1>探索你的收藏</h1></div><div className="heading-actions"><span className="result-count">{releaseTotal} 个发行版本</span>{session.role === "admin" && <button className="outline-button" type="button" onClick={() => void startScan()} disabled={scan?.status === "running"}>↻ 扫描音乐库</button>}</div></div>{releaseLoading ? <p className="state-block" role="status">正在加载发行版本...</p> : releaseError ? <p className="state-block error" role="alert">{releaseError} <button type="button" onClick={() => setReleaseRetry((r) => r + 1)}>重试</button></p> : releases.length === 0 ? <p className="state-block">暂无匹配的发行版本</p> : <div className="release-grid">{releases.map((release) => <button className="release-card" key={release.id} type="button" onClick={() => void showRelease(release.id)}><div className="cover-placeholder">{release.title.slice(0, 1)}</div><strong>{release.title}</strong><span>{release.artist}</span><small>{release.year ?? "年份未知"}</small></button>)}</div>}
+        {selectedRelease && <article className="detail-panel"><div className="detail-cover">{selectedRelease.artwork ? <img src={`/api/v1/artworks/${encodeURIComponent(selectedRelease.artwork.resource_id)}`} alt={`${selectedRelease.title} 封面`} /> : <span>{selectedRelease.title.slice(0, 1)}</span>}</div><div className="detail-body"><p className="eyebrow">发行详情</p><h2>{selectedRelease.title}</h2><p className="detail-artist">{selectedRelease.artist}</p>{selectedRelease.media.map((medium) => <div className="medium" key={medium.id}><h3>碟片 {medium.position} <span>{medium.title}</span></h3>{medium.tracks.length === 0 ? <p>此碟片暂无曲目</p> : <ol>{medium.tracks.map((track) => <li key={track.id}><button type="button" onClick={() => playTrack(track)}><span>{String(track.position).padStart(2, "0")}</span><b>{track.title}</b><small>{track.artist}</small><i>▶</i></button></li>)}</ol>}</div>)}</div></article>}
+      </section><aside className="queue-panel" id="queue"><div className="queue-heading"><h2>即将播放</h2><span>{nowPlaying ? "演示队列" : "空队列"}</span></div>{nowPlaying ? <div className="queue-now"><div className="mini-cover">{nowPlaying.title.slice(0, 1)}</div><div><strong>{nowPlaying.title}</strong><span>{nowPlaying.artist}</span></div><button type="button" aria-label="暂停播放" onClick={() => setIsPlaying((v) => !v)}>{isPlaying ? "Ⅱ" : "▶"}</button></div> : <div className="queue-empty"><span>♫</span><p>从发行详情中选择一首曲目<br />开始播放演示</p></div>}<div className="queue-tip"><span>⌘</span><p>播放控制为界面演示<br />暂未连接音频流服务</p></div></aside></div>
+      {session.role === "admin" && <section className="admin-panel" id="admin"><div className="section-heading"><div><p className="eyebrow">管理员工具</p><h2>管理中心</h2></div></div><div className="admin-grid"><section className="admin-card"><h3>用户</h3><form onSubmit={createUser}><input aria-label="新用户名" placeholder="新用户名" value={newUsername} onChange={(e) => setNewUsername(e.target.value)} /><input aria-label="初始密码" type="password" placeholder="初始密码（至少 12 位）" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} /><button type="submit">创建用户</button></form>{users.map((user) => <div className="admin-row" key={user.id}><span>{user.username}<small>{user.disabled ? "已禁用" : "正常"}</small></span><button type="button" onClick={() => void toggleUser(user)}>{user.disabled ? "启用" : "禁用"}</button><button type="button" onClick={() => void revokeUser(user)}>撤销</button></div>)}</section><section className="admin-card"><h3>音乐目录</h3><form onSubmit={registerRoot}><input aria-label="音乐目录路径" placeholder="允许的音乐目录路径" value={libraryPath} onChange={(e) => setLibraryPath(e.target.value)} /><button type="submit">注册目录</button></form>{libraryRoots.map((root) => <div className="admin-row" key={root.id}><span>{root.name}<small>{root.status} · r{root.revision}</small></span><button type="button" onClick={() => void changeRoot(root)}>{root.status === "active" ? "停用" : "恢复"}</button></div>)}{operations.slice(0, 3).map((item) => <div className="history-row" key={item.id}><span>{item.operation}</span><small>{item.status}</small></div>)}</section></div></section>}
+    </section>{nowPlaying && <footer className="player-bar"><div className="player-track"><div className="mini-cover">{nowPlaying.title.slice(0, 1)}</div><div><strong>{nowPlaying.title}</strong><span>{nowPlaying.artist}</span></div></div><div className="player-controls"><button type="button" aria-label="上一首">|◀</button><button className="play-button" type="button" aria-label={isPlaying ? "暂停" : "播放"} onClick={() => setIsPlaying((v) => !v)}>{isPlaying ? "Ⅱ" : "▶"}</button><button type="button" aria-label="下一首">▶|</button></div><div className="progress"><span>1:24</span><div><i /></div><span>4:12</span></div><span className="volume">⌁　▮▮▮</span></footer>}
+  </main>;
 }
 
 createRoot(document.getElementById("root")!).render(

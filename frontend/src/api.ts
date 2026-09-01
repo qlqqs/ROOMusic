@@ -2,7 +2,7 @@ export type SetupStatusDTO = { setup_required: boolean };
 export type SessionDTO = { username: string; role: "admin" | "user" };
 export type UserDTO = { id: string; username: string; role: "admin" | "user"; disabled: boolean; created_at: string };
 export type RootOperationDTO = { id: string; root_id?: string; operation: string; status: string; revision?: number; error_code?: string; created_at: string };
-export type LibraryRootDTO = { id: string; path: string; status: "active" | "disabled"; revision: number; created_at: string; updated_at: string };
+export type LibraryRootDTO = { id: string; path: string; name?: string; status: "active" | "disabled"; revision: number; created_at: string; updated_at: string };
 export type CreatedLibraryRootDTO = { id: string; name: string; status: "active"; revision: number };
 export type UpdatedLibraryRootDTO = { id: string; path: string; status: "active" | "disabled"; revision: number };
 
@@ -11,7 +11,7 @@ export type ScanStatusValue = (typeof scanStatuses)[number];
 export type ScanStartDTO = { id: string; scan_run_id: string; status: "running" };
 export type ScanStatusDTO = { id: string; status: ScanStatusValue; started_at: string; finished_at: string | null };
 
-export type ReleaseSummaryDTO = { id: string; title: string; artist: string };
+export type ReleaseSummaryDTO = { id: string; title: string; artist: string; year?: number };
 export type PaginationDTO = { page: number; page_size: number; total: number };
 export type ReleaseListDTO = { items: ReleaseSummaryDTO[]; pagination: PaginationDTO };
 export type TrackDTO = { id: string; title: string; artist: string; position: number; source: string };
