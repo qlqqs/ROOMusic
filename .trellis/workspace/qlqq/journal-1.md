@@ -115,3 +115,25 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 ### Status
 
 [OK] **Completed**
+
+
+## Session 6: 完成 Core 0 私有多用户管理
+<!-- trellis-session: v=2 fp=1d7b071c1da28657 -->
+
+**Date**: 2026-09-01
+**Task**: 完成 Core 0 私有多用户管理
+**Branch**: `main`
+
+### Summary
+
+新增 admin/user 角色、用户创建与禁用、会话撤销和管理员权限矩阵；禁用用户即时失效，前端按角色隐藏目录管理控件。通过 backend go test/vet、frontend lint/typecheck/test 与 git diff --check。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bc0ead7` | feat(core): add private multi-user management |
+
+### Status
+
+[OK] **Completed**
