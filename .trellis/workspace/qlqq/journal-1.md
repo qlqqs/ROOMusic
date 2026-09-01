@@ -182,3 +182,26 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 ### Status
 
 [OK] **Completed**
+
+
+## Session 9: 完成 Core 0.1 反代与开发工作流
+<!-- trellis-session: v=2 fp=db9b53d4321dde7f -->
+
+**Date**: 2026-09-01
+**Task**: 完成 Core 0.1 反代与开发工作流
+**Branch**: `main`
+
+### Summary
+
+新增 ROOMUSIC_PUBLIC_URL 严格来源配置、开发数据库重置脚本、一键 dev 热更新工作流，并补齐前端用户管理与目录操作历史界面；通过后端、前端、构建和 Compose 门禁。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ffed522` | feat(core-0.1): add reverse proxy config and dev workflow |
+| `9d30566` | chore(core-0.1): refresh embedded frontend assets |
+
+### Status
+
+[OK] **Completed**
