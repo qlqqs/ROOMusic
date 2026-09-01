@@ -1,0 +1,3 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"REST 搜索授权、错误、查询和回归测试门禁"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"URL 搜索状态、运行时解码、loading/empty/error 和可访问交互"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"追踪 q 参数、SQL 过滤、Release DTO 与前端列表状态"}
