@@ -90,7 +90,19 @@ func (application *roomusicApplication) requireSameOrigin(responseWriter http.Re
 	if application.config.SecureCookies {
 		allowedScheme = "https"
 	}
-	if originURL.Scheme != allowedScheme || originURL.Host != request.Host {
+	if originURL.Scheme != allowedScheme {
+		writeAPIError(responseWriter, request, http.StatusForbidden, "origin_forbidden", "请求来源不受信任")
+		return false
+	}
+	if application.config.PublicURL != "" {
+		publicURL, _ := url.Parse(application.config.PublicURL)
+		if originURL.Host != publicURL.Host {
+			writeAPIError(responseWriter, request, http.StatusForbidden, "origin_forbidden", "请求来源不受信任")
+			return false
+		}
+		return true
+	}
+	if originURL.Host != request.Host {
 		writeAPIError(responseWriter, request, http.StatusForbidden, "origin_forbidden", "请求来源不受信任")
 		return false
 	}

@@ -1,0 +1,4 @@
+
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"安全边界、测试覆盖与质量门禁"}
+{"file":".trellis/spec/frontend/index.md","reason":"React/Vite 开发与 DTO 解码规范"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"事务、迁移和重置脚本约束"}

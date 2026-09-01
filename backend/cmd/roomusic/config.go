@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 )
@@ -13,6 +14,7 @@ type serverConfig struct {
 	AllowedLibraryRoots []string
 	SecureCookies       bool
 	DataDirectory       string
+	PublicURL           string
 }
 
 func loadServerConfig() (serverConfig, error) {
@@ -20,7 +22,14 @@ func loadServerConfig() (serverConfig, error) {
 	if dataDirectory == "" {
 		dataDirectory = "./data"
 	}
-	config := serverConfig{Address: configuredAddress(), Environment: configuredEnvironment(), DatabaseURL: strings.TrimSpace(os.Getenv("ROOMUSIC_DATABASE_URL")), SecureCookies: os.Getenv("ROOMUSIC_SECURE_COOKIES") == "true", DataDirectory: dataDirectory}
+	publicURL := strings.TrimSpace(os.Getenv("ROOMUSIC_PUBLIC_URL"))
+	if publicURL != "" {
+		parsed, err := url.Parse(publicURL)
+		if err != nil || parsed.Scheme == "" || parsed.Host == "" || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+			return serverConfig{}, fmt.Errorf("ROOMUSIC_PUBLIC_URL must be an absolute origin")
+		}
+	}
+	config := serverConfig{Address: configuredAddress(), Environment: configuredEnvironment(), DatabaseURL: strings.TrimSpace(os.Getenv("ROOMUSIC_DATABASE_URL")), SecureCookies: os.Getenv("ROOMUSIC_SECURE_COOKIES") == "true", DataDirectory: dataDirectory, PublicURL: publicURL}
 	for _, configuredRoot := range strings.Split(os.Getenv("ROOMUSIC_ALLOWED_LIBRARY_ROOTS"), ",") {
 		if root := strings.TrimSpace(configuredRoot); root != "" {
 			config.AllowedLibraryRoots = append(config.AllowedLibraryRoots, root)

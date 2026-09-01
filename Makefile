@@ -1,4 +1,10 @@
-.PHONY: backend-test backend-build frontend-install frontend-check frontend-build
+.PHONY: dev dev-reset backend-test backend-build frontend-install frontend-check frontend-build
+
+dev:
+	./scripts/dev.sh
+
+dev-reset:
+	./scripts/dev-reset.sh
 
 backend-test:
 	cd backend && go test ./...

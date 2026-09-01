@@ -5,6 +5,8 @@ import {
   decodeAcknowledgement,
   decodeCreatedLibraryRoot,
   decodeLibraryRootList,
+  decodeRootOperationList,
+  decodeUserList,
   decodeReleaseDetail,
   decodeReleaseList,
   decodeScanStart,
@@ -19,6 +21,8 @@ import {
   ScanStartDTO,
   ScanStatusDTO,
   SessionDTO,
+  RootOperationDTO,
+  UserDTO,
 } from "./api";
 import "./styles.css";
 
@@ -33,6 +37,10 @@ function App() {
   const [password, setPassword] = useState("");
   const [libraryPath, setLibraryPath] = useState("");
   const [libraryRoots, setLibraryRoots] = useState<LibraryRootDTO[]>([]);
+  const [users, setUsers] = useState<UserDTO[]>([]);
+  const [operations, setOperations] = useState<RootOperationDTO[]>([]);
+  const [newUsername, setNewUsername] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [releases, setReleases] = useState<ReleaseSummaryDTO[]>([]);
   const [releaseTotal, setReleaseTotal] = useState(0);
   const [selectedRelease, setSelectedRelease] =
@@ -64,6 +72,8 @@ function App() {
     void requestApi("/api/v1/library-roots", decodeLibraryRootList)
       .then((result) => setLibraryRoots(result.items))
       .catch((error: unknown) => setMessage(describeError(error)));
+    void requestApi("/api/v1/users", decodeUserList).then((result) => setUsers(result.items)).catch((error: unknown) => setMessage(describeError(error)));
+    void requestApi("/api/v1/library-root-operations", decodeRootOperationList).then((result) => setOperations(result.items)).catch((error: unknown) => setMessage(describeError(error)));
   }, [session]);
   useEffect(() => {
     const onPopState = () => {
@@ -167,6 +177,22 @@ function App() {
       setMessage(describeError(error));
     }
   }
+  async function createUser(event: FormEvent) {
+    event.preventDefault();
+    try {
+      await requestApi("/api/v1/users", (input) => input as UserDTO, { method: "POST", body: JSON.stringify({ username: newUsername, password: newPassword }) });
+      const result = await requestApi("/api/v1/users", decodeUserList);
+      setUsers(result.items); setNewUsername(""); setNewPassword(""); setMessage("用户已创建");
+    } catch (error: unknown) { setMessage(describeError(error)); }
+  }
+  async function toggleUser(user: UserDTO) {
+    try { await requestApi(`/api/v1/users/${user.id}`, (input) => input, { method: "PATCH", body: JSON.stringify({ disabled: !user.disabled }) }); setUsers((items) => items.map((item) => item.id === user.id ? { ...item, disabled: !user.disabled } : item)); }
+    catch (error: unknown) { setMessage(describeError(error)); }
+  }
+  async function revokeUser(user: UserDTO) {
+    try { await requestApi(`/api/v1/users/${user.id}/sessions/revoke`, decodeAcknowledgement, { method: "POST", body: "{}" }); setMessage(`已撤销 ${user.username} 的会话`); }
+    catch (error: unknown) { setMessage(describeError(error)); }
+  }
   async function showRelease(releaseID: string) {
     try {
       setSelectedRelease(
@@ -215,7 +241,8 @@ function App() {
       <main className="shell">
         <p className="eyebrow">本地音乐库</p>
         <h1>ROOMusic</h1>
-        <h2>{setupRequired ? "创建管理员" : "管理员登录"}</h2>
+        <h2>{setupRequired ? "首次设置管理员" : "登录音乐库"}</h2>
+        <p>{setupRequired ? "数据库尚未初始化，请先创建唯一的初始管理员账号。" : "使用管理员或普通用户账号登录。"}</p>
         <form onSubmit={submitAuth}>
           <label>
             用户名
@@ -242,6 +269,15 @@ function App() {
       <p className="eyebrow">{session.role === "admin" ? "管理员" : "用户"} · {session.username}</p>
       <h1>ROOMusic</h1>
       {session.role === "admin" && <>
+      <section aria-label="用户管理">
+        <h2>用户管理</h2>
+        <form onSubmit={createUser}>
+          <label>新用户 <input value={newUsername} onChange={(e) => setNewUsername(e.target.value)} /></label>
+          <label>初始密码 <input type="password" minLength={12} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} /></label>
+          <button type="submit">创建普通用户</button>
+        </form>
+        <ul>{users.map((user) => <li key={user.id}>{user.username} · {user.role} · {user.disabled ? "已禁用" : "正常"} <button type="button" onClick={() => void toggleUser(user)}>{user.disabled ? "启用" : "禁用"}</button> <button type="button" onClick={() => void revokeUser(user)}>撤销会话</button></li>)}</ul>
+      </section>
       <form onSubmit={registerRoot}>
         <label>
           音乐目录
@@ -271,6 +307,7 @@ function App() {
         扫描音乐库
       </button>{" "}
       </>}
+      {session.role === "admin" && <section aria-label="目录操作历史"><h2>目录操作历史</h2>{operations.length === 0 ? <p>暂无操作记录</p> : <ul>{operations.map((item) => <li key={item.id}>{item.operation} · {item.status}{item.revision ? ` · revision ${item.revision}` : ""}{item.error_code ? ` · ${item.error_code}` : ""} · {new Date(item.created_at).toLocaleString()}</li>)}</ul>}</section>}
       <button type="button" onClick={() => void logout()}>
         退出登录
       </button>
