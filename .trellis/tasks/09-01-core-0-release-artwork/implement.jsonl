@@ -1,0 +1,4 @@
+{"file":"backend/cmd/roomusic/scanner.go","reason":"扫描只读边界、Release 目录归属和错误诊断入口"}
+{"file":"backend/cmd/roomusic/application.go","reason":"Release 详情 REST DTO、鉴权和资源路由边界"}
+{"file":"backend/migrations/0003_catalog_observations.sql","reason":"Release/Track 关系和来源观察迁移结构"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"artwork 元数据、data storage 和迁移约束"}

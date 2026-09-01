@@ -13,13 +13,21 @@
 - 通过受鉴权的资源 ID 返回正确 MIME 与缓存头，不向客户端暴露原始路径。
 - 图片损坏或处理失败只产生诊断，不阻塞音频扫描与图谱更新。
 
+## 已确认决策
+
+- 同一 Release 同时发现内嵌图片和目录图片时，优先使用内嵌图片；目录图片作为回退。
+- 仅处理 release-level artwork；不展示或持久化 Track-level artwork。
+- 目录图片只接受明确命名的常见图片文件，发现顺序和 MIME 白名单必须确定且可测试。
+
 ## Acceptance Criteria
 
 - [ ] folder artwork 与内嵌 artwork 的优先级在相同输入重扫时保持确定。
 - [ ] 重复内容不会产生重复存储，损坏图片不会阻塞 Release 浏览。
 - [ ] 鉴权资源 API 返回正确 MIME/缓存语义且不泄露原始路径。
 - [ ] 测试证明音乐目录没有任何写入。
+- [ ] 内嵌图片优先级高于目录图片，重复扫描结果和 artwork resource ID 稳定。
 
 ## Out of Scope
 
 - Track-level artwork、外部下载、人工选图、冲突编辑和多尺寸衍生平台。
+- 图片裁剪、转码和外部 metadata/artwork provider。

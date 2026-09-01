@@ -12,10 +12,15 @@ type serverConfig struct {
 	DatabaseURL         string
 	AllowedLibraryRoots []string
 	SecureCookies       bool
+	DataDirectory       string
 }
 
 func loadServerConfig() (serverConfig, error) {
-	config := serverConfig{Address: configuredAddress(), Environment: configuredEnvironment(), DatabaseURL: strings.TrimSpace(os.Getenv("ROOMUSIC_DATABASE_URL")), SecureCookies: os.Getenv("ROOMUSIC_SECURE_COOKIES") == "true"}
+	dataDirectory := strings.TrimSpace(os.Getenv("ROOMUSIC_DATA_DIR"))
+	if dataDirectory == "" {
+		dataDirectory = "./data"
+	}
+	config := serverConfig{Address: configuredAddress(), Environment: configuredEnvironment(), DatabaseURL: strings.TrimSpace(os.Getenv("ROOMUSIC_DATABASE_URL")), SecureCookies: os.Getenv("ROOMUSIC_SECURE_COOKIES") == "true", DataDirectory: dataDirectory}
 	for _, configuredRoot := range strings.Split(os.Getenv("ROOMUSIC_ALLOWED_LIBRARY_ROOTS"), ",") {
 		if root := strings.TrimSpace(configuredRoot); root != "" {
 			config.AllowedLibraryRoots = append(config.AllowedLibraryRoots, root)
