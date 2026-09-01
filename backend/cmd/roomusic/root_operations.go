@@ -5,9 +5,22 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
+
+	"github.com/jackc/pgx/v5/pgconn"
 )
+
+func (a *roomusicApplication) writeRootOperationPersistenceError(w http.ResponseWriter, r *http.Request, err error) {
+	var postgresError *pgconn.PgError
+	if errors.As(err, &postgresError) && postgresError.Code == "23505" {
+		writeAPIError(w, r, http.StatusConflict, "idempotency_conflict", "幂等键已用于其他请求")
+		return
+	}
+	a.logger.Error("record root operation", "request_id", r.Header.Get("X-Request-ID"), "error", err)
+	writeAPIError(w, r, http.StatusInternalServerError, "operation_failed", "目录操作未能完成")
+}
 
 func operationKey(r *http.Request) string { return strings.TrimSpace(r.Header.Get("Idempotency-Key")) }
 
@@ -172,9 +185,9 @@ func (a *roomusicApplication) updateRoot(w http.ResponseWriter, r *http.Request)
 	}
 	result := map[string]any{"id": id, "path": filepathBase(path), "status": "disabled", "revision": newRev}
 	body, _ := json.Marshal(result)
-	_, err = tx.ExecContext(r.Context(), `INSERT INTO library_root_operations(id,root_id,actor_id,operation_type,status,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id) VALUES($1,$2::uuid,$3::uuid,'disable','succeeded',$4,$5,$6,$7,jsonb_build_object('status',$8,'revision',$6),jsonb_build_object('status','disabled','revision',$7),$9::jsonb,$10)`, createIdentifier(), id, actor.ID, key, fp, rev, newRev, status, body, r.Header.Get("X-Request-ID"))
+	_, err = tx.ExecContext(r.Context(), `INSERT INTO library_root_operations(id,root_id,actor_id,operation_type,status,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id) VALUES($1,$2::uuid,$3::uuid,'disable','succeeded',$4,$5,$6,$7,jsonb_build_object('status',$8::text,'revision',$6::bigint),jsonb_build_object('status','disabled','revision',$7::bigint),$9::jsonb,$10)`, createIdentifier(), id, actor.ID, key, fp, rev, newRev, status, string(body), r.Header.Get("X-Request-ID"))
 	if err != nil {
-		writeAPIError(w, r, 409, "idempotency_conflict", "幂等键已用于其他请求")
+		a.writeRootOperationPersistenceError(w, r, err)
 		return
 	}
 	if err = tx.Commit(); err != nil {
@@ -243,9 +256,9 @@ func (a *roomusicApplication) restoreRoot(w http.ResponseWriter, r *http.Request
 	}
 	result := map[string]any{"id": id, "path": filepathBase(path), "status": "active", "revision": newRev}
 	body, _ := json.Marshal(result)
-	_, err = tx.ExecContext(r.Context(), `INSERT INTO library_root_operations(id,root_id,actor_id,operation_type,status,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id) VALUES($1,$2::uuid,$3::uuid,'restore','succeeded',$4,$5,$6,$7,jsonb_build_object('status','disabled','revision',$6),jsonb_build_object('status',$8,'revision',$7),$9::jsonb,$10)`, createIdentifier(), id, actor.ID, key, fp, rev, newRev, beforeStatus, body, r.Header.Get("X-Request-ID"))
+	_, err = tx.ExecContext(r.Context(), `INSERT INTO library_root_operations(id,root_id,actor_id,operation_type,status,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id) VALUES($1,$2::uuid,$3::uuid,'restore','succeeded',$4,$5,$6,$7,jsonb_build_object('status','disabled','revision',$6::bigint),jsonb_build_object('status',$8::text,'revision',$7::bigint),$9::jsonb,$10)`, createIdentifier(), id, actor.ID, key, fp, rev, newRev, beforeStatus, string(body), r.Header.Get("X-Request-ID"))
 	if err != nil {
-		writeAPIError(w, r, 409, "idempotency_conflict", "幂等键已用于其他请求")
+		a.writeRootOperationPersistenceError(w, r, err)
 		return
 	}
 	if err = tx.Commit(); err != nil {

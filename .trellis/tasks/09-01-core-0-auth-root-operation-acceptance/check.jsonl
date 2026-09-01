@@ -1,0 +1,5 @@
+{"file":".trellis/spec/guides/index.md","reason":"集成质量总则"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"后端测试与安全检查"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"事务和数据库集成证据检查"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"权限与冲突错误契约检查"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"父任务前端门禁复验"}

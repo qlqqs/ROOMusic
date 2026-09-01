@@ -1,0 +1,5 @@
+{"file":".trellis/spec/guides/index.md","reason":"共享 Core 0 工程边界"}
+{"file":".trellis/spec/backend/index.md","reason":"后端授权和模块边界"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"事务、revision、幂等与集成测试要求"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"稳定 401/403/409 错误断言"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"后端测试质量门禁"}
