@@ -1,0 +1,7 @@
+{"file":".trellis/spec/guides/index.md","reason":"质量检查总则"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"后端测试与安全检查"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"事务、并发、幂等和迁移检查"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"错误契约检查"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"日志和敏感信息检查"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"前端状态、可访问性和测试检查"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"DTO 类型安全检查"}

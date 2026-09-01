@@ -15,9 +15,9 @@ describe("Core 0 API decoders", () => {
   it("decodes setup, session, and library-root contracts", () => {
     expect(decodeSetupStatus({ setup_required: true })).toEqual({ setup_required: true });
     expect(decodeSession({ username: "admin", role: "admin" })).toEqual({ username: "admin", role: "admin" });
-    expect(decodeCreatedLibraryRoot({ id: "root-1", name: "Music" })).toEqual({ id: "root-1", name: "Music" });
-    expect(decodeLibraryRootList({ items: [{ id: "root-1", path: "Music", created_at: "2026-09-01T08:00:00Z" }] })).toEqual({
-      items: [{ id: "root-1", path: "Music", created_at: "2026-09-01T08:00:00Z" }],
+    expect(decodeCreatedLibraryRoot({ id: "root-1", name: "Music", status: "active", revision: 1 })).toEqual({ id: "root-1", name: "Music", status: "active", revision: 1 });
+    expect(decodeLibraryRootList({ items: [{ id: "root-1", path: "Music", status: "active", revision: 1, created_at: "2026-09-01T08:00:00Z", updated_at: "2026-09-01T08:00:00Z" }] })).toEqual({
+      items: [{ id: "root-1", path: "Music", status: "active", revision: 1, created_at: "2026-09-01T08:00:00Z", updated_at: "2026-09-01T08:00:00Z" }],
     });
   });
 

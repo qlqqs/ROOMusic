@@ -23,3 +23,20 @@
 ## Out of Scope
 
 - Agent 审批状态机、任意工具注册、文件 checkpoint/quarantine、完整 Event Sourcing 和通用工作流引擎。
+
+## Confirmed Facts
+
+- 当前 `library_roots` 只有 `id`、`path`、`created_at`，新增接口使用路径唯一约束并在冲突时复用目录。
+- 目录、扫描和诊断已由后端管理员授权；多用户任务已经提供 `admin` / `user` 角色和稳定 actor 身份。
+- 数据库启动会按 `backend/migrations/*.sql` 顺序执行迁移，业务操作应在 PostgreSQL 事务内完成。
+
+## Key Decisions
+
+- 目录生命周期采用 `active` / `disabled` 两态，`revision` 从 1 开始，每次成功状态变更递增。
+- `Idempotency-Key` 必须绑定 actor、操作类型和规范化 payload；同 key 同 fingerprint 返回原结果，异 fingerprint 返回 `idempotency_conflict`。
+- 恢复只依据操作记录中的 before state，并要求资源 revision 与记录的 after revision 一致；冲突时 fail closed。
+- 首个具体操作模型直接服务 library root，不提前抽取通用 Change Set 执行器。
+
+## Open Questions
+
+无阻塞问题。目录停用不删除来源数据；扫描器只读取 active 目录，既有来源保留用于诊断。

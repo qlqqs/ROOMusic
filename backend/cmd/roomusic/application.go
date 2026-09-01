@@ -54,6 +54,9 @@ func buildApplicationHandler(config serverConfig, database *databaseState, logge
 	mux.HandleFunc("POST /api/v1/users/{id}/sessions/revoke", application.revokeUserSessions)
 	mux.HandleFunc("GET /api/v1/library-roots", application.listRoots)
 	mux.HandleFunc("POST /api/v1/library-roots", application.addRoot)
+	mux.HandleFunc("PATCH /api/v1/library-roots/{id}", application.updateRoot)
+	mux.HandleFunc("POST /api/v1/library-roots/{id}/restore", application.restoreRoot)
+	mux.HandleFunc("GET /api/v1/library-root-operations", application.rootOperations)
 	mux.HandleFunc("POST /api/v1/scans", application.startScan)
 	mux.HandleFunc("GET /api/v1/scans/{id}", application.scanStatus)
 	mux.HandleFunc("GET /api/v1/scans/{id}/diagnostics", application.diagnostics)
@@ -176,7 +179,7 @@ func (application *roomusicApplication) listRoots(responseWriter http.ResponseWr
 	if _, ok := application.requireAdmin(responseWriter, request); !ok {
 		return
 	}
-	rows, err := application.database.connection.QueryContext(request.Context(), "SELECT id::text,path,created_at FROM library_roots ORDER BY path")
+	rows, err := application.database.connection.QueryContext(request.Context(), "SELECT id::text,path,status,revision,created_at,updated_at FROM library_roots ORDER BY path")
 	if err != nil {
 		writeAPIError(responseWriter, request, 503, "database_unavailable", "服务暂不可用")
 		return
@@ -184,13 +187,14 @@ func (application *roomusicApplication) listRoots(responseWriter http.ResponseWr
 	defer rows.Close()
 	roots := []map[string]any{}
 	for rows.Next() {
-		var id, path string
-		var created time.Time
-		if scanErr := rows.Scan(&id, &path, &created); scanErr != nil {
+		var id, path, status string
+		var revision int64
+		var created, updated time.Time
+		if scanErr := rows.Scan(&id, &path, &status, &revision, &created, &updated); scanErr != nil {
 			writeAPIError(responseWriter, request, 503, "database_error", "无法读取目录")
 			return
 		}
-		roots = append(roots, map[string]any{"id": id, "path": filepath.Base(path), "created_at": created})
+		roots = append(roots, map[string]any{"id": id, "path": filepath.Base(path), "status": status, "revision": revision, "created_at": created, "updated_at": updated})
 	}
 	if rowsErr := rows.Err(); rowsErr != nil {
 		writeAPIError(responseWriter, request, 503, "database_error", "无法读取目录")
@@ -206,6 +210,8 @@ func (application *roomusicApplication) addRoot(responseWriter http.ResponseWrit
 	if _, ok := application.requireAdmin(responseWriter, request); !ok {
 		return
 	}
+	actor, _ := application.currentUser(request)
+	key := operationKey(request)
 	var input struct {
 		Path string `json:"path"`
 	}
@@ -217,13 +223,38 @@ func (application *roomusicApplication) addRoot(responseWriter http.ResponseWrit
 		writeAPIError(responseWriter, request, 400, "invalid_library_path", "目录不在允许的音乐根目录内")
 		return
 	}
+	fingerprint := operationFingerprint(map[string]any{"path": safePath})
+	if done, _ := application.replayOperation(responseWriter, request, actor.ID, "create", key, fingerprint); done {
+		return
+	}
+	tx, err := application.database.connection.BeginTx(request.Context(), nil)
+	if err != nil {
+		writeAPIError(responseWriter, request, 503, "database_unavailable", "服务暂不可用")
+		return
+	}
+	defer tx.Rollback()
 	id := createIdentifier()
-	err = application.database.connection.QueryRowContext(request.Context(), "INSERT INTO library_roots(id,path) VALUES($1::uuid,$2) ON CONFLICT(path) DO UPDATE SET path=EXCLUDED.path RETURNING id::text", id, safePath).Scan(&id)
+	var createdID string
+	var rev int64
+	err = tx.QueryRowContext(request.Context(), "INSERT INTO library_roots(id,path) VALUES($1::uuid,$2) ON CONFLICT(path) DO UPDATE SET path=EXCLUDED.path RETURNING id::text,revision", id, safePath).Scan(&createdID, &rev)
 	if err != nil {
 		writeAPIError(responseWriter, request, 500, "database_error", "无法注册目录")
 		return
 	}
-	writeJSON(responseWriter, 201, map[string]string{"id": id, "name": filepath.Base(safePath)})
+	result := map[string]any{"id": createdID, "name": filepath.Base(safePath), "status": "active", "revision": rev}
+	body, _ := json.Marshal(result)
+	_, err = tx.ExecContext(request.Context(), `INSERT INTO library_root_operations(id,root_id,actor_id,operation_type,status,idempotency_key,fingerprint,result_revision,before_state,after_state,response,request_id) VALUES($1,$2::uuid,$3::uuid,'create','succeeded',$4,$5,$6,'{}',jsonb_build_object('status','active','revision',$6),$7::jsonb,$8)`, createIdentifier(), createdID, actor.ID, key, fingerprint, rev, body, request.Header.Get("X-Request-ID"))
+	if err != nil {
+		writeAPIError(responseWriter, request, 409, "idempotency_conflict", "幂等键已用于其他请求")
+		return
+	}
+	if err = tx.Commit(); err != nil {
+		writeAPIError(responseWriter, request, 503, "database_unavailable", "服务暂不可用")
+		return
+	}
+	responseWriter.Header().Set("Content-Type", "application/json")
+	responseWriter.WriteHeader(201)
+	_, _ = responseWriter.Write(body)
 }
 
 func validateLibraryPath(input string, allowedRoots []string) (string, error) {

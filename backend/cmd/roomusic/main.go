@@ -121,6 +121,7 @@ func requestIDMiddleware(logger *slog.Logger, next http.Handler) http.Handler {
 		if !requestIDPattern.MatchString(requestID) {
 			requestID = fmt.Sprintf("req-%d", time.Now().UnixNano())
 		}
+		request.Header.Set("X-Request-ID", requestID)
 		responseWriter.Header().Set("X-Request-ID", requestID)
 		logger.Info("http request", "request_id", requestID, "method", request.Method, "path", request.URL.Path)
 		next.ServeHTTP(responseWriter, request)

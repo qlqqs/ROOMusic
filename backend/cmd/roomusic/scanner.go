@@ -91,7 +91,7 @@ func (application *roomusicApplication) runScan(scanID string) {
 }
 
 func (application *roomusicApplication) loadRegisteredRoots(context context.Context) ([]registeredRoot, error) {
-	rows, err := application.database.connection.QueryContext(context, "SELECT id::text,path FROM library_roots ORDER BY path,id")
+	rows, err := application.database.connection.QueryContext(context, "SELECT id::text,path FROM library_roots WHERE status='active' ORDER BY path,id")
 	if err != nil {
 		return nil, err
 	}

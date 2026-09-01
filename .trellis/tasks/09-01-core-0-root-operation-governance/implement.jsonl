@@ -1,0 +1,9 @@
+{"file":".trellis/spec/guides/index.md","reason":"共享 Core 0 工程边界"}
+{"file":".trellis/spec/guides/engineering-principles.md","reason":"最小完整实现与验证原则"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"目录操作跨 REST、数据库、扫描和 UI 的数据流"}
+{"file":".trellis/spec/backend/index.md","reason":"后端模块边界与授权契约"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"事务、revision、幂等与迁移规则"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"错误分类和 REST 映射"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"操作日志关联 ID 与路径脱敏"}
+{"file":".trellis/spec/frontend/index.md","reason":"前端角色、REST 和状态展示边界"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"操作 DTO 解码约束"}
