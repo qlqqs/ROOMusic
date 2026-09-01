@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 8
+- **Total Sessions**: 9
 - **Last Active**: 2026-09-01
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~184 | Active |
+| `journal-1.md` | ~207 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 9 | 2026-09-01 | 完成 Core 0.1 反代与开发工作流 | `ffed522`, `9d30566` | `main` |
 | 8 | 2026-09-01 | 完成 Core 0 最终集成验收 | `1013177`, `ca4671a` | `main` |
 | 7 | 2026-09-01 | 完成 Core 0 目录操作治理 | `a57c212` | `main` |
 | 6 | 2026-09-01 | 完成 Core 0 私有多用户管理 | `bc0ead7` | `main` |
