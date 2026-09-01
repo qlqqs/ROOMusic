@@ -137,3 +137,25 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 ### Status
 
 [OK] **Completed**
+
+
+## Session 7: 完成 Core 0 目录操作治理
+<!-- trellis-session: v=2 fp=e26d20bfd278353a -->
+
+**Date**: 2026-09-01
+**Task**: 完成 Core 0 目录操作治理
+**Branch**: `main`
+
+### Summary
+
+为 library root 增加 active/disabled 生命周期、revision、幂等键和操作日志，新增停用/恢复/历史 API，扫描过滤停用目录，前端展示状态与操作控件。通过 backend go test/vet、frontend lint/typecheck/test 和 git diff --check。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a57c212` | feat(core): govern library root operations |
+
+### Status
+
+[OK] **Completed**
