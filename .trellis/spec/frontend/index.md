@@ -35,6 +35,7 @@ Before writing or reviewing frontend code:
 | [State Management](./state-management.md) | Server, URL, session, and local state ownership |
 | [Type Safety](./type-safety.md) | Strict TypeScript, DTO decoding, and exhaustive domain states |
 | [Quality Guidelines](./quality-guidelines.md) | Tests, accessibility, gates, and forbidden shortcuts |
+| [播放器设计规范](./player-design-guidelines.md) | 工作台视觉层级、响应式布局、播放交互与可访问性 |
 
 ## Quality Check
 
@@ -95,6 +96,8 @@ ROOMusic is a work-focused library management interface for private collections.
 Prefer dense, scannable Release/Medium/Track information, predictable navigation,
 explicit operation status, and recoverable errors. Do not turn administration or
 browse flows into marketing-style pages.
+
+播放器工作流的具体视觉、布局和交互约束见[播放器管理界面设计规范](./player-design-guidelines.md)。
 
 ## Evidence
 
