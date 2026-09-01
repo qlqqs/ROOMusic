@@ -16,7 +16,6 @@ CREATE TABLE IF NOT EXISTS library_root_operations (
     response JSONB NOT NULL DEFAULT '{}'::jsonb,
     error_code TEXT,
     request_id TEXT NOT NULL,
-    request_id TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(actor_id, operation_type, idempotency_key)
 );

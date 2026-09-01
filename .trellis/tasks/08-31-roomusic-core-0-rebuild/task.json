@@ -24,7 +24,8 @@
     "09-01-core-0-basic-search",
     "09-01-core-0-private-multi-user",
     "09-01-core-0-root-operation-governance",
-    "09-01-core-0-release-artwork"
+    "09-01-core-0-release-artwork",
+    "09-01-core-0-auth-root-operation-acceptance"
   ],
   "parent": null,
   "relatedFiles": [],

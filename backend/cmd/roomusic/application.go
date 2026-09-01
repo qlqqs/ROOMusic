@@ -243,9 +243,9 @@ func (application *roomusicApplication) addRoot(responseWriter http.ResponseWrit
 	}
 	result := map[string]any{"id": createdID, "name": filepath.Base(safePath), "status": "active", "revision": rev}
 	body, _ := json.Marshal(result)
-	_, err = tx.ExecContext(request.Context(), `INSERT INTO library_root_operations(id,root_id,actor_id,operation_type,status,idempotency_key,fingerprint,result_revision,before_state,after_state,response,request_id) VALUES($1,$2::uuid,$3::uuid,'create','succeeded',$4,$5,$6,'{}',jsonb_build_object('status','active','revision',$6),$7::jsonb,$8)`, createIdentifier(), createdID, actor.ID, key, fingerprint, rev, body, request.Header.Get("X-Request-ID"))
+	_, err = tx.ExecContext(request.Context(), `INSERT INTO library_root_operations(id,root_id,actor_id,operation_type,status,idempotency_key,fingerprint,result_revision,before_state,after_state,response,request_id) VALUES($1,$2::uuid,$3::uuid,'create','succeeded',$4,$5,$6,'{}',jsonb_build_object('status','active','revision',$6::bigint),$7::jsonb,$8)`, createIdentifier(), createdID, actor.ID, key, fingerprint, rev, string(body), request.Header.Get("X-Request-ID"))
 	if err != nil {
-		writeAPIError(responseWriter, request, 409, "idempotency_conflict", "幂等键已用于其他请求")
+		application.writeRootOperationPersistenceError(responseWriter, request, err)
 		return
 	}
 	if err = tx.Commit(); err != nil {
