@@ -1,0 +1,376 @@
+package main
+
+import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+)
+
+type roomusicApplication struct {
+	config      serverConfig
+	database    *databaseState
+	logger      *slog.Logger
+	scanMutex   sync.Mutex
+	runningScan string
+}
+type apiError struct {
+	Error     apiErrorDetail `json:"error"`
+	RequestID string         `json:"request_id"`
+}
+type apiErrorDetail struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+func writeAPIError(responseWriter http.ResponseWriter, request *http.Request, status int, code, message string) {
+	requestID := responseWriter.Header().Get("X-Request-ID")
+	writeJSON(responseWriter, status, apiError{Error: apiErrorDetail{Code: code, Message: message}, RequestID: requestID})
+}
+
+func buildApplicationHandler(config serverConfig, database *databaseState, logger *slog.Logger) http.Handler {
+	application := &roomusicApplication{config: config, database: database, logger: logger}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", healthHandler)
+	mux.HandleFunc("GET /readyz", func(responseWriter http.ResponseWriter, request *http.Request) {
+		statusCode, status := readinessStatus(database)
+		writeJSON(responseWriter, statusCode, map[string]string{"status": status})
+	})
+	mux.HandleFunc("GET /api/v1/setup/status", application.setupStatus)
+	mux.HandleFunc("POST /api/v1/setup/admin", application.setupAdmin)
+	mux.HandleFunc("POST /api/v1/auth/login", application.login)
+	mux.HandleFunc("POST /api/v1/auth/logout", application.logout)
+	mux.HandleFunc("GET /api/v1/auth/me", application.me)
+	mux.HandleFunc("GET /api/v1/library-roots", application.listRoots)
+	mux.HandleFunc("POST /api/v1/library-roots", application.addRoot)
+	mux.HandleFunc("POST /api/v1/scans", application.startScan)
+	mux.HandleFunc("GET /api/v1/scans/{id}", application.scanStatus)
+	mux.HandleFunc("GET /api/v1/scans/{id}/diagnostics", application.diagnostics)
+	mux.HandleFunc("GET /api/v1/releases", application.listReleases)
+	mux.HandleFunc("GET /api/v1/releases/{id}", application.releaseDetail)
+	mux.Handle("/", productionFrontendHandler())
+	return requestIDMiddleware(logger, mux)
+}
+
+func (application *roomusicApplication) setupStatus(responseWriter http.ResponseWriter, request *http.Request) {
+	var completed bool
+	err := application.database.connection.QueryRowContext(request.Context(), "SELECT EXISTS (SELECT 1 FROM setup_state)").Scan(&completed)
+	if err != nil {
+		writeAPIError(responseWriter, request, 503, "database_unavailable", "服务暂不可用")
+		return
+	}
+	writeJSON(responseWriter, 200, map[string]bool{"setup_required": !completed})
+}
+
+func (application *roomusicApplication) setupAdmin(responseWriter http.ResponseWriter, request *http.Request) {
+	if !application.requireSameOrigin(responseWriter, request) {
+		return
+	}
+	var input struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if !decodeJSON(responseWriter, request, &input) || len(input.Password) < 12 || strings.TrimSpace(input.Username) == "" {
+		writeAPIError(responseWriter, request, 400, "invalid_input", "用户名不能为空，密码至少需要 12 个字符")
+		return
+	}
+	passwordHash, err := hashPassword(input.Password)
+	if err != nil {
+		writeAPIError(responseWriter, request, 500, "internal_error", "无法创建管理员")
+		return
+	}
+	tx, err := application.database.connection.BeginTx(request.Context(), nil)
+	if err != nil {
+		writeAPIError(responseWriter, request, 503, "database_unavailable", "服务暂不可用")
+		return
+	}
+	defer tx.Rollback()
+	var setupExists bool
+	if err = tx.QueryRowContext(request.Context(), "SELECT EXISTS (SELECT 1 FROM setup_state)").Scan(&setupExists); err != nil || setupExists {
+		writeAPIError(responseWriter, request, 409, "setup_closed", "管理员初始化已完成")
+		return
+	}
+	userID := createIdentifier()
+	if _, err = tx.ExecContext(request.Context(), "INSERT INTO users (id, username, password_hash) VALUES ($1::uuid,$2,$3)", userID, input.Username, passwordHash); err != nil {
+		writeAPIError(responseWriter, request, 409, "setup_closed", "管理员初始化已完成")
+		return
+	}
+	if _, err = tx.ExecContext(request.Context(), "INSERT INTO setup_state (completed_at) VALUES (NOW())"); err != nil {
+		writeAPIError(responseWriter, request, 409, "setup_closed", "管理员初始化已完成")
+		return
+	}
+	if err = tx.Commit(); err != nil {
+		writeAPIError(responseWriter, request, 409, "setup_closed", "管理员初始化已完成")
+		return
+	}
+	writeJSON(responseWriter, 201, map[string]string{"username": input.Username})
+}
+
+func decodeJSON(responseWriter http.ResponseWriter, request *http.Request, destination any) bool {
+	if err := json.NewDecoder(http.MaxBytesReader(responseWriter, request.Body, 1<<20)).Decode(destination); err != nil {
+		writeAPIError(responseWriter, request, 400, "invalid_json", "请求格式无效")
+		return false
+	}
+	return true
+}
+
+func (application *roomusicApplication) login(responseWriter http.ResponseWriter, request *http.Request) {
+	if !application.requireSameOrigin(responseWriter, request) {
+		return
+	}
+	var input struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if !decodeJSON(responseWriter, request, &input) {
+		return
+	}
+	var userID, passwordHash string
+	err := application.database.connection.QueryRowContext(request.Context(), "SELECT id::text,password_hash FROM users WHERE username=$1", input.Username).Scan(&userID, &passwordHash)
+	if err != nil || !verifyPassword(passwordHash, input.Password) {
+		writeAPIError(responseWriter, request, 401, "invalid_credentials", "用户名或密码错误")
+		return
+	}
+	token := generateSessionToken()
+	_, err = application.database.connection.ExecContext(request.Context(), "INSERT INTO sessions (token_hash,user_id,expires_at) VALUES ($1,$2::uuid,NOW()+INTERVAL '24 hours')", hashSessionToken(token), userID)
+	if err != nil {
+		writeAPIError(responseWriter, request, 503, "database_unavailable", "服务暂不可用")
+		return
+	}
+	application.setSessionCookie(responseWriter, token)
+	writeJSON(responseWriter, 200, map[string]string{"username": input.Username})
+}
+
+func (application *roomusicApplication) logout(responseWriter http.ResponseWriter, request *http.Request) {
+	if !application.requireSameOrigin(responseWriter, request) {
+		return
+	}
+	if cookie, err := request.Cookie(sessionCookieName); err == nil {
+		_, _ = application.database.connection.ExecContext(request.Context(), "UPDATE sessions SET revoked_at=NOW() WHERE token_hash=$1", hashSessionToken(cookie.Value))
+	}
+	http.SetCookie(responseWriter, &http.Cookie{Name: sessionCookieName, Value: "", Path: "/", HttpOnly: true, Secure: application.config.SecureCookies, SameSite: http.SameSiteLaxMode, MaxAge: -1})
+	writeJSON(responseWriter, 200, map[string]bool{"logged_out": true})
+}
+func (application *roomusicApplication) me(responseWriter http.ResponseWriter, request *http.Request) {
+	var username string
+	userID, err := application.authenticatedUser(request)
+	if err != nil {
+		application.writeAuthenticationError(responseWriter, request)
+		return
+	}
+	err = application.database.connection.QueryRowContext(request.Context(), "SELECT username FROM users WHERE id=$1::uuid", userID).Scan(&username)
+	if err != nil {
+		application.writeAuthenticationError(responseWriter, request)
+		return
+	}
+	writeJSON(responseWriter, 200, map[string]string{"username": username})
+}
+
+func (application *roomusicApplication) listRoots(responseWriter http.ResponseWriter, request *http.Request) {
+	if _, err := application.authenticatedUser(request); err != nil {
+		application.writeAuthenticationError(responseWriter, request)
+		return
+	}
+	rows, err := application.database.connection.QueryContext(request.Context(), "SELECT id::text,path,created_at FROM library_roots ORDER BY path")
+	if err != nil {
+		writeAPIError(responseWriter, request, 503, "database_unavailable", "服务暂不可用")
+		return
+	}
+	defer rows.Close()
+	roots := []map[string]any{}
+	for rows.Next() {
+		var id, path string
+		var created time.Time
+		if scanErr := rows.Scan(&id, &path, &created); scanErr != nil {
+			writeAPIError(responseWriter, request, 503, "database_error", "无法读取目录")
+			return
+		}
+		roots = append(roots, map[string]any{"id": id, "path": filepath.Base(path), "created_at": created})
+	}
+	if rowsErr := rows.Err(); rowsErr != nil {
+		writeAPIError(responseWriter, request, 503, "database_error", "无法读取目录")
+		return
+	}
+	writeJSON(responseWriter, 200, map[string]any{"items": roots})
+}
+
+func (application *roomusicApplication) addRoot(responseWriter http.ResponseWriter, request *http.Request) {
+	if !application.requireSameOrigin(responseWriter, request) {
+		return
+	}
+	if _, err := application.authenticatedUser(request); err != nil {
+		application.writeAuthenticationError(responseWriter, request)
+		return
+	}
+	var input struct {
+		Path string `json:"path"`
+	}
+	if !decodeJSON(responseWriter, request, &input) {
+		return
+	}
+	safePath, err := validateLibraryPath(input.Path, application.config.AllowedLibraryRoots)
+	if err != nil {
+		writeAPIError(responseWriter, request, 400, "invalid_library_path", "目录不在允许的音乐根目录内")
+		return
+	}
+	id := createIdentifier()
+	err = application.database.connection.QueryRowContext(request.Context(), "INSERT INTO library_roots(id,path) VALUES($1::uuid,$2) ON CONFLICT(path) DO UPDATE SET path=EXCLUDED.path RETURNING id::text", id, safePath).Scan(&id)
+	if err != nil {
+		writeAPIError(responseWriter, request, 500, "database_error", "无法注册目录")
+		return
+	}
+	writeJSON(responseWriter, 201, map[string]string{"id": id, "name": filepath.Base(safePath)})
+}
+
+func validateLibraryPath(input string, allowedRoots []string) (string, error) {
+	clean, err := filepath.Abs(filepath.Clean(input))
+	if err != nil {
+		return "", err
+	}
+	// Registration must not silently follow a directory symlink. The lexical
+	// path and its real path differ whenever any component is a symlink.
+	real, err := filepath.EvalSymlinks(clean)
+	if err != nil {
+		return "", err
+	}
+	if filepath.Clean(real) != clean {
+		return "", fmt.Errorf("directory symlink is not allowed")
+	}
+	info, err := os.Stat(real)
+	if err != nil || !info.IsDir() {
+		return "", fmt.Errorf("not directory")
+	}
+	for _, allowed := range allowedRoots {
+		allowedReal, evalErr := filepath.EvalSymlinks(allowed)
+		if evalErr == nil && (real == allowedReal || strings.HasPrefix(real, allowedReal+string(filepath.Separator))) {
+			return real, nil
+		}
+	}
+	return "", fmt.Errorf("outside allowlist")
+}
+
+func (application *roomusicApplication) listReleases(responseWriter http.ResponseWriter, request *http.Request) {
+	if _, err := application.authenticatedUser(request); err != nil {
+		application.writeAuthenticationError(responseWriter, request)
+		return
+	}
+	page, pageSize, paginationError := parsePagination(request)
+	if paginationError != nil {
+		writeAPIError(responseWriter, request, http.StatusBadRequest, "invalid_pagination", "分页参数无效")
+		return
+	}
+	var total int
+	if err := application.database.connection.QueryRowContext(request.Context(), "SELECT COUNT(*) FROM releases").Scan(&total); err != nil {
+		writeAPIError(responseWriter, request, 503, "database_unavailable", "服务暂不可用")
+		return
+	}
+	rows, err := application.database.connection.QueryContext(request.Context(), "SELECT id::text,title,artist FROM releases ORDER BY title,artist,id LIMIT $1 OFFSET $2", pageSize, (page-1)*pageSize)
+	if err != nil {
+		writeAPIError(responseWriter, request, 503, "database_unavailable", "服务暂不可用")
+		return
+	}
+	defer rows.Close()
+	items := []map[string]string{}
+	for rows.Next() {
+		var id, title, artist string
+		if scanErr := rows.Scan(&id, &title, &artist); scanErr != nil {
+			writeAPIError(responseWriter, request, 503, "database_error", "无法读取发行版本")
+			return
+		}
+		items = append(items, map[string]string{"id": id, "title": title, "artist": artist})
+	}
+	if rowsErr := rows.Err(); rowsErr != nil {
+		writeAPIError(responseWriter, request, 503, "database_error", "无法读取发行版本")
+		return
+	}
+	writeJSON(responseWriter, 200, map[string]any{"items": items, "pagination": map[string]int{"page": page, "page_size": pageSize, "total": total}})
+}
+
+func parsePagination(request *http.Request) (int, int, error) {
+	page, pageSize := 1, 50
+	var err error
+	if pageValue := request.URL.Query().Get("page"); pageValue != "" {
+		page, err = strconv.Atoi(pageValue)
+		if err != nil || page < 1 {
+			return 0, 0, fmt.Errorf("invalid page")
+		}
+	}
+	if pageSizeValue := request.URL.Query().Get("page_size"); pageSizeValue != "" {
+		pageSize, err = strconv.Atoi(pageSizeValue)
+		if err != nil || pageSize < 1 || pageSize > 100 {
+			return 0, 0, fmt.Errorf("invalid page size")
+		}
+	}
+	return page, pageSize, nil
+}
+
+type releaseTrackDTO struct {
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Artist   string `json:"artist"`
+	Position int    `json:"position"`
+	Source   string `json:"source"`
+}
+
+type releaseMediumDTO struct {
+	ID       string            `json:"id"`
+	Position int               `json:"position"`
+	Title    string            `json:"title"`
+	Tracks   []releaseTrackDTO `json:"tracks"`
+}
+
+func (application *roomusicApplication) releaseDetail(responseWriter http.ResponseWriter, request *http.Request) {
+	if _, err := application.authenticatedUser(request); err != nil {
+		application.writeAuthenticationError(responseWriter, request)
+		return
+	}
+	releaseID := request.PathValue("id")
+	var title, artist string
+	if err := application.database.connection.QueryRowContext(request.Context(), "SELECT title,artist FROM releases WHERE id=$1::uuid", releaseID).Scan(&title, &artist); err != nil {
+		if err == sql.ErrNoRows {
+			writeAPIError(responseWriter, request, 404, "not_found", "发行版本不存在")
+		} else {
+			writeAPIError(responseWriter, request, 400, "invalid_id", "发行版本标识无效")
+		}
+		return
+	}
+	rows, err := application.database.connection.QueryContext(request.Context(), "SELECT m.id::text,m.position,m.title,t.id::text,t.title,t.artist,t.position,t.relative_path FROM media m LEFT JOIN tracks t ON t.medium_id=m.id AND t.source_status='present' WHERE m.release_id=$1::uuid ORDER BY m.position,t.position,t.id", releaseID)
+	if err != nil {
+		writeAPIError(responseWriter, request, 503, "database_unavailable", "服务暂不可用")
+		return
+	}
+	defer rows.Close()
+	media := []releaseMediumDTO{}
+	mediumIndexes := make(map[string]int)
+	for rows.Next() {
+		var mediumID, mediumTitle string
+		var mediumPosition int
+		var trackID, trackTitle, trackArtist, sourcePath sql.NullString
+		var trackPosition sql.NullInt64
+		if scanErr := rows.Scan(&mediumID, &mediumPosition, &mediumTitle, &trackID, &trackTitle, &trackArtist, &trackPosition, &sourcePath); scanErr != nil {
+			writeAPIError(responseWriter, request, 503, "database_error", "无法读取发行版本详情")
+			return
+		}
+		mediumIndex, exists := mediumIndexes[mediumID]
+		if !exists {
+			mediumIndex = len(media)
+			mediumIndexes[mediumID] = mediumIndex
+			media = append(media, releaseMediumDTO{ID: mediumID, Position: mediumPosition, Title: mediumTitle, Tracks: []releaseTrackDTO{}})
+		}
+		if trackID.Valid {
+			media[mediumIndex].Tracks = append(media[mediumIndex].Tracks, releaseTrackDTO{ID: trackID.String, Title: trackTitle.String, Artist: trackArtist.String, Position: int(trackPosition.Int64), Source: filepath.Base(sourcePath.String)})
+		}
+	}
+	if rowsErr := rows.Err(); rowsErr != nil {
+		writeAPIError(responseWriter, request, 503, "database_error", "无法读取发行版本详情")
+		return
+	}
+	writeJSON(responseWriter, 200, map[string]any{"id": releaseID, "title": title, "artist": artist, "media": media})
+}
