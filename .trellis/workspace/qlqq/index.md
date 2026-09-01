@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 6
+- **Total Sessions**: 7
 - **Last Active**: 2026-09-01
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~139 | Active |
+| `journal-1.md` | ~161 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 7 | 2026-09-01 | 完成 Core 0 目录操作治理 | `a57c212` | `main` |
 | 6 | 2026-09-01 | 完成 Core 0 私有多用户管理 | `bc0ead7` | `main` |
 | 5 | 2026-09-01 | 完成 Release 封面体验 | `26d4ffb` | `main` |
 | 4 | 2026-09-01 | 完成 PostgreSQL 基础搜索 | `5ea3141` | `main` |
