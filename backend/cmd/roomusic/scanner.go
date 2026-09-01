@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -143,8 +144,47 @@ func (application *roomusicApplication) scanRoot(context context.Context, scanID
 		}
 		relativePath := safeRelativePath(root.Path, path)
 		extension := strings.ToLower(filepath.Ext(path))
-		if extension != ".flac" && extension != ".mp3" {
-			if diagnosticError := application.recordDiagnostic(context, scanID, relativePath, "unsupported_format", "仅支持 FLAC 和 MP3"); diagnosticError != nil {
+		if extension == ".cue" {
+			tracks, referenced, cueErr := parseCue(path)
+			if cueErr != nil {
+				complete = false
+				application.recordDiagnostic(context, scanID, relativePath, "unsupported_cue", cueErr.Error())
+				return nil
+			}
+			audioPath := filepath.Join(filepath.Dir(path), referenced)
+			if !isWithin(root.Path, audioPath) {
+				complete = false
+				application.recordDiagnostic(context, scanID, relativePath, "unsupported_cue", "CUE 引用越界")
+				return nil
+			}
+			base, parseErr := parseAudioFile(audioPath)
+			if parseErr != nil {
+				complete = false
+				application.recordDiagnostic(context, scanID, relativePath, "parse_failure", "CUE 引用音频解析失败")
+				return nil
+			}
+			for _, cue := range tracks {
+				o := base
+				o.SourceKind = "cue_virtual"
+				o.TrackNumber = cue.Number
+				if cue.Title != "" {
+					o.Title = cue.Title
+				}
+				if cue.Artist != "" {
+					o.Artist = cue.Artist
+				}
+				// Include the normalized referenced file so changing FILE cannot reuse an old identity.
+				referencedIdentity := filepath.ToSlash(filepath.Clean(referenced))
+				virtualPath := relativePath + "#track-" + strconv.Itoa(cue.Number) + "@" + referencedIdentity
+				if saveErr := application.saveObservation(context, scanID, root, virtualPath, o); saveErr != nil {
+					complete = false
+					application.recordDiagnostic(context, scanID, virtualPath, "catalog_write_failure", "无法保存 CUE 虚拟音轨")
+				}
+			}
+			return nil
+		}
+		if extension != ".flac" && extension != ".mp3" && extension != ".ogg" && extension != ".opus" && extension != ".wav" {
+			if diagnosticError := application.recordDiagnostic(context, scanID, relativePath, "unsupported_format", "不支持的音频格式"); diagnosticError != nil {
 				return diagnosticError
 			}
 			return nil

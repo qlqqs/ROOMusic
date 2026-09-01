@@ -12,6 +12,15 @@
 - 增加扩展多碟 fixture；不因新增 parser 改变既有 FLAC/MP3 Track 身份。
 - unsupported 或超出范围的 CUE 变体必须产生明确诊断。
 
+### 已确认的 CUE 支持子集
+
+- 首期仅支持 UTF-8/UTF-16 文本、单个 `FILE` 音频引用、`TRACK nn AUDIO` 和
+  `INDEX 01 mm:ss:ff`。
+- 引用文件必须位于当前允许根内；越界、断链、多个 `FILE`、非 `AUDIO` track、
+  缺失 `INDEX 01` 或无法解码的 CUE 记录为 `unsupported`/安全诊断。
+- CUE 虚拟 Track 使用稳定的来源身份（CUE 相对路径 + track 编号 + 音频引用），
+  重扫保持身份；不写回 CUE 或音频源文件。
+
 ## Acceptance Criteria
 
 - [ ] OGG、Opus、WAV 代表性 fixture 形成与既有格式一致的图谱和来源。

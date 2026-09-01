@@ -1,0 +1,4 @@
+{"file":"backend/cmd/roomusic/audio_parser.go","reason":"现有 FLAC/MP3 parser 边界、audioObservation 字段和 filename fallback 复用点"}
+{"file":"backend/cmd/roomusic/scanner.go","reason":"扫描分类、只读路径 containment、诊断和 missing 对账入口"}
+{"file":"backend/migrations/0003_catalog_observations.sql","reason":"Track 来源观察持久化结构，评估虚拟 CUE Track 所需迁移"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"解析器、文件系统和扫描失败路径的测试与安全门禁"}
