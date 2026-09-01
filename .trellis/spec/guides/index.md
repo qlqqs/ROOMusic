@@ -1,97 +1,53 @@
-# Thinking Guides
+# ROOMusic Shared Engineering Guides
 
-> **Purpose**: Expand your thinking to catch things you might not have considered.
+These guides apply to every package before the backend- or frontend-specific
+rules. They are project contracts for the upcoming Core 0 implementation, not
+claims that application code already exists.
 
----
+## Read First
 
-## Why Thinking Guides?
+| Guide | Purpose | Use when |
+| --- | --- | --- |
+| [Product Goals](./product-goals.md) | Preserve user value and distinguish Core 0 from the long-term product | Scoping any feature or infrastructure |
+| [Modular Design](./modular-design.md) | Define ownership, dependency direction, cohesion, and coupling limits | Creating or changing a module boundary |
+| [Engineering Principles](./engineering-principles.md) | Define smallest-complete changes, focused functions, and proportional verification | Planning and reviewing every change |
+| [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md) | Reuse the correct policy owner without premature abstraction | Adding helpers, types, components, or constants |
+| [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md) | Trace data and authority across REST, services, storage, and UI | Changing a workflow that crosses a boundary |
 
-**Most bugs and tech debt come from "didn't think of that"**, not from lack of skill:
+Backend work must also read [Backend Guidelines](../backend/index.md). Frontend
+work must also read [Frontend Guidelines](../frontend/index.md).
 
-- Didn't think about what happens at layer boundaries → cross-layer bugs
-- Didn't think about code patterns repeating → duplicated code everywhere
-- Didn't think about edge cases → runtime errors
-- Didn't think about future maintainers → unreadable code
+## Rule Priority
 
-These guides help you **ask the right questions before coding**.
+When sources disagree, apply this order:
 
----
+1. The user-approved task and current Core 0 PRD define current scope and
+   acceptance behavior.
+2. V0 planning defines inherited product intent and long-term direction.
+3. V0 implementation choices are historical evidence only.
+4. Current README, Compose, and environment files describe repository and local
+   environment facts.
 
-## Available Guides
+For example, rich Release Graph queries remain a product goal, but Core 0 uses
+versioned REST and PostgreSQL search. Historical GraphQL and Meilisearch choices
+do not override that current contract.
 
-| Guide | Purpose | When to Use |
-|-------|---------|-------------|
-| [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md) | Identify patterns and reduce duplication | When you notice repeated patterns |
-| [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md) | Think through data flow across layers | Features spanning multiple layers |
+## Working Trigger
 
----
+Before changing code, answer four questions:
 
-## Quick Reference: Thinking Triggers
+1. Which capability owns the behavior?
+2. Which boundary accepts and validates the input?
+3. Which authority decides whether the action is allowed?
+4. What focused test proves the behavior and the important failure path?
 
-### When to Think About Cross-Layer Issues
+An anti-pattern is beginning from a convenient technical folder such as
+`utils`, `handlers`, or `queries` and allowing that location to become the
+policy owner.
 
-- [ ] Feature touches 3+ layers (API, Service, Component, Database)
-- [ ] Data format changes between layers
-- [ ] Multiple consumers need the same data
-- [ ] You're not sure where to put some logic
-- [ ] You are adding an event kind, JSONL record, RPC payload, or config field
-- [ ] UI / command code starts casting raw payload fields directly
+## Evidence
 
-→ Read [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md)
-
-### When to Think About Code Reuse
-
-- [ ] You're writing similar code to something that exists
-- [ ] You see the same pattern repeated 3+ times
-- [ ] You're adding a new field to multiple places
-- [ ] **You're modifying any constant or config**
-- [ ] **You're creating a new utility/helper function** ← Search first!
-- [ ] Two files read the same untyped payload field with local casts
-- [ ] Multiple branches update the same derived state from `kind` / `action`
-
-→ Read [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md)
-
-### When Verifying AI Cross-Review Results
-
-- [ ] Reviewer claims "user input can be malicious" → Check the actual data source (internal manifest? user config? external API?)
-- [ ] Reviewer flags "missing validation" → Is the data from a trusted internal source?
-- [ ] Reviewer says "behavior change" → Read the code comments — is it intentional design?
-- [ ] Reviewer identifies a "bug" in test → Mentally delete the feature being tested — does the test still pass? If yes → tautological test
-
-**Common AI reviewer false-positive patterns**:
-1. **Trust boundary confusion**: Treating internal data (bundled JSON manifests) as untrusted external input
-2. **Ignoring design comments**: Flagging intentional behavior documented in code comments as bugs
-3. **Variable misreading**: Not tracing a variable to its actual definition (e.g., Map keyed by path vs name)
-
-**Verification rule**: Every CRITICAL/WARNING finding must be verified against the actual code before prioritizing. Budget ~35% false-positive rate for AI reviews.
-
----
-
-## Pre-Modification Rule (CRITICAL)
-
-> **Before changing ANY value, ALWAYS search first!**
-
-```bash
-# Search for the value you're about to change
-grep -r "value_to_change" .
-```
-
-This single habit prevents most "forgot to update X" bugs.
-
----
-
-## How to Use This Directory
-
-1. **Before coding**: Skim the relevant thinking guide
-2. **During coding**: If something feels repetitive or complex, check the guides
-3. **After bugs**: Add new insights to the relevant guide (learn from mistakes)
-
----
-
-## Contributing
-
-Found a new "didn't think of that" moment? Add it to the relevant guide.
-
----
-
-**Core Principle**: 30 minutes of thinking saves 3 hours of debugging.
+- [Core 0 PRD](../../tasks/08-31-roomusic-core-0-rebuild/prd.md)
+- [Current README](../../../README.md)
+- [Architecture canvas](../../../roomusic-modular-plugin-architecture.canvas.tsx)
+- [V0 product definition](../../../../ROOMusic-V0/.planning/PROJECT.md)

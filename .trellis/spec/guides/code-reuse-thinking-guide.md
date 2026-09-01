@@ -1,223 +1,91 @@
 # Code Reuse Thinking Guide
 
-> **Purpose**: Stop and think before creating new code - does it already exist?
+## Purpose
 
----
+Reuse should preserve one semantic owner, not maximize the number of callers per
+helper. ROOMusic favors capability-local code until a stable abstraction has
+multiple real consumers and no feature-specific policy.
 
-## The Problem
+## Search First
 
-**Duplicated code is the #1 source of inconsistency bugs.**
-
-When you copy-paste or rewrite existing logic:
-- Bug fixes don't propagate
-- Behavior diverges over time
-- Codebase becomes harder to understand
-
----
-
-## Before Writing New Code
-
-### Step 1: Search First
+Before adding a function, type, component, constant, endpoint, or query, search
+for its vocabulary and behavior:
 
 ```bash
-# Search for similar function names
-grep -r "functionName" .
-
-# Search for similar logic
-grep -r "keyword" .
+rg -n "revision_conflict|expected_revision" .
+rg -n "allowed_library_roots|realpath|symlink" .
+rg -n "ReleaseGroup|Medium|Track" .
 ```
 
-### Step 2: Ask These Questions
+Also search tests and specifications. Similar naming can reveal the existing
+owner; similar syntax alone does not prove shared semantics.
 
-| Question | If Yes... |
-|----------|-----------|
-| Does a similar function exist? | Use or extend it |
-| Is this pattern used elsewhere? | Follow the existing pattern |
-| Could this be a shared utility? | Create it in the right place |
-| Am I copying code from another file? | **STOP** - extract to shared |
+## Reuse Decision
 
----
+| Situation | Action |
+| --- | --- |
+| Same policy and same lifecycle | Extend the existing owner and its tests |
+| Same wire payload consumed in several places | Create one boundary decoder and typed projection |
+| Same domain-neutral mechanism with real consumers | Extract a narrow shared package/component |
+| Similar code with different authority or change cadence | Keep it local |
+| Only a hypothetical future consumer | Do not abstract yet |
 
-## Common Duplication Patterns
+Constants follow ownership too. Supported scan formats belong to the scanner
+contract; HTTP status mappings belong to the transport error mapper; UI labels
+belong to presentation or localization. A single global constants package would
+couple unrelated changes.
 
-### Pattern 1: Copy-Paste Functions
+## ROOMusic Examples
 
-**Bad**: Copying a validation function to another file
+Good reuse:
 
-**Good**: Extract to shared utilities, import where needed
+- One server-side path containment implementation used by root registration and
+  scan startup, with filesystem-adapter tests for traversal and symlink escape.
+- One REST error decoder used by frontend features, returning a typed
+  `ApiError` rather than repeated casts from `unknown`.
+- One presentational scan-status component reused where its props and interaction
+  are identical, while feature hooks continue to own fetching.
 
-### Pattern 2: Similar Components
+Keep separate:
 
-**Bad**: Creating a new component that's 80% similar to existing
+- Setup password policy and ordinary display-name validation.
+- Scan-run state transitions and Operation Journal state transitions.
+- Release title normalization and a search-input display formatter.
 
-**Good**: Extend existing component with props/variants
+These may look similar but have different invariants and reasons to change.
 
-### Pattern 3: Repeated Constants
+## Extraction Threshold
 
-**Bad**: Defining the same constant in multiple files
+Before moving code to shared scope, verify all of the following:
 
-**Good**: Single source of truth, import everywhere
+- The abstraction has a precise name that does not contain `misc`, `common`, or
+  `helpers`.
+- At least two implemented consumers need the same semantics.
+- The new API is smaller and easier to test than the duplicated behavior.
+- Ownership of errors, configuration, and lifecycle remains clear.
+- Moving it does not create a module cycle or expose private types.
 
-### Pattern 4: Repeated Payload Field Extraction
+Prefer duplication of a trivial representation over a misleading abstraction.
+Prefer a stable domain value type over duplicated interpretation of raw strings.
 
-**Bad**: Multiple consumers cast the same JSON/event fields locally:
+## Anti-Patterns
 
-```typescript
-const description = (ev as { description?: string }).description;
-const context = (ev as { context?: ContextEntry[] }).context;
-```
+- Copying permission checks into handlers and frontend route guards.
+- Letting multiple modules canonicalize library paths differently.
+- Creating a generic repository base that leaks SQL or transactions everywhere.
+- Creating a mega-component with flags for unrelated features because two pages
+  share markup.
+- Restoring a V0 helper without proving its assumptions match the current
+  REST/PostgreSQL-only Core 0 contract.
 
-This is duplicated contract logic even when the code is only two lines. Each
-consumer now has its own definition of what a valid payload means.
+## Completion Check
 
-**Good**: Put the decoder, type guard, or projection next to the data owner:
+- [ ] Searched for the policy and all current consumers.
+- [ ] Reused or extended the semantic owner when appropriate.
+- [ ] Kept feature policy out of shared code.
+- [ ] Updated every typed contract consumer.
+- [ ] Added tests where ownership or behavior moved.
+- [ ] Did not add infrastructure for a future-only consumer.
 
-```typescript
-if (isThreadEvent(ev)) {
-  renderThreadEvent(ev);
-}
-```
-
-**Rule**: If the same untyped payload field is read in 2+ places, create a
-shared type guard / normalizer / projection before adding a third reader.
-
----
-
-## When to Abstract
-
-**Abstract when**:
-- Same code appears 3+ times
-- Logic is complex enough to have bugs
-- Multiple people might need this
-
-**Don't abstract when**:
-- Only used once
-- Trivial one-liner
-- Abstraction would be more complex than duplication
-
----
-
-## After Batch Modifications
-
-When you've made similar changes to multiple files:
-
-1. **Review**: Did you catch all instances?
-2. **Search**: Run grep to find any missed
-3. **Consider**: Should this be abstracted?
-
-### Reducers Should Use Exhaustive Structure
-
-When state is derived from action-like values (`action`, `kind`, `status`,
-`phase`), prefer a reducer with one `switch` over scattered `if/else` updates.
-
-```typescript
-// BAD - action-specific state transitions are hard to audit
-if (action === "opened") { ... }
-else if (action === "comment") { ... }
-else if (action === "status") { ... }
-
-// GOOD - one reducer owns the transition table
-switch (event.action) {
-  case "opened":
-    ...
-    return;
-  case "comment":
-    ...
-    return;
-}
-```
-
-This matters when the event log is the source of truth. A reducer is the
-documented replay model; display code and commands should not duplicate pieces
-of that replay model.
-
----
-
-## Checklist Before Commit
-
-- [ ] Searched for existing similar code
-- [ ] No copy-pasted logic that should be shared
-- [ ] No repeated untyped payload field extraction outside a shared decoder
-- [ ] Constants defined in one place
-- [ ] Similar patterns follow same structure
-- [ ] Reducer/action transitions live in one reducer or command dispatcher
-
----
-
-## Gotcha: Python if/elif/else Exhaustive Check
-
-**Problem**: Python's if/elif/else chains have no compile-time exhaustive check. When you add a new value to a `Literal` type (e.g., `Platform`), existing if/elif/else chains silently fall through to `else` with wrong defaults.
-
-**Symptom**: New platform works partially — some methods return Claude defaults instead of platform-specific values. No error is raised.
-
-**Example** (`cli_adapter.py`):
-```python
-# BAD: "gemini" falls through to else, returns "claude"
-@property
-def cli_name(self) -> str:
-    if self.platform == "opencode":
-        return "opencode"
-    else:
-        return "claude"  # gemini silently gets "claude"!
-
-# GOOD: explicit branch for every platform
-@property
-def cli_name(self) -> str:
-    if self.platform == "opencode":
-        return "opencode"
-    elif self.platform == "gemini":
-        return "gemini"
-    else:
-        return "claude"
-```
-
-**Prevention**: When adding a new value to a Python `Literal` type, search for ALL if/elif/else chains that switch on that type and add explicit branches. Don't rely on `else` being correct for new values.
-
----
-
-## Gotcha: Asymmetric Mechanisms Producing Same Output
-
-**Problem**: When two different mechanisms must produce the same file set (e.g., recursive directory copy for init vs. manual `files.set()` for update), structural changes (renaming, moving, adding subdirectories) only propagate through the automatic mechanism. The manual one silently drifts.
-
-**Symptom**: Init works perfectly, but update creates files at wrong paths or misses files entirely.
-
-**Prevention**:
-- **Best**: Eliminate the asymmetry — have the manual path call the automatic one (e.g., `collectTemplateFiles()` calls `getAllScripts()` instead of maintaining its own list)
-- **If asymmetry is unavoidable**: Add a regression test that compares outputs from both mechanisms
-- When migrating directory structures, search for ALL code paths that reference the old structure
-
-**Real example**: `trellis update` had a manual `files.set()` list for 11 scripts that `getAllScripts()` already tracked. Fix: replaced the manual list with a `for..of getAllScripts()` loop. See `update.ts` refactor in v0.4.0-beta.3.
-
----
-
-## Template File Registration (Trellis-specific)
-
-When adding new files to `src/templates/trellis/scripts/`:
-
-**Single registration point**: `src/templates/trellis/index.ts`
-
-1. Add `export const xxxScript = readTemplate("scripts/path/file.py");`
-2. Add to `getAllScripts()` Map
-
-That's it. `commands/update.ts` uses `getAllScripts()` directly — no manual sync needed.
-
-**Why this matters**: Without registration in `getAllScripts()`, `trellis update` won't sync the file to user projects. Bug fixes and features won't propagate.
-
-**History**: Before v0.4.0-beta.3, `update.ts` had its own hand-maintained file list that frequently fell out of sync with `getAllScripts()`. This caused 11 Python files to be silently skipped during `trellis update`. The fix was to eliminate the duplicate list and use `getAllScripts()` as the single source of truth.
-
-### Quick Checklist for New Scripts
-
-```bash
-# After adding a new .py file, verify it's in getAllScripts():
-grep -l "newFileName" src/templates/trellis/index.ts  # Should match
-```
-
-### Template Sync Convention
-
-`.trellis/scripts/` (dogfooded) and `packages/cli/src/templates/trellis/scripts/` (template) must stay identical. After editing `.trellis/scripts/`, always sync:
-
-```bash
-rsync -av --delete --exclude='__pycache__' .trellis/scripts/ packages/cli/src/templates/trellis/scripts/
-```
-
-**Gotcha**: Running rsync with wrong source/destination paths can create nested garbage directories (e.g., `.trellis/scripts/packages/cli/...`). Always double-check paths before running.
+See [Modular Design](./modular-design.md) and the current
+[Core 0 PRD](../../tasks/08-31-roomusic-core-0-rebuild/prd.md).
