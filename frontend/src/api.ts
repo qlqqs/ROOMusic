@@ -1,8 +1,9 @@
 export type SetupStatusDTO = { setup_required: boolean };
 export type SessionDTO = { username: string; role: "admin" | "user" };
 export type UserDTO = { id: string; username: string; role: "admin" | "user"; disabled: boolean; created_at: string };
-export type LibraryRootDTO = { id: string; path: string; created_at: string };
-export type CreatedLibraryRootDTO = { id: string; name: string };
+export type LibraryRootDTO = { id: string; path: string; status: "active" | "disabled"; revision: number; created_at: string; updated_at: string };
+export type CreatedLibraryRootDTO = { id: string; name: string; status: "active"; revision: number };
+export type UpdatedLibraryRootDTO = { id: string; path: string; status: "active" | "disabled"; revision: number };
 
 const scanStatuses = ["running", "succeeded", "failed", "canceled", "incomplete"] as const;
 export type ScanStatusValue = (typeof scanStatuses)[number];
@@ -71,10 +72,15 @@ export function decodeLibraryRootList(input: unknown): { items: LibraryRootDTO[]
   return {
     items: requireArray(object.items, "items").map((item) => {
       const root = requireObject(item, "library root");
+      const status = requireNonEmptyString(root.status, "status");
+      if (status !== "active" && status !== "disabled") throw new Error("unknown root status");
       return {
         id: requireNonEmptyString(root.id, "id"),
         path: requireNonEmptyString(root.path, "path"),
+        status,
+        revision: requireSafeInteger(root.revision, "revision", 1),
         created_at: requireTimestamp(root.created_at, "created_at"),
+        updated_at: requireTimestamp(root.updated_at, "updated_at"),
       };
     }),
   };
@@ -82,7 +88,15 @@ export function decodeLibraryRootList(input: unknown): { items: LibraryRootDTO[]
 
 export function decodeCreatedLibraryRoot(input: unknown): CreatedLibraryRootDTO {
   const object = requireObject(input, "created library root");
-  return { id: requireNonEmptyString(object.id, "id"), name: requireNonEmptyString(object.name, "name") };
+  if (object.status !== "active") throw new Error("created root must be active");
+  return { id: requireNonEmptyString(object.id, "id"), name: requireNonEmptyString(object.name, "name"), status: "active", revision: requireSafeInteger(object.revision, "revision", 1) };
+}
+
+export function decodeUpdatedLibraryRoot(input: unknown): UpdatedLibraryRootDTO {
+  const object = requireObject(input, "updated library root");
+  const status = requireNonEmptyString(object.status, "status");
+  if (status !== "active" && status !== "disabled") throw new Error("unknown root status");
+  return { id: requireNonEmptyString(object.id, "id"), path: requireNonEmptyString(object.path, "path"), status, revision: requireSafeInteger(object.revision, "revision", 1) };
 }
 
 export function decodeScanStart(input: unknown): ScanStartDTO {
@@ -227,3 +241,5 @@ function requireNonNegativeInteger(input: unknown, fieldName: string, minimum: n
   }
   return input;
 }
+
+const requireSafeInteger = requireNonNegativeInteger;

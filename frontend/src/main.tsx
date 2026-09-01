@@ -1,4 +1,4 @@
-/* global URL, URLSearchParams, window */
+/* global URL, URLSearchParams, window, crypto */
 import { FormEvent, StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -10,6 +10,7 @@ import {
   decodeScanStart,
   decodeScanStatus,
   decodeSession,
+  decodeUpdatedLibraryRoot,
   decodeSetupStatus,
   LibraryRootDTO,
   ReleaseDetailDTO,
@@ -128,7 +129,7 @@ function App() {
       const createdRoot = await requestApi(
         "/api/v1/library-roots",
         decodeCreatedLibraryRoot,
-        { method: "POST", body: JSON.stringify({ path: libraryPath }) },
+        { method: "POST", body: JSON.stringify({ path: libraryPath }), headers: { "Idempotency-Key": crypto.randomUUID() } },
       );
       const refreshedRoots = await requestApi(
         "/api/v1/library-roots",
@@ -140,6 +141,18 @@ function App() {
     } catch (error: unknown) {
       setMessage(describeError(error));
     }
+  }
+  async function changeRoot(root: LibraryRootDTO) {
+    try {
+      const restoring = root.status === "disabled";
+      const updated = await requestApi(
+        restoring ? `/api/v1/library-roots/${root.id}/restore` : `/api/v1/library-roots/${root.id}`,
+        decodeUpdatedLibraryRoot,
+        { method: restoring ? "POST" : "PATCH", body: JSON.stringify(restoring ? { expected_revision: root.revision } : { status: "disabled", expected_revision: root.revision }), headers: { "Idempotency-Key": crypto.randomUUID() } },
+      );
+      setLibraryRoots((items) => items.map((item) => item.id === updated.id ? { ...item, status: updated.status, revision: updated.revision } : item));
+      setMessage(restoring ? "目录已恢复" : "目录已停用");
+    } catch (error: unknown) { setMessage(describeError(error)); }
   }
   async function startScan() {
     try {
@@ -246,7 +259,7 @@ function App() {
       ) : (
         <ul>
           {libraryRoots.map((root) => (
-            <li key={root.id}>{root.path}</li>
+            <li key={root.id}>{root.path} · {root.status} · r{root.revision} <button type="button" onClick={() => void changeRoot(root)}>{root.status === "active" ? "停用" : "恢复"}</button></li>
           ))}
         </ul>
       )}
