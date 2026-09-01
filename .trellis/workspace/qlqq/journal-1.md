@@ -49,3 +49,25 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 ### Status
 
 [OK] **Completed**
+
+
+## Session 3: 完成扫描格式与 CUE 扩展
+<!-- trellis-session: v=2 fp=90dc35588615d7e4 -->
+
+**Date**: 2026-09-01
+**Task**: 完成扫描格式与 CUE 扩展
+**Branch**: `main`
+
+### Summary
+
+增加 OGG、Opus、WAV 基础解析与受限 UTF-8/UTF-16 CUE 虚拟 Track 扫描，强化 FILE/TRACK/INDEX、codec header、路径 containment 和稳定来源身份校验；通过 Go test/vet/build、前端 lint/typecheck/test/build、docker compose config。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `edf7120` | feat(core): expand audio formats and cue scanning |
+
+### Status
+
+[OK] **Completed**
