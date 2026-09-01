@@ -1,85 +1,61 @@
-# ROOMusic Core 0 实现计划
+# ROOMusic Core 0 集成交付计划
 
 ## 执行原则
 
-按依赖顺序分成可独立验证的工作单元。每个单元完成后先运行对应验证，再进入下一个单元；不得直接从 V0 复制全部代码或迁移历史 schema。产品代码只在用户批准本规划并执行 `task.py start` 后开始修改。
+本任务是版本级父任务，不直接启动或修改产品代码。产品实现由子任务按依赖顺序完成；每个子任务必须独立规划、验证和归档。父任务只维护跨子任务合同、检查阶段间兼容性并执行最终集成验收。
 
-## 阶段清单
+## 子任务执行顺序
 
-### 1. 工程骨架与本地运行
+### 1. 首个可浏览纵向切片
 
-- 建立 Go module、`cmd/roomusic`、配置加载、数据库连接和 HTTP 服务入口。
-- 建立 React/TypeScript 前端、开发 server、API 代理和生产构建脚本。
-- 建立 Go 静态资源托管接口和前端 fallback 路由。
-- 补充只需 PostgreSQL 的本地运行文档；Redis/Meilisearch 不参与启动检查。
+- 子任务：`09-01-core-0-first-browse-slice`。
+- 建立从单管理员初始化、受限目录注册、FLAC/MP3 扫描到 Release 详情浏览的最小端到端闭环。
+- 首次确认工程结构、REST 错误、迁移、会话、路径安全、scan run 和最小图谱合同。
 
-验证：Go format/build/test、前端 install/lint/typecheck/build、Compose PostgreSQL 启动和服务健康检查。
+集成门：干净环境仅依赖 PostgreSQL 即可完成 setup、login、注册目录、扫描、列表和详情浏览。
 
-### 2. 数据库迁移与基础领域模型
+### 2. 基础搜索
 
-- 设计并实现 setup、users、sessions、library_roots、scan_runs、scan diagnostics 和最小 Release Graph 表。
-- 为源观察、Track 来源、ReleaseGroup/Release/Medium/Track 生命周期和 `missing` 状态建立约束。
-- 为 artwork 元数据和 data 目录 storage key 建表，不把图片二进制放进 PostgreSQL。
-- 为 Change Set、Operation Journal、operation events、resource revision 和 idempotency 建表。
-- 迁移必须可重复执行；启动迁移失败时服务不得宣称 ready。
+- 子任务：`09-01-core-0-basic-search`。
+- 在已稳定的读模型上实现 PostgreSQL 搜索，不引入 Meilisearch。
 
-验证：迁移空库、重复迁移、回滚/失败行为、数据库约束、repository 集成测试。
+集成门：搜索结果只能投影权威图谱，不能成为写模型。
 
-### 3. 初始化、会话和用户权限
+### 3. 格式与 CUE 扩展
 
-- 实现一次性 setup admin，确保 setup 状态和管理员创建原子化。
-- 实现 opaque Cookie session、token hash、过期、登出、撤销和禁用用户即时生效。
-- 实现 admin/user 中间件、同源/Origin 或等价 CSRF 检查、稳定错误响应。
-- 实现管理员创建/禁用普通用户和撤销会话。
+- 子任务：`09-01-core-0-format-cue-expansion`。
+- 增加 OGG、Opus、WAV、常见 CUE 和边界样本，不改变既有 FLAC/MP3 身份。
 
-验证：setup 重复请求、登录失败、Cookie 属性、token 不落库、过期/撤销/禁用、普通用户越权和 CSRF 测试。
+集成门：扩展格式与 CUE 重扫不破坏既有来源、Track ID 和 missing 规则。
 
-### 4. 路径策略与目录变更闭环
+### 4. Release 封面
 
-- 实现 `allowed_library_roots` 配置解析、规范化路径、realpath 和同根符号链接检查。
-- 实现 library root 新增、停用、恢复 REST API。
-- 将这些操作接入 Change Set、Operation Journal、before/after、revision、幂等键和明确逆操作。
-- 对旧 revision 和同 key 不同 payload 返回稳定冲突；同 key 同 payload 返回原结果。
+- 子任务：`09-01-core-0-release-artwork`。
+- 增加目录图和内嵌图发现、受控 data 存储与鉴权资源接口。
 
-验证：路径穿越、白名单外目录、符号链接越界、目录不存在、重复请求、revision 冲突、恢复成功和恢复失败测试。
+集成门：封面失败不阻塞音频扫描，且不泄露原始路径。
 
-### 5. 只读扫描器与 Release Graph
+### 5. 私有多用户
 
-- 实现全局串行进程内调度和重复触发复用当前 scan run。
-- 实现目录遍历：默认不跟随目录符号链接；合法同根文件符号链接可读取；异常只记录诊断。
-- 实现 `FLAC`、`MP3`、`OGG`、`Opus`、`WAV` 标签和基础文件事实解析。
-- 实现常见 CUE 虚拟 Track 和多碟 Medium 识别。
-- 一个发行目录默认形成独立 ReleaseGroup/Release；不做跨目录弱启发式归组。
-- 写入 source observation、字段来源、scan run 统计和 unsupported/parse failure 诊断。
-- 同 root 同规范化相对路径保持 Track ID；rename/move 不自动继承身份。
-- 只有完整成功扫描执行负向对账并标记 `missing`；失败、取消、离线、权限错误或不完整扫描不执行。
+- 子任务：`09-01-core-0-private-multi-user`。
+- 在单管理员闭环上增加普通用户生命周期和只读权限矩阵。
 
-验证：格式 fixture、CUE fixture、多碟 fixture、重复扫描、软缺失、恢复、rename/move、符号链接、失败扫描隔离和扫描中重复触发测试。
+集成门：所有后端管理端点独立授权，前端角色显示不是权限边界。
 
-### 6. Release-level 封面
+### 6. 目录操作治理
 
-- 扫描同目录明确命名的 folder artwork 和音频内嵌封面。
-- 固化并测试默认封面优先级。
-- 受控复制到 data 目录，按 hash key 幂等保存元数据。
-- 提供鉴权 artwork resource API，隐藏原始路径并返回正确 MIME/缓存头。
+- 子任务：`09-01-core-0-root-operation-governance`。
+- 基于目录新增、停用和恢复的具体用例实现 revision、幂等、审计事件和恢复语义。
+- 只有出现第二类真实持久化操作后，才评估抽取通用 Change Set 或 Reversible Executor。
 
-验证：目录图片优先级、内嵌封面 fallback、重复 hash、损坏图片、只读音乐目录、权限和路径泄露测试。
+集成门：冲突必须 fail closed；重复请求不产生重复副作用；恢复不覆盖更新后的 revision。
 
-### 7. 读模型 REST API 与前端页面
+### 7. 父任务最终集成审查
 
-- 实现 setup/auth、library roots、scans、releases、release detail、search、artwork 和 admin users/change history API。
-- 保持稳定分页、错误 code、request ID 和角色可见性。
-- 实现 setup/login、library list、release detail、scan status/diagnostics、admin roots/users/change history 页面。
-- 生产构建由 Go 托管；前端不把 session token 写入 localStorage。
-
-验证：handler integration tests、权限矩阵、前端 typecheck/lint、核心页面交互和生产静态资源 smoke test。
-
-### 8. 文档与质量门禁收敛
-
-- 更新 README、环境变量示例、Core 0 API 和运行说明。
-- 记录明确的支持格式、软缺失、身份和 ReleaseGroup 限制。
-- 固化最小质量命令并在干净环境运行。
-- 运行 cross-layer review，确认 DTO、数据库状态、日志字段和前端状态没有漂移。
+- 汇总子任务验证结果，运行干净环境端到端验收。
+- 检查跨子任务迁移、DTO、身份、来源、诊断、日志和前端状态是否漂移。
+- 确认 Redis、Meilisearch、GraphQL、Agent runtime 和插件基础设施没有成为隐式依赖。
+- 父任务通过最终验收后再归档。
 
 ## 风险与回退点
 

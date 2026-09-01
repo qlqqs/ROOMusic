@@ -105,7 +105,7 @@ itself, runs a repository update, and returns the database row directly.
 - [Core 0 requirements](../../tasks/08-31-roomusic-core-0-rebuild/prd.md)
 - [Current environment README](../../../README.md)
 - [Current Compose services](../../../compose.yaml)
-- [Architecture canvas](../../../roomusic-modular-plugin-architecture.canvas.tsx)
+- [Architecture canvas](../../../docs/architecture/roomusic-modular-plugin-architecture.canvas.tsx)
 
 The Compose file includes Redis and Meilisearch as development/future services;
 the Core 0 PRD explicitly makes them optional.

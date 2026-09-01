@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/guides/product-goals.md", "reason": "Verify product outcome, phase boundaries and permanent invariants"}
+{"file": ".trellis/spec/guides/modular-design.md", "reason": "Review capability ownership, cohesion and coupling"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Run backend safety, test and dependency quality checks"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Run frontend type, state, accessibility and build quality checks"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Trace REST, persistence and UI contracts end to end"}
+{"file": "docs/architecture/architecture-decisions.md", "reason": "Verify module ownership, dependency direction, and Core 0 boundaries"}
+{"file": "docs/architecture/roomusic-modular-plugin-architecture.canvas.tsx", "reason": "Review architecture-level boundary and extension constraints"}
+{"file": "docs/architecture/roomusic-full-architecture-tree.canvas.tsx", "reason": "Review the full module tree without prescribing concrete source files"}

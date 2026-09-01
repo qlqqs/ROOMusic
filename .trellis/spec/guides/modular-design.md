@@ -114,6 +114,6 @@ repository does not decide whether the caller is an administrator.
   needs an out-of-process boundary.
 
 The visual intent is summarized by the
-[architecture canvas](../../../roomusic-modular-plugin-architecture.canvas.tsx),
+[architecture canvas](../../../docs/architecture/roomusic-modular-plugin-architecture.canvas.tsx),
 while the [Core 0 PRD](../../tasks/08-31-roomusic-core-0-rebuild/prd.md) remains
 authoritative for behavior.
