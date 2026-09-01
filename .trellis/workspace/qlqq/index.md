@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 7
+- **Total Sessions**: 8
 - **Last Active**: 2026-09-01
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~161 | Active |
+| `journal-1.md` | ~184 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 8 | 2026-09-01 | 完成 Core 0 最终集成验收 | `1013177`, `ca4671a` | `main` |
 | 7 | 2026-09-01 | 完成 Core 0 目录操作治理 | `a57c212` | `main` |
 | 6 | 2026-09-01 | 完成 Core 0 私有多用户管理 | `bc0ead7` | `main` |
 | 5 | 2026-09-01 | 完成 Release 封面体验 | `26d4ffb` | `main` |
