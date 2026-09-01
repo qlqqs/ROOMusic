@@ -29,6 +29,19 @@ Read-only filesystem -> parser observations -> scan policy -> PostgreSQL
   -> Release Graph query -> REST DTO -> frontend decoder -> feature view model
 ```
 
+Future Music Steward operation:
+
+```text
+User / scheduled intent
+  -> Assistant approval, Steward independent review, or Operator no-approval path
+  -> typed Change Set
+  -> backend tool authority and current-principal recheck
+  -> revision/idempotency/physical-safety validation
+  -> transactional or staged executor
+  -> Operation Journal + safe REST DTO
+  -> operation/recovery UI
+```
+
 For each arrow, record the input type, output type, possible error, correlation
 identifier, and owner. A diagram is useful when a flow crosses three or more
 boundaries or changes persistent state.
@@ -62,6 +75,9 @@ Before a cross-layer change:
 - [ ] Decide loading, empty, stale, conflict, cancelled, and failure UI states.
 - [ ] Confirm Redis, Meilisearch, Agent, playback, and plugins are not accidental
       Core 0 dependencies.
+- [ ] For a future Agent operation, keep approval state, execution state, and
+      recovery state distinct; identify the backend tool that owns each side
+      effect.
 
 After implementation:
 
@@ -70,6 +86,8 @@ After implementation:
 - [ ] Test conflict/rollback behavior for persistent changes.
 - [ ] Verify one decoder/type owner per wire payload.
 - [ ] Verify logs, scan history, and Operation Journal remain distinct.
+- [ ] Verify Operator skips approval only, Steward cannot self-review, and no
+      Agent payload can grant itself a capability.
 - [ ] Search every consumer when a field, enum, endpoint, or error code changes.
 
 ## Examples

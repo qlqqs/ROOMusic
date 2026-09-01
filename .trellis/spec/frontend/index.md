@@ -100,4 +100,4 @@ browse flows into marketing-style pages.
 
 - [Core 0 UI acceptance behavior](../../tasks/08-31-roomusic-core-0-rebuild/prd.md)
 - [Current development environment](../../../README.md)
-- [V0 product audience and long-term direction](../../../../ROOMusic-V0/.planning/PROJECT.md)
+- [Inherited product audience and long-term direction](../guides/product-goals.md)

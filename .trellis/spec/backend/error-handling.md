@@ -21,16 +21,25 @@ codes may refine these classes without changing their HTTP meaning.
 | `validation_failed` | 422 | Decoded input violates a domain constraint |
 | `unauthenticated` | 401 | No valid active session |
 | `permission_denied` | 403 | Authenticated actor lacks authority |
+| `approval_required`, `review_required`, `capability_denied` | 403 | The selected mode has not satisfied its approval or tool policy |
 | `not_found` | 404 | Authorized resource is absent |
 | `revision_conflict`, `idempotency_conflict`, `setup_closed` | 409 | Current state conflicts with the command |
 | `precondition_failed` | 412 | Explicit request precondition no longer holds |
-| `unavailable` | 503 | Required Core 0 dependency is temporarily unavailable |
+| `unavailable`, `review_unavailable` | 503 | A required dependency or Steward reviewer is temporarily unavailable |
 | `internal` | 500 | Unexpected implementation or infrastructure failure |
 
 Path traversal, an out-of-root resolved target, and forbidden symlink behavior
 are safe validation failures with stable codes, but responses must not disclose
 the allowed host paths. Unsupported audio files encountered during scanning are
 persisted scan diagnostics, not reasons to fail the entire REST request.
+
+For future Music Steward operations, approval and execution failures remain
+distinct. `approval_required` means Assistant mode still needs the current
+user's explicit decision. `review_required` means Steward has no valid review
+bound to the current proposal. `review_unavailable` fails Steward closed and
+must never cause an automatic fallback to Operator mode. `capability_denied`
+means the registered tool policy rejects the mode or principal; changing model
+output cannot grant that capability.
 
 ## REST Error Contract
 

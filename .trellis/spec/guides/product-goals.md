@@ -14,10 +14,64 @@ propose or execute only through fixed identity, permission, confirmation,
 audit, transaction, and recovery boundaries. It never becomes the source of
 authority merely because it is called an Agent or plugin.
 
-This intent comes from the V0 [product definition](../../../../ROOMusic-V0/.planning/PROJECT.md),
-[requirements](../../../../ROOMusic-V0/.planning/REQUIREMENTS.md), and
-[roadmap](../../../../ROOMusic-V0/.planning/ROADMAP.md). Those files are product
-history, not current source code or a mandate to restore the V0 runtime.
+This repository-local guide preserves the relevant conclusions from the V0
+product definition, requirements, roadmap, and Roon phase-one alignment
+research. The original V0 planning workspace is historical input, not a
+required sibling checkout, current source code, or a mandate to restore the V0
+runtime.
+
+## Long-Term Steward Model
+
+The product has one user-facing Agent concept: **Music Steward**. Assistant,
+Steward, and Operator are execution modes with different approval paths; they
+are not three independent Agents and must not grow three separate authority
+implementations.
+
+| Mode | Approval path | Intended use | Core authority |
+| --- | --- | --- | --- |
+| `assistant` | The current user explicitly approves the proposed operation | Explain the library, prepare plans, and perform safe user-scoped actions | Cannot approve its own dangerous proposal |
+| `steward` | An independent Review Subagent returns a structured approval, subject to policy | Autonomous evidence-backed organization and bounded maintenance | The main Agent cannot act as its own reviewer |
+| `operator` | No user confirmation or AI review step | Explicit administrator-controlled direct execution | Still limited to registered tools and backend validation |
+
+The approval path is the product distinction. Execution is shared: every mode
+submits a typed command to the backend authority, which checks identity,
+capability, target scope, physical safety, revision, and idempotency before any
+side effect. Operator mode skips approval, not validation, logging, or recovery
+metadata. "Direct execution" never means unrestricted shell, arbitrary SQL, or
+unbounded host filesystem access.
+
+The Review Subagent is a separate reviewer role, not a second general-purpose
+Assistant. It receives a bounded operation proposal and safe evidence summary,
+then returns `approved`, `rejected`, or `needs_human_confirmation` with reasons,
+risk, scope, and recovery requirements. Its output is an approval input, never
+the authority to write data. The backend re-evaluates the proposal and policy;
+an Agent or model cannot manufacture approval by placing an approval field in
+its own payload.
+
+The deterministic library pipeline remains separate from Music Steward. Parsing,
+identity assignment, conservative Release grouping, and source observation are
+program-owned behavior. AI is used for unresolved interpretation and user
+assistance, not as a replacement for deterministic rules that are already
+reliable.
+
+## Long-Term Change Management
+
+ROOMusic does not use runtime logs as a substitute for Git. Logs are ephemeral
+operational evidence; durable business recovery uses four separate concepts:
+
+- **Change Set**: the intent and complete scope of one business operation.
+- **Operation Journal**: immutable lifecycle events, actor, mode, tool, status,
+  and correlation identifiers.
+- **Checkpoint**: the minimum before-state, revision, manifest, or hash needed
+  to recover the affected resources.
+- **Reversible Executor**: typed inverse actions that can restore a supported
+  operation, rather than an Agent guessing how to undo natural-language history.
+
+Core 0 uses this model for directory configuration changes first. It does not
+implement full Event Sourcing, Git-like branches, or a full file recovery
+system. Future file and tag mutation must add an explicit recovery strategy
+before the capability is enabled. A physical purge may be irreversible, but
+the operation must state that fact instead of claiming rollback support.
 
 ## Core 0 Outcome
 
@@ -58,9 +112,11 @@ These rules survive later phases and adapter changes:
 - Plugins, providers, Agents, and execution adapters use published capabilities;
   they cannot bypass core authority or mutate private module storage.
 
-The Roon alignment reference explains why local files become an object graph,
-why versions remain distinct, and why tags and source evidence matter:
-[Roon phase-one alignment](../../../../ROOMusic-V0/.planning/references/roon-phase1-alignment.md).
+The inherited Roon alignment conclusion is that local files become an object
+graph, versions remain distinct, and tags and source evidence remain
+inspectable. Those conclusions are captured by the Core 0 outcome and permanent
+invariants above so a standalone clone does not depend on external planning
+files.
 
 ## Current Supersessions
 

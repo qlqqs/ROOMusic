@@ -44,6 +44,11 @@ decoding, authorization, SQL, and presentation and therefore must be split.
 - Default source-file writes, tag updates, moves, deletes, or directory symlink
   traversal.
 - Copying V0 code without revalidating assumptions and tests against Core 0.
+- Letting an Agent, model adapter, Review Subagent, browser, or plugin execute
+  SQL, shell, or filesystem mutations outside a registered backend tool.
+- Treating Operator mode as a reason to skip authorization, argument validation,
+  revision/idempotency checks, journaling, or recovery classification.
+- Treating the main Agent's own output as independent Steward approval.
 
 ## Test Ownership
 
@@ -56,6 +61,7 @@ decoding, authorization, SQL, and presentation and therefore must be split.
 | Path boundary | traversal, relative/absolute normalization, symlink escape/broken target, and allowed-root containment |
 | Scanner | initial formats, CUE, cancellation, partial failure, complete-only missing reconciliation, repeat identity |
 | Directory mutation | transaction, expected revision, idempotent retry, key/input conflict, Change Set, and inverse action |
+| Future Agent tool | mode/approval matrix, independent review binding, backend recheck, tool scope, idempotency, journal, and recovery/irreversible marker |
 | Concurrency-sensitive code | deterministic contention test and race detector where practical |
 
 Tests assert behavior, not implementation call counts. Mocks are appropriate for
@@ -95,6 +101,8 @@ when local and CI behavior agree.
 - [ ] Representative success and dangerous failure paths are tested.
 - [ ] The production Core 0 loop still works with Redis and Meilisearch absent.
 - [ ] No music-source mutation or raw path disclosure was introduced.
+- [ ] Any future Agent or Operator path uses the shared authority/executor and
+      cannot bypass it through a model adapter, plugin, CLI, or internal route.
 - [ ] Documentation/specs changed when a contract or selected tool changed.
 
 ## Anti-Example

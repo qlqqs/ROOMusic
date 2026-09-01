@@ -50,6 +50,10 @@ event name.
   every function.
 - Add `scan_run_id`, `operation_id`, `change_set_id`, and `task_id` when
   those scopes exist.
+- Future Music Steward flows add `agent_run_id`, `review_run_id`, `mode`,
+  `tool`, `approval_status`, and `operation_id` when applicable. Use stable IDs
+  and enum values; do not log prompts, chain-of-thought, raw model responses, or
+  full Change Set payloads.
 - Include stable actor/user identifiers only when necessary for security or
   operation diagnosis; do not include email, display name, or session token.
 - A background operation accepted by a request retains the initiating
@@ -81,6 +85,12 @@ in bounded scan diagnostics; emitting one info log per track is unacceptable for
 Log an operation's lifecycle with its durable `operation_id`, but keep
 before/after state and recovery data in Change Set/Operation Journal storage.
 Logging "rollback available" is not a recovery implementation.
+
+Assistant, Steward, and Operator use the same operation event vocabulary. Logs
+may state that approval was user-provided, reviewer-provided, or not required;
+they must not describe Operator as "auto-approved" and must not treat a Review
+Subagent response as proof that execution committed. The durable journal owns
+approval references, execution status, and rollback state.
 
 ## Sensitive Data
 
@@ -122,5 +132,5 @@ structured and correlated; it does not expose panic detail to REST clients.
 
 These requirements come from the
 [Core 0 observability contract](../../tasks/08-31-roomusic-core-0-rebuild/prd.md)
-and the large-library product context in the
-[V0 product definition](../../../../ROOMusic-V0/.planning/PROJECT.md).
+and the repository-local
+[large-library product context](../guides/product-goals.md).

@@ -21,7 +21,9 @@ Before writing or reviewing backend code:
       [Engineering Principles](../guides/engineering-principles.md).
 - [ ] Read the layer guides below that govern the change. Read database,
       error, and logging rules whenever a backend workflow crosses those
-      boundaries; read the quality guide for every implementation task.
+      boundaries; read the Music Steward/operation guide for any Agent, tool,
+      persistent operation, approval, or recovery work; read the quality guide
+      for every implementation task.
 - [ ] Identify the owning capability, its published contract, the input
       boundary, and the backend authority for the requested behavior.
 - [ ] Confirm the change fits the Core 0 PostgreSQL-only, versioned REST,
@@ -36,6 +38,7 @@ Before writing or reviewing backend code:
 | [Database Guidelines](./database-guidelines.md) | PostgreSQL ownership, transactions, migrations, revisions, and idempotency |
 | [Error Handling](./error-handling.md) | Classified application errors and stable REST responses |
 | [Logging Guidelines](./logging-guidelines.md) | Structured JSON events, correlation, and redaction |
+| [Music Steward And Operation Guidelines](./agent-and-operation-guidelines.md) | Agent modes, Review Subagent, tools, Change Sets, and recovery |
 | [Quality Guidelines](./quality-guidelines.md) | Focused code, forbidden coupling, tests, and gates |
 
 ## Quality Check

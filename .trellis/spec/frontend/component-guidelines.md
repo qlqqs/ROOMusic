@@ -56,6 +56,26 @@ failed scan removed missing music.
 Use stable entity IDs as React keys. Track numbers, titles, array indexes, and
 file names are not stable identities.
 
+## Operation And Agent Surfaces
+
+Future operation screens must render the backend's durable Change Set and
+Operation Journal state; they must not infer completion from a button click or
+from a log message. Display the operation mode and approval state separately:
+
+- `assistant`: show the pending user-approval step and keep the exact proposal
+  available for review before submitting approval.
+- `steward`: show Review Subagent status and distinguish approved, rejected,
+  reviewer unavailable, and `needs_human_confirmation`.
+- `operator`: show that no approval/review step was required, while still
+  displaying validation, execution, failure, recovery availability, and any
+  irreversible marker.
+
+The UI may hide controls for usability, but it never turns a local role flag
+into permission. A dangerous action dialog must show target scope, impact,
+before/after summary where available, current revision, operation status, and
+whether an inverse action or checkpoint exists. Natural-language Agent output
+is explanatory content, not an executable command or proof of approval.
+
 ## Security And Authority
 
 A hidden or disabled control is user guidance only. The backend rechecks role and

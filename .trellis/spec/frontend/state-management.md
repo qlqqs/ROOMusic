@@ -80,6 +80,35 @@ Follow the returned operation or resource status contract. Change Set and
 Operation Journal are backend records; the UI does not synthesize recovery
 availability from button history.
 
+Approval and execution are separate server-owned state machines. Future Agent
+UI must not collapse them into one `isRunning` boolean. Preserve at least:
+
+```ts
+type ApprovalState =
+  | { status: "not_required" }
+  | { status: "awaiting_user" }
+  | { status: "reviewing" }
+  | { status: "approved"; approvalId: string }
+  | { status: "rejected"; reasons: string[] }
+  | { status: "needs_human_confirmation"; reasons: string[] }
+  | { status: "review_unavailable" };
+
+type ExecutionState =
+  | { status: "planned" }
+  | { status: "running"; operationId: string }
+  | { status: "succeeded"; operationId: string }
+  | { status: "partially_failed"; operationId: string }
+  | { status: "failed"; operationId: string }
+  | { status: "rolling_back"; operationId: string }
+  | { status: "rolled_back"; operationId: string }
+  | { status: "rollback_failed"; operationId: string };
+```
+
+This is a semantic example, not a finalized wire DTO. The stable requirement is
+that Operator uses `not_required`, not a fake automatic approval; Steward review
+failure never becomes approval; and execution/recovery state always comes from
+the backend journal.
+
 ## Session Lifecycle
 
 The app bootstraps a safe current-session endpoint. Logout, expiry, revocation,

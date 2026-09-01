@@ -8,7 +8,7 @@ claims that application code already exists.
 
 | Guide | Purpose | Use when |
 | --- | --- | --- |
-| [Product Goals](./product-goals.md) | Preserve user value and distinguish Core 0 from the long-term product | Scoping any feature or infrastructure |
+| [Product Goals](./product-goals.md) | Preserve user value, Music Steward modes, change management, and phase boundaries | Scoping any feature, Agent, operation, or infrastructure |
 | [Modular Design](./modular-design.md) | Define ownership, dependency direction, cohesion, and coupling limits | Creating or changing a module boundary |
 | [Engineering Principles](./engineering-principles.md) | Define smallest-complete changes, focused functions, and proportional verification | Planning and reviewing every change |
 | [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md) | Reuse the correct policy owner without premature abstraction | Adding helpers, types, components, or constants |
@@ -50,4 +50,8 @@ policy owner.
 - [Core 0 PRD](../../tasks/08-31-roomusic-core-0-rebuild/prd.md)
 - [Current README](../../../README.md)
 - [Architecture canvas](../../../roomusic-modular-plugin-architecture.canvas.tsx)
-- [V0 product definition](../../../../ROOMusic-V0/.planning/PROJECT.md)
+- [Inherited V0 product goals and phase decisions](./product-goals.md)
+
+The original V0 planning workspace is historical input, not a required sibling
+checkout. The repository-local product goals and Core 0 PRD preserve the
+decisions that remain authoritative for this project.
