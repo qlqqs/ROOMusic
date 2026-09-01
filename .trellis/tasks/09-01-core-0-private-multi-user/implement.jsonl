@@ -1,0 +1,9 @@
+{"file":".trellis/spec/guides/index.md","reason":"共享工程规范与 Core 0 边界"}
+{"file":".trellis/spec/guides/engineering-principles.md","reason":"实现范围与验证原则"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"REST、认证、数据库和 UI 的跨层数据流"}
+{"file":".trellis/spec/backend/index.md","reason":"后端模块边界与授权契约"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"用户状态、会话撤销与事务迁移规则"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"稳定错误码和 HTTP 响应映射"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"用户管理日志脱敏与关联 ID"}
+{"file":".trellis/spec/frontend/index.md","reason":"前端 REST、会话角色和权限展示边界"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Session/User DTO 解码约束"}

@@ -11,8 +11,7 @@ func (application *roomusicApplication) startScan(responseWriter http.ResponseWr
 	if !application.requireSameOrigin(responseWriter, request) {
 		return
 	}
-	if _, err := application.authenticatedUser(request); err != nil {
-		application.writeAuthenticationError(responseWriter, request)
+	if _, ok := application.requireAdmin(responseWriter, request); !ok {
 		return
 	}
 	application.scanMutex.Lock()
@@ -52,8 +51,7 @@ func (application *roomusicApplication) scanStatus(responseWriter http.ResponseW
 }
 
 func (application *roomusicApplication) diagnostics(responseWriter http.ResponseWriter, request *http.Request) {
-	if _, err := application.authenticatedUser(request); err != nil {
-		application.writeAuthenticationError(responseWriter, request)
+	if _, ok := application.requireAdmin(responseWriter, request); !ok {
 		return
 	}
 	rows, err := application.database.connection.QueryContext(request.Context(), "SELECT kind,COALESCE(relative_path,''),message FROM scan_diagnostics WHERE scan_run_id=$1::uuid ORDER BY id LIMIT 100", request.PathValue("id"))

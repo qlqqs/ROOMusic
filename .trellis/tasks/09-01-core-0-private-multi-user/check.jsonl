@@ -1,0 +1,7 @@
+{"file":".trellis/spec/guides/index.md","reason":"共享工程规范质量门禁"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"后端测试、授权和安全检查"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"事务、迁移和并发一致性检查"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"错误分类和稳定响应检查"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"日志关联与敏感信息检查"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"前端类型、交互和可访问性检查"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"DTO 解码和类型穷举检查"}
