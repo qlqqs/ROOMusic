@@ -271,3 +271,37 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 ### Status
 
 [OK] **Completed**
+
+
+## Session 13: 记录真实音乐资产长期记忆
+<!-- trellis-session: v=2 fp=49e91fe9b5eacbe2 -->
+
+**Date**: 2026-09-02
+**Task**: 记录真实音乐资产长期记忆
+**Branch**: `main`
+
+### Summary
+
+将根目录 music/ 是真实音乐资产这一事实写入 Trellis 长期规范，明确只读、测试与 CI 隔离及信息披露边界；完成质量检查并归档小任务。
+
+### Main Changes
+
+- 新增 .trellis/spec/guides/real-music-assets.md 并加入共享指南索引。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `269c17c` | docs(trellis): record real music assets |
+
+### Testing
+
+- [OK] Markdown 相对链接 12 项通过，git diff --check 通过，确认 music/ 无 Git 状态变化。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 继续处理已有的 CI 门禁与 HTTP 可观测性任务。
