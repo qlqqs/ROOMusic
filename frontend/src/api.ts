@@ -20,7 +20,7 @@ export type ScanStatusDTO = {
 };
 export type ActiveScanDTO = { scan: ScanStatusDTO | null };
 
-export type ReleaseSummaryDTO = { id: string; title: string; artist: string; year?: number };
+export type ReleaseSummaryDTO = { id: string; title: string; artist: string; year?: number; attention_count?: number };
 export type PaginationDTO = { page: number; page_size: number; total: number };
 export type ReleaseListDTO = { items: ReleaseSummaryDTO[]; pagination: PaginationDTO };
 export type TrackDTO = { id: string; title: string; artist: string; position: number; source: string };
@@ -217,6 +217,7 @@ function decodeReleaseSummary(input: unknown): ReleaseSummaryDTO {
     id: requireNonEmptyString(object.id, "release.id"),
     title: requireNonEmptyString(object.title, "release.title"),
     artist: requireNonEmptyString(object.artist, "release.artist"),
+    attention_count: object.attention_count === undefined ? undefined : requireNonNegativeInteger(object.attention_count, "release.attention_count", 0),
   };
 }
 

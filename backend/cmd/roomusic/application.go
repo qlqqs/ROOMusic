@@ -327,14 +327,17 @@ func (application *roomusicApplication) listReleases(responseWriter http.Respons
 		writeAPIError(responseWriter, request, http.StatusBadRequest, "invalid_query", "搜索条件无效")
 		return
 	}
-	whereClause := ""
+	whereClause := " WHERE EXISTS (SELECT 1 FROM tracks visible_tracks JOIN media visible_media ON visible_media.id=visible_tracks.medium_id WHERE visible_media.release_id=releases.id AND visible_tracks.source_status='present')"
 	queryArgs := []any{}
 	if searchQuery != "" {
-		whereClause = ` WHERE (title ILIKE '%' || $1 || '%' ESCAPE '~' OR artist ILIKE '%' || $1 || '%' ESCAPE '~' OR EXISTS (
+		whereClause += ` AND (title ILIKE '%' || $1 || '%' ESCAPE '~' OR artist ILIKE '%' || $1 || '%' ESCAPE '~' OR EXISTS (
 			SELECT 1 FROM media JOIN tracks ON tracks.medium_id = media.id
 			WHERE media.release_id = releases.id AND tracks.title ILIKE '%' || $1 || '%' ESCAPE '~'
 		))`
 		queryArgs = append(queryArgs, escapeLikePattern(searchQuery))
+	}
+	if request.URL.Query().Get("attention") == "required" {
+		whereClause += ` AND (EXISTS (SELECT 1 FROM release_field_decisions d WHERE d.release_id=releases.id AND d.action='uncertain_apply') OR EXISTS (SELECT 1 FROM tracks at JOIN media am ON am.id=at.medium_id WHERE am.release_id=releases.id AND at.source_status='missing'))`
 	}
 	var total int
 	countQuery := "SELECT COUNT(*) FROM releases" + whereClause
@@ -342,7 +345,7 @@ func (application *roomusicApplication) listReleases(responseWriter http.Respons
 		writeAPIError(responseWriter, request, 503, "database_unavailable", "服务暂不可用")
 		return
 	}
-	listQuery := "SELECT id::text,title,artist FROM releases" + whereClause + " ORDER BY title,artist,id LIMIT $" + strconv.Itoa(len(queryArgs)+1) + " OFFSET $" + strconv.Itoa(len(queryArgs)+2)
+	listQuery := "SELECT id::text,title,artist,(SELECT COUNT(*) FROM release_field_decisions d WHERE d.release_id=releases.id AND d.action='uncertain_apply') FROM releases" + whereClause + " ORDER BY title,artist,id LIMIT $" + strconv.Itoa(len(queryArgs)+1) + " OFFSET $" + strconv.Itoa(len(queryArgs)+2)
 	listArgs := append(append([]any{}, queryArgs...), pageSize, (page-1)*pageSize)
 	rows, err := application.database.connection.QueryContext(request.Context(), listQuery, listArgs...)
 	if err != nil {
@@ -350,14 +353,15 @@ func (application *roomusicApplication) listReleases(responseWriter http.Respons
 		return
 	}
 	defer rows.Close()
-	items := []map[string]string{}
+	items := []map[string]any{}
 	for rows.Next() {
 		var id, title, artist string
-		if scanErr := rows.Scan(&id, &title, &artist); scanErr != nil {
+		var attention int
+		if scanErr := rows.Scan(&id, &title, &artist, &attention); scanErr != nil {
 			writeAPIError(responseWriter, request, 503, "database_error", "无法读取发行版本")
 			return
 		}
-		items = append(items, map[string]string{"id": id, "title": title, "artist": artist})
+		items = append(items, map[string]any{"id": id, "title": title, "artist": artist, "attention_count": attention})
 	}
 	if rowsErr := rows.Err(); rowsErr != nil {
 		writeAPIError(responseWriter, request, 503, "database_error", "无法读取发行版本")

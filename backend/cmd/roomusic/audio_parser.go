@@ -32,6 +32,24 @@ type cueTrack struct {
 	ReferencedFile string
 }
 
+func parseM4A(path string) (audioObservation, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return audioObservation{}, err
+	}
+	defer file.Close()
+	header := make([]byte, 12)
+	if _, err := io.ReadFull(file, header); err != nil || string(header[4:8]) != "ftyp" {
+		return audioObservation{}, fmt.Errorf("invalid M4A stream")
+	}
+	brand := string(header[8:12])
+	if brand != "M4A " && brand != "isom" && brand != "mp42" && brand != "mp41" {
+		return audioObservation{}, fmt.Errorf("unsupported M4A brand")
+	}
+	o := audioObservation{SourceKind: "m4a", InferredFields: map[string]bool{}}
+	return applyFilenameFallback(path, o), nil
+}
+
 func parseCue(path string) ([]cueTrack, string, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -159,6 +177,8 @@ func parseAudioFile(path string) (audioObservation, error) {
 		return parseOpus(path)
 	case ".wav":
 		return parseWAV(path)
+	case ".m4a":
+		return parseM4A(path)
 	default:
 		return audioObservation{}, fmt.Errorf("unsupported format")
 	}
