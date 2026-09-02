@@ -1,0 +1,14 @@
+{"file":".trellis/spec/guides/product-goals.md","reason":"自动整理、只读来源、Release Graph 与后续 Music Steward 的产品边界"}
+{"file":".trellis/spec/guides/modular-design.md","reason":"Library parser、Release Graph organizer 与 PostgreSQL adapter 的能力所有权"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"扫描、catalog、REST decoder 和 UI 的跨层合同检查"}
+{"file":".trellis/spec/guides/real-music-assets.md","reason":"真实 music 目录只读、测试隔离和信息披露约束"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"短事务、迁移、Track 身份、provenance 与 complete-only missing 合同"}
+{"file":".trellis/spec/backend/core0-runtime-contracts.md","reason":"当前扫描协调、取消、REST、PostgreSQL 和 CI 已落地合同"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"scan diagnostics、incomplete 终态和安全错误映射"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"parser、scanner、PostgreSQL、并发与只读安全测试门槛"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"新增 Release/evidence/scan payload 的 runtime decoder 与类型所有权"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Release/Medium/Track、attention、权限和可访问状态展示"}
+{"file":".trellis/spec/frontend/hook-guidelines.md","reason":"REST 查询、URL 筛选、扫描轮询和过期响应协调"}
+{"file":".trellis/tasks/09-02-album-scan-organization-core/research/v0-scan-gap.md","reason":"V0 行为、字段语义与当前 scanner/schema/UI 差距"}
+{"file":".trellis/tasks/09-02-album-scan-organization-core/research/architecture-compatibility.md","reason":"当前模块化单体与后续 overlay/topology/AI 的兼容边界"}
+{"file":".trellis/tasks/09-02-album-scan-organization-core/research/scope-minimization.md","reason":"保留最小 evidence/只读 attention 并删除治理平台的裁剪依据"}

@@ -1,0 +1,13 @@
+{"file":".trellis/spec/guides/product-goals.md","reason":"检查恢复行为未引入文件写入、弱相似合并或 V0 运行时"}
+{"file":".trellis/spec/guides/modular-design.md","reason":"检查 scanner、organizer、repository 与 HTTP 没有越权耦合"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"检查 schema、REST、decoder、权限和 UI 字段全链路一致"}
+{"file":".trellis/spec/guides/real-music-assets.md","reason":"检查测试未访问真实 music 且路径/evidence 已脱敏"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"检查迁移、约束、短事务、重扫身份和 missing 安全"}
+{"file":".trellis/spec/backend/core0-runtime-contracts.md","reason":"检查扫描锁、取消、恢复、现有 REST 和生产构建无回归"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"检查 uncertain 与硬诊断分离、终态和错误 envelope"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"检查纯规则、parser、数据库、并发和回归测试证据"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"检查所有新增 wire payload 都由 API 边界严格解码"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"检查 attention/evidence 权限、状态、键和可访问性"}
+{"file":".trellis/tasks/09-02-album-scan-organization-core/research/v0-scan-gap.md","reason":"逐项核对核心 V0 整理差距是否关闭且未整包复制"}
+{"file":".trellis/tasks/09-02-album-scan-organization-core/research/architecture-compatibility.md","reason":"检查为 overlay、AI、topology、search/playback 保留正确 seam"}
+{"file":".trellis/tasks/09-02-album-scan-organization-core/research/scope-minimization.md","reason":"检查 evidence/attention 足够解释，且未回涨成人工治理平台"}
