@@ -5,6 +5,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"golang.org/x/text/encoding/japanese"
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/transform"
 	"io"
 	"os"
 	"path/filepath"
@@ -193,9 +196,20 @@ func parseCue(path string) ([]cueTrack, string, error) {
 		}
 		b = []byte(string(utf16.Decode(u)))
 	} else if !utf8.Valid(b) {
-		return nil, "", fmt.Errorf("unsupported CUE encoding")
+		decoded := b
+		for _, enc := range []transform.Transformer{simplifiedchinese.GBK.NewDecoder(), japanese.ShiftJIS.NewDecoder()} {
+			if out, _, e := transform.Bytes(enc, b); e == nil && utf8.Valid(out) {
+				decoded = out
+				break
+			}
+		}
+		if !utf8.Valid(decoded) {
+			return nil, "", fmt.Errorf("unsupported CUE encoding")
+		}
+		b = decoded
 	}
 	var fileRef string
+	var currentFile string
 	var tracks []cueTrack
 	var cur *cueTrack
 	for _, line := range strings.Split(string(b), "\n") {
@@ -208,15 +222,12 @@ func parseCue(path string) ([]cueTrack, string, error) {
 		rest := strings.TrimSpace(strings.TrimPrefix(line, fields[0]))
 		switch key {
 		case "FILE":
-			if fileRef != "" {
-				return nil, "", fmt.Errorf("multiple FILE declarations")
-			}
 			if len(rest) == 0 {
 				return nil, "", fmt.Errorf("missing FILE")
 			}
 			if strings.HasPrefix(rest, "\"") {
 				if end := strings.Index(rest[1:], "\""); end >= 0 {
-					fileRef = rest[1 : end+1]
+					currentFile = rest[1 : end+1]
 					fileType := strings.Fields(strings.TrimSpace(rest[end+2:]))
 					if len(fileType) == 0 || !supportedCueFileType(fileType[0]) {
 						return nil, "", fmt.Errorf("missing FILE type")
@@ -229,7 +240,10 @@ func parseCue(path string) ([]cueTrack, string, error) {
 				if len(parts) < 2 || !supportedCueFileType(parts[1]) {
 					return nil, "", fmt.Errorf("missing FILE type")
 				}
-				fileRef = parts[0]
+				currentFile = parts[0]
+			}
+			if fileRef == "" {
+				fileRef = currentFile
 			}
 		case "TRACK":
 			if len(fields) < 3 || strings.ToUpper(fields[2]) != "AUDIO" {
@@ -240,6 +254,7 @@ func parseCue(path string) ([]cueTrack, string, error) {
 				return nil, "", fmt.Errorf("invalid TRACK number")
 			}
 			tracks = append(tracks, cueTrack{Number: n})
+			tracks[len(tracks)-1].ReferencedFile = currentFile
 			cur = &tracks[len(tracks)-1]
 		case "TITLE":
 			if cur != nil {
