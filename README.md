@@ -82,6 +82,24 @@ mise run env-logs
 mise run env-down
 ```
 
+## PostgreSQL 集成测试
+
+普通 `go test ./...` 不会隐式启动数据库；未设置
+`ROOMUSIC_TEST_DATABASE_URL` 时，PostgreSQL 集成测试会明确跳过。提交或 CI
+门禁应使用独立入口启动一次性的 PostgreSQL 18 容器：
+
+```bash
+./scripts/test-integration.sh
+# 或 mise run test-integration
+```
+
+该脚本只启动 `compose.test.yaml` 中的 PostgreSQL，默认监听
+`127.0.0.1:55432`，每个测试使用独立 schema，结束后删除测试容器和数据卷。
+可通过 `ROOMUSIC_TEST_PG_PORT`、`ROOMUSIC_TEST_PG_DATABASE`、
+`ROOMUSIC_TEST_PG_USER`、`ROOMUSIC_TEST_PG_PASSWORD` 调整连接参数；设置
+`ROOMUSIC_TEST_KEEP_DB=true` 可在本地调试时保留容器。CI 应显式执行该入口，
+不能把集成测试跳过当作数据库门禁通过。
+
 ## 迁移边界
 
 本次只迁移可复用的开发工具链和基础数据服务配置。以下 V0 内容不会自动迁移：

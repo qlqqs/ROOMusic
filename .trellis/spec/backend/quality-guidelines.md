@@ -7,6 +7,12 @@
 `ROOMUSIC_TEST_DATABASE_URL` 控制是否连接 PostgreSQL。未配置该变量时测试会
 明确跳过，不能把跳过结果当作事务证据。
 
+集成门禁使用 `./scripts/test-integration.sh`（或 `mise run test-integration`）。
+该入口只启动 `compose.test.yaml` 中的 PostgreSQL 18，默认使用
+`127.0.0.1:55432`，测试结束删除专用容器和数据卷；CI 必须显式执行入口，不能
+把未配置数据库导致的跳过视为通过。测试可通过 `ROOMUSIC_TEST_KEEP_DB=true`
+保留容器用于本地调试，但不得复用生产 `.env` 或业务数据卷。
+
 ## Design Requirements
 
 - Keep capability policy cohesive and behind narrow, consumer-owned interfaces.

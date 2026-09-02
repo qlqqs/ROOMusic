@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -361,6 +362,74 @@ func TestPostgreSQLRootOperationHistoryIsAdminOnlyAndRedacted(t *testing.T) {
 		t.Fatalf("operation history omitted safe audit fields: %s", responseBody)
 	}
 	requireAPIError(t, application.request(t, http.MethodGet, "/api/v1/library-root-operations", nil, &ordinary, nil), http.StatusForbidden, "forbidden")
+}
+
+func TestPostgreSQLUserTransactionProtectsLastAdmin(t *testing.T) {
+	application := newIntegrationTestApplication(t)
+	admin := application.createUser(t, "admin")
+	secondAdmin := application.createUser(t, "admin")
+
+	// Disabling one of two administrators succeeds and revokes its sessions atomically.
+	response := application.request(t, http.MethodPatch, "/api/v1/users/"+secondAdmin.id,
+		map[string]bool{"disabled": true}, &admin, nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("disable second admin: HTTP %d: %s", response.Code, response.Body.String())
+	}
+	var revoked bool
+	if err := application.database.connection.QueryRow(`SELECT revoked_at IS NOT NULL FROM sessions WHERE token_hash=$1`, hashSessionToken(secondAdmin.token)).Scan(&revoked); err != nil {
+		t.Fatalf("read revoked session: %v", err)
+	}
+	if !revoked {
+		t.Fatal("disabled administrator session was not revoked")
+	}
+
+	// The remaining administrator cannot be disabled, preserving the last-admin invariant.
+	response = application.request(t, http.MethodPatch, "/api/v1/users/"+admin.id,
+		map[string]bool{"disabled": true}, &admin, nil)
+	requireAPIError(t, response, http.StatusConflict, "last_admin")
+	var adminDisabled bool
+	if err := application.database.connection.QueryRow(`SELECT disabled_at IS NOT NULL FROM users WHERE id=$1::uuid`, admin.id).Scan(&adminDisabled); err != nil {
+		t.Fatalf("read remaining admin: %v", err)
+	}
+	if adminDisabled {
+		t.Fatal("last administrator was disabled")
+	}
+
+	unknownID := createIdentifier()
+	response = application.request(t, http.MethodPatch, "/api/v1/users/"+unknownID,
+		map[string]bool{"disabled": true}, &admin, nil)
+	requireAPIError(t, response, http.StatusNotFound, "not_found")
+}
+
+func TestPostgreSQLSaveObservationCreatesSeparateDiscMedia(t *testing.T) {
+	application := newIntegrationTestApplication(t)
+	rootID := createIdentifier()
+	rootPath := filepath.Join(application.allowedRoot, "multi-disc")
+	if err := os.MkdirAll(rootPath, 0o755); err != nil {
+		t.Fatalf("create root fixture: %v", err)
+	}
+	if _, err := application.database.connection.Exec(`INSERT INTO library_roots(id,path,status,revision) VALUES($1::uuid,$2,'active',1)`, rootID, rootPath); err != nil {
+		t.Fatalf("insert root fixture: %v", err)
+	}
+	scanID := createIdentifier()
+	if _, err := application.database.connection.Exec(`INSERT INTO scan_runs(id,status,started_at) VALUES($1::uuid,'running',NOW())`, scanID); err != nil {
+		t.Fatalf("insert scan fixture: %v", err)
+	}
+	root := registeredRoot{ID: rootID, Path: rootPath}
+	roomusic := &roomusicApplication{config: serverConfig{DataDirectory: t.TempDir()}, database: application.database, logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	for _, disc := range []int{1, 2} {
+		observation := audioObservation{Album: "Two Disc", Artist: "Artist", Title: fmt.Sprintf("Track %d", disc), TrackNumber: 1, DiscNumber: disc}
+		if err := roomusic.saveObservation(context.Background(), scanID, root, fmt.Sprintf("disc%d/track.flac", disc), observation); err != nil {
+			t.Fatalf("save disc %d observation: %v", disc, err)
+		}
+	}
+	var mediaCount int
+	if err := application.database.connection.QueryRow(`SELECT COUNT(*) FROM media m JOIN releases r ON r.id=m.release_id WHERE r.source_root_id=$1::uuid`, rootID).Scan(&mediaCount); err != nil {
+		t.Fatalf("count media: %v", err)
+	}
+	if mediaCount != 2 {
+		t.Fatalf("expected two media rows, got %d", mediaCount)
+	}
 }
 
 func decodeJSONMap(t *testing.T, response *httptest.ResponseRecorder) map[string]any {

@@ -1,0 +1,21 @@
+name: roomusic-test
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    ports:
+      - "127.0.0.1:${ROOMUSIC_TEST_PG_PORT:-55432}:5432"
+    environment:
+      POSTGRES_DB: "${ROOMUSIC_TEST_PG_DATABASE:-roomusic_test}"
+      POSTGRES_USER: "${ROOMUSIC_TEST_PG_USER:-roomusic_test}"
+      POSTGRES_PASSWORD: "${ROOMUSIC_TEST_PG_PASSWORD:-roomusic_test}"
+    volumes:
+      - roomusic-test-postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ROOMUSIC_TEST_PG_USER:-roomusic_test} -d ${ROOMUSIC_TEST_PG_DATABASE:-roomusic_test}"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  roomusic-test-postgres-data:
