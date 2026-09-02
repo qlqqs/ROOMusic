@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 11
+- **Total Sessions**: 12
 - **Last Active**: 2026-09-02
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~251 | Active |
+| `journal-1.md` | ~273 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 12 | 2026-09-02 | PostgreSQL 迁移执行器治理 | `495bb7e` | `task/postgres-migration-governance` |
 | 11 | 2026-09-02 | PostgreSQL 集成测试基础设施 | `eaf9430` | `main` |
 | 10 | 2026-09-01 | Core 0 运行契约修复与规范刷新 | `a15487f` | `main` |
 | 9 | 2026-09-01 | 完成 Core 0.1 反代与开发工作流 | `ffed522`, `9d30566` | `main` |

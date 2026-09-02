@@ -249,3 +249,25 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 ### Status
 
 [OK] **Completed**
+
+
+## Session 12: PostgreSQL 迁移执行器治理
+<!-- trellis-session: v=2 fp=3e2cbff03900622f -->
+
+**Date**: 2026-09-02
+**Task**: PostgreSQL 迁移执行器治理
+**Branch**: `task/postgres-migration-governance`
+
+### Summary
+
+完成迁移执行器治理：加入连续版本发现、原始字节 SHA-256、事务级 advisory lock、旧 1/6/7 历史基线、漂移与未知版本 fail-closed、提交前 tracking 复核及 PostgreSQL 18 集成测试；同步更新数据库规范、运行合同和运维文档。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `495bb7e` | feat(db): govern PostgreSQL migration execution |
+
+### Status
+
+[OK] **Completed**
