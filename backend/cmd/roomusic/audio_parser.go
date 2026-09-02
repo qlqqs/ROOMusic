@@ -22,6 +22,11 @@ type audioObservation struct {
 	InferredFields          map[string]bool
 	Artwork                 []byte
 	ArtworkMIME             string
+	DurationSeconds         float64
+	Codec                   string
+	SampleRate              int
+	Channels                int
+	Bitrate                 int
 }
 
 type cueTrack struct {
@@ -33,21 +38,127 @@ type cueTrack struct {
 }
 
 func parseM4A(path string) (audioObservation, error) {
-	file, err := os.Open(path)
+	b, err := os.ReadFile(path)
 	if err != nil {
 		return audioObservation{}, err
 	}
-	defer file.Close()
-	header := make([]byte, 12)
-	if _, err := io.ReadFull(file, header); err != nil || string(header[4:8]) != "ftyp" {
+	if len(b) > 16<<20 {
+		return audioObservation{}, fmt.Errorf("M4A metadata too large")
+	}
+	if len(b) < 12 || string(b[4:8]) != "ftyp" {
 		return audioObservation{}, fmt.Errorf("invalid M4A stream")
 	}
-	brand := string(header[8:12])
+	brand := string(b[8:12])
 	if brand != "M4A " && brand != "isom" && brand != "mp42" && brand != "mp41" {
 		return audioObservation{}, fmt.Errorf("unsupported M4A brand")
 	}
 	o := audioObservation{SourceKind: "m4a", InferredFields: map[string]bool{}}
+	parseM4AAtoms(b, &o)
 	return applyFilenameFallback(path, o), nil
+}
+
+func parseM4AAtoms(data []byte, o *audioObservation) {
+	for _, m := range []struct {
+		atom string
+		dst  *string
+	}{{"©nam", &o.Title}, {"©ART", &o.Artist}, {"©alb", &o.Album}} {
+		if i := bytes.Index(data, []byte(m.atom)); i >= 0 {
+			if j := bytes.Index(data[i+8:], []byte("data")); j >= 0 {
+				start := i + 8 + j + 16
+				end := start
+				for end < len(data) && data[end] >= 32 {
+					end++
+				}
+				if end > start {
+					*m.dst = strings.TrimSpace(string(data[start:end]))
+				}
+			}
+		}
+	}
+	var walk func([]byte)
+	walk = func(buf []byte) {
+		for pos := 0; pos+8 <= len(buf); {
+			sz := int(binary.BigEndian.Uint32(buf[pos : pos+4]))
+			typ := string(buf[pos+4 : pos+8])
+			start := pos + 8
+			if sz == 1 {
+				if pos+16 > len(buf) {
+					return
+				}
+				v := binary.BigEndian.Uint64(buf[pos+8 : pos+16])
+				if v > uint64(len(buf)-pos) {
+					return
+				}
+				sz = int(v)
+				start = pos + 16
+			}
+			if sz < start-pos || pos+sz > len(buf) {
+				return
+			}
+			payload := buf[start : pos+sz]
+			switch typ {
+			case "moov", "trak", "mdia", "minf", "stbl", "udta", "meta", "ilst":
+				walk(payload)
+			case "mvhd":
+				if len(payload) >= 20 {
+					version := payload[0]
+					off := 20
+					if version == 1 {
+						off = 28
+					}
+					if off+12 <= len(payload) {
+						timescale := binary.BigEndian.Uint32(payload[off : off+4])
+						dur := binary.BigEndian.Uint64(payload[off+4 : off+12])
+						if timescale > 0 {
+							o.DurationSeconds = float64(dur) / float64(timescale)
+						}
+					}
+				}
+			case "mdhd":
+				if len(payload) >= 20 {
+					version := payload[0]
+					off := 12
+					if version == 1 {
+						off = 20
+					}
+					if off+12 <= len(payload) {
+						ts := binary.BigEndian.Uint32(payload[off : off+4])
+						dur := binary.BigEndian.Uint64(payload[off+4 : off+12])
+						if ts > 0 && o.DurationSeconds == 0 {
+							o.DurationSeconds = float64(dur) / float64(ts)
+						}
+					}
+				}
+			case "stsd":
+				if len(payload) >= 16 {
+					o.Codec = string(payload[12:16])
+					if o.Codec == "mp4a" {
+						o.Codec = "aac"
+					}
+					if len(payload) >= 32 {
+						o.Channels = int(binary.BigEndian.Uint16(payload[24:26]))
+						o.SampleRate = int(binary.BigEndian.Uint32(payload[28:32]) >> 16)
+					}
+				}
+			case "©nam", "©ART", "©alb":
+				if len(payload) >= 16 {
+					text := strings.TrimSpace(string(payload[16:]))
+					switch typ {
+					case "©nam":
+						o.Title = text
+					case "©ART":
+						o.Artist = text
+					case "©alb":
+						o.Album = text
+					}
+				}
+			}
+			pos += sz
+		}
+	}
+	if len(data) > 8 {
+		walk(data[8:])
+	}
 }
 
 func parseCue(path string) ([]cueTrack, string, error) {
