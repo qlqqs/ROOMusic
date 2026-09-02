@@ -17,6 +17,9 @@ type sourceObservation struct {
 	TrackNumber, DiscNumber           int
 	SourceKind                        string
 	InferredFields                    map[string]bool
+	DurationSeconds                   float64
+	Codec                             string
+	SampleRate, Channels, Bitrate     int
 }
 
 func (o sourceObservation) fieldObservations() []fieldObservation {

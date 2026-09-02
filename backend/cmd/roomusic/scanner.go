@@ -308,7 +308,7 @@ func (application *roomusicApplication) scanRoot(context context.Context, execut
 			}
 			return nil
 		}
-		organizedObservations = append(organizedObservations, sourceObservation{RelativePath: relativePath, Directory: directoryOf(relativePath), Title: observation.Title, Album: observation.Album, Artist: observation.Artist, TrackNumber: observation.TrackNumber, DiscNumber: observation.DiscNumber, SourceKind: observation.SourceKind, InferredFields: observation.InferredFields})
+		organizedObservations = append(organizedObservations, sourceObservation{RelativePath: relativePath, Directory: directoryOf(relativePath), Title: observation.Title, Album: observation.Album, Artist: observation.Artist, TrackNumber: observation.TrackNumber, DiscNumber: observation.DiscNumber, SourceKind: observation.SourceKind, InferredFields: observation.InferredFields, DurationSeconds: observation.DurationSeconds, Codec: observation.Codec, SampleRate: observation.SampleRate, Channels: observation.Channels, Bitrate: observation.Bitrate})
 		if contextErr := context.Err(); contextErr != nil {
 			return contextErr
 		}
@@ -407,9 +407,9 @@ func (application *roomusicApplication) persistOrganizedCandidates(ctx context.C
 				err = tx.QueryRowContext(ctx, "SELECT id::text FROM tracks WHERE source_identity=$1 OR (source_root_id=$2::uuid AND relative_path=$3)", identity, root.ID, o.RelativePath).Scan(&trackID)
 				if errors.Is(err, sql.ErrNoRows) {
 					trackID = createIdentifier()
-					_, err = tx.ExecContext(ctx, "INSERT INTO tracks(id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,source_kind,source_identity) VALUES($1::uuid,$2::uuid,$3,$4,$5,$6,$7::uuid,$8,'present',NOW(),$9,$10)", trackID, mediumID, ot.Position, o.Title, o.Artist, disc, root.ID, o.RelativePath, o.SourceKind, identity)
+					_, err = tx.ExecContext(ctx, "INSERT INTO tracks(id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,source_kind,source_identity,duration_seconds,codec,sample_rate,channels,bitrate) VALUES($1::uuid,$2::uuid,$3,$4,$5,$6,$7::uuid,$8,'present',NOW(),$9,$10,$11,$12,$13,$14,$15)", trackID, mediumID, ot.Position, o.Title, o.Artist, disc, root.ID, o.RelativePath, o.SourceKind, identity, o.DurationSeconds, o.Codec, o.SampleRate, o.Channels, o.Bitrate)
 				} else if err == nil {
-					_, err = tx.ExecContext(ctx, "UPDATE tracks SET medium_id=$1::uuid,position=$2,title=$3,artist=$4,disc_number=$5,source_status='present',observed_at=NOW(),source_kind=$6,source_identity=$7 WHERE id=$8::uuid", mediumID, ot.Position, o.Title, o.Artist, disc, o.SourceKind, identity, trackID)
+					_, err = tx.ExecContext(ctx, "UPDATE tracks SET medium_id=$1::uuid,position=$2,title=$3,artist=$4,disc_number=$5,source_status='present',observed_at=NOW(),source_kind=$6,source_identity=$7,duration_seconds=$8,codec=$9,sample_rate=$10,channels=$11,bitrate=$12 WHERE id=$13::uuid", mediumID, ot.Position, o.Title, o.Artist, disc, o.SourceKind, identity, o.DurationSeconds, o.Codec, o.SampleRate, o.Channels, o.Bitrate, trackID)
 				}
 				if err != nil {
 					return err
