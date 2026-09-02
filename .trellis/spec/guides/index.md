@@ -9,6 +9,7 @@ documented future boundaries.
 | Guide | Purpose | Use when |
 | --- | --- | --- |
 | [Product Goals](./product-goals.md) | Preserve user value, Music Steward modes, change management, and phase boundaries | Scoping any feature, Agent, operation, or infrastructure |
+| [真实音乐资产目录](./real-music-assets.md) | 记录本地真实音乐资产、只读操作边界、测试与 CI 隔离及信息披露要求 | 触及 `music/`、测试、CI 或真实媒体验证时 |
 | [Modular Design](./modular-design.md) | Define ownership, dependency direction, cohesion, and coupling limits | Creating or changing a module boundary |
 | [Engineering Principles](./engineering-principles.md) | Define smallest-complete changes, focused functions, and proportional verification | Planning and reviewing every change |
 | [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md) | Reuse the correct policy owner without premature abstraction | Adding helpers, types, components, or constants |
