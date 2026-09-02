@@ -305,3 +305,25 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 ### Next Steps
 
 - 继续处理已有的 CI 门禁与 HTTP 可观测性任务。
+
+
+## Session 14: CI 门禁与 HTTP 可观测性
+<!-- trellis-session: v=2 fp=38535c870fa225c5 -->
+
+**Date**: 2026-09-02
+**Task**: CI 门禁与 HTTP 可观测性
+**Branch**: `main`
+
+### Summary
+
+完成 GitHub Actions 后端、前端和 PostgreSQL 18 门禁；将 HTTP 请求日志改为完成事件，记录状态、字节、耗时、路由模板、request_id 和可选 actor_id；补充脱敏测试、README 与运行规范。Go、race、vet、build、前端检查、Compose、Shell 和 PostgreSQL 18 集成测试均通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `25d521f` | feat: add CI gates and HTTP observability |
+
+### Status
+
+[OK] **Completed**
