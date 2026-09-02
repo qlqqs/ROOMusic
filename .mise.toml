@@ -21,3 +21,7 @@ mise current
 docker compose config --quiet
 docker compose ps
 '''
+
+[tasks.test-integration]
+description = "启动临时 PostgreSQL 并运行集成测试"
+run = "./scripts/test-integration.sh"
