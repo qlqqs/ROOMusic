@@ -16,7 +16,9 @@
 - 开发启动：`./scripts/dev.sh`，默认读取 `.env.dev`，Go 运行在 `backend/`，
   Vite 通过开发配置代理 `/api` 到 `:8080`。
 - HTTP：`POST /api/v1/users`、`PATCH /api/v1/users/{id}`、
-  `POST /api/v1/library-roots`、`POST /api/v1/scans`。
+  `POST /api/v1/library-roots`、`POST /api/v1/scans`、
+  `GET /api/v1/scans/active`、`GET /api/v1/scans/{id}`、
+  `POST /api/v1/scans/{id}/cancel`。
 - 用户更新请求：`{ "disabled": boolean }`；响应：`{ "disabled": boolean }`。
 - 目录新增响应：`{ "id": string, "name": string, "status": "active" | "disabled", "revision": integer }`。
 - 目录列表项目：`id`、安全 basename `path`/`name`、`status`、`revision`、时间戳；
@@ -60,8 +62,9 @@
   附件（例如 `.jpg`、`.png`、`.txt`）不产生 unsupported 音频诊断。
 - `saveObservation` 按 Release 内 `disc_number` 选择或创建 Medium；同一 root
   与规范化相对路径继续复用 Track 身份。
-- `canceled` 保留 wire 枚举，但当前没有用户取消端点；扫描 goroutine 仍由进程
-  拥有的背景上下文运行。
+- `canceled` 是已落地的 wire 终态；取消意图持久化在
+  `scan_runs.cancel_requested_at`，扫描 worker 由应用生命周期 context 管理，
+  不继承启动或取消请求的 HTTP context。
 
 ### 环境与资产
 
@@ -183,18 +186,129 @@ writeJSON(w, http.StatusOK, map[string]bool{"disabled": requested})
 前端同样必须调用 `requestApi(..., decodeUpdatedUser)`，禁止把 `unknown` 直接
 cast 成 `UserDTO`。
 
-## 扫描协调合同
+## 场景：持久化扫描取消与跨进程协调
 
-- `scan_runs.cancel_requested_at` 持久化取消意图；管理员调用
-  `POST /api/v1/scans/{id}/cancel`，重复请求保持同一时间戳并返回活动状态。
-- 扫描执行权由专用 `database/sql.Conn` 持有 PostgreSQL session advisory lock
-  `0x5343414e`；不能用事务级锁或进程内 mutex 代替跨进程协调。连接关闭才释放该锁。
-- 启动恢复只有在取得同一协调锁时才能把遗留 `running` 收敛为 `incomplete`；锁竞争时
-  必须跳过更新。正常停机先取消 worker、等待其有界退出，再关闭数据库。
-- 只有完整 `succeeded` 终态在同一事务中执行 `missing` 对账；`canceled`、`failed`、
-  `incomplete` 或协调失效不得标记来源缺失。
-- 状态 API 统一返回 `id`、`scan_run_id`、`status`、`started_at`、`finished_at` 和
-  `cancel_requested_at`；活动查询返回 `{ "scan": DTO | null }`。
+### 1. 范围与触发
+
+当代码创建、恢复、查询、取消或结束全库扫描时，必须遵守本场景。其目标是在多个
+ROOMusic 进程之间只允许一个扫描执行器，并保证取消、停机、数据库故障或执行权丢失
+不会触发错误的 `missing` 对账。PostgreSQL 同时是扫描状态和执行资格的权威；进程内
+mutex 只保护本进程的 worker 引用。
+
+### 2. 接口与数据库签名
+
+- `POST /api/v1/scans`：管理员启动扫描；新建时返回 `202`，已有本进程或其他进程的
+  活动扫描时返回该活动 DTO 和 `200`。
+- `GET /api/v1/scans/active`：已登录用户查询活动扫描，返回
+  `{ "scan": ScanDTO | null }`。
+- `GET /api/v1/scans/{id}`：已登录用户查询指定扫描。
+- `POST /api/v1/scans/{id}/cancel`：管理员持久化取消意图；请求不等待 worker 结束。
+- `scan_runs.cancel_requested_at TIMESTAMPTZ NULL`：`NULL` 表示未请求取消，首次取消写入
+  数据库时间，重复取消用 `COALESCE(cancel_requested_at, NOW())` 保留原时间。
+- `scanAdvisoryLockKey = 0x5343414e`：专用 `database/sql.Conn` 调用
+  `pg_try_advisory_lock(bigint)` 获取 PostgreSQL session advisory lock，并在 worker
+  结束时显式 unlock 后关闭连接。
+
+### 3. 请求、响应与生命周期合同
+
+`ScanDTO` 的 JSON 字段固定为：
+
+```json
+{
+  "id": "uuid",
+  "scan_run_id": "uuid",
+  "status": "running | succeeded | failed | canceled | incomplete",
+  "started_at": "RFC 3339 timestamp",
+  "finished_at": "RFC 3339 timestamp | null",
+  "cancel_requested_at": "RFC 3339 timestamp | null"
+}
+```
+
+- `id` 与 `scan_run_id` 当前必须相同；新增字段和状态必须同时更新后端 presenter、前端
+  decoder、状态文案和测试，前端不得将未知状态强制转换为已知状态。
+- 启动和取消是同源、session、管理员授权的状态变更；活动/指定状态查询要求有效
+  session。前端权限只控制按钮可见性，不能代替后端鉴权。
+- worker 的父 context 属于应用生命周期，不得使用 HTTP 请求 context。取消端点只提交
+  意图；worker 每 500 ms 轮询一次，并在 root、目录遍历和文件处理边界协作式停止。
+- session advisory lock 必须由贯穿扫描生命周期的专用连接持有；扫描读取、观察、诊断
+  和终态写入使用该 holder。连接池 `MaxOpenConns=1` 无法同时容纳 holder 与控制查询，
+  必须拒绝启动而不是进入死锁。
+- 只有持有同一协调锁的恢复路径可以把遗留 `running` 改为 `incomplete`；锁竞争时必须
+  保持活动行不变。正常停机先取消 worker、有限等待，再关闭数据库。
+- `finalizeScan` 先 `SELECT ... FOR UPDATE` 锁定扫描行。持久化取消优先收敛为
+  `canceled`；只有完整 `succeeded` 才能在同一事务执行所有 root 的 `missing` 对账和
+  终态更新。`canceled`、`failed`、`incomplete` 与协调故障均禁止负向对账。
+- session advisory lock 没有 TTL，不能据本地时间推断锁已失效；发布或回滚时不得让
+  不认识该锁的旧扫描器与新扫描器同时运行。
+
+### 4. 校验与错误矩阵
+
+| 条件 | HTTP/状态行为 |
+| --- | --- |
+| 未登录访问扫描 API | `401` 安全错误 envelope |
+| 普通用户启动或取消 | `403`，不创建扫描、不写 `cancel_requested_at` |
+| 启动获得锁且无活动任务 | 插入一个 `running`，返回 `202` 和新 DTO |
+| 本进程已有活动任务 | 返回同一 DTO 和 `200`，不创建第二行 |
+| 未获锁但可读取其他实例的活动任务 | 返回该 DTO 和 `200`，不等待、不接管 |
+| 未获锁且无法确认活动任务 | `503 scan_coordination_unavailable`，不创建扫描 |
+| holder 会耗尽唯一连接池槽位 | `503 scan_coordination_unavailable`，不启动 worker |
+| 查询未知扫描 | `404 not_found`；其他数据库错误为 `503 database_unavailable` |
+| 首次或重复取消 `running` | `202`；时间戳非空且重复请求保持不变 |
+| 取消已是终态的扫描 | `200` 和原 DTO；不得改写终态或取消时间 |
+| 恢复时协调锁正被持有 | 跳过恢复，其他实例的 `running` 保持不变 |
+| 恢复取得锁并发现遗留 `running` | 收敛为 `incomplete`，不自动接管或续扫 |
+| 取消、停机、协调/数据库故障 | 不执行 `missing` 对账；终态按已持久化证据收敛 |
+
+### 5. 正确、基准与错误案例
+
+- 正确：管理员连续两次取消同一 `running` 扫描，两次均返回 `202`，DTO 中的
+  `cancel_requested_at` 完全相同；worker 随后写入 `canceled` 和 `finished_at`。
+- 基准：刷新管理页面后调用活动查询，从 PostgreSQL 恢复“正在扫描”或“取消请求中”，
+  不依赖旧页面内存；没有活动任务时返回 `{ "scan": null }`。
+- 正确：第二实例未取得 advisory lock，读取并返回第一实例的 `scan_run_id`，不插入
+  排队行，也不启动替代 worker。
+- 错误：启动时无条件把所有 `running` 改为 `incomplete`；用事务级 advisory lock、
+  本地 mutex 或 HTTP context 代替 session holder；先逐 root 提交 `missing` 再更新终态。
+
+### 6. 必需测试与断言点
+
+- PostgreSQL/HTTP：首次与重复取消均返回 `202`，时间戳持久且幂等；终态取消返回
+  `200` 且终态不可逆；未知 ID、匿名和普通用户分别验证错误 envelope 与无副作用。
+- PostgreSQL 并发：两个独立连接竞争 `0x5343414e` 时只有一个成功；失败实例复用活动
+  ID；unlock/close 后可重新获取；`MaxOpenConns=1` 快速失败而非阻塞。
+- PostgreSQL 恢复：活 holder 存在时遗留行保持 `running`；释放后恢复为
+  `incomplete`，且不创建替代扫描。
+- PostgreSQL 终态：取消请求覆盖成功候选并得到 `canceled`；取消、失败和不完整均保持
+  旧来源 `present`；成功扫描的所有 root 对账与 `succeeded` 更新一起提交或回滚。
+- 后端并发与生命周期：取消轮询、停机等待、holder 释放和本进程 worker 引用通过
+  适用的 `go test -race`；数据库/holder 故障不得继续 stale write。
+- 前端 decoder/UI：六个 DTO 字段必需且时间/状态严格校验；活动空值、取消请求中、
+  `canceled`/`failed`/`incomplete` 文案以及取消失败后的重试入口均有覆盖。
+
+### 7. 错误与正确示例
+
+#### Wrong
+
+```go
+go runScan(request.Context(), scanID) // 客户端断开会成为业务取消
+_, _ = db.Exec("UPDATE scan_runs SET status='incomplete' WHERE status='running'")
+```
+
+这既没有跨进程执行资格，也会在另一实例仍健康时破坏其活动状态。
+
+#### Correct
+
+```go
+execution, acquired, err := acquireScanExecution(app.scanContext, app.database.connection)
+if err != nil || !acquired {
+    // 返回活动任务，或以 scan_coordination_unavailable 安全失败。
+    return
+}
+go app.runScan(scanID, execution) // worker 由应用生命周期和持久化取消共同驱动
+```
+
+终态仍必须在 holder 连接上的单个事务中锁定 `scan_runs`，并仅在判定为
+`succeeded` 后执行 `missing` 对账。
 
 ## 后续技术债
 
