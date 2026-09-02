@@ -183,9 +183,21 @@ writeJSON(w, http.StatusOK, map[string]bool{"disabled": requested})
 前端同样必须调用 `requestApi(..., decodeUpdatedUser)`，禁止把 `unknown` 直接
 cast 成 `UserDTO`。
 
+## 扫描协调合同
+
+- `scan_runs.cancel_requested_at` 持久化取消意图；管理员调用
+  `POST /api/v1/scans/{id}/cancel`，重复请求保持同一时间戳并返回活动状态。
+- 扫描执行权由专用 `database/sql.Conn` 持有 PostgreSQL session advisory lock
+  `0x5343414e`；不能用事务级锁或进程内 mutex 代替跨进程协调。连接关闭才释放该锁。
+- 启动恢复只有在取得同一协调锁时才能把遗留 `running` 收敛为 `incomplete`；锁竞争时
+  必须跳过更新。正常停机先取消 worker、等待其有界退出，再关闭数据库。
+- 只有完整 `succeeded` 终态在同一事务中执行 `missing` 对账；`canceled`、`failed`、
+  `incomplete` 或协调失效不得标记来源缺失。
+- 状态 API 统一返回 `id`、`scan_run_id`、`status`、`started_at`、`finished_at` 和
+  `cancel_requested_at`；活动查询返回 `{ "scan": DTO | null }`。
+
 ## 后续技术债
 
-- 扫描取消仅保留枚举，尚无持久化取消端点或跨进程任务队列。
 - HTTP 请求现在通过 `http.request.completed` 事件记录状态码、耗时和路由模板；用户
   创建/禁用/会话撤销仍无独立 Operation Journal。
 - `frontend/src/main.tsx` 与 `api.ts` 仍是 Core 0 过渡单体，feature/router/query

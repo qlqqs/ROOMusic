@@ -1,0 +1,16 @@
+{"file": ".trellis/spec/guides/index.md", "reason": "共享指南索引，确认跨层规则和规则优先级。"}
+{"file": ".trellis/spec/guides/engineering-principles.md", "reason": "遵循最小完整变更、边界清晰和按风险验证。"}
+{"file": ".trellis/spec/guides/modular-design.md", "reason": "确认扫描能力所有权、依赖方向和窄接口边界。"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "追踪 REST、扫描服务、数据库和前端状态的完整数据流。"}
+{"file": ".trellis/spec/backend/index.md", "reason": "确认后端预开发清单、PostgreSQL-only 和扫描安全合同。"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "约束迁移、短事务、advisory lock、连接生命周期和 missing 对账。"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "定义并发扫描、取消、集成测试和 race 验证门禁。"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "保持取消、冲突、数据库故障的稳定错误分类和脱敏。"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "约束扫描生命周期事件、关联字段和敏感信息脱敏。"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "同步现有扫描状态、REST、启动恢复和仅成功对账合同。"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "确认前端 REST、同源认证和服务端状态权威边界。"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "约束轮询、取消清理、mutation pending 和 stale response。"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "定义扫描 server state、刷新和终态展示所有权。"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "约束 DTO runtime decoder、枚举穷举和新增 nullable 字段。"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "定义取消/不完整 UI 状态、可访问性和前端验证门禁。"}
+{"file": ".trellis/tasks/09-02-persistent-scan-cancellation-coordination/research/scan-coordination-options.md", "reason": "采用专用 Conn + session advisory lock 的研究依据、竞态和限制。"}

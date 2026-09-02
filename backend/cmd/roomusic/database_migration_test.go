@@ -139,8 +139,8 @@ func TestPostgreSQLMigrationRollsBackOnFailure(t *testing.T) {
 	if err := applyMigrations(context.Background(), database); err != nil {
 		t.Fatalf("database connection was not reusable after rollback: %v", err)
 	}
-	if rows := queryMigrationRows(t, database); len(rows) != 8 {
-		t.Fatalf("expected a clean retry to apply 8 migrations, got %d rows", len(rows))
+	if rows := queryMigrationRows(t, database); len(rows) != 9 {
+		t.Fatalf("expected a clean retry to apply 9 migrations, got %d rows", len(rows))
 	}
 }
 
@@ -175,8 +175,8 @@ func TestPostgreSQLMigrationFreshAndRerunMetadata(t *testing.T) {
 		t.Fatalf("apply fresh migrations: %v", err)
 	}
 	rows := queryMigrationRows(t, database)
-	if len(rows) != 8 {
-		t.Fatalf("expected 8 migration rows, got %d", len(rows))
+	if len(rows) != 9 {
+		t.Fatalf("expected 9 migration rows, got %d", len(rows))
 	}
 	for index, row := range rows {
 		if row.version != int64(index+1) || row.name == "" || len(row.checksum) != 64 {
@@ -223,8 +223,8 @@ func TestPostgreSQLMigrationLegacySparseHistoryUpgrade(t *testing.T) {
 		t.Fatalf("upgrade legacy migrations: %v", err)
 	}
 	rows := queryMigrationRows(t, database)
-	if len(rows) != 8 {
-		t.Fatalf("expected 8 migration rows after legacy upgrade, got %d", len(rows))
+	if len(rows) != 9 {
+		t.Fatalf("expected 9 migration rows after legacy upgrade, got %d", len(rows))
 	}
 	for _, version := range []int64{2, 3, 4, 5} {
 		if rows[version-1].version != version {
@@ -260,7 +260,7 @@ func TestPostgreSQLMigrationBaselinesCommittedMetadataColumnsWithoutVersionEight
 		t.Fatalf("govern committed metadata columns: %v", err)
 	}
 	rows := queryMigrationRows(t, database)
-	if len(rows) != 8 || rows[7].version != 8 || rows[7].name != metadataMigration.Name || rows[7].checksum != metadataMigration.Checksum {
+	if len(rows) != 9 || rows[7].version != 8 || rows[7].name != metadataMigration.Name || rows[7].checksum != metadataMigration.Checksum {
 		t.Fatalf("version 8 baseline was not recorded correctly: %+v", rows)
 	}
 }
@@ -309,8 +309,8 @@ func TestPostgreSQLMigrationConcurrentExecutorsSerialize(t *testing.T) {
 	if err := first.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatalf("count concurrent migration rows: %v", err)
 	}
-	if count != 8 {
-		t.Fatalf("concurrent migration created %d rows, want 8", count)
+	if count != 9 {
+		t.Fatalf("concurrent migration created %d rows, want 9", count)
 	}
 }
 

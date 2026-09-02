@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -18,6 +19,8 @@ type roomusicApplication struct {
 	config      serverConfig
 	database    *databaseState
 	logger      *slog.Logger
+	scanContext context.Context
+	scanWorkers sync.WaitGroup
 	scanMutex   sync.Mutex
 	runningScan string
 }
@@ -36,7 +39,15 @@ func writeAPIError(responseWriter http.ResponseWriter, request *http.Request, st
 }
 
 func buildApplicationHandler(config serverConfig, database *databaseState, logger *slog.Logger) http.Handler {
-	application := &roomusicApplication{config: config, database: database, logger: logger}
+	_, handler := buildApplication(context.Background(), config, database, logger)
+	return handler
+}
+
+func buildApplication(scanContext context.Context, config serverConfig, database *databaseState, logger *slog.Logger) (*roomusicApplication, http.Handler) {
+	if scanContext == nil {
+		scanContext = context.Background()
+	}
+	application := &roomusicApplication{config: config, database: database, logger: logger, scanContext: scanContext}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthHandler)
 	mux.HandleFunc("GET /readyz", func(responseWriter http.ResponseWriter, request *http.Request) {
@@ -58,13 +69,29 @@ func buildApplicationHandler(config serverConfig, database *databaseState, logge
 	mux.HandleFunc("POST /api/v1/library-roots/{id}/restore", application.restoreRoot)
 	mux.HandleFunc("GET /api/v1/library-root-operations", application.rootOperations)
 	mux.HandleFunc("POST /api/v1/scans", application.startScan)
+	mux.HandleFunc("GET /api/v1/scans/active", application.activeScan)
 	mux.HandleFunc("GET /api/v1/scans/{id}", application.scanStatus)
+	mux.HandleFunc("POST /api/v1/scans/{id}/cancel", application.cancelScan)
 	mux.HandleFunc("GET /api/v1/scans/{id}/diagnostics", application.diagnostics)
 	mux.HandleFunc("GET /api/v1/releases", application.listReleases)
 	mux.HandleFunc("GET /api/v1/releases/{id}", application.releaseDetail)
 	mux.HandleFunc("GET /api/v1/artworks/{id}", application.artworkResource)
 	mux.Handle("/", productionFrontendHandler())
-	return requestIDMiddleware(logger, mux)
+	return application, requestIDMiddleware(logger, mux)
+}
+
+func (application *roomusicApplication) waitForScans(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		application.scanWorkers.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (application *roomusicApplication) setupStatus(responseWriter http.ResponseWriter, request *http.Request) {
