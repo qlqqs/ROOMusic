@@ -30,7 +30,7 @@ API 文档、Trellis 任务文档、说明性注释和运维文档。代码标�
 
 ```text
 backend/cmd/roomusic/*.go   # HTTP、身份、扫描、目录和 catalog 过渡实现
-backend/migrations/*.sql    # embed.FS 按序执行的 SQL
+backend/migrations/*.sql    # embed.FS 按版本执行并记录校验和的 SQL
 frontend/src/main.tsx       # React 页面与本地状态编排
 frontend/src/api.ts         # REST DTO、decoder 和 transport
 frontend/src/styles.css     # 工作台样式与响应式布局
@@ -55,6 +55,15 @@ scripts/       Development, database, fixture, and verification helpers
 `backend/migrations/` is the canonical migration location. Do not create a
 second root-level `migrations/` directory unless an explicit design decision
 changes the migration owner.
+
+迁移由 Platform/Database 启动边界统一治理：应用使用
+`database/sql + pgx/v5`，先验证嵌入文件的连续版本和原始字节 SHA-256，再在
+一个 PostgreSQL 事务中持有固定的事务级 advisory lock
+`0x524f4f4d55534943`（`ROOMUSIC` 命名空间）。`schema_migrations` 保存不可变的
+文件名、校验和和应用时间；名称/校验和漂移或未知未来版本会阻止启动。0001--0007
+属于已共享迁移，只能通过追加迁移修正；旧库中历史上缺少 0002--0005 记录时，
+执行器按已验证的 0001、0006、0007 形态建立一次性元数据基线，不重放旧 SQL。
+迁移失败整体回滚，生产回退使用备份或 forward-fix，不提供 down migration。
 
 ## Backend capability ownership
 

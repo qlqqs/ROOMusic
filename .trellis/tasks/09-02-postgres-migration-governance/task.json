@@ -1,0 +1,28 @@
+{
+  "id": "postgres-migration-governance",
+  "name": "postgres-migration-governance",
+  "title": "PostgreSQL 迁移执行器治理",
+  "description": "为 PostgreSQL 迁移增加版本追踪、并发锁、校验和与可靠事务边界，并建立真实集成测试",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": "backend",
+  "package": null,
+  "priority": "P2",
+  "creator": "qlqq",
+  "assignee": "qlqq",
+  "createdAt": "2026-09-02",
+  "completedAt": null,
+  "branch": "task/postgres-migration-governance",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "risk": "high"
+  }
+}

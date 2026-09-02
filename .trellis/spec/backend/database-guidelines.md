@@ -7,10 +7,12 @@ PostgreSQL 18 is the only required business authority for Core 0. The current
 may be running for development, but application startup, sessions, scanning,
 search, and the user-visible Core 0 loop must work without them.
 
-当前实现使用 `database/sql` + `pgx/v5`，迁移通过 `embed.FS` 按
-`backend/migrations/*.sql` 排序执行；未引入 ORM、query generator 或外部迁移
-工具。现有执行器每次启动重放幂等 SQL，尚未按 `schema_migrations` 跳过或加锁，
-该治理列为后续技术债。
+当前实现使用 `database/sql` + `pgx/v5`，迁移通过 `embed.FS` 发现并按版本排序；
+未引入 ORM、query generator 或外部迁移工具。启动时执行器在单个事务中取得固定
+的 `pg_advisory_xact_lock`（key 为 `0x524f4f4d55534943`，即字符串
+`ROOMUSIC` 的稳定命名空间），按 `schema_migrations` 跳过已完成版本，并在
+`name`/`checksum` 列保存文件名和原始字节的 lowercase SHA-256。锁是事务级的，
+提交、回滚、连接断开或上下文取消都会释放。
 
 ## Ownership And Access
 
@@ -109,12 +111,80 @@ complete and successful.
 - Select and document the migration command/tool with the first migration. V0's
   historical tool choice is not automatically inherited.
 
+### ROOMusic 执行器合同
+
+#### 1. 范围 / 触发
+
+- 触发条件：启动边界新增或改变 PostgreSQL schema 迁移、迁移追踪字段、并发锁或
+  回滚语义时，必须同时更新本合同和对应集成测试。
+- 所有权：`backend/cmd/roomusic/database.go` 负责发现、计划、执行和记录；
+  `backend/migrations/` 是唯一 SQL 来源。
+
+#### 2. 签名（命令 / 数据库）
+
+- `applyMigrations(ctx context.Context, connection *sql.DB) error` 是启动入口；
+  测试可通过 `applyMigrationsFromFS` 注入 `fs.FS`。
+- `schema_migrations` 至少包含 `version BIGINT PRIMARY KEY`、
+  `applied_at TIMESTAMPTZ`、`name TEXT` 和 `checksum TEXT`；迁移 0008 负责追加
+  后两列。
+- 事务必须在执行 SQL、读取 tracking 表和写入元数据时使用同一个
+  `*sql.Tx`，锁 key 固定为 `0x524f4f4d55534943`。
+
+#### 3. 合同（输入 / 输出 / 边界）
+
+- 输入是 `embed.FS` 中原始迁移字节；文件名为 `NNNN_name.sql`，版本从 1 连续；
+  校验和是原始字节的 lowercase SHA-256。
+- 成功输出是每个发布版本恰好一行 `version/name/checksum/applied_at`；重复启动
+  不重放 SQL，也不改写既有 `applied_at`。
+- tracking 表探测故意使用未限定的 `to_regclass('schema_migrations')`，使探测和
+  迁移 SQL 遵循同一个 PostgreSQL `search_path`（不能拼接未转义的 schema 名）。
+- 事务提交前必须重新读取并校验 tracking 表；迁移 SQL 写入的未知版本、重复行或
+  名称/校验和漂移一律失败。迁移文件不得包含 `COMMIT`、`ROLLBACK` 或依赖事务外
+  执行的语句。
+
+#### 4. 校验与错误矩阵
+
+| 条件 | 执行器行为 |
+| --- | --- |
+| 文件名非法、版本重复或有缺口 | 在开启事务前返回错误 |
+| 已记录名称/校验和与当前文件不符 | 带版本上下文返回错误并回滚 |
+| tracking 表含未发布版本（包括迁移期间新增） | fail closed 并回滚 |
+| 旧库只有可信的 1/6/7 记录 | 将 2--5 一次性基线，不重放旧 SQL |
+| advisory lock 等待被取消、SQL/记录/提交失败 | 回滚全部 DDL 和记录，启动不 ready |
+
+#### 5. 良好 / 基线 / 错误案例
+
+- 良好：全新库一次事务执行 0001--0008，记录 1--8 的文件名和哈希；第二次启动
+  只校验记录。
+- 基线：旧执行器留下 1、6、7，且业务表已存在；只补 2--5 元数据并执行新增迁移。
+- 错误：手工插入版本 99、篡改哈希，或在迁移 SQL 中插入版本 99；执行器拒绝提交，
+  不尝试猜测或修复损坏 schema。
+
+#### 6. 必需测试（断言点）
+
+- 无数据库单元测试：版本发现、连续性、重复/非法文件名和原始字节哈希。
+- PostgreSQL 18 集成测试：fresh、rerun 时间戳稳定、旧 1/6/7 基线、0008 已提交
+  但缺行、漂移/未知版本、迁移期间新增未知版本、事务回滚、并发锁和锁等待取消；
+  断言失败后 schema/记录不存在且同一连接可重试。
+
+#### 7. 错误 vs 正确
+
+错误：迁移 SQL 执行后只遍历当前发布版本并 upsert tracking 行，忽略表中额外的
+  版本。
+
+正确：在提交前重新读取完整 tracking 表，先验证每一行属于当前发布集合且元数据
+  一致，再为缺失的发布版本补记记录。
+
 ## Testing
 
 Repository integration tests use a disposable PostgreSQL database at the
 supported version and cover constraints, rollback, conflict, idempotency, and
 representative query shape. Scanner integration tests must prove incomplete
 scans cannot mark sources missing.
+
+迁移治理测试还必须覆盖全新库、重复启动时间戳稳定、旧 1/6/7 历史升级、名称/
+校验和漂移、未知版本、事务回滚、并发 advisory lock 和锁等待上下文取消；集成
+入口为 `./scripts/test-integration.sh`，使用隔离 schema 和 PostgreSQL 18。
 
 ## Anti-Patterns
 
