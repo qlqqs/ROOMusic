@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 14
+- **Total Sessions**: 15
 - **Last Active**: 2026-09-02
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~329 | Active |
+| `journal-1.md` | ~352 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 15 | 2026-09-02 | 持久化扫描取消与跨进程协调 | `511cea3`, `579fa45` | `main` |
 | 14 | 2026-09-02 | CI 门禁与 HTTP 可观测性 | `25d521f` | `main` |
 | 13 | 2026-09-02 | 记录真实音乐资产长期记忆 | `269c17c` | `main` |
 | 12 | 2026-09-02 | PostgreSQL 迁移执行器治理 | `495bb7e` | `task/postgres-migration-governance` |
