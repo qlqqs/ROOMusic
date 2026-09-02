@@ -192,7 +192,7 @@ Preserve existing task fields and artifacts. If the correct status cannot be det
 
 ### Phase 1: Plan
 - 1.0 Create task `[required · once]` (only after task-creation consent)
-- 1.1 Requirement exploration `[required · repeatable]` (`prd.md`; complex tasks also need `design.md` + `implement.md`)
+- 1.1 Requirement exploration `[required · repeatable]` — **every planning pass must invoke `trellis-brainstorm`** (`prd.md`; complex tasks also need `design.md` + `implement.md`)
 - 1.2 Research `[optional · repeatable]`
 - 1.3 Configure context `[required · once]` — Claude Code, Cursor, OpenCode, Codex, Kiro, Gemini, Qoder, CodeBuddy, Copilot, Droid, Pi, Oh My Pi, ZCode, Snow, Reasonix, Grok, Kimi Code (sub-agent-dispatch platforms only; inline platforms skip)
 - 1.4 Activate task `[required · once]` (review gate, then `task.py start`; status → in_progress)
@@ -201,8 +201,9 @@ Preserve existing task fields and artifacts. If the correct status cannot be det
 <!-- Per-turn breadcrumb: shown throughout Phase 1 (status='planning') -->
 
 [workflow-state:planning]
-Load `trellis-brainstorm`; stay in planning.
+**Mandatory:** invoke `trellis-brainstorm` on every planning pass; do not skip it because requirements appear clear or artifacts already exist.
 Lightweight: `prd.md` can be enough. Complex: finish `prd.md`, `design.md`, and `implement.md`; ask for review before `task.py start`.
+Before leaving planning, choose the final planning decision through exactly one route: (a) human approval of the final planning summary, or (b) review and recommendation from one or more planning sub-agents, followed by recording the selected outcome. Record the route, selector, and rationale in the planning summary and `prd.md`.
 Multi-deliverable scope: consider a parent task plus independently verifiable child tasks; dependencies must be written in child artifacts, not implied by tree position.
 Sub-agent mode: curate `implement.jsonl` and `check.jsonl` as spec/research manifests before start.
 [/workflow-state:planning]
@@ -214,8 +215,9 @@ Sub-agent mode: curate `implement.jsonl` and `check.jsonl` as spec/research mani
      into a sub-agent. -->
 
 [workflow-state:planning-inline]
-Load `trellis-brainstorm`; stay in planning.
+**Mandatory:** invoke `trellis-brainstorm` on every planning pass; do not skip it because requirements appear clear or artifacts already exist.
 Lightweight: `prd.md` can be enough. Complex: finish `prd.md`, `design.md`, and `implement.md`; ask for review before `task.py start`.
+Before leaving planning, choose the final planning decision through exactly one route: (a) human approval of the final planning summary, or (b) review and recommendation from one or more planning sub-agents, followed by recording the selected outcome. Record the route, selector, and rationale in the planning summary and `prd.md`.
 Multi-deliverable scope: consider a parent task plus independently verifiable child tasks; dependencies must be written in child artifacts, not implied by tree position.
 Inline mode: skip jsonl curation; Phase 2 reads artifacts/specs via `trellis-before-dev`.
 [/workflow-state:planning-inline]
@@ -360,6 +362,16 @@ When considering a parent/child split:
 
 Return to this step whenever requirements change and revise the relevant artifact.
 
+Every planning pass must also resolve its final planning decision through exactly
+one route: **human selection**, by presenting the final planning summary and
+obtaining explicit approval in a subsequent turn; or **sub-agent selection**, by
+having one or more planning sub-agents review the candidate plan and recording
+the selected recommendation. Record the route, selector (human or named
+sub-agent(s)), selected outcome, and short rationale in the final planning
+summary and `prd.md`. The sub-agent route is planning review only and does not
+authorize implementation; do not run `task.py start` until a subsequent
+explicit implementation approval is received.
+
 #### 1.2 Research `[optional · repeatable]`
 
 Research can happen at any time during requirement exploration. It isn't limited to local code — you can use any available tool (MCP servers, skills, web search, etc.) to look up external information, including third-party library docs, industry practices, API references, etc.
@@ -446,7 +458,7 @@ Skip this step. Context is loaded directly by the `trellis-before-dev` skill in 
 
 #### 1.4 Activate task `[required · once]`
 
-After artifact review, flip the task status to `in_progress`:
+After artifact review and the required planning-decision record, flip the task status to `in_progress`:
 
 ```bash
 python3 ./.trellis/scripts/task.py start <task-dir>
@@ -463,6 +475,7 @@ If `task.py start` errors with a session-identity message (no context key from h
 | Condition | Required |
 |------|:---:|
 | `prd.md` exists | ✅ |
+| Final planning decision route, selector, outcome, and rationale are recorded | ✅ |
 | User confirms task should enter implementation | ✅ |
 | `task.py start` has been run (status = in_progress) | ✅ |
 | `research/` has artifacts (complex tasks) | recommended |
