@@ -41,6 +41,16 @@
 ### 数据库与扫描
 
 - PostgreSQL 是 Core 0 唯一业务权威，连接实现为 `database/sql + pgx/v5`。
+- 启动迁移由 `backend/cmd/roomusic/database.go` 负责：嵌入的
+  `backend/migrations/*.sql` 必须从版本 1 连续排序，原始字节使用 lowercase
+  SHA-256；执行器在一个事务中持有 `pg_advisory_xact_lock(0x524f4f4d55534943)`，
+  成功版本在 `schema_migrations` 中记录文件名、校验和与时间。
+- `0008_migration_metadata.sql` 为迁移记录增加 `name`/`checksum`。旧版数据库
+  可能只有 0001、0006、0007 三条记录；确认这段连续历史后，0002--0005 只做一次
+  元数据基线，不重放 SQL。名称或校验和漂移、未发布版本和无法证明连续历史均
+  fail closed；不提供 down migration，生产回退使用备份或 forward-fix。
+- 迁移 SQL、DDL 和记录写入同一事务；锁等待取消或任一步失败都会回滚，只有
+  提交成功后才执行中断扫描恢复并进入 ready。
 - 用户禁用/启用在同一事务中锁定启用管理员集合和目标用户，检查最后管理员，
   更新 `disabled_at`，并在禁用时撤销该用户未撤销 session。
 - 目录新增对已存在路径执行幂等 upsert，但不隐式恢复 disabled 状态；响应和
@@ -132,7 +142,6 @@ cast 成 `UserDTO`。
 
 ## 后续技术债
 
-- 迁移执行器尚未按 `schema_migrations` 跳过，也没有分布式锁、校验和或整体迁移事务。
 - 扫描取消仅保留枚举，尚无持久化取消端点或跨进程任务队列。
 - HTTP 日志尚未包含完整状态码、耗时和路由模板；用户创建/禁用/会话撤销尚无
   独立 Operation Journal。

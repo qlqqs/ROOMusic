@@ -1,0 +1,7 @@
+{"file":".trellis/spec/guides/index.md","reason":"按共享指南检查跨层一致性。"}
+{"file":".trellis/spec/guides/engineering-principles.md","reason":"检查变更是否最小完整且验证与风险匹配。"}
+{"file":".trellis/spec/backend/index.md","reason":"按后端质量检查清单审查实现。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"检查迁移版本、事务、锁、回滚和 PostgreSQL 集成证据。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"执行 Go、集成测试和并发代码质量门禁。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"检查失败分类、wrapping 和安全错误输出。"}
+{"file":".trellis/spec/backend/core0-runtime-contracts.md","reason":"确认 Core 0 API、启动和扫描行为没有漂移。"}
