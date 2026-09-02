@@ -56,6 +56,9 @@ func (application *roomusicApplication) currentUser(request *http.Request) (auth
 	if err != nil {
 		return authUser{}, errors.New("authentication required")
 	}
+	if observation, ok := request.Context().Value(requestObservationKey{}).(*requestObservation); ok {
+		observation.actorID = user.ID
+	}
 	return user, nil
 }
 func (application *roomusicApplication) requireAdmin(w http.ResponseWriter, r *http.Request) (authUser, bool) {

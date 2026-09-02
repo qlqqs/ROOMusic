@@ -100,6 +100,59 @@ mise run env-down
 `ROOMUSIC_TEST_KEEP_DB=true` 可在本地调试时保留容器。CI 应显式执行该入口，
 不能把集成测试跳过当作数据库门禁通过。
 
+## CI 门禁与 HTTP 完成日志
+
+仓库提供 [GitHub Actions 工作流](.github/workflows/ci.yml)，在每个 Pull Request、
+推送到 `main` 以及手动触发时运行。工作流使用 `.mise.toml` 中的 Go `1.25.10`
+和 Node.js `24.16.0`，并行执行三组必需门禁：
+
+- 后端：`gofmt`、普通测试、`-race` 测试、`go vet` 和 `go build`；
+- 前端：`npm ci`、ESLint、TypeScript 检查、Vitest 和 production build，并确认
+  生成的 `backend/cmd/roomusic/web` 内嵌资产没有未提交漂移；
+- 集成与配置：Shell 语法、两个 Compose 配置和
+  `./scripts/test-integration.sh` 提供的 PostgreSQL 18 集成测试。
+
+任一命令失败都会使工作流失败。CI 不启动 Redis 或 Meilisearch，不读取生产
+`.env`，也不使用真实音乐目录。提交前可在本地运行等价门禁：
+
+```bash
+(cd backend && test -z "$(gofmt -l .)" && go test ./... -count=1)
+(cd backend && go test -race ./... -count=1 && go vet ./... && go build ./...)
+(cd frontend && npm ci && npm run lint && npm run typecheck)
+(cd frontend && npm run test -- --run && npm run build)
+git diff --exit-code -- backend/cmd/roomusic/web
+test -z "$(git ls-files --others --exclude-standard -- backend/cmd/roomusic/web)"
+bash -n scripts/*.sh
+PG_PASSWORD=ci-placeholder MEILI_MASTER_KEY=ci-placeholder docker compose config --quiet
+docker compose -f compose.test.yaml config --quiet
+./scripts/test-integration.sh
+git diff --check
+```
+
+HTTP 边界在每个请求结束时写出一个结构化 JSON 完成事件。事件名固定为
+`http.request.completed`，并包含请求 ID、方法、ServeMux 路由模板、最终状态、
+响应字节数和非负耗时；认证成功时才附带稳定的 `actor_id`。例如：
+
+```json
+{
+  "event": "http.request.completed",
+  "module": "platform",
+  "message": "http request completed",
+  "request_id": "req-example",
+  "method": "GET",
+  "route_template": "GET /api/v1/releases/{id}",
+  "status": 200,
+  "response_bytes": 512,
+  "duration_ms": 3
+}
+```
+
+`time` 和 `level` 由 JSON `slog` handler 写入；状态小于 400 使用 `INFO`，400--499
+使用 `WARN`，500 及以上使用 `ERROR`。路由使用注册模板，未匹配请求使用
+`<unmatched>`，不会记录查询字符串、请求体、Cookie、session/token、密码、数据库
+URL、完整 NAS 路径或音频/封面内容。`X-Request-ID` 仍会回写响应，并与错误
+envelope 保持关联。
+
 ## 数据库迁移执行器
 
 应用启动会从 Go `embed.FS` 读取 `backend/migrations/` 中连续编号的 SQL，使用
