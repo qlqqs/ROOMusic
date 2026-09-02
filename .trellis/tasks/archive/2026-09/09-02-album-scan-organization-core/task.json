@@ -1,0 +1,29 @@
+{
+  "id": "album-scan-organization-core",
+  "name": "album-scan-organization-core",
+  "title": "专辑扫描整理核心闭环",
+  "description": "参考 ROOMusic-V0，规划并实现专辑扫描、数据库归组与前端整理视图的核心闭环，不改写真实音乐文件",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "qlqq",
+  "assignee": "qlqq",
+  "createdAt": "2026-09-02",
+  "completedAt": "2026-09-02",
+  "branch": "feat/album-scan-organization-core",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "09-02-scan-candidate-persistence",
+    "09-02-m4a-release-evidence-rest"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
