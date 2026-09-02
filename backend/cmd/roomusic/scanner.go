@@ -286,10 +286,6 @@ func (application *roomusicApplication) scanRoot(context context.Context, execut
 				// Include the normalized referenced file so changing FILE cannot reuse an old identity.
 				referencedIdentity := filepath.ToSlash(filepath.Clean(referenced))
 				virtualPath := relativePath + "#track-" + strconv.Itoa(cue.Number) + "@" + referencedIdentity
-				if saveErr := application.saveObservationWith(context, executor, scanID, root, virtualPath, o); saveErr != nil {
-					complete = false
-					application.recordDiagnosticWith(context, executor, scanID, virtualPath, "catalog_write_failure", "无法保存 CUE 虚拟音轨")
-				}
 				organizedObservations = append(organizedObservations, sourceObservation{RelativePath: virtualPath, Directory: filepath.ToSlash(filepath.Dir(relativePath)), Title: o.Title, Album: o.Album, Artist: o.Artist, TrackNumber: o.TrackNumber, DiscNumber: o.DiscNumber, SourceKind: o.SourceKind, InferredFields: o.InferredFields})
 			}
 			return nil
@@ -312,12 +308,6 @@ func (application *roomusicApplication) scanRoot(context context.Context, execut
 			}
 			return nil
 		}
-		if saveError := application.saveObservationWith(context, executor, scanID, root, relativePath, observation); saveError != nil {
-			complete = false
-			if diagnosticError := application.recordDiagnosticWith(context, executor, scanID, relativePath, "catalog_write_failure", "无法保存音频观察"); diagnosticError != nil {
-				return diagnosticError
-			}
-		}
 		organizedObservations = append(organizedObservations, sourceObservation{RelativePath: relativePath, Directory: directoryOf(relativePath), Title: observation.Title, Album: observation.Album, Artist: observation.Artist, TrackNumber: observation.TrackNumber, DiscNumber: observation.DiscNumber, SourceKind: observation.SourceKind, InferredFields: observation.InferredFields})
 		if contextErr := context.Err(); contextErr != nil {
 			return contextErr
@@ -331,7 +321,7 @@ func (application *roomusicApplication) scanRoot(context context.Context, execut
 		complete = false
 	}
 	if complete && len(organizedObservations) > 0 {
-		if evidenceErr := application.persistOrganizerEvidence(context, executor, scanID, root.ID, organizeObservations(organizedObservations)); evidenceErr != nil {
+		if evidenceErr := application.persistOrganizedCandidates(context, executor, scanID, root, organizeObservations(organizedObservations)); evidenceErr != nil {
 			complete = false
 			_ = application.recordDiagnosticWith(context, executor, scanID, "", "catalog_write_failure", "无法保存整理证据")
 		}
@@ -367,6 +357,90 @@ func (application *roomusicApplication) persistOrganizerEvidence(ctx context.Con
 		if err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// persistOrganizedCandidates applies one candidate at a time in a short transaction.
+// Track identity is rooted in (root, relative source path), so rescans update rows
+// instead of creating duplicates while allowing candidate topology to change.
+func (application *roomusicApplication) persistOrganizedCandidates(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, candidates []organizedCandidate) error {
+	for _, c := range candidates {
+		tx, err := executor.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		rollback := true
+		defer func() {
+			if rollback {
+				_ = tx.Rollback()
+			}
+		}()
+		anchor := candidateIdentity(root.ID, c.Anchor)
+		var releaseID, groupID string
+		err = tx.QueryRowContext(ctx, "SELECT id::text,group_id::text FROM releases WHERE source_root_id=$1::uuid AND candidate_anchor=$2", root.ID, anchor).Scan(&releaseID, &groupID)
+		if errors.Is(err, sql.ErrNoRows) {
+			groupID, releaseID = createIdentifier(), createIdentifier()
+			if _, err = tx.ExecContext(ctx, "INSERT INTO release_groups(id) VALUES($1::uuid)", groupID); err == nil {
+				_, err = tx.ExecContext(ctx, "INSERT INTO releases(id,group_id,title,artist,source_root_id,relative_directory,candidate_anchor,candidate_kind,album_artist) VALUES($1::uuid,$2::uuid,$3,$4,$5::uuid,$6,$7,$8,$9)", releaseID, groupID, c.Title, c.Artist, root.ID, c.Anchor.Scope, anchor, string(c.Anchor.Kind), c.Artist)
+			}
+		} else if err == nil {
+			_, err = tx.ExecContext(ctx, "UPDATE releases SET title=$1,artist=$2,relative_directory=$3,candidate_kind=$4,album_artist=$5 WHERE id=$6::uuid", c.Title, c.Artist, c.Anchor.Scope, string(c.Anchor.Kind), c.Artist, releaseID)
+		}
+		if err != nil {
+			return err
+		}
+		for disc, tracks := range c.Mediums {
+			var mediumID string
+			err = tx.QueryRowContext(ctx, "SELECT id::text FROM media WHERE release_id=$1::uuid AND position=$2", releaseID, disc).Scan(&mediumID)
+			if errors.Is(err, sql.ErrNoRows) {
+				mediumID = createIdentifier()
+				_, err = tx.ExecContext(ctx, "INSERT INTO media(id,release_id,position) VALUES($1::uuid,$2::uuid,$3)", mediumID, releaseID, disc)
+			}
+			if err != nil {
+				return err
+			}
+			for _, ot := range tracks {
+				o := ot.Observation
+				identity := root.ID + ":" + filepath.ToSlash(filepath.Clean(o.RelativePath))
+				var trackID string
+				err = tx.QueryRowContext(ctx, "SELECT id::text FROM tracks WHERE source_identity=$1 OR (source_root_id=$2::uuid AND relative_path=$3)", identity, root.ID, o.RelativePath).Scan(&trackID)
+				if errors.Is(err, sql.ErrNoRows) {
+					trackID = createIdentifier()
+					_, err = tx.ExecContext(ctx, "INSERT INTO tracks(id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,source_kind,source_identity) VALUES($1::uuid,$2::uuid,$3,$4,$5,$6,$7::uuid,$8,'present',NOW(),$9,$10)", trackID, mediumID, ot.Position, o.Title, o.Artist, disc, root.ID, o.RelativePath, o.SourceKind, identity)
+				} else if err == nil {
+					_, err = tx.ExecContext(ctx, "UPDATE tracks SET medium_id=$1::uuid,position=$2,title=$3,artist=$4,disc_number=$5,source_status='present',observed_at=NOW(),source_kind=$6,source_identity=$7 WHERE id=$8::uuid", mediumID, ot.Position, o.Title, o.Artist, disc, o.SourceKind, identity, trackID)
+				}
+				if err != nil {
+					return err
+				}
+				for _, f := range o.fieldObservations() {
+					if _, err = tx.ExecContext(ctx, "INSERT INTO track_observations(track_id,scan_run_id,field_name,value,source_kind,inferred,observed_at) VALUES($1::uuid,$2::uuid,$3,$4,$5,$6,NOW())", trackID, scanID, f.Name, f.Value, f.SourceKind, f.Inferred); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		for _, d := range c.Decisions {
+			_, err = tx.ExecContext(ctx, `INSERT INTO release_field_decisions(release_id,field_key,selected_value,selected_source,confidence,action,rule_id,candidates,reason,scan_run_id) VALUES($1::uuid,$2,to_jsonb($3::text),$4,$5,$6,$7,to_jsonb($8::text[]),$9,$10::uuid) ON CONFLICT(release_id,field_key) DO UPDATE SET selected_value=EXCLUDED.selected_value,selected_source=EXCLUDED.selected_source,confidence=EXCLUDED.confidence,action=EXCLUDED.action,rule_id=EXCLUDED.rule_id,candidates=EXCLUDED.candidates,reason=EXCLUDED.reason,scan_run_id=EXCLUDED.scan_run_id,observed_at=NOW()`, releaseID, d.Field, d.Value, d.Source, d.Confidence, d.Action, d.RuleID, d.Candidates, d.Reason, scanID)
+			if err != nil {
+				return err
+			}
+		}
+		refs := make([]string, 0)
+		for _, tracks := range c.Mediums {
+			for _, t := range tracks {
+				refs = append(refs, t.Observation.RelativePath)
+			}
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO release_grouping_evidence(release_id,candidate_kind,rule_id,source_refs,reason,scan_run_id) VALUES($1::uuid,$2,$3,to_jsonb($4::text[]),$5,$6::uuid)`, releaseID, c.Anchor.Kind, "organizer_v1", refs, strings.Join(c.Attention, ";"), scanID)
+		if err != nil {
+			return err
+		}
+		if err = tx.Commit(); err != nil {
+			return err
+		}
+		rollback = false
 	}
 	return nil
 }

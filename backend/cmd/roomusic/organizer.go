@@ -19,6 +19,15 @@ type sourceObservation struct {
 	InferredFields                    map[string]bool
 }
 
+func (o sourceObservation) fieldObservations() []fieldObservation {
+	fields := []fieldObservation{{Name: "title", Value: o.Title}, {Name: "artist", Value: o.Artist}, {Name: "album", Value: o.Album}, {Name: "track_number", Value: strconv.Itoa(o.TrackNumber)}, {Name: "disc_number", Value: strconv.Itoa(o.DiscNumber)}}
+	for i := range fields {
+		fields[i].Inferred = o.InferredFields[fields[i].Name]
+		fields[i].SourceKind = o.SourceKind
+	}
+	return fields
+}
+
 type candidateKind string
 
 const (
