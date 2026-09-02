@@ -227,3 +227,25 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 ### Status
 
 [OK] **Completed**
+
+
+## Session 11: PostgreSQL 集成测试基础设施
+<!-- trellis-session: v=2 fp=e6b3437e28ff653c -->
+
+**Date**: 2026-09-02
+**Task**: PostgreSQL 集成测试基础设施
+**Branch**: `main`
+
+### Summary
+
+新增 PostgreSQL-only Compose 测试环境与 test-integration 脚本，补充真实数据库回归用例，更新 README、Trellis 质量规范和 mise 任务。修正目录操作 SQL 类型和未知用户测试断言。集成门禁及 Go 质量检查通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `eaf9430` | test(core): add postgres integration test foundation |
+
+### Status
+
+[OK] **Completed**
