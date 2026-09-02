@@ -403,11 +403,15 @@ func parsePagination(request *http.Request) (int, int, error) {
 }
 
 type releaseTrackDTO struct {
-	ID       string `json:"id"`
-	Title    string `json:"title"`
-	Artist   string `json:"artist"`
-	Position int    `json:"position"`
-	Source   string `json:"source"`
+	ID              string  `json:"id"`
+	Title           string  `json:"title"`
+	Artist          string  `json:"artist"`
+	Position        int     `json:"position"`
+	Source          string  `json:"source"`
+	DurationSeconds float64 `json:"duration_seconds,omitempty"`
+	Codec           string  `json:"codec,omitempty"`
+	SampleRate      int     `json:"sample_rate,omitempty"`
+	Channels        int     `json:"channels,omitempty"`
 }
 
 type releaseMediumDTO struct {
@@ -422,6 +426,17 @@ type releaseArtworkDTO struct {
 	MIME       string `json:"mime"`
 	Width      int    `json:"width"`
 	Height     int    `json:"height"`
+}
+
+type releaseEvidenceDTO struct {
+	Field      string   `json:"field"`
+	Value      any      `json:"value,omitempty"`
+	Source     string   `json:"source"`
+	Confidence string   `json:"confidence"`
+	Action     string   `json:"action"`
+	RuleID     string   `json:"rule_id"`
+	Candidates []string `json:"candidates,omitempty"`
+	Reason     string   `json:"reason,omitempty"`
 }
 
 func (application *roomusicApplication) releaseDetail(responseWriter http.ResponseWriter, request *http.Request) {
@@ -440,7 +455,7 @@ func (application *roomusicApplication) releaseDetail(responseWriter http.Respon
 		}
 		return
 	}
-	rows, err := application.database.connection.QueryContext(request.Context(), "SELECT m.id::text,m.position,m.title,t.id::text,t.title,t.artist,t.position,t.relative_path FROM media m LEFT JOIN tracks t ON t.medium_id=m.id AND t.source_status='present' WHERE m.release_id=$1::uuid ORDER BY m.position,t.position,t.id", releaseID)
+	rows, err := application.database.connection.QueryContext(request.Context(), "SELECT m.id::text,m.position,m.title,t.id::text,t.title,t.artist,t.position,t.relative_path,t.duration_seconds,t.codec,t.sample_rate,t.channels FROM media m LEFT JOIN tracks t ON t.medium_id=m.id AND t.source_status='present' WHERE m.release_id=$1::uuid ORDER BY m.position,t.position,t.id", releaseID)
 	if err != nil {
 		writeAPIError(responseWriter, request, 503, "database_unavailable", "服务暂不可用")
 		return
@@ -451,9 +466,11 @@ func (application *roomusicApplication) releaseDetail(responseWriter http.Respon
 	for rows.Next() {
 		var mediumID, mediumTitle string
 		var mediumPosition int
-		var trackID, trackTitle, trackArtist, sourcePath sql.NullString
+		var trackID, trackTitle, trackArtist, sourcePath, codec sql.NullString
 		var trackPosition sql.NullInt64
-		if scanErr := rows.Scan(&mediumID, &mediumPosition, &mediumTitle, &trackID, &trackTitle, &trackArtist, &trackPosition, &sourcePath); scanErr != nil {
+		var duration sql.NullFloat64
+		var sampleRate, channels sql.NullInt64
+		if scanErr := rows.Scan(&mediumID, &mediumPosition, &mediumTitle, &trackID, &trackTitle, &trackArtist, &trackPosition, &sourcePath, &duration, &codec, &sampleRate, &channels); scanErr != nil {
 			writeAPIError(responseWriter, request, 503, "database_error", "无法读取发行版本详情")
 			return
 		}
@@ -464,7 +481,7 @@ func (application *roomusicApplication) releaseDetail(responseWriter http.Respon
 			media = append(media, releaseMediumDTO{ID: mediumID, Position: mediumPosition, Title: mediumTitle, Tracks: []releaseTrackDTO{}})
 		}
 		if trackID.Valid {
-			media[mediumIndex].Tracks = append(media[mediumIndex].Tracks, releaseTrackDTO{ID: trackID.String, Title: trackTitle.String, Artist: trackArtist.String, Position: int(trackPosition.Int64), Source: filepath.Base(sourcePath.String)})
+			media[mediumIndex].Tracks = append(media[mediumIndex].Tracks, releaseTrackDTO{ID: trackID.String, Title: trackTitle.String, Artist: trackArtist.String, Position: int(trackPosition.Int64), Source: filepath.Base(sourcePath.String), DurationSeconds: duration.Float64, Codec: codec.String, SampleRate: int(sampleRate.Int64), Channels: int(channels.Int64)})
 		}
 	}
 	if rowsErr := rows.Err(); rowsErr != nil {
@@ -473,6 +490,31 @@ func (application *roomusicApplication) releaseDetail(responseWriter http.Respon
 	}
 	_ = application.database.connection.QueryRowContext(request.Context(), "SELECT storage_key,mime_type,width,height FROM release_artworks WHERE release_id=$1::uuid", releaseID).Scan(&artwork.ResourceID, &artwork.MIME, &artwork.Width, &artwork.Height)
 	result := map[string]any{"id": releaseID, "title": title, "artist": artist, "media": media}
+	var user authUser
+	user, _ = application.currentUser(request)
+	evRows, _ := application.database.connection.QueryContext(request.Context(), "SELECT field_key,selected_value,selected_source,confidence,action,rule_id,candidates,reason FROM release_field_decisions WHERE release_id=$1::uuid ORDER BY field_key", releaseID)
+	if evRows != nil {
+		defer evRows.Close()
+		evidence := []releaseEvidenceDTO{}
+		for evRows.Next() {
+			var e releaseEvidenceDTO
+			var raw, cand sql.NullString
+			if evRows.Scan(&e.Field, &raw, &e.Source, &e.Confidence, &e.Action, &e.RuleID, &cand, &e.Reason) == nil {
+				if user.Role == "admin" {
+					if cand.Valid {
+						_ = json.Unmarshal([]byte(cand.String), &e.Candidates)
+					}
+					e.Value = raw.String
+				} else {
+					e.Value = nil
+					e.Candidates = nil
+					e.Reason = ""
+				}
+				evidence = append(evidence, e)
+			}
+		}
+		result["evidence"] = evidence
+	}
 	if artwork.ResourceID != "" {
 		result["artwork"] = artwork
 	}

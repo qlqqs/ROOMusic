@@ -23,10 +23,11 @@ export type ActiveScanDTO = { scan: ScanStatusDTO | null };
 export type ReleaseSummaryDTO = { id: string; title: string; artist: string; year?: number; attention_count?: number };
 export type PaginationDTO = { page: number; page_size: number; total: number };
 export type ReleaseListDTO = { items: ReleaseSummaryDTO[]; pagination: PaginationDTO };
-export type TrackDTO = { id: string; title: string; artist: string; position: number; source: string };
+export type TrackDTO = { id: string; title: string; artist: string; position: number; source: string; duration_seconds?: number; codec?: string; sample_rate?: number; channels?: number };
 export type MediumDTO = { id: string; position: number; title: string; tracks: TrackDTO[] };
 export type ReleaseArtworkDTO = { resource_id: string; mime: string; width: number; height: number };
-export type ReleaseDetailDTO = ReleaseSummaryDTO & { media: MediumDTO[]; artwork?: ReleaseArtworkDTO };
+export type ReleaseEvidenceDTO = { field: string; value?: unknown; source: string; confidence: string; action: string; rule_id: string; candidates?: string[]; reason?: string };
+export type ReleaseDetailDTO = ReleaseSummaryDTO & { media: MediumDTO[]; artwork?: ReleaseArtworkDTO; evidence?: ReleaseEvidenceDTO[] };
 
 type Decoder<ResponseDTO> = (input: unknown) => ResponseDTO;
 type UnknownObject = { [key: string]: unknown };
@@ -183,6 +184,7 @@ export function decodeReleaseDetail(input: unknown): ReleaseDetailDTO {
   const object = requireObject(input, "release detail");
   const summary = decodeReleaseSummary(object);
   const artworkObject = object.artwork === undefined ? undefined : requireObject(object.artwork, "artwork");
+  const evidence = object.evidence === undefined ? undefined : requireArray(object.evidence, "evidence").map((item) => { const e=requireObject(item,"evidence"); return { field: requireNonEmptyString(e.field,"evidence.field"), value:e.value, source: requireNonEmptyString(e.source,"evidence.source"), confidence: requireNonEmptyString(e.confidence,"evidence.confidence"), action: requireNonEmptyString(e.action,"evidence.action"), rule_id: requireNonEmptyString(e.rule_id,"evidence.rule_id"), candidates:e.candidates===undefined?undefined:requireArray(e.candidates,"evidence.candidates").map((x)=>requireNonEmptyString(x,"evidence.candidate")), reason:e.reason===undefined?undefined:requireNonEmptyString(e.reason,"evidence.reason") }; });
   return {
     ...summary,
     artwork: artworkObject ? { resource_id: requireNonEmptyString(artworkObject.resource_id, "artwork.resource_id"), mime: requireNonEmptyString(artworkObject.mime, "artwork.mime"), width: requireNonNegativeInteger(artworkObject.width, "artwork.width", 1), height: requireNonNegativeInteger(artworkObject.height, "artwork.height", 1) } : undefined,
@@ -200,10 +202,15 @@ export function decodeReleaseDetail(input: unknown): ReleaseDetailDTO {
             artist: requireNonEmptyString(track.artist, "track.artist"),
             position: requireNonNegativeInteger(track.position, "track.position", 1),
             source: requireNonEmptyString(track.source, "track.source"),
+            duration_seconds: track.duration_seconds === undefined ? undefined : requireNonNegativeNumber(track.duration_seconds, "track.duration_seconds"),
+            codec: track.codec === undefined ? undefined : requireNonEmptyString(track.codec, "track.codec"),
+            sample_rate: track.sample_rate === undefined ? undefined : requireNonNegativeInteger(track.sample_rate, "track.sample_rate", 0),
+            channels: track.channels === undefined ? undefined : requireNonNegativeInteger(track.channels, "track.channels", 0),
           };
         }),
       };
     }),
+    evidence,
   };
 }
 
@@ -276,6 +283,11 @@ function requireNonNegativeInteger(input: unknown, fieldName: string, minimum: n
   if (typeof input !== "number" || !Number.isSafeInteger(input) || input < minimum) {
     throw new Error(`${fieldName} must be a safe integer greater than or equal to ${minimum}`);
   }
+  return input;
+}
+
+function requireNonNegativeNumber(input: unknown, fieldName: string): number {
+  if (typeof input !== "number" || !Number.isFinite(input) || input < 0) throw new Error(`${fieldName} must be a non-negative number`);
   return input;
 }
 
