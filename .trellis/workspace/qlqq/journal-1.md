@@ -327,3 +327,26 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 ### Status
 
 [OK] **Completed**
+
+
+## Session 15: 持久化扫描取消与跨进程协调
+<!-- trellis-session: v=2 fp=a74b3e7c91500c2f -->
+
+**Date**: 2026-09-02
+**Task**: 持久化扫描取消与跨进程协调
+**Branch**: `main`
+
+### Summary
+
+完成 PostgreSQL 持久化扫描取消、session advisory lock 跨进程单任务协调、锁感知恢复、终态与缺失来源原子对账、管理端状态恢复与取消交互；补齐七段式运行合同并消除过时描述。后端、前端、race、构建与 PostgreSQL 集成检查已在任务质量阶段通过，本次规范修正通过任务上下文校验和 git diff 检查。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `511cea3` | feat: add persistent scan cancellation coordination |
+| `579fa45` | docs: clarify persistent scan coordination contract |
+
+### Status
+
+[OK] **Completed**
