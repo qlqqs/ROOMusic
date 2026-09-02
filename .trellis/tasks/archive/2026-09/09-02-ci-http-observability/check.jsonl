@@ -1,0 +1,10 @@
+{"file":".trellis/spec/guides/index.md","reason":"质量审查需要依据项目共享指南和阶段边界。"}
+{"file":".trellis/spec/guides/engineering-principles.md","reason":"检查是否存在无关依赖、过度抽象或未验证的 CI/日志改动。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核 request ID、actor、route、响应和日志之间的数据流一致性。"}
+{"file":".trellis/spec/backend/index.md","reason":"审查 Platform/HTTP 所有权、依赖方向和 Go 运行命令路径。"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"逐字段检查完成事件 schema、等级和敏感信息不泄露。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"审查单元、race、PostgreSQL 集成、Compose 和生产构建门禁是否真实执行。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"确认状态码捕获与错误 envelope/预期失败分类没有回归。"}
+{"file":".trellis/spec/backend/core0-runtime-contracts.md","reason":"核对 request ID、认证、扫描、迁移和内嵌前端资源的兼容性。"}
+{"file":".trellis/spec/frontend/index.md","reason":"检查 npm ci、Vite build 和嵌入资产漂移门禁是否符合前端合同。"}
+{"file":"README.md","reason":"核对 CI、集成测试和生产开发命令文档是否同步且使用简体中文。"}
