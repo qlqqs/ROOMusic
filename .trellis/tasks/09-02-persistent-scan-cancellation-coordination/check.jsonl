@@ -1,0 +1,16 @@
+{"file": ".trellis/spec/guides/index.md", "reason": "按共享指南复核跨层一致性和 Core 0 范围。"}
+{"file": ".trellis/spec/guides/engineering-principles.md", "reason": "检查变更是否最小完整，验证是否与风险匹配。"}
+{"file": ".trellis/spec/guides/modular-design.md", "reason": "复核所有权、依赖方向和协调接口是否窄化。"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "检查字段、错误、身份和状态在后端/前端全链路同步。"}
+{"file": ".trellis/spec/backend/index.md", "reason": "按后端质量清单复核授权、事务、路径和 PostgreSQL-only 边界。"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "验证 0009、锁、短事务、回滚和 missing 原子性证据。"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "验证并发 contention、取消、失败路径和 race/集成测试。"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "检查 HTTP 状态、错误码、幂等和内部原因脱敏。"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "检查扫描事件关联与日志中无 token/完整路径。"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "确认既有状态查询、权限和成功/不完整扫描合同未漂移。"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "复核前端服务端权威和同源 cookie 合同。"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "复核轮询停止、取消 pending、错误重试和清理。"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "复核刷新后活动扫描恢复和终态单一来源。"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "复核 decoder 对未知状态/时间/错误响应的安全处理。"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "检查可访问状态、窄屏布局和最小前端测试。"}
+{"file": ".trellis/tasks/09-02-persistent-scan-cancellation-coordination/research/scan-coordination-options.md", "reason": "对照研究中的 holder、恢复、连接池和终态竞态 caveat。"}

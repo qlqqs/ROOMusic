@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   decodeApiErrorResponse,
+  decodeActiveScan,
   decodeCreatedLibraryRoot,
   decodeLibraryRootList,
   decodeReleaseDetail,
   decodeReleaseList,
+  decodeScanCancel,
   decodeScanStart,
   decodeScanStatus,
   decodeSession,
@@ -31,15 +33,23 @@ describe("Core 0 API decoders", () => {
   });
 
   it("distinguishes accepted scans from persisted scan status", () => {
-    expect(decodeScanStart({ id: "scan-1", scan_run_id: "scan-1", status: "running" })).toEqual({ id: "scan-1", scan_run_id: "scan-1", status: "running" });
-    expect(decodeScanStatus({ id: "scan-1", status: "running", started_at: "2026-09-01T08:00:00Z", finished_at: null })).toEqual({
+    const runningScan = { id: "scan-1", scan_run_id: "scan-1", status: "running", started_at: "2026-09-01T08:00:00Z", finished_at: null, cancel_requested_at: null };
+    expect(decodeScanStart(runningScan)).toEqual(runningScan);
+    expect(decodeScanStatus(runningScan)).toEqual({
       id: "scan-1",
+      scan_run_id: "scan-1",
       status: "running",
       started_at: "2026-09-01T08:00:00Z",
       finished_at: null,
+      cancel_requested_at: null,
     });
-    expect(() => decodeScanStatus({ id: "scan-1", status: "partially_done", started_at: "2026-09-01T08:00:00Z", finished_at: null })).toThrow();
-    expect(() => decodeScanStatus({ id: "scan-1", status: "failed", started_at: "not-a-date", finished_at: null })).toThrow();
+    const cancelRequested = { ...runningScan, cancel_requested_at: "2026-09-01T08:01:00Z" };
+    expect(decodeScanCancel(cancelRequested)).toEqual(cancelRequested);
+    expect(decodeActiveScan({ scan: cancelRequested })).toEqual({ scan: cancelRequested });
+    expect(decodeActiveScan({ scan: null })).toEqual({ scan: null });
+    expect(() => decodeScanStatus({ ...runningScan, status: "partially_done" })).toThrow();
+    expect(() => decodeScanStatus({ ...runningScan, started_at: "not-a-date" })).toThrow();
+    expect(() => decodeScanStatus({ ...runningScan, cancel_requested_at: undefined })).toThrow();
   });
 
   it("decodes paginated releases with stable Medium and Track identities", () => {

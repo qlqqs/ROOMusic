@@ -5,6 +5,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -12,8 +13,10 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"path"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -25,21 +28,21 @@ var frontendAssets embed.FS
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	applicationContext, stopApplication := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopApplication()
 	config, configErr := loadServerConfig()
 	if configErr != nil {
 		logger.Error("roomusic configuration invalid", "event", "platform.config.invalid", "error", configErr)
 		os.Exit(1)
 	}
-	database, databaseErr := openDatabase(context.Background(), config.DatabaseURL)
+	database, databaseErr := openDatabase(applicationContext, config.DatabaseURL)
 	if databaseErr != nil {
 		logger.Error("roomusic database unavailable", "event", "platform.database.unavailable", "error", databaseErr)
 	}
-	if database != nil {
-		defer database.connection.Close()
-	}
 	var requestHandler http.Handler = buildHandler(logger, database)
+	var application *roomusicApplication
 	if database != nil {
-		requestHandler = buildApplicationHandler(config, database, logger)
+		application, requestHandler = buildApplication(applicationContext, config, database, logger)
 	}
 	server := &http.Server{
 		Addr:              config.Address,
@@ -48,8 +51,33 @@ func main() {
 	}
 
 	logger.Info("roomusic server starting", "address", server.Addr)
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		logger.Error("roomusic server stopped", "error", err)
+	serveErrors := make(chan error, 1)
+	go func() {
+		serveErrors <- server.ListenAndServe()
+	}()
+	var serveErr error
+	select {
+	case <-applicationContext.Done():
+	case serveErr = <-serveErrors:
+		stopApplication()
+	}
+	shutdownContext, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelShutdown()
+	if err := server.Shutdown(shutdownContext); err != nil {
+		logger.Error("roomusic HTTP shutdown failed", "event", "platform.http.shutdown_failed", "error", err)
+	}
+	if application != nil {
+		if err := application.waitForScans(shutdownContext); err != nil {
+			logger.Error("roomusic scan shutdown timed out", "event", "library.scan.shutdown_timeout", "error", err)
+		}
+	}
+	if database != nil {
+		if err := database.connection.Close(); err != nil {
+			logger.Error("roomusic database close failed", "event", "platform.database.close_failed", "error", err)
+		}
+	}
+	if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+		logger.Error("roomusic server stopped", "error", serveErr)
 		os.Exit(1)
 	}
 }

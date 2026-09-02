@@ -72,8 +72,20 @@ func openDatabase(ctx context.Context, databaseURL string) (*databaseState, erro
 	return &databaseState{connection: connection, ready: true}, nil
 }
 
-func recoverInterruptedScans(ctx context.Context, connection *sql.DB) error {
-	_, err := connection.ExecContext(ctx, `UPDATE scan_runs
+func recoverInterruptedScans(ctx context.Context, connection *sql.DB) (err error) {
+	holder, acquired, err := acquireScanExecution(ctx, connection)
+	if err != nil {
+		return fmt.Errorf("acquire scan recovery lock: %w", err)
+	}
+	if !acquired {
+		return nil
+	}
+	defer func() {
+		if closeErr := holder.close(context.Background()); closeErr != nil && err == nil {
+			err = fmt.Errorf("release scan recovery lock: %w", closeErr)
+		}
+	}()
+	_, err = holder.connection.ExecContext(ctx, `UPDATE scan_runs
 		SET status='incomplete', finished_at=NOW(), error_message='process_restarted'
 		WHERE status='running'`)
 	if err != nil {

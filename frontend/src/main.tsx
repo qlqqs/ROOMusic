@@ -4,6 +4,7 @@ import { FormEvent, StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   decodeAcknowledgement,
+  decodeActiveScan,
   decodeCreatedLibraryRoot,
   decodeCreatedUser,
   decodeLibraryRootList,
@@ -11,6 +12,7 @@ import {
   decodeUserList,
   decodeReleaseDetail,
   decodeReleaseList,
+  decodeScanCancel,
   decodeScanStart,
   decodeScanStatus,
   decodeSession,
@@ -21,7 +23,6 @@ import {
   ReleaseDetailDTO,
   ReleaseSummaryDTO,
   requestApi,
-  ScanStartDTO,
   ScanStatusDTO,
   SessionDTO,
   RootOperationDTO,
@@ -31,6 +32,18 @@ import "./styles.css";
 
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : "请求失败";
+}
+
+function describeScanState(scan: ScanStatusDTO | null): string {
+  if (!scan) return "已同步";
+  if (scan.status === "running") return scan.cancel_requested_at ? "正在取消扫描" : "正在扫描";
+  const labels: Record<Exclude<ScanStatusDTO["status"], "running">, string> = {
+    succeeded: "扫描完成",
+    failed: "扫描失败",
+    canceled: "扫描已取消",
+    incomplete: "扫描未完成",
+  };
+  return labels[scan.status];
 }
 
 function App() {
@@ -57,7 +70,8 @@ function App() {
   const [releaseLoading, setReleaseLoading] = useState(false);
   const [releaseError, setReleaseError] = useState("");
   const [releaseRetry, setReleaseRetry] = useState(0);
-  const [scan, setScan] = useState<ScanStatusDTO | ScanStartDTO | null>(null);
+  const [scan, setScan] = useState<ScanStatusDTO | null>(null);
+  const [scanMutationPending, setScanMutationPending] = useState(false);
   const [message, setMessage] = useState("");
   const [nowPlaying, setNowPlaying] = useState<ReleaseDetailDTO["media"][number]["tracks"][number] | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -79,6 +93,9 @@ function App() {
       .catch((error: unknown) => setMessage(describeError(error)));
     void requestApi("/api/v1/users", decodeUserList).then((result) => setUsers(result.items)).catch((error: unknown) => setMessage(describeError(error)));
     void requestApi("/api/v1/library-root-operations", decodeRootOperationList).then((result) => setOperations(result.items)).catch((error: unknown) => setMessage(describeError(error)));
+    void requestApi("/api/v1/scans/active", decodeActiveScan)
+      .then((result) => setScan(result.scan))
+      .catch((error: unknown) => setMessage(describeError(error)));
   }, [session]);
   useEffect(() => {
     const onPopState = () => {
@@ -170,6 +187,7 @@ function App() {
     } catch (error: unknown) { setMessage(describeError(error)); }
   }
   async function startScan() {
+    setScanMutationPending(true);
     try {
       setScan(
         await requestApi("/api/v1/scans", decodeScanStart, {
@@ -180,6 +198,23 @@ function App() {
       setMessage("扫描已启动");
     } catch (error: unknown) {
       setMessage(describeError(error));
+    } finally {
+      setScanMutationPending(false);
+    }
+  }
+  async function cancelScan() {
+    if (!scan || scan.status !== "running") return;
+    setScanMutationPending(true);
+    try {
+      setScan(await requestApi(`/api/v1/scans/${scan.id}/cancel`, decodeScanCancel, {
+        method: "POST",
+        body: "{}",
+      }));
+      setMessage("取消请求已提交");
+    } catch (error: unknown) {
+      setMessage(describeError(error));
+    } finally {
+      setScanMutationPending(false);
     }
   }
   async function createUser(event: FormEvent) {
@@ -275,9 +310,9 @@ function App() {
     );
   return <main className="app-shell">
     <aside className="sidebar"><div className="brand"><span className="brand-mark">R</span><span>ROOMusic</span></div><p className="side-label">工作区</p><nav><a className="nav-item active" href="#library">◈ <span>媒体库</span><b>{releaseTotal}</b></a><a className="nav-item" href="#queue">≡ <span>播放队列</span></a>{session.role === "admin" && <a className="nav-item" href="#admin">⚙ <span>管理中心</span></a>}</nav><div className="sidebar-bottom"><div className="profile"><span className="avatar">{session.username.slice(0, 1).toUpperCase()}</span><div><strong>{session.username}</strong><small>{session.role === "admin" ? "管理员" : "成员"}</small></div></div><button className="ghost-button" type="button" onClick={() => void logout()}>退出登录</button></div></aside>
-    <section className="workspace"><header className="topbar"><form className="searchbar" onSubmit={submitSearch}><span>⌕</span><label className="sr-only" htmlFor="library-search">搜索音乐库</label><input id="library-search" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="搜索艺术家、专辑或曲目" />{searchQuery && <button type="button" onClick={clearSearch}>清除</button>}</form><span className="sync-state"><i /> {scan?.status === "running" ? "正在扫描" : "已同步"}</span></header>
+    <section className="workspace"><header className="topbar"><form className="searchbar" onSubmit={submitSearch}><span>⌕</span><label className="sr-only" htmlFor="library-search">搜索音乐库</label><input id="library-search" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="搜索艺术家、专辑或曲目" />{searchQuery && <button type="button" onClick={clearSearch}>清除</button>}</form><span className="sync-state" role="status"><i /> {describeScanState(scan)}</span></header>
       {message && <p className="toast" role="alert">{message}</p>}
-      <div className="content-grid"><section className="library-panel" id="library"><div className="section-heading"><div><p className="eyebrow">私人音乐库</p><h1>探索你的收藏</h1></div><div className="heading-actions"><span className="result-count">{releaseTotal} 个发行版本</span>{session.role === "admin" && <button className="outline-button" type="button" onClick={() => void startScan()} disabled={scan?.status === "running"}>↻ 扫描音乐库</button>}</div></div>{releaseLoading ? <p className="state-block" role="status">正在加载发行版本...</p> : releaseError ? <p className="state-block error" role="alert">{releaseError} <button type="button" onClick={() => setReleaseRetry((r) => r + 1)}>重试</button></p> : releases.length === 0 ? <p className="state-block">暂无匹配的发行版本</p> : <div className="release-grid">{releases.map((release) => <button className="release-card" key={release.id} type="button" onClick={() => void showRelease(release.id)}><div className="cover-placeholder">{release.title.slice(0, 1)}</div><strong title={release.title}>{release.title}</strong><span title={release.artist}>{release.artist}</span><small>{release.year ?? "年份未知"}</small></button>)}</div>}
+      <div className="content-grid"><section className="library-panel" id="library"><div className="section-heading"><div><p className="eyebrow">私人音乐库</p><h1>探索你的收藏</h1></div><div className="heading-actions"><span className="result-count">{releaseTotal} 个发行版本</span>{session.role === "admin" && (scan?.status === "running" ? <button className="outline-button" type="button" onClick={() => void cancelScan()} disabled={scanMutationPending || scan.cancel_requested_at !== null}>{scan.cancel_requested_at ? "取消请求中" : "停止扫描"}</button> : <button className="outline-button" type="button" onClick={() => void startScan()} disabled={scanMutationPending}>↻ 扫描音乐库</button>)}</div></div>{releaseLoading ? <p className="state-block" role="status">正在加载发行版本...</p> : releaseError ? <p className="state-block error" role="alert">{releaseError} <button type="button" onClick={() => setReleaseRetry((r) => r + 1)}>重试</button></p> : releases.length === 0 ? <p className="state-block">暂无匹配的发行版本</p> : <div className="release-grid">{releases.map((release) => <button className="release-card" key={release.id} type="button" onClick={() => void showRelease(release.id)}><div className="cover-placeholder">{release.title.slice(0, 1)}</div><strong title={release.title}>{release.title}</strong><span title={release.artist}>{release.artist}</span><small>{release.year ?? "年份未知"}</small></button>)}</div>}
         {selectedRelease && <article className="detail-panel"><div className="detail-cover">{selectedRelease.artwork ? <img src={`/api/v1/artworks/${encodeURIComponent(selectedRelease.artwork.resource_id)}`} alt={`${selectedRelease.title} 封面`} /> : <span>{selectedRelease.title.slice(0, 1)}</span>}</div><div className="detail-body"><p className="eyebrow">发行详情</p><h2>{selectedRelease.title}</h2><p className="detail-artist">{selectedRelease.artist}</p>{selectedRelease.media.map((medium) => <div className="medium" key={medium.id}><h3>碟片 {medium.position} <span>{medium.title}</span></h3>{medium.tracks.length === 0 ? <p>此碟片暂无曲目</p> : <ol>{medium.tracks.map((track) => <li key={track.id}><button type="button" onClick={() => playTrack(track)}><span>{String(track.position).padStart(2, "0")}</span><b>{track.title}</b><small>{track.artist}</small><i>▶</i></button></li>)}</ol>}</div>)}</div></article>}
       </section><aside className="queue-panel" id="queue"><div className="queue-heading"><h2>即将播放</h2><span>{nowPlaying ? "演示队列" : "空队列"}</span></div>{nowPlaying ? <div className="queue-now"><div className="mini-cover">{nowPlaying.title.slice(0, 1)}</div><div><strong title={nowPlaying.title}>{nowPlaying.title}</strong><span title={nowPlaying.artist}>{nowPlaying.artist}</span></div><button type="button" aria-label={isPlaying ? "暂停播放" : "播放"} onClick={() => setIsPlaying((v) => !v)}>{isPlaying ? "Ⅱ" : "▶"}</button></div> : <div className="queue-empty"><span>♫</span><p>从发行详情中选择一首曲目<br />开始播放演示</p></div>}<div className="queue-tip"><span>⌘</span><p>播放控制为界面演示<br />暂未连接音频流服务</p></div></aside></div>
       {session.role === "admin" && <section className="admin-panel" id="admin"><div className="section-heading"><div><p className="eyebrow">管理员工具</p><h2>管理中心</h2></div></div><div className="admin-grid"><section className="admin-card"><h3>用户</h3><form onSubmit={createUser}><input aria-label="新用户名" placeholder="新用户名" value={newUsername} onChange={(e) => setNewUsername(e.target.value)} /><input aria-label="初始密码" type="password" placeholder="初始密码（至少 12 位）" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} /><button type="submit">创建用户</button></form>{users.map((user) => <div className="admin-row" key={user.id}><span>{user.username}<small>{user.disabled ? "已禁用" : "正常"}</small></span><button type="button" onClick={() => void toggleUser(user)}>{user.disabled ? "启用" : "禁用"}</button><button type="button" onClick={() => void revokeUser(user)}>撤销</button></div>)}</section><section className="admin-card"><h3>音乐目录</h3><form onSubmit={registerRoot}><input aria-label="音乐目录路径" placeholder="允许的音乐目录路径" value={libraryPath} onChange={(e) => setLibraryPath(e.target.value)} /><button type="submit">注册目录</button></form>{libraryRoots.map((root) => <div className="admin-row" key={root.id}><span>{root.name}<small>{root.status} · r{root.revision}</small></span><button type="button" onClick={() => void changeRoot(root)}>{root.status === "active" ? "停用" : "恢复"}</button></div>)}{operations.slice(0, 3).map((item) => <div className="history-row" key={item.id}><span>{item.operation}</span><small>{item.status}</small></div>)}</section></div></section>}

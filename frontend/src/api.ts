@@ -10,8 +10,15 @@ export type UpdatedLibraryRootDTO = { id: string; path: string; status: "active"
 
 const scanStatuses = ["running", "succeeded", "failed", "canceled", "incomplete"] as const;
 export type ScanStatusValue = (typeof scanStatuses)[number];
-export type ScanStartDTO = { id: string; scan_run_id: string; status: "running" };
-export type ScanStatusDTO = { id: string; status: ScanStatusValue; started_at: string; finished_at: string | null };
+export type ScanStatusDTO = {
+  id: string;
+  scan_run_id: string;
+  status: ScanStatusValue;
+  started_at: string;
+  finished_at: string | null;
+  cancel_requested_at: string | null;
+};
+export type ActiveScanDTO = { scan: ScanStatusDTO | null };
 
 export type ReleaseSummaryDTO = { id: string; title: string; artist: string; year?: number };
 export type PaginationDTO = { page: number; page_size: number; total: number };
@@ -131,18 +138,8 @@ export function decodeUpdatedLibraryRoot(input: unknown): UpdatedLibraryRootDTO 
   return { id: requireNonEmptyString(object.id, "id"), path: requireNonEmptyString(object.path, "path"), status, revision: requireSafeInteger(object.revision, "revision", 1) };
 }
 
-export function decodeScanStart(input: unknown): ScanStartDTO {
-  const object = requireObject(input, "scan start");
-  const status = requireNonEmptyString(object.status, "status");
-  if (status !== "running") {
-    throw new Error("scan start status must be running");
-  }
-  return {
-    id: requireNonEmptyString(object.id, "id"),
-    scan_run_id: requireNonEmptyString(object.scan_run_id, "scan_run_id"),
-    status,
-  };
-}
+export const decodeScanStart = decodeScanStatus;
+export const decodeScanCancel = decodeScanStatus;
 
 export function decodeScanStatus(input: unknown): ScanStatusDTO {
   const object = requireObject(input, "scan status");
@@ -152,10 +149,17 @@ export function decodeScanStatus(input: unknown): ScanStatusDTO {
   }
   return {
     id: requireNonEmptyString(object.id, "id"),
+    scan_run_id: requireNonEmptyString(object.scan_run_id, "scan_run_id"),
     status,
     started_at: requireTimestamp(object.started_at, "started_at"),
     finished_at: object.finished_at === null ? null : requireTimestamp(object.finished_at, "finished_at"),
+    cancel_requested_at: object.cancel_requested_at === null ? null : requireTimestamp(object.cancel_requested_at, "cancel_requested_at"),
   };
+}
+
+export function decodeActiveScan(input: unknown): ActiveScanDTO {
+  const object = requireObject(input, "active scan");
+  return { scan: object.scan === null ? null : decodeScanStatus(object.scan) };
 }
 
 function isScanStatus(value: string): value is ScanStatusValue {
