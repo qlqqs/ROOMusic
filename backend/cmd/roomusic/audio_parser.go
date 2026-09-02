@@ -102,11 +102,17 @@ func parseM4AAtoms(data []byte, o *audioObservation) {
 			case "mvhd":
 				if len(payload) >= 20 {
 					version := payload[0]
-					off := 20
+					off := 12 // version 0: creation, modification, timescale
 					if version == 1 {
-						off = 28
+						off = 20 // version 1 uses 64-bit creation/modification
 					}
-					if off+12 <= len(payload) {
+					if version == 0 && off+8 <= len(payload) {
+						timescale := binary.BigEndian.Uint32(payload[off : off+4])
+						dur := binary.BigEndian.Uint32(payload[off+4 : off+8])
+						if timescale > 0 {
+							o.DurationSeconds = float64(dur) / float64(timescale)
+						}
+					} else if version == 1 && off+12 <= len(payload) {
 						timescale := binary.BigEndian.Uint32(payload[off : off+4])
 						dur := binary.BigEndian.Uint64(payload[off+4 : off+12])
 						if timescale > 0 {
@@ -121,7 +127,13 @@ func parseM4AAtoms(data []byte, o *audioObservation) {
 					if version == 1 {
 						off = 20
 					}
-					if off+12 <= len(payload) {
+					if version == 0 && off+8 <= len(payload) {
+						ts := binary.BigEndian.Uint32(payload[off : off+4])
+						dur := binary.BigEndian.Uint32(payload[off+4 : off+8])
+						if ts > 0 && o.DurationSeconds == 0 {
+							o.DurationSeconds = float64(dur) / float64(ts)
+						}
+					} else if version == 1 && off+12 <= len(payload) {
 						ts := binary.BigEndian.Uint32(payload[off : off+4])
 						dur := binary.BigEndian.Uint64(payload[off+4 : off+12])
 						if ts > 0 && o.DurationSeconds == 0 {
@@ -135,9 +147,11 @@ func parseM4AAtoms(data []byte, o *audioObservation) {
 					if o.Codec == "mp4a" {
 						o.Codec = "aac"
 					}
-					if len(payload) >= 32 {
-						o.Channels = int(binary.BigEndian.Uint16(payload[24:26]))
-						o.SampleRate = int(binary.BigEndian.Uint32(payload[28:32]) >> 16)
+					if len(payload) >= 48 {
+						// stsd full-box header is 8 bytes; channels/sample rate are
+						// at offsets 24/32 within the sample entry.
+						o.Channels = int(binary.BigEndian.Uint16(payload[32:34]))
+						o.SampleRate = int(binary.BigEndian.Uint32(payload[40:44]) >> 16)
 					}
 				}
 			case "©nam", "©ART", "©alb":
