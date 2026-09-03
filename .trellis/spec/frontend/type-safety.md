@@ -95,6 +95,12 @@ must match the wire/domain contract.
 - Resource and revision values come from the server response and are carried
   unchanged into mutations.
 
+发行边界的有界合同必须在分配或解码全部嵌套项之前检查：列表每页最多 100 条，详情
+最多 256 个 Medium、整张 Release 合计最多 10,000 条 Track，credits/evidence 和
+diagnostics 使用后端同名上限。Track 上限是 Release 总量，不是“每个 Medium 各
+10,000 条”；decoder 在映射下一组 Track 前先累计长度并 fail closed。管理员 evidence
+中的 source ref 必须是有界安全相对路径，绝对路径和 `file://` 一律拒绝。
+
 ## Forbidden Patterns
 
 - `any`, `// @ts-ignore`, unchecked double assertions, or broad
