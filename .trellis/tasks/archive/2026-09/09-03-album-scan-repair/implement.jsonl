@@ -1,0 +1,17 @@
+{"file":".trellis/spec/guides/product-goals.md","reason":"确认 Core 0 产品边界、只读音乐根、版本区分和成功扫描 missing 合同。"}
+{"file":".trellis/spec/guides/modular-design.md","reason":"约束 parser、organizer、persistence、REST 的能力所有权和窄接口。"}
+{"file":".trellis/spec/guides/engineering-principles.md","reason":"遵循最小完整变更、证据/决定分离和按风险验证原则。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"检查 observation 到数据库、REST、前端的跨层数据流和状态合同。"}
+{"file":".trellis/spec/guides/real-music-assets.md","reason":"保护真实 music 目录只读并限制测试资产使用方式。"}
+{"file":".trellis/spec/backend/index.md","reason":"加载后端 Core 0、PostgreSQL、REST 和扫描质量门槛。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"指导 forward migration、事务、唯一约束、幂等和 complete-only reconciliation。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"统一 parser/scan/REST 错误分类、诊断、权限和安全脱敏。"}
+{"file":".trellis/spec/backend/core0-runtime-contracts.md","reason":"保持现有扫描协调、取消、路径 containment、迁移和生产静态资源合同。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"覆盖 parser、scanner、PostgreSQL、REST、并发和只读安全测试要求。"}
+{"file":".trellis/spec/frontend/index.md","reason":"加载前端 typed REST、状态所有权、同源部署和只读问题视图边界。"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"指导列表/详情/诊断组件的语义、键盘、错误和响应式行为。"}
+{"file":".trellis/spec/frontend/hook-guidelines.md","reason":"指导请求取消、轮询、URL 状态和加载/失败状态。"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"明确服务器、URL 和本地 UI 状态归属，避免引入状态库。"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"约束新增 DTO 的 runtime decoder、枚举、nullable 和 bounded evidence。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"覆盖前端测试、可访问性、窄屏和生产构建门禁。"}
+{"file":".trellis/tasks/09-03-album-scan-repair/research/v0-reference-and-current-gaps.md","reason":"提供已验证 V0 行为参考及当前实现缺口，明确禁止复制旧 runtime。"}

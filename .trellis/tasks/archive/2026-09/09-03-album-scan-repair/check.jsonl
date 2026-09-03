@@ -1,0 +1,17 @@
+{"file":".trellis/spec/guides/product-goals.md","reason":"复核变更是否仍属于 Core 0 产品范围并保持永久安全不变量。"}
+{"file":".trellis/spec/guides/modular-design.md","reason":"复核跨能力依赖、接口宽度和 policy owner 是否正确。"}
+{"file":".trellis/spec/guides/engineering-principles.md","reason":"复核实现是否最小完整、错误路径和验证证据是否充分。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核 parser/staging/organizer/SQL/REST/decoder/UI 字段与状态闭环。"}
+{"file":".trellis/spec/guides/real-music-assets.md","reason":"复核真实资产只读、测试隔离和信息披露边界。"}
+{"file":".trellis/spec/backend/index.md","reason":"执行后端质量检查、权限、迁移、扫描和静态资源合同复核。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"检查 schema 约束、短事务、幂等、回滚和 missing 对账。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"检查错误 envelope、诊断 bounded、取消终态和路径脱敏。"}
+{"file":".trellis/spec/backend/core0-runtime-contracts.md","reason":"检查现有 Core 0 运行合同未回归。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"执行后端测试覆盖和 forbidden pattern 复核。"}
+{"file":".trellis/spec/frontend/index.md","reason":"检查前端 REST、权限、状态和只读边界。"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"检查 UI 可访问性、错误/空/权限状态和布局。"}
+{"file":".trellis/spec/frontend/hook-guidelines.md","reason":"检查请求生命周期、轮询取消和 URL state。"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"检查 state owner 清晰且无隐藏全局状态。"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"检查 runtime decoder 枚举、nullable 和 malformed payload 行为。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"执行前端 lint/typecheck/test/build 和可访问性质量复核。"}
+{"file":".trellis/tasks/09-03-album-scan-repair/research/v0-reference-and-current-gaps.md","reason":"对照 V0 参考检查行为恢复是否越界复制历史架构。"}
