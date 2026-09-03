@@ -350,3 +350,29 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 ### Status
 
 [OK] **Completed**
+
+
+## Session 16: 完成专辑扫描解析与候选闭环
+<!-- trellis-session: v=2 fp=6a49f289337171af -->
+
+**Date**: 2026-09-03
+**Task**: 完成专辑扫描解析与候选闭环
+**Branch**: `feat/album-scan-organization-core`
+
+### Summary
+
+完成有界 M4A/CUE 解析、确定性专辑归组、staging 与候选持久化、REST/前端只读证据闭环，并通过 PostgreSQL 18 与全量质量门禁。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a527d2c` | feat: repair bounded audio and cue parsing |
+| `8ccc269` | feat: persist deterministic album scan candidates |
+| `19e2a8e` | feat: expose album scan evidence |
+| `851351e` | feat: add read-only album evidence views |
+| `02bb425` | docs: record album scan contracts |
+
+### Status
+
+[OK] **Completed**
