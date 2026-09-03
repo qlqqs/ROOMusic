@@ -49,6 +49,12 @@ should be able to reload, bookmark, or use browser navigation. Normalize and
 validate URL values at the search feature boundary; invalid values fall back to
 documented defaults without sending arbitrary backend fields.
 
+当前发行列表的 `q`、`attention=required` 和 `page` 都是 URL state。提交新搜索、清空
+搜索或切换 attention 时把 `page` 重置为 1；上一页/下一页只写入 `[1,lastPage]`。
+服务端返回总数后，若 URL page 超出真实末页，使用 `replaceState` 规范化 URL 并请求
+末页，避免把可恢复的过期书签永久显示为空结果。`popstate` 必须重新读取三项状态，
+不得维护一份与 URL 分叉的隐藏分页真相。
+
 Do not put session tokens, absolute paths, secrets, raw errors, or uncommitted
 operation payloads in the URL.
 

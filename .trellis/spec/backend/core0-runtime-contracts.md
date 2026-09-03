@@ -18,7 +18,9 @@
 - HTTP：`POST /api/v1/users`、`PATCH /api/v1/users/{id}`、
   `POST /api/v1/library-roots`、`POST /api/v1/scans`、
   `GET /api/v1/scans/active`、`GET /api/v1/scans/{id}`、
-  `POST /api/v1/scans/{id}/cancel`。
+  `POST /api/v1/scans/{id}/cancel`、`GET /api/v1/scans/{id}/diagnostics`、
+  `GET /api/v1/releases`、`GET /api/v1/releases/{id}`、管理员专用
+  `GET /api/v1/releases/{id}/evidence` 和 `GET /api/v1/artworks/{id}`。
 - 用户更新请求：`{ "disabled": boolean }`；响应：`{ "disabled": boolean }`。
 - 目录新增响应：`{ "id": string, "name": string, "status": "active" | "disabled", "revision": integer }`。
 - 目录列表项目：`id`、安全 basename `path`/`name`、`status`、`revision`、时间戳；
@@ -39,6 +41,10 @@
   读取或存储 session token。
 - JSON 请求体上限 1 MiB；搜索词最多 200 字节；发行分页默认 `page=1`、
   `page_size=50`，最大 100；扫描诊断最多 100 条。
+- 发行列表只返回至少含一个 `present` Track 的 Release，支持严格 allowlist 的
+  `attention=required`。详情返回有界 Medium/Track、credits、音频/CUE facts 和
+  普通用户安全 evidence 摘要；完整候选、reason code 和安全相对来源只由管理员
+  evidence 端点返回，普通用户必须得到 403。
 
 ### 数据库与扫描
 
@@ -60,8 +66,44 @@
 - 扫描只读取 `active` roots。unsupported 音频候选、CUE/解析/权限/遍历错误
   将 root 标记为不完整；只有全局 `succeeded` 才允许 `missing` 对账。非音频
   附件（例如 `.jpg`、`.png`、`.txt`）不产生 unsupported 音频诊断。
-- `saveObservation` 按 Release 内 `disc_number` 选择或创建 Medium；同一 root
-  与规范化相对路径继续复用 Track 身份。
+- `0011_scan_staging_and_identity.sql` 增加有界 scan staging、稳定 candidate anchor、
+  物理/CUE source identity、音频/CUE 列、current field/grouping evidence、credits
+  和 Release 元数据约束；旧 CUE 身份在首次修复扫描时复用原 Track ID。
+- scanner 先把 observation 写入 `scan_observations`，再按 organization scope 有界
+  读取并运行纯 organizer；每个 candidate 使用独立短事务写入 Release Graph，解析
+  失败不阻止其它有效 candidate 提交。无论成功或失败都清理本次 staging；只有全局
+  `succeeded` 才执行 missing 对账。
+- root 遍历开始前的 staging 清理失败必须立即中止该 root，结束时的兜底清理失败必须
+  令 root 保持不完整并写入 `staging_write_failure`。每个 scope 最多读取 10,000 条
+  observation，单条 JSON 最多 24 MiB，scope 名按 256 条分页遍历；不得退回 root 级
+  无界内存 slice。
+- 物理 Track 以 root + 规范化相对路径复用身份；CUE Track 以 sheet、父来源、track
+  和 `INDEX 01` 复用身份。每次候选写入替换 current decisions、grouping evidence、
+  credits 和 track observations，不按重扫次数追加。
+- CUE 引用可以位于 sheet 的父目录或兄弟目录，只要仍在显式注册根 containment 内；
+  staging 必须先按规范化 `cue_parent_relative_path` 与物理 observation 对齐 scope，
+  organizer 再仅在同一 candidate 和明确父子关系内消除虚拟/物理重复。不得仅按 sheet
+  所在目录、标题或时长模糊去重。扫描前使用解析 symlink 后的 `Stat` 验证媒体节点为
+  regular file，FIFO、设备和逃逸链接不得传给 parser。
+- parser 默认的 track/disc `1` 必须带 inferred 标记；organizer 只对缺失或 inferred
+  位置应用 Disc/CD/Disk 目录与稳定路径 fallback，显式标签永远优先。CUE sheet 与
+  track PERFORMER 的 provenance 分别为 `cue_sheet` 和 `cue_track`，构造每条虚拟 Track
+  时复制 `InferredFields`/`FieldSources` map。
+- 缺失 `AlbumArtist` 表示未知，不是与唯一明确值冲突：相同权威 album 下只有一个明确
+  `AlbumArtist` 时，缺失值与该 partition 兼容；出现多个明确值时仍按多数决或稳定拆分。
+  生成 Release artist/credit 时，只要存在明确 `AlbumArtist`，就先在这些值之间决策，
+  不允许多数 Track Artist 覆盖它。根目录 staging scope 先按权威 album 聚合，再由
+  organizer 决定 album artist partition，避免在决策前永久拆散兼容 observation。
+- `.log` 抓轨证据只读取候选来源目录中普通、非 symlink 文件的前 64 KiB；只有明确
+  EAC/XLD 产品签名才为缺失字段补 `source_type=CD`、`media_type=CD`，且不得覆盖标签
+  或从音频规格推断。field uncertainty、grouping inconsistency 和可见 missing 来源
+  在 `attention_count` 中按语义去重；同目录拆分使用独立
+  `same_directory_conflict` reason。
+- 封面只在 Release ID 确定后写入 ROOMusic 管理目录并绑定；读取、校验或数据库绑定
+  失败产生独立诊断，不修改源音乐或源封面。命名 folder artwork 存在但不安全、为空、
+  超限或格式无效时必须 fail closed 并保留原关系，不能当作“来源已删除”。复用由 hash
+  命名的受管文件前核对实际字节，损坏时原子替换；数据库查询、绑定失败后的新文件清理、
+  旧 key 引用检查和文件删除错误都必须向上返回，使扫描进入 `incomplete`。
 - `canceled` 是已落地的 wire 终态；取消意图持久化在
   `scan_runs.cancel_requested_at`，扫描 worker 由应用生命周期 context 管理，
   不继承启动或取消请求的 HTTP context。
@@ -127,6 +169,15 @@ Authorization/session token、密码、数据库 URL、完整 NAS 路径或音�
 | 用户 SQL/事务失败 | `503 database_unavailable` 或分类错误，不返回成功 |
 | 重复注册 disabled root | 返回 `status=disabled` 与真实 revision，不隐式恢复 |
 | unsupported 音频/CUE/遍历错误 | 有界诊断，扫描 `incomplete`/`failed`，禁止 `missing` |
+| 初始或终态 staging 清理失败 | root 不完整并记录 `staging_write_failure`；旧 observation 不得混入本次候选 |
+| 媒体节点不是 regular file | 不调用 parser，记录 `non_regular_file` 并令扫描不完整 |
+| CUE 显式父来源跨 sheet 目录但仍在注册根内 | 对齐到父来源 scope，保留稳定虚拟身份并按明确关系去重 |
+| rip log 无明确签名、签名晚于 64 KiB 或为 symlink | 不产生 CD 语义，不读取超出预算的内容 |
+| 相同 album 的部分 Track 缺少 AlbumArtist，且其它 Track 只有一个明确值 | 保持同一候选，明确 AlbumArtist 优先于 Track Artist |
+| 命名 folder artwork 非普通文件、为空、超限或格式损坏 | `artwork_failure`，保留已有关系，不解释为封面删除 |
+| content-addressed 受管文件与其 hash 内容不符 | 写临时文件并原子替换，随后才确认数据库关系 |
+| 受管封面查询或旧文件清理失败 | 返回分类错误并令扫描不完整，不静默吞错 |
+| 单个 candidate/封面写入失败 | 已提交候选保持可见，记录分类诊断并使扫描不完整，禁止 `missing` |
 | 扫描成功且所有 root 完整 | 允许负向 `missing` 对账 |
 | 非音频附件 | 忽略，不改变扫描完整性 |
 | 前端非 2xx 或 malformed JSON | `ApiRequestError` 安全回退并保留 request ID |
@@ -137,17 +188,34 @@ Authorization/session token、密码、数据库 URL、完整 NAS 路径或音�
   两个并发禁用请求至多成功一个。
 - 基准：重复 POST 已停用目录返回 disabled；管理员随后使用 restore 端点显式恢复。
 - 正确：多碟来源按 `disc_number=1/2` 形成两个 Medium，重扫保持 Track ID。
+- 正确：`sheets/album.cue` 引用 `../media/image.flac` 时，只要两者仍在同一注册根内，
+  虚拟轨会与显式父来源对齐；每轨 provenance 独立，track PERFORMER 不污染相邻轨。
+- 基准：只有 EAC/XLD 明确签名位于 `.log` 前 64 KiB 时补充缺失的 CD 语义；无签名
+  日志保持未知。
+- 正确：一张专辑只有一轨提供 `AlbumArtist`、其余轨只提供各自 Artist 时仍形成一个
+  candidate，Release artist 与 credit 使用明确 `AlbumArtist`；缺失轨不伪造自己的 tag。
+- 正确：已存在的 content-addressed 封面文件被破坏后，重扫按期望字节修复；旧 key
+  清理失败返回 `artwork_failure`，不报告成功。
 - 错误：把 `role` 缺失解释为 admin；把 root 原始路径放入列表 JSON；unsupported
-  文件仍让扫描 succeeded 并执行 missing；忽略 `Exec` 错误后返回 200。
+  文件仍让扫描 succeeded 并执行 missing；把 FIFO 交给 parser；按标题删除 CUE 轨；
+  忽略 `Exec` 错误后返回 200。
 
 ## 6. 必需测试
 
 - 前端 `api.test.ts`：session role 缺失/未知、创建/更新用户、root active/disabled、
   malformed payload 和错误 envelope fallback。
 - 后端单元：终态映射、unsupported 音频候选识别、来源身份规范化和路径 containment。
+- parser/organizer 单元：M4A/WAV 容器有效性、CUE 多 FILE 与跨目录 containment、
+  sheet/track performer provenance、逐轨 map 隔离、inferred track/disc fallback、
+  明确标签优先、缺失 AlbumArtist 兼容与 AlbumArtist 决策优先级，以及 rip log 64 KiB
+  预算和签名要求。
 - PostgreSQL 集成（配置 `ROOMUSIC_TEST_DATABASE_URL` 时）：用户禁用与 session
   原子性、最后管理员/并发保护、未知用户 404、目录幂等与真实状态、扫描 incomplete
-  禁止 missing、多 Medium 与 Track 身份稳定。
+  禁止 missing、多 Medium 与 Track 身份稳定；另需覆盖 staging 清理、候选短事务
+  回滚/部分提交、跨目录 CUE 父来源对齐、CUE legacy identity、regular-file 拒绝、
+  current evidence 替换、受管封面内容重校验、旧 key 清理错误传播和绑定失败清理。
+- 发行 REST/前端：present-only 列表、稳定分页/搜索、attention allowlist、详情事实、
+  管理员 evidence 权限、路径脱敏、nullable/enum/数组上限和 malformed payload。
 - HTTP 中间件：隐式 200、显式状态、错误响应的状态/字节统计，路由模板、耗时、日志
   级别、请求 ID 回写、可选 actor_id 以及敏感字段脱敏；每个请求只能有一个完成事件。
 - 运行门禁：`npm run lint`、`npm run typecheck`、`npm run test`、
