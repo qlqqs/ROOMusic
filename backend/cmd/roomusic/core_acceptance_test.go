@@ -61,6 +61,34 @@ func TestValidateLibraryPathEnforcesRealContainment(t *testing.T) {
 	}
 }
 
+func TestRegisteredRootMustRemainARealDirectory(t *testing.T) {
+	temporaryDirectory := t.TempDir()
+	realParent := filepath.Join(temporaryDirectory, "real-parent")
+	registeredRoot := filepath.Join(realParent, "collection")
+	if err := os.MkdirAll(registeredRoot, 0o755); err != nil {
+		t.Fatalf("create registered root: %v", err)
+	}
+	if !registeredRootAvailable(registeredRoot) {
+		t.Fatal("real registered root was rejected")
+	}
+
+	directLink := filepath.Join(temporaryDirectory, "root-link")
+	if err := os.Symlink(registeredRoot, directLink); err != nil {
+		t.Fatalf("create root symlink: %v", err)
+	}
+	if registeredRootAvailable(directLink) {
+		t.Fatal("registered root replaced by a symlink was accepted")
+	}
+
+	ancestorLink := filepath.Join(temporaryDirectory, "parent-link")
+	if err := os.Symlink(realParent, ancestorLink); err != nil {
+		t.Fatalf("create ancestor symlink: %v", err)
+	}
+	if registeredRootAvailable(filepath.Join(ancestorLink, "collection")) {
+		t.Fatal("registered root below a symlink ancestor was accepted")
+	}
+}
+
 func TestFileSymlinkTargetsMustRemainWithinRoot(t *testing.T) {
 	temporaryDirectory := t.TempDir()
 	allowedRoot := filepath.Join(temporaryDirectory, "music")
@@ -231,6 +259,12 @@ func TestTrackSourceIdentityIsStableOnlyForSameRootAndPath(t *testing.T) {
 	}
 	if _, err := createTrackSourceIdentity("root-one", "../escaped.mp3"); err == nil {
 		t.Fatal("escaping source path was accepted as an identity")
+	}
+	if _, err := createTrackSourceIdentity("root-one", `..\escaped.mp3`); err == nil {
+		t.Fatal("backslash path escape was accepted as an identity")
+	}
+	if _, err := createTrackSourceIdentity("root-one", `C:\music\track.mp3`); err == nil {
+		t.Fatal("drive-qualified source path was accepted as an identity")
 	}
 }
 
