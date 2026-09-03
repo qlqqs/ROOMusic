@@ -1,17 +1,62 @@
 import { describe, expect, it } from "vitest";
 import {
-  decodeApiErrorResponse,
   decodeActiveScan,
+  decodeApiErrorResponse,
   decodeCreatedLibraryRoot,
   decodeLibraryRootList,
   decodeReleaseDetail,
+  decodeReleaseEvidence,
   decodeReleaseList,
   decodeScanCancel,
+  decodeScanDiagnostics,
   decodeScanStart,
   decodeScanStatus,
   decodeSession,
   decodeSetupStatus,
 } from "./api";
+
+const emptyDiagnosticSummary = { total: 0, counts: [] };
+const releaseSummary = {
+  id: "release-1",
+  title: "专辑",
+  artist: "艺术家",
+  album_artist: "专辑艺术家",
+  year: 2026,
+  source_type: null,
+  media_type: "CD",
+  medium_count: 1,
+  track_count: 1,
+  attention_count: 1,
+};
+const releaseDetail = {
+  ...releaseSummary,
+  candidate_kind: "ordinary_directory",
+  genre: null,
+  catalog_number: "CAT-001",
+  artwork: null,
+  credits: [{ role: "album_artist", name: "专辑艺术家" }],
+  evidence: [{ field: "title", source: "tag", confidence: "high", action: "auto_apply", rule_id: "majority_v1" }],
+  media: [{
+    id: "medium-1",
+    position: 1,
+    title: "Medium",
+    tracks: [{
+      id: "track-1",
+      position: 1,
+      title: "曲目",
+      artist: "艺术家",
+      source: "01.flac",
+      source_kind: "flac_vorbis_comment",
+      duration_seconds: 240.5,
+      codec: "flac",
+      bit_depth: 24,
+      sample_rate: 96_000,
+      channels: 2,
+      bitrate: 2_400,
+      cue: null,
+    }],
+  }],
+};
 
 describe("Core 0 API decoders", () => {
   it("decodes setup, session, and library-root contracts", () => {
@@ -32,53 +77,102 @@ describe("Core 0 API decoders", () => {
     expect(() => decodeLibraryRootList({ items: [{ id: "root-1", path: "Music" }] })).toThrow();
   });
 
-  it("distinguishes accepted scans from persisted scan status", () => {
-    const runningScan = { id: "scan-1", scan_run_id: "scan-1", status: "running", started_at: "2026-09-01T08:00:00Z", finished_at: null, cancel_requested_at: null };
+  it("distinguishes scan terminal states and validates diagnostic aggregates", () => {
+    const runningScan = { id: "scan-1", scan_run_id: "scan-1", status: "running", started_at: "2026-09-01T08:00:00Z", finished_at: null, cancel_requested_at: null, diagnostics: emptyDiagnosticSummary };
     expect(decodeScanStart(runningScan)).toEqual(runningScan);
-    expect(decodeScanStatus(runningScan)).toEqual({
-      id: "scan-1",
-      scan_run_id: "scan-1",
-      status: "running",
-      started_at: "2026-09-01T08:00:00Z",
-      finished_at: null,
-      cancel_requested_at: null,
-    });
+    expect(decodeScanStatus(runningScan)).toEqual(runningScan);
     const cancelRequested = { ...runningScan, cancel_requested_at: "2026-09-01T08:01:00Z" };
     expect(decodeScanCancel(cancelRequested)).toEqual(cancelRequested);
     expect(decodeActiveScan({ scan: cancelRequested })).toEqual({ scan: cancelRequested });
     expect(decodeActiveScan({ scan: null })).toEqual({ scan: null });
+
+    expect(decodeScanDiagnostics({
+      summary: { total: 2, counts: [{ kind: "parse_failure", count: 2 }] },
+      items: [{ id: "1", kind: "parse_failure", path: "Album/01.m4a", message: "音频文件解析失败" }],
+    }).summary.total).toBe(2);
     expect(() => decodeScanStatus({ ...runningScan, status: "partially_done" })).toThrow();
-    expect(() => decodeScanStatus({ ...runningScan, started_at: "not-a-date" })).toThrow();
-    expect(() => decodeScanStatus({ ...runningScan, cancel_requested_at: undefined })).toThrow();
+    expect(() => decodeScanStatus({ ...runningScan, diagnostics: undefined })).toThrow();
+    expect(() => decodeScanStatus({ ...runningScan, started_at: "2026" })).toThrow();
+    expect(() => decodeScanDiagnostics({ summary: { total: 2, counts: [{ kind: "parse_failure", count: 1 }] }, items: [] })).toThrow();
+    expect(() => decodeScanDiagnostics({ summary: { total: 1, counts: [{ kind: "parse_failure", count: 1 }] }, items: [{ id: "1", kind: "parse_failure", path: "/srv/private.flac", message: "失败" }] })).toThrow();
   });
 
-  it("decodes paginated releases with stable Medium and Track identities", () => {
+  it("decodes release counts, nullable facts, audio facts, and evidence summaries", () => {
     const releaseList = decodeReleaseList({
-      items: [{ id: "release-1", title: "专辑", artist: "艺术家" }],
+      items: [releaseSummary],
       pagination: { page: 1, page_size: 50, total: 1 },
     });
-    expect(releaseList.pagination.total).toBe(1);
+    expect(releaseList.items[0]?.attention_count).toBe(1);
+    expect(releaseList.items[0]?.source_type).toBeNull();
 
-    const releaseDetail = decodeReleaseDetail({
-      id: "release-1",
-      title: "专辑",
-      artist: "艺术家",
-      media: [{
-        id: "medium-1",
-        position: 1,
-        title: "Medium",
-        tracks: [{ id: "track-1", position: 1, title: "曲目", artist: "艺术家", source: "01.flac" }],
-      }],
-    });
-    expect(releaseDetail.media[0]?.id).toBe("medium-1");
-    expect(releaseDetail.media[0]?.tracks[0]?.id).toBe("track-1");
+    const decodedDetail = decodeReleaseDetail(releaseDetail);
+    expect(decodedDetail.media[0]?.id).toBe("medium-1");
+    expect(decodedDetail.media[0]?.tracks[0]?.bit_depth).toBe(24);
+    expect(decodedDetail.credits[0]?.role).toBe("album_artist");
   });
 
-  it("rejects missing pagination and unstable detail identities", () => {
-    expect(() => decodeReleaseList({ items: [] })).toThrow();
+  it("strictly decodes bounded administrator evidence", () => {
+    const rawEvidence = {
+      release_id: "release-1",
+      fields: [{
+        field: "title",
+        value: "专辑",
+        source: "tag",
+        confidence: "medium",
+        action: "uncertain_apply",
+        rule_id: "majority_v1",
+        candidates: ["专辑", "专辑（重制版）"],
+        reason_code: "inconsistent_candidates",
+      }],
+      grouping: {
+        candidate_kind: "same_dir_split",
+        rule_id: "organizer_v2",
+        source_refs: ["Album/01.flac"],
+        reason_codes: ["title:inconsistent_candidates"],
+      },
+      truncated: false,
+    };
+    const evidence = decodeReleaseEvidence(rawEvidence);
+    expect(evidence.grouping?.source_refs).toEqual(["Album/01.flac"]);
+    expect(evidence.fields[0]?.action).toBe("uncertain_apply");
+
+    expect(() => decodeReleaseEvidence({ ...rawEvidence, grouping: { ...rawEvidence.grouping, source_refs: ["/srv/music/private.flac"] } })).toThrow();
+    expect(() => decodeReleaseEvidence({ ...rawEvidence, grouping: { ...rawEvidence.grouping, source_refs: ["file:///srv/music/private.flac"] } })).toThrow();
+    expect(() => decodeReleaseEvidence({ ...rawEvidence, fields: [{ ...rawEvidence.fields[0], confidence: "certain" }] })).toThrow();
+    expect(() => decodeReleaseEvidence({ ...rawEvidence, fields: [{ ...rawEvidence.fields[0], candidates: Array.from({ length: 21 }, (_, index) => `候选 ${index}`) }] })).toThrow();
+  });
+
+  it("rejects missing fields, unknown enums, and unbounded arrays", () => {
     expect(() => decodeReleaseList({ items: [], pagination: { page: 0, page_size: 50, total: 0 } })).toThrow();
-    expect(() => decodeReleaseDetail({ id: "release-1", title: "专辑", artist: "艺术家", media: [{ id: "", position: 1, title: "Medium", tracks: [] }] })).toThrow();
-    expect(() => decodeReleaseDetail({ id: "release-1", title: "专辑", artist: "艺术家", media: [{ id: "medium-1", position: 1, title: "Medium", tracks: [{ position: 1, title: "曲目", artist: "艺术家", source: "01.flac" }] }] })).toThrow();
+    expect(() => decodeReleaseList({ items: [], pagination: { page: 1, page_size: 101, total: 0 } })).toThrow();
+    expect(() => decodeReleaseList({ items: Array.from({ length: 101 }, () => releaseSummary), pagination: { page: 1, page_size: 100, total: 101 } })).toThrow();
+    expect(() => decodeReleaseDetail({ ...releaseDetail, candidate_kind: "guessed" })).toThrow();
+    expect(() => decodeReleaseDetail({ ...releaseDetail, evidence: [{ ...releaseDetail.evidence[0], action: "confirmed" }] })).toThrow();
+    expect(() => decodeReleaseDetail({ ...releaseDetail, media: [{ ...releaseDetail.media[0], id: "" }] })).toThrow();
+    expect(() => decodeReleaseDetail({ ...releaseDetail, media: [{ ...releaseDetail.media[0], tracks: [{ ...releaseDetail.media[0].tracks[0], id: undefined }] }] })).toThrow();
+    const boundaryTracks = Array.from({ length: 10_000 }, (_, trackIndex) => ({
+      ...releaseDetail.media[0].tracks[0],
+      id: `track-${trackIndex}`,
+    }));
+    const boundaryMedium = {
+      ...releaseDetail.media[0],
+      tracks: boundaryTracks,
+    };
+    expect(decodeReleaseDetail({
+      ...releaseDetail,
+      media: [boundaryMedium],
+    }).media[0]?.tracks).toHaveLength(10_000);
+    expect(() => decodeReleaseDetail({
+      ...releaseDetail,
+      media: [boundaryMedium, {
+        ...releaseDetail.media[0],
+        id: "medium-overflow",
+        tracks: [{
+          ...releaseDetail.media[0].tracks[0],
+          id: "track-overflow",
+        }],
+      }],
+    })).toThrow();
   });
 
   it("uses a safe fallback for malformed API errors", () => {
@@ -90,5 +184,10 @@ describe("Core 0 API decoders", () => {
     const classifiedError = decodeApiErrorResponse({ error: { code: "permission_denied", message: "无权访问" }, request_id: "req-1" }, null);
     expect(classifiedError.code).toBe("permission_denied");
     expect(classifiedError.requestID).toBe("req-1");
+
+    const oversizedError = decodeApiErrorResponse({ error: { code: "x".repeat(4_097), message: "x".repeat(4_097) }, request_id: "x".repeat(4_097) }, "req-fallback");
+    expect(oversizedError.code).toBe("request_failed");
+    expect(oversizedError.message).toBe("请求失败");
+    expect(oversizedError.requestID).toBe("req-fallback");
   });
 });
