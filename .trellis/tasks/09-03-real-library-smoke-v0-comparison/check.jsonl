@@ -1,0 +1,14 @@
+{"file":".trellis/spec/guides/real-music-assets.md","reason":"复核真实资产只读挂载、前后摘要、默认跳过和隐私边界。"}
+{"file":".trellis/spec/guides/product-goals.md","reason":"复核实现未把 V0 runtime、Redis/Meilisearch 或文件写入变成当前产品依赖。"}
+{"file":".trellis/spec/guides/modular-design.md","reason":"复核 smoke adapter、scanner policy、数据库和 REST owner 未错误耦合。"}
+{"file":".trellis/spec/guides/engineering-principles.md","reason":"复核变更最小完整且覆盖主要危险失败路径。"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"检查没有复制现有 path/scan policy 或不加验证地迁入 V0 helper。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核 corpus、两套 scanner、数据库、REST、snapshot 和 diff 的字段/状态闭环。"}
+{"file":".trellis/spec/backend/index.md","reason":"执行后端权限、路径、数据库、错误、日志和质量总检查。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"检查只读查询、隔离数据库、事务、幂等和迁移安全。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"检查非成功 scan 不被当通过、错误有界且清理路径安全。"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"检查报告/日志无绝对音乐路径、凭据、逐文件清单或原始 metadata。"}
+{"file":".trellis/spec/backend/core0-runtime-contracts.md","reason":"检查当前正式扫描、取消、终态和 REST 投影未回归。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"执行 shell、Compose、Go、PostgreSQL、并发和只读安全质量门禁。"}
+{"file":".trellis/tasks/09-03-real-library-smoke-v0-comparison/research/v0-baseline-inventory.md","reason":"核对实际基准身份与用户确认的 V0 corrected generation 决策一致。"}
+{"file":".trellis/tasks/archive/2026-09/09-03-album-scan-repair/research/v0-reference-and-current-gaps.md","reason":"对照既有 V0 行为研究，检查问题分类和修复 owner 是否正确。"}

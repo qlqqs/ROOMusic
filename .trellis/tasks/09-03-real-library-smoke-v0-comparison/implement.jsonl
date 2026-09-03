@@ -1,0 +1,14 @@
+{"file":".trellis/spec/guides/real-music-assets.md","reason":"约束真实 music 资产只读、显式验证、CI 隔离和信息披露边界。"}
+{"file":".trellis/spec/guides/product-goals.md","reason":"保持 Core 0 只读扫描、PostgreSQL authority 和阶段范围。"}
+{"file":".trellis/spec/guides/modular-design.md","reason":"明确 smoke 工具、scanner、catalog、数据库与 REST 的所有权边界。"}
+{"file":".trellis/spec/guides/engineering-principles.md","reason":"指导最小完整实现、危险失败路径和按风险验证。"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"复用当前扫描/路径政策 owner，避免复制 V0 runtime 或创建宽泛 helper。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"跟踪只读文件系统到 scanner、PostgreSQL、REST 和 canonical diff 的完整数据流。"}
+{"file":".trellis/spec/backend/index.md","reason":"加载当前后端 Core 0 边界和实施前后检查清单。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"约束隔离 PostgreSQL、短事务、显式查询、迁移和重扫幂等。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"定义 scan 终态、bounded diagnostics、取消/失败和安全错误。"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"确保 smoke 日志与报告聚合、关联且不泄露路径、凭据或 metadata。"}
+{"file":".trellis/spec/backend/core0-runtime-contracts.md","reason":"保持当前正式 setup/root/scan/REST、协调锁和 complete-only missing 合同。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"提供 scanner、PostgreSQL、路径、并发和部署定义的最小测试门槛。"}
+{"file":".trellis/tasks/09-03-real-library-smoke-v0-comparison/research/v0-baseline-inventory.md","reason":"提供 V0 数据盘点、固定归档身份、用户确认的 corrected generation 语义和重建可行性。"}
+{"file":".trellis/tasks/archive/2026-09/09-03-album-scan-repair/research/v0-reference-and-current-gaps.md","reason":"提供已验证的 V0 scanner 行为参考和当前 parser/organizer/persistence 差异背景。"}
