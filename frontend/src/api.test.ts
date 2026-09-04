@@ -33,6 +33,9 @@ const releaseDetail = {
   candidate_kind: "ordinary_directory",
   genre: null,
   catalog_number: "CAT-001",
+  edition: "初回限定版",
+  label: "示例唱片公司",
+  barcode: "0123456789012",
   artwork: null,
   credits: [{ role: "album_artist", name: "专辑艺术家" }],
   evidence: [{ field: "title", source: "tag", confidence: "high", action: "auto_apply", rule_id: "majority_v1" }],
@@ -54,6 +57,7 @@ const releaseDetail = {
       channels: 2,
       bitrate: 2_400,
       cue: null,
+      credits: [{ role: "composer", name: "作曲者" }],
     }],
   }],
 };
@@ -108,7 +112,11 @@ describe("Core 0 API decoders", () => {
     const decodedDetail = decodeReleaseDetail(releaseDetail);
     expect(decodedDetail.media[0]?.id).toBe("medium-1");
     expect(decodedDetail.media[0]?.tracks[0]?.bit_depth).toBe(24);
+    expect(decodedDetail.media[0]?.tracks[0]?.credits[0]?.role).toBe("composer");
     expect(decodedDetail.credits[0]?.role).toBe("album_artist");
+    expect(decodedDetail.edition).toBe("初回限定版");
+    expect(decodedDetail.label).toBe("示例唱片公司");
+    expect(decodedDetail.barcode).toBe("0123456789012");
   });
 
   it("strictly decodes bounded administrator evidence", () => {
@@ -150,6 +158,22 @@ describe("Core 0 API decoders", () => {
     expect(() => decodeReleaseDetail({ ...releaseDetail, evidence: [{ ...releaseDetail.evidence[0], action: "confirmed" }] })).toThrow();
     expect(() => decodeReleaseDetail({ ...releaseDetail, media: [{ ...releaseDetail.media[0], id: "" }] })).toThrow();
     expect(() => decodeReleaseDetail({ ...releaseDetail, media: [{ ...releaseDetail.media[0], tracks: [{ ...releaseDetail.media[0].tracks[0], id: undefined }] }] })).toThrow();
+    expect(() => decodeReleaseDetail({ ...releaseDetail, edition: undefined })).toThrow();
+    expect(() => decodeReleaseDetail({ ...releaseDetail, media: [{ ...releaseDetail.media[0], tracks: [{ ...releaseDetail.media[0].tracks[0], credits: undefined }] }] })).toThrow();
+    expect(() => decodeReleaseDetail({ ...releaseDetail, media: [{ ...releaseDetail.media[0], tracks: [{ ...releaseDetail.media[0].tracks[0], credits: [{ role: "arranger", name: "编曲者" }] }] }] })).toThrow();
+    expect(() => decodeReleaseDetail({ ...releaseDetail, media: [{ ...releaseDetail.media[0], tracks: [{ ...releaseDetail.media[0].tracks[0], credits: Array.from({ length: 101 }, (_, index) => ({ role: "composer", name: `作曲者 ${index}` })) }] }] })).toThrow();
+    const hundredCredits = Array.from({ length: 100 }, (_, index) => ({ role: "composer", name: `作曲者 ${index}` }));
+    expect(() => decodeReleaseDetail({
+      ...releaseDetail,
+      media: [{
+        ...releaseDetail.media[0],
+        tracks: Array.from({ length: 101 }, (_, trackIndex) => ({
+          ...releaseDetail.media[0].tracks[0],
+          id: `credited-track-${trackIndex}`,
+          credits: hundredCredits,
+        })),
+      }],
+    })).toThrow();
     const boundaryTracks = Array.from({ length: 10_000 }, (_, trackIndex) => ({
       ...releaseDetail.media[0].tracks[0],
       id: `track-${trackIndex}`,

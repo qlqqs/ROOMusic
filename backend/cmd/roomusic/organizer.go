@@ -23,6 +23,9 @@ type sourceObservation struct {
 	MediaType       string            `json:"media_type,omitempty"`
 	Genre           string            `json:"genre,omitempty"`
 	CatalogNumber   string            `json:"catalog_number,omitempty"`
+	Edition         string            `json:"edition,omitempty"`
+	Label           string            `json:"label,omitempty"`
+	Barcode         string            `json:"barcode,omitempty"`
 	Year            int               `json:"year,omitempty"`
 	TrackNumber     int               `json:"track_number,omitempty"`
 	DiscNumber      int               `json:"disc_number,omitempty"`
@@ -37,17 +40,23 @@ type sourceObservation struct {
 	Bitrate         int               `json:"bitrate,omitempty"`
 
 	// CUE 事实只保存安全的相对引用；虚拟轨身份包含 sheet、父来源、轨号与 INDEX 01。
-	CueSheetPath          string   `json:"cue_sheet_path,omitempty"`
-	CueParentRelativePath string   `json:"cue_parent_relative_path,omitempty"`
-	CueReferencedFile     string   `json:"cue_referenced_file,omitempty"`
-	CueIndexFrames        int      `json:"cue_index_frames,omitempty"`
-	CueIndexPresent       bool     `json:"cue_index_present,omitempty"`
-	CueEndFrames          int      `json:"cue_end_frames,omitempty"`
-	CueEndPresent         bool     `json:"cue_end_present,omitempty"`
-	CueISRC               string   `json:"cue_isrc,omitempty"`
-	Artwork               []byte   `json:"artwork,omitempty"`
-	ArtworkMIME           string   `json:"artwork_mime,omitempty"`
-	RelatedSourceRefs     []string `json:"related_source_refs,omitempty"`
+	CueSheetPath          string              `json:"cue_sheet_path,omitempty"`
+	CueParentRelativePath string              `json:"cue_parent_relative_path,omitempty"`
+	CueReferencedFile     string              `json:"cue_referenced_file,omitempty"`
+	CueIndexFrames        int                 `json:"cue_index_frames,omitempty"`
+	CueIndexPresent       bool                `json:"cue_index_present,omitempty"`
+	CueEndFrames          int                 `json:"cue_end_frames,omitempty"`
+	CueEndPresent         bool                `json:"cue_end_present,omitempty"`
+	CueISRC               string              `json:"cue_isrc,omitempty"`
+	Artwork               []byte              `json:"artwork,omitempty"`
+	ArtworkMIME           string              `json:"artwork_mime,omitempty"`
+	RelatedSourceRefs     []string            `json:"related_source_refs,omitempty"`
+	Credits               []creditObservation `json:"credits,omitempty"`
+}
+
+type creditObservation struct {
+	Role string `json:"role"`
+	Name string `json:"name"`
 }
 
 func (o sourceObservation) fieldObservations() []fieldObservation {
@@ -62,7 +71,7 @@ func (o sourceObservation) fieldObservations() []fieldObservation {
 	if o.Year > 0 {
 		fields = append(fields, fieldObservation{Name: "year", Value: strconv.Itoa(o.Year)})
 	}
-	for _, optional := range []fieldObservation{{Name: "source_type", Value: o.SourceType}, {Name: "media_type", Value: o.MediaType}, {Name: "genre", Value: o.Genre}, {Name: "catalog_number", Value: o.CatalogNumber}, {Name: "isrc", Value: o.CueISRC}} {
+	for _, optional := range []fieldObservation{{Name: "source_type", Value: o.SourceType}, {Name: "media_type", Value: o.MediaType}, {Name: "genre", Value: o.Genre}, {Name: "catalog_number", Value: o.CatalogNumber}, {Name: "edition", Value: o.Edition}, {Name: "label", Value: o.Label}, {Name: "barcode", Value: o.Barcode}, {Name: "isrc", Value: o.CueISRC}} {
 		if optional.Value != "" {
 			fields = append(fields, optional)
 		}
@@ -121,6 +130,7 @@ type organizedCandidate struct {
 	GroupingRefs               []string
 	SourceType, MediaType      string
 	Genre, CatalogNumber       string
+	Edition, Label, Barcode    string
 }
 
 const unknownCandidateTitle = "未知专辑"
@@ -264,6 +274,12 @@ func fieldValue(o sourceObservation, field string) string {
 		return o.Genre
 	case "catalog_number":
 		return o.CatalogNumber
+	case "edition":
+		return o.Edition
+	case "label":
+		return o.Label
+	case "barcode":
+		return o.Barcode
 	case "source_type":
 		return o.SourceType
 	case "media_type":
@@ -363,6 +379,60 @@ func chooseReleaseArtist(observations []sourceObservation) fieldDecision {
 		return chooseValue(withAlbumArtist, "artist", func(observation sourceObservation) string { return observation.AlbumArtist })
 	}
 	return chooseValue(observations, "artist", func(observation sourceObservation) string { return observation.Artist })
+}
+
+// appendFolderDecisionObservation 在候选边界已经确定后补充目录名证据，避免目录名
+// 改变来源身份或把本应分开的候选重新归组。每个字段只有在标签/CUE 没有权威值时才补充。
+func appendFolderDecisionObservation(observations []sourceObservation, scope string) []sourceObservation {
+	scope = normalizedPath(scope)
+	if scope == "" {
+		return observations
+	}
+	metadata, matched := parseFolderMetadata(filepath.Base(filepath.FromSlash(scope)))
+	if !matched {
+		return observations
+	}
+	folder := sourceObservation{
+		SourceKind:     "folder",
+		InferredFields: map[string]bool{},
+		FieldSources:   map[string]string{},
+	}
+	setText := func(field, value string, target *string) {
+		if normalizeValue(value) == "" || hasAuthoritativeObservationValue(observations, field) {
+			return
+		}
+		*target = value
+		folder.FieldSources[field] = "folder"
+	}
+	setText("album", metadata.Album, &folder.Album)
+	setText("album_artist", metadata.AlbumArtist, &folder.AlbumArtist)
+	setText("source_type", metadata.SourceType, &folder.SourceType)
+	setText("media_type", metadata.MediaType, &folder.MediaType)
+	setText("catalog_number", metadata.Catalog, &folder.CatalogNumber)
+	setText("edition", metadata.Edition, &folder.Edition)
+	setText("label", metadata.Label, &folder.Label)
+	if metadata.Year > 0 && !hasAuthoritativeObservationValue(observations, "year") {
+		folder.Year = metadata.Year
+		folder.FieldSources["year"] = "folder"
+	}
+	if len(folder.FieldSources) == 0 {
+		return observations
+	}
+	result := append([]sourceObservation(nil), observations...)
+	return append(result, folder)
+}
+
+func hasAuthoritativeObservationValue(observations []sourceObservation, field string) bool {
+	provenanceField := field
+	if field == "title" {
+		provenanceField = "album"
+	}
+	for _, observation := range observations {
+		if normalizeValue(fieldValue(observation, provenanceField)) != "" && !observation.InferredFields[provenanceField] {
+			return true
+		}
+	}
+	return false
 }
 
 // organizeObservations 以确定性纯规则把 observations 归为 Release candidates；
@@ -561,21 +631,31 @@ func organizeObservations(observations []sourceObservation) []organizedCandidate
 		obs := b.obs
 		sort.Slice(obs, func(i, j int) bool { return observationSortKey(obs[i]) < observationSortKey(obs[j]) })
 		c := organizedCandidate{Anchor: candidateAnchor{Kind: b.kind, Scope: b.scope, Partition: stableAnchorPartition(b.kind, b.partition, obs)}, ReleaseGroupKey: key, Mediums: map[int][]organizedTrack{}}
-		albumDecision := chooseValue(obs, "title", func(o sourceObservation) string { return o.Album })
-		if b.kind == candidateMultiDisc && !hasAuthoritativeAlbum(obs) {
+		folderDecisionScope := b.scope
+		if b.kind == candidateMultiDisc && len(obs) > 0 {
+			// V0 的严格多碟候选使用首个物理碟目录的 folder evidence，父目录只负责
+			// 归组和缺失标题 fallback，不能额外制造 catalog 等高置信度字段。
+			folderDecisionScope = directoryOf(obs[0].RelativePath)
+		}
+		decisionObservations := appendFolderDecisionObservation(obs, folderDecisionScope)
+		albumDecision := chooseValue(decisionObservations, "title", func(o sourceObservation) string { return o.Album })
+		if b.kind == candidateMultiDisc && !hasAuthoritativeAlbum(decisionObservations) {
 			if fallback := normalizeValue(filepath.Base(filepath.FromSlash(b.scope))); fallback != "" && fallback != "." {
 				albumDecision = fieldDecision{Field: "title", Value: fallback, Source: "folder_fallback", Confidence: "low", Action: "uncertain_apply", RuleID: "multidisc_parent_fallback_v1", Reason: "inferred_value", Candidates: []string{fallback}}
 			}
 		}
-		artistDecision := chooseReleaseArtist(obs)
-		albumArtistDecision := chooseValue(obs, "album_artist", func(o sourceObservation) string { return o.AlbumArtist })
-		yearDecision := chooseValue(obs, "year", func(o sourceObservation) string { return fieldValue(o, "year") })
-		sourceDecision := chooseValue(obs, "source_type", func(o sourceObservation) string { return o.SourceType })
-		mediaDecision := chooseValue(obs, "media_type", func(o sourceObservation) string { return o.MediaType })
-		genreDecision := chooseValue(obs, "genre", func(o sourceObservation) string { return o.Genre })
-		catalogDecision := chooseValue(obs, "catalog_number", func(o sourceObservation) string { return o.CatalogNumber })
+		artistDecision := chooseReleaseArtist(decisionObservations)
+		albumArtistDecision := chooseValue(decisionObservations, "album_artist", func(o sourceObservation) string { return o.AlbumArtist })
+		yearDecision := chooseValue(decisionObservations, "year", func(o sourceObservation) string { return fieldValue(o, "year") })
+		sourceDecision := chooseValue(decisionObservations, "source_type", func(o sourceObservation) string { return o.SourceType })
+		mediaDecision := chooseValue(decisionObservations, "media_type", func(o sourceObservation) string { return o.MediaType })
+		genreDecision := chooseValue(decisionObservations, "genre", func(o sourceObservation) string { return o.Genre })
+		catalogDecision := chooseValue(decisionObservations, "catalog_number", func(o sourceObservation) string { return o.CatalogNumber })
+		editionDecision := chooseValue(decisionObservations, "edition", func(o sourceObservation) string { return o.Edition })
+		labelDecision := chooseValue(decisionObservations, "label", func(o sourceObservation) string { return o.Label })
+		barcodeDecision := chooseValue(decisionObservations, "barcode", func(o sourceObservation) string { return o.Barcode })
 		c.Decisions = []fieldDecision{albumDecision, artistDecision}
-		for _, optionalDecision := range []fieldDecision{albumArtistDecision, yearDecision, sourceDecision, mediaDecision, genreDecision, catalogDecision} {
+		for _, optionalDecision := range []fieldDecision{albumArtistDecision, yearDecision, sourceDecision, mediaDecision, genreDecision, catalogDecision, editionDecision, labelDecision, barcodeDecision} {
 			if optionalDecision.Value != "" {
 				c.Decisions = append(c.Decisions, optionalDecision)
 			}
@@ -590,6 +670,9 @@ func organizeObservations(observations []sourceObservation) []organizedCandidate
 		c.MediaType = mediaDecision.Value
 		c.Genre = genreDecision.Value
 		c.CatalogNumber = catalogDecision.Value
+		c.Edition = editionDecision.Value
+		c.Label = labelDecision.Value
+		c.Barcode = barcodeDecision.Value
 		// Attention 只保存独立的归组问题；字段不确定性已由 release_field_decisions 表达，
 		// 不应再写入 grouping reason 导致 REST 重复计数。
 		if b.kind == candidateSameDirSplit {
@@ -702,14 +785,40 @@ func applyRipLogEvidence(candidate *organizedCandidate, sourceRefs []string) {
 	decision := func(field string) fieldDecision {
 		return fieldDecision{Field: field, Value: "CD", Source: "rip_log", Confidence: "high", Action: "auto_apply", RuleID: "rip_log_cd_v1", Candidates: []string{"CD"}}
 	}
-	if candidate.SourceType == "" {
-		candidate.SourceType = "CD"
-		candidate.Decisions = append(candidate.Decisions, decision("source_type"))
+	apply := func(field string, target *string) {
+		index := -1
+		for i := range candidate.Decisions {
+			if candidate.Decisions[i].Field == field {
+				index = i
+				break
+			}
+		}
+		if *target != "" || index >= 0 {
+			if index < 0 || candidate.Decisions[index].Source != "folder" {
+				return
+			}
+		}
+		*target = "CD"
+		next := decision(field)
+		updated := make([]fieldDecision, 0, len(candidate.Decisions)+1)
+		replaced := false
+		for _, existing := range candidate.Decisions {
+			if existing.Field != field {
+				updated = append(updated, existing)
+				continue
+			}
+			if !replaced {
+				updated = append(updated, next)
+				replaced = true
+			}
+		}
+		if !replaced {
+			updated = append(updated, next)
+		}
+		candidate.Decisions = updated
 	}
-	if candidate.MediaType == "" {
-		candidate.MediaType = "CD"
-		candidate.Decisions = append(candidate.Decisions, decision("media_type"))
-	}
+	apply("source_type", &candidate.SourceType)
+	apply("media_type", &candidate.MediaType)
 }
 
 func mergeEvidenceRefs(groups ...[]string) []string {

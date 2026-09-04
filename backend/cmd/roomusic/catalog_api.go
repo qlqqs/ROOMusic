@@ -18,6 +18,8 @@ const (
 	maxReleaseMedia         = 256
 	maxReleaseTrackRows     = 10000
 	maxReleaseCredits       = 100
+	maxTrackCredits         = 100
+	maxReleaseTrackCredits  = 10000
 	maxReleaseEvidence      = 100
 	maxEvidenceCandidates   = 20
 	maxEvidenceSourceRefs   = 100
@@ -91,19 +93,20 @@ type releaseCueDTO struct {
 }
 
 type releaseTrackDTO struct {
-	ID              string         `json:"id"`
-	Title           string         `json:"title"`
-	Artist          string         `json:"artist"`
-	Position        int            `json:"position"`
-	Source          string         `json:"source"`
-	SourceKind      string         `json:"source_kind"`
-	DurationSeconds *float64       `json:"duration_seconds"`
-	Codec           *string        `json:"codec"`
-	BitDepth        *int           `json:"bit_depth"`
-	SampleRate      *int           `json:"sample_rate"`
-	Channels        *int           `json:"channels"`
-	Bitrate         *int           `json:"bitrate"`
-	Cue             *releaseCueDTO `json:"cue"`
+	ID              string             `json:"id"`
+	Title           string             `json:"title"`
+	Artist          string             `json:"artist"`
+	Position        int                `json:"position"`
+	Source          string             `json:"source"`
+	SourceKind      string             `json:"source_kind"`
+	DurationSeconds *float64           `json:"duration_seconds"`
+	Codec           *string            `json:"codec"`
+	BitDepth        *int               `json:"bit_depth"`
+	SampleRate      *int               `json:"sample_rate"`
+	Channels        *int               `json:"channels"`
+	Bitrate         *int               `json:"bitrate"`
+	Cue             *releaseCueDTO     `json:"cue"`
+	Credits         []releaseCreditDTO `json:"credits"`
 }
 
 type releaseMediumDTO struct {
@@ -138,6 +141,9 @@ type releaseDetailDTO struct {
 	CandidateKind string                      `json:"candidate_kind"`
 	Genre         *string                     `json:"genre"`
 	CatalogNumber *string                     `json:"catalog_number"`
+	Edition       *string                     `json:"edition"`
+	Label         *string                     `json:"label"`
+	Barcode       *string                     `json:"barcode"`
 	Media         []releaseMediumDTO          `json:"media"`
 	Credits       []releaseCreditDTO          `json:"credits"`
 	Artwork       *releaseArtworkDTO          `json:"artwork"`
@@ -329,8 +335,15 @@ func (application *roomusicApplication) releaseDetail(responseWriter http.Respon
 		application.writeReleaseLoadError(responseWriter, request, err)
 		return
 	}
-	var candidateKind, genre, catalogNumber sql.NullString
-	err = application.database.connection.QueryRowContext(request.Context(), `SELECT candidate_kind,NULLIF(BTRIM(genre),''),NULLIF(BTRIM(catalog_number),'') FROM releases WHERE id=$1::uuid`, releaseID).Scan(&candidateKind, &genre, &catalogNumber)
+	var candidateKind, genre, catalogNumber, edition, label, barcode sql.NullString
+	err = application.database.connection.QueryRowContext(request.Context(), `SELECT
+		candidate_kind,
+		NULLIF(BTRIM(genre),''),
+		NULLIF(BTRIM(catalog_number),''),
+		NULLIF(BTRIM(edition),''),
+		NULLIF(BTRIM(label),''),
+		NULLIF(BTRIM(barcode),'')
+		FROM releases WHERE id=$1::uuid`, releaseID).Scan(&candidateKind, &genre, &catalogNumber, &edition, &label, &barcode)
 	if err != nil {
 		writeAPIError(responseWriter, request, http.StatusServiceUnavailable, "database_unavailable", "无法读取发行版本详情")
 		return
@@ -362,6 +375,9 @@ func (application *roomusicApplication) releaseDetail(responseWriter http.Respon
 		CandidateKind:     normalizeCandidateKind(candidateKind.String),
 		Genre:             stringPointerFromNull(genre),
 		CatalogNumber:     stringPointerFromNull(catalogNumber),
+		Edition:           stringPointerFromNull(edition),
+		Label:             stringPointerFromNull(label),
+		Barcode:           stringPointerFromNull(barcode),
 		Media:             media,
 		Credits:           credits,
 		Artwork:           artwork,
@@ -401,6 +417,11 @@ func (application *roomusicApplication) loadReleaseMedia(ctx context.Context, re
 	defer rows.Close()
 	media := make([]releaseMediumDTO, 0)
 	mediumIndexes := make(map[string]int)
+	type trackLocation struct {
+		medium int
+		track  int
+	}
+	trackLocations := make(map[string]trackLocation)
 	rowCount := 0
 	for rows.Next() {
 		rowCount++
@@ -442,6 +463,7 @@ func (application *roomusicApplication) loadReleaseMedia(ctx context.Context, re
 			SampleRate:      intPointerFromNull(sampleRate),
 			Channels:        intPointerFromNull(channels),
 			Bitrate:         intPointerFromNull(bitrate),
+			Credits:         []releaseCreditDTO{},
 		}
 		if strings.Contains(strings.ToLower(sourceKind), "cue") || cueIndex.Valid || cueEnd.Valid || isrc.Valid {
 			track.Cue = &releaseCueDTO{
@@ -458,9 +480,51 @@ func (application *roomusicApplication) loadReleaseMedia(ctx context.Context, re
 				track.Cue.EndSeconds = &seconds
 			}
 		}
+		trackIndex := len(media[mediumIndex].Tracks)
 		media[mediumIndex].Tracks = append(media[mediumIndex].Tracks, track)
+		trackLocations[trackID] = trackLocation{medium: mediumIndex, track: trackIndex}
 	}
 	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	creditRows, err := application.database.connection.QueryContext(ctx, `SELECT
+		t.id::text,c.role,c.name
+		FROM track_credits c
+		JOIN tracks t ON t.id=c.track_id AND t.source_status='present'
+		JOIN media m ON m.id=t.medium_id
+		WHERE m.release_id=$1::uuid
+		ORDER BY m.position,m.id,t.position,t.id,c.position,c.role,c.name
+		LIMIT $2`, releaseID, maxReleaseTrackCredits+1)
+	if err != nil {
+		return nil, err
+	}
+	defer creditRows.Close()
+	creditCounts := make(map[string]int)
+	totalCredits := 0
+	for creditRows.Next() {
+		if totalCredits == maxReleaseTrackCredits {
+			return nil, errors.New("release track credit projection exceeds bound")
+		}
+		var trackID string
+		var credit releaseCreditDTO
+		if err := creditRows.Scan(&trackID, &credit.Role, &credit.Name); err != nil {
+			return nil, err
+		}
+		location, exists := trackLocations[trackID]
+		if !exists {
+			return nil, errors.New("track credit projection references an unavailable track")
+		}
+		if creditCounts[trackID] == maxTrackCredits {
+			return nil, errors.New("track credit projection exceeds per-track bound")
+		}
+		media[location.medium].Tracks[location.track].Credits = append(
+			media[location.medium].Tracks[location.track].Credits,
+			credit,
+		)
+		creditCounts[trackID]++
+		totalCredits++
+	}
+	if err := creditRows.Err(); err != nil {
 		return nil, err
 	}
 	return media, nil

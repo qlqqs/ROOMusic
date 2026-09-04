@@ -43,6 +43,10 @@ type audioObservation struct {
 	ISRC                    string
 	SourceType              string
 	MediaType               string
+	Edition                 string
+	Label                   string
+	Barcode                 string
+	Credits                 []creditObservation
 	RawAtoms                map[string]string
 }
 
@@ -553,6 +557,13 @@ func parseM4AItem(reader io.ReaderAt, atom m4aAtom, observation *audioObservatio
 	itemType := atom.Type
 	// iTunes item 包含一个或多个 data 子 atom；只读取有界区域，封面也受同一预算限制。
 	children := 0
+	freeformMean := ""
+	freeformName := ""
+	type itemData struct {
+		value    []byte
+		typeCode [4]byte
+	}
+	values := make([]itemData, 0, 1)
 	for offset := atom.PayloadStart; offset < atom.End; {
 		children++
 		if children > 64 {
@@ -562,7 +573,8 @@ func parseM4AItem(reader io.ReaderAt, atom m4aAtom, observation *audioObservatio
 		if err != nil {
 			return err
 		}
-		if child.Type == "data" {
+		switch child.Type {
+		case "data":
 			if budgetErr := consumeM4AMetadataBudget(budget, child.End-child.PayloadStart); budgetErr != nil {
 				return budgetErr
 			}
@@ -571,11 +583,37 @@ func parseM4AItem(reader io.ReaderAt, atom m4aAtom, observation *audioObservatio
 				return payloadErr
 			}
 			if len(payload) >= 8 {
-				value := payload[8:]
-				parseM4AItemValue(itemType, value, payload[:4], observation)
+				var code [4]byte
+				copy(code[:], payload[:4])
+				values = append(values, itemData{value: append([]byte(nil), payload[8:]...), typeCode: code})
+			}
+		case "mean", "name":
+			payloadSize := child.End - child.PayloadStart
+			if budgetErr := consumeM4AMetadataBudget(budget, payloadSize); budgetErr != nil {
+				return budgetErr
+			}
+			payload, payloadErr := readM4AAtomPayload(reader, child, maxAudioTextBytes+4)
+			if payloadErr != nil {
+				return payloadErr
+			}
+			if len(payload) < 4 {
+				return errors.New("truncated M4A freeform metadata")
+			}
+			text := decodeM4AText(payload[4:], 1)
+			if child.Type == "mean" {
+				freeformMean = text
+			} else {
+				freeformName = text
 			}
 		}
 		offset = child.End
+	}
+	for _, value := range values {
+		if itemType == "----" {
+			parseM4AFreeformValue(freeformMean, freeformName, value.value, value.typeCode[:], observation)
+			continue
+		}
+		parseM4AItemValue(itemType, value.value, value.typeCode[:], observation)
 	}
 	return nil
 }
@@ -631,8 +669,40 @@ func parseM4AItemValue(itemType string, value, typeCode []byte, observation *aud
 		observation.Genre = text
 	case "\xa9day":
 		observation.Year = parseYear(text)
+	case "\xa9wrt":
+		addObservationCredits(observation, "composer", text)
 	case "\xa9cmt":
 		// 评论仅作为 RawAtoms 证据保留，不映射到当前观察合同未拥有的业务字段。
+	}
+}
+
+func parseM4AFreeformValue(mean, name string, value, typeCode []byte, observation *audioObservation) {
+	if mean != "com.apple.iTunes" || observation == nil {
+		return
+	}
+	text := decodeM4AText(value, binary.BigEndian.Uint32(typeCode))
+	if text == "" {
+		return
+	}
+	name = strings.ToUpper(strings.TrimSpace(name))
+	switch name {
+	case "LABEL":
+		if observation.Label == "" {
+			observation.Label = text
+		}
+	case "UPC":
+		if observation.Barcode == "" {
+			observation.Barcode = text
+		}
+	default:
+		return
+	}
+	if observation.RawAtoms == nil {
+		observation.RawAtoms = make(map[string]string)
+	}
+	key := "----:" + name
+	if _, present := observation.RawAtoms[key]; present || len(observation.RawAtoms) < maxM4ARawAtoms {
+		observation.RawAtoms[key] = text
 	}
 }
 
@@ -1576,6 +1646,7 @@ func parseMP3(path string) (audioObservation, error) {
 	if _, err = io.ReadFull(file, header); err != nil {
 		return observation, fmt.Errorf("invalid MP3 stream")
 	}
+	audioStart := int64(0)
 	if string(header[:3]) == "ID3" {
 		size := 10 + int(header[6]&0x7f)<<21 + int(header[7]&0x7f)<<14 + int(header[8]&0x7f)<<7 + int(header[9]&0x7f)
 		if size > 16<<20 {
@@ -1586,8 +1657,15 @@ func parseMP3(path string) (audioObservation, error) {
 			return observation, err
 		}
 		parseID3Frames(data, &observation)
+		audioStart = int64(size)
+		if header[5]&0x10 != 0 {
+			audioStart += 10
+		}
 	} else if header[0] != 0xff || header[1]&0xe0 != 0xe0 {
 		return observation, fmt.Errorf("invalid MP3 stream")
+	}
+	if info, statErr := file.Stat(); statErr == nil {
+		applyMP3AudioFacts(file, info.Size(), audioStart, &observation)
 	}
 	return applyFilenameFallback(path, observation), nil
 }
@@ -1609,7 +1687,7 @@ func parseID3Frames(data []byte, observation *audioObservation) {
 			}
 			continue
 		}
-		if frameID != "TIT2" && frameID != "TPE1" && frameID != "TPE2" && frameID != "TALB" && frameID != "TRCK" && frameID != "TPOS" && frameID != "TCON" && frameID != "TDRC" && frameID != "TYER" && frameID != "TSRC" {
+		if frameID != "TIT2" && frameID != "TPE1" && frameID != "TPE2" && frameID != "TPE3" && frameID != "TALB" && frameID != "TRCK" && frameID != "TPOS" && frameID != "TCON" && frameID != "TDRC" && frameID != "TYER" && frameID != "TSRC" && frameID != "TCOM" && frameID != "TPUB" {
 			continue
 		}
 		if len(frame) < 2 {
@@ -1635,8 +1713,85 @@ func parseID3Frames(data []byte, observation *audioObservation) {
 			observation.Year = parseYear(value)
 		case "TSRC":
 			observation.ISRC = value
+		case "TCOM":
+			addObservationCredits(observation, "composer", value)
+		case "TPE3":
+			addObservationCredits(observation, "conductor", value)
+		case "TPUB":
+			observation.Label = value
 		}
 	}
+}
+
+const maxMP3FrameSearchBytes = 64 << 10
+
+var (
+	mp3MPEG1Layer3Bitrates = [16]int{0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0}
+	mp3MPEG2Layer3Bitrates = [16]int{0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0}
+	mp3MPEG1SampleRates    = [4]int{44100, 48000, 32000, 0}
+)
+
+// applyMP3AudioFacts 只在 ID3 后的有界窗口中寻找 MPEG Layer III 首帧，
+// 不把整首音频读入内存。找不到有效帧时保留已解析标签，不伪造音频事实。
+func applyMP3AudioFacts(reader io.ReaderAt, fileSize, audioStart int64, observation *audioObservation) {
+	if reader == nil || observation == nil || fileSize <= audioStart || audioStart < 0 {
+		return
+	}
+	searchSize := fileSize - audioStart
+	if searchSize > maxMP3FrameSearchBytes {
+		searchSize = maxMP3FrameSearchBytes
+	}
+	data := make([]byte, int(searchSize))
+	read, err := reader.ReadAt(data, audioStart)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return
+	}
+	data = data[:read]
+	for offset := 0; offset+4 <= len(data); offset++ {
+		bitrate, sampleRate, channels, valid := decodeMP3FrameHeader(data[offset : offset+4])
+		if !valid {
+			continue
+		}
+		observation.Bitrate = bitrate
+		observation.SampleRate = sampleRate
+		observation.Channels = channels
+		if fileSize <= math.MaxInt64/8 {
+			seconds := fileSize * 8 / int64(bitrate*1000)
+			if seconds > 0 {
+				observation.DurationSeconds = float64(seconds)
+			}
+		}
+		return
+	}
+}
+
+func decodeMP3FrameHeader(header []byte) (bitrate, sampleRate, channels int, valid bool) {
+	if len(header) < 4 || header[0] != 0xff || header[1]&0xe0 != 0xe0 {
+		return 0, 0, 0, false
+	}
+	version := (header[1] >> 3) & 0x03
+	layer := (header[1] >> 1) & 0x03
+	bitrateIndex := (header[2] >> 4) & 0x0f
+	sampleRateIndex := (header[2] >> 2) & 0x03
+	if version == 1 || layer != 1 || bitrateIndex == 0 || bitrateIndex == 15 || sampleRateIndex == 3 {
+		return 0, 0, 0, false
+	}
+	sampleRate = mp3MPEG1SampleRates[sampleRateIndex]
+	if version == 3 {
+		bitrate = mp3MPEG1Layer3Bitrates[bitrateIndex]
+	} else {
+		bitrate = mp3MPEG2Layer3Bitrates[bitrateIndex]
+		if version == 2 {
+			sampleRate /= 2
+		} else {
+			sampleRate /= 4
+		}
+	}
+	channels = 2
+	if header[3]>>6 == 3 {
+		channels = 1
+	}
+	return bitrate, sampleRate, channels, bitrate > 0 && sampleRate > 0
 }
 
 func parseID3AttachedPicture(frame []byte) ([]byte, string, bool) {
@@ -1680,12 +1835,63 @@ func parseID3AttachedPicture(frame []byte) ([]byte, string, bool) {
 }
 
 func decodeID3Text(frame []byte) string {
+	if len(frame) < 2 {
+		return ""
+	}
 	encoding := frame[0]
 	text := frame[1:]
-	if encoding == 0 {
+	switch encoding {
+	case 0:
+		if terminator := bytes.IndexByte(text, 0); terminator >= 0 {
+			text = text[:terminator]
+		}
+		var decoded strings.Builder
+		for _, value := range text {
+			decoded.WriteRune(rune(value))
+		}
+		return boundedAudioText(decoded.String())
+	case 1:
+		if len(text) < 2 || (text[0] != 0xff || text[1] != 0xfe) && (text[0] != 0xfe || text[1] != 0xff) {
+			return ""
+		}
+		littleEndian := text[0] == 0xff
+		return decodeID3UTF16(text[2:], littleEndian)
+	case 2:
+		return decodeID3UTF16(text, false)
+	case 3:
+		if terminator := bytes.IndexByte(text, 0); terminator >= 0 {
+			text = text[:terminator]
+		}
+		if !utf8.Valid(text) {
+			return ""
+		}
 		return boundedAudioText(string(text))
+	default:
+		return ""
 	}
-	return boundedAudioText(string(text))
+}
+
+func decodeID3UTF16(value []byte, littleEndian bool) string {
+	if len(value)%2 != 0 {
+		return ""
+	}
+	units := make([]uint16, 0, len(value)/2)
+	for offset := 0; offset < len(value); offset += 2 {
+		var unit uint16
+		if littleEndian {
+			unit = binary.LittleEndian.Uint16(value[offset:])
+		} else {
+			unit = binary.BigEndian.Uint16(value[offset:])
+		}
+		if unit == 0 {
+			break
+		}
+		units = append(units, unit)
+	}
+	if !validUTF16Units(units) {
+		return ""
+	}
+	return boundedAudioText(string(utf16.Decode(units)))
 }
 func parseNumber(value string) int {
 	returnValue, _ := strconv.Atoi(strings.SplitN(value, "/", 2)[0])
@@ -1712,6 +1918,26 @@ func setAudioTag(observation *audioObservation, key, value string) {
 		observation.Year = parseYear(value)
 	case "CATALOG", "CATALOGNUMBER", "CATALOGNO":
 		observation.Catalog = value
+	case "LABEL", "PUBLISHER", "ORGANIZATION":
+		if observation.Label == "" {
+			observation.Label = value
+		}
+	case "BARCODE", "UPC", "EAN":
+		if observation.Barcode == "" {
+			observation.Barcode = value
+		}
+	case "EDITION", "VERSION", "SUBTITLE", "RELEASEVERSION":
+		if observation.Edition == "" {
+			observation.Edition = value
+		}
+	case "COMPOSER", "TCOM":
+		addObservationCredits(observation, "composer", value)
+	case "CONDUCTOR", "TPE3":
+		addObservationCredits(observation, "conductor", value)
+	case "PERFORMER", "PERFORMERS":
+		addObservationCredits(observation, "performer", value)
+	case "PRODUCER":
+		addObservationCredits(observation, "producer", value)
 	case "ISRC":
 		observation.ISRC = value
 	case "SOURCE", "SOURCETYPE":
@@ -1719,6 +1945,33 @@ func setAudioTag(observation *audioObservation, key, value string) {
 	case "MEDIA", "MEDIATYPE":
 		observation.MediaType = value
 	}
+}
+
+func addObservationCredits(observation *audioObservation, role, value string) {
+	if observation == nil {
+		return
+	}
+	role = strings.ToLower(normalizeValue(role))
+	if role == "" {
+		return
+	}
+	for _, name := range splitCreditNames(value) {
+		credit := creditObservation{Role: role, Name: name}
+		duplicate := false
+		for _, existing := range observation.Credits {
+			if existing == credit {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			observation.Credits = append(observation.Credits, credit)
+		}
+	}
+}
+
+func splitCreditNames(value string) []string {
+	return canonicalArtistNames(value)
 }
 func applyFilenameFallback(path string, observation audioObservation) audioObservation {
 	if observation.InferredFields == nil {

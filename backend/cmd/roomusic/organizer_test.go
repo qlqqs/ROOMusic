@@ -42,6 +42,25 @@ func TestOrganizeStrictMultidisc(t *testing.T) {
 	}
 }
 
+func TestOrganizeStrictMultidiscUsesPhysicalDiscFolderEvidence(t *testing.T) {
+	parent := "Artist - Album (2024) [CAT-1001]"
+	got := organizeObservations([]sourceObservation{
+		{RelativePath: parent + "/CD1/01.flac", Directory: parent + "/CD1", Album: "Album", Artist: "Artist", DiscNumber: 1, TrackNumber: 1},
+		{RelativePath: parent + "/CD2/01.flac", Directory: parent + "/CD2", Album: "Album", Artist: "Artist", DiscNumber: 2, TrackNumber: 1},
+	})
+	if len(got) != 1 || got[0].Anchor.Kind != candidateMultiDisc {
+		t.Fatalf("unexpected strict multi-disc candidate: %#v", got)
+	}
+	if got[0].CatalogNumber != "" {
+		t.Fatalf("parent grouping folder invented catalog metadata: %#v", got[0])
+	}
+	for _, decision := range got[0].Decisions {
+		if decision.Field == "catalog_number" {
+			t.Fatalf("parent grouping folder invented catalog evidence: %#v", decision)
+		}
+	}
+}
+
 func TestOrganizeStrictMultidiscWithoutAlbumTagUsesParentFolder(t *testing.T) {
 	got := organizeObservations([]sourceObservation{
 		{RelativePath: "Box/Disc 1/a.flac", Directory: "Box/Disc 1", Album: "Disc 1", InferredFields: map[string]bool{"album": true, "disc_number": true}, DiscNumber: 1},
@@ -454,6 +473,34 @@ func TestRipLogEvidenceFillsOnlyMissingReleaseSemantics(t *testing.T) {
 		}
 		if !found {
 			t.Fatalf("missing %s rip-log decision: %#v", field, candidates[0].Decisions)
+		}
+	}
+
+	folderCandidate := organizedCandidate{
+		SourceType: "WEB",
+		MediaType:  "Digital Media",
+		Decisions: []fieldDecision{
+			{Field: "source_type", Value: "WEB", Source: "folder", RuleID: "majority_v1"},
+			{Field: "media_type", Value: "Digital Media", Source: "folder", RuleID: "majority_v1"},
+		},
+	}
+	applyRipLogEvidence(&folderCandidate, []string{"album/rip.log"})
+	if folderCandidate.SourceType != "CD" || folderCandidate.MediaType != "CD" {
+		t.Fatalf("明确抓轨日志没有覆盖较弱目录补充值：%#v", folderCandidate)
+	}
+	for _, field := range []string{"source_type", "media_type"} {
+		matches := 0
+		for _, decision := range folderCandidate.Decisions {
+			if decision.Field != field {
+				continue
+			}
+			matches++
+			if decision.Source != "rip_log" || decision.RuleID != "rip_log_cd_v1" {
+				t.Fatalf("%s 仍保留较弱目录 provenance：%#v", field, decision)
+			}
+		}
+		if matches != 1 {
+			t.Fatalf("%s 决策数量 = %d，期望 1：%#v", field, matches, folderCandidate.Decisions)
 		}
 	}
 }

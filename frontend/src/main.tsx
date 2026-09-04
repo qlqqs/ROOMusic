@@ -512,6 +512,9 @@ function App() {
                     <div><dt>候选类型</dt><dd>{selectedRelease.candidate_kind}</dd></div>
                     {selectedRelease.genre && <div><dt>流派</dt><dd>{selectedRelease.genre}</dd></div>}
                     {selectedRelease.catalog_number && <div><dt>目录号</dt><dd>{selectedRelease.catalog_number}</dd></div>}
+                    {selectedRelease.edition && <div><dt>版本</dt><dd>{selectedRelease.edition}</dd></div>}
+                    {selectedRelease.label && <div><dt>唱片公司</dt><dd>{selectedRelease.label}</dd></div>}
+                    {selectedRelease.barcode && <div><dt>条码</dt><dd>{selectedRelease.barcode}</dd></div>}
                   </dl>
                   {selectedRelease.credits.length > 0 && <p className="credit-line">署名：{selectedRelease.credits.map((credit) => `${credit.role} · ${credit.name}`).join("；")}</p>}
 
@@ -532,6 +535,7 @@ function App() {
                                 {track.channels ? ` · ${track.channels} 声道` : ""}
                                 {track.bitrate ? ` · ${track.bitrate} kbps` : ""}
                                 {track.cue?.start_seconds !== null && track.cue ? ` · CUE ${track.cue.start_seconds.toFixed(2)}s` : ""}
+                                {track.credits.length > 0 ? ` · ${track.credits.map((credit) => `${credit.role}：${credit.name}`).join(" / ")}` : ""}
                               </small>
                               <i>▶</i>
                             </button>

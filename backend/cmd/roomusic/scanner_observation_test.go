@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -147,6 +148,52 @@ func TestBuildCueVirtualObservationDistinguishesSheetAndTrackPerformer(t *testin
 	}
 	if trackPerformer.Artist != "Track Artist" || trackPerformer.FieldSources["artist"] != "cue_track" {
 		t.Fatalf("track performer provenance = %+v", trackPerformer)
+	}
+}
+
+func TestCueReferenceCompletionAndStagingPolicy(t *testing.T) {
+	testCases := []struct {
+		name       string
+		status     string
+		index      bool
+		incomplete bool
+		staged     bool
+	}{
+		{name: "present with index", status: "present", index: true, staged: true},
+		{name: "present without index", status: "present", index: false},
+		{name: "missing parent", status: "missing", index: true},
+		{name: "unsafe parent", status: "unsafe", index: true, incomplete: true},
+		{name: "unchecked parent", status: "unchecked", index: true, incomplete: true},
+		{name: "unknown status", status: "", index: true, incomplete: true},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			track := cueTrack{ReferenceStatus: testCase.status, IndexPresent: testCase.index}
+			if got := cueReferenceMakesScanIncomplete(testCase.status); got != testCase.incomplete {
+				t.Fatalf("cueReferenceMakesScanIncomplete(%q) = %t, want %t", testCase.status, got, testCase.incomplete)
+			}
+			if got := cueTrackCanBeStaged(track); got != testCase.staged {
+				t.Fatalf("cueTrackCanBeStaged(%+v) = %t, want %t", track, got, testCase.staged)
+			}
+		})
+	}
+}
+
+func TestCanonicalCreditObservationsAreStableAndDeduplicated(t *testing.T) {
+	got := canonicalCreditObservations([]creditObservation{
+		{Role: " Producer ", Name: " Producer One "},
+		{Role: "composer", Name: "Composer Two"},
+		{Role: "COMPOSER", Name: "Composer One"},
+		{Role: "composer", Name: "Composer One"},
+		{Role: "", Name: "ignored"},
+	})
+	want := []creditObservation{
+		{Role: "composer", Name: "Composer One"},
+		{Role: "composer", Name: "Composer Two"},
+		{Role: "producer", Name: "Producer One"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("canonical credits = %+v，期望 %+v", got, want)
 	}
 }
 

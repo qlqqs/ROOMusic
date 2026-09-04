@@ -317,7 +317,9 @@ func createMP3Fixture(t *testing.T, frames map[string]string) []byte {
 	tagData := &bytes.Buffer{}
 	for _, frameID := range []string{"TIT2", "TPE1", "TALB", "TRCK", "TPOS"} {
 		value := frames[frameID]
-		frameContent := append([]byte{0}, []byte(value)...)
+		// 测试值包含中文，必须按 ID3v2 的 UTF-8 encoding=3 声明；
+		// encoding=0 是 ISO-8859-1，不能承载这些字节。
+		frameContent := append([]byte{3}, []byte(value)...)
 		if _, err := tagData.WriteString(frameID); err != nil {
 			t.Fatalf("write MP3 frame identifier: %v", err)
 		}
@@ -332,6 +334,6 @@ func createMP3Fixture(t *testing.T, frames map[string]string) []byte {
 		}
 	}
 	tagLength := tagData.Len()
-	header := []byte{'I', 'D', '3', 3, 0, 0, byte(tagLength >> 21), byte(tagLength >> 14), byte(tagLength >> 7), byte(tagLength)}
+	header := []byte{'I', 'D', '3', 4, 0, 0, byte(tagLength >> 21), byte(tagLength >> 14), byte(tagLength >> 7), byte(tagLength)}
 	return append(header, tagData.Bytes()...)
 }
