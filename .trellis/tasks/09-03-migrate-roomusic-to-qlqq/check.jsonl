@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/guides/index.md", "reason": "核验任务遵守项目共享规范与范围优先级"}
+{"file": ".trellis/spec/guides/engineering-principles.md", "reason": "核验变更最小完整、验证与回滚和风险相称"}
+{"file": ".trellis/spec/guides/real-music-assets.md", "reason": "核验真实音乐未修改且报告未泄露路径与文件清单"}
+{"file": ".trellis/tasks/09-03-migrate-roomusic-to-qlqq/research/paseo-codex-qlqq-migration.md", "reason": "核验官方 Paseo/Codex 合同、用户路径和敏感状态排除项"}
