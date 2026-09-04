@@ -435,3 +435,26 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 ### Next Steps
 
 - 无；保留 root 环境和权限受限快照作为观察期回滚资料。
+
+
+## Session 19: 完成发行列表后端封面摘要
+<!-- trellis-session: v=2 fp=21ea6dca165ffa28 -->
+
+**Date**: 2026-09-04
+**Task**: 完成发行列表后端封面摘要
+**Branch**: `task/release-list-artwork-backend`
+
+### Summary
+
+发行列表与详情现共享一次 LEFT JOIN 的 nullable artwork 摘要投影，非法元数据安全失败；补齐单元、PostgreSQL 18 集成测试和 Catalog REST 合同。后端子任务已归档，父级前端任务继续保持规划状态。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `52c5850` | feat: expose artwork in release summaries |
+| `9315a0b` | docs: record staged music display task context |
+
+### Status
+
+[OK] **Completed**
