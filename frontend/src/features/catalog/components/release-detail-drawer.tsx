@@ -4,7 +4,7 @@ import type { ReleaseDetailDTO, ReleaseEvidenceDTO, TrackDTO } from "../../../ap
 import {
   flattenReleaseTracks,
   formatReleaseLabel,
-  notRecordedLabel,
+  formatSourceMediaLabel,
   type DemoQueueItem,
 } from "../model/display";
 import { MediumSection } from "./medium-section";
@@ -30,7 +30,7 @@ type ReleaseDetailDrawerProps = {
 
 const focusableSelector = "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
 
-// 详情抽屉：role=dialog、焦点圈定、Escape 关闭、关闭后焦点回到触发卡片。
+// 详情内页：整页翻开的杂志内页（非抽屉），role=dialog、焦点圈定、Escape 关闭、关闭后焦点回到触发卡片。
 // 每个发行版本通过 key 重建，本地 disclosure 状态随之重置。
 export function ReleaseDetailDrawer(props: ReleaseDetailDrawerProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -87,9 +87,9 @@ export function ReleaseDetailDrawer(props: ReleaseDetailDrawerProps) {
   }
 
   return (
-    <div className="drawer-overlay" onClick={props.onClose}>
+    <div className="sheet-overlay" onClick={props.onClose}>
       <div
-        className="detail-drawer"
+        className="sheet-page"
         role="dialog"
         aria-modal="true"
         aria-labelledby="release-detail-label release-detail-title"
@@ -97,14 +97,14 @@ export function ReleaseDetailDrawer(props: ReleaseDetailDrawerProps) {
         onKeyDown={handleKeyDown}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="drawer-heading">
-          <p className="eyebrow" id="release-detail-label">发行详情</p>
-          <button type="button" className="drawer-close" ref={closeButtonRef} onClick={props.onClose} aria-label="关闭详情">
-            ✕
+        <div className="sheet-heading">
+          <p className="eyebrow" id="release-detail-label">ROOMusic · 发行详情</p>
+          <button type="button" className="sheet-close" ref={closeButtonRef} onClick={props.onClose} aria-label="关闭详情">
+            ✕ 合回本刊
           </button>
         </div>
         {props.state.status === "loading" && (
-          <div className="drawer-skeleton" role="status" aria-label="正在加载发行详情">
+          <div className="sheet-skeleton" role="status" aria-label="正在加载发行详情">
             <div className="skeleton-block skeleton-cover" />
             <div className="skeleton-block skeleton-line" />
             <div className="skeleton-block skeleton-line short" />
@@ -170,74 +170,78 @@ type ReadyDetailProps = {
 function ReadyDetail(props: ReadyDetailProps) {
   const { detail } = props;
   const title = detail.title.trim() === "" ? "未知专辑" : detail.title;
-  const sourceLabel = [detail.source_type, detail.media_type].filter(Boolean).join(" / ") || notRecordedLabel;
+  const sourceLabel = formatSourceMediaLabel(detail);
   const hasTracks = props.queueItems.length > 0;
   return (
-    <div className="drawer-body">
-      <ReleaseCover artwork={detail.artwork} title={title} className="detail-cover" allowRetry />
-      <h2 id="release-detail-title">{title}</h2>
-      <p className="detail-artist">{formatReleaseLabel(detail)}</p>
-      <div className="drawer-actions">
-        <button type="button" onClick={() => props.onPlayItems(props.queueItems.slice(0, 1))} disabled={!hasTracks}>
-          播放首曲
-        </button>
-        <button type="button" onClick={() => props.onPlayItems(props.queueItems)} disabled={!hasTracks}>
-          播放全部
-        </button>
-        <button type="button" onClick={props.onExpandAll}>全部展开</button>
-        <button type="button" onClick={() => props.onCollapseAll(detail.media.map((medium) => medium.id))}>
-          全部收起
-        </button>
+    <div className="sheet-body">
+      <div className="spread-left">
+        <ReleaseCover artwork={detail.artwork} title={title} className="detail-cover sheet-cover" allowRetry />
+        <dl className="release-facts">
+          {detail.year !== null && <div><dt>年份</dt><dd>{detail.year}</dd></div>}
+          {sourceLabel !== null && <div><dt>来源 / 介质</dt><dd>{sourceLabel}</dd></div>}
+          <div><dt>规模</dt><dd>{detail.medium_count} 碟 · {detail.track_count} 首</dd></div>
+          <div><dt>候选类型</dt><dd>{detail.candidate_kind}</dd></div>
+          {detail.genre && <div><dt>流派</dt><dd>{detail.genre}</dd></div>}
+          {detail.catalog_number && <div><dt>目录号</dt><dd>{detail.catalog_number}</dd></div>}
+          {detail.edition && <div><dt>版本</dt><dd>{detail.edition}</dd></div>}
+          {detail.label && <div><dt>唱片公司</dt><dd>{detail.label}</dd></div>}
+          {detail.barcode && <div><dt>条码</dt><dd>{detail.barcode}</dd></div>}
+        </dl>
+        {detail.credits.length > 0 && (
+          <p className="credit-line">署名：{detail.credits.map((credit) => `${credit.role} · ${credit.name}`).join("；")}</p>
+        )}
       </div>
-      <dl className="release-facts">
-        <div><dt>年份</dt><dd>{detail.year ?? "未知"}</dd></div>
-        <div><dt>来源 / 介质</dt><dd>{sourceLabel}</dd></div>
-        <div><dt>规模</dt><dd>{detail.medium_count} 碟 · {detail.track_count} 首</dd></div>
-        <div><dt>候选类型</dt><dd>{detail.candidate_kind}</dd></div>
-        {detail.genre && <div><dt>流派</dt><dd>{detail.genre}</dd></div>}
-        {detail.catalog_number && <div><dt>目录号</dt><dd>{detail.catalog_number}</dd></div>}
-        {detail.edition && <div><dt>版本</dt><dd>{detail.edition}</dd></div>}
-        {detail.label && <div><dt>唱片公司</dt><dd>{detail.label}</dd></div>}
-        {detail.barcode && <div><dt>条码</dt><dd>{detail.barcode}</dd></div>}
-      </dl>
-      {detail.credits.length > 0 && (
-        <p className="credit-line">署名：{detail.credits.map((credit) => `${credit.role} · ${credit.name}`).join("；")}</p>
-      )}
+      <div className="spread-right">
+        <h2 id="release-detail-title">{title}</h2>
+        <p className="detail-artist">{formatReleaseLabel(detail)}</p>
+        <div className="sheet-actions">
+          <button type="button" onClick={() => props.onPlayItems(props.queueItems.slice(0, 1))} disabled={!hasTracks}>
+            播放首曲
+          </button>
+          <button type="button" onClick={() => props.onPlayItems(props.queueItems)} disabled={!hasTracks}>
+            播放全部
+          </button>
+          <button type="button" onClick={props.onExpandAll}>全部展开</button>
+          <button type="button" onClick={() => props.onCollapseAll(detail.media.map((medium) => medium.id))}>
+            全部收起
+          </button>
+        </div>
 
-      {detail.media.map((medium) => (
-        <MediumSection
-          key={medium.id}
-          medium={medium}
-          expanded={!props.collapsedMedia.has(medium.id)}
-          onToggle={props.onToggleMedium}
-          onPlayTrack={props.onPlayTrack}
-        />
-      ))}
+        {detail.media.map((medium) => (
+          <MediumSection
+            key={medium.id}
+            medium={medium}
+            expanded={!props.collapsedMedia.has(medium.id)}
+            onToggle={props.onToggleMedium}
+            onPlayTrack={props.onPlayTrack}
+          />
+        ))}
 
-      {detail.evidence.length > 0 && (
-        <details className="evidence-panel">
-          <summary>整理证据摘要（{detail.evidence.length} 条）</summary>
-          <ul>{detail.evidence.map((item) => <li key={`${item.field}-${item.rule_id}`}><strong>{item.field}</strong><span>{item.source} · {item.confidence} · {item.action}</span></li>)}</ul>
-        </details>
-      )}
+        {detail.evidence.length > 0 && (
+          <details className="evidence-panel">
+            <summary>整理证据摘要（{detail.evidence.length} 条）</summary>
+            <ul>{detail.evidence.map((item) => <li key={`${item.field}-${item.rule_id}`}><strong>{item.field}</strong><span>{item.source} · {item.confidence} · {item.action}</span></li>)}</ul>
+          </details>
+        )}
 
-      {props.isAdmin && (
-        <section aria-label="管理员整理证据" className="evidence-panel detailed-evidence">
-          <div className="panel-heading">
-            <h3>管理员证据</h3>
-            <button type="button" onClick={props.onShowEvidence} disabled={props.evidenceLoading}>
-              {props.evidenceLoading ? "正在读取..." : "查看完整证据"}
-            </button>
-          </div>
-          {props.evidenceError && <p className="error" role="alert">{props.evidenceError}</p>}
-          {props.evidence && <>
-            {props.evidence.fields.length === 0 ? <p>此发行版本没有字段证据。</p> : <ul>{props.evidence.fields.map((item) => <li key={`${item.field}-${item.rule_id}`}><strong>{item.field}</strong><span>{item.value ?? "未选择值"} · {item.confidence} · {item.action}</span>{item.reason_code && <small>{item.reason_code}</small>}{item.candidates.length > 0 && <small>候选：{item.candidates.join("、")}</small>}</li>)}</ul>}
-            {props.evidence.grouping && <div className="grouping-evidence"><strong>归组：{props.evidence.grouping.candidate_kind}</strong>{props.evidence.grouping.reason_codes.map((reason) => <small key={reason}>{reason}</small>)}{props.evidence.grouping.source_refs.length > 0 && <ul>{props.evidence.grouping.source_refs.map((sourceRef) => <li key={sourceRef}><code>{sourceRef}</code></li>)}</ul>}</div>}
-            {props.evidence.truncated && <p>证据已按安全上限截断。</p>}
-          </>}
-        </section>
-      )}
-      <p className="readonly-hint">如需更正，请修改外部源文件或标签后重新扫描。ROOMusic 不会改写音乐源。</p>
+        {props.isAdmin && (
+          <section aria-label="管理员整理证据" className="evidence-panel detailed-evidence">
+            <div className="panel-heading">
+              <h3>管理员证据</h3>
+              <button type="button" onClick={props.onShowEvidence} disabled={props.evidenceLoading}>
+                {props.evidenceLoading ? "正在读取..." : "查看完整证据"}
+              </button>
+            </div>
+            {props.evidenceError && <p className="error" role="alert">{props.evidenceError}</p>}
+            {props.evidence && <>
+              {props.evidence.fields.length === 0 ? <p>此发行版本没有字段证据。</p> : <ul>{props.evidence.fields.map((item) => <li key={`${item.field}-${item.rule_id}`}><strong>{item.field}</strong><span>{item.value ?? "未选择值"} · {item.confidence} · {item.action}</span>{item.reason_code && <small>{item.reason_code}</small>}{item.candidates.length > 0 && <small>候选：{item.candidates.join("、")}</small>}</li>)}</ul>}
+              {props.evidence.grouping && <div className="grouping-evidence"><strong>归组：{props.evidence.grouping.candidate_kind}</strong>{props.evidence.grouping.reason_codes.map((reason) => <small key={reason}>{reason}</small>)}{props.evidence.grouping.source_refs.length > 0 && <ul>{props.evidence.grouping.source_refs.map((sourceRef) => <li key={sourceRef}><code>{sourceRef}</code></li>)}</ul>}</div>}
+              {props.evidence.truncated && <p>证据已按安全上限截断。</p>}
+            </>}
+          </section>
+        )}
+        <p className="readonly-hint">如需更正，请修改外部源文件或标签后重新扫描。ROOMusic 不会改写音乐源。</p>
+      </div>
     </div>
   );
 }

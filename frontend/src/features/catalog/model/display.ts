@@ -41,6 +41,23 @@ export function formatReleaseLabel(release: { album_artist: string | null; artis
   return artist === "" ? unknownArtistLabel : release.artist;
 }
 
+export function formatSourceMediaLabel(
+  release: Pick<ReleaseSummaryDTO, "source_type" | "media_type">,
+  separator = " / ",
+): string | null {
+  const values: string[] = [];
+  const seen = new Set<string>();
+  for (const rawValue of [release.source_type, release.media_type]) {
+    const value = rawValue?.trim();
+    if (!value) continue;
+    const normalized = value.toLowerCase();
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    values.push(value);
+  }
+  return values.length > 0 ? values.join(separator) : null;
+}
+
 export function coverFallbackLabel(title: string): string {
   const trimmed = title.trim();
   if (trimmed === "") return "♫";
@@ -67,14 +84,13 @@ export type ReleaseCardModel = {
 
 export function toReleaseCardModel(release: ReleaseSummaryDTO): ReleaseCardModel {
   const title = release.title.trim() === "" ? untitledReleaseLabel : release.title;
-  const sourceParts = [release.source_type, release.media_type].filter((part): part is string => part !== null);
   return {
     id: release.id,
     title,
     artistLabel: formatReleaseLabel(release),
     yearLabel: release.year === null ? "年份未知" : String(release.year),
     sizeLabel: `${release.medium_count} 碟 / ${release.track_count} 首`,
-    sourceLabel: sourceParts.length > 0 ? sourceParts.join(" · ") : null,
+    sourceLabel: formatSourceMediaLabel(release, " · "),
     attentionCount: release.attention_count,
     artwork: release.artwork,
     fallbackLabel: coverFallbackLabel(release.title),

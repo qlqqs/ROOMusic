@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>设计方向预览 — ROOMusic 前端重设计</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;900&text=唱片目录第柒期秋库藏冀编辑选正在播出&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{color-scheme:light}
+  *{box-sizing:border-box}
+  body{margin:0;background:#f4f4f1;color:#1a1a18;font-family:ui-sans-serif,system-ui,"PingFang SC","Microsoft YaHei",sans-serif}
+
+  /* ---------- 中性壳 ---------- */
+  .intro{padding:22px 32px 18px;border-bottom:1px solid #dddcd7;max-width:1440px;margin:0 auto}
+  .intro h1{font-size:17px;margin:0 0 6px;font-weight:700}
+  .intro p{margin:0;font-size:13px;color:#5b5b56;line-height:1.7;max-width:78ch}
+  .dials{display:grid;grid-template-columns:repeat(3,minmax(180px,1fr));gap:14px;padding:16px 32px;border-bottom:1px solid #dddcd7;max-width:1440px;margin:0 auto}
+  .dial{display:grid;gap:6px;font-size:12px;color:#4e4e49}
+  .dial-head{display:flex;justify-content:space-between;align-items:baseline}
+  .dial-head b{font-weight:700;color:#1a1a18}
+  .dial-head small{color:#8a8a82}
+  .dial output{font-variant-numeric:tabular-nums;font-weight:700;color:#166a4a}
+  .dial input{width:100%;accent-color:#1a1a18}
+  .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;padding:28px 32px;max-width:1440px;margin:0 auto}
+  .dir{background:#fff;border:2px solid #e3e2dd;border-radius:12px;overflow:hidden;display:flex;flex-direction:column;min-width:0;cursor:pointer;transition:border-color .15s ease}
+  .dir:hover{border-color:#b9b8b0}
+  .dir.qmdp-selected{border-color:#1a1a18}
+  .mock{position:relative;width:100%;aspect-ratio:960/600;overflow:hidden;container-type:inline-size;border-bottom:1px solid #e3e2dd}
+  .stage{position:absolute;top:0;left:0;width:960px;height:600px;transform-origin:top left;transform:scale(calc(100cqw/960px))}
+  .meta{padding:14px 18px;display:grid;gap:6px;width:100%}
+  .meta .tag{display:inline-flex;align-items:center;gap:8px;font-size:11px;color:#8a8a82}
+  .meta .tag::before{content:"";width:6px;height:6px;border-radius:50%;background:#b9b8b0}
+  .meta h2{margin:0;font-size:15px;font-weight:700}
+  .meta p{margin:0;font-size:12.5px;color:#5b5b56;line-height:1.6;max-width:64ch;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .dir .qmdp-pick-button{width:calc(100% - 36px);margin:2px 18px 18px;min-height:44px;border:1px solid #1a1a18;background:#1a1a18;color:#fff;border-radius:8px;font:inherit;font-size:13px;font-weight:650;cursor:pointer}
+  .notes{max-width:1440px;margin:0 auto;padding:8px 32px 64px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
+  .note{background:#fff;border:1px solid #e3e2dd;border-radius:12px;padding:18px 20px;font-size:12.5px;line-height:1.75;color:#43433e}
+  .note h3{margin:0 0 8px;font-size:14px;color:#1a1a18}
+  .note dl{margin:0;display:grid;grid-template-columns:5.5em 1fr;gap:4px 12px}
+  .note dt{color:#8a8a82}
+  .note dd{margin:0}
+  .note.reco{grid-column:1/-1;border-color:#1a1a18}
+  .static-hint{max-width:1440px;margin:0 auto;padding:0 32px 20px;font-size:12px;color:#8a8a82}
+  @media (max-width:760px){
+    .intro{padding:16px}
+    .dials{grid-template-columns:1fr;padding:14px 16px}
+    .grid{grid-template-columns:1fr;padding:16px}
+    .notes{grid-template-columns:1fr;padding:0 16px 48px}
+    .static-hint{padding:0 16px 16px}
+    .mock{aspect-ratio:4/4.2}
+    .stage{left:50%;transform:translateX(-50%) scale(.62);transform-origin:top center}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important}}
+
+  /* ============ 方向 A · 唱片店月刊（亮 · 衬线 · 编辑式） ============ */
+  .dA{background:#f4efe2;color:#211d15;font-family:Georgia,"Noto Serif SC","Songti SC",serif;padding:0 44px;display:flex;flex-direction:column}
+  .dA .masthead{padding:26px 0 14px;border-bottom:3px double #211d15;display:flex;align-items:baseline;justify-content:space-between}
+  .dA .masthead .lat{font-size:15px;letter-spacing:.32em;font-weight:600}
+  .dA .masthead h1{font-family:"Noto Serif SC","Songti SC",serif;font-size:46px;font-weight:900;letter-spacing:.12em}
+  .dA .masthead .issue{font-size:11px;color:#6d6455;text-align:right;line-height:1.7}
+  .dA .nav{display:flex;gap:26px;padding:11px 0;border-bottom:1px solid #211d15;font-size:12px}
+  .dA .nav b{font-weight:600}
+  .dA .nav span{color:#6d6455}
+  .dA .nav .n{color:#b23a2a;font-size:10px;margin-right:5px}
+  .dA .searchline{display:flex;gap:10px;align-items:baseline;padding:13px 0;border-bottom:1px solid #c9c0ac;font-size:13px;color:#6d6455}
+  .dA .searchline em{font-style:normal;color:#b23a2a;font-size:15px}
+  .dA .main{flex:1;display:grid;grid-template-columns:300px 1fr;gap:34px;padding:22px 0 16px;min-height:0}
+  .dA .feature{position:relative}
+  .dA .cover-f{aspect-ratio:1;background:#26221b;display:grid;place-items:center;color:#f4efe2;position:relative;overflow:hidden}
+  .dA .cover-f::before{content:"";position:absolute;inset:18px;border:1px solid #8a7f68;border-radius:50%}
+  .dA .cover-f::after{content:"";position:absolute;inset:52px;border:1px solid #8a7f68;border-radius:50%}
+  .dA .cover-f b{font-family:"Noto Serif SC","Songti SC",serif;font-size:84px;font-weight:900;z-index:1}
+  .dA .seal{position:absolute;top:10px;right:10px;background:#b23a2a;color:#f4efe2;font-size:10px;padding:5px 8px;letter-spacing:.2em}
+  .dA .feature h3{font-size:19px;font-weight:600;margin:12px 0 3px}
+  .dA .feature p{font-size:11.5px;color:#6d6455;line-height:1.7}
+  .dA .idx{border-left:1px solid #c9c0ac;padding-left:26px}
+  .dA .idx h4{font-size:11px;letter-spacing:.3em;color:#6d6455;font-weight:600;margin-bottom:6px}
+  .dA .row{display:grid;grid-template-columns:34px 1fr auto;gap:8px;align-items:baseline;padding:9.5px 0;border-bottom:1px solid #ddd4bf;font-size:13px}
+  .dA .row .no{color:#b23a2a;font-size:12px;font-weight:700}
+  .dA .row b{font-weight:600}
+  .dA .row b i{font-style:normal;color:#6d6455;font-weight:400;font-size:11px;margin-left:8px}
+  .dA .row time{font-size:11px;color:#6d6455;font-variant-numeric:tabular-nums}
+  .dA .player{border-top:3px double #211d15;padding:12px 0 16px;display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;font-size:12.5px}
+  .dA .player .pp{width:34px;height:34px;border:1.5px solid #211d15;border-radius:50%;display:grid;place-items:center;font-size:11px}
+  .dA .player .prog{height:1px;background:#211d15;position:relative;margin-top:6px}
+  .dA .player .prog::after{content:"";position:absolute;left:0;top:-2px;width:38%;border-top:5px solid #b23a2a}
+  .dA .player time{font-size:11px;color:#6d6455;font-variant-numeric:tabular-nums}
+
+  /* ============ 方向 B · 母带控制室（暗 · 等宽 · 控台） ============ */
+  .dB{background:#0e1210;color:#c9d4c9;font-family:"JetBrains Mono",ui-monospace,"Sarasa Mono SC",monospace;display:flex;flex-direction:column;font-size:12px}
+  .dB .status{display:flex;gap:18px;align-items:center;padding:10px 16px;border-bottom:1px solid #2a332e;background:#131815;font-size:11px}
+  .dB .status .logo{color:#ffb000;font-weight:700}
+  .dB .status .led{color:#7ee787}
+  .dB .status .led::before{content:"●";margin-right:6px}
+  .dB .status .right{margin-left:auto;color:#5f6f66}
+  .dB .body{flex:1;display:grid;grid-template-columns:170px 1fr 240px;min-height:0}
+  .dB .rail{border-right:1px solid #2a332e;padding:14px 0}
+  .dB .rail div{padding:8px 16px;color:#5f6f66}
+  .dB .rail div.on{color:#ffb000;background:#181e1a;border-right:2px solid #ffb000}
+  .dB .rail div.on::before{content:"> "}
+  .dB .tbl{padding:14px 18px;min-width:0}
+  .dB .tbl h4{color:#5f6f66;font-size:10px;letter-spacing:.2em;font-weight:400;margin-bottom:10px}
+  .dB .tr{display:grid;grid-template-columns:34px 1fr 90px 44px 40px 60px;gap:10px;padding:7px 8px;border-bottom:1px solid #1c231f;align-items:center}
+  .dB .tr.head{color:#5f6f66;font-size:10px;border-bottom:1px solid #2a332e}
+  .dB .tr .no{color:#5f6f66}
+  .dB .tr .yr,.dB .tr .tc{color:#7d8b7f;font-variant-numeric:tabular-nums}
+  .dB .tr .st{color:#7ee787}
+  .dB .tr.hot{background:#1a211c;outline:1px solid #3d4a40}
+  .dB .tr.hot .ttl{color:#ffb000}
+  .dB .side{border-left:1px solid #2a332e;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+  .dB .side h4{color:#5f6f66;font-size:10px;letter-spacing:.2em;font-weight:400}
+  .dB .vu{display:flex;gap:5px;align-items:flex-end;height:56px}
+  .dB .vu i{flex:1;background:#2a332e}
+  .dB .vu i.f{background:#ffb000}
+  .dB .now{border:1px solid #2a332e;padding:10px 12px;font-size:11px;line-height:1.9}
+  .dB .now b{color:#e8f0e6}
+  .dB .now .bar{color:#ffb000;letter-spacing:1px}
+  .dB .console{border-top:1px solid #2a332e;padding:10px 16px;display:flex;gap:14px;align-items:center;background:#131815;font-size:11.5px}
+  .dB .console .prompt{color:#7ee787}
+  .dB .console .cursor{display:inline-block;width:8px;height:14px;background:#ffb000;vertical-align:-2px}
+  .dB .console .keys{margin-left:auto;color:#5f6f66}
+
+  /* ============ 方向 C · 客厅唱机（亮 · 圆角 · 居家） ============ */
+  .dC{background:#faf4ea;color:#3d3733;font-family:ui-rounded,ui-sans-serif,system-ui,"PingFang SC",sans-serif;padding:26px 34px;display:flex;flex-direction:column}
+  .dC .topnav{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px}
+  .dC .brandc{display:flex;align-items:center;gap:9px;font-weight:800;font-size:15px}
+  .dC .brandc i{width:14px;height:14px;border-radius:50%;background:#c96f4a}
+  .dC .tabs{display:flex;gap:6px;background:#f0e6d4;border-radius:999px;padding:4px}
+  .dC .tabs span{font-size:12px;padding:6px 14px;border-radius:999px;color:#8a7a68}
+  .dC .tabs span.on{background:#fffdf8;color:#3d3733;font-weight:700;box-shadow:0 1px 3px rgb(61 55 51 / 12%)}
+  .dC .hello{font-size:30px;font-weight:800;letter-spacing:.01em;margin-bottom:4px}
+  .dC .hello em{font-style:normal;color:#c96f4a}
+  .dC .sub{font-size:12.5px;color:#8a7a68;margin-bottom:18px}
+  .dC .searchc{display:flex;align-items:center;gap:10px;background:#fffdf8;border:1px solid #ecdfc9;border-radius:999px;padding:11px 18px;font-size:12.5px;color:#a08e78;box-shadow:0 2px 10px rgb(61 55 51 / 6%);margin-bottom:22px}
+  .dC .shelf{flex:1;display:grid;grid-template-columns:repeat(4,1fr);gap:16px;align-content:start}
+  .dC .card-c{background:#fffdf8;border-radius:24px;padding:12px;box-shadow:0 2px 12px rgb(61 55 51 / 7%)}
+  .dC .cov{border-radius:16px;aspect-ratio:1;position:relative;overflow:hidden;margin-bottom:10px}
+  .dC .cov.a{background:#e8b4a0}.dC .cov.b{background:#8a9b7e}.dC .cov.c{background:#e6cf9b}.dC .cov.d{background:#b7c4c9}
+  .dC .cov::after{content:"";position:absolute;width:58%;aspect-ratio:1;border-radius:50%;background:rgb(255 253 248 / 55%);left:21%;top:21%}
+  .dC .cov::before{content:"";position:absolute;z-index:1;width:16%;aspect-ratio:1;border-radius:50%;background:#3d3733;left:42%;top:42%}
+  .dC .card-c b{display:block;font-size:12.5px}
+  .dC .card-c small{font-size:10.5px;color:#a08e78}
+  .dC .deck{margin-top:20px;background:#3d3733;color:#faf4ea;border-radius:999px;padding:10px 18px;display:flex;align-items:center;gap:14px;box-shadow:0 8px 24px rgb(61 55 51 / 25%)}
+  .dC .deck .thumb{width:36px;height:36px;border-radius:50%;background:#c96f4a;position:relative;flex-shrink:0}
+  .dC .deck .thumb::after{content:"";position:absolute;inset:13px;border-radius:50%;background:#3d3733}
+  .dC .deck .tt{min-width:0}
+  .dC .deck .tt b{display:block;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dC .deck .tt small{font-size:10px;color:#b9ab98}
+  .dC .deck .ctrl{margin-left:auto;display:flex;gap:8px;align-items:center}
+  .dC .deck .ctrl span{width:30px;height:30px;border-radius:50%;border:1px solid #6b6156;display:grid;place-items:center;font-size:10px}
+  .dC .deck .ctrl .play{background:#c96f4a;border-color:#c96f4a;color:#3d3733;width:36px;height:36px}
+
+  /* ============ 方向 D · 深夜电台（暗 · 巨型排版 · 横向带） ============ */
+  .dD{background:#0c0c0e;color:#f2f2f0;font-family:ui-sans-serif,system-ui,"PingFang SC",sans-serif;display:flex;flex-direction:column}
+  .dD .top{display:flex;justify-content:space-between;align-items:center;padding:14px 28px;border-bottom:1px solid #232326;font-size:11px;letter-spacing:.22em}
+  .dD .top .live{color:#ff3b30}
+  .dD .top .live::before{content:"●";margin-right:7px;font-size:9px}
+  .dD .onair{flex:1;display:grid;grid-template-columns:1fr 250px;gap:30px;padding:26px 28px 18px;min-height:0}
+  .dD .onair .lbl{color:#ff3b30;font-size:11px;letter-spacing:.3em;font-weight:700;margin-bottom:10px}
+  .dD .onair h1{font-size:58px;font-weight:900;line-height:1.05;letter-spacing:.01em}
+  .dD .onair .artist{font-size:17px;color:#8b8b92;margin-top:12px}
+  .dD .onair .meta-line{display:flex;gap:18px;margin-top:22px;font-size:11px;color:#8b8b92;font-variant-numeric:tabular-nums}
+  .dD .upnext{border-left:1px solid #232326;padding-left:22px}
+  .dD .upnext h4{font-size:10px;letter-spacing:.28em;color:#8b8b92;font-weight:700;margin-bottom:12px}
+  .dD .upnext .u{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #1a1a1e;font-size:12px}
+  .dD .upnext .u span{color:#8b8b92;font-size:10.5px;font-variant-numeric:tabular-nums}
+  .dD .tape{border-top:1px solid #232326;border-bottom:1px solid #232326;padding:12px 28px;display:flex;gap:0;font-size:12px;white-space:nowrap;overflow:hidden;color:#c9c9c4}
+  .dD .tape b{font-weight:700}
+  .dD .tape i{font-style:normal;color:#3a3a40;padding:0 16px}
+  .dD .tape em{font-style:normal;color:#ff3b30}
+  .dD .deck-d{padding:16px 28px 20px;display:grid;grid-template-columns:auto 1fr auto;gap:18px;align-items:center}
+  .dD .deck-d .dot{width:14px;height:14px;border-radius:50%;background:#ff3b30;box-shadow:0 0 18px rgb(255 59 48 / 55%)}
+  .dD .deck-d .tl{height:2px;background:#232326;position:relative}
+  .dD .deck-d .tl::after{content:"";position:absolute;left:0;top:0;bottom:0;width:31%;background:#f2f2f0}
+  .dD .deck-d .freq{font-size:12px;color:#8b8b92;font-variant-numeric:tabular-nums;letter-spacing:.1em}
+</style>
+</head>
+<body>
+
+<header class="intro">
+  <h1>ROOMusic 前端重设计 · 四个方向</h1>
+  <p>以下是四个可比较的设计方向样机，用于选择视觉与交互气质，<strong>不是最终页面</strong>。样机用的是真实产品场景：音乐库浏览、搜索、发行详情与底部播放条。点选任一方向（或按 1–4）并确认后才开始正式实现；也可以只选中意某个细节，在对话里告诉我，比如「要 A 的排版 + D 的配色」。</p>
+</header>
+
+<div class="dials" data-qmdp-dials aria-label="设计拨盘">
+  <label class="dial">
+    <span class="dial-head"><b>视觉冒险度</b><small>保守 1 — 10 大胆</small><output data-qmdp-output="variance">6</output></span>
+    <input data-qmdp-dial="variance" type="range" min="1" max="10" value="6">
+  </label>
+  <label class="dial">
+    <span class="dial-head"><b>动效强度</b><small>静态 1 — 10 电影级</small><output data-qmdp-output="motion">4</output></span>
+    <input data-qmdp-dial="motion" type="range" min="1" max="10" value="4">
+  </label>
+  <label class="dial">
+    <span class="dial-head"><b>信息密度</b><small>留白 1 — 10 满载</small><output data-qmdp-output="density">5</output></span>
+    <input data-qmdp-dial="density" type="range" min="1" max="10" value="5">
+  </label>
+</div>
+
+<main class="grid">
+
+  <article class="dir option" data-direction="A" data-name="唱片店月刊">
+    <div class="mock"><div class="stage dA">
+      <div class="masthead">
+        <span class="lat">ROOMUSIC</span>
+        <h1>唱片目录</h1>
+        <span class="issue">第柒期 · 2026 秋<br>库藏 1,284 张 · 已同步</span>
+      </div>
+      <nav class="nav">
+        <b><span class="n">01</span>音乐库</b>
+        <span><span class="n">02</span>扫描</span>
+        <span><span class="n">03</span>播放队列</span>
+        <span><span class="n">04</span>系统</span>
+      </nav>
+      <div class="searchline"><em>⌕</em>搜索唱片、艺术家、曲目……</div>
+      <div class="main">
+        <div class="feature">
+          <div class="cover-f"><b>冀</b><span class="seal">编辑选</span></div>
+          <h3>冀西南林路行</h3>
+          <p>万能青年旅店 · 2020 · 8 首<br>整张专辑 44 分 22 秒，FLAC 16/44.1</p>
+        </div>
+        <div class="idx">
+          <h4>本期入库</h4>
+          <div class="row"><span class="no">01</span><b>艳阳天<i>窦唯</i></b><time>1995</time></div>
+          <div class="row"><span class="no">02</span><b>看不见的城市<i>惘闻</i></b><time>2018</time></div>
+          <div class="row"><span class="no">03</span><b>劳动之余<i>声音玩具</i></b><time>2021</time></div>
+          <div class="row"><span class="no">04</span><b>县城记<i>五条人</i></b><time>2009</time></div>
+          <div class="row"><span class="no">05</span><b>相见恨晚<i>腰乐队</i></b><time>2014</time></div>
+          <div class="row"><span class="no">06</span><b>时代在召唤<i>假假條</i></b><time>2016</time></div>
+        </div>
+      </div>
+      <div class="player">
+        <span class="pp">▶</span>
+        <div>正在播放 · 河北墨麒麟 — 万能青年旅店<div class="prog"></div></div>
+        <time>04:12 / 11:26</time>
+      </div>
+    </div></div>
+    <div class="meta">
+      <span class="tag">方向样机 A</span>
+      <h2 data-direction-name>唱片店月刊</h2>
+      <p>亮纸底 + 衬线刊头 + 朱红编辑记号，像一本独立唱片店的店刊；编辑式不等比版面，一张主推封面配编号入库列表。</p>
+    </div>
+  </article>
+
+  <article class="dir option" data-direction="B" data-name="母带控制室">
+    <div class="mock"><div class="stage dB">
+      <div class="status">
+        <span class="logo">ROOMUSIC</span>
+        <span>▸ LIBRARY</span>
+        <span class="led">SYNC OK</span>
+        <span class="right">ROOTS 3 · USERS 2 · 2026-09-04 21:14</span>
+      </div>
+      <div class="body">
+        <div class="rail">
+          <div class="on">[01] 音乐库</div>
+          <div>[02] 扫描</div>
+          <div>[03] 播放队列</div>
+          <div>[04] 用户</div>
+          <div>[05] 系统</div>
+        </div>
+        <div class="tbl">
+          <h4>RELEASES · SORTED BY ADDED · 1,284 TOTAL</h4>
+          <div class="tr head"><span>NO</span><span>标题</span><span>艺术家</span><span>年份</span><span>轨数</span><span>状态</span></div>
+          <div class="tr hot"><span class="no">0001</span><span class="ttl">冀西南林路行</span><span>万能青年旅店</span><span class="yr">2020</span><span class="tc">8</span><span class="st">OK</span></div>
+          <div class="tr"><span class="no">0002</span><span class="ttl">艳阳天</span><span>窦唯</span><span class="yr">1995</span><span class="tc">10</span><span class="st">OK</span></div>
+          <div class="tr"><span class="no">0003</span><span class="ttl">看不见的城市</span><span>惘闻</span><span class="yr">2018</span><span class="tc">9</span><span class="st">OK</span></div>
+          <div class="tr"><span class="no">0004</span><span class="ttl">劳动之余</span><span>声音玩具</span><span class="yr">2021</span><span class="tc">8</span><span class="st">OK</span></div>
+          <div class="tr"><span class="no">0005</span><span class="ttl">县城记</span><span>五条人</span><span class="yr">2009</span><span class="tc">12</span><span class="st">OK</span></div>
+          <div class="tr"><span class="no">0006</span><span class="ttl">相见恨晚</span><span>腰乐队</span><span class="yr">2014</span><span class="tc">11</span><span class="st">OK</span></div>
+          <div class="tr"><span class="no">0007</span><span class="ttl">时代在召唤</span><span>假假條</span><span class="yr">2016</span><span class="tc">9</span><span class="st">SYNC</span></div>
+        </div>
+        <div class="side">
+          <h4>OUTPUT LEVEL</h4>
+          <div class="vu"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i><i></i><i></i></div>
+          <h4>NOW PLAYING</h4>
+          <div class="now">
+            <b>河北墨麒麟</b><br>万能青年旅店 · 冀西南林路行<br>
+            <span class="bar">██████░░░░░░</span> 04:12/11:26
+          </div>
+        </div>
+      </div>
+      <div class="console">
+        <span class="prompt">roomusic&gt;</span>
+        <span>queue add 冀西南林路行 --medium 1</span>
+        <span class="cursor"></span>
+        <span class="keys">[SPACE] 播放 · [N] 下一首 · [/] 搜索</span>
+      </div>
+    </div></div>
+    <div class="meta">
+      <span class="tag">方向样机 B</span>
+      <h2 data-direction-name>母带控制室</h2>
+      <p>暗底等宽 + 琥珀 LED + 密排表格，像录音棚控台的固件界面；信息密度最高，状态与命令行一目了然。</p>
+    </div>
+  </article>
+
+  <article class="dir option" data-direction="C" data-name="客厅唱机">
+    <div class="mock"><div class="stage dC">
+      <div class="topnav">
+        <span class="brandc"><i></i>ROOMusic</span>
+        <span class="tabs"><span class="on">音乐库</span><span>扫描</span><span>队列</span></span>
+        <span style="font-size:11px;color:#8a9b7e;font-weight:700">● 已同步</span>
+      </div>
+      <div class="hello">晚上好，<em>来听点什么？</em></div>
+      <div class="sub">库藏 1,284 张唱片，上次扫描今天 18:02 完成</div>
+      <div class="searchc">⌕&nbsp;&nbsp;搜一张唱片，或一位艺术家……</div>
+      <div class="shelf">
+        <div class="card-c"><div class="cov a"></div><b>冀西南林路行</b><small>万能青年旅店 · 2020</small></div>
+        <div class="card-c"><div class="cov b"></div><b>艳阳天</b><small>窦唯 · 1995</small></div>
+        <div class="card-c"><div class="cov c"></div><b>看不见的城市</b><small>惘闻 · 2018</small></div>
+        <div class="card-c"><div class="cov d"></div><b>劳动之余</b><small>声音玩具 · 2021</small></div>
+      </div>
+      <div class="deck">
+        <span class="thumb"></span>
+        <span class="tt"><b>河北墨麒麟</b><small>万能青年旅店</small></span>
+        <span class="ctrl"><span>‹‹</span><span class="play">▶</span><span>››</span></span>
+      </div>
+    </div></div>
+    <div class="meta">
+      <span class="tag">方向样机 C</span>
+      <h2 data-direction-name>客厅唱机</h2>
+      <p>暖白 + 陶土 + 鼠尾草，大圆角卡片与悬浮唱盘播放条，像周末客厅里的唱机；密度最低，最亲和，适合家庭共用。</p>
+    </div>
+  </article>
+
+  <article class="dir option" data-direction="D" data-name="深夜电台">
+    <div class="mock"><div class="stage dD">
+      <div class="top">
+        <span>ROOMUSIC FM</span>
+        <span class="live">LIVE · 已同步</span>
+      </div>
+      <div class="onair">
+        <div>
+          <div class="lbl">正在播出 NOW PLAYING</div>
+          <h1>河北墨麒麟</h1>
+          <div class="artist">万能青年旅店 —《冀西南林路行》· 2020</div>
+          <div class="meta-line"><span>04:12 / 11:26</span><span>FLAC 16/44.1</span><span>队列还有 5 首</span></div>
+        </div>
+        <div class="upnext">
+          <h4>UP NEXT</h4>
+          <div class="u">山雀 <span>06:03</span></div>
+          <div class="u">郊眠寺 <span>09:40</span></div>
+          <div class="u">采石 <span>08:56</span></div>
+          <div class="u">揪心的玩笑… <span>05:28</span></div>
+        </div>
+      </div>
+      <div class="tape">
+        <span><em>20:00</em> <b>冀西南林路行</b> 万能青年旅店</span><i>|</i>
+        <span><em>21:00</em> <b>艳阳天</b> 窦唯</span><i>|</i>
+        <span><em>22:00</em> <b>看不见的城市</b> 惘闻</span><i>|</i>
+        <span><em>23:00</em> <b>劳动之余</b> 声音玩具</span><i>|</i>
+        <span><em>00:00</em> <b>县城记</b> 五条人</span>
+      </div>
+      <div class="deck-d">
+        <span class="dot"></span>
+        <span class="tl"></span>
+        <span class="freq">87.9 · LIBRARY</span>
+      </div>
+    </div></div>
+    <div class="meta">
+      <span class="tag">方向样机 D</span>
+      <h2 data-direction-name>深夜电台</h2>
+      <p>近黑底 + 巨型"正在播出"排版 + 横向节目带，像深夜电台网站；把当前播放推到绝对主角，浏览变成节目表。</p>
+    </div>
+  </article>
+
+</main>
+
+<p class="static-hint">若通过本地预览服务打开，点选方向后会自动回传；若以文件形式静态打开，请把页面底部复制的「选 X」文本发回对话。</p>
+
+<section class="notes">
+  <div class="note">
+    <h3>A · 唱片店月刊</h3>
+    <dl>
+      <dt>气质</dt><dd>像独立唱片店店刊 /《The Wire》内页，复古印刷</dd>
+      <dt>字体</dt><dd>标题 Noto Serif SC（子集化）+ 系统衬线回退；正文系统中文栈</dd>
+      <dt>色彩</dt><dd>纸米 #f4efe2 + 墨色 #211d15 + 编辑朱红 #b23a2a，双色克制</dd>
+      <dt>布局动作</dt><dd>编辑式不等比：双细线刊头 + 主推封面 + 编号入库列表</dd>
+      <dt>记忆点</dt><dd>期号眉批与朱红「编辑选」印章，让曲库有被策展感</dd>
+      <dt>拨盘建议</dt><dd>冒险 7 · 动效 2 · 密度 5；适合慢慢淘碟的收藏者</dd>
+    </dl>
+  </div>
+  <div class="note">
+    <h3>B · 母带控制室</h3>
+    <dl>
+      <dt>气质</dt><dd>像录音棚控台 / 硬件固件界面，工业实用</dd>
+      <dt>字体</dt><dd>JetBrains Mono + 中文系统等宽回退，全界面等宽</dd>
+      <dt>色彩</dt><dd>炭黑 #0e1210 + 琥珀 #ffb000 + 扫描绿状态点，单色功能色</dd>
+      <dt>布局动作</dt><dd>状态栏 + 编号左栏 + 密排表格 + VU 表侧栏 + 控制台底栏</dd>
+      <dt>记忆点</dt><dd>底部 `roomusic&gt;` 命令行，键盘操作是一等公民</dd>
+      <dt>拨盘建议</dt><dd>冒险 6 · 动效 3 · 密度 8；适合把曲库当设备管的极客</dd>
+    </dl>
+  </div>
+  <div class="note">
+    <h3>C · 客厅唱机</h3>
+    <dl>
+      <dt>气质</dt><dd>像周末客厅的一台唱机，暖调居家、玩具感</dd>
+      <dt>字体</dt><dd>圆润无衬线（ui-rounded / 系统中文栈），字重对比代替装饰</dd>
+      <dt>色彩</dt><dd>暖白 #faf4ea + 陶土 #c96f4a + 鼠尾草 #8a9b7e，粉彩多色</dd>
+      <dt>布局动作</dt><dd>问候语 + 胶囊搜索 + 大圆角封面架 + 悬浮唱盘播放条</dd>
+      <dt>记忆点</dt><dd>封面像杯垫，播放条是浮在底部的深色唱盘胶囊</dd>
+      <dt>拨盘建议</dt><dd>冒险 5 · 动效 6 · 密度 3；适合家庭多人共用的场景</dd>
+    </dl>
+  </div>
+  <div class="note">
+    <h3>D · 深夜电台</h3>
+    <dl>
+      <dt>气质</dt><dd>像 NTS / 深夜电台网站，当代沉浸</dd>
+      <dt>字体</dt><dd>系统黑体超大展示字（58px+），字重与字号做全部层级</dd>
+      <dt>色彩</dt><dd>近黑 #0c0c0e + 白 + 信号红 #ff3b30 单色点睛</dd>
+      <dt>布局动作</dt><dd>巨型正在播出 + 右侧 UP NEXT + 横向节目时间表带</dd>
+      <dt>记忆点</dt><dd>曲库变成一张节目表，播放状态是永远的主角</dd>
+      <dt>拨盘建议</dt><dd>冒险 8 · 动效 7 · 密度 4；适合"开着听"的陪伴型使用</dd>
+    </dl>
+  </div>
+  <div class="note reco">
+    <h3>我的推荐：A · 唱片店月刊</h3>
+    <p>理由：ROOMusic 的定位是"音乐库管家"，核心是收藏与整理。A 的刊物式策展感最贴合"管家"气质，亮底中文可读性最好，也与现有暗色界面拉开最大辨识度。B 最硬核但日常浏览偏冷；C 最亲和但管理感弱；D 最炫但以播放为中心，弱化了"库"的存在。四个方向都可以混搭，例如「A 的版面 + B 的键盘操作」。</p>
+  </div>
+</section>
+
+</body>
+</html>
