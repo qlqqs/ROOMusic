@@ -376,3 +376,27 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 ### Status
 
 [OK] **Completed**
+
+
+## Session 17: 完成真实音乐库只读 Smoke 与 V0 对照
+<!-- trellis-session: v=2 fp=6a9b62ff4b929d8e -->
+
+**Date**: 2026-09-04
+**Task**: 完成真实音乐库只读 Smoke 与 V0 对照
+**Branch**: `task/real-library-smoke-v0-comparison`
+
+### Summary
+
+建立固定 V0 scanner 的隔离 SQLite/canonical 基准，完成 399 个真实资产的 current 首扫与重扫，对照收口扫描、元数据、艺人署名和严格多碟差异；最终 current A/B、current regression 与未知分类均为 0，资产前后摘要一致。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `efd5317` | feat: add isolated real-library smoke tooling |
+| `2747989` | fix: close V0 comparison regressions |
+| `b718d2e` | docs: record real-library smoke verification |
+
+### Status
+
+[OK] **Completed**
