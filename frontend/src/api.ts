@@ -29,10 +29,12 @@ const candidateKinds = ["ordinary_directory", "strict_multidisc", "box_leaf", "s
 const evidenceConfidences = ["high", "medium", "low"] as const;
 const evidenceActions = ["auto_apply", "uncertain_apply"] as const;
 const artworkMIMETypes = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
+const trackCreditRoles = ["composer", "conductor", "performer", "producer"] as const;
 
 export type CandidateKind = (typeof candidateKinds)[number];
 export type EvidenceConfidence = (typeof evidenceConfidences)[number];
 export type EvidenceAction = (typeof evidenceActions)[number];
+export type TrackCreditRole = (typeof trackCreditRoles)[number];
 export type ReleaseSummaryDTO = {
   id: string;
   title: string;
@@ -62,15 +64,20 @@ export type TrackDTO = {
   channels: number | null;
   bitrate: number | null;
   cue: CueTrackDTO | null;
+  credits: TrackCreditDTO[];
 };
 export type MediumDTO = { id: string; position: number; title: string; tracks: TrackDTO[] };
 export type ReleaseArtworkDTO = { resource_id: string; mime: (typeof artworkMIMETypes)[number]; width: number; height: number };
 export type ReleaseCreditDTO = { role: string; name: string };
+export type TrackCreditDTO = { role: TrackCreditRole; name: string };
 export type ReleaseEvidenceSummaryDTO = { field: string; source: string; confidence: EvidenceConfidence; action: EvidenceAction; rule_id: string };
 export type ReleaseDetailDTO = ReleaseSummaryDTO & {
   candidate_kind: CandidateKind;
   genre: string | null;
   catalog_number: string | null;
+  edition: string | null;
+  label: string | null;
+  barcode: string | null;
   media: MediumDTO[];
   credits: ReleaseCreditDTO[];
   artwork: ReleaseArtworkDTO | null;
@@ -83,6 +90,8 @@ export type ReleaseEvidenceDTO = { release_id: string; fields: ReleaseFieldEvide
 const maxReleaseItems = 100;
 const maxMediaItems = 256;
 const maxTrackItems = 10_000;
+const maxTrackCredits = 100;
+const maxReleaseTrackCredits = 10_000;
 const maxEvidenceItems = 100;
 const maxEvidenceCandidates = 20;
 const maxEvidenceSourceRefs = 100;
@@ -283,6 +292,7 @@ export function decodeReleaseDetail(input: unknown): ReleaseDetailDTO {
   const summary = decodeReleaseSummary(object);
   const artworkObject = object.artwork === null ? null : requireObject(object.artwork, "artwork");
   let decodedTrackCount = 0;
+  let decodedTrackCreditCount = 0;
   const media = requireBoundedArray(object.media, "media", maxMediaItems).map((item) => {
     const medium = requireObject(item, "medium");
     const trackItems = requireBoundedArray(medium.tracks, "medium.tracks", maxTrackItems);
@@ -293,6 +303,11 @@ export function decodeReleaseDetail(input: unknown): ReleaseDetailDTO {
     const tracks = trackItems.map((trackItem) => {
       const track = requireObject(trackItem, "track");
       const cueObject = track.cue === null ? null : requireObject(track.cue, "track.cue");
+      const creditItems = requireBoundedArray(track.credits, "track.credits", maxTrackCredits);
+      if (decodedTrackCreditCount + creditItems.length > maxReleaseTrackCredits) {
+        throw new Error("release track credits exceed their maximum length");
+      }
+      decodedTrackCreditCount += creditItems.length;
       return {
         id: requireNonEmptyString(track.id, "track.id"),
         title: requireBoundedString(track.title, "track.title"),
@@ -313,6 +328,13 @@ export function decodeReleaseDetail(input: unknown): ReleaseDetailDTO {
           end_seconds: requireNullableNonNegativeNumber(cueObject.end_seconds, "track.cue.end_seconds"),
           isrc: requireNullableNonEmptyString(cueObject.isrc, "track.cue.isrc"),
         } : null,
+        credits: creditItems.map((creditItem) => {
+          const credit = requireObject(creditItem, "track.credit");
+          return {
+            role: requireEnum(credit.role, "track.credit.role", trackCreditRoles),
+            name: requireNonEmptyString(credit.name, "track.credit.name"),
+          };
+        }),
       };
     });
     return {
@@ -327,6 +349,9 @@ export function decodeReleaseDetail(input: unknown): ReleaseDetailDTO {
     candidate_kind: requireEnum(object.candidate_kind, "candidate_kind", candidateKinds),
     genre: requireNullableNonEmptyString(object.genre, "genre"),
     catalog_number: requireNullableNonEmptyString(object.catalog_number, "catalog_number"),
+    edition: requireNullableNonEmptyString(object.edition, "edition"),
+    label: requireNullableNonEmptyString(object.label, "label"),
+    barcode: requireNullableNonEmptyString(object.barcode, "barcode"),
     artwork: artworkObject ? {
       resource_id: requireNonEmptyString(artworkObject.resource_id, "artwork.resource_id"),
       mime: requireEnum(artworkObject.mime, "artwork.mime", artworkMIMETypes),

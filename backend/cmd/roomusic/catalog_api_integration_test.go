@@ -26,6 +26,7 @@ func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
 	if err := application.database.connection.QueryRow(`SELECT id::text FROM media WHERE release_id=$1::uuid`, releaseID).Scan(&mediumID); err != nil {
 		t.Fatalf("read release medium: %v", err)
 	}
+	trackID := createIdentifier()
 	if _, err := application.database.connection.Exec(`INSERT INTO tracks(
 		id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,
 		source_kind,source_identity,duration_seconds,codec,bit_depth,sample_rate,channels,bitrate,
@@ -34,8 +35,13 @@ func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
 		$1::uuid,$2::uuid,1,'第一轨','曲目艺术家',1,$3::uuid,'CUE Album/image.flac#track-1','present',NOW(),
 		'cue_virtual',$4,240.0,'flac',24,96000,2,2400,
 		'CUE Album/album.cue','CUE Album/image.flac','image.flac',0,18000,'USAAA2600001'
-	)`, createIdentifier(), mediumID, rootID, rootID+":cue:v1:album"); err != nil {
+	)`, trackID, mediumID, rootID, rootID+":cue:v1:album"); err != nil {
 		t.Fatalf("insert present CUE track: %v", err)
+	}
+	if _, err := application.database.connection.Exec(`INSERT INTO track_credits(track_id,role,name,position) VALUES
+		($1::uuid,'composer','作曲者',1),
+		($1::uuid,'producer','制作人',2)`, trackID); err != nil {
+		t.Fatalf("insert track credits: %v", err)
 	}
 	if _, err := application.database.connection.Exec(`INSERT INTO tracks(
 		id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,source_kind,source_identity
@@ -110,6 +116,12 @@ func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
 	if track.Source != "image.flac#track-1" || track.BitDepth == nil || *track.BitDepth != 24 || track.Bitrate == nil || *track.Bitrate != 2400 || track.Cue == nil || track.Cue.IndexFrames == nil || *track.Cue.IndexFrames != 0 {
 		t.Fatalf("audio/CUE facts were not projected: %+v", track)
 	}
+	if len(track.Credits) != 2 || track.Credits[0].Role != "composer" || track.Credits[0].Name != "作曲者" || track.Credits[1].Role != "producer" {
+		t.Fatalf("track credits were not projected in order: %+v", track.Credits)
+	}
+	if detail.Edition == nil || *detail.Edition != "初回限定版" || detail.Label == nil || *detail.Label != "示例唱片公司" || detail.Barcode == nil || *detail.Barcode != "0123456789012" {
+		t.Fatalf("release metadata was not projected: edition=%v label=%v barcode=%v", detail.Edition, detail.Label, detail.Barcode)
+	}
 	if len(detail.Credits) != 1 || detail.Credits[0].Name != "专辑艺术家" || len(detail.Evidence) != 1 {
 		t.Fatalf("credit/evidence summary mismatch: credits=%+v evidence=%+v", detail.Credits, detail.Evidence)
 	}
@@ -174,8 +186,8 @@ func createCatalogReleaseFixture(t *testing.T, application *integrationTestAppli
 		t.Fatalf("insert release group fixture: %v", err)
 	}
 	if _, err := application.database.connection.Exec(`INSERT INTO releases(
-		id,group_id,title,artist,album_artist,year,source_type,media_type,genre,catalog_number,source_root_id,relative_directory,candidate_anchor,candidate_kind
-	) VALUES($1::uuid,$2::uuid,$3,$4,$4,2026,NULL,'CD','Jazz','CAT-001',$5::uuid,$6,$7,'ordinary_directory')`, releaseID, groupID, title, artist, rootID, anchorSuffix, rootID+":v2:"+anchorSuffix); err != nil {
+		id,group_id,title,artist,album_artist,year,source_type,media_type,genre,catalog_number,edition,label,barcode,source_root_id,relative_directory,candidate_anchor,candidate_kind
+	) VALUES($1::uuid,$2::uuid,$3,$4,$4,2026,NULL,'CD','Jazz','CAT-001','初回限定版','示例唱片公司','0123456789012',$5::uuid,$6,$7,'ordinary_directory')`, releaseID, groupID, title, artist, rootID, anchorSuffix, rootID+":v2:"+anchorSuffix); err != nil {
 		t.Fatalf("insert release fixture: %v", err)
 	}
 	if _, err := application.database.connection.Exec(`INSERT INTO media(id,release_id,position,title) VALUES($1::uuid,$2::uuid,1,'Medium')`, mediumID, releaseID); err != nil {

@@ -121,6 +121,25 @@ func TestParseM4ATextDecodingIsStrictAndBounded(t *testing.T) {
 	}
 }
 
+func TestParseM4AWriterAndAllowlistedFreeformMetadata(t *testing.T) {
+	items := repairM4AAtom(string([]byte{0xa9, 'w', 'r', 't'}), repairM4AData(1, []byte("Composer One; Composer Two")))
+	items = append(items, repairM4AFreeform("LABEL", "Example Label")...)
+	items = append(items, repairM4AFreeform("UPC", "012345678901")...)
+	items = append(items, repairM4AFreeform("PRIVATE_NOTE", "must stay unmapped")...)
+	observation := audioObservation{InferredFields: map[string]bool{}, RawAtoms: map[string]string{}}
+	parseM4AAtoms(repairM4AAtom("ilst", items), &observation)
+
+	if observation.Label != "Example Label" || observation.Barcode != "012345678901" {
+		t.Fatalf("M4A freeform metadata 未映射：%+v", observation)
+	}
+	if len(observation.Credits) != 2 || observation.Credits[0] != (creditObservation{Role: "composer", Name: "Composer One"}) || observation.Credits[1] != (creditObservation{Role: "composer", Name: "Composer Two"}) {
+		t.Fatalf("M4A composer 未拆分：%+v", observation.Credits)
+	}
+	if observation.RawAtoms["----:PRIVATE_NOTE"] != "" {
+		t.Fatal("未在 allowlist 中的 M4A freeform 字段进入了业务映射")
+	}
+}
+
 func TestEstimatedBitrateRejectsUnrepresentableFacts(t *testing.T) {
 	if bitrate := estimatedBitrateKbps(32_000, 1); bitrate != 256 {
 		t.Fatalf("estimated bitrate = %d, want 256", bitrate)
@@ -158,6 +177,77 @@ func TestParseExistingTagParsersRetainAlbumArtist(t *testing.T) {
 	}
 	if flac.SourceType != "CD" || flac.MediaType != "Compact Disc" || mp3.SourceType != "" || mp3.MediaType != "" {
 		t.Fatalf("explicit source/media tags were not isolated from audio facts: flac=%+v mp3=%+v", flac, mp3)
+	}
+}
+
+func TestParseFLACRetainsReleaseMetadataAndTrackCredits(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "metadata.flac")
+	data := repairFLACComments(
+		"TITLE=Track",
+		"LABEL=Example Label",
+		"UPC=012345678901",
+		"EDITION=Deluxe Edition",
+		"COMPOSER=Composer One; Composer Two",
+		"COMPOSER=Composer Three",
+	)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("写入 FLAC fixture：%v", err)
+	}
+	observation, err := parseFLAC(path)
+	if err != nil {
+		t.Fatalf("解析 FLAC metadata：%v", err)
+	}
+	if observation.Label != "Example Label" || observation.Barcode != "012345678901" || observation.Edition != "Deluxe Edition" {
+		t.Fatalf("FLAC 发行字段丢失：%+v", observation)
+	}
+	wantCredits := []creditObservation{
+		{Role: "composer", Name: "Composer One"},
+		{Role: "composer", Name: "Composer Two"},
+		{Role: "composer", Name: "Composer Three"},
+	}
+	if len(observation.Credits) != len(wantCredits) {
+		t.Fatalf("FLAC credits 数量 = %d，期望 %d：%+v", len(observation.Credits), len(wantCredits), observation.Credits)
+	}
+	for index := range wantCredits {
+		if observation.Credits[index] != wantCredits[index] {
+			t.Fatalf("FLAC credit[%d] = %+v，期望 %+v", index, observation.Credits[index], wantCredits[index])
+		}
+	}
+}
+
+func TestParseMP3DecodesUTF16AndReadsMPEGFacts(t *testing.T) {
+	title := repairUTF16("UTF16 Title", true)
+	fixture := repairMP3BinaryFrame("TIT2", append([]byte{1}, title...))
+	fixture = append(fixture, []byte{0xff, 0xfb, 0x90, 0x00}...)
+	fixture = append(fixture, make([]byte, 16_000)...)
+	path := filepath.Join(t.TempDir(), "utf16.mp3")
+	if err := os.WriteFile(path, fixture, 0o644); err != nil {
+		t.Fatalf("写入 MP3 fixture：%v", err)
+	}
+	observation, err := parseMP3(path)
+	if err != nil {
+		t.Fatalf("解析 MP3：%v", err)
+	}
+	if observation.Title != "UTF16 Title" {
+		t.Fatalf("UTF-16 标题 = %q", observation.Title)
+	}
+	if observation.Bitrate != 128 || observation.SampleRate != 44_100 || observation.Channels != 2 || observation.DurationSeconds < 1 {
+		t.Fatalf("MPEG 音频事实不完整：%+v", observation)
+	}
+}
+
+func TestDecodeID3TextSupportsDeclaredEncodings(t *testing.T) {
+	if got := decodeID3Text(append([]byte{0}, []byte{'c', 'a', 'f', 0xe9}...)); got != "café" {
+		t.Fatalf("Latin-1 ID3 文本 = %q", got)
+	}
+	if got := decodeID3Text(append([]byte{2}, repairUTF16("标题", false)[2:]...)); got != "标题" {
+		t.Fatalf("UTF-16BE ID3 文本 = %q", got)
+	}
+	if got := decodeID3Text(append([]byte{3}, []byte("标题")...)); got != "标题" {
+		t.Fatalf("UTF-8 ID3 文本 = %q", got)
+	}
+	if got := decodeID3Text([]byte{1, 0, 'x'}); got != "" {
+		t.Fatalf("无 BOM 的 ID3v2 UTF-16 文本被接受：%q", got)
 	}
 }
 
@@ -695,6 +785,12 @@ func repairM4AData(typeCode uint32, value []byte) []byte {
 	binary.BigEndian.PutUint32(payload[:4], typeCode)
 	copy(payload[8:], value)
 	return repairM4AAtom("data", payload)
+}
+
+func repairM4AFreeform(name, value string) []byte {
+	mean := repairM4AAtom("mean", append([]byte{0, 0, 0, 0}, []byte("com.apple.iTunes")...))
+	nameAtom := repairM4AAtom("name", append([]byte{0, 0, 0, 0}, []byte(name)...))
+	return repairM4AAtom("----", append(mean, append(nameAtom, repairM4AData(1, []byte(value))...)...))
 }
 
 func repairM4AMoov(codec string, channels, bitDepth, sampleRate, duration uint32, title, artist, album, albumArtist string) []byte {

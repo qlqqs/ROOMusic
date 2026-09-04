@@ -20,7 +20,7 @@ func TestPostgreSQLCandidatePersistenceIsIdempotentAndReplacesCurrentEvidence(t 
 	firstScan := insertRunningScan(t, fixture)
 	artwork := minimalPNGArtwork()
 	observations := []sourceObservation{
-		{RelativePath: "Album/01.flac", Directory: "Album", Title: "First", Album: "Release", AlbumArtist: "Album Artist", Artist: "Track Artist", Year: 2024, TrackNumber: 1, DiscNumber: 1, SourceKind: "flac_vorbis_comment", DurationSeconds: 60, Codec: "flac", BitDepth: 24, SampleRate: 96000, Channels: 2, Bitrate: 1800, Artwork: artwork, ArtworkMIME: "image/png"},
+		{RelativePath: "Album/01.flac", Directory: "Album", Title: "First", Album: "Release", AlbumArtist: "Album Artist", Artist: "Track Artist / Guest Artist", Year: 2024, TrackNumber: 1, DiscNumber: 1, SourceKind: "flac_vorbis_comment", DurationSeconds: 60, Codec: "flac", BitDepth: 24, SampleRate: 96000, Channels: 2, Bitrate: 1800, Edition: "Deluxe Edition", Label: "Example Label", Barcode: "012345678901", Credits: []creditObservation{{Role: "composer", Name: "Composer One"}, {Role: "composer", Name: "Composer Two"}}, Artwork: artwork, ArtworkMIME: "image/png"},
 		{RelativePath: "Album/02.flac", Directory: "Album", Title: "Second", Album: "Release", AlbumArtist: "Album Artist", Artist: "Track Artist", Year: 1999, TrackNumber: 2, DiscNumber: 1, SourceKind: "flac_vorbis_comment", InferredFields: map[string]bool{"year": true}},
 	}
 	if err := application.persistOrganizedCandidates(context.Background(), fixture.database.connection, firstScan, root, organizeObservations(observations)); err != nil {
@@ -37,7 +37,22 @@ func TestPostgreSQLCandidatePersistenceIsIdempotentAndReplacesCurrentEvidence(t 
 	}
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM release_grouping_evidence WHERE release_id=$1::uuid`, 1, releaseID)
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM release_credits WHERE release_id=$1::uuid AND role='album_artist' AND name='Album Artist'`, 1, releaseID)
+	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM track_credits credits JOIN tracks ON tracks.id=credits.track_id WHERE tracks.source_root_id=$1::uuid AND credits.role='composer'`, 2, root.ID)
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM release_artworks WHERE release_id=$1::uuid`, 1, releaseID)
+	var edition, label, barcode string
+	if err := fixture.database.connection.QueryRow(`SELECT edition,label,barcode FROM releases WHERE id=$1::uuid`, releaseID).Scan(&edition, &label, &barcode); err != nil {
+		t.Fatalf("read release metadata: %v", err)
+	}
+	if edition != "Deluxe Edition" || label != "Example Label" || barcode != "012345678901" {
+		t.Fatalf("release metadata = %q/%q/%q", edition, label, barcode)
+	}
+	var trackArtist string
+	if err := fixture.database.connection.QueryRow(`SELECT artist FROM tracks WHERE source_root_id=$1::uuid AND relative_path='Album/01.flac'`, root.ID).Scan(&trackArtist); err != nil {
+		t.Fatalf("read canonical track artist: %v", err)
+	}
+	if trackArtist != "Guest Artist / Track Artist" {
+		t.Fatalf("canonical track artist = %q", trackArtist)
+	}
 	var releaseYear int
 	if err := fixture.database.connection.QueryRow(`SELECT year FROM releases WHERE id=$1::uuid`, releaseID).Scan(&releaseYear); err != nil {
 		t.Fatalf("read selected release year: %v", err)
@@ -53,6 +68,7 @@ func TestPostgreSQLCandidatePersistenceIsIdempotentAndReplacesCurrentEvidence(t 
 	secondScan := insertRunningScan(t, fixture)
 	observations[0].Title = "First (rescanned)"
 	observations[0].BitDepth = 16
+	observations[0].Credits = []creditObservation{{Role: "composer", Name: "Composer Three"}}
 	observations = []sourceObservation{observations[1], observations[0]}
 	if err := application.persistOrganizedCandidates(context.Background(), fixture.database.connection, secondScan, root, organizeObservations(observations)); err != nil {
 		t.Fatalf("persist repeated candidate: %v", err)
@@ -80,6 +96,8 @@ func TestPostgreSQLCandidatePersistenceIsIdempotentAndReplacesCurrentEvidence(t 
 	if title != "First (rescanned)" || bitDepth != 16 {
 		t.Fatalf("track facts were not replaced: title=%q bit_depth=%d", title, bitDepth)
 	}
+	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM track_credits credits JOIN tracks ON tracks.id=credits.track_id WHERE tracks.source_root_id=$1::uuid AND credits.role='composer' AND credits.name='Composer Three'`, 1, root.ID)
+	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM track_credits credits JOIN tracks ON tracks.id=credits.track_id WHERE tracks.source_root_id=$1::uuid AND credits.name IN ('Composer One','Composer Two')`, 0, root.ID)
 
 	thirdScan := insertRunningScan(t, fixture)
 	observations[1].Artwork = nil
