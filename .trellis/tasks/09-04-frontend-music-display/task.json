@@ -1,0 +1,28 @@
+{
+  "id": "frontend-music-display",
+  "name": "frontend-music-display",
+  "title": "完善前端音乐库展示",
+  "description": "完善扫描完成后的音乐库浏览与音乐信息展示体验。",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "qlqq",
+  "assignee": "qlqq",
+  "createdAt": "2026-09-04",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "09-04-release-list-artwork-backend"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

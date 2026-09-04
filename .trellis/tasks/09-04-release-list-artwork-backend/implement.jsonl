@@ -1,0 +1,11 @@
+{"file": ".trellis/spec/guides/product-goals.md", "reason": "确认 Release 浏览价值、Core 0 只读边界及真实播放延期。"}
+{"file": ".trellis/spec/guides/modular-design.md", "reason": "约束 catalog 能力归属、依赖方向和共享摘要边界。"}
+{"file": ".trellis/spec/guides/engineering-principles.md", "reason": "遵循最小完整改动、错误分类和比例化验证。"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "跟踪 release_artworks 从 PostgreSQL 到两个 REST DTO 的跨层合同。"}
+{"file": ".trellis/spec/backend/index.md", "reason": "加载后端能力边界和实施前检查清单。"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "约束只读 PostgreSQL 查询、索引关联和无迁移边界。"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "约束 malformed artwork 和数据库错误的安全分类与 REST envelope。"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "提供后端测试证据、门禁和禁止耦合检查。"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "确认发行 REST、封面鉴权、present-only 和路径脱敏合同。"}
+{"file": ".trellis/tasks/09-04-frontend-music-display/research/current-state.md", "reason": "继承父任务的现状证据和方案比较；后端先行、前端延期。"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "实现 Release 列表/详情 artwork 投影与安全错误合同。"}
