@@ -46,6 +46,7 @@ export type ReleaseSummaryDTO = {
   medium_count: number;
   track_count: number;
   attention_count: number;
+  artwork: ReleaseArtworkDTO | null;
 };
 export type PaginationDTO = { page: number; page_size: number; total: number };
 export type ReleaseListDTO = { items: ReleaseSummaryDTO[]; pagination: PaginationDTO };
@@ -290,7 +291,6 @@ export function decodeReleaseList(input: unknown): ReleaseListDTO {
 export function decodeReleaseDetail(input: unknown): ReleaseDetailDTO {
   const object = requireObject(input, "release detail");
   const summary = decodeReleaseSummary(object);
-  const artworkObject = object.artwork === null ? null : requireObject(object.artwork, "artwork");
   let decodedTrackCount = 0;
   let decodedTrackCreditCount = 0;
   const media = requireBoundedArray(object.media, "media", maxMediaItems).map((item) => {
@@ -352,12 +352,6 @@ export function decodeReleaseDetail(input: unknown): ReleaseDetailDTO {
     edition: requireNullableNonEmptyString(object.edition, "edition"),
     label: requireNullableNonEmptyString(object.label, "label"),
     barcode: requireNullableNonEmptyString(object.barcode, "barcode"),
-    artwork: artworkObject ? {
-      resource_id: requireNonEmptyString(artworkObject.resource_id, "artwork.resource_id"),
-      mime: requireEnum(artworkObject.mime, "artwork.mime", artworkMIMETypes),
-      width: requireNonNegativeInteger(artworkObject.width, "artwork.width", 1),
-      height: requireNonNegativeInteger(artworkObject.height, "artwork.height", 1),
-    } : null,
     media,
     credits: requireBoundedArray(object.credits, "credits", maxEvidenceItems).map((item) => {
       const credit = requireObject(item, "credit");
@@ -408,7 +402,37 @@ function decodeReleaseSummary(input: unknown): ReleaseSummaryDTO {
     medium_count: requireNonNegativeInteger(object.medium_count, "release.medium_count", 0),
     track_count: requireNonNegativeInteger(object.track_count, "release.track_count", 0),
     attention_count: requireNonNegativeInteger(object.attention_count, "release.attention_count", 0),
+    artwork: decodeReleaseArtwork(object.artwork),
   };
+}
+
+const maxArtworkResourceIDLength = 255;
+
+function decodeReleaseArtwork(input: unknown): ReleaseArtworkDTO | null {
+  if (input === null) return null;
+  const artwork = requireObject(input, "artwork");
+  return {
+    resource_id: requireSafeResourceID(artwork.resource_id, "artwork.resource_id"),
+    mime: requireEnum(artwork.mime, "artwork.mime", artworkMIMETypes),
+    width: requireNonNegativeInteger(artwork.width, "artwork.width", 1),
+    height: requireNonNegativeInteger(artwork.height, "artwork.height", 1),
+  };
+}
+
+// 封面资源 ID 必须与后端 releaseArtworkFromProjection 的安全边界一致：
+// 有界 basename，不含路径分隔符、点目录或控制字符。
+function requireSafeResourceID(input: unknown, fieldName: string): string {
+  if (typeof input !== "string" || input === "" || input.length > maxArtworkResourceIDLength) {
+    throw new Error(`${fieldName} must be a bounded resource id`);
+  }
+  if (input === "." || input === ".." || input.includes("/") || input.includes("\\")) {
+    throw new Error(`${fieldName} must be a safe basename`);
+  }
+  // eslint-disable-next-line no-control-regex
+  if (/[\x00-\x1f\x7f]/.test(input)) {
+    throw new Error(`${fieldName} must not contain control characters`);
+  }
+  return input;
 }
 
 function decodeReleaseEvidenceSummary(input: unknown): ReleaseEvidenceSummaryDTO {
