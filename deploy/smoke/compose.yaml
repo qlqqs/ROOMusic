@@ -1,0 +1,118 @@
+# 仅用于 Smoke 的 Compose 定义。
+#
+# 入口脚本通过生成的 --env-file 和抗冲突 project 名提供所有插值值。
+# 不要直接运行本文件：它有意不连接仓库的开发 Compose project 或其 volume。
+services:
+  current:
+    image: "${ROOMUSIC_SMOKE_CURRENT_IMAGE:-roomusic-current-smoke:local}"
+    environment:
+      ROOMUSIC_ENV: dev
+      ROOMUSIC_HTTP_ADDR: ":8080"
+      ROOMUSIC_DATABASE_URL: "postgres://roomusic:${ROOMUSIC_SMOKE_CURRENT_PG_PASSWORD}@current-postgres:5432/roomusic?sslmode=disable"
+      ROOMUSIC_ALLOWED_LIBRARY_ROOTS: /music
+      ROOMUSIC_DATA_DIR: /data
+      ROOMUSIC_AUTH_JWT_SECRET: "${ROOMUSIC_SMOKE_CURRENT_JWT_SECRET}"
+      ROOMUSIC_AUTH_REFRESH_HMAC_SECRET: "${ROOMUSIC_SMOKE_CURRENT_REFRESH_SECRET}"
+      ROOMUSIC_AUTH_SETUP_TOKEN: "${ROOMUSIC_SMOKE_CURRENT_SETUP_TOKEN}"
+      ROOMUSIC_HTTP_ALLOWED_ORIGINS: "http://127.0.0.1:${ROOMUSIC_SMOKE_CURRENT_HTTP_PORT}"
+      ROOMUSIC_SECURE_COOKIES: "false"
+      ROOMUSIC_MUSICBRAINZ_ENABLED: "false"
+      ROOMUSIC_AI_PROVIDER_ENABLED: "false"
+      ROOMUSIC_AI_STEWARD_POST_SCAN_ENABLED: "false"
+      ROOMUSIC_SCAN_INTERVAL: 8760h
+      ROOMUSIC_LOG_PATH_MODE: hash
+    ports:
+      - "127.0.0.1:${ROOMUSIC_SMOKE_CURRENT_HTTP_PORT}:8080"
+    volumes:
+      - type: bind
+        source: "${ROOMUSIC_SMOKE_MUSIC_ROOT}"
+        target: /music
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: "${ROOMUSIC_SMOKE_DATA_ROOT}/current"
+        target: /data
+        bind:
+          create_host_path: false
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /run:size=16m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    depends_on:
+      current-postgres:
+        condition: service_healthy
+    networks:
+      - current-net
+      - current-control
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      start_period: 10s
+      retries: 12
+
+  v0:
+    image: "${ROOMUSIC_SMOKE_V0_IMAGE:-roomusic-v0-smoke:local}"
+    environment:
+      ROOMUSIC_V0_EXPORT_ROOT: /music
+      ROOMUSIC_V0_EXPORT_OUTPUT: /output/v0-rows.ndjson
+    volumes:
+      - type: bind
+        source: "${ROOMUSIC_SMOKE_MUSIC_ROOT}"
+        target: /music
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: "${ROOMUSIC_SMOKE_DATA_ROOT}/v0"
+        target: /output
+        bind:
+          create_host_path: false
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /run:size=16m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    network_mode: none
+    restart: "no"
+
+  current-postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: roomusic
+      POSTGRES_USER: roomusic
+      POSTGRES_PASSWORD: "${ROOMUSIC_SMOKE_CURRENT_PG_PASSWORD}"
+    ports:
+      - "127.0.0.1:${ROOMUSIC_SMOKE_CURRENT_PG_PORT}:5432"
+    volumes:
+      - current-postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U roomusic -d roomusic"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    networks:
+      - current-net
+    restart: "no"
+
+networks:
+  current-net:
+    driver: bridge
+    internal: true
+  # host 只通过发布端口进入应用。关闭 masquerade，防止应用通过该桥做普通外部出网。
+  current-control:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+
+volumes:
+  current-postgres-data:
