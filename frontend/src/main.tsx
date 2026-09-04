@@ -1,4 +1,4 @@
-/* global AbortController, URLSearchParams, window, crypto */
+/* global AbortController, URLSearchParams, window, crypto, HTMLDivElement, WheelEvent */
 import { FormEvent, StrictMode, useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -29,17 +29,21 @@ import {
   ScanDiagnosticsDTO,
   SessionDTO,
   RootOperationDTO,
+  TrackDTO,
   UserDTO,
 } from "./api";
 import { clampReleasePage, readReleaseFilters, releaseFilterURL } from "./release_filters";
 import {
   CatalogToolbar,
+  MediumSection,
   ReleaseCard,
   ReleaseCover,
   ReleaseDetailDrawer,
   clearDemoQueue,
   currentDemoItem,
   emptyDemoQueue,
+  flattenReleaseTracks,
+  formatSourceMediaLabel,
   nextDemoTrack,
   playDemoItems,
   playDemoTrack,
@@ -81,6 +85,16 @@ function describeScanNotice(scan: ScanStatusDTO | null): string | null {
     case "incomplete": return "扫描未完成，结果可能不完整";
     case "succeeded": return null;
   }
+}
+
+type PageRoute = "home" | "library" | "settings";
+
+// 轻量 hash 路由：#/ 首页、#/library 专辑库、#/settings 编辑部。
+// 不引入 router 依赖；Go 同源服务无需 SPA fallback。
+function readRoute(hash: string): PageRoute {
+  if (hash.startsWith("#/library")) return "library";
+  if (hash.startsWith("#/settings")) return "settings";
+  return "home";
 }
 
 function App() {
@@ -129,6 +143,12 @@ function App() {
   const [scanMutationPending, setScanMutationPending] = useState(false);
   const [message, setMessage] = useState("");
   const [queue, setQueue] = useState<DemoQueueState>(emptyDemoQueue);
+  const [featuredReleaseId, setFeaturedReleaseId] = useState<string | null>(null);
+  const [route, setRoute] = useState<PageRoute>(() => readRoute(window.location.hash));
+  const [featureDetail, setFeatureDetail] = useState<ReleaseDetailState | null>(null);
+  const [featureRetry, setFeatureRetry] = useState(0);
+  const [bannerCollapsedMedia, setBannerCollapsedMedia] = useState<ReadonlySet<string>>(new Set());
+  const shelfRowRef = useRef<HTMLDivElement | null>(null);
 
   const pushFilters = useCallback((filters: { query: string; attentionRequired: boolean; page: number; release: string | null }) => {
     window.history.pushState({}, "", releaseFilterURL(window.location.href, filters));
@@ -147,6 +167,87 @@ function App() {
     setReleaseEvidence(null);
     setReleaseEvidenceLoading(false);
     setReleaseEvidenceError("");
+  }, []);
+
+  const shelfReleases =
+    searchQuery === "" && !attentionRequired && releasePage === 1 ? releases.slice(0, 12) : [];
+  const featuredRelease =
+    shelfReleases.length > 0
+      ? (shelfReleases.find((release) => release.id === featuredReleaseId) ?? shelfReleases[0])
+      : null;
+  const featureModel = featuredRelease ? toReleaseCardModel(featuredRelease) : null;
+  const featuredId = featuredRelease?.id ?? null;
+
+  // 首页头条横幅：直接内联详情与曲目，不经过内页；summary 先渲染，详情异步补齐。
+  useEffect(() => {
+    if (featuredId === null) {
+      setFeatureDetail(null);
+      return;
+    }
+    const requestController = new AbortController();
+    setFeatureDetail({ status: "loading" });
+    setBannerCollapsedMedia(new Set());
+    void requestApi(`/api/v1/releases/${encodeURIComponent(featuredId)}`, decodeReleaseDetail, { signal: requestController.signal })
+      .then((detail) => {
+        if (requestController.signal.aborted) return;
+        setFeatureDetail({ status: "ready", detail });
+      })
+      .catch((error: unknown) => {
+        if (requestController.signal.aborted) return;
+        const code = error instanceof ApiRequestError ? error.code : "request_failed";
+        if (code === "unauthorized") {
+          setMessage("登录已过期，请重新登录");
+          setSession(null);
+          return;
+        }
+        setFeatureDetail({ status: "error", code });
+      });
+    return () => requestController.abort();
+  }, [featuredId, featureRetry, session]);
+
+  const bannerQueueItems = featureDetail?.status === "ready" ? flattenReleaseTracks(featureDetail.detail) : [];
+  const bannerDetail = featureDetail?.status === "ready" ? featureDetail.detail : null;
+  // 空值字段不占位：只有真实记录的档案字段才进入横幅。
+  const bannerSourceLabel = bannerDetail ? formatSourceMediaLabel(bannerDetail) : null;
+
+  function previewFeature(releaseID: string) {
+    setFeaturedReleaseId(releaseID);
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    document.getElementById("feature-story")?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+  }
+
+  function playBannerTrack(track: TrackDTO) {
+    const item = bannerQueueItems.find((candidate) => candidate.track.id === track.id);
+    if (item) queuePlayTrack(item);
+  }
+
+  function toggleBannerMedium(mediumID: string) {
+    setBannerCollapsedMedia((collapsed) => {
+      const next = new Set(collapsed);
+      if (next.has(mediumID)) next.delete(mediumID);
+      else next.add(mediumID);
+      return next;
+    });
+  }
+
+  // 唱片架：纵向滚轮转横向滚动（需非 passive 监听才能阻止页面联动）。
+  const shelfVisible = route === "home" && shelfReleases.length > 0;
+  useEffect(() => {
+    const row = shelfRowRef.current;
+    if (!row) return;
+    const onWheel = (event: WheelEvent) => {
+      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+      event.preventDefault();
+      row.scrollLeft += event.deltaY;
+    };
+    row.addEventListener("wheel", onWheel, { passive: false });
+    return () => row.removeEventListener("wheel", onWheel);
+  }, [shelfVisible]);
+
+  useEffect(() => {
+    const onHashChange = () => setRoute(readRoute(window.location.hash));
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
   useEffect(() => {
@@ -545,124 +646,232 @@ function App() {
       </main>
     );
   return (
-    <main className={currentQueueItem ? "app-shell has-player" : "app-shell"}>
-      <aside className="sidebar">
-        <div className="brand"><span className="brand-mark">R</span><span>ROOMusic</span></div>
-        <p className="side-label">工作区</p>
-        <nav>
-          <a className="nav-item active" href="#library" onClick={() => { if (selectedReleaseId) closeReleaseSelection(); }}>◈ <span>媒体库</span><b>{releaseTotal}</b></a>
-          <a className="nav-item" href="#queue">≡ <span>播放队列</span></a>
-          {session.role === "admin" && <a className="nav-item" href="#admin">⚙ <span>管理中心</span></a>}
-        </nav>
-        <div className="sidebar-bottom">
-          <div className="profile"><span className="avatar">{session.username.slice(0, 1).toUpperCase()}</span><div><strong>{session.username}</strong><small>{session.role === "admin" ? "管理员" : "成员"}</small></div></div>
-          <button className="ghost-button" type="button" onClick={() => void logout()}>退出登录</button>
-        </div>
-      </aside>
-
-      <section className="workspace">
-        <header className="topbar">
+    <div className={currentQueueItem ? "journal has-player" : "journal"}>
+      <header className="masthead">
+        <div className="masthead-top">
+          <span>VOL.01 · 本地音乐库</span>
           <span className="sync-state" role="status"><i /> {describeScanState(scan)}</span>
-        </header>
-        {message && <p className="toast" role="alert">{message}</p>}
-
-        <div className="content-grid">
-          <section className="library-panel" id="library">
-            <div className="section-heading">
-              <div><p className="eyebrow">私人音乐库</p><h1>探索你的收藏</h1></div>
-              <div className="heading-actions">
-                {session.role === "admin" && (scan?.status === "running" ? (
-                  <button className="outline-button" type="button" onClick={() => void cancelScan()} disabled={scanMutationPending || scan.cancel_requested_at !== null}>
-                    {scan.cancel_requested_at ? "取消请求中" : "停止扫描"}
-                  </button>
-                ) : (
-                  <button className="outline-button" type="button" onClick={() => void startScan()} disabled={scanMutationPending}>↻ 扫描音乐库</button>
-                ))}
-              </div>
-            </div>
-
-            <CatalogToolbar
-              searchInput={searchInput}
-              submittedQuery={searchQuery}
-              onSearchInput={setSearchInput}
-              onSubmitSearch={submitSearch}
-              onClearSearch={clearSearch}
-              attentionRequired={attentionRequired}
-              onToggleAttention={toggleAttentionFilter}
-              viewMode={viewMode}
-              onViewModeChange={setViewMode}
-              onRefresh={() => setReleaseRetry((retry) => retry + 1)}
-              pending={releaseLoading}
-              stale={staleRefreshing}
-              total={releaseTotal}
-              page={releasePage}
-              pageCount={releasePageCount}
-              onPageChange={changeReleasePage}
-            />
-
-            {scanNotice && <p className="scan-notice" role="status">{scanNotice}</p>}
-
-            {initialListLoading ? (
-              <div className="release-grid" role="status" aria-label="正在加载发行版本">
-                {Array.from({ length: 8 }, (_, index) => (
-                  <div className="skeleton-card" key={index}>
-                    <div className="skeleton-block skeleton-cover" />
-                    <div className="skeleton-block skeleton-line" />
-                    <div className="skeleton-block skeleton-line short" />
-                  </div>
-                ))}
-              </div>
-            ) : releaseError ? (
-              <p className="state-block error" role="alert">{releaseError} <button type="button" onClick={() => setReleaseRetry((retry) => retry + 1)}>重试</button></p>
-            ) : releases.length === 0 ? (
-              attentionRequired ? (
-                <p className="state-block">当前没有需要检查的发行版本 <button type="button" onClick={toggleAttentionFilter}>显示全部</button></p>
-              ) : searchQuery ? (
-                <p className="state-block">没有找到与“{searchQuery}”匹配的发行版本 <button type="button" onClick={clearSearch}>清除搜索</button></p>
-              ) : (
-                <p className="state-block">
-                  音乐库暂无发行版本
-                  {session.role === "admin"
-                    ? <button type="button" onClick={() => void startScan()} disabled={scanMutationPending || scan?.status === "running"}>扫描音乐库</button>
-                    : <span>请等待管理员完成扫描。</span>}
-                </p>
-              )
-            ) : (
-              <div className={viewMode === "grid" ? "release-grid" : "release-list"} aria-busy={staleRefreshing}>
-                {releases.map((release) => (
-                  <ReleaseCard key={release.id} model={toReleaseCardModel(release)} layout={viewMode} onOpen={openRelease} />
-                ))}
-              </div>
-            )}
-          </section>
-
-          <aside className="queue-panel" id="queue" aria-label="播放队列">
-            <div className="queue-heading"><h2>即将播放</h2><span>{queue.items.length > 0 ? `${queue.items.length} 首 · 演示队列` : "空队列"}</span></div>
-            {queue.items.length === 0 ? (
-              <div className="queue-empty"><span>♫</span><p>从发行详情中选择一首曲目<br />开始播放演示</p></div>
-            ) : (
-              <>
-                <ol className="queue-list">
-                  {queue.items.map((item, index) => (
-                    <li key={item.track.id} aria-current={index === queue.currentIndex ? "true" : undefined}>
-                      <button type="button" className={index === queue.currentIndex ? "queue-item current" : "queue-item"} onClick={() => queuePlayTrack(item)}>
-                        <span>{index + 1}</span>
-                        <b title={item.track.title}>{item.track.title || untitledTrackLabel}</b>
-                        <small title={item.releaseArtist}>{item.releaseArtist}</small>
-                      </button>
-                    </li>
-                  ))}
-                </ol>
-                <button className="ghost-button queue-clear" type="button" onClick={() => setQueue(clearDemoQueue)}>清空队列</button>
-              </>
-            )}
-            <div className="queue-tip"><span>⌘</span><p>演示模式<br />未连接音频服务</p></div>
-          </aside>
+          <span className="masthead-user">
+            {session.username}（{session.role === "admin" ? "管理员" : "成员"}）
+            <button className="masthead-logout" type="button" onClick={() => void logout()}>退出</button>
+          </span>
         </div>
+        <h1 className="masthead-name">ROOMusic</h1>
+        <p className="masthead-motto">私人唱片月刊 · 收录 {releaseTotal} 个发行版本</p>
+      </header>
 
+      <nav className="sections" aria-label="栏目">
+        <a className={route === "home" ? "section-link current" : "section-link"} aria-current={route === "home" ? "page" : undefined} href="#/"><b>01</b>首页</a>
+        <a className={route === "library" ? "section-link current" : "section-link"} aria-current={route === "library" ? "page" : undefined} href="#/library"><b>02</b>专辑库<span className="section-count">{releaseTotal}</span></a>
         {session.role === "admin" && (
-          <section className="admin-panel" id="admin">
-            <div className="section-heading"><div><p className="eyebrow">管理员工具</p><h2>管理中心</h2></div></div>
+          <a className={route === "settings" ? "section-link current" : "section-link"} aria-current={route === "settings" ? "page" : undefined} href="#/settings"><b>03</b>编辑部</a>
+        )}
+      </nav>
+
+      {message && <p className="toast" role="alert">{message}</p>}
+
+      <main className="front-page">
+        {route === "home" && (
+        <>
+        {featureModel && featuredRelease && (
+          <section className="feature-banner" id="feature-story" aria-label="头条专辑">
+            <div className="feature-art">
+              <ReleaseCover artwork={featureModel.artwork} title={featureModel.title} className="feature-cover" />
+              <span className="feature-seal">头条</span>
+            </div>
+            <div className="feature-body">
+              <p className="eyebrow">本周主推 · 点下方唱片更换</p>
+              <h2>{featureModel.title}</h2>
+              <p className="feature-meta">{featureModel.artistLabel} · {featureModel.yearLabel} · {featureModel.sizeLabel}</p>
+              {bannerDetail && (
+                <>
+                  <div className="sheet-actions">
+                    <button type="button" onClick={() => queuePlayItems(bannerQueueItems.slice(0, 1))} disabled={bannerQueueItems.length === 0}>
+                      播放首曲
+                    </button>
+                    <button type="button" onClick={() => queuePlayItems(bannerQueueItems)} disabled={bannerQueueItems.length === 0}>
+                      播放全部
+                    </button>
+                  </div>
+                  <p className="banner-meta-line">
+                    {bannerDetail.year !== null && <span>{bannerDetail.year}</span>}
+                    <span>{bannerDetail.medium_count} 碟</span>
+                    <span>{bannerDetail.track_count} 首</span>
+                    {bannerSourceLabel && <span>{bannerSourceLabel}</span>}
+                    {bannerDetail.genre && <span>{bannerDetail.genre}</span>}
+                    {bannerDetail.label && <span>{bannerDetail.label}</span>}
+                    {bannerDetail.catalog_number && <span>{bannerDetail.catalog_number}</span>}
+                  </p>
+                </>
+              )}
+            </div>
+            <div className="feature-tracks">
+              {featureDetail === null || featureDetail.status === "loading" ? (
+                <div role="status" aria-label="正在加载头条详情">
+                  <div className="skeleton-block skeleton-line" />
+                  <div className="skeleton-block skeleton-line" />
+                  <div className="skeleton-block skeleton-line short" />
+                  <div className="skeleton-block skeleton-line" />
+                  <div className="skeleton-block skeleton-line" />
+                </div>
+              ) : featureDetail.status === "error" ? (
+                <p className="state-block error" role="alert">
+                  头条详情加载失败
+                  <button type="button" onClick={() => setFeatureRetry((retry) => retry + 1)}>重试</button>
+                </p>
+              ) : (
+                featureDetail.detail.media.map((medium) => (
+                  <MediumSection
+                    key={medium.id}
+                    medium={medium}
+                    expanded={!bannerCollapsedMedia.has(medium.id)}
+                    onToggle={toggleBannerMedium}
+                    onPlayTrack={playBannerTrack}
+                  />
+                ))
+              )}
+            </div>
+          </section>
+        )}
+
+        {shelfReleases.length > 0 && featuredRelease && (
+          <section className="front-shelf" aria-label="新入架唱片">
+            <div className="shelf-head">
+              <p className="eyebrow">新入架</p>
+              <a className="shelf-more" href="#/library">查看更多 →</a>
+            </div>
+            <div className="shelf-row" ref={shelfRowRef}>
+              {shelfReleases.map((release) => {
+                const model = toReleaseCardModel(release);
+                const isCurrent = release.id === featuredRelease.id;
+                return (
+                  <button
+                    key={release.id}
+                    type="button"
+                    className={isCurrent ? "shelf-item current" : "shelf-item"}
+                    aria-pressed={isCurrent}
+                    aria-label={`将 ${model.title} 设为头条`}
+                    onClick={() => previewFeature(release.id)}
+                  >
+                    <ReleaseCover artwork={model.artwork} title={model.title} className="shelf-cover" />
+                    <strong title={model.title}>{model.title}</strong>
+                    <small title={model.artistLabel}>{model.artistLabel}</small>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        <section className="program" id="queue" aria-label="节目单">
+          <div className="section-heading">
+            <div><p className="eyebrow">播放队列 · 演示模式</p><h2>节目单</h2></div>
+            {queue.items.length > 0 && (
+              <div className="heading-actions">
+                <button className="outline-button" type="button" onClick={() => setQueue(clearDemoQueue)}>清空节目单</button>
+              </div>
+            )}
+          </div>
+          {queue.items.length === 0 ? (
+            <p className="program-empty">
+              节目单还空着——从发行详情里挑几首，排一期自己的节目。
+              <span className="program-hint">演示模式，未连接音频服务</span>
+            </p>
+          ) : (
+            <ol className="program-list">
+              {queue.items.map((item, index) => (
+                <li key={item.track.id} aria-current={index === queue.currentIndex ? "true" : undefined}>
+                  <button type="button" className={index === queue.currentIndex ? "program-item current" : "program-item"} onClick={() => queuePlayTrack(item)}>
+                    <span className="program-no">{String(index + 1).padStart(2, "0")}</span>
+                    <b title={item.track.title}>{item.track.title || untitledTrackLabel}</b>
+                    <small title={item.releaseArtist}>{item.releaseArtist}</small>
+                  </button>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+        </>
+        )}
+
+        {route === "library" && (
+        <section className="catalog-section" id="library">
+          <div className="section-heading">
+            <div><p className="eyebrow">私人音乐库</p><h2>专辑库</h2></div>
+            <div className="heading-actions">
+              {session.role === "admin" && (scan?.status === "running" ? (
+                <button className="outline-button" type="button" onClick={() => void cancelScan()} disabled={scanMutationPending || scan.cancel_requested_at !== null}>
+                  {scan.cancel_requested_at ? "取消请求中" : "停止扫描"}
+                </button>
+              ) : (
+                <button className="outline-button" type="button" onClick={() => void startScan()} disabled={scanMutationPending}>↻ 扫描音乐库</button>
+              ))}
+            </div>
+          </div>
+
+          <CatalogToolbar
+            searchInput={searchInput}
+            submittedQuery={searchQuery}
+            onSearchInput={setSearchInput}
+            onSubmitSearch={submitSearch}
+            onClearSearch={clearSearch}
+            attentionRequired={attentionRequired}
+            onToggleAttention={toggleAttentionFilter}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            onRefresh={() => setReleaseRetry((retry) => retry + 1)}
+            pending={releaseLoading}
+            stale={staleRefreshing}
+            total={releaseTotal}
+            page={releasePage}
+            pageCount={releasePageCount}
+            onPageChange={changeReleasePage}
+          />
+
+          {scanNotice && <p className="scan-notice" role="status">{scanNotice}</p>}
+
+          {initialListLoading ? (
+            <div className="release-grid" role="status" aria-label="正在加载发行版本">
+              {Array.from({ length: 8 }, (_, index) => (
+                <div className="skeleton-card" key={index}>
+                  <div className="skeleton-block skeleton-cover" />
+                  <div className="skeleton-block skeleton-line" />
+                  <div className="skeleton-block skeleton-line short" />
+                </div>
+              ))}
+            </div>
+          ) : releaseError ? (
+            <p className="state-block error" role="alert">{releaseError} <button type="button" onClick={() => setReleaseRetry((retry) => retry + 1)}>重试</button></p>
+          ) : releases.length === 0 ? (
+            attentionRequired ? (
+              <p className="state-block">当前没有需要检查的发行版本 <button type="button" onClick={toggleAttentionFilter}>显示全部</button></p>
+            ) : searchQuery ? (
+              <p className="state-block">没有找到与“{searchQuery}”匹配的发行版本 <button type="button" onClick={clearSearch}>清除搜索</button></p>
+            ) : (
+              <p className="state-block">
+                音乐库暂无发行版本
+                {session.role === "admin"
+                  ? <button type="button" onClick={() => void startScan()} disabled={scanMutationPending || scan?.status === "running"}>扫描音乐库</button>
+                  : <span>请等待管理员完成扫描。</span>}
+              </p>
+            )
+          ) : (
+            <div className={viewMode === "grid" ? "release-grid" : "release-list"} aria-busy={staleRefreshing}>
+              {releases.map((release) => (
+                <ReleaseCard key={release.id} model={toReleaseCardModel(release)} layout={viewMode} onOpen={openRelease} />
+              ))}
+            </div>
+          )}
+        </section>
+        )}
+
+        {route === "settings" && session.role !== "admin" && (
+          <p className="state-block">编辑部仅管理员可用。<a href="#/">回到首页</a></p>
+        )}
+
+        {route === "settings" && session.role === "admin" && (
+          <section className="desk-section" id="admin">
+            <div className="section-heading"><div><p className="eyebrow">管理员工具</p><h2>编辑部</h2></div></div>
             <div className="admin-grid">
               <section className="admin-card">
                 <h3>用户</h3>
@@ -689,7 +898,7 @@ function App() {
             </div>
           </section>
         )}
-      </section>
+      </main>
 
       {selectedReleaseId && (
         <ReleaseDetailDrawer
@@ -726,7 +935,7 @@ function App() {
           <span className="demo-badge">演示模式，未连接音频服务</span>
         </footer>
       )}
-    </main>
+    </div>
   );
 }
 

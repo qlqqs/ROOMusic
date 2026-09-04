@@ -10,6 +10,7 @@ import {
   formatAudioFacts,
   formatDuration,
   formatReleaseLabel,
+  formatSourceMediaLabel,
   maxDemoQueueItems,
   nextDemoTrack,
   playDemoItems,
@@ -113,6 +114,20 @@ describe("formatReleaseLabel", () => {
     expect(formatReleaseLabel({ album_artist: "  ", artist: "艺术家" })).toBe("艺术家");
     expect(formatReleaseLabel({ album_artist: null, artist: "" })).toBe("艺术家未知");
     expect(formatReleaseLabel({ album_artist: null, artist: "   " })).toBe("艺术家未知");
+  });
+});
+
+describe("formatSourceMediaLabel", () => {
+  it("deduplicates equivalent source and media values", () => {
+    expect(formatSourceMediaLabel({ source_type: "CD", media_type: "CD" })).toBe("CD");
+    expect(formatSourceMediaLabel({ source_type: "web", media_type: "WEB" })).toBe("web");
+    expect(formatSourceMediaLabel({ source_type: " CD ", media_type: "cd" })).toBe("CD");
+  });
+
+  it("keeps distinct values and omits empty values", () => {
+    expect(formatSourceMediaLabel({ source_type: "digital", media_type: "FLAC" })).toBe("digital / FLAC");
+    expect(formatSourceMediaLabel({ source_type: null, media_type: "CD" }, " · ")).toBe("CD");
+    expect(formatSourceMediaLabel({ source_type: null, media_type: null })).toBeNull();
   });
 });
 
