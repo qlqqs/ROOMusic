@@ -505,3 +505,25 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 ### Status
 
 [OK] **Completed**
+
+
+## Session 22: 修复扫描元数据与前端标签显示
+<!-- trellis-session: v=2 fp=d17e146708fa8b78 -->
+
+**Date**: 2026-09-04
+**Task**: 修复扫描元数据与前端标签显示
+**Branch**: `main`
+
+### Summary
+
+修正开发音乐根目录并完成只读重扫，恢复厂牌、条码、目录号与署名；统一来源/介质显示去重，完成月刊式前端改版、设计锚和嵌入资源提交。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f2615d5` | feat: refine catalog presentation and metadata display |
+
+### Status
+
+[OK] **Completed**
