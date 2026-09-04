@@ -11,4 +11,6 @@
 {"file":".trellis/spec/backend/core0-runtime-contracts.md","reason":"保持当前正式 setup/root/scan/REST、协调锁和 complete-only missing 合同。"}
 {"file":".trellis/spec/backend/quality-guidelines.md","reason":"提供 scanner、PostgreSQL、路径、并发和部署定义的最小测试门槛。"}
 {"file":".trellis/tasks/09-03-real-library-smoke-v0-comparison/research/v0-baseline-inventory.md","reason":"提供 V0 数据盘点、固定归档身份、用户确认的 corrected generation 语义和重建可行性。"}
+{"file":".trellis/tasks/09-03-real-library-smoke-v0-comparison/research/v0-production-scan-blocker.md","reason":"记录为何 V0 production 失败库不再作为基准，以及已撤回 degraded 路线的证据。"}
+{"file":".trellis/tasks/09-03-real-library-smoke-v0-comparison/research/v0-standalone-reference-design.md","reason":"规定复用 V0 scanner 核心、standalone adapter、normalized SQLite、canonical round-trip 与基准身份。"}
 {"file":".trellis/tasks/archive/2026-09/09-03-album-scan-repair/research/v0-reference-and-current-gaps.md","reason":"提供已验证的 V0 scanner 行为参考和当前 parser/organizer/persistence 差异背景。"}

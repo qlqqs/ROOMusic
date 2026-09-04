@@ -11,4 +11,6 @@
 {"file":".trellis/spec/backend/core0-runtime-contracts.md","reason":"检查当前正式扫描、取消、终态和 REST 投影未回归。"}
 {"file":".trellis/spec/backend/quality-guidelines.md","reason":"执行 shell、Compose、Go、PostgreSQL、并发和只读安全质量门禁。"}
 {"file":".trellis/tasks/09-03-real-library-smoke-v0-comparison/research/v0-baseline-inventory.md","reason":"核对实际基准身份与用户确认的 V0 corrected generation 决策一致。"}
+{"file":".trellis/tasks/09-03-real-library-smoke-v0-comparison/research/v0-production-scan-blocker.md","reason":"复核实现未回退到 V0 production 失败库或把 local-evidence 错误提升为基准。"}
+{"file":".trellis/tasks/09-03-real-library-smoke-v0-comparison/research/v0-standalone-reference-design.md","reason":"复核 adapter 只调用 V0 scanner 核心、SQLite/JSON round-trip 完整、路径脱敏且无 partial baseline。"}
 {"file":".trellis/tasks/archive/2026-09/09-03-album-scan-repair/research/v0-reference-and-current-gaps.md","reason":"对照既有 V0 行为研究，检查问题分类和修复 owner 是否正确。"}

@@ -2,19 +2,29 @@
 
 ## 1. 基准定义
 
-本任务不再等待历史 `golden.sqlite`。用户已确认固定 V0 代码的生成结果已经包含此前
-人工修正，因此基准定义为：
+本任务不再等待历史 `golden.sqlite`，也不从已知失败的 V0 production PostgreSQL 截取
+部分数据。用户已确认固定 V0 scanner 的生成结果已经包含此前人工修正；代码又证明
+production worker、现存真实语料测试和历史 golden generator 在图生成阶段共用同一组
+核心 API。因此基准定义为：
 
 ```text
-V0 代码身份 + 当前 corpus 身份 + V0 production scanner 输出
-  = v0_generated_corrected
+V0 scanner 代码身份 + smoke adapter 身份 + 当前 corpus 身份
+  + standalone 核心调用链完整成功 + normalized SQLite 校验成功
+  = v0_release_graph_generated_corrected
 ```
 
 - V0 代码身份固定为 `ROOMusic-migration.tar.gz`，执行前核对 SHA-256
   `fe25388328698b26991ea3b59a14406a155eb92d578a9be2a68d67d331ecf97d`。
 - 归档只解包到权限受限的临时目录，不修改归档或旁边的 `ROOMusic-V0` 目录。
-- V0 与当前实现必须读取同一份、同一摘要的当前真实资产。历史 UAT 数量只是 sanity
-  check，不因历史 corpus 与当前 corpus 数量不同而否定本轮基准。
+- adapter 源码由本任务维护，只复制到临时解包副本的 `cmd/` 下构建；它可以调用 V0
+  `internal/scanner`，但不能修改或替换 scanner 文件。manifest 分别记录 archive 与
+  adapter hash。
+- V0 与当前实现必须读取同一份、同一摘要的当前真实资产。历史
+  `110 Release/112 Medium/407 Track/466 File` 只作口径明确的 sanity evidence，不覆盖
+  同一 corpus 的实际逐项输出。
+- 基准范围从设计上就是 Release Graph-only，成功时记录 `degraded=false`；不生成或导出
+  V0 local evidence、quality badge、scan diagnostics、REST/queue 状态，也不需要接受任何
+  V0 production 失败。
 - 历史 SQLite/PostgreSQL 若日后出现，只作审计候选；多个候选必须先停下交由用户选择。
 
 ## 2. 交付边界
@@ -23,8 +33,9 @@ V0 代码身份 + 当前 corpus 身份 + V0 production scanner 输出
 
 | 部分 | 责任 | 不负责 |
 | --- | --- | --- |
-| Smoke 编排脚本 | opt-in、前置检查、隔离服务、正式 REST 扫描、超时/信号清理、产物权限 | scanner 业务规则、直接 SQL 修正 |
-| 对照工具 | corpus 总摘要、V0/current canonical export、稳定匹配、确定性 diff、脱敏报告 | 启动业务服务、修改真实资产 |
+| Smoke 编排脚本 | opt-in、前置检查、隔离 V0 exporter 与当前正式 REST 扫描、超时/信号清理、产物权限 | scanner 业务规则、直接 SQL 修正 |
+| V0 adapter | 调用固定 V0 scanner 的公开核心 API，输出严格版本化的临时 graph rows | 复制算法、保存 local evidence、启动 V0 runtime |
+| 对照工具 | corpus 总摘要、SQLite/canonical export、稳定匹配、确定性 diff、脱敏报告 | 修改真实资产、推断或忽略未知差异 |
 | 缺陷修复 | 用脱敏合成 fixture 固化回归，在 parser/organizer/persistence/REST owner 修复 | 对真实音乐或 V0 数据做特例补丁 |
 
 预计新增一个 `scripts/real-library-smoke.sh` 显式入口，以及位于当前 Go module 内的窄
@@ -37,9 +48,11 @@ V0 代码身份 + 当前 corpus 身份 + V0 production scanner 输出
 显式 opt-in + 路径/工具/端口检查
   -> 真实资产前置树摘要（详细清单仅在 0700 临时目录）
   -> 校验并解包固定 V0 归档
-  -> 隔离 V0 PostgreSQL/Redis/必要服务 + /music:ro
-  -> V0 migration/setup/login/library-path/scan/poll
-  -> V0 canonical snapshot + 权限受限的 catalog dump/manifest
+  -> 注入并 hash smoke-owned V0 adapter
+  -> 隔离 exporter 容器 + /music:ro + /output:rw + runtime network=none
+  -> Walk/parse/FileEvidence/BuildReleaseCandidates/AssembleReleaseCandidate
+  -> 临时 graph rows -> normalized v0-reference.sqlite
+  -> SQLite graph/路径/FK/唯一性校验 -> canonical V0 snapshot/manifest
   -> 隔离当前 PostgreSQL + 当前应用 + /music:ro
   -> 当前 migration/setup/library-root/首次 scan/poll
   -> current snapshot A
@@ -50,8 +63,9 @@ V0 代码身份 + 当前 corpus 身份 + V0 production scanner 输出
   -> 清理容器、网络、volume、临时目录
 ```
 
-任一阶段失败都不得继续生成“通过”报告。只有 V0 扫描完整成功、dump 完整且 manifest
-落盘成功时，才允许保留本地 V0 基准文件。
+任一 walk、解析、CUE 路径验证、组装、序列化或 SQLite 完整性失败都不得生成基准或启动
+current。V0 adapter 不提供“部分成功”或 known-error 放行分支；只有 graph 全量生成、
+SQLite 校验和 canonical round-trip 全部成功后，才允许保留本地基准文件。
 
 ## 4. 隔离运行合同
 
@@ -61,26 +75,33 @@ V0 代码身份 + 当前 corpus 身份 + V0 production scanner 输出
   工作区根或与任一 data/database 目录重叠时 fail closed。
 - 不读取现有 `.env`/`.env.dev`。脚本生成临时凭据、随机 Compose project 名和空闲
   loopback 端口，所有敏感临时文件为 `0600`，目录为 `0700`。
-- 应用容器仅以 `:ro` 挂载真实音乐；V0/current 的数据库、data、cache、构建和报告目录
-  与现有项目完全分离。通过 Compose inspect 再次确认 mount 的 `RW=false` 后才触发扫描。
-- AI、provider、定时扫描和非必要网络能力显式关闭。V0 运行所需 Redis/Meilisearch
-  即使启动，也只能位于随机隔离 project 网络中，不能复用现有服务或 volume。
+- 扫描容器仅以 `:ro` 挂载真实音乐；V0 exporter/current 的 data、database、cache、构建
+  和报告目录与现有项目完全分离。通过容器 inspect 再次确认 mount 的 `RW=false` 后才
+  触发扫描。
+- V0 exporter 不启动 Redis、Meilisearch、PostgreSQL、REST、AI 或 provider，运行时网络
+  设为 `none`。构建阶段可使用用户明确允许的 `.bashrc` 代理下载已锁定 Go 依赖，代理值
+  不写入镜像层、manifest 或运行环境。
 - trap 处理成功、失败、取消和信号路径；使用精确 project 名执行 `down --volumes`，
   禁止对默认 `roomusic` project 或当前 volume 执行清理。
 
-### 4.2 V0 正式路径
+### 4.2 V0 standalone 路径
 
-V0 通过归档自带 Dockerfile 与 migration 启动 production app，调用正式接口：
+adapter 复刻的是历史 `cmd/golden generate-candidate` 的职责边界，而不是 production
+runtime：
 
-1. `/api/setup` 创建一次性管理员；
-2. `/api/auth/login` 获取只存在于临时文件/内存的 token；
-3. `/api/library-paths` 注册容器内只读根；
-4. `/api/scan/trigger` 触发任务；
-5. `/api/scan/progress` 和持久化 scan state 共同确认完整终态。
+1. `scanner.Walk` 在唯一 allowlisted `/music` 根生成 `WalkResult`；
+2. 对发现的 CUE 和音频分别调用 `ParseCueSheet`/`ValidateCueFiles` 与 `ParseTags`，构造
+   `FileEvidence`；
+3. 调用 `BuildReleaseCandidates`，随后为每个 candidate 注入 tags、Cues 和 FileEvidence；
+4. 调用 `AssembleReleaseCandidate` 得到 Release/Medium/Track/File、credits 与 grouping
+   结果；
+5. adapter 只输出 corpus-relative、确定排序的临时 NDJSON；当前 smoke writer 将其写入
+   normalized SQLite，校验后再导出 canonical JSON。
 
-不得绕过 scanner 直接调用 assembler 或向 catalog 表填充结果。为重放生产生成逻辑而
-启动 V0 runtime 是测试工具行为，不会把 Redis、Meilisearch、GraphQL、AI 或旧 schema
-引入当前 ROOMusic。
+步骤 1—4 与现存 `TestRealMusicCorpusRoonReleaseGraph` 同源，也与 production handler 在
+`SaveReleaseWithObservationsFenced` 之前的图生成路径同源。步骤 5 属于可审计适配，不改变
+V0 业务规则。adapter 对解析错误 fail closed；不会进入 production 独有的 artwork、lyrics、
+quality badge、local-evidence persistence、queue 或 reconciliation 收尾。
 
 ### 4.3 当前 ROOMusic 正式路径
 
@@ -105,15 +126,16 @@ scan start/status、diagnostics、Release list/detail/evidence 完成端到端�
 
 ## 6. Canonical snapshot 合同
 
-V0 和当前 schema 分别由独立 adapter 读取，再映射到同一个版本化、确定排序的模型。
-adapter 使用显式列和只读事务，不共享两套数据库的内部 ID。
+V0 standalone rows 先进入 normalized SQLite，当前 schema 则由独立只读 PostgreSQL
+adapter 导出；两端再映射到同一个版本化、确定排序的模型，不共享内部 ID。
 
 ### 6.1 数据集身份
 
 - `snapshot_version`
-- `implementation`：`v0_generated_corrected` 或 `current`
-- `code_hash`、migration/schema 摘要、corpus 总摘要
-- scan run 终态、开始/结束时间和安全聚合计数
+- `implementation`：`v0_release_graph_generated_corrected` 或 `current`
+- `code_hash`、adapter hash、SQLite/current migration schema 摘要、corpus 总摘要
+- `generation_mode`、开始/结束时间和安全聚合计数
+- `baseline_scope=release_graph_only`、`degraded=false` 和 excluded evidence scope
 
 时间只作审计，不参加语义相等判断。
 
@@ -133,8 +155,10 @@ adapter 使用显式列和只读事务，不共享两套数据库的内部 ID。
 
 - Release/Medium/Track/File 层级、归组、多碟、Box leaf 和 CUE virtual 关系；
 - title、artist、album artist、year、source/media、edition、label、catalog、genre；
-- credits、audio/CUE facts、current field decision、confidence/action、关键 evidence；
-- scan diagnostics、attention 和管理员 REST 投影聚合。
+- credits，以及 Release Graph 中已有的 audio/CUE facts；
+- V0 standalone 基准只比较 adapter 明确导出的 grouping/field facts；V0 local evidence、
+  quality badge、scan diagnostics/attention 以及 production runtime 状态始终排除；
+- current A/B 仍独立比较 current evidence、diagnostics、attention 和管理员 REST 投影。
 
 只有两端确有等价语义的字段执行 exact compare。schema adapter 必须显式声明不可比字段，
 不得通过删除、lowercase 或空值合并让差异消失。
@@ -156,14 +180,18 @@ adapter 使用显式列和只读事务，不共享两套数据库的内部 ID。
 
 ## 8. 本地基准与报告
 
-- 成功的 V0 catalog dump、canonical snapshot 和 manifest 保存到新增的 Git 忽略本地
-  目录，文件权限 `0600`；manifest 不包含凭据、宿主绝对路径或逐文件 metadata。
+- 校验通过的 normalized `v0-reference.sqlite`、V0 canonical、字段白名单约束的 current
+  A/B canonical、comparison 和 manifest 保存到 Git 忽略本地目录，文件权限 `0600`。
+  SQLite 只包含 Release Graph allowlist，不含 local-evidence/quality-badge/scan-error 表；
+  审计产物不包含凭据、宿主绝对路径或原始 SQL dump，失败运行不得保留这些产物。
 - 基准名包含 V0 code hash 和 corpus 总摘要。发现同一身份但内容 hash 不同时 fail
   closed；存在多个不同基准时只盘点并等待用户选择。
 - 任务内只记录脱敏 `smoke-result.md`：运行身份、聚合计数、耗时、终态、前后 corpus
   总摘要是否一致、差异分类数量、修复/延期和实际命令，不记录原始数据库或逐项私有数据。
-- 默认失败路径删除 dump 与 raw snapshot；可复现调试依赖脱敏 fixture，不依赖保留失败
-  数据库。
+- 并发成功运行各自保存在独立身份目录；任务内聚合报告按“最后一个完整成功运行胜出”
+  原子发布，禁止直接覆盖写入造成截断或混合内容。
+- 默认失败路径删除 SQLite、raw rows 与 snapshot；可复现调试依赖脱敏 fixture，不依赖
+  production 失败数据库。
 
 ## 9. 修复循环与回退
 
@@ -171,9 +199,11 @@ adapter 使用显式列和只读事务，不共享两套数据库的内部 ID。
 2. 先让回归测试失败，再在真实 owner 修复；禁止按来源 hash、私有文件名或具体专辑写
    特例。
 3. 运行与修改直接相关的最小测试和 PostgreSQL 集成测试，再执行对应 hash ID 的定向
-   smoke；所有问题关闭后重新从空数据库执行完整 V0、当前首次/重扫和对照。
+   smoke；所有问题关闭后重新生成 V0 standalone 基准，并从空当前数据库执行首次/重扫
+   和对照。
 4. 若修复需要改变已批准产品合同、引入 overlay/AI/provider/topology 或文件写入，停止
    本任务并返回规划；不因“让 diff 归零”而扩大权限。
 
-V0 归档和基准生成逻辑永不在本任务中修改。当前修复可按 Git patch 回退；数据库均为
-临时或可重建，本任务不提供 destructive down migration，也不接触现有业务数据库。
+V0 归档和 scanner 业务逻辑永不在本任务中修改；adapter 可以整体删除回退，已知 V0
+production evidence 缺陷另行跟踪。当前修复可按 Git patch 回退；SQLite 与当前测试库均
+为临时或可重建，本任务不提供 destructive down migration，也不接触现有业务数据库。
