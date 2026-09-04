@@ -64,7 +64,14 @@ func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
 
 	legacyReleaseID := createCatalogReleaseFixture(t, application, rootID, "旧版专辑", "旧版艺术家", "legacy", true)
 	hiddenReleaseID := createCatalogReleaseFixture(t, application, rootID, "空壳专辑", "艺术家", "hidden", false)
+	expectedArtwork := releaseArtworkDTO{ResourceID: "catalog-cover.webp", MIME: "image/webp", Width: 640, Height: 480}
+	if _, err := application.database.connection.Exec(`INSERT INTO release_artworks(
+		release_id,content_hash,mime_type,width,height,storage_key,source_type
+	) VALUES($1::uuid,$2,$3,$4,$5,$6,'embedded')`, releaseID, strings.Repeat("a", 64), expectedArtwork.MIME, expectedArtwork.Width, expectedArtwork.Height, expectedArtwork.ResourceID); err != nil {
+		t.Fatalf("insert release artwork fixture: %v", err)
+	}
 
+	requireAPIError(t, application.request(t, http.MethodGet, "/api/v1/releases", nil, nil, nil), http.StatusUnauthorized, "unauthorized")
 	allResponse := application.request(t, http.MethodGet, "/api/v1/releases", nil, &ordinary, nil)
 	if allResponse.Code != http.StatusOK {
 		t.Fatalf("list releases: HTTP %d: %s", allResponse.Code, allResponse.Body.String())
@@ -81,6 +88,53 @@ func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
 	}
 	if strings.Contains(allResponse.Body.String(), hiddenReleaseID) {
 		t.Fatal("missing-only release was visible in the ordinary list")
+	}
+	var artworkSummary, noArtworkSummary *releaseSummaryDTO
+	for index := range allList.Items {
+		switch allList.Items[index].ID {
+		case releaseID:
+			artworkSummary = &allList.Items[index]
+		case legacyReleaseID:
+			noArtworkSummary = &allList.Items[index]
+		}
+	}
+	if artworkSummary == nil || artworkSummary.Artwork == nil || *artworkSummary.Artwork != expectedArtwork {
+		t.Fatalf("list artwork projection mismatch: %+v", artworkSummary)
+	}
+	if noArtworkSummary == nil || noArtworkSummary.Artwork != nil {
+		t.Fatalf("release without artwork did not project nil: %+v", noArtworkSummary)
+	}
+	var rawList struct {
+		Items []map[string]json.RawMessage `json:"items"`
+	}
+	if err := json.Unmarshal(allResponse.Body.Bytes(), &rawList); err != nil {
+		t.Fatalf("decode raw release list: %v", err)
+	}
+	foundExplicitNull := false
+	for _, item := range rawList.Items {
+		var itemID string
+		if err := json.Unmarshal(item["id"], &itemID); err != nil {
+			t.Fatalf("decode raw release id: %v", err)
+		}
+		if itemID == legacyReleaseID {
+			artworkJSON, exists := item["artwork"]
+			foundExplicitNull = exists && string(artworkJSON) == "null"
+		}
+	}
+	if !foundExplicitNull {
+		t.Fatalf("release list did not include explicit null artwork: %s", allResponse.Body.String())
+	}
+
+	searchResponse := application.request(t, http.MethodGet, "/api/v1/releases?q=CUE&page=1&page_size=1", nil, &ordinary, nil)
+	if searchResponse.Code != http.StatusOK {
+		t.Fatalf("search releases: HTTP %d: %s", searchResponse.Code, searchResponse.Body.String())
+	}
+	var searchList struct {
+		Items      []releaseSummaryDTO   `json:"items"`
+		Pagination struct{ Total int64 } `json:"pagination"`
+	}
+	if err := json.Unmarshal(searchResponse.Body.Bytes(), &searchList); err != nil || searchList.Pagination.Total != 1 || len(searchList.Items) != 1 || searchList.Items[0].ID != releaseID {
+		t.Fatalf("search/pagination projection mismatch: list=%+v err=%v", searchList, err)
 	}
 
 	attentionResponse := application.request(t, http.MethodGet, "/api/v1/releases?attention=required", nil, &ordinary, nil)
@@ -125,8 +179,23 @@ func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
 	if len(detail.Credits) != 1 || detail.Credits[0].Name != "专辑艺术家" || len(detail.Evidence) != 1 {
 		t.Fatalf("credit/evidence summary mismatch: credits=%+v evidence=%+v", detail.Credits, detail.Evidence)
 	}
+	if detail.Artwork == nil || artworkSummary.Artwork == nil || *detail.Artwork != *artworkSummary.Artwork {
+		t.Fatalf("list/detail artwork mismatch: list=%+v detail=%+v", artworkSummary.Artwork, detail.Artwork)
+	}
 	if strings.Contains(detailResponse.Body.String(), "CUE Album/") || strings.Contains(detailResponse.Body.String(), "/srv/") || strings.Contains(detailResponse.Body.String(), "CUE 专辑（重制版）") {
 		t.Fatal("ordinary detail disclosed source paths or administrator-only candidates")
+	}
+	legacyDetailResponse := application.request(t, http.MethodGet, "/api/v1/releases/"+legacyReleaseID, nil, &ordinary, nil)
+	if legacyDetailResponse.Code != http.StatusOK {
+		t.Fatalf("release detail without artwork: HTTP %d: %s", legacyDetailResponse.Code, legacyDetailResponse.Body.String())
+	}
+	var legacyDetail releaseDetailDTO
+	if err := json.Unmarshal(legacyDetailResponse.Body.Bytes(), &legacyDetail); err != nil || legacyDetail.Artwork != nil {
+		t.Fatalf("detail without artwork mismatch: detail=%+v err=%v", legacyDetail, err)
+	}
+	var rawLegacyDetail map[string]json.RawMessage
+	if err := json.Unmarshal(legacyDetailResponse.Body.Bytes(), &rawLegacyDetail); err != nil || string(rawLegacyDetail["artwork"]) != "null" {
+		t.Fatalf("release detail did not include explicit null artwork: body=%s err=%v", legacyDetailResponse.Body.String(), err)
 	}
 	requireAPIError(t, application.request(t, http.MethodGet, "/api/v1/releases/"+hiddenReleaseID, nil, &ordinary, nil), http.StatusNotFound, "not_found")
 	requireAPIError(t, application.request(t, http.MethodGet, "/api/v1/releases/not-a-uuid", nil, &ordinary, nil), http.StatusBadRequest, "invalid_id")
@@ -155,6 +224,25 @@ func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
 		t.Fatalf("legacy evidence did not return a recoverable empty state: evidence=%+v err=%v", legacyEvidence, err)
 	}
 	requireAPIError(t, application.request(t, http.MethodGet, "/api/v1/releases/not-a-uuid/evidence", nil, &admin, nil), http.StatusBadRequest, "invalid_id")
+
+	unsafeResourceID := "../private-cover.webp"
+	if _, err := application.database.connection.Exec(`INSERT INTO release_artworks(
+		release_id,content_hash,mime_type,width,height,storage_key,source_type
+	) VALUES($1::uuid,$2,'image/webp',1,1,$3,'folder')`, legacyReleaseID, strings.Repeat("b", 64), unsafeResourceID); err != nil {
+		t.Fatalf("insert malformed artwork fixture: %v", err)
+	}
+	malformedListResponse := application.request(t, http.MethodGet, "/api/v1/releases", nil, &ordinary, nil)
+	requireAPIError(t, malformedListResponse, http.StatusServiceUnavailable, "database_error")
+	malformedDetailResponse := application.request(t, http.MethodGet, "/api/v1/releases/"+legacyReleaseID, nil, &ordinary, nil)
+	requireAPIError(t, malformedDetailResponse, http.StatusServiceUnavailable, "database_unavailable")
+	for _, response := range []string{malformedListResponse.Body.String(), malformedDetailResponse.Body.String()} {
+		if strings.Contains(response, unsafeResourceID) || strings.Contains(response, "release_artworks") || strings.Contains(response, "SELECT ") {
+			t.Fatalf("malformed artwork error leaked internal data: %s", response)
+		}
+	}
+	if _, err := application.database.connection.Exec(`DELETE FROM release_artworks WHERE release_id=$1::uuid`, legacyReleaseID); err != nil {
+		t.Fatalf("remove malformed artwork fixture: %v", err)
+	}
 
 	if _, err := application.database.connection.Exec(`INSERT INTO scan_diagnostics(scan_run_id,root_id,relative_path,kind,message) VALUES
 		($1::uuid,$2::uuid,'CUE Album/broken.m4a','parse_failure','音频文件解析失败'),

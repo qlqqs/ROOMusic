@@ -2,11 +2,14 @@
 
 ## Status
 
-当前 Core 0 已有 React + TypeScript + Vite 前端，代码暂集中在
-`frontend/src/main.tsx`、`frontend/src/api.ts` 和 `frontend/src/styles.css`。
-请求使用原生 `fetch`/Cookie credentials，响应由手写 runtime decoder 校验，
-测试使用 Vitest，静态检查使用 ESLint；尚未引入 router、query/cache 或 UI 库。
-目标 feature 分层仍是后续演进方向，不代表当前目录已经存在。
+当前 Core 0 已有 React + TypeScript + Vite 前端。`App` 组合、会话与请求协调仍集中在
+`frontend/src/main.tsx`，DTO/decoder 集中在 `frontend/src/api.ts`，样式集中在
+`frontend/src/styles.css`；catalog 展示能力已按 feature 分层落入
+`frontend/src/features/catalog/`（`model/` 纯 formatter 与 view model，
+`components/` 展示组件，`index.ts` 公开边界），后续 feature 沿用该增量拆分方式，
+不做一次性全量搬迁。请求使用原生 `fetch`/Cookie credentials，响应由手写 runtime
+decoder 校验，测试使用 Vitest（组件测试使用 jsdom），静态检查使用 ESLint；
+尚未引入 router、query/cache 或 UI 库。
 
 ## Pre-Development Checklist
 

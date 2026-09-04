@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/guides/engineering-principles.md", "reason": "核对最小改动、错误分类与验证比例。"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "核对前端质量检查清单。"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "核对组件状态与可访问性。"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "核对状态归属唯一。"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "核对 decoder 与类型穷尽。"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "核对测试与门禁证据。"}
+{"file": ".trellis/spec/frontend/player-design-guidelines.md", "reason": "核对响应式与播放交互规范。"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "核对未越过后端权威与播放延期边界。"}

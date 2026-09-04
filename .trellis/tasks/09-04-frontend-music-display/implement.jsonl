@@ -1,0 +1,14 @@
+{"file": ".trellis/spec/guides/product-goals.md", "reason": "确认 Release 优先的信息架构及 Core 0 播放、外部服务和只读边界。"}
+{"file": ".trellis/spec/guides/modular-design.md", "reason": "确定 catalog 展示、App 编排和后端投影的能力归属与依赖方向。"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "跟踪列表 artwork 从 PostgreSQL、REST decoder 到封面组件的跨层合同。"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "加载前端同源 REST、状态归属、响应式和 Core 0 约束总览。"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "指导在过渡单体中增量抽取 feature-local catalog 组件。"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "约束详情、封面、Medium/Track 组件的状态、语义和可访问性。"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "约束请求取消、详情生命周期、扫描刷新和本地状态协调。"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "确定 URL 查询/详情、server state、disclosure 和演示队列的 owner。"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "约束 artwork DTO decoder、嵌套项上限和安全资源 ID。"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "提供前端测试、门禁、权限错误和响应式验收要求。"}
+{"file": ".trellis/spec/frontend/player-design-guidelines.md", "reason": "保留既有工作台视觉、固定播放器和演示播放边界。"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "确认 Release REST、封面鉴权、扫描终态和路径脱敏合同。"}
+{"file": ".trellis/tasks/09-04-frontend-music-display/research/current-state.md", "reason": "提供当前代码证据、方案比较和列表 artwork 选择依据。"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "后续前端消费已完成的 Release artwork additive REST 合同。"}

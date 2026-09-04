@@ -27,6 +27,7 @@ const releaseSummary = {
   medium_count: 1,
   track_count: 1,
   attention_count: 1,
+  artwork: null,
 };
 const releaseDetail = {
   ...releaseSummary,
@@ -117,6 +118,31 @@ describe("Core 0 API decoders", () => {
     expect(decodedDetail.edition).toBe("初回限定版");
     expect(decodedDetail.label).toBe("示例唱片公司");
     expect(decodedDetail.barcode).toBe("0123456789012");
+  });
+
+  it("strictly decodes the additive summary artwork field", () => {
+    const artwork = { resource_id: "cover-abc123", mime: "image/jpeg", width: 600, height: 600 };
+    const withArtwork = decodeReleaseList({ items: [{ ...releaseSummary, artwork }], pagination: { page: 1, page_size: 50, total: 1 } });
+    expect(withArtwork.items[0]?.artwork).toEqual(artwork);
+
+    const withoutArtwork = decodeReleaseList({ items: [releaseSummary], pagination: { page: 1, page_size: 50, total: 1 } });
+    expect(withoutArtwork.items[0]?.artwork).toBeNull();
+
+    const detailWithArtwork = decodeReleaseDetail({ ...releaseDetail, artwork });
+    expect(detailWithArtwork.artwork).toEqual(artwork);
+
+    const missingArtwork = { ...releaseSummary } as Record<string, unknown>;
+    delete missingArtwork.artwork;
+    expect(() => decodeReleaseList({ items: [missingArtwork], pagination: { page: 1, page_size: 50, total: 1 } })).toThrow();
+    expect(() => decodeReleaseList({ items: [{ ...releaseSummary, artwork: { ...artwork, mime: "image/svg+xml" } }], pagination: { page: 1, page_size: 50, total: 1 } })).toThrow();
+    expect(() => decodeReleaseList({ items: [{ ...releaseSummary, artwork: { ...artwork, width: 0 } }], pagination: { page: 1, page_size: 50, total: 1 } })).toThrow();
+    expect(() => decodeReleaseList({ items: [{ ...releaseSummary, artwork: { ...artwork, height: -3 } }], pagination: { page: 1, page_size: 50, total: 1 } })).toThrow();
+    expect(() => decodeReleaseList({ items: [{ ...releaseSummary, artwork: { ...artwork, height: 1.5 } }], pagination: { page: 1, page_size: 50, total: 1 } })).toThrow();
+    expect(() => decodeReleaseList({ items: [{ ...releaseSummary, artwork: { ...artwork, resource_id: "x".repeat(256) } }], pagination: { page: 1, page_size: 50, total: 1 } })).toThrow();
+    expect(() => decodeReleaseList({ items: [{ ...releaseSummary, artwork: { ...artwork, resource_id: "../cover" } }], pagination: { page: 1, page_size: 50, total: 1 } })).toThrow();
+    expect(() => decodeReleaseList({ items: [{ ...releaseSummary, artwork: { ...artwork, resource_id: "a/b" } }], pagination: { page: 1, page_size: 50, total: 1 } })).toThrow();
+    expect(() => decodeReleaseList({ items: [{ ...releaseSummary, artwork: { ...artwork, resource_id: ".." } }], pagination: { page: 1, page_size: 50, total: 1 } })).toThrow();
+    expect(() => decodeReleaseList({ items: [{ ...releaseSummary, artwork: { ...artwork, resource_id: `cover${String.fromCharCode(7)}id` } }], pagination: { page: 1, page_size: 50, total: 1 } })).toThrow();
   });
 
   it("strictly decodes bounded administrator evidence", () => {
