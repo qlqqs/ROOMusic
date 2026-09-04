@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/guides/product-goals.md", "reason": "检查是否越过 Core 0 只读、播放延期和基础设施边界。"}
+{"file": ".trellis/spec/guides/modular-design.md", "reason": "检查 catalog 投影、DTO 和资源端点的能力归属与依赖方向。"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "检查数据库、REST、错误和安全边界的闭环。"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "检查 SQL 投影、索引使用和迁移未漂移。"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "检查错误码、状态码和敏感数据脱敏。"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "执行后端测试门禁和危险失败路径审查。"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "核对发行 REST additive artwork、认证、present-only 和资源安全合同。"}
+{"file": ".trellis/tasks/09-04-release-list-artwork-backend/research/backend-contract.md", "reason": "对照现状研究，确认无 N+1、无前端改动和错误路径覆盖。"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "检查 artwork null、列表/详情一致、N+1 和非法投影测试。"}
