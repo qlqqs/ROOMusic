@@ -52,6 +52,11 @@
   普通用户安全 evidence 摘要；完整候选、reason code 和安全相对来源只由管理员
   evidence 端点返回，普通用户必须得到 403。
 - 发行列表/详情的封面摘要见 [Catalog REST 合同](./catalog-rest-contracts.md)。
+- 前端 catalog 展示位于 `frontend/src/features/catalog`：摘要 `artwork` 由
+  `decodeReleaseSummary` 严格解码（白名单 MIME、正整数宽高、有界 basename
+  resource ID），封面只按 `/api/v1/artworks/{resource_id}` 同源鉴权读取；选中详情
+  是 URL `release` 参数，演示队列是纯本地状态。真实音频播放仍延期，底栏必须标注
+  “演示模式，未连接音频服务”，不渲染进度/音量等伪播放控件。
 
 ### 数据库与扫描
 
