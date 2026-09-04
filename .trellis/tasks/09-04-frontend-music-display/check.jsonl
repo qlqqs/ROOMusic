@@ -1,0 +1,13 @@
+{"file": ".trellis/spec/guides/product-goals.md", "reason": "检查实现是否越过 Core 0 播放、外部服务和只读边界。"}
+{"file": ".trellis/spec/guides/modular-design.md", "reason": "检查新增 API、组件和状态是否保持能力归属与低耦合。"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "检查 artwork、URL、权限和错误状态的跨层闭环。"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "检查前端总体合同、同源请求和状态/响应式要求。"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "检查组件职责、键盘交互、空/错/加载状态和安全显示。"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "检查请求取消、stale response、轮询和生命周期清理。"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "检查 URL/server/local state 是否有重复真相或违规持久化。"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "检查 decoder 严格性、边界、ID 和未知值处理。"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "执行质量门禁、测试、可访问性和生成资产审查。"}
+{"file": ".trellis/spec/frontend/player-design-guidelines.md", "reason": "检查视觉层级、固定播放器和演示播放声明。"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "检查后端 REST/封面投影未改变认证、扫描和路径安全合同。"}
+{"file": ".trellis/tasks/09-04-frontend-music-display/research/current-state.md", "reason": "对照现状研究检查实现是否引入 N+1 或延期范围。"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "检查前端 decoder 与后端 artwork 列表/详情合同闭环。"}

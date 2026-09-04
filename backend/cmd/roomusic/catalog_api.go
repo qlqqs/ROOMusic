@@ -10,6 +10,7 @@ import (
 	pathpkg "path"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -68,20 +69,27 @@ const (
 		 JOIN media present_medium ON present_medium.id = present_track.medium_id
 		 WHERE present_medium.release_id = releases.id
 		   AND present_track.source_status = 'present'),
-		` + releaseAttentionExpression
+		` + releaseAttentionExpression + `,
+		release_artwork.storage_key,
+		release_artwork.mime_type,
+		release_artwork.width,
+		release_artwork.height`
+	releaseSummaryArtworkJoin = ` LEFT JOIN release_artworks release_artwork
+		ON release_artwork.release_id = releases.id`
 )
 
 type releaseSummaryDTO struct {
-	ID             string  `json:"id"`
-	Title          string  `json:"title"`
-	Artist         string  `json:"artist"`
-	AlbumArtist    *string `json:"album_artist"`
-	Year           *int    `json:"year"`
-	SourceType     *string `json:"source_type"`
-	MediaType      *string `json:"media_type"`
-	MediumCount    int64   `json:"medium_count"`
-	TrackCount     int64   `json:"track_count"`
-	AttentionCount int64   `json:"attention_count"`
+	ID             string             `json:"id"`
+	Title          string             `json:"title"`
+	Artist         string             `json:"artist"`
+	AlbumArtist    *string            `json:"album_artist"`
+	Year           *int               `json:"year"`
+	SourceType     *string            `json:"source_type"`
+	MediaType      *string            `json:"media_type"`
+	MediumCount    int64              `json:"medium_count"`
+	TrackCount     int64              `json:"track_count"`
+	AttentionCount int64              `json:"attention_count"`
+	Artwork        *releaseArtworkDTO `json:"artwork"`
 }
 
 type releaseCueDTO struct {
@@ -146,7 +154,6 @@ type releaseDetailDTO struct {
 	Barcode       *string                     `json:"barcode"`
 	Media         []releaseMediumDTO          `json:"media"`
 	Credits       []releaseCreditDTO          `json:"credits"`
-	Artwork       *releaseArtworkDTO          `json:"artwork"`
 	Evidence      []releaseEvidenceSummaryDTO `json:"evidence"`
 }
 
@@ -218,7 +225,7 @@ func (application *roomusicApplication) listReleases(responseWriter http.Respons
 		writeAPIError(responseWriter, request, http.StatusServiceUnavailable, "database_unavailable", "服务暂不可用")
 		return
 	}
-	listQuery := "SELECT " + releaseSummaryProjection + " FROM releases" + whereClause +
+	listQuery := "SELECT " + releaseSummaryProjection + " FROM releases" + releaseSummaryArtworkJoin + whereClause +
 		" ORDER BY LOWER(releases.title),LOWER(releases.artist),releases.id LIMIT $" + strconv.Itoa(len(queryArgs)+1) +
 		" OFFSET $" + strconv.Itoa(len(queryArgs)+2)
 	listArgs := append(append([]any{}, queryArgs...), pageSize, (page-1)*pageSize)
@@ -295,8 +302,8 @@ func parsePagination(request *http.Request) (int, int, error) {
 
 func scanReleaseSummary(row interface{ Scan(...any) error }) (releaseSummaryDTO, error) {
 	var result releaseSummaryDTO
-	var albumArtist, sourceType, mediaType sql.NullString
-	var year sql.NullInt64
+	var albumArtist, sourceType, mediaType, artworkResourceID, artworkMIME sql.NullString
+	var year, artworkWidth, artworkHeight sql.NullInt64
 	err := row.Scan(
 		&result.ID,
 		&result.Title,
@@ -308,6 +315,10 @@ func scanReleaseSummary(row interface{ Scan(...any) error }) (releaseSummaryDTO,
 		&result.MediumCount,
 		&result.TrackCount,
 		&result.AttentionCount,
+		&artworkResourceID,
+		&artworkMIME,
+		&artworkWidth,
+		&artworkHeight,
 	)
 	if err != nil {
 		return releaseSummaryDTO{}, err
@@ -316,7 +327,46 @@ func scanReleaseSummary(row interface{ Scan(...any) error }) (releaseSummaryDTO,
 	result.Year = intPointerFromNull(year)
 	result.SourceType = stringPointerFromNull(sourceType)
 	result.MediaType = stringPointerFromNull(mediaType)
+	result.Artwork, err = releaseArtworkFromProjection(artworkResourceID, artworkMIME, artworkWidth, artworkHeight)
+	if err != nil {
+		return releaseSummaryDTO{}, err
+	}
 	return result, nil
+}
+
+func releaseArtworkFromProjection(resourceID, mime sql.NullString, width, height sql.NullInt64) (*releaseArtworkDTO, error) {
+	presentColumns := 0
+	for _, present := range []bool{resourceID.Valid, mime.Valid, width.Valid, height.Valid} {
+		if present {
+			presentColumns++
+		}
+	}
+	if presentColumns == 0 {
+		return nil, nil
+	}
+	if presentColumns != 4 {
+		return nil, errors.New("incomplete artwork projection")
+	}
+	if resourceID.String == "" || resourceID.String == "." || resourceID.String == ".." ||
+		!utf8.ValidString(resourceID.String) || strings.ContainsAny(resourceID.String, `/\\`) ||
+		strings.IndexFunc(resourceID.String, unicode.IsControl) >= 0 {
+		return nil, errors.New("unsafe artwork resource identifier")
+	}
+	switch mime.String {
+	case "image/jpeg", "image/png", "image/gif", "image/webp":
+	default:
+		return nil, errors.New("unsupported artwork MIME type")
+	}
+	const maxArtworkDimension = int64(1<<31 - 1)
+	if width.Int64 <= 0 || height.Int64 <= 0 || width.Int64 > maxArtworkDimension || height.Int64 > maxArtworkDimension {
+		return nil, errors.New("invalid artwork dimensions")
+	}
+	return &releaseArtworkDTO{
+		ResourceID: resourceID.String,
+		MIME:       mime.String,
+		Width:      int(width.Int64),
+		Height:     int(height.Int64),
+	}, nil
 }
 
 func (application *roomusicApplication) releaseDetail(responseWriter http.ResponseWriter, request *http.Request) {
@@ -364,12 +414,6 @@ func (application *roomusicApplication) releaseDetail(responseWriter http.Respon
 		writeAPIError(responseWriter, request, http.StatusServiceUnavailable, "database_error", "无法读取整理证据")
 		return
 	}
-	artwork, err := application.loadReleaseArtwork(request.Context(), releaseID)
-	if err != nil {
-		writeAPIError(responseWriter, request, http.StatusServiceUnavailable, "database_error", "无法读取发行版本封面")
-		return
-	}
-
 	writeJSON(responseWriter, http.StatusOK, releaseDetailDTO{
 		releaseSummaryDTO: summary,
 		CandidateKind:     normalizeCandidateKind(candidateKind.String),
@@ -380,14 +424,13 @@ func (application *roomusicApplication) releaseDetail(responseWriter http.Respon
 		Barcode:           stringPointerFromNull(barcode),
 		Media:             media,
 		Credits:           credits,
-		Artwork:           artwork,
 		Evidence:          evidence,
 	})
 }
 
 func (application *roomusicApplication) loadReleaseSummary(ctx context.Context, releaseID string) (releaseSummaryDTO, error) {
 	return scanReleaseSummary(application.database.connection.QueryRowContext(ctx,
-		"SELECT "+releaseSummaryProjection+" FROM releases WHERE releases.id=$1::uuid AND "+releaseVisiblePredicate,
+		"SELECT "+releaseSummaryProjection+" FROM releases"+releaseSummaryArtworkJoin+" WHERE releases.id=$1::uuid AND "+releaseVisiblePredicate,
 		releaseID,
 	))
 }
@@ -574,21 +617,6 @@ func (application *roomusicApplication) loadReleaseEvidenceSummary(ctx context.C
 		return nil, err
 	}
 	return evidence, nil
-}
-
-func (application *roomusicApplication) loadReleaseArtwork(ctx context.Context, releaseID string) (*releaseArtworkDTO, error) {
-	var artwork releaseArtworkDTO
-	err := application.database.connection.QueryRowContext(ctx, `SELECT storage_key,mime_type,width,height FROM release_artworks WHERE release_id=$1::uuid`, releaseID).Scan(&artwork.ResourceID, &artwork.MIME, &artwork.Width, &artwork.Height)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	if artwork.ResourceID == "" || strings.ContainsAny(artwork.ResourceID, `/\\`) {
-		return nil, errors.New("unsafe artwork resource identifier")
-	}
-	return &artwork, nil
 }
 
 func (application *roomusicApplication) releaseEvidence(responseWriter http.ResponseWriter, request *http.Request) {

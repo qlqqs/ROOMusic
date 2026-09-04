@@ -1,0 +1,14 @@
+{"file": ".trellis/spec/guides/product-goals.md", "reason": "确认 Release 浏览价值、Core 0 只读边界及真实播放延期。"}
+{"file": ".trellis/spec/guides/modular-design.md", "reason": "约束 catalog feature 归属、依赖方向和组件拆分边界。"}
+{"file": ".trellis/spec/guides/engineering-principles.md", "reason": "遵循最小完整改动、错误分类和比例化验证。"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "跟踪 artwork 摘要从 REST DTO 到封面组件的跨层合同。"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "加载前端层实施前检查清单与质量门禁。"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "约束 features/catalog 目录拆分与公开边界。"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "约束展示组件、工作流状态、可访问性与组合方式。"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "约束 REST 请求协调、取消与扫描轮询。"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "明确 server/URL/session/local 状态归属。"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "约束 DTO 严格解码与穷尽域状态。"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "约束测试、可访问性与门禁。"}
+{"file": ".trellis/spec/frontend/player-design-guidelines.md", "reason": "约束工作台视觉层级、响应式布局与播放交互。"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "确认列表 artwork 摘要、封面鉴权与扫描状态合同。"}
+{"file": ".trellis/tasks/09-04-frontend-music-display/research/current-state.md", "reason": "继承父任务现状证据与方案比较。"}
