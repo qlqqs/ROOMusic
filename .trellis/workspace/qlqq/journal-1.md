@@ -458,3 +458,27 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 ### Status
 
 [OK] **Completed**
+
+
+## Session 20: 完善音乐库前端展示
+<!-- trellis-session: v=2 fp=664c3e134965736c -->
+
+**Date**: 2026-09-04
+**Task**: 完善音乐库前端展示
+**Branch**: `task/music-display-frontend`
+
+### Summary
+
+实施并验收前端子任务 09-04-music-display-frontend：catalog feature 分层（model/纯 formatter + components）、列表封面四态与严格 artwork decoder、URL release 参数与详情抽屉焦点/生命周期、本地演示队列、响应式与可访问性；lint/typecheck/test/build 与后端定向回归通过；修复抽屉 aria-labelledby 悬空；spec 记录 catalog 分层与 artwork 消费合同。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b85122e` | feat: build catalog browsing workspace frontend |
+| `663c9bd` | chore: rebuild embedded web assets |
+| `d0afb98` | docs: record catalog feature layering and artwork consumption |
+
+### Status
+
+[OK] **Completed**
