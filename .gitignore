@@ -26,3 +26,5 @@
 .idea/
 .vscode/
 *.swp
+# 真实音乐 Smoke 的本地基准与脱敏审计产物
+.roomusic-smoke/

@@ -1,0 +1,4 @@
+# current.Dockerfile 的上下文是 backend/；避免把测试输出带入镜像。
+**/*_test.go
+tmp/
+.cache/
