@@ -482,3 +482,26 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 ### Status
 
 [OK] **Completed**
+
+
+## Session 21: 收尾前端音乐库展示父任务
+<!-- trellis-session: v=2 fp=1a116be0f2a78ca3 -->
+
+**Date**: 2026-09-04
+**Task**: 收尾前端音乐库展示父任务
+**Branch**: `main`
+
+### Summary
+
+核对并归档已完成的音乐库展示父任务；最终复核统一 Release URL 选择值与 artwork resource_id 的 255 边界，补充回归测试和代码规范，重建内嵌前端资产。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f8151e0` | fix: bound catalog resource identifiers |
+| `abab775` | chore: rebuild embedded web assets |
+
+### Status
+
+[OK] **Completed**
