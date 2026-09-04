@@ -55,6 +55,11 @@ documented defaults without sending arbitrary backend fields.
 末页，避免把可恢复的过期书签永久显示为空结果。`popstate` 必须重新读取三项状态，
 不得维护一份与 URL 分叉的隐藏分页真相。
 
+当前详情选择同样由 URL 的 `release` 参数持有：读取和写入时都先 trim，只接受非空且
+不超过 255 个 JavaScript 字符单元的 opaque ID；超长值按未选择处理并从规范化 URL
+删除，禁止带着任意长的深链接值发起详情请求。打开或关闭详情只增删 `release`，必须
+保留 `q`、`attention` 和 `page`。
+
 Do not put session tokens, absolute paths, secrets, raw errors, or uncommitted
 operation payloads in the URL.
 

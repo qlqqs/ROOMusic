@@ -26,6 +26,7 @@ describe("release URL filters", () => {
     expect(readReleaseFilters("?release=release-abc123")).toEqual({ query: "", attentionRequired: false, page: 1, release: "release-abc123" });
     expect(readReleaseFilters("?release=%20%20")).toEqual({ query: "", attentionRequired: false, page: 1, release: null });
     expect(readReleaseFilters("?release=")).toEqual({ query: "", attentionRequired: false, page: 1, release: null });
+    expect(readReleaseFilters(`?release=${"r".repeat(256)}`)).toEqual({ query: "", attentionRequired: false, page: 1, release: null });
 
     const selected = new URL(releaseFilterURL("https://roomusic.test/library?q=Miles&page=2", { query: "Miles", attentionRequired: false, page: 2, release: " release-9 " }));
     expect(selected.searchParams.get("release")).toBe("release-9");
@@ -35,6 +36,9 @@ describe("release URL filters", () => {
     const deselected = new URL(releaseFilterURL(selected.toString(), { query: "Miles", attentionRequired: false, page: 2, release: null }));
     expect(deselected.searchParams.has("release")).toBe(false);
     expect(deselected.searchParams.get("q")).toBe("Miles");
+
+    const oversized = new URL(releaseFilterURL(selected.toString(), { query: "Miles", attentionRequired: false, page: 2, release: "r".repeat(256) }));
+    expect(oversized.searchParams.has("release")).toBe(false);
   });
 
   it("clamps an out-of-range page to the last real result page", () => {
