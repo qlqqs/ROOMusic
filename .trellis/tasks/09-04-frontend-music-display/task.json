@@ -19,7 +19,8 @@
   "pr_url": null,
   "subtasks": [],
   "children": [
-    "09-04-release-list-artwork-backend"
+    "09-04-release-list-artwork-backend",
+    "09-04-music-display-frontend"
   ],
   "parent": null,
   "relatedFiles": [],
