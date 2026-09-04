@@ -31,14 +31,17 @@ V0 Phase 01.1 文档确认：
 - `candidate.sqlite` 是程序生成物，可重建，不是人工真相源。
 - `golden.sqlite` 是人工审查资产，禁止 candidate generation 覆盖。
 - schema v2 区分 evidence、program-owned expected 和 AI/human reviewed expected。
-- 2026-05-27 的最终记录为 110 个 Release 全部 `reviewed`，112 个 Medium、466 个 Track、
-  466 个 file evidence；final validation 通过，reviewed-only diff 为 `No differences.`。
+- 历史记录存在两个口径：初始 candidate 为 110 个 Release、112 个 Medium、466 个 Track
+  和 466 个 file evidence；D-51 消除 CUE+split 重复 Track 后，最新 candidate 为 110 个
+  Release、112 个 Medium、407 个 Track，物理 file evidence 仍为 466。110 个 Release
+  最终全部 `reviewed`，final validation 通过，reviewed-only diff 为 `No differences.`。
 - 2026-05-28 曾将 SQLite candidate/golden 导入 PostgreSQL `golden` schema；记录为两套
   dataset 各 110 个 Release、各 631 条字段合同，随后 SQLite 活跃工具链被退役。
 
 因此候选优先级为：
 
-1. 固定 V0 归档对当前同一 corpus 重新生成的 `v0_generated_corrected` 数据库输出。
+1. 固定 V0 归档对当前同一 corpus 重新生成的
+   `v0_release_graph_generated_corrected` standalone SQLite 输出。
 2. 若日后找回，经用户确认且能证明身份的 schema v2 `golden.sqlite` 或 PostgreSQL
    `golden` dataset，仅作为审计/交叉验证来源。
 3. 若出现多个历史或重建候选，先盘点 hash、schema、类型、聚合计数和时间，再由用户
@@ -56,22 +59,28 @@ V0 Phase 01.1 文档确认：
   散落文件和多碟等真实场景，可用来交叉验证重建结果的行为覆盖。
 - 归档与 `ROOMusic-V0` 当前目录的 scanner、database、应用入口、migration 和 Compose
   关键文件已做逐文件只读比较，未发现差异。
-- 用户确认这些生产生成规则已经包含人工修正，因此重建产物标注为
-  `v0_generated_corrected`，是本任务的权威行为基准；旧 review notes 不属于本次对照
+- 用户确认这些生成规则已经包含人工修正，因此 standalone 重建产物标注为
+  `v0_release_graph_generated_corrected`，是本任务的权威行为基准；旧 review notes 不属于本次对照
   合同。
 - 历史 UAT 数量和关键场景继续作为 sanity check；当前 corpus 漂移可以解释历史数量
   变化，但 V0 与当前实现必须在同一当前 corpus 摘要下逐项比较。
 
-## 规划批准后的下一步
+## 已批准并实现的重建路线
 
-1. 先完成 `design.md`、`implement.md`、PRD 收敛和实施/检查上下文清单，再呈交最终
-   规划摘要；得到后续明确实施批准前不启动扫描。
-2. 实施时在独立 V0 PostgreSQL/Redis/临时 data 环境中只读挂载真实资产，运行固定归档
-   中的正式 scanner，导出不可变的重建参考快照。
-3. 用历史聚合数量、真实语料场景与 program-owned 合同交叉验证，并把成功数据库导出为
-   权限受限、Git 忽略且带 hash/manifest 的本地基准。
-4. 若之后发现一个或多个历史数据库，先只读计算 hash、schema/review 覆盖和聚合计数，
+1. 固定归档只解包到本轮临时目录，并单独记录归档 hash 与 smoke-owned adapter hash；
+   adapter 不修改 V0 scanner，只调用其 `Walk -> parse -> BuildReleaseCandidates ->
+   AssembleReleaseCandidate` 核心链路。
+2. V0 exporter 运行时使用 `/music:ro`、`/output:rw`、只读根文件系统和
+   `network_mode=none`，不再启动 V0 PostgreSQL、Redis、Meilisearch 或 REST。
+3. exporter rows 必须先通过 normalized SQLite 的外键、唯一性、图闭合与内容校验，再从
+   SQLite 回读 canonical JSON；任一步失败都发生在 current 启动之前。
+4. 实施早期的合成 WAV 隔离演练跑通了上述链路与 current 首扫/重扫，且清理后本轮容器、
+   volume 和临时镜像均为零；该阶段只证明工具链，不作为真实资产结论。
+5. 若之后发现一个或多个历史数据库，仍先只读计算 hash、schema/review 覆盖和聚合计数，
    仅报告非敏感差异并请求用户选择，不按时间自动决定。
+6. 最终真实资产验收已完成：同一 corpus 下 V0 为 68 Release/69 Medium/225 Track/284 File，
+   current 首扫与重扫均为 68/69/284/284；current A/B 差异为 0，V0/current 的
+   `current_regression=0`、未知分类为 0，资产前后摘要一致。
 
 ## 证据来源
 
