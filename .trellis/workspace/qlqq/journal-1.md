@@ -400,3 +400,38 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 ### Status
 
 [OK] **Completed**
+
+
+## Session 18: 迁移 ROOMusic 开发环境到 qlqq
+<!-- trellis-session: v=2 fp=8702d5ac23d90673 -->
+
+**Date**: 2026-09-04
+**Task**: 迁移 ROOMusic 开发环境到 qlqq
+**Branch**: `task/real-library-smoke-v0-comparison`
+
+### Summary
+
+完成 ROOMusic 开发环境、工具链和 Paseo 服务从 root 到 qlqq 的可回滚迁移；qlqq Paseo 已接管 6767，最终按用户要求以表面检查收口并记录已知版本与额外工作区偏差。
+
+### Main Changes
+
+- 归档迁移规划、设计、执行证据和中文 migration-report。
+- 确认 qlqq Paseo enabled/active、root Paseo disabled/inactive，工作区与进程均为非 root。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a427377` | docs: record qlqq environment migration |
+
+### Testing
+
+- [OK] 按用户要求未重跑 lint、typecheck、构建、测试和 Agent smoke；完成 systemd、HTTP、进程 UID、Docker、路径、权限、Git 与 Trellis 文档轻量检查。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 无；保留 root 环境和权限受限快照作为观察期回滚资料。
