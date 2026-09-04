@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 16
-- **Last Active**: 2026-09-03
+- **Total Sessions**: 17
+- **Last Active**: 2026-09-04
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~378 | Active |
+| `journal-1.md` | ~402 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 17 | 2026-09-04 | 完成真实音乐库只读 Smoke 与 V0 对照 | `efd5317`, `2747989`, `b718d2e` | `task/real-library-smoke-v0-comparison` |
 | 16 | 2026-09-03 | 完成专辑扫描解析与候选闭环 | `a527d2c`, `8ccc269`, `19e2a8e`, `851351e`, `02bb425` | `feat/album-scan-organization-core` |
 | 15 | 2026-09-02 | 持久化扫描取消与跨进程协调 | `511cea3`, `579fa45` | `main` |
 | 14 | 2026-09-02 | CI 门禁与 HTTP 可观测性 | `25d521f` | `main` |
