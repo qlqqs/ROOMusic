@@ -1,8 +1,8 @@
 /* global AbortController, URLSearchParams, window, crypto */
-/* eslint-disable no-irregular-whitespace */
 import { FormEvent, StrictMode, useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
+  ApiRequestError,
   decodeAcknowledgement,
   decodeActiveScan,
   decodeCreatedLibraryRoot,
@@ -22,7 +22,6 @@ import {
   decodeUpdatedUser,
   decodeSetupStatus,
   LibraryRootDTO,
-  ReleaseDetailDTO,
   ReleaseEvidenceDTO,
   ReleaseSummaryDTO,
   requestApi,
@@ -33,6 +32,27 @@ import {
   UserDTO,
 } from "./api";
 import { clampReleasePage, readReleaseFilters, releaseFilterURL } from "./release_filters";
+import {
+  CatalogToolbar,
+  ReleaseCard,
+  ReleaseCover,
+  ReleaseDetailDrawer,
+  clearDemoQueue,
+  currentDemoItem,
+  emptyDemoQueue,
+  nextDemoTrack,
+  playDemoItems,
+  playDemoTrack,
+  previousDemoTrack,
+  removeCurrentDemoItem,
+  setDemoPlaying,
+  toReleaseCardModel,
+  untitledTrackLabel,
+  type CatalogViewMode,
+  type DemoQueueItem,
+  type DemoQueueState,
+  type ReleaseDetailState,
+} from "./features/catalog";
 import "./styles.css";
 
 function describeError(error: unknown): string {
@@ -51,6 +71,18 @@ function describeScanState(scan: ScanStatusDTO | null): string {
   return labels[scan.status];
 }
 
+// 扫描终态文案互不混淆：只有 succeeded 才宣称结果已更新。
+function describeScanNotice(scan: ScanStatusDTO | null): string | null {
+  if (!scan) return null;
+  switch (scan.status) {
+    case "running": return scan.cancel_requested_at ? "正在取消扫描，结果可能继续变化" : "正在扫描，结果可能继续变化";
+    case "failed": return "扫描失败，当前显示的是此前的结果";
+    case "canceled": return "扫描已取消，结果可能不完整";
+    case "incomplete": return "扫描未完成，结果可能不完整";
+    case "succeeded": return null;
+  }
+}
+
 function App() {
   const [session, setSession] = useState<SessionDTO | null>(null);
   const [setupRequired, setSetupRequired] = useState<boolean | null>(null);
@@ -64,11 +96,9 @@ function App() {
   const [newPassword, setNewPassword] = useState("");
   const [releases, setReleases] = useState<ReleaseSummaryDTO[]>([]);
   const [releaseTotal, setReleaseTotal] = useState(0);
-  const [selectedRelease, setSelectedRelease] =
-    useState<ReleaseDetailDTO | null>(null);
+  const [releaseDetail, setReleaseDetail] = useState<ReleaseDetailState | null>(null);
   const selectedReleaseGeneration = useRef(0);
-  const [releaseEvidence, setReleaseEvidence] =
-    useState<ReleaseEvidenceDTO | null>(null);
+  const [releaseEvidence, setReleaseEvidence] = useState<ReleaseEvidenceDTO | null>(null);
   const [releaseEvidenceLoading, setReleaseEvidenceLoading] = useState(false);
   const [releaseEvidenceError, setReleaseEvidenceError] = useState("");
   const [searchInput, setSearchInput] = useState(
@@ -83,26 +113,42 @@ function App() {
   const [releasePage, setReleasePage] = useState(
     () => readReleaseFilters(window.location.search).page,
   );
+  const [selectedReleaseId, setSelectedReleaseId] = useState<string | null>(
+    () => readReleaseFilters(window.location.search).release,
+  );
   const [releasePageSize, setReleasePageSize] = useState(50);
   const [releaseLoading, setReleaseLoading] = useState(false);
   const [releaseError, setReleaseError] = useState("");
   const [releaseRetry, setReleaseRetry] = useState(0);
+  const [detailRetry, setDetailRetry] = useState(0);
+  const [viewMode, setViewMode] = useState<CatalogViewMode>("grid");
   const [scan, setScan] = useState<ScanStatusDTO | null>(null);
-  const [scanDiagnostics, setScanDiagnostics] =
-    useState<ScanDiagnosticsDTO | null>(null);
+  const [scanDiagnostics, setScanDiagnostics] = useState<ScanDiagnosticsDTO | null>(null);
   const [scanDiagnosticsLoading, setScanDiagnosticsLoading] = useState(false);
   const [scanDiagnosticsError, setScanDiagnosticsError] = useState("");
   const [scanMutationPending, setScanMutationPending] = useState(false);
   const [message, setMessage] = useState("");
-  const [nowPlaying, setNowPlaying] = useState<ReleaseDetailDTO["media"][number]["tracks"][number] | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const invalidateSelectedRelease = useCallback(() => {
+  const [queue, setQueue] = useState<DemoQueueState>(emptyDemoQueue);
+
+  const pushFilters = useCallback((filters: { query: string; attentionRequired: boolean; page: number; release: string | null }) => {
+    window.history.pushState({}, "", releaseFilterURL(window.location.href, filters));
+  }, []);
+
+  const closeReleaseSelection = useCallback(() => {
     selectedReleaseGeneration.current += 1;
-    setSelectedRelease(null);
+    if (readReleaseFilters(window.location.search).release !== null) {
+      window.history.pushState({}, "", releaseFilterURL(window.location.href, {
+        ...readReleaseFilters(window.location.search),
+        release: null,
+      }));
+    }
+    setSelectedReleaseId(null);
+    setReleaseDetail(null);
     setReleaseEvidence(null);
     setReleaseEvidenceLoading(false);
     setReleaseEvidenceError("");
   }, []);
+
   useEffect(() => {
     void requestApi("/api/v1/setup/status", decodeSetupStatus)
       .then((status) => {
@@ -114,6 +160,7 @@ function App() {
       })
       .catch((error: unknown) => setMessage(describeError(error)));
   }, []);
+
   useEffect(() => {
     if (session?.role !== "admin") return;
     void requestApi("/api/v1/library-roots", decodeLibraryRootList)
@@ -125,6 +172,7 @@ function App() {
       .then((result) => setScan(result.scan))
       .catch((error: unknown) => setMessage(describeError(error)));
   }, [session]);
+
   useEffect(() => {
     const onPopState = () => {
       const filters = readReleaseFilters(window.location.search);
@@ -132,11 +180,13 @@ function App() {
       setSearchQuery(filters.query);
       setAttentionRequired(filters.attentionRequired);
       setReleasePage(filters.page);
-      invalidateSelectedRelease();
+      setSelectedReleaseId(filters.release);
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [invalidateSelectedRelease]);
+  }, []);
+
+  // 列表请求：带取消与过期响应保护；扫描状态变化（含 succeeded 终态）触发一次刷新。
   useEffect(() => {
     if (!session) return;
     const params = new URLSearchParams({ page: String(releasePage), page_size: "50" });
@@ -150,15 +200,13 @@ function App() {
         if (requestController.signal.aborted) return;
         const normalizedPage = clampReleasePage(releasePage, result.pagination.total, result.pagination.page_size);
         if (normalizedPage !== releasePage) {
+          // 越界页码：用当前 URL 真实状态规范化，保留 release 选中项。
           window.history.replaceState({}, "", releaseFilterURL(window.location.href, {
-            query: searchQuery,
-            attentionRequired,
+            ...readReleaseFilters(window.location.search),
             page: normalizedPage,
           }));
-          setReleases([]);
           setReleaseTotal(result.pagination.total);
           setReleasePageSize(result.pagination.page_size);
-          invalidateSelectedRelease();
           setReleasePage(normalizedPage);
           return;
         }
@@ -174,7 +222,47 @@ function App() {
         if (!requestController.signal.aborted) setReleaseLoading(false);
       });
     return () => requestController.abort();
-  }, [session, scan?.status, searchQuery, attentionRequired, releasePage, releaseRetry, invalidateSelectedRelease]);
+  }, [session, scan?.status, searchQuery, attentionRequired, releasePage, releaseRetry]);
+
+  // 详情请求：URL release 参数驱动；旧响应不得覆盖新选择。
+  useEffect(() => {
+    if (!session || !selectedReleaseId) {
+      selectedReleaseGeneration.current += 1;
+      setReleaseDetail(null);
+      setReleaseEvidence(null);
+      setReleaseEvidenceLoading(false);
+      setReleaseEvidenceError("");
+      return;
+    }
+    const requestGeneration = ++selectedReleaseGeneration.current;
+    const requestController = new AbortController();
+    setReleaseDetail({ status: "loading" });
+    setReleaseEvidence(null);
+    setReleaseEvidenceLoading(false);
+    setReleaseEvidenceError("");
+    void requestApi(`/api/v1/releases/${encodeURIComponent(selectedReleaseId)}`, decodeReleaseDetail, { signal: requestController.signal })
+      .then((detail) => {
+        if (requestController.signal.aborted || selectedReleaseGeneration.current !== requestGeneration) return;
+        setReleaseDetail({ status: "ready", detail });
+      })
+      .catch((error: unknown) => {
+        if (requestController.signal.aborted || selectedReleaseGeneration.current !== requestGeneration) return;
+        const code = error instanceof ApiRequestError ? error.code : "request_failed";
+        if (code === "unauthorized") {
+          setMessage("登录已过期，请重新登录");
+          setSession(null);
+          return;
+        }
+        if (code === "not_found") {
+          closeReleaseSelection();
+          setMessage("发行版本不存在或已被移除");
+          return;
+        }
+        setReleaseDetail({ status: "error", code });
+      });
+    return () => requestController.abort();
+  }, [session, selectedReleaseId, detailRetry, closeReleaseSelection]);
+
   useEffect(() => {
     if (!scan || scan.status !== "running") return;
     const requestController = new AbortController();
@@ -192,6 +280,7 @@ function App() {
       window.clearInterval(timer);
     };
   }, [scan]);
+
   useEffect(() => {
     if (session?.role !== "admin" || !scan) {
       setScanDiagnostics(null);
@@ -213,6 +302,7 @@ function App() {
       });
     return () => requestController.abort();
   }, [session?.role, scan?.id, scan?.status, scan?.diagnostics.total]);
+
   async function submitAuth(event: FormEvent) {
     event.preventDefault();
     try {
@@ -236,6 +326,7 @@ function App() {
       setMessage(describeError(error));
     }
   }
+
   async function registerRoot(event: FormEvent) {
     event.preventDefault();
     try {
@@ -255,6 +346,7 @@ function App() {
       setMessage(describeError(error));
     }
   }
+
   async function changeRoot(root: LibraryRootDTO) {
     try {
       const restoring = root.status === "disabled";
@@ -267,6 +359,7 @@ function App() {
       setMessage(restoring ? "目录已恢复" : "目录已停用");
     } catch (error: unknown) { setMessage(describeError(error)); }
   }
+
   async function startScan() {
     setScanMutationPending(true);
     try {
@@ -283,6 +376,7 @@ function App() {
       setScanMutationPending(false);
     }
   }
+
   async function cancelScan() {
     if (!scan || scan.status !== "running") return;
     setScanMutationPending(true);
@@ -298,6 +392,7 @@ function App() {
       setScanMutationPending(false);
     }
   }
+
   async function createUser(event: FormEvent) {
     event.preventDefault();
     try {
@@ -306,32 +401,25 @@ function App() {
       setUsers(result.items); setNewUsername(""); setNewPassword(""); setMessage("用户已创建");
     } catch (error: unknown) { setMessage(describeError(error)); }
   }
+
   async function toggleUser(user: UserDTO) {
     try { const updated = await requestApi(`/api/v1/users/${user.id}`, decodeUpdatedUser, { method: "PATCH", body: JSON.stringify({ disabled: !user.disabled }) }); setUsers((items) => items.map((item) => item.id === user.id ? { ...item, disabled: updated.disabled } : item)); }
     catch (error: unknown) { setMessage(describeError(error)); }
   }
+
   async function revokeUser(user: UserDTO) {
     try { await requestApi(`/api/v1/users/${user.id}/sessions/revoke`, decodeAcknowledgement, { method: "POST", body: "{}" }); setMessage(`已撤销 ${user.username} 的会话`); }
     catch (error: unknown) { setMessage(describeError(error)); }
   }
-  async function showRelease(releaseID: string) {
-    invalidateSelectedRelease();
-    const requestGeneration = selectedReleaseGeneration.current;
-    try {
-      const detail = await requestApi(`/api/v1/releases/${releaseID}`, decodeReleaseDetail);
-      if (selectedReleaseGeneration.current === requestGeneration) setSelectedRelease(detail);
-    } catch (error: unknown) {
-      if (selectedReleaseGeneration.current === requestGeneration) setMessage(describeError(error));
-    }
-  }
+
   async function showReleaseEvidence() {
-    if (session?.role !== "admin" || !selectedRelease) return;
-    const releaseID = selectedRelease.id;
+    if (session?.role !== "admin" || !releaseDetail || releaseDetail.status !== "ready") return;
+    const releaseID = releaseDetail.detail.id;
     const requestGeneration = selectedReleaseGeneration.current;
     setReleaseEvidenceLoading(true);
     setReleaseEvidenceError("");
     try {
-      const evidence = await requestApi(`/api/v1/releases/${releaseID}/evidence`, decodeReleaseEvidence);
+      const evidence = await requestApi(`/api/v1/releases/${encodeURIComponent(releaseID)}/evidence`, decodeReleaseEvidence);
       if (selectedReleaseGeneration.current === requestGeneration) setReleaseEvidence(evidence);
     } catch (error: unknown) {
       if (selectedReleaseGeneration.current === requestGeneration) setReleaseEvidenceError(describeError(error));
@@ -339,8 +427,8 @@ function App() {
       if (selectedReleaseGeneration.current === requestGeneration) setReleaseEvidenceLoading(false);
     }
   }
+
   async function logout() {
-    invalidateSelectedRelease();
     try {
       await requestApi("/api/v1/auth/logout", decodeAcknowledgement, {
         method: "POST",
@@ -350,41 +438,77 @@ function App() {
     } catch (error: unknown) {
       setMessage(describeError(error));
     }
+    // 退出登录清理选中详情、浏览状态与演示队列。
+    selectedReleaseGeneration.current += 1;
+    setReleaseDetail(null);
+    setReleaseEvidence(null);
+    setReleaseEvidenceError("");
+    setReleaseEvidenceLoading(false);
+    setReleases([]);
+    setReleaseTotal(0);
+    setScan(null);
+    setQueue(clearDemoQueue);
+    setSearchInput("");
+    setSearchQuery("");
+    setAttentionRequired(false);
+    setReleasePage(1);
+    setSelectedReleaseId(null);
+    setPassword("");
+    window.history.pushState({}, "", releaseFilterURL(window.location.href, { query: "", attentionRequired: false, page: 1, release: null }));
   }
-  function submitSearch(event: FormEvent) {
-    event.preventDefault();
+
+  function submitSearch() {
     const query = searchInput.trim();
-    window.history.pushState({}, "", releaseFilterURL(window.location.href, { query, attentionRequired, page: 1 }));
-    invalidateSelectedRelease();
+    pushFilters({ query, attentionRequired, page: 1, release: null });
     setSearchQuery(query);
     setReleasePage(1);
+    setSelectedReleaseId(null);
   }
+
   function clearSearch() {
     setSearchInput("");
-    window.history.pushState({}, "", releaseFilterURL(window.location.href, { query: "", attentionRequired, page: 1 }));
-    invalidateSelectedRelease();
+    pushFilters({ query: "", attentionRequired, page: 1, release: null });
     setSearchQuery("");
     setReleasePage(1);
+    setSelectedReleaseId(null);
   }
+
   function toggleAttentionFilter() {
     const nextValue = !attentionRequired;
-    window.history.pushState({}, "", releaseFilterURL(window.location.href, { query: searchQuery, attentionRequired: nextValue, page: 1 }));
-    invalidateSelectedRelease();
+    pushFilters({ query: searchQuery, attentionRequired: nextValue, page: 1, release: null });
     setAttentionRequired(nextValue);
     setReleasePage(1);
+    setSelectedReleaseId(null);
   }
+
   function changeReleasePage(page: number) {
     const nextPage = Math.max(1, Math.min(page, Math.max(1, Math.ceil(releaseTotal / releasePageSize))));
     if (nextPage === releasePage) return;
-    window.history.pushState({}, "", releaseFilterURL(window.location.href, { query: searchQuery, attentionRequired, page: nextPage }));
-    invalidateSelectedRelease();
+    pushFilters({ query: searchQuery, attentionRequired, page: nextPage, release: null });
     setReleasePage(nextPage);
+    setSelectedReleaseId(null);
   }
-  function playTrack(track: ReleaseDetailDTO["media"][number]["tracks"][number]) {
-    setNowPlaying(track);
-    setIsPlaying(true);
+
+  function openRelease(releaseID: string) {
+    pushFilters({ query: searchQuery, attentionRequired, page: releasePage, release: releaseID });
+    setReleaseDetail({ status: "loading" });
+    setSelectedReleaseId(releaseID);
   }
+
+  function queuePlayItems(items: DemoQueueItem[]) {
+    setQueue((current) => playDemoItems(current, items));
+  }
+
+  function queuePlayTrack(item: DemoQueueItem) {
+    setQueue((current) => playDemoTrack(current, item));
+  }
+
   const releasePageCount = Math.max(1, Math.ceil(releaseTotal / releasePageSize));
+  const scanNotice = describeScanNotice(scan);
+  const initialListLoading = releaseLoading && releases.length === 0 && releaseError === "";
+  const staleRefreshing = releaseLoading && releases.length > 0;
+  const currentQueueItem = currentDemoItem(queue);
+
   if (setupRequired === null)
     return (
       <main className="shell">
@@ -421,12 +545,12 @@ function App() {
       </main>
     );
   return (
-    <main className="app-shell">
+    <main className={currentQueueItem ? "app-shell has-player" : "app-shell"}>
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark">R</span><span>ROOMusic</span></div>
         <p className="side-label">工作区</p>
         <nav>
-          <a className="nav-item active" href="#library">◈ <span>媒体库</span><b>{releaseTotal}</b></a>
+          <a className="nav-item active" href="#library" onClick={() => { if (selectedReleaseId) closeReleaseSelection(); }}>◈ <span>媒体库</span><b>{releaseTotal}</b></a>
           <a className="nav-item" href="#queue">≡ <span>播放队列</span></a>
           {session.role === "admin" && <a className="nav-item" href="#admin">⚙ <span>管理中心</span></a>}
         </nav>
@@ -438,12 +562,6 @@ function App() {
 
       <section className="workspace">
         <header className="topbar">
-          <form className="searchbar" onSubmit={submitSearch}>
-            <span>⌕</span>
-            <label className="sr-only" htmlFor="library-search">搜索音乐库</label>
-            <input id="library-search" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="搜索艺术家、专辑或曲目" />
-            {searchQuery && <button type="button" onClick={clearSearch}>清除</button>}
-          </form>
           <span className="sync-state" role="status"><i /> {describeScanState(scan)}</span>
         </header>
         {message && <p className="toast" role="alert">{message}</p>}
@@ -453,10 +571,6 @@ function App() {
             <div className="section-heading">
               <div><p className="eyebrow">私人音乐库</p><h1>探索你的收藏</h1></div>
               <div className="heading-actions">
-                <button className="filter-toggle" type="button" aria-pressed={attentionRequired} onClick={toggleAttentionFilter}>
-                  {attentionRequired ? "显示全部" : "只看需要检查"}
-                </button>
-                <span className="result-count">{releaseTotal} 个发行版本</span>
                 {session.role === "admin" && (scan?.status === "running" ? (
                   <button className="outline-button" type="button" onClick={() => void cancelScan()} disabled={scanMutationPending || scan.cancel_requested_at !== null}>
                     {scan.cancel_requested_at ? "取消请求中" : "停止扫描"}
@@ -467,112 +581,82 @@ function App() {
               </div>
             </div>
 
-            {releaseLoading ? (
-              <p className="state-block" role="status">正在加载发行版本...</p>
+            <CatalogToolbar
+              searchInput={searchInput}
+              submittedQuery={searchQuery}
+              onSearchInput={setSearchInput}
+              onSubmitSearch={submitSearch}
+              onClearSearch={clearSearch}
+              attentionRequired={attentionRequired}
+              onToggleAttention={toggleAttentionFilter}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+              onRefresh={() => setReleaseRetry((retry) => retry + 1)}
+              pending={releaseLoading}
+              stale={staleRefreshing}
+              total={releaseTotal}
+              page={releasePage}
+              pageCount={releasePageCount}
+              onPageChange={changeReleasePage}
+            />
+
+            {scanNotice && <p className="scan-notice" role="status">{scanNotice}</p>}
+
+            {initialListLoading ? (
+              <div className="release-grid" role="status" aria-label="正在加载发行版本">
+                {Array.from({ length: 8 }, (_, index) => (
+                  <div className="skeleton-card" key={index}>
+                    <div className="skeleton-block skeleton-cover" />
+                    <div className="skeleton-block skeleton-line" />
+                    <div className="skeleton-block skeleton-line short" />
+                  </div>
+                ))}
+              </div>
             ) : releaseError ? (
               <p className="state-block error" role="alert">{releaseError} <button type="button" onClick={() => setReleaseRetry((retry) => retry + 1)}>重试</button></p>
             ) : releases.length === 0 ? (
-              <p className="state-block">{attentionRequired ? "当前没有需要检查的发行版本" : "暂无匹配的发行版本"}</p>
+              attentionRequired ? (
+                <p className="state-block">当前没有需要检查的发行版本 <button type="button" onClick={toggleAttentionFilter}>显示全部</button></p>
+              ) : searchQuery ? (
+                <p className="state-block">没有找到与“{searchQuery}”匹配的发行版本 <button type="button" onClick={clearSearch}>清除搜索</button></p>
+              ) : (
+                <p className="state-block">
+                  音乐库暂无发行版本
+                  {session.role === "admin"
+                    ? <button type="button" onClick={() => void startScan()} disabled={scanMutationPending || scan?.status === "running"}>扫描音乐库</button>
+                    : <span>请等待管理员完成扫描。</span>}
+                </p>
+              )
             ) : (
-              <div className="release-grid">
+              <div className={viewMode === "grid" ? "release-grid" : "release-list"} aria-busy={staleRefreshing}>
                 {releases.map((release) => (
-                  <button className="release-card" key={release.id} type="button" onClick={() => void showRelease(release.id)}>
-                    <div className="cover-placeholder">{release.title.slice(0, 1) || "♫"}</div>
-                    <strong title={release.title}>{release.title || "未知专辑"}</strong>
-                    <span title={release.album_artist ?? release.artist}>{(release.album_artist ?? release.artist) || "艺术家未知"}</span>
-                    <small>{release.year ?? "年份未知"} · {release.medium_count} 碟 / {release.track_count} 首</small>
-                    {(release.source_type || release.media_type) && <small>{[release.source_type, release.media_type].filter(Boolean).join(" · ")}</small>}
-                    {release.attention_count > 0 && <span className="attention-badge">需要检查 {release.attention_count}</span>}
-                  </button>
+                  <ReleaseCard key={release.id} model={toReleaseCardModel(release)} layout={viewMode} onOpen={openRelease} />
                 ))}
               </div>
             )}
-
-            {(releasePage > 1 || releaseTotal > releasePageSize) && (
-              <nav className="pagination" aria-label="发行版本分页">
-                <button type="button" onClick={() => changeReleasePage(releasePage - 1)} disabled={releaseLoading || releasePage <= 1}>上一页</button>
-                <span>第 {releasePage} / {releasePageCount} 页</span>
-                <button type="button" onClick={() => changeReleasePage(releasePage + 1)} disabled={releaseLoading || releasePage >= releasePageCount}>下一页</button>
-              </nav>
-            )}
-
-            {selectedRelease && (
-              <article className="detail-panel">
-                <div className="detail-cover">
-                  {selectedRelease.artwork ? <img src={`/api/v1/artworks/${encodeURIComponent(selectedRelease.artwork.resource_id)}`} alt={`${selectedRelease.title} 封面`} /> : <span>{selectedRelease.title.slice(0, 1) || "♫"}</span>}
-                </div>
-                <div className="detail-body">
-                  <p className="eyebrow">发行详情</p>
-                  <h2>{selectedRelease.title || "未知专辑"}</h2>
-                  <p className="detail-artist">{(selectedRelease.album_artist ?? selectedRelease.artist) || "艺术家未知"}</p>
-                  <dl className="release-facts">
-                    <div><dt>年份</dt><dd>{selectedRelease.year ?? "未知"}</dd></div>
-                    <div><dt>来源 / 介质</dt><dd>{[selectedRelease.source_type, selectedRelease.media_type].filter(Boolean).join(" / ") || "未记录"}</dd></div>
-                    <div><dt>规模</dt><dd>{selectedRelease.medium_count} 碟 · {selectedRelease.track_count} 首</dd></div>
-                    <div><dt>候选类型</dt><dd>{selectedRelease.candidate_kind}</dd></div>
-                    {selectedRelease.genre && <div><dt>流派</dt><dd>{selectedRelease.genre}</dd></div>}
-                    {selectedRelease.catalog_number && <div><dt>目录号</dt><dd>{selectedRelease.catalog_number}</dd></div>}
-                    {selectedRelease.edition && <div><dt>版本</dt><dd>{selectedRelease.edition}</dd></div>}
-                    {selectedRelease.label && <div><dt>唱片公司</dt><dd>{selectedRelease.label}</dd></div>}
-                    {selectedRelease.barcode && <div><dt>条码</dt><dd>{selectedRelease.barcode}</dd></div>}
-                  </dl>
-                  {selectedRelease.credits.length > 0 && <p className="credit-line">署名：{selectedRelease.credits.map((credit) => `${credit.role} · ${credit.name}`).join("；")}</p>}
-
-                  {selectedRelease.media.map((medium) => (
-                    <div className="medium" key={medium.id}>
-                      <h3>碟片 {medium.position} <span>{medium.title}</span></h3>
-                      <ol>
-                        {medium.tracks.map((track) => (
-                          <li key={track.id}>
-                            <button type="button" onClick={() => playTrack(track)}>
-                              <span>{String(track.position).padStart(2, "0")}</span>
-                              <b>{track.title || "未命名曲目"}</b>
-                              <small>
-                                {track.artist || "艺术家未知"}
-                                {track.codec ? ` · ${track.codec}` : ""}
-                                {track.bit_depth ? ` · ${track.bit_depth} bit` : ""}
-                                {track.sample_rate ? ` · ${Math.round(track.sample_rate / 1000)} kHz` : ""}
-                                {track.channels ? ` · ${track.channels} 声道` : ""}
-                                {track.bitrate ? ` · ${track.bitrate} kbps` : ""}
-                                {track.cue?.start_seconds !== null && track.cue ? ` · CUE ${track.cue.start_seconds.toFixed(2)}s` : ""}
-                                {track.credits.length > 0 ? ` · ${track.credits.map((credit) => `${credit.role}：${credit.name}`).join(" / ")}` : ""}
-                              </small>
-                              <i>▶</i>
-                            </button>
-                          </li>
-                        ))}
-                      </ol>
-                    </div>
-                  ))}
-
-                  {selectedRelease.evidence.length > 0 && (
-                    <section aria-label="整理证据摘要" className="evidence-panel">
-                      <h3>整理证据摘要</h3>
-                      <ul>{selectedRelease.evidence.map((item) => <li key={`${item.field}-${item.rule_id}`}><strong>{item.field}</strong><span>{item.source} · {item.confidence} · {item.action}</span></li>)}</ul>
-                    </section>
-                  )}
-
-                  {session.role === "admin" && (
-                    <section aria-label="管理员整理证据" className="evidence-panel detailed-evidence">
-                      <div className="panel-heading"><h3>管理员证据</h3><button type="button" onClick={() => void showReleaseEvidence()} disabled={releaseEvidenceLoading}>{releaseEvidenceLoading ? "正在读取..." : "查看完整证据"}</button></div>
-                      {releaseEvidenceError && <p className="error" role="alert">{releaseEvidenceError}</p>}
-                      {releaseEvidence && <>
-                        {releaseEvidence.fields.length === 0 ? <p>此发行版本没有字段证据。</p> : <ul>{releaseEvidence.fields.map((item) => <li key={`${item.field}-${item.rule_id}`}><strong>{item.field}</strong><span>{item.value ?? "未选择值"} · {item.confidence} · {item.action}</span>{item.reason_code && <small>{item.reason_code}</small>}{item.candidates.length > 0 && <small>候选：{item.candidates.join("、")}</small>}</li>)}</ul>}
-                        {releaseEvidence.grouping && <div className="grouping-evidence"><strong>归组：{releaseEvidence.grouping.candidate_kind}</strong>{releaseEvidence.grouping.reason_codes.map((reason) => <small key={reason}>{reason}</small>)}{releaseEvidence.grouping.source_refs.length > 0 && <ul>{releaseEvidence.grouping.source_refs.map((sourceRef) => <li key={sourceRef}><code>{sourceRef}</code></li>)}</ul>}</div>}
-                        {releaseEvidence.truncated && <p>证据已按安全上限截断。</p>}
-                      </>}
-                    </section>
-                  )}
-                  <p className="readonly-hint">如需更正，请修改外部源文件或标签后重新扫描。ROOMusic 不会改写音乐源。</p>
-                </div>
-              </article>
-            )}
           </section>
 
-          <aside className="queue-panel" id="queue">
-            <div className="queue-heading"><h2>即将播放</h2><span>{nowPlaying ? "演示队列" : "空队列"}</span></div>
-            {nowPlaying ? <div className="queue-now"><div className="mini-cover">{nowPlaying.title.slice(0, 1) || "♫"}</div><div><strong title={nowPlaying.title}>{nowPlaying.title || "未命名曲目"}</strong><span title={nowPlaying.artist}>{nowPlaying.artist || "艺术家未知"}</span></div><button type="button" aria-label={isPlaying ? "暂停播放" : "播放"} onClick={() => setIsPlaying((playing) => !playing)}>{isPlaying ? "Ⅱ" : "▶"}</button></div> : <div className="queue-empty"><span>♫</span><p>从发行详情中选择一首曲目<br />开始播放演示</p></div>}
-            <div className="queue-tip"><span>⌘</span><p>播放控制为界面演示<br />暂未连接音频流服务</p></div>
+          <aside className="queue-panel" id="queue" aria-label="播放队列">
+            <div className="queue-heading"><h2>即将播放</h2><span>{queue.items.length > 0 ? `${queue.items.length} 首 · 演示队列` : "空队列"}</span></div>
+            {queue.items.length === 0 ? (
+              <div className="queue-empty"><span>♫</span><p>从发行详情中选择一首曲目<br />开始播放演示</p></div>
+            ) : (
+              <>
+                <ol className="queue-list">
+                  {queue.items.map((item, index) => (
+                    <li key={item.track.id} aria-current={index === queue.currentIndex ? "true" : undefined}>
+                      <button type="button" className={index === queue.currentIndex ? "queue-item current" : "queue-item"} onClick={() => queuePlayTrack(item)}>
+                        <span>{index + 1}</span>
+                        <b title={item.track.title}>{item.track.title || untitledTrackLabel}</b>
+                        <small title={item.releaseArtist}>{item.releaseArtist}</small>
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+                <button className="ghost-button queue-clear" type="button" onClick={() => setQueue(clearDemoQueue)}>清空队列</button>
+              </>
+            )}
+            <div className="queue-tip"><span>⌘</span><p>演示模式<br />未连接音频服务</p></div>
           </aside>
         </div>
 
@@ -607,7 +691,41 @@ function App() {
         )}
       </section>
 
-      {nowPlaying && <footer className="player-bar"><div className="player-track"><div className="mini-cover">{nowPlaying.title.slice(0, 1) || "♫"}</div><div><strong title={nowPlaying.title}>{nowPlaying.title || "未命名曲目"}</strong><span title={nowPlaying.artist}>{nowPlaying.artist || "艺术家未知"}</span></div></div><div className="player-controls"><button type="button" aria-label="上一首">|◀</button><button className="play-button" type="button" aria-label={isPlaying ? "暂停" : "播放"} onClick={() => setIsPlaying((playing) => !playing)}>{isPlaying ? "Ⅱ" : "▶"}</button><button type="button" aria-label="下一首">▶|</button></div><div className="progress"><span>1:24</span><div><i /></div><span>4:12</span></div><span className="volume">⌁　▮▮▮</span></footer>}
+      {selectedReleaseId && (
+        <ReleaseDetailDrawer
+          key={selectedReleaseId}
+          state={releaseDetail ?? { status: "loading" }}
+          isAdmin={session.role === "admin"}
+          evidence={releaseEvidence}
+          evidenceLoading={releaseEvidenceLoading}
+          evidenceError={releaseEvidenceError}
+          onClose={closeReleaseSelection}
+          onRetry={() => setDetailRetry((retry) => retry + 1)}
+          onShowEvidence={() => void showReleaseEvidence()}
+          onPlayItems={queuePlayItems}
+          onPlayTrack={queuePlayTrack}
+        />
+      )}
+
+      {currentQueueItem && queue.currentIndex !== null && (
+        <footer className="player-bar">
+          <div className="player-track">
+            <ReleaseCover artwork={currentQueueItem.releaseArtwork} title={currentQueueItem.releaseTitle} className="mini-cover" />
+            <div>
+              <strong title={currentQueueItem.track.title}>{currentQueueItem.track.title || untitledTrackLabel}</strong>
+              <span title={`${currentQueueItem.releaseArtist} · ${currentQueueItem.releaseTitle}`}>{currentQueueItem.releaseArtist} · {currentQueueItem.releaseTitle}</span>
+            </div>
+          </div>
+          <div className="player-controls">
+            <button type="button" aria-label="上一首" disabled={queue.currentIndex <= 0} onClick={() => setQueue(previousDemoTrack)}>|◀</button>
+            <button className="play-button" type="button" aria-label={queue.isPlaying ? "暂停" : "播放"} onClick={() => setQueue((current) => setDemoPlaying(current, !current.isPlaying))}>{queue.isPlaying ? "Ⅱ" : "▶"}</button>
+            <button type="button" aria-label="下一首" disabled={queue.currentIndex >= queue.items.length - 1} onClick={() => setQueue(nextDemoTrack)}>▶|</button>
+          </div>
+          <span className="player-position">{queue.currentIndex + 1} / {queue.items.length}</span>
+          <button className="ghost-button" type="button" onClick={() => setQueue(removeCurrentDemoItem)}>移除当前</button>
+          <span className="demo-badge">演示模式，未连接音频服务</span>
+        </footer>
+      )}
     </main>
   );
 }

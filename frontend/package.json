@@ -12,10 +12,10 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
-    "typescript": "latest",
     "react": "latest",
-    "react-dom": "latest"
+    "react-dom": "latest",
+    "typescript": "latest",
+    "vite": "latest"
   },
   "devDependencies": {
     "@eslint/js": "latest",
@@ -25,6 +25,7 @@
     "@typescript-eslint/parser": "latest",
     "eslint": "latest",
     "eslint-plugin-react-hooks": "latest",
+    "jsdom": "^30.0.1",
     "vitest": "latest"
   }
 }
