@@ -16,6 +16,7 @@ import (
 
 const (
 	maxReleaseRows          = 100
+	maxArtworkResourceID    = 255
 	maxReleaseMedia         = 256
 	maxReleaseTrackRows     = 10000
 	maxReleaseCredits       = 100
@@ -347,7 +348,8 @@ func releaseArtworkFromProjection(resourceID, mime sql.NullString, width, height
 	if presentColumns != 4 {
 		return nil, errors.New("incomplete artwork projection")
 	}
-	if resourceID.String == "" || resourceID.String == "." || resourceID.String == ".." ||
+	if resourceID.String == "" || len(resourceID.String) > maxArtworkResourceID ||
+		resourceID.String == "." || resourceID.String == ".." ||
 		!utf8.ValidString(resourceID.String) || strings.ContainsAny(resourceID.String, `/\\`) ||
 		strings.IndexFunc(resourceID.String, unicode.IsControl) >= 0 {
 		return nil, errors.New("unsafe artwork resource identifier")

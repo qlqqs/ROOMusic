@@ -6,6 +6,13 @@ export type ReleaseFilterState = {
   release: string | null;
 };
 
+const maxReleaseSelectionLength = 255;
+
+function readReleaseSelection(value: string | null): string | null {
+  const release = value?.trim() ?? "";
+  return release !== "" && release.length <= maxReleaseSelectionLength ? release : null;
+}
+
 function readPage(value: string | null): number {
   if (value === null || !/^\d+$/.test(value)) return 1;
   const page = Number(value);
@@ -14,12 +21,11 @@ function readPage(value: string | null): number {
 
 export function readReleaseFilters(search: string): ReleaseFilterState {
   const parameters = new URLSearchParams(search);
-  const release = parameters.get("release")?.trim() ?? "";
   return {
     query: parameters.get("q")?.trim() ?? "",
     attentionRequired: parameters.get("attention") === "required",
     page: readPage(parameters.get("page")),
-    release: release === "" ? null : release,
+    release: readReleaseSelection(parameters.get("release")),
   };
 }
 
@@ -39,8 +45,8 @@ export function releaseFilterURL(currentURL: string, filters: ReleaseFilterState
   else url.searchParams.delete("attention");
   if (Number.isSafeInteger(filters.page) && filters.page > 1) url.searchParams.set("page", String(filters.page));
   else url.searchParams.delete("page");
-  const release = filters.release?.trim() ?? "";
-  if (release) url.searchParams.set("release", release);
+  const release = readReleaseSelection(filters.release);
+  if (release !== null) url.searchParams.set("release", release);
   else url.searchParams.delete("release");
   return url.toString();
 }

@@ -128,6 +128,7 @@ func TestReleaseArtworkProjectionValidation(t *testing.T) {
 	}{
 		{name: "partial nullable columns", resourceID: stringValue("cover.webp"), mime: stringValue("image/webp"), width: intValue(640)},
 		{name: "empty resource identifier", resourceID: stringValue(""), mime: stringValue("image/webp"), width: intValue(640), height: intValue(480)},
+		{name: "oversized resource identifier", resourceID: stringValue(strings.Repeat("a", maxArtworkResourceID+1)), mime: stringValue("image/webp"), width: intValue(640), height: intValue(480)},
 		{name: "dot resource identifier", resourceID: stringValue("."), mime: stringValue("image/webp"), width: intValue(640), height: intValue(480)},
 		{name: "parent resource identifier", resourceID: stringValue(".."), mime: stringValue("image/webp"), width: intValue(640), height: intValue(480)},
 		{name: "slash resource identifier", resourceID: stringValue("private/cover.webp"), mime: stringValue("image/webp"), width: intValue(640), height: intValue(480)},

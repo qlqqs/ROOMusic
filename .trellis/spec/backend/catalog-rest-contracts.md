@@ -24,8 +24,8 @@
 - 列表与详情复用同一 Release 摘要投影。封面按 `release_id` 主键一次 `LEFT JOIN`，
   禁止在列表 handler 中逐 Release 查询详情或封面。
 - 没有封面关系时必须显式返回 `"artwork": null`，不能省略字段或隐藏 Release。
-- 有封面时只返回安全 basename `resource_id`、白名单 MIME 和 PostgreSQL 正整数宽高；
-  不返回图片字节、`content_hash`、`source_type`、受管目录或音乐源路径。
+- 有封面时只返回最长 255 字节的安全 basename `resource_id`、白名单 MIME 和 PostgreSQL
+  正整数宽高；不返回图片字节、`content_hash`、`source_type`、受管目录或音乐源路径。
 - MIME 只允许 `image/jpeg | image/png | image/gif | image/webp`。资源字节仍通过认证的
   artwork endpoint 返回。
 
@@ -38,7 +38,7 @@
 | Release 不存在或仅含 `missing` Track | 详情返回 `404 not_found` |
 | 无 `release_artworks` 关系 | 列表与详情返回显式 `artwork: null` |
 | 封面四列完整且合法 | 列表与详情返回相同 artwork 对象 |
-| 封面列部分为空，ID 含路径分隔符/点目录/控制字符，MIME 或尺寸非法 | fail closed 为既有 `503` 安全错误 envelope；不得回显存储值、SQL 或路径 |
+| 封面列部分为空，ID 超过 255 字节或含路径分隔符/点目录/控制字符，MIME 或尺寸非法 | fail closed 为既有 `503` 安全错误 envelope；不得回显存储值、SQL 或路径 |
 | artwork 资源不存在、记录不安全或文件不可读 | `404 not_found`，不返回主机路径 |
 
 ## 5. 正确、基准与错误案例
@@ -50,8 +50,8 @@
 
 ## 6. 必需测试与断言点
 
-- 单元测试：四列全空、部分空、四种 MIME、空/点目录/分隔符/控制字符/非法 UTF-8 ID、
-  零/负/越界尺寸，以及摘要 JSON 的显式 `null`。
+- 单元测试：四列全空、部分空、四种 MIME、空/超过 255 字节/点目录/分隔符/控制字符/
+  非法 UTF-8 ID、零/负/越界尺寸，以及摘要 JSON 的显式 `null`。
 - PostgreSQL REST 集成：有封面、无封面、列表/详情一致、present-only、搜索/分页、
   attention、未认证、隐藏 Release、非法资源 ID 的安全 503 和无路径/SQL 泄露。
 - 运行 `go test ./cmd/roomusic -run 'Release|Catalog|Artwork' -count=1`；涉及 SQL 投影时，
