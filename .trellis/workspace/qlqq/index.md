@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 19
+- **Total Sessions**: 20
 - **Last Active**: 2026-09-04
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~460 | Active |
+| `journal-1.md` | ~484 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 20 | 2026-09-04 | 完善音乐库前端展示 | `b85122e`, `663c9bd`, `d0afb98` | `task/music-display-frontend` |
 | 19 | 2026-09-04 | 完成发行列表后端封面摘要 | `52c5850`, `9315a0b` | `task/release-list-artwork-backend` |
 | 18 | 2026-09-04 | 迁移 ROOMusic 开发环境到 qlqq | `a427377` | `task/real-library-smoke-v0-comparison` |
 | 17 | 2026-09-04 | 完成真实音乐库只读 Smoke 与 V0 对照 | `efd5317`, `2747989`, `b718d2e` | `task/real-library-smoke-v0-comparison` |
