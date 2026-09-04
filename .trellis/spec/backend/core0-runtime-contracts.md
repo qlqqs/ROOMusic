@@ -51,6 +51,7 @@
   `attention=required`。详情返回有界 Medium/Track、credits、音频/CUE facts 和
   普通用户安全 evidence 摘要；完整候选、reason code 和安全相对来源只由管理员
   evidence 端点返回，普通用户必须得到 403。
+- 发行列表/详情的封面摘要见 [Catalog REST 合同](./catalog-rest-contracts.md)。
 
 ### 数据库与扫描
 

@@ -39,6 +39,7 @@ Before writing or reviewing backend code:
 | [Error Handling](./error-handling.md) | Classified application errors and stable REST responses |
 | [Logging Guidelines](./logging-guidelines.md) | Structured JSON events, correlation, and redaction |
 | [Core 0 当前运行合同](./core0-runtime-contracts.md) | 当前 REST、环境、事务、扫描和跨层安全合同 |
+| [Catalog REST 合同](./catalog-rest-contracts.md) | Release 列表/详情、封面摘要、可见性和错误合同 |
 | [Music Steward And Operation Guidelines](./agent-and-operation-guidelines.md) | Agent modes, Review Subagent, tools, Change Sets, and recovery |
 | [Quality Guidelines](./quality-guidelines.md) | Focused code, forbidden coupling, tests, and gates |
 
