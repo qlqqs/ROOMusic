@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 22
-- **Last Active**: 2026-09-04
+- **Total Sessions**: 23
+- **Last Active**: 2026-09-27
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~529 | Active |
+| `journal-1.md` | ~570 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 23 | 2026-09-27 | Classical M0 文档对齐与提交收尾 | `850d274` | `docs/classical-m0-alignment` |
 | 22 | 2026-09-04 | 修复扫描元数据与前端标签显示 | `f2615d5` | `main` |
 | 21 | 2026-09-04 | 收尾前端音乐库展示父任务 | `f8151e0`, `abab775` | `main` |
 | 20 | 2026-09-04 | 完善音乐库前端展示 | `b85122e`, `663c9bd`, `d0afb98` | `task/music-display-frontend` |

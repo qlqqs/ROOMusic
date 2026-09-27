@@ -527,3 +527,44 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 ### Status
 
 [OK] **Completed**
+
+
+## Session 23: Classical M0 文档对齐与提交收尾
+<!-- trellis-session: v=2 fp=1a18c58f4406fc56 -->
+
+**Date**: 2026-09-27
+**任务**: Classical M0 文档对齐与提交收尾
+**分支**: `docs/classical-m0-alignment`
+
+### 摘要
+
+完成 Classical 设计依据、Core 1 能力路线、四份 ADR 草案与规范对齐。用户明确批准提交后创建文档分支并完成工作提交，随后仅归档 M0、修复父子任务引用。父任务仍在规划，ADR 与 Core 1 截止范围仍待批准，未推送。
+
+### 主要变更
+
+- 新增 frontend/DESIGN.md、docs/architecture/core-1-roadmap.md 与四份未采纳 ADR；同步 README、架构摘要和相关前后端规范。
+- 工作提交 850d274 只含 36 个文档/任务文件；M0 已归档至 .trellis/tasks/archive/2026-09/09-27-classical-m0-alignment，父任务保持 planning，旧任务未修改或归档。
+- 归档时修复 Markdown 链接、JSONL 上下文和 relatedFiles；保留工作提交清单与归档前实际执行命令，不改写历史。
+- 目录幂等指纹缺少路由目标 ID 等风险仅作静态记录，未动态复现或修复；未启动 M1/B0，未安装依赖或修改业务、原型与媒体。
+- 验证边界为纯文档：未运行 Go/npm/数据库全量测试、UI 或真实媒体测试，不声称浏览器兼容、播放性能或发行许可已验收。
+
+### Git 提交
+
+| 提交哈希 | 说明 |
+|------|---------|
+| `850d274` | docs: 对齐 Classical 设计与 Core 1 路线 |
+
+### 验证
+
+- [OK] python3 .trellis/scripts/task.py validate .trellis/tasks/09-27-classical-core-1；python3 .trellis/scripts/task.py validate .trellis/tasks/archive/2026-09/09-27-classical-m0-alignment：父子上下文均通过。
+- [OK] python3 /tmp/roomusic-m0-review-check.py；python3 /tmp/roomusic-m0-validate.py：归档前执行，36 个文件、177 个本地链接与原型 token、静态对比度和扫描字段通过。
+- [OK] python3 /tmp/roomusic-m0-archive-check.py：归档后 36 个文件、178 个本地链接、元数据和父子关系通过；临时检查器不是仓库工具。
+- [OK] git diff --check；git diff --cached --check；受保护路径 git diff --exit-code：均通过，无业务、原型、依赖或旧任务变更。
+
+### 状态
+
+[OK] **已完成**
+
+### 后续步骤
+
+- 由用户审阅四份 ADR 草案和 Core 1 截止范围；明确决策后再独立创建、规划并批准 M1/B0 等任务，不自动开始业务实施。
