@@ -8,8 +8,9 @@ optional-property access unless a documented tool constraint blocks them. Do not
 weaken compiler settings to integrate one feature.
 
 External data enters as `unknown` and becomes trusted only through one runtime
-decoder at the owning boundary. 当前 Core 0 使用 `frontend/src/api.ts` 中的手写
-decoder，暂未引入运行时校验库；禁止以 raw cast 绕过角色、枚举或必填字段检查。
+decoder at the owning boundary. 旧手写 decoder 的实现随 `frontend/src/` 删除；恢复时
+仍须按 feature API 边界解码，不得把旧 `api.ts` 写成当前存在的模块。运行时校验库尚未
+采纳；禁止以 raw cast 绕过角色、枚举或必填字段检查。
 
 ## Type Ownership
 
@@ -29,11 +30,11 @@ derive identity from title, track number, array index, or file path.
 
 ## Runtime Decoding
 
-A feature owns one decoder per response contract:
+每个 feature 为每种响应合同维护唯一 decoder。以下只演示当前扫描响应的部分字段，
+不是完整 DTO；时间字段沿用 wire 名称与非空合同：
 
 ```ts
 const scanStatuses = [
-  "pending",
   "running",
   "succeeded",
   "failed",
@@ -46,19 +47,20 @@ type ScanStatus = (typeof scanStatuses)[number];
 type ScanRunDTO = {
   id: string;
   status: ScanStatus;
-  observedFiles: number;
-  startedAt: string | null;
+  started_at: string;
 };
 
 function decodeScanRun(input: unknown): ScanRunDTO {
-  // The selected decoder validates object shape, bounded numbers, status, and
-  // nullable timestamps here. Consumers never repeat those checks.
+  // decoder 在此校验对象、标识、状态及时间；完整实现还需校验其余响应字段。
+  // 消费者不重复解码。
   return scanRunDecoder.parse(input);
 }
 ```
 
-`scanRunDecoder` is illustrative; its library/API is not selected. The stable
-rule is that `unknown` is decoded once and all consumers receive `ScanRunDTO`.
+`scanRunDecoder` 仅为解码模式示意，不是已存在或已选定的库。完整扫描响应以
+[运行合同](../backend/core0-runtime-contracts.md)和
+[`scanDTO`](../../../backend/cmd/roomusic/scans.go)为准，当前没有已扫描文件数或百分比进度。
+不得从示例增加后端未返回的字段；只在边界解码一次 `unknown`，其他消费者只接收类型化结果。
 
 Decode the common error envelope even for non-2xx responses. Unknown response
 codes remain representable as a safe `ApiError` fallback so an older frontend

@@ -46,11 +46,11 @@ them into `ValidateString` loses ownership rather than creating useful reuse.
 
 ## Evidence And Decisions
 
-The repository currently has no application source. New code conventions must
-be recorded after a concrete choice is made; do not invent a router, SQL
-library, state library, validation library, styling system, or test runner in a
-feature patch. The chosen dependency must solve a current need, respect module
-boundaries, and come with the commands needed for verification.
+仓库已有 Go 后端、迁移与测试；2026-09-27 的前端处于源码删除后的重建阶段，不能把
+这两种现状混为“项目没有源码”。依据真实文件核对现状，再决定复用、恢复或新增。
+新 router、SQL/state/validation/styling 库或测试工具必须解决当前需求、遵守模块边界，
+并在获批任务/ADR 中记录选择及验证命令。草案、原型按钮和旧任务授权均不等于本轮
+已经采纳或实现。
 
 Use the source hierarchy in [Product Goals](./product-goals.md). V0 code can
 teach a domain lesson, but copying an old scaffold or dependency requires a new

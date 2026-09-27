@@ -2,8 +2,9 @@
 
 ## Status
 
-本文档是供 Trellis 任务上下文读取的架构摘要。此目录中的 Canvas 文件提供
-可视化细节；本文档记录实现和审查必须遵守的长期规则。
+本文档是供 Trellis 任务上下文读取的架构摘要，记录长期规则并区分当前实现与目标边界。
+Canvas 保留历史可视化参考，不证明相关模块已存在。2026-09-27 的 Classical M0 仅获批
+整理文档，新增能力与技术决策仍以文末草案和后续批准为准。
 
 ## 文档语言
 
@@ -26,19 +27,20 @@ API 文档、Trellis 任务文档、说明性注释和运维文档。代码标�
 
 ## Core 0 当前实现树
 
-当前可运行代码仍采用过渡单体结构：
+2026-09-27 的后端仍为过渡单体，前端源码已删除：
 
 ```text
-backend/cmd/roomusic/*.go   # HTTP、身份、扫描、目录和 catalog 过渡实现
-backend/migrations/*.sql    # embed.FS 按版本执行并记录校验和的 SQL
-frontend/src/main.tsx       # React 页面与本地状态编排
-frontend/src/api.ts         # REST DTO、decoder 和 transport
-frontend/src/styles.css     # 工作台样式与响应式布局
+backend/cmd/roomusic/*.go    # HTTP、身份、扫描、目录操作和 catalog 的当前实现
+backend/migrations/*.sql     # embed.FS 迁移；已共享文件不改写
+backend/cmd/roomusic/web/    # 当前为前端重置占位资产
+frontend/package.json       # 保留工具链/依赖；src/ 不存在
+frontend/DESIGN.md          # 本轮恢复的 Classical 设计依据，不是界面实现
+frontend-desgin/            # 已入库原型及设计工具资产，保持原样
 ```
 
 下方 `backend/internal/*` 与 `frontend/src/features/*` 仅是目标能力边界。
-在第二个真实消费者、路由边界或独立生命周期形成前，不为目录对称性进行
-大规模拆分。
+M1 候选先用现有 API 恢复客户端；B0 候选按真实能力分步拆包，两者可并行。
+不为目录对称性生成空层，也不把 API 行为修复、新迁移或媒体服务夹入纯重构。
 
 ## Repository-level modules
 
@@ -79,8 +81,9 @@ backend/internal/
 └── agent/        Assistant/Steward/Operator modes, plans, review, tool authority
 ```
 
-Only the first five modules are part of the current first-browse slice. The
-remaining modules are planned boundaries, not a reason to create empty packages.
+当前身份、目录/扫描、catalog、基础 PostgreSQL 搜索和窄目录操作能力仍在 `package main`
+中实现；上图不表示这些包已经存在。尤其 `agent` 与通用操作治理是后续能力，不能按目录图
+预建运行时。B0 每一步保留既有 API 和安全/事务/扫描行为。
 
 Each capability owns its policy, application use cases, ports, adapters, and
 tests. Cross-capability calls use published typed contracts or narrow
@@ -101,9 +104,11 @@ frontend/src/
 └── shared/          HTTP transport, policy-free UI, neutral mechanics
 ```
 
-Core 0 creates `app`, `auth`, `library`, `catalog`, and the required `shared`
-parts. Feature code owns its REST DTOs, runtime decoders, hooks, view models,
-components, and routes. `shared` must never import `features` or `app`.
+客户端恢复时按实际页面建立 `app`、`auth`、`library`、`catalog` 和必要 `shared`。
+上图中的搜索、通用操作和 Agent 目录只是候选；Classical 后续 `player`、`curation`、
+`artists`、`personal`、`steward` 的命名与责任由相应子任务落实，不因示意图批量生成。
+各 feature 拥有 REST DTO、decoder、hook、view model、组件和路由；`shared` 不能导入
+`features` 或 `app`。新增 Router/Query 仍须先通过依赖 ADR。
 
 The frontend flow is:
 
@@ -129,8 +134,9 @@ services. Domain code stays deterministic where possible. Transport decodes and
 maps; application code coordinates authority and business rules; adapters
 enforce physical storage constraints.
 
-The library scanner publishes observations through a narrow catalog contract. It
-does not write catalog-private tables or decide Release Graph invariants.
+目标边界要求 library scanner 通过窄 catalog 合同提交观察，不直接写 catalog 私有表
+或替代其图不变量。当前 `scanner.go` 仍直接写图；这是待拆分的现状，不是上述边界已实现
+的证明。B0 只迁移职责并保持行为，人工关系保护等新规则留待后续获批任务。
 
 ## Core safety invariants
 
@@ -160,6 +166,23 @@ capabilities, bypass backend authority, or mutate core state directly.
 Capability Registry and Plugin Host are future runtime infrastructure. Do not
 introduce a service locator, dynamic plugin loader, RPC layer, or WASM runtime
 until an approved feature requires that boundary.
+
+## Classical / Core 1 决策草案
+
+[能力矩阵与路线](core-1-roadmap.md)记录 M0–M6/B0 的依赖、验收和旧任务承接。
+推荐 Core 1 截止 M4、M5/M6 后续交付，但该范围仍待用户确认；也可先交付 M1+必要 B0+M2。
+以下四份文档均为**草案／待批准**，不授权安装库、建表、扩权或变更生产媒体路径。
+
+| ADR | 主题 | 涉及阶段 |
+| --- | --- | --- |
+| [0001](adr/0001-frontend-foundations.md) | 前端路由、数据请求、样式、字体与依赖治理 | M1 |
+| [0002](adr/0002-metadata-overlays.md) | 扫描观察、人工修正、有效值与稳定身份 | M3/M4 |
+| [0003](adr/0003-governed-operations.md) | 通用变更集、审批、角色、检查点与受限逆操作 | M3/M4/M6 |
+| [0004](adr/0004-media-delivery.md) | 受保护串流、浏览器能力、ffmpeg 与派生缓存 | M2 |
+
+当前安全和部署合同继续生效：只读源文件、后端最终授权、Cookie 同源、PostgreSQL 权威；
+扫描观察不是用户逐字段操作，不能直接生成“回滚到某次扫描”的承诺。具体 URL、表结构、
+版本、风险等级与播放支持矩阵在对应子任务批准后才成为可执行合同。
 
 ## Source documents
 

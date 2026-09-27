@@ -11,6 +11,13 @@ Core 0 is a modular monolith: one Go application, versioned REST, in-process sca
 coordination, PostgreSQL as the only required business authority, and a read-only
 music library.
 
+## 后续阶段说明
+
+Classical / Core 1 的能力路线与四类 ADR 位于
+[阶段提案](../../../docs/architecture/core-1-roadmap.md)。M0 仅更新文档，不改变本层现有
+API、表结构或权限。B0 是待立项的行为保持拆包；修正覆盖层、通用审批、editor 角色和
+媒体处理均为候选能力，须经对应子任务批准后再实施。Core 0 限制不是未来阶段的默认授权。
+
 ## Pre-Development Checklist
 
 Before writing or reviewing backend code:
@@ -47,9 +54,8 @@ Before writing or reviewing backend code:
 
 Before declaring backend work complete:
 
-- [ ] Follow the [Backend Quality Guidelines](./quality-guidelines.md) and run
-      every applicable, selected repository gate; until the Go scaffold exists,
-      record the missing command rather than inventing one.
+- [ ] 按[后端质量规范](./quality-guidelines.md)运行改动影响到的现有门禁；Go module
+      和测试套件已经存在。仅文档修改检查文档，不把未运行或因数据库缺失而跳过当作通过。
 - [ ] Verify the behavior is owned by one capability, ports remain narrow, and
       no private table, adapter, or helper became a cross-module API.
 - [ ] Verify request decoding, authorization, path safety, transaction,

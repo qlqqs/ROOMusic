@@ -7,9 +7,9 @@ remain server state, shareable filters remain URL state, transient interaction
 remains local component state, and authentication authority remains on the
 backend.
 
-当前 Core 0 未引入状态库或 query/cache 层；server state 由页面 effect 加载，
-URL 搜索参数由 History API 管理，短生命周期交互使用本地 `useState`。不得把
-该过渡实现误认为目标全局 store，也不得默认新增状态库。
+当前 `frontend/src/` 已删除，不存在运行中的页面 effect 或全局 store。下文保留状态
+归属合同；路由和 query/cache 方案由 [前端基础 ADR 草案](../../../docs/architecture/adr/0001-frontend-foundations.md)
+及获批实施子任务决定。不能把历史实现或候选库当成已经落地的当前状态。
 
 ## State Categories
 
@@ -33,8 +33,8 @@ not a second editable source of truth.
   catalog into a client store.
 - Refetch or invalidate the smallest affected resource after a mutation.
 - Treat 401, 403, 409, and 503 as distinct states.
-- Scan progress derives from the durable scan-run resource. A local percentage
-  cannot redefine succeeded/failed/canceled/incomplete.
+- 扫描状态来自持久 scan-run 资源；当前没有已扫描文件数或百分比进度，诊断计数不能
+  替代总进度。本地提交状态不能新增远端枚举或改写成功、失败、取消和不完整终态。
 - PostgreSQL remains the Core 0 authority. The frontend must not assume
   Meilisearch lag, Redis task semantics, or subscriptions.
 
@@ -49,16 +49,15 @@ should be able to reload, bookmark, or use browser navigation. Normalize and
 validate URL values at the search feature boundary; invalid values fall back to
 documented defaults without sending arbitrary backend fields.
 
-当前发行列表的 `q`、`attention=required` 和 `page` 都是 URL state。提交新搜索、清空
-搜索或切换 attention 时把 `page` 重置为 1；上一页/下一页只写入 `[1,lastPage]`。
-服务端返回总数后，若 URL page 超出真实末页，使用 `replaceState` 规范化 URL 并请求
-末页，避免把可恢复的过期书签永久显示为空结果。`popstate` 必须重新读取三项状态，
-不得维护一份与 URL 分叉的隐藏分页真相。
+现有 Release API 的 `q`、`attention=required` 和 `page` 仍应映射为可恢复 URL state。
+提交新搜索、清空搜索或切换 attention 时把 `page` 重置为 1；翻页限制在有效页内。
+总数为零时保留第一页空态；非零总数对应的 URL 页码超过末页时，用替换历史项而非新增
+历史项的方式规范化并请求末页。前进/后退必须重新派生筛选，不维护隐藏分页副本。
 
-当前详情选择同样由 URL 的 `release` 参数持有：读取和写入时都先 trim，只接受非空且
-不超过 255 个 JavaScript 字符单元的 opaque ID；超长值按未选择处理并从规范化 URL
-删除，禁止带着任意长的深链接值发起详情请求。打开或关闭详情只增删 `release`，必须
-保留 `q`、`attention` 和 `page`。
+旧客户端以 `release` 查询参数选择详情；新路径形式与旧链接兼容策略尚待 M1 确定，
+不要求继续 hash 路由。无论采用路径参数还是查询参数，都只在边界读取/trim/校验一次
+opaque ID，拒绝空值及超过 255 个 JavaScript 字符单元的值，避免任意长值进入请求。
+打开/关闭详情必须能恢复列表筛选与页码；精确 URL 语法获批后同步路由测试与本规范。
 
 Do not put session tokens, absolute paths, secrets, raw errors, or uncommitted
 operation payloads in the URL.
@@ -138,17 +137,26 @@ documented proxy/credentials setup, not a second auth scheme.
 - Client-generated scan completion or missing-source decisions.
 - Clearing all cached data after every mutation.
 - Optimistically disabling a root without revision-conflict recovery.
-- 在 Core 0 中引入未获任务授权的真实播放基础设施、Agent 会话或 PWA 离线存储；本地模拟播放、收藏和歌单遵循下述例外合同。
+- 在 Core 0 或 M1 中引入未经批准的真实播放基础设施、Agent 会话或 PWA 离线存储。
+- 用模拟计时器、演示数据或浏览器本地个人库掩盖生产 API/能力缺失。
 
-## 本地音乐客户端状态
+## 播放与个人状态的阶段边界
 
-经 music-client-experience 任务批准，模拟队列、收藏、歌单和最近播放属于跨页面的客户端状态，由各 feature 的 hook 统一管理，不引入全局状态库。仅保存有限的曲目标识和展示快照，服务端目录仍是权威来源。
+旧 `music-client-experience` 的模拟播放和本地收藏/歌单持久化只是历史任务方案，
+不再作为 Classical 客户端的例外合同。M1 没有真实播放时隐藏或明确禁用播放动作，
+不生成播放历史；受控响应只用于测试，不作为生产 fallback。
 
-持久化结构带版本，读取先校验未知数据，再交给内部类型。存储键必须包含真实用户身份或独立演示身份；退出、失效及账号切换时不能将前一身份的内存写入后一身份。恢复队列必须暂停，不能在刷新后启动模拟时钟。
+M2 候选由路由外的唯一播放生命周期持有队列、当前队列条目和模式，服务端目录仍是媒体
+事实权威。是否使用 `PlayerEngine` 与 `useSyncExternalStore` 由子任务/ADR 决定，
+不是本规范预先安装库或创建全局 store 的授权。恢复队列后暂停，不自动发声。
 
-任何受认证接口返回 `unauthorized` 都必须结束当前会话，包括目录、详情、证据、扫描和管理命令；不能仅显示错误后留下旧播放器。`forbidden` 只表示当前操作无权执行，不等同于注销。
+服务端按用户隔离的历史、收藏和歌单是后续方案，不再把本地快照当作持久权威。若未来
+批准缓存或偏好持久化，需带版本、边界校验和账号命名空间；损坏、未知版本、禁用存储
+都应可恢复，写失败不能声称“已保存”。
 
-损坏 JSON、未知版本、非法数值和浏览器禁用存储均应有可恢复行为。写入失败时本轮操作可保留在内存，但不能显示“已保存”的成功状态。不得持久化 Cookie、凭据、服务端路径或管理操作结果。
+任何受认证接口返回 `unauthorized` 都必须结束当前会话并清理该用户的查询、队列及媒体
+生命周期；账号切换时取消旧请求并阻止迟到响应污染新会话。`forbidden` 只表示当前操作
+无权执行，不等同于注销。Cookie、凭据、服务器路径和治理操作结果不得存入浏览器持久层。
 
 See [Hook Guidelines](./hook-guidelines.md),
 [Cross-Layer Thinking](../guides/cross-layer-thinking-guide.md), and the

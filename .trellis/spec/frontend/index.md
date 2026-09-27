@@ -2,20 +2,19 @@
 
 ## Status
 
-当前 Core 0 已有 React + TypeScript + Vite 前端。`App` 组合、会话与请求协调仍集中在
-`frontend/src/main.tsx`，DTO/decoder 集中在 `frontend/src/api.ts`，样式集中在
-`frontend/src/styles.css`；catalog 展示能力已按 feature 分层落入
-`frontend/src/features/catalog/`（`model/` 纯 formatter 与 view model，
-`components/` 展示组件，`index.ts` 公开边界），后续 feature 沿用该增量拆分方式，
-不做一次性全量搬迁。请求使用原生 `fetch`/Cookie credentials，响应由手写 runtime
-decoder 校验，测试使用 Vitest（组件测试使用 jsdom），静态检查使用 ESLint；
-尚未引入 router、query/cache 或 UI 库。
+2026-09-27 基线：`frontend/src/` 已删除，尚未恢复客户端。`frontend/` 保留 React、
+TypeScript、Vite、ESLint、Vitest/jsdom、lucide-react 的依赖声明与配置；这不等于相应
+组件、decoder 或测试当前存在。生产内嵌页面为前端重置占位页，CI 可跳过真实前端构建。
 
-音乐客户端扩展位于 `features/player/`（模拟播放模型）、
-`features/personal-library/`（本地收藏、歌单、历史、持久化和共享控件）及
-`features/demo/`（显式演示入口）。工具图标使用 lucide-react；模拟状态不代表真实音频服务。
-具体状态归属和隔离规则见 [State Management](./state-management.md)，交互见
-[播放器设计规范](./player-design-guidelines.md)。
+本轮 Classical 的唯一落地设计锚为 [frontend/DESIGN.md](../../../frontend/DESIGN.md)，
+来源是 `frontend-desgin/` 中的原型。旧月刊布局、hash 路由、模拟播放器和生产演示入口
+不再是恢复客户端的默认要求；仍适用的队列语义与安全边界保留在本层规范。
+
+M0 仅获批整理文档。M1 的候选范围是用现有 API 恢复客户端，既有初始化、会话、目录、
+扫描和成员管理写操作仍可使用；不新增元数据治理写路径。新依赖与路由方案见
+[前端基础 ADR 草案](../../../docs/architecture/adr/0001-frontend-foundations.md)，阶段和
+能力矩阵见 [Core 1 路线提案](../../../docs/architecture/core-1-roadmap.md)。草案不授权安装依赖。
+以下是后续恢复实现需遵守的合同，不是当前前端已通过功能验收的声明。
 
 ## Pre-Development Checklist
 
@@ -38,6 +37,8 @@ Before writing or reviewing frontend code:
 
 | Guide | Contract |
 | --- | --- |
+| [Classical 设计依据](../../../frontend/DESIGN.md) | 原型来源、设计变量、布局、组件状态和落地差异 |
+| [Core 1 路线提案](../../../docs/architecture/core-1-roadmap.md) | 当前能力、待批准阶段、旧任务承接与实施门禁 |
 | [Directory Structure](./directory-structure.md) | App composition, feature ownership, public boundaries, and shared code |
 | [Component Guidelines](./component-guidelines.md) | Presentational contracts, workflow states, accessibility, and composition |
 | [Hook Guidelines](./hook-guidelines.md) | Stateful coordination, REST access, cancellation, and polling |
@@ -51,9 +52,8 @@ Before writing or reviewing frontend code:
 
 Before declaring frontend work complete:
 
-- [ ] Follow the [Frontend Quality Guidelines](./quality-guidelines.md) and run
-      every applicable, selected repository gate; until the frontend scaffold
-      exists, record the missing command rather than inventing one.
+- [ ] 按[前端质量规范](./quality-guidelines.md)运行适用门禁；当前脚本已有配置，
+      但源码缺失时的脚本成功不等于客户端验收。M0 只验证文档，M1 须验证真实构建与行为。
 - [ ] Verify raw REST payloads are decoded once at the feature API boundary,
       types are exhaustive, and state has one clear owner.
 - [ ] Verify loading, empty, stale, conflict, canceled, and error states that
@@ -64,7 +64,7 @@ Before declaring frontend work complete:
       backend authority; update a linked guideline when a Core 0 contract or
       selected implementation tool changes.
 
-## Core 0 Frontend Contract
+## Core 0 前端保留合同（恢复实现时适用）
 
 - React/TypeScript runs through a development server for local iteration.
   Production assets are built once and served by the Go application from the

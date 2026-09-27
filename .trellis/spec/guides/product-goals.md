@@ -93,6 +93,25 @@ Core 0 is the smallest useful local-library loop:
 The authoritative acceptance behavior is in the current
 [Core 0 PRD](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md).
 
+## 2026-09-27 当前状态与 Core 1 范围提案
+
+上文 Core 0 Outcome 是阶段目标和继承合同，不代表当前所有界面仍可运行。Go 后端、
+迁移与 REST 保留，`frontend/src/` 已删除，Web 处于重置占位状态；Classical 文档
+以 [frontend/DESIGN.md](../../../frontend/DESIGN.md) 为落地依据。
+
+用户本轮只批准 M0 文档整理。推荐 Core 1 覆盖 M0、M1、B0、M2、M3、M4，即恢复客户端、
+渐进后端边界、真实播放和受控的元数据/版本管理；M5（发现与个人库完整体验）与
+M6（Steward）留为后续候选。**此截止范围尚未采纳**；较小替代是先交付 M1 + 必要 B0 + M2，
+将治理能力排到下一阶段。完整能力矩阵、依赖、验收和 ADR 见
+[Core 1 路线提案](../../../docs/architecture/core-1-roadmap.md)。
+
+M1 只消费现有 API，不新增元数据治理写路径；初始化/会话、目录配置、扫描和成员管理的
+既有写操作并未被“只读客户端”称呼禁止。M2 的播放历史只承接真实播放的最小用户隔离记录，
+不提前实现全部个人库。后续播放、角色、修正、审批或依赖必须分别通过所属任务/ADR 的批准。
+
+下面的永久约束跨阶段继续生效。不得因某能力不属于 Core 0 而永远禁止未来获批阶段，
+也不能因未来路线提到它就把它变成当前必需依赖。
+
 ## Permanent Invariants
 
 These rules survive later phases and adapter changes:

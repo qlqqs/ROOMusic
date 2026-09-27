@@ -2,10 +2,15 @@
 
 ## Status And Intent
 
-当前 Core 0 是扁平过渡结构：`src/main.tsx` 集中页面编排，`src/api.ts` 集中
-REST DTO/decoder，`src/styles.css` 集中样式。下面的 feature-oriented layout
-是目标边界；只有出现第二个真实消费者或明确路由边界时才拆分，不能为了匹配
-目录示例生成空文件夹。
+2026-09-27 基线中 `frontend/src/` 不存在，不能按旧 `main.tsx` / `api.ts` 单体进行
+“增量搬迁”。下图是恢复客户端的目标能力边界，不是已有目录；只为当前获批页面和真实
+消费者创建模块，不预建空文件夹。M1 优先需要 `app`、`auth`、`catalog`、`library` 与
+必要的 `shared`；已有成员管理由 `auth` 或经子任务明确的身份管理边界承接。
+
+`player`、`curation`、通用 `operations`、`artists`、`personal`、`steward` 随对应获批
+阶段建立。基础 Release 搜索可先由 `catalog` 拥有，不因目录示例中的 `search` 而新增搜索
+服务。阶段命名和候选依赖见 [Core 1 路线提案](../../../docs/architecture/core-1-roadmap.md)。
+设计变量与共用表现原语的放置由 M1 落实，不能直接复制整个设计工具运行时。
 
 ## Planned Layout
 

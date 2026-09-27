@@ -2,10 +2,15 @@
 
 ## Status
 
-当前前端 package 位于 `frontend/`，使用 npm + `package-lock.json`、Vite、
-TypeScript、ESLint 和 Vitest。Node 版本由 `.mise.toml` 管理；安装使用
-`npm ci`。仓库目前没有 formatter 或自动化 accessibility runner，相关门禁仍
-需在后续工具选型后补充。
+前端 package 位于 `frontend/`，保留 npm + `package-lock.json`、Vite、TypeScript、
+ESLint 和 Vitest 配置，但 2026-09-27 基线没有 `src/`。脚本存在、类型检查通过或
+Vitest 的 `--passWithNoTests` 退出成功，均不能证明客户端可用。CI 在入口缺失时只检查
+内嵌占位页，不运行真实 production build 或资产漂移检查。
+
+M0 只做文档检查。M1 恢复源码时须执行真实构建与相关行为测试，恢复构建/内嵌资产门禁，
+不能保留重置分支作为功能完成依据。Node 版本由 `.mise.toml` 管理；安装使用 `npm ci`。
+仓库没有 formatter 或自动化 accessibility runner；浏览器测试、可访问性工具若需新增，
+须经具体子任务选型，不声称 Playwright 已配置。
 
 The current [README](../../../README.md) establishes Node.js 24.16.0 through the
 repository development toolchain. Do not rely on an undocumented global version.
@@ -82,10 +87,12 @@ test
 build
 ```
 
-Run all gates affected by a change. A production build must be consumable by the
-Go server and must not require a standalone Node process. The exact package
-manager, formatter, linter, bundler, test runner, and browser automation tool are
-selection hooks; do not name unchosen dependencies in feature work.
+按改动选择最小相关测试集；仅文档变更检查链接、任务上下文和 diff，不为了“全绿”运行
+无关全量测试。实现阶段必须记录实际命令、跳过原因和尚缺证据。
+
+运行改动影响到的适用门禁。恢复后的 production build 必须能由 Go 服务提供，不依赖
+独立 Node 生产进程。npm、ESLint、Vite 和 Vitest 已有配置，不再列为尚未选择的工具；
+formatter、浏览器自动化与无障碍 runner 若需新增，仍须单独选型，不凭规范示例引入依赖。
 
 ## Review Checklist
 

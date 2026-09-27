@@ -1,12 +1,14 @@
 # ROOMusic
 
-ROOMusic 当前提供可运行的 Core 0 本地开发与同源生产闭环，不迁移 V0 中已经膨胀的应用容器、AI worker、operator、release overlay 或业务配置。
+ROOMusic 保留 Core 0 的 Go 后端、数据库与同源部署工具链，不迁移 V0 中已经膨胀的应用容器、AI worker、operator、release overlay 或业务配置。
+
+> **当前状态（2026-09-27）**：前端源码 `frontend/src/` 已删除，Go 内嵌页面为重置占位页，尚无可用的 Classical 客户端。本轮 M0 仅对齐文档，不恢复界面。设计依据见 [frontend/DESIGN.md](frontend/DESIGN.md)，能力矩阵、阶段范围和四类待批准 ADR 见 [Core 1 路线提案](docs/architecture/core-1-roadmap.md)。
 
 ## 软件目标
 
 ROOMusic 的长期目标是面向个人、家庭和小型私有群体的自托管音乐库管家。系统以 `ReleaseGroup -> Release -> Medium -> Track` 为核心理解发行版本，而不是只把音乐呈现为文件夹列表。后续能力可以覆盖浏览、搜索、播放、metadata 整理和受控 Agent 操作，但必须建立在稳定身份、来源可解释、后端权限、事务、操作记录和恢复边界之上。
 
-当前 Core 0 先交付最小可用闭环：初始化和登录、允许目录内的只读扫描、保守的 Release Graph、Web 浏览、基础搜索，以及目录配置的 Change Set/Operation Journal。Redis、Meilisearch、GraphQL、播放、文件写入和可运行的 Agent runtime 都不是 Core 0 的强制依赖。
+Core 0 的阶段目标是最小可用闭环（当前前端恢复状态见上方说明）：初始化和登录、允许目录内的只读扫描、保守的 Release Graph、Web 浏览、基础搜索，以及目录配置的 Change Set/Operation Journal。Redis、Meilisearch、GraphQL、播放、文件写入和可运行的 Agent runtime 都不是 Core 0 的强制依赖。
 
 长期只保留一个产品 Agent：`Music Steward`。`Assistant`、`Steward`、`Operator` 是三种审批模式：Assistant 的危险操作由用户批准，Steward 由独立 Review Subagent 审查，Operator 由管理员显式进入后跳过审批直接执行。三种模式仍统一经过后端注册工具、权限和范围校验、结构化日志、Operation Journal 及适用的恢复机制；Operator 不等于无限制 shell、任意 SQL 或任意宿主机文件访问。
 
@@ -50,7 +52,7 @@ mise run env-check
 
 ## 快捷开发工作流
 
-默认复制 `.env.example` 为 `.env.dev`（或通过 `ROOMUSIC_ENV_FILE` 指定配置）并填写本地 PostgreSQL 密码，可用一条命令启动 PostgreSQL、Go 后端和 Vite 前端：
+以下脚本与配置保持不变；Vite 进程启动不等于当前缺失的客户端可用。默认复制 `.env.example` 为 `.env.dev`（或通过 `ROOMUSIC_ENV_FILE` 指定配置）并填写本地 PostgreSQL 密码，可用一条命令启动 PostgreSQL、Go 后端和 Vite 开发服务：
 
 ```bash
 ./scripts/dev.sh
@@ -65,6 +67,7 @@ mise run env-check
 ```
 
 生产配置必须设置 `ROOMUSIC_SECURE_COOKIES=true`。生产脚本不会启动 Vite，也不要求安装 Make。
+当前 `scripts/prod.sh` 默认仍执行前端构建；源码缺失期间不能把该默认流程视为已恢复的生产 Web 闭环，M1 需恢复并验证真实构建。
 
 如需重新体验首次初始化流程，开发环境可清空业务数据：
 
@@ -107,21 +110,28 @@ mise run env-down
 和 Node.js `24.16.0`，并行执行三组必需门禁：
 
 - 后端：`gofmt`、普通测试、`-race` 测试、`go vet` 和 `go build`；
-- 前端：`npm ci`、ESLint、TypeScript 检查、Vitest 和 production build，并确认
-  生成的 `backend/cmd/roomusic/web` 内嵌资产没有未提交漂移；
+- 前端：`npm ci`、ESLint、TypeScript 检查和 Vitest；存在 `src/main.tsx` 才执行
+  production build 与 `backend/cmd/roomusic/web` 漂移检查，否则只检查占位页。
+  M1 必须恢复真实构建门禁，不能以占位分支或无测试退出成功作为客户端验收；
 - 集成与配置：Shell 语法、两个 Compose 配置和
   `./scripts/test-integration.sh` 提供的 PostgreSQL 18 集成测试。
 
 任一命令失败都会使工作流失败。CI 不启动 Redis 或 Meilisearch，不读取生产
-`.env`，也不使用真实音乐目录。提交前可在本地运行等价门禁：
+`.env`，也不使用真实音乐目录。以下列出等价门禁；本地验证按改动选择最小相关集合，
+不是每次都运行全部。仅文档变更检查链接与 diff 即可：
 
 ```bash
 (cd backend && test -z "$(gofmt -l .)" && go test ./... -count=1)
 (cd backend && go test -race ./... -count=1 && go vet ./... && go build ./...)
 (cd frontend && npm ci && npm run lint && npm run typecheck)
-(cd frontend && npm run test -- --run && npm run build)
-git diff --exit-code -- backend/cmd/roomusic/web
-test -z "$(git ls-files --others --exclude-standard -- backend/cmd/roomusic/web)"
+(cd frontend && npm run test -- --run)
+if test -f frontend/src/main.tsx; then
+  (cd frontend && npm run build)
+  git diff --exit-code -- backend/cmd/roomusic/web
+  test -z "$(git ls-files --others --exclude-standard -- backend/cmd/roomusic/web)"
+else
+  test -f backend/cmd/roomusic/web/index.html
+fi
 bash -n scripts/*.sh
 PG_PASSWORD=ci-placeholder MEILI_MASTER_KEY=ci-placeholder docker compose config --quiet
 docker compose -f compose.test.yaml config --quiet

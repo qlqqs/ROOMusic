@@ -1,0 +1,32 @@
+{
+  "id": "classical-core-1",
+  "name": "classical-core-1",
+  "title": "Classical 重设计 / Core 1",
+  "description": "基于 Classical 原型统筹前端恢复、后端演进、真实播放与资料库治理；由独立子任务分阶段规划和验收。",
+  "status": "planning",
+  "dev_type": null,
+  "scope": "classical-core-1",
+  "package": null,
+  "priority": "P2",
+  "creator": "qlqq",
+  "assignee": "qlqq",
+  "createdAt": "2026-09-27",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "09-27-classical-m0-alignment"
+  ],
+  "parent": null,
+  "relatedFiles": [
+    ".trellis/tasks/09-27-classical-core-1/prd.md",
+    ".trellis/tasks/09-27-classical-core-1/design.md",
+    ".trellis/tasks/09-27-classical-core-1/implement.md"
+  ],
+  "notes": "2026-09-27：人工选择路线。用户在最终规划摘要后回复“批准”，授权 M0 文档整理；技术选型、Core 1 截止范围及后续业务实施仍待确认。",
+  "meta": {}
+}

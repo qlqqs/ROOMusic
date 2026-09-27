@@ -7,9 +7,10 @@ connect a typed feature API client to components, synchronize URL/local state,
 or manage a lifecycle such as scan polling. They do not become service locators
 or alternative business-policy engines.
 
-当前 Core 0 未引入 data-fetching/cache 库，使用原生 `useEffect`、`useState` 和
-`requestApi`。后续若选择缓存机制，必须在迁移任务中统一边界，不能与 ad hoc
-请求混用。
+旧前端使用原生 `useEffect`、`useState` 和 `requestApi`，但这些实现随 `src/` 删除，
+目前不存在可直接复用的 hook。后续客户端仍按下述生命周期/边界合同恢复；TanStack Query
+是 [ADR 草案](../../../docs/architecture/adr/0001-frontend-foundations.md) 中的候选，尚未安装
+或采纳。选定机制后由一个边界统一请求、取消和缓存，不能与无归属请求混用。
 
 ## Planned Layers
 

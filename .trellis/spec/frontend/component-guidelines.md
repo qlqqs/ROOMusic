@@ -17,8 +17,10 @@ ReleaseRoute
   -> EvidenceSummary
 ```
 
-这是目标组合模式。当前 Core 0 使用原生 React + CSS，没有额外组件或 icon 库；
-引入新库必须有具体需求并在规范中记录。
+这是恢复客户端的目标组合模式，不是当前源码现状。`frontend/package.json` 已声明
+React 与 lucide-react，但 `src/` 尚不存在。按 [Classical 设计依据](../../../frontend/DESIGN.md)
+组织组件与状态；新组件库或样式依赖仍须在对应子任务及 ADR 中批准，不能因原型包含某个
+控件而假定其业务能力已实现。
 
 ## Props And Contracts
 
@@ -50,9 +52,9 @@ Add stale/retrying where the selected server-state mechanism can distinguish
 them. Administrative mutations also show pending, success, revision conflict,
 permission loss, and failure without losing the user's context.
 
-Scan views distinguish pending, running, succeeded, failed, canceled, and
-incomplete. Do not label an incomplete scan successful, and do not imply that a
-failed scan removed missing music.
+扫描视图区分后端的 `running | succeeded | failed | canceled | incomplete`；提交中的
+`pending` 如需展示，只是本地请求状态，不是新增远端扫描枚举。诊断计数不是百分比进度。
+不把不完整扫描标为成功，也不暗示失败扫描移除了缺失音乐。
 
 Use stable entity IDs as React keys. Track numbers, titles, array indexes, and
 file names are not stable identities.
