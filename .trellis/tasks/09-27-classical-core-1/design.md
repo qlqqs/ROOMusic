@@ -3,7 +3,7 @@
 ## 定位
 
 本文承接上一轮建议，供 M0 整理和后续子任务研究，不宣称这些能力或依赖已经存在。
-当前事实以[基线记录](../09-27-classical-m0-alignment/research/baseline.md)为准。
+当前事实以[基线记录](../archive/2026-09/09-27-classical-m0-alignment/research/baseline.md)为准。
 
 ## 能力边界
 

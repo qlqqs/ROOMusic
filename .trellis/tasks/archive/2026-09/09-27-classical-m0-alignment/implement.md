@@ -21,7 +21,7 @@
 默认由主会话协调、决策沟通和规范更新；若任务实施需分派，遵循当时生效的 Trellis
 上下文加载与审查流程。创建阶段未分派；本轮批准实施后可按不重叠文档边界分派，主会话负责规范同步和集成。
 
-## 验证命令与人工检查
+## 实施期验证命令与人工检查（归档前记录）
 
 ```bash
 python3 .trellis/scripts/task.py validate .trellis/tasks/09-27-classical-core-1
@@ -47,5 +47,6 @@ git diff --check
 ## 实施结果与收尾
 
 R1–R6 的文档交付及最终独立检查已完成，证据见 [验证记录](verification.md)。
-用户于 2026-09-27 回复“提交”，已确认 [提交计划](commit-plan.md)。M0 在工作提交及
-Trellis 收尾前保持 `in_progress`；四类 ADR 与 Core 1 范围仍待采纳，不启动 M1/B0。
+用户于 2026-09-27 回复“提交”，已确认 [提交计划](commit-plan.md)。工作提交 `850d274`
+已完成，M0 已归档为 `completed`；四类 ADR 与 Core 1 范围仍待采纳，不启动 M1/B0。
+归档后的验证路径和收尾证据见 [验证记录](verification.md)。

@@ -8,7 +8,7 @@
 
 - [x] 创建父任务和 M0，建立双向关系；保存路线、事实与候选决策。
 - [x] 用户于 2026-09-27 审阅 M0 最终规划摘要并明确批准文档整理实施。
-- [x] M0 完成设计依据、能力矩阵、规范同步、四类 ADR 草案与 Core 1 范围提案，并通过文档检查；等待工作提交收尾。
+- [x] M0 完成设计依据、能力矩阵、规范同步、四类 ADR 草案与 Core 1 范围提案，并通过文档检查；工作提交 `850d274` 已完成，M0 已归档。
 - [ ] 用户确认范围及必要的产品/架构决策，按独立交付创建 M1、B0 等后续任务。
 - [ ] M1 与 B0 分别验证；M1 不等待无关重构，B0 不夹带新功能。
 - [ ] M2、M3 依各自前置条件安排，随后推进依赖写路径的 M4。
@@ -17,11 +17,11 @@
 
 ## 验证策略
 
-当前只验证任务结构、上下文路径和文档一致性：
+M0 归档后，以下命令按当前路径验证任务结构、上下文路径和文档一致性；归档前的实际执行记录保留在 M0 验证文档：
 
 ```bash
 python3 .trellis/scripts/task.py validate .trellis/tasks/09-27-classical-core-1
-python3 .trellis/scripts/task.py validate .trellis/tasks/09-27-classical-m0-alignment
+python3 .trellis/scripts/task.py validate .trellis/tasks/archive/2026-09/09-27-classical-m0-alignment
 python3 .trellis/scripts/task.py list
 python3 .trellis/scripts/task.py current --source
 git diff --check

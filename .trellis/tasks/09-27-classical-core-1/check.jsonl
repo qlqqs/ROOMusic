@@ -1,4 +1,4 @@
 {"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "审查前端数据边界、错误状态、可访问性及比例适当的验证要求"}
 {"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "审查后端权威、只读源文件与风险对应的验证边界"}
 {"file": ".trellis/spec/guides/real-music-assets.md", "reason": "防止任务文档泄露私有资产或授权源文件变更"}
-{"file": ".trellis/tasks/09-27-classical-m0-alignment/research/baseline.md", "reason": "核对现状与候选状态，避免将原型描述误当成运行合同"}
+{"file": ".trellis/tasks/archive/2026-09/09-27-classical-m0-alignment/research/baseline.md", "reason": "核对现状与候选状态，避免将原型描述误当成运行合同"}

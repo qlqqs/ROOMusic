@@ -96,3 +96,30 @@ Lint、TypeCheck 与 Go/npm/数据库全量测试不适用于本轮纯文档变�
 
 批准记录与分支更新后，提交前再次运行两任务 `task.py validate`、两个临时文档检查器、
 `git diff --check` 与受保护目录零差异检查，全部通过；仍为 36 个文件和 177 个本地链接。
+
+## 归档后复核
+
+2026-09-27，工作提交 `850d274` 已完成。仅 M0 通过 `task.py archive --no-commit`
+迁入 `archive/2026-09/`，并在独立归档提交前修复父子 Markdown 链接、两侧 JSONL
+上下文和 `relatedFiles`。原工作提交清单与归档前已执行命令保留，不改写历史。
+
+实际执行：
+
+```bash
+python3 .trellis/scripts/task.py archive 09-27-classical-m0-alignment --no-commit
+python3 .trellis/scripts/task.py validate .trellis/tasks/09-27-classical-core-1
+python3 .trellis/scripts/task.py validate .trellis/tasks/archive/2026-09/09-27-classical-m0-alignment
+python3 /tmp/roomusic-m0-archive-check.py
+python3 .trellis/scripts/task.py list
+python3 .trellis/scripts/task.py current --source
+git diff --check
+git diff --cached --check
+```
+
+归档检查通过：36 个文档/任务文件、178 个本地链接、JSON/JSONL、分支元数据、
+工作提交关联及父子关系均有效。父任务保持 `planning`，旧任务仍为 `in_progress`；
+M0 为 `completed`。`current --source` 返回无当前任务（退出码 1），这是归档清除会话
+指针后的预期状态。临时归档检查器不是仓库工具；此前临时检查器记录不冒充归档后运行。
+
+工作提交后的设计、ADR、规范及业务/原型/依赖均无额外改动。四份 ADR 与 Core 1 范围
+仍待批准；未启动 M1/B0、未推送，也未归档父任务或旧任务。纯文档改动不运行全量测试。

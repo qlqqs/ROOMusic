@@ -27,6 +27,6 @@
     ".trellis/tasks/09-27-classical-core-1/design.md",
     ".trellis/tasks/09-27-classical-core-1/implement.md"
   ],
-  "notes": "2026-09-27：人工选择路线。用户在最终规划摘要后回复“批准”，授权 M0 文档整理；技术选型、Core 1 截止范围及后续业务实施仍待确认。",
+  "notes": "2026-09-27：人工选择路线。用户先批准 M0 文档整理，再回复“提交”；M0 文档已提交（850d274）并归档。父任务保持 planning；技术选型、Core 1 截止范围及后续业务实施仍待确认，不因 M0 完成而启动其他阶段。",
   "meta": {}
 }
