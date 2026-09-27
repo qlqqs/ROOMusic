@@ -1,0 +1,7 @@
+{"file":"frontend/DESIGN.md","reason":"已有视觉选择与布局合同"}
+{"file":".trellis/spec/frontend/index.md","reason":"前端分层规范入口"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"会话、URL 和本地状态归属"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"组件与无障碍合同"}
+{"file":".trellis/spec/frontend/hook-guidelines.md","reason":"副作用清理"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"持久化校验"}
+{"file":".trellis/tasks/09-04-music-client-experience/design.md","reason":"任务技术方案"}

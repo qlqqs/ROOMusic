@@ -1,0 +1,5 @@
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"测试与静态检查门禁"}
+{"file":".trellis/spec/frontend/player-design-guidelines.md","reason":"播放和响应式规范"}
+{"file":"frontend/DESIGN.md","reason":"设计一致性"}
+{"file":".trellis/tasks/09-04-music-client-experience/prd.md","reason":"需求验收标准"}
+{"file":".trellis/tasks/09-04-music-client-experience/design.md","reason":"队列语义与存储隔离"}

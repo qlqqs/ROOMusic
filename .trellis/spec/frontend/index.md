@@ -11,6 +11,12 @@
 decoder 校验，测试使用 Vitest（组件测试使用 jsdom），静态检查使用 ESLint；
 尚未引入 router、query/cache 或 UI 库。
 
+音乐客户端扩展位于 `features/player/`（模拟播放模型）、
+`features/personal-library/`（本地收藏、歌单、历史、持久化和共享控件）及
+`features/demo/`（显式演示入口）。工具图标使用 lucide-react；模拟状态不代表真实音频服务。
+具体状态归属和隔离规则见 [State Management](./state-management.md)，交互见
+[播放器设计规范](./player-design-guidelines.md)。
+
 ## Pre-Development Checklist
 
 Before writing or reviewing frontend code:
