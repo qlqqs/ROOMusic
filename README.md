@@ -56,7 +56,7 @@ mise run env-check
 ./scripts/dev.sh
 ```
 
-前端开发地址为 `http://localhost:5173`，后端地址为 `http://localhost:8080`。React 修改由 Vite 热更新；Go 或迁移文件修改会自动重启后端。按 `Ctrl-C` 会同时停止两个开发进程，PostgreSQL 容器保持运行。也可使用 `make dev` 作为便利入口。
+前端开发地址为 `http://localhost:5173`，后端地址为 `http://localhost:8080`。如需经公网反代访问 Vite，把 `.env.dev` 中的 `ROOMUSIC_PUBLIC_URL` 设为反代后的外部地址，Vite 只会放行该主机名。React 修改由 Vite 热更新；Go 或迁移文件修改会自动重启后端。按 `Ctrl-C` 会同时停止两个开发进程，PostgreSQL 容器保持运行。也可使用 `make dev` 作为便利入口。
 
 生产环境使用无后缀 `.env`，由 Go 单体直接提供 `8080`：
 

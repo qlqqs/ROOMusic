@@ -18,4 +18,9 @@ export default [
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
     },
   },
+  {
+    // Vite 配置运行在 Node 中。
+    files: ["vite.config*.ts"],
+    languageOptions: { globals: { process: "readonly", URL: "readonly" } },
+  },
 ];

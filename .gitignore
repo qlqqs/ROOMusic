@@ -2,12 +2,12 @@
 .env
 .env.*
 !.env.example
-!.env.dev
 
 # 本地音乐库与运行期数据
 /music/
 /data/
 /appdata/
+/backend/data/
 
 # 构建与依赖产物
 /node_modules/

@@ -140,8 +140,11 @@
   是前端可重复安装依据。当前 `package.json` 的 `latest` 依赖是待治理风险。
 - 生产 Vite 构建写入唯一的 `backend/cmd/roomusic/web`；该目录是生成资产，
   不手工编辑。开发 `vite.config.dev.ts` 才允许自定义 Host 和 API 代理。
-- `allowedHosts: true` 只放宽 Vite Host 校验；后端仍按
-  `ROOMUSIC_PUBLIC_URL`、Origin scheme/host 和 Secure Cookie 校验写请求。
+- 开发 Vite 通过公网反代访问时，`allowedHosts` 只放行 `ROOMUSIC_PUBLIC_URL` 的主机名，
+  不得使用 `allowedHosts: true`；后端仍按 `ROOMUSIC_PUBLIC_URL`、Origin scheme/host
+  和 Secure Cookie 校验写请求。
+- `.env.dev`、`.env` 是本机配置，必须被 Git 忽略；仓库只跟踪不含真实值的
+  `.env.example`。`backend/data/` 等运行期数据（含封面缓存）同样不得提交。
 - `scripts/dev.sh` 默认只确保 PostgreSQL、Go 和 Vite；Redis/Meilisearch 是
   Compose/mise 可选服务。`scripts/prod.sh` 不启动 Node 服务。
 - 真实 Smoke 使用随机 Compose project、空 PostgreSQL 18 volume、临时数据目录和
