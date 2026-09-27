@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/classical-d3de10a0-5b67-4da7-b5b3-8d49f26a63f1/styles.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&amp;display=swap">
+<script src="_ds/classical-d3de10a0-5b67-4da7-b5b3-8d49f26a63f1/_ds_bundle.js"></script>
+<style>:root{--font-heading:"Cormorant Garamond","Noto Serif SC",serif;--font-body:"Lora","Noto Serif SC",serif}</style>
+</helmet>
+<div style="width:100%;height:68px;box-sizing:border-box;border-top:1px solid var(--color-divider);display:grid;grid-template-columns:300px minmax(0,1fr) 300px;align-items:center;gap:24px;padding:0 22px;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body)">
+  <div style="display:flex;align-items:center;gap:12px;min-width:0">
+    <div style="width:44px;height:44px;flex:none;background:var(--color-neutral-900);color:var(--color-neutral-100);border:3px solid var(--color-surface);outline:1px solid var(--color-divider);box-sizing:border-box;display:grid;place-items:center;font:italic 400 15px/1 var(--font-heading)">{{ initial }}</div>
+    <div style="min-width:0">
+      <div style="font:600 16px/1.2 var(--font-heading);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ title }}</div>
+      <div style="font-size:11.5px;color:var(--color-neutral-700);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ artist }} — {{ album }}</div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;align-items:center;gap:5px;max-width:540px;width:100%;justify-self:center">
+    <div style="display:flex;align-items:center;gap:18px;color:var(--color-text)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:15px;height:15px;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;color:var(--color-neutral-700)"><path d="m18 14 4 4-4 4"></path><path d="m18 2 4 4-4 4"></path><path d="M2 18h1.973a4 4 0 0 0 3.3-1.7l5.454-7.6a4 4 0 0 1 3.3-1.7H22"></path><path d="M2 6h1.972a4 4 0 0 1 3.6 2.2"></path><path d="M22 18h-6.041a4 4 0 0 1-3.3-1.8l-.359-.45"></path></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:17px;height:17px;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" x2="5" y1="19" y2="5"></line></svg>
+      <div style="width:32px;height:32px;border:1px solid var(--color-accent);border-radius:50%;display:grid;place-items:center;color:var(--color-accent-700)"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none" style="width:13px;height:13px"><rect x="14" y="4" width="4" height="16" rx="1"></rect><rect x="6" y="4" width="4" height="16" rx="1"></rect></svg></div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:17px;height:17px;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" x2="19" y1="5" y2="19"></line></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:15px;height:15px;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;color:var(--color-neutral-700)"><path d="m17 2 4 4-4 4"></path><path d="M3 11v-1a4 4 0 0 1 4-4h14"></path><path d="m7 22-4-4 4-4"></path><path d="M21 13v1a4 4 0 0 1-4 4H3"></path></svg>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;width:100%;font-size:10.5px;color:var(--color-neutral-700);font-feature-settings:'tnum'">
+      <span>{{ elapsed }}</span>
+      <div style="flex:1;height:1px;background:var(--color-divider);position:relative"><div style="position:absolute;left:0;top:-0.5px;height:2px;width:{{ pct }};background:var(--color-accent)"></div></div>
+      <span>{{ total }}</span>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;justify-content:flex-end;gap:14px;font-size:11.5px;color:var(--color-neutral-700)">
+    <span class="tag tag-outline" style="font-feature-settings:'tnum'">{{ quality }}</span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:16px;height:16px;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"></path><path d="M16 9a5 5 0 0 1 0 6"></path></svg>
+    <div style="width:64px;height:1px;background:var(--color-divider);position:relative"><div style="position:absolute;left:0;top:-0.5px;height:2px;width:62%;background:var(--color-text)"></div></div>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:16px;height:16px;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;color:var(--color-text)"><path d="M21 15V6"></path><path d="M18.5 18a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"></path><path d="M12 12H3"></path><path d="M16 6H3"></path><path d="M12 18H3"></path></svg>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:68},&quot;title&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;开不了口&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;artist&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;周杰伦&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;album&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;范特西 · 台湾首版&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;elapsed&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;1:52&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;total&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;4:47&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;pct&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;39%&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;quality&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;FLAC 16/44.1 · 无损&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props;
+    const title = p.title ?? '开不了口';
+    return {
+      title, initial: (p.album ?? '范特西').slice(0, 1),
+      artist: p.artist ?? '周杰伦', album: p.album ?? '范特西 · 台湾首版',
+      elapsed: p.elapsed ?? '1:52', total: p.total ?? '4:47', pct: p.pct ?? '39%',
+      quality: p.quality ?? 'FLAC 16/44.1 · 无损'
+    };
+  }
+}
+</script>
+</body>
+</html>

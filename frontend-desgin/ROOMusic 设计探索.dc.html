@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/classical-d3de10a0-5b67-4da7-b5b3-8d49f26a63f1/styles.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&amp;display=swap">
+<script src="_ds/classical-d3de10a0-5b67-4da7-b5b3-8d49f26a63f1/_ds_bundle.js"></script>
+<style>:root{--font-heading:"Cormorant Garamond","Noto Serif SC",serif;--font-body:"Lora","Noto Serif SC",serif}body{margin:0;background:var(--color-neutral-200);font-family:var(--font-body);color:var(--color-text)}a{color:var(--color-accent-700)}a:hover{color:var(--color-accent)}.dv-turn{padding:44px 48px 40px;border-bottom:1px solid var(--color-divider);scroll-margin-top:16px}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-text);color:var(--color-bg);border-radius:4px;text-decoration:none}.dv-tname{font:600 15px/1.2 var(--font-heading);color:var(--color-text)}.dv-opts{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:color-mix(in srgb,var(--color-text) 9%,transparent);color:var(--color-text);border-radius:4px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 12px/1.3 var(--font-body);color:var(--color-neutral-700)}.dv-card{max-width:100%;background:var(--color-bg);border:1px solid var(--color-divider);border-radius:6px;box-shadow:var(--shadow-md);overflow:hidden}.dv-opt:target .dv-oid{background:var(--color-accent);color:#fff}.dv-next{margin:30px 0 0;font:13px/1.6 var(--font-body);color:var(--color-neutral-700)}</style>
+</helmet>
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">第一轮 · 十个界面，每个 2–3 个方向</span></div>
+<div style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr);gap:40px;max-width:1320px;border:1px solid var(--color-divider);border-radius:var(--radius-md);background:var(--color-bg);padding:28px 32px;margin-bottom:8px">
+  <div>
+    <div style="font-size:10.5px;letter-spacing:.14em;color:var(--color-accent-700)">设计说明</div>
+    <h2 style="font-size:34px;font-weight:400;margin:6px 0 10px">ROOMusic：一间有目录、有校对、有档案的唱片室</h2>
+    <p style="font-size:13.5px;text-align:justify;margin:0">以 Classical 设计系统为底：衬线标题、细线分隔、颜色只作描边。Roon 的丰富度（制作人员、编辑笔记、关联）保留，但把"版本学"放到前台——ReleaseGroup → Release → Medium → Track 是 ROOMusic 与普通播放器的根本区别，因此专辑详情给了三种版本呈现方式。</p>
+  </div>
+  <div style="font-size:12.5px;line-height:1.7">
+    <div style="font:600 15px/1.2 var(--font-heading);margin-bottom:6px">假设</div>
+    <div>桌面 Web，1280 × 800 画框；中文界面，曲目与艺人保留原文。</div>
+    <div>示例数据：华语流行、动画原声、影视原声；编号与条码为示意。</div>
+    <div>封面以色块占位——拿到真实封面后替换。</div>
+  </div>
+  <div style="font-size:12.5px;line-height:1.7">
+    <div style="font:600 15px/1.2 var(--font-heading);margin-bottom:6px">贯穿的原则</div>
+    <div>写操作都可解释：给出依据、改动预览与风险等级。</div>
+    <div>高风险操作走审批，每次写入留下恢复点。</div>
+    <div>Steward 默认只读，任何写入都需确认。</div>
+  </div>
+</div>
+
+<div style="display:flex;align-items:baseline;gap:14px;margin:44px 0 16px;border-top:1px solid var(--color-divider);padding-top:18px"><span style="font:400 32px/1 var(--font-heading);color:var(--color-accent-700);font-feature-settings:'tnum'">01</span><span style="font:600 22px/1.2 var(--font-heading)">首页 / 资料库概览</span></div>
+<div class="dv-opts">
+<div class="dv-opt" id="1a"><div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>编辑式头版 · 继续聆听 + 管家便笺</div><div class="dv-card"><div style="width:1280px;height:800px;display:grid;grid-template-columns:216px minmax(0,1fr);grid-template-rows:732px 68px;background:var(--color-bg);overflow:hidden">
+<dc-import name="Sidebar" active="home" hint-size="216px,732px"></dc-import>
+<div style="padding:34px 44px;box-sizing:border-box;display:flex;flex-direction:column;gap:24px;overflow:hidden">
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;border-bottom:1px solid var(--color-divider);padding-bottom:18px">
+    <div><div style="font-size:11px;letter-spacing:.14em;color:var(--color-accent-700);font-feature-settings:'tnum'">2026 年 9 月 27 日 · 星期日</div><h1 style="font-size:56px;font-weight:400;margin:8px 0 0;letter-spacing:-.02em">晚上好，林。</h1></div>
+    <div style="font-size:12px;color:var(--color-neutral-700);text-align:right;font-feature-settings:'tnum';line-height:1.8">2,318 张专辑 · 2,741 个版本<br>31,904 首曲目 · 612 GB</div>
+  </div>
+  <div style="display:grid;grid-template-columns:minmax(0,1fr) 270px;gap:36px;min-height:0">
+    <div style="display:flex;flex-direction:column;gap:26px;min-width:0">
+      <div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px"><span style="font:600 20px/1.2 var(--font-heading)">继续聆听</span><span style="font-size:12px;color:var(--color-accent-700)">全部历史</span></div>
+        <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px">
+          <sc-for list="{{ continueL }}" as="a" hint-placeholder-count="4">
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="aspect-ratio:1;background:{{ a.bg }};color:{{ a.fg }};border:5px solid var(--color-surface);outline:1px solid var(--color-divider);padding:12px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between"><span style="font:italic 400 21px/1.05 var(--font-heading)">{{ a.title }}</span><span style="font-size:9px;letter-spacing:.12em">{{ a.artist }}</span></div>
+            <div><div style="font:600 16px/1.2 var(--font-heading)">{{ a.title }}</div><div style="font-size:11.5px;color:var(--color-neutral-700)">{{ a.artist }} · {{ a.note }}</div></div>
+            <div style="height:1px;background:var(--color-divider);position:relative"><div style="position:absolute;left:0;top:-0.5px;height:2px;width:{{ a.pct }};background:var(--color-accent)"></div></div>
+          </div>
+          </sc-for>
+        </div>
+      </div>
+      <div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px"><span style="font:600 20px/1.2 var(--font-heading)">最近入库</span><span style="font-size:12px;color:var(--color-neutral-700)">本周 38 张</span></div>
+        <div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:16px">
+          <sc-for list="{{ recentL }}" as="a" hint-placeholder-count="6">
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <div style="aspect-ratio:1;background:{{ a.bg }};color:{{ a.fg }};border:4px solid var(--color-surface);outline:1px solid var(--color-divider);padding:8px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between"><span style="font:italic 400 14px/1.05 var(--font-heading)">{{ a.title }}</span><span style="font-size:8.5px">{{ a.mark }}</span></div>
+            <div style="font:600 13.5px/1.2 var(--font-heading);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ a.title }}</div>
+            <div style="font-size:10.5px;color:var(--color-neutral-700);margin-top:-5px">{{ a.note }}</div>
+          </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    <aside style="border-left:1px solid var(--color-divider);padding-left:28px;display:flex;flex-direction:column;gap:22px">
+      <div class="card" style="gap:10px">
+        <div class="card-kicker" style="color:var(--color-accent-700)">Music Steward · 便笺</div>
+        <div style="font:600 18px/1.25 var(--font-heading)">本周新增 38 张专辑，3 处需要你确认</div>
+        <p style="font-size:12.5px;text-align:justify;margin:0">《范特西》的首批限定版多出一张 VCD，已作为独立 Release 保留；《君の名は。》的两个版本疑似被合并，建议拆分。</p>
+        <div style="display:flex;gap:8px"><button class="btn btn-primary">查看</button><button class="btn btn-ghost">稍后</button></div>
+      </div>
+      <div>
+        <div style="font:600 16px/1.2 var(--font-heading);margin-bottom:8px">资料库状态</div>
+        <div style="display:flex;justify-content:space-between;font-size:12.5px;padding:7px 0;border-bottom:1px solid var(--color-divider)"><span>待处理问题</span><span style="color:var(--color-accent-700);font-feature-settings:'tnum'">7</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:12.5px;padding:7px 0;border-bottom:1px solid var(--color-divider)"><span>待审批</span><span style="color:var(--color-accent-700);font-feature-settings:'tnum'">2</span></div>
+        <div style="padding:7px 0 0;font-size:12.5px"><div style="display:flex;justify-content:space-between"><span>扫描 /mnt/music/anime</span><span style="font-feature-settings:'tnum'">64%</span></div><div style="height:1px;background:var(--color-divider);margin-top:7px;position:relative"><div style="position:absolute;left:0;top:-0.5px;height:2px;width:64%;background:var(--color-accent)"></div></div></div>
+      </div>
+      <div>
+        <div style="font-size:10.5px;letter-spacing:.14em;color:var(--color-accent-700)">三十年前的这个月</div>
+        <div style="font:600 18px/1.25 var(--font-heading);margin:6px 0 4px">王菲《浮躁》</div>
+        <p style="font-size:12.5px;color:var(--color-neutral-700);text-align:justify;margin:0">1996 年秋发行。你的资料库中有 1 个版本，上次播放是 2024 年。</p>
+      </div>
+    </aside>
+  </div>
+</div>
+<dc-import name="PlayerBar" style="grid-column:1 / -1" hint-size="1280px,68px"></dc-import>
+</div></div></div>
+
+<div class="dv-opt" id="1b"><div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>书籍目录式 · 按类别与年代索引整个资料库</div><div class="dv-card"><div style="width:1280px;height:800px;display:grid;grid-template-columns:216px minmax(0,1fr);grid-template-rows:732px 68px;background:var(--color-bg);overflow:hidden">
+<dc-import name="Sidebar" active="home" hint-size="216px,732px"></dc-import>
+<div style="padding:34px 44px;box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:48px;overflow:hidden">
+  <div>
+    <div style="font-size:11px;letter-spacing:.14em;color:var(--color-accent-700)">资料库 · 卷一</div>
+    <h1 style="font-size:60px;font-weight:400;margin:6px 0 18px;letter-spacing:-.02em">目录</h1>
+    <sc-for list="{{ cats }}" as="c" hint-placeholder-count="6">
+    <div style="padding:13px 0;border-bottom:1px solid var(--color-divider)">
+      <div style="display:flex;align-items:baseline;gap:12px">
+        <span style="width:30px;font:400 17px/1 var(--font-heading);color:var(--color-accent-700)">{{ c.num }}</span>
+        <span style="font:600 23px/1.1 var(--font-heading)">{{ c.name }}</span>
+        <span style="flex:1;border-bottom:1px dotted var(--color-neutral-400);transform:translateY(-5px)"></span>
+        <span style="font:400 20px/1 var(--font-heading);font-feature-settings:'tnum'">{{ c.count }}</span>
+      </div>
+      <div style="padding-left:42px;font-size:12px;color:var(--color-neutral-700);margin-top:4px">{{ c.sub }}</div>
+    </div>
+    </sc-for>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:26px">
+    <div>
+      <div style="display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid var(--color-divider);padding-bottom:6px;margin-bottom:14px"><span style="font:600 19px/1.2 var(--font-heading)">按年代</span><span style="font-size:11.5px;color:var(--color-neutral-700)">发行年份 · 专辑数</span></div>
+      <div style="display:flex;align-items:flex-end;gap:14px;height:130px">
+        <sc-for list="{{ decades }}" as="d" hint-placeholder-count="6">
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px;height:100%">
+          <span style="font-size:10.5px;color:var(--color-neutral-700);font-feature-settings:'tnum'">{{ d.n }}</span>
+          <div style="width:100%;height:{{ d.h }};border:1px solid var(--color-accent);border-bottom:0;box-sizing:border-box;background:color-mix(in srgb,var(--color-accent) 8%,transparent)"></div>
+          <span style="font:400 15px/1 var(--font-heading);font-feature-settings:'tnum'">{{ d.label }}</span>
+        </div>
+        </sc-for>
+      </div>
+    </div>
+    <div>
+      <div style="display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid var(--color-divider);padding-bottom:6px;margin-bottom:4px"><span style="font:600 19px/1.2 var(--font-heading)">最近播放</span><span style="font-size:11.5px;color:var(--color-accent-700)">历史</span></div>
+      <sc-for list="{{ plays }}" as="p" hint-placeholder-count="6">
+      <div style="display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--color-divider);font-size:13px">
+        <span style="font-size:11px;color:var(--color-neutral-700);font-feature-settings:'tnum'">{{ p.time }}</span>
+        <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.title }}</span>
+        <span style="font-size:11.5px;color:var(--color-neutral-700)">{{ p.artist }}</span>
+      </div>
+      </sc-for>
+    </div>
+    <div>
+      <div style="font:600 19px/1.2 var(--font-heading);border-bottom:1px solid var(--color-divider);padding-bottom:6px;margin-bottom:12px">本周入库</div>
+      <div style="display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px">
+        <sc-for list="{{ weekNew }}" as="a" hint-placeholder-count="8">
+        <div style="aspect-ratio:1;background:{{ a.bg }};color:{{ a.fg }};border:3px solid var(--color-surface);outline:1px solid var(--color-divider);box-sizing:border-box;display:grid;place-items:center;font:italic 400 15px/1 var(--font-heading)">{{ a.initial }}</div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</div>
+<dc-import name="PlayerBar" style="grid-column:1 / -1" hint-size="1280px,68px"></dc-import>
+</div></div></div>
+</div>
+
+<div style="display:flex;align-items:baseline;gap:14px;margin:56px 0 16px;border-top:1px solid var(--color-divider);padding-top:18px"><span style="font:400 32px/1 var(--font-heading);color:var(--color-accent-700);font-feature-settings:'tnum'">02</span><span style="font:600 22px/1.2 var(--font-heading)">专辑详情 · ReleaseGroup → Release → Medium → Track</span><span style="font-size:12.5px;color:var(--color-neutral-700)">同一张《范特西》的四个版本，三种呈现</span></div>
+<div class="dv-opts">
+<div class="dv-opt" id="1c"><div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>版本标签页 · 最接近常规播放器，版本信息紧随标签</div><div class="dv-card"><div style="width:1280px;height:800px;display:grid;grid-template-columns:216px minmax(0,1fr);grid-template-rows:732px 68px;background:var(--color-bg);overflow:hidden">
+<dc-import name="Sidebar" active="albums" hint-size="216px,732px"></dc-import>
+<div style="overflow:hidden;display:flex;flex-direction:column">
+  <div style="padding:30px 44px 0;display:flex;gap:34px">
+    <div style="width:216px;height:216px;flex:none;background:var(--color-neutral-900);color:var(--color-neutral-100);border:7px solid var(--color-surface);outline:1px solid var(--color-divider);box-sizing:border-box;padding:18px;display:flex;flex-direction:column;justify-content:space-between"><span style="font:italic 400 38px/1 var(--font-heading)">范特西</span><span style="font-size:10px;letter-spacing:.16em">JAY CHOU · 2001</span></div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:10.5px;letter-spacing:.14em;color:var(--color-accent-700)">RELEASE GROUP · 录音室专辑</div>
+      <h1 style="font-size:60px;font-weight:400;margin:4px 0 2px;letter-spacing:-.02em">范特西</h1>
+      <div style="font-size:14px"><a href="#1f" style="text-decoration:none">周杰伦</a> · 2001 · 华语流行 / R&amp;B / 中国风</div>
+      <div style="font-size:12px;color:var(--color-neutral-700);margin-top:4px;font-feature-settings:'tnum'">4 个版本 · 10 首作品 · 39:35</div>
+      <div style="display:flex;gap:8px;margin:16px 0 14px">
+        <button class="btn btn-primary"><svg viewBox="0 0 24 24" fill="currentColor" style="width:12px;height:12px"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>播放</button>
+        <button class="btn btn-secondary">加入队列</button>
+        <button class="btn btn-secondary btn-icon"><svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" style="width:15px;height:15px;stroke-width:1.5;color:var(--color-accent)"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"></path></svg></button>
+        <button class="btn btn-ghost">交给 Steward 整理</button>
+      </div>
+      <p style="font-size:13px;text-align:justify;max-width:640px;margin:0;color:var(--color-neutral-800)">{{ review }} <span style="color:var(--color-neutral-700);font-style:italic">— 编辑笔记</span></p>
+    </div>
+  </div>
+  <div style="display:flex;align-items:flex-end;gap:28px;margin:24px 44px 0;border-bottom:1px solid var(--color-divider)">
+    <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4">
+    <div style="padding:9px 0;border-bottom:1px solid {{ t.bd }};margin-bottom:-1px;color:{{ t.c }};font-size:14px">{{ t.name }} <span style="font-size:11px;font-feature-settings:'tnum'">{{ t.year }}</span></div>
+    </sc-for>
+    <span style="flex:1"></span>
+    <span style="padding:9px 0;font-size:11.5px;color:var(--color-neutral-700);font-feature-settings:'tnum'">阿尔发音乐 · AFCD-0109 · 4710937 30912 5 · FLAC 16/44.1</span>
+  </div>
+  <div style="display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:40px;padding:6px 44px 0;min-height:0">
+    <div>
+      <sc-for list="{{ tracks }}" as="t" hint-placeholder-count="10">
+      <div style="display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:10px;padding:7px 8px;border-bottom:1px solid var(--color-divider);background:{{ t.bg }};color:{{ t.c }}">
+        <span style="font-size:12px;font-feature-settings:'tnum';color:var(--color-neutral-700)">{{ t.mark }}</span>
+        <div><div style="font-size:14px">{{ t.title }}</div><div style="font-size:11px;color:var(--color-neutral-700)">{{ t.cred }}</div></div>
+        <span style="font-size:12px;font-feature-settings:'tnum'">{{ t.dur }}</span>
+      </div>
+      </sc-for>
+    </div>
+    <div style="padding-top:12px">
+      <div style="font:600 17px/1.2 var(--font-heading);margin-bottom:6px">制作人员</div>
+      <sc-for list="{{ credits }}" as="c" hint-placeholder-count="5">
+      <div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:5px 0;border-bottom:1px solid var(--color-divider)"><span>{{ c.name }}</span><span style="color:var(--color-neutral-700)">{{ c.role }}</span></div>
+      </sc-for>
+      <div style="font:600 17px/1.2 var(--font-heading);margin:20px 0 10px">同艺人</div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">
+        <sc-for list="{{ related }}" as="a" hint-placeholder-count="3">
+        <div><div style="aspect-ratio:1;background:{{ a.bg }};color:{{ a.fg }};border:3px solid var(--color-surface);outline:1px solid var(--color-divider);box-sizing:border-box;display:grid;place-items:center;font:italic 400 15px/1 var(--font-heading)">{{ a.initial }}</div><div style="font-size:11px;margin-top:5px">{{ a.title }}</div></div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</div>
+<dc-import name="PlayerBar" style="grid-column:1 / -1" hint-size="1280px,68px"></dc-import>
+</div></div></div>
+
+<div class="dv-opt" id="1d"><div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>版本对比表 · 逐项比较，差异以金色下划线标出，并解释"为何不合并"</div><div class="dv-card"><div style="width:1280px;height:800px;display:grid;grid-template-columns:216px minmax(0,1fr);grid-template-rows:732px 68px;background:var(--color-bg);overflow:hidden">
+<dc-import name="Sidebar" active="albums" hint-size="216px,732px"></dc-import>
+<div style="padding:30px 44px;box-sizing:border-box;overflow:hidden;display:flex;flex-direction:column;gap:20px">
+  <div style="display:flex;align-items:center;gap:22px">
+    <div style="width:92px;height:92px;flex:none;background:var(--color-neutral-900);color:var(--color-neutral-100);border:4px solid var(--color-surface);outline:1px solid var(--color-divider);box-sizing:border-box;display:grid;place-items:center;font:italic 400 22px/1 var(--font-heading)">范</div>
+    <div style="flex:1">
+      <div style="font-size:12px;color:var(--color-neutral-700)"><a href="#1c" style="text-decoration:none">范特西</a> › 版本</div>
+      <h2 style="font-size:36px;font-weight:400;margin:2px 0 0">四个版本的逐项对比</h2>
+      <div style="font-size:12.5px;color:var(--color-neutral-700)">以台湾首版为基准；与之不同的字段以<span style="color:var(--color-accent-700);text-decoration:underline;text-underline-offset:3px">金色下划线</span>标出。</div>
+    </div>
+    <button class="btn btn-secondary">导出为 CSV</button>
+  </div>
+  <table class="table" style="font-size:13px">
+    <thead><tr><th style="width:120px">字段</th>
+      <sc-for list="{{ edHead }}" as="h" hint-placeholder-count="4"><th><span style="font:600 15px/1.2 var(--font-heading);text-transform:none;letter-spacing:0;color:var(--color-text)">{{ h.name }}</span> <span style="font-feature-settings:'tnum'">{{ h.year }}</span></th></sc-for>
+    </tr></thead>
+    <tbody>
+      <sc-for list="{{ diffRows }}" as="r" hint-placeholder-count="8">
+      <tr><td style="color:var(--color-neutral-700);font-size:12px">{{ r.label }}</td>
+        <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="4"><td style="color:{{ c.c }};text-decoration:{{ c.d }};text-underline-offset:4px;text-decoration-color:var(--color-accent);font-feature-settings:'tnum'">{{ c.v }}</td></sc-for>
+      </tr>
+      </sc-for>
+      <tr><td style="color:var(--color-neutral-700);font-size:12px">状态</td>
+        <sc-for list="{{ stRow }}" as="c" hint-placeholder-count="4"><td><span class="{{ c.cls }}">{{ c.v }}</span></td></sc-for>
+      </tr>
+    </tbody>
+  </table>
+  <div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:22px">
+    <div class="card" style="padding:16px 18px">
+      <div class="card-kicker" style="color:var(--color-accent-700)">为什么没有合并</div>
+      <p style="font-size:13px;text-align:justify;margin:0">四个 Release 的编号与条码各不相同；首批限定版多出一个 Medium（VCD）；20 周年黑胶采用 2 × LP 分面，本地文件为 24/96 母带。它们同属一个 ReleaseGroup，因此在专辑列表中只出现一次，但作为独立版本保留。</p>
+    </div>
+    <div class="card" style="padding:16px 18px">
+      <div class="card-kicker" style="color:var(--color-accent-700)">默认播放版本</div>
+      <div class="seg" style="align-self:flex-start"><label class="seg-opt"><input type="radio" name="dflt1d" checked="">台湾首版</label><label class="seg-opt"><input type="radio" name="dflt1d">最高音质</label><label class="seg-opt"><input type="radio" name="dflt1d">最近添加</label></div>
+      <div style="font-size:11.5px;color:var(--color-neutral-700)">"最高音质"会选中 20 周年黑胶（24/96）。</div>
+    </div>
+  </div>
+</div>
+<dc-import name="PlayerBar" style="grid-column:1 / -1" hint-size="1280px,68px"></dc-import>
+</div></div></div>
+
+<div class="dv-opt" id="1e"><div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a>发行时间线 + 结构树 · 把四层模型直接画出来，黑胶按面展开</div><div class="dv-card"><div style="width:1280px;height:800px;display:grid;grid-template-columns:216px minmax(0,1fr);grid-template-rows:732px 68px;background:var(--color-bg);overflow:hidden">
+<dc-import name="Sidebar" active="albums" hint-size="216px,732px"></dc-import>
+<div style="display:grid;grid-template-columns:292px minmax(0,1fr);overflow:hidden">
+  <div style="border-right:1px solid var(--color-divider);padding:30px 24px 30px 30px;font-size:13px">
+    <div style="font-size:10.5px;letter-spacing:.14em;color:var(--color-accent-700);margin-bottom:14px">结构</div>
+    <div style="display:flex;align-items:baseline;gap:8px"><span style="font:600 22px/1.1 var(--font-heading)">范特西</span><span style="font-size:9.5px;letter-spacing:.1em;color:var(--color-neutral-700)">RELEASE GROUP</span></div>
+    <div style="margin:10px 0 0 6px;border-left:1px solid var(--color-divider);padding-left:16px;display:flex;flex-direction:column;gap:9px">
+      <div style="display:flex;justify-content:space-between"><span>台湾首版</span><span style="font-size:11px;color:var(--color-neutral-700);font-feature-settings:'tnum'">2001 · 1 CD</span></div>
+      <div style="display:flex;justify-content:space-between"><span>首批限定</span><span style="font-size:11px;color:var(--color-neutral-700);font-feature-settings:'tnum'">2001 · CD + VCD</span></div>
+      <div style="display:flex;justify-content:space-between"><span>内地引进版</span><span style="font-size:11px;color:var(--color-neutral-700);font-feature-settings:'tnum'">2001 · 1 CD</span></div>
+      <div>
+        <div style="display:flex;justify-content:space-between;color:var(--color-accent-700)"><span style="font-weight:600">20 周年黑胶</span><span style="font-size:11px;font-feature-settings:'tnum'">2021 · 2 LP</span></div>
+        <div style="margin:8px 0 0 4px;border-left:1px solid var(--color-accent);padding-left:14px;display:flex;flex-direction:column;gap:7px;font-size:12.5px">
+          <div>LP 1 <span style="font-size:9.5px;letter-spacing:.1em;color:var(--color-neutral-700)">MEDIUM</span></div>
+          <div style="padding-left:14px;color:var(--color-neutral-800)">Side A · 3 首<br>Side B · 2 首</div>
+          <div>LP 2 <span style="font-size:9.5px;letter-spacing:.1em;color:var(--color-neutral-700)">MEDIUM</span></div>
+          <div style="padding-left:14px;color:var(--color-neutral-800)">Side C · 3 首<br>Side D · 2 首</div>
+        </div>
+      </div>
+    </div>
+    <div style="border-top:1px solid var(--color-divider);margin-top:22px;padding-top:14px;font-size:12px;color:var(--color-neutral-700);text-align:justify">点击任一节点，右侧切换到该层级。Track 层以曲目序号显示，黑胶沿用 A1、B2 记法。</div>
+  </div>
+  <div style="padding:30px 40px;overflow:hidden;display:flex;flex-direction:column;gap:26px">
+    <div>
+      <div style="display:flex;align-items:baseline;justify-content:space-between"><h2 style="font-size:34px;font-weight:400;margin:0">发行时间线</h2><span style="font-size:12px;color:var(--color-neutral-700)">上：发行 · 下：入库</span></div>
+      <div style="position:relative;height:170px;margin-top:14px">
+        <div style="position:absolute;left:0;right:0;top:84px;height:1px;background:var(--color-text)"></div>
+        <sc-for list="{{ ticks }}" as="k" hint-placeholder-count="5">
+        <div style="position:absolute;left:{{ k.x }};top:78px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center"><span style="width:1px;height:12px;background:var(--color-text)"></span></div>
+        </sc-for>
+        <div style="position:absolute;left:0;top:0;display:flex;flex-direction:column;gap:3px;font-size:12px"><span style="font:400 22px/1 var(--font-heading);font-feature-settings:'tnum'">2001</span><span>台湾首版 · 首批限定 · 内地引进版</span></div>
+        <div style="position:absolute;left:0;top:79px;width:11px;height:11px;border-radius:50%;border:1px solid var(--color-text);background:var(--color-bg);transform:translateX(-50%)"></div>
+        <div style="position:absolute;right:0;top:0;display:flex;flex-direction:column;align-items:flex-end;gap:3px;font-size:12px;color:var(--color-accent-700)"><span style="font:400 22px/1 var(--font-heading);font-feature-settings:'tnum'">2021</span><span>20 周年黑胶</span></div>
+        <div style="position:absolute;right:0;top:77px;width:15px;height:15px;border-radius:50%;border:1px solid var(--color-accent);background:var(--color-accent-100);transform:translateX(50%)"></div>
+        <div style="position:absolute;left:50%;top:110px;transform:translateX(-50%);font-size:11.5px;color:var(--color-neutral-700);text-align:center"><span style="display:block;width:7px;height:7px;border:1px solid var(--color-neutral-600);transform:rotate(45deg);margin:0 auto 8px"></span>2011 · 入库台湾首版</div>
+        <div style="position:absolute;left:90%;top:110px;transform:translateX(-50%);font-size:11.5px;color:var(--color-neutral-700);text-align:center"><span style="display:block;width:7px;height:7px;border:1px solid var(--color-neutral-600);transform:rotate(45deg);margin:0 auto 8px"></span>2023 · 入库黑胶</div>
+        <div style="position:absolute;left:0;top:140px;font-size:11px;color:var(--color-neutral-700);font-feature-settings:'tnum'">2001</div>
+        <div style="position:absolute;right:0;top:140px;font-size:11px;color:var(--color-neutral-700);font-feature-settings:'tnum'">2026</div>
+      </div>
+    </div>
+    <div style="border-top:1px solid var(--color-divider);padding-top:20px">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px">
+        <div><div style="font-size:10.5px;letter-spacing:.14em;color:var(--color-accent-700)">RELEASE · 2021 · 台湾</div><h3 style="font-size:28px;font-weight:400;margin:4px 0 2px">20 周年黑胶</h3><div style="font-size:12px;color:var(--color-neutral-700);font-feature-settings:'tnum'">杰威尔音乐 · JVR-LP-0109 · 4710937 41007 4 · 本地 FLAC 24/96</div></div>
+        <div style="display:flex;gap:8px"><button class="btn btn-primary"><svg viewBox="0 0 24 24" fill="currentColor" style="width:12px;height:12px"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>播放此版本</button><button class="btn btn-secondary">设为默认</button></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:22px;margin-top:20px">
+        <sc-for list="{{ lpSides }}" as="s" hint-placeholder-count="4">
+        <div>
+          <div style="display:flex;align-items:baseline;gap:8px;border-bottom:1px solid var(--color-text);padding-bottom:6px;margin-bottom:4px"><span style="font:400 30px/1 var(--font-heading)">{{ s.side }}</span><span style="font-size:11px;color:var(--color-neutral-700)">{{ s.disc }} · Side {{ s.side }}</span></div>
+          <sc-for list="{{ s.tracks }}" as="t" hint-placeholder-count="3">
+          <div style="display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:6px;font-size:12.5px;padding:6px 0;border-bottom:1px solid var(--color-divider)"><span style="color:var(--color-accent-700);font-feature-settings:'tnum'">{{ t.k }}</span><span>{{ t.t }}</span><span style="font-feature-settings:'tnum';color:var(--color-neutral-700)">{{ t.d }}</span></div>
+          </sc-for>
+        </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</div>
+<dc-import name="PlayerBar" style="grid-column:1 / -1" hint-size="1280px,68px"></dc-import>
+</div></div></div>
+</div>
+<div style="display:flex;align-items:baseline;gap:14px;margin:56px 0 16px;border-top:1px solid var(--color-divider);padding-top:18px"><span style="font:400 32px/1 var(--font-heading);color:var(--color-accent-700);font-feature-settings:'tnum'">03</span><span style="font:600 22px/1.2 var(--font-heading)">艺人页</span><span style="font-size:12.5px;color:var(--color-neutral-700)">传记式 vs 合作网络</span></div>
+<div class="dv-opts">
+<div class="dv-opt" id="1f"><div class="dv-olabel"><a class="dv-oid" href="#1f">1f</a>传记与唱片目录 · 像一页人物词条</div><div class="dv-card"><div style="width:1280px;height:800px;display:grid;grid-template-columns:216px minmax(0,1fr);grid-template-rows:732px 68px;background:var(--color-bg);overflow:hidden">
+<dc-import name="Sidebar" active="artists" hint-size="216px,732px"></dc-import>
+<div style="padding:32px 44px;box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:40px;overflow:hidden">
+  <div style="display:flex;flex-direction:column;gap:24px;min-width:0">
+    <div style="display:flex;gap:30px">
+      <div style="width:172px;height:212px;flex:none;border:6px solid var(--color-surface);outline:1px solid var(--color-divider);box-sizing:border-box;background:var(--color-neutral-300);display:grid;place-items:center;font-size:11px;color:var(--color-neutral-800)">艺人照片</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:10.5px;letter-spacing:.14em;color:var(--color-accent-700)">艺人 · 华语流行</div>
+        <h1 style="font-size:64px;font-weight:400;margin:4px 0 0;letter-spacing:-.02em">周杰伦</h1>
+        <div style="font-size:13.5px">Jay Chou · 歌手、词曲作者、制作人 · 台湾</div>
+        <div style="font-size:12px;color:var(--color-neutral-700);margin-top:4px;font-feature-settings:'tnum'">本地 14 张专辑 · 19 个版本 · 168 首曲目</div>
+        <div style="display:flex;gap:8px;margin:14px 0 0"><button class="btn btn-primary"><svg viewBox="0 0 24 24" fill="currentColor" style="width:12px;height:12px"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>随机播放</button><button class="btn btn-secondary">艺人电台</button><button class="btn btn-ghost">查看合作网络</button></div>
+      </div>
+    </div>
+    <div style="column-count:2;column-gap:32px;column-rule:1px solid var(--color-divider);font-size:13px;text-align:justify;color:var(--color-neutral-800)">
+      <p style="margin:0 0 10px">2000 年以同名专辑出道，几乎从一开始就同时承担作曲、演唱与制作。他与作词人方文山的长期合作，塑造了此后十余年华语流行里的"中国风"一脉：五声音阶的旋律、古典意象的歌词，配上 R&amp;B 与说唱的节奏。</p>
+      <p style="margin:0">除录音室专辑外，他也为电影写歌、配乐并执导。资料库中收有他参与的两部电影原声，它们被归在"原声与合作"之下，而不是混进录音室作品。</p>
+    </div>
+    <div>
+      <div style="display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid var(--color-divider);padding-bottom:6px;margin-bottom:14px"><span style="font:600 20px/1.2 var(--font-heading)">录音室专辑</span><span style="font-size:12px;color:var(--color-neutral-700)">按发行年份 · 共 14</span></div>
+      <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px">
+        <sc-for list="{{ jayAlbums }}" as="a" hint-placeholder-count="4">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="aspect-ratio:1;background:{{ a.bg }};color:{{ a.fg }};border:5px solid var(--color-surface);outline:1px solid var(--color-divider);padding:12px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between"><span style="font:italic 400 22px/1.05 var(--font-heading)">{{ a.title }}</span><span style="font-size:9px;letter-spacing:.12em">{{ a.artist }}</span></div>
+          <div><div style="font:600 16px/1.2 var(--font-heading)">{{ a.title }}</div><div style="font-size:11.5px;color:var(--color-neutral-700);font-feature-settings:'tnum'">{{ a.note }}</div></div>
+        </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+  <aside style="border-left:1px solid var(--color-divider);padding-left:26px;display:flex;flex-direction:column;gap:22px">
+    <div>
+      <div style="font:600 17px/1.2 var(--font-heading);margin-bottom:4px">常合作</div>
+      <div style="font-size:11px;color:var(--color-neutral-700);margin-bottom:8px">按本地曲目中的制作人员字段统计</div>
+      <sc-for list="{{ collabs }}" as="c" hint-placeholder-count="5">
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;padding:7px 0;border-bottom:1px solid var(--color-divider)"><span style="font-size:13.5px">{{ c.name }}</span><span style="font-size:12px;font-feature-settings:'tnum'">{{ c.n }}</span><span style="font-size:11px;color:var(--color-neutral-700)">{{ c.role }}</span></div>
+      </sc-for>
+    </div>
+    <div>
+      <div style="font:600 17px/1.2 var(--font-heading);margin-bottom:8px">原声与合作</div>
+      <div style="font-size:12.5px;line-height:1.9">《头文字 D》电影原声 · 2005<br>《不能说的秘密》电影原声 · 2007<br>《千里之外》· 与费玉清 · 2006</div>
+    </div>
+  </aside>
+</div>
+<dc-import name="PlayerBar" style="grid-column:1 / -1" hint-size="1280px,68px"></dc-import>
+</div></div></div>
+
+<div class="dv-opt" id="1g"><div class="dv-olabel"><a class="dv-oid" href="#1g">1g</a>合作网络 · 以制作人员关系为主线，点开一条关系看共同作品</div><div class="dv-card"><div style="width:1280px;height:800px;display:grid;grid-template-columns:216px minmax(0,1fr);grid-template-rows:732px 68px;background:var(--color-bg);overflow:hidden">
+<dc-import name="Sidebar" active="artists" hint-size="216px,732px"></dc-import>
+<div style="display:grid;grid-template-columns:minmax(0,1fr) 300px;overflow:hidden">
+  <div style="padding:30px 36px;display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px">
+      <div><div style="font-size:12px;color:var(--color-neutral-700)"><a href="#1f" style="text-decoration:none">周杰伦</a> › 合作网络</div><h2 style="font-size:36px;font-weight:400;margin:4px 0 0">与谁一起完成了这些歌</h2></div>
+      <div class="seg"><label class="seg-opt"><input type="radio" name="g1g" checked="">全部</label><label class="seg-opt"><input type="radio" name="g1g">作词</label><label class="seg-opt"><input type="radio" name="g1g">编曲</label><label class="seg-opt"><input type="radio" name="g1g">合唱</label></div>
+    </div>
+    <div style="position:relative;width:660px;height:430px;align-self:center;margin-top:16px">
+      <sc-for list="{{ graph }}" as="g" hint-placeholder-count="8">
+      <div style="position:absolute;left:330px;top:215px;width:{{ g.w }};height:1px;background:{{ g.lc }};transform-origin:0 0;transform:rotate({{ g.ang }})"></div>
+      </sc-for>
+      <div style="position:absolute;left:330px;top:215px;transform:translate(-50%,-50%);border:1px solid var(--color-text);border-radius:var(--radius-md);background:var(--color-bg);padding:12px 22px;text-align:center"><div style="font:400 30px/1 var(--font-heading)">周杰伦</div><div style="font-size:10.5px;color:var(--color-neutral-700);margin-top:4px">14 张专辑 · 168 首</div></div>
+      <sc-for list="{{ graph }}" as="g" hint-placeholder-count="8">
+      <div style="position:absolute;left:{{ g.x }};top:{{ g.y }};transform:translate(-50%,-50%);border:1px solid {{ g.bd }};border-radius:var(--radius-md);background:var(--color-bg);padding:6px 12px;text-align:center;white-space:nowrap"><div style="font:600 16px/1.1 var(--font-heading);color:{{ g.c }}">{{ g.name }}</div><div style="font-size:10px;color:var(--color-neutral-700);font-feature-settings:'tnum'">{{ g.role }}</div></div>
+      </sc-for>
+    </div>
+    <div style="font-size:11.5px;color:var(--color-neutral-700);text-align:center">线条只表示"同一首曲目的制作人员中同时出现"，数据全部来自本地标签。</div>
+  </div>
+  <aside style="border-left:1px solid var(--color-divider);padding:30px 26px;display:flex;flex-direction:column;gap:14px">
+    <div style="font-size:10.5px;letter-spacing:.14em;color:var(--color-accent-700)">所选关系</div>
+    <div style="font:400 30px/1.1 var(--font-heading)">方文山 <span style="color:var(--color-accent-700)">×</span> 周杰伦</div>
+    <div style="font-size:12.5px;color:var(--color-neutral-700);font-feature-settings:'tnum'">作词 × 作曲 · 共同出现于 92 首曲目、11 张专辑</div>
+    <div style="border-top:1px solid var(--color-divider)">
+      <sc-for list="{{ fwsTracks }}" as="t" hint-placeholder-count="7">
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:7px 0;border-bottom:1px solid var(--color-divider);font-size:13px"><span>{{ t.t }}</span><span style="font-size:11px;color:var(--color-neutral-700);font-feature-settings:'tnum'">{{ t.a }} · {{ t.y }}</span></div>
+      </sc-for>
+    </div>
+    <div style="font-size:12px;color:var(--color-accent-700)">还有 85 首</div>
+    <div style="display:flex;gap:8px;margin-top:auto"><button class="btn btn-primary">生成播放列表</button><button class="btn btn-secondary">打开 方文山</button></div>
+  </aside>
+</div>
+<dc-import name="PlayerBar" style="grid-column:1 / -1" hint-size="1280px,68px"></dc-import>
+</div></div></div>
+</div>
+
+<div style="display:flex;align-items:baseline;gap:14px;margin:56px 0 16px;border-top:1px solid var(--color-divider);padding-top:18px"><span style="font:400 32px/1 var(--font-heading);color:var(--color-accent-700);font-feature-settings:'tnum'">04</span><span style="font:600 22px/1.2 var(--font-heading)">搜索</span><span style="font-size:12.5px;color:var(--color-neutral-700)">中日文别名互通：输入"千与千寻"也能找到《千と千尋の神隠し》</span></div>
+<div class="dv-opts">
+<div class="dv-opt" id="1h"><div class="dv-olabel"><a class="dv-oid" href="#1h">1h</a>命令面板 · ⌘K 随处唤出，按类型分组，标明匹配依据</div><div class="dv-card"><div style="width:1280px;height:800px;display:grid;grid-template-columns:216px minmax(0,1fr);grid-template-rows:732px 68px;background:var(--color-bg);overflow:hidden;position:relative">
+<dc-import name="Sidebar" active="albums" hint-size="216px,732px"></dc-import>
+<div style="padding:32px 44px;overflow:hidden">
+  <h1 style="font-size:48px;font-weight:400;margin:0 0 18px">专辑</h1>
+  <div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:20px">
+    <sc-for list="{{ weekNew }}" as="a" hint-placeholder-count="8">
+    <div><div style="aspect-ratio:1;background:{{ a.bg }};color:{{ a.fg }};border:5px solid var(--color-surface);outline:1px solid var(--color-divider);padding:10px;box-sizing:border-box;font:italic 400 18px/1.05 var(--font-heading)">{{ a.title }}</div><div style="font:600 14px/1.2 var(--font-heading);margin-top:7px">{{ a.title }}</div></div>
+    </sc-for>
+    <sc-for list="{{ favs }}" as="a" hint-placeholder-count="6">
+    <div><div style="aspect-ratio:1;background:{{ a.bg }};color:{{ a.fg }};border:5px solid var(--color-surface);outline:1px solid var(--color-divider);padding:10px;box-sizing:border-box;font:italic 400 18px/1.05 var(--font-heading)">{{ a.title }}</div><div style="font:600 14px/1.2 var(--font-heading);margin-top:7px">{{ a.title }}</div></div>
+    </sc-for>
+  </div>
+</div>
+<dc-import name="PlayerBar" style="grid-column:1 / -1" hint-size="1280px,68px"></dc-import>
+<div style="position:absolute;inset:0;background:color-mix(in srgb, var(--color-neutral-900) 42%, transparent);display:flex;justify-content:center;padding-top:88px">
+  <div style="width:660px;align-self:flex-start;background:var(--color-bg);border:1px solid var(--color-divider);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);overflow:hidden">
+    <div style="display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--color-divider)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:18px;height:18px;stroke-width:1.5;stroke-linecap:round;color:var(--color-accent-700)"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+      <span style="font:400 24px/1 var(--font-heading)">千与千寻</span><span style="width:1px;height:24px;background:var(--color-accent);margin-left:-8px"></span>
+      <span style="flex:1"></span><span class="tag tag-neutral">全部</span>
+    </div>
+    <div style="padding:10px 12px 12px;display:flex;flex-direction:column;gap:4px">
+      <div style="font-size:10px;letter-spacing:.14em;color:var(--color-neutral-700);padding:6px 8px">最佳匹配</div>
+      <div style="display:flex;align-items:center;gap:14px;padding:10px 8px;border-radius:var(--radius-md);background:color-mix(in srgb, var(--color-accent) 9%, transparent)">
+        <div style="width:52px;height:52px;flex:none;background:var(--color-accent-200);color:var(--color-accent-900);border:3px solid var(--color-surface);outline:1px solid var(--color-divider);box-sizing:border-box;display:grid;place-items:center;font:italic 400 18px/1 var(--font-heading)">千</div>
+        <div style="flex:1;min-width:0"><div style="font:600 18px/1.2 var(--font-heading)">千と千尋の神隠し サウンドトラック</div><div style="font-size:12px;color:var(--color-neutral-700)">久石譲 · 2001 · 2 个版本 · 动画原声</div></div>
+        <span class="tag tag-accent">别名匹配：千与千寻</span>
+      </div>
+      <div style="font-size:10px;letter-spacing:.14em;color:var(--color-neutral-700);padding:10px 8px 4px">曲目</div>
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:14px;padding:7px 8px;font-size:13.5px"><span>あの夏へ</span><span style="font-size:12px;color:var(--color-neutral-700)">久石譲</span><span style="font-size:12px;font-feature-settings:'tnum'">3:39</span></div>
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:14px;padding:7px 8px;font-size:13.5px"><span>いつも何度でも</span><span style="font-size:12px;color:var(--color-neutral-700)">木村弓</span><span style="font-size:12px;font-feature-settings:'tnum'">3:36</span></div>
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:14px;padding:7px 8px;font-size:13.5px"><span>6番目の駅</span><span style="font-size:12px;color:var(--color-neutral-700)">久石譲</span><span style="font-size:12px;font-feature-settings:'tnum'">3:35</span></div>
+      <div style="font-size:10px;letter-spacing:.14em;color:var(--color-neutral-700);padding:10px 8px 4px">艺人 · 版本字段</div>
+      <div style="display:flex;gap:10px;padding:4px 8px;flex-wrap:wrap"><span class="tag tag-outline">久石譲</span><span class="tag tag-outline">木村弓</span><span class="tag tag-neutral" style="font-feature-settings:'tnum'">编号 TKCA-72226 · 德间日本</span></div>
+    </div>
+    <div style="display:flex;gap:18px;padding:10px 20px;border-top:1px solid var(--color-divider);font-size:11px;color:var(--color-neutral-700)"><span>↑↓ 选择</span><span>↵ 打开</span><span>⇥ 按字段筛选</span><span style="flex:1"></span><span style="color:var(--color-accent-700)">问 Steward："千与千寻有几个版本？"</span></div>
+  </div>
+</div>
+</div></div></div>
+
+<div class="dv-opt" id="1i"><div class="dv-olabel"><a class="dv-oid" href="#1i">1i</a>全页结果 · 左侧分面筛选，结果按艺人 / 专辑 / 曲目分区</div><div class="dv-card"><div style="width:1280px;height:800px;display:grid;grid-template-columns:216px minmax(0,1fr);grid-template-rows:732px 68px;background:var(--color-bg);overflow:hidden">
+<dc-import name="Sidebar" active="albums" hint-size="216px,732px"></dc-import>
+<div style="padding:28px 44px;box-sizing:border-box;display:flex;flex-direction:column;gap:20px;overflow:hidden">
+  <div style="border-bottom:1px solid var(--color-text);padding-bottom:10px;display:flex;align-items:baseline;gap:16px"><span style="font:400 44px/1 var(--font-heading)">久石让</span><span style="font-size:12px;color:var(--color-neutral-700)">已匹配别名：久石譲 · Joe Hisaishi · 204 条结果</span></div>
+  <div style="display:grid;grid-template-columns:180px minmax(0,1fr);gap:36px;min-height:0">
+    <div style="font-size:12.5px;display:flex;flex-direction:column;gap:18px">
+      <div><div style="font-size:10px;letter-spacing:.14em;color:var(--color-neutral-700);margin-bottom:6px">类型</div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0;color:var(--color-accent-700)"><span>全部</span><span style="font-feature-settings:'tnum'">204</span></div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0"><span>专辑</span><span style="font-feature-settings:'tnum'">12</span></div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0"><span>版本</span><span style="font-feature-settings:'tnum'">17</span></div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0"><span>曲目</span><span style="font-feature-settings:'tnum'">184</span></div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0"><span>艺人</span><span style="font-feature-settings:'tnum'">1</span></div></div>
+      <div><div style="font-size:10px;letter-spacing:.14em;color:var(--color-neutral-700);margin-bottom:6px">角色</div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0"><span>作曲</span><span style="font-feature-settings:'tnum'">176</span></div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0"><span>钢琴演奏</span><span style="font-feature-settings:'tnum'">31</span></div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0"><span>指挥</span><span style="font-feature-settings:'tnum'">22</span></div></div>
+      <div><div style="font-size:10px;letter-spacing:.14em;color:var(--color-neutral-700);margin-bottom:6px">厂牌</div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0"><span>德间日本</span><span style="font-feature-settings:'tnum'">9</span></div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0"><span>Universal</span><span style="font-feature-settings:'tnum'">3</span></div></div>
+      <div><div style="font-size:10px;letter-spacing:.14em;color:var(--color-neutral-700);margin-bottom:6px">本地格式</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap"><span class="tag tag-outline">FLAC</span><span class="tag tag-neutral">DSF</span><span class="tag tag-neutral">MP3</span></div></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:20px;min-width:0">
+      <div style="display:flex;align-items:center;gap:20px;border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:14px 18px">
+        <div style="width:64px;height:64px;border-radius:50%;border:1px solid var(--color-accent);display:grid;place-items:center;font:400 28px/1 var(--font-heading);color:var(--color-accent-700)">久</div>
+        <div style="flex:1"><div style="font-size:10px;letter-spacing:.14em;color:var(--color-accent-700)">艺人 · 最佳匹配</div><div style="font:400 28px/1.1 var(--font-heading)">久石譲</div><div style="font-size:12px;color:var(--color-neutral-700);font-feature-settings:'tnum'">作曲家 · 本地 12 张专辑 · 184 首</div></div>
+        <button class="btn btn-secondary">打开艺人页</button>
+      </div>
+      <div>
+        <div style="font:600 18px/1.2 var(--font-heading);border-bottom:1px solid var(--color-divider);padding-bottom:6px;margin-bottom:12px">专辑</div>
+        <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px">
+          <sc-for list="{{ hisaAlbums }}" as="a" hint-placeholder-count="5">
+          <div><div style="aspect-ratio:1;background:{{ a.bg }};color:{{ a.fg }};border:4px solid var(--color-surface);outline:1px solid var(--color-divider);padding:9px;box-sizing:border-box;font:italic 400 15px/1.05 var(--font-heading)">{{ a.title }}</div><div style="font:600 13.5px/1.2 var(--font-heading);margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ a.title }}</div><div style="font-size:10.5px;color:var(--color-neutral-700);font-feature-settings:'tnum'">{{ a.note }}</div></div>
+          </sc-for>
+        </div>
+      </div>
+      <table class="table" style="font-size:13px">
+        <thead><tr><th>曲目</th><th>专辑</th><th>版本</th><th style="text-align:right">时长</th></tr></thead>
+        <tbody>
+          <sc-for list="{{ hisaTracks }}" as="t" hint-placeholder-count="5">
+          <tr><td>{{ t.t }}</td><td style="color:var(--color-neutral-700)">{{ t.a }}</td><td style="color:var(--color-neutral-700);font-size:12px;font-feature-settings:'tnum'">{{ t.e }}</td><td style="text-align:right;font-feature-settings:'tnum'">{{ t.d }}</td></tr>
+          </sc-for>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<dc-import name="PlayerBar" style="grid-column:1 / -1" hint-size="1280px,68px"></dc-import>
+</div></div></div>
+</div>
+
+<div style="display:flex;align-items:baseline;gap:14px;margin:56px 0 16px;border-top:1px solid var(--color-divider);padding-top:18px"><span style="font:400 32px/1 var(--font-heading);color:var(--color-accent-700);font-feature-settings:'tnum'">05</span><span style="font:600 22px/1.2 var(--font-heading)">正在播放 + 队列</span><span style="font-size:12.5px;color:var(--color-neutral-700)">沉浸的书页 vs 看得见的信号路径</span></div>
+<div class="dv-opts">
+<div class="dv-opt" id="1j"><div class="dv-olabel"><a class="dv-oid" href="#1j">1j</a>书页式全屏 · 大图版、制作人员与编辑笔记，队列退到一侧</div><div class="dv-card"><div style="width:1280px;height:800px;display:grid;grid-template-rows:732px 68px;background:var(--color-bg);overflow:hidden">
+<div style="padding:30px 56px;box-sizing:border-box;display:grid;grid-template-columns:450px minmax(0,1fr);gap:56px;overflow:hidden">
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div style="font-size:12px;color:var(--color-neutral-700)">‹ 返回资料库</div>
+    <div style="width:450px;height:450px;background:var(--color-neutral-900);color:var(--color-neutral-100);border:10px solid var(--color-surface);outline:1px solid var(--color-divider);box-sizing:border-box;padding:34px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:var(--shadow-md)"><span style="font:italic 400 76px/1 var(--font-heading)">范特西</span><span style="font-size:12px;letter-spacing:.18em">JAY CHOU · 2001</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--color-neutral-700);font-feature-settings:'tnum'"><span>台湾首版 · AFCD-0109</span><span>FLAC 16/44.1 · 无损</span></div>
+  </div>
+  <div style="display:flex;flex-direction:column;min-width:0;padding-top:28px">
+    <div style="font-size:10.5px;letter-spacing:.14em;color:var(--color-accent-700);font-feature-settings:'tnum'">正在播放 · 第 5 首 / 共 10 首</div>
+    <h1 style="font-size:72px;font-weight:400;margin:6px 0 4px;letter-spacing:-.02em">开不了口</h1>
+    <div style="font-size:15px"><a href="#1f" style="text-decoration:none">周杰伦</a> — <a href="#1c" style="text-decoration:none">《范特西》</a></div>
+    <div style="display:flex;align-items:center;gap:12px;margin:26px 0 12px;font-size:11.5px;color:var(--color-neutral-700);font-feature-settings:'tnum'"><span>1:52</span><div style="flex:1;height:1px;background:var(--color-divider);position:relative"><div style="position:absolute;left:0;top:-1px;height:3px;width:39%;background:var(--color-accent)"></div><div style="position:absolute;left:39%;top:-5px;width:11px;height:11px;border-radius:50%;border:1px solid var(--color-accent);background:var(--color-bg);transform:translateX(-50%)"></div></div><span>4:47</span></div>
+    <div style="display:flex;align-items:center;gap:26px">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:22px;height:22px;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" x2="5" y1="19" y2="5"></line></svg>
+      <div style="width:56px;height:56px;border:1px solid var(--color-accent);border-radius:50%;display:grid;place-items:center;color:var(--color-accent-700)"><svg viewBox="0 0 24 24" fill="currentColor" style="width:20px;height:20px"><rect x="14" y="4" width="4" height="16" rx="1"></rect><rect x="6" y="4" width="4" height="16" rx="1"></rect></svg></div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:22px;height:22px;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" x2="19" y1="5" y2="19"></line></svg>
+      <span style="flex:1"></span>
+      <div class="seg"><label class="seg-opt"><input type="radio" name="np1j" checked="">关于</label><label class="seg-opt"><input type="radio" name="np1j">歌词</label><label class="seg-opt"><input type="radio" name="np1j">版本</label></div>
+    </div>
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:36px;margin-top:30px;border-top:1px solid var(--color-divider);padding-top:18px">
+      <div>
+        <div style="font:600 17px/1.2 var(--font-heading);margin-bottom:8px">关于这首歌</div>
+        <div style="display:grid;grid-template-columns:48px 1fr;gap:5px 10px;font-size:12.5px"><span style="color:var(--color-neutral-700)">作词</span><span>徐若瑄</span><span style="color:var(--color-neutral-700)">作曲</span><span>周杰伦</span><span style="color:var(--color-neutral-700)">编曲</span><span>钟兴民</span><span style="color:var(--color-neutral-700)">收录</span><span>范特西 · 4 个版本中均有</span></div>
+        <p style="font-size:12.5px;text-align:justify;margin:12px 0 0;color:var(--color-neutral-800)">专辑里最安静的一首情歌，钢琴与弦乐托着一段欲言又止的旋律。黑胶版把它放在 B 面末尾。</p>
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px"><span style="font:600 17px/1.2 var(--font-heading)">接下来</span><span style="font-size:11.5px;color:var(--color-neutral-700);font-feature-settings:'tnum'">5 首 · 19:53</span></div>
+        <sc-for list="{{ queue }}" as="q" hint-placeholder-count="5">
+        <div style="display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:8px;padding:6px 0;border-bottom:1px solid var(--color-divider);font-size:13px"><span style="font-size:11px;color:var(--color-neutral-700);font-feature-settings:'tnum'">{{ q.n }}</span><span>{{ q.t }}</span><span style="font-size:11.5px;font-feature-settings:'tnum'">{{ q.d }}</span></div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</div>
+<dc-import name="PlayerBar" hint-size="1280px,68px"></dc-import>
+</div></div></div>
+
+<div class="dv-opt" id="1k"><div class="dv-olabel"><a class="dv-oid" href="#1k">1k</a>信号路径 + 队列表 · 从文件到输出的每一步都可见</div><div class="dv-card"><div style="width:1280px;height:800px;display:grid;grid-template-columns:216px minmax(0,1fr);grid-template-rows:732px 68px;background:var(--color-bg);overflow:hidden">
+<dc-import name="Sidebar" active="home" hint-size="216px,732px"></dc-import>
+<div style="display:grid;grid-template-columns:360px minmax(0,1fr);overflow:hidden">
+  <div style="border-right:1px solid var(--color-divider);padding:30px 32px;display:flex;flex-direction:column;gap:18px">
+    <div style="display:flex;gap:16px;align-items:center">
+      <div style="width:96px;height:96px;flex:none;background:var(--color-neutral-900);color:var(--color-neutral-100);border:5px solid var(--color-surface);outline:1px solid var(--color-divider);box-sizing:border-box;display:grid;place-items:center;font:italic 400 26px/1 var(--font-heading)">范</div>
+      <div><div style="font:400 30px/1.05 var(--font-heading)">开不了口</div><div style="font-size:12.5px;color:var(--color-neutral-700)">周杰伦 — 范特西</div></div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--color-divider);padding-top:16px"><span style="font:600 18px/1.2 var(--font-heading)">信号路径</span><span class="tag tag-outline">无损 · Bit-perfect</span></div>
+    <div style="display:flex;flex-direction:column">
+      <div style="display:grid;grid-template-columns:22px 1fr;gap:12px"><div style="display:flex;flex-direction:column;align-items:center"><span style="width:11px;height:11px;border-radius:50%;border:1px solid var(--color-accent);margin-top:4px"></span><span style="flex:1;width:1px;background:var(--color-accent)"></span></div><div style="padding-bottom:16px"><div style="font-size:13.5px">源文件</div><div style="font-size:11.5px;color:var(--color-neutral-700);font-feature-settings:'tnum'">FLAC · 16 bit / 44.1 kHz · 立体声<br>/mnt/music/华语/周杰伦/2001 范特西 [AFCD-0109]</div></div></div>
+      <div style="display:grid;grid-template-columns:22px 1fr;gap:12px"><div style="display:flex;flex-direction:column;align-items:center"><span style="width:11px;height:11px;border-radius:50%;border:1px solid var(--color-accent);margin-top:4px"></span><span style="flex:1;width:1px;background:var(--color-accent)"></span></div><div style="padding-bottom:16px"><div style="font-size:13.5px">ROOMusic 服务器</div><div style="font-size:11.5px;color:var(--color-neutral-700)">解码 · 未启用 DSP · 未重采样</div></div></div>
+      <div style="display:grid;grid-template-columns:22px 1fr;gap:12px"><div style="display:flex;flex-direction:column;align-items:center"><span style="width:11px;height:11px;border-radius:50%;border:1px solid var(--color-accent);margin-top:4px"></span><span style="flex:1;width:1px;background:var(--color-accent)"></span></div><div style="padding-bottom:16px"><div style="font-size:13.5px">传输</div><div style="font-size:11.5px;color:var(--color-neutral-700)">局域网 · 无损 · 缓冲 8 秒</div></div></div>
+      <div style="display:grid;grid-template-columns:22px 1fr;gap:12px"><div style="display:flex;flex-direction:column;align-items:center"><span style="width:11px;height:11px;border-radius:50%;background:var(--color-accent);margin-top:4px"></span></div><div><div style="font-size:13.5px">输出 · 客厅</div><div style="font-size:11.5px;color:var(--color-neutral-700)">USB DAC · 16/44.1 · 硬件音量</div></div></div>
+    </div>
+    <div style="margin-top:auto;border-top:1px solid var(--color-divider);padding-top:14px;font-size:12px;color:var(--color-neutral-700);text-align:justify">若切换到 20 周年黑胶版本，源文件将变为 24/96，输出端会随之切换采样率。</div>
+  </div>
+  <div style="padding:30px 40px;overflow:hidden">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:14px">
+      <div><h2 style="font-size:36px;font-weight:400;margin:0">队列</h2><div style="font-size:12px;color:var(--color-neutral-700);font-feature-settings:'tnum'">来自《范特西》· 台湾首版 · 5 首 · 19:53</div></div>
+      <div style="display:flex;gap:8px"><button class="btn btn-secondary">保存为播放列表</button><button class="btn btn-ghost">清空</button></div>
+    </div>
+    <table class="table" style="font-size:13.5px">
+      <thead><tr><th style="width:44px">#</th><th>曲目</th><th>专辑 · 版本</th><th style="text-align:right">时长</th></tr></thead>
+      <tbody>
+        <tr style="background:color-mix(in srgb, var(--color-accent) 8%, transparent);color:var(--color-accent-700)"><td style="font-feature-settings:'tnum'">▸ 05</td><td>开不了口</td><td>范特西 · 台湾首版</td><td style="text-align:right;font-feature-settings:'tnum'">1:52 / 4:47</td></tr>
+        <sc-for list="{{ queue }}" as="q" hint-placeholder-count="5">
+        <tr><td style="color:var(--color-neutral-700);font-feature-settings:'tnum'">{{ q.n }}</td><td>{{ q.t }}</td><td style="color:var(--color-neutral-700)">{{ q.a }}</td><td style="text-align:right;font-feature-settings:'tnum'">{{ q.d }}</td></tr>
+        </sc-for>
+      </tbody>
+    </table>
+    <div style="display:flex;align-items:baseline;gap:10px;margin:24px 0 6px"><span style="font:600 17px/1.2 var(--font-heading)">然后 · 原声电台</span><span style="font-size:11.5px;color:var(--color-neutral-700)">根据《范特西》和你最近的聆听挑选，可关闭</span></div>
+    <sc-for list="{{ radioQ }}" as="q" hint-placeholder-count="3">
+    <div style="display:grid;grid-template-columns:44px minmax(0,1fr) 200px auto;padding:8px;border-bottom:1px dashed var(--color-divider);font-size:13px;color:var(--color-neutral-700)"><span>·</span><span>{{ q.t }}</span><span>{{ q.a }}</span><span style="font-feature-settings:'tnum'">{{ q.d }}</span></div>
+    </sc-for>
+  </div>
+</div>
+<dc-import name="PlayerBar" style="grid-column:1 / -1" hint-size="1280px,68px"></dc-import>
+</div></div></div>
+</div>
+<div style="display:flex;align-items:baseline;gap:14px;margin:56px 0 16px;border-top:1px solid var(--color-divider);padding-top:18px"><span style="font:400 32px/1 var(--font-heading);color:var(--color-accent-700);font-feature-settings:'tnum'">06</span><span style="font:600 22px/1.2 var(--font-heading)">收藏 / 历史 / 播放列表</span><span style="font-size:12.5px;color:var(--color-neutral-700)">三栏账簿 vs 聆听日记</span></div>
+<div class="dv-opts">
+<div class="dv-opt" id="1l"><div class="dv-olabel"><a class="dv-oid" href="#1l">1l</a>三栏账簿 · 收藏、历史、播放列表并排，细线分栏</div><div class="dv-card"><div style="width:1280px;height:800px;display:grid;grid-template-columns:216px minmax(0,1fr);grid-template-rows:732px 68px;background:var(--color-bg);overflow:hidden">
+<dc-import name="Sidebar" active="library" hint-size="216px,732px"></dc-import>
+<div style="padding:32px 44px;box-sizing:border-box;display:flex;flex-direction:column;gap:20px;overflow:hidden">
+  <h1 style="font-size:48px;font-weight:400;margin:0">我的音乐</h1>
+  <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--color-text);min-height:0">
+    <div style="padding:16px 26px 0 0">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px"><span style="font:600 21px/1.2 var(--font-heading)">收藏</span><div class="seg"><label class="seg-opt" style="padding:4px 9px"><input type="radio" name="f1l" checked="">专辑</label><label class="seg-opt" style="padding:4px 9px"><input type="radio" name="f1l">曲目</label></div></div>
+      <sc-for list="{{ favs }}" as="a" hint-placeholder-count="6">
+      <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--color-divider)">
+        <div style="width:44px;height:44px;flex:none;background:{{ a.bg }};color:{{ a.fg }};border:3px solid var(--color-surface);outline:1px solid var(--color-divider);box-sizing:border-box;display:grid;place-items:center;font:italic 400 15px/1 var(--font-heading)">{{ a.initial }}</div>
+        <div style="min-width:0"><div style="font:600 15px/1.2 var(--font-heading)">{{ a.title }}</div><div style="font-size:11.5px;color:var(--color-neutral-700)">{{ a.note }}</div></div>
+      </div>
+      </sc-for>
+    </div>
+    <div style="padding:16px 26px 0;border-left:1px solid var(--color-divider)">
+      <div style="font:600 21px/1.2 var(--font-heading);margin-bottom:10px">历史</div>
+      <div style="font-size:10px;letter-spacing:.14em;color:var(--color-accent-700);margin:4px 0">今天</div>
+      <sc-for list="{{ histToday }}" as="p" hint-placeholder-count="5">
+      <div style="display:grid;grid-template-columns:44px minmax(0,1fr);gap:10px;padding:7px 0;border-bottom:1px solid var(--color-divider)"><span style="font-size:11px;color:var(--color-neutral-700);font-feature-settings:'tnum'">{{ p.time }}</span><div><div style="font-size:13.5px">{{ p.title }}</div><div style="font-size:11px;color:var(--color-neutral-700)">{{ p.artist }}</div></div></div>
+      </sc-for>
+      <div style="font-size:10px;letter-spacing:.14em;color:var(--color-accent-700);margin:14px 0 4px">昨天</div>
+      <sc-for list="{{ histYest }}" as="p" hint-placeholder-count="4">
+      <div style="display:grid;grid-template-columns:44px minmax(0,1fr);gap:10px;padding:7px 0;border-bottom:1px solid var(--color-divider)"><span style="font-size:11px;color:var(--color-neutral-700);font-feature-settings:'tnum'">{{ p.time }}</span><div><div style="font-size:13.5px">{{ p.title }}</div><div style="font-size:11px;color:var(--color-neutral-700)">{{ p.artist }}</div></div></div>
+      </sc-for>
+    </div>
+    <div style="padding:16px 0 0 26px;border-left:1px solid var(--color-divider)">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px"><span style="font:600 21px/1.2 var(--font-heading)">播放列表</span><button class="btn btn-ghost" style="font-size:13px">＋ 新建</button></div>
+      <sc-for list="{{ playlists }}" as="p" hint-placeholder-count="5">
+      <div style="padding:10px 0;border-bottom:1px solid var(--color-divider)"><div style="font:600 17px/1.2 var(--font-heading)">{{ p.name }}</div><div style="font-size:11.5px;color:var(--color-neutral-700);font-feature-settings:'tnum'">{{ p.meta }}</div></div>
+      </sc-for>
+      <div class="card" style="margin-top:16px;padding:12px 14px"><div class="card-kicker" style="color:var(--color-accent-700)">Steward 建议</div><div style="font-size:12.5px">你最近常在深夜听原声，要把这 32 首整理成"深夜原声 · 二"吗？</div></div>
+    </div>
+  </div>
+</div>
+<dc-import name="PlayerBar" style="grid-column:1 / -1" hint-size="1280px,68px"></dc-import>
+</div></div></div>
+
+<div class="dv-opt" id="1m"><div class="dv-olabel"><a class="dv-oid" href="#1m">1m</a>聆听日记 · 历史按日成篇，播放列表立成书脊</div><div class="dv-card"><div style="width:1280px;height:800px;display:grid;grid-template-columns:216px minmax(0,1fr);grid-template-rows:732px 68px;background:var(--color-bg);overflow:hidden">
+<dc-import name="Sidebar" active="library" hint-size="216px,732px"></dc-import>
+<div style="padding:30px 44px;box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:40px;overflow:hidden">
+  <div style="display:flex;flex-direction:column;gap:18px;min-width:0">
+    <div style="display:flex;align-items:baseline;justify-content:space-between"><h1 style="font-size:52px;font-weight:400;margin:0">九月的聆听</h1><span style="font-size:12.5px;color:var(--color-neutral-700);font-feature-settings:'tnum'">共 41 小时 · 612 首</span></div>
+    <div style="display:flex;align-items:flex-end;gap:5px;height:84px;border-bottom:1px solid var(--color-text)">
+      <sc-for list="{{ days }}" as="d" hint-placeholder-count="27">
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;height:100%"><div style="width:100%;height:{{ d.h }};background:{{ d.bg }}"></div></div>
+      </sc-for>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--color-neutral-700);margin-top:-12px;font-feature-settings:'tnum'"><span>9 月 1 日</span><span>每根竖线 = 一天的聆听时长</span><span style="color:var(--color-accent-700)">今天</span></div>
+    <sc-for list="{{ diary }}" as="e" hint-placeholder-count="3">
+    <div style="display:grid;grid-template-columns:150px minmax(0,1fr);gap:20px;border-top:1px solid var(--color-divider);padding-top:14px">
+      <div><div style="font:400 20px/1.2 var(--font-heading)">{{ e.day }}</div><div style="font-size:11.5px;color:var(--color-neutral-700);font-feature-settings:'tnum'">{{ e.total }}</div></div>
+      <div>
+        <p style="font-size:13px;margin:0 0 10px;font-style:italic;color:var(--color-neutral-800)">{{ e.note }}</p>
+        <div style="display:flex;gap:10px">
+          <sc-for list="{{ e.albums }}" as="a" hint-placeholder-count="3">
+          <div style="width:62px;height:62px;background:{{ a.bg }};color:{{ a.fg }};border:3px solid var(--color-surface);outline:1px solid var(--color-divider);box-sizing:border-box;display:grid;place-items:center;font:italic 400 18px/1 var(--font-heading)">{{ a.initial }}</div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    </sc-for>
+  </div>
+  <div style="border-left:1px solid var(--color-divider);padding-left:28px;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:baseline;justify-content:space-between"><span style="font:600 21px/1.2 var(--font-heading)">书架 · 播放列表</span><span style="font-size:12px;color:var(--color-accent-700)">＋</span></div>
+    <div style="font-size:11.5px;color:var(--color-neutral-700);margin:2px 0 18px">书脊高度 = 列表时长</div>
+    <div style="display:flex;align-items:flex-end;gap:6px;height:340px;border-bottom:2px solid var(--color-text)">
+      <sc-for list="{{ spines }}" as="s" hint-placeholder-count="6">
+      <div style="width:42px;height:{{ s.h }};background:{{ s.bg }};color:{{ s.fg }};border:1px solid var(--color-divider);box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:12px 0"><span style="writing-mode:vertical-rl;font:600 15px/1 var(--font-heading);letter-spacing:.08em">{{ s.name }}</span><span style="font-size:10px;font-feature-settings:'tnum'">{{ s.n }}</span></div>
+      </sc-for>
+    </div>
+    <div style="margin-top:22px">
+      <div style="font:600 17px/1.2 var(--font-heading);margin-bottom:6px">收藏 · 最近加入</div>
+      <sc-for list="{{ histYest }}" as="p" hint-placeholder-count="4">
+      <div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:6px 0;border-bottom:1px solid var(--color-divider)"><span>♡ {{ p.title }}</span><span style="color:var(--color-neutral-700)">{{ p.artist }}</span></div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+<dc-import name="PlayerBar" style="grid-column:1 / -1" hint-size="1280px,68px"></dc-import>
+</div></div></div>
+</div>
+
+<div style="display:flex;align-items:baseline;gap:14px;margin:56px 0 16px;border-top:1px solid var(--color-divider);padding-top:18px"><span style="font:400 32px/1 var(--font-heading);color:var(--color-accent-700);font-feature-settings:'tnum'">07</span><span style="font:600 22px/1.2 var(--font-heading)">元数据问题检测与修正</span><span style="font-size:12.5px;color:var(--color-neutral-700)">收件箱 vs 校对稿</span></div>
+<div class="dv-opts">
+<div class="dv-opt" id="1n"><div class="dv-olabel"><a class="dv-oid" href="#1n">1n</a>问题收件箱 · 左列表右详情，依据 + 改动前后 + 风险</div><div class="dv-card"><div style="width:1280px;height:800px;display:grid;grid-template-columns:216px minmax(0,1fr);grid-template-rows:732px 68px;background:var(--color-bg);overflow:hidden">
+<dc-import name="Sidebar" active="issues" hint-size="216px,732px"></dc-import>
+<div style="display:grid;grid-template-columns:400px minmax(0,1fr);overflow:hidden">
+  <div style="border-right:1px solid var(--color-divider);padding:28px 0 0;display:flex;flex-direction:column">
+    <div style="padding:0 24px 14px"><h2 style="font-size:34px;font-weight:400;margin:0 0 10px">元数据问题</h2>
+      <div class="seg"><label class="seg-opt" style="padding:5px 10px"><input type="radio" name="i1n" checked="">全部 7</label><label class="seg-opt" style="padding:5px 10px"><input type="radio" name="i1n">缺失 3</label><label class="seg-opt" style="padding:5px 10px"><input type="radio" name="i1n">冲突 2</label><label class="seg-opt" style="padding:5px 10px"><input type="radio" name="i1n">可疑合并 2</label></div></div>
+    <sc-for list="{{ issues }}" as="i" hint-placeholder-count="7">
+    <div style="padding:11px 24px;border-top:1px solid var(--color-divider);background:{{ i.bg }};box-shadow:inset 2px 0 0 {{ i.bd }}">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px"><span class="{{ i.cls }}" style="padding:1px 7px">{{ i.type }}</span><span style="font-size:11px;color:var(--color-neutral-700)">{{ i.sev }}</span></div>
+      <div style="font:600 15.5px/1.2 var(--font-heading)">{{ i.target }}</div>
+      <div style="font-size:12px;color:var(--color-neutral-800)">{{ i.desc }}</div>
+    </div>
+    </sc-for>
+  </div>
+  <div style="padding:28px 40px;overflow:hidden;display:flex;flex-direction:column;gap:18px">
+    <div>
+      <div style="display:flex;gap:8px;align-items:center"><span class="tag tag-outline">可疑合并</span><span style="font-size:11.5px;color:var(--color-neutral-700)">扫描于今天 09:12 · 置信度 0.91</span></div>
+      <h2 style="font-size:34px;font-weight:400;margin:8px 0 4px">《君の名は。》两个版本被合并</h2>
+      <p style="font-size:13px;text-align:justify;margin:0;max-width:640px">通常盘与初回限定盘的 27 条音轨被写入同一个 Release，其中 12 首曲目重复出现。建议拆分为两个 Release，仍归属同一 ReleaseGroup。</p>
+    </div>
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) 30px minmax(0,1fr);gap:10px;align-items:stretch">
+      <div class="card" style="padding:14px 16px;font-size:12.5px;line-height:1.9">
+        <div class="card-kicker" style="color:var(--color-neutral-700)">当前</div>
+        <div>君の名は。 <span style="font-size:10px;color:var(--color-neutral-700)">RG</span></div>
+        <div style="padding-left:14px;border-left:1px solid var(--color-divider)">Release · 2016 · UPCH-20423<br><span style="padding-left:14px">Medium 1 · <span style="color:var(--color-accent-700)">27 轨（12 首重复）</span></span></div>
+      </div>
+      <div style="display:grid;place-items:center;color:var(--color-accent-700);font:400 24px/1 var(--font-heading)">→</div>
+      <div class="card" style="padding:14px 16px;font-size:12.5px;line-height:1.9;border-color:var(--color-accent)">
+        <div class="card-kicker" style="color:var(--color-accent-700)">建议</div>
+        <div>君の名は。 <span style="font-size:10px;color:var(--color-neutral-700)">RG</span></div>
+        <div style="padding-left:14px;border-left:1px solid var(--color-accent)">Release · 通常盘 · UPCH-20423<br><span style="padding-left:14px">Medium 1 · 27 轨</span><br>Release · 初回限定盘 · UPCH-29227<br><span style="padding-left:14px">Medium 1 · 27 轨 · Medium 2 · DVD</span></div>
+      </div>
+    </div>
+    <div>
+      <div style="font:600 17px/1.2 var(--font-heading);margin-bottom:6px">依据</div>
+      <div style="font-size:12.5px;line-height:1.9"><span style="color:var(--color-accent-700)">①</span> 两组文件位于不同目录，目录名分别含"通常盘""初回限定"<br><span style="color:var(--color-accent-700)">②</span> 两组文件的编号标签不同<br><span style="color:var(--color-accent-700)">③</span> 重复曲目时长一致，但编码器与写入日期不同</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px;border-top:1px solid var(--color-divider);padding-top:16px;margin-top:auto">
+      <div style="flex:1;font-size:12.5px"><span style="color:var(--color-accent-700)">高风险</span> · 改动 Release 结构，需管理员审批 · 自动建立恢复点</div>
+      <button class="btn btn-ghost">交给 Steward</button><button class="btn btn-secondary">忽略</button><button class="btn btn-primary">提交审批</button>
+    </div>
+  </div>
+</div>
+<dc-import name="PlayerBar" style="grid-column:1 / -1" hint-size="1280px,68px"></dc-import>
+</div></div></div>
+
+<div class="dv-opt" id="1o"><div class="dv-olabel"><a class="dv-oid" href="#1o">1o</a>校对稿 · 删除线标旧值、金色标新值，页边注写明出处</div><div class="dv-card"><div style="width:1280px;height:800px;display:grid;grid-template-columns:216px minmax(0,1fr);grid-template-rows:732px 68px;background:var(--color-bg);overflow:hidden">
+<dc-import name="Sidebar" active="issues" hint-size="216px,732px"></dc-import>
+<div style="display:grid;grid-template-columns:240px minmax(0,1fr);overflow:hidden">
+  <div style="border-right:1px solid var(--color-divider);padding:28px 20px;font-size:13px">
+    <div style="font-size:10.5px;letter-spacing:.14em;color:var(--color-accent-700);margin-bottom:10px">待校对 · 5 份</div>
+    <div style="padding:9px 10px;border-radius:var(--radius-md);background:color-mix(in srgb, var(--color-accent) 10%, transparent);display:flex;justify-content:space-between"><span>淡淡幽情</span><span style="color:var(--color-accent-700);font-feature-settings:'tnum'">3 处</span></div>
+    <div style="padding:9px 10px;display:flex;justify-content:space-between"><span>范特西 · 首批限定</span><span style="font-feature-settings:'tnum'">1 处</span></div>
+    <div style="padding:9px 10px;display:flex;justify-content:space-between"><span>之乎者也</span><span style="font-feature-settings:'tnum'">1 处</span></div>
+    <div style="padding:9px 10px;display:flex;justify-content:space-between"><span>新世紀エヴァンゲリオン</span><span style="font-feature-settings:'tnum'">1 处</span></div>
+    <div style="padding:9px 10px;display:flex;justify-content:space-between"><span>Interstellar</span><span style="font-feature-settings:'tnum'">1 处</span></div>
+  </div>
+  <div style="padding:30px 44px;display:grid;grid-template-columns:minmax(0,1fr) 230px;gap:0;overflow:hidden">
+    <div style="padding-right:32px;border-right:1px solid var(--color-accent)">
+      <div style="font-size:10.5px;letter-spacing:.14em;color:var(--color-neutral-700)">校对稿 · RELEASE · 1983 · 宝丽金</div>
+      <h1 style="font-size:52px;font-weight:400;margin:6px 0 20px">淡淡幽情</h1>
+      <div style="display:grid;grid-template-columns:110px minmax(0,1fr);row-gap:0;font-size:14px">
+        <div style="padding:14px 0;border-top:1px solid var(--color-divider);color:var(--color-neutral-700);font-size:12px">专辑艺人</div>
+        <div style="padding:14px 0;border-top:1px solid var(--color-divider)"><span style="text-decoration:line-through;color:var(--color-neutral-600)">Teresa Teng</span> <span style="color:var(--color-accent-700);border-bottom:1px solid var(--color-accent)">邓丽君</span><sup style="color:var(--color-accent-700);font-size:10px"> ①</sup></div>
+        <div style="padding:14px 0;border-top:1px solid var(--color-divider);color:var(--color-neutral-700);font-size:12px">发行日期</div>
+        <div style="padding:14px 0;border-top:1px solid var(--color-divider);font-feature-settings:'tnum'"><span style="text-decoration:line-through;color:var(--color-neutral-600)">1983</span> <span style="color:var(--color-accent-700);border-bottom:1px solid var(--color-accent)">1983-02</span><sup style="color:var(--color-accent-700);font-size:10px"> ②</sup></div>
+        <div style="padding:14px 0;border-top:1px solid var(--color-divider);color:var(--color-neutral-700);font-size:12px">厂牌</div>
+        <div style="padding:14px 0;border-top:1px solid var(--color-divider)">宝丽金</div>
+        <div style="padding:14px 0;border-top:1px solid var(--color-divider);color:var(--color-neutral-700);font-size:12px">第 6 轨 · 作词</div>
+        <div style="padding:14px 0;border-top:1px solid var(--color-divider)">但愿人长久 · <span style="color:var(--color-neutral-600)">—</span> <span style="color:var(--color-accent-700);border-bottom:1px solid var(--color-accent)">苏轼</span><sup style="color:var(--color-accent-700);font-size:10px"> ③</sup></div>
+        <div style="padding:14px 0;border-top:1px solid var(--color-divider);border-bottom:1px solid var(--color-divider);color:var(--color-neutral-700);font-size:12px">编号</div>
+        <div style="padding:14px 0;border-top:1px solid var(--color-divider);border-bottom:1px solid var(--color-divider)">—<span style="font-size:11.5px;color:var(--color-neutral-700)">　（未找到可靠来源，保留空白）</span></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:22px"><button class="btn btn-primary">接受全部 3 处</button><button class="btn btn-secondary">逐条确认</button><button class="btn btn-ghost">退回</button></div>
+      <div style="font-size:11.5px;color:var(--color-neutral-700);margin-top:10px">低风险 · 只写入资料库字段，不改动文件 · 可在"审批与日志"中撤销</div>
+    </div>
+    <div style="padding-left:20px;font-size:12px;line-height:1.6;display:flex;flex-direction:column;gap:18px;padding-top:88px">
+      <div><span style="color:var(--color-accent-700);font:600 15px/1 var(--font-heading)">①</span> 统一为艺人主名，"Teresa Teng"保留为别名，艺人页将合并为一页。<div style="color:var(--color-neutral-700)">来源：艺人别名表</div></div>
+      <div><span style="color:var(--color-accent-700);font:600 15px/1 var(--font-heading)">②</span> 精确到月。<div style="color:var(--color-neutral-700)">来源：参照 Release 记录</div></div>
+      <div><span style="color:var(--color-accent-700);font:600 15px/1 var(--font-heading)">③</span> 歌词取自《水调歌头》，作词记为苏轼。<div style="color:var(--color-neutral-700)">来源：同 ReleaseGroup 的 2008 版</div></div>
+    </div>
+  </div>
+</div>
+<dc-import name="PlayerBar" style="grid-column:1 / -1" hint-size="1280px,68px"></dc-import>
+</div></div></div>
+</div>
+
+<div style="display:flex;align-items:baseline;gap:14px;margin:56px 0 16px;border-top:1px solid var(--color-divider);padding-top:18px"><span style="font:400 32px/1 var(--font-heading);color:var(--color-accent-700);font-feature-settings:'tnum'">08</span><span style="font:600 22px/1.2 var(--font-heading)">扫描与目录管理</span><span style="font-size:12.5px;color:var(--color-neutral-700)">管理视图 vs 可解释的扫描报告</span></div>
+<div class="dv-opts">
+<div class="dv-opt" id="1p"><div class="dv-olabel"><a class="dv-oid" href="#1p">1p</a>目录表 · 状态、进度与计划一屏看完</div><div class="dv-card"><div style="width:1280px;height:800px;display:grid;grid-template-columns:216px minmax(0,1fr);grid-template-rows:732px 68px;background:var(--color-bg);overflow:hidden">
+<dc-import name="Sidebar" active="scan" hint-size="216px,732px"></dc-import>
+<div style="padding:32px 44px;box-sizing:border-box;display:flex;flex-direction:column;gap:22px;overflow:hidden">
+  <div style="display:flex;align-items:flex-end;justify-content:space-between">
+    <div><h1 style="font-size:48px;font-weight:400;margin:0">扫描目录</h1><div style="font-size:12.5px;color:var(--color-neutral-700);font-feature-settings:'tnum'">4 个目录 · 23,616 个文件 · 612 GB · ROOMusic 只读取文件，不会修改或移动它们</div></div>
+    <div style="display:flex;gap:8px"><button class="btn btn-secondary">＋ 添加目录</button><button class="btn btn-primary">立即扫描全部</button></div>
+  </div>
+  <table class="table" style="font-size:13.5px">
+    <thead><tr><th>路径</th><th style="text-align:right">文件</th><th style="text-align:right">大小</th><th>上次扫描</th><th style="width:220px">状态</th></tr></thead>
+    <tbody>
+      <sc-for list="{{ roots }}" as="r" hint-placeholder-count="4">
+      <tr><td style="font-feature-settings:'tnum'">{{ r.path }}</td><td style="text-align:right;font-feature-settings:'tnum'">{{ r.files }}</td><td style="text-align:right;font-feature-settings:'tnum'">{{ r.size }}</td><td style="color:var(--color-neutral-700)">{{ r.last }}</td>
+        <td><div style="display:flex;flex-direction:column;gap:6px"><span class="{{ r.cls }}" style="align-self:flex-start">{{ r.status }}</span><div style="height:1px;background:var(--color-divider);position:relative"><div style="position:absolute;left:0;top:-0.5px;height:2px;width:{{ r.pct }};background:var(--color-accent)"></div></div></div></td></tr>
+      </sc-for>
+    </tbody>
+  </table>
+  <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px">
+    <div class="card" style="padding:16px 18px"><div class="card-kicker" style="color:var(--color-accent-700)">正在扫描</div><div class="card-title">/mnt/music/anime</div><div style="font-size:12px;color:var(--color-neutral-700);font-feature-settings:'tnum'">3,080 / 4,812 个文件 · 约 6 分钟<br>当前：…/君の名は。/Disc 2/05.flac</div><div style="display:flex;gap:8px"><button class="btn btn-secondary">暂停</button><button class="btn btn-ghost">查看过程</button></div></div>
+    <div class="card" style="padding:16px 18px"><div class="card-kicker" style="color:var(--color-accent-700)">计划</div><div class="card-title">每天 03:00 增量扫描</div><div style="font-size:12px;color:var(--color-neutral-700)">另外监听文件变动，新文件在 30 秒内入库</div><div class="seg" style="align-self:flex-start"><label class="seg-opt" style="padding:4px 10px"><input type="radio" name="s1p" checked="">增量</label><label class="seg-opt" style="padding:4px 10px"><input type="radio" name="s1p">完整</label></div></div>
+    <div class="card" style="padding:16px 18px"><div class="card-kicker" style="color:var(--color-accent-700)">需要处理</div><div class="card-title">/home/shared/家庭/旧手机备份</div><div style="font-size:12px;color:var(--color-neutral-700)">没有读取权限，已跳过 212 个文件</div><div style="display:flex;gap:8px"><button class="btn btn-secondary">查看说明</button><button class="btn btn-ghost">忽略此目录</button></div></div>
+  </div>
+</div>
+<dc-import name="PlayerBar" style="grid-column:1 / -1" hint-size="1280px,68px"></dc-import>
+</div></div></div>
+
+<div class="dv-opt" id="1q"><div class="dv-olabel"><a class="dv-oid" href="#1q">1q</a>扫描报告 · 从文件到 ReleaseGroup 的漏斗，每个判断都有依据与置信度</div><div class="dv-card"><div style="width:1280px;height:800px;display:grid;grid-template-columns:216px minmax(0,1fr);grid-template-rows:732px 68px;background:var(--color-bg);overflow:hidden">
+<dc-import name="Sidebar" active="scan" hint-size="216px,732px"></dc-import>
+<div style="padding:32px 44px;box-sizing:border-box;display:flex;flex-direction:column;gap:24px;overflow:hidden">
+  <div><div style="font-size:10.5px;letter-spacing:.14em;color:var(--color-accent-700);font-feature-settings:'tnum'">扫描报告 · /mnt/music/anime · 今天 09:12</div><h1 style="font-size:48px;font-weight:400;margin:4px 0 0">这次扫描做了什么</h1></div>
+  <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border-top:1px solid var(--color-text);border-bottom:1px solid var(--color-divider)">
+    <sc-for list="{{ funnel }}" as="f" hint-placeholder-count="5">
+    <div style="padding:16px 18px 18px 0;border-right:1px solid var(--color-divider);margin-right:18px">
+      <div style="font-size:12px;color:var(--color-neutral-700)">{{ f.name }} →</div>
+      <div style="font:400 44px/1.1 var(--font-heading);font-feature-settings:'tnum';color:{{ f.c }}">{{ f.n }}</div>
+      <div style="font-size:11.5px;color:var(--color-neutral-800)">{{ f.sub }}</div>
+    </div>
+    </sc-for>
+  </div>
+  <div>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px"><span style="font:600 20px/1.2 var(--font-heading)">关键判断</span><span style="font-size:12px;color:var(--color-neutral-700)">共 226 条 · 显示最值得看的 4 条</span></div>
+    <table class="table" style="font-size:13px">
+      <thead><tr><th style="width:90px">结果</th><th>对象</th><th>判断</th><th>依据</th><th style="text-align:right">置信度</th></tr></thead>
+      <tbody>
+        <sc-for list="{{ decisions }}" as="d" hint-placeholder-count="4">
+        <tr><td><span class="{{ d.cls }}">{{ d.k }}</span></td><td>{{ d.obj }}</td><td style="color:var(--color-neutral-800)">{{ d.what }}</td><td style="font-size:12px;color:var(--color-neutral-700)">{{ d.why }}</td><td style="text-align:right;font-feature-settings:'tnum'">{{ d.conf }}</td></tr>
+        </sc-for>
+      </tbody>
+    </table>
+  </div>
+  <div style="display:flex;align-items:center;gap:14px;border:1px solid var(--color-accent);border-radius:var(--radius-md);padding:14px 18px">
+    <div style="flex:1;font-size:13px"><span style="font:600 16px/1.2 var(--font-heading)">9 个判断等待你确认。</span> 置信度低于 0.85 的判断不会自动写入资料库。</div>
+    <button class="btn btn-primary">逐条确认</button>
+  </div>
+</div>
+<dc-import name="PlayerBar" style="grid-column:1 / -1" hint-size="1280px,68px"></dc-import>
+</div></div></div>
+</div>
+<div style="display:flex;align-items:baseline;gap:14px;margin:56px 0 16px;border-top:1px solid var(--color-divider);padding-top:18px"><span style="font:400 32px/1 var(--font-heading);color:var(--color-accent-700);font-feature-settings:'tnum'">09</span><span style="font:600 22px/1.2 var(--font-heading)">权限审批 / 操作日志</span><span style="font-size:12.5px;color:var(--color-neutral-700)">审批队列 vs 带恢复点的账簿</span></div>
+<div class="dv-opts">
+<div class="dv-opt" id="1r"><div class="dv-olabel"><a class="dv-oid" href="#1r">1r</a>审批队列 + 日志表 · 待办在上，谁能做什么在右</div><div class="dv-card"><div style="width:1280px;height:800px;display:grid;grid-template-columns:216px minmax(0,1fr);grid-template-rows:732px 68px;background:var(--color-bg);overflow:hidden">
+<dc-import name="Sidebar" active="audit" hint-size="216px,732px"></dc-import>
+<div style="padding:30px 44px;box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:36px;overflow:hidden">
+  <div style="display:flex;flex-direction:column;gap:18px;min-width:0">
+    <h1 style="font-size:48px;font-weight:400;margin:0">审批与日志</h1>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px">
+      <div class="card" style="padding:16px 18px;border-color:var(--color-accent)">
+        <div style="display:flex;justify-content:space-between;align-items:center"><span class="card-kicker" style="color:var(--color-accent-700)">高风险 · 结构改动</span><span style="font-size:11px;color:var(--color-neutral-700)">今天 21:02</span></div>
+        <div class="card-title" style="font-size:19px">拆分 Release《君の名は。》</div>
+        <div style="font-size:12px;color:var(--color-neutral-800);font-feature-settings:'tnum'">发起：Steward（代 林）<br>影响：1 ReleaseGroup · 2 Release · 27 轨</div>
+        <div style="display:flex;gap:8px"><button class="btn btn-primary">批准</button><button class="btn btn-secondary">拒绝</button><button class="btn btn-ghost">查看差异</button></div>
+      </div>
+      <div class="card" style="padding:16px 18px">
+        <div style="display:flex;justify-content:space-between;align-items:center"><span class="card-kicker" style="color:var(--color-accent-700)">文件操作 · 需二次确认</span><span style="font-size:11px;color:var(--color-neutral-700)">今天 18:40</span></div>
+        <div class="card-title" style="font-size:19px">移除 12 个重复文件</div>
+        <div style="font-size:12px;color:var(--color-neutral-800);font-feature-settings:'tnum'">发起：小雨（家庭成员）<br>影响：1.4 GB · 移入回收站，保留 30 天</div>
+        <div style="display:flex;gap:8px"><button class="btn btn-primary">批准</button><button class="btn btn-secondary">拒绝</button><button class="btn btn-ghost">查看文件</button></div>
+      </div>
+    </div>
+    <div>
+      <div style="font:600 20px/1.2 var(--font-heading);margin-bottom:6px">操作日志</div>
+      <table class="table" style="font-size:13px">
+        <thead><tr><th style="width:120px">时间</th><th style="width:130px">操作者</th><th>操作</th><th>范围</th><th>状态</th></tr></thead>
+        <tbody>
+          <sc-for list="{{ log }}" as="l" hint-placeholder-count="6">
+          <tr><td style="font-size:12px;color:var(--color-neutral-700);font-feature-settings:'tnum'">{{ l.time }}</td><td>{{ l.who }}</td><td>{{ l.act }}</td><td style="font-size:12px;color:var(--color-neutral-700);font-feature-settings:'tnum'">{{ l.scope }}</td><td><span class="{{ l.cls }}">{{ l.st }}</span></td></tr>
+          </sc-for>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <aside style="border-left:1px solid var(--color-divider);padding-left:26px;display:flex;flex-direction:column;gap:14px">
+    <div style="font:600 18px/1.2 var(--font-heading)">成员与权限</div>
+    <div style="padding:8px 0;border-bottom:1px solid var(--color-divider)"><div style="display:flex;justify-content:space-between"><span style="font-size:14px">林</span><span class="tag tag-outline">管理员</span></div><div style="font-size:11.5px;color:var(--color-neutral-700);margin-top:3px">审批一切 · 管理目录与成员</div></div>
+    <div style="padding:8px 0;border-bottom:1px solid var(--color-divider)"><div style="display:flex;justify-content:space-between"><span style="font-size:14px">小雨</span><span class="tag tag-neutral">编辑者</span></div><div style="font-size:11.5px;color:var(--color-neutral-700);margin-top:3px">可改字段 · 结构与文件操作需审批</div></div>
+    <div style="padding:8px 0;border-bottom:1px solid var(--color-divider)"><div style="display:flex;justify-content:space-between"><span style="font-size:14px">爸爸</span><span class="tag tag-neutral">听众</span></div><div style="font-size:11.5px;color:var(--color-neutral-700);margin-top:3px">浏览、播放、收藏</div></div>
+    <div style="padding:8px 0;border-bottom:1px solid var(--color-divider)"><div style="display:flex;justify-content:space-between"><span style="font-size:14px">Music Steward</span><span class="tag tag-neutral">助手</span></div><div style="font-size:11.5px;color:var(--color-neutral-700);margin-top:3px">只读分析 · 只能"提交"，不能"批准"</div></div>
+    <div style="margin-top:auto;font-size:12px;color:var(--color-neutral-700);text-align:justify">风险分级：字段补全为低；艺人合并为中；Release 结构与文件操作为高。</div>
+  </aside>
+</div>
+<dc-import name="PlayerBar" style="grid-column:1 / -1" hint-size="1280px,68px"></dc-import>
+</div></div></div>
+
+<div class="dv-opt" id="1s"><div class="dv-olabel"><a class="dv-oid" href="#1s">1s</a>账簿与恢复点 · 每次写入都是一条可回滚的记录</div><div class="dv-card"><div style="width:1280px;height:800px;display:grid;grid-template-columns:216px minmax(0,1fr);grid-template-rows:732px 68px;background:var(--color-bg);overflow:hidden">
+<dc-import name="Sidebar" active="audit" hint-size="216px,732px"></dc-import>
+<div style="display:grid;grid-template-columns:minmax(0,1fr) 340px;overflow:hidden">
+  <div style="padding:30px 40px;overflow:hidden">
+    <div style="font-size:10.5px;letter-spacing:.14em;color:var(--color-accent-700)">资料库账簿</div>
+    <h1 style="font-size:48px;font-weight:400;margin:4px 0 22px">每一次改动</h1>
+    <sc-for list="{{ log }}" as="l" hint-placeholder-count="6">
+    <div style="display:grid;grid-template-columns:118px 26px minmax(0,1fr);gap:0 14px">
+      <div style="text-align:right;font-size:11.5px;color:var(--color-neutral-700);padding-top:3px;font-feature-settings:'tnum'">{{ l.time }}</div>
+      <div style="display:flex;flex-direction:column;align-items:center"><span style="width:11px;height:11px;border-radius:50%;border:1px solid var(--color-text);background:var(--color-bg);margin-top:5px"></span><span style="flex:1;width:1px;background:var(--color-divider)"></span></div>
+      <div style="padding-bottom:18px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-size:14px">{{ l.act }}</span><span class="{{ l.cls }}" style="padding:1px 7px">{{ l.st }}</span></div>
+        <div style="font-size:11.5px;color:var(--color-neutral-700);font-feature-settings:'tnum'">{{ l.who }} · {{ l.scope }}</div>
+        <sc-if value="{{ l.hasRp }}" hint-placeholder-val="{{ false }}"><div style="display:inline-flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:var(--color-accent-700);border:1px solid var(--color-accent);border-radius:999px;padding:1px 9px;font-feature-settings:'tnum'">◎ 恢复点 {{ l.rp }}</div></sc-if>
+      </div>
+    </div>
+    </sc-for>
+  </div>
+  <aside style="border-left:1px solid var(--color-divider);padding:30px 28px;display:flex;flex-direction:column;gap:16px">
+    <div style="font-size:10.5px;letter-spacing:.14em;color:var(--color-accent-700)">所选恢复点</div>
+    <div style="font:400 30px/1.1 var(--font-heading)">#41 · 昨天 22:40</div>
+    <div style="font-size:13px">合并艺人"邓丽君"与"Teresa Teng"</div>
+    <div class="card" style="padding:12px 14px;font-size:12.5px;line-height:1.8"><div class="card-kicker" style="color:var(--color-neutral-700)">回滚到此点将撤销</div>艺人合并（5 张专辑 · 71 轨）<br>及其后 1 条改动：扫描 #42 的新增记录</div>
+    <div style="font:600 17px/1.2 var(--font-heading);margin-top:6px">恢复边界</div>
+    <div style="font-size:12.5px;text-align:justify;line-height:1.7;color:var(--color-neutral-800)">ROOMusic 只改写资料库记录，音频文件本身不会被修改。文件类操作（移除、重命名）需二次审批，文件先进回收站，保留 30 天。</div>
+    <div style="margin-top:auto;display:flex;gap:8px"><button class="btn btn-primary">回滚到 #41</button><button class="btn btn-secondary">导出日志</button></div>
+  </aside>
+</div>
+<dc-import name="PlayerBar" style="grid-column:1 / -1" hint-size="1280px,68px"></dc-import>
+</div></div></div>
+</div>
+
+<div style="display:flex;align-items:baseline;gap:14px;margin:56px 0 16px;border-top:1px solid var(--color-divider);padding-top:18px"><span style="font:400 32px/1 var(--font-heading);color:var(--color-accent-700);font-feature-settings:'tnum'">10</span><span style="font:600 22px/1.2 var(--font-heading)">Music Steward 智能管家</span><span style="font-size:12.5px;color:var(--color-neutral-700)">对话式 · 随页停靠 vs 独立工作台</span></div>
+<div class="dv-opts">
+<div class="dv-opt" id="1t"><div class="dv-olabel"><a class="dv-oid" href="#1t">1t</a>侧栏停靠 · 在专辑页上直接对话，回答里带可执行的计划</div><div class="dv-card"><div style="width:1280px;height:800px;display:grid;grid-template-columns:216px minmax(0,1fr) 390px;grid-template-rows:732px 68px;background:var(--color-bg);overflow:hidden">
+<dc-import name="Sidebar" active="steward" hint-size="216px,732px"></dc-import>
+<div style="padding:30px 36px;overflow:hidden">
+  <div style="display:flex;gap:24px">
+    <div style="width:150px;height:150px;flex:none;background:var(--color-neutral-900);color:var(--color-neutral-100);border:6px solid var(--color-surface);outline:1px solid var(--color-divider);box-sizing:border-box;padding:14px;font:italic 400 28px/1 var(--font-heading)">范特西</div>
+    <div><div style="font-size:10.5px;letter-spacing:.14em;color:var(--color-accent-700)">RELEASE GROUP</div><h1 style="font-size:48px;font-weight:400;margin:4px 0 2px">范特西</h1><div style="font-size:13px">周杰伦 · 2001 · 4 个版本</div></div>
+  </div>
+  <div style="display:flex;gap:22px;margin-top:22px;border-bottom:1px solid var(--color-divider)">
+    <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4"><div style="padding:8px 0;border-bottom:1px solid {{ t.bd }};margin-bottom:-1px;color:{{ t.c }};font-size:13px;white-space:nowrap">{{ t.name }}</div></sc-for>
+  </div>
+  <sc-for list="{{ tracks }}" as="t" hint-placeholder-count="10">
+  <div style="display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:8px;padding:8px 6px;border-bottom:1px solid var(--color-divider);font-size:13.5px;color:{{ t.c }};background:{{ t.bg }}"><span style="font-size:11.5px;color:var(--color-neutral-700);font-feature-settings:'tnum'">{{ t.mark }}</span><span>{{ t.title }}</span><span style="font-size:12px;font-feature-settings:'tnum'">{{ t.dur }}</span></div>
+  </sc-for>
+</div>
+<div style="border-left:1px solid var(--color-divider);display:flex;flex-direction:column;overflow:hidden">
+  <div style="display:flex;align-items:center;gap:8px;padding:16px 20px;border-bottom:1px solid var(--color-divider)"><span style="font:600 18px/1.2 var(--font-heading);flex:1">Music Steward</span><span class="tag tag-neutral">只读</span><span style="font-size:16px;color:var(--color-neutral-700)">×</span></div>
+  <div style="flex:1;padding:18px 20px;display:flex;flex-direction:column;gap:14px;overflow:hidden;font-size:13px">
+    <div style="align-self:flex-end;max-width:82%;border:1px solid var(--color-divider);border-radius:var(--radius-lg);padding:9px 12px">范特西那几个版本帮我理一下，有没有问题？</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="font-size:10.5px;letter-spacing:.12em;color:var(--color-accent-700)">STEWARD · 读取了 4 个 Release、扫描日志</div>
+      <p style="margin:0;text-align:justify;line-height:1.65">四个版本都正确归在同一个 ReleaseGroup 下，编号与条码可区分，没有错误合并。有两处可以补：</p>
+      <div style="border-left:1px solid var(--color-accent);padding-left:12px;line-height:1.8"><span style="color:var(--color-accent-700)">1.</span> 首批限定版的 VCD 还没导入，所以该版本只显示 1 个 Medium。<br><span style="color:var(--color-accent-700)">2.</span> 内地引进版缺少条码；我没找到可靠来源，建议留空。</div>
+      <div class="card" style="padding:12px 14px;gap:8px">
+        <div class="card-kicker" style="color:var(--color-accent-700)">计划 · 低风险</div>
+        <div style="font-size:12.5px">为首批限定版添加 Medium 2（VCD · 4 支 MV），标记为"未导入的视频介质"</div>
+        <div style="font-size:11px;color:var(--color-neutral-700)">只改资料库记录 · 会建立恢复点 · 可撤销</div>
+        <div style="display:flex;gap:8px"><button class="btn btn-primary">预览改动</button><button class="btn btn-ghost">不用了</button></div>
+      </div>
+    </div>
+  </div>
+  <div style="padding:12px 16px 16px;border-top:1px solid var(--color-divider);display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><span class="tag tag-outline">默认播放哪个版本？</span><span class="tag tag-outline">比较黑胶与 CD 的音质</span></div>
+    <div style="display:flex;align-items:center;gap:8px;border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:8px 10px"><span style="flex:1;font-size:13px;color:var(--color-neutral-700)">问问你的资料库…</span><span style="width:26px;height:26px;border:1px solid var(--color-accent);border-radius:50%;display:grid;place-items:center;color:var(--color-accent-700);font-size:13px">↑</span></div>
+  </div>
+</div>
+<dc-import name="PlayerBar" style="grid-column:1 / -1" hint-size="1280px,68px"></dc-import>
+</div></div></div>
+
+<div class="dv-opt" id="1u"><div class="dv-olabel"><a class="dv-oid" href="#1u">1u</a>独立工作台 · 对话中嵌入封面、对比表与审批关卡</div><div class="dv-card"><div style="width:1280px;height:800px;display:grid;grid-template-columns:216px minmax(0,1fr);grid-template-rows:732px 68px;background:var(--color-bg);overflow:hidden">
+<dc-import name="Sidebar" active="steward" hint-size="216px,732px"></dc-import>
+<div style="display:grid;grid-template-columns:230px minmax(0,1fr);overflow:hidden">
+  <div style="border-right:1px solid var(--color-divider);padding:26px 14px;display:flex;flex-direction:column;gap:2px">
+    <button class="btn btn-secondary" style="margin-bottom:14px">＋ 新对话</button>
+    <div style="font-size:10px;letter-spacing:.14em;color:var(--color-neutral-700);padding:0 10px 6px">最近</div>
+    <sc-for list="{{ convos }}" as="c" hint-placeholder-count="5">
+    <div style="padding:8px 10px;border-radius:var(--radius-md);font-size:13px;color:{{ c.c }};background:{{ c.bg }}">{{ c.t }}</div>
+    </sc-for>
+    <div style="margin-top:auto;font-size:11.5px;color:var(--color-neutral-700);text-align:justify;padding:0 10px">Steward 默认只读。任何写入都会先给出改动预览；高风险操作提交给管理员审批。</div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden">
+    <div style="flex:1;overflow:hidden;padding:30px 0">
+      <div style="max-width:700px;margin:0 auto;display:flex;flex-direction:column;gap:18px;font-size:13.5px">
+        <div style="align-self:flex-end;max-width:75%;border:1px solid var(--color-divider);border-radius:var(--radius-lg);padding:10px 14px">《君の名は。》好像有重复的歌，怎么回事？</div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div style="font-size:10.5px;letter-spacing:.12em;color:var(--color-accent-700)">STEWARD · 读取了 1 个 Release、今天 09:12 的扫描报告</div>
+          <p style="margin:0;text-align:justify;line-height:1.7">原因是通常盘和初回限定盘被扫描成了同一个 Release，27 条音轨里有 12 首出现两次。它们应当是同一 ReleaseGroup 下的两个版本：</p>
+          <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px">
+            <div style="display:flex;gap:12px;align-items:center;border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:10px"><div style="width:52px;height:52px;flex:none;background:var(--color-accent-600);color:var(--color-accent-100);border:3px solid var(--color-surface);outline:1px solid var(--color-divider);box-sizing:border-box;display:grid;place-items:center;font:italic 400 18px/1 var(--font-heading)">君</div><div><div style="font:600 15px/1.2 var(--font-heading)">通常盘</div><div style="font-size:11px;color:var(--color-neutral-700);font-feature-settings:'tnum'">UPCH-20423 · 1 CD · 27 轨</div></div></div>
+            <div style="display:flex;gap:12px;align-items:center;border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:10px"><div style="width:52px;height:52px;flex:none;background:var(--color-accent-600);color:var(--color-accent-100);border:3px solid var(--color-surface);outline:1px solid var(--color-divider);box-sizing:border-box;display:grid;place-items:center;font:italic 400 18px/1 var(--font-heading)">君</div><div><div style="font:600 15px/1.2 var(--font-heading)">初回限定盘</div><div style="font-size:11px;color:var(--color-neutral-700);font-feature-settings:'tnum'">UPCH-29227 · CD + DVD · 27 轨</div></div></div>
+          </div>
+          <p style="margin:0;text-align:justify;line-height:1.7">判断依据：两组文件在不同目录，编号标签不同，重复曲目的编码器和写入日期也不同。</p>
+          <div style="border:1px solid var(--color-accent);border-radius:var(--radius-md);padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:center;gap:8px"><span class="tag tag-outline">需要审批</span><span style="font:600 16px/1.2 var(--font-heading)">拆分为两个 Release</span></div>
+            <div style="font-size:12.5px;color:var(--color-neutral-800)">高风险：改动 Release 结构。我不能直接执行，已为你准备好提交单，批准前不会有任何写入。</div>
+            <div style="display:flex;gap:8px"><button class="btn btn-primary">提交给管理员（林）</button><button class="btn btn-secondary">查看完整差异</button></div>
+          </div>
+          <div style="font-size:12px;color:var(--color-neutral-700);display:flex;align-items:center;gap:8px"><span style="width:6px;height:6px;border-radius:50%;background:var(--color-accent)"></span>已提交 · 今天 21:02 · 可在 <a href="#1r">审批与日志</a> 中查看</div>
+        </div>
+      </div>
+    </div>
+    <div style="border-top:1px solid var(--color-divider);padding:14px 0 18px">
+      <div style="max-width:700px;margin:0 auto;display:flex;align-items:center;gap:10px;border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:10px 12px"><span style="flex:1;font-size:13.5px;color:var(--color-neutral-700)">问问你的资料库，或让我整理些什么…</span><span style="font-size:11px;color:var(--color-neutral-700)">只读</span><span style="width:28px;height:28px;border:1px solid var(--color-accent);border-radius:50%;display:grid;place-items:center;color:var(--color-accent-700)">↑</span></div>
+    </div>
+  </div>
+</div>
+<dc-import name="PlayerBar" style="grid-column:1 / -1" hint-size="1280px,68px"></dc-import>
+</div></div></div>
+</div>
+<p class="dv-next">接下来可以说："<a class="dv-oid" href="#1c">1c</a> 的标签页加上 <a class="dv-oid" href="#1d">1d</a> 的差异提示" · "把 <a class="dv-oid" href="#1n">1n</a> 的详情换成 <a class="dv-oid" href="#1o">1o</a> 的校对稿" · "选定方向后做成可点击原型"</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const TONES = [
+  ['var(--color-neutral-900)', 'var(--color-neutral-100)'],
+  ['var(--color-accent-800)', 'var(--color-accent-100)'],
+  ['var(--color-neutral-300)', 'var(--color-neutral-900)'],
+  ['var(--color-accent-200)', 'var(--color-accent-900)'],
+  ['var(--color-neutral-700)', 'var(--color-neutral-100)'],
+  ['var(--color-accent-600)', 'var(--color-accent-100)'],
+  ['var(--color-neutral-200)', 'var(--color-accent-800)'],
+  ['var(--color-accent-900)', 'var(--color-accent-300)']
+];
+const AL = {
+  jay: ['Jay', '周杰伦', 2000, 6], fantasy: ['范特西', '周杰伦', 2001, 0], yeh: ['叶惠美', '周杰伦', 2003, 1], qlx: ['七里香', '周杰伦', 2004, 5],
+  fuzao: ['浮躁', '王菲', 1996, 2], ddyq: ['淡淡幽情', '邓丽君', 1983, 6], zhz: ['之乎者也', '罗大佑', 1982, -1],
+  bebop: ['COWBOY BEBOP', 'SEATBELTS', 1998, 1], chihiro: ['千と千尋の神隠し', '久石譲', 2001, 3], kimi: ['君の名は。', 'RADWIMPS', 2016, 5],
+  eva: ['新世紀エヴァンゲリオン', '鷺巣詩郎', 1995, 4], kiku: ['菊次郎の夏', '久石譲', 1999, 2], mood: ['花样年华', '梅林茂 等', 2000, 7],
+  tiger: ['卧虎藏龙', '谭盾 · 马友友', 2000, 2], emperor: ['The Last Emperor', '坂本龍一 等', 1987, 4], inter: ['Interstellar', 'Hans Zimmer', 2014, 0],
+  totoro: ['となりのトトロ', '久石譲', 1988, 6], mononoke: ['もののけ姫', '久石譲', 1997, 1], howl: ['ハウルの動く城', '久石譲', 2004, 7]
+};
+const cov = (id, x = {}) => {
+  const [title, artist, year, t] = AL[id];
+  const c = t < 0 ? ['var(--color-neutral-100)', 'var(--color-neutral-600)'] : TONES[t];
+  return { id, title, artist, year, bg: c[0], fg: c[1], initial: title.slice(0, 1), mark: t < 0 ? '暂无封面' : '', ...x };
+};
+const TR = [['爱在西元前','方文山','3:54'],['爸，我回来了','周杰伦','3:51'],['简单爱','徐若瑄','4:30'],['忍者','方文山','2:40'],['开不了口','徐若瑄','4:47'],['上海一九四三','方文山','3:14'],['对不起','方文山','3:45'],['威廉古堡','方文山','3:59'],['双截棍','方文山','3:21'],['安静','周杰伦','5:34']];
+const ED = [
+  { name: '台湾首版', year: 2001, region: '台湾', label: '阿尔发音乐', cat: 'AFCD-0109', barcode: '4710937 30912 5', media: '1 × CD', tracks: '10', local: 'FLAC 16/44.1', extra: '—', status: '完整', cls: 'tag tag-neutral' },
+  { name: '首批限定', year: 2001, region: '台湾', label: '阿尔发音乐', cat: 'AFCD-0109L', barcode: '4710937 30913 2', media: '1 × CD · 1 × VCD', tracks: '10 + 4', local: 'FLAC 16/44.1', extra: 'VCD · 4 支 MV', status: 'VCD 未导入', cls: 'tag tag-accent' },
+  { name: '内地引进版', year: 2001, region: '中国内地', label: '上海声像', cat: 'CNS-2001-417', barcode: '—', media: '1 × CD', tracks: '10', local: 'FLAC 16/44.1', extra: '—', status: '缺少条码', cls: 'tag tag-accent' },
+  { name: '20 周年黑胶', year: 2021, region: '台湾', label: '杰威尔音乐', cat: 'JVR-LP-0109', barcode: '4710937 41007 4', media: '2 × LP · 4 面', tracks: '10', local: 'FLAC 24/96', extra: 'Side A–D 分面', status: '完整', cls: 'tag tag-neutral' }
+];
+const FIELDS = [['地区','region'],['厂牌','label'],['编号','cat'],['条码','barcode'],['介质','media'],['音轨','tracks'],['本地格式','local'],['独有内容','extra']];
+const ACC = 'var(--color-accent-700)', INK = 'var(--color-text)', MUTE = 'var(--color-neutral-700)';
+
+const GN = [['方文山','作词 · 92 首'],['钟兴民','编曲 · 41 首'],['黄俊郎','作词 · 18 首'],['徐若瑄','作词 · 9 首'],['杨瑞代','监制 · 3 张'],['费玉清','合唱 · 1 首'],['温岚','合唱 · 1 首'],['林迈可','编曲 · 12 首']];
+const graph = (() => {
+  const cx = 330, cy = 215, rx = 255, ry = 165;
+  return GN.map(([name, role], i) => {
+    const a = -Math.PI / 2 + i * 2 * Math.PI / GN.length;
+    const x = cx + rx * Math.cos(a), y = cy + ry * Math.sin(a);
+    const len = Math.hypot(x - cx, y - cy), ang = Math.atan2(y - cy, x - cx) * 180 / Math.PI;
+    const sel = i === 0;
+    return { name, role, x: x + 'px', y: y + 'px', w: len.toFixed(1) + 'px', ang: ang.toFixed(1) + 'deg',
+      lc: sel ? 'var(--color-accent)' : 'var(--color-divider)', bd: sel ? 'var(--color-accent)' : 'var(--color-divider)', c: sel ? ACC : INK };
+  });
+})();
+
+const DATA = {
+  continueL: [cov('fantasy', { note: '第 5 首 · 剩 24 分', pct: '42%' }), cov('bebop', { note: '剩 51 分', pct: '12%' }), cov('mood', { note: '第 3 首 · 剩 30 分', pct: '30%' }), cov('chihiro', { note: '第 12 首 · 剩 38 分', pct: '55%' })],
+  recentL: [cov('kimi', { note: '2 个版本' }), cov('eva', { note: '3 个版本' }), cov('tiger', { note: '1 个版本' }), cov('zhz', { note: '缺封面' }), cov('emperor', { note: '2 个版本' }), cov('inter', { note: '1 个版本' })],
+  cats: [['I','华语流行','1,204','周杰伦 · 王菲 · 邓丽君 · 罗大佑 · 陈奕迅'],['II','动画原声','486','久石譲 · 菅野よう子 · 鷺巣詩郎 · RADWIMPS'],['III','电影原声','312','梅林茂 · 谭盾 · 坂本龍一 · Hans Zimmer'],['IV','剧集原声','118','《请回答1988》·《琅琊榜》·《半泽直树》'],['V','游戏原声','96','植松伸夫 · 下村陽子 · 光田康典'],['VI','未分类','102','等待 Steward 建议分类']].map(([num, name, count, sub]) => ({ num, name, count, sub })),
+  decades: [['70s',38],['80s',164],['90s',402],['00s',688],['10s',571],['20s',255]].map(([label, n]) => ({ label, n: String(n), h: Math.round(n / 688 * 100) + 'px' })),
+  plays: [['21:14','开不了口','周杰伦'],['20:58','简单爱','周杰伦'],['20:41','Tank!','SEATBELTS'],['19:30',"Yumeji's Theme",'梅林茂'],['19:02','あの夏へ','久石譲'],['昨天 23:15','前前前世','RADWIMPS']].map(([time, title, artist]) => ({ time, title, artist })),
+  weekNew: ['kimi','eva','tiger','zhz','emperor','inter','howl','mononoke'].map(id => cov(id)),
+  review: '第二张专辑，也是周杰伦把个人风格一次说清楚的作品：中国风、R&B、说唱与摇滚被拼进同一张唱片，却不显杂乱。几首主打几乎同时成为那一年街头的背景音。',
+  tabs: ED.map((e, i) => ({ name: e.name, year: e.year, c: i === 0 ? ACC : MUTE, bd: i === 0 ? 'var(--color-accent)' : 'transparent' })),
+  tracks: TR.map((t, i) => ({ mark: i === 4 ? '▸' : String(i + 1).padStart(2, '0'), title: t[0], cred: `词 ${t[1]} · 曲 周杰伦`, dur: t[2], c: i === 4 ? ACC : INK, bg: i === 4 ? 'color-mix(in srgb, var(--color-accent) 7%, transparent)' : 'transparent' })),
+  credits: [['周杰伦','作曲 · 演唱 · 制作'],['方文山','作词'],['徐若瑄','作词'],['钟兴民','编曲'],['杨瑞代','监制']].map(([name, role]) => ({ name, role })),
+  related: ['jay','yeh','qlx'].map(id => cov(id)),
+  edHead: ED.map(e => ({ name: e.name, year: e.year })),
+  diffRows: FIELDS.map(([label, f]) => ({ label, cells: ED.map((e, i) => { const d = i > 0 && e[f] !== ED[0][f]; return { v: e[f], c: d ? ACC : INK, d: d ? 'underline' : 'none' }; }) })),
+  stRow: ED.map(e => ({ v: e.status, cls: e.cls })),
+  ticks: ['0%','20%','40%','60%','80%','100%'].map(x => ({ x })),
+  lpSides: [['A','LP 1',[['A1','爱在西元前','3:54'],['A2','爸，我回来了','3:51'],['A3','简单爱','4:30']]],['B','LP 1',[['B1','忍者','2:40'],['B2','开不了口','4:47']]],['C','LP 2',[['C1','上海一九四三','3:14'],['C2','对不起','3:45'],['C3','威廉古堡','3:59']]],['D','LP 2',[['D1','双截棍','3:21'],['D2','安静','5:34']]]].map(([side, disc, ts]) => ({ side, disc, tracks: ts.map(([k, t, d]) => ({ k, t, d })) })),
+  jayAlbums: [cov('jay', { note: '2000 · 1 个版本' }), cov('fantasy', { note: '2001 · 4 个版本' }), cov('yeh', { note: '2003 · 2 个版本' }), cov('qlx', { note: '2004 · 2 个版本' })],
+  collabs: [['方文山','作词','92 首'],['钟兴民','编曲','41 首'],['黄俊郎','作词','18 首'],['徐若瑄','作词','9 首'],['林迈可','编曲','12 首']].map(([name, role, n]) => ({ name, role, n })),
+  graph,
+  fwsTracks: [['爱在西元前','范特西','2001'],['上海一九四三','范特西','2001'],['威廉古堡','范特西','2001'],['双截棍','范特西','2001'],['以父之名','叶惠美','2003'],['东风破','叶惠美','2003'],['七里香','七里香','2004']].map(([t, a, y]) => ({ t, a, y })),
+  hisaAlbums: [cov('chihiro', { note: '2001 · 2 个版本' }), cov('totoro', { note: '1988 · 3 个版本' }), cov('mononoke', { note: '1997 · 1 个版本' }), cov('howl', { note: '2004 · 1 个版本' }), cov('kiku', { note: '1999 · 2 个版本' })],
+  hisaTracks: [['あの夏へ','千と千尋の神隠し','2001 · TKCA-72226','3:39'],['Summer','菊次郎の夏','1999 · 首版','6:23'],['風のとおり道','となりのトトロ','1988 · 首版','3:27'],['アシタカせっ記','もののけ姫','1997 · 首版','3:35'],['人生のメリーゴーランド','ハウルの動く城','2004 · 首版','5:31']].map(([t, a, e, d]) => ({ t, a, e, d })),
+  queue: [['06','上海一九四三','范特西 · 台湾首版','3:14'],['07','对不起','范特西 · 台湾首版','3:45'],['08','威廉古堡','范特西 · 台湾首版','3:59'],['09','双截棍','范特西 · 台湾首版','3:21'],['10','安静','范特西 · 台湾首版','5:34']].map(([n, t, a, d]) => ({ n, t, a, d })),
+  radioQ: [['Tank!','SEATBELTS','3:30'],["Yumeji's Theme",'梅林茂','2:32'],['あの夏へ','久石譲','3:39']].map(([t, a, d]) => ({ t, a, d })),
+  favs: [cov('fantasy', { note: '周杰伦 · 2001' }), cov('mood', { note: '梅林茂 等 · 2000' }), cov('bebop', { note: 'SEATBELTS · 1998' }), cov('ddyq', { note: '邓丽君 · 1983' }), cov('chihiro', { note: '久石譲 · 2001' }), cov('tiger', { note: '谭盾 · 2000' })],
+  histToday: [['21:14','开不了口','周杰伦'],['20:58','简单爱','周杰伦'],['20:41','Tank!','SEATBELTS'],['19:30',"Yumeji's Theme",'梅林茂'],['19:02','あの夏へ','久石譲']].map(([time, title, artist]) => ({ time, title, artist })),
+  histYest: [['23:15','前前前世','RADWIMPS'],['22:48','Cornfield Chase','Hans Zimmer'],['21:30','但愿人长久','邓丽君'],['21:02','Merry-Go-Round of Life','久石譲']].map(([time, title, artist]) => ({ time, title, artist })),
+  playlists: [['深夜原声','42 首 · 2 小时 51 分'],['吉卜力 · 久石譲','68 首 · 4 小时 12 分'],['给爸爸的邓丽君','24 首 · 1 小时 26 分'],['2001 年的华语','37 首 · 2 小时 30 分'],['公路电影','19 首 · 1 小时 8 分']].map(([name, meta]) => ({ name, meta })),
+  days: [42,95,0,130,64,20,210,88,45,0,76,150,32,58,190,240,12,66,98,110,0,35,72,160,54,201,134].map((m, i) => ({ d: String(i + 1), h: Math.max(2, Math.round(m / 240 * 64)) + 'px', bg: i === 26 ? 'var(--color-accent)' : 'var(--color-neutral-400)', c: i === 26 ? ACC : MUTE })),
+  diary: [
+    { day: '9 月 27 日 · 周日', total: '2 小时 14 分', note: '从《范特西》开始，绕到 SEATBELTS，最后停在《あの夏へ》。', albums: ['fantasy','bebop','chihiro'].map(id => cov(id)) },
+    { day: '9 月 26 日 · 周六', total: '3 小时 21 分', note: '一整晚的电影原声：花样年华、卧虎藏龙与星际穿越。', albums: ['mood','tiger','inter','kimi'].map(id => cov(id)) },
+    { day: '9 月 25 日 · 周五', total: '58 分', note: '《淡淡幽情》，从头到尾。', albums: ['ddyq'].map(id => cov(id)) }
+  ],
+  spines: [['深夜原声','42',300,0],['吉卜力 · 久石譲','68',330,3],['给爸爸的邓丽君','24',270,6],['2001 年的华语','37',310,1],['公路电影','19',250,2],['雨天','15',285,7]].map(([name, n, h, t]) => ({ name, n, h: h + 'px', bg: TONES[t][0], fg: TONES[t][1] })),
+  issues: [
+    ['可疑合并','高','君の名は。','通常盘与初回限定盘的曲目被写入同一 Release',true],
+    ['缺失','中','范特西 · 首批限定','VCD 介质未导入，Medium 数与参照不一致'],
+    ['冲突','中','邓丽君 / Teresa Teng','同一艺人两种写法，艺人页被拆成两页'],
+    ['缺失','低','之乎者也','缺少封面图像'],
+    ['缺失','低','范特西 · 内地引进版','缺少条码'],
+    ['冲突','低','新世紀エヴァンゲリオン','年份精度不一致：1995 与 1995-11-22'],
+    ['可疑合并','中','Interstellar','3 首曲目疑似重复导入']
+  ].map(([type, sev, target, desc, sel]) => ({ type, sev, target, desc, cls: sev === '高' ? 'tag tag-outline' : 'tag tag-neutral', bg: sel ? 'color-mix(in srgb, var(--color-accent) 8%, transparent)' : 'transparent', bd: sel ? 'var(--color-accent)' : 'transparent' })),
+  roots: [
+    ['/mnt/music/华语','14,210','361 GB','2 小时前','正常','100%','tag tag-neutral'],
+    ['/mnt/music/anime','4,812','141 GB','进行中','扫描中 64%','64%','tag tag-outline'],
+    ['/mnt/music/ost','3,390','88 GB','昨天 03:00','正常','100%','tag tag-neutral'],
+    ['/home/shared/家庭','1,204','22 GB','昨天 03:00','1 个目录不可读','100%','tag tag-accent']
+  ].map(([path, files, size, last, status, pct, cls]) => ({ path, files, size, last, status, pct, cls })),
+  funnel: [['发现文件','4,812','/mnt/music/anime 下的音频文件'],['读取标签','4,806','6 个文件标签损坏，已跳过'],['组成 Release','212','按目录、条码与碟号分组'],['归入 ReleaseGroup','198','其中 14 个为新建'],['需要确认','9','置信度低于 0.85 的判断']].map(([name, n, sub], i) => ({ name, n, sub, c: i === 4 ? ACC : INK })),
+  decisions: [
+    ['已归并','君の名は。/ Disc 1、Disc 2','识别为同一 Release 的 2 个 Medium','相同条码 · 相邻目录 · 碟号标签 1/2','0.97','tag tag-neutral'],
+    ['新建版本','COWBOY BEBOP / 2019 Vinyl','作为独立 Release，归入已有 ReleaseGroup','编号与条码不同 · 采样率 24/96','0.93','tag tag-neutral'],
+    ['待确认','Interstellar / Expanded','3 首曲目疑似重复','时长相同，编码器不同','0.71','tag tag-outline'],
+    ['已跳过','/anime/_temp','空目录，未创建任何记录','—','—','tag tag-neutral']
+  ].map(([k, obj, what, why, conf, cls]) => ({ k, obj, what, why, conf, cls })),
+  log: [
+    ['今天 21:02','Steward（代 林）','提交：拆分 Release《君の名は。》','1 ReleaseGroup · 2 Release · 27 轨','待审批','tag tag-outline',''],
+    ['今天 09:12','系统','扫描 /mnt/music/华语 完成','新增 38 张专辑','完成','tag tag-neutral','#42'],
+    ['昨天 22:40','林','合并艺人 “邓丽君” 与 “Teresa Teng”','5 张专辑 · 71 轨','可撤销','tag tag-accent','#41'],
+    ['9 月 25 日 20:17','小雨','请求删除 12 个重复文件','1.4 GB','已拒绝','tag tag-neutral',''],
+    ['9 月 24 日 03:00','系统','计划扫描 · 全部目录','无变更','完成','tag tag-neutral','#40'],
+    ['9 月 22 日 19:44','林','为《范特西》设置默认版本','1 ReleaseGroup','完成','tag tag-neutral','#39']
+  ].map(([time, who, act, scope, st, cls, rp]) => ({ time, who, act, scope, st, cls, rp, hasRp: !!rp })),
+  convos: ['整理《范特西》的版本','哪些专辑缺封面？','把吉卜力原声做成播放列表','解释 Release 与 ReleaseGroup','上周的扫描做了什么'].map((t, i) => ({ t, c: i === 0 ? ACC : INK, bg: i === 0 ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'transparent' }))
+};
+
+class Component extends DCLogic {
+  renderVals() { return DATA; }
+}
+</script>
+</body>
+</html>

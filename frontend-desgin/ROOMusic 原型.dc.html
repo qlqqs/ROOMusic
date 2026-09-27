@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/classical-d3de10a0-5b67-4da7-b5b3-8d49f26a63f1/styles.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&amp;display=swap">
+<script src="_ds/classical-d3de10a0-5b67-4da7-b5b3-8d49f26a63f1/_ds_bundle.js"></script>
+<style>:root{--font-heading:"Cormorant Garamond","Noto Serif SC",serif;--font-body:"Lora","Noto Serif SC",serif}html,body{margin:0;height:100%;overflow:hidden;background:var(--color-bg)}a{color:var(--color-accent-700)}a:hover{color:var(--color-accent)}button{font-family:inherit}</style>
+</helmet>
+<div style="display:grid;grid-template-columns:216px minmax(0,1fr);grid-template-rows:minmax(0,1fr) 68px;height:100vh;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body)">
+
+<aside style="grid-row:1;border-right:1px solid var(--color-divider);display:flex;flex-direction:column;gap:20px;padding:24px 14px 16px;overflow:auto;box-sizing:border-box">
+  <div style="padding:0 10px;cursor:pointer" onClick="{{ goHome }}">
+    <div style="font:400 27px/1 var(--font-heading);letter-spacing:-.01em">ROO<span style="font-style:italic;color:var(--color-accent-700)">Music</span></div>
+    <div style="font-size:11px;color:var(--color-neutral-700);margin-top:5px;font-feature-settings:'tnum'">私人音乐库 · 2,318 张专辑</div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:2px">
+    <div style="font-size:10px;letter-spacing:.16em;color:var(--color-neutral-700);padding:0 10px 6px">聆听</div>
+    <div onClick="{{ goHome }}" style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:var(--radius-md);font-size:13.5px;cursor:pointer;color:{{ nav.home.c }};background:{{ nav.home.bg }}" style-hover="background:color-mix(in srgb, var(--color-text) 6%, transparent)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:16px;height:16px;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"></path><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>概览</div>
+    <div onClick="{{ goAlbum }}" style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:var(--radius-md);font-size:13.5px;cursor:pointer;color:{{ nav.album.c }};background:{{ nav.album.bg }}" style-hover="background:color-mix(in srgb, var(--color-text) 6%, transparent)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:16px;height:16px;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none"><circle cx="12" cy="12" r="10"></circle><path d="M6 12c0-1.7.7-3.2 1.8-4.2"></path><circle cx="12" cy="12" r="2"></circle><path d="M18 12c0 1.7-.7 3.2-1.8 4.2"></path></svg>专辑</div>
+    <div onClick="{{ goPlaying }}" style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:var(--radius-md);font-size:13.5px;cursor:pointer;color:{{ nav.playing.c }};background:{{ nav.playing.bg }}" style-hover="background:color-mix(in srgb, var(--color-text) 6%, transparent)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:16px;height:16px;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none"><path d="M21 15V6"></path><path d="M18.5 18a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"></path><path d="M12 12H3"></path><path d="M16 6H3"></path><path d="M12 18H3"></path></svg>正在播放</div>
+    <div onClick="{{ notInProto }}" style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:var(--radius-md);font-size:13.5px;cursor:pointer;color:var(--color-neutral-700)" style-hover="background:color-mix(in srgb, var(--color-text) 6%, transparent)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:16px;height:16px;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>艺人</div>
+    <div onClick="{{ notInProto }}" style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:var(--radius-md);font-size:13.5px;cursor:pointer;color:var(--color-neutral-700)" style-hover="background:color-mix(in srgb, var(--color-text) 6%, transparent)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:16px;height:16px;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"></path></svg>收藏 · 历史 · 列表</div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:2px">
+    <div style="font-size:10px;letter-spacing:.16em;color:var(--color-neutral-700);padding:0 10px 6px">资料库</div>
+    <div onClick="{{ goIssues }}" style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:var(--radius-md);font-size:13.5px;cursor:pointer;color:{{ nav.issues.c }};background:{{ nav.issues.bg }}" style-hover="background:color-mix(in srgb, var(--color-text) 6%, transparent)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:16px;height:16px;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg><span style="flex:1">元数据问题</span><span style="font-size:11px;color:var(--color-accent-700);font-feature-settings:'tnum'">{{ openCount }}</span></div>
+    <div onClick="{{ goScan }}" style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:var(--radius-md);font-size:13.5px;cursor:pointer;color:{{ nav.scan.c }};background:{{ nav.scan.bg }}" style-hover="background:color-mix(in srgb, var(--color-text) 6%, transparent)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:16px;height:16px;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none"><path d="M10.7 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v4.1"></path><circle cx="17" cy="17" r="3"></circle><path d="m21 21-1.9-1.9"></path></svg><span style="flex:1">扫描目录</span><span style="font-size:11px;color:var(--color-neutral-700);font-feature-settings:'tnum'">{{ scanLabel }}</span></div>
+    <div onClick="{{ goAudit }}" style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:var(--radius-md);font-size:13.5px;cursor:pointer;color:{{ nav.audit.c }};background:{{ nav.audit.bg }}" style-hover="background:color-mix(in srgb, var(--color-text) 6%, transparent)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:16px;height:16px;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path><path d="m9 12 2 2 4-4"></path></svg><span style="flex:1">审批与日志</span><span style="font-size:11px;color:var(--color-accent-700);font-feature-settings:'tnum'">{{ pendingCount }}</span></div>
+  </div>
+  <div onClick="{{ toggleSteward }}" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid {{ stewBd }};border-radius:var(--radius-md);font-size:13.5px;cursor:pointer;color:{{ stewC }}" style-hover="background:color-mix(in srgb, var(--color-accent) 8%, transparent)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:16px;height:16px;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"></path></svg>Music Steward</div>
+  <div style="margin-top:auto;display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--color-divider);padding:14px 10px 0;font-size:12px">
+    <div style="display:flex;align-items:center;gap:8px;color:var(--color-neutral-700)"><span style="width:22px;height:22px;border-radius:50%;border:1px solid var(--color-accent);display:grid;place-items:center;font:600 11px/1 var(--font-heading);color:var(--color-accent-700)">林</span>林 · 管理员</div>
+  </div>
+</aside>
+
+<div style="grid-row:1;position:relative;min-width:0;overflow:hidden">
+<main ref="{{ mainRef }}" style="height:100%;overflow:auto;box-sizing:border-box">
+
+<sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+<div style="padding:34px 44px 44px;max-width:1240px;display:flex;flex-direction:column;gap:24px">
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;border-bottom:1px solid var(--color-divider);padding-bottom:18px">
+    <div><div style="font-size:11px;letter-spacing:.14em;color:var(--color-accent-700);font-feature-settings:'tnum'">2026 年 9 月 27 日 · 星期日</div><h1 style="font-size:56px;font-weight:400;margin:8px 0 0;letter-spacing:-.02em">晚上好，林。</h1></div>
+    <div style="font-size:12px;color:var(--color-neutral-700);text-align:right;font-feature-settings:'tnum';line-height:1.8">2,318 张专辑 · 2,741 个版本<br>31,904 首曲目 · 612 GB</div>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:36px">
+    <div style="flex:1 1 560px;display:flex;flex-direction:column;gap:28px;min-width:0">
+      <div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px"><span style="font:600 20px/1.2 var(--font-heading)">继续聆听</span><span onClick="{{ notInProto }}" style="font-size:12px;color:var(--color-accent-700);cursor:pointer">全部历史</span></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:20px">
+          <sc-for list="{{ continueL }}" as="a" hint-placeholder-count="4">
+          <div onClick="{{ a.open }}" style="display:flex;flex-direction:column;gap:8px;cursor:pointer" style-hover="color:var(--color-accent-700)">
+            <div style="aspect-ratio:1;background:{{ a.bg }};color:{{ a.fg }};border:5px solid var(--color-surface);outline:1px solid var(--color-divider);padding:12px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between"><span style="font:italic 400 21px/1.05 var(--font-heading)">{{ a.title }}</span><span style="font-size:9px;letter-spacing:.12em">{{ a.artist }}</span></div>
+            <div><div style="font:600 16px/1.2 var(--font-heading)">{{ a.title }}</div><div style="font-size:11.5px;color:var(--color-neutral-700)">{{ a.artist }} · {{ a.note }}</div></div>
+            <div style="height:1px;background:var(--color-divider);position:relative"><div style="position:absolute;left:0;top:-0.5px;height:2px;width:{{ a.pct }};background:var(--color-accent)"></div></div>
+          </div>
+          </sc-for>
+        </div>
+      </div>
+      <div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px"><span style="font:600 20px/1.2 var(--font-heading)">最近入库</span><span style="font-size:12px;color:var(--color-neutral-700)">本周 38 张</span></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:16px">
+          <sc-for list="{{ recentL }}" as="a" hint-placeholder-count="6">
+          <div onClick="{{ a.open }}" style="display:flex;flex-direction:column;gap:7px;cursor:pointer" style-hover="color:var(--color-accent-700)">
+            <div style="aspect-ratio:1;background:{{ a.bg }};color:{{ a.fg }};border:4px solid var(--color-surface);outline:1px solid var(--color-divider);padding:8px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between"><span style="font:italic 400 14px/1.05 var(--font-heading)">{{ a.title }}</span><span style="font-size:8.5px">{{ a.mark }}</span></div>
+            <div style="font:600 13.5px/1.2 var(--font-heading);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ a.title }}</div>
+            <div style="font-size:10.5px;color:var(--color-neutral-700);margin-top:-5px">{{ a.note }}</div>
+          </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    <aside style="flex:1 1 260px;max-width:320px;border-left:1px solid var(--color-divider);padding-left:28px;display:flex;flex-direction:column;gap:22px">
+      <div class="card" style="gap:10px">
+        <div class="card-kicker" style="color:var(--color-accent-700)">Music Steward · 便笺</div>
+        <div style="font:600 18px/1.25 var(--font-heading)">本周新增 38 张专辑，有 {{ openCount }} 处待你确认</div>
+        <p style="font-size:12.5px;text-align:justify;margin:0">《范特西》的首批限定版多出一张 VCD，已作为独立版本保留；《君の名は。》的两个版本疑似被合并，建议拆分。</p>
+        <div style="display:flex;gap:8px"><button class="btn btn-primary" onClick="{{ goIssues }}">查看</button><button class="btn btn-ghost" onClick="{{ toggleSteward }}">问 Steward</button></div>
+      </div>
+      <div>
+        <div style="font:600 16px/1.2 var(--font-heading);margin-bottom:8px">资料库状态</div>
+        <div onClick="{{ goIssues }}" style="display:flex;justify-content:space-between;font-size:12.5px;padding:7px 0;border-bottom:1px solid var(--color-divider);cursor:pointer"><span>待处理问题</span><span style="color:var(--color-accent-700);font-feature-settings:'tnum'">{{ openCount }}</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:12.5px;padding:7px 0;border-bottom:1px solid var(--color-divider)"><span>待审批</span><span style="color:var(--color-accent-700);font-feature-settings:'tnum'">{{ pendingCount }}</span></div>
+        <div style="padding:7px 0 0;font-size:12.5px"><div style="display:flex;justify-content:space-between"><span>扫描 /mnt/music/anime</span><span style="font-feature-settings:'tnum'">{{ scanLabel }}</span></div><div style="height:1px;background:var(--color-divider);margin-top:7px;position:relative"><div style="position:absolute;left:0;top:-0.5px;height:2px;width:{{ scanPct }};background:var(--color-accent)"></div></div></div>
+      </div>
+      <div>
+        <div style="font-size:10.5px;letter-spacing:.14em;color:var(--color-accent-700)">三十年前的这个月</div>
+        <div style="font:600 18px/1.25 var(--font-heading);margin:6px 0 4px">王菲《浮躁》</div>
+        <p style="font-size:12.5px;color:var(--color-neutral-700);text-align:justify;margin:0">1996 年秋发行。你的资料库中有 1 个版本，上次播放是 2024 年。</p>
+      </div>
+    </aside>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isAlbum }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;min-height:100%">
+  <sc-if value="{{ treeOpen }}" hint-placeholder-val="{{ false }}">
+  <aside style="width:260px;flex:none;border-right:1px solid var(--color-divider);padding:30px 22px 30px 26px;box-sizing:border-box;font-size:13px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><span style="font-size:10.5px;letter-spacing:.14em;color:var(--color-accent-700)">结构</span><span onClick="{{ toggleTree }}" style="cursor:pointer;color:var(--color-neutral-700)">收起 ‹</span></div>
+    <div style="display:flex;align-items:baseline;gap:8px"><span style="font:600 22px/1.1 var(--font-heading)">范特西</span><span style="font-size:9.5px;letter-spacing:.1em;color:var(--color-neutral-700)">RELEASE GROUP</span></div>
+    <div style="margin:10px 0 0 6px;border-left:1px solid var(--color-divider);padding-left:14px;display:flex;flex-direction:column;gap:4px">
+      <sc-for list="{{ treeEds }}" as="e" hint-placeholder-count="4">
+      <div>
+        <div onClick="{{ e.pick }}" style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;cursor:pointer;color:{{ e.c }}"><span>{{ e.name }}</span><span style="font-size:11px;font-feature-settings:'tnum'">{{ e.meta }}</span></div>
+        <sc-if value="{{ e.sel }}" hint-placeholder-val="{{ false }}">
+        <div style="margin:2px 0 6px 4px;border-left:1px solid var(--color-accent);padding-left:12px;display:flex;flex-direction:column;gap:5px;font-size:12.5px">
+          <sc-for list="{{ e.media }}" as="m" hint-placeholder-count="1">
+          <div onClick="{{ m.pick }}" style="cursor:pointer;color:{{ m.c }}">{{ m.name }} <span style="font-size:9.5px;letter-spacing:.1em;color:var(--color-neutral-700)">MEDIUM · {{ m.count }}</span></div>
+          </sc-for>
+        </div>
+        </sc-if>
+      </div>
+      </sc-for>
+    </div>
+    <div style="border-top:1px solid var(--color-divider);margin-top:20px;padding-top:12px;font-size:12px;color:var(--color-neutral-700);text-align:justify">ReleaseGroup 是作品，Release 是一次具体发行，Medium 是其中一张盘，Track 是盘上的曲目。</div>
+  </aside>
+  </sc-if>
+  <div style="flex:1;min-width:0;padding-bottom:40px">
+    <div style="padding:30px 44px 0;display:flex;gap:34px;flex-wrap:wrap">
+      <div style="width:216px;height:216px;flex:none;background:var(--color-neutral-900);color:var(--color-neutral-100);border:7px solid var(--color-surface);outline:1px solid var(--color-divider);box-sizing:border-box;padding:18px;display:flex;flex-direction:column;justify-content:space-between"><span style="font:italic 400 38px/1 var(--font-heading)">范特西</span><span style="font-size:10px;letter-spacing:.16em">JAY CHOU · 2001</span></div>
+      <div style="flex:1 1 380px;min-width:0">
+        <div style="display:flex;align-items:center;gap:12px"><span style="font-size:10.5px;letter-spacing:.14em;color:var(--color-accent-700)">RELEASE GROUP · 录音室专辑</span><sc-if value="{{ treeClosed }}" hint-placeholder-val="{{ true }}"><span onClick="{{ toggleTree }}" style="font-size:11.5px;color:var(--color-neutral-700);cursor:pointer;border:1px solid var(--color-divider);border-radius:var(--radius-sm);padding:0 6px">› 结构</span></sc-if></div>
+        <h1 style="font-size:60px;font-weight:400;margin:4px 0 2px;letter-spacing:-.02em">范特西</h1>
+        <div style="font-size:14px"><span onClick="{{ notInProto }}" style="color:var(--color-accent-700);cursor:pointer">周杰伦</span> · 2001 · 华语流行 / R&amp;B / 中国风</div>
+        <div style="font-size:12px;color:var(--color-neutral-700);margin-top:4px;font-feature-settings:'tnum'">4 个版本 · 10 首作品 · 39:35</div>
+        <div style="display:flex;gap:8px;margin:16px 0 14px;flex-wrap:wrap">
+          <button class="btn btn-primary" onClick="{{ playEdition }}"><svg viewBox="0 0 24 24" fill="currentColor" style="width:12px;height:12px"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>播放{{ edName }}</button>
+          <button class="btn btn-secondary" onClick="{{ openCompare }}">对比全部版本</button>
+          <button class="btn btn-secondary btn-icon" onClick="{{ toggleFav }}" aria-label="收藏"><svg viewBox="0 0 24 24" fill="{{ favFill }}" stroke="currentColor" style="width:15px;height:15px;stroke-width:1.5;color:var(--color-accent)"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"></path></svg></button>
+          <button class="btn btn-ghost" onClick="{{ toggleSteward }}">交给 Steward 整理</button>
+        </div>
+        <p style="font-size:13px;text-align:justify;max-width:640px;margin:0;color:var(--color-neutral-800)">第二张专辑，也是周杰伦把个人风格一次说清楚的作品：中国风、R&amp;B、说唱与摇滚被拼进同一张唱片，却不显杂乱。几首主打几乎同时成为那一年街头的背景音。 <span style="color:var(--color-neutral-700);font-style:italic">— 编辑笔记</span></p>
+      </div>
+    </div>
+    <div style="display:flex;align-items:flex-end;gap:28px;margin:24px 44px 0;border-bottom:1px solid var(--color-divider);flex-wrap:wrap">
+      <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4">
+      <div onClick="{{ t.pick }}" style="padding:9px 0;border-bottom:1px solid {{ t.bd }};margin-bottom:-1px;color:{{ t.c }};font-size:14px;cursor:pointer" style-hover="color:var(--color-accent-700)">{{ t.name }} <span style="font-size:11px;font-feature-settings:'tnum'">{{ t.year }}</span></div>
+      </sc-for>
+      <span style="flex:1"></span>
+      <span style="padding:9px 0;font-size:11.5px;color:var(--color-neutral-700);font-feature-settings:'tnum'">{{ edMeta }}</span>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:40px;padding:10px 44px 0">
+      <div style="flex:1 1 440px;min-width:0">
+        <sc-if value="{{ multiMedia }}" hint-placeholder-val="{{ false }}">
+        <div class="seg" style="margin:6px 0 10px">
+          <sc-for list="{{ mediaTabs }}" as="m" hint-placeholder-count="2"><label class="seg-opt"><input type="radio" name="medium" checked="{{ m.sel }}" onChange="{{ m.pick }}">{{ m.name }}</label></sc-for>
+        </div>
+        </sc-if>
+        <sc-if value="{{ isVideo }}" hint-placeholder-val="{{ false }}">
+        <div class="card" style="margin-top:6px;padding:16px 18px">
+          <div class="card-kicker" style="color:var(--color-accent-700)">视频介质 · 未导入</div>
+          <div style="font-size:13px">这张 VCD 收录 4 支 MV：双截棍、简单爱、开不了口、爱在西元前。它被记录为该版本的 Medium 2，但不参与音频播放。</div>
+          <div style="display:flex;gap:8px"><button class="btn btn-secondary" onClick="{{ goIssue1 }}">查看相关问题</button></div>
+        </div>
+        </sc-if>
+        <sc-for list="{{ trackRows }}" as="t" hint-placeholder-count="10">
+        <div onClick="{{ t.play }}" style="display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:10px;padding:7px 8px;border-bottom:1px solid var(--color-divider);background:{{ t.bg }};color:{{ t.c }};cursor:pointer" style-hover="background:color-mix(in srgb, var(--color-text) 5%, transparent)">
+          <span style="font-size:12px;font-feature-settings:'tnum';color:var(--color-neutral-700)">{{ t.k }}</span>
+          <div><div style="font-size:14px">{{ t.title }}</div><div style="font-size:11px;color:var(--color-neutral-700)">{{ t.cred }}</div></div>
+          <span style="font-size:12px;font-feature-settings:'tnum'">{{ t.dur }}</span>
+        </div>
+        </sc-for>
+      </div>
+      <div style="flex:0 1 250px;padding-top:12px">
+        <div style="font:600 17px/1.2 var(--font-heading);margin-bottom:6px">制作人员</div>
+        <sc-for list="{{ credits }}" as="c" hint-placeholder-count="5">
+        <div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:5px 0;border-bottom:1px solid var(--color-divider)"><span>{{ c.name }}</span><span style="color:var(--color-neutral-700)">{{ c.role }}</span></div>
+        </sc-for>
+        <div style="font:600 17px/1.2 var(--font-heading);margin:20px 0 6px">此版本</div>
+        <div style="font-size:12.5px;line-height:1.8;color:var(--color-neutral-800)">{{ edNote }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isPlaying }}" hint-placeholder-val="{{ false }}">
+<div style="padding:26px 48px 40px;max-width:1280px;display:flex;flex-direction:column;gap:30px">
+<div onClick="{{ goAlbum }}" style="font-size:12px;color:var(--color-neutral-700);cursor:pointer;margin-bottom:-16px">‹ 返回专辑</div>
+<div style="display:grid;grid-template-columns:minmax(200px,min(400px,42%)) minmax(0,1fr);gap:clamp(24px,3vw,44px)">
+    <div style="width:100%;aspect-ratio:1;background:var(--color-neutral-900);color:var(--color-neutral-100);border:10px solid var(--color-surface);outline:1px solid var(--color-divider);box-sizing:border-box;padding:clamp(18px,2.4vw,32px);display:flex;flex-direction:column;justify-content:space-between;box-shadow:var(--shadow-md)"><span style="font:italic 400 clamp(40px,5vw,72px)/1 var(--font-heading)">范特西</span><span style="font-size:12px;letter-spacing:.18em">JAY CHOU · 2001</span></div>
+  <div style="position:relative;min-width:0">
+    <div style="position:absolute;inset:0 0 34px;overflow:hidden;display:flex;flex-direction:column;justify-content:center;gap:14px;padding:0 clamp(18px,2.6vw,40px);-webkit-mask-image:linear-gradient(transparent,#000 18%,#000 82%,transparent);mask-image:linear-gradient(transparent,#000 18%,#000 82%,transparent)">
+      <sc-for list="{{ lyricLines }}" as="l" hint-placeholder-count="9">
+      <div onClick="{{ l.seekTo }}" style="flex:none;font-family:var(--font-heading);font-size:{{ l.fs }};line-height:1.3;text-wrap:balance;color:{{ l.c }};cursor:pointer;transition:font-size .3s,color .3s" style-hover="color:var(--color-accent)">{{ l.t }}</div>
+      </sc-for>
+    </div>
+    <div style="position:absolute;left:clamp(18px,2.6vw,40px);right:16px;bottom:12px;font-size:11px;color:var(--color-neutral-700)">本地 开不了口.lrc · 逐行同步 · 点任一行跳到该处</div>
+  </div>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px;margin-top:-6px">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap">
+      <div>
+    <div style="font-size:10.5px;letter-spacing:.14em;color:var(--color-accent-700);font-feature-settings:'tnum'">{{ npKicker }}</div>
+    <h1 style="font-size:clamp(30px,4vw,46px);font-weight:400;margin:0;letter-spacing:-.02em">{{ curTitle }}</h1>
+    <div style="font-size:15px"><span style="color:var(--color-accent-700)">周杰伦</span> — <span onClick="{{ goAlbum }}" style="color:var(--color-accent-700);cursor:pointer">《范特西》</span></div>
+      </div>
+      <div style="font-size:11.5px;color:var(--color-neutral-700);font-feature-settings:'tnum'">{{ curEdName }} · {{ curCat }} · {{ curFmt }} · 无损</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;margin:4px 0 2px;font-size:11.5px;color:var(--color-neutral-700);font-feature-settings:'tnum'"><span>{{ elapsed }}</span><div onClick="{{ seek }}" style="flex:1;height:14px;display:flex;align-items:center;cursor:pointer"><div style="flex:1;height:1px;background:var(--color-divider);position:relative"><div style="position:absolute;left:0;top:-1px;height:3px;width:{{ pct }};background:var(--color-accent)"></div><div style="position:absolute;left:{{ pct }};top:-5px;width:11px;height:11px;border-radius:50%;border:1px solid var(--color-accent);background:var(--color-bg);transform:translateX(-50%)"></div></div></div><span>{{ total }}</span></div>
+    <div style="display:flex;align-items:center;gap:26px;flex-wrap:wrap">
+      <button onClick="{{ prev }}" aria-label="上一首" style="border:0;background:none;padding:4px;cursor:pointer;color:var(--color-text)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:22px;height:22px;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" x2="5" y1="19" y2="5"></line></svg></button>
+      <button onClick="{{ togglePlay }}" aria-label="播放/暂停" style="width:56px;height:56px;border:1px solid var(--color-accent);border-radius:50%;display:grid;place-items:center;color:var(--color-accent-700);background:none;cursor:pointer" style-hover="background:color-mix(in srgb, var(--color-accent) 12%, transparent)">
+        <sc-if value="{{ playingNow }}" hint-placeholder-val="{{ false }}"><svg viewBox="0 0 24 24" fill="currentColor" style="width:20px;height:20px"><rect x="14" y="4" width="4" height="16" rx="1"></rect><rect x="6" y="4" width="4" height="16" rx="1"></rect></svg></sc-if>
+        <sc-if value="{{ pausedNow }}" hint-placeholder-val="{{ true }}"><svg viewBox="0 0 24 24" fill="currentColor" style="width:20px;height:20px;margin-left:3px"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg></sc-if>
+      </button>
+      <button onClick="{{ next }}" aria-label="下一首" style="border:0;background:none;padding:4px;cursor:pointer;color:var(--color-text)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:22px;height:22px;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" x2="19" y1="5" y2="19"></line></svg></button>
+    </div>
+</div>
+    <div style="display:flex;flex-wrap:wrap;gap:40px;border-top:1px solid var(--color-divider);padding-top:18px">
+      <div style="flex:1 1 320px;min-width:0">
+        <div class="seg" style="margin-bottom:16px"><sc-for list="{{ npTabs }}" as="t" hint-placeholder-count="3"><label class="seg-opt"><input type="radio" name="nptab" checked="{{ t.sel }}" onChange="{{ t.pick }}">{{ t.name }}</label></sc-for></div>
+        <sc-if value="{{ tabAbout }}" hint-placeholder-val="{{ true }}">
+        <div style="font:600 17px/1.2 var(--font-heading);margin-bottom:8px">关于这首歌</div>
+        <div style="display:grid;grid-template-columns:48px 1fr;gap:5px 10px;font-size:12.5px"><span style="color:var(--color-neutral-700)">作词</span><span>{{ curLyr }}</span><span style="color:var(--color-neutral-700)">作曲</span><span>周杰伦</span><span style="color:var(--color-neutral-700)">收录</span><span>范特西 · 4 个版本中均有</span></div>
+        </sc-if>
+        <sc-if value="{{ tabSignal }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font:600 17px/1.2 var(--font-heading)">信号路径</span><span class="tag tag-outline">无损 · Bit-perfect</span></div>
+        <sc-for list="{{ signal }}" as="s" hint-placeholder-count="4">
+        <div style="display:grid;grid-template-columns:22px 1fr;gap:12px"><div style="display:flex;flex-direction:column;align-items:center"><span style="width:11px;height:11px;border-radius:50%;border:1px solid var(--color-accent);background:{{ s.dot }};margin-top:4px"></span><span style="flex:1;width:1px;background:{{ s.line }}"></span></div><div style="padding-bottom:14px"><div style="font-size:13.5px">{{ s.name }}</div><div style="font-size:11.5px;color:var(--color-neutral-700);font-feature-settings:'tnum'">{{ s.sub }}</div></div></div>
+        </sc-for>
+        </sc-if>
+        <sc-if value="{{ tabEd }}" hint-placeholder-val="{{ false }}">
+        <div style="font:600 17px/1.2 var(--font-heading);margin-bottom:8px">切换播放版本</div>
+        <sc-for list="{{ edSwitch }}" as="e" hint-placeholder-count="3">
+        <div onClick="{{ e.pick }}" style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--color-divider);font-size:13px;cursor:pointer;color:{{ e.c }}"><span>{{ e.name }}</span><span style="font-size:11.5px;font-feature-settings:'tnum'">{{ e.fmt }}</span></div>
+        </sc-for>
+        <div style="font-size:11.5px;color:var(--color-neutral-700);margin-top:8px">切换后从本曲开头播放，信号路径随之更新。</div>
+        </sc-if>
+      </div>
+      <div style="flex:1 1 260px;min-width:0">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px"><span style="font:600 17px/1.2 var(--font-heading)">接下来</span><span style="font-size:11.5px;color:var(--color-neutral-700);font-feature-settings:'tnum'">{{ queueMeta }}</span></div>
+        <sc-for list="{{ queue }}" as="q" hint-placeholder-count="5">
+        <div onClick="{{ q.jump }}" style="display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:8px;padding:6px 4px;border-bottom:1px solid var(--color-divider);font-size:13px;cursor:pointer" style-hover="background:color-mix(in srgb, var(--color-text) 5%, transparent)"><span style="font-size:11px;color:var(--color-neutral-700);font-feature-settings:'tnum'">{{ q.k }}</span><span>{{ q.title }}</span><span style="font-size:11.5px;font-feature-settings:'tnum'">{{ q.dur }}</span></div>
+        </sc-for>
+        <sc-if value="{{ queueEmpty }}" hint-placeholder-val="{{ false }}"><div style="font-size:12.5px;color:var(--color-neutral-700);padding:8px 0">这是本版本的最后一首。</div></sc-if>
+      </div>
+    </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isIssues }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;min-height:100%">
+  <div style="width:380px;flex:none;border-right:1px solid var(--color-divider);padding:28px 0 20px">
+    <div style="padding:0 24px 14px"><h2 style="font-size:34px;font-weight:400;margin:0 0 10px">元数据问题</h2>
+      <div class="seg"><sc-for list="{{ filters }}" as="f" hint-placeholder-count="4"><label class="seg-opt" style="padding:5px 10px"><input type="radio" name="ifilter" checked="{{ f.sel }}" onChange="{{ f.pick }}">{{ f.label }}</label></sc-for></div></div>
+    <sc-for list="{{ issueRows }}" as="i" hint-placeholder-count="7">
+    <div onClick="{{ i.pick }}" style="padding:11px 24px;border-top:1px solid var(--color-divider);background:{{ i.bg }};box-shadow:inset 2px 0 0 {{ i.bd }};cursor:pointer;opacity:{{ i.op }}" style-hover="background:color-mix(in srgb, var(--color-text) 4%, transparent)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px"><span class="{{ i.cls }}" style="padding:1px 7px">{{ i.tagLabel }}</span><span style="font-size:11px;color:var(--color-neutral-700)">{{ i.sevLabel }}</span></div>
+      <div style="font:600 15.5px/1.2 var(--font-heading)">{{ i.target }}</div>
+      <div style="font-size:12px;color:var(--color-neutral-800)">{{ i.desc }}</div>
+    </div>
+    </sc-for>
+  </div>
+  <div style="flex:1;min-width:0;padding:28px 40px 40px;display:flex;flex-direction:column;gap:18px;max-width:860px">
+    <div>
+      <div style="display:flex;gap:8px;align-items:center"><span class="tag tag-outline">{{ iss.type }}</span><span style="font-size:11.5px;color:var(--color-neutral-700)">{{ iss.meta }}</span></div>
+      <h2 style="font-size:34px;font-weight:400;margin:8px 0 4px">{{ iss.title }}</h2>
+      <p style="font-size:13px;text-align:justify;margin:0;max-width:640px">{{ iss.body }}</p>
+    </div>
+    <sc-if value="{{ iss.isStruct }}" hint-placeholder-val="{{ true }}">
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) 30px minmax(0,1fr);gap:10px">
+      <div class="card" style="padding:14px 16px;font-size:12.5px;line-height:1.9"><div class="card-kicker" style="color:var(--color-neutral-700)">当前</div><sc-for list="{{ iss.before }}" as="l" hint-placeholder-count="3"><div style="padding-left:{{ l.ind }}">{{ l.t }}</div></sc-for></div>
+      <div style="display:grid;place-items:center;color:var(--color-accent-700);font:400 24px/1 var(--font-heading)">→</div>
+      <div class="card" style="padding:14px 16px;font-size:12.5px;line-height:1.9;border-color:var(--color-accent)"><div class="card-kicker" style="color:var(--color-accent-700)">建议</div><sc-for list="{{ iss.after }}" as="l" hint-placeholder-count="4"><div style="padding-left:{{ l.ind }}">{{ l.t }}</div></sc-for></div>
+    </div>
+    </sc-if>
+    <sc-if value="{{ iss.isProof }}" hint-placeholder-val="{{ false }}">
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) 220px;border-top:1px solid var(--color-divider)">
+      <div style="border-right:1px solid var(--color-accent);padding-right:24px">
+        <sc-for list="{{ iss.proof }}" as="p" hint-placeholder-count="2">
+        <div style="display:grid;grid-template-columns:100px minmax(0,1fr);padding:14px 0;border-bottom:1px solid var(--color-divider);font-size:14px"><span style="color:var(--color-neutral-700);font-size:12px">{{ p.field }}</span><span><span style="text-decoration:line-through;color:var(--color-neutral-600)">{{ p.old }}</span>　<span style="color:var(--color-accent-700);border-bottom:1px solid var(--color-accent)">{{ p.nv }}</span><sup style="color:var(--color-accent-700);font-size:10px"> {{ p.mark }}</sup></span></div>
+        </sc-for>
+      </div>
+      <div style="padding:14px 0 0 18px;font-size:12px;line-height:1.6;display:flex;flex-direction:column;gap:14px">
+        <sc-for list="{{ iss.proof }}" as="p" hint-placeholder-count="2"><div><span style="color:var(--color-accent-700);font:600 15px/1 var(--font-heading)">{{ p.mark }}</span> {{ p.note }}</div></sc-for>
+      </div>
+    </div>
+    </sc-if>
+    <div>
+      <div style="font:600 17px/1.2 var(--font-heading);margin-bottom:6px">依据</div>
+      <sc-for list="{{ iss.evidence }}" as="e" hint-placeholder-count="2"><div style="font-size:12.5px;line-height:1.9"><span style="color:var(--color-accent-700)">·</span> {{ e.t }}</div></sc-for>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;border-top:1px solid var(--color-divider);padding-top:16px;flex-wrap:wrap">
+      <div style="flex:1 1 260px;font-size:12.5px"><span style="color:var(--color-accent-700)">{{ iss.riskLabel }}</span> · {{ iss.riskText }}</div>
+      <sc-if value="{{ iss.isOpen }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;gap:8px"><button class="btn btn-ghost" onClick="{{ toggleSteward }}">交给 Steward</button><button class="btn btn-secondary" onClick="{{ ignoreIssue }}">忽略</button><button class="btn btn-primary" onClick="{{ applyIssue }}">{{ iss.action }}</button></div>
+      </sc-if>
+      <sc-if value="{{ iss.isDone }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;gap:10px;font-size:12.5px"><span class="tag tag-accent">{{ iss.doneLabel }}</span><button class="btn btn-ghost" onClick="{{ undoIssue }}">撤销</button></div>
+      </sc-if>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isScan }}" hint-placeholder-val="{{ false }}">
+<sc-if value="{{ scanList }}" hint-placeholder-val="{{ true }}">
+<div style="padding:32px 44px 44px;max-width:1240px;display:flex;flex-direction:column;gap:22px">
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap">
+    <div><h1 style="font-size:48px;font-weight:400;margin:0">扫描目录</h1><div style="font-size:12.5px;color:var(--color-neutral-700);font-feature-settings:'tnum'">4 个目录 · 23,616 个文件 · 612 GB · ROOMusic 只读取文件，不会修改或移动它们</div></div>
+    <div style="display:flex;gap:8px"><button class="btn btn-secondary" onClick="{{ addRoot }}">＋ 添加目录</button><button class="btn btn-primary" onClick="{{ rescan }}">立即扫描全部</button></div>
+  </div>
+  <table class="table" style="font-size:13.5px">
+    <thead><tr><th>路径</th><th style="text-align:right">文件</th><th style="text-align:right">大小</th><th>上次扫描</th><th style="width:220px">状态</th></tr></thead>
+    <tbody>
+      <sc-for list="{{ roots }}" as="r" hint-placeholder-count="4">
+      <tr><td style="font-feature-settings:'tnum'">{{ r.path }}</td><td style="text-align:right;font-feature-settings:'tnum'">{{ r.files }}</td><td style="text-align:right;font-feature-settings:'tnum'">{{ r.size }}</td><td style="color:var(--color-neutral-700)">{{ r.last }}</td>
+        <td><div style="display:flex;flex-direction:column;gap:6px"><span class="{{ r.cls }}" style="align-self:flex-start">{{ r.status }}</span><div style="height:1px;background:var(--color-divider);position:relative"><div style="position:absolute;left:0;top:-0.5px;height:2px;width:{{ r.pct }};background:var(--color-accent)"></div></div></div></td></tr>
+      </sc-for>
+    </tbody>
+  </table>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px">
+    <div class="card" style="padding:16px 18px"><div class="card-kicker" style="color:var(--color-accent-700)">{{ scanCardKicker }}</div><div class="card-title">/mnt/music/anime</div><div style="font-size:12px;color:var(--color-neutral-700);font-feature-settings:'tnum'">{{ scanCardText }}</div><div style="display:flex;gap:8px"><button class="btn btn-secondary" onClick="{{ togglePause }}">{{ pauseLabel }}</button><button class="btn btn-ghost" onClick="{{ openReport }}">查看过程</button></div></div>
+    <div class="card" style="padding:16px 18px"><div class="card-kicker" style="color:var(--color-accent-700)">计划</div><div class="card-title">每天 03:00 增量扫描</div><div style="font-size:12px;color:var(--color-neutral-700)">另外监听文件变动，新文件在 30 秒内入库</div><div class="seg" style="align-self:flex-start"><label class="seg-opt" style="padding:4px 10px"><input type="radio" name="scanmode" checked="">增量</label><label class="seg-opt" style="padding:4px 10px"><input type="radio" name="scanmode">完整</label></div></div>
+    <div class="card" style="padding:16px 18px"><div class="card-kicker" style="color:var(--color-accent-700)">需要处理</div><div class="card-title">/home/shared/家庭/旧手机备份</div><div style="font-size:12px;color:var(--color-neutral-700)">没有读取权限，已跳过 212 个文件</div><div style="display:flex;gap:8px"><button class="btn btn-secondary" onClick="{{ permHelp }}">查看说明</button><button class="btn btn-ghost" onClick="{{ ignoreRoot }}">忽略此目录</button></div></div>
+  </div>
+</div>
+</sc-if>
+<sc-if value="{{ scanReport }}" hint-placeholder-val="{{ false }}">
+<div style="padding:32px 44px 44px;max-width:1240px;display:flex;flex-direction:column;gap:24px">
+  <div><div onClick="{{ closeReport }}" style="font-size:12px;color:var(--color-neutral-700);cursor:pointer;margin-bottom:10px">‹ 返回扫描目录</div><div style="font-size:10.5px;letter-spacing:.14em;color:var(--color-accent-700);font-feature-settings:'tnum'">扫描报告 · /mnt/music/anime · 今天 09:12</div><h1 style="font-size:48px;font-weight:400;margin:4px 0 0">这次扫描做了什么</h1></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));border-top:1px solid var(--color-text);border-bottom:1px solid var(--color-divider)">
+    <sc-for list="{{ funnel }}" as="f" hint-placeholder-count="5">
+    <div style="padding:16px 18px 18px 0;border-right:1px solid var(--color-divider);margin-right:18px"><div style="font-size:12px;color:var(--color-neutral-700)">{{ f.name }} →</div><div style="font:400 44px/1.1 var(--font-heading);font-feature-settings:'tnum';color:{{ f.c }}">{{ f.n }}</div><div style="font-size:11.5px;color:var(--color-neutral-800)">{{ f.sub }}</div></div>
+    </sc-for>
+  </div>
+  <div>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px"><span style="font:600 20px/1.2 var(--font-heading)">关键判断</span><span style="font-size:12px;color:var(--color-neutral-700)">共 226 条 · 显示最值得看的 4 条</span></div>
+    <table class="table" style="font-size:13px">
+      <thead><tr><th style="width:90px">结果</th><th>对象</th><th>判断</th><th>依据</th><th style="text-align:right">置信度</th></tr></thead>
+      <tbody>
+        <sc-for list="{{ decisions }}" as="d" hint-placeholder-count="4">
+        <tr onClick="{{ d.open }}" style="cursor:pointer"><td><span class="{{ d.cls }}">{{ d.k }}</span></td><td>{{ d.obj }}</td><td style="color:var(--color-neutral-800)">{{ d.what }}</td><td style="font-size:12px;color:var(--color-neutral-700)">{{ d.why }}</td><td style="text-align:right;font-feature-settings:'tnum'">{{ d.conf }}</td></tr>
+        </sc-for>
+      </tbody>
+    </table>
+  </div>
+  <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;border:1px solid var(--color-accent);border-radius:var(--radius-md);padding:14px 18px">
+    <div style="flex:1 1 300px;font-size:13px"><span style="font:600 16px/1.2 var(--font-heading)">有判断等待你确认。</span> 置信度低于 0.85 的判断不会自动写入资料库，它们出现在"元数据问题"中。</div>
+    <button class="btn btn-primary" onClick="{{ goIssues }}">逐条确认</button>
+  </div>
+</div>
+</sc-if>
+</sc-if>
+
+<sc-if value="{{ isAudit }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-wrap:wrap;min-height:100%">
+  <div style="flex:1 1 560px;min-width:0;padding:30px 40px 40px;display:flex;flex-direction:column;gap:22px">
+    <h1 style="font-size:48px;font-weight:400;margin:0">审批与日志</h1>
+    <div>
+      <div style="font:600 20px/1.2 var(--font-heading);margin-bottom:10px">待审批 · {{ pendingCount }}</div>
+      <sc-if value="{{ noApprovals }}" hint-placeholder-val="{{ false }}"><div style="font-size:13px;color:var(--color-neutral-700);padding:12px 0">没有待审批的操作。</div></sc-if>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px">
+        <sc-for list="{{ approvals }}" as="a" hint-placeholder-count="1">
+        <div class="card" style="padding:16px 18px;border-color:{{ a.bd }}">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span class="card-kicker" style="color:var(--color-accent-700)">{{ a.risk }}</span><span style="font-size:11px;color:var(--color-neutral-700)">{{ a.time }}</span></div>
+          <div class="card-title" style="font-size:19px">{{ a.title }}</div>
+          <div style="font-size:12px;color:var(--color-neutral-800);font-feature-settings:'tnum'">发起：{{ a.who }}<br>影响：{{ a.scope }}</div>
+          <div style="display:flex;gap:8px"><button class="btn btn-primary" onClick="{{ a.approve }}">批准</button><button class="btn btn-secondary" onClick="{{ a.reject }}">拒绝</button><button class="btn btn-ghost" onClick="{{ a.view }}">查看差异</button></div>
+        </div>
+        </sc-for>
+      </div>
+    </div>
+    <div>
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px"><span style="font:600 20px/1.2 var(--font-heading)">账簿</span><span style="font-size:12px;color:var(--color-neutral-700)">点击带恢复点的记录查看回滚范围</span></div>
+      <sc-for list="{{ logs }}" as="l" hint-placeholder-count="6">
+      <div onClick="{{ l.pick }}" style="display:grid;grid-template-columns:110px 24px minmax(0,1fr);gap:0 14px;cursor:pointer;border-radius:var(--radius-md);background:{{ l.bg }}" style-hover="background:color-mix(in srgb, var(--color-text) 4%, transparent)">
+        <div style="text-align:right;font-size:11.5px;color:var(--color-neutral-700);padding-top:9px;font-feature-settings:'tnum'">{{ l.time }}</div>
+        <div style="display:flex;flex-direction:column;align-items:center"><span style="width:11px;height:11px;border-radius:50%;border:1px solid {{ l.dotBd }};background:var(--color-bg);margin-top:11px"></span><span style="flex:1;width:1px;background:var(--color-divider)"></span></div>
+        <div style="padding:6px 8px 16px 0">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="font-size:14px">{{ l.act }}</span><span class="{{ l.cls }}" style="padding:1px 7px">{{ l.st }}</span></div>
+          <div style="font-size:11.5px;color:var(--color-neutral-700);font-feature-settings:'tnum'">{{ l.who }} · {{ l.scope }}</div>
+          <sc-if value="{{ l.hasRp }}" hint-placeholder-val="{{ false }}"><div style="display:inline-flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:var(--color-accent-700);border:1px solid var(--color-accent);border-radius:999px;padding:1px 9px;font-feature-settings:'tnum'">◎ 恢复点 {{ l.rp }}</div></sc-if>
+        </div>
+      </div>
+      </sc-for>
+    </div>
+  </div>
+  <aside style="flex:0 1 320px;border-left:1px solid var(--color-divider);padding:30px 28px;display:flex;flex-direction:column;gap:16px;box-sizing:border-box">
+    <sc-if value="{{ hasRpSel }}" hint-placeholder-val="{{ true }}">
+    <div style="font-size:10.5px;letter-spacing:.14em;color:var(--color-accent-700)">所选恢复点</div>
+    <div style="font:400 30px/1.1 var(--font-heading);font-feature-settings:'tnum'">{{ rpSel.rp }} · {{ rpSel.time }}</div>
+    <div style="font-size:13px">{{ rpSel.act }}</div>
+    <div class="card" style="padding:12px 14px;font-size:12.5px;line-height:1.8"><div class="card-kicker" style="color:var(--color-neutral-700)">回滚到此点将撤销</div>{{ rpSel.undo }}</div>
+    <button class="btn btn-primary" onClick="{{ rollback }}" style="align-self:flex-start">回滚到 {{ rpSel.rp }}</button>
+    </sc-if>
+    <sc-if value="{{ noRpSel }}" hint-placeholder-val="{{ false }}"><div style="font-size:13px;color:var(--color-neutral-700)">这条记录没有恢复点。选择带 ◎ 标记的记录查看回滚范围。</div></sc-if>
+    <div style="font:600 17px/1.2 var(--font-heading);margin-top:10px">成员与权限</div>
+    <sc-for list="{{ members }}" as="m" hint-placeholder-count="4">
+    <div style="padding:6px 0;border-bottom:1px solid var(--color-divider)"><div style="display:flex;justify-content:space-between;gap:8px"><span style="font-size:13.5px">{{ m.name }}</span><span class="{{ m.cls }}">{{ m.role }}</span></div><div style="font-size:11px;color:var(--color-neutral-700);margin-top:2px">{{ m.can }}</div></div>
+    </sc-for>
+    <div style="font-size:12px;text-align:justify;line-height:1.7;color:var(--color-neutral-800);margin-top:6px">ROOMusic 只改写资料库记录，音频文件本身不会被修改。文件类操作需二次审批，文件先进回收站，保留 30 天。</div>
+  </aside>
+</div>
+</sc-if>
+
+</main>
+
+<sc-if value="{{ stewardOpen }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;top:0;right:0;bottom:0;width:390px;max-width:100%;background:var(--color-bg);border-left:1px solid var(--color-divider);box-shadow:var(--shadow-lg);display:flex;flex-direction:column">
+  <div style="display:flex;align-items:center;gap:8px;padding:14px 16px 14px 20px;border-bottom:1px solid var(--color-divider)">
+    <div style="flex:1;min-width:0"><div style="font:600 18px/1.2 var(--font-heading)">Music Steward</div>
+      <button onClick="{{ toggleConvList }}" style="display:flex;align-items:center;gap:4px;max-width:100%;border:0;background:none;padding:2px 0 0;cursor:pointer;font:inherit;font-size:12px;color:var(--color-accent-700)" style-hover="color:var(--color-accent)"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ convTitle }}</span><span>{{ convCaret }}</span></button></div>
+    <button class="btn btn-ghost" onClick="{{ newConv }}" style="font-size:13px">＋ 新对话</button>
+    <span class="tag tag-neutral">只读</span><button onClick="{{ toggleSteward }}" aria-label="关闭" style="border:0;background:none;cursor:pointer;font-size:18px;color:var(--color-neutral-700)">×</button></div>
+  <sc-if value="{{ convListOpen }}" hint-placeholder-val="{{ false }}">
+  <div style="border-bottom:1px solid var(--color-divider);padding:8px 10px 10px;display:flex;flex-direction:column;gap:2px;max-height:50%;overflow:auto">
+    <div style="font-size:10px;letter-spacing:.14em;color:var(--color-neutral-700);padding:4px 10px 6px">会话</div>
+    <sc-for list="{{ convList }}" as="c" hint-placeholder-count="4">
+    <div onClick="{{ c.pick }}" style="display:flex;align-items:baseline;gap:10px;padding:8px 10px;border-radius:var(--radius-md);cursor:pointer;color:{{ c.c }};background:{{ c.bg }}" style-hover="background:color-mix(in srgb, var(--color-text) 5%, transparent)"><span style="flex:1;min-width:0;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.title }}</span><span style="font-size:11px;color:var(--color-neutral-700);font-feature-settings:'tnum'">{{ c.meta }}</span></div>
+    </sc-for>
+  </div>
+  </sc-if>
+  <div ref="{{ chatRef }}" style="flex:1;overflow:auto;padding:18px 20px;display:flex;flex-direction:column;gap:14px;font-size:13px">
+    <sc-if value="{{ convEmpty }}" hint-placeholder-val="{{ false }}"><div style="margin:auto 0;text-align:center;color:var(--color-neutral-700);font-size:12.5px;line-height:1.8"><div style="font:400 22px/1.2 var(--font-heading);color:var(--color-text);margin-bottom:6px">问问你的资料库</div>我默认只读；需要写入时会先给出改动预览。</div></sc-if>
+    <sc-for list="{{ msgs }}" as="m" hint-placeholder-count="2">
+    <sc-if value="{{ m.me }}" hint-placeholder-val="{{ false }}"><div style="align-self:flex-end;max-width:82%;border:1px solid var(--color-divider);border-radius:var(--radius-lg);padding:9px 12px">{{ m.text }}</div></sc-if>
+    <sc-if value="{{ m.bot }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:10.5px;letter-spacing:.12em;color:var(--color-accent-700)">STEWARD · {{ m.src }}</div>
+      <p style="margin:0;text-align:justify;line-height:1.65">{{ m.text }}</p>
+      <sc-if value="{{ m.plan }}" hint-placeholder-val="{{ false }}">
+      <div class="card" style="padding:12px 14px;gap:8px">
+        <div class="card-kicker" style="color:var(--color-accent-700)">计划 · 低风险</div>
+        <div style="font-size:12.5px">为首批限定版添加 Medium 2（VCD · 4 支 MV），标记为"未导入的视频介质"</div>
+        <div style="font-size:11px;color:var(--color-neutral-700)">只改资料库记录 · 会建立恢复点 · 可撤销</div>
+        <div style="display:flex;gap:8px"><button class="btn btn-primary" onClick="{{ goIssue1 }}">预览改动</button></div>
+      </div>
+      </sc-if>
+    </div>
+    </sc-if>
+    </sc-for>
+  </div>
+  <div style="padding:12px 16px 16px;border-top:1px solid var(--color-divider);display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ chips }}" as="c" hint-placeholder-count="3"><button class="tag tag-outline" onClick="{{ c.send }}" style="background:none;cursor:pointer">{{ c.t }}</button></sc-for></div>
+    <form onSubmit="{{ sendDraft }}" style="display:flex;align-items:center;gap:8px;border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:6px 6px 6px 10px">
+      <input value="{{ draft }}" onChange="{{ setDraft }}" placeholder="问问你的资料库…" style="flex:1;border:0;background:none;font:inherit;font-size:13px;color:var(--color-text);outline:none">
+      <button type="submit" aria-label="发送" style="width:28px;height:28px;border:1px solid var(--color-accent);border-radius:50%;display:grid;place-items:center;color:var(--color-accent-700);background:none;cursor:pointer">↑</button>
+    </form>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ hasToast }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:50%;bottom:20px;transform:translateX(-50%);background:var(--color-bg);border:1px solid var(--color-accent);border-radius:var(--radius-md);box-shadow:var(--shadow-md);padding:9px 16px;font-size:12.5px;white-space:nowrap">{{ toast }}</div>
+</sc-if>
+</div>
+
+<footer style="grid-column:1 / -1;border-top:1px solid var(--color-divider);display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr) minmax(0,260px);align-items:center;gap:24px;padding:0 22px;background:var(--color-bg)">
+  <div onClick="{{ goPlaying }}" style="display:flex;align-items:center;gap:12px;min-width:0;cursor:pointer">
+    <div style="width:44px;height:44px;flex:none;background:var(--color-neutral-900);color:var(--color-neutral-100);border:3px solid var(--color-surface);outline:1px solid var(--color-divider);box-sizing:border-box;display:grid;place-items:center;font:italic 400 15px/1 var(--font-heading)">范</div>
+    <div style="min-width:0"><div style="font:600 16px/1.2 var(--font-heading);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ curTitle }}</div><div style="font-size:11.5px;color:var(--color-neutral-700);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">周杰伦 — 范特西 · {{ curEdName }}</div></div>
+  </div>
+  <div style="display:flex;flex-direction:column;align-items:center;gap:4px;max-width:540px;width:100%;justify-self:center">
+    <div style="display:flex;align-items:center;gap:18px">
+      <button onClick="{{ prev }}" aria-label="上一首" style="border:0;background:none;padding:2px;cursor:pointer;color:var(--color-text)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:17px;height:17px;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" x2="5" y1="19" y2="5"></line></svg></button>
+      <button onClick="{{ togglePlay }}" aria-label="播放/暂停" style="width:32px;height:32px;border:1px solid var(--color-accent);border-radius:50%;display:grid;place-items:center;color:var(--color-accent-700);background:none;cursor:pointer" style-hover="background:color-mix(in srgb, var(--color-accent) 12%, transparent)">
+        <sc-if value="{{ playingNow }}" hint-placeholder-val="{{ false }}"><svg viewBox="0 0 24 24" fill="currentColor" style="width:13px;height:13px"><rect x="14" y="4" width="4" height="16" rx="1"></rect><rect x="6" y="4" width="4" height="16" rx="1"></rect></svg></sc-if>
+        <sc-if value="{{ pausedNow }}" hint-placeholder-val="{{ true }}"><svg viewBox="0 0 24 24" fill="currentColor" style="width:13px;height:13px;margin-left:2px"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg></sc-if>
+      </button>
+      <button onClick="{{ next }}" aria-label="下一首" style="border:0;background:none;padding:2px;cursor:pointer;color:var(--color-text)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:17px;height:17px;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" x2="19" y1="5" y2="19"></line></svg></button>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;width:100%;font-size:10.5px;color:var(--color-neutral-700);font-feature-settings:'tnum'">
+      <span>{{ elapsed }}</span>
+      <div onClick="{{ seek }}" style="flex:1;height:12px;display:flex;align-items:center;cursor:pointer"><div style="flex:1;height:1px;background:var(--color-divider);position:relative"><div style="position:absolute;left:0;top:-0.5px;height:2px;width:{{ pct }};background:var(--color-accent)"></div></div></div>
+      <span>{{ total }}</span>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;justify-content:flex-end;gap:14px;font-size:11.5px;color:var(--color-neutral-700)">
+    <span class="tag tag-outline" style="font-feature-settings:'tnum';white-space:nowrap">{{ curFmt }} · 无损</span>
+    <button onClick="{{ goPlaying }}" aria-label="队列" style="border:0;background:none;padding:2px;cursor:pointer;color:var(--color-text)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:16px;height:16px;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"><path d="M21 15V6"></path><path d="M18.5 18a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"></path><path d="M12 12H3"></path><path d="M16 6H3"></path><path d="M12 18H3"></path></svg></button>
+  </div>
+</footer>
+
+<sc-if value="{{ compareOpen }}" hint-placeholder-val="{{ false }}">
+<div class="dialog-backdrop" onClick="{{ closeCompare }}" style="z-index:10">
+  <div class="dialog" onClick="{{ stop }}" style="width:min(980px,100%);max-height:90vh;overflow:auto">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px">
+      <div><div class="dialog-title" style="font-size:26px;font-weight:400">四个版本的逐项对比</div><div style="font-size:12.5px;color:var(--color-neutral-700)">以台湾首版为基准；不同之处以<span style="color:var(--color-accent-700);text-decoration:underline;text-underline-offset:3px">金色下划线</span>标出。点击列头切换到该版本。</div></div>
+      <button onClick="{{ closeCompare }}" aria-label="关闭" style="border:0;background:none;cursor:pointer;font-size:20px;color:var(--color-neutral-700)">×</button>
+    </div>
+    <table class="table" style="font-size:13px">
+      <thead><tr><th style="width:100px">字段</th>
+        <sc-for list="{{ edHead }}" as="h" hint-placeholder-count="4"><th onClick="{{ h.pick }}" style="cursor:pointer;box-shadow:inset 0 2px 0 {{ h.bd }}"><span style="font:600 15px/1.2 var(--font-heading);text-transform:none;letter-spacing:0;color:var(--color-text)">{{ h.name }}</span> <span style="font-feature-settings:'tnum'">{{ h.year }}</span></th></sc-for>
+      </tr></thead>
+      <tbody>
+        <sc-for list="{{ diffRows }}" as="r" hint-placeholder-count="8">
+        <tr><td style="color:var(--color-neutral-700);font-size:12px">{{ r.label }}</td><sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="4"><td style="color:{{ c.c }};text-decoration:{{ c.d }};text-underline-offset:4px;text-decoration-color:var(--color-accent);font-feature-settings:'tnum'">{{ c.v }}</td></sc-for></tr>
+        </sc-for>
+      </tbody>
+    </table>
+    <div class="card" style="padding:14px 16px"><div class="card-kicker" style="color:var(--color-accent-700)">为什么没有合并</div><p style="font-size:13px;text-align:justify;margin:0">四个 Release 的编号与条码各不相同；首批限定版多出一个 Medium（VCD）；20 周年黑胶采用 2 × LP 分面，本地文件为 24/96 母带。它们同属一个 ReleaseGroup，因此在专辑列表中只出现一次，但作为独立版本保留。</p></div>
+  </div>
+</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;stewardOpen&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+const TONES = [['var(--color-neutral-900)','var(--color-neutral-100)'],['var(--color-accent-800)','var(--color-accent-100)'],['var(--color-neutral-300)','var(--color-neutral-900)'],['var(--color-accent-200)','var(--color-accent-900)'],['var(--color-neutral-700)','var(--color-neutral-100)'],['var(--color-accent-600)','var(--color-accent-100)'],['var(--color-neutral-200)','var(--color-accent-800)'],['var(--color-accent-900)','var(--color-accent-300)']];
+const ACC = 'var(--color-accent-700)', INK = 'var(--color-text)', MUTE = 'var(--color-neutral-700)', TINT = 'color-mix(in srgb, var(--color-accent) 8%, transparent)';
+const sec = s => { const [m, x] = s.split(':'); return +m * 60 + +x; };
+const fmt = s => { s = Math.max(0, Math.floor(s)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+const TR = [['爱在西元前','方文山','3:54'],['爸，我回来了','周杰伦','3:51'],['简单爱','徐若瑄','4:30'],['忍者','方文山','2:40'],['开不了口','徐若瑄','4:47'],['上海一九四三','方文山','3:14'],['对不起','方文山','3:45'],['威廉古堡','方文山','3:59'],['双截棍','方文山','3:21'],['安静','周杰伦','5:34']].map(([t, l, d]) => ({ t, l, d, s: sec(d) }));
+const cdRows = TR.map((_, i) => ({ i, k: String(i + 1).padStart(2, '0') }));
+const LPK = ['A1','A2','A3','B1','B2','C1','C2','C3','D1','D2'];
+const ED = [
+  { name: '台湾首版', year: 2001, region: '台湾', label: '阿尔发音乐', cat: 'AFCD-0109', barcode: '4710937 30912 5', mediaL: '1 × CD', tracks: '10', local: 'FLAC 16/44.1', src: 'FLAC · 16 bit / 44.1 kHz', extra: '—', note: '最早的台湾发行，资料库的默认播放版本。', media: [{ name: 'CD', rows: cdRows }] },
+  { name: '首批限定', year: 2001, region: '台湾', label: '阿尔发音乐', cat: 'AFCD-0109L', barcode: '4710937 30913 2', mediaL: '1 × CD · 1 × VCD', tracks: '10 + 4', local: 'FLAC 16/44.1', src: 'FLAC · 16 bit / 44.1 kHz', extra: 'VCD · 4 支 MV', note: '附赠 VCD 的首批版本。音频与首版相同，VCD 尚未导入。', media: [{ name: 'CD', rows: cdRows }, { name: 'VCD', video: true, rows: [] }] },
+  { name: '内地引进版', year: 2001, region: '中国内地', label: '上海声像', cat: 'CNS-2001-417', barcode: '—', mediaL: '1 × CD', tracks: '10', local: 'FLAC 16/44.1', src: 'FLAC · 16 bit / 44.1 kHz', extra: '—', note: '内地引进发行，缺少条码记录。', media: [{ name: 'CD', rows: cdRows }] },
+  { name: '20 周年黑胶', year: 2021, region: '台湾', label: '杰威尔音乐', cat: 'JVR-LP-0109', barcode: '4710937 41007 4', mediaL: '2 × LP · 4 面', tracks: '10', local: 'FLAC 24/96', src: 'FLAC · 24 bit / 96 kHz', extra: 'Side A–D 分面', note: '2 × LP，按面编号；本地文件来自 24/96 数字母带。', media: [{ name: 'LP 1', rows: [0,1,2,3,4].map(i => ({ i, k: LPK[i] })) }, { name: 'LP 2', rows: [5,6,7,8,9].map(i => ({ i, k: LPK[i] })) }] }
+];
+const FIELDS = [['地区','region'],['厂牌','label'],['编号','cat'],['条码','barcode'],['介质','mediaL'],['音轨','tracks'],['本地格式','local'],['独有内容','extra']];
+const cov = (title, artist, t, x) => { const c = t < 0 ? ['var(--color-neutral-100)','var(--color-neutral-600)'] : TONES[t]; return { title, artist, bg: c[0], fg: c[1], mark: t < 0 ? '暂无封面' : '', ...x }; };
+const L = (t, ind = 0) => ({ t, ind: ind * 14 + 'px' });
+const ISS = [
+  { type: '可疑合并', sev: 'high', target: '君の名は。', desc: '通常盘与初回限定盘的曲目被写入同一 Release', title: '《君の名は。》两个版本被合并', meta: '扫描于今天 09:12 · 置信度 0.91', body: '通常盘与初回限定盘的 27 条音轨被写入同一个 Release，其中 12 首曲目重复出现。建议拆分为两个 Release，仍归属同一 ReleaseGroup。', kind: 'struct',
+    before: [L('君の名は。 · ReleaseGroup'), L('Release · 2016 · UPCH-20423', 1), L('Medium 1 · 27 轨（12 首重复）', 2)],
+    after: [L('君の名は。 · ReleaseGroup'), L('Release · 通常盘 · UPCH-20423', 1), L('Medium 1 · 27 轨', 2), L('Release · 初回限定盘 · UPCH-29227', 1), L('Medium 1 · 27 轨 · Medium 2 · DVD', 2)],
+    evidence: ['两组文件位于不同目录，目录名分别含"通常盘""初回限定"', '两组文件的编号标签不同', '重复曲目时长一致，但编码器与写入日期不同'] },
+  { type: '缺失', sev: 'low', target: '范特西 · 首批限定', desc: 'VCD 介质未导入，Medium 数与参照不一致', title: '首批限定版缺少 VCD 介质', meta: '扫描于今天 09:12 · 置信度 0.95', body: '参照记录中该版本有 2 个 Medium（CD + VCD），本地只有 CD。建议补上 Medium 2 的记录并标注为未导入的视频介质，不影响音频播放。', kind: 'struct',
+    before: [L('Release · 首批限定 · AFCD-0109L'), L('Medium 1 · CD · 10 轨', 1)],
+    after: [L('Release · 首批限定 · AFCD-0109L'), L('Medium 1 · CD · 10 轨', 1), L('Medium 2 · VCD · 4 支 MV（未导入）', 1)],
+    evidence: ['编号带 L 后缀，与首版区分', '参照 Release 记录列出 2 个 Medium'] },
+  { type: '冲突', sev: 'mid', target: '邓丽君 / Teresa Teng', desc: '同一艺人两种写法，艺人页被拆成两页', title: '同一艺人被拆成两页', meta: '5 张专辑 · 71 轨受影响', body: '"邓丽君"与"Teresa Teng"指向同一位艺人。建议以"邓丽君"为主名，"Teresa Teng"保留为别名，两个艺人页合并为一页。', kind: 'proof',
+    proof: [['专辑艺人', 'Teresa Teng', '邓丽君', '①', '统一为主名，原写法保留为别名'], ['艺人页', '2 页', '1 页', '②', '合并后收录 5 张专辑']],
+    evidence: ['两者在参照源中的艺人 ID 相同', '2 张专辑的文件标签使用英文名'] },
+  { type: '缺失', sev: 'low', target: '之乎者也', desc: '缺少封面图像', title: '《之乎者也》缺少封面', meta: '扫描于昨天 03:00', body: '本地目录中没有封面文件，标签中也未内嵌图像。已从参照源找到一张 600 × 600 的候选封面。', kind: 'proof',
+    proof: [['封面', '—', '参照源 · 600 × 600', '①', '写入资料库，不会改动原文件']],
+    evidence: ['参照 Release 与本地曲目数、时长一致'] },
+  { type: '缺失', sev: 'low', target: '范特西 · 内地引进版', desc: '缺少条码', title: '内地引进版缺少条码', meta: '扫描于 9 月 24 日', body: '没有找到可靠来源。建议保持空白，并标记为"已知缺失"，以后扫描时不再提醒。', kind: 'proof',
+    proof: [['条码', '—', '已知缺失', '①', '保留空白，停止提醒']],
+    evidence: ['参照源中该版本同样没有条码记录'] },
+  { type: '冲突', sev: 'low', target: '新世紀エヴァンゲリオン', desc: '年份精度不一致：1995 与 1995-11-22', title: '发行日期精度不一致', meta: '扫描于今天 09:12', body: '文件标签只写了年份，参照记录精确到日。建议采用更精确的日期。', kind: 'proof',
+    proof: [['发行日期', '1995', '1995-11-22', '①', '来源：参照 Release 记录']],
+    evidence: ['同一 ReleaseGroup 的其他版本也记录了完整日期'] },
+  { type: '可疑合并', sev: 'mid', target: 'Interstellar', desc: '3 首曲目疑似重复导入', title: 'Interstellar 有 3 首疑似重复', meta: '扫描于今天 09:12 · 置信度 0.71', body: 'Expanded Edition 中有 3 首曲目各出现两次，时长相同但编码器不同。建议把重复的 3 个文件移出该 Release；文件本身保留在原位。', kind: 'struct',
+    before: [L('Release · Expanded Edition'), L('Medium 1 · 19 轨（3 首重复）', 1)],
+    after: [L('Release · Expanded Edition'), L('Medium 1 · 16 轨', 1), L('3 个文件 → 未归属（文件保留）', 1)],
+    evidence: ['重复曲目时长一致（±0 秒）', '编码器不同：一组为 LAME 转换后的 FLAC'] }
+];
+const RISK = { high: ['高风险', '改动 Release 结构，需管理员审批 · 自动建立恢复点', '提交审批'], mid: ['中风险', '影响多张专辑的归属 · 会建立恢复点，可撤销', '应用修正'], low: ['低风险', '只写入资料库字段，不改动文件 · 可撤销', '应用修正'] };
+const SEV = { high: '高', mid: '中', low: '低' };
+const REPLIES = {
+  '默认播放哪个版本？': ['读取了 4 个 Release', '现在默认播放台湾首版。如果你更在意音质，可以改为"最高音质"，会选中 20 周年黑胶（24/96）。这是低风险设置，随时可改。'],
+  '比较黑胶与 CD 的音质': ['读取了 2 个 Release 的文件信息', '黑胶版本地文件为 24 bit / 96 kHz，来自数字母带；CD 版为 16 bit / 44.1 kHz。两者曲目与曲序相同，黑胶按 A–D 四面分成两个 Medium。'],
+  '哪些专辑缺封面？': ['读取了资料库', '目前只有 1 张：罗大佑《之乎者也》。我已找到候选封面，在"元数据问题"里可以预览后再决定。']
+};
+
+class Component extends DCLogic {
+  state = {
+    view: 'home', ed: 0, med: 0, tree: false, compare: false, fav: true,
+    cur: { ed: 0, i: 4 }, pos: 112, playing: false, npTab: 'about',
+    issue: 0, filter: '全部', st: {}, report: false, paused: false, ignRoot: false, dup: 'open', logSel: 1, rpN: 43,
+    logs: [
+      { time: '今天 09:12', who: '系统', act: '扫描 /mnt/music/华语 完成', scope: '新增 38 张专辑', st: '完成', cls: 'tag tag-neutral', rp: '#42', undo: '扫描 #42 新增的 38 张专辑记录' },
+      { time: '昨天 22:40', who: '林', act: '合并艺人 “邓丽君” 与 “Teresa Teng”', scope: '5 张专辑 · 71 轨', st: '可撤销', cls: 'tag tag-accent', rp: '#41', undo: '艺人合并（5 张专辑 · 71 轨）' },
+      { time: '9 月 25 日 20:17', who: '小雨', act: '请求删除 12 个重复文件', scope: '1.4 GB', st: '转为审批', cls: 'tag tag-neutral', rp: '', undo: '' },
+      { time: '9 月 24 日 03:00', who: '系统', act: '计划扫描 · 全部目录', scope: '无变更', st: '完成', cls: 'tag tag-neutral', rp: '#40', undo: '计划扫描 #40（无变更）' },
+      { time: '9 月 22 日 19:44', who: '林', act: '为《范特西》设置默认版本', scope: '1 ReleaseGroup', st: '完成', cls: 'tag tag-neutral', rp: '#39', undo: '《范特西》默认版本设置' }
+    ], steward: this.props.stewardOpen ?? false, draft: '', toast: '', scan: 64,
+    convOpen: false, conv: 0, convSeq: 5,
+    convs: [
+      { id: 1, title: '整理《范特西》的版本', when: '今天', msgs: [
+        { me: true, text: '范特西那几个版本帮我理一下，有没有问题？' },
+        { bot: true, src: '读取了 4 个 Release、扫描日志', text: '四个版本都正确归在同一个 ReleaseGroup 下，编号与条码可区分，没有错误合并。有一处可以补：首批限定版的 VCD 还没导入，所以该版本只显示 1 个 Medium。', plan: true }] },
+      { id: 2, title: '哪些专辑缺封面？', when: '昨天', msgs: [
+        { me: true, text: '哪些专辑缺封面？' },
+        { bot: true, src: '读取了资料库', text: '目前只有 1 张：罗大佑《之乎者也》。我已找到候选封面，在"元数据问题"里可以预览后再决定。' }] },
+      { id: 3, title: '把吉卜力原声做成播放列表', when: '9 月 25 日', msgs: [
+        { me: true, text: '把吉卜力的原声做成一个播放列表' },
+        { bot: true, src: '读取了 12 张专辑', text: '找到 12 张吉卜力原声，共 68 首。已按上映年份排序生成"吉卜力 · 久石譲"，这是你自己的数据，无需审批。' }] },
+      { id: 4, title: '解释 Release 与 ReleaseGroup', when: '9 月 20 日', msgs: [
+        { me: true, text: 'Release 和 ReleaseGroup 有什么区别？' },
+        { bot: true, src: '不需要读取资料库', text: 'ReleaseGroup 是一部作品，例如《范特西》；Release 是它的一次具体发行，例如台湾首版或 20 周年黑胶。专辑列表按 ReleaseGroup 展示，进入后再选版本。' }] }
+    ]
+  };
+  componentDidMount() {
+    this.timer = setInterval(() => {
+      const s = this.state, patch = {};
+      if (s.scan < 100 && !s.paused) patch.scan = s.scan + 1;
+      if (s.playing) {
+        if (s.pos + 1 >= TR[s.cur.i].s) { this.next(); } else patch.pos = s.pos + 1;
+      }
+      if (Object.keys(patch).length) this.setState(patch);
+    }, 1000);
+  }
+  componentWillUnmount() { clearInterval(this.timer); clearTimeout(this.tt); }
+  go(view, extra = {}) { this.setState({ view, ...extra }); if (this.main) this.main.scrollTop = 0; }
+  toastMsg(t) { clearTimeout(this.tt); this.setState({ toast: t }); this.tt = setTimeout(() => this.setState({ toast: '' }), 2600); }
+  play(ed, i) { this.setState({ cur: { ed, i }, pos: 0, playing: true }); }
+  next = () => { const { cur } = this.state; if (cur.i < TR.length - 1) this.setState({ cur: { ...cur, i: cur.i + 1 }, pos: 0 }); else this.setState({ playing: false, pos: 0 }); };
+  prev = () => { const { cur, pos } = this.state; if (pos > 3 || cur.i === 0) this.setState({ pos: 0 }); else this.setState({ cur: { ...cur, i: cur.i - 1 }, pos: 0 }); };
+  send(text) {
+    if (!text.trim()) return;
+    const r = REPLIES[text] || ['只读分析', '收到。我会先只读分析，不会直接修改资料库；需要写入时会列出改动预览，并按风险等级请你确认或提交审批。'];
+    this.setState(s => { const convs = s.convs.map((c, i) => i !== s.conv ? c : { ...c, title: c.msgs.length ? c.title : text.slice(0, 18), when: '刚刚', msgs: [...c.msgs, { me: true, text }, { bot: true, src: r[0], text: r[1] }] }); return { draft: '', convs }; }, () => { if (this.chat) this.chat.scrollTop = this.chat.scrollHeight; });
+  }
+  renderVals() {
+    const s = this.state, e = ED[s.ed], m = e.media[s.med] || e.media[0];
+    const ce = ED[s.cur.ed], ct = TR[s.cur.i];
+    const navOn = { c: ACC, bg: 'color-mix(in srgb, var(--color-accent) 11%, transparent)' }, navOff = { c: INK, bg: 'transparent' };
+    const nav = {}; ['home','album','playing','issues','scan','audit'].forEach(k => nav[k] = s.view === k ? navOn : navOff);
+    const status = i => s.st[i] || 'open';
+    const openCount = ISS.filter((_, i) => status(i) === 'open').length;
+    const approvals = [];
+    if (status(0) === 'pending') approvals.push({ id: 'kimi', risk: '高风险 · 结构改动', time: '刚刚', title: '拆分 Release《君の名は。》', who: '林（来自元数据问题）', scope: '1 ReleaseGroup · 2 Release · 27 轨', bd: 'var(--color-accent)' });
+    if (s.dup === 'open') approvals.push({ id: 'dup', risk: '文件操作 · 需二次确认', time: '今天 18:40', title: '移除 12 个重复文件', who: '小雨（编辑者）', scope: '1.4 GB · 移入回收站，保留 30 天', bd: 'var(--color-divider)' });
+    const pendingCount = approvals.length;
+    const addLog = (act, scope, st, cls, withRp) => this.setState(x => ({ rpN: withRp ? x.rpN + 1 : x.rpN, logs: [{ time: '刚刚', who: '林', act, scope, st, cls, rp: withRp ? '#' + x.rpN : '', undo: act }, ...x.logs] }));
+    const decide = (id, ok) => {
+      if (id === 'kimi') { this.setState(x => { const st = { ...x.st }; if (ok) st[0] = 'applied'; else delete st[0]; return { st }; }); addLog((ok ? '批准：' : '拒绝：') + '拆分 Release《君の名は。》', '1 ReleaseGroup · 2 Release · 27 轨', ok ? '完成' : '已拒绝', 'tag tag-neutral', ok); }
+      else { this.setState({ dup: ok ? 'approved' : 'rejected' }); addLog((ok ? '批准：' : '拒绝：') + '移除 12 个重复文件', '1.4 GB', ok ? '已移入回收站' : '已拒绝', ok ? 'tag tag-accent' : 'tag tag-neutral', ok); }
+      this.toastMsg(ok ? '已批准，已建立恢复点' : '已拒绝，不会有任何写入');
+    };
+    const rpLog = s.logs[s.logSel] || {};
+    const notInProto = () => this.toastMsg('这一页不在本原型中，见《设计探索》画布');
+    const toAlbum = () => this.go('album');
+    const fcount = t => ISS.filter(x => t === '全部' || x.type === t).length;
+    const iss = ISS[s.issue], ist = status(s.issue), rk = RISK[iss.sev];
+    const setEd = i => this.setState({ ed: i, med: 0 });
+    return {
+      nav, openCount: String(openCount), pendingCount: String(pendingCount),
+      stewBd: s.steward ? 'var(--color-accent)' : 'var(--color-divider)', stewC: s.steward ? ACC : INK,
+      goHome: () => this.go('home'), goAlbum: toAlbum, goPlaying: () => this.go('playing'), goIssues: () => this.go('issues'),
+      goIssue1: () => this.go('issues', { issue: 1, filter: '全部' }),
+      notInProto, toggleSteward: () => this.setState(x => ({ steward: !x.steward })), stewardOpen: s.steward,
+      mainRef: el => { this.main = el; }, chatRef: el => { this.chat = el; },
+      isHome: s.view === 'home', isAlbum: s.view === 'album', isPlaying: s.view === 'playing', isIssues: s.view === 'issues',
+      scanPct: s.scan + '%', scanLabel: s.scan >= 100 ? '完成' : s.scan + '%',
+      continueL: [cov('范特西','周杰伦',0,{ note: '第 5 首 · 剩 24 分', pct: '42%', open: toAlbum }), cov('COWBOY BEBOP','SEATBELTS',1,{ note: '剩 51 分', pct: '12%', open: notInProto }), cov('花样年华','梅林茂 等',7,{ note: '第 3 首 · 剩 30 分', pct: '30%', open: notInProto }), cov('千と千尋の神隠し','久石譲',3,{ note: '第 12 首', pct: '55%', open: notInProto })],
+      recentL: [cov('君の名は。','RADWIMPS',5,{ note: '2 个版本', open: () => this.go('issues', { issue: 0 }) }), cov('新世紀エヴァンゲリオン','鷺巣詩郎',4,{ note: '3 个版本', open: notInProto }), cov('卧虎藏龙','谭盾',2,{ note: '1 个版本', open: notInProto }), cov('之乎者也','罗大佑',-1,{ note: '缺封面', open: () => this.go('issues', { issue: 3 }) }), cov('The Last Emperor','坂本龍一 等',4,{ note: '2 个版本', open: notInProto }), cov('Interstellar','Hans Zimmer',0,{ note: '1 个版本', open: notInProto })],
+      treeOpen: s.tree, treeClosed: !s.tree, toggleTree: () => this.setState(x => ({ tree: !x.tree })),
+      treeEds: ED.map((x, i) => ({ name: x.name, meta: x.year + ' · ' + x.mediaL.split(' · ')[0], c: i === s.ed ? ACC : INK, sel: i === s.ed, pick: () => setEd(i),
+        media: x.media.map((mm, j) => ({ name: mm.name, count: mm.video ? '4 支 MV' : mm.rows.length + ' 轨', c: j === s.med ? ACC : INK, pick: () => this.setState({ med: j }) })) })),
+      edName: e.name, edMeta: `${e.label} · ${e.cat} · ${e.barcode} · ${e.local}`, edNote: e.note,
+      playEdition: () => { const r = m.rows[0] || cdRows[0]; this.play(s.ed, r.i); },
+      openCompare: () => this.setState({ compare: true }), closeCompare: () => this.setState({ compare: false }), compareOpen: s.compare, stop: ev => ev.stopPropagation(),
+      favFill: s.fav ? 'currentColor' : 'none', toggleFav: () => { this.setState(x => ({ fav: !x.fav })); this.toastMsg(s.fav ? '已取消收藏' : '已加入收藏'); },
+      tabs: ED.map((x, i) => ({ name: x.name, year: x.year, c: i === s.ed ? ACC : MUTE, bd: i === s.ed ? 'var(--color-accent)' : 'transparent', pick: () => setEd(i) })),
+      multiMedia: e.media.length > 1, isVideo: !!m.video,
+      mediaTabs: e.media.map((mm, j) => ({ name: mm.name, sel: j === s.med, pick: () => this.setState({ med: j }) })),
+      trackRows: m.rows.map(r => { const on = s.cur.ed === s.ed && s.cur.i === r.i; return { k: on ? '▸' : r.k, title: TR[r.i].t, cred: `词 ${TR[r.i].l} · 曲 周杰伦`, dur: TR[r.i].d, c: on ? ACC : INK, bg: on ? TINT : 'transparent', play: () => this.play(s.ed, r.i) }; }),
+      credits: [['周杰伦','作曲 · 演唱 · 制作'],['方文山','作词'],['徐若瑄','作词'],['钟兴民','编曲'],['杨瑞代','监制']].map(([name, role]) => ({ name, role })),
+      edHead: ED.map((x, i) => ({ name: x.name, year: x.year, bd: i === s.ed ? 'var(--color-accent)' : 'transparent', pick: () => { setEd(i); this.setState({ compare: false }); } })),
+      diffRows: FIELDS.map(([label, f]) => ({ label, cells: ED.map((x, i) => { const d = i > 0 && x[f] !== ED[0][f]; return { v: x[f], c: d ? ACC : INK, d: d ? 'underline' : 'none' }; }) })),
+      curTitle: ct.t, curLyr: ct.l, curEdName: ce.name, curCat: ce.cat, curFmt: ce.local,
+      npKicker: `${s.playing ? '正在播放' : '已暂停'} · 第 ${s.cur.i + 1} 首 / 共 ${TR.length} 首`,
+      elapsed: fmt(s.pos), total: ct.d, pct: (s.pos / ct.s * 100).toFixed(1) + '%',
+      playingNow: s.playing, pausedNow: !s.playing,
+      togglePlay: () => this.setState(x => ({ playing: !x.playing })), next: this.next, prev: this.prev,
+      seek: ev => { const r = ev.currentTarget.getBoundingClientRect(); const f = Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)); this.setState({ pos: Math.floor(f * ct.s) }); },
+      npTabs: [['about','关于'],['signal','信号路径'],['ed','版本']].map(([k, name]) => ({ name, sel: s.npTab === k, pick: () => this.setState({ npTab: k }) })),
+      tabAbout: s.npTab === 'about', tabSignal: s.npTab === 'signal', tabEd: s.npTab === 'ed',
+      lyricLines: (() => { const n = Math.floor(ct.s / 12), cur = Math.floor((s.pos - 6) / 12); const lo = Math.max(0, Math.min(cur - 4, n - 9));
+        return Array.from({ length: Math.min(9, n) }, (_, j) => { const i = lo + j, on = i === cur, past = i < cur;
+          return { t: `歌词第 ${i + 1} 行（${fmt(6 + i * 12)}）`, c: on ? ACC : past ? 'var(--color-neutral-500)' : INK, fs: on ? 'clamp(24px,2.6vw,34px)' : 'clamp(17px,1.8vw,22px)', seekTo: () => this.setState({ pos: 6 + i * 12 }) }; }); })(),
+      signal: [['源文件', ce.src + ' · 立体声'], ['ROOMusic 服务器', '解码 · 未启用 DSP · 未重采样'], ['传输', '局域网 · 无损 · 缓冲 8 秒'], ['输出 · 客厅', 'USB DAC · ' + ce.local.replace('FLAC ', '') + ' · 硬件音量']].map(([name, sub], i, a) => ({ name, sub, dot: i === a.length - 1 ? 'var(--color-accent)' : 'var(--color-bg)', line: i === a.length - 1 ? 'transparent' : 'var(--color-accent)' })),
+      edSwitch: ED.filter(x => !x.media.every(mm => mm.video)).map((x, i) => ({ name: x.name, fmt: x.local, c: i === s.cur.ed ? ACC : INK, pick: () => this.setState({ cur: { ed: i, i: s.cur.i }, pos: 0 }) })),
+      queue: TR.slice(s.cur.i + 1).map((t, j) => { const i = s.cur.i + 1 + j; return { k: s.cur.ed === 3 ? LPK[i] : String(i + 1).padStart(2, '0'), title: t.t, dur: t.d, jump: () => this.play(s.cur.ed, i) }; }),
+      queueEmpty: s.cur.i === TR.length - 1, queueMeta: `${TR.length - 1 - s.cur.i} 首 · ${fmt(TR.slice(s.cur.i + 1).reduce((a, t) => a + t.s, 0))}`,
+      filters: ['全部','缺失','冲突','可疑合并'].map(label => ({ label: `${label} ${fcount(label)}`, sel: s.filter === label, pick: () => this.setState({ filter: label }) })),
+      issueRows: ISS.map((x, i) => ({ x, i })).filter(({ x }) => s.filter === '全部' || x.type === s.filter).map(({ x, i }) => { const stt = status(i), sel = i === s.issue;
+        return { target: x.target, desc: x.desc, sevLabel: SEV[x.sev] + '风险', tagLabel: { open: x.type, applied: '已修正', pending: '待审批', ignored: '已忽略' }[stt], cls: stt === 'open' ? (x.sev === 'high' ? 'tag tag-outline' : 'tag tag-neutral') : 'tag tag-accent', bg: sel ? TINT : 'transparent', bd: sel ? 'var(--color-accent)' : 'transparent', op: stt === 'ignored' ? '0.55' : '1', pick: () => this.setState({ issue: i }) }; }),
+      iss: { type: iss.type, meta: iss.meta, title: iss.title, body: iss.body, isStruct: iss.kind === 'struct', isProof: iss.kind === 'proof',
+        before: iss.before || [], after: iss.after || [], proof: (iss.proof || []).map(([field, old, nv, mark, note]) => ({ field, old, nv, mark, note })),
+        evidence: iss.evidence.map(t => ({ t })), riskLabel: rk[0], riskText: rk[1], action: rk[2], isOpen: ist === 'open', isDone: ist !== 'open',
+        doneLabel: { applied: '已应用 · 已建立恢复点', pending: '已提交给管理员审批', ignored: '已忽略' }[ist] || '' },
+      applyIssue: () => { const v = iss.sev === 'high' ? 'pending' : 'applied'; this.setState(x => ({ st: { ...x.st, [s.issue]: v } })); if (v === 'pending') addLog('提交审批：' + iss.title, iss.target, '待审批', 'tag tag-outline', false); else addLog('修正：' + iss.title, iss.target, '可撤销', 'tag tag-accent', true); this.toastMsg(v === 'pending' ? '已提交审批，批准前不会写入' : '已应用，可随时撤销'); },
+      isScan: s.view === 'scan', isAudit: s.view === 'audit', goScan: () => this.go('scan', { report: false }), goAudit: () => this.go('audit'),
+      scanList: !s.report, scanReport: s.report, openReport: () => this.go('scan', { report: true }), closeReport: () => this.go('scan', { report: false }),
+      roots: [
+        ['/mnt/music/华语','14,210','361 GB','2 小时前','正常','100%','tag tag-neutral'],
+        ['/mnt/music/anime','4,812','141 GB', s.scan >= 100 ? '刚刚' : '进行中', s.scan >= 100 ? '正常' : (s.paused ? '已暂停 ' : '扫描中 ') + s.scan + '%', s.scan + '%', s.scan >= 100 ? 'tag tag-neutral' : 'tag tag-outline'],
+        ['/mnt/music/ost','3,390','88 GB','昨天 03:00','正常','100%','tag tag-neutral'],
+        ['/home/shared/家庭','1,204','22 GB','昨天 03:00', s.ignRoot ? '已忽略 1 个子目录' : '1 个目录不可读','100%', s.ignRoot ? 'tag tag-neutral' : 'tag tag-accent']
+      ].map(([path, files, size, last, status, pct, cls]) => ({ path, files, size, last, status, pct, cls })),
+      scanCardKicker: s.scan >= 100 ? '扫描完成' : (s.paused ? '已暂停' : '正在扫描'),
+      scanCardText: s.scan >= 100 ? '4,812 个文件 · 新增 38 张专辑 · 9 个判断待确认' : `${Math.round(4812 * s.scan / 100).toLocaleString()} / 4,812 个文件 · 当前：…/君の名は。/Disc 2`,
+      pauseLabel: s.paused ? '继续' : '暂停', togglePause: () => this.setState(x => ({ paused: !x.paused })),
+      rescan: () => { this.setState({ scan: 0, paused: false }); this.toastMsg('已开始扫描全部目录（增量）'); },
+      addRoot: () => this.toastMsg('选择目录后，ROOMusic 只会以只读方式访问'),
+      permHelp: () => this.toastMsg('请在服务器上为 ROOMusic 用户授予该目录的读取权限'),
+      ignoreRoot: () => { this.setState({ ignRoot: true }); this.toastMsg('已忽略该子目录，可在设置中恢复'); },
+      funnel: [['发现文件','4,812','/mnt/music/anime 下的音频文件'],['读取标签','4,806','6 个文件标签损坏，已跳过'],['组成 Release','212','按目录、条码与碟号分组'],['归入 ReleaseGroup','198','其中 14 个为新建'],['需要确认','9','置信度低于 0.85 的判断']].map(([name, n, sub], i) => ({ name, n, sub, c: i === 4 ? ACC : INK })),
+      decisions: [
+        ['已归并','君の名は。/ Disc 1、Disc 2','识别为同一 Release 的 2 个 Medium','相同条码 · 相邻目录 · 碟号 1/2','0.97','tag tag-neutral', 0],
+        ['新建版本','COWBOY BEBOP / 2019 Vinyl','作为独立 Release，归入已有 ReleaseGroup','编号与条码不同 · 24/96','0.93','tag tag-neutral', -1],
+        ['待确认','Interstellar / Expanded','3 首曲目疑似重复','时长相同，编码器不同','0.71','tag tag-outline', 6],
+        ['已跳过','/anime/_temp','空目录，未创建任何记录','—','—','tag tag-neutral', -1]
+      ].map(([k, obj, what, why, conf, cls, ii]) => ({ k, obj, what, why, conf, cls, open: ii >= 0 ? () => this.go('issues', { issue: ii, filter: '全部' }) : () => this.toastMsg('这条判断已自动写入，无需确认') })),
+      approvals: approvals.map(a => ({ ...a, approve: () => decide(a.id, true), reject: () => decide(a.id, false), view: a.id === 'kimi' ? () => this.go('issues', { issue: 0, filter: '全部' }) : () => this.toastMsg('12 个文件与已有文件的音频指纹一致') })),
+      noApprovals: approvals.length === 0,
+      logs: s.logs.map((l, i) => ({ ...l, hasRp: !!l.rp, bg: i === s.logSel ? TINT : 'transparent', dotBd: l.rp ? 'var(--color-accent)' : 'var(--color-text)', pick: () => this.setState({ logSel: i }) })),
+      hasRpSel: !!rpLog.rp, noRpSel: !rpLog.rp,
+      rpSel: { rp: rpLog.rp || '', time: rpLog.time || '', act: rpLog.act || '', undo: rpLog.undo + (s.logSel > 0 ? `，以及其后的 ${s.logSel} 条记录` : '') },
+      rollback: () => { const r = rpLog.rp; addLog('回滚到恢复点 ' + r, '撤销 ' + (s.logSel + 1) + ' 条记录', '完成', 'tag tag-neutral', true); this.setState({ logSel: 0 }); this.toastMsg('已回滚到 ' + r + '（音频文件未受影响）'); },
+      members: [['林','管理员','tag tag-outline','审批一切 · 管理目录与成员'],['小雨','编辑者','tag tag-neutral','可改字段 · 结构与文件操作需审批'],['爸爸','听众','tag tag-neutral','浏览、播放、收藏'],['Music Steward','助手','tag tag-neutral','只读分析 · 只能提交，不能批准']].map(([name, role, cls, can]) => ({ name, role, cls, can })),
+      ignoreIssue: () => this.setState(x => ({ st: { ...x.st, [s.issue]: 'ignored' } })),
+      undoIssue: () => this.setState(x => { const st = { ...x.st }; delete st[s.issue]; return { st }; }),
+      msgs: (s.convs[s.conv] || { msgs: [] }).msgs.map(x => ({ me: !!x.me, bot: !!x.bot, text: x.text, src: x.src || '', plan: !!x.plan })),
+      convTitle: (s.convs[s.conv] || {}).title || '新对话', convCaret: s.convOpen ? '▴' : '▾', convListOpen: s.convOpen, convEmpty: !((s.convs[s.conv] || { msgs: [] }).msgs.length),
+      toggleConvList: () => this.setState(x => ({ convOpen: !x.convOpen })),
+      convList: s.convs.map((c, i) => ({ title: c.title, meta: c.when, c: i === s.conv ? ACC : INK, bg: i === s.conv ? TINT : 'transparent', pick: () => this.setState({ conv: i, convOpen: false }, () => { if (this.chat) this.chat.scrollTop = this.chat.scrollHeight; }) })),
+      newConv: () => this.setState(x => { if (x.convs[0] && !x.convs[0].msgs.length) return { conv: 0, convOpen: false }; return { convs: [{ id: x.convSeq, title: '新对话', when: '刚刚', msgs: [] }, ...x.convs], conv: 0, convSeq: x.convSeq + 1, convOpen: false }; }),
+      chips: Object.keys(REPLIES).map(t => ({ t, send: () => this.send(t) })),
+      draft: s.draft, setDraft: ev => this.setState({ draft: ev.target.value }),
+      sendDraft: ev => { ev.preventDefault(); this.send(s.draft); },
+      toast: s.toast, hasToast: !!s.toast
+    };
+  }
+}
+</script>
+</body>
+</html>
