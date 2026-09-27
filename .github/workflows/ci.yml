@@ -67,13 +67,27 @@ jobs:
       - name: Test
         working-directory: frontend
         run: npm run test -- --run
+      - name: Detect frontend entry
+        id: frontend-entry
+        run: |
+          if test -f frontend/src/main.tsx; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "Frontend source is intentionally absent while the redesign is pending."
+          fi
       - name: Production build
+        if: steps.frontend-entry.outputs.available == 'true'
         working-directory: frontend
         run: npm run build
       - name: Check embedded asset drift
+        if: steps.frontend-entry.outputs.available == 'true'
         run: |
           git diff --exit-code -- backend/cmd/roomusic/web
           test -z "$(git ls-files --others --exclude-standard -- backend/cmd/roomusic/web)"
+      - name: Check frontend reset fallback
+        if: steps.frontend-entry.outputs.available != 'true'
+        run: test -f backend/cmd/roomusic/web/index.html
 
   integration:
     name: PostgreSQL integration and configuration
