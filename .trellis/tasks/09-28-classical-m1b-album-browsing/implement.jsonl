@@ -1,0 +1,3 @@
+{"file": "frontend/DESIGN.md", "reason": "专辑页设计与落地差异表"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "组件合同、状态呈现与可访问性"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "catalog 读取合同与封面投影"}

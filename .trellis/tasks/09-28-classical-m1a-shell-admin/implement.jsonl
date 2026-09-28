@@ -1,0 +1,5 @@
+{"file": "docs/architecture/adr/0001-frontend-foundations.md", "reason": "已批准的前端选型与待定项"}
+{"file": "frontend/DESIGN.md", "reason": "Classical 设计锚点与落地差异"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "app/features/shared 目录与导入规则"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "URL、服务器、会话与本地状态归属"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "边界解码与穷尽类型"}

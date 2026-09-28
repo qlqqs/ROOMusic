@@ -4,4 +4,4 @@
 {"file":".trellis/spec/frontend/component-guidelines.md","reason":"组件与无障碍合同"}
 {"file":".trellis/spec/frontend/hook-guidelines.md","reason":"副作用清理"}
 {"file":".trellis/spec/frontend/type-safety.md","reason":"持久化校验"}
-{"file":".trellis/tasks/09-04-music-client-experience/design.md","reason":"任务技术方案"}
+{"file":".trellis/tasks/archive/2026-09/09-04-music-client-experience/design.md","reason":"任务技术方案"}

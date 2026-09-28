@@ -19,7 +19,14 @@
   "pr_url": null,
   "subtasks": [],
   "children": [
-    "09-27-classical-m0-alignment"
+    "09-27-classical-m0-alignment",
+    "09-28-core-1-roadmap-revision",
+    "09-28-classical-b0-package-split",
+    "09-28-classical-i-identity-groups",
+    "09-28-classical-m1a-shell-admin",
+    "09-28-classical-m1b-album-browsing",
+    "09-28-classical-f1-api-json-404",
+    "09-28-classical-f2-root-op-idempotency"
   ],
   "parent": null,
   "relatedFiles": [
@@ -27,6 +34,6 @@
     ".trellis/tasks/09-27-classical-core-1/design.md",
     ".trellis/tasks/09-27-classical-core-1/implement.md"
   ],
-  "notes": "2026-09-27：人工选择路线。用户先批准 M0 文档整理，再回复“提交”；M0 文档已提交（850d274）并归档。父任务保持 planning；技术选型、Core 1 截止范围及后续业务实施仍待确认，不因 M0 完成而启动其他阶段。",
+  "notes": "2026-09-27：人工选择路线。用户先批准 M0 文档整理，再回复“提交”；M0 文档已提交（850d274）并归档。2026-09-28：路线修订任务 09-28-core-1-roadmap-revision 由用户裁决 D1–D6，Core 1 截止到 M4；已创建 B0、I、M1a、M1b、F1、F2 子任务（planning）。父任务保持 planning，不直接实施。",
   "meta": {}
 }

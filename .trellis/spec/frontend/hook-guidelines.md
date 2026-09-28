@@ -8,9 +8,10 @@ or manage a lifecycle such as scan polling. They do not become service locators
 or alternative business-policy engines.
 
 旧前端使用原生 `useEffect`、`useState` 和 `requestApi`，但这些实现随 `src/` 删除，
-目前不存在可直接复用的 hook。后续客户端仍按下述生命周期/边界合同恢复；TanStack Query
-是 [ADR 草案](../../../docs/architecture/adr/0001-frontend-foundations.md) 中的候选，尚未安装
-或采纳。选定机制后由一个边界统一请求、取消和缓存，不能与无归属请求混用。
+目前不存在可直接复用的 hook。后续客户端仍按下述生命周期/边界合同恢复。TanStack Query
+已于 2026-09-28 获批（[ADR 0001](../../../docs/architecture/adr/0001-frontend-foundations.md)
+决策记录），由 M1a 安装；它是服务器状态的唯一缓存边界，统一请求、取消和缓存，不能与无归属
+请求混用。
 
 ## Planned Layers
 

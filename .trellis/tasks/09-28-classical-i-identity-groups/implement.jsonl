@@ -1,0 +1,4 @@
+{"file": "docs/architecture/adr/0002-metadata-overlays.md", "reason": "已批准的身份策略、归组依据与验收矩阵"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移只新增、事务与幂等规则"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "Release 列表/详情合同，按组接口需与之对齐"}
+{"file": ".trellis/spec/guides/real-music-assets.md", "reason": "真实音乐只读与测试隔离，冒烟输出不泄露路径"}

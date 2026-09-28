@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "集成测试矩阵与危险失败路径的验证"}
+{"file": "docs/architecture/adr/0002-metadata-overlays.md", "reason": "核对实现与已批准身份规则一致"}

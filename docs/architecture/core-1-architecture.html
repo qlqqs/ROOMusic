@@ -1,0 +1,1112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ROOMusic · Core 1 目标架构</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Lora:wght@400;600&family=Noto+Serif+SC:wght@400;600&display=swap">
+<style>
+/* 变量取自 Classical 设计系统（frontend-desgin/_ds/.../styles.css），离线时回退到系统衬线字体。 */
+:root {
+  --color-bg: #f3f2f2;
+  --color-surface: #eae9e9;
+  --color-text: #201f1d;
+  --color-accent: #b68235;
+  --color-divider: color-mix(in srgb, #201f1d 16%, transparent);
+  --color-neutral-100: #f8f4f4;
+  --color-neutral-200: #eae7e7;
+  --color-neutral-300: #d7d3d3;
+  --color-neutral-500: #9b9797;
+  --color-neutral-600: #7d7979;
+  --color-neutral-700: #605d5d;
+  --color-neutral-800: #444141;
+  --color-accent-100: #fff3e4;
+  --color-accent-600: #a06f24;
+  --color-accent-700: #7d5411;
+  --color-accent-800: #5a3b0a;
+  --font-heading: "Cormorant Garamond", "Noto Serif SC", "Songti SC", serif;
+  --font-body: "Lora", "Noto Serif SC", "Songti SC", serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace, "Noto Serif SC";
+  --radius-md: 4px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { background: var(--color-bg); }
+/* Cormorant 默认是旧式数字，M0、M1 会像 “Mo”“MI”，全局改用齐线数字。 */
+body { margin: 0; color: var(--color-text); font-family: var(--font-body); font-size: 14px; line-height: 1.55; font-variant-numeric: lining-nums; }
+h1, h2, h3 { font-family: var(--font-heading); font-weight: 600; letter-spacing: -0.01em; margin: 0; line-height: 1.12; text-wrap: balance; }
+p { margin: 0; }
+a { color: var(--color-accent-700); text-underline-offset: 3px; }
+a:hover { color: var(--color-accent); }
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+::selection { background: color-mix(in srgb, var(--color-accent) 30%, transparent); }
+code { font-family: var(--font-mono); font-size: 0.86em; }
+
+.page { max-width: 1360px; margin: 0 auto; padding: 44px 40px 72px; }
+.kicker { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--color-accent-700); font-variant-numeric: lining-nums tabular-nums; }
+
+/* 刊头 */
+.masthead { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr); gap: 48px; padding-bottom: 26px; border-bottom: 3px double var(--color-text); }
+.brand { font: 400 22px/1 var(--font-heading); margin-bottom: 18px; }
+.brand span { font-style: italic; color: var(--color-accent-700); }
+.masthead h1 { font-size: 52px; font-weight: 400; margin-top: 8px; }
+.lede { margin-top: 14px; max-width: 640px; font-size: 15px; color: var(--color-neutral-800); text-align: justify; }
+.meta { margin: 0; display: grid; gap: 10px; font-size: 12.5px; align-content: start; padding-top: 6px; }
+.meta div { display: grid; grid-template-columns: 44px 1fr; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--color-divider); }
+.meta dt { color: var(--color-neutral-700); letter-spacing: .08em; }
+.meta dd { margin: 0; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 16px 0; border-bottom: 1px solid var(--color-divider); font-size: 12.5px; color: var(--color-neutral-800); }
+.lg { display: inline-flex; align-items: center; gap: 8px; }
+.sw { display: inline-block; width: 26px; height: 16px; border-radius: 3px; background: var(--color-bg); }
+.lg-edge { width: 34px; height: 10px; overflow: visible; }
+
+.toc { display: flex; flex-wrap: wrap; gap: 6px 28px; padding: 14px 0 0; font-size: 13.5px; }
+.toc a { color: var(--color-text); text-decoration: none; display: inline-flex; gap: 8px; align-items: baseline; }
+.toc a span { font: 400 17px/1 var(--font-heading); color: var(--color-accent-700); font-variant-numeric: lining-nums tabular-nums; }
+.toc a:hover { color: var(--color-accent-700); }
+
+/* 章节 */
+.sec { padding-top: 46px; }
+.sec-head { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 14px; align-items: baseline; padding-top: 18px; border-top: 1px solid var(--color-text); margin-bottom: 26px; }
+.sec-num { font: 400 42px/1 var(--font-heading); color: var(--color-accent-700); font-variant-numeric: lining-nums tabular-nums; }
+.sec-head h2 { font-size: 32px; font-weight: 400; }
+.sec-lede { margin-top: 8px; max-width: 860px; color: var(--color-neutral-800); text-align: justify; }
+
+/* 状态编码：边框样式表示状态，颜色只作描边 */
+.s-now { border: 1px solid var(--color-neutral-800); }
+.s-done { border: 1px solid var(--color-accent-700); background: color-mix(in srgb, var(--color-accent) 7%, var(--color-bg)); }
+.s-draft { border: 1px dashed var(--color-neutral-600); }
+.s-appr { border: 1.5px solid var(--color-accent); }
+.s-later { border: 1px dotted var(--color-neutral-500); color: var(--color-neutral-700); }
+
+.tag { display: inline-flex; align-items: center; font-size: 10.5px; line-height: 1.5; padding: 0 7px; border-radius: 3px; letter-spacing: .02em; white-space: nowrap; font-variant-numeric: lining-nums tabular-nums; }
+.t-now { background: var(--color-neutral-200); color: var(--color-neutral-800); }
+.t-done { border: 1px solid var(--color-accent-700); color: var(--color-accent-700); }
+.t-draft { border: 1px dashed var(--color-neutral-600); color: var(--color-neutral-800); }
+.t-appr { border: 1px solid var(--color-accent); background: var(--color-accent-100); color: var(--color-accent-800); }
+.t-later { border: 1px dotted var(--color-neutral-500); color: var(--color-neutral-700); }
+
+/* 方框 */
+.node { position: relative; z-index: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; padding: 10px 12px 12px; border-radius: var(--radius-md); background: var(--color-bg); }
+.node.s-done { background: color-mix(in srgb, var(--color-accent) 7%, var(--color-bg)); }
+.node-k { font-size: 10.5px; letter-spacing: .04em; color: var(--color-neutral-700); overflow-wrap: anywhere; font-variant-numeric: lining-nums tabular-nums; }
+.node-t { font: 600 18px/1.15 var(--font-heading); text-wrap: balance; }
+.node-b { font-size: 12.5px; line-height: 1.5; color: var(--color-neutral-800); text-wrap: pretty; }
+.node-b code.block { display: block; margin-bottom: 2px; overflow-wrap: anywhere; }
+.s-later .node-b, .s-later .node-t { color: var(--color-neutral-700); }
+.node-list { margin: 0; padding-left: 1.05em; font-size: 12.5px; line-height: 1.5; color: var(--color-neutral-800); }
+.node-list li.appr { color: var(--color-accent-800); }
+.node-list li.appr::marker { color: var(--color-accent); }
+.node-list li.later { color: var(--color-neutral-700); }
+.node-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: auto; padding-top: 5px; }
+.stage { font: 400 28px/1 var(--font-heading); color: var(--color-accent-700); font-variant-numeric: lining-nums tabular-nums; }
+.s-later .stage { color: var(--color-neutral-600); }
+.node[tabindex] { cursor: default; }
+
+/* 01 分层 */
+.band { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 28px; padding: 22px 0; border-top: 1px solid var(--color-divider); }
+.band:first-child { border-top: 0; padding-top: 0; }
+.band-label h3 { font-size: 23px; margin-top: 6px; }
+.band-label p { margin-top: 8px; font-size: 12px; color: var(--color-neutral-700); }
+.grid-3 { display: grid; gap: 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.grid-5 { display: grid; gap: 14px; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.proto { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 28px; padding: 12px 0; border-top: 1px solid var(--color-divider); }
+.proto-label { display: flex; align-items: center; gap: 10px; font-size: 11px; letter-spacing: .12em; color: var(--color-neutral-700); }
+.proto-label b { font: 400 24px/1 var(--font-heading); color: var(--color-accent-700); }
+.proto-items { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; border: 1px solid var(--color-divider); border-radius: 999px; padding: 3px 12px; background: var(--color-bg); }
+.rules { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 16px; }
+.rule { font-size: 12.5px; padding-left: 10px; border-left: 2px solid var(--color-accent); color: var(--color-neutral-800); }
+
+/* 连线图 */
+.scroll { overflow-x: auto; padding: 4px 2px 8px; }
+.diagram { position: relative; display: grid; }
+.diagram > svg.edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 0; }
+.edge-labels { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.edge { fill: none; stroke-width: 1.3; transition: opacity .15s, stroke .15s; }
+.edge.k-now { stroke: var(--color-neutral-800); marker-end: url(#ah-now); }
+.edge.k-draft { stroke: var(--color-neutral-600); stroke-dasharray: 5 4; marker-end: url(#ah-draft); }
+.edge.k-appr { stroke: var(--color-accent); marker-end: url(#ah-appr); }
+.edge.k-later { stroke: var(--color-neutral-500); stroke-dasharray: 1.5 3.5; stroke-linecap: round; marker-end: url(#ah-later); }
+.edge.hot { stroke: var(--color-accent-700); stroke-width: 2; marker-end: url(#ah-hot); }
+.diagram.focusing .edge:not(.hot) { opacity: .15; }
+.diagram.focusing .edge-label:not(.hot) { opacity: .25; }
+.diagram.focusing .node:not(.hot-node):not(.linked) { opacity: .55; }
+.node { transition: opacity .15s; }
+.edge-label { position: absolute; transform: translate(-50%, -50%); padding: 0 5px; border-radius: 2px; background: var(--color-bg); font-size: 11px; line-height: 1.5; color: var(--color-neutral-700); white-space: nowrap; }
+.edge-label.k-appr { color: var(--color-accent-700); }
+#ah-now path { fill: var(--color-neutral-800); }
+#ah-draft path { fill: var(--color-neutral-600); }
+#ah-appr path { fill: var(--color-accent); }
+#ah-later path { fill: var(--color-neutral-500); }
+#ah-hot path { fill: var(--color-accent-700); }
+.hint { margin-top: 10px; font-size: 12px; color: var(--color-neutral-700); }
+
+/* 02 元数据三层 */
+.d-meta { grid-template-columns: repeat(4, minmax(150px, 1fr)) minmax(180px, 1.15fr) minmax(170px, 1fr); column-gap: 50px; row-gap: 30px; min-width: 1200px; }
+.layer-bar { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 22px; }
+.layer-bar > div { padding: 10px 12px; border-top: 2px solid var(--color-text); font-size: 12.5px; color: var(--color-neutral-800); }
+.layer-bar b { display: block; font: 600 16px/1.2 var(--font-heading); color: var(--color-text); margin-bottom: 4px; }
+.layer-bar .is-draft { border-top-style: dashed; border-top-color: var(--color-neutral-600); }
+
+/* 03 写路径 */
+.d-gov { grid-template-columns: repeat(6, minmax(140px, 1fr)); column-gap: 40px; min-width: 1150px; }
+.gov-lower { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 28px; margin-top: 28px; }
+.track { padding: 12px 0; border-top: 1px solid var(--color-divider); }
+.track:first-child { border-top: 0; padding-top: 0; }
+.track-h { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--color-neutral-700); margin-bottom: 8px; }
+.states { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11.5px; }
+.st { padding: 2px 8px; border: 1px solid var(--color-divider); border-radius: 3px; background: var(--color-bg); }
+.st.key { border-color: var(--color-accent); color: var(--color-accent-800); }
+.st.bad { border-style: dashed; }
+.arrow { color: var(--color-neutral-600); font-family: var(--font-body); }
+.sep { color: var(--color-neutral-500); font-family: var(--font-body); }
+.notes { display: grid; gap: 12px; align-content: start; }
+.note { padding: 10px 12px; border-radius: var(--radius-md); font-size: 12.5px; color: var(--color-neutral-800); }
+.note b { display: block; font: 600 16px/1.25 var(--font-heading); color: var(--color-text); margin-bottom: 4px; }
+
+/* 04 前端 */
+.d-front { grid-template-columns: repeat(6, minmax(140px, 1fr)); column-gap: 40px; row-gap: 30px; min-width: 1150px; }
+.row-label { position: absolute; left: 0; font-size: 10px; letter-spacing: .12em; color: var(--color-neutral-700); }
+.front-lower { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; margin-top: 28px; }
+.own { padding: 10px 12px; border-top: 2px solid var(--color-text); font-size: 12.5px; color: var(--color-neutral-800); }
+.own b { display: block; font: 600 16px/1.2 var(--font-heading); color: var(--color-text); margin-bottom: 4px; }
+.front-bottom { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 18px; margin-top: 18px; }
+.tree { margin: 0; padding: 14px 16px; border: 1px solid var(--color-divider); border-radius: var(--radius-md); font-family: var(--font-mono); font-size: 12px; line-height: 1.7; color: var(--color-neutral-800); white-space: pre; overflow-x: auto; }
+.tree b { color: var(--color-text); font-weight: 600; }
+.tree i { font-style: normal; color: var(--color-neutral-600); }
+
+/* 05 路线 */
+/* 第 5 列是留给连线的通道：I 右侧的三条依赖线从这里分开走。 */
+.d-road { grid-template-columns: 96px repeat(3, minmax(118px, 1fr)) 26px repeat(3, minmax(118px, 1fr)); grid-template-rows: repeat(6, auto); column-gap: 30px; row-gap: 12px; min-width: 1060px; padding-top: 30px; }
+.d-road .node-t { font-size: 16px; }
+.d-road .stage { font-size: 26px; }
+.lane { grid-column: 1 / -1; border-top: 1px solid var(--color-divider); margin-top: -6px; }
+.lane-label { grid-column: 1; align-self: center; font-size: 11px; letter-spacing: .12em; color: var(--color-neutral-700); }
+.axis { position: absolute; top: 0; left: 126px; right: 0; display: flex; align-items: center; gap: 10px; font-size: 11px; letter-spacing: .12em; color: var(--color-neutral-700); }
+.axis i { flex: 1; height: 1px; background: linear-gradient(to right, var(--color-divider), var(--color-accent)); }
+.road-notes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 24px; }
+
+/* 06 扩展边界 */
+.d-ext { grid-template-columns: repeat(4, minmax(170px, 1fr)); column-gap: 56px; row-gap: 40px; min-width: 1000px; }
+
+/* 页脚 */
+.colophon { margin-top: 56px; padding-top: 16px; border-top: 3px double var(--color-text); display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 32px; font-size: 12px; color: var(--color-neutral-700); }
+.colophon b { color: var(--color-text); font-weight: 600; }
+.colophon ul { margin: 6px 0 0; padding-left: 1.1em; }
+
+/* font 简写会重置 font-variant-numeric，用到简写的地方补回齐线数字。 */
+.brand, .node-t, .layer-bar b, .note b, .own b, .proto-label b { font-variant-numeric: lining-nums; }
+
+@media (max-width: 1100px) {
+  .page { padding: 32px 22px 56px; }
+  .masthead, .gov-lower, .front-bottom, .colophon { grid-template-columns: 1fr; gap: 24px; }
+  .band, .proto { grid-template-columns: 1fr; gap: 12px; }
+  .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-5, .front-lower { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .layer-bar, .road-notes { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .edge, .node { transition: none; }
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <marker id="ah-now" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z"/></marker>
+    <marker id="ah-draft" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z"/></marker>
+    <marker id="ah-appr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z"/></marker>
+    <marker id="ah-later" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z"/></marker>
+    <marker id="ah-hot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z"/></marker>
+  </defs>
+</svg>
+
+<div class="page">
+  <header class="masthead">
+    <div>
+      <div class="brand">ROO<span>Music</span></div>
+      <div class="kicker">架构图 · Classical 重设计之后</div>
+      <h1>Core 1 目标架构</h1>
+      <p class="lede">浏览器、Go 模块化单体和数据分层如何衔接，资料库写操作走哪一条路，以及各阶段的先后与依赖。颜色只作描边：边框样式区分“已有”“已完成”“已批准”“草案”和“后续阶段”。</p>
+    </div>
+    <dl class="meta">
+      <div><dt>依据</dt><dd>路线图 <code>core-1-roadmap.md</code> 与 ADR 0001–0004（均为部分批准）</dd></div>
+      <div><dt>核对</dt><dd>2026-09-28 · 代码基线 <code>66678d6</code></dd></div>
+      <div><dt>决策</dt><dd>2026-09-28 已裁决 D1–D6：阶段顺序、身份策略、M1 前端基础、Core 1 截止到 M4、旧任务、归组依据；记录于任务 <code>09-28-core-1-roadmap-revision</code></dd></div>
+      <div><dt>性质</dt><dd>沟通用图，不是批准记录；冲突时以路线图和 ADR 为准</dd></div>
+    </dl>
+  </header>
+
+  <div class="legend" role="list" aria-label="图例">
+    <span class="lg" role="listitem"><i class="sw s-now"></i>已有（Core 0）</span>
+    <span class="lg" role="listitem"><i class="sw s-done"></i>已完成</span>
+    <span class="lg" role="listitem"><i class="sw s-appr"></i>已批准（待实施）</span>
+    <span class="lg" role="listitem"><i class="sw s-draft"></i>草案（ADR 仍待批准）</span>
+    <span class="lg" role="listitem"><i class="sw s-later"></i>后续阶段（Core 1 之后）</span>
+    <span class="lg" role="listitem"><svg class="lg-edge" viewBox="0 0 34 10" aria-hidden="true"><path class="edge k-now" d="M1,5 L30,5"/></svg>依赖或数据方向（悬停方框可高亮相关连线）</span>
+  </div>
+
+  <nav class="toc" aria-label="目录">
+    <a href="#s1"><span>01</span>系统分层</a>
+    <a href="#s2"><span>02</span>元数据三层与身份</a>
+    <a href="#s3"><span>03</span>受治理写路径</a>
+    <a href="#s4"><span>04</span>前端结构</a>
+    <a href="#s5"><span>05</span>路线与依赖</a>
+    <a href="#s6"><span>06</span>扩展边界</a>
+  </nav>
+
+  <!-- 01 系统分层 -->
+  <section class="sec" id="s1" aria-labelledby="s1-title">
+    <div class="sec-head">
+      <span class="sec-num">01</span>
+      <div>
+        <h2 id="s1-title">系统分层</h2>
+        <p class="sec-lede">一个 Go 进程同源提供 Web 资产、REST 和媒体。PostgreSQL 是唯一的业务权威，音乐目录永远只读。后端现在是单个 <code>package main</code>，B0 起按能力拆到 <code>internal/</code>。</p>
+      </div>
+    </div>
+
+    <div class="band">
+      <div class="band-label">
+        <div class="kicker">浏览器</div>
+        <h3>Classical 单页应用</h3>
+        <p><code>frontend/</code> · Vite 开发；生产构建内嵌进 Go 二进制</p>
+      </div>
+      <div class="grid-3">
+        <div class="node s-appr">
+          <div class="node-k">app/shell</div>
+          <div class="node-t">应用外壳</div>
+          <p class="node-b">侧栏导航 · 底部播放条 · Steward 抽屉位 · 全局提示</p>
+          <div class="node-tags"><span class="tag t-appr">M1a</span></div>
+        </div>
+        <div class="node s-appr">
+          <div class="node-k">TanStack Router</div>
+          <div class="node-t">路由</div>
+          <p class="node-b">history 模式；路径和搜索参数在边界解码一次。选中的版本、问题、会话都放进 URL，可收藏、可分享。</p>
+          <div class="node-tags"><span class="tag t-appr">ADR 0001 已批准 · M1a</span></div>
+        </div>
+        <div class="node s-appr">
+          <div class="node-k">TanStack Query</div>
+          <div class="node-t">服务端状态</div>
+          <p class="node-b">缓存键覆盖全部输入；写操作后按资源最小失效；扫描进度轮询与取消。</p>
+          <div class="node-tags"><span class="tag t-appr">ADR 0001 已批准 · M1a</span></div>
+        </div>
+        <div class="node s-appr">
+          <div class="node-k">features/</div>
+          <div class="node-t">功能模块</div>
+          <ul class="node-list">
+            <li>auth · home · catalog · library</li>
+            <li>curation · operations · player</li>
+            <li class="later">search · artists · personal（M5）</li>
+            <li class="later">steward（M6）</li>
+          </ul>
+          <div class="node-tags"><span class="tag t-appr">M1a / M1b 起逐步交付</span></div>
+        </div>
+        <div class="node s-appr">
+          <div class="node-k">features/player</div>
+          <div class="node-t">播放引擎 PlayerEngine</div>
+          <p class="node-b">独占唯一的 <code>&lt;audio&gt;</code>；队列与播放模式放在 React 之外，界面只订阅；对接 Media Session。</p>
+          <div class="node-tags"><span class="tag t-appr">M2a</span></div>
+        </div>
+        <div class="node s-appr">
+          <div class="node-k">shared/</div>
+          <div class="node-t">共享层</div>
+          <p class="node-b">传输层（Cookie 凭据、请求 ID、错误信封）· 运行时 decoder · Classical 设计变量与基础组件。</p>
+          <div class="node-tags"><span class="tag t-appr">M1a</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="proto">
+      <div class="proto-label"><b>⇅</b>同源 HTTP</div>
+      <div class="proto-items">
+        <span class="pill">REST JSON · <code>/api/v1</code>（版本化）</span>
+        <span class="pill">HttpOnly Cookie 会话，浏览器代码不可读</span>
+        <span class="pill">媒体 · <code>GET /tracks/{id}/stream</code> · Range <span class="tag t-appr">M2a</span></span>
+        <span class="pill">Web 资产由 Go 内嵌提供</span>
+      </div>
+    </div>
+
+    <div class="band">
+      <div class="band-label">
+        <div class="kicker">服务端</div>
+        <h3>Go 模块化单体</h3>
+        <p>这是目标结构。现在全部代码在 <code>cmd/roomusic</code> 的一个 <code>package main</code> 里，下面的“已有”指能力已有，不是模块已拆出。</p>
+      </div>
+      <div>
+        <div class="grid-3">
+          <div class="node s-now">
+            <div class="node-k">internal/platform</div>
+            <div class="node-t">platform</div>
+            <p class="node-b">配置 · HTTP 中间件与完成日志 · PostgreSQL 连接与事务 · 迁移执行器</p>
+            <div class="node-tags"><span class="tag t-now">能力已有 · 未拆包</span><span class="tag t-appr">B0 第三步</span></div>
+          </div>
+          <div class="node s-now">
+            <div class="node-k">internal/identity</div>
+            <div class="node-t">identity</div>
+            <p class="node-b">初始化关闭 · 用户 · 不透明会话与撤销 · 角色 admin / user；editor 是 M3 候选</p>
+            <div class="node-tags"><span class="tag t-now">能力已有 · 未拆包</span></div>
+          </div>
+          <div class="node s-now">
+            <div class="node-k">internal/library</div>
+            <div class="node-t">library</div>
+            <p class="node-b">允许目录与 revision · 扫描运行、取消、诊断 · 解析器 · 写观察层</p>
+            <div class="node-tags"><span class="tag t-now">能力已有 · 未拆包</span><span class="tag t-appr">B0 第二步</span></div>
+          </div>
+          <div class="node s-appr">
+            <div class="node-k">internal/catalog</div>
+            <div class="node-t">catalog</div>
+            <p class="node-b">Release 图 · 身份匹配 · 归组规则 · 有效值投影 · 读取 API。现状：扫描器直接写 <code>releases</code>。</p>
+            <div class="node-tags"><span class="tag t-now">部分已有 · 未拆包</span><span class="tag t-appr">B0 第一步</span><span class="tag t-appr">阶段 I</span></div>
+          </div>
+          <div class="node s-draft">
+            <div class="node-k">internal/operations</div>
+            <div class="node-t">operations</div>
+            <p class="node-b">Change Set · 批准 · 操作日志 · 检查点 · 类型化逆操作。现在只有目录操作这一种。</p>
+            <div class="node-tags"><span class="tag t-draft">M3 · ADR 0003</span></div>
+          </div>
+          <div class="node s-appr">
+            <div class="node-k">internal/playback</div>
+            <div class="node-t">playback</div>
+            <p class="node-b">鉴权串流与 Range · 浏览器能力判定 · ALAC / CUE 派生缓存</p>
+            <div class="node-tags"><span class="tag t-appr">M2a</span><span class="tag t-draft">M2b · ADR 0004 待批项</span></div>
+          </div>
+          <div class="node s-appr">
+            <div class="node-k">internal/personal</div>
+            <div class="node-t">personal</div>
+            <p class="node-b">播放历史（P，Core 1，排在阶段 I 之后）；收藏与歌单在 M5。按用户隔离，不进审批流。</p>
+            <div class="node-tags"><span class="tag t-appr">P · 阶段 I 之后</span><span class="tag t-later">收藏歌单 · M5</span></div>
+          </div>
+          <div class="node s-later">
+            <div class="node-k">internal/search</div>
+            <div class="node-t">search</div>
+            <p class="node-b">规范化投影（简繁日异体字）· 标题与艺人别名 · pg_trgm 加速子串</p>
+            <div class="node-tags"><span class="tag t-later">M5</span></div>
+          </div>
+          <div class="node s-later">
+            <div class="node-k">internal/steward</div>
+            <div class="node-t">steward</div>
+            <p class="node-b">只读结果层的受限工具 · 只能提交 Change Set · 独立审查</p>
+            <div class="node-tags"><span class="tag t-later">M6</span></div>
+          </div>
+        </div>
+        <div class="rules">
+          <span class="rule">扫描器只写观察层，结果由 catalog 计算</span>
+          <span class="rule">资料库写操作一律经 operations</span>
+          <span class="rule">个人数据按用户隔离，不走审批</span>
+          <span class="rule">Steward 与人类走同一条授权路径</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="proto">
+      <div class="proto-label"><b>⇅</b>进程内</div>
+      <div class="proto-items">
+        <span class="pill"><code>database/sql</code> + pgx · 单事务写入 · 迁移锁</span>
+        <span class="pill">只读打开 · root 包含检查 · 不跟随目录符号链接</span>
+        <span class="pill">受限子进程 · 并发与缓存上限 <span class="tag t-draft">M2b</span></span>
+      </div>
+    </div>
+
+    <div class="band">
+      <div class="band-label">
+        <div class="kicker">存储与外部</div>
+        <h3>权威与依赖</h3>
+        <p>新依赖都要先有 ADR</p>
+      </div>
+      <div class="grid-5">
+        <div class="node s-now">
+          <div class="node-k">PostgreSQL 18</div>
+          <div class="node-t">业务权威</div>
+          <p class="node-b">图、观察、覆盖、操作日志、个人数据都在这里</p>
+          <div class="node-tags"><span class="tag t-now">已有</span></div>
+        </div>
+        <div class="node s-now">
+          <div class="node-k">音乐目录</div>
+          <div class="node-t">只读源</div>
+          <p class="node-b">永不改名、移动或写标签；包含浏览器放不了的 ALAC 与 CUE 整轨</p>
+          <div class="node-tags"><span class="tag t-now">已有</span></div>
+        </div>
+        <div class="node s-now">
+          <div class="node-k">数据目录</div>
+          <div class="node-t">受管文件</div>
+          <p class="node-b">封面（已有）· 派生媒体缓存（M2b）；绝不写入音乐目录</p>
+          <div class="node-tags"><span class="tag t-now">已有</span><span class="tag t-draft">M2b</span></div>
+        </div>
+        <div class="node s-draft">
+          <div class="node-k">ffmpeg</div>
+          <div class="node-t">媒体派生</div>
+          <p class="node-b">ALAC 无损派生 · CUE 按样本精确分轨；许可与部署待审</p>
+          <div class="node-tags"><span class="tag t-draft">M2b · ADR 0004</span></div>
+        </div>
+        <div class="node s-later">
+          <div class="node-k">模型服务</div>
+          <div class="node-t">Steward 后端</div>
+          <p class="node-b">M6 再定；先处理提示注入与数据外发</p>
+          <div class="node-tags"><span class="tag t-later">M6</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 02 元数据三层与身份 -->
+  <section class="sec" id="s2" aria-labelledby="s2-title">
+    <div class="sec-head">
+      <span class="sec-num">02</span>
+      <div>
+        <h2 id="s2-title">元数据三层与身份</h2>
+        <p class="sec-lede">重扫只更新观察层；人工修正单独保存，挂在稳定的实体 ID 上；API 只读由两者算出的结果层。身份匹配是这张图的地基：ID 一变，挂在上面的修正、收藏和歌单都会脱钩。</p>
+      </div>
+    </div>
+    <div class="scroll">
+      <div class="diagram d-meta" data-diagram="meta">
+        <div class="node s-now" id="m-scan" tabindex="0" style="grid-column:1;grid-row:1">
+          <div class="node-k">library</div>
+          <div class="node-t">扫描</div>
+          <p class="node-b">只读遍历允许目录；只有完整成功的扫描才能把来源标为缺失。</p>
+        </div>
+        <div class="node s-now" id="m-obs" tabindex="0" style="grid-column:2;grid-row:1">
+          <div class="node-k">观察层</div>
+          <div class="node-t">扫描观察</div>
+          <p class="node-b"><code>scan_observations</code> · <code>track_observations</code>；程序生成，可随时重建。</p>
+        </div>
+        <div class="node s-appr" id="m-id" tabindex="0" style="grid-column:3;grid-row:1">
+          <div class="node-k">catalog</div>
+          <div class="node-t">身份匹配</div>
+          <p class="node-b">现状：按锚点和来源路径匹配。改名，或新增一个排序更靠前的文件，ID 就会变。</p>
+          <ul class="node-list">
+            <li class="appr">按曲目成员关系匹配 Release</li>
+            <li class="appr">同一 root 内、唯一且音频完全相同才重绑定</li>
+            <li class="appr">有歧义留给人工认领</li>
+          </ul>
+          <div class="node-tags"><span class="tag t-appr">阶段 I · 已批准</span></div>
+        </div>
+        <div class="node s-now" id="m-derived" tabindex="0" style="grid-column:4;grid-row:1">
+          <div class="node-k">派生值</div>
+          <div class="node-t">确定性规则</div>
+          <p class="node-b">字段决策与候选 · 分组证据。标题、艺人、年份、目录相似只产生候选，不自动合并。</p>
+        </div>
+        <div class="node s-draft" id="m-intent" tabindex="0" style="grid-column:1;grid-row:2">
+          <div class="node-k">发起方</div>
+          <div class="node-t">修正意图</div>
+          <p class="node-b">人类在界面提交；M6 起 Steward 也可以提案。</p>
+        </div>
+        <div class="node s-draft" id="m-ops" tabindex="0" style="grid-column:2;grid-row:2">
+          <div class="node-k">operations</div>
+          <div class="node-t">受治理操作</div>
+          <p class="node-b">授权 · 预览 · 批准 · 单事务执行 · 检查点</p>
+          <div class="node-tags"><span class="tag t-draft">M3 · ADR 0003</span></div>
+        </div>
+        <div class="node s-draft" id="m-overlay" tabindex="0" style="grid-column:4;grid-row:2">
+          <div class="node-k">覆盖层</div>
+          <div class="node-t">人工修正</div>
+          <p class="node-b">修正值、依据、操作者；绑定实体 UUID；重扫不覆盖。</p>
+          <div class="node-tags"><span class="tag t-draft">M3 · ADR 0002</span></div>
+        </div>
+        <div class="node s-draft" id="m-result" tabindex="0" style="grid-column:5;grid-row:1 / 3;align-self:center">
+          <div class="node-k">结果层</div>
+          <div class="node-t">有效值投影</div>
+          <p class="node-b">有修正用修正，否则用派生值。只读、可重建；待处理问题数在这里预先算好，扫描完成和操作生效时都刷新。</p>
+          <div class="node-tags"><span class="tag t-draft">M3 / M4</span></div>
+        </div>
+        <div class="node s-now" id="m-read" tabindex="0" style="grid-column:6;grid-row:1 / 3;align-self:center">
+          <div class="node-k">读取出口</div>
+          <div class="node-t">只读结果层</div>
+          <ul class="node-list">
+            <li>REST 读取接口（已有）</li>
+            <li class="later">搜索投影（M5）</li>
+            <li class="later">Steward 只读工具（M6）</li>
+          </ul>
+        </div>
+        <svg class="edges" aria-hidden="true"></svg>
+        <div class="edge-labels" aria-hidden="true"></div>
+      </div>
+    </div>
+    <div class="layer-bar">
+      <div><b>观察层 · 已有</b>扫描器写入的事实与证据。失败、取消或不完整的扫描不能当作缺失的证据。</div>
+      <div class="is-draft"><b>覆盖层 · 缺失</b>现状是扫描器更新已有 Release 时直接覆盖字段（<code>scanner.go:934</code>），所以覆盖层落地之前不开放修正。</div>
+      <div class="is-draft"><b>结果层 · 缺失</b>现在 <code>releases</code> 表同时充当观察和结果。Core 1 中 ReleaseGroup 成员关系只能由人工确认（M3 起）。</div>
+    </div>
+  </section>
+
+  <!-- 03 受治理写路径 -->
+  <section class="sec" id="s3" aria-labelledby="s3-title">
+    <div class="sec-head">
+      <span class="sec-num">03</span>
+      <div>
+        <h2 id="s3-title">受治理写路径</h2>
+        <p class="sec-lede">所有资料库写操作走同一条路。人类和 Steward 只是不同的发起方；批准状态和执行状态分开保存，“已批准”不等于“已执行”，有日志也不等于能撤销。</p>
+      </div>
+    </div>
+    <div class="scroll">
+      <div class="diagram d-gov" data-diagram="gov">
+        <div class="node s-draft" id="g-intent" tabindex="0" style="grid-column:1">
+          <div class="node-k">1 · 发起</div>
+          <div class="node-t">意图</div>
+          <p class="node-b">人类界面提交 · Steward 提案（M6）</p>
+        </div>
+        <div class="node s-draft" id="g-authz" tabindex="0" style="grid-column:2">
+          <div class="node-k">2 · 入口</div>
+          <div class="node-t">解码与授权</div>
+          <p class="node-b">以当前会话主体和角色为准；不信任请求里自报的身份、角色或模式。</p>
+        </div>
+        <div class="node s-draft" id="g-preview" tabindex="0" style="grid-column:3">
+          <div class="node-k">3 · 预览</div>
+          <div class="node-t">Change Set</div>
+          <p class="node-b">目标集合 · 预期 revision · 证据摘要 · 风险 · 逆操作计划</p>
+        </div>
+        <div class="node s-draft" id="g-approve" tabindex="0" style="grid-column:4">
+          <div class="node-k">4 · 批准</div>
+          <div class="node-t">按政策</div>
+          <p class="node-b">免审批，或人工 / 独立审查；批准绑定具体提案、证据与有效期。</p>
+        </div>
+        <div class="node s-draft" id="g-exec" tabindex="0" style="grid-column:5">
+          <div class="node-k">5 · 执行</div>
+          <div class="node-t">单一事务</div>
+          <p class="node-b">重验授权、版本和批准 → 资源变化 + 检查点 + 日志 + 幂等结果一起提交。</p>
+        </div>
+        <div class="node s-draft" id="g-revert" tabindex="0" style="grid-column:6">
+          <div class="node-k">6 · 撤销</div>
+          <div class="node-t">类型化逆操作</div>
+          <p class="node-b">逆序链先全部预检，再原子执行；不可逆的操作明确标注。</p>
+        </div>
+        <svg class="edges" aria-hidden="true"></svg>
+        <div class="edge-labels" aria-hidden="true"></div>
+      </div>
+    </div>
+    <div class="gov-lower">
+      <div>
+        <div class="track">
+          <div class="track-h"><span>批准状态 · 与执行分开保存</span><span>Operator 用 <code>not_required</code>，不伪造自动批准</span></div>
+          <div class="states">
+            <span class="st key">not_required</span><span class="sep">｜</span>
+            <span class="st">awaiting_user</span><span class="sep">｜</span>
+            <span class="st">reviewing</span><span class="arrow">→</span>
+            <span class="st key">approved</span><span class="sep">｜</span>
+            <span class="st bad">rejected</span><span class="sep">｜</span>
+            <span class="st bad">needs_human_confirmation</span><span class="sep">｜</span>
+            <span class="st bad">review_unavailable</span>
+          </div>
+        </div>
+        <div class="track">
+          <div class="track-h"><span>执行状态 · 来自后端操作日志</span><span>界面不自行推断能否恢复</span></div>
+          <div class="states">
+            <span class="st">planned</span><span class="arrow">→</span>
+            <span class="st">running</span><span class="arrow">→</span>
+            <span class="st key">succeeded</span><span class="sep">｜</span>
+            <span class="st bad">partially_failed</span><span class="sep">｜</span>
+            <span class="st bad">failed</span><span class="arrow">→</span>
+            <span class="st">rolling_back</span><span class="arrow">→</span>
+            <span class="st key">rolled_back</span><span class="sep">｜</span>
+            <span class="st bad">rollback_failed</span>
+          </div>
+        </div>
+        <p class="hint">状态名取自 <code>.trellis/spec/frontend/state-management.md</code> 的语义示例，不是最终的接口格式。</p>
+      </div>
+      <div class="notes">
+        <div class="note s-appr"><b>M3 试点 · 已批准</b>字段修正 + ReleaseGroup 成员调整。后者只改 <code>releases.group_id</code>，而扫描器更新已有 Release 时不碰这个字段。</div>
+        <div class="note s-now"><b>不走这条路</b>个人数据（按用户隔离直接写）· 扫描（只写观察层）</div>
+        <div class="note s-now"><b>永远禁止</b>任意 SQL、shell 或主机路径 · Agent 自己批准 · 审查失败时降级为 Operator</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 04 前端结构 -->
+  <section class="sec" id="s4" aria-labelledby="s4-title">
+    <div class="sec-head">
+      <span class="sec-num">04</span>
+      <div>
+        <h2 id="s4-title">前端结构</h2>
+        <p class="sec-lede">前端从零搭建，第一天就按目标结构组织。组件不直接请求接口；原始 JSON 只在 feature 的 API 边界解码一次；每种状态只有一个归属。</p>
+      </div>
+    </div>
+    <div class="scroll">
+      <div class="diagram d-front" data-diagram="front">
+        <div class="node s-appr" id="f-page" tabindex="0" style="grid-column:1;grid-row:1">
+          <div class="node-k">app/routes</div>
+          <div class="node-t">页面</div>
+          <p class="node-b">路由拥有 URL 状态，负责组合 feature。</p>
+        </div>
+        <div class="node s-appr" id="f-comp" tabindex="0" style="grid-column:2;grid-row:1">
+          <div class="node-k">features/*/components</div>
+          <div class="node-t">组件</div>
+          <p class="node-b">只负责展示与交互，不直接调用 <code>fetch</code>。</p>
+        </div>
+        <div class="node s-appr" id="f-hook" tabindex="0" style="grid-column:3;grid-row:1">
+          <div class="node-k">features/*/hooks</div>
+          <div class="node-t">feature hook</div>
+          <p class="node-b"><code>useQuery</code> / <code>useMutation</code>；缓存键覆盖全部输入。</p>
+        </div>
+        <div class="node s-appr" id="f-api" tabindex="0" style="grid-column:4;grid-row:1">
+          <div class="node-k">features/*/api</div>
+          <div class="node-t">接口与 decoder</div>
+          <p class="node-b">原始 JSON 只在这里解码一次，之后只传类型化的值。</p>
+        </div>
+        <div class="node s-appr" id="f-transport" tabindex="0" style="grid-column:5;grid-row:1">
+          <div class="node-k">shared/api</div>
+          <div class="node-t">传输层</div>
+          <p class="node-b">Cookie 凭据 · 请求 ID · 错误信封；401 立即结束会话。</p>
+        </div>
+        <div class="node s-now" id="f-rest" tabindex="0" style="grid-column:6;grid-row:1">
+          <div class="node-k">Go · 同源</div>
+          <div class="node-t">REST · /api/v1</div>
+          <p class="node-b">后端做最终授权；前端的角色判断只控制导航和禁用态。</p>
+        </div>
+        <div class="node s-appr" id="f-player-ui" tabindex="0" style="grid-column:1;grid-row:2">
+          <div class="node-k">features/player</div>
+          <div class="node-t">播放界面</div>
+          <p class="node-b">播放条 · 正在播放 · 队列，只订阅状态。</p>
+        </div>
+        <div class="node s-appr" id="f-engine" tabindex="0" style="grid-column:2;grid-row:2">
+          <div class="node-k">React 之外</div>
+          <div class="node-t">PlayerEngine</div>
+          <p class="node-b">外部 store（<code>useSyncExternalStore</code>）；切页不断播，刷新恢复后保持暂停。</p>
+        </div>
+        <div class="node s-appr" id="f-audio" tabindex="0" style="grid-column:3;grid-row:2">
+          <div class="node-k">全局唯一</div>
+          <div class="node-t">&lt;audio&gt; 元素</div>
+          <p class="node-b">由真实媒体事件驱动，不再使用模拟时钟；对接 Media Session。</p>
+        </div>
+        <div class="node s-appr" id="f-stream" tabindex="0" style="grid-column:6;grid-row:2">
+          <div class="node-k">Go · 同源</div>
+          <div class="node-t">媒体接口</div>
+          <p class="node-b"><code class="block">GET /tracks/{id}/stream</code>按曲目 ID 解析，前端不接触任何路径。</p>
+          <div class="node-tags"><span class="tag t-appr">M2a · 已批准</span></div>
+        </div>
+        <svg class="edges" aria-hidden="true"></svg>
+        <div class="edge-labels" aria-hidden="true"></div>
+      </div>
+    </div>
+    <div class="front-lower">
+      <div class="own"><b>URL</b>页面、筛选、分页；选中的版本、问题、Steward 会话。</div>
+      <div class="own"><b>服务端状态</b>只放在 Query 缓存，不复制进全局 store。</div>
+      <div class="own"><b>播放状态</b>PlayerEngine 外部 store，跨页面长期存在。</div>
+      <div class="own"><b>本地交互</b>浮层、表单草稿、焦点。</div>
+      <div class="own"><b>会话</b>HttpOnly Cookie，浏览器代码读不到；切换身份时清空缓存。</div>
+    </div>
+    <div class="front-bottom">
+<pre class="tree" aria-label="前端目录结构"><b>frontend/src/</b>
+├─ <b>app/</b>        路由 · 外壳 · providers
+├─ <b>features/</b>   auth · home · catalog · library
+│              curation · operations · player
+│              <i>search · artists · personal · steward（后续）</i>
+└─ <b>shared/</b>     api · ui（Classical 变量）· lib</pre>
+      <div class="note s-appr"><b>接口防漂移 · 已批准（ADR 0001）</b>Go 集成测试把真实响应写成 JSON 样本，前端 decoder 测试读取这些样本；样本变了却没提交时 CI 失败。OpenAPI 留到 M6 设计 Steward 工具 schema 时再评估。</div>
+    </div>
+  </section>
+
+  <!-- 05 路线与依赖 -->
+  <section class="sec" id="s5" aria-labelledby="s5-title">
+    <div class="sec-head">
+      <span class="sec-num">05</span>
+      <div>
+        <h2 id="s5-title">路线与依赖</h2>
+        <p class="sec-lede">箭头表示硬依赖：前者完成后，后者才能开始。同一泳道从左到右推进；不同泳道可以并行。</p>
+      </div>
+    </div>
+    <div class="scroll">
+      <div class="diagram d-road" data-diagram="road">
+        <div class="axis" aria-hidden="true"><span>先</span><i></i><span>后</span></div>
+        <div class="lane" style="grid-row:1"></div><div class="lane-label" style="grid-row:1">后端地基</div>
+        <div class="lane" style="grid-row:2"></div><div class="lane-label" style="grid-row:2">Agent</div>
+        <div class="lane" style="grid-row:3"></div><div class="lane-label" style="grid-row:3">前端</div>
+        <div class="lane" style="grid-row:4"></div><div class="lane-label" style="grid-row:4">播放</div>
+        <div class="lane" style="grid-row:5"></div><div class="lane-label" style="grid-row:5">个人与发现</div>
+        <div class="lane" style="grid-row:6"></div><div class="lane-label" style="grid-row:6">独立修复</div>
+
+        <div class="node s-done" id="r-m0" tabindex="0" style="grid-column:2;grid-row:1 / 4;align-self:center">
+          <div class="stage">M0</div>
+          <div class="node-t">设计与规范对齐</div>
+          <p class="node-b">DESIGN.md · spec · ADR 0001–0004 草案 · 路线图</p>
+          <div class="node-tags"><span class="tag t-done">已完成 · 850d274</span></div>
+        </div>
+        <div class="node s-appr" id="r-b0" tabindex="0" style="grid-column:3;grid-row:1">
+          <div class="stage">B0</div>
+          <div class="node-t">拆包</div>
+          <p class="node-b">纯重构：catalog 先拆，再拆目录与扫描；行为不变。</p>
+          <div class="node-tags"><span class="tag t-appr">子任务 · planning</span></div>
+        </div>
+        <div class="node s-appr" id="r-i" tabindex="0" style="grid-column:4;grid-row:1">
+          <div class="stage">I</div>
+          <div class="node-t">身份与分组只读</div>
+          <p class="node-b">成员关系匹配 · 保守重绑定 · ID 稳定性测试 · 按组接口</p>
+          <div class="node-tags"><span class="tag t-appr">子任务 · planning</span></div>
+        </div>
+        <div class="node s-appr" id="r-m3" tabindex="0" style="grid-column:6;grid-row:1">
+          <div class="stage">M3</div>
+          <div class="node-t">修正与受治理操作</div>
+          <p class="node-b">试点：字段修正 + 组成员调整</p>
+          <div class="node-tags"><span class="tag t-appr">未立项</span><span class="tag t-draft">ADR 细节待批</span></div>
+        </div>
+        <div class="node s-appr" id="r-m4" tabindex="0" style="grid-column:7;grid-row:1">
+          <div class="stage">M4</div>
+          <div class="node-t">问题与版本工具</div>
+          <p class="node-b">问题投影 · 版本对比 · 默认版本 · 扫描反馈；之后再做 Release 合并与拆分。</p>
+          <div class="node-tags"><span class="tag t-appr">未立项</span></div>
+        </div>
+        <div class="node s-later" id="r-m6" tabindex="0" style="grid-column:8;grid-row:2">
+          <div class="stage">M6</div>
+          <div class="node-t">Music Steward</div>
+          <p class="node-b">只读问答 → 提案 → 独立审查</p>
+        </div>
+        <div class="node s-appr" id="r-m1a" tabindex="0" style="grid-column:3;grid-row:3">
+          <div class="stage">M1a</div>
+          <div class="node-t">外壳与管理</div>
+          <p class="node-b">登录 · 目录 · 扫描 · 成员 · 概览；恢复 CI 构建检查。</p>
+          <div class="node-tags"><span class="tag t-appr">子任务 · planning</span></div>
+        </div>
+        <div class="node s-appr" id="r-m1b" tabindex="0" style="grid-column:6;grid-row:3">
+          <div class="stage">M1b</div>
+          <div class="node-t">专辑页</div>
+          <p class="node-b">直接用按组接口；一组一版本时自然退化。</p>
+          <div class="node-tags"><span class="tag t-appr">子任务 · planning</span></div>
+        </div>
+        <div class="node s-appr" id="r-m2a" tabindex="0" style="grid-column:4;grid-row:4">
+          <div class="stage">M2a</div>
+          <div class="node-t">直出播放</div>
+          <p class="node-b">播放引擎 · 能力判定；放不了的明确标注。</p>
+          <div class="node-tags"><span class="tag t-appr">ADR 0004 替代 A</span><span class="tag t-appr">未立项</span></div>
+        </div>
+        <div class="node s-appr" id="r-m2b" tabindex="0" style="grid-column:6;grid-row:4">
+          <div class="stage">M2b</div>
+          <div class="node-t">派生与歌词</div>
+          <p class="node-b">ffmpeg 无损派生 · CUE 精确分轨 · 歌词</p>
+          <div class="node-tags"><span class="tag t-draft">许可与部署待审</span></div>
+        </div>
+        <div class="node s-appr" id="r-personal" tabindex="0" style="grid-column:6;grid-row:5">
+          <div class="stage">P</div>
+          <div class="node-t">播放历史</div>
+          <p class="node-b">服务端按用户隔离保存；收藏与歌单在 M5。</p>
+          <div class="node-tags"><span class="tag t-appr">未立项</span></div>
+        </div>
+        <div class="node s-later" id="r-m5" tabindex="0" style="grid-column:8;grid-row:5">
+          <div class="stage">M5</div>
+          <div class="node-t">搜索与艺人</div>
+          <p class="node-b">搜索规范化 · 标题与艺人别名 · 收藏与歌单；修改别名走受治理操作。</p>
+        </div>
+        <div class="node s-appr" id="r-fix" tabindex="0" style="grid-column:3 / 5;grid-row:6">
+          <div class="node-k">随时可插入 · 不依赖其他阶段</div>
+          <div class="node-t">F1 · F2 独立修复</div>
+          <p class="node-b">未知 <code>/api/</code> 路径返回 JSON 404 · 目录操作的幂等指纹补上目录 ID</p>
+          <div class="node-tags"><span class="tag t-appr">子任务 · planning</span></div>
+        </div>
+        <svg class="edges" aria-hidden="true"></svg>
+        <div class="edge-labels" aria-hidden="true"></div>
+      </div>
+    </div>
+    <div class="road-notes">
+      <div class="note s-now"><b>不能调换的顺序</b>M3 依赖阶段 I 的稳定 ID；M6 依赖 M3 / M4 的操作合同。</div>
+      <div class="note s-now"><b>可以并行</b>M1 与 B0、阶段 I 同时推进；播放不依赖治理写路径。</div>
+      <div class="note s-appr"><b>已裁决（2026-09-28）</b>Core 1 截止到 M4；阶段顺序、身份策略、M1 前端基础与归组依据等 D1–D6 见路线修订任务。各 ADR 其余细节在对应阶段规划时批准。</div>
+    </div>
+  </section>
+
+  <!-- 06 扩展边界 -->
+  <section class="sec" id="s6" aria-labelledby="s6-title">
+    <div class="sec-head">
+      <span class="sec-num">06</span>
+      <div>
+        <h2 id="s6-title">扩展边界</h2>
+        <p class="sec-lede">最终结构是“不可替换的内核 + 第一方模块 + 受控扩展层”。插件只能从两个口子进入：观察层和意图侧；任何插件都不能直接写结果层，也不能给自己授权。本节是指导原则，插件宿主等未来立项时复核。</p>
+      </div>
+    </div>
+    <div class="scroll">
+      <div class="diagram d-ext" data-diagram="ext">
+        <div class="node s-later" id="x-parser" tabindex="0" style="grid-column:1;grid-row:1">
+          <div class="node-k">扩展层 · 远期</div>
+          <div class="node-t">格式解析器插件</div>
+          <p class="node-b">新增音频或元数据格式；产出与内置解析器同形的观察。</p>
+        </div>
+        <div class="node s-later" id="x-provider" tabindex="0" style="grid-column:2;grid-row:1">
+          <div class="node-k">扩展层 · 远期</div>
+          <div class="node-t">元数据与封面提供方</div>
+          <p class="node-b">例如 MusicBrainz；结果只作候选或证据，不覆盖人工修正。</p>
+        </div>
+        <div class="node s-later" id="x-agent" tabindex="0" style="grid-column:3;grid-row:1">
+          <div class="node-k">扩展层 · 远期</div>
+          <div class="node-t">Agent 与审查插件</div>
+          <p class="node-b">只读结果层的受限工具；只能提交提案，不能批准自己的提案。</p>
+        </div>
+        <div class="node s-later" id="x-exec" tabindex="0" style="grid-column:4;grid-row:1">
+          <div class="node-k">扩展层 · 最后</div>
+          <div class="node-t">执行插件</div>
+          <p class="node-b">文件或标签操作；须等受治理操作与恢复策略成熟，并服从音乐源默认只读。</p>
+        </div>
+        <div class="node s-now" id="x-obs" tabindex="0" style="grid-column:1 / 3;grid-row:2">
+          <div class="node-k">接入口一 · 观察层</div>
+          <div class="node-t">观察、候选与证据</div>
+          <p class="node-b">与扫描观察同层；由 catalog 决定是否采纳，弱证据只产生候选。</p>
+        </div>
+        <div class="node s-draft" id="x-cs" tabindex="0" style="grid-column:3;grid-row:2">
+          <div class="node-k">接入口二 · 意图侧</div>
+          <div class="node-t">Change Set</div>
+          <p class="node-b">提案带目标、revision、证据与风险；批准与执行分开记录。</p>
+        </div>
+        <div class="node s-draft" id="x-ops" tabindex="0" style="grid-column:4;grid-row:2">
+          <div class="node-k">operations · M3</div>
+          <div class="node-t">授权与执行</div>
+          <p class="node-b">重验授权、版本和批准；执行插件只能由这里在授权包裹下调用。</p>
+        </div>
+        <div class="node s-draft" id="x-result" tabindex="0" style="grid-column:1 / 5;grid-row:3">
+          <div class="node-k">结果层 · 有效值投影</div>
+          <div class="node-t">插件不能直接写入这里，也不能给自己授权</div>
+          <p class="node-b">观察经 catalog 计算、修正经 operations 写入覆盖层，两者合成后才成为 API 读取的结果。</p>
+        </div>
+        <div class="node s-now" id="x-kernel" tabindex="0" style="grid-column:1 / 5;grid-row:4">
+          <div class="node-k">内核 · 永远不做成插件（部分已有）</div>
+          <div class="node-t">身份与权限 · 变更管理 · 工具授权 · 持久化（PostgreSQL）</div>
+        </div>
+        <svg class="edges" aria-hidden="true"></svg>
+        <div class="edge-labels" aria-hidden="true"></div>
+      </div>
+    </div>
+    <div class="layer-bar">
+      <div><b>第一步 · Core 1 期间</b>只做“插件形状”：各模块由使用方定义窄接口，外部依赖做成同一二进制内的适配器，例如 M2b 的 ffmpeg、以后的元数据提供方和 M6 的模型服务。</div>
+      <div class="is-draft"><b>第二步 · 出现第三方需求时</b>把稳定接口升级为 <code>extensions/</code> 合同，再建能力注册表与插件宿主。插件优先跑在独立进程、通过类型化 RPC 调用；不用 Go 的 <code>plugin</code> 包；WASM 只用于不受信任的第三方代码。</div>
+      <div class="is-draft"><b>最后 · 执行插件</b>在受治理操作和恢复策略成熟之后才考虑，并继续服从音乐源默认只读的不变量。</div>
+    </div>
+  </section>
+
+  <footer class="colophon">
+    <div>
+      <b>来源</b>
+      <ul>
+        <li><code>docs/architecture/core-1-roadmap.md</code> · <code>docs/architecture/adr/0001–0004</code> · <code>frontend/DESIGN.md</code></li>
+        <li><code>.trellis/spec/frontend/state-management.md</code>（批准与执行状态）</li>
+        <li><code>backend/cmd/roomusic/scanner.go:929</code>（每个新 Release 新建一个组）、<code>:934</code>（更新已有 Release 时直接覆盖字段）</li>
+        <li><code>backend/cmd/roomusic/organizer.go:1006</code>（拆分候选的锚点取最小文件路径）</li>
+        <li><code>docs/architecture/architecture-decisions.md</code>（扩展边界与两步走指导原则）</li>
+      </ul>
+    </div>
+    <div>
+      <b>说明</b>
+      <p style="margin-top:6px">这张图用于沟通，不是批准记录。金色实线表示 2026-09-28 已批准、尚未实施的阶段或方案；灰色虚线表示 ADR 中仍待批准的内容；点线是 Core 1 之后的阶段。离线打开时字体会回退到系统衬线体。</p>
+    </div>
+  </footer>
+</div>
+
+<script>
+// 每张连线图的边：from → to；kind 对应状态编码，sides 可覆盖自动选择的出入口。
+const DIAGRAMS = {
+  meta: [
+    { from: 'm-scan', to: 'm-obs' },
+    { from: 'm-obs', to: 'm-id' },
+    { from: 'm-id', to: 'm-derived' },
+    { from: 'm-derived', to: 'm-result', kind: 'draft' },
+    { from: 'm-intent', to: 'm-ops', kind: 'draft' },
+    { from: 'm-ops', to: 'm-overlay', kind: 'draft', label: '唯一写入口' },
+    { from: 'm-id', to: 'm-overlay', kind: 'appr', label: '稳定 ID' },
+    { from: 'm-overlay', to: 'm-result', kind: 'draft' },
+    { from: 'm-result', to: 'm-read', kind: 'draft' },
+  ],
+  gov: [
+    { from: 'g-intent', to: 'g-authz', kind: 'draft' },
+    { from: 'g-authz', to: 'g-preview', kind: 'draft' },
+    { from: 'g-preview', to: 'g-approve', kind: 'draft' },
+    { from: 'g-approve', to: 'g-exec', kind: 'draft' },
+    { from: 'g-exec', to: 'g-revert', kind: 'draft', label: '按需' },
+  ],
+  front: [
+    { from: 'f-page', to: 'f-comp', kind: 'draft' },
+    { from: 'f-comp', to: 'f-hook', kind: 'draft' },
+    { from: 'f-hook', to: 'f-api', kind: 'draft' },
+    { from: 'f-api', to: 'f-transport', kind: 'draft' },
+    { from: 'f-transport', to: 'f-rest', kind: 'draft' },
+    { from: 'f-player-ui', to: 'f-engine', kind: 'draft' },
+    { from: 'f-engine', to: 'f-audio', kind: 'draft' },
+    { from: 'f-audio', to: 'f-stream', kind: 'appr', label: 'Range 请求 · 同源 Cookie' },
+  ],
+  road: [
+    { from: 'r-m0', to: 'r-b0' },
+    { from: 'r-m0', to: 'r-m1a' },
+    { from: 'r-b0', to: 'r-i', kind: 'appr' },
+    { from: 'r-i', to: 'r-m3', kind: 'appr' },
+    // 同一侧出发的线：下方端口先拐弯，上方端口后拐弯，形成嵌套而不交叉。
+    { from: 'r-i', to: 'r-m1b', kind: 'appr', turn: 0.68 },
+    { from: 'r-i', to: 'r-personal', kind: 'appr', turn: 0.38 },
+    { from: 'r-m1a', to: 'r-m1b', kind: 'appr' },
+    { from: 'r-m1a', to: 'r-m2a', kind: 'appr' },
+    { from: 'r-m2a', to: 'r-m2b', kind: 'appr' },
+    { from: 'r-m2a', to: 'r-personal', kind: 'appr', turn: 0.16 },
+    { from: 'r-m3', to: 'r-m4', kind: 'appr' },
+    { from: 'r-m4', to: 'r-m5', kind: 'later', turn: 0.3 },
+    { from: 'r-m4', to: 'r-m6', kind: 'later', turn: 0.62 },
+  ],
+  ext: [
+    { from: 'x-parser', to: 'x-obs', kind: 'later' },
+    { from: 'x-provider', to: 'x-obs', kind: 'later', label: '只作候选' },
+    { from: 'x-agent', to: 'x-cs', kind: 'later', label: '只产出提案' },
+    { from: 'x-cs', to: 'x-ops', kind: 'draft' },
+    { from: 'x-ops', to: 'x-exec', kind: 'later', label: '授权包裹调用' },
+    { from: 'x-obs', to: 'x-result', kind: 'now', label: 'catalog 计算' },
+    { from: 'x-ops', to: 'x-result', kind: 'draft', label: '写入覆盖层' },
+  ],
+};
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const PORT_GAP = 10;
+
+function relativeRect(element, origin) {
+  const r = element.getBoundingClientRect();
+  return { left: r.left - origin.left, top: r.top - origin.top, right: r.right - origin.left, bottom: r.bottom - origin.top, width: r.width, height: r.height };
+}
+
+function chooseSides(source, target) {
+  if (target.left >= source.right - 2) return ['right', 'left'];
+  if (target.right <= source.left + 2) return ['left', 'right'];
+  if (target.top >= source.bottom - 2) return ['bottom', 'top'];
+  return ['top', 'bottom'];
+}
+
+function portPoint(rect, side, offset) {
+  if (side === 'right') return { x: rect.right, y: rect.top + rect.height / 2 + offset };
+  if (side === 'left') return { x: rect.left, y: rect.top + rect.height / 2 + offset };
+  if (side === 'bottom') return { x: rect.left + rect.width / 2 + offset, y: rect.bottom };
+  return { x: rect.left + rect.width / 2 + offset, y: rect.top };
+}
+
+function pushOut(point, side, distance) {
+  if (side === 'right') return { x: point.x + distance, y: point.y };
+  if (side === 'left') return { x: point.x - distance, y: point.y };
+  if (side === 'bottom') return { x: point.x, y: point.y + distance };
+  return { x: point.x, y: point.y - distance };
+}
+
+function cubicPoint(p0, p1, p2, p3, t) {
+  const u = 1 - t;
+  return {
+    x: u * u * u * p0.x + 3 * u * u * t * p1.x + 3 * u * t * t * p2.x + t * t * t * p3.x,
+    y: u * u * u * p0.y + 3 * u * u * t * p1.y + 3 * u * t * t * p2.y + t * t * t * p3.y,
+  };
+}
+
+function render(container) {
+  const edges = DIAGRAMS[container.dataset.diagram] || [];
+  const svg = container.querySelector(':scope > svg.edges');
+  const labels = container.querySelector(':scope > .edge-labels');
+  const origin = container.getBoundingClientRect();
+  svg.setAttribute('width', origin.width);
+  svg.setAttribute('height', origin.height);
+  svg.setAttribute('viewBox', `0 0 ${origin.width} ${origin.height}`);
+  svg.replaceChildren();
+  labels.replaceChildren();
+
+  // 第一遍：确定出入口，并按对端位置排序，让同一侧的多条线错开且少交叉。
+  const routed = edges.map((edge) => {
+    const source = container.querySelector('#' + edge.from);
+    const target = container.querySelector('#' + edge.to);
+    if (!source || !target) return null;
+    const s = relativeRect(source, origin);
+    const t = relativeRect(target, origin);
+    const [sourceSide, targetSide] = edge.sides || chooseSides(s, t);
+    return { edge, s, t, sourceSide, targetSide, sourceOffset: 0, targetOffset: 0 };
+  }).filter(Boolean);
+
+  const ports = new Map();
+  const addPort = (key, item, otherCenter, field) => {
+    if (!ports.has(key)) ports.set(key, []);
+    ports.get(key).push({ item, otherCenter, field });
+  };
+  for (const item of routed) {
+    const vertical = (side) => side === 'left' || side === 'right';
+    const tc = vertical(item.sourceSide) ? item.t.top + item.t.height / 2 : item.t.left + item.t.width / 2;
+    const sc = vertical(item.targetSide) ? item.s.top + item.s.height / 2 : item.s.left + item.s.width / 2;
+    addPort(item.edge.from + ':' + item.sourceSide, item, tc, 'sourceOffset');
+    addPort(item.edge.to + ':' + item.targetSide, item, sc, 'targetOffset');
+  }
+  for (const list of ports.values()) {
+    list.sort((a, b) => a.otherCenter - b.otherCenter);
+    list.forEach((entry, index) => { entry.item[entry.field] = (index - (list.length - 1) / 2) * PORT_GAP; });
+  }
+
+  // 第二遍：画三次贝塞尔曲线和标签。
+  for (const item of routed) {
+    const { edge } = item;
+    const kind = edge.kind || 'now';
+    const p0 = portPoint(item.s, item.sourceSide, item.sourceOffset);
+    const p3 = pushOut(portPoint(item.t, item.targetSide, item.targetOffset), item.targetSide, 1);
+    const horizontal = item.sourceSide === 'left' || item.sourceSide === 'right';
+    const span = horizontal ? Math.abs(p3.x - p0.x) : Math.abs(p3.y - p0.y);
+    const bend = Math.max(18, span * 0.5);
+    let p1 = pushOut(p0, item.sourceSide, bend);
+    let p2 = pushOut(p3, item.targetSide, bend);
+    if (edge.turn !== undefined) {
+      // turn 是拐弯处在两端之间的相对位置；多条线共用一个通道时用它错开。
+      const ratio = (edge.turn - 0.125) / 0.75;
+      if (horizontal) {
+        const x = p0.x + (p3.x - p0.x) * ratio;
+        p1 = { x, y: p0.y };
+        p2 = { x, y: p3.y };
+      } else {
+        const y = p0.y + (p3.y - p0.y) * ratio;
+        p1 = { x: p0.x, y };
+        p2 = { x: p3.x, y };
+      }
+    }
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', `M${p0.x},${p0.y} C${p1.x},${p1.y} ${p2.x},${p2.y} ${p3.x},${p3.y}`);
+    path.setAttribute('class', `edge k-${kind}`);
+    path.dataset.from = edge.from;
+    path.dataset.to = edge.to;
+    svg.append(path);
+    if (edge.label) {
+      const mid = cubicPoint(p0, p1, p2, p3, 0.5);
+      const label = document.createElement('span');
+      label.className = `edge-label k-${kind}`;
+      label.textContent = edge.label;
+      label.style.left = `${mid.x}px`;
+      label.style.top = `${mid.y}px`;
+      label.dataset.from = edge.from;
+      label.dataset.to = edge.to;
+      labels.append(label);
+    }
+  }
+}
+
+function wireHighlight(container) {
+  const clear = () => {
+    container.classList.remove('focusing');
+    container.querySelectorAll('.hot, .hot-node, .linked').forEach((el) => el.classList.remove('hot', 'hot-node', 'linked'));
+  };
+  const focus = (node) => {
+    clear();
+    container.classList.add('focusing');
+    node.classList.add('hot-node');
+    container.querySelectorAll(`[data-from="${node.id}"], [data-to="${node.id}"]`).forEach((el) => {
+      el.classList.add('hot');
+      const other = el.dataset.from === node.id ? el.dataset.to : el.dataset.from;
+      container.querySelector('#' + other)?.classList.add('linked');
+    });
+  };
+  container.querySelectorAll('.node[id]').forEach((node) => {
+    node.addEventListener('mouseenter', () => focus(node));
+    node.addEventListener('mouseleave', clear);
+    node.addEventListener('focus', () => focus(node));
+    node.addEventListener('blur', clear);
+  });
+}
+
+const pending = new Set();
+function schedule(container) {
+  if (pending.size === 0) requestAnimationFrame(() => { pending.forEach(render); pending.clear(); });
+  pending.add(container);
+}
+
+const diagrams = document.querySelectorAll('.diagram[data-diagram]');
+const observer = new ResizeObserver((entries) => entries.forEach((entry) => {
+  const container = entry.target.closest('.diagram[data-diagram]');
+  if (container) schedule(container);
+}));
+diagrams.forEach((container) => {
+  wireHighlight(container);
+  observer.observe(container);
+  container.querySelectorAll('.node').forEach((node) => observer.observe(node));
+});
+if (document.fonts) document.fonts.ready.then(() => diagrams.forEach(schedule));
+</script>
+</body>
+</html>

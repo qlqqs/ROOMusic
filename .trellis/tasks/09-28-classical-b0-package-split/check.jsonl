@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "纯重构的验证门禁与禁止的耦合"}
+{"file": ".trellis/spec/guides/engineering-principles.md", "reason": "行为保持重构与行为变更分离"}

@@ -3,8 +3,9 @@
 ## Status
 
 本文档是供 Trellis 任务上下文读取的架构摘要，记录长期规则并区分当前实现与目标边界。
-Canvas 保留历史可视化参考，不证明相关模块已存在。2026-09-27 的 Classical M0 仅获批
-整理文档，新增能力与技术决策仍以文末草案和后续批准为准。
+Canvas 保留历史可视化参考，不证明相关模块已存在；当前目标结构的图示见
+[Core 1 目标架构图](core-1-architecture.html)。2026-09-28 已批准 Core 1 范围与部分 ADR 项，
+其余新增能力与技术决策仍以文末各 ADR 的决策记录和后续批准为准。
 
 ## 文档语言
 
@@ -39,7 +40,8 @@ frontend-desgin/            # 已入库原型及设计工具资产，保持原�
 ```
 
 下方 `backend/internal/*` 与 `frontend/src/features/*` 仅是目标能力边界。
-M1 候选先用现有 API 恢复客户端；B0 候选按真实能力分步拆包，两者可并行。
+M1a 先用现有 API 恢复外壳与管理界面；B0 先拆 catalog、再拆目录与扫描，两者可并行；
+阶段 I 在拆出的 catalog 上实施身份规则与按组只读接口，M1b 的专辑页随后使用它。
 不为目录对称性生成空层，也不把 API 行为修复、新迁移或媒体服务夹入纯重构。
 
 ## Repository-level modules
@@ -167,18 +169,34 @@ Capability Registry and Plugin Host are future runtime infrastructure. Do not
 introduce a service locator, dynamic plugin loader, RPC layer, or WASM runtime
 until an approved feature requires that boundary.
 
-## Classical / Core 1 决策草案
+### 扩展边界的两步走（指导原则，2026-09-28）
 
-[能力矩阵与路线](core-1-roadmap.md)记录 M0–M6/B0 的依赖、验收和旧任务承接。
-推荐 Core 1 截止 M4、M5/M6 后续交付，但该范围仍待用户确认；也可先交付 M1+必要 B0+M2。
-以下四份文档均为**草案／待批准**，不授权安装库、建表、扩权或变更生产媒体路径。
+以下是评估后的指导原则，不是已批准的插件方案；未来插件立项时须复核。
 
-| ADR | 主题 | 涉及阶段 |
-| --- | --- | --- |
-| [0001](adr/0001-frontend-foundations.md) | 前端路由、数据请求、样式、字体与依赖治理 | M1 |
-| [0002](adr/0002-metadata-overlays.md) | 扫描观察、人工修正、有效值与稳定身份 | M3/M4 |
-| [0003](adr/0003-governed-operations.md) | 通用变更集、审批、角色、检查点与受限逆操作 | M3/M4/M6 |
-| [0004](adr/0004-media-delivery.md) | 受保护串流、浏览器能力、ffmpeg 与派生缓存 | M2 |
+- 插件只能从两个口子进入：**观察层**（格式解析器、元数据与封面提供方的产出只作为候选或证据，
+  不覆盖人工修正）和**意图侧**（Agent 与审查插件只产出 Change Set；执行插件只能由 operations
+  在授权包裹下调用）。任何插件都不能直接写有效值结果层，也不能给自己授权。
+- **第一步（Core 1 期间）**：只做“插件形状”，不建插件基础设施。各模块由使用方定义窄接口，
+  外部依赖实现为同一二进制内的适配器，例如 M2b 的 ffmpeg、以后的元数据提供方和 M6 的模型服务。
+- **第二步（出现第三方或仓库外扩展需求时）**：把已稳定的接口升级为 `extensions/` 下的类型化
+  合同，再建能力注册表与插件宿主。插件优先运行在独立进程并通过类型化 RPC 调用；不采用 Go 的
+  `plugin` 包（要求工具链与依赖版本完全一致、仅支持 Linux/macOS、不能卸载）；只有需要运行
+  不受信任的第三方代码时才考虑 WASM 沙箱。
+- 执行插件排在最后：必须在受治理操作与恢复策略成熟之后，并继续服从音乐源默认只读的不变量。
+
+## Classical / Core 1 决策状态
+
+[Core 1 路线](core-1-roadmap.md)记录各阶段的依赖、验收和旧任务承接。2026-09-28 用户（qlqq）
+批准 Core 1 截止到 M4（B0、I、M1a、M1b、M2a、M2b、P、M3、M4，外加 F1、F2），M5、M6 后续。
+下表 ADR 均为**部分批准**：只有各自“决策记录”列明的项获批，其余仍待批准；批准的是选型与范围，
+不是已经安装库、建表、扩权或变更生产媒体路径。
+
+| ADR | 主题 | 涉及阶段 | 已批准的项 |
+| --- | --- | --- | --- |
+| [0001](adr/0001-frontend-foundations.md) | 前端路由、数据请求、样式、字体与依赖治理 | M1a/M1b | Router + Query、CSS Modules、Fontsource 自托管、JSON 样本防漂移 |
+| [0002](adr/0002-metadata-overlays.md) | 扫描观察、人工修正、有效值与稳定身份 | I/M3/M4 | 成员关系匹配 + 同 root 保守重绑定；Core 1 仅人工确认归组 |
+| [0003](adr/0003-governed-operations.md) | 通用变更集、审批、角色、检查点与受限逆操作 | M3/M4/M6 | M3 试点：字段修正 + ReleaseGroup 成员调整 |
+| [0004](adr/0004-media-delivery.md) | 受保护串流、浏览器能力、ffmpeg 与派生缓存 | M2a/M2b | “仅直出”作为 M2a 首发范围 |
 
 当前安全和部署合同继续生效：只读源文件、后端最终授权、Cookie 同源、PostgreSQL 权威；
 扫描观察不是用户逐字段操作，不能直接生成“回滚到某次扫描”的承诺。具体 URL、表结构、
@@ -186,6 +204,7 @@ until an approved feature requires that boundary.
 
 ## Source documents
 
+- `docs/architecture/core-1-architecture.html`（Core 1 目标架构图，含扩展边界）
 - `docs/architecture/roomusic-modular-plugin-architecture.canvas.tsx`
 - `docs/architecture/roomusic-full-architecture-tree.canvas.tsx`
 - `docs/architecture/core-0-file-structure.canvas.tsx`

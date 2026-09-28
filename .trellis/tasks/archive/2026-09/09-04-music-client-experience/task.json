@@ -3,7 +3,7 @@
   "name": "music-client-experience",
   "title": "完善音乐客户端前端体验",
   "description": "沿用复古唱片店视觉，完善导航、个人音乐库、歌单与模拟播放闭环，允许本地占位数据",
-  "status": "in_progress",
+  "status": "completed",
   "dev_type": null,
   "scope": null,
   "package": null,
@@ -11,7 +11,7 @@
   "creator": "qlqq",
   "assignee": "qlqq",
   "createdAt": "2026-09-04",
-  "completedAt": null,
+  "completedAt": "2026-09-28",
   "branch": "feat/music-client-experience",
   "base_branch": "main",
   "worktree_path": null,
@@ -22,5 +22,8 @@
   "parent": null,
   "relatedFiles": [],
   "notes": "",
-  "meta": {}
+  "meta": {
+    "outcome": "superseded",
+    "superseded_by": "09-27-classical-core-1"
+  }
 }

@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "revision 与幂等规则"}
+{"file": "docs/architecture/adr/0003-governed-operations.md", "reason": "目录目标绑定缺口与幂等合同"}
