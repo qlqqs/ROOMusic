@@ -1,6 +1,6 @@
 # M1a：Classical 外壳与管理界面
 
-> 状态：planning，未启动。2026-09-28 由[路线修订任务](../09-28-core-1-roadmap-revision/design.md)（第二部分）创建，本文是 PRD 初稿；
+> 状态：planning，未启动。2026-09-28 由[路线修订任务](../archive/2026-09/09-28-core-1-roadmap-revision/design.md)（第二部分）创建，本文是 PRD 初稿；
 > 启动前需按 Trellis 流程完成规划并获批准。父任务见 [Classical 重设计 / Core 1](../09-27-classical-core-1/prd.md)。
 
 ## 目标与用户价值

@@ -1,4 +1,4 @@
-{"file": ".trellis/tasks/09-28-core-1-roadmap-revision/research/architecture-evaluation.md", "reason": "评估结论、已核实事实与 file:line 依据，修订文档时逐条对照"}
+{"file": ".trellis/tasks/archive/2026-09/09-28-core-1-roadmap-revision/research/architecture-evaluation.md", "reason": "评估结论、已核实事实与 file:line 依据，修订文档时逐条对照"}
 {"file": ".trellis/spec/guides/product-goals.md", "reason": "阶段边界与永久不变量，修订路线与播放历史描述时不得放宽"}
 {"file": ".trellis/spec/guides/modular-design.md", "reason": "能力归属与依赖方向，约束 B0 拆包顺序与扩展边界表述"}
 {"file": ".trellis/spec/backend/directory-structure.md", "reason": "internal/ 目标布局与反模式，B0 子任务 PRD 初稿的依据"}

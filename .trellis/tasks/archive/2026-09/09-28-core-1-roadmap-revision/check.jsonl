@@ -1,4 +1,4 @@
-{"file": ".trellis/tasks/09-28-core-1-roadmap-revision/research/architecture-evaluation.md", "reason": "核对修订后的文档与评估结论、裁决 D1–D6 一致"}
+{"file": ".trellis/tasks/archive/2026-09/09-28-core-1-roadmap-revision/research/architecture-evaluation.md", "reason": "核对修订后的文档与评估结论、裁决 D1–D6 一致"}
 {"file": ".trellis/spec/guides/real-music-assets.md", "reason": "检查新增文档没有泄露私有路径、曲目清单或媒体内容"}
 {"file": ".trellis/spec/guides/product-goals.md", "reason": "检查路线与 ADR 修订没有放宽只读源文件、后端权威、保守分组等不变量"}
 {"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "审查子任务 PRD 初稿中的验证门禁与风险对应关系"}
