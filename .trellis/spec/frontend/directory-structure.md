@@ -9,7 +9,7 @@
 
 `player`、`curation`、通用 `operations`、`artists`、`personal`、`steward` 随对应获批
 阶段建立。基础 Release 搜索可先由 `catalog` 拥有，不因目录示例中的 `search` 而新增搜索
-服务。阶段命名和候选依赖见 [Core 1 路线提案](../../../docs/architecture/core-1-roadmap.md)。
+服务。阶段命名和依赖见 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)。
 设计变量与共用表现原语的放置由 M1 落实，不能直接复制整个设计工具运行时。
 
 ## Planned Layout

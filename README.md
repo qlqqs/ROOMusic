@@ -2,7 +2,7 @@
 
 ROOMusic 保留 Core 0 的 Go 后端、数据库与同源部署工具链，不迁移 V0 中已经膨胀的应用容器、AI worker、operator、release overlay 或业务配置。
 
-> **当前状态（2026-09-27）**：前端源码 `frontend/src/` 已删除，Go 内嵌页面为重置占位页，尚无可用的 Classical 客户端。本轮 M0 仅对齐文档，不恢复界面。设计依据见 [frontend/DESIGN.md](frontend/DESIGN.md)，能力矩阵、阶段范围和四类待批准 ADR 见 [Core 1 路线提案](docs/architecture/core-1-roadmap.md)。
+> **当前状态（2026-09-28）**：前端源码 `frontend/src/` 已删除，Go 内嵌页面为重置占位页，尚无可用的 Classical 客户端。M0 与路线修订只对齐文档，不恢复界面。设计依据见 [frontend/DESIGN.md](frontend/DESIGN.md)，能力矩阵、已批准的 Core 1 阶段范围和四类部分批准的 ADR 见 [Core 1 路线](docs/architecture/core-1-roadmap.md)。
 
 ## 软件目标
 

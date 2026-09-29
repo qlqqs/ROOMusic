@@ -29,8 +29,8 @@ When sources disagree, apply this order:
 4. Current README, Compose, and environment files describe repository and local
    environment facts.
 
-2026-09-27 的 M0 只批准设计/规范整理。新 Classical 设计锚替代旧视觉指令；Core 1
-范围和新增技术仍按草案处理。历史 PRD 的批准记录不代表已删除源码仍存在，也不把
+2026-09-27 的 M0 只批准设计/规范整理。新 Classical 设计锚替代旧视觉指令；2026-09-28
+已批准 Core 1 范围与阶段顺序，新增技术以各 ADR“决策记录”中已批准的项为限，其余仍按草案处理。历史 PRD 的批准记录不代表已删除源码仍存在，也不把
 旧演示/本地持久化方案自动授权给新客户端。规划描述与源码现状冲突时，分别标注
 “目标/候选”与“当前事实”，不能通过修改措辞假装功能已交付。
 
@@ -55,7 +55,7 @@ policy owner.
 
 - [Core 0 PRD](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md)
 - [Classical 设计依据](../../../frontend/DESIGN.md)
-- [Core 1 路线提案](../../../docs/architecture/core-1-roadmap.md)（M0 文档已获准整理，具体范围与 ADR 尚待采纳）
+- [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)（2026-09-28 已批准 Core 1 范围与阶段顺序；ADR 0001–0004 为部分批准）
 - [Current README](../../../README.md)
 - [Architecture canvas](../../../docs/architecture/roomusic-modular-plugin-architecture.canvas.tsx)
 - [Inherited V0 product goals and phase decisions](./product-goals.md)

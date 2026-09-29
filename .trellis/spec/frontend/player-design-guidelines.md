@@ -6,9 +6,9 @@
 不宣称已实现。唯一落地视觉依据是 [frontend/DESIGN.md](../../../frontend/DESIGN.md)，
 原始设计位于 `frontend-desgin/`。旧月刊布局、朱红主色、大圆角和生产演示播放器不再适用。
 
-M1 仅接入既有认证、catalog、目录/扫描和成员 API；M2 才候选引入真实播放。
-未完成阶段的控件隐藏或明确禁用，不能用模拟状态充当功能。具体阶段与未决方案见
-[Core 1 路线提案](../../../docs/architecture/core-1-roadmap.md)。
+M1a/M1b 仅接入既有认证、目录/扫描、成员 API 与阶段 I 的按组只读接口；真实播放从 M2a（直出）开始，
+M2b 补派生与歌词。未完成阶段的控件隐藏或明确禁用，不能用模拟状态充当功能。具体阶段与未决方案见
+[Core 1 路线](../../../docs/architecture/core-1-roadmap.md)。
 
 ## 视觉与布局
 

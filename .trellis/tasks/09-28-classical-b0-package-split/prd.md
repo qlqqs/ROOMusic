@@ -30,6 +30,10 @@
 - REST 路由、JSON 形状、状态码、SQL 语义与迁移文件不变，由现有集成测试和 catalog REST 合同测试证明。
 - `cmd/roomusic` 只保留入口与装配；依赖方向为 handler → 能力包 → platform，没有循环；catalog 不导入 library 的私有实现。
 
+## 验证方式
+
+每一步单独运行上述 Go 命令与 `./scripts/test-integration.sh`；另用 `go list -deps` 或同等方式确认包依赖方向与无循环。
+
 ## 风险
 
 - diff 大、导出命名需要斟酌；原 `package main` 内的集成测试要随包拆分。每步单独提交，出问题按步回退。

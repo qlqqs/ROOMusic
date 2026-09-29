@@ -10,10 +10,10 @@ TypeScript、Vite、ESLint、Vitest/jsdom、lucide-react 的依赖声明与配�
 来源是 `frontend-desgin/` 中的原型。旧月刊布局、hash 路由、模拟播放器和生产演示入口
 不再是恢复客户端的默认要求；仍适用的队列语义与安全边界保留在本层规范。
 
-M0 仅获批整理文档。M1 的候选范围是用现有 API 恢复客户端，既有初始化、会话、目录、
-扫描和成员管理写操作仍可使用；不新增元数据治理写路径。新依赖与路由方案见
-[前端基础 ADR 草案](../../../docs/architecture/adr/0001-frontend-foundations.md)，阶段和
-能力矩阵见 [Core 1 路线提案](../../../docs/architecture/core-1-roadmap.md)。草案不授权安装依赖。
+2026-09-28 已批准 Core 1 路线：M1a 用现有 API 恢复外壳与管理，M1b 使用阶段 I 的按组只读接口；
+既有初始化、会话、目录、扫描和成员管理写操作仍可使用，不新增元数据治理写路径。已批准的依赖与路由方案见
+[前端基础 ADR](../../../docs/architecture/adr/0001-frontend-foundations.md) 决策记录，阶段和
+能力矩阵见 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)。依赖在 M1a 子任务中安装，文档本身不授权安装。
 以下是后续恢复实现需遵守的合同，不是当前前端已通过功能验收的声明。
 
 ## Pre-Development Checklist
@@ -38,7 +38,7 @@ Before writing or reviewing frontend code:
 | Guide | Contract |
 | --- | --- |
 | [Classical 设计依据](../../../frontend/DESIGN.md) | 原型来源、设计变量、布局、组件状态和落地差异 |
-| [Core 1 路线提案](../../../docs/architecture/core-1-roadmap.md) | 当前能力、待批准阶段、旧任务承接与实施门禁 |
+| [Core 1 路线](../../../docs/architecture/core-1-roadmap.md) | 当前能力、已批准阶段与依赖、ADR 裁决状态、旧任务承接与实施门禁 |
 | [Directory Structure](./directory-structure.md) | App composition, feature ownership, public boundaries, and shared code |
 | [Component Guidelines](./component-guidelines.md) | Presentational contracts, workflow states, accessibility, and composition |
 | [Hook Guidelines](./hook-guidelines.md) | Stateful coordination, REST access, cancellation, and polling |

@@ -110,7 +110,7 @@ frontend/src/
 上图中的搜索、通用操作和 Agent 目录只是候选；Classical 后续 `player`、`curation`、
 `artists`、`personal`、`steward` 的命名与责任由相应子任务落实，不因示意图批量生成。
 各 feature 拥有 REST DTO、decoder、hook、view model、组件和路由；`shared` 不能导入
-`features` 或 `app`。新增 Router/Query 仍须先通过依赖 ADR。
+`features` 或 `app`。Router/Query 已于 2026-09-28 获批（ADR 0001 决策记录），由 M1a 安装并锁定版本。
 
 The frontend flow is:
 

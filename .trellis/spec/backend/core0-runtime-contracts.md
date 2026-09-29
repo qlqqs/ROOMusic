@@ -9,7 +9,7 @@
 2026-09-27 起必须区分：`frontend/src/` 已删除，当前 Go 内嵌页面仅是重置占位页。
 本文件涉及旧 `requestApi`、decoder 和前端测试的内容是恢复实现时需保留的合同，
 不是当前源码或已通过的前端验收。Classical 设计见 [DESIGN.md](../../../frontend/DESIGN.md)，
-阶段与依赖草案见 [Core 1 路线提案](../../../docs/architecture/core-1-roadmap.md)。
+阶段与依赖见 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)（2026-09-28 已批准）。
 M0 不改变以下后端 API、数据库或运行边界。
 
 ## 2. 接口签名
@@ -501,9 +501,9 @@ go app.runScan(scanID, execution) // worker 由应用生命周期和持久化取
 
 - HTTP 请求现在通过 `http.request.completed` 事件记录状态码、耗时和路由模板；用户
   创建/禁用/会话撤销仍无独立 Operation Journal。
-- 前端源码已删除；M1 按 Classical 设计恢复 feature 边界，router/query cache 和版本
-  锁定须经依赖 ADR 与实施子任务批准，不能把历史文件当成当前可拆分实现。
-- 未匹配的 `/api/` 仍落入前端 fallback；JSON 404 是独立行为修复候选，不随 M0 或
+- 前端源码已删除；M1a 按 Classical 设计恢复 feature 边界。Router/Query 已于 2026-09-28 获批
+  （ADR 0001），版本锁定在 M1a 子任务中确定，不能把历史文件当成当前可拆分实现。
+- 未匹配的 `/api/` 仍落入前端 fallback；JSON 404 已立项为独立修复 F1，不随 M0 或
   B0 纯拆包暗中修改。后续路由/transport 测试需覆盖非 JSON 意外响应。
 - 2026-09-27 静态审查：`root_operations.go` 的 `updateRoot` / `restoreRoot` 指纹未包含
   路由 root ID，`replayOperation` 按 actor/类型/幂等键查询；同键同 body 跨目标可能重放

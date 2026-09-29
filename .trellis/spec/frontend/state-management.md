@@ -8,8 +8,8 @@ remains local component state, and authentication authority remains on the
 backend.
 
 当前 `frontend/src/` 已删除，不存在运行中的页面 effect 或全局 store。下文保留状态
-归属合同；路由和 query/cache 方案由 [前端基础 ADR 草案](../../../docs/architecture/adr/0001-frontend-foundations.md)
-及获批实施子任务决定。不能把历史实现或候选库当成已经落地的当前状态。
+归属合同；路由和 query/cache 方案已于 2026-09-28 选定 TanStack Router + Query（[前端基础 ADR](../../../docs/architecture/adr/0001-frontend-foundations.md)
+决策记录），具体接入与清理策略由 M1a 子任务决定。不能把历史实现或候选库当成已经落地的当前状态。
 
 ## State Categories
 

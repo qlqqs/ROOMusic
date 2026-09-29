@@ -14,9 +14,9 @@ music library.
 ## 后续阶段说明
 
 Classical / Core 1 的能力路线与四类 ADR 位于
-[阶段提案](../../../docs/architecture/core-1-roadmap.md)。M0 仅更新文档，不改变本层现有
-API、表结构或权限。B0 是待立项的行为保持拆包；修正覆盖层、通用审批、editor 角色和
-媒体处理均为候选能力，须经对应子任务批准后再实施。Core 0 限制不是未来阶段的默认授权。
+[Core 1 路线](../../../docs/architecture/core-1-roadmap.md)（2026-09-28 已批准阶段顺序与范围）。M0 与路线修订仅更新文档，
+不改变本层现有 API、表结构或权限。B0 是已立项（planning）的行为保持拆包；身份稳定与按组只读接口属于阶段 I；
+修正覆盖层、通用审批、editor 角色和媒体处理的实施细节须经对应子任务与 ADR 项批准后再实施。Core 0 限制不是未来阶段的默认授权。
 
 ## Pre-Development Checklist
 

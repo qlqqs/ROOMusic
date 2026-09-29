@@ -23,8 +23,8 @@
 | [Classical styles.css](../frontend-desgin/_ds/classical-d3de10a0-5b67-4da7-b5b3-8d49f26a63f1/styles.css)、[设计系统说明](../frontend-desgin/_ds/classical-d3de10a0-5b67-4da7-b5b3-8d49f26a63f1/readme.md) | 原始色板、字体、间距、圆角、阴影和基础组件；页面的字体覆盖也必须一起读取 |
 | [原型同步记录](../frontend-desgin/github.md) | 保存设计导入时的历史状态；本文不修改该记录或原始资产 |
 | [产品目标](../.trellis/spec/guides/product-goals.md)、[前端规范](../.trellis/spec/frontend/index.md) | 后端权威、源文件只读、数据与组件责任；视觉样张不能覆盖这些合同 |
-| [Core 1 路线](../docs/architecture/core-1-roadmap.md) | 文档范围、批准边界、现有能力及阶段依赖提案；不能把路线图当作实施授权 |
-| [前端基础 ADR 草案](../docs/architecture/adr/0001-frontend-foundations.md)、[媒体交付 ADR 草案](../docs/architecture/adr/0004-media-delivery.md) | Router/Query、样式组织、字体分发及真实播放方案的决策入口，未批准前不锁定实现 |
+| [Core 1 路线](../docs/architecture/core-1-roadmap.md) | 批准边界、现有能力及 2026-09-28 已批准的阶段顺序与依赖；不能把路线图当作各阶段的实施授权 |
+| [前端基础 ADR](../docs/architecture/adr/0001-frontend-foundations.md)、[媒体交付 ADR](../docs/architecture/adr/0004-media-delivery.md)（均为部分批准） | Router/Query、样式组织、字体分发及真实播放方案的决策入口；已批准项见各自“决策记录”，其余未批准前不锁定实现 |
 
 本轮只把既有 Classical 方向提炼成设计锚点，不重新生成多方向预览、不引入另一套风格、
 不修改源稿或实现 UI。排版建议与本项目发生冲突时，以获批范围和 Classical 源稿为先；
@@ -255,7 +255,7 @@ M2 需补齐无曲目、等待媒体、缓冲、播放、暂停、结束、格�
 
 ## 7. 页面能力与阶段边界
 
-下表是**阶段提案**，不是交付现状或自动排期。现有路由已对照
+下表的阶段归属按 2026-09-28 批准的 Core 1 路线（D1、D4），不是交付现状或自动排期。现有路由已对照
 [application.go](../backend/cmd/roomusic/application.go)，字段依据
 [catalog_api.go](../backend/cmd/roomusic/catalog_api.go)、[scans.go](../backend/cmd/roomusic/scans.go)
 和 [root_operations.go](../backend/cmd/roomusic/root_operations.go)。具体 DTO 与错误合同仍由相应规范/子任务维护。
@@ -272,12 +272,12 @@ M2 需补齐无曲目、等待媒体、缓冲、播放、暂停、结束、格�
 | 收藏/历史/播放列表 | 尚无完整服务端个人库 API | 不沿用旧本地个人库或演示身份；播放历史在阶段 I 之后由服务端按用户隔离保存（P），跨用户隔离必须成立 | P 播放历史；M5 收藏与歌单 |
 | 元数据问题 | Release 候选字段、关注计数与证据 | M1 可查看现有证据，不伪造待办状态、忽略、应用或撤销；持久修正与结构操作需写路径 | M3 基础；M4 整理 |
 | 扫描目录/过程 | `library-roots`、`scans`、`scans/active`、取消、状态和诊断 | 管理员可使用已有添加/禁用/恢复、启动/取消；无进度百分比、暂停、定时/监听或漏斗报告合同 | M1a 现状；增强另立子任务 |
-| 审批与日志/成员 | `library-root-operations`、目录恢复、`users` 与会话撤销 | M1 命名为目录操作记录/成员管理，不冒充通用审批；角色按现有 `admin/user`，不复制编辑者/听众三角色表 | M1 现状；M3 通用治理 |
-| Music Steward | 仅有模式与权限规范，无对应运行时 API | 不显示能对话或批准的空外壳，不把示例回答当数据 | M6 候选，未自动纳入 Core 1 |
+| 审批与日志/成员 | `library-root-operations`、目录恢复、`users` 与会话撤销 | M1 命名为目录操作记录/成员管理，不冒充通用审批；角色按现有 `admin/user`，不复制编辑者/听众三角色表 | M1a 现状；M3 通用治理 |
+| Music Steward | 仅有模式与权限规范，无对应运行时 API | 不显示能对话或批准的空外壳，不把示例回答当数据 | M6，Core 1 之后 |
 
 M1 不是“只读界面”：它包含已存在且按后端授权执行的管理写操作；只读约束针对音乐源文件。
 B0 是独立的行为保持拆包，不顺带增加 UI 所需的新接口。M4 必须依赖 M3 的修正/操作写路径，
-不能先做一个只在浏览器里合并、拆分和撤销的可点击外壳。最终顺序和范围以阶段评审为准。
+不能先做一个只在浏览器里合并、拆分和撤销的可点击外壳。顺序与范围以 Core 1 路线为准，各阶段细节在对应子任务中评审。
 
 ## 8. 原型不实承诺与落地调整表
 
