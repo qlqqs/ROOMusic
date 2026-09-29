@@ -96,9 +96,53 @@ func buildHandler(logger *slog.Logger, database *databaseState) http.Handler {
 		statusCode, status := readinessStatus(database)
 		writeJSON(responseWriter, statusCode, map[string]string{"status": status})
 	})
+	registerAPIFallback(mux, http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
+		writeAPIError(responseWriter, request, http.StatusServiceUnavailable, "database_unavailable", "服务暂不可用")
+	}))
 	mux.Handle("/", productionFrontendHandler())
 
 	return requestIDMiddleware(logger, mux)
+}
+
+// API 兜底模式比 "/" 更具体：未注册的 /api 请求返回 JSON 错误，不落入前端页面。
+const (
+	apiFallbackPattern     = "/api/"
+	apiRootFallbackPattern = "/api"
+)
+
+var apiProbeMethods = []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete}
+
+func registerAPIFallback(mux *http.ServeMux, handler http.Handler) {
+	mux.Handle(apiFallbackPattern, handler)
+	mux.Handle(apiRootFallbackPattern, handler)
+}
+
+func isAPIFallbackPattern(pattern string) bool {
+	return pattern == apiFallbackPattern || pattern == apiRootFallbackPattern
+}
+
+// apiNotFoundHandler 在路径已注册但方法不符时返回 405 与 Allow，否则返回 404。
+func apiNotFoundHandler(mux *http.ServeMux) http.Handler {
+	return http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
+		if allowed := allowedAPIMethods(mux, request); len(allowed) > 0 {
+			responseWriter.Header().Set("Allow", strings.Join(allowed, ", "))
+			writeAPIError(responseWriter, request, http.StatusMethodNotAllowed, "method_not_allowed", "接口不支持该请求方法")
+			return
+		}
+		writeAPIError(responseWriter, request, http.StatusNotFound, "not_found", "接口不存在")
+	})
+}
+
+func allowedAPIMethods(mux *http.ServeMux, request *http.Request) []string {
+	var allowed []string
+	for _, method := range apiProbeMethods {
+		probe := request.WithContext(request.Context())
+		probe.Method = method
+		if _, pattern := mux.Handler(probe); pattern != "" && !isAPIFallbackPattern(pattern) {
+			allowed = append(allowed, method)
+		}
+	}
+	return allowed
 }
 
 func healthHandler(responseWriter http.ResponseWriter, _ *http.Request) {
@@ -162,7 +206,7 @@ func requestIDMiddleware(logger *slog.Logger, next http.Handler) http.Handler {
 		routeTemplate := "<unmatched>"
 		if mux, ok := next.(*http.ServeMux); ok {
 			_, routeTemplate = mux.Handler(request)
-			if routeTemplate == "" {
+			if routeTemplate == "" || isAPIFallbackPattern(routeTemplate) {
 				routeTemplate = "<unmatched>"
 			}
 		}

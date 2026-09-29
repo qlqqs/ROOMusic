@@ -77,7 +77,7 @@ HTTP 边界在请求完成后恰好写出一个 `http.request.completed` 事件�
 | `message` | 固定为 `http request completed` |
 | `request_id` | 经过长度和字符集校验的请求 ID，并回写 `X-Request-ID` |
 | `method` | HTTP 方法 |
-| `route_template` | ServeMux 注册的安全路由模板；无法匹配时为 `<unmatched>` |
+| `route_template` | ServeMux 注册的安全路由模板；无法匹配或落入 `/api` 兜底时为 `<unmatched>` |
 | `status` | 最终 HTTP 状态码；未显式写入时为 200 |
 | `response_bytes` | 实际写入响应的字节数 |
 | `duration_ms` | 从进入中间件到完成事件的非负毫秒数 |

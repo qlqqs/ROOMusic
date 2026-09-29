@@ -193,7 +193,7 @@ M0 不改变以下后端 API、数据库或运行边界。
 | `message` | 固定为 `http request completed` |
 | `request_id` | 有界且经过字符集校验，并回写 `X-Request-ID` |
 | `method` | HTTP 方法 |
-| `route_template` | ServeMux 注册的路由模板；未匹配时为 `<unmatched>` |
+| `route_template` | ServeMux 注册的路由模板；未匹配或落入 `/api` 兜底时为 `<unmatched>` |
 | `status` | 最终状态码；隐式响应默认为 200 |
 | `response_bytes` | 实际写入字节数 |
 | `duration_ms` | 非负耗时（毫秒） |
@@ -213,6 +213,9 @@ Authorization/session token、密码、数据库 URL、完整 NAS 路径或音�
 | 用户目标不存在 | `404 not_found`，事务回滚 |
 | 禁用最后一个启用管理员 | `409 last_admin`，不改用户或 session |
 | 用户 SQL/事务失败 | `503 database_unavailable` 或分类错误，不返回成功 |
+| 未注册的 `/api`、`/api/...` 路径 | `404 not_found` JSON 错误信封，不回落到前端 `index.html` |
+| 已注册的 `/api/` 路径使用未注册方法 | `405 method_not_allowed`，`Allow` 头列出该路径注册的方法（注册 `GET` 时含 `HEAD`） |
+| 启动时数据库不可用（降级 handler） | 所有 `/api` 请求返回 `503 database_unavailable`；`/healthz`、`/readyz` 与前端页面照常 |
 | 重复注册 disabled root | 返回 `status=disabled` 与真实 revision，不隐式恢复 |
 | unsupported 音频、CUE 语法/编码、`unsafe`/`unchecked` 引用或遍历错误 | 有界诊断，扫描 `incomplete`/`failed`，禁止 `missing` |
 | CUE 引用目标不存在或 Track 缺少 `INDEX 01` | 写 `cue_reference` 诊断并跳过不可用虚拟 Track；不单独令扫描 incomplete，也不伪造父来源/offset |
@@ -503,8 +506,8 @@ go app.runScan(scanID, execution) // worker 由应用生命周期和持久化取
   创建/禁用/会话撤销仍无独立 Operation Journal。
 - 前端源码已删除；M1a 按 Classical 设计恢复 feature 边界。Router/Query 已于 2026-09-28 获批
   （ADR 0001），版本锁定在 M1a 子任务中确定，不能把历史文件当成当前可拆分实现。
-- 未匹配的 `/api/` 仍落入前端 fallback；JSON 404 已立项为独立修复 F1，不随 M0 或
-  B0 纯拆包暗中修改。后续路由/transport 测试需覆盖非 JSON 意外响应。
+- ~~未匹配的 `/api/` 仍落入前端 fallback~~：2026-09-29 由 F1 修复。`/api` 兜底返回 JSON 404/405/503，
+  完成日志的 `route_template` 记为 `<unmatched>`，见上文校验与错误矩阵。
 - 2026-09-27 静态审查：`root_operations.go` 的 `updateRoot` / `restoreRoot` 指纹未包含
   路由 root ID，`replayOperation` 按 actor/类型/幂等键查询；同键同 body 跨目标可能重放
   前一个 root 的结果。本轮未动态复现或修复。详见

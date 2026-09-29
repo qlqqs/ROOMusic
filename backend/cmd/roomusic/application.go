@@ -76,6 +76,7 @@ func buildApplication(scanContext context.Context, config serverConfig, database
 	mux.HandleFunc("GET /api/v1/releases/{id}/evidence", application.releaseEvidence)
 	mux.HandleFunc("GET /api/v1/releases/{id}", application.releaseDetail)
 	mux.HandleFunc("GET /api/v1/artworks/{id}", application.artworkResource)
+	registerAPIFallback(mux, apiNotFoundHandler(mux))
 	mux.Handle("/", productionFrontendHandler())
 	return application, requestIDMiddleware(logger, mux)
 }
