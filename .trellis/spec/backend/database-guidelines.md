@@ -68,6 +68,11 @@ retry. An idempotency key is scoped to its operation/actor context and tied to a
 canonical request fingerprint. Repeating the same request returns the recorded
 result; reusing the key for different input returns a conflict.
 
+指纹必须包含路由中的目标身份（目录停用/恢复为小写 root ID），不能只含请求体。同一幂等键的
+请求先在事务内取得该键的事务级 advisory lock，再查记录（READ COMMITTED，使加锁后的查询能看到
+前一个持锁事务已提交的记录），因此并发重试只执行一次，其余请求回放已存结果。当前实现见
+`backend/cmd/roomusic/root_operations.go` 的 `beginRootOperation`。
+
 Do not hold a database transaction open while walking a library tree or reading
 audio tags. Persist scan progress in bounded batches and finalize the scan with
 a transaction that applies negative reconciliation only when the outcome is

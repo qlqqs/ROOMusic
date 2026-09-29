@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"hash/fnv"
 	"net/http"
 	"strings"
 
@@ -24,40 +25,80 @@ func (a *roomusicApplication) writeRootOperationPersistenceError(w http.Response
 
 func operationKey(r *http.Request) string { return strings.TrimSpace(r.Header.Get("Idempotency-Key")) }
 
+// rootIDFromPath 校验路由中的目录 ID 并规范为小写，使指纹和响应不受大小写影响。
+func rootIDFromPath(w http.ResponseWriter, r *http.Request) (string, bool) {
+	id := r.PathValue("id")
+	if !isValidIdentifier(id) {
+		writeAPIError(w, r, 400, "invalid_id", "目录标识无效")
+		return "", false
+	}
+	return strings.ToLower(id), true
+}
+
 func operationFingerprint(v any) string {
 	b, _ := json.Marshal(v)
 	h := sha256.Sum256(b)
 	return hex.EncodeToString(h[:])
 }
 
-func (a *roomusicApplication) replayOperation(w http.ResponseWriter, r *http.Request, actor, typ, key, fingerprint string) (bool, int) {
+// rootOperationLockClass 是目录操作 advisory lock 的固定类别（ASCII 的 ROOT）。
+// 两参数锁与迁移锁、扫描锁使用的单个 bigint 键锁互不共用键空间。
+const rootOperationLockClass int32 = 0x524f4f54
+
+// rootOperationLockKey 把同一 actor、操作类型和幂等键映射到同一把锁。碰撞只会让无关请求多排一次队，
+// 是否重放仍由 beginRootOperation 中完整的 actor/类型/键查询决定。
+func rootOperationLockKey(actorID, operationType, key string) int32 {
+	hash := fnv.New32a()
+	_, _ = hash.Write([]byte(actorID + ":" + operationType + ":" + key))
+	return int32(hash.Sum32())
+}
+
+// beginRootOperation 是目录新增、停用、恢复共用的幂等入口。它开启事务，取得该幂等键的事务级锁，
+// 再在事务内查询已有记录，因此同键请求串行执行：
+//   - 没有记录：返回事务，由调用方继续执行业务并写入记录，提交时释放锁；
+//   - 记录的指纹一致：回放已存响应，不重复执行；
+//   - 记录的指纹不一致：返回 409 idempotency_conflict。
+//
+// 后两种情况以及任何失败都已写出响应并返回 nil。
+func (a *roomusicApplication) beginRootOperation(w http.ResponseWriter, r *http.Request, actorID, operationType, key, fingerprint string) *sql.Tx {
 	if key == "" {
 		writeAPIError(w, r, 400, "invalid_input", "请求需要 Idempotency-Key")
-		return true, 0
+		return nil
 	}
-	var oldFingerprint string
-	var response []byte
-	var status string
-	err := a.database.connection.QueryRowContext(r.Context(), `SELECT fingerprint,response,status FROM library_root_operations WHERE actor_id=$1::uuid AND operation_type=$2 AND idempotency_key=$3`, actor, typ, key).Scan(&oldFingerprint, &response, &status)
-	if err == sql.ErrNoRows {
-		return false, 0
-	}
+	// 加锁后的查询必须看到前一个持锁事务已提交的记录，所以显式要求 READ COMMITTED。
+	tx, err := a.database.connection.BeginTx(r.Context(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		writeAPIError(w, r, 503, "database_unavailable", "服务暂不可用")
-		return true, 0
+		return nil
 	}
-	if oldFingerprint != fingerprint {
+	if _, err = tx.ExecContext(r.Context(), `SELECT pg_advisory_xact_lock($1::int, $2::int)`, rootOperationLockClass, rootOperationLockKey(actorID, operationType, key)); err != nil {
+		_ = tx.Rollback()
+		writeAPIError(w, r, 503, "database_unavailable", "服务暂不可用")
+		return nil
+	}
+	var recordedFingerprint, status string
+	var response []byte
+	err = tx.QueryRowContext(r.Context(), `SELECT fingerprint,response,status FROM library_root_operations WHERE actor_id=$1::uuid AND operation_type=$2 AND idempotency_key=$3`, actorID, operationType, key).Scan(&recordedFingerprint, &response, &status)
+	if err == sql.ErrNoRows {
+		return tx
+	}
+	_ = tx.Rollback()
+	if err != nil {
+		writeAPIError(w, r, 503, "database_unavailable", "服务暂不可用")
+		return nil
+	}
+	if recordedFingerprint != fingerprint {
 		writeAPIError(w, r, 409, "idempotency_conflict", "幂等键已用于其他请求")
-		return true, 0
+		return nil
 	}
 	code := http.StatusOK
-	if status == "succeeded" && typ == "create" {
+	if status == "succeeded" && operationType == "create" {
 		code = http.StatusCreated
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	_, _ = w.Write(response)
-	return true, code
+	return nil
 }
 
 func (a *roomusicApplication) listRootsGoverned(w http.ResponseWriter, r *http.Request) {
@@ -135,6 +176,10 @@ func (a *roomusicApplication) updateRoot(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
+	id, ok := rootIDFromPath(w, r)
+	if !ok {
+		return
+	}
 	key := operationKey(r)
 	var in struct {
 		Status           string `json:"status"`
@@ -147,20 +192,15 @@ func (a *roomusicApplication) updateRoot(w http.ResponseWriter, r *http.Request)
 		writeAPIError(w, r, 400, "invalid_input", "状态或 revision 无效")
 		return
 	}
-	id := r.PathValue("id")
-	fp := operationFingerprint(map[string]any{"status": in.Status, "expected_revision": in.ExpectedRevision})
-	if done, _ := a.replayOperation(w, r, actor.ID, "disable", key, fp); done {
-		return
-	}
-	tx, err := a.database.connection.BeginTx(r.Context(), nil)
-	if err != nil {
-		writeAPIError(w, r, 503, "database_unavailable", "服务暂不可用")
+	fp := operationFingerprint(map[string]any{"root_id": id, "status": in.Status, "expected_revision": in.ExpectedRevision})
+	tx := a.beginRootOperation(w, r, actor.ID, "disable", key, fp)
+	if tx == nil {
 		return
 	}
 	defer tx.Rollback()
 	var path, status string
 	var rev int64
-	err = tx.QueryRowContext(r.Context(), "SELECT path,status,revision FROM library_roots WHERE id=$1::uuid FOR UPDATE", id).Scan(&path, &status, &rev)
+	err := tx.QueryRowContext(r.Context(), "SELECT path,status,revision FROM library_roots WHERE id=$1::uuid FOR UPDATE", id).Scan(&path, &status, &rev)
 	if err == sql.ErrNoRows {
 		writeAPIError(w, r, 404, "not_found", "目录不存在")
 		return
@@ -205,6 +245,10 @@ func (a *roomusicApplication) restoreRoot(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
+	id, ok := rootIDFromPath(w, r)
+	if !ok {
+		return
+	}
 	key := operationKey(r)
 	var in struct {
 		ExpectedRevision int64 `json:"expected_revision"`
@@ -216,20 +260,15 @@ func (a *roomusicApplication) restoreRoot(w http.ResponseWriter, r *http.Request
 		writeAPIError(w, r, 400, "invalid_input", "revision 无效")
 		return
 	}
-	id := r.PathValue("id")
-	fp := operationFingerprint(map[string]any{"expected_revision": in.ExpectedRevision})
-	if done, _ := a.replayOperation(w, r, actor.ID, "restore", key, fp); done {
-		return
-	}
-	tx, err := a.database.connection.BeginTx(r.Context(), nil)
-	if err != nil {
-		writeAPIError(w, r, 503, "database_unavailable", "服务暂不可用")
+	fp := operationFingerprint(map[string]any{"root_id": id, "expected_revision": in.ExpectedRevision})
+	tx := a.beginRootOperation(w, r, actor.ID, "restore", key, fp)
+	if tx == nil {
 		return
 	}
 	defer tx.Rollback()
 	var path, status string
 	var rev int64
-	err = tx.QueryRowContext(r.Context(), "SELECT path,status,revision FROM library_roots WHERE id=$1::uuid FOR UPDATE", id).Scan(&path, &status, &rev)
+	err := tx.QueryRowContext(r.Context(), "SELECT path,status,revision FROM library_roots WHERE id=$1::uuid FOR UPDATE", id).Scan(&path, &status, &rev)
 	if err == sql.ErrNoRows {
 		writeAPIError(w, r, 404, "not_found", "目录不存在")
 		return

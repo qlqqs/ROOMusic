@@ -339,6 +339,131 @@ func TestPostgreSQLRootOperationTransactionsAndConflicts(t *testing.T) {
 	assertOperationCount(t, application.database.connection, rollbackRootID, 1)
 }
 
+func TestPostgreSQLRootOperationIdempotencyBindsTarget(t *testing.T) {
+	application := newIntegrationTestApplication(t)
+	database := application.database.connection
+	admin := application.createUser(t, "admin")
+
+	t.Run("disable with another target", func(t *testing.T) {
+		rootA := createRoot(t, application, admin, createLibraryDirectory(t, application, "disable-a"), "disable-a-create")
+		rootB := createRoot(t, application, admin, createLibraryDirectory(t, application, "disable-b"), "disable-b-create")
+		body := map[string]any{"status": "disabled", "expected_revision": 1}
+		key := map[string]string{"Idempotency-Key": "shared-disable"}
+
+		first := application.request(t, http.MethodPatch, "/api/v1/library-roots/"+rootA, body, &admin, key)
+		if first.Code != http.StatusOK {
+			t.Fatalf("disable first target: HTTP %d: %s", first.Code, first.Body.String())
+		}
+		cross := application.request(t, http.MethodPatch, "/api/v1/library-roots/"+rootB, body, &admin, key)
+		requireAPIError(t, cross, http.StatusConflict, "idempotency_conflict")
+		if strings.Contains(cross.Body.String(), rootA) {
+			t.Fatalf("cross-target conflict disclosed the first target: %s", cross.Body.String())
+		}
+		assertRootState(t, database, rootB, "active", 1)
+		assertOperationCount(t, database, rootB, 1)
+		assertRootState(t, database, rootA, "disabled", 2)
+		assertOperationCount(t, database, rootA, 2)
+
+		// 路由 ID 大小写不同仍是同一个目标，重放返回原结果。
+		upper := application.request(t, http.MethodPatch, "/api/v1/library-roots/"+strings.ToUpper(rootA), body, &admin, key)
+		if upper.Code != http.StatusOK || !jsonResponsesEqual(t, upper, first) {
+			t.Fatalf("upper-case route replay did not return the recorded result: HTTP %d: %s", upper.Code, upper.Body.String())
+		}
+		assertOperationCount(t, database, rootA, 2)
+	})
+
+	t.Run("restore with another target", func(t *testing.T) {
+		rootA := createAndDisableRoot(t, application, admin, createLibraryDirectory(t, application, "restore-a"), "restore-a")
+		rootB := createAndDisableRoot(t, application, admin, createLibraryDirectory(t, application, "restore-b"), "restore-b")
+		body := map[string]int{"expected_revision": 2}
+		key := map[string]string{"Idempotency-Key": "shared-restore"}
+
+		first := application.request(t, http.MethodPost, "/api/v1/library-roots/"+rootA+"/restore", body, &admin, key)
+		if first.Code != http.StatusOK {
+			t.Fatalf("restore first target: HTTP %d: %s", first.Code, first.Body.String())
+		}
+		cross := application.request(t, http.MethodPost, "/api/v1/library-roots/"+rootB+"/restore", body, &admin, key)
+		requireAPIError(t, cross, http.StatusConflict, "idempotency_conflict")
+		if strings.Contains(cross.Body.String(), rootA) {
+			t.Fatalf("cross-target conflict disclosed the first target: %s", cross.Body.String())
+		}
+		assertRootState(t, database, rootB, "disabled", 2)
+		assertOperationCount(t, database, rootB, 2)
+		assertRootState(t, database, rootA, "active", 3)
+		assertOperationCount(t, database, rootA, 3)
+	})
+
+	t.Run("malformed identifiers", func(t *testing.T) {
+		var before int
+		if err := database.QueryRow(`SELECT COUNT(*) FROM library_root_operations`).Scan(&before); err != nil {
+			t.Fatalf("count root operations: %v", err)
+		}
+		key := map[string]string{"Idempotency-Key": "malformed-identifier"}
+		disable := application.request(t, http.MethodPatch, "/api/v1/library-roots/not-a-uuid", map[string]any{"status": "disabled", "expected_revision": 1}, &admin, key)
+		requireAPIError(t, disable, http.StatusBadRequest, "invalid_id")
+		restore := application.request(t, http.MethodPost, "/api/v1/library-roots/not-a-uuid/restore", map[string]int{"expected_revision": 1}, &admin, key)
+		requireAPIError(t, restore, http.StatusBadRequest, "invalid_id")
+		var after int
+		if err := database.QueryRow(`SELECT COUNT(*) FROM library_root_operations`).Scan(&after); err != nil || after != before {
+			t.Fatalf("malformed identifier changed operation records: before=%d after=%d err=%v", before, after, err)
+		}
+	})
+
+	t.Run("replay after losing the admin role", func(t *testing.T) {
+		formerAdmin := application.createUser(t, "admin")
+		rootID := createRoot(t, application, formerAdmin, createLibraryDirectory(t, application, "former-admin"), "former-admin-create")
+		body := map[string]any{"status": "disabled", "expected_revision": 1}
+		key := map[string]string{"Idempotency-Key": "former-admin-disable"}
+		first := application.request(t, http.MethodPatch, "/api/v1/library-roots/"+rootID, body, &formerAdmin, key)
+		if first.Code != http.StatusOK {
+			t.Fatalf("disable before losing the role: HTTP %d: %s", first.Code, first.Body.String())
+		}
+		if _, err := database.Exec(`UPDATE users SET role='user' WHERE id=$1::uuid`, formerAdmin.id); err != nil {
+			t.Fatalf("demote administrator: %v", err)
+		}
+		replay := application.request(t, http.MethodPatch, "/api/v1/library-roots/"+rootID, body, &formerAdmin, key)
+		requireAPIError(t, replay, http.StatusForbidden, "forbidden")
+		if strings.Contains(replay.Body.String(), rootID) {
+			t.Fatalf("forbidden replay disclosed the recorded result: %s", replay.Body.String())
+		}
+	})
+}
+
+func TestPostgreSQLRootOperationConcurrentRetriesConverge(t *testing.T) {
+	application := newIntegrationTestApplication(t)
+	database := application.database.connection
+	admin := application.createUser(t, "admin")
+
+	t.Run("create", func(t *testing.T) {
+		path := createLibraryDirectory(t, application, "concurrent-create")
+		responses := runOverlappingRootRequests(t, application, func() *httptest.ResponseRecorder {
+			return application.request(t, http.MethodPost, "/api/v1/library-roots", map[string]string{"path": path}, &admin, map[string]string{"Idempotency-Key": "concurrent-create"})
+		})
+		for index, response := range responses {
+			if response.Code != http.StatusCreated || !jsonResponsesEqual(t, response, responses[0]) {
+				t.Fatalf("concurrent create %d: HTTP %d: %s", index, response.Code, response.Body.String())
+			}
+		}
+		rootID := decodeJSONMap(t, responses[0])["id"].(string)
+		assertRootState(t, database, rootID, "active", 1)
+		assertOperationCount(t, database, rootID, 1)
+	})
+
+	t.Run("disable", func(t *testing.T) {
+		rootID := createRoot(t, application, admin, createLibraryDirectory(t, application, "concurrent-disable"), "concurrent-disable-create")
+		responses := runOverlappingRootRequests(t, application, func() *httptest.ResponseRecorder {
+			return application.request(t, http.MethodPatch, "/api/v1/library-roots/"+rootID, map[string]any{"status": "disabled", "expected_revision": 1}, &admin, map[string]string{"Idempotency-Key": "concurrent-disable"})
+		})
+		for index, response := range responses {
+			if response.Code != http.StatusOK || !jsonResponsesEqual(t, response, responses[0]) {
+				t.Fatalf("concurrent disable %d: HTTP %d: %s", index, response.Code, response.Body.String())
+			}
+		}
+		assertRootState(t, database, rootID, "disabled", 2)
+		assertOperationCount(t, database, rootID, 2)
+	})
+}
+
 func TestPostgreSQLRootOperationHistoryIsAdminOnlyAndRedacted(t *testing.T) {
 	application := newIntegrationTestApplication(t)
 	admin := application.createUser(t, "admin")
@@ -470,6 +595,88 @@ func createAndDisableRoot(t *testing.T, application *integrationTestApplication,
 		t.Fatalf("disable root %q: HTTP %d: %s", path, response.Code, response.Body.String())
 	}
 	return rootID
+}
+
+func createLibraryDirectory(t *testing.T, application *integrationTestApplication, name string) string {
+	t.Helper()
+	path := filepath.Join(application.allowedRoot, name)
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatalf("create library fixture %q: %v", name, err)
+	}
+	return path
+}
+
+const overlappingRootRequests = 8
+
+// runOverlappingRootRequests 先让测试事务独占 library_roots，再并发发出同一个请求，
+// 等所有请求都卡在数据库锁上才释放，因此这些请求一定真正重叠。
+func runOverlappingRootRequests(t *testing.T, application *integrationTestApplication, send func() *httptest.ResponseRecorder) []*httptest.ResponseRecorder {
+	t.Helper()
+	holder, err := application.database.connection.Begin()
+	if err != nil {
+		t.Fatalf("begin lock holder: %v", err)
+	}
+	// 测试提前失败时也要放锁，否则 schema 清理会一直等待。
+	t.Cleanup(func() { _ = holder.Rollback() })
+	if _, err := holder.Exec(`LOCK TABLE library_roots IN ACCESS EXCLUSIVE MODE`); err != nil {
+		t.Fatalf("lock library_roots: %v", err)
+	}
+	responses := make(chan *httptest.ResponseRecorder, overlappingRootRequests)
+	for i := 0; i < overlappingRootRequests; i++ {
+		go func() { responses <- send() }()
+	}
+	waitForLockWaiters(t, application.database.connection, overlappingRootRequests)
+	if err := holder.Rollback(); err != nil {
+		t.Fatalf("release lock holder: %v", err)
+	}
+	results := make([]*httptest.ResponseRecorder, 0, overlappingRootRequests)
+	timeout := time.After(15 * time.Second)
+	for len(results) < overlappingRootRequests {
+		select {
+		case response := <-responses:
+			results = append(results, response)
+		case <-timeout:
+			t.Fatalf("only %d of %d overlapping requests finished", len(results), overlappingRootRequests)
+		}
+	}
+	return results
+}
+
+func waitForLockWaiters(t *testing.T, database *sql.DB, expected int) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var waiting int
+		if err := database.QueryRow(`SELECT COUNT(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND pid<>pg_backend_pid()`).Scan(&waiting); err != nil {
+			t.Fatalf("count lock waiters: %v", err)
+		}
+		if waiting >= expected {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("expected %d requests waiting on database locks, got %d\n%s", expected, waiting, describeDatabaseSessions(database))
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// describeDatabaseSessions 返回当前库的会话快照，供并发测试超时时定位卡点。
+func describeDatabaseSessions(database *sql.DB) string {
+	rows, err := database.Query(`SELECT pid,state,COALESCE(wait_event_type,''),COALESCE(wait_event,''),LEFT(query,100) FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() ORDER BY pid`)
+	if err != nil {
+		return fmt.Sprintf("read database sessions: %v", err)
+	}
+	defer rows.Close()
+	var snapshot strings.Builder
+	for rows.Next() {
+		var pid int
+		var state, waitType, waitEvent, query string
+		if err := rows.Scan(&pid, &state, &waitType, &waitEvent, &query); err != nil {
+			return fmt.Sprintf("scan database sessions: %v", err)
+		}
+		fmt.Fprintf(&snapshot, "pid=%d state=%s wait=%s/%s query=%q\n", pid, state, waitType, waitEvent, query)
+	}
+	return snapshot.String()
 }
 
 func assertRootState(t *testing.T, database *sql.DB, rootID, expectedStatus string, expectedRevision int64) {

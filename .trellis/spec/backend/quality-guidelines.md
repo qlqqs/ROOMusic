@@ -67,7 +67,7 @@ decoding, authorization, SQL, and presentation and therefore must be split.
 | Session lifecycle | Setup closure, login/logout, expiry, revocation, disabled user, token-hash storage, cookie flags |
 | Path boundary | traversal, relative/absolute normalization, symlink escape/broken target, and allowed-root containment |
 | Scanner | initial formats, CUE, cancellation, partial failure, complete-only missing reconciliation, repeat identity |
-| Directory mutation | transaction, expected revision, idempotent retry, key/input conflict, Change Set, and inverse action |
+| Directory mutation | transaction, expected revision, idempotent retry, key/input conflict including the same key on another target, overlapping same-key retries forced to overlap by a test-held lock, Change Set, and inverse action |
 | Future Agent tool | mode/approval matrix, independent review binding, backend recheck, tool scope, idempotency, journal, and recovery/irreversible marker |
 | Concurrency-sensitive code | deterministic contention test and race detector where practical |
 

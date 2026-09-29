@@ -1,2 +1,4 @@
-{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "revision 与幂等规则"}
-{"file": "docs/architecture/adr/0003-governed-operations.md", "reason": "目录目标绑定缺口与幂等合同"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "事务、revision 与幂等键作用域/指纹规则"}
+{"file": "docs/architecture/adr/0003-governed-operations.md", "reason": "目录目标绑定缺口、第四节并发与幂等合同、第八节验收场景"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "idempotency_conflict、invalid_id、forbidden 分类"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "目录操作运行合同、错误矩阵与技术债（需同步）"}

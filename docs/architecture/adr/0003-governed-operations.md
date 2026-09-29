@@ -2,7 +2,7 @@
 
 ## 状态与决策边界
 
-- 状态：**部分批准**（2026-09-28）：仅第九节第 1 项中的 M3 首批试点范围已批准；其余内容仍是草案，未授权新增权限或业务实施。
+- 状态：**部分批准**（2026-09-28、2026-09-29）：第九节第 1 项中的 M3 首批试点范围（2026-09-28），以及第 4 项中的目录目标绑定缺口与旧记录策略（2026-09-29，F2）已批准；其余内容仍是草案，未授权新增权限或业务实施。
 - 核对日期：2026-09-27；代码证据基线：`6cf76ec`。
 - 范围依据：[Core 1 路线](../core-1-roadmap.md)与[架构决策摘要](../architecture-decisions.md)。
   下文风险分类、审批政策和 `editor` 均未获实施批准，在 M3 规划时裁决。
@@ -18,6 +18,7 @@
 | 日期 | 选择者 | 已批准 | 仍待批准 | 依据 |
 | --- | --- | --- | --- | --- |
 | 2026-09-28 | qlqq | 第九节第 1 项中的首批治理范围：M3 以“字段修正”和“ReleaseGroup 成员调整”两种操作试点共同合同。前者覆盖简单字段写入，后者覆盖跨实体的结构关系（只改 Release 所属组，扫描器更新已有 Release 时不改该字段），以验证检查点与逆操作。艺人合并因尚无艺人实体，不作为试点。M3 依赖 ADR 0002 阶段 I 的稳定 ID | 第 1 项其余部分（选共同合同还是轻量替代、审批队列与链式恢复的范围）及第 2–7 项 | 任务 `09-28-core-1-roadmap-revision` 的 PRD，裁决 D1 |
+| 2026-09-29 | qlqq | 第九节第 4 项中的目录部分：停用/恢复的幂等指纹绑定路由 root ID；同键同义请求串行为一次执行；同键用于另一个目录或不同参数返回 `idempotency_conflict`；旧记录不做兼容（开发阶段直接重构）。不改键作用域（actor 加操作类型），不新增迁移 | 第 4 项其余部分（资源 revision 与证据依赖、通用幂等作用域、断线对账）及第 1 项其余部分、第 2–3、5–7 项 | 任务 `09-28-classical-f2-root-op-idempotency` 的 PRD，裁决 D1–D4 |
 
 ## 一、仓库事实：目录操作是窄实现，不是通用治理平台
 
@@ -29,11 +30,11 @@
 | [application.go](../../../backend/cmd/roomusic/application.go)：`buildApplication`、`addRoot` | 有目录注册、停用、恢复和目录操作列表；注册验证允许根和路径安全，要求同源、管理员及幂等键 | 有通用变更集、审批队列、任意历史点恢复 API |
 | [root_operations.go](../../../backend/cmd/roomusic/root_operations.go)：`updateRoot`、`restoreRoot` | 锁定目录行，检查 `expected_revision` 和状态；资源修改与成功操作记录同事务，revision 递增 | 对所有业务写入均有 revision/事务治理 |
 | [0007_root_operations.sql](../../../backend/migrations/0007_root_operations.sql) | `library_root_operations` 保存 actor、类型、幂等键/指纹、前后状态、revision、响应、request ID；类型限于 create/disable/restore | 已有独立 Change Set、追加式生命周期 Journal、审批对象、检查点仓库或逆操作注册表 |
-| [root_operations.go](../../../backend/cmd/roomusic/root_operations.go)：`replayOperation`、`rootOperations` | 按 actor/操作类型/幂等键查结果；历史只向管理员返回最近 100 条安全摘要 | 任意作用域的完整审计检索、任意操作链重放或并发重试已全面验证 |
+| [root_operations.go](../../../backend/cmd/roomusic/root_operations.go)：`beginRootOperation`、`rootOperations` | 目录新增/停用/恢复共用入口：按 actor/操作类型/幂等键在事务内加锁后查结果，指纹含目标，同键请求串行；历史只向管理员返回最近 100 条安全摘要 | 目录以外的作用域、任意作用域的完整审计检索、任意操作链重放或通用并发重试已全面验证 |
 | [application.go](../../../backend/cmd/roomusic/application.go)：`createUser`、`updateUser`、`revokeUserSessions` | 成员创建、禁用/启用、会话撤销独立实现；禁用用户与撤销其会话有事务保护 | 这些写入已经进入目录操作记录，或都能撤销 |
 | [scanner.go](../../../backend/cmd/roomusic/scanner.go)：`persistOneCandidate`、`finalizeScan`；[0011](../../../backend/migrations/0011_scan_staging_and_identity.sql) | 扫描按候选提交并替换当前证据；暂存会清理；仅完整成功终态允许 missing 对账 | 每个扫描字段都有 Change Set，或扫描日志能恢复到过去的目录/元数据快照 |
 | [操作规范](../../../.trellis/spec/backend/agent-and-operation-guidelines.md) | 长期合同区分 Change Set、Journal、Checkpoint、Reversible Executor 和三种执行模式 | Review Subagent、Operator 运行时、标签/文件操作已经实现 |
-| [目录操作集成测试](../../../backend/cmd/roomusic/auth_root_operations_integration_test.go)：`TestPostgreSQLRootOperationTransactionsAndConflicts`、`TestPostgreSQLRootOperationHistoryIsAdminOnlyAndRedacted` | 有串行重试、键冲突、revision 冲突、缺失逆向依据、记录失败回滚和历史权限/脱敏断言 | 覆盖通用审批、跨目标幂等、批量撤销链或所有失败生命周期 |
+| [目录操作集成测试](../../../backend/cmd/roomusic/auth_root_operations_integration_test.go)：`TestPostgreSQLRootOperationTransactionsAndConflicts`、`TestPostgreSQLRootOperationIdempotencyBindsTarget`、`TestPostgreSQLRootOperationConcurrentRetriesConverge`、`TestPostgreSQLRootOperationHistoryIsAdminOnlyAndRedacted` | 有串行重试、键冲突、跨目标同键冲突、同键并发收敛、路由 ID 校验、降权后重放、revision 冲突、缺失逆向依据、记录失败回滚和历史权限/脱敏断言 | 覆盖通用审批、批量撤销链或所有失败生命周期 |
 
 ### 当前可恢复性与缺口
 
@@ -45,11 +46,11 @@
   扫描。当前停用/恢复不应被 UI 命名为整库“检查点回滚”。
 - 表允许 `failed` 状态，但当前写入点只插入成功操作；校验拒绝和事务失败通常返回错误，
   不会生成完整的失败 Journal。不能因为列存在就宣称所有尝试已经持久审计。
-- **已发现的目标绑定缺口**：停用指纹只有状态与预期 revision，恢复指纹只有预期 revision，
-  均没有路由中的 root ID；重放查询又只按 actor/类型/键定位。从代码可推导：同一 actor
-  将同键同 body 用于另一个 root 时，可能拿到前一 root 的已存响应，而不是目标冲突。
-  这是静态核对发现，未在本轮运行复现；修复须另立行为变更与定向测试，不混入 M0 或
-  行为保持的 B0（2026-09-28 已立项为 F2）。
+- **目标绑定缺口（已由 F2 修复，2026-09-29）**：原停用指纹只有状态与预期 revision，恢复指纹只有
+  预期 revision，均没有路由中的 root ID；重放查询又只按 actor/类型/键定位，同一 actor 将同键
+  同 body 用于另一个 root 时，会拿到前一 root 的已存响应而目标不变（F2 已动态复现）。现指纹含
+  小写 root ID，同键请求在事务内加锁串行，跨目标同键返回 `idempotency_conflict`；旧记录不做兼容，
+  升级后重试返回 409。失败尝试仍不写记录，键作用域仍是 actor 加操作类型。
 - 重放查询位于修改事务之前；现有测试证明的是串行重试路径，不足以承诺并发同键请求
   都返回相同结果。通用合同实施前必须补齐并发收敛验证，不能直接复制该流程并声称完备。
 
@@ -253,7 +254,8 @@ Operator。审查证据必须有界且脱敏，不提供数据库连接、媒体
 ### 渐进迁移
 
 1. 通过新迁移演进，不改已共享迁移。先补现有窄合同的测试及经批准的缺口修复，再扩展
-   新能力；旧 root 结果的重放不得被新指纹规则无意破坏，兼容窗口需专项设计。
+   新能力。F2（2026-09-29）按“开发阶段不做兼容”裁决，指纹改变后旧停用/恢复记录不再重放，重试
+   返回 409；后续再改指纹或记录格式时，先确认是否有需要保留的已存结果，没有就不设兼容窗口。
 2. 历史目录记录可经只读适配展示为“旧目录操作”，保留原 ID、actor、revision、响应与
    原语义；不能补造 `change_set_id` 对应的历史意图、批准、mode、policy 或未记录的失败。
    若迁移建立新关联 ID，必须标明是迁移关联而非当时已存在的事实。
@@ -279,7 +281,7 @@ Operator。审查证据必须有界且脱敏，不提供数据库连接、媒体
 | 场景 | 必须断言 |
 | --- | --- |
 | 当前目录注册/停用/恢复及成员管理 | 沿用现有权限、同源、状态、最后管理员与 session 约束；重复注册不重新启用目录 |
-| 现有停用/恢复同键用于不同 root | 指纹绑定目标；跨目标明确冲突且无副作用，不返回另一 root 的结果；旧结果兼容可验证 |
+| 现有停用/恢复同键用于不同 root | 指纹绑定目标；跨目标明确冲突且无副作用，不返回另一 root 的结果；旧记录不兼容，升级后重试返回 409（F2 已由集成测试验证，2026-09-29） |
 | 同键同义串行/并发、同键不同参数/模式/目标 | 一个执行结果，不重复副作用；不一致请求冲突；权限失效后重放不泄露结果 |
 | 操作超时、断线、提交结果不明 | 保留稳定执行身份并可对账；不换新键猜测重试，不伪称失败已回滚 |
 | user 越权共享写入、未知 editor、伪造 actor/mode | 默认拒绝；没有数据库变化或权限提升；不得把缺少角色解释成 admin |
@@ -308,8 +310,8 @@ Operator。审查证据必须有界且脱敏，不提供数据库连接、媒体
    提案、执行、批准权限。当前 admin/user 合同在批准前保持不变。
 3. actor/委托、mode、政策版本、批准期限和失效策略；是否要求人类复核不同于提案者；
    Steward 独立审查不替代后端权威这一不变量不可放宽。
-4. 资源 revision、证据依赖、幂等作用域、并发执行和断线对账方案；目录目标绑定缺口
-   的独立修复范围及旧记录重放兼容策略。
+4. 资源 revision、证据依赖、幂等作用域、并发执行和断线对账方案。目录目标绑定缺口及旧记录
+   重放策略已由 F2 决定（2026-09-29，见“决策记录”），其余部分仍待批准。
 5. 检查点最小内容、保留与清理政策、逆执行器兼容版本、恢复链范围/大小/时限和原子性；
    没有验证的恢复类型应明确不支持，而不是以风险提示代替实现。
 6. 审计失败/数据库不可用的呈现与恢复责任，历史记录迁移及新旧写入口切换/回退方案。

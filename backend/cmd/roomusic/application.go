@@ -252,12 +252,8 @@ func (application *roomusicApplication) addRoot(responseWriter http.ResponseWrit
 		return
 	}
 	fingerprint := operationFingerprint(map[string]any{"path": safePath})
-	if done, _ := application.replayOperation(responseWriter, request, actor.ID, "create", key, fingerprint); done {
-		return
-	}
-	tx, err := application.database.connection.BeginTx(request.Context(), nil)
-	if err != nil {
-		writeAPIError(responseWriter, request, 503, "database_unavailable", "服务暂不可用")
+	tx := application.beginRootOperation(responseWriter, request, actor.ID, "create", key, fingerprint)
+	if tx == nil {
 		return
 	}
 	defer tx.Rollback()

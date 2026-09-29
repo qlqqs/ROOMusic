@@ -77,6 +77,15 @@ M0 不改变以下后端 API、数据库或运行边界。
   更新 `disabled_at`，并在禁用时撤销该用户未撤销 session。
 - 目录新增对已存在路径执行幂等 upsert，但不隐式恢复 disabled 状态；响应和
   Operation Journal 使用数据库真实 `status`/`revision`。
+- 目录新增、停用、恢复必须带 `Idempotency-Key`，缺失返回 `400 invalid_input`。键的作用域是
+  actor 加操作类型；请求指纹包含目标身份：新增为规范化路径，停用/恢复为小写路由 root ID 加
+  请求参数（`expected_revision` 等）。三个入口共用 `beginRootOperation`：先开启 READ COMMITTED
+  事务并取得该键的事务级 advisory lock，再在事务内查记录，因此同键请求串行执行。
+  指纹一致时返回首次的状态码和响应（新增 `201`，其余 `200`），不重复执行；指纹不一致时返回
+  `409 idempotency_conflict` 且无副作用；同键并发只执行一次，其余请求回放首次记录。
+  路由 root ID 格式错误返回 `400 invalid_id`，不进入幂等流程。只有成功的操作写记录，失败的
+  尝试不占用幂等键。2026-09-29 起指纹含目标；此前记录的停用/恢复键不做兼容，升级后重试
+  返回 `409 idempotency_conflict`（开发阶段裁决，见 F2 任务）。
 - 扫描只读取 `active` roots。unsupported 音频候选、CUE 语法/编码错误、
   `unsafe`/`unchecked` 引用、权限和遍历错误将 root 标记为不完整；只有全局
   `succeeded` 才允许 `missing` 对账。已经安全解析但目标不存在的 CUE 引用，以及
@@ -213,6 +222,9 @@ Authorization/session token、密码、数据库 URL、完整 NAS 路径或音�
 | 用户目标不存在 | `404 not_found`，事务回滚 |
 | 禁用最后一个启用管理员 | `409 last_admin`，不改用户或 session |
 | 用户 SQL/事务失败 | `503 database_unavailable` 或分类错误，不返回成功 |
+| 同一幂等键用于另一个目录，或同一目录的不同请求参数 | `409 idempotency_conflict`；不执行、不写记录，也不返回前一个请求的结果 |
+| 同一幂等键的并发请求（新增、停用、恢复） | 串行处理，只执行一次，其余请求回放首次记录的状态码和响应 |
+| 停用/恢复的路由目录 ID 不是 UUID 形式 | `400 invalid_id`，不进入幂等流程，不写操作记录 |
 | 未注册的 `/api`、`/api/...` 路径 | `404 not_found` JSON 错误信封，不回落到前端 `index.html` |
 | 已注册的 `/api/` 路径使用未注册方法 | `405 method_not_allowed`，`Allow` 头列出该路径注册的方法（注册 `GET` 时含 `HEAD`） |
 | 启动时数据库不可用（降级 handler） | 所有 `/api` 请求返回 `503 database_unavailable`；`/healthz`、`/readyz` 与前端页面照常 |
@@ -508,8 +520,7 @@ go app.runScan(scanID, execution) // worker 由应用生命周期和持久化取
   （ADR 0001），版本锁定在 M1a 子任务中确定，不能把历史文件当成当前可拆分实现。
 - ~~未匹配的 `/api/` 仍落入前端 fallback~~：2026-09-29 由 F1 修复。`/api` 兜底返回 JSON 404/405/503，
   完成日志的 `route_template` 记为 `<unmatched>`，见上文校验与错误矩阵。
-- 2026-09-27 静态审查：`root_operations.go` 的 `updateRoot` / `restoreRoot` 指纹未包含
-  路由 root ID，`replayOperation` 按 actor/类型/幂等键查询；同键同 body 跨目标可能重放
-  前一个 root 的结果。本轮未动态复现或修复。详见
-  [ADR 0003 的现有缺口](../../../docs/architecture/adr/0003-governed-operations.md)；需独立
-  行为修复及跨 root、旧记录兼容、并发重试测试，不能把现有实现当通用幂等模板。
+- ~~2026-09-27 静态审查：停用/恢复指纹未含路由 root ID，同键同 body 跨目标会重放前一个 root 的结果~~：
+  2026-09-29 由 F2 动态复现并修复。指纹现含小写 root ID，同键请求串行，旧记录不做兼容，见上文
+  “数据库与扫描”。目录操作仍是窄实现，不是通用幂等模板：失败尝试不写记录，通用操作合同属于 M3，
+  见 [ADR 0003](../../../docs/architecture/adr/0003-governed-operations.md)。

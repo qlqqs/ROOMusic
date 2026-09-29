@@ -36,7 +36,7 @@ ReleaseGroup（`scanner.go:929`）；曲目与 Release 的身份依赖路径（`
 | 专辑库、基础搜索 | `GET /releases` 的 `q`、`attention=required`、`page`、`page_size` | M1b：使用阶段 I 的按组只读接口，列表、筛选、分页和可恢复 URL 状态；一组一个版本时自然退化 | Core 1 不做自动跨版本归组（仅人工确认，M3 起）；搜索规范化、别名和艺人属于 M5 |
 | 发行详情与封面 | `GET /releases/{id}`、`GET /artworks/{resource_id}` | M1b：组详情与版本标签（单版本退化）、Medium/Track 层级、现有字段/credits、封面空态与错误态 | 默认版本与版本对比属于 M4；作词/编曲角色需额外数据合同；歌词在 M2b |
 | 来源与待关注信息 | 管理员 `GET /releases/{id}/evidence`，普通详情含安全摘要 | M1b：按现有权限查看证据；仅 `attention` 筛选不能冒充问题工单 | 忽略/修正/审批等处理状态属于 M3/M4 |
-| 目录管理 | `GET/POST /library-roots`、`PATCH /library-roots/{id}`、`POST /library-roots/{id}/restore` | M1a：管理员新增、停用、恢复；保留 revision/幂等与安全路径合同 | “只读客户端”不禁用这些已有管理操作；音乐文件仍不写入；幂等指纹的目标绑定由 F2 修复 |
+| 目录管理 | `GET/POST /library-roots`、`PATCH /library-roots/{id}`、`POST /library-roots/{id}/restore` | M1a：管理员新增、停用、恢复；保留 revision/幂等与安全路径合同 | “只读客户端”不禁用这些已有管理操作；音乐文件仍不写入；幂等指纹的目标绑定已由 F2 修复（2026-09-29） |
 | 扫描目录 | `POST /scans`、`GET /scans/active`、`GET /scans/{id}`、`POST /scans/{id}/cancel`、`GET /scans/{id}/diagnostics` | M1a：活动扫描、运行/终态、取消请求和受限诊断 | 无完成百分比、已扫描文件进度、暂停/续跑、定时/监听、完整历史列表或新增专辑差量；增强单独拆分 |
 | 成员 | `GET/POST /users`、`PATCH /users/{id}`、`POST /users/{id}/sessions/revoke` | M1a：当前 admin/user 范围内的创建、禁用和会话撤销 | `editor` 是 M3 候选，不在前端单方面授予 |
 | 日志 | `GET /library-root-operations` | M1a：如展示，只称目录操作历史，沿用当前有界结果 | 不是通用日志、审批队列或任意检查点恢复；M3 扩展 |
@@ -79,7 +79,7 @@ M3、M4**，外加两项独立修复 F1、F2。阶段完成结果是“可用客
 | M5 | 搜索规范化、艺人实体与别名、收藏、歌单、历史页面 | M4（别名修改走受治理操作） | 按用户隔离、真实服务端持久化，不重建本地演示系统 | Core 1 之后 |
 | M6 | 只读 Steward → 受控提案 → 独立审查 | M3、M4 的工具、权限与执行边界；另需覆盖提示注入与数据外发的 ADR | Agent 只提供意图/证据，不能自批危险操作或绕过后端 | Core 1 之后 |
 | F1 | 未知 `/api/` 路径返回 JSON 404 | 无，随时可插入 | 非 API 路径仍回落到 `index.html`；有回归测试 | `classical-f1-api-json-404`（2026-09-29 已完成） |
-| F2 | 目录操作的幂等指纹纳入目标目录 ID，定义旧记录兼容策略 | 无；建议先于或与 M1a 同期完成 | 跨目标重放被拒或按目标区分；同目标重放返回原结果 | `classical-f2-root-op-idempotency` |
+| F2 | 目录操作的幂等指纹纳入目标目录 ID；同键并发串行；旧记录不兼容 | 无；建议先于或与 M1a 同期完成 | 跨目标同键返回冲突且无副作用；同目标重放返回原结果；同键并发只执行一次 | `classical-f2-root-op-idempotency`（2026-09-29 已完成） |
 
 “任务”列中的名称是父任务 `09-27-classical-core-1` 下的子任务；除标注已完成的外，均为 planning 状态，尚未启动。
 扫描进度/报告、定时/增量扫描是 M4 周边候选，不是版本治理的逻辑前置；创建子任务时应
@@ -88,10 +88,10 @@ M3、M4**，外加两项独立修复 F1、F2。阶段完成结果是“可用客
 
 ## 静态审查发现的现有风险
 
-`root_operations.go` 的停用/恢复指纹没有包含路由 root ID，重放查询只按 actor、操作类型
-和幂等键查记录；同键同 body 用于不同目录时可能返回前一个目标的结果。已记录于
-[ADR 0003](adr/0003-governed-operations.md)与运行合同技术债，已立项为 F2，**尚未动态复现或修复**。
-修复不与纯拆包混合，也不等到通用操作平台完成才处理。F2 完成前，M1a 不能把跨目标重试视为安全功能。
+`root_operations.go` 的停用/恢复指纹原先没有包含路由 root ID，重放查询只按 actor、操作类型
+和幂等键查记录；同键同 body 用于不同目录时会返回前一个目标的结果。已记录于
+[ADR 0003](adr/0003-governed-operations.md)与运行合同技术债，**2026-09-29 由 F2 动态复现并修复**：
+指纹含目标，同键请求串行，旧记录不做兼容。修复没有与纯拆包混合，也没有等通用操作平台。
 
 ## ADR 索引与决策门禁
 
