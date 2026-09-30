@@ -23,8 +23,9 @@ type Execer interface {
 }
 
 // PersistCandidate 用一个独立短事务把整理后的候选写入 Release 图：Release 与其分组、Medium、Track、
-// 逐字段观察、署名、字段决定与分组证据。Release 按 candidate_anchor 查找并更新，Track 按来源身份复用，
-// 因此重扫更新既有行且允许 candidate 拓扑变化。成功时返回 Release ID；封面不在本事务内，由调用方在提交后处理。
+// 逐字段观察、署名、字段决定与分组证据。Release 按 candidate_anchor 查找并更新；每条 Track 沿用还是新建，
+// 由 PlanStagedRoot 写在暂存行上的规划决定，因此调用前必须已完成规划。成功时返回 Release ID；封面不在本事务内，
+// 由调用方在提交后处理。
 func PersistCandidate(ctx context.Context, database TxBeginner, scanID, rootID string, candidate OrganizedCandidate) (releaseID string, err error) {
 	tx, err := database.BeginTx(ctx, nil)
 	if err != nil {
@@ -37,6 +38,10 @@ func PersistCandidate(ctx context.Context, database TxBeginner, scanID, rootID s
 		}
 	}()
 
+	plans, err := loadTrackPlans(ctx, tx, scanID, rootID, candidate)
+	if err != nil {
+		return "", err
+	}
 	anchor := CandidateIdentity(rootID, candidate.Anchor)
 	var groupID string
 	err = tx.QueryRowContext(ctx, "SELECT id::text,group_id::text FROM releases WHERE source_root_id=$1::uuid AND candidate_anchor=$2", rootID, anchor).Scan(&releaseID, &groupID)
@@ -71,22 +76,12 @@ func PersistCandidate(ctx context.Context, database TxBeginner, scanID, rootID s
 		for _, placedTrack := range candidate.Mediums[disc] {
 			observation := placedTrack.Observation
 			observation.RelativePath = NormalizedPath(observation.RelativePath)
-			trackArtist := metadata.CanonicalTrackArtist(observation.Artist)
-			identity := SourceIdentityForObservation(rootID, observation)
+			plan, planned := plans[observation.RelativePath]
+			if !planned {
+				return "", errUnplannedObservation
+			}
 			var trackID string
-			if isCueObservation(observation) {
-				err = tx.QueryRowContext(ctx, "SELECT id::text FROM tracks WHERE source_identity IN ($1,$2,$3) ORDER BY id LIMIT 1", identity, legacySourceIdentity(rootID, observation), legacyCueSourceIdentity(rootID, observation)).Scan(&trackID)
-			} else {
-				err = tx.QueryRowContext(ctx, "SELECT id::text FROM tracks WHERE source_identity IN ($1,$2) OR (source_root_id=$3::uuid AND relative_path=$4) ORDER BY id LIMIT 1", identity, legacySourceIdentity(rootID, observation), rootID, observation.RelativePath).Scan(&trackID)
-			}
-			if errors.Is(err, sql.ErrNoRows) {
-				trackID = uuid.New()
-				_, err = tx.ExecContext(ctx, `INSERT INTO tracks(id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,source_kind,source_identity,duration_seconds,codec,sample_rate,channels,bitrate,bit_depth,cue_sheet_path,cue_parent_relative_path,cue_referenced_file,cue_index_frames,cue_end_frames,cue_isrc)
-					VALUES($1::uuid,$2::uuid,$3,$4,$5,$6,$7::uuid,$8,'present',NOW(),$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`, trackID, mediumID, placedTrack.Position, observation.Title, trackArtist, disc, rootID, observation.RelativePath, observation.SourceKind, identity, observation.DurationSeconds, observation.Codec, observation.SampleRate, observation.Channels, observation.Bitrate, nullablePositiveInt(observation.BitDepth), nullableString(observation.CueSheetPath), nullableString(observation.CueParentRelativePath), nullableString(observation.CueReferencedFile), nullableCueFrame(observation.CueIndexFrames, observation.CueIndexPresent), nullableCueFrame(observation.CueEndFrames, observation.CueEndPresent), nullableString(observation.CueISRC))
-			} else if err == nil {
-				_, err = tx.ExecContext(ctx, `UPDATE tracks SET medium_id=$1::uuid,position=$2,title=$3,artist=$4,disc_number=$5,source_status='present',observed_at=NOW(),source_kind=$6,source_identity=$7,duration_seconds=$8,codec=$9,sample_rate=$10,channels=$11,bitrate=$12,bit_depth=$13,cue_sheet_path=$14,cue_parent_relative_path=$15,cue_referenced_file=$16,cue_index_frames=$17,cue_end_frames=$18,cue_isrc=$19 WHERE id=$20::uuid`, mediumID, placedTrack.Position, observation.Title, trackArtist, disc, observation.SourceKind, identity, observation.DurationSeconds, observation.Codec, observation.SampleRate, observation.Channels, observation.Bitrate, nullablePositiveInt(observation.BitDepth), nullableString(observation.CueSheetPath), nullableString(observation.CueParentRelativePath), nullableString(observation.CueReferencedFile), nullableCueFrame(observation.CueIndexFrames, observation.CueIndexPresent), nullableCueFrame(observation.CueEndFrames, observation.CueEndPresent), nullableString(observation.CueISRC), trackID)
-			}
-			if err != nil {
+			if trackID, err = persistTrack(ctx, tx, scanID, rootID, mediumID, disc, placedTrack, observation, plan); err != nil {
 				return "", err
 			}
 			if _, err = tx.ExecContext(ctx, "DELETE FROM track_observations WHERE track_id=$1::uuid", trackID); err != nil {

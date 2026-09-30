@@ -45,8 +45,10 @@
 
 `scan_observations` 新增的规划列：`source_identity`、`fingerprint_path`（要计算指纹的文件，物理轨为自身，CUE 虚拟轨
 为父文件）、`source_size`、`source_modified_at`、`content_fingerprint`、`cue_index_frames`、`cue_end_frames`、`candidate_key`、
-`matched_track_id`、`planned_track_id`、`content_changed BOOLEAN NOT NULL DEFAULT FALSE`、`withheld BOOLEAN NOT NULL DEFAULT FALSE`，
-以及 `(scan_run_id, root_id, source_identity)` 与 `(scan_run_id, root_id, candidate_key)` 两个索引。暂存行随扫描清理，不设外键。
+`matched_track_id`、`planned_track_id`，以及三个布尔列（默认 `FALSE`）：`content_changed`、`withheld`、`planned`。`planned` 只在整个
+规划成功结束时才对保留下来且未暂缓的行置为真，`PersistCandidate` 只写 `planned` 的观察——规划中途失败时不会出现“缺少规划却按新曲目写入”。
+索引为 `(scan_run_id, root_id, fingerprint_path)`（计算指纹后按文件回写，同一个 CUE 父文件对应多行）与
+`(scan_run_id, root_id, candidate_key)`（第 4 步按候选键写入 Release 分配）。暂存行随扫描清理，不设外键。
 
 ### 迁移 0014：锚点改为定位信息
 
@@ -76,6 +78,9 @@
   非空时，直接复用已存指纹。常规重扫不增加读盘；迁移后的第一次扫描会为非 FLAC 文件与 MD5 为零的 FLAC
   各读一次音频数据。
 - **失败**：按需计算失败时，记 `fingerprint_failure` 诊断，该文件所在 scope 本轮暂缓写入，root 记为不完整。
+- **没有音频负载的退化文件**（没有帧的 FLAC、没有 `mdat` 的 M4A、只有标签的 MP3、只有头部包的 OGG）没有可识别的内容：
+  `ContentFingerprint` 返回空串而不是“空内容的哈希”，否则这些文件会互相被当成同一份音频。空指纹按“未知”处理，不参与配对
+  与换内容判断。
 - 已知不影响正确性的边界：`mp3gain` 之类改写帧增益的工具、FLAC 文件尾附加的非标准 ID3v1、M4A 中的章节文本轨，
   都会被视为内容变化，走“换内容”处理（新身份），不会错误沿用。
 
@@ -98,8 +103,11 @@
   其他 root 不可用不影响本 root 的重绑定；整轮状态与 missing 对账规则不变。
 - 写入阶段仍可能被取消或出错。重绑定随所在候选的事务提交，依据的是完整的遍历证据；取消后已提交的不回滚，
   未写到的候选保持原状。
-- 规划只做 SQL 与读文件，不持有长事务；organize 在规划和写入中各跑一次，规则是确定性的，两次结果一致。
-  写入时若候选的观察缺少规划记录，按 `catalog_write_failure` 处理并令 root 不完整，不猜测身份。
+- 规划只做 SQL 与读文件，不持有长事务；organize 在规划和写入中各跑一次，规则是确定性的，两次结果一致。规划读取暂存时不带封面字节。
+  写入时若候选的观察缺少规划记录（`planned` 为假），按 `catalog_write_failure` 处理并令 root 不完整，不猜测身份。
+- `PlanStagedRoot` 只在数据库错误或被取消时返回错误，此时暂存行没有完整的规划，library 不得写入；单个 scope 读不出来
+  （超过上限、载荷损坏）或单个文件指纹失败只记在结果里，对应 scope 暂缓，其余照常。有指纹或 scope 失败时，root 按不完整处理，
+  不做配对。
 
 ## 5. 身份规则
 
@@ -118,7 +126,9 @@
 
 - **消失集合**：本 root 中状态为 present、已有指纹，且没有被任何保留观察计划使用的曲目（包括换内容的原曲目，以及
   此前被腾出身份但仍为 present 的曲目）。已经是 missing 的曲目不参与，符合“本轮将被置为缺失”的批准范围。
-- **配对键**：`(content_fingerprint, cue_index_frames, cue_end_frames)`，NULL 按相等处理。
+- **配对键**：`(content_fingerprint, cue_index_frames, cue_end_frames)`，NULL 按相等处理。曲目侧只有 `source_kind='cue_virtual'`
+  的曲目才带区间：只有一个 `TRACK` 的 CUE 会把区间事实合并进物理轨（`tracks.cue_*` 列有值），而暂存的物理观察没有这些值，
+  不这样处理这类物理轨改名后就配不上对。
 - **遍历完整时**：同一键在未匹配或换内容的观察中恰好一条、在消失集合中也恰好一条，才重绑定——该观察的
   `planned_track_id` 设为那条曲目。两侧任一侧多于一条且另一侧非空时不重绑定，逐键记 `identity_ambiguous` 诊断。
   配对后仍为空的换内容观察建新曲目，记 `content_replaced` 诊断。
@@ -160,7 +170,8 @@
 
 `PersistCandidate(ctx, db, scanID, rootID, candidate)` 签名不变，事务内的步骤：
 
-1. 按 `candidate_key` 读取本候选的暂存行（`planned_track_id`、`planned_release_id`、指纹、大小、修改时间）。
+1. 按相对路径读取本候选各观察的暂存行（`planned_track_id`、`planned_release_id`、指纹、大小、修改时间），只读 `planned` 为真的行；
+   缺少任何一条即整个候选回滚。
 2. Release：有 `planned_release_id` 时更新字段、`candidate_anchor`、`candidate_kind`、`relative_directory`；否则新建
    Release 与 ReleaseGroup（与现在相同，每个新 Release 一个新组）。
 3. Medium：按 `(release_id, position)` 查找或新建（不变）。

@@ -31,7 +31,7 @@ func TestPostgreSQLSaveObservationCreatesSeparateDiscMedia(t *testing.T) {
 	roomusic := NewService(nil, application.database, t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	for _, disc := range []int{1, 2} {
 		observation := parser.AudioObservation{Album: "Two Disc", Artist: "Artist", Title: fmt.Sprintf("Track %d", disc), TrackNumber: 1, DiscNumber: disc}
-		if err := roomusic.saveObservation(context.Background(), scanID, root, fmt.Sprintf("disc%d/track.flac", disc), observation); err != nil {
+		if err := saveAudioObservation(context.Background(), roomusic, application, scanID, root, fmt.Sprintf("disc%d/track.flac", disc), observation); err != nil {
 			t.Fatalf("save disc %d observation: %v", disc, err)
 		}
 	}
@@ -97,7 +97,7 @@ func TestPostgreSQLCanceledScanDoesNotReconcileMissingSources(t *testing.T) {
 	roomusic := NewService(nil, application.database, t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	root := registeredRoot{ID: rootID, Path: rootPath}
 	observation := parser.AudioObservation{Album: "Album", Artist: "Artist", Title: "Track", TrackNumber: 1, DiscNumber: 1}
-	if err := roomusic.saveObservation(context.Background(), scanID, root, "track.flac", observation); err != nil {
+	if err := saveAudioObservation(context.Background(), roomusic, application, scanID, root, "track.flac", observation); err != nil {
 		t.Fatalf("save observation: %v", err)
 	}
 	if _, err := application.database.Exec(`UPDATE tracks SET observed_at=NOW()-INTERVAL '1 hour' WHERE source_root_id=$1::uuid`, rootID); err != nil {

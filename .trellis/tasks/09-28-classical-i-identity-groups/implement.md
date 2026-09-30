@@ -46,16 +46,17 @@ git diff --check
 
 ## 第 3 步：迁移 0013 与曲目重绑定
 
-- [ ] `backend/migrations/0013_track_content_fingerprints.sql`：design 第 2 节的曲目列、约束调整与暂存规划列；实施前在测试库
+- [x] `backend/migrations/0013_track_content_fingerprints.sql`：design 第 2 节的曲目列、约束调整与暂存规划列；实施前在测试库
   用 `pg_constraint` 核对 `UNIQUE(source_root_id, relative_path)` 的实际约束名。
-- [ ] catalog：`SourceObservation` 增加大小、修改时间、指纹（不进 JSON）；暂存写入规划列；`Fingerprinter` 端口；
+- [x] catalog：`SourceObservation` 增加大小、修改时间、指纹（不进 JSON）；暂存写入规划列；`Fingerprinter` 端口；
   `PlanStagedRoot`（design 第 4 节 a–e）；`PersistCandidate` 按计划写曲目（先腾出再占用），Release 暂时仍按锚点查找；
   删除 `legacySourceIdentity`、`legacyCueSourceIdentity` 与同路径兜底。
-- [ ] library：遍历记录大小与修改时间（CUE 虚拟轨取父文件）；调用规划并记录诊断与日志；指纹失败令 root 不完整；
+- [x] library：遍历记录大小与修改时间（CUE 虚拟轨取父文件）；调用规划并记录诊断与日志；指纹失败令 root 不完整；
   写入时跳过暂缓的 scope；实现 root 内的 Fingerprinter。
-- [ ] 测试调整：用“暂存 → 规划 → 写入”的测试辅助函数替换 `persistOrganizedCandidates`、`saveObservation`、
-  `saveObservationWith`（它们只被测试使用，一并删除）；删除 `TestPostgreSQLFirstRepairScanReusesLegacyCueTrackIdentity`。
-- [ ] 新增集成测试（真实临时目录中的合成 FLAC/CUE，走完整扫描流程）：
+- [x] 测试调整：用“暂存 → 规划 → 写入”的测试辅助函数（`persistTestObservations`、`saveAudioObservation`、`planStagedObservations`）
+  替换 `persistOrganizedCandidates`、`saveObservation`、`saveObservationWith`（它们只被测试使用，一并删除）；删除
+  `TestPostgreSQLFirstRepairScanReusesLegacyCueTrackIdentity` 与只测旧身份函数的 `TestLegacyCueSourceIdentityCanBeReusedAfterUpgrade`。
+- [x] 新增集成测试（真实临时目录中的合成 FLAC/CUE，走完整扫描流程）：
   - `TestPostgreSQLRescanKeepsTrackIdentity`（未变化重扫）
   - `TestPostgreSQLDirectoryRenameRebindsTracks`
   - `TestPostgreSQLMovedFileKeepsTrackIdentity`（同 root 内移到另一个专辑目录）
@@ -69,6 +70,9 @@ git diff --check
   - `TestPostgreSQLCompleteRootRebindsWhenAnotherRootIsUnavailable`（按 root 判断完整；整轮 incomplete，不置缺失）
   - `TestPostgreSQLUnchangedFilesReuseStoredFingerprints`（可计数的 Fingerprinter，第二次扫描不再计算）
   - `TestPostgreSQLFingerprintFailureDefersScope`
+  - `TestPostgreSQLSingleTrackCueMergedTrackKeepsIdentityOnRename`（单轨 CUE 合并进物理轨的区间事实不影响配对）
+  - `TestPostgreSQLScanAfterMigrationBackfillsFingerprintsWithoutChangingIdentity`（迁移后第一次扫描只补指纹，不换 ID）
+  - `TestPostgreSQLIncompleteScanDefersReplacedContent`（不完整遍历中换内容的 scope 也暂缓）
 - 提交：`feat(catalog): 按内容指纹在同一 root 内保守重绑定曲目`。
 
 ## 第 4 步：迁移 0014 与 Release 成员关系匹配

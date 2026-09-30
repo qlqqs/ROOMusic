@@ -306,6 +306,30 @@ func TestContentFingerprintHonorsCancellation(t *testing.T) {
 	})
 }
 
+func TestContentFingerprintIsEmptyWhenThereIsNoAudioPayload(t *testing.T) {
+	cases := []struct {
+		name string
+		file string
+		data []byte
+	}{
+		{"FLAC without frames and without md5", "track.flac", parsertest.FLACWithAudio(t, [16]byte{}, nil, "TITLE=x")},
+		{"M4A without mdat", "track.m4a", bytes.Join([][]byte{testM4AFtyp(), repairM4AMoov("alac", 2, 16, 44100, 88200, "t", "", "", "")}, nil)},
+		{"M4A with an empty mdat", "track.m4a", bytes.Join([][]byte{testM4AFtyp(), repairM4AAtom("mdat", nil), repairM4AMoov("alac", 2, 16, 44100, 88200, "t", "", "", "")}, nil)},
+		{"MP3 with tags only", "track.mp3", bytes.Join([][]byte{repairMP3Frames(map[string]string{"TIT2": "title"}), testID3v1()}, nil)},
+		{"Vorbis with headers only", "track.ogg", testVorbisStream("title", 255)},
+		{"Opus with headers only", "track.opus", testOpusStream("title", 255)},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			path := writeFingerprintFixture(t, testCase.file, testCase.data)
+			fingerprint, err := ContentFingerprint(context.Background(), path)
+			if err != nil || fingerprint != "" {
+				t.Fatalf("没有音频负载的文件指纹 = %q（错误 %v），期望空串", fingerprint, err)
+			}
+		})
+	}
+}
+
 func TestContentFingerprintRejectsUnsupportedAndDamagedFiles(t *testing.T) {
 	streamInfoBlock := append([]byte{0, 0, 0, 34}, make([]byte, 34)...)
 	cases := []struct {

@@ -295,21 +295,6 @@ func TestSingleCueTrackRetainsCueFactsOnPhysicalIdentity(t *testing.T) {
 	}
 }
 
-func TestLegacyCueSourceIdentityCanBeReusedAfterUpgrade(t *testing.T) {
-	observation := SourceObservation{
-		SourceKind:            "cue_virtual",
-		TrackNumber:           2,
-		CueSheetPath:          "Album/album.cue",
-		CueParentRelativePath: "Album/disc/image.flac",
-		CueReferencedFile:     "Album/disc/image.flac",
-	}
-	got := legacyCueSourceIdentity("root-id", observation)
-	want := "root-id:Album/album.cue#track-2@disc/image.flac"
-	if got != want {
-		t.Fatalf("legacy CUE source identity = %q, want %q", got, want)
-	}
-}
-
 func TestOrganizerEvidenceListsAreBounded(t *testing.T) {
 	observations := make([]SourceObservation, 0, MaxGroupingEvidenceRefs+5)
 	for index := 0; index < MaxGroupingEvidenceRefs+5; index++ {

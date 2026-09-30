@@ -322,6 +322,7 @@ func (service *Service) scanRoot(ctx context.Context, executor scanExecutor, sca
 				}
 			}
 			parentFacts := make(map[string]parser.AudioObservation, len(document.Files))
+			parentInfos := make(map[string]fs.FileInfo, len(document.Files))
 			for _, reference := range document.Files {
 				if cueReferenceMakesScanIncomplete(reference.Status) {
 					complete = false
@@ -341,7 +342,16 @@ func (service *Service) scanRoot(ctx context.Context, executor scanExecutor, sca
 					}
 					continue
 				}
+				parentInfo, parentStatError := os.Stat(reference.ResolvedPath)
+				if parentStatError != nil {
+					complete = false
+					if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, relativePath, "permission_error", "无法读取文件"); diagnosticError != nil {
+						return diagnosticError
+					}
+					continue
+				}
 				parentFacts[reference.Path] = facts
+				parentInfos[reference.Path] = parentInfo
 			}
 			for _, cue := range document.Tracks {
 				if contextErr := ctx.Err(); contextErr != nil {
@@ -359,6 +369,9 @@ func (service *Service) scanRoot(ctx context.Context, executor scanExecutor, sca
 					continue
 				}
 				virtualObservation := buildCueVirtualObservation(o, document, cue, relativePath)
+				// 虚拟轨的指纹依据是父文件：大小与修改时间取自父文件。
+				virtualObservation.SourceSize = parentInfos[cue.ReferencedFile].Size()
+				virtualObservation.SourceModifiedAt = parentInfos[cue.ReferencedFile].ModTime()
 				if stageErr := stageObservation(ctx, executor, scanID, root.ID, virtualObservation); stageErr != nil {
 					complete = false
 					captureProcessingError(stageErr)
@@ -384,7 +397,7 @@ func (service *Service) scanRoot(ctx context.Context, executor scanExecutor, sca
 			}
 			return nil
 		}
-		physicalObservation := catalog.SourceObservation{RelativePath: relativePath, Directory: catalog.DirectoryOf(relativePath), Title: observation.Title, Album: observation.Album, AlbumArtist: observation.AlbumArtist, Artist: observation.Artist, SourceType: observation.SourceType, MediaType: observation.MediaType, Genre: observation.Genre, CatalogNumber: observation.Catalog, Edition: observation.Edition, Label: observation.Label, Barcode: observation.Barcode, Year: observation.Year, TrackNumber: observation.TrackNumber, DiscNumber: observation.DiscNumber, SourceKind: observation.SourceKind, InferredFields: observation.InferredFields, FieldSources: observationFieldSources(observation), DurationSeconds: observation.DurationSeconds, Codec: observation.Codec, BitDepth: observation.BitDepth, SampleRate: observation.SampleRate, Channels: observation.Channels, Bitrate: observation.Bitrate, Artwork: observation.Artwork, ArtworkMIME: observation.ArtworkMIME, Credits: append([]metadata.Credit(nil), observation.Credits...)}
+		physicalObservation := catalog.SourceObservation{RelativePath: relativePath, Directory: catalog.DirectoryOf(relativePath), Title: observation.Title, Album: observation.Album, AlbumArtist: observation.AlbumArtist, Artist: observation.Artist, SourceType: observation.SourceType, MediaType: observation.MediaType, Genre: observation.Genre, CatalogNumber: observation.Catalog, Edition: observation.Edition, Label: observation.Label, Barcode: observation.Barcode, Year: observation.Year, TrackNumber: observation.TrackNumber, DiscNumber: observation.DiscNumber, SourceKind: observation.SourceKind, InferredFields: observation.InferredFields, FieldSources: observationFieldSources(observation), DurationSeconds: observation.DurationSeconds, Codec: observation.Codec, BitDepth: observation.BitDepth, SampleRate: observation.SampleRate, Channels: observation.Channels, Bitrate: observation.Bitrate, Artwork: observation.Artwork, ArtworkMIME: observation.ArtworkMIME, Credits: append([]metadata.Credit(nil), observation.Credits...), SourceSize: fileInfo.Size(), SourceModifiedAt: fileInfo.ModTime(), ContentFingerprint: observation.ContentFingerprint}
 		// 注册根本身不是 album 证据。目录 fallback 只在根目录以下有效；根级文件缺少
 		// album tag 时必须保持为彼此独立的 loose-unknown candidates。
 		if physicalObservation.Directory == "" && physicalObservation.InferredFields["album"] {
@@ -414,14 +427,22 @@ func (service *Service) scanRoot(ctx context.Context, executor scanExecutor, sca
 				captureProcessingError(diagnosticError)
 			}
 		}
-		// 即使其它文件解析失败，也持久化有效 observations；扫描会进入 incomplete，
-		// 因而不会执行负向 missing 对账。
-		if evidenceErr := service.persistStagedCandidates(ctx, executor, scanID, root); evidenceErr != nil {
+		// 先规划曲目身份（遍历已经结束，complete 即遍历证据是否完整）；规划失败时暂存行没有完整的规划，不能写入。
+		planned, planProblem := service.planRootIdentities(ctx, executor, scanID, root, complete)
+		if planProblem != nil {
 			complete = false
-			captureProcessingError(evidenceErr)
-			kind, message := candidatePersistenceDiagnostic(evidenceErr)
-			if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, "", kind, message); diagnosticError != nil {
-				captureProcessingError(diagnosticError)
+			captureProcessingError(planProblem)
+		}
+		// 即使其它文件解析失败，也持久化有效 observations（被规划暂缓的 scope 除外）；扫描会进入 incomplete，
+		// 因而不会执行负向 missing 对账。
+		if planned {
+			if evidenceErr := service.persistStagedCandidates(ctx, executor, scanID, root); evidenceErr != nil {
+				complete = false
+				captureProcessingError(evidenceErr)
+				kind, message := candidatePersistenceDiagnostic(evidenceErr)
+				if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, "", kind, message); diagnosticError != nil {
+					captureProcessingError(diagnosticError)
+				}
 			}
 		}
 	}
@@ -528,6 +549,7 @@ func buildCueVirtualObservation(parent parser.AudioObservation, document parser.
 		CueEndFrames:          cue.EndFrames,
 		CueEndPresent:         cue.EndPresent,
 		CueISRC:               cue.ISRC,
+		ContentFingerprint:    parent.ContentFingerprint,
 	}
 }
 
@@ -749,9 +771,8 @@ func observationFieldSources(observation parser.AudioObservation) map[string]str
 	return sources
 }
 
-// persistOrganizedCandidates 为每个 candidate 使用独立短事务。Track 身份基于
-// root + 相对来源路径，因此重扫更新既有行，同时允许 candidate 拓扑变化。
-// persistOneCandidate 在 catalog 事务提交后为该 Release 绑定封面；封面失败以 errArtworkBinding 包装返回。
+// persistOneCandidate 用 catalog 的独立短事务写入一个候选；封面在事务提交后为该 Release 绑定，
+// 封面失败以 errArtworkBinding 包装返回。曲目沿用还是新建由规划决定，见 planRootIdentities。
 func (service *Service) persistOneCandidate(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, candidate catalog.OrganizedCandidate) error {
 	releaseID, err := catalog.PersistCandidate(ctx, executor, scanID, root.ID, candidate)
 	if err != nil {
@@ -760,15 +781,6 @@ func (service *Service) persistOneCandidate(ctx context.Context, executor scanEx
 	if artworkObservation, ok := candidate.ArtworkObservation(); ok {
 		if artworkErr := service.saveArtworkForRelease(ctx, executor, releaseID, root, artworkObservation); artworkErr != nil {
 			return fmt.Errorf("%w: %v", errArtworkBinding, artworkErr)
-		}
-	}
-	return nil
-}
-
-func (service *Service) persistOrganizedCandidates(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, candidates []catalog.OrganizedCandidate) error {
-	for _, c := range candidates {
-		if err := service.persistOneCandidate(ctx, executor, scanID, root, c); err != nil {
-			return err
 		}
 	}
 	return nil
@@ -803,22 +815,6 @@ func isWithin(root, path string) bool {
 	rootReal, rootError := filepath.EvalSymlinks(root)
 	pathReal, pathError := filepath.EvalSymlinks(path)
 	return rootError == nil && pathError == nil && (pathReal == rootReal || strings.HasPrefix(pathReal, rootReal+string(filepath.Separator)))
-}
-
-func (service *Service) saveObservation(context context.Context, scanID string, root registeredRoot, relativePath string, observation parser.AudioObservation) error {
-	return service.saveObservationWith(context, service.database, scanID, root, relativePath, observation)
-}
-
-func (service *Service) saveObservationWith(context context.Context, executor scanExecutor, scanID string, root registeredRoot, relativePath string, observation parser.AudioObservation) error {
-	sourceIdentity, err := createTrackSourceIdentity(root.ID, relativePath)
-	if err != nil {
-		return err
-	}
-	organized := catalog.SourceObservation{RelativePath: sourceIdentity.RelativePath, Directory: catalog.DirectoryOf(sourceIdentity.RelativePath), Title: observation.Title, Album: observation.Album, AlbumArtist: observation.AlbumArtist, Artist: observation.Artist, SourceType: observation.SourceType, MediaType: observation.MediaType, Genre: observation.Genre, CatalogNumber: observation.Catalog, Year: observation.Year, TrackNumber: observation.TrackNumber, DiscNumber: observation.DiscNumber, SourceKind: observation.SourceKind, InferredFields: observation.InferredFields, FieldSources: observationFieldSources(observation), DurationSeconds: observation.DurationSeconds, Codec: observation.Codec, BitDepth: observation.BitDepth, SampleRate: observation.SampleRate, Channels: observation.Channels, Bitrate: observation.Bitrate, Artwork: observation.Artwork, ArtworkMIME: observation.ArtworkMIME}
-	if organized.Directory == "" && organized.InferredFields["album"] {
-		organized.Album = ""
-	}
-	return service.persistOrganizedCandidates(context, executor, scanID, root, catalog.OrganizeObservations([]catalog.SourceObservation{organized}))
 }
 
 // saveArtworkForRelease 为 Release 取得封面并交给受管存储：优先用观察里的内嵌封面，否则在曲目所在

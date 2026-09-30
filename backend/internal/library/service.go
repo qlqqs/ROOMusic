@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"log/slog"
 	"sync"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 )
 
 // Service 是目录与扫描能力的应用服务：持有数据库、数据目录（受管封面）、日志，以及扫描生命周期状态。
@@ -17,6 +19,8 @@ type Service struct {
 	scanWorkers   sync.WaitGroup
 	scanMutex     sync.Mutex
 	runningScan   string
+	// fingerprinter 为 root 提供指纹计算；nil 时使用 root 内的文件实现。仅供测试注入可计数或会失败的实现。
+	fingerprinter func(registeredRoot) catalog.Fingerprinter
 }
 
 // NewService 返回服务。scanContext 是扫描 worker 的生命周期上下文（进程停机时取消）；nil 时使用 Background。

@@ -32,7 +32,8 @@ const (
 )
 
 // ContentFingerprint 计算 path 指向的音频文件与标签无关的内容指纹。读取按块检查 context，不把整个
-// 文件读入内存（OGG 例外：解析器本来就整体读入该格式）。文件无法完整读取时返回错误。
+// 文件读入内存（OGG 例外：解析器本来就整体读入该格式）。文件无法完整读取时返回错误；没有任何音频负载
+// （例如没有帧的 FLAC、没有 mdat 的 M4A）的退化文件没有可识别的内容，返回空串，不与其他文件比较。
 func ContentFingerprint(ctx context.Context, path string) (string, error) {
 	var compute func(context.Context, io.ReaderAt, int64) (string, error)
 	switch strings.ToLower(filepath.Ext(path)) {
@@ -146,6 +147,9 @@ func flacFingerprint(ctx context.Context, reader io.ReaderAt, size int64) (strin
 	if position > size {
 		return "", io.ErrUnexpectedEOF
 	}
+	if position == size {
+		return "", nil
+	}
 	hash := sha256.New()
 	if err := hashSection(ctx, hash, reader, position, size); err != nil {
 		return "", err
@@ -154,12 +158,12 @@ func flacFingerprint(ctx context.Context, reader io.ReaderAt, size int64) (strin
 }
 
 // m4aFingerprint 按文件顺序哈希顶层全部 mdat 原子的负载（兼容 64 位长度和“到文件尾”的原子）。
-// 没有 mdat 时哈希空内容，与其他没有音频负载的文件一致。
 func m4aFingerprint(ctx context.Context, reader io.ReaderAt, size int64) (string, error) {
 	if size < 8 {
 		return "", fmt.Errorf("invalid M4A stream")
 	}
 	hash := sha256.New()
+	var payloadBytes int64
 	for offset, atoms := int64(0), 0; offset < size; atoms++ {
 		if atoms >= maxM4AAtoms {
 			return "", errors.New("too many M4A atoms")
@@ -172,8 +176,12 @@ func m4aFingerprint(ctx context.Context, reader io.ReaderAt, size int64) (string
 			if err := hashSection(ctx, hash, reader, atom.PayloadStart, atom.End); err != nil {
 				return "", err
 			}
+			payloadBytes += atom.End - atom.PayloadStart
 		}
 		offset = atom.End
+	}
+	if payloadBytes == 0 {
+		return "", nil
 	}
 	return formatFingerprint(fingerprintM4AMedia, hash.Sum(nil)), nil
 }
@@ -183,6 +191,9 @@ func mp3Fingerprint(ctx context.Context, reader io.ReaderAt, size int64) (string
 	start, end, err := mp3AudioRange(reader, size)
 	if err != nil {
 		return "", err
+	}
+	if start == end {
+		return "", nil
 	}
 	hash := sha256.New()
 	if err := hashSection(ctx, hash, reader, start, end); err != nil {
@@ -364,6 +375,7 @@ func oggAudioFingerprint(data []byte) (string, error) {
 		return "", fmt.Errorf("unsupported OGG codec")
 	}
 	hash := sha256.New()
+	var audioBytes int
 	completed := 0
 	pos := 0
 	for pos+27 <= len(data) {
@@ -382,6 +394,7 @@ func oggAudioFingerprint(data []byte) (string, error) {
 			}
 			if completed >= headerPackets {
 				_, _ = hash.Write(data[cursor:end])
+				audioBytes += end - cursor
 			}
 			cursor = end
 			// 小于 255 的段结束当前包；255 表示包在下一段（可能在下一页）继续。
@@ -393,6 +406,9 @@ func oggAudioFingerprint(data []byte) (string, error) {
 	}
 	if pos != len(data) {
 		return "", fmt.Errorf("invalid OGG trailing data")
+	}
+	if audioBytes == 0 {
+		return "", nil
 	}
 	return formatFingerprint(fingerprintOggAudio, hash.Sum(nil)), nil
 }
