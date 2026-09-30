@@ -1,4 +1,4 @@
-// Package httpapi 是 Release 目录的 REST 传输层：列表、详情、证据与封面读取。
+// Package httpapi 是 Release 目录的 REST 传输层：列表、详情、证据、按组读取与封面读取。
 // handler 只做参数解析、鉴权和响应映射；查询与投影在 catalog，封面读取在 catalog/artwork。
 package httpapi
 
@@ -35,6 +35,8 @@ func (handlers *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/releases", handlers.listReleases)
 	mux.HandleFunc("GET /api/v1/releases/{id}/evidence", handlers.releaseEvidence)
 	mux.HandleFunc("GET /api/v1/releases/{id}", handlers.releaseDetail)
+	mux.HandleFunc("GET /api/v1/release-groups", handlers.listReleaseGroups)
+	mux.HandleFunc("GET /api/v1/release-groups/{id}", handlers.releaseGroupDetail)
 	mux.HandleFunc("GET /api/v1/artworks/{id}", handlers.artworkResource)
 }
 

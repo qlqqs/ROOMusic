@@ -51,6 +51,20 @@ const (
 		  WHERE missing_medium.release_id = releases.id
 		    AND missing_track.source_status = 'missing')
 	)`
+	// releaseSearchPredicate 是 Release 搜索的命中条件（参数 $1 已转义 LIKE 通配符）：标题、艺人、专辑艺人，
+	// 或任一 present 曲目的标题。/releases 与 /release-groups 共用它，保证搜索语义一致。
+	releaseSearchPredicate = `(
+		releases.title ILIKE '%' || $1 || '%' ESCAPE '~'
+		OR releases.artist ILIKE '%' || $1 || '%' ESCAPE '~'
+		OR COALESCE(releases.album_artist, '') ILIKE '%' || $1 || '%' ESCAPE '~'
+		OR EXISTS (
+			SELECT 1 FROM media search_media
+			JOIN tracks search_track ON search_track.medium_id = search_media.id
+			WHERE search_media.release_id = releases.id
+			  AND search_track.source_status = 'present'
+			  AND search_track.title ILIKE '%' || $1 || '%' ESCAPE '~'
+		)
+	)`
 	releaseSummaryProjection = `releases.id::text,
 		releases.title,
 		releases.artist,
@@ -120,18 +134,7 @@ func (s *Store) ListReleases(ctx context.Context, params ListParams) (ReleasePag
 	whereClause := " WHERE " + releaseVisiblePredicate
 	queryArgs := []any{}
 	if params.Search != "" {
-		whereClause += ` AND (
-			releases.title ILIKE '%' || $1 || '%' ESCAPE '~'
-			OR releases.artist ILIKE '%' || $1 || '%' ESCAPE '~'
-			OR COALESCE(releases.album_artist, '') ILIKE '%' || $1 || '%' ESCAPE '~'
-			OR EXISTS (
-				SELECT 1 FROM media search_media
-				JOIN tracks search_track ON search_track.medium_id = search_media.id
-				WHERE search_media.release_id = releases.id
-				  AND search_track.source_status = 'present'
-				  AND search_track.title ILIKE '%' || $1 || '%' ESCAPE '~'
-			)
-		)`
+		whereClause += " AND " + releaseSearchPredicate
 		queryArgs = append(queryArgs, escapeLikePattern(params.Search))
 	}
 	if params.AttentionRequired {
@@ -458,33 +461,48 @@ func (s *Store) LoadReleaseEvidence(ctx context.Context, releaseID string) (Rele
 }
 
 func scanReleaseSummary(row interface{ Scan(...any) error }) (ReleaseSummary, error) {
-	var result ReleaseSummary
-	var albumArtist, sourceType, mediaType, artworkResourceID, artworkMIME sql.NullString
-	var year, artworkWidth, artworkHeight sql.NullInt64
-	err := row.Scan(
-		&result.ID,
-		&result.Title,
-		&result.Artist,
-		&albumArtist,
-		&year,
-		&sourceType,
-		&mediaType,
-		&result.MediumCount,
-		&result.TrackCount,
-		&result.AttentionCount,
-		&artworkResourceID,
-		&artworkMIME,
-		&artworkWidth,
-		&artworkHeight,
-	)
-	if err != nil {
+	var columns releaseSummaryColumns
+	if err := row.Scan(columns.targets()...); err != nil {
 		return ReleaseSummary{}, err
 	}
-	result.AlbumArtist = stringPointerFromNull(albumArtist)
-	result.Year = intPointerFromNull(year)
-	result.SourceType = stringPointerFromNull(sourceType)
-	result.MediaType = stringPointerFromNull(mediaType)
-	result.Artwork, err = releaseArtworkFromProjection(artworkResourceID, artworkMIME, artworkWidth, artworkHeight)
+	return columns.summary()
+}
+
+// releaseSummaryColumns 收集 releaseSummaryProjection 的原始列。targets 给出 Scan 的目标（调用方可以在后面追加自己的列），
+// summary 再解释 nullable 列并校验封面；列表、详情与按组投影都经过它，只有一处解释这些列。
+type releaseSummaryColumns struct {
+	result                                                             ReleaseSummary
+	albumArtist, sourceType, mediaType, artworkResourceID, artworkMIME sql.NullString
+	year, artworkWidth, artworkHeight                                  sql.NullInt64
+}
+
+func (columns *releaseSummaryColumns) targets() []any {
+	return []any{
+		&columns.result.ID,
+		&columns.result.Title,
+		&columns.result.Artist,
+		&columns.albumArtist,
+		&columns.year,
+		&columns.sourceType,
+		&columns.mediaType,
+		&columns.result.MediumCount,
+		&columns.result.TrackCount,
+		&columns.result.AttentionCount,
+		&columns.artworkResourceID,
+		&columns.artworkMIME,
+		&columns.artworkWidth,
+		&columns.artworkHeight,
+	}
+}
+
+func (columns *releaseSummaryColumns) summary() (ReleaseSummary, error) {
+	result := columns.result
+	result.AlbumArtist = stringPointerFromNull(columns.albumArtist)
+	result.Year = intPointerFromNull(columns.year)
+	result.SourceType = stringPointerFromNull(columns.sourceType)
+	result.MediaType = stringPointerFromNull(columns.mediaType)
+	var err error
+	result.Artwork, err = releaseArtworkFromProjection(columns.artworkResourceID, columns.artworkMIME, columns.artworkWidth, columns.artworkHeight)
 	if err != nil {
 		return ReleaseSummary{}, err
 	}

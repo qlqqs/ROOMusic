@@ -2,8 +2,8 @@
 
 ## 1. 范围与触发
 
-本合同适用于发行版本列表、详情和封面资源读取。新增或修改 Release 摘要字段、可见性、
-搜索、筛选、分页或封面投影时必须同步阅读并更新本文件。Catalog 是读取 owner；扫描器仍
+本合同适用于发行版本列表、详情、按组只读读取和封面资源读取。新增或修改 Release 摘要字段、可见性、
+搜索、筛选、分页、按组投影或封面投影时必须同步阅读并更新本文件。Catalog 是读取 owner；扫描器仍
 负责写入 Release Graph 与 `release_artworks`，音乐源保持只读。
 
 ## 2. 接口与数据签名
@@ -11,11 +11,16 @@
 - `GET /api/v1/releases?q=<string>&attention=required&page=<int>&page_size=<int>`
 - `GET /api/v1/releases/{id}`
 - `GET /api/v1/releases/{id}/evidence`：仅管理员。
+- `GET /api/v1/release-groups?q=<string>&attention=required&page=<int>&page_size=<int>`
+- `GET /api/v1/release-groups/{id}`
 - `GET /api/v1/artworks/{resource_id}`：认证后读取受管封面。
 - Release 摘要包含 `id`、标题/艺人、nullable 年份/来源/介质、Medium/Track/attention
   计数，以及 `artwork: null | {resource_id,mime,width,height}`。
 - `artwork` 是在既有 Release 摘要上追加的向后兼容（additive）字段；真实音频播放仍
   明确延期，不属于当前 Catalog REST 合同。
+- ReleaseGroup 摘要：`{id, release_count, attention_count, representative}`，`representative`
+  是代表版本的完整 Release 摘要（含封面）。组详情在摘要上加 `releases`：成员 Release 摘要数组。
+  两个接口都只读，写操作（人工归组等）属于 M3。
 
 ## 3. 请求与响应合同
 
@@ -29,6 +34,23 @@
 - MIME 只允许 `image/jpeg | image/png | image/gif | image/webp`。资源字节仍通过认证的
   artwork endpoint 返回。
 
+### 按组读取（阶段 I，只读）
+
+- **参数与错误码**与 `/releases` 完全相同：`page`、`page_size`（默认 1/50，最大 100）、`q`（最多 200 字节）、
+  `attention=required`，错误码 `invalid_pagination`、`invalid_query`、`invalid_attention`；详情的非 UUID 为
+  `400 invalid_id`。响应是 `{items:[组摘要], pagination:{page,page_size,total}}`，`total` 是满足条件的组数。
+- **可见性**：成员 Release 的可见条件与 `/releases` 相同（至少一条 `present` 曲目）。组至少有一个可见成员才出现；
+  `release_count` 只数可见成员；只有不可见成员的组、不存在的组，详情返回 `404 not_found`。
+- **代表版本**：可见成员中年份最早者（没有年份排最后），其次创建最早，最后 ID 最小。M4 引入默认版本后，默认版本排在最前。
+  组详情的 `releases` 按同一规则排序，最多 100 条，`release_count` 仍是完整数量；`representative` 与 `releases[0]` 相同。
+- **搜索**：任一可见成员命中 `/releases` 的搜索条件（同一个 SQL 谓词），组即命中；只命中不可见成员的不算。
+- **attention**：`attention_count` 是全部可见成员 attention 之和（不可见成员不计）；`attention=required` 取其大于 0 的组，
+  与代表版本自己的 `attention_count` 无关。
+- **排序**：代表版本的 `LOWER(title)`、`LOWER(artist)`、ID，与 `/releases` 一致。M3 人工归组之前每组恰好一个版本，
+  此时 `/release-groups` 与 `/releases` 的总数、顺序与代表版本逐项对应，`release_count` 为 1，
+  `attention_count` 等于该版本的 `attention_count`。
+- 摘要投影、封面 `LEFT JOIN` 与搜索谓词复用 `/releases` 的同一批 SQL 常量，不逐组查询。
+
 ## 4. 校验与错误矩阵
 
 | 条件 | 行为 |
@@ -36,6 +58,9 @@
 | 未认证 | `401 unauthorized` |
 | 分页、搜索或 attention 非法 | 对应稳定 `400` 错误码 |
 | Release 不存在或仅含 `missing` Track | 详情返回 `404 not_found` |
+| ReleaseGroup 不存在，或没有任何可见成员 | 组详情返回 `404 not_found` |
+| 组详情的 ID 不是 UUID | `400 invalid_id` |
+| 组列表的读取失败 | `503 database_unavailable`（查询无法执行）或 `503 database_error`，不回显 SQL |
 | 无 `release_artworks` 关系 | 列表与详情返回显式 `artwork: null` |
 | 封面四列完整且合法 | 列表与详情返回相同 artwork 对象 |
 | 封面列部分为空，ID 超过 255 字节或含路径分隔符/点目录/控制字符，MIME 或尺寸非法 | fail closed 为既有 `503` 安全错误 envelope；不得回显存储值、SQL 或路径 |
@@ -54,7 +79,11 @@
   非法 UTF-8 ID、零/负/越界尺寸，以及摘要 JSON 的显式 `null`。
 - PostgreSQL REST 集成：有封面、无封面、列表/详情一致、present-only、搜索/分页、
   attention、未认证、隐藏 Release、非法资源 ID 的安全 503 和无路径/SQL 泄露。
-- 运行 `go test ./internal/catalog/... ./internal/app -run 'Release|Catalog|Artwork' -count=1`；涉及 SQL 投影时，
+- 按组读取（`internal/app/release_groups_api_integration_test.go`）：每组一个版本时与 `/releases` 的总数、顺序、
+  代表版本逐项对应（含搜索、attention、分页、超出范围的页、present-only）；直接插入多成员组，覆盖代表版本规则
+  （年份、无年份排后、创建时间、ID）、`release_count` 与 `attention_count`（不可见成员不计）、搜索命中非代表成员、
+  attention 只来自非代表成员、成员数超过 100 的截断；401、400、404、非法参数。
+- 运行 `go test ./internal/catalog/... ./internal/app -run 'Release|Catalog|Artwork|Group|Routes' -count=1`；涉及 SQL 投影时，
   还需通过隔离 PostgreSQL 18 的 `./scripts/test-integration.sh`。
 
 ## 7. 错误与正确示例

@@ -93,14 +93,14 @@ git diff --check
 
 ## 第 5 步：ReleaseGroup 只读接口
 
-- [ ] `backend/internal/catalog/groups.go`（新）：列表与详情投影；`projection.go` 增加组摘要与详情类型。
-- [ ] `backend/internal/catalog/httpapi/groups.go`（新）：两个 handler；`handlers.go` 的 `Register` 注册路由。
-- [ ] `backend/internal/app/routes_test.go` 加入两个路由。
-- [ ] `backend/internal/app/release_groups_api_integration_test.go`（新）：
+- [x] `backend/internal/catalog/groups.go`（新）：列表与详情投影；`projection.go` 增加组摘要与详情类型。
+- [x] `backend/internal/catalog/httpapi/groups.go`（新）：两个 handler；`handlers.go` 的 `Register` 注册路由。
+- [x] `backend/internal/app/routes_test.go` 加入两个路由。
+- [x] `backend/internal/app/release_groups_api_integration_test.go`（新）：
   - `TestPostgreSQLReleaseGroupListMirrorsReleaseList`（总数、顺序、代表版本逐项对应；搜索、attention、分页、present-only）
   - `TestPostgreSQLReleaseGroupRepresentativeAndCounts`（直接插入多成员组：年份、创建时间、无年份排后；成员数与 attention 之和）
   - `TestPostgreSQLReleaseGroupDetailErrors`（401、400 `invalid_id`、404 不存在与无可见成员）
-- [ ] `.trellis/spec/backend/catalog-rest-contracts.md` 增补按组接口合同与测试命令。
+- [x] `.trellis/spec/backend/catalog-rest-contracts.md` 增补按组接口合同与测试命令。
 - 最小验证：`go test ./internal/catalog/... ./internal/app -run 'Release|Catalog|Artwork|Group|Routes' -count=1`，再跑全量门禁。
 - 提交：`feat(catalog): ReleaseGroup 只读接口`。
 
