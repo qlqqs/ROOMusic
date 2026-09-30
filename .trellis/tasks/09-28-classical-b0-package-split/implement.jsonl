@@ -1,3 +1,6 @@
-{"file": ".trellis/spec/backend/directory-structure.md", "reason": "internal/ 目标布局、能力归属与反模式"}
-{"file": ".trellis/spec/guides/modular-design.md", "reason": "依赖方向与窄接口，约束拆包顺序"}
-{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "事务与迁移边界，拆包不改变 SQL 语义"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "internal/ 目标布局、能力归属、跨能力只经公开合同"}
+{"file": ".trellis/spec/guides/modular-design.md", "reason": "依赖方向、窄接口与反模式，约束拆环方式"}
+{"file": ".trellis/spec/backend/index.md", "reason": "Core 0 边界：transport 不执行 SQL；D1 的技术债边界"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "事务与迁移执行器合同，拆包不改变 SQL 语义"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "启动、恢复、HTTP 完成日志、F1/F2 合同，拆包后需保持并更新代码位置"}
+{"file": ".trellis/spec/guides/engineering-principles.md", "reason": "行为保持重构与行为变更分离、复用抽取条件"}

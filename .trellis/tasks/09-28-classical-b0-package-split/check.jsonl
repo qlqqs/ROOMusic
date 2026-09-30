@@ -1,2 +1,4 @@
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "纯重构的验证门禁与禁止的耦合"}
-{"file": ".trellis/spec/guides/engineering-principles.md", "reason": "行为保持重构与行为变更分离"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "门禁、禁止的耦合与 -race 要求"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "核对实际布局与依赖规则、技术债登记"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "完成日志字段与 route_template 不变"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "Release REST 合同不变，测试命令路径需更新"}
