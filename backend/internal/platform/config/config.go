@@ -1,4 +1,5 @@
-package main
+// Package config 解码并校验进程的环境变量配置。它只读环境，不做任何 I/O，也不含业务默认策略。
+package config
 
 import (
 	"fmt"
@@ -7,7 +8,8 @@ import (
 	"strings"
 )
 
-type serverConfig struct {
+// Server 是进程启动所需的配置。
+type Server struct {
 	Address             string
 	Environment         string
 	DatabaseURL         string
@@ -17,7 +19,8 @@ type serverConfig struct {
 	PublicURL           string
 }
 
-func loadServerConfig() (serverConfig, error) {
+// Load 从环境变量读取并校验配置；缺少必需项或生产环境不安全时返回错误。
+func Load() (Server, error) {
 	dataDirectory := strings.TrimSpace(os.Getenv("ROOMUSIC_DATA_DIR"))
 	if dataDirectory == "" {
 		dataDirectory = "./data"
@@ -26,23 +29,23 @@ func loadServerConfig() (serverConfig, error) {
 	if publicURL != "" {
 		parsed, err := url.Parse(publicURL)
 		if err != nil || parsed.Scheme == "" || parsed.Host == "" || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
-			return serverConfig{}, fmt.Errorf("ROOMUSIC_PUBLIC_URL must be an absolute origin")
+			return Server{}, fmt.Errorf("ROOMUSIC_PUBLIC_URL must be an absolute origin")
 		}
 	}
-	config := serverConfig{Address: configuredAddress(), Environment: configuredEnvironment(), DatabaseURL: strings.TrimSpace(os.Getenv("ROOMUSIC_DATABASE_URL")), SecureCookies: os.Getenv("ROOMUSIC_SECURE_COOKIES") == "true", DataDirectory: dataDirectory, PublicURL: publicURL}
+	config := Server{Address: configuredAddress(), Environment: configuredEnvironment(), DatabaseURL: strings.TrimSpace(os.Getenv("ROOMUSIC_DATABASE_URL")), SecureCookies: os.Getenv("ROOMUSIC_SECURE_COOKIES") == "true", DataDirectory: dataDirectory, PublicURL: publicURL}
 	for _, configuredRoot := range strings.Split(os.Getenv("ROOMUSIC_ALLOWED_LIBRARY_ROOTS"), ",") {
 		if root := strings.TrimSpace(configuredRoot); root != "" {
 			config.AllowedLibraryRoots = append(config.AllowedLibraryRoots, root)
 		}
 	}
 	if config.DatabaseURL == "" {
-		return serverConfig{}, fmt.Errorf("ROOMUSIC_DATABASE_URL is required")
+		return Server{}, fmt.Errorf("ROOMUSIC_DATABASE_URL is required")
 	}
 	if len(config.AllowedLibraryRoots) == 0 {
-		return serverConfig{}, fmt.Errorf("ROOMUSIC_ALLOWED_LIBRARY_ROOTS must contain at least one root")
+		return Server{}, fmt.Errorf("ROOMUSIC_ALLOWED_LIBRARY_ROOTS must contain at least one root")
 	}
 	if config.Environment == "production" && !config.SecureCookies {
-		return serverConfig{}, fmt.Errorf("ROOMUSIC_SECURE_COOKIES must be true in production")
+		return Server{}, fmt.Errorf("ROOMUSIC_SECURE_COOKIES must be true in production")
 	}
 	return config, nil
 }
@@ -52,4 +55,11 @@ func configuredEnvironment() string {
 		return environment
 	}
 	return "development"
+}
+
+func configuredAddress() string {
+	if address := os.Getenv("ROOMUSIC_HTTP_ADDR"); address != "" {
+		return address
+	}
+	return ":8080"
 }

@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"encoding/json"
@@ -17,21 +17,21 @@ func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
 	ordinary := application.createUser(t, "user")
 
 	rootID := uuid.New()
-	if _, err := application.database.connection.Exec(`INSERT INTO library_roots(id,path,status,revision) VALUES($1::uuid,$2,'active',1)`, rootID, application.allowedRoot); err != nil {
+	if _, err := application.database.Exec(`INSERT INTO library_roots(id,path,status,revision) VALUES($1::uuid,$2,'active',1)`, rootID, application.allowedRoot); err != nil {
 		t.Fatalf("insert catalog root fixture: %v", err)
 	}
 	scanID := uuid.New()
-	if _, err := application.database.connection.Exec(`INSERT INTO scan_runs(id,status,started_at,finished_at) VALUES($1::uuid,'incomplete',NOW(),NOW())`, scanID); err != nil {
+	if _, err := application.database.Exec(`INSERT INTO scan_runs(id,status,started_at,finished_at) VALUES($1::uuid,'incomplete',NOW(),NOW())`, scanID); err != nil {
 		t.Fatalf("insert scan fixture: %v", err)
 	}
 
 	releaseID := createCatalogReleaseFixture(t, application, rootID, "CUE 专辑", "专辑艺术家", "current", true)
 	var mediumID string
-	if err := application.database.connection.QueryRow(`SELECT id::text FROM media WHERE release_id=$1::uuid`, releaseID).Scan(&mediumID); err != nil {
+	if err := application.database.QueryRow(`SELECT id::text FROM media WHERE release_id=$1::uuid`, releaseID).Scan(&mediumID); err != nil {
 		t.Fatalf("read release medium: %v", err)
 	}
 	trackID := uuid.New()
-	if _, err := application.database.connection.Exec(`INSERT INTO tracks(
+	if _, err := application.database.Exec(`INSERT INTO tracks(
 		id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,
 		source_kind,source_identity,duration_seconds,codec,bit_depth,sample_rate,channels,bitrate,
 		cue_sheet_path,cue_parent_relative_path,cue_referenced_file,cue_index_frames,cue_end_frames,cue_isrc
@@ -42,34 +42,34 @@ func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
 	)`, trackID, mediumID, rootID, rootID+":cue:v1:album"); err != nil {
 		t.Fatalf("insert present CUE track: %v", err)
 	}
-	if _, err := application.database.connection.Exec(`INSERT INTO track_credits(track_id,role,name,position) VALUES
+	if _, err := application.database.Exec(`INSERT INTO track_credits(track_id,role,name,position) VALUES
 		($1::uuid,'composer','作曲者',1),
 		($1::uuid,'producer','制作人',2)`, trackID); err != nil {
 		t.Fatalf("insert track credits: %v", err)
 	}
-	if _, err := application.database.connection.Exec(`INSERT INTO tracks(
+	if _, err := application.database.Exec(`INSERT INTO tracks(
 		id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,source_kind,source_identity
 	) VALUES($1::uuid,$2::uuid,2,'缺失轨','曲目艺术家',1,$3::uuid,'CUE Album/missing.flac','missing',NOW()-INTERVAL '1 day','flac_vorbis_comment',$4)`, uuid.New(), mediumID, rootID, rootID+":physical:v1:missing"); err != nil {
 		t.Fatalf("insert missing track: %v", err)
 	}
-	if _, err := application.database.connection.Exec(`INSERT INTO release_field_decisions(
+	if _, err := application.database.Exec(`INSERT INTO release_field_decisions(
 		release_id,field_key,selected_value,selected_source,confidence,action,rule_id,candidates,reason,scan_run_id
 	) VALUES($1::uuid,'title',to_jsonb('CUE 专辑'::text),'tag','medium','uncertain_apply','majority_v1',to_jsonb(ARRAY['CUE 专辑','CUE 专辑（重制版）']::text[]),'inconsistent_candidates',$2::uuid)`, releaseID, scanID); err != nil {
 		t.Fatalf("insert field evidence: %v", err)
 	}
-	if _, err := application.database.connection.Exec(`INSERT INTO release_grouping_evidence(
+	if _, err := application.database.Exec(`INSERT INTO release_grouping_evidence(
 		release_id,candidate_kind,rule_id,source_refs,reason,scan_run_id
 	) VALUES($1::uuid,'same_dir_split','organizer_v2',$2::jsonb,'same_directory_conflict',$3::uuid)`, releaseID, `["CUE Album/image.flac#track-1","/srv/private.flac"]`, scanID); err != nil {
 		t.Fatalf("insert grouping evidence: %v", err)
 	}
-	if _, err := application.database.connection.Exec(`INSERT INTO release_credits(release_id,role,name,position) VALUES($1::uuid,'album_artist','专辑艺术家',1)`, releaseID); err != nil {
+	if _, err := application.database.Exec(`INSERT INTO release_credits(release_id,role,name,position) VALUES($1::uuid,'album_artist','专辑艺术家',1)`, releaseID); err != nil {
 		t.Fatalf("insert release credit: %v", err)
 	}
 
 	legacyReleaseID := createCatalogReleaseFixture(t, application, rootID, "旧版专辑", "旧版艺术家", "legacy", true)
 	hiddenReleaseID := createCatalogReleaseFixture(t, application, rootID, "空壳专辑", "艺术家", "hidden", false)
 	expectedArtwork := catalog.ReleaseArtwork{ResourceID: "catalog-cover.webp", MIME: "image/webp", Width: 640, Height: 480}
-	if _, err := application.database.connection.Exec(`INSERT INTO release_artworks(
+	if _, err := application.database.Exec(`INSERT INTO release_artworks(
 		release_id,content_hash,mime_type,width,height,storage_key,source_type
 	) VALUES($1::uuid,$2,$3,$4,$5,$6,'embedded')`, releaseID, strings.Repeat("a", 64), expectedArtwork.MIME, expectedArtwork.Width, expectedArtwork.Height, expectedArtwork.ResourceID); err != nil {
 		t.Fatalf("insert release artwork fixture: %v", err)
@@ -230,7 +230,7 @@ func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
 	requireAPIError(t, application.request(t, http.MethodGet, "/api/v1/releases/not-a-uuid/evidence", nil, &admin, nil), http.StatusBadRequest, "invalid_id")
 
 	unsafeResourceID := "../private-cover.webp"
-	if _, err := application.database.connection.Exec(`INSERT INTO release_artworks(
+	if _, err := application.database.Exec(`INSERT INTO release_artworks(
 		release_id,content_hash,mime_type,width,height,storage_key,source_type
 	) VALUES($1::uuid,$2,'image/webp',1,1,$3,'folder')`, legacyReleaseID, strings.Repeat("b", 64), unsafeResourceID); err != nil {
 		t.Fatalf("insert malformed artwork fixture: %v", err)
@@ -244,11 +244,11 @@ func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
 			t.Fatalf("malformed artwork error leaked internal data: %s", response)
 		}
 	}
-	if _, err := application.database.connection.Exec(`DELETE FROM release_artworks WHERE release_id=$1::uuid`, legacyReleaseID); err != nil {
+	if _, err := application.database.Exec(`DELETE FROM release_artworks WHERE release_id=$1::uuid`, legacyReleaseID); err != nil {
 		t.Fatalf("remove malformed artwork fixture: %v", err)
 	}
 
-	if _, err := application.database.connection.Exec(`INSERT INTO scan_diagnostics(scan_run_id,root_id,relative_path,kind,message) VALUES
+	if _, err := application.database.Exec(`INSERT INTO scan_diagnostics(scan_run_id,root_id,relative_path,kind,message) VALUES
 		($1::uuid,$2::uuid,'CUE Album/broken.m4a','parse_failure','音频文件解析失败'),
 		($1::uuid,$2::uuid,'/srv/private.flac','permission_denied','文件不可读取')`, scanID, rootID); err != nil {
 		t.Fatalf("insert scan diagnostics: %v", err)
@@ -274,25 +274,25 @@ func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
 func createCatalogReleaseFixture(t *testing.T, application *integrationTestApplication, rootID, title, artist, anchorSuffix string, present bool) string {
 	t.Helper()
 	groupID, releaseID, mediumID := uuid.New(), uuid.New(), uuid.New()
-	if _, err := application.database.connection.Exec(`INSERT INTO release_groups(id) VALUES($1::uuid)`, groupID); err != nil {
+	if _, err := application.database.Exec(`INSERT INTO release_groups(id) VALUES($1::uuid)`, groupID); err != nil {
 		t.Fatalf("insert release group fixture: %v", err)
 	}
-	if _, err := application.database.connection.Exec(`INSERT INTO releases(
+	if _, err := application.database.Exec(`INSERT INTO releases(
 		id,group_id,title,artist,album_artist,year,source_type,media_type,genre,catalog_number,edition,label,barcode,source_root_id,relative_directory,candidate_anchor,candidate_kind
 	) VALUES($1::uuid,$2::uuid,$3,$4,$4,2026,NULL,'CD','Jazz','CAT-001','初回限定版','示例唱片公司','0123456789012',$5::uuid,$6,$7,'ordinary_directory')`, releaseID, groupID, title, artist, rootID, anchorSuffix, rootID+":v2:"+anchorSuffix); err != nil {
 		t.Fatalf("insert release fixture: %v", err)
 	}
-	if _, err := application.database.connection.Exec(`INSERT INTO media(id,release_id,position,title) VALUES($1::uuid,$2::uuid,1,'Medium')`, mediumID, releaseID); err != nil {
+	if _, err := application.database.Exec(`INSERT INTO media(id,release_id,position,title) VALUES($1::uuid,$2::uuid,1,'Medium')`, mediumID, releaseID); err != nil {
 		t.Fatalf("insert medium fixture: %v", err)
 	}
 	if present {
 		if title == "CUE 专辑" {
 			return releaseID
 		}
-		if _, err := application.database.connection.Exec(`INSERT INTO tracks(id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,source_kind,source_identity) VALUES($1::uuid,$2::uuid,1,'旧版轨',$3,1,$4::uuid,$5,'present',NOW(),'physical',$6)`, uuid.New(), mediumID, artist, rootID, anchorSuffix+"/track.flac", rootID+":physical:v1:"+anchorSuffix); err != nil {
+		if _, err := application.database.Exec(`INSERT INTO tracks(id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,source_kind,source_identity) VALUES($1::uuid,$2::uuid,1,'旧版轨',$3,1,$4::uuid,$5,'present',NOW(),'physical',$6)`, uuid.New(), mediumID, artist, rootID, anchorSuffix+"/track.flac", rootID+":physical:v1:"+anchorSuffix); err != nil {
 			t.Fatalf("insert present legacy track: %v", err)
 		}
-	} else if _, err := application.database.connection.Exec(`INSERT INTO tracks(id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,source_kind,source_identity) VALUES($1::uuid,$2::uuid,1,'旧轨',$3,1,$4::uuid,$5,'missing',NOW(),'physical',$6)`, uuid.New(), mediumID, artist, rootID, anchorSuffix+"/track.flac", rootID+":physical:v1:"+anchorSuffix); err != nil {
+	} else if _, err := application.database.Exec(`INSERT INTO tracks(id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,source_kind,source_identity) VALUES($1::uuid,$2::uuid,1,'旧轨',$3,1,$4::uuid,$5,'missing',NOW(),'physical',$6)`, uuid.New(), mediumID, artist, rootID, anchorSuffix+"/track.flac", rootID+":physical:v1:"+anchorSuffix); err != nil {
 		t.Fatalf("insert missing-only track: %v", err)
 	}
 	return releaseID

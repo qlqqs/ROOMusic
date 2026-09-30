@@ -1,53 +1,25 @@
-package main
+package app
 
 import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
+	"testing/fstest"
+
+	"github.com/qlqq/roomusic/backend/internal/platform/config"
+	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 )
-
-func TestReleaseSearchParsingTrimsAndEscapesWildcards(t *testing.T) {
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/releases?q=%20%25Rock_%20", nil)
-	query, err := parseReleaseSearch(request)
-	if err != nil || query != "%Rock_" {
-		t.Fatalf("unexpected parsed query %q, %v", query, err)
-	}
-	longQuery := strings.Repeat("x", 201)
-	if _, err := parseReleaseSearch(httptest.NewRequest(http.MethodGet, "/api/v1/releases?q="+longQuery, nil)); err == nil {
-		t.Fatal("overlong search query was accepted")
-	}
-}
-
-func TestProductionFrontendServesRootFallbackAndAsset404(t *testing.T) {
-	handler := productionFrontendHandler()
-	for _, requestPath := range []string{"/", "/releases/example"} {
-		responseRecorder := httptest.NewRecorder()
-		handler.ServeHTTP(responseRecorder, httptest.NewRequest(http.MethodGet, requestPath, nil))
-		if responseRecorder.Code != http.StatusOK {
-			t.Fatalf("expected frontend path %q to return 200, got %d", requestPath, responseRecorder.Code)
-		}
-		if !bytes.Contains(responseRecorder.Body.Bytes(), []byte("ROOMusic")) {
-			t.Fatalf("frontend path %q did not serve the embedded index", requestPath)
-		}
-	}
-
-	responseRecorder := httptest.NewRecorder()
-	handler.ServeHTTP(responseRecorder, httptest.NewRequest(http.MethodGet, "/assets/missing.js", nil))
-	if responseRecorder.Code != http.StatusNotFound {
-		t.Fatalf("missing production asset returned %d instead of 404", responseRecorder.Code)
-	}
-}
 
 func TestAPIFallbackReturnsJSONErrors(t *testing.T) {
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
-	applicationHandler := buildApplicationHandler(serverConfig{}, nil, logger)
-	degradedHandler := buildHandler(logger, nil)
+	applicationHandler := New(nil, config.Server{}, nil, testFrontend(), logger).Handler()
+	degradedHandler := Degraded(testFrontend(), logger)
 	cases := []struct {
 		name    string
 		handler http.Handler
@@ -82,7 +54,7 @@ func TestAPIFallbackReturnsJSONErrors(t *testing.T) {
 			if allow := response.Header().Get("Allow"); allow != testCase.allow {
 				t.Fatalf("Allow = %q, want %q", allow, testCase.allow)
 			}
-			var body apiError
+			var body httpserver.APIError
 			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 				t.Fatalf("decode body: %v (%s)", err, response.Body.String())
 			}
@@ -103,8 +75,8 @@ func TestAPIFallbackReturnsJSONErrors(t *testing.T) {
 func TestAPIFallbackKeepsFrontendAndHealthRoutes(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	for name, handler := range map[string]http.Handler{
-		"application": buildApplicationHandler(serverConfig{}, nil, logger),
-		"degraded":    buildHandler(logger, nil),
+		"application": New(nil, config.Server{}, nil, testFrontend(), logger).Handler(),
+		"degraded":    Degraded(testFrontend(), logger),
 	} {
 		for requestPath, want := range map[string]int{"/some/page": http.StatusOK, "/apiary": http.StatusOK, "/assets/missing.js": http.StatusNotFound, "/healthz": http.StatusOK} {
 			response := httptest.NewRecorder()
@@ -117,4 +89,8 @@ func TestAPIFallbackKeepsFrontendAndHealthRoutes(t *testing.T) {
 			}
 		}
 	}
+}
+
+func testFrontend() fs.FS {
+	return fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("<!doctype html><title>ROOMusic</title>")}}
 }

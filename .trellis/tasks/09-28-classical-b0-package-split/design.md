@@ -54,6 +54,9 @@ backend/
 | 共享工具 | `createIdentifier` → `uuid.New`；`isValidIdentifier` → `uuid.Valid`；`safeRelativeSourceRef` → `catalog.SafeRelativeSourceRef`；错误信封、`writeJSON`、`decodeJSON` → `httpserver` |
 | 鉴权是 `roomusicApplication` 的方法 | `identity.Guard` 公开 `RequireSameOrigin`、`RequireAdmin`、`Authenticate`、`WriteUnauthenticated`。<br>各能力的 httpapi 依赖 `identity` 这份公开合同，不依赖 `identity/httpapi`。<br>完成日志需要的 actor 通过 `httpserver.SetActor` 写入 |
 | 前端 `//go:embed web` 只能留在 `cmd/roomusic` | `main` 把 `fs.Sub(frontendAssets, "web")` 传给 `app`，`httpserver.Frontend(fs.FS)` 负责提供页面。Vite 输出目录和 CI 检查都不用改 |
+| `databaseState`（连接加就绪标志）只在“非 nil 即就绪”时使用 | 删除；`app.New` 直接接收 `*sql.DB`，nil 表示未就绪（路由测试利用这一点不连库建立路由表）。`openDatabase`（`postgres.Open` 加 `library.RecoverInterruptedScans`）留在 `cmd/roomusic/main.go` |
+| 各 handler 按能力分散后如何保持路由模式不变 | 每个 `httpapi` 包提供 `Register(mux)`，模式字符串原样不变；`app` 的路由表测试逐条固定“方法 + 路径 → 模式”，`route_template` 日志因此不变 |
+| 前端嵌入产物只能留在 `cmd/roomusic` | 验证真实嵌入产物的 `TestProductionFrontendServesRootFallbackAndAsset404` 留在 `cmd/roomusic/main_test.go`；`app` 的测试用 `fstest.MapFS` 充当前端 |
 | `roomusicApplication` 汇集了全部状态 | 拆成多个服务：<br>• `catalog.Store`：db<br>• `artwork.Store`：数据目录<br>• `library.Service`：db、允许的根、logger、扫描 context 与 worker 状态、catalog 依赖<br>• `identity.Guard`：db、`SecureCookies`、`PublicURL`<br>每个服务只持有自己需要的依赖 |
 
 ## 依赖规则

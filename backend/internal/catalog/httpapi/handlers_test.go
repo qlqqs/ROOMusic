@@ -1,9 +1,10 @@
-package main
+package httpapi
 
 import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -38,5 +39,17 @@ func TestReleasePaginationRejectsOffsetOverflow(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/releases?page="+strconv.Itoa(maximumInt)+"&page_size=100", nil)
 	if _, _, err := parsePagination(request); err == nil {
 		t.Fatal("pagination offset overflow was accepted")
+	}
+}
+
+func TestReleaseSearchParsingTrimsAndEscapesWildcards(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/releases?q=%20%25Rock_%20", nil)
+	query, err := parseReleaseSearch(request)
+	if err != nil || query != "%Rock_" {
+		t.Fatalf("unexpected parsed query %q, %v", query, err)
+	}
+	longQuery := strings.Repeat("x", 201)
+	if _, err := parseReleaseSearch(httptest.NewRequest(http.MethodGet, "/api/v1/releases?q="+longQuery, nil)); err == nil {
+		t.Fatal("overlong search query was accepted")
 	}
 }

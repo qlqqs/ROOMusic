@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"bytes"
@@ -18,13 +18,17 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/library"
+	"github.com/qlqq/roomusic/backend/internal/platform/config"
+	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
+	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
 type integrationTestApplication struct {
-	database    *databaseState
+	database    *sql.DB
 	handler     http.Handler
 	origin      string
 	allowedRoot string
@@ -40,25 +44,25 @@ func newIntegrationTestApplication(t *testing.T) *integrationTestApplication {
 	scopedURL := postgrestest.NewSchema(t, "roomusic_test_")
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	database, err := openDatabase(ctx, scopedURL)
+	database, err := postgres.Open(ctx, scopedURL)
 	if err != nil {
 		t.Fatalf("open isolated application database: %v", err)
 	}
 	t.Cleanup(func() {
-		if err := database.connection.Close(); err != nil {
+		if err := database.Close(); err != nil {
 			t.Errorf("close isolated application database: %v", err)
 		}
 	})
 
 	allowedRoot := t.TempDir()
-	config := serverConfig{
+	config := config.Server{
 		AllowedLibraryRoots: []string{allowedRoot},
 		DataDirectory:       t.TempDir(),
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	return &integrationTestApplication{
 		database:    database,
-		handler:     buildApplicationHandler(config, database, logger),
+		handler:     New(nil, config, database, testFrontend(), logger).Handler(),
 		origin:      "http://roomusic.test",
 		allowedRoot: allowedRoot,
 	}
@@ -66,12 +70,12 @@ func newIntegrationTestApplication(t *testing.T) *integrationTestApplication {
 
 func (application *integrationTestApplication) createUser(t *testing.T, role string) integrationTestUser {
 	t.Helper()
-	user := integrationTestUser{id: uuid.New(), token: generateSessionToken()}
+	user := integrationTestUser{id: uuid.New(), token: identity.GenerateSessionToken()}
 	username := role + "-" + strings.ReplaceAll(uuid.New(), "-", "")
-	if _, err := application.database.connection.Exec(`INSERT INTO users(id,username,password_hash,role) VALUES($1::uuid,$2,'test-only',$3)`, user.id, username, role); err != nil {
+	if _, err := application.database.Exec(`INSERT INTO users(id,username,password_hash,role) VALUES($1::uuid,$2,'test-only',$3)`, user.id, username, role); err != nil {
 		t.Fatalf("insert %s fixture: %v", role, err)
 	}
-	if _, err := application.database.connection.Exec(`INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2::uuid,NOW()+INTERVAL '1 hour')`, hashSessionToken(user.token), user.id); err != nil {
+	if _, err := application.database.Exec(`INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2::uuid,NOW()+INTERVAL '1 hour')`, identity.HashSessionToken(user.token), user.id); err != nil {
 		t.Fatalf("insert %s session fixture: %v", role, err)
 	}
 	return user
@@ -96,7 +100,7 @@ func (application *integrationTestApplication) request(t *testing.T, method, pat
 		request.Header.Set("Origin", application.origin)
 	}
 	if user != nil {
-		request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: user.token})
+		request.AddCookie(&http.Cookie{Name: identity.SessionCookieName, Value: user.token})
 	}
 	for name, value := range headers {
 		request.Header.Set(name, value)
@@ -111,7 +115,7 @@ func requireAPIError(t *testing.T, response *httptest.ResponseRecorder, status i
 	if response.Code != status {
 		t.Fatalf("expected HTTP %d, got %d: %s", status, response.Code, response.Body.String())
 	}
-	var envelope apiError
+	var envelope httpserver.APIError
 	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil {
 		t.Fatalf("decode API error: %v", err)
 	}
@@ -125,7 +129,7 @@ func TestPostgreSQLPermissionMatrixAndImmediateSessionInvalidation(t *testing.T)
 	admin := application.createUser(t, "admin")
 	ordinary := application.createUser(t, "user")
 	scanID := uuid.New()
-	if _, err := application.database.connection.Exec(`INSERT INTO scan_runs(id,status,started_at,finished_at) VALUES($1::uuid,'succeeded',NOW(),NOW())`, scanID); err != nil {
+	if _, err := application.database.Exec(`INSERT INTO scan_runs(id,status,started_at,finished_at) VALUES($1::uuid,'succeeded',NOW(),NOW())`, scanID); err != nil {
 		t.Fatalf("insert scan fixture: %v", err)
 	}
 
@@ -181,7 +185,7 @@ func TestPostgreSQLPermissionMatrixAndImmediateSessionInvalidation(t *testing.T)
 	requireAPIError(t, application.request(t, http.MethodGet, "/api/v1/auth/me", nil, &revokedUser, nil), http.StatusUnauthorized, "unauthorized")
 
 	expiredUser := application.createUser(t, "user")
-	if _, err := application.database.connection.Exec(`UPDATE sessions SET expires_at=NOW()-INTERVAL '1 second' WHERE token_hash=$1`, hashSessionToken(expiredUser.token)); err != nil {
+	if _, err := application.database.Exec(`UPDATE sessions SET expires_at=NOW()-INTERVAL '1 second' WHERE token_hash=$1`, identity.HashSessionToken(expiredUser.token)); err != nil {
 		t.Fatalf("expire user session: %v", err)
 	}
 	requireAPIError(t, application.request(t, http.MethodGet, "/api/v1/auth/me", nil, &expiredUser, nil), http.StatusUnauthorized, "unauthorized")
@@ -211,19 +215,19 @@ func TestPostgreSQLRootOperationTransactionsAndConflicts(t *testing.T) {
 	if created["name"] != filepath.Base(firstPath) || created["status"] != "active" || created["revision"] != float64(1) {
 		t.Fatalf("unexpected create result: %#v", created)
 	}
-	assertRootState(t, application.database.connection, rootID, "active", 1)
-	assertOperationCount(t, application.database.connection, rootID, 1)
+	assertRootState(t, application.database, rootID, "active", 1)
+	assertOperationCount(t, application.database, rootID, 1)
 
 	replay := application.request(t, http.MethodPost, "/api/v1/library-roots", map[string]string{"path": firstPath}, &admin, map[string]string{"Idempotency-Key": "create-first"})
 	if replay.Code != http.StatusCreated || !jsonResponsesEqual(t, replay, createResponse) {
 		t.Fatalf("create replay did not return the recorded result: HTTP %d: %s", replay.Code, replay.Body.String())
 	}
-	assertOperationCount(t, application.database.connection, rootID, 1)
+	assertOperationCount(t, application.database, rootID, 1)
 
 	conflict := application.request(t, http.MethodPost, "/api/v1/library-roots", map[string]string{"path": secondPath}, &admin, map[string]string{"Idempotency-Key": "create-first"})
 	requireAPIError(t, conflict, http.StatusConflict, "idempotency_conflict")
 	var secondPathRows int
-	if err := application.database.connection.QueryRow(`SELECT COUNT(*) FROM library_roots WHERE path=$1`, secondPath).Scan(&secondPathRows); err != nil || secondPathRows != 0 {
+	if err := application.database.QueryRow(`SELECT COUNT(*) FROM library_roots WHERE path=$1`, secondPath).Scan(&secondPathRows); err != nil || secondPathRows != 0 {
 		t.Fatalf("idempotency conflict left a second root: count=%d err=%v", secondPathRows, err)
 	}
 
@@ -232,14 +236,14 @@ func TestPostgreSQLRootOperationTransactionsAndConflicts(t *testing.T) {
 	if disableResponse.Code != http.StatusOK {
 		t.Fatalf("disable root: HTTP %d: %s", disableResponse.Code, disableResponse.Body.String())
 	}
-	assertRootState(t, application.database.connection, rootID, "disabled", 2)
-	assertOperationState(t, application.database.connection, rootID, "disable", 1, 2, "active", "disabled")
+	assertRootState(t, application.database, rootID, "disabled", 2)
+	assertOperationState(t, application.database, rootID, "disable", 1, 2, "active", "disabled")
 
 	disableReplay := application.request(t, http.MethodPatch, "/api/v1/library-roots/"+rootID, disableBody, &admin, map[string]string{"Idempotency-Key": "disable-first"})
 	if disableReplay.Code != http.StatusOK || !jsonResponsesEqual(t, disableReplay, disableResponse) {
 		t.Fatalf("disable replay did not return the recorded result: HTTP %d: %s", disableReplay.Code, disableReplay.Body.String())
 	}
-	assertOperationCount(t, application.database.connection, rootID, 2)
+	assertOperationCount(t, application.database, rootID, 2)
 
 	for name, body := range map[string]map[string]any{
 		"stale revision":   {"status": "disabled", "expected_revision": 1},
@@ -248,8 +252,8 @@ func TestPostgreSQLRootOperationTransactionsAndConflicts(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			response := application.request(t, http.MethodPatch, "/api/v1/library-roots/"+rootID, body, &admin, map[string]string{"Idempotency-Key": "failed-" + strings.ReplaceAll(name, " ", "-")})
 			requireAPIError(t, response, http.StatusConflict, "revision_conflict")
-			assertRootState(t, application.database.connection, rootID, "disabled", 2)
-			assertOperationCount(t, application.database.connection, rootID, 2)
+			assertRootState(t, application.database, rootID, "disabled", 2)
+			assertOperationCount(t, application.database, rootID, 2)
 		})
 	}
 
@@ -258,50 +262,50 @@ func TestPostgreSQLRootOperationTransactionsAndConflicts(t *testing.T) {
 	if restoreResponse.Code != http.StatusOK {
 		t.Fatalf("restore root: HTTP %d: %s", restoreResponse.Code, restoreResponse.Body.String())
 	}
-	assertRootState(t, application.database.connection, rootID, "active", 3)
-	assertOperationState(t, application.database.connection, rootID, "restore", 2, 3, "disabled", "active")
+	assertRootState(t, application.database, rootID, "active", 3)
+	assertOperationState(t, application.database, rootID, "restore", 2, 3, "disabled", "active")
 	restoreReplay := application.request(t, http.MethodPost, "/api/v1/library-roots/"+rootID+"/restore", restoreBody, &admin, map[string]string{"Idempotency-Key": "restore-first"})
 	if restoreReplay.Code != http.StatusOK || !jsonResponsesEqual(t, restoreReplay, restoreResponse) {
 		t.Fatalf("restore replay did not return the recorded result: HTTP %d: %s", restoreReplay.Code, restoreReplay.Body.String())
 	}
-	assertOperationCount(t, application.database.connection, rootID, 3)
+	assertOperationCount(t, application.database, rootID, 3)
 
 	modifiedRootID := createAndDisableRoot(t, application, admin, secondPath, "modified")
-	if _, err := application.database.connection.Exec(`UPDATE library_roots SET revision=revision+1 WHERE id=$1::uuid`, modifiedRootID); err != nil {
+	if _, err := application.database.Exec(`UPDATE library_roots SET revision=revision+1 WHERE id=$1::uuid`, modifiedRootID); err != nil {
 		t.Fatalf("simulate later root modification: %v", err)
 	}
 	laterModification := application.request(t, http.MethodPost, "/api/v1/library-roots/"+modifiedRootID+"/restore", map[string]int{"expected_revision": 2}, &admin, map[string]string{"Idempotency-Key": "restore-modified"})
 	requireAPIError(t, laterModification, http.StatusConflict, "revision_conflict")
-	assertRootState(t, application.database.connection, modifiedRootID, "disabled", 3)
-	assertOperationCount(t, application.database.connection, modifiedRootID, 2)
+	assertRootState(t, application.database, modifiedRootID, "disabled", 3)
+	assertOperationCount(t, application.database, modifiedRootID, 2)
 
 	missingInverseID := uuid.New()
 	missingInversePath := filepath.Join(application.allowedRoot, "missing-inverse")
-	if _, err := application.database.connection.Exec(`INSERT INTO library_roots(id,path,status,revision) VALUES($1::uuid,$2,'disabled',2)`, missingInverseID, missingInversePath); err != nil {
+	if _, err := application.database.Exec(`INSERT INTO library_roots(id,path,status,revision) VALUES($1::uuid,$2,'disabled',2)`, missingInverseID, missingInversePath); err != nil {
 		t.Fatalf("insert root without inverse operation: %v", err)
 	}
 	missingInverse := application.request(t, http.MethodPost, "/api/v1/library-roots/"+missingInverseID+"/restore", map[string]int{"expected_revision": 2}, &admin, map[string]string{"Idempotency-Key": "restore-missing-inverse"})
 	requireAPIError(t, missingInverse, http.StatusConflict, "revision_conflict")
-	assertRootState(t, application.database.connection, missingInverseID, "disabled", 2)
-	assertOperationCount(t, application.database.connection, missingInverseID, 0)
+	assertRootState(t, application.database, missingInverseID, "disabled", 2)
+	assertOperationCount(t, application.database, missingInverseID, 0)
 
 	rollbackPath := filepath.Join(application.allowedRoot, "rollback-library")
 	if err := os.MkdirAll(rollbackPath, 0o755); err != nil {
 		t.Fatalf("create rollback library fixture: %v", err)
 	}
 	rollbackRootID := createRoot(t, application, admin, rollbackPath, "create-rollback")
-	if _, err := application.database.connection.Exec(`CREATE FUNCTION reject_disable_operation() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.operation_type='disable' THEN RAISE EXCEPTION 'test rejection'; END IF; RETURN NEW; END $$; CREATE TRIGGER reject_disable_operation BEFORE INSERT ON library_root_operations FOR EACH ROW EXECUTE FUNCTION reject_disable_operation()`); err != nil {
+	if _, err := application.database.Exec(`CREATE FUNCTION reject_disable_operation() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.operation_type='disable' THEN RAISE EXCEPTION 'test rejection'; END IF; RETURN NEW; END $$; CREATE TRIGGER reject_disable_operation BEFORE INSERT ON library_root_operations FOR EACH ROW EXECUTE FUNCTION reject_disable_operation()`); err != nil {
 		t.Fatalf("install rollback test trigger: %v", err)
 	}
 	rollbackResponse := application.request(t, http.MethodPatch, "/api/v1/library-roots/"+rollbackRootID, map[string]any{"status": "disabled", "expected_revision": 1}, &admin, map[string]string{"Idempotency-Key": "disable-rollback"})
 	requireAPIError(t, rollbackResponse, http.StatusInternalServerError, "operation_failed")
-	assertRootState(t, application.database.connection, rollbackRootID, "active", 1)
-	assertOperationCount(t, application.database.connection, rollbackRootID, 1)
+	assertRootState(t, application.database, rollbackRootID, "active", 1)
+	assertOperationCount(t, application.database, rollbackRootID, 1)
 }
 
 func TestPostgreSQLRootOperationIdempotencyBindsTarget(t *testing.T) {
 	application := newIntegrationTestApplication(t)
-	database := application.database.connection
+	database := application.database
 	admin := application.createUser(t, "admin")
 
 	t.Run("disable with another target", func(t *testing.T) {
@@ -391,7 +395,7 @@ func TestPostgreSQLRootOperationIdempotencyBindsTarget(t *testing.T) {
 
 func TestPostgreSQLRootOperationConcurrentRetriesConverge(t *testing.T) {
 	application := newIntegrationTestApplication(t)
-	database := application.database.connection
+	database := application.database
 	admin := application.createUser(t, "admin")
 
 	t.Run("create", func(t *testing.T) {
@@ -461,7 +465,7 @@ func TestPostgreSQLUserTransactionProtectsLastAdmin(t *testing.T) {
 		t.Fatalf("disable second admin: HTTP %d: %s", response.Code, response.Body.String())
 	}
 	var revoked bool
-	if err := application.database.connection.QueryRow(`SELECT revoked_at IS NOT NULL FROM sessions WHERE token_hash=$1`, hashSessionToken(secondAdmin.token)).Scan(&revoked); err != nil {
+	if err := application.database.QueryRow(`SELECT revoked_at IS NOT NULL FROM sessions WHERE token_hash=$1`, identity.HashSessionToken(secondAdmin.token)).Scan(&revoked); err != nil {
 		t.Fatalf("read revoked session: %v", err)
 	}
 	if !revoked {
@@ -473,7 +477,7 @@ func TestPostgreSQLUserTransactionProtectsLastAdmin(t *testing.T) {
 		map[string]bool{"disabled": true}, &admin, nil)
 	requireAPIError(t, response, http.StatusConflict, "last_admin")
 	var adminDisabled bool
-	if err := application.database.connection.QueryRow(`SELECT disabled_at IS NOT NULL FROM users WHERE id=$1::uuid`, admin.id).Scan(&adminDisabled); err != nil {
+	if err := application.database.QueryRow(`SELECT disabled_at IS NOT NULL FROM users WHERE id=$1::uuid`, admin.id).Scan(&adminDisabled); err != nil {
 		t.Fatalf("read remaining admin: %v", err)
 	}
 	if adminDisabled {
@@ -541,7 +545,7 @@ const overlappingRootRequests = 8
 // 等所有请求都卡在数据库锁上才释放，因此这些请求一定真正重叠。
 func runOverlappingRootRequests(t *testing.T, application *integrationTestApplication, send func() *httptest.ResponseRecorder) []*httptest.ResponseRecorder {
 	t.Helper()
-	holder, err := application.database.connection.Begin()
+	holder, err := application.database.Begin()
 	if err != nil {
 		t.Fatalf("begin lock holder: %v", err)
 	}
@@ -554,7 +558,7 @@ func runOverlappingRootRequests(t *testing.T, application *integrationTestApplic
 	for i := 0; i < overlappingRootRequests; i++ {
 		go func() { responses <- send() }()
 	}
-	waitForLockWaiters(t, application.database.connection, overlappingRootRequests)
+	waitForLockWaiters(t, application.database, overlappingRootRequests)
 	if err := holder.Rollback(); err != nil {
 		t.Fatalf("release lock holder: %v", err)
 	}
@@ -648,7 +652,7 @@ func TestPostgreSQLScanCancellationIsPersistentAndIdempotent(t *testing.T) {
 	roomusic := newIntegrationTestApplication(t)
 	admin := roomusic.createUser(t, "admin")
 	scanID := uuid.New()
-	if _, err := roomusic.database.connection.Exec(`INSERT INTO scan_runs(id,status,started_at) VALUES($1::uuid,'running',NOW())`, scanID); err != nil {
+	if _, err := roomusic.database.Exec(`INSERT INTO scan_runs(id,status,started_at) VALUES($1::uuid,'running',NOW())`, scanID); err != nil {
 		t.Fatalf("insert running scan: %v", err)
 	}
 

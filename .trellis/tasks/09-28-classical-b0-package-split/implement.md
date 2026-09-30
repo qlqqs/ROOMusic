@@ -56,7 +56,7 @@ git diff --check
    - 提交：`refactor(backend): 拆出 library 与 parser`。
    - 实际验证：gofmt、vet、build、`go test ./...`、`-race`、`./scripts/test-integration.sh` 全部通过；测试名单与基线逐项对账，除已说明的两个新增外无变化；scanner.go 的 37 个函数、解析器全文、扫描辅助函数用脚本对照原文，只有机械改动（接收者、字段名、包前缀）。
    - 与计划的差异：`parsertest` 只导出两个 FLAC 夹具；取消与诊断也抽成 `Service` 方法（见 design）；`buildApplication` 在数据库为 nil 时不解引用（F1 的路由测试依赖这一点）。
-4. [ ] **httpserver、config、identity、httpapi 与 app**
+4. [x] **httpserver、config、identity、httpapi 与 app**
    - 新建 `platform/config`、`platform/httpserver`（`SetActor`、`Frontend(fs.FS)`）、`identity`（`Guard`）。
    - 新建三个 `httpapi` 包，按 design 的 handler 处理方式搬移。
    - 新建 `app`（`New`、`Degraded`、`WaitForScans`），`cmd/roomusic` 只保留 `main.go` 与 `web/`。
@@ -65,6 +65,11 @@ git diff --check
      - 路由表测试：原有的每个“方法 + 路径”仍解析到同一模式，`/api` 兜底仍为 `<unmatched>`；
      - `dependency_rules_test.go`：按 design 的依赖规则检查各包导入。
    - 提交：`refactor(backend): 拆出 platform、identity、各能力 httpapi 与 app`。
+   - 实际验证：gofmt、vet、build、`go test ./...`、`-race`、`./scripts/test-integration.sh` 全部通过；测试名单与基线逐项对账，除已说明的新增外，多出 `TestRoutesResolveToRegisteredPatterns` 与 `TestPackageDependencyDirections`；
+     34 个 handler 函数与 32 个基础设施函数（中间件、响应记录器、兜底、配置、Guard）用脚本对照原文，只有机械改动；
+     依赖规则测试做过变异检查（临时给 catalog 加 `net/http`、给 library 加 identity 导入，两处都被拦截）；
+     另用编译出的二进制在正常与数据库不可达两种模式下做了端到端冒烟（健康检查、就绪、初始化状态、404/405/401 的 JSON 错误、前端回落、降级 503）。
+   - 与计划的差异：`databaseState` 删除，`/readyz` 以 `database != nil` 判断；`cmd/roomusic/main_test.go` 保留前端嵌入产物测试。
 5. [ ] **文档与收尾**
    - 用 `grep -rn 'cmd/roomusic/' --include=*.md --include=*.html` 找出全部旧链接，逐一改到新位置。ADR 证据表注明“路径已随 B0 更新”。
    - 更新以下文档：

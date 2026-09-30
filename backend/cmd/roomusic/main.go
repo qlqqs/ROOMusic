@@ -1,23 +1,25 @@
+// 命令 roomusic 是进程入口：加载配置、连接数据库、装配应用并管理 HTTP 生命周期。
+// 业务策略不在这里；路由与服务的装配见 internal/app。
 package main
 
 import (
-	"bufio"
 	"context"
+	"database/sql"
 	"embed"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"log/slog"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"path"
-	"strings"
 	"syscall"
 	"time"
+
+	"github.com/qlqq/roomusic/backend/internal/app"
+	"github.com/qlqq/roomusic/backend/internal/library"
+	"github.com/qlqq/roomusic/backend/internal/platform/config"
+	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
 )
 
 // frontendAssets is populated by the production build in this package's web
@@ -30,22 +32,24 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	applicationContext, stopApplication := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopApplication()
-	config, configErr := loadServerConfig()
+	settings, configErr := config.Load()
 	if configErr != nil {
 		logger.Error("roomusic configuration invalid", "event", "platform.config.invalid", "error", configErr)
 		os.Exit(1)
 	}
-	database, databaseErr := openDatabase(applicationContext, config.DatabaseURL)
+	database, databaseErr := openDatabase(applicationContext, settings.DatabaseURL)
 	if databaseErr != nil {
 		logger.Error("roomusic database unavailable", "event", "platform.database.unavailable", "error", databaseErr)
 	}
-	var requestHandler http.Handler = buildHandler(logger, database)
-	var application *roomusicApplication
+	frontend := frontendSub()
+	requestHandler := app.Degraded(frontend, logger)
+	var application *app.App
 	if database != nil {
-		application, requestHandler = buildApplication(applicationContext, config, database, logger)
+		application = app.New(applicationContext, settings, database, frontend, logger)
+		requestHandler = application.Handler()
 	}
 	server := &http.Server{
-		Addr:              config.Address,
+		Addr:              settings.Address,
 		Handler:           requestHandler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
@@ -67,12 +71,12 @@ func main() {
 		logger.Error("roomusic HTTP shutdown failed", "event", "platform.http.shutdown_failed", "error", err)
 	}
 	if application != nil {
-		if err := application.library.WaitForScans(shutdownContext); err != nil {
+		if err := application.WaitForScans(shutdownContext); err != nil {
 			logger.Error("roomusic scan shutdown timed out", "event", "library.scan.shutdown_timeout", "error", err)
 		}
 	}
 	if database != nil {
-		if err := database.connection.Close(); err != nil {
+		if err := database.Close(); err != nil {
 			logger.Error("roomusic database close failed", "event", "platform.database.close_failed", "error", err)
 		}
 	}
@@ -82,271 +86,24 @@ func main() {
 	}
 }
 
-func configuredAddress() string {
-	if address := os.Getenv("ROOMUSIC_HTTP_ADDR"); address != "" {
-		return address
+// openDatabase 连接并迁移数据库，再恢复上次进程遗留的运行中扫描。
+func openDatabase(ctx context.Context, databaseURL string) (*sql.DB, error) {
+	connection, err := postgres.Open(ctx, databaseURL)
+	if err != nil {
+		return nil, err
 	}
-	return ":8080"
-}
-
-func buildHandler(logger *slog.Logger, database *databaseState) http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", healthHandler)
-	mux.HandleFunc("GET /readyz", func(responseWriter http.ResponseWriter, _ *http.Request) {
-		statusCode, status := readinessStatus(database)
-		writeJSON(responseWriter, statusCode, map[string]string{"status": status})
-	})
-	registerAPIFallback(mux, http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
-		writeAPIError(responseWriter, request, http.StatusServiceUnavailable, "database_unavailable", "服务暂不可用")
-	}))
-	mux.Handle("/", productionFrontendHandler())
-
-	return requestIDMiddleware(logger, mux)
-}
-
-// API 兜底模式比 "/" 更具体：未注册的 /api 请求返回 JSON 错误，不落入前端页面。
-const (
-	apiFallbackPattern     = "/api/"
-	apiRootFallbackPattern = "/api"
-)
-
-var apiProbeMethods = []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete}
-
-func registerAPIFallback(mux *http.ServeMux, handler http.Handler) {
-	mux.Handle(apiFallbackPattern, handler)
-	mux.Handle(apiRootFallbackPattern, handler)
-}
-
-func isAPIFallbackPattern(pattern string) bool {
-	return pattern == apiFallbackPattern || pattern == apiRootFallbackPattern
-}
-
-// apiNotFoundHandler 在路径已注册但方法不符时返回 405 与 Allow，否则返回 404。
-func apiNotFoundHandler(mux *http.ServeMux) http.Handler {
-	return http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
-		if allowed := allowedAPIMethods(mux, request); len(allowed) > 0 {
-			responseWriter.Header().Set("Allow", strings.Join(allowed, ", "))
-			writeAPIError(responseWriter, request, http.StatusMethodNotAllowed, "method_not_allowed", "接口不支持该请求方法")
-			return
-		}
-		writeAPIError(responseWriter, request, http.StatusNotFound, "not_found", "接口不存在")
-	})
-}
-
-func allowedAPIMethods(mux *http.ServeMux, request *http.Request) []string {
-	var allowed []string
-	for _, method := range apiProbeMethods {
-		probe := request.WithContext(request.Context())
-		probe.Method = method
-		if _, pattern := mux.Handler(probe); pattern != "" && !isAPIFallbackPattern(pattern) {
-			allowed = append(allowed, method)
-		}
+	if err := library.RecoverInterruptedScans(ctx, connection); err != nil {
+		_ = connection.Close()
+		return nil, err
 	}
-	return allowed
+	return connection, nil
 }
 
-func healthHandler(responseWriter http.ResponseWriter, _ *http.Request) {
-	writeJSON(responseWriter, http.StatusOK, map[string]string{"status": "ok"})
-}
-
-func readinessHandler(responseWriter http.ResponseWriter, _ *http.Request) {
-	// Database wiring is intentionally the next vertical slice. Until then the
-	// service must not claim readiness for the business application.
-	writeJSON(responseWriter, http.StatusServiceUnavailable, map[string]string{"status": "not_ready"})
-}
-
-func productionFrontendHandler() http.Handler {
+// frontendSub 返回嵌入的前端产物子树。嵌入内容是编译期常量，取子树失败属于构建错误，因此直接 panic。
+func frontendSub() fs.FS {
 	webAssets, err := fs.Sub(frontendAssets, "web")
 	if err != nil {
 		panic(fmt.Errorf("load embedded frontend assets: %w", err))
 	}
-	fileServer := http.FileServer(http.FS(webAssets))
-	return http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
-		requestedPath := strings.TrimPrefix(path.Clean(request.URL.Path), "/")
-		if requestedPath == "." || requestedPath == "" {
-			serveEmbeddedIndex(responseWriter, webAssets)
-			return
-		}
-		if _, statError := fs.Stat(webAssets, requestedPath); statError != nil {
-			if strings.HasPrefix(requestedPath, "assets/") {
-				http.NotFound(responseWriter, request)
-				return
-			}
-			serveEmbeddedIndex(responseWriter, webAssets)
-			return
-		}
-		request.URL.Path = "/" + requestedPath
-		fileServer.ServeHTTP(responseWriter, request)
-	})
-}
-
-func serveEmbeddedIndex(responseWriter http.ResponseWriter, webAssets fs.FS) {
-	indexHTML, err := fs.ReadFile(webAssets, "index.html")
-	if err != nil {
-		http.Error(responseWriter, "frontend unavailable", http.StatusServiceUnavailable)
-		return
-	}
-	responseWriter.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = responseWriter.Write(indexHTML)
-}
-
-func requestIDMiddleware(logger *slog.Logger, next http.Handler) http.Handler {
-	if logger == nil {
-		logger = slog.Default()
-	}
-	return http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
-		requestID := request.Header.Get("X-Request-ID")
-		if !requestIDPattern.MatchString(requestID) {
-			requestID = fmt.Sprintf("req-%d", time.Now().UnixNano())
-		}
-		request.Header.Set("X-Request-ID", requestID)
-		responseWriter.Header().Set("X-Request-ID", requestID)
-		observation := &requestObservation{}
-		request = request.WithContext(context.WithValue(request.Context(), requestObservationKey{}, observation))
-		routeTemplate := "<unmatched>"
-		if mux, ok := next.(*http.ServeMux); ok {
-			_, routeTemplate = mux.Handler(request)
-			if routeTemplate == "" || isAPIFallbackPattern(routeTemplate) {
-				routeTemplate = "<unmatched>"
-			}
-		}
-		recorded := &recordingResponseWriter{ResponseWriter: responseWriter}
-		started := time.Now()
-		defer func() {
-			level := slog.LevelInfo
-			status := recorded.statusCode()
-			if recovered := recover(); recovered != nil {
-				status = http.StatusInternalServerError
-				level = slog.LevelError
-				logHTTPCompleted(logger, level, requestID, request.Method, routeTemplate, status, recorded.bytes, time.Since(started), observation.actorID)
-				panic(recovered)
-			}
-			if status >= 500 {
-				level = slog.LevelError
-			} else if status >= 400 {
-				level = slog.LevelWarn
-			}
-			logHTTPCompleted(logger, level, requestID, request.Method, routeTemplate, status, recorded.bytes, time.Since(started), observation.actorID)
-		}()
-		next.ServeHTTP(recorded, request)
-	})
-}
-
-type requestObservationKey struct{}
-
-type requestObservation struct {
-	actorID string
-}
-
-func logHTTPCompleted(logger *slog.Logger, level slog.Level, requestID, method, routeTemplate string, status, responseBytes int, duration time.Duration, actorID string) {
-	if duration < 0 {
-		duration = 0
-	}
-	attrs := []slog.Attr{
-		slog.String("event", "http.request.completed"),
-		slog.String("module", "platform"),
-		slog.String("message", "http request completed"),
-		slog.String("request_id", requestID),
-		slog.String("method", method),
-		slog.String("route_template", routeTemplate),
-		slog.Int("status", status),
-		slog.Int("response_bytes", responseBytes),
-		slog.Int64("duration_ms", duration.Milliseconds()),
-	}
-	if actorID != "" {
-		attrs = append(attrs, slog.String("actor_id", actorID))
-	}
-	logger.LogAttrs(context.Background(), level, "http request completed", attrs...)
-}
-
-type recordingResponseWriter struct {
-	http.ResponseWriter
-	status  int
-	bytes   int
-	written bool
-}
-
-func (w *recordingResponseWriter) WriteHeader(statusCode int) {
-	if statusCode >= 100 && statusCode < 200 {
-		w.ResponseWriter.WriteHeader(statusCode)
-		return
-	}
-	if w.written {
-		return
-	}
-	w.status = statusCode
-	w.written = true
-	w.ResponseWriter.WriteHeader(statusCode)
-}
-
-func (w *recordingResponseWriter) Write(payload []byte) (int, error) {
-	if !w.written {
-		w.WriteHeader(http.StatusOK)
-	}
-	n, err := w.ResponseWriter.Write(payload)
-	w.bytes += n
-	return n, err
-}
-
-func (w *recordingResponseWriter) statusCode() int {
-	if !w.written {
-		return http.StatusOK
-	}
-	return w.status
-}
-
-func (w *recordingResponseWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
-
-func (w *recordingResponseWriter) Flush() {
-	_ = w.FlushError()
-}
-
-func (w *recordingResponseWriter) FlushError() error {
-	if !w.written {
-		w.WriteHeader(http.StatusOK)
-	}
-	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
-		flusher.Flush()
-		return nil
-	}
-	return http.ErrNotSupported
-}
-
-func (w *recordingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	hijacker, ok := w.ResponseWriter.(http.Hijacker)
-	if !ok {
-		return nil, nil, http.ErrNotSupported
-	}
-	return hijacker.Hijack()
-}
-
-func (w *recordingResponseWriter) Push(target string, options *http.PushOptions) error {
-	pusher, ok := w.ResponseWriter.(http.Pusher)
-	if !ok {
-		return http.ErrNotSupported
-	}
-	return pusher.Push(target, options)
-}
-
-func (w *recordingResponseWriter) ReadFrom(reader io.Reader) (int64, error) {
-	if !w.written {
-		w.WriteHeader(http.StatusOK)
-	}
-	var n int64
-	var err error
-	if readerFrom, ok := w.ResponseWriter.(io.ReaderFrom); ok {
-		n, err = readerFrom.ReadFrom(reader)
-	} else {
-		n, err = io.Copy(w.ResponseWriter, reader)
-	}
-	w.bytes += int(n)
-	return n, err
-}
-
-func writeJSON(responseWriter http.ResponseWriter, statusCode int, value any) {
-	responseWriter.Header().Set("Content-Type", "application/json")
-	responseWriter.WriteHeader(statusCode)
-	if err := json.NewEncoder(responseWriter).Encode(value); err != nil {
-		return
-	}
+	return webAssets
 }
