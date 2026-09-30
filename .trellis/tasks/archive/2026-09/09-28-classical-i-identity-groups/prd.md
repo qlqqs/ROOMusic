@@ -1,7 +1,7 @@
 # 阶段 I：身份稳定与 ReleaseGroup 只读
 
 > 状态：已实施并验证（2026-09-30 用户批准规划后分六步实施，见文末“实施结果”）。父任务见
-> [Classical 重设计 / Core 1](../09-27-classical-core-1/prd.md)；2026-09-28 由[路线修订任务](../archive/2026-09/09-28-core-1-roadmap-revision/design.md)
+> [Classical 重设计 / Core 1](../../../09-27-classical-core-1/prd.md)；2026-09-28 由[路线修订任务](../09-28-core-1-roadmap-revision/design.md)
 > （第二部分）创建。技术设计见 [design.md](design.md)，执行计划见 [implement.md](implement.md)，
 > 核实事实与推导见 [research/identity-analysis.md](research/identity-analysis.md)。
 
@@ -25,7 +25,7 @@
 
 | 日期 | 选择者 | 决策 |
 | --- | --- | --- |
-| 2026-09-28 | qlqq | D2：成员关系匹配 + 同 root 保守重绑定（唯一 1:1 音频相同才重绑定；取消、失败、不完整不重绑定；跨 root 不推定）。D6：Core 1 只有人工确认归组，阶段 I 提供按组只读接口。见 [ADR 0002](../../../docs/architecture/adr/0002-metadata-overlays.md) 决策记录 |
+| 2026-09-28 | qlqq | D2：成员关系匹配 + 同 root 保守重绑定（唯一 1:1 音频相同才重绑定；取消、失败、不完整不重绑定；跨 root 不推定）。D6：Core 1 只有人工确认归组，阶段 I 提供按组只读接口。见 [ADR 0002](../../../../../docs/architecture/adr/0002-metadata-overlays.md) 决策记录 |
 | 2026-09-29 | qlqq | 开发阶段不做兼容，有必要可直接重构 |
 | 2026-09-30 | qlqq | 重绑定的“遍历完整”按 root 判断：一个 root 遍历完整即在该 root 内重绑定，不受其他 root 不可用影响；missing 对账仍要求整轮 `succeeded` |
 
