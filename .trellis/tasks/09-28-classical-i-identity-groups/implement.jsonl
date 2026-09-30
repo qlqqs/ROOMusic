@@ -2,3 +2,7 @@
 {"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移只新增、事务与幂等规则"}
 {"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "Release 列表/详情合同，按组接口需与之对齐"}
 {"file": ".trellis/spec/guides/real-music-assets.md", "reason": "真实音乐只读与测试隔离，冒烟输出不泄露路径"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "扫描流程、终态与 missing 对账、诊断种类与错误矩阵，阶段 I 在其上增加规划阶段"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "包归属与依赖规则；暂存表改归 catalog、Fingerprinter 端口"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "新增 library.scan.identity_resolved 事件的命名与脱敏"}
+{"file": ".trellis/tasks/09-28-classical-i-identity-groups/research/identity-analysis.md", "reason": "现状事实、各格式指纹依据与推导结论"}

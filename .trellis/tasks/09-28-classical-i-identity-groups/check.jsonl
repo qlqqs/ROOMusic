@@ -1,2 +1,5 @@
 {"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "集成测试矩阵与危险失败路径的验证"}
 {"file": "docs/architecture/adr/0002-metadata-overlays.md", "reason": "核对实现与已批准身份规则一致"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "核对扫描终态、missing 对账与诊断合同未被破坏，新增规则已写入"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "核对按组接口与 /releases 的语义对齐、错误矩阵与测试要求"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移只新增、事务边界、不在事务中读文件"}
