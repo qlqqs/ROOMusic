@@ -83,30 +83,38 @@ func parsePagination(request *http.Request) (int, int, error) {
 // 页大小上限只约束请求参数；Store 不重复限制。
 const maxReleaseRows = 100
 
+// parseReleaseListParams 解析 /releases 与 /release-groups 共用的查询参数（合同要求两者的参数、默认值、上限与错误码
+// 完全相同，所以只在这里解析一次）。参数非法时写出 400 错误并返回 false。
+func parseReleaseListParams(responseWriter http.ResponseWriter, request *http.Request) (catalog.ListParams, bool) {
+	page, pageSize, err := parsePagination(request)
+	if err != nil {
+		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_pagination", "分页参数无效")
+		return catalog.ListParams{}, false
+	}
+	searchQuery, err := parseReleaseSearch(request)
+	if err != nil {
+		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_query", "搜索条件无效")
+		return catalog.ListParams{}, false
+	}
+	attentionRequired, err := parseReleaseAttention(request)
+	if err != nil {
+		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_attention", "检查筛选条件无效")
+		return catalog.ListParams{}, false
+	}
+	return catalog.ListParams{Search: searchQuery, AttentionRequired: attentionRequired, Page: page, PageSize: pageSize}, true
+}
+
 func (handlers *Handlers) listReleases(responseWriter http.ResponseWriter, request *http.Request) {
 	if _, err := handlers.guard.Authenticate(request); err != nil {
 		handlers.guard.WriteUnauthenticated(responseWriter, request)
 		return
 	}
-	page, pageSize, err := parsePagination(request)
-	if err != nil {
-		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_pagination", "分页参数无效")
-		return
-	}
-	searchQuery, err := parseReleaseSearch(request)
-	if err != nil {
-		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_query", "搜索条件无效")
-		return
-	}
-	attentionRequired, err := parseReleaseAttention(request)
-	if err != nil {
-		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_attention", "检查筛选条件无效")
+	params, ok := parseReleaseListParams(responseWriter, request)
+	if !ok {
 		return
 	}
 
-	result, err := handlers.store.ListReleases(request.Context(), catalog.ListParams{
-		Search: searchQuery, AttentionRequired: attentionRequired, Page: page, PageSize: pageSize,
-	})
+	result, err := handlers.store.ListReleases(request.Context(), params)
 	if errors.Is(err, catalog.ErrQuery) {
 		httpserver.WriteError(responseWriter, request, http.StatusServiceUnavailable, "database_unavailable", "服务暂不可用")
 		return
@@ -117,7 +125,7 @@ func (handlers *Handlers) listReleases(responseWriter http.ResponseWriter, reque
 	}
 	httpserver.WriteJSON(responseWriter, http.StatusOK, map[string]any{
 		"items":      result.Items,
-		"pagination": map[string]any{"page": page, "page_size": pageSize, "total": result.Total},
+		"pagination": map[string]any{"page": params.Page, "page_size": params.PageSize, "total": result.Total},
 	})
 }
 

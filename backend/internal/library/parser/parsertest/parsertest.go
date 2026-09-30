@@ -8,6 +8,7 @@ import (
 )
 
 // FLACWithComments 返回只含一个 VORBIS_COMMENT 块的最小 FLAC 头，comments 是形如 KEY=value 的文本。
+// 它没有 STREAMINFO 与音频帧，所以没有音频内容指纹（指纹为空）；涉及曲目身份的测试应改用 FLACWithAudio。
 func FLACWithComments(t testing.TB, comments []string) []byte {
 	t.Helper()
 	metadata := &bytes.Buffer{}
@@ -30,7 +31,7 @@ const (
 	FLACTotalSamples = FLACSampleRate * 240
 )
 
-// FLACStream 返回带有效 STREAMINFO（MD5 为零）和空注释块的 FLAC 头。
+// FLACStream 返回带有效 STREAMINFO（MD5 为零）和空注释块的 FLAC 头；没有音频帧，所以没有音频内容指纹。
 func FLACStream() []byte {
 	streamInfo := flacStreamInfo([16]byte{})
 	comments := make([]byte, 8)
@@ -40,7 +41,8 @@ func FLACStream() []byte {
 }
 
 // FLACWithAudio 返回带有效 STREAMINFO 的 FLAC：md5 写入 STREAMINFO 的音频 MD5 字段（全零表示编码器没有写入），
-// comments 写入 VORBIS_COMMENT 块，frames 作为最后一个元数据块之后的音频帧字节。
+// comments 写入 VORBIS_COMMENT 块，frames 作为最后一个元数据块之后的音频帧字节。给每个文件不同的 md5（或帧字节）
+// 才有互不相同的内容指纹，身份重绑定类测试依赖这一点。
 func FLACWithAudio(t testing.TB, md5 [16]byte, frames []byte, comments ...string) []byte {
 	t.Helper()
 	streamInfo := flacStreamInfo(md5)

@@ -528,7 +528,7 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
     </div>
     <div class="layer-bar">
       <div><b>观察层 · 已有</b>扫描器写入的事实与证据。失败、取消或不完整的扫描不能当作缺失的证据。</div>
-      <div class="is-draft"><b>覆盖层 · 缺失</b>现状是写入 Release 图时更新已有 Release 会直接覆盖字段（<code>internal/catalog/persist.go:50</code>），所以覆盖层落地之前不开放修正。</div>
+      <div class="is-draft"><b>覆盖层 · 缺失</b>现状是写入 Release 图时更新已有 Release 会直接覆盖字段（<code>internal/catalog/persist.go:149</code>），所以覆盖层落地之前不开放修正。</div>
       <div class="is-draft"><b>结果层 · 缺失</b>现在 <code>releases</code> 表同时充当观察和结果。Core 1 中 ReleaseGroup 成员关系只能由人工确认（M3 起）。</div>
     </div>
   </section>
@@ -877,7 +877,7 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
       <ul>
         <li><code>docs/architecture/core-1-roadmap.md</code> · <code>docs/architecture/adr/0001–0004</code> · <code>frontend/DESIGN.md</code></li>
         <li><code>.trellis/spec/frontend/state-management.md</code>（批准与执行状态）</li>
-        <li><code>backend/internal/catalog/persist.go:44</code>（每个新 Release 新建一个组）、<code>:50</code>（更新已有 Release 时直接覆盖字段）</li>
+        <li><code>backend/internal/catalog/persist.go:142</code>（每个新 Release 新建一个组）、<code>:149</code>（更新已有 Release 时直接覆盖字段）</li>
         <li><code>backend/internal/catalog/organizer.go:922</code>（拆分候选的锚点取最小文件路径）</li>
         <li><code>docs/architecture/architecture-decisions.md</code>（扩展边界与两步走指导原则）</li>
       </ul>

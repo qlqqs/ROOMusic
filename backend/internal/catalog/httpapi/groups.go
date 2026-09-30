@@ -15,25 +15,12 @@ func (handlers *Handlers) listReleaseGroups(responseWriter http.ResponseWriter, 
 		handlers.guard.WriteUnauthenticated(responseWriter, request)
 		return
 	}
-	page, pageSize, err := parsePagination(request)
-	if err != nil {
-		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_pagination", "分页参数无效")
-		return
-	}
-	searchQuery, err := parseReleaseSearch(request)
-	if err != nil {
-		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_query", "搜索条件无效")
-		return
-	}
-	attentionRequired, err := parseReleaseAttention(request)
-	if err != nil {
-		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_attention", "检查筛选条件无效")
+	params, ok := parseReleaseListParams(responseWriter, request)
+	if !ok {
 		return
 	}
 
-	result, err := handlers.store.ListReleaseGroups(request.Context(), catalog.ListParams{
-		Search: searchQuery, AttentionRequired: attentionRequired, Page: page, PageSize: pageSize,
-	})
+	result, err := handlers.store.ListReleaseGroups(request.Context(), params)
 	if errors.Is(err, catalog.ErrQuery) {
 		httpserver.WriteError(responseWriter, request, http.StatusServiceUnavailable, "database_unavailable", "服务暂不可用")
 		return
@@ -44,7 +31,7 @@ func (handlers *Handlers) listReleaseGroups(responseWriter http.ResponseWriter, 
 	}
 	httpserver.WriteJSON(responseWriter, http.StatusOK, map[string]any{
 		"items":      result.Items,
-		"pagination": map[string]any{"page": page, "page_size": pageSize, "total": result.Total},
+		"pagination": map[string]any{"page": params.Page, "page_size": params.PageSize, "total": result.Total},
 	})
 }
 

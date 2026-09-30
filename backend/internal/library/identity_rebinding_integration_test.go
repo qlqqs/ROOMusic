@@ -802,3 +802,49 @@ func TestPostgreSQLTrackPathUniquenessOnlyConstrainsBoundRows(t *testing.T) {
 		t.Fatal("超过 256 字节的内容指纹被接受")
 	}
 }
+
+func TestPostgreSQLPersistRejectsObservationsWithoutPlan(t *testing.T) {
+	fixture := newLibraryFixture(t)
+	root := insertScannerRoot(t, fixture, "persist-without-plan")
+	service := scannerTestApplication(fixture)
+	scanID := insertRunningScan(t, fixture)
+	observation := catalog.SourceObservation{RelativePath: "Album/01.flac", Directory: "Album", Title: "One", Album: "Album", Artist: "Artist", TrackNumber: 1, DiscNumber: 1, SourceKind: "flac_vorbis_comment"}
+	if err := stageObservation(context.Background(), fixture.database, scanID, root.ID, observation); err != nil {
+		t.Fatalf("stage observation: %v", err)
+	}
+
+	// 没有规划就写入：不猜测身份，候选回滚，不产生曲目、Release 或组。
+	err := service.persistStagedCandidates(context.Background(), fixture.database, scanID, root)
+	if err == nil || !strings.Contains(err.Error(), "no identity plan") {
+		t.Fatalf("没有规划的观察被写入：%v", err)
+	}
+	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE source_root_id=$1::uuid`, 0, root.ID)
+	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM releases WHERE source_root_id=$1::uuid`, 0, root.ID)
+	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM release_groups`, 0)
+}
+
+func TestPostgreSQLPersistRollsBackWhenPlannedTrackDisappears(t *testing.T) {
+	fixture := newLibraryFixture(t)
+	root := insertScannerRoot(t, fixture, "planned-track-disappears")
+	service := scannerTestApplication(fixture)
+	observation := catalog.SourceObservation{RelativePath: "Album/01.flac", Directory: "Album", Title: "One", Album: "Album", Artist: "Artist", TrackNumber: 1, DiscNumber: 1, SourceKind: "flac_vorbis_comment"}
+	if err := persistTestObservations(context.Background(), service, fixture, insertRunningScan(t, fixture), root, observation); err != nil {
+		t.Fatalf("first persist: %v", err)
+	}
+	trackID := readTrackIDs(t, fixture, root.ID)[0]
+
+	// 规划已经指定沿用这条曲目，写入前它却被删除：整个候选回滚，而不是悄悄改为新建。
+	scanID := insertRunningScan(t, fixture)
+	if err := stageObservation(context.Background(), fixture.database, scanID, root.ID, observation); err != nil {
+		t.Fatalf("stage observation: %v", err)
+	}
+	planStagedObservations(t, fixture, scanID, root)
+	if _, err := fixture.database.Exec(`DELETE FROM tracks WHERE id=$1::uuid`, trackID); err != nil {
+		t.Fatalf("delete planned track: %v", err)
+	}
+	err := service.persistStagedCandidates(context.Background(), fixture.database, scanID, root)
+	if err == nil || !strings.Contains(err.Error(), "planned track no longer exists") {
+		t.Fatalf("指定沿用的曲目已不存在却写入成功：%v", err)
+	}
+	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE source_root_id=$1::uuid`, 0, root.ID)
+}
