@@ -14,6 +14,7 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/library/parser/parsertest"
+	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
 // audioFile 描述一个合成 FLAC：seed 决定音频内容（STREAMINFO 的 MD5 与帧字节），其余是标签。
@@ -165,6 +166,7 @@ func TestPostgreSQLRescanKeepsTrackIdentity(t *testing.T) {
 	if len(before) != 2 {
 		t.Fatalf("首次扫描的曲目 = %v", before)
 	}
+	releasesBefore := releaseIDsByTitle(t, fixture, root.ID)
 	for _, track := range readTracks(t, fixture, root.ID) {
 		if track.Fingerprint == "" {
 			t.Fatalf("曲目 %q 没有保存指纹", track.Path)
@@ -177,6 +179,7 @@ func TestPostgreSQLRescanKeepsTrackIdentity(t *testing.T) {
 	for path, id := range before {
 		requireTrackAt(t, after, path, id)
 	}
+	requireSameReleases(t, releasesBefore, releaseIDsByTitle(t, fixture, root.ID))
 	requireNoMissingTracks(t, fixture, root.ID)
 }
 
@@ -188,6 +191,7 @@ func TestPostgreSQLDirectoryRenameRebindsTracks(t *testing.T) {
 	writeAudio(t, root, "Album/02.flac", audioFile{seed: 2, title: "Two", album: "Album", track: 2, zeroMD5: true})
 	requireScanStatus(t, runTestScan(t, fixture, service, root), "succeeded")
 	before := presentTrackIDs(t, fixture, root.ID)
+	releasesBefore := releaseIDsByTitle(t, fixture, root.ID)
 
 	moveFixture(t, root, "Album", "Renamed Album")
 	scan := runTestScan(t, fixture, service, root)
@@ -195,6 +199,7 @@ func TestPostgreSQLDirectoryRenameRebindsTracks(t *testing.T) {
 	after := presentTrackIDs(t, fixture, root.ID)
 	requireTrackAt(t, after, "Renamed Album/01.flac", before["Album/01.flac"])
 	requireTrackAt(t, after, "Renamed Album/02.flac", before["Album/02.flac"])
+	requireSameReleases(t, releasesBefore, releaseIDsByTitle(t, fixture, root.ID))
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE source_root_id=$1::uuid`, 2, root.ID)
 	requireNoMissingTracks(t, fixture, root.ID)
 	requireDiagnosticCount(t, fixture, scan.ID, "identity_ambiguous", 0)
@@ -711,5 +716,49 @@ func TestPostgreSQLIncompleteScanDefersReplacedContent(t *testing.T) {
 	requireDiagnosticCount(t, fixture, complete.ID, "content_replaced", 1)
 	if newID := presentTrackIDs(t, fixture, root.ID)["Album/01.flac"]; newID == "" || newID == oldID {
 		t.Fatalf("完整遍历后新内容应得到新曲目：%q（旧 %q）", newID, oldID)
+	}
+}
+
+func TestPostgreSQLTrackPathUniquenessOnlyConstrainsBoundRows(t *testing.T) {
+	fixture := newLibraryFixture(t)
+	root := insertScannerRoot(t, fixture, "path-uniqueness")
+	groupID, releaseID, mediumID := uuid.New(), uuid.New(), uuid.New()
+	for _, statement := range []struct {
+		query string
+		args  []any
+	}{
+		{`INSERT INTO release_groups(id) VALUES($1::uuid)`, []any{groupID}},
+		{`INSERT INTO releases(id,group_id,title,artist,source_root_id) VALUES($1::uuid,$2::uuid,'Release','Artist',$3::uuid)`, []any{releaseID, groupID, root.ID}},
+		{`INSERT INTO media(id,release_id,position) VALUES($1::uuid,$2::uuid,1)`, []any{mediumID, releaseID}},
+	} {
+		if _, err := fixture.database.Exec(statement.query, statement.args...); err != nil {
+			t.Fatalf("prepare release graph: %v", err)
+		}
+	}
+	insertTrack := func(identity any, fingerprint any) error {
+		_, err := fixture.database.Exec(`INSERT INTO tracks(id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,source_kind,source_identity,content_fingerprint)
+			VALUES($1::uuid,$2::uuid,1,'Title','Artist',1,$3::uuid,'Album/01.flac','present',NOW(),'physical',$4,$5)`, uuid.New(), mediumID, root.ID, identity, fingerprint)
+		return err
+	}
+
+	if err := insertTrack("identity-one", nil); err != nil {
+		t.Fatalf("insert bound track: %v", err)
+	}
+	// 失去来源身份的旧曲目可以与同一路径上的新曲目并存。
+	if err := insertTrack(nil, nil); err != nil {
+		t.Fatalf("insert unbound track at the same path: %v", err)
+	}
+	if err := insertTrack(nil, nil); err != nil {
+		t.Fatalf("insert second unbound track at the same path: %v", err)
+	}
+	// 两条仍持有来源身份的曲目不能占用同一路径。
+	if err := insertTrack("identity-two", nil); err == nil {
+		t.Fatal("同一路径上的第二条已绑定曲目被接受")
+	}
+	if err := insertTrack(nil, ""); err == nil {
+		t.Fatal("空的内容指纹被接受")
+	}
+	if err := insertTrack(nil, strings.Repeat("x", 257)); err == nil {
+		t.Fatal("超过 256 字节的内容指纹被接受")
 	}
 }

@@ -12,6 +12,7 @@ import (
 //   - 曲目先按当前来源身份匹配；同一来源身份下两边指纹都已知且不同，视为换了内容，新内容建新曲目。
 //   - 遍历完整的 root 中，没有匹配到身份的观察与“本轮消失”的曲目按指纹键配对，两侧都恰好一条才沿用原曲目。
 //   - 遍历不完整时不重绑定，含疑似移动或换内容观察的 scope 暂缓写入，留给下一次完整遍历。
+//   - Release 按曲目成员关系匹配：候选的保留曲目中严格过半当前属于同一个既有 Release 时沿用它，锚点只是位置信息。
 //
 // 规划只做 SQL 与读文件，不持有长事务；结果写在暂存行上，由 PersistCandidate 按行写入。
 
@@ -101,6 +102,9 @@ func PlanStagedRoot(ctx context.Context, database StagingDB, scanID, rootID stri
 			return plan, err
 		}
 	} else if err := withholdSuspiciousScopes(ctx, database, scanID, rootID, &plan); err != nil {
+		return plan, err
+	}
+	if err := allocateReleases(ctx, database, scanID, rootID); err != nil {
 		return plan, err
 	}
 	if err := summarizePlan(ctx, database, scanID, rootID, &plan); err != nil {
@@ -346,6 +350,45 @@ func withholdSuspiciousScopes(ctx context.Context, database StagingDB, scanID, r
 	_, err = database.ExecContext(ctx, `WITH `+vanishedTracksCTE+`, `+suspiciousCTE+`
 		UPDATE scan_observations SET withheld=TRUE
 		WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND organization_scope IN (SELECT organization_scope FROM suspicious)`, scanID, rootID)
+	return err
+}
+
+// allocateReleases 在曲目规划之后、写入之前，对未暂缓的全部候选一次性分配要沿用的 Release：
+//   - 候选的总数是它保留下来的观察数；与既有 Release R 的重叠，是其中已规划沿用的曲目当前属于 R 的条数。
+//   - 重叠严格超过总数一半时，候选倾向 R；严格过半保证每个候选至多倾向一个 Release。
+//   - 多个候选倾向同一个 R 时，重叠多者得；平局时候选键等于 R 当前锚点者（留在原位置的一方）优先，
+//     再平局按候选键升序。
+//   - 获胜候选的全部暂存行写入 planned_release_id；落选或没有倾向的候选留空，写入时新建 Release 与组。
+//
+// 候选键即 CandidateIdentity(rootID, 锚点)，与 releases.candidate_anchor 同一格式；锚点不再用于查找，
+// 只在这里用来打破平局，并在写入时更新为最近一次的位置。
+func allocateReleases(ctx context.Context, database StagingDB, scanID, rootID string) error {
+	_, err := database.ExecContext(ctx, `WITH candidate_rows AS (
+			SELECT o.candidate_key, o.planned_track_id
+			FROM scan_observations o
+			WHERE o.scan_run_id=$1::uuid AND o.root_id=$2::uuid AND o.candidate_key IS NOT NULL AND NOT o.withheld
+		), totals AS (
+			SELECT candidate_key, COUNT(*) AS total FROM candidate_rows GROUP BY candidate_key
+		), candidate_overlaps AS (
+			SELECT c.candidate_key, m.release_id, COUNT(*) AS overlap
+			FROM candidate_rows c
+			JOIN tracks t ON t.id=c.planned_track_id
+			JOIN media m ON m.id=t.medium_id
+			GROUP BY c.candidate_key, m.release_id
+		), preferences AS (
+			SELECT o.candidate_key, o.release_id, o.overlap, COALESCE(r.candidate_anchor=o.candidate_key, FALSE) AS stays
+			FROM candidate_overlaps o
+			JOIN totals tt ON tt.candidate_key=o.candidate_key
+			JOIN releases r ON r.id=o.release_id
+			WHERE o.overlap*2>tt.total
+		), winners AS (
+			SELECT DISTINCT ON (release_id) release_id, candidate_key
+			FROM preferences
+			ORDER BY release_id, overlap DESC, stays DESC, candidate_key ASC
+		)
+		UPDATE scan_observations o SET planned_release_id=w.release_id
+		FROM winners w
+		WHERE o.scan_run_id=$1::uuid AND o.root_id=$2::uuid AND o.candidate_key=w.candidate_key AND NOT o.withheld`, scanID, rootID)
 	return err
 }
 

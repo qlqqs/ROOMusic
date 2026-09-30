@@ -77,16 +77,18 @@ git diff --check
 
 ## 第 4 步：迁移 0014 与 Release 成员关系匹配
 
-- [ ] `backend/migrations/0014_release_anchor_location.sql`：删除 `releases_candidate_anchor_uq`，暂存增加 `planned_release_id`。
-- [ ] catalog：规划增加 Release 分配（design 第 6 节）；`PersistCandidate` 按 `planned_release_id` 复用或新建，复用时更新锚点。
-- [ ] 新增集成测试：
+- [x] `backend/migrations/0014_release_anchor_location.sql`：删除 `releases_candidate_anchor_uq`，暂存增加 `planned_release_id`。
+- [x] catalog：规划增加 Release 分配（design 第 6 节）；`PersistCandidate` 按 `planned_release_id` 复用或新建，复用时更新锚点。
+- [x] 新增集成测试：
   - `TestPostgreSQLAddedEarlierFileKeepsReleaseIdentity`（散落专辑与同目录拆分，最小路径改变）
   - `TestPostgreSQLRemovedSmallestFileKeepsReleaseIdentity`
   - `TestPostgreSQLDirectoryRenameKeepsReleaseIdentity`
   - `TestPostgreSQLMovedFileJoinsTargetRelease`（两个 Release 的 ID 都不变）
   - `TestPostgreSQLSplitReleaseKeepsIdentityForLargerPart`（含平局：留在原位置的一方沿用）
-  - `TestPostgreSQLMinorityOverlapCreatesNewRelease`（2 轨加 3 轨新建）
-- [ ] 第 3 步的矩阵测试补上 Release ID 断言（未变化重扫、改名、移动）。
+  - `TestPostgreSQLMinorityOverlapCreatesNewRelease`（2 轨加 3 轨新建；新旧 Release 同锚点）
+  - `TestPostgreSQLExactlyHalfOverlapIsNotAMajority`（1 轨加 1 轨：恰好一半不算过半）
+  - `TestPostgreSQLTrackPathUniquenessOnlyConstrainsBoundRows`（0013 的约束：路径唯一性只约束仍绑定的行、指纹长度检查）
+- [x] 第 3 步的矩阵测试补上 Release ID 断言（未变化重扫、改名；“移动”由 `TestPostgreSQLMovedFileJoinsTargetRelease` 覆盖）。
 - 提交：`feat(catalog): Release 按曲目成员关系匹配`。
 
 ## 第 5 步：ReleaseGroup 只读接口

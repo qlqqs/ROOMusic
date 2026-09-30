@@ -23,9 +23,9 @@ type Execer interface {
 }
 
 // PersistCandidate 用一个独立短事务把整理后的候选写入 Release 图：Release 与其分组、Medium、Track、
-// 逐字段观察、署名、字段决定与分组证据。Release 按 candidate_anchor 查找并更新；每条 Track 沿用还是新建，
-// 由 PlanStagedRoot 写在暂存行上的规划决定，因此调用前必须已完成规划。成功时返回 Release ID；封面不在本事务内，
-// 由调用方在提交后处理。
+// 逐字段观察、署名、字段决定与分组证据。沿用哪个 Release、每条 Track 沿用还是新建，都由 PlanStagedRoot
+// 写在暂存行上的规划决定，因此调用前必须已完成规划；锚点只是 Release 最近一次的位置，不参与查找。
+// 成功时返回 Release ID；封面不在本事务内，由调用方在提交后处理。
 func PersistCandidate(ctx context.Context, database TxBeginner, scanID, rootID string, candidate OrganizedCandidate) (releaseID string, err error) {
 	tx, err := database.BeginTx(ctx, nil)
 	if err != nil {
@@ -38,23 +38,11 @@ func PersistCandidate(ctx context.Context, database TxBeginner, scanID, rootID s
 		}
 	}()
 
-	plans, err := loadTrackPlans(ctx, tx, scanID, rootID, candidate)
+	plans, plannedReleaseID, err := loadTrackPlans(ctx, tx, scanID, rootID, candidate)
 	if err != nil {
 		return "", err
 	}
-	anchor := CandidateIdentity(rootID, candidate.Anchor)
-	var groupID string
-	err = tx.QueryRowContext(ctx, "SELECT id::text,group_id::text FROM releases WHERE source_root_id=$1::uuid AND candidate_anchor=$2", rootID, anchor).Scan(&releaseID, &groupID)
-	if errors.Is(err, sql.ErrNoRows) {
-		groupID, releaseID = uuid.New(), uuid.New()
-		if _, err = tx.ExecContext(ctx, "INSERT INTO release_groups(id) VALUES($1::uuid)", groupID); err == nil {
-			_, err = tx.ExecContext(ctx, `INSERT INTO releases(id,group_id,title,artist,source_root_id,relative_directory,candidate_anchor,candidate_kind,album_artist,year,source_type,media_type,genre,catalog_number,edition,label,barcode)
-				VALUES($1::uuid,$2::uuid,$3,$4,$5::uuid,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`, releaseID, groupID, candidate.Title, candidate.Artist, rootID, candidate.Anchor.Scope, anchor, string(candidate.Anchor.Kind), candidate.AlbumArtist, releaseYear(candidate), nullableString(candidate.SourceType), nullableString(candidate.MediaType), nullableString(candidate.Genre), nullableString(candidate.CatalogNumber), nullableString(candidate.Edition), nullableString(candidate.Label), nullableString(candidate.Barcode))
-		}
-	} else if err == nil {
-		_, err = tx.ExecContext(ctx, `UPDATE releases SET title=$1,artist=$2,relative_directory=$3,candidate_kind=$4,album_artist=$5,year=$6,source_type=$7,media_type=$8,genre=$9,catalog_number=$10,edition=$11,label=$12,barcode=$13 WHERE id=$14::uuid`, candidate.Title, candidate.Artist, candidate.Anchor.Scope, string(candidate.Anchor.Kind), candidate.AlbumArtist, releaseYear(candidate), nullableString(candidate.SourceType), nullableString(candidate.MediaType), nullableString(candidate.Genre), nullableString(candidate.CatalogNumber), nullableString(candidate.Edition), nullableString(candidate.Label), nullableString(candidate.Barcode), releaseID)
-	}
-	if err != nil {
+	if releaseID, err = persistRelease(ctx, tx, rootID, candidate, plannedReleaseID); err != nil {
 		return "", err
 	}
 
@@ -143,6 +131,31 @@ func PersistCandidate(ctx context.Context, database TxBeginner, scanID, rootID s
 	}
 	committed = true
 	return releaseID, nil
+}
+
+// persistRelease 写入候选的 Release：规划指定沿用 Release 时更新其字段并把锚点记为最近一次的位置，
+// 否则新建 Release 与一个新的 ReleaseGroup（每个新 Release 一个组）。
+func persistRelease(ctx context.Context, tx *sql.Tx, rootID string, candidate OrganizedCandidate, plannedReleaseID string) (string, error) {
+	anchor := CandidateIdentity(rootID, candidate.Anchor)
+	if plannedReleaseID == "" {
+		groupID, releaseID := uuid.New(), uuid.New()
+		if _, err := tx.ExecContext(ctx, "INSERT INTO release_groups(id) VALUES($1::uuid)", groupID); err != nil {
+			return "", err
+		}
+		_, err := tx.ExecContext(ctx, `INSERT INTO releases(id,group_id,title,artist,source_root_id,relative_directory,candidate_anchor,candidate_kind,album_artist,year,source_type,media_type,genre,catalog_number,edition,label,barcode)
+			VALUES($1::uuid,$2::uuid,$3,$4,$5::uuid,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`, releaseID, groupID, candidate.Title, candidate.Artist, rootID, candidate.Anchor.Scope, anchor, string(candidate.Anchor.Kind), candidate.AlbumArtist, releaseYear(candidate), nullableString(candidate.SourceType), nullableString(candidate.MediaType), nullableString(candidate.Genre), nullableString(candidate.CatalogNumber), nullableString(candidate.Edition), nullableString(candidate.Label), nullableString(candidate.Barcode))
+		return releaseID, err
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE releases SET title=$1,artist=$2,relative_directory=$3,candidate_anchor=$4,candidate_kind=$5,album_artist=$6,year=$7,source_type=$8,media_type=$9,genre=$10,catalog_number=$11,edition=$12,label=$13,barcode=$14 WHERE id=$15::uuid`, candidate.Title, candidate.Artist, candidate.Anchor.Scope, anchor, string(candidate.Anchor.Kind), candidate.AlbumArtist, releaseYear(candidate), nullableString(candidate.SourceType), nullableString(candidate.MediaType), nullableString(candidate.Genre), nullableString(candidate.CatalogNumber), nullableString(candidate.Edition), nullableString(candidate.Label), nullableString(candidate.Barcode), plannedReleaseID)
+	if err != nil {
+		return "", err
+	}
+	if changed, err := result.RowsAffected(); err != nil {
+		return "", err
+	} else if changed != 1 {
+		return "", errPlannedReleaseMissing
+	}
+	return plannedReleaseID, nil
 }
 
 // ArtworkObservation 返回提供封面的来源：优先取带内嵌封面的曲目，否则取按碟序排列的第一首曲目

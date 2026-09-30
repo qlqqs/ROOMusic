@@ -67,7 +67,7 @@ func StageObservation(ctx context.Context, database StagingDB, scanID, rootID st
 			source_identity=EXCLUDED.source_identity,fingerprint_path=EXCLUDED.fingerprint_path,source_size=EXCLUDED.source_size,
 			source_modified_at=EXCLUDED.source_modified_at,content_fingerprint=EXCLUDED.content_fingerprint,
 			cue_index_frames=EXCLUDED.cue_index_frames,cue_end_frames=EXCLUDED.cue_end_frames,
-			candidate_key=NULL,matched_track_id=NULL,planned_track_id=NULL,content_changed=FALSE,withheld=FALSE,planned=FALSE,observed_at=NOW()`,
+			candidate_key=NULL,matched_track_id=NULL,planned_track_id=NULL,planned_release_id=NULL,content_changed=FALSE,withheld=FALSE,planned=FALSE,observed_at=NOW()`,
 		scanID, rootID, scope, observation.RelativePath, payload,
 		SourceIdentityForObservation(rootID, observation), nullableString(fingerprintPath), size, modifiedAt,
 		nullableString(observation.ContentFingerprint), nullableCueFrame(observation.CueIndexFrames, observation.CueIndexPresent), nullableCueFrame(observation.CueEndFrames, observation.CueEndPresent))

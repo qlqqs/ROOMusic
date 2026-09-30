@@ -15,6 +15,10 @@ var (
 	errUnplannedObservation = errors.New("staged observation has no identity plan")
 	// errPlannedTrackMissing 表示规划指定沿用的曲目已经不存在。
 	errPlannedTrackMissing = errors.New("planned track no longer exists")
+	// errPlannedReleaseMissing 表示规划指定沿用的 Release 已经不存在。
+	errPlannedReleaseMissing = errors.New("planned release no longer exists")
+	// errInconsistentReleasePlan 表示同一个候选的观察被规划到了不同的 Release。
+	errInconsistentReleasePlan = errors.New("staged observations of one candidate disagree on the planned release")
 )
 
 // trackPlan 是暂存行上一条观察的曲目规划：沿用哪条曲目（空串表示新建），以及要保存的指纹与文件状态。
@@ -25,31 +29,37 @@ type trackPlan struct {
 	ModifiedAt  sql.NullTime
 }
 
-// loadTrackPlans 读取候选中全部观察的规划，键为规范化相对路径。
-func loadTrackPlans(ctx context.Context, tx *sql.Tx, scanID, rootID string, candidate OrganizedCandidate) (map[string]trackPlan, error) {
+// loadTrackPlans 读取候选中全部观察的规划：键为规范化相对路径的曲目规划，以及候选要沿用的 Release
+// （空串表示新建）。候选的观察由规划统一分配，必须指向同一个 Release。
+func loadTrackPlans(ctx context.Context, tx *sql.Tx, scanID, rootID string, candidate OrganizedCandidate) (map[string]trackPlan, string, error) {
 	paths := make([]string, 0, len(candidate.Mediums))
 	for _, tracks := range candidate.Mediums {
 		for _, track := range tracks {
 			paths = append(paths, NormalizedPath(track.Observation.RelativePath))
 		}
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT relative_path, COALESCE(planned_track_id::text,''), content_fingerprint, source_size, source_modified_at
+	rows, err := tx.QueryContext(ctx, `SELECT relative_path, COALESCE(planned_track_id::text,''), content_fingerprint, source_size, source_modified_at, COALESCE(planned_release_id::text,'')
 		FROM scan_observations
 		WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND relative_path=ANY($3::text[]) AND planned`, scanID, rootID, paths)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer rows.Close()
 	plans := make(map[string]trackPlan, len(paths))
+	releaseID := ""
 	for rows.Next() {
-		var path string
+		var path, plannedRelease string
 		var plan trackPlan
-		if err := rows.Scan(&path, &plan.TrackID, &plan.Fingerprint, &plan.Size, &plan.ModifiedAt); err != nil {
-			return nil, err
+		if err := rows.Scan(&path, &plan.TrackID, &plan.Fingerprint, &plan.Size, &plan.ModifiedAt, &plannedRelease); err != nil {
+			return nil, "", err
 		}
+		if len(plans) > 0 && plannedRelease != releaseID {
+			return nil, "", errInconsistentReleasePlan
+		}
+		releaseID = plannedRelease
 		plans[path] = plan
 	}
-	return plans, rows.Err()
+	return plans, releaseID, rows.Err()
 }
 
 // persistTrack 按规划写入一条曲目并返回它的 ID：沿用规划指定的曲目（更新路径、来源身份与全部事实），或新建。
