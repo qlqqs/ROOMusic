@@ -7,6 +7,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
 const scanAdvisoryLockKey int64 = 0x5343414e
@@ -141,7 +144,7 @@ func (application *roomusicApplication) startScan(responseWriter http.ResponseWr
 		writeAPIError(responseWriter, request, 503, "database_unavailable", "无法启动扫描")
 		return
 	}
-	scanID := createIdentifier()
+	scanID := uuid.New()
 	if _, err := transaction.ExecContext(request.Context(), "INSERT INTO scan_runs(id,status,started_at) VALUES($1::uuid,'running',NOW())", scanID); err != nil {
 		_ = transaction.Rollback()
 		_ = execution.close(context.Background())
@@ -174,7 +177,7 @@ func (application *roomusicApplication) scanStatus(responseWriter http.ResponseW
 		return
 	}
 	scanID := request.PathValue("id")
-	if !isValidIdentifier(scanID) {
+	if !uuid.Valid(scanID) {
 		writeAPIError(responseWriter, request, http.StatusBadRequest, "invalid_id", "扫描标识无效")
 		return
 	}
@@ -234,7 +237,7 @@ func (application *roomusicApplication) cancelScan(responseWriter http.ResponseW
 		return
 	}
 	id := request.PathValue("id")
-	if !isValidIdentifier(id) {
+	if !uuid.Valid(id) {
 		writeAPIError(responseWriter, request, http.StatusBadRequest, "invalid_id", "扫描标识无效")
 		return
 	}
@@ -280,7 +283,7 @@ func (application *roomusicApplication) diagnostics(responseWriter http.Response
 		return
 	}
 	scanID := request.PathValue("id")
-	if !isValidIdentifier(scanID) {
+	if !uuid.Valid(scanID) {
 		writeAPIError(responseWriter, request, http.StatusBadRequest, "invalid_id", "扫描标识无效")
 		return
 	}
@@ -308,7 +311,7 @@ func (application *roomusicApplication) diagnostics(responseWriter http.Response
 			return
 		}
 		item := scanDiagnosticDTO{ID: id, Kind: safeDiagnosticKind(kind), Message: safeDiagnosticMessage(kind, message)}
-		if safePath, safe := safeRelativeSourceRef(relativePath); safe {
+		if safePath, safe := catalog.SafeRelativeSourceRef(relativePath); safe {
 			item.Path = &safePath
 		}
 		items = append(items, item)

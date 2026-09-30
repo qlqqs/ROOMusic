@@ -16,6 +16,7 @@ import (
 	"unicode/utf16"
 	"unicode/utf8"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"golang.org/x/text/encoding/japanese"
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/encoding/traditionalchinese"
@@ -46,7 +47,7 @@ type audioObservation struct {
 	Edition                 string
 	Label                   string
 	Barcode                 string
-	Credits                 []creditObservation
+	Credits                 []metadata.Credit
 	RawAtoms                map[string]string
 }
 
@@ -108,7 +109,6 @@ const (
 	maxCueFiles           = 4096
 	maxCueTracks          = 10000
 	maxM4ARawAtoms        = 64
-	maxAudioTextBytes     = 4096
 )
 
 func parseM4A(path string) (audioObservation, error) {
@@ -592,7 +592,7 @@ func parseM4AItem(reader io.ReaderAt, atom m4aAtom, observation *audioObservatio
 			if budgetErr := consumeM4AMetadataBudget(budget, payloadSize); budgetErr != nil {
 				return budgetErr
 			}
-			payload, payloadErr := readM4AAtomPayload(reader, child, maxAudioTextBytes+4)
+			payload, payloadErr := readM4AAtomPayload(reader, child, metadata.MaxTextBytes+4)
 			if payloadErr != nil {
 				return payloadErr
 			}
@@ -730,29 +730,13 @@ func decodeM4AText(value []byte, dataType uint32) string {
 		if !validUTF16Units(units) {
 			return ""
 		}
-		return boundedAudioText(string(utf16.Decode(units)))
+		return metadata.BoundedText(string(utf16.Decode(units)))
 	}
 	value = bytes.Trim(value, "\x00 \t\r\n")
 	if utf8.Valid(value) {
-		return boundedAudioText(string(value))
+		return metadata.BoundedText(string(value))
 	}
 	return ""
-}
-
-func boundedAudioText(value string) string {
-	value = strings.TrimSpace(value)
-	var result strings.Builder
-	for _, character := range value {
-		if unicode.IsControl(character) {
-			continue
-		}
-		width := utf8.RuneLen(character)
-		if width < 0 || result.Len()+width > maxAudioTextBytes {
-			break
-		}
-		result.WriteRune(character)
-	}
-	return strings.TrimSpace(result.String())
 }
 
 func parseYear(value string) int {
@@ -1849,7 +1833,7 @@ func decodeID3Text(frame []byte) string {
 		for _, value := range text {
 			decoded.WriteRune(rune(value))
 		}
-		return boundedAudioText(decoded.String())
+		return metadata.BoundedText(decoded.String())
 	case 1:
 		if len(text) < 2 || (text[0] != 0xff || text[1] != 0xfe) && (text[0] != 0xfe || text[1] != 0xff) {
 			return ""
@@ -1865,7 +1849,7 @@ func decodeID3Text(frame []byte) string {
 		if !utf8.Valid(text) {
 			return ""
 		}
-		return boundedAudioText(string(text))
+		return metadata.BoundedText(string(text))
 	default:
 		return ""
 	}
@@ -1891,14 +1875,14 @@ func decodeID3UTF16(value []byte, littleEndian bool) string {
 	if !validUTF16Units(units) {
 		return ""
 	}
-	return boundedAudioText(string(utf16.Decode(units)))
+	return metadata.BoundedText(string(utf16.Decode(units)))
 }
 func parseNumber(value string) int {
 	returnValue, _ := strconv.Atoi(strings.SplitN(value, "/", 2)[0])
 	return returnValue
 }
 func setAudioTag(observation *audioObservation, key, value string) {
-	value = boundedAudioText(value)
+	value = metadata.BoundedText(value)
 	switch strings.ToUpper(key) {
 	case "TITLE", "TRACKTITLE":
 		observation.Title = value
@@ -1951,12 +1935,12 @@ func addObservationCredits(observation *audioObservation, role, value string) {
 	if observation == nil {
 		return
 	}
-	role = strings.ToLower(normalizeValue(role))
+	role = strings.ToLower(metadata.NormalizeValue(role))
 	if role == "" {
 		return
 	}
 	for _, name := range splitCreditNames(value) {
-		credit := creditObservation{Role: role, Name: name}
+		credit := metadata.Credit{Role: role, Name: name}
 		duplicate := false
 		for _, existing := range observation.Credits {
 			if existing == credit {
@@ -1971,7 +1955,7 @@ func addObservationCredits(observation *audioObservation, role, value string) {
 }
 
 func splitCreditNames(value string) []string {
-	return canonicalArtistNames(value)
+	return metadata.CanonicalArtistNames(value)
 }
 func applyFilenameFallback(path string, observation audioObservation) audioObservation {
 	if observation.InferredFields == nil {
@@ -2003,28 +1987,4 @@ func applyFilenameFallback(path string, observation audioObservation) audioObser
 		observation.InferredFields["disc_number"] = true
 	}
 	return observation
-}
-
-type fieldObservation struct {
-	Name, Value, SourceKind string
-	Inferred                bool
-}
-
-func (observation audioObservation) fieldObservations() []fieldObservation {
-	fields := []fieldObservation{
-		{Name: "title", Value: observation.Title},
-		{Name: "artist", Value: observation.Artist},
-		{Name: "album", Value: observation.Album},
-		{Name: "album_artist", Value: observation.AlbumArtist},
-		{Name: "track_number", Value: strconv.Itoa(observation.TrackNumber)},
-		{Name: "disc_number", Value: strconv.Itoa(observation.DiscNumber)},
-	}
-	for index := range fields {
-		fields[index].Inferred = observation.InferredFields[fields[index].Name]
-		fields[index].SourceKind = observation.SourceKind
-		if fields[index].Inferred {
-			fields[index].SourceKind = "filename_fallback"
-		}
-	}
-	return fields
 }

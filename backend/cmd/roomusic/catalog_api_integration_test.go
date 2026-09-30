@@ -5,6 +5,9 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
 func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
@@ -12,11 +15,11 @@ func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
 	admin := application.createUser(t, "admin")
 	ordinary := application.createUser(t, "user")
 
-	rootID := createIdentifier()
+	rootID := uuid.New()
 	if _, err := application.database.connection.Exec(`INSERT INTO library_roots(id,path,status,revision) VALUES($1::uuid,$2,'active',1)`, rootID, application.allowedRoot); err != nil {
 		t.Fatalf("insert catalog root fixture: %v", err)
 	}
-	scanID := createIdentifier()
+	scanID := uuid.New()
 	if _, err := application.database.connection.Exec(`INSERT INTO scan_runs(id,status,started_at,finished_at) VALUES($1::uuid,'incomplete',NOW(),NOW())`, scanID); err != nil {
 		t.Fatalf("insert scan fixture: %v", err)
 	}
@@ -26,7 +29,7 @@ func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
 	if err := application.database.connection.QueryRow(`SELECT id::text FROM media WHERE release_id=$1::uuid`, releaseID).Scan(&mediumID); err != nil {
 		t.Fatalf("read release medium: %v", err)
 	}
-	trackID := createIdentifier()
+	trackID := uuid.New()
 	if _, err := application.database.connection.Exec(`INSERT INTO tracks(
 		id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,
 		source_kind,source_identity,duration_seconds,codec,bit_depth,sample_rate,channels,bitrate,
@@ -45,7 +48,7 @@ func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
 	}
 	if _, err := application.database.connection.Exec(`INSERT INTO tracks(
 		id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,source_kind,source_identity
-	) VALUES($1::uuid,$2::uuid,2,'缺失轨','曲目艺术家',1,$3::uuid,'CUE Album/missing.flac','missing',NOW()-INTERVAL '1 day','flac_vorbis_comment',$4)`, createIdentifier(), mediumID, rootID, rootID+":physical:v1:missing"); err != nil {
+	) VALUES($1::uuid,$2::uuid,2,'缺失轨','曲目艺术家',1,$3::uuid,'CUE Album/missing.flac','missing',NOW()-INTERVAL '1 day','flac_vorbis_comment',$4)`, uuid.New(), mediumID, rootID, rootID+":physical:v1:missing"); err != nil {
 		t.Fatalf("insert missing track: %v", err)
 	}
 	if _, err := application.database.connection.Exec(`INSERT INTO release_field_decisions(
@@ -64,7 +67,7 @@ func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
 
 	legacyReleaseID := createCatalogReleaseFixture(t, application, rootID, "旧版专辑", "旧版艺术家", "legacy", true)
 	hiddenReleaseID := createCatalogReleaseFixture(t, application, rootID, "空壳专辑", "艺术家", "hidden", false)
-	expectedArtwork := releaseArtworkDTO{ResourceID: "catalog-cover.webp", MIME: "image/webp", Width: 640, Height: 480}
+	expectedArtwork := catalog.ReleaseArtwork{ResourceID: "catalog-cover.webp", MIME: "image/webp", Width: 640, Height: 480}
 	if _, err := application.database.connection.Exec(`INSERT INTO release_artworks(
 		release_id,content_hash,mime_type,width,height,storage_key,source_type
 	) VALUES($1::uuid,$2,$3,$4,$5,$6,'embedded')`, releaseID, strings.Repeat("a", 64), expectedArtwork.MIME, expectedArtwork.Width, expectedArtwork.Height, expectedArtwork.ResourceID); err != nil {
@@ -77,8 +80,8 @@ func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
 		t.Fatalf("list releases: HTTP %d: %s", allResponse.Code, allResponse.Body.String())
 	}
 	var allList struct {
-		Items      []releaseSummaryDTO   `json:"items"`
-		Pagination struct{ Total int64 } `json:"pagination"`
+		Items      []catalog.ReleaseSummary `json:"items"`
+		Pagination struct{ Total int64 }    `json:"pagination"`
 	}
 	if err := json.Unmarshal(allResponse.Body.Bytes(), &allList); err != nil {
 		t.Fatalf("decode release list: %v", err)
@@ -89,7 +92,7 @@ func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
 	if strings.Contains(allResponse.Body.String(), hiddenReleaseID) {
 		t.Fatal("missing-only release was visible in the ordinary list")
 	}
-	var artworkSummary, noArtworkSummary *releaseSummaryDTO
+	var artworkSummary, noArtworkSummary *catalog.ReleaseSummary
 	for index := range allList.Items {
 		switch allList.Items[index].ID {
 		case releaseID:
@@ -130,8 +133,8 @@ func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
 		t.Fatalf("search releases: HTTP %d: %s", searchResponse.Code, searchResponse.Body.String())
 	}
 	var searchList struct {
-		Items      []releaseSummaryDTO   `json:"items"`
-		Pagination struct{ Total int64 } `json:"pagination"`
+		Items      []catalog.ReleaseSummary `json:"items"`
+		Pagination struct{ Total int64 }    `json:"pagination"`
 	}
 	if err := json.Unmarshal(searchResponse.Body.Bytes(), &searchList); err != nil || searchList.Pagination.Total != 1 || len(searchList.Items) != 1 || searchList.Items[0].ID != releaseID {
 		t.Fatalf("search/pagination projection mismatch: list=%+v err=%v", searchList, err)
@@ -142,7 +145,7 @@ func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
 		t.Fatalf("list attention releases: HTTP %d: %s", attentionResponse.Code, attentionResponse.Body.String())
 	}
 	var attentionList struct {
-		Items []releaseSummaryDTO `json:"items"`
+		Items []catalog.ReleaseSummary `json:"items"`
 	}
 	if err := json.Unmarshal(attentionResponse.Body.Bytes(), &attentionList); err != nil {
 		t.Fatalf("decode attention list: %v", err)
@@ -159,7 +162,7 @@ func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
 	if detailResponse.Code != http.StatusOK {
 		t.Fatalf("release detail: HTTP %d: %s", detailResponse.Code, detailResponse.Body.String())
 	}
-	var detail releaseDetailDTO
+	var detail catalog.ReleaseDetail
 	if err := json.Unmarshal(detailResponse.Body.Bytes(), &detail); err != nil {
 		t.Fatalf("decode release detail: %v", err)
 	}
@@ -189,7 +192,7 @@ func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
 	if legacyDetailResponse.Code != http.StatusOK {
 		t.Fatalf("release detail without artwork: HTTP %d: %s", legacyDetailResponse.Code, legacyDetailResponse.Body.String())
 	}
-	var legacyDetail releaseDetailDTO
+	var legacyDetail catalog.ReleaseDetail
 	if err := json.Unmarshal(legacyDetailResponse.Body.Bytes(), &legacyDetail); err != nil || legacyDetail.Artwork != nil {
 		t.Fatalf("detail without artwork mismatch: detail=%+v err=%v", legacyDetail, err)
 	}
@@ -205,7 +208,7 @@ func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
 	if evidenceResponse.Code != http.StatusOK {
 		t.Fatalf("administrator evidence: HTTP %d: %s", evidenceResponse.Code, evidenceResponse.Body.String())
 	}
-	var evidence releaseEvidenceResponseDTO
+	var evidence catalog.ReleaseEvidence
 	if err := json.Unmarshal(evidenceResponse.Body.Bytes(), &evidence); err != nil {
 		t.Fatalf("decode evidence response: %v", err)
 	}
@@ -219,7 +222,7 @@ func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
 	if legacyEvidenceResponse.Code != http.StatusOK {
 		t.Fatalf("legacy evidence response: HTTP %d: %s", legacyEvidenceResponse.Code, legacyEvidenceResponse.Body.String())
 	}
-	var legacyEvidence releaseEvidenceResponseDTO
+	var legacyEvidence catalog.ReleaseEvidence
 	if err := json.Unmarshal(legacyEvidenceResponse.Body.Bytes(), &legacyEvidence); err != nil || len(legacyEvidence.Fields) != 0 || legacyEvidence.Grouping != nil {
 		t.Fatalf("legacy evidence did not return a recoverable empty state: evidence=%+v err=%v", legacyEvidence, err)
 	}
@@ -269,7 +272,7 @@ func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
 
 func createCatalogReleaseFixture(t *testing.T, application *integrationTestApplication, rootID, title, artist, anchorSuffix string, present bool) string {
 	t.Helper()
-	groupID, releaseID, mediumID := createIdentifier(), createIdentifier(), createIdentifier()
+	groupID, releaseID, mediumID := uuid.New(), uuid.New(), uuid.New()
 	if _, err := application.database.connection.Exec(`INSERT INTO release_groups(id) VALUES($1::uuid)`, groupID); err != nil {
 		t.Fatalf("insert release group fixture: %v", err)
 	}
@@ -285,10 +288,10 @@ func createCatalogReleaseFixture(t *testing.T, application *integrationTestAppli
 		if title == "CUE 专辑" {
 			return releaseID
 		}
-		if _, err := application.database.connection.Exec(`INSERT INTO tracks(id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,source_kind,source_identity) VALUES($1::uuid,$2::uuid,1,'旧版轨',$3,1,$4::uuid,$5,'present',NOW(),'physical',$6)`, createIdentifier(), mediumID, artist, rootID, anchorSuffix+"/track.flac", rootID+":physical:v1:"+anchorSuffix); err != nil {
+		if _, err := application.database.connection.Exec(`INSERT INTO tracks(id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,source_kind,source_identity) VALUES($1::uuid,$2::uuid,1,'旧版轨',$3,1,$4::uuid,$5,'present',NOW(),'physical',$6)`, uuid.New(), mediumID, artist, rootID, anchorSuffix+"/track.flac", rootID+":physical:v1:"+anchorSuffix); err != nil {
 			t.Fatalf("insert present legacy track: %v", err)
 		}
-	} else if _, err := application.database.connection.Exec(`INSERT INTO tracks(id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,source_kind,source_identity) VALUES($1::uuid,$2::uuid,1,'旧轨',$3,1,$4::uuid,$5,'missing',NOW(),'physical',$6)`, createIdentifier(), mediumID, artist, rootID, anchorSuffix+"/track.flac", rootID+":physical:v1:"+anchorSuffix); err != nil {
+	} else if _, err := application.database.connection.Exec(`INSERT INTO tracks(id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,source_kind,source_identity) VALUES($1::uuid,$2::uuid,1,'旧轨',$3,1,$4::uuid,$5,'missing',NOW(),'physical',$6)`, uuid.New(), mediumID, artist, rootID, anchorSuffix+"/track.flac", rootID+":physical:v1:"+anchorSuffix); err != nil {
 		t.Fatalf("insert missing-only track: %v", err)
 	}
 	return releaseID

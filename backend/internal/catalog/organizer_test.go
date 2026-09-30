@@ -1,40 +1,37 @@
-package main
+package catalog
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 )
 
 func TestOrganizeLooseAndUnknown(t *testing.T) {
-	got := organizeObservations([]sourceObservation{{RelativePath: "a.flac", Album: "Album", TrackNumber: 1}, {RelativePath: "b.flac", Album: "Album", TrackNumber: 2}, {RelativePath: "c.flac", Title: "x"}})
+	got := OrganizeObservations([]SourceObservation{{RelativePath: "a.flac", Album: "Album", TrackNumber: 1}, {RelativePath: "b.flac", Album: "Album", TrackNumber: 2}, {RelativePath: "c.flac", Title: "x"}})
 	if len(got) != 2 {
 		t.Fatalf("candidates=%d", len(got))
 	}
-	if got[0].Anchor.Kind != candidateLooseAlbum && got[1].Anchor.Kind != candidateLooseAlbum {
+	if got[0].Anchor.Kind != CandidateLooseAlbum && got[1].Anchor.Kind != CandidateLooseAlbum {
 		t.Fatalf("missing loose album candidate: %#v", got)
 	}
 }
 
 func TestOrganizeMajorityDeterministic(t *testing.T) {
-	a := []sourceObservation{{RelativePath: "z.flac", Album: "Same", AlbumArtist: "B"}, {RelativePath: "a.flac", Album: "Same", AlbumArtist: "A"}, {RelativePath: "m.flac", Album: "Other", AlbumArtist: "A"}}
-	b := []sourceObservation{a[2], a[0], a[1]}
-	x, y := organizeObservations(a), organizeObservations(b)
+	a := []SourceObservation{{RelativePath: "z.flac", Album: "Same", AlbumArtist: "B"}, {RelativePath: "a.flac", Album: "Same", AlbumArtist: "A"}, {RelativePath: "m.flac", Album: "Other", AlbumArtist: "A"}}
+	b := []SourceObservation{a[2], a[0], a[1]}
+	x, y := OrganizeObservations(a), OrganizeObservations(b)
 	if len(x) != len(y) || x[0].Title != y[0].Title || x[0].Artist != y[0].Artist {
 		t.Fatalf("order dependent: %#v %#v", x, y)
 	}
 }
 
 func TestOrganizeStrictMultidisc(t *testing.T) {
-	obs := []sourceObservation{{RelativePath: "Disc 1/a.flac", Directory: "", Album: "Box", DiscNumber: 1, TrackNumber: 1}, {RelativePath: "CD2/b.flac", Album: "Box", DiscNumber: 2, TrackNumber: 1}}
-	got := organizeObservations(obs)
+	obs := []SourceObservation{{RelativePath: "Disc 1/a.flac", Directory: "", Album: "Box", DiscNumber: 1, TrackNumber: 1}, {RelativePath: "CD2/b.flac", Album: "Box", DiscNumber: 2, TrackNumber: 1}}
+	got := OrganizeObservations(obs)
 	if len(got) != 1 {
 		t.Fatalf("got %d candidates", len(got))
 	}
-	if got[0].Anchor.Kind != candidateMultiDisc {
+	if got[0].Anchor.Kind != CandidateMultiDisc {
 		t.Fatalf("kind=%s", got[0].Anchor.Kind)
 	}
 	if len(got[0].Mediums) != 2 {
@@ -44,11 +41,11 @@ func TestOrganizeStrictMultidisc(t *testing.T) {
 
 func TestOrganizeStrictMultidiscUsesPhysicalDiscFolderEvidence(t *testing.T) {
 	parent := "Artist - Album (2024) [CAT-1001]"
-	got := organizeObservations([]sourceObservation{
+	got := OrganizeObservations([]SourceObservation{
 		{RelativePath: parent + "/CD1/01.flac", Directory: parent + "/CD1", Album: "Album", Artist: "Artist", DiscNumber: 1, TrackNumber: 1},
 		{RelativePath: parent + "/CD2/01.flac", Directory: parent + "/CD2", Album: "Album", Artist: "Artist", DiscNumber: 2, TrackNumber: 1},
 	})
-	if len(got) != 1 || got[0].Anchor.Kind != candidateMultiDisc {
+	if len(got) != 1 || got[0].Anchor.Kind != CandidateMultiDisc {
 		t.Fatalf("unexpected strict multi-disc candidate: %#v", got)
 	}
 	if got[0].CatalogNumber != "" {
@@ -62,11 +59,11 @@ func TestOrganizeStrictMultidiscUsesPhysicalDiscFolderEvidence(t *testing.T) {
 }
 
 func TestOrganizeStrictMultidiscWithoutAlbumTagUsesParentFolder(t *testing.T) {
-	got := organizeObservations([]sourceObservation{
+	got := OrganizeObservations([]SourceObservation{
 		{RelativePath: "Box/Disc 1/a.flac", Directory: "Box/Disc 1", Album: "Disc 1", InferredFields: map[string]bool{"album": true, "disc_number": true}, DiscNumber: 1},
 		{RelativePath: "Box/CD2/b.flac", Directory: "Box/CD2", Album: "CD2", InferredFields: map[string]bool{"album": true, "disc_number": true}, DiscNumber: 1},
 	})
-	if len(got) != 1 || got[0].Anchor.Kind != candidateMultiDisc || got[0].Title != "Box" {
+	if len(got) != 1 || got[0].Anchor.Kind != CandidateMultiDisc || got[0].Title != "Box" {
 		t.Fatalf("strict multi-disc fallback = %#v", got)
 	}
 	if got[0].Decisions[0].Source != "folder_fallback" || got[0].Decisions[0].Confidence != "low" {
@@ -78,7 +75,7 @@ func TestOrganizeStrictMultidiscWithoutAlbumTagUsesParentFolder(t *testing.T) {
 }
 
 func TestOrganizeSameDirectoryConflictUsesMajorityOrStableSplit(t *testing.T) {
-	majority := organizeObservations([]sourceObservation{
+	majority := OrganizeObservations([]SourceObservation{
 		{RelativePath: "album/01.flac", Directory: "album", Album: "Winner", AlbumArtist: "Artist"},
 		{RelativePath: "album/02.flac", Directory: "album", Album: "Winner", AlbumArtist: "Artist"},
 		{RelativePath: "album/03.flac", Directory: "album", Album: "Other", AlbumArtist: "Artist"},
@@ -96,17 +93,17 @@ func TestOrganizeSameDirectoryConflictUsesMajorityOrStableSplit(t *testing.T) {
 		t.Fatalf("field attention was missing or duplicated as grouping attention: %#v", majority[0])
 	}
 
-	tie := []sourceObservation{
+	tie := []SourceObservation{
 		{RelativePath: "album/02.flac", Directory: "album", Album: "Beta", AlbumArtist: "B"},
 		{RelativePath: "album/01.flac", Directory: "album", Album: "Alpha", AlbumArtist: "A"},
 	}
-	got := organizeObservations(tie)
-	reversed := organizeObservations([]sourceObservation{tie[1], tie[0]})
+	got := OrganizeObservations(tie)
+	reversed := OrganizeObservations([]SourceObservation{tie[1], tie[0]})
 	if len(got) != 2 || !reflect.DeepEqual(got, reversed) {
 		t.Fatalf("tie did not produce stable split: %#v %#v", got, reversed)
 	}
 	for _, candidate := range got {
-		if candidate.Anchor.Kind != candidateSameDirSplit || candidate.Anchor.Partition == "" {
+		if candidate.Anchor.Kind != CandidateSameDirSplit || candidate.Anchor.Partition == "" {
 			t.Fatalf("unexpected split candidate: %#v", candidate.Anchor)
 		}
 		if !reflect.DeepEqual(candidate.Attention, []string{"same_directory_conflict"}) {
@@ -116,7 +113,7 @@ func TestOrganizeSameDirectoryConflictUsesMajorityOrStableSplit(t *testing.T) {
 }
 
 func TestOrganizeNonContiguousDiscDirectoriesStayLeafCandidates(t *testing.T) {
-	got := organizeObservations([]sourceObservation{
+	got := OrganizeObservations([]SourceObservation{
 		{RelativePath: "Box/Disc 1/a.flac", Directory: "Box/Disc 1", Album: "Set", DiscNumber: 1},
 		{RelativePath: "Box/Disc 3/b.flac", Directory: "Box/Disc 3", Album: "Set", DiscNumber: 3},
 	})
@@ -124,14 +121,14 @@ func TestOrganizeNonContiguousDiscDirectoriesStayLeafCandidates(t *testing.T) {
 		t.Fatalf("non-contiguous discs merged: %#v", got)
 	}
 	for _, candidate := range got {
-		if candidate.Anchor.Kind != candidateBoxLeaf {
+		if candidate.Anchor.Kind != CandidateBoxLeaf {
 			t.Fatalf("candidate kind = %s, want box leaf", candidate.Anchor.Kind)
 		}
 	}
 }
 
 func TestOrganizeRootUnknownAndCueIdentityAreExplicit(t *testing.T) {
-	unknown := organizeObservations([]sourceObservation{
+	unknown := OrganizeObservations([]SourceObservation{
 		{RelativePath: "one.flac", Title: "One", Artist: "Artist"},
 		{RelativePath: "two.flac", Title: "Two", Artist: "Artist"},
 	})
@@ -139,37 +136,29 @@ func TestOrganizeRootUnknownAndCueIdentityAreExplicit(t *testing.T) {
 		t.Fatalf("root unknown files were merged: %#v", unknown)
 	}
 
-	physical := sourceObservation{RelativePath: "disc.wav", SourceKind: "wav"}
-	cueA := sourceObservation{RelativePath: "album.cue#track-1@disc.wav", SourceKind: "cue_virtual", CueSheetPath: "album.cue", CueParentRelativePath: "disc.wav", TrackNumber: 1, CueIndexFrames: 0, CueIndexPresent: true}
+	physical := SourceObservation{RelativePath: "disc.wav", SourceKind: "wav"}
+	cueA := SourceObservation{RelativePath: "album.cue#track-1@disc.wav", SourceKind: "cue_virtual", CueSheetPath: "album.cue", CueParentRelativePath: "disc.wav", TrackNumber: 1, CueIndexFrames: 0, CueIndexPresent: true}
 	cueB := cueA
 	cueB.CueIndexFrames = 75
-	if sourceIdentityForObservation("root", physical) == sourceIdentityForObservation("root", cueA) || sourceIdentityForObservation("root", cueA) == sourceIdentityForObservation("root", cueB) {
+	if SourceIdentityForObservation("root", physical) == SourceIdentityForObservation("root", cueA) || SourceIdentityForObservation("root", cueA) == SourceIdentityForObservation("root", cueB) {
 		t.Fatal("physical and CUE virtual source identities collided")
 	}
 }
 
-func TestObservationFieldSourcesDistinguishFallbacks(t *testing.T) {
-	observation := audioObservation{InferredFields: map[string]bool{"title": true, "artist": true, "album": true}}
-	sources := observationFieldSources(observation)
-	if sources["title"] != "filename_fallback" || sources["artist"] != "display_fallback" || sources["album"] != "folder_fallback" {
-		t.Fatalf("unexpected fallback sources: %#v", sources)
-	}
-}
-
 func TestOrganizeTagAlbumOutranksFolderFallback(t *testing.T) {
-	observations := []sourceObservation{
+	observations := []SourceObservation{
 		{RelativePath: "dir/one.flac", Directory: "dir", Album: "Tagged", InferredFields: map[string]bool{}},
 		{RelativePath: "dir/two.flac", Directory: "dir", Album: "dir", InferredFields: map[string]bool{"album": true}, FieldSources: map[string]string{"album": "folder_fallback"}},
 		{RelativePath: "dir/three.flac", Directory: "dir", Album: "dir", InferredFields: map[string]bool{"album": true}, FieldSources: map[string]string{"album": "folder_fallback"}},
 	}
-	got := organizeObservations(observations)
+	got := OrganizeObservations(observations)
 	if len(got) != 1 || got[0].Title != "Tagged" {
 		t.Fatalf("tag album did not outrank fallback: %#v", got)
 	}
 }
 
 func TestOrganizeAlbumArtistKeepsAuthoritativeProvenance(t *testing.T) {
-	got := organizeObservations([]sourceObservation{{RelativePath: "album/one.flac", Directory: "album", Album: "Release", AlbumArtist: "Album Artist", Artist: "未知艺术家", InferredFields: map[string]bool{"artist": true}, FieldSources: map[string]string{"artist": "display_fallback"}}})
+	got := OrganizeObservations([]SourceObservation{{RelativePath: "album/one.flac", Directory: "album", Album: "Release", AlbumArtist: "Album Artist", Artist: "未知艺术家", InferredFields: map[string]bool{"artist": true}, FieldSources: map[string]string{"artist": "display_fallback"}}})
 	if len(got) != 1 || got[0].Artist != "Album Artist" || got[0].AlbumArtist != "Album Artist" {
 		t.Fatalf("album artist was not selected: %#v", got)
 	}
@@ -181,12 +170,12 @@ func TestOrganizeAlbumArtistKeepsAuthoritativeProvenance(t *testing.T) {
 }
 
 func TestOrganizeMissingAlbumArtistRemainsCompatibleWithKnownRelease(t *testing.T) {
-	observations := []sourceObservation{
+	observations := []SourceObservation{
 		{RelativePath: "album/01.flac", Directory: "album", Album: "Release", AlbumArtist: "Album Artist", Artist: "Guest One"},
 		{RelativePath: "album/02.flac", Directory: "album", Album: "Release", Artist: "Track Artist"},
 		{RelativePath: "album/03.flac", Directory: "album", Album: "Release", Artist: "Track Artist"},
 	}
-	got := organizeObservations(observations)
+	got := OrganizeObservations(observations)
 	if len(got) != 1 {
 		t.Fatalf("missing album artist split a compatible release: %#v", got)
 	}
@@ -194,51 +183,51 @@ func TestOrganizeMissingAlbumArtistRemainsCompatibleWithKnownRelease(t *testing.
 		t.Fatalf("authoritative album artist did not win release credit: %#v", got[0])
 	}
 
-	rootObservations := []sourceObservation{
+	rootObservations := []SourceObservation{
 		{RelativePath: "01.flac", Album: "Release", AlbumArtist: "Album Artist", Artist: "Guest One"},
 		{RelativePath: "02.flac", Album: "Release", Artist: "Track Artist"},
 	}
-	rootGot := organizeObservations(rootObservations)
+	rootGot := OrganizeObservations(rootObservations)
 	if len(rootGot) != 1 || rootGot[0].AlbumArtist != "Album Artist" || rootGot[0].Artist != "Album Artist" {
 		t.Fatalf("root album observations were not reconciled: %#v", rootGot)
 	}
-	if observationOrganizationScope(rootObservations[0]) != observationOrganizationScope(rootObservations[1]) {
+	if OrganizationScope(rootObservations[0]) != OrganizationScope(rootObservations[1]) {
 		t.Fatal("root staging separated a missing album artist before organizer reconciliation")
 	}
 }
 
 func TestResolveCuePhysicalCoexistenceUsesExplicitParent(t *testing.T) {
-	image := sourceObservation{RelativePath: "album/image.flac", Directory: "album", SourceKind: "physical"}
-	virtual := sourceObservation{RelativePath: "album/disc.cue#track-1@image.flac", Directory: "album", SourceKind: "cue_virtual", CueParentRelativePath: "album/image.flac"}
-	if got := resolveCuePhysicalCoexistence([]sourceObservation{image, virtual}); len(got) != 1 || isCueObservation(got[0]) {
+	image := SourceObservation{RelativePath: "album/image.flac", Directory: "album", SourceKind: "physical"}
+	virtual := SourceObservation{RelativePath: "album/disc.cue#track-1@image.flac", Directory: "album", SourceKind: "cue_virtual", CueParentRelativePath: "album/image.flac"}
+	if got := resolveCuePhysicalCoexistence([]SourceObservation{image, virtual}); len(got) != 1 || isCueObservation(got[0]) {
 		t.Fatalf("single virtual track did not retain its physical parent: %#v", got)
 	}
 
-	unrelated := sourceObservation{RelativePath: "album/unrelated.flac", Directory: "album", SourceKind: "physical"}
-	got := resolveCuePhysicalCoexistence([]sourceObservation{image, virtual, unrelated})
+	unrelated := SourceObservation{RelativePath: "album/unrelated.flac", Directory: "album", SourceKind: "physical"}
+	got := resolveCuePhysicalCoexistence([]SourceObservation{image, virtual, unrelated})
 	if len(got) != 2 || isCueObservation(got[0]) || isCueObservation(got[1]) {
 		t.Fatalf("unrelated physical source changed parent decision: %#v", got)
 	}
 
 	secondVirtual := virtual
 	secondVirtual.RelativePath = "album/disc.cue#track-2@image.flac"
-	got = resolveCuePhysicalCoexistence([]sourceObservation{image, virtual, secondVirtual, unrelated})
+	got = resolveCuePhysicalCoexistence([]SourceObservation{image, virtual, secondVirtual, unrelated})
 	if len(got) != 3 || !isCueObservation(got[0]) || !isCueObservation(got[1]) || got[2].RelativePath != unrelated.RelativePath {
 		t.Fatalf("multi-track CUE did not independently hide only its parent: %#v", got)
 	}
 
-	secondParent := sourceObservation{RelativePath: "album/second.flac", Directory: "album", SourceKind: "physical"}
-	secondParentVirtual := sourceObservation{RelativePath: "album/disc.cue#track-3@second.flac", Directory: "album", SourceKind: "cue_virtual", CueParentRelativePath: "album/second.flac"}
-	got = resolveCuePhysicalCoexistence([]sourceObservation{image, virtual, secondVirtual, secondParent, secondParentVirtual})
+	secondParent := SourceObservation{RelativePath: "album/second.flac", Directory: "album", SourceKind: "physical"}
+	secondParentVirtual := SourceObservation{RelativePath: "album/disc.cue#track-3@second.flac", Directory: "album", SourceKind: "cue_virtual", CueParentRelativePath: "album/second.flac"}
+	got = resolveCuePhysicalCoexistence([]SourceObservation{image, virtual, secondVirtual, secondParent, secondParentVirtual})
 	if len(got) != 3 || !isCueObservation(got[0]) || !isCueObservation(got[1]) || got[2].RelativePath != secondParent.RelativePath {
 		t.Fatalf("per-parent CUE decisions interfered: %#v", got)
 	}
 }
 
 func TestSingleCueTrackEnrichesInferredPhysicalMetadata(t *testing.T) {
-	physical := sourceObservation{RelativePath: "album/image.flac", Directory: "album", Title: "image", Album: "album", Artist: "未知艺术家", SourceKind: "physical", InferredFields: map[string]bool{"title": true, "album": true, "artist": true}, FieldSources: map[string]string{"title": "filename_fallback", "album": "folder_fallback", "artist": "display_fallback"}}
-	virtual := sourceObservation{RelativePath: "album/disc.cue#track-1", Directory: "album", Title: "Cue Title", Album: "Cue Album", AlbumArtist: "Cue Artist", Artist: "Cue Artist", SourceKind: "cue_virtual", CueParentRelativePath: "album/image.flac", FieldSources: map[string]string{"title": "cue_track", "album": "cue_sheet", "album_artist": "cue_sheet", "artist": "cue_track"}}
-	got := resolveCueCandidateGroups([]sourceObservation{physical, virtual})
+	physical := SourceObservation{RelativePath: "album/image.flac", Directory: "album", Title: "image", Album: "album", Artist: "未知艺术家", SourceKind: "physical", InferredFields: map[string]bool{"title": true, "album": true, "artist": true}, FieldSources: map[string]string{"title": "filename_fallback", "album": "folder_fallback", "artist": "display_fallback"}}
+	virtual := SourceObservation{RelativePath: "album/disc.cue#track-1", Directory: "album", Title: "Cue Title", Album: "Cue Album", AlbumArtist: "Cue Artist", Artist: "Cue Artist", SourceKind: "cue_virtual", CueParentRelativePath: "album/image.flac", FieldSources: map[string]string{"title": "cue_track", "album": "cue_sheet", "album_artist": "cue_sheet", "artist": "cue_track"}}
+	got := resolveCueCandidateGroups([]SourceObservation{physical, virtual})
 	if len(got) != 1 || isCueObservation(got[0]) || got[0].Title != "Cue Title" || got[0].Album != "Cue Album" || got[0].AlbumArtist != "Cue Artist" || got[0].Artist != "Cue Artist" {
 		t.Fatalf("single CUE evidence did not enrich physical track: %#v", got)
 	}
@@ -250,7 +239,7 @@ func TestSingleCueTrackEnrichesInferredPhysicalMetadata(t *testing.T) {
 }
 
 func TestCueCandidateIncludesExplicitParentOutsideSheetDirectory(t *testing.T) {
-	physical := sourceObservation{
+	physical := SourceObservation{
 		RelativePath:   "media/image.flac",
 		Directory:      "media",
 		Title:          "image",
@@ -260,7 +249,7 @@ func TestCueCandidateIncludesExplicitParentOutsideSheetDirectory(t *testing.T) {
 		InferredFields: map[string]bool{"title": true, "album": true, "artist": true},
 		FieldSources:   map[string]string{"title": "filename_fallback", "album": "folder_fallback", "artist": "display_fallback"},
 	}
-	virtual := sourceObservation{
+	virtual := SourceObservation{
 		RelativePath:          "sheets/album.cue#track-1@../media/image.flac",
 		Directory:             "sheets",
 		Title:                 "CUE Track",
@@ -273,7 +262,7 @@ func TestCueCandidateIncludesExplicitParentOutsideSheetDirectory(t *testing.T) {
 		FieldSources:          map[string]string{"title": "cue_track", "album": "cue_sheet", "album_artist": "cue_sheet", "artist": "cue_track"},
 	}
 
-	got := resolveCueCandidateGroups([]sourceObservation{physical, virtual})
+	got := resolveCueCandidateGroups([]SourceObservation{physical, virtual})
 	if len(got) != 1 || isCueObservation(got[0]) || got[0].RelativePath != physical.RelativePath {
 		t.Fatalf("cross-directory CUE parent was excluded from its candidate: %#v", got)
 	}
@@ -283,8 +272,8 @@ func TestCueCandidateIncludesExplicitParentOutsideSheetDirectory(t *testing.T) {
 }
 
 func TestSingleCueTrackRetainsCueFactsOnPhysicalIdentity(t *testing.T) {
-	physical := sourceObservation{RelativePath: "album/01.flac", Directory: "album", SourceKind: "flac"}
-	virtual := sourceObservation{
+	physical := SourceObservation{RelativePath: "album/01.flac", Directory: "album", SourceKind: "flac"}
+	virtual := SourceObservation{
 		RelativePath:          "album/disc.cue#track-1",
 		Directory:             "album",
 		SourceKind:            "cue_virtual",
@@ -297,7 +286,7 @@ func TestSingleCueTrackRetainsCueFactsOnPhysicalIdentity(t *testing.T) {
 		CueEndPresent:         true,
 		CueISRC:               "TEST00000001",
 	}
-	got := resolveCueCandidateGroups([]sourceObservation{physical, virtual})
+	got := resolveCueCandidateGroups([]SourceObservation{physical, virtual})
 	if len(got) != 1 || isCueObservation(got[0]) {
 		t.Fatalf("single-file physical identity was not retained: %#v", got)
 	}
@@ -306,66 +295,8 @@ func TestSingleCueTrackRetainsCueFactsOnPhysicalIdentity(t *testing.T) {
 	}
 }
 
-func TestArtworkDimensionsRejectMalformedAndReadWebP(t *testing.T) {
-	if width, height := artworkDimensions([]byte{0xff, 0xd8, 0xff}, "image/jpeg"); width != 0 || height != 0 {
-		t.Fatalf("malformed JPEG dimensions = %dx%d", width, height)
-	}
-	webp := make([]byte, 30)
-	copy(webp[:4], "RIFF")
-	copy(webp[8:12], "WEBP")
-	copy(webp[12:16], "VP8X")
-	webp[24], webp[27] = 1, 2 // WebP 将宽高保存为实际值减一。
-	if width, height := artworkDimensions(webp, "image/webp"); width != 2 || height != 3 {
-		t.Fatalf("WebP dimensions = %dx%d, want 2x3", width, height)
-	}
-}
-
-func TestFolderArtworkDoesNotFollowSymlink(t *testing.T) {
-	root := t.TempDir()
-	outside := filepath.Join(t.TempDir(), "outside.png")
-	if err := os.WriteFile(outside, minimalPNGArtwork(), 0o644); err != nil {
-		t.Fatalf("write outside artwork: %v", err)
-	}
-	if err := os.Symlink(outside, filepath.Join(root, "cover.png")); err != nil {
-		t.Fatalf("create artwork symlink: %v", err)
-	}
-	if data, _, err := discoverFolderArtwork(root); err == nil || len(data) != 0 {
-		t.Fatal("folder artwork symlink was not rejected")
-	}
-}
-
-func TestFolderArtworkRejectsInvalidNamedCandidate(t *testing.T) {
-	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "cover.png"), []byte("not an image"), 0o644); err != nil {
-		t.Fatalf("write invalid artwork: %v", err)
-	}
-	if data, _, err := discoverFolderArtwork(root); err == nil || len(data) != 0 {
-		t.Fatal("invalid named artwork was treated as absent")
-	}
-}
-
-func TestFolderArtworkReadFailureIsReported(t *testing.T) {
-	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "cover.png"), minimalPNGArtwork(), 0o644); err != nil {
-		t.Fatalf("write folder artwork: %v", err)
-	}
-	_, _, err := discoverFolderArtworkWithReader(root, func(string) ([]byte, error) {
-		return nil, fmt.Errorf("read denied")
-	})
-	if err == nil {
-		t.Fatal("folder artwork read failure was treated as missing artwork")
-	}
-}
-
-func TestArtworkPersistenceFailureKeepsDiagnosticCategory(t *testing.T) {
-	kind, message := candidatePersistenceDiagnostic(errArtworkBinding)
-	if kind != "artwork_failure" || message != "封面处理失败" {
-		t.Fatalf("artwork diagnostic = %q/%q", kind, message)
-	}
-}
-
 func TestLegacyCueSourceIdentityCanBeReusedAfterUpgrade(t *testing.T) {
-	observation := sourceObservation{
+	observation := SourceObservation{
 		SourceKind:            "cue_virtual",
 		TrackNumber:           2,
 		CueSheetPath:          "Album/album.cue",
@@ -380,27 +311,27 @@ func TestLegacyCueSourceIdentityCanBeReusedAfterUpgrade(t *testing.T) {
 }
 
 func TestOrganizerEvidenceListsAreBounded(t *testing.T) {
-	observations := make([]sourceObservation, 0, maxGroupingEvidenceRefs+5)
-	for index := 0; index < maxGroupingEvidenceRefs+5; index++ {
-		observations = append(observations, sourceObservation{RelativePath: fmt.Sprintf("album/%03d.flac", index), Directory: "album", Album: "Release", Artist: fmt.Sprintf("Artist %03d", index)})
+	observations := make([]SourceObservation, 0, MaxGroupingEvidenceRefs+5)
+	for index := 0; index < MaxGroupingEvidenceRefs+5; index++ {
+		observations = append(observations, SourceObservation{RelativePath: fmt.Sprintf("album/%03d.flac", index), Directory: "album", Album: "Release", Artist: fmt.Sprintf("Artist %03d", index)})
 	}
-	decision := chooseValue(observations, "artist", func(observation sourceObservation) string { return observation.Artist })
+	decision := chooseValue(observations, "artist", func(observation SourceObservation) string { return observation.Artist })
 	if len(decision.Candidates) != maxDecisionCandidates {
 		t.Fatalf("decision candidates = %d, want bound %d", len(decision.Candidates), maxDecisionCandidates)
 	}
-	candidates := organizeObservations(observations)
-	if len(candidates) != 1 || len(candidates[0].GroupingRefs) != maxGroupingEvidenceRefs {
+	candidates := OrganizeObservations(observations)
+	if len(candidates) != 1 || len(candidates[0].GroupingRefs) != MaxGroupingEvidenceRefs {
 		t.Fatalf("grouping refs were not bounded: %#v", candidates)
 	}
 }
 
 func TestOrganizerAssignsStableFallbackTrackPositions(t *testing.T) {
-	observations := []sourceObservation{
+	observations := []SourceObservation{
 		{RelativePath: "album/c.flac", Directory: "album", Album: "Release", TrackNumber: 1, InferredFields: map[string]bool{"track_number": true}},
 		{RelativePath: "album/a.flac", Directory: "album", Album: "Release", TrackNumber: 1, InferredFields: map[string]bool{"track_number": true}},
 		{RelativePath: "album/b.flac", Directory: "album", Album: "Release", TrackNumber: 1, InferredFields: map[string]bool{"track_number": true}},
 	}
-	got := organizeObservations(observations)
+	got := OrganizeObservations(observations)
 	if len(got) != 1 || len(got[0].Mediums[1]) != 3 {
 		t.Fatalf("unexpected candidates: %#v", got)
 	}
@@ -412,12 +343,12 @@ func TestOrganizerAssignsStableFallbackTrackPositions(t *testing.T) {
 }
 
 func TestOrganizerFallbackPositionsPreserveExplicitTags(t *testing.T) {
-	observations := []sourceObservation{
+	observations := []SourceObservation{
 		{RelativePath: "album/c.flac", Directory: "album", Album: "Release", TrackNumber: 1, InferredFields: map[string]bool{"track_number": true}},
 		{RelativePath: "album/b.flac", Directory: "album", Album: "Release", TrackNumber: 2},
 		{RelativePath: "album/a.flac", Directory: "album", Album: "Release", TrackNumber: 1, InferredFields: map[string]bool{"track_number": true}},
 	}
-	got := organizeObservations(observations)
+	got := OrganizeObservations(observations)
 	if len(got) != 1 || len(got[0].Mediums[1]) != 3 {
 		t.Fatalf("unexpected candidates: %#v", got)
 	}
@@ -430,7 +361,7 @@ func TestOrganizerFallbackPositionsPreserveExplicitTags(t *testing.T) {
 		t.Fatalf("explicit track position was overwritten: %#v", got[0].Mediums[1][1])
 	}
 
-	explicitDisc := organizeObservations([]sourceObservation{{
+	explicitDisc := OrganizeObservations([]SourceObservation{{
 		RelativePath: "Box/CD2/01.flac",
 		Directory:    "Box/CD2",
 		Album:        "Release",
@@ -443,7 +374,7 @@ func TestOrganizerFallbackPositionsPreserveExplicitTags(t *testing.T) {
 }
 
 func TestRipLogEvidenceFillsOnlyMissingReleaseSemantics(t *testing.T) {
-	candidates := organizeObservations([]sourceObservation{{
+	candidates := OrganizeObservations([]SourceObservation{{
 		RelativePath: "album/01.flac",
 		Directory:    "album",
 		Album:        "Release",
@@ -454,13 +385,13 @@ func TestRipLogEvidenceFillsOnlyMissingReleaseSemantics(t *testing.T) {
 	if len(candidates) != 1 {
 		t.Fatalf("unexpected candidates: %#v", candidates)
 	}
-	applyRipLogEvidence(&candidates[0], []string{"album/rip.log"})
+	ApplyRipLogEvidence(&candidates[0], []string{"album/rip.log"})
 	if candidates[0].SourceType != "Vinyl" || candidates[0].MediaType != "LP" {
 		t.Fatalf("rip log overrode explicit tags: %#v", candidates[0])
 	}
 
-	candidates = organizeObservations([]sourceObservation{{RelativePath: "album/01.flac", Directory: "album", Album: "Release", Artist: "Artist"}})
-	applyRipLogEvidence(&candidates[0], []string{"album/rip.log"})
+	candidates = OrganizeObservations([]SourceObservation{{RelativePath: "album/01.flac", Directory: "album", Album: "Release", Artist: "Artist"}})
+	ApplyRipLogEvidence(&candidates[0], []string{"album/rip.log"})
 	if candidates[0].SourceType != "CD" || candidates[0].MediaType != "CD" || candidates[0].GroupingRefs[0] != "album/rip.log" {
 		t.Fatalf("explicit rip log evidence was not applied: %#v", candidates[0])
 	}
@@ -476,15 +407,15 @@ func TestRipLogEvidenceFillsOnlyMissingReleaseSemantics(t *testing.T) {
 		}
 	}
 
-	folderCandidate := organizedCandidate{
+	folderCandidate := OrganizedCandidate{
 		SourceType: "WEB",
 		MediaType:  "Digital Media",
-		Decisions: []fieldDecision{
+		Decisions: []FieldDecision{
 			{Field: "source_type", Value: "WEB", Source: "folder", RuleID: "majority_v1"},
 			{Field: "media_type", Value: "Digital Media", Source: "folder", RuleID: "majority_v1"},
 		},
 	}
-	applyRipLogEvidence(&folderCandidate, []string{"album/rip.log"})
+	ApplyRipLogEvidence(&folderCandidate, []string{"album/rip.log"})
 	if folderCandidate.SourceType != "CD" || folderCandidate.MediaType != "CD" {
 		t.Fatalf("明确抓轨日志没有覆盖较弱目录补充值：%#v", folderCandidate)
 	}
@@ -502,39 +433,5 @@ func TestRipLogEvidenceFillsOnlyMissingReleaseSemantics(t *testing.T) {
 		if matches != 1 {
 			t.Fatalf("%s 决策数量 = %d，期望 1：%#v", field, matches, folderCandidate.Decisions)
 		}
-	}
-}
-
-func TestDiscoverCandidateRipLogEvidenceRequiresExplicitSignatureAndSkipsSymlink(t *testing.T) {
-	rootPath := t.TempDir()
-	albumPath := filepath.Join(rootPath, "Album")
-	if err := os.Mkdir(albumPath, 0o755); err != nil {
-		t.Fatalf("create album directory: %v", err)
-	}
-	for name, content := range map[string]string{
-		"eac.LOG":   "Exact Audio Copy V1.6\nEAC extraction logfile",
-		"notes.log": "CD FLAC 44.1 kHz without a ripping-tool signature",
-		"late.log":  strings.Repeat("x", maxRipLogHeaderBytes) + "Exact Audio Copy V1.6",
-		"xld.log":   "X Lossless Decoder version 2026\nAll tracks ripped",
-	} {
-		if err := os.WriteFile(filepath.Join(albumPath, name), []byte(content), 0o644); err != nil {
-			t.Fatalf("write %s: %v", name, err)
-		}
-	}
-	outside := filepath.Join(t.TempDir(), "outside.log")
-	if err := os.WriteFile(outside, []byte("Exact Audio Copy"), 0o644); err != nil {
-		t.Fatalf("write outside log: %v", err)
-	}
-	if err := os.Symlink(outside, filepath.Join(albumPath, "linked.log")); err != nil {
-		t.Fatalf("create log symlink: %v", err)
-	}
-
-	candidate := organizedCandidate{
-		Anchor:  candidateAnchor{Kind: candidateOrdinary, Scope: "Album"},
-		Mediums: map[int][]organizedTrack{1: {{Observation: sourceObservation{RelativePath: "Album/01.flac", Directory: "Album"}}}},
-	}
-	references, diagnostics := discoverCandidateRipLogEvidence(registeredRoot{ID: "root", Path: rootPath}, candidate)
-	if !reflect.DeepEqual(references, []string{"Album/eac.LOG", "Album/xld.log"}) || len(diagnostics) != 0 {
-		t.Fatalf("unexpected rip-log evidence: refs=%v diagnostics=%v", references, diagnostics)
 	}
 }

@@ -9,6 +9,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 )
 
 type failingScanExecutor struct {
@@ -180,14 +182,14 @@ func TestCueReferenceCompletionAndStagingPolicy(t *testing.T) {
 }
 
 func TestCanonicalCreditObservationsAreStableAndDeduplicated(t *testing.T) {
-	got := canonicalCreditObservations([]creditObservation{
+	got := metadata.CanonicalCredits([]metadata.Credit{
 		{Role: " Producer ", Name: " Producer One "},
 		{Role: "composer", Name: "Composer Two"},
 		{Role: "COMPOSER", Name: "Composer One"},
 		{Role: "composer", Name: "Composer One"},
 		{Role: "", Name: "ignored"},
 	})
-	want := []creditObservation{
+	want := []metadata.Credit{
 		{Role: "composer", Name: "Composer One"},
 		{Role: "composer", Name: "Composer Two"},
 		{Role: "producer", Name: "Producer One"},

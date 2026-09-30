@@ -1,131 +1,55 @@
-package main
+package catalog
 
 import (
 	"fmt"
-	pathpkg "path"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 )
 
-// sourceObservation 是 scanner 到 organizer 的领域合同，只包含规范化元数据与安全的
-// 相对来源标识。CUE offset 等解析器专属值保持为事实，由 organizer 负责归组和选择
-// Release 字段。
-type sourceObservation struct {
-	RelativePath    string            `json:"relative_path"`
-	Directory       string            `json:"directory"`
-	Title           string            `json:"title,omitempty"`
-	Album           string            `json:"album,omitempty"`
-	AlbumArtist     string            `json:"album_artist,omitempty"`
-	Artist          string            `json:"artist,omitempty"`
-	SourceType      string            `json:"source_type,omitempty"`
-	MediaType       string            `json:"media_type,omitempty"`
-	Genre           string            `json:"genre,omitempty"`
-	CatalogNumber   string            `json:"catalog_number,omitempty"`
-	Edition         string            `json:"edition,omitempty"`
-	Label           string            `json:"label,omitempty"`
-	Barcode         string            `json:"barcode,omitempty"`
-	Year            int               `json:"year,omitempty"`
-	TrackNumber     int               `json:"track_number,omitempty"`
-	DiscNumber      int               `json:"disc_number,omitempty"`
-	SourceKind      string            `json:"source_kind"`
-	InferredFields  map[string]bool   `json:"inferred_fields,omitempty"`
-	FieldSources    map[string]string `json:"field_sources,omitempty"`
-	DurationSeconds float64           `json:"duration_seconds,omitempty"`
-	Codec           string            `json:"codec,omitempty"`
-	BitDepth        int               `json:"bit_depth,omitempty"`
-	SampleRate      int               `json:"sample_rate,omitempty"`
-	Channels        int               `json:"channels,omitempty"`
-	Bitrate         int               `json:"bitrate,omitempty"`
-
-	// CUE 事实只保存安全的相对引用；虚拟轨身份包含 sheet、父来源、轨号与 INDEX 01。
-	CueSheetPath          string              `json:"cue_sheet_path,omitempty"`
-	CueParentRelativePath string              `json:"cue_parent_relative_path,omitempty"`
-	CueReferencedFile     string              `json:"cue_referenced_file,omitempty"`
-	CueIndexFrames        int                 `json:"cue_index_frames,omitempty"`
-	CueIndexPresent       bool                `json:"cue_index_present,omitempty"`
-	CueEndFrames          int                 `json:"cue_end_frames,omitempty"`
-	CueEndPresent         bool                `json:"cue_end_present,omitempty"`
-	CueISRC               string              `json:"cue_isrc,omitempty"`
-	Artwork               []byte              `json:"artwork,omitempty"`
-	ArtworkMIME           string              `json:"artwork_mime,omitempty"`
-	RelatedSourceRefs     []string            `json:"related_source_refs,omitempty"`
-	Credits               []creditObservation `json:"credits,omitempty"`
-}
-
-type creditObservation struct {
-	Role string `json:"role"`
-	Name string `json:"name"`
-}
-
-func (o sourceObservation) fieldObservations() []fieldObservation {
-	fields := []fieldObservation{
-		{Name: "title", Value: o.Title},
-		{Name: "artist", Value: o.Artist},
-		{Name: "album", Value: o.Album},
-		{Name: "album_artist", Value: o.AlbumArtist},
-		{Name: "track_number", Value: strconv.Itoa(o.TrackNumber)},
-		{Name: "disc_number", Value: strconv.Itoa(o.DiscNumber)},
-	}
-	if o.Year > 0 {
-		fields = append(fields, fieldObservation{Name: "year", Value: strconv.Itoa(o.Year)})
-	}
-	for _, optional := range []fieldObservation{{Name: "source_type", Value: o.SourceType}, {Name: "media_type", Value: o.MediaType}, {Name: "genre", Value: o.Genre}, {Name: "catalog_number", Value: o.CatalogNumber}, {Name: "edition", Value: o.Edition}, {Name: "label", Value: o.Label}, {Name: "barcode", Value: o.Barcode}, {Name: "isrc", Value: o.CueISRC}} {
-		if optional.Value != "" {
-			fields = append(fields, optional)
-		}
-	}
-	for i := range fields {
-		fields[i].Inferred = o.InferredFields[fields[i].Name]
-		fields[i].SourceKind = o.FieldSources[fields[i].Name]
-		if fields[i].SourceKind == "" {
-			fields[i].SourceKind = o.SourceKind
-		}
-		if fields[i].Inferred {
-			if o.FieldSources[fields[i].Name] != "" {
-				fields[i].SourceKind = o.FieldSources[fields[i].Name]
-			} else {
-				fields[i].SourceKind = "default_fallback"
-			}
-		}
-	}
-	return fields
-}
-
-type candidateKind string
+// CandidateKind 标识 organizer 如何把一组来源判定为一个 Release 候选。
+type CandidateKind string
 
 const (
-	candidateOrdinary     candidateKind = "ordinary_directory"
-	candidateMultiDisc    candidateKind = "strict_multidisc"
-	candidateBoxLeaf      candidateKind = "box_leaf"
-	candidateSameDirSplit candidateKind = "same_dir_split"
-	candidateLooseAlbum   candidateKind = "loose_album"
-	candidateLooseUnknown candidateKind = "loose_unknown"
+	CandidateOrdinary     CandidateKind = "ordinary_directory"
+	CandidateMultiDisc    CandidateKind = "strict_multidisc"
+	CandidateBoxLeaf      CandidateKind = "box_leaf"
+	CandidateSameDirSplit CandidateKind = "same_dir_split"
+	CandidateLooseAlbum   CandidateKind = "loose_album"
+	CandidateLooseUnknown CandidateKind = "loose_unknown"
 )
 
-type candidateAnchor struct {
-	Kind             candidateKind
+// CandidateAnchor 是候选在扫描间保持稳定的锚点：判定类型、整理范围与范围内的区分符。
+// 它只使用安全的相对来源路径，不含展示标题。
+type CandidateAnchor struct {
+	Kind             CandidateKind
 	Scope, Partition string
 }
 
-type fieldDecision struct {
+// FieldDecision 记录一个 Release 字段的选择结果：取值、来源、置信度、动作、规则与候选值。
+type FieldDecision struct {
 	Field, Value, Source, Confidence, Action, RuleID, Reason string
 	Candidates                                               []string
 }
 
-type organizedTrack struct {
-	Observation sourceObservation
+// OrganizedTrack 是已归入某个 Medium 的一条曲目来源及其排定的位置与碟号。
+type OrganizedTrack struct {
+	Observation SourceObservation
 	Position    int
 	Disc        int
 }
 
-type organizedCandidate struct {
-	Anchor                     candidateAnchor
+// OrganizedCandidate 是 organizer 的输出：一个 Release 候选，含锚点、按碟分组的曲目、
+// 字段决定、需关注原因与分组证据引用。它是纯值，写入数据库由 PersistCandidate 完成。
+type OrganizedCandidate struct {
+	Anchor                     CandidateAnchor
 	ReleaseGroupKey            string
 	Title, Artist, AlbumArtist string
-	Mediums                    map[int][]organizedTrack
-	Decisions                  []fieldDecision
+	Mediums                    map[int][]OrganizedTrack
+	Decisions                  []FieldDecision
 	Attention                  []string
 	GroupingRefs               []string
 	SourceType, MediaType      string
@@ -136,41 +60,30 @@ type organizedCandidate struct {
 const unknownCandidateTitle = "未知专辑"
 
 const (
-	maxDecisionCandidates   = 20
-	maxGroupingEvidenceRefs = 100
+	maxDecisionCandidates = 20
+	// MaxGroupingEvidenceRefs 是单个候选保留的分组证据来源引用上限。
+	MaxGroupingEvidenceRefs = 100
 )
 
-func normalizeValue(v string) string {
-	return strings.Join(strings.Fields(strings.TrimSpace(v)), " ")
-}
-
-func normalizedPath(v string) string {
-	v = pathpkg.Clean(strings.ReplaceAll(strings.TrimSpace(v), "\\", "/"))
-	if v == "." {
-		return ""
-	}
-	return strings.TrimPrefix(v, "./")
-}
-
-func stableValues(obs []sourceObservation, field func(sourceObservation) string) map[string]int {
+func stableValues(obs []SourceObservation, field func(SourceObservation) string) map[string]int {
 	counts := map[string]int{}
 	for _, o := range obs {
-		if v := normalizeValue(field(o)); v != "" {
+		if v := metadata.NormalizeValue(field(o)); v != "" {
 			counts[v]++
 		}
 	}
 	return counts
 }
 
-func chooseValue(obs []sourceObservation, field string, get func(sourceObservation) string) fieldDecision {
+func chooseValue(obs []SourceObservation, field string, get func(SourceObservation) string) FieldDecision {
 	inferenceField := field
 	if field == "title" {
 		inferenceField = "album"
 	}
-	authoritative := make([]sourceObservation, 0, len(obs))
+	authoritative := make([]SourceObservation, 0, len(obs))
 	for _, observation := range obs {
 		provenanceField := decisionProvenanceField(observation, inferenceField)
-		if !observation.InferredFields[provenanceField] && normalizeValue(get(observation)) != "" {
+		if !observation.InferredFields[provenanceField] && metadata.NormalizeValue(get(observation)) != "" {
 			authoritative = append(authoritative, observation)
 		}
 	}
@@ -180,7 +93,7 @@ func chooseValue(obs []sourceObservation, field string, get func(sourceObservati
 	}
 	counts := stableValues(decisionObservations, get)
 	if len(counts) == 0 {
-		return fieldDecision{Field: field, RuleID: "field_missing_v1", Confidence: "low", Action: "uncertain_apply", Reason: "field_missing"}
+		return FieldDecision{Field: field, RuleID: "field_missing_v1", Confidence: "low", Action: "uncertain_apply", Reason: "field_missing"}
 	}
 	values := make([]string, 0, len(counts))
 	for value := range counts {
@@ -204,7 +117,7 @@ func chooseValue(obs []sourceObservation, field string, get func(sourceObservati
 	source := "tag"
 	for _, o := range decisionObservations {
 		provenanceField := decisionProvenanceField(o, inferenceField)
-		if normalizeValue(get(o)) == selected && !o.InferredFields[provenanceField] {
+		if metadata.NormalizeValue(get(o)) == selected && !o.InferredFields[provenanceField] {
 			if s := o.FieldSources[provenanceField]; s != "" {
 				source = s
 			}
@@ -225,17 +138,17 @@ func chooseValue(obs []sourceObservation, field string, get func(sourceObservati
 	if len(values) > maxDecisionCandidates {
 		values = values[:maxDecisionCandidates]
 	}
-	return fieldDecision{Field: field, Value: selected, Source: source, Confidence: confidence, Action: action, RuleID: "majority_v1", Reason: reason, Candidates: values}
+	return FieldDecision{Field: field, Value: selected, Source: source, Confidence: confidence, Action: action, RuleID: "majority_v1", Reason: reason, Candidates: values}
 }
 
-func allInferred(obs []sourceObservation, field string) bool {
+func allInferred(obs []SourceObservation, field string) bool {
 	if len(obs) == 0 {
 		return true
 	}
 	seen := false
 	for _, o := range obs {
 		provenanceField := decisionProvenanceField(o, field)
-		if normalizeValue(fieldValue(o, provenanceField)) == "" {
+		if metadata.NormalizeValue(fieldValue(o, provenanceField)) == "" {
 			continue
 		}
 		seen = true
@@ -246,14 +159,14 @@ func allInferred(obs []sourceObservation, field string) bool {
 	return seen
 }
 
-func decisionProvenanceField(observation sourceObservation, field string) string {
-	if field == "artist" && normalizeValue(observation.AlbumArtist) != "" {
+func decisionProvenanceField(observation SourceObservation, field string) string {
+	if field == "artist" && metadata.NormalizeValue(observation.AlbumArtist) != "" {
 		return "album_artist"
 	}
 	return field
 }
 
-func fieldValue(o sourceObservation, field string) string {
+func fieldValue(o SourceObservation, field string) string {
 	switch field {
 	case "title":
 		return o.Title
@@ -297,10 +210,10 @@ type observationLocation struct {
 	isDiscDir bool
 }
 
-func locateObservation(o sourceObservation) observationLocation {
-	dir := normalizedPath(o.Directory)
+func locateObservation(o SourceObservation) observationLocation {
+	dir := NormalizedPath(o.Directory)
 	if dir == "" {
-		dir = normalizedPath(filepath.ToSlash(filepath.Dir(filepath.FromSlash(o.RelativePath))))
+		dir = NormalizedPath(filepath.ToSlash(filepath.Dir(filepath.FromSlash(o.RelativePath))))
 	}
 	base := strings.ToLower(filepath.Base(filepath.FromSlash(dir)))
 	for _, prefix := range []string{"disc", "cd", "disk"} {
@@ -312,7 +225,7 @@ func locateObservation(o sourceObservation) observationLocation {
 			}
 			n, err := strconv.Atoi(remainder[:digitEnd])
 			if err == nil && n > 0 && strings.Trim(strings.TrimSpace(remainder[digitEnd:]), "_-.()[]") == "" {
-				parent := normalizedPath(filepath.ToSlash(filepath.Dir(filepath.FromSlash(dir))))
+				parent := NormalizedPath(filepath.ToSlash(filepath.Dir(filepath.FromSlash(dir))))
 				return observationLocation{dir: dir, parent: parent, disc: n, isDiscDir: true}
 			}
 		}
@@ -320,27 +233,27 @@ func locateObservation(o sourceObservation) observationLocation {
 	return observationLocation{dir: dir}
 }
 
-func albumPartition(o sourceObservation) string {
-	album := normalizeValue(o.Album)
+func albumPartition(o SourceObservation) string {
+	album := metadata.NormalizeValue(o.Album)
 	if o.InferredFields["album"] {
 		album = ""
 	}
 	if album == "" {
 		return "|"
 	}
-	artist := normalizeValue(o.AlbumArtist)
+	artist := metadata.NormalizeValue(o.AlbumArtist)
 	if o.InferredFields["album_artist"] {
 		artist = ""
 	}
 	return album + "|" + artist
 }
 
-func albumEvidence(o sourceObservation) string {
+func albumEvidence(o SourceObservation) string {
 	album, _, _ := strings.Cut(albumPartition(o), "|")
 	return album
 }
 
-func knownAlbumArtists(observations []sourceObservation) map[string]map[string]bool {
+func knownAlbumArtists(observations []SourceObservation) map[string]map[string]bool {
 	result := map[string]map[string]bool{}
 	for _, observation := range observations {
 		partition := albumPartition(observation)
@@ -356,7 +269,7 @@ func knownAlbumArtists(observations []sourceObservation) map[string]map[string]b
 	return result
 }
 
-func compatibleAlbumPartition(observation sourceObservation, knownArtists map[string]map[string]bool) string {
+func compatibleAlbumPartition(observation SourceObservation, knownArtists map[string]map[string]bool) string {
 	partition := albumPartition(observation)
 	album, artist, found := strings.Cut(partition, "|")
 	if !found || album == "" || artist != "" || len(knownArtists[album]) != 1 {
@@ -368,79 +281,80 @@ func compatibleAlbumPartition(observation sourceObservation, knownArtists map[st
 	return partition
 }
 
-func chooseReleaseArtist(observations []sourceObservation) fieldDecision {
-	withAlbumArtist := make([]sourceObservation, 0, len(observations))
+func chooseReleaseArtist(observations []SourceObservation) FieldDecision {
+	withAlbumArtist := make([]SourceObservation, 0, len(observations))
 	for _, observation := range observations {
-		if normalizeValue(observation.AlbumArtist) != "" && !observation.InferredFields["album_artist"] {
+		if metadata.NormalizeValue(observation.AlbumArtist) != "" && !observation.InferredFields["album_artist"] {
 			withAlbumArtist = append(withAlbumArtist, observation)
 		}
 	}
 	if len(withAlbumArtist) > 0 {
-		return chooseValue(withAlbumArtist, "artist", func(observation sourceObservation) string { return observation.AlbumArtist })
+		return chooseValue(withAlbumArtist, "artist", func(observation SourceObservation) string { return observation.AlbumArtist })
 	}
-	return chooseValue(observations, "artist", func(observation sourceObservation) string { return observation.Artist })
+	return chooseValue(observations, "artist", func(observation SourceObservation) string { return observation.Artist })
 }
 
 // appendFolderDecisionObservation 在候选边界已经确定后补充目录名证据，避免目录名
 // 改变来源身份或把本应分开的候选重新归组。每个字段只有在标签/CUE 没有权威值时才补充。
-func appendFolderDecisionObservation(observations []sourceObservation, scope string) []sourceObservation {
-	scope = normalizedPath(scope)
+func appendFolderDecisionObservation(observations []SourceObservation, scope string) []SourceObservation {
+	scope = NormalizedPath(scope)
 	if scope == "" {
 		return observations
 	}
-	metadata, matched := parseFolderMetadata(filepath.Base(filepath.FromSlash(scope)))
+	parsed, matched := parseFolderMetadata(filepath.Base(filepath.FromSlash(scope)))
 	if !matched {
 		return observations
 	}
-	folder := sourceObservation{
+	folder := SourceObservation{
 		SourceKind:     "folder",
 		InferredFields: map[string]bool{},
 		FieldSources:   map[string]string{},
 	}
 	setText := func(field, value string, target *string) {
-		if normalizeValue(value) == "" || hasAuthoritativeObservationValue(observations, field) {
+		if metadata.NormalizeValue(value) == "" || hasAuthoritativeObservationValue(observations, field) {
 			return
 		}
 		*target = value
 		folder.FieldSources[field] = "folder"
 	}
-	setText("album", metadata.Album, &folder.Album)
-	setText("album_artist", metadata.AlbumArtist, &folder.AlbumArtist)
-	setText("source_type", metadata.SourceType, &folder.SourceType)
-	setText("media_type", metadata.MediaType, &folder.MediaType)
-	setText("catalog_number", metadata.Catalog, &folder.CatalogNumber)
-	setText("edition", metadata.Edition, &folder.Edition)
-	setText("label", metadata.Label, &folder.Label)
-	if metadata.Year > 0 && !hasAuthoritativeObservationValue(observations, "year") {
-		folder.Year = metadata.Year
+	setText("album", parsed.Album, &folder.Album)
+	setText("album_artist", parsed.AlbumArtist, &folder.AlbumArtist)
+	setText("source_type", parsed.SourceType, &folder.SourceType)
+	setText("media_type", parsed.MediaType, &folder.MediaType)
+	setText("catalog_number", parsed.Catalog, &folder.CatalogNumber)
+	setText("edition", parsed.Edition, &folder.Edition)
+	setText("label", parsed.Label, &folder.Label)
+	if parsed.Year > 0 && !hasAuthoritativeObservationValue(observations, "year") {
+		folder.Year = parsed.Year
 		folder.FieldSources["year"] = "folder"
 	}
 	if len(folder.FieldSources) == 0 {
 		return observations
 	}
-	result := append([]sourceObservation(nil), observations...)
+	result := append([]SourceObservation(nil), observations...)
 	return append(result, folder)
 }
 
-func hasAuthoritativeObservationValue(observations []sourceObservation, field string) bool {
+func hasAuthoritativeObservationValue(observations []SourceObservation, field string) bool {
 	provenanceField := field
 	if field == "title" {
 		provenanceField = "album"
 	}
 	for _, observation := range observations {
-		if normalizeValue(fieldValue(observation, provenanceField)) != "" && !observation.InferredFields[provenanceField] {
+		if metadata.NormalizeValue(fieldValue(observation, provenanceField)) != "" && !observation.InferredFields[provenanceField] {
 			return true
 		}
 	}
 	return false
 }
 
-// organizeObservations 以确定性纯规则把 observations 归为 Release candidates；
+// OrganizeObservations 以确定性纯规则把 observations 归为 Release candidates；
 // 数据库、文件系统和遍历顺序都不会进入规则输入。
-func organizeObservations(observations []sourceObservation) []organizedCandidate {
-	items := append([]sourceObservation(nil), observations...)
+// OrganizeObservations 把同一整理范围内的来源观察确定性地归成 Release 候选；结果不依赖输入顺序。
+func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate {
+	items := append([]SourceObservation(nil), observations...)
 	sort.Slice(items, func(i, j int) bool {
-		left, right := normalizedPath(items[i].RelativePath), normalizedPath(items[j].RelativePath)
+		left, right := NormalizedPath(items[i].RelativePath), NormalizedPath(items[j].RelativePath)
 		if left != right {
 			return left < right
 		}
@@ -451,7 +365,7 @@ func organizeObservations(observations []sourceObservation) []organizedCandidate
 	locations := make([]observationLocation, len(items))
 	parentDiscs := map[string]map[int]map[string]bool{}
 	parentAlbums := map[string]map[string]int{}
-	parentObservations := map[string][]sourceObservation{}
+	parentObservations := map[string][]SourceObservation{}
 	for i, o := range items {
 		locations[i] = locateObservation(o)
 		if !locations[i].isDiscDir {
@@ -510,13 +424,13 @@ func organizeObservations(observations []sourceObservation) []organizedCandidate
 	}
 
 	type bucket struct {
-		kind      candidateKind
+		kind      CandidateKind
 		scope     string
 		partition string
-		obs       []sourceObservation
+		obs       []SourceObservation
 	}
 	buckets := map[string]*bucket{}
-	addBucket := func(kind candidateKind, scope, partition string, observations ...sourceObservation) {
+	addBucket := func(kind CandidateKind, scope, partition string, observations ...SourceObservation) {
 		key := string(kind) + "\x00" + scope + "\x00" + partition
 		if buckets[key] == nil {
 			buckets[key] = &bucket{kind: kind, scope: scope, partition: partition}
@@ -526,25 +440,25 @@ func organizeObservations(observations []sourceObservation) []organizedCandidate
 
 	// 先建立目录与 Box 边界，再在边界内应用 album 多数决；严格多碟父目录是唯一允许的
 	// 跨目录合并。
-	baseGroups := map[string][]sourceObservation{}
+	baseGroups := map[string][]SourceObservation{}
 	baseMeta := map[string]struct {
-		kind  candidateKind
+		kind  CandidateKind
 		scope string
 	}{}
 	for i, o := range items {
 		loc := locations[i]
-		kind, scope := candidateOrdinary, loc.dir
+		kind, scope := CandidateOrdinary, loc.dir
 		if loc.isDiscDir {
 			if strictParents[loc.parent] {
-				kind, scope = candidateMultiDisc, loc.parent
+				kind, scope = CandidateMultiDisc, loc.parent
 			} else {
-				kind, scope = candidateBoxLeaf, loc.dir
+				kind, scope = CandidateBoxLeaf, loc.dir
 			}
 		}
 		key := string(kind) + "\x00" + scope
 		baseGroups[key] = append(baseGroups[key], o)
 		baseMeta[key] = struct {
-			kind  candidateKind
+			kind  CandidateKind
 			scope string
 		}{kind, scope}
 	}
@@ -556,20 +470,20 @@ func organizeObservations(observations []sourceObservation) []organizedCandidate
 	for _, key := range baseKeys {
 		group := baseGroups[key]
 		meta := baseMeta[key]
-		if meta.kind == candidateMultiDisc {
+		if meta.kind == CandidateMultiDisc {
 			addBucket(meta.kind, meta.scope, "", group...)
 			continue
 		}
 		// 根目录文件没有可信的专辑文件夹身份：存在 album tag 时可以归组，否则每个文件
 		// 都是独立的未知专辑候选。
 		if meta.scope == "" {
-			withAlbum := map[string][]sourceObservation{}
+			withAlbum := map[string][]SourceObservation{}
 			knownArtists := knownAlbumArtists(group)
 			for _, o := range group {
 				if part := compatibleAlbumPartition(o, knownArtists); part != "|" {
 					withAlbum[part] = append(withAlbum[part], o)
 				} else {
-					addBucket(candidateLooseUnknown, "", normalizedPath(o.RelativePath), o)
+					addBucket(CandidateLooseUnknown, "", NormalizedPath(o.RelativePath), o)
 				}
 			}
 			parts := make([]string, 0, len(withAlbum))
@@ -578,7 +492,7 @@ func organizeObservations(observations []sourceObservation) []organizedCandidate
 			}
 			sort.Strings(parts)
 			for _, part := range parts {
-				addBucket(candidateLooseAlbum, "", part, withAlbum[part]...)
+				addBucket(CandidateLooseAlbum, "", part, withAlbum[part]...)
 			}
 			continue
 		}
@@ -612,11 +526,11 @@ func organizeObservations(observations []sourceObservation) []organizedCandidate
 			obs := parts[part]
 			if part == "|" {
 				for _, unknown := range obs {
-					addBucket(candidateSameDirSplit, meta.scope, "|@"+normalizedPath(unknown.RelativePath), unknown)
+					addBucket(CandidateSameDirSplit, meta.scope, "|@"+NormalizedPath(unknown.RelativePath), unknown)
 				}
 				continue
 			}
-			addBucket(candidateSameDirSplit, meta.scope, part, obs...)
+			addBucket(CandidateSameDirSplit, meta.scope, part, obs...)
 		}
 	}
 
@@ -625,37 +539,37 @@ func organizeObservations(observations []sourceObservation) []organizedCandidate
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
-	result := make([]organizedCandidate, 0, len(keys))
+	result := make([]OrganizedCandidate, 0, len(keys))
 	for _, key := range keys {
 		b := buckets[key]
 		obs := b.obs
 		sort.Slice(obs, func(i, j int) bool { return observationSortKey(obs[i]) < observationSortKey(obs[j]) })
-		c := organizedCandidate{Anchor: candidateAnchor{Kind: b.kind, Scope: b.scope, Partition: stableAnchorPartition(b.kind, b.partition, obs)}, ReleaseGroupKey: key, Mediums: map[int][]organizedTrack{}}
+		c := OrganizedCandidate{Anchor: CandidateAnchor{Kind: b.kind, Scope: b.scope, Partition: stableAnchorPartition(b.kind, b.partition, obs)}, ReleaseGroupKey: key, Mediums: map[int][]OrganizedTrack{}}
 		folderDecisionScope := b.scope
-		if b.kind == candidateMultiDisc && len(obs) > 0 {
+		if b.kind == CandidateMultiDisc && len(obs) > 0 {
 			// V0 的严格多碟候选使用首个物理碟目录的 folder evidence，父目录只负责
 			// 归组和缺失标题 fallback，不能额外制造 catalog 等高置信度字段。
-			folderDecisionScope = directoryOf(obs[0].RelativePath)
+			folderDecisionScope = DirectoryOf(obs[0].RelativePath)
 		}
 		decisionObservations := appendFolderDecisionObservation(obs, folderDecisionScope)
-		albumDecision := chooseValue(decisionObservations, "title", func(o sourceObservation) string { return o.Album })
-		if b.kind == candidateMultiDisc && !hasAuthoritativeAlbum(decisionObservations) {
-			if fallback := normalizeValue(filepath.Base(filepath.FromSlash(b.scope))); fallback != "" && fallback != "." {
-				albumDecision = fieldDecision{Field: "title", Value: fallback, Source: "folder_fallback", Confidence: "low", Action: "uncertain_apply", RuleID: "multidisc_parent_fallback_v1", Reason: "inferred_value", Candidates: []string{fallback}}
+		albumDecision := chooseValue(decisionObservations, "title", func(o SourceObservation) string { return o.Album })
+		if b.kind == CandidateMultiDisc && !hasAuthoritativeAlbum(decisionObservations) {
+			if fallback := metadata.NormalizeValue(filepath.Base(filepath.FromSlash(b.scope))); fallback != "" && fallback != "." {
+				albumDecision = FieldDecision{Field: "title", Value: fallback, Source: "folder_fallback", Confidence: "low", Action: "uncertain_apply", RuleID: "multidisc_parent_fallback_v1", Reason: "inferred_value", Candidates: []string{fallback}}
 			}
 		}
 		artistDecision := chooseReleaseArtist(decisionObservations)
-		albumArtistDecision := chooseValue(decisionObservations, "album_artist", func(o sourceObservation) string { return o.AlbumArtist })
-		yearDecision := chooseValue(decisionObservations, "year", func(o sourceObservation) string { return fieldValue(o, "year") })
-		sourceDecision := chooseValue(decisionObservations, "source_type", func(o sourceObservation) string { return o.SourceType })
-		mediaDecision := chooseValue(decisionObservations, "media_type", func(o sourceObservation) string { return o.MediaType })
-		genreDecision := chooseValue(decisionObservations, "genre", func(o sourceObservation) string { return o.Genre })
-		catalogDecision := chooseValue(decisionObservations, "catalog_number", func(o sourceObservation) string { return o.CatalogNumber })
-		editionDecision := chooseValue(decisionObservations, "edition", func(o sourceObservation) string { return o.Edition })
-		labelDecision := chooseValue(decisionObservations, "label", func(o sourceObservation) string { return o.Label })
-		barcodeDecision := chooseValue(decisionObservations, "barcode", func(o sourceObservation) string { return o.Barcode })
-		c.Decisions = []fieldDecision{albumDecision, artistDecision}
-		for _, optionalDecision := range []fieldDecision{albumArtistDecision, yearDecision, sourceDecision, mediaDecision, genreDecision, catalogDecision, editionDecision, labelDecision, barcodeDecision} {
+		albumArtistDecision := chooseValue(decisionObservations, "album_artist", func(o SourceObservation) string { return o.AlbumArtist })
+		yearDecision := chooseValue(decisionObservations, "year", func(o SourceObservation) string { return fieldValue(o, "year") })
+		sourceDecision := chooseValue(decisionObservations, "source_type", func(o SourceObservation) string { return o.SourceType })
+		mediaDecision := chooseValue(decisionObservations, "media_type", func(o SourceObservation) string { return o.MediaType })
+		genreDecision := chooseValue(decisionObservations, "genre", func(o SourceObservation) string { return o.Genre })
+		catalogDecision := chooseValue(decisionObservations, "catalog_number", func(o SourceObservation) string { return o.CatalogNumber })
+		editionDecision := chooseValue(decisionObservations, "edition", func(o SourceObservation) string { return o.Edition })
+		labelDecision := chooseValue(decisionObservations, "label", func(o SourceObservation) string { return o.Label })
+		barcodeDecision := chooseValue(decisionObservations, "barcode", func(o SourceObservation) string { return o.Barcode })
+		c.Decisions = []FieldDecision{albumDecision, artistDecision}
+		for _, optionalDecision := range []FieldDecision{albumArtistDecision, yearDecision, sourceDecision, mediaDecision, genreDecision, catalogDecision, editionDecision, labelDecision, barcodeDecision} {
 			if optionalDecision.Value != "" {
 				c.Decisions = append(c.Decisions, optionalDecision)
 			}
@@ -675,7 +589,7 @@ func organizeObservations(observations []sourceObservation) []organizedCandidate
 		c.Barcode = barcodeDecision.Value
 		// Attention 只保存独立的归组问题；字段不确定性已由 release_field_decisions 表达，
 		// 不应再写入 grouping reason 导致 REST 重复计数。
-		if b.kind == candidateSameDirSplit {
+		if b.kind == CandidateSameDirSplit {
 			c.Attention = append(c.Attention, "same_directory_conflict")
 		}
 		c.GroupingRefs = observationRefs(obs)
@@ -699,7 +613,7 @@ func organizeObservations(observations []sourceObservation) []organizedCandidate
 			if position < 1 || o.InferredFields["track_number"] {
 				position = 0
 			}
-			c.Mediums[disc] = append(c.Mediums[disc], organizedTrack{Observation: o, Position: position, Disc: disc})
+			c.Mediums[disc] = append(c.Mediums[disc], OrganizedTrack{Observation: o, Position: position, Disc: disc})
 		}
 		for disc := range c.Mediums {
 			assignFallbackTrackPositions(c.Mediums[disc])
@@ -715,7 +629,7 @@ func organizeObservations(observations []sourceObservation) []organizedCandidate
 	return result
 }
 
-func assignFallbackTrackPositions(tracks []organizedTrack) {
+func assignFallbackTrackPositions(tracks []OrganizedTrack) {
 	used := map[int]bool{}
 	for _, track := range tracks {
 		if track.Position > 0 {
@@ -747,22 +661,22 @@ func assignFallbackTrackPositions(tracks []organizedTrack) {
 	}
 }
 
-func hasAuthoritativeAlbum(observations []sourceObservation) bool {
+func hasAuthoritativeAlbum(observations []SourceObservation) bool {
 	for _, observation := range observations {
-		if normalizeValue(observation.Album) != "" && !observation.InferredFields["album"] {
+		if metadata.NormalizeValue(observation.Album) != "" && !observation.InferredFields["album"] {
 			return true
 		}
 	}
 	return false
 }
 
-func observationRefs(observations []sourceObservation) []string {
+func observationRefs(observations []SourceObservation) []string {
 	seen := map[string]bool{}
 	refs := make([]string, 0, len(observations))
 	for _, observation := range observations {
 		candidates := append([]string{observation.RelativePath}, observation.RelatedSourceRefs...)
 		for _, ref := range candidates {
-			ref = normalizedPath(ref)
+			ref = NormalizedPath(ref)
 			if ref == "" || seen[ref] {
 				continue
 			}
@@ -771,19 +685,21 @@ func observationRefs(observations []sourceObservation) []string {
 		}
 	}
 	sort.Strings(refs)
-	if len(refs) > maxGroupingEvidenceRefs {
-		refs = refs[:maxGroupingEvidenceRefs]
+	if len(refs) > MaxGroupingEvidenceRefs {
+		refs = refs[:MaxGroupingEvidenceRefs]
 	}
 	return refs
 }
 
-func applyRipLogEvidence(candidate *organizedCandidate, sourceRefs []string) {
+// ApplyRipLogEvidence 用抓轨日志证据补全候选缺失的光盘语义（来源类型与媒体类型）；
+// 已由 tag、CUE 或目录名明确给出的字段不会被覆盖。
+func ApplyRipLogEvidence(candidate *OrganizedCandidate, sourceRefs []string) {
 	if candidate == nil || len(sourceRefs) == 0 {
 		return
 	}
 	candidate.GroupingRefs = mergeEvidenceRefs(sourceRefs, candidate.GroupingRefs)
-	decision := func(field string) fieldDecision {
-		return fieldDecision{Field: field, Value: "CD", Source: "rip_log", Confidence: "high", Action: "auto_apply", RuleID: "rip_log_cd_v1", Candidates: []string{"CD"}}
+	decision := func(field string) FieldDecision {
+		return FieldDecision{Field: field, Value: "CD", Source: "rip_log", Confidence: "high", Action: "auto_apply", RuleID: "rip_log_cd_v1", Candidates: []string{"CD"}}
 	}
 	apply := func(field string, target *string) {
 		index := -1
@@ -800,7 +716,7 @@ func applyRipLogEvidence(candidate *organizedCandidate, sourceRefs []string) {
 		}
 		*target = "CD"
 		next := decision(field)
-		updated := make([]fieldDecision, 0, len(candidate.Decisions)+1)
+		updated := make([]FieldDecision, 0, len(candidate.Decisions)+1)
 		replaced := false
 		for _, existing := range candidate.Decisions {
 			if existing.Field != field {
@@ -823,16 +739,16 @@ func applyRipLogEvidence(candidate *organizedCandidate, sourceRefs []string) {
 
 func mergeEvidenceRefs(groups ...[]string) []string {
 	seen := map[string]bool{}
-	result := make([]string, 0, maxGroupingEvidenceRefs)
+	result := make([]string, 0, MaxGroupingEvidenceRefs)
 	for _, group := range groups {
 		for _, value := range group {
-			value = normalizedPath(value)
+			value = NormalizedPath(value)
 			if value == "" || seen[value] {
 				continue
 			}
 			seen[value] = true
 			result = append(result, value)
-			if len(result) == maxGroupingEvidenceRefs {
+			if len(result) == MaxGroupingEvidenceRefs {
 				return result
 			}
 		}
@@ -840,20 +756,20 @@ func mergeEvidenceRefs(groups ...[]string) []string {
 	return result
 }
 
-func resolveCueCandidateGroups(observations []sourceObservation) []sourceObservation {
+func resolveCueCandidateGroups(observations []SourceObservation) []SourceObservation {
 	type cueGroup struct {
 		directory string
 		partition string
-		cues      []sourceObservation
+		cues      []SourceObservation
 	}
 	groups := map[string]*cueGroup{}
 	for _, observation := range observations {
 		if !isCueObservation(observation) {
 			continue
 		}
-		key := normalizedPath(observation.Directory) + "\x00" + albumPartition(observation)
+		key := NormalizedPath(observation.Directory) + "\x00" + albumPartition(observation)
 		if groups[key] == nil {
-			groups[key] = &cueGroup{directory: normalizedPath(observation.Directory), partition: albumPartition(observation)}
+			groups[key] = &cueGroup{directory: NormalizedPath(observation.Directory), partition: albumPartition(observation)}
 		}
 		groups[key].cues = append(groups[key].cues, observation)
 	}
@@ -863,10 +779,10 @@ func resolveCueCandidateGroups(observations []sourceObservation) []sourceObserva
 	}
 	sort.Strings(keys)
 	processed := map[string]bool{}
-	result := make([]sourceObservation, 0, len(observations))
+	result := make([]SourceObservation, 0, len(observations))
 	for _, key := range keys {
 		group := groups[key]
-		members := append([]sourceObservation(nil), group.cues...)
+		members := append([]SourceObservation(nil), group.cues...)
 		parents := map[string]bool{}
 		for _, cue := range group.cues {
 			parents[cueParentPath(cue)] = true
@@ -875,18 +791,18 @@ func resolveCueCandidateGroups(observations []sourceObservation) []sourceObserva
 			if isCueObservation(observation) {
 				continue
 			}
-			path := normalizedPath(observation.RelativePath)
+			path := NormalizedPath(observation.RelativePath)
 			if parents[path] {
 				members = append(members, observation)
 				continue
 			}
-			if normalizedPath(observation.Directory) == group.directory && group.partition != "|" && albumPartition(observation) == group.partition {
+			if NormalizedPath(observation.Directory) == group.directory && group.partition != "|" && albumPartition(observation) == group.partition {
 				members = append(members, observation)
 			}
 		}
 		refs := observationRefs(members)
 		for _, member := range members {
-			processed[normalizedPath(member.RelativePath)] = true
+			processed[NormalizedPath(member.RelativePath)] = true
 		}
 		survivors := resolveCuePhysicalCoexistence(members)
 		for index := range survivors {
@@ -909,7 +825,7 @@ func resolveCueCandidateGroups(observations []sourceObservation) []sourceObserva
 		}
 	}
 	for _, observation := range observations {
-		if !processed[normalizedPath(observation.RelativePath)] {
+		if !processed[NormalizedPath(observation.RelativePath)] {
 			result = append(result, observation)
 		}
 	}
@@ -917,10 +833,10 @@ func resolveCueCandidateGroups(observations []sourceObservation) []sourceObserva
 	return result
 }
 
-func mergeSingleCueEvidence(physical sourceObservation, cues []sourceObservation) sourceObservation {
-	matching := make([]sourceObservation, 0, 1)
+func mergeSingleCueEvidence(physical SourceObservation, cues []SourceObservation) SourceObservation {
+	matching := make([]SourceObservation, 0, 1)
 	for _, cue := range cues {
-		if cueParentPath(cue) == normalizedPath(physical.RelativePath) {
+		if cueParentPath(cue) == NormalizedPath(physical.RelativePath) {
 			matching = append(matching, cue)
 		}
 	}
@@ -990,12 +906,12 @@ func cloneBoolMap(input map[string]bool) map[string]bool {
 	return result
 }
 
-func observationSortKey(o sourceObservation) string {
-	return normalizedPath(o.RelativePath) + "\x00" + normalizeValue(o.Title) + "\x00" + normalizeValue(o.Album) + "\x00" + normalizeValue(o.Artist)
+func observationSortKey(o SourceObservation) string {
+	return NormalizedPath(o.RelativePath) + "\x00" + metadata.NormalizeValue(o.Title) + "\x00" + metadata.NormalizeValue(o.Album) + "\x00" + metadata.NormalizeValue(o.Artist)
 }
 
-func splitByPartition(obs []sourceObservation, knownArtists map[string]map[string]bool) map[string][]sourceObservation {
-	result := map[string][]sourceObservation{}
+func splitByPartition(obs []SourceObservation, knownArtists map[string]map[string]bool) map[string][]SourceObservation {
+	result := map[string][]SourceObservation{}
 	for _, o := range obs {
 		partition := compatibleAlbumPartition(o, knownArtists)
 		result[partition] = append(result[partition], o)
@@ -1003,13 +919,13 @@ func splitByPartition(obs []sourceObservation, knownArtists map[string]map[strin
 	return result
 }
 
-func stableAnchorPartition(kind candidateKind, groupingPartition string, obs []sourceObservation) string {
-	if kind == candidateOrdinary || kind == candidateMultiDisc || kind == candidateBoxLeaf {
+func stableAnchorPartition(kind CandidateKind, groupingPartition string, obs []SourceObservation) string {
+	if kind == CandidateOrdinary || kind == CandidateMultiDisc || kind == CandidateBoxLeaf {
 		return ""
 	}
 	paths := make([]string, 0, len(obs))
 	for _, observation := range obs {
-		paths = append(paths, normalizedPath(observation.RelativePath))
+		paths = append(paths, NormalizedPath(observation.RelativePath))
 	}
 	sort.Strings(paths)
 	if len(paths) > 0 && paths[0] != "" {
@@ -1021,7 +937,7 @@ func stableAnchorPartition(kind candidateKind, groupingPartition string, obs []s
 // resolveCuePhysicalCoexistence 只使用明确的 CUE 父来源关系。每个父来源独立决策：
 // 多个虚拟分轨保留虚拟轨并隐藏整轨；只有一个虚拟轨时保留物理轨；无关物理文件
 // 永远不参与该决策。GroupingRefs 仍保留被隐藏来源的证据。
-func resolveCuePhysicalCoexistence(obs []sourceObservation) []sourceObservation {
+func resolveCuePhysicalCoexistence(obs []SourceObservation) []SourceObservation {
 	physicalByPath := map[string]bool{}
 	virtualCountByParent := map[string]int{}
 	for _, o := range obs {
@@ -1031,16 +947,16 @@ func resolveCuePhysicalCoexistence(obs []sourceObservation) []sourceObservation 
 			}
 			continue
 		}
-		physicalByPath[normalizedPath(o.RelativePath)] = true
+		physicalByPath[NormalizedPath(o.RelativePath)] = true
 	}
-	result := make([]sourceObservation, 0, len(obs))
+	result := make([]SourceObservation, 0, len(obs))
 	for _, o := range obs {
 		if isCueObservation(o) {
 			parent := cueParentPath(o)
 			if physicalByPath[parent] && virtualCountByParent[parent] <= 1 {
 				continue
 			}
-		} else if virtualCountByParent[normalizedPath(o.RelativePath)] > 1 {
+		} else if virtualCountByParent[NormalizedPath(o.RelativePath)] > 1 {
 			continue
 		}
 		result = append(result, o)
@@ -1048,37 +964,19 @@ func resolveCuePhysicalCoexistence(obs []sourceObservation) []sourceObservation 
 	return result
 }
 
-func isCueObservation(observation sourceObservation) bool {
+func isCueObservation(observation SourceObservation) bool {
 	return strings.EqualFold(observation.SourceKind, "cue_virtual") || strings.Contains(strings.ToLower(observation.SourceKind), "cue")
 }
 
-func cueParentPath(observation sourceObservation) string {
-	if parent := normalizedPath(observation.CueParentRelativePath); parent != "" {
+func cueParentPath(observation SourceObservation) string {
+	if parent := NormalizedPath(observation.CueParentRelativePath); parent != "" {
 		return parent
 	}
-	return normalizedPath(observation.CueReferencedFile)
+	return NormalizedPath(observation.CueReferencedFile)
 }
 
-func refineDirectoryKind(obs []sourceObservation, scope string) (candidateKind, string) {
-	// 保留此兼容 helper，供上一纵向切片的调用方过渡。
-	if len(obs) == 0 {
-		return candidateOrdinary, scope
-	}
-	loc := locateObservation(obs[0])
-	if loc.isDiscDir {
-		return candidateBoxLeaf, scope
-	}
-	return candidateOrdinary, scope
-}
-
-func candidateIdentity(root string, a candidateAnchor) string {
+// CandidateIdentity 由根目录 ID 与锚点生成写入 releases.candidate_anchor 的稳定标识。
+func CandidateIdentity(root string, a CandidateAnchor) string {
 	// Partition 只使用安全的相对来源区分符，不包含展示标题。
-	return fmt.Sprintf("%s:v2:%s:%s:%s", normalizeValue(root), a.Kind, normalizedPath(a.Scope), normalizedPath(a.Partition))
-}
-
-func decisionValue(d fieldDecision) string {
-	if d.Value != "" {
-		return d.Value
-	}
-	return strconv.Itoa(len(d.Candidates))
+	return fmt.Sprintf("%s:v2:%s:%s:%s", metadata.NormalizeValue(root), a.Kind, NormalizedPath(a.Scope), NormalizedPath(a.Partition))
 }

@@ -20,9 +20,6 @@ func TestReleaseSearchParsingTrimsAndEscapesWildcards(t *testing.T) {
 	if err != nil || query != "%Rock_" {
 		t.Fatalf("unexpected parsed query %q, %v", query, err)
 	}
-	if escaped := escapeLikePattern(query); escaped != "~%Rock~_" {
-		t.Fatalf("unexpected escaped pattern %q", escaped)
-	}
 	longQuery := strings.Repeat("x", 201)
 	if _, err := parseReleaseSearch(httptest.NewRequest(http.MethodGet, "/api/v1/releases?q="+longQuery, nil)); err == nil {
 		t.Fatal("overlong search query was accepted")

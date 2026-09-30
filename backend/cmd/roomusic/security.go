@@ -20,16 +20,6 @@ const sessionCookieName = "roomusic_session"
 
 var requestIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$`)
 
-func createIdentifier() string {
-	identifierBytes := make([]byte, 16)
-	if _, err := rand.Read(identifierBytes); err != nil {
-		panic(err)
-	}
-	identifierBytes[6] = (identifierBytes[6] & 0x0f) | 0x40
-	identifierBytes[8] = (identifierBytes[8] & 0x3f) | 0x80
-	return hex.EncodeToString(identifierBytes[:4]) + "-" + hex.EncodeToString(identifierBytes[4:6]) + "-" + hex.EncodeToString(identifierBytes[6:8]) + "-" + hex.EncodeToString(identifierBytes[8:10]) + "-" + hex.EncodeToString(identifierBytes[10:])
-}
-
 func hashSessionToken(token string) []byte { digest := sha256.Sum256([]byte(token)); return digest[:] }
 
 func generateSessionToken() string {

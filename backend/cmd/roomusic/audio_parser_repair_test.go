@@ -6,10 +6,13 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"syscall"
 	"testing"
 	"unicode/utf16"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 )
 
 func TestParseM4AReaderParsesLateMoovAndRawITunesAtoms(t *testing.T) {
@@ -116,7 +119,7 @@ func TestParseM4ATextDecodingIsStrictAndBounded(t *testing.T) {
 	if decoded := decodeM4AText([]byte{0xff, 0xfe, 0xfd}, 1); decoded != "" {
 		t.Fatalf("invalid M4A text was accepted: %q", decoded)
 	}
-	if decoded := decodeM4AText([]byte(strings.Repeat("x", maxAudioTextBytes+100)), 1); len(decoded) != maxAudioTextBytes {
+	if decoded := decodeM4AText([]byte(strings.Repeat("x", metadata.MaxTextBytes+100)), 1); len(decoded) != metadata.MaxTextBytes {
 		t.Fatalf("M4A text bound was not applied: %d", len(decoded))
 	}
 }
@@ -132,7 +135,7 @@ func TestParseM4AWriterAndAllowlistedFreeformMetadata(t *testing.T) {
 	if observation.Label != "Example Label" || observation.Barcode != "012345678901" {
 		t.Fatalf("M4A freeform metadata 未映射：%+v", observation)
 	}
-	if len(observation.Credits) != 2 || observation.Credits[0] != (creditObservation{Role: "composer", Name: "Composer One"}) || observation.Credits[1] != (creditObservation{Role: "composer", Name: "Composer Two"}) {
+	if len(observation.Credits) != 2 || observation.Credits[0] != (metadata.Credit{Role: "composer", Name: "Composer One"}) || observation.Credits[1] != (metadata.Credit{Role: "composer", Name: "Composer Two"}) {
 		t.Fatalf("M4A composer 未拆分：%+v", observation.Credits)
 	}
 	if observation.RawAtoms["----:PRIVATE_NOTE"] != "" {
@@ -200,7 +203,7 @@ func TestParseFLACRetainsReleaseMetadataAndTrackCredits(t *testing.T) {
 	if observation.Label != "Example Label" || observation.Barcode != "012345678901" || observation.Edition != "Deluxe Edition" {
 		t.Fatalf("FLAC 发行字段丢失：%+v", observation)
 	}
-	wantCredits := []creditObservation{
+	wantCredits := []metadata.Credit{
 		{Role: "composer", Name: "Composer One"},
 		{Role: "composer", Name: "Composer Two"},
 		{Role: "composer", Name: "Composer Three"},
@@ -863,4 +866,12 @@ func repairUTF16(value string, littleEndian bool) []byte {
 		}
 	}
 	return result
+}
+
+func TestSplitCreditNamesUsesArtistRules(t *testing.T) {
+	got := splitCreditNames("Composer Alpha, Composer Beta & Composer Gamma")
+	want := []string{"Composer Alpha", "Composer Beta", "Composer Gamma"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("credit 拆分结果 = %#v，期望 %#v", got, want)
+	}
 }

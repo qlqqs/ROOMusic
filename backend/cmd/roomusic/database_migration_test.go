@@ -17,6 +17,7 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/migrations"
 )
 
@@ -229,7 +230,7 @@ func TestPostgreSQLMigrationLegacySparseHistoryUpgrade(t *testing.T) {
 			t.Fatalf("apply historical migration %d: %v", version, err)
 		}
 	}
-	userID := createIdentifier()
+	userID := uuid.New()
 	if _, err := database.Exec(`INSERT INTO users(id,username,password_hash) VALUES($1::uuid,'legacy-user','hash')`, userID); err != nil {
 		t.Fatalf("insert legacy data: %v", err)
 	}
@@ -427,7 +428,7 @@ func migrationTestDatabaseURL(t *testing.T) string {
 		_ = admin.Close()
 		t.Fatalf("ping migration test admin connection: %v", err)
 	}
-	schema := "roomusic_migration_" + strings.ReplaceAll(createIdentifier(), "-", "")
+	schema := "roomusic_migration_" + strings.ReplaceAll(uuid.New(), "-", "")
 	if _, err := admin.ExecContext(ctx, `CREATE SCHEMA `+schema); err != nil {
 		_ = admin.Close()
 		t.Fatalf("create migration test schema: %v", err)
@@ -477,7 +478,7 @@ func openConcurrentMigrationDatabases(t *testing.T) (*sql.DB, *sql.DB) {
 		_ = admin.Close()
 		t.Fatalf("ping concurrent migration admin connection: %v", err)
 	}
-	schema := "roomusic_migration_concurrent_" + strings.ReplaceAll(createIdentifier(), "-", "")
+	schema := "roomusic_migration_concurrent_" + strings.ReplaceAll(uuid.New(), "-", "")
 	if _, err := admin.ExecContext(ctx, `CREATE SCHEMA `+schema); err != nil {
 		_ = admin.Close()
 		t.Fatalf("create concurrent migration schema: %v", err)

@@ -3,9 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +16,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/artwork"
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 )
 
 type registeredRoot struct{ ID, Path string }
@@ -36,11 +38,11 @@ type trackSourceIdentity struct {
 
 func createTrackSourceIdentity(rootID, relativePath string) (trackSourceIdentity, error) {
 	rawPath := strings.ReplaceAll(strings.TrimSpace(relativePath), "\\", "/")
-	normalizedPath := pathpkg.Clean(rawPath)
-	if rootID == "" || normalizedPath == "." || strings.IndexByte(rawPath, 0) >= 0 || strings.HasPrefix(rawPath, "/") || strings.HasPrefix(rawPath, "//") || len(rawPath) >= 2 && rawPath[1] == ':' || normalizedPath == ".." || strings.HasPrefix(normalizedPath, "../") {
+	cleanedPath := pathpkg.Clean(rawPath)
+	if rootID == "" || cleanedPath == "." || strings.IndexByte(rawPath, 0) >= 0 || strings.HasPrefix(rawPath, "/") || strings.HasPrefix(rawPath, "//") || len(rawPath) >= 2 && rawPath[1] == ':' || cleanedPath == ".." || strings.HasPrefix(cleanedPath, "../") {
 		return trackSourceIdentity{}, fmt.Errorf("invalid source relative path")
 	}
-	return trackSourceIdentity{RootID: rootID, RelativePath: normalizedPath}, nil
+	return trackSourceIdentity{RootID: rootID, RelativePath: cleanedPath}, nil
 }
 
 type scanOutcome struct {
@@ -179,10 +181,8 @@ func (application *roomusicApplication) finalizeScan(ctx context.Context, connec
 		status = "canceled"
 	}
 	if scanStatusAllowsMissingReconciliation(status) {
-		for _, rootID := range rootIDs {
-			if _, err := transaction.ExecContext(ctx, "UPDATE tracks SET source_status='missing' WHERE source_root_id=$1::uuid AND observed_at < (SELECT started_at FROM scan_runs WHERE id=$2::uuid)", rootID, scanID); err != nil {
-				return "", err
-			}
+		if err := catalog.MarkMissingSources(ctx, transaction, scanID, rootIDs); err != nil {
+			return "", err
 		}
 	}
 	var errorMessage any
@@ -382,7 +382,7 @@ func (application *roomusicApplication) scanRoot(ctx context.Context, executor s
 			}
 			return nil
 		}
-		physicalObservation := sourceObservation{RelativePath: relativePath, Directory: directoryOf(relativePath), Title: observation.Title, Album: observation.Album, AlbumArtist: observation.AlbumArtist, Artist: observation.Artist, SourceType: observation.SourceType, MediaType: observation.MediaType, Genre: observation.Genre, CatalogNumber: observation.Catalog, Edition: observation.Edition, Label: observation.Label, Barcode: observation.Barcode, Year: observation.Year, TrackNumber: observation.TrackNumber, DiscNumber: observation.DiscNumber, SourceKind: observation.SourceKind, InferredFields: observation.InferredFields, FieldSources: observationFieldSources(observation), DurationSeconds: observation.DurationSeconds, Codec: observation.Codec, BitDepth: observation.BitDepth, SampleRate: observation.SampleRate, Channels: observation.Channels, Bitrate: observation.Bitrate, Artwork: observation.Artwork, ArtworkMIME: observation.ArtworkMIME, Credits: append([]creditObservation(nil), observation.Credits...)}
+		physicalObservation := catalog.SourceObservation{RelativePath: relativePath, Directory: catalog.DirectoryOf(relativePath), Title: observation.Title, Album: observation.Album, AlbumArtist: observation.AlbumArtist, Artist: observation.Artist, SourceType: observation.SourceType, MediaType: observation.MediaType, Genre: observation.Genre, CatalogNumber: observation.Catalog, Edition: observation.Edition, Label: observation.Label, Barcode: observation.Barcode, Year: observation.Year, TrackNumber: observation.TrackNumber, DiscNumber: observation.DiscNumber, SourceKind: observation.SourceKind, InferredFields: observation.InferredFields, FieldSources: observationFieldSources(observation), DurationSeconds: observation.DurationSeconds, Codec: observation.Codec, BitDepth: observation.BitDepth, SampleRate: observation.SampleRate, Channels: observation.Channels, Bitrate: observation.Bitrate, Artwork: observation.Artwork, ArtworkMIME: observation.ArtworkMIME, Credits: append([]metadata.Credit(nil), observation.Credits...)}
 		// 注册根本身不是 album 证据。目录 fallback 只在根目录以下有效；根级文件缺少
 		// album tag 时必须保持为彼此独立的 loose-unknown candidates。
 		if physicalObservation.Directory == "" && physicalObservation.InferredFields["album"] {
@@ -439,7 +439,7 @@ func cueTrackCanBeStaged(track cueTrack) bool {
 	return track.ReferenceStatus == "present" && track.IndexPresent
 }
 
-func buildCueVirtualObservation(parent audioObservation, document cueDocument, cue cueTrack, sheetRelativePath string) sourceObservation {
+func buildCueVirtualObservation(parent audioObservation, document cueDocument, cue cueTrack, sheetRelativePath string) catalog.SourceObservation {
 	observation := parent
 	observation.InferredFields = cloneBoolMap(parent.InferredFields)
 	observation.SourceKind = "cue_virtual"
@@ -489,12 +489,12 @@ func buildCueVirtualObservation(parent audioObservation, document cueDocument, c
 	delete(observation.InferredFields, "track_number")
 	fieldSources["track_number"] = "cue_track"
 
-	referencedIdentity := normalizedPath(cue.ReferencedFile)
-	parentRelative := normalizedPath(filepath.ToSlash(filepath.Join(filepath.Dir(sheetRelativePath), referencedIdentity)))
+	referencedIdentity := catalog.NormalizedPath(cue.ReferencedFile)
+	parentRelative := catalog.NormalizedPath(filepath.ToSlash(filepath.Join(filepath.Dir(sheetRelativePath), referencedIdentity)))
 	virtualPath := sheetRelativePath + "#track-" + strconv.Itoa(cue.Number) + "@" + parentRelative + "#index-" + strconv.Itoa(cue.IndexFrames)
-	return sourceObservation{
+	return catalog.SourceObservation{
 		RelativePath:          virtualPath,
-		Directory:             directoryOf(sheetRelativePath),
+		Directory:             catalog.DirectoryOf(sheetRelativePath),
 		Title:                 observation.Title,
 		Album:                 observation.Album,
 		AlbumArtist:           observation.AlbumArtist,
@@ -558,7 +558,7 @@ const (
 	maxRipLogDiagnostics          = 20
 )
 
-func stageObservation(ctx context.Context, executor scanExecutor, scanID, rootID string, observation sourceObservation) error {
+func stageObservation(ctx context.Context, executor scanExecutor, scanID, rootID string, observation catalog.SourceObservation) error {
 	identity, err := createTrackSourceIdentity(rootID, observation.RelativePath)
 	if err != nil {
 		return err
@@ -572,7 +572,7 @@ func stageObservation(ctx context.Context, executor scanExecutor, scanID, rootID
 			return fmt.Errorf("invalid staged CUE reference: %w", err)
 		}
 	}
-	scope := observationOrganizationScope(observation)
+	scope := catalog.OrganizationScope(observation)
 	// 每个逻辑 scope 只暂存一份确定性的 embedded artwork；folder artwork 要等到
 	// Release id 确定后再发现和绑定。
 	if len(observation.Artwork) > 0 {
@@ -600,22 +600,7 @@ func stageObservation(ctx context.Context, executor scanExecutor, scanID, rootID
 	return err
 }
 
-func observationOrganizationScope(observation sourceObservation) string {
-	location := locateObservation(observation)
-	if location.isDiscDir {
-		return "disc-parent:" + location.parent
-	}
-	if location.dir == "" {
-		if album := albumEvidence(observation); album != "" {
-			digest := sha256.Sum256([]byte(album))
-			return fmt.Sprintf("root-album:%x", digest[:12])
-		}
-		return "root-source:" + normalizedPath(observation.RelativePath)
-	}
-	return "directory:" + location.dir
-}
-
-func loadStagedObservationScope(ctx context.Context, executor scanExecutor, scanID, rootID, scope string) ([]sourceObservation, error) {
+func loadStagedObservationScope(ctx context.Context, executor scanExecutor, scanID, rootID, scope string) ([]catalog.SourceObservation, error) {
 	rows, err := executor.QueryContext(ctx, `SELECT observation FROM scan_observations
 		WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND organization_scope=$3
 		ORDER BY relative_path LIMIT $4`, scanID, rootID, scope, maxStagedObservationsPerScope+1)
@@ -623,13 +608,13 @@ func loadStagedObservationScope(ctx context.Context, executor scanExecutor, scan
 		return nil, err
 	}
 	defer rows.Close()
-	observations := make([]sourceObservation, 0, 64)
+	observations := make([]catalog.SourceObservation, 0, 64)
 	for rows.Next() {
 		var raw []byte
 		if err := rows.Scan(&raw); err != nil {
 			return nil, err
 		}
-		var observation sourceObservation
+		var observation catalog.SourceObservation
 		if err := json.Unmarshal(raw, &observation); err != nil {
 			return nil, fmt.Errorf("decode staged observation: %w", err)
 		}
@@ -676,9 +661,9 @@ func (application *roomusicApplication) persistStagedCandidates(ctx context.Cont
 				}
 				continue
 			}
-			for _, candidate := range organizeObservations(observations) {
+			for _, candidate := range catalog.OrganizeObservations(observations) {
 				ripLogRefs, diagnostics := discoverCandidateRipLogEvidence(root, candidate)
-				applyRipLogEvidence(&candidate, ripLogRefs)
+				catalog.ApplyRipLogEvidence(&candidate, ripLogRefs)
 				for _, diagnostic := range diagnostics {
 					if diagnosticErr := application.recordDiagnosticWith(ctx, executor, scanID, diagnostic.RelativePath, diagnostic.Kind, diagnostic.Message); diagnosticErr != nil && firstErr == nil {
 						firstErr = diagnosticErr
@@ -700,7 +685,7 @@ type ripLogDiagnostic struct {
 	Message      string
 }
 
-func discoverCandidateRipLogEvidence(root registeredRoot, candidate organizedCandidate) ([]string, []ripLogDiagnostic) {
+func discoverCandidateRipLogEvidence(root registeredRoot, candidate catalog.OrganizedCandidate) ([]string, []ripLogDiagnostic) {
 	directories := candidateSourceDirectories(candidate)
 	references := make([]string, 0)
 	diagnostics := make([]ripLogDiagnostic, 0)
@@ -728,13 +713,13 @@ func discoverCandidateRipLogEvidence(root registeredRoot, candidate organizedCan
 			continue
 		}
 		for _, entry := range entries {
-			if len(references) == maxGroupingEvidenceRefs {
+			if len(references) == catalog.MaxGroupingEvidenceRefs {
 				break
 			}
 			if !strings.EqualFold(filepath.Ext(entry.Name()), ".log") || entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
 				continue
 			}
-			relativePath := normalizedPath(filepath.ToSlash(filepath.Join(directory, entry.Name())))
+			relativePath := catalog.NormalizedPath(filepath.ToSlash(filepath.Join(directory, entry.Name())))
 			if _, err := createTrackSourceIdentity(root.ID, relativePath); err != nil {
 				continue
 			}
@@ -760,11 +745,11 @@ func discoverCandidateRipLogEvidence(root registeredRoot, candidate organizedCan
 	return references, diagnostics
 }
 
-func candidateSourceDirectories(candidate organizedCandidate) []string {
+func candidateSourceDirectories(candidate catalog.OrganizedCandidate) []string {
 	seen := map[string]bool{}
 	directories := make([]string, 0)
 	add := func(value string) {
-		value = normalizedPath(value)
+		value = catalog.NormalizedPath(value)
 		if seen[value] {
 			return
 		}
@@ -776,7 +761,7 @@ func candidateSourceDirectories(candidate organizedCandidate) []string {
 		for _, track := range tracks {
 			directory := track.Observation.Directory
 			if directory == "" {
-				directory = directoryOf(track.Observation.RelativePath)
+				directory = catalog.DirectoryOf(track.Observation.RelativePath)
 			}
 			add(directory)
 		}
@@ -822,14 +807,6 @@ func alignCueStagingScopes(ctx context.Context, executor scanExecutor, scanID, r
 	return err
 }
 
-func directoryOf(path string) string {
-	d := filepath.ToSlash(filepath.Dir(path))
-	if d == "." {
-		return ""
-	}
-	return d
-}
-
 func firstNonEmpty(values ...string) string {
 	for _, value := range values {
 		if value = strings.TrimSpace(value); value != "" {
@@ -861,177 +838,13 @@ func observationFieldSources(observation audioObservation) map[string]string {
 
 // persistOrganizedCandidates 为每个 candidate 使用独立短事务。Track 身份基于
 // root + 相对来源路径，因此重扫更新既有行，同时允许 candidate 拓扑变化。
-func (application *roomusicApplication) persistOrganizedCandidates(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, candidates []organizedCandidate) error {
-	for _, c := range candidates {
-		if err := application.persistOneCandidate(ctx, executor, scanID, root, c); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func sourceIdentityForObservation(rootID string, observation sourceObservation) string {
-	if strings.EqualFold(observation.SourceKind, "cue_virtual") || strings.Contains(strings.ToLower(observation.SourceKind), "cue") {
-		sheet := normalizedPath(observation.CueSheetPath)
-		parent := normalizedPath(observation.CueParentRelativePath)
-		if parent == "" {
-			parent = normalizedPath(observation.CueReferencedFile)
-		}
-		return fmt.Sprintf("%s:cue:v1:%s:%s:%d:%d", rootID, sheet, parent, observation.TrackNumber, observation.CueIndexFrames)
-	}
-	return rootID + ":physical:v1:" + normalizedPath(observation.RelativePath)
-}
-
-// legacySourceIdentity 只用于从 0010 原地升级；新行始终使用上述版本化身份。
-func legacySourceIdentity(rootID string, observation sourceObservation) string {
-	return rootID + ":" + normalizedPath(observation.RelativePath)
-}
-
-func legacyCueSourceIdentity(rootID string, observation sourceObservation) string {
-	if !isCueObservation(observation) {
-		return ""
-	}
-	sheet := normalizedPath(observation.CueSheetPath)
-	parent := cueParentPath(observation)
-	if sheet == "" || parent == "" || observation.TrackNumber < 1 {
-		return ""
-	}
-	sheetDirectory := filepath.Dir(filepath.FromSlash(sheet))
-	parentFromSheet, err := filepath.Rel(sheetDirectory, filepath.FromSlash(parent))
-	if err != nil {
-		return ""
-	}
-	parentFromSheet = normalizedPath(filepath.ToSlash(parentFromSheet))
-	if parentFromSheet == "" {
-		return ""
-	}
-	legacyPath := sheet + "#track-" + strconv.Itoa(observation.TrackNumber) + "@" + parentFromSheet
-	return rootID + ":" + legacyPath
-}
-
-func (application *roomusicApplication) persistOneCandidate(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, candidate organizedCandidate) (err error) {
-	tx, err := executor.BeginTx(ctx, nil)
+// persistOneCandidate 在 catalog 事务提交后为该 Release 绑定封面；封面失败以 errArtworkBinding 包装返回。
+func (application *roomusicApplication) persistOneCandidate(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, candidate catalog.OrganizedCandidate) error {
+	releaseID, err := catalog.PersistCandidate(ctx, executor, scanID, root.ID, candidate)
 	if err != nil {
 		return err
 	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = tx.Rollback()
-		}
-	}()
-
-	anchor := candidateIdentity(root.ID, candidate.Anchor)
-	var releaseID, groupID string
-	err = tx.QueryRowContext(ctx, "SELECT id::text,group_id::text FROM releases WHERE source_root_id=$1::uuid AND candidate_anchor=$2", root.ID, anchor).Scan(&releaseID, &groupID)
-	if errors.Is(err, sql.ErrNoRows) {
-		groupID, releaseID = createIdentifier(), createIdentifier()
-		if _, err = tx.ExecContext(ctx, "INSERT INTO release_groups(id) VALUES($1::uuid)", groupID); err == nil {
-			_, err = tx.ExecContext(ctx, `INSERT INTO releases(id,group_id,title,artist,source_root_id,relative_directory,candidate_anchor,candidate_kind,album_artist,year,source_type,media_type,genre,catalog_number,edition,label,barcode)
-				VALUES($1::uuid,$2::uuid,$3,$4,$5::uuid,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`, releaseID, groupID, candidate.Title, candidate.Artist, root.ID, candidate.Anchor.Scope, anchor, string(candidate.Anchor.Kind), candidate.AlbumArtist, releaseYear(candidate), nullableString(candidate.SourceType), nullableString(candidate.MediaType), nullableString(candidate.Genre), nullableString(candidate.CatalogNumber), nullableString(candidate.Edition), nullableString(candidate.Label), nullableString(candidate.Barcode))
-		}
-	} else if err == nil {
-		_, err = tx.ExecContext(ctx, `UPDATE releases SET title=$1,artist=$2,relative_directory=$3,candidate_kind=$4,album_artist=$5,year=$6,source_type=$7,media_type=$8,genre=$9,catalog_number=$10,edition=$11,label=$12,barcode=$13 WHERE id=$14::uuid`, candidate.Title, candidate.Artist, candidate.Anchor.Scope, string(candidate.Anchor.Kind), candidate.AlbumArtist, releaseYear(candidate), nullableString(candidate.SourceType), nullableString(candidate.MediaType), nullableString(candidate.Genre), nullableString(candidate.CatalogNumber), nullableString(candidate.Edition), nullableString(candidate.Label), nullableString(candidate.Barcode), releaseID)
-	}
-	if err != nil {
-		return err
-	}
-
-	discs := make([]int, 0, len(candidate.Mediums))
-	for disc := range candidate.Mediums {
-		discs = append(discs, disc)
-	}
-	sort.Ints(discs)
-	for _, disc := range discs {
-		var mediumID string
-		err = tx.QueryRowContext(ctx, "SELECT id::text FROM media WHERE release_id=$1::uuid AND position=$2", releaseID, disc).Scan(&mediumID)
-		if errors.Is(err, sql.ErrNoRows) {
-			mediumID = createIdentifier()
-			_, err = tx.ExecContext(ctx, "INSERT INTO media(id,release_id,position) VALUES($1::uuid,$2::uuid,$3)", mediumID, releaseID, disc)
-		}
-		if err != nil {
-			return err
-		}
-		for _, organizedTrack := range candidate.Mediums[disc] {
-			observation := organizedTrack.Observation
-			observation.RelativePath = normalizedPath(observation.RelativePath)
-			trackArtist := canonicalTrackArtist(observation.Artist)
-			identity := sourceIdentityForObservation(root.ID, observation)
-			var trackID string
-			if isCueObservation(observation) {
-				err = tx.QueryRowContext(ctx, "SELECT id::text FROM tracks WHERE source_identity IN ($1,$2,$3) ORDER BY id LIMIT 1", identity, legacySourceIdentity(root.ID, observation), legacyCueSourceIdentity(root.ID, observation)).Scan(&trackID)
-			} else {
-				err = tx.QueryRowContext(ctx, "SELECT id::text FROM tracks WHERE source_identity IN ($1,$2) OR (source_root_id=$3::uuid AND relative_path=$4) ORDER BY id LIMIT 1", identity, legacySourceIdentity(root.ID, observation), root.ID, observation.RelativePath).Scan(&trackID)
-			}
-			if errors.Is(err, sql.ErrNoRows) {
-				trackID = createIdentifier()
-				_, err = tx.ExecContext(ctx, `INSERT INTO tracks(id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,source_kind,source_identity,duration_seconds,codec,sample_rate,channels,bitrate,bit_depth,cue_sheet_path,cue_parent_relative_path,cue_referenced_file,cue_index_frames,cue_end_frames,cue_isrc)
-					VALUES($1::uuid,$2::uuid,$3,$4,$5,$6,$7::uuid,$8,'present',NOW(),$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`, trackID, mediumID, organizedTrack.Position, observation.Title, trackArtist, disc, root.ID, observation.RelativePath, observation.SourceKind, identity, observation.DurationSeconds, observation.Codec, observation.SampleRate, observation.Channels, observation.Bitrate, nullablePositiveInt(observation.BitDepth), nullableString(observation.CueSheetPath), nullableString(observation.CueParentRelativePath), nullableString(observation.CueReferencedFile), nullableCueFrame(observation.CueIndexFrames, observation.CueIndexPresent), nullableCueFrame(observation.CueEndFrames, observation.CueEndPresent), nullableString(observation.CueISRC))
-			} else if err == nil {
-				_, err = tx.ExecContext(ctx, `UPDATE tracks SET medium_id=$1::uuid,position=$2,title=$3,artist=$4,disc_number=$5,source_status='present',observed_at=NOW(),source_kind=$6,source_identity=$7,duration_seconds=$8,codec=$9,sample_rate=$10,channels=$11,bitrate=$12,bit_depth=$13,cue_sheet_path=$14,cue_parent_relative_path=$15,cue_referenced_file=$16,cue_index_frames=$17,cue_end_frames=$18,cue_isrc=$19 WHERE id=$20::uuid`, mediumID, organizedTrack.Position, observation.Title, trackArtist, disc, observation.SourceKind, identity, observation.DurationSeconds, observation.Codec, observation.SampleRate, observation.Channels, observation.Bitrate, nullablePositiveInt(observation.BitDepth), nullableString(observation.CueSheetPath), nullableString(observation.CueParentRelativePath), nullableString(observation.CueReferencedFile), nullableCueFrame(observation.CueIndexFrames, observation.CueIndexPresent), nullableCueFrame(observation.CueEndFrames, observation.CueEndPresent), nullableString(observation.CueISRC), trackID)
-			}
-			if err != nil {
-				return err
-			}
-			if _, err = tx.ExecContext(ctx, "DELETE FROM track_observations WHERE track_id=$1::uuid", trackID); err != nil {
-				return err
-			}
-			for _, field := range observation.fieldObservations() {
-				if _, err = tx.ExecContext(ctx, "INSERT INTO track_observations(track_id,scan_run_id,field_name,value,source_kind,inferred,observed_at) VALUES($1::uuid,$2::uuid,$3,$4,$5,$6,NOW())", trackID, scanID, field.Name, field.Value, field.SourceKind, field.Inferred); err != nil {
-					return err
-				}
-			}
-			if _, err = tx.ExecContext(ctx, "DELETE FROM track_credits WHERE track_id=$1::uuid", trackID); err != nil {
-				return err
-			}
-			for position, credit := range canonicalCreditObservations(observation.Credits) {
-				if _, err = tx.ExecContext(ctx, "INSERT INTO track_credits(track_id,role,name,position) VALUES($1::uuid,$2,$3,$4)", trackID, credit.Role, credit.Name, position+1); err != nil {
-					return err
-				}
-			}
-		}
-	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM media WHERE release_id=$1::uuid AND NOT EXISTS (
-		SELECT 1 FROM tracks WHERE tracks.medium_id=media.id)`, releaseID); err != nil {
-		return err
-	}
-
-	if _, err = tx.ExecContext(ctx, "DELETE FROM release_field_decisions WHERE release_id=$1::uuid", releaseID); err != nil {
-		return err
-	}
-	for _, decision := range candidate.Decisions {
-		if _, err = tx.ExecContext(ctx, `INSERT INTO release_field_decisions(release_id,field_key,selected_value,selected_source,confidence,action,rule_id,candidates,reason,scan_run_id)
-			VALUES($1::uuid,$2,to_jsonb($3::text),$4,$5,$6,$7,to_jsonb($8::text[]),$9,$10::uuid)`, releaseID, decision.Field, decision.Value, decision.Source, decision.Confidence, decision.Action, decision.RuleID, decision.Candidates, decision.Reason, scanID); err != nil {
-			return err
-		}
-	}
-	if _, err = tx.ExecContext(ctx, "DELETE FROM release_credits WHERE release_id=$1::uuid", releaseID); err != nil {
-		return err
-	}
-	if candidate.AlbumArtist != "" {
-		if _, err = tx.ExecContext(ctx, "INSERT INTO release_credits(release_id,role,name,position) VALUES($1::uuid,'album_artist',$2,1)", releaseID, candidate.AlbumArtist); err != nil {
-			return err
-		}
-	}
-	refs := append([]string(nil), candidate.GroupingRefs...)
-	if len(refs) == 0 {
-		for _, disc := range discs {
-			for _, track := range candidate.Mediums[disc] {
-				refs = append(refs, normalizedPath(track.Observation.RelativePath))
-			}
-		}
-		sort.Strings(refs)
-	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO release_grouping_evidence(release_id,candidate_kind,rule_id,source_refs,reason,scan_run_id)
-		VALUES($1::uuid,$2,$3,to_jsonb($4::text[]),$5,$6::uuid)
-		ON CONFLICT(release_id) DO UPDATE SET candidate_kind=EXCLUDED.candidate_kind,rule_id=EXCLUDED.rule_id,source_refs=EXCLUDED.source_refs,reason=EXCLUDED.reason,scan_run_id=EXCLUDED.scan_run_id,observed_at=NOW()`, releaseID, candidate.Anchor.Kind, "organizer_v2", refs, strings.Join(candidate.Attention, ";"), scanID); err != nil {
-		return err
-	}
-	if err = tx.Commit(); err != nil {
-		return err
-	}
-	committed = true
-	if artworkObservation, ok := candidateArtworkObservation(candidate); ok {
+	if artworkObservation, ok := candidate.ArtworkObservation(); ok {
 		if artworkErr := application.saveArtworkForRelease(ctx, executor, releaseID, root, artworkObservation); artworkErr != nil {
 			return fmt.Errorf("%w: %v", errArtworkBinding, artworkErr)
 		}
@@ -1039,87 +852,13 @@ func (application *roomusicApplication) persistOneCandidate(ctx context.Context,
 	return nil
 }
 
-func canonicalCreditObservations(values []creditObservation) []creditObservation {
-	seen := make(map[string]bool, len(values))
-	result := make([]creditObservation, 0, len(values))
-	for _, value := range values {
-		value.Role = strings.ToLower(normalizeValue(value.Role))
-		value.Name = normalizeValue(value.Name)
-		if value.Role == "" || value.Name == "" {
-			continue
-		}
-		key := value.Role + "\x00" + value.Name
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		result = append(result, value)
-	}
-	sort.Slice(result, func(i, j int) bool {
-		if result[i].Role != result[j].Role {
-			return result[i].Role < result[j].Role
-		}
-		return result[i].Name < result[j].Name
-	})
-	return result
-}
-
-func candidateArtworkObservation(candidate organizedCandidate) (sourceObservation, bool) {
-	discs := make([]int, 0, len(candidate.Mediums))
-	for disc := range candidate.Mediums {
-		discs = append(discs, disc)
-	}
-	sort.Ints(discs)
-	for _, disc := range discs {
-		for _, track := range candidate.Mediums[disc] {
-			observation := track.Observation
-			if len(observation.Artwork) > 0 {
-				return observation, true
-			}
-		}
-	}
-	for _, disc := range discs {
-		if len(candidate.Mediums[disc]) > 0 {
-			return candidate.Mediums[disc][0].Observation, true
-		}
-	}
-	return sourceObservation{}, false
-}
-
-func releaseYear(candidate organizedCandidate) any {
-	// Release 核心列必须与 organizer 已保存的字段决定一致，不能在持久化层把
-	// inferred 年份重新计票并覆盖权威 tag/CUE 证据。
-	for _, decision := range candidate.Decisions {
-		if decision.Field != "year" {
-			continue
-		}
-		year, err := strconv.Atoi(decision.Value)
-		if err == nil && year > 0 {
-			return year
+func (application *roomusicApplication) persistOrganizedCandidates(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, candidates []catalog.OrganizedCandidate) error {
+	for _, c := range candidates {
+		if err := application.persistOneCandidate(ctx, executor, scanID, root, c); err != nil {
+			return err
 		}
 	}
 	return nil
-}
-
-func nullableString(value string) any {
-	if strings.TrimSpace(value) == "" {
-		return nil
-	}
-	return value
-}
-
-func nullablePositiveInt(value int) any {
-	if value <= 0 {
-		return nil
-	}
-	return value
-}
-
-func nullableCueFrame(value int, present bool) any {
-	if !present || value < 0 {
-		return nil
-	}
-	return value
 }
 
 func isSupportedAudioExtension(extension string) bool {
@@ -1162,27 +901,17 @@ func (application *roomusicApplication) saveObservationWith(context context.Cont
 	if err != nil {
 		return err
 	}
-	organized := sourceObservation{RelativePath: sourceIdentity.RelativePath, Directory: directoryOf(sourceIdentity.RelativePath), Title: observation.Title, Album: observation.Album, AlbumArtist: observation.AlbumArtist, Artist: observation.Artist, SourceType: observation.SourceType, MediaType: observation.MediaType, Genre: observation.Genre, CatalogNumber: observation.Catalog, Year: observation.Year, TrackNumber: observation.TrackNumber, DiscNumber: observation.DiscNumber, SourceKind: observation.SourceKind, InferredFields: observation.InferredFields, FieldSources: observationFieldSources(observation), DurationSeconds: observation.DurationSeconds, Codec: observation.Codec, BitDepth: observation.BitDepth, SampleRate: observation.SampleRate, Channels: observation.Channels, Bitrate: observation.Bitrate, Artwork: observation.Artwork, ArtworkMIME: observation.ArtworkMIME}
+	organized := catalog.SourceObservation{RelativePath: sourceIdentity.RelativePath, Directory: catalog.DirectoryOf(sourceIdentity.RelativePath), Title: observation.Title, Album: observation.Album, AlbumArtist: observation.AlbumArtist, Artist: observation.Artist, SourceType: observation.SourceType, MediaType: observation.MediaType, Genre: observation.Genre, CatalogNumber: observation.Catalog, Year: observation.Year, TrackNumber: observation.TrackNumber, DiscNumber: observation.DiscNumber, SourceKind: observation.SourceKind, InferredFields: observation.InferredFields, FieldSources: observationFieldSources(observation), DurationSeconds: observation.DurationSeconds, Codec: observation.Codec, BitDepth: observation.BitDepth, SampleRate: observation.SampleRate, Channels: observation.Channels, Bitrate: observation.Bitrate, Artwork: observation.Artwork, ArtworkMIME: observation.ArtworkMIME}
 	if organized.Directory == "" && organized.InferredFields["album"] {
 		organized.Album = ""
 	}
-	return application.persistOrganizedCandidates(context, executor, scanID, root, organizeObservations([]sourceObservation{organized}))
+	return application.persistOrganizedCandidates(context, executor, scanID, root, catalog.OrganizeObservations([]catalog.SourceObservation{organized}))
 }
 
-func (application *roomusicApplication) saveArtwork(ctx context.Context, root registeredRoot, relativePath string, observation audioObservation) error {
-	return application.saveArtworkWith(ctx, application.database.connection, root, relativePath, observation)
-}
-
-func (application *roomusicApplication) saveArtworkWith(ctx context.Context, executor scanExecutor, root registeredRoot, relativePath string, observation audioObservation) error {
-	var releaseID string
-	if err := executor.QueryRowContext(ctx, "SELECT id::text FROM releases WHERE source_root_id=$1::uuid AND relative_directory=$2 ORDER BY id LIMIT 1", root.ID, directoryOf(relativePath)).Scan(&releaseID); err != nil {
-		return err
-	}
-	return application.saveArtworkForRelease(ctx, executor, releaseID, root, sourceObservation{RelativePath: relativePath, Artwork: observation.Artwork, ArtworkMIME: observation.ArtworkMIME})
-}
-
-func (application *roomusicApplication) saveArtworkForRelease(ctx context.Context, executor scanExecutor, releaseID string, root registeredRoot, observation sourceObservation) error {
-	relativePath := normalizedPath(observation.RelativePath)
+// saveArtworkForRelease 为 Release 取得封面并交给受管存储：优先用观察里的内嵌封面，否则在曲目所在
+// 文件夹发现封面图片；两者都没有时移除既有关联。文件夹封面发现失败以原错误返回，不当作没有封面。
+func (application *roomusicApplication) saveArtworkForRelease(ctx context.Context, executor scanExecutor, releaseID string, root registeredRoot, observation catalog.SourceObservation) error {
+	relativePath := catalog.NormalizedPath(observation.RelativePath)
 	directory := filepath.Dir(filepath.Join(root.Path, filepath.FromSlash(relativePath)))
 	data, mimeType := observation.Artwork, observation.ArtworkMIME
 	sourceType := "embedded"
@@ -1194,174 +923,11 @@ func (application *roomusicApplication) saveArtworkForRelease(ctx context.Contex
 			return fmt.Errorf("discover folder artwork: %w", discoveryErr)
 		}
 	}
+	store := artwork.NewStore(application.config.DataDirectory)
 	if len(data) == 0 {
-		return application.removeReleaseArtwork(ctx, executor, releaseID)
+		return store.Remove(ctx, executor, releaseID)
 	}
-	if len(data) > 16<<20 {
-		return fmt.Errorf("artwork too large")
-	}
-	detectedMIME := sniffArtworkMIME(data)
-	if mimeType == "" {
-		mimeType = detectedMIME
-	}
-	if detectedMIME == "" || mimeType != detectedMIME {
-		return fmt.Errorf("unsupported artwork")
-	}
-	width, height := artworkDimensions(data, mimeType)
-	if width <= 0 || height <= 0 {
-		return fmt.Errorf("invalid artwork")
-	}
-	var previousKey sql.NullString
-	if err := executor.QueryRowContext(ctx, "SELECT storage_key FROM release_artworks WHERE release_id=$1::uuid", releaseID).Scan(&previousKey); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return err
-	}
-	hash := fmt.Sprintf("%x", sha256.Sum256(data))
-	key := hash + "." + strings.TrimPrefix(strings.TrimPrefix(mimeType, "image/"), "x-")
-	artworkDirectory := filepath.Join(application.config.DataDirectory, "artwork")
-	if err := os.MkdirAll(artworkDirectory, 0o750); err != nil {
-		return err
-	}
-	path := filepath.Join(artworkDirectory, key)
-	needsWrite := true
-	info, statErr := os.Lstat(path)
-	if statErr == nil {
-		if info.Mode()&os.ModeSymlink == 0 && info.Mode().IsRegular() && info.Size() == int64(len(data)) {
-			existing, readErr := os.ReadFile(path)
-			if readErr != nil {
-				return readErr
-			}
-			needsWrite = !bytes.Equal(existing, data)
-		}
-	} else if !errors.Is(statErr, fs.ErrNotExist) {
-		return statErr
-	}
-	wroteManagedFile := false
-	if needsWrite {
-		temporary, createErr := os.CreateTemp(artworkDirectory, ".artwork-*")
-		if createErr != nil {
-			return createErr
-		}
-		temporaryPath := temporary.Name()
-		defer os.Remove(temporaryPath)
-		if chmodErr := temporary.Chmod(0o640); chmodErr != nil {
-			temporary.Close()
-			return chmodErr
-		}
-		if _, writeErr := temporary.Write(data); writeErr != nil {
-			temporary.Close()
-			return writeErr
-		}
-		if closeErr := temporary.Close(); closeErr != nil {
-			return closeErr
-		}
-		if renameErr := os.Rename(temporaryPath, path); renameErr != nil {
-			return renameErr
-		}
-		wroteManagedFile = true
-	}
-	_, err := executor.ExecContext(ctx, `INSERT INTO release_artworks(release_id,content_hash,mime_type,width,height,storage_key,source_type) VALUES($1::uuid,$2,$3,$4,$5,$6,$7) ON CONFLICT(release_id) DO UPDATE SET content_hash=EXCLUDED.content_hash,mime_type=EXCLUDED.mime_type,width=EXCLUDED.width,height=EXCLUDED.height,storage_key=EXCLUDED.storage_key,source_type=EXCLUDED.source_type`, releaseID, hash, mimeType, width, height, key, sourceType)
-	if err != nil {
-		if wroteManagedFile {
-			if cleanupErr := removeUnreferencedArtwork(ctx, executor, path, key); cleanupErr != nil {
-				return errors.Join(err, fmt.Errorf("remove failed artwork: %w", cleanupErr))
-			}
-		}
-		return err
-	}
-	if previousKey.Valid && previousKey.String != key && filepath.Base(previousKey.String) == previousKey.String {
-		if cleanupErr := removeUnreferencedArtwork(ctx, executor, filepath.Join(artworkDirectory, previousKey.String), previousKey.String); cleanupErr != nil {
-			return fmt.Errorf("remove replaced artwork: %w", cleanupErr)
-		}
-	}
-	return nil
-}
-
-func (application *roomusicApplication) removeReleaseArtwork(ctx context.Context, executor scanExecutor, releaseID string) error {
-	var key sql.NullString
-	err := executor.QueryRowContext(ctx, "DELETE FROM release_artworks WHERE release_id=$1::uuid RETURNING storage_key", releaseID).Scan(&key)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if key.Valid && filepath.Base(key.String) == key.String {
-		if cleanupErr := removeUnreferencedArtwork(ctx, executor, filepath.Join(application.config.DataDirectory, "artwork", key.String), key.String); cleanupErr != nil {
-			return fmt.Errorf("remove released artwork: %w", cleanupErr)
-		}
-	}
-	return nil
-}
-
-func removeUnreferencedArtwork(ctx context.Context, executor scanExecutor, path, key string) error {
-	var references int
-	if err := executor.QueryRowContext(ctx, "SELECT COUNT(*) FROM release_artworks WHERE storage_key=$1", key).Scan(&references); err != nil {
-		return err
-	}
-	if references != 0 {
-		return nil
-	}
-	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
-	return nil
-}
-
-func artworkDimensions(data []byte, mimeType string) (int, int) {
-	switch mimeType {
-	case "image/png":
-		if len(data) >= 24 {
-			return int(binary.BigEndian.Uint32(data[16:20])), int(binary.BigEndian.Uint32(data[20:24]))
-		}
-	case "image/gif":
-		if len(data) >= 10 {
-			return int(binary.LittleEndian.Uint16(data[6:8])), int(binary.LittleEndian.Uint16(data[8:10]))
-		}
-	case "image/jpeg":
-		for offset := 2; offset+9 < len(data); {
-			if data[offset] != 0xff {
-				offset++
-				continue
-			}
-			marker := data[offset+1]
-			offset += 2
-			if marker == 0xd8 || marker == 0xd9 || marker == 0x01 || marker >= 0xd0 && marker <= 0xd7 {
-				continue
-			}
-			if offset+2 > len(data) {
-				break
-			}
-			length := int(binary.BigEndian.Uint16(data[offset : offset+2]))
-			if length < 2 || offset+length > len(data) {
-				break
-			}
-			if (marker >= 0xc0 && marker <= 0xc3 || marker >= 0xc5 && marker <= 0xc7 || marker >= 0xc9 && marker <= 0xcb || marker >= 0xcd && marker <= 0xcf) && length >= 7 {
-				return int(binary.BigEndian.Uint16(data[offset+5 : offset+7])), int(binary.BigEndian.Uint16(data[offset+3 : offset+5]))
-			}
-			offset += length
-		}
-	case "image/webp":
-		if len(data) < 30 {
-			break
-		}
-		switch string(data[12:16]) {
-		case "VP8X":
-			width := 1 + int(data[24]) + int(data[25])<<8 + int(data[26])<<16
-			height := 1 + int(data[27]) + int(data[28])<<8 + int(data[29])<<16
-			return width, height
-		case "VP8 ":
-			if data[23] == 0x9d && data[24] == 0x01 && data[25] == 0x2a {
-				return int(binary.LittleEndian.Uint16(data[26:28]) & 0x3fff), int(binary.LittleEndian.Uint16(data[28:30]) & 0x3fff)
-			}
-		case "VP8L":
-			if data[20] == 0x2f {
-				width := 1 + int(data[21]) + int(data[22]&0x3f)<<8
-				height := 1 + int(data[22]>>6) + int(data[23])<<2 + int(data[24]&0x0f)<<10
-				return width, height
-			}
-		}
-	}
-	return 0, 0
+	return store.Save(ctx, executor, releaseID, data, mimeType, sourceType)
 }
 
 func discoverFolderArtwork(directory string) ([]byte, string, error) {
@@ -1395,7 +961,7 @@ func discoverFolderArtworkWithReader(directory string, readFile func(string) ([]
 			}
 			continue
 		}
-		if mime := sniffArtworkMIME(data); mime != "" {
+		if mime := artwork.SniffMIME(data); mime != "" {
 			return data, mime, nil
 		}
 		if firstErr == nil {
@@ -1405,30 +971,6 @@ func discoverFolderArtworkWithReader(directory string, readFile func(string) ([]
 	return nil, "", firstErr
 }
 
-func sniffArtworkMIME(data []byte) string {
-	if len(data) >= 3 && data[0] == 0xff && data[1] == 0xd8 && data[2] == 0xff {
-		return "image/jpeg"
-	}
-	if len(data) >= 8 && string(data[:8]) == "\x89PNG\r\n\x1a\n" {
-		return "image/png"
-	}
-	if len(data) >= 6 && (string(data[:6]) == "GIF87a" || string(data[:6]) == "GIF89a") {
-		return "image/gif"
-	}
-	if len(data) >= 12 && string(data[:4]) == "RIFF" && string(data[8:12]) == "WEBP" {
-		return "image/webp"
-	}
-	return ""
-}
-
-func (application *roomusicApplication) markMissing(context context.Context, scanID string, rootIDs []string) error {
-	for _, rootID := range rootIDs {
-		if _, err := application.database.connection.ExecContext(context, "UPDATE tracks SET source_status='missing' WHERE source_root_id=$1::uuid AND observed_at < (SELECT started_at FROM scan_runs WHERE id=$2::uuid)", rootID, scanID); err != nil {
-			return err
-		}
-	}
-	return nil
-}
 func (application *roomusicApplication) recordDiagnostic(context context.Context, scanID, relativePath, kind, message string) error {
 	return application.recordDiagnosticWith(context, application.database.connection, scanID, relativePath, kind, message)
 }
@@ -1436,4 +978,13 @@ func (application *roomusicApplication) recordDiagnostic(context context.Context
 func (application *roomusicApplication) recordDiagnosticWith(context context.Context, executor scanExecutor, scanID, relativePath, kind, message string) error {
 	_, err := executor.ExecContext(context, "INSERT INTO scan_diagnostics(scan_run_id,relative_path,kind,message) SELECT $1::uuid,$2,$3,$4 WHERE (SELECT COUNT(*) FROM scan_diagnostics WHERE scan_run_id=$1::uuid)<100", scanID, relativePath, kind, message)
 	return err
+}
+
+// cloneBoolMap 复制推断字段表，且总返回非 nil 的映射（CUE 虚拟轨随后会删除其中的键）。
+func cloneBoolMap(input map[string]bool) map[string]bool {
+	result := make(map[string]bool, len(input))
+	for key, value := range input {
+		result[key] = value
+	}
+	return result
 }

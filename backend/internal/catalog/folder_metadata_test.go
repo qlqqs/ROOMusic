@@ -1,4 +1,4 @@
-package main
+package catalog
 
 import "testing"
 
@@ -74,7 +74,7 @@ func TestParseFolderMetadataRejectsUnmatchedAndOversizedNames(t *testing.T) {
 
 func TestFolderMetadataOnlySupplementsMissingCandidateFields(t *testing.T) {
 	scope := "Example Artist - Folder Album (2024) {Folder Edition, Folder Label, CAT-1001} [FLAC]"
-	candidates := organizeObservations([]sourceObservation{{
+	candidates := OrganizeObservations([]SourceObservation{{
 		RelativePath:   scope + "/01.flac",
 		Directory:      scope,
 		Album:          "Tagged Album",
@@ -105,7 +105,7 @@ func TestFolderMetadataOnlySupplementsMissingCandidateFields(t *testing.T) {
 
 func TestFolderMetadataDoesNotChangeCandidateIdentity(t *testing.T) {
 	scope := "Example Artist - Folder Album (2024) - WEB-DL - 24bit FLAC-Source"
-	observations := []sourceObservation{{
+	observations := []SourceObservation{{
 		RelativePath:   scope + "/01.flac",
 		Directory:      scope,
 		Album:          scope,
@@ -115,12 +115,12 @@ func TestFolderMetadataDoesNotChangeCandidateIdentity(t *testing.T) {
 		SourceKind:     "flac_vorbis_comment",
 		InferredFields: map[string]bool{"album": true, "artist": true},
 	}}
-	candidates := organizeObservations(observations)
+	candidates := OrganizeObservations(observations)
 	if len(candidates) != 1 {
 		t.Fatalf("候选数量 = %d，期望 1", len(candidates))
 	}
 	candidate := candidates[0]
-	if candidate.Anchor.Kind != candidateOrdinary || candidate.Anchor.Scope != scope || candidate.Anchor.Partition != "" {
+	if candidate.Anchor.Kind != CandidateOrdinary || candidate.Anchor.Scope != scope || candidate.Anchor.Partition != "" {
 		t.Fatalf("目录 metadata 改变了候选身份：%+v", candidate.Anchor)
 	}
 	if candidate.Title != "Folder Album" || candidate.AlbumArtist != "Example Artist" || candidate.SourceType != "web" || candidate.MediaType != "web" {
@@ -130,7 +130,7 @@ func TestFolderMetadataDoesNotChangeCandidateIdentity(t *testing.T) {
 
 func TestStrictMultidiscFolderMetadataDoesNotUseParentScope(t *testing.T) {
 	parent := "Example Artist - Example Album (2024) {Example Label, CAT-1001} [FLAC]"
-	candidates := organizeObservations([]sourceObservation{
+	candidates := OrganizeObservations([]SourceObservation{
 		{
 			RelativePath: parent + "/Disc 1/01.flac",
 			Directory:    parent + "/Disc 1",
@@ -148,7 +148,7 @@ func TestStrictMultidiscFolderMetadataDoesNotUseParentScope(t *testing.T) {
 			DiscNumber:   2,
 		},
 	})
-	if len(candidates) != 1 || candidates[0].Anchor.Kind != candidateMultiDisc {
+	if len(candidates) != 1 || candidates[0].Anchor.Kind != CandidateMultiDisc {
 		t.Fatalf("严格多碟候选不正确：%+v", candidates)
 	}
 	if candidates[0].CatalogNumber != "" || candidates[0].Label != "" {

@@ -20,4 +20,4 @@ trap cleanup EXIT INT TERM
 
 "${COMPOSE[@]}" up -d --wait postgres
 echo "运行 PostgreSQL 集成测试：${ROOMUSIC_TEST_DATABASE_URL}" >&2
-(cd "$ROOT_DIR/backend" && go test ./cmd/roomusic -run 'TestPostgreSQL' -count=1)
+(cd "$ROOT_DIR/backend" && go test ./... -run 'TestPostgreSQL' -count=1)

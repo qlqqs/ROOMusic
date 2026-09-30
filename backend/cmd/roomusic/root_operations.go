@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
 func (a *roomusicApplication) writeRootOperationPersistenceError(w http.ResponseWriter, r *http.Request, err error) {
@@ -28,7 +29,7 @@ func operationKey(r *http.Request) string { return strings.TrimSpace(r.Header.Ge
 // rootIDFromPath 校验路由中的目录 ID 并规范为小写，使指纹和响应不受大小写影响。
 func rootIDFromPath(w http.ResponseWriter, r *http.Request) (string, bool) {
 	id := r.PathValue("id")
-	if !isValidIdentifier(id) {
+	if !uuid.Valid(id) {
 		writeAPIError(w, r, 400, "invalid_id", "目录标识无效")
 		return "", false
 	}
@@ -225,7 +226,7 @@ func (a *roomusicApplication) updateRoot(w http.ResponseWriter, r *http.Request)
 	}
 	result := map[string]any{"id": id, "path": filepathBase(path), "status": "disabled", "revision": newRev}
 	body, _ := json.Marshal(result)
-	_, err = tx.ExecContext(r.Context(), `INSERT INTO library_root_operations(id,root_id,actor_id,operation_type,status,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id) VALUES($1,$2::uuid,$3::uuid,'disable','succeeded',$4,$5,$6,$7,jsonb_build_object('status',$8::text,'revision',$6::bigint),jsonb_build_object('status','disabled','revision',$7::bigint),$9::jsonb,$10)`, createIdentifier(), id, actor.ID, key, fp, rev, newRev, status, string(body), r.Header.Get("X-Request-ID"))
+	_, err = tx.ExecContext(r.Context(), `INSERT INTO library_root_operations(id,root_id,actor_id,operation_type,status,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id) VALUES($1,$2::uuid,$3::uuid,'disable','succeeded',$4,$5,$6,$7,jsonb_build_object('status',$8::text,'revision',$6::bigint),jsonb_build_object('status','disabled','revision',$7::bigint),$9::jsonb,$10)`, uuid.New(), id, actor.ID, key, fp, rev, newRev, status, string(body), r.Header.Get("X-Request-ID"))
 	if err != nil {
 		a.writeRootOperationPersistenceError(w, r, err)
 		return
@@ -295,7 +296,7 @@ func (a *roomusicApplication) restoreRoot(w http.ResponseWriter, r *http.Request
 	}
 	result := map[string]any{"id": id, "path": filepathBase(path), "status": "active", "revision": newRev}
 	body, _ := json.Marshal(result)
-	_, err = tx.ExecContext(r.Context(), `INSERT INTO library_root_operations(id,root_id,actor_id,operation_type,status,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id) VALUES($1,$2::uuid,$3::uuid,'restore','succeeded',$4,$5,$6,$7,jsonb_build_object('status','disabled','revision',$6::bigint),jsonb_build_object('status',$8::text,'revision',$7::bigint),$9::jsonb,$10)`, createIdentifier(), id, actor.ID, key, fp, rev, newRev, beforeStatus, string(body), r.Header.Get("X-Request-ID"))
+	_, err = tx.ExecContext(r.Context(), `INSERT INTO library_root_operations(id,root_id,actor_id,operation_type,status,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id) VALUES($1,$2::uuid,$3::uuid,'restore','succeeded',$4,$5,$6,$7,jsonb_build_object('status','disabled','revision',$6::bigint),jsonb_build_object('status',$8::text,'revision',$7::bigint),$9::jsonb,$10)`, uuid.New(), id, actor.ID, key, fp, rev, newRev, beforeStatus, string(body), r.Header.Get("X-Request-ID"))
 	if err != nil {
 		a.writeRootOperationPersistenceError(w, r, err)
 		return

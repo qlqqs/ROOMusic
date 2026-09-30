@@ -12,6 +12,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog/artwork"
+	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
 type roomusicApplication struct {
@@ -133,7 +136,7 @@ func (application *roomusicApplication) setupAdmin(responseWriter http.ResponseW
 		writeAPIError(responseWriter, request, 409, "setup_closed", "管理员初始化已完成")
 		return
 	}
-	userID := createIdentifier()
+	userID := uuid.New()
 	if _, err = tx.ExecContext(request.Context(), "INSERT INTO users (id, username, password_hash, role) VALUES ($1::uuid,$2,$3,'admin')", userID, input.Username, passwordHash); err != nil {
 		writeAPIError(responseWriter, request, 409, "setup_closed", "管理员初始化已完成")
 		return
@@ -257,7 +260,7 @@ func (application *roomusicApplication) addRoot(responseWriter http.ResponseWrit
 		return
 	}
 	defer tx.Rollback()
-	id := createIdentifier()
+	id := uuid.New()
 	var createdID string
 	var rev int64
 	var status string
@@ -268,7 +271,7 @@ func (application *roomusicApplication) addRoot(responseWriter http.ResponseWrit
 	}
 	result := map[string]any{"id": createdID, "name": filepath.Base(safePath), "status": status, "revision": rev}
 	body, _ := json.Marshal(result)
-	_, err = tx.ExecContext(request.Context(), `INSERT INTO library_root_operations(id,root_id,actor_id,operation_type,status,idempotency_key,fingerprint,result_revision,before_state,after_state,response,request_id) VALUES($1,$2::uuid,$3::uuid,'create','succeeded',$4,$5,$6,'{}',jsonb_build_object('status',$9::text,'revision',$6::bigint),$7::jsonb,$8)`, createIdentifier(), createdID, actor.ID, key, fingerprint, rev, string(body), request.Header.Get("X-Request-ID"), status)
+	_, err = tx.ExecContext(request.Context(), `INSERT INTO library_root_operations(id,root_id,actor_id,operation_type,status,idempotency_key,fingerprint,result_revision,before_state,after_state,response,request_id) VALUES($1,$2::uuid,$3::uuid,'create','succeeded',$4,$5,$6,'{}',jsonb_build_object('status',$9::text,'revision',$6::bigint),$7::jsonb,$8)`, uuid.New(), createdID, actor.ID, key, fingerprint, rev, string(body), request.Header.Get("X-Request-ID"), status)
 	if err != nil {
 		application.writeRootOperationPersistenceError(responseWriter, request, err)
 		return
@@ -314,16 +317,7 @@ func (application *roomusicApplication) artworkResource(w http.ResponseWriter, r
 		application.writeAuthenticationError(w, r)
 		return
 	}
-	var key, mime string
-	if err := application.database.connection.QueryRowContext(r.Context(), "SELECT storage_key,mime_type FROM release_artworks WHERE storage_key=$1", r.PathValue("id")).Scan(&key, &mime); err != nil {
-		writeAPIError(w, r, http.StatusNotFound, "not_found", "封面不存在")
-		return
-	}
-	if filepath.Base(key) != key {
-		writeAPIError(w, r, http.StatusNotFound, "not_found", "封面不存在")
-		return
-	}
-	b, err := os.ReadFile(filepath.Join(application.config.DataDirectory, "artwork", key))
+	data, mime, err := artwork.NewStore(application.config.DataDirectory).Load(r.Context(), application.database.connection, r.PathValue("id"))
 	if err != nil {
 		writeAPIError(w, r, http.StatusNotFound, "not_found", "封面不存在")
 		return
@@ -331,7 +325,7 @@ func (application *roomusicApplication) artworkResource(w http.ResponseWriter, r
 	w.Header().Set("Content-Type", mime)
 	w.Header().Set("Cache-Control", "private, max-age=86400")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(b)
+	_, _ = w.Write(data)
 }
 
 func (application *roomusicApplication) listUsers(w http.ResponseWriter, r *http.Request) {
@@ -373,7 +367,7 @@ func (application *roomusicApplication) createUser(w http.ResponseWriter, r *htt
 		writeAPIError(w, r, 500, "internal_error", "无法创建用户")
 		return
 	}
-	id := createIdentifier()
+	id := uuid.New()
 	_, err = application.database.connection.ExecContext(r.Context(), "INSERT INTO users(id,username,password_hash,role) VALUES($1::uuid,$2,$3,'user')", id, in.Username, hash)
 	if err != nil {
 		writeAPIError(w, r, 409, "username_taken", "用户名已存在")

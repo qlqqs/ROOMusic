@@ -1,4 +1,4 @@
-package main
+package metadata
 
 import (
 	"reflect"
@@ -28,7 +28,7 @@ func TestSplitArtistNamesFlattensConservativeSeparators(t *testing.T) {
 }
 
 func TestCanonicalArtistNamesApplyOfficialAliasesAndDeduplicate(t *testing.T) {
-	got := canonicalArtistNames("Jay Chou / 周杰倫 / Guest Artist")
+	got := CanonicalArtistNames("Jay Chou / 周杰倫 / Guest Artist")
 	want := []string{"周杰伦", "Guest Artist"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("艺人别名归一结果 = %#v，期望 %#v", got, want)
@@ -36,15 +36,7 @@ func TestCanonicalArtistNamesApplyOfficialAliasesAndDeduplicate(t *testing.T) {
 }
 
 func TestCanonicalTrackArtistUsesStableDisplayOrder(t *testing.T) {
-	if got := canonicalTrackArtist("Artist Beta, Artist Alpha"); got != "Artist Alpha / Artist Beta" {
+	if got := CanonicalTrackArtist("Artist Beta, Artist Alpha"); got != "Artist Alpha / Artist Beta" {
 		t.Fatalf("Track artist = %q，期望稳定排序后的展示值", got)
-	}
-}
-
-func TestSplitCreditNamesUsesArtistRules(t *testing.T) {
-	got := splitCreditNames("Composer Alpha, Composer Beta & Composer Gamma")
-	want := []string{"Composer Alpha", "Composer Beta", "Composer Gamma"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("credit 拆分结果 = %#v，期望 %#v", got, want)
 	}
 }

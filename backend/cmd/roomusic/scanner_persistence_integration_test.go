@@ -11,6 +11,10 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
+	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
 func TestPostgreSQLCandidatePersistenceIsIdempotentAndReplacesCurrentEvidence(t *testing.T) {
@@ -19,11 +23,11 @@ func TestPostgreSQLCandidatePersistenceIsIdempotentAndReplacesCurrentEvidence(t 
 	application := scannerTestApplication(fixture)
 	firstScan := insertRunningScan(t, fixture)
 	artwork := minimalPNGArtwork()
-	observations := []sourceObservation{
-		{RelativePath: "Album/01.flac", Directory: "Album", Title: "First", Album: "Release", AlbumArtist: "Album Artist", Artist: "Track Artist / Guest Artist", Year: 2024, TrackNumber: 1, DiscNumber: 1, SourceKind: "flac_vorbis_comment", DurationSeconds: 60, Codec: "flac", BitDepth: 24, SampleRate: 96000, Channels: 2, Bitrate: 1800, Edition: "Deluxe Edition", Label: "Example Label", Barcode: "012345678901", Credits: []creditObservation{{Role: "composer", Name: "Composer One"}, {Role: "composer", Name: "Composer Two"}}, Artwork: artwork, ArtworkMIME: "image/png"},
+	observations := []catalog.SourceObservation{
+		{RelativePath: "Album/01.flac", Directory: "Album", Title: "First", Album: "Release", AlbumArtist: "Album Artist", Artist: "Track Artist / Guest Artist", Year: 2024, TrackNumber: 1, DiscNumber: 1, SourceKind: "flac_vorbis_comment", DurationSeconds: 60, Codec: "flac", BitDepth: 24, SampleRate: 96000, Channels: 2, Bitrate: 1800, Edition: "Deluxe Edition", Label: "Example Label", Barcode: "012345678901", Credits: []metadata.Credit{{Role: "composer", Name: "Composer One"}, {Role: "composer", Name: "Composer Two"}}, Artwork: artwork, ArtworkMIME: "image/png"},
 		{RelativePath: "Album/02.flac", Directory: "Album", Title: "Second", Album: "Release", AlbumArtist: "Album Artist", Artist: "Track Artist", Year: 1999, TrackNumber: 2, DiscNumber: 1, SourceKind: "flac_vorbis_comment", InferredFields: map[string]bool{"year": true}},
 	}
-	if err := application.persistOrganizedCandidates(context.Background(), fixture.database.connection, firstScan, root, organizeObservations(observations)); err != nil {
+	if err := application.persistOrganizedCandidates(context.Background(), fixture.database.connection, firstScan, root, catalog.OrganizeObservations(observations)); err != nil {
 		t.Fatalf("persist first candidate: %v", err)
 	}
 
@@ -68,9 +72,9 @@ func TestPostgreSQLCandidatePersistenceIsIdempotentAndReplacesCurrentEvidence(t 
 	secondScan := insertRunningScan(t, fixture)
 	observations[0].Title = "First (rescanned)"
 	observations[0].BitDepth = 16
-	observations[0].Credits = []creditObservation{{Role: "composer", Name: "Composer Three"}}
-	observations = []sourceObservation{observations[1], observations[0]}
-	if err := application.persistOrganizedCandidates(context.Background(), fixture.database.connection, secondScan, root, organizeObservations(observations)); err != nil {
+	observations[0].Credits = []metadata.Credit{{Role: "composer", Name: "Composer Three"}}
+	observations = []catalog.SourceObservation{observations[1], observations[0]}
+	if err := application.persistOrganizedCandidates(context.Background(), fixture.database.connection, secondScan, root, catalog.OrganizeObservations(observations)); err != nil {
 		t.Fatalf("persist repeated candidate: %v", err)
 	}
 
@@ -102,7 +106,7 @@ func TestPostgreSQLCandidatePersistenceIsIdempotentAndReplacesCurrentEvidence(t 
 	thirdScan := insertRunningScan(t, fixture)
 	observations[1].Artwork = nil
 	observations[1].ArtworkMIME = ""
-	if err := application.persistOrganizedCandidates(context.Background(), fixture.database.connection, thirdScan, root, organizeObservations(observations)); err != nil {
+	if err := application.persistOrganizedCandidates(context.Background(), fixture.database.connection, thirdScan, root, catalog.OrganizeObservations(observations)); err != nil {
 		t.Fatalf("persist candidate without artwork: %v", err)
 	}
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM release_artworks WHERE release_id=$1::uuid`, 0, releaseID)
@@ -119,8 +123,8 @@ func TestPostgreSQLCandidateTransactionRollsBackOnEvidenceFailure(t *testing.T) 
 	if _, err := fixture.database.connection.Exec(`CREATE FUNCTION reject_grouping_evidence() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test rejection'; END $$; CREATE TRIGGER reject_grouping_evidence BEFORE INSERT ON release_grouping_evidence FOR EACH ROW EXECUTE FUNCTION reject_grouping_evidence()`); err != nil {
 		t.Fatalf("install rejection trigger: %v", err)
 	}
-	observations := []sourceObservation{{RelativePath: "Album/01.flac", Directory: "Album", Title: "Track", Album: "Release", TrackNumber: 1, DiscNumber: 1, SourceKind: "flac_vorbis_comment"}}
-	if err := application.persistOrganizedCandidates(context.Background(), fixture.database.connection, scanID, root, organizeObservations(observations)); err == nil {
+	observations := []catalog.SourceObservation{{RelativePath: "Album/01.flac", Directory: "Album", Title: "Track", Album: "Release", TrackNumber: 1, DiscNumber: 1, SourceKind: "flac_vorbis_comment"}}
+	if err := application.persistOrganizedCandidates(context.Background(), fixture.database.connection, scanID, root, catalog.OrganizeObservations(observations)); err == nil {
 		t.Fatal("candidate persistence unexpectedly succeeded")
 	}
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM releases WHERE source_root_id=$1::uuid`, 0, root.ID)
@@ -342,8 +346,8 @@ func TestPostgreSQLCueStagingAlignsParentAndPersistsVirtualIdentity(t *testing.T
 	root := insertScannerRoot(t, fixture, "cue-staging")
 	application := scannerTestApplication(fixture)
 	scanID := insertRunningScan(t, fixture)
-	physical := sourceObservation{RelativePath: "image.flac", Title: "Image", Artist: "Artist", TrackNumber: 1, DiscNumber: 1, SourceKind: "physical"}
-	virtual := sourceObservation{RelativePath: "album.cue#track-1@image.flac#index-0", Title: "Cue Track", Album: "Cue Album", AlbumArtist: "Cue Artist", Artist: "Cue Artist", TrackNumber: 1, DiscNumber: 1, SourceKind: "cue_virtual", CueSheetPath: "album.cue", CueParentRelativePath: "image.flac", CueReferencedFile: "image.flac", CueIndexFrames: 0, CueIndexPresent: true, CueEndFrames: 750, CueEndPresent: true, CueISRC: "TEST00000001", DurationSeconds: 10, Codec: "flac", BitDepth: 16, SampleRate: 44100, Channels: 2}
+	physical := catalog.SourceObservation{RelativePath: "image.flac", Title: "Image", Artist: "Artist", TrackNumber: 1, DiscNumber: 1, SourceKind: "physical"}
+	virtual := catalog.SourceObservation{RelativePath: "album.cue#track-1@image.flac#index-0", Title: "Cue Track", Album: "Cue Album", AlbumArtist: "Cue Artist", Artist: "Cue Artist", TrackNumber: 1, DiscNumber: 1, SourceKind: "cue_virtual", CueSheetPath: "album.cue", CueParentRelativePath: "image.flac", CueReferencedFile: "image.flac", CueIndexFrames: 0, CueIndexPresent: true, CueEndFrames: 750, CueEndPresent: true, CueISRC: "TEST00000001", DurationSeconds: 10, Codec: "flac", BitDepth: 16, SampleRate: 44100, Channels: 2}
 	secondVirtual := virtual
 	secondVirtual.RelativePath = "album.cue#track-2@image.flac#index-750"
 	secondVirtual.Title = "Cue Track 2"
@@ -351,7 +355,7 @@ func TestPostgreSQLCueStagingAlignsParentAndPersistsVirtualIdentity(t *testing.T
 	secondVirtual.CueIndexFrames = 750
 	secondVirtual.CueEndFrames = 1500
 	secondVirtual.CueISRC = "TEST00000002"
-	for _, observation := range []sourceObservation{physical, virtual, secondVirtual} {
+	for _, observation := range []catalog.SourceObservation{physical, virtual, secondVirtual} {
 		if err := stageObservation(context.Background(), fixture.database.connection, scanID, root.ID, observation); err != nil {
 			t.Fatalf("stage observation: %v", err)
 		}
@@ -369,7 +373,7 @@ func TestPostgreSQLCueStagingAlignsParentAndPersistsVirtualIdentity(t *testing.T
 	if err := fixture.database.connection.QueryRow(`SELECT source_kind,source_identity,cue_sheet_path,cue_parent_relative_path,cue_index_frames,cue_end_frames,cue_isrc,bit_depth FROM tracks WHERE source_root_id=$1::uuid AND position=1`, root.ID).Scan(&kind, &identity, &sheet, &parent, &indexFrames, &endFrames, &isrc, &bitDepth); err != nil {
 		t.Fatalf("read CUE track: %v", err)
 	}
-	if kind != "cue_virtual" || identity != sourceIdentityForObservation(root.ID, virtual) || sheet != "album.cue" || parent != "image.flac" || indexFrames != 0 || endFrames != 750 || isrc != "TEST00000001" || bitDepth != 16 {
+	if kind != "cue_virtual" || identity != catalog.SourceIdentityForObservation(root.ID, virtual) || sheet != "album.cue" || parent != "image.flac" || indexFrames != 0 || endFrames != 750 || isrc != "TEST00000001" || bitDepth != 16 {
 		t.Fatalf("unexpected CUE facts: kind=%q identity=%q sheet=%q parent=%q index=%d end=%d isrc=%q bitDepth=%d", kind, identity, sheet, parent, indexFrames, endFrames, isrc, bitDepth)
 	}
 	var refs string
@@ -386,8 +390,8 @@ func TestPostgreSQLFirstRepairScanReusesLegacyCueTrackIdentity(t *testing.T) {
 	root := insertScannerRoot(t, fixture, "legacy-cue-identity")
 	application := scannerTestApplication(fixture)
 	scanID := insertRunningScan(t, fixture)
-	groupID, releaseID, mediumID, trackID := createIdentifier(), createIdentifier(), createIdentifier(), createIdentifier()
-	anchor := candidateIdentity(root.ID, candidateAnchor{Kind: candidateOrdinary, Scope: "Album"})
+	groupID, releaseID, mediumID, trackID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	anchor := catalog.CandidateIdentity(root.ID, catalog.CandidateAnchor{Kind: catalog.CandidateOrdinary, Scope: "Album"})
 	if _, err := fixture.database.connection.Exec(`INSERT INTO release_groups(id) VALUES($1::uuid)`, groupID); err != nil {
 		t.Fatalf("insert legacy CUE release group: %v", err)
 	}
@@ -402,7 +406,7 @@ func TestPostgreSQLFirstRepairScanReusesLegacyCueTrackIdentity(t *testing.T) {
 		t.Fatalf("insert legacy CUE track: %v", err)
 	}
 
-	observation := sourceObservation{
+	observation := catalog.SourceObservation{
 		RelativePath:          "Album/album.cue#track-1@Album/image.flac#index-0",
 		Directory:             "Album",
 		Title:                 "New title",
@@ -416,7 +420,7 @@ func TestPostgreSQLFirstRepairScanReusesLegacyCueTrackIdentity(t *testing.T) {
 		CueReferencedFile:     "Album/image.flac",
 		CueIndexPresent:       true,
 	}
-	if err := application.persistOrganizedCandidates(context.Background(), fixture.database.connection, scanID, root, organizeObservations([]sourceObservation{observation})); err != nil {
+	if err := application.persistOrganizedCandidates(context.Background(), fixture.database.connection, scanID, root, catalog.OrganizeObservations([]catalog.SourceObservation{observation})); err != nil {
 		t.Fatalf("persist repaired CUE candidate: %v", err)
 	}
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE source_root_id=$1::uuid`, 1, root.ID)
@@ -424,7 +428,7 @@ func TestPostgreSQLFirstRepairScanReusesLegacyCueTrackIdentity(t *testing.T) {
 	if err := fixture.database.connection.QueryRow(`SELECT id::text,source_identity,title FROM tracks WHERE source_root_id=$1::uuid`, root.ID).Scan(&reusedID, &sourceIdentity, &title); err != nil {
 		t.Fatalf("read repaired CUE track: %v", err)
 	}
-	if reusedID != trackID || sourceIdentity != sourceIdentityForObservation(root.ID, observation) || title != "New title" {
+	if reusedID != trackID || sourceIdentity != catalog.SourceIdentityForObservation(root.ID, observation) || title != "New title" {
 		t.Fatalf("legacy CUE track was not reused: id=%q identity=%q title=%q", reusedID, sourceIdentity, title)
 	}
 }
@@ -437,8 +441,8 @@ func TestPostgreSQLArtworkLinkFailureRemovesNewManagedFile(t *testing.T) {
 	if _, err := fixture.database.connection.Exec(`CREATE FUNCTION reject_release_artwork() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test rejection'; END $$; CREATE TRIGGER reject_release_artwork BEFORE INSERT ON release_artworks FOR EACH ROW EXECUTE FUNCTION reject_release_artwork()`); err != nil {
 		t.Fatalf("install artwork rejection trigger: %v", err)
 	}
-	observation := sourceObservation{RelativePath: "Album/01.flac", Directory: "Album", Title: "Track", Album: "Release", Artist: "Artist", TrackNumber: 1, DiscNumber: 1, SourceKind: "flac_vorbis_comment", Artwork: minimalPNGArtwork(), ArtworkMIME: "image/png"}
-	if err := application.persistOrganizedCandidates(context.Background(), fixture.database.connection, scanID, root, organizeObservations([]sourceObservation{observation})); err == nil {
+	observation := catalog.SourceObservation{RelativePath: "Album/01.flac", Directory: "Album", Title: "Track", Album: "Release", Artist: "Artist", TrackNumber: 1, DiscNumber: 1, SourceKind: "flac_vorbis_comment", Artwork: minimalPNGArtwork(), ArtworkMIME: "image/png"}
+	if err := application.persistOrganizedCandidates(context.Background(), fixture.database.connection, scanID, root, catalog.OrganizeObservations([]catalog.SourceObservation{observation})); err == nil {
 		t.Fatal("artwork link failure unexpectedly succeeded")
 	}
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM releases WHERE source_root_id=$1::uuid`, 1, root.ID)
@@ -458,8 +462,8 @@ func TestPostgreSQLManagedArtworkIsRevalidatedAndCleanupErrorsPropagate(t *testi
 	application := scannerTestApplication(fixture)
 	scanID := insertRunningScan(t, fixture)
 	artwork := minimalPNGArtwork()
-	observation := sourceObservation{RelativePath: "Album/01.flac", Directory: "Album", Title: "Track", Album: "Release", Artist: "Artist", TrackNumber: 1, DiscNumber: 1, SourceKind: "flac_vorbis_comment", Artwork: artwork, ArtworkMIME: "image/png"}
-	if err := application.persistOrganizedCandidates(context.Background(), fixture.database.connection, scanID, root, organizeObservations([]sourceObservation{observation})); err != nil {
+	observation := catalog.SourceObservation{RelativePath: "Album/01.flac", Directory: "Album", Title: "Track", Album: "Release", Artist: "Artist", TrackNumber: 1, DiscNumber: 1, SourceKind: "flac_vorbis_comment", Artwork: artwork, ArtworkMIME: "image/png"}
+	if err := application.persistOrganizedCandidates(context.Background(), fixture.database.connection, scanID, root, catalog.OrganizeObservations([]catalog.SourceObservation{observation})); err != nil {
 		t.Fatalf("persist initial artwork: %v", err)
 	}
 	var releaseID, originalKey string
@@ -498,8 +502,8 @@ func TestPostgreSQLOrganizationMigrationConsolidatesLegacyCurrentRows(t *testing
 	fixture := newIntegrationTestApplication(t)
 	root := insertScannerRoot(t, fixture, "legacy-consolidation")
 	scanID := insertRunningScan(t, fixture)
-	groupID, releaseID := createIdentifier(), createIdentifier()
-	firstMedium, secondMedium := createIdentifier(), createIdentifier()
+	groupID, releaseID := uuid.New(), uuid.New()
+	firstMedium, secondMedium := uuid.New(), uuid.New()
 	for _, statement := range []string{"DROP INDEX media_release_position_uq", "DROP INDEX release_grouping_evidence_current_uq"} {
 		if _, err := fixture.database.connection.Exec(statement); err != nil {
 			t.Fatalf("drop current index: %v", err)
@@ -517,7 +521,7 @@ func TestPostgreSQLOrganizationMigrationConsolidatesLegacyCurrentRows(t *testing
 	}
 	if _, err := fixture.database.connection.Exec(`INSERT INTO tracks(id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at) VALUES
 		($1::uuid,$2::uuid,1,'One','Artist',1,$3::uuid,'Legacy/one.flac','present',NOW()),
-		($4::uuid,$5::uuid,2,'Two','Artist',1,$3::uuid,'Legacy/two.flac','present',NOW())`, createIdentifier(), firstMedium, root.ID, createIdentifier(), secondMedium); err != nil {
+		($4::uuid,$5::uuid,2,'Two','Artist',1,$3::uuid,'Legacy/two.flac','present',NOW())`, uuid.New(), firstMedium, root.ID, uuid.New(), secondMedium); err != nil {
 		t.Fatalf("insert legacy tracks: %v", err)
 	}
 	if _, err := fixture.database.connection.Exec(`INSERT INTO release_grouping_evidence(release_id,candidate_kind,rule_id,source_refs,reason,scan_run_id,observed_at) VALUES
@@ -536,7 +540,7 @@ func TestPostgreSQLOrganizationMigrationConsolidatesLegacyCurrentRows(t *testing
 	if err := fixture.database.connection.QueryRow(`SELECT candidate_anchor FROM releases WHERE id=$1::uuid`, releaseID).Scan(&migratedAnchor); err != nil {
 		t.Fatalf("read migrated anchor: %v", err)
 	}
-	expectedAnchor := candidateIdentity(root.ID, candidateAnchor{Kind: candidateLooseAlbum, Partition: "source:Legacy/one.flac"})
+	expectedAnchor := catalog.CandidateIdentity(root.ID, catalog.CandidateAnchor{Kind: catalog.CandidateLooseAlbum, Partition: "source:Legacy/one.flac"})
 	if migratedAnchor != expectedAnchor {
 		t.Fatalf("legacy anchor = %q, want %q", migratedAnchor, expectedAnchor)
 	}
@@ -549,8 +553,8 @@ func TestPostgreSQLOrganizationMigrationConsolidatesLegacyCurrentRows(t *testing
 func TestPostgreSQLOrganizationMigrationLeavesConflictingLegacyAnchors(t *testing.T) {
 	fixture := newIntegrationTestApplication(t)
 	root := insertScannerRoot(t, fixture, "legacy-anchor-conflict")
-	firstGroup, secondGroup := createIdentifier(), createIdentifier()
-	firstRelease, secondRelease := createIdentifier(), createIdentifier()
+	firstGroup, secondGroup := uuid.New(), uuid.New()
+	firstRelease, secondRelease := uuid.New(), uuid.New()
 	if _, err := fixture.database.connection.Exec(`INSERT INTO release_groups(id) VALUES($1::uuid),($2::uuid)`, firstGroup, secondGroup); err != nil {
 		t.Fatalf("insert legacy groups: %v", err)
 	}
@@ -584,7 +588,7 @@ func scannerTestApplication(fixture *integrationTestApplication) *roomusicApplic
 
 func insertScannerRoot(t *testing.T, fixture *integrationTestApplication, name string) registeredRoot {
 	t.Helper()
-	root := registeredRoot{ID: createIdentifier(), Path: filepath.Join(fixture.allowedRoot, name)}
+	root := registeredRoot{ID: uuid.New(), Path: filepath.Join(fixture.allowedRoot, name)}
 	if err := os.MkdirAll(root.Path, 0o755); err != nil {
 		t.Fatalf("create root: %v", err)
 	}
@@ -596,7 +600,7 @@ func insertScannerRoot(t *testing.T, fixture *integrationTestApplication, name s
 
 func insertRunningScan(t *testing.T, fixture *integrationTestApplication) string {
 	t.Helper()
-	id := createIdentifier()
+	id := uuid.New()
 	if _, err := fixture.database.connection.Exec(`INSERT INTO scan_runs(id,status,started_at) VALUES($1::uuid,'running',NOW())`, id); err != nil {
 		t.Fatalf("insert scan: %v", err)
 	}

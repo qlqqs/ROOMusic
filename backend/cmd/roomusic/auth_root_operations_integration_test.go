@@ -19,6 +19,7 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
 const integrationTestDatabaseEnvironment = "ROOMUSIC_TEST_DATABASE_URL"
@@ -52,7 +53,7 @@ func newIntegrationTestApplication(t *testing.T) *integrationTestApplication {
 		t.Fatalf("ping integration test database: %v", err)
 	}
 
-	schema := "roomusic_test_" + strings.ReplaceAll(createIdentifier(), "-", "")
+	schema := "roomusic_test_" + strings.ReplaceAll(uuid.New(), "-", "")
 	if _, err := adminConnection.ExecContext(ctx, `CREATE SCHEMA `+schema); err != nil {
 		t.Fatalf("create isolated integration schema: %v", err)
 	}
@@ -106,8 +107,8 @@ func integrationDatabaseURL(databaseURL, schema string) (string, error) {
 
 func (application *integrationTestApplication) createUser(t *testing.T, role string) integrationTestUser {
 	t.Helper()
-	user := integrationTestUser{id: createIdentifier(), token: generateSessionToken()}
-	username := role + "-" + strings.ReplaceAll(createIdentifier(), "-", "")
+	user := integrationTestUser{id: uuid.New(), token: generateSessionToken()}
+	username := role + "-" + strings.ReplaceAll(uuid.New(), "-", "")
 	if _, err := application.database.connection.Exec(`INSERT INTO users(id,username,password_hash,role) VALUES($1::uuid,$2,'test-only',$3)`, user.id, username, role); err != nil {
 		t.Fatalf("insert %s fixture: %v", role, err)
 	}
@@ -164,7 +165,7 @@ func TestPostgreSQLPermissionMatrixAndImmediateSessionInvalidation(t *testing.T)
 	application := newIntegrationTestApplication(t)
 	admin := application.createUser(t, "admin")
 	ordinary := application.createUser(t, "user")
-	scanID := createIdentifier()
+	scanID := uuid.New()
 	if _, err := application.database.connection.Exec(`INSERT INTO scan_runs(id,status,started_at,finished_at) VALUES($1::uuid,'succeeded',NOW(),NOW())`, scanID); err != nil {
 		t.Fatalf("insert scan fixture: %v", err)
 	}
@@ -181,8 +182,8 @@ func TestPostgreSQLPermissionMatrixAndImmediateSessionInvalidation(t *testing.T)
 		{name: "revoke sessions", method: http.MethodPost, path: "/api/v1/users/" + ordinary.id + "/sessions/revoke", body: map[string]any{}},
 		{name: "list roots", method: http.MethodGet, path: "/api/v1/library-roots"},
 		{name: "create root", method: http.MethodPost, path: "/api/v1/library-roots", body: map[string]string{"path": t.TempDir()}},
-		{name: "update root", method: http.MethodPatch, path: "/api/v1/library-roots/" + createIdentifier(), body: map[string]any{"status": "disabled", "expected_revision": 1}},
-		{name: "restore root", method: http.MethodPost, path: "/api/v1/library-roots/" + createIdentifier() + "/restore", body: map[string]int{"expected_revision": 2}},
+		{name: "update root", method: http.MethodPatch, path: "/api/v1/library-roots/" + uuid.New(), body: map[string]any{"status": "disabled", "expected_revision": 1}},
+		{name: "restore root", method: http.MethodPost, path: "/api/v1/library-roots/" + uuid.New() + "/restore", body: map[string]int{"expected_revision": 2}},
 		{name: "operation history", method: http.MethodGet, path: "/api/v1/library-root-operations"},
 		{name: "start scan", method: http.MethodPost, path: "/api/v1/scans", body: map[string]any{}},
 		{name: "scan diagnostics", method: http.MethodGet, path: "/api/v1/scans/" + scanID + "/diagnostics"},
@@ -315,7 +316,7 @@ func TestPostgreSQLRootOperationTransactionsAndConflicts(t *testing.T) {
 	assertRootState(t, application.database.connection, modifiedRootID, "disabled", 3)
 	assertOperationCount(t, application.database.connection, modifiedRootID, 2)
 
-	missingInverseID := createIdentifier()
+	missingInverseID := uuid.New()
 	missingInversePath := filepath.Join(application.allowedRoot, "missing-inverse")
 	if _, err := application.database.connection.Exec(`INSERT INTO library_roots(id,path,status,revision) VALUES($1::uuid,$2,'disabled',2)`, missingInverseID, missingInversePath); err != nil {
 		t.Fatalf("insert root without inverse operation: %v", err)
@@ -520,7 +521,7 @@ func TestPostgreSQLUserTransactionProtectsLastAdmin(t *testing.T) {
 		t.Fatal("last administrator was disabled")
 	}
 
-	unknownID := createIdentifier()
+	unknownID := uuid.New()
 	response = application.request(t, http.MethodPatch, "/api/v1/users/"+unknownID,
 		map[string]bool{"disabled": true}, &admin, nil)
 	requireAPIError(t, response, http.StatusNotFound, "not_found")
@@ -528,7 +529,7 @@ func TestPostgreSQLUserTransactionProtectsLastAdmin(t *testing.T) {
 
 func TestPostgreSQLSaveObservationCreatesSeparateDiscMedia(t *testing.T) {
 	application := newIntegrationTestApplication(t)
-	rootID := createIdentifier()
+	rootID := uuid.New()
 	rootPath := filepath.Join(application.allowedRoot, "multi-disc")
 	if err := os.MkdirAll(rootPath, 0o755); err != nil {
 		t.Fatalf("create root fixture: %v", err)
@@ -536,7 +537,7 @@ func TestPostgreSQLSaveObservationCreatesSeparateDiscMedia(t *testing.T) {
 	if _, err := application.database.connection.Exec(`INSERT INTO library_roots(id,path,status,revision) VALUES($1::uuid,$2,'active',1)`, rootID, rootPath); err != nil {
 		t.Fatalf("insert root fixture: %v", err)
 	}
-	scanID := createIdentifier()
+	scanID := uuid.New()
 	if _, err := application.database.connection.Exec(`INSERT INTO scan_runs(id,status,started_at) VALUES($1::uuid,'running',NOW())`, scanID); err != nil {
 		t.Fatalf("insert scan fixture: %v", err)
 	}
@@ -718,7 +719,7 @@ func assertOperationState(t *testing.T, database *sql.DB, rootID, operation stri
 func TestPostgreSQLScanCancellationIsPersistentAndIdempotent(t *testing.T) {
 	roomusic := newIntegrationTestApplication(t)
 	admin := roomusic.createUser(t, "admin")
-	scanID := createIdentifier()
+	scanID := uuid.New()
 	if _, err := roomusic.database.connection.Exec(`INSERT INTO scan_runs(id,status,started_at) VALUES($1::uuid,'running',NOW())`, scanID); err != nil {
 		t.Fatalf("insert running scan: %v", err)
 	}
@@ -755,7 +756,7 @@ func TestPostgreSQLScanCancellationIsPersistentAndIdempotent(t *testing.T) {
 
 func TestPostgreSQLScanRecoverySkipsLiveHolder(t *testing.T) {
 	roomusic := newIntegrationTestApplication(t)
-	scanID := createIdentifier()
+	scanID := uuid.New()
 	if _, err := roomusic.database.connection.Exec(`INSERT INTO scan_runs(id,status,started_at) VALUES($1::uuid,'running',NOW())`, scanID); err != nil {
 		t.Fatalf("insert running scan: %v", err)
 	}
@@ -791,7 +792,7 @@ func TestPostgreSQLScanRecoverySkipsLiveHolder(t *testing.T) {
 
 func TestPostgreSQLCanceledScanDoesNotReconcileMissingSources(t *testing.T) {
 	application := newIntegrationTestApplication(t)
-	rootID := createIdentifier()
+	rootID := uuid.New()
 	rootPath := filepath.Join(application.allowedRoot, "cancel-safe")
 	if err := os.MkdirAll(rootPath, 0o755); err != nil {
 		t.Fatalf("create root fixture: %v", err)
@@ -799,7 +800,7 @@ func TestPostgreSQLCanceledScanDoesNotReconcileMissingSources(t *testing.T) {
 	if _, err := application.database.connection.Exec(`INSERT INTO library_roots(id,path,status,revision) VALUES($1::uuid,$2,'active',1)`, rootID, rootPath); err != nil {
 		t.Fatalf("insert root fixture: %v", err)
 	}
-	scanID := createIdentifier()
+	scanID := uuid.New()
 	if _, err := application.database.connection.Exec(`INSERT INTO scan_runs(id,status,started_at,cancel_requested_at) VALUES($1::uuid,'running',NOW(),NOW())`, scanID); err != nil {
 		t.Fatalf("insert canceled scan fixture: %v", err)
 	}

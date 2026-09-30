@@ -1,9 +1,11 @@
-package main
+package catalog
 
 import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 )
 
 // folderMetadata 是目录名解析产生的辅助证据。它只补充候选中缺失的发行字段，
@@ -119,19 +121,19 @@ func parseFolderMetadata(name string) (folderMetadata, bool) {
 }
 
 func finishFolderMetadata(result folderMetadata) folderMetadata {
-	result.AlbumArtist = normalizeValue(result.AlbumArtist)
-	result.Album = normalizeValue(result.Album)
+	result.AlbumArtist = metadata.NormalizeValue(result.AlbumArtist)
+	result.Album = metadata.NormalizeValue(result.Album)
 	result.MediaType = normalizeFolderToken(result.MediaType)
 	result.SourceType = folderSourceType(result.MediaType)
-	result.Edition = normalizeValue(result.Edition)
-	result.Label = normalizeValue(result.Label)
-	result.Catalog = normalizeValue(result.Catalog)
-	result.format = strings.ToLower(normalizeValue(result.format))
+	result.Edition = metadata.NormalizeValue(result.Edition)
+	result.Label = metadata.NormalizeValue(result.Label)
+	result.Catalog = metadata.NormalizeValue(result.Catalog)
+	result.format = strings.ToLower(metadata.NormalizeValue(result.format))
 	return result
 }
 
 func normalizeFolderToken(value string) string {
-	value = strings.ToLower(normalizeValue(value))
+	value = strings.ToLower(metadata.NormalizeValue(value))
 	value = strings.ReplaceAll(value, "_", "-")
 	switch value {
 	case "web-dl", "webdl", "download", "digital":
@@ -181,7 +183,7 @@ func folderBracketFields(value string) []string {
 	matches := folderBracketFieldPattern.FindAllStringSubmatch(value, -1)
 	result := make([]string, 0, len(matches))
 	for _, match := range matches {
-		if field := normalizeValue(match[1]); field != "" {
+		if field := metadata.NormalizeValue(match[1]); field != "" {
 			result = append(result, field)
 		}
 	}
@@ -192,7 +194,7 @@ func applyFolderBracketField(field string, result *folderMetadata) {
 	if result == nil {
 		return
 	}
-	field = normalizeValue(field)
+	field = metadata.NormalizeValue(field)
 	bundleMedia := folderMediaFromBundle(field)
 	if bundleMedia != "" {
 		result.MediaType = bundleMedia
@@ -295,7 +297,7 @@ func parseFolderExtraFields(extra string, result *folderMetadata) {
 	}
 	fields := make([]string, 0)
 	for _, field := range strings.Split(extra, ",") {
-		if field = normalizeValue(field); field != "" {
+		if field = metadata.NormalizeValue(field); field != "" {
 			fields = append(fields, field)
 		}
 	}

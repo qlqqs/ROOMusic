@@ -1,4 +1,6 @@
-package main
+// Package metadata 收纳元数据值的规则：空白规范化、有界文本、署名，以及艺人名的拆分与别名归一。
+// 它是叶子包，只依赖标准库，供解析器与 catalog 共同使用。
+package metadata
 
 import (
 	"sort"
@@ -39,7 +41,7 @@ var officialArtistAliasIndex = func() map[string]string {
 }()
 
 func splitArtistNames(raw string) []string {
-	raw = boundedAudioText(raw)
+	raw = BoundedText(raw)
 	if raw == "" {
 		return nil
 	}
@@ -72,7 +74,7 @@ func splitArtistNames(raw string) []string {
 	return []string{raw}
 }
 
-func canonicalArtistNames(raw string) []string {
+func CanonicalArtistNames(raw string) []string {
 	parts := splitArtistNames(raw)
 	result := make([]string, 0, len(parts))
 	seen := make(map[string]bool, len(parts))
@@ -91,8 +93,8 @@ func canonicalArtistNames(raw string) []string {
 	return result
 }
 
-func canonicalTrackArtist(raw string) string {
-	names := canonicalArtistNames(raw)
+func CanonicalTrackArtist(raw string) string {
+	names := CanonicalArtistNames(raw)
 	sort.Strings(names)
 	return strings.Join(names, " / ")
 }

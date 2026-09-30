@@ -25,8 +25,8 @@ git diff --check
 
 ## 步骤
 
-1. [ ] **catalog 与共享叶子包**（阶段 I 所需）
-   - 新建 `platform/id`（`New`、`Valid`）和 `catalog/metadata`（Credit、`NormalizeValue`、`BoundedText`、艺人规则）。
+1. [x] **catalog 与共享叶子包**（阶段 I 所需）
+   - 新建 `platform/uuid`（`New`、`Valid`；包名不用 `id`，避免被 handler 里的局部变量 `id` 遮蔽）和 `catalog/metadata`（Credit、`NormalizeValue`、`BoundedText`、艺人规则、`CanonicalCredits`）。
    - 新建 `catalog`：观察合同与候选类型、organizer、文件夹名解析、`NormalizedPath`、`DirectoryOf`、来源身份函数、`PersistCandidate`（不含封面）、`MarkMissingSources`、读取查询与 DTO、`SafeRelativeSourceRef`。
    - 新建 `catalog/artwork`：`Store` 负责保存、移除、读取，以及 MIME 嗅探与尺寸计算。
    - `package main` 改为调用这些包：
@@ -35,7 +35,8 @@ git diff --check
      - catalog handler 暂留 main，改调 `catalog.Store`。
    - 被测代码已移走的测试随之移动；`organizer_test.go` 按归属拆分。删除 catalog 范围内的死代码。
    - `scripts/test-integration.sh` 改为 `./...`。
-   - 过门禁后提交：`refactor(backend): 拆出 catalog、metadata 与 platform/id`。
+   - 过门禁后提交：`refactor(backend): 拆出 catalog、metadata、artwork 与 platform/uuid`。
+   - 实际验证：gofmt、vet、build、`go test ./...`、`go test -race ./...`、`./scripts/test-integration.sh` 全部通过；测试名单与基线 161 逐项对账，只多两个（`TestNewReturnsValidVersion4Identifiers`、从搜索解析测试拆出的 `TestEscapeLikePatternEscapesWildcards`）；搬迁的函数用脚本对照原文，只有预期改动。
 2. [ ] **library 与解析器**
    - 新建 `library/parser`（含 `parsertest`），以及 `library`：
      - 路径校验、扫描引擎、暂存、rip log 与文件夹封面发现、诊断写入；
