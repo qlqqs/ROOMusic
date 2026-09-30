@@ -15,7 +15,7 @@ music library.
 
 Classical / Core 1 的能力路线与四类 ADR 位于
 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)（2026-09-28 已批准阶段顺序与范围）。M0 与路线修订仅更新文档，
-不改变本层现有 API、表结构或权限。B0（行为保持拆包）已完成；身份稳定与按组只读接口属于阶段 I；
+不改变本层现有 API、表结构或权限。B0（行为保持拆包）与阶段 I（身份稳定、按组只读接口）已完成；
 修正覆盖层、通用审批、editor 角色和媒体处理的实施细节须经对应子任务与 ADR 项批准后再实施。Core 0 限制不是未来阶段的默认授权。
 
 ## Pre-Development Checklist

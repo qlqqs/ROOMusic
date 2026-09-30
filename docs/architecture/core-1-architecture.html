@@ -354,14 +354,14 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
           <div class="node s-now">
             <div class="node-k">internal/library</div>
             <div class="node-t">library</div>
-            <p class="node-b">允许目录与 revision · 扫描运行、取消、诊断 · 解析器 · 写观察层</p>
+            <p class="node-b">允许目录与 revision · 扫描运行、取消、诊断 · 解析器与音频指纹 · 写观察层</p>
             <div class="node-tags"><span class="tag t-done">已拆出 · B0</span></div>
           </div>
-          <div class="node s-appr">
+          <div class="node s-done">
             <div class="node-k">internal/catalog</div>
             <div class="node-t">catalog</div>
-            <p class="node-b">Release 图 · 身份匹配 · 归组规则 · 有效值投影 · 读取 API。现状：library 经 <code>catalog.PersistCandidate</code> 写 <code>releases</code>。</p>
-            <div class="node-tags"><span class="tag t-done">已拆出 · B0</span><span class="tag t-appr">阶段 I</span></div>
+            <p class="node-b">Release 图 · 扫描暂存与身份规划 · 归组规则 · 有效值投影 · 读取 API（含按组只读）。library 经 <code>catalog.PlanStagedRoot</code> 规划、<code>catalog.PersistCandidate</code> 写 <code>releases</code>。</p>
+            <div class="node-tags"><span class="tag t-done">已拆出 · B0</span><span class="tag t-done">身份稳定 · 阶段 I</span></div>
           </div>
           <div class="node s-draft">
             <div class="node-k">internal/operations</div>
@@ -474,16 +474,16 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
           <div class="node-t">扫描观察</div>
           <p class="node-b"><code>scan_observations</code> · <code>track_observations</code>；程序生成，可随时重建。</p>
         </div>
-        <div class="node s-appr" id="m-id" tabindex="0" style="grid-column:3;grid-row:1">
+        <div class="node s-done" id="m-id" tabindex="0" style="grid-column:3;grid-row:1">
           <div class="node-k">catalog</div>
           <div class="node-t">身份匹配</div>
-          <p class="node-b">现状：按锚点和来源路径匹配。改名，或新增一个排序更靠前的文件，ID 就会变。</p>
+          <p class="node-b">阶段 I 已实现：改名、移动、增删少量文件，曲目与 Release 的 ID 都不变。</p>
           <ul class="node-list">
-            <li class="appr">按曲目成员关系匹配 Release</li>
-            <li class="appr">同一 root 内、唯一且音频完全相同才重绑定</li>
-            <li class="appr">有歧义留给人工认领</li>
+            <li>按曲目成员关系匹配 Release，锚点只是位置信息</li>
+            <li>同一 root 遍历完整时，唯一且音频完全相同才重绑定</li>
+            <li>有歧义不重绑定，留给人工认领</li>
           </ul>
-          <div class="node-tags"><span class="tag t-appr">阶段 I · 已批准</span></div>
+          <div class="node-tags"><span class="tag t-done">阶段 I · 已完成</span></div>
         </div>
         <div class="node s-now" id="m-derived" tabindex="0" style="grid-column:4;grid-row:1">
           <div class="node-k">派生值</div>
@@ -730,11 +730,11 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
           <p class="node-b">纯重构：五个提交拆出 catalog、postgres、library、httpapi 与 app；行为不变。</p>
           <div class="node-tags"><span class="tag t-done">已完成 · 2026-09-30</span></div>
         </div>
-        <div class="node s-appr" id="r-i" tabindex="0" style="grid-column:4;grid-row:1">
+        <div class="node s-done" id="r-i" tabindex="0" style="grid-column:4;grid-row:1">
           <div class="stage">I</div>
           <div class="node-t">身份与分组只读</div>
           <p class="node-b">成员关系匹配 · 保守重绑定 · ID 稳定性测试 · 按组接口</p>
-          <div class="node-tags"><span class="tag t-appr">子任务 · planning</span></div>
+          <div class="node-tags"><span class="tag t-done">已完成 · 2026-09-30</span></div>
         </div>
         <div class="node s-appr" id="r-m3" tabindex="0" style="grid-column:6;grid-row:1">
           <div class="stage">M3</div>
@@ -800,7 +800,7 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
     </div>
     <div class="road-notes">
       <div class="note s-now"><b>不能调换的顺序</b>M3 依赖阶段 I 的稳定 ID；M6 依赖 M3 / M4 的操作合同。</div>
-      <div class="note s-now"><b>可以并行</b>M1 与阶段 I 同时推进（B0 已完成）；播放不依赖治理写路径。</div>
+      <div class="note s-now"><b>可以并行</b>M1a 可独立推进，M1b 接在阶段 I 的按组接口之后（B0、阶段 I 已完成）；播放不依赖治理写路径。</div>
       <div class="note s-appr"><b>已裁决（2026-09-28）</b>Core 1 截止到 M4；阶段顺序、身份策略、M1 前端基础与归组依据等 D1–D6 见路线修订任务。各 ADR 其余细节在对应阶段规划时批准。</div>
     </div>
   </section>

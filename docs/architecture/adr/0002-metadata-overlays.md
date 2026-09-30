@@ -3,6 +3,7 @@
 ## 状态与决策边界
 
 - 状态：**部分批准**（2026-09-28）：第十节第 2 项（身份策略）与第 4 项（归组依据）已批准，其余仍待批准。
+  身份策略与 ReleaseGroup 只读接口已由阶段 I 实施（2026-09-30）。
 - 核对日期：2026-09-27；代码证据基线：`6cf76ec`（身份相关行号于 2026-09-28 在 `66678d6` 复核）。B0（2026-09-30）拆包后，下文代码链接已更新到新位置，行号锚点以新文件为准；核对结论仍以该基线为准。
 - 范围依据：[Core 1 路线](../core-1-roadmap.md)与[架构决策摘要](../architecture-decisions.md)。
 - 推荐方向：保留扫描事实，单独保存经授权的修正意图，由 catalog 生成有效读值；结构变更
@@ -17,6 +18,7 @@
 | 日期 | 选择者 | 已批准 | 仍待批准 | 依据 |
 | --- | --- | --- | --- | --- |
 | 2026-09-28 | qlqq | 第 2 项身份策略：Release 按所含曲目的成员关系匹配，增删文件不换 ID，锚点降为定位信息；同一 root 内改名或移动的文件，仅在完整成功扫描中、且新出现与变缺失的文件唯一 1:1 音频完全相同时重绑定（FLAC 用已解析的 STREAMINFO 音频 MD5，`backend/internal/library/parser/parser.go:1556`；其他格式在阶段 I 选定与标签无关的指纹）；有歧义保持分离、留待人工认领；跨 root 仍需单独审阅的映射操作。第 4 项归组依据：Core 1 仅人工确认，不做自动跨版本归组；ReleaseGroup 只读接口在阶段 I 提供，组成员调整是 M3 的试点操作 | 第 1、3、5、6、7 项 | 任务 `09-28-core-1-roadmap-revision` 的 PRD，裁决 D1、D2、D6 |
+| 2026-09-30 | qlqq | 对第 2 项身份策略的细化（阶段 I 规划）：重绑定所需的“遍历完整”按 root 判断——一个 root 遍历完整（未取消，没有遍历、解析、暂存失败）即可在该 root 内重绑定，不受其他 root 不可用影响；`missing` 对账仍要求整轮 `succeeded`。已据此实施：与标签无关的音频指纹（FLAC MD5、M4A `mdat`、MP3 帧、OGG 音频包、WAV `data`）、同 root 保守重绑定、Release 成员关系匹配与按组只读接口 | 第 1、3、5、6、7 项 | 任务 `09-28-classical-i-identity-groups` 的 PRD、design 与 research |
 
 ## 一、当前证据与尚未实现的能力
 
@@ -33,6 +35,10 @@
 | [read.go](../../../backend/internal/catalog/read.go)：`releaseSummaryProjection`、`ListReleases`；[handlers.go](../../../backend/internal/catalog/httpapi/handlers.go)：`listReleases`、`releaseDetail`、`releaseEvidence` | 列表、搜索、排序和详情直接读取扫描写入的值；列表/详情要求至少一个 `present` Track；管理员可读存在的 Release 的详细证据 | 有效值必须在后端统一投影；详细证据可见不代表缺失版本能从普通详情访问 |
 | [app.go](../../../backend/internal/app/app.go)：`New` | 只有 Release 读取与证据路由，没有元数据修正或 ReleaseGroup 合并/拆分入口 | M1 不能展示可提交的修正外壳或伪造保存成功 |
 | [扫描持久化测试](../../../backend/internal/library/scanner_persistence_integration_test.go)：`TestPostgreSQLCandidatePersistenceIsIdempotentAndReplacesCurrentEvidence`、`TestPostgreSQLIncompleteRootPersistsValidCandidatesAndCleansStaging` | 固定来源重扫保留 ID 并替换当前证据；不完整扫描也可保留已提交候选，暂存随后清理 | 扫描不是整库快照事务；当前证据和暂存都不是恢复点 |
+
+> 阶段 I（2026-09-30）改变了上表中的身份相关行：`legacySourceIdentity`、`legacyCueSourceIdentity` 已删除；
+> `PersistCandidate` 不再按 `candidate_anchor` 查找 Release，曲目与 Release 的沿用由 `PlanStagedRoot` 写在暂存行上的规划
+> 决定；ReleaseGroup 有按组只读接口。本表保留为规划时的基线证据，现状见第四节。
 
 继承的约束来自[产品目标](../../../.trellis/spec/guides/product-goals.md)、
 [数据库规范](../../../.trellis/spec/backend/database-guidelines.md)及
@@ -98,22 +104,23 @@
 
 ## 四、身份稳定性的实际边界
 
-以下仅保证已核对代码中的匹配机制，不保证音频内容相同或任意路径演进稳定。
+以下是阶段 I（2026-09-30）实施后的实际机制，仍不保证跨 root、歧义或原地替换音频时的身份延续。
 
 | 身份依据 | 当前构成与可复用条件 | 不保证的场景 |
 | --- | --- | --- |
-| 物理 `source_identity` | root ID、`physical:v1` 与规范化相对路径；同 root、同路径重扫匹配原 Track | 文件重命名、移动、换 root；同路径被其他内容替换仍可能复用，当前并非内容指纹身份 |
-| CUE `source_identity` | root ID、`cue:v1`、sheet 相对路径、父音频相对路径、轨号、`INDEX 01` 帧 | sheet/父文件改名或移动、轨号/起始帧变化；旧身份兼容只是升级路径，不是通用映射保证 |
-| 普通、多碟、Box 叶候选 `candidate_anchor` | root、`v2`、候选种类、规范化范围，分区为空 | 目录范围变化、普通/多碟/拆分种类变化；标题修改若影响分桶，也可能间接改变锚点 |
-| 散落文件、同目录拆分候选 `candidate_anchor` | 还使用候选内排序最小的相对来源路径作分区；无来源才退到分组分区 | 最小成员移除/改名、新增更小成员、分桶集合变化；不保证增减文件后 Release ID 不变 |
-| 现有图 UUID | 命中锚点保留 Release/Group；命中来源保留 Track，Medium 按所属 Release 与碟序定位 | Track 复用不保证所属 Release/Medium 不变；新锚点不会自动继承旧 Release 的人工意图 |
+| 物理 `source_identity` | root ID、`physical:v1` 与规范化相对路径，只标识来源此刻在哪里。曲目 UUID 由规划延续：同一路径且内容指纹相同（或一侧未知）沿用；同一 root 内改名、移动、互换在遍历完整且指纹唯一 1:1 时沿用 | 跨 root 移动；多个文件音频完全相同（歧义，不重绑定）；遍历不完整期间（暂缓到下一次完整遍历）；原地替换音频（新 UUID，原曲目失去来源身份） |
+| CUE `source_identity` | root ID、`cue:v1`、sheet 相对路径、父音频相对路径、轨号、`INDEX 01` 帧；指纹取父文件指纹，配对键另含起止帧 | 轨号或起止帧变化；同上 |
+| `candidate_anchor` | root、`v2`、候选种类、规范化范围；散落文件与同目录拆分候选另用组内最小相对路径作分区。**只记录最近一次的位置**，不参与查找、不要求唯一 | 无：不再影响 Release ID |
+| 现有图 UUID | Track 见上；Release：候选已规划沿用的曲目严格过半属于同一 Release 时沿用（重叠多者得，平局留在原位置的一方，再按候选键），否则新建 Release 与 ReleaseGroup | 新增文件多于原有（如 2 轨加 3 轨）、整张专辑被替换、跨 root 时 Release 是新的；新 Release 不自动继承旧 Release 的人工意图 |
 
-定位：[identity.go](../../../backend/internal/catalog/identity.go) 与 [persist.go](../../../backend/internal/catalog/persist.go) 的身份与持久化函数、
-[organizer.go](../../../backend/internal/catalog/organizer.go) 的 `stableAnchorPartition` 和
-`CandidateIdentity`；反例见[来源身份测试](../../../backend/internal/library/scan_rules_test.go)
-`TestTrackSourceIdentityIsStableOnlyForSameRootAndPath` 及
-[整理测试](../../../backend/internal/catalog/organizer_test.go)
-`TestOrganizeRootUnknownAndCueIdentityAreExplicit`。
+定位：[identity.go](../../../backend/internal/catalog/identity.go) 的来源身份、[identity_plan.go](../../../backend/internal/catalog/identity_plan.go)
+的 `PlanStagedRoot` 规划、[persist.go](../../../backend/internal/catalog/persist.go) 与 [persist_track.go](../../../backend/internal/catalog/persist_track.go)
+的按计划写入、[organizer.go](../../../backend/internal/catalog/organizer.go) 的 `stableAnchorPartition` 和 `CandidateIdentity`、
+[指纹](../../../backend/internal/library/parser/fingerprint.go)；测试见
+[改名/移动/互换等场景](../../../backend/internal/library/identity_rebinding_integration_test.go)与
+[Release 成员关系](../../../backend/internal/library/release_membership_integration_test.go)，来源身份规范化见
+[来源身份测试](../../../backend/internal/library/scan_rules_test.go)
+`TestTrackSourceIdentityIsStableOnlyForSameRootAndPath`。
 
 [0011 迁移](../../../backend/migrations/0011_scan_staging_and_identity.sql)只在无冲突时升级旧
 Release 锚点；会收敛到同一锚点的旧记录保留旧标记，交给后续扫描匹配 Track。这不是人工
@@ -125,17 +132,17 @@ Release 锚点；会收敛到同一锚点的旧记录保留旧标记，交给后
 `source_identity` 字符串直接当永久修正主键。仍须校验该实体的来源绑定和关系版本；仅换成
 UUID 外键无法解决内容被替换、Track 被重新挂接或旧 Release 已无可见 Track 的问题。
 
-| 场景 | 行为（尚待实现；标“已批准”的行由阶段 I 实施） |
+| 场景 | 行为（标“已实施”的行由阶段 I 落地，2026-09-30；其余尚待实现） |
 | --- | --- |
 | 同来源、同结构重扫 | 保留实体绑定和修正，只更新观察；相关基值变化可标示待复核，但不得静默删改既有修正 |
 | 仅路径书写被规范化 | 沿用现有安全路径规范化，不把越界、跨 root 或真实改名当成等价路径 |
-| 物理文件或目录重命名、移动（同一 root） | **已批准（2026-09-28）**：只在完整成功扫描中，把本轮新出现且没有身份匹配的观察，与本轮将被置为缺失的旧曲目按音频指纹配对；唯一 1:1 完全相同才重绑定到原 UUID，修正与人工关系随之保留。多对多、指纹不同或扫描不完整时不重绑定，按原规则把旧来源置为缺失，并留待人工认领。仍不按标题相似搬移修正 |
+| 物理文件或目录重命名、移动（同一 root） | **已实施（阶段 I，2026-09-30）**：只在该 root 遍历完整（未取消，没有遍历、解析、暂存、指纹失败）时，把本轮没有身份匹配的观察，与本 root 中本轮消失（present、有指纹、未被计划沿用）的旧曲目按音频指纹（CUE 另含起止帧）配对；唯一 1:1 完全相同才重绑定到原 UUID，修正与人工关系随之保留。多对多、指纹不同、跨 root 时不重绑定：歧义按原规则把旧来源置为缺失并记诊断，留待人工认领；遍历不完整时含疑似移动的 scope 暂缓写入，留给下一次完整遍历。仍不按标题相似搬移修正 |
 | 跨 root 移动、重新注册导致 root 身份变化 | 不推定身份连续；若要转移修正，必须有单独审阅的绑定映射、双方 revision、影响预览和逆操作 |
-| 分桶、最小来源或 CUE 分轨结构变化 | **已批准（2026-09-28）**：Release 按所含曲目的成员关系匹配——复用包含候选多数曲目、且没有被重叠更高的候选占用的既有 Release，锚点降为定位信息；因此增删文件或最小来源变化不再换 Release ID。无法证明成员关系连续时保留原修正，隔离待认领的新观察/提案，不静默重挂到新目标 |
+| 分桶、最小来源或 CUE 分轨结构变化 | **已实施（阶段 I，2026-09-30）**：Release 按所含曲目的成员关系匹配——候选已规划沿用的曲目严格过半属于同一个既有 Release 时沿用它，多个候选争同一个时重叠多者得（平局：留在原位置者，再按候选键），锚点降为最近一次的位置信息；因此增删文件或最小来源变化不再换 Release ID。无法证明成员关系连续时（新增文件多于原有、被整体替换）新建 Release，原有修正留待人工认领，不静默重挂到新目标 |
 | Track 来源相同，但扫描拟改变其所属版本 | 字段修正与关系修正分别判断。已确认的关系不能被当前 `medium_id` 重写逻辑绕过；必须先形成 catalog 冲突处理路径 |
 | 合并、拆分或重新归组 | 先明确每个修正的目标映射和冲突决议；不能把 Release 修正复制给全部拆分结果，或按最后写入覆盖合并双方修正 |
 | 完整扫描确认缺失 | 保留实体、修正和证据，不清理人工历史；普通浏览仍遵守 present-only，未来管理入口才负责解释悬挂修正 |
-| 来源重新出现 | 原身份与绑定可确认时继续使用原修正；新身份不自动继承。同路径复用无法证明内容相同：阶段 I 保存音频指纹后，同路径但指纹不同的内容不静默沿用原身份 |
+| 来源重新出现 | 原身份与绑定可确认时继续使用原修正；新身份不自动继承。同路径复用无法证明内容相同：**已实施（阶段 I）**——扫描保存音频指纹，同路径但指纹不同的内容得到新曲目（新 UUID），原曲目失去来源身份并置为缺失 |
 | 扫描失败、取消或不完整 | 已提交观察可以保留，但不得负向 missing 对账、删除覆盖或宣称整库回滚；对应来源绑定冲突仍单独可见 |
 
 此处的“隔离”是保留证据、停止有歧义的修正转移或人工关系变更，不是新增文件隔离工具，

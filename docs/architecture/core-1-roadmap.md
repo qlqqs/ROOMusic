@@ -17,10 +17,11 @@
 ## 当前基线
 
 后端入口位于 `backend/cmd/roomusic`，能力代码位于 `backend/internal/`（B0 于 2026-09-30 完成拆分，见
-[后端目录结构](../../.trellis/spec/backend/directory-structure.md)）。扫描后的候选由 `catalog.PersistCandidate`
-写入 Release 图（`internal/catalog/persist.go:46`、`:50`），为每个新 Release 新建一个空的
-ReleaseGroup（`persist.go:44`）；曲目与 Release 的身份依赖路径（`internal/catalog/identity.go:21`、
-`internal/catalog/organizer.go:922`），改名、移动或增删文件都可能换 ID。生产部署仍由一个 Go 应用提供 REST 与同源 Web 资产，PostgreSQL
+[后端目录结构](../../.trellis/spec/backend/directory-structure.md)）。阶段 I（2026-09-30）已实施身份稳定：扫描暂存表归 catalog，
+`catalog.PlanStagedRoot` 在写入前规划曲目与 Release 的沿用——曲目按来源身份与音频内容指纹延续，同一 root 遍历完整时
+改名、移动、互换按指纹唯一 1:1 保守重绑定；Release 按曲目成员关系匹配，`candidate_anchor` 只是位置信息，
+每个新 Release 仍新建一个 ReleaseGroup；`GET /api/v1/release-groups` 与 `/{id}` 提供按组只读读取
+（M3 人工归组之前每组一个版本）。生产部署仍由一个 Go 应用提供 REST 与同源 Web 资产，PostgreSQL
 是唯一必需业务权威。
 
 `frontend/src/` 已删除，保留工具链配置和依赖声明；Go 内嵌资源是重置占位页。
@@ -43,7 +44,7 @@ ReleaseGroup（`persist.go:44`）；曲目与 Release 的身份依赖路径（`i
 | 日志 | `GET /library-root-operations` | M1a：如展示，只称目录操作历史，沿用当前有界结果 | 不是通用日志、审批队列或任意检查点恢复；M3 扩展 |
 | 概览 | 可组合已公开的 Release 分页总数、活动扫描和有权限的目录状态 | M1a：有真实来源的摘要与跳转，缺少数据就省略 | 不生成“本次新增 N 张”“全部扫描历史”“收藏总数”或 AI 便笺等不存在的统计 |
 | 正在播放、队列、歌词 | 当前无曲目串流或歌词接口 | 隐藏或明确禁用，不能启动模拟时钟或记录假历史 | M2a：直出播放与浏览器能力判定；M2b：ffmpeg 派生、CUE 分轨与歌词；P：阶段 I 之后的服务端播放历史 |
-| 元数据整理、版本学 | 扫描有来源锚点、字段候选/决策；新 Release 会创建独立 group 记录 | 只显示已有 Release 与证据，不自动归并为“同专辑” | 阶段 I：身份稳定与按组只读；M3：修正覆盖层与组成员调整（人工确认）；M4：问题、版本工具，之后 Release 合并/拆分 |
+| 元数据整理、版本学 | 扫描有字段候选/决策；曲目按内容指纹、Release 按成员关系保持 ID（阶段 I）；新 Release 各自一个 group，已有按组只读接口 | 只显示已有 Release 与证据，不自动归并为“同专辑” | 阶段 I 已完成（2026-09-30）；M3：修正覆盖层与组成员调整（人工确认）；M4：问题、版本工具，之后 Release 合并/拆分 |
 | 我的音乐、艺人、Steward | 当前没有个人库、艺人实体/别名或 Steward 运行时接口 | 不把原型入口伪装可用 | P：播放历史（Core 1）；M5：收藏、歌单、历史页面、艺人与搜索规范化；M6：受控 Agent；外部元数据源另立项 |
 
 接口依据：`backend/internal/app/app.go` 与各 `httpapi` 包的 `Register`（路由表）、`internal/library/scans.go` 的 `Scan`、
@@ -69,7 +70,7 @@ M3、M4**，外加两项独立修复 F1、F2。阶段完成结果是“可用客
 | --- | --- | --- | --- | --- |
 | M0 | 设计依据、能力矩阵、四类 ADR 草案、规范/旧任务承接 | 本轮文档授权 | 现状与提案区分清楚，没有业务变更 | 已完成（`850d274`） |
 | B0 | 纯重构：先拆 `internal/catalog`（organizer、Release 图写入、读取查询），再拆目录与扫描（含解析器），最后拆 platform | 无；不阻塞 M1a | 对外接口、扫描、安全与事务行为不变；每步 `-race` 测试与 PostgreSQL 集成测试通过 | `classical-b0-package-split`（2026-09-30 已完成，`b4cda28`–`e452105`） |
-| I | 身份稳定：音频指纹、同 root 保守重绑定、按曲目成员关系匹配 Release、ID 稳定性集成测试；ReleaseGroup 只读接口 | B0 的 catalog 部分 | 重扫、增删文件、同 root 内改名/移动后 UUID 不变；歧义不重绑定；`/releases` 行为不变 | `classical-i-identity-groups` |
+| I | 身份稳定：音频指纹、同 root 保守重绑定、按曲目成员关系匹配 Release、ID 稳定性集成测试；ReleaseGroup 只读接口 | B0 的 catalog 部分 | 重扫、增删文件、同 root 内改名/移动后 UUID 不变；歧义不重绑定；`/releases` 行为不变 | `classical-i-identity-groups`（2026-09-30 已完成，`7260178`–`75ef107` 加文档同步） |
 | M1a | Classical 外壳、初始化/会话、现有目录/扫描/成员管理、简版概览；恢复 CI 构建与内嵌资产检查 | ADR 0001 第 1–3 项已批准；可与 B0、I 并行 | 真实 API 主路径、权限/错误/空态、键盘/窄屏、实际构建及内嵌资产检查通过 | `classical-m1a-shell-admin` |
 | M1b | 专辑列表与详情（按组形态，单版本自然退化） | 阶段 I 的按组接口；M1a 的外壳与数据层 | 同 M1a 质量门禁，另覆盖长标题、缺封面、单版本、多 Medium | `classical-m1b-album-browsing` |
 | M2a | 鉴权直出串流、播放引擎、浏览器能力判定；不可播放的曲目明确标注 | M1a 外壳；ADR 0004 第 1 项的实播矩阵在 M2a 规划时确定 | 约定浏览器/格式可播放、拖动/取消/错误可恢复、切页不断播，不宣称硬件 Bit-perfect | 未立项 |

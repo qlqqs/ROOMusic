@@ -22,7 +22,8 @@ M0 不改变以下后端 API、数据库或运行边界。
   `GET /api/v1/scans/active`、`GET /api/v1/scans/{id}`、
   `POST /api/v1/scans/{id}/cancel`、`GET /api/v1/scans/{id}/diagnostics`、
   `GET /api/v1/releases`、`GET /api/v1/releases/{id}`、管理员专用
-  `GET /api/v1/releases/{id}/evidence`，以及已登录用户可读的 `GET /api/v1/artworks/{id}`。
+  `GET /api/v1/releases/{id}/evidence`、按组只读的 `GET /api/v1/release-groups` 与
+  `GET /api/v1/release-groups/{id}`，以及已登录用户可读的 `GET /api/v1/artworks/{id}`。
 - 用户更新请求：`{ "disabled": boolean }`；响应：`{ "disabled": boolean }`。
 - 目录新增响应：`{ "id": string, "name": string, "status": "active" | "disabled", "revision": integer }`。
 - 目录列表项目：`id`、安全 basename `path`/`name`、`status`、`revision`、时间戳；
@@ -53,7 +54,7 @@ M0 不改变以下后端 API、数据库或运行边界。
   `attention=required`。详情返回有界 Medium/Track、credits、音频/CUE facts 和
   普通用户安全 evidence 摘要；完整候选、reason code 和安全相对来源只由管理员
   evidence 端点返回，普通用户必须得到 403。
-- 发行列表/详情的封面摘要见 [Catalog REST 合同](./catalog-rest-contracts.md)。
+- 发行列表/详情的封面摘要与按组只读接口的合同见 [Catalog REST 合同](./catalog-rest-contracts.md)。
 - 恢复 catalog 时，摘要 `artwork` 仍需严格解码（白名单 MIME、正整数宽高、有界
   basename resource ID），封面只按 `/api/v1/artworks/{resource_id}` 同源鉴权读取。
   选中详情和筛选的 URL 责任见 [状态规范](../frontend/state-management.md)，具体新路由
@@ -94,22 +95,49 @@ M0 不改变以下后端 API、数据库或运行边界。
   （例如 `.jpg`、`.png`、`.txt`）不产生 unsupported 音频诊断。
 - `0011_scan_staging_and_identity.sql` 增加有界 scan staging、稳定 candidate anchor、
   物理/CUE source identity、音频/CUE 列、current field/grouping evidence、Release credits
-  和 source/media/genre/catalog 字段；旧 CUE 身份在首次修复扫描时复用原 Track ID。
+  和 source/media/genre/catalog 字段。0010 时期的旧来源身份不再兼容（见下方身份规则，开发阶段裁决）。
 - `0012_track_credits_and_release_metadata.sql` 增加 Release `edition`/`label`/`barcode`
   以及 `track_credits(track_id,role,name,position)`。逐轨角色由数据库 CHECK allowlist
   约束，`track_id + role + name` 唯一；重扫先替换该 Track 的 current credits，不能按扫描
   次数累计。
-- scanner 先把 observation 写入 `scan_observations`，再按 organization scope 有界
-  读取并运行纯 organizer；每个 candidate 使用独立短事务写入 Release Graph，解析
-  失败不阻止其它有效 candidate 提交。无论成功或失败都清理本次 staging；只有全局
-  `succeeded` 才执行 missing 对账。
+- `0013_track_content_fingerprints.sql` 为 `tracks` 增加 `content_fingerprint`（种类与版本随值保存，≤256 字节）、
+  `source_size`、`source_modified_at`，并把 `(source_root_id, relative_path)` 唯一性改为只约束仍持有
+  `source_identity` 的行（部分唯一索引），使内容被替换、失去来源身份的旧曲目可与同一路径上的新曲目并存；
+  `scan_observations` 增加身份规划列（来源身份、指纹依据、候选键、匹配/计划曲目、换内容/暂缓/已规划标记）。
+  `0014_release_anchor_location.sql` 取消 `releases_candidate_anchor_uq`（锚点只是位置信息），并给暂存行增加
+  `planned_release_id`。两个迁移都只放宽约束、增加列，不改写已有数据。
+- scanner 先把 observation 写入 `scan_observations`（连同来源身份、来源文件大小与修改时间、解析时带出的
+  指纹；表的读写归 `catalog/staging.go`，路径安全校验仍在 library）。遍历结束、未被取消且没有致命错误后，先做
+  **身份规划** `catalog.PlanStagedRoot`：逐 scope 有界读取并运行纯 organizer，为保留下来的观察写入候选键；按来源身份
+  匹配在库曲目；复用大小与修改时间都没变的已存指纹，其余经 catalog 定义的 `Fingerprinter` 端口（library 在注册
+  root 内校验后调用 parser）计算；分类为同内容匹配、换内容、未匹配；遍历完整时配对重绑定，不完整时暂缓可疑 scope；
+  最后为每个候选分配要沿用的 Release。规划只做 SQL 与读文件，不持有长事务，结果写在暂存行上。随后按 organization
+  scope 有界读取，每个 candidate 使用独立短事务按规划写入 Release Graph（只写已规划的观察，被暂缓的 scope 不写入），
+  解析失败不阻止其它有效 candidate 提交。无论成功或失败都清理本次 staging；只有全局 `succeeded` 才执行 missing 对账。
 - root 遍历开始前的 staging 清理失败必须立即中止该 root，结束时的兜底清理失败必须
   令 root 保持不完整并写入 `staging_write_failure`。每个 scope 最多读取 10,000 条
   observation，单条 JSON 最多 24 MiB，scope 名按 256 条分页遍历；不得退回 root 级
   无界内存 slice。
-- 物理 Track 以 root + 规范化相对路径复用身份；CUE Track 以 sheet、父来源、track
-  和 `INDEX 01` 复用身份。每次候选写入替换 current decisions、grouping evidence、
-  credits 和 track observations，不按重扫次数追加。
+- **曲目身份**（阶段 I）：曲目 UUID 在同一 root 内随音频内容延续，不再随路径改变。物理 Track 的来源身份是 root +
+  规范化相对路径，CUE Track 是 sheet、父来源、track 和 `INDEX 01`，它们只表示来源“此刻在哪里”。内容指纹与标签无关
+  （`<种类>-v1:<值>`）：FLAC 用 STREAMINFO 音频 MD5 加样本数与格式（MD5 全零时哈希帧数据），M4A 哈希全部 `mdat`
+  负载，MP3 哈希去掉首尾标签后的帧数据，OGG/Opus 哈希头部包之后的音频包，WAV 哈希 `fmt` 与 `data` 块；CUE 虚拟轨
+  取父文件指纹，配对键另含起止帧；没有音频负载的退化文件指纹为空（未知），不与其他文件比较。规划规则：
+  (1) 曲目先按当前来源身份匹配；两边指纹都已知且不同，视为同一路径换了内容，新内容建新曲目，原曲目失去来源身份，
+  没有配对到别处时置为 `missing`，记 `content_replaced`；(2) 只有该 root 遍历完整（未取消，没有遍历、解析、暂存失败，
+  也没有指纹或 scope 失败）时，没有匹配到身份的观察才与本 root 中本轮消失（present、有指纹、未被计划沿用）的曲目
+  按指纹键配对，两侧都恰好一条才沿用 UUID 并更新路径与来源身份，否则不重绑定，歧义键记 `identity_ambiguous`；
+  (3) 遍历不完整时不配对，含疑似移动或换内容观察的 scope 整体暂缓写入并记 `identity_deferred`，留给下一次完整遍历，
+  其余 scope 照常写入；(4) 跨 root 从不重绑定；相似度、标题、时长从不用于推断身份。写入前先腾出被别的曲目持有的
+  来源身份（互换、轮换与处理顺序无关）。重绑定按候选逐个短事务提交，依据的是完整的遍历证据；取消后已提交的保留，没写到
+  的候选保持原状。每次候选写入替换 current decisions、grouping evidence、credits 和 track observations，不按重扫次数追加。
+- **Release 身份**（阶段 I）：候选已规划沿用的曲目中严格过半当前属于同一个既有 Release 时沿用它；多个候选争同一个
+  Release 时重叠多者得，平局时候选键等于该 Release 当前锚点者（留在原位置的一方）优先，再按候选键升序；落选或无倾向的
+  候选写入时新建 Release 与 ReleaseGroup。`candidate_anchor` 只记录最近一次的位置，不参与查找、不要求唯一。因此改名、
+  移动、增删少量文件、最小来源变化都不换 Release ID；新增文件多于原有（如 2 轨加 3 轨）或整体被替换时新建 Release。
+- 身份规划的诊断写入 `scan_diagnostics`（沿用每次扫描最多 100 条的上限，安全相对路径，无绝对路径）：
+  `identity_ambiguous`、`content_replaced`、`identity_deferred`、`fingerprint_failure`；每个 root 规划结束记一条聚合
+  INFO 日志 `library.scan.identity_resolved`，只含计数。
 - CUE 引用可以位于 sheet 的父目录或兄弟目录，只要仍在显式注册根 containment 内；
   staging 必须先按规范化 `cue_parent_relative_path` 与物理 observation 对齐 scope，
   organizer 再仅在同一 candidate 和明确父子关系内消除虚拟/物理重复。不得仅按 sheet
@@ -246,6 +274,12 @@ Authorization/session token、密码、数据库 URL、完整 NAS 路径或音�
 | content-addressed 受管文件与其 hash 内容不符 | 写临时文件并原子替换，随后才确认数据库关系 |
 | 受管封面查询或旧文件清理失败 | 返回分类错误并令扫描不完整，不静默吞错 |
 | 单个 candidate/封面写入失败 | 已提交候选保持可见，记录分类诊断并使扫描不完整，禁止 `missing` |
+| 同一路径的音频内容指纹变化 | 新内容建新曲目（新 UUID）；原曲目失去来源身份，没有配对到别处时置为 `missing`；记 `content_replaced` |
+| 遍历完整的 root 中，无身份匹配的观察与本轮消失的曲目指纹相同且各恰好一条 | 沿用原曲目 UUID 并更新路径；任一侧多于一条时不重绑定，逐键记 `identity_ambiguous` |
+| 遍历不完整或被取消时出现疑似移动或换内容的来源 | 不重绑定、不因此新建身份、不置 `missing`；所在 scope 暂缓写入并记 `identity_deferred`，其余 scope 照常写入 |
+| 来源文件无法完整读取以计算指纹 | 记 `fingerprint_failure`，该 scope 暂缓写入，root 不完整，本轮不配对 |
+| 规划失败，或候选的观察没有规划 | 记 `catalog_write_failure`，root 不完整；不写入、不猜测身份 |
+| 候选已规划沿用的曲目严格过半属于同一 Release | 沿用该 Release UUID；不过半（如 2 轨加 3 轨、1 轨加 1 轨）则新建 Release 与 ReleaseGroup |
 | 扫描成功且所有 root 完整 | 允许负向 `missing` 对账 |
 | 非音频附件 | 忽略，不改变扫描完整性 |
 | 前端非 2xx 或 malformed JSON | `ApiRequestError` 安全回退并保留 request ID |
@@ -290,15 +324,17 @@ Authorization/session token、密码、数据库 URL、完整 NAS 路径或音�
   missing reference/missing `INDEX 01` 非阻断跳过、`unsafe`/`unchecked` 引用阻断、
   sheet/track performer provenance、逐轨 map 隔离、inferred track/disc fallback、
   明确标签优先、缺失 AlbumArtist 兼容与 AlbumArtist 决策优先级、艺人/credit 多分隔符、
-  官方别名/固定组合名，以及 rip log 64 KiB 预算、签名和仅覆盖 `folder` 的优先级。
+  官方别名/固定组合名，rip log 64 KiB 预算、签名和仅覆盖 `folder` 的优先级，以及各格式音频内容指纹（同音频不同标签
+  相同、音频变化不同、FLAC MD5 为零的回退、MP3 首尾标签、OGG 注释包分页、读取中取消）。
 - PostgreSQL 集成（配置 `ROOMUSIC_TEST_DATABASE_URL` 时）：用户禁用与 session
   原子性、最后管理员/并发保护、未知用户 404、目录幂等与真实状态、扫描 incomplete
   禁止 missing、多 Medium 与 Track 身份稳定；另需覆盖 staging 清理、候选短事务
-  回滚/部分提交、跨目录 CUE 父来源对齐、CUE legacy identity、regular-file 拒绝、
+  回滚/部分提交、跨目录 CUE 父来源对齐、regular-file 拒绝、身份规划（改名/移动/互换/相同音频、不完整与取消、换内容、跨 root、CUE、
+  指纹复用与失败）与 Release 成员关系匹配、
   current evidence/track credits 替换、Track artist canonical 展示、受管封面内容重校验、
   旧 key 清理错误传播和绑定失败清理。
 - 发行 REST/前端：present-only 列表、稳定分页/搜索、attention allowlist、详情事实、
-  管理员 evidence 权限、路径脱敏、nullable/enum/数组上限和 malformed payload。
+  管理员 evidence 权限、路径脱敏、nullable/enum/数组上限和 malformed payload；按组接口与 `/releases` 逐项对应。
 - HTTP 中间件：隐式 200、显式状态、错误响应的状态/字节统计，路由模板、耗时、日志
   级别、请求 ID 回写、可选 actor_id 以及敏感字段脱敏；每个请求只能有一个完成事件。
 - 运行门禁：`npm run lint`、`npm run typecheck`、`npm run test`、

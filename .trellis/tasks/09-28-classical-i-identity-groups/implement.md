@@ -106,13 +106,13 @@ git diff --check
 
 ## 第 6 步：文档与规范同步
 
-- [ ] `.trellis/spec/backend/database-guidelines.md:90`–`91`：身份规则改为指纹重绑定与成员关系匹配。
-- [ ] `.trellis/spec/backend/core0-runtime-contracts.md`：扫描流程（规划阶段、暂缓）、身份规则（`:110`–`112`）、四类新诊断、
+- [x] `.trellis/spec/backend/database-guidelines.md:90`–`91`：身份规则改为指纹重绑定与成员关系匹配。
+- [x] `.trellis/spec/backend/core0-runtime-contracts.md`：扫描流程（规划阶段、暂缓）、身份规则（`:110`–`112`）、四类新诊断、
   错误矩阵新增行。
-- [ ] `.trellis/spec/backend/directory-structure.md`：暂存表归 catalog。
-- [ ] `docs/architecture/adr/0002-metadata-overlays.md`：决策记录补充 2026-09-30“按 root 判断完整”的裁决；第四节相关行标为已由阶段 I 实施。
-- [ ] `docs/architecture/core-1-roadmap.md`、`core-1-architecture.html`：阶段 I 状态与“当前基线”段落。
-- [ ] 父任务 `prd.md`、`implement.md` 的阶段 I 状态；本任务 `prd.md` 增加“实施结果”。
+- [x] `.trellis/spec/backend/directory-structure.md`：暂存表归 catalog。
+- [x] `docs/architecture/adr/0002-metadata-overlays.md`：决策记录补充 2026-09-30“按 root 判断完整”的裁决；第四节相关行标为已由阶段 I 实施。
+- [x] `docs/architecture/core-1-roadmap.md`、`core-1-architecture.html`：阶段 I 状态与“当前基线”段落。
+- [x] 父任务 `prd.md`、`implement.md` 的阶段 I 状态；本任务 `prd.md` 增加“实施结果”。
 - 验证：修改过的 Markdown 相对链接有效；`python3 ./.trellis/scripts/task.py validate .trellis/tasks/09-28-classical-i-identity-groups`；`git diff --check`。
 - 提交：`docs: 同步阶段 I 的身份规则与按组接口`。
 
@@ -129,7 +129,7 @@ git diff --check
 
 ## 启动前检查
 
-- [ ] 用户明确批准最终规划摘要。
-- [ ] `python3 ./.trellis/scripts/task.py validate .trellis/tasks/09-28-classical-i-identity-groups` 通过。
-- [ ] `implement.jsonl`、`check.jsonl` 含真实规范条目。
-- [ ] `python3 ./.trellis/scripts/task.py start .trellis/tasks/09-28-classical-i-identity-groups`。
+- [x] 用户明确批准最终规划摘要。
+- [x] `python3 ./.trellis/scripts/task.py validate .trellis/tasks/09-28-classical-i-identity-groups` 通过。
+- [x] `implement.jsonl`、`check.jsonl` 含真实规范条目。
+- [x] `python3 ./.trellis/scripts/task.py start .trellis/tasks/09-28-classical-i-identity-groups`。

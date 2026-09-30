@@ -24,14 +24,14 @@ backend/
 │   │   └── uuid/                   # UUID 生成与格式校验
 │   ├── identity/                   # 会话、密码、Guard（同源、登录、管理员校验）
 │   │   └── httpapi/                # setup、登录登出、成员管理
-│   ├── library/                    # 路径校验、扫描引擎与暂存、诊断、扫描执行锁与中断恢复、Service
-│   │   ├── parser/                 # 音频与 CUE 解析（叶子包）
+│   ├── library/                    # 路径校验、扫描引擎（遍历、解析、把观察交给 catalog 暂存）、诊断、扫描执行锁与中断恢复、Service
+│   │   ├── parser/                 # 音频与 CUE 解析、与标签无关的音频内容指纹（叶子包）
 │   │   │   └── parsertest/         # 仅测试使用：合成音频夹具
 │   │   └── httpapi/                # 目录、目录操作、扫描
-│   └── catalog/                    # 观察合同、organizer、来源身份、Release 图写入、读取投影
+│   └── catalog/                    # 观察合同、扫描暂存表、身份规划、organizer、来源身份、Release 图写入、读取投影
 │       ├── metadata/               # 署名、空白规范化、有界文本、艺人名规则（叶子包）
 │       ├── artwork/                # 受管封面：校验、落盘、关联、读取
-│       └── httpapi/                # Release 列表/详情/证据、封面读取
+│       └── httpapi/                # Release 列表/详情/证据、按组只读、封面读取
 ├── migrations/
 └── testdata/                       # small repository-wide fixtures only
 ```
@@ -56,7 +56,10 @@ backend/
 - `library` owns allowed-root registration workflows, read-only source
   discovery, parsers, scan runs, diagnostics, and missing-source reconciliation.
 - `catalog` owns ReleaseGroup, Release, Medium, Track, key field provenance, and
-  conservative grouping rules.
+  conservative grouping rules. 扫描暂存表（`scan_observations`）与身份规划（曲目重绑定、Release 成员关系匹配）也归它：
+  library 经 `catalog.StageObservation` 等函数写入暂存，规划需要读文件时通过 catalog 定义的窄端口
+  `catalog.Fingerprinter` 向 library 取值（library 在注册 root 内校验路径后调用 parser），catalog 不导入 library 或
+  parser，两边不读对方的私有表。
 - `search` owns query semantics and result projections while PostgreSQL remains
   the authority. It cannot write catalog truth through a search projection.
 - `operations` owns Change Sets, Operation Journal events, idempotency records,

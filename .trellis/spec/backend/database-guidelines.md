@@ -87,9 +87,12 @@ complete and successful.
 - Store session token hashes only; never store or log the bearer token. Session
   rows include owner, expiry, revocation, and timestamps needed for immediate
   invalidation.
-- Keep Track identity stable for the same root and normalized relative source
-  path. Rename/move appears as an old missing source and a new source in Core 0;
-  weak similarity cannot update the old identity.
+- 曲目 UUID 在同一 root 内随音频内容延续，不随路径改变（阶段 I）：曲目先按当前来源身份（root + 规范化相对路径，
+  CUE 另含 sheet、父来源、轨号与起点）匹配；同一来源身份下音频内容指纹变化视为换了内容，新建曲目。改名、移动只在该 root
+  遍历完整时，才按指纹（含 CUE 区间）把没有匹配到身份的观察与本轮消失的曲目唯一 1:1 配对、沿用 UUID；歧义、跨 root、
+  相似度都不重绑定，遍历不完整或被取消时不重绑定。规则与测试见 [Core 0 运行合同](./core0-runtime-contracts.md)。
+- Release UUID 按候选中已有曲目的成员关系延续（严格过半沿用）；`releases.candidate_anchor` 只记录最近一次的位置，
+  不参与查找，也不要求唯一。
 - Preserve missing sources and derived entities for diagnosis. Core 0 performs
   no automatic physical purge.
 - Store provenance for key metadata: current value, source kind, inferred flag,

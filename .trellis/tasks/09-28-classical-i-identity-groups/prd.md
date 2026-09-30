@@ -1,6 +1,6 @@
 # 阶段 I：身份稳定与 ReleaseGroup 只读
 
-> 状态：in_progress（2026-09-30 用户批准规划，已 `task.py start`）。父任务见
+> 状态：已实施并验证（2026-09-30 用户批准规划后分六步实施，见文末“实施结果”）。父任务见
 > [Classical 重设计 / Core 1](../09-27-classical-core-1/prd.md)；2026-09-28 由[路线修订任务](../archive/2026-09/09-28-core-1-roadmap-revision/design.md)
 > （第二部分）创建。技术设计见 [design.md](design.md)，执行计划见 [implement.md](implement.md)，
 > 核实事实与推导见 [research/identity-analysis.md](research/identity-analysis.md)。
@@ -77,3 +77,46 @@
 - 某个 root 一直不完整时，该 root 的移动一直暂缓，旧条目保留，直到修好问题文件。
 - 原地替换音频（如重新抓轨）得到新曲目 ID；整张专辑被替换时发行也会新建，原有修正需人工认领（M3 及以后）。
 - 新增文件多于原有文件时新建 Release，原 Release 失去全部曲目后不可见。
+
+## 实施结果
+
+2026-09-30 分六步实施，逐步提交到 `main`（未推送）：
+
+| 步骤 | 提交 | 内容 |
+| --- | --- | --- |
+| 规划 | `83d5ebb` | PRD、design、implement、research |
+| 1 | `7260178` | `parser.ContentFingerprint` 与各格式指纹；只读真实库覆盖核对（[research/fingerprint-coverage.md](research/fingerprint-coverage.md)） |
+| 2 | `abcc077` | 扫描暂存表归入 catalog（纯搬迁，测试名单前后一致） |
+| 3 | `b54cfca` | 迁移 0013、`PlanStagedRoot` 身份规划、曲目按计划写入与重绑定、删除旧身份兼容 |
+| 4 | `7194559` | 迁移 0014、Release 成员关系匹配 |
+| 5 | `75ef107` | ReleaseGroup 只读接口与 REST 合同 |
+| 6 | 见 `git log`（`docs: 同步阶段 I 的身份规则与按组接口`） | 规范、ADR 0002、路线图与架构图同步 |
+
+**与规划的差异**（实施中确定，已同步到 [design.md](design.md)）：
+
+- 暂存行增加 `planned` 标志：只有规划成功结束时才对保留下来且未暂缓的行置为真，`PersistCandidate` 只写已规划的观察，
+  避免规划中途失败时按“新曲目”写入；规划读取暂存时不带封面字节。
+- 没有音频负载的退化文件（无帧的 FLAC、无 `mdat` 的 M4A、只有标签的 MP3、只有头部包的 OGG）指纹为空（未知），
+  不与其他文件比较；否则它们会互相被当成同一份音频。
+- 配对键中，曲目侧只有 CUE 虚拟轨才带起止帧：单轨 CUE 会把区间事实合并进物理轨，暂存的物理观察没有这些值。
+- 索引：暂存表用 `(scan_run_id, root_id, fingerprint_path)` 与 `(…, candidate_key)`；设计里的来源身份索引没有查询使用，已去掉。
+- 除 `TestPostgreSQLFirstRepairScanReusesLegacyCueTrackIdentity` 外，只测旧身份函数的单元测试
+  `TestLegacyCueSourceIdentityCanBeReusedAfterUpgrade` 也随函数一并删除。
+
+**验收对照**（测试名见 [implement.md](implement.md)）：
+
+| 编号 | 证据 |
+| --- | --- |
+| A1 | parser 单元测试（各格式同音频不同标签相同、音频变化不同、FLAC MD5 为零回退、MP3 首尾标签、OGG 注释包分页、M4A 多个 `mdat`、WAV 块、取消）；`TestPostgreSQLRescanKeepsTrackIdentity` 断言曲目都有指纹与文件状态；`TestPostgreSQLUnchangedFilesReuseStoredFingerprints` 用可计数的端口证明未变文件不再计算 |
+| A2 | 改名、同 root 移动、互换与三文件轮换、CUE 目录改名、单轨 CUE 改名各一个场景；跨 root 移动得到新身份；相同音频不重绑定并记 `identity_ambiguous` |
+| A3 | `TestPostgreSQLIncompleteScanDefersMovesUntilCompleteScan`、`…DefersReplacedContent`、`TestPostgreSQLCanceledScanDoesNotRebind`（规划期间取消、遍历前取消）、`TestPostgreSQLCompleteRootRebindsWhenAnotherRootIsUnavailable`、`TestPostgreSQLFingerprintFailureDefersScope` |
+| A4 | `TestPostgreSQLReplacedContentGetsNewIdentity` |
+| A5 | `TestPostgreSQLAddedEarlierFileKeepsReleaseIdentity`、`…RemovedSmallestFile…`、`…DirectoryRenameKeepsReleaseIdentity`、`…MovedFileJoinsTargetRelease`、`…SplitReleaseKeepsIdentityForLargerPart`（含平局）、`…MinorityOverlapCreatesNewRelease`、`…ExactlyHalfOverlapIsNotAMajority`；重扫与改名场景补了 Release ID 断言 |
+| A6 | `TestPostgreSQLReleaseGroupListMirrorsReleaseList`（13 组查询逐项对应）、`…RepresentativeAndCounts`、`…DetailErrors`；路由表测试含两个新路由 |
+| A7 | `legacySourceIdentity`、`legacyCueSourceIdentity` 与同路径兜底已删除；只新增迁移 0013、0014 |
+| A8 | 规范、ADR 0002、路线图、架构图已同步；`/releases` 既有测试未改动并通过（只在 `read.go` 内抽出共用的搜索谓词与摘要列扫描，行为不变） |
+| A9 | 每步执行：`gofmt -l .`、`go vet ./...`、`go build ./...`、`go test ./... -count=1`、`go test -race ./... -count=1`、`./scripts/test-integration.sh`、`git diff --check`，均通过；关键逻辑另做了变异验证（关闭配对、去掉“先腾出”、不暂缓、不复用指纹、不判换内容、Release 分配与比较规则、按组的代表版本/attention/搜索/可见性/排序）确认测试会失败 |
+| A10 | 真实库 284 个音频文件全部得到指纹，失败 0，无重复；迁移后第一次扫描额外读约 3.05 GiB、约 32 秒，见 research |
+
+**遗留与已知限制**：见上文“风险与已知限制”；另外真实库没有 OGG/Opus/WAV 文件，这三类只由合成夹具验证；
+被放弃的 Release 与组不做自动清理（范围外）。

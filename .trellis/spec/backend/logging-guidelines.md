@@ -116,6 +116,11 @@ URL、完整 NAS 路径、音频或封面内容。匿名请求不填充 `actor_i
 不支持格式的细节应放在有界扫描诊断中。对于 100,000 首歌曲的库，不得每首曲目发出一条
 info 日志。
 
+每个 root 的身份规划结束时记一条聚合 INFO 事件 `library.scan.identity_resolved`：`scan_run_id`、`library_root_id`、
+`walk_complete`，以及同内容匹配、重绑定、歧义键、换内容、暂缓 scope、指纹计算/复用/失败与 scope 失败的计数；不含任何
+路径。逐文件的歧义、暂缓、换内容细节放在有界扫描诊断里（`identity_ambiguous`、`content_replaced`、
+`identity_deferred`、`fingerprint_failure`）。
+
 操作生命周期使用持久化 `operation_id` 记录；前后状态和恢复数据保存在 Change Set/
 Operation Journal 中。记录“可回滚”不等于实现恢复。
 
