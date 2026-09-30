@@ -1,4 +1,4 @@
-package main
+package postgres
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -17,6 +16,7 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/migrations"
 )
@@ -402,50 +402,6 @@ func testMigrationFS(statements map[int64]string) fs.FS {
 	return mapFS
 }
 
-func openMigrationTestDatabase(t *testing.T) *sql.DB {
-	t.Helper()
-	if strings.TrimSpace(os.Getenv(integrationTestDatabaseEnvironment)) == "" {
-		t.Skipf("%s is not configured", integrationTestDatabaseEnvironment)
-	}
-	database := openMigrationTestDatabaseURL(t, migrationTestDatabaseURL(t))
-	t.Cleanup(func() { _ = database.Close() })
-	return database
-}
-
-func migrationTestDatabaseURL(t *testing.T) string {
-	t.Helper()
-	base := strings.TrimSpace(os.Getenv(integrationTestDatabaseEnvironment))
-	if base == "" {
-		t.Skipf("%s is not configured", integrationTestDatabaseEnvironment)
-	}
-	admin, err := sql.Open("pgx", base)
-	if err != nil {
-		t.Fatalf("open migration test admin connection: %v", err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	if err := admin.PingContext(ctx); err != nil {
-		_ = admin.Close()
-		t.Fatalf("ping migration test admin connection: %v", err)
-	}
-	schema := "roomusic_migration_" + strings.ReplaceAll(uuid.New(), "-", "")
-	if _, err := admin.ExecContext(ctx, `CREATE SCHEMA `+schema); err != nil {
-		_ = admin.Close()
-		t.Fatalf("create migration test schema: %v", err)
-	}
-	t.Cleanup(func() {
-		cleanupContext, cleanupCancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cleanupCancel()
-		_, _ = admin.ExecContext(cleanupContext, `DROP SCHEMA IF EXISTS `+schema+` CASCADE`)
-		_ = admin.Close()
-	})
-	scoped, err := integrationDatabaseURL(base, schema)
-	if err != nil {
-		t.Fatalf("scope migration test URL: %v", err)
-	}
-	return scoped
-}
-
 func openMigrationTestDatabaseURL(t *testing.T, databaseURL string) *sql.DB {
 	t.Helper()
 	database, err := sql.Open("pgx", databaseURL)
@@ -460,44 +416,6 @@ func openMigrationTestDatabaseURL(t *testing.T, databaseURL string) *sql.DB {
 	}
 	database.SetMaxOpenConns(2)
 	return database
-}
-
-func openConcurrentMigrationDatabases(t *testing.T) (*sql.DB, *sql.DB) {
-	t.Helper()
-	base := strings.TrimSpace(os.Getenv(integrationTestDatabaseEnvironment))
-	if base == "" {
-		t.Skipf("%s is not configured", integrationTestDatabaseEnvironment)
-	}
-	admin, err := sql.Open("pgx", base)
-	if err != nil {
-		t.Fatalf("open concurrent migration admin connection: %v", err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	if err := admin.PingContext(ctx); err != nil {
-		_ = admin.Close()
-		t.Fatalf("ping concurrent migration admin connection: %v", err)
-	}
-	schema := "roomusic_migration_concurrent_" + strings.ReplaceAll(uuid.New(), "-", "")
-	if _, err := admin.ExecContext(ctx, `CREATE SCHEMA `+schema); err != nil {
-		_ = admin.Close()
-		t.Fatalf("create concurrent migration schema: %v", err)
-	}
-	scoped, err := integrationDatabaseURL(base, schema)
-	if err != nil {
-		t.Fatalf("scope concurrent migration URL: %v", err)
-	}
-	first := openMigrationTestDatabaseURL(t, scoped)
-	second := openMigrationTestDatabaseURL(t, scoped)
-	t.Cleanup(func() {
-		cleanupContext, cleanupCancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cleanupCancel()
-		_, _ = admin.ExecContext(cleanupContext, `DROP SCHEMA IF EXISTS `+schema+` CASCADE`)
-		_ = admin.Close()
-		_ = first.Close()
-		_ = second.Close()
-	})
-	return first, second
 }
 
 func findMigrationByVersion(t *testing.T, version int64) migration {
@@ -543,4 +461,23 @@ func equalInt64s(first, second []int64) bool {
 func migrationTestSHA256Hex(data []byte) string {
 	digest := sha256.Sum256(data)
 	return hex.EncodeToString(digest[:])
+}
+
+func openMigrationTestDatabase(t *testing.T) *sql.DB {
+	t.Helper()
+	database := openMigrationTestDatabaseURL(t, postgrestest.NewSchema(t, "roomusic_migration_"))
+	t.Cleanup(func() { _ = database.Close() })
+	return database
+}
+
+func openConcurrentMigrationDatabases(t *testing.T) (*sql.DB, *sql.DB) {
+	t.Helper()
+	scoped := postgrestest.NewSchema(t, "roomusic_migration_concurrent_")
+	first := openMigrationTestDatabaseURL(t, scoped)
+	second := openMigrationTestDatabaseURL(t, scoped)
+	t.Cleanup(func() {
+		_ = first.Close()
+		_ = second.Close()
+	})
+	return first, second
 }

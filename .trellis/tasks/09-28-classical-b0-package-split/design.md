@@ -47,7 +47,7 @@ backend/
 | organizer 用 scanner 的 `directoryOf`，与 `normalizedPath` 同为相对来源路径规则 | 两者移入 `catalog` 并导出（`DirectoryOf`、`NormalizedPath`），library 调用 |
 | scanner 的 `observationOrganizationScope` 依赖 organizer 内部的目录定位 | 移入 `catalog.OrganizationScope`，不再向外导出 organizer 的内部函数 |
 | `canonicalCreditObservations` 是署名值规则 | 移入 `metadata.CanonicalCredits`，与 `Credit` 同包 |
-| scanner 的 `cloneBoolMap` 与 organizer 同名函数语义相同（总返回非 nil） | 第 2 步随 `buildCueVirtualObservation` 留在 library，各包自带一份 7 行实现，不为它导出 catalog 的内部函数 |
+| scanner 的 `cloneBoolMap` 与 organizer 同名函数语义相同（总返回非 nil） | 第 3 步随 `buildCueVirtualObservation` 留在 library，各包自带一份 7 行实现，不为它导出 catalog 的内部函数 |
 | Release 图写入提交后保存封面 | `catalog.PersistCandidate` 只写 Release 图，返回 release ID。<br>提交后的封面步骤由 library 编排：先取内嵌或文件夹封面（发现在 library），再调用 `artwork.Store`（写文件与关联在 catalog）。<br>顺序、错误包装（`errArtworkBinding`、`discover folder artwork: %w`）、没有封面时移除关联的分支都保持不变 |
 | `finalizeScan` 直接写 `tracks` | missing 对账 SQL 移入 `catalog.MarkMissingSources(ctx, tx, rootID, scanID)`。library 在同一个扫描事务里调用 |
 | `openDatabase` 内含中断扫描恢复 | `postgres.Open` 只负责连接与迁移，`library.RecoverInterruptedScans` 由 `main` 紧接着调用。失败时同样关闭连接并进入降级模式，与现在一致 |
@@ -121,7 +121,7 @@ backend/
 | 单元测试 | 与被测代码同包（内部测试，可访问未导出标识符）。跨包测试的文件按被测函数拆开：<br>• `organizer_test.go`：organizer 部分到 `catalog`，rip log 与文件夹封面发现到 `library`，封面尺寸到 `catalog/artwork`<br>• `core_acceptance_test.go`：按用例归属拆开 |
 | 完整 HTTP 链路的集成测试（权限矩阵、目录操作与 F2、catalog API、历史记录、最后管理员、F1 兜底） | `internal/app`。辅助函数 `request`、`createUser` 放在 `app` 的 `_test.go` 中 |
 | 数据库层的 library 测试（扫描持久化、取消、恢复、未完成扫描不对账） | `internal/library` |
-| 迁移测试 | `internal/platform/postgres` |
+| 迁移测试 | `internal/platform/postgres`（隔离 schema 的测试库在 `postgres/postgrestest`，它不导入 `postgres`，避免测试循环依赖） |
 | 共享测试夹具 | 隔离 schema 的测试库 → `postgrestest`；合成 FLAC 等 → `parsertest`；伪执行器 → 使用方所在包的测试文件 |
 | `real_music_readonly_test.go` | `library/parser`，仍由环境变量守护，只读 |
 

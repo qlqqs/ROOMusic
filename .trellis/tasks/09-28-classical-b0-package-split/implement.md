@@ -1,10 +1,12 @@
 # B0 执行计划
 
-需求见 [prd.md](prd.md)，设计见 [design.md](design.md)。按四步推进：
+需求见 [prd.md](prd.md)，设计见 [design.md](design.md)。按五步推进：
 
-- 前三步是代码，每步独立可编译，通过完整门禁后单独提交到 main；
-- 第四步同步文档；
+- 前四步是代码，每步独立可编译，通过完整门禁后单独提交到 main；
+- 第五步同步文档；
 - 提交前后都核对测试函数数量。
+- 第 2 步是实施中新增的：library 的数据库测试需要“隔离 schema 加迁移”的测试库，迁移执行器必须先离开 `package main`，
+  所以把原计划里第 3 步的 `platform/postgres` 提前为单独一步。
 
 ## 每步门禁
 
@@ -37,7 +39,14 @@ git diff --check
    - `scripts/test-integration.sh` 改为 `./...`。
    - 过门禁后提交：`refactor(backend): 拆出 catalog、metadata、artwork 与 platform/uuid`。
    - 实际验证：gofmt、vet、build、`go test ./...`、`go test -race ./...`、`./scripts/test-integration.sh` 全部通过；测试名单与基线 161 逐项对账，只多两个（`TestNewReturnsValidVersion4Identifiers`、从搜索解析测试拆出的 `TestEscapeLikePatternEscapesWildcards`）；搬迁的函数用脚本对照原文，只有预期改动。
-2. [ ] **library 与解析器**
+2. [x] **platform/postgres**
+   - 新建 `platform/postgres`：`Open`（连接、探测、应用迁移，返回 `*sql.DB`）与迁移执行器（原 `database.go` 除 `databaseState`、扫描恢复、就绪状态外的全部）。
+   - 新建 `platform/postgres/postgrestest`：隔离 schema 的测试库（`ROOMUSIC_TEST_DATABASE_URL`），不导入 `postgres`，避免测试循环依赖。
+   - `openDatabase` 留在 `package main` 作为薄封装：调用 `postgres.Open`，再执行中断扫描恢复（第 3 步随 library 移走），再包成 `databaseState`。
+   - 迁移测试随执行器移到 `platform/postgres`；`newIntegrationTestApplication` 改用 `postgrestest`。
+   - 提交：`refactor(backend): 拆出 platform/postgres 与测试库辅助包`。
+   - 实际验证：gofmt、vet、build、`go test ./...`、`-race`、`./scripts/test-integration.sh` 全部通过；测试名单与第 1 步后一致（迁移测试 12 个随执行器移动，名称不变）。
+3. [ ] **library 与解析器**
    - 新建 `library/parser`（含 `parsertest`），以及 `library`：
      - 路径校验、扫描引擎、暂存、rip log 与文件夹封面发现、诊断写入；
      - 扫描执行锁、`RecoverInterruptedScans`、`Service.StartScan` 的类型化结果、扫描查询与 DTO、`WaitForScans`。
@@ -45,8 +54,8 @@ git diff --check
    - 扫描 handler 暂留 main，改为映射 `StartScan` 的结果；目录类 handler 暂不动。
    - 相关测试移到 `library` 和 `parser`，删除 library 范围内的死代码。
    - 提交：`refactor(backend): 拆出 library 与 parser`。
-3. [ ] **platform、identity、httpapi 与 app**
-   - 新建 `platform/config`、`platform/httpserver`（`SetActor`、`Frontend(fs.FS)`）、`platform/postgres`（含 `postgrestest`）、`identity`（`Guard`）。
+4. [ ] **httpserver、config、identity、httpapi 与 app**
+   - 新建 `platform/config`、`platform/httpserver`（`SetActor`、`Frontend(fs.FS)`）、`identity`（`Guard`）。
    - 新建三个 `httpapi` 包，按 design 的 handler 处理方式搬移。
    - 新建 `app`（`New`、`Degraded`、`WaitForScans`），`cmd/roomusic` 只保留 `main.go` 与 `web/`。
    - 完整 HTTP 链路测试移入 `app`。
@@ -54,7 +63,7 @@ git diff --check
      - 路由表测试：原有的每个“方法 + 路径”仍解析到同一模式，`/api` 兜底仍为 `<unmatched>`；
      - `dependency_rules_test.go`：按 design 的依赖规则检查各包导入。
    - 提交：`refactor(backend): 拆出 platform、identity、各能力 httpapi 与 app`。
-4. [ ] **文档与收尾**
+5. [ ] **文档与收尾**
    - 用 `grep -rn 'cmd/roomusic/' --include=*.md --include=*.html` 找出全部旧链接，逐一改到新位置。ADR 证据表注明“路径已随 B0 更新”。
    - 更新以下文档：
      - `directory-structure.md`：实际布局、`httpapi` 命名、`library/httpapi` 与 `identity/httpapi` 内仍有 SQL 的技术债；

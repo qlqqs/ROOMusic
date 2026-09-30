@@ -73,7 +73,7 @@
 | 编号 | 事项 | 选择 | 依据 |
 | --- | --- | --- | --- |
 | D1 | 拆分深度 | 按能力拆包，只在需要时抽用例：<br>• catalog 完全分层；<br>• 扫描启动（涉及共享状态）抽进 library；<br>• 目录、目录操作、身份的 handler 原样搬进各自的 httpapi，里面的 SQL 登记为技术债，M3 处理 | qlqq，2026-09-29，选择推荐项 |
-| D2 | 范围与顺序 | catalog → library（含解析器）→ platform、identity、httpapi 与 app，最后同步文档；每步单独提交 | 路线修订 D1（2026-09-28）批准了前三步；platform、identity 与 app 是“`cmd/roomusic` 只保留入口”的前提 |
+| D2 | 范围与顺序 | catalog → platform/postgres → library（含解析器）→ httpserver、config、identity、httpapi 与 app，最后同步文档；每步单独提交 | 路线修订 D1（2026-09-28）批准了前三步；platform、identity 与 app 是“`cmd/roomusic` 只保留入口”的前提 |
 | D3 | identity 是否纳入 | 纳入 | 初稿规则“成本低则同批完成”：约 390 行；handler 离开 `package main` 后都需要可导入的鉴权 |
 
 ## 需求与验收
@@ -88,7 +88,7 @@
 | R6 | 死代码 | design 列出的无调用函数被删除；`recordingResponseWriter.Unwrap` 保留 |
 | R7 | 测试与门禁 | • 测试随被测代码归属移动；<br>• 测试函数数量不少于基线 161，死代码对应的测试除外，完成时逐项列出；<br>• `scripts/test-integration.sh` 覆盖 `./...`；<br>• 每步都通过 implement 列出的门禁：gofmt、vet、build、全量测试、race、集成脚本、`git diff --check` |
 | R8 | 文档 | • 指向 `backend/cmd/roomusic/*.go` 的链接全部改到新位置；<br>• 规范写明实际布局与技术债；<br>• 路线图、架构图、父任务更新 B0 状态；<br>• M1a 与阶段 I 的 PRD 不再引用旧路径 |
-| R9 | 分步提交 | 四个提交（三步代码加文档），每个都能独立 `git revert` |
+| R9 | 分步提交 | 五个提交（四步代码加文档；platform/postgres 因测试库依赖从第 3 步提前为单独一步），每个都能独立 `git revert` |
 
 ## 范围外
 

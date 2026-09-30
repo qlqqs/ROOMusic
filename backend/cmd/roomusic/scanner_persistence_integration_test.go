@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
+	"github.com/qlqq/roomusic/backend/migrations"
 )
 
 func TestPostgreSQLCandidatePersistenceIsIdempotentAndReplacesCurrentEvidence(t *testing.T) {
@@ -529,8 +531,8 @@ func TestPostgreSQLOrganizationMigrationConsolidatesLegacyCurrentRows(t *testing
 		($1::uuid,'legacy','new','[]','new',$2::uuid,NOW())`, releaseID, scanID); err != nil {
 		t.Fatalf("insert duplicate evidence: %v", err)
 	}
-	migration := findMigrationByVersion(t, 11)
-	if _, err := fixture.database.connection.Exec(string(migration.SQL)); err != nil {
+	migrationSQL := embeddedMigrationSQL(t, 11)
+	if _, err := fixture.database.connection.Exec(migrationSQL); err != nil {
 		t.Fatalf("reapply organization migration to legacy rows: %v", err)
 	}
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM media WHERE release_id=$1::uuid AND position=1`, 1, releaseID)
@@ -566,8 +568,8 @@ func TestPostgreSQLOrganizationMigrationLeavesConflictingLegacyAnchors(t *testin
 		t.Fatalf("insert conflicting legacy releases: %v", err)
 	}
 
-	migration := findMigrationByVersion(t, 11)
-	if _, err := fixture.database.connection.Exec(string(migration.SQL)); err != nil {
+	migrationSQL := embeddedMigrationSQL(t, 11)
+	if _, err := fixture.database.connection.Exec(migrationSQL); err != nil {
 		t.Fatalf("reapply organization migration with conflicting legacy anchors: %v", err)
 	}
 
@@ -641,4 +643,25 @@ func assertDatabaseCount(t *testing.T, fixture *integrationTestApplication, quer
 
 func minimalPNGArtwork() []byte {
 	return []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 13, 'I', 'H', 'D', 'R', 0, 0, 0, 1, 0, 0, 0, 1}
+}
+
+// embeddedMigrationSQL 读取嵌入迁移中指定版本的原始 SQL，用于在旧数据上重放某次数据升级。
+func embeddedMigrationSQL(t *testing.T, version int) string {
+	t.Helper()
+	entries, err := fs.ReadDir(migrations.Files, ".")
+	if err != nil {
+		t.Fatalf("list embedded migrations: %v", err)
+	}
+	prefix := fmt.Sprintf("%04d_", version)
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), prefix) {
+			data, err := fs.ReadFile(migrations.Files, entry.Name())
+			if err != nil {
+				t.Fatalf("read embedded migration %s: %v", entry.Name(), err)
+			}
+			return string(data)
+		}
+	}
+	t.Fatalf("embedded migration %d not found", version)
+	return ""
 }

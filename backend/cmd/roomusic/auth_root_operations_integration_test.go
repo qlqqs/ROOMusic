@@ -10,7 +10,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -19,10 +18,9 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
-
-const integrationTestDatabaseEnvironment = "ROOMUSIC_TEST_DATABASE_URL"
 
 type integrationTestApplication struct {
 	database    *databaseState
@@ -38,38 +36,9 @@ type integrationTestUser struct {
 
 func newIntegrationTestApplication(t *testing.T) *integrationTestApplication {
 	t.Helper()
-	databaseURL := strings.TrimSpace(os.Getenv(integrationTestDatabaseEnvironment))
-	if databaseURL == "" {
-		t.Skipf("%s is not configured", integrationTestDatabaseEnvironment)
-	}
-
-	adminConnection, err := sql.Open("pgx", databaseURL)
-	if err != nil {
-		t.Fatalf("open integration test database: %v", err)
-	}
+	scopedURL := postgrestest.NewSchema(t, "roomusic_test_")
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	if err := adminConnection.PingContext(ctx); err != nil {
-		t.Fatalf("ping integration test database: %v", err)
-	}
-
-	schema := "roomusic_test_" + strings.ReplaceAll(uuid.New(), "-", "")
-	if _, err := adminConnection.ExecContext(ctx, `CREATE SCHEMA `+schema); err != nil {
-		t.Fatalf("create isolated integration schema: %v", err)
-	}
-	t.Cleanup(func() {
-		defer adminConnection.Close()
-		cleanupContext, cleanupCancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cleanupCancel()
-		if _, err := adminConnection.ExecContext(cleanupContext, `DROP SCHEMA IF EXISTS `+schema+` CASCADE`); err != nil {
-			t.Errorf("drop isolated integration schema: %v", err)
-		}
-	})
-
-	scopedURL, err := integrationDatabaseURL(databaseURL, schema)
-	if err != nil {
-		t.Fatalf("scope integration database URL: %v", err)
-	}
 	database, err := openDatabase(ctx, scopedURL)
 	if err != nil {
 		t.Fatalf("open isolated application database: %v", err)
@@ -92,17 +61,6 @@ func newIntegrationTestApplication(t *testing.T) *integrationTestApplication {
 		origin:      "http://roomusic.test",
 		allowedRoot: allowedRoot,
 	}
-}
-
-func integrationDatabaseURL(databaseURL, schema string) (string, error) {
-	parsed, err := url.Parse(databaseURL)
-	if err != nil {
-		return "", err
-	}
-	query := parsed.Query()
-	query.Set("search_path", schema)
-	parsed.RawQuery = query.Encode()
-	return parsed.String(), nil
 }
 
 func (application *integrationTestApplication) createUser(t *testing.T, role string) integrationTestUser {
