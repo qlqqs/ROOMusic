@@ -108,7 +108,7 @@
 | 编号 | 证据 |
 | --- | --- |
 | A1 | parser 单元测试（各格式同音频不同标签相同、音频变化不同、FLAC MD5 为零回退、MP3 首尾标签、OGG 注释包分页、M4A 多个 `mdat`、WAV 块、取消）；`TestPostgreSQLRescanKeepsTrackIdentity` 断言曲目都有指纹与文件状态；`TestPostgreSQLUnchangedFilesReuseStoredFingerprints` 用可计数的端口证明未变文件不再计算 |
-| A2 | 改名、同 root 移动、互换与三文件轮换、CUE 目录改名、单轨 CUE 改名各一个场景；跨 root 移动得到新身份；相同音频不重绑定并记 `identity_ambiguous` |
+| A2 | 改名、同 root 移动、互换（同目录与跨目录）与三文件轮换、CUE 目录改名、单轨 CUE 改名各一个场景；跨 root 移动得到新身份；相同音频不重绑定并记 `identity_ambiguous` |
 | A3 | `TestPostgreSQLIncompleteScanDefersMovesUntilCompleteScan`、`…DefersReplacedContent`、`TestPostgreSQLCanceledScanDoesNotRebind`（规划期间取消、遍历前取消）、`TestPostgreSQLCompleteRootRebindsWhenAnotherRootIsUnavailable`、`TestPostgreSQLFingerprintFailureDefersScope` |
 | A4 | `TestPostgreSQLReplacedContentGetsNewIdentity` |
 | A5 | `TestPostgreSQLAddedEarlierFileKeepsReleaseIdentity`、`…RemovedSmallestFile…`、`…DirectoryRenameKeepsReleaseIdentity`、`…MovedFileJoinsTargetRelease`、`…SplitReleaseKeepsIdentityForLargerPart`（含平局）、`…MinorityOverlapCreatesNewRelease`、`…ExactlyHalfOverlapIsNotAMajority`；重扫与改名场景补了 Release ID 断言 |

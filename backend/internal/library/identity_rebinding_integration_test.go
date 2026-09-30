@@ -276,6 +276,46 @@ func TestPostgreSQLSwappedFilesFollowContent(t *testing.T) {
 	})
 }
 
+func TestPostgreSQLSwappedFilesAcrossDirectoriesFollowContent(t *testing.T) {
+	fixture := newLibraryFixture(t)
+	root := insertScannerRoot(t, fixture, "swap-across-directories")
+	service := scannerTestApplication(fixture)
+	// 两个目录各三个文件；其中同名的 x.flac 内容互换：处理顺序在两个候选之间也必须先腾出再占用。
+	// 互换后每个目录里仍有两首本目录专辑的曲目占多数，所以两个目录都还是一个候选。
+	for index, directory := range []string{"First", "Second"} {
+		for number, name := range []string{"x", "y", "z"} {
+			writeAudio(t, root, directory+"/"+name+".flac", audioFile{seed: byte(index*3 + number + 1), title: directory + " " + name, album: directory, track: number + 1})
+		}
+	}
+	requireScanStatus(t, runTestScan(t, fixture, service, root), "succeeded")
+	before := presentTrackIDs(t, fixture, root.ID)
+	releasesBefore := releaseIDsByTitle(t, fixture, root.ID)
+	if len(releasesBefore) != 2 {
+		t.Fatalf("首次扫描的 Release = %v", releasesBefore)
+	}
+
+	moveFixture(t, root, "First/x.flac", "tmp.flac")
+	moveFixture(t, root, "Second/x.flac", "First/x.flac")
+	moveFixture(t, root, "tmp.flac", "Second/x.flac")
+	requireScanStatus(t, runTestScan(t, fixture, service, root), "succeeded")
+	after := presentTrackIDs(t, fixture, root.ID)
+	requireTrackAt(t, after, "Second/x.flac", before["First/x.flac"])
+	requireTrackAt(t, after, "First/x.flac", before["Second/x.flac"])
+	for _, path := range []string{"First/y.flac", "First/z.flac", "Second/y.flac", "Second/z.flac"} {
+		requireTrackAt(t, after, path, before[path])
+	}
+	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE source_root_id=$1::uuid`, 6, root.ID)
+	requireNoMissingTracks(t, fixture, root.ID)
+	// 每个目录仍有三首中的两首在原处，Release 沿用；被互换的两首曲目改属另一个目录的 Release。
+	requireSameReleases(t, releasesBefore, releaseIDsByTitle(t, fixture, root.ID))
+	if got := releaseOfTrack(t, fixture, before["First/x.flac"]); got != releasesBefore["Second"] {
+		t.Fatalf("移到 Second 目录的曲目属于 Release %q，期望 %q", got, releasesBefore["Second"])
+	}
+	if got := releaseOfTrack(t, fixture, before["Second/x.flac"]); got != releasesBefore["First"] {
+		t.Fatalf("移到 First 目录的曲目属于 Release %q，期望 %q", got, releasesBefore["First"])
+	}
+}
+
 func TestPostgreSQLIdenticalAudioIsNotRebound(t *testing.T) {
 	fixture := newLibraryFixture(t)
 	root := insertScannerRoot(t, fixture, "identical-audio")

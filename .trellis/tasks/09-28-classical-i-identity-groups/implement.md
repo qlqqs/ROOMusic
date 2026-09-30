@@ -60,7 +60,8 @@ git diff --check
   - `TestPostgreSQLRescanKeepsTrackIdentity`（未变化重扫）
   - `TestPostgreSQLDirectoryRenameRebindsTracks`
   - `TestPostgreSQLMovedFileKeepsTrackIdentity`（同 root 内移到另一个专辑目录）
-  - `TestPostgreSQLSwappedFilesFollowContent`
+  - `TestPostgreSQLSwappedFilesFollowContent`（同目录两文件互换与三文件轮换）
+  - `TestPostgreSQLSwappedFilesAcrossDirectoriesFollowContent`（跨候选互换：两个目录各三个文件，互换其中一个）
   - `TestPostgreSQLIdenticalAudioIsNotRebound`（歧义，记 `identity_ambiguous`）
   - `TestPostgreSQLIncompleteScanDefersMovesUntilCompleteScan`（不重绑定、不置缺失、不产生新身份；随后的完整扫描重绑定）
   - `TestPostgreSQLCanceledScanDoesNotRebind`
