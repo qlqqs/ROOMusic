@@ -51,6 +51,9 @@ type AudioObservation struct {
 	Barcode                 string
 	Credits                 []metadata.Credit
 	RawAtoms                map[string]string
+	// ContentFingerprint 是解析时无需额外读盘就能得到的内容指纹（FLAC 的音频 MD5、OGG 的音频包哈希）；
+	// 其他格式为空，需要时用 ContentFingerprint 函数计算。
+	ContentFingerprint string
 }
 
 type CueTrack struct {
@@ -1370,6 +1373,10 @@ func parseOggStream(path string, requireOpus bool) (AudioObservation, error) {
 	if !codecHeader || (requireOpus && !opusHead) {
 		return o, fmt.Errorf("invalid Opus stream")
 	}
+	// 指纹只是补充事实：头部不符合指纹规则的流仍按原规则解析，由按需计算路径报告失败。
+	if fingerprint, fingerprintErr := oggAudioFingerprint(data); fingerprintErr == nil {
+		o.ContentFingerprint = fingerprint
+	}
 	return applyFilenameFallback(path, o), nil
 }
 
@@ -1546,6 +1553,7 @@ func parseFLAC(path string) (AudioObservation, error) {
 			if err := parseFLACStreamInfo(block, fileSize, &observation); err != nil {
 				return observation, err
 			}
+			observation.ContentFingerprint = flacMD5Fingerprint(block)
 		case 4:
 			parseVorbisComments(block, &observation)
 		}
@@ -1557,10 +1565,7 @@ func parseFLACStreamInfo(block []byte, fileSize int64, observation *AudioObserva
 	if len(block) != 34 {
 		return fmt.Errorf("invalid FLAC STREAMINFO length")
 	}
-	sampleRate := int(block[10])<<12 | int(block[11])<<4 | int(block[12]>>4)
-	channels := int((block[12]>>1)&0x07) + 1
-	bitDepth := (int(block[12]&0x01)<<4 | int(block[13]>>4)) + 1
-	totalSamples := int64(block[13]&0x0f)<<32 | int64(binary.BigEndian.Uint32(block[14:18]))
+	sampleRate, channels, bitDepth, totalSamples := decodeFLACStreamInfo(block)
 	if sampleRate <= 0 || channels <= 0 || bitDepth <= 0 {
 		return fmt.Errorf("invalid FLAC STREAMINFO facts")
 	}
@@ -1574,6 +1579,15 @@ func parseFLACStreamInfo(block []byte, fileSize int64, observation *AudioObserva
 		observation.Bitrate = estimatedBitrateKbps(fileSize, observation.DurationSeconds)
 	}
 	return nil
+}
+
+// decodeFLACStreamInfo 解出 STREAMINFO 的采样率、声道数、位深和总样本数；block 必须是 34 字节。
+func decodeFLACStreamInfo(block []byte) (sampleRate, channels, bitDepth int, totalSamples int64) {
+	sampleRate = int(block[10])<<12 | int(block[11])<<4 | int(block[12]>>4)
+	channels = int((block[12]>>1)&0x07) + 1
+	bitDepth = (int(block[12]&0x01)<<4 | int(block[13]>>4)) + 1
+	totalSamples = int64(block[13]&0x0f)<<32 | int64(binary.BigEndian.Uint32(block[14:18]))
+	return sampleRate, channels, bitDepth, totalSamples
 }
 
 func estimatedBitrateKbps(fileSize int64, durationSeconds float64) int {

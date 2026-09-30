@@ -22,20 +22,40 @@ func FLACWithComments(t testing.TB, comments []string) []byte {
 	return append([]byte{'f', 'L', 'a', 'C', 0x84, byte(blockLength >> 16), byte(blockLength >> 8), byte(blockLength)}, metadata.Bytes()...)
 }
 
-// FLACStream 返回带有效 STREAMINFO（44.1 kHz、双声道、16 位、240 秒）和空注释块的 FLAC 头。
+// FLAC 夹具的 STREAMINFO 固定为 44.1 kHz、双声道、16 位、240 秒。
+const (
+	FLACSampleRate   = 44100
+	FLACChannels     = 2
+	FLACBitDepth     = 16
+	FLACTotalSamples = FLACSampleRate * 240
+)
+
+// FLACStream 返回带有效 STREAMINFO（MD5 为零）和空注释块的 FLAC 头。
 func FLACStream() []byte {
-	streamInfo := make([]byte, 34)
-	const sampleRate = 44100
-	const channels = 2
-	const bitDepth = 16
-	const durationSeconds = 240
-	totalSamples := uint64(sampleRate * durationSeconds)
-	packed := uint64(sampleRate)<<44 | uint64(channels-1)<<41 | uint64(bitDepth-1)<<36 | totalSamples
-	binary.BigEndian.PutUint64(streamInfo[10:18], packed)
+	streamInfo := flacStreamInfo([16]byte{})
 	comments := make([]byte, 8)
 	result := append([]byte{'f', 'L', 'a', 'C', 0, 0, 0, byte(len(streamInfo))}, streamInfo...)
 	result = append(result, []byte{0x84, 0, 0, byte(len(comments))}...)
 	return append(result, comments...)
+}
+
+// FLACWithAudio 返回带有效 STREAMINFO 的 FLAC：md5 写入 STREAMINFO 的音频 MD5 字段（全零表示编码器没有写入），
+// comments 写入 VORBIS_COMMENT 块，frames 作为最后一个元数据块之后的音频帧字节。
+func FLACWithAudio(t testing.TB, md5 [16]byte, frames []byte, comments ...string) []byte {
+	t.Helper()
+	streamInfo := flacStreamInfo(md5)
+	tagged := FLACWithComments(t, comments)
+	result := append([]byte{'f', 'L', 'a', 'C', 0, 0, 0, byte(len(streamInfo))}, streamInfo...)
+	result = append(result, tagged[4:]...)
+	return append(result, frames...)
+}
+
+func flacStreamInfo(md5 [16]byte) []byte {
+	streamInfo := make([]byte, 34)
+	packed := uint64(FLACSampleRate)<<44 | uint64(FLACChannels-1)<<41 | uint64(FLACBitDepth-1)<<36 | uint64(FLACTotalSamples)
+	binary.BigEndian.PutUint64(streamInfo[10:18], packed)
+	copy(streamInfo[18:34], md5[:])
+	return streamInfo
 }
 
 func writeLittleEndianString(t testing.TB, destination *bytes.Buffer, value string) {

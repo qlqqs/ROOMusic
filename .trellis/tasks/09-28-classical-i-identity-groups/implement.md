@@ -21,16 +21,16 @@ git diff --check
 
 ## 第 1 步：解析器内容指纹
 
-- [ ] `backend/internal/library/parser/fingerprint.go`（新）：`ContentFingerprint(ctx, path)` 按扩展名分派；
+- [x] `backend/internal/library/parser/fingerprint.go`（新）：`ContentFingerprint(ctx, path)` 按扩展名分派；
   `m4a-mdat`、`mp3-frames`、`wav-data`、`flac-frames` 流式 SHA-256，按块检查 context。
-- [ ] `parser.go`：`AudioObservation` 增加 `ContentFingerprint`；`parseFLACStreamInfo` 读取 MD5（非零时生成 `flac-md5`）；
+- [x] `parser.go`：`AudioObservation` 增加 `ContentFingerprint`；`parseFLACStreamInfo` 读取 MD5（非零时生成 `flac-md5`）；
   `parseOggStream` 在已读入的数据上生成 `ogg-audio`。
-- [ ] `parsertest`：增加带指定 MD5 与音频帧字节的 FLAC 夹具。
-- [ ] 单元测试 `fingerprint_test.go`：`TestContentFingerprintIgnoresTags`（逐格式表驱动）、
+- [x] `parsertest`：增加带指定 MD5 与音频帧字节的 FLAC 夹具。
+- [x] 单元测试 `fingerprint_test.go`：`TestContentFingerprintIgnoresTags`（逐格式表驱动）、
   `TestContentFingerprintDetectsAudioChange`、`TestFLACFingerprintFallsBackWhenMD5IsZero`、
   `TestMP3FingerprintStripsLeadingAndTrailingTags`、`TestOggFingerprintIgnoresCommentPagination`、
   `TestM4AFingerprintHashesAllMediaData`、`TestContentFingerprintHonorsCancellation`。
-- [ ] `real_music_readonly_test.go`：增加 `TestRealMusicFingerprintCoverage`（未设置 `ROOMUSIC_REAL_MUSIC_ROOT` 时跳过）。
+- [x] `real_music_readonly_test.go`：增加 `TestRealMusicFingerprintCoverage`（未设置 `ROOMUSIC_REAL_MUSIC_ROOT` 时跳过）。
 - 最小验证：`go test ./internal/library/parser -count=1`。
 - 只读真实库核对（规划批准即授权本次运行；只读、只输出汇总计数）：
   `ROOMUSIC_REAL_MUSIC_ROOT=$(realpath ../music) go test ./internal/library/parser -run TestRealMusicFingerprintCoverage -count=1 -v`。
