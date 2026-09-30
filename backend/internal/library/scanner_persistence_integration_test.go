@@ -363,7 +363,7 @@ func TestPostgreSQLCueStagingAlignsParentAndPersistsVirtualIdentity(t *testing.T
 			t.Fatalf("stage observation: %v", err)
 		}
 	}
-	if err := alignCueStagingScopes(context.Background(), fixture.database, scanID, root.ID); err != nil {
+	if err := catalog.AlignCueStagingScopes(context.Background(), fixture.database, scanID, root.ID); err != nil {
 		t.Fatalf("align CUE scope: %v", err)
 	}
 	assertDatabaseCount(t, fixture, `SELECT COUNT(DISTINCT organization_scope) FROM scan_observations WHERE scan_run_id=$1::uuid`, 1, scanID)

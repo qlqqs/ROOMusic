@@ -39,9 +39,9 @@ git diff --check
 
 ## 第 2 步：暂存表归入 catalog（行为不变的重构）
 
-- [ ] `backend/internal/catalog/staging.go`（新）：从 `library/scanner.go` 移入暂存、按 scope 分页读取、清理、CUE scope 对齐；
+- [x] `backend/internal/catalog/staging.go`（新）：从 `library/scanner.go` 移入暂存、按 scope 分页读取、清理、CUE scope 对齐；
   library 改为调用它们，路径安全校验留在 library。
-- [ ] 测试名单与移动前逐项对账，没有丢失。
+- [x] 测试名单与移动前逐项对账，没有丢失。
 - 提交：`refactor(backend): 扫描暂存表归入 catalog`。
 
 ## 第 3 步：迁移 0013 与曲目重绑定

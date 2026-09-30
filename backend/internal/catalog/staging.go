@@ -1,0 +1,124 @@
+package catalog
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+)
+
+// scan_observations 是一次扫描中某个 root 的暂存表：library 遍历时写入，catalog 按 organization scope
+// 分页读取并整理，再逐候选写入 Release 图。暂存行随扫描清理，不设外键。
+
+const (
+	maxStagedObservationBytes     = 24 << 20
+	stagedScopePageSize           = 256
+	maxStagedObservationsPerScope = 10000
+)
+
+// StagingDB 是读写扫描暂存表所需的最小数据库能力。
+type StagingDB interface {
+	Execer
+	Queryer
+}
+
+// StageObservation 把 observation 写入 scanID 中 rootID 的暂存表；同一相对路径再次暂存会覆盖。
+// 调用方必须先校验 observation 里的相对路径与 CUE 引用是安全的（路径校验属于 library）。
+func StageObservation(ctx context.Context, database StagingDB, scanID, rootID string, observation SourceObservation) error {
+	scope := OrganizationScope(observation)
+	// 每个逻辑 scope 只暂存一份确定性的 embedded artwork；folder artwork 要等到
+	// Release id 确定后再发现和绑定。
+	if len(observation.Artwork) > 0 {
+		var alreadyStaged bool
+		if err := database.QueryRowContext(ctx, `SELECT EXISTS (
+			SELECT 1 FROM scan_observations WHERE scan_run_id=$1::uuid AND root_id=$2::uuid
+			AND organization_scope=$3 AND observation ? 'artwork')`, scanID, rootID, scope).Scan(&alreadyStaged); err != nil {
+			return err
+		}
+		if alreadyStaged {
+			observation.Artwork = nil
+			observation.ArtworkMIME = ""
+		}
+	}
+	payload, err := json.Marshal(observation)
+	if err != nil {
+		return fmt.Errorf("marshal staged observation: %w", err)
+	}
+	if len(payload) > maxStagedObservationBytes {
+		return errors.New("staged observation exceeds bound")
+	}
+	_, err = database.ExecContext(ctx, `INSERT INTO scan_observations(scan_run_id,root_id,organization_scope,relative_path,observation)
+		VALUES($1::uuid,$2::uuid,$3,$4,$5::jsonb)
+		ON CONFLICT(scan_run_id,root_id,relative_path) DO UPDATE SET organization_scope=EXCLUDED.organization_scope,observation=EXCLUDED.observation,observed_at=NOW()`, scanID, rootID, scope, observation.RelativePath, payload)
+	return err
+}
+
+// StagedScopes 返回 rootID 在本次扫描中 organization_scope 大于 after 的下一页 scope（升序，页大小有界）。
+// 没有更多 scope 时返回空切片；逐页传入上一页最后一个 scope 即可遍历全部。
+func StagedScopes(ctx context.Context, database Queryer, scanID, rootID, after string) ([]string, error) {
+	rows, err := database.QueryContext(ctx, `SELECT DISTINCT organization_scope FROM scan_observations
+		WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND organization_scope>$3
+		ORDER BY organization_scope LIMIT $4`, scanID, rootID, after, stagedScopePageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	scopes := make([]string, 0, stagedScopePageSize)
+	for rows.Next() {
+		var scope string
+		if err := rows.Scan(&scope); err != nil {
+			return nil, err
+		}
+		scopes = append(scopes, scope)
+	}
+	return scopes, rows.Err()
+}
+
+// LoadStagedScope 按相对路径顺序读取一个 organization scope 的全部暂存观察；超过上限时返回错误而不是无界读取。
+func LoadStagedScope(ctx context.Context, database Queryer, scanID, rootID, scope string) ([]SourceObservation, error) {
+	rows, err := database.QueryContext(ctx, `SELECT observation FROM scan_observations
+		WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND organization_scope=$3
+		ORDER BY relative_path LIMIT $4`, scanID, rootID, scope, maxStagedObservationsPerScope+1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	observations := make([]SourceObservation, 0, 64)
+	for rows.Next() {
+		var raw []byte
+		if err := rows.Scan(&raw); err != nil {
+			return nil, err
+		}
+		var observation SourceObservation
+		if err := json.Unmarshal(raw, &observation); err != nil {
+			return nil, fmt.Errorf("decode staged observation: %w", err)
+		}
+		observations = append(observations, observation)
+		if len(observations) > maxStagedObservationsPerScope {
+			return nil, errors.New("staged organization scope exceeds bound")
+		}
+	}
+	return observations, rows.Err()
+}
+
+// ClearStagedObservations 删除 rootID 在本次扫描中的全部暂存行。
+func ClearStagedObservations(ctx context.Context, database Execer, scanID, rootID string) error {
+	_, err := database.ExecContext(ctx, "DELETE FROM scan_observations WHERE scan_run_id=$1::uuid AND root_id=$2::uuid", scanID, rootID)
+	return err
+}
+
+// AlignCueStagingScopes 把 CUE 虚拟轨的显式父来源对齐到虚拟轨所在的 scope，使 organizer 能在同一 scope 内
+// 按明确的父子关系消除虚拟/物理重复。
+func AlignCueStagingScopes(ctx context.Context, database Execer, scanID, rootID string) error {
+	_, err := database.ExecContext(ctx, `UPDATE scan_observations parent
+		SET organization_scope=cue.organization_scope
+		FROM (
+			SELECT observation->>'cue_parent_relative_path' AS parent_path, MIN(organization_scope) AS organization_scope
+			FROM scan_observations
+			WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND observation->>'source_kind'='cue_virtual'
+			GROUP BY observation->>'cue_parent_relative_path'
+		) cue
+		WHERE parent.scan_run_id=$1::uuid AND parent.root_id=$2::uuid
+		  AND parent.relative_path=cue.parent_path`, scanID, rootID)
+	return err
+}

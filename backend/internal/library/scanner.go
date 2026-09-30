@@ -1,4 +1,4 @@
-// Package library 拥有目录与扫描能力：允许根内路径校验、只读来源发现、扫描运行与取消、暂存观察、
+// Package library 拥有目录与扫描能力：允许根内路径校验、只读来源发现、扫描运行与取消、把观察交给 catalog 暂存、
 // 诊断、中断恢复与仅在完整成功后才执行的 missing 对账。它不含 HTTP，也从不写音乐库。
 package library
 
@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -222,7 +221,7 @@ func (service *Service) loadRegisteredRoots(context context.Context, executor sc
 
 func (service *Service) scanRoot(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot) (returnError error) {
 	// 遍历前必须清理同一扫描重试留下的旧行，否则旧 observation 会混入本次候选。
-	if err := clearStagedObservations(ctx, executor, scanID, root.ID); err != nil {
+	if err := catalog.ClearStagedObservations(ctx, executor, scanID, root.ID); err != nil {
 		cleanupError := fmt.Errorf("clear stale staged observations: %w", err)
 		if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, "", "staging_write_failure", "无法清理扫描暂存观察"); diagnosticError != nil {
 			cleanupError = errors.Join(cleanupError, fmt.Errorf("record staging cleanup diagnostic: %w", diagnosticError))
@@ -232,7 +231,7 @@ func (service *Service) scanRoot(ctx context.Context, executor scanExecutor, sca
 	defer func() {
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		cleanupError := clearStagedObservations(cleanupCtx, executor, scanID, root.ID)
+		cleanupError := catalog.ClearStagedObservations(cleanupCtx, executor, scanID, root.ID)
 		if cleanupError == nil {
 			return
 		}
@@ -408,7 +407,7 @@ func (service *Service) scanRoot(ctx context.Context, executor scanExecutor, sca
 		captureProcessingError(err)
 	}
 	if ctx.Err() == nil && err == nil {
-		if alignErr := alignCueStagingScopes(ctx, executor, scanID, root.ID); alignErr != nil {
+		if alignErr := catalog.AlignCueStagingScopes(ctx, executor, scanID, root.ID); alignErr != nil {
 			complete = false
 			captureProcessingError(alignErr)
 			if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, "", "staging_write_failure", "无法对齐 CUE 父来源"); diagnosticError != nil {
@@ -552,15 +551,12 @@ func candidatePersistenceDiagnostic(err error) (string, string) {
 	return "catalog_write_failure", "无法保存整理证据"
 }
 
-const maxStagedObservationBytes = 24 << 20
-
 const (
-	stagedScopePageSize           = 256
-	maxStagedObservationsPerScope = 10000
-	maxRipLogHeaderBytes          = 64 << 10
-	maxRipLogDiagnostics          = 20
+	maxRipLogHeaderBytes = 64 << 10
+	maxRipLogDiagnostics = 20
 )
 
+// stageObservation 先校验并规范化观察里的相对路径与 CUE 引用（路径安全属于 library），再交给 catalog 写入暂存表。
 func stageObservation(ctx context.Context, executor scanExecutor, scanID, rootID string, observation catalog.SourceObservation) error {
 	identity, err := createTrackSourceIdentity(rootID, observation.RelativePath)
 	if err != nil {
@@ -575,81 +571,14 @@ func stageObservation(ctx context.Context, executor scanExecutor, scanID, rootID
 			return fmt.Errorf("invalid staged CUE reference: %w", err)
 		}
 	}
-	scope := catalog.OrganizationScope(observation)
-	// 每个逻辑 scope 只暂存一份确定性的 embedded artwork；folder artwork 要等到
-	// Release id 确定后再发现和绑定。
-	if len(observation.Artwork) > 0 {
-		var alreadyStaged bool
-		if err := executor.QueryRowContext(ctx, `SELECT EXISTS (
-			SELECT 1 FROM scan_observations WHERE scan_run_id=$1::uuid AND root_id=$2::uuid
-			AND organization_scope=$3 AND observation ? 'artwork')`, scanID, rootID, scope).Scan(&alreadyStaged); err != nil {
-			return err
-		}
-		if alreadyStaged {
-			observation.Artwork = nil
-			observation.ArtworkMIME = ""
-		}
-	}
-	payload, err := json.Marshal(observation)
-	if err != nil {
-		return fmt.Errorf("marshal staged observation: %w", err)
-	}
-	if len(payload) > maxStagedObservationBytes {
-		return errors.New("staged observation exceeds bound")
-	}
-	_, err = executor.ExecContext(ctx, `INSERT INTO scan_observations(scan_run_id,root_id,organization_scope,relative_path,observation)
-		VALUES($1::uuid,$2::uuid,$3,$4,$5::jsonb)
-		ON CONFLICT(scan_run_id,root_id,relative_path) DO UPDATE SET organization_scope=EXCLUDED.organization_scope,observation=EXCLUDED.observation,observed_at=NOW()`, scanID, rootID, scope, observation.RelativePath, payload)
-	return err
-}
-
-func loadStagedObservationScope(ctx context.Context, executor scanExecutor, scanID, rootID, scope string) ([]catalog.SourceObservation, error) {
-	rows, err := executor.QueryContext(ctx, `SELECT observation FROM scan_observations
-		WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND organization_scope=$3
-		ORDER BY relative_path LIMIT $4`, scanID, rootID, scope, maxStagedObservationsPerScope+1)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	observations := make([]catalog.SourceObservation, 0, 64)
-	for rows.Next() {
-		var raw []byte
-		if err := rows.Scan(&raw); err != nil {
-			return nil, err
-		}
-		var observation catalog.SourceObservation
-		if err := json.Unmarshal(raw, &observation); err != nil {
-			return nil, fmt.Errorf("decode staged observation: %w", err)
-		}
-		observations = append(observations, observation)
-		if len(observations) > maxStagedObservationsPerScope {
-			return nil, errors.New("staged organization scope exceeds bound")
-		}
-	}
-	return observations, rows.Err()
+	return catalog.StageObservation(ctx, executor, scanID, rootID, observation)
 }
 
 func (service *Service) persistStagedCandidates(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot) error {
 	var firstErr error
 	lastScope := ""
 	for {
-		rows, err := executor.QueryContext(ctx, `SELECT DISTINCT organization_scope FROM scan_observations
-			WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND organization_scope>$3
-			ORDER BY organization_scope LIMIT $4`, scanID, root.ID, lastScope, stagedScopePageSize)
-		if err != nil {
-			return err
-		}
-		scopes := make([]string, 0, stagedScopePageSize)
-		for rows.Next() {
-			var scope string
-			if err := rows.Scan(&scope); err != nil {
-				rows.Close()
-				return err
-			}
-			scopes = append(scopes, scope)
-		}
-		err = rows.Err()
-		rows.Close()
+		scopes, err := catalog.StagedScopes(ctx, executor, scanID, root.ID, lastScope)
 		if err != nil {
 			return err
 		}
@@ -657,7 +586,7 @@ func (service *Service) persistStagedCandidates(ctx context.Context, executor sc
 			break
 		}
 		for _, scope := range scopes {
-			observations, loadErr := loadStagedObservationScope(ctx, executor, scanID, root.ID, scope)
+			observations, loadErr := catalog.LoadStagedScope(ctx, executor, scanID, root.ID, scope)
 			if loadErr != nil {
 				if firstErr == nil {
 					firstErr = loadErr
@@ -789,25 +718,6 @@ func hasExplicitRipLogSignature(path string) (bool, error) {
 	}
 	header = bytes.ToLower(header)
 	return bytes.Contains(header, []byte("exact audio copy")) || bytes.Contains(header, []byte("x lossless decoder")), nil
-}
-
-func clearStagedObservations(ctx context.Context, executor scanExecutor, scanID, rootID string) error {
-	_, err := executor.ExecContext(ctx, "DELETE FROM scan_observations WHERE scan_run_id=$1::uuid AND root_id=$2::uuid", scanID, rootID)
-	return err
-}
-
-func alignCueStagingScopes(ctx context.Context, executor scanExecutor, scanID, rootID string) error {
-	_, err := executor.ExecContext(ctx, `UPDATE scan_observations parent
-		SET organization_scope=cue.organization_scope
-		FROM (
-			SELECT observation->>'cue_parent_relative_path' AS parent_path, MIN(organization_scope) AS organization_scope
-			FROM scan_observations
-			WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND observation->>'source_kind'='cue_virtual'
-			GROUP BY observation->>'cue_parent_relative_path'
-		) cue
-		WHERE parent.scan_run_id=$1::uuid AND parent.root_id=$2::uuid
-		  AND parent.relative_path=cue.parent_path`, scanID, rootID)
-	return err
 }
 
 func firstNonEmpty(values ...string) string {
