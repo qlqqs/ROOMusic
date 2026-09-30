@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
-	"strings"
 	"testing"
 )
 
@@ -39,15 +38,5 @@ func TestReleasePaginationRejectsOffsetOverflow(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/releases?page="+strconv.Itoa(maximumInt)+"&page_size=100", nil)
 	if _, _, err := parsePagination(request); err == nil {
 		t.Fatal("pagination offset overflow was accepted")
-	}
-}
-
-func TestScanDiagnosticProjectionDoesNotEchoStoredHostPaths(t *testing.T) {
-	message := safeDiagnosticMessage("unsupported_cue", "open /srv/private/album.cue: permission denied")
-	if strings.Contains(message, "/srv/private") {
-		t.Fatalf("safe diagnostic message leaked a host path: %q", message)
-	}
-	if safeDiagnosticKind("../../private") != "unknown" {
-		t.Fatal("unsafe diagnostic kind was exposed")
 	}
 }

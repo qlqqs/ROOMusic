@@ -1,4 +1,4 @@
-package main
+package library
 
 import (
 	"fmt"
@@ -9,10 +9,11 @@ import (
 	"testing"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/library/parser"
 )
 
 func TestObservationFieldSourcesDistinguishFallbacks(t *testing.T) {
-	observation := audioObservation{InferredFields: map[string]bool{"title": true, "artist": true, "album": true}}
+	observation := parser.AudioObservation{InferredFields: map[string]bool{"title": true, "artist": true, "album": true}}
 	sources := observationFieldSources(observation)
 	if sources["title"] != "filename_fallback" || sources["artist"] != "display_fallback" || sources["album"] != "folder_fallback" {
 		t.Fatalf("unexpected fallback sources: %#v", sources)

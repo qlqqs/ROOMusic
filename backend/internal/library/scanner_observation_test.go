@@ -1,4 +1,4 @@
-package main
+package library
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
+	"github.com/qlqq/roomusic/backend/internal/library/parser"
 )
 
 type failingScanExecutor struct {
@@ -73,7 +74,7 @@ func (executor *cleanupFailureScanExecutor) QueryRowContext(context.Context, str
 }
 
 func TestBuildCueVirtualObservationClonesMutableProvenancePerTrack(t *testing.T) {
-	parent := audioObservation{
+	parent := parser.AudioObservation{
 		Title:       "image",
 		Artist:      "未知艺术家",
 		Album:       "Album",
@@ -88,8 +89,8 @@ func TestBuildCueVirtualObservationClonesMutableProvenancePerTrack(t *testing.T)
 			"disc_number":  true,
 		},
 	}
-	document := cueDocument{Title: "CUE Album"}
-	first := buildCueVirtualObservation(parent, document, cueTrack{
+	document := parser.CueDocument{Title: "CUE Album"}
+	first := buildCueVirtualObservation(parent, document, parser.CueTrack{
 		Number:           1,
 		Title:            "First",
 		Artist:           "First Artist",
@@ -97,7 +98,7 @@ func TestBuildCueVirtualObservationClonesMutableProvenancePerTrack(t *testing.T)
 		ReferencedFile:   "image.flac",
 		IndexPresent:     true,
 	}, "Album/album.cue")
-	second := buildCueVirtualObservation(parent, document, cueTrack{
+	second := buildCueVirtualObservation(parent, document, parser.CueTrack{
 		Number:         2,
 		ReferencedFile: "image.flac",
 		IndexFrames:    750,
@@ -128,16 +129,16 @@ func TestBuildCueVirtualObservationClonesMutableProvenancePerTrack(t *testing.T)
 }
 
 func TestBuildCueVirtualObservationDistinguishesSheetAndTrackPerformer(t *testing.T) {
-	parent := audioObservation{Artist: "未知艺术家", InferredFields: map[string]bool{"artist": true}}
-	document := cueDocument{Artist: "Sheet Artist"}
-	sheetPerformer := buildCueVirtualObservation(parent, document, cueTrack{
+	parent := parser.AudioObservation{Artist: "未知艺术家", InferredFields: map[string]bool{"artist": true}}
+	document := parser.CueDocument{Artist: "Sheet Artist"}
+	sheetPerformer := buildCueVirtualObservation(parent, document, parser.CueTrack{
 		Number:         1,
 		Artist:         "Sheet Artist",
 		SheetArtist:    "Sheet Artist",
 		ReferencedFile: "image.flac",
 		IndexPresent:   true,
 	}, "Album/album.cue")
-	trackPerformer := buildCueVirtualObservation(parent, document, cueTrack{
+	trackPerformer := buildCueVirtualObservation(parent, document, parser.CueTrack{
 		Number:           2,
 		Artist:           "Track Artist",
 		PerformerPresent: true,
@@ -170,7 +171,7 @@ func TestCueReferenceCompletionAndStagingPolicy(t *testing.T) {
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			track := cueTrack{ReferenceStatus: testCase.status, IndexPresent: testCase.index}
+			track := parser.CueTrack{ReferenceStatus: testCase.status, IndexPresent: testCase.index}
 			if got := cueReferenceMakesScanIncomplete(testCase.status); got != testCase.incomplete {
 				t.Fatalf("cueReferenceMakesScanIncomplete(%q) = %t, want %t", testCase.status, got, testCase.incomplete)
 			}
@@ -201,7 +202,7 @@ func TestCanonicalCreditObservationsAreStableAndDeduplicated(t *testing.T) {
 
 func TestScanRootFailsWhenInitialStagingCleanupFails(t *testing.T) {
 	expected := errors.New("cleanup failed")
-	application := &roomusicApplication{}
+	application := &Service{}
 	err := application.scanRoot(context.Background(), failingScanExecutor{err: expected}, "scan-id", registeredRoot{ID: "root-id", Path: t.TempDir()})
 	if !errors.Is(err, expected) {
 		t.Fatalf("initial staging cleanup error was discarded: %v", err)
@@ -212,7 +213,7 @@ func TestScanRootRecordsInitialStagingCleanupFailure(t *testing.T) {
 	cleanupError := errors.New("initial cleanup failed")
 	executor := &cleanupFailureScanExecutor{cleanupFailureAt: 1, cleanupError: cleanupError}
 
-	err := (&roomusicApplication{}).scanRoot(context.Background(), executor, "scan-id", registeredRoot{ID: "root-id", Path: t.TempDir()})
+	err := (&Service{}).scanRoot(context.Background(), executor, "scan-id", registeredRoot{ID: "root-id", Path: t.TempDir()})
 	if !errors.Is(err, cleanupError) {
 		t.Fatalf("initial staging cleanup error was discarded: %v", err)
 	}
@@ -229,7 +230,7 @@ func TestScanRootPreservesEarlyFailureWhenExitStagingCleanupFails(t *testing.T) 
 	executor := &cleanupFailureScanExecutor{cleanupFailureAt: 2, cleanupError: cleanupError}
 	missingRoot := filepath.Join(t.TempDir(), "missing")
 
-	err := (&roomusicApplication{}).scanRoot(context.Background(), executor, "scan-id", registeredRoot{ID: "root-id", Path: missingRoot})
+	err := (&Service{}).scanRoot(context.Background(), executor, "scan-id", registeredRoot{ID: "root-id", Path: missingRoot})
 	if !errors.Is(err, cleanupError) || !strings.Contains(err.Error(), "root unavailable") {
 		t.Fatalf("scan root did not preserve both failures: %v", err)
 	}
@@ -249,7 +250,7 @@ func TestScanRootReturnsDiagnosticPersistenceFailure(t *testing.T) {
 		t.Fatalf("write malformed CUE: %v", err)
 	}
 
-	err := (&roomusicApplication{}).scanRoot(context.Background(), executor, "scan-id", registeredRoot{ID: "root-id", Path: root})
+	err := (&Service{}).scanRoot(context.Background(), executor, "scan-id", registeredRoot{ID: "root-id", Path: root})
 	if !errors.Is(err, diagnosticError) {
 		t.Fatalf("diagnostic persistence error was discarded: %v", err)
 	}

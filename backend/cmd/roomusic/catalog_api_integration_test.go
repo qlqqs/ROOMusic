@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/library"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
@@ -256,7 +257,7 @@ func TestPostgreSQLCatalogReadProjectionAndEvidencePermissions(t *testing.T) {
 	if statusResponse.Code != http.StatusOK {
 		t.Fatalf("scan status: HTTP %d: %s", statusResponse.Code, statusResponse.Body.String())
 	}
-	var scan scanDTO
+	var scan library.Scan
 	if err := json.Unmarshal(statusResponse.Body.Bytes(), &scan); err != nil || scan.Diagnostics.Total != 2 || len(scan.Diagnostics.Counts) != 2 {
 		t.Fatalf("scan diagnostic aggregate mismatch: scan=%+v err=%v", scan, err)
 	}

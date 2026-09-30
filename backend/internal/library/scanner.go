@@ -1,4 +1,6 @@
-package main
+// Package library 拥有目录与扫描能力：允许根内路径校验、只读来源发现、扫描运行与取消、暂存观察、
+// 诊断、中断恢复与仅在完整成功后才执行的 missing 对账。它不含 HTTP，也从不写音乐库。
+package library
 
 import (
 	"bytes"
@@ -20,6 +22,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/artwork"
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
+	"github.com/qlqq/roomusic/backend/internal/library/parser"
 )
 
 type registeredRoot struct{ ID, Path string }
@@ -70,24 +73,24 @@ func scanStatusAllowsMissingReconciliation(status string) bool {
 	return status == "succeeded"
 }
 
-func (application *roomusicApplication) runScan(scanID string, execution *scanExecution) {
-	scanContext, cancel := context.WithCancel(application.scanContext)
+func (service *Service) runScan(scanID string, execution *scanExecution) {
+	scanContext, cancel := context.WithCancel(service.scanContext)
 	pollDone := make(chan struct{})
 	stopReason := make(chan error, 1)
-	go application.pollScanCancellation(scanContext, scanID, cancel, pollDone, stopReason)
+	go service.pollScanCancellation(scanContext, scanID, cancel, pollDone, stopReason)
 	defer func() {
 		cancel()
 		<-pollDone
 		if err := execution.close(context.Background()); err != nil {
-			application.logger.Error("scan coordination release failed", "event", "library.scan.coordination_failed", "scan_run_id", scanID, "error", err)
+			service.logger.Error("scan coordination release failed", "event", "library.scan.coordination_failed", "scan_run_id", scanID, "error", err)
 		}
-		application.scanMutex.Lock()
-		if application.runningScan == scanID {
-			application.runningScan = ""
+		service.scanMutex.Lock()
+		if service.runningScan == scanID {
+			service.runningScan = ""
 		}
-		application.scanMutex.Unlock()
+		service.scanMutex.Unlock()
 	}()
-	roots, loadError := application.loadRegisteredRoots(scanContext, execution.connection)
+	roots, loadError := service.loadRegisteredRoots(scanContext, execution.connection)
 	outcome := scanOutcome{Complete: loadError == nil, Failed: loadError != nil}
 	rootIDs := make([]string, 0, len(roots))
 	for _, root := range roots {
@@ -96,9 +99,9 @@ func (application *roomusicApplication) runScan(scanID string, execution *scanEx
 			break
 		}
 		rootIDs = append(rootIDs, root.ID)
-		if rootError := application.scanRoot(scanContext, execution.connection, scanID, root); rootError != nil {
+		if rootError := service.scanRoot(scanContext, execution.connection, scanID, root); rootError != nil {
 			outcome.Complete = false
-			application.logger.Error("scan root incomplete", "event", "library.scan.root_incomplete", "scan_run_id", scanID, "root_id", root.ID, "error", rootError)
+			service.logger.Error("scan root incomplete", "event", "library.scan.root_incomplete", "scan_run_id", scanID, "root_id", root.ID, "error", rootError)
 		}
 	}
 	if scanContext.Err() != nil {
@@ -109,30 +112,30 @@ func (application *roomusicApplication) runScan(scanID string, execution *scanEx
 			if errors.Is(err, errScanCancellationRequested) {
 				outcome.Canceled = true
 			} else {
-				application.logger.Error("scan cancellation polling failed", "event", "library.scan.coordination_failed", "scan_run_id", scanID, "error", err)
+				service.logger.Error("scan cancellation polling failed", "event", "library.scan.coordination_failed", "scan_run_id", scanID, "error", err)
 			}
 		default:
 			// 应用停机只表示本次扫描未完成；只有观察到持久化取消请求才写入 canceled。
 		}
 	}
 	if loadError != nil {
-		if diagnosticError := application.recordDiagnosticWith(context.Background(), execution.connection, scanID, "", "database_error", "无法读取已注册目录"); diagnosticError != nil {
+		if diagnosticError := service.recordDiagnosticWith(context.Background(), execution.connection, scanID, "", "database_error", "无法读取已注册目录"); diagnosticError != nil {
 			outcome.Failed = true
 		}
 	}
 	finalizeContext, finalizeCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer finalizeCancel()
-	status, updateError := application.finalizeScan(finalizeContext, execution.connection, scanID, rootIDs, outcome)
+	status, updateError := service.finalizeScan(finalizeContext, execution.connection, scanID, rootIDs, outcome)
 	if updateError != nil {
-		application.logger.Error("scan terminal status persistence failed", "event", "library.scan.terminal_write_failed", "scan_id", scanID, "error", updateError)
+		service.logger.Error("scan terminal status persistence failed", "event", "library.scan.terminal_write_failed", "scan_id", scanID, "error", updateError)
 		return
 	}
-	application.logger.Info("scan completed", "event", "library.scan.completed", "scan_run_id", scanID, "outcome", status)
+	service.logger.Info("scan completed", "event", "library.scan.completed", "scan_run_id", scanID, "outcome", status)
 }
 
 var errScanCancellationRequested = errors.New("scan cancellation requested")
 
-func (application *roomusicApplication) pollScanCancellation(ctx context.Context, scanID string, cancel context.CancelFunc, done chan<- struct{}, stopReason chan<- error) {
+func (service *Service) pollScanCancellation(ctx context.Context, scanID string, cancel context.CancelFunc, done chan<- struct{}, stopReason chan<- error) {
 	defer close(done)
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
@@ -142,7 +145,7 @@ func (application *roomusicApplication) pollScanCancellation(ctx context.Context
 			return
 		case <-ticker.C:
 			var requested bool
-			err := application.database.connection.QueryRowContext(ctx, "SELECT cancel_requested_at IS NOT NULL FROM scan_runs WHERE id=$1::uuid AND status='running'", scanID).Scan(&requested)
+			err := service.database.QueryRowContext(ctx, "SELECT cancel_requested_at IS NOT NULL FROM scan_runs WHERE id=$1::uuid AND status='running'", scanID).Scan(&requested)
 			if errors.Is(err, sql.ErrNoRows) {
 				stopReason <- errors.New("active scan row disappeared")
 				cancel()
@@ -162,7 +165,7 @@ func (application *roomusicApplication) pollScanCancellation(ctx context.Context
 	}
 }
 
-func (application *roomusicApplication) finalizeScan(ctx context.Context, connection *sql.Conn, scanID string, rootIDs []string, outcome scanOutcome) (string, error) {
+func (service *Service) finalizeScan(ctx context.Context, connection *sql.Conn, scanID string, rootIDs []string, outcome scanOutcome) (string, error) {
 	transaction, err := connection.BeginTx(ctx, nil)
 	if err != nil {
 		return "", err
@@ -200,7 +203,7 @@ func (application *roomusicApplication) finalizeScan(ctx context.Context, connec
 	return status, nil
 }
 
-func (application *roomusicApplication) loadRegisteredRoots(context context.Context, executor scanExecutor) ([]registeredRoot, error) {
+func (service *Service) loadRegisteredRoots(context context.Context, executor scanExecutor) ([]registeredRoot, error) {
 	rows, err := executor.QueryContext(context, "SELECT id::text,path FROM library_roots WHERE status='active' ORDER BY path,id")
 	if err != nil {
 		return nil, err
@@ -217,11 +220,11 @@ func (application *roomusicApplication) loadRegisteredRoots(context context.Cont
 	return roots, rows.Err()
 }
 
-func (application *roomusicApplication) scanRoot(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot) (returnError error) {
+func (service *Service) scanRoot(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot) (returnError error) {
 	// 遍历前必须清理同一扫描重试留下的旧行，否则旧 observation 会混入本次候选。
 	if err := clearStagedObservations(ctx, executor, scanID, root.ID); err != nil {
 		cleanupError := fmt.Errorf("clear stale staged observations: %w", err)
-		if diagnosticError := application.recordDiagnosticWith(ctx, executor, scanID, "", "staging_write_failure", "无法清理扫描暂存观察"); diagnosticError != nil {
+		if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, "", "staging_write_failure", "无法清理扫描暂存观察"); diagnosticError != nil {
 			cleanupError = errors.Join(cleanupError, fmt.Errorf("record staging cleanup diagnostic: %w", diagnosticError))
 		}
 		return cleanupError
@@ -234,13 +237,13 @@ func (application *roomusicApplication) scanRoot(ctx context.Context, executor s
 			return
 		}
 		cleanupError = fmt.Errorf("clear staged observations: %w", cleanupError)
-		if diagnosticError := application.recordDiagnosticWith(cleanupCtx, executor, scanID, "", "staging_write_failure", "无法清理扫描暂存观察"); diagnosticError != nil {
+		if diagnosticError := service.recordDiagnosticWith(cleanupCtx, executor, scanID, "", "staging_write_failure", "无法清理扫描暂存观察"); diagnosticError != nil {
 			cleanupError = errors.Join(cleanupError, fmt.Errorf("record staging cleanup diagnostic: %w", diagnosticError))
 		}
 		returnError = errors.Join(returnError, cleanupError)
 	}()
 	if !registeredRootAvailable(root.Path) {
-		if diagnosticError := application.recordDiagnosticWith(ctx, executor, scanID, "", "root_unavailable", "注册目录当前不可用"); diagnosticError != nil {
+		if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, "", "root_unavailable", "注册目录当前不可用"); diagnosticError != nil {
 			return fmt.Errorf("record unavailable root diagnostic: %w", diagnosticError)
 		}
 		return errors.New("root unavailable")
@@ -261,7 +264,7 @@ func (application *roomusicApplication) scanRoot(ctx context.Context, executor s
 		}
 		if walkError != nil {
 			complete = false
-			if diagnosticError := application.recordDiagnosticWith(ctx, executor, scanID, safeRelativePath(root.Path, path), "permission_error", "无法读取文件"); diagnosticError != nil {
+			if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, safeRelativePath(root.Path, path), "permission_error", "无法读取文件"); diagnosticError != nil {
 				return diagnosticError
 			}
 			return nil
@@ -276,7 +279,7 @@ func (application *roomusicApplication) scanRoot(ctx context.Context, executor s
 			target, targetError := filepath.EvalSymlinks(path)
 			if targetError != nil || !isWithin(root.Path, target) {
 				complete = false
-				if diagnosticError := application.recordDiagnosticWith(ctx, executor, scanID, safeRelativePath(root.Path, path), "broken_or_escaped_link", "文件链接目标不可读取"); diagnosticError != nil {
+				if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, safeRelativePath(root.Path, path), "broken_or_escaped_link", "文件链接目标不可读取"); diagnosticError != nil {
 					return diagnosticError
 				}
 				return nil
@@ -290,14 +293,14 @@ func (application *roomusicApplication) scanRoot(ctx context.Context, executor s
 		fileInfo, statError := os.Stat(path)
 		if statError != nil {
 			complete = false
-			if diagnosticError := application.recordDiagnosticWith(ctx, executor, scanID, relativePath, "permission_error", "无法读取文件"); diagnosticError != nil {
+			if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, relativePath, "permission_error", "无法读取文件"); diagnosticError != nil {
 				return diagnosticError
 			}
 			return nil
 		}
 		if !fileInfo.Mode().IsRegular() {
 			complete = false
-			if diagnosticError := application.recordDiagnosticWith(ctx, executor, scanID, relativePath, "non_regular_file", "音频来源不是普通文件"); diagnosticError != nil {
+			if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, relativePath, "non_regular_file", "音频来源不是普通文件"); diagnosticError != nil {
 				return diagnosticError
 			}
 			return nil
@@ -306,20 +309,20 @@ func (application *roomusicApplication) scanRoot(ctx context.Context, executor s
 			if contextErr := ctx.Err(); contextErr != nil {
 				return contextErr
 			}
-			document, cueErr := parseCueDocument(path, root.Path)
+			document, cueErr := parser.ParseCueDocument(path, root.Path)
 			if cueErr != nil {
 				complete = false
-				if diagnosticError := application.recordDiagnosticWith(ctx, executor, scanID, relativePath, "unsupported_cue", "CUE 文件无法解析"); diagnosticError != nil {
+				if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, relativePath, "unsupported_cue", "CUE 文件无法解析"); diagnosticError != nil {
 					return diagnosticError
 				}
 				return nil
 			}
 			for _, diagnostic := range document.Diagnostics {
-				if diagnosticError := application.recordDiagnosticWith(ctx, executor, scanID, relativePath, "cue_reference", diagnostic); diagnosticError != nil {
+				if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, relativePath, "cue_reference", diagnostic); diagnosticError != nil {
 					return diagnosticError
 				}
 			}
-			parentFacts := make(map[string]audioObservation, len(document.Files))
+			parentFacts := make(map[string]parser.AudioObservation, len(document.Files))
 			for _, reference := range document.Files {
 				if cueReferenceMakesScanIncomplete(reference.Status) {
 					complete = false
@@ -331,10 +334,10 @@ func (application *roomusicApplication) scanRoot(ctx context.Context, executor s
 					complete = false
 					continue
 				}
-				facts, parseErr := parseAudioFile(reference.ResolvedPath)
+				facts, parseErr := parser.ParseAudioFile(reference.ResolvedPath)
 				if parseErr != nil {
 					complete = false
-					if diagnosticError := application.recordDiagnosticWith(ctx, executor, scanID, relativePath, "parse_failure", "CUE 引用音频解析失败"); diagnosticError != nil {
+					if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, relativePath, "parse_failure", "CUE 引用音频解析失败"); diagnosticError != nil {
 						return diagnosticError
 					}
 					continue
@@ -360,7 +363,7 @@ func (application *roomusicApplication) scanRoot(ctx context.Context, executor s
 				if stageErr := stageObservation(ctx, executor, scanID, root.ID, virtualObservation); stageErr != nil {
 					complete = false
 					captureProcessingError(stageErr)
-					if diagnosticError := application.recordDiagnosticWith(ctx, executor, scanID, relativePath, "staging_write_failure", "无法暂存 CUE 观察"); diagnosticError != nil {
+					if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, relativePath, "staging_write_failure", "无法暂存 CUE 观察"); diagnosticError != nil {
 						return diagnosticError
 					}
 				}
@@ -369,15 +372,15 @@ func (application *roomusicApplication) scanRoot(ctx context.Context, executor s
 		}
 		if !isSupportedAudioExtension(extension) {
 			complete = false
-			if diagnosticError := application.recordDiagnosticWith(ctx, executor, scanID, relativePath, "unsupported_format", "不支持的音频格式"); diagnosticError != nil {
+			if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, relativePath, "unsupported_format", "不支持的音频格式"); diagnosticError != nil {
 				return diagnosticError
 			}
 			return nil
 		}
-		observation, parseError := parseAudioFile(path)
+		observation, parseError := parser.ParseAudioFile(path)
 		if parseError != nil {
 			complete = false
-			if diagnosticError := application.recordDiagnosticWith(ctx, executor, scanID, relativePath, "parse_failure", "音频文件解析失败"); diagnosticError != nil {
+			if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, relativePath, "parse_failure", "音频文件解析失败"); diagnosticError != nil {
 				return diagnosticError
 			}
 			return nil
@@ -391,7 +394,7 @@ func (application *roomusicApplication) scanRoot(ctx context.Context, executor s
 		if stageErr := stageObservation(ctx, executor, scanID, root.ID, physicalObservation); stageErr != nil {
 			complete = false
 			captureProcessingError(stageErr)
-			if diagnosticError := application.recordDiagnosticWith(ctx, executor, scanID, relativePath, "staging_write_failure", "无法暂存音频观察"); diagnosticError != nil {
+			if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, relativePath, "staging_write_failure", "无法暂存音频观察"); diagnosticError != nil {
 				return diagnosticError
 			}
 		}
@@ -408,17 +411,17 @@ func (application *roomusicApplication) scanRoot(ctx context.Context, executor s
 		if alignErr := alignCueStagingScopes(ctx, executor, scanID, root.ID); alignErr != nil {
 			complete = false
 			captureProcessingError(alignErr)
-			if diagnosticError := application.recordDiagnosticWith(ctx, executor, scanID, "", "staging_write_failure", "无法对齐 CUE 父来源"); diagnosticError != nil {
+			if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, "", "staging_write_failure", "无法对齐 CUE 父来源"); diagnosticError != nil {
 				captureProcessingError(diagnosticError)
 			}
 		}
 		// 即使其它文件解析失败，也持久化有效 observations；扫描会进入 incomplete，
 		// 因而不会执行负向 missing 对账。
-		if evidenceErr := application.persistStagedCandidates(ctx, executor, scanID, root); evidenceErr != nil {
+		if evidenceErr := service.persistStagedCandidates(ctx, executor, scanID, root); evidenceErr != nil {
 			complete = false
 			captureProcessingError(evidenceErr)
 			kind, message := candidatePersistenceDiagnostic(evidenceErr)
-			if diagnosticError := application.recordDiagnosticWith(ctx, executor, scanID, "", kind, message); diagnosticError != nil {
+			if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, "", kind, message); diagnosticError != nil {
 				captureProcessingError(diagnosticError)
 			}
 		}
@@ -435,11 +438,11 @@ func cueReferenceMakesScanIncomplete(status string) bool {
 	return status != "present" && status != "missing"
 }
 
-func cueTrackCanBeStaged(track cueTrack) bool {
+func cueTrackCanBeStaged(track parser.CueTrack) bool {
 	return track.ReferenceStatus == "present" && track.IndexPresent
 }
 
-func buildCueVirtualObservation(parent audioObservation, document cueDocument, cue cueTrack, sheetRelativePath string) catalog.SourceObservation {
+func buildCueVirtualObservation(parent parser.AudioObservation, document parser.CueDocument, cue parser.CueTrack, sheetRelativePath string) catalog.SourceObservation {
 	observation := parent
 	observation.InferredFields = cloneBoolMap(parent.InferredFields)
 	observation.SourceKind = "cue_virtual"
@@ -466,7 +469,7 @@ func buildCueVirtualObservation(parent audioObservation, document cueDocument, c
 	if cue.ISRC != "" {
 		fieldSources["isrc"] = "cue_track"
 	}
-	if parsedYear := parseYear(firstNonEmpty(cue.Date, document.Date)); parsedYear > 0 {
+	if parsedYear := parser.ParseYear(firstNonEmpty(cue.Date, document.Date)); parsedYear > 0 {
 		observation.Year = parsedYear
 		fieldSources["year"] = "cue_sheet"
 	}
@@ -626,7 +629,7 @@ func loadStagedObservationScope(ctx context.Context, executor scanExecutor, scan
 	return observations, rows.Err()
 }
 
-func (application *roomusicApplication) persistStagedCandidates(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot) error {
+func (service *Service) persistStagedCandidates(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot) error {
 	var firstErr error
 	lastScope := ""
 	for {
@@ -665,11 +668,11 @@ func (application *roomusicApplication) persistStagedCandidates(ctx context.Cont
 				ripLogRefs, diagnostics := discoverCandidateRipLogEvidence(root, candidate)
 				catalog.ApplyRipLogEvidence(&candidate, ripLogRefs)
 				for _, diagnostic := range diagnostics {
-					if diagnosticErr := application.recordDiagnosticWith(ctx, executor, scanID, diagnostic.RelativePath, diagnostic.Kind, diagnostic.Message); diagnosticErr != nil && firstErr == nil {
+					if diagnosticErr := service.recordDiagnosticWith(ctx, executor, scanID, diagnostic.RelativePath, diagnostic.Kind, diagnostic.Message); diagnosticErr != nil && firstErr == nil {
 						firstErr = diagnosticErr
 					}
 				}
-				if persistErr := application.persistOneCandidate(ctx, executor, scanID, root, candidate); persistErr != nil && firstErr == nil {
+				if persistErr := service.persistOneCandidate(ctx, executor, scanID, root, candidate); persistErr != nil && firstErr == nil {
 					firstErr = persistErr
 				}
 			}
@@ -816,7 +819,7 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func observationFieldSources(observation audioObservation) map[string]string {
+func observationFieldSources(observation parser.AudioObservation) map[string]string {
 	sources := map[string]string{}
 	for field, inferred := range observation.InferredFields {
 		if !inferred {
@@ -839,22 +842,22 @@ func observationFieldSources(observation audioObservation) map[string]string {
 // persistOrganizedCandidates 为每个 candidate 使用独立短事务。Track 身份基于
 // root + 相对来源路径，因此重扫更新既有行，同时允许 candidate 拓扑变化。
 // persistOneCandidate 在 catalog 事务提交后为该 Release 绑定封面；封面失败以 errArtworkBinding 包装返回。
-func (application *roomusicApplication) persistOneCandidate(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, candidate catalog.OrganizedCandidate) error {
+func (service *Service) persistOneCandidate(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, candidate catalog.OrganizedCandidate) error {
 	releaseID, err := catalog.PersistCandidate(ctx, executor, scanID, root.ID, candidate)
 	if err != nil {
 		return err
 	}
 	if artworkObservation, ok := candidate.ArtworkObservation(); ok {
-		if artworkErr := application.saveArtworkForRelease(ctx, executor, releaseID, root, artworkObservation); artworkErr != nil {
+		if artworkErr := service.saveArtworkForRelease(ctx, executor, releaseID, root, artworkObservation); artworkErr != nil {
 			return fmt.Errorf("%w: %v", errArtworkBinding, artworkErr)
 		}
 	}
 	return nil
 }
 
-func (application *roomusicApplication) persistOrganizedCandidates(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, candidates []catalog.OrganizedCandidate) error {
+func (service *Service) persistOrganizedCandidates(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, candidates []catalog.OrganizedCandidate) error {
 	for _, c := range candidates {
-		if err := application.persistOneCandidate(ctx, executor, scanID, root, c); err != nil {
+		if err := service.persistOneCandidate(ctx, executor, scanID, root, c); err != nil {
 			return err
 		}
 	}
@@ -892,11 +895,11 @@ func isWithin(root, path string) bool {
 	return rootError == nil && pathError == nil && (pathReal == rootReal || strings.HasPrefix(pathReal, rootReal+string(filepath.Separator)))
 }
 
-func (application *roomusicApplication) saveObservation(context context.Context, scanID string, root registeredRoot, relativePath string, observation audioObservation) error {
-	return application.saveObservationWith(context, application.database.connection, scanID, root, relativePath, observation)
+func (service *Service) saveObservation(context context.Context, scanID string, root registeredRoot, relativePath string, observation parser.AudioObservation) error {
+	return service.saveObservationWith(context, service.database, scanID, root, relativePath, observation)
 }
 
-func (application *roomusicApplication) saveObservationWith(context context.Context, executor scanExecutor, scanID string, root registeredRoot, relativePath string, observation audioObservation) error {
+func (service *Service) saveObservationWith(context context.Context, executor scanExecutor, scanID string, root registeredRoot, relativePath string, observation parser.AudioObservation) error {
 	sourceIdentity, err := createTrackSourceIdentity(root.ID, relativePath)
 	if err != nil {
 		return err
@@ -905,12 +908,12 @@ func (application *roomusicApplication) saveObservationWith(context context.Cont
 	if organized.Directory == "" && organized.InferredFields["album"] {
 		organized.Album = ""
 	}
-	return application.persistOrganizedCandidates(context, executor, scanID, root, catalog.OrganizeObservations([]catalog.SourceObservation{organized}))
+	return service.persistOrganizedCandidates(context, executor, scanID, root, catalog.OrganizeObservations([]catalog.SourceObservation{organized}))
 }
 
 // saveArtworkForRelease 为 Release 取得封面并交给受管存储：优先用观察里的内嵌封面，否则在曲目所在
 // 文件夹发现封面图片；两者都没有时移除既有关联。文件夹封面发现失败以原错误返回，不当作没有封面。
-func (application *roomusicApplication) saveArtworkForRelease(ctx context.Context, executor scanExecutor, releaseID string, root registeredRoot, observation catalog.SourceObservation) error {
+func (service *Service) saveArtworkForRelease(ctx context.Context, executor scanExecutor, releaseID string, root registeredRoot, observation catalog.SourceObservation) error {
 	relativePath := catalog.NormalizedPath(observation.RelativePath)
 	directory := filepath.Dir(filepath.Join(root.Path, filepath.FromSlash(relativePath)))
 	data, mimeType := observation.Artwork, observation.ArtworkMIME
@@ -923,7 +926,7 @@ func (application *roomusicApplication) saveArtworkForRelease(ctx context.Contex
 			return fmt.Errorf("discover folder artwork: %w", discoveryErr)
 		}
 	}
-	store := artwork.NewStore(application.config.DataDirectory)
+	store := artwork.NewStore(service.dataDirectory)
 	if len(data) == 0 {
 		return store.Remove(ctx, executor, releaseID)
 	}
@@ -971,11 +974,11 @@ func discoverFolderArtworkWithReader(directory string, readFile func(string) ([]
 	return nil, "", firstErr
 }
 
-func (application *roomusicApplication) recordDiagnostic(context context.Context, scanID, relativePath, kind, message string) error {
-	return application.recordDiagnosticWith(context, application.database.connection, scanID, relativePath, kind, message)
+func (service *Service) recordDiagnostic(context context.Context, scanID, relativePath, kind, message string) error {
+	return service.recordDiagnosticWith(context, service.database, scanID, relativePath, kind, message)
 }
 
-func (application *roomusicApplication) recordDiagnosticWith(context context.Context, executor scanExecutor, scanID, relativePath, kind, message string) error {
+func (service *Service) recordDiagnosticWith(context context.Context, executor scanExecutor, scanID, relativePath, kind, message string) error {
 	_, err := executor.ExecContext(context, "INSERT INTO scan_diagnostics(scan_run_id,relative_path,kind,message) SELECT $1::uuid,$2,$3,$4 WHERE (SELECT COUNT(*) FROM scan_diagnostics WHERE scan_run_id=$1::uuid)<100", scanID, relativePath, kind, message)
 	return err
 }

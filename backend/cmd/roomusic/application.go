@@ -4,27 +4,22 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/artwork"
+	"github.com/qlqq/roomusic/backend/internal/library"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
 type roomusicApplication struct {
-	config      serverConfig
-	database    *databaseState
-	logger      *slog.Logger
-	scanContext context.Context
-	scanWorkers sync.WaitGroup
-	scanMutex   sync.Mutex
-	runningScan string
+	config   serverConfig
+	database *databaseState
+	logger   *slog.Logger
+	library  *library.Service
 }
 type apiError struct {
 	Error     apiErrorDetail `json:"error"`
@@ -49,7 +44,11 @@ func buildApplication(scanContext context.Context, config serverConfig, database
 	if scanContext == nil {
 		scanContext = context.Background()
 	}
-	application := &roomusicApplication{config: config, database: database, logger: logger, scanContext: scanContext}
+	var connection *sql.DB
+	if database != nil {
+		connection = database.connection
+	}
+	application := &roomusicApplication{config: config, database: database, logger: logger, library: library.NewService(scanContext, connection, config.DataDirectory, logger)}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthHandler)
 	mux.HandleFunc("GET /readyz", func(responseWriter http.ResponseWriter, request *http.Request) {
@@ -82,20 +81,6 @@ func buildApplication(scanContext context.Context, config serverConfig, database
 	registerAPIFallback(mux, apiNotFoundHandler(mux))
 	mux.Handle("/", productionFrontendHandler())
 	return application, requestIDMiddleware(logger, mux)
-}
-
-func (application *roomusicApplication) waitForScans(ctx context.Context) error {
-	done := make(chan struct{})
-	go func() {
-		application.scanWorkers.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
 }
 
 func (application *roomusicApplication) setupStatus(responseWriter http.ResponseWriter, request *http.Request) {
@@ -249,7 +234,7 @@ func (application *roomusicApplication) addRoot(responseWriter http.ResponseWrit
 	if !decodeJSON(responseWriter, request, &input) {
 		return
 	}
-	safePath, err := validateLibraryPath(input.Path, application.config.AllowedLibraryRoots)
+	safePath, err := library.ValidatePath(input.Path, application.config.AllowedLibraryRoots)
 	if err != nil {
 		writeAPIError(responseWriter, request, 400, "invalid_library_path", "目录不在允许的音乐根目录内")
 		return
@@ -283,33 +268,6 @@ func (application *roomusicApplication) addRoot(responseWriter http.ResponseWrit
 	responseWriter.Header().Set("Content-Type", "application/json")
 	responseWriter.WriteHeader(201)
 	_, _ = responseWriter.Write(body)
-}
-
-func validateLibraryPath(input string, allowedRoots []string) (string, error) {
-	clean, err := filepath.Abs(filepath.Clean(input))
-	if err != nil {
-		return "", err
-	}
-	// Registration must not silently follow a directory symlink. The lexical
-	// path and its real path differ whenever any component is a symlink.
-	real, err := filepath.EvalSymlinks(clean)
-	if err != nil {
-		return "", err
-	}
-	if filepath.Clean(real) != clean {
-		return "", fmt.Errorf("directory symlink is not allowed")
-	}
-	info, err := os.Stat(real)
-	if err != nil || !info.IsDir() {
-		return "", fmt.Errorf("not directory")
-	}
-	for _, allowed := range allowedRoots {
-		allowedReal, evalErr := filepath.EvalSymlinks(allowed)
-		if evalErr == nil && (real == allowedReal || strings.HasPrefix(real, allowedReal+string(filepath.Separator))) {
-			return real, nil
-		}
-	}
-	return "", fmt.Errorf("outside allowlist")
 }
 
 func (application *roomusicApplication) artworkResource(w http.ResponseWriter, r *http.Request) {

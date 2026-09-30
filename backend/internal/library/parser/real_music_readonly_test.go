@@ -1,4 +1,4 @@
-package main
+package parser
 
 import (
 	"os"
@@ -23,7 +23,7 @@ func TestRealMusicReadOnlySmoke(t *testing.T) {
 		}
 		switch filepath.Ext(path) {
 		case ".flac", ".mp3", ".ogg", ".opus", ".wav", ".m4a":
-			if _, parseErr := parseAudioFile(path); parseErr != nil {
+			if _, parseErr := ParseAudioFile(path); parseErr != nil {
 				t.Errorf("音频解析失败 (%s): %v", filepath.Base(path), parseErr)
 			}
 			checked++

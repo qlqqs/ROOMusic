@@ -78,8 +78,13 @@ backend/
   - DTO 的 JSON 标签保持不变，作为读取投影的公开合同放在 `catalog`。
 - **扫描**：`startScan` 会操作共享状态（`runningScan`、`scanWorkers`），它的编排移入 `library.Service.StartScan`，返回类型化结果：已在运行、已启动、协调不可用、数据库失败。
   - `library/httpapi` 按原样把这些结果映射成现有的状态码、错误码和文案。
-  - `getScan`、`getActiveScan`、扫描 DTO 和诊断汇总移入 `library`。
-  - `cancelScan`、`diagnostics` 等 handler 里的其余 SQL 原样搬移。
+  - 扫描 DTO 和诊断汇总移入 `library`（`Scan`、`DiagnosticsSummary`、`Diagnostic`）；`GetScan`、`ActiveScan` 也是 `Service` 方法。
+  - 实施时把 `cancelScan`、`diagnostics` 也做成了 `Service.CancelScan`、`Service.Diagnostics`：原计划让它们带着 SQL 搬进 `library/httpapi`，
+    但过渡期它们还在 `package main`，而 `library` 不能导入 `net/http`，与其导出 `scanRow`、`scanSelectColumns` 这类内部函数，
+    不如直接抽成用例。结果是扫描相关 handler 不再含 SQL，只剩参数解析、鉴权与响应映射。
+  - 各失败点仍映射到原来的状态码与文案，靠哨兵错误区分：`ErrScanNotFound`、`ErrCoordinationUnavailable`、`ErrStartFailed`、
+    `ErrDiagnosticsUnavailable`、`ErrQuery`。
+  - 目录（`listRoots`、`addRoot`）与目录操作（`root_operations.go`）的 handler 仍原样保留，路径校验 `ValidatePath` 属于 `library`。
 - **目录与目录操作**：`listRoots`、`addRoot`、F2 的 `beginRootOperation`、`updateRoot`、`restoreRoot`、`rootOperations` 原样搬进 `library/httpapi`。只有路径校验 `validateLibraryPath` 属于策略，移入 `library`。
 - **身份**：setup、登录、登出、`me`、成员 handler 原样搬进 `identity/httpapi`。
 - **技术债**：`library/httpapi` 和 `identity/httpapi` 里仍有 SQL。这一点写进 `directory-structure.md`，M3 重做目录操作时抽出用例，身份接口下次变更时一并处理。

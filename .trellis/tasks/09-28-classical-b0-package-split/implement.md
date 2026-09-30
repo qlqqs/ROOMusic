@@ -46,7 +46,7 @@ git diff --check
    - 迁移测试随执行器移到 `platform/postgres`；`newIntegrationTestApplication` 改用 `postgrestest`。
    - 提交：`refactor(backend): 拆出 platform/postgres 与测试库辅助包`。
    - 实际验证：gofmt、vet、build、`go test ./...`、`-race`、`./scripts/test-integration.sh` 全部通过；测试名单与第 1 步后一致（迁移测试 12 个随执行器移动，名称不变）。
-3. [ ] **library 与解析器**
+3. [x] **library 与解析器**
    - 新建 `library/parser`（含 `parsertest`），以及 `library`：
      - 路径校验、扫描引擎、暂存、rip log 与文件夹封面发现、诊断写入；
      - 扫描执行锁、`RecoverInterruptedScans`、`Service.StartScan` 的类型化结果、扫描查询与 DTO、`WaitForScans`。
@@ -54,6 +54,8 @@ git diff --check
    - 扫描 handler 暂留 main，改为映射 `StartScan` 的结果；目录类 handler 暂不动。
    - 相关测试移到 `library` 和 `parser`，删除 library 范围内的死代码。
    - 提交：`refactor(backend): 拆出 library 与 parser`。
+   - 实际验证：gofmt、vet、build、`go test ./...`、`-race`、`./scripts/test-integration.sh` 全部通过；测试名单与基线逐项对账，除已说明的两个新增外无变化；scanner.go 的 37 个函数、解析器全文、扫描辅助函数用脚本对照原文，只有机械改动（接收者、字段名、包前缀）。
+   - 与计划的差异：`parsertest` 只导出两个 FLAC 夹具；取消与诊断也抽成 `Service` 方法（见 design）；`buildApplication` 在数据库为 nil 时不解引用（F1 的路由测试依赖这一点）。
 4. [ ] **httpserver、config、identity、httpapi 与 app**
    - 新建 `platform/config`、`platform/httpserver`（`SetActor`、`Frontend(fs.FS)`）、`identity`（`Guard`）。
    - 新建三个 `httpapi` 包，按 design 的 handler 处理方式搬移。

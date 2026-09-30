@@ -1,4 +1,6 @@
-package main
+// Package parser 解析音频文件与 CUE 抄本，只产出安全、有界的事实观察，不读取音乐库之外的位置，
+// 也不写入任何文件。它是叶子包：只依赖标准库、字符集解码库与 catalog/metadata。
+package parser
 
 import (
 	"bufio"
@@ -23,7 +25,7 @@ import (
 	"golang.org/x/text/transform"
 )
 
-type audioObservation struct {
+type AudioObservation struct {
 	Title, Artist, Album    string
 	AlbumArtist             string
 	TrackNumber, DiscNumber int
@@ -51,7 +53,7 @@ type audioObservation struct {
 	RawAtoms                map[string]string
 }
 
-type cueTrack struct {
+type CueTrack struct {
 	Number           int
 	Title, Artist    string
 	PerformerPresent bool
@@ -73,9 +75,9 @@ type cueTrack struct {
 	ReferenceStatus  string
 }
 
-// cueFileReference 保留每个 FILE 声明。兼容入口 parseCue 会把引用平铺到
-// cueTrack.ReferencedFile，需要逐文件诊断的扫描流程则直接使用 parseCueDocument。
-type cueFileReference struct {
+// CueFileReference 保留每个 FILE 声明。兼容入口 parseCue 会把引用平铺到
+// CueTrack.ReferencedFile，需要逐文件诊断的扫描流程则直接使用 ParseCueDocument。
+type CueFileReference struct {
 	Path         string
 	Type         string
 	ResolvedPath string
@@ -83,9 +85,9 @@ type cueFileReference struct {
 	TrackNumbers []int
 }
 
-type cueDocument struct {
-	Tracks      []cueTrack
-	Files       []cueFileReference
+type CueDocument struct {
+	Tracks      []CueTrack
+	Files       []CueFileReference
 	Title       string
 	Artist      string
 	Genre       string
@@ -111,21 +113,21 @@ const (
 	maxM4ARawAtoms        = 64
 )
 
-func parseM4A(path string) (audioObservation, error) {
+func parseM4A(path string) (AudioObservation, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return audioObservation{}, err
+		return AudioObservation{}, err
 	}
 	defer file.Close()
 	info, err := file.Stat()
 	if err != nil {
-		return audioObservation{}, err
+		return AudioObservation{}, err
 	}
 	if info.Size() < 8 {
-		return audioObservation{}, fmt.Errorf("invalid M4A stream")
+		return AudioObservation{}, fmt.Errorf("invalid M4A stream")
 	}
 
-	o := audioObservation{
+	o := AudioObservation{
 		SourceKind:     "m4a",
 		InferredFields: map[string]bool{},
 		RawAtoms:       make(map[string]string),
@@ -136,10 +138,10 @@ func parseM4A(path string) (audioObservation, error) {
 	for offset := int64(0); offset < info.Size(); {
 		atom, headerErr := readM4AAtomHeader(file, offset, info.Size())
 		if headerErr != nil {
-			return audioObservation{}, fmt.Errorf("invalid M4A atom at %d: %w", offset, headerErr)
+			return AudioObservation{}, fmt.Errorf("invalid M4A atom at %d: %w", offset, headerErr)
 		}
 		if budgetErr := consumeM4AAtomBudget(&budget); budgetErr != nil {
-			return audioObservation{}, budgetErr
+			return AudioObservation{}, budgetErr
 		}
 		switch atom.Type {
 		case "ftyp":
@@ -150,30 +152,30 @@ func parseM4A(path string) (audioObservation, error) {
 			}
 			brand, err = readM4ABrand(file, atom)
 			if err != nil {
-				return audioObservation{}, err
+				return AudioObservation{}, err
 			}
 			if !supportedM4ABrand(brand) {
-				return audioObservation{}, fmt.Errorf("unsupported M4A brand")
+				return AudioObservation{}, fmt.Errorf("unsupported M4A brand")
 			}
 			foundFTYP = true
 		case "moov":
 			if err := walkM4AAtoms(file, atom.PayloadStart, atom.End, &o, &budget, 0, "moov"); err != nil {
-				return audioObservation{}, fmt.Errorf("invalid M4A metadata: %w", err)
+				return AudioObservation{}, fmt.Errorf("invalid M4A metadata: %w", err)
 			}
 		}
 		if atom.End <= offset {
-			return audioObservation{}, fmt.Errorf("invalid M4A atom size")
+			return AudioObservation{}, fmt.Errorf("invalid M4A atom size")
 		}
 		offset = atom.End
 	}
 	if !foundFTYP {
-		return audioObservation{}, fmt.Errorf("invalid M4A stream: missing ftyp")
+		return AudioObservation{}, fmt.Errorf("invalid M4A stream: missing ftyp")
 	}
 	if !supportedM4ABrand(brand) {
-		return audioObservation{}, fmt.Errorf("unsupported M4A brand")
+		return AudioObservation{}, fmt.Errorf("unsupported M4A brand")
 	}
 	if o.Codec != "aac" && o.Codec != "alac" {
-		return audioObservation{}, fmt.Errorf("invalid M4A stream: missing supported audio sample entry")
+		return AudioObservation{}, fmt.Errorf("invalid M4A stream: missing supported audio sample entry")
 	}
 	if o.Bitrate == 0 && o.DurationSeconds > 0 {
 		// 这里只提供容器级粗略估算，不据此推断发行或来源语义。
@@ -182,7 +184,7 @@ func parseM4A(path string) (audioObservation, error) {
 	return applyFilenameFallback(path, o), nil
 }
 
-func parseM4AAtoms(data []byte, o *audioObservation) {
+func parseM4AAtoms(data []byte, o *AudioObservation) {
 	if o == nil {
 		return
 	}
@@ -263,7 +265,7 @@ func supportedM4ABrand(brand string) bool {
 	}
 }
 
-func walkM4AAtoms(reader io.ReaderAt, start, limit int64, observation *audioObservation, budget *m4aParseBudget, depth int, parent string) error {
+func walkM4AAtoms(reader io.ReaderAt, start, limit int64, observation *AudioObservation, budget *m4aParseBudget, depth int, parent string) error {
 	if depth > maxM4ARecursion {
 		return errors.New("atom nesting too deep")
 	}
@@ -360,7 +362,7 @@ func consumeM4AAtomBudget(budget *m4aParseBudget) error {
 	return nil
 }
 
-func parseM4ADuration(reader io.ReaderAt, atom m4aAtom, observation *audioObservation, budget *m4aParseBudget) error {
+func parseM4ADuration(reader io.ReaderAt, atom m4aAtom, observation *AudioObservation, budget *m4aParseBudget) error {
 	if err := consumeM4AMetadataBudget(budget, atom.End-atom.PayloadStart); err != nil {
 		return err
 	}
@@ -402,7 +404,7 @@ func parseM4ADuration(reader io.ReaderAt, atom m4aAtom, observation *audioObserv
 	return nil
 }
 
-func parseM4ASampleDescription(reader io.ReaderAt, atom m4aAtom, observation *audioObservation, budget *m4aParseBudget) error {
+func parseM4ASampleDescription(reader io.ReaderAt, atom m4aAtom, observation *AudioObservation, budget *m4aParseBudget) error {
 	if err := consumeM4AMetadataBudget(budget, atom.End-atom.PayloadStart); err != nil {
 		return err
 	}
@@ -460,11 +462,11 @@ func parseM4ASampleDescription(reader io.ReaderAt, atom m4aAtom, observation *au
 	return nil
 }
 
-func parseM4ASampleEntryChildren(data []byte, observation *audioObservation) error {
+func parseM4ASampleEntryChildren(data []byte, observation *AudioObservation) error {
 	return parseM4ASampleEntryChildrenDepth(data, observation, 0)
 }
 
-func parseM4ASampleEntryChildrenDepth(data []byte, observation *audioObservation, depth int) error {
+func parseM4ASampleEntryChildrenDepth(data []byte, observation *AudioObservation, depth int) error {
 	if depth > 8 {
 		return errors.New("M4A sample entry nesting too deep")
 	}
@@ -536,7 +538,7 @@ func parseM4ASampleEntryChildrenDepth(data []byte, observation *audioObservation
 	return nil
 }
 
-func parseM4ABitrate(reader io.ReaderAt, atom m4aAtom, observation *audioObservation, budget *m4aParseBudget) error {
+func parseM4ABitrate(reader io.ReaderAt, atom m4aAtom, observation *AudioObservation, budget *m4aParseBudget) error {
 	if err := consumeM4AMetadataBudget(budget, atom.End-atom.PayloadStart); err != nil {
 		return err
 	}
@@ -553,7 +555,7 @@ func parseM4ABitrate(reader io.ReaderAt, atom m4aAtom, observation *audioObserva
 	return nil
 }
 
-func parseM4AItem(reader io.ReaderAt, atom m4aAtom, observation *audioObservation, budget *m4aParseBudget) error {
+func parseM4AItem(reader io.ReaderAt, atom m4aAtom, observation *AudioObservation, budget *m4aParseBudget) error {
 	itemType := atom.Type
 	// iTunes item 包含一个或多个 data 子 atom；只读取有界区域，封面也受同一预算限制。
 	children := 0
@@ -618,7 +620,7 @@ func parseM4AItem(reader io.ReaderAt, atom m4aAtom, observation *audioObservatio
 	return nil
 }
 
-func parseM4AItemValue(itemType string, value, typeCode []byte, observation *audioObservation) {
+func parseM4AItemValue(itemType string, value, typeCode []byte, observation *AudioObservation) {
 	if observation.RawAtoms == nil {
 		observation.RawAtoms = make(map[string]string)
 	}
@@ -668,7 +670,7 @@ func parseM4AItemValue(itemType string, value, typeCode []byte, observation *aud
 	case "\xa9gen":
 		observation.Genre = text
 	case "\xa9day":
-		observation.Year = parseYear(text)
+		observation.Year = ParseYear(text)
 	case "\xa9wrt":
 		addObservationCredits(observation, "composer", text)
 	case "\xa9cmt":
@@ -676,7 +678,7 @@ func parseM4AItemValue(itemType string, value, typeCode []byte, observation *aud
 	}
 }
 
-func parseM4AFreeformValue(mean, name string, value, typeCode []byte, observation *audioObservation) {
+func parseM4AFreeformValue(mean, name string, value, typeCode []byte, observation *AudioObservation) {
 	if mean != "com.apple.iTunes" || observation == nil {
 		return
 	}
@@ -739,7 +741,7 @@ func decodeM4AText(value []byte, dataType uint32) string {
 	return ""
 }
 
-func parseYear(value string) int {
+func ParseYear(value string) int {
 	value = strings.TrimSpace(value)
 	if len(value) < 4 {
 		return 0
@@ -751,8 +753,8 @@ func parseYear(value string) int {
 	return year
 }
 
-func parseCue(path string) ([]cueTrack, string, error) {
-	document, err := parseCueDocument(path)
+func parseCue(path string) ([]CueTrack, string, error) {
+	document, err := ParseCueDocument(path)
 	if err != nil {
 		return nil, "", err
 	}
@@ -767,36 +769,36 @@ func parseCue(path string) ([]cueTrack, string, error) {
 	return document.Tracks, document.Files[0].Path, nil
 }
 
-// parseCueDocument 保留全部 FILE、sheet 元数据和有界逐引用诊断。可选根目录用于
+// ParseCueDocument 保留全部 FILE、sheet 元数据和有界逐引用诊断。可选根目录用于
 // 扫描级 containment，省略时保守限定在 CUE 目录；缺失或不安全的引用仍携带状态。
-func parseCueDocument(path string, containmentRoot ...string) (cueDocument, error) {
+func ParseCueDocument(path string, containmentRoot ...string) (CueDocument, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return cueDocument{}, err
+		return CueDocument{}, err
 	}
 	defer file.Close()
 	info, err := file.Stat()
 	if err != nil {
-		return cueDocument{}, err
+		return CueDocument{}, err
 	}
 	if info.Size() > maxCueBytes {
-		return cueDocument{}, fmt.Errorf("CUE metadata too large")
+		return CueDocument{}, fmt.Errorf("CUE metadata too large")
 	}
 	data := make([]byte, int(info.Size()))
 	if _, err := io.ReadFull(file, data); err != nil {
-		return cueDocument{}, err
+		return CueDocument{}, err
 	}
 	content, encoding, err := decodeCueText(data)
 	if err != nil {
-		return cueDocument{}, err
+		return CueDocument{}, err
 	}
-	document := cueDocument{Encoding: encoding}
+	document := CueDocument{Encoding: encoding}
 	boundary := filepath.Dir(path)
 	if len(containmentRoot) > 0 && strings.TrimSpace(containmentRoot[0]) != "" {
 		boundary = containmentRoot[0]
 	}
-	var currentFile *cueFileReference
-	var currentTrack *cueTrack
+	var currentFile *CueFileReference
+	var currentTrack *CueTrack
 	var currentFileID int
 	var nextFileID int
 	var trackCount int
@@ -831,54 +833,54 @@ func parseCueDocument(path string, containmentRoot ...string) (cueDocument, erro
 			continue
 		}
 		if len(line) > maxCueLineBytes {
-			return cueDocument{}, fmt.Errorf("CUE line %d exceeds size limit", lineNumber+1)
+			return CueDocument{}, fmt.Errorf("CUE line %d exceeds size limit", lineNumber+1)
 		}
 		tokens, tokenErr := cueTokens(line)
 		if tokenErr != nil {
-			return cueDocument{}, fmt.Errorf("CUE line %d: %w", lineNumber+1, tokenErr)
+			return CueDocument{}, fmt.Errorf("CUE line %d: %w", lineNumber+1, tokenErr)
 		}
 		if len(tokens) == 0 {
 			continue
 		}
 		for _, token := range tokens {
 			if len(token) > maxCueTokenBytes {
-				return cueDocument{}, fmt.Errorf("CUE line %d contains an overlong value", lineNumber+1)
+				return CueDocument{}, fmt.Errorf("CUE line %d contains an overlong value", lineNumber+1)
 			}
 		}
 		key := strings.ToUpper(tokens[0])
 		switch key {
 		case "FILE":
 			if len(tokens) < 3 || !supportedCueFileType(tokens[2]) {
-				return cueDocument{}, fmt.Errorf("CUE line %d: missing FILE type", lineNumber+1)
+				return CueDocument{}, fmt.Errorf("CUE line %d: missing FILE type", lineNumber+1)
 			}
 			flushFile()
 			if nextFileID >= maxCueFiles {
-				return cueDocument{}, fmt.Errorf("CUE contains too many FILE declarations")
+				return CueDocument{}, fmt.Errorf("CUE contains too many FILE declarations")
 			}
 			nextFileID++
 			currentFileID = nextFileID
 			ref := strings.TrimSpace(tokens[1])
 			status, resolved, diagnostic := validateCueReference(path, boundary, ref)
-			currentFile = &cueFileReference{Path: normalizeCueReference(ref), Type: strings.ToUpper(tokens[2]), ResolvedPath: resolved, Status: status}
+			currentFile = &CueFileReference{Path: normalizeCueReference(ref), Type: strings.ToUpper(tokens[2]), ResolvedPath: resolved, Status: status}
 			if diagnostic != "" {
 				appendCueDiagnostic(&document, diagnostic)
 			}
 		case "TRACK":
 			if currentFile == nil {
-				return cueDocument{}, fmt.Errorf("CUE line %d: TRACK before FILE", lineNumber+1)
+				return CueDocument{}, fmt.Errorf("CUE line %d: TRACK before FILE", lineNumber+1)
 			}
 			if len(tokens) < 3 || strings.ToUpper(tokens[2]) != "AUDIO" {
-				return cueDocument{}, fmt.Errorf("CUE line %d: unsupported CUE track", lineNumber+1)
+				return CueDocument{}, fmt.Errorf("CUE line %d: unsupported CUE track", lineNumber+1)
 			}
 			if trackCount >= maxCueTracks {
-				return cueDocument{}, fmt.Errorf("CUE contains too many TRACK declarations")
+				return CueDocument{}, fmt.Errorf("CUE contains too many TRACK declarations")
 			}
 			number, numberErr := strconv.Atoi(tokens[1])
 			if numberErr != nil || number < 1 || number > 999 {
-				return cueDocument{}, fmt.Errorf("CUE line %d: invalid TRACK number", lineNumber+1)
+				return CueDocument{}, fmt.Errorf("CUE line %d: invalid TRACK number", lineNumber+1)
 			}
 			flushTrack()
-			currentTrack = &cueTrack{Number: number, Indexes: make(map[int]int)}
+			currentTrack = &CueTrack{Number: number, Indexes: make(map[int]int)}
 			trackCount++
 		case "TITLE":
 			value := cueValue(tokens[1:])
@@ -918,17 +920,17 @@ func parseCueDocument(path string, containmentRoot ...string) (cueDocument, erro
 			}
 			indexNumber, indexErr := strconv.Atoi(tokens[1])
 			if indexErr != nil || indexNumber < 0 || indexNumber > 99 {
-				return cueDocument{}, fmt.Errorf("CUE line %d: invalid INDEX number", lineNumber+1)
+				return CueDocument{}, fmt.Errorf("CUE line %d: invalid INDEX number", lineNumber+1)
 			}
 			frames, frameErr := parseCueTimecode(tokens[2])
 			if frameErr != nil {
-				return cueDocument{}, fmt.Errorf("CUE line %d: %w", lineNumber+1, frameErr)
+				return CueDocument{}, fmt.Errorf("CUE line %d: %w", lineNumber+1, frameErr)
 			}
 			if currentTrack.Indexes == nil {
 				currentTrack.Indexes = make(map[int]int)
 			}
 			if _, duplicate := currentTrack.Indexes[indexNumber]; duplicate {
-				return cueDocument{}, fmt.Errorf("CUE line %d: duplicate INDEX number", lineNumber+1)
+				return CueDocument{}, fmt.Errorf("CUE line %d: duplicate INDEX number", lineNumber+1)
 			}
 			currentTrack.Indexes[indexNumber] = frames
 			if indexNumber == 1 {
@@ -939,7 +941,7 @@ func parseCueDocument(path string, containmentRoot ...string) (cueDocument, erro
 	}
 	flushFile()
 	if len(document.Files) == 0 || len(document.Tracks) == 0 {
-		return cueDocument{}, fmt.Errorf("incomplete CUE")
+		return CueDocument{}, fmt.Errorf("incomplete CUE")
 	}
 	for fileIndex := range document.Files {
 		fileRef := &document.Files[fileIndex]
@@ -1191,7 +1193,7 @@ func validateCueReference(cuePath, containmentRoot, reference string) (status, r
 	return "present", resolved, ""
 }
 
-func appendCueDiagnostic(document *cueDocument, diagnostic string) {
+func appendCueDiagnostic(document *CueDocument, diagnostic string) {
 	if document == nil || len(document.Diagnostics) >= maxCueDiagnostics || diagnostic == "" {
 		return
 	}
@@ -1222,11 +1224,11 @@ func truncateUTF8Bytes(value string, maxBytes int) string {
 	return string([]rune(value)[:safeRuneLimit(value, maxBytes)])
 }
 
-func cueDurationFrames(fileRef *cueFileReference) int {
+func cueDurationFrames(fileRef *CueFileReference) int {
 	if fileRef == nil || fileRef.Status != "present" || fileRef.ResolvedPath == "" {
 		return 0
 	}
-	observation, err := parseAudioFile(fileRef.ResolvedPath)
+	observation, err := ParseAudioFile(fileRef.ResolvedPath)
 	if err != nil || observation.DurationSeconds <= 0 {
 		return 0
 	}
@@ -1236,7 +1238,7 @@ func cueDurationFrames(fileRef *cueFileReference) int {
 	return int(math.Round(observation.DurationSeconds * 75))
 }
 
-func setCueTrackRanges(tracks []cueTrack, trackFileIDs []int, fileID, parentDuration int) bool {
+func setCueTrackRanges(tracks []CueTrack, trackFileIDs []int, fileID, parentDuration int) bool {
 	indices := make([]int, 0)
 	for index := range tracks {
 		if index < len(trackFileIDs) && trackFileIDs[index] == fileID {
@@ -1280,7 +1282,7 @@ func supportedCueFileType(value string) bool {
 	}
 }
 
-func parseAudioFile(path string) (audioObservation, error) {
+func ParseAudioFile(path string) (AudioObservation, error) {
 	extension := strings.ToLower(filepath.Ext(path))
 	switch extension {
 	case ".flac":
@@ -1296,23 +1298,23 @@ func parseAudioFile(path string) (audioObservation, error) {
 	case ".m4a":
 		return parseM4A(path)
 	default:
-		return audioObservation{}, fmt.Errorf("unsupported format")
+		return AudioObservation{}, fmt.Errorf("unsupported format")
 	}
 }
 
-func parseOgg(path string) (audioObservation, error) {
+func parseOgg(path string) (AudioObservation, error) {
 	return parseOggStream(path, false)
 }
 
-func parseOggStream(path string, requireOpus bool) (audioObservation, error) {
+func parseOggStream(path string, requireOpus bool) (AudioObservation, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return audioObservation{}, err
+		return AudioObservation{}, err
 	}
 	if len(data) < 27 || string(data[:4]) != "OggS" {
-		return audioObservation{}, fmt.Errorf("invalid OGG stream")
+		return AudioObservation{}, fmt.Errorf("invalid OGG stream")
 	}
-	o := audioObservation{SourceKind: "ogg_vorbis_comment", InferredFields: map[string]bool{}}
+	o := AudioObservation{SourceKind: "ogg_vorbis_comment", InferredFields: map[string]bool{}}
 	opusHead := false
 	codecHeader := false
 	pos := 0
@@ -1371,27 +1373,27 @@ func parseOggStream(path string, requireOpus bool) (audioObservation, error) {
 	return applyFilenameFallback(path, o), nil
 }
 
-func parseOpus(path string) (audioObservation, error) { return parseOggStream(path, true) }
+func parseOpus(path string) (AudioObservation, error) { return parseOggStream(path, true) }
 
-func parseWAV(path string) (audioObservation, error) {
+func parseWAV(path string) (AudioObservation, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return audioObservation{}, err
+		return AudioObservation{}, err
 	}
 	defer file.Close()
 	info, err := file.Stat()
 	if err != nil {
-		return audioObservation{}, err
+		return AudioObservation{}, err
 	}
 	var header [12]byte
 	if _, err := io.ReadFull(file, header[:]); err != nil || string(header[:4]) != "RIFF" || string(header[8:12]) != "WAVE" {
-		return audioObservation{}, fmt.Errorf("invalid WAV stream")
+		return AudioObservation{}, fmt.Errorf("invalid WAV stream")
 	}
 	declaredEnd := int64(binary.LittleEndian.Uint32(header[4:8])) + 8
 	if declaredEnd < 12 || declaredEnd > info.Size() {
-		return audioObservation{}, fmt.Errorf("truncated WAV stream")
+		return AudioObservation{}, fmt.Errorf("truncated WAV stream")
 	}
-	o := audioObservation{SourceKind: "wav_info", InferredFields: map[string]bool{}, Codec: "wav"}
+	o := AudioObservation{SourceKind: "wav_info", InferredFields: map[string]bool{}, Codec: "wav"}
 	var byteRate int
 	var foundFormat bool
 	var dataBytes int64
@@ -1447,7 +1449,7 @@ func parseWAV(path string) (audioObservation, error) {
 		position += paddedSize
 	}
 	if !foundFormat || dataBytes <= 0 {
-		return audioObservation{}, fmt.Errorf("invalid WAV stream: missing audio chunks")
+		return AudioObservation{}, fmt.Errorf("invalid WAV stream: missing audio chunks")
 	}
 	if byteRate > 0 && dataBytes > 0 {
 		o.DurationSeconds = float64(dataBytes) / float64(byteRate)
@@ -1456,7 +1458,7 @@ func parseWAV(path string) (audioObservation, error) {
 	return applyFilenameFallback(path, o), nil
 }
 
-func parseWAVFormat(chunk []byte, observation *audioObservation, byteRate *int) error {
+func parseWAVFormat(chunk []byte, observation *AudioObservation, byteRate *int) error {
 	if len(chunk) < 16 {
 		return fmt.Errorf("invalid WAV format chunk")
 	}
@@ -1481,7 +1483,7 @@ func parseWAVFormat(chunk []byte, observation *audioObservation, byteRate *int) 
 	return nil
 }
 
-func parseWAVInfo(chunk []byte, observation *audioObservation) {
+func parseWAVInfo(chunk []byte, observation *AudioObservation) {
 	if len(chunk) < 4 || string(chunk[:4]) != "INFO" {
 		return
 	}
@@ -1508,17 +1510,17 @@ func parseWAVInfo(chunk []byte, observation *audioObservation) {
 	}
 }
 
-func parseFLAC(path string) (audioObservation, error) {
+func parseFLAC(path string) (AudioObservation, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return audioObservation{}, err
+		return AudioObservation{}, err
 	}
 	defer file.Close()
 	magic := make([]byte, 4)
 	if _, err = io.ReadFull(file, magic); err != nil || string(magic) != "fLaC" {
-		return audioObservation{}, fmt.Errorf("invalid FLAC stream")
+		return AudioObservation{}, fmt.Errorf("invalid FLAC stream")
 	}
-	observation := audioObservation{SourceKind: "flac_vorbis_comment", InferredFields: make(map[string]bool), Codec: "flac"}
+	observation := AudioObservation{SourceKind: "flac_vorbis_comment", InferredFields: make(map[string]bool), Codec: "flac"}
 	var fileSize int64
 	if info, statErr := file.Stat(); statErr == nil {
 		fileSize = info.Size()
@@ -1551,7 +1553,7 @@ func parseFLAC(path string) (audioObservation, error) {
 	return applyFilenameFallback(path, observation), nil
 }
 
-func parseFLACStreamInfo(block []byte, fileSize int64, observation *audioObservation) error {
+func parseFLACStreamInfo(block []byte, fileSize int64, observation *AudioObservation) error {
 	if len(block) != 34 {
 		return fmt.Errorf("invalid FLAC STREAMINFO length")
 	}
@@ -1585,7 +1587,7 @@ func estimatedBitrateKbps(fileSize int64, durationSeconds float64) int {
 	return int(bitrate)
 }
 
-func parseVorbisComments(block []byte, observation *audioObservation) {
+func parseVorbisComments(block []byte, observation *AudioObservation) {
 	reader := bufio.NewReader(strings.NewReader(string(block)))
 	var vendorLength uint32
 	if binary.Read(reader, binary.LittleEndian, &vendorLength) != nil {
@@ -1619,13 +1621,13 @@ func parseVorbisComments(block []byte, observation *audioObservation) {
 	}
 }
 
-func parseMP3(path string) (audioObservation, error) {
+func parseMP3(path string) (AudioObservation, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return audioObservation{}, err
+		return AudioObservation{}, err
 	}
 	defer file.Close()
-	observation := audioObservation{SourceKind: "mp3_id3v2", InferredFields: make(map[string]bool), Codec: "mp3"}
+	observation := AudioObservation{SourceKind: "mp3_id3v2", InferredFields: make(map[string]bool), Codec: "mp3"}
 	header := make([]byte, 10)
 	if _, err = io.ReadFull(file, header); err != nil {
 		return observation, fmt.Errorf("invalid MP3 stream")
@@ -1654,7 +1656,7 @@ func parseMP3(path string) (audioObservation, error) {
 	return applyFilenameFallback(path, observation), nil
 }
 
-func parseID3Frames(data []byte, observation *audioObservation) {
+func parseID3Frames(data []byte, observation *AudioObservation) {
 	for offset := 0; offset+10 <= len(data); {
 		frameID := string(data[offset : offset+4])
 		frameSize := int(binary.BigEndian.Uint32(data[offset+4 : offset+8]))
@@ -1694,7 +1696,7 @@ func parseID3Frames(data []byte, observation *audioObservation) {
 		case "TCON":
 			observation.Genre = value
 		case "TDRC", "TYER":
-			observation.Year = parseYear(value)
+			observation.Year = ParseYear(value)
 		case "TSRC":
 			observation.ISRC = value
 		case "TCOM":
@@ -1717,7 +1719,7 @@ var (
 
 // applyMP3AudioFacts 只在 ID3 后的有界窗口中寻找 MPEG Layer III 首帧，
 // 不把整首音频读入内存。找不到有效帧时保留已解析标签，不伪造音频事实。
-func applyMP3AudioFacts(reader io.ReaderAt, fileSize, audioStart int64, observation *audioObservation) {
+func applyMP3AudioFacts(reader io.ReaderAt, fileSize, audioStart int64, observation *AudioObservation) {
 	if reader == nil || observation == nil || fileSize <= audioStart || audioStart < 0 {
 		return
 	}
@@ -1881,7 +1883,7 @@ func parseNumber(value string) int {
 	returnValue, _ := strconv.Atoi(strings.SplitN(value, "/", 2)[0])
 	return returnValue
 }
-func setAudioTag(observation *audioObservation, key, value string) {
+func setAudioTag(observation *AudioObservation, key, value string) {
 	value = metadata.BoundedText(value)
 	switch strings.ToUpper(key) {
 	case "TITLE", "TRACKTITLE":
@@ -1899,7 +1901,7 @@ func setAudioTag(observation *audioObservation, key, value string) {
 	case "GENRE":
 		observation.Genre = value
 	case "DATE", "YEAR":
-		observation.Year = parseYear(value)
+		observation.Year = ParseYear(value)
 	case "CATALOG", "CATALOGNUMBER", "CATALOGNO":
 		observation.Catalog = value
 	case "LABEL", "PUBLISHER", "ORGANIZATION":
@@ -1931,7 +1933,7 @@ func setAudioTag(observation *audioObservation, key, value string) {
 	}
 }
 
-func addObservationCredits(observation *audioObservation, role, value string) {
+func addObservationCredits(observation *AudioObservation, role, value string) {
 	if observation == nil {
 		return
 	}
@@ -1957,7 +1959,7 @@ func addObservationCredits(observation *audioObservation, role, value string) {
 func splitCreditNames(value string) []string {
 	return metadata.CanonicalArtistNames(value)
 }
-func applyFilenameFallback(path string, observation audioObservation) audioObservation {
+func applyFilenameFallback(path string, observation AudioObservation) AudioObservation {
 	if observation.InferredFields == nil {
 		observation.InferredFields = make(map[string]bool)
 	}

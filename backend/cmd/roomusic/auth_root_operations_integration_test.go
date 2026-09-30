@@ -18,6 +18,7 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/qlqq/roomusic/backend/internal/library"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
@@ -485,37 +486,6 @@ func TestPostgreSQLUserTransactionProtectsLastAdmin(t *testing.T) {
 	requireAPIError(t, response, http.StatusNotFound, "not_found")
 }
 
-func TestPostgreSQLSaveObservationCreatesSeparateDiscMedia(t *testing.T) {
-	application := newIntegrationTestApplication(t)
-	rootID := uuid.New()
-	rootPath := filepath.Join(application.allowedRoot, "multi-disc")
-	if err := os.MkdirAll(rootPath, 0o755); err != nil {
-		t.Fatalf("create root fixture: %v", err)
-	}
-	if _, err := application.database.connection.Exec(`INSERT INTO library_roots(id,path,status,revision) VALUES($1::uuid,$2,'active',1)`, rootID, rootPath); err != nil {
-		t.Fatalf("insert root fixture: %v", err)
-	}
-	scanID := uuid.New()
-	if _, err := application.database.connection.Exec(`INSERT INTO scan_runs(id,status,started_at) VALUES($1::uuid,'running',NOW())`, scanID); err != nil {
-		t.Fatalf("insert scan fixture: %v", err)
-	}
-	root := registeredRoot{ID: rootID, Path: rootPath}
-	roomusic := &roomusicApplication{config: serverConfig{DataDirectory: t.TempDir()}, database: application.database, logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
-	for _, disc := range []int{1, 2} {
-		observation := audioObservation{Album: "Two Disc", Artist: "Artist", Title: fmt.Sprintf("Track %d", disc), TrackNumber: 1, DiscNumber: disc}
-		if err := roomusic.saveObservation(context.Background(), scanID, root, fmt.Sprintf("disc%d/track.flac", disc), observation); err != nil {
-			t.Fatalf("save disc %d observation: %v", disc, err)
-		}
-	}
-	var mediaCount int
-	if err := application.database.connection.QueryRow(`SELECT COUNT(*) FROM media m JOIN releases r ON r.id=m.release_id WHERE r.source_root_id=$1::uuid`, rootID).Scan(&mediaCount); err != nil {
-		t.Fatalf("count media: %v", err)
-	}
-	if mediaCount != 2 {
-		t.Fatalf("expected two media rows, got %d", mediaCount)
-	}
-}
-
 func decodeJSONMap(t *testing.T, response *httptest.ResponseRecorder) map[string]any {
 	t.Helper()
 	var result map[string]any
@@ -686,7 +656,7 @@ func TestPostgreSQLScanCancellationIsPersistentAndIdempotent(t *testing.T) {
 	if first.Code != http.StatusAccepted {
 		t.Fatalf("first cancel: HTTP %d: %s", first.Code, first.Body.String())
 	}
-	var firstBody scanDTO
+	var firstBody library.Scan
 	if err := json.Unmarshal(first.Body.Bytes(), &firstBody); err != nil {
 		t.Fatalf("decode first cancel: %v", err)
 	}
@@ -698,7 +668,7 @@ func TestPostgreSQLScanCancellationIsPersistentAndIdempotent(t *testing.T) {
 	if second.Code != http.StatusAccepted {
 		t.Fatalf("second cancel: HTTP %d: %s", second.Code, second.Body.String())
 	}
-	var secondBody scanDTO
+	var secondBody library.Scan
 	if err := json.Unmarshal(second.Body.Bytes(), &secondBody); err != nil {
 		t.Fatalf("decode second cancel: %v", err)
 	}
@@ -709,85 +679,5 @@ func TestPostgreSQLScanCancellationIsPersistentAndIdempotent(t *testing.T) {
 	active := roomusic.request(t, http.MethodGet, "/api/v1/scans/active", nil, &admin, nil)
 	if active.Code != http.StatusOK || !strings.Contains(active.Body.String(), scanID) {
 		t.Fatalf("active scan response: HTTP %d: %s", active.Code, active.Body.String())
-	}
-}
-
-func TestPostgreSQLScanRecoverySkipsLiveHolder(t *testing.T) {
-	roomusic := newIntegrationTestApplication(t)
-	scanID := uuid.New()
-	if _, err := roomusic.database.connection.Exec(`INSERT INTO scan_runs(id,status,started_at) VALUES($1::uuid,'running',NOW())`, scanID); err != nil {
-		t.Fatalf("insert running scan: %v", err)
-	}
-	holder, acquired, err := acquireScanExecution(context.Background(), roomusic.database.connection)
-	if err != nil || !acquired {
-		t.Fatalf("acquire live holder: acquired=%v err=%v", acquired, err)
-	}
-
-	if err := recoverInterruptedScans(context.Background(), roomusic.database.connection); err != nil {
-		t.Fatalf("recover while holder is live: %v", err)
-	}
-	var status string
-	if err := roomusic.database.connection.QueryRow(`SELECT status FROM scan_runs WHERE id=$1::uuid`, scanID).Scan(&status); err != nil {
-		t.Fatalf("query scan status: %v", err)
-	}
-	if status != "running" {
-		t.Fatalf("live scan was recovered as %q", status)
-	}
-
-	if err := holder.close(context.Background()); err != nil {
-		t.Fatalf("release live holder: %v", err)
-	}
-	if err := recoverInterruptedScans(context.Background(), roomusic.database.connection); err != nil {
-		t.Fatalf("recover stale scan: %v", err)
-	}
-	if err := roomusic.database.connection.QueryRow(`SELECT status FROM scan_runs WHERE id=$1::uuid`, scanID).Scan(&status); err != nil {
-		t.Fatalf("query recovered scan status: %v", err)
-	}
-	if status != "incomplete" {
-		t.Fatalf("stale scan status = %q, want incomplete", status)
-	}
-}
-
-func TestPostgreSQLCanceledScanDoesNotReconcileMissingSources(t *testing.T) {
-	application := newIntegrationTestApplication(t)
-	rootID := uuid.New()
-	rootPath := filepath.Join(application.allowedRoot, "cancel-safe")
-	if err := os.MkdirAll(rootPath, 0o755); err != nil {
-		t.Fatalf("create root fixture: %v", err)
-	}
-	if _, err := application.database.connection.Exec(`INSERT INTO library_roots(id,path,status,revision) VALUES($1::uuid,$2,'active',1)`, rootID, rootPath); err != nil {
-		t.Fatalf("insert root fixture: %v", err)
-	}
-	scanID := uuid.New()
-	if _, err := application.database.connection.Exec(`INSERT INTO scan_runs(id,status,started_at,cancel_requested_at) VALUES($1::uuid,'running',NOW(),NOW())`, scanID); err != nil {
-		t.Fatalf("insert canceled scan fixture: %v", err)
-	}
-	roomusic := &roomusicApplication{config: serverConfig{DataDirectory: t.TempDir()}, database: application.database, logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
-	root := registeredRoot{ID: rootID, Path: rootPath}
-	observation := audioObservation{Album: "Album", Artist: "Artist", Title: "Track", TrackNumber: 1, DiscNumber: 1}
-	if err := roomusic.saveObservation(context.Background(), scanID, root, "track.flac", observation); err != nil {
-		t.Fatalf("save observation: %v", err)
-	}
-	if _, err := application.database.connection.Exec(`UPDATE tracks SET observed_at=NOW()-INTERVAL '1 hour' WHERE source_root_id=$1::uuid`, rootID); err != nil {
-		t.Fatalf("age observation: %v", err)
-	}
-	holder, acquired, err := acquireScanExecution(context.Background(), application.database.connection)
-	if err != nil || !acquired {
-		t.Fatalf("acquire scan holder: acquired=%v err=%v", acquired, err)
-	}
-	defer holder.close(context.Background())
-	status, err := roomusic.finalizeScan(context.Background(), holder.connection, scanID, []string{rootID}, scanOutcome{Complete: true})
-	if err != nil {
-		t.Fatalf("finalize canceled scan: %v", err)
-	}
-	if status != "canceled" {
-		t.Fatalf("terminal status = %q, want canceled", status)
-	}
-	var sourceStatus string
-	if err := application.database.connection.QueryRow(`SELECT source_status FROM tracks WHERE source_root_id=$1::uuid`, rootID).Scan(&sourceStatus); err != nil {
-		t.Fatalf("query source status: %v", err)
-	}
-	if sourceStatus != "present" {
-		t.Fatalf("canceled scan marked source %q", sourceStatus)
 	}
 }

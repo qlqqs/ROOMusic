@@ -1,4 +1,4 @@
-package main
+package parser
 
 import (
 	"bytes"
@@ -13,6 +13,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
+	"github.com/qlqq/roomusic/backend/internal/library/parser/parsertest"
 )
 
 func TestParseM4AReaderParsesLateMoovAndRawITunesAtoms(t *testing.T) {
@@ -129,7 +130,7 @@ func TestParseM4AWriterAndAllowlistedFreeformMetadata(t *testing.T) {
 	items = append(items, repairM4AFreeform("LABEL", "Example Label")...)
 	items = append(items, repairM4AFreeform("UPC", "012345678901")...)
 	items = append(items, repairM4AFreeform("PRIVATE_NOTE", "must stay unmapped")...)
-	observation := audioObservation{InferredFields: map[string]bool{}, RawAtoms: map[string]string{}}
+	observation := AudioObservation{InferredFields: map[string]bool{}, RawAtoms: map[string]string{}}
 	parseM4AAtoms(repairM4AAtom("ilst", items), &observation)
 
 	if observation.Label != "Example Label" || observation.Barcode != "012345678901" {
@@ -276,7 +277,7 @@ func TestParseMP3AttachedPictureKeepsMIMESeparateFromDescription(t *testing.T) {
 }
 
 func TestFilenameFallbackMarksOnlyMissingPositionsInferred(t *testing.T) {
-	inferred := applyFilenameFallback(filepath.Join("Album", "track.flac"), audioObservation{
+	inferred := applyFilenameFallback(filepath.Join("Album", "track.flac"), AudioObservation{
 		Title:          "Track",
 		Artist:         "Artist",
 		Album:          "Album",
@@ -286,7 +287,7 @@ func TestFilenameFallbackMarksOnlyMissingPositionsInferred(t *testing.T) {
 		t.Fatalf("missing positions were not marked as inferred: %+v", inferred)
 	}
 
-	explicit := applyFilenameFallback(filepath.Join("Album", "track.flac"), audioObservation{
+	explicit := applyFilenameFallback(filepath.Join("Album", "track.flac"), AudioObservation{
 		Title:          "Track",
 		Artist:         "Artist",
 		Album:          "Album",
@@ -298,7 +299,7 @@ func TestFilenameFallbackMarksOnlyMissingPositionsInferred(t *testing.T) {
 		t.Fatalf("explicit position 1 was downgraded to fallback evidence: %+v", explicit)
 	}
 
-	invalid := applyFilenameFallback(filepath.Join("Album", "track.flac"), audioObservation{
+	invalid := applyFilenameFallback(filepath.Join("Album", "track.flac"), AudioObservation{
 		TrackNumber:    -1,
 		DiscNumber:     -2,
 		InferredFields: map[string]bool{},
@@ -404,7 +405,7 @@ func TestParseOggAndOpusIdentificationFacts(t *testing.T) {
 func TestParseCueDocumentSupportsMultiFileMetadataAndIndexRanges(t *testing.T) {
 	temporaryDirectory := t.TempDir()
 	for _, name := range []string{"disc one.flac", "disc two.flac"} {
-		if err := os.WriteFile(filepath.Join(temporaryDirectory, name), repairFLACFixture(), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(temporaryDirectory, name), parsertest.FLACStream(), 0o644); err != nil {
 			t.Fatalf("write referenced fixture: %v", err)
 		}
 	}
@@ -434,7 +435,7 @@ func TestParseCueDocumentSupportsMultiFileMetadataAndIndexRanges(t *testing.T) {
 		t.Fatalf("write CUE fixture: %v", err)
 	}
 
-	document, err := parseCueDocument(path)
+	document, err := ParseCueDocument(path)
 	if err != nil {
 		t.Fatalf("parse multi-file CUE: %v", err)
 	}
@@ -468,7 +469,7 @@ func TestParseCueDocumentSupportsMultiFileMetadataAndIndexRanges(t *testing.T) {
 
 func TestParseCueDocumentDecodesSupportedEncodingsAndReportsUnsafeReference(t *testing.T) {
 	temporaryDirectory := t.TempDir()
-	if err := os.WriteFile(filepath.Join(temporaryDirectory, "track.flac"), repairFLACFixture(), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(temporaryDirectory, "track.flac"), parsertest.FLACStream(), 0o644); err != nil {
 		t.Fatalf("write referenced fixture: %v", err)
 	}
 	base := "TITLE \"专辑\"\nFILE \"track.flac\" FLAC\nTRACK 01 AUDIO\nTITLE \"曲目\"\nINDEX 01 00:00:00\n"
@@ -487,7 +488,7 @@ func TestParseCueDocumentDecodesSupportedEncodingsAndReportsUnsafeReference(t *t
 			if err := os.WriteFile(path, encodingCase.data, 0o644); err != nil {
 				t.Fatalf("write encoded CUE: %v", err)
 			}
-			document, err := parseCueDocument(path)
+			document, err := ParseCueDocument(path)
 			if err != nil {
 				t.Fatalf("parse %s CUE: %v", encodingCase.name, err)
 			}
@@ -502,7 +503,7 @@ func TestParseCueDocumentDecodesSupportedEncodingsAndReportsUnsafeReference(t *t
 	if err := os.WriteFile(unsafePath, []byte(unsafe), 0o644); err != nil {
 		t.Fatalf("write unsafe CUE: %v", err)
 	}
-	document, err := parseCueDocument(unsafePath)
+	document, err := ParseCueDocument(unsafePath)
 	if err != nil {
 		t.Fatalf("unsafe FILE should be a diagnostic, not syntax failure: %v", err)
 	}
@@ -513,7 +514,7 @@ func TestParseCueDocumentDecodesSupportedEncodingsAndReportsUnsafeReference(t *t
 
 func TestParseCueDecoderSupportsGBKShiftJISAndBig5(t *testing.T) {
 	temporaryDirectory := t.TempDir()
-	if err := os.WriteFile(filepath.Join(temporaryDirectory, "track.flac"), repairFLACFixture(), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(temporaryDirectory, "track.flac"), parsertest.FLACStream(), 0o644); err != nil {
 		t.Fatalf("write referenced FLAC: %v", err)
 	}
 	testCases := []struct {
@@ -535,7 +536,7 @@ func TestParseCueDecoderSupportsGBKShiftJISAndBig5(t *testing.T) {
 			if err := os.WriteFile(path, data, 0o644); err != nil {
 				t.Fatalf("write %s CUE: %v", testCase.name, err)
 			}
-			document, err := parseCueDocument(path)
+			document, err := ParseCueDocument(path)
 			if err != nil {
 				t.Fatalf("parse %s CUE: %v", testCase.name, err)
 			}
@@ -560,7 +561,7 @@ func TestParseCueDocumentBoundsInputAndSymlinkContainment(t *testing.T) {
 	if err := oversized.Close(); err != nil {
 		t.Fatalf("close oversized CUE: %v", err)
 	}
-	if _, err := parseCueDocument(oversizedPath); err == nil {
+	if _, err := ParseCueDocument(oversizedPath); err == nil {
 		t.Fatal("oversized CUE was accepted")
 	}
 	if _, _, err := decodeCueText([]byte{0xff, 0xfe, 0x00, 0xd8}); err == nil {
@@ -581,7 +582,7 @@ func TestParseCueDocumentBoundsInputAndSymlinkContainment(t *testing.T) {
 	insidePath := filepath.Join(cueDirectory, "sub", "track.flac")
 	outsidePath := filepath.Join(outsideDirectory, "outside.flac")
 	for _, path := range []string{insidePath, outsidePath} {
-		if err := os.WriteFile(path, repairFLACFixture(), 0o644); err != nil {
+		if err := os.WriteFile(path, parsertest.FLACStream(), 0o644); err != nil {
 			t.Fatalf("write referenced FLAC: %v", err)
 		}
 	}
@@ -593,7 +594,7 @@ func TestParseCueDocumentBoundsInputAndSymlinkContainment(t *testing.T) {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write path CUE: %v", err)
 	}
-	document, err := parseCueDocument(path)
+	document, err := ParseCueDocument(path)
 	if err != nil {
 		t.Fatalf("parse path CUE: %v", err)
 	}
@@ -611,7 +612,7 @@ func TestParseCueDocumentAllowsParentReferenceWithinExplicitRoot(t *testing.T) {
 	if err := os.MkdirAll(cueDirectory, 0o755); err != nil {
 		t.Fatalf("create sheet directory: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(libraryRoot, "track.flac"), repairFLACFixture(), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(libraryRoot, "track.flac"), parsertest.FLACStream(), 0o644); err != nil {
 		t.Fatalf("write parent audio: %v", err)
 	}
 	path := filepath.Join(cueDirectory, "album.cue")
@@ -619,10 +620,10 @@ func TestParseCueDocumentAllowsParentReferenceWithinExplicitRoot(t *testing.T) {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write parent-reference CUE: %v", err)
 	}
-	if document, err := parseCueDocument(path, libraryRoot); err != nil || document.Files[0].Status != "present" {
+	if document, err := ParseCueDocument(path, libraryRoot); err != nil || document.Files[0].Status != "present" {
 		t.Fatalf("contained parent reference was rejected: doc=%+v err=%v", document, err)
 	}
-	if document, err := parseCueDocument(path); err != nil || document.Files[0].Status != "unsafe" {
+	if document, err := ParseCueDocument(path); err != nil || document.Files[0].Status != "unsafe" {
 		t.Fatalf("default CUE-directory boundary was not conservative: doc=%+v err=%v", document, err)
 	}
 }
@@ -639,7 +640,7 @@ func TestParseCueDocumentRejectsNonRegularReference(t *testing.T) {
 		t.Fatalf("write FIFO-reference CUE: %v", err)
 	}
 
-	document, err := parseCueDocument(path)
+	document, err := ParseCueDocument(path)
 	if err != nil {
 		t.Fatalf("non-regular reference should be diagnosed, not fail syntax parsing: %v", err)
 	}
@@ -654,7 +655,7 @@ func TestParseCueDocumentRejectsNonRegularReference(t *testing.T) {
 func TestParseCueDocumentClassifiesMalformedIndexSequences(t *testing.T) {
 	temporaryDirectory := t.TempDir()
 	audioPath := filepath.Join(temporaryDirectory, "track.flac")
-	if err := os.WriteFile(audioPath, repairFLACFixture(), 0o644); err != nil {
+	if err := os.WriteFile(audioPath, parsertest.FLACStream(), 0o644); err != nil {
 		t.Fatalf("write referenced FLAC: %v", err)
 	}
 	duplicatePath := filepath.Join(temporaryDirectory, "duplicate.cue")
@@ -662,7 +663,7 @@ func TestParseCueDocumentClassifiesMalformedIndexSequences(t *testing.T) {
 	if err := os.WriteFile(duplicatePath, []byte(duplicate), 0o644); err != nil {
 		t.Fatalf("write duplicate-index CUE: %v", err)
 	}
-	if _, err := parseCueDocument(duplicatePath); err == nil {
+	if _, err := ParseCueDocument(duplicatePath); err == nil {
 		t.Fatal("duplicate INDEX number was accepted")
 	}
 
@@ -671,7 +672,7 @@ func TestParseCueDocumentClassifiesMalformedIndexSequences(t *testing.T) {
 	if err := os.WriteFile(nonMonotonicPath, []byte(nonMonotonic), 0o644); err != nil {
 		t.Fatalf("write non-monotonic CUE: %v", err)
 	}
-	document, err := parseCueDocument(nonMonotonicPath)
+	document, err := ParseCueDocument(nonMonotonicPath)
 	if err != nil {
 		t.Fatalf("non-monotonic INDEX should produce a diagnostic: %v", err)
 	}
@@ -684,7 +685,7 @@ func TestParseCueDocumentClassifiesMalformedIndexSequences(t *testing.T) {
 	if err := os.WriteFile(missingPath, []byte(missing), 0o644); err != nil {
 		t.Fatalf("write missing-index CUE: %v", err)
 	}
-	if document, err := parseCueDocument(missingPath); err != nil || len(document.Diagnostics) == 0 {
+	if document, err := ParseCueDocument(missingPath); err != nil || len(document.Diagnostics) == 0 {
 		t.Fatalf("document parser did not retain missing-index diagnostic: doc=%+v err=%v", document, err)
 	}
 	if _, _, err := parseCue(missingPath); err == nil {
@@ -710,21 +711,6 @@ func repairOggPage(packet []byte) []byte {
 	page[27] = byte(len(packet))
 	copy(page[28:], packet)
 	return page
-}
-
-func repairFLACFixture() []byte {
-	streamInfo := make([]byte, 34)
-	const sampleRate = 44100
-	const channels = 2
-	const bitDepth = 16
-	const durationSeconds = 240
-	totalSamples := uint64(sampleRate * durationSeconds)
-	packed := uint64(sampleRate)<<44 | uint64(channels-1)<<41 | uint64(bitDepth-1)<<36 | totalSamples
-	binary.BigEndian.PutUint64(streamInfo[10:18], packed)
-	comments := make([]byte, 8)
-	result := append([]byte{'f', 'L', 'a', 'C', 0, 0, 0, byte(len(streamInfo))}, streamInfo...)
-	result = append(result, []byte{0x84, 0, 0, byte(len(comments))}...)
-	return append(result, comments...)
 }
 
 func repairFLACComments(comments ...string) []byte {

@@ -84,7 +84,7 @@
 | R2 | 依赖方向 | 满足 design 的依赖规则：<br>• `catalog`、`catalog/metadata`、`catalog/artwork`、`library`、`library/parser` 不导入 `net/http`；<br>• 能力包之间只经公开合同调用，不导入其他能力的 `httpapi`；<br>• `internal/app/dependency_rules_test.go` 持续检查，CI 自动运行 |
 | R3 | 对外行为不变 | 以下都不变：路由模式、JSON 形状、状态码、错误码与文案、完成日志字段、SQL 文本与事务边界、迁移文件、暂存观察的 JSON 形状。<br>证据：<br>• 现有测试只改包名、导入和标识符，断言不改，全部通过；<br>• 新增路由表测试，证明每个“方法 + 路径”仍解析到原模式，`/api` 兜底仍为 `<unmatched>` |
 | R4 | 所有权修正 | • Release 图写入、missing 对账、封面关联与受管存储归 catalog；<br>• 文件夹封面发现与扫描编排归 library；<br>• 打开数据库不再夹带扫描恢复，改由 `main` 紧接着调用，失败仍进入降级模式。<br>扫描持久化、封面、取消与恢复相关测试全部通过 |
-| R5 | handler 处理（D1） | • `catalog/httpapi` 只做参数解析、鉴权与响应映射，没有 SQL；<br>• 扫描启动编排在 `library`，返回类型化结果；<br>• 目录、目录操作、身份的 handler 原样搬进各自的 httpapi，技术债写进 `directory-structure.md` |
+| R5 | handler 处理（D1） | • `catalog/httpapi` 只做参数解析、鉴权与响应映射，没有 SQL；<br>• 扫描相关 handler（启动、查询、取消、诊断）只做解析、鉴权与响应映射，用例在 `library.Service`，以哨兵错误区分失败点；<br>• 目录、目录操作、身份的 handler 原样搬进各自的 httpapi，技术债写进 `directory-structure.md` |
 | R6 | 死代码 | design 列出的无调用函数被删除；`recordingResponseWriter.Unwrap` 保留 |
 | R7 | 测试与门禁 | • 测试随被测代码归属移动；<br>• 测试函数数量不少于基线 161，死代码对应的测试除外，完成时逐项列出；<br>• `scripts/test-integration.sh` 覆盖 `./...`；<br>• 每步都通过 implement 列出的门禁：gofmt、vet、build、全量测试、race、集成脚本、`git diff --check` |
 | R8 | 文档 | • 指向 `backend/cmd/roomusic/*.go` 的链接全部改到新位置；<br>• 规范写明实际布局与技术债；<br>• 路线图、架构图、父任务更新 B0 状态；<br>• M1a 与阶段 I 的 PRD 不再引用旧路径 |
