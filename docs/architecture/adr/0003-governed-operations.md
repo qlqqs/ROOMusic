@@ -3,7 +3,7 @@
 ## 状态与决策边界
 
 - 状态：**部分批准**（2026-09-28、2026-09-29）：第九节第 1 项中的 M3 首批试点范围（2026-09-28），以及第 4 项中的目录目标绑定缺口与旧记录策略（2026-09-29，F2）已批准；其余内容仍是草案，未授权新增权限或业务实施。
-- 核对日期：2026-09-27；代码证据基线：`6cf76ec`。
+- 核对日期：2026-09-27；代码证据基线：`6cf76ec`。B0（2026-09-30）拆包后，下文代码链接已更新到新位置；核对结论仍以该基线为准。
 - 范围依据：[Core 1 路线](../core-1-roadmap.md)与[架构决策摘要](../architecture-decisions.md)。
   下文风险分类、审批政策和 `editor` 均未获实施批准，在 M3 规划时裁决。
 - 推荐方向：从目录管理和有限元数据修正提炼最小共同操作合同，保留类型化业务执行器，
@@ -26,15 +26,15 @@
 
 | 定位 | 当前事实 | 不能据此宣称 |
 | --- | --- | --- |
-| [0006_multi_user.sql](../../../backend/migrations/0006_multi_user.sql)、[security.go](../../../backend/cmd/roomusic/security.go)：`currentUser`、`requireAdmin` | 用户角色仅 `admin`、`user`；会话查询检查到期、撤销与用户禁用；管理员检查在后端 | 已有 `editor`、自定义权限或 Agent 身份授权 |
-| [application.go](../../../backend/cmd/roomusic/application.go)：`buildApplication`、`addRoot` | 有目录注册、停用、恢复和目录操作列表；注册验证允许根和路径安全，要求同源、管理员及幂等键 | 有通用变更集、审批队列、任意历史点恢复 API |
-| [root_operations.go](../../../backend/cmd/roomusic/root_operations.go)：`updateRoot`、`restoreRoot` | 锁定目录行，检查 `expected_revision` 和状态；资源修改与成功操作记录同事务，revision 递增 | 对所有业务写入均有 revision/事务治理 |
+| [0006_multi_user.sql](../../../backend/migrations/0006_multi_user.sql)、[guard.go](../../../backend/internal/identity/guard.go)：`Authenticate`、`RequireAdmin` | 用户角色仅 `admin`、`user`；会话查询检查到期、撤销与用户禁用；管理员检查在后端 | 已有 `editor`、自定义权限或 Agent 身份授权 |
+| [app.go](../../../backend/internal/app/app.go)、[roots.go](../../../backend/internal/library/httpapi/roots.go)：`New`、`addRoot` | 有目录注册、停用、恢复和目录操作列表；注册验证允许根和路径安全，要求同源、管理员及幂等键 | 有通用变更集、审批队列、任意历史点恢复 API |
+| [root_operations.go](../../../backend/internal/library/httpapi/root_operations.go)：`updateRoot`、`restoreRoot` | 锁定目录行，检查 `expected_revision` 和状态；资源修改与成功操作记录同事务，revision 递增 | 对所有业务写入均有 revision/事务治理 |
 | [0007_root_operations.sql](../../../backend/migrations/0007_root_operations.sql) | `library_root_operations` 保存 actor、类型、幂等键/指纹、前后状态、revision、响应、request ID；类型限于 create/disable/restore | 已有独立 Change Set、追加式生命周期 Journal、审批对象、检查点仓库或逆操作注册表 |
-| [root_operations.go](../../../backend/cmd/roomusic/root_operations.go)：`beginRootOperation`、`rootOperations` | 目录新增/停用/恢复共用入口：按 actor/操作类型/幂等键在事务内加锁后查结果，指纹含目标，同键请求串行；历史只向管理员返回最近 100 条安全摘要 | 目录以外的作用域、任意作用域的完整审计检索、任意操作链重放或通用并发重试已全面验证 |
-| [application.go](../../../backend/cmd/roomusic/application.go)：`createUser`、`updateUser`、`revokeUserSessions` | 成员创建、禁用/启用、会话撤销独立实现；禁用用户与撤销其会话有事务保护 | 这些写入已经进入目录操作记录，或都能撤销 |
-| [scanner.go](../../../backend/cmd/roomusic/scanner.go)：`persistOneCandidate`、`finalizeScan`；[0011](../../../backend/migrations/0011_scan_staging_and_identity.sql) | 扫描按候选提交并替换当前证据；暂存会清理；仅完整成功终态允许 missing 对账 | 每个扫描字段都有 Change Set，或扫描日志能恢复到过去的目录/元数据快照 |
+| [root_operations.go](../../../backend/internal/library/httpapi/root_operations.go)：`beginRootOperation`、`rootOperations` | 目录新增/停用/恢复共用入口：按 actor/操作类型/幂等键在事务内加锁后查结果，指纹含目标，同键请求串行；历史只向管理员返回最近 100 条安全摘要 | 目录以外的作用域、任意作用域的完整审计检索、任意操作链重放或通用并发重试已全面验证 |
+| [handlers.go](../../../backend/internal/identity/httpapi/handlers.go)：`createUser`、`updateUser`、`revokeUserSessions` | 成员创建、禁用/启用、会话撤销独立实现；禁用用户与撤销其会话有事务保护 | 这些写入已经进入目录操作记录，或都能撤销 |
+| [persist.go](../../../backend/internal/catalog/persist.go)：`PersistCandidate`；[scanner.go](../../../backend/internal/library/scanner.go)：`finalizeScan`；[0011](../../../backend/migrations/0011_scan_staging_and_identity.sql) | 扫描按候选提交并替换当前证据；暂存会清理；仅完整成功终态允许 missing 对账 | 每个扫描字段都有 Change Set，或扫描日志能恢复到过去的目录/元数据快照 |
 | [操作规范](../../../.trellis/spec/backend/agent-and-operation-guidelines.md) | 长期合同区分 Change Set、Journal、Checkpoint、Reversible Executor 和三种执行模式 | Review Subagent、Operator 运行时、标签/文件操作已经实现 |
-| [目录操作集成测试](../../../backend/cmd/roomusic/auth_root_operations_integration_test.go)：`TestPostgreSQLRootOperationTransactionsAndConflicts`、`TestPostgreSQLRootOperationIdempotencyBindsTarget`、`TestPostgreSQLRootOperationConcurrentRetriesConverge`、`TestPostgreSQLRootOperationHistoryIsAdminOnlyAndRedacted` | 有串行重试、键冲突、跨目标同键冲突、同键并发收敛、路由 ID 校验、降权后重放、revision 冲突、缺失逆向依据、记录失败回滚和历史权限/脱敏断言 | 覆盖通用审批、批量撤销链或所有失败生命周期 |
+| [目录操作集成测试](../../../backend/internal/app/auth_root_operations_integration_test.go)：`TestPostgreSQLRootOperationTransactionsAndConflicts`、`TestPostgreSQLRootOperationIdempotencyBindsTarget`、`TestPostgreSQLRootOperationConcurrentRetriesConverge`、`TestPostgreSQLRootOperationHistoryIsAdminOnlyAndRedacted` | 有串行重试、键冲突、跨目标同键冲突、同键并发收敛、路由 ID 校验、降权后重放、revision 冲突、缺失逆向依据、记录失败回滚和历史权限/脱敏断言 | 覆盖通用审批、批量撤销链或所有失败生命周期 |
 
 ### 当前可恢复性与缺口
 

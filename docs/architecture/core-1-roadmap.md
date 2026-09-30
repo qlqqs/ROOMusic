@@ -16,10 +16,11 @@
 
 ## 当前基线
 
-后端位于 `backend/cmd/roomusic`，共用一个 `package main`；`internal/` 是目标而非已完成拆分。
-扫描器直接写入 Release 图（`scanner.go:930`、`:934`），为每个新 Release 新建一个空的
-ReleaseGroup（`scanner.go:929`）；曲目与 Release 的身份依赖路径（`scanner.go:882`、`organizer.go:1006`），
-改名、移动或增删文件都可能换 ID。生产部署仍由一个 Go 应用提供 REST 与同源 Web 资产，PostgreSQL
+后端入口位于 `backend/cmd/roomusic`，能力代码位于 `backend/internal/`（B0 于 2026-09-30 完成拆分，见
+[后端目录结构](../../.trellis/spec/backend/directory-structure.md)）。扫描后的候选由 `catalog.PersistCandidate`
+写入 Release 图（`internal/catalog/persist.go:46`、`:50`），为每个新 Release 新建一个空的
+ReleaseGroup（`persist.go:44`）；曲目与 Release 的身份依赖路径（`internal/catalog/identity.go:21`、
+`internal/catalog/organizer.go:922`），改名、移动或增删文件都可能换 ID。生产部署仍由一个 Go 应用提供 REST 与同源 Web 资产，PostgreSQL
 是唯一必需业务权威。
 
 `frontend/src/` 已删除，保留工具链配置和依赖声明；Go 内嵌资源是重置占位页。
@@ -45,8 +46,8 @@ ReleaseGroup（`scanner.go:929`）；曲目与 Release 的身份依赖路径（`
 | 元数据整理、版本学 | 扫描有来源锚点、字段候选/决策；新 Release 会创建独立 group 记录 | 只显示已有 Release 与证据，不自动归并为“同专辑” | 阶段 I：身份稳定与按组只读；M3：修正覆盖层与组成员调整（人工确认）；M4：问题、版本工具，之后 Release 合并/拆分 |
 | 我的音乐、艺人、Steward | 当前没有个人库、艺人实体/别名或 Steward 运行时接口 | 不把原型入口伪装可用 | P：播放历史（Core 1）；M5：收藏、歌单、历史页面、艺人与搜索规范化；M6：受控 Agent；外部元数据源另立项 |
 
-接口依据：`backend/cmd/roomusic/application.go:56-79`、`scans.go` 的 `scanDTO`、
-`catalog_api.go`、`root_operations.go`、`0006_multi_user.sql` 和
+接口依据：`backend/internal/app/app.go` 与各 `httpapi` 包的 `Register`（路由表）、`internal/library/scans.go` 的 `Scan`、
+`internal/catalog/projection.go`、`internal/library/httpapi/root_operations.go`、`0006_multi_user.sql` 和
 `0012_track_credits_and_release_metadata.sql`。精确请求/错误合同继续由
 [运行合同](../../.trellis/spec/backend/core0-runtime-contracts.md)与
 [Catalog REST 合同](../../.trellis/spec/backend/catalog-rest-contracts.md)维护，不复制为第二份 DTO 定义。
@@ -67,7 +68,7 @@ M3、M4**，外加两项独立修复 F1、F2。阶段完成结果是“可用客
 | 阶段 | 独立交付 | 前置与允许并行 | 验收出口 | 任务 |
 | --- | --- | --- | --- | --- |
 | M0 | 设计依据、能力矩阵、四类 ADR 草案、规范/旧任务承接 | 本轮文档授权 | 现状与提案区分清楚，没有业务变更 | 已完成（`850d274`） |
-| B0 | 纯重构：先拆 `internal/catalog`（organizer、Release 图写入、读取查询），再拆目录与扫描（含解析器），最后拆 platform | 无；不阻塞 M1a | 对外接口、扫描、安全与事务行为不变；每步 `-race` 测试与 PostgreSQL 集成测试通过 | `classical-b0-package-split` |
+| B0 | 纯重构：先拆 `internal/catalog`（organizer、Release 图写入、读取查询），再拆目录与扫描（含解析器），最后拆 platform | 无；不阻塞 M1a | 对外接口、扫描、安全与事务行为不变；每步 `-race` 测试与 PostgreSQL 集成测试通过 | `classical-b0-package-split`（2026-09-30 已完成，`b4cda28`–`e452105`） |
 | I | 身份稳定：音频指纹、同 root 保守重绑定、按曲目成员关系匹配 Release、ID 稳定性集成测试；ReleaseGroup 只读接口 | B0 的 catalog 部分 | 重扫、增删文件、同 root 内改名/移动后 UUID 不变；歧义不重绑定；`/releases` 行为不变 | `classical-i-identity-groups` |
 | M1a | Classical 外壳、初始化/会话、现有目录/扫描/成员管理、简版概览；恢复 CI 构建与内嵌资产检查 | ADR 0001 第 1–3 项已批准；可与 B0、I 并行 | 真实 API 主路径、权限/错误/空态、键盘/窄屏、实际构建及内嵌资产检查通过 | `classical-m1a-shell-admin` |
 | M1b | 专辑列表与详情（按组形态，单版本自然退化） | 阶段 I 的按组接口；M1a 的外壳与数据层 | 同 M1a 质量门禁，另覆盖长标题、缺封面、单版本、多 Medium | `classical-m1b-album-browsing` |
@@ -88,7 +89,7 @@ M3、M4**，外加两项独立修复 F1、F2。阶段完成结果是“可用客
 
 ## 静态审查发现的现有风险
 
-`root_operations.go` 的停用/恢复指纹原先没有包含路由 root ID，重放查询只按 actor、操作类型
+`internal/library/httpapi/root_operations.go` 的停用/恢复指纹原先没有包含路由 root ID，重放查询只按 actor、操作类型
 和幂等键查记录；同键同 body 用于不同目录时会返回前一个目标的结果。已记录于
 [ADR 0003](adr/0003-governed-operations.md)与运行合同技术债，**2026-09-29 由 F2 动态复现并修复**：
 指纹含目标，同键请求串行，旧记录不做兼容。修复没有与纯拆包混合，也没有等通用操作平台。

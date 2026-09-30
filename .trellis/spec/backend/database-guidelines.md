@@ -71,7 +71,7 @@ result; reusing the key for different input returns a conflict.
 指纹必须包含路由中的目标身份（目录停用/恢复为小写 root ID），不能只含请求体。同一幂等键的
 请求先在事务内取得该键的事务级 advisory lock，再查记录（READ COMMITTED，使加锁后的查询能看到
 前一个持锁事务已提交的记录），因此并发重试只执行一次，其余请求回放已存结果。当前实现见
-`backend/cmd/roomusic/root_operations.go` 的 `beginRootOperation`。
+`backend/internal/library/httpapi/root_operations.go` 的 `beginRootOperation`。
 
 Do not hold a database transaction open while walking a library tree or reading
 audio tags. Persist scan progress in bounded batches and finalize the scan with
@@ -122,7 +122,7 @@ complete and successful.
 
 - 触发条件：启动边界新增或改变 PostgreSQL schema 迁移、迁移追踪字段、并发锁或
   回滚语义时，必须同时更新本合同和对应集成测试。
-- 所有权：`backend/cmd/roomusic/database.go` 负责发现、计划、执行和记录；
+- 所有权：`backend/internal/platform/postgres/migrate.go` 负责发现、计划、执行和记录；
   `backend/migrations/` 是唯一 SQL 来源。
 
 #### 2. 签名（命令 / 数据库）

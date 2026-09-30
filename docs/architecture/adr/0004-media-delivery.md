@@ -19,11 +19,11 @@
 
 | 仓库证据 | 可确认的现状 | 尚未具备的能力 |
 | --- | --- | --- |
-| `backend/cmd/roomusic/application.go` 路由注册 | 已有鉴权、扫描、Release 与封面读取；没有曲目串流或转码路由 | 原型里的播放按钮不代表可播放 |
-| `backend/cmd/roomusic/audio_parser.go` | M4A 解析区分 AAC/ALAC sample entry；CUE 解析有 `INDEX`、帧位置和引用验证 | 元数据可解析不代表浏览器可解码；`.m4a` 不是 codec 名称 |
-| `backend/cmd/roomusic/catalog_api.go` | 详情可返回 codec、位深、采样率、声道、时长和 CUE 起止事实 | 这些 nullable 扫描观察不是当前源文件可播性的实时证明 |
+| `backend/internal/app/app.go` 与各 `httpapi` 包的 `Register`（路由注册） | 已有鉴权、扫描、Release 与封面读取；没有曲目串流或转码路由 | 原型里的播放按钮不代表可播放 |
+| `backend/internal/library/parser/parser.go` | M4A 解析区分 AAC/ALAC sample entry；CUE 解析有 `INDEX`、帧位置和引用验证 | 元数据可解析不代表浏览器可解码；`.m4a` 不是 codec 名称 |
+| `backend/internal/catalog/projection.go`、`read.go` | 详情可返回 codec、位深、采样率、声道、时长和 CUE 起止事实 | 这些 nullable 扫描观察不是当前源文件可播性的实时证明 |
 | `backend/migrations/0010_album_organization.sql`、`0011_scan_staging_and_identity.sql` 与 `scanner.go` | 已有物理/CUE 来源身份、父来源与 CUE 范围；扫描保持源只读 | `source_identity` 是身份线索，不是媒体内容摘要或派生缓存版本 |
-| `backend/cmd/roomusic/security.go`、`config.go` | Cookie 会话由后端验证；有允许的音乐根和受管数据目录概念 | 扫描时验证过路径，不等于播放时可省略重新验证 |
+| `backend/internal/identity/guard.go`、`backend/internal/platform/config/config.go` | Cookie 会话由后端验证；有允许的音乐根和受管数据目录概念 | 扫描时验证过路径，不等于播放时可省略重新验证 |
 | `deploy/smoke/current.Dockerfile` | 当前 Smoke 镜像只安装基础运行依赖，没有安装 FFmpeg | 不能将外部可执行文件假设为当前 Go 二进制或部署镜像的一部分 |
 | `.trellis/spec/guides/real-music-assets.md` | `music/` 是受保护真实资产，默认只读，测试不得依赖它 | 派生缓存不是向源目录写入的授权 |
 

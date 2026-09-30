@@ -2,10 +2,10 @@
 
 ## Status
 
-当前仓库已有 Go Core 0 应用，入口位于 `backend/cmd/roomusic`，使用
+当前仓库已有 Go Core 0 应用，入口位于 `backend/cmd/roomusic`，能力代码按 `backend/internal/` 分包
+（B0，2026-09-30 完成，见[目录结构](./directory-structure.md)），使用
 `net/http`、`database/sql + pgx/v5`、`embed.FS` 迁移、bcrypt 和 `log/slog`。
-代码仍是过渡单体；下文的 `internal/*` 分层是目标架构，只有在真实边界形成后
-才拆分。
+进程仍是单体；`domain/application/ports/adapters` 细分层只在出现第二个实现或需要隔离持久化时才建。
 
 Core 0 is a modular monolith: one Go application, versioned REST, in-process scan
 coordination, PostgreSQL as the only required business authority, and a read-only
@@ -15,7 +15,7 @@ music library.
 
 Classical / Core 1 的能力路线与四类 ADR 位于
 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)（2026-09-28 已批准阶段顺序与范围）。M0 与路线修订仅更新文档，
-不改变本层现有 API、表结构或权限。B0 是已立项（planning）的行为保持拆包；身份稳定与按组只读接口属于阶段 I；
+不改变本层现有 API、表结构或权限。B0（行为保持拆包）已完成；身份稳定与按组只读接口属于阶段 I；
 修正覆盖层、通用审批、editor 角色和媒体处理的实施细节须经对应子任务与 ADR 项批准后再实施。Core 0 限制不是未来阶段的默认授权。
 
 ## Pre-Development Checklist

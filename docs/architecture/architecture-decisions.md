@@ -28,10 +28,12 @@ API 文档、Trellis 任务文档、说明性注释和运维文档。代码标�
 
 ## Core 0 当前实现树
 
-2026-09-27 的后端仍为过渡单体，前端源码已删除：
+2026-09-30 后端已按能力分包（B0，仍是单进程模块化单体），前端源码已删除：
 
 ```text
-backend/cmd/roomusic/*.go    # HTTP、身份、扫描、目录操作和 catalog 的当前实现
+backend/cmd/roomusic/main.go # 进程入口与 HTTP 生命周期，不含业务策略
+backend/internal/*           # app（组合根）、platform、identity、library（含 parser）、catalog（含 metadata、artwork）；
+                             # 各能力的 REST 传输层在 <能力>/httpapi
 backend/migrations/*.sql     # embed.FS 迁移；已共享文件不改写
 backend/cmd/roomusic/web/    # 当前为前端重置占位资产
 frontend/package.json       # 保留工具链/依赖；src/ 不存在
@@ -39,8 +41,9 @@ frontend/DESIGN.md          # 本轮恢复的 Classical 设计依据，不是界
 frontend-desgin/            # 已入库原型及设计工具资产，保持原样
 ```
 
-下方 `backend/internal/*` 与 `frontend/src/features/*` 仅是目标能力边界。
-M1a 先用现有 API 恢复外壳与管理界面；B0 先拆 catalog、再拆目录与扫描，两者可并行；
+`backend/internal/*` 是现状（布局见[后端目录结构](../../.trellis/spec/backend/directory-structure.md)）；
+下方 `frontend/src/features/*` 仍只是目标能力边界。
+M1a 先用现有 API 恢复外壳与管理界面；B0 已拆出 catalog、library 与 platform；
 阶段 I 在拆出的 catalog 上实施身份规则与按组只读接口，M1b 的专辑页随后使用它。
 不为目录对称性生成空层，也不把 API 行为修复、新迁移或媒体服务夹入纯重构。
 
@@ -137,8 +140,8 @@ maps; application code coordinates authority and business rules; adapters
 enforce physical storage constraints.
 
 目标边界要求 library scanner 通过窄 catalog 合同提交观察，不直接写 catalog 私有表
-或替代其图不变量。当前 `scanner.go` 仍直接写图；这是待拆分的现状，不是上述边界已实现
-的证明。B0 只迁移职责并保持行为，人工关系保护等新规则留待后续获批任务。
+或替代其图不变量。B0 之后 library 只经 `catalog.PersistCandidate`、`catalog.MarkMissingSources`
+提交，图表的 SQL 只在 catalog 内；B0 只迁移职责并保持行为，人工关系保护等新规则留待后续获批任务。
 
 ## Core safety invariants
 

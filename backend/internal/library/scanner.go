@@ -974,10 +974,6 @@ func discoverFolderArtworkWithReader(directory string, readFile func(string) ([]
 	return nil, "", firstErr
 }
 
-func (service *Service) recordDiagnostic(context context.Context, scanID, relativePath, kind, message string) error {
-	return service.recordDiagnosticWith(context, service.database, scanID, relativePath, kind, message)
-}
-
 func (service *Service) recordDiagnosticWith(context context.Context, executor scanExecutor, scanID, relativePath, kind, message string) error {
 	_, err := executor.ExecContext(context, "INSERT INTO scan_diagnostics(scan_run_id,relative_path,kind,message) SELECT $1::uuid,$2,$3,$4 WHERE (SELECT COUNT(*) FROM scan_diagnostics WHERE scan_run_id=$1::uuid)<100", scanID, relativePath, kind, message)
 	return err

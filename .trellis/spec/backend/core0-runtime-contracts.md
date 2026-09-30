@@ -4,7 +4,7 @@
 
 本合同记录已落地的 Go 启动、`/api/v1` REST、PostgreSQL 用户与目录状态、扫描终态、
 发行/逐轨元数据、真实音乐只读 Smoke 与同源资产边界。后端仍位于过渡单体
-`backend/cmd/roomusic`，`internal/*` 只是待按能力拆分的目标。
+`backend/cmd/roomusic`（入口）与 `backend/internal/*`（能力代码，B0 于 2026-09-30 完成拆分）。
 
 2026-09-27 起必须区分：`frontend/src/` 已删除，当前 Go 内嵌页面仅是重置占位页。
 本文件涉及旧 `requestApi`、decoder 和前端测试的内容是恢复实现时需保留的合同，
@@ -63,7 +63,7 @@ M0 不改变以下后端 API、数据库或运行边界。
 ### 数据库与扫描
 
 - PostgreSQL 是 Core 0 唯一业务权威，连接实现为 `database/sql + pgx/v5`。
-- 启动迁移由 `backend/cmd/roomusic/database.go` 负责：嵌入的
+- 启动迁移由 `backend/internal/platform/postgres`（`migrate.go`）负责：嵌入的
   `backend/migrations/*.sql` 必须从版本 1 连续排序，原始字节使用 lowercase
   SHA-256；执行器在一个事务中持有 `pg_advisory_xact_lock(0x524f4f4d55534943)`，
   成功版本在 `schema_migrations` 中记录文件名、校验和与时间。

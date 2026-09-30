@@ -59,7 +59,7 @@ function decodeScanRun(input: unknown): ScanRunDTO {
 
 `scanRunDecoder` 仅为解码模式示意，不是已存在或已选定的库。完整扫描响应以
 [运行合同](../backend/core0-runtime-contracts.md)和
-[`scanDTO`](../../../backend/cmd/roomusic/scans.go)为准，当前没有已扫描文件数或百分比进度。
+[`library.Scan`](../../../backend/internal/library/scans.go)为准，当前没有已扫描文件数或百分比进度。
 不得从示例增加后端未返回的字段；只在边界解码一次 `unknown`，其他消费者只接收类型化结果。
 
 Decode the common error envelope even for non-2xx responses. Unknown response

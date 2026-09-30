@@ -2,48 +2,52 @@
 
 ## Status And Intent
 
-当前 Go module 位于 `backend/`，Core 0 实际代码暂集中在
-`backend/cmd/roomusic/*.go`，迁移位于 `backend/migrations/`。下方按能力分层的
-结构是目标约定；实现尚未满足拆分触发条件时不要创建空目录或伪接口。
+后端已按能力拆到 `backend/internal/`（B0，2026-09-30 完成，行为保持的纯重构）。`backend/cmd/roomusic`
+只剩进程入口 `main.go` 与前端产物 `web/`；迁移位于 `backend/migrations/`。下方“Current Layout”是实际布局，
+“Deferred”列出尚未创建的层和能力。实现尚未满足拆分触发条件时不要创建空目录或伪接口。
 
-## Planned Layout
+## Current Layout
 
 ```text
 backend/
-├── cmd/
-│   └── roomusic/
-│       └── main.go                 # process entry; no business policy
+├── cmd/roomusic/
+│   ├── main.go                     # 进程入口：加载配置、连接数据库、装配 app、HTTP 生命周期
+│   └── web/                        # Vite 生产产物（go:embed），不手工编辑
 ├── internal/
-│   ├── app/                        # composition root, route mounting, lifecycle
+│   ├── app/                        # 组合根：装配服务与 handler、挂载全部路由、降级 handler
 │   ├── platform/
-│   │   ├── config/                 # environment decoding and validation
-│   │   ├── httpserver/             # server mechanics and common middleware
-│   │   ├── observability/          # logger/correlation implementation
-│   │   └── postgres/               # pool and transaction mechanics
-│   ├── identity/
-│   │   ├── domain/
-│   │   ├── application/
-│   │   ├── ports/
-│   │   ├── adapters/postgres/
-│   │   └── transport/httpapi/
-│   ├── library/
-│   │   ├── domain/
-│   │   ├── application/
-│   │   ├── ports/
-│   │   ├── adapters/filesystem/
-│   │   ├── adapters/postgres/
-│   │   ├── parser/
-│   │   └── transport/httpapi/
-│   ├── catalog/                    # Release Graph and provenance
-│   ├── search/                     # PostgreSQL-backed Core 0 search
-│   └── operations/                 # Change Set and Operation Journal
+│   │   ├── config/                 # 环境变量解码与校验
+│   │   ├── httpserver/             # 请求 ID 与完成日志中间件、JSON 与错误信封、/api 兜底、
+│   │   │                           # 前端静态资源、健康检查
+│   │   ├── postgres/               # 连接与迁移执行器
+│   │   │   └── postgrestest/       # 仅测试使用：隔离 schema 的测试库
+│   │   └── uuid/                   # UUID 生成与格式校验
+│   ├── identity/                   # 会话、密码、Guard（同源、登录、管理员校验）
+│   │   └── httpapi/                # setup、登录登出、成员管理
+│   ├── library/                    # 路径校验、扫描引擎与暂存、诊断、扫描执行锁与中断恢复、Service
+│   │   ├── parser/                 # 音频与 CUE 解析（叶子包）
+│   │   │   └── parsertest/         # 仅测试使用：合成音频夹具
+│   │   └── httpapi/                # 目录、目录操作、扫描
+│   └── catalog/                    # 观察合同、organizer、来源身份、Release 图写入、读取投影
+│       ├── metadata/               # 署名、空白规范化、有界文本、艺人名规则（叶子包）
+│       ├── artwork/                # 受管封面：校验、落盘、关联、读取
+│       └── httpapi/                # Release 列表/详情/证据、封面读取
 ├── migrations/
 └── testdata/                       # small repository-wide fixtures only
 ```
 
-The other capability directories follow the same internal shape only where each
-layer is needed. Do not create empty folders or interfaces to make every module
-look symmetrical.
+`<能力>/httpapi` 是该能力的 REST 传输层，各自提供 `Register(mux)` 注册路由；应用服务放在能力包本身
+（例如 `library.Service`、`catalog.Store`、`identity.Guard`）。
+
+## Deferred
+
+- 没有 `domain/`、`application/`、`ports/`、`adapters/` 这几层：每个能力目前只有一个 PostgreSQL 实现，
+  为它们建目录只会多一层间接。出现第二个实现或需要隔离持久化时再拆。
+- 没有 `search/`、`operations/`：搜索仍是 catalog 的 PostgreSQL 查询；受治理操作属于 M3。
+- 没有 `platform/observability`：日志由 `httpserver` 的中间件和各处 `slog` 调用承担。
+- **已知技术债**：`identity/httpapi` 与 `library/httpapi` 中目录、目录操作和成员管理的 handler 仍直接执行 SQL
+  （含 F2 的幂等流程），与“handler 不含 SQL”的规则不符。M3 按受治理操作合同重做目录操作时抽出用例，
+  成员管理在下一次身份接口变更时一并抽出。扫描相关 handler 已只做解析、鉴权和响应映射。
 
 ## Ownership
 
@@ -85,6 +89,10 @@ Across capabilities, call a published application contract or narrow port.
 Never import another capability's `adapters`, `transport`, persistence row
 types, or unexported policy package. Cross-capability orchestration belongs in a
 clearly named application service, not a circular callback chain.
+
+依赖方向由 `internal/app/dependency_rules_test.go` 强制：它读取每个 `internal/` 包的导入，要求
+每个包在 `packageRules` 中声明允许依赖的内部包，以及是否可以使用 `net/http`（能力核心 `catalog`、
+`library`、`parser` 不可以）。新增包必须先声明规则，测试才会通过；CI 的 `go test ./...` 会运行它。
 
 ## File And Package Naming
 

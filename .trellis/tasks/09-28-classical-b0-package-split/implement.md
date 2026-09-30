@@ -70,7 +70,7 @@ git diff --check
      依赖规则测试做过变异检查（临时给 catalog 加 `net/http`、给 library 加 identity 导入，两处都被拦截）；
      另用编译出的二进制在正常与数据库不可达两种模式下做了端到端冒烟（健康检查、就绪、初始化状态、404/405/401 的 JSON 错误、前端回落、降级 503）。
    - 与计划的差异：`databaseState` 删除，`/readyz` 以 `database != nil` 判断；`cmd/roomusic/main_test.go` 保留前端嵌入产物测试。
-5. [ ] **文档与收尾**
+5. [x] **文档与收尾**
    - 用 `grep -rn 'cmd/roomusic/' --include=*.md --include=*.html` 找出全部旧链接，逐一改到新位置。ADR 证据表注明“路径已随 B0 更新”。
    - 更新以下文档：
      - `directory-structure.md`：实际布局、`httpapi` 命名、`library/httpapi` 与 `identity/httpapi` 内仍有 SQL 的技术债；

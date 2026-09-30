@@ -3,7 +3,7 @@
 ## 状态与决策边界
 
 - 状态：**部分批准**（2026-09-28）：第十节第 2 项（身份策略）与第 4 项（归组依据）已批准，其余仍待批准。
-- 核对日期：2026-09-27；代码证据基线：`6cf76ec`（身份相关行号于 2026-09-28 在 `66678d6` 复核）。
+- 核对日期：2026-09-27；代码证据基线：`6cf76ec`（身份相关行号于 2026-09-28 在 `66678d6` 复核）。B0（2026-09-30）拆包后，下文代码链接已更新到新位置，行号锚点以新文件为准；核对结论仍以该基线为准。
 - 范围依据：[Core 1 路线](../core-1-roadmap.md)与[架构决策摘要](../architecture-decisions.md)。
 - 推荐方向：保留扫描事实，单独保存经授权的修正意图，由 catalog 生成有效读值；结构变更
   使用显式治理操作，不通过改标题等字段隐式触发。
@@ -16,7 +16,7 @@
 
 | 日期 | 选择者 | 已批准 | 仍待批准 | 依据 |
 | --- | --- | --- | --- | --- |
-| 2026-09-28 | qlqq | 第 2 项身份策略：Release 按所含曲目的成员关系匹配，增删文件不换 ID，锚点降为定位信息；同一 root 内改名或移动的文件，仅在完整成功扫描中、且新出现与变缺失的文件唯一 1:1 音频完全相同时重绑定（FLAC 用已解析的 STREAMINFO 音频 MD5，`backend/cmd/roomusic/audio_parser.go:1570`；其他格式在阶段 I 选定与标签无关的指纹）；有歧义保持分离、留待人工认领；跨 root 仍需单独审阅的映射操作。第 4 项归组依据：Core 1 仅人工确认，不做自动跨版本归组；ReleaseGroup 只读接口在阶段 I 提供，组成员调整是 M3 的试点操作 | 第 1、3、5、6、7 项 | 任务 `09-28-core-1-roadmap-revision` 的 PRD，裁决 D1、D2、D6 |
+| 2026-09-28 | qlqq | 第 2 项身份策略：Release 按所含曲目的成员关系匹配，增删文件不换 ID，锚点降为定位信息；同一 root 内改名或移动的文件，仅在完整成功扫描中、且新出现与变缺失的文件唯一 1:1 音频完全相同时重绑定（FLAC 用已解析的 STREAMINFO 音频 MD5，`backend/internal/library/parser/parser.go:1556`；其他格式在阶段 I 选定与标签无关的指纹）；有歧义保持分离、留待人工认领；跨 root 仍需单独审阅的映射操作。第 4 项归组依据：Core 1 仅人工确认，不做自动跨版本归组；ReleaseGroup 只读接口在阶段 I 提供，组成员调整是 M3 的试点操作 | 第 1、3、5、6、7 项 | 任务 `09-28-core-1-roadmap-revision` 的 PRD，裁决 D1、D2、D6 |
 
 ## 一、当前证据与尚未实现的能力
 
@@ -25,14 +25,14 @@
 
 | 定位 | 当前事实 | 对本决策的约束 |
 | --- | --- | --- |
-| [scanner.go](../../../backend/cmd/roomusic/scanner.go)：`stageObservation`、`persistStagedCandidates`、`persistOneCandidate` | 扫描先暂存观察，再按候选短事务写图；重扫更新 Release/Track 列，替换逐轨观察、署名及 Release 字段决策，更新当前归组证据 | 现有列和证据不能直接充当持久人工修正或完整历史 |
-| [organizer.go](../../../backend/cmd/roomusic/organizer.go)：`organizeObservations`、`stableAnchorPartition`、`candidateIdentity` | 确定性规则生成候选、字段决策与分碟结构；锚点使用 root、候选种类、范围及来源分区，不直接使用展示标题 | 不含标题不等于不受分组、目录或来源集合变化影响 |
-| [scanner.go](../../../backend/cmd/roomusic/scanner.go)：`sourceIdentityForObservation`、`legacySourceIdentity`、`legacyCueSourceIdentity` | 物理来源按 root 与相对路径识别；CUE 虚拟轨另含 sheet、父来源、轨号及起始帧；存在旧身份兼容查询 | 是扫描来源匹配规则，不是全局内容身份或任意移动映射器 |
+| [scanner.go](../../../backend/internal/library/scanner.go)：`stageObservation`、`persistStagedCandidates`；[persist.go](../../../backend/internal/catalog/persist.go)：`PersistCandidate` | 扫描先暂存观察，再按候选短事务写图；重扫更新 Release/Track 列，替换逐轨观察、署名及 Release 字段决策，更新当前归组证据 | 现有列和证据不能直接充当持久人工修正或完整历史 |
+| [organizer.go](../../../backend/internal/catalog/organizer.go)：`OrganizeObservations`、`stableAnchorPartition`、`CandidateIdentity` | 确定性规则生成候选、字段决策与分碟结构；锚点使用 root、候选种类、范围及来源分区，不直接使用展示标题 | 不含标题不等于不受分组、目录或来源集合变化影响 |
+| [identity.go](../../../backend/internal/catalog/identity.go)：`SourceIdentityForObservation`、`legacySourceIdentity`、`legacyCueSourceIdentity` | 物理来源按 root 与相对路径识别；CUE 虚拟轨另含 sheet、父来源、轨号及起始帧；存在旧身份兼容查询 | 是扫描来源匹配规则，不是全局内容身份或任意移动映射器 |
 | [0002](../../../backend/migrations/0002_core_slice.sql)、[0003](../../../backend/migrations/0003_catalog_observations.sql)、[0010](../../../backend/migrations/0010_album_organization.sql)、[0011](../../../backend/migrations/0011_scan_staging_and_identity.sql)、[0012](../../../backend/migrations/0012_track_credits_and_release_metadata.sql) | 已有图实体、来源身份、当前证据、署名及元数据；ReleaseGroup 只有 `id`、`created_at`；没有人工覆盖层或 Release/Track 编辑 revision 合同 | 不能把目录 revision、`observed_at` 或证据行 ID 当成现成的编辑版本号 |
-| [scanner.go](../../../backend/cmd/roomusic/scanner.go)：`persistOneCandidate` 查找 `candidate_anchor` 后的创建分支 | 未命中锚点时，为新 Release 单独创建 ReleaseGroup；命中时复用该 Release 的 `group_id`；已有 Track 可被更新到另一个 Medium | 没有跨版本语义归并，也没有人工关系与扫描关系冲突的处理层 |
-| [catalog_api.go](../../../backend/cmd/roomusic/catalog_api.go)：`releaseSummaryProjection`、`listReleases`、`releaseDetail`、`releaseEvidence` | 列表、搜索、排序和详情直接读取扫描写入的值；列表/详情要求至少一个 `present` Track；管理员可读存在的 Release 的详细证据 | 有效值必须在后端统一投影；详细证据可见不代表缺失版本能从普通详情访问 |
-| [application.go](../../../backend/cmd/roomusic/application.go)：`buildApplication` | 只有 Release 读取与证据路由，没有元数据修正或 ReleaseGroup 合并/拆分入口 | M1 不能展示可提交的修正外壳或伪造保存成功 |
-| [扫描持久化测试](../../../backend/cmd/roomusic/scanner_persistence_integration_test.go)：`TestPostgreSQLCandidatePersistenceIsIdempotentAndReplacesCurrentEvidence`、`TestPostgreSQLIncompleteRootPersistsValidCandidatesAndCleansStaging` | 固定来源重扫保留 ID 并替换当前证据；不完整扫描也可保留已提交候选，暂存随后清理 | 扫描不是整库快照事务；当前证据和暂存都不是恢复点 |
+| [persist.go](../../../backend/internal/catalog/persist.go)：`PersistCandidate` 查找 `candidate_anchor` 后的创建分支 | 未命中锚点时，为新 Release 单独创建 ReleaseGroup；命中时复用该 Release 的 `group_id`；已有 Track 可被更新到另一个 Medium | 没有跨版本语义归并，也没有人工关系与扫描关系冲突的处理层 |
+| [read.go](../../../backend/internal/catalog/read.go)：`releaseSummaryProjection`、`ListReleases`；[handlers.go](../../../backend/internal/catalog/httpapi/handlers.go)：`listReleases`、`releaseDetail`、`releaseEvidence` | 列表、搜索、排序和详情直接读取扫描写入的值；列表/详情要求至少一个 `present` Track；管理员可读存在的 Release 的详细证据 | 有效值必须在后端统一投影；详细证据可见不代表缺失版本能从普通详情访问 |
+| [app.go](../../../backend/internal/app/app.go)：`New` | 只有 Release 读取与证据路由，没有元数据修正或 ReleaseGroup 合并/拆分入口 | M1 不能展示可提交的修正外壳或伪造保存成功 |
+| [扫描持久化测试](../../../backend/internal/library/scanner_persistence_integration_test.go)：`TestPostgreSQLCandidatePersistenceIsIdempotentAndReplacesCurrentEvidence`、`TestPostgreSQLIncompleteRootPersistsValidCandidatesAndCleansStaging` | 固定来源重扫保留 ID 并替换当前证据；不完整扫描也可保留已提交候选，暂存随后清理 | 扫描不是整库快照事务；当前证据和暂存都不是恢复点 |
 
 继承的约束来自[产品目标](../../../.trellis/spec/guides/product-goals.md)、
 [数据库规范](../../../.trellis/spec/backend/database-guidelines.md)及
@@ -108,11 +108,11 @@
 | 散落文件、同目录拆分候选 `candidate_anchor` | 还使用候选内排序最小的相对来源路径作分区；无来源才退到分组分区 | 最小成员移除/改名、新增更小成员、分桶集合变化；不保证增减文件后 Release ID 不变 |
 | 现有图 UUID | 命中锚点保留 Release/Group；命中来源保留 Track，Medium 按所属 Release 与碟序定位 | Track 复用不保证所属 Release/Medium 不变；新锚点不会自动继承旧 Release 的人工意图 |
 
-定位：[scanner.go](../../../backend/cmd/roomusic/scanner.go) 的身份与持久化函数、
-[organizer.go](../../../backend/cmd/roomusic/organizer.go) 的 `stableAnchorPartition` 和
-`candidateIdentity`；反例见[来源身份测试](../../../backend/cmd/roomusic/core_acceptance_test.go)
+定位：[identity.go](../../../backend/internal/catalog/identity.go) 与 [persist.go](../../../backend/internal/catalog/persist.go) 的身份与持久化函数、
+[organizer.go](../../../backend/internal/catalog/organizer.go) 的 `stableAnchorPartition` 和
+`CandidateIdentity`；反例见[来源身份测试](../../../backend/internal/library/scan_rules_test.go)
 `TestTrackSourceIdentityIsStableOnlyForSameRootAndPath` 及
-[整理测试](../../../backend/cmd/roomusic/organizer_test.go)
+[整理测试](../../../backend/internal/catalog/organizer_test.go)
 `TestOrganizeRootUnknownAndCueIdentityAreExplicit`。
 
 [0011 迁移](../../../backend/migrations/0011_scan_staging_and_identity.sql)只在无冲突时升级旧

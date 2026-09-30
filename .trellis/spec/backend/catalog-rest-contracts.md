@@ -54,7 +54,7 @@
   非法 UTF-8 ID、零/负/越界尺寸，以及摘要 JSON 的显式 `null`。
 - PostgreSQL REST 集成：有封面、无封面、列表/详情一致、present-only、搜索/分页、
   attention、未认证、隐藏 Release、非法资源 ID 的安全 503 和无路径/SQL 泄露。
-- 运行 `go test ./cmd/roomusic -run 'Release|Catalog|Artwork' -count=1`；涉及 SQL 投影时，
+- 运行 `go test ./internal/catalog/... ./internal/app -run 'Release|Catalog|Artwork' -count=1`；涉及 SQL 投影时，
   还需通过隔离 PostgreSQL 18 的 `./scripts/test-integration.sh`。
 
 ## 7. 错误与正确示例

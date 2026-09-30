@@ -256,9 +256,9 @@ M2 需补齐无曲目、等待媒体、缓冲、播放、暂停、结束、格�
 ## 7. 页面能力与阶段边界
 
 下表的阶段归属按 2026-09-28 批准的 Core 1 路线（D1、D4），不是交付现状或自动排期。现有路由已对照
-[application.go](../backend/cmd/roomusic/application.go)，字段依据
-[catalog_api.go](../backend/cmd/roomusic/catalog_api.go)、[scans.go](../backend/cmd/roomusic/scans.go)
-和 [root_operations.go](../backend/cmd/roomusic/root_operations.go)。具体 DTO 与错误合同仍由相应规范/子任务维护。
+[app.go](../backend/internal/app/app.go)（路由表由各 `httpapi` 包注册），字段依据
+[projection.go](../backend/internal/catalog/projection.go)、[scans.go](../backend/internal/library/scans.go)
+和 [root_operations.go](../backend/internal/library/httpapi/root_operations.go)。具体 DTO 与错误合同仍由相应规范/子任务维护。
 
 | 页面/场景 | 已有 API 依据 | 缺口与 M1 的诚实呈现 | 建议阶段 |
 | --- | --- | --- | --- |

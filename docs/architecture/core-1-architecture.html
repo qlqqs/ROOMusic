@@ -266,7 +266,7 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
       <span class="sec-num">01</span>
       <div>
         <h2 id="s1-title">系统分层</h2>
-        <p class="sec-lede">一个 Go 进程同源提供 Web 资产、REST 和媒体。PostgreSQL 是唯一的业务权威，音乐目录永远只读。后端现在是单个 <code>package main</code>，B0 起按能力拆到 <code>internal/</code>。</p>
+        <p class="sec-lede">一个 Go 进程同源提供 Web 资产、REST 和媒体。PostgreSQL 是唯一的业务权威，音乐目录永远只读。后端已按能力拆到 <code>internal/</code>（B0，2026-09-30 完成）。</p>
       </div>
     </div>
 
@@ -335,7 +335,7 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
       <div class="band-label">
         <div class="kicker">服务端</div>
         <h3>Go 模块化单体</h3>
-        <p>这是目标结构。现在全部代码在 <code>cmd/roomusic</code> 的一个 <code>package main</code> 里，下面的“已有”指能力已有，不是模块已拆出。</p>
+        <p>这是现在的结构：B0 已拆出 platform、identity、library、catalog，并由 <code>internal/app</code> 装配；operations、playback 等仍是后续阶段的目标。</p>
       </div>
       <div>
         <div class="grid-3">
@@ -343,25 +343,25 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
             <div class="node-k">internal/platform</div>
             <div class="node-t">platform</div>
             <p class="node-b">配置 · HTTP 中间件与完成日志 · PostgreSQL 连接与事务 · 迁移执行器</p>
-            <div class="node-tags"><span class="tag t-now">能力已有 · 未拆包</span><span class="tag t-appr">B0 第三步</span></div>
+            <div class="node-tags"><span class="tag t-done">已拆出 · B0</span></div>
           </div>
           <div class="node s-now">
             <div class="node-k">internal/identity</div>
             <div class="node-t">identity</div>
             <p class="node-b">初始化关闭 · 用户 · 不透明会话与撤销 · 角色 admin / user；editor 是 M3 候选</p>
-            <div class="node-tags"><span class="tag t-now">能力已有 · 未拆包</span></div>
+            <div class="node-tags"><span class="tag t-done">已拆出 · B0</span></div>
           </div>
           <div class="node s-now">
             <div class="node-k">internal/library</div>
             <div class="node-t">library</div>
             <p class="node-b">允许目录与 revision · 扫描运行、取消、诊断 · 解析器 · 写观察层</p>
-            <div class="node-tags"><span class="tag t-now">能力已有 · 未拆包</span><span class="tag t-appr">B0 第二步</span></div>
+            <div class="node-tags"><span class="tag t-done">已拆出 · B0</span></div>
           </div>
           <div class="node s-appr">
             <div class="node-k">internal/catalog</div>
             <div class="node-t">catalog</div>
-            <p class="node-b">Release 图 · 身份匹配 · 归组规则 · 有效值投影 · 读取 API。现状：扫描器直接写 <code>releases</code>。</p>
-            <div class="node-tags"><span class="tag t-now">部分已有 · 未拆包</span><span class="tag t-appr">B0 第一步</span><span class="tag t-appr">阶段 I</span></div>
+            <p class="node-b">Release 图 · 身份匹配 · 归组规则 · 有效值投影 · 读取 API。现状：library 经 <code>catalog.PersistCandidate</code> 写 <code>releases</code>。</p>
+            <div class="node-tags"><span class="tag t-done">已拆出 · B0</span><span class="tag t-appr">阶段 I</span></div>
           </div>
           <div class="node s-draft">
             <div class="node-k">internal/operations</div>
@@ -528,7 +528,7 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
     </div>
     <div class="layer-bar">
       <div><b>观察层 · 已有</b>扫描器写入的事实与证据。失败、取消或不完整的扫描不能当作缺失的证据。</div>
-      <div class="is-draft"><b>覆盖层 · 缺失</b>现状是扫描器更新已有 Release 时直接覆盖字段（<code>scanner.go:934</code>），所以覆盖层落地之前不开放修正。</div>
+      <div class="is-draft"><b>覆盖层 · 缺失</b>现状是写入 Release 图时更新已有 Release 会直接覆盖字段（<code>internal/catalog/persist.go:50</code>），所以覆盖层落地之前不开放修正。</div>
       <div class="is-draft"><b>结果层 · 缺失</b>现在 <code>releases</code> 表同时充当观察和结果。Core 1 中 ReleaseGroup 成员关系只能由人工确认（M3 起）。</div>
     </div>
   </section>
@@ -724,11 +724,11 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
           <p class="node-b">DESIGN.md · spec · ADR 0001–0004 草案 · 路线图</p>
           <div class="node-tags"><span class="tag t-done">已完成 · 850d274</span></div>
         </div>
-        <div class="node s-appr" id="r-b0" tabindex="0" style="grid-column:3;grid-row:1">
+        <div class="node s-done" id="r-b0" tabindex="0" style="grid-column:3;grid-row:1">
           <div class="stage">B0</div>
           <div class="node-t">拆包</div>
-          <p class="node-b">纯重构：catalog 先拆，再拆目录与扫描；行为不变。</p>
-          <div class="node-tags"><span class="tag t-appr">子任务 · planning</span></div>
+          <p class="node-b">纯重构：五个提交拆出 catalog、postgres、library、httpapi 与 app；行为不变。</p>
+          <div class="node-tags"><span class="tag t-done">已完成 · 2026-09-30</span></div>
         </div>
         <div class="node s-appr" id="r-i" tabindex="0" style="grid-column:4;grid-row:1">
           <div class="stage">I</div>
@@ -800,7 +800,7 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
     </div>
     <div class="road-notes">
       <div class="note s-now"><b>不能调换的顺序</b>M3 依赖阶段 I 的稳定 ID；M6 依赖 M3 / M4 的操作合同。</div>
-      <div class="note s-now"><b>可以并行</b>M1 与 B0、阶段 I 同时推进；播放不依赖治理写路径。</div>
+      <div class="note s-now"><b>可以并行</b>M1 与阶段 I 同时推进（B0 已完成）；播放不依赖治理写路径。</div>
       <div class="note s-appr"><b>已裁决（2026-09-28）</b>Core 1 截止到 M4；阶段顺序、身份策略、M1 前端基础与归组依据等 D1–D6 见路线修订任务。各 ADR 其余细节在对应阶段规划时批准。</div>
     </div>
   </section>
@@ -877,8 +877,8 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
       <ul>
         <li><code>docs/architecture/core-1-roadmap.md</code> · <code>docs/architecture/adr/0001–0004</code> · <code>frontend/DESIGN.md</code></li>
         <li><code>.trellis/spec/frontend/state-management.md</code>（批准与执行状态）</li>
-        <li><code>backend/cmd/roomusic/scanner.go:929</code>（每个新 Release 新建一个组）、<code>:934</code>（更新已有 Release 时直接覆盖字段）</li>
-        <li><code>backend/cmd/roomusic/organizer.go:1006</code>（拆分候选的锚点取最小文件路径）</li>
+        <li><code>backend/internal/catalog/persist.go:44</code>（每个新 Release 新建一个组）、<code>:50</code>（更新已有 Release 时直接覆盖字段）</li>
+        <li><code>backend/internal/catalog/organizer.go:922</code>（拆分候选的锚点取最小文件路径）</li>
         <li><code>docs/architecture/architecture-decisions.md</code>（扩展边界与两步走指导原则）</li>
       </ul>
     </div>

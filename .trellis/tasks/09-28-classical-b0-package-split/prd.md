@@ -105,3 +105,27 @@
 
 - D1 由用户（qlqq）于 2026-09-29 选定；D2、D3 按已批准的路线与初稿规则推出，随最终规划摘要一并确认。
 - 状态：用户于 2026-09-29 明确批准最终规划摘要，进入实施。
+
+## 实施结果（2026-09-30）
+
+- **提交**（均在 main，未推送）：`8e696dd` 规划；`b4cda28` catalog、metadata、artwork、uuid；`0888c77` platform/postgres 与 postgrestest；
+  `bbb4431` library 与 parser；`e452105` httpserver、config、identity、各 httpapi 与 app；文档同步为最后一个提交。
+- **结果**：`cmd/roomusic` 只剩 `main.go`（109 行入口）、`main_test.go` 与 `web/`；后端非测试代码 8,833 行分布在 16 个包里，测试 5,164 行随被测代码移动。
+  `catalog`、`library`、`parser` 不导入 `net/http`；依赖方向由 `internal/app/dependency_rules_test.go` 强制，变异检查证明它会拦截违规。
+- **行为不变的证据**：
+  - 每一步都通过 gofmt、vet、build、`go test ./...`、`go test -race ./...`、`./scripts/test-integration.sh`；
+  - 测试名单与基线 161 个逐项对账，没有丢失；新增 4 个：`TestNewReturnsValidVersion4Identifiers`、`TestEscapeLikePatternEscapesWildcards`
+    （从搜索解析测试拆出的断言）、`TestRoutesResolveToRegisteredPatterns`（固定 REST 路由表）、`TestPackageDependencyDirections`；
+  - 搬迁的函数用脚本对照原文，逐函数只有机械改动：organizer 35、scanner 37、handler 34、基础设施 32，以及解析器全文、来源身份、持久化、封面和迁移执行器；
+  - 用编译出的二进制在正常与数据库不可达两种模式下做了端到端冒烟。
+- **与计划的差异**：
+  - 新增一步 `platform/postgres`（library 的数据库测试需要隔离 schema 加迁移的测试库，执行器必须先离开 `package main`）；
+  - 取消与诊断也抽成 `library.Service` 方法，扫描 handler 不再含 SQL；
+  - 包名 `platform/uuid` 取代 `platform/id`，避免被 handler 里的局部变量 `id` 遮蔽；
+  - `databaseState` 删除，`/readyz` 以 `database != nil` 判断；
+  - `cmd/roomusic/main_test.go` 保留验证真实嵌入产物的前端测试；
+  - scanner 的 `cloneBoolMap` 与 organizer 的同名函数各留一份。
+- **删除的无调用方代码**：`readinessHandler`、`decisionValue`、`refineDirectoryKind`、`listRootsGoverned`、`markMissing`、`recordDiagnostic`、`saveArtwork`、`saveArtworkWith`、`audioObservation.fieldObservations`、`databaseState`。
+- **文档同步**：后端规范（目录结构、index、运行合同、数据库、日志、Catalog REST、前端类型安全）、ADR 0001–0004 的代码链接（结论仍以核对基线为准）、
+  架构决策摘要、路线图、架构图、`frontend/DESIGN.md`、阶段 I 与 M1a 的 PRD、父任务。`frontend-desgin/github.md` 是设计工具的导出清单，按约定保持原样；已归档任务是历史记录，不改。
+- **遗留技术债**（已写入 `directory-structure.md`）：`identity/httpapi` 与 `library/httpapi` 中目录、目录操作、成员管理的 handler 仍直接执行 SQL；M3 重做目录操作时抽出用例。

@@ -68,7 +68,7 @@ Operation Journal。这些内容都是可查询的业务记录，并各自拥有
 ### HTTP 完成事件（Core 0 当前实现）
 
 HTTP 边界在请求完成后恰好写出一个 `http.request.completed` 事件。事件由
-`backend/cmd/roomusic/main.go` 的请求中间件产生，字段合同如下：
+`backend/internal/platform/httpserver/middleware.go` 的请求中间件产生，字段合同如下：
 
 | 字段 | 合同 |
 | --- | --- |
