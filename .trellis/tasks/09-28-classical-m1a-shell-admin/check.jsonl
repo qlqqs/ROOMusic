@@ -1,2 +1,5 @@
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质量门禁与可访问性"}
 {"file": "frontend/DESIGN.md", "reason": "界面与设计锚点一致"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端门禁、可访问性与测试证据"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "decoder 只在边界解码一次、不做裸类型断言"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "会话清理与状态归属"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "前端行为与后端接口合同一致"}
