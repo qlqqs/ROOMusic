@@ -1,0 +1,58 @@
+import AxeBuilder from "@axe-core/playwright";
+import { expect, type Page } from "@playwright/test";
+
+/** 设计要求验证的五种宽度（DESIGN.md 响应式一节）。 */
+export const widths = [375, 768, 1024, 1280, 1440] as const;
+
+/** 页面与主内容区都不能产生横向滚动：主内容区在宽屏下是自己的滚动容器，页面级检查看不到它里面的溢出。 */
+export async function expectNoHorizontalOverflow(page: Page, label: string): Promise<void> {
+  const overflow = await page.evaluate(() => {
+    const main = document.getElementById("main");
+    return {
+      page: document.documentElement.scrollWidth - window.innerWidth,
+      main: main === null ? 0 : main.scrollWidth - main.clientWidth,
+    };
+  });
+  expect(overflow.page, `${label}：页面横向溢出 ${overflow.page}px`).toBeLessThanOrEqual(0);
+  expect(overflow.main, `${label}：主内容区横向溢出 ${overflow.main}px`).toBeLessThanOrEqual(0);
+}
+
+const axeTags = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
+
+/** axe 扫描（WCAG 2.1 A 与 AA）：serious 或 critical 即失败，失败信息列出规则、说明与元素。 */
+export async function expectNoSeriousViolations(page: Page, label: string): Promise<void> {
+  const { violations } = await new AxeBuilder({ page }).withTags(axeTags).analyze();
+  const serious = violations.filter((violation) => violation.impact === "serious" || violation.impact === "critical");
+  const described = serious.map((violation) => `${violation.id}: ${violation.help}（${violation.nodes.map((node) => node.target.join(" ")).join("；")}）`);
+  expect(described, `${label}：axe 发现严重问题`).toEqual([]);
+}
+
+/** 所有有文字的元素的计算字号都不小于 minimum（设计的最小字号 12px）。 */
+export async function expectMinimumFontSize(page: Page, label: string, minimum = 12): Promise<void> {
+  const tooSmall = await page.evaluate((limit) => {
+    const found: string[] = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+      const text = (node.textContent ?? "").trim();
+      const element = node.parentElement;
+      if (text === "" || element === null) continue;
+      const size = Number.parseFloat(getComputedStyle(element).fontSize);
+      if (size < limit) found.push(`<${element.tagName.toLowerCase()}> ${size}px “${text.slice(0, 20)}”`);
+    }
+    return found;
+  }, minimum);
+  expect(tooSmall, `${label}：字号不应小于 ${minimum}px`).toEqual([]);
+}
+
+/** 焦点环可见：当前聚焦元素有实线轮廓，宽度不小于 2px。 */
+export async function expectVisibleFocusRing(page: Page, label: string): Promise<void> {
+  const ring = await page.evaluate(() => {
+    const element = document.activeElement;
+    if (element === null) return null;
+    const style = getComputedStyle(element);
+    return { style: style.outlineStyle, width: Number.parseFloat(style.outlineWidth) };
+  });
+  expect(ring, `${label}：没有聚焦元素`).not.toBeNull();
+  expect(ring?.style, `${label}：焦点环样式`).not.toBe("none");
+  expect(ring?.width ?? 0, `${label}：焦点环宽度`).toBeGreaterThanOrEqual(2);
+}

@@ -81,13 +81,20 @@ Co-Authored-By 行。改动前端源码的提交都重新构建并一起提交 `
 
 ## 第 6 步：浏览器冒烟、无障碍与真实接口冒烟
 
-- [ ] `playwright.config.ts`、`e2e/support/api-mock.ts` 与各场景；五种宽度的横向溢出断言、axe 扫描、键盘路径、
-      无第三方请求断言；按发现的问题修整样式与语义。
-- [ ] CI 前端作业增加安装 Chromium 与 `npm run test:e2e`；Makefile 增加 `frontend-e2e`、`frontend-install` 改用 `npm ci`。
-- [ ] 真实接口冒烟（design.md 第 10 节）：隔离 PostgreSQL 与临时目录，走 A2 主路径；命令与结果写入
-      `research/real-api-smoke.md`，用后清理容器、目录与临时文件。
-- [ ] 验证：`npx playwright install chromium`、`npm run test:e2e`，以及第 3 步的前端命令。
-- [ ] 提交：`test(frontend): Playwright 冒烟、无障碍与响应式检查`。
+- [x] `playwright.config.ts`、`e2e/support/{api-mock,fixtures,checks,locators}.ts` 与 7 个规格文件共 73 个用例：初始化与登录（含回跳、退出、
+      会话中途 401、403、服务不可用）、目录、扫描（假时钟推进轮询）、成员、键盘路径、五种宽度的横向溢出、axe 与最小字号、
+      检查工具自检；每个测试结束时断言没有第三方请求、没有脚本错误与控制台错误。
+      页面与状态在第 3 至 5 步已经手工审计过，所以响应式与 axe 一次通过，没有需要为它们修整的样式或语义；
+      为了证明这不是检查没有生效，增加了 `e2e/checks.spec.ts`，用故意有问题的页面确认每项检查都会失败。
+- [x] CI 前端作业增加 `npx playwright install --with-deps chromium`、`npm run test:e2e` 与失败时上传报告；作业超时改为 20 分钟。
+      Makefile 增加 `frontend-e2e`，`frontend-install` 改用 `npm ci`；`package.json` 增加 `preview` 脚本，Playwright 的 webServer 经 npm 脚本调用，
+      不依赖 `PATH` 里有 `node_modules/.bin`。
+- [x] 真实接口冒烟（design.md 第 10 节）：隔离 PostgreSQL 与临时目录，合成的有效 FLAC 与损坏文件，走 A2 主路径共 82 项检查全部通过
+      （成功与不完整两种终态、诊断、停用与恢复、成员全流程、成员会话、最后一个管理员、真实数据下五个宽度与 axe、退出与回跳）；
+      命令、结果、发现与未覆盖项见 `research/real-api-smoke.md`。容器、卷、目录与临时文件用后已清理，用户自己的 `roomusic` 项目没有被触碰。
+- [x] 验证：`npx playwright install chromium`（本机，系统库经 `LD_LIBRARY_PATH` 提供）、`npm run test:e2e`（73 个用例）、
+      `npm run lint`、`typecheck`、`test`、`build`、`go build ./...`、内嵌产物漂移检查、`git diff --check`。
+- [x] 提交：`test(frontend): Playwright 冒烟、无障碍与响应式检查`。
 
 ## 第 7 步：文档同步与收尾
 
@@ -142,3 +149,17 @@ Co-Authored-By 行。改动前端源码的提交都重新构建并一起提交 `
   - `roleLabels` 提到 `features/auth` 的公共导出（身份区与成员列表共用）；测试替身的后注册处理器（含正则路径）覆盖先注册的。
   - 后端缺口（第 7 步记入 design.md 第 13 节）：`createUser` 把任何插入失败都映射成 409 `username_taken`；`invalid_input` 的文案写“12 个字符”而规则按字节；
     `PATCH /users/{id}` 与撤销会话对格式不对的 ID 返回 503（UUID 转换错误）而不是 400；`/users` 的读取失败会被静默跳过（design.md 已记）。
+- 第 6 步的发现与取舍：
+  - 浏览器测试的受控后端是按同一份行为定义另写的状态机（幂等键必填与重放、`expected_revision` 与 409、扫描按读取次数结束、取消需要两次读取、
+    最后一个管理员、停用自己会清除会话），响应体取自后端样本并经同一批 decoder 的类型约束；它不能复用 Vitest 的替身，因为替身依赖 vitest。
+    规格里用 `page.clock.install()` 加 `fastForward` 推进轮询，不真实等待，也不使用固定睡眠。
+  - 原生 `<dialog>` 的模态在最后一个可聚焦元素之后会把焦点交给浏览器界面或 `body`，不是严格的循环；键盘用例断言“焦点始终在对话框内或在 `body` 上，
+    且依次到达至少两个对话框内的元素”，并断言 Esc 把焦点还给触发按钮。严格的循环断言在真实 Chromium 上必然失败，不是缺陷。
+  - Playwright 的夹具回调参数不能叫 `use`：react-hooks 的 lint 规则会把它当成 React Hook，本项目约定叫 `provide`。
+  - 检查本身要有自检：全部通过既可能是页面没问题，也可能是检查没有生效。`e2e/checks.spec.ts` 用缺少替代文字的图片、11px 文字、内部溢出的主内容区与
+    没有轮廓的聚焦按钮确认 axe、最小字号、横向溢出与焦点环检查都会失败。
+  - CI 里 Playwright 重试一次（`retries: 1`），失败时上传 HTML 报告与 trace（保留 7 天）；`webServer` 先 `npm run build` 再 `npm run preview`，
+    所以被测的就是内嵌进后端的那份产物；本机复用已在运行的预览服务（`reuseExistingServer`），CI 不复用。
+  - 真实接口冒烟没有发现产品缺陷。两处与预期不符都是脚本写错：同一文档里主动退出后登录页不带 `redirect`，而重新载入后（没有“刚退出”的记忆）
+    直接访问受保护页会带 `redirect`；撤销会话后在 `/library` 刷新再登录，会回到 `/library` 而不是概览。第 7 步把这一区别写进前端规范的会话一节。
+  - 终态在开始扫描后约 2 秒才被界面观察到，是 2 秒的详情轮询间隔；合成素材的扫描几乎立即完成。
