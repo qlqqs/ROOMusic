@@ -7,3 +7,7 @@
 # picking either side (task state lives in task.json, not index.md). See
 # .trellis/spec/backend/directory-structure.md for details.
 .trellis/workspace/*/journal-*.md merge=union
+
+# 前端构建产物：由 frontend 的 npm run build 生成并内嵌进后端，不手改。
+# 压缩后的脚本含行尾空白，不参与空白检查（git diff --check）；在 GitHub 上标为生成文件，默认折叠差异。
+backend/cmd/roomusic/web/** -whitespace linguist-generated=true

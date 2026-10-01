@@ -1,0 +1,106 @@
+.frame {
+  min-height: 100dvh;
+}
+
+.skipLink {
+  position: absolute;
+  top: -100px;
+  left: var(--space-3);
+  z-index: 100;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--text-primary);
+  font-family: var(--font-heading);
+  font-size: var(--fs-14);
+  font-weight: var(--font-heading-weight);
+  text-decoration: none;
+}
+
+.skipLink:focus {
+  top: var(--space-3);
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: var(--layout-topbar-height);
+  padding: var(--space-2) var(--layout-page-inset-x);
+  border-bottom: 1px solid var(--color-divider);
+  background: var(--color-bg);
+}
+
+.sidebar {
+  display: none;
+}
+
+.main {
+  min-width: 0;
+}
+
+/* 主内容区只在导航后被程序聚焦，不需要焦点环。 */
+.main:focus {
+  outline: none;
+}
+
+.drawer {
+  width: min(320px, 85vw);
+  height: 100dvh;
+  max-height: 100dvh;
+  margin: 0 auto 0 0;
+  border-width: 0 1px 0 0;
+  border-radius: 0;
+}
+
+.drawerContent {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+  min-height: 100%;
+  padding: var(--space-4);
+}
+
+.drawerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+@media (min-width: 768px) {
+  .frame {
+    display: grid;
+    grid-template-columns: var(--layout-sidebar-width) minmax(0, 1fr);
+    height: 100dvh;
+    min-height: 0;
+  }
+
+  .topbar {
+    display: none;
+  }
+
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    min-height: 0;
+    padding: var(--space-6) var(--space-3) var(--space-4);
+    overflow-y: auto;
+    border-right: 1px solid var(--color-divider);
+  }
+
+  .identity {
+    margin-top: auto;
+  }
+
+  .main {
+    min-height: 0;
+    overflow-y: auto;
+  }
+}

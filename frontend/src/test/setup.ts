@@ -16,6 +16,9 @@ if (typeof HTMLDialogElement.prototype.showModal !== "function") {
   };
 }
 
+// jsdom 没有实现 window.scrollTo：路由切换时的滚动恢复会调用它，未桩住会在每次导航后刷出“Not implemented”。
+window.scrollTo = () => undefined;
+
 afterEach(() => {
   cleanup();
 });

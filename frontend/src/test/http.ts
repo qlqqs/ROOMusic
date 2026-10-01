@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import { loadApiSample } from "./api-samples";
 
 /** 测试用的 JSON 响应；默认带 application/json，与后端的 WriteJSON 一致。 */
 export function jsonResponse(status: number, body: unknown, headers: Record<string, string> = {}): Response {
@@ -6,6 +7,12 @@ export function jsonResponse(status: number, body: unknown, headers: Record<stri
     status,
     headers: { "Content-Type": "application/json", ...headers },
   });
+}
+
+/** 用后端真实响应样本构造响应（状态码与响应体都取自样本）。 */
+export function sampleResponse(name: string, headers: Record<string, string> = {}): Response {
+  const sample = loadApiSample(name);
+  return jsonResponse(sample.status, sample.body, headers);
 }
 
 /** 一次请求的记录：测试据此断言路径、方法、请求头与请求体。 */

@@ -1,0 +1,25 @@
+.list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-8);
+  margin: 0;
+}
+
+.item {
+  display: grid;
+  gap: 2px;
+}
+
+.label {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+}
+
+.value {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--fs-36);
+  line-height: 1.15;
+  /* Cormorant 默认是旧式数字（“1”像罗马数字 I，“3”下沉）；统计值要等高等宽，便于读数与对齐。 */
+  font-variant-numeric: lining-nums tabular-nums;
+}

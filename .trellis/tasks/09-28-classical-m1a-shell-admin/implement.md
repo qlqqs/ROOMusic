@@ -39,13 +39,19 @@ Co-Authored-By 行。改动前端源码的提交都重新构建并一起提交 `
 
 ## 第 3 步：认证、外壳与概览（首个可用界面）
 
-- [ ] `src/main.tsx`、`app/providers.tsx`、`app/router.tsx`、外壳（侧栏、窄屏导航、身份区）、无权限 / 不存在 / 服务不可用页面。
-- [ ] 会话控制器：启动、初始化后自动登录、登录跳回、退出、401 清理、代次守卫、跨标签页广播与重新可见核对。
-- [ ] 概览四个区块及其查询 hook。
-- [ ] CI 前端作业删除入口检测与占位页分支，测试命令改为 `npm run test`。
-- [ ] 验证：`npm run lint`、`npm run typecheck`、`npm run test`、`npm run build`；`go build ./...`（内嵌新产物）；
-      本地 `vite` 开发服务连隔离后端手动走一遍登录与退出。
-- [ ] 提交：`feat(frontend): 认证、会话生命周期、应用外壳与概览`（含首次内嵌产物与字体文件）。
+- [x] `src/main.tsx`、`app/providers.tsx`、`app/router.tsx`、外壳（侧栏、窄屏导航、身份区）、无权限 / 不存在 / 服务不可用页面。
+- [x] 会话控制器：启动、初始化后自动登录、登录跳回、退出、401 清理、代次守卫、跨标签页广播与重新可见核对。
+- [x] 概览四个区块及其查询 hook。
+- [x] CI 前端作业删除入口检测与占位页分支，测试命令改为 `npm run test`。
+- [x] 验证：`npm run lint`、`npm run typecheck`、`npm run test`（23 个文件 342 个测试）、`npm run build`；`go build ./...`（内嵌新产物）；
+      连续两次构建的 119 个产物文件逐字节一致（CI 漂移检查可行）。
+      计划写的是“vite 开发服务连隔离后端”，实际改为更严格的做法：用**生产构建产物**连隔离后端（项目的 `compose.test.yaml`
+      PostgreSQL + 临时目录 + 本地编译的后端二进制，同源托管内嵌产物），在真实 Chromium 中走完：全新库进入初始化页 →
+      口令规则 → 创建并自动登录 → 刷新 → 已登录访问 `/login`、`/setup` 回概览 → 退出 → 错误密码 → 登录 → 另一标签页退出本页跟随 →
+      清 Cookie 后重新可见触发核对，回到登录页并提示“登录已失效”；会话 Cookie 为 `HttpOnly; SameSite=Lax`；没有第三方请求。
+      用样本假后端另检 375 / 768 / 1024 / 1280 / 1440 五个宽度无横向溢出，9 个页面状态（登录、初始化、概览、扫描运行中、
+      非管理员、不存在、服务不可用、窄屏菜单）axe（wcag2a/2aa/21a/21aa/22aa）零违规。验证用的脚本与资源都在 `/tmp`，不入库，用后已清理。
+- [x] 提交：`feat(frontend): 认证、会话生命周期、应用外壳与概览`（含首次内嵌产物与字体文件）。
 
 ## 第 4 步：扫描目录与扫描详情
 
@@ -87,3 +93,18 @@ Co-Authored-By 行。改动前端源码的提交都重新构建并一起提交 `
 - `.github/workflows/ci.yml`：第 3、6 步修改，回退时与对应源码一起回退。
 - 后端只改测试与 testdata（第 2 步），回退不影响运行；没有数据库迁移。
 - 每步提交后都是可用状态，按逆序 `git revert` 即可回到上一步。
+
+## 实施中的发现（第 7 步据此同步文档）
+
+- 路由：TanStack Router 把 `validateSearch` 的返回值合并到原始查询串上（`match.search = { ...原始, ...校验结果 }`），校验函数只省略键时
+  不合法的原值仍留在 `search` 里并被 `beforeLoad` 读到；必须显式返回 `undefined`（`/login` 的 `redirect` 已修，有回归测试）。写进前端规范的路由一节。
+- 数字：Cormorant Garamond 默认是旧式数字（“1”像罗马数字 I，“3”下沉），`tabular-nums` 单独使用不改变这一点；统计值与后续的表格、时长用
+  `lining-nums tabular-nums`，标题里的数字保持字体默认。DESIGN.md“数字”一行据此改写。
+- 测试：jsdom 没有 `window.scrollTo`，路由滚动恢复会在每次导航后刷出“Not implemented”，已在 `src/test/setup.ts` 桩住。
+- 浏览器：未登录时 `GET /auth/me` 返回 401 是合同行为，浏览器控制台会记一条资源错误；第 6 步的控制台断言要排除这类预期的资源状态。
+  本机缺 Chromium 的系统库（`libatk` 等）且无 root 时，可 `apt-get download` 后 `dpkg -x` 到 `/tmp`，用 `LD_LIBRARY_PATH` 运行；CI 用
+  `npx playwright install --with-deps chromium`。Playwright 1.63 要求 chromium 修订 1243，本机缓存是 1234，第 6 步需要 `npx playwright install chromium`。
+- 产物：构建后 CSS 约 118 KB（gzip 43 KB），主要是 Noto Serif SC 约 120 个 `unicode-range` 分片的 `@font-face`，字体文件按需下载；
+  JS 约 337 KB（gzip 108 KB）。内嵌目录共 119 个文件、约 6.8 MB。
+- 后端静态文件（M1a 不改，记入路线遗留项）：`httpserver.Frontend` 不设缓存头，带哈希文件名的资源与较大的字体每次都要重新协商；
+  对 `/assets/`、`/licenses/` 这类目录路径会返回目录列表。

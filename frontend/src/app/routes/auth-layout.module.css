@@ -1,0 +1,38 @@
+.page {
+  display: grid;
+  min-height: 100dvh;
+  padding: var(--space-6) var(--space-4);
+  place-items: center;
+}
+
+.sheet {
+  display: grid;
+  gap: var(--space-6);
+  width: min(100%, 440px);
+  padding: var(--space-6);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+}
+
+.brand {
+  color: var(--text-secondary);
+  font-family: var(--font-heading);
+  font-size: var(--fs-20);
+  font-weight: var(--font-heading-weight);
+}
+
+.header {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.description {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+}
+
+@media (max-width: 767px) {
+  .sheet {
+    padding: var(--space-4);
+  }
+}
