@@ -1,0 +1,67 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--control-height);
+  padding: 0 calc(var(--space-3) * 1.2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-heading);
+  font-size: var(--fs-14);
+  font-weight: var(--font-heading-weight);
+  line-height: 1.2;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.icon {
+  display: inline-flex;
+}
+
+.secondary {
+  border-color: var(--color-control-border);
+}
+
+.primary {
+  border-color: var(--color-accent);
+  color: var(--text-accent);
+}
+
+.text {
+  padding-inline: var(--space-2);
+  color: var(--text-accent);
+}
+
+.button:enabled:not([aria-disabled="true"]):hover {
+  background: var(--color-hover);
+}
+
+.button:enabled:not([aria-disabled="true"]):active {
+  background: var(--color-pressed);
+}
+
+.primary:enabled:not([aria-disabled="true"]):hover,
+.text:enabled:not([aria-disabled="true"]):hover {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+.primary:enabled:not([aria-disabled="true"]):active,
+.text:enabled:not([aria-disabled="true"]):active {
+  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+}
+
+.button:disabled,
+.button[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.button[aria-busy="true"] {
+  cursor: progress;
+}

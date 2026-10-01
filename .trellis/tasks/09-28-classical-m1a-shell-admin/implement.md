@@ -11,16 +11,19 @@ Co-Authored-By 行。改动前端源码的提交都重新构建并一起提交 `
 
 ## 第 1 步：依赖与脚手架（无应用入口）
 
-- [ ] `package.json`：全部直接依赖改为 design.md 第 2 节的精确版本，构建工具移入 devDependencies；脚本 `test` 改为
+- [x] `package.json`：全部直接依赖改为 design.md 第 2 节的精确版本，构建工具移入 devDependencies；脚本 `test` 改为
       `vitest run`，新增 `test:e2e`。用 `npm install` 更新 lock，再用 `npm ci` 确认可重复安装。
-- [ ] 复核 TypeScript 6 与 TanStack Router、`exactOptionalPropertyTypes` 的兼容性；不兼容时按 prd.md 风险条处理并记录。
-- [ ] `tsconfig.json`（新增严格选项、包含 `src`、`e2e` 与配置文件）、`eslint.config.js`（react-hooks 推荐规则、Node 环境文件）、
+- [x] 复核 TypeScript 6 与 TanStack Router、`exactOptionalPropertyTypes` 的兼容性；不兼容时按 prd.md 风险条处理并记录。
+      结果（2026-10-01）：TypeScript 6.0.3 + Router 1.170.40 + Query 5.104.0 在 `strict`、`noUncheckedIndexedAccess`、
+      `exactOptionalPropertyTypes` 下用代码定义路由（根上下文、无路径布局的守卫、`validateSearch`、`$scanId` 参数）通过类型检查，
+      无需放宽任何选项；注意无路径布局的 `id` 会进入子路由 ID，参数 hook 用路由对象的 `useParams()`。
+- [x] `tsconfig.json`（新增严格选项、包含 `src`、`e2e` 与配置文件）、`eslint.config.js`（react-hooks 推荐规则、Node 环境文件）、
       `vite.config.ts`（Vitest：jsdom、setup 文件、只收集 `src/**/*.test.ts(x)`）、`.gitignore`。
-- [ ] `src/styles/`：tokens、base、fonts；`public/licenses/` 放三套字体的 OFL 文本与来源说明。
-- [ ] `shared/api`（请求层、错误分类、解码原语、错误信封 decoder）、`shared/lib`（请求 ID、幂等键、时间格式化）、
+- [x] `src/styles/`：tokens、base、fonts；`public/licenses/` 放三套字体的 OFL 文本与来源说明。
+- [x] `shared/api`（请求层、错误分类、解码原语、错误信封 decoder）、`shared/lib`（请求 ID、幂等键、时间格式化）、
       `shared/ui` 基础组件，均带单元测试。
-- [ ] 验证：`npm ci`、`npm run lint`、`npm run typecheck`、`npm run test`。
-- [ ] 提交：`build(frontend): 精确锁定依赖并建立 Classical 脚手架与请求层`。
+- [x] 验证：`npm ci`、`npm run lint`、`npm run typecheck`、`npm run test`。
+- [x] 提交：`build(frontend): 精确锁定依赖并建立 Classical 脚手架与请求层`。
 
 ## 第 2 步：接口样本与全部 decoder
 

@@ -1,0 +1,28 @@
+.dialog {
+  width: min(440px, calc(100vw - 2 * var(--space-4)));
+}
+
+.content {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.title {
+  font-size: var(--fs-20);
+}
+
+.body {
+  display: grid;
+  gap: var(--space-2);
+  font-size: var(--fs-14);
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}

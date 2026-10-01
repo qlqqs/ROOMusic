@@ -1,5 +1,5 @@
 import { defineConfig, mergeConfig } from "vite";
-import baseConfig from "./vite.config.ts";
+import baseConfig from "./vite.config";
 
 // 公网反代开发时只放行 ROOMUSIC_PUBLIC_URL 的主机名；Vite 默认已放行 localhost 和 IP。
 const publicUrl = process.env.ROOMUSIC_PUBLIC_URL;

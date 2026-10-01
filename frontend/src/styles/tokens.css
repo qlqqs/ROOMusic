@@ -1,0 +1,126 @@
+/*
+ * Classical 设计变量。
+ * 色板、色阶、间距、圆角与阴影取自设计稿 frontend-desgin/_ds/.../styles.css 的 :root，数值保持原样；
+ * 语义文字色、控件边界、焦点环、布局与字阶是 M1a 的落地定义（见 frontend/DESIGN.md 第 3 节）。
+ * 组件只引用这些变量，不各自复制近似值。
+ */
+:root {
+  color-scheme: light;
+
+  --color-bg: #f3f2f2;
+  --color-surface: #eae9e9;
+  --color-text: #201f1d;
+  --color-accent: #b68235;
+  --color-accent-2: #ac803e;
+  --color-divider: color-mix(in srgb, #201f1d 16%, transparent);
+
+  --color-neutral-100: #f8f4f4;
+  --color-neutral-200: #eae7e7;
+  --color-neutral-300: #d7d3d3;
+  --color-neutral-400: #bab6b6;
+  --color-neutral-500: #9b9797;
+  --color-neutral-600: #7d7979;
+  --color-neutral-700: #605d5d;
+  --color-neutral-800: #444141;
+  --color-neutral-900: #2d2b2b;
+
+  --color-accent-100: #fff3e4;
+  --color-accent-200: #ffe3bf;
+  --color-accent-300: #facb8d;
+  --color-accent-400: #e1ad66;
+  --color-accent-500: #c28d41;
+  --color-accent-600: #a06f24;
+  --color-accent-700: #7d5411;
+  --color-accent-800: #5a3b0a;
+  --color-accent-900: #3a270d;
+
+  --color-accent-2-100: #fff3e4;
+  --color-accent-2-200: #ffe3be;
+  --color-accent-2-300: #f5cd96;
+  --color-accent-2-400: #dbaf70;
+  --color-accent-2-500: #bc8f4e;
+  --color-accent-2-600: #9b7232;
+  --color-accent-2-700: #79561f;
+  --color-accent-2-800: #573d14;
+  --color-accent-2-900: #382810;
+
+  /* 语义文字色：小字与链接用 accent-700（对纸面约 5.97:1），accent 只用于描边与细线。 */
+  --text-primary: var(--color-text);
+  --text-secondary: var(--color-neutral-700);
+  --text-accent: var(--color-accent-700);
+
+  /* 控件边界取 neutral-600（对纸面约 3.8:1）；--color-divider 只做结构分隔，不承担控件识别。 */
+  --color-control-border: var(--color-neutral-600);
+  --color-hover: color-mix(in srgb, var(--color-text) 6%, transparent);
+  --color-pressed: color-mix(in srgb, var(--color-text) 12%, transparent);
+  --color-selected: color-mix(in srgb, var(--color-accent) 11%, transparent);
+
+  --focus-ring: 2px solid var(--color-accent-700);
+  --focus-offset: 2px;
+
+  /* 中文衬线回退依次为 Noto Serif CJK、思源宋体、macOS/iOS 宋体与华文宋体；字体未加载时仍是衬线。 */
+  --font-heading:
+    "Cormorant Garamond Variable", "Noto Serif SC Variable", "Noto Serif CJK SC", "Source Han Serif SC",
+    "Songti SC", "STSong", serif;
+  --font-body:
+    "Lora Variable", "Noto Serif SC Variable", "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC",
+    "STSong", serif;
+  --font-heading-weight: 600;
+  --font-display-weight: 400;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  /* 字阶：最小 12px；正文 15px，控件与表格 14px。 */
+  --fs-12: 12px;
+  --fs-14: 14px;
+  --fs-15: 15px;
+  --fs-17: 17px;
+  --fs-20: 20px;
+  --fs-25: 25px;
+  --fs-36: 36px;
+  --fs-48: 48px;
+
+  --space-1: 4.6px;
+  --space-2: 9.2px;
+  --space-3: 13.8px;
+  --space-4: 18.4px;
+  --space-6: 27.6px;
+  --space-8: 36.8px;
+
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 7px;
+
+  --shadow-sm: 0 1px 2px color-mix(in srgb, #2d2b2b 14%, transparent);
+  --shadow-md: 0 3px 10px color-mix(in srgb, #2d2b2b 16%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in srgb, #2d2b2b 22%, transparent);
+
+  --layout-sidebar-width: 216px;
+  --layout-content-max: 1240px;
+  --layout-page-inset-x: 44px;
+  --layout-page-inset-y: 34px;
+  --layout-topbar-height: 56px;
+
+  /* 控件最小高度：桌面 36px，触屏与窄屏 44px（见下方媒体查询）。 */
+  --control-height: 36px;
+}
+
+@media (max-width: 1199px) {
+  :root {
+    --layout-page-inset-x: 28px;
+    --layout-page-inset-y: 28px;
+  }
+}
+
+@media (max-width: 767px) {
+  :root {
+    --layout-page-inset-x: 16px;
+    --layout-page-inset-y: 20px;
+    --control-height: 44px;
+  }
+}
+
+@media (pointer: coarse) {
+  :root {
+    --control-height: 44px;
+  }
+}

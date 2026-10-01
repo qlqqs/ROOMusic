@@ -17,6 +17,8 @@
 /build/
 **/build/
 /coverage/
+/frontend/test-results/
+/frontend/playwright-report/
 /roomusic
 *.exe
 *.log

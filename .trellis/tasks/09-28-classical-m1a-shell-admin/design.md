@@ -74,7 +74,7 @@ frontend/
 ```ts
 type ApiFailure =
   | { kind: "http"; status: number; code: string; message: string; requestId: string }
-  | { kind: "invalid_response"; status: number | null; requestId: string }
+  | { kind: "invalid_response"; status: number; requestId: string }       // 收到响应但不可信
   | { kind: "network"; requestId: string }   // 写请求结果未知
   | { kind: "aborted" };
 
@@ -92,8 +92,9 @@ function apiRequest<T>(
   `crypto.randomUUID` 在局域网 HTTP 开发访问（非安全上下文）下不可用。
 - 响应 `Content-Type` 不是 JSON（例如 HTML 回落页）、JSON 解析失败、信封不合法或 decoder 抛错，都归为 `invalid_response`，
   结果不进入缓存。信封要求 `error.code` 匹配 `^[a-z0-9_]{1,64}$`、`message` 为字符串（≤1000 字符）、`request_id` 为字符串。
-- `session: "required"`（默认）的请求得到 401 `unauthorized` 时调用应用注册的会话失效回调；初始化状态、初始化与登录接口标为
-  `"none"`。
+- `session: "required"`（默认）的请求得到 401 `unauthorized` 时通知应用注册的会话边界；初始化状态、初始化与登录接口标为
+  `"none"`。会话边界是 `{ currentGeneration(), onUnauthorized(generation) }`：请求发出时读取会话代次，401 到达时带回，
+  会话控制器据此忽略属于旧会话的 401（旧会话的请求不能结束新登录的会话）。
 - 解码原语（`shared/api/decode.ts`）：对象、字符串（长度上下界，默认最长 4096 字符）、布尔、安全整数（上下界）、
   RFC 3339 时间（允许小数秒与时区偏移）、UUID、枚举、数组（先查长度再逐项映射）、可空。抛出带字段路径的 `DecodeError`，
   只用于测试诊断，不展示给用户。
@@ -226,6 +227,8 @@ root（context: 会话快照）                     notFound → “页面不存
 - 前端作业：npm ci → lint → typecheck → `npm run test` → `npm run build` → 内嵌资产漂移检查（沿用现有两条命令）→
   `npx playwright install --with-deps chromium` → `npm run test:e2e`。删除入口检测与占位页分支。
 - `package.json` 脚本：`test` 改为 `vitest run`（去掉 `--passWithNoTests`），新增 `test:e2e`（`playwright test`）。
+- `vite.config.ts` 显式设置 `build.target`（`chrome111`、`edge111`、`firefox113`、`safari16.4`），与浏览器矩阵一致；
+  ESLint 禁止 `shared/api/request.ts` 之外直接使用 `fetch`（`no-restricted-globals` 与 `no-restricted-properties`）。
 - `.gitignore` 增加 `frontend/test-results/`、`frontend/playwright-report/`；Makefile 的 `frontend-install` 改用 `npm ci`，
   新增 `frontend-e2e`。
 - 构建产物继续提交：每个改动前端源码的提交都重新构建并一起提交 `backend/cmd/roomusic/web`。
