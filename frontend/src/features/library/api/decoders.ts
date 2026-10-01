@@ -27,9 +27,15 @@ export const decodeRootList = d.defineDecoder(rootListDecoder);
 export type RootDTO = d.Infer<typeof rootDecoder>;
 
 /** POST /library-roots（201）：路径已登记时返回已有目录，停用的保持停用。 */
-export const decodeRootCreated = d.defineDecoder(
-  d.object({ id: d.uuid(), name: d.string({ min: 1 }), status: d.oneOf(rootStatuses), revision: d.integer({ min: 1 }) }),
-);
+const rootCreatedDecoder = d.object({
+  id: d.uuid(),
+  name: d.string({ min: 1 }),
+  status: d.oneOf(rootStatuses),
+  revision: d.integer({ min: 1 }),
+});
+
+export const decodeRootCreated = d.defineDecoder(rootCreatedDecoder);
+export type RootCreatedDTO = d.Infer<typeof rootCreatedDecoder>;
 
 /** 停用与恢复的结果。 */
 const rootChangedDecoder = d.object({

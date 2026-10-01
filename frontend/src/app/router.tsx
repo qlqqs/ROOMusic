@@ -1,6 +1,9 @@
 import { createRootRouteWithContext, createRoute, createRouter, Outlet, redirect, type RouterHistory } from "@tanstack/react-router";
 import { sanitizeRedirect, type SessionController } from "../features/auth";
+import { ScanDetail } from "../features/library";
 import { AuthenticatedLayout } from "./shell/authenticated-layout";
+import { AdminGate } from "./routes/admin-gate";
+import { LibraryPage } from "./routes/library-page";
 import { LoginPage } from "./routes/login-page";
 import { NotFoundPage } from "./routes/not-found-page";
 import { OverviewPage } from "./routes/overview-page";
@@ -57,10 +60,37 @@ const authenticatedRoute = createRoute({
 
 const overviewRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/", component: OverviewPage });
 
+// 管理页由 AdminGate 把关：非管理员显示“需要管理员权限”，不渲染页面内容，也就不会调用管理接口。
+function LibraryRoute() {
+  return (
+    <AdminGate>
+      <LibraryPage />
+    </AdminGate>
+  );
+}
+
+const libraryRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/library", component: LibraryRoute });
+
+function ScanDetailRoute() {
+  const { scanId } = scanDetailRoute.useParams();
+  return (
+    <AdminGate>
+      <ScanDetail scanId={scanId} />
+    </AdminGate>
+  );
+}
+
+// 参数不是 UUID 时由页面显示“扫描不存在”，不发请求。
+const scanDetailRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/library/scans/$scanId",
+  component: ScanDetailRoute,
+});
+
 // 已登录用户访问不存在的路径时仍显示在外壳里；未登录用户先被守卫送去登录。
 const notFoundRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "$", component: NotFoundPage });
 
-const routeTree = rootRoute.addChildren([setupRoute, loginRoute, authenticatedRoute.addChildren([overviewRoute, notFoundRoute])]);
+const routeTree = rootRoute.addChildren([setupRoute, loginRoute, authenticatedRoute.addChildren([overviewRoute, libraryRoute, scanDetailRoute, notFoundRoute])]);
 
 export function createAppRouter(context: RouterContext, history?: RouterHistory) {
   return createRouter({ routeTree, context, ...(history === undefined ? {} : { history }) });

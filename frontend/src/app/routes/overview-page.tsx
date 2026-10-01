@@ -13,7 +13,7 @@ export function OverviewPage() {
     <Page title="概览" description="资料库与扫描的当前状态。">
       <div className={styles.grid}>
         <LibrarySummary isAdmin={isAdmin} />
-        <ScanSummary />
+        <ScanSummary canManage={isAdmin} />
         {isAdmin ? <RootSummary /> : null}
         {isAdmin ? <MemberSummary /> : null}
       </div>

@@ -2,6 +2,8 @@
 // 未知字段被忽略（旧前端可以读新后端），缺字段、错类型、未知枚举与超界一律抛出 DecodeError。
 // DecodeError 带字段路径，只用于测试与开发诊断，不展示给用户。
 
+import { isUuid } from "../lib/ids";
+
 export class DecodeError extends Error {
   readonly path: string;
 
@@ -105,11 +107,9 @@ export function timestamp(): Decoder<string> {
   };
 }
 
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export function uuid(): Decoder<string> {
   return (input, path) => {
-    if (typeof input !== "string" || !uuidPattern.test(input)) throw new DecodeError(path, "应为 UUID");
+    if (!isUuid(input)) throw new DecodeError(path, "应为 UUID");
     return input;
   };
 }

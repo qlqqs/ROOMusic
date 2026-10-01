@@ -1,6 +1,7 @@
 // shared/ui 的公开入口：无策略的表现组件，不发请求、不判断角色。
 export { Button } from "./button";
 export { ConfirmDialog } from "./confirm-dialog";
+export { DataTable, type Column } from "./data-table";
 export { FailureNotice } from "./failure-notice";
 export { ModalDialog } from "./modal-dialog";
 export { Notice } from "./notice";

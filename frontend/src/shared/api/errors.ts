@@ -47,3 +47,21 @@ export function failureOf(error: unknown): ApiFailure | null {
 export function isHttpFailure(failure: ApiFailure | null, status: number, code?: string): boolean {
   return failure?.kind === "http" && failure.status === status && (code === undefined || failure.code === code);
 }
+
+/**
+ * 写请求失败后，服务端是否可能已经执行了操作：没有拿到可信的响应（网络失败、无效响应），或服务端报告了内部错误（5xx）。
+ * 4xx 是明确的拒绝，操作没有执行；aborted 是调用方主动取消，不在此列。
+ * 结果不确定时界面不能说“失败了”，要先刷新核对；带幂等键的操作可以用同一个键安全重试。
+ */
+export function isOutcomeUncertain(failure: ApiFailure | null): boolean {
+  switch (failure?.kind) {
+    case "network":
+    case "invalid_response":
+      return true;
+    case "http":
+      return failure.status >= 500;
+    case "aborted":
+    case undefined:
+      return false;
+  }
+}

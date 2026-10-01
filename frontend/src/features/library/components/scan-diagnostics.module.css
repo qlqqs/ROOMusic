@@ -1,0 +1,26 @@
+.kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.kind {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--fs-14);
+}
+
+.count {
+  font-family: var(--font-heading);
+  font-size: var(--fs-20);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.note {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+}

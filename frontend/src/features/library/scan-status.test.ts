@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isScanFinished, scanPhase, scanPhaseLabels, type ScanPhase } from "./scan-status";
+import { isScanFinished, scanPhase, scanPhaseLabels, scanPhaseNotes, type ScanPhase } from "./scan-status";
 
 describe("scanPhase", () => {
   it("运行中且没有取消请求是 running，有取消请求是 cancel_requested", () => {
@@ -15,6 +15,13 @@ describe("scanPhase", () => {
   it("六种阶段的文案互不相同", () => {
     const phases: ScanPhase[] = ["running", "cancel_requested", "succeeded", "failed", "canceled", "incomplete"];
     expect(new Set(phases.map((phase) => scanPhaseLabels[phase])).size).toBe(6);
+    expect(new Set(phases.map((phase) => scanPhaseNotes[phase])).size).toBe(6);
+  });
+
+  it("失败、已取消、不完整都说明没有执行缺失对账，运行中不暗示进度", () => {
+    for (const phase of ["failed", "canceled", "incomplete"] as const) expect(scanPhaseNotes[phase]).toContain("没有执行缺失对账");
+    expect(scanPhaseNotes.succeeded).not.toContain("没有执行缺失对账");
+    for (const note of Object.values(scanPhaseNotes)) expect(note).not.toMatch(/\d+\s*%/);
   });
 });
 

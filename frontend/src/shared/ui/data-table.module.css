@@ -1,0 +1,118 @@
+/* 以容器宽度而不是视口宽度决定是否堆叠：页面有侧栏时，768px 视口里的内容区只有约 500px。 */
+.container {
+  container-type: inline-size;
+  min-width: 0;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-14);
+  line-height: 1.5;
+}
+
+.caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.table th,
+.table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-divider);
+  text-align: start;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.table th:first-child,
+.table td:first-child {
+  padding-inline-start: 0;
+}
+
+.table thead th {
+  padding-top: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.table .rowHeader {
+  font-family: var(--font-heading);
+  font-size: var(--fs-15);
+  font-weight: var(--font-heading-weight);
+}
+
+.table .numeric {
+  text-align: end;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.value {
+  min-width: 0;
+}
+
+@container (max-width: 639px) {
+  .table,
+  .table thead,
+  .table tbody,
+  .table tr,
+  .table th,
+  .table td {
+    display: block;
+  }
+
+  /* 表头仍在可访问树里，只是不显示：每个值前面的标签来自 data-label。 */
+  .table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .table tr {
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .table th,
+  .table td,
+  .table th:first-child,
+  .table td:first-child {
+    padding: 3px 0;
+    border: 0;
+  }
+
+  .table td {
+    display: grid;
+    grid-template-columns: minmax(5.5em, 32%) minmax(0, 1fr);
+    gap: var(--space-2);
+  }
+
+  .table td::before {
+    content: attr(data-label);
+    color: var(--text-secondary);
+    font-size: var(--fs-12);
+    line-height: 1.9;
+  }
+
+  .table .unlabeled {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .table .unlabeled::before {
+    content: none;
+  }
+
+  .table .numeric {
+    text-align: start;
+  }
+}

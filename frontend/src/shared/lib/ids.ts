@@ -24,3 +24,10 @@ export function newIdempotencyKey(): string {
   const hex = toHex(bytes);
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
+
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** 是否是带连字符的 UUID（不区分大小写）：路由参数在发请求前先校验，不是 UUID 的值直接当作不存在。 */
+export function isUuid(value: unknown): value is string {
+  return typeof value === "string" && uuidPattern.test(value);
+}

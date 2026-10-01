@@ -7,22 +7,33 @@ type Handler = (request: RecordedRequest) => Response | Promise<Response>;
 /** 测试用的后端替身：按“方法 路径”分派请求；没有注册的接口返回后端真实的“接口不存在”响应。 */
 export type FakeApi = {
   readonly requests: RecordedRequest[];
-  /** 注册处理器。path 带查询串时只匹配该查询串，否则匹配该路径的任意查询串。 */
-  on: (method: string, path: string, handler: Handler) => void;
+  /**
+   * 注册处理器。字符串路径带查询串时只匹配该查询串，否则匹配该路径的任意查询串；
+   * 正则匹配不含查询串的路径（用于带 ID 的路径），字符串路径优先于正则。同一个字符串路径后注册的覆盖先注册的。
+   */
+  on: (method: string, path: string | RegExp, handler: Handler) => void;
   /** 已发出的、方法与路径（不含查询串）匹配的请求。 */
-  requestsTo: (method: string, path: string) => RecordedRequest[];
+  requestsTo: (method: string, path: string | RegExp) => RecordedRequest[];
 };
+
+const pathOf = (request: RecordedRequest) => request.path.split("?")[0] ?? request.path;
 
 export function installFakeApi(): FakeApi {
   const handlers = new Map<string, Handler>();
+  const patterns: { method: string; pattern: RegExp; handler: Handler }[] = [];
   const requests = stubFetch((request) => {
-    const handler = handlers.get(`${request.method} ${request.path}`) ?? handlers.get(`${request.method} ${request.path.split("?")[0]}`);
+    const exact = handlers.get(`${request.method} ${request.path}`) ?? handlers.get(`${request.method} ${pathOf(request)}`);
+    const handler = exact ?? patterns.find((route) => route.method === request.method && route.pattern.test(pathOf(request)))?.handler;
     return handler === undefined ? sampleResponse("errors/not-found-api") : handler(request);
   });
+  const matches = (path: string | RegExp, request: RecordedRequest) => (typeof path === "string" ? pathOf(request) === path : path.test(pathOf(request)));
   return {
     requests,
-    on: (method, path, handler) => void handlers.set(`${method} ${path}`, handler),
-    requestsTo: (method, path) => requests.filter((request) => request.method === method && request.path.split("?")[0] === path),
+    on: (method, path, handler) => {
+      if (typeof path === "string") handlers.set(`${method} ${path}`, handler);
+      else patterns.push({ method, pattern: path, handler });
+    },
+    requestsTo: (method, path) => requests.filter((request) => request.method === method && matches(path, request)),
   };
 }
 
