@@ -1,9 +1,7 @@
 import { LogOut } from "lucide-react";
-import { useLogout, useViewerScope } from "../../features/auth";
+import { roleLabels, useLogout, useViewerScope } from "../../features/auth";
 import { Button, FailureNotice, StatusTag } from "../../shared/ui";
 import styles from "./identity-panel.module.css";
-
-const roleLabels = { admin: "管理员", user: "成员" } as const;
 
 /** 当前身份与退出：退出要等后端确认，失败时留在当前页并提示重试，不假装已退出。 */
 export function IdentityPanel() {

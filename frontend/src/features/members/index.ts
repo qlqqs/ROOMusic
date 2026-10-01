@@ -1,2 +1,3 @@
-// members 的公开入口：概览用的成员区块；成员管理页在随后的提交里加入。
+// members 的公开入口：概览用的成员区块，以及成员管理页的内容。
+export { MemberManagement } from "./components/member-management";
 export { MemberSummary } from "./components/member-summary";

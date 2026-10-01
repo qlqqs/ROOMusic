@@ -9,7 +9,8 @@ export type FakeApi = {
   readonly requests: RecordedRequest[];
   /**
    * 注册处理器。字符串路径带查询串时只匹配该查询串，否则匹配该路径的任意查询串；
-   * 正则匹配不含查询串的路径（用于带 ID 的路径），字符串路径优先于正则。同一个字符串路径后注册的覆盖先注册的。
+   * 正则匹配不含查询串的路径（用于带 ID 的路径），字符串路径优先于正则。后注册的覆盖先注册的，
+   * 测试因此可以在场景里改写某个接口的行为。
    */
   on: (method: string, path: string | RegExp, handler: Handler) => void;
   /** 已发出的、方法与路径（不含查询串）匹配的请求。 */
@@ -31,7 +32,7 @@ export function installFakeApi(): FakeApi {
     requests,
     on: (method, path, handler) => {
       if (typeof path === "string") handlers.set(`${method} ${path}`, handler);
-      else patterns.push({ method, pattern: path, handler });
+      else patterns.unshift({ method, pattern: path, handler });
     },
     requestsTo: (method, path) => requests.filter((request) => request.method === method && matches(path, request)),
   };

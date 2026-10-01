@@ -4,6 +4,7 @@ export { userRoles, type UserRole, type ViewerDTO } from "./api/decoders";
 export { LoginForm } from "./components/login-form";
 export { SetupForm } from "./components/setup-form";
 export { useLogin, useLogout, useSetupAdmin } from "./hooks/use-session-actions";
+export { roleLabels } from "./roles";
 export { sanitizeRedirect } from "./session/redirect";
 export { createBroadcastSessionChannel, type SessionChannel } from "./session/session-channel";
 export {

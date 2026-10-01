@@ -16,11 +16,18 @@ export const decodeMemberList = d.defineDecoder(memberListDecoder);
 export type MemberDTO = d.Infer<typeof memberDecoder>;
 export type MemberListDTO = d.Infer<typeof memberListDecoder>;
 
-export const decodeCreatedMember = d.defineDecoder(
-  d.object({ id: d.uuid(), username: d.string({ min: 1 }), role: d.oneOf(userRoles) }),
-);
+const createdMemberDecoder = d.object({ id: d.uuid(), username: d.string({ min: 1 }), role: d.oneOf(userRoles) });
+
+export const decodeCreatedMember = d.defineDecoder(createdMemberDecoder);
+export type CreatedMemberDTO = d.Infer<typeof createdMemberDecoder>;
 
 /** PATCH /users/{id} 的结果：停用与重新启用都返回目标状态。 */
-export const decodeMemberDisabledState = d.defineDecoder(d.object({ disabled: d.boolean() }));
+const memberDisabledStateDecoder = d.object({ disabled: d.boolean() });
 
-export const decodeSessionsRevoked = d.defineDecoder(d.object({ revoked: d.literal(true) }));
+export const decodeMemberDisabledState = d.defineDecoder(memberDisabledStateDecoder);
+export type MemberDisabledStateDTO = d.Infer<typeof memberDisabledStateDecoder>;
+
+const sessionsRevokedDecoder = d.object({ revoked: d.literal(true) });
+
+export const decodeSessionsRevoked = d.defineDecoder(sessionsRevokedDecoder);
+export type SessionsRevokedDTO = d.Infer<typeof sessionsRevokedDecoder>;

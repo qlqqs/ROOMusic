@@ -5,6 +5,7 @@ import { AuthenticatedLayout } from "./shell/authenticated-layout";
 import { AdminGate } from "./routes/admin-gate";
 import { LibraryPage } from "./routes/library-page";
 import { LoginPage } from "./routes/login-page";
+import { MembersPage } from "./routes/members-page";
 import { NotFoundPage } from "./routes/not-found-page";
 import { OverviewPage } from "./routes/overview-page";
 import { SetupPage } from "./routes/setup-page";
@@ -71,6 +72,16 @@ function LibraryRoute() {
 
 const libraryRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/library", component: LibraryRoute });
 
+function MembersRoute() {
+  return (
+    <AdminGate>
+      <MembersPage />
+    </AdminGate>
+  );
+}
+
+const membersRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/members", component: MembersRoute });
+
 function ScanDetailRoute() {
   const { scanId } = scanDetailRoute.useParams();
   return (
@@ -90,7 +101,7 @@ const scanDetailRoute = createRoute({
 // 已登录用户访问不存在的路径时仍显示在外壳里；未登录用户先被守卫送去登录。
 const notFoundRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "$", component: NotFoundPage });
 
-const routeTree = rootRoute.addChildren([setupRoute, loginRoute, authenticatedRoute.addChildren([overviewRoute, libraryRoute, scanDetailRoute, notFoundRoute])]);
+const routeTree = rootRoute.addChildren([setupRoute, loginRoute, authenticatedRoute.addChildren([overviewRoute, libraryRoute, scanDetailRoute, membersRoute, notFoundRoute])]);
 
 export function createAppRouter(context: RouterContext, history?: RouterHistory) {
   return createRouter({ routeTree, context, ...(history === undefined ? {} : { history }) });

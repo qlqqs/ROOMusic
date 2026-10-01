@@ -1,8 +1,8 @@
-import { FolderSearch, LayoutDashboard, type LucideIcon } from "lucide-react";
+import { FolderSearch, LayoutDashboard, Users, type LucideIcon } from "lucide-react";
 import type { UserRole } from "../../features/auth";
 
 export type NavItem = {
-  to: "/" | "/library";
+  to: "/" | "/library" | "/members";
   label: string;
   icon: LucideIcon;
   /** 只有管理员看到；后端仍然独立鉴权，这里只决定显示。 */
@@ -15,6 +15,7 @@ export type NavItem = {
 const navItems: readonly NavItem[] = [
   { to: "/", label: "概览", icon: LayoutDashboard, adminOnly: false, group: null },
   { to: "/library", label: "扫描目录", icon: FolderSearch, adminOnly: true, group: "资料库" },
+  { to: "/members", label: "成员", icon: Users, adminOnly: true, group: "资料库" },
 ];
 
 export type NavGroup = { label: string | null; items: readonly NavItem[] };
