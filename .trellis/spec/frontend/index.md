@@ -2,19 +2,20 @@
 
 ## Status
 
-2026-09-27 基线：`frontend/src/` 已删除，尚未恢复客户端。`frontend/` 保留 React、
-TypeScript、Vite、ESLint、Vitest/jsdom、lucide-react 的依赖声明与配置；这不等于相应
-组件、decoder 或测试当前存在。生产内嵌页面为前端重置占位页，CI 可跳过真实前端构建。
+2026-10-01：M1a 已实现并验证——应用外壳、初始化与会话、目录与扫描管理、成员管理、简版概览。`frontend/src/`
+按本层规范重建：React 19 与严格 TypeScript、TanStack Router（代码定义路由，不用 loader）与 TanStack Query
+（服务器状态的唯一缓存）、CSS Modules 加集中的 Classical 全局变量、Fontsource 自托管可变字体；直接依赖全部精确固定。
+生产页面由 Go 同源提供，构建产物（`backend/cmd/roomusic/web`）随源码提交，CI 检查漂移。M1b 在这个外壳上增加专辑浏览。
 
 本轮 Classical 的唯一落地设计锚为 [frontend/DESIGN.md](../../../frontend/DESIGN.md)，
 来源是 `frontend-desgin/` 中的原型。旧月刊布局、hash 路由、模拟播放器和生产演示入口
-不再是恢复客户端的默认要求；仍适用的队列语义与安全边界保留在本层规范。
+不再是默认要求；仍适用的队列语义与安全边界保留在本层规范。
 
-2026-09-28 已批准 Core 1 路线：M1a 用现有 API 恢复外壳与管理，M1b 使用阶段 I 的按组只读接口；
-既有初始化、会话、目录、扫描和成员管理写操作仍可使用，不新增元数据治理写路径。已批准的依赖与路由方案见
+既有初始化、会话、目录、扫描和成员管理写操作仍可使用，不新增元数据治理写路径。依赖与路由方案的决策见
 [前端基础 ADR](../../../docs/architecture/adr/0001-frontend-foundations.md) 决策记录，阶段和
-能力矩阵见 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)。依赖在 M1a 子任务中安装，文档本身不授权安装。
-以下是后续恢复实现需遵守的合同，不是当前前端已通过功能验收的声明。
+能力矩阵见 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)，M1a 的设计与验证记录见任务
+[M1a 技术设计](../../tasks/09-28-classical-m1a-shell-admin/design.md)。各规范文件区分“已实现的合同”与尚未实现的目标
+（播放器、搜索、受治理操作与 Agent 界面）；后者不是当前前端已通过验收的声明。
 
 ## Pre-Development Checklist
 
@@ -52,8 +53,8 @@ Before writing or reviewing frontend code:
 
 Before declaring frontend work complete:
 
-- [ ] 按[前端质量规范](./quality-guidelines.md)运行适用门禁；当前脚本已有配置，
-      但源码缺失时的脚本成功不等于客户端验收。M0 只验证文档，M1 须验证真实构建与行为。
+- [ ] 按[前端质量规范](./quality-guidelines.md)运行适用门禁：lint、类型检查、Vitest、生产构建与内嵌资产漂移检查；
+      涉及页面与交互时运行 Playwright 冒烟（`npm run test:e2e`），仅文档变更不必运行。
 - [ ] Verify raw REST payloads are decoded once at the feature API boundary,
       types are exhaustive, and state has one clear owner.
 - [ ] Verify loading, empty, stale, conflict, canceled, and error states that
@@ -64,7 +65,7 @@ Before declaring frontend work complete:
       backend authority; update a linked guideline when a Core 0 contract or
       selected implementation tool changes.
 
-## Core 0 前端保留合同（恢复实现时适用）
+## Core 0 前端保留合同（M1a 已按此实现）
 
 - React/TypeScript runs through a development server for local iteration.
   Production assets are built once and served by the Go application from the
@@ -79,7 +80,8 @@ Before declaring frontend work complete:
   authority.
 - Core screens cover initialization/login as applicable, library browse, Release
   detail with Medium/Track structure, basic search, directory/scan administration,
-  and loading, empty, stale, conflict, canceled, and error states.
+  and loading, empty, stale, conflict, canceled, and error states. M1a 已交付初始化与登录、
+  概览、目录与扫描管理、成员管理；专辑浏览、详情与基础搜索随 M1b。
 - The UI displays safe resource identities and evidence. It never receives or
   constructs arbitrary host filesystem paths for ordinary users.
 - Redis, Meilisearch, Agent runtime, runtime plugins, playback, PWA offline

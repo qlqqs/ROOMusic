@@ -13,6 +13,12 @@
 把未配置数据库导致的跳过视为通过。测试可通过 `ROOMUSIC_TEST_KEEP_DB=true`
 保留容器用于本地调试，但不得复用生产 `.env` 或业务数据卷。
 
+**API 响应样本**：改动任何 REST 响应的字段、状态码或错误码时，集成测试 `TestPostgreSQLAPIResponseSamples`
+（`internal/app/api_samples_integration_test.go`）会因样本漂移失败。确认是有意的合同变更后，用
+`ROOMUSIC_UPDATE_API_SAMPLES=1 ./scripts/test-integration.sh` 重写 `internal/app/testdata/api-samples/`，同一提交里同步前端 decoder
+（前端契约测试逐个解码这些样本）。新增端点或错误码时，把它加进该测试的固定流程与覆盖清单。样本只用合成素材，测试断言其中
+没有绝对路径、密码、Cookie 与令牌。
+
 ## Design Requirements
 
 - Keep capability policy cohesive and behind narrow, consumer-owned interfaces.

@@ -6,11 +6,12 @@
 发行/逐轨元数据、真实音乐只读 Smoke 与同源资产边界。后端仍位于过渡单体
 `backend/cmd/roomusic`（入口）与 `backend/internal/*`（能力代码，B0 于 2026-09-30 完成拆分）。
 
-2026-09-27 起必须区分：`frontend/src/` 已删除，当前 Go 内嵌页面仅是重置占位页。
-本文件涉及旧 `requestApi`、decoder 和前端测试的内容是恢复实现时需保留的合同，
-不是当前源码或已通过的前端验收。Classical 设计见 [DESIGN.md](../../../frontend/DESIGN.md)，
-阶段与依赖见 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)（2026-09-28 已批准）。
-M0 不改变以下后端 API、数据库或运行边界。
+2026-09-27 删除了旧前端；2026-10-01 的 M1a 按 Classical 设计重建 `frontend/src/`（外壳、会话、目录与扫描管理、
+成员管理、简版概览），Go 内嵌的是它的生产构建。本文件涉及前端 transport、decoder 与前端测试的内容，现在由
+`frontend/src/shared/api` 与各 feature 的 `api/` 实现，前端规范见 [前端规范索引](../frontend/index.md)。
+Classical 设计见 [DESIGN.md](../../../frontend/DESIGN.md)，阶段与依赖见
+[Core 1 路线](../../../docs/architecture/core-1-roadmap.md)（2026-09-28 已批准）。
+M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成 API 响应样本的集成测试与其 testdata。
 
 ## 2. 接口签名
 
@@ -29,8 +30,9 @@ M0 不改变以下后端 API、数据库或运行边界。
 - 目录列表项目：`id`、安全 basename `path`/`name`、`status`、`revision`、时间戳；
   不返回原始绝对路径。
 - 扫描状态枚举：`running | succeeded | failed | canceled | incomplete`。
-- 历史前端请求形态为 `requestApi(path, decoder, options?)`，实现现已删除；恢复时
-  必须保留成功响应的边界 decoder 与非 2xx 的统一安全错误解码，函数名不构成新架构限制。
+- 前端请求形态为 `apiRequest(spec, decode)`（`frontend/src/shared/api/request.ts`）：成功响应经边界 decoder，
+  非 2xx 经统一的错误信封 decoder；响应不是 JSON、信封不合法或 decoder 失败时归为 `invalid_response`，不进入缓存。
+  函数名不构成架构限制，合同是“边界解码一次、失败安全分类”。
 - 真实音乐显式验收：`ROOMUSIC_REAL_LIBRARY_SMOKE=1 ./scripts/real-library-smoke.sh
   --music-root <绝对目录> --v0-archive <固定归档>`；不得进入默认测试或 CI。
 - Release 详情的 `edition`、`label`、`barcode` 为 nullable string；每条 Track 的
@@ -46,8 +48,8 @@ M0 不改变以下后端 API、数据库或运行边界。
   角色仅控制展示。
 - 错误 envelope 为 `{ "error": { "code": string, "message": string }, "request_id": string }`。
   消息不得包含 SQL、绝对路径、密码、token 或数据库 URL。
-- 恢复前端 transport 时沿用 Cookie credentials 与 JSON 请求体的 Content-Type
-  合同；浏览器不读取或存储 session token，不为媒体资源强加 JSON 解码。
+- 前端 transport 沿用 Cookie credentials（`same-origin`）与 JSON 请求体的 Content-Type
+  合同，请求带客户端生成的 `X-Request-ID`；浏览器不读取或存储 session token，不为媒体资源强加 JSON 解码。
 - JSON 请求体上限 1 MiB；搜索词最多 200 字节；发行分页默认 `page=1`、
   `page_size=50`，最大 100；扫描诊断最多 100 条。
 - 发行列表只返回至少含一个 `present` Track 的 Release，支持严格 allowlist 的
@@ -176,9 +178,9 @@ M0 不改变以下后端 API、数据库或运行边界。
 ### 环境与资产
 
 - Node/Go 版本由 `.mise.toml` 管理，依赖安装使用 `npm ci`；`package-lock.json`
-  是前端可重复安装依据。当前 `package.json` 的 `latest` 依赖是待治理风险。
-- Vite 的生产构建目标仍为唯一的 `backend/cmd/roomusic/web`，不手工编辑该目录。
-  当前入口缺失时 CI 使用已提交占位页；M1 必须恢复真实构建和资产漂移检查。开发
+  是前端可重复安装依据，`package.json` 的直接依赖全部精确固定（M1a）。
+- Vite 的生产构建目标仍为唯一的 `backend/cmd/roomusic/web`，不手工编辑该目录；产物随源码提交，
+  CI 运行真实构建与资产漂移检查（M1a 恢复）。开发
   `vite.config.dev.ts` 才允许自定义 Host 和 API 代理。
 - 开发 Vite 通过公网反代访问时，`allowedHosts` 只放行 `ROOMUSIC_PUBLIC_URL` 的主机名，
   不得使用 `allowedHosts: true`；后端仍按 `ROOMUSIC_PUBLIC_URL`、Origin scheme/host
@@ -206,14 +208,21 @@ M0 不改变以下后端 API、数据库或运行边界。
   固定为 `contents: read`，同一分支的新运行会取消旧运行。
 - 工作流使用 `.mise.toml` 中的 Go `1.25.10` 和 Node.js `24.16.0`。后端门禁从
   `backend/` module 运行 `gofmt`、`go test`、`go test -race`、`go vet` 和 `go build`；
-  前端使用 `frontend/package-lock.json` 执行 `npm ci`、lint、typecheck 和 Vitest。
-  仅在 `frontend/src/main.tsx` 存在时执行 production build；入口缺失时只检查已提交
-  占位页，不视为客户端验收。M1 恢复源码后必须验证真实构建。
-- production build 分支随后执行 `git diff --exit-code -- backend/cmd/roomusic/web`，
-  并检查该目录没有未跟踪生成文件；入口缺失分支不执行资产漂移检查。
+  前端作业使用 `frontend/package-lock.json` 依次执行 `npm ci`、lint、typecheck、`npm run test`
+  （Vitest）与 `npm run build`，没有“入口缺失”分支。
+- 生产构建之后执行 `git diff --exit-code -- backend/cmd/roomusic/web`，并检查该目录没有未跟踪生成文件；
+  随后 `npx playwright install --with-deps chromium` 与 `npm run test:e2e`（对生产构建的浏览器冒烟、无障碍与
+  响应式检查，失败时上传报告）。
   集成 job 执行 `bash -n scripts/*.sh`、两个 Compose
   配置校验和 `./scripts/test-integration.sh`；后者真实启动 PostgreSQL 18 并在结束时
   清理专用容器和数据卷。
+- **API 响应样本**：集成测试 `TestPostgreSQLAPIResponseSamples`（`backend/internal/app/api_samples_integration_test.go`）
+  经真实 handler 走固定流程，把响应写成 `backend/internal/app/testdata/api-samples/` 下的 JSON 样本（只含状态码与响应体）：
+  UUID 与时间戳规范化为固定值、请求 ID 固定、按键排序。默认**逐字比较**，不一致或目录里有本次没有产出的文件都失败；
+  确认是有意的合同变更后用 `ROOMUSIC_UPDATE_API_SAMPLES=1 ./scripts/test-integration.sh` 重写（会删除多余文件），并同步前端
+  decoder。样本由集成作业把关漂移，前端作业读取它们（`frontend/src/test/api-contract.test.ts`，Playwright 的受控响应也取自样本）。
+  测试断言样本不含允许根目录的绝对路径、临时目录前缀、`password`、`roomusic_session`、会话令牌与测试密码；扫描素材是临时目录里的
+  合成文件，不读取真实音乐。
 - CI 不启动或依赖 Redis/Meilisearch，不读取生产 `.env`，也不使用真实音乐目录。普通
   测试因未设置 `ROOMUSIC_TEST_DATABASE_URL` 而跳过时，不得被视为 PostgreSQL 集成门禁
   通过。
@@ -316,9 +325,8 @@ Authorization/session token、密码、数据库 URL、完整 NAS 路径或音�
 
 ## 6. 必需测试
 
-- 前端源码恢复时重新建立 decoder/transport 测试（旧 `api.test.ts` 已删除）：session
-  role 缺失/未知、创建/更新用户、root active/disabled、malformed payload 和错误
-  envelope fallback；测试应随新 feature 边界组织，不要求恢复旧单体测试文件。
+- 前端 decoder/transport 测试随 feature 边界组织（M1a 已建立）：每个 decoder 有样本与反例（缺字段、错类型、未知枚举、超界）、
+  请求层覆盖内容类型、损坏 JSON、HTML 回落页、信封不合法、网络失败与取消；所有后端样本由契约测试逐个解码并往返比较。
 - 后端单元：终态映射、unsupported 音频候选识别、来源身份规范化和路径 containment。
 - parser/organizer 单元：M4A/WAV 容器有效性、CUE 多 FILE 与跨目录 containment、
   missing reference/missing `INDEX 01` 非阻断跳过、`unsafe`/`unchecked` 引用阻断、
@@ -375,8 +383,8 @@ if err != nil {
 writeJSON(w, http.StatusOK, map[string]bool{"disabled": requested})
 ```
 
-恢复前端时，用户更新响应同样必须经过所属 feature 的唯一 decoder，禁止把 `unknown`
-直接 cast 成 `UserDTO`；旧 `requestApi(..., decodeUpdatedUser)` 仅示意此边界，不固定新实现名称。
+前端的用户更新响应同样必须经过所属 feature 的唯一 decoder（`features/members/api/decoders.ts`），禁止把 `unknown`
+直接 cast 成 `UserDTO`。
 
 ### CUE 诊断错误与正确示例
 
@@ -552,8 +560,17 @@ go app.runScan(scanID, execution) // worker 由应用生命周期和持久化取
 
 - HTTP 请求现在通过 `http.request.completed` 事件记录状态码、耗时和路由模板；用户
   创建/禁用/会话撤销仍无独立 Operation Journal。
-- 前端源码已删除；M1a 按 Classical 设计恢复 feature 边界。Router/Query 已于 2026-09-28 获批
-  （ADR 0001），版本锁定在 M1a 子任务中确定，不能把历史文件当成当前可拆分实现。
+- ~~前端源码已删除~~：2026-10-01 由 M1a 按 Classical 设计重建，依赖精确固定（见 ADR 0001 决策记录）。
+- M1a 前端发现的后端缺口（M1a 不改后端，如实呈现，记入后续任务）：
+  - 没有扫描历史列表：离开扫描详情后，结束的扫描只能通过 URL 找回；扫描目录页只显示活动扫描。
+  - `/auth/me` 不返回用户 ID，前端用用户名判断目标是否为自己。
+  - 成员列表无分页，成员写操作无幂等键，不能创建管理员或修改角色；`listUsers` 会静默跳过读取失败的行；
+    `createUser` 把任何插入失败都映射成 409 `username_taken`；`invalid_input` 的文案写“12 个字符”而规则按字节；
+    `PATCH /users/{id}` 与撤销会话对格式不对的 ID 返回 503（`::uuid` 转换错误）而不是 400。
+  - 401 信封的 message 与角色无关（前端按错误码选文案规避）。
+  - 没有查询允许根目录的接口，新增目录只能手输服务器上的绝对路径。
+  - `httpserver.Frontend` 不设缓存头，带哈希文件名的资源与较大的字体每次都要重新协商；对 `/assets/`、`/licenses/`
+    这类目录路径会返回目录列表。封面缓存头 `private, max-age=86400` 在 M1b 显示封面时评估。
 - ~~未匹配的 `/api/` 仍落入前端 fallback~~：2026-09-29 由 F1 修复。`/api` 兜底返回 JSON 404/405/503，
   完成日志的 `route_template` 记为 `<unmatched>`，见上文校验与错误矩阵。
 - ~~2026-09-27 静态审查：停用/恢复指纹未含路由 root ID，同键同 body 跨目标会重放前一个 root 的结果~~：

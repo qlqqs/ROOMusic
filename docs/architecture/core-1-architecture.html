@@ -277,34 +277,34 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
         <p><code>frontend/</code> · Vite 开发；生产构建内嵌进 Go 二进制</p>
       </div>
       <div class="grid-3">
-        <div class="node s-appr">
+        <div class="node s-done">
           <div class="node-k">app/shell</div>
           <div class="node-t">应用外壳</div>
-          <p class="node-b">侧栏导航 · 底部播放条 · Steward 抽屉位 · 全局提示</p>
-          <div class="node-tags"><span class="tag t-appr">M1a</span></div>
+          <p class="node-b">侧栏导航 · 窄屏模态导航 · 身份区与退出；播放条（M2a）与 Steward 抽屉（M6）后续再加。</p>
+          <div class="node-tags"><span class="tag t-done">已完成 · M1a</span></div>
         </div>
-        <div class="node s-appr">
+        <div class="node s-done">
           <div class="node-k">TanStack Router</div>
           <div class="node-t">路由</div>
-          <p class="node-b">history 模式；路径和搜索参数在边界解码一次。选中的版本、问题、会话都放进 URL，可收藏、可分享。</p>
-          <div class="node-tags"><span class="tag t-appr">ADR 0001 已批准 · M1a</span></div>
+          <p class="node-b">代码定义的路径路由与守卫（不用 loader）；<code>redirect</code> 等搜索参数在边界校验一次。选中的版本、问题等后续阶段放进 URL，可收藏、可分享。</p>
+          <div class="node-tags"><span class="tag t-done">已完成 · ADR 0001 · M1a</span></div>
         </div>
-        <div class="node s-appr">
+        <div class="node s-done">
           <div class="node-k">TanStack Query</div>
           <div class="node-t">服务端状态</div>
-          <p class="node-b">缓存键覆盖全部输入；写操作后按资源最小失效；扫描进度轮询与取消。</p>
-          <div class="node-tags"><span class="tag t-appr">ADR 0001 已批准 · M1a</span></div>
+          <p class="node-b">缓存键带会话代次并覆盖全部输入；写操作后按资源最小失效；扫描详情轮询到终态即停止；会话结束时取消并清空缓存。</p>
+          <div class="node-tags"><span class="tag t-done">已完成 · ADR 0001 · M1a</span></div>
         </div>
         <div class="node s-appr">
           <div class="node-k">features/</div>
           <div class="node-t">功能模块</div>
           <ul class="node-list">
-            <li>auth · home · catalog · library</li>
+            <li>auth · members · library · catalog</li>
             <li>curation · operations · player</li>
             <li class="later">search · artists · personal（M5）</li>
             <li class="later">steward（M6）</li>
           </ul>
-          <div class="node-tags"><span class="tag t-appr">M1a / M1b 起逐步交付</span></div>
+          <div class="node-tags"><span class="tag t-done">M1a 已建 auth · members · library · catalog</span><span class="tag t-appr">M1b 起逐步交付其余</span></div>
         </div>
         <div class="node s-appr">
           <div class="node-k">features/player</div>
@@ -312,11 +312,11 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
           <p class="node-b">独占唯一的 <code>&lt;audio&gt;</code>；队列与播放模式放在 React 之外，界面只订阅；对接 Media Session。</p>
           <div class="node-tags"><span class="tag t-appr">M2a</span></div>
         </div>
-        <div class="node s-appr">
+        <div class="node s-done">
           <div class="node-k">shared/</div>
           <div class="node-t">共享层</div>
           <p class="node-b">传输层（Cookie 凭据、请求 ID、错误信封）· 运行时 decoder · Classical 设计变量与基础组件。</p>
-          <div class="node-tags"><span class="tag t-appr">M1a</span></div>
+          <div class="node-tags"><span class="tag t-done">已完成 · M1a</span></div>
         </div>
       </div>
     </div>
@@ -753,11 +753,11 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
           <div class="node-t">Music Steward</div>
           <p class="node-b">只读问答 → 提案 → 独立审查</p>
         </div>
-        <div class="node s-appr" id="r-m1a" tabindex="0" style="grid-column:3;grid-row:3">
+        <div class="node s-done" id="r-m1a" tabindex="0" style="grid-column:3;grid-row:3">
           <div class="stage">M1a</div>
           <div class="node-t">外壳与管理</div>
-          <p class="node-b">登录 · 目录 · 扫描 · 成员 · 概览；恢复 CI 构建检查。</p>
-          <div class="node-tags"><span class="tag t-appr">子任务 · planning</span></div>
+          <p class="node-b">登录 · 目录 · 扫描 · 成员 · 概览；恢复 CI 构建与浏览器检查。</p>
+          <div class="node-tags"><span class="tag t-done">已完成 · 2026-10-01</span></div>
         </div>
         <div class="node s-appr" id="r-m1b" tabindex="0" style="grid-column:6;grid-row:3">
           <div class="stage">M1b</div>
@@ -800,7 +800,7 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
     </div>
     <div class="road-notes">
       <div class="note s-now"><b>不能调换的顺序</b>M3 依赖阶段 I 的稳定 ID；M6 依赖 M3 / M4 的操作合同。</div>
-      <div class="note s-now"><b>可以并行</b>M1a 可独立推进，M1b 接在阶段 I 的按组接口之后（B0、阶段 I 已完成）；播放不依赖治理写路径。</div>
+      <div class="note s-now"><b>可以并行</b>M1a 已完成（2026-10-01），M1b 接在 M1a 的外壳与阶段 I 的按组接口之后（B0、阶段 I、M1a 已完成）；播放不依赖治理写路径。</div>
       <div class="note s-appr"><b>已裁决（2026-09-28）</b>Core 1 截止到 M4；阶段顺序、身份策略、M1 前端基础与归组依据等 D1–D6 见路线修订任务。各 ADR 其余细节在对应阶段规划时批准。</div>
     </div>
   </section>

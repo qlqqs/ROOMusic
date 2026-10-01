@@ -2,15 +2,9 @@
 
 ## Status
 
-前端 package 位于 `frontend/`，保留 npm + `package-lock.json`、Vite、TypeScript、
-ESLint 和 Vitest 配置，但 2026-09-27 基线没有 `src/`。脚本存在、类型检查通过或
-Vitest 的 `--passWithNoTests` 退出成功，均不能证明客户端可用。CI 在入口缺失时只检查
-内嵌占位页，不运行真实 production build 或资产漂移检查。
-
-M0 只做文档检查。M1 恢复源码时须执行真实构建与相关行为测试，恢复构建/内嵌资产门禁，
-不能保留重置分支作为功能完成依据。Node 版本由 `.mise.toml` 管理；安装使用 `npm ci`。
-仓库没有 formatter 或自动化 accessibility runner；浏览器测试、可访问性工具若需新增，
-须经具体子任务选型，不声称 Playwright 已配置。
+前端 package 位于 `frontend/`，使用 npm 与 `package-lock.json`，直接依赖全部精确固定（`package.json` 里没有 `latest` 或范围版本）。
+2026-10-01 的 M1a 起，CI 与本地都运行真实的前端门禁：没有“源码缺失则跳过”的分支，Vitest 不再使用 `--passWithNoTests`。
+Node 版本由 `.mise.toml` 管理，安装使用 `npm ci`。仓库没有 formatter；无障碍由 Playwright 加 axe-core 在浏览器里扫描。
 
 The current [README](../../../README.md) establishes Node.js 24.16.0 through the
 repository development toolchain. Do not rely on an undocumented global version.
@@ -66,6 +60,22 @@ Backend integration tests remain responsible for real authorization, path
 containment, transactions, and session cookie flags; frontend tests prove that
 the UI sends the contract and handles results correctly.
 
+### 已采用的测试层次（M1a）
+
+| 层次 | 工具与做法 |
+| --- | --- |
+| 单元与组件 | Vitest + jsdom + Testing Library（`user-event`）。请求层、解码原语、每个 decoder（样本与反例）、会话控制器、`shared/ui` 组件各自有测试，与被测单元同目录 |
+| 接口契约 | `src/test/api-contract.test.ts` 遍历后端生成的 JSON 样本，每个样本都要被 decoder 解码且往返无损；样本由后端集成测试 `TestPostgreSQLAPIResponseSamples` 把关 |
+| 页面级 | `src/app/*.test.tsx`：经 `renderApp` 装配真实的应用运行时（路由、会话、查询缓存），后端是有状态的替身（幂等重放、`expected_revision` 与 409、可注入请求或响应丢失，响应取自真实样本）；轮询用假定时器；断言用户可见的结果 |
+| 浏览器冒烟 | Playwright（只跑 Chromium）对**生产构建**运行 `vite preview`，API 由测试内的受控后端响应（`e2e/support/api-mock.ts`，响应体取自样本）。覆盖初始化与登录、回跳与退出、会话中途 401、403、目录与扫描、成员、只用键盘完成主要操作；每个测试结束时断言没有第三方请求、没有脚本错误与控制台错误 |
+| 响应式与无障碍 | 每个页面状态在 375 / 768 / 1024 / 1280 / 1440 下页面与主内容区（`#main`）都没有横向溢出；axe（`wcag2a`、`wcag2aa`、`wcag21a`、`wcag21aa`）在默认、对话框、错误提示、字段错误与窄屏菜单等状态下没有 serious 或 critical；所有文字不小于 12px |
+| 检查自检 | `e2e/checks.spec.ts` 用故意有问题的页面确认 axe、最小字号、横向溢出与焦点环检查都会失败，避免检查空转时全部通过 |
+| 真实接口冒烟 | 在隔离环境（`compose.test.yaml` 以独立 project 名启动 PostgreSQL，Go 以内嵌产物启动，允许根为临时目录，只放合成素材）走主路径，命令与结果记录在任务 `research/`，用后清理容器与目录。不进入 CI，**不读取用户真实的 `music/`** |
+
+浏览器测试的约定：用 `page.clock.install()` 加 `fastForward` 推进轮询，不真实等待、不用固定睡眠；夹具回调参数不要命名为 `use`
+（react-hooks 的 lint 规则会把它当成 Hook，本项目叫 `provide`）；原生 `<dialog>` 的焦点断言见[组件规范](./component-guidelines.md)。
+Playwright 在 CI 里重试一次，失败时上传 HTML 报告与 trace（保留 7 天）；本机复用已在运行的预览服务，CI 不复用。
+
 ## Accessibility And Responsive Gate
 
 Run automated accessibility checks on representative screens and manually verify
@@ -74,25 +84,36 @@ and contrast. Test narrow mobile and desktop widths. Text, controls, tables, and
 cover media must not overlap or resize the surrounding layout unexpectedly.
 
 Automated accessibility output is a signal, not proof. Critical workflows require
-keyboard and screen-reader-semantic review.
+keyboard and screen-reader-semantic review. M1a 的自动化部分已在 Playwright 中落地（见上表）；键盘路径用例覆盖
+登录、停用确认对话框、成员新建与确认、窄屏菜单与跳转链接。
 
-## 当前脚本
+## 当前脚本与门禁
 
-当前 package 已提供以下稳定脚本：
+`frontend/package.json` 的稳定脚本：
 
 ```text
-lint
-typecheck
-test
-build
+dev          # vite --config vite.config.dev.ts（开发服务器，代理 /api）
+lint         # eslint .
+typecheck    # tsc --noEmit
+test         # vitest run
+build        # tsc --noEmit && vite build（产物输出到 backend/cmd/roomusic/web）
+preview      # vite preview
+test:e2e     # playwright test（webServer 先构建，再用 preview 提供产物）
 ```
 
-按改动选择最小相关测试集；仅文档变更检查链接、任务上下文和 diff，不为了“全绿”运行
-无关全量测试。实现阶段必须记录实际命令、跳过原因和尚缺证据。
+Makefile：`frontend-install`（`npm ci`）、`frontend-check`（lint、typecheck、test）、`frontend-build`、`frontend-e2e`。
 
-运行改动影响到的适用门禁。恢复后的 production build 必须能由 Go 服务提供，不依赖
-独立 Node 生产进程。npm、ESLint、Vite 和 Vitest 已有配置，不再列为尚未选择的工具；
-formatter、浏览器自动化与无障碍 runner 若需新增，仍须单独选型，不凭规范示例引入依赖。
+CI 前端作业按顺序执行：`npm ci` → lint → typecheck → `npm run test` → `npm run build` → 内嵌资产漂移检查（`git diff --exit-code`
+与未跟踪文件检查）→ `npx playwright install --with-deps chromium` → `npm run test:e2e`，失败时上传 Playwright 报告。
+构建产物（`backend/cmd/roomusic/web`）随源码提交：**每个改动前端源码的提交都重新构建并一起提交**，否则漂移检查失败。
+样本漂移由集成作业（`./scripts/test-integration.sh`）把关。
+
+按改动选择最小相关测试集；仅文档变更检查链接、任务上下文和 diff，不为了“全绿”运行
+无关全量测试。实现阶段必须记录实际命令、跳过原因和尚缺证据。生产构建由 Go 服务同源提供，不依赖独立 Node 生产进程。
+
+本机运行浏览器测试：首次需要 `cd frontend && npx playwright install chromium`（CI 用 `--with-deps`）。没有 root 权限且缺少
+Chromium 的系统库（`libatk` 等）时，可 `apt-get download` 后 `dpkg -x` 解到临时目录，再用 `LD_LIBRARY_PATH` 指向它运行；
+`test-results/` 与 `playwright-report/` 已被 Git 忽略。formatter 若需新增，仍须单独选型。
 
 ## Review Checklist
 

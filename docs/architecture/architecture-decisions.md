@@ -28,22 +28,24 @@ API 文档、Trellis 任务文档、说明性注释和运维文档。代码标�
 
 ## Core 0 当前实现树
 
-2026-09-30 后端已按能力分包（B0，仍是单进程模块化单体），前端源码已删除：
+2026-09-30 后端已按能力分包（B0，仍是单进程模块化单体）；2026-10-01 前端由 M1a 重建（外壳与管理页）：
 
 ```text
 backend/cmd/roomusic/main.go # 进程入口与 HTTP 生命周期，不含业务策略
 backend/internal/*           # app（组合根）、platform、identity、library（含 parser）、catalog（含 metadata、artwork）；
                              # 各能力的 REST 传输层在 <能力>/httpapi
 backend/migrations/*.sql     # embed.FS 迁移；已共享文件不改写
-backend/cmd/roomusic/web/    # 当前为前端重置占位资产
-frontend/package.json       # 保留工具链/依赖；src/ 不存在
-frontend/DESIGN.md          # 本轮恢复的 Classical 设计依据，不是界面实现
+backend/cmd/roomusic/web/    # 前端生产构建（随源码提交，由 Go 内嵌；CI 检查漂移）
+frontend/src/               # M1a 重建的 Classical 客户端（布局见前端目录结构规范）
+frontend/e2e/               # Playwright 冒烟、无障碍与响应式检查
+frontend/DESIGN.md          # Classical 设计依据；标注“M1a 实现”的条目是实际采用的值
 frontend-desgin/            # 已入库原型及设计工具资产，保持原样
 ```
 
 `backend/internal/*` 是现状（布局见[后端目录结构](../../.trellis/spec/backend/directory-structure.md)）；
-下方 `frontend/src/features/*` 仍只是目标能力边界。
-M1a 先用现有 API 恢复外壳与管理界面；B0 已拆出 catalog、library 与 platform；
+`frontend/src/` 的实际布局见[前端目录结构](../../.trellis/spec/frontend/directory-structure.md)（M1a，2026-10-01），下方
+`features/*` 示意图中尚未建立的目录仍只是目标能力边界。
+M1a 已用现有 API 恢复外壳与管理界面；B0 已拆出 catalog、library 与 platform；
 阶段 I 在拆出的 catalog 上实施身份规则与按组只读接口，M1b 的专辑页随后使用它。
 不为目录对称性生成空层，也不把 API 行为修复、新迁移或媒体服务夹入纯重构。
 
@@ -109,11 +111,11 @@ frontend/src/
 └── shared/          HTTP transport, policy-free UI, neutral mechanics
 ```
 
-客户端恢复时按实际页面建立 `app`、`auth`、`library`、`catalog` 和必要 `shared`。
+M1a 按实际页面建立了 `app`、`auth`、`members`、`library`、`catalog` 和 `shared`。
 上图中的搜索、通用操作和 Agent 目录只是候选；Classical 后续 `player`、`curation`、
 `artists`、`personal`、`steward` 的命名与责任由相应子任务落实，不因示意图批量生成。
 各 feature 拥有 REST DTO、decoder、hook、view model、组件和路由；`shared` 不能导入
-`features` 或 `app`。Router/Query 已于 2026-09-28 获批（ADR 0001 决策记录），由 M1a 安装并锁定版本。
+`features` 或 `app`。Router/Query 已于 2026-09-28 获批（ADR 0001 决策记录），M1a 已安装并锁定版本。
 
 The frontend flow is:
 
@@ -196,7 +198,7 @@ until an approved feature requires that boundary.
 
 | ADR | 主题 | 涉及阶段 | 已批准的项 |
 | --- | --- | --- | --- |
-| [0001](adr/0001-frontend-foundations.md) | 前端路由、数据请求、样式、字体与依赖治理 | M1a/M1b | Router + Query、CSS Modules、Fontsource 自托管、JSON 样本防漂移 |
+| [0001](adr/0001-frontend-foundations.md) | 前端路由、数据请求、样式、字体与依赖治理 | M1a/M1b | Router + Query、CSS Modules、Fontsource 可变字体自托管、JSON 样本防漂移；会话代次与跨标签页失效、精确依赖与浏览器矩阵、测试工具（2026-10-01，M1a 已实施） |
 | [0002](adr/0002-metadata-overlays.md) | 扫描观察、人工修正、有效值与稳定身份 | I/M3/M4 | 成员关系匹配 + 同 root 保守重绑定；Core 1 仅人工确认归组 |
 | [0003](adr/0003-governed-operations.md) | 通用变更集、审批、角色、检查点与受限逆操作 | M3/M4/M6 | M3 试点：字段修正 + ReleaseGroup 成员调整 |
 | [0004](adr/0004-media-delivery.md) | 受保护串流、浏览器能力、ffmpeg 与派生缓存 | M2a/M2b | “仅直出”作为 M2a 首发范围 |

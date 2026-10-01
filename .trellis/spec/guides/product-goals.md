@@ -95,9 +95,9 @@ The authoritative acceptance behavior is in the current
 
 ## 2026-09-28 当前状态与 Core 1 范围
 
-上文 Core 0 Outcome 是阶段目标和继承合同，不代表当前所有界面仍可运行。Go 后端、
-迁移与 REST 保留，`frontend/src/` 已删除，Web 处于重置占位状态；Classical 文档
-以 [frontend/DESIGN.md](../../../frontend/DESIGN.md) 为落地依据。
+上文 Core 0 Outcome 是阶段目标和继承合同，不代表当前所有界面都已可用。Go 后端、迁移与 REST 保留；
+`frontend/src/` 于 2026-09-27 删除，2026-10-01 由 M1a 重建了外壳、初始化与会话、目录与扫描管理、成员管理和简版概览，
+专辑浏览（M1b）及之后的界面尚未实现。Classical 文档以 [frontend/DESIGN.md](../../../frontend/DESIGN.md) 为落地依据。
 
 2026-09-28 用户批准 Core 1 = M0、B0、I、M1a、M1b、M2a、M2b、P（服务端播放历史）、M3、M4，
 外加独立修复 F1、F2：依次是恢复客户端、后端拆包与身份稳定、真实播放和受控的元数据/版本管理。

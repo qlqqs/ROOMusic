@@ -7,11 +7,23 @@ connect a typed feature API client to components, synchronize URL/local state,
 or manage a lifecycle such as scan polling. They do not become service locators
 or alternative business-policy engines.
 
-旧前端使用原生 `useEffect`、`useState` 和 `requestApi`，但这些实现随 `src/` 删除，
-目前不存在可直接复用的 hook。后续客户端仍按下述生命周期/边界合同恢复。TanStack Query
-已于 2026-09-28 获批（[ADR 0001](../../../docs/architecture/adr/0001-frontend-foundations.md)
-决策记录），由 M1a 安装；它是服务器状态的唯一缓存边界，统一请求、取消和缓存，不能与无归属
-请求混用。
+2026-10-01 的 M1a 已按下述生命周期与边界实现 hook（`features/*/hooks/`）。TanStack Query
+（[ADR 0001](../../../docs/architecture/adr/0001-frontend-foundations.md) 决策记录）是服务器状态的唯一缓存边界，统一请求、
+取消和缓存，不能与无归属请求混用；`queryFn` 必须消费 Query 传入的 `signal` 并交给 `apiRequest`。
+
+## 已实现的 hook 形态
+
+- **查询 hook**（`useRoots`、`useScan`、`useActiveScan`、`useMembers`、`useLibraryTotals`……）：从 `useViewerScope()` 取会话
+  代次，查询键由 feature 的 `query-keys.ts` 构造，用 `select` 取出需要的数据，返回 Query 的结果交给 `QueryContent`
+  渲染加载、错误重试与就绪。轮询用 `refetchInterval` 的函数形式，只在非终态返回间隔。
+- **命令 hook**：把写操作建模为“意图”。目录与成员的命令 hook（`useRootCommands`、`useMemberCommands`）的 `state` 是
+  `idle | pending | succeeded | failed` 的可辨识联合（失败态带 `failure` 与 `uncertain`）；`submit(intent, callbacks)` 发起新意图，
+  `dismiss()` 清除结果。目录命令在发起时生成幂等键，`retry(callbacks)` 沿用同一命令与同一个键；成员命令没有幂等保证，所以
+  没有 `retry`。`onSettled` 返回刷新相关查询的 Promise，命令在刷新完成后才结束；回调先经 `scope.isCurrent()` 检查发起时的会话
+  代次，旧会话的迟到结果不更新界面、不导航。开始与取消扫描（`useStartScan`、`useCancelScan`）是更简单的 mutation：开始扫描
+  重复发送只会得到同一个扫描，不需要幂等键；取消被接受不等于已取消，结束前先刷新扫描状态，按钮保持忙碌。
+- **派生值留在来源处**：扫描的阶段、文案与是否终态由 `scan-status.ts` 的纯函数从后端状态推出，不用 effect 同步。
+- **到终态的副作用**：`useScan` 在读到终态时用 effect 使活动扫描查询失效（依赖 `finished` 布尔值而不是整份数据，只触发一次）。
 
 ## Planned Layers
 
@@ -102,6 +114,10 @@ Test hooks through observable behavior with a controlled API boundary. Cover
 success, classified error, cancellation/stale response, mutation conflict, and
 polling termination when relevant. Do not assert internal hook call ordering as
 a substitute for user-visible outcomes.
+
+实际做法：hook 通过整页测试（`src/app/*.test.tsx`）覆盖——经 `renderApp` 装配真实的应用运行时，后端是有状态的替身
+（`src/test/fake-library.ts`、`fake-members.ts`，实现幂等重放、`expected_revision` 与 409，响应取自真实样本并经真实 decoder，
+可注入“请求丢失 / 响应丢失”），轮询用假定时器推进，断言用户可见的结果（提示文案、列表、焦点、发出的请求）。
 
 ## Anti-Patterns
 

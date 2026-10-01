@@ -1,6 +1,7 @@
 # M1a 技术设计
 
-需求与验收见 [prd.md](prd.md)。本文记录实现边界、数据流、合同与取舍；版本号是 2026-10-01 的核对结果，实施第一步再复核一次。
+需求与验收见 [prd.md](prd.md)。本文记录实现边界、数据流、合同与取舍；版本号是 2026-10-01 的核对结果，实施第一步已复核。
+2026-10-01 实施完成后，第 11 至 13 节据实际交付同步，与规划初稿的差异集中在第 12 节。
 
 ## 1. 边界
 
@@ -233,7 +234,9 @@ root（context: 会话快照）                     notFound → “页面不存
 
 - 前端作业：npm ci → lint → typecheck → `npm run test` → `npm run build` → 内嵌资产漂移检查（沿用现有两条命令）→
   `npx playwright install --with-deps chromium` → `npm run test:e2e`。删除入口检测与占位页分支。
-- `package.json` 脚本：`test` 改为 `vitest run`（去掉 `--passWithNoTests`），新增 `test:e2e`（`playwright test`）。
+- `package.json` 脚本：`test` 改为 `vitest run`（去掉 `--passWithNoTests`），新增 `test:e2e`（`playwright test`）与 `preview`（`vite preview`，
+  Playwright 的 webServer 经它启动预览，不依赖 `PATH` 里有 `node_modules/.bin`）。CI 的前端作业超时改为 20 分钟，Playwright 重试一次，
+  失败时上传 HTML 报告与 trace。
 - `vite.config.ts` 显式设置 `build.target`（`chrome111`、`edge111`、`firefox113`、`safari16.4`），与浏览器矩阵一致；
   ESLint 禁止 `shared/api/request.ts` 之外直接使用 `fetch`（`no-restricted-globals` 与 `no-restricted-properties`）。
 - `.gitignore` 增加 `frontend/test-results/`、`frontend/playwright-report/`；Makefile 的 `frontend-install` 改用 `npm ci`，
@@ -248,6 +251,19 @@ root（context: 会话快照）                     notFound → “页面不存
 - 初稿的待规划事项已决定：会话代次与跨标签页（K1）、依赖与浏览器矩阵和重试（K2）、URL 形状与旧链接（K5）、样本位置与
   CI 归属（K7）。
 
+实施中与设计的差异（取舍与发现见 [implement.md](implement.md) 的“实施中的发现”）：
+
+- 开始扫描返回 200（已有扫描在运行）时不新建也不跳转，留在扫描目录页提示并链接到那个扫描；只有 202 才进入详情页。
+- 活动扫描（`/scans/active`）在确有扫描时每 5 秒刷新（页面隐藏时暂停），设计只写了详情页轮询；否则扫描目录页与概览在扫描结束后会一直显示“运行中”。
+- 表格以容器宽度（CSS 容器查询，小于 640px）而不是视口宽度决定是否堆叠，因为带侧栏时 768px 视口里内容区只有约 500px；`DataTable` 进入 `shared/ui`。
+- `shared/api` 新增 `isOutcomeUncertain`（网络失败、无效响应、5xx 为结果不确定，4xx 为明确拒绝）；成员写操作没有幂等键，所以没有“重试”，只刷新核对。
+- `app/runtime.ts`（`createAppRuntime`）是缓存、会话与路由之间唯一的接线点，设计第 3 节的目录图没有列出它。
+- 路由：TanStack Router 把 `validateSearch` 的返回值合并到原始查询串，不合法的值必须显式返回 `undefined`（`/login` 的 `redirect` 有回归测试）。
+- 数字：Cormorant Garamond 默认是旧式数字，数据值用 `lining-nums tabular-nums`。
+- 浏览器测试：受控后端按同一份行为定义另写（不能复用依赖 vitest 的替身）；原生 `<dialog>` 的焦点断言放宽为“在对话框内或在 `body` 上”；增加
+  `e2e/checks.spec.ts` 自检，证明各项检查会失败。本机缺系统库且无 root 时的运行方法见前端质量规范。
+- 验收的真实接口冒烟用合成 FLAC 与损坏文件，走 A2 主路径共 82 项检查，记录在 `research/real-api-smoke.md`；没有发现产品缺陷。
+
 ## 13. 后端缺口（不在本任务修复）
 
 - 没有扫描历史列表：离开扫描详情后，结束的扫描只能通过 URL 找回；扫描目录页只显示活动扫描。
@@ -256,6 +272,11 @@ root（context: 会话快照）                     notFound → “页面不存
 - 401 信封文案与角色无关（界面按错误码选文案规避）。
 - 没有查询允许根目录的接口，新增目录只能手输绝对路径。
 - 封面缓存头为 `private, max-age=86400`，在 M1b 显示封面时评估。
+- `createUser` 把任何插入失败都映射成 409 `username_taken`；`invalid_input` 的文案写“12 个字符”而规则按字节；`PATCH /users/{id}` 与撤销会话
+  对格式不对的 ID 返回 503（`::uuid` 转换错误）而不是 400。
+- `httpserver.Frontend` 不设缓存头，带哈希文件名的资源与较大的字体每次都要重新协商；对 `/assets/`、`/licenses/` 这类目录路径会返回目录列表。
+
+这些缺口已记入 [后端运行合同的技术债](../../spec/backend/core0-runtime-contracts.md)。
 
 ## 14. 回退
 

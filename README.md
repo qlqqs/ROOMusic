@@ -2,13 +2,13 @@
 
 ROOMusic 保留 Core 0 的 Go 后端、数据库与同源部署工具链，不迁移 V0 中已经膨胀的应用容器、AI worker、operator、release overlay 或业务配置。
 
-> **当前状态（2026-09-28）**：前端源码 `frontend/src/` 已删除，Go 内嵌页面为重置占位页，尚无可用的 Classical 客户端。M0 与路线修订只对齐文档，不恢复界面。设计依据见 [frontend/DESIGN.md](frontend/DESIGN.md)，能力矩阵、已批准的 Core 1 阶段范围和四类部分批准的 ADR 见 [Core 1 路线](docs/architecture/core-1-roadmap.md)。
+> **当前状态（2026-10-01）**：Classical 客户端的 M1a 已完成：应用外壳、初始化与登录、扫描目录与扫描详情、成员管理、简版概览，由 Go 同源提供（构建产物提交在 `backend/cmd/roomusic/web`）。专辑浏览（M1b）、播放（M2）与元数据整理（M3 起）尚未实现。设计依据见 [frontend/DESIGN.md](frontend/DESIGN.md)，能力矩阵、已批准的 Core 1 阶段范围和四类 ADR 见 [Core 1 路线](docs/architecture/core-1-roadmap.md)，前端规范见 [前端规范索引](.trellis/spec/frontend/index.md)。
 
 ## 软件目标
 
 ROOMusic 的长期目标是面向个人、家庭和小型私有群体的自托管音乐库管家。系统以 `ReleaseGroup -> Release -> Medium -> Track` 为核心理解发行版本，而不是只把音乐呈现为文件夹列表。后续能力可以覆盖浏览、搜索、播放、metadata 整理和受控 Agent 操作，但必须建立在稳定身份、来源可解释、后端权限、事务、操作记录和恢复边界之上。
 
-Core 0 的阶段目标是最小可用闭环（当前前端恢复状态见上方说明）：初始化和登录、允许目录内的只读扫描、保守的 Release Graph、Web 浏览、基础搜索，以及目录配置的 Change Set/Operation Journal。Redis、Meilisearch、GraphQL、播放、文件写入和可运行的 Agent runtime 都不是 Core 0 的强制依赖。
+Core 0 的阶段目标是最小可用闭环（前端的当前进度见上方说明）：初始化和登录、允许目录内的只读扫描、保守的 Release Graph、Web 浏览、基础搜索，以及目录配置的 Change Set/Operation Journal。Redis、Meilisearch、GraphQL、播放、文件写入和可运行的 Agent runtime 都不是 Core 0 的强制依赖。
 
 长期只保留一个产品 Agent：`Music Steward`。`Assistant`、`Steward`、`Operator` 是三种审批模式：Assistant 的危险操作由用户批准，Steward 由独立 Review Subagent 审查，Operator 由管理员显式进入后跳过审批直接执行。三种模式仍统一经过后端注册工具、权限和范围校验、结构化日志、Operation Journal 及适用的恢复机制；Operator 不等于无限制 shell、任意 SQL 或任意宿主机文件访问。
 
@@ -52,7 +52,7 @@ mise run env-check
 
 ## 快捷开发工作流
 
-以下脚本与配置保持不变；Vite 进程启动不等于当前缺失的客户端可用。默认复制 `.env.example` 为 `.env.dev`（或通过 `ROOMUSIC_ENV_FILE` 指定配置）并填写本地 PostgreSQL 密码，可用一条命令启动 PostgreSQL、Go 后端和 Vite 开发服务：
+默认复制 `.env.example` 为 `.env.dev`（或通过 `ROOMUSIC_ENV_FILE` 指定配置）并填写本地 PostgreSQL 密码，可用一条命令启动 PostgreSQL、Go 后端和 Vite 开发服务：
 
 ```bash
 ./scripts/dev.sh
@@ -67,7 +67,8 @@ mise run env-check
 ```
 
 生产配置必须设置 `ROOMUSIC_SECURE_COOKIES=true`。生产脚本不会启动 Vite，也不要求安装 Make。
-当前 `scripts/prod.sh` 默认仍执行前端构建；源码缺失期间不能把该默认流程视为已恢复的生产 Web 闭环，M1 需恢复并验证真实构建。
+`scripts/prod.sh` 默认先执行前端构建（`npm run build`，产物输出到 `backend/cmd/roomusic/web` 并由 Go 内嵌），设置 `ROOMUSIC_SKIP_BUILD=1`
+可使用已提交的产物直接启动。
 
 如需重新体验首次初始化流程，开发环境可清空业务数据：
 
@@ -84,6 +85,23 @@ make dev-reset
 mise run env-logs
 mise run env-down
 ```
+
+## 前端检查
+
+前端位于 `frontend/`，使用 `npm ci` 按锁文件安装。常用命令（也有对应的 `make frontend-install`、`frontend-check`、`frontend-build`、`frontend-e2e`）：
+
+```bash
+cd frontend
+npm ci
+npm run lint && npm run typecheck && npm run test   # 静态检查与 Vitest（单元、组件、页面级）
+npm run build                                       # 生产构建，输出到 backend/cmd/roomusic/web
+npx playwright install chromium                     # 首次运行浏览器测试前安装；CI 使用 --with-deps
+npm run test:e2e                                    # Playwright：先构建，再对生产构建做冒烟、无障碍与响应式检查
+```
+
+构建产物随源码提交：**每个改动前端源码的提交都要重新构建并一起提交**，否则 CI 的漂移检查失败。浏览器测试的接口由测试内的受控后端响应
+（响应取自后端样本），不需要启动后端或数据库。后端响应的 JSON 样本由 `./scripts/test-integration.sh` 把关，改动 REST 响应时见
+[后端质量规范](.trellis/spec/backend/quality-guidelines.md)。
 
 ## PostgreSQL 集成测试
 
@@ -110,9 +128,8 @@ mise run env-down
 和 Node.js `24.16.0`，并行执行三组必需门禁：
 
 - 后端：`gofmt`、普通测试、`-race` 测试、`go vet` 和 `go build`；
-- 前端：`npm ci`、ESLint、TypeScript 检查和 Vitest；存在 `src/main.tsx` 才执行
-  production build 与 `backend/cmd/roomusic/web` 漂移检查，否则只检查占位页。
-  M1 必须恢复真实构建门禁，不能以占位分支或无测试退出成功作为客户端验收；
+- 前端：`npm ci`、ESLint、TypeScript 检查、Vitest、production build 与 `backend/cmd/roomusic/web` 漂移检查，
+  然后安装 Chromium 并运行 Playwright 冒烟、无障碍与响应式检查（失败时上传报告）；
 - 集成与配置：Shell 语法、两个 Compose 配置和
   `./scripts/test-integration.sh` 提供的 PostgreSQL 18 集成测试。
 
@@ -124,14 +141,11 @@ mise run env-down
 (cd backend && test -z "$(gofmt -l .)" && go test ./... -count=1)
 (cd backend && go test -race ./... -count=1 && go vet ./... && go build ./...)
 (cd frontend && npm ci && npm run lint && npm run typecheck)
-(cd frontend && npm run test -- --run)
-if test -f frontend/src/main.tsx; then
-  (cd frontend && npm run build)
-  git diff --exit-code -- backend/cmd/roomusic/web
-  test -z "$(git ls-files --others --exclude-standard -- backend/cmd/roomusic/web)"
-else
-  test -f backend/cmd/roomusic/web/index.html
-fi
+(cd frontend && npm run test)
+(cd frontend && npm run build)
+git diff --exit-code -- backend/cmd/roomusic/web
+test -z "$(git ls-files --others --exclude-standard -- backend/cmd/roomusic/web)"
+(cd frontend && npx playwright install --with-deps chromium && npm run test:e2e)
 bash -n scripts/*.sh
 PG_PASSWORD=ci-placeholder MEILI_MASTER_KEY=ci-placeholder docker compose config --quiet
 docker compose -f compose.test.yaml config --quiet

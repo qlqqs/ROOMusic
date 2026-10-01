@@ -98,13 +98,16 @@ Co-Authored-By 行。改动前端源码的提交都重新构建并一起提交 `
 
 ## 第 7 步：文档同步与收尾
 
-- [ ] 前端规范（index、directory-structure、state-management、type-safety、quality-guidelines、hook-guidelines、
-      component-guidelines）、后端 `core0-runtime-contracts.md` 的 CI 与样本说明、ADR 0001 决策记录（第 4、5 项及字体、测试工具）、
-      DESIGN.md（字体、字号、断点与第 10 节状态）、README、Core 1 路线与架构图、父任务 prd/implement、M1b PRD。
-- [ ] 本任务 prd.md 的实施结果与验收对照；如实施偏离设计，同步 design.md。
-- [ ] 最终验证：按 CI 顺序执行前端全部命令（含漂移检查与 e2e）；`./scripts/test-integration.sh`；`git diff --check`；
-      检查改动文档的相对链接。
-- [ ] 提交：`docs: 同步 M1a 的前端规范、ADR 与路线`；随后归档任务并修正归档后的相对链接。
+- [x] 前端规范（index、directory-structure、state-management、type-safety、hook-guidelines、component-guidelines、quality-guidelines）、
+      后端 `core0-runtime-contracts.md` 与 `quality-guidelines.md`（CI、API 样本与后端缺口）、ADR 0001（决策记录增加 2026-10-01 一行，第 4、5 项标为已批准并实施，
+      字体改为可变字体、测试工具）、Core 1 路线、架构决策摘要与架构图、DESIGN.md（数字、字体、字号、断点、容器查询表格与第 10 节验收状态）、README、
+      产品目标与规范索引中的过时表述、父任务 prd/implement、M1b PRD（M1a 交付的基础与需要补的缺口）。
+- [x] 本任务 prd.md 补上“实施结果与验收对照”；design.md 第 11 至 13 节据实际交付同步（差异与后端缺口）。
+- [x] 最终验证：`npm ci --dry-run`（manifest 与 lock 一致）、`npm run lint`、`typecheck`、`test`（29 个文件 443 个测试）、`build` 与内嵌资产漂移检查、
+      `npm run test:e2e`（73 个用例）；`./scripts/test-integration.sh`（含 API 样本比较，通过）并手工篡改样本与多放一个样本文件确认漂移检测会失败、还原后通过；
+      `gofmt`、`go vet`、`go build ./...`、`bash -n scripts/*.sh`、`git diff --check`；改动文档的 148 个相对链接逐个检查，没有断链。
+      没有运行 `go test -race ./...` 与完整的后端单元测试：本任务没有改动后端生产代码，后端只在第 2 步新增测试与 testdata，当时已验证。
+- [x] 提交：`docs: 同步 M1a 的前端规范、ADR 与路线`；随后归档任务并修正归档后的相对链接（见本任务的归档提交）。
 
 ## 风险文件与回退点
 

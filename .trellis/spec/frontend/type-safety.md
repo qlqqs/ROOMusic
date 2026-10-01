@@ -2,15 +2,19 @@
 
 ## Baseline
 
-The frontend uses TypeScript with strict checking. The initial scaffold must
-enable `strict` and should enable checks that prevent unchecked indexed and
-optional-property access unless a documented tool constraint blocks them. Do not
-weaken compiler settings to integrate one feature.
+The frontend uses TypeScript with strict checking. `tsconfig.json` 已开启 `strict`、`noUncheckedIndexedAccess`、
+`exactOptionalPropertyTypes` 与 `noFallthroughCasesInSwitch`，类型检查范围包括 `src`、`e2e` 与各配置文件。Do not
+weaken compiler settings to integrate one feature；某个依赖与选项不兼容时，只关闭被阻断的单个选项并记录原因。
 
 External data enters as `unknown` and becomes trusted only through one runtime
-decoder at the owning boundary. 旧手写 decoder 的实现随 `frontend/src/` 删除；恢复时
-仍须按 feature API 边界解码，不得把旧 `api.ts` 写成当前存在的模块。运行时校验库尚未
-采纳；禁止以 raw cast 绕过角色、枚举或必填字段检查。
+decoder at the owning boundary. 解码用 `shared/api/decode.ts` 的手写原语（对象、字符串、布尔、安全整数、RFC 3339 时间、
+UUID、枚举、数组、可选与可空），不引入运行时校验库；原语失败时抛出带字段路径的 `DecodeError`，只用于测试诊断，不展示给用户。
+禁止以 raw cast 绕过角色、枚举或必填字段检查。
+
+decoder 与后端的一致性由样本把关：后端集成测试 `TestPostgreSQLAPIResponseSamples` 经真实 handler 产生响应，写成
+`backend/internal/app/testdata/api-samples/` 下的 JSON 样本（只含状态码与响应体）；`src/test/api-contract.test.ts` 遍历全部
+样本，每个样本必须对应一个 decoder 并解码成功、状态码一致，且 decoder 往返后与样本相同（后端新增字段而 decoder 没有保留
+它时失败）。后端合同变化时先更新样本（`ROOMUSIC_UPDATE_API_SAMPLES=1 ./scripts/test-integration.sh`），再同步 decoder。
 
 ## Type Ownership
 
@@ -30,37 +34,43 @@ derive identity from title, track number, array index, or file path.
 
 ## Runtime Decoding
 
-每个 feature 为每种响应合同维护唯一 decoder。以下只演示当前扫描响应的部分字段，
-不是完整 DTO；时间字段沿用 wire 名称与非空合同：
+每个 feature 为每种响应合同维护唯一 decoder，字段名沿用 wire 名称，可选字段与后端“缺失时省略”的合同一致。以下是目录操作记录
+的 decoder（节选自 `features/library/api/decoders.ts`）：
 
 ```ts
-const scanStatuses = [
-  "running",
-  "succeeded",
-  "failed",
-  "canceled",
-  "incomplete",
-] as const;
+import { decode as d } from "../../../shared/api";
 
-type ScanStatus = (typeof scanStatuses)[number];
+export const rootOperationKinds = ["create", "disable", "restore"] as const;
+export const rootOperationStatuses = ["succeeded", "failed"] as const;
 
-type ScanRunDTO = {
-  id: string;
-  status: ScanStatus;
-  started_at: string;
-};
+// root_id、revision 与 error_code 在记录没有对应值时被省略。
+const rootOperationDecoder = d.object({
+  id: d.uuid(),
+  operation: d.oneOf(rootOperationKinds),
+  status: d.oneOf(rootOperationStatuses),
+  created_at: d.timestamp(),
+  root_id: d.optional(d.uuid()),
+  revision: d.optional(d.integer({ min: 1 })),
+  error_code: d.optional(d.string({ min: 1, max: 64 })),
+});
 
-function decodeScanRun(input: unknown): ScanRunDTO {
-  // decoder 在此校验对象、标识、状态及时间；完整实现还需校验其余响应字段。
-  // 消费者不重复解码。
-  return scanRunDecoder.parse(input);
-}
+// 目录操作记录最多 100 条。
+const rootOperationListDecoder = d.object({ items: d.array(rootOperationDecoder, { max: 100 }) });
+
+export const decodeRootOperationList = d.defineDecoder(rootOperationListDecoder);
+export type RootOperationDTO = d.Infer<typeof rootOperationDecoder>;
 ```
 
-`scanRunDecoder` 仅为解码模式示意，不是已存在或已选定的库。完整扫描响应以
-[运行合同](../backend/core0-runtime-contracts.md)和
-[`library.Scan`](../../../backend/internal/library/scans.go)为准，当前没有已扫描文件数或百分比进度。
-不得从示例增加后端未返回的字段；只在边界解码一次 `unknown`，其他消费者只接收类型化结果。
+列表上限沿用后端：目录操作记录、诊断明细与诊断类别各最多 100 条；后端没有上限的列表（目录、成员）不限条数，只限字段长度。
+数组先检查长度再逐项映射。完整扫描响应以[运行合同](../backend/core0-runtime-contracts.md)和
+[`library.Scan`](../../../backend/internal/library/scans.go)为准，当前没有已扫描文件数或百分比进度；
+不得增加后端未返回的字段，只在边界解码一次 `unknown`，其他消费者只接收类型化结果。
+
+请求层 `apiRequest(spec, decode)` 返回 `{ status, data }`（状态码有业务含义：开始扫描 202 新建 / 200 已有，目录新增 201），
+失败时抛出携带 `ApiFailure` 的 `ApiError`，分为四类：`http`（后端的合法错误信封）、`invalid_response`（收到响应但不可信：
+非 JSON、HTML 回落页、信封或 decoder 不合法，不进入缓存）、`network`（没有拿到响应，对写请求结果未知）、`aborted`
+（调用方取消）。`isOutcomeUncertain(failure)` 把网络失败、无效响应与 5xx 归为“结果不确定”，4xx 是明确的拒绝；界面按
+`error.code` 选文案，不比较后端 message。
 
 Decode the common error envelope even for non-2xx responses. Unknown response
 codes remain representable as a safe `ApiError` fallback so an older frontend
@@ -114,6 +124,7 @@ diagnostics 使用后端同名上限。Track 上限是 Release 总量，不是�
 - Using GraphQL-generated types in Core 0 or importing types from V0 source.
 - A generic API function whose caller supplies an arbitrary type parameter and
   receives an unvalidated cast.
+- 在 `shared/api/request.ts` 之外直接调用 `fetch`（`no-restricted-globals` 与 `no-restricted-properties` 会报错）。
 
 Narrow assertions such as `as const` are acceptable when they make a literal
 contract more precise. Any unavoidable unsafe assertion must be isolated at a

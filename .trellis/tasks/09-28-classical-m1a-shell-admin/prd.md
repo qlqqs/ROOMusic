@@ -1,8 +1,9 @@
 # M1a：Classical 外壳与管理界面
 
-> 状态：planning。2026-09-28 由[路线修订任务](../archive/2026-09/09-28-core-1-roadmap-revision/design.md)（第二部分）创建，
-> 2026-10-01 完成规划，待批准后启动。父任务见 [Classical 重设计 / Core 1](../09-27-classical-core-1/prd.md)。
-> 技术设计见 [design.md](design.md)，执行计划见 [implement.md](implement.md)。
+> 状态：已完成（2026-10-01）。2026-09-28 由[路线修订任务](../archive/2026-09/09-28-core-1-roadmap-revision/design.md)（第二部分）创建，
+> 2026-10-01 规划获批并实施：规划提交 `2e84149`，实施提交 `66a0e05`–`4220960`，另有文档同步提交。
+> 父任务见 [Classical 重设计 / Core 1](../09-27-classical-core-1/prd.md)。技术设计见 [design.md](design.md)，执行计划与实施发现见
+> [implement.md](implement.md)，真实接口冒烟记录见 [research/real-api-smoke.md](research/real-api-smoke.md)。
 
 ## 目标与用户价值
 
@@ -148,6 +149,24 @@ M1b（专辑浏览）在本任务的外壳、数据层与 decoder 约定之上�
 | A8 | R1 | 构建只产出 woff2 可变字体（合计约 6.3 MB）并附 OFL 许可文本；页面没有任何第三方请求（Playwright 断言）；字体未加载时系统衬线回退可读 |
 | A9 | R10 | 前端作业没有入口缺失分支，执行构建、漂移检查与 Playwright 冒烟；本地按 CI 顺序执行全部通过 |
 | A10 | R11 | 文档与实际交付一致，链接检查通过 |
+
+## 实施结果与验收对照（2026-10-01）
+
+| 编号 | 结果 | 证据 |
+| --- | --- | --- |
+| A1 | 达成 | `package.json` 没有 `latest` 或范围版本；`npm ci`、lint、typecheck、Vitest（29 个文件 443 个测试）、build 通过，构建结果与提交的内嵌产物一致（`git diff --exit-code` 与未跟踪文件检查）；Go 测试 `TestAPIFallbackKeepsFrontendAndHealthRoutes` 与 `/api` 兜底测试覆盖深链回落、缺失的 `/assets/*` 为 404、未知 `/api/*` 为 JSON 404；真实接口冒烟里 `/library`、`/library/scans/{id}`、`/members` 刷新正常 |
+| A2 | 达成 | 隔离 PostgreSQL 与临时目录上的真实接口冒烟 82 项通过，覆盖初始化 → 自动登录 → 添加目录 → 开始扫描并看到终态（成功与不完整）与诊断 → 停用并恢复目录 → 新建成员 → 停用并重新启用 → 撤销会话 → 退出；命令与结果见 `research/real-api-smoke.md` |
+| A3 | 达成 | 401 回到登录页（Vitest、Playwright、真实冒烟的撤销会话）；403 显示拒绝且会话保留（Playwright）；`revision_conflict`（Vitest、Playwright）、`idempotency_conflict` 与 `setup_closed`（Vitest）、`last_admin` 与 `username_taken`（Playwright、真实冒烟）各有可恢复的提示；损坏 JSON、HTML、未知枚举、超界列表显示带请求 ID 的安全错误且不进入缓存（请求层与 decoder 测试）；写请求网络失败时显示“结果未确认”并提供核对，目录操作用同一个幂等键重试（Vitest 的请求或响应丢失用例） |
+| A4 | 达成 | 会话控制器的代次、迟到响应与写操作回调、`BroadcastChannel` 广播与重新可见时核对有 Vitest 覆盖；跨标签页行为另在 Step 3 于真实后端手动验证 |
+| A5 | 达成 | 假定时器（Vitest）与 `page.clock`（Playwright）验证只在运行中轮询、终态即停止；六种状态文案互不混同；断言页面没有百分比或剩余时间 |
+| A6 | 达成，读屏未人工验证 | Playwright：10 个页面状态在 375 / 768 / 1024 / 1280 / 1440 下页面与主内容区无横向溢出；键盘路径 5 个用例（登录、确认对话框、成员新建、窄屏菜单、跳转链接）；对话框有名称、Esc 与取消可关闭、焦点回到触发按钮；axe（WCAG 2.1 A/AA，含 `color-contrast`）在 16 个页面状态 × 桌面与手机宽度加窄屏菜单下没有 serious 或 critical；所有文字不小于 12px。`e2e/checks.spec.ts` 证明这些检查会失败 |
+| A7 | 达成 | 样本覆盖设计第 9 节的清单；手工篡改一个样本字段、或在样本目录多放一个文件，`TestPostgreSQLAPIResponseSamples` 都会失败并给出更新方法，还原后通过；样本断言不含绝对路径、密码、Cookie；每个样本都被前端契约测试解码 |
+| A8 | 达成，字体回退未单独验证 | 产物中只有 woff2（112 个，合计约 6.0 MB）并附三套 OFL 文本；页面没有任何第三方请求（Playwright 每个测试断言）；字体栈以系统衬线收尾，字体未加载时的可读性没有单独的测试，留给 M1b 的长标题页面一并验证 |
+| A9 | 达成 | CI 前端作业没有入口缺失分支，依次执行 `npm ci`、lint、typecheck、Vitest、构建、漂移检查、安装 Chromium、Playwright；本地按 CI 顺序执行全部通过（本次文档同步提交前复核，另跑 `./scripts/test-integration.sh`） |
+| A10 | 达成 | 前端各规范、后端运行合同与质量规范、ADR 0001、Core 1 路线与架构图、架构决策摘要、DESIGN.md、README、父任务与 M1b 的 PRD 已同步；改动文档的相对链接逐个检查 |
+
+范围内的偏离与取舍（开始扫描 200 时不跳转、活动扫描 5 秒刷新、容器查询表格、成员写操作不重试等）记录在 design.md 第 12 节；
+发现的后端缺口记录在 design.md 第 13 节与[后端运行合同的技术债](../../spec/backend/core0-runtime-contracts.md)，都不在本任务范围内修复。
 
 ## 关键决策（随本规划一并批准）
 
