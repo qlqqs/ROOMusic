@@ -1,8 +1,8 @@
 # M1a：Classical 外壳与管理界面
 
-> 状态：已完成（2026-10-01）。2026-09-28 由[路线修订任务](../archive/2026-09/09-28-core-1-roadmap-revision/design.md)（第二部分）创建，
+> 状态：已完成（2026-10-01）。2026-09-28 由[路线修订任务](../../2026-09/09-28-core-1-roadmap-revision/design.md)（第二部分）创建，
 > 2026-10-01 规划获批并实施：规划提交 `2e84149`，实施提交 `66a0e05`–`4220960`，另有文档同步提交。
-> 父任务见 [Classical 重设计 / Core 1](../09-27-classical-core-1/prd.md)。技术设计见 [design.md](design.md)，执行计划与实施发现见
+> 父任务见 [Classical 重设计 / Core 1](../../../09-27-classical-core-1/prd.md)。技术设计见 [design.md](design.md)，执行计划与实施发现见
 > [implement.md](implement.md)，真实接口冒烟记录见 [research/real-api-smoke.md](research/real-api-smoke.md)。
 
 ## 目标与用户价值
@@ -13,10 +13,10 @@ M1b（专辑浏览）在本任务的外壳、数据层与 decoder 约定之上�
 
 ## 依据
 
-- [ADR 0001](../../../docs/architecture/adr/0001-frontend-foundations.md) 的决策记录：第 1–3 项与接口防漂移做法已批准（D3）；
+- [ADR 0001](../../../../../docs/architecture/adr/0001-frontend-foundations.md) 的决策记录：第 1–3 项与接口防漂移做法已批准（D3）；
   第 4、5 项按本任务“关键决策”K1、K2 提请批准。
-- [frontend/DESIGN.md](../../../frontend/DESIGN.md) 与 `.trellis/spec/frontend/` 下的各项规范。
-- [Core 1 路线](../../../docs/architecture/core-1-roadmap.md) 矩阵中标注 M1a 的行。
+- [frontend/DESIGN.md](../../../../../frontend/DESIGN.md) 与 `.trellis/spec/frontend/` 下的各项规范。
+- [Core 1 路线](../../../../../docs/architecture/core-1-roadmap.md) 矩阵中标注 M1a 的行。
 - 用户偏好：开发阶段不做兼容，有必要可直接重构。
 
 ## 已确认的事实（2026-10-01 核对）
@@ -166,7 +166,7 @@ M1b（专辑浏览）在本任务的外壳、数据层与 decoder 约定之上�
 | A10 | 达成 | 前端各规范、后端运行合同与质量规范、ADR 0001、Core 1 路线与架构图、架构决策摘要、DESIGN.md、README、父任务与 M1b 的 PRD 已同步；改动文档的相对链接逐个检查 |
 
 范围内的偏离与取舍（开始扫描 200 时不跳转、活动扫描 5 秒刷新、容器查询表格、成员写操作不重试等）记录在 design.md 第 12 节；
-发现的后端缺口记录在 design.md 第 13 节与[后端运行合同的技术债](../../spec/backend/core0-runtime-contracts.md)，都不在本任务范围内修复。
+发现的后端缺口记录在 design.md 第 13 节与[后端运行合同的技术债](../../../../spec/backend/core0-runtime-contracts.md)，都不在本任务范围内修复。
 
 ## 关键决策（随本规划一并批准）
 

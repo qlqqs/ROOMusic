@@ -14,7 +14,7 @@
 既有初始化、会话、目录、扫描和成员管理写操作仍可使用，不新增元数据治理写路径。依赖与路由方案的决策见
 [前端基础 ADR](../../../docs/architecture/adr/0001-frontend-foundations.md) 决策记录，阶段和
 能力矩阵见 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)，M1a 的设计与验证记录见任务
-[M1a 技术设计](../../tasks/09-28-classical-m1a-shell-admin/design.md)。各规范文件区分“已实现的合同”与尚未实现的目标
+[M1a 技术设计](../../tasks/archive/2026-10/09-28-classical-m1a-shell-admin/design.md)。各规范文件区分“已实现的合同”与尚未实现的目标
 （播放器、搜索、受治理操作与 Agent 界面）；后者不是当前前端已通过验收的声明。
 
 ## Pre-Development Checklist

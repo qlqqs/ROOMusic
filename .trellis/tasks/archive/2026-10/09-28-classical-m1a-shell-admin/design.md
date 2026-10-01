@@ -276,7 +276,7 @@ root（context: 会话快照）                     notFound → “页面不存
   对格式不对的 ID 返回 503（`::uuid` 转换错误）而不是 400。
 - `httpserver.Frontend` 不设缓存头，带哈希文件名的资源与较大的字体每次都要重新协商；对 `/assets/`、`/licenses/` 这类目录路径会返回目录列表。
 
-这些缺口已记入 [后端运行合同的技术债](../../spec/backend/core0-runtime-contracts.md)。
+这些缺口已记入 [后端运行合同的技术债](../../../../spec/backend/core0-runtime-contracts.md)。
 
 ## 14. 回退
 
