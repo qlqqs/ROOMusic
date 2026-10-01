@@ -28,6 +28,7 @@ import (
 )
 
 type integrationTestApplication struct {
+	app         *App
 	database    *sql.DB
 	handler     http.Handler
 	origin      string
@@ -60,9 +61,21 @@ func newIntegrationTestApplication(t *testing.T) *integrationTestApplication {
 		DataDirectory:       t.TempDir(),
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	scanContext, cancelScans := context.WithCancel(context.Background())
+	application := New(scanContext, config, database, testFrontend(), logger)
+	// 后注册先执行：测试结束（含中途失败）时先取消并等待扫描 worker 退出，再关闭数据库、清理 schema。
+	t.Cleanup(func() {
+		cancelScans()
+		waitContext, cancelWait := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancelWait()
+		if err := application.WaitForScans(waitContext); err != nil {
+			t.Errorf("wait for scan workers: %v", err)
+		}
+	})
 	return &integrationTestApplication{
+		app:         application,
 		database:    database,
-		handler:     New(nil, config, database, testFrontend(), logger).Handler(),
+		handler:     application.Handler(),
 		origin:      "http://roomusic.test",
 		allowedRoot: allowedRoot,
 	}

@@ -114,6 +114,13 @@ export function uuid(): Decoder<string> {
   };
 }
 
+export function literal<const V extends string | number | boolean>(expected: V): Decoder<V> {
+  return (input, path) => {
+    if (input !== expected) throw new DecodeError(path, `应为 ${String(expected)}`);
+    return expected;
+  };
+}
+
 export function oneOf<const V extends readonly string[]>(values: V): Decoder<V[number]> {
   return (input, path) => {
     const match = values.find((value) => value === input);
@@ -121,6 +128,9 @@ export function oneOf<const V extends readonly string[]>(values: V): Decoder<V[n
     return match;
   };
 }
+
+/** 后端没有给列表设置上限时使用（目录、成员）：显式写出“无上限”，让这一后端缺口留在代码里。 */
+export const unbounded = Number.POSITIVE_INFINITY;
 
 /** 先检查长度再逐项映射，超界的数组不会被分配或解码。 */
 export function array<T>(item: Decoder<T>, options: { max: number; min?: number }): Decoder<T[]> {

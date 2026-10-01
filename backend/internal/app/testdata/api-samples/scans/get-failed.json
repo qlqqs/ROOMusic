@@ -1,0 +1,32 @@
+{
+  "body": {
+    "cancel_requested_at": null,
+    "diagnostics": {
+      "counts": [
+        {
+          "count": 1,
+          "kind": "database_error"
+        },
+        {
+          "count": 1,
+          "kind": "parse_failure"
+        },
+        {
+          "count": 1,
+          "kind": "permission_error"
+        },
+        {
+          "count": 1,
+          "kind": "unsupported_format"
+        }
+      ],
+      "total": 4
+    },
+    "finished_at": "2026-01-01T00:00:01Z",
+    "id": "00000000-0000-4000-8000-000000000001",
+    "scan_run_id": "00000000-0000-4000-8000-000000000001",
+    "started_at": "2026-01-01T00:00:00Z",
+    "status": "failed"
+  },
+  "status": 200
+}

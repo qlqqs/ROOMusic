@@ -5,12 +5,14 @@ import {
   defineDecoder,
   DecodeError,
   integer,
+  literal,
   nullable,
   object,
   oneOf,
   optional,
   string,
   timestamp,
+  unbounded,
   uuid,
 } from "./decode";
 
@@ -99,6 +101,16 @@ describe("oneOf", () => {
   });
 });
 
+describe("literal", () => {
+  it("只接受指定的值", () => {
+    const decode = defineDecoder(literal(true));
+    expect(decode(true)).toBe(true);
+    expect(() => decode(false)).toThrow(DecodeError);
+    expect(() => decode("true")).toThrow(DecodeError);
+    expect(() => defineDecoder(literal("a"))("b")).toThrow(DecodeError);
+  });
+});
+
 describe("array", () => {
   it("逐项解码并在错误路径中带索引", () => {
     const decode = defineDecoder(array(string({ min: 1 }), { max: 3 }));
@@ -115,6 +127,11 @@ describe("array", () => {
     const decode = defineDecoder(array(counting, { max: 2 }));
     expect(() => decode(["a", "b", "c"])).toThrow(DecodeError);
     expect(decoded).toBe(0);
+  });
+
+  it("unbounded 表示后端没有给出上限，数组长度不受限制", () => {
+    const decode = defineDecoder(array(integer(), { max: unbounded }));
+    expect(decode(Array.from({ length: 5000 }, (_, index) => index))).toHaveLength(5000);
   });
 
   it("拒绝非数组与不足最少项数", () => {

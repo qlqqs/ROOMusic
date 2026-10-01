@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "username_taken",
+      "message": "用户名已存在"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

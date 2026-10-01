@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "revision_conflict",
+      "message": "目录版本已变化"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

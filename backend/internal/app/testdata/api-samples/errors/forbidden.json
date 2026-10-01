@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "forbidden",
+      "message": "需要管理员权限"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 403
+}

@@ -1,0 +1,17 @@
+{
+  "body": {
+    "scan": {
+      "cancel_requested_at": null,
+      "diagnostics": {
+        "counts": [],
+        "total": 0
+      },
+      "finished_at": null,
+      "id": "00000000-0000-4000-8000-000000000001",
+      "scan_run_id": "00000000-0000-4000-8000-000000000001",
+      "started_at": "2026-01-01T00:00:00Z",
+      "status": "running"
+    }
+  },
+  "status": 200
+}

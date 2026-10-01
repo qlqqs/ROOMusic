@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "setup_closed",
+      "message": "管理员初始化已完成"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

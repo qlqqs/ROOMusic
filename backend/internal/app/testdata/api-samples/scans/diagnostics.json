@@ -1,0 +1,22 @@
+{
+  "body": {
+    "items": [
+      {
+        "id": "1",
+        "kind": "parse_failure",
+        "message": "音频文件解析失败",
+        "path": "broken.flac"
+      }
+    ],
+    "summary": {
+      "counts": [
+        {
+          "count": 1,
+          "kind": "parse_failure"
+        }
+      ],
+      "total": 1
+    }
+  },
+  "status": 200
+}

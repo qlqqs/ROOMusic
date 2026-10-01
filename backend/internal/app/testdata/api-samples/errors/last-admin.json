@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "last_admin",
+      "message": "不能禁用最后一个管理员"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

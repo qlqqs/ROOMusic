@@ -1,0 +1,52 @@
+{
+  "body": {
+    "items": [
+      {
+        "id": "101",
+        "kind": "parse_failure",
+        "message": "音频文件解析失败",
+        "path": "disc-1/01.flac"
+      },
+      {
+        "id": "102",
+        "kind": "permission_error",
+        "message": "扫描发现需要检查的问题",
+        "path": "disc-2"
+      },
+      {
+        "id": "103",
+        "kind": "database_error",
+        "message": "扫描数据库操作失败",
+        "path": null
+      },
+      {
+        "id": "104",
+        "kind": "unsupported_format",
+        "message": "音频格式暂不支持",
+        "path": "extras/cover.dsf"
+      }
+    ],
+    "summary": {
+      "counts": [
+        {
+          "count": 1,
+          "kind": "database_error"
+        },
+        {
+          "count": 1,
+          "kind": "parse_failure"
+        },
+        {
+          "count": 1,
+          "kind": "permission_error"
+        },
+        {
+          "count": 1,
+          "kind": "unsupported_format"
+        }
+      ],
+      "total": 4
+    }
+  },
+  "status": 200
+}

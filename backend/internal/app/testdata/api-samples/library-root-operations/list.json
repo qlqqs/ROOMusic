@@ -1,0 +1,55 @@
+{
+  "body": {
+    "items": [
+      {
+        "created_at": "2026-01-01T00:00:05Z",
+        "error_code": "operation_failed",
+        "id": "00000000-0000-4000-8000-000000000001",
+        "operation": "disable",
+        "root_id": "00000000-0000-4000-8000-000000000002",
+        "status": "failed"
+      },
+      {
+        "created_at": "2026-01-01T00:00:04Z",
+        "id": "00000000-0000-4000-8000-000000000003",
+        "operation": "restore",
+        "revision": 3,
+        "root_id": "00000000-0000-4000-8000-000000000002",
+        "status": "succeeded"
+      },
+      {
+        "created_at": "2026-01-01T00:00:03Z",
+        "id": "00000000-0000-4000-8000-000000000004",
+        "operation": "create",
+        "revision": 2,
+        "root_id": "00000000-0000-4000-8000-000000000002",
+        "status": "succeeded"
+      },
+      {
+        "created_at": "2026-01-01T00:00:02Z",
+        "id": "00000000-0000-4000-8000-000000000005",
+        "operation": "disable",
+        "revision": 2,
+        "root_id": "00000000-0000-4000-8000-000000000002",
+        "status": "succeeded"
+      },
+      {
+        "created_at": "2026-01-01T00:00:01Z",
+        "id": "00000000-0000-4000-8000-000000000006",
+        "operation": "create",
+        "revision": 1,
+        "root_id": "00000000-0000-4000-8000-000000000002",
+        "status": "succeeded"
+      },
+      {
+        "created_at": "2026-01-01T00:00:00Z",
+        "id": "00000000-0000-4000-8000-000000000007",
+        "operation": "create",
+        "revision": 1,
+        "root_id": "00000000-0000-4000-8000-000000000008",
+        "status": "succeeded"
+      }
+    ]
+  },
+  "status": 200
+}

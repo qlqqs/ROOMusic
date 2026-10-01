@@ -1,0 +1,28 @@
+{
+  "body": {
+    "items": [
+      {
+        "created_at": "2026-01-01T00:00:02Z",
+        "disabled": true,
+        "id": "00000000-0000-4000-8000-000000000001",
+        "role": "user",
+        "username": "archivist"
+      },
+      {
+        "created_at": "2026-01-01T00:00:00Z",
+        "disabled": false,
+        "id": "00000000-0000-4000-8000-000000000002",
+        "role": "admin",
+        "username": "curator"
+      },
+      {
+        "created_at": "2026-01-01T00:00:01Z",
+        "disabled": false,
+        "id": "00000000-0000-4000-8000-000000000003",
+        "role": "user",
+        "username": "listener"
+      }
+    ]
+  },
+  "status": 200
+}

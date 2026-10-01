@@ -27,15 +27,15 @@ Co-Authored-By 行。改动前端源码的提交都重新构建并一起提交 `
 
 ## 第 2 步：接口样本与全部 decoder
 
-- [ ] 集成测试辅助代码允许传入扫描上下文；新增 `TestPostgreSQLAPIResponseSamples`（design.md 第 9 节的流程、规范化、比较与
+- [x] 集成测试辅助代码提供可取消的扫描上下文并在清理时等待 worker；新增 `TestPostgreSQLAPIResponseSamples`（design.md 第 9 节的流程、规范化、比较与
       安全断言），生成 `backend/internal/app/testdata/api-samples/`。
-- [ ] `features/auth`、`members`、`library`、`catalog` 的 `api/` decoder 与 DTO；`src/test/api-samples.ts` 与契约测试；
+- [x] `features/auth`、`members`、`library`、`catalog` 的 `api/` decoder 与 DTO；`src/test/api-samples.ts` 与契约测试；
       各 decoder 的反例测试。
-- [ ] 验证：`gofmt -l .`、`go vet ./...`、`go test ./internal/app/... -count=1`；
+- [x] 验证：`gofmt -l .`、`go vet ./...`、`go test ./internal/app/... -count=1`；
       `ROOMUSIC_UPDATE_API_SAMPLES=1 ./scripts/test-integration.sh` 生成样本后，再连续两次 `./scripts/test-integration.sh`
       确认比较模式通过且样本稳定；前端 `npm run lint`、`npm run typecheck`、`npm run test`。
-- [ ] 人工检查样本：无绝对路径、密码、Cookie，内容与后端合同一致。
-- [ ] 提交：`test(app): 用真实响应生成 API 样本，前端 decoder 以样本校验`。
+- [x] 人工检查样本：无绝对路径、密码、Cookie，内容与后端合同一致。
+- [x] 提交：`test(app): 用真实响应生成 API 样本，前端 decoder 以样本校验`。
 
 ## 第 3 步：认证、外壳与概览（首个可用界面）
 

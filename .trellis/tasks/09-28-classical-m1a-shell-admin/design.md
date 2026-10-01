@@ -5,7 +5,7 @@
 ## 1. 边界
 
 - 只消费现有 `/api/v1` 接口，不改后端生产代码。后端只新增一个生成 API 样本的集成测试与其 testdata，并让集成测试的
-  应用装配能传入扫描上下文（测试辅助代码）。
+  应用装配提供可取消的扫描上下文、在清理时取消并等待扫描 worker 退出（测试辅助代码）。
 - 前端从零重建，不搬运旧 `api.ts` / `main.tsx`；旧代码只作合同参考（字段、上限）。
 - Router 只拥有 URL、导航与守卫；Query 是服务器状态唯一的缓存。路由不使用 loader，页面直接调用 feature 查询 hook，
   避免 Router 缓存与 Query 缓存并存。
@@ -179,34 +179,41 @@ root（context: 会话快照）                     notFound → “页面不存
 ### 生成与比较
 
 - 测试 `TestPostgreSQLAPIResponseSamples` 位于 `backend/internal/app/api_samples_integration_test.go`，随
-  `./scripts/test-integration.sh` 运行。按固定流程调用真实 handler：固定用户名（管理员 `curator`、成员 `listener`）、
-  固定目录名（允许根下的 `classical-a`、`classical-b`）、固定请求头 `X-Request-ID: sample-request`。
-- 需要固定顺序或特殊状态的数据用固定 ID 与时间直接插入（例如按 ID 排序的诊断、各终态扫描）。两个需要时序控制的样本：
-  - 新建扫描（202）：测试事务先锁住 `library_roots` 表，worker 读不到目录而停在第一步，记录响应后再释放并等待 worker 结束；
-  - 已有扫描（200）：测试连接持有扫描 advisory lock（模拟另一实例）并插入一条运行中的扫描。
-- 规范化：用 `UseNumber` 解码；UUID 字符串按首次出现顺序替换为 `00000000-0000-4000-8000-000000000001` 起的固定值；
-  所有 RFC 3339 时间按原始时间先后映射为 `2026-01-01T00:00:00Z` 起逐秒递增的值（保留先后关系）；按键排序、两空格缩进、
-  末尾换行写出。每个文件为 `{ "status": <状态码>, "body": <响应体> }`。
+  `./scripts/test-integration.sh` 运行。按固定流程调用真实 handler：固定用户名（管理员 `curator`、成员 `listener`、
+  `archivist`）、固定目录名（允许根下的 `classical-a`、`classical-b`）、固定请求头 `X-Request-ID: sample-request`。
+  初始化与登录都走真实接口（初始化 → 登录取 Cookie），不用直接插入用户。
+- 扫描素材是临时目录里的合成文件：`classical-a` 下一个有效 FLAC，`classical-b` 下一个损坏文件。第一次扫描覆盖两个目录，
+  真实结果是 `incomplete` 并产生 `parse_failure` 诊断；停用 `classical-b` 后的第二次扫描是 `succeeded`，并产生发行组。
+- 需要固定状态的数据直接写库：失败的扫描（带多类诊断）、取消请求中与已取消的扫描、一条失败的目录操作记录、一条封面记录。
+  它们是后端表允许、真实流程不一定产出的状态，由真实 handler 读出。
+- 时序控制：第一次扫描开始前，测试事务先独占 `library_roots`，worker 读不到目录而停在第一步，因此“新建（202）”“进行中”
+  “已有扫描（200，同进程内已有运行中的扫描时后端直接返回它）”都发生在 `running` 状态；释放后轮询到终态并等待 worker 退出，
+  再启动下一次扫描。
+- 规范化：用 `UseNumber` 解码；每个文件内，UUID 字符串按首次出现顺序替换为 `00000000-0000-4000-8000-000000000001` 起的
+  固定值；所有 RFC 3339 时间按先后顺序映射为 `2026-01-01T00:00:00Z` 起逐秒递增的值（相同时刻得到相同值，保留先后关系）；
+  按键排序、两空格缩进、末尾换行写出。每个文件为 `{ "status": <状态码>, "body": <响应体> }`。
 - 默认逐字比较，目录中出现本次没有产出的文件也失败；失败信息说明如何在确认合同变更后用
   `ROOMUSIC_UPDATE_API_SAMPLES=1 ./scripts/test-integration.sh` 重写并同步前端 decoder。更新模式会删除多余文件。
-- 测试断言样本中没有允许根目录的绝对路径、`password` 与 `roomusic_session`。
+- 测试断言样本中没有允许根目录的绝对路径、临时目录前缀、`password`、`roomusic_session`、各会话令牌与测试密码。
 
 ### 覆盖清单
 
-| 范围 | 样本 |
+| 范围 | 样本（目录/文件） |
 | --- | --- |
-| 初始化与会话 | 初始化状态（需要 / 已完成）、初始化 201、登录、当前用户（管理员 / 成员）、退出 |
-| 成员 | 列表、新建、停用、重新启用、撤销会话 |
-| 目录 | 列表（启用与停用各一）、新增、重复登记已停用目录、停用、恢复、目录操作记录 |
-| 扫描 | 开始（202 新建、200 已有）、活动扫描（无 / 运行中）、指定扫描（运行中、取消请求中、成功、失败、已取消、不完整）、取消（202、200）、诊断 |
-| 目录（概览用） | ReleaseGroup 列表（空、一项） |
-| 错误信封 | `unauthorized`、`forbidden`、`invalid_credentials`、`setup_closed`、`invalid_input`（短密码、缺少幂等键）、`username_taken`、`last_admin`、`invalid_library_path`、`revision_conflict`、`idempotency_conflict`、`not_found`（扫描、未知 API）、`invalid_id`、`method_not_allowed`、`database_unavailable`（降级 handler） |
+| 初始化与会话 | `auth/`：初始化状态（需要 / 已完成）、初始化 201、登录、当前用户（管理员 / 成员）、退出 |
+| 成员 | `users/`：列表（含停用成员）、新建、停用、重新启用、撤销会话 |
+| 目录 | `library-roots/`：列表（空 / 启用与停用各一）、新增、重复登记已停用目录、停用、恢复 |
+| 目录操作记录 | `library-root-operations/`：列表（空 / 成功与失败的记录，字段可缺失） |
+| 扫描 | `scans/`：开始（202 新建、200 已有）、活动扫描（无 / 运行中）、指定扫描（运行中、取消请求中、成功、失败、已取消、不完整）、取消（202、200）、诊断（真实一条、空、多类别） |
+| 发行组（概览用） | `release-groups/`：列表（空、一项、一项带封面） |
+| 错误信封 | `errors/`：`unauthorized`、`forbidden`、`origin_forbidden`、`invalid_credentials`、`setup_closed`、`invalid_input`（短密码、缺少幂等键）、`username_taken`、`last_admin`、`invalid_library_path`、`revision_conflict`、`idempotency_conflict`、`not_found`（扫描、未知 API）、`invalid_id`、`method_not_allowed`、`database_unavailable`（降级 handler） |
 
 ### 消费
 
 - `src/test/api-samples.ts` 从 `../backend/internal/app/testdata/api-samples/` 读取样本（Node `fs`），是唯一记录该路径的地方。
 - `src/test/api-contract.test.ts` 遍历全部样本：每个样本必须在映射表中对应一个 decoder（错误样本对应错误信封 decoder）
-  并解码成功；没有映射的样本即失败。
+  并解码成功、状态码一致，且 decoder 往返后与样本相同（后端新增字段而 decoder 没有保留它时失败）；没有映射的样本，
+  或没有样本的映射，同样失败。
 - `e2e/support/api-mock.ts` 用同一批样本响应 `page.route`；场景需要的变体（例如列表多一项）在样本数据上修改字段值，
   不手写新的响应结构。
 

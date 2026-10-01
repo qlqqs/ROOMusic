@@ -17,6 +17,9 @@ const httpMessages: Readonly<Record<string, string>> = {
   not_found: "请求的内容不存在或已被移除。",
   method_not_allowed: "服务器不支持此操作。",
   database_unavailable: "服务暂时不可用，请稍后重试。",
+  // 写请求的 Origin 与服务器信任的访问地址不一致（例如经 IP 访问而部署配置了公网地址）。
+  origin_forbidden: "请求来源不受信任。请使用管理员配置的访问地址打开页面后重试。",
+  origin_required: "请求来源不受信任。请使用管理员配置的访问地址打开页面后重试。",
 };
 
 /** 把请求失败转成用户可读的简体中文；界面按错误码选文案，不比较后端 message 的字符串。 */

@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_input",
+      "message": "请求需要 Idempotency-Key"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "database_unavailable",
+      "message": "服务暂不可用"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 503
+}
