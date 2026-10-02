@@ -53,7 +53,7 @@ function memberId(members: FakeMembers, username: string): string {
 
 function addAdmin(session: FakeSession, members: FakeMembers, username: string) {
   members.users = [...members.users, { id: "00000000-0000-4000-8000-0000000000aa", username, role: "admin", disabled: false, created_at: "2026-01-01T00:00:00Z" }];
-  session.accounts[username] = { password, role: "admin" };
+  session.accounts[username] = { id: "00000000-0000-4000-8000-0000000000aa", password, role: "admin" };
 }
 
 describe("成员页：访问与列表", () => {
@@ -80,6 +80,37 @@ describe("成员页：访问与列表", () => {
     expect(within(archivist).getByRole("button", { name: "重新启用成员 archivist" })).toBeTruthy();
     expect(within(archivist).queryByRole("button", { name: /停用成员|撤销会话/ })).toBeNull();
     expect(within(archivist).queryByText("你")).toBeNull();
+  });
+
+  it("“你”按用户 ID 判断，不看用户名：查看者的 ID 对上哪一行，哪一行标“你”，撤销确认框同理", async () => {
+    const { session, members } = setup();
+    const curator = session.accounts.curator;
+    if (curator === undefined) throw new Error("替身缺少 curator 账号");
+    // 用户名仍是 curator，但 ID 是 listener 那一行的 ID。
+    session.accounts.curator = { ...curator, id: memberId(members, "listener") };
+    renderApp({ path: "/members" });
+    await heading("成员");
+    await screen.findByRole("rowheader", { name: /^listener/ });
+
+    expect(within(rowOf("listener")).getByText("你")).toBeTruthy();
+    expect(within(rowOf("curator")).queryByText("你")).toBeNull();
+    await userEvent.click(within(rowOf("listener")).getByRole("button", { name: "撤销会话 listener" }));
+    expect(within(await screen.findByRole("dialog")).getByText("这是你自己的账号：确认后你会被立即退出登录。")).toBeTruthy();
+  });
+
+  it("查看者的 ID 不在列表里：即使有同名成员，也没有任何一行标“你”，确认框不提示是自己的账号", async () => {
+    const { session } = setup();
+    const curator = session.accounts.curator;
+    if (curator === undefined) throw new Error("替身缺少 curator 账号");
+    session.accounts.curator = { ...curator, id: "00000000-0000-4000-8000-0000000000ee" };
+    renderApp({ path: "/members" });
+    await heading("成员");
+    await screen.findByRole("rowheader", { name: /^listener/ });
+
+    expect(screen.queryByText("你")).toBeNull();
+    await userEvent.click(within(rowOf("curator")).getByRole("button", { name: "撤销会话 curator" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).queryByText(/这是你自己的账号/)).toBeNull();
   });
 
   it("导航里有“资料库”分组下的“成员”，当前页有 aria-current", async () => {
@@ -175,6 +206,23 @@ describe("新建成员", () => {
     expect(api.requestsTo("POST", usersPath)[0]?.body).toEqual({ username: "han", password: "密码密码" });
   });
 
+  it("密码最多 72 个字节：超出时不发请求，字段提示当前字节数；恰好 72 个字节（24 个汉字）可以", async () => {
+    const { api } = await openMembers();
+    await fillForm("wide", "字".repeat(25));
+    await create();
+    expect(await screen.findByText("密码不能超过 72 个字节（现在是 75 个）。")).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByLabelText("密码"));
+    expect(api.requestsTo("POST", usersPath)).toHaveLength(0);
+
+    await userEvent.clear(screen.getByLabelText("密码"));
+    await userEvent.clear(screen.getByLabelText("确认密码"));
+    await userEvent.type(screen.getByLabelText("密码"), "字".repeat(24));
+    await userEvent.type(screen.getByLabelText("确认密码"), "字".repeat(24));
+    await create();
+    expect(await screen.findByText(/已创建成员“wide”/)).toBeTruthy();
+    expect(api.requestsTo("POST", usersPath)[0]?.body).toEqual({ username: "wide", password: "字".repeat(24) });
+  });
+
   it("用户名已存在（409）：错误显示在用户名旁并保留输入，页面上没有重复的提示，改了用户名后错误消失", async () => {
     await openMembers();
     await fillForm("listener");
@@ -191,13 +239,13 @@ describe("新建成员", () => {
     expect(screen.queryByText("用户名已存在，请换一个。")).toBeNull();
   });
 
-  it("后端以 invalid_input 拒绝（400）：按错误码显示文案，不用后端的“字符”措辞", async () => {
+  it("后端以 invalid_input 拒绝（400）：按错误码显示文案，不直接显示后端的 message", async () => {
     const { api } = await openMembers();
     api.on("POST", usersPath, () => sampleResponse("errors/invalid-input"));
     await fillForm("newbie");
     await create();
     const alert = await screen.findByRole("alert");
-    expect(within(alert).getByText("用户名不能为空，密码至少需要 12 个字节。")).toBeTruthy();
+    expect(within(alert).getByText("用户名不能为空，密码需要 12 到 72 个字节。")).toBeTruthy();
     expect(within(alert).getByText("操作没有完成")).toBeTruthy();
   });
 
@@ -336,6 +384,17 @@ describe("停用、重新启用与撤销会话", () => {
     await userEvent.click(within(rowOf("listener")).getByRole("button", { name: "停用成员 listener" }));
     await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "停用成员" }));
     expect(await screen.findByText("成员已不存在，列表已刷新。")).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole("rowheader", { name: /^listener/ })).toBeNull());
+    expect(api.requestsTo("GET", usersPath).length).toBeGreaterThan(1);
+  });
+
+  it("撤销会话时成员已不存在（404）：提示并刷新列表，不再提示撤销成功", async () => {
+    const { api, members } = await openMembers();
+    members.users = members.users.filter((user) => user.username !== "listener");
+    await userEvent.click(within(rowOf("listener")).getByRole("button", { name: "撤销会话 listener" }));
+    await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "撤销会话" }));
+    expect(await screen.findByText("成员已不存在，列表已刷新。")).toBeTruthy();
+    expect(screen.queryByText(/已撤销成员/)).toBeNull();
     await waitFor(() => expect(screen.queryByRole("rowheader", { name: /^listener/ })).toBeNull());
     expect(api.requestsTo("GET", usersPath).length).toBeGreaterThan(1);
   });

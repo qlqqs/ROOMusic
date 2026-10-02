@@ -8,7 +8,7 @@ import styles from "./create-member-form.module.css";
 import { memberFailureMessages } from "./member-messages";
 
 /**
- * 新建成员：用户名与密码（规则与初始化管理员相同，密码按 UTF-8 字节计，至少 12 字节）。
+ * 新建成员：用户名与密码（规则与初始化管理员相同，密码按 UTF-8 字节计，需要 12 到 72 字节）。
  * 只能创建“成员”角色。失败时保留输入，成功后清空；用户名重复显示在用户名输入框旁。
  */
 export function CreateMemberForm({ commands }: { commands: MemberCommands }) {

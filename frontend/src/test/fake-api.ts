@@ -38,7 +38,7 @@ export function installFakeApi(): FakeApi {
   };
 }
 
-export type FakeAccount = { password: string; role: "admin" | "user" };
+export type FakeAccount = { id: string; password: string; role: "admin" | "user" };
 
 /** 后端会话的替身状态：测试可以直接改 current 来模拟另一个标签页登录、退出或会话失效。 */
 export type FakeSession = {
@@ -51,13 +51,17 @@ export type FakeSession = {
 export function installFakeSession(api: FakeApi, initial: Partial<FakeSession> = {}): FakeSession {
   const session: FakeSession = {
     setupRequired: false,
-    accounts: { curator: { password: "curator-password", role: "admin" }, listener: { password: "listener-password", role: "user" } },
+    // ID 与 users/list 样本里同名成员的 ID 一致：成员页按 ID 标出“你”，替身的查看者必须能对上列表里的那一行。
+    accounts: {
+      curator: { id: "00000000-0000-4000-8000-000000000002", password: "curator-password", role: "admin" },
+      listener: { id: "00000000-0000-4000-8000-000000000003", password: "listener-password", role: "user" },
+    },
     current: null,
     ...initial,
   };
   const viewer = () => {
     const account = session.current === null ? undefined : session.accounts[session.current];
-    return session.current === null || account === undefined ? null : { username: session.current, role: account.role };
+    return session.current === null || account === undefined ? null : { id: account.id, username: session.current, role: account.role };
   };
 
   api.on("GET", "/api/v1/setup/status", () => jsonResponse(200, { setup_required: session.setupRequired }));
@@ -70,7 +74,7 @@ export function installFakeSession(api: FakeApi, initial: Partial<FakeSession> =
     const account = session.accounts[username];
     if (account === undefined || account.password !== password) return sampleResponse("errors/invalid-credentials");
     session.current = username;
-    return jsonResponse(200, { username, role: account.role });
+    return jsonResponse(200, { id: account.id, username, role: account.role });
   });
   api.on("POST", "/api/v1/auth/logout", () => {
     session.current = null;
@@ -79,9 +83,10 @@ export function installFakeSession(api: FakeApi, initial: Partial<FakeSession> =
   api.on("POST", "/api/v1/setup/admin", (request) => {
     if (!session.setupRequired) return sampleResponse("errors/setup-closed");
     const { username, password } = request.body as { username: string; password: string };
-    session.accounts[username] = { password, role: "admin" };
+    const id = "00000000-0000-4000-8000-0000000000f0";
+    session.accounts[username] = { id, password, role: "admin" };
     session.setupRequired = false;
-    return jsonResponse(201, { username, role: "admin" });
+    return jsonResponse(201, { id, username, role: "admin" });
   });
   return session;
 }

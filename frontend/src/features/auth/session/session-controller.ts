@@ -52,7 +52,7 @@ export type SessionController = {
 type Resolved = { kind: "setup_required" } | { kind: "anonymous" } | { kind: "authenticated"; viewer: ViewerDTO };
 
 function sameViewer(left: ViewerDTO, right: ViewerDTO): boolean {
-  return left.username === right.username && left.role === right.role;
+  return left.id === right.id && left.role === right.role;
 }
 
 export function createSessionController(

@@ -5,14 +5,37 @@ package httpapi
 
 import (
 	"database/sql"
+	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
+
+// invalidAccountMessage 是用户名或密码不合规时的提示；密码长度按 UTF-8 字节计，范围取自 identity 的规则。
+var invalidAccountMessage = fmt.Sprintf("用户名不能为空，密码需要 %d 到 %d 个字节", identity.MinPasswordBytes, identity.MaxPasswordBytes)
+
+// isUniqueViolation 报告 err 是否为 PostgreSQL 唯一约束冲突（SQLSTATE 23505）。
+// 只有它才表示“已存在”；其他数据库错误必须如实报告为不可用，不能伪装成冲突。
+func isUniqueViolation(err error) bool {
+	var postgresError *pgconn.PgError
+	return errors.As(err, &postgresError) && postgresError.Code == "23505"
+}
+
+// userIDFromPath 校验路由中的用户 ID；格式不对时写出 400 invalid_id，不访问数据库。
+func userIDFromPath(w http.ResponseWriter, r *http.Request) (string, bool) {
+	id := r.PathValue("id")
+	if !uuid.Valid(id) {
+		httpserver.WriteError(w, r, 400, "invalid_id", "用户标识无效")
+		return "", false
+	}
+	return id, true
+}
 
 // Handlers 汇集身份相关的 HTTP handler。
 type Handlers struct {
@@ -56,8 +79,11 @@ func (handlers *Handlers) setupAdmin(responseWriter http.ResponseWriter, request
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
-	if !httpserver.DecodeJSON(responseWriter, request, &input) || len(input.Password) < 12 || strings.TrimSpace(input.Username) == "" {
-		httpserver.WriteError(responseWriter, request, 400, "invalid_input", "用户名不能为空，密码至少需要 12 个字符")
+	if !httpserver.DecodeJSON(responseWriter, request, &input) {
+		return
+	}
+	if strings.TrimSpace(input.Username) == "" || !identity.ValidPasswordLength(input.Password) {
+		httpserver.WriteError(responseWriter, request, 400, "invalid_input", invalidAccountMessage)
 		return
 	}
 	passwordHash, err := identity.HashPassword(input.Password)
@@ -72,24 +98,38 @@ func (handlers *Handlers) setupAdmin(responseWriter http.ResponseWriter, request
 	}
 	defer tx.Rollback()
 	var setupExists bool
-	if err = tx.QueryRowContext(request.Context(), "SELECT EXISTS (SELECT 1 FROM setup_state)").Scan(&setupExists); err != nil || setupExists {
+	if err = tx.QueryRowContext(request.Context(), "SELECT EXISTS (SELECT 1 FROM setup_state)").Scan(&setupExists); err != nil {
+		httpserver.WriteError(responseWriter, request, 503, "database_unavailable", "服务暂不可用")
+		return
+	}
+	if setupExists {
 		httpserver.WriteError(responseWriter, request, 409, "setup_closed", "管理员初始化已完成")
 		return
 	}
 	userID := uuid.New()
 	if _, err = tx.ExecContext(request.Context(), "INSERT INTO users (id, username, password_hash, role) VALUES ($1::uuid,$2,$3,'admin')", userID, input.Username, passwordHash); err != nil {
-		httpserver.WriteError(responseWriter, request, 409, "setup_closed", "管理员初始化已完成")
+		writeSetupWriteError(responseWriter, request, err)
 		return
 	}
 	if _, err = tx.ExecContext(request.Context(), "INSERT INTO setup_state (completed_at) VALUES (NOW())"); err != nil {
-		httpserver.WriteError(responseWriter, request, 409, "setup_closed", "管理员初始化已完成")
+		writeSetupWriteError(responseWriter, request, err)
 		return
 	}
 	if err = tx.Commit(); err != nil {
+		writeSetupWriteError(responseWriter, request, err)
+		return
+	}
+	httpserver.WriteJSON(responseWriter, 201, map[string]string{"id": userID, "username": input.Username, "role": "admin"})
+}
+
+// writeSetupWriteError 映射初始化事务里的写入失败：只有唯一约束冲突（另一次初始化抢先写入了管理员或初始化标记）
+// 才是 setup_closed，其他数据库错误如实报告为不可用。
+func writeSetupWriteError(responseWriter http.ResponseWriter, request *http.Request, err error) {
+	if isUniqueViolation(err) {
 		httpserver.WriteError(responseWriter, request, 409, "setup_closed", "管理员初始化已完成")
 		return
 	}
-	httpserver.WriteJSON(responseWriter, 201, map[string]string{"username": input.Username, "role": "admin"})
+	httpserver.WriteError(responseWriter, request, 503, "database_unavailable", "服务暂不可用")
 }
 
 func (handlers *Handlers) login(responseWriter http.ResponseWriter, request *http.Request) {
@@ -116,7 +156,7 @@ func (handlers *Handlers) login(responseWriter http.ResponseWriter, request *htt
 		return
 	}
 	handlers.guard.SetSessionCookie(responseWriter, token)
-	httpserver.WriteJSON(responseWriter, 200, map[string]string{"username": input.Username, "role": role})
+	httpserver.WriteJSON(responseWriter, 200, map[string]string{"id": userID, "username": input.Username, "role": role})
 }
 
 func (handlers *Handlers) logout(responseWriter http.ResponseWriter, request *http.Request) {
@@ -136,7 +176,7 @@ func (handlers *Handlers) me(responseWriter http.ResponseWriter, request *http.R
 		handlers.guard.WriteUnauthenticated(responseWriter, request)
 		return
 	}
-	httpserver.WriteJSON(responseWriter, 200, map[string]string{"username": user.Username, "role": user.Role})
+	httpserver.WriteJSON(responseWriter, 200, map[string]string{"id": user.ID, "username": user.Username, "role": user.Role})
 }
 
 func (handlers *Handlers) listUsers(w http.ResponseWriter, r *http.Request) {
@@ -155,9 +195,14 @@ func (handlers *Handlers) listUsers(w http.ResponseWriter, r *http.Request) {
 		var disabled sql.NullTime
 		var created time.Time
 		if rows.Scan(&id, &username, &role, &disabled, &created) != nil {
-			continue
+			httpserver.WriteError(w, r, 503, "database_unavailable", "服务暂不可用")
+			return
 		}
 		items = append(items, map[string]any{"id": id, "username": username, "role": role, "disabled": disabled.Valid, "created_at": created})
+	}
+	if rows.Err() != nil {
+		httpserver.WriteError(w, r, 503, "database_unavailable", "服务暂不可用")
+		return
 	}
 	httpserver.WriteJSON(w, 200, map[string]any{"items": items})
 }
@@ -170,8 +215,11 @@ func (handlers *Handlers) createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct{ Username, Password string }
-	if !httpserver.DecodeJSON(w, r, &in) || strings.TrimSpace(in.Username) == "" || len(in.Password) < 12 {
-		httpserver.WriteError(w, r, 400, "invalid_input", "用户名不能为空，密码至少需要 12 个字符")
+	if !httpserver.DecodeJSON(w, r, &in) {
+		return
+	}
+	if strings.TrimSpace(in.Username) == "" || !identity.ValidPasswordLength(in.Password) {
+		httpserver.WriteError(w, r, 400, "invalid_input", invalidAccountMessage)
 		return
 	}
 	hash, err := identity.HashPassword(in.Password)
@@ -182,7 +230,11 @@ func (handlers *Handlers) createUser(w http.ResponseWriter, r *http.Request) {
 	id := uuid.New()
 	_, err = handlers.database.ExecContext(r.Context(), "INSERT INTO users(id,username,password_hash,role) VALUES($1::uuid,$2,$3,'user')", id, in.Username, hash)
 	if err != nil {
-		httpserver.WriteError(w, r, 409, "username_taken", "用户名已存在")
+		if isUniqueViolation(err) {
+			httpserver.WriteError(w, r, 409, "username_taken", "用户名已存在")
+			return
+		}
+		httpserver.WriteError(w, r, 503, "database_unavailable", "无法创建用户")
 		return
 	}
 	httpserver.WriteJSON(w, 201, map[string]string{"id": id, "username": in.Username, "role": "user"})
@@ -192,18 +244,23 @@ func (handlers *Handlers) updateUser(w http.ResponseWriter, r *http.Request) {
 	if !handlers.guard.RequireSameOrigin(w, r) {
 		return
 	}
-	_, ok := handlers.guard.RequireAdmin(w, r)
+	if _, ok := handlers.guard.RequireAdmin(w, r); !ok {
+		return
+	}
+	id, ok := userIDFromPath(w, r)
 	if !ok {
 		return
 	}
 	var in struct {
 		Disabled *bool `json:"disabled"`
 	}
-	if !httpserver.DecodeJSON(w, r, &in) || in.Disabled == nil {
+	if !httpserver.DecodeJSON(w, r, &in) {
+		return
+	}
+	if in.Disabled == nil {
 		httpserver.WriteError(w, r, 400, "invalid_input", "缺少禁用状态")
 		return
 	}
-	id := r.PathValue("id")
 	tx, err := handlers.database.BeginTx(r.Context(), nil)
 	if err != nil {
 		httpserver.WriteError(w, r, 503, "database_unavailable", "服务暂不可用")
@@ -292,7 +349,21 @@ func (handlers *Handlers) revokeUserSessions(w http.ResponseWriter, r *http.Requ
 	if _, ok := handlers.guard.RequireAdmin(w, r); !ok {
 		return
 	}
-	_, err := handlers.database.ExecContext(r.Context(), "UPDATE sessions SET revoked_at=NOW() WHERE user_id=$1::uuid AND revoked_at IS NULL", r.PathValue("id"))
+	id, ok := userIDFromPath(w, r)
+	if !ok {
+		return
+	}
+	// 没有删除用户的接口，存在性检查与撤销之间用户不会消失，所以不需要把两步放进同一个事务。
+	var exists bool
+	if err := handlers.database.QueryRowContext(r.Context(), "SELECT EXISTS (SELECT 1 FROM users WHERE id=$1::uuid)", id).Scan(&exists); err != nil {
+		httpserver.WriteError(w, r, 503, "database_unavailable", "无法撤销会话")
+		return
+	}
+	if !exists {
+		httpserver.WriteError(w, r, 404, "not_found", "用户不存在")
+		return
+	}
+	_, err := handlers.database.ExecContext(r.Context(), "UPDATE sessions SET revoked_at=NOW() WHERE user_id=$1::uuid AND revoked_at IS NULL", id)
 	if err != nil {
 		httpserver.WriteError(w, r, 503, "database_unavailable", "无法撤销会话")
 		return

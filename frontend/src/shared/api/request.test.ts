@@ -162,7 +162,7 @@ describe("apiRequest 网络失败与取消", () => {
 
 describe("apiRequest 与会话边界", () => {
   const unauthorized = () =>
-    jsonResponse(401, { error: { code: "unauthorized", message: "需要管理员登录" }, request_id: "r" });
+    jsonResponse(401, { error: { code: "unauthorized", message: "需要登录" }, request_id: "r" });
 
   it("受保护请求得到 401 unauthorized 时，带上请求发出时的代次通知会话边界", async () => {
     let generation = 3;

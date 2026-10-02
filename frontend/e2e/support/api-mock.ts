@@ -10,7 +10,7 @@ import { withValue } from "../../src/test/mutate";
 
 type Role = "admin" | "user";
 type Handled = { status: number; body: unknown } | "abort";
-type Account = { password: string; role: Role };
+type Account = { id: string; password: string; role: Role };
 
 export type MockOptions = {
   /** 初始是否需要初始化（全新库）。 */
@@ -71,8 +71,9 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
     accounts: setupRequired
       ? new Map()
       : new Map<string, Account>([
-          ["curator", { password: "curator-password", role: "admin" }],
-          ["listener", { password: "listener-password", role: "user" }],
+          // ID 与 users/list 样本里同名成员的 ID 一致，成员页才能按 ID 标出“你”。
+          ["curator", { id: "00000000-0000-4000-8000-000000000002", password: "curator-password", role: "admin" }],
+          ["listener", { id: "00000000-0000-4000-8000-000000000003", password: "listener-password", role: "user" }],
         ]),
     roots: seedRoots(),
     operations: (sampleBody("library-root-operations/list") as { items: RootOperationDTO[] }).items,
@@ -116,7 +117,7 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
 
   const viewer = () => {
     const account = mock.session === null ? undefined : mock.accounts.get(mock.session);
-    return mock.session === null || account === undefined ? null : { username: mock.session, role: account.role };
+    return mock.session === null || account === undefined ? null : { id: account.id, username: mock.session, role: account.role };
   };
   /** 受保护接口的门：未登录 401；被指定禁止或角色不够 403；否则交给处理器。 */
   const guarded = (method: string, path: string, requireAdmin: boolean, handler: () => Handled): Handled => {
@@ -157,10 +158,11 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
       case "POST /api/v1/setup/admin": {
         if (!mock.setupRequired) return sample("errors/setup-closed");
         const { username, password } = body as { username: string; password: string };
-        mock.accounts.set(username, { password, role: "admin" });
-        mock.users = [...mock.users, { id: uuidOf("e", counter++), username, role: "admin", disabled: false, created_at: now() }];
+        const id = uuidOf("e", counter++);
+        mock.accounts.set(username, { id, password, role: "admin" });
+        mock.users = [...mock.users, { id, username, role: "admin", disabled: false, created_at: now() }];
         mock.setupRequired = false;
-        return json({ username, role: "admin" }, 201);
+        return json({ id, username, role: "admin" }, 201);
       }
       case "GET /api/v1/auth/me": {
         const current = viewer();
@@ -172,7 +174,7 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
         const disabled = mock.users.find((user) => user.username === username)?.disabled === true;
         if (account === undefined || account.password !== password || disabled) return sample("errors/invalid-credentials");
         mock.session = username;
-        return json({ username, role: account.role });
+        return json({ id: account.id, username, role: account.role });
       }
       case "POST /api/v1/auth/logout":
         mock.session = null;
@@ -210,11 +212,12 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
       case "POST /api/v1/users":
         return guarded(method, path, true, () => {
           const { username, password } = body as { username: string; password: string };
-          if (username.trim() === "" || new TextEncoder().encode(password).length < 12) return sample("errors/invalid-input");
+          const passwordBytes = new TextEncoder().encode(password).length;
+          if (username.trim() === "" || passwordBytes < 12 || passwordBytes > 72) return sample("errors/invalid-input");
           if (mock.users.some((user) => user.username === username)) return sample("errors/username-taken");
           const created: MemberDTO = { id: uuidOf("e", counter++), username, role: "user", disabled: false, created_at: now() };
           mock.users = [...mock.users, created].sort((left, right) => (left.username < right.username ? -1 : 1));
-          mock.accounts.set(username, { password, role: "user" });
+          mock.accounts.set(username, { id: created.id, password, role: "user" });
           return json({ id: created.id, username, role: "user" }, 201);
         });
     }
@@ -273,11 +276,11 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
         const revoking = userChange[1] !== undefined;
         const index = mock.users.findIndex((user) => user.id === idIn(path, "users"));
         const target = mock.users[index];
+        if (target === undefined) return sample("errors/not-found-user");
         if (revoking) {
-          if (target !== undefined && target.username === mock.session) mock.session = null;
+          if (target.username === mock.session) mock.session = null;
           return json({ revoked: true });
         }
-        if (target === undefined) return notFound("用户不存在");
         const { disabled } = body as { disabled: boolean };
         const enabledAdmins = mock.users.filter((user) => user.role === "admin" && !user.disabled).length;
         if (disabled && !target.disabled && target.role === "admin" && enabledAdmins <= 1) return sample("errors/last-admin");

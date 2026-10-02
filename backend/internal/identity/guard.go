@@ -80,9 +80,10 @@ func (guard *Guard) RequireAdmin(w http.ResponseWriter, r *http.Request) (User, 
 	return u, true
 }
 
-// WriteUnauthenticated 写出 401 unauthorized。
+// WriteUnauthenticated 写出 401 unauthorized。所有需要登录的接口共用这条消息，不提及角色：
+// 普通用户的会话失效时也会收到它。
 func (guard *Guard) WriteUnauthenticated(responseWriter http.ResponseWriter, request *http.Request) {
-	httpserver.WriteError(responseWriter, request, http.StatusUnauthorized, "unauthorized", "需要管理员登录")
+	httpserver.WriteError(responseWriter, request, http.StatusUnauthorized, "unauthorized", "需要登录")
 }
 
 // RequireSameOrigin 要求写请求带有可信的 Origin；失败时已写出 403，返回 false。
@@ -123,6 +124,18 @@ func (guard *Guard) RequireSameOrigin(responseWriter http.ResponseWriter, reques
 // SetSessionCookie 写出 24 小时有效的 HttpOnly 会话 Cookie。
 func (guard *Guard) SetSessionCookie(responseWriter http.ResponseWriter, token string) {
 	http.SetCookie(responseWriter, &http.Cookie{Name: SessionCookieName, Value: token, Path: "/", HttpOnly: true, Secure: guard.secureCookies, SameSite: http.SameSiteLaxMode, Expires: time.Now().Add(24 * time.Hour)})
+}
+
+// 密码长度按 UTF-8 字节计。bcrypt 只处理前 72 个字节，x/crypto 对更长的输入直接返回错误，
+// 所以上限必须在入口处拒绝，否则过长的密码会变成 500。
+const (
+	MinPasswordBytes = 12
+	MaxPasswordBytes = 72
+)
+
+// ValidPasswordLength 报告密码的字节数是否在 MinPasswordBytes 到 MaxPasswordBytes 之间（含两端）。
+func ValidPasswordLength(password string) bool {
+	return len(password) >= MinPasswordBytes && len(password) <= MaxPasswordBytes
 }
 
 // HashPassword 用 bcrypt 生成密码哈希。

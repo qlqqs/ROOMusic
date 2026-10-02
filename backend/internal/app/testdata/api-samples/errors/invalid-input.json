@@ -2,7 +2,7 @@
   "body": {
     "error": {
       "code": "invalid_input",
-      "message": "用户名不能为空，密码至少需要 12 个字符"
+      "message": "用户名不能为空，密码需要 12 到 72 个字节"
     },
     "request_id": "sample-request"
   },

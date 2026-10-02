@@ -45,7 +45,7 @@ describe("启动", () => {
     await controller.start();
     expect(controller.getSnapshot()).toEqual({
       status: "authenticated",
-      viewer: { username: "curator", role: "admin" },
+      viewer: { id: "00000000-0000-4000-8000-000000000002", username: "curator", role: "admin" },
       generation: 1,
     });
     expect(controller.currentGeneration()).toBe(1);
@@ -213,7 +213,7 @@ describe("会话结束与清理", () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
       session.current = "curator";
       order.push("login:end");
-      return jsonResponse(200, { username: "curator", role: "admin" });
+      return jsonResponse(200, { id: "00000000-0000-4000-8000-000000000002", username: "curator", role: "admin" });
     });
     api.on("POST", "/api/v1/auth/logout", () => {
       order.push("logout");
@@ -298,6 +298,25 @@ describe("核对会话（recheck）", () => {
     session.current = "listener";
     await controller.recheck();
     expect(controller.getSnapshot()).toMatchObject({ status: "authenticated", viewer: { username: "listener", role: "user" }, generation: 3 });
+    expect(reasons).toEqual(["switched"]);
+  });
+
+  it("用户名相同但 ID 不同：视为换人，按 ID 而不是用户名判断", async () => {
+    const api = installFakeApi();
+    const session = installFakeSession(api, { current: "curator" });
+    const controller = newController();
+    await controller.start();
+    const reasons: SessionEndReason[] = [];
+    controller.onEnded(({ reason }) => reasons.push(reason));
+    const curator = session.accounts.curator;
+    if (curator === undefined) throw new Error("替身缺少 curator 账号");
+    session.accounts.curator = { ...curator, id: "00000000-0000-4000-8000-0000000000ee" };
+    await controller.recheck();
+    expect(controller.getSnapshot()).toMatchObject({
+      status: "authenticated",
+      viewer: { id: "00000000-0000-4000-8000-0000000000ee", username: "curator" },
+      generation: 3,
+    });
     expect(reasons).toEqual(["switched"]);
   });
 

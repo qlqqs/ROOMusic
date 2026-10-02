@@ -30,7 +30,7 @@ export function setMemberDisabled(id: string, disabled: boolean): Promise<ApiRes
   return apiRequest({ method: "PATCH", path: `/api/v1/users/${id}`, body: { disabled } }, decodeMemberDisabledState);
 }
 
-/** 撤销该成员的全部会话；后端不检查成员是否存在。 */
+/** 撤销该成员的全部会话；成员不存在时返回 404 not_found。 */
 export function revokeMemberSessions(id: string): Promise<ApiResponse<SessionsRevokedDTO>> {
   return apiRequest({ method: "POST", path: `/api/v1/users/${id}/sessions/revoke` }, decodeSessionsRevoked);
 }

@@ -8,11 +8,14 @@ describe("decodeViewer", () => {
   const admin = sampleBody("auth/me-admin");
 
   it("解码管理员与成员", () => {
-    expect(decodeViewer(admin)).toEqual({ username: "curator", role: "admin" });
-    expect(decodeViewer(sampleBody("auth/me-user"))).toEqual({ username: "listener", role: "user" });
+    expect(decodeViewer(admin)).toEqual({ id: "00000000-0000-4000-8000-000000000001", username: "curator", role: "admin" });
+    expect(decodeViewer(sampleBody("auth/me-user"))).toEqual({ id: "00000000-0000-4000-8000-000000000001", username: "listener", role: "user" });
   });
 
   it.each([
+    ["缺少 id", without(admin, ["id"])],
+    ["id 不是 UUID", withValue(admin, ["id"], "curator")],
+    ["id 不是字符串", withValue(admin, ["id"], 1)],
     ["缺少 username", without(admin, ["username"])],
     ["缺少 role", without(admin, ["role"])],
     ["未知角色", withValue(admin, ["role"], "owner")],

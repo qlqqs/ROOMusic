@@ -1,6 +1,6 @@
 import { useRef, useState, type FormEvent } from "react";
 import { Button, FailureNotice, TextField } from "../../../shared/ui";
-import { passwordHint, validateNewAccount, type NewAccountErrors } from "../account-rules";
+import { invalidAccountMessage, passwordHint, validateNewAccount, type NewAccountErrors } from "../account-rules";
 import { useSetupAdmin } from "../hooks/use-session-actions";
 import styles from "./auth-form.module.css";
 
@@ -31,7 +31,7 @@ export function SetupForm() {
           error={setup.error}
           context="write"
           messages={{
-            invalid_input: "用户名不能为空，密码至少需要 12 个字节。",
+            invalid_input: invalidAccountMessage,
             setup_closed: "初始化已经完成，请登录。",
           }}
         />

@@ -17,8 +17,8 @@ const byUsername = (left: MemberDTO, right: MemberDTO) => (left.username < right
 const utf8Length = (value: string) => new TextEncoder().encode(value).length;
 
 /**
- * 成员接口的替身，行为依据后端实现：未登录 401、非管理员 403；新建只能是 user 角色，用户名去空白后非空且密码至少 12 字节，
- * 重复用户名 409；停用最后一个启用的管理员 409 last_admin；停用与撤销会话会撤销目标的全部会话
+ * 成员接口的替身，行为依据后端实现：未登录 401、非管理员 403；新建只能是 user 角色，用户名去空白后非空且密码 12 到 72 字节，
+ * 重复用户名 409；路径里的 ID 不是 UUID 时 400，成员不存在时 404（含撤销会话）；停用最后一个启用的管理员 409 last_admin；停用与撤销会话会撤销目标的全部会话
  * （目标是当前登录的账号时，替身把会话置为失效，之后的请求得到 401）。成员写操作没有幂等保证。
  */
 export function installMembersApi(api: FakeApi, session: FakeSession, overrides: Partial<FakeMembers> = {}): FakeMembers {
@@ -47,9 +47,10 @@ export function installMembersApi(api: FakeApi, session: FakeSession, overrides:
     return response;
   };
   const revokeSessionsOf = (user: MemberDTO) => {
-    if (user.username === session.current) session.current = null;
+    if (session.current !== null && session.accounts[session.current]?.id === user.id) session.current = null;
   };
   const idOf = (path: string) => /\/users\/([^/?]+)/.exec(path)?.[1] ?? "";
+  const malformedId = (path: string) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOf(path));
 
   api.on("GET", "/api/v1/users", () => admin() ?? jsonResponse(200, { items: members.users }));
 
@@ -58,7 +59,7 @@ export function installMembersApi(api: FakeApi, session: FakeSession, overrides:
       const denied = admin();
       if (denied !== null) return denied;
       const { username, password } = request.body as { username: string; password: string };
-      if (username.trim() === "" || utf8Length(password) < 12) return sampleResponse("errors/invalid-input");
+      if (username.trim() === "" || utf8Length(password) < 12 || utf8Length(password) > 72) return sampleResponse("errors/invalid-input");
       if (members.users.some((user) => user.username === username)) return sampleResponse("errors/username-taken");
       const created: MemberDTO = {
         id: `00000000-0000-4000-8000-${String(nextUser++).padStart(12, "0")}`,
@@ -68,7 +69,7 @@ export function installMembersApi(api: FakeApi, session: FakeSession, overrides:
         created_at: "2026-01-02T00:00:00Z",
       };
       members.users = [...members.users, created].sort(byUsername);
-      session.accounts[username] = { password, role: "user" };
+      session.accounts[username] = { id: created.id, password, role: "user" };
       return jsonResponse(201, { id: created.id, username, role: "user" });
     }),
   );
@@ -77,10 +78,11 @@ export function installMembersApi(api: FakeApi, session: FakeSession, overrides:
     unreliable(() => {
       const denied = admin();
       if (denied !== null) return denied;
+      if (malformedId(request.path)) return sampleResponse("errors/invalid-id-user");
       const { disabled } = request.body as { disabled: boolean };
       const index = members.users.findIndex((user) => user.id === idOf(request.path));
       const target = members.users[index];
-      if (target === undefined) return jsonResponse(404, { error: { code: "not_found", message: "用户不存在" }, request_id: "sample-request" });
+      if (target === undefined) return sampleResponse("errors/not-found-user");
       const enabledAdmins = members.users.filter((user) => user.role === "admin" && !user.disabled).length;
       if (disabled && !target.disabled && target.role === "admin" && enabledAdmins <= 1) return sampleResponse("errors/last-admin");
       members.users[index] = { ...target, disabled };
@@ -93,8 +95,10 @@ export function installMembersApi(api: FakeApi, session: FakeSession, overrides:
     unreliable(() => {
       const denied = admin();
       if (denied !== null) return denied;
+      if (malformedId(request.path)) return sampleResponse("errors/invalid-id-user");
       const target = members.users.find((user) => user.id === idOf(request.path));
-      if (target !== undefined) revokeSessionsOf(target);
+      if (target === undefined) return sampleResponse("errors/not-found-user");
+      revokeSessionsOf(target);
       return jsonResponse(200, { revoked: true });
     }),
   );

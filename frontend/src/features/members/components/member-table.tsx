@@ -7,8 +7,8 @@ import styles from "./member-table.module.css";
 
 type MemberTableProps = {
   members: readonly MemberDTO[];
-  /** 当前登录的用户名：后端没有给出用户 ID，用户名是唯一标识，用来标出“你自己”。 */
-  viewerUsername: string;
+  /** 当前登录的用户 ID，用来标出“你自己”。 */
+  viewerId: string;
   /** 有命令在进行中：所有操作按钮忙碌（点击被忽略），同一时刻只有一个成员命令。 */
   busy: boolean;
   onDisable: (member: MemberDTO) => void;
@@ -17,7 +17,7 @@ type MemberTableProps = {
 };
 
 /** 成员列表：用户名、角色、状态、创建时间与可用操作。停用与撤销会话要确认，重新启用直接执行。 */
-export function MemberTable({ members, viewerUsername, busy, onDisable, onEnable, onRevoke }: MemberTableProps) {
+export function MemberTable({ members, viewerId, busy, onDisable, onEnable, onRevoke }: MemberTableProps) {
   const columns: Column<MemberDTO>[] = [
     {
       id: "username",
@@ -26,7 +26,7 @@ export function MemberTable({ members, viewerUsername, busy, onDisable, onEnable
       cell: (member) => (
         <span className={styles.name}>
           <span>{member.username}</span>
-          {member.username === viewerUsername ? <StatusTag tone="outline">你</StatusTag> : null}
+          {member.id === viewerId ? <StatusTag tone="outline">你</StatusTag> : null}
         </span>
       ),
     },

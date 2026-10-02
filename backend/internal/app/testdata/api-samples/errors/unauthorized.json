@@ -2,7 +2,7 @@
   "body": {
     "error": {
       "code": "unauthorized",
-      "message": "需要管理员登录"
+      "message": "需要登录"
     },
     "request_id": "sample-request"
   },

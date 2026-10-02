@@ -42,7 +42,7 @@ export function MemberManagement() {
           {(items) => (
             <MemberTable
               members={items}
-              viewerUsername={viewer.username}
+              viewerId={viewer.id}
               busy={state.status === "pending"}
               onDisable={(member) => ask("disable", member)}
               onEnable={(member) => commands.submit({ kind: "enable", member: toTarget(member) })}
@@ -53,7 +53,7 @@ export function MemberManagement() {
       </Panel>
       <MemberActionDialog
         action={confirming}
-        isSelf={confirming?.member.username === viewer.username}
+        isSelf={confirming?.member.id === viewer.id}
         pending={state.status === "pending"}
         onConfirm={() => {
           if (confirming === null) return;

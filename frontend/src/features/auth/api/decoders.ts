@@ -3,8 +3,9 @@ import { decode as d } from "../../../shared/api";
 export const userRoles = ["admin", "user"] as const;
 export type UserRole = (typeof userRoles)[number];
 
-// /auth/me、/auth/login 与 /setup/admin 都返回这一结构：后端没有给出用户 ID，用户名是唯一标识。
+// /auth/me、/auth/login 与 /setup/admin 都返回这一结构。用户 ID 是查看者的标识；用户名唯一，但只用来显示。
 const viewerDecoder = d.object({
+  id: d.uuid(),
   username: d.string({ min: 1 }),
   role: d.oneOf(userRoles),
 });

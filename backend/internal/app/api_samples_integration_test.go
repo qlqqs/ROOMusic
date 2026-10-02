@@ -121,6 +121,8 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	if response := call(http.MethodGet, "/api/v1/auth/me", nil, listener); response.Code != http.StatusUnauthorized {
 		t.Fatalf("revoked member session still works: HTTP %d: %s", response.Code, response.Body.String())
 	}
+	samples.record("errors/invalid-id-user", call(http.MethodPatch, "/api/v1/users/not-a-uuid", map[string]bool{"disabled": true}, admin), http.StatusBadRequest)
+	samples.record("errors/not-found-user", call(http.MethodPost, "/api/v1/users/"+uuid.New()+"/sessions/revoke", map[string]any{}, admin), http.StatusNotFound)
 
 	// 目录与扫描的合成素材：一个有效的 FLAC 与一个损坏文件，都在测试专用的临时根目录里。
 	libraryA := createLibraryDirectory(t, application, "classical-a")

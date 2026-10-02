@@ -81,6 +81,8 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "errors/not-found-scan": { status: 404, code: "not_found" },
   "errors/not-found-api": { status: 404, code: "not_found" },
   "errors/invalid-id": { status: 400, code: "invalid_id" },
+  "errors/invalid-id-user": { status: 400, code: "invalid_id" },
+  "errors/not-found-user": { status: 404, code: "not_found" },
   "errors/method-not-allowed": { status: 405, code: "method_not_allowed" },
   "errors/database-unavailable": { status: 503, code: "database_unavailable" },
 };
