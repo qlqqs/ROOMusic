@@ -1,0 +1,196 @@
+{
+  "body": {
+    "album_artist": "Sample Orchestra",
+    "artist": "Sample Orchestra",
+    "artwork": null,
+    "attention_count": 0,
+    "barcode": "0123456789012",
+    "candidate_kind": "ordinary_directory",
+    "catalog_number": "SL-0001",
+    "credits": [
+      {
+        "name": "Sample Orchestra",
+        "role": "album_artist"
+      }
+    ],
+    "edition": "Remastered",
+    "evidence": [
+      {
+        "action": "auto_apply",
+        "confidence": "high",
+        "field": "album_artist",
+        "rule_id": "majority_v1",
+        "source": "tag"
+      },
+      {
+        "action": "auto_apply",
+        "confidence": "high",
+        "field": "artist",
+        "rule_id": "majority_v1",
+        "source": "tag"
+      },
+      {
+        "action": "auto_apply",
+        "confidence": "high",
+        "field": "barcode",
+        "rule_id": "majority_v1",
+        "source": "tag"
+      },
+      {
+        "action": "auto_apply",
+        "confidence": "high",
+        "field": "catalog_number",
+        "rule_id": "majority_v1",
+        "source": "tag"
+      },
+      {
+        "action": "auto_apply",
+        "confidence": "high",
+        "field": "edition",
+        "rule_id": "majority_v1",
+        "source": "tag"
+      },
+      {
+        "action": "auto_apply",
+        "confidence": "high",
+        "field": "genre",
+        "rule_id": "majority_v1",
+        "source": "tag"
+      },
+      {
+        "action": "auto_apply",
+        "confidence": "high",
+        "field": "label",
+        "rule_id": "majority_v1",
+        "source": "tag"
+      },
+      {
+        "action": "auto_apply",
+        "confidence": "high",
+        "field": "title",
+        "rule_id": "majority_v1",
+        "source": "tag"
+      },
+      {
+        "action": "auto_apply",
+        "confidence": "high",
+        "field": "year",
+        "rule_id": "majority_v1",
+        "source": "tag"
+      }
+    ],
+    "genre": "Classical",
+    "id": "00000000-0000-4000-8000-000000000001",
+    "label": "Sample Label",
+    "media": [
+      {
+        "id": "00000000-0000-4000-8000-000000000002",
+        "position": 1,
+        "title": "Medium",
+        "tracks": [
+          {
+            "artist": "Sample Orchestra",
+            "bit_depth": 16,
+            "bitrate": null,
+            "channels": 2,
+            "codec": "flac",
+            "credits": [
+              {
+                "name": "Sample Composer",
+                "role": "composer"
+              },
+              {
+                "name": "Sample Conductor",
+                "role": "conductor"
+              },
+              {
+                "name": "Sample Soloist",
+                "role": "performer"
+              }
+            ],
+            "cue": null,
+            "duration_seconds": 240,
+            "id": "00000000-0000-4000-8000-000000000003",
+            "position": 1,
+            "sample_rate": 44100,
+            "source": "d1-01.flac",
+            "source_kind": "flac_vorbis_comment",
+            "title": "Allegro"
+          },
+          {
+            "artist": "Sample Soloist",
+            "bit_depth": 16,
+            "bitrate": null,
+            "channels": 2,
+            "codec": "flac",
+            "credits": [
+              {
+                "name": "Sample Composer",
+                "role": "composer"
+              },
+              {
+                "name": "Sample Conductor",
+                "role": "conductor"
+              },
+              {
+                "name": "Sample Soloist",
+                "role": "performer"
+              }
+            ],
+            "cue": null,
+            "duration_seconds": 240,
+            "id": "00000000-0000-4000-8000-000000000004",
+            "position": 2,
+            "sample_rate": 44100,
+            "source": "d1-02.flac",
+            "source_kind": "flac_vorbis_comment",
+            "title": "Andante"
+          }
+        ]
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000005",
+        "position": 2,
+        "title": "Medium",
+        "tracks": [
+          {
+            "artist": "Sample Orchestra",
+            "bit_depth": 16,
+            "bitrate": null,
+            "channels": 2,
+            "codec": "flac",
+            "credits": [
+              {
+                "name": "Sample Composer",
+                "role": "composer"
+              },
+              {
+                "name": "Sample Conductor",
+                "role": "conductor"
+              },
+              {
+                "name": "Sample Soloist",
+                "role": "performer"
+              }
+            ],
+            "cue": null,
+            "duration_seconds": 240,
+            "id": "00000000-0000-4000-8000-000000000006",
+            "position": 1,
+            "sample_rate": 44100,
+            "source": "d2-01.flac",
+            "source_kind": "flac_vorbis_comment",
+            "title": "Finale"
+          }
+        ]
+      }
+    ],
+    "media_type": null,
+    "medium_count": 2,
+    "source_type": null,
+    "title": "Sample Symphonies",
+    "track_count": 3,
+    "year": 1998
+  },
+  "status": 200
+}

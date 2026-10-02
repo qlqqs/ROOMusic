@@ -7,6 +7,7 @@ import {
   integer,
   literal,
   nullable,
+  number,
   object,
   oneOf,
   optional,
@@ -43,6 +44,25 @@ describe("string", () => {
     expect(() => defineDecoder(string())("a".repeat(4097))).toThrow(DecodeError);
     expect(defineDecoder(string())("a".repeat(4096))).toHaveLength(4096);
     expect(() => defineDecoder(string({ pattern: /^[a-z]+$/ }))("ABC")).toThrow(DecodeError);
+  });
+});
+
+describe("number", () => {
+  it("接受上下界内的有限数字，包含小数", () => {
+    const decode = defineDecoder(number({ min: 0, max: 10 }));
+    expect(decode(0)).toBe(0);
+    expect(decode(3.25)).toBe(3.25);
+    expect(decode(10)).toBe(10);
+  });
+
+  it("拒绝越界、非数字、字符串形式的数字与非有限值", () => {
+    const decode = defineDecoder(number({ min: 0, max: 10 }));
+    expect(() => decode(-0.001)).toThrow(DecodeError);
+    expect(() => decode(10.001)).toThrow(DecodeError);
+    expect(() => decode("3")).toThrow(DecodeError);
+    expect(() => decode(null)).toThrow(DecodeError);
+    expect(() => decode(Number.NaN)).toThrow(DecodeError);
+    expect(() => decode(Number.POSITIVE_INFINITY)).toThrow(DecodeError);
   });
 });
 

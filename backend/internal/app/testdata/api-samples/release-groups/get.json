@@ -1,0 +1,36 @@
+{
+  "body": {
+    "attention_count": 0,
+    "id": "00000000-0000-4000-8000-000000000001",
+    "release_count": 1,
+    "releases": [
+      {
+        "album_artist": "Sample Orchestra",
+        "artist": "Sample Orchestra",
+        "artwork": null,
+        "attention_count": 0,
+        "id": "00000000-0000-4000-8000-000000000002",
+        "media_type": null,
+        "medium_count": 2,
+        "source_type": null,
+        "title": "Sample Symphonies",
+        "track_count": 3,
+        "year": 1998
+      }
+    ],
+    "representative": {
+      "album_artist": "Sample Orchestra",
+      "artist": "Sample Orchestra",
+      "artwork": null,
+      "attention_count": 0,
+      "id": "00000000-0000-4000-8000-000000000002",
+      "media_type": null,
+      "medium_count": 2,
+      "source_type": null,
+      "title": "Sample Symphonies",
+      "track_count": 3,
+      "year": 1998
+    }
+  },
+  "status": 200
+}

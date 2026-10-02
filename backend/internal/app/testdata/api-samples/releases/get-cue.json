@@ -1,0 +1,111 @@
+{
+  "body": {
+    "album_artist": "Sample Cue Artist",
+    "artist": "Sample Cue Artist",
+    "artwork": null,
+    "attention_count": 0,
+    "barcode": null,
+    "candidate_kind": "ordinary_directory",
+    "catalog_number": null,
+    "credits": [
+      {
+        "name": "Sample Cue Artist",
+        "role": "album_artist"
+      }
+    ],
+    "edition": null,
+    "evidence": [
+      {
+        "action": "auto_apply",
+        "confidence": "high",
+        "field": "album_artist",
+        "rule_id": "majority_v1",
+        "source": "cue_sheet"
+      },
+      {
+        "action": "auto_apply",
+        "confidence": "high",
+        "field": "artist",
+        "rule_id": "majority_v1",
+        "source": "cue_sheet"
+      },
+      {
+        "action": "auto_apply",
+        "confidence": "high",
+        "field": "title",
+        "rule_id": "majority_v1",
+        "source": "cue_sheet"
+      },
+      {
+        "action": "auto_apply",
+        "confidence": "high",
+        "field": "year",
+        "rule_id": "majority_v1",
+        "source": "cue_sheet"
+      }
+    ],
+    "genre": null,
+    "id": "00000000-0000-4000-8000-000000000001",
+    "label": null,
+    "media": [
+      {
+        "id": "00000000-0000-4000-8000-000000000002",
+        "position": 1,
+        "title": "Medium",
+        "tracks": [
+          {
+            "artist": "Sample Cue Artist",
+            "bit_depth": 16,
+            "bitrate": null,
+            "channels": 2,
+            "codec": "flac",
+            "credits": [],
+            "cue": {
+              "end_frames": 9000,
+              "end_seconds": 120,
+              "index_frames": 0,
+              "isrc": "XXAAA0500001",
+              "start_seconds": 0
+            },
+            "duration_seconds": 120,
+            "id": "00000000-0000-4000-8000-000000000003",
+            "position": 1,
+            "sample_rate": 44100,
+            "source": "image.flac#index-0",
+            "source_kind": "cue_virtual",
+            "title": "Cue One"
+          },
+          {
+            "artist": "Sample Cue Artist",
+            "bit_depth": 16,
+            "bitrate": null,
+            "channels": 2,
+            "codec": "flac",
+            "credits": [],
+            "cue": {
+              "end_frames": 18000,
+              "end_seconds": 240,
+              "index_frames": 9000,
+              "isrc": "XXAAA0500002",
+              "start_seconds": 120
+            },
+            "duration_seconds": 120,
+            "id": "00000000-0000-4000-8000-000000000004",
+            "position": 2,
+            "sample_rate": 44100,
+            "source": "image.flac#index-9000",
+            "source_kind": "cue_virtual",
+            "title": "Cue Two"
+          }
+        ]
+      }
+    ],
+    "media_type": null,
+    "medium_count": 1,
+    "source_type": null,
+    "title": "Sample Cue Album",
+    "track_count": 2,
+    "year": 2005
+  },
+  "status": 200
+}

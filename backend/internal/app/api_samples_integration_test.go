@@ -252,6 +252,10 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	samples.record("scans/get-canceled", call(http.MethodGet, "/api/v1/scans/"+cancelScan, nil, admin), http.StatusOK)
 	samples.record("scans/cancel-already-finished", call(http.MethodPost, "/api/v1/scans/"+cancelScan+"/cancel", map[string]any{}, admin), http.StatusOK)
 
+	// 专辑详情（M1b）：用合成 FLAC 扫描出一张双碟专辑，再记录组、发行版本与管理员证据的详情。放在扫描记录样本之后，
+	// 这样新增的扫描与专辑不会改变前面已记录的列表样本。
+	recordAlbumDetailSamples(t, application, samples, call, admin, libraryA, libraryB)
+
 	// 通用错误：扫描不存在、标识无效、未知接口、方法不符、数据库不可用的降级响应。
 	samples.record("errors/not-found-scan", call(http.MethodGet, "/api/v1/scans/"+uuid.New(), nil, admin), http.StatusNotFound)
 	samples.record("errors/invalid-id", call(http.MethodGet, "/api/v1/scans/not-a-uuid", nil, admin), http.StatusBadRequest)
@@ -268,6 +272,110 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	samples.record("auth/logout", call(http.MethodPost, "/api/v1/auth/logout", map[string]any{}, secondAdmin), http.StatusOK)
 
 	samples.finish()
+}
+
+// apiSampleCall 是样本测试里发请求的闭包：带固定的请求 ID，把响应交给记录器。
+type apiSampleCall func(method, path string, body any, user *integrationTestUser, extraHeaders ...map[string]string) *httptest.ResponseRecorder
+
+// recordAlbumDetailSamples 记录专辑浏览用到的详情接口：一张合成的双碟专辑（厂牌、编号、条码、作曲/指挥/演奏署名），
+// 既有的单曲专辑，一张 CUE 专辑，管理员的完整证据，把两个版本放进同一个组后的多版本组详情，以及两个 404。
+// 素材全部是临时目录里的合成 FLAC，不读取真实音乐。
+func recordAlbumDetailSamples(t *testing.T, application *integrationTestApplication, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser, libraryA, libraryB string) {
+	t.Helper()
+	releaseIDByTitle := func(title string) (releaseID, groupID string) {
+		t.Helper()
+		if err := application.database.QueryRow(`SELECT id::text,group_id::text FROM releases WHERE title=$1`, title).Scan(&releaseID, &groupID); err != nil {
+			t.Fatalf("read release %q: %v", title, err)
+		}
+		return releaseID, groupID
+	}
+	// 既有的单曲专辑：大多数字段为空，前面直接写库给它绑定了一张封面。重新扫描时没有对应的来源文件，封面关联会被清掉，
+	// 所以在下面的扫描之前记录。
+	singleID, singleGroup := releaseIDByTitle("Sample Preludes")
+	samples.record("releases/get-single", call(http.MethodGet, "/api/v1/releases/"+singleID, nil, admin), http.StatusOK)
+
+	// 第一次扫描用的损坏文件会让扫描不完整；去掉它，这次扫描完整成功，不再产生与专辑无关的诊断。
+	if err := os.Remove(filepath.Join(libraryB, "broken.flac")); err != nil {
+		t.Fatalf("remove corrupt FLAC fixture: %v", err)
+	}
+	albumDirectory := filepath.Join(libraryA, "double-album")
+	if err := os.MkdirAll(albumDirectory, 0o755); err != nil {
+		t.Fatalf("create double album directory: %v", err)
+	}
+	// 每个文件的音频 MD5 不同，内容指纹互不相同。
+	shared := []string{
+		"ALBUM=Sample Symphonies", "ALBUMARTIST=Sample Orchestra", "DATE=1998", "GENRE=Classical",
+		"LABEL=Sample Label", "CATALOGNUMBER=SL-0001", "BARCODE=0123456789012", "EDITION=Remastered",
+		"COMPOSER=Sample Composer", "CONDUCTOR=Sample Conductor", "PERFORMER=Sample Soloist",
+	}
+	for _, track := range []struct {
+		file     string
+		md5      byte
+		comments []string
+	}{
+		{"d1-01.flac", 11, []string{"TITLE=Allegro", "ARTIST=Sample Orchestra", "DISCNUMBER=1/2", "TRACKNUMBER=1"}},
+		{"d1-02.flac", 12, []string{"TITLE=Andante", "ARTIST=Sample Soloist", "DISCNUMBER=1/2", "TRACKNUMBER=2"}},
+		{"d2-01.flac", 13, []string{"TITLE=Finale", "ARTIST=Sample Orchestra", "DISCNUMBER=2/2", "TRACKNUMBER=1"}},
+	} {
+		content := parsertest.FLACWithAudio(t, [16]byte{track.md5}, bytes.Repeat([]byte{track.md5}, 64), append(append([]string{}, shared...), track.comments...)...)
+		if err := os.WriteFile(filepath.Join(albumDirectory, track.file), content, 0o644); err != nil {
+			t.Fatalf("write %s: %v", track.file, err)
+		}
+	}
+	// 一张 CUE 专辑：一个整轨 FLAC 加一份 CUE，虚拟曲目的 cue 字段有值（起止帧、秒与 ISRC）。
+	cueDirectory := filepath.Join(libraryA, "cue-album")
+	if err := os.MkdirAll(cueDirectory, 0o755); err != nil {
+		t.Fatalf("create CUE album directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(cueDirectory, "image.flac"), parsertest.FLACWithAudio(t, [16]byte{21}, bytes.Repeat([]byte{21}, 64)), 0o644); err != nil {
+		t.Fatalf("write CUE image fixture: %v", err)
+	}
+	cueSheet := strings.Join([]string{
+		`TITLE "Sample Cue Album"`,
+		`PERFORMER "Sample Cue Artist"`,
+		`REM DATE 2005`,
+		`FILE "image.flac" FLAC`,
+		`  TRACK 01 AUDIO`,
+		`    TITLE "Cue One"`,
+		`    PERFORMER "Sample Cue Artist"`,
+		`    ISRC XXAAA0500001`,
+		`    INDEX 01 00:00:00`,
+		`  TRACK 02 AUDIO`,
+		`    TITLE "Cue Two"`,
+		`    PERFORMER "Sample Cue Artist"`,
+		`    ISRC XXAAA0500002`,
+		`    INDEX 01 02:00:00`,
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(cueDirectory, "album.cue"), []byte(cueSheet), 0o644); err != nil {
+		t.Fatalf("write CUE sheet fixture: %v", err)
+	}
+	started := call(http.MethodPost, "/api/v1/scans", map[string]any{}, admin)
+	if started.Code != http.StatusAccepted {
+		t.Fatalf("start album scan: HTTP %d: %s", started.Code, started.Body.String())
+	}
+	if status := waitForScanToFinish(t, application, decodeJSONMap(t, started)["id"].(string)); status != "succeeded" {
+		t.Fatalf("album scan should succeed, got %s", status)
+	}
+
+	doubleID, doubleGroup := releaseIDByTitle("Sample Symphonies")
+
+	samples.record("release-groups/get", call(http.MethodGet, "/api/v1/release-groups/"+doubleGroup, nil, admin), http.StatusOK)
+	samples.record("releases/get", call(http.MethodGet, "/api/v1/releases/"+doubleID, nil, admin), http.StatusOK)
+	samples.record("releases/evidence", call(http.MethodGet, "/api/v1/releases/"+doubleID+"/evidence", nil, admin), http.StatusOK)
+	cueID, _ := releaseIDByTitle("Sample Cue Album")
+	samples.record("releases/get-cue", call(http.MethodGet, "/api/v1/releases/"+cueID, nil, admin), http.StatusOK)
+
+	// M3 之前没有人工归组，多版本的组只能直接写库构造：把双碟专辑并入单曲专辑所在的组。
+	if _, err := application.database.Exec(`UPDATE releases SET group_id=$1::uuid WHERE id=$2::uuid`, singleGroup, doubleID); err != nil {
+		t.Fatalf("move release into the other group: %v", err)
+	}
+	if _, err := application.database.Exec(`DELETE FROM release_groups WHERE id=$1::uuid`, doubleGroup); err != nil {
+		t.Fatalf("remove the emptied group: %v", err)
+	}
+	samples.record("release-groups/get-multiple", call(http.MethodGet, "/api/v1/release-groups/"+singleGroup, nil, admin), http.StatusOK)
+
+	samples.record("errors/not-found-release-group", call(http.MethodGet, "/api/v1/release-groups/"+uuid.New(), nil, admin), http.StatusNotFound)
+	samples.record("errors/not-found-release", call(http.MethodGet, "/api/v1/releases/"+uuid.New(), nil, admin), http.StatusNotFound)
 }
 
 // waitForScanToFinish 等扫描离开 running，再等 worker 退出：worker 在写入终态之后才释放扫描互斥并清除运行标记，

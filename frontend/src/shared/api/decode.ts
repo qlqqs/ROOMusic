@@ -93,6 +93,16 @@ export function integer(options: { min?: number; max?: number } = {}): Decoder<n
   };
 }
 
+/** 有限的数字（允许小数）：时长之类的浮点字段用它；NaN 与无穷大不会出现在合法的 JSON 里，仍然拒绝。 */
+export function number(options: { min?: number; max?: number } = {}): Decoder<number> {
+  const { min = Number.NEGATIVE_INFINITY, max = Number.POSITIVE_INFINITY } = options;
+  return (input, path) => {
+    if (typeof input !== "number" || !Number.isFinite(input)) throw new DecodeError(path, "应为有限的数字");
+    if (input < min || input > max) throw new DecodeError(path, `应在 ${min} 到 ${max} 之间`);
+    return input;
+  };
+}
+
 // RFC 3339：允许小数秒与时区偏移；Date.parse 对 2 月 30 日之类并不严格，所以先用字段范围约束形状。
 const timestampPattern =
   /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:(?:[0-5]\d|60)(?:\.\d{1,9})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;

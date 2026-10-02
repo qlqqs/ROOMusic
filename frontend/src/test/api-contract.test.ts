@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { decodeLoggedOut, decodeSetupStatus, decodeViewer } from "../features/auth/api/decoders";
-import { decodeReleaseGroupPage } from "../features/catalog/api/decoders";
+import {
+  decodeReleaseDetail,
+  decodeReleaseEvidence,
+  decodeReleaseGroupDetail,
+  decodeReleaseGroupPage,
+} from "../features/catalog/api/decoders";
 import {
   decodeActiveScan,
   decodeDiagnosticsPage,
@@ -65,6 +70,12 @@ const successContracts: Record<string, Contract> = {
   "release-groups/list-empty": { status: 200, decode: decodeReleaseGroupPage },
   "release-groups/list-one": { status: 200, decode: decodeReleaseGroupPage },
   "release-groups/list-one-with-artwork": { status: 200, decode: decodeReleaseGroupPage },
+  "release-groups/get": { status: 200, decode: decodeReleaseGroupDetail },
+  "release-groups/get-multiple": { status: 200, decode: decodeReleaseGroupDetail },
+  "releases/get": { status: 200, decode: decodeReleaseDetail },
+  "releases/get-single": { status: 200, decode: decodeReleaseDetail },
+  "releases/get-cue": { status: 200, decode: decodeReleaseDetail },
+  "releases/evidence": { status: 200, decode: decodeReleaseEvidence },
 };
 
 // 错误样本都用统一信封；这里同时记录界面要处理的错误码与状态码。
@@ -87,6 +98,8 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "errors/invalid-id-user": { status: 400, code: "invalid_id" },
   "errors/invalid-pagination": { status: 400, code: "invalid_pagination" },
   "errors/not-found-user": { status: 404, code: "not_found" },
+  "errors/not-found-release-group": { status: 404, code: "not_found" },
+  "errors/not-found-release": { status: 404, code: "not_found" },
   "errors/method-not-allowed": { status: 405, code: "method_not_allowed" },
   "errors/database-unavailable": { status: 503, code: "database_unavailable" },
 };

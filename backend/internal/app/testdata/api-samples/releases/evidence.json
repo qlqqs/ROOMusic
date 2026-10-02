@@ -1,0 +1,127 @@
+{
+  "body": {
+    "fields": [
+      {
+        "action": "auto_apply",
+        "candidates": [
+          "Sample Orchestra"
+        ],
+        "confidence": "high",
+        "field": "album_artist",
+        "reason_code": null,
+        "rule_id": "majority_v1",
+        "source": "tag",
+        "value": "Sample Orchestra"
+      },
+      {
+        "action": "auto_apply",
+        "candidates": [
+          "Sample Orchestra"
+        ],
+        "confidence": "high",
+        "field": "artist",
+        "reason_code": null,
+        "rule_id": "majority_v1",
+        "source": "tag",
+        "value": "Sample Orchestra"
+      },
+      {
+        "action": "auto_apply",
+        "candidates": [
+          "0123456789012"
+        ],
+        "confidence": "high",
+        "field": "barcode",
+        "reason_code": null,
+        "rule_id": "majority_v1",
+        "source": "tag",
+        "value": "0123456789012"
+      },
+      {
+        "action": "auto_apply",
+        "candidates": [
+          "SL-0001"
+        ],
+        "confidence": "high",
+        "field": "catalog_number",
+        "reason_code": null,
+        "rule_id": "majority_v1",
+        "source": "tag",
+        "value": "SL-0001"
+      },
+      {
+        "action": "auto_apply",
+        "candidates": [
+          "Remastered"
+        ],
+        "confidence": "high",
+        "field": "edition",
+        "reason_code": null,
+        "rule_id": "majority_v1",
+        "source": "tag",
+        "value": "Remastered"
+      },
+      {
+        "action": "auto_apply",
+        "candidates": [
+          "Classical"
+        ],
+        "confidence": "high",
+        "field": "genre",
+        "reason_code": null,
+        "rule_id": "majority_v1",
+        "source": "tag",
+        "value": "Classical"
+      },
+      {
+        "action": "auto_apply",
+        "candidates": [
+          "Sample Label"
+        ],
+        "confidence": "high",
+        "field": "label",
+        "reason_code": null,
+        "rule_id": "majority_v1",
+        "source": "tag",
+        "value": "Sample Label"
+      },
+      {
+        "action": "auto_apply",
+        "candidates": [
+          "Sample Symphonies"
+        ],
+        "confidence": "high",
+        "field": "title",
+        "reason_code": null,
+        "rule_id": "majority_v1",
+        "source": "tag",
+        "value": "Sample Symphonies"
+      },
+      {
+        "action": "auto_apply",
+        "candidates": [
+          "1998"
+        ],
+        "confidence": "high",
+        "field": "year",
+        "reason_code": null,
+        "rule_id": "majority_v1",
+        "source": "tag",
+        "value": "1998"
+      }
+    ],
+    "grouping": {
+      "candidate_kind": "ordinary_directory",
+      "reason_codes": [],
+      "rule_id": "organizer_v2",
+      "source_refs": [
+        "double-album/d1-01.flac",
+        "double-album/d1-02.flac",
+        "double-album/d2-01.flac"
+      ]
+    },
+    "release_id": "00000000-0000-4000-8000-000000000001",
+    "truncated": false
+  },
+  "status": 200
+}
