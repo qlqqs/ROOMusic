@@ -35,20 +35,47 @@ func NewStore(dataDirectory string) *Store {
 	return &Store{directory: filepath.Join(dataDirectory, "artwork")}
 }
 
-// Load 读取资源标识（即 storage_key）对应的封面字节与 MIME。找不到关联、存储键不安全或文件不可读时返回错误。
-func (s *Store) Load(ctx context.Context, database Queryer, resourceID string) ([]byte, string, error) {
+// Resource 是已确认存在的受管封面。ID 就是 storage_key：内容哈希加扩展名，同一个 ID 的字节永远不变，
+// 所以它本身就能充当 HTTP 的强校验值。
+type Resource struct {
+	ID       string
+	MIMEType string
+}
+
+// Lookup 按资源标识查封面关联，只读数据库、不读文件：调用方可以在确认资源存在后，
+// 凭客户端已有的校验值直接答复“未修改”，省掉读文件。找不到关联或存储键不安全时返回错误。
+func (s *Store) Lookup(ctx context.Context, database Queryer, resourceID string) (Resource, error) {
 	var key, mime string
 	if err := database.QueryRowContext(ctx, "SELECT storage_key,mime_type FROM release_artworks WHERE storage_key=$1", resourceID).Scan(&key, &mime); err != nil {
-		return nil, "", err
+		return Resource{}, err
 	}
-	if filepath.Base(key) != key {
-		return nil, "", errors.New("unsafe artwork storage key")
+	if !safeStorageKey(key) {
+		return Resource{}, errors.New("unsafe artwork storage key")
 	}
-	data, err := os.ReadFile(filepath.Join(s.directory, key))
-	if err != nil {
-		return nil, "", err
+	return Resource{ID: key, MIMEType: mime}, nil
+}
+
+// Read 读取封面文件的字节。文件不存在或不可读时返回错误。
+func (s *Store) Read(resource Resource) ([]byte, error) {
+	if !safeStorageKey(resource.ID) {
+		return nil, errors.New("unsafe artwork storage key")
 	}
-	return data, mime, nil
+	return os.ReadFile(filepath.Join(s.directory, resource.ID))
+}
+
+// safeStorageKey 只接受 Save 会写出的形状：非空、不超过 255 字节，只含字母、数字、点、下划线与连字符，
+// 且不是 "." 或 ".."。这样键既不会逃出数据目录，也不会破坏作为 ETag 写进响应头的引号语法。
+func safeStorageKey(key string) bool {
+	if key == "" || len(key) > 255 || key == "." || key == ".." {
+		return false
+	}
+	for index := 0; index < len(key); index++ {
+		character := key[index]
+		if !(character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' || character >= '0' && character <= '9' || character == '.' || character == '_' || character == '-') {
+			return false
+		}
+	}
+	return true
 }
 
 // Save 校验封面字节并保存为 Release 的受管封面：内容寻址写入数据目录，再写 release_artworks 关联，

@@ -202,13 +202,32 @@ func (handlers *Handlers) artworkResource(w http.ResponseWriter, r *http.Request
 		handlers.guard.WriteUnauthenticated(w, r)
 		return
 	}
-	data, mime, err := handlers.artwork.Load(r.Context(), handlers.database, r.PathValue("id"))
+	// 先鉴权、再确认资源存在，最后才比较校验值：未登录与不存在的资源不会因为带着匹配的 ETag 得到 304。
+	resource, err := handlers.artwork.Lookup(r.Context(), handlers.database, r.PathValue("id"))
 	if err != nil {
 		httpserver.WriteError(w, r, http.StatusNotFound, "not_found", "封面不存在")
 		return
 	}
-	w.Header().Set("Content-Type", mime)
-	w.Header().Set("Cache-Control", "private, max-age=86400")
+	// 资源标识是内容哈希加扩展名，同一个标识的字节永远不变，直接作为强校验值。private, no-cache 让浏览器每次显示前
+	// 都带着凭据重新验证：内容没变只花一次 304（不读文件），退出登录后验证得到 401，旧封面不再显示。
+	if httpserver.IfNoneMatchHits(r, resource.ID) {
+		setArtworkCacheHeaders(w, resource)
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	data, err := handlers.artwork.Read(resource)
+	if err != nil {
+		httpserver.WriteError(w, r, http.StatusNotFound, "not_found", "封面不存在")
+		return
+	}
+	setArtworkCacheHeaders(w, resource)
+	w.Header().Set("Content-Type", resource.MIMEType)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
+}
+
+// setArtworkCacheHeaders 写出封面 200 与 304 共用的缓存头（304 必须带上与 200 相同的 ETag 与 Cache-Control）。
+func setArtworkCacheHeaders(w http.ResponseWriter, resource artwork.Resource) {
+	w.Header().Set("Cache-Control", "private, no-cache")
+	w.Header().Set("ETag", httpserver.EntityTag(resource.ID))
 }

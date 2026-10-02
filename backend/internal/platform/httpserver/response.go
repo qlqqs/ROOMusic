@@ -32,9 +32,11 @@ func DecodeJSON(responseWriter http.ResponseWriter, request *http.Request, desti
 	return true
 }
 
-// WriteJSON 以 application/json 写出状态码和值。
+// WriteJSON 以 application/json 写出状态码和值。API 的 JSON 随会话与数据变化，含错误信封在内一律
+// Cache-Control: no-store，浏览器与中间缓存都不保留；需要验证式缓存的资源（封面）不经过这里。
 func WriteJSON(responseWriter http.ResponseWriter, statusCode int, value any) {
 	responseWriter.Header().Set("Content-Type", "application/json")
+	responseWriter.Header().Set("Cache-Control", "no-store")
 	responseWriter.WriteHeader(statusCode)
 	if err := json.NewEncoder(responseWriter).Encode(value); err != nil {
 		return

@@ -28,11 +28,12 @@ import (
 )
 
 type integrationTestApplication struct {
-	app         *App
-	database    *sql.DB
-	handler     http.Handler
-	origin      string
-	allowedRoot string
+	app           *App
+	database      *sql.DB
+	handler       http.Handler
+	origin        string
+	allowedRoot   string
+	dataDirectory string
 }
 
 type integrationTestUser struct {
@@ -56,9 +57,10 @@ func newIntegrationTestApplication(t *testing.T) *integrationTestApplication {
 	})
 
 	allowedRoot := t.TempDir()
+	dataDirectory := t.TempDir()
 	config := config.Server{
 		AllowedLibraryRoots: []string{allowedRoot},
-		DataDirectory:       t.TempDir(),
+		DataDirectory:       dataDirectory,
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	scanContext, cancelScans := context.WithCancel(context.Background())
@@ -73,11 +75,12 @@ func newIntegrationTestApplication(t *testing.T) *integrationTestApplication {
 		}
 	})
 	return &integrationTestApplication{
-		app:         application,
-		database:    database,
-		handler:     application.Handler(),
-		origin:      "http://roomusic.test",
-		allowedRoot: allowedRoot,
+		app:           application,
+		database:      database,
+		handler:       application.Handler(),
+		origin:        "http://roomusic.test",
+		allowedRoot:   allowedRoot,
+		dataDirectory: dataDirectory,
 	}
 }
 
