@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "身份、扫描接口的请求/错误合同与技术债条目"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "封面读取合同与错误矩阵"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "错误信封、状态码与不回显 SQL 的约束"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "URL 分页状态与查看者会话约定"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "shared/ui 组件合同（新增 Pagination）"}
+{"file": "docs/architecture/adr/0001-frontend-foundations.md", "reason": "第 8 节第 6 项：后端缓存头调整"}

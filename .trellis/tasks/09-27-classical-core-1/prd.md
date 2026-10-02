@@ -29,7 +29,7 @@
 ## 阶段任务映射
 
 2026-09-28 路线修订（任务 [09-28-core-1-roadmap-revision](../archive/2026-09/09-28-core-1-roadmap-revision/prd.md)，裁决 D1–D6）
-后，Core 1 = M0、B0、I、M1a、M1b、M2a、M2b、P、M3、M4，外加独立修复 F1、F2；M5、M6 为后续阶段。
+后，Core 1 = M0、B0、I、M1a、M1b、M2a、M2b、P、M3、M4，外加独立修复 F1、F2（2026-10-02 增加 F3）；M5、M6 为后续阶段。
 详细依赖与验收出口见 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)。先后依赖写在各子任务中，
 父子关系只表达归属。
 
@@ -40,9 +40,10 @@
 | B0 | 纯重构：先拆 catalog，再拆 platform/postgres、library（含解析器），最后拆 httpserver、identity、各 httpapi 与 app | 无；可与 M1a 并行，不夹带业务变更 | [已完成并归档](../archive/2026-09/09-28-classical-b0-package-split/prd.md)（2026-09-30） |
 | I | 音频指纹、同 root 保守重绑定、按成员关系匹配 Release、ID 稳定性测试、ReleaseGroup 只读接口 | B0 的 catalog 部分 | [已完成并归档](../archive/2026-09/09-28-classical-i-identity-groups/prd.md)（2026-09-30） |
 | M1a | 应用外壳、认证、现有目录/扫描/成员管理、简版概览、恢复真实构建门禁 | ADR 0001 第 1–5 项已批准；只消费现有 API，可与 B0、I 并行 | [已完成并归档](../archive/2026-10/09-28-classical-m1a-shell-admin/prd.md)（2026-10-01，提交 `66a0e05`–`4220960` 加文档同步） |
-| M1b | 专辑列表与详情（按组形态，单版本自然退化） | 阶段 I 的按组接口；M1a（已完成） | [planning](../09-28-classical-m1b-album-browsing/prd.md) |
+| M1b | 专辑列表与详情（按组形态，单版本自然退化） | 阶段 I 的按组接口；M1a（已完成）；F3 | [planning](../09-28-classical-m1b-album-browsing/prd.md)（2026-10-02 完成规划并获批，F3 归档后启动） |
 | F1 | 未知 `/api/` 路径返回 JSON 404 | 无 | [已完成并归档](../archive/2026-09/09-28-classical-f1-api-json-404/prd.md)（2026-09-29） |
 | F2 | 目录操作幂等指纹纳入目标目录 ID | 无；建议先于或与 M1a 同期 | [已完成并归档](../archive/2026-09/09-28-classical-f2-root-op-idempotency/prd.md)（2026-09-29） |
+| F3 | M1a 遗留的后端缺口：扫描记录、查看者 ID、成员接口错误映射、HTTP 缓存头（成员写操作幂等延到 M3） | 无；先于 M1b | [in_progress](../10-02-classical-f3-backend-gaps/prd.md)（2026-10-02 创建，同日获批并启动） |
 | M2a | 鉴权直出串流、播放引擎、浏览器能力判定 | M1a 外壳；实播矩阵在规划时确定 | 未立项 |
 | M2b | ffmpeg 派生缓存、CUE 精确分轨、歌词 | M2a；ADR 0004 第 2–7 项获批 | 未立项 |
 | P | 服务端播放历史 | 阶段 I；M2a | 未立项 |

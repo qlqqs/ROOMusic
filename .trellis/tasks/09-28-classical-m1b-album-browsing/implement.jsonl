@@ -1,3 +1,6 @@
-{"file": "frontend/DESIGN.md", "reason": "专辑页设计与落地差异表"}
+{"file": "frontend/DESIGN.md", "reason": "专辑页设计、组件合同、长标题门槛与落地差异表"}
 {"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "组件合同、状态呈现与可访问性"}
-{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "catalog 读取合同与封面投影"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "列表与详情的 URL 状态、查询键与会话代次"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "decoder 原语、样本契约与上限"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "查询 hook 的形状与测试方式"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "catalog 读取合同、封面投影与证据权限"}
