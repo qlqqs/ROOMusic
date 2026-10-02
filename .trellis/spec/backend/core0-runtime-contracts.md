@@ -12,6 +12,8 @@
 Classical 设计见 [DESIGN.md](../../../frontend/DESIGN.md)，阶段与依赖见
 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)（2026-09-28 已批准）。
 M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成 API 响应样本的集成测试与其 testdata。
+2026-10-02 的 F3 补齐了 M1a 暴露的后端缺口（没有迁移）：管理员的扫描记录列表、身份响应带用户 `id`、身份与成员接口的错误映射和
+密码长度规则、静态资源/JSON/封面的缓存头；合同见下文“身份与成员接口”“HTTP 缓存”和各错误矩阵。
 
 ## 2. 接口签名
 
@@ -19,13 +21,16 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 - 开发启动：`./scripts/dev.sh`，默认读取 `.env.dev`，Go 运行在 `backend/`，
   Vite 通过开发配置代理 `/api` 到 `:8080`。
 - HTTP：`POST /api/v1/users`、`PATCH /api/v1/users/{id}`、
-  `POST /api/v1/library-roots`、`POST /api/v1/scans`、
+  `POST /api/v1/library-roots`、`POST /api/v1/scans`、管理员专用的 `GET /api/v1/scans`、
   `GET /api/v1/scans/active`、`GET /api/v1/scans/{id}`、
   `POST /api/v1/scans/{id}/cancel`、`GET /api/v1/scans/{id}/diagnostics`、
   `GET /api/v1/releases`、`GET /api/v1/releases/{id}`、管理员专用
   `GET /api/v1/releases/{id}/evidence`、按组只读的 `GET /api/v1/release-groups` 与
   `GET /api/v1/release-groups/{id}`，以及已登录用户可读的 `GET /api/v1/artworks/{id}`。
 - 用户更新请求：`{ "disabled": boolean }`；响应：`{ "disabled": boolean }`。
+- 查看者：初始化管理员（`POST /setup/admin`，201）、登录（`POST /auth/login`）与当前用户（`GET /auth/me`）三处响应同形，
+  `{ "id": UUID, "username": string, "role": "admin" | "user" }`。前端用 `id` 与 `role` 判断是否同一查看者、成员表里哪一行是“你”，
+  用户名只用于显示。
 - 目录新增响应：`{ "id": string, "name": string, "status": "active" | "disabled", "revision": integer }`。
 - 目录列表项目：`id`、安全 basename `path`/`name`、`status`、`revision`、时间戳；
   不返回原始绝对路径。
@@ -51,7 +56,11 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 - 前端 transport 沿用 Cookie credentials（`same-origin`）与 JSON 请求体的 Content-Type
   合同，请求带客户端生成的 `X-Request-ID`；浏览器不读取或存储 session token，不为媒体资源强加 JSON 解码。
 - JSON 请求体上限 1 MiB；搜索词最多 200 字节；发行分页默认 `page=1`、
-  `page_size=50`，最大 100；扫描诊断最多 100 条。
+  `page_size=50`，最大 100；扫描记录分页默认 `page=1`、`page_size=20`，最大 100；扫描诊断最多 100 条。
+  分页参数由 `httpserver.ParsePagination` 统一解析（`page` 至少 1，`page_size` 在 1 到上限之间，偏移不得溢出 `int`），
+  不合法的值返回 `400 invalid_pagination`；超出末页返回空 `items` 而总数照常。
+- 请求体的解码与校验分两步：不是合法 JSON 的请求体由 `DecodeJSON` 写出 `400 invalid_json` 并返回 `false`，调用方必须
+  直接返回，不得再写第二个错误信封（曾因 `!DecodeJSON(...) || 校验失败` 的写法让一个响应带两个 JSON 文档）。
 - 发行列表只返回至少含一个 `present` Track 的 Release，支持严格 allowlist 的
   `attention=required`。详情返回有界 Medium/Track、credits、音频/CUE facts 和
   普通用户安全 evidence 摘要；完整候选、reason code 和安全相对来源只由管理员
@@ -62,6 +71,50 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
   选中详情和筛选的 URL 责任见 [状态规范](../frontend/state-management.md)，具体新路由
   形式尚待批准。M1 不恢复演示队列或模拟计时器；未实现的播放动作隐藏或明确禁用，
   不以“演示模式”标记替代真实能力边界。
+
+### 身份与成员接口
+
+- 密码按 UTF-8 **字节**计，至少 12、至多 72（`identity.MinPasswordBytes`、`MaxPasswordBytes`，由 `identity.ValidPasswordLength`
+  判断）。72 是 bcrypt 实际处理的字节数，`golang.org/x/crypto` 对更长的输入返回 `ErrPasswordTooLong`，所以上限必须在入口拒绝，
+  否则初始化与新建成员会变成 500。不合规返回 `400 invalid_input`，文案按字节说明；登录不检查密码长度。
+- 写入失败只按 PostgreSQL 唯一约束冲突（`*pgconn.PgError`，SQLSTATE `23505`）判断“已存在”：新建成员映射 `409 username_taken`，
+  初始化管理员（插入用户、写入初始化标记或提交）映射 `409 setup_closed`。其他数据库错误一律 `503 database_unavailable`，
+  不伪装成冲突。
+- `PATCH /users/{id}` 与 `POST /users/{id}/sessions/revoke` 先校验路由 ID 是 UUID，否则 `400 invalid_id` 且不访问数据库；
+  撤销未知用户的会话返回 `404 not_found`，不再对任何 ID 都返回 200。
+- `GET /users` 读某一行或遍历失败时返回 `503 database_unavailable`，不静默跳过：列表不能少人而不报错。
+- 401 的 message 一律是“需要登录”，与角色无关（403 的“需要管理员权限”不变）；前端仍按错误码选文案。
+- 成员写操作（创建、停用/启用、撤销会话）没有 `Idempotency-Key`。F3 裁决（2026-10-02）延到 M3，随“成员管理是否纳入受治理操作”
+  一起决定（见 [ADR 0003](../../../docs/architecture/adr/0003-governed-operations.md)）。现状：停用/启用设定绝对状态，重复执行
+  结果相同；撤销会话重复执行只是再撤销一次；重复创建得到 `409 username_taken`，不会建出第二个账号。前端对结果不明的成员操作
+  不重试，刷新列表让管理员核对。
+
+### HTTP 缓存
+
+| 响应 | `Cache-Control` | 说明 |
+| --- | --- | --- |
+| `assets/` 下存在的文件 | `public, max-age=31536000, immutable` | Vite 构建的文件名带内容哈希，内容变化就换名 |
+| `/` 与 SPA 回落页 | `no-cache` | `text/html`，不加 `ETag`（约 1 KB，验证收益小） |
+| `assets/` 以外存在的文件（`licenses/` 下的许可文本等） | `no-cache` | `http.FileServer` 的既有行为；内嵌文件的修改时间为零，没有 `Last-Modified` 与 `ETag` |
+| `assets/` 下缺失的文件、`assets` 目录及其子目录 | 无 | `404 text/plain`，不回落到入口页，不列目录 |
+| 其他目录路径（`/licenses/` 等） | `no-cache` | 回落到入口页，不列目录 |
+| 经 `httpserver.WriteJSON` 写出的 JSON（含错误信封与 `/healthz`） | `no-store` | 随会话与数据变化，浏览器与中间缓存都不保留 |
+| `GET /api/v1/artworks/{resource_id}` 200 | `private, no-cache` | `ETag: "<resource_id>"`；每次显示前带凭据重新验证 |
+| 封面带匹配的 `If-None-Match` | `private, no-cache` | `304`，同一个 `ETag`，没有响应体，不读文件 |
+
+- 请求路径先经 `path.Clean`，再判断是否在 `assets/` 下：`/assets/../licenses/x.txt` 清理后不在 `assets/` 里，不会因为字面上带着
+  `assets/` 就被长期缓存。
+- `immutable` 只能给带哈希的文件。`cmd/roomusic` 的测试断言内嵌 `assets/` 下每个文件名都含哈希段；给名字固定的文件加
+  `immutable` 会让浏览器拿不到新版本。
+- 封面的资源 ID 是内容 SHA-256 加扩展名，同一 ID 的字节永不改变，所以 `ETag` 就是资源 ID（强校验值）。处理顺序固定：
+  未登录 `401`（即使 `If-None-Match` 匹配也不是 304）→ 查记录并校验存储键，不存在或不安全 `404`（即使带着 `If-None-Match`
+  也不是 304）→ `If-None-Match` 命中则 `304`（不读文件）→ 读文件返回 `200`。`artwork.Lookup` 只查记录，`artwork.Read` 才读文件。
+  `If-None-Match` 按 RFC 9110 的弱比较：忽略 `W/` 前缀，逐个比较逗号分隔的标签，`*` 命中任何存在的资源，无法解析的值视为不命中。
+- 选择 `private, no-cache` 而不是 `no-store`：所有登录用户本来就能读所有封面，验证主要防的是“退出登录后从浏览器缓存直接显示”；
+  `no-store` 会让每次显示都整张重新下载。退出后重新验证得到 `401`，旧响应不再被使用。`no-store` 不追溯清除已保存的数据
+  （见 [ADR 0001](../../../docs/architecture/adr/0001-frontend-foundations.md)）。未来的音频缓存由
+  [ADR 0004](../../../docs/architecture/adr/0004-media-delivery.md)另行约束。
+- 浏览器端的缓存行为（重新验证、退出后的封面）由响应头合同与集成测试保证；Playwright 跑在 `vite preview` 上，不经过 Go 服务。
 
 ### 数据库与扫描
 
@@ -259,6 +312,20 @@ Authorization/session token、密码、数据库 URL、完整 NAS 路径或音�
 | 用户目标不存在 | `404 not_found`，事务回滚 |
 | 禁用最后一个启用管理员 | `409 last_admin`，不改用户或 session |
 | 用户 SQL/事务失败 | `503 database_unavailable` 或分类错误，不返回成功 |
+| 初始化管理员或新建成员时用户名为空白，或密码少于 12 或超过 72 个字节 | `400 invalid_input`，文案按字节说明；不调用 bcrypt，不写库 |
+| 请求体不是合法 JSON | `400 invalid_json`，响应里只有一个错误信封 |
+| 新建成员的用户名唯一约束冲突（SQLSTATE `23505`） | `409 username_taken` |
+| 新建成员的其他数据库错误（触发器异常、约束以外的失败） | `503 database_unavailable`，不返回 409 |
+| 初始化管理员：已初始化，或插入/写标记/提交时的唯一约束冲突（另一次初始化抢先） | `409 setup_closed` |
+| 初始化管理员的其他数据库错误 | `503 database_unavailable`，不返回 409 |
+| `PATCH /users/{id}`、撤销会话的路由 ID 不是 UUID | `400 invalid_id`，不访问数据库 |
+| 撤销未知用户的会话 | `404 not_found`，不是 200 |
+| `GET /users` 读某一行或遍历失败 | `503 database_unavailable`，不返回少了人的列表 |
+| 未登录访问需要登录的接口 | `401 unauthorized`，message“需要登录”，与角色无关 |
+| 封面：未登录（即使带匹配的 `If-None-Match`） | `401`，不是 304 |
+| 封面：资源不存在、记录或存储键不安全（即使带 `If-None-Match`） | `404 not_found`，不是 304 |
+| 封面：`If-None-Match` 命中当前资源 | `304`，同一个 `ETag`，不读文件（文件被删除后仍是 304） |
+| `assets/` 下缺失的文件、`assets` 及其子目录 | `404 text/plain`，不回落到入口页，没有目录列表 |
 | 同一幂等键用于另一个目录，或同一目录的不同请求参数 | `409 idempotency_conflict`；不执行、不写记录，也不返回前一个请求的结果 |
 | 同一幂等键的并发请求（新增、停用、恢复） | 串行处理，只执行一次，其余请求回放首次记录的状态码和响应 |
 | 停用/恢复的路由目录 ID 不是 UUID 形式 | `400 invalid_id`，不进入幂等流程，不写操作记录 |
@@ -345,6 +412,20 @@ Authorization/session token、密码、数据库 URL、完整 NAS 路径或音�
   管理员 evidence 权限、路径脱敏、nullable/enum/数组上限和 malformed payload；按组接口与 `/releases` 逐项对应。
 - HTTP 中间件：隐式 200、显式状态、错误响应的状态/字节统计，路由模板、耗时、日志
   级别、请求 ID 回写、可选 actor_id 以及敏感字段脱敏；每个请求只能有一个完成事件。
+- 身份与成员（F3，`internal/app/identity_api_integration_test.go`，PostgreSQL）：三处查看者响应带 `id` 且与成员列表一致；
+  初始化管理员与新建成员只把唯一约束冲突映射为 409（用测试库里的触发器注入 `RAISE EXCEPTION`，SQLSTATE 是 `P0001` 而不是
+  `23505`，必须得到 503 且没有部分写入）；密码 11/12/72/73 字节的边界；非 UUID 与未知用户 ID；`listUsers` 遇到读不了的行
+  返回 503；401 文案与角色无关；非法 JSON 只写一个信封。`identity/password_test.go` 另测多字节字符按字节计，以及 72 与 bcrypt
+  的上限一致。
+- 扫描记录（F3，`internal/app/scan_history_integration_test.go`、`internal/platform/httpserver/pagination_test.go`）：401/403、
+  分页参数的各种非法值、排序与翻页覆盖全部扫描、条目与 `GET /scans/{id}` 逐项相同、超出末页、读取失败（改名表）返回 503；
+  `catalog/httpapi` 的分页合同测试证明共用解析器后行为不变。
+- HTTP 缓存（F3）：`platform/httpserver` 的 `frontend_test.go`（`fstest.MapFS`：各类路径的缓存头、目录不列、缺失资源 404、HEAD）、
+  `etag_test.go`（弱比较、列表、`*`、无法解析的值）、`response_test.go`（`WriteJSON` 与健康检查 `no-store`）；
+  `cmd/roomusic/main_test.go` 对真实内嵌产物断言 `assets/` 文件名都带哈希段、缓存策略生效；
+  `internal/app/artwork_cache_integration_test.go`（封面 200/304/401/404、删除文件后仍 304、标签不匹配返回新字节、
+  不安全存储键、JSON 不可缓存）；`catalog/artwork` 的存储键与读取单元测试。真实二进制的 `curl -I` 冒烟记录在任务
+  `10-02-classical-f3-backend-gaps` 的 `research/cache-headers-smoke.md`（只用合成数据）。
 - 运行门禁：`npm run lint`、`npm run typecheck`、`npm run test`、
   `gofmt -l .`、`go test ./... -count=1`、`go vet ./...`、`go build ./...`、
   `go test -race ./... -count=1`、`bash -n scripts/*.sh`、两个 Compose 配置校验、
@@ -385,6 +466,42 @@ writeJSON(w, http.StatusOK, map[string]bool{"disabled": requested})
 
 前端的用户更新响应同样必须经过所属 feature 的唯一 decoder（`features/members/api/decoders.ts`），禁止把 `unknown`
 直接 cast 成 `UserDTO`。
+
+### 写入失败与请求体错误
+
+错误：把任何插入失败都当成“已存在”，数据库故障就变成了“用户名已存在”；`DecodeJSON` 已经写出 `invalid_json` 之后，
+同一个表达式又写了第二个错误信封，一个响应里有两个 JSON 文档。
+
+```go
+if !httpserver.DecodeJSON(w, r, &in) || strings.TrimSpace(in.Username) == "" {
+	httpserver.WriteError(w, r, 400, "invalid_input", "...") // 解码失败时是第二次写
+	return
+}
+if _, err := db.ExecContext(ctx, insertUser, id, in.Username, hash); err != nil {
+	httpserver.WriteError(w, r, 409, "username_taken", "用户名已存在")
+	return
+}
+```
+
+正确：解码与校验分两步；只认 SQLSTATE `23505`，其余如实报告为不可用。
+
+```go
+if !httpserver.DecodeJSON(w, r, &in) {
+	return
+}
+if strings.TrimSpace(in.Username) == "" || !identity.ValidPasswordLength(in.Password) {
+	httpserver.WriteError(w, r, 400, "invalid_input", invalidAccountMessage)
+	return
+}
+if _, err := db.ExecContext(ctx, insertUser, id, in.Username, hash); err != nil {
+	if isUniqueViolation(err) { // errors.As(*pgconn.PgError) 且 Code == "23505"
+		httpserver.WriteError(w, r, 409, "username_taken", "用户名已存在")
+		return
+	}
+	httpserver.WriteError(w, r, 503, "database_unavailable", "无法创建用户")
+	return
+}
+```
 
 ### CUE 诊断错误与正确示例
 
@@ -442,6 +559,8 @@ mutex 只保护本进程的 worker 引用。
 
 - `POST /api/v1/scans`：管理员启动扫描；新建时返回 `202`，已有本进程或其他进程的
   活动扫描时返回该活动 DTO 和 `200`。
+- `GET /api/v1/scans`：管理员查询扫描记录（F3），`page`（默认 1）、`page_size`（默认 20，最大 100），按
+  `started_at DESC, id DESC` 排序；响应 `{ "items": [ScanDTO], "pagination": { "page", "page_size", "total" } }`。
 - `GET /api/v1/scans/active`：已登录用户查询活动扫描，返回
   `{ "scan": ScanDTO | null }`。
 - `GET /api/v1/scans/{id}`：已登录用户查询指定扫描。
@@ -472,8 +591,12 @@ mutex 只保护本进程的 worker 引用。
   数组；示例为零诊断状态。它不表示已扫描文件数或完成百分比。
 - `id` 与 `scan_run_id` 当前必须相同；新增字段和状态必须同时更新后端 presenter、前端
   decoder、状态文案和测试，前端不得将未知状态强制转换为已知状态。
+- `GET /api/v1/scans` 的条目与 `GET /scans/{id}` 的 `ScanDTO` 完全相同（含诊断汇总）。诊断汇总对整页只用一次
+  `scan_run_id=ANY($1::uuid[]) GROUP BY scan_run_id,kind` 查询读取，列表与详情共用同一个读取函数，所以计数一致；
+  单次扫描的诊断种类超过 100 视为数据异常，读取失败而不是截断。总数与当前页是两次查询，不保证同一快照；
+  超出末页返回空 `items` 而 `total` 照常。`scan_runs` 每次扫描一行，表很小，不为列表另建索引。
 - 启动和取消是同源、session、管理员授权的状态变更；活动/指定状态查询要求有效
-  session。前端权限只控制按钮可见性，不能代替后端鉴权。
+  session；扫描记录列表要求管理员（唯一的使用方是管理员的扫描目录页）。前端权限只控制按钮可见性，不能代替后端鉴权。
 - worker 的父 context 属于应用生命周期，不得使用 HTTP 请求 context。取消端点只提交
   意图；worker 每 500 ms 轮询一次，并在 root、目录遍历和文件处理边界协作式停止。
 - session advisory lock 必须由贯穿扫描生命周期的专用连接持有；扫描读取、观察、诊断
@@ -493,6 +616,9 @@ mutex 只保护本进程的 worker 引用。
 | --- | --- |
 | 未登录访问扫描 API | `401` 安全错误 envelope |
 | 普通用户启动或取消 | `403`，不创建扫描、不写 `cancel_requested_at` |
+| 普通用户读取扫描记录列表 | `403 forbidden`；未登录为 `401` |
+| 扫描记录的 `page`/`page_size` 非法（非整数、小于 1、`page_size` 超过 100、偏移溢出） | `400 invalid_pagination` |
+| 扫描记录读取失败（计数、分页、诊断汇总任一步） | `503 database_unavailable`，不回显 SQL |
 | 启动获得锁且无活动任务 | 插入一个 `running`，返回 `202` 和新 DTO |
 | 本进程已有活动任务 | 返回同一 DTO 和 `200`，不创建第二行 |
 | 未获锁但可读取其他实例的活动任务 | 返回该 DTO 和 `200`，不等待、不接管 |
@@ -561,16 +687,18 @@ go app.runScan(scanID, execution) // worker 由应用生命周期和持久化取
 - HTTP 请求现在通过 `http.request.completed` 事件记录状态码、耗时和路由模板；用户
   创建/禁用/会话撤销仍无独立 Operation Journal。
 - ~~前端源码已删除~~：2026-10-01 由 M1a 按 Classical 设计重建，依赖精确固定（见 ADR 0001 决策记录）。
-- M1a 前端发现的后端缺口（M1a 不改后端，如实呈现，记入后续任务）：
-  - 没有扫描历史列表：离开扫描详情后，结束的扫描只能通过 URL 找回；扫描目录页只显示活动扫描。
-  - `/auth/me` 不返回用户 ID，前端用用户名判断目标是否为自己。
-  - 成员列表无分页，成员写操作无幂等键，不能创建管理员或修改角色；`listUsers` 会静默跳过读取失败的行；
-    `createUser` 把任何插入失败都映射成 409 `username_taken`；`invalid_input` 的文案写“12 个字符”而规则按字节；
-    `PATCH /users/{id}` 与撤销会话对格式不对的 ID 返回 503（`::uuid` 转换错误）而不是 400。
-  - 401 信封的 message 与角色无关（前端按错误码选文案规避）。
+- M1a 前端发现的后端缺口（M1a 不改后端，如实呈现，记入后续任务）。2026-10-02 由 F3 修复的条目划掉，其余仍待办：
+  - ~~没有扫描历史列表~~：F3 新增 `GET /api/v1/scans`（管理员）与扫描目录页的“扫描记录”，见上文扫描场景。
+  - ~~`/auth/me` 不返回用户 ID~~：F3 起 `/auth/me`、登录与初始化管理员的响应都带 `id`，前端按 ID 判断“你”与同一查看者。
+  - 成员列表无分页，不能创建管理员或修改角色（`editor` 是 M3 候选）。
+  - 成员写操作无幂等键：**F3 裁决（2026-10-02）延到 M3**，随成员管理是否纳入受治理操作一起决定；前端保持“结果不明时刷新列表核对”。
+  - ~~`listUsers` 会静默跳过读取失败的行~~、~~`createUser` 与 `setupAdmin` 把任何写入失败映射成 409~~、~~`invalid_input` 的文案写
+    “12 个字符”而规则按字节~~（另有过长密码在 bcrypt 处变成 500）、~~`PATCH /users/{id}` 与撤销会话对格式不对的 ID 返回 503，撤销
+    未知用户也返回 200~~：F3 已修复，见上文“身份与成员接口”。
+  - ~~401 信封的 message 与角色无关~~：F3 起统一为“需要登录”。
   - 没有查询允许根目录的接口，新增目录只能手输服务器上的绝对路径。
-  - `httpserver.Frontend` 不设缓存头，带哈希文件名的资源与较大的字体每次都要重新协商；对 `/assets/`、`/licenses/`
-    这类目录路径会返回目录列表。封面缓存头 `private, max-age=86400` 在 M1b 显示封面时评估。
+  - ~~`httpserver.Frontend` 不设缓存头；`/assets/`、`/licenses/` 这类目录路径会返回目录列表；封面缓存头 `private, max-age=86400`~~：
+    F3 已修复，见上文“HTTP 缓存”。
 - ~~未匹配的 `/api/` 仍落入前端 fallback~~：2026-09-29 由 F1 修复。`/api` 兜底返回 JSON 404/405/503，
   完成日志的 `route_template` 记为 `<unmatched>`，见上文校验与错误矩阵。
 - ~~2026-09-27 静态审查：停用/恢复指纹未含路由 root ID，同键同 body 跨目标会重放前一个 root 的结果~~：

@@ -67,7 +67,7 @@ the UI sends the contract and handles results correctly.
 | 单元与组件 | Vitest + jsdom + Testing Library（`user-event`）。请求层、解码原语、每个 decoder（样本与反例）、会话控制器、`shared/ui` 组件各自有测试，与被测单元同目录 |
 | 接口契约 | `src/test/api-contract.test.ts` 遍历后端生成的 JSON 样本，每个样本都要被 decoder 解码且往返无损；样本由后端集成测试 `TestPostgreSQLAPIResponseSamples` 把关 |
 | 页面级 | `src/app/*.test.tsx`：经 `renderApp` 装配真实的应用运行时（路由、会话、查询缓存），后端是有状态的替身（幂等重放、`expected_revision` 与 409、可注入请求或响应丢失，响应取自真实样本）；轮询用假定时器；断言用户可见的结果 |
-| 浏览器冒烟 | Playwright（只跑 Chromium）对**生产构建**运行 `vite preview`，API 由测试内的受控后端响应（`e2e/support/api-mock.ts`，响应体取自样本）。覆盖初始化与登录、回跳与退出、会话中途 401、403、目录与扫描、成员、只用键盘完成主要操作；每个测试结束时断言没有第三方请求、没有脚本错误与控制台错误 |
+| 浏览器冒烟 | Playwright（只跑 Chromium）对**生产构建**运行 `vite preview`，API 由测试内的受控后端响应（`e2e/support/api-mock.ts`，响应体取自样本）。覆盖初始化与登录、回跳与退出、会话中途 401、403、目录与扫描（含扫描记录的翻页与进入详情）、成员、只用键盘完成主要操作；每个测试结束时断言没有第三方请求、没有脚本错误与控制台错误 |
 | 响应式与无障碍 | 每个页面状态在 375 / 768 / 1024 / 1280 / 1440 下页面与主内容区（`#main`）都没有横向溢出；axe（`wcag2a`、`wcag2aa`、`wcag21a`、`wcag21aa`）在默认、对话框、错误提示、字段错误与窄屏菜单等状态下没有 serious 或 critical；所有文字不小于 12px |
 | 检查自检 | `e2e/checks.spec.ts` 用故意有问题的页面确认 axe、最小字号、横向溢出与焦点环检查都会失败，避免检查空转时全部通过 |
 | 真实接口冒烟 | 在隔离环境（`compose.test.yaml` 以独立 project 名启动 PostgreSQL，Go 以内嵌产物启动，允许根为临时目录，只放合成素材）走主路径，命令与结果记录在任务 `research/`，用后清理容器与目录。不进入 CI，**不读取用户真实的 `music/`** |

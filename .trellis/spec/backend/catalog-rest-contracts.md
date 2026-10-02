@@ -13,7 +13,7 @@
 - `GET /api/v1/releases/{id}/evidence`：仅管理员。
 - `GET /api/v1/release-groups?q=<string>&attention=required&page=<int>&page_size=<int>`
 - `GET /api/v1/release-groups/{id}`
-- `GET /api/v1/artworks/{resource_id}`：认证后读取受管封面。
+- `GET /api/v1/artworks/{resource_id}`：认证后读取受管封面；响应带 `ETag`，支持 `If-None-Match` 的 `304`（见第 3 节）。
 - Release 摘要包含 `id`、标题/艺人、nullable 年份/来源/介质、Medium/Track/attention
   计数，以及 `artwork: null | {resource_id,mime,width,height}`。
 - `artwork` 是在既有 Release 摘要上追加的向后兼容（additive）字段；真实音频播放仍
@@ -33,6 +33,21 @@
   正整数宽高；不返回图片字节、`content_hash`、`source_type`、受管目录或音乐源路径。
 - MIME 只允许 `image/jpeg | image/png | image/gif | image/webp`。资源字节仍通过认证的
   artwork endpoint 返回。
+
+### 封面响应与缓存（F3）
+
+- 200 响应：`Content-Type` 为记录的 MIME，`Cache-Control: private, no-cache`，`ETag: "<resource_id>"`。资源 ID 是内容
+  SHA-256 加扩展名，同一个 ID 的字节永不改变，所以它本身就是强校验值。
+- 处理顺序固定：未登录 `401` → `artwork.Lookup` 只查记录并校验存储键（不存在或不安全 `404`）→ `If-None-Match` 命中则 `304`，
+  同一个 `ETag`、没有响应体、**不读文件** → `artwork.Read` 读文件，返回 `200`。所以未登录时即使 `If-None-Match` 匹配也不是 304，
+  不存在的资源即使带着看似匹配的标签也是 404；删除文件之后，带匹配标签的请求仍是 304，没有标签的请求才发现文件不见了（`404`）。
+- `If-None-Match` 按 RFC 9110 的弱比较：忽略 `W/` 前缀，逐个比较逗号分隔的标签，`*` 命中任何存在的资源，无法解析的值视为不命中并按
+  正常的 `200` 处理。标签不匹配时返回完整响应。
+- 存储键只接受字母、数字、点、下划线与连字符，非空、不超过 255 字节、不是 `.` 或 `..`（`artwork.safeStorageKey`）：既不会逃出数据目录，
+  也不会破坏作为 `ETag` 写进响应头的引号语法。不满足的记录按“不安全”处理，返回 `404` 而不回显路径。
+- 选择 `private, no-cache`：每次显示前带凭据重新验证，退出登录后验证得到 `401`，旧响应不再被使用；未变时代价只是一次查库加一个 304。
+  不用 `no-store`（每次整张重新下载），也不用 `max-age`（退出后一段时间内仍可从浏览器缓存直接读到）。依据与局限见
+  [运行合同](./core0-runtime-contracts.md)的“HTTP 缓存”。
 
 ### 按组读取（阶段 I，只读）
 
@@ -64,7 +79,10 @@
 | 无 `release_artworks` 关系 | 列表与详情返回显式 `artwork: null` |
 | 封面四列完整且合法 | 列表与详情返回相同 artwork 对象 |
 | 封面列部分为空，ID 超过 255 字节或含路径分隔符/点目录/控制字符，MIME 或尺寸非法 | fail closed 为既有 `503` 安全错误 envelope；不得回显存储值、SQL 或路径 |
-| artwork 资源不存在、记录不安全或文件不可读 | `404 not_found`，不返回主机路径 |
+| artwork 资源不存在、记录不安全或文件不可读 | `404 not_found`，不返回主机路径；带 `If-None-Match` 也不是 304（数据库读取错误同样归为 404，既有合同） |
+| artwork 未认证 | `401`；即使 `If-None-Match` 匹配也不是 304 |
+| artwork 的 `If-None-Match` 命中当前资源 | `304`，同一个 `ETag`，没有响应体，不读文件 |
+| artwork 的 `If-None-Match` 不匹配或无法解析 | `200` 完整响应，带当前 `ETag` |
 
 ## 5. 正确、基准与错误案例
 
@@ -83,6 +101,9 @@
   代表版本逐项对应（含搜索、attention、分页、超出范围的页、present-only）；直接插入多成员组，覆盖代表版本规则
   （年份、无年份排后、创建时间、ID）、`release_count` 与 `attention_count`（不可见成员不计）、搜索命中非代表成员、
   attention 只来自非代表成员、成员数超过 100 的截断；401、400、404、非法参数。
+- 封面缓存（F3，`internal/app/artwork_cache_integration_test.go`）：200 带 `ETag` 与 `private, no-cache`；强标签、弱标签、列表与
+  `*` 都得到 304 且没有响应体；删除文件后带匹配标签仍是 304；标签不匹配返回新字节；未认证 401、未知资源 404（都不是 304）；
+  不安全的存储键返回 404。`catalog/artwork` 的单元测试覆盖 `safeStorageKey` 与 `Read`，`platform/httpserver` 的 `etag_test.go` 覆盖弱比较。
 - 运行 `go test ./internal/catalog/... ./internal/app -run 'Release|Catalog|Artwork|Group|Routes' -count=1`；涉及 SQL 投影时，
   还需通过隔离 PostgreSQL 18 的 `./scripts/test-integration.sh`。
 

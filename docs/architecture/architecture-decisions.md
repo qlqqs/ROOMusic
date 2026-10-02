@@ -192,15 +192,15 @@ until an approved feature requires that boundary.
 ## Classical / Core 1 决策状态
 
 [Core 1 路线](core-1-roadmap.md)记录各阶段的依赖、验收和旧任务承接。2026-09-28 用户（qlqq）
-批准 Core 1 截止到 M4（B0、I、M1a、M1b、M2a、M2b、P、M3、M4，外加 F1、F2），M5、M6 后续。
+批准 Core 1 截止到 M4（B0、I、M1a、M1b、M2a、M2b、P、M3、M4，外加 F1、F2），M5、M6 后续；2026-10-02 起另有 F3（M1a 遗留的后端缺口）。
 下表 ADR 均为**部分批准**：只有各自“决策记录”列明的项获批，其余仍待批准；批准的是选型与范围，
 不是已经安装库、建表、扩权或变更生产媒体路径。
 
 | ADR | 主题 | 涉及阶段 | 已批准的项 |
 | --- | --- | --- | --- |
-| [0001](adr/0001-frontend-foundations.md) | 前端路由、数据请求、样式、字体与依赖治理 | M1a/M1b | Router + Query、CSS Modules、Fontsource 可变字体自托管、JSON 样本防漂移；会话代次与跨标签页失效、精确依赖与浏览器矩阵、测试工具（2026-10-01，M1a 已实施） |
+| [0001](adr/0001-frontend-foundations.md) | 前端路由、数据请求、样式、字体与依赖治理 | M1a/M1b | Router + Query、CSS Modules、Fontsource 可变字体自托管、JSON 样本防漂移；会话代次与跨标签页失效、精确依赖与浏览器矩阵、测试工具（2026-10-01，M1a 已实施）；封面与静态资源缓存头（2026-10-02，F3 已实施） |
 | [0002](adr/0002-metadata-overlays.md) | 扫描观察、人工修正、有效值与稳定身份 | I/M3/M4 | 成员关系匹配 + 同 root 保守重绑定；Core 1 仅人工确认归组 |
-| [0003](adr/0003-governed-operations.md) | 通用变更集、审批、角色、检查点与受限逆操作 | M3/M4/M6 | M3 试点：字段修正 + ReleaseGroup 成员调整 |
+| [0003](adr/0003-governed-operations.md) | 通用变更集、审批、角色、检查点与受限逆操作 | M3/M4/M6 | M3 试点：字段修正 + ReleaseGroup 成员调整；成员写操作幂等延到 M3（F3，2026-10-02） |
 | [0004](adr/0004-media-delivery.md) | 受保护串流、浏览器能力、ffmpeg 与派生缓存 | M2a/M2b | “仅直出”作为 M2a 首发范围 |
 
 当前安全和部署合同继续生效：只读源文件、后端最终授权、Cookie 同源、PostgreSQL 权威；

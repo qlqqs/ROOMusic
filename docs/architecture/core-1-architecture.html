@@ -790,9 +790,9 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
         </div>
         <div class="node s-done" id="r-fix" tabindex="0" style="grid-column:3 / 5;grid-row:6">
           <div class="node-k">随时可插入 · 不依赖其他阶段</div>
-          <div class="node-t">F1 · F2 独立修复</div>
-          <p class="node-b">未知 <code>/api/</code> 路径返回 JSON 404 · 目录操作的幂等指纹补上目录 ID，同键请求串行</p>
-          <div class="node-tags"><span class="tag t-done">F1 · F2 已完成</span></div>
+          <div class="node-t">F1 · F2 · F3 独立修复</div>
+          <p class="node-b">未知 <code>/api/</code> 路径返回 JSON 404 · 目录操作的幂等指纹补上目录 ID，同键请求串行 · 扫描记录、查看者 ID、错误映射与 HTTP 缓存头</p>
+          <div class="node-tags"><span class="tag t-done">F1 · F2 已完成</span><span class="tag t-done">F3 已完成 · 2026-10-02</span></div>
         </div>
         <svg class="edges" aria-hidden="true"></svg>
         <div class="edge-labels" aria-hidden="true"></div>
@@ -800,7 +800,7 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
     </div>
     <div class="road-notes">
       <div class="note s-now"><b>不能调换的顺序</b>M3 依赖阶段 I 的稳定 ID；M6 依赖 M3 / M4 的操作合同。</div>
-      <div class="note s-now"><b>可以并行</b>M1a 已完成（2026-10-01），M1b 接在 M1a 的外壳与阶段 I 的按组接口之后（B0、阶段 I、M1a 已完成）；播放不依赖治理写路径。</div>
+      <div class="note s-now"><b>可以并行</b>M1a 已完成（2026-10-01），M1b 接在 M1a 的外壳、阶段 I 的按组接口与 F3 的封面缓存和分页组件之后（B0、阶段 I、M1a、F3 已完成）；播放不依赖治理写路径。</div>
       <div class="note s-appr"><b>已裁决（2026-09-28）</b>Core 1 截止到 M4；阶段顺序、身份策略、M1 前端基础与归组依据等 D1–D6 见路线修订任务。各 ADR 其余细节在对应阶段规划时批准。</div>
     </div>
   </section>

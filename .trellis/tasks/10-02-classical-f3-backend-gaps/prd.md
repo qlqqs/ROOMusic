@@ -1,6 +1,6 @@
 # F3：M1a 遗留的后端缺口
 
-> 状态：in_progress（2026-10-02 创建；同日用户批准最终规划摘要，启动实施）。父任务：[Classical 重设计 / Core 1](../09-27-classical-core-1/prd.md)。
+> 状态：已实施（2026-10-02 创建，同日用户批准最终规划摘要，实施完成；结果见“实施结果与验收对照”）。父任务：[Classical 重设计 / Core 1](../09-27-classical-core-1/prd.md)。
 > 来源：M1a 记入[运行合同技术债](../../spec/backend/core0-runtime-contracts.md)的后端缺口；用户 2026-10-02 要求规划其中五项：扫描历史列表、
 > `/auth/me` 不返回用户 ID、成员写操作没有幂等、`createUser` 把任何插入失败都当成 409、静态资源没有缓存头。
 > 跨前后端，按复杂任务管理：技术设计见 [design.md](design.md)，执行顺序与验证命令见 [implement.md](implement.md)。
@@ -87,6 +87,69 @@
 - 扫描进度、暂停/续跑、定时与监听扫描（另立增强任务）。
 - 封面缩略图（M1b 的风险项，见 M1b 的 PRD）；专辑列表与详情（M1b）。
 - 浏览器端的缓存验证：Playwright 跑在 `vite preview` 上，不经过 Go 服务；缓存头由 Go 测试验证。
+
+## 实施结果与验收对照（2026-10-02）
+
+提交（均在 `main`，未推送）：`ec92090`（查看者 `id`、成员与初始化的错误映射、密码字节规则）、`cca2b5e`（扫描记录接口与扫描目录页）、
+`9b97c9d`（静态资源、JSON 与封面的缓存头），加文档同步与归档的提交。没有数据库迁移，没有新增依赖，模块依赖规则不变。
+
+| 编号 | 结果 | 证据 |
+| --- | --- | --- |
+| R1 | 达成 | 后端：`TestPostgreSQLScanListIsAdminOnlyAndValidatesPagination`（401/403 与 `page`、`page_size` 的各种非法值）、`TestPostgreSQLScanListOrdersPagesAndMatchesScanDetails`（相同 `started_at` 按 ID 倒序、翻页覆盖全部扫描、超出末页返回空 `items`、条目与 `GET /scans/{id}` 逐项相同）、`TestPostgreSQLScanListReportsDatabaseFailures`（503）；样本 `scans/list`、`scans/list-empty`、`errors/invalid-pagination`。前端：整页测试 `app/library-scans.test.tsx`（加载、空、失败、翻页、`scan_page` 规范化与越界替换、启动与结束后的失效刷新）、`Pagination` 与页码解析的单元测试、decoder 测试；Playwright：扫描记录进入 `a11y.spec.ts`（第一页与末页）、`responsive.spec.ts`（五种宽度无横向溢出）、`keyboard.spec.ts`（键盘翻页并进入详情）与 `library.spec.ts` |
+| R2 | 达成 | `TestPostgreSQLIdentityResponsesCarryUserID`：初始化、登录与 `/auth/me`（管理员与成员）都带 `id`，且与库里的用户、成员列表一致；样本 `auth/*` 已重写；前端 decoder 要求 `id`，`session-controller.test.ts` 与 `app/members.test.tsx` 用“用户名相同、ID 不同”的数据证明判断依据是 ID |
+| R3 | 达成（按裁决不改代码） | 运行合同的“身份与成员接口”与技术债条目、ADR 0003 的决策记录写明“延到 M3” |
+| R4 | 达成 | `TestPostgreSQLSetupAdminMapsOnlyUniqueViolationsToSetupClosed`、`TestPostgreSQLCreateUserMapsOnlyUniqueViolationsToUsernameTaken`（触发器注入的 `P0001` 必须得到 503 且没有部分写入；密码 11/12/72/73 字节；非法 JSON 只写一个信封）、`TestPostgreSQLUserRoutesRejectMalformedAndUnknownIDs`、`TestPostgreSQLListUsersFailsLoudlyOnUnreadableRows`、`TestPostgreSQLUnauthenticatedMessageIsRoleNeutral`；`identity/password_test.go` 证明按字节计且 72 与 bcrypt 的上限一致；前端 `account-rules.test.ts` 与成员页测试；样本 `errors/invalid-id-user`、`errors/not-found-user` |
+| R5 | 达成 | `platform/httpserver` 的 `frontend_test.go`（缓存头、目录不列、缺失资源 404、`/assets/../` 路径清理、HEAD）、`etag_test.go`、`response_test.go`；`cmd/roomusic/main_test.go` 对真实内嵌产物断言 `assets/` 文件名都带哈希段且缓存策略生效；`TestPostgreSQLArtworkCachingUsesETagAndRevalidation`（200/304、强标签、弱标签、列表与 `*`、删除文件后仍 304、未登录 401、未知资源 404、会话撤销后验证得到 401）、`TestPostgreSQLArtworkServesFreshBytesWhenTheTagDiffers`、`TestPostgreSQLArtworkRejectsUnsafeStorageKeys`、`TestPostgreSQLJSONResponsesAreNotCacheable`；真实二进制的 `curl -I` 冒烟见 [research/cache-headers-smoke.md](research/cache-headers-smoke.md) |
+| R6 | 达成 | 运行合同（扫描记录、身份与成员接口、HTTP 缓存、错误矩阵、必需测试、示例、技术债）、Catalog REST 合同（封面缓存与 304）、ADR 0001（决策记录、第 4 节、第 8 节第 6 项）、ADR 0003（D1）、Core 1 路线、架构摘要与架构图、前端规范（状态、组件、目录、质量）、DESIGN、父任务 PRD 与 implement、M1b 的 PRD 已同步；改动文档的相对链接逐个检查，`git diff --check` 通过 |
+
+### 实际运行的验证
+
+收尾时在最终工作树上按 CI 门禁整体运行了一次：F3 改了所有 JSON 响应的头、静态资源处理器、401 文案与内嵌产物，局部子集覆盖不到，
+所以没有只跑相关包。
+
+| 命令 | 结果 |
+| --- | --- |
+| `cd backend && gofmt -l .` | 无输出 |
+| `go vet ./...`、`go build ./...` | 通过 |
+| `go test -race ./... -count=1` | 全部通过（没有 `ROOMUSIC_TEST_DATABASE_URL` 时数据库测试跳过，由下一行覆盖） |
+| `bash -n scripts/*.sh` | 通过 |
+| `./scripts/test-integration.sh`（`roomusic-test` 项目，PostgreSQL 18） | exit 0：`internal/app` 14.5s、`internal/library` 20.2s、`internal/platform/postgres` 3.5s；测试容器与数据卷已清理 |
+| `cd frontend && npm run lint`、`npm run typecheck` | 通过 |
+| `npm run test`（Vitest） | 31 个文件、511 个测试通过 |
+| `npm run build`，随后 `git diff --exit-code -- backend/cmd/roomusic/web` 与未跟踪文件检查 | 通过，内嵌产物与提交一致，无漂移 |
+| `LD_LIBRARY_PATH=/tmp/chromelibs/root/usr/lib/x86_64-linux-gnu npm run test:e2e`（Playwright，Chromium） | 81 个用例通过（含 axe、五种宽度与键盘路径） |
+| 真实二进制 `curl -I` 缓存头冒烟 | 与设计一致，见 `research/cache-headers-smoke.md`（合成数据，临时库与临时目录，结束后清理） |
+
+实施期间每一步另按 `implement.md` 跑过各自的最小验证（第 1 步：Vitest 454 个测试与 Playwright 相关子集；第 2 步：Vitest 511、Playwright 81；
+第 3 步：相关包的 `-race` 测试、集成测试与上面的冒烟），并在改动前先让新测试对旧代码失败（身份映射与双写 `invalid_json`），分页解析的搬迁则先证明
+catalog 的分页测试在改动前后都通过。
+
+### 没有运行或没有覆盖的内容
+
+- **浏览器端的缓存行为**（`private, no-cache` 的重新验证、退出登录后的封面）：Playwright 跑在 `vite preview` 上，不经过 Go 服务；由响应头合同、
+  集成测试与 `curl -I` 冒烟保证。M1b 的真实接口冒烟会带着封面在浏览器里再走一遍。
+- 读屏器人工验证（与 M1a 相同的限制）；两个 Compose 配置校验（没有改动 compose 文件）；`ROOMUSIC_REAL_LIBRARY_SMOKE` 的真实音乐库验收
+  （显式开启才运行，F3 不改扫描与目录行为）。本任务的测试与冒烟只用合成数据，没有读取 `music/`、`.env` 或 `.env.dev`。
+- F3 之前已被浏览器保存的封面按旧的一天新鲜期自然过期，不另做处理。
+
+### 与设计的差异
+
+1. `artwork.Store.Load` 被删除，没有按设计保留为“查记录加读文件”的组合：它唯一的调用方就是封面 handler，保留只会留下没有调用者的代码。
+2. 封面存储键的校验比原来的 `filepath.Base` 比较更严（只接受字母、数字、点、下划线与连字符，非空、不超过 255 字节、不是 `.` 或 `..`）：
+   键会被写进 `ETag` 的引号里，必须保证不含引号与控制字符，同时仍不能逃出数据目录。
+3. 封面查找与读取的错误（含数据库错误）仍映射为 404，沿用既有合同，没有改成 503。
+4. 设计没有预见的缺陷：`!DecodeJSON(...) || 校验失败` 的写法在请求体不是合法 JSON 时会先写 `invalid_json`、再写 `invalid_input`，一个响应里有两个 JSON 文档。
+   `setupAdmin`、`createUser`、`updateUser` 三处拆成“解码”与“校验”两步，并有回归测试。
+5. 查询键拆成 `scanHistory(代次)`（前缀，整体失效）与 `scanHistoryPage(代次, 页)`，设计里是单个带页码的键。
+6. 扫描记录除了“启动扫描成功”与“扫描详情到达终态”之外，还在“活动扫描消失或换成另一个”时失效：用户留在扫描目录页等待扫描结束时，
+   记录里的“运行中”要自己变成终态。
+7. 新增样本 `errors/invalid-pagination`（设计没有列出）。
+
+### 遗留与后续
+
+- 成员写操作的幂等键：延到 M3，随成员管理是否纳入受治理操作一起决定（D1）。
+- 仍在技术债里：成员列表分页、创建管理员与修改角色、允许根目录的查询接口。
+- 封面缩略图仍是 M1b 的风险项；M1b 在本任务归档后启动，沿用这里交付的分页组件、封面 `ETag` 与查看者 `id`。
 
 ## 最终规划决策记录
 

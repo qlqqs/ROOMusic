@@ -28,7 +28,8 @@ M3 人工归组之前每组只有一个版本，页面自然退化，不出现�
   `credits`（Release 级）、`evidence`（安全摘要）。上限：介质 256、曲目 10000、Release 署名 100、单曲署名 100、证据 100
   （`backend/internal/catalog/read.go:18`–`:26`）。曲目 `source` 只是文件名（`read.go:644`），`source_kind` 为 `cue_virtual` 时是 CUE 分轨。
 - `GET /releases/{id}/evidence`：仅管理员；字段值、候选（每字段最多 20）、原因码、分组证据（规则、来源引用最多 100、原因码）与 `truncated`。
-- `GET /artworks/{resource_id}`：登录即可读；资源 ID 是内容哈希加扩展名，F3 之后响应为 `private, no-cache` 加 `ETag`，未变返回 304。
+- `GET /artworks/{resource_id}`：登录即可读；资源 ID 是内容哈希加扩展名，响应为 `private, no-cache` 加 `ETag: "<资源 ID>"`（F3，2026-10-02），
+  带匹配的 `If-None-Match` 返回 304 且不读文件；未登录 401、资源不存在 404，都不会是 304。
   原图大小不受限（扫描时只拒绝超过 16 MB 的图片），没有缩略图接口。
 - 阶段 I 之后每个新 Release 各自一个组；多版本的组目前只能直接写库构造（M3 才有人工归组）。
 
@@ -37,7 +38,9 @@ M3 人工归组之前每组只有一个版本，页面自然退化，不出现�
 - 应用外壳与导航（`app/shell/nav-items.ts`）、代码定义的路由与守卫（`app/router.tsx`，不用 loader）、会话代次与 `["viewer", 代次, …]` 查询键、
   请求层 `apiRequest` 与解码原语（`shared/api`）、`shared/ui` 组件、Classical 变量与字体（`styles/`）。`/library` 已被扫描目录页占用。
 - `features/catalog` 已有 `GET /release-groups` 列表的 decoder 与端点，只用于概览计数（`useLibraryTotals`）。
-- F3 交付的 `shared/ui` 分页组件、封面的 `ETag` 与 304、查看者带用户 ID。
+- F3 交付的：`shared/ui` 的 `Pagination`（链接由调用方经 `renderLink` 生成，组件不依赖路由）与 `shared/lib/pagination.ts` 的
+  `parsePageParam`、`pageCountOf`；页码的 URL 约定（只在 ≥2 时写进 URL、不合法的值回到第 1 页、越界时替换为末页，见前端状态规范）；
+  封面的 `ETag` 与 304；`/auth/me`、登录与初始化管理员的响应带用户 `id`，会话与成员页按 ID 判断“你”。
 - 测试基础设施：`src/test/` 的替身后端与样本读取、`e2e/support/api-mock.ts` 的受控后端、`e2e/checks.spec.ts` 保证有效的检查
   （五种宽度、axe、最小字号、焦点环）；新页面把状态加进 `e2e/a11y.spec.ts` 与 `e2e/responsive.spec.ts` 的清单即可获得这些检查。
 - 接口样本 `backend/internal/app/testdata/api-samples/release-groups/` 只有列表（空、一项、一项带封面）；组详情、发行版本详情与证据没有样本。
