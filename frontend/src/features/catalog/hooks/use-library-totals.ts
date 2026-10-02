@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { useViewerScope, viewerQueryKey } from "../../auth";
+import { useViewerScope } from "../../auth";
 import { fetchReleaseGroupPage } from "../api/endpoints";
+import { catalogKeys } from "../query-keys";
 
 /**
  * 概览用的专辑数与需要关注的专辑数，取列表响应里的 pagination.total（每次只请求一项）。
@@ -9,7 +10,7 @@ import { fetchReleaseGroupPage } from "../api/endpoints";
 export function useLibraryTotals() {
   const { generation } = useViewerScope();
   return useQuery({
-    queryKey: viewerQueryKey(generation, "catalog", "release-group-totals"),
+    queryKey: catalogKeys.totals(generation),
     queryFn: async ({ signal }) => {
       const [all, attention] = await Promise.all([
         fetchReleaseGroupPage({ page: 1, pageSize: 1, attentionRequired: false, signal }),

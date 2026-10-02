@@ -1,8 +1,8 @@
-import { FolderSearch, LayoutDashboard, Users, type LucideIcon } from "lucide-react";
+import { Disc3, FolderSearch, LayoutDashboard, Users, type LucideIcon } from "lucide-react";
 import type { UserRole } from "../../features/auth";
 
 export type NavItem = {
-  to: "/" | "/library" | "/members";
+  to: "/" | "/albums" | "/library" | "/members";
   label: string;
   icon: LucideIcon;
   /** 只有管理员看到；后端仍然独立鉴权，这里只决定显示。 */
@@ -14,6 +14,7 @@ export type NavItem = {
 // 只列真实可用的页面：没有播放、艺人、收藏或 Steward 入口。后续阶段在这里加入对应的页面。
 const navItems: readonly NavItem[] = [
   { to: "/", label: "概览", icon: LayoutDashboard, adminOnly: false, group: null },
+  { to: "/albums", label: "专辑", icon: Disc3, adminOnly: false, group: "资料库" },
   { to: "/library", label: "扫描目录", icon: FolderSearch, adminOnly: true, group: "资料库" },
   { to: "/members", label: "成员", icon: Users, adminOnly: true, group: "资料库" },
 ];

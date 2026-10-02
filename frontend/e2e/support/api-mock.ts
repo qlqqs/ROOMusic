@@ -1,8 +1,10 @@
 import type { BrowserContext } from "@playwright/test";
+import type { ReleaseGroupSummaryDTO } from "../../src/features/catalog/api/decoders";
 import type { DiagnosticsPageDTO, RootDTO, RootOperationDTO, ScanDTO } from "../../src/features/library/api/decoders";
 import type { MemberDTO } from "../../src/features/members/api/decoders";
 import { loadApiSample, sampleBody } from "../../src/test/api-samples";
-import { withValue } from "../../src/test/mutate";
+import { albumGroups, respondToGroupList } from "../../src/test/catalog-data";
+import { gradientPng } from "./png";
 
 // 受控后端：用后端集成测试产出的真实响应样本回答 /api/v1/*，并保持必要的状态（会话、目录、扫描、成员），
 // 让页面能走完整的流程。这里只实现冒烟需要的行为；幂等重放、请求丢失等细节由 Vitest 的页面级测试覆盖。
@@ -34,6 +36,10 @@ export type ApiMock = {
   scans: Map<string, ScanDTO>;
   activeScanId: string | null;
   diagnostics: Map<string, DiagnosticsPageDTO>;
+  /** 专辑列表的全部组，已按接口的顺序排好；接口只做筛选与分页（行为与 Vitest 的替身共用 catalog-data.ts）。 */
+  groups: ReleaseGroupSummaryDTO[];
+  /** 封面接口对这些资源 ID 返回 404（图片加载失败）；其他资源返回一张合成的渐变 PNG。 */
+  brokenArtworks: Set<string>;
   /** 运行中的扫描被读取这么多次之后变为终态（不依赖真实时间）；null 表示永远运行。 */
   scanFinishesAfterReads: number | null;
   /** 新建的扫描结束时的终态。incomplete 会带一条诊断。 */
@@ -68,7 +74,6 @@ function seedRoots(): RootDTO[] {
 
 export async function installApiMock(context: BrowserContext, options: MockOptions = {}): Promise<ApiMock> {
   const { setupRequired = false, signedInAs = null, failSetupStatusTimes = 0 } = options;
-  const groups = sampleBody("release-groups/list-one");
   const mock: ApiMock = {
     setupRequired,
     session: signedInAs,
@@ -85,6 +90,9 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
     scans: new Map(),
     activeScanId: null,
     diagnostics: new Map(),
+    // 默认 12 个专辑：三分之二有封面，每第 4 个需要关注，第 5 个有两个版本。
+    groups: albumGroups(12, (index) => ({ artwork: index % 3 !== 0, attention_count: index % 4 === 0 ? 1 : 0, release_count: index === 5 ? 2 : 1 })),
+    brokenArtworks: new Set(),
     scanFinishesAfterReads: 2,
     scanOutcome: "succeeded",
     forbid: new Set(),
@@ -196,7 +204,7 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
         mock.session = null;
         return sample("auth/logout");
       case "GET /api/v1/release-groups":
-        return guarded(method, path, false, () => json(withValue(groups, ["pagination", "total"], 12)));
+        return guarded(method, path, false, () => respondToGroupList(mock.groups, search));
       case "GET /api/v1/library-roots":
         return guarded(method, path, true, () => json({ items: mock.roots }));
       case "GET /api/v1/library-root-operations":
@@ -336,6 +344,19 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
       body = undefined;
     }
     mock.calls.push({ method: request.method(), path: url.pathname, body, idempotencyKey: request.headers()["idempotency-key"] ?? null });
+    // 封面是图片，不是 JSON：未登录 401，被标记的资源 404，其余返回合成的渐变图。
+    const artwork = /^\/api\/v1\/artworks\/([^/]+)$/.exec(url.pathname);
+    if (artwork !== null && request.method() === "GET") {
+      const resourceId = decodeURIComponent(artwork[1] ?? "");
+      if (viewer() === null || mock.brokenArtworks.has(resourceId)) {
+        const failed = viewer() === null ? sample("errors/unauthorized") : notFound("封面不存在");
+        if (failed !== "abort") await route.fulfill({ status: failed.status, contentType: "application/json", body: JSON.stringify(failed.body) });
+        return;
+      }
+      const seed = [...resourceId].reduce((sum, character) => sum + character.charCodeAt(0), 0);
+      await route.fulfill({ status: 200, contentType: "image/png", headers: { "Cache-Control": "private, no-cache" }, body: gradientPng(96, seed) });
+      return;
+    }
     const handled = handle(request.method(), url.pathname, request.headers(), body, url.searchParams);
     if (handled === "abort") {
       await route.abort("failed");

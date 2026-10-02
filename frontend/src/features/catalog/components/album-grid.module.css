@@ -1,0 +1,32 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--space-6) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.placeholder {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+}
+
+.placeholderCover {
+  display: block;
+  aspect-ratio: 1;
+  border: 1px solid var(--color-divider);
+  background: var(--color-neutral-200);
+}
+
+.placeholderLine {
+  display: block;
+  height: 14px;
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-200);
+}
+
+.placeholderLine:last-child {
+  width: 60%;
+}

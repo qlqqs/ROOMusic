@@ -1,4 +1,5 @@
 import { sampleBody } from "../src/test/api-samples";
+import { albumGroups } from "../src/test/catalog-data";
 import type { DiagnosticsPageDTO } from "../src/features/library/api/decoders";
 import type { ApiMock, MockOptions } from "./support/api-mock";
 import { expectNoHorizontalOverflow, widths } from "./support/checks";
@@ -16,6 +17,25 @@ const cases: Case[] = [
   { name: "概览（管理员）", options: { signedInAs: "curator" }, path: () => "/", title: "概览" },
   { name: "概览（成员）", options: { signedInAs: "listener" }, path: () => "/", title: "概览" },
   { name: "扫描目录", options: { signedInAs: "curator" }, path: () => "/library", title: "扫描目录" },
+  { name: "专辑列表", options: { signedInAs: "curator" }, path: () => "/albums", title: "专辑" },
+  {
+    name: "专辑列表（多页，需要关注与多版本）",
+    options: { signedInAs: "listener" },
+    prepare: (mock) => {
+      mock.groups = albumGroups(100, (index) => ({ artwork: index % 2 === 0, attention_count: index % 7 === 0 ? 1 : 0, release_count: index % 5 === 0 ? 3 : 1 }));
+    },
+    path: () => "/albums?page=2",
+    title: "专辑",
+  },
+  {
+    name: "专辑列表（空库）",
+    options: { signedInAs: "curator" },
+    prepare: (mock) => {
+      mock.groups = [];
+    },
+    path: () => "/albums",
+    title: "专辑",
+  },
   {
     name: "扫描目录（扫描记录有数据，多页）",
     options: { signedInAs: "curator" },

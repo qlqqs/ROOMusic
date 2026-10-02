@@ -1,0 +1,13 @@
+.count {
+  color: var(--text-secondary);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.results {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.results[aria-busy="true"] {
+  opacity: 0.6;
+}

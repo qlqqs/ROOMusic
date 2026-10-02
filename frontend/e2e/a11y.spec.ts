@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { sampleBody } from "../src/test/api-samples";
+import { albumGroups } from "../src/test/catalog-data";
 import type { DiagnosticsPageDTO } from "../src/features/library/api/decoders";
 import type { ApiMock, MockOptions } from "./support/api-mock";
 import { expectMinimumFontSize, expectNoSeriousViolations } from "./support/checks";
@@ -68,6 +69,69 @@ const states: State[] = [
       await page.goto("/");
       await expect(heading(page, "概览")).toBeVisible();
       await expect(page.getByText("没有正在运行的扫描。")).toBeVisible();
+    },
+  },
+  {
+    name: "专辑列表（有封面、需要关注与多版本）",
+    options: { signedInAs: "listener" },
+    reach: async (page, mock) => {
+      mock.brokenArtworks.add("cover-002.png");
+      await page.goto("/albums");
+      await expect(page.getByText("共 12 张专辑")).toBeVisible();
+      await expect(page.getByText("封面无法加载")).toBeVisible();
+    },
+  },
+  {
+    name: "专辑列表（多页，第二页）",
+    options: { signedInAs: "curator" },
+    reach: async (page, mock) => {
+      mock.groups = albumGroups(100, (index) => ({ artwork: index % 2 === 0, attention_count: index % 7 === 0 ? 1 : 0 }));
+      await page.goto("/albums?page=2");
+      await expect(page.getByRole("navigation", { name: "专辑分页" }).getByText("第 2 / 3 页")).toBeVisible();
+    },
+  },
+  {
+    name: "专辑列表（搜索结果）",
+    options: { signedInAs: "curator" },
+    reach: async (page) => {
+      await page.goto("/albums?q=Album%200&attention=required");
+      await expect(page.getByRole("region", { name: "“Album 0”中需要关注的专辑" })).toBeVisible();
+    },
+  },
+  {
+    name: "专辑列表（没有符合条件的专辑）",
+    options: { signedInAs: "curator" },
+    reach: async (page) => {
+      await page.goto("/albums?q=nothing");
+      await expect(page.getByText(/没有符合条件的专辑。/)).toBeVisible();
+    },
+  },
+  {
+    name: "专辑列表（搜索词过长的字段错误）",
+    options: { signedInAs: "curator" },
+    reach: async (page) => {
+      await page.goto("/albums");
+      await page.getByRole("textbox", { name: "搜索专辑" }).fill("长".repeat(70));
+      await page.getByRole("button", { name: "搜索" }).click();
+      await expect(page.getByText(/搜索词最多 200 个字节/)).toBeVisible();
+    },
+  },
+  {
+    name: "专辑列表（空库，管理员）",
+    options: { signedInAs: "curator" },
+    reach: async (page, mock) => {
+      mock.groups = [];
+      await page.goto("/albums");
+      await expect(page.getByText(/资料库里还没有专辑。添加音乐目录/)).toBeVisible();
+    },
+  },
+  {
+    name: "专辑列表（空库，成员）",
+    options: { signedInAs: "listener" },
+    reach: async (page, mock) => {
+      mock.groups = [];
+      await page.goto("/albums");
+      await expect(page.getByText(/请等待管理员添加音乐目录/)).toBeVisible();
     },
   },
   {

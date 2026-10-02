@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
 import { formatCount } from "../../../shared/lib/number";
 import { pageCountOf } from "../../../shared/lib/pagination";
+import { useClampedPage } from "../../../shared/lib/use-clamped-page";
 import { formatDateTime, UNKNOWN_TIME } from "../../../shared/lib/time";
 import { DataTable, Pagination, Panel, QueryContent, Skeleton, VisuallyHidden, type Column } from "../../../shared/ui";
 import type { ScanDTO } from "../api/decoders";
@@ -42,15 +42,14 @@ export function ScanHistorySection({ page }: { page: number }) {
   const history = useScanHistory(page);
   const navigate = useNavigate();
 
-  // 占位数据（翻页时保留的上一页）不能用来判断当前页是否越界。
-  const pagination = history.isPlaceholderData ? undefined : history.data?.pagination;
-  const pageCount = pagination === undefined ? 0 : pageCountOf(pagination.total, pagination.page_size);
-  const lastPage = Math.max(1, pageCount);
-  const outOfRange = pagination !== undefined && page > lastPage;
-  useEffect(() => {
-    if (!outOfRange) return;
-    void navigate({ to: "/library", search: (previous) => ({ ...previous, scan_page: lastPage > 1 ? lastPage : undefined }), replace: true });
-  }, [outOfRange, lastPage, navigate]);
+  const pagination = history.data?.pagination;
+  const outOfRange = useClampedPage({
+    page,
+    pageCount: pagination === undefined ? 0 : pageCountOf(pagination.total, pagination.page_size),
+    ready: pagination !== undefined && !history.isPlaceholderData,
+    onOutOfRange: (lastPage) =>
+      void navigate({ to: "/library", search: (previous) => ({ ...previous, scan_page: lastPage > 1 ? lastPage : undefined }), replace: true }),
+  });
 
   return (
     <Panel title="扫描记录">

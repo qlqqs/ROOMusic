@@ -1,9 +1,10 @@
-import { Panel, QueryContent, Skeleton, StatList } from "../../../shared/ui";
+import { Link } from "@tanstack/react-router";
+import { Panel, QueryContent, Skeleton, StatList, VisuallyHidden } from "../../../shared/ui";
 import { formatCount } from "../../../shared/lib/number";
 import { useLibraryTotals } from "../hooks/use-library-totals";
 import styles from "./library-summary.module.css";
 
-/** 概览的资料库区块：专辑数与需要关注的专辑数。专辑页尚未交付，数字不做成链接。 */
+/** 概览的资料库区块：专辑数与需要关注的专辑数，两个数字分别链接到全部专辑与只看需要关注的专辑。 */
 export function LibrarySummary({ isAdmin }: { isAdmin: boolean }) {
   const totals = useLibraryTotals();
   return (
@@ -20,8 +21,24 @@ export function LibrarySummary({ isAdmin }: { isAdmin: boolean }) {
             <>
               <StatList
                 items={[
-                  { label: "专辑", value: formatCount(data.total) },
-                  { label: "需要关注", value: formatCount(data.attention) },
+                  {
+                    label: "专辑",
+                    value: (
+                      <Link to="/albums" className={styles.statLink}>
+                        {formatCount(data.total)}
+                        <VisuallyHidden>，查看全部专辑</VisuallyHidden>
+                      </Link>
+                    ),
+                  },
+                  {
+                    label: "需要关注",
+                    value: (
+                      <Link to="/albums" search={{ attention: "required" }} className={styles.statLink}>
+                        {formatCount(data.attention)}
+                        <VisuallyHidden>，查看需要关注的专辑</VisuallyHidden>
+                      </Link>
+                    ),
+                  },
                 ]}
               />
               <p className={styles.note}>“需要关注”表示有待核对的元数据，不代表一定有错。</p>

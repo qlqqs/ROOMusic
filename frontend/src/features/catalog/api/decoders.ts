@@ -193,6 +193,7 @@ export const decodeReleaseGroupDetail = d.defineDecoder(releaseGroupDetailDecode
 export const decodeReleaseDetail = d.defineDecoder(releaseDetailDecoder);
 export const decodeReleaseEvidence = d.defineDecoder(releaseEvidenceDecoder);
 
+export type ArtworkDTO = d.Infer<typeof artworkDecoder>;
 export type ReleaseSummaryDTO = d.Infer<typeof releaseSummaryDecoder>;
 export type ReleaseGroupSummaryDTO = d.Infer<typeof releaseGroupSummaryDecoder>;
 export type ReleaseGroupPageDTO = d.Infer<typeof releaseGroupPageDecoder>;

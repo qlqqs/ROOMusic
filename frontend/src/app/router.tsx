@@ -1,9 +1,12 @@
 import { createRootRouteWithContext, createRoute, createRouter, Outlet, redirect, type RouterHistory } from "@tanstack/react-router";
 import { sanitizeRedirect, type SessionController } from "../features/auth";
+import { parseAlbumSearch, type AlbumSearch } from "../features/catalog";
 import { ScanDetail } from "../features/library";
 import { parsePageParam } from "../shared/lib/pagination";
 import { AuthenticatedLayout } from "./shell/authenticated-layout";
 import { AdminGate } from "./routes/admin-gate";
+import { AlbumDetailPage } from "./routes/album-detail-page";
+import { AlbumsPage } from "./routes/albums-page";
 import { LibraryPage } from "./routes/library-page";
 import { LoginPage } from "./routes/login-page";
 import { MembersPage } from "./routes/members-page";
@@ -62,6 +65,25 @@ const authenticatedRoute = createRoute({
 
 const overviewRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/", component: OverviewPage });
 
+// 专辑：所有登录用户都能浏览。q、attention、page 都在地址里；不合法的值显式写成 undefined（见上面的登录路由）。
+function AlbumsRoute() {
+  return <AlbumsPage search={albumsRoute.useSearch()} />;
+}
+
+const albumsRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/albums",
+  validateSearch: (search: Record<string, unknown>): AlbumSearch => parseAlbumSearch(search),
+  component: AlbumsRoute,
+});
+
+// 组 ID 不是 UUID 等情况由详情页自己说明；这里只定义形状。
+const albumDetailRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/albums/$groupId",
+  component: AlbumDetailPage,
+});
+
 // 管理页由 AdminGate 把关：非管理员显示“需要管理员权限”，不渲染页面内容，也就不会调用管理接口。
 function LibraryRoute() {
   const { scan_page: scanPage } = libraryRoute.useSearch();
@@ -111,7 +133,7 @@ const scanDetailRoute = createRoute({
 // 已登录用户访问不存在的路径时仍显示在外壳里；未登录用户先被守卫送去登录。
 const notFoundRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "$", component: NotFoundPage });
 
-const routeTree = rootRoute.addChildren([setupRoute, loginRoute, authenticatedRoute.addChildren([overviewRoute, libraryRoute, scanDetailRoute, membersRoute, notFoundRoute])]);
+const routeTree = rootRoute.addChildren([setupRoute, loginRoute, authenticatedRoute.addChildren([overviewRoute, albumsRoute, albumDetailRoute, libraryRoute, scanDetailRoute, membersRoute, notFoundRoute])]);
 
 export function createAppRouter(context: RouterContext, history?: RouterHistory) {
   return createRouter({ routeTree, context, ...(history === undefined ? {} : { history }) });
@@ -122,5 +144,12 @@ export type AppRouter = ReturnType<typeof createAppRouter>;
 declare module "@tanstack/react-router" {
   interface Register {
     router: AppRouter;
+  }
+}
+
+declare module "@tanstack/history" {
+  interface HistoryState {
+    /** 从专辑列表进入详情时带上的筛选与页码，“返回专辑列表”据此恢复；直接打开详情时没有。 */
+    albumList?: AlbumSearch;
   }
 }
