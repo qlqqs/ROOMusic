@@ -1,10 +1,10 @@
 # F3：M1a 遗留的后端缺口
 
-> 状态：已实施（2026-10-02 创建，同日用户批准最终规划摘要，实施完成；结果见“实施结果与验收对照”）。父任务：[Classical 重设计 / Core 1](../09-27-classical-core-1/prd.md)。
-> 来源：M1a 记入[运行合同技术债](../../spec/backend/core0-runtime-contracts.md)的后端缺口；用户 2026-10-02 要求规划其中五项：扫描历史列表、
+> 状态：已实施（2026-10-02 创建，同日用户批准最终规划摘要，实施完成；结果见“实施结果与验收对照”）。父任务：[Classical 重设计 / Core 1](../../../09-27-classical-core-1/prd.md)。
+> 来源：M1a 记入[运行合同技术债](../../../../spec/backend/core0-runtime-contracts.md)的后端缺口；用户 2026-10-02 要求规划其中五项：扫描历史列表、
 > `/auth/me` 不返回用户 ID、成员写操作没有幂等、`createUser` 把任何插入失败都当成 409、静态资源没有缓存头。
 > 跨前后端，按复杂任务管理：技术设计见 [design.md](design.md)，执行顺序与验证命令见 [implement.md](implement.md)。
-> 先于 [M1b](../09-28-classical-m1b-album-browsing/prd.md) 实施：M1b 显示封面前需要的封面缓存头结论（ADR 0001 第 6 项）与分页组件在本任务落定。
+> 先于 [M1b](../../../09-28-classical-m1b-album-browsing/prd.md) 实施：M1b 显示封面前需要的封面缓存头结论（ADR 0001 第 6 项）与分页组件在本任务落定。
 
 ## 目标与用户价值
 
@@ -33,7 +33,7 @@
 - 401 的 message 一律是“需要管理员登录”（`guard.go:85`），普通用户也收到这句；前端按错误码选文案规避。
 - 成员写操作（创建、停用/启用、撤销会话）没有 `Idempotency-Key`：停用/启用设定绝对状态，重复执行结果相同；撤销会话重复执行只是再撤销一次；
   创建重复执行得到 409，不会建出第二个账号。M1a 前端对结果不明的成员操作不重试，刷新列表让管理员核对
-  （`frontend/src/features/members/hooks/use-member-commands.ts:24`、`:57`）。[ADR 0003](../../../docs/architecture/adr/0003-governed-operations.md)
+  （`frontend/src/features/members/hooks/use-member-commands.ts:24`、`:57`）。[ADR 0003](../../../../../docs/architecture/adr/0003-governed-operations.md)
   把成员管理是否纳入受治理操作留给 M3（`:249`、`:306`）。
 
 **扫描**
@@ -54,7 +54,7 @@
 - API 的 JSON 响应不设 `Cache-Control`（`backend/internal/platform/httpserver/response.go:36`–`:40`）；前端请求一律带 `cache: "no-store"`。
 - 封面响应是 `Cache-Control: private, max-age=86400`（`backend/internal/catalog/httpapi/handlers.go:230`）。资源 ID 是内容 SHA-256 加扩展名
   （`backend/internal/catalog/artwork/artwork.go:76`–`:77`），同一 ID 的字节永不改变。所有登录用户都能读所有封面；现状的风险是退出登录后，
-  封面一天内仍可从同一浏览器的 HTTP 缓存直接读到。[ADR 0001](../../../docs/architecture/adr/0001-frontend-foundations.md) 建议受保护响应评估
+  封面一天内仍可从同一浏览器的 HTTP 缓存直接读到。[ADR 0001](../../../../../docs/architecture/adr/0001-frontend-foundations.md) 建议受保护响应评估
   `private, no-store` 或每次重新验证（`:138`–`:142`），后端缓存头调整须独立立项（第 8 节第 6 项，`:205`–`:206`）。
 
 ## 已裁决

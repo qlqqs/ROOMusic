@@ -2,7 +2,7 @@
   "id": "classical-f3-backend-gaps",
   "name": "classical-f3-backend-gaps",
   "title": "F3：M1a 遗留的后端缺口",
-  "description": "修补 M1a 发现的后端缺口：扫描历史列表、/auth/me 返回用户 ID、成员写操作幂等、createUser 错误映射、静态资源缓存头（含封面缓存头评估）；范围在规划中确认。",
+  "description": "修补 M1a 发现的后端缺口：管理员的扫描记录列表、身份响应带用户 ID、成员与初始化接口的错误映射和密码字节规则、静态资源/JSON/封面的缓存头；成员写操作幂等按裁决延到 M3。",
   "status": "completed",
   "dev_type": null,
   "scope": null,

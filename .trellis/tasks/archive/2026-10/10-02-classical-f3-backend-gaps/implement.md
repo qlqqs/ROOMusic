@@ -71,7 +71,7 @@
 ### 收尾
 
 - [x] PRD 写“实施结果与验收对照”，列实际运行的命令与结果；未运行的检查写明原因。
-- [ ] `task.py archive classical-f3-backend-gaps --skip-branch-validation`（直接在 `main` 上提交，没有 PR），随后单独提交归档后的链接修正。
+- [x] `task.py archive classical-f3-backend-gaps --skip-branch-validation`（直接在 `main` 上提交，没有 PR），随后单独提交归档后的链接修正。
 
 ## 风险与回退点
 
