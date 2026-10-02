@@ -139,6 +139,22 @@ export function installLibraryApi(api: FakeApi, overrides: Partial<FakeLibrary> 
 
   const activeScan = () => (library.activeScanId === null ? null : (library.scans.get(library.activeScanId) ?? null));
   api.on("GET", "/api/v1/scans/active", () => jsonResponse(200, { scan: activeScan() }));
+  // 扫描记录：开始时间倒序，同一时间按 ID 倒序；page 默认 1、page_size 默认 20 且最大 100，非法值 400 invalid_pagination。
+  api.on("GET", "/api/v1/scans", (request) => {
+    const query = new URL(request.path, "http://localhost").searchParams;
+    const page = Number(query.get("page") ?? "1");
+    const pageSize = Number(query.get("page_size") ?? "20");
+    if (!Number.isInteger(page) || page < 1 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) {
+      return sampleResponse("errors/invalid-pagination");
+    }
+    const ordered = [...library.scans.values()].sort((left, right) =>
+      left.started_at === right.started_at ? (left.id < right.id ? 1 : -1) : left.started_at < right.started_at ? 1 : -1,
+    );
+    return jsonResponse(200, {
+      items: ordered.slice((page - 1) * pageSize, page * pageSize),
+      pagination: { page, page_size: pageSize, total: ordered.length },
+    });
+  });
   api.on("POST", "/api/v1/scans", () => {
     if (library.startScanFailure !== null) return library.startScanFailure.clone();
     const existing = activeScan();

@@ -85,6 +85,19 @@ const scanDecoder = d.object({
 
 export const decodeScan = d.defineDecoder(scanDecoder);
 export type ScanDTO = d.Infer<typeof scanDecoder>;
+
+// 扫描记录一页（仅管理员）：条目与 GET /scans/{id} 相同；每页最多 100 条，total 是全部扫描数。
+const scanPageDecoder = d.object({
+  items: d.array(scanDecoder, { max: 100 }),
+  pagination: d.object({
+    page: d.integer({ min: 1 }),
+    page_size: d.integer({ min: 1, max: 100 }),
+    total: d.integer({ min: 0 }),
+  }),
+});
+
+export const decodeScanPage = d.defineDecoder(scanPageDecoder);
+export type ScanPageDTO = d.Infer<typeof scanPageDecoder>;
 export type DiagnosticsSummaryDTO = d.Infer<typeof diagnosticsSummaryDecoder>;
 
 export const decodeActiveScan = d.defineDecoder(d.object({ scan: d.nullable(scanDecoder) }));

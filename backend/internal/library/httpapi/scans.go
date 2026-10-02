@@ -35,6 +35,33 @@ func (handlers *Handlers) startScan(responseWriter http.ResponseWriter, request 
 	httpserver.WriteJSON(responseWriter, status, result.Scan)
 }
 
+// 扫描记录列表的页大小：默认 20、上限 100。
+const (
+	defaultScanPageSize = 20
+	maxScanPageSize     = 100
+)
+
+// listScans 返回扫描记录（仅管理员）：条目与 GET /scans/{id} 相同，按开始时间倒序分页。
+func (handlers *Handlers) listScans(responseWriter http.ResponseWriter, request *http.Request) {
+	if _, ok := handlers.guard.RequireAdmin(responseWriter, request); !ok {
+		return
+	}
+	page, pageSize, err := httpserver.ParsePagination(request, defaultScanPageSize, maxScanPageSize)
+	if err != nil {
+		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_pagination", "分页参数无效")
+		return
+	}
+	result, err := handlers.service.ListScans(request.Context(), page, pageSize)
+	if err != nil {
+		httpserver.WriteError(responseWriter, request, http.StatusServiceUnavailable, "database_unavailable", "无法读取扫描记录")
+		return
+	}
+	httpserver.WriteJSON(responseWriter, http.StatusOK, map[string]any{
+		"items":      result.Items,
+		"pagination": map[string]any{"page": page, "page_size": pageSize, "total": result.Total},
+	})
+}
+
 func (handlers *Handlers) scanStatus(responseWriter http.ResponseWriter, request *http.Request) {
 	if _, err := handlers.guard.Authenticate(request); err != nil {
 		handlers.guard.WriteUnauthenticated(responseWriter, request)

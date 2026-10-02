@@ -34,11 +34,40 @@ func TestReleaseAttentionFilterAllowlist(t *testing.T) {
 	}
 }
 
-func TestReleasePaginationRejectsOffsetOverflow(t *testing.T) {
+// 分页参数的解析由 platform/httpserver 共用；这里确认目录列表仍是默认 50、上限 100，非法值写出 400 invalid_pagination。
+func TestReleaseListPaginationContract(t *testing.T) {
 	maximumInt := int(^uint(0) >> 1)
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/releases?page="+strconv.Itoa(maximumInt)+"&page_size=100", nil)
-	if _, _, err := parsePagination(request); err == nil {
-		t.Fatal("pagination offset overflow was accepted")
+	for _, testCase := range []struct {
+		name     string
+		query    string
+		page     int
+		pageSize int
+		invalid  bool
+	}{
+		{name: "defaults", query: "", page: 1, pageSize: 50},
+		{name: "explicit", query: "?page=3&page_size=100", page: 3, pageSize: 100},
+		{name: "page zero", query: "?page=0", invalid: true},
+		{name: "non-numeric page", query: "?page=x", invalid: true},
+		{name: "page size zero", query: "?page_size=0", invalid: true},
+		{name: "page size above 100", query: "?page_size=101", invalid: true},
+		{name: "offset overflow", query: "?page=" + strconv.Itoa(maximumInt) + "&page_size=100", invalid: true},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			params, ok := parseReleaseListParams(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/releases"+testCase.query, nil))
+			if ok == testCase.invalid {
+				t.Fatalf("parseReleaseListParams ok = %v, want %v (HTTP %d: %s)", ok, !testCase.invalid, recorder.Code, recorder.Body.String())
+			}
+			if testCase.invalid {
+				if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), `"invalid_pagination"`) {
+					t.Fatalf("expected 400 invalid_pagination, got HTTP %d: %s", recorder.Code, recorder.Body.String())
+				}
+				return
+			}
+			if params.Page != testCase.page || params.PageSize != testCase.pageSize {
+				t.Fatalf("params = (%d, %d), want (%d, %d)", params.Page, params.PageSize, testCase.page, testCase.pageSize)
+			}
+		})
 	}
 }
 

@@ -99,6 +99,26 @@ test.describe("键盘", () => {
     await expect(dialog).toBeHidden();
   });
 
+  test("扫描记录：键盘翻页并进入详情，焦点环可见", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "curator" });
+    mock.seedHistory(25);
+    await page.goto("/library");
+    const nav = page.getByRole("navigation", { name: "扫描记录分页" });
+    await expect(nav.getByText("第 1 / 2 页")).toBeVisible();
+
+    await nav.getByRole("link", { name: "下一页" }).focus();
+    await expectVisibleFocusRing(page, "下一页链接");
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/library\?scan_page=2$/);
+    await expect(nav.getByText("第 2 / 2 页")).toBeVisible();
+
+    const detail = page.getByRole("table", { name: "扫描记录" }).getByRole("link", { name: /^查看详情/ }).first();
+    await detail.focus();
+    await expectVisibleFocusRing(page, "查看详情链接");
+    await page.keyboard.press("Enter");
+    await expect(heading(page, "扫描详情")).toBeVisible();
+  });
+
   test("窄屏菜单：Enter 打开，焦点进入并被约束，Esc 关闭并把焦点还给“菜单”按钮；选择链接后菜单关闭", async ({ page, backend }) => {
     await backend.start({ signedInAs: "curator" });
     await page.setViewportSize({ width: 375, height: 800 });

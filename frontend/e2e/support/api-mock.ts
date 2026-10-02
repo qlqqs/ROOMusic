@@ -46,8 +46,12 @@ export type ApiMock = {
   expireSession: () => void;
   /** 预置一个扫描；缺省是运行中，withActive 为 true 时同时作为活动扫描。 */
   seedScan: (overrides?: Partial<ScanDTO>, withActive?: boolean) => ScanDTO;
+  /** 预置 count 个已结束的扫描：状态轮流为成功、失败、不完整、已取消（失败与不完整带诊断），开始时间依次晚一分钟，最后一个最新。 */
+  seedHistory: (count: number) => ScanDTO[];
   callsTo: (method: string, path: string | RegExp) => RecordedCall[];
 };
+
+const historyStatuses = ["succeeded", "failed", "incomplete", "canceled"] as const;
 
 const uuidOf = (prefix: string, index: number) => `00000000-0000-4000-8000-${prefix}${String(index).padStart(11, "0")}`;
 const sample = (name: string): Handled => {
@@ -104,6 +108,18 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
       if (withActive) mock.activeScanId = scan.id;
       return scan;
     },
+    seedHistory: (count) =>
+      Array.from({ length: count }, (_, index) => {
+        const status = historyStatuses[index % historyStatuses.length] ?? "succeeded";
+        const startedAt = Date.UTC(2026, 0, 1, 0, index);
+        return mock.seedScan({
+          status,
+          started_at: new Date(startedAt).toISOString(),
+          finished_at: new Date(startedAt + 90_000).toISOString(),
+          cancel_requested_at: status === "canceled" ? new Date(startedAt + 30_000).toISOString() : null,
+          diagnostics: status === "failed" || status === "incomplete" ? (sampleBody("scans/get-failed") as ScanDTO).diagnostics : { total: 0, counts: [] },
+        });
+      }),
     callsTo: (method, path) =>
       mock.calls.filter((call) => call.method === method && (typeof path === "string" ? call.path === path : path.test(call.path))),
   };
@@ -146,7 +162,7 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
     mock.operations.unshift({ id: uuidOf("b", counter++), created_at: now(), ...item });
   };
 
-  const handle = (method: string, path: string, headers: Record<string, string>, body: unknown): Handled => {
+  const handle = (method: string, path: string, headers: Record<string, string>, body: unknown, search: URLSearchParams): Handled => {
     const key = `${method} ${path}`;
     switch (key) {
       case "GET /api/v1/setup/status":
@@ -201,6 +217,22 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
         });
       case "GET /api/v1/scans/active":
         return guarded(method, path, false, () => json({ scan: mock.activeScanId === null ? null : (mock.scans.get(mock.activeScanId) ?? null) }));
+      case "GET /api/v1/scans":
+        return guarded(method, path, true, () => {
+          const page = Number(search.get("page") ?? "1");
+          const pageSize = Number(search.get("page_size") ?? "20");
+          if (!Number.isInteger(page) || page < 1 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) {
+            return sample("errors/invalid-pagination");
+          }
+          // 开始时间倒序，同一时间按 ID 倒序，与后端一致。
+          const ordered = [...mock.scans.values()].sort((left, right) =>
+            left.started_at === right.started_at ? (left.id < right.id ? 1 : -1) : left.started_at < right.started_at ? 1 : -1,
+          );
+          return json({
+            items: ordered.slice((page - 1) * pageSize, page * pageSize),
+            pagination: { page, page_size: pageSize, total: ordered.length },
+          });
+        });
       case "POST /api/v1/scans":
         return guarded(method, path, true, () => {
           const existing = mock.activeScanId === null ? undefined : mock.scans.get(mock.activeScanId);
@@ -304,7 +336,7 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
       body = undefined;
     }
     mock.calls.push({ method: request.method(), path: url.pathname, body, idempotencyKey: request.headers()["idempotency-key"] ?? null });
-    const handled = handle(request.method(), url.pathname, request.headers(), body);
+    const handled = handle(request.method(), url.pathname, request.headers(), body, url.searchParams);
     if (handled === "abort") {
       await route.abort("failed");
       return;

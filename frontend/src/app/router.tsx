@@ -1,6 +1,7 @@
 import { createRootRouteWithContext, createRoute, createRouter, Outlet, redirect, type RouterHistory } from "@tanstack/react-router";
 import { sanitizeRedirect, type SessionController } from "../features/auth";
 import { ScanDetail } from "../features/library";
+import { parsePageParam } from "../shared/lib/pagination";
 import { AuthenticatedLayout } from "./shell/authenticated-layout";
 import { AdminGate } from "./routes/admin-gate";
 import { LibraryPage } from "./routes/library-page";
@@ -63,14 +64,23 @@ const overviewRoute = createRoute({ getParentRoute: () => authenticatedRoute, pa
 
 // 管理页由 AdminGate 把关：非管理员显示“需要管理员权限”，不渲染页面内容，也就不会调用管理接口。
 function LibraryRoute() {
+  const { scan_page: scanPage } = libraryRoute.useSearch();
   return (
     <AdminGate>
-      <LibraryPage />
+      <LibraryPage scanPage={scanPage ?? 1} />
     </AdminGate>
   );
 }
 
-const libraryRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/library", component: LibraryRoute });
+// scan_page 是扫描记录的页码，只在 2 及以上时出现；不合法的值显式写成 undefined（路由把校验结果合并到原始查询串上）。
+const libraryRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/library",
+  validateSearch: (search: Record<string, unknown>): { scan_page?: number | undefined } => ({
+    scan_page: parsePageParam(search["scan_page"]),
+  }),
+  component: LibraryRoute,
+});
 
 function MembersRoute() {
   return (

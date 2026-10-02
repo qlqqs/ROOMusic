@@ -9,6 +9,7 @@ import {
   decodeRootList,
   decodeRootOperationList,
   decodeScan,
+  decodeScanPage,
 } from "../features/library/api/decoders";
 import {
   decodeCreatedMember,
@@ -46,6 +47,8 @@ const successContracts: Record<string, Contract> = {
   "library-root-operations/list": { status: 200, decode: decodeRootOperationList },
   "scans/active-none": { status: 200, decode: decodeActiveScan },
   "scans/active-running": { status: 200, decode: decodeActiveScan },
+  "scans/list": { status: 200, decode: decodeScanPage },
+  "scans/list-empty": { status: 200, decode: decodeScanPage },
   "scans/start-created": { status: 202, decode: decodeScan },
   "scans/start-existing": { status: 200, decode: decodeScan },
   "scans/get-running": { status: 200, decode: decodeScan },
@@ -82,6 +85,7 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "errors/not-found-api": { status: 404, code: "not_found" },
   "errors/invalid-id": { status: 400, code: "invalid_id" },
   "errors/invalid-id-user": { status: 400, code: "invalid_id" },
+  "errors/invalid-pagination": { status: 400, code: "invalid_pagination" },
   "errors/not-found-user": { status: 404, code: "not_found" },
   "errors/method-not-allowed": { status: 405, code: "method_not_allowed" },
   "errors/database-unavailable": { status: 503, code: "database_unavailable" },

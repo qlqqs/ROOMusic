@@ -3,5 +3,6 @@ export { RootOperationsSection } from "./components/root-operations-section";
 export { RootSection } from "./components/root-section";
 export { RootSummary } from "./components/root-summary";
 export { ScanDetail } from "./components/scan-detail";
+export { ScanHistorySection } from "./components/scan-history-section";
 export { ScanSection } from "./components/scan-section";
 export { ScanSummary } from "./components/scan-summary";

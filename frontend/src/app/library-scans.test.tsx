@@ -2,6 +2,7 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { decodeDiagnosticsPage, type ScanDTO } from "../features/library/api/decoders";
+import { formatDateTime } from "../shared/lib/time";
 import { sampleBody } from "../test/api-samples";
 import { installFakeApi, installFakeSession, installOverviewApi } from "../test/fake-api";
 import { installLibraryApi, seedScan, type FakeLibrary } from "../test/fake-library";
@@ -117,7 +118,8 @@ describe("扫描目录页：扫描区段", () => {
     const { api, library } = setup();
     const scan = seedScan(library, {}, true);
     renderApp({ path: "/library" });
-    expect(await screen.findByText("运行中")).toBeTruthy();
+    // 扫描记录里同一个扫描也显示“运行中”：这里只看“扫描”区段里的卡片。
+    expect(await within(await screen.findByRole("region", { name: "扫描" })).findByText("运行中")).toBeTruthy();
     const reads = () => api.requestsTo("GET", "/api/v1/scans/active").length;
     const first = reads();
 
@@ -132,6 +134,222 @@ describe("扫描目录页：扫描区段", () => {
     const settled = reads();
     await tick(30_000);
     expect(reads()).toBe(settled);
+  });
+});
+
+/** 预置 count 个已成功的扫描：开始时间每个晚一分钟，所以最后预置的在列表（最新在前）里排第一。 */
+function seedHistory(library: FakeLibrary, count: number, overrides: (index: number) => Partial<ScanDTO> = () => ({})): ScanDTO[] {
+  return Array.from({ length: count }, (_, index) =>
+    seedScan(library, {
+      status: "succeeded",
+      started_at: new Date(Date.UTC(2026, 0, 1, 0, index)).toISOString(),
+      finished_at: new Date(Date.UTC(2026, 0, 1, 0, index, 30)).toISOString(),
+      ...overrides(index),
+    }),
+  );
+}
+
+const historyRegion = () => screen.findByRole("region", { name: "扫描记录" });
+const historyTable = () => screen.findByRole("table", { name: "扫描记录" });
+
+function historyRows(table: HTMLElement): HTMLElement[] {
+  return within(table).getAllByRole("row").slice(1);
+}
+
+function rowAt(table: HTMLElement, index: number): HTMLElement {
+  const row = historyRows(table)[index];
+  if (row === undefined) throw new Error(`扫描记录没有第 ${index + 1} 行`);
+  return row;
+}
+
+const lastScanListRequest = (api: ReturnType<typeof setup>["api"]) => api.requestsTo("GET", "/api/v1/scans").at(-1)?.path;
+
+describe("扫描目录页：扫描记录", () => {
+  it("没有扫描：说明还没有记录，不显示表格与分页", async () => {
+    setup();
+    renderApp({ path: "/library" });
+    const region = await historyRegion();
+    expect(await within(region).findByText("还没有扫描记录。开始一次扫描后，它会出现在这里。")).toBeTruthy();
+    expect(within(region).queryByRole("table")).toBeNull();
+    expect(within(region).queryByRole("navigation")).toBeNull();
+  });
+
+  it("列出扫描：最新的在前；开始时间、状态、结束时间与诊断数；运行中显示“进行中”；每行有进入详情的链接", async () => {
+    const { library } = setup();
+    const failed = seedScan(library, {
+      status: "failed",
+      started_at: "2026-01-01T00:00:00Z",
+      finished_at: "2026-01-01T00:01:00Z",
+      diagnostics: { total: 1234, counts: [{ kind: "parse_failure", count: 1234 }] },
+    });
+    const succeeded = seedScan(library, { status: "succeeded", started_at: "2026-01-02T00:00:00Z", finished_at: "2026-01-02T00:02:00Z" });
+    const canceling = seedScan(library, { started_at: "2026-01-03T00:00:00Z", cancel_requested_at: "2026-01-03T00:00:10Z" }, true);
+    renderApp({ path: "/library" });
+
+    const table = await historyTable();
+    expect(historyRows(table)).toHaveLength(3);
+    const [first, second, third] = [rowAt(table, 0), rowAt(table, 1), rowAt(table, 2)];
+    expect(within(first).getByRole("rowheader").textContent).toBe(formatDateTime(canceling.started_at));
+    expect(within(first).getByText("取消请求中")).toBeTruthy();
+    expect(within(first).getByText("进行中")).toBeTruthy();
+    expect(within(second).getByRole("rowheader").textContent).toBe(formatDateTime(succeeded.started_at));
+    expect(within(second).getByText("成功")).toBeTruthy();
+    expect(within(second).getByText(formatDateTime("2026-01-02T00:02:00Z"))).toBeTruthy();
+    expect(within(third).getByText("失败")).toBeTruthy();
+    expect(within(third).getByText("1,234")).toBeTruthy();
+    expect(within(third).getByText(formatDateTime(failed.finished_at ?? ""))).toBeTruthy();
+
+    // 每行的链接文字相同，开始时间在可访问名称里，读屏的链接列表里分得清。
+    const link = within(third).getByRole("link", { name: `查看详情（${formatDateTime(failed.started_at)} 开始的扫描）` });
+    expect(link.getAttribute("href")).toBe(`/library/scans/${failed.id}`);
+    expect(within(await historyRegion()).getByText(/共 3 次扫描，最新的在前，每页 20 条。/)).toBeTruthy();
+  });
+
+  it("从记录进入详情：显示该次扫描的状态", async () => {
+    const { library } = setup();
+    const scan = seedHistory(library, 1, () => ({ status: "incomplete" }))[0];
+    if (scan === undefined) throw new Error("没有预置扫描");
+    renderApp({ path: "/library" });
+    await userEvent.click(await within(await historyTable()).findByRole("link", { name: /^查看详情/ }));
+    expect(await heading("扫描详情")).toBeTruthy();
+    expect(within(await statusPanel()).getByText("不完整")).toBeTruthy();
+  });
+
+  it("超过一页：显示分页，翻页更新地址（第 1 页不写参数），两端的上一页与下一页不可用，翻页请求带页码与页大小", async () => {
+    const { api, library } = setup();
+    seedHistory(library, 45);
+    const { history } = renderApp({ path: "/library" });
+    const nav = await screen.findByRole("navigation", { name: "扫描记录分页" });
+    expect(within(nav).getByText("第 1 / 3 页").getAttribute("aria-current")).toBe("page");
+    expect(within(nav).queryByRole("link", { name: "上一页" })).toBeNull();
+    expect(historyRows(await historyTable())).toHaveLength(20);
+    expect(lastScanListRequest(api)).toBe("/api/v1/scans?page=1&page_size=20");
+
+    await userEvent.click(within(nav).getByRole("link", { name: "下一页" }));
+    await waitFor(() => expect(history.location.search).toBe("?scan_page=2"));
+    await waitFor(() => expect(within(screen.getByRole("navigation", { name: "扫描记录分页" })).getByText("第 2 / 3 页")).toBeTruthy());
+    expect(lastScanListRequest(api)).toBe("/api/v1/scans?page=2&page_size=20");
+    expect(historyRows(await historyTable())).toHaveLength(20);
+
+    await userEvent.click(within(screen.getByRole("navigation", { name: "扫描记录分页" })).getByRole("link", { name: "下一页" }));
+    await waitFor(() => expect(history.location.search).toBe("?scan_page=3"));
+    await waitFor(() => expect(historyRows(screen.getByRole("table", { name: "扫描记录" }))).toHaveLength(5));
+    const last = screen.getByRole("navigation", { name: "扫描记录分页" });
+    expect(within(last).getByText("第 3 / 3 页")).toBeTruthy();
+    expect(within(last).queryByRole("link", { name: "下一页" })).toBeNull();
+
+    await userEvent.click(within(last).getByRole("link", { name: "上一页" }));
+    await waitFor(() => expect(history.location.search).toBe("?scan_page=2"));
+    await userEvent.click(within(await screen.findByRole("navigation", { name: "扫描记录分页" })).getByRole("link", { name: "上一页" }));
+    await waitFor(() => expect(history.location.search).toBe(""));
+    await waitFor(() => expect(within(screen.getByRole("navigation", { name: "扫描记录分页" })).getByText("第 1 / 3 页")).toBeTruthy());
+  });
+
+  it("一页放得下时不显示分页", async () => {
+    const { library } = setup();
+    seedHistory(library, 20);
+    renderApp({ path: "/library" });
+    expect(historyRows(await historyTable())).toHaveLength(20);
+    expect(screen.queryByRole("navigation", { name: "扫描记录分页" })).toBeNull();
+  });
+
+  it.each([
+    ["?scan_page=2", 2],
+    ["?scan_page=3", 3],
+    ["?scan_page=abc", 1],
+    ["?scan_page=0", 1],
+    ["?scan_page=1", 1],
+    ["?scan_page=-2", 1],
+    ["?scan_page=2.5", 1],
+    ["?scan_page=1000001", 1],
+  ])("地址 %s：请求第 %i 页，不合法的值回到第 1 页", async (search, expectedPage) => {
+    const { api, library } = setup();
+    seedHistory(library, 45);
+    renderApp({ path: `/library${search}` });
+    await historyTable();
+    expect(api.requestsTo("GET", "/api/v1/scans").map((request) => request.path)).toEqual([`/api/v1/scans?page=${expectedPage}&page_size=20`]);
+  });
+
+  it("页码超出末页：用替换历史的方式改到末页，不新增历史项，并显示末页的内容", async () => {
+    const { library } = setup();
+    seedHistory(library, 45);
+    const { history } = renderApp({ path: "/library?scan_page=99" });
+    await waitFor(() => expect(history.location.search).toBe("?scan_page=3"));
+    await waitFor(() => expect(historyRows(screen.getByRole("table", { name: "扫描记录" }))).toHaveLength(5));
+    expect(within(screen.getByRole("navigation", { name: "扫描记录分页" })).getByText("第 3 / 3 页")).toBeTruthy();
+    expect(history.length).toBe(1);
+  });
+
+  it("没有扫描时带了页码：回到第 1 页的空态，地址里不再有参数", async () => {
+    setup();
+    const { history } = renderApp({ path: "/library?scan_page=3" });
+    expect(await within(await historyRegion()).findByText(/还没有扫描记录/)).toBeTruthy();
+    await waitFor(() => expect(history.location.search).toBe(""));
+    expect(history.length).toBe(1);
+  });
+
+  it("读取失败（503）：区段内显示带请求 ID 的错误与重试，其他区段不受影响，重试成功后显示记录", async () => {
+    const { api, library } = setup();
+    seedHistory(library, 2);
+    api.on("GET", "/api/v1/scans", () => sampleResponse("errors/database-unavailable"));
+    renderApp({ path: "/library" });
+    const region = await historyRegion();
+    // 503 会被自动重试（最多 2 次，带退避），耗尽后才显示错误。
+    const alert = await within(region).findByRole("alert", {}, { timeout: 8000 });
+    expect(within(alert).getByText(/请求 ID：/)).toBeTruthy();
+    expect(screen.getByRole("rowheader", { name: "classical-a" })).toBeTruthy();
+
+    api.on("GET", "/api/v1/scans", () => jsonResponse(200, sampleBody("scans/list")));
+    await userEvent.click(within(alert).getByRole("button", { name: "重试" }));
+    expect(historyRows(await historyTable())).toHaveLength(4);
+    expect(within(region).queryByRole("alert")).toBeNull();
+  }, 15_000);
+
+  it("已有扫描在运行（200）：留在本页，扫描记录随之刷新并出现这个运行中的扫描", async () => {
+    const { library } = setup();
+    seedHistory(library, 1);
+    renderApp({ path: "/library" });
+    const button = await screen.findByRole("button", { name: "开始扫描" });
+    expect(historyRows(await historyTable())).toHaveLength(1);
+    // 界面还显示“没有活动扫描”时，别处已经开始了扫描。
+    seedScan(library, { started_at: "2026-02-01T00:00:00Z" }, true);
+    await userEvent.click(button);
+
+    await waitFor(() => expect(historyRows(screen.getByRole("table", { name: "扫描记录" }))).toHaveLength(2));
+    expect(within(rowAt(screen.getByRole("table", { name: "扫描记录" }), 0)).getByText("运行中")).toBeTruthy();
+  });
+
+  it("活动扫描结束：卡片更新的同时，扫描记录里的“运行中”也变成终态", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { library } = setup();
+    const scan = seedScan(library, { started_at: "2026-02-01T00:00:00Z" }, true);
+    renderApp({ path: "/library" });
+    expect(within(rowAt(await historyTable(), 0)).getByText("运行中")).toBeTruthy();
+
+    library.scans.set(scan.id, { ...scan, status: "failed", finished_at: "2026-02-01T00:03:00Z" });
+    library.activeScanId = null;
+    await tick(5000);
+    expect(await screen.findByText(/没有正在运行的扫描。扫描会读取/)).toBeTruthy();
+    await waitFor(() => expect(within(rowAt(screen.getByRole("table", { name: "扫描记录" }), 0)).getByText("失败")).toBeTruthy());
+    expect(within(rowAt(screen.getByRole("table", { name: "扫描记录" }), 0)).queryByText("进行中")).toBeNull();
+  });
+
+  it("扫描在详情页结束后回到扫描目录页：扫描记录显示终态，不是缓存里的“运行中”", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { library } = setup();
+    const scan = seedScan(library, { started_at: "2026-02-01T00:00:00Z" }, true);
+    renderApp({ path: "/library" });
+    expect(within(rowAt(await historyTable(), 0)).getByText("运行中")).toBeTruthy();
+
+    await userEvent.click(await screen.findByRole("link", { name: "查看扫描详情" }));
+    const panel = await statusPanel();
+    library.scans.set(scan.id, { ...scan, status: "succeeded", finished_at: "2026-02-01T00:01:00Z" });
+    library.activeScanId = null;
+    await tick(2000);
+    await waitFor(() => expect(within(panel).getByRole("status").textContent).toBe("成功"));
+
+    await userEvent.click(screen.getByRole("link", { name: "返回扫描目录" }));
+    await waitFor(() => expect(within(rowAt(screen.getByRole("table", { name: "扫描记录" }), 0)).getByText("成功")).toBeTruthy());
   });
 });
 

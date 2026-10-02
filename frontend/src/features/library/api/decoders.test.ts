@@ -10,6 +10,7 @@ import {
   decodeRootList,
   decodeRootOperationList,
   decodeScan,
+  decodeScanPage,
 } from "./decoders";
 
 function repeated(list: unknown, key: string, count: number): unknown {
@@ -151,6 +152,44 @@ describe("扫描", () => {
     expect(decodeActiveScan(sampleBody("scans/active-running")).scan?.status).toBe("running");
     expect(() => decodeActiveScan({})).toThrow(d.DecodeError);
     expect(() => decodeActiveScan({ scan: {} })).toThrow(d.DecodeError);
+  });
+});
+
+describe("扫描记录", () => {
+  const list = sampleBody("scans/list");
+
+  it("解码一页扫描：条目与单个扫描相同，覆盖运行中（取消请求中）、成功、不完整与失败", () => {
+    const decoded = decodeScanPage(list);
+    expect(decoded.items.map((item) => item.status)).toEqual(["running", "succeeded", "incomplete", "failed"]);
+    expect(decoded.items[0]?.cancel_requested_at).not.toBeNull();
+    expect(decoded.items[0]?.finished_at).toBeNull();
+    expect(decoded.items[3]?.diagnostics.total).toBe(4);
+    expect(decoded.pagination).toEqual({ page: 1, page_size: 20, total: 4 });
+  });
+
+  it("空列表：没有条目，总数为 0", () => {
+    const decoded = decodeScanPage(sampleBody("scans/list-empty"));
+    expect(decoded.items).toEqual([]);
+    expect(decoded.pagination.total).toBe(0);
+  });
+
+  it("每页最多 100 条", () => {
+    expect(decodeScanPage(repeated(list, "items", 100)).items).toHaveLength(100);
+    expect(() => decodeScanPage(repeated(list, "items", 101))).toThrow(d.DecodeError);
+  });
+
+  it.each([
+    ["缺少 items", without(list, ["items"])],
+    ["缺少 pagination", without(list, ["pagination"])],
+    ["页码为 0", withValue(list, ["pagination", "page"], 0)],
+    ["页大小超过 100", withValue(list, ["pagination", "page_size"], 101)],
+    ["总数为负", withValue(list, ["pagination", "total"], -1)],
+    ["总数不是整数", withValue(list, ["pagination", "total"], 1.5)],
+    ["条目缺少状态", without(list, ["items", 0, "status"])],
+    ["条目状态未知", withValue(list, ["items", 1, "status"], "paused")],
+    ["条目 id 不是 UUID", withValue(list, ["items", 2, "id"], "3")],
+  ])("拒绝：%s", (_name, input) => {
+    expect(() => decodeScanPage(input)).toThrow(d.DecodeError);
   });
 });
 

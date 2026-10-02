@@ -79,6 +79,25 @@ const states: State[] = [
     },
   },
   {
+    name: "扫描目录（扫描记录，第一页）",
+    options: { signedInAs: "curator" },
+    reach: async (page, mock) => {
+      mock.seedHistory(25);
+      await page.goto("/library");
+      await expect(page.getByRole("table", { name: "扫描记录" })).toBeVisible();
+      await expect(page.getByRole("navigation", { name: "扫描记录分页" }).getByText("第 1 / 2 页")).toBeVisible();
+    },
+  },
+  {
+    name: "扫描目录（扫描记录，末页）",
+    options: { signedInAs: "curator" },
+    reach: async (page, mock) => {
+      mock.seedHistory(25);
+      await page.goto("/library?scan_page=2");
+      await expect(page.getByRole("navigation", { name: "扫描记录分页" }).getByText("第 2 / 2 页")).toBeVisible();
+    },
+  },
+  {
     name: "扫描目录（停用确认对话框）",
     options: { signedInAs: "curator" },
     reach: async (page) => {

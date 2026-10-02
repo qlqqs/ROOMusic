@@ -5,14 +5,18 @@ import { libraryKeys } from "../query-keys";
 
 /**
  * 开始扫描：202 新建，200 已有扫描在运行（返回的是那一个）。没有幂等键也不需要：重复开始只会得到同一个扫描。
- * 无论成败都刷新活动扫描，让界面显示服务器当前的状态（连接中断时扫描可能已经开始）。
+ * 无论成败都刷新活动扫描，让界面显示服务器当前的状态（连接中断时扫描可能已经开始）；扫描记录同样过期，
+ * 但不等它刷新完：它不影响“开始扫描”的结果，也不该拖慢进入详情页。
  */
 export function useStartScan() {
   const queryClient = useQueryClient();
   const { generation } = useViewerScope();
   return useMutation({
     mutationFn: () => startScan(),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: libraryKeys.activeScan(generation) }),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: libraryKeys.scanHistory(generation) });
+      return queryClient.invalidateQueries({ queryKey: libraryKeys.activeScan(generation) });
+    },
   });
 }
 

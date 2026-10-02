@@ -10,6 +10,7 @@ export { StatusTag } from "./status-tag";
 export { TextField } from "./text-field";
 export { VisuallyHidden } from "./visually-hidden";
 export { Page } from "./page";
+export { Pagination, type PaginationLinkProps } from "./pagination";
 export { Panel } from "./panel";
 export { QueryContent, type QuerySource } from "./query-content";
 export { StatList, type Stat } from "./stat-list";

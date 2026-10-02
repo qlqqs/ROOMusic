@@ -67,6 +67,59 @@ test.describe("目录", () => {
   });
 });
 
+test.describe("扫描记录", () => {
+  test("翻页写进地址；后退、前进与刷新都重新显示对应的页；页码超出末页时替换为末页", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "curator" });
+    mock.seedHistory(45);
+    await page.goto("/library");
+    const nav = () => page.getByRole("navigation", { name: "扫描记录分页" });
+    const rows = () => page.getByRole("table", { name: "扫描记录" }).getByRole("row");
+    await expect(nav().getByText("第 1 / 3 页")).toBeVisible();
+    await expect(rows()).toHaveCount(21);
+
+    await nav().getByRole("link", { name: "下一页" }).click();
+    await expect(page).toHaveURL(/\/library\?scan_page=2$/);
+    await expect(nav().getByText("第 2 / 3 页")).toBeVisible();
+
+    await page.goBack();
+    await expect(page).toHaveURL(/\/library$/);
+    await expect(nav().getByText("第 1 / 3 页")).toBeVisible();
+    await page.goForward();
+    await expect(nav().getByText("第 2 / 3 页")).toBeVisible();
+    await page.reload();
+    await expect(nav().getByText("第 2 / 3 页")).toBeVisible();
+
+    // 超出末页：用替换历史的方式改到末页，后退不会回到越界的页码。
+    await page.goto("/library?scan_page=99");
+    await expect(page).toHaveURL(/\/library\?scan_page=3$/);
+    await expect(nav().getByText("第 3 / 3 页")).toBeVisible();
+    await expect(rows()).toHaveCount(6);
+  });
+
+  test("记录显示最新的在前、状态与诊断数；开始扫描后在详情页结束，回到目录页记录已是终态", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "curator" });
+    mock.seedHistory(3);
+    await page.clock.install();
+    await page.goto("/library");
+    const table = page.getByRole("table", { name: "扫描记录" });
+    await expect(table.getByRole("row")).toHaveCount(4);
+    await expect(table.getByRole("row").nth(1)).toContainText("不完整");
+
+    await page.getByRole("button", { name: "开始扫描" }).click();
+    await expect(heading(page, "扫描详情")).toBeVisible();
+    await expect(async () => {
+      await page.clock.fastForward(2000);
+      await expect(phaseTag(page)).toHaveText("成功", { timeout: 500 });
+    }).toPass({ timeout: 10_000 });
+    await page.getByRole("link", { name: "返回扫描目录" }).click();
+
+    await expect(table.getByRole("row")).toHaveCount(5);
+    const newest = table.getByRole("row").nth(1);
+    await expect(newest).toContainText("成功");
+    await expect(newest).not.toContainText("进行中");
+  });
+});
+
 test.describe("扫描", () => {
   test("开始扫描 → 详情页轮询 → 终态后停止（成功）", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });

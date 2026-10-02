@@ -8,12 +8,14 @@ import {
   decodeRootList,
   decodeRootOperationList,
   decodeScan,
+  decodeScanPage,
   type DiagnosticsPageDTO,
   type RootChangedDTO,
   type RootCreatedDTO,
   type RootDTO,
   type RootOperationDTO,
   type ScanDTO,
+  type ScanPageDTO,
 } from "./decoders";
 
 export function fetchRoots(signal?: AbortSignal): Promise<ApiResponse<{ items: RootDTO[] }>> {
@@ -58,6 +60,12 @@ export function fetchActiveScan(signal?: AbortSignal): Promise<ApiResponse<{ sca
 /** 开始扫描：202 表示新建，200 表示已有扫描在运行（返回的是那一个）。没有请求体与幂等键，重复开始是安全的。 */
 export function startScan(): Promise<ApiResponse<ScanDTO>> {
   return apiRequest({ method: "POST", path: "/api/v1/scans" }, decodeScan);
+}
+
+/** 扫描记录（仅管理员）：按开始时间倒序分页，page 从 1 起。 */
+export function fetchScanPage(page: number, pageSize: number, signal?: AbortSignal): Promise<ApiResponse<ScanPageDTO>> {
+  const query = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+  return apiRequest({ method: "GET", path: `/api/v1/scans?${query}`, signal }, decodeScanPage);
 }
 
 export function fetchScan(scanId: string, signal?: AbortSignal): Promise<ApiResponse<ScanDTO>> {

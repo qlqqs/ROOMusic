@@ -17,6 +17,15 @@ const cases: Case[] = [
   { name: "概览（成员）", options: { signedInAs: "listener" }, path: () => "/", title: "概览" },
   { name: "扫描目录", options: { signedInAs: "curator" }, path: () => "/library", title: "扫描目录" },
   {
+    name: "扫描目录（扫描记录有数据，多页）",
+    options: { signedInAs: "curator" },
+    prepare: (mock) => {
+      mock.seedHistory(25);
+    },
+    path: () => "/library",
+    title: "扫描目录",
+  },
+  {
     name: "扫描详情（失败，多类诊断）",
     options: { signedInAs: "curator" },
     prepare: (mock) => {

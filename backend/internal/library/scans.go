@@ -135,33 +135,108 @@ func (service *Service) activeScan(ctx context.Context) (Scan, error) {
 	return result, err
 }
 
+// ScanPage 是一页扫描记录与扫描总数。
+type ScanPage struct {
+	Items []Scan
+	Total int64
+}
+
+// ListScans 按开始时间倒序（同一时间按 ID 倒序）读取一页扫描及其诊断汇总；page 从 1 起，调用方已校验 page 与 pageSize。
+// 超出末页时 Items 为空而 Total 照常。总数与当前页是两次查询，不保证同一快照；诊断汇总对整页只查一次，不逐条查询。
+func (service *Service) ListScans(ctx context.Context, page, pageSize int) (ScanPage, error) {
+	var total int64
+	if err := service.database.QueryRowContext(ctx, "SELECT COUNT(*) FROM scan_runs").Scan(&total); err != nil {
+		return ScanPage{}, fmt.Errorf("count scans: %w", err)
+	}
+	items, err := service.scanRunsPage(ctx, pageSize, (page-1)*pageSize)
+	if err != nil {
+		return ScanPage{}, err
+	}
+	ids := make([]string, len(items))
+	for index, item := range items {
+		ids[index] = item.ID
+	}
+	summaries, err := loadScanDiagnosticsSummaries(ctx, service.database, ids)
+	if err != nil {
+		return ScanPage{}, fmt.Errorf("load scan diagnostics: %w", err)
+	}
+	for index := range items {
+		items[index].Diagnostics = summaries[items[index].ID]
+	}
+	return ScanPage{Items: items, Total: total}, nil
+}
+
+// scanRunsPage 读取一页扫描行；读完并关闭结果集后才返回，调用方可以接着用同一连接池发起下一个查询。
+func (service *Service) scanRunsPage(ctx context.Context, limit, offset int) ([]Scan, error) {
+	rows, err := service.database.QueryContext(ctx, "SELECT "+scanSelectColumns+" FROM scan_runs ORDER BY started_at DESC,id DESC LIMIT $1 OFFSET $2", limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("query scans: %w", err)
+	}
+	defer rows.Close()
+	items := []Scan{}
+	for rows.Next() {
+		item, err := scanRow(rows)
+		if err != nil {
+			return nil, fmt.Errorf("read scan: %w", err)
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read scans: %w", err)
+	}
+	return items, nil
+}
+
 type scanDiagnosticsQuerier interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 }
 
 func loadScanDiagnosticsSummary(ctx context.Context, queryer scanDiagnosticsQuerier, scanID string) (DiagnosticsSummary, error) {
-	rows, err := queryer.QueryContext(ctx, `SELECT kind,COUNT(*) FROM scan_diagnostics WHERE scan_run_id=$1::uuid GROUP BY kind ORDER BY kind LIMIT 101`, scanID)
+	summaries, err := loadScanDiagnosticsSummaries(ctx, queryer, []string{scanID})
 	if err != nil {
 		return DiagnosticsSummary{}, err
 	}
+	return summaries[scanID], nil
+}
+
+// maxDiagnosticKinds 是单次扫描的诊断种类上限；超过说明数据异常，读取失败而不是截断。
+const maxDiagnosticKinds = 100
+
+// loadScanDiagnosticsSummaries 用一次分组查询读取多个扫描的诊断汇总，每个传入的扫描都有一项（没有诊断时为空汇总）。
+// 单个扫描的读取（loadScanDiagnosticsSummary）也经过这里，所以列表与详情的诊断计数一致。
+func loadScanDiagnosticsSummaries(ctx context.Context, queryer scanDiagnosticsQuerier, scanIDs []string) (map[string]DiagnosticsSummary, error) {
+	summaries := make(map[string]DiagnosticsSummary, len(scanIDs))
+	for _, scanID := range scanIDs {
+		summaries[scanID] = DiagnosticsSummary{Counts: []DiagnosticCount{}}
+	}
+	if len(scanIDs) == 0 {
+		return summaries, nil
+	}
+	// 每个扫描至多 maxDiagnosticKinds 种；多取一行用来发现超出上限。
+	rows, err := queryer.QueryContext(ctx, `SELECT scan_run_id::text,kind,COUNT(*) FROM scan_diagnostics WHERE scan_run_id=ANY($1::uuid[]) GROUP BY scan_run_id,kind ORDER BY scan_run_id,kind LIMIT $2`, scanIDs, len(scanIDs)*maxDiagnosticKinds+1)
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
-	result := DiagnosticsSummary{Counts: []DiagnosticCount{}}
 	for rows.Next() {
-		if len(result.Counts) == 100 {
-			return DiagnosticsSummary{}, errors.New("scan diagnostic kinds exceed bound")
-		}
+		var scanID string
 		var item DiagnosticCount
-		if err := rows.Scan(&item.Kind, &item.Count); err != nil {
-			return DiagnosticsSummary{}, err
+		if err := rows.Scan(&scanID, &item.Kind, &item.Count); err != nil {
+			return nil, err
+		}
+		summary := summaries[scanID]
+		if len(summary.Counts) == maxDiagnosticKinds {
+			return nil, errors.New("scan diagnostic kinds exceed bound")
 		}
 		item.Kind = safeDiagnosticKind(item.Kind)
-		result.Total += item.Count
-		result.Counts = append(result.Counts, item)
+		summary.Total += item.Count
+		summary.Counts = append(summary.Counts, item)
+		summaries[scanID] = summary
 	}
 	if err := rows.Err(); err != nil {
-		return DiagnosticsSummary{}, err
+		return nil, err
 	}
-	return result, nil
+	return summaries, nil
 }
 
 func safeDiagnosticKind(kind string) string {

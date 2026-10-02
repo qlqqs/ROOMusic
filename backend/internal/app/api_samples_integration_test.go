@@ -81,6 +81,8 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 
 	// 空库状态：没有扫描、没有发行组、没有目录。
 	samples.record("scans/active-none", call(http.MethodGet, "/api/v1/scans/active", nil, admin), http.StatusOK)
+	samples.record("scans/list-empty", call(http.MethodGet, "/api/v1/scans", nil, admin), http.StatusOK)
+	samples.record("errors/invalid-pagination", call(http.MethodGet, "/api/v1/scans?page=0", nil, admin), http.StatusBadRequest)
 	samples.record("release-groups/list-empty", call(http.MethodGet, "/api/v1/release-groups?page_size=1", nil, admin), http.StatusOK)
 	samples.record("library-roots/list-empty", call(http.MethodGet, "/api/v1/library-roots", nil, admin), http.StatusOK)
 	samples.record("library-root-operations/list-empty", call(http.MethodGet, "/api/v1/library-root-operations", nil, admin), http.StatusOK)
@@ -243,6 +245,7 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	}
 	samples.record("scans/cancel-requested", call(http.MethodPost, "/api/v1/scans/"+cancelScan+"/cancel", map[string]any{}, admin), http.StatusAccepted)
 	samples.record("scans/get-cancel-requested", call(http.MethodGet, "/api/v1/scans/"+cancelScan, nil, admin), http.StatusOK)
+	samples.record("scans/list", call(http.MethodGet, "/api/v1/scans", nil, admin), http.StatusOK)
 	if _, err := application.database.Exec(`UPDATE scan_runs SET status='canceled',finished_at=NOW() WHERE id=$1::uuid`, cancelScan); err != nil {
 		t.Fatalf("finish canceled scan fixture: %v", err)
 	}

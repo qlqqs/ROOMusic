@@ -44,9 +44,9 @@ async function addRoot(path: string) {
 }
 
 describe("扫描目录页：访问与列表", () => {
-  it("管理员看到扫描、音乐目录与目录操作记录三个区段，目录只显示名称与状态", async () => {
+  it("管理员看到扫描、音乐目录、扫描记录与目录操作记录四个区段，目录只显示名称与状态", async () => {
     await openLibrary();
-    for (const name of ["扫描", "音乐目录", "目录操作记录"]) {
+    for (const name of ["扫描", "音乐目录", "扫描记录", "目录操作记录"]) {
       expect(screen.getByRole("heading", { level: 2, name })).toBeTruthy();
     }
     expect(within(rowOf("classical-a")).getByText("启用")).toBeTruthy();
@@ -68,7 +68,7 @@ describe("扫描目录页：访问与列表", () => {
     renderApp({ path: "/library" });
     expect(await heading("需要管理员权限")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "扫描目录" })).toBeNull();
-    for (const path of [rootsPath, "/api/v1/library-root-operations", "/api/v1/scans/active"]) {
+    for (const path of [rootsPath, "/api/v1/library-root-operations", "/api/v1/scans/active", "/api/v1/scans"]) {
       expect(api.requestsTo("GET", path)).toHaveLength(0);
     }
   });

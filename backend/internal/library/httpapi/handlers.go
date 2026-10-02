@@ -35,6 +35,7 @@ func (handlers *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH /api/v1/library-roots/{id}", handlers.updateRoot)
 	mux.HandleFunc("POST /api/v1/library-roots/{id}/restore", handlers.restoreRoot)
 	mux.HandleFunc("GET /api/v1/library-root-operations", handlers.rootOperations)
+	mux.HandleFunc("GET /api/v1/scans", handlers.listScans)
 	mux.HandleFunc("POST /api/v1/scans", handlers.startScan)
 	mux.HandleFunc("GET /api/v1/scans/active", handlers.activeScan)
 	mux.HandleFunc("GET /api/v1/scans/{id}", handlers.scanStatus)

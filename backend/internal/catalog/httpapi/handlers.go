@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
@@ -59,34 +58,16 @@ func parseReleaseAttention(request *http.Request) (bool, error) {
 	return true, nil
 }
 
-func parsePagination(request *http.Request) (int, int, error) {
-	page, pageSize := 1, 50
-	var err error
-	if pageValue := request.URL.Query().Get("page"); pageValue != "" {
-		page, err = strconv.Atoi(pageValue)
-		if err != nil || page < 1 {
-			return 0, 0, fmt.Errorf("invalid page")
-		}
-	}
-	if pageSizeValue := request.URL.Query().Get("page_size"); pageSizeValue != "" {
-		pageSize, err = strconv.Atoi(pageSizeValue)
-		if err != nil || pageSize < 1 || pageSize > maxReleaseRows {
-			return 0, 0, fmt.Errorf("invalid page size")
-		}
-	}
-	if page-1 > int(^uint(0)>>1)/pageSize {
-		return 0, 0, fmt.Errorf("page offset exceeds bound")
-	}
-	return page, pageSize, nil
-}
-
-// 页大小上限只约束请求参数；Store 不重复限制。
-const maxReleaseRows = 100
+// 目录列表的页大小：默认 50、上限 100。上限只约束请求参数，Store 不重复限制。
+const (
+	defaultReleasePageSize = 50
+	maxReleaseRows         = 100
+)
 
 // parseReleaseListParams 解析 /releases 与 /release-groups 共用的查询参数（合同要求两者的参数、默认值、上限与错误码
 // 完全相同，所以只在这里解析一次）。参数非法时写出 400 错误并返回 false。
 func parseReleaseListParams(responseWriter http.ResponseWriter, request *http.Request) (catalog.ListParams, bool) {
-	page, pageSize, err := parsePagination(request)
+	page, pageSize, err := httpserver.ParsePagination(request, defaultReleasePageSize, maxReleaseRows)
 	if err != nil {
 		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_pagination", "分页参数无效")
 		return catalog.ListParams{}, false
