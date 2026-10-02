@@ -1,11 +1,11 @@
 # M1b 执行计划
 
-> 需求见 [prd.md](prd.md)，设计见 [design.md](design.md)。在 F3 完成并归档之后启动。每一步单独提交到 `main`，不推送；改动前端源码的提交
+> 需求见 [prd.md](prd.md)，设计见 [design.md](design.md)。F3 归档后于 2026-10-02 启动。每一步单独提交到 `main`，不推送；改动前端源码的提交
 > 同时重建并提交 `backend/cmd/roomusic/web`。测试与冒烟只用合成数据和 `roomusic-test` compose 项目，不读 `music/`，不碰用户自己的 `roomusic` 项目。
 
 ## 启动前
 
-- [ ] F3 已归档（用户已于 2026-10-02 批准最终规划摘要）；然后运行 `python3 ./.trellis/scripts/task.py start .trellis/tasks/09-28-classical-m1b-album-browsing`。
+- [x] F3 已归档（用户已于 2026-10-02 批准最终规划摘要）；已运行 `python3 ./.trellis/scripts/task.py start .trellis/tasks/09-28-classical-m1b-album-browsing`。
 - [ ] 读规范：`.trellis/spec/frontend/` 全部层级规范、`frontend/DESIGN.md` 第 4–10 节、`.trellis/spec/backend/catalog-rest-contracts.md`。
 
 ## 步骤

@@ -40,7 +40,7 @@
 | B0 | 纯重构：先拆 catalog，再拆 platform/postgres、library（含解析器），最后拆 httpserver、identity、各 httpapi 与 app | 无；可与 M1a 并行，不夹带业务变更 | [已完成并归档](../archive/2026-09/09-28-classical-b0-package-split/prd.md)（2026-09-30） |
 | I | 音频指纹、同 root 保守重绑定、按成员关系匹配 Release、ID 稳定性测试、ReleaseGroup 只读接口 | B0 的 catalog 部分 | [已完成并归档](../archive/2026-09/09-28-classical-i-identity-groups/prd.md)（2026-09-30） |
 | M1a | 应用外壳、认证、现有目录/扫描/成员管理、简版概览、恢复真实构建门禁 | ADR 0001 第 1–5 项已批准；只消费现有 API，可与 B0、I 并行 | [已完成并归档](../archive/2026-10/09-28-classical-m1a-shell-admin/prd.md)（2026-10-01，提交 `66a0e05`–`4220960` 加文档同步） |
-| M1b | 专辑列表与详情（按组形态，单版本自然退化） | 阶段 I 的按组接口；M1a（已完成）；F3 | [planning](../09-28-classical-m1b-album-browsing/prd.md)（2026-10-02 完成规划并获批，F3 归档后启动） |
+| M1b | 专辑列表与详情（按组形态，单版本自然退化） | 阶段 I 的按组接口；M1a（已完成）；F3 | [in_progress](../09-28-classical-m1b-album-browsing/prd.md)（2026-10-02 完成规划并获批，F3 归档后同日启动） |
 | F1 | 未知 `/api/` 路径返回 JSON 404 | 无 | [已完成并归档](../archive/2026-09/09-28-classical-f1-api-json-404/prd.md)（2026-09-29） |
 | F2 | 目录操作幂等指纹纳入目标目录 ID | 无；建议先于或与 M1a 同期 | [已完成并归档](../archive/2026-09/09-28-classical-f2-root-op-idempotency/prd.md)（2026-09-29） |
 | F3 | M1a 遗留的后端缺口：扫描记录、查看者 ID、成员接口错误映射、HTTP 缓存头（成员写操作幂等延到 M3） | 无；先于 M1b | [已完成并归档](../archive/2026-10/10-02-classical-f3-backend-gaps/prd.md)（2026-10-02，提交 `ec92090`–`9b97c9d` 加文档同步） |
