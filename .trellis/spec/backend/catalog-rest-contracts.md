@@ -21,6 +21,10 @@
 - ReleaseGroup 摘要：`{id, release_count, attention_count, representative}`，`representative`
   是代表版本的完整 Release 摘要（含封面）。组详情在摘要上加 `releases`：成员 Release 摘要数组。
   两个接口都只读，写操作（人工归组等）属于 M3。
+- Release 详情的 `edition`、`label`、`barcode` 为 nullable string；每条 Track 的
+  `credits` 项为 `{role,name}`，`role` 只允许
+  `composer | conductor | performer | producer`。每轨最多 100 条、单个 Release 最多
+  10,000 条 Track credits，超限后端 fail closed，前端 decoder 同样拒绝。
 
 ## 3. 请求与响应合同
 
@@ -33,6 +37,18 @@
   正整数宽高；不返回图片字节、`content_hash`、`source_type`、受管目录或音乐源路径。
 - MIME 只允许 `image/jpeg | image/png | image/gif | image/webp`。资源字节仍通过认证的
   artwork endpoint 返回。
+
+### 发行列表、详情与 evidence 权限
+
+- 发行列表只返回至少含一个 `present` Track 的 Release，支持严格 allowlist 的
+  `attention=required`。详情返回有界 Medium/Track、credits、音频/CUE facts 和
+  普通用户安全 evidence 摘要；完整候选、reason code 和安全相对来源只由管理员
+  evidence 端点返回，普通用户必须得到 403。
+- 恢复 catalog 时，摘要 `artwork` 仍需严格解码（白名单 MIME、正整数宽高、有界
+  basename resource ID），封面只按 `/api/v1/artworks/{resource_id}` 同源鉴权读取。
+  选中详情和筛选的 URL 责任见 [状态规范](../frontend/state-management.md)，具体新路由
+  形式尚待批准。M1 不恢复演示队列或模拟计时器；未实现的播放动作隐藏或明确禁用，
+  不以“演示模式”标记替代真实能力边界。
 
 ### 封面响应与缓存（F3）
 
@@ -106,6 +122,8 @@
   不安全的存储键返回 404。`catalog/artwork` 的单元测试覆盖 `safeStorageKey` 与 `Read`，`platform/httpserver` 的 `etag_test.go` 覆盖弱比较。
 - 运行 `go test ./internal/catalog/... ./internal/app -run 'Release|Catalog|Artwork|Group|Routes' -count=1`；涉及 SQL 投影时，
   还需通过隔离 PostgreSQL 18 的 `./scripts/test-integration.sh`。
+- 发行 REST/前端：present-only 列表、稳定分页/搜索、attention allowlist、详情事实、
+  管理员 evidence 权限、路径脱敏、nullable/enum/数组上限和 malformed payload；按组接口与 `/releases` 逐项对应。
 
 ## 7. 错误与正确示例
 

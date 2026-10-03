@@ -45,8 +45,12 @@ Before writing or reviewing backend code:
 | [Database Guidelines](./database-guidelines.md) | PostgreSQL ownership, transactions, migrations, revisions, and idempotency |
 | [Error Handling](./error-handling.md) | Classified application errors and stable REST responses |
 | [Logging Guidelines](./logging-guidelines.md) | Structured JSON events, correlation, and redaction |
-| [Core 0 当前运行合同](./core0-runtime-contracts.md) | 当前 REST、环境、事务、扫描和跨层安全合同 |
-| [Catalog REST 合同](./catalog-rest-contracts.md) | Release 列表/详情、封面摘要、可见性和错误合同 |
+| [Core 0 当前运行合同](./core0-runtime-contracts.md) | 总览：平台层 REST 通则、HTTP 缓存、迁移、环境、CI、完成日志，以及后续技术债和专题文件表 |
+| [身份与成员合同](./identity-contracts.md) | 密码规则、初始化与成员接口、用户停用事务、写入失败映射 |
+| [目录与扫描流程合同](./library-scan-contracts.md) | 目录幂等、扫描完整性、暂存与身份规划、CUE、抓轨日志、封面发现 |
+| [扫描协调合同](./scan-coordination-contracts.md) | 扫描状态与记录、持久化取消、跨进程协调锁 |
+| [真实库 Smoke 合同](./real-library-smoke-contracts.md) | 真实音乐只读验收与 V0 对照 |
+| [Catalog REST 合同](./catalog-rest-contracts.md) | Release 列表/详情/evidence、按组接口、封面摘要、可见性和错误合同 |
 | [Music Steward And Operation Guidelines](./agent-and-operation-guidelines.md) | Agent modes, Review Subagent, tools, Change Sets, and recovery |
 | [Quality Guidelines](./quality-guidelines.md) | Focused code, forbidden coupling, tests, and gates |
 
@@ -65,6 +69,8 @@ Before declaring backend work complete:
       path, including cancellation or incomplete scans when applicable.
 - [ ] Update this spec or a linked guideline when a Core 0 contract or selected
       implementation tool changes.
+- [ ] 每个 `.trellis/spec` 文件不超过 24,000 字节（Trellis 给子代理注入上下文时，单个文件超过 32,768 字节的部分会被截断）。
+      接近 24 KB 时，先按主题拆成新文件并更新上面的层级表，再继续增补；拆分只搬移内容、不改写，并核对没有丢失或重复。
 
 ## Core 0 Boundaries
 

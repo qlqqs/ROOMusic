@@ -49,7 +49,11 @@ Before writing or reviewing frontend code:
 | [Type Safety](./type-safety.md) | Strict TypeScript, DTO decoding, and exhaustive domain states |
 | [Quality Guidelines](./quality-guidelines.md) | Tests, accessibility, gates, and forbidden shortcuts |
 | [播放器设计规范](./player-design-guidelines.md) | 工作台视觉层级、响应式布局、播放交互与可访问性 |
-| [Core 0 当前运行合同](../backend/core0-runtime-contracts.md) | REST、环境、扫描、事务与跨层安全合同 |
+| [Core 0 当前运行合同](../backend/core0-runtime-contracts.md) | 平台层 REST 通则、HTTP 缓存、环境、CI 与专题合同索引 |
+| [身份与成员合同](../backend/identity-contracts.md) | 查看者响应、密码规则、成员与初始化接口的错误映射 |
+| [目录与扫描流程合同](../backend/library-scan-contracts.md) | 目录接口、目录幂等、扫描整理与封面发现 |
+| [扫描协调合同](../backend/scan-coordination-contracts.md) | 扫描状态、扫描记录、持久化取消与 `ScanDTO` |
+| [Catalog REST 合同](../backend/catalog-rest-contracts.md) | 发行与按组接口、封面摘要、可见性与错误合同 |
 
 ## Quality Check
 

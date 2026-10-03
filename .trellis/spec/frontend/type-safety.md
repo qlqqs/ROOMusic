@@ -62,7 +62,7 @@ export type RootOperationDTO = d.Infer<typeof rootOperationDecoder>;
 ```
 
 列表上限沿用后端：目录操作记录、诊断明细与诊断类别各最多 100 条；后端没有上限的列表（目录、成员）不限条数，只限字段长度。
-数组先检查长度再逐项映射。完整扫描响应以[运行合同](../backend/core0-runtime-contracts.md)和
+数组先检查长度再逐项映射。完整扫描响应以[扫描协调合同](../backend/scan-coordination-contracts.md)和
 [`library.Scan`](../../../backend/internal/library/scans.go)为准，当前没有已扫描文件数或百分比进度；
 不得增加后端未返回的字段，只在边界解码一次 `unknown`，其他消费者只接收类型化结果。
 
