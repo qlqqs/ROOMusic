@@ -17,6 +17,20 @@ export async function expectNoHorizontalOverflow(page: Page, label: string): Pro
   expect(overflow.main, `${label}：主内容区横向溢出 ${overflow.main}px`).toBeLessThanOrEqual(0);
 }
 
+/**
+ * 桌面外壳里只有主内容区自己滚动，窗口本身不能再滚动：否则会滚出一片空白。
+ * 典型原因是“仅供读屏”的绝对定位元素（VisuallyHidden、表格的 caption）没有定位祖先：它们的包含块是整个文档，
+ * 不受主内容区裁剪，长页面下半部分的这类元素会把文档撑得比窗口还高。窄屏的外壳让整页滚动，不在检查范围内。
+ */
+export async function expectNoDocumentScroll(page: Page, label: string): Promise<void> {
+  const extra = await page.evaluate(() => {
+    const main = document.getElementById("main");
+    const mainScrolls = main !== null && getComputedStyle(main).overflowY === "auto";
+    return mainScrolls ? document.documentElement.scrollHeight - window.innerHeight : 0;
+  });
+  expect(extra, `${label}：窗口本身还能再滚动 ${extra}px`).toBeLessThanOrEqual(0);
+}
+
 const axeTags = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
 
 /** axe 扫描（WCAG 2.1 A 与 AA）：serious 或 critical 即失败，失败信息列出规则、说明与元素。 */

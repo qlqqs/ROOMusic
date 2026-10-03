@@ -1,0 +1,23 @@
+/* 曲目与侧栏两列：按容器宽度而不是视口宽度折叠，带侧栏的 768px 视口里内容区只有约 500px。 */
+.layout {
+  container-type: inline-size;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-8);
+  align-items: start;
+}
+
+.aside {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+@container (min-width: 720px) {
+  .columns {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
+  }
+}

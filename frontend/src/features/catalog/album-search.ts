@@ -1,3 +1,4 @@
+import { isUuid } from "../../shared/lib/ids";
 import { parsePageParam } from "../../shared/lib/pagination";
 import { utf8ByteLength } from "../auth";
 
@@ -37,4 +38,29 @@ export function parseAlbumSearch(search: Record<string, unknown>): AlbumSearch {
 /** 是否带了搜索词或筛选：决定“没有结果”说的是资料库为空，还是没有符合条件的专辑。 */
 export function isFiltered(search: AlbumSearch): boolean {
   return search.q !== undefined || search.attention !== undefined;
+}
+
+/**
+ * 专辑详情的 URL 状态：选中的版本。release 只在选中非代表版本时出现；代表版本（默认）不写进 URL。
+ * 字段写成 `T | undefined`，原因同上。
+ */
+export type AlbumDetailSearch = {
+  release?: string | undefined;
+};
+
+/** 路由的 validateSearch（详情页）：只有 UUID 形状的 release 保留，并统一成小写，与接口给的成员 ID 直接比较。 */
+export function parseAlbumDetailSearch(search: Record<string, unknown>): AlbumDetailSearch {
+  const release = search["release"];
+  return { release: isUuid(release) ? release.toLowerCase() : undefined };
+}
+
+/**
+ * 详情页“返回专辑列表”的目标：卡片链接带进来的列表参数（history state）。state 会跨刷新保留，也可能被改写，
+ * 所以经列表自己的校验再用；没有或形状不对时回到不带参数的列表。
+ */
+export function albumListSearchFromState(state: unknown): AlbumSearch {
+  if (typeof state !== "object" || state === null || !("albumList" in state)) return {};
+  const albumList = state.albumList;
+  if (typeof albumList !== "object" || albumList === null || Array.isArray(albumList)) return {};
+  return parseAlbumSearch(albumList as Record<string, unknown>);
 }

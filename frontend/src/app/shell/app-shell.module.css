@@ -85,7 +85,13 @@
     display: none;
   }
 
+  /*
+   * 两个滚动区都要是定位祖先：页面里“仅供读屏”的元素（VisuallyHidden、表格的 caption）是绝对定位的，
+   * 没有定位祖先时它们的包含块是整个文档，不受滚动区裁剪，会把文档撑到比窗口还高，
+   * 窗口本身就能滚出一片空白（长页面的下半部分，例如展开的证据表格）。
+   */
   .sidebar {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: var(--space-6);
@@ -100,6 +106,7 @@
   }
 
   .main {
+    position: relative;
     min-height: 0;
     overflow-y: auto;
   }

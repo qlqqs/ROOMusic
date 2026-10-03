@@ -1,6 +1,15 @@
 import type { ApiResponse } from "../../../shared/api";
 import { apiRequest } from "../../../shared/api";
-import { decodeReleaseGroupPage, type ReleaseGroupPageDTO } from "./decoders";
+import {
+  decodeReleaseDetail,
+  decodeReleaseEvidence,
+  decodeReleaseGroupDetail,
+  decodeReleaseGroupPage,
+  type ReleaseDetailDTO,
+  type ReleaseEvidenceDTO,
+  type ReleaseGroupDetailDTO,
+  type ReleaseGroupPageDTO,
+} from "./decoders";
 
 export type ReleaseGroupListParams = {
   page: number;
@@ -17,6 +26,23 @@ export function fetchReleaseGroupPage(params: ReleaseGroupListParams): Promise<A
   if (params.attentionRequired) query.set("attention", "required");
   if (params.search !== undefined && params.search !== "") query.set("q", params.search);
   return apiRequest({ method: "GET", path: `/api/v1/release-groups?${query}`, signal: params.signal }, decodeReleaseGroupPage);
+}
+
+// 下面三个接口的 ID 由调用方先用 isUuid 校验，不是 UUID 的值不会发请求。
+
+/** 一个专辑组：组摘要加成员版本的摘要（最多 100 个，release_count 是完整数量）。 */
+export function fetchReleaseGroup(groupId: string, signal?: AbortSignal): Promise<ApiResponse<ReleaseGroupDetailDTO>> {
+  return apiRequest({ method: "GET", path: `/api/v1/release-groups/${groupId}`, signal }, decodeReleaseGroupDetail);
+}
+
+/** 一个发行版本的详情：介质、曲目、署名与证据摘要。 */
+export function fetchRelease(releaseId: string, signal?: AbortSignal): Promise<ApiResponse<ReleaseDetailDTO>> {
+  return apiRequest({ method: "GET", path: `/api/v1/releases/${releaseId}`, signal }, decodeReleaseDetail);
+}
+
+/** 完整证据（仅管理员）：字段值、候选、原因码与分组证据。 */
+export function fetchReleaseEvidence(releaseId: string, signal?: AbortSignal): Promise<ApiResponse<ReleaseEvidenceDTO>> {
+  return apiRequest({ method: "GET", path: `/api/v1/releases/${releaseId}/evidence`, signal }, decodeReleaseEvidence);
 }
 
 /**

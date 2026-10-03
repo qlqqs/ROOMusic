@@ -1,6 +1,6 @@
-import { createRootRouteWithContext, createRoute, createRouter, Outlet, redirect, type RouterHistory } from "@tanstack/react-router";
+import { createRootRouteWithContext, createRoute, createRouter, Outlet, redirect, useLocation, type RouterHistory } from "@tanstack/react-router";
 import { sanitizeRedirect, type SessionController } from "../features/auth";
-import { parseAlbumSearch, type AlbumSearch } from "../features/catalog";
+import { albumListSearchFromState, parseAlbumDetailSearch, parseAlbumSearch, type AlbumDetailSearch, type AlbumSearch } from "../features/catalog";
 import { ScanDetail } from "../features/library";
 import { parsePageParam } from "../shared/lib/pagination";
 import { AuthenticatedLayout } from "./shell/authenticated-layout";
@@ -77,11 +77,20 @@ const albumsRoute = createRoute({
   component: AlbumsRoute,
 });
 
-// 组 ID 不是 UUID 等情况由详情页自己说明；这里只定义形状。
+// 详情：release 只在选中非代表版本时出现，规范化（不在本组成员里的值丢弃）由详情页在组详情返回后做。
+// 组 ID 不是 UUID 等情况也由详情页自己说明；“返回专辑列表”的参数来自卡片链接带进来的 history state。
+function AlbumDetailRoute() {
+  const { groupId } = albumDetailRoute.useParams();
+  const { release } = albumDetailRoute.useSearch();
+  const state = useLocation({ select: (location) => location.state });
+  return <AlbumDetailPage groupId={groupId} release={release} list={albumListSearchFromState(state)} />;
+}
+
 const albumDetailRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: "/albums/$groupId",
-  component: AlbumDetailPage,
+  validateSearch: (search: Record<string, unknown>): AlbumDetailSearch => parseAlbumDetailSearch(search),
+  component: AlbumDetailRoute,
 });
 
 // 管理页由 AdminGate 把关：非管理员显示“需要管理员权限”，不渲染页面内容，也就不会调用管理接口。

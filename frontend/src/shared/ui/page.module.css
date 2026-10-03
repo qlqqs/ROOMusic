@@ -42,3 +42,14 @@
     font-size: var(--fs-48);
   }
 }
+
+/* 长标题降一级字号（窄屏 36 → 25px，宽屏 48 → 36px）；选择器更具体，两种宽度下都压过上面的规则。 */
+.heading[data-compact] h1 {
+  font-size: var(--fs-25);
+}
+
+@media (min-width: 768px) {
+  .heading[data-compact] h1 {
+    font-size: var(--fs-36);
+  }
+}

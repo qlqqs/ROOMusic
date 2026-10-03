@@ -1,0 +1,67 @@
+/* 容器查询：带侧栏的中等视口里内容区很窄，按容器宽度而不是视口宽度决定封面是否并排。 */
+.container {
+  container-type: inline-size;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4) var(--space-6);
+  align-items: start;
+}
+
+.cover {
+  width: min(100%, 280px);
+}
+
+.info {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-6);
+  margin: 0;
+}
+
+.fact {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.fact dt {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+}
+
+.fact dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-heading);
+  font-size: var(--fs-20);
+  line-height: 1.25;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.attention {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+}
+
+@container (min-width: 560px) {
+  .hero {
+    grid-template-columns: 240px minmax(0, 1fr);
+  }
+
+  .cover {
+    width: 100%;
+  }
+}

@@ -1,0 +1,100 @@
+.evidence {
+  min-width: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-divider);
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-height);
+  cursor: pointer;
+  list-style: none;
+}
+
+/* Safari 用的专有标记也去掉，自己画折叠箭头。 */
+.summary::-webkit-details-marker {
+  display: none;
+}
+
+.chevron {
+  flex: none;
+  color: var(--text-accent);
+}
+
+.evidence[open] .chevron {
+  transform: rotate(90deg);
+}
+
+.summaryText {
+  font-family: var(--font-heading);
+  font-size: var(--fs-20);
+  font-weight: var(--font-heading-weight);
+}
+
+.count {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.body {
+  display: grid;
+  gap: var(--space-4);
+  padding-top: var(--space-3);
+  min-width: 0;
+}
+
+.note {
+  max-width: 70ch;
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+}
+
+.full {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-divider);
+}
+
+.detail {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.subheading {
+  font-size: var(--fs-17);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-1) var(--space-4);
+  margin: 0;
+  font-size: var(--fs-14);
+}
+
+.facts dt {
+  color: var(--text-secondary);
+}
+
+.facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.plainList {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.path {
+  overflow-wrap: anywhere;
+}

@@ -1,0 +1,64 @@
+import { describe, expect, it } from "vitest";
+import { listApiSampleNames, loadApiSample } from "../../test/api-samples";
+import { decodeReleaseDetail, decodeReleaseEvidence } from "./api/decoders";
+import {
+  candidateKindLabel,
+  confidenceLabel,
+  creditRoleLabel,
+  evidenceActionLabel,
+  evidenceFieldLabel,
+  evidenceSourceLabel,
+  reasonCodeLabel,
+} from "./labels";
+
+describe("词表标签", () => {
+  const labels = [
+    ["署名角色", creditRoleLabel, "composer", "作曲"],
+    ["证据字段", evidenceFieldLabel, "catalog_number", "编号"],
+    ["证据来源", evidenceSourceLabel, "filename_fallback", "文件名（推断）"],
+    ["可信度", confidenceLabel, "medium", "中"],
+    ["处理方式", evidenceActionLabel, "uncertain_apply", "不确定，已暂时采用"],
+    ["原因码", reasonCodeLabel, "inconsistent_candidates", "候选值互相不一致"],
+    ["归组方式", candidateKindLabel, "box_leaf", "套装里的子目录"],
+  ] as const;
+
+  it.each(labels)("%s：已知值给中文名，未知值原样显示", (_name, label, known, expected) => {
+    expect(label(known)).toBe(expected);
+    expect(label("some_future_value")).toBe("some_future_value");
+    expect(label("")).toBe("");
+  });
+
+  it("后端样本里出现过的取值都有中文名（样本之外新增的取值会原样显示）", () => {
+    const names = listApiSampleNames().filter((name) => name.startsWith("releases/get") || name === "releases/evidence");
+    expect(names.length).toBeGreaterThan(0);
+    const unknown: string[] = [];
+    const check = (label: (value: string) => string, value: string, kind: string) => {
+      if (label(value) === value) unknown.push(`${kind}:${value}`);
+    };
+    for (const name of names) {
+      const body = loadApiSample(name).body;
+      if (name === "releases/evidence") {
+        const evidence = decodeReleaseEvidence(body);
+        for (const field of evidence.fields) {
+          check(evidenceFieldLabel, field.field, "field");
+          check(evidenceSourceLabel, field.source, "source");
+          check(confidenceLabel, field.confidence, "confidence");
+          check(evidenceActionLabel, field.action, "action");
+        }
+        if (evidence.grouping !== null) check(candidateKindLabel, evidence.grouping.candidate_kind, "candidate_kind");
+        continue;
+      }
+      const release = decodeReleaseDetail(body);
+      for (const item of release.evidence) {
+        check(evidenceFieldLabel, item.field, "field");
+        check(evidenceSourceLabel, item.source, "source");
+        check(confidenceLabel, item.confidence, "confidence");
+        check(evidenceActionLabel, item.action, "action");
+      }
+      for (const credit of [...release.credits, ...release.media.flatMap((medium) => medium.tracks.flatMap((track) => track.credits))]) {
+        check(creditRoleLabel, credit.role, "role");
+      }
+    }
+    expect(unknown).toEqual([]);
+  });
+});

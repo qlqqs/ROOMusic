@@ -2,4 +2,4 @@
 export { AlbumDetailView } from "./components/album-detail-view";
 export { AlbumListView } from "./components/album-list-view";
 export { LibrarySummary } from "./components/library-summary";
-export { parseAlbumSearch, type AlbumSearch } from "./album-search";
+export { albumListSearchFromState, parseAlbumDetailSearch, parseAlbumSearch, type AlbumDetailSearch, type AlbumSearch } from "./album-search";

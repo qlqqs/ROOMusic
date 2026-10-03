@@ -1,11 +1,14 @@
-import { AlbumDetailView } from "../../features/catalog";
-import { Page } from "../../shared/ui";
+import { AlbumDetailView, type AlbumSearch } from "../../features/catalog";
+import { useViewerScope } from "../../features/auth";
 
-/** 专辑详情（第 3 步替换为真实内容）。 */
-export function AlbumDetailPage() {
-  return (
-    <Page title="专辑详情">
-      <AlbumDetailView />
-    </Page>
-  );
+type AlbumDetailPageProps = {
+  groupId: string;
+  release: string | undefined;
+  list: AlbumSearch;
+};
+
+/** 专辑详情：所有登录用户都能读；管理员在“来源与证据”里多一个完整证据。页面标题与 h1 由详情自己给出（取决于选中的版本）。 */
+export function AlbumDetailPage(props: AlbumDetailPageProps) {
+  const { viewer } = useViewerScope();
+  return <AlbumDetailView {...props} isAdmin={viewer.role === "admin"} />;
 }

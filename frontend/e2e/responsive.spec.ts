@@ -2,7 +2,7 @@ import { sampleBody } from "../src/test/api-samples";
 import { albumGroups } from "../src/test/catalog-data";
 import type { DiagnosticsPageDTO } from "../src/features/library/api/decoders";
 import type { ApiMock, MockOptions } from "./support/api-mock";
-import { expectNoHorizontalOverflow, widths } from "./support/checks";
+import { expectNoDocumentScroll, expectNoHorizontalOverflow, widths } from "./support/checks";
 import { expect, test } from "./support/fixtures";
 import { heading } from "./support/locators";
 
@@ -74,6 +74,7 @@ test.describe("五种宽度下没有横向溢出", () => {
         await expect(heading(page, item.title)).toBeVisible();
         await page.evaluate(() => document.fonts.ready);
         await expectNoHorizontalOverflow(page, `${item.name} @${width}px`);
+        await expectNoDocumentScroll(page, `${item.name} @${width}px`);
       }
     });
   }

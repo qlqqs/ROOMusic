@@ -1,0 +1,77 @@
+.nav {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.heading {
+  font-size: var(--fs-17);
+}
+
+.list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.link {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  min-height: var(--control-height);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-md);
+  color: inherit;
+  text-decoration: none;
+}
+
+.link:hover {
+  background: var(--color-hover);
+}
+
+/* 路由给当前版本的链接加 aria-current="page"：用整块轻底和加粗的边框表达选中，不只靠颜色。 */
+.link[aria-current="page"] {
+  border-color: var(--color-accent-700);
+  background: var(--color-selected);
+  box-shadow: inset 0 0 0 1px var(--color-accent-700);
+}
+
+.name {
+  font-family: var(--font-heading);
+  font-size: var(--fs-17);
+  font-weight: var(--font-heading-weight);
+  /* “版本 2”是界面标签不是作品标题：Cormorant 默认的旧式数字（“2”像小写字母）换成等高数字。 */
+  font-variant-numeric: lining-nums;
+}
+
+.title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  max-width: 36ch;
+  font-size: var(--fs-14);
+}
+
+.detail {
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.note {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+}

@@ -1,0 +1,100 @@
+.media {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.jump {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-4);
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+}
+
+.jumpList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+ * content-visibility: auto 自带 paint 包含，会裁掉超出分段边界的内容（例如标题的焦点环），
+ * 所以用内边距把边界往外放一圈，再用负外边距抵消。
+ */
+.medium {
+  display: grid;
+  gap: var(--space-3);
+  margin: -6px;
+  padding: 6px;
+  scroll-margin-top: calc(var(--layout-topbar-height) + var(--space-3));
+  content-visibility: auto;
+  contain-intrinsic-size: auto 480px;
+}
+
+.heading {
+  font-size: var(--fs-17);
+  overflow-wrap: anywhere;
+  /* “第 2 张”是界面标签不是作品标题：用等高数字，不用 Cormorant 默认的旧式数字。 */
+  font-variant-numeric: lining-nums;
+}
+
+.count {
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: var(--fs-14);
+  font-weight: 400;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.tracks {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.track {
+  display: grid;
+  grid-template-columns: 3.2em minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-divider);
+}
+
+.number {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  font-variant-numeric: lining-nums tabular-nums;
+  text-align: right;
+}
+
+.body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+  font-size: var(--fs-15);
+}
+
+.secondary {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+}
+
+.duration {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  font-variant-numeric: lining-nums tabular-nums;
+  white-space: nowrap;
+}

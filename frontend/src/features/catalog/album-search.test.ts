@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isFiltered, MAX_SEARCH_BYTES, parseAlbumSearch, parseSearchText } from "./album-search";
+import { albumListSearchFromState, isFiltered, MAX_SEARCH_BYTES, parseAlbumDetailSearch, parseAlbumSearch, parseSearchText } from "./album-search";
 
 describe("parseSearchText", () => {
   it("去掉首尾空白后保留", () => {
@@ -61,5 +61,36 @@ describe("isFiltered", () => {
     expect(isFiltered({ page: 3 })).toBe(false);
     expect(isFiltered({ q: "bach" })).toBe(true);
     expect(isFiltered({ attention: "required" })).toBe(true);
+  });
+});
+
+describe("parseAlbumDetailSearch", () => {
+  const id = "00000000-0000-4000-8000-00000000000a";
+
+  it("UUID 形状的 release 保留，并统一成小写", () => {
+    expect(parseAlbumDetailSearch({ release: id })).toEqual({ release: id });
+    expect(parseAlbumDetailSearch({ release: id.toUpperCase() })).toEqual({ release: id });
+  });
+
+  it("不是 UUID 的值显式返回 undefined（路由会把校验结果合并到原始查询串上）", () => {
+    for (const value of ["", "abc", "1234", 1234, true, null, {}, [id], `${id}x`, ` ${id}`]) {
+      const result = parseAlbumDetailSearch({ release: value });
+      expect(result).toEqual({ release: undefined });
+      expect("release" in result).toBe(true);
+    }
+    expect(parseAlbumDetailSearch({})).toEqual({ release: undefined });
+  });
+});
+
+describe("albumListSearchFromState", () => {
+  it("取出卡片链接带进来的列表参数，并经列表自己的校验", () => {
+    expect(albumListSearchFromState({ albumList: { q: " 贝多芬 ", attention: "required", page: 3 } })).toEqual({ q: "贝多芬", attention: "required", page: 3 });
+    expect(albumListSearchFromState({ albumList: { q: "x", attention: "other", page: 1 } })).toEqual({ q: "x", attention: undefined, page: undefined });
+  });
+
+  it("没有 state、形状不对或被改写成别的类型时回到不带参数的列表", () => {
+    for (const state of [undefined, null, "albumList", 3, {}, { albumList: null }, { albumList: "q=1" }, { albumList: [1, 2] }, { albumList: 7 }]) {
+      expect(albumListSearchFromState(state)).toEqual({});
+    }
   });
 });
