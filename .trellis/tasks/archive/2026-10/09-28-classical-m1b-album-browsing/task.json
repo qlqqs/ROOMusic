@@ -2,7 +2,7 @@
   "id": "classical-m1b-album-browsing",
   "name": "classical-m1b-album-browsing",
   "title": "M1b：专辑浏览",
-  "description": "基于阶段 I 的按组只读接口交付专辑列表与详情，单版本自然退化，未实现的能力隐藏或明确禁用。",
+  "description": "基于阶段 I 的按组只读接口交付专辑列表与详情，单版本自然退化，未实现的能力不出现（不做禁用占位）。",
   "status": "completed",
   "dev_type": null,
   "scope": null,

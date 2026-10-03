@@ -4,7 +4,7 @@
 > 来源：M1a 记入[运行合同技术债](../../../../spec/backend/core0-runtime-contracts.md)的后端缺口；用户 2026-10-02 要求规划其中五项：扫描历史列表、
 > `/auth/me` 不返回用户 ID、成员写操作没有幂等、`createUser` 把任何插入失败都当成 409、静态资源没有缓存头。
 > 跨前后端，按复杂任务管理：技术设计见 [design.md](design.md)，执行顺序与验证命令见 [implement.md](implement.md)。
-> 先于 [M1b](../../../09-28-classical-m1b-album-browsing/prd.md) 实施：M1b 显示封面前需要的封面缓存头结论（ADR 0001 第 6 项）与分页组件在本任务落定。
+> 先于 [M1b](../09-28-classical-m1b-album-browsing/prd.md) 实施：M1b 显示封面前需要的封面缓存头结论（ADR 0001 第 6 项）与分页组件在本任务落定。
 
 ## 目标与用户价值
 

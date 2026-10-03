@@ -1,7 +1,7 @@
 # M1b：专辑浏览
 
-> 状态：已实施（2026-10-02 完成规划并获用户批准，F3 归档后同日启动，2026-10-03 实施完成；结果见“实施结果与验收对照”）。2026-09-28 由[路线修订任务](../archive/2026-09/09-28-core-1-roadmap-revision/design.md)（第二部分）创建。
-> 父任务见 [Classical 重设计 / Core 1](../09-27-classical-core-1/prd.md)。技术设计见 [design.md](design.md)，执行顺序与验证命令见 [implement.md](implement.md)。
+> 状态：已实施（2026-10-02 完成规划并获用户批准，F3 归档后同日启动，2026-10-03 实施完成；结果见“实施结果与验收对照”）。2026-09-28 由[路线修订任务](../../2026-09/09-28-core-1-roadmap-revision/design.md)（第二部分）创建。
+> 父任务见 [Classical 重设计 / Core 1](../../../09-27-classical-core-1/prd.md)。技术设计见 [design.md](design.md)，执行顺序与验证命令见 [implement.md](implement.md)。
 
 ## 目标与用户价值
 
@@ -10,11 +10,11 @@ M3 人工归组之前每组只有一个版本，页面自然退化，不出现�
 
 ## 依据
 
-- [Core 1 路线](../../../docs/architecture/core-1-roadmap.md) 的 M1b 行与能力矩阵（专辑库、发行详情与封面、来源与待关注信息三行）。
-- [frontend/DESIGN.md](../../../frontend/DESIGN.md)：专辑信息顺序（第 4 节）、Release 列表/封面与版本/介质选择的组件合同（第 5 节）、
+- [Core 1 路线](../../../../../docs/architecture/core-1-roadmap.md) 的 M1b 行与能力矩阵（专辑库、发行详情与封面、来源与待关注信息三行）。
+- [frontend/DESIGN.md](../../../../../frontend/DESIGN.md)：专辑信息顺序（第 4 节）、Release 列表/封面与版本/介质选择的组件合同（第 5 节）、
   页面能力（第 7 节）、原型落地调整（第 8 节）、可访问性与长标题门槛（第 9 节）、M1b 验收与仍待确认项（第 10 节）。
-- [ADR 0002](../../../docs/architecture/adr/0002-metadata-overlays.md) 第六节：Core 1 只允许人工确认归组。
-- [Catalog REST 合同](../../spec/backend/catalog-rest-contracts.md)与[前端 URL 状态约定](../../spec/frontend/state-management.md)。
+- [ADR 0002](../../../../../docs/architecture/adr/0002-metadata-overlays.md) 第六节：Core 1 只允许人工确认归组。
+- [Catalog REST 合同](../../../../spec/backend/catalog-rest-contracts.md)与[前端 URL 状态约定](../../../../spec/frontend/state-management.md)。
 
 ## 已核实事实（2026-10-02）
 
@@ -187,7 +187,7 @@ M1b 只改前端与后端的样本测试，后端生产代码没有改动，所�
 - **后端：CUE 专辑拿不到文件夹封面**：CUE 虚拟曲目的 `relative_path` 形如 `cue-album/album.cue#track-1@cue-album/image.flac#index-0`，
   `saveArtworkForRelease` 用 `filepath.Dir` 取曲目所在文件夹，得到不存在的目录，`cover.png` 没有被发现。页面按“没有封面”显示文字版面，没有出错。
 - **后端：多碟专辑只在第一张碟的文件夹里找封面**：放在多碟专辑父目录里的封面不会被发现，而真实资料库里常见这种布局。
-- 以上两项是后端行为，M1b 范围外不改，已记入[后端运行合同](../../spec/backend/core0-runtime-contracts.md)的技术债，由用户另行安排；合成冒烟已经能复现。
+- 以上两项是后端行为，M1b 范围外不改，已记入[后端运行合同](../../../../spec/backend/core0-runtime-contracts.md)的技术债，由用户另行安排；合成冒烟已经能复现。
 - 运行合同文件已超过 32 KB，值得按主题拆分（本任务只追加了一条技术债，没有动结构）。
 - 后续任务沿用的东西：`features/catalog` 的 decoder 与端点、`Cover`、`labels.ts`/`format.ts`、`Panel.headingRef` 的焦点约定、`e2e/support/albums-data.ts` 的长内容数据，以及 `expectNoDocumentScroll` 与变异验证的做法。
 
@@ -199,4 +199,4 @@ M1b 只改前端与后端的样本测试，后端生产代码没有改动，所�
   介质逐段列出并在多碟时加页内跳转、不做“结构树”、证据按权限显示、搜索显式提交、不做缩略图。K9（封面无滤镜、密集信息用衬线字体）按 DESIGN 的
   “看过真实页面再定”处理：先按默认实施，收尾时用截图请用户确认。
 - 理由：先按组、版本的最终形态落地浏览能力，让后续整理与版本管理不必返工。
-- 状态：F3 已归档，2026-10-02 启动并实施；2026-10-03 实施完成，K9 经用户看过截图确认（见“K9 的确认”）。
+- 状态：F3 已归档，2026-10-02 启动并实施；2026-10-03 实施完成，K9 经用户看过截图确认（见“K9 的确认”），同日归档。

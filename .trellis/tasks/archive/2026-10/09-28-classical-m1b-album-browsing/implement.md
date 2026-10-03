@@ -66,7 +66,7 @@
 
 - [x] PRD 写“实施结果与验收对照”（A1–A12），列实际运行的命令与结果。
 - [x] 把截图交给用户确认 K9（2026-10-03，两项都确认默认），答复已记入 PRD 的“K9 的确认”与 DESIGN 的“仍待确认”第 2 项。
-- [ ] `task.py archive classical-m1b-album-browsing --skip-branch-validation`，随后单独提交归档后的链接修正。
+- [x] `task.py archive classical-m1b-album-browsing --skip-branch-validation`，随后单独提交归档后的链接修正。
 
 ## 风险与回退点
 
