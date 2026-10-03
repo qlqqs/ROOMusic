@@ -31,7 +31,7 @@
 
 ### 第 2 步：端到端冒烟
 
-- [ ] 用 `/tmp/m1b-smoke` 的合成素材，在 `roomusic-test` 项目里起真实后端，扫描后检查：
+- [x] 用 `/tmp/m1b-smoke` 的合成素材，在 `roomusic-test` 项目里起真实后端，扫描后检查：
   - `cue-album` 有封面
   - `double-album` 的封面放回父目录后有封面
   - 其他专辑的封面与 M1b 冒烟时一致
@@ -41,13 +41,14 @@
 ### 第 3 步：文档
 
 - [x] `research/real-library-artwork-layout.md`：真实库只读统计（规划时已写好，只有计数，写明了方法与范围）。
-- [ ] 运行合同：
+- [x] 运行合同：
   - 封面规则补上查找目录、顺序与大小写
   - 错误矩阵与必需测试同步
   - 技术债两条划掉并注明 F4，补记大小写缺口已修
-- [ ] 父任务 `09-27-classical-core-1` 的 PRD 任务表加 F4，`implement.md` 加对应条目。
-- [ ] PRD 补“实施结果与验收对照”。
-- [ ] 链接检查与 `git diff --check`。
+- [x] 父任务 `09-27-classical-core-1` 的 PRD 任务表加 F4，`implement.md` 加对应条目。
+- [x] PRD 补“实施结果与验收对照”。
+- [x] 路线文档 `docs/architecture/core-1-roadmap.md` 同步 F4（原文还写着“未修”）。
+- [x] 链接检查与 `git diff --check`。
 - [ ] 提交：`docs(f4): 封面发现规则与实施结果`。
 
 ### 收尾

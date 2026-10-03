@@ -1,6 +1,6 @@
 # F4：后端封面发现缺口
 
-> 状态：规划中（2026-10-03 创建）。父任务：[Classical 重设计 / Core 1](../09-27-classical-core-1/prd.md)。
+> 状态：已实施并验证（2026-10-03 创建并实施，代码提交 `b66f569`）。父任务：[Classical 重设计 / Core 1](../09-27-classical-core-1/prd.md)。
 > 来源：M1b 真实接口冒烟发现、记入[运行合同技术债](../../spec/backend/core0-runtime-contracts.md)的两处封面发现缺口；用户 2026-10-03 要求先解决。
 > 规划时用真实资料库的只读聚合统计又发现了第三处（文件名大小写），一并纳入。
 > 只改后端扫描；技术设计见 [design.md](design.md)，执行顺序与验证命令见 [implement.md](implement.md)。
@@ -100,3 +100,26 @@ Linux 文件系统区分大小写（`music/` 在 ext 文件系统上），所以
 - **查找不超出发行目录**：Box 叶子目录、CUE 跨目录引用的音频目录都不去找。宁可显示“没有封面”，也不把盒子或公共目录里的封面绑到每张专辑上。
 - **大小写纳入本任务**：缺口 1、2 修好之后，真实库里的效果主要取决于大小写；改动集中在同一个函数里。
 - **不做迁移，也不兼容旧数据**：每次扫描都会重新绑定封面；开发阶段不为旧结果写兼容逻辑（用户既有裁决）。
+
+## 实施结果与验收对照
+
+2026-10-03 实施。代码在 `b66f569`（`backend/internal/catalog/persist.go`、`backend/internal/library/scanner.go` 与测试），文档在随后的提交里。
+
+| # | 结果 |
+| --- | --- |
+| A1 | 通过：集成测试 `TestPostgreSQLCueAlbumGetsFolderArtworkAndRescanRebindsIt`（先没有封面，放入 `Cover.PNG` 后重扫绑定 `folder` 封面）；冒烟里 CUE 专辑 800×500 封面可经接口读取 |
+| A2 | 通过：`TestPostgreSQLStrictMultiDiscUsesParentFolderArtwork`（父目录 `Cover.JPG`，JPEG） |
+| A3 | 通过：`...ParentArtworkOutranksFirstDisc`（父目录胜过 `CD1/`）、`...FallsBackToDiscFolderArtwork`（只有 `CD2/` 时用 `CD2/`）；冒烟阶段 B、C 复现 |
+| A4 | 通过：`evidence_test.go` 的大小写变体、全小写优先、字节序、优先级不受大小写影响 4 个单元测试；冒烟里 `Folder.PNG` 被发现 |
+| A5 | 通过：`TestPostgreSQLBoxLeafDoesNotUseBoxParentArtwork`；catalog 单元测试覆盖普通、根目录散曲；原有测试期望没有改 |
+| A6 | 通过：`TestPostgreSQLEmbeddedArtworkOutranksFolderArtwork`（内嵌封面与目录里的 `cover.png` 同时存在，取内嵌） |
+| A7 | 通过：原有三个失败测试只改了函数签名；新增“前一个目录无效、后一个有效”“只有无效文件返回错误”“目录不存在跳过”“读目录失败报告”等用例 |
+| A8 | 通过：`gofmt -l`、`go vet ./...`、`go build ./...`；`go test -race ./internal/catalog/... ./internal/library/... -count=1`；`./scripts/test-integration.sh` 全部通过，`api-samples` 没有变化。没有运行全量 `go test -race ./...`：改动只在 catalog、library 两个包，REST 与前端没有变化 |
+| A9 | 通过：运行合同补了查找目录、顺序、大小写与错误矩阵、必需测试，技术债两条（外加大小写）划掉并注明 F4；父任务表已加 F4；相对链接检查见提交记录 |
+
+- 集成测试的变异检查：去掉发行目录后，多碟父目录的两个集成测试失败；改回用 `filepath.Dir(RelativePath)` 取曲目目录后，CUE 的单元测试失败。
+- 端到端冒烟见 [research/e2e-smoke.md](research/e2e-smoke.md)：合成素材上 15 个组有封面，CUE 专辑从“没有”变为有，A/B/C 三阶段一致。
+- 设计与实现的差别：`ArtworkDirectories` 取曲目目录时复用 organizer 的 `locateObservation`（观察的 `Directory`，为空时才取路径的目录），
+  与整理时对同一条观察的目录判断一致，没有另写一份。
+- 用户重扫真实库后的预期：按 [research/real-library-artwork-layout.md](research/real-library-artwork-layout.md) 的统计，最多约 8 张专辑多出文件夹封面（6 个含 CUE 的目录、唯一的多碟专辑，以及 1 个只有大小写不同封面的普通目录）；
+  已有内嵌封面的专辑不变；没有变化的专辑不会被改写。扫描本身不改动 `music/`。

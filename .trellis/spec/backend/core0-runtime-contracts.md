@@ -224,6 +224,19 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
   超限或格式无效时必须 fail closed 并保留原关系，不能当作“来源已删除”。复用由 hash
   命名的受管文件前核对实际字节，损坏时原子替换；数据库查询、绑定失败后的新文件清理、
   旧 key 引用检查和文件删除错误都必须向上返回，使扫描进入 `incomplete`。
+- 封面来源与文件夹封面发现（F4，2026-10-03）：
+  - 内嵌封面优先：按碟序、碟内按位置取第一首带内嵌封面的曲目；没有才找文件夹封面。
+  - 文件夹封面按目录顺序查找（`OrganizedCandidate.ArtworkDirectories`，相对注册根）：先是发行目录 `Anchor.Scope`，
+    再按碟序、曲序列出各曲目观察的 `Directory`，去重。CUE 虚拟轨的 `Directory` 是 sheet 所在目录，不能从虚拟路径
+    `sheet.cue#track-N@parent#index-M` 用 `filepath.Dir` 推出。严格多碟专辑的发行目录是各碟的父目录，所以顺序是
+    `A` → `A/CD1` → `A/CD2`；Box 叶子只查自己的目录，不查 Box 父目录；CUE 的发行目录是 sheet 目录，不查跨目录的音频目录。
+    查找不会越出发行自己的目录，避免把盒装或公共目录里的封面绑给每张专辑。
+  - 每个目录读一次（`os.ReadDir`），文件名不区分大小写：名字表与优先级不变（`cover.{jpg,jpeg,png,webp}`、`folder.{jpg,jpeg,png}`、
+    `front.{jpg,jpeg,png}`），大小写不同的同名文件里全小写的优先，其余按字节序。
+  - 每个命名文件仍要通过安全检查：不是符号链接、是普通文件、大小 1 字节到 16 MiB、读取成功、`artwork.SniffMIME` 识别格式。
+    无效的命名文件记下第一个错误后继续找；全部目录找完仍没有可用封面时才返回该错误（`artwork_failure`）。
+    目录不存在不算错误，其他读目录错误按同样方式记录。
+  - 没有迁移：重扫会对每个候选重新发现封面，下一次扫描即绑定或移除。
 - `canceled` 是已落地的 wire 终态；取消意图持久化在
   `scan_runs.cancel_requested_at`，扫描 worker 由应用生命周期 context 管理，
   不继承启动或取消请求的 HTTP context。
@@ -346,7 +359,13 @@ Authorization/session token、密码、数据库 URL、完整 NAS 路径或音�
 | canonical 对照出现未知字段差异 | 保留为 `current_regression`/未分类失败；不得用空值或通用 ignore 放行 |
 | V0/current 报告出现 `current_regression`、未知分类或分类计数与差异项不闭合 | 整轮 Smoke 非零退出，不发布成功报告或保留该轮审计产物 |
 | 相同 album 的部分 Track 缺少 AlbumArtist，且其它 Track 只有一个明确值 | 保持同一候选，明确 AlbumArtist 优先于 Track Artist |
-| 命名 folder artwork 非普通文件、为空、超限或格式损坏 | `artwork_failure`，保留已有关系，不解释为封面删除 |
+| 命名 folder artwork 非普通文件、为空、超限或格式损坏，且所有查找目录里没有别的可用封面 | `artwork_failure`，保留已有关系，不解释为封面删除 |
+| 前一个目录里的命名封面无效，后一个目录里有可用封面 | 用后一个目录的封面，不报错 |
+| 查找目录不存在 | 跳过该目录，不报错 |
+| 读查找目录失败（非“不存在”，如权限） | 记为错误并继续找下一个目录；全部找完仍没有可用封面才 `artwork_failure` |
+| 发行目录与曲目目录都有封面（如严格多碟的父目录与 `CD1/`） | 先找到的发行目录（父目录）胜出 |
+| 候选带内嵌封面，目录里也有文件夹封面 | 内嵌封面，`source_type=embedded` |
+| 文件名只是大小写不同（`Cover.JPG`、`FOLDER.png`） | 与全小写名同样被发现；优先级不受大小写影响 |
 | content-addressed 受管文件与其 hash 内容不符 | 写临时文件并原子替换，随后才确认数据库关系 |
 | 受管封面查询或旧文件清理失败 | 返回分类错误并令扫描不完整，不静默吞错 |
 | 单个 candidate/封面写入失败 | 已提交候选保持可见，记录分类诊断并使扫描不完整，禁止 `missing` |
@@ -386,6 +405,8 @@ Authorization/session token、密码、数据库 URL、完整 NAS 路径或音�
   candidate，Release artist 与 credit 使用明确 `AlbumArtist`；缺失轨不伪造自己的 tag。
 - 正确：已存在的 content-addressed 封面文件被破坏后，重扫按期望字节修复；旧 key
   清理失败返回 `artwork_failure`，不报告成功。
+- 正确：CUE 专辑目录里的 `cover.png` 被绑定；严格多碟专辑父目录里的 `Cover.JPG` 被绑定；Box 叶子目录没有封面时，
+  Box 父目录里的封面不会绑给它；封面后来才放进目录，下一次扫描即绑定。
 - 错误：把 `role` 缺失解释为 admin；把 root 原始路径放入列表 JSON；unsupported
   文件仍让扫描 succeeded 并执行 missing；把 FIFO 交给 parser；按标题删除 CUE 轨；
   忽略 `Exec` 错误后返回 200。
@@ -399,7 +420,10 @@ Authorization/session token、密码、数据库 URL、完整 NAS 路径或音�
   missing reference/missing `INDEX 01` 非阻断跳过、`unsafe`/`unchecked` 引用阻断、
   sheet/track performer provenance、逐轨 map 隔离、inferred track/disc fallback、
   明确标签优先、缺失 AlbumArtist 兼容与 AlbumArtist 决策优先级、艺人/credit 多分隔符、
-  官方别名/固定组合名，rip log 64 KiB 预算、签名和仅覆盖 `folder` 的优先级，以及各格式音频内容指纹（同音频不同标签
+  官方别名/固定组合名，rip log 64 KiB 预算、签名和仅覆盖 `folder` 的优先级，封面目录顺序（`ArtworkDirectories`：普通、CUE、
+  CUE 跨目录、严格多碟含碟号 10、Box 叶子、根目录散曲、去重与按曲序）与内嵌封面选取（`EmbeddedArtwork`），
+  文件夹封面发现（大小写变体、全小写优先、名字优先级不受大小写影响、多目录顺序、前一个目录无效时用后一个、目录不存在跳过、
+  读目录失败报告、符号链接/无效/读取失败），以及各格式音频内容指纹（同音频不同标签
   相同、音频变化不同、FLAC MD5 为零的回退、MP3 首尾标签、OGG 注释包分页、读取中取消）。
 - PostgreSQL 集成（配置 `ROOMUSIC_TEST_DATABASE_URL` 时）：用户禁用与 session
   原子性、最后管理员/并发保护、未知用户 404、目录幂等与真实状态、扫描 incomplete
@@ -407,7 +431,8 @@ Authorization/session token、密码、数据库 URL、完整 NAS 路径或音�
   回滚/部分提交、跨目录 CUE 父来源对齐、regular-file 拒绝、身份规划（改名/移动/互换/相同音频、不完整与取消、换内容、跨 root、CUE、
   指纹复用与失败）与 Release 成员关系匹配、
   current evidence/track credits 替换、Track artist canonical 展示、受管封面内容重校验、
-  旧 key 清理错误传播和绑定失败清理。
+  旧 key 清理错误传播和绑定失败清理，封面发现（CUE 含重扫、严格多碟父目录、父目录与碟目录都有、回退到碟目录、
+  Box 叶子不取父目录、内嵌优先）。
 - 发行 REST/前端：present-only 列表、稳定分页/搜索、attention allowlist、详情事实、
   管理员 evidence 权限、路径脱敏、nullable/enum/数组上限和 malformed payload；按组接口与 `/releases` 逐项对应。
 - HTTP 中间件：隐式 200、显式状态、错误响应的状态/字节统计，路由模板、耗时、日志
@@ -699,12 +724,12 @@ go app.runScan(scanID, execution) // worker 由应用生命周期和持久化取
   - 没有查询允许根目录的接口，新增目录只能手输服务器上的绝对路径。
   - ~~`httpserver.Frontend` 不设缓存头；`/assets/`、`/licenses/` 这类目录路径会返回目录列表；封面缓存头 `private, max-age=86400`~~：
     F3 已修复，见上文“HTTP 缓存”。
-- M1b 真实接口冒烟（2026-10-03，见任务 `09-28-classical-m1b-album-browsing` 的 `research/real-api-smoke.md`）发现的封面发现缺口。M1b 不改后端行为，如实呈现“没有封面”，记入后续任务：
-  - CUE 专辑拿不到文件夹封面：CUE 虚拟曲目的 `relative_path` 形如 `cue-album/album.cue#track-1@cue-album/image.flac#index-0`，`saveArtworkForRelease`
-  （`backend/internal/library/scanner.go`）用 `filepath.Dir` 从中取“曲目所在文件夹”，得到不存在的目录，`cover.png` 没有被发现。
-  - 多碟专辑只在第一张碟的文件夹里找封面：封面来源取“按碟序排列的第一首曲目”（`OrganizedCandidate.ArtworkObservation`，`backend/internal/catalog/persist.go`）所在的文件夹，
-    放在专辑父目录里的 `cover.jpg` 不会被发现（真实资料库常见这种布局）。
-  - 两者的修法（CUE 取物理文件的目录、多碟回退到各碟目录的公共父目录）都会改变扫描结果，需要单独的任务、迁移前后的对照与回归测试，不夹入前端交付。
+- ~~M1b 真实接口冒烟（2026-10-03，见任务 `09-28-classical-m1b-album-browsing` 的 `research/real-api-smoke.md`）发现的封面发现缺口~~：
+  2026-10-03 由 F4（任务 `10-03-classical-f4-artwork-discovery`）修复，规则见上文“封面来源与文件夹封面发现”：
+  - ~~CUE 专辑拿不到文件夹封面~~：虚拟路径推不出真实目录；现在用观察的 `Directory`（sheet 所在目录）。
+  - ~~多碟专辑只在第一张碟的文件夹里找封面~~：现在先查发行目录（各碟的父目录），再按碟序查各碟目录。
+  - ~~封面文件名只认全小写~~（F4 规划时的只读统计发现）：Linux 区分大小写，`Cover.JPG` 等找不到；现在不区分大小写。
+  - 查找范围仍限于发行自己的目录：Box 叶子不查 Box 父目录，CUE 不查跨目录的音频目录。
 - ~~未匹配的 `/api/` 仍落入前端 fallback~~：2026-09-29 由 F1 修复。`/api` 兜底返回 JSON 404/405/503，
   完成日志的 `route_template` 记为 `<unmatched>`，见上文校验与错误矩阵。
 - ~~2026-09-27 静态审查：停用/恢复指纹未含路由 root ID，同键同 body 跨目标会重放前一个 root 的结果~~：
