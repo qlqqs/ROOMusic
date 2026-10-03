@@ -1,7 +1,7 @@
 # 拆分后端运行合同
 
 > 状态：规划中（2026-10-03 创建）。只改规范文档，不改代码。
-> 来源：M1b 归档时记下的遗留项。用户 2026-10-03 要求与 [F4](../10-03-classical-f4-artwork-discovery/prd.md) 一并先解决。
+> 来源：M1b 归档时记下的遗留项。用户 2026-10-03 要求与 [F4](../archive/2026-10/10-03-classical-f4-artwork-discovery/prd.md) 一并先解决。
 > 技术设计（各段去向）见 [design.md](design.md)，执行顺序与校验见 [implement.md](implement.md)。
 
 ## 目标与用户价值
