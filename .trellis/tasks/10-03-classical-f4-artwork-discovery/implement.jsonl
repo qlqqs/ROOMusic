@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "封面绑定、artwork_failure 失败语义、扫描诊断与技术债条目"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端测试与门禁要求"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "catalog 与 library 的职责边界与依赖方向"}
+{"file": ".trellis/spec/guides/real-music-assets.md", "reason": "真实资料库只读、只输出聚合计数"}

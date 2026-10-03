@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "层级表与 Quality Check，需列出拆分后的专题文件"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "接收发行 REST 字段与测试条目，七节结构的参照"}
