@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ReleaseGroupSummaryDTO } from "../features/catalog/api/decoders";
 import { sampleBody } from "../test/api-samples";
 import { installFakeApi, installFakeSession, installOverviewApi } from "../test/fake-api";
@@ -377,6 +377,52 @@ describe("专辑列表：分页与地址", () => {
 
     gate.resolve(firstPage);
     await waitFor(() => expect(screen.queryByText("，正在更新…")).toBeNull());
+  });
+});
+
+describe("专辑列表：翻页后的滚动与焦点", () => {
+  it("点页码链接：结果标题滚到视野顶部并获得焦点，接着 Tab 就是新一页的第一张卡片", async () => {
+    setup();
+    const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
+    try {
+      renderApp({ path: "/albums" });
+      const nav = await pagination();
+      await waitFor(() => expect(albumLinks()).toHaveLength(48));
+      expect(scroll).not.toHaveBeenCalled();
+
+      await userEvent.click(within(nav).getByRole("link", { name: "下一页" }));
+      const resultsHeading = screen.getByRole("heading", { level: 2, name: "全部专辑" });
+      expect(document.activeElement).toBe(resultsHeading);
+      expect(scroll).toHaveBeenCalledTimes(1);
+      expect(scroll.mock.contexts[0]).toBe(resultsHeading);
+
+      await waitFor(() => expect(titles()[0]).toBe("Album 049"));
+      await userEvent.tab();
+      expect(document.activeElement).toBe(albumLinks()[0]);
+    } finally {
+      scroll.mockRestore();
+    }
+  });
+
+  it("上一页同样；而改搜索词或筛选不挪动焦点（用户还在筛选区里）", async () => {
+    setup();
+    const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
+    try {
+      renderApp({ path: "/albums?page=2" });
+      const nav = await pagination();
+      await waitFor(() => expect(albumLinks()).toHaveLength(48));
+      await userEvent.click(within(nav).getByRole("link", { name: "上一页" }));
+      expect(document.activeElement).toBe(screen.getByRole("heading", { level: 2, name: "全部专辑" }));
+      expect(scroll).toHaveBeenCalledTimes(1);
+
+      const checkbox = screen.getByRole("checkbox", { name: "只看需要关注" });
+      await userEvent.click(checkbox);
+      await screen.findByRole("region", { name: "需要关注的专辑" });
+      expect(document.activeElement).toBe(checkbox);
+      expect(scroll).toHaveBeenCalledTimes(1);
+    } finally {
+      scroll.mockRestore();
+    }
   });
 });
 

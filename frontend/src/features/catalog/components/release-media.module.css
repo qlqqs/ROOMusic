@@ -1,6 +1,11 @@
+/*
+ * min-width: 0：被 content-visibility 跳过的分段会把上一次渲染时的宽度当作自己的最小内容宽度（窗口先宽后窄、
+ * 分段又在屏幕外时可复现），网格轨道随之保持旧宽度，窄屏上整页横向溢出。显式的 min-width 让轨道不再按内容的最小宽度撑开。
+ */
 .media {
   display: grid;
   gap: var(--space-6);
+  min-width: 0;
 }
 
 .jump {
@@ -28,11 +33,17 @@
 .medium {
   display: grid;
   gap: var(--space-3);
+  min-width: 0;
   margin: -6px;
   padding: 6px;
   scroll-margin-top: calc(var(--layout-topbar-height) + var(--space-3));
   content-visibility: auto;
-  contain-intrinsic-size: auto 480px;
+  /*
+   * 屏幕外的分段被跳过时没有内容撑开高度，用 480px 占位（auto 让浏览器记住渲染过的真实高度）。
+   * 只写块方向：简写 contain-intrinsic-size 带一个值会同时给宽度，被跳过的分段就有了 480px 的固有宽度，
+   * 窄屏（内容区不足 480px）上整页横向溢出。
+   */
+  contain-intrinsic-block-size: auto 480px;
 }
 
 .heading {

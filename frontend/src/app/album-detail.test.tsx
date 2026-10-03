@@ -133,12 +133,12 @@ describe("专辑详情：单版本", () => {
 });
 
 describe("专辑详情：介质与曲目", () => {
+  const original = Element.prototype.scrollIntoView;
   beforeEach(() => {
-    // jsdom 没有实现 scrollIntoView。
     Element.prototype.scrollIntoView = vi.fn();
   });
   afterEach(() => {
-    Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+    Element.prototype.scrollIntoView = original;
   });
 
   it("多张介质逐段列出：每段一个标题与曲目列表，顶部有跳到每一张的链接", async () => {

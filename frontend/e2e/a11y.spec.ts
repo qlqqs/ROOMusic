@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import { sampleBody } from "../src/test/api-samples";
 import { albumGroups } from "../src/test/catalog-data";
+import { LONG_TITLE, longContentGroup, multiVersionGroup, seedLongContent, seedVersions, singleVersionGroup } from "./support/albums-data";
 import type { DiagnosticsPageDTO } from "../src/features/library/api/decoders";
 import type { ApiMock, MockOptions } from "./support/api-mock";
 import { expectMinimumFontSize, expectNoSeriousViolations } from "./support/checks";
@@ -132,6 +133,131 @@ const states: State[] = [
       mock.groups = [];
       await page.goto("/albums");
       await expect(page.getByText(/请等待管理员添加音乐目录/)).toBeVisible();
+    },
+  },
+  {
+    name: "专辑列表（长内容）",
+    options: { signedInAs: "listener" },
+    reach: async (page, mock) => {
+      const long = longContentGroup();
+      seedLongContent(mock, long);
+      mock.groups = [long, ...albumGroups(11, () => ({ artwork: true }))];
+      await page.goto("/albums");
+      await expect(page.getByText("共 12 张专辑")).toBeVisible();
+    },
+  },
+  {
+    name: "专辑详情（单版本）",
+    options: { signedInAs: "listener" },
+    reach: async (page, mock) => {
+      const group = singleVersionGroup();
+      mock.groups = [group];
+      await page.goto(`/albums/${group.id}`);
+      await expect(heading(page, "Sample Symphonies")).toBeVisible();
+      await expect(page.getByRole("region", { name: /^第 2 张/ })).toBeVisible();
+    },
+  },
+  {
+    name: "专辑详情（多版本，多介质，需要关注）",
+    options: { signedInAs: "listener" },
+    reach: async (page, mock) => {
+      const group = multiVersionGroup();
+      mock.groups = [group];
+      seedVersions(mock, group);
+      await page.goto(`/albums/${group.id}`);
+      await expect(page.getByRole("navigation", { name: "版本" })).toBeVisible();
+      await expect(page.getByRole("region", { name: /^第 2 张/ })).toBeVisible();
+    },
+  },
+  {
+    name: "专辑详情（成员展开证据摘要）",
+    options: { signedInAs: "listener" },
+    reach: async (page, mock) => {
+      const group = multiVersionGroup();
+      mock.groups = [group];
+      seedVersions(mock, group);
+      await page.goto(`/albums/${group.id}`);
+      await page.locator("summary").click();
+      await expect(page.getByRole("table", { name: "证据摘要" })).toBeVisible();
+    },
+  },
+  {
+    name: "专辑详情（管理员的完整证据）",
+    options: { signedInAs: "curator" },
+    reach: async (page, mock) => {
+      const group = multiVersionGroup();
+      mock.groups = [group];
+      seedVersions(mock, group);
+      await page.goto(`/albums/${group.id}`);
+      await page.locator("summary").click();
+      await page.getByRole("button", { name: "查看完整证据" }).click();
+      await expect(page.getByRole("table", { name: "字段证据" })).toBeVisible();
+    },
+  },
+  {
+    name: "专辑详情（完整证据读取被拒绝）",
+    options: { signedInAs: "curator" },
+    reach: async (page, mock) => {
+      const group = singleVersionGroup();
+      mock.groups = [group];
+      mock.forbid.add(`GET /api/v1/releases/${group.representative.id}/evidence`);
+      await page.goto(`/albums/${group.id}`);
+      await page.locator("summary").click();
+      await page.getByRole("button", { name: "查看完整证据" }).click();
+      await expect(page.getByRole("alert")).toBeVisible();
+    },
+  },
+  {
+    name: "专辑详情（封面加载失败）",
+    options: { signedInAs: "listener" },
+    reach: async (page, mock) => {
+      const group = singleVersionGroup();
+      mock.groups = [group];
+      mock.brokenArtworks.add("cover-001.png");
+      await page.goto(`/albums/${group.id}`);
+      await expect(page.getByRole("button", { name: "重新加载封面" })).toBeVisible();
+    },
+  },
+  {
+    name: "专辑详情（没有封面）",
+    options: { signedInAs: "listener" },
+    reach: async (page, mock) => {
+      const group = { ...singleVersionGroup(), representative: { ...singleVersionGroup().representative, artwork: null } };
+      mock.groups = [group];
+      await page.goto(`/albums/${group.id}`);
+      await expect(page.getByRole("img", { name: "《Sample Symphonies》没有封面" })).toBeVisible();
+    },
+  },
+  {
+    name: "专辑详情（所选版本已不可见）",
+    options: { signedInAs: "listener" },
+    reach: async (page, mock) => {
+      const group = multiVersionGroup();
+      mock.groups = [group];
+      const versions = seedVersions(mock, group);
+      mock.hiddenReleases.add(versions[1]?.id ?? "");
+      await page.goto(`/albums/${group.id}?release=${versions[1]?.id}`);
+      await expect(page.getByText("这个版本已不可见")).toBeVisible();
+    },
+  },
+  {
+    name: "专辑详情（长内容）",
+    options: { signedInAs: "listener" },
+    reach: async (page, mock) => {
+      const long = longContentGroup();
+      seedLongContent(mock, long);
+      mock.groups = [long];
+      await page.goto(`/albums/${long.id}`);
+      await expect(heading(page, LONG_TITLE)).toBeVisible();
+      await expect(page.getByRole("region", { name: /^第 12 张/ })).toBeVisible();
+    },
+  },
+  {
+    name: "专辑不存在",
+    options: { signedInAs: "listener" },
+    reach: async (page) => {
+      await page.goto("/albums/00000000-0000-4000-8000-0000000000aa");
+      await expect(heading(page, "专辑不存在")).toBeVisible();
     },
   },
   {

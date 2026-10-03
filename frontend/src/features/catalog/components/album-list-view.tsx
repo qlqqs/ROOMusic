@@ -1,4 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
+import { useRef } from "react";
 import { pageCountOf } from "../../../shared/lib/pagination";
 import { formatCount } from "../../../shared/lib/number";
 import { useClampedPage } from "../../../shared/lib/use-clamped-page";
@@ -24,6 +25,15 @@ function resultsTitle(search: AlbumSearch): string {
 export function AlbumListView({ search, isAdmin }: { search: AlbumSearch; isAdmin: boolean }) {
   const query = useAlbumPage(search);
   const navigate = useNavigate();
+  const resultsHeading = useRef<HTMLHeadingElement>(null);
+  // 页码链接在结果的下方：不挪动的话，新的一页会停在滚到底的位置，键盘用户还要倒着穿过整页卡片才能到第一张。
+  // 点页码链接时把结果顶部滚到视野里并聚焦结果标题，接着 Tab 就是第一张卡片。
+  const showResultsTop = () => {
+    const heading = resultsHeading.current;
+    if (heading === null) return;
+    heading.scrollIntoView({ block: "start" });
+    heading.focus({ preventScroll: true });
+  };
   const pagination = query.data?.pagination;
   const outOfRange = useClampedPage({
     page: search.page ?? 1,
@@ -38,6 +48,7 @@ export function AlbumListView({ search, isAdmin }: { search: AlbumSearch; isAdmi
       <AlbumFilters search={search} />
       <Panel
         title={resultsTitle(search)}
+        headingRef={resultsHeading}
         action={
           pagination === undefined ? undefined : (
             <span className={styles.count}>
@@ -72,7 +83,7 @@ export function AlbumListView({ search, isAdmin }: { search: AlbumSearch; isAdmi
                   page={data.pagination.page}
                   pageCount={pageCountOf(data.pagination.total, data.pagination.page_size)}
                   renderLink={(target, props) => (
-                    <Link to="/albums" search={{ q: search.q, attention: search.attention, page: target > 1 ? target : undefined }} {...props} />
+                    <Link to="/albums" search={{ q: search.q, attention: search.attention, page: target > 1 ? target : undefined }} onClick={showResultsTop} {...props} />
                   )}
                 />
               </div>

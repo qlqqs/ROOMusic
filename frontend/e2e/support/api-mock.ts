@@ -1,9 +1,16 @@
 import type { BrowserContext } from "@playwright/test";
-import type { ReleaseGroupSummaryDTO } from "../../src/features/catalog/api/decoders";
 import type { DiagnosticsPageDTO, RootDTO, RootOperationDTO, ScanDTO } from "../../src/features/library/api/decoders";
 import type { MemberDTO } from "../../src/features/members/api/decoders";
 import { loadApiSample, sampleBody } from "../../src/test/api-samples";
-import { albumGroups, respondToGroupList } from "../../src/test/catalog-data";
+import {
+  albumGroups,
+  catalogDataOf,
+  respondToGroupDetail,
+  respondToGroupList,
+  respondToReleaseDetail,
+  respondToReleaseEvidence,
+  type CatalogData,
+} from "../../src/test/catalog-data";
 import { gradientPng } from "./png";
 
 // 受控后端：用后端集成测试产出的真实响应样本回答 /api/v1/*，并保持必要的状态（会话、目录、扫描、成员），
@@ -25,7 +32,11 @@ export type MockOptions = {
 
 export type RecordedCall = { method: string; path: string; body: unknown; idempotencyKey: string | null };
 
-export type ApiMock = {
+/**
+ * 专辑数据（列表、组详情、版本详情、完整证据）与接口行为同 Vitest 的替身共用 catalog-data.ts：groups 是列表的全部组（已按接口的顺序排好，
+ * 接口只做筛选与分页）；没有专门登记的组、版本与证据按列表里的摘要合成，特别安排的（多版本、长内容、被重扫掉的版本）登记进对应的 Map。
+ */
+export type ApiMock = CatalogData & {
   setupRequired: boolean;
   /** 当前会话的用户名；null 表示没有有效会话。 */
   session: string | null;
@@ -36,8 +47,6 @@ export type ApiMock = {
   scans: Map<string, ScanDTO>;
   activeScanId: string | null;
   diagnostics: Map<string, DiagnosticsPageDTO>;
-  /** 专辑列表的全部组，已按接口的顺序排好；接口只做筛选与分页（行为与 Vitest 的替身共用 catalog-data.ts）。 */
-  groups: ReleaseGroupSummaryDTO[];
   /** 封面接口对这些资源 ID 返回 404（图片加载失败）；其他资源返回一张合成的渐变 PNG。 */
   brokenArtworks: Set<string>;
   /** 运行中的扫描被读取这么多次之后变为终态（不依赖真实时间）；null 表示永远运行。 */
@@ -91,7 +100,7 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
     activeScanId: null,
     diagnostics: new Map(),
     // 默认 12 个专辑：三分之二有封面，每第 4 个需要关注，第 5 个有两个版本。
-    groups: albumGroups(12, (index) => ({ artwork: index % 3 !== 0, attention_count: index % 4 === 0 ? 1 : 0, release_count: index === 5 ? 2 : 1 })),
+    ...catalogDataOf(albumGroups(12, (index) => ({ artwork: index % 3 !== 0, attention_count: index % 4 === 0 ? 1 : 0, release_count: index === 5 ? 2 : 1 }))),
     brokenArtworks: new Set(),
     scanFinishesAfterReads: 2,
     scanOutcome: "succeeded",
@@ -276,6 +285,17 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
         mock.roots = mock.roots.map((candidate, position) => (position === index ? updated : candidate));
         recordOperation({ operation: restoring ? "restore" : "disable", status: "succeeded", root_id: root.id, revision: updated.revision });
         return json({ id: root.id, path: root.name, status: updated.status, revision: updated.revision });
+      });
+    }
+
+    // 专辑详情：组详情与版本详情登录即可读，完整证据只有管理员能读。
+    const catalogPath = /^\/api\/v1\/(release-groups|releases)\/([^/]+)(\/evidence)?$/.exec(path);
+    if (catalogPath !== null && method === "GET") {
+      const [, kind, id = "", evidence] = catalogPath;
+      if (kind === "release-groups" && evidence !== undefined) return sample("errors/not-found-api");
+      return guarded(method, path, evidence !== undefined, () => {
+        if (kind === "release-groups") return respondToGroupDetail(mock, id);
+        return evidence === undefined ? respondToReleaseDetail(mock, id) : respondToReleaseEvidence(mock, id);
       });
     }
 

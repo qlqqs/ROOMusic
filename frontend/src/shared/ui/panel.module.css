@@ -18,6 +18,8 @@
 .header h2 {
   min-width: 0;
   overflow-wrap: anywhere;
+  /* 被滚动到视野顶部时（例如翻页后）不被窄屏的吸顶栏盖住。 */
+  scroll-margin-top: calc(var(--layout-topbar-height) + var(--space-3));
 }
 
 .action {

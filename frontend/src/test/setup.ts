@@ -19,6 +19,9 @@ if (typeof HTMLDialogElement.prototype.showModal !== "function") {
 // jsdom 没有实现 window.scrollTo：路由切换时的滚动恢复会调用它，未桩住会在每次导航后刷出“Not implemented”。
 window.scrollTo = () => undefined;
 
+// jsdom 没有实现 Element.scrollIntoView：翻页后滚到结果顶部、跳到某一张介质都会调用它。需要断言调用的测试自己换成 vi.fn()。
+Element.prototype.scrollIntoView = () => undefined;
+
 afterEach(() => {
   cleanup();
 });

@@ -1,4 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
+import { albumGroup, albumGroups } from "../src/test/catalog-data";
+import { seedVersions } from "./support/albums-data";
 import { expectVisibleFocusRing } from "./support/checks";
 import { expect, test } from "./support/fixtures";
 import { heading, mainNav } from "./support/locators";
@@ -30,8 +32,19 @@ async function expectFocusStaysInDialog(page: Page, dialog: Locator, tabs: numbe
 const focusedName = (page: Page) =>
   page.evaluate(() => {
     const element = document.activeElement;
-    return element?.getAttribute("aria-label") ?? element?.textContent?.trim() ?? element?.tagName ?? "";
+    // 表单控件的名称来自它的 label，而不是自己的文字。
+    const label = element instanceof HTMLInputElement ? element.labels?.[0]?.textContent?.trim() : undefined;
+    return element?.getAttribute("aria-label") ?? label ?? element?.textContent?.trim() ?? element?.tagName ?? "";
   });
+
+/** 一直按 Tab，直到聚焦元素的名称满足条件（最多 limit 次）：失败时说明最后停在了哪里。 */
+async function tabTo(page: Page, matches: (name: string) => boolean, limit = 12): Promise<void> {
+  for (let step = 0; step < limit; step += 1) {
+    await page.keyboard.press("Tab");
+    if (matches(await focusedName(page))) return;
+  }
+  throw new Error(`按了 ${limit} 次 Tab 仍没有到达目标，最后聚焦的是“${await focusedName(page)}”`);
+}
 
 test.describe("键盘", () => {
   test("只用键盘登录：Tab 到各字段，Enter 提交，焦点环可见", async ({ page, backend }) => {
@@ -161,5 +174,97 @@ test.describe("键盘", () => {
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
     await expect(trigger).toBeFocused();
+  });
+
+  test("专辑主路径只用键盘完成：搜索 → 筛选 → 翻页 → 打开详情 → 切换版本 → 展开证据 → 返回列表，焦点始终可见", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "curator" });
+    // 每个专辑都需要关注，共 120 个：筛选后仍有三页；有三个版本的“Album Choral”是第二页的第一个。
+    const choral = albumGroup(200, {
+      title: "Album Choral",
+      album_artist: "Berliner Philharmoniker",
+      artist: "Berliner Philharmoniker",
+      year: 1977,
+      medium_count: 2,
+      track_count: 12,
+      release_count: 3,
+      attention_count: 1,
+      artwork: true,
+    });
+    mock.groups = [
+      ...albumGroups(48, () => ({ attention_count: 1 })),
+      choral,
+      ...Array.from({ length: 71 }, (_, offset) => albumGroup(101 + offset, { attention_count: 1 })),
+    ];
+    seedVersions(mock, choral);
+    const cards = page.locator('a[href^="/albums/"]');
+    const pager = page.getByRole("navigation", { name: "专辑分页" });
+
+    await page.goto("/albums");
+    await expect(cards).toHaveCount(48);
+
+    // 搜索：回车提交，地址记录搜索词。
+    const search = page.getByRole("textbox", { name: "搜索专辑" });
+    await search.focus();
+    await expectVisibleFocusRing(page, "搜索框");
+    await page.keyboard.type("Album");
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/albums\?q=Album$/);
+
+    // 筛选：Tab 到复选框，空格切换，立即生效。
+    await tabTo(page, (name) => name.includes("只看需要关注"));
+    await expectVisibleFocusRing(page, "只看需要关注");
+    await page.keyboard.press("Space");
+    await expect(page).toHaveURL(/\/albums\?q=Album&attention=required$/);
+    await expect(page.getByRole("region", { name: "“Album”中需要关注的专辑" })).toBeVisible();
+
+    // 翻页：页码链接在 48 张卡片之后，直接聚焦它；Enter 之后焦点被带到结果标题，Tab 是第一张卡片。
+    const next = pager.getByRole("link", { name: "下一页" });
+    await next.focus();
+    await expectVisibleFocusRing(page, "下一页链接");
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/albums\?q=Album&attention=required&page=2$/);
+    const resultsHeading = page.getByRole("heading", { level: 2, name: "“Album”中需要关注的专辑" });
+    await expect(resultsHeading).toBeFocused();
+    await expectVisibleFocusRing(page, "结果标题");
+    await page.keyboard.press("Tab");
+    await expect(cards.first()).toContainText("Album Choral");
+    await expect(cards.first()).toBeFocused();
+    await expectVisibleFocusRing(page, "第一张卡片");
+
+    // 打开详情：导航后焦点回到主内容区。
+    await page.keyboard.press("Enter");
+    await expect(heading(page, "Album Choral")).toBeVisible();
+    await expect(page.locator("main#main")).toBeFocused();
+
+    // 切换版本：Tab 到“版本 2”，Enter；只改查询参数，焦点留在链接上，当前版本随之变化。
+    await tabTo(page, (name) => name.startsWith("版本 2"));
+    await expectVisibleFocusRing(page, "版本 2 链接");
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\?release=[0-9a-f-]{36}$/);
+    const version2 = page.getByRole("navigation", { name: "版本" }).getByRole("link", { name: /^版本 2 / });
+    await expect(version2).toHaveAttribute("aria-current", "page");
+    await expect(version2).toBeFocused();
+    await expect(page.locator("ol > li")).toHaveCount(13);
+
+    // 展开证据：Tab 到“来源与证据”，Enter 展开；管理员再 Tab 到“查看完整证据”，Enter 加载。
+    await tabTo(page, (name) => name.startsWith("来源与证据"));
+    await expectVisibleFocusRing(page, "来源与证据");
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("table", { name: "证据摘要" })).toBeVisible();
+    await tabTo(page, (name) => name === "查看完整证据");
+    await expectVisibleFocusRing(page, "查看完整证据按钮");
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("table", { name: "字段证据" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "重新加载完整证据" })).toBeFocused();
+
+    // 返回列表：恢复搜索词、筛选与页码。
+    const back = page.getByRole("link", { name: "返回专辑列表" });
+    await back.focus();
+    await expectVisibleFocusRing(page, "返回专辑列表链接");
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/albums\?q=Album&attention=required&page=2$/);
+    await expect(heading(page, "专辑")).toBeVisible();
+    await expect(pager.getByText("第 2 / 3 页")).toBeVisible();
+    await expect(cards.first()).toContainText("Album Choral");
   });
 });
