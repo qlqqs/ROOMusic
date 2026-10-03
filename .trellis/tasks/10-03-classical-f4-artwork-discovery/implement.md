@@ -5,20 +5,21 @@
 
 ## 启动前
 
-- [ ] 用户批准最终规划摘要后运行 `python3 ./.trellis/scripts/task.py start .trellis/tasks/10-03-classical-f4-artwork-discovery`。
-- [ ] 读规范：`.trellis/spec/backend/{index,core0-runtime-contracts,quality-guidelines,directory-structure}.md`、
+- [x] 用户批准最终规划摘要后运行 `python3 ./.trellis/scripts/task.py start .trellis/tasks/10-03-classical-f4-artwork-discovery`。
+- [x] 读规范：`.trellis/spec/backend/{index,core0-runtime-contracts,quality-guidelines,directory-structure}.md`、
       `.trellis/spec/guides/real-music-assets.md`。
 
 ## 步骤
 
 ### 第 1 步：代码与测试（R1–R4）
 
-- [ ] `catalog/persist.go`：用 `EmbeddedArtwork`、`ArtworkDirectories` 替换 `ArtworkObservation`，并加单元测试。
-- [ ] `library/scanner.go`：`persistOneCandidate` 直接传候选；`saveArtworkForRelease` 先用内嵌封面，再按目录列表找；
+- [x] `catalog/persist.go`：用 `EmbeddedArtwork`、`ArtworkDirectories` 替换 `ArtworkObservation`，并加单元测试。
+- [x] `library/scanner.go`：`persistOneCandidate` 直接传候选；`saveArtworkForRelease` 先用内嵌封面，再按目录列表找；
       `discoverFolderArtwork*` 改为多目录、`ReadDir` 加不区分大小写的匹配。
-- [ ] `library/evidence_test.go`：调整现有三个测试，补上设计里列出的单元用例。
-- [ ] `library/scanner_persistence_integration_test.go`：加入 CUE、多碟父目录、两处都有、Box 叶子四个场景。
-- [ ] 验证：
+- [x] `library/evidence_test.go`：调整现有三个测试，补上设计里列出的单元用例。
+- [x] 集成场景放在新文件 `library/scanner_artwork_integration_test.go`（CUE 含重扫、多碟父目录、父目录与碟目录都有、回退到碟目录、Box 叶子、内嵌优先），
+      `scanner_persistence_integration_test.go` 只改了两处调用签名。
+- [x] 验证：
 
   ```bash
   cd backend && gofmt -l . && go vet ./... && go build ./...

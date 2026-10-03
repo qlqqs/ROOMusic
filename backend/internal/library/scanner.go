@@ -778,10 +778,8 @@ func (service *Service) persistOneCandidate(ctx context.Context, executor scanEx
 	if err != nil {
 		return err
 	}
-	if artworkObservation, ok := candidate.ArtworkObservation(); ok {
-		if artworkErr := service.saveArtworkForRelease(ctx, executor, releaseID, root, artworkObservation); artworkErr != nil {
-			return fmt.Errorf("%w: %v", errArtworkBinding, artworkErr)
-		}
+	if artworkErr := service.saveArtworkForRelease(ctx, executor, releaseID, root, candidate); artworkErr != nil {
+		return fmt.Errorf("%w: %v", errArtworkBinding, artworkErr)
 	}
 	return nil
 }
@@ -817,17 +815,19 @@ func isWithin(root, path string) bool {
 	return rootError == nil && pathError == nil && (pathReal == rootReal || strings.HasPrefix(pathReal, rootReal+string(filepath.Separator)))
 }
 
-// saveArtworkForRelease 为 Release 取得封面并交给受管存储：优先用观察里的内嵌封面，否则在曲目所在
-// 文件夹发现封面图片；两者都没有时移除既有关联。文件夹封面发现失败以原错误返回，不当作没有封面。
-func (service *Service) saveArtworkForRelease(ctx context.Context, executor scanExecutor, releaseID string, root registeredRoot, observation catalog.SourceObservation) error {
-	relativePath := catalog.NormalizedPath(observation.RelativePath)
-	directory := filepath.Dir(filepath.Join(root.Path, filepath.FromSlash(relativePath)))
-	data, mimeType := observation.Artwork, observation.ArtworkMIME
+// saveArtworkForRelease 为 Release 取得封面并交给受管存储：优先用候选曲目里的内嵌封面，否则按
+// catalog 给出的目录顺序（发行目录、再各曲目目录）发现文件夹封面；两者都没有时移除既有关联。
+// 文件夹封面发现失败以原错误返回，不当作没有封面。
+func (service *Service) saveArtworkForRelease(ctx context.Context, executor scanExecutor, releaseID string, root registeredRoot, candidate catalog.OrganizedCandidate) error {
+	var data []byte
+	var mimeType string
 	sourceType := "embedded"
-	if len(data) == 0 {
+	if observation, ok := candidate.EmbeddedArtwork(); ok {
+		data, mimeType = observation.Artwork, observation.ArtworkMIME
+	} else {
 		sourceType = "folder"
 		var discoveryErr error
-		data, mimeType, discoveryErr = discoverFolderArtwork(directory)
+		data, mimeType, discoveryErr = discoverFolderArtwork(root.Path, candidate.ArtworkDirectories())
 		if discoveryErr != nil {
 			return fmt.Errorf("discover folder artwork: %w", discoveryErr)
 		}
@@ -839,45 +839,78 @@ func (service *Service) saveArtworkForRelease(ctx context.Context, executor scan
 	return store.Save(ctx, executor, releaseID, data, mimeType, sourceType)
 }
 
-func discoverFolderArtwork(directory string) ([]byte, string, error) {
-	return discoverFolderArtworkWithReader(directory, os.ReadFile)
+// folderArtworkNames 是文件夹封面的文件名及优先顺序（小写）；实际文件名按小写后匹配。
+var folderArtworkNames = []string{"cover.jpg", "cover.jpeg", "cover.png", "cover.webp", "folder.jpg", "folder.jpeg", "folder.png", "front.jpg", "front.jpeg", "front.png"}
+
+func discoverFolderArtwork(rootPath string, directories []string) ([]byte, string, error) {
+	return discoverFolderArtworkWithReader(rootPath, directories, os.ReadFile)
 }
 
-func discoverFolderArtworkWithReader(directory string, readFile func(string) ([]byte, error)) ([]byte, string, error) {
+// discoverFolderArtworkWithReader 按顺序在 directories（相对 rootPath，空串表示根）里找封面，第一个通过检查的文件
+// 即为结果。无效的命名封面（符号链接、非普通文件、超限、读取失败、格式不支持）记下第一个错误后继续找；
+// 全部找完仍没有结果时才返回该错误。目录不存在不算错误，其他读目录错误按同样方式记录。
+func discoverFolderArtworkWithReader(rootPath string, directories []string, readFile func(string) ([]byte, error)) ([]byte, string, error) {
 	var firstErr error
-	for _, name := range []string{"cover.jpg", "cover.jpeg", "cover.png", "cover.webp", "folder.jpg", "folder.jpeg", "folder.png", "front.jpg", "front.jpeg", "front.png"} {
-		path := filepath.Join(directory, name)
-		info, err := os.Lstat(path)
+	remember := func(err error) {
+		if firstErr == nil {
+			firstErr = err
+		}
+	}
+	for _, directory := range directories {
+		directoryPath := filepath.Join(rootPath, filepath.FromSlash(directory))
+		entries, err := os.ReadDir(directoryPath)
 		if errors.Is(err, fs.ErrNotExist) {
 			continue
 		}
 		if err != nil {
-			if firstErr == nil {
-				firstErr = err
-			}
+			remember(err)
 			continue
 		}
-		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > 16<<20 {
-			if firstErr == nil {
-				firstErr = fmt.Errorf("folder artwork %s is not a safe bounded regular file", name)
+		for _, name := range folderArtworkNames {
+			for _, entryName := range folderArtworkCandidates(entries, name) {
+				data, mimeType, err := readFolderArtworkFile(filepath.Join(directoryPath, entryName), name, readFile)
+				if err != nil {
+					remember(err)
+					continue
+				}
+				return data, mimeType, nil
 			}
-			continue
-		}
-		data, err := readFile(path)
-		if err != nil {
-			if firstErr == nil {
-				firstErr = err
-			}
-			continue
-		}
-		if mime := artwork.SniffMIME(data); mime != "" {
-			return data, mime, nil
-		}
-		if firstErr == nil {
-			firstErr = fmt.Errorf("folder artwork %s has an unsupported format", name)
 		}
 	}
 	return nil, "", firstErr
+}
+
+// folderArtworkCandidates 返回目录中小写后等于 name 的文件名：全小写的在前，其余按字节序（ReadDir 已按名字排序）。
+func folderArtworkCandidates(entries []os.DirEntry, name string) []string {
+	var exact, variants []string
+	for _, entry := range entries {
+		switch entryName := entry.Name(); {
+		case entryName == name:
+			exact = append(exact, entryName)
+		case strings.ToLower(entryName) == name:
+			variants = append(variants, entryName)
+		}
+	}
+	return append(exact, variants...)
+}
+
+func readFolderArtworkFile(path, name string, readFile func(string) ([]byte, error)) ([]byte, string, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, "", err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > 16<<20 {
+		return nil, "", fmt.Errorf("folder artwork %s is not a safe bounded regular file", name)
+	}
+	data, err := readFile(path)
+	if err != nil {
+		return nil, "", err
+	}
+	mimeType := artwork.SniffMIME(data)
+	if mimeType == "" {
+		return nil, "", fmt.Errorf("folder artwork %s has an unsupported format", name)
+	}
+	return data, mimeType, nil
 }
 
 func (service *Service) recordDiagnosticWith(context context.Context, executor scanExecutor, scanID, relativePath, kind, message string) error {

@@ -158,28 +158,46 @@ func persistRelease(ctx context.Context, tx *sql.Tx, rootID string, candidate Or
 	return plannedReleaseID, nil
 }
 
-// ArtworkObservation 返回提供封面的来源：优先取带内嵌封面的曲目，否则取按碟序排列的第一首曲目
-// （调用方再回退到该曲目所在文件夹的封面）。没有任何曲目时 ok 为 false。
-func (candidate OrganizedCandidate) ArtworkObservation() (SourceObservation, bool) {
+// orderedTracks 按碟号升序、碟内按位置升序列出候选的全部曲目；不依赖 organizer 已排好的隐含顺序。
+func (candidate OrganizedCandidate) orderedTracks() []OrganizedTrack {
 	discs := make([]int, 0, len(candidate.Mediums))
 	for disc := range candidate.Mediums {
 		discs = append(discs, disc)
 	}
 	sort.Ints(discs)
+	var tracks []OrganizedTrack
 	for _, disc := range discs {
-		for _, track := range candidate.Mediums[disc] {
-			observation := track.Observation
-			if len(observation.Artwork) > 0 {
-				return observation, true
-			}
-		}
+		medium := append([]OrganizedTrack(nil), candidate.Mediums[disc]...)
+		sort.SliceStable(medium, func(i, j int) bool { return medium[i].Position < medium[j].Position })
+		tracks = append(tracks, medium...)
 	}
-	for _, disc := range discs {
-		if len(candidate.Mediums[disc]) > 0 {
-			return candidate.Mediums[disc][0].Observation, true
+	return tracks
+}
+
+// EmbeddedArtwork 返回按碟序、曲序第一首带内嵌封面的曲目观察；没有则 ok 为 false。
+func (candidate OrganizedCandidate) EmbeddedArtwork() (SourceObservation, bool) {
+	for _, track := range candidate.orderedTracks() {
+		if len(track.Observation.Artwork) > 0 {
+			return track.Observation, true
 		}
 	}
 	return SourceObservation{}, false
+}
+
+// ArtworkDirectories 返回查找文件夹封面的目录（相对注册根，已规范化并去重，空串表示注册根）：
+// 先是发行目录 Anchor.Scope，再按碟序、曲序列出各曲目所在的目录。CUE 虚拟轨的目录是 sheet 所在目录，
+// 不是由虚拟路径推出的目录。不会越过发行自己的目录：Box 叶子不查 Box 父目录，CUE 不查跨目录的音频目录。
+func (candidate OrganizedCandidate) ArtworkDirectories() []string {
+	directories := []string{NormalizedPath(candidate.Anchor.Scope)}
+	seen := map[string]bool{directories[0]: true}
+	for _, track := range candidate.orderedTracks() {
+		directory := locateObservation(track.Observation).dir
+		if !seen[directory] {
+			seen[directory] = true
+			directories = append(directories, directory)
+		}
+	}
+	return directories
 }
 
 func releaseYear(candidate OrganizedCandidate) any {

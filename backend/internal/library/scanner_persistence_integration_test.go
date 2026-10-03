@@ -430,7 +430,7 @@ func TestPostgreSQLManagedArtworkIsRevalidatedAndCleanupErrorsPropagate(t *testi
 	if err := os.WriteFile(originalPath, []byte("corrupt"), 0o640); err != nil {
 		t.Fatalf("corrupt managed artwork: %v", err)
 	}
-	if err := application.saveArtworkForRelease(context.Background(), fixture.database, releaseID, root, observation); err != nil {
+	if err := application.saveArtworkForRelease(context.Background(), fixture.database, releaseID, root, singleTrackCandidate(observation)); err != nil {
 		t.Fatalf("repair managed artwork: %v", err)
 	}
 	repaired, err := os.ReadFile(originalPath)
@@ -449,7 +449,7 @@ func TestPostgreSQLManagedArtworkIsRevalidatedAndCleanupErrorsPropagate(t *testi
 	}
 	replacement := append(append([]byte(nil), artwork...), 0)
 	observation.Artwork = replacement
-	if err := application.saveArtworkForRelease(context.Background(), fixture.database, releaseID, root, observation); err == nil || !strings.Contains(err.Error(), "remove replaced artwork") {
+	if err := application.saveArtworkForRelease(context.Background(), fixture.database, releaseID, root, singleTrackCandidate(observation)); err == nil || !strings.Contains(err.Error(), "remove replaced artwork") {
 		t.Fatalf("old artwork cleanup error was discarded: %v", err)
 	}
 }
@@ -588,6 +588,14 @@ func assertDatabaseCount(t *testing.T, fixture *libraryFixture, query string, ex
 	}
 	if count != expected {
 		t.Fatalf("count = %d, want %d for %s", count, expected, query)
+	}
+}
+
+// singleTrackCandidate 把一条观察包装成只含它的普通目录候选，供直接调用封面绑定的测试使用。
+func singleTrackCandidate(observation catalog.SourceObservation) catalog.OrganizedCandidate {
+	return catalog.OrganizedCandidate{
+		Anchor:  catalog.CandidateAnchor{Kind: catalog.CandidateOrdinary, Scope: observation.Directory},
+		Mediums: map[int][]catalog.OrganizedTrack{1: {{Observation: observation, Position: 1, Disc: 1}}},
 	}
 }
 
