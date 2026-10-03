@@ -2,7 +2,7 @@
 
 ROOMusic 保留 Core 0 的 Go 后端、数据库与同源部署工具链，不迁移 V0 中已经膨胀的应用容器、AI worker、operator、release overlay 或业务配置。
 
-> **当前状态（2026-10-01）**：Classical 客户端的 M1a 已完成：应用外壳、初始化与登录、扫描目录与扫描详情、成员管理、简版概览，由 Go 同源提供（构建产物提交在 `backend/cmd/roomusic/web`）。专辑浏览（M1b）、播放（M2）与元数据整理（M3 起）尚未实现。设计依据见 [frontend/DESIGN.md](frontend/DESIGN.md)，能力矩阵、已批准的 Core 1 阶段范围和四类 ADR 见 [Core 1 路线](docs/architecture/core-1-roadmap.md)，前端规范见 [前端规范索引](.trellis/spec/frontend/index.md)。
+> **当前状态（2026-10-03）**：Classical 客户端的 M1a 与 M1b 已完成：应用外壳、初始化与登录、扫描目录与扫描详情、成员管理、简版概览，以及专辑浏览（列表、搜索、详情与来源证据），由 Go 同源提供（构建产物提交在 `backend/cmd/roomusic/web`）。播放（M2）与元数据整理（M3 起）尚未实现。设计依据见 [frontend/DESIGN.md](frontend/DESIGN.md)，能力矩阵、已批准的 Core 1 阶段范围和四类 ADR 见 [Core 1 路线](docs/architecture/core-1-roadmap.md)，前端规范见 [前端规范索引](.trellis/spec/frontend/index.md)。
 
 ## 软件目标
 

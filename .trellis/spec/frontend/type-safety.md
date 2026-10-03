@@ -7,7 +7,7 @@ The frontend uses TypeScript with strict checking. `tsconfig.json` 已开启 `st
 weaken compiler settings to integrate one feature；某个依赖与选项不兼容时，只关闭被阻断的单个选项并记录原因。
 
 External data enters as `unknown` and becomes trusted only through one runtime
-decoder at the owning boundary. 解码用 `shared/api/decode.ts` 的手写原语（对象、字符串、布尔、安全整数、RFC 3339 时间、
+decoder at the owning boundary. 解码用 `shared/api/decode.ts` 的手写原语（对象、字符串、布尔、安全整数、有限数字（曲目时长）、RFC 3339 时间、
 UUID、枚举、数组、可选与可空），不引入运行时校验库；原语失败时抛出带字段路径的 `DecodeError`，只用于测试诊断，不展示给用户。
 禁止以 raw cast 绕过角色、枚举或必填字段检查。
 
@@ -111,7 +111,11 @@ must match the wire/domain contract.
 最多 256 个 Medium、整张 Release 合计最多 10,000 条 Track，credits/evidence 和
 diagnostics 使用后端同名上限。Track 上限是 Release 总量，不是“每个 Medium 各
 10,000 条”；decoder 在映射下一组 Track 前先累计长度并 fail closed。管理员 evidence
-中的 source ref 必须是有界安全相对路径，绝对路径和 `file://` 一律拒绝。
+中的 source ref 必须是有界安全相对路径，绝对路径和 `file://` 一律拒绝。M1b 的 `features/catalog/api/decoders.ts` 按上面实现：
+Track 与曲目署名的合计在解码每个介质之前累计，source ref 拒绝以 `/` 开头、反斜杠、`\0`、首段含 `:` 与空段、`.`、`..`。
+
+后端会增长的词表（署名角色、证据字段、来源、可信度、处理方式、原因码、归组方式、来源与介质类型）按**字符串**解码，不用枚举：后端新增取值不会让整页解码失败，
+显示时由 `features/catalog/labels.ts` 给已知值中文名、未知值原样显示（样本里出现过的取值都有中文名，由测试保证）。
 
 ## Forbidden Patterns
 

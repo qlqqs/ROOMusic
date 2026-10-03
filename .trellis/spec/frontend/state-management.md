@@ -10,8 +10,8 @@ backend.
 2026-10-01 的 M1a 已落地下面的归属合同：服务器状态由 TanStack Query 持有，URL 状态由 TanStack Router 持有（路由不使用
 loader，页面直接调用 feature 查询 hook，不让 Router 缓存与 Query 缓存并存），会话由 `features/auth/session` 的会话控制器
 持有（普通 TypeScript 对象，组件经 `useSyncExternalStore` 读取）。没有全局 store。选型依据见
-[前端基础 ADR](../../../docs/architecture/adr/0001-frontend-foundations.md) 决策记录；尚未实现的部分（搜索 URL、受治理操作、
-播放）保留为目标合同。
+[前端基础 ADR](../../../docs/architecture/adr/0001-frontend-foundations.md) 决策记录；M1b（2026-10-03）又落地了专辑的搜索与详情 URL；
+尚未实现的部分（受治理操作、播放）保留为目标合同。
 
 ## State Categories
 
@@ -57,6 +57,10 @@ request.
   扫描详情到达终态；失效按 `libraryKeys.scanHistory(generation)` 前缀覆盖所有页。翻页用 `keepPreviousData` 保留上一页，
   新页到达前表格不闪空。
 - 响应不是 JSON、信封不合法或 decoder 失败时按 `invalid_response` 失败，结果不进入缓存。
+- 专辑（M1b，`features/catalog/query-keys.ts` 的 `catalogKeys`）：列表一页一个条目（搜索词、筛选与页码都在键里），翻页与改筛选时用 `keepPreviousData` 保留上一份结果，
+  页面标明“正在更新”，保留的结果是占位数据，不能用来判断页码是否越界；组详情、版本详情各按 ID 一个条目；完整证据只有管理员且点了“查看完整证据”才 `enabled`，
+  普通用户从不创建这个查询。选中的版本在组详情里还是成员、读详情却是 404（两次请求之间被重新扫描）时就地提示，并让组详情与该版本的查询失效，
+  重新读到的成员列表决定还有哪些版本。
 
 ## URL State
 
@@ -74,12 +78,25 @@ documented defaults without sending arbitrary backend fields.
 `validateSearch` 经 `shared/lib/pagination.ts` 的 `parsePageParam` 解析，缺失、0、负数、小数、非数字与过大的值都显式返回 `undefined`
 并回到第 1 页。页码超出末页（总数缩小、手改 URL）时用**替换**历史项的方式改到末页，没有数据时回到第 1 页；翻页时保留的上一页
 （占位数据）不能用来判断当前页是否越界。`shared/ui` 的 `Pagination` 只负责结构与可访问语义，链接由调用方用路由 `Link` 生成。
-M1b 的列表页沿用同一约定（参数名按页面区分，写入、解析、越界处理都一样）。
+已实现的专辑列表（M1b，`/albums`）沿用同一约定：`q`（去掉首尾空白后非空且不超过 200 个 UTF-8 字节，与后端上限一致，超限的值丢弃；路由会把形如数字的值
+解析成数字，`?q=1984` 按原文本处理）、`attention`（只有 `required` 保留）、`page`（≥2 才写）。搜索显式提交（回车或“搜索”按钮），不做输入即搜，每次提交一条历史；
+提交搜索、清除、切换筛选时把页码置为 `undefined`，翻页只改页码；搜索框里输入过程中的草稿是局部状态，地址变化（前进、后退、清除）时由地址重新派生。
+越界页码的规范化抽成 `shared/lib/use-clamped-page.ts`（扫描记录同样使用）。点页码链接时把结果区标题滚到视野顶部并聚焦（页码链接在结果下方，不挪的话新的一页停在滚到底的位置，
+键盘用户要倒着穿过整页卡片），改搜索词或筛选不挪焦点。
 
 M1a 的 URL 形状已定：`/`、`/setup`、`/login?redirect=`、`/library`（可带 `scan_page`）、`/library/scans/$scanId`、`/members`；旧 hash 链接与
-`?release=` 不做兼容（开发阶段不做兼容）。专辑详情的 URL 形状在 M1b 确定。无论采用路径参数还是查询参数，都只在边界读取/trim/
-校验一次 opaque ID，拒绝空值及超过 255 个 JavaScript 字符单元的值，避免任意长值进入请求。
-打开/关闭详情必须能恢复列表筛选与页码；精确 URL 语法在 M1b 获批后同步路由测试与本规范。
+`?release=` 不做兼容（开发阶段不做兼容）。M1b 增加 `/albums`（`q`、`attention`、`page`）与 `/albums/$groupId`（`release`）。
+无论采用路径参数还是查询参数，都只在边界读取/trim/校验一次 opaque ID，拒绝空值及超过 255 个 JavaScript 字符单元的值，避免任意长值进入请求。
+打开/关闭详情必须能恢复列表筛选与页码。
+
+已实现的专辑详情（M1b）：
+- `/albums/$groupId?release=<UUID>`：`release` 只在选中非代表版本时出现。`validateSearch` 只保留 UUID 形状的值并统一成小写；组详情返回后，`release` 不是本组成员或就是代表版本时
+  用**替换**历史项的方式去掉（返回键不会回到被规范掉的地址）。`groupId` 不是 UUID 时不发请求，直接显示“专辑不存在”（与扫描详情一致）。
+- 返回列表：卡片链接把列表参数放进路由的 history state（`state={{ albumList: search }}`，类型由 `router.tsx` 里对 `HistoryState` 的声明合并给出）；
+  详情页读 `location.state`，经 `albumListSearchFromState`（内部再走列表自己的 `parseAlbumSearch`，因为 state 会跨刷新保留、也可能被改写）生成“返回专辑列表”的目标，
+  切换版本与地址规范化都把它带在新的历史项里；没有时（直接打开详情）回到 `/albums`。浏览器后退不依赖它。
+- 版本导航的链接用路由给当前版本的链接自动加的 `aria-current="page"`（`activeOptions={{ exact: true }}`：`release` 为 `undefined` 与缺省等价，其余必须相等）。
+  只改查询参数的导航不重置滚动、不把焦点抢回主内容区；只有路径变化（进入详情、返回列表）才回到页面顶部并聚焦主内容区。
 
 路由实现约定（M1a）：TanStack Router 把 `validateSearch` 的返回值合并到原始查询串上，所以不合法的值必须**显式返回
 `undefined`**，只省略键时原值仍留在 `search` 里并被 `beforeLoad` 读到（`/login` 的 `redirect` 曾因此让 `beforeLoad`

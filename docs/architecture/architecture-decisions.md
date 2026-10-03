@@ -46,7 +46,7 @@ frontend-desgin/            # 已入库原型及设计工具资产，保持原�
 `frontend/src/` 的实际布局见[前端目录结构](../../.trellis/spec/frontend/directory-structure.md)（M1a，2026-10-01），下方
 `features/*` 示意图中尚未建立的目录仍只是目标能力边界。
 M1a 已用现有 API 恢复外壳与管理界面；B0 已拆出 catalog、library 与 platform；
-阶段 I 在拆出的 catalog 上实施身份规则与按组只读接口，M1b 的专辑页随后使用它。
+阶段 I 在拆出的 catalog 上实施身份规则与按组只读接口，M1b 的专辑页（2026-10-03）随后使用了它。
 不为目录对称性生成空层，也不把 API 行为修复、新迁移或媒体服务夹入纯重构。
 
 ## Repository-level modules

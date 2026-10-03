@@ -5,7 +5,9 @@
 2026-10-01：M1a 已实现并验证——应用外壳、初始化与会话、目录与扫描管理、成员管理、简版概览。`frontend/src/`
 按本层规范重建：React 19 与严格 TypeScript、TanStack Router（代码定义路由，不用 loader）与 TanStack Query
 （服务器状态的唯一缓存）、CSS Modules 加集中的 Classical 全局变量、Fontsource 自托管可变字体；直接依赖全部精确固定。
-生产页面由 Go 同源提供，构建产物（`backend/cmd/roomusic/web`）随源码提交，CI 检查漂移。M1b 在这个外壳上增加专辑浏览。
+生产页面由 Go 同源提供，构建产物（`backend/cmd/roomusic/web`）随源码提交，CI 检查漂移。
+2026-10-03：M1b 在这个外壳上增加了专辑浏览：`/albums`（搜索、需要关注筛选、分页、封面卡片）与 `/albums/$groupId`（头部、版本导航、介质与曲目、发行信息、
+折叠的来源与证据，管理员可按需读完整证据），详见[状态](./state-management.md)、[组件](./component-guidelines.md)与[质量](./quality-guidelines.md)规范。
 
 本轮 Classical 的唯一落地设计锚为 [frontend/DESIGN.md](../../../frontend/DESIGN.md)，
 来源是 `frontend-desgin/` 中的原型。旧月刊布局、hash 路由、模拟播放器和生产演示入口
@@ -81,7 +83,7 @@ Before declaring frontend work complete:
 - Core screens cover initialization/login as applicable, library browse, Release
   detail with Medium/Track structure, basic search, directory/scan administration,
   and loading, empty, stale, conflict, canceled, and error states. M1a 已交付初始化与登录、
-  概览、目录与扫描管理、成员管理；专辑浏览、详情与基础搜索随 M1b。
+  概览、目录与扫描管理、成员管理；M1b 已交付专辑浏览、详情与基础搜索。
 - The UI displays safe resource identities and evidence. It never receives or
   constructs arbitrary host filesystem paths for ordinary users.
 - Redis, Meilisearch, Agent runtime, runtime plugins, playback, PWA offline

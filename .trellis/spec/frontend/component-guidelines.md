@@ -28,7 +28,7 @@ hook 里，展示在组件里。按 [Classical 设计依据](../../../frontend/D
 
 | 组件 | 约定 |
 | --- | --- |
-| `Page`、`Panel`、`StatList` | `Page` 渲染唯一的 `h1`（并设置“页面名 · ROOMusic”标题）；`Panel` 是带标题的区段；`StatList` 显示数值，数据值用 `lining-nums tabular-nums` |
+| `Page`、`Panel`、`StatList` | `Page` 渲染唯一的 `h1`（并设置“页面名 · ROOMusic”标题），标题很长时 `compactTitle` 降一级字号（M1b：专辑名超过 80 个字符），完整显示并换行；`Panel` 是带标题的区段，给 `headingRef` 时标题可以被程序聚焦（`tabIndex=-1`，不进 Tab 顺序）；`StatList` 显示数值，数据值用 `lining-nums tabular-nums` |
 | `QueryContent` | 数据区块的首次加载（保留结构的 `Skeleton`，不画成空库）、失败（带请求 ID 的 `FailureNotice` 与重试）、成功，以及“刷新失败但还有旧数据”（旧数据继续显示，错误在其上方）；它只依赖最小的查询形状，不依赖查询库 |
 | `Notice`、`FailureNotice` | 行内状态或错误，由图标与文字表达，不靠颜色；错误 `role="alert"`，其余 `role="status"`；可附请求 ID 与下一步操作；**不使用全局 toast**，结果就近显示在操作区 |
 | `Button`、`TextField` | `Button` 有主要 / 次要 / 文字三种形态；忙碌态不设 `disabled`（焦点留在按钮上），点击被忽略并设置 `aria-busy`，文案由调用方改成“正在…”；`TextField` 的 label、说明与错误经 `aria-describedby` 关联，错误同时设置 `aria-invalid` |
@@ -46,10 +46,29 @@ hook 里，展示在组件里。按 [Classical 设计依据](../../../frontend/D
 - 失败文案按**错误码**选择（各 feature 的 `*-messages.ts`，`as const` 映射），不比较后端 message；未知错误码显示后端的安全
   message 与请求 ID（`describeFailure`）。
 - 扫描阶段只在变化时经礼貌型 live region 播报一次，轮询得到相同阶段不重复播报；不显示百分比或剩余时间。
-- 用户内容（用户名、目录名等）允许任意位置换行（`overflow-wrap: anywhere`），超长值不撑破布局。
+- 用户内容（用户名、目录名、专辑与曲目标题等）允许任意位置换行（`overflow-wrap: anywhere`），超长值不撑破布局。**网格项与弹性项还要 `min-width: 0`**：
+  `overflow-wrap: anywhere` 只让文字能折行，网格轨道与弹性项的“自动最小宽度”仍可能取内容的最小宽度（尤其是被 `content-visibility` 跳过、保留着上一次渲染宽度的分段），
+  窗口先宽后窄时整页横向溢出；M1b 的 Playwright 有“先宽后窄”的回归用例。
+- **“仅供读屏”的绝对定位元素需要定位祖先**：`VisuallyHidden` 与 `DataTable` 的 caption 是绝对定位的，没有定位祖先时它们的包含块是整个文档，不受主内容区裁剪，
+  会把文档撑得比窗口还高，窗口本身能滚出一片空白。桌面外壳的两个滚动区（`.main`、`.sidebar`）因此是 `position: relative`；新增的滚动容器同样要这样做。
+  Playwright 的 `expectNoDocumentScroll` 检查它（≥768px 时窗口本身不能再滚动）。
+- 界面标签里的数字（“版本 2”“第 2 张”）用 `lining-nums`；作品标题里的数字保持标题字体默认的旧式数字。
 - 表格里每一行都重复的链接文字（“查看详情”）用 `VisuallyHidden` 补上对象（如开始时间），读屏的链接列表里能分辨是哪一行。
 - 原生 `<dialog>` 模态在最后一个可聚焦元素之后会把焦点交给浏览器界面或 `body`，不是严格的循环；测试断言“焦点始终在对话框内或
   在 `body` 上”，而不是要求严格循环。
+
+## 已实现的专辑组件（M1b，`features/catalog`）
+
+| 组件 | 约定 |
+| --- | --- |
+| `Cover` | 带裱边的正方形封面，不加滤镜，真实封面 `object-fit: contain` 不裁切；四态（加载中的同尺寸底色、已加载、没有封面的标题文字版面、加载失败加“封面无法加载”）由 `data-state` 表达；`variant="card"` 是装饰（`alt=""`、懒加载、对读屏隐藏），`variant="detail"` 有替代文字（“《标题》封面”“《标题》没有封面”）并在失败后提供“重新加载封面”（换 `key` 重新挂载图片，浏览器重新发请求）。只引用同源的封面接口，不拉外部图片 |
+| `AlbumCard`、`AlbumGrid` | 整张卡片是一个 `Link`（里面没有按钮），可访问名称含标题与艺人，标题最多 3 行（`line-clamp`，完整文字仍在 DOM 里）；网格 `repeat(auto-fill, minmax(160px, 1fr))`；“N 个版本”只在 `release_count > 1` 时出现，单版本组没有版本字样 |
+| `AlbumFilters`、`AlbumListView` | `<form role="search">`：搜索词显式提交，清除后焦点回到输入框，字节超限在字段旁说明现状；“只看需要关注”立即生效。结果数用 `aria-live="polite"`，“正在更新…”只给看得见的人；翻页时旧结果保持可见并标 `aria-busy`；点页码链接时滚到结果标题并聚焦 |
+| `AlbumDetailView` | 页面标题与 h1 取决于选中的版本，所以详情自己渲染 `Page`（路由组件不包 `Page`）；头部用组详情里的摘要先渲染，曲目区单独显示加载态；选中的版本读详情得到 404 时就地提示并给出办法，不影响页面其余部分 |
+| `AlbumHeader`、`VersionNav` | 头部是封面加概况（年份未知写“未知”，流派与总时长有才写，有一首曲目时长未知就不写总时长）；版本导航是 `<nav aria-label="版本">` 里的链接，不是 ARIA 标签页，各版本标题不同时才附标题 |
+| `ReleaseMedia` | 一张介质时直接是 `<ol role="list">`，多于一张时每张一个 `<section aria-labelledby>` 加“跳到第 N 张”链接（点击把焦点放到分段标题上并滚到视野，不改地址）；分段用 `content-visibility: auto`，占位高度只写块方向的 `contain-intrinsic-block-size`（简写 `contain-intrinsic-size` 带一个值会同时给宽度，窄屏上被跳过的分段有 480px 的固有宽度，整页横向溢出） |
+| `ReleaseFacts`、`EvidenceSection` | 发行信息里没有值的条目不列出；“来源与证据”是受控的 `<details>`：展开状态由 React 持有，折叠时不渲染内容（没有可聚焦的隐藏控件），换版本（`key`）回到折叠；管理员的“查看完整证据”按钮在展开后才出现，点击后才请求，按钮留在原处（加载中忙碌、之后可重新加载）使焦点不丢 |
+| `labels.ts` | 署名角色、证据字段、来源、可信度、处理方式、原因码与归组方式的中文名；清单按后端当时的取值核对，**未知取值原样显示**，后端新增取值不会让页面出错（样本里出现过的取值都有中文名，由测试保证） |
 
 ## Props And Contracts
 

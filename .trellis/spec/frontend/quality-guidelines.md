@@ -60,19 +60,21 @@ Backend integration tests remain responsible for real authorization, path
 containment, transactions, and session cookie flags; frontend tests prove that
 the UI sends the contract and handles results correctly.
 
-### 已采用的测试层次（M1a）
+### 已采用的测试层次（M1a 起，M1b 补充）
 
 | 层次 | 工具与做法 |
 | --- | --- |
 | 单元与组件 | Vitest + jsdom + Testing Library（`user-event`）。请求层、解码原语、每个 decoder（样本与反例）、会话控制器、`shared/ui` 组件各自有测试，与被测单元同目录 |
 | 接口契约 | `src/test/api-contract.test.ts` 遍历后端生成的 JSON 样本，每个样本都要被 decoder 解码且往返无损；样本由后端集成测试 `TestPostgreSQLAPIResponseSamples` 把关 |
-| 页面级 | `src/app/*.test.tsx`：经 `renderApp` 装配真实的应用运行时（路由、会话、查询缓存），后端是有状态的替身（幂等重放、`expected_revision` 与 409、可注入请求或响应丢失，响应取自真实样本）；轮询用假定时器；断言用户可见的结果 |
-| 浏览器冒烟 | Playwright（只跑 Chromium）对**生产构建**运行 `vite preview`，API 由测试内的受控后端响应（`e2e/support/api-mock.ts`，响应体取自样本）。覆盖初始化与登录、回跳与退出、会话中途 401、403、目录与扫描（含扫描记录的翻页与进入详情）、成员、只用键盘完成主要操作；每个测试结束时断言没有第三方请求、没有脚本错误与控制台错误 |
-| 响应式与无障碍 | 每个页面状态在 375 / 768 / 1024 / 1280 / 1440 下页面与主内容区（`#main`）都没有横向溢出；axe（`wcag2a`、`wcag2aa`、`wcag21a`、`wcag21aa`）在默认、对话框、错误提示、字段错误与窄屏菜单等状态下没有 serious 或 critical；所有文字不小于 12px |
-| 检查自检 | `e2e/checks.spec.ts` 用故意有问题的页面确认 axe、最小字号、横向溢出与焦点环检查都会失败，避免检查空转时全部通过 |
-| 真实接口冒烟 | 在隔离环境（`compose.test.yaml` 以独立 project 名启动 PostgreSQL，Go 以内嵌产物启动，允许根为临时目录，只放合成素材）走主路径，命令与结果记录在任务 `research/`，用后清理容器与目录。不进入 CI，**不读取用户真实的 `music/`** |
+| 页面级 | `src/app/*.test.tsx`：经 `renderApp` 装配真实的应用运行时（路由、会话、查询缓存），后端是有状态的替身（幂等重放、`expected_revision` 与 409、可注入请求或响应丢失，响应取自真实样本）；轮询用假定时器；断言用户可见的结果。M1b 的专辑页：`src/test/catalog-data.ts` 按列表里的摘要合成组详情、版本详情与完整证据（任意介质数与曲目数，含千首曲目），可登记特别安排的数据，也能模拟“被重新扫描后不可见的版本” |
+| 浏览器冒烟 | Playwright（只跑 Chromium）对**生产构建**运行 `vite preview`，API 由测试内的受控后端响应（`e2e/support/api-mock.ts`，响应体取自样本）。覆盖初始化与登录、回跳与退出、会话中途 401、403、目录与扫描（含扫描记录的翻页与进入详情）、成员、专辑（搜索、筛选、翻页、详情、版本切换、证据权限、封面重新加载）、只用键盘完成主要操作（含专辑主路径：搜索 → 筛选 → 翻页 → 打开详情 → 切换版本 → 展开证据 → 返回列表）；每个测试结束时断言没有第三方请求、没有脚本错误与控制台错误 |
+| 响应式与无障碍 | 每个页面状态在 375 / 768 / 1024 / 1280 / 1440 下页面与主内容区（`#main`）都没有横向溢出，≥768px 时窗口本身不能再滚动（`expectNoDocumentScroll`）；axe（`wcag2a`、`wcag2aa`、`wcag21a`、`wcag21aa`）在默认、对话框、错误提示、字段错误与窄屏菜单等状态下没有 serious 或 critical；所有文字不小于 12px。M1b 起长内容（超过 1000 字的中日英混排标题、超长艺人名、无空格长串、十二张介质）的列表与详情也在清单里，并在字体请求全部被拦截（断言拦截生效）时再检查一遍；还有“窗口先宽后窄”的回归用例（滚到底让屏幕外的分段被 `content-visibility` 跳过，再缩到窄屏） |
+| 检查自检 | `e2e/checks.spec.ts` 用故意有问题的页面确认 axe、最小字号、横向溢出、窗口纵向滚动与焦点环检查都会失败，避免检查空转时全部通过 |
+| 真实接口冒烟 | 在隔离环境（`compose.test.yaml` 以独立 project 名启动 PostgreSQL，Go 以内嵌产物启动，允许根为临时目录，只放合成素材）走主路径，命令与结果记录在任务 `research/`，用后清理容器与目录。不进入 CI，**不读取用户真实的 `music/`**。M1b 的冒烟用 74 个合成 FLAC（含双碟、CUE、需要关注、长标题与竖版封面）走专辑浏览，并发现了后端封面发现的两处缺口（见后端运行合同的技术债） |
 
-浏览器测试的约定：用 `page.clock.install()` 加 `fastForward` 推进轮询，不真实等待、不用固定睡眠；夹具回调参数不要命名为 `use`
+浏览器测试的约定：用 `page.clock.install()` 加 `fastForward` 推进轮询，不真实等待、不用固定睡眠；
+自检用的页面要写 `<!doctype html>`：没有它浏览器进入怪异模式，`document.documentElement.scrollHeight` 等度量与真实页面不同，检查会“通过”却没有生效；
+检查加进去之后用故意去掉修正的变更确认新用例确实会失败（M1b 的 `min-width: 0` 与外壳 `position: relative` 都这样验证过）；夹具回调参数不要命名为 `use`
 （react-hooks 的 lint 规则会把它当成 Hook，本项目叫 `provide`）；原生 `<dialog>` 的焦点断言见[组件规范](./component-guidelines.md)。
 Playwright 在 CI 里重试一次，失败时上传 HTML 报告与 trace（保留 7 天）；本机复用已在运行的预览服务，CI 不复用。
 
@@ -85,7 +87,15 @@ cover media must not overlap or resize the surrounding layout unexpectedly.
 
 Automated accessibility output is a signal, not proof. Critical workflows require
 keyboard and screen-reader-semantic review. M1a 的自动化部分已在 Playwright 中落地（见上表）；键盘路径用例覆盖
-登录、停用确认对话框、成员新建与确认、窄屏菜单与跳转链接。
+登录、停用确认对话框、成员新建与确认、窄屏菜单与跳转链接，M1b 增加专辑主路径。**人工读屏验证仍未做。**
+
+M1b 从真实页面上学到的布局约束（都由上面的检查守住）：
+
+- 长页面里的“仅供读屏”元素（`VisuallyHidden`、`DataTable` 的 caption）是绝对定位的，滚动容器必须是定位祖先，否则文档被撑高、窗口能滚出一片空白。
+- 网格与弹性容器里的项要写 `min-width: 0`；`content-visibility: auto` 的分段被跳过时会保留上一次渲染的宽度，窗口缩窄后仍撑宽轨道。
+  占位尺寸只写块方向的 `contain-intrinsic-block-size`，简写 `contain-intrinsic-size` 带一个值会同时给宽度。
+- 分页链接在结果下方：点击后把结果标题滚到视野顶部并聚焦，否则新的一页停在滚到底的位置，键盘用户要倒着穿过整页卡片。
+- 只改查询参数的导航（切换版本）不应把焦点抢回主内容区；路径变化才回到页面顶部。
 
 ## 当前脚本与门禁
 

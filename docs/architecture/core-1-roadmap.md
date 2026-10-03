@@ -27,21 +27,26 @@
 M1a（2026-10-01）已重建 `frontend/src/`：应用外壳、初始化与会话（会话代次、跨标签页同步）、扫描目录与扫描详情、成员管理、
 简版概览；Go 内嵌的是它的生产构建（`backend/cmd/roomusic/web`，随源码提交）。`.github/workflows/ci.yml` 的前端作业运行
 lint、typecheck、Vitest、生产构建、内嵌资产漂移检查与 Playwright 冒烟（含无障碍与五种宽度的响应式检查），接口响应样本由集成作业把关。
-M1b 在这个外壳上增加专辑浏览。Classical 原型与 `_ds` 设计系统已经入库，源目录不搬迁。
+Classical 原型与 `_ds` 设计系统已经入库，源目录不搬迁。
+
+M1b（2026-10-03）在这个外壳上增加了专辑浏览，只改前端与样本测试，没有新增后端接口：`/albums`（搜索、需要关注筛选、分页，每页 48 张封面卡片，搜索与页码都在地址里）与
+`/albums/$groupId`（头部、多版本时的版本导航、按介质逐段列出的曲目与署名、发行信息、折叠的来源与证据；管理员可按需读完整证据，普通用户从不请求）。
+所选版本在两次请求之间被重新扫描掉时就地提示。真实接口冒烟（隔离 PostgreSQL 与合成素材）同时发现后端封面发现的两处缺口：CUE 专辑拿不到文件夹封面，
+多碟专辑只在第一张碟的文件夹里找封面（未修，记入后端运行合同的技术债）。
 
 F3（2026-10-02）补齐了 M1a 暴露的后端缺口，没有迁移：管理员的 `GET /api/v1/scans`（分页）与扫描目录页的“扫描记录”；`/auth/me`、登录与初始化管理员的响应都带用户 `id`，前端按 ID 判断“你”与同一查看者；成员与初始化接口只把唯一约束冲突映射为 409，密码按字节限制在 12 到 72；静态资源、JSON 与封面带明确的缓存头（封面 `private, no-cache` 加 `ETag` 与 304，`assets/` 下的文件 `immutable`，JSON `no-store`，不再列目录）。成员写操作的幂等键延到 M3。M1b 因此可以直接使用共用的分页组件与封面缓存。
 
 ## 页面 / API / 缺口矩阵
 
-下列路径均相对于 `/api/v1`，是已注册的现有接口；表中没有的新能力不通过假数据补齐。标注 M1a 的行已于 2026-10-01 交付，
-标注 M1b 及以后的行尚未实施。
+下列路径均相对于 `/api/v1`，是已注册的现有接口；表中没有的新能力不通过假数据补齐。标注 M1a 的行已于 2026-10-01 交付，标注 M1b 的行已于 2026-10-03 交付，
+标注 M2 及以后的行尚未实施。
 
 | 页面或用户动作 | 当前 API / 数据证据 | M1 可交付的真实范围 | 缺口与所属阶段 |
 | --- | --- | --- | --- |
 | 初始化与会话 | `GET /setup/status`、`POST /setup/admin`、`POST /auth/login`、`POST /auth/logout`、`GET /auth/me` | M1a：初始化关闭、登录/退出、失效恢复和 401/403 区分；查看者带用户 `id`（F3） | 无需新增认证方案；不引入浏览器 bearer token |
-| 专辑库、基础搜索 | `GET /releases` 的 `q`、`attention=required`、`page`、`page_size` | M1b：使用阶段 I 的按组只读接口，列表、筛选、分页和可恢复 URL 状态；一组一个版本时自然退化 | Core 1 不做自动跨版本归组（仅人工确认，M3 起）；搜索规范化、别名和艺人属于 M5 |
-| 发行详情与封面 | `GET /releases/{id}`、`GET /artworks/{resource_id}` | M1b：组详情与版本标签（单版本退化）、Medium/Track 层级、现有字段/credits、封面空态与错误态；封面响应为 `private, no-cache` 加 `ETag` 与 304（F3） | 默认版本与版本对比属于 M4；作词/编曲角色需额外数据合同；歌词在 M2b |
-| 来源与待关注信息 | 管理员 `GET /releases/{id}/evidence`，普通详情含安全摘要 | M1b：按现有权限查看证据；仅 `attention` 筛选不能冒充问题工单 | 忽略/修正/审批等处理状态属于 M3/M4 |
+| 专辑库、基础搜索 | `GET /releases` 的 `q`、`attention=required`、`page`、`page_size` | M1b（已交付）：使用阶段 I 的按组只读接口，列表、筛选、分页和可恢复 URL 状态；一组一个版本时自然退化 | Core 1 不做自动跨版本归组（仅人工确认，M3 起）；搜索规范化、别名和艺人属于 M5 |
+| 发行详情与封面 | `GET /releases/{id}`、`GET /artworks/{resource_id}` | M1b（已交付）：组详情与版本导航（单版本退化）、Medium/Track 层级、现有字段/credits、封面空态与错误态；封面响应为 `private, no-cache` 加 `ETag` 与 304（F3） | 默认版本与版本对比属于 M4；作词/编曲角色需额外数据合同；歌词在 M2b |
+| 来源与待关注信息 | 管理员 `GET /releases/{id}/evidence`，普通详情含安全摘要 | M1b（已交付）：按现有权限查看证据；仅 `attention` 筛选不能冒充问题工单 | 忽略/修正/审批等处理状态属于 M3/M4 |
 | 目录管理 | `GET/POST /library-roots`、`PATCH /library-roots/{id}`、`POST /library-roots/{id}/restore` | M1a：管理员新增、停用、恢复；保留 revision/幂等与安全路径合同 | “只读客户端”不禁用这些已有管理操作；音乐文件仍不写入；幂等指纹的目标绑定已由 F2 修复（2026-09-29） |
 | 扫描目录 | `POST /scans`、`GET /scans`（管理员，F3）、`GET /scans/active`、`GET /scans/{id}`、`POST /scans/{id}/cancel`、`GET /scans/{id}/diagnostics` | M1a：活动扫描、运行/终态、取消请求和受限诊断；F3：分页的扫描记录（可进入扫描详情） | 无完成百分比、已扫描文件进度、暂停/续跑、定时/监听或新增专辑差量；增强单独拆分 |
 | 成员 | `GET/POST /users`、`PATCH /users/{id}`、`POST /users/{id}/sessions/revoke` | M1a：当前 admin/user 范围内的创建、禁用和会话撤销；F3 修正了错误映射与密码字节规则 | `editor` 是 M3 候选，不在前端单方面授予；成员写操作的幂等键延到 M3（F3 裁决） |
@@ -76,7 +81,7 @@ M3、M4**，外加两项独立修复 F1、F2；2026-10-02 起另有 F3（M1a 遗
 | B0 | 纯重构：先拆 `internal/catalog`（organizer、Release 图写入、读取查询），再拆目录与扫描（含解析器），最后拆 platform | 无；不阻塞 M1a | 对外接口、扫描、安全与事务行为不变；每步 `-race` 测试与 PostgreSQL 集成测试通过 | `classical-b0-package-split`（2026-09-30 已完成，`b4cda28`–`e452105`） |
 | I | 身份稳定：音频指纹、同 root 保守重绑定、按曲目成员关系匹配 Release、ID 稳定性集成测试；ReleaseGroup 只读接口 | B0 的 catalog 部分 | 重扫、增删文件、同 root 内改名/移动后 UUID 不变；歧义不重绑定；`/releases` 行为不变 | `classical-i-identity-groups`（2026-09-30 已完成，`7260178`–`75ef107` 加文档同步） |
 | M1a | Classical 外壳、初始化/会话、现有目录/扫描/成员管理、简版概览；恢复 CI 构建与内嵌资产检查 | ADR 0001 第 1–5 项已批准；可与 B0、I 并行 | 真实 API 主路径、权限/错误/空态、键盘/窄屏、实际构建及内嵌资产检查通过 | `classical-m1a-shell-admin`（2026-10-01 已完成，`66a0e05`–`4220960` 加文档同步） |
-| M1b | 专辑列表与详情（按组形态，单版本自然退化） | 阶段 I 的按组接口；M1a 的外壳与数据层；F3 的封面缓存头与分页组件 | 同 M1a 质量门禁，另覆盖长标题、缺封面、单版本、多 Medium | `classical-m1b-album-browsing` |
+| M1b | 专辑列表与详情（按组形态，单版本自然退化） | 阶段 I 的按组接口；M1a 的外壳与数据层；F3 的封面缓存头与分页组件 | 同 M1a 质量门禁，另覆盖长标题、缺封面、单版本、多 Medium；2026-10-03 已实施（Vitest 721、Playwright 151、隔离 PostgreSQL 上的真实接口冒烟 17 项） | `classical-m1b-album-browsing`（已完成） |
 | M2a | 鉴权直出串流、播放引擎、浏览器能力判定；不可播放的曲目明确标注 | M1a 外壳；ADR 0004 第 1 项的实播矩阵在 M2a 规划时确定 | 约定浏览器/格式可播放、拖动/取消/错误可恢复、切页不断播，不宣称硬件 Bit-perfect | 未立项 |
 | M2b | ffmpeg 无损派生缓存、CUE 精确分轨、歌词 | M2a；ADR 0004 第 2–7 项（含许可与部署）获批 | ALAC 与 CUE 曲目在约定浏览器可播放；缓存有上限、可取消 | 未立项 |
 | P | 服务端播放历史（按用户隔离） | 阶段 I；M2a 产生真实播放 | 只记录真实播放；重扫与改名后仍指向同一曲目 | 未立项 |

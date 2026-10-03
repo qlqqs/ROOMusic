@@ -11,7 +11,7 @@
 
 ```text
 frontend/
-├── e2e/                            # Playwright 冒烟；受控后端在 e2e/support/api-mock.ts，响应取自后端样本
+├── e2e/                            # Playwright 冒烟；受控后端在 e2e/support/api-mock.ts，响应取自后端样本，专辑的长内容与多版本数据在 e2e/support/albums-data.ts
 ├── playwright.config.ts
 ├── public/licenses/                # 三套字体的 OFL 文本，构建时复制到产物根目录
 └── src/
@@ -27,13 +27,13 @@ frontend/
     │   ├── auth/                   # 初始化、登录、退出、会话生命周期与跨标签页同步
     │   ├── members/                # 成员列表与管理（管理其他账号，生命周期与 auth 不同）
     │   ├── library/                # 目录、目录操作记录、扫描记录、扫描详情与诊断
-    │   └── catalog/                # 专辑列表合同；M1a 只用于概览计数，M1b 扩展为浏览
+    │   └── catalog/                # 专辑：列表（M1b）、详情（M1b）、封面、证据展示，以及概览的计数（M1a）
     ├── shared/
     │   ├── api/                    # 请求、错误分类、解码原语、错误信封、重试策略、失败文案
     │   ├── ui/                     # 无策略的表现组件
-    │   └── lib/                    # 与领域无关的小机制：幂等键与请求 ID、时间、数字、类名、页面标题、页码解析
+    │   └── lib/                    # 与领域无关的小机制：幂等键与请求 ID、时间、数字、类名、页面标题、页码解析与越界规范化
     ├── styles/                     # tokens.css、base.css、fonts.ts
-    └── test/                       # 测试共用基础设施：渲染、替身后端、样本读取、受控通道
+    └── test/                       # 测试共用基础设施：渲染、替身后端、样本读取、受控通道；专辑数据与接口行为（catalog-data.ts）
 ```
 
 feature 只建需要的子目录；文件名统一小写短横线，组件以 PascalCase 导出，样式模块与组件同目录（`*.module.css`）：
@@ -51,6 +51,21 @@ features/library/
 
 测试与被测单元同目录。跨页面的整页行为（路由、会话、替身后端）放在 `app/*.test.tsx`；测试共用的替身后端与读取
 后端样本的代码放在 `src/test/`，它们依赖 vitest，不被 Playwright 复用。浏览器冒烟放在 `frontend/e2e/`。
+例外是只依赖解码器与样本读取的纯模块（M1b 的 `catalog-data.ts`：专辑数据与列表、组详情、版本详情、完整证据的接口行为）：
+Vitest 的替身（`fake-catalog.ts`）与 Playwright 的受控后端共用它，让两层对同一份“后端行为”断言；Playwright 运行在 Node 里，
+所以 e2e 只能导入这类纯模块（不能导入 vitest、`*.module.css` 或会连带导入它们的应用代码）。
+
+M1b 的 `features/catalog/` 实际布局（只列与 library 不同的部分）：
+
+```text
+features/catalog/
+├── album-search.ts                 # 列表与详情的 URL 参数校验与规范化（纯函数）、从 history state 取返回列表的参数
+├── labels.ts                       # 署名与证据词表的中文名，未知值原样显示
+├── format.ts                       # 卡片摘要、时长、介质标题、署名文字、发行信息条目
+├── api/                            # decoders.ts（含样本往返与上限）、endpoints.ts（列表、组、版本、证据、封面地址）
+├── hooks/                          # use-album-page、use-album、use-release、use-release-evidence、use-library-totals
+└── components/                     # cover、album-card/grid/filters/list-view、album-detail-view、album-header、version-nav、release-media/facts、evidence-section、library-summary
+```
 
 ## 归属
 
@@ -59,7 +74,7 @@ features/library/
   `auth`，由 `members` 拥有。
 - `members` 拥有成员列表、新建、停用、重新启用与撤销会话。
 - `library` 拥有目录与扫描管理、目录操作记录、扫描记录（F3）、扫描详情与诊断的展示。
-- `catalog` 拥有 Release/ReleaseGroup 的列表与详情、Medium/Track 展示、来源与封面展示；M1a 只有概览的计数。
+- `catalog` 拥有 Release/ReleaseGroup 的列表与详情、Medium/Track 展示、来源与封面展示（M1b 实现），以及概览里的专辑数。
 - `search` 拥有查询与筛选的 URL 状态和结果展示（尚未建立）。
 - `operations` 拥有 Change Set 与 Operation Journal 的状态及受支持的恢复界面，不是通用 toast（尚未建立）。
 - `shared/api` 拥有同源请求、凭据、请求关联、响应体处理、错误信封、重试策略与解码原语；feature 的端点与 DTO 留在 feature。

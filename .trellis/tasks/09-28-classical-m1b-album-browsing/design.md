@@ -2,6 +2,8 @@
 
 > 需求、决策与验收见 [prd.md](prd.md)，执行顺序见 [implement.md](implement.md)。本文只写实现边界、数据流、合同和取舍。
 > 前置：F3 已交付 `shared/ui` 的 `Pagination`、封面 `ETag`/304 与查看者 ID。
+> 本文保留规划时的设计；实施中与它不同的地方（版本导航的标签、没有“专辑”小标题、`Page.compactTitle`、用焦点管理做介质跳转等）
+> 逐条列在 [prd.md 的“与设计的差异”](prd.md#与设计的差异)。
 
 ## 1. 边界
 

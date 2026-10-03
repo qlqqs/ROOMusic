@@ -304,7 +304,7 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
             <li class="later">search · artists · personal（M5）</li>
             <li class="later">steward（M6）</li>
           </ul>
-          <div class="node-tags"><span class="tag t-done">M1a 已建 auth · members · library · catalog</span><span class="tag t-appr">M1b 起逐步交付其余</span></div>
+          <div class="node-tags"><span class="tag t-done">M1a 已建 auth · members · library · catalog（M1b 扩展为专辑浏览）</span><span class="tag t-appr">M2a 起逐步交付其余</span></div>
         </div>
         <div class="node s-appr">
           <div class="node-k">features/player</div>
@@ -759,11 +759,11 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
           <p class="node-b">登录 · 目录 · 扫描 · 成员 · 概览；恢复 CI 构建与浏览器检查。</p>
           <div class="node-tags"><span class="tag t-done">已完成 · 2026-10-01</span></div>
         </div>
-        <div class="node s-appr" id="r-m1b" tabindex="0" style="grid-column:6;grid-row:3">
+        <div class="node s-done" id="r-m1b" tabindex="0" style="grid-column:6;grid-row:3">
           <div class="stage">M1b</div>
           <div class="node-t">专辑页</div>
-          <p class="node-b">直接用按组接口；一组一版本时自然退化。</p>
-          <div class="node-tags"><span class="tag t-appr">子任务 · planning</span></div>
+          <p class="node-b">直接用按组接口：搜索 · 筛选 · 分页 · 封面卡片；详情含版本导航、介质与曲目、来源与证据；一组一版本时自然退化。</p>
+          <div class="node-tags"><span class="tag t-done">已完成 · 2026-10-03</span></div>
         </div>
         <div class="node s-appr" id="r-m2a" tabindex="0" style="grid-column:4;grid-row:4">
           <div class="stage">M2a</div>
@@ -800,7 +800,7 @@ code { font-family: var(--font-mono); font-size: 0.86em; }
     </div>
     <div class="road-notes">
       <div class="note s-now"><b>不能调换的顺序</b>M3 依赖阶段 I 的稳定 ID；M6 依赖 M3 / M4 的操作合同。</div>
-      <div class="note s-now"><b>可以并行</b>M1a 已完成（2026-10-01），M1b 接在 M1a 的外壳、阶段 I 的按组接口与 F3 的封面缓存和分页组件之后（B0、阶段 I、M1a、F3 已完成）；播放不依赖治理写路径。</div>
+      <div class="note s-now"><b>可以并行</b>M1a（2026-10-01）与 M1b（2026-10-03）已完成，M1b 建在 M1a 的外壳、阶段 I 的按组接口与 F3 的封面缓存和分页组件之上（B0、阶段 I、M1a、F3、M1b 已完成）；播放（M2a）接在它们之后，不依赖治理写路径。</div>
       <div class="note s-appr"><b>已裁决（2026-09-28）</b>Core 1 截止到 M4；阶段顺序、身份策略、M1 前端基础与归组依据等 D1–D6 见路线修订任务。各 ADR 其余细节在对应阶段规划时批准。</div>
     </div>
   </section>

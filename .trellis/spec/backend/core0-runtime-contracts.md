@@ -699,6 +699,12 @@ go app.runScan(scanID, execution) // worker 由应用生命周期和持久化取
   - 没有查询允许根目录的接口，新增目录只能手输服务器上的绝对路径。
   - ~~`httpserver.Frontend` 不设缓存头；`/assets/`、`/licenses/` 这类目录路径会返回目录列表；封面缓存头 `private, max-age=86400`~~：
     F3 已修复，见上文“HTTP 缓存”。
+- M1b 真实接口冒烟（2026-10-03，见任务 `09-28-classical-m1b-album-browsing` 的 `research/real-api-smoke.md`）发现的封面发现缺口。M1b 不改后端行为，如实呈现“没有封面”，记入后续任务：
+  - CUE 专辑拿不到文件夹封面：CUE 虚拟曲目的 `relative_path` 形如 `cue-album/album.cue#track-1@cue-album/image.flac#index-0`，`saveArtworkForRelease`
+  （`backend/internal/library/scanner.go`）用 `filepath.Dir` 从中取“曲目所在文件夹”，得到不存在的目录，`cover.png` 没有被发现。
+  - 多碟专辑只在第一张碟的文件夹里找封面：封面来源取“按碟序排列的第一首曲目”（`OrganizedCandidate.ArtworkObservation`，`backend/internal/catalog/persist.go`）所在的文件夹，
+    放在专辑父目录里的 `cover.jpg` 不会被发现（真实资料库常见这种布局）。
+  - 两者的修法（CUE 取物理文件的目录、多碟回退到各碟目录的公共父目录）都会改变扫描结果，需要单独的任务、迁移前后的对照与回归测试，不夹入前端交付。
 - ~~未匹配的 `/api/` 仍落入前端 fallback~~：2026-09-29 由 F1 修复。`/api` 兜底返回 JSON 404/405/503，
   完成日志的 `route_template` 记为 `<unmatched>`，见上文校验与错误矩阵。
 - ~~2026-09-27 静态审查：停用/恢复指纹未含路由 root ID，同键同 body 跨目标会重放前一个 root 的结果~~：
