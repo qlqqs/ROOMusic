@@ -1,7 +1,7 @@
 # 拆分后端运行合同
 
 > 状态：已实施并验证（2026-10-03 创建并实施）。只改规范文档，不改代码。
-> 来源：M1b 归档时记下的遗留项。用户 2026-10-03 要求与 [F4](../archive/2026-10/10-03-classical-f4-artwork-discovery/prd.md) 一并先解决。
+> 来源：M1b 归档时记下的遗留项。用户 2026-10-03 要求与 [F4](../10-03-classical-f4-artwork-discovery/prd.md) 一并先解决。
 > 技术设计（各段去向）见 [design.md](design.md)，执行顺序与校验见 [implement.md](implement.md)。
 
 ## 目标与用户价值
@@ -21,7 +21,7 @@
   - 目录与扫描流水线：目录操作幂等、暂存、曲目与 Release 身份、CUE、抓轨日志、封面
   - 扫描协调：已是独立的“场景”一节
   - 真实库 Smoke 与 V0 对照
-  - 发行 REST 的少量字段：本应在 [Catalog REST 合同](../../spec/backend/catalog-rest-contracts.md) 里
+  - 发行 REST 的少量字段：本应在 [Catalog REST 合同](../../../../spec/backend/catalog-rest-contracts.md) 里
 
   各主题的错误矩阵、案例、必需测试、示例都混在同一张表或同一个列表里。
 - 仓库里（不含归档任务）链接它的只有 6 处，都不带锚点：
