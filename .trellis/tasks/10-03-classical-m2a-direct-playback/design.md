@@ -13,7 +13,7 @@ ADR 0004 §3 要求媒体用例通过窄合同消费身份、catalog 与 library
 | 合同 | 所属 | 内容 |
 | --- | --- | --- |
 | `catalog.Store.LoadTrackSource(ctx, trackID)` | catalog（新增） | 只返回 `source_status='present'` 的曲目：root ID、相对路径、`source_kind`、`codec`、扫描时的大小与修改时间、内容指纹；不存在或不可见时 `ErrTrackNotFound` |
-| `library.LoadRootLocation(ctx, queryer, rootID)` | library（新增） | 根目录的绝对路径与 `status` |
+| `library.LoadRootLocation(ctx, queryer, rootID)` | library（新增） | 根目录的绝对路径与是否启用（`RootLocation{Path, Active}`）；不存在时 `ErrRootNotFound` |
 | `library.ValidatePath(path, allowedRoots)` | library（已有） | 播放时复核根目录仍在配置允许的范围内、不是符号链接 |
 | `identity.Guard.Authenticate(request)` | identity（已有） | 会话有效、用户未停用；初次请求与 10 秒复核都用它 |
 
@@ -97,8 +97,9 @@ catalog 组件不依赖 player：`ReleaseMedia` 增加 `renderTrackActions` 与 
    `O_NONBLOCK` 让检查后被换成 FIFO 的文件也不会阻塞打开。随后对**已打开的句柄** `Stat`：必须是普通文件。
 3. 句柄的大小、修改时间（截到微秒，与 `TIMESTAMPTZ` 一致）必须等于 `tracks.source_size`、`source_modified_at`；任一为空或不等即 `source_changed`。
    这是“严格”策略：改了标签而没重扫的文件暂时不能播，提示重新扫描；好处是不会用旧曲目信息播放已被替换的内容。
-4. 用 `ReadAt` 读文件头识别容器：FLAC 为 `fLaC`（允许前置 ID3v2）、MP4 为偏移 4 处的 `ftyp`、MP3 为 `ID3` 或帧同步、WAV 为 `RIFF…WAVE`、
-   Ogg 为 `OggS`；与格式表不符即 `source_changed`。
+4. 用 `ReadAt` 读文件头识别容器，接受范围与扫描器的解析器一致，避免扫描成功的文件在这里被误判：FLAC 为 `fLaC`（解析器不收录前置 ID3v2 的 FLAC）、
+   MP4 为顶层有 `ftyp`（解析器允许它之前有别的 atom，最多往后找 8 个）、MP3 为 `ID3` 或帧同步、WAV 为 `RIFF…WAVE`、Ogg 为 `OggS`；
+   与格式表不符即 `source_changed`，读文件头本身失败为 `source_unavailable`。
 5. 根目录句柄用完即关；文件句柄在响应结束时关闭。源文件始终只读。
 
 ## 4. 已建立传输的复核（K3）
