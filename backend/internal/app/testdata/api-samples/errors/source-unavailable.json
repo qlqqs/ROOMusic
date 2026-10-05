@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "source_unavailable",
+      "message": "音频文件无法读取"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

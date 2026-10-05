@@ -34,6 +34,8 @@ type integrationTestApplication struct {
 	origin        string
 	allowedRoot   string
 	dataDirectory string
+	// shutdown 取消应用的生命周期上下文，模拟进程收到停机信号。
+	shutdown context.CancelFunc
 }
 
 type integrationTestUser struct {
@@ -41,7 +43,13 @@ type integrationTestUser struct {
 	token string
 }
 
-func newIntegrationTestApplication(t *testing.T) *integrationTestApplication {
+func newIntegrationTestApplication(t *testing.T, applied ...Option) *integrationTestApplication {
+	t.Helper()
+	return newIntegrationTestApplicationWithLogger(t, slog.New(slog.NewTextHandler(io.Discard, nil)), applied...)
+}
+
+// newIntegrationTestApplicationWithLogger 与 newIntegrationTestApplication 相同，但使用给定的日志，供断言日志事件的测试使用。
+func newIntegrationTestApplicationWithLogger(t *testing.T, logger *slog.Logger, applied ...Option) *integrationTestApplication {
 	t.Helper()
 	scopedURL := postgrestest.NewSchema(t, "roomusic_test_")
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -62,9 +70,8 @@ func newIntegrationTestApplication(t *testing.T) *integrationTestApplication {
 		AllowedLibraryRoots: []string{allowedRoot},
 		DataDirectory:       dataDirectory,
 	}
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	scanContext, cancelScans := context.WithCancel(context.Background())
-	application := New(scanContext, config, database, testFrontend(), logger)
+	application := New(scanContext, config, database, testFrontend(), logger, applied...)
 	// 后注册先执行：测试结束（含中途失败）时先取消并等待扫描 worker 退出，再关闭数据库、清理 schema。
 	t.Cleanup(func() {
 		cancelScans()
@@ -81,6 +88,7 @@ func newIntegrationTestApplication(t *testing.T) *integrationTestApplication {
 		origin:        "http://roomusic.test",
 		allowedRoot:   allowedRoot,
 		dataDirectory: dataDirectory,
+		shutdown:      cancelScans,
 	}
 }
 

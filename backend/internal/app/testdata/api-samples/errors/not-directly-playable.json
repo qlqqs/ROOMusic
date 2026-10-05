@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "not_directly_playable",
+      "message": "这首曲目不能直接播放"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

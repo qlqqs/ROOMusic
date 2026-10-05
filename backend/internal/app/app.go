@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"time"
 
 	catalogapi "github.com/qlqq/roomusic/backend/internal/catalog/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/identity"
@@ -16,6 +17,8 @@ import (
 	libraryapi "github.com/qlqq/roomusic/backend/internal/library/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/platform/config"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
+	"github.com/qlqq/roomusic/backend/internal/playback"
+	playbackapi "github.com/qlqq/roomusic/backend/internal/playback/httpapi"
 )
 
 // App 是装配完成的应用：请求 handler 加上需要在停机时等待的后台工作。
@@ -25,11 +28,27 @@ type App struct {
 	library *library.Service
 }
 
-// New 装配应用。scanContext 是扫描 worker 的生命周期上下文（进程停机时取消）；frontend 是前端产物子树。
-// database 为 nil 时路由表照常建立但 /readyz 报告未就绪，供不连接数据库的路由测试使用。
-func New(scanContext context.Context, settings config.Server, database *sql.DB, frontend fs.FS, logger *slog.Logger) *App {
+// Option 调整装配。生产路径不传任何选项；选项只用于测试把时间常量缩短到可以快速验证。
+type Option func(*options)
+
+type options struct {
+	playbackRecheckInterval time.Duration
+}
+
+// WithPlaybackRecheckInterval 设置已建立的音频传输复核会话与目录的间隔（默认 playback.DefaultRecheckInterval）。
+func WithPlaybackRecheckInterval(interval time.Duration) Option {
+	return func(settings *options) { settings.playbackRecheckInterval = interval }
+}
+
+// New 装配应用。lifecycle 是应用的生命周期上下文（进程停机时取消）：扫描 worker 与已建立的音频传输都以它为界；
+// frontend 是前端产物子树。database 为 nil 时路由表照常建立但 /readyz 报告未就绪，供不连接数据库的路由测试使用。
+func New(lifecycle context.Context, settings config.Server, database *sql.DB, frontend fs.FS, logger *slog.Logger, applied ...Option) *App {
+	var assembly options
+	for _, apply := range applied {
+		apply(&assembly)
+	}
 	guard := identity.NewGuard(database, settings.SecureCookies, settings.PublicURL)
-	libraryService := library.NewService(scanContext, database, settings.DataDirectory, logger)
+	libraryService := library.NewService(lifecycle, database, settings.DataDirectory, logger)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", httpserver.HealthHandler)
@@ -37,6 +56,7 @@ func New(scanContext context.Context, settings config.Server, database *sql.DB, 
 	identityapi.New(database, guard).Register(mux)
 	libraryapi.New(database, guard, libraryService, settings.AllowedLibraryRoots, logger).Register(mux)
 	catalogapi.New(database, guard, settings.DataDirectory).Register(mux)
+	playbackapi.New(guard, playback.NewService(database, settings.AllowedLibraryRoots), lifecycle, logger, assembly.playbackRecheckInterval).Register(mux)
 	httpserver.RegisterAPIFallback(mux, httpserver.APINotFoundHandler(mux))
 	mux.Handle("/", httpserver.Frontend(frontend))
 	return &App{mux: mux, handler: httpserver.Middleware(logger, mux), library: libraryService}

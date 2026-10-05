@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "root_disabled",
+      "message": "曲目所在的目录已停用"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

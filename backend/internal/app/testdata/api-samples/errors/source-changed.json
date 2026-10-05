@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "source_changed",
+      "message": "音频文件在上次扫描后有变化，请重新扫描"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

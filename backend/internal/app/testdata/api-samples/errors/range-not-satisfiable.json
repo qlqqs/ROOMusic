@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "range_not_satisfiable",
+      "message": "请求的范围无效"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 416
+}

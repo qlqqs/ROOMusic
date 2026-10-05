@@ -38,9 +38,10 @@ var packageRules = map[string]packageRule{
 	"identity/httpapi":               {imports: []string{"identity", "platform/httpserver", "platform/uuid"}, http: true},
 	"catalog/httpapi":                {imports: []string{"catalog", "catalog/artwork", "identity", "platform/httpserver", "platform/uuid"}, http: true},
 	"library/httpapi":                {imports: []string{"identity", "library", "platform/httpserver", "platform/uuid"}, http: true},
+	"playback/httpapi":               {imports: []string{"identity", "platform/httpserver", "platform/uuid", "playback"}, http: true},
 	"app": {imports: []string{
 		"catalog/httpapi", "identity", "identity/httpapi", "library", "library/httpapi",
-		"platform/config", "platform/httpserver",
+		"platform/config", "platform/httpserver", "playback", "playback/httpapi",
 	}, http: true},
 }
 

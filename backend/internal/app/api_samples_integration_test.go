@@ -376,6 +376,71 @@ func recordAlbumDetailSamples(t *testing.T, application *integrationTestApplicat
 
 	samples.record("errors/not-found-release-group", call(http.MethodGet, "/api/v1/release-groups/"+uuid.New(), nil, admin), http.StatusNotFound)
 	samples.record("errors/not-found-release", call(http.MethodGet, "/api/v1/releases/"+uuid.New(), nil, admin), http.StatusNotFound)
+
+	recordPlaybackSamples(t, application, samples, call, admin, libraryA, rootIDOf(t, application, libraryA))
+}
+
+// rootIDOf 返回按路径登记的根目录 ID。
+func rootIDOf(t *testing.T, application *integrationTestApplication, path string) string {
+	t.Helper()
+	var rootID string
+	if err := application.database.QueryRow(`SELECT id::text FROM library_roots WHERE path=$1`, path).Scan(&rootID); err != nil {
+		t.Fatalf("read root id: %v", err)
+	}
+	return rootID
+}
+
+// recordPlaybackSamples 记录播放接口：直出格式表、播放预检，以及各个 409 与 416。素材是上面扫描出的合成 FLAC，
+// 预检的大小因此是确定的；每个故障都在记录之后立即复原（改回文件名与修改时间、重新启用目录），不影响其他样本。
+func recordPlaybackSamples(t *testing.T, application *integrationTestApplication, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser, library, rootID string) {
+	t.Helper()
+	trackID := func(query string, args ...any) string {
+		t.Helper()
+		var id string
+		if err := application.database.QueryRow(query, args...).Scan(&id); err != nil {
+			t.Fatalf("read track: %v", err)
+		}
+		return id
+	}
+	playable := trackID(`SELECT id::text FROM tracks WHERE title='Allegro' AND source_status='present'`)
+	cue := trackID(`SELECT id::text FROM tracks WHERE title='Cue One' AND source_kind='cue_virtual'`)
+
+	samples.record("playback/formats", call(http.MethodGet, "/api/v1/playback/formats", nil, admin), http.StatusOK)
+	samples.record("tracks/playback", call(http.MethodGet, "/api/v1/tracks/"+playable+"/playback", nil, admin), http.StatusOK)
+	samples.record("errors/not-found-track", call(http.MethodGet, "/api/v1/tracks/"+uuid.New()+"/playback", nil, admin), http.StatusNotFound)
+	samples.record("errors/not-directly-playable", call(http.MethodGet, "/api/v1/tracks/"+cue+"/playback", nil, admin), http.StatusConflict)
+	samples.record("errors/range-not-satisfiable", call(http.MethodGet, "/api/v1/tracks/"+playable+"/audio", nil, admin, map[string]string{"Range": "bytes=999999-"}), http.StatusRequestedRangeNotSatisfiable)
+
+	file := filepath.Join(library, "double-album", "d1-01.flac")
+	info, err := os.Stat(file)
+	if err != nil {
+		t.Fatalf("stat playable fixture: %v", err)
+	}
+	if err := os.Rename(file, file+".moved"); err != nil {
+		t.Fatalf("hide playable fixture: %v", err)
+	}
+	samples.record("errors/source-unavailable", call(http.MethodGet, "/api/v1/tracks/"+playable+"/playback", nil, admin), http.StatusConflict)
+	if err := os.Rename(file+".moved", file); err != nil {
+		t.Fatalf("restore playable fixture: %v", err)
+	}
+	if err := os.Chtimes(file, info.ModTime().Add(time.Second), info.ModTime().Add(time.Second)); err != nil {
+		t.Fatalf("touch playable fixture: %v", err)
+	}
+	samples.record("errors/source-changed", call(http.MethodGet, "/api/v1/tracks/"+playable+"/playback", nil, admin), http.StatusConflict)
+	if err := os.Chtimes(file, info.ModTime(), info.ModTime()); err != nil {
+		t.Fatalf("restore modification time: %v", err)
+	}
+
+	if _, err := application.database.Exec(`UPDATE library_roots SET status='disabled' WHERE id=$1::uuid`, rootID); err != nil {
+		t.Fatalf("disable root: %v", err)
+	}
+	samples.record("errors/root-disabled", call(http.MethodGet, "/api/v1/tracks/"+playable+"/playback", nil, admin), http.StatusConflict)
+	if _, err := application.database.Exec(`UPDATE library_roots SET status='active' WHERE id=$1::uuid`, rootID); err != nil {
+		t.Fatalf("restore root: %v", err)
+	}
+	if response := call(http.MethodGet, "/api/v1/tracks/"+playable+"/playback", nil, admin); response.Code != http.StatusOK {
+		t.Fatalf("the playable fixture did not recover: HTTP %d: %s", response.Code, response.Body.String())
+	}
 }
 
 // waitForScanToFinish 等扫描离开 running，再等 worker 退出：worker 在写入终态之后才释放扫描互斥并清除运行标记，
@@ -540,7 +605,8 @@ func firstDifference(committed, actual []byte) string {
 }
 
 var (
-	sampleUUIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+	// sampleUUIDPattern 匹配字符串中出现的每一个 UUID，包括嵌在路径里的（例如播放预检的音频地址）。
+	sampleUUIDPattern = regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
 	sampleTimePattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$`)
 )
 
@@ -593,13 +659,14 @@ func (normalizer *sampleNormalizer) collect(value any) {
 			normalizer.collect(item)
 		}
 	case string:
-		if sampleUUIDPattern.MatchString(typed) {
-			lower := strings.ToLower(typed)
+		for _, found := range sampleUUIDPattern.FindAllString(typed, -1) {
+			lower := strings.ToLower(found)
 			if _, seen := normalizer.uuids[lower]; !seen {
 				normalizer.uuids[lower] = ""
 				normalizer.uuidOrder = append(normalizer.uuidOrder, lower)
 			}
-		} else if sampleTimePattern.MatchString(typed) {
+		}
+		if sampleTimePattern.MatchString(typed) {
 			if parsed, err := time.Parse(time.RFC3339Nano, typed); err == nil {
 				normalizer.instants[parsed.UnixNano()] = ""
 			}
@@ -637,14 +704,14 @@ func (normalizer *sampleNormalizer) replace(value any) any {
 		}
 		return result
 	case string:
-		if sampleUUIDPattern.MatchString(typed) {
-			return normalizer.uuids[strings.ToLower(typed)]
-		}
 		if sampleTimePattern.MatchString(typed) {
 			if parsed, err := time.Parse(time.RFC3339Nano, typed); err == nil {
 				return normalizer.instants[parsed.UnixNano()]
 			}
 		}
+		return sampleUUIDPattern.ReplaceAllStringFunc(typed, func(found string) string {
+			return normalizer.uuids[strings.ToLower(found)]
+		})
 	}
 	return value
 }
