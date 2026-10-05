@@ -1,0 +1,19 @@
+{"file": "docs/architecture/adr/0004-media-delivery.md", "reason": "D1 仅直出、§3 边界、§4 能力协商、§5 Range 与鉴权、撤销边界"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "统一错误信封、JSON 缓存头、接口列表与专题文件表"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "曲目投影字段、接口样本与 decoder 防漂移做法"}
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "目录停用语义、CUE 与物理文件共存、只读源与 regular-file 规则"}
+{"file": ".trellis/spec/backend/identity-contracts.md", "reason": "会话、成员停用与会话撤销"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "能力包边界与依赖方向，新增 playback 包"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "错误映射与安全错误文案"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "中止日志的事件名与脱敏要求"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端测试与门禁"}
+{"file": ".trellis/spec/frontend/player-design-guidelines.md", "reason": "队列、模式、信号路径与播放器交互合同"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "会话清理、播放生命周期与浏览器持久数据规则"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "组件责任、可访问性与完整状态"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "feature 公开入口与跨 feature 导入规则"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "边界 decoder 与接口样本"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Vitest、Playwright、axe、宽度检查与内嵌产物"}
+{"file": "frontend/DESIGN.md", "reason": "播放栏布局、§6 播放与队列语义、窄屏规则（相关的 §3–§6 都在前 32 KB 内，注入截断不影响）"}
+{"file": ".trellis/spec/guides/real-music-assets.md", "reason": "真实音乐只读，自动化只用合成素材"}
+{"file": ".trellis/tasks/10-03-classical-m2a-direct-playback/research/library-formats.md", "reason": "真实库格式构成与格式验收子矩阵"}
+{"file": ".trellis/tasks/10-03-classical-m2a-direct-playback/research/automation-feasibility.md", "reason": "无头 Chromium 真实播放验证方法与请求模式"}

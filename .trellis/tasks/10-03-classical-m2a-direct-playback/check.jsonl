@@ -1,0 +1,8 @@
+{"file": "docs/architecture/adr/0004-media-delivery.md", "reason": "核对鉴权顺序、Range、缓存头、撤销上界与不宣称 Bit-perfect"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "错误信封、缓存头与接口列表一致"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "依赖方向与依赖规则测试"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端测试覆盖与门禁"}
+{"file": ".trellis/spec/frontend/player-design-guidelines.md", "reason": "队列与模式语义、信号路径措辞"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "会话结束清理与持久数据规则"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端门禁、Playwright 与内嵌产物"}
+{"file": ".trellis/spec/guides/real-music-assets.md", "reason": "真实音乐只读与披露边界"}

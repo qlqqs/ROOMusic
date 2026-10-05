@@ -28,7 +28,8 @@
     "09-28-classical-f1-api-json-404",
     "09-28-classical-f2-root-op-idempotency",
     "10-02-classical-f3-backend-gaps",
-    "10-03-classical-f4-artwork-discovery"
+    "10-03-classical-f4-artwork-discovery",
+    "10-03-classical-m2a-direct-playback"
   ],
   "parent": null,
   "relatedFiles": [
