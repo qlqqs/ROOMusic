@@ -15,27 +15,27 @@
 
 ### 第 1 步：后端来源核对与安全打开（A3、A4、A5 后端部分、A13 依赖规则）
 
-- [ ] `catalog.Store.LoadTrackSource` 与 `ErrTrackNotFound`；`library.LoadRootLocation`。
-- [ ] `backend/internal/playback`：格式表、容器识别、版本比对、`os.Root` 加 `O_NONBLOCK` 打开、ETag、Range 解析、`recheckingReader`、`StillPlayable`。
-- [ ] 单元测试与 `TestPostgreSQL…` 集成测试（design §7 后端第 1、2 条）；依赖规则加入 `playback`。
+- [x] `catalog.Store.LoadTrackSource` 与 `ErrTrackNotFound`；`library.LoadRootLocation`。
+- [x] `backend/internal/playback`：格式表、容器识别、版本比对、`os.Root` 加 `O_NONBLOCK` 打开、ETag、Range 解析、`recheckingReader`、`StillPlayable`。
+- [x] 单元测试与 `TestPostgreSQL…` 集成测试（design §7 后端第 1、2 条）；依赖规则加入 `playback`。
 - 验证：`cd backend && test -z "$(gofmt -l .)" && go vet ./... && go build ./...`；
   `go test -race ./internal/playback/... ./internal/catalog/... ./internal/library/... ./internal/app/... -count=1`；`./scripts/test-integration.sh`。
 - 提交：`feat(playback): 曲目音频直出的来源核对与安全打开`。
 
 ### 第 2 步：后端接口（A1、A2、A6、A13）
 
-- [ ] `backend/internal/playback/httpapi`：`GET /api/v1/playback/formats`、`GET /api/v1/tracks/{id}/playback`、`GET|HEAD /api/v1/tracks/{id}/audio`；错误映射；
+- [x] `backend/internal/playback/httpapi`：`GET /api/v1/playback/formats`、`GET /api/v1/tracks/{id}/playback`、`GET|HEAD /api/v1/tracks/{id}/audio`；错误映射；
   复核接线（`Guard.Authenticate` 加 `StillPlayable`，应用生命周期上下文）；`playback.stream.aborted` 日志。
-- [ ] `app.New` 装配（传入允许根、生命周期上下文与日志）。
-- [ ] 接口样本 8 个与样本测试；HTTP 集成测试（含传输中撤销会话、停用目录、关停）。
+- [x] `app.New` 装配（传入允许根、生命周期上下文与日志）。
+- [x] 接口样本 8 个与样本测试；HTTP 集成测试（含传输中撤销会话、停用目录、关停）。
 - 验证：同第 1 步，加 `./scripts/test-integration.sh` 确认样本无漂移。
 - 提交：`feat(playback): 新增格式表、播放预检与音频直出接口`。
 
 ### 第 3 步：测试素材（A14 的前置）
 
-- [ ] `scripts/gen-playback-fixtures.sh`：用固定摘要的 FFmpeg 容器（`docker run --rm`，不挂载 `music/`）生成 design §7 列出的素材到 `testdata/playback/`，合计不超过 1 MB。
-- [ ] 解析器测试逐个解析素材，核对编码、位深、采样率与声道，防止素材与格式表脱节。
-- 验证：`bash -n scripts/gen-playback-fixtures.sh`；`go test ./internal/library/parser/... -run Fixture -count=1`；`du -sh testdata/playback`。
+- [x] `scripts/gen-playback-fixtures.sh`：用固定摘要的 FFmpeg 容器（`docker run --rm --network none`，只挂载输出目录，不挂载 `music/`）生成 design §7 列出的素材到 `backend/testdata/playback/`（合计约 0.7 MB，带 `README.md`）。
+- [x] 解析器测试逐个解析素材，核对编码、位深、采样率与声道；`playback` 测试核对素材与格式表、容器识别一致。发现 24 bit WAV 被 FFmpeg 写成 `wav_extensible`，不在格式表中（见 prd 风险）。
+- 验证：`bash -n scripts/gen-playback-fixtures.sh`；`go test ./internal/library/parser/ ./internal/playback/ -run Fixture -count=1`；`du -sb backend/testdata/playback`；脚本重复运行字节相同。
 - 提交：`test(playback): 合成音频测试素材与生成脚本`。
 
 ### 第 4 步：前端播放引擎（A7–A10、A12、A13 前端部分）

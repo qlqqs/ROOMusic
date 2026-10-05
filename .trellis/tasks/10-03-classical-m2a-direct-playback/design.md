@@ -52,7 +52,7 @@ catalog 组件不依赖 player：`ReleaseMedia` 增加 `renderTrackActions` 与 
 | `flac_vorbis_comment` / `flac` | `audio/flac`、无 | 自动化（16/44.1、24/48）加三组手工 |
 | `m4a` / `alac` | `audio/mp4`、`alac` | macOS Safari 手工实播；失败则移除，ALAC 在 M2a 处处不可播 |
 | `mp3_id3v2` / `mp3` | `audio/mpeg`、无 | 自动化加手工 |
-| `wav_info` / `pcm` | `audio/wav`、`1` | 自动化（16、24 bit） |
+| `wav_info` / `pcm` | `audio/wav`、`1` | 自动化（16 bit）。24 bit 的 WAV 被常见工具（包括 FFmpeg）写成 WAVE_FORMAT_EXTENSIBLE，扫描记为 `wav_extensible`，不在表中 |
 | `m4a` / `aac` | `audio/mp4`、`mp4a.40.2` | 自动化（AAC-LC 样本）；解析器不区分 AAC 档次，HE-AAC 若解码失败走运行时错误路径 |
 | `ogg_vorbis_comment` / `vorbis` | `audio/ogg`、`vorbis` | 自动化 |
 | `opus_tags` / `opus` | `audio/ogg`、`opus` | 自动化 |
@@ -213,9 +213,11 @@ Media Session：曲名、艺人、专辑与封面（`/api/v1/artworks/{id}` 的�
   按真实时间推进 → 拖动 → 结束后前进；MP3、WAV、AAC、Vorbis、Opus 可播放；ALAC 在 Chromium 中标为不可播放；CUE 虚拟轨标注；
   刷新后暂停恢复；另一个标签页退出后本页停止并清空；管理员在播放中撤销该用户会话后传输在复核间隔内被切断；停用目录后下一首显示“所在目录已停用”；
   修改文件后显示“需要重新扫描”。CI 新增作业运行它。
-- **测试素材**：用固定版本的 FFmpeg 容器一次性生成 1–2 秒的立体声正弦音（FLAC 16/44.1 与 24/48、ALAC 16/44.1 与 24/48、MP3、AAC-LC、
-  WAV 16 与 24 bit、Ogg Vorbis、Opus，均带专辑/曲名/音轨号标签），提交到 `testdata/playback/`（合计不超过 1 MB），
-  生成命令与镜像摘要写在 `scripts/gen-playback-fixtures.sh`。FFmpeg 只用于生成素材，不进入运行时、部署或 CI。
+- **测试素材**：用固定摘要的 FFmpeg 容器一次性生成 0.5–3 秒的立体声正弦音（FLAC 16/44.1 与 24/48、ALAC 16/44.1 与 24/48、MP3、AAC-LC、
+  WAV 16 与 24 bit、Ogg Vorbis、Opus，均带专辑/曲名/音轨号标签），提交到 `backend/testdata/playback/`（合计不超过 1 MB，实际约 0.7 MB；
+  `README.md` 逐个说明），生成命令与镜像摘要写在 `scripts/gen-playback-fixtures.sh`（输出带 bitexact，重复生成字节相同）。
+  24 bit WAV 经扫描是 `wav_extensible`，作为“不在格式表中”的反例留在真实服务自动化里。
+  FFmpeg 只用于生成素材，不进入运行时、部署或 CI。
 - **手工实播**（K2）：三组（macOS Safari、Windows Chrome 或 Edge、任一系统 Firefox）按 `research/manual-acceptance.md` 的清单执行，
   记录操作系统与浏览器版本、格式参数、播放与拖动结果。
 
