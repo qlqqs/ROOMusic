@@ -12,6 +12,7 @@ import { LoginPage } from "./routes/login-page";
 import { MembersPage } from "./routes/members-page";
 import { NotFoundPage } from "./routes/not-found-page";
 import { OverviewPage } from "./routes/overview-page";
+import { NowPlayingPage } from "../features/player";
 import { SetupPage } from "./routes/setup-page";
 
 export type RouterContext = { session: SessionController };
@@ -62,6 +63,8 @@ const authenticatedRoute = createRoute({
   },
   component: AuthenticatedLayout,
 });
+
+const nowPlayingRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/now-playing", component: NowPlayingPage });
 
 const overviewRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/", component: OverviewPage });
 
@@ -142,7 +145,7 @@ const scanDetailRoute = createRoute({
 // 已登录用户访问不存在的路径时仍显示在外壳里；未登录用户先被守卫送去登录。
 const notFoundRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "$", component: NotFoundPage });
 
-const routeTree = rootRoute.addChildren([setupRoute, loginRoute, authenticatedRoute.addChildren([overviewRoute, albumsRoute, albumDetailRoute, libraryRoute, scanDetailRoute, membersRoute, notFoundRoute])]);
+const routeTree = rootRoute.addChildren([setupRoute, loginRoute, authenticatedRoute.addChildren([overviewRoute, nowPlayingRoute, albumsRoute, albumDetailRoute, libraryRoute, scanDetailRoute, membersRoute, notFoundRoute])]);
 
 export function createAppRouter(context: RouterContext, history?: RouterHistory) {
   return createRouter({ routeTree, context, ...(history === undefined ? {} : { history }) });

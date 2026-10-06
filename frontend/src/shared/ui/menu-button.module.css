@@ -1,0 +1,6 @@
+.menu { position: fixed; z-index: 30; display: grid; width: min(240px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); overflow-y: auto; padding: var(--space-1); border: 1px solid var(--color-control-border); border-radius: var(--radius-md); background: var(--color-bg); box-shadow: var(--shadow-md); }
+.menu button { min-height: var(--control-height); padding: var(--space-2); border: 0; background: transparent; color: var(--text-primary); text-align: left; overflow-wrap: anywhere; font: inherit; font-size: var(--fs-14); }
+.menu button:focus-visible { outline: var(--focus-ring); outline-offset: -2px; background: var(--color-selected); }
+.menu button:disabled { color: var(--text-secondary); }
+.menu button:active { background: var(--color-pressed); }
+@media (hover: hover) and (pointer: fine) { .menu button:hover { background: var(--color-hover); } }

@@ -20,9 +20,9 @@ function successText(result: RootCommandResult): { tone: "success" | "info" | "w
         ? { tone: "info", text: `目录“${result.root.name}”已经登记，列表没有变化。` }
         : { tone: "success", text: `已添加目录“${result.root.name}”。下一次扫描会包含它。` };
     case "disable":
-      return { tone: "success", text: `已停用目录“${result.name}”。扫描会跳过它，已入库的内容保留。` };
+      return { tone: "success", text: `已停用目录“${result.name}”。扫描会跳过它，其中的曲目也不能播放；已入库的信息保留，恢复后即可播放。` };
     case "restore":
-      return { tone: "success", text: `已恢复目录“${result.name}”。下一次扫描会包含它。` };
+      return { tone: "success", text: `已恢复目录“${result.name}”。下一次扫描会包含它，其中的曲目可以播放。` };
   }
 }
 

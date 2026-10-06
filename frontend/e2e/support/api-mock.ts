@@ -212,6 +212,8 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
       case "POST /api/v1/auth/logout":
         mock.session = null;
         return sample("auth/logout");
+      case "GET /api/v1/playback/formats":
+        return guarded(method, path, false, () => sample("playback/formats"));
       case "GET /api/v1/release-groups":
         return guarded(method, path, false, () => respondToGroupList(mock.groups, search));
       case "GET /api/v1/library-roots":

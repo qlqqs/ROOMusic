@@ -1,0 +1,29 @@
+import { Link } from "@tanstack/react-router";
+import { usePlayer } from "../player-provider";
+import { PlayerArtwork } from "./player-artwork";
+import { ModeControl, SeekControl, TransportControls, VolumeControl } from "./player-controls";
+import { failureLabels, sourceFormat, statusLabels } from "./player-labels";
+import styles from "./player-bar.module.css";
+
+export function PlayerBar() {
+  const { snapshot } = usePlayer();
+  const track = snapshot.current?.track;
+  const currentFailure = snapshot.current === null ? undefined : snapshot.failures[snapshot.current.entryId];
+  const faultText = snapshot.fault?.kind === "transient" ? "读取失败，进入正在播放页重试" : snapshot.fault?.kind === "autoplay_blocked" ? "请按播放" : currentFailure === undefined ? null : failureLabels[currentFailure];
+  return <section aria-label="播放器" className={styles.bar}>
+    <div className={styles.identity}>
+      {track === undefined ? null : <><div className={styles.cover}><PlayerArtwork track={track} /></div><div className={styles.text}>
+        <Link to="/now-playing" className={styles.title}>{track.title}</Link>
+        {faultText === null ? null : <p className={styles.fault}>{faultText}</p>}
+        <p className={styles.subtitle}>{track.artist} — <Link to="/albums/$groupId" params={{ groupId: track.groupId }} search={{ release: track.releaseId }}>{track.albumTitle}</Link></p>
+      </div></>}
+    </div>
+    <div className={styles.center}><TransportControls compact /><div className={styles.desktop}><SeekControl /></div></div>
+    <div className={styles.end}>
+      <div className={styles.desktop}><Link to="/now-playing" hash="signal-path">{track === undefined ? "未知格式" : sourceFormat(track)}</Link><span className={styles.state}>{statusLabels[snapshot.status]}</span></div>
+      <div className={styles.desktop}><ModeControl /></div>
+      <div className={styles.volume}><VolumeControl /></div>
+      <Link to="/now-playing" hash="queue" className={styles.queue}>队列（{snapshot.queue.entries.length}）</Link>
+    </div>
+  </section>;
+}

@@ -14,3 +14,5 @@ export { Pagination, type PaginationLinkProps } from "./pagination";
 export { Panel } from "./panel";
 export { QueryContent, type QuerySource } from "./query-content";
 export { StatList, type Stat } from "./stat-list";
+
+export { MenuButton, type MenuAction } from "./menu-button";

@@ -28,6 +28,13 @@ const groupRequests = (api: Api) => api.requestsTo("GET", /^\/api\/v1\/release-g
 const releaseRequests = (api: Api) => api.requestsTo("GET", /^\/api\/v1\/releases\/[^/]+$/);
 const evidenceRequests = (api: Api) => api.requestsTo("GET", /^\/api\/v1\/releases\/[^/]+\/evidence$/);
 const trackRows = () => Array.from(document.querySelectorAll("ol > li"));
+/** 曲目行自身的文字（序号、标题、艺人与署名、时长、标记），不含播放器放进行末插槽的动作；插槽内容由播放器测试覆盖。 */
+function rowFacts(row: Element | undefined): string | null | undefined {
+  if (row === undefined) return undefined;
+  const copy = row.cloneNode(true) as Element;
+  for (const child of Array.from(copy.children)) if (child.querySelector("button") !== null) child.remove();
+  return copy.textContent;
+}
 const searchOf = (history: { location: { search: string } }) => new URLSearchParams(history.location.search);
 
 /** 头部概况里的一项（dt 的下一个兄弟 dd）；流派在头部与侧栏各有一份，所以取第一个（头部）。 */
@@ -154,7 +161,10 @@ describe("专辑详情：介质与曲目", () => {
     expect(first.getByRole("heading", { level: 3 }).textContent).toBe("第 1 张，2 首");
     // 序号、标题、署名与时长；曲目艺人与专辑艺人相同时不重复。
     const row = first.getAllByRole("listitem")[0];
-    expect(row?.textContent).toBe("1Track 1-01作曲：Sample Composer；指挥：Sample Conductor1:51");
+    expect(rowFacts(row)).toBe("1Track 1-01作曲：Sample Composer；指挥：Sample Conductor1:51");
+    // 播放动作在行末单独的插槽里，不混进曲目事实。
+    if (row === undefined) throw new Error("缺少曲目行");
+    expect(within(row).getByRole("button", { name: "从这首开始播放" })).toBeTruthy();
     expect(first.getAllByRole("listitem")[1]?.textContent).toContain("2:01");
     expect(second.getByText("1:52")).toBeTruthy();
     // 不显示来源文件名。
@@ -205,10 +215,10 @@ describe("专辑详情：介质与曲目", () => {
     await screen.findByText("Track 01");
 
     const rows = trackRows();
-    expect(rows[0]?.textContent).toBe("1Track 01作曲：Sample Composer；指挥：Sample Conductor1:51");
-    expect(rows[1]?.textContent).toBe("2Track 02Sample Soloist—时长未知");
+    expect(rowFacts(rows[0])).toBe("1Track 01作曲：Sample Composer；指挥：Sample Conductor1:51");
+    expect(rowFacts(rows[1])).toBe("2Track 02Sample Soloist—时长未知");
     // 标题缺失写“（无标题）”；未知角色原样显示。
-    expect(rows[2]?.textContent).toBe("3（无标题）mixer：Someone2:11");
+    expect(rowFacts(rows[2])).toBe("3（无标题）mixer：Someone2:11");
     // 有一首的时长未知，就不写总时长。
     expect(screen.queryByText("总时长")).toBeNull();
   });
@@ -223,7 +233,7 @@ describe("专辑详情：介质与曲目", () => {
     await screen.findByText("Cue One");
     expect(screen.getByText("Cue Two")).toBeTruthy();
     expect(screen.getAllByText("CUE 分轨")).toHaveLength(2);
-    expect(trackRows().map((row) => row.textContent)).toEqual(["1Cue OneCUE 分轨2:00", "2Cue TwoCUE 分轨2:00"]);
+    expect(trackRows().map((row) => rowFacts(row))).toEqual(["1Cue OneCUE 分轨2:00", "2Cue TwoCUE 分轨2:00"]);
     expect(headerFact("总时长")).toBe("4:00");
   });
 

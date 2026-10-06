@@ -247,7 +247,8 @@ test.describe("键盘", () => {
     await expect(page.locator("ol > li")).toHaveCount(13);
 
     // 展开证据：Tab 到“来源与证据”，Enter 展开；管理员再 Tab 到“查看完整证据”，Enter 加载。
-    await tabTo(page, (name) => name.startsWith("来源与证据"));
+    // 13 首曲目各新增播放与更多两个可聚焦控件，仍逐个 Tab 验证到达证据入口。
+    await tabTo(page, (name) => name.startsWith("来源与证据"), 40);
     await expectVisibleFocusRing(page, "来源与证据");
     await page.keyboard.press("Enter");
     await expect(page.getByRole("table", { name: "证据摘要" })).toBeVisible();

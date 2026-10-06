@@ -1,5 +1,6 @@
 import { Outlet } from "@tanstack/react-router";
 import { useSession, ViewerScopeProvider } from "../../features/auth";
+import { PlayerProvider } from "../../features/player";
 import { AppShell } from "./app-shell";
 
 /**
@@ -11,9 +12,11 @@ export function AuthenticatedLayout() {
   if (session.status !== "authenticated") return null;
   return (
     <ViewerScopeProvider key={session.generation} viewer={session.viewer} generation={session.generation}>
-      <AppShell>
-        <Outlet />
-      </AppShell>
+      <PlayerProvider userId={session.viewer.id}>
+        <AppShell>
+          <Outlet />
+        </AppShell>
+      </PlayerProvider>
     </ViewerScopeProvider>
   );
 }

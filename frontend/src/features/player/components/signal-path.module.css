@@ -1,0 +1,9 @@
+.section { display: grid; gap: var(--space-4); min-width: 0; scroll-margin-top: var(--layout-topbar-height); }
+.path { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); margin: 0; padding: 0; list-style: none; }
+.path li { display: grid; gap: var(--space-2); align-content: start; min-width: 0; padding-top: var(--space-3); border-top: 1px solid var(--color-divider); overflow-wrap: anywhere; font-size: var(--fs-14); }
+.path h3 { font-size: var(--fs-17); }
+.path dl div { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.path dt { color: var(--text-secondary); }
+.path dd { margin: 0; }
+@media (max-width: 1023px) { .path { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 767px) { .path { grid-template-columns: minmax(0, 1fr); } }

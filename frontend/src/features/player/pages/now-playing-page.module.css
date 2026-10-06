@@ -1,0 +1,10 @@
+.page { display: grid; gap: var(--space-8); min-width: 0; max-width: 1280px; }
+.hero { display: grid; grid-template-columns: minmax(200px, min(400px, 42%)) minmax(0, 1fr); gap: var(--space-6); align-items: start; min-width: 0; }
+.info { display: grid; gap: var(--space-3); min-width: 0; overflow-wrap: anywhere; }
+.title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; font-size: var(--fs-36); font-weight: 400; }
+.artist, .album { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+.artist { -webkit-line-clamp: 2; }
+.album { -webkit-line-clamp: 3; }
+.artwork { min-width: 0; }
+@media (max-width: 1023px) { .hero { gap: var(--space-4); } .title { font-size: var(--fs-25); } }
+@media (max-width: 767px) { .hero { grid-template-columns: minmax(0, 1fr); } .artwork { width: min(320px, 100%); justify-self: center; } }

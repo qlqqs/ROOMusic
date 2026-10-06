@@ -1,8 +1,8 @@
-import { Disc3, FolderSearch, LayoutDashboard, Users, type LucideIcon } from "lucide-react";
+import { Disc3, Music2, FolderSearch, LayoutDashboard, Users, type LucideIcon } from "lucide-react";
 import type { UserRole } from "../../features/auth";
 
 export type NavItem = {
-  to: "/" | "/albums" | "/library" | "/members";
+  to: "/" | "/albums" | "/now-playing" | "/library" | "/members";
   label: string;
   icon: LucideIcon;
   /** 只有管理员看到；后端仍然独立鉴权，这里只决定显示。 */
@@ -11,10 +11,11 @@ export type NavItem = {
   group: string | null;
 };
 
-// 只列真实可用的页面：没有播放、艺人、收藏或 Steward 入口。后续阶段在这里加入对应的页面。
+// 只列真实可用的页面；艺人、收藏与 Steward 留待对应阶段。
 const navItems: readonly NavItem[] = [
-  { to: "/", label: "概览", icon: LayoutDashboard, adminOnly: false, group: null },
-  { to: "/albums", label: "专辑", icon: Disc3, adminOnly: false, group: "资料库" },
+  { to: "/", label: "概览", icon: LayoutDashboard, adminOnly: false, group: "聆听" },
+  { to: "/albums", label: "专辑", icon: Disc3, adminOnly: false, group: "聆听" },
+  { to: "/now-playing", label: "正在播放", icon: Music2, adminOnly: false, group: "聆听" },
   { to: "/library", label: "扫描目录", icon: FolderSearch, adminOnly: true, group: "资料库" },
   { to: "/members", label: "成员", icon: Users, adminOnly: true, group: "资料库" },
 ];

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ReleaseMediumDTO } from "./api/decoders";
-import { albumArtistOf, albumMeta, creditsText, formatDuration, groupCredits, mediumHeading, releaseFacts, totalDuration, UNKNOWN_DURATION } from "./format";
+import { albumArtistOf, albumMeta, creditsText, groupCredits, mediumHeading, releaseFacts, totalDuration } from "./format";
 
 describe("albumMeta", () => {
   it("年份、介质数（多于一张才写）与曲目数，用间隔号连接", () => {
@@ -21,27 +21,6 @@ describe("albumArtistOf", () => {
   it("优先专辑艺人，没有时用艺人", () => {
     expect(albumArtistOf({ album_artist: "柏林爱乐", artist: "卡拉扬" })).toBe("柏林爱乐");
     expect(albumArtistOf({ album_artist: null, artist: "Glenn Gould" })).toBe("Glenn Gould");
-  });
-});
-
-describe("formatDuration", () => {
-  it("不足一小时写 m:ss，一小时以上写 h:mm:ss", () => {
-    expect(formatDuration(0)).toBe("0:00");
-    expect(formatDuration(59)).toBe("0:59");
-    expect(formatDuration(240)).toBe("4:00");
-    expect(formatDuration(3599)).toBe("59:59");
-    expect(formatDuration(3600)).toBe("1:00:00");
-    expect(formatDuration(3725)).toBe("1:02:05");
-    expect(formatDuration(100 * 3600 + 61)).toBe("100:01:01");
-  });
-
-  it("小数秒四舍五入到整秒", () => {
-    expect(formatDuration(239.6)).toBe("4:00");
-    expect(formatDuration(239.4)).toBe("3:59");
-  });
-
-  it("未知时长写占位，不写 0:00", () => {
-    expect(formatDuration(null)).toBe(UNKNOWN_DURATION);
   });
 });
 

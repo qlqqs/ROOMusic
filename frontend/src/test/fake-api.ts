@@ -69,6 +69,8 @@ export function installFakeSession(api: FakeApi, initial: Partial<FakeSession> =
     const current = viewer();
     return current === null ? sampleResponse("errors/unauthorized") : jsonResponse(200, current);
   });
+  // 已登录外壳中的专辑播放动作读取格式表；错误场景可以显式覆盖这个默认响应。
+  api.on("GET", "/api/v1/playback/formats", () => viewer() === null ? sampleResponse("errors/unauthorized") : sampleResponse("playback/formats"));
   api.on("POST", "/api/v1/auth/login", (request) => {
     const { username, password } = request.body as { username: string; password: string };
     const account = session.accounts[username];

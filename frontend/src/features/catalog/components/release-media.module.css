@@ -109,3 +109,5 @@
   font-variant-numeric: lining-nums tabular-nums;
   white-space: nowrap;
 }
+
+.actions { grid-column: 2 / -1; min-width: 0; }

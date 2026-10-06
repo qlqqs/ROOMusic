@@ -1,12 +1,15 @@
+import type { ReactNode } from "react";
 import { TriangleAlert } from "lucide-react";
 import { formatCount } from "../../../shared/lib/number";
 import { StatusTag } from "../../../shared/ui";
 import type { ReleaseDetailDTO, ReleaseSummaryDTO } from "../api/decoders";
-import { formatDuration, totalDuration } from "../format";
+import { formatDuration } from "../../../shared/lib/duration";
+import { totalDuration } from "../format";
 import styles from "./album-header.module.css";
 import { Cover } from "./cover";
 
 type AlbumHeaderProps = {
+  actions?: ReactNode;
   /** 选中版本的摘要（来自组详情）：先于曲目到达，所以封面与计数不必等详情。 */
   release: ReleaseSummaryDTO;
   /** 版本详情，到达前为 undefined：流派与总时长要等它。 */
@@ -32,7 +35,7 @@ function factsOf(release: ReleaseSummaryDTO, detail: ReleaseDetailDTO | undefine
  * 详情页的头部：封面与版本概况。标题与专辑艺人是页面的 h1 与说明，由 Page 给出。
  * “需要关注”只是提示核对，这里不把它写成错误，说明在底部的“来源与证据”里。
  */
-export function AlbumHeader({ release, detail }: AlbumHeaderProps) {
+export function AlbumHeader({ release, detail, actions }: AlbumHeaderProps) {
   return (
     <div className={styles.container}>
       <div className={styles.hero}>
@@ -40,6 +43,7 @@ export function AlbumHeader({ release, detail }: AlbumHeaderProps) {
           <Cover artwork={release.artwork} title={release.title} variant="detail" />
         </div>
         <div className={styles.info}>
+          {actions}
           <dl className={styles.facts}>
             {factsOf(release, detail).map((fact) => (
               <div key={fact.label} className={styles.fact}>

@@ -187,8 +187,10 @@ describe("停用目录", () => {
   it("停用前要确认：对话框说明影响范围，初始焦点在取消上；取消不发请求", async () => {
     const { api } = await openLibrary();
     const dialog = await openDisableDialog();
-    expect(within(dialog).getByText("停用后，扫描会跳过这个目录。")).toBeTruthy();
+    expect(within(dialog).getByText("停用后，扫描会跳过这个目录，其中的曲目也不能播放。")).toBeTruthy();
     expect(within(dialog).getByText(/不会因为停用而被标为缺失/)).toBeTruthy();
+    expect(within(dialog).getByText(/恢复后即可播放/)).toBeTruthy();
+    expect(within(dialog).getByText(/浏览器已缓存的音频无法收回/)).toBeTruthy();
     expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "取消" }));
 
     await userEvent.click(within(dialog).getByRole("button", { name: "取消" }));

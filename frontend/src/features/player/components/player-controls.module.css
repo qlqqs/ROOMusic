@@ -1,0 +1,19 @@
+.transport { display: flex; align-items: center; justify-content: center; gap: var(--space-1); min-width: 0; }
+.transport button { padding: 0; width: var(--control-height); }
+.play { display: inline-flex; align-items: center; justify-content: center; width: var(--control-height); height: var(--control-height); }
+.play button { width: 32px; min-height: 32px; height: 32px; border-radius: 50%; }
+.seek { display: flex; gap: var(--space-2); align-items: center; min-width: 0; font-size: var(--fs-12); font-variant-numeric: lining-nums tabular-nums; }
+.seek input { flex: 1; min-width: 0; width: 100%; }
+.seek span { white-space: nowrap; }
+.volume { display: flex; gap: var(--space-1); align-items: center; min-width: 0; }
+.volume input { width: 90px; min-width: 0; }
+.full { display: grid; gap: var(--space-3); min-width: 0; }
+.options { display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: center; justify-content: space-between; }
+input[type="range"] { accent-color: var(--text-accent); min-height: 24px; }
+@media (max-width: 767px) { .desktop { display: none; } .play button { width: 44px; height: 44px; min-height: 44px; } .seek input { min-height: 44px; } .volume input { min-height: 44px; } }
+@media (pointer: coarse) { .play button { width: 44px; height: 44px; min-height: 44px; } }
+
+@media (min-width: 768px) and (pointer: fine) { .compact { height: 32px; } .compact .play { height: 32px; } .compact button { min-height: 32px; height: 32px; } }
+
+.full .play { width: 56px; height: 56px; }
+.full .play button { width: 56px; min-height: 56px; height: 56px; }
