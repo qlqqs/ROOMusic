@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { decodePlaybackFormats, decodeTrackPlayback } from "../features/player/api/decoders";
 import { decodeLoggedOut, decodeSetupStatus, decodeViewer } from "../features/auth/api/decoders";
 import {
   decodeReleaseDetail,
@@ -30,6 +31,8 @@ import { listApiSampleNames, loadApiSample } from "./api-samples";
 type Contract = { status: number; decode: (input: unknown) => unknown };
 
 const successContracts: Record<string, Contract> = {
+  "playback/formats": { status: 200, decode: decodePlaybackFormats },
+  "tracks/playback": { status: 200, decode: decodeTrackPlayback },
   "auth/setup-status-required": { status: 200, decode: decodeSetupStatus },
   "auth/setup-status-completed": { status: 200, decode: decodeSetupStatus },
   "auth/setup-admin-created": { status: 201, decode: decodeViewer },
@@ -80,6 +83,12 @@ const successContracts: Record<string, Contract> = {
 
 // 错误样本都用统一信封；这里同时记录界面要处理的错误码与状态码。
 const errorContracts: Record<string, { status: number; code: string }> = {
+  "errors/root-disabled": { status: 409, code: "root_disabled" },
+  "errors/not-directly-playable": { status: 409, code: "not_directly_playable" },
+  "errors/source-unavailable": { status: 409, code: "source_unavailable" },
+  "errors/source-changed": { status: 409, code: "source_changed" },
+  "errors/not-found-track": { status: 404, code: "not_found" },
+  "errors/range-not-satisfiable": { status: 416, code: "range_not_satisfiable" },
   "errors/unauthorized": { status: 401, code: "unauthorized" },
   "errors/forbidden": { status: 403, code: "forbidden" },
   "errors/origin-forbidden": { status: 403, code: "origin_forbidden" },
