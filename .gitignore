@@ -19,6 +19,8 @@
 /coverage/
 /frontend/test-results/
 /frontend/playwright-report/
+# 真实播放自动化的报告与诊断产物，与模拟浏览器测试隔离。
+/frontend/coverage/playback-real/
 /roomusic
 *.exe
 *.log
