@@ -40,34 +40,34 @@
 
 ### 第 4 步：前端播放引擎（A7–A10、A12、A13 前端部分）
 
-- [ ] `frontend/src/features/player/api`：端点与 decoder（读取接口样本）。
-- [ ] `engine/queue.ts`（纯函数）、`capability.ts`、`persistence.ts`、`media-session.ts`、`player-engine.ts`；`PlayerProvider` 与 `usePlayer`。
-- [ ] Vitest：design §7 前端第 1 条中与引擎相关的全部用例。
+- [x] `frontend/src/features/player/api`：端点与 decoder（读取接口样本）。
+- [x] `engine/queue.ts`（纯函数）、`capability.ts`、`persistence.ts`、`media-session.ts`、`player-engine.ts`；`PlayerProvider` 与 `usePlayer`。
+- [x] Vitest：design §7 前端第 1 条中与引擎相关的全部用例。
 - 验证：`cd frontend && npm run lint && npm run typecheck && npx vitest run src/features/player`。
-- 提交：`feat(player): 播放引擎、队列与能力判定`（只含引擎，界面尚未接入，不需要重建内嵌产物）。
+- 提交：`feat(player): 播放引擎、队列与能力判定`（只含引擎；仍重新构建内嵌产物，未接入页面时可能没有资产差异，不能因此豁免构建门禁）。
 
 ### 第 5 步：前端界面（A5 界面部分、A9、A11）
 
-- [ ] `shared/ui/menu-button.tsx`；外壳播放栏区域与窄屏留白；导航分组与 `/now-playing` 路由。
-- [ ] 播放栏、正在播放页（信号路径、队列）、专辑页插槽与动作、不可播放原因；停用目录的确认框与结果提示文案。
-- [ ] Vitest 与 Playwright（路由模拟）：五种宽度、axe、键盘路径、长标题。
+- [x] `shared/ui/menu-button.tsx`；外壳播放栏区域与窄屏留白；导航分组与 `/now-playing` 路由。
+- [x] 播放栏、正在播放页（信号路径、队列）、专辑页插槽与动作、不可播放原因；停用目录的确认框与结果提示文案。
+- [x] Vitest 与 Playwright（路由模拟）：五种宽度、axe、键盘路径、长标题。
 - 验证（外壳变化影响所有页面，所以跑前端全量）：`npm run lint && npm run typecheck && npm test && npm run build`；
   内嵌产物漂移检查 `git diff --exit-code -- backend/cmd/roomusic/web` 在提交后为空；`npm run test:e2e`。
 - 提交：`feat(player): 播放栏、正在播放页与专辑页播放入口`（含重建的内嵌产物）。
 
 ### 第 6 步：真实服务自动化与 CI（A14）
 
-- [ ] `scripts/playback-e2e.sh` 与 `frontend/playwright.real.config.ts`、对应用例（design §7“真实服务自动化”）。
-- [ ] `.github/workflows/ci.yml` 新增作业：Go、Node、Playwright Chromium、Docker PostgreSQL，运行该脚本。
+- [x] `scripts/playback-e2e.sh` 与 `frontend/playwright.real.config.ts`、对应用例（design §7“真实服务自动化”）。
+- [x] `.github/workflows/ci.yml` 新增作业：Go、Node、Playwright Chromium、Docker PostgreSQL，运行该脚本。
 - 验证：本机运行 `./scripts/playback-e2e.sh` 通过并确认 `roomusic-test` 容器已清理；`bash -n scripts/*.sh`；`docker compose -f compose.test.yaml config --quiet`。
 - 提交：`test(playback): 真实服务播放自动化与 CI 作业`。
 
 ### 第 7 步：文档与规范（A16）
 
-- [ ] 新增 `.trellis/spec/backend/playback-contracts.md`（接口、检查顺序、错误码、复核、测试）；更新 `backend/index.md`、`directory-structure.md`、
+- [x] 新增 `.trellis/spec/backend/playback-contracts.md`（接口、检查顺序、错误码、复核、测试）；更新 `backend/index.md`、`directory-structure.md`、
   `core0-runtime-contracts.md` 的专题表与接口列表；`library-scan-contracts.md` 只加一行指向停用目录的播放语义（该文件余量约 900 字节）。
-- [ ] 前端规范：`player-design-guidelines.md`、`state-management.md`、`quality-guidelines.md`、`index.md`；`frontend/DESIGN.md` §4、§6、§7。
-- [ ] ADR 0004 决策记录（第 1 项按 K2、第 5 项中撤销与停用部分按 K3）；路线图与父任务 PRD 的 M2a 状态。
+- [x] 前端规范：`player-design-guidelines.md`、`state-management.md`、`quality-guidelines.md`、`index.md`；`frontend/DESIGN.md` §4、§6、§7。
+- [x] ADR 0004 决策记录（第 1 项按 K2、第 5 项中撤销与停用部分按 K3）；路线图与父任务 PRD 的 M2a 状态。
 - 验证：`find .trellis/spec -name '*.md' -size +24000c` 为空；Markdown 相对链接检查；`git diff --check`。
 - 提交：`docs(playback): 同步 M2a 合同、规范与路线`。
 
@@ -86,3 +86,20 @@
 - **素材生成**需要一次性拉取 FFmpeg 镜像；拉取失败时改为只用代码生成 FLAC/WAV，并把其余格式移出格式表。
 - **规范余量**：`library-scan-contracts.md` 接近 24 KB，只允许加一行链接。
 - 回退：每步独立提交；前端回退必须连同内嵌产物。
+
+## 2026-10-05 续接门禁状态
+
+第4–7步代码与文档已补齐。最小引擎/组件回归、前端938项、真实服务13项、播放与API样本最小PostgreSQL集成均通过；
+最终全页面Playwright158项、播放器专项7项与长文本截图复验全部通过，计数登记见PRD。前端已按最终源码重新构建内嵌产物并重复构建核对字节一致。
+
+四组提交方案已向用户提出，**等待确认**，尚未提交或推送；因此上方“提交”是计划而非完成记录。
+第6步CI作业已配置但远端尚未实际运行，A14不能声称全部完成。
+第8步手工验收表已写入research，A15三组记录仍待执行，任务保持in_progress，不归档。
+
+分组提交时必须以**每个提交的完整文件树**构建验证，不能把包含尚未提交UI的工作区产物放进仅引擎提交。
+并行续接新增的UI公开导出随UI提交，跨文件时长重用与其导入点同批提交；不产生缺组件/缺导出的中间提交。
+
+第二轮审查修复（同日，见 [research/review-fixes.md](research/review-fixes.md)）改动了第 4、5、7 步的源码、测试与文档，并已按最终源码重建内嵌产物。
+分组时：引擎、队列、持久化与 provider 的 `usePlayerEngine/usePlayerSelector` 属第 4 步；`hooks/use-current-track-marker.ts`
+依赖 `components/player-labels.ts`，与界面、catalog 插槽、外壳及专辑页一起属第 5 步；规范、设计与 ADR 属第 7 步。
+修复后只跑了相关测试集（命令见 PRD），第 5 步提交门禁要求的前端全量与全页面 Playwright 仍须在提交时重跑。

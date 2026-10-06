@@ -125,6 +125,28 @@ CI 前端作业按顺序执行：`npm ci` → lint → typecheck → `npm run te
 Chromium 的系统库（`libatk` 等）时，可 `apt-get download` 后 `dpkg -x` 解到临时目录，再用 `LD_LIBRARY_PATH` 指向它运行；
 `test-results/` 与 `playwright-report/` 已被 Git 忽略。formatter 若需新增，仍须单独选型。
 
+## M2a 播放验证分层
+
+播放器改动先运行最小 Vitest：`npx vitest run src/features/player src/test/api-contract.test.ts`；
+涉及共享外壳/导航/专辑接线时影响所有页面，按获批计划运行前端全量 Vitest 与 Playwright。
+API 全样本清单必须注册播放两项成功、六项错误，局部 decoder 测试不能替代样本完整性断言。
+
+- 组件与路由模拟：底栏状态、未知时长、键盘菜单与队列、长标题、五宽375/768/1024/1280/1440、axe。
+- 真实服务：`LD_LIBRARY_PATH=/tmp/chromelibs/root/usr/lib/x86_64-linux-gnu ./scripts/playback-e2e.sh`（本机缺系统库时）。
+  独立临时合成媒体、真实Go、`roomusic-test` PostgreSQL与Chromium，由`playwright.real.config.ts`收集
+  `e2e/real/*.real.ts`，不能被既有mock `*.spec.ts`混收集。
+  输出使用`coverage/playback-real/{results,report}`独立目录，不放mock默认`test-results`下，避免并行运行时被另一配置清空。
+  `.gitignore` 精确忽略 `/frontend/coverage/playback-real/`；根 `/coverage/` 不覆盖这个嵌套目录，切换输出位置必须用 `git check-ignore` 实证。
+- 隔离脚本拒绝接管已存在的测试容器/数据卷，Compose `--env-file /dev/null`与临时Vite `envDir:false`不读本机.env。
+  白名单复制后端源码到临时树，前端输出同一临时树，不覆盖工作区内嵌产物；结束按精确PID与本轮Compose资源清理。
+  不与`test-integration.sh`并行争用`roomusic-test`。
+- 音频真实时间、seek与自然结束必须观察原生媒体事件，不替换播放行为假装实播。
+  长期撤销用180秒合成PCM与有背压的真实TCP读取，服务端慢速流测试独立证明复核；短素材通常已缓冲，不能代替。
+- 三组手工：macOS Safari、Windows Chrome或Edge、任一OS Firefox，记录版本与格式/定位结果。
+  未执行、失败、实际通过分别记录；CI配置已加入不等于远端CI已运行通过。
+
+新增配置须纳入`tsconfig.json`，避免工具配置没有常规类型门禁；私有路径/源音频不得进入报告。
+
 ## Review Checklist
 
 - [ ] Change belongs to one feature or an explicit app/shared owner.

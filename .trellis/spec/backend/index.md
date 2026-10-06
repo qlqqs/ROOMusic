@@ -51,6 +51,7 @@ Before writing or reviewing backend code:
 | [扫描协调合同](./scan-coordination-contracts.md) | 扫描状态与记录、持久化取消、跨进程协调锁 |
 | [真实库 Smoke 合同](./real-library-smoke-contracts.md) | 真实音乐只读验收与 V0 对照 |
 | [Catalog REST 合同](./catalog-rest-contracts.md) | Release 列表/详情/evidence、按组接口、封面摘要、可见性和错误合同 |
+| [播放直出合同](./playback-contracts.md) | M2a 格式表、预检、音频 Range、安全打开与周期复核 |
 | [Music Steward And Operation Guidelines](./agent-and-operation-guidelines.md) | Agent modes, Review Subagent, tools, Change Sets, and recovery |
 | [Quality Guidelines](./quality-guidelines.md) | Focused code, forbidden coupling, tests, and gates |
 

@@ -27,6 +27,7 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 | 扫描协调 | [scan-coordination-contracts.md](./scan-coordination-contracts.md) | 扫描状态与记录、持久化取消、跨进程协调锁 |
 | 真实库 Smoke | [real-library-smoke-contracts.md](./real-library-smoke-contracts.md) | 真实音乐只读验收、V0 对照 |
 | 发行 REST | [catalog-rest-contracts.md](./catalog-rest-contracts.md) | 发行列表、详情、evidence、封面摘要与按组只读接口 |
+| 鉴权直出 | [playback-contracts.md](./playback-contracts.md) | M2a 格式表、预检、音频、Range、来源版本与撤销复核 |
 
 ## 2. 接口签名
 
@@ -40,6 +41,8 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
   `GET /api/v1/releases`、`GET /api/v1/releases/{id}`、管理员专用
   `GET /api/v1/releases/{id}/evidence`、按组只读的 `GET /api/v1/release-groups` 与
   `GET /api/v1/release-groups/{id}`，以及已登录用户可读的 `GET /api/v1/artworks/{id}`。
+- M2a：`GET /api/v1/playback/formats`、`GET /api/v1/tracks/{id}/playback` 与
+  `GET|HEAD /api/v1/tracks/{id}/audio`，具体合同见[鉴权直出](./playback-contracts.md)。
 - 前端请求形态为 `apiRequest(spec, decode)`（`frontend/src/shared/api/request.ts`）：成功响应经边界 decoder，
   非 2xx 经统一的错误信封 decoder；响应不是 JSON、信封不合法或 decoder 失败时归为 `invalid_response`，不进入缓存。
   函数名不构成架构限制，合同是“边界解码一次、失败安全分类”。
@@ -73,6 +76,7 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 | 其他目录路径（`/licenses/` 等） | `no-cache` | 回落到入口页，不列目录 |
 | 经 `httpserver.WriteJSON` 写出的 JSON（含错误信封与 `/healthz`） | `no-store` | 随会话与数据变化，浏览器与中间缓存都不保留 |
 | `GET /api/v1/artworks/{resource_id}` 200 | `private, no-cache` | `ETag: "<resource_id>"`；每次显示前带凭据重新验证 |
+| 曲目原文件音频 200/206/HEAD | `private, no-store` | 已验证媒体类型、强 ETag、`nosniff`，无 `Last-Modified`；先鉴权与核对来源 |
 | 封面带匹配的 `If-None-Match` | `private, no-cache` | `304`，同一个 `ETag`，没有响应体，不读文件 |
 
 - 请求路径先经 `path.Clean`，再判断是否在 `assets/` 下：`/assets/../licenses/x.txt` 清理后不在 `assets/` 里，不会因为字面上带着

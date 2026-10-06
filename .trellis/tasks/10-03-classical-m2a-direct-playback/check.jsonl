@@ -6,3 +6,4 @@
 {"file": ".trellis/spec/frontend/state-management.md", "reason": "会话结束清理与持久数据规则"}
 {"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端门禁、Playwright 与内嵌产物"}
 {"file": ".trellis/spec/guides/real-music-assets.md", "reason": "真实音乐只读与披露边界"}
+{"file": ".trellis/spec/backend/playback-contracts.md", "reason": "核对实现、错误优先级、Range、来源版本与撤销复核，以及手工实播门禁"}

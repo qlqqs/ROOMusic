@@ -136,3 +136,65 @@ M1a 外壳与会话生命周期、M1b 专辑详情、F3 的封面缓存头与 F4
   说明的结论：M2a 后端不解码，只直出原文件字节，由浏览器内置解码器解码；ALAC 只有 Safari 能解，其余桌面浏览器标注不可播放
   （真实库约 30%），要让它们可播需 M2b 的无损派生（后端 FFmpeg 转 FLAC）。用户选择保持现有范围，不把 M2b 转码提前，也不做前端 WASM 解码。
 - 状态：已批准，可运行 `task.py start` 并按 `implement.md` 实施；M2b、P、M3 仍各自单独规划。
+
+## 实施结果与验收对照（2026-10-05 续接）
+
+状态：继续实施已批准的 M2a，不新建任务。第 1–3 步此前已提交；第 4–7 步本轮已补齐，
+最终 UI 视觉与全页面浏览器复验已通过。提交方案已提出，等待用户确认，不推送。
+任务仍 `in_progress`：A15 三组手工实播、A14 远端 CI 实际运行尚缺证据，不提前归档。
+
+| 验收 | 当前证据与边界 |
+| --- | --- |
+| A1–A4、A6 | 既有后端实现与接口/安全打开/慢速连接测试；本轮隔离 PostgreSQL 上播放与 API 样本最小集成 `-race` 通过，样本未漂移；未匿名泄露资源 |
+| A5 | 七格式原生 Chromium 解码通过；ALAC、CUE 虚拟轨、24 bit WAV-ext 禁用且无音频请求；Safari ALAC 手工结果仍待确认 |
+| A7、A8、A10、A12 | 引擎/纯队列/能力/恢复/媒体键回归通过；短素材真实时间、seek、自然结束与暂停恢复通过；系统媒体键的实际 OS 行为仍列入手工表 |
+| A9 | 路由切换连续与跨标签退出后停播、清空恢复记录真实专项通过；会话结束同步清理，不混同普通卸载 |
+| A11 | MenuButton/底栏/正在播放/队列/不可播放原因组件回归通过，五宽与 axe 专项7项、全页面Playwright158项通过；375/1280长标题实际截图复验通过，保留完整可访问名称 |
+| A13 | 注册并解码两项成功/六项错误播放样本，全样本覆盖断言通过；后端依赖方向测试通过 |
+| A14 | 本机真实 Go + PostgreSQL + Chromium 13 项全部通过（38.0s）；新增 CI job，但尚未推送/执行远端 CI，不写成 CI 已通过 |
+| A15 | **待用户执行**：macOS Safari、Windows Chrome 或 Edge、任一系统 Firefox；记录见[手工验收表](research/manual-acceptance.md) |
+| A16 | 已同步播放合同、ADR、设计与前后端规范；路线/父任务已记录实施结果与未完成门禁，规范大小/链接检查通过 |
+
+### 已执行的验证
+
+- 引擎定向：`cd frontend && npx vitest run src/features/player src/test/api-contract.test.ts src/shared/lib/duration.test.ts src/features/catalog/format.test.ts`。
+- 全前端：`cd frontend && npm run lint && npm run typecheck && npm test`；52 文件、938 测试通过。
+- 路由模拟浏览器：`cd frontend && npx playwright test --workers=2 --output=/tmp/roomusic-player-full-check-results`（`LD_LIBRARY_PATH` 指向本机 Chromium 依赖目录，复用本轮临时 preview），158 项通过；
+  `npx playwright test e2e/player.spec.ts --workers=2 --output=/tmp/roomusic-player-check-results`，7 项通过。最终 UI 小范围16项组件回归通过。
+- 本机真实：`LD_LIBRARY_PATH=/tmp/chromelibs/root/usr/lib/x86_64-linux-gnu ./scripts/playback-e2e.sh -g 'seek|合成源'`，2 项通过；
+  相同环境 `./scripts/playback-e2e.sh`，13 项通过。容器/卷/临时目录与服务精确清理，无测试资源残留。
+- 后端最小单元：`cd backend && go test -race ./internal/playback/... ./internal/app/... -run 'Test(CheckRange|Rechecking|Format|FindFormat|Fixtures|PackageDependency)' -count=1`。
+- 后端最小集成：隔离 `roomusic-test` PostgreSQL，`cd backend && go test -race ./internal/playback/... ./internal/app/... -run 'TestPostgreSQL(Playback|APIResponseSamples)' -count=1`。
+- 生产构建：`cd frontend && npm run build -- --config <临时envDir:false配置>`；临时配置仅展开既有 Vite 配置并禁止读取 .env；连续两次内嵌产物119文件字节相同。
+- 内嵌后端：`cd backend && go build ./... && go test ./cmd/roomusic -count=1`，构建与资产合同测试通过。
+- `bash -n scripts/playback-e2e.sh`、`cd frontend && npm exec eslint -- e2e/real playwright.real.config.ts`、`npm exec tsc -- --noEmit`；脚本与真实配置通过。
+- `git diff --check`、Markdown 相对链接检查、`find .trellis/spec -name '*.md' -size +24000c`、`task.py validate`：通过；
+  DESIGN 超注入上限的警告保留，新增落地补充末尾可能被截断；manifest 已注明不能假定全文件注入，
+  当前完整可执行合同另收于小型播放器/状态/播放规范文件。
+
+未运行全量后端测试：后端业务源码本轮没有变化，最小播放/样本集成覆盖相关合同；
+外壳影响全部前端页面，按获批执行计划运行全量前端，非默认扩大所有项目测试。
+修复与证据边界详见[独立检查记录](research/implementation-review.md)。
+
+### 第二轮审查修复（2026-10-05）
+
+Claude 复核后修复 12 项问题（后端无缺陷），明细见[审查修复记录](research/review-fixes.md)。上方 938 项与 158 项计数早于这次修复。修复后实际执行：
+
+- `cd frontend && npm run lint && npm run typecheck`：通过。
+- `npx vitest run src/features/player src/test/api-contract.test.ts src/shared/lib/duration.test.ts src/shared/ui/menu-button.test.tsx src/features/catalog src/app/album-detail.test.tsx src/app/library-roots.test.tsx src/app/shell src/features/library/components/root-command-notice.test.tsx`：22 文件、494 测试通过；
+  新增的 11 条回归测试先在还原旧行为的代码上确认失败。
+- `npm run build -- --config <临时envDir:false配置>`，再构建到临时目录比对：119 个文件字节相同；`cd backend && go build ./... && go test ./cmd/roomusic -count=1` 通过。
+- `npx playwright test e2e/player.spec.ts e2e/albums.spec.ts e2e/keyboard.spec.ts e2e/a11y.spec.ts --workers=2 --output=/tmp/<临时目录>`：106 项通过。
+- `LD_LIBRARY_PATH=/tmp/chromelibs/root/usr/lib/x86_64-linux-gnu ./scripts/playback-e2e.sh`：13 项通过（37.9s），测试容器与卷已清理。
+
+两项 e2e 早于最后一处修复：在队首按“上一首”时作废待定位的位置（`previous()` 中一行）。
+两套用例都不经过“上一首”，这处由引擎回归测试覆盖；修复后重跑的是 lint、类型检查、上面的 Vitest、内嵌资产重建与比对和 `go test`。
+
+未运行前端全量与其余 52 项路由模拟用例：改动集中在播放器、专辑页与外壳订阅，相关测试集已覆盖；第 5 步提交门禁时按计划重跑全量。
+后端源码未改动，未运行后端测试。
+
+### 收尾边界
+
+最终工作区仍未提交：等待四组提交方案确认。内嵌资产已按最终源码重建；提交后还需执行
+`git diff --exit-code -- backend/cmd/roomusic/web` 的已提交树漂移门禁，不能以当前未提交差异冒充该门禁通过。
+三组手工结果与CI实际运行尚缺，不归档、不标记任务complete。没有读写真实music，没有推送。

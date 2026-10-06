@@ -3,7 +3,7 @@
 ## 现状与意图
 
 2026-10-01 的 M1a 已按下面的结构重建 `frontend/src/`。目录只为获批页面和真实消费者建立，不预建空文件夹；
-`player`、`curation`、通用 `operations`、`artists`、`personal`、`steward` 随对应获批阶段建立，基础 Release 搜索由
+M2a 已建立 `player`；`curation`、通用 `operations`、`artists`、`personal`、`steward` 随对应获批阶段建立，基础 Release 搜索由
 `catalog` 拥有，不为它新增搜索服务。阶段命名和依赖见 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)。
 设计变量集中在 `styles/`，不复制设计工具的运行时。
 
@@ -12,7 +12,8 @@
 ```text
 frontend/
 ├── e2e/                            # Playwright 冒烟；受控后端在 e2e/support/api-mock.ts，响应取自后端样本，专辑的长内容与多版本数据在 e2e/support/albums-data.ts
-├── playwright.config.ts
+├── playwright.config.ts            # 路由模拟
+├── playwright.real.config.ts       # 隔离真实Go服务与原生音频；脚本启动
 ├── public/licenses/                # 三套字体的 OFL 文本，构建时复制到产物根目录
 └── src/
     ├── main.tsx
@@ -27,6 +28,7 @@ frontend/
     │   ├── auth/                   # 初始化、登录、退出、会话生命周期与跨标签页同步
     │   ├── members/                # 成员列表与管理（管理其他账号，生命周期与 auth 不同）
     │   ├── library/                # 目录、目录操作记录、扫描记录、扫描详情与诊断
+    │   ├── player/                 # 播放器：api、engine、provider、能力查询、底栏与正在播放页
     │   └── catalog/                # 专辑：列表（M1b）、详情（M1b）、封面、证据展示，以及概览的计数（M1a）
     ├── shared/
     │   ├── api/                    # 请求、错误分类、解码原语、错误信封、重试策略、失败文案
@@ -75,6 +77,8 @@ features/catalog/
 - `members` 拥有成员列表、新建、停用、重新启用与撤销会话。
 - `library` 拥有目录与扫描管理、目录操作记录、扫描记录（F3）、扫描详情与诊断的展示。
 - `catalog` 拥有 Release/ReleaseGroup 的列表与详情、Medium/Track 展示、来源与封面展示（M1b 实现），以及概览里的专辑数。
+- `player` 拥有单一媒体生命周期、队列/模式/恢复、浏览器能力与播放界面；只经 catalog 公开合同读发行，
+  不反向导入 app，也不把播放器全局状态放到 shared。进度与离散快照分开订阅。
 - `search` 拥有查询与筛选的 URL 状态和结果展示（尚未建立）。
 - `operations` 拥有 Change Set 与 Operation Journal 的状态及受支持的恢复界面，不是通用 toast（尚未建立）。
 - `shared/api` 拥有同源请求、凭据、请求关联、响应体处理、错误信封、重试策略与解码原语；feature 的端点与 DTO 留在 feature。

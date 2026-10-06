@@ -9,6 +9,10 @@
 2026-10-03：M1b 在这个外壳上增加了专辑浏览：`/albums`（搜索、需要关注筛选、分页、封面卡片）与 `/albums/$groupId`（头部、版本导航、介质与曲目、发行信息、
 折叠的来源与证据，管理员可按需读完整证据），详见[状态](./state-management.md)、[组件](./component-guidelines.md)与[质量](./quality-guidelines.md)规范。
 
+M2a 的播放器入口与生命周期见[状态规范](./state-management.md)、[播放器规范](./player-design-guidelines.md)及
+[后端播放合同](../backend/playback-contracts.md)。直出仅传原字节，未引入转码、歌词或服务端播放历史；
+自动化与三组手工实播分别记录，不把浏览器能力提示当作验收证据。
+
 本轮 Classical 的唯一落地设计锚为 [frontend/DESIGN.md](../../../frontend/DESIGN.md)，
 来源是 `frontend-desgin/` 中的原型。旧月刊布局、hash 路由、模拟播放器和生产演示入口
 不再是默认要求；仍适用的队列语义与安全边界保留在本层规范。

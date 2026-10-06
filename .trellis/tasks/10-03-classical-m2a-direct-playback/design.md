@@ -123,8 +123,11 @@ catalog 组件不依赖 player：`ReleaseMedia` 增加 `renderTrackActions` 与 
 - `PlayerEngine` 是不依赖 React 的类，持有一个分离的 `HTMLAudioElement`（`new Audio()`，不放进 DOM）、队列、当前条目、模式与音量；
   对外提供 `subscribe`/`getSnapshot`，React 用 `useSyncExternalStore` 读取不可变快照。
 - `PlayerProvider` 放在 `AuthenticatedLayout` 的会话代次子树内（`frontend/src/app/shell/authenticated-layout.tsx:13`）：
-  换用户、退出或会话失效时子树卸载，`dispose()` 停止音频、清空 `src` 并 `load()` 中断网络、清除 Media Session 与本标签页保存的队列。
-- 状态：`idle`、`loading`（预检与加载）、`playing`、`paused`、`buffering`（`waiting`/`stalled`）、`error`；进度、时长、可拖动范围都只取自媒体事件。
+  换用户、退出或会话失效时由会话 `onEnded` 同步调用 `endSession()`，停止音频、清空 `src` 并 `load()` 中断网络、清除 Media Session 与本标签页保存的队列。
+  普通卸载只 `detach()` 中断工作并保留刷新恢复记录，不能等到卸载才区分是否注销（2026-10-05 续接时确认的入口合同）。
+- 状态：`idle`、`loading`（预检与加载）、`playing`、`paused`、`buffering`（`waiting`，收到 `playing` 回到播放）、`error`；进度、时长、可拖动范围都只取自媒体事件。
+  `stalled` 只说明网络暂时没送来数据，已缓冲的音频照常出声且之后不保证有 `playing`，不改变状态（2026-10-05 审查修正）。
+  `loading`、`playing`、`buffering` 都是“要播放”：播放/暂停按钮写“暂停”，按下即暂停，加载中则放弃这次加载。
   只在“曲目切换”和“出错”时向读屏公告，不按进度播报。
 
 ### 5.2 队列与模式（`engine/queue.ts`，纯函数）
@@ -132,7 +135,7 @@ catalog 组件不依赖 player：`ReleaseMedia` 增加 `renderTrackActions` 与 
 - 条目 `{ entryId, item }`；`entryId` 每次入队新生成，同一曲目可多次出现，移除与移动按 `entryId`。
 - 立即播放（整张或从某首开始）：用该版本全部可播放曲目替换队列，从选中项开始；下一首播放：插在当前项之后；加入队列：追加到队尾，不打断当前播放。
 - 模式四选一：顺序（末项自然结束后停在暂停）、列表循环（回到首项）、单曲循环（只影响自然结束，手动上一首/下一首照常切换）、
-  随机（剩余条目随机排列，多于一项时不连续重复；“上一首”沿实际播放历史返回）。
+  随机（剩余条目随机排列，多于一项时不连续重复；“上一首”沿实际播放历史返回，离开的条目放回本轮，之后仍会轮到）。
 - 移除当前项：停止并切到下一项（没有则停在空闲）；清空队列需确认。队列上限 10,000 条（与发行详情的曲目上限一致），超出时拒绝并提示。
 
 ### 5.3 播放一首曲目
@@ -159,6 +162,7 @@ catalog 组件不依赖 player：`ReleaseMedia` 增加 `renderTrackActions` 与 
   只存标识：`{ version: 1, entries: [{ entryId, trackId, releaseId, groupId }], currentEntryId, mode, positionSeconds, history }`，
   不存标题、路径或凭据（ADR 0001 不把私有服务器数据放进浏览器持久层）。
 - 写入时机：队列变化、暂停、切歌、`pagehide`，播放中每 5 秒一次；写失败只是不保存，不提示“已保存”。
+  定位生效前（元数据或可定位范围未到）保存或出错重试时用待定位的位置；在队首按“上一首”从头重播时作废这个位置；队列未变时复用已序列化的条目。
 - 恢复：解码失败或版本未知即丢弃；按 `releaseId` 去重后经发行详情查询（并发 4）重建条目；已不存在的曲目丢弃并提示数量；
   恢复后保持暂停，首次按播放时先预检再定位到保存的位置。
 - 会话结束（退出、失效、换用户）时删除该键；音量与静音是设备偏好，存 `localStorage` 的 `roomusic:player-volume:v1`，不随会话清除。
@@ -182,7 +186,8 @@ Media Session：曲名、艺人、专辑与封面（`/api/v1/artworks/{id}` 的�
 - **信号路径**：源文件（容器与编码、位深、采样率、声道，缺失写“未知”）→ 服务端（原文件直出，字节不改动、不转码）→
   浏览器（当前解码与播放状态；说明浏览器可能按输出设备重新采样）→ 系统输出（未知：网页无法得知声卡的实际格式与音量链路）。不出现“Bit-perfect”。
 - **专辑页**：头部增加“播放”“加入队列”；每行增加“从这首开始播放”按钮与“更多”菜单（下一首播放、加入队列）；
-  不可播放的行禁用播放按钮并显示原因；当前播放的曲目在行内以文字和图标标注“正在播放”。专辑卡片不加播放按钮（M1b 已裁决）。
+  不可播放的行禁用播放按钮并显示原因；当前曲目在行内以文字和图标标注真实状态（正在播放、已暂停、正在加载、正在缓冲），
+  暂停时也保留标注。专辑卡片不加播放按钮（M1b 已裁决）。
 - **共享组件**：新增 `shared/ui` 的 `MenuButton`（按 WAI-ARIA 菜单按钮模式：Enter/空格/下箭头打开，方向键移动，Esc 关闭并把焦点还给按钮）。
   不用 Popover API（ADR 0001 的最低浏览器版本不全支持）。
 
@@ -235,3 +240,12 @@ Media Session：曲名、艺人、专辑与封面（`/api/v1/artworks/{id}` 的�
 
 开发阶段不做兼容层。没有迁移；后端接口是新增的，前端改动集中在新 feature、外壳与专辑页插槽。
 按提交逐步回退即可；回退前端时需要同时回退内嵌产物 `backend/cmd/roomusic/web`。
+
+## 10. 续接实现的公开入口记录（2026-10-05）
+
+用户在续接时确认：`features/player/index.ts` 公开 provider、离散/进度订阅、能力查询、曲目转换与队列合同。
+条目字段为 `entryId,track`，`playTracks` 返回 `added|queue_full`，超限拒绝而不静默截断。
+`endSession` 同步清理，普通卸载 `detach` 保留刷新恢复；生成条目 ID 复用 `newIdempotencyKey`，兼容局域网非安全 HTTP。
+全样本覆盖清单补齐两项成功/六项播放错误样本，防止仅局部 decoder 测试通过而遗漏跨层门禁。
+第二轮审查修复另公开 `usePlayerEngine`（只发命令）、`usePlayerSelector`（只订阅选出的基本值）与 `useCurrentTrackMarker`
+（专辑页当前曲目标记），大列表不订阅整份快照；问题与修复见[审查修复记录](research/review-fixes.md)。

@@ -21,6 +21,6 @@
   "children": [],
   "parent": "09-27-classical-core-1",
   "relatedFiles": [],
-  "notes": "",
+  "notes": "2026-10-05续接第4–7步自动化实施与独立检查完成：前端938项、mock158项、真实播放13项通过；内嵌资产重建。等待用户确认提交、远端CI实际运行与A15三组手工实播，保持in_progress，不归档。",
   "meta": {}
 }

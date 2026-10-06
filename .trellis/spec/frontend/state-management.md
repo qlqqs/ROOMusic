@@ -220,17 +220,40 @@ documented proxy/credentials setup, not a second auth scheme.
 不再作为 Classical 客户端的例外合同。M1 没有真实播放时隐藏或明确禁用播放动作，
 不生成播放历史；受控响应只用于测试，不作为生产 fallback。
 
-M2 候选由路由外的唯一播放生命周期持有队列、当前队列条目和模式，服务端目录仍是媒体
-事实权威。是否使用 `PlayerEngine` 与 `useSyncExternalStore` 由子任务/ADR 决定，
-不是本规范预先安装库或创建全局 store 的授权。恢复队列后暂停，不自动发声。
+### M2a 播放生命周期与恢复合同
 
-服务端按用户隔离的历史、收藏和歌单是后续方案，不再把本地快照当作持久权威。若未来
-批准缓存或偏好持久化，需带版本、边界校验和账号命名空间；损坏、未知版本、禁用存储
-都应可恢复，写失败不能声称“已保存”。
+`features/player` 的公开入口导出 `PlayerProvider({ userId, children })`、`usePlayer()`、
+`usePlayerProgress()`、`usePlayerEngine()`、`usePlayerSelector()`、`useCurrentTrackMarker()`、`usePlaybackCapabilities()`。
+provider 放在已登录会话代次子树内，只装配一个分离的 `Audio()` 与不依赖 React 的 `PlayerEngine`；切页不重建。
+离散快照通过 `useSyncExternalStore` 订阅，进度独立订阅，避免每次 `timeupdate` 重绘整队列。
+大量重复的组件（专辑页每行动作）只用 `usePlayerEngine()` 发命令；只关心某个值的组件用 `usePlayerSelector()` 选出基本值
+（外壳只看队列是否为空，专辑页只看当前曲目与状态），音量、队列变化不重绘整张曲目表；曲目行 `memo`，插槽函数保持引用稳定。
+`useReleaseLoader` 经 catalog 公开入口复用会话范围的 Query 缓存，格式表 Query 在会话内保持有效。
 
-任何受认证接口返回 `unauthorized` 都必须结束当前会话并清理该用户的查询、队列及媒体
-生命周期；账号切换时取消旧请求并阻止迟到响应污染新会话。`forbidden` 只表示当前操作
-无权执行，不等同于注销。Cookie、凭据、服务器路径和治理操作结果不得存入浏览器持久层。
+普通卸载执行 `detach()`：中断媒体与异步工作，但保留刷新恢复记录；
+会话控制器 `onEnded` 同步执行 `endSession()`：停止音频、清空 `src` 并 `load()` 中断网络，
+清空媒体键、队列与本账号保存记录，不等待 React 卸载。`401`、跨标签核对发现退出、换查看者
+均走这一边界。旧请求代次与引擎异步令牌阻止迟到响应覆盖新曲目/新账号。
+不能把“普通卸载”和“结束会话”混为一谈，否则刷新恢复记录会被删除。
+
+队列条目为 `{ entryId, track }`，同曲重复项按 `entryId` 操作。快照包含
+`status/queue/current/hasNext/failures/fault/event/volume/muted/restoring`；进度快照包含
+`positionSeconds/durationSeconds/seekable`。只有实际媒体事件才能更新正在播放、进度与时长，
+未知时长为 `null`。失败条目与可重试暂停分别表达，不靠模拟时钟推断结束。
+
+恢复键 `sessionStorage["roomusic:player:v1:<userId>"]`，只存 version、entryId/trackId/releaseId/groupId、
+currentEntryId、mode、positionSeconds 与有限播放历史（条目 ID），不存标题、路径或凭据。
+边界解码版本、UUID、条目唯一性、数量与当前项归属；损坏/未知版本删除，不可用存储安全降级。
+按发行 ID 去重、最多 4 个并发重新加载详情；只有明确 404 或详情中缺少的曲目才丢弃并提示数量，
+网络/503 等暂时失败保留原恢复记录并提供重试，不能把临时故障当作不存在删除。恢复后保持暂停，首播重新预检后定位。
+普通队列动作、暂停、切歌与 pagehide 保存，播放中每 5 秒保存；写失败不声称已保存。
+开始位置在元数据与可定位范围到达后才生效，此前保存或出错重试用待定位的位置，不写成 0；在队首按“上一首”从头重播时作废该位置；队列未变时复用已序列化的条目。
+音量/静音是设备偏好，存 `localStorage["roomusic:player-volume:v1"]`，不随账号清除。
+
+服务端历史、收藏与歌单仍未实现（P/M5），队列恢复不构成浏览器个人库权威。以后新增的缓存或偏好持久化同样要带版本与边界校验，
+含账号数据的按账号命名（不含私有数据的设备偏好如音量除外）；损坏、未知版本、禁用存储都应可恢复，写失败不能声称“已保存”。
+Cookie、凭据、服务器路径和治理操作结果不得写进浏览器持久层。
+具体交互与错误矩阵见[播放器规范](./player-design-guidelines.md)；API 见[播放合同](../backend/playback-contracts.md)。
 
 See [Hook Guidelines](./hook-guidelines.md),
 [Cross-Layer Thinking](../guides/cross-layer-thinking-guide.md), and the
