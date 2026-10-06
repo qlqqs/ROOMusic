@@ -78,6 +78,7 @@ test("FLAC 真实 seek，自然切到下一首；切页不断播，刷新暂停�
   await expect.poll(() => page.evaluate((id) => window.playbackTestEvents.some((event) => event.type === "playing" && event.src.includes(id)), second.track.id)).toBe(true);
 });
 
+// ALAC 在 Safari 实播通过前不在格式表里，和 WAV extensible 一样是“不能直接播放”，不是“浏览器不能解码”。
 test("ALAC、CUE 虚拟轨和 WAV extensible 明确禁用且不会请求音频", async ({ page }) => {
   const reads: string[] = [];
   page.on("request", (request) => { if (/\/audio$/.test(request.url())) reads.push(request.url()); });
@@ -86,7 +87,7 @@ test("ALAC、CUE 虚拟轨和 WAV extensible 明确禁用且不会请求音频",
     await page.goto(`/albums/${item.groupId}`);
     const row = page.locator("ol > li").filter({ has: page.getByText(item.track.title, { exact: true }) });
     await expect(row.getByRole("button", { name: "从这首开始播放", exact: true })).toBeDisabled();
-    await expect(row).toContainText(source.startsWith("alac") ? /浏览器.*不支持|浏览器.*无法|浏览器.*不能/ : /不能直接播放|不支持.*直出|不支持.*直接/);
+    await expect(row).toContainText(/不能直接播放|不支持.*直出|不支持.*直接/);
   }
   const cue = albums.find((album) => album.release.media.some((medium) => medium.tracks.some((track) => track.source_kind === "cue_virtual")));
   expect(cue).toBeDefined();

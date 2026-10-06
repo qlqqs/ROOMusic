@@ -15,6 +15,7 @@
 | --- | --- | --- | --- | --- |
 | 2026-09-28 | qlqq | 第 11 节第 1 项的后半：接受第 2 节“替代 A：仅受保护的原文件直出”作为首发范围，即 M2a。M2a 只直出已在目标浏览器验证可播放的容器与 codec，放不了的曲目在界面中明确标注（例如 Chrome/Firefox 下的 ALAC，以及需要精确裁剪的 CUE 虚拟轨）；推荐的“直出优先 + 完整派生缓存”由 M2b 承接。服务端播放历史移出 M2，排在 ADR 0002 阶段 I 之后 | 第 1 项的实播矩阵（M2a 规划时确定）；第 2–7 项（M2b 之前确定，含 FFmpeg 的分发与许可审核） | 任务 `09-28-core-1-roadmap-revision` 的 PRD，裁决 D1、D4 |
 | 2026-10-03（K2/K3），2026-10-05（规划批准） | qlqq | 第 1 项实播矩阵：Linux Chromium 自动化，加 macOS Safari、Windows Chrome 或 Edge、任一系统 Firefox 三组手工；FLAC 两组参数、ALAC 两组参数与 MP3 必测，其他白名单格式先用自动化实播。第 5 项中 M2a 的部分：每个新请求鉴权，在途读取每 10 秒复核会话/成员/目录，失败关闭；停用目录禁止播放但保留浏览；音频 private, no-store，已缓冲字节不可收回。M2a API 与错误合同按已批准设计实施 | 三组手工结果尚待记录；第 2–4、6 项与第 5/7 项的派生部分在 M2b 另批 | [M2a PRD](../../../.trellis/tasks/10-03-classical-m2a-direct-playback/prd.md)、[播放合同](../../../.trellis/spec/backend/playback-contracts.md) |
+| 2026-10-06 | Claude（qlqq 授权代为决定 M2a 收尾） | 第 1 项的执行：M2a 收尾时 ALAC 没有任何浏览器的实播证据，按 D1“只直出已验证可播放的组合”移出直出格式表，所有浏览器标注“不能直接播放”；三组手工实播与远端 CI 移交后续验收任务 | ALAC 在 macOS Safari 手工实播通过后恢复；第 2–4、6 项与第 5/7 项的派生部分在 M2b 另批 | [M2a PRD](../../../.trellis/tasks/10-03-classical-m2a-direct-playback/prd.md)、[播放合同](../../../.trellis/spec/backend/playback-contracts.md) |
 
 ## 1. 当前证据
 

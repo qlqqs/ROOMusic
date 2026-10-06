@@ -21,8 +21,9 @@ func TestFixturesFromARealEncoderMatchTheFormatTable(t *testing.T) {
 	}{
 		{"flac-16-44100.flac", "audio/flac", "", true},
 		{"flac-24-48000.flac", "audio/flac", "", true},
-		{"alac-16-44100.m4a", "audio/mp4", "alac", true},
-		{"alac-24-48000.m4a", "audio/mp4", "alac", true},
+		// ALAC 只有 Safari 能解码，Safari 手工实播通过前不在格式表中：标注不可直接播放。
+		{"alac-16-44100.m4a", "", "", false},
+		{"alac-24-48000.m4a", "", "", false},
 		{"mp3-44100.mp3", "audio/mpeg", "", true},
 		{"aac-44100.m4a", "audio/mp4", "mp4a.40.2", true},
 		{"wav-16-44100.wav", "audio/wav", "1", true},

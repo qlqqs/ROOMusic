@@ -6,7 +6,6 @@ func TestFormatTableContainsOnlyTheApprovedCombinations(t *testing.T) {
 	type combination struct{ sourceKind, codec, mimeType, codecs string }
 	want := []combination{
 		{"flac_vorbis_comment", "flac", "audio/flac", ""},
-		{"m4a", "alac", "audio/mp4", "alac"},
 		{"mp3_id3v2", "mp3", "audio/mpeg", ""},
 		{"wav_info", "pcm", "audio/wav", "1"},
 		{"m4a", "aac", "audio/mp4", "mp4a.40.2"},
@@ -34,7 +33,8 @@ func TestFindFormatRejectsEverythingOutsideTheTable(t *testing.T) {
 		ok                bool
 	}{
 		{"flac_vorbis_comment", "flac", true},
-		{"m4a", "alac", true},
+		// 没有 Safari 实播证据之前 ALAC 不直出。
+		{"m4a", "alac", false},
 		{"m4a", "aac", true},
 		{"wav_info", "pcm", true},
 		{"cue_virtual", "flac", false},

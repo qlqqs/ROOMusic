@@ -24,12 +24,11 @@ type Format struct {
 	container  container
 }
 
-// formatTable 只保留拿到验证证据的组合（见 M2a 设计的格式表）：FLAC 与 MP3 经自动化加手工实播，
-// ALAC 只有 Safari 手工实播通过才保留，其余格式经自动化用合成样本验证。不在表中的组合一律不直出：
-// cue_virtual（需要精确切分，M2b）、ieee_float、wav_extensible 与其他 WAV 编码、未知组合。
+// formatTable 只保留拿到验证证据的组合（见 M2a 设计的格式表）：表中格式都经真实 Chromium 自动化用合成样本验证。
+// ALAC 只有 Safari 能解码，Safari 手工实播通过才加入（M2a 收尾时尚无证据，2026-10-06 移出）。不在表中的组合一律不直出：
+// m4a/alac、cue_virtual（需要精确切分，M2b）、ieee_float、wav_extensible 与其他 WAV 编码、未知组合。
 var formatTable = []Format{
 	{SourceKind: "flac_vorbis_comment", Codec: "flac", MIMEType: "audio/flac", container: containerFLAC},
-	{SourceKind: "m4a", Codec: "alac", MIMEType: "audio/mp4", Codecs: "alac", container: containerMP4},
 	{SourceKind: "mp3_id3v2", Codec: "mp3", MIMEType: "audio/mpeg", container: containerMP3},
 	{SourceKind: "wav_info", Codec: "pcm", MIMEType: "audio/wav", Codecs: "1", container: containerWAV},
 	{SourceKind: "m4a", Codec: "aac", MIMEType: "audio/mp4", Codecs: "mp4a.40.2", container: containerMP4},

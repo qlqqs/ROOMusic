@@ -27,9 +27,9 @@ M2a 在既有同源会话与只读音乐源之上新增播放格式表、预检�
 "mime_type": string, "codecs": string|null, "size_bytes": integer } }`。
 前端只使用已解码的返回路径，不根据文件名或来源路径构造 URL。
 
-直出候选表：FLAC、ALAC/MP4、MP3、16 bit PCM WAV、AAC-LC/MP4、Ogg Vorbis、Ogg Opus；
-`cue_virtual`、`wav_extensible`、浮点 WAV 与未知组合拒绝。表中的候选必须以任务要求的实播证据收口：
-ALAC 保留仍须 macOS Safari 手工通过；其余自动化格式必须以真实解码验证，不以解析器能识别代替。
+直出格式表：FLAC、MP3、16 bit PCM WAV、AAC-LC/MP4、Ogg Vorbis、Ogg Opus，都经真实 Chromium 解码验证，不以解析器能识别代替；
+`m4a/alac`、`cue_virtual`、`wav_extensible`、浮点 WAV 与未知组合拒绝。ALAC 只有 Safari 能解码，
+macOS Safari 手工实播通过后才加入格式表（M2a 收尾时尚无证据，2026-10-06 移出，见 ADR 0004 决策记录）。
 浏览器能力探测不能保证某个具体文件可播，运行时仍可报解码失败。
 
 安全打开顺序：

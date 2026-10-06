@@ -50,7 +50,7 @@ catalog 组件不依赖 player：`ReleaseMedia` 增加 `renderTrackActions` 与 
 | `source_kind` / `codec` | `mime_type`、`codecs` | 需要的证据 |
 | --- | --- | --- |
 | `flac_vorbis_comment` / `flac` | `audio/flac`、无 | 自动化（16/44.1、24/48）加三组手工 |
-| `m4a` / `alac` | `audio/mp4`、`alac` | macOS Safari 手工实播；失败则移除，ALAC 在 M2a 处处不可播 |
+| `m4a` / `alac` | `audio/mp4`、`alac` | macOS Safari 手工实播通过才加入。2026-10-06 收尾时尚无证据，已移出表，ALAC 在所有浏览器标注不能直接播放 |
 | `mp3_id3v2` / `mp3` | `audio/mpeg`、无 | 自动化加手工 |
 | `wav_info` / `pcm` | `audio/wav`、`1` | 自动化（16 bit）。24 bit 的 WAV 被常见工具（包括 FFmpeg）写成 WAVE_FORMAT_EXTENSIBLE，扫描记为 `wav_extensible`，不在表中 |
 | `m4a` / `aac` | `audio/mp4`、`mp4a.40.2` | 自动化（AAC-LC 样本）；解析器不区分 AAC 档次，HE-AAC 若解码失败走运行时错误路径 |
@@ -153,7 +153,7 @@ catalog 组件不依赖 player：`ReleaseMedia` 增加 `renderTrackActions` 与 
 - 一首曲目可播放 = 不是 `cue_virtual` 且（`source_kind`, `codec`）在格式表中，且 `canPlayType(mime; codecs)` 不为空字符串，
   且浏览器提供 `mediaCapabilities.decodingInfo` 时其 `supported` 不为 `false`（API 缺失或抛错时只看 `canPlayType`）。结果按类型参数缓存。
 - 不可播放的原因与文案：CUE 虚拟轨“CUE 分轨曲目需要切分，目前不能播放”；不在格式表“这种格式目前不能直接播放”；
-  浏览器不支持“当前浏览器不能解码 ALAC”（编码名取自曲目事实）。目录停用、文件变化只能在预检时得知，作为播放失败原因显示。
+  浏览器不支持“当前浏览器不能解码 <编码>”（编码名取自曲目事实，转为大写）。目录停用、文件变化只能在预检时得知，作为播放失败原因显示。
 - 整张播放与加入队列只放入可播放的曲目，并提示跳过的数量；一首都不能播放时按钮禁用并在专辑头部说明原因。
 
 ### 5.5 刷新后恢复（K1）

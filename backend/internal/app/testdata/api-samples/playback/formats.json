@@ -8,12 +8,6 @@
         "source_kind": "flac_vorbis_comment"
       },
       {
-        "codec": "alac",
-        "codecs": "alac",
-        "mime_type": "audio/mp4",
-        "source_kind": "m4a"
-      },
-      {
         "codec": "mp3",
         "codecs": null,
         "mime_type": "audio/mpeg",

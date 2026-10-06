@@ -9,7 +9,7 @@
 | --- | --- | --- | --- | --- |
 | `flac-16-44100.flac` | FLAC | 16 / 44.1 kHz | 3 秒 | 直出，三组手工实播必测 |
 | `flac-24-48000.flac` | FLAC | 24 / 48 kHz | 2 秒 | 直出，三组手工实播必测 |
-| `alac-16-44100.m4a` | ALAC | 16 / 44.1 kHz | 2 秒 | 只有 Safari 能解码；`moov` 在 `mdat` 之前 |
+| `alac-16-44100.m4a` | ALAC | 16 / 44.1 kHz | 2 秒 | 只有 Safari 能解码；Safari 实播通过前不在直出格式表中，标注“不能直接播放”；`moov` 在 `mdat` 之前 |
 | `alac-24-48000.m4a` | ALAC | 24 / 48 kHz | 1 秒 | 同上 |
 | `mp3-44100.mp3` | MP3（64 kbps） | — / 44.1 kHz | 2 秒 | ID3v2.3 标签 |
 | `aac-44100.m4a` | AAC-LC（64 kbps） | — / 44.1 kHz | 2 秒 | |

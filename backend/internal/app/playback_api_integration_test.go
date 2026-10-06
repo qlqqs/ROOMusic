@@ -335,6 +335,7 @@ func TestPostgreSQLPlaybackChecksRunInTheDocumentedOrder(t *testing.T) {
 		{"missing track", missing, http.StatusNotFound, "not_found"},
 		{"cue virtual track", cue, http.StatusConflict, "not_directly_playable"},
 		{"format outside the table", floatWAV, http.StatusConflict, "not_directly_playable"},
+		{"ALAC before Safari verification", alac, http.StatusConflict, "not_directly_playable"},
 		{"file is gone", gone, http.StatusConflict, "source_unavailable"},
 		{"link leaves the root", escaped, http.StatusConflict, "source_unavailable"},
 		{"size differs from the scan", sizeChanged, http.StatusConflict, "source_changed"},
@@ -378,7 +379,7 @@ func TestPostgreSQLPlaybackPreflightDescribesTheOriginalRepresentation(t *testin
 	library := createPlaybackLibrary(t, application)
 	user := application.createUser(t, "user")
 	flac := library.addTrack(t, application, playbackTrackSpec{relative: "a.flac", content: flacBytes(8192)})
-	alac := library.addTrack(t, application, playbackTrackSpec{relative: "b.m4a", content: mp4Bytes(6000), sourceKind: "m4a", codec: "alac"})
+	aac := library.addTrack(t, application, playbackTrackSpec{relative: "b.m4a", content: mp4Bytes(6000), sourceKind: "m4a", codec: "aac"})
 
 	type preflight struct {
 		TrackID        string `json:"track_id"`
@@ -409,9 +410,9 @@ func TestPostgreSQLPlaybackPreflightDescribesTheOriginalRepresentation(t *testin
 		flacResult.Representation.MIMEType != "audio/flac" || flacResult.Representation.Codecs != nil || flacResult.Representation.SizeBytes != 8192 {
 		t.Fatalf("FLAC preflight = %+v", flacResult)
 	}
-	alacResult := read(alac)
-	if alacResult.Representation.MIMEType != "audio/mp4" || alacResult.Representation.Codecs == nil || *alacResult.Representation.Codecs != "alac" || alacResult.Representation.SizeBytes != 6000 {
-		t.Fatalf("ALAC preflight = %+v", alacResult)
+	aacResult := read(aac)
+	if aacResult.Representation.MIMEType != "audio/mp4" || aacResult.Representation.Codecs == nil || *aacResult.Representation.Codecs != "mp4a.40.2" || aacResult.Representation.SizeBytes != 6000 {
+		t.Fatalf("AAC preflight = %+v", aacResult)
 	}
 	// 预检返回的地址就是音频接口，两者的核对完全一致。
 	if response := application.request(t, http.MethodGet, flacResult.Representation.URL, nil, &user, nil); response.Code != http.StatusOK || response.Body.Len() != 8192 {
@@ -452,7 +453,6 @@ func TestPostgreSQLPlaybackFormatsListTheApprovedCombinations(t *testing.T) {
 	}
 	want := []string{
 		"flac_vorbis_comment/flac audio/flac null",
-		"m4a/alac audio/mp4 alac",
 		"mp3_id3v2/mp3 audio/mpeg null",
 		"wav_info/pcm audio/wav 1",
 		"m4a/aac audio/mp4 mp4a.40.2",
