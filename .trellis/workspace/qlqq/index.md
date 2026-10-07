@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 23
-- **Last Active**: 2026-09-27
+- **Total Sessions**: 25
+- **Last Active**: 2026-10-07
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~570 | Active |
+| `journal-1.md` | ~650 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,8 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 25 | 2026-10-07 | M2a 审查修复与收尾归档 | `d1c976d`, `06071f8`, `1096443`, `4dc1889`, `13a9cfe`, `9cc11fd`, `564728a`, `48b0d3f` | `main` |
+| 24 | 2026-10-05 | M2a 播放器续接与自动化验收 | - | `main` |
 | 23 | 2026-09-27 | Classical M0 文档对齐与提交收尾 | `850d274` | `docs/classical-m0-alignment` |
 | 22 | 2026-09-04 | 修复扫描元数据与前端标签显示 | `f2615d5` | `main` |
 | 21 | 2026-09-04 | 收尾前端音乐库展示父任务 | `f8151e0`, `abab775` | `main` |

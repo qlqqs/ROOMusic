@@ -568,3 +568,83 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 ### 后续步骤
 
 - 由用户审阅四份 ADR 草案和 Core 1 截止范围；明确决策后再独立创建、规划并批准 M1/B0 等任务，不自动开始业务实施。
+
+
+## Session 24: M2a 播放器续接与自动化验收
+<!-- trellis-session: v=2 fp=9d60cf564e85c863 -->
+
+**Date**: 2026-10-05
+**Task**: M2a 播放器续接与自动化验收
+**Branch**: `main`
+
+### Summary
+
+接续已批准的M2a第4–7步，补齐播放引擎、UI、隔离真实播放与合同；独立检查修复恢复、历史和无界文本边界。真实13项及前端938项通过；远端CI、三组手工实播与提交确认尚待，保持任务进行中。
+
+### Main Changes
+
+- 补齐播放器、公共入口、队列与按账号暂停恢复；既有Claude改动保留完善。
+- 真实服务使用合成媒体、独立roomusic-test与临时构建树，受背压TCP验证撤销；新增CI作业。
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] 前端 lint/typecheck、52文件938项Vitest通过；原生真实播放13项通过。
+- [OK] 最小播放单元/隔离PostgreSQL播放与API样本集成race通过；未运行无关全量后端。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 全mock158项、播放器专项7项与最终375/1280截图已通过；119个内嵌文件重复构建字节一致，Go构建/资产合同通过。
+- 用户确认四组提交；三组手工实播/远端CI结果完成后才归档。
+
+
+## Session 25: M2a 审查修复与收尾归档
+<!-- trellis-session: v=2 fp=5cc7b05daaaf1820 -->
+
+**Date**: 2026-10-07
+**Task**: M2a 审查修复与收尾归档
+**Branch**: `main`
+
+### Summary
+
+复核 Codex 完成的 M2a 并修复 12 项问题；按获批计划分组提交第 4–7 步，ALAC 在 Safari 实播前移出直出格式表；三组手工实播、ALAC 恢复与远端 CI 移交 10-06-m2a-acceptance-followup，M2a 归档。
+
+### Main Changes
+
+- 修复审查问题：stalled 不算缓冲、加载中按钮文字、窄订阅与曲目行 memo、待定位位置、全局公告、当前曲目标记、随机后退、定时保存不重复序列化，以及文档与测试断言。
+- 第 4–7 步各一个提交，每组先导出暂存区在完整文件树上验证；ALAC 移出格式表另成提交 13a9cfe，可 revert 恢复。
+- 新建后续验收任务并移入手工验收表；M2a 归档并修正相对链接；未推送。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d1c976d` | feat(player): 播放引擎、队列与能力判定 |
+| `06071f8` | feat(player): 播放栏、正在播放页与专辑页播放入口 |
+| `1096443` | test(playback): 真实服务播放自动化与 CI 作业 |
+| `4dc1889` | docs(playback): 同步 M2a 合同、规范与路线 |
+| `13a9cfe` | fix(playback): ALAC 在 Safari 实播确认前移出直出格式表 |
+| `9cc11fd` | docs(m2a): 收尾决策、验收对照与遗留验收任务 |
+| `564728a` | chore(task): archive 10-03-classical-m2a-direct-playback |
+| `48b0d3f` | chore(task): 修正 M2a 归档后的相对链接 |
+
+### Testing
+
+- [OK] [OK] 第 5 步树：lint、typecheck、Vitest 52 文件 954 项、全页面 Playwright 158 项；提交后内嵌产物漂移门禁为空。
+- [OK] [OK] 干净提交树 npm ci 后真实服务 13 项；ALAC 调整后隔离 PostgreSQL 播放与样本集成 18 项、真实服务 13 项。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 用户安排 macOS Safari、Windows Chrome 或 Edge、任一系统 Firefox 三组手工实播（10-06-m2a-acceptance-followup）。
+- Safari 通过后恢复 ALAC；下次推送 main 后确认 CI 四个作业通过。
