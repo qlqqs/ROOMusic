@@ -15,6 +15,6 @@
 {"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Vitest、Playwright、axe、宽度检查与内嵌产物"}
 {"file": "frontend/DESIGN.md", "reason": "视觉与布局源依据：§3/§4与§6核心语义位于前32KB，新增落地补充末尾可能被截断；当前完整合同必须同时读取player-design-guidelines、state-management与playback-contracts"}
 {"file": ".trellis/spec/guides/real-music-assets.md", "reason": "真实音乐只读，自动化只用合成素材"}
-{"file": ".trellis/tasks/10-03-classical-m2a-direct-playback/research/library-formats.md", "reason": "真实库格式构成与格式验收子矩阵"}
-{"file": ".trellis/tasks/10-03-classical-m2a-direct-playback/research/automation-feasibility.md", "reason": "无头 Chromium 真实播放验证方法与请求模式"}
+{"file": ".trellis/tasks/archive/2026-10/10-03-classical-m2a-direct-playback/research/library-formats.md", "reason": "真实库格式构成与格式验收子矩阵"}
+{"file": ".trellis/tasks/archive/2026-10/10-03-classical-m2a-direct-playback/research/automation-feasibility.md", "reason": "无头 Chromium 真实播放验证方法与请求模式"}
 {"file": ".trellis/spec/backend/playback-contracts.md", "reason": "M2a 已实现的鉴权直出、Range、安全打开与10秒复核可执行合同"}

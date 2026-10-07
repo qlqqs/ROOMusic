@@ -2,7 +2,7 @@
 
 ## 来源
 
-M2a（[PRD](../10-03-classical-m2a-direct-playback/prd.md)）于 2026-10-06 收尾归档。用户要求“直接帮我做决定并完成任务收尾”，
+M2a（[PRD](../archive/2026-10/10-03-classical-m2a-direct-playback/prd.md)）于 2026-10-06 收尾、2026-10-07 归档。用户要求“直接帮我做决定并完成任务收尾”，
 由 Claude 代为决定（理由见 M2a PRD 的“收尾决策”）。以下三项无法在本机完成，移到本任务：
 
 - **三组手工实播（M2a 的 A15）**：需要 macOS Safari、Windows 上的 Chrome 或 Edge、任一系统上的 Firefox 实机，由用户执行。

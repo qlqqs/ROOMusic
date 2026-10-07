@@ -141,7 +141,7 @@ M1a 外壳与会话生命周期、M1b 专辑详情、F3 的封面缓存头与 F4
 
 状态：**已完成，2026-10-07 归档**。第 1–3 步此前已提交；第 4–7 步 2026-10-05 补齐，经第二轮审查修复后于 2026-10-06 分组提交。
 用户要求“直接帮我做决定并完成任务收尾”，收尾方式由 Claude 代为决定（见下方“收尾决策”）：ALAC 没有实播证据，移出直出格式表；
-A15 三组手工实播与 A14 的远端 CI 移交[后续验收任务](../10-06-m2a-acceptance-followup/prd.md)。下表为收尾时的证据与边界。
+A15 三组手工实播与 A14 的远端 CI 移交[后续验收任务](../../../10-06-m2a-acceptance-followup/prd.md)。下表为收尾时的证据与边界。
 
 | 验收 | 当前证据与边界 |
 | --- | --- |
@@ -152,7 +152,7 @@ A15 三组手工实播与 A14 的远端 CI 移交[后续验收任务](../10-06-m
 | A11 | MenuButton/底栏/正在播放/队列/不可播放原因组件回归通过，五宽与 axe 专项7项、全页面Playwright158项通过；375/1280长标题实际截图复验通过，保留完整可访问名称 |
 | A13 | 注册并解码两项成功/六项错误播放样本，全样本覆盖断言通过；后端依赖方向测试通过 |
 | A14 | 本机真实 Go + PostgreSQL + Chromium 13 项通过，包括从干净导出的提交树用 `npm ci` 全新安装后运行（Node 24.16.0、Go 1.25.10，与 CI 相同）；新增 CI 作业，未推送，远端 CI 未运行，移交后续任务，不写成 CI 已通过 |
-| A15 | **移交后续任务**：需要 macOS Safari、Windows Chrome 或 Edge、任一系统 Firefox 的实机，由用户执行；[手工验收表](../10-06-m2a-acceptance-followup/research/manual-acceptance.md)已移到该任务 |
+| A15 | **移交后续任务**：需要 macOS Safari、Windows Chrome 或 Edge、任一系统 Firefox 的实机，由用户执行；[手工验收表](../../../10-06-m2a-acceptance-followup/research/manual-acceptance.md)已移到该任务 |
 | A16 | 已同步播放合同、ADR、设计与前后端规范；路线/父任务已记录实施结果与移交项，规范大小/链接检查通过；ALAC 移出已同步合同、ADR、DESIGN 与素材说明 |
 
 ### 已执行的验证
@@ -225,4 +225,4 @@ Claude 复核后修复 12 项问题（后端无缺陷），明细见[审查修�
 ### 收尾边界
 
 第 4–7 步与 ALAC 调整已分组提交到 `main`（`d1c976d`、`06071f8`、`1096443`、`4dc1889`、`13a9cfe`），未推送。
-三组手工实播、Safari 上恢复 ALAC 与远端 CI 见[后续验收任务](../10-06-m2a-acceptance-followup/prd.md)。没有读写真实 `music/`。
+三组手工实播、Safari 上恢复 ALAC 与远端 CI 见[后续验收任务](../../../10-06-m2a-acceptance-followup/prd.md)。没有读写真实 `music/`。

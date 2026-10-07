@@ -31,8 +31,8 @@
 - 状态所有者仍是播放引擎，UI 只表达命令和已知事实；不把测试失败兜底成生产假状态。
 - 同一机制必须分别测试正常卸载/刷新与会话结束，不用 dispose 混淆清理策略。
 - 中心协调测试资源与源码冻结；真实构建不在另一个代理写临时不完整类型时反复启动数据库。
-- 已落实到 [状态规范](../../../spec/frontend/state-management.md)、[播放器规范](../../../spec/frontend/player-design-guidelines.md)、
-  [质量规范](../../../spec/frontend/quality-guidelines.md)与[播放合同](../../../spec/backend/playback-contracts.md)。
+- 已落实到 [状态规范](../../../../../spec/frontend/state-management.md)、[播放器规范](../../../../../spec/frontend/player-design-guidelines.md)、
+  [质量规范](../../../../../spec/frontend/quality-guidelines.md)与[播放合同](../../../../../spec/backend/playback-contracts.md)。
 - 本仓库无对应的 `src/templates/markdown/spec/` 模板树，不为此任务创建框架模板。
 
 ## 验证与尚缺证据

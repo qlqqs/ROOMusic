@@ -5,7 +5,7 @@
 M2a 在既有同源会话与只读音乐源之上新增播放格式表、预检与音频直出。核心包
 `backend/internal/playback` 消费 catalog、library 的公开合同，不含 HTTP、私有表查询、转码或文件写入。
 `playback/httpapi` 负责鉴权、输入解码、错误映射与流式响应；`app` 装配生命周期与日志。
-设计与验证边界见 [M2a 任务](../../tasks/10-03-classical-m2a-direct-playback/prd.md)及
+设计与验证边界见 [M2a 任务](../../tasks/archive/2026-10/10-03-classical-m2a-direct-playback/prd.md)及
 [ADR 0004](../../../docs/architecture/adr/0004-media-delivery.md)。三组手工实播未完成前不能宣称整个 M2a 已验收。
 
 ## 2. 签名

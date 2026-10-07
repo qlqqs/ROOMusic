@@ -45,7 +45,7 @@
 | F2 | 目录操作幂等指纹纳入目标目录 ID | 无；建议先于或与 M1a 同期 | [已完成并归档](../archive/2026-09/09-28-classical-f2-root-op-idempotency/prd.md)（2026-09-29） |
 | F3 | M1a 遗留的后端缺口：扫描记录、查看者 ID、成员接口错误映射、HTTP 缓存头（成员写操作幂等延到 M3） | 无；先于 M1b | [已完成并归档](../archive/2026-10/10-02-classical-f3-backend-gaps/prd.md)（2026-10-02，提交 `ec92090`–`9b97c9d` 加文档同步） |
 | F4 | M1b 冒烟发现的后端封面发现缺口：CUE 专辑、多碟专辑的父目录封面，另含文件名大小写 | 无；先于 M2a | [已完成并归档](../archive/2026-10/10-03-classical-f4-artwork-discovery/prd.md)（2026-10-03，提交 `b66f569` 加文档同步） |
-| M2a | 鉴权直出串流、播放引擎、浏览器能力判定 | M1a 外壳；实播矩阵在规划时确定 | [已完成并归档](../10-03-classical-m2a-direct-playback/prd.md)（2026-10-07，提交 `d1c976d`–`13a9cfe` 加文档同步；ALAC 在 Safari 实播前移出格式表，三组手工实播、ALAC 恢复与远端 CI 见下一行） |
+| M2a | 鉴权直出串流、播放引擎、浏览器能力判定 | M1a 外壳；实播矩阵在规划时确定 | [已完成并归档](../archive/2026-10/10-03-classical-m2a-direct-playback/prd.md)（2026-10-07，提交 `d1c976d`–`13a9cfe` 加文档同步；ALAC 在 Safari 实播前移出格式表，三组手工实播、ALAC 恢复与远端 CI 见下一行） |
 | M2a 遗留验收 | 三组手工实播、Safari 上恢复 ALAC、下次推送后的远端 CI | M2a；需要用户的 macOS 与 Windows 实机 | [规划中](../10-06-m2a-acceptance-followup/prd.md)（2026-10-06 创建，等待用户安排实机） |
 | M2b | ffmpeg 派生缓存、CUE 精确分轨、歌词 | M2a；ADR 0004 第 2–7 项获批 | 未立项 |
 | P | 服务端播放历史 | 阶段 I；M2a | 未立项 |
