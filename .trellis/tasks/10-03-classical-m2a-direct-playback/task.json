@@ -21,6 +21,6 @@
   "children": [],
   "parent": "09-27-classical-core-1",
   "relatedFiles": [],
-  "notes": "2026-10-05续接第4–7步自动化实施与独立检查完成：前端938项、mock158项、真实播放13项通过；内嵌资产重建。等待用户确认提交、远端CI实际运行与A15三组手工实播，保持in_progress，不归档。",
+  "notes": "2026-10-06 收尾（用户授权代为决定）：第4–7步与 ALAC 移出格式表已分组提交（d1c976d、06071f8、1096443、4dc1889、13a9cfe），未推送；三组手工实播、Safari 上恢复 ALAC 与远端 CI 移交 10-06-m2a-acceptance-followup。",
   "meta": {}
 }

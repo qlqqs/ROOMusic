@@ -96,7 +96,7 @@ M0 只核对文档合同；以上界面与播放验收不因写完本规范而�
 
 必需验证：API样本与decoder、纯队列四模式、持久数据边界、引擎媒体事件/异步竞态与会话结束、
 媒体键、底栏与正在播放组件、键盘菜单与队列、五种宽度布局与axe、隔离真实服务解码/定位。
-手工实播另见[验收表](../../tasks/10-03-classical-m2a-direct-playback/research/manual-acceptance.md)。
+手工实播另见[验收表](../../tasks/10-06-m2a-acceptance-followup/research/manual-acceptance.md)。
 错误做法：忽略`queue_full`、退出时只卸载provider、凭浏览器能力宣称格式已实测。
 正确做法：显式提示容量失败、订阅会话结束同步清理、逐项区分自动化结果与手工证据。
 

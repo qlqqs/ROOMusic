@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/playback-contracts.md", "reason": "直出格式表、预检与音频接口合同；恢复 ALAC 时同步格式表说明"}
+{"file": "docs/architecture/adr/0004-media-delivery.md", "reason": "D1 只直出已验证的组合；2026-10-06 移出 ALAC 的决策记录，恢复时追加新行"}
+{"file": ".trellis/tasks/10-06-m2a-acceptance-followup/research/manual-acceptance.md", "reason": "三组手工实播清单与结果表"}
+{"file": ".trellis/spec/frontend/player-design-guidelines.md", "reason": "不可播放原因的文案与播放器行为约束"}

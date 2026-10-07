@@ -223,7 +223,7 @@ Media Session：曲名、艺人、专辑与封面（`/api/v1/artworks/{id}` 的�
   `README.md` 逐个说明），生成命令与镜像摘要写在 `scripts/gen-playback-fixtures.sh`（输出带 bitexact，重复生成字节相同）。
   24 bit WAV 经扫描是 `wav_extensible`，作为“不在格式表中”的反例留在真实服务自动化里。
   FFmpeg 只用于生成素材，不进入运行时、部署或 CI。
-- **手工实播**（K2）：三组（macOS Safari、Windows Chrome 或 Edge、任一系统 Firefox）按 `research/manual-acceptance.md` 的清单执行，
+- **手工实播**（K2）：三组（macOS Safari、Windows Chrome 或 Edge、任一系统 Firefox）按[后续验收任务](../10-06-m2a-acceptance-followup/prd.md)中 `research/manual-acceptance.md` 的清单执行（M2a 收尾时移交），
   记录操作系统与浏览器版本、格式参数、播放与拖动结果。
 
 ## 8. 取舍

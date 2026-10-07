@@ -137,23 +137,23 @@ M1a 外壳与会话生命周期、M1b 专辑详情、F3 的封面缓存头与 F4
   （真实库约 30%），要让它们可播需 M2b 的无损派生（后端 FFmpeg 转 FLAC）。用户选择保持现有范围，不把 M2b 转码提前，也不做前端 WASM 解码。
 - 状态：已批准，可运行 `task.py start` 并按 `implement.md` 实施；M2b、P、M3 仍各自单独规划。
 
-## 实施结果与验收对照（2026-10-05 续接）
+## 实施结果与验收对照
 
-状态：继续实施已批准的 M2a，不新建任务。第 1–3 步此前已提交；第 4–7 步本轮已补齐，
-最终 UI 视觉与全页面浏览器复验已通过。提交方案已提出，等待用户确认，不推送。
-任务仍 `in_progress`：A15 三组手工实播、A14 远端 CI 实际运行尚缺证据，不提前归档。
+状态：**已完成，2026-10-07 归档**。第 1–3 步此前已提交；第 4–7 步 2026-10-05 补齐，经第二轮审查修复后于 2026-10-06 分组提交。
+用户要求“直接帮我做决定并完成任务收尾”，收尾方式由 Claude 代为决定（见下方“收尾决策”）：ALAC 没有实播证据，移出直出格式表；
+A15 三组手工实播与 A14 的远端 CI 移交[后续验收任务](../10-06-m2a-acceptance-followup/prd.md)。下表为收尾时的证据与边界。
 
 | 验收 | 当前证据与边界 |
 | --- | --- |
 | A1–A4、A6 | 既有后端实现与接口/安全打开/慢速连接测试；本轮隔离 PostgreSQL 上播放与 API 样本最小集成 `-race` 通过，样本未漂移；未匿名泄露资源 |
-| A5 | 七格式原生 Chromium 解码通过；ALAC、CUE 虚拟轨、24 bit WAV-ext 禁用且无音频请求；Safari ALAC 手工结果仍待确认 |
+| A5 | FLAC 两组参数、MP3、16 bit WAV、AAC、Vorbis、Opus 七个素材由真实 Chromium 解码通过；ALAC 没有实播证据，2026-10-06 移出格式表（`13a9cfe`），与 CUE 虚拟轨、24 bit WAV-ext 一样禁用且不请求音频；Safari 通过后在后续任务恢复 |
 | A7、A8、A10、A12 | 引擎/纯队列/能力/恢复/媒体键回归通过；短素材真实时间、seek、自然结束与暂停恢复通过；系统媒体键的实际 OS 行为仍列入手工表 |
 | A9 | 路由切换连续与跨标签退出后停播、清空恢复记录真实专项通过；会话结束同步清理，不混同普通卸载 |
 | A11 | MenuButton/底栏/正在播放/队列/不可播放原因组件回归通过，五宽与 axe 专项7项、全页面Playwright158项通过；375/1280长标题实际截图复验通过，保留完整可访问名称 |
 | A13 | 注册并解码两项成功/六项错误播放样本，全样本覆盖断言通过；后端依赖方向测试通过 |
-| A14 | 本机真实 Go + PostgreSQL + Chromium 13 项全部通过（38.0s）；新增 CI job，但尚未推送/执行远端 CI，不写成 CI 已通过 |
-| A15 | **待用户执行**：macOS Safari、Windows Chrome 或 Edge、任一系统 Firefox；记录见[手工验收表](research/manual-acceptance.md) |
-| A16 | 已同步播放合同、ADR、设计与前后端规范；路线/父任务已记录实施结果与未完成门禁，规范大小/链接检查通过 |
+| A14 | 本机真实 Go + PostgreSQL + Chromium 13 项通过，包括从干净导出的提交树用 `npm ci` 全新安装后运行（Node 24.16.0、Go 1.25.10，与 CI 相同）；新增 CI 作业，未推送，远端 CI 未运行，移交后续任务，不写成 CI 已通过 |
+| A15 | **移交后续任务**：需要 macOS Safari、Windows Chrome 或 Edge、任一系统 Firefox 的实机，由用户执行；[手工验收表](../10-06-m2a-acceptance-followup/research/manual-acceptance.md)已移到该任务 |
+| A16 | 已同步播放合同、ADR、设计与前后端规范；路线/父任务已记录实施结果与移交项，规范大小/链接检查通过；ALAC 移出已同步合同、ADR、DESIGN 与素材说明 |
 
 ### 已执行的验证
 
@@ -193,8 +193,36 @@ Claude 复核后修复 12 项问题（后端无缺陷），明细见[审查修�
 未运行前端全量与其余 52 项路由模拟用例：改动集中在播放器、专辑页与外壳订阅，相关测试集已覆盖；第 5 步提交门禁时按计划重跑全量。
 后端源码未改动，未运行后端测试。
 
+### 收尾决策（2026-10-06）
+
+用户要求“直接帮我做决定并完成任务收尾”。以下由 Claude 代为决定：
+
+| 事项 | 决定 | 理由 |
+| --- | --- | --- |
+| 提交分组 | 按执行计划第 4–7 步各一个提交，第二轮审查修复按 implement.md 写好的分组并入；每组先把暂存区导出成完整文件树，在其上验证后再提交 | 计划已获批；导出暂存区能验证每个提交本身可构建、测试通过，也不需要 amend |
+| A15 三组手工实播 | 移交后续验收任务 | 需要 macOS 与 Windows 实机，本机无法执行，不以 Linux 自动化冒充 |
+| ALAC | 移出直出格式表（`13a9cfe`），Safari 实播通过后恢复 | ADR 0004 D1 只直出已验证可播放的组合，A15 规定 Safari 通过才保留，而 ALAC 在任何浏览器上都还没有实播证据；Chromium、Firefox 本来就不能解码，只有 Safari 暂时受影响 |
+| A14 远端 CI | 不推送，移交后续验收任务；本机改用干净提交树加 `npm ci` 验证 | 用户一贯只提交到 `main` 不推送（本地领先 `origin/main` 72 个提交）；仓库公开，推送不可撤回 |
+
+### 收尾验证（2026-10-06）
+
+每组都在导出的暂存树（`git checkout-index -a`）上验证后再提交：
+
+- 第 4 步：`npm run lint && npm run typecheck`；`npx vitest run src/features/player src/test/api-contract.test.ts src/features/catalog`，14 文件、389 测试通过；
+  用 `envDir:false` 临时配置构建，与已提交的内嵌产物 119 个文件字节相同（引擎尚未接入页面），所以该提交不含资产改动。
+- 第 5 步：`npm run lint && npm run typecheck && npm test`，52 文件、954 测试通过；构建结果与暂存的内嵌产物字节相同；
+  `LD_LIBRARY_PATH=… npm run test:e2e -- --workers=2`，158 项通过，webServer 用默认配置构建的产物也相同；提交后 `git diff --exit-code -- backend/cmd/roomusic/web` 为空。
+- 第 6 步：`bash -n scripts/*.sh`；`docker compose --env-file /dev/null -f compose.test.yaml config --quiet`；CI YAML 可解析；
+  `npm ci` 后 `npm run typecheck`、`npm exec eslint -- e2e/real playwright.real.config.ts`；`LD_LIBRARY_PATH=… ./scripts/playback-e2e.sh`，13 项通过（38.0s）。
+- 第 7 步：`git diff --cached --check`、规范大小、相对链接检查、`task.py validate` 通过。
+- ALAC 调整：`gofmt -l`、`go vet ./...`、`go build ./...`；`go test -race ./internal/playback/... ./internal/library/parser/... ./internal/app/... -count=1`；
+  隔离 `roomusic-test` PostgreSQL 上 `go test -race ./internal/playback/... ./internal/app/... -run 'TestPostgreSQL(Playback|APIResponseSamples)' -count=1`，18 个集成测试通过，样本无漂移；
+  `npx vitest run src/test/api-contract.test.ts src/features/player`，10 文件、290 测试通过；真实服务 13 项通过。测试容器与数据卷均已删除。
+
+未运行后端全量（`go test ./...` 与全部 `TestPostgreSQL`）：后端只改了播放格式表与对应测试，已覆盖 playback、parser、app 包与播放、样本集成。
+远端 CI 未运行（未推送）。
+
 ### 收尾边界
 
-最终工作区仍未提交：等待四组提交方案确认。内嵌资产已按最终源码重建；提交后还需执行
-`git diff --exit-code -- backend/cmd/roomusic/web` 的已提交树漂移门禁，不能以当前未提交差异冒充该门禁通过。
-三组手工结果与CI实际运行尚缺，不归档、不标记任务complete。没有读写真实music，没有推送。
+第 4–7 步与 ALAC 调整已分组提交到 `main`（`d1c976d`、`06071f8`、`1096443`、`4dc1889`、`13a9cfe`），未推送。
+三组手工实播、Safari 上恢复 ALAC 与远端 CI 见[后续验收任务](../10-06-m2a-acceptance-followup/prd.md)。没有读写真实 `music/`。

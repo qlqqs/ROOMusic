@@ -73,10 +73,10 @@
 
 ### 第 8 步：手工实播与收尾（A15）
 
-- [ ] 写 `research/manual-acceptance.md`：三组组合的检查清单（FLAC 两种参数、ALAC、MP3、拖动、切歌、模式、切页、刷新恢复、
-  另一标签页退出、媒体键、不可播放标注）与结果表；请用户执行并回填操作系统与浏览器版本。
-- [ ] 按结果修正；ALAC 在 Safari 未通过时从格式表移除并同步文档。
-- [ ] PRD 写“实施结果与验收对照”；`task.py archive … --skip-branch-validation`，再单独提交归档后的相对链接修正；更新记忆。
+- [x] 写 `research/manual-acceptance.md`：三组组合的检查清单（FLAC 两种参数、ALAC、MP3、拖动、切歌、模式、切页、刷新恢复、
+  另一标签页退出、媒体键、不可播放标注）与结果表。收尾时移到后续验收任务，由用户执行并回填操作系统与浏览器版本。
+- [x] 按结果修正：收尾时没有 Safari 结果，按 ADR 0004 D1 先把 ALAC 移出格式表（`13a9cfe`），Safari 通过后在后续任务恢复。
+- [x] PRD 写“实施结果与验收对照”；`task.py archive … --skip-branch-validation`，再单独提交归档后的相对链接修正；更新记忆。
 
 ## 风险与回退点
 
@@ -103,3 +103,9 @@
 分组时：引擎、队列、持久化与 provider 的 `usePlayerEngine/usePlayerSelector` 属第 4 步；`hooks/use-current-track-marker.ts`
 依赖 `components/player-labels.ts`，与界面、catalog 插槽、外壳及专辑页一起属第 5 步；规范、设计与 ADR 属第 7 步。
 修复后只跑了相关测试集（命令见 PRD），第 5 步提交门禁要求的前端全量与全页面 Playwright 仍须在提交时重跑。
+
+## 2026-10-06 收尾
+
+用户授权代为决定收尾（决定与理由见 PRD“收尾决策”）。第 4–7 步按上面的分组各一个提交：`d1c976d`、`06071f8`、`1096443`、`4dc1889`。
+每组先把暂存区导出成完整文件树，在其上验证后再提交；第 5 步的前端全量与全页面 Playwright 在该树上重跑，提交后漂移门禁为空。
+ALAC 移出格式表另成一个提交 `13a9cfe`。三组手工实播、ALAC 恢复与远端 CI 移交[后续验收任务](../10-06-m2a-acceptance-followup/prd.md)。

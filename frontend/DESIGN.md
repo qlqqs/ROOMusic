@@ -285,7 +285,7 @@ M2 需补齐无曲目、等待媒体、缓冲、播放、暂停、结束、格�
 播放进度有“播放进度”名称与时间 aria-valuetext；仅曲目变化与错误公告，不能逐秒打扰读屏。
 
 入口与同步会话结束清理见[状态规范](../.trellis/spec/frontend/state-management.md)，API/源文件版本与10秒复核见
-[播放合同](../.trellis/spec/backend/playback-contracts.md)。格式仍以真实自动化与[三组手工实播记录](../.trellis/tasks/10-03-classical-m2a-direct-playback/research/manual-acceptance.md)收口；
+[播放合同](../.trellis/spec/backend/playback-contracts.md)。格式仍以真实自动化与[三组手工实播记录](../.trellis/tasks/10-06-m2a-acceptance-followup/research/manual-acceptance.md)收口；
 ALAC 在 Safari 实播确认前不直出，所有浏览器都标注“这种格式目前不能直接播放”。转码、精确 CUE 分轨、歌词与服务端历史不在 M2a 范围。
 
 ## 7. 页面能力与阶段边界
