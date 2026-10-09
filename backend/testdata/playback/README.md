@@ -1,7 +1,9 @@
 # 播放测试素材
 
 合成的立体声正弦音，只用于测试，不含任何真实音乐。由 `scripts/gen-playback-fixtures.sh` 用固定摘要的 FFmpeg 容器生成
-（容器没有网络，只挂载本目录；输出带 bitexact 标志，重复生成得到相同字节），合计不到 1 MB。FFmpeg 不进入运行时、部署或 CI。
+（容器没有网络，只挂载本目录；输出带 bitexact 标志，重复生成得到相同字节），合计不到 1 MB。运行时的 ffmpeg 由部署者安装；
+派生核心的真实 ffmpeg 测试用 `scripts/ffmpeg-pinned.sh` 取出的同一个固定镜像里的 ffmpeg（设置 `ROOMUSIC_TEST_FFMPEG`）。
+同一个脚本还生成派生核心的启动自检素材 `backend/internal/playback/derivation/selftest.m4a`（0.25 秒 ALAC，两个声道频率不同，`moov` 在文件末尾）。
 
 所有文件的专辑是 `Playback Fixtures`，艺人是 `Fixture Artist`，曲名与音轨号如下。
 

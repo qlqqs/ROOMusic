@@ -15,6 +15,7 @@ var ErrTrackNotFound = errors.New("track not found")
 // 以及扫描时观察到的文件大小与修改时间。播放用它核对“磁盘上的文件仍是扫描时的那个”。
 // Size 或 ModifiedAt 为 nil 表示这条曲目早于大小与修改时间的记录，需要重新扫描才能核对。
 // SourceKind 与 Codec 取自扫描观察，不是当前文件可播性的实时证明。
+// BitDepth、SampleRate 与 Channels 是扫描时解析出的音频参数，0 表示扫描没有取得该值；派生播放用它们核对转换结果。
 type TrackSource struct {
 	TrackID            string
 	RootID             string
@@ -24,6 +25,9 @@ type TrackSource struct {
 	Size               *int64
 	ModifiedAt         *time.Time
 	ContentFingerprint string
+	BitDepth           int
+	SampleRate         int
+	Channels           int
 }
 
 // LoadTrackSource 读取 present 曲目的来源事实；曲目不存在或已缺失时返回 ErrTrackNotFound。
@@ -32,13 +36,14 @@ func (s *Store) LoadTrackSource(ctx context.Context, trackID string) (TrackSourc
 	var source TrackSource
 	var codec, fingerprint sql.NullString
 	var size sql.NullInt64
+	var bitDepth, sampleRate, channels sql.NullInt32
 	var modifiedAt sql.NullTime
 	err := s.database.QueryRowContext(ctx, `SELECT id::text, source_root_id::text, relative_path, source_kind,
-		codec, source_size, source_modified_at, content_fingerprint
+		codec, source_size, source_modified_at, content_fingerprint, bit_depth, sample_rate, channels
 		FROM tracks
 		WHERE id=$1::uuid AND source_status='present'`, trackID).Scan(
 		&source.TrackID, &source.RootID, &source.RelativePath, &source.SourceKind,
-		&codec, &size, &modifiedAt, &fingerprint,
+		&codec, &size, &modifiedAt, &fingerprint, &bitDepth, &sampleRate, &channels,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return TrackSource{}, ErrTrackNotFound
@@ -48,6 +53,9 @@ func (s *Store) LoadTrackSource(ctx context.Context, trackID string) (TrackSourc
 	}
 	source.Codec = codec.String
 	source.ContentFingerprint = fingerprint.String
+	source.BitDepth = int(bitDepth.Int32)
+	source.SampleRate = int(sampleRate.Int32)
+	source.Channels = int(channels.Int32)
 	if size.Valid {
 		source.Size = &size.Int64
 	}

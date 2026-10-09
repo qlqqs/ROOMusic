@@ -106,6 +106,40 @@ func TestContentFingerprintDetectsAudioChange(t *testing.T) {
 	}
 }
 
+// 对已打开的句柄取证必须与按路径计算得到同一个指纹：播放在转换前用句柄核对扫描时记录的指纹。
+func TestContentFingerprintOfMatchesTheFileVariant(t *testing.T) {
+	audio := bytes.Repeat([]byte{0x11, 0x22, 0x33, 0x44, 0x55}, 400)
+	for _, format := range fingerprintFormats() {
+		t.Run(format.name, func(t *testing.T) {
+			path := writeFingerprintFixture(t, "track"+format.extension, format.build(t, audio, "tag"))
+			want := fingerprintOf(t, path)
+			file, err := os.Open(path)
+			if err != nil {
+				t.Fatalf("open fixture: %v", err)
+			}
+			defer file.Close()
+			info, err := file.Stat()
+			if err != nil {
+				t.Fatalf("stat fixture: %v", err)
+			}
+			for _, extension := range []string{format.extension, strings.ToUpper(format.extension)} {
+				got, err := ContentFingerprintOf(context.Background(), extension, file, info.Size())
+				if err != nil || got != want {
+					t.Fatalf("ContentFingerprintOf(%q) = %q, %v; want %q", extension, got, err, want)
+				}
+			}
+			canceled, cancel := context.WithCancel(context.Background())
+			cancel()
+			if _, err := ContentFingerprintOf(canceled, format.extension, file, info.Size()); !errors.Is(err, context.Canceled) {
+				t.Fatalf("canceled context: err = %v, want context.Canceled", err)
+			}
+		})
+	}
+	if _, err := ContentFingerprintOf(context.Background(), ".txt", strings.NewReader("x"), 1); err == nil {
+		t.Fatal("unsupported extension produced a fingerprint")
+	}
+}
+
 func TestFLACFingerprintFallsBackWhenMD5IsZero(t *testing.T) {
 	frames := bytes.Repeat([]byte{0xab}, 512)
 	md5 := [16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}

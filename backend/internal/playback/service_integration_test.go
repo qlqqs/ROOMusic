@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
@@ -64,6 +65,18 @@ type trackSpec struct {
 	modifiedAt   *time.Time
 	fingerprint  string
 	status       string
+	// 音频参数，0 表示扫描没有取得（写入 NULL）。
+	bitDepth   int
+	sampleRate int
+	channels   int
+}
+
+// nullableInt 把 0 写成 NULL。
+func nullableInt(value int) any {
+	if value == 0 {
+		return nil
+	}
+	return value
 }
 
 func textPointer(value string) *string { return &value }
@@ -90,9 +103,10 @@ func (fixture *playbackFixture) insertTrack(t *testing.T, spec trackSpec) string
 		modified = spec.modifiedAt.UTC().Truncate(time.Microsecond)
 	}
 	fixture.exec(t, `INSERT INTO tracks(id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,
-			source_kind,codec,source_size,source_modified_at,content_fingerprint)
-		VALUES($1::uuid,$2::uuid,1,'曲目','艺术家',1,$3::uuid,$4,$5,NOW(),$6,$7,$8,$9,$10)`,
-		trackID, mediumID, fixture.rootID, spec.relativePath, spec.status, spec.sourceKind, spec.codec, spec.size, modified, fingerprint)
+			source_kind,codec,source_size,source_modified_at,content_fingerprint,bit_depth,sample_rate,channels)
+		VALUES($1::uuid,$2::uuid,1,'曲目','艺术家',1,$3::uuid,$4,$5,NOW(),$6,$7,$8,$9,$10,$11,$12,$13)`,
+		trackID, mediumID, fixture.rootID, spec.relativePath, spec.status, spec.sourceKind, spec.codec, spec.size, modified, fingerprint,
+		nullableInt(spec.bitDepth), nullableInt(spec.sampleRate), nullableInt(spec.channels))
 	return trackID
 }
 
@@ -104,6 +118,34 @@ func (fixture *playbackFixture) insertPlayableFLAC(t *testing.T, relative string
 	size := int64(len(content))
 	modified := scanTime
 	return fixture.insertTrack(t, trackSpec{relativePath: relative, codec: textPointer("flac"), size: &size, modifiedAt: &modified, fingerprint: "md5-of-audio"})
+}
+
+// 派生播放用扫描时的音频参数核对转换结果：来源事实带出位深、采样率与声道；扫描没有取得的参数为 0。
+func TestPostgreSQLTrackSourceCarriesTheAudioParameters(t *testing.T) {
+	fixture := newPlaybackFixture(t)
+	size := int64(1234)
+	modified := scanTime
+	described := fixture.insertTrack(t, trackSpec{
+		relativePath: "专辑/01 曲目.m4a", sourceKind: "m4a", codec: textPointer("alac"), size: &size, modifiedAt: &modified,
+		fingerprint: "m4a-mdat-v1:abc", bitDepth: 24, sampleRate: 48000, channels: 2,
+	})
+	bare := fixture.insertTrack(t, trackSpec{relativePath: "专辑/02 曲目.flac", codec: textPointer("flac"), size: &size, modifiedAt: &modified})
+
+	store := catalog.NewStore(fixture.database)
+	source, err := store.LoadTrackSource(context.Background(), described)
+	if err != nil {
+		t.Fatalf("LoadTrackSource: %v", err)
+	}
+	if source.BitDepth != 24 || source.SampleRate != 48000 || source.Channels != 2 || source.ContentFingerprint != "m4a-mdat-v1:abc" {
+		t.Fatalf("source = %+v", source)
+	}
+	source, err = store.LoadTrackSource(context.Background(), bare)
+	if err != nil {
+		t.Fatalf("LoadTrackSource without parameters: %v", err)
+	}
+	if source.BitDepth != 0 || source.SampleRate != 0 || source.Channels != 0 {
+		t.Fatalf("missing parameters must be 0: %+v", source)
+	}
 }
 
 func requirePrepareError(t *testing.T, service *Service, trackID string, want error) {

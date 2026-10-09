@@ -4,21 +4,33 @@
 #   cd backend && go test ./internal/library/parser/ -run Fixture
 # 核对素材与直出格式表没有脱节。
 #
-# FFmpeg 只在这里用于生成素材，不进入运行时、部署或 CI：镜像按摘要固定，容器没有网络，
-# 只挂载输出目录（绝不挂载 music/）。输出一侧的 -fflags +bitexact 去掉编码器版本、时间戳与随机流序号，同一镜像下重复运行得到相同字节。
+# 素材由按摘要固定的镜像里的 FFmpeg 生成：容器没有网络，只挂载输出目录（绝不挂载 music/）。镜像引用只在
+# scripts/ffmpeg-pinned.sh 里定义一处，测试与 CI 用它取出同一个构建；运行时的 ffmpeg 由部署者安装，不由本脚本提供。
+# 输出一侧的 -fflags +bitexact 去掉编码器版本、时间戳与随机流序号，同一镜像下重复运行得到相同字节。
+#
+# 除 backend/testdata/playback 的素材外，还会生成派生核心的启动自检素材 backend/internal/playback/derivation/selftest.m4a（go:embed）。
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="${ROOMUSIC_PLAYBACK_FIXTURE_DIR:-$ROOT_DIR/backend/testdata/playback}"
-# mwader/static-ffmpeg 7.1.1（静态构建，含 libmp3lame、libvorbis、libopus）。升级镜像须重新核对素材并更新这里的摘要。
-FFMPEG_IMAGE="mwader/static-ffmpeg@sha256:11a44711684c0b9f754c047dcd64235b8b52deab251bd0e0a86f22faa160749c"
+SELFTEST_DIR="${ROOMUSIC_SELFTEST_FIXTURE_DIR:-$ROOT_DIR/backend/internal/playback/derivation}"
+# mwader/static-ffmpeg 7.1.1（静态构建，含 libmp3lame、libvorbis、libopus）。升级镜像须重新核对素材并更新 ffmpeg-pinned.sh 里的摘要。
+FFMPEG_IMAGE="$("$ROOT_DIR/scripts/ffmpeg-pinned.sh" --image)"
 MAX_TOTAL_BYTES=1000000
+MAX_SELFTEST_BYTES=32768
 
-mkdir -p "$OUT_DIR"
+mkdir -p "$OUT_DIR" "$SELFTEST_DIR"
+
+# run_ffmpeg_in <输出目录> <FFmpeg 参数...>：输出目录挂载为容器内的 /out。
+run_ffmpeg_in() {
+  local directory="$1"
+  shift
+  docker run --rm --network none -v "$directory:/out" -u "$(id -u):$(id -g)" "$FFMPEG_IMAGE" \
+    -hide_banner -loglevel error -y "$@"
+}
 
 run_ffmpeg() {
-  docker run --rm --network none -v "$OUT_DIR:/out" -u "$(id -u):$(id -g)" "$FFMPEG_IMAGE" \
-    -hide_banner -loglevel error -y "$@"
+  run_ffmpeg_in "$OUT_DIR" "$@"
 }
 
 # 两种源信号：440 Hz / 44.1 kHz 与 523.25 Hz / 48 kHz，对应真实库里最常见的两组采样率。
@@ -46,6 +58,18 @@ generate wav-16-44100.wav "WAV 16-44.1" 7 "$SINE_44100" 1 -c:a pcm_s16le
 generate wav-24-48000.wav "WAV 24-48" 8 "$SINE_48000" 0.5 -c:a pcm_s24le
 generate vorbis-44100.ogg "Vorbis" 9 "$SINE_44100" 2 -c:a libvorbis -q:a 2
 generate opus-48000.opus "Opus" 10 "$SINE_48000" 2 -c:a libopus -b:a 64k
+
+# 派生核心的启动自检素材：0.25 秒 16 bit/44.1 kHz 立体声 ALAC，两个声道是不同频率的正弦（能暴露声道错位），
+# moov 在文件末尾（不加 faststart，证明 ffmpeg 能经文件描述符定位读取）。没有标签与封面。
+run_ffmpeg_in "$SELFTEST_DIR" \
+  -filter_complex "sine=frequency=440:sample_rate=44100:duration=0.25[l];sine=frequency=660:sample_rate=44100:duration=0.25[r];[l][r]amerge=inputs=2[a]" \
+  -map "[a]" -fflags +bitexact -flags:a +bitexact -c:a alac -sample_fmt s16p -map_metadata -1 /out/selftest.m4a
+selftest_size="$(stat -c %s "$SELFTEST_DIR/selftest.m4a")"
+printf '%8d  %s\n' "$selftest_size" "selftest.m4a（派生核心自检素材）"
+if [ "$selftest_size" -gt "$MAX_SELFTEST_BYTES" ]; then
+  echo "自检素材 ${selftest_size} 字节，超过 ${MAX_SELFTEST_BYTES}；请缩短时长后重新生成" >&2
+  exit 1
+fi
 
 total=0
 for file in "$OUT_DIR"/*; do

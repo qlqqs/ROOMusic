@@ -35,19 +35,8 @@ const (
 // 文件读入内存（OGG 例外：解析器本来就整体读入该格式）。文件无法完整读取时返回错误；没有任何音频负载
 // （例如没有帧的 FLAC、没有 mdat 的 M4A）的退化文件没有可识别的内容，返回空串，不与其他文件比较。
 func ContentFingerprint(ctx context.Context, path string) (string, error) {
-	var compute func(context.Context, io.ReaderAt, int64) (string, error)
-	switch strings.ToLower(filepath.Ext(path)) {
-	case ".flac":
-		compute = flacFingerprint
-	case ".m4a":
-		compute = m4aFingerprint
-	case ".mp3":
-		compute = mp3Fingerprint
-	case ".ogg", ".opus":
-		compute = oggFingerprint
-	case ".wav":
-		compute = wavFingerprint
-	default:
+	compute := fingerprintFunc(filepath.Ext(path))
+	if compute == nil {
 		return "", fmt.Errorf("unsupported format")
 	}
 	if err := ctx.Err(); err != nil {
@@ -63,6 +52,36 @@ func ContentFingerprint(ctx context.Context, path string) (string, error) {
 		return "", err
 	}
 	return compute(ctx, file, info.Size())
+}
+
+// ContentFingerprintOf 与 ContentFingerprint 计算同一个指纹，对象是调用方已经打开的文件：extension 是带点的扩展名
+// （如 ".m4a"，不区分大小写），size 是文件大小。播放用它对已打开的句柄重新取证，不再按路径访问。
+func ContentFingerprintOf(ctx context.Context, extension string, reader io.ReaderAt, size int64) (string, error) {
+	compute := fingerprintFunc(extension)
+	if compute == nil {
+		return "", fmt.Errorf("unsupported format")
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	return compute(ctx, reader, size)
+}
+
+// fingerprintFunc 返回扩展名对应的指纹算法；不支持的扩展名返回 nil。
+func fingerprintFunc(extension string) func(context.Context, io.ReaderAt, int64) (string, error) {
+	switch strings.ToLower(extension) {
+	case ".flac":
+		return flacFingerprint
+	case ".m4a":
+		return m4aFingerprint
+	case ".mp3":
+		return mp3Fingerprint
+	case ".ogg", ".opus":
+		return oggFingerprint
+	case ".wav":
+		return wavFingerprint
+	}
+	return nil
 }
 
 // contextReader 在每次读取前检查 context，使长时间的流式读取可以被取消。
