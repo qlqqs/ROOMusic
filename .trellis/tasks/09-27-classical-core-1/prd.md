@@ -46,8 +46,10 @@
 | F3 | M1a 遗留的后端缺口：扫描记录、查看者 ID、成员接口错误映射、HTTP 缓存头（成员写操作幂等延到 M3） | 无；先于 M1b | [已完成并归档](../archive/2026-10/10-02-classical-f3-backend-gaps/prd.md)（2026-10-02，提交 `ec92090`–`9b97c9d` 加文档同步） |
 | F4 | M1b 冒烟发现的后端封面发现缺口：CUE 专辑、多碟专辑的父目录封面，另含文件名大小写 | 无；先于 M2a | [已完成并归档](../archive/2026-10/10-03-classical-f4-artwork-discovery/prd.md)（2026-10-03，提交 `b66f569` 加文档同步） |
 | M2a | 鉴权直出串流、播放引擎、浏览器能力判定 | M1a 外壳；实播矩阵在规划时确定 | [已完成并归档](../archive/2026-10/10-03-classical-m2a-direct-playback/prd.md)（2026-10-07，提交 `d1c976d`–`13a9cfe` 加文档同步；ALAC 在 Safari 实播前移出格式表，三组手工实播、ALAC 恢复与远端 CI 见下一行） |
-| M2a 遗留验收 | 三组手工实播、Safari 上恢复 ALAC、下次推送后的远端 CI | M2a；需要用户的 macOS 与 Windows 实机 | [规划中](../10-06-m2a-acceptance-followup/prd.md)（2026-10-06 创建，等待用户安排实机） |
-| M2b | ffmpeg 派生缓存、CUE 精确分轨、歌词 | M2a；ADR 0004 第 2–7 项获批 | 未立项 |
+| M2a 遗留验收 | 三组手工实播、Safari 上恢复 ALAC、下次推送后的远端 CI | M2a；需要用户的 macOS 与 Windows 实机 | [规划中](../10-06-m2a-acceptance-followup/prd.md)（2026-10-06 创建；2026-10-09 用户决定延后手工实播，先推进开发） |
+| M2b 派生播放 | ffmpeg 无损派生缓存，ALAC 经 FLAC 在所有浏览器播放 | M2a；ADR 0004 第 2、4、6 项与第 5、7 项派生部分随规划获批 | [规划中](../10-09-classical-m2b-derived-playback/prd.md)（2026-10-09 创建，等待规划批准） |
+| M2b 歌词 | 扫描时提取内嵌歌词、歌词接口、正在播放页逐行同步 | M2a；建议在派生播放之后实施 | [规划中](../10-09-classical-m2b-lyrics/prd.md)（2026-10-09 创建，等待规划批准） |
+| M2b CUE 分轨 | CUE 虚拟轨的精确切分（需批准 ADR 0004 第 3 项） | M2b 派生播放的缓存与任务管理 | 延后：2026-10-09 用户裁决，真实库扫描后没有 CUE 虚拟轨（见[调研](../10-09-classical-m2b-derived-playback/research/library-evidence.md)） |
 | P | 服务端播放历史 | 阶段 I；M2a | 未立项 |
 | M3 | 修正覆盖层与受治理操作；试点为字段修正与 ReleaseGroup 成员调整 | 阶段 I；ADR 0002/0003 相关待批项获批 | 未立项 |
 | M4 | 问题投影、版本对比/默认版本、扫描反馈；之后 Release 合并拆分 | M3；Core 1 仅人工确认归组 | 未立项 |

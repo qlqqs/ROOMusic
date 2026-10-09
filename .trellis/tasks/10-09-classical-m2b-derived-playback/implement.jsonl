@@ -1,0 +1,9 @@
+{"file": "docs/architecture/adr/0004-media-delivery.md", "reason": "§3 边界、§6 派生缓存、§7 进程与许可门禁、§8 无损派生的 PCM 验收、§11 待批项"}
+{"file": ".trellis/spec/backend/playback-contracts.md", "reason": "M2a 检查顺序、安全打开、Range、ETag、10 秒复核与错误矩阵，派生沿用"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "错误信封、JSON 缓存头、环境变量与专题文件表"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新包 playback/derivation 的位置与依赖方向"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "派生日志事件不含路径与 stderr"}
+{"file": ".trellis/spec/frontend/player-design-guidelines.md", "reason": "信号路径只写可核实的环节、播放器状态规则"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "播放引擎状态与查询键"}
+{"file": ".trellis/spec/guides/real-music-assets.md", "reason": "真实音乐只读，核对只输出汇总，不保存派生文件"}
+{"file": ".trellis/tasks/10-09-classical-m2b-derived-playback/research/library-evidence.md", "reason": "真实库格式构成、CUE 结论与运行环境"}

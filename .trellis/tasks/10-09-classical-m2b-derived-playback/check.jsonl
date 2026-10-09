@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/playback-contracts.md", "reason": "派生接口是否保持 M2a 的检查顺序、头与复核"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端测试与质量门禁"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端测试、内嵌产物与 Playwright 门禁"}
+{"file": ".trellis/spec/guides/real-music-assets.md", "reason": "测试不依赖真实音乐、不写入 music/"}
