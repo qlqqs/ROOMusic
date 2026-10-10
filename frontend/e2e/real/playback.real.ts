@@ -1,7 +1,8 @@
-import { appendFile } from "node:fs/promises";
+import { appendFile, copyFile, mkdir, utimes } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import http from "node:http";
 import { expect, test } from "@playwright/test";
+import { decodeTrackPlayback, decodeTrackPreparing } from "../../src/features/player/api/decoders";
 import { admin, body, catalog, decodeError, decodeID, decodeRoot, decodeSetup, findTrack, fixtureRoot, login, mediaState, observeMedia, origin, playTrack, post, scan, type Albums } from "./support";
 
 let albums: Albums;
@@ -78,11 +79,98 @@ test("FLAC 真实 seek，自然切到下一首；切页不断播，刷新暂停�
   await expect.poll(() => page.evaluate((id) => window.playbackTestEvents.some((event) => event.type === "playing" && event.src.includes(id)), second.track.id)).toBe(true);
 });
 
-// ALAC 在 Safari 实播通过前不在格式表里，和 WAV extensible 一样是“不能直接播放”，不是“浏览器不能解码”。
-test("ALAC、CUE 虚拟轨和 WAV extensible 明确禁用且不会请求音频", async ({ page }) => {
+// ALAC 由服务端用固定版本 ffmpeg 无损转换成 FLAC 后交付（playback-e2e.sh 提供 ROOMUSIC_FFMPEG_PATH）。
+// 音频请求从不启动转换，转换之前是 409；之后必须先预检（预检是唯一启动或加入转换的入口）。
+// 播放 formats 专辑里的曲目会预取下一首派生曲目（别的用例可能已经转换过 ALAC），所以这里用一个专用的探针文件：
+// 放在独立目录（独立专辑，不进入任何其他用例的队列），修改时间也与原素材不同，没有任何预取或缓存命中会先于本用例转换它。
+test("ALAC 音频请求不会启动转换：转换前 409，预检完成后才能读取 audio/flac，并支持 Range", async ({ page }) => {
+  const probeDirectory = join(fixtureRoot, "probe");
+  const probeFile = join(probeDirectory, "alac-probe.m4a");
+  await mkdir(probeDirectory, { recursive: true });
+  await copyFile(join(fixtureRoot, "formats", "alac-16-44100.m4a"), probeFile);
+  await utimes(probeFile, new Date(), new Date(Date.now() - 86_400_000));
+  await scan(page.request);
+  const item = findTrack(await catalog(page.request), "alac-probe.m4a");
+  const audio = `/api/v1/tracks/${item.track.id}/audio`;
+  const before = await page.request.get(audio);
+  expect(before.status()).toBe(409);
+  expect(decodeError(await before.json()).error.code).toBe("derivation_not_ready");
+  const head = await page.request.head(audio);
+  expect(head.status()).toBe(409);
+  // 预检会等待转换完成（合成素材约 1 秒）：返回 200 与派生表示。
+  const preflight = await page.request.get(`/api/v1/tracks/${item.track.id}/playback`);
+  expect(preflight.status()).toBe(200);
+  const ready = decodeTrackPlayback(await preflight.json());
+  expect(ready.representation).toMatchObject({ kind: "derived", mime_type: "audio/flac", codecs: null, url: audio });
+  const full = await page.request.get(audio);
+  expect(full.status()).toBe(200);
+  expect(full.headers()["content-type"]).toBe("audio/flac");
+  expect(full.headers()["cache-control"]).toBe("private, no-store");
+  expect(full.headers()["accept-ranges"]).toBe("bytes");
+  expect(full.headers()["etag"]).toMatch(/^"[0-9a-f]{32}"$/);
+  const content = await full.body();
+  expect(content.length).toBe(ready.representation.size_bytes);
+  expect(content.subarray(0, 4).toString("latin1")).toBe("fLaC");
+  const partial = await page.request.get(audio, { headers: { Range: "bytes=0-3" } });
+  expect(partial.status()).toBe(206);
+  expect((await partial.body()).toString("latin1")).toBe("fLaC");
+  expect(partial.headers()["etag"]).toBe(full.headers()["etag"]);
+  const outOfRange = await page.request.get(audio, { headers: { Range: `bytes=${content.length}-` } });
+  expect(outOfRange.status()).toBe(416);
+});
+
+for (const source of ["alac-16-44100.m4a", "alac-24-48000.m4a"]) {
+  test(`${source} 经服务端无损转换：Chromium 真实解码 FLAC，真实拖动，自然结束，信号路径写明无损转换`, async ({ page }) => {
+    const item = findTrack(albums, source);
+    const preflights: { status: number; kind: string }[] = [];
+    const audioResponses: { status: number; type: string; etag: string }[] = [];
+    page.on("response", (response) => {
+      const url = response.url();
+      if (url.endsWith(`/tracks/${item.track.id}/playback`)) {
+        void response.json().then((input: unknown) => {
+          preflights.push({ status: response.status(), kind: response.status() === 202 ? decodeTrackPreparing(input).status : decodeTrackPlayback(input).representation.kind });
+        }, () => undefined);
+      }
+      if (url.endsWith(`/tracks/${item.track.id}/audio`)) audioResponses.push({ status: response.status(), type: response.headers()["content-type"] ?? "", etag: response.headers()["etag"] ?? "" });
+    });
+    await playTrack(page, item);
+    expect(await mediaState(page)).not.toBeNull();
+    await expect.poll(() => preflights.some((preflight) => preflight.status === 200 && preflight.kind === "derived")).toBe(true);
+    expect(audioResponses.length).toBeGreaterThan(0);
+    for (const response of audioResponses) {
+      expect([200, 206]).toContain(response.status);
+      expect(response.type).toBe("audio/flac");
+      expect(response.etag).toMatch(/^"[0-9a-f]{32}"$/);
+    }
+    // 信号路径的服务端一栏：无损转换，不再是原文件直出（趁这首还是当前曲目：自然结束后队列会前进到别的格式）。
+    await page.getByRole("link", { name: "正在播放", exact: true }).click();
+    const server = page.getByRole("heading", { name: "服务端", exact: true }).locator("..");
+    await expect(server).toContainText("无损转换");
+    await expect(server).toContainText("PCM 一致");
+    await expect(server).not.toContainText("原文件直出");
+    // 真实鼠标拖动原生 slider：暂停后拖到中间，媒体在派生文件上真实 seek。播放栏在每个页面都有，限定在它里面以免与正在播放页的控件重名。
+    const bar = page.getByRole("region", { name: "播放器", exact: true });
+    await bar.getByRole("button", { name: "暂停", exact: true }).click();
+    const seek = bar.getByRole("slider", { name: "播放进度", exact: true });
+    await expect(seek).toBeEnabled();
+    const bounds = await seek.boundingBox();
+    if (!bounds) throw new Error("播放进度没有可操作区域");
+    await page.mouse.move(bounds.x + 8, bounds.y + bounds.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2, { steps: 6 });
+    await page.mouse.up();
+    await expect.poll(() => page.evaluate((id) => window.playbackTestEvents.some((event) => event.type === "seeked" && event.src.includes(id) && event.time > 0.2), item.track.id)).toBe(true);
+    await bar.getByRole("button", { name: "播放", exact: true }).click();
+    await expect.poll(() => page.evaluate((id) => window.playbackTestEvents.some((event) => event.type === "ended" && event.src.includes(id)), item.track.id)).toBe(true);
+    expect(await page.evaluate((id) => window.playbackTestEvents.filter((event) => event.src.includes(id) && event.type === "error"), item.track.id)).toEqual([]);
+  });
+}
+
+// WAV extensible 与 CUE 虚拟轨仍是“不能直接播放”，不是“浏览器不能解码”。
+test("CUE 虚拟轨和 WAV extensible 明确禁用且不会请求音频", async ({ page }) => {
   const reads: string[] = [];
   page.on("request", (request) => { if (/\/audio$/.test(request.url())) reads.push(request.url()); });
-  for (const source of ["alac-16-44100.m4a", "alac-24-48000.m4a", "wav-24-48000.wav"]) {
+  for (const source of ["wav-24-48000.wav"]) {
     const item = findTrack(albums, source);
     await page.goto(`/albums/${item.groupId}`);
     const row = page.locator("ol > li").filter({ has: page.getByText(item.track.title, { exact: true }) });

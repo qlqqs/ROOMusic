@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # 只使用合成素材、独立数据库和 roomusic-test；不读取 .env 或真实音乐目录。
+# ALAC 的派生播放用 scripts/ffmpeg-pinned.sh 取出的固定版本 ffmpeg（经 ROOMUSIC_FFMPEG_PATH 交给隔离服务）；取不到时脚本失败，
+# 不会静默退回“ALAC 不能播放”。
 set -Eeuo pipefail
 umask 077
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
@@ -16,6 +18,8 @@ flock -n 9 || { echo '已有真实播放测试运行中' >&2; exit 1; }
 [[ -z "$(docker volume ls -q --filter label=com.docker.compose.project=roomusic-test)" ]] || {
   echo 'roomusic-test 已有数据卷；拒绝接管历史测试数据' >&2; exit 1;
 }
+# 先于任何临时资源取出 ffmpeg：它只用 docker create/cp（不属于 roomusic-test 项目），失败就直接退出。
+FFMPEG_PATH="$("$ROOT_DIR/scripts/ffmpeg-pinned.sh")"
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/roomusic-playback-e2e.XXXXXXXX")"
 SERVER_PID=''
 COMPOSE_STARTED=false
@@ -103,6 +107,7 @@ export ROOMUSIC_PLAYBACK_FIXTURE_ROOT="$TEMP_DIR/library"
 env ROOMUSIC_ENV=development ROOMUSIC_HTTP_ADDR="127.0.0.1:$PORT" \
   ROOMUSIC_DATABASE_URL="$ROOMUSIC_TEST_DATABASE_URL" ROOMUSIC_ALLOWED_LIBRARY_ROOTS="$TEMP_DIR/library" \
   ROOMUSIC_DATA_DIR="$TEMP_DIR/data" ROOMUSIC_PUBLIC_URL="$ROOMUSIC_PLAYBACK_BASE_URL" ROOMUSIC_SECURE_COOKIES=false \
+  ROOMUSIC_FFMPEG_PATH="$FFMPEG_PATH" \
   "$TEMP_DIR/roomusic" >"$TEMP_DIR/server.log" 2>&1 &
 SERVER_PID=$!
 ready=false
@@ -112,4 +117,6 @@ for _ in {1..150}; do
   sleep 0.2
 done
 [[ "$ready" == true ]] || { echo '隔离服务启动超时' >&2; exit 1; }
+# 派生必须已就绪（ffmpeg 自检通过）：否则 ALAC 用例会以“不能播放”失败，这里先给出明确原因。
+grep -q '"event":"playback.derivation.ready"' "$TEMP_DIR/server.log" || { echo '隔离服务没有启用 ALAC 派生（ffmpeg 不可用或自检失败）' >&2; exit 1; }
 (cd "$ROOT_DIR/frontend" && npm exec playwright -- test --config playwright.real.config.ts "$@")

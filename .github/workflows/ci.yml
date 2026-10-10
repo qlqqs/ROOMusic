@@ -112,7 +112,7 @@ jobs:
         run: |
           docker compose config --quiet
           docker compose -f compose.test.yaml config --quiet
-      - name: Run PostgreSQL 18 integration tests
+      - name: Run PostgreSQL 18 and pinned ffmpeg integration tests
         env:
           ROOMUSIC_TEST_PG_PASSWORD: ci-placeholder
         run: ./scripts/test-integration.sh
@@ -143,7 +143,7 @@ jobs:
       - name: Install Playwright Chromium
         working-directory: frontend
         run: npx playwright install --with-deps chromium
-      - name: Scan synthetic library and verify real playback
+      - name: Scan synthetic library and verify real playback (including pinned ffmpeg derivation)
         run: ./scripts/playback-e2e.sh
       - name: Upload real playback diagnostics
         if: failure()
