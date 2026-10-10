@@ -93,3 +93,36 @@
 | 2026-10-09 | 人工选择 | qlqq | 下一阶段做 M2b，手工实播延后 | 急需推进开发；M2b 按 D1 顺序紧接 M2a |
 | 2026-10-09 | 人工选择 | qlqq | M2b 范围：ALAC 派生 + 歌词两个子任务，CUE 精确分轨延后 | 真实库没有 CUE 虚拟轨，ALAC 全部不能播放，134 个文件内嵌歌词 |
 | 2026-10-09 | 人工选择 | qlqq | 批准 K1–K8 与本规划，均按推荐方案执行；歌词子任务在本任务归档后启动 | 用户阅读最终规划摘要（目标、范围、决策、验收、风险与执行顺序）后回复“批准执行” |
+
+## 实施结果（2026-10-10）
+
+提交（均在 `main`，未推送）：`ef306f7` 无损派生缓存与 ffmpeg 适配；`5f184ef` ALAC 经无损派生播放（接口、配置、前端、内嵌产物）；
+`5ac806b` 真实服务覆盖 ALAC 派生播放；`8e7657d` 派生合同、决策与部署说明。真实库核对见 [research/real-library-derivation-check.md](research/real-library-derivation-check.md)。
+
+| 编号 | 结果 | 证据 |
+| --- | --- | --- |
+| B1 | 达成 | `TestPostgreSQLPlaybackFormats…`（含与不含派生）、`TestOpenDerivationReportsAnUnusableFFmpeg…`（日志只含 `reason`）、接口样本 `playback/formats` |
+| B2 | 达成 | `TestFFmpeg…`（两组素材的 PCM 核对、损坏输入、超限、不覆盖、句柄不受路径替换影响）；`TestPostgreSQLPlaybackDerivesALACLosslesslyWithFFmpeg`（STREAMINFO 与 PCM 逐位相同）；真实库 84/84 成功 |
+| B3 | 达成 | `TestPostgreSQLPlaybackPreflightWaitsForTheDerivationAndAudioServesTheCachedFile`（202 → 200、音频未就绪 409、音频不启动转换）；`TestConcurrentWaitersShareOneConversion`；真实服务探针用例 |
+| B4 | 达成 | 同上加 `TestPostgreSQLPlaybackChecksPrecedeAnyConversion`、`…DerivedStreamIsCutWhenTheRootIsDisabled`；派生 ETag 与原文件不同；Range、If-Range、416 与 304 针对派生文件 |
+| B5 | 达成 | `TestDeriveKey…`、`…RejectsASourceRewrittenInPlaceBeforeConverting`、`TestVerifyHandle`、`TestContentIsVerifiedBeforeConversionAndSizeAfterwards` |
+| B6 | 达成 | `TestRunningQueuedAndPerUserLimits`、`TestQueuedJobsStartInFirstInFirstOutOrder`、`TestJobIsCanceledWhenNoWaiterReturnsWithinTheGracePeriod`、`TestRunFFmpegKillsTheWholeProcessGroupOnCancel`、`TestJobTimeoutIsAFailure`、`TestFreeSpaceAndReservations`、`TestCloseCancelsRunningAndQueuedJobs`、`…PreflightWaitEndsWhenTheApplicationShutsDown` |
+| B7 | 达成 | 缓存测试（索引重建、淘汰、不删刚发布的条目）、`config_test.go`、`TestOpenDerivationRefusesACacheDirectoryThatOverlapsALibraryRoot`（含符号链接，且拒绝发生在创建目录之前） |
+| B8 | 达成 | Vitest（引擎正在准备、预取、忙与失败，能力判定，界面，provider 默认装配，解码器与样本契约）；Playwright 的 ALAC 用例与五种宽度；真实 Chromium 解码 `audio/flac` |
+| B9 | 本机达成，远端未验证 | `./scripts/playback-e2e.sh` 16 项通过（原有 13 项加 ALAC 三项）；CI 的集成与真实播放作业都经 `scripts/ffmpeg-pinned.sh` 取得同一个 ffmpeg，待下次推送确认 |
+| B10 | 达成 | 新增 `playback-derivation-contracts.md`；更新播放合同、后端索引与目录、运行合同、前端三份规范、DESIGN.md、ADR 0004、路线图、父任务、后续验收任务、README 与 `.env.example` |
+| B11 | 达成 | 隔离 PostgreSQL 与固定 ffmpeg 上 `go test -race ./internal/playback/... ./internal/app/... ./internal/platform/... ./internal/catalog/... ./internal/library/...` 通过；Vitest 1011 项、Playwright 166 项、真实服务 16 项通过；无环境变量的重新构建与内嵌产物逐文件一致；提交前在导出的暂存树上重复构建与测试 |
+
+### 与设计的差异
+
+实施中有几处与 [design.md](design.md) 不同，已在其第 11 节记录原因：随机模式不预取；连续两次“正在准备”预检之间至少间隔 1 秒；
+准备结束后状态回到加载；信号路径的交付方式取自能力判定表而不是引擎快照；缓存上限的默认值与下限只放在配置层；
+预检因应用关停而结束时以 503 `derivation_busy` 应答。真实服务自动化还发现：播放 formats 专辑时会预取下一首 ALAC，
+所以“音频请求从不启动转换”的用例改用独立目录的探针文件。
+
+### 仍需用户完成
+
+- 宿主机装好 ffmpeg（`./scripts/ffmpeg-pinned.sh`，或发行版的包），设置 `ROOMUSIC_FFMPEG_PATH`（或放进 `PATH`），重启服务，播放几首 ALAC 确认
+  听感与进度（真实库 84 个 ALAC 的转换与 PCM 核对已通过，见调研）。没有 ffmpeg 时 ALAC 仍标注“这种格式目前不能直接播放”，应用照常运行。
+- 三组手工实播（F1，ALAC 两行经派生播放）与下次推送后的远端 CI（F3），见后续验收任务。
+
