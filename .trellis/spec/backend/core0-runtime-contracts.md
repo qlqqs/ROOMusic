@@ -27,7 +27,8 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 | 扫描协调 | [scan-coordination-contracts.md](./scan-coordination-contracts.md) | 扫描状态与记录、持久化取消、跨进程协调锁 |
 | 真实库 Smoke | [real-library-smoke-contracts.md](./real-library-smoke-contracts.md) | 真实音乐只读验收、V0 对照 |
 | 发行 REST | [catalog-rest-contracts.md](./catalog-rest-contracts.md) | 发行列表、详情、evidence、封面摘要与按组只读接口 |
-| 鉴权直出 | [playback-contracts.md](./playback-contracts.md) | M2a 格式表、预检、音频、Range、来源版本与撤销复核 |
+| 鉴权直出 | [playback-contracts.md](./playback-contracts.md) | M2a 格式表、预检、音频、Range、来源版本与撤销复核；M2b 的 `delivery`、202 与派生错误码 |
+| 无损派生 | [playback-derivation-contracts.md](./playback-derivation-contracts.md) | M2b ALAC → FLAC：ffmpeg 与缓存配置、启动自检、转换与核对、上限与取消、测试 |
 
 ## 2. 接口签名
 
@@ -42,8 +43,10 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
   `GET /api/v1/releases/{id}/evidence`、按组只读的 `GET /api/v1/release-groups` 与
   `GET /api/v1/release-groups/{id}`，以及已登录用户可读的 `GET /api/v1/artworks/{id}`。
 - M2a：`GET /api/v1/playback/formats`、`GET /api/v1/tracks/{id}/playback` 与
-  `GET|HEAD /api/v1/tracks/{id}/audio`，具体合同见[鉴权直出](./playback-contracts.md)。
-- 前端请求形态为 `apiRequest(spec, decode)`（`frontend/src/shared/api/request.ts`）：成功响应经边界 decoder，
+  `GET|HEAD /api/v1/tracks/{id}/audio`，具体合同见[鉴权直出](./playback-contracts.md)；M2b 在同样三个接口上增加派生交付
+  （预检可返回 202），见[无损派生](./playback-derivation-contracts.md)。
+- 前端请求形态为 `apiRequest(spec, decode)`（`frontend/src/shared/api/request.ts`）：成功响应经边界 decoder（第二个参数是状态码，
+  同一路径 200 与 202 形状不同时用它核对响应体与状态码相符），
   非 2xx 经统一的错误信封 decoder；响应不是 JSON、信封不合法或 decoder 失败时归为 `invalid_response`，不进入缓存。
   函数名不构成架构限制，合同是“边界解码一次、失败安全分类”。
 
@@ -118,7 +121,10 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
   不得使用 `allowedHosts: true`；后端仍按 `ROOMUSIC_PUBLIC_URL`、Origin scheme/host
   和 Secure Cookie 校验写请求。
 - `.env.dev`、`.env` 是本机配置，必须被 Git 忽略；仓库只跟踪不含真实值的
-  `.env.example`。`backend/data/` 等运行期数据（含封面缓存）同样不得提交。
+  `.env.example`。`backend/data/` 等运行期数据（含封面缓存与 `media-cache/` 派生缓存）同样不得提交。
+- ALAC 派生需要部署者安装 ffmpeg（项目不分发）：`ROOMUSIC_FFMPEG_PATH`（绝对路径，空则在 `PATH` 中查找）与
+  `ROOMUSIC_MEDIA_CACHE_MAX_MIB`（默认 10240，最小 256）；找不到或自检失败时应用照常启动，ALAC 保持“不能直接播放”。
+  `scripts/ffmpeg-pinned.sh` 取出按摘要固定的 ffmpeg 7.1.1，测试、CI 与推荐部署共用。详见[无损派生合同](./playback-derivation-contracts.md)。
 - `scripts/dev.sh` 默认只确保 PostgreSQL、Go 和 Vite；Redis/Meilisearch 是
   Compose/mise 可选服务。`scripts/prod.sh` 不启动 Node 服务。
 
@@ -134,8 +140,9 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
   随后 `npx playwright install --with-deps chromium` 与 `npm run test:e2e`（对生产构建的浏览器冒烟、无障碍与
   响应式检查，失败时上传报告）。
   集成 job 执行 `bash -n scripts/*.sh`、两个 Compose
-  配置校验和 `./scripts/test-integration.sh`；后者真实启动 PostgreSQL 18 并在结束时
-  清理专用容器和数据卷。
+  配置校验和 `./scripts/test-integration.sh`；后者先经 `scripts/ffmpeg-pinned.sh` 取出固定版本 ffmpeg（取不到即失败，
+  派生用例不得静默跳过），真实启动 PostgreSQL 18 并运行 `TestPostgreSQL|TestFFmpeg`，结束时清理专用容器和数据卷。
+  真实播放 job 运行 `./scripts/playback-e2e.sh`，同样经该脚本取得同一个 ffmpeg。
 - **API 响应样本**：集成测试 `TestPostgreSQLAPIResponseSamples`（`backend/internal/app/api_samples_integration_test.go`）
   经真实 handler 走固定流程，把响应写成 `backend/internal/app/testdata/api-samples/` 下的 JSON 样本（只含状态码与响应体）：
   UUID 与时间戳规范化为固定值、请求 ID 固定、按键排序。默认**逐字比较**，不一致或目录里有本次没有产出的文件都失败；

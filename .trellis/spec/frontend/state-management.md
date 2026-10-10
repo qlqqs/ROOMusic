@@ -237,7 +237,9 @@ provider 放在已登录会话代次子树内，只装配一个分离的 `Audio(
 不能把“普通卸载”和“结束会话”混为一谈，否则刷新恢复记录会被删除。
 
 队列条目为 `{ entryId, track }`，同曲重复项按 `entryId` 操作。快照包含
-`status/queue/current/hasNext/failures/fault/event/volume/muted/restoring`；进度快照包含
+`status/queue/current/hasNext/failures/fault/event/volume/muted/restoring`；`status` 含 M2b 的 `preparing`（预检收到 202，服务端正在无损转换），
+`fault` 含 `busy`（503 `derivation_busy`，与 `transient` 共用重试）；预检结果是 `ready | preparing`，状态码与响应体不符按无效响应处理。
+预取下一首派生曲目的预检由引擎持有独立的取消控制器，不进入快照；进度快照包含
 `positionSeconds/durationSeconds/seekable`。只有实际媒体事件才能更新正在播放、进度与时长，
 未知时长为 `null`。失败条目与可重试暂停分别表达，不靠模拟时钟推断结束。
 

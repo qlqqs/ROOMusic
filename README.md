@@ -86,6 +86,24 @@ mise run env-logs
 mise run env-down
 ```
 
+## ALAC 播放与 ffmpeg
+
+浏览器大多不能解码 ALAC。服务端会在第一次播放时用 ffmpeg 把 ALAC 无损转换成 FLAC（位深、采样率与声道不变，发布前核对转换前后解码出的 PCM 完全相同），
+缓存在 `<数据目录>/media-cache`（默认 `ROOMUSIC_DATA_DIR=./data`），之后和其他曲目一样经鉴权播放；等待转换时播放栏显示“正在准备”。
+项目**不分发 ffmpeg**，需要播放 ALAC 的部署者自行安装，任选其一：
+
+```bash
+./scripts/ffmpeg-pinned.sh            # 取出按摘要固定的静态 ffmpeg 7.1.1（需要 docker），打印可执行文件路径
+# 或用发行版的包（apt install ffmpeg 等），确保它在 PATH 中
+```
+
+把路径写进 `ROOMUSIC_FFMPEG_PATH`（绝对路径）；留空则在 `PATH` 中查找。启动时会用内置的一小段 ALAC 跑一遍完整的转换与核对，
+找不到 ffmpeg 或自检失败时应用照常启动，日志有一条 `playback.derivation.unavailable`（带原因类别），ALAC 曲目仍标注“这种格式目前不能直接播放”。
+装好后重启服务即可，无需重新扫描。`ROOMUSIC_MEDIA_CACHE_MAX_MIB`（默认 10240，最小 256）限制缓存大小，超出时按最近使用淘汰。
+缓存目录必须在音乐目录之外（`ROOMUSIC_DATA_DIR` 不能放进 `ROOMUSIC_ALLOWED_LIBRARY_ROOTS` 之内，反之亦然），否则服务拒绝启动。
+派生文件只写入缓存目录，不写音乐目录；不需要的话删除 `media-cache/` 即可。契约与上限见
+[无损派生合同](.trellis/spec/backend/playback-derivation-contracts.md)。
+
 ## 前端检查
 
 前端位于 `frontend/`，使用 `npm ci` 按锁文件安装。常用命令（也有对应的 `make frontend-install`、`frontend-check`、`frontend-build`、`frontend-e2e`）：
@@ -114,7 +132,8 @@ npm run test:e2e                                    # Playwright：先构建，�
 # 或 mise run test-integration
 ```
 
-该脚本只启动 `compose.test.yaml` 中的 PostgreSQL，默认监听
+该脚本先经 `scripts/ffmpeg-pinned.sh` 取出固定版本的 ffmpeg（派生播放的测试需要它；取不到时脚本失败，不会静默跳过），
+然后只启动 `compose.test.yaml` 中的 PostgreSQL，默认监听
 `127.0.0.1:55432`，每个测试使用独立 schema，结束后删除测试容器和数据卷。
 可通过 `ROOMUSIC_TEST_PG_PORT`、`ROOMUSIC_TEST_PG_DATABASE`、
 `ROOMUSIC_TEST_PG_USER`、`ROOMUSIC_TEST_PG_PASSWORD` 调整连接参数；设置

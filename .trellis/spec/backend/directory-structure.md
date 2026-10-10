@@ -28,8 +28,9 @@ backend/
 │   │   ├── parser/                 # 音频与 CUE 解析、与标签无关的音频内容指纹（叶子包）
 │   │   │   └── parsertest/         # 仅测试使用：合成音频夹具
 │   │   └── httpapi/                # 目录、目录操作、扫描
-│   ├── playback/                   # 鉴权直出核心：来源核对、安全打开、格式表与周期复核
-│   │   └── httpapi/                # 格式表、曲目预检与原文件音频
+│   ├── playback/                   # 鉴权交付核心：来源核对、安全打开、格式表、周期复核与派生编排
+│   │   ├── derivation/             # 无损派生：受管缓存、转换任务、ffmpeg 适配与输出核对（不含 HTTP，不依赖任何内部包）
+│   │   └── httpapi/                # 格式表、曲目预检（含派生等待）与音频
 │   └── catalog/                    # 观察合同、扫描暂存表、身份规划、organizer、来源身份、Release 图写入、读取投影
 │       ├── metadata/               # 署名、空白规范化、有界文本、艺人名规则（叶子包）
 │       ├── artwork/                # 受管封面：校验、落盘、关联、读取
@@ -62,8 +63,10 @@ backend/
   library 经 `catalog.StageObservation` 等函数写入暂存，规划需要读文件时通过 catalog 定义的窄端口
   `catalog.Fingerprinter` 向 library 取值（library 在注册 root 内校验路径后调用 parser），catalog 不导入 library 或
   parser，两边不读对方的私有表。
-- `playback` 拥有只读直出与周期复核，经 catalog、library 公开合同读取来源；HTTP 层经 identity 鉴权。
-  具体错误、Range 与资源关闭规则见[播放合同](./playback-contracts.md)。
+- `playback` 拥有只读直出、派生交付编排与周期复核，经 catalog、library 公开合同读取来源，经 `playback/derivation` 的窄端口取得派生文件；
+  HTTP 层经 identity 鉴权。具体错误、Range 与资源关闭规则见[播放合同](./playback-contracts.md)。
+  `playback/derivation` 拥有缓存目录、转换任务与 ffmpeg 适配，不知道曲目与权限，由 `playback` 提供源文件版本与“安全打开并核对”的回调，
+  由 `app.OpenDerivation` 在启动时装配（含缓存目录与音乐根互不包含的检查），见[无损派生合同](./playback-derivation-contracts.md)。
 - `search` owns query semantics and result projections while PostgreSQL remains
   the authority. It cannot write catalog truth through a search projection.
 - `operations` owns Change Sets, Operation Journal events, idempotency records,

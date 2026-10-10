@@ -1,4 +1,4 @@
-# M2a 遗留验收：三组手工实播、ALAC 恢复与远端 CI
+# M2a 遗留验收：三组手工实播与远端 CI（ALAC 直出已由 M2b 派生取代）
 
 ## 来源
 
@@ -8,6 +8,7 @@ M2a（[PRD](../archive/2026-10/10-03-classical-m2a-direct-playback/prd.md)）于
 - **三组手工实播（M2a 的 A15）**：需要 macOS Safari、Windows 上的 Chrome 或 Edge、任一系统上的 Firefox 实机，由用户执行。
 - **ALAC 直出**：ALAC 在任何浏览器上都没有实播证据，按 ADR 0004 D1（只直出已验证可播放的组合）在提交 `13a9cfe` 中移出直出格式表，
   所有浏览器标注“这种格式目前不能直接播放”。Chromium、Firefox 本来就不能解码 ALAC，只有 Safari 暂时受影响。
+  2026-10-09 用户批准 M2b 的 ALAC 无损派生（K8）：ALAC 改由服务端转换成 FLAC 在所有浏览器播放，本任务不再恢复 Safari 直出。
 - **远端 CI（M2a 的 A14 后半）**：真实服务自动化已在干净导出的提交树上用 `npm ci` 全新安装后通过；远端 CI 需要推送，
   而用户的做法是提交到 `main` 不推送，因此留到下次推送时确认。
 
@@ -16,19 +17,18 @@ M2a（[PRD](../archive/2026-10/10-03-classical-m2a-direct-playback/prd.md)）于
 | 编号 | 需求 | 验收 |
 | --- | --- | --- |
 | F1 | 三组手工实播 | [验收表](research/manual-acceptance.md)三组记录完整：系统与浏览器版本、测试提交、逐项结果；失败已修正或按获批范围处理 |
-| F2 | Safari 上恢复 ALAC 直出 | 先在隔离测试实例上恢复 `m4a/alac`，macOS Safari 上 ALAC 16/44.1 与 24/48 的播放、定位、自然结束都正常，才提交恢复；不通过则保持移出，由 M2b 的无损派生承接 |
+| F2 | ~~Safari 上恢复 ALAC 直出~~ | **已由 M2b 派生取代**（2026-10-09，K8）：不再要求 Safari 直出；ALAC 两组参数在三组浏览器上的派生播放记入 F1 的验收表 |
 | F3 | 远端 CI | 下次推送 `main` 后，CI 的四个作业（含 `Real playback (Chromium)`）通过；失败在本任务修正 |
 
-## 恢复 ALAC 的做法
+## 手工实播的做法
 
-- 恢复的内容是 `13a9cfe` 中格式表、单元与集成测试、API 样本、真实服务用例的反向修改；
-  文档里把“移出”改回“已验证”，ADR 0004 追加新的决策行，不删除 2026-10-06 的记录。可以 `git revert 13a9cfe` 后再按此调整文档。
 - 只用 `backend/testdata/playback/` 的合成素材与 `roomusic-test`，不碰真实 `music/` 与用户的 `roomusic` 项目。
+- ALAC 两行需要测试实例装好 ffmpeg（`scripts/ffmpeg-pinned.sh` 取出固定版本，经 `ROOMUSIC_FFMPEG_PATH` 指定）。
 
 ## 范围外
 
-- 转码、CUE 精确分轨（M2b）；iOS 与 Android 的实播门禁。
+- 有损转码；CUE 精确分轨（M2b 延后，另行规划）；iOS 与 Android 的实播门禁。
 
 ## 状态
 
-规划中，等待用户安排实机。三项相互独立，可分别完成；全部完成后归档本任务，并把结果回填到父任务与路线图。
+规划中，等待用户安排实机。F1 与 F3 相互独立，可分别完成；全部完成后归档本任务，并把结果回填到父任务与路线图。

@@ -1,8 +1,8 @@
 {
   "id": "m2a-acceptance-followup",
   "name": "m2a-acceptance-followup",
-  "title": "M2a 遗留验收：三组手工实播、ALAC 恢复与远端 CI",
-  "description": "执行 M2a 三组手工实播（macOS Safari、Windows Chrome 或 Edge、任一系统 Firefox）；Safari 实播通过后恢复 ALAC 直出；下次推送后确认远端 CI 的真实播放作业通过",
+  "title": "M2a 遗留验收：三组手工实播与远端 CI",
+  "description": "执行 M2a 三组手工实播（macOS Safari、Windows Chrome 或 Edge、任一系统 Firefox，ALAC 经 M2b 派生播放）；下次推送后确认远端 CI 的真实播放作业通过；Safari 直出 ALAC 已由 M2b 派生取代",
   "status": "planning",
   "dev_type": null,
   "scope": null,

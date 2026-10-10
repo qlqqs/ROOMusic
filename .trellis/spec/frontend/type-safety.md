@@ -66,7 +66,8 @@ export type RootOperationDTO = d.Infer<typeof rootOperationDecoder>;
 [`library.Scan`](../../../backend/internal/library/scans.go)为准，当前没有已扫描文件数或百分比进度；
 不得增加后端未返回的字段，只在边界解码一次 `unknown`，其他消费者只接收类型化结果。
 
-请求层 `apiRequest(spec, decode)` 返回 `{ status, data }`（状态码有业务含义：开始扫描 202 新建 / 200 已有，目录新增 201），
+请求层 `apiRequest(spec, decode)` 返回 `{ status, data }`（状态码有业务含义：开始扫描 202 新建 / 200 已有，目录新增 201；
+播放预检 200 是表示、202 是“正在准备”，decode 的第二个参数是状态码，供同一路径形状不同的响应核对状态码与响应体相符，否则按 `invalid_response`），
 失败时抛出携带 `ApiFailure` 的 `ApiError`，分为四类：`http`（后端的合法错误信封）、`invalid_response`（收到响应但不可信：
 非 JSON、HTML 回落页、信封或 decoder 不合法，不进入缓存）、`network`（没有拿到响应，对写请求结果未知）、`aborted`
 （调用方取消）。`isOutcomeUncertain(failure)` 把网络失败、无效响应与 5xx 归为“结果不确定”，4xx 是明确的拒绝；界面按
