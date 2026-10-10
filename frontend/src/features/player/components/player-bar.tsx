@@ -9,7 +9,7 @@ export function PlayerBar() {
   const { snapshot } = usePlayer();
   const track = snapshot.current?.track;
   const currentFailure = snapshot.current === null ? undefined : snapshot.failures[snapshot.current.entryId];
-  const faultText = snapshot.fault?.kind === "transient" ? "读取失败，进入正在播放页重试" : snapshot.fault?.kind === "autoplay_blocked" ? "请按播放" : currentFailure === undefined ? null : failureLabels[currentFailure];
+  const faultText = snapshot.fault?.kind === "transient" ? "读取失败，进入正在播放页重试" : snapshot.fault?.kind === "busy" ? "服务器正忙于转换，进入正在播放页重试" : snapshot.fault?.kind === "autoplay_blocked" ? "请按播放" : currentFailure === undefined ? null : failureLabels[currentFailure];
   return <section aria-label="播放器" className={styles.bar}>
     <div className={styles.identity}>
       {track === undefined ? null : <><div className={styles.cover}><PlayerArtwork track={track} /></div><div className={styles.text}>

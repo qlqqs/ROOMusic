@@ -33,11 +33,24 @@ type Option func(*options)
 
 type options struct {
 	playbackRecheckInterval time.Duration
+	playbackPreflightWait   time.Duration
+	derivation              playback.Derivation
 }
 
 // WithPlaybackRecheckInterval 设置已建立的音频传输复核会话与目录的间隔（默认 playback.DefaultRecheckInterval）。
 func WithPlaybackRecheckInterval(interval time.Duration) Option {
 	return func(settings *options) { settings.playbackRecheckInterval = interval }
+}
+
+// WithPlaybackPreflightWait 设置预检等待派生完成的最长时间（默认 playback.DefaultPreflightWait）。
+func WithPlaybackPreflightWait(wait time.Duration) Option {
+	return func(settings *options) { settings.playbackPreflightWait = wait }
+}
+
+// WithDerivation 启用 ALAC 的无损派生：派生格式进入格式表，预检在缓存未命中时启动转换。不传时 ALAC 保持“不能直接播放”。
+// 生产路径的实现来自 OpenDerivation；调用方不得传入持有 nil 指针的接口值（OpenDerivation 返回 nil 时就不要装配）。
+func WithDerivation(port playback.Derivation) Option {
+	return func(settings *options) { settings.derivation = port }
 }
 
 // New 装配应用。lifecycle 是应用的生命周期上下文（进程停机时取消）：扫描 worker 与已建立的音频传输都以它为界；
@@ -56,7 +69,10 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	identityapi.New(database, guard).Register(mux)
 	libraryapi.New(database, guard, libraryService, settings.AllowedLibraryRoots, logger).Register(mux)
 	catalogapi.New(database, guard, settings.DataDirectory).Register(mux)
-	playbackapi.New(guard, playback.NewService(database, settings.AllowedLibraryRoots), lifecycle, logger, assembly.playbackRecheckInterval).Register(mux)
+	playbackService := playback.NewService(database, settings.AllowedLibraryRoots, playback.WithDerivation(assembly.derivation))
+	playbackapi.New(guard, playbackService, lifecycle, logger, playbackapi.Options{
+		RecheckInterval: assembly.playbackRecheckInterval, PreflightWait: assembly.playbackPreflightWait,
+	}).Register(mux)
 	httpserver.RegisterAPIFallback(mux, httpserver.APINotFoundHandler(mux))
 	mux.Handle("/", httpserver.Frontend(frontend))
 	return &App{mux: mux, handler: httpserver.Middleware(logger, mux), library: libraryService}

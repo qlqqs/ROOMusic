@@ -20,6 +20,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/library"
 	"github.com/qlqq/roomusic/backend/internal/platform/config"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
+	"github.com/qlqq/roomusic/backend/internal/playback/derivation"
 )
 
 // frontendAssets is populated by the production build in this package's web
@@ -44,8 +45,21 @@ func main() {
 	frontend := frontendSub()
 	requestHandler := app.Degraded(frontend, logger)
 	var application *app.App
+	var derivations *derivation.Manager
 	if database != nil {
-		application = app.New(applicationContext, settings, database, frontend, logger)
+		var appOptions []app.Option
+		var derivationErr error
+		// ffmpeg 不可用不阻止启动（ALAC 保持不能直接播放）；缓存目录与音乐根重叠等部署配置错误则拒绝启动。
+		derivations, derivationErr = app.OpenDerivation(applicationContext, settings, logger)
+		if derivationErr != nil {
+			logger.Error("roomusic media cache invalid", "event", "platform.config.invalid", "error", derivationErr)
+			_ = database.Close()
+			os.Exit(1)
+		}
+		if derivations != nil {
+			appOptions = append(appOptions, app.WithDerivation(derivations))
+		}
+		application = app.New(applicationContext, settings, database, frontend, logger, appOptions...)
 		requestHandler = application.Handler()
 	}
 	server := &http.Server{
@@ -73,6 +87,12 @@ func main() {
 	if application != nil {
 		if err := application.WaitForScans(shutdownContext); err != nil {
 			logger.Error("roomusic scan shutdown timed out", "event", "library.scan.shutdown_timeout", "error", err)
+		}
+	}
+	if derivations != nil {
+		// HTTP 已停止接收请求：终止仍在运行的 ffmpeg（进程组）并删除未完成的临时文件。
+		if err := derivations.Close(5 * time.Second); err != nil {
+			logger.Error("roomusic derivation shutdown timed out", "event", "playback.derivation.shutdown_timeout", "error", err)
 		}
 	}
 	if database != nil {

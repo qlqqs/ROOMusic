@@ -3,9 +3,11 @@
 //
 // 状态、进度与时长只来自媒体事件，不用定时器推断；按下播放不等于正在播放。预检（GET /tracks/{id}/playback）先于出声：
 // 媒体元素读不到错误正文，所以失败原因（目录已停用、文件变化、不能直出……）在预检里得到，音频出错后也用它再次分类。
+// 派生格式（ALAC）的预检会等待服务端无损转换：收到 202 就进入“正在准备”并立即再次预检，直到可以播放、失败或被放弃；
+// 当前曲目出声后，为下一首派生曲目预先发一次预检，让转换在切歌之前完成。
 import { failureOf, type ApiFailure } from "../../../shared/api";
 import type { ReleaseDetailDTO, ReleaseTrackDTO } from "../../catalog";
-import type { TrackPlaybackDTO } from "../api/decoders";
+import type { TrackPlaybackResult } from "../api/endpoints";
 import type { MediaSessionActionName, MediaSessionPort } from "./media-session";
 import { clearSavedQueue, loadSavedQueue, loadVolume, saveQueue, saveVolume, type SavedQueue, type StorageLike } from "./persistence";
 import {
@@ -23,6 +25,7 @@ import {
   replaceQueue,
   retreat,
   setMode as setQueueMode,
+  upNext,
   type PlayMode,
   type PlayerTrack,
   type QueueEntry,
@@ -55,8 +58,10 @@ export type AudioLike = {
 export type EngineDeps = {
   userId: string;
   audio: AudioLike;
-  /** 预检：请求经 apiRequest，401 照常通知会话边界。 */
-  loadPlayback: (trackId: string, signal: AbortSignal) => Promise<TrackPlaybackDTO>;
+  /** 预检：请求经 apiRequest，401 照常通知会话边界。派生格式的预检会在服务端等待转换，最多约 20 秒。 */
+  loadPlayback: (trackId: string, signal: AbortSignal) => Promise<TrackPlaybackResult>;
+  /** 这首曲目是否值得在上一首出声之后预先预检：当前浏览器可播放，且交付方式是服务端转换（预检是唯一会启动转换的请求）。 */
+  shouldPrefetch: (track: PlayerTrack) => boolean;
   /** 恢复队列时按发行读取详情（与详情页共用查询缓存）。 */
   loadRelease: (releaseId: string) => Promise<ReleaseDetailDTO>;
   sessionStorage: StorageLike | null;
@@ -70,24 +75,37 @@ export type EngineDeps = {
 };
 
 /** 曲目不能播放的原因；界面按它选文案（不比较后端 message）。 */
-export type PlaybackFailureReason = "not_found" | "root_disabled" | "not_directly_playable" | "source_unavailable" | "source_changed" | "decode_failed";
+export type PlaybackFailureReason =
+  | "not_found"
+  | "root_disabled"
+  | "not_directly_playable"
+  | "source_unavailable"
+  | "source_changed"
+  | "decode_failed"
+  | "derivation_failed";
 
-export type PlayerStatus = "idle" | "loading" | "playing" | "paused" | "buffering";
+/** preparing：服务端正在把曲目无损转换成浏览器能解码的格式（预检收到 202），转换完成后才开始加载音频。 */
+export type PlayerStatus = "idle" | "loading" | "preparing" | "playing" | "paused" | "buffering";
 
-/** 正在加载、出声或缓冲：都是“要播放”的状态。togglePlayback 此时暂停，播放/暂停按钮也据此显示“暂停”，两者不能各判各的。 */
+/** 正在加载、准备、出声或缓冲：都是“要播放”的状态。togglePlayback 此时暂停，播放/暂停按钮也据此显示“暂停”，两者不能各判各的。 */
 export function isPlaybackActive(status: PlayerStatus): boolean {
-  return status === "playing" || status === "buffering" || status === "loading";
+  return status === "playing" || status === "buffering" || status === "loading" || status === "preparing";
 }
 
-/** 停在暂停的两种故障：暂时无法取得音频（网络、服务暂不可用，可重试），或浏览器的自动播放策略拒绝了 play()。 */
-export type PlayerFault = { kind: "transient" } | { kind: "autoplay_blocked" };
+/**
+ * 停在暂停的几种故障：暂时无法取得音频（网络、服务暂不可用，可重试）、服务器正忙于转换（可重试，与前者共用重试入口，只是文案不同），
+ * 或浏览器的自动播放策略拒绝了 play()。
+ */
+export type PlayerFault = { kind: "transient" } | { kind: "busy" } | { kind: "autoplay_blocked" };
 
 /** 引擎自己产生的、值得向读屏公告的事件。seq 单调递增，界面据此只公告一次。 */
 export type PlayerEvent =
   | { seq: number; kind: "track_started"; entryId: string }
   | { seq: number; kind: "track_failed"; entryId: string; reason: PlaybackFailureReason }
   | { seq: number; kind: "all_failed" }
+  | { seq: number; kind: "preparing"; entryId: string }
   | { seq: number; kind: "transient_failure" }
+  | { seq: number; kind: "derivation_busy" }
   | { seq: number; kind: "autoplay_blocked" }
   | { seq: number; kind: "queue_restored"; restored: number; dropped: number };
 
@@ -123,6 +141,15 @@ const POSITION_STATE_INTERVAL_MS = 1_000;
 const SEEK_STEP_SECONDS = 10;
 const RESTORE_CONCURRENCY = 4;
 
+/** 从第一次收到“正在准备”起最多等多久：服务端一次转换的上限是 10 分钟，再留 1 分钟余量；超过按转换失败处理。 */
+const PREPARING_LIMIT_MS = 11 * 60_000;
+
+/**
+ * 连续两次预检（都收到“正在准备”）之间至少间隔多久。服务端会把预检挂起约 20 秒，正常情况下这个下限不起作用；
+ * 它只防止异常的、立即返回的 202 让客户端无休止地高速重试。不是退避：服务端在等，客户端不需要等。
+ */
+const MIN_PREPARING_POLL_MS = 1_000;
+
 const MEDIA_ERR_ABORTED = 1;
 const MEDIA_ERR_NETWORK = 2;
 
@@ -149,11 +176,18 @@ function failureReasonOf(failure: ApiFailure): PlaybackFailureReason | null {
         return "not_directly_playable";
       case "source_changed":
         return "source_changed";
+      case "derivation_failed":
+        return "derivation_failed";
       default:
         return "source_unavailable";
     }
   }
   return failure.status >= 400 && failure.status < 500 ? "source_unavailable" : null;
+}
+
+/** 服务器的转换并发、排队或磁盘空间已满（503 derivation_busy）：不是曲目的问题，稍后重试即可。 */
+function isDerivationBusy(failure: ApiFailure | null): boolean {
+  return failure?.kind === "http" && failure.status === 503 && failure.code === "derivation_busy";
 }
 
 export class PlayerEngine {
@@ -189,6 +223,11 @@ export class PlayerEngine {
   /** 每次开始加载一首曲目加一；异步回调带着发起时的值，过期的结果一律丢弃。 */
   private attempt = 0;
   private preflight: AbortController | null = null;
+  /** 最近一次预检发出的时刻，以及“正在准备”之后等待下一次预检的定时器（见 MIN_PREPARING_POLL_MS）。 */
+  private preflightSentAt = 0;
+  private pollTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 下一首的预取预检：与当前加载互相独立，结果被丢弃（只为让转换提前完成）；队列或当前项变化时中止。 */
+  private prefetch: AbortController | null = null;
   private loadedEntryId: string | null = null;
   private expectedSrc: string | null = null;
   private pendingSeek: number | null = null;
@@ -255,6 +294,7 @@ export class PlayerEngine {
     this.persist();
     this.stopTimers();
     this.cancelPreflight();
+    this.cancelPrefetch();
     this.attempt += 1;
     this.unloadAudio();
     this.setProgress({ positionSeconds: this.resumePosition, durationSeconds: null, seekable: false });
@@ -407,8 +447,8 @@ export class PlayerEngine {
 
   pause(): void {
     if (this.finished) return;
-    if (this.status === "loading" && this.loadedEntryId === null) {
-      // 预检还在途中：放弃这次加载，停在暂停。
+    if ((this.status === "loading" || this.status === "preparing") && this.loadedEntryId === null) {
+      // 预检（含等待转换）还在途中：放弃这次加载，停在暂停；服务端的转换在没有等待者之后自行取消。
       this.cancelPreflight();
       this.attempt += 1;
       this.status = "paused";
@@ -487,9 +527,9 @@ export class PlayerEngine {
     this.syncVolume();
   }
 
-  /** 暂时性故障（网络、服务暂不可用）之后重试：从停下的位置继续。 */
+  /** 暂时性故障（网络、服务暂不可用、服务器忙于转换）之后重试：从停下的位置继续。 */
   retry(): void {
-    if (this.finished || this.fault?.kind !== "transient") return;
+    if (this.finished || (this.fault?.kind !== "transient" && this.fault?.kind !== "busy")) return;
     if (this.restoreRetry) {
       this.restoreRetry = false;
       this.fault = null;
@@ -509,6 +549,7 @@ export class PlayerEngine {
     const entry = this.entryById(entryId);
     if (entry === undefined) return;
     this.cancelPreflight();
+    this.cancelPrefetch();
     this.unloadAudio();
     this.queue = this.queue.currentEntryId === entryId ? this.queue : { ...this.queue, currentEntryId: entryId };
     const attempt = ++this.attempt;
@@ -523,22 +564,69 @@ export class PlayerEngine {
     this.status = "loading";
     this.raise({ kind: "track_started", entryId });
     this.afterQueueChange();
+    this.requestPreflight(attempt, entry, seekTo, null);
+  }
+
+  /** 发出一次预检。preparingSince 是这首曲目第一次收到“正在准备”的时刻，还没收到过是 null。 */
+  private requestPreflight(attempt: number, entry: QueueEntry, seekTo: number, preparingSince: number | null): void {
     const controller = new AbortController();
     this.preflight = controller;
+    this.preflightSentAt = this.deps.now();
     this.deps.loadPlayback(entry.track.trackId, controller.signal).then(
-      (playback) => this.onPreflightResolved(attempt, entry, playback, seekTo),
+      (result) => this.onPreflightResolved(attempt, entry, result, seekTo, preparingSince),
       (error: unknown) => this.onPreflightRejected(attempt, entry, error, seekTo),
     );
   }
 
-  private onPreflightResolved(attempt: number, entry: QueueEntry, playback: TrackPlaybackDTO, seekTo: number): void {
+  private onPreflightResolved(attempt: number, entry: QueueEntry, result: TrackPlaybackResult, seekTo: number, preparingSince: number | null): void {
     if (attempt !== this.attempt) return;
+    if (result.state === "preparing") {
+      this.onPreparing(attempt, entry, seekTo, preparingSince);
+      return;
+    }
+    const playback = result.playback;
     this.preflight = null;
+    if (this.status === "preparing") {
+      // 转换完成：接下来是加载音频，不再是“正在准备”。
+      this.status = "loading";
+      this.syncMediaSessionState();
+      this.commit();
+    }
     this.loadedEntryId = entry.entryId;
     this.expectedSrc = playback.representation.url;
     this.pendingSeek = seekTo > 0 ? seekTo : null;
     this.audio.src = playback.representation.url;
     this.requestPlay(attempt, entry);
+  }
+
+  /**
+   * 服务端还在转换（预检收到 202）：进入“正在准备”并立即再次预检，服务端负责等待，这里不需要退避。
+   * 超过上限仍未就绪按转换失败处理；切歌、暂停、停止与会话结束都会使 attempt 失效，循环随之结束。
+   */
+  private onPreparing(attempt: number, entry: QueueEntry, seekTo: number, preparingSince: number | null): void {
+    const since = preparingSince ?? this.deps.now();
+    if (this.deps.now() - since > PREPARING_LIMIT_MS) {
+      this.preflight = null;
+      this.failEntry(entry, "derivation_failed");
+      return;
+    }
+    if (this.status !== "preparing") {
+      this.status = "preparing";
+      this.raise({ kind: "preparing", entryId: entry.entryId });
+      this.syncMediaSessionState();
+      this.commit();
+    }
+    // 钳制在 [0, 下限]：系统时钟向后跳变时不会等上很久。
+    const wait = Math.min(MIN_PREPARING_POLL_MS, MIN_PREPARING_POLL_MS - (this.deps.now() - this.preflightSentAt));
+    if (wait <= 0) {
+      this.requestPreflight(attempt, entry, seekTo, since);
+      return;
+    }
+    this.preflight = null;
+    this.pollTimer = setTimeout(() => {
+      this.pollTimer = null;
+      if (attempt === this.attempt) this.requestPreflight(attempt, entry, seekTo, since);
+    }, wait);
   }
 
   private requestPlay(attempt: number, entry: QueueEntry): void {
@@ -586,12 +674,17 @@ export class PlayerEngine {
       this.failEntry(entry, reason);
       return;
     }
-    // 网络失败、无效响应、5xx：暂时无法取得音频。停在暂停，保留位置，可以重试，不连续跳歌。
+    // 服务器忙于转换、网络失败、无效响应、5xx：暂时无法取得音频。停在暂停，保留位置，可以重试，不连续跳歌。
     this.unloadAudio();
+    this.pauseWithFault(isDerivationBusy(failure) ? "busy" : "transient", position);
+  }
+
+  /** 停在暂停并保留位置：暂时无法取得音频的几种故障共用，可以重试。 */
+  private pauseWithFault(kind: "transient" | "busy", position: number): void {
     this.resumePosition = position;
     this.status = "paused";
-    this.fault = { kind: "transient" };
-    this.raise({ kind: "transient_failure" });
+    this.fault = { kind };
+    this.raise(kind === "busy" ? { kind: "derivation_busy" } : { kind: "transient_failure" });
     this.syncMediaSessionState();
     this.commit();
     this.persist();
@@ -616,23 +709,24 @@ export class PlayerEngine {
     this.setProgress({ positionSeconds: position, durationSeconds: null, seekable: false });
     this.syncMediaSession();
     this.commit();
+    let result: TrackPlaybackResult;
+    this.preflightSentAt = this.deps.now();
     try {
-      await this.deps.loadPlayback(entry.track.trackId, controller.signal);
+      result = await this.deps.loadPlayback(entry.track.trackId, controller.signal);
     } catch (error) {
       if (attempt !== this.attempt || controller.signal.aborted) return;
       this.onPreflightRejected(attempt, entry, error, position);
       return;
     }
     if (attempt !== this.attempt) return;
+    if (result.state === "preparing") {
+      // 派生文件在音频请求之前被清走（缓存淘汰）之类：预检重新启动了转换，等它完成后从停下的位置继续。
+      this.onPreparing(attempt, entry, position, null);
+      return;
+    }
     this.preflight = null;
     if (mediaErrorCode === MEDIA_ERR_NETWORK) {
-      this.resumePosition = position;
-      this.status = "paused";
-      this.fault = { kind: "transient" };
-      this.raise({ kind: "transient_failure" });
-      this.syncMediaSessionState();
-      this.commit();
-      this.persist();
+      this.pauseWithFault("transient", position);
       return;
     }
     this.failEntry(entry, "decode_failed");
@@ -737,12 +831,14 @@ export class PlayerEngine {
 
   private readonly onPlaying = (): void => {
     if (!this.isCurrentMedia() || this.audio.paused) return;
+    const firstPlaying = this.playedVisitEntryId !== this.loadedEntryId;
     this.status = "playing";
     this.playedVisitEntryId = this.loadedEntryId;
     this.fault = null;
     this.startTimers();
     this.syncMediaSessionState();
     this.commit();
+    if (firstPlaying) this.prefetchNext();
   };
 
   private readonly onPause = (): void => {
@@ -803,6 +899,33 @@ export class PlayerEngine {
   private cancelPreflight(): void {
     this.preflight?.abort();
     this.preflight = null;
+    if (this.pollTimer !== null) {
+      clearTimeout(this.pollTimer);
+      this.pollTimer = null;
+    }
+  }
+
+  private cancelPrefetch(): void {
+    this.prefetch?.abort();
+    this.prefetch = null;
+  }
+
+  /**
+   * 当前曲目第一次出声之后，为下一首预先发一次预检：它是唯一会启动转换的请求，所以下一首是需要转换的格式时，
+   * 转换在当前曲目播放期间完成，切歌时预检立即命中缓存。结果被丢弃，不改变任何状态；只发一次，没等到就在切歌时按正常流程等。
+   * 单曲循环没有“下一首”，随机模式下一首尚未确定，都不预取。
+   */
+  private prefetchNext(): void {
+    this.cancelPrefetch();
+    if (this.finished || this.queue.mode === "repeat_one" || this.queue.mode === "shuffle") return;
+    const [next] = upNext(this.queue, 1);
+    if (next === undefined || next.entryId === this.queue.currentEntryId || !this.deps.shouldPrefetch(next.track)) return;
+    const controller = new AbortController();
+    this.prefetch = controller;
+    const finished = (): void => {
+      if (this.prefetch === controller) this.prefetch = null;
+    };
+    this.deps.loadPlayback(next.track.trackId, controller.signal).then(finished, finished);
   }
 
   /** 暂停并清空媒体元素的来源：中断网络传输，之后不再有旧媒体的事件被当作当前的。 */
@@ -819,6 +942,7 @@ export class PlayerEngine {
   /** 停止当前播放：放弃加载与媒体，状态回到“有当前项的暂停”或空闲。 */
   private stopPlayback(): void {
     this.cancelPreflight();
+    this.cancelPrefetch();
     this.attempt += 1;
     this.unloadAudio();
     this.fault = null;
@@ -871,6 +995,7 @@ export class PlayerEngine {
 
   /** 队列或当前项变化之后：同步系统媒体信息、保存队列、通知界面。 */
   private afterQueueChange(): void {
+    this.cancelPrefetch();
     this.syncMediaSession();
     this.commit();
     this.persist();

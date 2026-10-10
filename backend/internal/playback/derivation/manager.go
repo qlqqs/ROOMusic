@@ -12,13 +12,8 @@ import (
 	"time"
 )
 
-// 默认上限（PRD B3、B6、B7）。
+// 默认上限（PRD B3、B6、B7）。缓存总量上限由配置决定（platform/config），不在这里设默认值。
 const (
-	// DefaultMaxCacheBytes 是缓存的默认上限：10 GiB。
-	DefaultMaxCacheBytes int64 = 10 << 30
-	// MinMaxCacheBytes 是允许配置的缓存上限下限：256 MiB。
-	MinMaxCacheBytes int64 = 256 << 20
-
 	defaultMaxRunning     = 2
 	defaultMaxQueued      = 16
 	defaultMaxKeysPerUser = 3
@@ -60,7 +55,7 @@ func defaultLimits() limits {
 type Config struct {
 	// Dir 是缓存目录（<数据目录>/media-cache）；不存在时创建。调用方负责保证它与音乐根目录互不包含。
 	Dir string
-	// MaxBytes 是缓存上限。
+	// MaxBytes 是缓存上限（字节），必须为正；下限与默认值由配置层决定。
 	MaxBytes int64
 	// FFmpegPath 是 ffmpeg 可执行文件的路径，空则在 PATH 中查找。
 	FFmpegPath string

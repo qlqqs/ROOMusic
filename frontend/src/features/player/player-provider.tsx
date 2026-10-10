@@ -1,11 +1,14 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
 import { newIdempotencyKey } from "../../shared/lib/ids";
 import { useSessionController, useViewerScope } from "../auth";
 import { artworkPath, useReleaseLoader } from "../catalog";
 import { fetchTrackPlayback } from "./api/endpoints";
+import type { CapabilityTable } from "./engine/capability";
 import { browserMediaSession } from "./engine/media-session";
 import { PlayerEngine, type PlayerProgress, type PlayerSnapshot } from "./engine/player-engine";
 import type { StorageLike } from "./engine/persistence";
+import { playerKeys } from "./query-keys";
 
 const PlayerContext = createContext<PlayerEngine | null>(null);
 
@@ -21,13 +24,16 @@ function browserStorage(kind: "sessionStorage" | "localStorage"): StorageLike | 
 /** 放在按会话代次挂载的已登录子树内。普通卸载保留刷新恢复，会话结束同步销毁用户范围状态。 */
 export function PlayerProvider({ userId, children, engine: suppliedEngine }: { userId: string; children: ReactNode; engine?: PlayerEngine }) {
   const controller = useSessionController();
-  const { isCurrent } = useViewerScope();
+  const { generation, isCurrent } = useViewerScope();
+  const queryClient = useQueryClient();
   const loadRelease = useReleaseLoader();
   const engine = useMemo(
     () => suppliedEngine ?? new PlayerEngine({
       userId,
       audio: new Audio(),
       loadPlayback: async (trackId, signal) => (await fetchTrackPlayback(trackId, signal)).data,
+      // 只读已有的能力判定表（不为预取发请求）：还没取到时不预取，播放照常。
+      shouldPrefetch: (track) => queryClient.getQueryData<CapabilityTable>(playerKeys.capabilities(generation))?.deliveryOf({ sourceKind: track.source.sourceKind, codec: track.source.codec }) === "derived",
       loadRelease,
       sessionStorage: browserStorage("sessionStorage"),
       localStorage: browserStorage("localStorage"),
@@ -37,7 +43,7 @@ export function PlayerProvider({ userId, children, engine: suppliedEngine }: { u
       random: Math.random,
       now: Date.now,
     }),
-    [suppliedEngine, userId, loadRelease],
+    [suppliedEngine, userId, loadRelease, queryClient, generation],
   );
   useEffect(() => {
     // 请求层的 401、跨标签页注销和换用户都走同一个同步结束事件，不等下一次 React 渲染。

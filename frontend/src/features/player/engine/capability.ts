@@ -1,7 +1,8 @@
-// 能力判定：一首曲目能不能在当前浏览器里直接播放。
-// 服务端愿不愿意直出由后端的格式表决定（GET /playback/formats）；浏览器能不能解码用 canPlayType 与可选的 decodingInfo 询问。
+// 能力判定：一首曲目能不能在当前浏览器里播放。
+// 服务端愿不愿意交付由后端的格式表决定（GET /playback/formats）：直出原文件，或经无损转换（ALAC → FLAC）后交付；
+// 浏览器能不能解码用 canPlayType 与可选的 decodingInfo 询问，询问的是浏览器实际拿到的表示（派生项就是转换后的 FLAC）。
 // 两者都满足才可播放。canPlayType 与 decodingInfo 是能力提示，不是任何具体文件的播放保证：真正的证据是实际加载、播放与拖动。
-import type { PlaybackFormatDTO } from "../api/decoders";
+import type { PlaybackDelivery, PlaybackFormatDTO } from "../api/decoders";
 
 /** 浏览器的能力探针；测试可以注入替身。 */
 export type BrowserProbe = {
@@ -11,7 +12,7 @@ export type BrowserProbe = {
   decodingSupported?: ((type: string) => Promise<boolean>) | undefined;
 };
 
-/** 为 canPlayType 与 decodingInfo 拼出完整的类型串：`audio/mp4; codecs="alac"`。 */
+/** 为 canPlayType 与 decodingInfo 拼出浏览器拿到的表示的完整类型串：`audio/mp4; codecs="mp4a.40.2"`；派生项是转换后的 `audio/flac`。 */
 export function typeString(format: Pick<PlaybackFormatDTO, "mime_type" | "codecs">): string {
   return format.codecs === null ? format.mime_type : `${format.mime_type}; codecs="${format.codecs}"`;
 }
@@ -22,7 +23,7 @@ export type TrackVerdict =
       playable: false;
       /**
        * cue_virtual：需要切分的 CUE 曲目（M2b 才能播放）；
-       * format_not_direct：（来源类别、编码）不在后端的直出格式表里；
+       * format_not_direct：（来源类别、编码）不在后端的格式表里（包括派生不可用时的 ALAC）；
        * browser_cannot_decode：格式表里有，但当前浏览器不能解码。
        */
       reason: "cue_virtual" | "format_not_direct" | "browser_cannot_decode";
@@ -33,7 +34,11 @@ export type VerdictInput = { sourceKind: string; codec: string | null };
 
 export type CapabilityTable = {
   verdictOf: (input: VerdictInput) => TrackVerdict;
+  /** 可播放曲目的交付方式（直出或服务端无损转换）；不能播放（CUE、不在表中、浏览器不能解码）时为 null。 */
+  deliveryOf: (input: VerdictInput) => PlaybackDelivery | null;
 };
+
+type FormatSupport = { decodable: boolean; delivery: PlaybackDelivery };
 
 const formatKey = (sourceKind: string, codec: string) => `${sourceKind}\u0000${codec}`;
 
@@ -51,22 +56,28 @@ async function decodable(format: PlaybackFormatDTO, probe: BrowserProbe): Promis
 
 /** 对格式表里的每个组合询问浏览器一次，得到可以同步查询的判定表（结果在一个会话内不变）。 */
 export async function buildCapabilityTable(formats: readonly PlaybackFormatDTO[], probe: BrowserProbe): Promise<CapabilityTable> {
-  const browserCanDecode = new Map<string, boolean>();
+  const support = new Map<string, FormatSupport>();
   const types = new Map<string, Promise<boolean>>();
   await Promise.all(
     formats.map(async (format) => {
       const type = typeString(format);
       const result = types.get(type) ?? decodable(format, probe);
       types.set(type, result);
-      browserCanDecode.set(formatKey(format.source_kind, format.codec), await result);
+      support.set(formatKey(format.source_kind, format.codec), { decodable: await result, delivery: format.delivery });
     }),
   );
+  const lookup = ({ sourceKind, codec }: VerdictInput): FormatSupport | undefined =>
+    sourceKind === "cue_virtual" || codec === null ? undefined : support.get(formatKey(sourceKind, codec));
   return {
-    verdictOf: ({ sourceKind, codec }) => {
-      if (sourceKind === "cue_virtual") return { playable: false, reason: "cue_virtual" };
-      const supported = codec === null ? undefined : browserCanDecode.get(formatKey(sourceKind, codec));
-      if (supported === undefined) return { playable: false, reason: "format_not_direct" };
-      return supported ? { playable: true } : { playable: false, reason: "browser_cannot_decode" };
+    verdictOf: (input) => {
+      if (input.sourceKind === "cue_virtual") return { playable: false, reason: "cue_virtual" };
+      const found = lookup(input);
+      if (found === undefined) return { playable: false, reason: "format_not_direct" };
+      return found.decodable ? { playable: true } : { playable: false, reason: "browser_cannot_decode" };
+    },
+    deliveryOf: (input) => {
+      const found = lookup(input);
+      return found?.decodable === true ? found.delivery : null;
     },
   };
 }

@@ -48,8 +48,10 @@ async function readJsonBody(response: Response): Promise<JsonBody> {
 /**
  * 唯一发出 /api/v1 请求的函数：同源、携带 Cookie、不使用浏览器缓存、带客户端请求 ID。
  * 只有 JSON 响应进入解码；失败时抛出携带 ApiFailure 的 ApiError。
+ * decode 的第二个参数是成功响应的状态码：同一路径的 200 与 202 形状不同时（播放预检），解码器借它核对状态码与响应体相符；
+ * 其余只关心响应体的解码器可以忽略它。
  */
-export async function apiRequest<T>(spec: ApiRequestSpec, decode: (input: unknown) => T): Promise<ApiResponse<T>> {
+export async function apiRequest<T>(spec: ApiRequestSpec, decode: (input: unknown, status: number) => T): Promise<ApiResponse<T>> {
   const requestId = newRequestId();
   const generation = sessionBoundary?.currentGeneration() ?? 0;
 
@@ -95,7 +97,7 @@ export async function apiRequest<T>(spec: ApiRequestSpec, decode: (input: unknow
   }
 
   try {
-    return { status, data: decode(body.value) };
+    return { status, data: decode(body.value, status) };
   } catch (error) {
     throw new ApiError({ kind: "invalid_response", status, requestId }, { cause: error });
   }

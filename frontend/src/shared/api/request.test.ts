@@ -53,6 +53,18 @@ describe("apiRequest 请求形态", () => {
     expect(request?.body).toEqual({ path: "/music/a" });
   });
 
+  it("把成功响应的状态码交给解码器，状态码与响应体不符时按无效响应处理", async () => {
+    const decodeByStatus = (input: unknown, status: number) => {
+      const body = decodeOk(input);
+      if (status !== 200) throw new d.DecodeError("$", `状态码 ${status} 不符`);
+      return body;
+    };
+    stubFetch(() => jsonResponse(200, { ok: true }));
+    expect((await apiRequest({ method: "GET", path: "/api/v1/auth/me" }, decodeByStatus)).data).toEqual({ ok: true });
+    stubFetch(() => jsonResponse(202, { ok: true }));
+    expect(await failureFrom(apiRequest({ method: "GET", path: "/api/v1/auth/me" }, decodeByStatus))).toMatchObject({ kind: "invalid_response", status: 202 });
+  });
+
   it("返回状态码，让 201、202 与 200 的业务含义可区分", async () => {
     stubFetch(() => jsonResponse(202, { ok: true }));
     const response = await apiRequest({ method: "POST", path: "/api/v1/scans" }, decodeOk);

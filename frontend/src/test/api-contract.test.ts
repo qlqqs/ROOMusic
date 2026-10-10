@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodePlaybackFormats, decodeTrackPlayback } from "../features/player/api/decoders";
+import { decodePlaybackFormats, decodeTrackPlayback, decodeTrackPreparing } from "../features/player/api/decoders";
 import { decodeLoggedOut, decodeSetupStatus, decodeViewer } from "../features/auth/api/decoders";
 import {
   decodeReleaseDetail,
@@ -33,6 +33,8 @@ type Contract = { status: number; decode: (input: unknown) => unknown };
 const successContracts: Record<string, Contract> = {
   "playback/formats": { status: 200, decode: decodePlaybackFormats },
   "tracks/playback": { status: 200, decode: decodeTrackPlayback },
+  "tracks/playback-derived": { status: 200, decode: decodeTrackPlayback },
+  "tracks/playback-preparing": { status: 202, decode: decodeTrackPreparing },
   "auth/setup-status-required": { status: 200, decode: decodeSetupStatus },
   "auth/setup-status-completed": { status: 200, decode: decodeSetupStatus },
   "auth/setup-admin-created": { status: 201, decode: decodeViewer },
@@ -87,6 +89,9 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "errors/not-directly-playable": { status: 409, code: "not_directly_playable" },
   "errors/source-unavailable": { status: 409, code: "source_unavailable" },
   "errors/source-changed": { status: 409, code: "source_changed" },
+  "errors/derivation-not-ready": { status: 409, code: "derivation_not_ready" },
+  "errors/derivation-failed": { status: 409, code: "derivation_failed" },
+  "errors/derivation-busy": { status: 503, code: "derivation_busy" },
   "errors/not-found-track": { status: 404, code: "not_found" },
   "errors/range-not-satisfiable": { status: 416, code: "range_not_satisfiable" },
   "errors/unauthorized": { status: 401, code: "unauthorized" },

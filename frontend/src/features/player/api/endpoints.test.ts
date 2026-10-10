@@ -13,8 +13,37 @@ describe("播放 API 请求", () => {
     api.on("GET", "/api/v1/playback/formats", () => sampleResponse("playback/formats"));
     api.on("GET", `/api/v1/tracks/${trackId}/playback`, () => sampleResponse("tracks/playback"));
     expect((await fetchPlaybackFormats()).data).toEqual(sampleBody("playback/formats"));
-    expect((await fetchTrackPlayback(trackId)).data).toEqual(sampleBody("tracks/playback"));
+    expect((await fetchTrackPlayback(trackId)).data).toEqual({ state: "ready", playback: sampleBody("tracks/playback") });
     expect(api.requests).toHaveLength(2);
+  });
+
+  it("200 的派生表示与 202 的“正在准备”分别解码为 ready 与 preparing，并带回状态码", async () => {
+    const api = installFakeApi();
+    api.on("GET", `/api/v1/tracks/${trackId}/playback`, () => sampleResponse("tracks/playback-derived"));
+    const derived = await fetchTrackPlayback(trackId);
+    expect(derived.status).toBe(200);
+    expect(derived.data).toEqual({ state: "ready", playback: sampleBody("tracks/playback-derived") });
+    api.on("GET", `/api/v1/tracks/${trackId}/playback`, () => sampleResponse("tracks/playback-preparing"));
+    const waiting = await fetchTrackPlayback(trackId);
+    expect(waiting.status).toBe(202);
+    expect(waiting.data).toEqual({ state: "preparing" });
+  });
+
+  it.each([
+    ["200 带“正在准备”正文", 200, "tracks/playback-preparing"],
+    ["202 带表示正文", 202, "tracks/playback"],
+    ["201 带表示正文", 201, "tracks/playback"],
+    ["200 与 202 以外的成功状态", 203, "tracks/playback-derived"],
+  ])("状态码与响应体不符按无效响应处理，不会被当作“再等一轮”：%s", async (_name, status, sample) => {
+    const api = installFakeApi();
+    api.on("GET", `/api/v1/tracks/${trackId}/playback`, () => jsonResponse(status, sampleBody(sample)));
+    await expect(fetchTrackPlayback(trackId)).rejects.toMatchObject({ failure: { kind: "invalid_response", status } });
+  });
+
+  it("202 也必须是所请求的曲目", async () => {
+    const api = installFakeApi();
+    api.on("GET", `/api/v1/tracks/${trackId}/playback`, () => jsonResponse(202, { track_id: "00000000-0000-4000-8000-000000000002", status: "preparing" }));
+    await expect(fetchTrackPlayback(trackId)).rejects.toMatchObject({ failure: { kind: "invalid_response", status: 202 } });
   });
 
   it("预检不能返回另一首曲目；保持 invalid_response 分类", async () => {

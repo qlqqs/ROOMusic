@@ -67,6 +67,20 @@ type playbackTrackSpec struct {
 	recordedSize     *int64
 	recordedModified *time.Time
 	skipFile         bool
+	// bitDepth、sampleRate 与 channels 是扫描记录的音频参数，0 表示扫描没有取得（NULL）；派生核对用它们。
+	bitDepth, sampleRate, channels int
+	// fingerprint 是扫描记录的内容指纹，空则用“fingerprint-<曲目 ID>”（不是真实指纹，只适合不重算指纹的测试）；
+	// noFingerprint 为真时写 NULL，表示扫描没有取得指纹。
+	fingerprint   string
+	noFingerprint bool
+}
+
+// optionalInt 把 0 写成 NULL。
+func optionalInt(value int) any {
+	if value == 0 {
+		return nil
+	}
+	return value
 }
 
 // addTrack 把文件写进目录并登记与之一致的 present 曲目（可用 spec 制造与扫描记录不符的情形），返回曲目 ID。
@@ -96,14 +110,22 @@ func (library playbackLibrary) addTrack(t *testing.T, application *integrationTe
 		modified = *spec.recordedModified
 	}
 	groupID, releaseID, mediumID, trackID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	var fingerprint any = "fingerprint-" + trackID
+	switch {
+	case spec.noFingerprint:
+		fingerprint = nil
+	case spec.fingerprint != "":
+		fingerprint = spec.fingerprint
+	}
 	mustExec(t, application, `INSERT INTO release_groups(id) VALUES($1::uuid)`, groupID)
 	mustExec(t, application, `INSERT INTO releases(id,group_id,title,artist,source_root_id,relative_directory,candidate_anchor,candidate_kind)
 		VALUES($1::uuid,$2::uuid,'专辑','艺术家',$3::uuid,$4,$5,'ordinary_directory')`, releaseID, groupID, library.rootID, "dir-"+trackID, library.rootID+":v2:"+trackID)
 	mustExec(t, application, `INSERT INTO media(id,release_id,position,title) VALUES($1::uuid,$2::uuid,1,'Medium')`, mediumID, releaseID)
 	mustExec(t, application, `INSERT INTO tracks(id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,
-			source_kind,codec,source_size,source_modified_at,content_fingerprint)
-		VALUES($1::uuid,$2::uuid,1,'曲目','艺术家',1,$3::uuid,$4,'present',NOW(),$5,$6,$7,$8,$9)`,
-		trackID, mediumID, library.rootID, spec.relative, spec.sourceKind, spec.codec, size, modified.UTC().Truncate(time.Microsecond), "fingerprint-"+trackID)
+			source_kind,codec,source_size,source_modified_at,content_fingerprint,bit_depth,sample_rate,channels)
+		VALUES($1::uuid,$2::uuid,1,'曲目','艺术家',1,$3::uuid,$4,'present',NOW(),$5,$6,$7,$8,$9,$10,$11,$12)`,
+		trackID, mediumID, library.rootID, spec.relative, spec.sourceKind, spec.codec, size, modified.UTC().Truncate(time.Microsecond), fingerprint,
+		optionalInt(spec.bitDepth), optionalInt(spec.sampleRate), optionalInt(spec.channels))
 	return trackID
 }
 
@@ -335,7 +357,7 @@ func TestPostgreSQLPlaybackChecksRunInTheDocumentedOrder(t *testing.T) {
 		{"missing track", missing, http.StatusNotFound, "not_found"},
 		{"cue virtual track", cue, http.StatusConflict, "not_directly_playable"},
 		{"format outside the table", floatWAV, http.StatusConflict, "not_directly_playable"},
-		{"ALAC before Safari verification", alac, http.StatusConflict, "not_directly_playable"},
+		{"ALAC while derivation is unavailable", alac, http.StatusConflict, "not_directly_playable"},
 		{"file is gone", gone, http.StatusConflict, "source_unavailable"},
 		{"link leaves the root", escaped, http.StatusConflict, "source_unavailable"},
 		{"size differs from the scan", sizeChanged, http.StatusConflict, "source_changed"},
@@ -425,7 +447,7 @@ func TestPostgreSQLPlaybackPreflightDescribesTheOriginalRepresentation(t *testin
 	requireAPIError(t, application.request(t, http.MethodGet, "/api/v1/tracks/"+flac+"/playback", nil, &user, nil), http.StatusConflict, "source_unavailable")
 }
 
-func TestPostgreSQLPlaybackFormatsListTheApprovedCombinations(t *testing.T) {
+func TestPostgreSQLPlaybackFormatsListTheDirectlyPlayableCombinationsWithoutDerivation(t *testing.T) {
 	application := newIntegrationTestApplication(t)
 	user := application.createUser(t, "user")
 	response := application.request(t, http.MethodGet, "/api/v1/playback/formats", nil, &user, nil)
@@ -436,6 +458,7 @@ func TestPostgreSQLPlaybackFormatsListTheApprovedCombinations(t *testing.T) {
 		Items []struct {
 			SourceKind string  `json:"source_kind"`
 			Codec      string  `json:"codec"`
+			Delivery   string  `json:"delivery"`
 			MIMEType   string  `json:"mime_type"`
 			Codecs     *string `json:"codecs"`
 		} `json:"items"`
@@ -449,15 +472,16 @@ func TestPostgreSQLPlaybackFormatsListTheApprovedCombinations(t *testing.T) {
 		if item.Codecs != nil {
 			codecs = *item.Codecs
 		}
-		got = append(got, item.SourceKind+"/"+item.Codec+" "+item.MIMEType+" "+codecs)
+		got = append(got, item.SourceKind+"/"+item.Codec+" "+item.Delivery+" "+item.MIMEType+" "+codecs)
 	}
+	// 没有派生时只有直出格式；ALAC 不在其中（派生可用时才出现，见 playback_derivation_integration_test.go）。
 	want := []string{
-		"flac_vorbis_comment/flac audio/flac null",
-		"mp3_id3v2/mp3 audio/mpeg null",
-		"wav_info/pcm audio/wav 1",
-		"m4a/aac audio/mp4 mp4a.40.2",
-		"ogg_vorbis_comment/vorbis audio/ogg vorbis",
-		"opus_tags/opus audio/ogg opus",
+		"flac_vorbis_comment/flac original audio/flac null",
+		"mp3_id3v2/mp3 original audio/mpeg null",
+		"wav_info/pcm original audio/wav 1",
+		"m4a/aac original audio/mp4 mp4a.40.2",
+		"ogg_vorbis_comment/vorbis original audio/ogg vorbis",
+		"opus_tags/opus original audio/ogg opus",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("formats =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))

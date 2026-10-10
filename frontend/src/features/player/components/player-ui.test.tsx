@@ -11,6 +11,7 @@ import { queueStorageKey, saveQueue } from "../engine/persistence";
 import { ApiError } from "../../../shared/api";
 import { PlayerEngine, type EngineDeps, type PlayerSnapshot } from "../engine/player-engine";
 import type { CapabilityTable } from "../engine/capability";
+import type { TrackPlaybackResult } from "../api/endpoints";
 import { AlbumPlaybackActions, TrackPlaybackActions } from "./album-playback-actions";
 import { PlayerBar } from "./player-bar";
 import { PlayerControls } from "./player-controls";
@@ -28,8 +29,12 @@ vi.mock("../player-provider", () => {
     usePlayerProgress: function useTestProgress() { return useSyncExternalStore(engine.subscribeProgress, engine.getProgress); },
   };
 });
+// capabilitiesPending 为真时模拟“格式表还没取到”：没有初始数据，请求一直不返回。
+let capabilitiesPending = false;
 vi.mock("../hooks/use-playback-capabilities", () => ({
-  usePlaybackCapabilities: function useTestCapabilities() { return useQuery({ queryKey: ["test-capabilities"], queryFn: async () => table, initialData: table }); },
+  usePlaybackCapabilities: function useTestCapabilities() {
+    return useQuery({ queryKey: ["test-capabilities", capabilitiesPending], queryFn: () => (capabilitiesPending ? new Promise<CapabilityTable>(() => undefined) : Promise.resolve(table)), ...(capabilitiesPending ? {} : { initialData: table }) });
+  },
 }));
 let engine: PlayerEngine;
 let audio: FakeAudio;
@@ -38,9 +43,12 @@ let seq = 0;
 function view(children: ReactNode) {
   return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{children}</QueryClientProvider>);
 }
+/** 预检通过：原文件直出或已转换好的派生文件。 */
+const ready = (trackId: string, kind: "original" | "derived" = "original"): TrackPlaybackResult => ({ state: "ready", playback: { track_id: trackId, representation: { kind, url: `/api/v1/tracks/${trackId}/audio`, mime_type: "audio/flac", codecs: null, size_bytes: 100 } } });
 function createEngine(overrides: Partial<EngineDeps> = {}) {
   return new PlayerEngine({ userId: "test-user", audio, sessionStorage: null, localStorage: null, mediaSession: null, artworkUrl: (id) => `/api/v1/artworks/${id}`, newId: () => `entry-${++seq}`, random: () => 0, now: () => 0,
-    loadPlayback: async (trackId) => ({ track_id: trackId, representation: { kind: "original", url: `/api/v1/tracks/${trackId}/audio`, mime_type: "audio/flac", codecs: null, size_bytes: 100 } }),
+    loadPlayback: async (trackId) => ready(trackId),
+    shouldPrefetch: () => false,
     loadRelease: async () => releaseDetailOf(albumGroup(1).representative),
     ...overrides,
   });
@@ -50,12 +58,19 @@ async function settle(): Promise<void> {
   for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
 }
 beforeEach(() => {
+  capabilitiesPending = false;
   audio = new FakeAudio();
   engine = createEngine();
-  table = { verdictOf: ({ sourceKind, codec }) => sourceKind === "cue_virtual" ? { playable: false, reason: "cue_virtual" } : codec === "alac" ? { playable: false, reason: "browser_cannot_decode" } : { playable: true } };
+  table = {
+    verdictOf: ({ sourceKind, codec }) => sourceKind === "cue_virtual" ? { playable: false, reason: "cue_virtual" } : codec === "alac" ? { playable: false, reason: "browser_cannot_decode" } : { playable: true },
+    deliveryOf: ({ sourceKind, codec }) => sourceKind === "cue_virtual" || codec === "alac" ? null : "original",
+  };
   engine.attach();
 });
-afterEach(() => engine.endSession());
+afterEach(() => {
+  engine.endSession();
+  vi.useRealTimers();
+});
 
 describe("播放界面", () => {
   it("播放栏长标题保留完整名称；未知时长禁止拖动，媒体事件才能改变播放状态", async () => {
@@ -107,12 +122,64 @@ describe("播放界面", () => {
     expect(screen.getByRole("button", { name: "播放" })).toBeTruthy();
     expect(audio.playCalls).toBe(0);
   });
+  it("等待转换时显示“正在准备”：按钮写“暂停”，按下就放弃等待并停在暂停；公告说明正在转换", async () => {
+    vi.useFakeTimers();
+    engine.endSession();
+    const signals: AbortSignal[] = [];
+    // 立即返回的 202：引擎按最小间隔（1 秒）再次预检，测试用假定时器推进。
+    engine = createEngine({ loadPlayback: (_trackId, signal) => { signals.push(signal); return Promise.resolve<TrackPlaybackResult>({ state: "preparing" }); } });
+    engine.attach();
+    view(<><PlayerBar /><PlayerAnnouncement /></>);
+    await act(async () => { engine.playTracks([playerTrack("1")]); await settle(); });
+    expect(engine.getSnapshot().status).toBe("preparing");
+    expect(screen.getByText("正在准备")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe("正在准备：曲目 1，服务端正在无损转换，完成后开始播放。");
+    expect(screen.queryByRole("button", { name: "播放" })).toBeNull();
+    await act(async () => { vi.advanceTimersByTime(1000); await settle(); });
+    expect(signals).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "暂停" }));
+    expect(engine.getSnapshot().status).toBe("paused");
+    expect(screen.getByRole("button", { name: "播放" })).toBeTruthy();
+    await act(async () => { vi.advanceTimersByTime(10_000); await settle(); });
+    expect(signals).toHaveLength(2);
+    expect(audio.playCalls).toBe(0);
+  });
+  it("服务器正忙于转换：暂停并给出可重试的提示，底栏与公告都说明原因，重试后继续", async () => {
+    engine.endSession();
+    let busy = true;
+    engine = createEngine({ loadPlayback: async (trackId) => {
+      if (busy) throw new ApiError({ kind: "http", status: 503, code: "derivation_busy", message: "后端文案", requestId: "req-1" });
+      return ready(trackId, "derived");
+    } });
+    engine.attach();
+    view(<><PlayerBar /><PlayerFeedback /><PlayerAnnouncement /></>);
+    await act(async () => { engine.playTracks([playerTrack("1")]); await settle(); });
+    expect(engine.getSnapshot().fault).toEqual({ kind: "busy" });
+    expect(screen.getByText("服务器正忙于转换，请稍后重试。")).toBeTruthy();
+    expect(screen.getByText("服务器正忙于转换，进入正在播放页重试")).toBeTruthy();
+    // 提示条与全局公告都是 status；公告是隐藏的常驻区域。
+    expect(screen.getAllByRole("status").map((region) => region.textContent)).toContain("服务器正忙于转换，请稍后重试。已暂停，可到正在播放页重试。");
+    expect(screen.queryByText(/检查网络/)).toBeNull();
+    busy = false;
+    await act(async () => { await userEvent.click(screen.getByRole("button", { name: "重试播放" })); await settle(); });
+    expect(engine.getSnapshot().fault).toBeNull();
+    expect(audio.sources).toEqual(["/api/v1/tracks/track-1/audio"]);
+    expect(screen.queryByRole("button", { name: "重试播放" })).toBeNull();
+  });
+  it("无损转换失败的曲目在队列里写明原因", async () => {
+    engine.endSession();
+    engine = createEngine({ loadPlayback: async () => { throw new ApiError({ kind: "http", status: 409, code: "derivation_failed", message: "后端文案", requestId: "req-1" }); } });
+    engine.attach();
+    view(<PlayerQueue />);
+    await act(async () => { engine.playTracks([playerTrack("1")]); await settle(); });
+    expect(screen.getByText("无损转换失败，无法播放这首曲目")).toBeTruthy();
+  });
   it("暂时无法读取与自动播放被拒都进入全局公告；公告区域常驻，只换里面的文字", async () => {
     engine.endSession();
     let online = false;
     engine = createEngine({ loadPlayback: async (trackId) => {
       if (!online) throw new ApiError({ kind: "network", requestId: "req-1" });
-      return { track_id: trackId, representation: { kind: "original", url: `/api/v1/tracks/${trackId}/audio`, mime_type: "audio/flac", codecs: null, size_bytes: 100 } };
+      return ready(trackId);
     } });
     engine.attach();
     view(<PlayerAnnouncement />);
@@ -216,6 +283,33 @@ describe("播放界面", () => {
     expect(screen.getByText(/网页无法得知声卡/)).toBeTruthy();
     expect(document.body.textContent).not.toContain("Bit-perfect");
   });
+  it("信号路径的服务端一栏按交付方式写明：直出原文件，或无损转换并核对 PCM", () => {
+    engine.enqueue([playerTrack("1", { source: { sourceKind: "m4a", codec: "alac", bitDepth: 24, sampleRate: 96000, channels: 2, bitrate: null } })]);
+    table = { ...table, deliveryOf: () => "derived" };
+    const derived = view(<SignalPath />);
+    const stage = screen.getByRole("heading", { name: "服务端" }).closest("li");
+    expect(stage?.textContent).toContain("无损转换");
+    expect(stage?.textContent).toContain("重新编码为 FLAC，位深、采样率与声道不变");
+    expect(stage?.textContent).toContain("PCM 一致");
+    expect(stage?.textContent).not.toContain("原文件直出");
+    derived.unmount();
+
+    engine.clearQueue();
+    engine.enqueue([playerTrack("2")]);
+    table = { ...table, deliveryOf: () => "original" };
+    view(<SignalPath />);
+    const original = screen.getByRole("heading", { name: "服务端" }).closest("li");
+    expect(original?.textContent).toContain("原文件直出");
+    expect(original?.textContent).not.toContain("无损转换");
+  });
+  it("信号路径在取得格式表之前不替曲目说“原文件直出”", () => {
+    engine.enqueue([playerTrack("1", { source: { sourceKind: "m4a", codec: "alac", bitDepth: 16, sampleRate: 44100, channels: 2, bitrate: null } })]);
+    capabilitiesPending = true;
+    view(<SignalPath />);
+    const stage = screen.getByRole("heading", { name: "服务端" }).closest("li");
+    expect(stage?.textContent).toContain("读取中");
+    expect(stage?.textContent).not.toContain("原文件直出");
+  });
   it("队列重复曲目按 entryId 上移、移除；清空必须确认", async () => {
     const user = userEvent.setup();
     engine.enqueue([playerTrack("1"), playerTrack("1"), playerTrack("2")]);
@@ -272,7 +366,7 @@ describe("专辑播放入口", () => {
     expect(engine.getSnapshot().queue.entries).toHaveLength(0);
   });
   it("一首都不能播放时禁用整张动作并在头部解释", () => {
-    table = { verdictOf: () => ({ playable: false, reason: "format_not_direct" }) };
+    table = { verdictOf: () => ({ playable: false, reason: "format_not_direct" }), deliveryOf: () => null };
     view(<AlbumPlaybackActions release={release()} groupId="group-1" />);
     expect(screen.getByRole("button", { name: "播放整张专辑" }).getAttribute("disabled")).not.toBeNull();
     expect(screen.getByText(/这个版本没有可以播放的曲目/)).toBeTruthy();
