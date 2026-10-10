@@ -648,3 +648,49 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 
 - 用户安排 macOS Safari、Windows Chrome 或 Edge、任一系统 Firefox 三组手工实播（10-06-m2a-acceptance-followup）。
 - Safari 通过后恢复 ALAC；下次推送 main 后确认 CI 四个作业通过。
+
+
+## Session 26: M2b 派生播放：ALAC 经无损派生播放
+<!-- trellis-session: v=2 fp=a81ab8b6621c7242 -->
+
+**Date**: 2026-10-10
+**Task**: M2b 派生播放：ALAC 经无损派生播放
+**Branch**: `main`
+
+### Summary
+
+按获批的 M2b 规划实施 ALAC 无损派生：ffmpeg 两遍转换并核对 PCM、受管缓存、预检长轮询与 202、前端“正在准备”与预取、真实服务与 CI 自动化、规范与 ADR 决策记录；真实库 84 个 ALAC 核对全部成功；任务归档，歌词任务待启动。
+
+### Main Changes
+
+- 后端：playback/derivation（缓存、任务、ffmpeg 适配与核对）、预检与音频的派生分支、三个新错误码、ROOMUSIC_FFMPEG_PATH 与 ROOMUSIC_MEDIA_CACHE_MAX_MIB、缓存目录与音乐根的重叠检查
+- 前端：解码器与状态码核对、正在准备（最小间隔 1 秒、11 分钟上限）、预取下一首、忙与失败文案、信号路径；内嵌产物重新构建
+- 自动化与文档：真实服务覆盖 ALAC 派生播放，CI 经脚本取得同一个 ffmpeg；新增派生合同，更新播放合同、前端规范、ADR 0004、路线图、README；归档并修正相对链接；未推送
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ef306f7` | feat(playback): 无损派生缓存与 ffmpeg 适配 |
+| `5f184ef` | feat(playback): ALAC 经无损派生播放 |
+| `5ac806b` | test(playback): 真实服务覆盖 ALAC 派生播放 |
+| `8e7657d` | docs(playback): 同步 M2b 派生合同、决策与部署说明 |
+| `386f4fe` | docs(m2b): 派生任务收尾——真实库核对、实施结果与验收对照 |
+| `b2bf80f` | docs(m2b): 去掉任务文档末尾多余的空行 |
+| `11ef404` | chore(task): archive 10-09-classical-m2b-derived-playback |
+| `2022884` | chore(task): 修正 M2b 派生任务归档后的相对链接 |
+
+### Testing
+
+- [OK] 隔离 PostgreSQL 与固定 ffmpeg 上 go test -race（playback、app、platform、catalog、library）通过；导出的暂存树上重复通过
+- [OK] Vitest 52 文件 1011 项、Playwright 166 项、真实服务（Go + 隔离 PostgreSQL + Chromium）16 项通过；内嵌产物与无环境变量的重新构建逐文件一致
+- [OK] 真实库只读核对：84 个 ALAC 转换并核对 PCM 全部成功（98.7 秒，只记汇总）
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 用户装好 ffmpeg（scripts/ffmpeg-pinned.sh 或发行版的包）后重启服务，播放几首真实 ALAC 确认
+- 启动歌词任务 10-09-classical-m2b-lyrics；三组手工实播与下次推送后的远端 CI 见 10-06-m2a-acceptance-followup

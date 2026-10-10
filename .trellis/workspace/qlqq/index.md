@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 25
-- **Last Active**: 2026-10-07
+- **Total Sessions**: 26
+- **Last Active**: 2026-10-10
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~650 | Active |
+| `journal-1.md` | ~696 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 26 | 2026-10-10 | M2b 派生播放：ALAC 经无损派生播放 | `ef306f7`, `5f184ef`, `5ac806b`, `8e7657d`, `386f4fe`, `b2bf80f`, `11ef404`, `2022884` | `main` |
 | 25 | 2026-10-07 | M2a 审查修复与收尾归档 | `d1c976d`, `06071f8`, `1096443`, `4dc1889`, `13a9cfe`, `9cc11fd`, `564728a`, `48b0d3f` | `main` |
 | 24 | 2026-10-05 | M2a 播放器续接与自动化验收 | - | `main` |
 | 23 | 2026-09-27 | Classical M0 文档对齐与提交收尾 | `850d274` | `docs/classical-m0-alignment` |
