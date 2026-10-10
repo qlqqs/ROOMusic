@@ -4,8 +4,8 @@
 
 ## 启动前
 
-- [ ] 用户批准规划（Y1–Y5），批准记录写进 PRD；规划与派生任务一起提交。
-- [ ] 派生任务归档后再 `python3 ./.trellis/scripts/task.py start 10-09-classical-m2b-lyrics`（两者都改正在播放页与真实服务用例，先后进行）。
+- [x] 用户批准规划（Y1–Y5），批准记录写进 PRD；规划与派生任务一起提交。
+- [x] 派生任务归档后再 `python3 ./.trellis/scripts/task.py start 10-09-classical-m2b-lyrics`（两者都改正在播放页与真实服务用例，先后进行）。
 
 ## 步骤
 
