@@ -125,4 +125,3 @@
 - 宿主机装好 ffmpeg（`./scripts/ffmpeg-pinned.sh`，或发行版的包），设置 `ROOMUSIC_FFMPEG_PATH`（或放进 `PATH`），重启服务，播放几首 ALAC 确认
   听感与进度（真实库 84 个 ALAC 的转换与 PCM 核对已通过，见调研）。没有 ffmpeg 时 ALAC 仍标注“这种格式目前不能直接播放”，应用照常运行。
 - 三组手工实播（F1，ALAC 两行经派生播放）与下次推送后的远端 CI（F3），见后续验收任务。
-
