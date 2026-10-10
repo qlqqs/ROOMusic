@@ -12,7 +12,7 @@
   验收出口“ALAC 与 CUE 曲目在约定浏览器可播放；缓存有上限、可取消”。路线要求创建子任务时按最小可验收能力拆开。
 - `docs/architecture/adr/0004-media-delivery.md`：推荐“直出优先，必要时生成完整派生缓存”（§2）；派生缓存合同（§6）；进程、部署与许可门禁（§7）；
   无损派生的验收对象是解码后的 PCM（§8）；M2b 须先批准质量策略、配额/撤销规则及部署/许可门禁（§9）；待批准决策第 2–7 项（§11）。
-- M2a 的[播放合同](../../spec/backend/playback-contracts.md)与[播放器设计规范](../../spec/frontend/player-design-guidelines.md)：格式表、预检、原文件音频、
+- M2a 的[播放合同](../../../../spec/backend/playback-contracts.md)与[播放器设计规范](../../../../spec/frontend/player-design-guidelines.md)：格式表、预检、原文件音频、
   10 秒复核、信号路径。前端解码器已为派生表示预留扩展点（`frontend/src/features/player/api/decoders.ts:22`）。
 - 2026-10-09 用户裁决：下一阶段做 M2b；M2a 遗留的三组手工实播延后；M2b 范围为“ALAC 派生 + 歌词，CUE 精确分轨延后”（见“规划决策记录”）。
 

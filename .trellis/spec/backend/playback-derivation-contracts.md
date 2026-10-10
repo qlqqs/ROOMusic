@@ -9,7 +9,7 @@ M2b 让浏览器不能直接解码的 ALAC 曲目也能播放：服务端用 ffm
 包与依赖方向：`backend/internal/playback/derivation`（缓存、任务、ffmpeg 适配、输出核对；不含 HTTP，不读数据库，不依赖任何内部包）；
 `playback`（格式表、`Preflight` 与 `Prepare` 编排；依赖 `catalog`、`library`、`playback/derivation`）；`playback/httpapi`（传输）；
 `app`（`OpenDerivation` 与装配）。通用的播放接口、安全打开与复核见 [播放合同](./playback-contracts.md)，本文只写派生新增与改变的部分。
-设计与验证见 [M2b 任务](../../tasks/10-09-classical-m2b-derived-playback/design.md) 与
+设计与验证见 [M2b 任务](../../tasks/archive/2026-10/10-09-classical-m2b-derived-playback/design.md) 与
 [ADR 0004](../../../docs/architecture/adr/0004-media-delivery.md)。
 
 ## 2. 配置与启动

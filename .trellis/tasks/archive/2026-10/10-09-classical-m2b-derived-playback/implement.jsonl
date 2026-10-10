@@ -6,4 +6,4 @@
 {"file": ".trellis/spec/frontend/player-design-guidelines.md", "reason": "信号路径只写可核实的环节、播放器状态规则"}
 {"file": ".trellis/spec/frontend/state-management.md", "reason": "播放引擎状态与查询键"}
 {"file": ".trellis/spec/guides/real-music-assets.md", "reason": "真实音乐只读，核对只输出汇总，不保存派生文件"}
-{"file": ".trellis/tasks/10-09-classical-m2b-derived-playback/research/library-evidence.md", "reason": "真实库格式构成、CUE 结论与运行环境"}
+{"file": ".trellis/tasks/archive/2026-10/10-09-classical-m2b-derived-playback/research/library-evidence.md", "reason": "真实库格式构成、CUE 结论与运行环境"}
