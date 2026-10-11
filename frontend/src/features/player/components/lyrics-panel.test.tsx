@@ -295,6 +295,25 @@ describe("歌词面板", () => {
       act(() => mounted.audio.tick(21));
       expect(scrollTo.mock.calls.length).toBeGreaterThan(calls);
     });
+
+    it("键盘可完成“回到当前行”：Tab 从歌词里唯一的停靠点（当前行）走到按钮，Enter 恢复跟随并定位", async () => {
+      stubLayout();
+      const scrollTo = vi.spyOn(Element.prototype, "scrollTo").mockImplementation(() => undefined);
+      const mounted = await mount();
+      await lyricsList();
+      await startPlayback(mounted);
+      act(() => mounted.audio.tick(16));
+      fireEvent.keyDown(screen.getByRole("group", { name: "逐行歌词" }), { key: "PageDown" });
+      const back = screen.getByRole("button", { name: "回到当前行" });
+      const calls = scrollTo.mock.calls.length;
+      await userEvent.tab();
+      expect(document.activeElement?.textContent).toBe("Second line of the sample样本的第二行");
+      await userEvent.tab();
+      expect(document.activeElement).toBe(back);
+      await userEvent.keyboard("{Enter}");
+      expect(screen.queryByRole("button", { name: "回到当前行" })).toBeNull();
+      expect(scrollTo.mock.calls.length).toBe(calls + 1);
+    });
   });
 
   it("纯文本歌词：空行分段、静态显示，不高亮、不可点，可聚焦滚动", async () => {
