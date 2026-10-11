@@ -2,7 +2,7 @@ import { appendFile, copyFile, mkdir, utimes } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import http from "node:http";
 import { expect, test } from "@playwright/test";
-import { decodeTrackPlayback, decodeTrackPreparing } from "../../src/features/player/api/decoders";
+import { decodeTrackLyrics, decodeTrackPlayback, decodeTrackPreparing } from "../../src/features/player/api/decoders";
 import { admin, body, catalog, decodeError, decodeID, decodeRoot, decodeSetup, findTrack, fixtureRoot, login, mediaState, observeMedia, origin, playTrack, post, scan, type Albums } from "./support";
 
 let albums: Albums;
@@ -163,6 +163,83 @@ for (const source of ["alac-16-44100.m4a", "alac-24-48000.m4a"]) {
     await bar.getByRole("button", { name: "播放", exact: true }).click();
     await expect.poll(() => page.evaluate((id) => window.playbackTestEvents.some((event) => event.type === "ended" && event.src.includes(id)), item.track.id)).toBe(true);
     expect(await page.evaluate((id) => window.playbackTestEvents.filter((event) => event.src.includes(id) && event.type === "error"), item.track.id)).toEqual([]);
+  });
+}
+
+// 内嵌歌词：scripts/gen-playback-fixtures.sh 把同一份同步歌词写进 flac-16-44100.flac（Vorbis 注释 LYRICS）与 alac-16-44100.m4a（©lyr）；
+// 这里经真实扫描、接口与页面核对。歌词内容与 playback_fixture_test.go 的 fixtureLyrics 一致：两行元标签不显示，第二个时间点有两行（一组）。
+const fixtureLyricsLines = [
+  { start_ms: 0, text: "Fixture line one" },
+  { start_ms: 800, text: "Fixture line two" },
+  { start_ms: 800, text: "夹具第二行" },
+  { start_ms: 1600, text: "Fixture line three" },
+];
+
+for (const source of ["flac-16-44100.flac", "alac-16-44100.m4a"]) {
+  test(`${source} 的内嵌歌词经真实扫描提取，接口返回解析后的同步歌词`, async ({ page }) => {
+    const item = findTrack(albums, source);
+    const response = await page.request.get(`/api/v1/tracks/${item.track.id}/lyrics`);
+    expect(response.status()).toBe(200);
+    expect(response.headers()["cache-control"]).toBe("no-store");
+    const lyrics = decodeTrackLyrics(await response.json());
+    expect(lyrics.track_id).toBe(item.track.id);
+    expect(lyrics.lyrics).toEqual({ kind: "synced", source: "embedded", lines: fixtureLyricsLines });
+  });
+}
+
+test("没有内嵌歌词的素材返回 null；CUE 虚拟轨没有歌词，即使整轨镜像文件带着歌词", async ({ page }) => {
+  for (const source of ["flac-24-48000.flac", "mp3-44100.mp3", "vorbis-44100.ogg"]) {
+    const response = await page.request.get(`/api/v1/tracks/${findTrack(albums, source).track.id}/lyrics`);
+    expect(response.status(), source).toBe(200);
+    expect(decodeTrackLyrics(await response.json()).lyrics, source).toBeNull();
+  }
+  // cue/image.flac 是 flac-16-44100.flac 的副本（带歌词）：整张镜像的歌词不能分给它的虚拟轨。
+  const virtualTracks = albums.flatMap((album) => album.release.media.flatMap((medium) => medium.tracks)).filter((track) => track.source_kind === "cue_virtual");
+  expect(virtualTracks).toHaveLength(2);
+  for (const track of virtualTracks) {
+    const response = await page.request.get(`/api/v1/tracks/${track.id}/lyrics`);
+    expect(response.status()).toBe(200);
+    expect(decodeTrackLyrics(await response.json()).lyrics).toBeNull();
+  }
+});
+
+for (const source of ["flac-16-44100.flac", "alac-16-44100.m4a"]) {
+  test(`${source}：正在播放页显示歌词，点击一行后真实播放位置跳到该行，继续播放时当前行前进`, async ({ page }) => {
+    const item = findTrack(albums, source);
+    await playTrack(page, item);
+    const bar = page.getByRole("region", { name: "播放器", exact: true });
+    await bar.getByRole("button", { name: "暂停", exact: true }).click();
+    await expect.poll(async () => (await mediaState(page))?.paused).toBe(true);
+    await page.getByRole("link", { name: "正在播放", exact: true }).click();
+    const lyrics = page.locator("#main").getByRole("region", { name: "歌词", exact: true });
+    const current = lyrics.locator("[aria-current='true']");
+    // 元标签不显示；同一时间点的两行是一组。
+    await expect(lyrics.getByRole("listitem")).toHaveText(["Fixture line one", "Fixture line two夹具第二行", "Fixture line three"]);
+    await expect(lyrics.getByText("内嵌歌词 · 逐行同步 · 点任一行跳到该处", { exact: true })).toBeVisible();
+
+    // 真实点击：媒体元素真实 seek，播放位置不早于该行的时间。
+    await lyrics.getByRole("button", { name: /^Fixture line three/ }).click();
+    await expect.poll(async () => (await mediaState(page))?.time ?? 0).toBeGreaterThanOrEqual(1.55);
+    await expect(current).toHaveText("Fixture line three");
+    await lyrics.getByRole("button", { name: /^Fixture line two/ }).click();
+    await expect.poll(async () => (await mediaState(page))?.time ?? 0).toBeGreaterThanOrEqual(0.75);
+    expect((await mediaState(page))?.time ?? 0).toBeLessThan(1.5);
+    await expect(current).toHaveText("Fixture line two夹具第二行");
+
+    // 继续播放：位置随真实时间越过 1.6 秒，当前行前进到第三行。ALAC 素材只有 2 秒，第三行只当前不到半秒，轮询可能错过，
+    // 所以在点“播放”之前开始记录当前行的变化序列，再核对序列。
+    await lyrics.evaluate((region) => {
+      const seen: string[] = [];
+      Reflect.set(window, "lyricsCurrentSeen", seen);
+      const record = () => {
+        const text = region.querySelector("[aria-current='true']")?.textContent;
+        if (text && seen.at(-1) !== text) seen.push(text);
+      };
+      record();
+      new MutationObserver(record).observe(region, { subtree: true, childList: true, attributes: true, attributeFilter: ["aria-current"] });
+    });
+    await bar.getByRole("button", { name: "播放", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => Reflect.get(window, "lyricsCurrentSeen") as string[]), { timeout: 10_000 }).toEqual(["Fixture line two夹具第二行", "Fixture line three"]);
   });
 }
 

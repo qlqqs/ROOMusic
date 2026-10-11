@@ -10,6 +10,10 @@ import (
 // playbackFixtureDirectory 是 scripts/gen-playback-fixtures.sh 生成并提交的合成播放素材（立体声正弦音，总计不到 1 MB）。
 var playbackFixtureDirectory = filepath.Join("..", "..", "..", "testdata", "playback")
 
+// fixtureLyrics 是脚本写进 flac-16-44100.flac（Vorbis 注释 LYRICS）与 alac-16-44100.m4a（©lyr）的同步歌词；其余素材没有歌词。
+// 真实服务用例与它们一致：脚本里的 LYRICS 改了，这里与 E2E 的期望要一起改。
+const fixtureLyrics = "[ti:Playback Fixtures]\n[ar:Fixture Artist]\n[00:00.00]Fixture line one\n[00:00.80]Fixture line two\n[00:00.80]夹具第二行\n[00:01.60]Fixture line three"
+
 // 这些事实与脚本里的编码参数、播放格式表（playback.formatTable）和 E2E 用例共同约束：任何一边改了而另一边没改，这里先失败。
 func TestPlaybackFixturesMatchTheirDocumentedFacts(t *testing.T) {
 	for _, expected := range []struct {
@@ -52,6 +56,16 @@ func TestPlaybackFixturesMatchTheirDocumentedFacts(t *testing.T) {
 			}
 			if expected.seconds != 0 && math.Abs(observation.DurationSeconds-expected.seconds) > 0.05 {
 				t.Errorf("duration = %.3f s, want %.3f s", observation.DurationSeconds, expected.seconds)
+			}
+			wantLyrics, wantSource := "", ""
+			switch expected.file {
+			case "flac-16-44100.flac":
+				wantLyrics, wantSource = fixtureLyrics, LyricsSourceVorbisLyrics
+			case "alac-16-44100.m4a":
+				wantLyrics, wantSource = fixtureLyrics, LyricsSourceMP4
+			}
+			if observation.Lyrics != wantLyrics || observation.LyricsSource != wantSource {
+				t.Errorf("lyrics = %q (%s), want %q (%s)", observation.Lyrics, observation.LyricsSource, wantLyrics, wantSource)
 			}
 		})
 	}

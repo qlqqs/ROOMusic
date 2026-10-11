@@ -29,13 +29,13 @@
 - [x] `catalog.LoadTrackLyrics`、`catalog.ParseLyrics`；`GET /api/v1/tracks/{id}/lyrics`；接口样本与集成测试。
 - [x] 前端：端点与解码器、查询钩子、分组模型、歌词面板、正在播放页布局；Vitest 与 Playwright（路由模拟）；重新构建内嵌产物。
 - [x] 验证：后端同第 1 步加 `TestPostgreSQLAPIResponseSamples`；前端 `npm run lint && npm run typecheck && npm test`、`npm run test:e2e`；无环境变量的构建与内嵌产物逐文件一致。
-- [x] 提交：`feat(player): 歌词接口与逐行同步显示`（含内嵌产物）。
+- [x] 提交：`feat(player): 歌词接口与逐行同步显示`（含内嵌产物，`62023a1`）。
 
 ### 第 3 步：真实服务自动化（L7）
 
-- [ ] 生成带歌词的 FLAC 与 ALAC 素材（更新 `backend/testdata/playback/README.md` 与体积上限检查）；`playback.real.ts` 歌词用例。
-- [ ] 验证：`./scripts/playback-e2e.sh` 全部通过。
-- [ ] 提交：`test(player): 真实服务覆盖歌词显示`。
+- [x] 生成带歌词的 FLAC 与 ALAC 素材（更新 `backend/testdata/playback/README.md` 与体积上限检查）；`playback.real.ts` 歌词用例。
+- [x] 验证：`./scripts/playback-e2e.sh` 全部通过。
+- [x] 提交：`test(player): 真实服务覆盖歌词显示`。
 
 ### 第 4 步：文档与截图（L8）
 

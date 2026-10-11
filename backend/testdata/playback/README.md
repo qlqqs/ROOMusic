@@ -9,9 +9,9 @@
 
 | 文件 | 编码 | 位深 / 采样率 | 时长 | 说明 |
 | --- | --- | --- | --- | --- |
-| `flac-16-44100.flac` | FLAC | 16 / 44.1 kHz | 3 秒 | 直出，三组手工实播必测 |
+| `flac-16-44100.flac` | FLAC | 16 / 44.1 kHz | 3 秒 | 直出，三组手工实播必测；带内嵌同步歌词（Vorbis 注释 `LYRICS`） |
 | `flac-24-48000.flac` | FLAC | 24 / 48 kHz | 2 秒 | 直出，三组手工实播必测 |
-| `alac-16-44100.m4a` | ALAC | 16 / 44.1 kHz | 2 秒 | 不在直出格式表中：经 ffmpeg 无损派生为 FLAC 后播放（派生不可用时标注“不能直接播放”）；`moov` 在 `mdat` 之前 |
+| `alac-16-44100.m4a` | ALAC | 16 / 44.1 kHz | 2 秒 | 不在直出格式表中：经 ffmpeg 无损派生为 FLAC 后播放（派生不可用时标注“不能直接播放”）；`moov` 在 `mdat` 之前；带内嵌同步歌词（`©lyr`） |
 | `alac-24-48000.m4a` | ALAC | 24 / 48 kHz | 1 秒 | 同上；派生测试逐位核对解码后的 PCM |
 | `mp3-44100.mp3` | MP3（64 kbps） | — / 44.1 kHz | 2 秒 | ID3v2.3 标签 |
 | `aac-44100.m4a` | AAC-LC（64 kbps） | — / 44.1 kHz | 2 秒 | |
@@ -19,6 +19,14 @@
 | `wav-24-48000.wav` | PCM（WAVE_FORMAT_EXTENSIBLE） | 24 / 48 kHz | 0.5 秒 | 扫描记为 `wav_extensible`，不在直出格式表中：用来演示“不能直接播放”的标注 |
 | `vorbis-44100.ogg` | Ogg Vorbis | — / 44.1 kHz | 2 秒 | |
 | `opus-48000.opus` | Opus（64 kbps） | — / 48 kHz | 2 秒 | |
+
+## 内嵌歌词
+
+只有 `flac-16-44100.flac` 与 `alac-16-44100.m4a` 带歌词，内容相同，由脚本里的 `LYRICS` 变量写入（ffmpeg 的 `-metadata lyrics=`：FLAC 写成 Vorbis 注释 `LYRICS`，
+MP4 写成 `©lyr`）：两行元标签、三个时间点（0.00、0.80、1.60 秒，都在较短的 ALAC 的 2 秒之内），第二个时间点有英文与中文两行（双语对照，分成一组）。
+歌词的真实服务用例（`frontend/e2e/real/playback.real.ts`）与解析器的素材事实测试（`playback_fixture_test.go` 的 `fixtureLyrics`）都按这份歌词核对，
+改脚本里的 `LYRICS` 要同时改这两处。MP3 的 `USLT` 无法由 ffmpeg 写出，只在 Go 测试里构造。
+`playback-e2e.sh` 把 `flac-16-44100.flac` 复制成 CUE 整轨镜像：它带着歌词，而它的虚拟轨必须没有歌词（整张镜像的歌词不能分给单条曲目）。
 
 修改素材规格后重新运行脚本，再用 `cd backend && go test ./internal/library/parser/ ./internal/playback/ -run Fixture`
 核对素材事实与直出格式表仍然一致。

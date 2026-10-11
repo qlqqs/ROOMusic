@@ -37,6 +37,11 @@ run_ffmpeg() {
 SINE_44100="sine=frequency=440:sample_rate=44100"
 SINE_48000="sine=frequency=523.25:sample_rate=48000"
 
+# 内嵌的同步歌词（LRC），只写进 flac-16-44100.flac 与 alac-16-44100.m4a（FLAC 的 Vorbis 注释与 MP4 的 ©lyr）：歌词的真实服务用例
+# 在这两份素材上核对扫描提取、接口与页面。时间都落在较短的 ALAC（2 秒）之内；第二、三行同一时间戳，是双语对照（分成一组）；
+# 带元标签。MP3 的 USLT 无法由 ffmpeg 写出，只在 Go 测试里构造。
+LYRICS=$'[ti:Playback Fixtures]\n[ar:Fixture Artist]\n[00:00.00]Fixture line one\n[00:00.80]Fixture line two\n[00:00.80]夹具第二行\n[00:01.60]Fixture line three'
+
 # generate <输出文件> <曲名> <音轨号> <源信号> <时长秒> <编码参数...>
 generate() {
   local file="$1" title="$2" track="$3" source="$4" seconds="$5"
@@ -48,9 +53,9 @@ generate() {
 }
 
 # 时长按体积取舍：16 位与有损格式 2–3 秒，24 位无损与 WAV 更短，合计不超过 1 MB。
-generate flac-16-44100.flac "FLAC 16-44.1" 1 "$SINE_44100" 3 -c:a flac -sample_fmt s16
+generate flac-16-44100.flac "FLAC 16-44.1" 1 "$SINE_44100" 3 -c:a flac -sample_fmt s16 -metadata lyrics="$LYRICS"
 generate flac-24-48000.flac "FLAC 24-48" 2 "$SINE_48000" 2 -c:a flac -sample_fmt s32 -bits_per_raw_sample 24
-generate alac-16-44100.m4a "ALAC 16-44.1" 3 "$SINE_44100" 2 -c:a alac -sample_fmt s16p -movflags +faststart
+generate alac-16-44100.m4a "ALAC 16-44.1" 3 "$SINE_44100" 2 -c:a alac -sample_fmt s16p -movflags +faststart -metadata lyrics="$LYRICS"
 generate alac-24-48000.m4a "ALAC 24-48" 4 "$SINE_48000" 1 -c:a alac -sample_fmt s32p -bits_per_raw_sample 24 -movflags +faststart
 generate mp3-44100.mp3 "MP3" 5 "$SINE_44100" 2 -c:a libmp3lame -b:a 64k -id3v2_version 3
 generate aac-44100.m4a "AAC-LC" 6 "$SINE_44100" 2 -c:a aac -b:a 64k -movflags +faststart
