@@ -5,5 +5,6 @@ export { AlbumListView } from "./components/album-list-view";
 export { LibrarySummary } from "./components/library-summary";
 export { albumListSearchFromState, parseAlbumDetailSearch, parseAlbumSearch, type AlbumDetailSearch, type AlbumSearch } from "./album-search";
 export { artworkPath } from "./api/endpoints";
-export type { ArtworkDTO, ReleaseDetailDTO, ReleaseMediumDTO, ReleaseTrackDTO } from "./api/decoders";
+export { releaseSummaryDecoder } from "./api/decoders";
+export type { ArtworkDTO, ReleaseDetailDTO, ReleaseMediumDTO, ReleaseSummaryDTO, ReleaseTrackDTO } from "./api/decoders";
 export { useReleaseLoader } from "./hooks/use-release-loader";

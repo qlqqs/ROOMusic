@@ -23,6 +23,7 @@ import {
   decodeMemberList,
   decodeSessionsRevoked,
 } from "../features/members/api/decoders";
+import { decodePlaysCleared, decodeRecentReleases, decodeRecordedPlay } from "../features/listening/api/decoders";
 import { decodeErrorEnvelope } from "../shared/api";
 import { listApiSampleNames, loadApiSample } from "./api-samples";
 
@@ -84,6 +85,10 @@ const successContracts: Record<string, Contract> = {
   "releases/get-single": { status: 200, decode: decodeReleaseDetail },
   "releases/get-cue": { status: 200, decode: decodeReleaseDetail },
   "releases/evidence": { status: 200, decode: decodeReleaseEvidence },
+  "listening/recent-releases-empty": { status: 200, decode: decodeRecentReleases },
+  "listening/recent-releases": { status: 200, decode: decodeRecentReleases },
+  "listening/play-recorded": { status: 201, decode: decodeRecordedPlay },
+  "listening/plays-cleared": { status: 200, decode: decodePlaysCleared },
 };
 
 // 错误样本都用统一信封；这里同时记录界面要处理的错误码与状态码。
@@ -96,6 +101,7 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "errors/derivation-failed": { status: 409, code: "derivation_failed" },
   "errors/derivation-busy": { status: 503, code: "derivation_busy" },
   "errors/not-found-track": { status: 404, code: "not_found" },
+  "errors/play-too-short": { status: 400, code: "play_too_short" },
   "errors/range-not-satisfiable": { status: 416, code: "range_not_satisfiable" },
   "errors/unauthorized": { status: 401, code: "unauthorized" },
   "errors/forbidden": { status: 403, code: "forbidden" },

@@ -57,8 +57,13 @@ type Service struct {
 	batchSize, maxBatches int
 }
 
-// NewService 返回读取 database 与目录的 Service。
-func NewService(database Database, tracks Catalog) *Service {
+// NewService 返回读取 database 的 Service；曲目时长与所在发行经 catalog.Store 读取。
+func NewService(database *sql.DB) *Service {
+	return newService(database, catalog.NewStore(database))
+}
+
+// newService 允许测试替换目录端口。
+func newService(database Database, tracks Catalog) *Service {
 	return &Service{database: database, catalog: tracks, batchSize: recentBatchSize, maxBatches: recentMaxBatches}
 }
 

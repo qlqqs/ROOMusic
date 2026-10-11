@@ -34,7 +34,8 @@ const releaseSummaryShape = {
   attention_count: d.integer({ min: 0 }),
   artwork: d.nullable(artworkDecoder),
 };
-const releaseSummaryDecoder = d.object(releaseSummaryShape);
+// 其他 feature（最近播放）经 catalog 的公开入口复用同一个摘要解码器，保证两处对封面等字段的校验一致。
+export const releaseSummaryDecoder = d.object(releaseSummaryShape);
 
 const releaseGroupSummaryShape = {
   id: d.uuid(),

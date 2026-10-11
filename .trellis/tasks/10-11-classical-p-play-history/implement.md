@@ -40,14 +40,14 @@
 
 ### 第 2 步：接口、样本与前端解码（R1、R3）
 
-- [ ] `internal/listening/httpapi`：三个路由（design §4）；`app` 装配；依赖规则。
-- [ ] 集成测试 `internal/app/listening_api_integration_test.go`：201 与重放、409、400（缺键、非 UUID、数值、`play_too_short`）、404、401、跨源 403、
+- [x] `internal/listening/httpapi`：三个路由（design §4）；`app` 装配；依赖规则。
+- [x] 集成测试 `internal/app/listening_api_integration_test.go`：201 与重放、409、400（缺键、非 UUID、数值、`play_too_short`）、404、401、跨源 403、
   用户 A/B 与管理员互相读不到、清不掉；停用成员的记录保留、重新启用后本人可见；合成 FLAC 经扫描入库后改名、同 root 移动并重扫，
   记录仍指向同一曲目、最近播放仍显示同一专辑，文件消失（完整扫描标记缺失）后记录不显示但仍在库中。
-- [ ] 接口样本：记录、最近播放（有数据与空）、清除、`play_too_short`；`ROOMUSIC_UPDATE_API_SAMPLES=1` 重写后逐个核对差异只有新增文件。
-- [ ] 前端：`shared/api/request.ts` 支持 `DELETE`；`features/listening/api` 的端点与解码器（发行摘要复用 catalog 公开的解码器）；
+- [x] 接口样本：记录、最近播放（有数据与空）、清除、`play_too_short`；`ROOMUSIC_UPDATE_API_SAMPLES=1` 重写后逐个核对差异只有新增文件。
+- [x] 前端：`shared/api/request.ts` 支持 `DELETE`；`features/listening/api` 的端点与解码器（发行摘要复用 catalog 公开的解码器）；
   契约测试登记新样本；解码器的样本与反例测试。重新构建内嵌产物（无变化也要核对）。
-- [ ] 验证：第 1 步的命令，另加
+- [x] 验证：第 1 步的命令，另加
 
   ```bash
   ROOMUSIC_TEST_FFMPEG=<固定 ffmpeg 路径> go test -race ./internal/app/... -run 'TestPostgreSQL' -count=1   # 含 TestPostgreSQLAPIResponseSamples
@@ -56,7 +56,7 @@
   npm run build   # 内嵌产物与暂存区一致
   ```
 
-- [ ] 提交：`feat(listening): 播放历史接口`（含前端解码与内嵌产物）。
+- [x] 提交：`feat(listening): 播放历史接口`（含前端解码与内嵌产物）。
 
 ### 第 3 步：播放器计次与上报（R1、R2、R5）
 

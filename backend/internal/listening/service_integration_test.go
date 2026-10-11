@@ -42,7 +42,7 @@ func newListeningFixture(t *testing.T) *listeningFixture {
 		}
 	})
 	store := catalog.NewStore(database)
-	fixture := &listeningFixture{database: database, catalog: store, service: NewService(database, store), rootID: uuid.New()}
+	fixture := &listeningFixture{database: database, catalog: store, service: newService(database, store), rootID: uuid.New()}
 	fixture.exec(t, `INSERT INTO library_roots(id,path,status,revision) VALUES($1::uuid,'/library',$2,1)`, fixture.rootID, "active")
 	return fixture
 }
@@ -269,7 +269,7 @@ func (unconditionalDuration) LoadTrackDuration(context.Context, string) (float64
 
 func TestPostgreSQLRecordClassifiesAForeignKeyViolationAsAMissingTrack(t *testing.T) {
 	fixture := newListeningFixture(t)
-	service := NewService(fixture.database, unconditionalDuration{})
+	service := newService(fixture.database, unconditionalDuration{})
 	if _, err := service.Record(context.Background(), fixture.user(t), uuid.New(), uuid.New(), 10); !errors.Is(err, ErrTrackNotFound) {
 		t.Fatalf("Record for a track that has no row = %v, want ErrTrackNotFound", err)
 	}
@@ -461,7 +461,7 @@ func TestPostgreSQLRecentReleasesAreReadInBatches(t *testing.T) {
 		maxBatches int
 		want       int
 	}{{3, 1}, {4, 2}} {
-		service := NewService(fixture.database, fixture.catalog)
+		service := newService(fixture.database, fixture.catalog)
 		service.batchSize, service.maxBatches = 2, testCase.maxBatches
 		recent, err := service.RecentReleases(ctx, user)
 		if err != nil || len(recent.Items) != testCase.want {
@@ -480,7 +480,7 @@ func TestPostgreSQLRecentReleasesAreReadInBatches(t *testing.T) {
 		releases = append(releases, release)
 		fixture.playAt(t, other, fixture.track(t, release, "曲目", 200), baseTime.Add(time.Duration(index)*time.Minute))
 	}
-	service := NewService(fixture.database, fixture.catalog)
+	service := newService(fixture.database, fixture.catalog)
 	service.batchSize, service.maxBatches = 2, 10
 	recent, err := service.RecentReleases(ctx, other)
 	if err != nil || len(recent.Items) != 5 {

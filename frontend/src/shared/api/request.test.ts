@@ -53,6 +53,20 @@ describe("apiRequest 请求形态", () => {
     expect(request?.body).toEqual({ path: "/music/a" });
   });
 
+  it("DELETE 同样同源携带 Cookie，不带请求体与 Content-Type，也不带幂等键", async () => {
+    const requests = stubFetch(() => jsonResponse(200, { ok: true }));
+    await apiRequest({ method: "DELETE", path: "/api/v1/me/plays" }, decodeOk);
+
+    const [request] = requests;
+    expect(request?.method).toBe("DELETE");
+    expect(request?.path).toBe("/api/v1/me/plays");
+    expect(request?.headers.has("Content-Type")).toBe(false);
+    expect(request?.headers.has("Idempotency-Key")).toBe(false);
+    expect(request?.body).toBeUndefined();
+    expect(request?.init.credentials).toBe("same-origin");
+    expect(request?.init.cache).toBe("no-store");
+  });
+
   it("把成功响应的状态码交给解码器，状态码与响应体不符时按无效响应处理", async () => {
     const decodeByStatus = (input: unknown, status: number) => {
       const body = decodeOk(input);

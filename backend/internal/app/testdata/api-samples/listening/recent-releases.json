@@ -1,0 +1,34 @@
+{
+  "body": {
+    "has_history": true,
+    "items": [
+      {
+        "group_id": "00000000-0000-4000-8000-000000000001",
+        "last_played_at": "2026-01-01T00:00:00Z",
+        "last_track": {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "title": "Allegro"
+        },
+        "release": {
+          "album_artist": "Sample Orchestra",
+          "artist": "Sample Orchestra",
+          "artwork": {
+            "height": 480,
+            "mime": "image/webp",
+            "resource_id": "sample-listening-cover.webp",
+            "width": 640
+          },
+          "attention_count": 0,
+          "id": "00000000-0000-4000-8000-000000000003",
+          "media_type": null,
+          "medium_count": 2,
+          "source_type": null,
+          "title": "Sample Symphonies",
+          "track_count": 3,
+          "year": 1998
+        }
+      }
+    ]
+  },
+  "status": 200
+}

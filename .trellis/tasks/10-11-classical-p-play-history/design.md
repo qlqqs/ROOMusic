@@ -61,8 +61,8 @@ CREATE INDEX IF NOT EXISTS play_history_user_track_idx ON play_history (user_id,
 
 ## 4. 后端接口
 
-所有路由先 `Guard.Authenticate`（401 `unauthorized`），写路由再 `RequireSameOrigin`（403）；路径里没有用户 ID，一律作用于当前会话用户，
-管理员也只能操作自己的记录。
+写路由先 `RequireSameOrigin`（403），再 `Guard.Authenticate`（401 `unauthorized`），与现有写接口的顺序一致（跨源请求即使没有会话也是 403）；
+读路由只做 `Authenticate`。路径里没有用户 ID，一律作用于当前会话用户，管理员也只能操作自己的记录。
 
 ### `POST /api/v1/me/plays`：记录一次播放
 
@@ -71,7 +71,8 @@ CREATE INDEX IF NOT EXISTS play_history_user_track_idx ON play_history (user_id,
 - 同一用户同一键重放：请求体相同时回放首次记录（同样 `201` 与同一响应），不同时 `409 idempotency_conflict`，都不写新行。
   并发的同键请求由唯一约束串行：`INSERT … ON CONFLICT (user_id, idempotency_key) DO NOTHING RETURNING …`，
   没有返回行就读出已有行比较。
-- 校验顺序：鉴权 → 同源 → 幂等键 → JSON → 字段 → 曲目 → 门槛 → 写入。
+- 校验顺序：同源 → 鉴权 → 幂等键 → JSON → 字段 → 曲目 → 门槛 → 写入。
+  字段类型不符（如 `played_seconds` 是字符串、数值超出 float64）由 `DecodeJSON` 归为 `400 invalid_json`，字段缺失或取值不合理才是 `invalid_input`。
 
 ### `GET /api/v1/me/plays/recent-releases`：最近播放的发行
 
@@ -112,7 +113,8 @@ CREATE INDEX IF NOT EXISTS play_history_user_track_idx ON play_history (user_id,
     经 `LoadTrackPlacements` 换成发行，按顺序去重，凑满 8 个发行或没有更多记录为止；再查 `has_history`。
     分批是因为发行归属属于 catalog，listening 不能在自己的 SQL 里联表分组；最多读 2,000 首不同曲目，个人规模下通常一批就够。
   - `Clear(ctx, userID)`：删除该用户全部记录，返回行数。
-- `listening/httpapi.Register(mux)` 注册三个路由；`app` 装配并在 `dependency_rules_test.go` 声明两个新包的依赖。
+- `listening.NewService(database)` 自己创建 `catalog.Store`（与 `playback.NewService` 相同），所以 `app` 不直接依赖 catalog；
+  测试用不导出的 `newService` 替换目录端口。`listening/httpapi.Register(mux)` 注册三个路由；`app` 装配，`dependency_rules_test.go` 声明两个新包的依赖。
 - 日志：沿用 `http.request.completed`（路由模板不含 ID），不额外记录播放事件。
 
 ## 6. 前端结构

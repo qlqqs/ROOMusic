@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "play_too_short",
+      "message": "播放时间不够，不计入播放历史"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

@@ -15,6 +15,8 @@ import (
 	identityapi "github.com/qlqq/roomusic/backend/internal/identity/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/library"
 	libraryapi "github.com/qlqq/roomusic/backend/internal/library/httpapi"
+	"github.com/qlqq/roomusic/backend/internal/listening"
+	listeningapi "github.com/qlqq/roomusic/backend/internal/listening/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/platform/config"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"github.com/qlqq/roomusic/backend/internal/playback"
@@ -73,6 +75,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	playbackapi.New(guard, playbackService, lifecycle, logger, playbackapi.Options{
 		RecheckInterval: assembly.playbackRecheckInterval, PreflightWait: assembly.playbackPreflightWait,
 	}).Register(mux)
+	listeningapi.New(guard, listening.NewService(database)).Register(mux)
 	httpserver.RegisterAPIFallback(mux, httpserver.APINotFoundHandler(mux))
 	mux.Handle("/", httpserver.Frontend(frontend))
 	return &App{mux: mux, handler: httpserver.Middleware(logger, mux), library: libraryService}

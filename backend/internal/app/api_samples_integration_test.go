@@ -277,6 +277,9 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	secondAdmin := login(call(http.MethodPost, "/api/v1/auth/login", credentials("curator", sampleAdminPassword), nil))
 	samples.record("auth/logout", call(http.MethodPost, "/api/v1/auth/logout", map[string]any{}, secondAdmin), http.StatusOK)
 
+	// 播放历史（阶段 P）：放在最后，用管理员自己的历史。
+	recordListeningSamples(t, application, samples, call, admin)
+
 	samples.finish()
 }
 
@@ -386,6 +389,29 @@ func recordAlbumDetailSamples(t *testing.T, application *integrationTestApplicat
 
 	recordLyricsSamples(t, application, samples, call, admin)
 	recordPlaybackSamples(t, application, samples, call, admin, libraryA, rootIDOf(t, application, libraryA))
+}
+
+// recordListeningSamples 记录播放历史接口：空的最近播放、不够门槛的 400、记录一次播放（201）、有数据的最近播放（发行带封面）与清除。
+// 素材是 recordAlbumDetailSamples 扫描出的合成 FLAC（240 秒，门槛 120 秒，服务端接受 ≥ 119 秒）。
+func recordListeningSamples(t *testing.T, application *integrationTestApplication, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser) {
+	t.Helper()
+	var trackID, releaseID string
+	if err := application.database.QueryRow(`SELECT tracks.id::text, media.release_id::text FROM tracks JOIN media ON media.id=tracks.medium_id
+		WHERE tracks.title='Allegro' AND tracks.source_status='present'`).Scan(&trackID, &releaseID); err != nil {
+		t.Fatalf("read the track to play: %v", err)
+	}
+	if _, err := application.database.Exec(`INSERT INTO release_artworks(release_id,content_hash,mime_type,width,height,storage_key,source_type)
+		VALUES($1::uuid,$2,'image/webp',640,480,'sample-listening-cover.webp','embedded')`, releaseID, strings.Repeat("d", 64)); err != nil {
+		t.Fatalf("insert artwork fixture: %v", err)
+	}
+	key := func(suffix string) map[string]string {
+		return map[string]string{"Idempotency-Key": "00000000-0000-4000-8000-00000000" + suffix}
+	}
+	samples.record("listening/recent-releases-empty", call(http.MethodGet, "/api/v1/me/plays/recent-releases", nil, admin), http.StatusOK)
+	samples.record("errors/play-too-short", call(http.MethodPost, "/api/v1/me/plays", map[string]any{"track_id": trackID, "played_seconds": 30}, admin, key("0001")), http.StatusBadRequest)
+	samples.record("listening/play-recorded", call(http.MethodPost, "/api/v1/me/plays", map[string]any{"track_id": trackID, "played_seconds": 150.5}, admin, key("0002")), http.StatusCreated)
+	samples.record("listening/recent-releases", call(http.MethodGet, "/api/v1/me/plays/recent-releases", nil, admin), http.StatusOK)
+	samples.record("listening/plays-cleared", call(http.MethodDelete, "/api/v1/me/plays", nil, admin), http.StatusOK)
 }
 
 // 样本里的内嵌歌词：同步歌词带元标签、间奏（空行）、同一时间戳的双语两行与一行多个时间戳；纯文本歌词带分段。
