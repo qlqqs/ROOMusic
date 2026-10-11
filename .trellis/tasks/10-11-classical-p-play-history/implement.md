@@ -60,12 +60,12 @@
 
 ### 第 3 步：播放器计次与上报（R1、R2、R5）
 
-- [ ] `features/player/engine/listen-tracker.ts` 与单元测试（design §3 的每条规则）。
-- [ ] `PlayerEngine`：`recordPlay` 依赖、`seeking` 监听、访问的开始与继续、`endSession` 清空；引擎测试覆盖只调用一次、拖动不算、
-  暂停后继续、重试继续、换曲与单曲循环重新计、“上一首”回到曲首重新计、会话结束清空。
-- [ ] `features/listening` 的上报器与测试（重试节奏、4xx 放弃、`dispose` 之后不再发送、成功后失效“最近播放”查询）；
-  `PlayerProvider` 接线，`endSession` 调用 `dispose`。
-- [ ] 验证：`npm run lint && npm run typecheck`，`npx vitest run src/features/player src/features/listening`，
+- [x] `features/player/engine/listen-tracker.ts` 与单元测试（design §3 的每条规则）。
+- [x] `PlayerEngine`：`playRecorder` 依赖（`record`、`discard`）、`seeking` 监听、访问的开始与继续、`endSession` 作废；引擎测试覆盖只调用一次、拖动不算、
+  暂停后继续、重试继续、换曲与单曲循环重新计、“上一首”回到曲首重新计、会话结束作废。
+- [x] `features/listening` 的上报器与测试（重试节奏、4xx 放弃、`dispose` 之后不再发送、成功后失效“最近播放”查询）；
+  `PlayerProvider` 接线，`endSession` 经 `playRecorder.discard` 调用 `dispose`；默认装配的 provider 测试覆盖上报与会话结束后不再重试。
+- [x] 验证：`npm run lint && npm run typecheck`，`npx vitest run src/features/player src/features/listening`，
   再跑一次 `npm test`（引擎依赖变化会影响所有构造引擎的测试与替身，局部集合覆盖不全）；重新构建内嵌产物。
 - [ ] 提交：`feat(player): 达到规则的播放上报到服务端`（含内嵌产物）。
 

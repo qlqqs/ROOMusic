@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { albumGroup, releaseDetailOf } from "../../../test/catalog-data";
 import { FakeAudio } from "../../../test/fake-audio";
 import { playerTrack } from "../../../test/player-data";
+import { silentPlayRecorder } from "../../../test/play-recorder";
 import { memoryStorage } from "../../../test/memory-storage";
 import { queueStorageKey, saveQueue } from "../engine/persistence";
 import { ApiError } from "../../../shared/api";
@@ -55,7 +56,7 @@ function view(children: ReactNode) {
 /** 预检通过：原文件直出或已转换好的派生文件。 */
 const ready = (trackId: string, kind: "original" | "derived" = "original"): TrackPlaybackResult => ({ state: "ready", playback: { track_id: trackId, representation: { kind, url: `/api/v1/tracks/${trackId}/audio`, mime_type: "audio/flac", codecs: null, size_bytes: 100 } } });
 function createEngine(overrides: Partial<EngineDeps> = {}) {
-  return new PlayerEngine({ userId: "test-user", audio, sessionStorage: null, localStorage: null, mediaSession: null, artworkUrl: (id) => `/api/v1/artworks/${id}`, newId: () => `entry-${++seq}`, random: () => 0, now: () => 0,
+  return new PlayerEngine({ userId: "test-user", audio, sessionStorage: null, localStorage: null, mediaSession: null, artworkUrl: (id) => `/api/v1/artworks/${id}`, newId: () => `entry-${++seq}`, random: () => 0, now: () => 0, playRecorder: silentPlayRecorder,
     loadPlayback: async (trackId) => ready(trackId),
     shouldPrefetch: () => false,
     loadRelease: async () => releaseDetailOf(albumGroup(1).representative),

@@ -123,18 +123,23 @@ CREATE INDEX IF NOT EXISTS play_history_user_track_idx ON play_history (user_id,
 
 - 新的纯逻辑模块 `listen-tracker.ts`：维护当前访问（条目 ID、曲目 ID、门槛、累计秒数、是否已记录）、累计基线与真实时钟；
   提供开始访问、继续、停止累计、拖动、采样几个方法，采样跨过门槛的那一次返回“应记录”。单元测试覆盖第 3 节的每条规则。
-- `PlayerEngine` 的依赖增加 `recordPlay: (play: { trackId: string; playedSeconds: number }) => void`。
-  引擎在 `load` 判断是新访问还是继续，在 `playing`、`pause`、`waiting`、`seeking`、`timeupdate`、单曲循环重播、“上一首”回到曲首处调用跟踪器；
-  跨过门槛时调用 `recordPlay`。`endSession` 清空当前访问。
+- `PlayerEngine` 的依赖增加 `playRecorder: { record(play), discard() }`（`play` 是 `{ trackId, playedSeconds }`）：`record` 把达到规则的播放交出去，
+  引擎不发请求、不等结果，`record` 抛出的错误也不影响播放；`discard` 在会话结束时作废还没发出的上报。
+  引擎的 `load(entryId, seekTo, visit)` 显式区分新访问（换曲、从头再播，默认）与继续（播放键与重试从停下的位置继续）；
+  `playing` 事件再用“沿用进行中的访问，没有就开始新的”兜底（刷新恢复后首次播放、播完最后一首后再按播放）。
+  跟踪器在 `playing`、`pause`、`waiting`、`seeking`、`seeked`、`timeupdate`、单曲循环重播、“上一首”回到曲首、停止、播完最后一首、卸载处被调用；
+  跨过门槛时调用 `playRecorder.record`。`endSession` 先调用 `discard`，再清空当前访问。
 - 新增监听 `seeking` 事件（现在只监听 `seeked`）。
 
 ### 上报器（`features/listening`）
 
-- `createPlayReporter({ send, onRecorded, now })` 返回 `{ report, dispose }`：每次 `report` 生成新的幂等键（`newIdempotencyKey`），
-  `POST /me/plays`；网络失败与 5xx 按 2、10、30 秒重试 3 次，同一个键；4xx（含 400、404、409）与取消直接放弃；
-  401 交给请求层的会话边界，本次放弃。
-- `dispose` 取消全部等待中的重试并中止在途请求。`PlayerProvider` 与引擎一起创建上报器，引擎的 `endSession` 调用 `dispose`：
-  退出、会话失效、换用户之后，上一位用户未发出的记录不会在新会话下发出。
+- `createPlayReporter({ send, onRecorded, newKey })` 返回 `{ report, dispose }`：每次 `report` 生成新的幂等键（`newKey`，装配时用 `newIdempotencyKey`），
+  `POST /me/plays`；结果不确定的失败（`isOutcomeUncertain`：网络失败、无效响应、5xx）按 2、10、30 秒重试 3 次，同一个键；
+  4xx（含 400、404、409）、取消与不是 `ApiError` 的错误直接放弃；401 交给请求层的会话边界，本次放弃。
+  同时等待结果或重试的上报最多 50 个，超出的放弃；`report` 不抛出（`send` 同步抛出也按放弃处理）。
+  `createViewerPlayReporter(queryClient, generation)` 用真实的 `postPlay` 装配它。
+- `dispose` 取消全部等待中的重试并中止在途请求。`PlayerProvider` 与引擎一起创建上报器，并把 `dispose` 接到 `playRecorder.discard`，
+  引擎的 `endSession` 调用它：退出、会话失效、换用户之后，上一位用户未发出的记录不会在新会话下发出。
 - 成功后让该查看者的“最近播放”查询失效（`viewerQueryKey(generation, "listening", "recent-releases")`），概览打开时随之刷新。
 - 上报失败不改变播放状态、不提示用户（记录只是信息性的）；页面关闭时还没成功的记录放弃（P5）。
 

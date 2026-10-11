@@ -10,10 +10,12 @@ import { FakeAudio } from "../../test/fake-audio";
 import { memoryStorage } from "../../test/memory-storage";
 import { playerTrack } from "../../test/player-data";
 import { jsonResponse, sampleResponse } from "../../test/http";
+import { listeningKeys } from "../listening";
 import { decodePlaybackFormats } from "./api/decoders";
 import { buildCapabilityTable } from "./engine/capability";
 import { PlayerEngine } from "./engine/player-engine";
 import { queueStorageKey } from "./engine/persistence";
+import { silentPlayRecorder } from "../../test/play-recorder";
 import { PlayerProvider, usePlayer, usePlayerEngine, usePlayerProgress, usePlayerSelector } from "./player-provider";
 import { usePlaybackCapabilities } from "./hooks/use-playback-capabilities";
 import { playerKeys } from "./query-keys";
@@ -63,7 +65,7 @@ function engineFor(userId: string) {
     shouldPrefetch: () => false,
     loadRelease: async () => { throw new Error("没有保存的队列"); },
     sessionStorage: storage, localStorage: null, mediaSession: null,
-    artworkUrl: (id) => id, newId: () => "entry", random: () => 0, now: Date.now,
+    artworkUrl: (id) => id, newId: () => "entry", random: () => 0, now: Date.now, playRecorder: silentPlayRecorder,
   });
   engines.push(engine);
   return { engine, audio, storage };
@@ -130,6 +132,65 @@ describe("播放器provider", () => {
     await waitFor(() => expect(audio.sources).toEqual([`/api/v1/tracks/${trackId}/audio`]));
     expect(api.requestsTo("GET", `/api/v1/tracks/${trackId}/playback`)).toHaveLength(1);
     storageGetter.mockRestore();
+  });
+
+  /** 默认装配：点“播放”开始一首 60 秒的曲目（门槛 30 秒）并让媒体出声；返回已发出的播放上报。 */
+  async function startListening(options: { reportResponse: () => Response }) {
+    const { api, client, controller, state, Wrapper } = await context();
+    const audio = new FakeAudio();
+    vi.stubGlobal("Audio", class { constructor() { return audio; } });
+    const trackId = "00000000-0000-4000-8000-000000000001";
+    api.on("GET", `/api/v1/tracks/${trackId}/playback`, () => sampleResponse("tracks/playback"));
+    api.on("POST", "/api/v1/me/plays", options.reportResponse);
+    function Command() {
+      const { engine } = usePlayer();
+      return <button onClick={() => engine.playTracks([playerTrack("a", { trackId })])}>播放</button>;
+    }
+    render(<Wrapper><PlayerProvider userId={state.viewer.id}><Command /><Display /></PlayerProvider></Wrapper>);
+    act(() => screen.getByRole("button", { name: "播放" }).click());
+    await waitFor(() => expect(audio.sources).toEqual([`/api/v1/tracks/${trackId}/audio`]));
+    act(() => { audio.loadMetadata(60); audio.beginPlaying(); });
+    return {
+      client, controller, state, trackId,
+      plays: () => api.requestsTo("POST", "/api/v1/me/plays"),
+      // 引擎的计次时钟是真实时间：每次前进 1 秒，在容忍范围内，累计与浏览器里一样。
+      listenUntil: (second: number) => act(() => { for (let at = Math.floor(audio.currentTime) + 1; at <= second; at += 1) audio.tick(at); }),
+    };
+  }
+
+  it("默认装配：播放过半后带幂等键上报一次，成功后让这个会话的“最近播放”查询失效", async () => {
+    const { client, state, trackId, plays, listenUntil } = await startListening({ reportResponse: () => sampleResponse("listening/play-recorded") });
+    const recentKey = listeningKeys.recentReleases(state.generation);
+    client.setQueryData(recentKey, { cached: true });
+    listenUntil(29);
+    expect(plays()).toHaveLength(0);
+    listenUntil(30);
+    await waitFor(() => expect(plays()).toHaveLength(1));
+    const [request] = plays();
+    expect(request?.body).toEqual({ track_id: trackId, played_seconds: 30 });
+    expect(request?.headers.get("Idempotency-Key")).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    await waitFor(() => expect(client.getQueryState(recentKey)?.isInvalidated).toBe(true));
+    listenUntil(59);
+    expect(plays()).toHaveLength(1);
+  });
+
+  it("默认装配：上报失败时用同一个幂等键有限重试；会话结束后等待重试的上报不再发出", async () => {
+    // 网络失败：结果不确定，上报器重试。假定时器下不能用 waitFor（它收尾时等一个真实的 setTimeout），请求本身是同步发出的。
+    const { controller, state, plays, listenUntil } = await startListening({ reportResponse: () => { throw new TypeError("网络中断"); } });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      listenUntil(30);
+      expect(plays()).toHaveLength(1);
+      await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+      expect(plays()).toHaveLength(2);
+      expect(new Set(plays().map((request) => request.headers.get("Idempotency-Key"))).size).toBe(1);
+      // 第二次也失败了，10 秒后还有一次重试在等；会话结束时它被作废。
+      await act(async () => controller.handleUnauthorized(state.generation));
+      await act(async () => { await vi.advanceTimersByTimeAsync(120_000); });
+      expect(plays()).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("默认装配收到 202 后进入“正在准备”并立即再次预检，直到收到派生表示才加载音频", async () => {

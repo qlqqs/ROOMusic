@@ -109,6 +109,13 @@ export class FakeAudio extends EventTarget implements AudioLike {
     this.emit("timeupdate");
   }
 
+  /** 拖动或跳转：浏览器先发 seeking，到达新位置后发 seeked；currentTime 在 seeking 时就已是目标位置。 */
+  seekTo(position: number): void {
+    this.currentTime = position;
+    this.emit("seeking");
+    this.emit("seeked");
+  }
+
   stall(): void {
     this.emit("waiting");
   }

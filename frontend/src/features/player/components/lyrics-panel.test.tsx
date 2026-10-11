@@ -10,6 +10,7 @@ import { FakeAudio } from "../../../test/fake-audio";
 import { jsonResponse, sampleResponse, type RecordedRequest } from "../../../test/http";
 import { memoryStorage } from "../../../test/memory-storage";
 import { playerTrack } from "../../../test/player-data";
+import { silentPlayRecorder } from "../../../test/play-recorder";
 import { PlayerEngine } from "../engine/player-engine";
 import { PlayerProvider } from "../player-provider";
 import { LyricsPanel } from "./lyrics-panel";
@@ -45,7 +46,7 @@ async function mount(options: { lyrics?: (request: RecordedRequest) => Response 
     shouldPrefetch: () => false,
     loadRelease: async () => { throw new Error("没有保存的队列"); },
     sessionStorage: memoryStorage(), localStorage: null, mediaSession: null,
-    artworkUrl: (id) => id, newId: () => "entry", random: () => 0, now: Date.now,
+    artworkUrl: (id) => id, newId: () => "entry", random: () => 0, now: Date.now, playRecorder: silentPlayRecorder,
   });
   engines.push(engine);
   let commits = 0;

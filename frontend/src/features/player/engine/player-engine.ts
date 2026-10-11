@@ -5,9 +5,13 @@
 // 媒体元素读不到错误正文，所以失败原因（目录已停用、文件变化、不能直出……）在预检里得到，音频出错后也用它再次分类。
 // 派生格式（ALAC）的预检会等待服务端无损转换：收到 202 就进入“正在准备”并立即再次预检，直到可以播放、失败或被放弃；
 // 当前曲目出声后，为下一首派生曲目预先发一次预检，让转换在切歌之前完成。
+//
+// 计一次播放（阶段 P）：ListenTracker 按媒体事件累计真正出声的时间，达到规则时引擎把它经 playRecorder 交出去，一次访问最多一次；
+// 引擎不发请求、不等结果，也不知道接口长什么样。
 import { failureOf, type ApiFailure } from "../../../shared/api";
 import type { ReleaseDetailDTO, ReleaseTrackDTO } from "../../catalog";
 import type { TrackPlaybackResult } from "../api/endpoints";
+import { ListenTracker, type ListenRecord, type ListenTrack } from "./listen-tracker";
 import type { MediaSessionActionName, MediaSessionPort } from "./media-session";
 import { clearSavedQueue, loadSavedQueue, loadVolume, saveQueue, saveVolume, type SavedQueue, type StorageLike } from "./persistence";
 import {
@@ -55,6 +59,15 @@ export type AudioLike = {
   removeEventListener: (type: string, listener: () => void) => void;
 };
 
+/** 一次达到计次规则的播放：曲目与达到规则那一刻累计的实际出声秒数。 */
+export type PlayedTrack = ListenRecord;
+
+/**
+ * 记录播放的出口。record 把达到计次规则的播放交出去（上报到服务端），引擎不等结果、不处理失败，抛出的错误也不影响播放；
+ * discard 在会话结束时调用，作废还没有发出的上报，上一位用户的记录不会在新会话下发出。
+ */
+export type PlayRecorder = { record: (play: PlayedTrack) => void; discard: () => void };
+
 export type EngineDeps = {
   userId: string;
   audio: AudioLike;
@@ -72,6 +85,7 @@ export type EngineDeps = {
   newId: () => string;
   random: () => number;
   now: () => number;
+  playRecorder: PlayRecorder;
 };
 
 /** 曲目不能播放的原因；界面按它选文案（不比较后端 message）。 */
@@ -164,6 +178,11 @@ function finiteOr(value: number, fallback: number): number {
   return Number.isFinite(value) ? value : fallback;
 }
 
+/** 队列条目 → 计次的访问对象：条目 ID 区分同一首曲目的多次入队，时长是扫描得到的（未知是 null）。 */
+function listenTrackOf(entry: QueueEntry): ListenTrack {
+  return { entryId: entry.entryId, trackId: entry.track.trackId, durationSeconds: entry.track.durationSeconds };
+}
+
 /** 后端对预检与音频的 404/409 分类 → 曲目不能播放的原因；不认识的 4xx 按“文件无法读取”处理，5xx 与其他失败是暂时性的。 */
 function failureReasonOf(failure: ApiFailure): PlaybackFailureReason | null {
   if (failure.kind !== "http") return null;
@@ -194,6 +213,8 @@ export class PlayerEngine {
   private readonly deps: EngineDeps;
   private readonly audio: AudioLike;
   private readonly env: QueueEnv;
+  /** 计一次播放：只在状态为 playing 时累计，见 listen-tracker.ts。 */
+  private readonly listen: ListenTracker;
 
   private queue: QueueState = emptyQueue;
   private status: PlayerStatus = "idle";
@@ -241,6 +262,7 @@ export class PlayerEngine {
     this.deps = deps;
     this.audio = deps.audio;
     this.env = { newEntryId: deps.newId, random: deps.random };
+    this.listen = new ListenTracker(deps.now);
     const saved = loadVolume(deps.localStorage);
     this.volume = saved.volume;
     this.muted = saved.muted;
@@ -306,6 +328,7 @@ export class PlayerEngine {
   /** 会话结束（退出、失效、换用户）：停止播放、清空队列、删除保存的队列；之后引擎不再接受命令。 */
   endSession(): void {
     if (this.finished) return;
+    this.deps.playRecorder.discard();
     this.detach();
     // 即使尚未 attach，也必须中止命令发起的预检与媒体。
     this.stopPlayback();
@@ -442,7 +465,7 @@ export class PlayerEngine {
       this.commit();
       return;
     }
-    this.load(current.entryId, this.resumePosition);
+    this.load(current.entryId, this.resumePosition, "continue");
   }
 
   pause(): void {
@@ -473,6 +496,7 @@ export class PlayerEngine {
   stop(): void {
     if (this.finished) return;
     this.pause();
+    this.listen.end();
     this.resumePosition = 0;
     this.pendingSeek = null;
     if (this.isCurrentMedia() && this.progress.seekable) {
@@ -500,7 +524,9 @@ export class PlayerEngine {
     this.acceptTransition(step.state, this.queue.mode !== "shuffle");
     if (wasCurrent && this.loadedEntryId === step.entryId && this.isCurrentMedia()) {
       // 已经在队首（或随机模式没有历史）：当前条目从头播放；还没生效的开始位置作废，元数据到达后不能再跳过去。
+      // 从头再播是新的一次访问。
       this.pendingSeek = null;
+      this.beginListening(step.entryId);
       this.audio.currentTime = 0;
       this.play();
       return;
@@ -539,18 +565,23 @@ export class PlayerEngine {
     const current = currentEntry(this.queue);
     if (current === null) return;
     this.touch();
-    this.load(current.entryId, this.resumePosition);
+    this.load(current.entryId, this.resumePosition, "continue");
   }
 
   // ---- 加载与播放 ----
 
-  /** 预检并开始播放一首曲目；seekTo 是开始位置（秒）。之前的加载与媒体都被放弃。 */
-  private load(entryId: string, seekTo: number): void {
+  /**
+   * 预检并开始播放一首曲目；seekTo 是开始位置（秒）。之前的加载与媒体都被放弃。
+   * visit 决定计次：默认是新的访问（换曲、同一首从头再播）；播放键与重试从停下的位置继续时是 "continue"，累计保留。
+   */
+  private load(entryId: string, seekTo: number, visit: "new" | "continue" = "new"): void {
     const entry = this.entryById(entryId);
     if (entry === undefined) return;
     this.cancelPreflight();
     this.cancelPrefetch();
     this.unloadAudio();
+    if (visit === "continue") this.listen.continueOrBegin(listenTrackOf(entry));
+    else this.listen.begin(listenTrackOf(entry));
     this.queue = this.queue.currentEntryId === entryId ? this.queue : { ...this.queue, currentEntryId: entryId };
     const attempt = ++this.attempt;
     this.playedVisitEntryId = null;
@@ -759,6 +790,7 @@ export class PlayerEngine {
   private advanceAfterEnd(): void {
     const step = advance(this.queue, this.env, { reason: "natural", isSkipped: this.isFailed });
     if (step.entryId === null) {
+      this.listen.end(); // 播完了：之后再按播放是从头再播，算新的访问
       this.status = "paused";
       this.stopTimers();
       this.syncProgress();
@@ -769,7 +801,8 @@ export class PlayerEngine {
     }
     const current = currentEntry(this.queue);
     if (current !== null && step.entryId === current.entryId && this.loadedEntryId === current.entryId) {
-      // 单曲循环（或只有一首的循环）：当前条目从头再播，不必重新预检。
+      // 单曲循环（或只有一首的循环）：当前条目从头再播，不必重新预检；每一轮是新的访问。
+      this.beginListening(current.entryId);
       this.audio.currentTime = 0;
       this.syncProgress();
       this.status = "loading";
@@ -788,8 +821,9 @@ export class PlayerEngine {
     return [
       ["loadedmetadata", this.onLoadedMetadata],
       ["durationchange", this.syncProgress],
-      ["timeupdate", this.syncProgress],
-      ["seeked", this.syncProgress],
+      ["timeupdate", this.onTimeUpdate],
+      ["seeking", this.onSeeking],
+      ["seeked", this.onSeeked],
       ["progress", this.syncProgress],
       ["canplay", this.syncProgress],
       ["playing", this.onPlaying],
@@ -816,6 +850,7 @@ export class PlayerEngine {
   private readonly syncProgress = (): void => {
     if (!this.isCurrentMedia()) return;
     const duration = Number.isFinite(this.audio.duration) && this.audio.duration > 0 ? this.audio.duration : null;
+    this.listen.mediaDuration(duration);
     if (this.pendingSeek !== null && duration !== null && this.audio.seekable.length > 0) {
       const target = Math.min(this.pendingSeek, duration);
       this.pendingSeek = null;
@@ -835,6 +870,7 @@ export class PlayerEngine {
     this.status = "playing";
     this.playedVisitEntryId = this.loadedEntryId;
     this.fault = null;
+    this.resumeListening();
     this.startTimers();
     this.syncMediaSessionState();
     this.commit();
@@ -845,6 +881,7 @@ export class PlayerEngine {
     if (!this.isCurrentMedia() || this.audio.ended) return;
     if (!isPlaybackActive(this.status)) return;
     this.status = "paused";
+    this.listen.suspend();
     this.stopTimers();
     this.syncMediaSessionState();
     this.commit();
@@ -854,7 +891,27 @@ export class PlayerEngine {
   private readonly onWaiting = (): void => {
     if (!this.isCurrentMedia() || this.status !== "playing") return;
     this.status = "buffering";
+    this.listen.suspend();
     this.commit();
+  };
+
+  /** 出声期间的进度事件：同步进度，并把位置交给计次；跨过门槛的那一次把这次播放交给记录出口。 */
+  private readonly onTimeUpdate = (): void => {
+    this.syncProgress();
+    if (this.status !== "playing" || !this.isCurrentMedia()) return;
+    const record = this.listen.sample(finiteOr(this.audio.currentTime, Number.NaN));
+    if (record !== null) this.recordPlay(record);
+  };
+
+  /** 开始拖动：拖动跨过的距离不算出声。 */
+  private readonly onSeeking = (): void => {
+    if (!this.isCurrentMedia()) return;
+    this.listen.seeking();
+  };
+
+  private readonly onSeeked = (): void => {
+    this.syncProgress();
+    if (this.status === "playing" && this.isCurrentMedia()) this.listen.seeked(finiteOr(this.audio.currentTime, Number.NaN));
   };
 
   private readonly onEnded = (): void => {
@@ -881,6 +938,30 @@ export class PlayerEngine {
 
   private isActive(): boolean {
     return isPlaybackActive(this.status);
+  }
+
+  /** 新的访问：条目从头再播。 */
+  private beginListening(entryId: string): void {
+    const entry = this.entryById(entryId);
+    if (entry !== undefined) this.listen.begin(listenTrackOf(entry));
+  }
+
+  /** 开始出声：沿用这个条目进行中的访问，没有（刷新后、播完后再按播放）就开始新的，再以当前位置为基准。 */
+  private resumeListening(): void {
+    const entry = this.loadedEntryId === null ? undefined : this.entryById(this.loadedEntryId);
+    if (entry === undefined) return;
+    this.listen.continueOrBegin(listenTrackOf(entry));
+    this.listen.resume(finiteOr(this.audio.currentTime, Number.NaN));
+  }
+
+  /** 把达到规则的播放交给记录出口；会话结束后不再交出，出口抛出的错误不影响播放。 */
+  private recordPlay(record: ListenRecord): void {
+    if (this.finished) return;
+    try {
+      this.deps.playRecorder.record(record);
+    } catch {
+      // 记录只是信息性的：上报器自己处理失败，这里不让它波及播放。
+    }
   }
 
   private entryById(entryId: string): QueueEntry | undefined {
@@ -931,6 +1012,7 @@ export class PlayerEngine {
   /** 暂停并清空媒体元素的来源：中断网络传输，之后不再有旧媒体的事件被当作当前的。 */
   private unloadAudio(): void {
     this.stopTimers();
+    this.listen.suspend();
     this.loadedEntryId = null;
     this.expectedSrc = null;
     this.pendingSeek = null;
@@ -945,6 +1027,7 @@ export class PlayerEngine {
     this.cancelPrefetch();
     this.attempt += 1;
     this.unloadAudio();
+    this.listen.end();
     this.fault = null;
     this.resumePosition = 0;
     this.status = this.queue.currentEntryId === null ? "idle" : "paused";

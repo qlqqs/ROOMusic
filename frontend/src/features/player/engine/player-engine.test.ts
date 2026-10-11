@@ -4,6 +4,7 @@ import { sampleBody } from "../../../test/api-samples";
 import { FakeAudio } from "../../../test/fake-audio";
 import { memoryStorage } from "../../../test/memory-storage";
 import { playerTrack } from "../../../test/player-data";
+import { fakePlayRecorder } from "../../../test/play-recorder";
 import { decodeReleaseDetail } from "../../catalog/api/decoders";
 import type { TrackPlaybackResult } from "../api/endpoints";
 import type { MediaSessionActionName, MediaSessionMetadata, MediaSessionPort } from "./media-session";
@@ -66,6 +67,7 @@ function createHarness(overrides: Partial<EngineDeps> = {}, options: { attach?: 
     throw new Error("未登记发行");
   });
   const shouldPrefetch = vi.fn((_track: PlayerTrack) => false);
+  const recorder = fakePlayRecorder();
   const deps: EngineDeps = {
     userId,
     audio,
@@ -79,6 +81,7 @@ function createHarness(overrides: Partial<EngineDeps> = {}, options: { attach?: 
     newId: () => `e${++counter}`,
     random: () => 0,
     now: () => clock.now,
+    playRecorder: recorder.recorder,
     ...overrides,
   };
   const engine = new PlayerEngine(deps);
@@ -94,6 +97,9 @@ function createHarness(overrides: Partial<EngineDeps> = {}, options: { attach?: 
     loadPlayback,
     loadRelease,
     shouldPrefetch,
+    /** 引擎交给记录出口的播放（计次达到规则的那一刻），以及出口被作废的次数。 */
+    played: recorder.played,
+    discardPlays: recorder.discard,
     /** 让某首曲目的预检返回指定结果（Promise 或抛出的错误）。 */
     preflight: (trackId: string, outcome: () => Promise<TrackPlaybackResult>) => void outcomes.set(trackId, outcome),
     /**
@@ -1763,5 +1769,315 @@ describe("预取下一首派生曲目", () => {
     expect(preflightedTracks(h)).toEqual(["track-a", "track-b"]);
     // 第二次预检是前进到 track-b 的正常加载，不是预取：它出声之前没有预取调用。
     expect(h.shouldPrefetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("计一次播放（阶段 P）", () => {
+  /**
+   * 出声 seconds 秒：每一秒同时推进注入的时钟与播放位置，像浏览器大约每秒一次的 timeupdate。
+   * 默认曲目长 60 秒，门槛是 30 秒；达到门槛时引擎把这次播放交给记录出口（h.played）。
+   */
+  function listenFor(h: Harness, seconds: number): void {
+    for (let step = 0; step < seconds; step += 1) {
+      h.clock.now += 1_000;
+      h.audio.tick(h.audio.currentTime + 1);
+    }
+  }
+  const played = (trackId: string, playedSeconds = 30) => ({ trackId, playedSeconds });
+
+  it("累计出声达到曲长一半时恰好交出一次，之后继续播放也不再交出", async () => {
+    const h = createHarness();
+    await playAndStart(h, [track("a")], 0, 60);
+    listenFor(h, 29);
+    expect(h.played).toEqual([]);
+    listenFor(h, 1);
+    expect(h.played).toEqual([played("track-a")]);
+    listenFor(h, 29);
+    expect(h.played).toEqual([played("track-a")]);
+  });
+
+  it("门槛封顶 4 分钟；曲目没有扫描时长时用媒体报告的时长，两者都没有时也是 4 分钟", async () => {
+    const long = createHarness();
+    await playAndStart(long, [track("long", { durationSeconds: 1800 })], 0, 1800);
+    listenFor(long, 239);
+    expect(long.played).toEqual([]);
+    listenFor(long, 1);
+    expect(long.played).toEqual([played("track-long", 240)]);
+
+    const scannedWithoutDuration = createHarness();
+    await playAndStart(scannedWithoutDuration, [track("short", { durationSeconds: null })], 0, 40);
+    listenFor(scannedWithoutDuration, 19);
+    expect(scannedWithoutDuration.played).toEqual([]);
+    listenFor(scannedWithoutDuration, 1);
+    expect(scannedWithoutDuration.played).toEqual([played("track-short", 20)]);
+
+    const unknown = createHarness();
+    await playAndStart(unknown, [track("unknown", { durationSeconds: null })], 0, Number.POSITIVE_INFINITY);
+    listenFor(unknown, 239);
+    expect(unknown.played).toEqual([]);
+    listenFor(unknown, 1);
+    expect(unknown.played).toEqual([played("track-unknown", 240)]);
+  });
+
+  it("拖动跨过的部分不算：往后拖、往回拖再继续听，只累计真正出声的时间", async () => {
+    const h = createHarness();
+    await playAndStart(h, [track("a")], 0, 60);
+    listenFor(h, 20);
+    h.audio.seekTo(55);
+    listenFor(h, 4);
+    h.audio.seekTo(0);
+    listenFor(h, 5);
+    expect(h.played).toEqual([]); // 20 + 4 + 5 = 29
+    listenFor(h, 1);
+    expect(h.played).toEqual([played("track-a")]);
+  });
+
+  it("只拖动、几乎没有出声的播放不上报，哪怕位置一路走到了结尾", async () => {
+    const h = createHarness();
+    await playAndStart(h, [track("a")], 0, 60);
+    for (const position of [20, 40, 58]) {
+      h.audio.seekTo(position);
+      listenFor(h, 1);
+    }
+    h.audio.finish();
+    await settle();
+    expect(h.played).toEqual([]);
+  });
+
+  it("没有 seeking 事件的位置跳变（引擎自己设置 currentTime）按流逝的时间折算，跳过的距离不累计", async () => {
+    const h = createHarness();
+    await playAndStart(h, [track("a")], 0, 60);
+    listenFor(h, 10);
+    h.engine.seek(30); // FakeAudio 的 currentTime 赋值不发事件：下一次 timeupdate 看到的是 21 秒的跳变
+    listenFor(h, 1);
+    listenFor(h, 18);
+    expect(h.played).toEqual([]); // 10 + 18 = 28，跳变没有算进去
+    listenFor(h, 2);
+    expect(h.played).toEqual([played("track-a")]);
+  });
+
+  it("暂停后继续是同一次访问：暂停的时间不算，累计保留", async () => {
+    const h = createHarness();
+    await playAndStart(h, [track("a")], 0, 60);
+    listenFor(h, 20);
+    h.engine.pause();
+    h.clock.now += 120_000;
+    h.engine.play();
+    h.audio.beginPlaying();
+    listenFor(h, 9);
+    expect(h.played).toEqual([]);
+    listenFor(h, 1);
+    expect(h.played).toEqual([played("track-a")]);
+  });
+
+  it("缓冲期间不算：卡住的时间与缓冲中的进度变化都不累计", async () => {
+    const h = createHarness();
+    await playAndStart(h, [track("a")], 0, 60);
+    listenFor(h, 20);
+    h.audio.stall();
+    expect(state(h).status).toBe("buffering");
+    h.clock.now += 30_000;
+    h.audio.tick(23);
+    h.clock.now += 1_000;
+    h.audio.tick(24);
+    h.audio.beginPlaying();
+    listenFor(h, 9);
+    expect(h.played).toEqual([]); // 20 + 9 = 29
+    listenFor(h, 1);
+    expect(h.played).toEqual([played("track-a")]);
+  });
+
+  it("预检、正在准备与加载期间的时间不算，出声之前的位置变化也不算", async () => {
+    const h = createHarness();
+    h.preflightSequence("track-a", [preparing, playbackOf("track-a", "derived")]); // 服务端让预检等了 20 秒
+    h.engine.playTracks([track("a")]);
+    await settle();
+    expect(state(h).status).toBe("loading");
+    h.audio.loadMetadata(60);
+    h.audio.tick(10); // 还没有 playing 事件
+    h.clock.now += 1_000;
+    h.audio.tick(11);
+    h.audio.beginPlaying();
+    listenFor(h, 29);
+    expect(h.played).toEqual([]);
+    listenFor(h, 1);
+    expect(h.played).toEqual([played("track-a")]);
+  });
+
+  it("预检失败的曲目没有出声，不交出；下一首正常计次", async () => {
+    const h = createHarness();
+    h.fail("track-a", httpError(409, "source_unavailable"));
+    h.engine.playTracks([track("a"), track("b")]);
+    await settle();
+    h.audio.loadMetadata(60);
+    h.audio.beginPlaying();
+    listenFor(h, 30);
+    expect(h.played).toEqual([played("track-b")]);
+  });
+
+  it("静音与音量为 0 照常累计", async () => {
+    const h = createHarness();
+    await playAndStart(h, [track("a")], 0, 60);
+    h.engine.setMuted(true);
+    h.engine.setVolume(0);
+    listenFor(h, 30);
+    expect(h.played).toEqual([played("track-a")]);
+  });
+
+  it("换曲是新的访问：上一首的累计不带到下一首", async () => {
+    const h = createHarness();
+    await playAndStart(h, [track("a"), track("b")], 0, 60);
+    listenFor(h, 20);
+    h.engine.next();
+    await settle();
+    h.audio.loadMetadata(60);
+    h.audio.beginPlaying();
+    listenFor(h, 29);
+    expect(h.played).toEqual([]);
+    listenFor(h, 1);
+    expect(h.played).toEqual([played("track-b")]);
+  });
+
+  it("在队首按上一首是从头重播：新的访问，之前的累计作废", async () => {
+    const h = createHarness();
+    await playAndStart(h, [track("a"), track("b")], 0, 60);
+    listenFor(h, 20);
+    h.engine.previous();
+    h.audio.seekTo(0); // 浏览器对 currentTime 赋值发 seeking 与 seeked，媒体继续出声
+    listenFor(h, 29);
+    expect(h.played).toEqual([]);
+    listenFor(h, 1);
+    expect(h.played).toEqual([played("track-a")]);
+  });
+
+  it("单曲循环：每一轮是新的访问，各交出一次", async () => {
+    const h = createHarness();
+    h.engine.setMode("repeat_one");
+    await playAndStart(h, [track("a")], 0, 60);
+    listenFor(h, 30);
+    expect(h.played).toEqual([played("track-a")]);
+    h.audio.finish();
+    await settle();
+    h.audio.beginPlaying();
+    listenFor(h, 29);
+    expect(h.played).toHaveLength(1);
+    listenFor(h, 1);
+    expect(h.played).toEqual([played("track-a"), played("track-a")]);
+  });
+
+  it("播完最后一首后再按播放是从头重播，算新的访问", async () => {
+    const h = createHarness();
+    await playAndStart(h, [track("a")], 0, 60);
+    listenFor(h, 30);
+    h.audio.finish();
+    await settle();
+    expect(state(h).status).toBe("paused");
+    h.engine.play();
+    h.audio.ended = false;
+    h.audio.seekTo(0); // 浏览器在已播完的媒体上 play() 会先回到开头
+    h.audio.beginPlaying();
+    listenFor(h, 29);
+    expect(h.played).toEqual([played("track-a")]);
+    listenFor(h, 1);
+    expect(h.played).toEqual([played("track-a"), played("track-a")]);
+  });
+
+  it("停止回到曲目开头：之后再播放是新的访问", async () => {
+    const h = createHarness();
+    await playAndStart(h, [track("a")], 0, 60);
+    listenFor(h, 20);
+    h.engine.stop();
+    h.engine.play();
+    h.audio.beginPlaying();
+    listenFor(h, 29);
+    expect(h.played).toEqual([]);
+    listenFor(h, 1);
+    expect(h.played).toEqual([played("track-a")]);
+  });
+
+  it("暂时性故障后重试是同一次访问：累计保留，从停下的位置继续", async () => {
+    const h = createHarness();
+    await playAndStart(h, [track("a")], 0, 60);
+    listenFor(h, 20);
+    h.audio.fail(2);
+    await settle();
+    expect(state(h).fault).toEqual({ kind: "transient" });
+    h.engine.retry();
+    await settle();
+    h.audio.loadMetadata(60);
+    h.audio.beginPlaying();
+    expect(h.audio.currentTime).toBe(20);
+    listenFor(h, 9);
+    expect(h.played).toEqual([]);
+    listenFor(h, 1);
+    expect(h.played).toEqual([played("track-a")]);
+  });
+
+  it("普通卸载再挂载（开发模式的模拟卸载）保留这次访问，也不作废上报", async () => {
+    const h = createHarness();
+    await playAndStart(h, [track("a")], 0, 60);
+    listenFor(h, 20);
+    h.engine.detach();
+    h.engine.attach();
+    expect(h.discardPlays).not.toHaveBeenCalled();
+    h.engine.play();
+    await settle();
+    h.audio.loadMetadata(60);
+    h.audio.beginPlaying();
+    listenFor(h, 9);
+    expect(h.played).toEqual([]);
+    listenFor(h, 1);
+    expect(h.played).toEqual([played("track-a")]);
+  });
+
+  it("刷新后恢复的队列再播放：累计从零开始，保存的位置不算", async () => {
+    const release = decodeReleaseDetail(sampleBody("releases/get"));
+    const first = release.media.flatMap((medium) => medium.tracks)[0];
+    if (first === undefined) throw new Error("测试样本缺少曲目");
+    const storage = memoryStorage();
+    saveQueue(storage, userId, {
+      entries: [{ entryId: "restored-1", trackId: first.id, releaseId: release.id, groupId: "00000000-0000-4000-8000-000000000099" }],
+      currentEntryId: "restored-1",
+      mode: "shuffle",
+      positionSeconds: 22,
+      history: [],
+    });
+    const h = createHarness({ sessionStorage: storage, loadRelease: vi.fn(async () => release) });
+    await settle();
+    h.engine.play();
+    await settle();
+    h.audio.loadMetadata(240);
+    h.audio.beginPlaying();
+    expect(h.audio.currentTime).toBe(22);
+    listenFor(h, 119);
+    expect(h.played).toEqual([]); // 样本曲目长 240 秒，门槛 120 秒
+    listenFor(h, 1);
+    expect(h.played).toEqual([played(first.id, 120)]);
+  });
+
+  it("记录出口抛出错误也不影响播放", async () => {
+    const record = vi.fn(() => {
+      throw new Error("上报器坏了");
+    });
+    const h = createHarness({ playRecorder: { record, discard: () => undefined } });
+    await playAndStart(h, [track("a")], 0, 60);
+    listenFor(h, 30);
+    expect(record).toHaveBeenCalledTimes(1);
+    expect(state(h).status).toBe("playing");
+    listenFor(h, 5);
+    expect(progress(h).positionSeconds).toBe(35);
+    expect(record).toHaveBeenCalledTimes(1);
+  });
+
+  it("会话结束作废还没有发出的上报，之后的进度不再交出记录；重复结束只作废一次", async () => {
+    const h = createHarness();
+    await playAndStart(h, [track("a")], 0, 60);
+    listenFor(h, 20);
+    h.engine.endSession();
+    expect(h.discardPlays).toHaveBeenCalledTimes(1);
+    listenFor(h, 20);
+    h.engine.endSession();
+    expect(h.discardPlays).toHaveBeenCalledTimes(1);
+    expect(h.played).toEqual([]);
   });
 });

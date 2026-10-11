@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useMemo, useSyncExternalStore, ty
 import { newIdempotencyKey } from "../../shared/lib/ids";
 import { useSessionController, useViewerScope } from "../auth";
 import { artworkPath, useReleaseLoader } from "../catalog";
+import { createViewerPlayReporter } from "../listening";
 import { fetchTrackPlayback } from "./api/endpoints";
 import type { CapabilityTable } from "./engine/capability";
 import { browserMediaSession } from "./engine/media-session";
@@ -27,8 +28,11 @@ export function PlayerProvider({ userId, children, engine: suppliedEngine }: { u
   const { generation, isCurrent } = useViewerScope();
   const queryClient = useQueryClient();
   const loadRelease = useReleaseLoader();
-  const engine = useMemo(
-    () => suppliedEngine ?? new PlayerEngine({
+  const engine = useMemo(() => {
+    if (suppliedEngine !== undefined) return suppliedEngine;
+    // 上报器与引擎同生共死：引擎的 endSession 会作废它，上一位用户还没发出的记录不会在新会话下发出。
+    const reporter = createViewerPlayReporter(queryClient, generation);
+    return new PlayerEngine({
       userId,
       audio: new Audio(),
       loadPlayback: async (trackId, signal) => (await fetchTrackPlayback(trackId, signal)).data,
@@ -42,9 +46,9 @@ export function PlayerProvider({ userId, children, engine: suppliedEngine }: { u
       newId: newIdempotencyKey,
       random: Math.random,
       now: Date.now,
-    }),
-    [suppliedEngine, userId, loadRelease, queryClient, generation],
-  );
+      playRecorder: { record: reporter.report, discard: reporter.dispose },
+    });
+  }, [suppliedEngine, userId, loadRelease, queryClient, generation]);
   useEffect(() => {
     // 请求层的 401、跨标签页注销和换用户都走同一个同步结束事件，不等下一次 React 渲染。
     const unsubscribe = controller.onEnded(() => engine.endSession());
