@@ -35,6 +35,7 @@ var packageRules = map[string]packageRule{
 	"library":                        {imports: []string{"catalog", "catalog/artwork", "catalog/metadata", "library/parser", "platform/uuid"}},
 	"playback/derivation":            {},
 	"playback":                       {imports: []string{"catalog", "library", "playback/derivation"}},
+	"listening":                      {imports: []string{"catalog"}},
 	"identity":                       {imports: []string{"platform/httpserver"}, http: true},
 	"identity/httpapi":               {imports: []string{"identity", "platform/httpserver", "platform/uuid"}, http: true},
 	"catalog/httpapi":                {imports: []string{"catalog", "catalog/artwork", "identity", "platform/httpserver", "platform/uuid"}, http: true},

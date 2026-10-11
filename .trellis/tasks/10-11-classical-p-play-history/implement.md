@@ -22,12 +22,12 @@
 
 ### 第 1 步：数据表与记录规则（R1、R2 的服务端部分、R4）
 
-- [ ] 迁移 `0016_play_history.sql`（design §2）。
-- [ ] catalog：`LoadTrackDuration`、`LoadTrackPlacements`（design §5），集成测试覆盖 present-only、批量、空输入、封面校验。
-- [ ] `internal/listening`：门槛计算、`Record`（含幂等与冲突）、`RecentReleases`（分批去重）、`Clear`；在 `dependency_rules_test.go` 声明依赖。
-  单元测试覆盖门槛边界；集成测试覆盖重放、并发同键只写一行、门槛、缺失曲目、用户隔离、最近播放的倒序/去重/上限/隐藏缺失、
-  `has_history`、改名与同 root 移动后重扫仍指向同一曲目。
-- [ ] 验证：
+- [x] 迁移 `0016_play_history.sql`（design §2）。
+- [x] catalog：`LoadTrackDuration`、`LoadTrackPlacements`（design §5），集成测试覆盖 present-only、批量、空输入、封面校验。
+- [x] `internal/listening`：门槛计算、`Record`（含幂等与冲突）、`RecentReleases`（分批去重）、`Clear`；在 `dependency_rules_test.go` 声明依赖。
+  单元测试覆盖门槛边界；集成测试覆盖重放、并发同键只写一行、门槛、缺失曲目、用户隔离、最近播放的倒序/去重/上限/分批/隐藏缺失、
+  `has_history`、曲目换发行后的显示、表约束。改名与同 root 移动后重扫仍指向同一曲目的测试需要扫描管线，放在第 2 步的 `internal/app` 集成测试里。
+- [x] 验证：
 
   ```bash
   cd backend && test -z "$(gofmt -l .)" && go vet ./... && go build ./...
@@ -36,13 +36,14 @@
   go test -race ./internal/listening/... ./internal/catalog/... ./internal/platform/postgres/... -run 'TestPostgreSQL' -count=1
   ```
 
-- [ ] 提交：`feat(listening): 播放历史的数据表与记录规则`。
+- [x] 提交：`feat(listening): 播放历史的数据表与记录规则`。
 
 ### 第 2 步：接口、样本与前端解码（R1、R3）
 
 - [ ] `internal/listening/httpapi`：三个路由（design §4）；`app` 装配；依赖规则。
 - [ ] 集成测试 `internal/app/listening_api_integration_test.go`：201 与重放、409、400（缺键、非 UUID、数值、`play_too_short`）、404、401、跨源 403、
-  用户 A/B 与管理员互相读不到、清不掉。
+  用户 A/B 与管理员互相读不到、清不掉；停用成员的记录保留、重新启用后本人可见；合成 FLAC 经扫描入库后改名、同 root 移动并重扫，
+  记录仍指向同一曲目、最近播放仍显示同一专辑，文件消失（完整扫描标记缺失）后记录不显示但仍在库中。
 - [ ] 接口样本：记录、最近播放（有数据与空）、清除、`play_too_short`；`ROOMUSIC_UPDATE_API_SAMPLES=1` 重写后逐个核对差异只有新增文件。
 - [ ] 前端：`shared/api/request.ts` 支持 `DELETE`；`features/listening/api` 的端点与解码器（发行摘要复用 catalog 公开的解码器）；
   契约测试登记新样本；解码器的样本与反例测试。重新构建内嵌产物（无变化也要核对）。

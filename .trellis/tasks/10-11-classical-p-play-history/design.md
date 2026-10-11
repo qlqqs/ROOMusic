@@ -76,7 +76,7 @@ CREATE INDEX IF NOT EXISTS play_history_user_track_idx ON play_history (user_id,
 ### `GET /api/v1/me/plays/recent-releases`：最近播放的发行
 
 - 响应 `{ "items": [{ "group_id": UUID, "release": Release 摘要, "last_played_at": RFC 3339, "last_track": { "id": UUID, "title": string } }], "has_history": boolean }`。
-- `release` 与 `/releases` 的摘要同形（含 `artwork`）；最多 8 项，按 `last_played_at` 倒序，同一时间按发行 ID。
+- `release` 与 `/releases` 的摘要同形（含 `artwork`）；最多 8 项，按 `last_played_at` 倒序，同一时间按曲目 ID（分批读取时保持稳定）。
 - 每个发行只出现一次，代表它最近一次被播放的曲目；曲目已缺失（不再 `present`）的记录不显示，但仍保存，文件回来后照常出现。
 - 曲目随重扫换到另一个发行时，按它**当前**所在的发行显示（记录引用曲目，不引用发行）。
 - `has_history` 表示该用户是否有任何记录（含当前不显示的），前端据此决定是否提供“清除播放历史”。
