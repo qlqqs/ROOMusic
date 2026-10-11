@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端测试与门禁"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移与约束"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端测试、axe、五种宽度与内嵌产物"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "接口、上报与界面的跨层数据流核对"}

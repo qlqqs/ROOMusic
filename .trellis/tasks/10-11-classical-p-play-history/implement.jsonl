@@ -1,0 +1,10 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移写法、表归属与跨能力读取规则"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新能力包 listening 的归属与依赖方向"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "请求与响应、错误信封、幂等键、接口样本与 CI"}
+{"file": ".trellis/spec/backend/identity-contracts.md", "reason": "会话鉴权、同源校验与写入失败映射"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "发行摘要投影与封面校验，新公开读取函数要复用"}
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "曲目身份跨重扫稳定、缺失只标记不删除"}
+{"file": ".trellis/spec/frontend/player-design-guidelines.md", "reason": "播放状态只来自媒体事件，不记录假历史"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "查看者代次的查询键与会话结束时的清理"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "feature 归属与跨 feature 的公开合同"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "组件边界、可访问性与 CSS Modules"}
