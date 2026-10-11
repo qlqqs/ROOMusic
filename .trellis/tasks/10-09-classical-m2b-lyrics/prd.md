@@ -69,3 +69,42 @@
 | --- | --- | --- | --- | --- |
 | 2026-10-09 | 人工选择 | qlqq | M2b 范围：ALAC 派生 + 歌词两个子任务，CUE 精确分轨延后 | 真实库没有 CUE 虚拟轨，134 个文件内嵌歌词 |
 | 2026-10-09 | 人工选择 | qlqq | 批准 Y1–Y5 与本规划，均按推荐方案执行；本任务在派生任务归档后启动 | 用户阅读最终规划摘要（含“先做派生播放，归档后再做歌词”的顺序）后回复“批准执行” |
+| 2026-10-11 | 人工选择 | qlqq | Y5 布局确认通过，不改页面，继续收尾 | 用户查看合成数据的页面截图（宽屏与窄屏；同步、纯文本、没有歌词）后回复“布局可以，继续收尾（推荐）” |
+
+## 实施结果（2026-10-11）
+
+提交（均在 `main`，未推送）：`d6c9fd4` 扫描时提取内嵌歌词（解析器、迁移 0015、曲目写入）；`62023a1` 歌词接口与逐行同步显示（接口、前端面板、正在播放页、内嵌产物）；
+`ca17fa3` 真实服务覆盖歌词显示（带歌词的素材与用例）；`63099c8` 歌词合同与规范同步；`c25a70b` 真实库歌词覆盖的只读统计；
+`a42f6f9` “回到当前行”的键盘用例。
+
+真实库的只读核对（`TestRealMusicLyricsCoverage`，只输出计数，没有路径、文件名或歌词内容，不写入音乐目录）：284 个音频文件中 134 个带内嵌歌词
+（MP4 的 `©lyr` 84 个、FLAC 的 `LYRICS` 50 个），其中同步 110、纯文本 24，没有解析失败，原文最大 5263 字节、解析后最多 89 行；库里唯一的 MP3 是 ID3v2.3。
+与[调研](research/lyrics-evidence.md)完全一致。
+
+| 编号 | 结果 | 证据 |
+| --- | --- | --- |
+| L1 | 达成 | `TestNormalizeLyrics`、`TestFLACParserReadsVorbisLyrics`、`TestOggAndOpusParsersReadVorbisLyrics`、`TestM4AParserReadsLyrics`、`TestMP3ParserReadsUSLTLyrics`（四种编码）、`…PicksTheUSLTFrameWithAnEmptyDescriptor`、`…IgnoresMalformedUSLTFrames`、`TestID3FrameSizeFollowsTheTagVersion`、`TestRemoveUnsynchronisation`；素材事实测试核对真实 ffmpeg 写出的歌词；`TestPostgreSQLCueVirtualTracksHaveNoLyricsButTranscriptTracksKeepThem`（虚拟轨没有歌词，逐轨抄本的物理轨保留） |
+| L2 | 达成 | 迁移 `0015_track_lyrics.sql`；`TestPostgreSQLScanStoresUpdatesAndClearsEmbeddedLyrics`（写入、改标签后更新、删除歌词后清空）、`TestPostgreSQLTrackLyricsConstraint`（约束的各格，含“有歌词、没有来源”）；既有扫描与整理测试照常通过；API 样本只有合成 FLAC 的 `size_bytes` 因带了歌词标签而变大（481 → 669） |
+| L3 | 达成 | `TestParseLyrics{Synced,Offset,Plain,WithNothingToShow,Limits}`、`TestLyricsJSONShape`；`TestPostgreSQLTrackLyricsRequireLoginAndCheckInputInOrder`、`TestPostgreSQLTrackLyricsAreServedParsedToAnyMember`；`TestPostgreSQLAPIResponseSamples` 的 `tracks/lyrics-{synced,plain,none}` 三份样本，前端解码器与契约测试读取同一批样本 |
+| L4 | 达成 | `lyrics-panel.test.tsx`（当前组、跟随、暂停跟随与“回到当前行”、点击与键盘跳转、不可拖动时不可点）、`engine/lyrics.test.ts`（分组、二分与线性查找一致、跟随下标）；Playwright“同步歌词：当前行随播放位置变化并保持在中部，点击与键盘跳转，高亮不改变行高”与“…手动滚动后暂停跟随…”；真实服务里真实点击一行后媒体位置不早于该行 |
+| L5 | 达成 | `lyrics-panel.test.tsx` 的纯文本、没有歌词、读取失败与重试、404 按错误显示；Playwright“歌词读取失败：显示带重试的错误…；曲目没有歌词与纯文本如实显示” |
+| L6 | 达成 | 面板不设 `aria-live`、减少动态效果时不平滑滚动、字号与行高不随当前行变化的用例；Playwright 三种形态在五种宽度下布局不溢出且 axe 无严重问题；键盘有用例：Tab 只停在当前行、方向键、Home/End、Enter 跳转，Tab 到“回到当前行”后 Enter 恢复跟随（`a42f6f9`，把按钮改成空操作时失败） |
+| L7 | 达成 | `./scripts/playback-e2e.sh` 21 项通过（原有 16 项加歌词 5 项）：FLAC 与 ALAC 素材经真实扫描后接口返回同步歌词；正在播放页显示歌词，真实点击一行后媒体位置不早于该行，继续播放时当前行前进；没有歌词的素材与 CUE 虚拟轨（即使整轨镜像文件带着歌词）返回 `null` |
+| L8 | 达成 | 新增 `.trellis/spec/backend/lyrics-contracts.md`；更新后端索引、运行合同、扫描合同（只加指引）、catalog REST 合同，前端的播放器设计规范、组件规范、状态管理、质量规范、索引与目录结构，`frontend/DESIGN.md`、README、路线图与父任务；Y5 已由用户确认（见规划决策记录） |
+
+验证：隔离 PostgreSQL（`roomusic-test`，空闲端口、随机库名，结束 `down -v`）上相关后端包的 `-race` 测试通过；Vitest 1073 项、Playwright（路由模拟）182 项、真实服务 21 项通过；
+无环境变量的重新构建与内嵌产物逐文件一致；每个提交前在导出的暂存树上重复构建与测试。
+
+### 与设计的差异
+
+实施中有几处与 [design.md](design.md) 不同，已在其第 9 节记录原因：ID3v2.2 的 `ULT` 不读取；ID3 帧改为按版本读取（synchsafe 大小、同步消除、帧格式标志）；
+Ogg 与 Opus 保留既有的单页假设；`tracks_lyrics_ck` 显式要求来源非空；解析规则的若干细化；接口多一个 503；歌词写进既有素材而不是新增文件；
+面板只订阅当前组下标；当前组带 40 毫秒容差；键盘与读屏结构（只在当前行停靠、`role="group"` 滚动区）；一条既有长标题用例的断言随新布局调整。
+
+### 仍需用户完成
+
+- 升级后**重新扫描一次真实库**：已入库的曲目迁移后没有歌词，重扫才会写入（134 个文件）；重扫后在正在播放页确认歌词显示。
+- 带歌词的 84 个文件是 ALAC，要装好 ffmpeg（`./scripts/ffmpeg-pinned.sh`，或发行版的包），设置 `ROOMUSIC_FFMPEG_PATH`（或放进 `PATH`）并重启服务后才能播放；
+  没有 ffmpeg 时，播放时只有 50 个 FLAC 的歌词看得到。
+- 歌词面板在 Safari、Firefox 与 Windows 浏览器里的实际渲染（容器查询、渐隐遮罩、滚动跟随）目前只有 Linux Chromium 的自动化证据；
+  已在三组手工实播的“每组交互检查”里增加一行“歌词面板”，与 F1 一起做；F1 与下次推送后的远端 CI（F3）见后续验收任务 `10-06-m2a-acceptance-followup`。

@@ -43,14 +43,15 @@
   更新 `catalog-rest-contracts.md`、`backend/index.md`、`database-guidelines.md` 的迁移列表（如有）；前端 `player-design-guidelines.md`、`component-guidelines.md`；
   `frontend/DESIGN.md` 的正在播放与歌词描述；路线图与父任务。
 - [x] 用合成数据截取宽屏、窄屏的同步、纯文本、空态页面（`ROOMUSIC_LYRICS_SCREENSHOTS=1` 运行路由模拟用例，写到 `/tmp`，不入库）。
-- [ ] 请用户确认布局（Y5）；有修改意见则只改面板与页面样式，不影响接口。
+- [x] 请用户确认布局（Y5）：2026-10-11 用户看合成数据截图后回复“布局可以，继续收尾（推荐）”，没有修改意见。
 - [x] 验证：`git diff --cached --check`、规范文件大小、相对链接、`task.py validate`。
-- [ ] 提交：`docs(player): 同步歌词合同与规范`。
+- [x] 提交：`docs(player): 同步歌词合同与规范`（`63099c8`）。
 
 ### 第 5 步：收尾
 
-- [ ] 真实库只读核对：用解析器统计能提取歌词的文件数与同步/纯文本份数（应与调研一致：134 份、110 份同步），只输出计数。
-- [ ] PRD 写实施结果与验收对照；提醒用户重扫真实库后查看歌词。
+- [x] 真实库只读核对：`TestRealMusicLyricsCoverage`（`c25a70b`）只输出计数：284 个音频文件中 134 个带歌词，同步 110、纯文本 24，无解析失败。
+- [x] 补测“回到当前行”的键盘操作（`a42f6f9`）。
+- [x] PRD 写实施结果与验收对照；设计文档记录差异；提醒用户重扫真实库后查看歌词。
 - [ ] 归档（`--skip-branch-validation`），单独提交归档后的相对链接修正；更新记忆。
 
 ## 风险与回退点
