@@ -694,3 +694,52 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 
 - 用户装好 ffmpeg（scripts/ffmpeg-pinned.sh 或发行版的包）后重启服务，播放几首真实 ALAC 确认
 - 启动歌词任务 10-09-classical-m2b-lyrics；三组手工实播与下次推送后的远端 CI 见 10-06-m2a-acceptance-followup
+
+
+## Session 27: M2b 歌词：内嵌歌词提取与逐行同步显示
+<!-- trellis-session: v=2 fp=fbfa9f826334c5df -->
+
+**Date**: 2026-10-11
+**Task**: M2b 歌词：内嵌歌词提取与逐行同步显示
+**Branch**: `main`
+
+### Summary
+
+扫描时提取内嵌歌词并保存，接口读取时解析 LRC，正在播放页改为“封面 | 歌词”两栏并逐行同步、点击跳转；真实服务与真实库只读核对；用户确认布局后归档。
+
+### Main Changes
+
+- 后端：解析器提取 Vorbis LYRICS/UNSYNCEDLYRICS、MP4 ©lyr、ID3v2.3/2.4 USLT（按版本读取帧大小、同步消除与帧标志）；迁移 0015 增加 tracks.lyrics 与来源两列及约束；catalog.ParseLyrics 与 GET /api/v1/tracks/{id}/lyrics；CUE 虚拟轨没有歌词
+- 前端：歌词端点与严格解码器、会话内不过期的查询、同时间戳分组与二分定位（40 毫秒容差）、歌词面板（加载、错误重试、空态、纯文本、同步；跟随与暂停跟随、回到当前行、点击与键盘跳转、roving tabindex、无 aria-live）、正在播放页两栏布局；内嵌产物重新构建
+- 自动化与文档：带歌词的 FLAC 与 ALAC 合成素材与真实服务用例，真实库只读统计测试（TestRealMusicLyricsCoverage）；新增歌词合同规范，更新扫描、catalog REST、前端规范、DESIGN.md、README、路线图与父任务；归档并修正相对链接；后续验收清单增加“歌词面板”一行
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `17cb41b` | chore(task): 启动 M2b 歌词 |
+| `d6c9fd4` | feat(library): 扫描时提取内嵌歌词 |
+| `62023a1` | feat(player): 歌词接口与逐行同步显示 |
+| `ca17fa3` | test(player): 真实服务覆盖歌词显示 |
+| `63099c8` | docs(player): 同步歌词合同与规范 |
+| `c25a70b` | test(library): 增加真实库歌词覆盖的只读统计 |
+| `a42f6f9` | test(player): 覆盖歌词面板“回到当前行”的键盘操作 |
+| `7a1f863` | docs(m2b): 记录歌词任务的实施结果与验收对照 |
+| `b1cfdf1` | chore(task): archive 10-09-classical-m2b-lyrics |
+| `470e87c` | docs(m2b): 修正歌词任务归档后的相对链接 |
+
+### Testing
+
+- [OK] [OK] 隔离 PostgreSQL 上相关后端包的 go test -race 通过（含扫描写入/更新/清空、约束、接口 401/400/404/200、API 样本）；每个提交前在导出的暂存树上重复构建与测试
+- [OK] [OK] Vitest 54 文件 1073 项、Playwright（路由模拟）182 项、真实服务（Go + 隔离 PostgreSQL + Chromium）21 项通过；内嵌产物与无环境变量的重新构建逐文件一致
+- [OK] [OK] 真实库只读核对（只记汇总）：284 个音频文件中 134 个带歌词（MP4 84、FLAC 50），同步 110、纯文本 24，无解析失败，与调研一致；全部 Markdown 相对链接 488 个、断链 0
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 重新扫描一次真实库，歌词才会出现（已入库曲目迁移后没有歌词）；84 个带歌词的文件是 ALAC，要装好 ffmpeg（scripts/ffmpeg-pinned.sh 或发行版的包）并设置 ROOMUSIC_FFMPEG_PATH 后重启，才能播放
+- 三组手工实播（含新增的“歌词面板”一行）与下次推送后的远端 CI 见 10-06-m2a-acceptance-followup
+- 下一阶段待用户选择并先做规划：P（服务端播放历史）、M3（修正覆盖层）；CUE 精确分轨仍延后
