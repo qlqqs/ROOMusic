@@ -3,3 +3,9 @@
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
   gap: var(--space-6) var(--space-8);
 }
+
+/* 最近播放占满整行：卡片网格需要比资料库等区块更宽的版面。 */
+.wide {
+  grid-column: 1 / -1;
+  min-width: 0;
+}

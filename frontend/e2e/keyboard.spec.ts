@@ -82,6 +82,44 @@ test.describe("键盘", () => {
     await expect(page.locator("main#main")).toBeFocused();
   });
 
+  test("最近播放：卡片是整张的链接；清除确认对话框约束焦点，Esc 还回焦点，Enter 确认后焦点到区块标题", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "listener" });
+    mock.seedRecentPlays(3);
+    await page.goto("/");
+    const panel = page.getByRole("region", { name: "最近播放" });
+    const cards = panel.getByRole("link");
+    await expect(cards).toHaveCount(3);
+    await cards.first().focus();
+    await expectVisibleFocusRing(page, "最近播放的卡片");
+
+    const trigger = panel.getByRole("button", { name: "清除播放历史" });
+    await trigger.focus();
+    await expectVisibleFocusRing(page, "清除播放历史按钮");
+    await page.keyboard.press("Enter");
+    const dialog = page.getByRole("dialog", { name: "清除播放历史？" });
+    await expect(dialog).toBeVisible();
+    // 初始焦点在“取消”上，避免回车直接确认。
+    await expect(dialog.getByRole("button", { name: "取消" })).toBeFocused();
+    await expectFocusStaysInDialog(page, dialog, 4);
+
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+    expect(mock.callsTo("DELETE", "/api/v1/me/plays")).toHaveLength(0);
+
+    await page.keyboard.press("Enter");
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press("Tab");
+    expect(await focusedName(page)).toBe("清除播放历史");
+    await page.keyboard.press("Enter");
+    await expect(dialog).toBeHidden();
+    expect(mock.callsTo("DELETE", "/api/v1/me/plays")).toHaveLength(1);
+    // 打开对话框的按钮已经不存在：焦点到区块标题，读屏用户同时听到“已清除”的状态提示。
+    await expect(panel.getByRole("heading", { level: 2, name: "最近播放" })).toBeFocused();
+    await expect(panel.getByText("已清除你的播放历史。")).toBeVisible();
+    await expect(cards).toHaveCount(0);
+  });
+
   test("停用确认对话框：焦点进入且被约束，Esc 关闭并把焦点还给触发按钮，Enter 确认", async ({ page, backend }) => {
     await backend.start({ signedInAs: "curator" });
     await page.goto("/library");

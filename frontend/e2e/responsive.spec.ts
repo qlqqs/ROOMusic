@@ -92,11 +92,58 @@ const detailCases: Case[] = [
   longDetail,
 ];
 
+/** 概览的“最近播放”：八张卡片，第一张是超长标题与超长艺人名（卡片内换行，不撑宽网格）。 */
+const recentPlaysCases: Case[] = [
+  {
+    name: "概览（最近播放八张，含长内容）",
+    options: { signedInAs: "listener" },
+    prepare: (mock) => {
+      const long = longContentGroup();
+      mock.groups = [long, ...albumGroups(11, (index) => ({ artwork: index % 2 === 0 }))];
+      mock.seedRecentPlays(8);
+    },
+    path: () => "/",
+    title: "概览",
+  },
+  {
+    name: "概览（最近播放，清除确认对话框打开）",
+    options: { signedInAs: "curator" },
+    prepare: (mock) => {
+      mock.seedRecentPlays(3);
+    },
+    path: () => "/",
+    title: "概览",
+    after: async (page) => {
+      await page.getByRole("button", { name: "清除播放历史" }).click();
+      await expect(page.getByRole("dialog", { name: "清除播放历史？" })).toBeVisible();
+    },
+  },
+  {
+    name: "概览（最近播放，播放过的曲目都不在资料库里）",
+    options: { signedInAs: "listener" },
+    prepare: (mock) => {
+      mock.hasPlayHistory = true;
+    },
+    path: () => "/",
+    title: "概览",
+  },
+  {
+    name: "概览（最近播放读取失败）",
+    options: { signedInAs: "listener" },
+    prepare: (mock) => {
+      mock.forbid.add("GET /api/v1/me/plays/recent-releases");
+    },
+    path: () => "/",
+    title: "概览",
+  },
+];
+
 const cases: Case[] = [
   { name: "登录", options: {}, path: () => "/login", title: "登录" },
   { name: "初始化", options: { setupRequired: true }, path: () => "/setup", title: "创建管理员" },
   { name: "概览（管理员）", options: { signedInAs: "curator" }, path: () => "/", title: "概览" },
   { name: "概览（成员）", options: { signedInAs: "listener" }, path: () => "/", title: "概览" },
+  ...recentPlaysCases,
   { name: "扫描目录", options: { signedInAs: "curator" }, path: () => "/library", title: "扫描目录" },
   { name: "专辑列表", options: { signedInAs: "curator" }, path: () => "/albums", title: "专辑" },
   {

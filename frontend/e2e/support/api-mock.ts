@@ -1,5 +1,6 @@
 import type { BrowserContext } from "@playwright/test";
 import type { DiagnosticsPageDTO, RootDTO, RootOperationDTO, ScanDTO } from "../../src/features/library/api/decoders";
+import type { RecentReleaseDTO } from "../../src/features/listening/api/decoders";
 import type { MemberDTO } from "../../src/features/members/api/decoders";
 import { loadApiSample, sampleBody } from "../../src/test/api-samples";
 import {
@@ -55,12 +56,18 @@ export type ApiMock = CatalogData & {
   scanOutcome: "succeeded" | "incomplete";
   /** 对这些“方法 路径”返回 403（路径不含查询串）。 */
   forbid: Set<string>;
+  /** 当前用户的最近播放（最近的在前，最多 8 个）；只有一个会话，所以不按用户区分。 */
+  recentPlays: RecentReleaseDTO[];
+  /** 是否有任何播放记录：true 而 recentPlays 为空表示播放过的曲目都已不在资料库里。清除历史后为 false。 */
+  hasPlayHistory: boolean;
   /** 已收到的接口调用，按先后顺序。 */
   calls: RecordedCall[];
   /** 会话在服务端失效（过期或被撤销）：之后的受保护请求得到 401。 */
   expireSession: () => void;
   /** 预置一个扫描；缺省是运行中，withActive 为 true 时同时作为活动扫描。 */
   seedScan: (overrides?: Partial<ScanDTO>, withActive?: boolean) => ScanDTO;
+  /** 预置最近播放：取 groups 里最前面的 count 个专辑组（先设置 groups 再调用），第一个最近播放，每个晚一小时。 */
+  seedRecentPlays: (count: number) => RecentReleaseDTO[];
   /** 预置 count 个已结束的扫描：状态轮流为成功、失败、不完整、已取消（失败与不完整带诊断），开始时间依次晚一分钟，最后一个最新。 */
   seedHistory: (count: number) => ScanDTO[];
   callsTo: (method: string, path: string | RegExp) => RecordedCall[];
@@ -101,6 +108,8 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
     diagnostics: new Map(),
     // 默认 12 个专辑：三分之二有封面，每第 4 个需要关注，第 5 个有两个版本。
     ...catalogDataOf(albumGroups(12, (index) => ({ artwork: index % 3 !== 0, attention_count: index % 4 === 0 ? 1 : 0, release_count: index === 5 ? 2 : 1 }))),
+    recentPlays: [],
+    hasPlayHistory: false,
     brokenArtworks: new Set(),
     scanFinishesAfterReads: 2,
     scanOutcome: "succeeded",
@@ -124,6 +133,16 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
       mock.scans.set(scan.id, scan);
       if (withActive) mock.activeScanId = scan.id;
       return scan;
+    },
+    seedRecentPlays: (count) => {
+      mock.recentPlays = mock.groups.slice(0, count).map((group, index) => ({
+        group_id: group.id,
+        release: group.representative,
+        last_played_at: new Date(Date.UTC(2026, 0, 2, 12, 0, 0) - index * 3_600_000).toISOString().replace(".000Z", "Z"),
+        last_track: { id: uuidOf("c", index + 1), title: `Track ${index + 1}` },
+      }));
+      mock.hasPlayHistory = mock.recentPlays.length > 0;
+      return mock.recentPlays;
     },
     seedHistory: (count) =>
       Array.from({ length: count }, (_, index) => {
@@ -214,6 +233,18 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
         return sample("auth/logout");
       case "GET /api/v1/playback/formats":
         return guarded(method, path, false, () => sample("playback/formats"));
+      case "GET /api/v1/me/plays/recent-releases":
+        return guarded(method, path, false, () => json({ items: mock.recentPlays, has_history: mock.hasPlayHistory }));
+      case "POST /api/v1/me/plays":
+        // 播放上报：只需要应答，记录在 mock.calls 里；最近播放由测试用 seedRecentPlays 预置，不随上报变化。
+        return guarded(method, path, false, () => sample("listening/play-recorded"));
+      case "DELETE /api/v1/me/plays":
+        return guarded(method, path, false, () => {
+          const deleted = mock.recentPlays.length;
+          mock.recentPlays = [];
+          mock.hasPlayHistory = false;
+          return json({ deleted });
+        });
       case "GET /api/v1/release-groups":
         return guarded(method, path, false, () => respondToGroupList(mock.groups, search));
       case "GET /api/v1/library-roots":

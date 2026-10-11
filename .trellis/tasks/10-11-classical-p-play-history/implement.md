@@ -67,15 +67,15 @@
   `PlayerProvider` 接线，`endSession` 经 `playRecorder.discard` 调用 `dispose`；默认装配的 provider 测试覆盖上报与会话结束后不再重试。
 - [x] 验证：`npm run lint && npm run typecheck`，`npx vitest run src/features/player src/features/listening`，
   再跑一次 `npm test`（引擎依赖变化会影响所有构造引擎的测试与替身，局部集合覆盖不全）；重新构建内嵌产物。
-- [ ] 提交：`feat(player): 达到规则的播放上报到服务端`（含内嵌产物）。
+- [x] 提交：`feat(player): 达到规则的播放上报到服务端`（含内嵌产物）。
 
 ### 第 4 步：概览“最近播放”（P1）
 
-- [ ] `catalog/index.ts` 导出 `Cover`、`albumArtistOf`、`releaseSummaryDecoder` 与 `ReleaseSummaryDTO`。
-- [ ] `RecentPlaysPanel`（加载、空态、错误、卡片、清除确认与失败）；概览页组合并更新页面说明。
-- [ ] 测试替身：Vitest 的 `fake-api`、Playwright 的 `api-mock` 增加三个路由（响应取自样本）；概览相关页面测试与 Playwright 用例
+- [x] `catalog/index.ts` 导出 `Cover`、`albumArtistOf`、`releaseSummaryDecoder` 与 `ReleaseSummaryDTO`。
+- [x] `RecentPlaysPanel`（加载、空态、错误、卡片、清除确认与失败）；概览页组合并更新页面说明。
+- [x] 测试替身：Vitest 的 `fake-api`、Playwright 的 `api-mock` 增加三个路由（响应取自样本）；概览相关页面测试与 Playwright 用例
   （五种宽度不溢出、axe、键盘完成清除与确认）。
-- [ ] 验证：`npm run lint && npm run typecheck && npm test`；
+- [x] 验证：`npm run lint && npm run typecheck && npm test`；
   `LD_LIBRARY_PATH=/tmp/chromelibs/root/usr/lib/x86_64-linux-gnu npm run test:e2e`（概览出现在多数页面级用例的起点，需要全量）；
   重新构建内嵌产物。
 - [ ] 提交：`feat(listening): 概览显示最近播放`（含内嵌产物）。

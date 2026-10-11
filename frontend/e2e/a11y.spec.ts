@@ -73,6 +73,45 @@ const states: State[] = [
     },
   },
   {
+    name: "概览（最近播放八张，有封面与无封面）",
+    options: { signedInAs: "listener" },
+    reach: async (page, mock) => {
+      mock.seedRecentPlays(8);
+      await page.goto("/");
+      await expect(page.getByRole("region", { name: "最近播放" }).getByRole("link")).toHaveCount(8);
+    },
+  },
+  {
+    name: "概览（最近播放，清除确认对话框）",
+    options: { signedInAs: "listener" },
+    reach: async (page, mock) => {
+      mock.seedRecentPlays(3);
+      await page.goto("/");
+      await page.getByRole("button", { name: "清除播放历史" }).click();
+      await expect(page.getByRole("dialog", { name: "清除播放历史？" })).toBeVisible();
+    },
+  },
+  {
+    name: "概览（最近播放，清除后的空态与提示）",
+    options: { signedInAs: "listener" },
+    reach: async (page, mock) => {
+      mock.seedRecentPlays(3);
+      await page.goto("/");
+      await page.getByRole("button", { name: "清除播放历史" }).click();
+      await page.getByRole("dialog", { name: "清除播放历史？" }).getByRole("button", { name: "清除播放历史" }).click();
+      await expect(page.getByText("已清除你的播放历史。")).toBeVisible();
+    },
+  },
+  {
+    name: "概览（最近播放读取失败）",
+    options: { signedInAs: "listener" },
+    reach: async (page, mock) => {
+      mock.forbid.add("GET /api/v1/me/plays/recent-releases");
+      await page.goto("/");
+      await expect(page.getByRole("region", { name: "最近播放" }).getByRole("alert")).toBeVisible();
+    },
+  },
+  {
     name: "专辑列表（有封面、需要关注与多版本）",
     options: { signedInAs: "listener" },
     reach: async (page, mock) => {

@@ -71,6 +71,10 @@ export function installFakeSession(api: FakeApi, initial: Partial<FakeSession> =
   });
   // 已登录外壳中的专辑播放动作读取格式表；错误场景可以显式覆盖这个默认响应。
   api.on("GET", "/api/v1/playback/formats", () => viewer() === null ? sampleResponse("errors/unauthorized") : sampleResponse("playback/formats"));
+  // 已登录外壳里的播放历史：概览读取最近播放（默认没有记录）、播放器上报一次播放、清除历史。响应取自后端样本，需要数据的测试自行覆盖。
+  api.on("GET", "/api/v1/me/plays/recent-releases", () => viewer() === null ? sampleResponse("errors/unauthorized") : sampleResponse("listening/recent-releases-empty"));
+  api.on("POST", "/api/v1/me/plays", () => viewer() === null ? sampleResponse("errors/unauthorized") : sampleResponse("listening/play-recorded"));
+  api.on("DELETE", "/api/v1/me/plays", () => viewer() === null ? sampleResponse("errors/unauthorized") : sampleResponse("listening/plays-cleared"));
   api.on("POST", "/api/v1/auth/login", (request) => {
     const { username, password } = request.body as { username: string; password: string };
     const account = session.accounts[username];
