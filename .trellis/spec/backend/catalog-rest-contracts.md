@@ -2,7 +2,7 @@
 
 ## 1. 范围与触发
 
-本合同适用于发行版本列表、详情、按组只读读取和封面资源读取。新增或修改 Release 摘要字段、可见性、
+本合同适用于发行版本列表、详情、按组只读读取、封面资源读取和曲目歌词读取。新增或修改 Release 摘要字段、可见性、
 搜索、筛选、分页、按组投影或封面投影时必须同步阅读并更新本文件。Catalog 是读取 owner；扫描器仍
 负责写入 Release Graph 与 `release_artworks`，音乐源保持只读。
 
@@ -14,6 +14,8 @@
 - `GET /api/v1/release-groups?q=<string>&attention=required&page=<int>&page_size=<int>`
 - `GET /api/v1/release-groups/{id}`
 - `GET /api/v1/artworks/{resource_id}`：认证后读取受管封面；响应带 `ETag`，支持 `If-None-Match` 的 `304`（见第 3 节）。
+- `GET /api/v1/tracks/{id}/lyrics`：认证后读取曲目的内嵌歌词（所有登录成员；非 UUID 400、不存在或非 `present` 404；没有歌词是 200 加 `lyrics: null`）。
+  它与发行接口同属 catalog 的只读投影，提取、保存、解析规则与响应形状见[内嵌歌词合同](./lyrics-contracts.md)。
 - Release 摘要包含 `id`、标题/艺人、nullable 年份/来源/介质、Medium/Track/attention
   计数，以及 `artwork: null | {resource_id,mime,width,height}`。
 - `artwork` 是在既有 Release 摘要上追加的向后兼容（additive）字段；真实音频播放仍

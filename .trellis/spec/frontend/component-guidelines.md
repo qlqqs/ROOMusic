@@ -70,6 +70,14 @@ hook 里，展示在组件里。按 [Classical 设计依据](../../../frontend/D
 | `ReleaseFacts`、`EvidenceSection` | 发行信息里没有值的条目不列出；“来源与证据”是受控的 `<details>`：展开状态由 React 持有，折叠时不渲染内容（没有可聚焦的隐藏控件），换版本（`key`）回到折叠；管理员的“查看完整证据”按钮在展开后才出现，点击后才请求，按钮留在原处（加载中忙碌、之后可重新加载）使焦点不丢 |
 | `labels.ts` | 署名角色、证据字段、来源、可信度、处理方式、原因码与归组方式的中文名；清单按后端当时的取值核对，**未知取值原样显示**，后端新增取值不会让页面出错（样本里出现过的取值都有中文名，由测试保证） |
 
+## 已实现的歌词组件（M2b，`features/player`）
+
+| 组件 | 约定 |
+| --- | --- |
+| `LyricsPanel({ trackId })` | 自己取数（`useTrackLyrics`），经 `QueryContent` 呈现加载（普通文字）、失败（`FailureNotice` 加“重试”）、没有歌词（空态）、纯文本与同步五种状态；同步与纯文本子组件按曲目 `key` 重建，关闭跟随等局部状态不带到下一首；面板 `position: relative`，内部框架绝对铺满所在格，歌词再长也不撑高“封面 \| 歌词”那一行（窄于 760px 的单栏改为随内容增高、最高 60vh） |
+| 同步歌词 | `<ol role="list">`（`list-style: none` 会让部分读屏丢掉列表语义，所以显式写 role），每组一个 `<li>`，当前组 `aria-current="true"`，`data-state`（`past`、`active`、`upcoming`）驱动样式；媒体可拖动时每组是 `<button>`，用 roving tabindex（只有当前组可 Tab 到，方向键、Home、End 移动焦点），不可拖动时是普通文本，可滚动区域本身可聚焦（axe 的 `scrollable-region-focusable`）；可滚动区域用 `role="group"` 加名称，不再用第二个名为“歌词”的 `region`（axe 的 `landmark-unique`） |
+| 跟随滚动 | 目标位置由 `offsetTop` 相对滚动容器（容器必须 `position: relative`）计算，列表本身不能定位；只有用户输入事件（滚轮、触摸、滚动键、点滚动条）暂停跟随，不监听 `scroll`；`scrollTo`、`matchMedia` 在 jsdom 里没有实现，由 `test/setup.ts` 提供默认桩，需要断言的测试自己替换 |
+
 ## Props And Contracts
 
 - Define the smallest props at the component owner. Pass stable IDs and display

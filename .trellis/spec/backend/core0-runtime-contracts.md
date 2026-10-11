@@ -29,6 +29,7 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 | 发行 REST | [catalog-rest-contracts.md](./catalog-rest-contracts.md) | 发行列表、详情、evidence、封面摘要与按组只读接口 |
 | 鉴权直出 | [playback-contracts.md](./playback-contracts.md) | M2a 格式表、预检、音频、Range、来源版本与撤销复核；M2b 的 `delivery`、202 与派生错误码 |
 | 无损派生 | [playback-derivation-contracts.md](./playback-derivation-contracts.md) | M2b ALAC → FLAC：ffmpeg 与缓存配置、启动自检、转换与核对、上限与取消、测试 |
+| 内嵌歌词 | [lyrics-contracts.md](./lyrics-contracts.md) | M2b 歌词：标签提取、`tracks.lyrics`、歌词接口与 LRC 解析规则、测试 |
 
 ## 2. 接口签名
 
@@ -41,7 +42,7 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
   `POST /api/v1/scans/{id}/cancel`、`GET /api/v1/scans/{id}/diagnostics`、
   `GET /api/v1/releases`、`GET /api/v1/releases/{id}`、管理员专用
   `GET /api/v1/releases/{id}/evidence`、按组只读的 `GET /api/v1/release-groups` 与
-  `GET /api/v1/release-groups/{id}`，以及已登录用户可读的 `GET /api/v1/artworks/{id}`。
+  `GET /api/v1/release-groups/{id}`，以及已登录用户可读的 `GET /api/v1/artworks/{id}` 与 `GET /api/v1/tracks/{id}/lyrics`（见[内嵌歌词](./lyrics-contracts.md)）。
 - M2a：`GET /api/v1/playback/formats`、`GET /api/v1/tracks/{id}/playback` 与
   `GET|HEAD /api/v1/tracks/{id}/audio`，具体合同见[鉴权直出](./playback-contracts.md)；M2b 在同样三个接口上增加派生交付
   （预检可返回 202），见[无损派生](./playback-derivation-contracts.md)。

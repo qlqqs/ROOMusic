@@ -4,7 +4,7 @@
 
 当代码涉及目录（library root）的新增、停用、恢复及其幂等，或扫描的遍历、暂存、身份规划、Release Graph 写入、CUE、抓轨日志、
 艺人与 AlbumArtist 整理、封面发现与绑定时，遵守本合同。扫描状态、持久化取消与跨进程协调见
-[扫描协调合同](./scan-coordination-contracts.md)；发行读取接口见 [Catalog REST 合同](./catalog-rest-contracts.md)；
+[扫描协调合同](./scan-coordination-contracts.md)；发行读取接口见 [Catalog REST 合同](./catalog-rest-contracts.md)；内嵌歌词的提取与保存见[歌词合同](./lyrics-contracts.md)；
 通用请求与响应、迁移执行器与 CI 见 [Core 0 当前运行合同](./core0-runtime-contracts.md)。
 
 ## 2. 接口签名

@@ -223,12 +223,14 @@ documented proxy/credentials setup, not a second auth scheme.
 ### M2a 播放生命周期与恢复合同
 
 `features/player` 的公开入口导出 `PlayerProvider({ userId, children })`、`usePlayer()`、
-`usePlayerProgress()`、`usePlayerEngine()`、`usePlayerSelector()`、`useCurrentTrackMarker()`、`usePlaybackCapabilities()`。
+`usePlayerProgress()`、`usePlayerProgressSelector()`、`usePlayerEngine()`、`usePlayerSelector()`、`useCurrentTrackMarker()`、`usePlaybackCapabilities()`。
 provider 放在已登录会话代次子树内，只装配一个分离的 `Audio()` 与不依赖 React 的 `PlayerEngine`；切页不重建。
 离散快照通过 `useSyncExternalStore` 订阅，进度独立订阅，避免每次 `timeupdate` 重绘整队列。
 大量重复的组件（专辑页每行动作）只用 `usePlayerEngine()` 发命令；只关心某个值的组件用 `usePlayerSelector()` 选出基本值
 （外壳只看队列是否为空，专辑页只看当前曲目与状态），音量、队列变化不重绘整张曲目表；曲目行 `memo`，插槽函数保持引用稳定。
 `useReleaseLoader` 经 catalog 公开入口复用会话范围的 Query 缓存，格式表 Query 在会话内保持有效。
+歌词是服务器状态：`useTrackLyrics(trackId)`（键 `viewerQueryKey(generation, "player", "lyrics", trackId)`，`staleTime: Infinity`，会话结束随代次清空）；
+面板的跟随与暂停跟随是组件内局部状态，不进入引擎快照，也不持久化。
 
 普通卸载执行 `detach()`：中断媒体与异步工作，但保留刷新恢复记录；
 会话控制器 `onEnded` 同步执行 `endSession()`：停止音频、清空 `src` 并 `load()` 中断网络，

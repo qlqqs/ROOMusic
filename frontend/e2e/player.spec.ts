@@ -436,10 +436,20 @@ for (const width of widths) {
       await expectNoHorizontalOverflow(page, `${kind}歌词`);
       await expectNoDocumentScroll(page, `${kind}歌词`);
       await expectNoSeriousViolations(page, `${kind}歌词`);
-      if (process.env["ROOMUSIC_LYRICS_SCREENSHOTS"] === "1") {
-        await page.locator("#main").evaluate((main) => main.scrollTo(0, 0));
-        await page.evaluate(() => window.scrollTo(0, 0));
-        await page.screenshot({ path: `/tmp/roomusic-lyrics-${kind}-${width}.png` });
+      if (process.env["ROOMUSIC_LYRICS_SCREENSHOTS"] === "1" && (width === 375 || width === 768 || width === 1280)) {
+        // 供人工确认布局（截图写到 /tmp，不入库）：同步歌词先把播放位置移到中段，让高亮停在列表中部；
+        // 每种状态两张：页面顶部，以及把歌词面板滚到视野中央。
+        if (kind === "synced") {
+          await setMediaTime(page, 1.55);
+          await expect(lyrics.locator("[aria-current='true']")).toContainText("第 16 行歌词");
+          await page.waitForTimeout(800);
+        }
+        for (const [name, target] of [["top", null], ["lyrics", lyrics]] as const) {
+          await page.locator("#main").evaluate((main) => main.scrollTo(0, 0));
+          await page.evaluate(() => window.scrollTo(0, 0));
+          if (target !== null) await target.evaluate((element) => element.scrollIntoView({ block: "center" }));
+          await page.screenshot({ path: `/tmp/roomusic-lyrics-${kind}-${width}-${name}.png` });
+        }
       }
     });
   }

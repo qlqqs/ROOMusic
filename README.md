@@ -2,7 +2,7 @@
 
 ROOMusic 保留 Core 0 的 Go 后端、数据库与同源部署工具链，不迁移 V0 中已经膨胀的应用容器、AI worker、operator、release overlay 或业务配置。
 
-> **当前状态（2026-10-03）**：Classical 客户端的 M1a 与 M1b 已完成：应用外壳、初始化与登录、扫描目录与扫描详情、成员管理、简版概览，以及专辑浏览（列表、搜索、详情与来源证据），由 Go 同源提供（构建产物提交在 `backend/cmd/roomusic/web`）。播放（M2）与元数据整理（M3 起）尚未实现。设计依据见 [frontend/DESIGN.md](frontend/DESIGN.md)，能力矩阵、已批准的 Core 1 阶段范围和四类 ADR 见 [Core 1 路线](docs/architecture/core-1-roadmap.md)，前端规范见 [前端规范索引](.trellis/spec/frontend/index.md)。
+> **当前状态（2026-10-11）**：Classical 客户端的 M1a 与 M1b 已完成：应用外壳、初始化与登录、扫描目录与扫描详情、成员管理、简版概览，以及专辑浏览（列表、搜索、详情与来源证据），由 Go 同源提供（构建产物提交在 `backend/cmd/roomusic/web`）。M2 的播放也已交付：浏览器直出、ALAC 经 ffmpeg 无损派生、内嵌歌词的同步显示（三组手工实播尚待执行）。元数据整理（M3 起）尚未实现。设计依据见 [frontend/DESIGN.md](frontend/DESIGN.md)，能力矩阵、已批准的 Core 1 阶段范围和四类 ADR 见 [Core 1 路线](docs/architecture/core-1-roadmap.md)，前端规范见 [前端规范索引](.trellis/spec/frontend/index.md)。
 
 ## 软件目标
 
@@ -103,6 +103,12 @@ mise run env-down
 缓存目录必须在音乐目录之外（`ROOMUSIC_DATA_DIR` 不能放进 `ROOMUSIC_ALLOWED_LIBRARY_ROOTS` 之内，反之亦然），否则服务拒绝启动。
 派生文件只写入缓存目录，不写音乐目录；不需要的话删除 `media-cache/` 即可。契约与上限见
 [无损派生合同](.trellis/spec/backend/playback-derivation-contracts.md)。
+
+## 内嵌歌词
+
+扫描时从音频标签提取歌词（FLAC、Ogg、Opus 的 `LYRICS` 或 `UNSYNCEDLYRICS`，MP4 的 `©lyr`，MP3 的 ID3v2 `USLT`）并保存在曲目记录里；
+正在播放页显示：带时间轴的 LRC 逐行同步、可点击跳转，没有时间轴的静态显示，没有歌词就如实说明。不读外置 `.lrc` 文件，也不联网获取。
+**升级到带歌词的版本后需要重新扫描一次**，已入库的曲目才有歌词。契约见[内嵌歌词合同](.trellis/spec/backend/lyrics-contracts.md)。
 
 ## 前端检查
 

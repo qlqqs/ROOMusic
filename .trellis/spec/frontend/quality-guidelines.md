@@ -129,9 +129,12 @@ Chromium 的系统库（`libatk` 等）时，可 `apt-get download` 后 `dpkg -x
 
 播放器改动先运行最小 Vitest：`npx vitest run src/features/player src/test/api-contract.test.ts`；
 涉及共享外壳/导航/专辑接线时影响所有页面，按获批计划运行前端全量 Vitest 与 Playwright。
-API 全样本清单必须注册播放两项成功、六项错误，局部 decoder 测试不能替代样本完整性断言。
+API 全样本清单必须注册播放（含派生）与歌词的全部成功样本和错误样本，局部 decoder 测试不能替代样本完整性断言。
 
 - 组件与路由模拟：底栏状态、未知时长、键盘菜单与队列、长标题、五宽375/768/1024/1280/1440、axe。
+- 歌词（M2b）：Vitest 覆盖解码器（形态约束）、分组与当前组定位的纯函数、面板各状态、跟随与暂停跟随、键盘与点击跳转、减少动态效果、组内进度事件不重绘；
+  Playwright 路由模拟覆盖同步、纯文本、没有歌词三种形态的五种宽度（布局、不溢出、axe）与跟随、暂停跟随、键盘、读取失败重试。
+  平滑滚动要等它到位：用轮询判断，轮询函数里不放会抛错的断言；时间很短的状态（如 2 秒素材里只当前半秒的一行）不能靠轮询观察，用 MutationObserver 记录序列。
 - 真实服务：`LD_LIBRARY_PATH=/tmp/chromelibs/root/usr/lib/x86_64-linux-gnu ./scripts/playback-e2e.sh`（本机缺系统库时）。
   独立临时合成媒体、真实Go、`roomusic-test` PostgreSQL与Chromium，由`playwright.real.config.ts`收集
   `e2e/real/*.real.ts`，不能被既有mock `*.spec.ts`混收集。

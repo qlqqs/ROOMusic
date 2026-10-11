@@ -35,15 +35,16 @@
 
 - [x] 生成带歌词的 FLAC 与 ALAC 素材（更新 `backend/testdata/playback/README.md` 与体积上限检查）；`playback.real.ts` 歌词用例。
 - [x] 验证：`./scripts/playback-e2e.sh` 全部通过。
-- [x] 提交：`test(player): 真实服务覆盖歌词显示`。
+- [x] 提交：`test(player): 真实服务覆盖歌词显示`（`ca17fa3`）。
 
 ### 第 4 步：文档与截图（L8）
 
-- [ ] 新增 `.trellis/spec/backend/lyrics-contracts.md`（提取、保存、接口、解析规则、测试）；`library-scan-contracts.md` 只加一行指引（保持在 24,000 字节以内）；
+- [x] 新增 `.trellis/spec/backend/lyrics-contracts.md`（提取、保存、接口、解析规则、测试）；`library-scan-contracts.md` 只加一行指引（保持在 24,000 字节以内）；
   更新 `catalog-rest-contracts.md`、`backend/index.md`、`database-guidelines.md` 的迁移列表（如有）；前端 `player-design-guidelines.md`、`component-guidelines.md`；
   `frontend/DESIGN.md` 的正在播放与歌词描述；路线图与父任务。
-- [ ] 用合成数据截取宽屏、窄屏的同步、纯文本、空态页面，请用户确认布局（Y5）。
-- [ ] 验证：`git diff --cached --check`、规范文件大小、相对链接、`task.py validate`。
+- [x] 用合成数据截取宽屏、窄屏的同步、纯文本、空态页面（`ROOMUSIC_LYRICS_SCREENSHOTS=1` 运行路由模拟用例，写到 `/tmp`，不入库）。
+- [ ] 请用户确认布局（Y5）；有修改意见则只改面板与页面样式，不影响接口。
+- [x] 验证：`git diff --cached --check`、规范文件大小、相对链接、`task.py validate`。
 - [ ] 提交：`docs(player): 同步歌词合同与规范`。
 
 ### 第 5 步：收尾
