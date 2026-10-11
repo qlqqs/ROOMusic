@@ -55,21 +55,21 @@ Core 1 阶段 P：把真实发生的播放按用户隔离地保存在服务端�
 | P3 | 隐私边界 | 只本人可读、可清除，管理员也看不到他人记录；不存 IP、设备与客户端信息；停用成员的记录保留，重新启用后本人可见 | 2026-10-11 用户批准（最终规划摘要后回复“批准执行”） |
 | P4 | 保留期限 | 不自动过期，清除由用户发起 | 2026-10-11 用户批准（最终规划摘要后回复“批准执行”） |
 | P5 | 上报失败 | 页面打开期间有限次重试（同一个幂等键），关闭页面即放弃，不写浏览器存储；会话结束时作废未发出的记录 | 2026-10-11 用户批准（最终规划摘要后回复“批准执行”） |
-| P6 | 布局确认 | 收尾时用合成数据截取概览的宽屏与窄屏（有记录、空态、清除确认），请用户确认后再归档 | 2026-10-11 用户批准（最终规划摘要后回复“批准执行”） |
+| P6 | 布局确认 | 收尾时用合成数据截取概览的宽屏与窄屏（有记录、空态、清除确认），请用户确认后再归档 | 2026-10-11 用户批准；同日布局确认通过（回复“布局可以，继续收尾（推荐）”） |
 
 ## 验收标准
 
-- [ ] A1（R1、R2）：引擎测试证明达到门槛时恰好上报一次；未达到门槛、只拖动、预检失败、正在准备期间都不上报；单曲循环每轮各一次，
+- [x] A1（R1、R2）：引擎测试证明达到门槛时恰好上报一次；未达到门槛、只拖动、预检失败、正在准备期间都不上报；单曲循环每轮各一次，
   暂停或重试后继续累计。
-- [ ] A2（R2）：低于门槛的上报得到 `400 play_too_short`，不写记录；曲目不存在或已缺失得到 404。
-- [ ] A3（R5）：同一幂等键重放返回同一条记录，请求体不同得到 `409 idempotency_conflict`，并发同键只写一行。
-- [ ] A4（R3）：用户 A、用户 B、管理员互相读不到、清不掉对方的记录；跨源写入 403；未登录 401。
-- [ ] A5（R4）：改名与同 root 移动后重扫，记录仍指向同一曲目 ID，最近播放仍显示同一专辑；缺失曲目的记录不显示但仍在库中。
-- [ ] A6（R5）：上报失败不改变播放状态；会话结束后，等待重试的上报不再发出。
-- [ ] A7（R6、R7）：概览按倒序、去重、最多 8 张显示最近播放，空态与错误态各有文案；清除需要确认，成功后区块为空；
+- [x] A2（R2）：低于门槛的上报得到 `400 play_too_short`，不写记录；曲目不存在或已缺失得到 404。
+- [x] A3（R5）：同一幂等键重放返回同一条记录，请求体不同得到 `409 idempotency_conflict`，并发同键只写一行。
+- [x] A4（R3）：用户 A、用户 B、管理员互相读不到、清不掉对方的记录；跨源写入 403；未登录 401。
+- [x] A5（R4）：改名与同 root 移动后重扫，记录仍指向同一曲目 ID，最近播放仍显示同一专辑；缺失曲目的记录不显示但仍在库中。
+- [x] A6（R5）：上报失败不改变播放状态；会话结束后，等待重试的上报不再发出。
+- [x] A7（R6、R7）：概览按倒序、去重、最多 8 张显示最近播放，空态与错误态各有文案；清除需要确认，成功后区块为空；
   五种宽度不溢出、axe 无违规、键盘可以完成清除。
-- [ ] A8（R1–R6）：真实服务（Go、隔离 PostgreSQL、Chromium）中，合成 FLAC 真实播放过半后出现记录与专辑卡片，清除后为空；只拖动不产生记录。
-- [ ] A9：接口样本与前端解码器一致；规范与路线文档同步；概览布局经用户确认（P6）。
+- [x] A8（R1–R6）：真实服务（Go、隔离 PostgreSQL、Chromium）中，合成 FLAC 真实播放过半后出现记录与专辑卡片，清除后为空；只拖动不产生记录。
+- [x] A9：接口样本与前端解码器一致；规范与路线文档同步；概览布局经用户确认（P6）。
 
 ## 范围外
 
@@ -86,3 +86,39 @@ Core 1 阶段 P：把真实发生的播放按用户隔离地保存在服务端�
 - 选择者：用户（qlqq）。
 - 2026-10-11：用户回复“按照推荐开始下一阶段规划”，选定阶段 P 并同意创建任务进入规划；随后在 P1 中选择“记录 + 概览‘最近播放’（推荐）”。
 - 2026-10-11：用户在最终规划摘要后回复“批准执行”，批准 P2–P6 的推荐结论与 [implement.md](implement.md) 的七步计划；随后提交规划文档并运行 `task.py start`。
+- 2026-10-11：P6 布局确认通过，不改页面，继续收尾：用户查看合成数据的概览截图（宽屏 1440 与窄屏 375；有记录含超长标题、空态、清除确认、清除后）后回复“布局可以，继续收尾（推荐）”。
+
+## 实施结果（2026-10-11）
+
+提交（均在 `main`，未推送）：`ecf0bb1` 数据表、计次规则与服务（迁移 0016、catalog 两个公开读取函数、`internal/listening`）；`ee05b97` 三个接口、样本与前端解码；
+`7de1750` 播放器计次与上报（跟踪器、引擎、上报器、provider 接线）；`e94b77d` 概览“最近播放”（区块、清除、测试替身与浏览器用例）；
+`d70f7e9` 真实服务覆盖；`8718340` 合同与规范同步。规划与启动：`b611c13`、`733248f`。
+
+| 编号 | 结果 | 证据 |
+| --- | --- | --- |
+| A1 | 达成 | `listen-tracker.test.ts`（20 项：门槛、拖动与后退不算、跳变折算、暂停缓冲、新访问与继续）；`player-engine.test.ts` 的“计一次播放（阶段 P）”20 项：恰好交出一次、拖动不算、没有 seeking 事件的跳变不算、暂停与重试继续同一次、缓冲与预检与准备期间不算、换曲与单曲循环与队首“上一首”与停止与播完后再播重新计、卸载再挂载保留、刷新恢复后从零、静音照常、出口抛错不影响播放、会话结束作废；对引擎与上报器的关键行为做过变异检查（改坏实现，对应用例失败） |
+| A2 | 达成 | `TestPostgreSQLRecordEnforcesTheThresholdAndTrackRules`（低于门槛 `play_too_short`、时长未知只校验范围、曲目不存在与已缺失 404）、`TestPostgreSQLRecordClassifiesAForeignKeyViolationAsAMissingTrack`、`TestPostgreSQLListeningRequestsAreCheckedInOrder`；`TestThreshold`、`TestMeetsThresholdAllowsOneSecondOfTolerance`、`TestValidPlayedSeconds` |
+| A3 | 达成 | `TestPostgreSQLRecordStoresAndReplaysByIdempotencyKey`（重放回放首次记录，请求体不同 409）、`TestPostgreSQLRecordConcurrentRequestsWithTheSameKeyWriteOneRow`（并发同键只写一行）、`TestPostgreSQLPlayHistoryConstraints` |
+| A4 | 达成 | `TestPostgreSQLHistoryAndClearAreIsolatedPerUser`（服务层）、`TestPostgreSQLListeningHistoryIsPrivateEvenFromAdministrators`（用户 A、B 与管理员互相读不到、清不掉）、`TestPostgreSQLListeningRequestsAreCheckedInOrder`（跨源 403 先于鉴权、未登录 401）、`TestPostgreSQLListeningResponseShapesAndDisabledMembers`（停用成员的记录保留） |
+| A5 | 达成 | `TestPostgreSQLListeningFollowsTracksThroughRescans`：合成 FLAC 经扫描接口改名、跨目录移动、文件消失再回来，曲目 ID 与发行 ID 不变，记录仍指向同一曲目，最近播放仍显示它当前所在的专辑，缺失曲目隐藏但记录仍在、文件回来后重现；`TestPostgreSQLRecentReleases{AreNewestFirstOncePerRelease,AreLimitedAndHideMissingTracks,FollowTracksToTheirCurrentRelease,AreReadInBatches}`；catalog 的 `TestPostgreSQLLoadTrackPlacements` 与 `…FailClosedOnMalformedArtwork` |
+| A6 | 达成 | 引擎用例“记录出口抛出错误也不影响播放”“会话结束作废还没有发出的上报”；`play-reporter.test.ts`（24 项：2/10/30 秒同一个键重试、4xx 与取消放弃、`dispose` 中止在途请求并清除定时器、作废后到达的失败不再安排重试、上限 50）；`player-provider.test.tsx` 的默认装配用例：上报成功使“最近播放”失效，上报失败重试后会话结束，等待中的重试不再发出（接线改坏时失败） |
+| A7 | 达成 | `recent-plays.test.tsx`（12 项：占位与空态、倒序卡片与链接、点击进入版本、有记录但无可显示项、读取失败与重试、清除的确认与取消焦点、成功后焦点到标题与状态提示、不等重新读取、新播放使提示收起、失败与重试、失败后再打开不残留错误、请求中忙碌、纯键盘）；Playwright 新增 13 项：五种宽度不溢出（含八张卡片与超长标题、清除确认打开、有记录但无可显示项、读取失败）、axe 桌面与手机（有记录、确认对话框、清除后、读取失败）、真实 `<dialog>` 下的纯键盘清除（焦点约束、Esc 还回、Enter 确认后焦点到标题） |
+| A8 | 达成 | `./scripts/playback-e2e.sh` 23 项通过（原有 21 项加 2 项）：合成 FLAC 真实播放过半后页面只上报一次、服务端有这首曲目的记录、概览显示该专辑并链接到播放过的版本、清除确认后区块与服务端都为空且刷新后仍为空；真实鼠标把 180 秒素材拖到末尾再播完，没有上报、服务端没有记录 |
+| A9 | 达成 | 三个接口的样本（`listening/*`、`errors/play-too-short`）由后端集成测试生成，前端解码器经 `api-contract.test.ts` 往返核对，上限与后端一致；新增 `listening-contracts.md`，并同步运行合同、索引、catalog 合同、目录结构、播放器规范、状态管理、质量规范、DESIGN、产品目标、路线图与父任务；P6 布局已由用户确认（见规划决策记录） |
+
+验证：隔离 PostgreSQL（`roomusic-test`，空闲端口、随机库名，结束 `down -v`）上 `internal/listening`、`internal/catalog`、`internal/app`、`cmd` 的后端测试与 `go vet` 通过；
+Vitest 59 个文件 1192 项、Playwright（路由模拟）197 项、真实服务 23 项通过；`npm run lint`、`npm run typecheck` 通过；
+内嵌产物在导出的暂存树上重新构建后与提交的逐文件一致，每个涉及前端的提交前都在导出的暂存树上重复 lint、类型检查与全量 Vitest。
+
+### 与设计的差异
+
+实施中的调整都已写进 [design.md](design.md)：写路由先同源再鉴权；字段类型不符是 `invalid_json`；最近播放同一时间按曲目 ID 排序；`listening.NewService` 只收 `*sql.DB`（依赖规则不允许 app 导入 catalog）；
+引擎的依赖是 `playRecorder: { record, discard }`（而不是单个 `recordPlay`），`load` 显式区分新访问与继续；上报器的依赖是 `newKey` 而不是 `now`，另有 50 个待处理上限与同步抛错的处理；
+“有记录但曲目都已缺失”用单独的说明文案；清除成功后立刻置空并提示“已清除”、焦点带到标题；对话框渲染在区块之外；测试替身放在已登录会话的默认路由里。
+已接受的限制：上报失败后等待重试的记录，在随后清除历史时不会被取消（窗口约 42 秒，且清除成功说明服务已恢复），见 design 第 7 节与合同第 5 节。
+
+### 仍需用户完成
+
+- 部署后无需额外操作：迁移 0016 只新增一张表，不改写已有数据；已有的播放不会补记，只记录升级之后的真实播放。
+- 概览区块在 Safari、Firefox 与 Windows 浏览器里的实际渲染目前只有 Linux Chromium 的自动化证据；已在三组手工实播的“每组交互检查”里增加一行“最近播放”，与 F1 一起做；
+  F1 与下次推送后的远端 CI（F3）见后续验收任务 `10-06-m2a-acceptance-followup`。

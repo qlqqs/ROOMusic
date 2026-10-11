@@ -92,13 +92,13 @@
   `directory-structure.md`（后端与前端各加 `listening` 的归属）、`player-design-guidelines.md`（计一次播放）、`state-management.md`（上报器与查询键，
   保持在 24,000 字节以内）、`frontend/DESIGN.md` §7 概览行、`product-goals.md`、路线图与父任务；
   在 `10-06-m2a-acceptance-followup/research/manual-acceptance.md` 的交互检查里加“最近播放”一行。
-- [ ] 用合成数据截取概览的宽屏与窄屏（有记录、空态、清除确认），写到 `/tmp`，不入库；请用户确认布局（P6）。
+- [x] 用合成数据截取概览的宽屏与窄屏（有记录、空态、清除确认、清除后），写到 `/tmp/p-work/layout/`，不入库；用户确认布局（P6，2026-10-11）。
 - [x] 验证：`git diff --cached --check`、规范文件大小（均不超过 24,000 字节）、相对链接（512 个，断链 0）、`python3 ./.trellis/scripts/task.py validate`。
 - [x] 提交：`docs(listening): 同步播放历史合同与规范`。
 
 ### 第 7 步：收尾
 
-- [ ] PRD 写实施结果与验收对照；设计与实现有差异时记在 design.md。
+- [x] PRD 写实施结果与验收对照；设计与实现有差异时记在 design.md。
 - [ ] 归档（`--skip-branch-validation`），单独提交归档后的相对链接修正；写 journal；更新记忆。
 
 ## 风险与回退点
