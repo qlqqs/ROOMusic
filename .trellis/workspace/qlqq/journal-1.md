@@ -743,3 +743,52 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 - 重新扫描一次真实库，歌词才会出现（已入库曲目迁移后没有歌词）；84 个带歌词的文件是 ALAC，要装好 ffmpeg（scripts/ffmpeg-pinned.sh 或发行版的包）并设置 ROOMUSIC_FFMPEG_PATH 后重启，才能播放
 - 三组手工实播（含新增的“歌词面板”一行）与下次推送后的远端 CI 见 10-06-m2a-acceptance-followup
 - 下一阶段待用户选择并先做规划：P（服务端播放历史）、M3（修正覆盖层）；CUE 精确分轨仍延后
+
+
+## Session 28: P 服务端播放历史
+<!-- trellis-session: v=2 fp=bca6977fc6bc4833 -->
+
+**Date**: 2026-10-11
+**Task**: P 服务端播放历史
+**Branch**: `main`
+
+### Summary
+
+按用户隔离地保存真实播放：播放器按真正出声的时间累计，达到 min(曲长/2, 4 分钟) 带幂等键上报；概览新增“最近播放”并可清除自己的历史；真实服务与浏览器覆盖；用户确认布局后归档。
+
+### Main Changes
+
+- 后端：迁移 0016 的 play_history 表（用户与幂等键唯一、曲目引用不级联）；catalog 两个公开读取函数；internal/listening（门槛校验、幂等记录、分批读取最近播放、清除）与三个接口，写路由先同源再鉴权，只作用于会话用户
+- 前端：ListenTracker 与引擎的访问语义（新访问/继续、拖动与跳变不算）、playRecorder 依赖、上报器（2/10/30 秒同键重试、4xx 放弃、50 个上限、会话结束作废）、概览 RecentPlaysPanel（卡片、清除确认与失败、焦点与状态提示）；内嵌产物重新构建
+- 测试与文档：对引擎、上报器、provider 接线与区块做过变异检查；Playwright 新增 13 项（五种宽度、axe、纯键盘），真实服务新增 2 项；新增播放历史合同，同步运行合同、目录结构、播放器与状态管理规范、DESIGN、路线图与父任务；归档并修正相对链接
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b611c13` | docs(listening): 规划服务端播放历史（阶段 P） |
+| `733248f` | chore(task): 启动 P 服务端播放历史 |
+| `ecf0bb1` | feat(listening): 播放历史的数据表与记录规则 |
+| `ee05b97` | feat(listening): 播放历史接口 |
+| `7de1750` | feat(player): 达到规则的播放上报到服务端 |
+| `e94b77d` | feat(listening): 概览显示最近播放 |
+| `d70f7e9` | test(listening): 真实服务覆盖播放历史 |
+| `8718340` | docs(listening): 同步播放历史合同与规范 |
+| `e65c286` | docs(listening): 记录播放历史的实施结果与验收对照 |
+| `04cd0bc` | chore(task): archive 10-11-classical-p-play-history |
+| `48e422e` | docs(listening): 修正播放历史任务归档后的相对链接 |
+
+### Testing
+
+- [OK] 隔离 PostgreSQL 上 internal/listening、catalog、app、cmd 的后端测试与 go vet 通过；Vitest 59 文件 1192 项、Playwright（路由模拟）197 项、真实服务 23 项通过；lint 与类型检查通过
+- [OK] 内嵌产物在导出的暂存树上重新构建后与提交逐文件一致；全部 Markdown 相对链接 513 个、断链 0；task.py validate 通过
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 概览“最近播放”在 Safari、Firefox 与 Windows 浏览器里的实际渲染，与三组手工实播一起做（10-06-m2a-acceptance-followup 已加“最近播放”一行）；下次推送后的远端 CI 同样见该任务
+- 已接受的限制：上报失败后等待重试的记录，在随后清除历史时不会被取消（窗口约 42 秒），见播放历史合同第 5 节
+- 下一阶段待用户选择并先做规划：M3（修正覆盖层与受治理操作）；M5（历史页面、收藏、歌单）在 Core 1 之后；CUE 精确分轨仍延后
