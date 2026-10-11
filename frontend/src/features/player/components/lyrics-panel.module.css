@@ -1,0 +1,36 @@
+/* 面板绝对铺满所在格：歌词再长也不撑高“封面 | 歌词”那一行，高度由封面决定（再有一个下限）。 */
+.panel { position: relative; min-width: 0; min-height: 280px; }
+.heading { margin: 0; }
+.frame { position: absolute; inset: 0; display: flex; flex-direction: column; gap: var(--space-2); min-height: 0; }
+.state { flex: 1 1 auto; display: grid; place-items: center; align-content: center; gap: var(--space-3); margin: 0; padding: var(--space-4); text-align: center; color: var(--text-secondary); }
+.scroller { position: relative; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-inline: var(--space-2); -webkit-mask-image: linear-gradient(transparent, #000 10%, #000 90%, transparent); mask-image: linear-gradient(transparent, #000 10%, #000 90%, transparent); }
+.list { margin: 0; padding: var(--space-8) 0; list-style: none; display: grid; gap: var(--space-3); }
+.text { padding: var(--space-8) 0; display: grid; gap: var(--space-4); }
+.paragraph { margin: 0; font-family: var(--font-heading); font-size: var(--fs-17); line-height: 1.6; overflow-wrap: anywhere; }
+.plainLine { display: block; }
+
+/* 高亮只改颜色与左侧标记，不改字号、字重与行高：换行时版面不会跳动。左边框常驻（透明），所以状态变化不挪动文字。 */
+.group { padding-left: var(--space-3); border-left: 3px solid transparent; font-family: var(--font-heading); font-size: var(--fs-20); line-height: 1.4; overflow-wrap: anywhere; color: var(--text-primary); }
+.group[data-state="past"] { color: var(--text-secondary); }
+.group[data-state="active"] { border-left-color: var(--color-accent); color: var(--text-accent); }
+.line { display: grid; gap: var(--space-1); width: 100%; margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
+button.line { cursor: pointer; }
+button.line:hover { color: var(--text-accent); }
+.primary { display: block; }
+.secondary { display: block; font-family: var(--font-body); font-size: var(--fs-15); }
+.gap { height: var(--space-3); }
+
+.footer { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; min-height: var(--space-6); padding-inline: var(--space-2); }
+.note { margin: 0; font-size: var(--fs-12); color: var(--text-secondary); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .group { transition: color 0.2s ease, border-left-color 0.2s ease; }
+}
+
+/* 单栏（容器窄于 760px）：歌词放在标题与控制之后，随内容增高，最高 60vh，再长则在面板内滚动。 */
+@container now-playing (max-width: 759px) {
+  .panel { min-height: 0; }
+  .frame { position: static; max-height: 60vh; }
+  .scroller { flex: 0 1 auto; }
+  .state { flex: 0 0 auto; padding-block: var(--space-6); }
+}

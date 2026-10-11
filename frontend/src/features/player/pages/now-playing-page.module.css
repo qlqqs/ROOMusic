@@ -1,10 +1,16 @@
-.page { display: grid; gap: var(--space-8); min-width: 0; max-width: 1280px; }
-.hero { display: grid; grid-template-columns: minmax(200px, min(400px, 42%)) minmax(0, 1fr); gap: var(--space-6); align-items: start; min-width: 0; }
-.info { display: grid; gap: var(--space-3); min-width: 0; overflow-wrap: anywhere; }
+/* 容器宽度（不是视口）决定布局：侧栏占用的宽度已经扣除。宽于 760px 时首屏是“封面 | 歌词”两栏，标题与控制在两栏下方；
+   窄于 760px 时单栏：封面、标题与控制、歌词。 */
+.page { container: now-playing / inline-size; display: grid; gap: var(--space-8); min-width: 0; max-width: 1280px; }
+.hero { display: grid; grid-template-columns: minmax(200px, min(400px, 42%)) minmax(0, 1fr); grid-template-areas: "artwork lyrics" "info info"; gap: var(--space-6); align-items: stretch; min-width: 0; }
+.artwork { grid-area: artwork; align-self: start; min-width: 0; }
+.lyrics { grid-area: lyrics; display: grid; min-width: 0; }
+.info { grid-area: info; display: grid; gap: var(--space-3); min-width: 0; overflow-wrap: anywhere; }
 .title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; font-size: var(--fs-36); font-weight: 400; }
 .artist, .album { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
 .artist { -webkit-line-clamp: 2; }
 .album { -webkit-line-clamp: 3; }
-.artwork { min-width: 0; }
-@media (max-width: 1023px) { .hero { gap: var(--space-4); } .title { font-size: var(--fs-25); } }
-@media (max-width: 767px) { .hero { grid-template-columns: minmax(0, 1fr); } .artwork { width: min(320px, 100%); justify-self: center; } }
+@container now-playing (max-width: 759px) {
+  .hero { grid-template-columns: minmax(0, 1fr); grid-template-areas: "artwork" "info" "lyrics"; gap: var(--space-4); }
+  .artwork { width: min(280px, 100%); justify-self: center; align-self: auto; }
+  .title { font-size: var(--fs-25); }
+}

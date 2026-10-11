@@ -22,6 +22,21 @@ window.scrollTo = () => undefined;
 // jsdom 没有实现 Element.scrollIntoView：翻页后滚到结果顶部、跳到某一张介质都会调用它。需要断言调用的测试自己换成 vi.fn()。
 Element.prototype.scrollIntoView = () => undefined;
 
+// jsdom 没有实现 Element.scrollTo：歌词面板把当前行滚到中部时会调用它。需要断言调用的测试自己换成 vi.fn()。
+Element.prototype.scrollTo = () => undefined;
+
+// jsdom 没有实现 window.matchMedia：歌词面板据此决定是否平滑滚动。默认是“没有偏好”；测试减少动态效果时自己覆盖。
+window.matchMedia = (query: string): MediaQueryList => ({
+  matches: false,
+  media: query,
+  onchange: null,
+  addEventListener: () => undefined,
+  removeEventListener: () => undefined,
+  addListener: () => undefined,
+  removeListener: () => undefined,
+  dispatchEvent: () => false,
+});
+
 afterEach(() => {
   cleanup();
 });

@@ -1,7 +1,7 @@
 import { decode as d } from "../../../shared/api";
 import type { ApiResponse } from "../../../shared/api";
 import { apiRequest } from "../../../shared/api";
-import { decodePlaybackFormats, decodeTrackPlayback, decodeTrackPreparing, type PlaybackFormatsDTO, type TrackPlaybackDTO } from "./decoders";
+import { decodePlaybackFormats, decodeTrackLyrics, decodeTrackPlayback, decodeTrackPreparing, type PlaybackFormatsDTO, type TrackLyricsDTO, type TrackPlaybackDTO } from "./decoders";
 
 /** 后端批准交付的（来源类别、编码）组合、它们的交付方式（直出或无损转换）与交给浏览器的媒体类型。 */
 export function fetchPlaybackFormats(signal?: AbortSignal): Promise<ApiResponse<PlaybackFormatsDTO>> {
@@ -28,5 +28,18 @@ export function fetchTrackPlayback(trackId: string, signal?: AbortSignal): Promi
     const playback = decodeTrackPlayback(input);
     if (playback.track_id.toLowerCase() !== id.toLowerCase()) throw new d.DecodeError("$.track_id", "预检响应不是所请求的曲目");
     return { state: "ready", playback };
+  });
+}
+
+/**
+ * 曲目的内嵌歌词（所有登录成员可读，trackId 必须是 UUID，由调用方保证）。没有可显示的歌词是 200 加 lyrics: null，不是错误；
+ * 曲目不存在或已缺失是 404。响应必须是所请求的曲目，避免把别的曲目的歌词显示出来。
+ */
+export function fetchTrackLyrics(trackId: string, signal?: AbortSignal): Promise<ApiResponse<TrackLyricsDTO>> {
+  const id = d.defineDecoder(d.uuid())(trackId);
+  return apiRequest({ method: "GET", path: `/api/v1/tracks/${id}/lyrics`, signal }, (input): TrackLyricsDTO => {
+    const lyrics = decodeTrackLyrics(input);
+    if (lyrics.track_id.toLowerCase() !== id.toLowerCase()) throw new d.DecodeError("$.track_id", "歌词响应不是所请求的曲目");
+    return lyrics;
   });
 }

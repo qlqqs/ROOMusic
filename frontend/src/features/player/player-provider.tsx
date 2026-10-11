@@ -86,3 +86,12 @@ export function usePlayerProgress(): PlayerProgress {
   const engine = usePlayerEngine();
   return useSyncExternalStore(engine.subscribeProgress, engine.getProgress);
 }
+
+/**
+ * 只订阅进度里的一个派生值（例如歌词的“当前组下标”）：select 的结果不变（按 Object.is 比较）就不重绘，
+ * 约每秒 4 次的进度事件不会让大列表跟着重绘。select 必须返回基本值或进度里已有的引用。
+ */
+export function usePlayerProgressSelector<T>(select: (progress: PlayerProgress) => T): T {
+  const engine = usePlayerEngine();
+  return useSyncExternalStore(engine.subscribeProgress, () => select(engine.getProgress()));
+}

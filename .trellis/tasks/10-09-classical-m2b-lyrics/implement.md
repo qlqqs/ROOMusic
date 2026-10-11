@@ -11,9 +11,9 @@
 
 ### 第 1 步：提取与保存（L1、L2）
 
-- [ ] 解析器提取三类来源的歌词与来源键；单元测试。
-- [ ] 迁移 `0015_track_lyrics.sql`；`SourceObservation` 字段；`persist_track.go` 的 INSERT/UPDATE；扫描写入、更新、清空的集成测试。
-- [ ] 验证：
+- [x] 解析器提取三类来源的歌词与来源键；单元测试。
+- [x] 迁移 `0015_track_lyrics.sql`；`SourceObservation` 字段；`persist_track.go` 的 INSERT/UPDATE；扫描写入、更新、清空的集成测试。
+- [x] 验证：
 
   ```bash
   cd backend && test -z "$(gofmt -l .)" && go vet ./... && go build ./...
@@ -22,14 +22,14 @@
   go test -race ./internal/library/... ./internal/catalog/... ./internal/platform/postgres/... -run 'TestPostgreSQL' -count=1
   ```
 
-- [ ] 提交：`feat(library): 扫描时提取内嵌歌词`。
+- [x] 提交：`feat(library): 扫描时提取内嵌歌词`（`d6c9fd4`）。
 
 ### 第 2 步：歌词接口与正在播放页（L3–L6）
 
-- [ ] `catalog.LoadTrackLyrics`、`catalog.ParseLyrics`；`GET /api/v1/tracks/{id}/lyrics`；接口样本与集成测试。
-- [ ] 前端：端点与解码器、查询钩子、分组模型、歌词面板、正在播放页布局；Vitest 与 Playwright（路由模拟）；重新构建内嵌产物。
-- [ ] 验证：后端同第 1 步加 `TestPostgreSQLAPIResponseSamples`；前端 `npm run lint && npm run typecheck && npm test`、`npm run test:e2e`；无环境变量的构建与内嵌产物逐文件一致。
-- [ ] 提交：`feat(player): 歌词接口与逐行同步显示`（含内嵌产物）。
+- [x] `catalog.LoadTrackLyrics`、`catalog.ParseLyrics`；`GET /api/v1/tracks/{id}/lyrics`；接口样本与集成测试。
+- [x] 前端：端点与解码器、查询钩子、分组模型、歌词面板、正在播放页布局；Vitest 与 Playwright（路由模拟）；重新构建内嵌产物。
+- [x] 验证：后端同第 1 步加 `TestPostgreSQLAPIResponseSamples`；前端 `npm run lint && npm run typecheck && npm test`、`npm run test:e2e`；无环境变量的构建与内嵌产物逐文件一致。
+- [x] 提交：`feat(player): 歌词接口与逐行同步显示`（含内嵌产物）。
 
 ### 第 3 步：真实服务自动化（L7）
 

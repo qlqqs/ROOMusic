@@ -319,8 +319,9 @@ func recordAlbumDetailSamples(t *testing.T, application *integrationTestApplicat
 		md5      byte
 		comments []string
 	}{
-		{"d1-01.flac", 11, []string{"TITLE=Allegro", "ARTIST=Sample Orchestra", "DISCNUMBER=1/2", "TRACKNUMBER=1"}},
-		{"d1-02.flac", 12, []string{"TITLE=Andante", "ARTIST=Sample Soloist", "DISCNUMBER=1/2", "TRACKNUMBER=2"}},
+		// 前两首带内嵌歌词（同步与纯文本），第三首没有：歌词接口的三种响应来自真实扫描。
+		{"d1-01.flac", 11, []string{"TITLE=Allegro", "ARTIST=Sample Orchestra", "DISCNUMBER=1/2", "TRACKNUMBER=1", "LYRICS=" + sampleSyncedLyrics}},
+		{"d1-02.flac", 12, []string{"TITLE=Andante", "ARTIST=Sample Soloist", "DISCNUMBER=1/2", "TRACKNUMBER=2", "UNSYNCEDLYRICS=" + samplePlainLyrics}},
 		{"d2-01.flac", 13, []string{"TITLE=Finale", "ARTIST=Sample Orchestra", "DISCNUMBER=2/2", "TRACKNUMBER=1"}},
 	} {
 		content := parsertest.FLACWithAudio(t, [16]byte{track.md5}, bytes.Repeat([]byte{track.md5}, 64), append(append([]string{}, shared...), track.comments...)...)
@@ -383,7 +384,26 @@ func recordAlbumDetailSamples(t *testing.T, application *integrationTestApplicat
 	samples.record("errors/not-found-release-group", call(http.MethodGet, "/api/v1/release-groups/"+uuid.New(), nil, admin), http.StatusNotFound)
 	samples.record("errors/not-found-release", call(http.MethodGet, "/api/v1/releases/"+uuid.New(), nil, admin), http.StatusNotFound)
 
+	recordLyricsSamples(t, application, samples, call, admin)
 	recordPlaybackSamples(t, application, samples, call, admin, libraryA, rootIDOf(t, application, libraryA))
+}
+
+// 样本里的内嵌歌词：同步歌词带元标签、间奏（空行）、同一时间戳的双语两行与一行多个时间戳；纯文本歌词带分段。
+const (
+	sampleSyncedLyrics = "[ti:Allegro]\n[ar:Sample Orchestra]\n[00:00.00]\n[00:12.34]First line of the sample\n[00:15.00]Second line of the sample\n[00:15.00]样本的第二行\n[00:20.50][00:40.50]Chorus line"
+	samplePlainLyrics  = "First verse, line one\nFirst verse, line two\n\nSecond verse, line one"
+)
+
+// recordLyricsSamples 记录歌词接口：同步歌词、纯文本歌词与没有歌词。素材是 recordAlbumDetailSamples 扫描出的合成 FLAC。
+func recordLyricsSamples(t *testing.T, application *integrationTestApplication, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser) {
+	t.Helper()
+	for sample, title := range map[string]string{"tracks/lyrics-synced": "Allegro", "tracks/lyrics-plain": "Andante", "tracks/lyrics-none": "Finale"} {
+		var trackID string
+		if err := application.database.QueryRow(`SELECT id::text FROM tracks WHERE title=$1 AND source_status='present'`, title).Scan(&trackID); err != nil {
+			t.Fatalf("read track %q: %v", title, err)
+		}
+		samples.record(sample, call(http.MethodGet, "/api/v1/tracks/"+trackID+"/lyrics", nil, admin), http.StatusOK)
+	}
 }
 
 // rootIDOf 返回按路径登记的根目录 ID。

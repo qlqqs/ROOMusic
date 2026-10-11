@@ -63,3 +63,64 @@ export type PlaybackFormatDTO = d.Infer<typeof formatDecoder>;
 export type PlaybackFormatsDTO = d.Infer<typeof formatsDecoder>;
 export type TrackPlaybackDTO = d.Infer<typeof trackPlaybackDecoder>;
 export type TrackPreparingDTO = d.Infer<typeof trackPreparingDecoder>;
+
+// ---- 歌词 ----
+
+// 上限与后端 catalog.ParseLyrics 一致：最多 2,000 行、每行最多 1,000 个字符（UTF-16 码元最多 2,000）、开始时间最多 24 小时。
+// 异常响应不会被整体接受。
+const MAX_LYRICS_LINES = 2000;
+const MAX_LYRICS_TEXT_UNITS = 2000;
+const MAX_LYRICS_START_MS = 24 * 60 * 60 * 1000;
+
+const lyricsLineDecoder = d.object({
+  start_ms: d.nullable(d.integer({ min: 0, max: MAX_LYRICS_START_MS })),
+  text: d.string({ max: MAX_LYRICS_TEXT_UNITS }),
+});
+
+const rawLyricsDecoder = d.object({
+  kind: d.oneOf(["synced", "plain"] as const),
+  // 目前只有内嵌标签一种来源；新增来源时后端与这里一起扩展。
+  source: d.literal("embedded"),
+  lines: d.array(lyricsLineDecoder, { min: 1, max: MAX_LYRICS_LINES }),
+});
+
+const trackLyricsDecoder = d.object({
+  track_id: d.uuid(),
+  // 曲目存在但没有可显示的歌词是 null，不是错误。
+  lyrics: d.nullable(rawLyricsDecoder),
+});
+
+/** 同步歌词的一行：开始时间是非负毫秒数。 */
+export type SyncedLyricsLine = { start_ms: number; text: string };
+/** 纯文本歌词的一行：没有开始时间；text 可以是空串（分段）。 */
+export type PlainLyricsLine = { start_ms: null; text: string };
+export type LyricsDTO =
+  | { kind: "synced"; source: "embedded"; lines: SyncedLyricsLine[] }
+  | { kind: "plain"; source: "embedded"; lines: PlainLyricsLine[] };
+export type TrackLyricsDTO = { track_id: string; lyrics: LyricsDTO | null };
+
+/**
+ * 歌词响应。除字段形状外还检查两种形态的约束：synced 的每一行都有开始时间且非递减，plain 的每一行都没有；
+ * 违反的响应整体拒绝，面板不会拿到顺序错乱或缺时间的“同步歌词”。
+ */
+export const decodeTrackLyrics = d.defineDecoder((input, path): TrackLyricsDTO => {
+  const result = trackLyricsDecoder(input, path);
+  const lyrics = result.lyrics;
+  if (lyrics === null) return { track_id: result.track_id, lyrics: null };
+  if (lyrics.kind === "plain") {
+    const lines = lyrics.lines.map((line, index): PlainLyricsLine => {
+      if (line.start_ms !== null) throw new d.DecodeError(`${path}.lyrics.lines[${index}].start_ms`, "纯文本歌词的行不应有开始时间");
+      return { start_ms: null, text: line.text };
+    });
+    return { track_id: result.track_id, lyrics: { kind: "plain", source: lyrics.source, lines } };
+  }
+  let previous = 0;
+  const lines = lyrics.lines.map((line, index): SyncedLyricsLine => {
+    const linePath = `${path}.lyrics.lines[${index}].start_ms`;
+    if (line.start_ms === null) throw new d.DecodeError(linePath, "同步歌词的每一行都应有开始时间");
+    if (line.start_ms < previous) throw new d.DecodeError(linePath, "同步歌词的开始时间应非递减");
+    previous = line.start_ms;
+    return { start_ms: line.start_ms, text: line.text };
+  });
+  return { track_id: result.track_id, lyrics: { kind: "synced", source: lyrics.source, lines } };
+});

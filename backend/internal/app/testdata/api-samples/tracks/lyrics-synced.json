@@ -1,0 +1,36 @@
+{
+  "body": {
+    "lyrics": {
+      "kind": "synced",
+      "lines": [
+        {
+          "start_ms": 0,
+          "text": ""
+        },
+        {
+          "start_ms": 12340,
+          "text": "First line of the sample"
+        },
+        {
+          "start_ms": 15000,
+          "text": "Second line of the sample"
+        },
+        {
+          "start_ms": 15000,
+          "text": "样本的第二行"
+        },
+        {
+          "start_ms": 20500,
+          "text": "Chorus line"
+        },
+        {
+          "start_ms": 40500,
+          "text": "Chorus line"
+        }
+      ],
+      "source": "embedded"
+    },
+    "track_id": "00000000-0000-4000-8000-000000000001"
+  },
+  "status": 200
+}

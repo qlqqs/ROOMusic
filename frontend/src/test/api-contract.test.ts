@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodePlaybackFormats, decodeTrackPlayback, decodeTrackPreparing } from "../features/player/api/decoders";
+import { decodePlaybackFormats, decodeTrackLyrics, decodeTrackPlayback, decodeTrackPreparing } from "../features/player/api/decoders";
 import { decodeLoggedOut, decodeSetupStatus, decodeViewer } from "../features/auth/api/decoders";
 import {
   decodeReleaseDetail,
@@ -35,6 +35,9 @@ const successContracts: Record<string, Contract> = {
   "tracks/playback": { status: 200, decode: decodeTrackPlayback },
   "tracks/playback-derived": { status: 200, decode: decodeTrackPlayback },
   "tracks/playback-preparing": { status: 202, decode: decodeTrackPreparing },
+  "tracks/lyrics-synced": { status: 200, decode: decodeTrackLyrics },
+  "tracks/lyrics-plain": { status: 200, decode: decodeTrackLyrics },
+  "tracks/lyrics-none": { status: 200, decode: decodeTrackLyrics },
   "auth/setup-status-required": { status: 200, decode: decodeSetupStatus },
   "auth/setup-status-completed": { status: 200, decode: decodeSetupStatus },
   "auth/setup-admin-created": { status: 201, decode: decodeViewer },

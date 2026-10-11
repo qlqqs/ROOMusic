@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Page } from "../../../shared/ui";
 import { usePlayer } from "../player-provider";
+import { LyricsPanel } from "../components/lyrics-panel";
 import { PlayerArtwork } from "../components/player-artwork";
 import { PlayerControls } from "../components/player-controls";
 import { PlayerFeedback } from "../components/player-feedback";
@@ -18,6 +19,7 @@ export function NowPlayingPage() {
     {snapshot.queue.entries.length === 0 ? <p>队列是空的。去专辑选择一张唱片，开始聆听。</p> : <div className={styles.page}>
       {current === null ? <p>请选择队列中的一项播放。</p> : <div className={styles.hero}>
         <div className={styles.artwork}><PlayerArtwork track={current.track} /></div>
+        <div className={styles.lyrics}><LyricsPanel trackId={current.track.trackId} /></div>
         <div className={styles.info}>
           <p>{statusLabels[snapshot.status]} · 第 {snapshot.queue.entries.findIndex((entry) => entry.entryId === current.entryId) + 1} 首 / 共 {snapshot.queue.entries.length} 首</p>
           <h2 className={styles.title} title={current.track.title}>{current.track.title}</h2>

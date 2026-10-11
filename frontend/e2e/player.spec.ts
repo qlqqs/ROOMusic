@@ -27,6 +27,17 @@ async function fulfillFlac(route: Route) {
   } });
 }
 
+type LyricsReply = { status: number; body: unknown };
+
+/** 歌词接口：默认每首曲目都没有歌词；专项用例传入自己的回答（后注册的路由优先）。 */
+async function mockLyrics(page: Page, reply: (trackId: string) => LyricsReply = (trackId) => ({ status: 200, body: { track_id: trackId, lyrics: null } })) {
+  await page.route("**/api/v1/tracks/*/lyrics", (route) => {
+    const trackId = new URL(route.request().url()).pathname.split("/").at(-2) ?? "";
+    const { status, body } = reply(trackId);
+    return route.fulfill({ status, json: body });
+  });
+}
+
 /** 只观察原生 Audio 引用；代理构造器仍返回真实 HTMLAudioElement，不改变任何行为。 */
 async function observeAudio(page: Page) {
   await page.addInitScript(() => {
@@ -58,6 +69,7 @@ async function installPlayback(page: Page, mock: ApiMock, long = false) {
     return route.fulfill({ json: { track_id: id, representation: { kind: "original", url: `/api/v1/tracks/${id}/audio`, mime_type: "audio/flac", codecs: null, size_bytes: flac.length } } });
   });
   await page.route("**/api/v1/tracks/*/audio", fulfillFlac);
+  await mockLyrics(page);
   await observeAudio(page);
   await page.goto(`/albums/${group.id}`);
   await expect(page.getByRole("button", { name: "播放整张专辑", exact: true })).toBeEnabled();
@@ -154,7 +166,12 @@ for (const width of widths) {
     expect(await album.evaluate((element) => element.parentElement === null ? "" : getComputedStyle(element.parentElement).webkitLineClamp)).toBe("3");
     const info = heroTitle.locator("..");
     expect((await info.boundingBox())?.height).toBeLessThanOrEqual(650);
-    if (width >= 768) await expect(info.getByRole("button", { name: "播放", exact: true })).toBeInViewport();
+    if (width >= 768) {
+      // 首屏是“封面 | 歌词”，标题与控制在两栏下方：长标题时它们可能在首屏之外，但必须能滚动到达；底栏的播放按钮始终在首屏内。
+      await expect(bar(page).getByRole("button", { name: /^(播放|暂停)$/ })).toBeInViewport();
+      await info.getByRole("button", { name: "播放", exact: true }).scrollIntoViewIfNeeded();
+      await expect(info.getByRole("button", { name: "播放", exact: true })).toBeInViewport();
+    }
     expect((await queue(page).last().boundingBox())?.height).toBeLessThanOrEqual(300);
 
     await expectNoHorizontalOverflow(page, "正在播放长标题");
@@ -212,6 +229,7 @@ async function installDerivedPlayback(page: Page, mock: ApiMock, options: Derive
     await route.fulfill({ json: { track_id: id, representation: { kind: "derived", url: `/api/v1/tracks/${id}/audio`, mime_type: "audio/flac", codecs: null, size_bytes: flac.length } } }).catch(() => undefined);
   });
   await page.route("**/api/v1/tracks/*/audio", fulfillFlac);
+  await mockLyrics(page);
   await observeAudio(page);
   await page.goto(`/albums/${group.id}`);
   await expect(page.getByRole("button", { name: "播放整张专辑", exact: true })).toBeEnabled();
@@ -342,4 +360,199 @@ test("纯键盘：播放、下一首播放、不打断当前、切歌、队列�
   expect(await page.locator("#main").evaluate((main) => getComputedStyle(main).paddingBottom)).toBe("0px");
   await expect(page.getByText("队列是空的。去专辑选择一张唱片，开始聆听。")).toBeVisible();
   await expect.poll(() => media(page)).toMatchObject({ paused: true, sourceAttribute: null });
+});
+
+// ---- 歌词 ----
+
+const LYRIC_LINES = 30;
+
+/** 同步歌词：每 100 毫秒一行（合成 FLAC 约 3 秒，全部行都能到达）；有一行同时间的对照译文与一个间奏。 */
+function syncedLyrics(trackId: string, count = LYRIC_LINES) {
+  const lines = Array.from({ length: count }, (_, index) => ({ start_ms: index * 100, text: `第 ${index + 1} 行歌词${"词".repeat(index % 5)}` }));
+  return { track_id: trackId, lyrics: { kind: "synced", source: "embedded", lines } };
+}
+function plainLyrics(trackId: string) {
+  const lines = Array.from({ length: 24 }, (_, index) => ({ start_ms: null, text: index % 4 === 3 ? "" : `纯文本第 ${index + 1} 行${"词".repeat(index % 6)}` }));
+  return { track_id: trackId, lyrics: { kind: "plain", source: "embedded", lines } };
+}
+const lyricsReplies = {
+  synced: (trackId: string): LyricsReply => ({ status: 200, body: syncedLyrics(trackId) }),
+  plain: (trackId: string): LyricsReply => ({ status: 200, body: plainLyrics(trackId) }),
+  none: (trackId: string): LyricsReply => ({ status: 200, body: { track_id: trackId, lyrics: null } }),
+};
+
+/** 移到正在播放页：专辑页开始播放、暂停，再从底栏进入正在播放。 */
+async function openNowPlaying(page: Page) {
+  await startAndPause(page);
+  await bar(page).getByRole("link", { name: "队列（18）", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "正在播放", exact: true })).toBeVisible();
+}
+
+const lyricsPanel = (page: Page) => page.locator("#main").getByRole("region", { name: "歌词", exact: true });
+
+async function setMediaTime(page: Page, seconds: number) {
+  await page.evaluate((time) => {
+    const observed = Reflect.get(window, "playerMockObservedAudio") as HTMLAudioElement[];
+    const audio = observed.at(-1);
+    if (audio) audio.currentTime = time;
+  }, seconds);
+}
+
+/** 容器宽于 760px 是“封面 | 歌词”两栏、标题与控制在两栏下方；窄于 760px 是封面、标题与控制、歌词依次排列。 */
+async function expectLyricsLayout(page: Page, label: string) {
+  const main = page.locator("#main");
+  const lyrics = lyricsPanel(page);
+  const cover = main.getByLabel("没有可用封面").locator("..");
+  const title = main.getByRole("heading", { level: 2, name: "合成曲目 1", exact: true });
+  const [lyricsBox, coverBox, titleBox, container] = await Promise.all([lyrics.boundingBox(), cover.boundingBox(), title.boundingBox(), page.locator("#queue").evaluate((element) => element.clientWidth)]);
+  if (lyricsBox === null || coverBox === null || titleBox === null) throw new Error(`${label}：缺少布局元素`);
+  const viewport = page.viewportSize();
+  if (container >= 760) {
+    expect(lyricsBox.x, `${label}：歌词在封面右侧`).toBeGreaterThanOrEqual(coverBox.x + coverBox.width - 1);
+    expect(titleBox.y, `${label}：标题与控制在两栏下方`).toBeGreaterThanOrEqual(Math.max(lyricsBox.y + lyricsBox.height, coverBox.y + coverBox.height) - 1);
+    expect(Math.abs(lyricsBox.height - Math.max(coverBox.height, 280)), `${label}：歌词与封面同高`).toBeLessThanOrEqual(2);
+  } else {
+    expect(titleBox.y, `${label}：标题与控制在封面下方`).toBeGreaterThanOrEqual(coverBox.y + coverBox.height - 1);
+    expect(lyricsBox.y, `${label}：歌词在标题与控制之后`).toBeGreaterThanOrEqual(titleBox.y + titleBox.height - 1);
+    expect(coverBox.width, `${label}：单栏封面最大 280px`).toBeLessThanOrEqual(281);
+    expect(lyricsBox.height, `${label}：歌词最高 60vh`).toBeLessThanOrEqual((viewport?.height ?? 900) * 0.6 + 1);
+  }
+}
+
+for (const width of widths) {
+  for (const kind of ["synced", "plain", "none"] as const) {
+    test(`${width}px：${{ synced: "同步", plain: "纯文本", none: "没有" }[kind]}歌词的正在播放页布局不溢出，axe 无严重问题`, async ({ page, backend }) => {
+      await page.setViewportSize({ width, height: 900 });
+      const mock = await backend.start({ signedInAs: "listener" });
+      await installPlayback(page, mock);
+      await mockLyrics(page, lyricsReplies[kind]);
+      await openNowPlaying(page);
+      const lyrics = lyricsPanel(page);
+      await expect(lyrics).toBeVisible();
+      if (kind === "synced") await expect(lyrics.getByRole("listitem")).toHaveCount(LYRIC_LINES);
+      if (kind === "plain") await expect(lyrics.getByText("内嵌歌词 · 纯文本", { exact: true })).toBeVisible();
+      if (kind === "none") await expect(lyrics.getByText("这首曲目没有内嵌歌词", { exact: true })).toBeVisible();
+      await expectLyricsLayout(page, `${width}px ${kind}`);
+      await expectNoHorizontalOverflow(page, `${kind}歌词`);
+      await expectNoDocumentScroll(page, `${kind}歌词`);
+      await expectNoSeriousViolations(page, `${kind}歌词`);
+      if (process.env["ROOMUSIC_LYRICS_SCREENSHOTS"] === "1") {
+        await page.locator("#main").evaluate((main) => main.scrollTo(0, 0));
+        await page.evaluate(() => window.scrollTo(0, 0));
+        await page.screenshot({ path: `/tmp/roomusic-lyrics-${kind}-${width}.png` });
+      }
+    });
+  }
+}
+
+test("同步歌词：当前行随播放位置变化并保持在中部，点击与键盘跳转，高亮不改变行高", async ({ page, backend }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const mock = await backend.start({ signedInAs: "listener" });
+  await installPlayback(page, mock);
+  await mockLyrics(page, lyricsReplies.synced);
+  await openNowPlaying(page);
+  const lyrics = lyricsPanel(page);
+  const scroller = lyrics.getByRole("group", { name: "逐行歌词", exact: true });
+  const items = lyrics.getByRole("listitem");
+  const current = lyrics.locator("[aria-current='true']");
+  await expect(items).toHaveCount(LYRIC_LINES);
+  await expect(lyrics.getByText("内嵌歌词 · 逐行同步 · 点任一行跳到该处", { exact: true })).toBeVisible();
+  await expect(current).toContainText("第 1 行歌词");
+
+  // 平滑滚动需要时间：用轮询等它到位（轮询函数里不能放会抛错的断言）。
+  const inside = async (item: Locator) => {
+    const [box, area] = await Promise.all([item.boundingBox(), scroller.boundingBox()]);
+    return box !== null && area !== null && box.y + 1 >= area.y && box.y + box.height - 1 <= area.y + area.height;
+  };
+  const metrics = (item: Locator) => item.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { fontSize: style.fontSize, fontWeight: style.fontWeight, lineHeight: style.lineHeight };
+  });
+
+  // 位置到 1.55 秒：当前行变为第 16 行（1.5 秒），并被滚到可视区内；高亮前后字号、字重、行高与整份歌词的高度都不变。
+  const listHeight = async () => (await lyrics.getByRole("list").boundingBox())?.height;
+  const heightBefore = await listHeight();
+  const plainMetrics = await metrics(items.nth(3));
+  await setMediaTime(page, 1.55);
+  await expect(current).toContainText("第 16 行歌词");
+  await expect(current).toHaveCount(1);
+  await expect.poll(() => inside(current), { message: "当前行被滚进歌词区域" }).toBe(true);
+  expect(await metrics(current)).toEqual(plainMetrics);
+  expect(await listHeight()).toBe(heightBefore);
+  expect(await scroller.evaluate((element) => element.scrollTop), "已滚动到当前行附近").toBeGreaterThan(0);
+
+  // 点击第 25 行（2.4 秒）：播放位置不早于该行时间，当前行随之变化。
+  await lyrics.getByRole("button", { name: /^第 25 行歌词/ }).click();
+  await expect(current).toContainText("第 25 行歌词");
+  expect((await media(page))?.time ?? 0).toBeGreaterThanOrEqual(2.39);
+
+  // 键盘：焦点在当前行按钮上，方向键上移两行，Enter 跳转到第 23 行（2.2 秒）；焦点环可见。
+  await lyrics.getByRole("button", { name: /^第 25 行歌词/ }).focus();
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("ArrowUp");
+  await expect(lyrics.getByRole("button", { name: /^第 23 行歌词/ })).toBeFocused();
+  await expectVisibleFocusRing(page, "歌词行键盘操作");
+  await page.keyboard.press("Enter");
+  await expect(current).toContainText("第 23 行歌词");
+  expect((await media(page))?.time ?? 0).toBeGreaterThanOrEqual(2.19);
+  expect((await media(page))?.time ?? 0).toBeLessThan(2.3);
+  await expectNoSeriousViolations(page, "同步歌词的当前行与焦点");
+});
+
+test("同步歌词：手动滚动后暂停跟随并出现“回到当前行”，点击后恢复并定位", async ({ page, backend }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const mock = await backend.start({ signedInAs: "listener" });
+  await installPlayback(page, mock);
+  await mockLyrics(page, lyricsReplies.synced);
+  await openNowPlaying(page);
+  const lyrics = lyricsPanel(page);
+  const scroller = lyrics.getByRole("group", { name: "逐行歌词", exact: true });
+  const current = lyrics.locator("[aria-current='true']");
+  const back = lyrics.getByRole("button", { name: "回到当前行", exact: true });
+  const scrollTop = () => scroller.evaluate((element) => element.scrollTop);
+  await expect(lyrics.getByRole("listitem")).toHaveCount(LYRIC_LINES);
+  await setMediaTime(page, 2.05);
+  await expect(current).toContainText("第 21 行歌词");
+  await expect.poll(scrollTop).toBeGreaterThan(0);
+  await expect(back).toHaveCount(0);
+
+  // 滚轮是用户在自己浏览：暂停跟随。之后当前行变化时，滚动位置不再被拖回。
+  await scroller.hover();
+  await page.mouse.wheel(0, -700);
+  await expect(back).toBeVisible();
+  await expect.poll(scrollTop).toBeLessThan(200);
+  const parked = await scrollTop();
+  await setMediaTime(page, 2.75);
+  await expect(current).toContainText("第 28 行歌词");
+  await page.waitForTimeout(600);
+  expect(Math.abs((await scrollTop()) - parked)).toBeLessThanOrEqual(2);
+  await expectNoSeriousViolations(page, "暂停跟随");
+
+  // “回到当前行”：恢复跟随并立即定位（可视区内），按钮消失。
+  await back.click();
+  await expect(back).toHaveCount(0);
+  await expect.poll(async () => {
+    const [box, area] = await Promise.all([current.boundingBox(), scroller.boundingBox()]);
+    return box !== null && area !== null && box.y >= area.y && box.y + box.height <= area.y + area.height + 1;
+  }).toBe(true);
+});
+
+test("歌词读取失败：显示带重试的错误，重试后显示歌词；曲目没有歌词与纯文本如实显示", async ({ page, backend }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const mock = await backend.start({ signedInAs: "listener" });
+  await installPlayback(page, mock);
+  let failing = true;
+  await mockLyrics(page, (trackId) => failing
+    ? { status: 503, body: { error: { code: "database_unavailable", message: "后端文案" }, request_id: "mock" } }
+    : lyricsReplies.synced(trackId));
+  await openNowPlaying(page);
+  const lyrics = lyricsPanel(page);
+  // 查询对 503 自动重试两次，之后才显示错误。
+  await expect(lyrics.getByRole("alert")).toContainText("服务暂时不可用", { timeout: 20_000 });
+  await expect(lyrics.getByText("这首曲目没有内嵌歌词")).toHaveCount(0);
+  await expectNoSeriousViolations(page, "歌词读取失败");
+  failing = false;
+  await lyrics.getByRole("button", { name: "重试", exact: true }).click();
+  await expect(lyrics.getByRole("listitem")).toHaveCount(LYRIC_LINES);
+  await expect(lyrics.getByRole("alert")).toHaveCount(0);
 });

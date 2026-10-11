@@ -1,4 +1,4 @@
-// Package httpapi 是 Release 目录的 REST 传输层：列表、详情、证据、按组读取与封面读取。
+// Package httpapi 是 Release 目录的 REST 传输层：列表、详情、证据、按组读取、封面读取与曲目歌词读取。
 // handler 只做参数解析、鉴权和响应映射；查询与投影在 catalog，封面读取在 catalog/artwork。
 package httpapi
 
@@ -37,6 +37,7 @@ func (handlers *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/release-groups", handlers.listReleaseGroups)
 	mux.HandleFunc("GET /api/v1/release-groups/{id}", handlers.releaseGroupDetail)
 	mux.HandleFunc("GET /api/v1/artworks/{id}", handlers.artworkResource)
+	mux.HandleFunc("GET /api/v1/tracks/{id}/lyrics", handlers.trackLyrics)
 }
 
 func parseReleaseSearch(request *http.Request) (string, error) {
@@ -195,6 +196,30 @@ func (handlers *Handlers) releaseEvidence(responseWriter http.ResponseWriter, re
 		return
 	}
 	httpserver.WriteJSON(responseWriter, http.StatusOK, result)
+}
+
+// trackLyrics 返回曲目的内嵌歌词：所有登录成员可读；检查顺序是 401、400（非 UUID）、404（不存在或非 present）、200。
+// 没有可显示的歌词时 lyrics 为 null，不是 404。
+func (handlers *Handlers) trackLyrics(responseWriter http.ResponseWriter, request *http.Request) {
+	if _, err := handlers.guard.Authenticate(request); err != nil {
+		handlers.guard.WriteUnauthenticated(responseWriter, request)
+		return
+	}
+	trackID := request.PathValue("id")
+	if !uuid.Valid(trackID) {
+		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_id", "曲目标识无效")
+		return
+	}
+	lyrics, err := handlers.store.LoadTrackLyrics(request.Context(), trackID)
+	if errors.Is(err, catalog.ErrTrackNotFound) {
+		httpserver.WriteError(responseWriter, request, http.StatusNotFound, "not_found", "曲目不存在")
+		return
+	}
+	if err != nil {
+		httpserver.WriteError(responseWriter, request, http.StatusServiceUnavailable, "database_unavailable", "无法读取歌词")
+		return
+	}
+	httpserver.WriteJSON(responseWriter, http.StatusOK, lyrics)
 }
 
 func (handlers *Handlers) artworkResource(w http.ResponseWriter, r *http.Request) {

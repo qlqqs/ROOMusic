@@ -9,7 +9,7 @@ import { playerTrack } from "../../../test/player-data";
 import { memoryStorage } from "../../../test/memory-storage";
 import { queueStorageKey, saveQueue } from "../engine/persistence";
 import { ApiError } from "../../../shared/api";
-import { PlayerEngine, type EngineDeps, type PlayerSnapshot } from "../engine/player-engine";
+import { PlayerEngine, type EngineDeps, type PlayerProgress, type PlayerSnapshot } from "../engine/player-engine";
 import type { CapabilityTable } from "../engine/capability";
 import type { TrackPlaybackResult } from "../api/endpoints";
 import { AlbumPlaybackActions, TrackPlaybackActions } from "./album-playback-actions";
@@ -27,8 +27,17 @@ vi.mock("../player-provider", () => {
     usePlayerEngine: function useTestPlayerEngine() { return engine; },
     usePlayerSelector: function useTestPlayerSelector<T>(select: (snapshot: PlayerSnapshot) => T) { return useSyncExternalStore(engine.subscribe, () => select(engine.getSnapshot())); },
     usePlayerProgress: function useTestProgress() { return useSyncExternalStore(engine.subscribeProgress, engine.getProgress); },
+    usePlayerProgressSelector: function useTestProgressSelector<T>(select: (progress: PlayerProgress) => T) { return useSyncExternalStore(engine.subscribeProgress, () => select(engine.getProgress())); },
   };
 });
+// 页面级用例不关心歌词内容（面板自己的行为见 lyrics-panel.test.tsx）：歌词查询替换成“没有歌词”，并记录请求了哪些曲目。
+const lyricsRequests: string[] = [];
+vi.mock("../hooks/use-track-lyrics", () => ({
+  useTrackLyrics: function useTestLyrics(trackId: string) {
+    lyricsRequests.push(trackId);
+    return { status: "success", data: null, error: null, refetch: () => undefined };
+  },
+}));
 // capabilitiesPending 为真时模拟“格式表还没取到”：没有初始数据，请求一直不返回。
 let capabilitiesPending = false;
 vi.mock("../hooks/use-playback-capabilities", () => ({
@@ -267,12 +276,30 @@ describe("播放界面", () => {
     expect(within(row).getByTitle(`${artist} — ${albumTitle}`).textContent).toBe(`${artist} — ${albumTitle}`);
     expect(screen.getByRole("button", { name: "播放" })).toBeTruthy();
   });
+  it("正在播放页为当前曲目放歌词面板：封面、歌词、标题与控制依次出现；没有歌词时如实说明", () => {
+    lyricsRequests.length = 0;
+    engine.enqueue([playerTrack("1", { title: "第一首" }), playerTrack("2")]);
+    view(<NowPlayingPage />);
+    const lyrics = screen.getByRole("region", { name: "歌词" });
+    expect(within(lyrics).getByText("这首曲目没有内嵌歌词")).toBeTruthy();
+    expect(new Set(lyricsRequests)).toEqual(new Set(["track-1"]));
+    // DOM 顺序即阅读与焦点顺序：封面 → 歌词 → 标题与控制。
+    const cover = screen.getByLabelText("没有可用封面");
+    const title = screen.getByRole("heading", { level: 2, name: "第一首" });
+    expect(cover.compareDocumentPosition(lyrics) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(lyrics.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // 换到下一首后歌词面板跟着换曲目。
+    act(() => engine.next());
+    expect(lyricsRequests.at(-1)).toBe("track-2");
+  });
   it("正在播放空态不伪造封面、进度或信号路径", () => {
     view(<NowPlayingPage />);
     expect(screen.getByRole("heading", { level: 1, name: "正在播放" })).toBeTruthy();
     expect(screen.getByText(/队列是空的/)).toBeTruthy();
     expect(screen.getByRole("link", { name: "去专辑" })).toBeTruthy();
     expect(screen.queryByRole("slider")).toBeNull();
+    // 队列为空时没有当前曲目，也就没有歌词面板。
+    expect(screen.queryByRole("region", { name: "歌词" })).toBeNull();
   });
   it("信号路径分四段，输出未知，不宣称硬件保证", () => {
     engine.enqueue([playerTrack("1", { source: { sourceKind: "m4a", codec: "alac", bitDepth: null, sampleRate: 48000, channels: 2, bitrate: null } })]);

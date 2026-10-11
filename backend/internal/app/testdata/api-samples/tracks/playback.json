@@ -4,7 +4,7 @@
       "codecs": null,
       "kind": "original",
       "mime_type": "audio/flac",
-      "size_bytes": 481,
+      "size_bytes": 669,
       "url": "/api/v1/tracks/00000000-0000-4000-8000-000000000001/audio"
     },
     "track_id": "00000000-0000-4000-8000-000000000001"

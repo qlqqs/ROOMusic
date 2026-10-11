@@ -1,0 +1,28 @@
+{
+  "body": {
+    "lyrics": {
+      "kind": "plain",
+      "lines": [
+        {
+          "start_ms": null,
+          "text": "First verse, line one"
+        },
+        {
+          "start_ms": null,
+          "text": "First verse, line two"
+        },
+        {
+          "start_ms": null,
+          "text": ""
+        },
+        {
+          "start_ms": null,
+          "text": "Second verse, line one"
+        }
+      ],
+      "source": "embedded"
+    },
+    "track_id": "00000000-0000-4000-8000-000000000001"
+  },
+  "status": 200
+}
