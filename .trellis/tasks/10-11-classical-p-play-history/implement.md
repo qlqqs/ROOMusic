@@ -16,7 +16,7 @@
 ## 启动前
 
 - [x] 用户批准规划（P2–P6 与本计划），批准记录写进 PRD；提交规划文档。
-- [ ] `python3 ./.trellis/scripts/task.py start 10-11-classical-p-play-history`。
+- [x] `python3 ./.trellis/scripts/task.py start 10-11-classical-p-play-history`。
 
 ## 步骤
 
