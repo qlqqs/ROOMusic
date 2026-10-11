@@ -33,6 +33,24 @@ export async function catalog(api: APIRequestContext) {
   })));
 }
 export type Albums = Awaited<ReturnType<typeof catalog>>;
+
+// 播放历史（阶段 P）。解码器只取测试用到的字段：listening 的解码器会连带导入带样式的应用代码，Node 里的 Playwright 不能导入它。
+export const playsPath = "/api/v1/me/plays";
+const decodeRecent = d.defineDecoder(
+  d.object({
+    has_history: d.boolean(),
+    items: d.array(d.object({ group_id: d.uuid(), release: d.object({ id: d.uuid(), title: d.string() }), last_track: d.object({ id: d.uuid() }) }), { max: 8 }),
+  }),
+);
+const decodeCleared = d.defineDecoder(d.object({ deleted: d.integer({ min: 0 }) }));
+/** 当前会话用户最近播放的发行（直接读接口，不经页面）。 */
+export async function recentReleases(api: APIRequestContext) {
+  return decodeRecent(await body(await api.get(`${playsPath}/recent-releases`)));
+}
+/** 清除当前会话用户的全部播放历史，返回删除的条数。 */
+export async function clearPlayHistory(api: APIRequestContext) {
+  return decodeCleared(await body(await api.delete(playsPath, { headers: { Origin: origin } }))).deleted;
+}
 export function findTrack(albums: Albums, source: string) {
   for (const album of albums) {
     const track = album.release.media.flatMap((medium) => medium.tracks).find((item) => item.source === source);

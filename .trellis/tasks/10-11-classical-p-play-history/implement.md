@@ -82,9 +82,9 @@
 
 ### 第 5 步：真实服务覆盖
 
-- [ ] `frontend/e2e/real/playback.real.ts`：合成 FLAC 真实播放过半后接口有记录、概览显示该专辑、清除后为空；只拖动到结尾附近不产生记录。
-- [ ] 验证：`./scripts/playback-e2e.sh` 全部通过（运行前确认没有残留的 `roomusic-test` 容器）。
-- [ ] 提交：`test(listening): 真实服务覆盖播放历史`。
+- [x] `frontend/e2e/real/playback.real.ts`：合成 FLAC 真实播放过半后接口有记录、概览显示该专辑、清除后为空；只拖动到结尾附近不产生记录。
+- [x] 验证：`./scripts/playback-e2e.sh` 全部通过（运行前确认没有残留的 `roomusic-test` 容器；我自己的隔离数据库先 `db.sh down`）：23 个用例通过，含新增 2 个。
+- [x] 提交：`test(listening): 真实服务覆盖播放历史`。
 
 ### 第 6 步：文档与布局确认（P6）
 

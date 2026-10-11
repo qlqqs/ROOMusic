@@ -1,9 +1,9 @@
 import { appendFile, copyFile, mkdir, utimes } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import http from "node:http";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { decodeTrackLyrics, decodeTrackPlayback, decodeTrackPreparing } from "../../src/features/player/api/decoders";
-import { admin, body, catalog, decodeError, decodeID, decodeRoot, decodeSetup, findTrack, fixtureRoot, login, mediaState, observeMedia, origin, playTrack, post, scan, type Albums } from "./support";
+import { admin, body, catalog, clearPlayHistory, decodeError, decodeID, decodeRoot, decodeSetup, findTrack, fixtureRoot, login, mediaState, observeMedia, origin, playsPath, playTrack, post, recentReleases, scan, type Albums } from "./support";
 
 let albums: Albums;
 let root: ReturnType<typeof decodeRoot>;
@@ -242,6 +242,82 @@ for (const source of ["flac-16-44100.flac", "alac-16-44100.m4a"]) {
     await expect.poll(() => page.evaluate(() => Reflect.get(window, "lyricsCurrentSeen") as string[]), { timeout: 10_000 }).toEqual(["Fixture line two夹具第二行", "Fixture line three"]);
   });
 }
+
+// 播放历史（阶段 P）：真实服务、真实扫描、Chromium 真实播放与真实拖动。一次播放要累计出声达到 min(时长/2, 4 分钟) 才记录：
+// 合成素材约 3 秒，门槛约 1.5 秒；slow.wav 长 180 秒，门槛 90 秒。别的用例播放过素材，所以每个用例先清空自己的历史。
+/** 页面发出的“记录一次播放”请求（POST /api/v1/me/plays）的请求体。 */
+function watchPlayReports(page: Page): { track_id: string; played_seconds: number }[] {
+  const reports: { track_id: string; played_seconds: number }[] = [];
+  page.on("request", (request) => {
+    if (request.method() !== "POST" || new URL(request.url()).pathname !== playsPath) return;
+    const input: unknown = request.postDataJSON();
+    if (typeof input === "object" && input !== null && "track_id" in input && "played_seconds" in input && typeof input.track_id === "string" && typeof input.played_seconds === "number") {
+      reports.push({ track_id: input.track_id, played_seconds: input.played_seconds });
+    }
+  });
+  return reports;
+}
+
+test("播放过半后服务端记下这一次，概览的“最近播放”显示这张专辑，清除后为空", async ({ page }) => {
+  await clearPlayHistory(page.request);
+  expect(await recentReleases(page.request)).toEqual({ has_history: false, items: [] });
+  const item = findTrack(albums, "flac-16-44100.flac");
+  const duration = item.track.duration_seconds ?? 0;
+  expect(duration, "合成素材应有扫描得到的时长").toBeGreaterThan(1);
+  const threshold = Math.min(duration / 2, 240);
+  const reports = watchPlayReports(page);
+
+  await playTrack(page, item);
+  // 出声累计达到门槛才上报：服务端出现这首曲目的记录（专辑里后面的曲目在它自然结束之后才开始，不会先于它）。
+  await expect.poll(async () => (await recentReleases(page.request)).items.map((recent) => recent.last_track.id), { timeout: 15_000 }).toEqual([item.track.id]);
+  await page.getByRole("region", { name: "播放器", exact: true }).getByRole("button", { name: "暂停", exact: true }).click();
+  const own = reports.filter((report) => report.track_id === item.track.id);
+  expect(own, "这一次访问只上报一次").toHaveLength(1);
+  expect(own[0]?.played_seconds ?? 0).toBeGreaterThanOrEqual(threshold);
+  expect(own[0]?.played_seconds ?? 0).toBeLessThanOrEqual(duration + 1);
+
+  // 概览：最近播放里是这张专辑，整张卡片链接到播放过的版本。
+  await page.goto("/");
+  const panel = page.getByRole("region", { name: "最近播放", exact: true });
+  const card = panel.getByRole("link", { name: item.release.title });
+  await expect(card).toHaveAttribute("href", `/albums/${item.groupId}?release=${item.release.id}`);
+  await expect(card).toContainText(/上次播放 \d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
+  const recent = await recentReleases(page.request);
+  expect(recent.has_history).toBe(true);
+  expect(recent.items).toHaveLength(1);
+  expect(recent.items[0]).toMatchObject({ group_id: item.groupId, release: { id: item.release.id } });
+
+  // 清除：确认后区块为空，服务端也没有了；刷新后仍然为空。
+  await panel.getByRole("button", { name: "清除播放历史", exact: true }).click();
+  await page.getByRole("dialog", { name: "清除播放历史？" }).getByRole("button", { name: "清除播放历史", exact: true }).click();
+  await expect(panel.getByText("已清除你的播放历史。")).toBeVisible();
+  expect(await recentReleases(page.request)).toEqual({ has_history: false, items: [] });
+  await page.reload();
+  await expect(panel.getByText(/^还没有播放记录。/)).toBeVisible();
+  await expect(panel.getByRole("button", { name: "清除播放历史", exact: true })).toHaveCount(0);
+});
+
+test("只拖动、几乎没有出声的播放不产生记录：拖到接近末尾再自然播完", async ({ page }) => {
+  await clearPlayHistory(page.request);
+  const item = findTrack(albums, "slow.wav"); // 180 秒，门槛 90 秒：拖到末尾后只剩几秒可播
+  const reports = watchPlayReports(page);
+  await playTrack(page, item);
+  const bar = page.getByRole("region", { name: "播放器", exact: true });
+  const seek = bar.getByRole("slider", { name: "播放进度", exact: true });
+  await expect(seek).toBeEnabled();
+  const bounds = await seek.boundingBox();
+  if (!bounds) throw new Error("播放进度没有可操作区域");
+  // 真实鼠标把原生 slider 拖到最右端附近。
+  await page.mouse.move(bounds.x + 8, bounds.y + bounds.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + bounds.width - 3, bounds.y + bounds.height / 2, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate((id) => window.playbackTestEvents.some((event) => event.type === "seeked" && event.src.includes(id) && event.time > 150), item.track.id)).toBe(true);
+  await expect.poll(() => page.evaluate((id) => window.playbackTestEvents.some((event) => event.type === "ended" && event.src.includes(id)), item.track.id), { timeout: 30_000 }).toBe(true);
+  // 位置走完了整首，但出声只有开头与结尾的几秒，远不到 90 秒：没有上报，服务端也没有记录。
+  expect(reports).toEqual([]);
+  expect((await recentReleases(page.request)).items.map((recent) => recent.last_track.id)).not.toContain(item.track.id);
+});
 
 // WAV extensible 与 CUE 虚拟轨仍是“不能直接播放”，不是“浏览器不能解码”。
 test("CUE 虚拟轨和 WAV extensible 明确禁用且不会请求音频", async ({ page }) => {
