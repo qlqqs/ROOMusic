@@ -10,7 +10,7 @@
 折叠的来源与证据，管理员可按需读完整证据），详见[状态](./state-management.md)、[组件](./component-guidelines.md)与[质量](./quality-guidelines.md)规范。
 
 M2a 的播放器入口与生命周期见[状态规范](./state-management.md)、[播放器规范](./player-design-guidelines.md)及
-[后端播放合同](../backend/playback-contracts.md)。直出仅传原字节；M2b 增加 ALAC 的服务端无损派生与内嵌歌词（见[歌词合同](../backend/lyrics-contracts.md)），仍未引入服务端播放历史；
+[后端播放合同](../backend/playback-contracts.md)。直出仅传原字节；M2b 增加 ALAC 的服务端无损派生与内嵌歌词（见[歌词合同](../backend/lyrics-contracts.md)），阶段 P 增加按用户隔离的服务端播放历史与概览的“最近播放”（见[播放历史合同](../backend/listening-contracts.md)）；
 自动化与三组手工实播分别记录，不把浏览器能力提示当作验收证据。
 
 本轮 Classical 的唯一落地设计锚为 [frontend/DESIGN.md](../../../frontend/DESIGN.md)，

@@ -54,6 +54,7 @@ Before writing or reviewing backend code:
 | [播放直出合同](./playback-contracts.md) | M2a 格式表、预检、音频 Range、安全打开与周期复核；M2b 的 `delivery`、202 与派生错误码 |
 | [无损派生合同](./playback-derivation-contracts.md) | M2b ALAC → FLAC 无损派生：配置与启动、缓存、转换与核对、上限与取消、测试 |
 | [内嵌歌词合同](./lyrics-contracts.md) | M2b 歌词：标签提取与规范化、`tracks.lyrics` 与约束、歌词接口、LRC 解析规则、测试 |
+| [播放历史合同](./listening-contracts.md) | 阶段 P：`play_history`、计次规则与服务端校验、三个接口、最近播放读取规则、前端计次与上报、测试 |
 | [Music Steward And Operation Guidelines](./agent-and-operation-guidelines.md) | Agent modes, Review Subagent, tools, Change Sets, and recovery |
 | [Quality Guidelines](./quality-guidelines.md) | Focused code, forbidden coupling, tests, and gates |
 

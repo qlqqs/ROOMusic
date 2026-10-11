@@ -30,6 +30,7 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 | 鉴权直出 | [playback-contracts.md](./playback-contracts.md) | M2a 格式表、预检、音频、Range、来源版本与撤销复核；M2b 的 `delivery`、202 与派生错误码 |
 | 无损派生 | [playback-derivation-contracts.md](./playback-derivation-contracts.md) | M2b ALAC → FLAC：ffmpeg 与缓存配置、启动自检、转换与核对、上限与取消、测试 |
 | 内嵌歌词 | [lyrics-contracts.md](./lyrics-contracts.md) | M2b 歌词：标签提取、`tracks.lyrics`、歌词接口与 LRC 解析规则、测试 |
+| 播放历史 | [listening-contracts.md](./listening-contracts.md) | 阶段 P：`play_history`、计次规则、记录与最近播放与清除接口、按用户隔离、前端计次与上报、测试 |
 
 ## 2. 接口签名
 
@@ -46,6 +47,7 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 - M2a：`GET /api/v1/playback/formats`、`GET /api/v1/tracks/{id}/playback` 与
   `GET|HEAD /api/v1/tracks/{id}/audio`，具体合同见[鉴权直出](./playback-contracts.md)；M2b 在同样三个接口上增加派生交付
   （预检可返回 202），见[无损派生](./playback-derivation-contracts.md)。
+- P：`POST /api/v1/me/plays`、`GET /api/v1/me/plays/recent-releases` 与 `DELETE /api/v1/me/plays`，只作用于当前会话用户，见[播放历史](./listening-contracts.md)。
 - 前端请求形态为 `apiRequest(spec, decode)`（`frontend/src/shared/api/request.ts`）：成功响应经边界 decoder（第二个参数是状态码，
   同一路径 200 与 202 形状不同时用它核对响应体与状态码相符），
   非 2xx 经统一的错误信封 decoder；响应不是 JSON、信封不合法或 decoder 失败时归为 `invalid_response`，不进入缓存。

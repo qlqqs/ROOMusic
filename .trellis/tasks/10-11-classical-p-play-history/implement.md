@@ -88,13 +88,13 @@
 
 ### 第 6 步：文档与布局确认（P6）
 
-- [ ] 新增 `.trellis/spec/backend/listening-contracts.md`；更新运行合同（路由与专题文件表）、`catalog-rest-contracts.md`（两个新公开函数的一行指引）、
+- [x] 新增 `.trellis/spec/backend/listening-contracts.md`；更新运行合同（路由与专题文件表）、`catalog-rest-contracts.md`（两个新公开函数的一行指引）、
   `directory-structure.md`（后端与前端各加 `listening` 的归属）、`player-design-guidelines.md`（计一次播放）、`state-management.md`（上报器与查询键，
   保持在 24,000 字节以内）、`frontend/DESIGN.md` §7 概览行、`product-goals.md`、路线图与父任务；
   在 `10-06-m2a-acceptance-followup/research/manual-acceptance.md` 的交互检查里加“最近播放”一行。
 - [ ] 用合成数据截取概览的宽屏与窄屏（有记录、空态、清除确认），写到 `/tmp`，不入库；请用户确认布局（P6）。
-- [ ] 验证：`git diff --cached --check`、规范文件大小、相对链接、`python3 ./.trellis/scripts/task.py validate`。
-- [ ] 提交：`docs(listening): 同步播放历史合同与规范`。
+- [x] 验证：`git diff --cached --check`、规范文件大小（均不超过 24,000 字节）、相对链接（512 个，断链 0）、`python3 ./.trellis/scripts/task.py validate`。
+- [x] 提交：`docs(listening): 同步播放历史合同与规范`。
 
 ### 第 7 步：收尾
 

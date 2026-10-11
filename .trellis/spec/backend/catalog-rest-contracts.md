@@ -16,6 +16,8 @@
 - `GET /api/v1/artworks/{resource_id}`：认证后读取受管封面；响应带 `ETag`，支持 `If-None-Match` 的 `304`（见第 3 节）。
 - `GET /api/v1/tracks/{id}/lyrics`：认证后读取曲目的内嵌歌词（所有登录成员；非 UUID 400、不存在或非 `present` 404；没有歌词是 200 加 `lyrics: null`）。
   它与发行接口同属 catalog 的只读投影，提取、保存、解析规则与响应形状见[内嵌歌词合同](./lyrics-contracts.md)。
+- 播放历史（阶段 P）只经 catalog 的两个公开读取函数使用目录：`Store.LoadTrackDuration`（present 曲目的时长，未知为 0）与
+  `Store.LoadTrackPlacements`（present 曲目的标题、组与所在发行摘要，摘要与列表同一个投影），不读 catalog 的私有表；规则见[播放历史合同](./listening-contracts.md)。
 - Release 摘要包含 `id`、标题/艺人、nullable 年份/来源/介质、Medium/Track/attention
   计数，以及 `artwork: null | {resource_id,mime,width,height}`。
 - `artwork` 是在既有 Release 摘要上追加的向后兼容（additive）字段；真实音频播放仍

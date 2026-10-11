@@ -246,7 +246,7 @@ provider 放在已登录会话代次子树内，只装配一个分离的 `Audio(
 未知时长为 `null`。失败条目与可重试暂停分别表达，不靠模拟时钟推断结束。
 
 恢复键 `sessionStorage["roomusic:player:v1:<userId>"]`，只存 version、entryId/trackId/releaseId/groupId、
-currentEntryId、mode、positionSeconds 与有限播放历史（条目 ID），不存标题、路径或凭据。
+currentEntryId、mode、positionSeconds 与有限的随机“上一首”历史（条目 ID），不存标题、路径或凭据。
 边界解码版本、UUID、条目唯一性、数量与当前项归属；损坏/未知版本删除，不可用存储安全降级。
 按发行 ID 去重、最多 4 个并发重新加载详情；只有明确 404 或详情中缺少的曲目才丢弃并提示数量，
 网络/503 等暂时失败保留原恢复记录并提供重试，不能把临时故障当作不存在删除。恢复后保持暂停，首播重新预检后定位。
@@ -254,10 +254,18 @@ currentEntryId、mode、positionSeconds 与有限播放历史（条目 ID），�
 开始位置在元数据与可定位范围到达后才生效，此前保存或出错重试用待定位的位置，不写成 0；在队首按“上一首”从头重播时作废该位置；队列未变时复用已序列化的条目。
 音量/静音是设备偏好，存 `localStorage["roomusic:player-volume:v1"]`，不随账号清除。
 
-服务端历史、收藏与歌单仍未实现（P/M5），队列恢复不构成浏览器个人库权威。以后新增的缓存或偏好持久化同样要带版本与边界校验，
+收藏与歌单仍未实现（M5）；播放历史由服务端按用户保存（阶段 P），队列恢复不构成浏览器个人库权威。以后新增的缓存或偏好持久化同样要带版本与边界校验，
 含账号数据的按账号命名（不含私有数据的设备偏好如音量除外）；损坏、未知版本、禁用存储都应可恢复，写失败不能声称“已保存”。
 Cookie、凭据、服务器路径和治理操作结果不得写进浏览器持久层。
 具体交互与错误矩阵见[播放器规范](./player-design-guidelines.md)；API 见[播放合同](../backend/playback-contracts.md)。
+
+### 阶段 P 播放上报与最近播放
+
+引擎经依赖 `playRecorder: { record, discard }` 交出达到计次规则的播放，不碰网络；`PlayerProvider` 与引擎一起创建 `createViewerPlayReporter(queryClient, generation)`，
+把 `report` 接到 `record`、`dispose` 接到 `discard`（`endSession` 调用），所以上报器的生命周期等于引擎的：普通卸载与 StrictMode 重挂载沿用它，会话结束作废它。
+上报器是模块内的局部状态（待发送与等待重试的上报，最多 50 个），不进入 Query 缓存，也不持久化；成功后让 `listeningKeys.recentReleases(generation)` 失效。
+“最近播放”是服务器状态（键 `viewerQueryKey(generation, "listening", "recent-releases")`）；清除是写操作：成功后 `setQueryData` 置空并失效，不等重新读取，
+失败时保留旧数据、对话框里显示错误，DELETE 幂等所以可以直接重试。
 
 See [Hook Guidelines](./hook-guidelines.md),
 [Cross-Layer Thinking](../guides/cross-layer-thinking-guide.md), and the

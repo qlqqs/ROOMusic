@@ -28,7 +28,8 @@ frontend/
     │   ├── auth/                   # 初始化、登录、退出、会话生命周期与跨标签页同步
     │   ├── members/                # 成员列表与管理（管理其他账号，生命周期与 auth 不同）
     │   ├── library/                # 目录、目录操作记录、扫描记录、扫描详情与诊断
-    │   ├── player/                 # 播放器：api、engine（含歌词分组与定位）、provider、能力查询、底栏、歌词面板与正在播放页
+    │   ├── player/                 # 播放器：api、engine（含计次跟踪器、歌词分组与定位）、provider、能力查询、底栏、歌词面板与正在播放页
+    │   ├── listening/              # 播放历史：播放上报器（带幂等键、有限重试、会话结束作废）与概览的“最近播放”区块
     │   └── catalog/                # 专辑：列表（M1b）、详情（M1b）、封面、证据展示，以及概览的计数（M1a）
     ├── shared/
     │   ├── api/                    # 请求、错误分类、解码原语、错误信封、重试策略、失败文案
@@ -79,6 +80,8 @@ features/catalog/
 - `catalog` 拥有 Release/ReleaseGroup 的列表与详情、Medium/Track 展示、来源与封面展示（M1b 实现），以及概览里的专辑数。
 - `player` 拥有单一媒体生命周期、队列/模式/恢复、浏览器能力与播放界面；只经 catalog 公开合同读发行，
   不反向导入 app，也不把播放器全局状态放到 shared。进度与离散快照分开订阅。
+- `listening` 拥有播放上报（幂等键、有限重试、会话结束作废）与概览的“最近播放”区块（读取、卡片、清除确认）；经 catalog 公开合同取封面与专辑艺人的显示规则，
+  不导入 player：`player` 导入它的上报器，概览页（app 层）组合区块。
 - `search` 拥有查询与筛选的 URL 状态和结果展示（尚未建立）。
 - `operations` 拥有 Change Set 与 Operation Journal 的状态及受支持的恢复界面，不是通用 toast（尚未建立）。
 - `shared/api` 拥有同源请求、凭据、请求关联、响应体处理、错误信封、重试策略与解码原语；feature 的端点与 DTO 留在 feature。
