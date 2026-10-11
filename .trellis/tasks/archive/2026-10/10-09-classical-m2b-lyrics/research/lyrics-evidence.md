@@ -1,7 +1,7 @@
 # 歌词规划依据
 
 核对日期：2026-10-09。真实库数据由临时脚本只读汇总（方法与格式构成见
-[派生任务的调研](../../archive/2026-10/10-09-classical-m2b-derived-playback/research/library-evidence.md)），只输出计数，不输出路径、文件名或歌词内容。
+[派生任务的调研](../../10-09-classical-m2b-derived-playback/research/library-evidence.md)），只输出计数，不输出路径、文件名或歌词内容。
 
 ## 真实库的内嵌歌词
 

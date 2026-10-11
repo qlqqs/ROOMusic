@@ -4,4 +4,4 @@
 {"file": ".trellis/spec/frontend/player-design-guidelines.md", "reason": "歌词只显示真实数据、正在播放页规则"}
 {"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "组件边界、可访问性与 CSS Modules"}
 {"file": "frontend/DESIGN.md", "reason": "正在播放布局、歌词的读屏与动效要求"}
-{"file": ".trellis/tasks/10-09-classical-m2b-lyrics/research/lyrics-evidence.md", "reason": "真实库歌词形态、现有代码位置与原型"}
+{"file": ".trellis/tasks/archive/2026-10/10-09-classical-m2b-lyrics/research/lyrics-evidence.md", "reason": "真实库歌词形态、现有代码位置与原型"}

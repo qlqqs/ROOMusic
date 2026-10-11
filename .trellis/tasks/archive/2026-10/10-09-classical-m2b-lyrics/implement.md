@@ -1,6 +1,6 @@
 # M2b 歌词执行计划
 
-需求见 [prd.md](prd.md)，设计见 [design.md](design.md)。约束与派生任务相同（见[派生任务执行计划](../archive/2026-10/10-09-classical-m2b-derived-playback/implement.md)的“约束”）。
+需求见 [prd.md](prd.md)，设计见 [design.md](design.md)。约束与派生任务相同（见[派生任务执行计划](../10-09-classical-m2b-derived-playback/implement.md)的“约束”）。
 
 ## 启动前
 

@@ -4,7 +4,7 @@
 
 扫描时从音频标签提取歌词原文，保存在曲目记录里；接口读取时把原文解析成可显示的行；前端只做分组、定位与显示。
 修改歌词的提取规则、`tracks.lyrics` 两列、歌词接口、LRC 解析规则或前端歌词面板的数据合同时，先读本文件并同步更新。
-需求与取舍见[歌词任务](../../tasks/10-09-classical-m2b-lyrics/prd.md)与它的[技术设计](../../tasks/10-09-classical-m2b-lyrics/design.md)；
+需求与取舍见[歌词任务](../../tasks/archive/2026-10/10-09-classical-m2b-lyrics/prd.md)与它的[技术设计](../../tasks/archive/2026-10/10-09-classical-m2b-lyrics/design.md)；
 前端的面板与布局规则见[播放器设计规范](../frontend/player-design-guidelines.md)。
 
 只读内嵌标签：不读外置 `.lrc`、不联网、不提供编辑（人工修正属于 M3 起的覆盖层）、不做逐字高亮、不读 ID3 `SYLT`。
