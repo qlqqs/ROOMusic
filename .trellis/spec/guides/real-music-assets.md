@@ -19,6 +19,7 @@
 - 确需验证真实媒体时，必须采用显式、只读的检查，并在环境不可用时安全跳过或报告原因，而不是改变目录内容。
   现有的例子是 `backend/internal/library/parser/real_music_readonly_test.go` 里的测试：只有设置 `ROOMUSIC_REAL_MUSIC_ROOT`
   才运行，只读遍历，只输出按种类的汇总计数、失败数与耗时，不输出路径或文件名；结果记录到任务的 `research/` 时同样只写汇总。
+  歌词的覆盖统计是 `backend/internal/library/real_music_lyrics_test.go`（来源键、同步与纯文本份数、行数与大小范围），规则相同。
 
 ## 信息披露边界
 
