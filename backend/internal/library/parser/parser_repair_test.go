@@ -783,6 +783,11 @@ func repairM4AFreeform(name, value string) []byte {
 }
 
 func repairM4AMoov(codec string, channels, bitDepth, sampleRate, duration uint32, title, artist, album, albumArtist string) []byte {
+	return repairM4AMoovWithItems(codec, channels, bitDepth, sampleRate, duration, title, artist, album, albumArtist, nil)
+}
+
+// repairM4AMoovWithItems 与 repairM4AMoov 相同，并把 extraItems（已编码的 ilst 子 atom）追加到标签列表末尾。
+func repairM4AMoovWithItems(codec string, channels, bitDepth, sampleRate, duration uint32, title, artist, album, albumArtist string, extraItems []byte) []byte {
 	mvhdPayload := make([]byte, 20)
 	binary.BigEndian.PutUint32(mvhdPayload[12:16], 44100)
 	binary.BigEndian.PutUint32(mvhdPayload[16:20], duration)
@@ -831,6 +836,7 @@ func repairM4AMoov(codec string, channels, bitDepth, sampleRate, duration uint32
 	items = append(items, repairM4AAtom("trkn", repairM4AData(0, trackValue))...)
 	items = append(items, repairM4AAtom("disk", repairM4AData(0, discValue))...)
 	items = append(items, repairM4AAtom("covr", repairM4AData(13, []byte{0xff, 0xd8, 0xff, 0xd9}))...)
+	items = append(items, extraItems...)
 	meta := repairM4AAtom("meta", append([]byte{0, 0, 0, 0}, repairM4AAtom("ilst", items)...))
 	udta := repairM4AAtom("udta", meta)
 	return repairM4AAtom("moov", append(mvhd, append(trak, udta...)...))

@@ -54,6 +54,10 @@ type AudioObservation struct {
 	// ContentFingerprint 是解析时无需额外读盘就能得到的内容指纹（FLAC 的音频 MD5、OGG 的音频包哈希）；
 	// 其他格式为空，需要时用 ContentFingerprint 函数计算。
 	ContentFingerprint string
+	// Lyrics 是规范化后的内嵌歌词原文（见 NormalizeLyrics），LyricsSource 是来源键（LyricsSource* 常量）；没有有效歌词时两者都为空。
+	// 解析器只提取原文，不解析 LRC。
+	Lyrics       string
+	LyricsSource string
 }
 
 type CueTrack struct {
@@ -652,6 +656,11 @@ func parseM4AItemValue(itemType string, value, typeCode []byte, observation *Aud
 				observation.ArtworkMIME = "application/octet-stream"
 			}
 		}
+		return
+	}
+	if itemType == "\xa9lyr" {
+		// 歌词保留换行且可达 64 KiB，不能走有界的单行文本解码，也不放进 RawAtoms 证据。
+		setM4ALyrics(observation, value, typeCode)
 		return
 	}
 	text := decodeM4AText(value, binary.BigEndian.Uint32(typeCode))
@@ -1656,7 +1665,7 @@ func parseMP3(path string) (AudioObservation, error) {
 		if _, err = io.ReadFull(file, data); err != nil {
 			return observation, err
 		}
-		parseID3Frames(data, &observation)
+		parseID3Frames(data, &observation, header[3], header[5])
 		audioStart = int64(size)
 		if header[5]&0x10 != 0 {
 			audioStart += 10
@@ -1670,10 +1679,17 @@ func parseMP3(path string) (AudioObservation, error) {
 	return applyFilenameFallback(path, observation), nil
 }
 
-func parseID3Frames(data []byte, observation *AudioObservation) {
+// parseID3Frames 解析标签体里的帧；major 是 ID3v2 主版本号，tagFlags 是标签头的标志字节。
+func parseID3Frames(data []byte, observation *AudioObservation, major, tagFlags byte) {
+	if major == 3 && tagFlags&0x80 != 0 {
+		// v2.3 的同步消除作用于整个标签体（含帧头）；v2.4 改为逐帧标志，在 id3FramePayload 里处理。
+		data = removeUnsynchronisation(data)
+	}
+	lyricsHasEmptyDescriptor := false
 	for offset := 0; offset+10 <= len(data); {
 		frameID := string(data[offset : offset+4])
-		frameSize := int(binary.BigEndian.Uint32(data[offset+4 : offset+8]))
+		frameSize := id3FrameSize(data, offset, major)
+		formatFlags := data[offset+9]
 		offset += 10
 		if frameSize <= 0 || offset+frameSize > len(data) {
 			return
@@ -1684,6 +1700,16 @@ func parseID3Frames(data []byte, observation *AudioObservation) {
 			if artwork, mimeType, ok := parseID3AttachedPicture(frame); ok {
 				observation.Artwork = artwork
 				observation.ArtworkMIME = mimeType
+			}
+			continue
+		}
+		if frameID == "USLT" {
+			// 内容描述为空的帧优先；其余情况取第一个有效帧。
+			if payload, ok := id3FramePayload(frame, major, formatFlags); ok {
+				if emptyDescriptor, lyrics, valid := parseID3USLT(payload); valid && (observation.Lyrics == "" || emptyDescriptor && !lyricsHasEmptyDescriptor) {
+					observation.Lyrics, observation.LyricsSource = lyrics, LyricsSourceID3USLT
+					lyricsHasEmptyDescriptor = emptyDescriptor
+				}
 			}
 			continue
 		}
@@ -1721,6 +1747,88 @@ func parseID3Frames(data []byte, observation *AudioObservation) {
 			observation.Label = value
 		}
 	}
+}
+
+// id3FrameSize 读取 offset 处帧头里的 4 字节大小。v2.3 是普通大端整数；v2.4 规定为 synchsafe 整数，
+// 但有些写入器在 v2.4 里仍写普通整数。两种读法都可能成立时，取下一个帧头位置有效的那种；都无效时按规范取 synchsafe。
+func id3FrameSize(data []byte, offset int, major byte) int {
+	raw := data[offset+4 : offset+8]
+	plain := int(binary.BigEndian.Uint32(raw))
+	if major < 4 || raw[0]|raw[1]|raw[2]|raw[3] >= 0x80 {
+		return plain
+	}
+	synchsafe := int(raw[0])<<21 | int(raw[1])<<14 | int(raw[2])<<7 | int(raw[3])
+	if id3FrameBoundaryValid(data, offset+10+synchsafe) || !id3FrameBoundaryValid(data, offset+10+plain) {
+		return synchsafe
+	}
+	return plain
+}
+
+// id3FrameBoundaryValid 判断 next 是否像一个帧边界：恰好是标签体末尾、填充的开头，或一个由大写字母与数字组成的帧标识。
+func id3FrameBoundaryValid(data []byte, next int) bool {
+	if next < 0 || next > len(data) {
+		return false
+	}
+	if next == len(data) || data[next] == 0 {
+		return true
+	}
+	if next+10 > len(data) {
+		return false
+	}
+	for _, character := range data[next : next+4] {
+		if (character < 'A' || character > 'Z') && (character < '0' || character > '9') {
+			return false
+		}
+	}
+	return true
+}
+
+// id3FramePayload 按帧格式标志取出帧的有效载荷：跳过分组标识与数据长度指示，还原 v2.4 的逐帧同步消除。
+// 压缩或加密的帧无法解读，返回 false。
+func id3FramePayload(frame []byte, major, formatFlags byte) ([]byte, bool) {
+	var grouped, unsynchronised, hasDataLength bool
+	if major >= 4 {
+		if formatFlags&0x0c != 0 {
+			return nil, false
+		}
+		grouped, unsynchronised, hasDataLength = formatFlags&0x40 != 0, formatFlags&0x02 != 0, formatFlags&0x01 != 0
+	} else {
+		if formatFlags&0xc0 != 0 {
+			return nil, false
+		}
+		grouped = formatFlags&0x20 != 0
+	}
+	if grouped {
+		if len(frame) < 1 {
+			return nil, false
+		}
+		frame = frame[1:]
+	}
+	if hasDataLength {
+		if len(frame) < 4 {
+			return nil, false
+		}
+		frame = frame[4:]
+	}
+	if unsynchronised {
+		frame = removeUnsynchronisation(frame)
+	}
+	return frame, true
+}
+
+// removeUnsynchronisation 把同步消除时插入的零字节还原：每个 0xFF 0x00 变回 0xFF。
+func removeUnsynchronisation(data []byte) []byte {
+	if !bytes.Contains(data, []byte{0xff, 0x00}) {
+		return data
+	}
+	restored := make([]byte, 0, len(data))
+	for index := 0; index < len(data); index++ {
+		restored = append(restored, data[index])
+		if data[index] == 0xff && index+1 < len(data) && data[index+1] == 0x00 {
+			index++
+		}
+	}
+	return restored
 }
 
 const maxMP3FrameSearchBytes = 64 << 10
@@ -1898,6 +2006,9 @@ func parseNumber(value string) int {
 	return returnValue
 }
 func setAudioTag(observation *AudioObservation, key, value string) {
+	if setAudioLyrics(observation, key, value) {
+		return
+	}
 	value = metadata.BoundedText(value)
 	switch strings.ToUpper(key) {
 	case "TITLE", "TRACKTITLE":

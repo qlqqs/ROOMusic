@@ -51,6 +51,10 @@ type SourceObservation struct {
 	RelatedSourceRefs     []string          `json:"related_source_refs,omitempty"`
 	Credits               []metadata.Credit `json:"credits,omitempty"`
 
+	// 内嵌歌词的规范化原文与来源键（见 parser.NormalizeLyrics）；没有有效歌词时为空。CUE 虚拟轨没有歌词。
+	Lyrics       string `json:"lyrics,omitempty"`
+	LyricsSource string `json:"lyrics_source,omitempty"`
+
 	// 以下三个字段不进入暂存的 JSON 载荷，而是写入 scan_observations 的专用列，供身份规划使用：来源文件
 	// （CUE 虚拟轨为其父文件）的大小、修改时间与内容指纹。指纹为空表示解析时没有带出，规划阶段会复用已存值
 	// 或通过 Fingerprinter 计算；修改时间为零值表示没有取得文件状态，不会复用已存指纹。
