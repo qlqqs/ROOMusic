@@ -4,7 +4,7 @@
 
 Core 1 阶段 P：把真实发生的播放按用户隔离地保存在服务端，概览上能看到自己最近播放的专辑，也能清除自己的记录；
 这些记录是以后历史页面、收藏、歌单与推荐（M5）的数据基础。浏览器本地不作为权威存储
-（[路线图](../../../docs/architecture/core-1-roadmap.md)“旧任务承接”）。技术设计见 [design.md](design.md)，执行计划见 [implement.md](implement.md)。
+（[路线图](../../../../../docs/architecture/core-1-roadmap.md)“旧任务承接”）。技术设计见 [design.md](design.md)，执行计划见 [implement.md](implement.md)。
 
 ## 背景与已确认的事实
 
@@ -13,21 +13,21 @@ Core 1 阶段 P：把真实发生的播放按用户隔离地保存在服务端�
 - 2026-09-28 D4：Core 1 包含 P（服务端播放历史）；P 排在阶段 I 之后，因为它引用曲目 ID，必须等身份规则稳定。
 - 路线图 P 行：前置为阶段 I 与 M2a（均已完成）；验收出口为“只记录真实播放；重扫与改名后仍指向同一曲目”；
   P“只是真实播放的最小用户隔离记录，历史页面、收藏和歌单属于 M5”。
-- [DESIGN.md](../../../frontend/DESIGN.md) §7：概览的“聆听历史随 P”；“收藏/历史/播放列表”行要求跨用户隔离必须成立。
+- [DESIGN.md](../../../../../frontend/DESIGN.md) §7：概览的“聆听历史随 P”；“收藏/历史/播放列表”行要求跨用户隔离必须成立。
   原型概览有“继续聆听”区块（专辑卡片、“第 5 首 · 剩 24 分”、进度条）和“全部历史”链接；原型数值是示例，
   DESIGN §8 要求不展示虚构数值，也不给未实现的功能做禁用占位。
-- [播放器规范](../../spec/frontend/player-design-guidelines.md)：没有音频服务时不推进播放时钟、不记录播放历史。
+- [播放器规范](../../../../spec/frontend/player-design-guidelines.md)：没有音频服务时不推进播放时钟、不记录播放历史。
 
 ### 现有代码与数据
 
 - 曲目从不物理删除：完整扫描后找不到的文件只把 `tracks.source_status` 标为 `missing`
   （`backend/internal/catalog/persist.go:243`、`persist_track.go:98`），文件回来后沿用原 ID；只有空的 media 会被删除（`persist.go:93`），
   发行不删除。曲目 ID 按阶段 I 的规则跨重扫、改名、同 root 移动保持不变，原地换了音频内容的文件得到新 ID
-  （[目录与扫描流程合同](../../spec/backend/library-scan-contracts.md)）。
+  （[目录与扫描流程合同](../../../../spec/backend/library-scan-contracts.md)）。
 - 曲目可能随重扫换到另一个发行（`persist_track.go:80` 更新 `medium_id`）；`tracks.duration_seconds` 是扫描得到的时长，可能为空或 0。
 - 用户只能停用不能删除（`users.disabled_at`，迁移 0006）；停用的成员无法通过鉴权。
-- 状态变更请求必须通过 Origin 校验、HttpOnly 会话和后端授权（[运行合同](../../spec/backend/core0-runtime-contracts.md)“请求与响应”）。
-- 后端跨能力只经公开合同，各能力不读对方的私有表（[目录结构规范](../../spec/backend/directory-structure.md)）。
+- 状态变更请求必须通过 Origin 校验、HttpOnly 会话和后端授权（[运行合同](../../../../spec/backend/core0-runtime-contracts.md)“请求与响应”）。
+- 后端跨能力只经公开合同，各能力不读对方的私有表（[目录结构规范](../../../../spec/backend/directory-structure.md)）。
 - 播放引擎（`frontend/src/features/player/engine/player-engine.ts`）的状态与进度只来自媒体事件；单曲循环在同一个已加载媒体上从头再播
   （`advanceAfterEnd`）。队列里的 `history` 只是随机模式“上一首”用的条目 ID 列表，存在 sessionStorage，与本任务无关。
 - 概览页（`frontend/src/app/routes/overview-page.tsx`）目前由资料库、扫描、目录（管理员）、成员（管理员）四个区块组成。

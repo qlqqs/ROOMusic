@@ -5,7 +5,7 @@
 每个用户各自保存“真实播放过什么”：一条记录表示“这个用户把这首曲目播放到了计次规则要求的程度”。服务端校验规则、按用户隔离、
 换算“最近播放的发行”；前端按媒体事件累计真正出声的时间，达到规则时带幂等键上报，概览显示最近播放的专辑并可清除自己的历史。
 修改 `play_history` 表、计次规则、三个接口、最近播放的读取规则，或前端的计次与上报行为时，先读本文件并同步更新。
-需求与取舍见[播放历史任务](../../tasks/10-11-classical-p-play-history/prd.md)与它的[技术设计](../../tasks/10-11-classical-p-play-history/design.md)；
+需求与取舍见[播放历史任务](../../tasks/archive/2026-10/10-11-classical-p-play-history/prd.md)与它的[技术设计](../../tasks/archive/2026-10/10-11-classical-p-play-history/design.md)；
 前端的计次实现与概览区块的状态规则见[播放器设计规范](../frontend/player-design-guidelines.md)与[状态管理规范](../frontend/state-management.md)。
 
 范围外（M5 起）：完整历史页、收藏、歌单、播放统计与推荐、“继续聆听”的进度；暂停记录的开关、删除单条记录；管理员查看他人的播放；
