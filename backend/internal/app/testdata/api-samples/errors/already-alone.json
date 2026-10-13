@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "already_alone",
+      "message": "这个版本已经是独立专辑"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

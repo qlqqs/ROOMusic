@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "group_not_found",
+      "message": "目标专辑不存在"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 404
+}

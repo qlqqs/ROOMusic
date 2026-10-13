@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { decode as d } from "../../../shared/api";
 import { sampleBody } from "../../../test/api-samples";
 import { withValue, without } from "../../../test/mutate";
-import { CORRECTABLE_FIELDS, decodeCorrectionResult, decodeCorrectionState } from "./decoders";
+import { CORRECTABLE_FIELDS, decodeCorrectionResult, decodeCorrectionState, decodeGroupChangeResult } from "./decoders";
 
 describe("decodeCorrectionState", () => {
   const initial = sampleBody("corrections/get");
@@ -70,5 +70,30 @@ describe("decodeCorrectionResult", () => {
 
   it("读取状态的响应没有 operation_id，不能当作修正结果", () => {
     expect(() => decodeCorrectionResult(sampleBody("corrections/get"))).toThrow(d.DecodeError);
+  });
+});
+
+describe("decodeGroupChangeResult", () => {
+  const joined = sampleBody("group-changes/joined");
+  const detached = sampleBody("group-changes/detached");
+
+  it("解码归入与移出的响应：现在的组、原来的组、新的版本号和操作 ID", () => {
+    const joinedResult = decodeGroupChangeResult(joined);
+    const detachedResult = decodeGroupChangeResult(detached);
+    expect(joinedResult.revision).toBe(2);
+    expect(detachedResult.revision).toBe(3);
+    expect(joinedResult.group_id).not.toBe(joinedResult.previous_group_id);
+    expect(detachedResult.release_id).toBe(joinedResult.release_id);
+  });
+
+  it.each([
+    ["缺少 group_id", without(joined, ["group_id"])],
+    ["group_id 不是 UUID", withValue(joined, ["group_id"], "group-1")],
+    ["缺少 previous_group_id", without(joined, ["previous_group_id"])],
+    ["缺少 operation_id", without(joined, ["operation_id"])],
+    ["revision 为 0", withValue(joined, ["revision"], 0)],
+    ["revision 是字符串", withValue(joined, ["revision"], "2")],
+  ])("拒绝：%s", (_name, input) => {
+    expect(() => decodeGroupChangeResult(input)).toThrow(d.DecodeError);
   });
 });

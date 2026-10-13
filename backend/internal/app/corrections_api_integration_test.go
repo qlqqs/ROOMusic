@@ -1,19 +1,16 @@
 package app
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/qlqq/roomusic/backend/internal/library/parser/parsertest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
@@ -386,32 +383,13 @@ func TestPostgreSQLCorrectionsSurviveARealRescanAndShowEverywhere(t *testing.T) 
 	application := newIntegrationTestApplication(t)
 	admin := application.createUser(t, "admin")
 	library := createLibraryDirectory(t, application, "classical")
-	writeTrack := func(path string, md5 byte, comments ...string) {
-		t.Helper()
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatalf("create %s: %v", filepath.Dir(path), err)
-		}
-		content := parsertest.FLACWithAudio(t, [16]byte{md5}, bytes.Repeat([]byte{md5}, 64), comments...)
-		if err := os.WriteFile(path, content, 0o644); err != nil {
-			t.Fatalf("write %s: %v", path, err)
-		}
-	}
 	zuluFile := filepath.Join(library, "zulu", "01.flac")
-	writeTrack(zuluFile, 1, "TITLE=Zulu Prelude", "ARTIST=Zulu Pianist", "ALBUM=Zulu Album", "ALBUMARTIST=Zulu Pianist", "DATE=2000", "GENRE=Classical", "LABEL=Zulu Label", "TRACKNUMBER=1")
-	writeTrack(filepath.Join(library, "beta", "01.flac"), 2, "TITLE=Beta Prelude", "ARTIST=Beta Pianist", "ALBUM=Beta Album", "ALBUMARTIST=Beta Pianist", "DATE=2001", "TRACKNUMBER=1")
+	writeSyntheticTrack(t, zuluFile, 1, "TITLE=Zulu Prelude", "ARTIST=Zulu Pianist", "ALBUM=Zulu Album", "ALBUMARTIST=Zulu Pianist", "DATE=2000", "GENRE=Classical", "LABEL=Zulu Label", "TRACKNUMBER=1")
+	writeSyntheticTrack(t, filepath.Join(library, "beta", "01.flac"), 2, "TITLE=Beta Prelude", "ARTIST=Beta Pianist", "ALBUM=Beta Album", "ALBUMARTIST=Beta Pianist", "DATE=2001", "TRACKNUMBER=1")
 	if response := application.request(t, http.MethodPost, "/api/v1/library-roots", map[string]string{"path": library}, &admin, idempotencyHeader("create-classical")); response.Code != http.StatusCreated {
 		t.Fatalf("register the library: HTTP %d: %s", response.Code, response.Body.String())
 	}
-	scan := func() {
-		t.Helper()
-		started := application.request(t, http.MethodPost, "/api/v1/scans", map[string]any{}, &admin, nil)
-		if started.Code != http.StatusAccepted {
-			t.Fatalf("start scan: HTTP %d: %s", started.Code, started.Body.String())
-		}
-		if status := waitForScanToFinish(t, application, decodeJSONMap(t, started)["id"].(string)); status != "succeeded" {
-			t.Fatalf("scan finished as %s", status)
-		}
-	}
+	scan := func() { runScan(t, application, &admin) }
 	scan()
 
 	releaseIDOf := func(title string) (releaseID, groupID string) {
@@ -479,7 +457,7 @@ func TestPostgreSQLCorrectionsSurviveARealRescanAndShowEverywhere(t *testing.T) 
 
 	// 重扫：磁盘上的标签变了（音频内容不变，所以曲目与发行延续）。扫描值与证据更新，修正不变，没有修正的字段读到新的扫描值，
 	// 人工修改版本号不被扫描改动。
-	writeTrack(zuluFile, 1, "TITLE=Zulu Prelude", "ARTIST=Zulu Pianist", "ALBUM=Zulu Album Remastered", "ALBUMARTIST=Zulu Pianist Revised", "DATE=2010", "GENRE=Baroque", "LABEL=New Zulu Label", "TRACKNUMBER=1")
+	writeSyntheticTrack(t, zuluFile, 1, "TITLE=Zulu Prelude", "ARTIST=Zulu Pianist", "ALBUM=Zulu Album Remastered", "ALBUMARTIST=Zulu Pianist Revised", "DATE=2010", "GENRE=Baroque", "LABEL=New Zulu Label", "TRACKNUMBER=1")
 	scan()
 	if rescannedID, _ := releaseIDOf("Zulu Album Remastered"); rescannedID != zuluID {
 		t.Fatalf("the rescanned release has ID %s, want the same release %s", rescannedID, zuluID)

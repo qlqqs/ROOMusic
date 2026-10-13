@@ -23,7 +23,7 @@ import {
   decodeMemberList,
   decodeSessionsRevoked,
 } from "../features/members/api/decoders";
-import { decodeCorrectionResult, decodeCorrectionState } from "../features/governance/api/decoders";
+import { decodeCorrectionResult, decodeCorrectionState, decodeGroupChangeResult } from "../features/governance/api/decoders";
 import { decodePlaysCleared, decodeRecentReleases, decodeRecordedPlay } from "../features/listening/api/decoders";
 import { decodeErrorEnvelope } from "../shared/api";
 import { listApiSampleNames, loadApiSample } from "./api-samples";
@@ -90,6 +90,8 @@ const successContracts: Record<string, Contract> = {
   "corrections/get": { status: 200, decode: decodeCorrectionState },
   "corrections/get-corrected": { status: 200, decode: decodeCorrectionState },
   "corrections/patched": { status: 200, decode: decodeCorrectionResult },
+  "group-changes/joined": { status: 200, decode: decodeGroupChangeResult },
+  "group-changes/detached": { status: 200, decode: decodeGroupChangeResult },
   "listening/recent-releases-empty": { status: 200, decode: decodeRecentReleases },
   "listening/recent-releases": { status: 200, decode: decodeRecentReleases },
   "listening/play-recorded": { status: 201, decode: decodeRecordedPlay },
@@ -122,6 +124,9 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "errors/revision-conflict-release": { status: 409, code: "revision_conflict" },
   "errors/invalid-correction": { status: 400, code: "invalid_correction" },
   "errors/no-changes": { status: 400, code: "no_changes" },
+  "errors/same-group": { status: 409, code: "same_group" },
+  "errors/already-alone": { status: 409, code: "already_alone" },
+  "errors/group-not-found": { status: 404, code: "group_not_found" },
   "errors/idempotency-conflict": { status: 409, code: "idempotency_conflict" },
   "errors/not-found-scan": { status: 404, code: "not_found" },
   "errors/not-found-api": { status: 404, code: "not_found" },

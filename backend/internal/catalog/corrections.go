@@ -356,16 +356,23 @@ type correctionRecordState struct {
 	Effective map[string]any               `json:"effective"`
 }
 
-// lockVisibleRelease 锁住发行行并返回当前的人工修改版本号；发行不存在或没有可见曲目时返回 404 分类错误。
-// 所有会改发行的受控操作都先锁发行行，所以同一发行上的修正、归组与撤销互相串行。
-func lockVisibleRelease(ctx context.Context, tx *sql.Tx, releaseID string) (int64, error) {
-	var revision int64
+// lockedRelease 是被锁住的发行行里受控操作关心的两项：当前的人工修改版本号与所在的组。
+type lockedRelease struct {
+	revision int64
+	groupID  string // 小写 UUID
+}
+
+// lockVisibleRelease 锁住发行行并返回它的人工修改版本号与所在的组；发行不存在或没有可见曲目时返回 404 分类错误。
+// 所有会改发行的受控操作（修正、归组、撤销）都先锁发行行，所以同一发行上的这些操作互相串行。
+func lockVisibleRelease(ctx context.Context, tx *sql.Tx, releaseID string) (lockedRelease, error) {
+	var locked lockedRelease
 	var visible bool
-	err := tx.QueryRowContext(ctx, `SELECT releases.edit_revision, `+releaseVisiblePredicate+` FROM releases WHERE releases.id=$1::uuid FOR UPDATE`, releaseID).Scan(&revision, &visible)
+	err := tx.QueryRowContext(ctx, `SELECT releases.edit_revision, releases.group_id::text, `+releaseVisiblePredicate+` FROM releases WHERE releases.id=$1::uuid FOR UPDATE`, releaseID).
+		Scan(&locked.revision, &locked.groupID, &visible)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && !visible) {
-		return 0, operations.NotFound("not_found", "发行版本不存在")
+		return lockedRelease{}, operations.NotFound("not_found", "发行版本不存在")
 	}
-	return revision, err
+	return locked, err
 }
 
 // errRevisionConflict 表示预期版本与发行当前的人工修改版本号不一致。
@@ -378,10 +385,11 @@ func errRevisionConflict() error {
 // 写或删修正行、人工修改版本号加一，并把前后意图与有效值快照交给操作记录。
 func CorrectionExecutor(request CorrectionRequest) operations.Executor {
 	return func(ctx context.Context, tx *sql.Tx, operationID string) (operations.Outcome, error) {
-		revision, err := lockVisibleRelease(ctx, tx, request.ReleaseID)
+		locked, err := lockVisibleRelease(ctx, tx, request.ReleaseID)
 		if err != nil {
 			return operations.Outcome{}, err
 		}
+		revision := locked.revision
 		if revision != request.ExpectedRevision {
 			return operations.Outcome{}, errRevisionConflict()
 		}

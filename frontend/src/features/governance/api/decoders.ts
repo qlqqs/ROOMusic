@@ -35,10 +35,21 @@ const correctionStateDecoder = d.object(correctionStateShape);
 // 修正成功的响应：与读取相同的状态，加上这次操作的 ID（撤销用）。
 const correctionResultDecoder = d.object({ ...correctionStateShape, operation_id: d.uuid() });
 
+// 人工归组成功的响应：发行现在所在的组、原来的组、新的人工修改版本号与这次操作的 ID（撤销用）。
+const groupChangeResultDecoder = d.object({
+  release_id: d.uuid(),
+  group_id: d.uuid(),
+  previous_group_id: d.uuid(),
+  revision: d.integer({ min: 1 }),
+  operation_id: d.uuid(),
+});
+
 export const decodeCorrectionState = d.defineDecoder(correctionStateDecoder);
 export const decodeCorrectionResult = d.defineDecoder(correctionResultDecoder);
+export const decodeGroupChangeResult = d.defineDecoder(groupChangeResultDecoder);
 
 export type CorrectionIntentDTO = d.Infer<typeof correctionDecoder>;
 export type CorrectionFieldDTO = d.Infer<typeof correctionFieldDecoder>;
 export type CorrectionStateDTO = d.Infer<typeof correctionStateDecoder>;
 export type CorrectionResultDTO = d.Infer<typeof correctionResultDecoder>;
+export type GroupChangeResultDTO = d.Infer<typeof groupChangeResultDecoder>;

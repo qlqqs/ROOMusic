@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "same_group",
+      "message": "这个版本已经在这张专辑里"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

@@ -281,6 +281,8 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	recordListeningSamples(t, application, samples, call, admin)
 	// 字段修正（M3）：修正会改变这张专辑的有效值，所以放在所有其他样本之后。
 	recordCorrectionSamples(t, application, samples, call, admin)
+	// 人工归组（M3）：移动合成的 CUE 专辑，放在最后。
+	recordGroupChangeSamples(t, application, samples, call, admin)
 
 	samples.finish()
 }
@@ -445,6 +447,28 @@ func recordCorrectionSamples(t *testing.T, application *integrationTestApplicati
 	samples.record("errors/revision-conflict-release", call(http.MethodPatch, path, map[string]any{"expected_revision": 1, "changes": map[string]any{
 		"genre": map[string]any{"mode": "set", "value": "Romantic"},
 	}}, admin, key("0104")), http.StatusConflict)
+}
+
+// recordGroupChangeSamples 记录人工归组接口：把合成的 CUE 专辑归入单曲专辑所在的组、再移出为独立专辑的成功响应，
+// 以及 same_group、already_alone 与 group_not_found 三种错误。
+func recordGroupChangeSamples(t *testing.T, application *integrationTestApplication, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser) {
+	t.Helper()
+	var cueID, targetGroup string
+	if err := application.database.QueryRow(`SELECT id::text FROM releases WHERE title='Sample Cue Album'`).Scan(&cueID); err != nil {
+		t.Fatalf("read the release to move: %v", err)
+	}
+	if err := application.database.QueryRow(`SELECT group_id::text FROM releases WHERE title='Sample Preludes'`).Scan(&targetGroup); err != nil {
+		t.Fatalf("read the target group: %v", err)
+	}
+	path := "/api/v1/releases/" + cueID + "/group"
+	key := func(suffix string) map[string]string {
+		return map[string]string{"Idempotency-Key": "00000000-0000-4000-8000-00000000" + suffix}
+	}
+	samples.record("group-changes/joined", call(http.MethodPost, path, map[string]any{"expected_revision": 1, "action": "join", "group_id": targetGroup}, admin, key("0201")), http.StatusOK)
+	samples.record("errors/same-group", call(http.MethodPost, path, map[string]any{"expected_revision": 2, "action": "join", "group_id": targetGroup}, admin, key("0202")), http.StatusConflict)
+	samples.record("group-changes/detached", call(http.MethodPost, path, map[string]any{"expected_revision": 2, "action": "detach"}, admin, key("0203")), http.StatusOK)
+	samples.record("errors/already-alone", call(http.MethodPost, path, map[string]any{"expected_revision": 3, "action": "detach"}, admin, key("0204")), http.StatusConflict)
+	samples.record("errors/group-not-found", call(http.MethodPost, path, map[string]any{"expected_revision": 3, "action": "join", "group_id": uuid.New()}, admin, key("0205")), http.StatusNotFound)
 }
 
 // 样本里的内嵌歌词：同步歌词带元标签、间奏（空行）、同一时间戳的双语两行与一行多个时间戳；纯文本歌词带分段。
