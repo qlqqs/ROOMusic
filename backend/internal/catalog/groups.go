@@ -22,13 +22,13 @@ const (
 	// 默认版本将排在它之前。
 	releaseGroupMemberOrder = `(NULLIF(releases.year, 0) IS NULL), NULLIF(releases.year, 0), releases.created_at, releases.id`
 
-	// releaseGroupAttentionExpression 是组内全部可见成员的 attention 之和。子查询自己的 FROM releases 定义了 releases，
+	// releaseGroupAttentionExpression 是组内全部可见成员的 attention 之和。子查询自己的 FROM 定义了 releases，
 	// 常量里的 releases.* 都解析到子查询自己的行，而不是外层的代表版本。
 	releaseGroupAttentionExpression = `(SELECT COALESCE(SUM(` + releaseAttentionExpression + `), 0)::bigint
-		FROM releases WHERE releases.group_id = ranked.group_id AND ` + releaseVisiblePredicate + `)`
+		FROM ` + releaseSource + ` WHERE releases.group_id = ranked.group_id AND ` + releaseVisiblePredicate + `)`
 
 	// releaseGroupAnyMemberMatchesSearch 在任一可见成员命中 /releases 的搜索条件时为真。
-	releaseGroupAnyMemberMatchesSearch = `EXISTS (SELECT 1 FROM releases
+	releaseGroupAnyMemberMatchesSearch = `EXISTS (SELECT 1 FROM ` + releaseSource + `
 		WHERE releases.group_id = ranked.group_id AND ` + releaseVisiblePredicate + ` AND ` + releaseSearchPredicate + `)`
 )
 
@@ -43,7 +43,7 @@ func releaseGroupRankedCTE(onlyGroup bool) string {
 		SELECT releases.id, releases.group_id,
 		       ROW_NUMBER() OVER (PARTITION BY releases.group_id ORDER BY ` + releaseGroupMemberOrder + `) AS member_rank,
 		       COUNT(*) OVER (PARTITION BY releases.group_id) AS release_count
-		FROM releases
+		FROM ` + releaseSource + `
 		WHERE ` + releaseVisiblePredicate + groupFilter + `
 	)`
 }
@@ -72,7 +72,7 @@ func (s *Store) ListReleaseGroups(ctx context.Context, params ListParams) (Relea
 		return ReleaseGroupPage{}, fmt.Errorf("%w: count release groups: %w", ErrQuery, err)
 	}
 	listQuery := "WITH " + releaseGroupRankedCTE(false) + " SELECT " + releaseGroupSummaryProjection +
-		" FROM ranked JOIN releases ON releases.id = ranked.id" + releaseSummaryArtworkJoin +
+		" FROM ranked JOIN " + releaseSource + " ON releases.id = ranked.id" + releaseSummaryArtworkJoin +
 		" WHERE ranked.member_rank = 1" + filters +
 		" ORDER BY LOWER(releases.title),LOWER(releases.artist),releases.id LIMIT $" + strconv.Itoa(len(queryArgs)+1) +
 		" OFFSET $" + strconv.Itoa(len(queryArgs)+2)
@@ -101,7 +101,7 @@ func (s *Store) ListReleaseGroups(ctx context.Context, params ListParams) (Relea
 func (s *Store) LoadReleaseGroup(ctx context.Context, groupID string) (ReleaseGroupDetail, error) {
 	summary, err := scanReleaseGroupSummary(s.database.QueryRowContext(ctx,
 		"WITH "+releaseGroupRankedCTE(true)+" SELECT "+releaseGroupSummaryProjection+
-			" FROM ranked JOIN releases ON releases.id = ranked.id"+releaseSummaryArtworkJoin+
+			" FROM ranked JOIN "+releaseSource+" ON releases.id = ranked.id"+releaseSummaryArtworkJoin+
 			" WHERE ranked.member_rank = 1",
 		groupID))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -111,7 +111,7 @@ func (s *Store) LoadReleaseGroup(ctx context.Context, groupID string) (ReleaseGr
 		return ReleaseGroupDetail{}, err
 	}
 	rows, err := s.database.QueryContext(ctx,
-		"SELECT "+releaseSummaryProjection+" FROM releases"+releaseSummaryArtworkJoin+
+		"SELECT "+releaseSummaryProjection+" FROM "+releaseSource+releaseSummaryArtworkJoin+
 			" WHERE releases.group_id = $1::uuid AND "+releaseVisiblePredicate+
 			" ORDER BY "+releaseGroupMemberOrder+" LIMIT $2",
 		groupID, maxReleaseGroupMembers)

@@ -30,6 +30,7 @@ var packageRules = map[string]packageRule{
 	"catalog/metadata":               {},
 	"catalog/artwork":                {},
 	"catalog":                        {imports: []string{"catalog/metadata", "platform/uuid"}},
+	"operations":                     {imports: []string{"platform/uuid"}},
 	"library/parser":                 {imports: []string{"catalog/metadata"}},
 	"library/parser/parsertest":      {},
 	"library":                        {imports: []string{"catalog", "catalog/artwork", "catalog/metadata", "library/parser", "platform/uuid"}},

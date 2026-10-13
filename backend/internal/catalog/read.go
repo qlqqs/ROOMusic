@@ -14,17 +14,21 @@ import (
 )
 
 const (
-	maxArtworkResourceID    = 255
-	maxReleaseMedia         = 256
-	maxReleaseTrackRows     = 10000
-	maxReleaseCredits       = 100
-	maxTrackCredits         = 100
-	maxReleaseTrackCredits  = 10000
-	maxReleaseEvidence      = 100
-	maxEvidenceCandidates   = 20
-	maxEvidenceSourceRefs   = 100
-	maxEvidenceStringBytes  = 500
-	legacyCandidateKind     = "legacy"
+	maxArtworkResourceID   = 255
+	maxReleaseMedia        = 256
+	maxReleaseTrackRows    = 10000
+	maxReleaseCredits      = 100
+	maxTrackCredits        = 100
+	maxReleaseTrackCredits = 10000
+	maxReleaseEvidence     = 100
+	maxEvidenceCandidates  = 20
+	maxEvidenceSourceRefs  = 100
+	maxEvidenceStringBytes = 500
+	legacyCandidateKind    = "legacy"
+	// releaseSource 是所有读取投影的 Release 来源：视图 release_effective 在扫描值之上叠加人工修正（迁移 0017），
+	// 别名仍叫 releases，所以下面的谓词、投影与 groups.go、track_placement.go 里的 releases.* 列都解析到有效值。
+	// 没有修正时它与 releases 表的读取结果逐列相同。扫描与身份规划不经过它，仍读写 releases 本表。
+	releaseSource           = `release_effective releases`
 	releaseVisiblePredicate = `EXISTS (
 		SELECT 1
 		FROM tracks visible_tracks
@@ -36,7 +40,12 @@ const (
 		(SELECT COUNT(DISTINCT decision.field_key)
 		 FROM release_field_decisions decision
 		 WHERE decision.release_id = releases.id
-		   AND decision.action = 'uncertain_apply')
+		   AND decision.action = 'uncertain_apply'
+		   AND NOT EXISTS (
+			SELECT 1 FROM release_corrections correction
+			WHERE correction.release_id = decision.release_id
+			  AND correction.field = CASE decision.field_key WHEN 'artist' THEN 'album_artist' ELSE decision.field_key END
+		   ))
 		+ CASE WHEN EXISTS (
 			SELECT 1 FROM release_grouping_evidence grouping
 			WHERE grouping.release_id = releases.id
@@ -142,10 +151,10 @@ func (s *Store) ListReleases(ctx context.Context, params ListParams) (ReleasePag
 	}
 
 	var total int64
-	if err := s.database.QueryRowContext(ctx, "SELECT COUNT(*) FROM releases"+whereClause, queryArgs...).Scan(&total); err != nil {
+	if err := s.database.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+releaseSource+whereClause, queryArgs...).Scan(&total); err != nil {
 		return ReleasePage{}, fmt.Errorf("%w: count releases: %w", ErrQuery, err)
 	}
-	listQuery := "SELECT " + releaseSummaryProjection + " FROM releases" + releaseSummaryArtworkJoin + whereClause +
+	listQuery := "SELECT " + releaseSummaryProjection + " FROM " + releaseSource + releaseSummaryArtworkJoin + whereClause +
 		" ORDER BY LOWER(releases.title),LOWER(releases.artist),releases.id LIMIT $" + strconv.Itoa(len(queryArgs)+1) +
 		" OFFSET $" + strconv.Itoa(len(queryArgs)+2)
 	listArgs := append(append([]any{}, queryArgs...), params.PageSize, (params.Page-1)*params.PageSize)
@@ -178,7 +187,7 @@ func (s *Store) LoadReleaseHeader(ctx context.Context, releaseID string) (Releas
 		NULLIF(BTRIM(edition),''),
 		NULLIF(BTRIM(label),''),
 		NULLIF(BTRIM(barcode),'')
-		FROM releases WHERE id=$1::uuid`, releaseID).Scan(&candidateKind, &genre, &catalogNumber, &edition, &label, &barcode)
+		FROM release_effective WHERE id=$1::uuid`, releaseID).Scan(&candidateKind, &genre, &catalogNumber, &edition, &label, &barcode)
 	if err != nil {
 		return ReleaseHeader{}, err
 	}
@@ -202,7 +211,7 @@ func (s *Store) ReleaseExists(ctx context.Context, releaseID string) (bool, erro
 // LoadReleaseSummary 读取可见 Release 的摘要；不存在或没有可见曲目时返回 ErrReleaseNotFound。
 func (s *Store) LoadReleaseSummary(ctx context.Context, releaseID string) (ReleaseSummary, error) {
 	summary, err := scanReleaseSummary(s.database.QueryRowContext(ctx,
-		"SELECT "+releaseSummaryProjection+" FROM releases"+releaseSummaryArtworkJoin+" WHERE releases.id=$1::uuid AND "+releaseVisiblePredicate,
+		"SELECT "+releaseSummaryProjection+" FROM "+releaseSource+releaseSummaryArtworkJoin+" WHERE releases.id=$1::uuid AND "+releaseVisiblePredicate,
 		releaseID,
 	))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -341,8 +350,21 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 	return media, nil
 }
 
+// LoadReleaseCredits 读取专辑级署名。专辑艺人有人工修正时，扫描写入的 album_artist 署名被修正值取代，
+// 与头部显示的有效专辑艺人一致；其余署名原样。
 func (s *Store) LoadReleaseCredits(ctx context.Context, releaseID string) ([]ReleaseCredit, error) {
-	rows, err := s.database.QueryContext(ctx, `SELECT role,name FROM release_credits WHERE release_id=$1::uuid ORDER BY position,role,name LIMIT $2`, releaseID, maxReleaseCredits+1)
+	rows, err := s.database.QueryContext(ctx, `SELECT role,name FROM (
+			SELECT credit.role,credit.name,credit.position
+			FROM release_credits credit
+			WHERE credit.release_id=$1::uuid
+			  AND NOT (credit.role='album_artist' AND EXISTS (
+				SELECT 1 FROM release_corrections correction
+				WHERE correction.release_id=credit.release_id AND correction.field='album_artist'))
+			UNION ALL
+			SELECT 'album_artist',correction.text_value,1
+			FROM release_corrections correction
+			WHERE correction.release_id=$1::uuid AND correction.field='album_artist'
+		) credits ORDER BY position,role,name LIMIT $2`, releaseID, maxReleaseCredits+1)
 	if err != nil {
 		return nil, err
 	}

@@ -8,9 +8,9 @@
 
 ## 步骤
 
-- [ ] **1. 迁移、操作记录与有效值视图（无行为变化）**
+- [x] **1. 迁移、操作记录与有效值视图（无行为变化）**
   - 迁移 0017：`operations`、`releases.edit_revision`、`release_corrections`、视图 `release_effective`（design §2–3）。
-  - 新包 `internal/operations`：`Run`（advisory lock、重放、冲突、执行器、记录、提交）、`Load`、`List`、`Kind` 接口；依赖规则测试加入新包。
+  - 新包 `internal/operations`：`Run`（advisory lock、重放、冲突、执行器、记录、提交）、`Problem`（错误到状态码与错误码）、`Fingerprint`、`Load`、`List`；依赖规则测试加入新包。`Kind`（撤销与展示）接口随第一个使用者（第 4 步）定义，不提前造没有调用方的抽象。
   - catalog 读取切换到 `release_effective releases`；“需要关注”排除有修正的字段；专辑艺人署名按修正替换。
   - 门禁：没有修正时输出不变——现有 catalog、按组、播放历史与接口样本测试不改一行即通过；`operations` 用测试执行器覆盖重放、同键异义（含跨操作类型）、
     同键并发只执行一次、执行器错误回滚、记录写入失败（触发器）回滚。
