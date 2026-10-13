@@ -1,5 +1,6 @@
-import { albumGroup } from "../src/test/catalog-data";
+import { albumGroup, groupDetailOf, releaseVersions } from "../src/test/catalog-data";
 import { markUncertain, respondToCorrect } from "../src/test/governance-data";
+import type { ApiMock } from "./support/api-mock";
 import { expectMinimumFontSize, expectNoHorizontalOverflow, expectNoSeriousViolations, expectVisibleFocusRing, widths } from "./support/checks";
 import { expect, test } from "./support/fixtures";
 import { expectFocusStaysInDialog, focusedName, tabTo } from "./support/keyboard";
@@ -11,6 +12,12 @@ import { heading, uuidPattern } from "./support/locators";
 const symphonies = () => albumGroup(1, { title: "Sample Symphonies", album_artist: "Sample Orchestra", artist: "Sample Orchestra", year: 1998, medium_count: 2, track_count: 3, artwork: true });
 const releaseId = () => symphonies().representative.id;
 const detailPath = () => `/albums/${symphonies().id}`;
+const quartets = () => albumGroup(2, { title: "Beta Quartets", artist: "Beta Quartet", year: 1990, artwork: true });
+const concertos = () => albumGroup(4, { title: "Delta Concertos", artist: "Delta Ensemble", year: 1985, release_count: 2 });
+const seedGrouping = (mock: ApiMock) => {
+  mock.groups = [symphonies(), quartets(), albumGroup(3, { title: "Gamma Sonatas", artist: "Gamma Duo", year: 2005 }), concertos()];
+  mock.groupDetails.set(concertos().id, groupDetailOf(concertos(), releaseVersions(concertos(), 2)));
+};
 
 test.describe("编辑发行信息", () => {
   test("修改标题与年份并保存：请求带版本号与幂等键，页面显示新的有效值，提示里的撤销恢复原样", async ({ page, backend }) => {
@@ -182,6 +189,139 @@ test.describe("编辑发行信息：宽度与无障碍", () => {
       await expectNoHorizontalOverflow(page, `修改后的提示 @${width}px`);
       await expectMinimumFontSize(page, `修改后的提示 @${width}px`);
       await expectNoSeriousViolations(page, `修改后的提示 @${width}px`);
+    }
+  });
+});
+
+test.describe("调整归组", () => {
+  test("归入其他专辑：搜索、选中并预览、确认；页面跳到目标专辑并选中这个版本，提示里的撤销回到原来的专辑", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "curator" });
+    seedGrouping(mock);
+    await page.goto(detailPath());
+    await expect(heading(page, "Sample Symphonies")).toBeVisible();
+
+    await page.getByRole("button", { name: "归入其他专辑…" }).click();
+    const dialog = page.getByRole("dialog", { name: "把这个版本归入其他专辑" });
+    await expect(dialog.getByText("输入标题或艺人，找到要归入的专辑。")).toBeVisible();
+    await dialog.getByRole("textbox", { name: "搜索专辑" }).fill("Quartet");
+    await dialog.getByRole("textbox", { name: "搜索专辑" }).press("Enter");
+    await dialog.getByRole("radio", { name: /Beta Quartets/ }).check();
+    await expect(dialog.getByRole("status")).toHaveText("归入后，这个版本会和《Beta Quartets》的 1 个版本放在一起，同属一张专辑。");
+    await dialog.getByRole("button", { name: "归入这张专辑" }).click();
+
+    await expect(dialog).toBeHidden();
+    await expect(page).toHaveURL(new RegExp(`/albums/${quartets().id}\\?release=${releaseId()}`));
+    await expect(heading(page, "Sample Symphonies")).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "版本" })).toBeVisible();
+    await expect(page.getByText("已把这个版本归入《Beta Quartets》。")).toBeVisible();
+    const [call] = mock.callsTo("POST", `/api/v1/releases/${releaseId()}/group`);
+    expect(call?.body).toEqual({ expected_revision: 1, action: "join", group_id: quartets().id });
+    expect(call?.idempotencyKey).toMatch(uuidPattern);
+
+    await page.getByRole("button", { name: "撤销" }).click();
+    await expect(page).toHaveURL(new RegExp(`/albums/${symphonies().id}$`));
+    await expect(page.getByText("已撤销归组，这个版本回到了原来的专辑。")).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "版本" })).toHaveCount(0);
+  });
+
+  test("只用键盘完成归入：Tab 到入口，搜索、方向键选择、确认，再撤销", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "curator" });
+    seedGrouping(mock);
+    await page.goto(detailPath());
+    await expect(heading(page, "Sample Symphonies")).toBeVisible();
+
+    await tabTo(page, (name) => name === "归入其他专辑…", 30);
+    await expectVisibleFocusRing(page, "归入其他专辑按钮");
+    await page.keyboard.press("Enter");
+    const dialog = page.getByRole("dialog", { name: "把这个版本归入其他专辑" });
+    await expect(dialog).toBeVisible();
+    expect(await focusedName(page)).toBe("把这个版本归入其他专辑");
+    await page.keyboard.press("Tab");
+    expect(await focusedName(page)).toBe("搜索专辑");
+    await page.keyboard.type("Gamma");
+    await page.keyboard.press("Enter");
+    await expect(dialog.getByRole("radio", { name: /Gamma Sonatas/ })).toBeVisible();
+    await tabTo(page, (name) => name.includes("Gamma Sonatas"), 4);
+    await page.keyboard.press("Space");
+    await expect(dialog.getByRole("radio", { name: /Gamma Sonatas/ })).toBeChecked();
+    await tabTo(page, (name) => name === "归入这张专辑", 4);
+    await expectVisibleFocusRing(page, "归入这张专辑按钮");
+    await page.keyboard.press("Enter");
+    await expect(dialog).toBeHidden();
+    await expect(page.getByText("已把这个版本归入《Gamma Sonatas》。")).toBeVisible();
+    await tabTo(page, (name) => name === "撤销", 30);
+    await page.keyboard.press("Enter");
+    await expect(page.getByText("已撤销归组，这个版本回到了原来的专辑。")).toBeVisible();
+  });
+
+  test("Esc 关闭归入对话框：没有请求，焦点回到入口按钮", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "curator" });
+    seedGrouping(mock);
+    await page.goto(detailPath());
+    await page.getByRole("button", { name: "归入其他专辑…" }).click();
+    const dialog = page.getByRole("dialog", { name: "把这个版本归入其他专辑" });
+    await expect(dialog).toBeVisible();
+    await expectFocusStaysInDialog(page, dialog, 6);
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(page.getByRole("button", { name: "归入其他专辑…" })).toBeFocused();
+    expect(mock.callsTo("POST", /\/group$/)).toHaveLength(0);
+  });
+
+  test("移出为独立专辑：确认对话框、移出、页面跳到新的专辑；撤销回到原来的专辑", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "curator" });
+    seedGrouping(mock);
+    await page.goto(`/albums/${concertos().id}`);
+    await expect(heading(page, "Delta Concertos")).toBeVisible();
+    await page.getByRole("button", { name: "移出为独立专辑" }).click();
+    const dialog = page.getByRole("dialog", { name: "把这个版本移出为独立专辑？" });
+    await expect(dialog.getByRole("button", { name: "取消" })).toBeFocused();
+    await dialog.getByRole("button", { name: "移出" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByText("已把这个版本移出为独立专辑。")).toBeVisible();
+    await expect(page).not.toHaveURL(new RegExp(`/albums/${concertos().id}`));
+    await expect(page.getByRole("navigation", { name: "版本" })).toHaveCount(0);
+    expect(mock.callsTo("POST", /\/group$/)[0]?.body).toEqual({ expected_revision: 1, action: "detach" });
+
+    await page.getByRole("button", { name: "撤销" }).click();
+    await expect(page).toHaveURL(new RegExp(`/albums/${concertos().id}`));
+    await expect(page.getByText("已撤销移出，这个版本回到了原来的专辑。")).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "版本" })).toBeVisible();
+  });
+
+  test("五种宽度下归入对话框（搜索结果与预览）与移出确认对话框没有横向溢出，通过 axe", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "curator" });
+    seedGrouping(mock);
+    await page.goto(detailPath());
+    await expect(heading(page, "Sample Symphonies")).toBeVisible();
+    await page.getByRole("button", { name: "归入其他专辑…" }).click();
+    const dialog = page.getByRole("dialog", { name: "把这个版本归入其他专辑" });
+    await dialog.getByRole("textbox", { name: "搜索专辑" }).fill("e");
+    await dialog.getByRole("textbox", { name: "搜索专辑" }).press("Enter");
+    await dialog.getByRole("radio", { name: /Beta Quartets/ }).check();
+    await expect(dialog.getByRole("status")).toBeVisible();
+    for (const width of widths) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.evaluate(() => document.fonts.ready);
+      await expectNoHorizontalOverflow(page, `归入其他专辑 @${width}px`);
+      await expectMinimumFontSize(page, `归入其他专辑 @${width}px`);
+      await expectNoSeriousViolations(page, `归入其他专辑 @${width}px`);
+      const box = await dialog.boundingBox();
+      expect(box?.x ?? -1, `归入对话框左边界 @${width}px`).toBeGreaterThanOrEqual(0);
+      expect((box?.x ?? 0) + (box?.width ?? 0), `归入对话框右边界 @${width}px`).toBeLessThanOrEqual(width);
+      await expect(dialog.getByRole("button", { name: "归入这张专辑" })).toBeInViewport();
+    }
+    await dialog.getByRole("button", { name: "取消" }).click();
+
+    await page.goto(`/albums/${concertos().id}`);
+    await page.getByRole("button", { name: "移出为独立专辑" }).click();
+    const confirm = page.getByRole("dialog", { name: "把这个版本移出为独立专辑？" });
+    await expect(confirm).toBeVisible();
+    for (const width of widths) {
+      await page.setViewportSize({ width, height: 800 });
+      await expectNoHorizontalOverflow(page, `移出为独立专辑 @${width}px`);
+      await expectMinimumFontSize(page, `移出为独立专辑 @${width}px`);
+      await expectNoSeriousViolations(page, `移出为独立专辑 @${width}px`);
     }
   });
 });

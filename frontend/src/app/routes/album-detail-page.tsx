@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { useCallback } from "react";
 import { AlbumDetailView, useCatalogRefresh, type AlbumSearch, type ReleaseDetailDTO, type ReleaseTrackDTO } from "../../features/catalog";
 import { ReleaseAdminActions, useReleaseCommands } from "../../features/governance";
@@ -30,12 +31,27 @@ export function AlbumDetailPage(props: AlbumDetailPageProps) {
     () => Promise.all([refreshCatalog(), queryClient.invalidateQueries({ queryKey: listeningKeys.recentReleases(generation) })]),
     [refreshCatalog, queryClient, generation],
   );
-  const commands = useReleaseCommands({ refresh });
+  // 归组之后版本在另一个专辑组里：导航到那个组并选中这个版本（代表版本时详情页会把 release 参数规范掉），“返回专辑列表”的参数随之保留。
+  const navigate = useNavigate();
+  const { list } = props;
+  const showRelease = useCallback(
+    (targetGroupId: string, releaseId: string) => void navigate({ to: "/albums/$groupId", params: { groupId: targetGroupId }, search: { release: releaseId }, state: { albumList: list } }),
+    [navigate, list],
+  );
+  const commands = useReleaseCommands({ refresh, onMoved: showRelease });
   // 插槽保持同一个函数引用，曲目行才能跳过没有变化的重绘。
   const renderReleaseActions = useCallback((release: ReleaseDetailDTO) => <AlbumPlaybackActions key={release.id} release={release} groupId={groupId} />, [groupId]);
   const renderTrackActions = useCallback((track: ReleaseTrackDTO, release: ReleaseDetailDTO) => <TrackPlaybackActions key={track.id} release={release} track={track} groupId={groupId} />, [groupId]);
   const renderAdminActions = useCallback(
-    ({ release }: { release: ReleaseDetailDTO }) => <ReleaseAdminActions key={release.id} release={{ id: release.id, title: release.title }} commands={commands} />,
+    ({ release, groupId: currentGroupId, releaseCount }: { release: ReleaseDetailDTO; groupId: string; releaseCount: number }) => (
+      <ReleaseAdminActions
+        key={release.id}
+        release={{ id: release.id, title: release.title, revision: release.revision }}
+        groupId={currentGroupId}
+        releaseCount={releaseCount}
+        commands={commands}
+      />
+    ),
     [commands],
   );
   return <AlbumDetailView {...props} isAdmin={isAdmin}

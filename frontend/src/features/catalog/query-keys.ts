@@ -9,6 +9,8 @@ export const catalogKeys = {
   /** 专辑列表的一页：搜索词、筛选与页码都在键里，每种组合各有缓存条目。 */
   albumPage: (generation: number, search: AlbumSearch) =>
     viewerQueryKey(generation, "catalog", "release-groups", { q: search.q ?? null, attention: search.attention ?? null, page: search.page ?? 1 }),
+  /** 搜索专辑的结果（别的功能挑选专辑时用，例如把版本归入其他专辑）：每个搜索词一个条目，与列表页的缓存分开。 */
+  albumSearch: (generation: number, search: string) => viewerQueryKey(generation, "catalog", "album-search", search),
   /** 一个专辑组的详情（成员版本摘要）。 */
   group: (generation: number, groupId: string) => viewerQueryKey(generation, "catalog", "release-group", groupId),
   /** 一个发行版本的详情。 */

@@ -53,6 +53,12 @@ export type ReleaseCommandCallbacks = {
 type ReleaseCommandsOptions = {
   /** 修改成功或失败之后刷新别处缓存的专辑数据（目录、最近播放……）；由 app 组合，governance 不知道那些查询键。 */
   refresh: () => Promise<unknown>;
+  /**
+   * 版本换了专辑组（归入、移出，或撤销它们）之后，页面应该显示的专辑组与版本；在刷新之前同步调用。先导航再刷新：
+   * 否则刷新读到“原来的专辑已经没有这个版本（甚至已经空了）”，页面会闪一下“专辑不存在”，还会与详情页自己的地址规范化争抢导航。
+   * 由 app 实现导航，governance 不依赖路由。
+   */
+  onMoved: (groupId: string, releaseId: string) => void;
 };
 
 /**
@@ -60,7 +66,7 @@ type ReleaseCommandsOptions = {
  * 不做乐观修改；无论成败（包括 409 冲突与结果不确定）都刷新，让界面显示的是服务器当前的状态。
  * 同一时刻只有一个命令；写操作从不自动重试，重试由用户显式触发。
  */
-export function useReleaseCommands({ refresh }: ReleaseCommandsOptions) {
+export function useReleaseCommands({ refresh, onMoved }: ReleaseCommandsOptions) {
   const queryClient = useQueryClient();
   const scope = useViewerScope();
   const { generation } = scope;
@@ -85,6 +91,12 @@ export function useReleaseCommands({ refresh }: ReleaseCommandsOptions) {
           return { kind: "revert", result: data };
         }
       }
+    },
+    // 成功之后、刷新之前：版本换了专辑组就先把页面带到新的位置（旧身份的迟到结果不导航）。
+    onSuccess: (result, command) => {
+      if (!scope.isCurrent()) return;
+      if (result.kind === "join" || result.kind === "detach") onMoved(result.result.group_id, command.release.id);
+      else if (command.kind === "revert" && command.returnGroupId !== undefined) onMoved(command.returnGroupId, command.release.id);
     },
     // 返回 Promise：相关查询刷新完成后命令才算结束，成功提示出现时页面已经是新的。
     onSettled: () => Promise.all([queryClient.invalidateQueries({ queryKey: governanceKeys.all(generation) }), refresh()]),
