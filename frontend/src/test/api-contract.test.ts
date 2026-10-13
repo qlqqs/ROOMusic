@@ -23,7 +23,13 @@ import {
   decodeMemberList,
   decodeSessionsRevoked,
 } from "../features/members/api/decoders";
-import { decodeCorrectionResult, decodeCorrectionState, decodeGroupChangeResult } from "../features/governance/api/decoders";
+import {
+  decodeCorrectionResult,
+  decodeCorrectionState,
+  decodeGroupChangeResult,
+  decodeOperationPage,
+  decodeRevertResult,
+} from "../features/governance/api/decoders";
 import { decodePlaysCleared, decodeRecentReleases, decodeRecordedPlay } from "../features/listening/api/decoders";
 import { decodeErrorEnvelope } from "../shared/api";
 import { listApiSampleNames, loadApiSample } from "./api-samples";
@@ -92,6 +98,9 @@ const successContracts: Record<string, Contract> = {
   "corrections/patched": { status: 200, decode: decodeCorrectionResult },
   "group-changes/joined": { status: 200, decode: decodeGroupChangeResult },
   "group-changes/detached": { status: 200, decode: decodeGroupChangeResult },
+  "operations/list": { status: 200, decode: decodeOperationPage },
+  "operations/list-by-release": { status: 200, decode: decodeOperationPage },
+  "operations/reverted": { status: 200, decode: decodeRevertResult },
   "listening/recent-releases-empty": { status: 200, decode: decodeRecentReleases },
   "listening/recent-releases": { status: 200, decode: decodeRecentReleases },
   "listening/play-recorded": { status: 201, decode: decodeRecordedPlay },
@@ -127,6 +136,10 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "errors/same-group": { status: 409, code: "same_group" },
   "errors/already-alone": { status: 409, code: "already_alone" },
   "errors/group-not-found": { status: 404, code: "group_not_found" },
+  "errors/already-reverted": { status: 409, code: "already_reverted" },
+  "errors/not-revertible": { status: 409, code: "not_revertible" },
+  "errors/revert-conflict": { status: 409, code: "revert_conflict" },
+  "errors/not-found-operation": { status: 404, code: "not_found" },
   "errors/idempotency-conflict": { status: 409, code: "idempotency_conflict" },
   "errors/not-found-scan": { status: 404, code: "not_found" },
   "errors/not-found-api": { status: 404, code: "not_found" },

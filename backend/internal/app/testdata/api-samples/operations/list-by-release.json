@@ -1,0 +1,70 @@
+{
+  "body": {
+    "items": [
+      {
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "username": "curator"
+        },
+        "changes": {
+          "from": {
+            "group_id": "00000000-0000-4000-8000-000000000002",
+            "group_title": "Sample Cue Album"
+          },
+          "kind": "release_group_change",
+          "to": {
+            "group_id": "00000000-0000-4000-8000-000000000003",
+            "group_title": "Sample Preludes"
+          }
+        },
+        "created_at": "2026-01-01T00:00:01Z",
+        "id": "00000000-0000-4000-8000-000000000004",
+        "release": {
+          "group_id": "00000000-0000-4000-8000-000000000003",
+          "id": "00000000-0000-4000-8000-000000000005",
+          "title": "Sample Cue Album",
+          "visible": true
+        },
+        "reverted_by": null,
+        "revertible": false,
+        "reverts": "00000000-0000-4000-8000-000000000006",
+        "type": "revert"
+      },
+      {
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "username": "curator"
+        },
+        "changes": {
+          "from": {
+            "group_id": "00000000-0000-4000-8000-000000000003",
+            "group_title": "Sample Preludes"
+          },
+          "kind": "release_group_change",
+          "to": {
+            "group_id": "00000000-0000-4000-8000-000000000002",
+            "group_title": "Sample Cue Album"
+          }
+        },
+        "created_at": "2026-01-01T00:00:00Z",
+        "id": "00000000-0000-4000-8000-000000000006",
+        "release": {
+          "group_id": "00000000-0000-4000-8000-000000000003",
+          "id": "00000000-0000-4000-8000-000000000005",
+          "title": "Sample Cue Album",
+          "visible": true
+        },
+        "reverted_by": "00000000-0000-4000-8000-000000000004",
+        "revertible": false,
+        "reverts": null,
+        "type": "release_group_change"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "page_size": 2,
+      "total": 3
+    }
+  },
+  "status": 200
+}

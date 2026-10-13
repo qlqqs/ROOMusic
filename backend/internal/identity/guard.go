@@ -3,6 +3,7 @@
 package identity
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -165,4 +166,25 @@ func VerifyPassword(encodedHash, password string) bool {
 // ClearSessionCookie 让浏览器删除会话 Cookie。
 func (guard *Guard) ClearSessionCookie(responseWriter http.ResponseWriter) {
 	http.SetCookie(responseWriter, &http.Cookie{Name: SessionCookieName, Value: "", Path: "/", HttpOnly: true, Secure: guard.secureCookies, SameSite: http.SameSiteLaxMode, MaxAge: -1})
+}
+
+// Usernames 批量返回这些用户的用户名，键是小写 UUID；不存在的用户没有键。操作记录页用它显示“谁”。
+func (guard *Guard) Usernames(ctx context.Context, ids []string) (map[string]string, error) {
+	names := map[string]string{}
+	if len(ids) == 0 {
+		return names, nil
+	}
+	rows, err := guard.database.QueryContext(ctx, `SELECT id::text, username FROM users WHERE id = ANY($1::text[]::uuid[])`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, username string
+		if err := rows.Scan(&id, &username); err != nil {
+			return nil, err
+		}
+		names[id] = username
+	}
+	return names, rows.Err()
 }

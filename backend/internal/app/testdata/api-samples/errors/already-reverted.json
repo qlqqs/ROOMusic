@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "already_reverted",
+      "message": "这条操作已经撤销过了"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

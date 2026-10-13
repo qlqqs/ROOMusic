@@ -31,6 +31,7 @@ var packageRules = map[string]packageRule{
 	"catalog/artwork":                {},
 	"catalog":                        {imports: []string{"catalog/metadata", "operations", "platform/uuid"}},
 	"operations":                     {imports: []string{"platform/uuid"}},
+	"operations/httpapi":             {imports: []string{"identity", "operations", "platform/httpserver", "platform/uuid"}, http: true},
 	"library/parser":                 {imports: []string{"catalog/metadata"}},
 	"library/parser/parsertest":      {},
 	"library":                        {imports: []string{"catalog", "catalog/artwork", "catalog/metadata", "library/parser", "platform/uuid"}},
@@ -44,8 +45,8 @@ var packageRules = map[string]packageRule{
 	"playback/httpapi":               {imports: []string{"identity", "platform/httpserver", "platform/uuid", "playback"}, http: true},
 	"listening/httpapi":              {imports: []string{"identity", "listening", "platform/httpserver", "platform/uuid"}, http: true},
 	"app": {imports: []string{
-		"catalog/httpapi", "identity", "identity/httpapi", "library", "library/httpapi", "listening", "listening/httpapi",
-		"platform/config", "platform/httpserver", "playback", "playback/derivation", "playback/httpapi",
+		"catalog", "catalog/httpapi", "identity", "identity/httpapi", "library", "library/httpapi", "listening", "listening/httpapi",
+		"operations/httpapi", "platform/config", "platform/httpserver", "playback", "playback/derivation", "playback/httpapi",
 	}, http: true},
 }
 

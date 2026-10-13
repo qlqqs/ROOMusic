@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { decode as d } from "../../../shared/api";
 import { sampleBody } from "../../../test/api-samples";
 import { withValue, without } from "../../../test/mutate";
-import { CORRECTABLE_FIELDS, decodeCorrectionResult, decodeCorrectionState, decodeGroupChangeResult } from "./decoders";
+import { CORRECTABLE_FIELDS, decodeCorrectionResult, decodeCorrectionState, decodeGroupChangeResult, decodeOperationPage, decodeRevertResult } from "./decoders";
 
 describe("decodeCorrectionState", () => {
   const initial = sampleBody("corrections/get");
@@ -95,5 +95,84 @@ describe("decodeGroupChangeResult", () => {
     ["revision 是字符串", withValue(joined, ["revision"], "2")],
   ])("拒绝：%s", (_name, input) => {
     expect(() => decodeGroupChangeResult(input)).toThrow(d.DecodeError);
+  });
+});
+
+describe("decodeOperationPage", () => {
+  const page = sampleBody("operations/list");
+  const filtered = sampleBody("operations/list-by-release");
+
+  it("解码操作记录：谁、哪张专辑、改了什么、撤销关系与能不能撤销", () => {
+    const decoded = decodeOperationPage(page);
+    expect(decoded.pagination).toEqual({ page: 1, page_size: 10, total: 4 });
+    expect(decoded.items.map((item) => [item.type, item.changes?.kind, item.revertible])).toEqual([
+      ["revert", "release_group_change", false],
+      ["release_group_change", "release_group_change", false],
+      ["release_group_change", "release_group_change", false],
+      ["release_correction", "release_correction", true],
+    ]);
+    const [revert, detach, , correction] = decoded.items;
+    expect(revert?.reverts).toBe(detach?.id);
+    expect(detach?.reverted_by).toBe(revert?.id);
+    expect(revert?.actor.username).toBe("curator");
+    expect(correction?.release).toMatchObject({ title: "Sample Symphonies (corrected)", visible: true });
+    if (correction?.changes?.kind !== "release_correction") throw new Error("应是字段修正的记录");
+    expect(correction.changes.fields.map((field) => field.field)).toEqual(["title", "year", "label"]);
+    expect(correction.changes.fields[1]).toMatchObject({ before: { correction: null, effective: 1998 }, after: { correction: { mode: "null" }, effective: null } });
+  });
+
+  it("解码按发行筛选的分页", () => {
+    expect(decodeOperationPage(filtered).pagination).toMatchObject({ page: 1, page_size: 2, total: 3 });
+    expect(decodeOperationPage(filtered).items).toHaveLength(2);
+  });
+
+  it("每页最多 100 条", () => {
+    const item = (page as { items: unknown[] }).items[0];
+    const many = (count: number) => withValue(withValue(page, ["items"], Array.from({ length: count }, () => structuredClone(item))), ["pagination", "page_size"], 100);
+    expect(decodeOperationPage(many(100)).items).toHaveLength(100);
+    expect(() => decodeOperationPage(many(101))).toThrow(d.DecodeError);
+  });
+
+  it("目标发行已不存在、没有改动摘要时仍能解码", () => {
+    const orphaned = withValue(withValue(page, ["items", 0, "release"], null), ["items", 0, "changes"], null);
+    expect(decodeOperationPage(orphaned).items[0]).toMatchObject({ release: null, changes: null });
+  });
+
+  it.each([
+    ["缺少 items", without(page, ["items"])],
+    ["未知的记录类型", withValue(page, ["items", 0, "type"], "release_merge")],
+    ["未知的改动类型", withValue(page, ["items", 0, "changes", "kind"], "release_merge")],
+    ["缺少改动类型", without(page, ["items", 0, "changes", "kind"])],
+    ["id 不是 UUID", withValue(page, ["items", 0, "id"], "op-1")],
+    ["created_at 不是 RFC 3339", withValue(page, ["items", 0, "created_at"], "昨天")],
+    ["缺少操作者", without(page, ["items", 0, "actor"])],
+    ["缺少 revertible", without(page, ["items", 0, "revertible"])],
+    ["revertible 不是布尔值", withValue(page, ["items", 0, "revertible"], "true")],
+    ["reverts 不是 UUID", withValue(page, ["items", 0, "reverts"], "op-1")],
+    ["发行缺少 visible", without(page, ["items", 3, "release", "visible"])],
+    ["修正字段名未知", withValue(page, ["items", 3, "changes", "fields", 0, "field"], "source_type")],
+    ["归组快照缺少组 ID", without(page, ["items", 0, "changes", "from", "group_id"])],
+    ["缺少 pagination", without(page, ["pagination"])],
+  ])("拒绝：%s", (_name, input) => {
+    expect(() => decodeOperationPage(input)).toThrow(d.DecodeError);
+  });
+});
+
+describe("decodeRevertResult", () => {
+  const reverted = sampleBody("operations/reverted");
+
+  it("解码撤销成功的响应", () => {
+    const result = decodeRevertResult(reverted);
+    expect(result.revision).toBe(4);
+    expect(result.reverts_operation_id).not.toBe(result.operation_id);
+  });
+
+  it.each([
+    ["缺少 reverts_operation_id", without(reverted, ["reverts_operation_id"])],
+    ["release_id 不是 UUID", withValue(reverted, ["release_id"], "release-1")],
+    ["revision 为 0", withValue(reverted, ["revision"], 0)],
+    ["缺少 operation_id", without(reverted, ["operation_id"])],
+  ])("拒绝：%s", (_name, input) => {
+    expect(() => decodeRevertResult(input)).toThrow(d.DecodeError);
   });
 });

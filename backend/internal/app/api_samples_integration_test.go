@@ -283,6 +283,8 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	recordCorrectionSamples(t, application, samples, call, admin)
 	// 人工归组（M3）：移动合成的 CUE 专辑，放在最后。
 	recordGroupChangeSamples(t, application, samples, call, admin)
+	// 操作记录与撤销（M3）：汇总上面产生的记录，撤销最后一次移出，放在最后。
+	recordOperationSamples(t, application, samples, call, admin)
 
 	samples.finish()
 }
@@ -469,6 +471,35 @@ func recordGroupChangeSamples(t *testing.T, application *integrationTestApplicat
 	samples.record("group-changes/detached", call(http.MethodPost, path, map[string]any{"expected_revision": 2, "action": "detach"}, admin, key("0203")), http.StatusOK)
 	samples.record("errors/already-alone", call(http.MethodPost, path, map[string]any{"expected_revision": 3, "action": "detach"}, admin, key("0204")), http.StatusConflict)
 	samples.record("errors/group-not-found", call(http.MethodPost, path, map[string]any{"expected_revision": 3, "action": "join", "group_id": uuid.New()}, admin, key("0205")), http.StatusNotFound)
+}
+
+// recordOperationSamples 记录操作记录与撤销接口：撤销最后一次移出的成功响应，已撤销、撤销不能再撤销、之后又有修改与记录不存在
+// 四种错误，以及撤销之后的全部记录和按发行筛选的分页。记录来自前面的修正与归组样本。
+func recordOperationSamples(t *testing.T, application *integrationTestApplication, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser) {
+	t.Helper()
+	operationID := func(query string) string {
+		t.Helper()
+		var id string
+		if err := application.database.QueryRow(query).Scan(&id); err != nil {
+			t.Fatalf("read operation: %v", err)
+		}
+		return id
+	}
+	detachOperation := operationID(`SELECT id::text FROM operations WHERE operation_type='release_group_change' ORDER BY created_at DESC, id DESC LIMIT 1`)
+	joinOperation := operationID(`SELECT id::text FROM operations WHERE operation_type='release_group_change' ORDER BY created_at ASC, id ASC LIMIT 1`)
+	cueRelease := operationID(`SELECT id::text FROM releases WHERE title='Sample Cue Album'`)
+	key := func(suffix string) map[string]string {
+		return map[string]string{"Idempotency-Key": "00000000-0000-4000-8000-00000000" + suffix}
+	}
+	reverted := call(http.MethodPost, revertPath(detachOperation), nil, admin, key("0301"))
+	samples.record("operations/reverted", reverted, http.StatusOK)
+	revertRecord := decodeJSONMap(t, reverted)["operation_id"].(string)
+	samples.record("errors/already-reverted", call(http.MethodPost, revertPath(detachOperation), nil, admin, key("0302")), http.StatusConflict)
+	samples.record("errors/not-revertible", call(http.MethodPost, revertPath(revertRecord), nil, admin, key("0303")), http.StatusConflict)
+	samples.record("errors/revert-conflict", call(http.MethodPost, revertPath(joinOperation), nil, admin, key("0304")), http.StatusConflict)
+	samples.record("errors/not-found-operation", call(http.MethodPost, revertPath(uuid.New()), nil, admin, key("0305")), http.StatusNotFound)
+	samples.record("operations/list", call(http.MethodGet, "/api/v1/operations?page_size=10", nil, admin), http.StatusOK)
+	samples.record("operations/list-by-release", call(http.MethodGet, "/api/v1/operations?release_id="+cueRelease+"&page_size=2", nil, admin), http.StatusOK)
 }
 
 // 样本里的内嵌歌词：同步歌词带元标签、间奏（空行）、同一时间戳的双语两行与一行多个时间戳；纯文本歌词带分段。

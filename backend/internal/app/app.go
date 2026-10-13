@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 	catalogapi "github.com/qlqq/roomusic/backend/internal/catalog/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	identityapi "github.com/qlqq/roomusic/backend/internal/identity/httpapi"
@@ -17,6 +18,7 @@ import (
 	libraryapi "github.com/qlqq/roomusic/backend/internal/library/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/listening"
 	listeningapi "github.com/qlqq/roomusic/backend/internal/listening/httpapi"
+	operationsapi "github.com/qlqq/roomusic/backend/internal/operations/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/platform/config"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"github.com/qlqq/roomusic/backend/internal/playback"
@@ -71,6 +73,8 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	identityapi.New(database, guard).Register(mux)
 	libraryapi.New(database, guard, libraryService, settings.AllowedLibraryRoots, logger).Register(mux)
 	catalogapi.New(database, guard, settings.DataDirectory, logger).Register(mux)
+	// 受治理操作的撤销与展示：每种操作类型的能力由拥有对应业务表的包提供，operations/httpapi 不导入业务包。
+	operationsapi.New(database, guard, logger, catalog.CorrectionOperations(), catalog.GroupChangeOperations()).Register(mux)
 	playbackService := playback.NewService(database, settings.AllowedLibraryRoots, playback.WithDerivation(assembly.derivation))
 	playbackapi.New(guard, playbackService, lifecycle, logger, playbackapi.Options{
 		RecheckInterval: assembly.playbackRecheckInterval, PreflightWait: assembly.playbackPreflightWait,

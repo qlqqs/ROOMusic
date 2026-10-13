@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "not_revertible",
+      "message": "撤销不能再被撤销；需要的话请重新修改"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

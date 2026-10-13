@@ -176,6 +176,8 @@ func TestPostgreSQLPermissionMatrixAndImmediateSessionInvalidation(t *testing.T)
 		{name: "scan diagnostics", method: http.MethodGet, path: "/api/v1/scans/" + scanID + "/diagnostics"},
 		{name: "read release corrections", method: http.MethodGet, path: "/api/v1/releases/" + uuid.New() + "/corrections"},
 		{name: "change a release's group", method: http.MethodPost, path: "/api/v1/releases/" + uuid.New() + "/group", body: map[string]any{"expected_revision": 1, "action": "detach"}},
+		{name: "operation records", method: http.MethodGet, path: "/api/v1/operations"},
+		{name: "revert an operation", method: http.MethodPost, path: "/api/v1/operations/" + uuid.New() + "/revert"},
 		{name: "correct a release", method: http.MethodPatch, path: "/api/v1/releases/" + uuid.New() + "/corrections", body: map[string]any{"expected_revision": 1, "changes": map[string]any{"genre": map[string]any{"mode": "null"}}}},
 	} {
 		t.Run("ordinary user cannot "+testCase.name, func(t *testing.T) {

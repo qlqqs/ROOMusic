@@ -38,6 +38,8 @@ func TestRoutesResolveToRegisteredPatterns(t *testing.T) {
 		{http.MethodGet, "/api/v1/scans/" + id, "GET /api/v1/scans/{id}"},
 		{http.MethodPost, "/api/v1/scans/" + id + "/cancel", "POST /api/v1/scans/{id}/cancel"},
 		{http.MethodGet, "/api/v1/scans/" + id + "/diagnostics", "GET /api/v1/scans/{id}/diagnostics"},
+		{http.MethodGet, "/api/v1/operations", "GET /api/v1/operations"},
+		{http.MethodPost, "/api/v1/operations/" + id + "/revert", "POST /api/v1/operations/{id}/revert"},
 		{http.MethodGet, "/api/v1/releases", "GET /api/v1/releases"},
 		{http.MethodGet, "/api/v1/releases/" + id + "/evidence", "GET /api/v1/releases/{id}/evidence"},
 		{http.MethodGet, "/api/v1/releases/" + id + "/corrections", "GET /api/v1/releases/{id}/corrections"},

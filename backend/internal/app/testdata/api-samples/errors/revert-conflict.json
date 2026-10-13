@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "revert_conflict",
+      "message": "这张专辑之后又被修改过，不能撤销这一条"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

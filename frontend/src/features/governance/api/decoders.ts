@@ -44,12 +44,75 @@ const groupChangeResultDecoder = d.object({
   operation_id: d.uuid(),
 });
 
+// 操作记录（管理员）。type 是记录自己的类型；changes.kind 是前后状态按哪种类型解释（撤销记录与它所撤销的操作同类型）。
+// 目标发行已不存在时 release 为 null；撤销记录与被撤销的记录互相指向（reverts、reverted_by）。
+const MAX_OPERATION_PAGE_ITEMS = 100;
+const OPERATION_TYPES = ["release_correction", "release_group_change", "revert"] as const;
+
+const operationActorDecoder = d.object({ id: d.uuid(), username: d.string({ max: 200 }) });
+const operationReleaseDecoder = d.object({ id: d.uuid(), title: d.string(), group_id: d.uuid(), visible: d.boolean() });
+
+const fieldStateDecoder = d.object({ correction: d.nullable(correctionDecoder), effective: d.nullable(fieldValueDecoder) });
+const correctionChangesDecoder = d.object({
+  kind: d.literal("release_correction"),
+  fields: d.array(
+    d.object({ field: d.oneOf(CORRECTABLE_FIELDS), before: fieldStateDecoder, after: fieldStateDecoder }),
+    { max: CORRECTABLE_FIELDS.length },
+  ),
+});
+const groupSnapshotDecoder = d.object({ group_id: d.uuid(), group_title: d.string() });
+const groupChangesDecoder = d.object({ kind: d.literal("release_group_change"), from: groupSnapshotDecoder, to: groupSnapshotDecoder });
+
+type OperationChanges = d.Infer<typeof correctionChangesDecoder> | d.Infer<typeof groupChangesDecoder>;
+// 按 kind 选择解码器；未知的 kind 整体拒绝（后端新增操作类型时，样本契约测试先失败，在这里补上才算确认前端已经知道）。
+const operationChangesDecoder: d.Decoder<OperationChanges> = (input, path) => {
+  const kind = typeof input === "object" && input !== null && "kind" in input ? input.kind : undefined;
+  if (kind === "release_correction") return correctionChangesDecoder(input, path);
+  if (kind === "release_group_change") return groupChangesDecoder(input, path);
+  throw new d.DecodeError(`${path}.kind`, "不是已知的操作类型");
+};
+
+const operationItemDecoder = d.object({
+  id: d.uuid(),
+  type: d.oneOf(OPERATION_TYPES),
+  created_at: d.timestamp(),
+  actor: operationActorDecoder,
+  release: d.nullable(operationReleaseDecoder),
+  changes: d.nullable(operationChangesDecoder),
+  reverts: d.nullable(d.uuid()),
+  reverted_by: d.nullable(d.uuid()),
+  revertible: d.boolean(),
+});
+
+const operationPageDecoder = d.object({
+  items: d.array(operationItemDecoder, { max: MAX_OPERATION_PAGE_ITEMS }),
+  pagination: d.object({
+    page: d.integer({ min: 1 }),
+    page_size: d.integer({ min: 1, max: MAX_OPERATION_PAGE_ITEMS }),
+    total: d.integer({ min: 0 }),
+  }),
+});
+
+// 撤销成功的响应：新的撤销记录、被撤销的记录、发行与发行新的人工修改版本号。
+const revertResultDecoder = d.object({
+  operation_id: d.uuid(),
+  reverts_operation_id: d.uuid(),
+  release_id: d.uuid(),
+  revision: d.integer({ min: 1 }),
+});
+
 export const decodeCorrectionState = d.defineDecoder(correctionStateDecoder);
 export const decodeCorrectionResult = d.defineDecoder(correctionResultDecoder);
 export const decodeGroupChangeResult = d.defineDecoder(groupChangeResultDecoder);
+export const decodeOperationPage = d.defineDecoder(operationPageDecoder);
+export const decodeRevertResult = d.defineDecoder(revertResultDecoder);
 
 export type CorrectionIntentDTO = d.Infer<typeof correctionDecoder>;
 export type CorrectionFieldDTO = d.Infer<typeof correctionFieldDecoder>;
 export type CorrectionStateDTO = d.Infer<typeof correctionStateDecoder>;
 export type CorrectionResultDTO = d.Infer<typeof correctionResultDecoder>;
 export type GroupChangeResultDTO = d.Infer<typeof groupChangeResultDecoder>;
+export type OperationItemDTO = d.Infer<typeof operationItemDecoder>;
+export type OperationPageDTO = d.Infer<typeof operationPageDecoder>;
+export type OperationChangesDTO = OperationChanges;
+export type RevertResultDTO = d.Infer<typeof revertResultDecoder>;

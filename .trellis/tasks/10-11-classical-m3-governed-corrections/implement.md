@@ -23,8 +23,8 @@
   - catalog 的归组执行器（逆执行器随撤销放在第 4 步）；`POST /api/v1/releases/{id}/group`（`join`、`detach`）；接口样本与前端结果解码器。
   - 测试：归入后组的成员数、代表版本与 attention 之和正确，原组无可见版本时从列表消失、详情 404；移出得到新组；`same_group`、`already_alone`、`group_not_found`；
     **归组后真实重扫，归组保持**；并发：两个请求同时移动涉及同一组时不死锁、结果一致；权限与幂等同第 2 步。
-- [ ] **4. 撤销与操作记录接口**
-  - 新包 `operations/httpapi`：`POST /api/v1/operations/{id}/revert`、`GET /api/v1/operations`；catalog 实现 `Kind`（逆操作与批量描述），app 组装；接口样本。
+- [x] **4. 撤销与操作记录接口**
+  - 新包 `operations/httpapi`：`POST /api/v1/operations/{id}/revert`、`GET /api/v1/operations`；`operations.Kind` 与 `RevertExecutor`（先锁原记录再读取，使并发撤销串行）；catalog 实现两个 `Kind`（逆操作与批量描述），app 组装；身份包提供批量用户名查询；接口样本与前端解码器。
   - 测试：撤销修正恢复前一个意图（无修正、设值、设空分别验证，清除修正后再撤销读到的是当前扫描值）；撤销归组回到原组、原地址恢复；
     之后有修改 `revert_conflict`、重复撤销 `already_reverted`、撤销撤销 `not_revertible`、目标不可见 404；撤销的幂等；
     记录列表倒序分页、按发行筛选、`revertible` 正确、只有管理员可读、不含路径与密钥。
