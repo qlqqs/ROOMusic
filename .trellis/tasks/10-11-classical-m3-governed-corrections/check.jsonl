@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端测试与门禁"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移、约束、事务与幂等"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "读取投影一致性与接口样本"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端测试、axe、五种宽度与内嵌产物"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "修正、归组与撤销从接口到界面的跨层数据流核对"}

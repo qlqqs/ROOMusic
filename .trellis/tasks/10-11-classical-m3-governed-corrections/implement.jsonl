@@ -1,0 +1,13 @@
+{"file": "docs/architecture/adr/0002-metadata-overlays.md", "reason": "修正意图、有效值投影、身份演进与验收矩阵，本任务裁决其第 1、3、5–7 项"}
+{"file": "docs/architecture/adr/0003-governed-operations.md", "reason": "共同写入合同、幂等与版本、检查点与单次逆操作，本任务裁决其第 1–6 项"}
+{"file": ".trellis/spec/backend/agent-and-operation-guidelines.md", "reason": "Change Set、操作记录与类型化逆操作的长期合同"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移、事务边界、compare-and-update 与幂等键加锁的写法"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新包 operations 的归属、依赖方向与 handler 不含 SQL 的技术债"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "列表、详情、按组读取共用的投影与 SQL 常量，切换有效值视图时要保持一致"}
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "扫描写入与身份规划：重扫改写描述列、不改 group_id、新发行新建组"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "请求与响应、错误信封、同源校验、接口样本与技术债"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "分类错误与稳定的 REST 错误码"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "查看者代次的查询键、写操作的悲观更新与失效"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "对话框、表单、可访问性与 CSS Modules"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "新 feature governance 的归属与跨 feature 的公开合同"}
+{"file": "frontend/DESIGN.md", "reason": "证据与差异、对话框、操作记录的落地合同与原型不实承诺"}
