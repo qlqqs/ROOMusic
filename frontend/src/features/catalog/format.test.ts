@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ReleaseMediumDTO } from "./api/decoders";
-import { albumArtistOf, albumMeta, creditsText, groupCredits, mediumHeading, releaseFacts, totalDuration } from "./format";
+import { albumArtistOf, albumMeta, creditsText, groupCredits, isFieldCorrected, mediumHeading, releaseFacts, totalDuration } from "./format";
 
 describe("albumMeta", () => {
   it("年份、介质数（多于一张才写）与曲目数，用间隔号连接", () => {
@@ -108,13 +108,27 @@ describe("releaseFacts", () => {
     expect(
       releaseFacts({ label: "L", catalog_number: "C-1", barcode: "012", edition: "Remastered", genre: "Classical", source_type: "CD", media_type: "CD" }),
     ).toEqual([
-      { label: "厂牌", value: "L" },
-      { label: "编号", value: "C-1" },
-      { label: "条码", value: "012" },
-      { label: "版本说明", value: "Remastered" },
-      { label: "流派", value: "Classical" },
-      { label: "来源类型", value: "CD" },
-      { label: "介质类型", value: "CD" },
+      { label: "厂牌", value: "L", field: "label" },
+      { label: "编号", value: "C-1", field: "catalog_number" },
+      { label: "条码", value: "012", field: "barcode" },
+      { label: "版本说明", value: "Remastered", field: "edition" },
+      { label: "流派", value: "Classical", field: "genre" },
+      { label: "来源类型", value: "CD", field: "source_type" },
+      { label: "介质类型", value: "CD", field: "media_type" },
     ]);
+  });
+});
+
+describe("isFieldCorrected", () => {
+  it("字段名在人工修正的清单里就是已修正", () => {
+    expect(isFieldCorrected(["title", "genre"], "genre")).toBe(true);
+    expect(isFieldCorrected(["title"], "genre")).toBe(false);
+    expect(isFieldCorrected([], "title")).toBe(false);
+  });
+
+  it("专辑艺人的修正同时覆盖证据里的“艺人”，反过来不成立", () => {
+    expect(isFieldCorrected(["album_artist"], "artist")).toBe(true);
+    expect(isFieldCorrected(["album_artist"], "album_artist")).toBe(true);
+    expect(isFieldCorrected(["title"], "artist")).toBe(false);
   });
 });

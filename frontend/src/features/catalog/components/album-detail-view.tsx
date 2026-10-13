@@ -30,7 +30,15 @@ type PlaybackSlots = {
   currentTrackLabel?: string | undefined;
 };
 
-type AlbumDetailViewProps = PlaybackSlots & {
+type AdminSlots = {
+  /**
+   * 管理员的操作区（编辑发行信息、调整归组与上一次操作的结果），放在头部。由页面按角色传入；
+   * 这里再用 isAdmin 把一道，后端对每个写请求仍独立鉴权。context.releaseCount 是这个组里可见的版本数。
+   */
+  renderAdminActions?: ((context: { release: ReleaseDetailDTO; groupId: string; releaseCount: number }) => ReactNode) | undefined;
+};
+
+type AlbumDetailViewProps = PlaybackSlots & AdminSlots & {
   groupId: string;
   /** 地址里的 release 参数（路由已校验为 UUID 并转成小写）；没有表示代表版本。 */
   release: string | undefined;
@@ -56,7 +64,7 @@ function AlbumNotFound({ list }: { list: AlbumSearch }) {
   );
 }
 
-type ReleaseBodyProps = PlaybackSlots & {
+type ReleaseBodyProps = PlaybackSlots & AdminSlots & {
   groupId: string;
   group: ReleaseGroupDetailDTO;
   selected: ReleaseSummaryDTO;
@@ -117,12 +125,17 @@ function ReleaseGone({ groupId, group, selected }: { groupId: string; group: Rel
 }
 
 /** 选中版本的头部、曲目、发行信息与证据。头部用组详情里的摘要先渲染，曲目区单独显示加载态。 */
-function ReleaseBody({ groupId, group, selected, list, isAdmin, renderReleaseActions, renderTrackActions, currentTrackId, currentTrackLabel }: ReleaseBodyProps) {
+function ReleaseBody({ groupId, group, selected, list, isAdmin, renderReleaseActions, renderAdminActions, renderTrackActions, currentTrackId, currentTrackLabel }: ReleaseBodyProps) {
   const detail = useRelease(selected.id);
   const gone = detail.isError && isHttpFailure(failureOf(detail.error), 404);
   return (
     <>
-      <AlbumHeader release={selected} detail={detail.data} actions={detail.data === undefined ? undefined : renderReleaseActions?.(detail.data)} />
+      <AlbumHeader
+        release={selected}
+        detail={detail.data}
+        actions={detail.data === undefined ? undefined : renderReleaseActions?.(detail.data)}
+        adminActions={detail.data === undefined || !isAdmin ? undefined : renderAdminActions?.({ release: detail.data, groupId, releaseCount: group.release_count })}
+      />
       {group.release_count > 1 ? (
         <VersionNav groupId={groupId} releases={group.releases} releaseCount={group.release_count} representativeId={group.representative.id} list={list} />
       ) : null}
@@ -143,7 +156,7 @@ function canonicalRelease(group: ReleaseGroupDetailDTO, requested: string | unde
   return member === undefined || member.id === group.representative.id ? undefined : member.id;
 }
 
-function AlbumDetailContent({ groupId, release: requested, list, isAdmin, renderReleaseActions, renderTrackActions, currentTrackId, currentTrackLabel }: AlbumDetailViewProps) {
+function AlbumDetailContent({ groupId, release: requested, list, isAdmin, renderReleaseActions, renderAdminActions, renderTrackActions, currentTrackId, currentTrackLabel }: AlbumDetailViewProps) {
   const group = useAlbum(groupId);
   const navigate = useNavigate();
   const data = group.data;
@@ -169,7 +182,7 @@ function AlbumDetailContent({ groupId, release: requested, list, isAdmin, render
     >
       <QueryContent query={group} loading={<Skeleton label="正在加载专辑" lines={6} />}>
         {(loaded) =>
-          selected === undefined ? null : <ReleaseBody groupId={groupId} group={loaded} selected={selected} list={list} isAdmin={isAdmin} renderReleaseActions={renderReleaseActions} renderTrackActions={renderTrackActions} currentTrackId={currentTrackId} currentTrackLabel={currentTrackLabel} />
+          selected === undefined ? null : <ReleaseBody groupId={groupId} group={loaded} selected={selected} list={list} isAdmin={isAdmin} renderReleaseActions={renderReleaseActions} renderAdminActions={renderAdminActions} renderTrackActions={renderTrackActions} currentTrackId={currentTrackId} currentTrackLabel={currentTrackLabel} />
         }
       </QueryContent>
     </Page>

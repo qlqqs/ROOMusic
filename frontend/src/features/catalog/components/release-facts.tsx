@@ -1,8 +1,9 @@
 import { Fragment } from "react";
 import { Panel } from "../../../shared/ui";
 import type { ReleaseDetailDTO } from "../api/decoders";
-import { groupCredits, releaseFacts } from "../format";
+import { groupCredits, isFieldCorrected, releaseFacts } from "../format";
 import { creditRoleLabel } from "../labels";
+import { ManualCorrectionTag } from "./manual-correction-tag";
 import styles from "./release-facts.module.css";
 
 type ReleaseFactsProps = {
@@ -28,7 +29,15 @@ export function ReleaseFacts({ release, versioned }: ReleaseFactsProps) {
             {facts.map((fact) => (
               <Fragment key={fact.label}>
                 <dt>{fact.label}</dt>
-                <dd>{fact.value}</dd>
+                <dd>
+                  {fact.value}
+                  {isFieldCorrected(release.corrected_fields, fact.field) ? (
+                    <>
+                      {" "}
+                      <ManualCorrectionTag />
+                    </>
+                  ) : null}
+                </dd>
               </Fragment>
             ))}
           </dl>

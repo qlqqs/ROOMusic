@@ -10,3 +10,4 @@ export { artworkPath } from "./api/endpoints";
 export { releaseSummaryDecoder } from "./api/decoders";
 export type { ArtworkDTO, ReleaseDetailDTO, ReleaseMediumDTO, ReleaseSummaryDTO, ReleaseTrackDTO } from "./api/decoders";
 export { useReleaseLoader } from "./hooks/use-release-loader";
+export { useCatalogRefresh } from "./hooks/use-catalog-refresh";

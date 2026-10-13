@@ -70,7 +70,8 @@ const utf8Length = (value: string) => new TextEncoder().encode(value).length;
 /** 接口的一次应答：状态码与响应体（成功时是 DTO，失败时是后端的错误信封）。 */
 export type ApiResult = { status: number; body: unknown };
 
-function failure(status: number, code: string, message: string): ApiResult {
+/** 后端错误信封的一次应答。 */
+export function failure(status: number, code: string, message: string): ApiResult {
   return { status, body: { error: { code, message }, request_id: "sample-request" } };
 }
 
@@ -231,14 +232,16 @@ export function catalogDataOf(groups: ReleaseGroupSummaryDTO[] = []): CatalogDat
   return { groups, groupDetails: new Map(), releases: new Map(), evidence: new Map(), hiddenReleases: new Set() };
 }
 
-function groupDetailFor(data: CatalogData, id: string): ReleaseGroupDetailDTO | undefined {
+/** 组详情：登记过的取登记的，否则按列表里的摘要合成。 */
+export function groupDetailFor(data: CatalogData, id: string): ReleaseGroupDetailDTO | undefined {
   const registered = data.groupDetails.get(id);
   if (registered !== undefined) return registered;
   const group = data.groups.find((candidate) => candidate.id === id);
   return group === undefined ? undefined : groupDetailOf(group);
 }
 
-function releaseSummaryFor(data: CatalogData, id: string): ReleaseSummaryDTO | undefined {
+/** 版本摘要：在任一组详情的成员里找，找不到再看列表里的代表版本。 */
+export function releaseSummaryFor(data: CatalogData, id: string): ReleaseSummaryDTO | undefined {
   for (const detail of data.groupDetails.values()) {
     const member = detail.releases.find((release) => release.id === id);
     if (member !== undefined) return member;
@@ -246,7 +249,8 @@ function releaseSummaryFor(data: CatalogData, id: string): ReleaseSummaryDTO | u
   return data.groups.find((group) => group.representative.id === id)?.representative;
 }
 
-function releaseDetailFor(data: CatalogData, id: string): ReleaseDetailDTO | undefined {
+/** 版本详情：被隐藏的没有；登记过的取登记的，否则按摘要合成。 */
+export function releaseDetailFor(data: CatalogData, id: string): ReleaseDetailDTO | undefined {
   if (data.hiddenReleases.has(id)) return undefined;
   const registered = data.releases.get(id);
   if (registered !== undefined) return registered;

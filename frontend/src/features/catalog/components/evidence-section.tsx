@@ -3,12 +3,26 @@ import { useId, useState } from "react";
 import { formatCount } from "../../../shared/lib/number";
 import { Button, DataTable, FailureNotice, Notice, Skeleton, type Column } from "../../../shared/ui";
 import type { ReleaseDetailDTO, ReleaseEvidenceDTO, ReleaseEvidenceSummaryDTO, ReleaseFieldEvidenceDTO, ReleaseGroupingEvidenceDTO } from "../api/decoders";
+import { isFieldCorrected } from "../format";
 import { useReleaseEvidence } from "../hooks/use-release-evidence";
 import { candidateKindLabel, confidenceLabel, evidenceActionLabel, evidenceFieldLabel, evidenceSourceLabel, reasonCodeLabel } from "../labels";
 import styles from "./evidence-section.module.css";
+import { ManualCorrectionTag } from "./manual-correction-tag";
 
-const summaryColumns: Column<ReleaseEvidenceSummaryDTO>[] = [
-  { id: "field", header: "字段", rowHeader: true, cell: (item) => evidenceFieldLabel(item.field) },
+/** 字段名加上人工修正的标记：证据照旧写扫描得到的结论，标记说明页面显示的是管理员改过的值。 */
+function fieldCell(field: string, corrected: readonly string[]) {
+  return isFieldCorrected(corrected, field) ? (
+    <span className={styles.fieldCell}>
+      {evidenceFieldLabel(field)}
+      <ManualCorrectionTag />
+    </span>
+  ) : (
+    evidenceFieldLabel(field)
+  );
+}
+
+const summaryColumns = (corrected: readonly string[]): Column<ReleaseEvidenceSummaryDTO>[] => [
+  { id: "field", header: "字段", rowHeader: true, cell: (item) => fieldCell(item.field, corrected) },
   { id: "source", header: "来源", cell: (item) => evidenceSourceLabel(item.source) },
   { id: "confidence", header: "可信度", cell: (item) => confidenceLabel(item.confidence) },
   { id: "action", header: "处理方式", cell: (item) => evidenceActionLabel(item.action) },
@@ -17,8 +31,8 @@ const summaryColumns: Column<ReleaseEvidenceSummaryDTO>[] = [
 
 const none = "—";
 
-const fieldColumns: Column<ReleaseFieldEvidenceDTO>[] = [
-  { id: "field", header: "字段", rowHeader: true, cell: (item) => evidenceFieldLabel(item.field) },
+const fieldColumns = (corrected: readonly string[]): Column<ReleaseFieldEvidenceDTO>[] => [
+  { id: "field", header: "字段", rowHeader: true, cell: (item) => fieldCell(item.field, corrected) },
   { id: "value", header: "取值", cell: (item) => (item.value === null || item.value === "" ? none : item.value) },
   {
     id: "candidates",
@@ -77,14 +91,14 @@ function GroupingEvidence({ grouping }: { grouping: ReleaseGroupingEvidenceDTO |
   );
 }
 
-function EvidenceDetail({ evidence }: { evidence: ReleaseEvidenceDTO }) {
+function EvidenceDetail({ evidence, corrected }: { evidence: ReleaseEvidenceDTO; corrected: readonly string[] }) {
   return (
     <div className={styles.detail}>
       {evidence.truncated ? <Notice tone="warning">证据内容过长，已被截断，下面只显示前面的部分。</Notice> : null}
       {evidence.fields.length === 0 ? (
         <p>没有字段证据。</p>
       ) : (
-        <DataTable caption="字段证据" columns={fieldColumns} rows={evidence.fields} rowKey={(item) => item.field} />
+        <DataTable caption="字段证据" columns={fieldColumns(corrected)} rows={evidence.fields} rowKey={(item) => item.field} />
       )}
       <h4 className={styles.subheading}>归组依据</h4>
       <GroupingEvidence grouping={evidence.grouping} />
@@ -102,7 +116,7 @@ const failureMessages = {
  * 管理员的完整证据（字段值、候选值、原因码、归组依据）。点了按钮才请求，按钮留在原处：加载中忙碌、之后可重新加载，
  * 焦点不丢；失败就地提示，不影响页面其他部分。
  */
-function FullEvidence({ releaseId }: { releaseId: string }) {
+function FullEvidence({ releaseId, corrected }: { releaseId: string; corrected: readonly string[] }) {
   const headingId = useId();
   const [requested, setRequested] = useState(false);
   const evidence = useReleaseEvidence(releaseId, requested);
@@ -121,7 +135,7 @@ function FullEvidence({ releaseId }: { releaseId: string }) {
       {!requested ? null : evidence.data !== undefined ? (
         <>
           {evidence.isError ? <FailureNotice error={evidence.error} messages={failureMessages} /> : null}
-          <EvidenceDetail evidence={evidence.data} />
+          <EvidenceDetail evidence={evidence.data} corrected={corrected} />
         </>
       ) : evidence.isError ? (
         <FailureNotice error={evidence.error} messages={failureMessages} />
@@ -152,12 +166,15 @@ export function EvidenceSection({ release, isAdmin }: { release: ReleaseDetailDT
           <p className={styles.note}>
             这里记录各项信息是怎样得到的。“需要关注”只是提示依据不够确定，或有来源文件暂时找不到，需要人工核对，并不表示信息有误。
           </p>
+          {release.corrected_fields.length === 0 ? null : (
+            <p className={styles.note}>标有“人工修正”的字段，页面显示的是管理员改过的值；下面仍然记录扫描得到的结论，重新扫描不会覆盖人工修正。</p>
+          )}
           {count === 0 ? (
             <p>这个版本没有记录证据。</p>
           ) : (
-            <DataTable caption="证据摘要" columns={summaryColumns} rows={release.evidence} rowKey={(item) => item.field} />
+            <DataTable caption="证据摘要" columns={summaryColumns(release.corrected_fields)} rows={release.evidence} rowKey={(item) => item.field} />
           )}
-          {isAdmin ? <FullEvidence releaseId={release.id} /> : null}
+          {isAdmin ? <FullEvidence releaseId={release.id} corrected={release.corrected_fields} /> : null}
         </div>
       ) : null}
     </details>

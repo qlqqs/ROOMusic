@@ -12,6 +12,15 @@ import {
   respondToReleaseEvidence,
   type CatalogData,
 } from "../../src/test/catalog-data";
+import {
+  governanceDataOf,
+  respondToCorrect,
+  respondToCorrections,
+  respondToGroupChange,
+  respondToOperations,
+  respondToRevert,
+  type GovernanceData,
+} from "../../src/test/governance-data";
 import { gradientPng } from "./png";
 
 // 受控后端：用后端集成测试产出的真实响应样本回答 /api/v1/*，并保持必要的状态（会话、目录、扫描、成员），
@@ -38,6 +47,8 @@ export type RecordedCall = { method: string; path: string; body: unknown; idempo
  * 接口只做筛选与分页）；没有专门登记的组、版本与证据按列表里的摘要合成，特别安排的（多版本、长内容、被重扫掉的版本）登记进对应的 Map。
  */
 export type ApiMock = CatalogData & {
+  /** 管理员对发行的受治理操作（字段修正、归组、撤销、操作记录）的状态与行为，与上面的专辑数据共用：修改会反映到列表与详情。 */
+  governance: GovernanceData;
   setupRequired: boolean;
   /** 当前会话的用户名；null 表示没有有效会话。 */
   session: string | null;
@@ -108,6 +119,8 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
     diagnostics: new Map(),
     // 默认 12 个专辑：三分之二有封面，每第 4 个需要关注，第 5 个有两个版本。
     ...catalogDataOf(albumGroups(12, (index) => ({ artwork: index % 3 !== 0, attention_count: index % 4 === 0 ? 1 : 0, release_count: index === 5 ? 2 : 1 }))),
+    // 占位：治理数据必须引用 mock 本身（测试会改写 mock.groups 等字段），所以对象建好之后马上换成真正的。
+    governance: governanceDataOf(catalogDataOf()),
     recentPlays: [],
     hasPlayHistory: false,
     brokenArtworks: new Set(),
@@ -159,6 +172,8 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
     callsTo: (method, path) =>
       mock.calls.filter((call) => call.method === method && (typeof path === "string" ? call.path === path : path.test(call.path))),
   };
+
+  mock.governance = governanceDataOf(mock);
 
   let setupStatusFailures = failSetupStatusTimes;
   let clock = 100;
@@ -319,6 +334,22 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
         recordOperation({ operation: restoring ? "restore" : "disable", status: "succeeded", root_id: root.id, revision: updated.revision });
         return json({ id: root.id, path: root.name, status: updated.status, revision: updated.revision });
       });
+    }
+
+    // 受治理操作（只有管理员）：字段修正、归组、操作记录与撤销。
+    const releaseGovernance = /^\/api\/v1\/releases\/([^/]+)\/(corrections|group)$/.exec(path);
+    if (releaseGovernance !== null) {
+      const [, releaseId = "", suffix] = releaseGovernance;
+      const key = headers["idempotency-key"] ?? null;
+      if (suffix === "corrections" && method === "GET") return guarded(method, path, true, () => respondToCorrections(mock.governance, releaseId));
+      if (suffix === "corrections" && method === "PATCH") return guarded(method, path, true, () => respondToCorrect(mock.governance, releaseId, key, body));
+      if (suffix === "group" && method === "POST") return guarded(method, path, true, () => respondToGroupChange(mock.governance, releaseId, key, body));
+      return sample("errors/method-not-allowed");
+    }
+    if (key === "GET /api/v1/operations") return guarded(method, path, true, () => respondToOperations(mock.governance, search));
+    const operationRevert = /^\/api\/v1\/operations\/([^/]+)\/revert$/.exec(path);
+    if (operationRevert !== null && method === "POST") {
+      return guarded(method, path, true, () => respondToRevert(mock.governance, operationRevert[1] ?? "", headers["idempotency-key"] ?? null));
     }
 
     // 专辑详情：组详情与版本详情登录即可读，完整证据只有管理员能读。

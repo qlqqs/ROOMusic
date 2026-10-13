@@ -47,6 +47,13 @@
   font-variant-numeric: lining-nums tabular-nums;
 }
 
+.factTag {
+  /* 标签是 dd 里的小标记，不沿用事实数值的大字号与衬线字体。 */
+  font-family: var(--font-body);
+  font-size: var(--fs-12);
+  line-height: 1.4;
+}
+
 .attention {
   display: flex;
   flex-wrap: wrap;
