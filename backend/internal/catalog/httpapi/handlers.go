@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -16,23 +18,29 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
-// Handlers 汇集目录读取相关的 HTTP handler。
+// Handlers 汇集目录相关的 HTTP handler：读取与发行信息的受治理写入。
 type Handlers struct {
 	database *sql.DB
 	guard    *identity.Guard
 	store    *catalog.Store
 	artwork  *artwork.Store
+	logger   *slog.Logger
 }
 
-// New 返回目录 handler；dataDirectory 是受管封面所在的数据目录。
-func New(database *sql.DB, guard *identity.Guard, dataDirectory string) *Handlers {
-	return &Handlers{database: database, guard: guard, store: catalog.NewStore(database), artwork: artwork.NewStore(dataDirectory)}
+// New 返回目录 handler；dataDirectory 是受管封面所在的数据目录，logger 记录写入失败（500 与 503）的细节，可以为 nil。
+func New(database *sql.DB, guard *identity.Guard, dataDirectory string, logger *slog.Logger) *Handlers {
+	if logger == nil {
+		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+	return &Handlers{database: database, guard: guard, store: catalog.NewStore(database), artwork: artwork.NewStore(dataDirectory), logger: logger}
 }
 
-// Register 在 mux 上注册目录读取路由。
+// Register 在 mux 上注册目录路由。
 func (handlers *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/releases", handlers.listReleases)
 	mux.HandleFunc("GET /api/v1/releases/{id}/evidence", handlers.releaseEvidence)
+	mux.HandleFunc("GET /api/v1/releases/{id}/corrections", handlers.releaseCorrections)
+	mux.HandleFunc("PATCH /api/v1/releases/{id}/corrections", handlers.correctRelease)
 	mux.HandleFunc("GET /api/v1/releases/{id}", handlers.releaseDetail)
 	mux.HandleFunc("GET /api/v1/release-groups", handlers.listReleaseGroups)
 	mux.HandleFunc("GET /api/v1/release-groups/{id}", handlers.releaseGroupDetail)
@@ -149,16 +157,18 @@ func (handlers *Handlers) releaseDetail(responseWriter http.ResponseWriter, requ
 		return
 	}
 	httpserver.WriteJSON(responseWriter, http.StatusOK, catalog.ReleaseDetail{
-		ReleaseSummary: summary,
-		CandidateKind:  header.CandidateKind,
-		Genre:          header.Genre,
-		CatalogNumber:  header.CatalogNumber,
-		Edition:        header.Edition,
-		Label:          header.Label,
-		Barcode:        header.Barcode,
-		Media:          media,
-		Credits:        credits,
-		Evidence:       evidence,
+		ReleaseSummary:  summary,
+		CandidateKind:   header.CandidateKind,
+		Genre:           header.Genre,
+		CatalogNumber:   header.CatalogNumber,
+		Edition:         header.Edition,
+		Label:           header.Label,
+		Barcode:         header.Barcode,
+		Media:           media,
+		Credits:         credits,
+		Evidence:        evidence,
+		Revision:        header.Revision,
+		CorrectedFields: header.CorrectedFields,
 	})
 }
 

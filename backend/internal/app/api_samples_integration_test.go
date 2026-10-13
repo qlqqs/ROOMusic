@@ -279,6 +279,8 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 
 	// 播放历史（阶段 P）：放在最后，用管理员自己的历史。
 	recordListeningSamples(t, application, samples, call, admin)
+	// 字段修正（M3）：修正会改变这张专辑的有效值，所以放在所有其他样本之后。
+	recordCorrectionSamples(t, application, samples, call, admin)
 
 	samples.finish()
 }
@@ -412,6 +414,37 @@ func recordListeningSamples(t *testing.T, application *integrationTestApplicatio
 	samples.record("listening/play-recorded", call(http.MethodPost, "/api/v1/me/plays", map[string]any{"track_id": trackID, "played_seconds": 150.5}, admin, key("0002")), http.StatusCreated)
 	samples.record("listening/recent-releases", call(http.MethodGet, "/api/v1/me/plays/recent-releases", nil, admin), http.StatusOK)
 	samples.record("listening/plays-cleared", call(http.MethodDelete, "/api/v1/me/plays", nil, admin), http.StatusOK)
+}
+
+// recordCorrectionSamples 记录发行字段修正接口：修正状态、设值与设空的成功响应、修正后的状态与详情（带 corrected_fields），
+// 以及无效修正、没有变化与过期版本三种错误。素材是 recordAlbumDetailSamples 扫描出的合成双碟专辑。
+func recordCorrectionSamples(t *testing.T, application *integrationTestApplication, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser) {
+	t.Helper()
+	var releaseID string
+	if err := application.database.QueryRow(`SELECT id::text FROM releases WHERE title='Sample Symphonies'`).Scan(&releaseID); err != nil {
+		t.Fatalf("read the release to correct: %v", err)
+	}
+	path := "/api/v1/releases/" + releaseID + "/corrections"
+	key := func(suffix string) map[string]string {
+		return map[string]string{"Idempotency-Key": "00000000-0000-4000-8000-00000000" + suffix}
+	}
+	samples.record("corrections/get", call(http.MethodGet, path, nil, admin), http.StatusOK)
+	samples.record("corrections/patched", call(http.MethodPatch, path, map[string]any{"expected_revision": 1, "changes": map[string]any{
+		"title": map[string]any{"mode": "set", "value": "Sample Symphonies (corrected)"},
+		"year":  map[string]any{"mode": "null"},
+		"label": map[string]any{"mode": "set", "value": "Corrected Label"},
+	}}, admin, key("0101")), http.StatusOK)
+	samples.record("corrections/get-corrected", call(http.MethodGet, path, nil, admin), http.StatusOK)
+	samples.record("releases/get-corrected", call(http.MethodGet, "/api/v1/releases/"+releaseID, nil, admin), http.StatusOK)
+	samples.record("errors/invalid-correction", call(http.MethodPatch, path, map[string]any{"expected_revision": 2, "changes": map[string]any{
+		"title": map[string]any{"mode": "null"},
+	}}, admin, key("0102")), http.StatusBadRequest)
+	samples.record("errors/no-changes", call(http.MethodPatch, path, map[string]any{"expected_revision": 2, "changes": map[string]any{
+		"genre": map[string]any{"mode": "clear"},
+	}}, admin, key("0103")), http.StatusBadRequest)
+	samples.record("errors/revision-conflict-release", call(http.MethodPatch, path, map[string]any{"expected_revision": 1, "changes": map[string]any{
+		"genre": map[string]any{"mode": "set", "value": "Romantic"},
+	}}, admin, key("0104")), http.StatusConflict)
 }
 
 // 样本里的内嵌歌词：同步歌词带元标签、间奏（空行）、同一时间戳的双语两行与一行多个时间戳；纯文本歌词带分段。

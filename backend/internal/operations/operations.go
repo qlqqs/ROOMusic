@@ -107,6 +107,16 @@ func Problem(err error) (status int, code, message string) {
 	}
 }
 
+// NormalizeKey 校验 Idempotency-Key 请求头：必须是 UUID，规范成小写（键的大小写不影响幂等判断）。
+// 缺失或不是 UUID 时 ok 为 false，传输层应返回 400 invalid_input。
+func NormalizeKey(header string) (key string, ok bool) {
+	header = strings.TrimSpace(header)
+	if !uuid.Valid(header) {
+		return "", false
+	}
+	return strings.ToLower(header), true
+}
+
 // Spec 是一次操作的请求侧信息，由传输层在鉴权与校验之后构造。
 type Spec struct {
 	ActorID     string // 操作者（会话中的用户）

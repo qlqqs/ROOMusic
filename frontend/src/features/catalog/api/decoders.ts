@@ -12,6 +12,7 @@ const MAX_RELEASE_EVIDENCE = 100;
 const MAX_EVIDENCE_CANDIDATES = 20;
 const MAX_EVIDENCE_SOURCE_REFS = 100;
 const MAX_EVIDENCE_TEXT = 500; // 证据里的值、候选、原因码与来源引用，后端按 500 字节截断
+const MAX_CORRECTED_FIELDS = 16; // 有人工修正的字段名；后端目前可修正 8 个字段，留出余量
 
 const artworkDecoder = d.object({
   resource_id: d.string({ min: 1, max: 255 }),
@@ -151,6 +152,10 @@ const releaseDetailDecoder = d.object({
   media: mediaDecoder,
   credits: d.array(creditDecoder, { max: MAX_RELEASE_CREDITS }),
   evidence: d.array(evidenceSummaryDecoder, { max: MAX_RELEASE_EVIDENCE }),
+  // 人工修改版本号（修正、归组与撤销共用；管理员写操作用它做预期版本）与有人工修正的字段名。字段名按字符串解码：
+  // 后端新增可修正字段不会让页面解码失败，显示时由 labels 给已知值中文标签。
+  revision: d.integer({ min: 1 }),
+  corrected_fields: d.array(d.string({ min: 1, max: 64 }), { max: MAX_CORRECTED_FIELDS }),
 });
 
 // 管理员证据里的来源引用必须是有界的安全相对路径：绝对路径、盘符、`file://`、反斜杠与上级目录一律拒绝。

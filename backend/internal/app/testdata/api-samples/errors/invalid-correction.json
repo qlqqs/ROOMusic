@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_correction",
+      "message": "标题不能留空"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

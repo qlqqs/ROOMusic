@@ -86,3 +86,14 @@ func TestClassifySeparatesConnectionFailuresFromServerFailures(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeKeyAcceptsOnlyUUIDsAndLowercasesThem(t *testing.T) {
+	if key, ok := NormalizeKey("  01234567-89AB-CDEF-0123-456789ABCDEF "); !ok || key != "01234567-89ab-cdef-0123-456789abcdef" {
+		t.Fatalf("NormalizeKey(uppercase with spaces) = %q, %v; want the trimmed lowercase UUID", key, ok)
+	}
+	for _, header := range []string{"", "   ", "sample-key", "01234567-89ab-cdef-0123-456789abcdeg", "0123456789abcdef0123456789abcdef"} {
+		if key, ok := NormalizeKey(header); ok || key != "" {
+			t.Errorf("NormalizeKey(%q) = %q, %v; want it rejected", header, key, ok)
+		}
+	}
+}

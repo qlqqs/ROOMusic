@@ -23,6 +23,7 @@ import {
   decodeMemberList,
   decodeSessionsRevoked,
 } from "../features/members/api/decoders";
+import { decodeCorrectionResult, decodeCorrectionState } from "../features/governance/api/decoders";
 import { decodePlaysCleared, decodeRecentReleases, decodeRecordedPlay } from "../features/listening/api/decoders";
 import { decodeErrorEnvelope } from "../shared/api";
 import { listApiSampleNames, loadApiSample } from "./api-samples";
@@ -84,7 +85,11 @@ const successContracts: Record<string, Contract> = {
   "releases/get": { status: 200, decode: decodeReleaseDetail },
   "releases/get-single": { status: 200, decode: decodeReleaseDetail },
   "releases/get-cue": { status: 200, decode: decodeReleaseDetail },
+  "releases/get-corrected": { status: 200, decode: decodeReleaseDetail },
   "releases/evidence": { status: 200, decode: decodeReleaseEvidence },
+  "corrections/get": { status: 200, decode: decodeCorrectionState },
+  "corrections/get-corrected": { status: 200, decode: decodeCorrectionState },
+  "corrections/patched": { status: 200, decode: decodeCorrectionResult },
   "listening/recent-releases-empty": { status: 200, decode: decodeRecentReleases },
   "listening/recent-releases": { status: 200, decode: decodeRecentReleases },
   "listening/play-recorded": { status: 201, decode: decodeRecordedPlay },
@@ -114,6 +119,9 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "errors/last-admin": { status: 409, code: "last_admin" },
   "errors/invalid-library-path": { status: 400, code: "invalid_library_path" },
   "errors/revision-conflict": { status: 409, code: "revision_conflict" },
+  "errors/revision-conflict-release": { status: 409, code: "revision_conflict" },
+  "errors/invalid-correction": { status: 400, code: "invalid_correction" },
+  "errors/no-changes": { status: 400, code: "no_changes" },
   "errors/idempotency-conflict": { status: 409, code: "idempotency_conflict" },
   "errors/not-found-scan": { status: 404, code: "not_found" },
   "errors/not-found-api": { status: 404, code: "not_found" },

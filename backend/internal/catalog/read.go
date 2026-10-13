@@ -136,6 +136,8 @@ type ReleasePage struct {
 type ReleaseHeader struct {
 	CandidateKind                                 string
 	Genre, CatalogNumber, Edition, Label, Barcode *string
+	Revision                                      int64
+	CorrectedFields                               []string
 }
 
 // ListReleases 按标题、艺人排序返回可见 Release 的一页。查询执行失败时错误包含 ErrQuery。
@@ -180,24 +182,32 @@ func (s *Store) ListReleases(ctx context.Context, params ListParams) (ReleasePag
 // LoadReleaseHeader 读取详情里摘要以外的 Release 字段。
 func (s *Store) LoadReleaseHeader(ctx context.Context, releaseID string) (ReleaseHeader, error) {
 	var candidateKind, genre, catalogNumber, edition, label, barcode sql.NullString
+	var revision int64
 	err := s.database.QueryRowContext(ctx, `SELECT
 		candidate_kind,
 		NULLIF(BTRIM(genre),''),
 		NULLIF(BTRIM(catalog_number),''),
 		NULLIF(BTRIM(edition),''),
 		NULLIF(BTRIM(label),''),
-		NULLIF(BTRIM(barcode),'')
-		FROM release_effective WHERE id=$1::uuid`, releaseID).Scan(&candidateKind, &genre, &catalogNumber, &edition, &label, &barcode)
+		NULLIF(BTRIM(barcode),''),
+		edit_revision
+		FROM release_effective WHERE id=$1::uuid`, releaseID).Scan(&candidateKind, &genre, &catalogNumber, &edition, &label, &barcode, &revision)
+	if err != nil {
+		return ReleaseHeader{}, err
+	}
+	corrected, err := loadCorrectedFieldNames(ctx, s.database, releaseID)
 	if err != nil {
 		return ReleaseHeader{}, err
 	}
 	return ReleaseHeader{
-		CandidateKind: normalizeCandidateKind(candidateKind.String),
-		Genre:         stringPointerFromNull(genre),
-		CatalogNumber: stringPointerFromNull(catalogNumber),
-		Edition:       stringPointerFromNull(edition),
-		Label:         stringPointerFromNull(label),
-		Barcode:       stringPointerFromNull(barcode),
+		CandidateKind:   normalizeCandidateKind(candidateKind.String),
+		Genre:           stringPointerFromNull(genre),
+		CatalogNumber:   stringPointerFromNull(catalogNumber),
+		Edition:         stringPointerFromNull(edition),
+		Label:           stringPointerFromNull(label),
+		Barcode:         stringPointerFromNull(barcode),
+		Revision:        revision,
+		CorrectedFields: corrected,
 	}, nil
 }
 

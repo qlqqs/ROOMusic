@@ -79,6 +79,10 @@ type ReleaseDetail struct {
 	Media         []ReleaseMedium          `json:"media"`
 	Credits       []ReleaseCredit          `json:"credits"`
 	Evidence      []ReleaseEvidenceSummary `json:"evidence"`
+	// Revision 是发行的人工修改版本号（修正、归组与撤销共用；扫描从不改它），写操作用它做预期版本。
+	// CorrectedFields 是有人工修正的字段名（固定顺序，没有时为空数组），不含修正值的来源与操作者。
+	Revision        int64    `json:"revision"`
+	CorrectedFields []string `json:"corrected_fields"`
 }
 
 type ReleaseFieldEvidence struct {

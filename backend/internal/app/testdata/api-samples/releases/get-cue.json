@@ -7,6 +7,7 @@
     "barcode": null,
     "candidate_kind": "ordinary_directory",
     "catalog_number": null,
+    "corrected_fields": [],
     "credits": [
       {
         "name": "Sample Cue Artist",
@@ -102,6 +103,7 @@
     ],
     "media_type": null,
     "medium_count": 1,
+    "revision": 1,
     "source_type": null,
     "title": "Sample Cue Album",
     "track_count": 2,

@@ -12,6 +12,7 @@
     "barcode": null,
     "candidate_kind": "ordinary_directory",
     "catalog_number": null,
+    "corrected_fields": [],
     "credits": [
       {
         "name": "Sample Pianist",
@@ -79,6 +80,7 @@
     ],
     "media_type": null,
     "medium_count": 1,
+    "revision": 1,
     "source_type": null,
     "title": "Sample Preludes",
     "track_count": 1,

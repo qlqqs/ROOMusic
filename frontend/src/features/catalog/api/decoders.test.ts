@@ -129,6 +129,22 @@ describe("decodeReleaseDetail", () => {
     expect(release.evidence).toHaveLength(9);
   });
 
+  it("解码人工修改版本号与有人工修正的字段名", () => {
+    expect(decodeReleaseDetail(double)).toMatchObject({ revision: 1, corrected_fields: [] });
+    expect(decodeReleaseDetail(sampleBody("releases/get-corrected"))).toMatchObject({
+      title: "Sample Symphonies (corrected)",
+      year: null,
+      label: "Corrected Label",
+      revision: 2,
+      corrected_fields: ["title", "year", "label"],
+    });
+  });
+
+  it("修正字段名按字符串解码：后端新增可修正字段不会让页面解码失败；最多 16 个", () => {
+    expect(decodeReleaseDetail(withValue(double, ["corrected_fields"], ["title", "some_future_field"])).corrected_fields).toEqual(["title", "some_future_field"]);
+    expect(() => decodeReleaseDetail(withValue(double, ["corrected_fields"], Array.from({ length: 17 }, () => "title")))).toThrow(d.DecodeError);
+  });
+
   it("解码单曲专辑：大多数版本字段为空，封面存在", () => {
     const release = decodeReleaseDetail(single);
     expect(release).toMatchObject({ genre: null, catalog_number: null, edition: null, label: null, barcode: null, media_type: null });
@@ -188,6 +204,12 @@ describe("decodeReleaseDetail", () => {
     ["缺少 candidate_kind", without(double, ["candidate_kind"])],
     ["缺少 credits", without(double, ["credits"])],
     ["缺少 evidence", without(double, ["evidence"])],
+    ["缺少 revision", without(double, ["revision"])],
+    ["revision 为 0", withValue(double, ["revision"], 0)],
+    ["revision 是字符串", withValue(double, ["revision"], "1")],
+    ["缺少 corrected_fields", without(double, ["corrected_fields"])],
+    ["corrected_fields 不是数组", withValue(double, ["corrected_fields"], null)],
+    ["corrected_fields 含空字符串", withValue(double, ["corrected_fields"], [""])],
     ["label 是数字", withValue(double, ["label"], 5)],
     ["曲目缺少 id", without(double, ["media", 0, "tracks", 0, "id"])],
     ["曲目 id 不是 UUID", withValue(double, ["media", 0, "tracks", 0, "id"], "track-1")],

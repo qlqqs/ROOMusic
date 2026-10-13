@@ -70,7 +70,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	mux.HandleFunc("GET /readyz", httpserver.ReadyHandler(func() bool { return database != nil }))
 	identityapi.New(database, guard).Register(mux)
 	libraryapi.New(database, guard, libraryService, settings.AllowedLibraryRoots, logger).Register(mux)
-	catalogapi.New(database, guard, settings.DataDirectory).Register(mux)
+	catalogapi.New(database, guard, settings.DataDirectory, logger).Register(mux)
 	playbackService := playback.NewService(database, settings.AllowedLibraryRoots, playback.WithDerivation(assembly.derivation))
 	playbackapi.New(guard, playbackService, lifecycle, logger, playbackapi.Options{
 		RecheckInterval: assembly.playbackRecheckInterval, PreflightWait: assembly.playbackPreflightWait,

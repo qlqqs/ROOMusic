@@ -1,0 +1,74 @@
+{
+  "body": {
+    "fields": [
+      {
+        "correction": {
+          "mode": "set",
+          "value": "Sample Symphonies (corrected)"
+        },
+        "effective_value": "Sample Symphonies (corrected)",
+        "field": "title",
+        "scan_value": "Sample Symphonies",
+        "uncertain": false
+      },
+      {
+        "correction": null,
+        "effective_value": "Sample Orchestra",
+        "field": "album_artist",
+        "scan_value": "Sample Orchestra",
+        "uncertain": false
+      },
+      {
+        "correction": {
+          "mode": "null"
+        },
+        "effective_value": null,
+        "field": "year",
+        "scan_value": 1998,
+        "uncertain": false
+      },
+      {
+        "correction": null,
+        "effective_value": "Classical",
+        "field": "genre",
+        "scan_value": "Classical",
+        "uncertain": false
+      },
+      {
+        "correction": {
+          "mode": "set",
+          "value": "Corrected Label"
+        },
+        "effective_value": "Corrected Label",
+        "field": "label",
+        "scan_value": "Sample Label",
+        "uncertain": false
+      },
+      {
+        "correction": null,
+        "effective_value": "SL-0001",
+        "field": "catalog_number",
+        "scan_value": "SL-0001",
+        "uncertain": false
+      },
+      {
+        "correction": null,
+        "effective_value": "Remastered",
+        "field": "edition",
+        "scan_value": "Remastered",
+        "uncertain": false
+      },
+      {
+        "correction": null,
+        "effective_value": "0123456789012",
+        "field": "barcode",
+        "scan_value": "0123456789012",
+        "uncertain": false
+      }
+    ],
+    "operation_id": "00000000-0000-4000-8000-000000000001",
+    "release_id": "00000000-0000-4000-8000-000000000002",
+    "revision": 2
+  },
+  "status": 200
+}

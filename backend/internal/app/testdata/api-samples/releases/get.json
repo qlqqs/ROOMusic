@@ -7,6 +7,7 @@
     "barcode": "0123456789012",
     "candidate_kind": "ordinary_directory",
     "catalog_number": "SL-0001",
+    "corrected_fields": [],
     "credits": [
       {
         "name": "Sample Orchestra",
@@ -187,6 +188,7 @@
     ],
     "media_type": null,
     "medium_count": 2,
+    "revision": 1,
     "source_type": null,
     "title": "Sample Symphonies",
     "track_count": 3,

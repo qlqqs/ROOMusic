@@ -177,6 +177,8 @@ export function releaseDetailOf(summary: ReleaseSummaryDTO, overrides: ReleaseDe
     media: mediaOf(summary),
     credits: [{ role: "album_artist", name: summary.album_artist ?? summary.artist }],
     evidence: sampleRelease.evidence,
+    revision: 1,
+    corrected_fields: [],
     ...overrides,
   };
 }
