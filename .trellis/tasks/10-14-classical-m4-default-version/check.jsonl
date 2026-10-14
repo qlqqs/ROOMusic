@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端测试与门禁、隔离 PostgreSQL"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端测试、axe、五种宽度与内嵌产物"}
+{"file": ".trellis/spec/backend/governance-contracts.md", "reason": "受治理写入与撤销的必需测试与断言点"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "按组读取的一致性与接口样本"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "默认版本与对比从接口到界面的跨层数据流核对"}

@@ -1,0 +1,13 @@
+{"file": ".trellis/spec/backend/governance-contracts.md", "reason": "共同写入流程、Kind、撤销与操作记录列表；本任务新增组目标、组版本号与默认版本类型"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "按组读取、代表版本规则与有效值投影；本任务改代表版本规则并新增对比接口"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移、命名约束、事务边界与锁顺序"}
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "扫描写入：新建组、不改既有发行的组；本任务要求扫描不碰组的新列"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "错误信封、同源校验、接口样本与技术债"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "分类错误与稳定的 REST 错误码"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "查看者代次的查询键、写操作的悲观更新与失效"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "useReleaseCommands 命令状态机与幂等键、onMoved 先导航后刷新"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "对话框、表格、可访问性与 CSS Modules"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "catalog 与 governance 的边界、app 插槽组合"}
+{"file": "frontend/DESIGN.md", "reason": "版本对比对话框尺寸、差异下划线、不做音质结论与落地差异表"}
+{"file": "docs/architecture/adr/0002-metadata-overlays.md", "reason": "默认版本与组字段策略（第 4 项、第六节），本任务裁决默认版本的范围"}
+{"file": "docs/architecture/adr/0003-governed-operations.md", "reason": "M4 逐类批准的版本关系操作，本任务批准第一种"}
