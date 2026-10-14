@@ -1,6 +1,7 @@
 import { createRootRouteWithContext, createRoute, createRouter, Outlet, redirect, useLocation, type RouterHistory } from "@tanstack/react-router";
 import { sanitizeRedirect, type SessionController } from "../features/auth";
 import { albumListSearchFromState, parseAlbumDetailSearch, parseAlbumSearch, type AlbumDetailSearch, type AlbumSearch } from "../features/catalog";
+import { parseOperationsSearch, type OperationsSearch } from "../features/governance";
 import { ScanDetail } from "../features/library";
 import { parsePageParam } from "../shared/lib/pagination";
 import { AuthenticatedLayout } from "./shell/authenticated-layout";
@@ -11,6 +12,7 @@ import { LibraryPage } from "./routes/library-page";
 import { LoginPage } from "./routes/login-page";
 import { MembersPage } from "./routes/members-page";
 import { NotFoundPage } from "./routes/not-found-page";
+import { OperationsPage } from "./routes/operations-page";
 import { OverviewPage } from "./routes/overview-page";
 import { NowPlayingPage } from "../features/player";
 import { SetupPage } from "./routes/setup-page";
@@ -126,6 +128,23 @@ function MembersRoute() {
 
 const membersRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/members", component: MembersRoute });
 
+// page 是记录的页码（2 及以上），release 是只看某个版本的记录；不合法的值显式写成 undefined。
+function OperationsRoute() {
+  const { page, release } = operationsRoute.useSearch();
+  return (
+    <AdminGate>
+      <OperationsPage page={page ?? 1} releaseId={release} />
+    </AdminGate>
+  );
+}
+
+const operationsRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/operations",
+  validateSearch: (search: Record<string, unknown>): OperationsSearch => parseOperationsSearch(search),
+  component: OperationsRoute,
+});
+
 function ScanDetailRoute() {
   const { scanId } = scanDetailRoute.useParams();
   return (
@@ -145,7 +164,7 @@ const scanDetailRoute = createRoute({
 // 已登录用户访问不存在的路径时仍显示在外壳里；未登录用户先被守卫送去登录。
 const notFoundRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "$", component: NotFoundPage });
 
-const routeTree = rootRoute.addChildren([setupRoute, loginRoute, authenticatedRoute.addChildren([overviewRoute, nowPlayingRoute, albumsRoute, albumDetailRoute, libraryRoute, scanDetailRoute, membersRoute, notFoundRoute])]);
+const routeTree = rootRoute.addChildren([setupRoute, loginRoute, authenticatedRoute.addChildren([overviewRoute, nowPlayingRoute, albumsRoute, albumDetailRoute, libraryRoute, scanDetailRoute, membersRoute, operationsRoute, notFoundRoute])]);
 
 export function createAppRouter(context: RouterContext, history?: RouterHistory) {
   return createRouter({ routeTree, context, ...(history === undefined ? {} : { history }) });

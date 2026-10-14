@@ -1,0 +1,13 @@
+.history {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.more {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+}

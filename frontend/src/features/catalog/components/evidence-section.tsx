@@ -1,7 +1,6 @@
-import { ChevronRight } from "lucide-react";
 import { useId, useState } from "react";
 import { formatCount } from "../../../shared/lib/number";
-import { Button, DataTable, FailureNotice, Notice, Skeleton, type Column } from "../../../shared/ui";
+import { Button, DataTable, Disclosure, FailureNotice, Notice, Skeleton, type Column } from "../../../shared/ui";
 import type { ReleaseDetailDTO, ReleaseEvidenceDTO, ReleaseEvidenceSummaryDTO, ReleaseFieldEvidenceDTO, ReleaseGroupingEvidenceDTO } from "../api/decoders";
 import { isFieldCorrected } from "../format";
 import { useReleaseEvidence } from "../hooks/use-release-evidence";
@@ -148,35 +147,24 @@ function FullEvidence({ releaseId, corrected }: { releaseId: string; corrected: 
 
 /**
  * 详情底部折叠的“来源与证据”。所有登录用户都能读摘要（来自版本详情，字段、来源、可信度与处理方式）；
- * 管理员在展开后多一个“查看完整证据”，其余用户从不请求管理员接口。
- * 展开状态由 React 持有：折叠时不渲染内容，也就没有可聚焦的隐藏控件；换版本时（key）回到折叠。
+ * 管理员在展开后多一个“查看完整证据”，其余用户从不请求管理员接口。换版本时（key）回到折叠。
  */
 export function EvidenceSection({ release, isAdmin }: { release: ReleaseDetailDTO; isAdmin: boolean }) {
-  const [open, setOpen] = useState(false);
   const count = release.evidence.length;
   return (
-    <details className={styles.evidence} open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary className={styles.summary}>
-        <ChevronRight className={styles.chevron} size={18} aria-hidden="true" />
-        <span className={styles.summaryText}>来源与证据</span>
-        <span className={styles.count}>（{formatCount(count)} 项）</span>
-      </summary>
-      {open ? (
-        <div className={styles.body}>
-          <p className={styles.note}>
-            这里记录各项信息是怎样得到的。“需要关注”只是提示依据不够确定，或有来源文件暂时找不到，需要人工核对，并不表示信息有误。
-          </p>
-          {release.corrected_fields.length === 0 ? null : (
-            <p className={styles.note}>标有“人工修正”的字段，页面显示的是管理员改过的值；下面仍然记录扫描得到的结论，重新扫描不会覆盖人工修正。</p>
-          )}
-          {count === 0 ? (
-            <p>这个版本没有记录证据。</p>
-          ) : (
-            <DataTable caption="证据摘要" columns={summaryColumns(release.corrected_fields)} rows={release.evidence} rowKey={(item) => item.field} />
-          )}
-          {isAdmin ? <FullEvidence releaseId={release.id} corrected={release.corrected_fields} /> : null}
-        </div>
-      ) : null}
-    </details>
+    <Disclosure title="来源与证据" detail={`（${formatCount(count)} 项）`}>
+      <p className={styles.note}>
+        这里记录各项信息是怎样得到的。“需要关注”只是提示依据不够确定，或有来源文件暂时找不到，需要人工核对，并不表示信息有误。
+      </p>
+      {release.corrected_fields.length === 0 ? null : (
+        <p className={styles.note}>标有“人工修正”的字段，页面显示的是管理员改过的值；下面仍然记录扫描得到的结论，重新扫描不会覆盖人工修正。</p>
+      )}
+      {count === 0 ? (
+        <p>这个版本没有记录证据。</p>
+      ) : (
+        <DataTable caption="证据摘要" columns={summaryColumns(release.corrected_fields)} rows={release.evidence} rowKey={(item) => item.field} />
+      )}
+      {isAdmin ? <FullEvidence releaseId={release.id} corrected={release.corrected_fields} /> : null}
+    </Disclosure>
   );
 }

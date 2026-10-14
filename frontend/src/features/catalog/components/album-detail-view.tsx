@@ -36,6 +36,8 @@ type AdminSlots = {
    * 这里再用 isAdmin 把一道，后端对每个写请求仍独立鉴权。context.releaseCount 是这个组里可见的版本数。
    */
   renderAdminActions?: ((context: { release: ReleaseDetailDTO; groupId: string; releaseCount: number }) => ReactNode) | undefined;
+  /** 管理员的页面区块（修改记录），放在“来源与证据”之后；折叠与读取由区块自己负责。同样由页面按角色传入，这里再用 isAdmin 把一道。 */
+  renderAdminSections?: ((context: { release: ReleaseDetailDTO }) => ReactNode) | undefined;
 };
 
 type AlbumDetailViewProps = PlaybackSlots & AdminSlots & {
@@ -72,7 +74,7 @@ type ReleaseBodyProps = PlaybackSlots & AdminSlots & {
   isAdmin: boolean;
 };
 
-function ReleaseContent({ release, versioned, isAdmin, renderTrackActions, currentTrackId, currentTrackLabel }: PlaybackSlots & { release: ReleaseDetailDTO; versioned: boolean; isAdmin: boolean }) {
+function ReleaseContent({ release, versioned, isAdmin, renderAdminSections, renderTrackActions, currentTrackId, currentTrackLabel }: PlaybackSlots & Pick<AdminSlots, "renderAdminSections"> & { release: ReleaseDetailDTO; versioned: boolean; isAdmin: boolean }) {
   // 版本与插槽不变时保持同一个函数，曲目行才能跳过重绘。
   const renderRowActions = useMemo(() => (renderTrackActions === undefined ? undefined : (track: ReleaseTrackDTO) => renderTrackActions(track, release)), [renderTrackActions, release]);
   return (
@@ -88,6 +90,7 @@ function ReleaseContent({ release, versioned, isAdmin, renderTrackActions, curre
         </div>
       </div>
       <EvidenceSection key={release.id} release={release} isAdmin={isAdmin} />
+      {isAdmin ? renderAdminSections?.({ release }) : null}
     </>
   );
 }
@@ -125,7 +128,7 @@ function ReleaseGone({ groupId, group, selected }: { groupId: string; group: Rel
 }
 
 /** 选中版本的头部、曲目、发行信息与证据。头部用组详情里的摘要先渲染，曲目区单独显示加载态。 */
-function ReleaseBody({ groupId, group, selected, list, isAdmin, renderReleaseActions, renderAdminActions, renderTrackActions, currentTrackId, currentTrackLabel }: ReleaseBodyProps) {
+function ReleaseBody({ groupId, group, selected, list, isAdmin, renderReleaseActions, renderAdminActions, renderAdminSections, renderTrackActions, currentTrackId, currentTrackLabel }: ReleaseBodyProps) {
   const detail = useRelease(selected.id);
   const gone = detail.isError && isHttpFailure(failureOf(detail.error), 404);
   return (
@@ -143,7 +146,7 @@ function ReleaseBody({ groupId, group, selected, list, isAdmin, renderReleaseAct
         <ReleaseGone groupId={groupId} group={group} selected={selected} />
       ) : (
         <QueryContent query={detail} loading={<Skeleton label="正在加载曲目" lines={6} />}>
-          {(data) => <ReleaseContent release={data} versioned={group.release_count > 1} isAdmin={isAdmin} renderTrackActions={renderTrackActions} currentTrackId={currentTrackId} currentTrackLabel={currentTrackLabel} />}
+          {(data) => <ReleaseContent release={data} versioned={group.release_count > 1} isAdmin={isAdmin} renderAdminSections={renderAdminSections} renderTrackActions={renderTrackActions} currentTrackId={currentTrackId} currentTrackLabel={currentTrackLabel} />}
         </QueryContent>
       )}
     </>
@@ -156,7 +159,7 @@ function canonicalRelease(group: ReleaseGroupDetailDTO, requested: string | unde
   return member === undefined || member.id === group.representative.id ? undefined : member.id;
 }
 
-function AlbumDetailContent({ groupId, release: requested, list, isAdmin, renderReleaseActions, renderAdminActions, renderTrackActions, currentTrackId, currentTrackLabel }: AlbumDetailViewProps) {
+function AlbumDetailContent({ groupId, release: requested, list, isAdmin, renderReleaseActions, renderAdminActions, renderAdminSections, renderTrackActions, currentTrackId, currentTrackLabel }: AlbumDetailViewProps) {
   const group = useAlbum(groupId);
   const navigate = useNavigate();
   const data = group.data;
@@ -182,7 +185,7 @@ function AlbumDetailContent({ groupId, release: requested, list, isAdmin, render
     >
       <QueryContent query={group} loading={<Skeleton label="正在加载专辑" lines={6} />}>
         {(loaded) =>
-          selected === undefined ? null : <ReleaseBody groupId={groupId} group={loaded} selected={selected} list={list} isAdmin={isAdmin} renderReleaseActions={renderReleaseActions} renderAdminActions={renderAdminActions} renderTrackActions={renderTrackActions} currentTrackId={currentTrackId} currentTrackLabel={currentTrackLabel} />
+          selected === undefined ? null : <ReleaseBody groupId={groupId} group={loaded} selected={selected} list={list} isAdmin={isAdmin} renderReleaseActions={renderReleaseActions} renderAdminActions={renderAdminActions} renderAdminSections={renderAdminSections} renderTrackActions={renderTrackActions} currentTrackId={currentTrackId} currentTrackLabel={currentTrackLabel} />
         }
       </QueryContent>
     </Page>

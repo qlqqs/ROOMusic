@@ -4,7 +4,7 @@ import type { ApiMock } from "./support/api-mock";
 import { expectMinimumFontSize, expectNoHorizontalOverflow, expectNoSeriousViolations, expectVisibleFocusRing, widths } from "./support/checks";
 import { expect, test } from "./support/fixtures";
 import { expectFocusStaysInDialog, focusedName, tabTo } from "./support/keyboard";
-import { heading, uuidPattern } from "./support/locators";
+import { heading, mainNav, uuidPattern } from "./support/locators";
 
 // 管理员对发行的受治理写操作：编辑发行信息、调整归组、撤销与操作记录。受控后端保持修正与记录的状态，
 // 所以页面能走完整的流程：保存之后列表与详情显示新的有效值，撤销之后回到原来的样子。
@@ -18,6 +18,15 @@ const seedGrouping = (mock: ApiMock) => {
   mock.groups = [symphonies(), quartets(), albumGroup(3, { title: "Gamma Sonatas", artist: "Gamma Duo", year: 2005 }), concertos()];
   mock.groupDetails.set(concertos().id, groupDetailOf(concertos(), releaseVersions(concertos(), 2)));
 };
+
+// 预置在受控后端上的记录：直接调用与页面共用的接口行为，每条把厂牌改成不同的值（预期版本依次递增）。
+const seedKey = (index: number) => `00000000-0000-4000-8000-${String(0xc000 + index).padStart(12, "0")}`;
+function seedLabelCorrections(mock: ApiMock, count: number, label = (index: number) => `Label ${index + 1}`) {
+  for (let index = 0; index < count; index += 1) {
+    const result = respondToCorrect(mock.governance, releaseId(), seedKey(index), { expected_revision: index + 1, changes: { label: { mode: "set", value: label(index) } } });
+    if (result.status !== 200) throw new Error(`预置修正失败：${JSON.stringify(result.body)}`);
+  }
+}
 
 test.describe("编辑发行信息", () => {
   test("修改标题与年份并保存：请求带版本号与幂等键，页面显示新的有效值，提示里的撤销恢复原样", async ({ page, backend }) => {
@@ -114,7 +123,7 @@ test.describe("编辑发行信息", () => {
     const [call] = mock.callsTo("PATCH", `/api/v1/releases/${releaseId()}/corrections`);
     expect(call?.body).toEqual({ expected_revision: 1, changes: { title: { mode: "set", value: "Sample Symphonies" } } });
     // 之后详情的证据里，这个字段标出“人工修正”。
-    await page.locator("summary").click();
+    await page.locator("summary", { hasText: "来源与证据" }).click();
     await expect(page.getByRole("table", { name: "证据摘要" }).getByText("人工修正")).toBeVisible();
   });
 
@@ -322,6 +331,195 @@ test.describe("调整归组", () => {
       await expectNoHorizontalOverflow(page, `移出为独立专辑 @${width}px`);
       await expectMinimumFontSize(page, `移出为独立专辑 @${width}px`);
       await expectNoSeriousViolations(page, `移出为独立专辑 @${width}px`);
+    }
+  });
+});
+
+test.describe("操作记录", () => {
+  test("操作记录页：从“资料库”导航进入；撤销先确认，成功后提示，列表多一条记录并且不再有可撤销的", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "curator" });
+    mock.groups = [symphonies()];
+    seedLabelCorrections(mock, 2);
+    await page.goto("/");
+    await mainNav(page).getByRole("link", { name: "操作记录" }).click();
+    await expect(heading(page, "操作记录")).toBeVisible();
+    await expect(page).toHaveURL(/\/operations$/);
+
+    const table = page.getByRole("table", { name: "操作记录" });
+    await expect(table.getByRole("row")).toHaveCount(3);
+    await expect(table.getByRole("link", { name: "Sample Symphonies" }).first()).toHaveAttribute("href", `/albums/${symphonies().id}?release=${releaseId()}`);
+    await expect(table.getByText("厂牌：Label 1 → Label 2")).toBeVisible();
+    await expect(table.getByText("之后又有修改")).toBeVisible();
+    await expect(table.getByRole("button", { name: /^撤销/ })).toHaveCount(1);
+
+    await table.getByRole("button", { name: /^撤销/ }).click();
+    const dialog = page.getByRole("dialog", { name: "撤销这次修改？" });
+    await expect(dialog.getByRole("button", { name: "取消" })).toBeFocused();
+    await expect(dialog.getByText("厂牌：Label 2 → Label 1")).toBeVisible();
+    await dialog.getByRole("button", { name: "撤销" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByText("已撤销这次修改，相关字段恢复到修改之前的状态。")).toBeVisible();
+    await expect(table.getByRole("row")).toHaveCount(4);
+    await expect(table.getByText("撤销修改")).toBeVisible();
+    await expect(table.getByRole("button", { name: /^撤销/ })).toHaveCount(0);
+    const [call] = mock.callsTo("POST", /\/revert$/);
+    expect(call?.idempotencyKey).toMatch(uuidPattern);
+  });
+
+  test("翻页与筛选：每页 20 条，地址带页码；从专辑详情的“全部记录”进入只看这个版本", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "curator" });
+    mock.groups = [symphonies(), quartets()];
+    seedLabelCorrections(mock, 22);
+    await page.goto("/operations");
+    await expect(page.getByRole("table", { name: "操作记录" }).getByRole("row")).toHaveCount(21);
+    await page.getByRole("link", { name: "下一页" }).click();
+    await expect(page).toHaveURL(/\/operations\?page=2$/);
+    await expect(page.getByRole("table", { name: "操作记录" }).getByRole("row")).toHaveCount(3);
+    await expect(page.getByText("第 2 / 2 页")).toBeVisible();
+
+    await page.goto(`/operations?release=${quartets().representative.id}`);
+    await expect(page.getByText("这个版本还没有操作记录。")).toBeVisible();
+    await page.goto(`/operations?release=${releaseId()}`);
+    await expect(page.getByText("只显示《Sample Symphonies》的记录。")).toBeVisible();
+    await page.getByRole("link", { name: "查看全部记录" }).click();
+    await expect(page).toHaveURL(/\/operations$/);
+  });
+
+  test("只用键盘完成撤销：Tab 到“撤销”，Esc 取消后焦点回到按钮；再次打开并确认，焦点落在区块标题", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "curator" });
+    mock.groups = [symphonies()];
+    seedLabelCorrections(mock, 1);
+    await page.goto("/operations");
+    await expect(heading(page, "操作记录")).toBeVisible();
+    await expect(page.getByRole("table", { name: "操作记录" })).toBeVisible();
+
+    await tabTo(page, (name) => name.startsWith("撤销（"), 40);
+    await expectVisibleFocusRing(page, "撤销按钮");
+    await page.keyboard.press("Enter");
+    const dialog = page.getByRole("dialog", { name: "撤销这次修改？" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "取消" })).toBeFocused();
+    await expectFocusStaysInDialog(page, dialog, 4);
+
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(page.getByRole("button", { name: /^撤销/ })).toBeFocused();
+    expect(mock.callsTo("POST", /\/revert$/)).toHaveLength(0);
+
+    await page.keyboard.press("Enter");
+    await expect(dialog).toBeVisible();
+    await tabTo(page, (name) => name === "撤销", 4);
+    await expectVisibleFocusRing(page, "撤销确认按钮");
+    await page.keyboard.press("Enter");
+    await expect(dialog).toBeHidden();
+    await expect(page.getByText("已撤销这次修改，相关字段恢复到修改之前的状态。")).toBeVisible();
+    // 触发撤销的按钮已经消失：焦点带到区块标题，键盘用户不会掉回页面顶部。
+    await expect(page.getByRole("heading", { level: 2, name: "全部记录" })).toBeFocused();
+  });
+
+  test("专辑详情的“修改记录”：折叠时不请求，展开后读取；撤销的提示在记录区；“全部记录”进入筛选后的记录页", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "curator" });
+    mock.groups = [symphonies()];
+    seedLabelCorrections(mock, 1);
+    await page.goto(detailPath());
+    await expect(heading(page, "Sample Symphonies")).toBeVisible();
+    await expect(page.getByText("Track 1-01")).toBeVisible();
+    expect(mock.callsTo("GET", "/api/v1/operations")).toHaveLength(0);
+
+    await page.locator("summary", { hasText: "修改记录" }).click();
+    const table = page.getByRole("table", { name: "修改记录" });
+    await expect(table.getByRole("row")).toHaveCount(2);
+    await expect(table.getByRole("columnheader", { name: "专辑" })).toHaveCount(0);
+    await expect(page.getByText("共 1 条。")).toBeVisible();
+    await table.getByRole("button", { name: /^撤销/ }).click();
+    await page.getByRole("dialog", { name: "撤销这次修改？" }).getByRole("button", { name: "撤销" }).click();
+    await expect(page.getByText("已撤销这次修改，相关字段恢复到修改之前的状态。")).toBeVisible();
+    await expect(table.getByRole("row")).toHaveCount(3);
+    await expect(page.locator("summary", { hasText: "修改记录" })).toBeFocused();
+
+    await page.getByRole("link", { name: "全部记录" }).click();
+    await expect(page).toHaveURL(new RegExp(`/operations\\?release=${releaseId()}$`));
+    await expect(page.getByText("只显示《Sample Symphonies》的记录。")).toBeVisible();
+  });
+
+  test("普通成员：导航里没有“操作记录”，直接访问显示需要管理员权限，从不请求记录接口", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "listener" });
+    mock.groups = [symphonies()];
+    await page.goto("/operations");
+    await expect(heading(page, "需要管理员权限")).toBeVisible();
+    await expect(mainNav(page).getByRole("link", { name: "操作记录" })).toHaveCount(0);
+    expect(mock.callsTo("GET", "/api/v1/operations")).toHaveLength(0);
+    await page.goto(detailPath());
+    await expect(heading(page, "Sample Symphonies")).toBeVisible();
+    await expect(page.getByText("Track 1-01")).toBeVisible();
+    await expect(page.locator("summary", { hasText: "修改记录" })).toHaveCount(0);
+  });
+});
+
+test.describe("操作记录：宽度与无障碍", () => {
+  // 一条标题很长的修改：长标题与连续的长字符串都要在表格与对话框里换行，不撑出横向滚动。
+  const longTitle = `${"超长的专辑标题".repeat(8)}${"A".repeat(60)}`;
+
+  test("五种宽度下操作记录页（含分页与成功提示）没有横向溢出、字号不小于 12px，通过 axe", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "curator" });
+    mock.groups = [symphonies()];
+    seedLabelCorrections(mock, 23, (index) => (index === 22 ? longTitle : `Label ${index + 1}`));
+    await page.goto("/operations");
+    const table = page.getByRole("table", { name: "操作记录" });
+    await expect(table.getByRole("row")).toHaveCount(21);
+    await table.getByRole("button", { name: /^撤销/ }).click();
+    await page.getByRole("dialog", { name: "撤销这次修改？" }).getByRole("button", { name: "撤销" }).click();
+    await expect(page.getByText("已撤销这次修改，相关字段恢复到修改之前的状态。")).toBeVisible();
+    for (const width of widths) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.evaluate(() => document.fonts.ready);
+      await expectNoHorizontalOverflow(page, `操作记录页 @${width}px`);
+      await expectMinimumFontSize(page, `操作记录页 @${width}px`);
+      await expectNoSeriousViolations(page, `操作记录页 @${width}px`);
+    }
+  });
+
+  test("五种宽度下撤销确认对话框（长改动内容）在视野内、没有溢出，通过 axe", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "curator" });
+    mock.groups = [symphonies()];
+    seedLabelCorrections(mock, 1, () => longTitle);
+    await page.goto("/operations");
+    await page.getByRole("table", { name: "操作记录" }).getByRole("button", { name: /^撤销/ }).click();
+    const dialog = page.getByRole("dialog", { name: "撤销这次修改？" });
+    await expect(dialog).toBeVisible();
+    for (const width of widths) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.evaluate(() => document.fonts.ready);
+      await expectNoHorizontalOverflow(page, `撤销对话框 @${width}px`);
+      await expectMinimumFontSize(page, `撤销对话框 @${width}px`);
+      await expectNoSeriousViolations(page, `撤销对话框 @${width}px`);
+      const box = await dialog.boundingBox();
+      expect(box?.x ?? -1, `撤销对话框左边界 @${width}px`).toBeGreaterThanOrEqual(0);
+      expect((box?.x ?? 0) + (box?.width ?? 0), `撤销对话框右边界 @${width}px`).toBeLessThanOrEqual(width);
+      // 长改动内容在对话框里换行：对话框自己没有横向滚动。
+      expect(await dialog.evaluate((element) => element.scrollWidth - element.clientWidth), `撤销对话框内部横向溢出 @${width}px`).toBeLessThanOrEqual(0);
+      await expect(dialog.getByRole("button", { name: "撤销" })).toBeInViewport();
+    }
+  });
+
+  test("五种宽度下专辑详情展开的“修改记录”（含撤销提示）没有横向溢出，通过 axe", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "curator" });
+    mock.groups = [symphonies()];
+    seedLabelCorrections(mock, 7, (index) => (index === 6 ? longTitle : `Label ${index + 1}`));
+    await page.goto(detailPath());
+    await expect(heading(page, "Sample Symphonies")).toBeVisible();
+    await page.locator("summary", { hasText: "修改记录" }).click();
+    await expect(page.getByRole("table", { name: "修改记录" }).getByRole("row")).toHaveCount(6);
+    await expect(page.getByText("只显示最近 5 条，共 7 条。")).toBeVisible();
+    await page.getByRole("table", { name: "修改记录" }).getByRole("button", { name: /^撤销/ }).click();
+    await page.getByRole("dialog", { name: "撤销这次修改？" }).getByRole("button", { name: "撤销" }).click();
+    await expect(page.getByText("已撤销这次修改，相关字段恢复到修改之前的状态。")).toBeVisible();
+    for (const width of widths) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.evaluate(() => document.fonts.ready);
+      await expectNoHorizontalOverflow(page, `修改记录 @${width}px`);
+      await expectMinimumFontSize(page, `修改记录 @${width}px`);
+      await expectNoSeriousViolations(page, `修改记录 @${width}px`);
     }
   });
 });

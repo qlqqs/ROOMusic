@@ -2,6 +2,7 @@
 export { Button } from "./button";
 export { ConfirmDialog } from "./confirm-dialog";
 export { DataTable, type Column } from "./data-table";
+export { Disclosure } from "./disclosure";
 export { FailureNotice } from "./failure-notice";
 export { ModalDialog } from "./modal-dialog";
 export { Notice } from "./notice";

@@ -6,12 +6,12 @@ import { governanceFailureMessages } from "./governance-messages";
 
 type ReleaseCommandNoticeProps = {
   state: ReleaseCommandState;
-  /** 只显示这个发行的结果：同一个页面换到别的专辑后，上一张专辑的结果不再出现。 */
-  releaseId: string;
+  /** 只显示这个发行的结果：同一个页面换到别的专辑后，上一张专辑的结果不再出现。null 是不限发行（操作记录页）。 */
+  releaseId: string | null;
   /** 失败由打开着的对话框显示时，这里不重复。 */
   hideFailure: boolean;
-  /** 撤销刚刚成功的操作；只在成功提示里提供。 */
-  onUndo: (command: ReleaseCommand, result: ReleaseCommandResult) => void;
+  /** 撤销刚刚成功的操作；只在成功提示里提供。没有提供（操作记录页只做撤销）时成功提示没有“撤销”。 */
+  onUndo?: (command: ReleaseCommand, result: ReleaseCommandResult) => void;
   /** 用同一个幂等键重试上一个命令（只在结果不确定时提供）。 */
   onRetry: () => void;
   onDismiss: () => void;
@@ -21,6 +21,7 @@ const revertedText: Readonly<Record<RevertSubject, string>> = {
   correct: "已撤销这次修改，相关字段恢复到修改之前的状态。",
   join: "已撤销归组，这个版本回到了原来的专辑。",
   detach: "已撤销移出，这个版本回到了原来的专辑。",
+  group: "已撤销这次归组调整，这个版本回到了原来的专辑。",
   other: "已撤销。",
 };
 
@@ -42,7 +43,7 @@ function successText(command: ReleaseCommand, result: ReleaseCommandResult): str
  * 成功提示里有“撤销”（撤销本身的成功提示没有）；结果就近显示在操作区，不使用全局 toast。
  */
 export function ReleaseCommandNotice({ state, releaseId, hideFailure, onUndo, onRetry, onDismiss }: ReleaseCommandNoticeProps) {
-  if (state.status === "idle" || state.command.release.id !== releaseId) return null;
+  if (state.status === "idle" || (releaseId !== null && state.command.release.id !== releaseId)) return null;
   const dismiss = (
     <Button variant="text" onClick={onDismiss}>
       关闭
@@ -60,7 +61,7 @@ export function ReleaseCommandNotice({ state, releaseId, hideFailure, onUndo, on
         tone="success"
         action={
           <>
-            {result.kind === "revert" ? null : (
+            {result.kind === "revert" || onUndo === undefined ? null : (
               <Button variant="text" onClick={() => onUndo(command, result)}>
                 撤销
               </Button>

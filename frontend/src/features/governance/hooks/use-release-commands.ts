@@ -10,8 +10,8 @@ import { governanceKeys } from "../query-keys";
 /** 命令作用的发行：id 用来发请求，title 只用来写提示文字。 */
 export type ReleaseTarget = { id: string; title: string };
 
-/** 被撤销的操作是哪一种：成功提示据此说明恢复了什么。 */
-export type RevertSubject = "correct" | "join" | "detach" | "other";
+/** 被撤销的操作是哪一种：成功提示据此说明恢复了什么。group 是从操作记录里撤销的归组调整（记录不区分归入与移出）。 */
+export type RevertSubject = "correct" | "join" | "detach" | "group" | "other";
 
 export type ReleaseIntent =
   | { kind: "correct"; release: ReleaseTarget; revision: number; changes: CorrectionChanges; fields: readonly CorrectableField[] }
@@ -22,7 +22,7 @@ export type ReleaseIntent =
       release: ReleaseTarget;
       operationId: string;
       subject: RevertSubject;
-      /** 撤销归组之后要回到的专辑（原来的组）；字段修正与操作记录页的撤销没有。 */
+      /** 撤销归组之后要回到的专辑（原来的组）；字段修正的撤销没有。操作记录页不跟随（它的 onMoved 什么也不做）。 */
       returnGroupId?: string | undefined;
     };
 

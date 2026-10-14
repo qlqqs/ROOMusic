@@ -1,0 +1,52 @@
+import type { OperationChangesDTO, OperationItemDTO } from "./api/decoders";
+import { correctionFieldLabels, displayValue } from "./labels";
+
+/** 记录自己的类型：修正与归组按它改的东西命名；撤销记录写“撤销”，并说明撤销的是哪一类（记录坏了读不出改动时只写“撤销”）。 */
+export function operationTypeLabel(item: Pick<OperationItemDTO, "type" | "changes">): string {
+  switch (item.type) {
+    case "release_correction":
+      return "修改发行信息";
+    case "release_group_change":
+      return "调整归组";
+    case "revert":
+      if (item.changes?.kind === "release_correction") return "撤销修改";
+      if (item.changes?.kind === "release_group_change") return "撤销归组调整";
+      return "撤销";
+  }
+}
+
+/**
+ * 改动逐条一行。字段修正写“字段：前 → 后”（取当时的有效值），恢复扫描值与留空另加说明；归组写专辑的移动（标题是当时用户看到的专辑名）。
+ * reverse 为 true 时前后互换，写出“撤销之后会变成什么”：撤销前的预览用它，读起来是“改回去”。
+ * 改动内容不可读（记录里的状态损坏）时只说明这一点，不让列表失败。
+ */
+function linesOf(changes: OperationChangesDTO | null, reverse: boolean): string[] {
+  if (changes === null) return ["无法显示改动内容"];
+  if (changes.kind === "release_group_change") {
+    return reverse ? [`从《${changes.to.group_title}》移回《${changes.from.group_title}》`] : [`从《${changes.from.group_title}》移到《${changes.to.group_title}》`];
+  }
+  return changes.fields.map((field) => {
+    const [from, to] = reverse ? [field.after, field.before] : [field.before, field.after];
+    const note = to.correction === null ? "（恢复为扫描值）" : to.correction.mode === "null" ? "（留空）" : "";
+    return `${correctionFieldLabels[field.field]}：${displayValue(from.effective)} → ${displayValue(to.effective)}${note}`;
+  });
+}
+
+/** 这条记录改了什么。撤销记录的前后状态与它撤销的操作相反，所以同样的写法读起来就是“恢复成了什么”。 */
+export function changeLines(item: Pick<OperationItemDTO, "changes">): string[] {
+  return linesOf(item.changes, false);
+}
+
+/** 撤销这条记录会把什么改回去：撤销前的确认对话框用它说明影响。 */
+export function revertLines(item: Pick<OperationItemDTO, "changes">): string[] {
+  return linesOf(item.changes, true);
+}
+
+/** 这条记录现在为什么不能撤销（可以撤销时是 null）：列表在“撤销”按钮的位置写出原因，不让用户猜。 */
+export function notRevertibleReason(item: Pick<OperationItemDTO, "type" | "revertible" | "reverted_by" | "release">): string | null {
+  if (item.revertible) return null;
+  if (item.type === "revert") return "撤销不能再撤销";
+  if (item.reverted_by !== null) return "已撤销";
+  if (item.release === null || !item.release.visible) return "专辑已不可见";
+  return "之后又有修改";
+}

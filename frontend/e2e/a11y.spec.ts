@@ -216,7 +216,7 @@ const states: State[] = [
       mock.groups = [group];
       seedVersions(mock, group);
       await page.goto(`/albums/${group.id}`);
-      await page.locator("summary").click();
+      await page.locator("summary", { hasText: "来源与证据" }).click();
       await expect(page.getByRole("table", { name: "证据摘要" })).toBeVisible();
     },
   },
@@ -228,7 +228,7 @@ const states: State[] = [
       mock.groups = [group];
       seedVersions(mock, group);
       await page.goto(`/albums/${group.id}`);
-      await page.locator("summary").click();
+      await page.locator("summary", { hasText: "来源与证据" }).click();
       await page.getByRole("button", { name: "查看完整证据" }).click();
       await expect(page.getByRole("table", { name: "字段证据" })).toBeVisible();
     },
@@ -241,7 +241,7 @@ const states: State[] = [
       mock.groups = [group];
       mock.forbid.add(`GET /api/v1/releases/${group.representative.id}/evidence`);
       await page.goto(`/albums/${group.id}`);
-      await page.locator("summary").click();
+      await page.locator("summary", { hasText: "来源与证据" }).click();
       await page.getByRole("button", { name: "查看完整证据" }).click();
       await expect(page.getByRole("alert")).toBeVisible();
     },

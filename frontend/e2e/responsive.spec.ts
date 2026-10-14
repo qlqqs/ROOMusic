@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import { sampleBody } from "../src/test/api-samples";
 import { albumGroups } from "../src/test/catalog-data";
+import { respondToCorrect } from "../src/test/governance-data";
 import type { DiagnosticsPageDTO } from "../src/features/library/api/decoders";
 import { LONG_TITLE, longContentGroup, multiVersionGroup, seedLongContent, seedVersions, singleVersionGroup } from "./support/albums-data";
 import type { ApiMock, MockOptions } from "./support/api-mock";
@@ -48,7 +49,7 @@ const longDetail: Case = {
 
 /** 展开管理员的完整证据：证据表格与归组依据在页面的最下面，也是文档被撑高问题最容易出现的地方。 */
 const expandEvidence = async (page: Page) => {
-  await page.locator("summary").click();
+  await page.locator("summary", { hasText: "来源与证据" }).click();
   await page.getByRole("button", { name: "查看完整证据" }).click();
   await expect(page.getByRole("table", { name: "字段证据" })).toBeVisible();
 };
@@ -90,6 +91,44 @@ const detailCases: Case[] = [
   longList,
   { ...longDetail, name: "专辑详情（长内容，管理员展开完整证据）", options: { signedInAs: "curator" }, after: expandEvidence },
   longDetail,
+];
+
+/** 在受控后端上预置操作记录：count 条厂牌修正（预期版本依次递增），最后一条的值是超长的无空格串，检查表格与对话框里的换行。 */
+function seedOperations(mock: ApiMock, releaseId: string, count: number): void {
+  for (let index = 0; index < count; index += 1) {
+    const value = index === count - 1 ? `${"超长的厂牌名称".repeat(8)}${"B".repeat(60)}` : `Label ${index + 1}`;
+    const key = `00000000-0000-4000-8000-${String(0xd000 + index).padStart(12, "0")}`;
+    respondToCorrect(mock.governance, releaseId, key, { expected_revision: index + 1, changes: { label: { mode: "set", value } } });
+  }
+}
+
+/** 操作记录页（管理员）与专辑详情里展开的“修改记录”：表格在窄屏堆叠成逐条卡片，最后一条带超长的改动内容。 */
+const operationCases: Case[] = [
+  {
+    name: "操作记录（多页，含超长改动内容）",
+    options: { signedInAs: "curator" },
+    prepare: (mock) => {
+      mock.groups = [singleVersionGroup()];
+      seedOperations(mock, singleVersionGroup().representative.id, 25);
+    },
+    path: () => "/operations",
+    title: "操作记录",
+  },
+  { name: "操作记录（没有记录）", options: { signedInAs: "curator" }, path: () => "/operations", title: "操作记录" },
+  {
+    name: "专辑详情（管理员展开修改记录，含超长改动内容）",
+    options: { signedInAs: "curator" },
+    prepare: (mock) => {
+      mock.groups = [singleVersionGroup()];
+      seedOperations(mock, singleVersionGroup().representative.id, 7);
+    },
+    path: () => `/albums/${singleVersionGroup().id}`,
+    title: "Sample Symphonies",
+    after: async (page) => {
+      await page.locator("summary", { hasText: "修改记录" }).click();
+      await expect(page.getByRole("table", { name: "修改记录" })).toBeVisible();
+    },
+  },
 ];
 
 /** 概览的“最近播放”：八张卡片，第一张是超长标题与超长艺人名（卡片内换行，不撑宽网格）。 */
@@ -185,6 +224,7 @@ const cases: Case[] = [
     title: "扫描详情",
   },
   ...detailCases,
+  ...operationCases,
   { name: "成员", options: { signedInAs: "curator" }, path: () => "/members", title: "成员" },
   { name: "页面不存在", options: { signedInAs: "curator" }, path: () => "/nowhere", title: "页面不存在" },
   { name: "需要管理员权限", options: { signedInAs: "listener" }, path: () => "/library", title: "需要管理员权限" },

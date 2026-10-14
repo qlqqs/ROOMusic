@@ -154,7 +154,7 @@ test.describe("专辑列表", () => {
 
 /** 详情页的曲目行（曲目列表是页面里唯一的 ol）。 */
 const trackRows = (page: Page) => page.locator("ol > li");
-const evidenceSummary = (page: Page) => page.locator("summary");
+const evidenceSummary = (page: Page) => page.locator("summary", { hasText: "来源与证据" });
 const coverImage = (page: Page, title: string) => page.getByRole("img", { name: `《${title}》封面` });
 const imageLoaded = (page: Page, title: string) => coverImage(page, title).evaluate((image) => (image as HTMLImageElement).naturalWidth > 0);
 
