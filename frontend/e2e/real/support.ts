@@ -94,3 +94,44 @@ export async function playTrack(page: Page, item: ReturnType<typeof findTrack>) 
   await row.getByRole("button", { name: "从这首开始播放", exact: true }).click();
   await expect.poll(async () => (await mediaState(page))?.paused).toBe(false);
 }
+
+/**
+ * 初始化管理员（需要时）、登录，并登记合成素材的目录：目录已经登记时接口返回已有目录，所以多个用例文件各自调用都安全。
+ * 返回目录（含当前版本号）。
+ */
+export async function prepareLibrary(request: APIRequestContext) {
+  const setup = decodeSetup(await body(await request.get("/api/v1/setup/status")));
+  if (setup.setup_required) await body(await post(request, "/api/v1/setup/admin", admin));
+  await login(request);
+  return decodeRoot(await body(await post(request, "/api/v1/library-roots", { path: fixtureRoot })));
+}
+
+function riffChunk(id: string, payload: Buffer): Buffer {
+  const header = Buffer.alloc(8);
+  header.write(id, 0, "latin1");
+  header.writeUInt32LE(payload.length, 4);
+  return Buffer.concat([header, payload, payload.length % 2 === 1 ? Buffer.alloc(1) : Buffer.alloc(0)]);
+}
+
+/**
+ * 合成的 WAV（立体声、16 位、44.1 kHz，默认 0.2 秒），带 INFO 标签：曲名（INAM）、专辑（IPRD）、艺人（IART）。
+ * fill 是音频数据每个字节的值：不同专辑用不同的值，内容指纹才互不相同；同一个路径改标签时保持 fill，
+ * 扫描认为是同一首曲目只是标签变了。
+ */
+export function syntheticWav(tags: { title: string; album: string; artist: string }, fill: number, seconds = 0.2): Buffer {
+  const info = ([["INAM", tags.title], ["IPRD", tags.album], ["IART", tags.artist]] as const).map(([id, text]) => riffChunk(id, Buffer.from(`${text}\0`, "utf8")));
+  const format = Buffer.alloc(16);
+  format.writeUInt16LE(1, 0); // PCM
+  format.writeUInt16LE(2, 2); // 声道
+  format.writeUInt32LE(44_100, 4);
+  format.writeUInt32LE(44_100 * 4, 8);
+  format.writeUInt16LE(4, 12);
+  format.writeUInt16LE(16, 14);
+  const audio = Buffer.alloc(Math.round(44_100 * seconds) * 4, fill);
+  const chunks = Buffer.concat([riffChunk("fmt ", format), riffChunk("LIST", Buffer.concat([Buffer.from("INFO", "latin1"), ...info])), riffChunk("data", audio)]);
+  const header = Buffer.alloc(12);
+  header.write("RIFF", 0, "latin1");
+  header.writeUInt32LE(4 + chunks.length, 4);
+  header.write("WAVE", 8, "latin1");
+  return Buffer.concat([header, chunks]);
+}
