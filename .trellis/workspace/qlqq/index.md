@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 28
-- **Last Active**: 2026-10-11
+- **Total Sessions**: 29
+- **Last Active**: 2026-10-14
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~794 | Active |
+| `journal-1.md` | ~846 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 29 | 2026-10-14 | M3 修正覆盖层与受治理操作 | `f182760`, `c8c7e7c`, `1a36869`, `b054ec3`, `bf62b00`, `0fcb636`, `9c28da3`, `b2e17ce`, `53c886e`, `20c7913`, `084c1d0`, `60f9373`, `d82cd73`, `f5a9ecf` | `main` |
 | 28 | 2026-10-11 | P 服务端播放历史 | `b611c13`, `733248f`, `ecf0bb1`, `ee05b97`, `7de1750`, `e94b77d`, `d70f7e9`, `8718340`, `e65c286`, `04cd0bc`, `48e422e` | `main` |
 | 27 | 2026-10-11 | M2b 歌词：内嵌歌词提取与逐行同步显示 | `17cb41b`, `d6c9fd4`, `62023a1`, `ca17fa3`, `63099c8`, `c25a70b`, `a42f6f9`, `7a1f863`, `b1cfdf1`, `470e87c` | `main` |
 | 26 | 2026-10-10 | M2b 派生播放：ALAC 经无损派生播放 | `ef306f7`, `5f184ef`, `5ac806b`, `8e7657d`, `386f4fe`, `b2bf80f`, `11ef404`, `2022884` | `main` |

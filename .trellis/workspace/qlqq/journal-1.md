@@ -792,3 +792,55 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 - 概览“最近播放”在 Safari、Firefox 与 Windows 浏览器里的实际渲染，与三组手工实播一起做（10-06-m2a-acceptance-followup 已加“最近播放”一行）；下次推送后的远端 CI 同样见该任务
 - 已接受的限制：上报失败后等待重试的记录，在随后清除历史时不会被取消（窗口约 42 秒），见播放历史合同第 5 节
 - 下一阶段待用户选择并先做规划：M3（修正覆盖层与受治理操作）；M5（历史页面、收藏、歌单）在 Core 1 之后；CUE 精确分轨仍延后
+
+
+## Session 29: M3 修正覆盖层与受治理操作
+<!-- trellis-session: v=2 fp=5d760a14b87d0998 -->
+
+**Date**: 2026-10-14
+**Task**: M3 修正覆盖层与受治理操作
+**Branch**: `main`
+
+### Summary
+
+管理员能修正发行的八个字段、把版本归入其他专辑或移出为独立专辑，并撤销自己最近的修改；修正存放在独立的表里，重扫不覆盖；每次成功的修改写一条只有管理员可读的操作记录；用户确认布局后归档。
+
+### Main Changes
+
+- 后端：迁移 0017（operations、release_corrections、releases.edit_revision、release_effective 视图）；新包 internal/operations（共同写入流程 Run：操作者加幂等键的 advisory lock 串行与重放、同键异义冲突、同一事务写记录、错误分类；撤销与展示的 Kind 接口）与 operations/httpapi；catalog 的字段修正与人工归组执行器及逆执行器；四个接口（修正的读写、归组、操作记录列表、撤销）与错误码；所有读取经有效值视图
+- 前端：features/governance（命令状态机 useReleaseCommands、编辑发行信息、归入与移出、操作记录页、专辑详情折叠的“修改记录”、撤销确认与焦点兜底）；折叠面板抽成 shared/ui 的 Disclosure；“人工修正”标记；内嵌产物每个前端提交都重新构建
+- 测试与文档：后端集成测试覆盖视图、修正状态迁移、归组、撤销、并发与真实重扫；Vitest 与 Playwright（五种宽度、axe、纯键盘）；真实服务用例 governance.real.ts（页面改标题后重扫仍是修正值、归组与撤销、成员 403）；新增受治理操作合同，同步规范、DESIGN、ADR 0002/0003 决策记录、路线图与父任务；归档并修正相对链接
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f182760` | docs(governance): 规划修正覆盖层与受治理操作（阶段 M3） |
+| `c8c7e7c` | feat(governance): 迁移 0017、操作记录包与发行有效值视图（M3 第 1 步） |
+| `1a36869` | feat(governance): 发行字段修正接口与有效值读取（M3 第 2 步） |
+| `b054ec3` | feat(governance): 人工归组接口（M3 第 3 步） |
+| `bf62b00` | feat(governance): 撤销与操作记录接口（M3 第 4 步） |
+| `0fcb636` | feat(governance): 前端编辑发行信息（M3 第 5 步） |
+| `9c28da3` | feat(governance): 前端调整归组（M3 第 6 步） |
+| `b2e17ce` | feat(governance): 前端操作记录与修改记录（M3 第 7 步） |
+| `53c886e` | test(governance): 真实服务用例（M3 第 8 步） |
+| `20c7913` | docs(governance): 同步受治理操作的规范、设计与路线（M3 第 9 步） |
+| `084c1d0` | style(governance): 操作记录里的“撤销”与同列文字左对齐（M3 第 10 步） |
+| `60f9373` | docs(governance): 记录 M3 的实施结果与验收对照 |
+| `d82cd73` | chore(task): archive 10-11-classical-m3-governed-corrections |
+| `f5a9ecf` | docs(governance): 修正 M3 任务归档后的相对链接 |
+
+### Testing
+
+- [OK] [OK] 隔离 PostgreSQL 上 gofmt、go vet、go test -race ./internal/operations/...、catalog、identity、app、cmd 的测试通过（含接口样本逐字比较）；步骤 1–4 期间另跑 library、listening、playback 与逐项变异检查
+- [OK] [OK] lint、tsc、Vitest 67 文件 1358 项、Playwright（路由模拟）220 项、真实服务 27 项（治理 4 加播放 23，两种文件顺序都验证）通过；内嵌产物在导出的暂存树上重新构建后与提交逐文件一致；Markdown 相对链接 560 个、断链 0；task.py validate 通过
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 成员写操作接入操作记录（G6，独立小任务，补幂等键并写记录，不提供撤销）；M4 规划（认领、整组合并拆分、默认版本、问题处理）待用户指示
+- F1 手工实播与 F3 远端 CI 仍按用户裁决延后；浏览器验证只有 Linux Chromium 的自动化证据，没有人工读屏验证
+- 已接受的限制：被扫描判定为新发行时不继承旧发行的修正与归组（认领属于 M4）；播放队列里已有条目的标题不随修正更新
