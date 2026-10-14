@@ -75,6 +75,11 @@ type operationsListResponse struct {
 			GroupID string `json:"group_id"`
 			Visible bool   `json:"visible"`
 		} `json:"release"`
+		Album *struct {
+			ID      string `json:"id"`
+			Title   string `json:"title"`
+			Visible bool   `json:"visible"`
+		} `json:"album"`
 		Changes struct {
 			Kind string `json:"kind"`
 			From *struct {
@@ -122,6 +127,8 @@ func TestPostgreSQLOperationsAPIListsRecordsForAdministratorsOnly(t *testing.T) 
 	requireAPIError(t, application.request(t, http.MethodGet, "/api/v1/operations?page=0", nil, &environment.admin, nil), 400, "invalid_pagination")
 	requireAPIError(t, application.request(t, http.MethodGet, "/api/v1/operations?page_size=101", nil, &environment.admin, nil), 400, "invalid_pagination")
 	requireAPIError(t, application.request(t, http.MethodGet, "/api/v1/operations?release_id=not-a-uuid", nil, &environment.admin, nil), 400, "invalid_id")
+	requireAPIError(t, application.request(t, http.MethodGet, "/api/v1/operations?group_id=not-a-uuid", nil, &environment.admin, nil), 400, "invalid_id")
+	requireAPIError(t, application.request(t, http.MethodGet, "/api/v1/operations?release_id="+environment.a+"&group_id=not-a-uuid", nil, &environment.admin, nil), 400, "invalid_id")
 
 	// 空列表。
 	if empty, _ := environment.list(t, ""); empty.Pagination.Total != 0 || empty.Items == nil || len(empty.Items) != 0 {
@@ -157,6 +164,15 @@ func TestPostgreSQLOperationsAPIListsRecordsForAdministratorsOnly(t *testing.T) 
 	if first.Revertible || len(first.Changes.Fields) != 2 || first.Changes.Fields[0].Field != "title" || first.Changes.Fields[1].Field != "year" {
 		t.Fatalf("superseded correction item = %+v", first)
 	}
+	// 目标是发行的记录 album 为 null（键存在）；以专辑为目标的记录在默认版本任务里才出现。
+	if !strings.Contains(raw, `"album":null`) {
+		t.Errorf("the operations list items carry no album key: %s", raw)
+	}
+	for _, item := range listed.Items {
+		if item.Album != nil {
+			t.Errorf("item %s has album %+v, want null for a release target", item.ID, item.Album)
+		}
+	}
 	// 记录里没有请求体、前后状态原文、指纹、幂等键或服务器路径。
 	for _, forbidden := range []string{"before_state", "after_state", "fingerprint", "idempotency", "request_id", application.allowedRoot, "password"} {
 		if strings.Contains(raw, forbidden) {
@@ -168,6 +184,13 @@ func TestPostgreSQLOperationsAPIListsRecordsForAdministratorsOnly(t *testing.T) 
 	onlyB, _ := environment.list(t, "?release_id="+strings.ToUpper(environment.b))
 	if onlyB.Pagination.Total != 1 || len(onlyB.Items) != 1 || onlyB.Items[0].ID != joinOperation {
 		t.Fatalf("filter by release = %+v", onlyB)
+	}
+	// 按专辑筛选：现在没有以专辑为目标的记录；与发行一起给出时取并集，只带出这个版本的记录。
+	if none, _ := environment.list(t, "?group_id="+strings.ToUpper(environment.groupA)); none.Pagination.Total != 0 || none.Items == nil || len(none.Items) != 0 {
+		t.Fatalf("filter by a group without records = %+v", none)
+	}
+	if union, _ := environment.list(t, "?release_id="+environment.b+"&group_id="+environment.groupA); union.Pagination.Total != 1 || len(union.Items) != 1 || union.Items[0].ID != joinOperation {
+		t.Fatalf("filter by release and group = %+v", union)
 	}
 	pageTwo, _ := environment.list(t, "?page=2&page_size=2")
 	if pageTwo.Pagination.Total != 3 || pageTwo.Pagination.Page != 2 || len(pageTwo.Items) != 1 || pageTwo.Items[0].ID != correction {
@@ -272,7 +295,8 @@ func TestPostgreSQLRevertAPIUndoesCorrectionsAndGroupChangesAndReplays(t *testin
 		t.Fatalf("revert: HTTP %d: %s", reverted.Code, reverted.Body.String())
 	}
 	result := decodeJSONMap(t, reverted)
-	if result["reverts_operation_id"] != correction || result["release_id"] != environment.a || result["revision"] != float64(revision+1) || result["operation_id"] == "" {
+	if result["reverts_operation_id"] != correction || result["target_type"] != "release" || result["target_id"] != environment.a ||
+		result["revision"] != float64(revision+1) || result["operation_id"] == "" || result["release_id"] != nil {
 		t.Fatalf("revert result = %v", result)
 	}
 	if title, year := titleOf(environment.a); title != "Album A" || year != float64(1998) {

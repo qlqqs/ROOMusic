@@ -68,7 +68,7 @@ func TestPostgreSQLRevertExecutorRecordsAndGuardsTheOriginal(t *testing.T) {
 	if err := json.Unmarshal(reverted.Response, &response); err != nil {
 		t.Fatalf("decode the revert response: %v", err)
 	}
-	if response != (RevertResult{OperationID: reverted.OperationID, RevertsOperationID: original.OperationID, ReleaseID: fixture.releaseID, Revision: 3}) {
+	if response != (RevertResult{OperationID: reverted.OperationID, RevertsOperationID: original.OperationID, TargetType: TargetRelease, TargetID: fixture.releaseID, Revision: 3}) {
 		t.Fatalf("revert response = %+v", response)
 	}
 	record, err := Load(ctx, fixture.database, reverted.OperationID)

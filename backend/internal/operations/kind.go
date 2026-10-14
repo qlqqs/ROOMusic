@@ -9,7 +9,7 @@ import (
 // Kind 是一种操作类型的撤销与展示能力，由拥有对应业务表的包实现，经 app 注册给传输层（operations/httpapi），
 // 所以 operations 不需要知道任何业务规则。一个类型对应一个 Kind；撤销记录的状态与它所撤销的操作同类型（见 Record.ChangeType）。
 type Kind interface {
-	// Type 是它处理的 operation_type（TypeReleaseCorrection、TypeReleaseGroupChange）。
+	// Type 是它处理的 operation_type（TypeReleaseCorrection、TypeReleaseGroupChange、TypeReleaseGroupDefault）。
 	Type() string
 	// Revert 在 RevertExecutor 提供的事务里撤销 original：锁定目标、核对 original 是目标上最近一次修改
 	// （目标的人工修改版本号等于 original.ResultRevision，否则返回 revert_conflict）、恢复前态，返回撤销记录的目标、前后版本与前后状态。
@@ -28,18 +28,28 @@ type ReleaseInfo struct {
 	Visible bool   `json:"visible"`
 }
 
-// Description 是一条记录在列表里的展示信息，由 Kind.Describe 批量提供。
+// AlbumInfo 是组目标的记录所指专辑当前的展示信息：代表版本的有效标题，以及它现在是否可见（至少有一个可见版本）。
+type AlbumInfo struct {
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Visible bool   `json:"visible"`
+}
+
+// Description 是一条记录在列表里的展示信息，由 Kind.Describe 批量提供。目标是发行的记录给 Release，目标是专辑的记录给 Album，
+// 另一项为 nil。
 type Description struct {
 	Release    *ReleaseInfo // 目标发行；发行已不存在时为 nil
+	Album      *AlbumInfo   // 目标专辑；专辑已不存在时为 nil
 	Changes    any          // 改动摘要（可序列化成 JSON，结构由类型决定，含 kind 字段）
 	Revertible bool         // 目标现在仍可撤销这条记录；是否未被撤销、是否本身是撤销由调用方判断
 }
 
-// RevertResult 是撤销成功的响应。目前唯一的目标类型是发行，所以直接给 release_id。
+// RevertResult 是撤销成功的响应：新的撤销记录、被撤销的记录，以及目标（类型与 ID）和它新的人工修改版本号。
 type RevertResult struct {
 	OperationID        string `json:"operation_id"`
 	RevertsOperationID string `json:"reverts_operation_id"`
-	ReleaseID          string `json:"release_id"`
+	TargetType         string `json:"target_type"`
+	TargetID           string `json:"target_id"`
 	Revision           int64  `json:"revision"`
 }
 
@@ -67,7 +77,10 @@ func RevertExecutor(kind Kind, originalID string) Executor {
 			return Outcome{}, err
 		}
 		outcome.RevertsID = original.ID
-		outcome.Response = RevertResult{OperationID: operationID, RevertsOperationID: original.ID, ReleaseID: outcome.TargetID, Revision: outcome.ResultRevision}
+		outcome.Response = RevertResult{
+			OperationID: operationID, RevertsOperationID: original.ID,
+			TargetType: outcome.TargetType, TargetID: outcome.TargetID, Revision: outcome.ResultRevision,
+		}
 		return outcome, nil
 	}
 }

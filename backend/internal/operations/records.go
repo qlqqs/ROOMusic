@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
@@ -102,12 +103,18 @@ func LoadForUpdate(ctx context.Context, tx *sql.Tx, id string) (Record, error) {
 	return Load(ctx, tx, id)
 }
 
-// ListParams 是记录列表的已校验参数：Page 与 PageSize 都大于 0；TargetID 非空时只列这个目标的记录。
+// Target 是列表的一个筛选目标：目标类型（TargetRelease、TargetReleaseGroup）与目标 ID（UUID）。
+type Target struct {
+	Type string
+	ID   string
+}
+
+// ListParams 是记录列表的已校验参数：Page 与 PageSize 都大于 0；Targets 非空时只列这些目标上的记录（并集），为空时列出全部。
+// 并集让专辑详情的“修改记录”同时列出一个版本的记录和这张专辑的记录。
 type ListParams struct {
-	TargetType string
-	TargetID   string
-	Page       int
-	PageSize   int
+	Targets  []Target
+	Page     int
+	PageSize int
 }
 
 // Page 是一页记录和满足条件的总数；Items 永远非 nil。
@@ -120,9 +127,13 @@ type Page struct {
 func List(ctx context.Context, database Queryer, params ListParams) (Page, error) {
 	where := ""
 	arguments := []any{}
-	if params.TargetID != "" {
-		where = " WHERE o.target_type = $1 AND o.target_id = $2::uuid"
-		arguments = append(arguments, params.TargetType, params.TargetID)
+	if len(params.Targets) > 0 {
+		clauses := make([]string, len(params.Targets))
+		for index, target := range params.Targets {
+			clauses[index] = "(o.target_type = $" + strconv.Itoa(2*index+1) + " AND o.target_id = $" + strconv.Itoa(2*index+2) + "::uuid)"
+			arguments = append(arguments, target.Type, target.ID)
+		}
+		where = " WHERE " + strings.Join(clauses, " OR ")
 	}
 	var total int64
 	if err := database.QueryRowContext(ctx, "SELECT COUNT(*) FROM operations o"+where, arguments...).Scan(&total); err != nil {

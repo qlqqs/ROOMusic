@@ -14,14 +14,14 @@
 
 ## 步骤
 
-- [ ] **1. 迁移 0018 与操作记录的组目标（无行为变化）**
+- [x] **1. 迁移 0018 与操作记录的组目标（无行为变化）**
   - 迁移 0018（design §2）。
   - operations：新增 `TargetReleaseGroup`、`TypeReleaseGroupDefault`，`Description.Album`，`RevertResult` 改为目标类型加目标 ID，
-    `List` 支持 `group_id` 以及与 `release_id` 的并集（design §5）。
+    `List` 的参数改为目标列表 `Targets []Target`（类型加 ID，非空时取并集），支持 `group_id` 以及与 `release_id` 的并集（design §5）。
   - operations/httpapi：增加 `group_id` 筛选和列表项的 `album`。
   - 前端：同步改解码器（撤销响应、列表项的 `album`）。
   - 门禁：
-    - 现有 operations、catalog 和 app 的测试改动只限于撤销响应的新形状；
+    - 现有 operations、catalog 和 app 的测试改动只限于撤销响应的新形状和 `List` 参数的新形状（三处调用）；
     - 新增并集筛选的测试，覆盖分页和总数；
     - 迁移后的约束能拒绝未知的类型和目标类型。
 - [ ] **2. 默认版本的读写接口**

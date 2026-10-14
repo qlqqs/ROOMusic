@@ -54,14 +54,15 @@ type actorItem struct {
 	Username string `json:"username"`
 }
 
-// operationItem 是列表里的一条记录：谁、何时、哪张专辑（当前的状态）、改了什么、撤销关系，以及现在能不能撤销。
-// 不含请求体、前后状态原文、路径与密钥。
+// operationItem 是列表里的一条记录：谁、何时、哪个目标（当前的状态）、改了什么、撤销关系，以及现在能不能撤销。
+// 目标是发行的记录给 release、album 为 null；目标是专辑的记录反过来。不含请求体、前后状态原文、路径与密钥。
 type operationItem struct {
 	ID         string                  `json:"id"`
 	Type       string                  `json:"type"`
 	CreatedAt  time.Time               `json:"created_at"`
 	Actor      actorItem               `json:"actor"`
 	Release    *operations.ReleaseInfo `json:"release"`
+	Album      *operations.AlbumInfo   `json:"album"`
 	Changes    any                     `json:"changes"`
 	Reverts    *string                 `json:"reverts"`
 	RevertedBy *string                 `json:"reverted_by"`
@@ -75,8 +76,8 @@ func optionalID(value string) *string {
 	return &value
 }
 
-// listOperations 按时间倒序分页返回操作记录（管理员），可按发行筛选（release_id）。
-// 检查顺序是 401、403、400（分页、release_id）、200。
+// listOperations 按时间倒序分页返回操作记录（管理员），可按发行筛选（release_id）、按专辑筛选（group_id）；
+// 两个都给时取并集，即这个版本的记录加上这张专辑的记录。检查顺序是 401、403、400（分页、release_id、group_id）、200。
 func (handlers *Handlers) listOperations(responseWriter http.ResponseWriter, request *http.Request) {
 	if _, ok := handlers.guard.RequireAdmin(responseWriter, request); !ok {
 		return
@@ -92,7 +93,14 @@ func (handlers *Handlers) listOperations(responseWriter http.ResponseWriter, req
 			httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_id", "发行版本标识无效")
 			return
 		}
-		params.TargetType, params.TargetID = operations.TargetRelease, strings.ToLower(releaseID)
+		params.Targets = append(params.Targets, operations.Target{Type: operations.TargetRelease, ID: strings.ToLower(releaseID)})
+	}
+	if groupID := request.URL.Query().Get("group_id"); groupID != "" {
+		if !uuid.Valid(groupID) {
+			httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_id", "专辑标识无效")
+			return
+		}
+		params.Targets = append(params.Targets, operations.Target{Type: operations.TargetReleaseGroup, ID: strings.ToLower(groupID)})
 	}
 
 	listed, err := operations.List(request.Context(), handlers.database, params)
@@ -134,7 +142,7 @@ func (handlers *Handlers) listOperations(responseWriter http.ResponseWriter, req
 		items = append(items, operationItem{
 			ID: record.ID, Type: record.Type, CreatedAt: record.CreatedAt,
 			Actor:   actorItem{ID: record.ActorID, Username: names[record.ActorID]},
-			Release: description.Release, Changes: description.Changes,
+			Release: description.Release, Album: description.Album, Changes: description.Changes,
 			Reverts: optionalID(record.RevertsID), RevertedBy: optionalID(record.RevertedByID),
 			// 撤销记录不能再被撤销，已被撤销的操作也不能再撤销；其余由类型判断目标现在是否还能撤销。
 			Revertible: description.Revertible && record.Type != operations.TypeRevert && record.RevertedByID == "",

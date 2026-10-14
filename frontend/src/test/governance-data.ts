@@ -396,6 +396,7 @@ function itemOf(data: GovernanceData, record: OperationRecord): OperationItemDTO
     created_at: record.createdAt,
     actor: data.actor,
     release,
+    album: null,
     changes: record.changes,
     reverts: record.reverts,
     reverted_by: record.revertedBy,
@@ -436,6 +437,6 @@ export function respondToRevert(data: GovernanceData, operationId: string, key: 
   original.revertedBy = revert.id;
   return remember(data, key, fingerprint, {
     status: 200,
-    body: { operation_id: revert.id, reverts_operation_id: original.id, release_id: original.releaseId, revision: state.revision },
+    body: { operation_id: revert.id, reverts_operation_id: original.id, target_type: "release", target_id: original.releaseId, revision: state.revision },
   });
 }

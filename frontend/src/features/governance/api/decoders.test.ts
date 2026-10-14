@@ -133,6 +133,13 @@ describe("decodeOperationPage", () => {
     expect(() => decodeOperationPage(many(101))).toThrow(d.DecodeError);
   });
 
+  it("目标是发行的记录 album 为 null；给出 album 时解码标题与可见性", () => {
+    expect(decodeOperationPage(page).items.every((item) => item.album === null)).toBe(true);
+    const album = { id: "00000000-0000-4000-8000-0000000000aa", title: "某张专辑", visible: false };
+    const forAlbum = withValue(withValue(page, ["items", 0, "release"], null), ["items", 0, "album"], album);
+    expect(decodeOperationPage(forAlbum).items[0]).toMatchObject({ release: null, album });
+  });
+
   it("目标发行已不存在、没有改动摘要时仍能解码", () => {
     const orphaned = withValue(withValue(page, ["items", 0, "release"], null), ["items", 0, "changes"], null);
     expect(decodeOperationPage(orphaned).items[0]).toMatchObject({ release: null, changes: null });
@@ -150,6 +157,9 @@ describe("decodeOperationPage", () => {
     ["revertible 不是布尔值", withValue(page, ["items", 0, "revertible"], "true")],
     ["reverts 不是 UUID", withValue(page, ["items", 0, "reverts"], "op-1")],
     ["发行缺少 visible", without(page, ["items", 3, "release", "visible"])],
+    ["缺少 album", without(page, ["items", 0, "album"])],
+    ["album 缺少 visible", withValue(page, ["items", 0, "album"], { id: "00000000-0000-4000-8000-0000000000aa", title: "某张专辑" })],
+    ["album 的 id 不是 UUID", withValue(page, ["items", 0, "album"], { id: "album-1", title: "某张专辑", visible: true })],
     ["修正字段名未知", withValue(page, ["items", 3, "changes", "fields", 0, "field"], "source_type")],
     ["归组快照缺少组 ID", without(page, ["items", 0, "changes", "from", "group_id"])],
     ["缺少 pagination", without(page, ["pagination"])],
@@ -164,12 +174,20 @@ describe("decodeRevertResult", () => {
   it("解码撤销成功的响应", () => {
     const result = decodeRevertResult(reverted);
     expect(result.revision).toBe(4);
+    expect(result.target_type).toBe("release");
     expect(result.reverts_operation_id).not.toBe(result.operation_id);
+  });
+
+  it("解码专辑目标的撤销响应", () => {
+    expect(decodeRevertResult(withValue(reverted, ["target_type"], "release_group")).target_type).toBe("release_group");
   });
 
   it.each([
     ["缺少 reverts_operation_id", without(reverted, ["reverts_operation_id"])],
-    ["release_id 不是 UUID", withValue(reverted, ["release_id"], "release-1")],
+    ["缺少 target_id", without(reverted, ["target_id"])],
+    ["target_id 不是 UUID", withValue(reverted, ["target_id"], "release-1")],
+    ["缺少 target_type", without(reverted, ["target_type"])],
+    ["未知的 target_type", withValue(reverted, ["target_type"], "track")],
     ["revision 为 0", withValue(reverted, ["revision"], 0)],
     ["缺少 operation_id", without(reverted, ["operation_id"])],
   ])("拒绝：%s", (_name, input) => {

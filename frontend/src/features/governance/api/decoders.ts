@@ -45,12 +45,14 @@ const groupChangeResultDecoder = d.object({
 });
 
 // 操作记录（管理员）。type 是记录自己的类型；changes.kind 是前后状态按哪种类型解释（撤销记录与它所撤销的操作同类型）。
-// 目标发行已不存在时 release 为 null；撤销记录与被撤销的记录互相指向（reverts、reverted_by）。
+// 目标是发行的记录给 release、album 为 null，目标是专辑的记录反过来；目标已不存在时对应的一项也是 null；
+// 撤销记录与被撤销的记录互相指向（reverts、reverted_by）。
 const MAX_OPERATION_PAGE_ITEMS = 100;
 const OPERATION_TYPES = ["release_correction", "release_group_change", "revert"] as const;
 
 const operationActorDecoder = d.object({ id: d.uuid(), username: d.string({ max: 200 }) });
 const operationReleaseDecoder = d.object({ id: d.uuid(), title: d.string(), group_id: d.uuid(), visible: d.boolean() });
+const operationAlbumDecoder = d.object({ id: d.uuid(), title: d.string(), visible: d.boolean() });
 
 const fieldStateDecoder = d.object({ correction: d.nullable(correctionDecoder), effective: d.nullable(fieldValueDecoder) });
 const correctionChangesDecoder = d.object({
@@ -78,6 +80,7 @@ const operationItemDecoder = d.object({
   created_at: d.timestamp(),
   actor: operationActorDecoder,
   release: d.nullable(operationReleaseDecoder),
+  album: d.nullable(operationAlbumDecoder),
   changes: d.nullable(operationChangesDecoder),
   reverts: d.nullable(d.uuid()),
   reverted_by: d.nullable(d.uuid()),
@@ -93,11 +96,12 @@ const operationPageDecoder = d.object({
   }),
 });
 
-// 撤销成功的响应：新的撤销记录、被撤销的记录、发行与发行新的人工修改版本号。
+// 撤销成功的响应：新的撤销记录、被撤销的记录、目标（发行或专辑）与目标新的人工修改版本号。
 const revertResultDecoder = d.object({
   operation_id: d.uuid(),
   reverts_operation_id: d.uuid(),
-  release_id: d.uuid(),
+  target_type: d.oneOf(["release", "release_group"] as const),
+  target_id: d.uuid(),
   revision: d.integer({ min: 1 }),
 });
 

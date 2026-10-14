@@ -16,13 +16,14 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
-// runFixture 是隔离 schema 的已迁移测试库、两个操作者和一个合成发行（只用来承载 edit_revision）；不读任何文件。
+// runFixture 是隔离 schema 的已迁移测试库、两个操作者和一个合成发行及它的专辑（只用来承载 edit_revision）；不读任何文件。
 type runFixture struct {
 	t         *testing.T
 	database  *sql.DB
 	actorID   string
 	otherID   string
 	releaseID string
+	groupID   string
 }
 
 func newRunFixture(t *testing.T) *runFixture {
@@ -39,11 +40,10 @@ func newRunFixture(t *testing.T) *runFixture {
 			t.Errorf("close isolated operations database: %v", err)
 		}
 	})
-	fixture := &runFixture{t: t, database: database, actorID: uuid.New(), otherID: uuid.New(), releaseID: uuid.New()}
-	groupID := uuid.New()
+	fixture := &runFixture{t: t, database: database, actorID: uuid.New(), otherID: uuid.New(), releaseID: uuid.New(), groupID: uuid.New()}
 	fixture.exec(`INSERT INTO users(id,username,password_hash) VALUES($1::uuid,'admin','x'),($2::uuid,'other','x')`, fixture.actorID, fixture.otherID)
-	fixture.exec(`INSERT INTO release_groups(id) VALUES($1::uuid)`, groupID)
-	fixture.exec(`INSERT INTO releases(id,group_id,title,artist) VALUES($1::uuid,$2::uuid,'专辑','艺术家')`, fixture.releaseID, groupID)
+	fixture.exec(`INSERT INTO release_groups(id) VALUES($1::uuid)`, fixture.groupID)
+	fixture.exec(`INSERT INTO releases(id,group_id,title,artist) VALUES($1::uuid,$2::uuid,'专辑','艺术家')`, fixture.releaseID, fixture.groupID)
 	return fixture
 }
 
@@ -434,7 +434,7 @@ func TestPostgreSQLListOrdersPagesAndFiltersByTarget(t *testing.T) {
 		t.Fatalf("the most recent operation targets %s, want the second release %s", all.Items[0].TargetID, secondRelease)
 	}
 
-	filtered, err := List(ctx, fixture.database, ListParams{TargetType: TargetRelease, TargetID: fixture.releaseID, Page: 1, PageSize: 100})
+	filtered, err := List(ctx, fixture.database, ListParams{Targets: []Target{{TargetRelease, fixture.releaseID}}, Page: 1, PageSize: 100})
 	if err != nil || filtered.Total != 5 || len(filtered.Items) != 5 {
 		t.Fatalf("List(filtered) = total %d, %d items, %v; want 5", filtered.Total, len(filtered.Items), err)
 	}
@@ -444,7 +444,7 @@ func TestPostgreSQLListOrdersPagesAndFiltersByTarget(t *testing.T) {
 		}
 	}
 
-	pageTwo, err := List(ctx, fixture.database, ListParams{TargetType: TargetRelease, TargetID: fixture.releaseID, Page: 2, PageSize: 2})
+	pageTwo, err := List(ctx, fixture.database, ListParams{Targets: []Target{{TargetRelease, fixture.releaseID}}, Page: 2, PageSize: 2})
 	if err != nil || pageTwo.Total != 5 || len(pageTwo.Items) != 2 || pageTwo.Items[0].ID != ids[2] || pageTwo.Items[1].ID != ids[1] {
 		t.Fatalf("List(page 2) = %+v, %v; want the third and second newest of five", pageTwo, err)
 	}
@@ -452,7 +452,7 @@ func TestPostgreSQLListOrdersPagesAndFiltersByTarget(t *testing.T) {
 	if err != nil || beyond.Total != 6 || beyond.Items == nil || len(beyond.Items) != 0 {
 		t.Fatalf("List(beyond the end) = %+v, %v; want total 6 and a non-nil empty page", beyond, err)
 	}
-	none, err := List(ctx, fixture.database, ListParams{TargetType: TargetRelease, TargetID: uuid.New(), Page: 1, PageSize: 10})
+	none, err := List(ctx, fixture.database, ListParams{Targets: []Target{{TargetRelease, uuid.New()}}, Page: 1, PageSize: 10})
 	if err != nil || none.Total != 0 || none.Items == nil || len(none.Items) != 0 {
 		t.Fatalf("List(unknown target) = %+v, %v; want an empty page", none, err)
 	}

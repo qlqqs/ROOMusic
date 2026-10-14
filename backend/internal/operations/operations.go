@@ -32,13 +32,15 @@ import (
 )
 
 const (
-	// TypeReleaseCorrection、TypeReleaseGroupChange 与 TypeRevert 是 operations.operation_type 允许的取值。
-	TypeReleaseCorrection  = "release_correction"
-	TypeReleaseGroupChange = "release_group_change"
-	TypeRevert             = "revert"
+	// TypeReleaseCorrection、TypeReleaseGroupChange、TypeReleaseGroupDefault 与 TypeRevert 是 operations.operation_type 允许的取值。
+	TypeReleaseCorrection   = "release_correction"
+	TypeReleaseGroupChange  = "release_group_change"
+	TypeReleaseGroupDefault = "release_group_default"
+	TypeRevert              = "revert"
 
-	// TargetRelease 是目前唯一的目标类型。
-	TargetRelease = "release"
+	// TargetRelease 与 TargetReleaseGroup 是 operations.target_type 允许的取值：发行，以及专辑（release_groups 的一行）。
+	TargetRelease      = "release"
+	TargetReleaseGroup = "release_group"
 
 	// lockClass 是操作 advisory lock 的固定类别（ASCII 的 OPER）。两参数锁与迁移锁、扫描锁（单个 bigint 键）、
 	// 目录操作锁（ROOT 类别）互不共用键空间。
