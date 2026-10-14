@@ -66,12 +66,14 @@ export function OperationList({ caption, items, showRelease, onRevert }: Operati
           const reason = notRevertibleReason(item);
           if (reason !== null) return <span className={styles.muted}>{reason}</span>;
           return (
-            <Button variant="text" onClick={() => onRevert(item)}>
-              撤销
-              <VisuallyHidden>
-                （{formatDateTime(item.created_at)} 的{operationTypeLabel(item)}）
-              </VisuallyHidden>
-            </Button>
+            <span className={styles.revert}>
+              <Button variant="text" onClick={() => onRevert(item)}>
+                撤销
+                <VisuallyHidden>
+                  （{formatDateTime(item.created_at)} 的{operationTypeLabel(item)}）
+                </VisuallyHidden>
+              </Button>
+            </span>
           );
         },
       },

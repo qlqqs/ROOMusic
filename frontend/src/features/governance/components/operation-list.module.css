@@ -20,3 +20,9 @@
   list-style: none;
   color: var(--text-secondary);
 }
+
+/* 文字按钮自带左右内边距：向左收回，让“撤销”与同一列里其他文字（已撤销、之后又有修改）和列标题左对齐。 */
+.revert {
+  display: inline-block;
+  margin-inline-start: calc(-1 * var(--space-2));
+}
