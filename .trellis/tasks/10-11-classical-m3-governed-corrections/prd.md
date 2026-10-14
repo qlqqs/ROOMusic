@@ -95,22 +95,22 @@ Core 1 阶段 M3：让管理员能修正扫描得到的发行信息、把同一�
 
 ## 验收标准
 
-- [ ] A1（R1）：合成素材真实重扫后修正仍生效，扫描值与证据照常更新；清除修正后显示最新的扫描值。
-- [ ] A2（R1、G2）：无修正、设值、设空、清除之间的转换正确；标题与专辑艺人设空、非法值被拒（`400 invalid_correction`）；不改变状态的提交 `400 no_changes`。
-- [ ] A3（R2）：列表、详情、搜索、排序、分页、按组读取、最近播放与“制作人员”显示同一有效值（含专辑艺人带动展示艺人与排序）；
+- [x] A1（R1）：合成素材真实重扫后修正仍生效，扫描值与证据照常更新；清除修正后显示最新的扫描值。
+- [x] A2（R1、G2）：无修正、设值、设空、清除之间的转换正确；标题与专辑艺人设空、非法值被拒（`400 invalid_correction`）；不改变状态的提交 `400 no_changes`。
+- [x] A3（R2）：列表、详情、搜索、排序、分页、按组读取、最近播放与“制作人员”显示同一有效值（含专辑艺人带动展示艺人与排序）；
   没有修正时现有 catalog、按组、播放历史测试与接口样本不改即通过。
-- [ ] A4（R3、G3）：归入与移出后组的成员数、代表版本与 attention 之和正确，原组没有可见版本时不出现、详情 404；
+- [x] A4（R3、G3）：归入与移出后组的成员数、代表版本与 attention 之和正确，原组没有可见版本时不出现、详情 404；
   `same_group`、`already_alone`、`group_not_found` 各有用例；归组后真实重扫，归组保持。
-- [ ] A5（R4、R7）：非管理员与跨源写入被拒且没有任何变化，未登录 401；同键同义只执行一次（含并发同键），同键异义 `409 idempotency_conflict`；
+- [x] A5（R4、R7）：非管理员与跨源写入被拒且没有任何变化，未登录 401；同键同义只执行一次（含并发同键），同键异义 `409 idempotency_conflict`；
   过期版本 `409 revision_conflict`；业务或记录写入失败整体回滚。
-- [ ] A6（R5、G5）：每次成功的修正、归组与撤销各有一条记录，含操作者、时间、版本与前后状态；操作记录只有管理员可读，倒序分页，可按发行筛选，不含路径与密钥。
-- [ ] A7（R6）：撤销恢复之前的修正意图（无修正、设值、设空分别验证）或原来的组；之后有修改 `409 revert_conflict`、重复撤销 `409 already_reverted`、
+- [x] A6（R5、G5）：每次成功的修正、归组与撤销各有一条记录，含操作者、时间、版本与前后状态；操作记录只有管理员可读，倒序分页，可按发行筛选，不含路径与密钥。
+- [x] A7（R6）：撤销恢复之前的修正意图（无修正、设值、设空分别验证）或原来的组；之后有修改 `409 revert_conflict`、重复撤销 `409 already_reverted`、
   撤销撤销 `409 not_revertible`；撤销本身也记一条，版本号递增。
-- [ ] A8（G4）：修正（含确认扫描值）后该字段不再计入“需要关注”，清除后重新计入；证据区标出人工修正的字段。
-- [ ] A9（R8）：管理员能在专辑详情编辑字段、调整归组、查看修改记录并撤销，“操作记录”页可浏览与撤销；普通成员没有任何编辑入口；
+- [x] A8（G4）：修正（含确认扫描值）后该字段不再计入“需要关注”，清除后重新计入；证据区标出人工修正的字段。
+- [x] A9（R8）：管理员能在专辑详情编辑字段、调整归组、查看修改记录并撤销，“操作记录”页可浏览与撤销；普通成员没有任何编辑入口；
   冲突与结果不确定有明确提示，结果不确定后用同一个键重试；五种宽度不溢出、axe 无违规、纯键盘可完成。
-- [ ] A10：真实服务（Go、隔离 PostgreSQL、Chromium、合成素材）中，页面上修改标题后重扫仍为修正值；两张合成专辑归组后是一个组两个版本，撤销后分开。
-- [ ] A11：接口样本与前端解码器一致；规范、ADR 决策记录与路线文档同步；布局经用户确认（G9）。
+- [x] A10：真实服务（Go、隔离 PostgreSQL、Chromium、合成素材）中，页面上修改标题后重扫仍为修正值；两张合成专辑归组后是一个组两个版本，撤销后分开。
+- [x] A11：接口样本与前端解码器一致；规范、ADR 决策记录与路线文档同步；布局经用户确认（G9）。
 
 ## 范围外
 
@@ -129,3 +129,43 @@ Core 1 阶段 M3：让管理员能修正扫描得到的发行信息、把同一�
 - 2026-10-11：G1 用户选择“管理员直接生效 + 单条撤销（推荐）”。
 - 2026-10-12：G2 用户选择“只改发行字段（推荐）”。
 - 2026-10-13：用户回复“批准执行”，批准最终规划摘要（G3–G9、ADR 待批项对照表与十步计划），授权提交规划文档并启动任务。
+- 2026-10-14：G9 用户看过合成数据的宽屏与窄屏布局图（操作记录页、专辑详情的“修改记录”、编辑与归入对话框、撤销确认）后选择“布局可以，继续收尾（推荐）”。
+
+## 实施结果（2026-10-14）
+
+提交（均在 `main`，未推送）：`f182760` 规划；`c8c7e7c` 迁移 0017、操作记录包与发行有效值视图（无行为变化）；`1a36869` 字段修正接口与有效值读取；`b054ec3` 人工归组接口；
+`bf62b00` 撤销与操作记录接口；`0fcb636` 前端编辑发行信息；`9c28da3` 前端调整归组；`b2e17ce` 前端操作记录与修改记录；`53c886e` 真实服务用例；`20c7913` 文档同步；
+`084c1d0` 收尾截图时发现的对齐问题。收尾（本结果、归档、链接修正与 journal）随后提交。
+
+| 编号 | 结果 | 证据 |
+| --- | --- | --- |
+| A1 | 达成 | `TestPostgreSQLCorrectionsSurviveARealRescanAndShowEverywhere`（真实扫描接口重扫合成 FLAC，扫描值与证据更新，修正仍生效并显示在各处）、`TestPostgreSQLCorrectionStateTransitions`（清除后显示重扫之后的值）、`TestPostgreSQLRevertToNoCorrectionShowsTheCurrentScannedValue`；真实服务用例 `governance.real.ts`：页面改标题 → 改文件的专辑标签并重扫 → 同一个发行、扫描值更新而修正不动，撤销后回到现在的扫描值；用“扫描写入时顺手清掉修正”的临时改动验证过该用例会失败，随即还原 |
+| A2 | 达成 | `TestParseCorrectionChanges`、`TestCorrectionFingerprintCoversTheCompleteSemantics`、`TestPostgreSQLCorrectionStateTransitions`（改值、设空、清除、确认扫描值之间的转换与前后意图记录）、`TestPostgreSQLCorrectionsAPIStateAndSuccess`、`…APIRejectsUnauthorizedAndInvalidRequestsWithoutSideEffects`（非法值 `invalid_correction`、`no_changes`）；前端 `field-draft.test.ts`（18 项：规范化、字节上限、年份范围、只提交动过且有变化的字段） |
+| A3 | 达成 | `TestPostgreSQLEffectiveViewEqualsTheTableWithoutCorrections`（无修正时视图逐列等于表）、`…EffectiveViewAppliesAndRemovesCorrectionsPerField`、`…ReadsReturnEffectiveValues`（列表、详情、搜索、排序、按组读取）、`…ReleaseCreditsFollowTheAlbumArtistCorrection`、`TestPostgreSQLCorrectedValuesAreConsistentAcrossReads`；既有 catalog、按组、播放历史测试不改即通过，既有接口样本只有三份发行详情样本各增加 `revision` 与 `corrected_fields` 两行 |
+| A4 | 达成 | `TestPostgreSQLJoinMovesAVersionIntoAnotherAlbum`、`…DetachMakesAVersionItsOwnAlbum`、`…GroupChangeRejectsInvalidRequestsWithoutSideEffects`（`same_group`、`already_alone`、`group_not_found`）、`…ConcurrentGroupChangesDoNotDeadlock`、`TestPostgreSQLGroupChangeAPIJoinDetachAndReads`、`TestPostgreSQLManualGroupingSurvivesARealRescan`；真实服务用例：归组后一个组两个版本、重扫后保持、撤销后分开 |
+| A5 | 达成 | 两个接口的 `…APIRejectsUnauthorized…`（跨源与非管理员无任何变化、未登录 401）、`…IdempotencyAndConflicts`（重放与 `idempotency_conflict`、过期版本 `revision_conflict`）、`…ConcurrentRequests`（修正、归组、撤销各一个）；`TestPostgreSQLRunExecutesOnceForConcurrentRequestsWithTheSameKey`、`…RunRollsBackWhenExecutionFails`、`…RunRollsBackWhenTheRecordCannotBeWritten`、`…RunRefusesRecordsThatBreakTheRevisionContract` |
+| A6 | 达成 | `TestPostgreSQLOperationsAPIListsRecordsForAdministratorsOnly`（只有管理员可读、倒序分页、按发行筛选）、`TestPostgreSQLListOrdersPagesAndFiltersByTarget`、`TestPostgreSQLDescribeReportsTargetsChangesAndRevertibility`；接口样本经既有的脱敏断言（不含路径、令牌与密码） |
+| A7 | 达成 | `TestPostgreSQLRevertRestoresEveryPreviousCorrectionIntent`（无修正、设值、设空）、`…OnlyTouchesTheFieldsTheOperationChanged`、`…RevertOfAGroupChangeMovesTheVersionBack`、`…RevertIsRefusedAfterLaterEditsOrWhenTheTargetIsHidden`、`TestPostgreSQLRevertExecutorRecordsAndGuardsTheOriginal`（`not_revertible`、`already_reverted`）、`TestPostgreSQLConcurrentRevertsOfTheSameOperation`、`TestPostgreSQLRevertAPIUndoesCorrectionsAndGroupChangesAndReplays` |
+| A8 | 达成 | `TestPostgreSQLAttentionIgnoresCorrectedFields`、`TestPostgreSQLConfirmingTheScannedValueClearsAttention`（确认扫描值后不再计入，清除后重新计入）；前端证据表与详情头部的“人工修正”标记（`release-corrections.test.tsx`、Playwright） |
+| A9 | 达成 | Vitest：`release-corrections.test.tsx`（13 项）、`release-grouping.test.tsx`（14 项）、`operations.test.tsx`（22 项：入口与权限、列表、分页与越界规范化、筛选、撤销的各种结果、结果不确定后同键重试、焦点、专辑详情的“修改记录”、成员无入口）、`change-summary.test.ts`、`operations-search.test.ts`、`disclosure.test.tsx`；Playwright `governance.spec.ts`（20 项：编辑、归组、撤销与操作记录的流程，五种宽度、axe、纯键盘、Esc 与焦点恢复，含超长改动内容）与 `responsive.spec.ts` 新增的三个页面状态；对新增前端逻辑逐项做过变异检查（唯一存活的是页面与视图两道 `isAdmin` 把关里去掉一道，行为不变的等价变异） |
+| A10 | 达成 | `./scripts/playback-e2e.sh` 27 项通过（新增 `governance.real.ts` 4 项加原有播放 23 项；治理用例在播放用例之前与之后两种顺序都验证过）：页面改标题后重扫仍为修正值；两张合成专辑归组后是一个组两个版本、重扫保持、在“修改记录”里撤销后分开；普通成员没有入口且读写接口都是 403 |
+| A11 | 达成 | 19 份新样本与解码器经 `api-contract.test.ts` 往返核对；新增 `governance-contracts.md` 并同步 Catalog REST、数据库、目录结构、运行合同、身份合同、前端规范、DESIGN、ADR 0002/0003 决策记录、路线图、架构决策摘要、产品目标与父任务（`20c7913`）；布局经用户确认（见规划决策记录，G9） |
+
+验证：隔离 PostgreSQL（`roomusic-test`，空闲端口、随机库名，用后 `down -v`）上，收尾时在最终树上重跑 `gofmt -l .`、`go vet ./...`、`go test -race -count=1 ./internal/operations/...`、
+`go test -count=1 ./internal/catalog/... ./internal/identity/... ./internal/app/... ./cmd/...` 全部通过（含接口样本逐字比较）；步骤 1–4 期间另跑过 `internal/library`、`internal/listening`、`internal/playback`（本任务没有改动它们）与逐项变异检查。
+前端：`npm run lint`、`npx tsc --noEmit`、全量 Vitest 67 个文件 1358 项、`npm run build` 后内嵌产物与提交的逐文件一致（每个涉及前端的提交都在导出的暂存树上重复类型检查、全量 Vitest 与构建比对）、
+Playwright 路由模拟 220 项通过；真实服务 27 项通过。没有运行 Go 全量测试：本任务只改了 `operations`、`catalog`、`identity` 与 `app` 的装配，其余包由各步骤的相关测试覆盖。
+既有的同步歌词用例（`player.spec.ts` 同步歌词）偶发失败（M3 之前的基线上也出现过，单独运行通过），与 M3 无关；步骤 7 的全量运行中通过。
+
+### 与设计的差异
+
+已补记在 [design.md](design.md) 第 14 节：`Kind` 与逆执行器随撤销接口放在第 4 步；`RevertExecutor` 锁记录与读取分成两条语句（并发测试发现 READ COMMITTED 下带连接的 `FOR UPDATE` 读不到刚提交的撤销记录）；
+视图是每个字段一次主键上的 `LEFT JOIN` 而不是一次透视；前端的命令 hook 合并成 `useReleaseCommands`，命令状态由页面持有，版本换组先导航再刷新；折叠面板抽成 `Disclosure`；
+操作记录的查询 `staleTime` 为 0；撤销成功后焦点带到区块标题；收尾截图后修正了“撤销”按钮的对齐。
+
+### 已接受的限制与后续
+
+- 被扫描判定为新发行时（整张替换等）不继承旧发行的修正与归组（G8），认领属于 M4；播放队列里已有条目的标题不随修正更新；清除修正时以提交时的扫描值为准；不记录被拒绝的尝试。
+- 浏览器验证只有 Linux Chromium 的自动化证据（五种宽度、axe、键盘），没有 Safari、Firefox 与 Windows 的实际渲染，也没有人工读屏验证。
+- 部署后无需额外操作：迁移 0017 只新增表、列与视图，已有发行没有修正、版本号为 1，读取结果与升级前相同，不需要重扫。
+- 后续（均未启动）：成员写操作接入操作记录（G6，独立小任务）；M4 的规划（认领、整组合并拆分、默认版本、问题处理）。F1 手工实播与 F3 远端 CI 仍按用户裁决延后。
