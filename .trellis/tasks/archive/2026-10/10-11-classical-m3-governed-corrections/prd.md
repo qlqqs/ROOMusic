@@ -4,7 +4,7 @@
 
 Core 1 阶段 M3：让管理员能修正扫描得到的发行信息、把同一作品的不同版本归到一起；这些人工结果不会被下一次扫描冲掉，
 谁改了什么有记录，改错了能撤销，音乐文件始终不写。它是 M4（问题处理、版本对比与默认版本、Release 合并拆分）与 M6（Steward 提案）
-复用的写路径基础（[路线图](../../../docs/architecture/core-1-roadmap.md) M3 行，父任务 [R5](../09-27-classical-core-1/prd.md)）。
+复用的写路径基础（[路线图](../../../../../docs/architecture/core-1-roadmap.md) M3 行，父任务 [R5](../../../09-27-classical-core-1/prd.md)）。
 技术设计见 [design.md](design.md)，执行计划见 [implement.md](implement.md)。
 
 ## 背景与已确认的事实
@@ -16,11 +16,11 @@ Core 1 阶段 M3：让管理员能修正扫描得到的发行信息、把同一�
 - 2026-09-28 D6（ADR 0002 决策记录）：Core 1 只允许人工确认归组，不做任何自动跨版本归组。
 - 路线图 M3 行的验收出口：重扫不覆盖修正、越权拒绝、并发冲突、幂等与支持的撤销有证据。
 - F3 裁决（2026-10-02）：成员写操作的 `Idempotency-Key` 延到 M3，随“成员管理是否纳入受治理操作”一起决定
-  （[身份与成员合同](../../spec/backend/identity-contracts.md)）；本任务的结论见 G6。
+  （[身份与成员合同](../../../../spec/backend/identity-contracts.md)）；本任务的结论见 G6。
 - 开发阶段不做兼容（用户 2026-09-29 裁决，见 ADR 0003 决策记录中的 F2 一行）：旧记录与旧格式不写兼容层；
-  表结构只通过新增迁移改变（[数据库规范](../../spec/backend/database-guidelines.md)“Migrations”）。
-- 本阶段裁决的 ADR 项：[ADR 0002](../../../docs/architecture/adr/0002-metadata-overlays.md) 第十节第 1、3、5、6、7 项；
-  [ADR 0003](../../../docs/architecture/adr/0003-governed-operations.md) 第九节第 1 项其余部分与第 2–6 项（第 7 项属 M4/M6），处理结论见下文“ADR 待批项的处理”。
+  表结构只通过新增迁移改变（[数据库规范](../../../../spec/backend/database-guidelines.md)“Migrations”）。
+- 本阶段裁决的 ADR 项：[ADR 0002](../../../../../docs/architecture/adr/0002-metadata-overlays.md) 第十节第 1、3、5、6、7 项；
+  [ADR 0003](../../../../../docs/architecture/adr/0003-governed-operations.md) 第九节第 1 项其余部分与第 2–6 项（第 7 项属 M4/M6），处理结论见下文“ADR 待批项的处理”。
 
 ### 现有代码与数据
 
@@ -39,11 +39,11 @@ Core 1 阶段 M3：让管理员能修正扫描得到的发行信息、把同一�
 - 唯一的受控写入先例是目录停用/恢复：锁目录行、核对 `expected_revision`、同一事务写 `library_root_operations`（前后状态、响应、
   幂等键与指纹），同键请求用 advisory lock 串行（`backend/internal/library/httpapi/root_operations.go:65`）；
   恢复只认相邻的成功停用记录（`root_operations.go:218`）。这些 handler 里直接写 SQL，是已登记的技术债
-  （[目录结构规范](../../spec/backend/directory-structure.md)“已知技术债”）。
+  （[目录结构规范](../../../../spec/backend/directory-structure.md)“已知技术债”）。
 - 前端专辑详情由头部（标题、专辑艺人、年份等）、版本导航、介质与曲目、侧栏“发行信息/此版本”与“制作人员”、底部“来源与证据”组成
   （`frontend/src/features/catalog/components/`）；目录操作记录在扫描目录页（`root-operations-section.tsx`）。前端对象解码器忽略未知字段，
   后端新增响应字段不会让旧解码器失败（`frontend/src/shared/api/decode.ts` 的 `object`）。
-- 原型的“审批与日志”页有待办、账簿与“恢复点”回滚，角色表为管理员/编辑者/听众，风险分低中高；[DESIGN.md](../../../frontend/DESIGN.md) §8
+- 原型的“审批与日志”页有待办、账簿与“恢复点”回滚，角色表为管理员/编辑者/听众，风险分低中高；[DESIGN.md](../../../../../frontend/DESIGN.md) §8
   已把“恢复点回滚”“编辑者”“问题可应用/忽略/撤销”列为原型的不实承诺，要求 M3 另行评审，不能照搬。
 
 ## 需求

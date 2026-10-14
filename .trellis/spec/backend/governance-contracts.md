@@ -9,7 +9,7 @@ M3（2026-10）让管理员能修正扫描得到的发行信息、调整版本�
 
 决策依据：[ADR 0002](../../../docs/architecture/adr/0002-metadata-overlays.md)、
 [ADR 0003](../../../docs/architecture/adr/0003-governed-operations.md) 与任务
-[M3 修正覆盖层与受治理操作](../../tasks/10-11-classical-m3-governed-corrections/prd.md)。
+[M3 修正覆盖层与受治理操作](../../tasks/archive/2026-10/10-11-classical-m3-governed-corrections/prd.md)。
 
 ## 2. 数据模型（迁移 0017）
 
