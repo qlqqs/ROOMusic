@@ -67,7 +67,10 @@ operational evidence; durable business recovery uses four separate concepts:
 - **Reversible Executor**: typed inverse actions that can restore a supported
   operation, rather than an Agent guessing how to undo natural-language history.
 
-Core 0 uses this model for directory configuration changes first. It does not
+Core 0 uses this model for directory configuration changes first; M3 extends the
+operation record and single-step inverse to release field corrections and manual
+regrouping (an `operations` table plus typed inverse executors; no Change Set
+approval queue yet). It does not
 implement full Event Sourcing, Git-like branches, or a full file recovery
 system. Future file and tag mutation must add an explicit recovery strategy
 before the capability is enabled. A physical purge may be irreversible, but
@@ -107,8 +110,10 @@ ADR 裁决状态见 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md
 M1a 只消费现有 API，M1b 使用阶段 I 的 ReleaseGroup 只读接口，两者都不新增元数据治理写路径；
 初始化/会话、目录配置、扫描和成员管理的既有写操作并未被“只读客户端”称呼禁止。服务端播放
 历史（P）排在阶段 I 之后，只承接真实播放的最小用户隔离记录，不提前实现全部个人库；P 已于 2026-10-11 实施（概览的“最近播放”与清除自己的历史），
-历史页面、收藏与歌单仍属 M5。后续播放、
-角色、修正、审批或依赖仍须分别通过所属子任务与 ADR 中对应项的批准。
+历史页面、收藏与歌单仍属 M5。M3 已于 2026-10 实施受控的资料库写路径：管理员可以修正发行的八个字段、调整版本所属的专辑并撤销自己的最近一次修改，
+修正存放在独立的表里、重扫不会覆盖，每次成功的修改写入只有管理员可读的操作记录（合同见[受治理操作合同](../backend/governance-contracts.md)）；
+没有审批队列、`editor` 角色与成员写操作的记录，认领、整组合并拆分与默认版本属于 M4。后续播放、
+角色、审批或依赖仍须分别通过所属子任务与 ADR 中对应项的批准。
 
 下面的永久约束跨阶段继续生效。不得因某能力不属于 Core 0 而永远禁止未来获批阶段，
 也不能因未来路线提到它就把它变成当前必需依赖。

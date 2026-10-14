@@ -17,7 +17,8 @@ M2a 的播放器入口与生命周期见[状态规范](./state-management.md)、
 来源是 `frontend-desgin/` 中的原型。旧月刊布局、hash 路由、模拟播放器和生产演示入口
 不再是默认要求；仍适用的队列语义与安全边界保留在本层规范。
 
-既有初始化、会话、目录、扫描和成员管理写操作仍可使用，不新增元数据治理写路径。依赖与路由方案的决策见
+2026-10：M3 增加管理员的受治理写操作（`features/governance`）：专辑详情里编辑发行信息、调整归组与撤销，“资料库”下的“操作记录”页与详情里的“修改记录”；
+普通成员没有编辑入口，只看到有效值与“人工修正”标记（后端合同见[受治理操作合同](../backend/governance-contracts.md)）。依赖与路由方案的决策见
 [前端基础 ADR](../../../docs/architecture/adr/0001-frontend-foundations.md) 决策记录，阶段和
 能力矩阵见 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)，M1a 的设计与验证记录见任务
 [M1a 技术设计](../../tasks/archive/2026-10/09-28-classical-m1a-shell-admin/design.md)。各规范文件区分“已实现的合同”与尚未实现的目标
@@ -58,6 +59,7 @@ Before writing or reviewing frontend code:
 | [目录与扫描流程合同](../backend/library-scan-contracts.md) | 目录接口、目录幂等、扫描整理与封面发现 |
 | [扫描协调合同](../backend/scan-coordination-contracts.md) | 扫描状态、扫描记录、持久化取消与 `ScanDTO` |
 | [Catalog REST 合同](../backend/catalog-rest-contracts.md) | 发行与按组接口、封面摘要、可见性与错误合同 |
+| [受治理操作合同](../backend/governance-contracts.md) | M3 的修正、归组、撤销、操作记录接口与错误码，前端命令与界面据此 |
 
 ## Quality Check
 

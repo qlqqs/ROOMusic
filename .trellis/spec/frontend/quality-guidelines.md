@@ -150,6 +150,25 @@ API 全样本清单必须注册播放（含派生）与歌词的全部成功样�
 
 新增配置须纳入`tsconfig.json`，避免工具配置没有常规类型门禁；私有路径/源音频不得进入报告。
 
+## M3 受治理操作验证分层
+
+最小 Vitest：`npx vitest run src/features/governance src/app/release-corrections.test.tsx src/app/release-grouping.test.tsx src/app/operations.test.tsx src/shared/ui/disclosure.test.tsx src/test/api-contract.test.ts`；
+改到专辑详情（`catalog`）、路由或外壳时再加 `src/app/album-detail.test.tsx` 与 `src/app/app.test.tsx`。
+
+- **共用的接口行为**：`src/test/governance-data.ts` 实现修正、归组、撤销与操作记录的后端行为（预期版本、幂等重放与同键异义、`no_changes`、`same_group`、`already_alone`、
+  `revert_conflict`、撤销资格），修改反映到共用的专辑数据（列表、组详情、版本详情）；Vitest 的 `fake-governance.ts` 与 Playwright 的受控后端共用它，两层对同一份行为断言。
+  它只依赖解码器与样本读取（见[目录结构](./directory-structure.md)）。样本契约：`corrections/`、`group-changes/`、`operations/` 与新增错误码的样本都要有 decoder 并往返无损。
+- **页面级**：`src/app/release-corrections.test.tsx`、`release-grouping.test.tsx`、`operations.test.tsx` 覆盖入口与权限（成员没有入口也不请求）、请求内容（版本号与幂等键）、
+  各错误码的文案与对话框去向、结果不确定后同一个键重试、撤销后的刷新与焦点、页码越界规范化；用 `respondToCorrect` 等函数直接预置后端状态。
+- **浏览器冒烟**：`e2e/governance.spec.ts`（编辑、归组、撤销与操作记录的流程，五种宽度、axe、纯键盘、Esc）与 `responsive.spec.ts` 里操作记录与“修改记录”的页面状态
+  （含超长改动内容）。页面上有多个折叠区块时，`summary` 的定位必须带上文字（“来源与证据”“修改记录”），不能再用无条件的 `locator("summary")`。
+  对话框要检查**自己**没有横向滚动（`scrollWidth - clientWidth`），页面级的溢出检查看不到它。
+- **真实服务**：`e2e/real/governance.real.ts`，经 `scripts/playback-e2e.sh` 与播放用例同一个服务运行：素材是用例自己生成的合成 WAV（INFO 标签带专辑，放在 `library/governance`），
+  结束后删除并重扫；不依赖文件先后顺序（两种顺序都验证过）。覆盖页面改标题 → 改文件标签并重扫 → 扫描值更新而修正不动 → 撤销后回到现在的扫描值；
+  归组 → 重扫保持 → 在“修改记录”里撤销后分开；成员没有入口且接口 `403`。脚本拒绝接管已有的 `roomusic-test` 容器，先拆掉自己的测试库再运行。
+- **变异检查（实践，不入库）**：对新增逻辑逐项临时改坏（可撤销判断、焦点兜底、`staleTime`、地址规范化、同键重试、后端“扫描写入时顺手清掉修正”），确认用例会失败再还原；
+  存活的变异必须逐个判断是否等价（例如页面与视图两道 `isAdmin` 把关，去掉一道行为不变）。
+
 ## Review Checklist
 
 - [ ] Change belongs to one feature or an explicit app/shared owner.

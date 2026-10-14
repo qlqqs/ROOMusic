@@ -4,7 +4,8 @@
 
 本合同适用于发行版本列表、详情、按组只读读取、封面资源读取和曲目歌词读取。新增或修改 Release 摘要字段、可见性、
 搜索、筛选、分页、按组投影或封面投影时必须同步阅读并更新本文件。Catalog 是读取 owner；扫描器仍
-负责写入 Release Graph 与 `release_artworks`，音乐源保持只读。
+负责写入 Release Graph 与 `release_artworks`，音乐源保持只读。M3 起读取到的发行值是**有效值**（扫描值叠加管理员的修正，见第 3 节
+“有效值投影”）；修正、人工归组、撤销与操作记录的接口见[受治理操作合同](./governance-contracts.md)。
 
 ## 2. 接口与数据签名
 
@@ -18,13 +19,17 @@
   它与发行接口同属 catalog 的只读投影，提取、保存、解析规则与响应形状见[内嵌歌词合同](./lyrics-contracts.md)。
 - 播放历史（阶段 P）只经 catalog 的两个公开读取函数使用目录：`Store.LoadTrackDuration`（present 曲目的时长，未知为 0）与
   `Store.LoadTrackPlacements`（present 曲目的标题、组与所在发行摘要，摘要与列表同一个投影），不读 catalog 的私有表；规则见[播放历史合同](./listening-contracts.md)。
+- 管理员写接口（M3，合同见[受治理操作合同](./governance-contracts.md)）：`GET|PATCH /api/v1/releases/{id}/corrections`、
+  `POST /api/v1/releases/{id}/group`、`GET /api/v1/operations`、`POST /api/v1/operations/{id}/revert`。
 - Release 摘要包含 `id`、标题/艺人、nullable 年份/来源/介质、Medium/Track/attention
   计数，以及 `artwork: null | {resource_id,mime,width,height}`。
 - `artwork` 是在既有 Release 摘要上追加的向后兼容（additive）字段；真实音频播放仍
   明确延期，不属于当前 Catalog REST 合同。
 - ReleaseGroup 摘要：`{id, release_count, attention_count, representative}`，`representative`
   是代表版本的完整 Release 摘要（含封面）。组详情在摘要上加 `releases`：成员 Release 摘要数组。
-  两个接口都只读，写操作（人工归组等）属于 M3。
+  两个接口都只读；人工归组由治理合同的 `POST /releases/{id}/group` 提供。
+- Release 详情在摘要之外加 `revision`（发行的人工修改版本号，写操作用它做预期版本）与 `corrected_fields`（有人工修正的字段名，固定顺序，
+  没有时是空数组）；所有登录成员可见，不含修正值的来源与操作者。
 - Release 详情的 `edition`、`label`、`barcode` 为 nullable string；每条 Track 的
   `credits` 项为 `{role,name}`，`role` 只允许
   `composer | conductor | performer | producer`。每轨最多 100 条、单个 Release 最多
@@ -69,6 +74,14 @@
   不用 `no-store`（每次整张重新下载），也不用 `max-age`（退出后一段时间内仍可从浏览器缓存直接读到）。依据与局限见
   [运行合同](./core0-runtime-contracts.md)的“HTTP 缓存”。
 
+### 有效值投影（M3）
+
+- 所有读取（列表、详情、搜索、排序、分页、按组读取、代表版本规则、最近播放的曲目位置）的发行来源是视图 `release_effective`
+  （常量 `releaseSource`，别名仍叫 `releases`）：标题、专辑艺人、年份、流派、厂牌、编号、版本说明、条码在有修正时取修正值（设空为空），
+  展示艺人 `artist` 跟随专辑艺人的修正。扫描与身份规划读写 `releases` 本表。**没有修正时与扫描值逐项一致。**
+- `attention_count` 不计已有修正的字段（`artist` 由专辑艺人的修正覆盖），分组原因与缺失曲目照旧；详情的专辑级署名里，专辑艺人有修正时用修正值。
+  完整规则与视图定义见[受治理操作合同](./governance-contracts.md)第 5 节。
+
 ### 按组读取（阶段 I，只读）
 
 - **参数与错误码**与 `/releases` 完全相同：`page`、`page_size`（默认 1/50，最大 100）、`q`（最多 200 字节）、
@@ -81,7 +94,7 @@
 - **搜索**：任一可见成员命中 `/releases` 的搜索条件（同一个 SQL 谓词），组即命中；只命中不可见成员的不算。
 - **attention**：`attention_count` 是全部可见成员 attention 之和（不可见成员不计）；`attention=required` 取其大于 0 的组，
   与代表版本自己的 `attention_count` 无关。
-- **排序**：代表版本的 `LOWER(title)`、`LOWER(artist)`、ID，与 `/releases` 一致。M3 人工归组之前每组恰好一个版本，
+- **排序**：代表版本的 `LOWER(title)`、`LOWER(artist)`、ID，与 `/releases` 一致。没有人工归组时每组恰好一个版本，
   此时 `/release-groups` 与 `/releases` 的总数、顺序与代表版本逐项对应，`release_count` 为 1，
   `attention_count` 等于该版本的 `attention_count`。
 - 摘要投影、封面 `LEFT JOIN` 与搜索谓词复用 `/releases` 的同一批 SQL 常量，不逐组查询。
@@ -121,6 +134,8 @@
   代表版本逐项对应（含搜索、attention、分页、超出范围的页、present-only）；直接插入多成员组，覆盖代表版本规则
   （年份、无年份排后、创建时间、ID）、`release_count` 与 `attention_count`（不可见成员不计）、搜索命中非代表成员、
   attention 只来自非代表成员、成员数超过 100 的截断；401、400、404、非法参数。
+- 有效值（M3，`internal/catalog/effective_integration_test.go`）：无修正时视图逐列等于表；逐字段叠加与清除；读取（列表、详情、搜索、排序、按组）返回有效值；
+  署名跟随专辑艺人的修正；“需要关注”不计已修正的字段。
 - 封面缓存（F3，`internal/app/artwork_cache_integration_test.go`）：200 带 `ETag` 与 `private, no-cache`；强标签、弱标签、列表与
   `*` 都得到 304 且没有响应体；删除文件后带匹配标签仍是 304；标签不匹配返回新字节；未认证 401、未知资源 404（都不是 304）；
   不安全的存储键返回 404。`catalog/artwork` 的单元测试覆盖 `safeStorageKey` 与 `Read`，`platform/httpserver` 的 `etag_test.go` 覆盖弱比较。

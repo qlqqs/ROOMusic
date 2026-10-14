@@ -22,6 +22,13 @@ or alternative business-policy engines.
   没有 `retry`。`onSettled` 返回刷新相关查询的 Promise，命令在刷新完成后才结束；回调先经 `scope.isCurrent()` 检查发起时的会话
   代次，旧会话的迟到结果不更新界面、不导航。开始与取消扫描（`useStartScan`、`useCancelScan`）是更简单的 mutation：开始扫描
   重复发送只会得到同一个扫描，不需要幂等键；取消被接受不等于已取消，结束前先刷新扫描状态，按钮保持忙碌。
+- **受治理命令 hook**（M3，`useReleaseCommands`）：同一个命令状态机承载四种意图（修正、归入、移出、撤销），每个新意图在发起时生成幂等键，
+  结果不确定时 `retry` 沿用同一个命令与键；`refresh` 与 `onMoved` 由 app 传入（governance 不知道别的 feature 的查询键，也不依赖路由）。
+  版本换了专辑组之后**先导航再刷新**：`onMoved` 在 mutation 的 `onSuccess` 里同步调用，刷新放在 `onSettled`——否则刷新读到“原来的专辑已没有这个版本”，
+  详情页的地址规范化与这次导航争抢、旧专辑闪一下“专辑不存在”。返回的对象只在状态变化时换新（`useMemo`），页面才能把它放进 `useCallback` 的依赖。
+  命令状态由页面持有，因为写操作之后路由可能换到另一个专辑组、详情组件重新挂载，结果提示要留在页面上；撤销对话框的开合与焦点兜底在 `useRevertFlow`。
+- **操作记录查询**（`useOperations`）：键里带发行筛选、页码与页大小；翻页用 `keepPreviousData` 保留上一页；`staleTime` 为 0（审计视图每次打开都重读，
+  别的管理员的修改也能看到，先显示缓存再刷新）；展开才请求的区块把请求放在只在展开后挂载的子组件里，不靠 `enabled` 开关。
 - **派生值留在来源处**：扫描的阶段、文案与是否终态由 `scan-status.ts` 的纯函数从后端状态推出，不用 effect 同步。
 - **到终态的副作用**：`useScan` 在读到终态时用 effect 使活动扫描查询失效（依赖 `finished` 布尔值而不是整份数据，只触发一次）。
 

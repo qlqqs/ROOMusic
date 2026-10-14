@@ -33,10 +33,12 @@ backend/
 │   │   └── httpapi/                # 格式表、曲目预检（含派生等待）与音频
 │   ├── listening/                  # 播放历史：每用户的真实播放记录、计次门槛校验、最近播放的发行与清除（发行归属只经 catalog 公开函数换算）
 │   │   └── httpapi/                # 记录一次播放、最近播放、清除
-│   └── catalog/                    # 观察合同、扫描暂存表、身份规划、organizer、来源身份、Release 图写入、读取投影
+│   ├── operations/                 # 受治理操作的共同流程：操作记录、同一操作者同一键的串行与重放、同一事务写记录、撤销与展示的 Kind 接口（不含业务表、规则与 HTTP）
+│   │   └── httpapi/                # 操作记录列表与撤销（不导入 catalog，各类型的撤销经 Kind 由 app 注入）
+│   └── catalog/                    # 观察合同、扫描暂存表、身份规划、organizer、来源身份、Release 图写入、读取投影、修正与人工归组的执行器、有效值视图
 │       ├── metadata/               # 署名、空白规范化、有界文本、艺人名规则（叶子包）
 │       ├── artwork/                # 受管封面：校验、落盘、关联、读取
-│       └── httpapi/                # Release 列表/详情/证据、按组只读、封面读取
+│       └── httpapi/                # Release 列表/详情/证据、按组只读、封面读取、修正与人工归组
 ├── migrations/
 └── testdata/                       # small repository-wide fixtures only
 ```
@@ -48,11 +50,12 @@ backend/
 
 - 没有 `domain/`、`application/`、`ports/`、`adapters/` 这几层：每个能力目前只有一个 PostgreSQL 实现，
   为它们建目录只会多一层间接。出现第二个实现或需要隔离持久化时再拆。
-- 没有 `search/`、`operations/`：搜索仍是 catalog 的 PostgreSQL 查询；受治理操作属于 M3。
+- 没有 `search/`：搜索仍是 catalog 的 PostgreSQL 查询。`operations/` 已在 M3 建立（见下），但没有审批队列、Change Set 与执行模式（M6 的 Agent 阶段才需要）。
 - 没有 `platform/observability`：日志由 `httpserver` 的中间件和各处 `slog` 调用承担。
 - **已知技术债**：`identity/httpapi` 与 `library/httpapi` 中目录、目录操作和成员管理的 handler 仍直接执行 SQL
-  （含 F2 的幂等流程），与“handler 不含 SQL”的规则不符。M3 按受治理操作合同重做目录操作时抽出用例，
-  成员管理在下一次身份接口变更时一并抽出。扫描相关 handler 已只做解析、鉴权和响应映射。
+  （含 F2 的幂等流程），与“handler 不含 SQL”的规则不符。M3 的新操作（修正、归组、撤销）已按 `operations.Run` 实现，handler 只做解析、鉴权与响应映射；
+  目录操作与成员管理没有迁入共同流程（目录操作记录不并入操作记录页，成员写操作的接入见[治理合同](./governance-contracts.md)第 11 节与
+  [身份与成员合同](./identity-contracts.md)），下一次改动它们时再抽出用例。扫描相关 handler 已只做解析、鉴权和响应映射。
 
 ## Ownership
 
@@ -61,7 +64,8 @@ backend/
 - `library` owns allowed-root registration workflows, read-only source
   discovery, parsers, scan runs, diagnostics, and missing-source reconciliation.
 - `catalog` owns ReleaseGroup, Release, Medium, Track, key field provenance, and
-  conservative grouping rules. 扫描暂存表（`scan_observations`）与身份规划（曲目重绑定、Release 成员关系匹配）也归它：
+  conservative grouping rules. M3 起还拥有发行字段的修正表 `release_corrections`、人工修改版本号 `releases.edit_revision`、有效值视图
+  `release_effective`，以及字段修正与人工归组的执行器和逆执行器（在 `operations.Run` 给的事务里执行，不碰鉴权、幂等与操作记录表）。扫描暂存表（`scan_observations`）与身份规划（曲目重绑定、Release 成员关系匹配）也归它：
   library 经 `catalog.StageObservation` 等函数写入暂存，规划需要读文件时通过 catalog 定义的窄端口
   `catalog.Fingerprinter` 向 library 取值（library 在注册 root 内校验路径后调用 parser），catalog 不导入 library 或
   parser，两边不读对方的私有表。
@@ -74,8 +78,10 @@ backend/
   见[播放历史合同](./listening-contracts.md)。
 - `search` owns query semantics and result projections while PostgreSQL remains
   the authority. It cannot write catalog truth through a search projection.
-- `operations` owns Change Sets, Operation Journal events, idempotency records,
-  revisions used by managed operations, and supported inverse actions.
+- `operations`（M3）拥有操作记录表 `operations`、共同写入流程 `Run`（幂等键串行与重放、同键异义冲突、同一事务写记录、错误分类）与撤销、展示的 `Kind`
+  接口；它不含业务表、规则与 HTTP，依赖只有 `platform/uuid`。业务表与版本号列留在拥有它们的能力里（catalog），各类型的撤销能力由 catalog 实现、
+  经 `app` 注册给 `operations/httpapi`。Change Set、审批与执行模式尚未实现，见[治理合同](./governance-contracts.md)。
+  Original sketch for later phases: Change Sets, Operation Journal events, and supported inverse actions.
 - `platform` owns mechanisms shared by the process, never feature policy.
 - `app` is the only composition root. It may import concrete adapters to wire
   dependencies; domain and application packages may not.

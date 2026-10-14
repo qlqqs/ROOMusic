@@ -31,6 +31,7 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 | 无损派生 | [playback-derivation-contracts.md](./playback-derivation-contracts.md) | M2b ALAC → FLAC：ffmpeg 与缓存配置、启动自检、转换与核对、上限与取消、测试 |
 | 内嵌歌词 | [lyrics-contracts.md](./lyrics-contracts.md) | M2b 歌词：标签提取、`tracks.lyrics`、歌词接口与 LRC 解析规则、测试 |
 | 播放历史 | [listening-contracts.md](./listening-contracts.md) | 阶段 P：`play_history`、计次规则、记录与最近播放与清除接口、按用户隔离、前端计次与上报、测试 |
+| 受治理操作 | [governance-contracts.md](./governance-contracts.md) | 阶段 M3：操作记录与 `operations.Run`、发行字段修正与有效值视图、人工归组、撤销、操作记录接口、测试 |
 
 ## 2. 接口签名
 
@@ -48,6 +49,8 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
   `GET|HEAD /api/v1/tracks/{id}/audio`，具体合同见[鉴权直出](./playback-contracts.md)；M2b 在同样三个接口上增加派生交付
   （预检可返回 202），见[无损派生](./playback-derivation-contracts.md)。
 - P：`POST /api/v1/me/plays`、`GET /api/v1/me/plays/recent-releases` 与 `DELETE /api/v1/me/plays`，只作用于当前会话用户，见[播放历史](./listening-contracts.md)。
+- M3（管理员）：`GET|PATCH /api/v1/releases/{id}/corrections`、`POST /api/v1/releases/{id}/group`、`GET /api/v1/operations`、
+  `POST /api/v1/operations/{id}/revert`，见[受治理操作](./governance-contracts.md)。
 - 前端请求形态为 `apiRequest(spec, decode)`（`frontend/src/shared/api/request.ts`）：成功响应经边界 decoder（第二个参数是状态码，
   同一路径 200 与 202 形状不同时用它核对响应体与状态码相符），
   非 2xx 经统一的错误信封 decoder；响应不是 JSON、信封不合法或 decoder 失败时归为 `invalid_response`，不进入缓存。
@@ -220,14 +223,14 @@ Authorization/session token、密码、数据库 URL、完整 NAS 路径或音�
 
 ## 后续技术债
 
-- HTTP 请求现在通过 `http.request.completed` 事件记录状态码、耗时和路由模板；用户
-  创建/禁用/会话撤销仍无独立 Operation Journal。
+- HTTP 请求现在通过 `http.request.completed` 事件记录状态码、耗时和路由模板；M3 起发行修正、归组与撤销写操作记录，用户
+  创建/禁用/会话撤销仍无幂等键与操作记录（M3 裁决 G6 不纳入，独立小任务）。
 - ~~前端源码已删除~~：2026-10-01 由 M1a 按 Classical 设计重建，依赖精确固定（见 ADR 0001 决策记录）。
 - M1a 前端发现的后端缺口（M1a 不改后端，如实呈现，记入后续任务）。2026-10-02 由 F3 修复的条目划掉，其余仍待办：
   - ~~没有扫描历史列表~~：F3 新增 `GET /api/v1/scans`（管理员）与扫描目录页的“扫描记录”，见 [扫描协调合同](./scan-coordination-contracts.md)。
   - ~~`/auth/me` 不返回用户 ID~~：F3 起 `/auth/me`、登录与初始化管理员的响应都带 `id`，前端按 ID 判断“你”与同一查看者。
-  - 成员列表无分页，不能创建管理员或修改角色（`editor` 是 M3 候选）。
-  - 成员写操作无幂等键：**F3 裁决（2026-10-02）延到 M3**，随成员管理是否纳入受治理操作一起决定；前端保持“结果不明时刷新列表核对”。
+  - 成员列表无分页，不能创建管理员或修改角色（M3 没有引入 `editor`，仍是候选）。
+  - 成员写操作无幂等键：F3 裁决延到 M3，**M3 裁决（G6）不纳入**，接入见 [身份与成员合同](./identity-contracts.md)；前端保持“结果不明时刷新列表核对”。
   - ~~`listUsers` 会静默跳过读取失败的行~~、~~`createUser` 与 `setupAdmin` 把任何写入失败映射成 409~~、~~`invalid_input` 的文案写
     “12 个字符”而规则按字节~~（另有过长密码在 bcrypt 处变成 500）、~~`PATCH /users/{id}` 与撤销会话对格式不对的 ID 返回 503，撤销
     未知用户也返回 200~~：F3 已修复，见 [身份与成员合同](./identity-contracts.md)。
@@ -245,5 +248,5 @@ Authorization/session token、密码、数据库 URL、完整 NAS 路径或音�
   完成日志的 `route_template` 记为 `<unmatched>`，见上文校验与错误矩阵。
 - ~~2026-09-27 静态审查：停用/恢复指纹未含路由 root ID，同键同 body 跨目标会重放前一个 root 的结果~~：
   2026-09-29 由 F2 动态复现并修复。指纹现含小写 root ID，同键请求串行，旧记录不做兼容，见
-  [目录与扫描流程合同](./library-scan-contracts.md)的“目录新增与操作幂等”。目录操作仍是窄实现，不是通用幂等模板：失败尝试不写记录，通用操作合同属于 M3，
+  [目录与扫描流程合同](./library-scan-contracts.md)的“目录新增与操作幂等”。目录操作仍是窄实现，不是通用幂等模板：失败尝试不写记录，通用操作合同由 M3 建立（`operations.Run`，目录操作没有迁入），
   见 [ADR 0003](../../../docs/architecture/adr/0003-governed-operations.md)。
