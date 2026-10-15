@@ -6,8 +6,8 @@ const id = "0192E3A4-0000-4000-8000-0000000000AB";
 describe("parseOperationsSearch", () => {
   it("没有参数时都是 undefined（显式写出，路由才会丢掉原来的值）", () => {
     const parsed = parseOperationsSearch({});
-    expect(parsed).toEqual({ page: undefined, release: undefined });
-    expect("page" in parsed && "release" in parsed).toBe(true);
+    expect(parsed).toEqual({ page: undefined, release: undefined, group: undefined });
+    expect("page" in parsed && "release" in parsed && "group" in parsed).toBe(true);
   });
 
   it("页码是 2 及以上的整数；第 1 页不写进地址，不合法的值丢弃", () => {
@@ -19,5 +19,12 @@ describe("parseOperationsSearch", () => {
   it("release 只保留 UUID 并统一成小写；不是 UUID 时看全部记录", () => {
     expect(parseOperationsSearch({ release: id }).release).toBe(id.toLowerCase());
     for (const release of ["", "abc", "0192e3a4-0000-4000-8000", 7, ["x"], `${id}x`]) expect(parseOperationsSearch({ release }).release, String(release)).toBeUndefined();
+  });
+
+  it("group 与 release 一样只保留 UUID 并统一成小写，两者互不影响", () => {
+    expect(parseOperationsSearch({ group: id }).group).toBe(id.toLowerCase());
+    expect(parseOperationsSearch({ group: id }).release).toBeUndefined();
+    expect(parseOperationsSearch({ release: id, group: "not-a-uuid" })).toEqual({ page: undefined, release: id.toLowerCase(), group: undefined });
+    for (const group of ["", "abc", 7, ["x"], `${id}x`]) expect(parseOperationsSearch({ group }).group, String(group)).toBeUndefined();
   });
 });

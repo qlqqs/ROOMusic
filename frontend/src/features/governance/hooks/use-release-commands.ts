@@ -3,26 +3,36 @@ import { useCallback, useMemo } from "react";
 import { failureOf, isOutcomeUncertain, type ApiFailure } from "../../../shared/api";
 import { newIdempotencyKey } from "../../../shared/lib/ids";
 import { useViewerScope } from "../../auth";
-import type { CorrectableField, CorrectionResultDTO, GroupChangeResultDTO, RevertResultDTO } from "../api/decoders";
-import { changeReleaseGroup, correctRelease, revertOperation, type CorrectionChanges } from "../api/endpoints";
+import type { CorrectableField, CorrectionResultDTO, GroupChangeResultDTO, GroupDefaultResultDTO, RevertResultDTO } from "../api/decoders";
+import { changeReleaseGroup, correctRelease, revertOperation, setGroupDefault, type CorrectionChanges } from "../api/endpoints";
 import { governanceKeys } from "../query-keys";
 
 /** 命令作用的发行：id 用来发请求，title 只用来写提示文字。 */
 export type ReleaseTarget = { id: string; title: string };
 
-/** 被撤销的操作是哪一种：成功提示据此说明恢复了什么。group 是从操作记录里撤销的归组调整（记录不区分归入与移出）。 */
-export type RevertSubject = "correct" | "join" | "detach" | "group" | "other";
+/** 被撤销的操作是哪一种：成功提示据此说明恢复了什么。group 是从操作记录里撤销的归组调整（记录不区分归入与移出），default 是默认版本的调整。 */
+export type RevertSubject = "correct" | "join" | "detach" | "group" | "default" | "other";
 
 export type ReleaseIntent =
   | { kind: "correct"; release: ReleaseTarget; revision: number; changes: CorrectionChanges; fields: readonly CorrectableField[] }
   | { kind: "join"; release: ReleaseTarget; revision: number; group: { id: string; title: string } }
   | { kind: "detach"; release: ReleaseTarget; revision: number }
   | {
+      /**
+       * 设定或清除专辑的默认版本。release 是页面上正在看的版本（成功之后页面继续显示它）；group 是专辑与页面读到的专辑版本号
+       * （预期版本）；target 是要设为默认版本的发行（设为默认版本时就是 release 自己），null 是改回自动选择。
+       */
+      kind: "default";
+      release: ReleaseTarget;
+      group: { id: string; revision: number };
+      target: string | null;
+    }
+  | {
       kind: "revert";
       release: ReleaseTarget;
       operationId: string;
       subject: RevertSubject;
-      /** 撤销归组之后要回到的专辑（原来的组）；字段修正的撤销没有。操作记录页不跟随（它的 onMoved 什么也不做）。 */
+      /** 撤销归组或默认版本调整之后页面要显示的专辑（归组是原来的组，默认版本是这张专辑）；字段修正的撤销没有。操作记录页不跟随（它的 onMoved 什么也不做）。 */
       returnGroupId?: string | undefined;
     };
 
@@ -36,6 +46,7 @@ export type ReleaseCommandResult =
   | { kind: "correct"; result: CorrectionResultDTO }
   | { kind: "join"; result: GroupChangeResultDTO; groupTitle: string }
   | { kind: "detach"; result: GroupChangeResultDTO }
+  | { kind: "default"; result: GroupDefaultResultDTO }
   | { kind: "revert"; result: RevertResultDTO };
 
 export type ReleaseCommandState =
@@ -54,7 +65,8 @@ type ReleaseCommandsOptions = {
   /** 修改成功或失败之后刷新别处缓存的专辑数据（目录、最近播放……）；由 app 组合，governance 不知道那些查询键。 */
   refresh: () => Promise<unknown>;
   /**
-   * 版本换了专辑组（归入、移出，或撤销它们）之后，页面应该显示的专辑组与版本；在刷新之前同步调用。先导航再刷新：
+   * 页面应该显示的专辑组与版本：版本换了专辑组（归入、移出，或撤销它们）之后，以及设定、清除默认版本之后（专辑不变，
+   * 代表版本可能变了，页面要继续显示刚才那个版本）；在刷新之前同步调用。先导航再刷新：
    * 否则刷新读到“原来的专辑已经没有这个版本（甚至已经空了）”，页面会闪一下“专辑不存在”，还会与详情页自己的地址规范化争抢导航。
    * 由 app 实现导航，governance 不依赖路由。
    */
@@ -62,7 +74,7 @@ type ReleaseCommandsOptions = {
 };
 
 /**
- * 管理员对发行的写操作：修正字段、归入其他专辑、移出为独立专辑与撤销。悲观更新：只在后端确认并刷新相关查询之后才算完成，
+ * 管理员对发行与专辑的写操作：修正字段、归入其他专辑、移出为独立专辑、设定或清除默认版本与撤销。悲观更新：只在后端确认并刷新相关查询之后才算完成，
  * 不做乐观修改；无论成败（包括 409 冲突与结果不确定）都刷新，让界面显示的是服务器当前的状态。
  * 同一时刻只有一个命令；写操作从不自动重试，重试由用户显式触发。
  */
@@ -86,6 +98,10 @@ export function useReleaseCommands({ refresh, onMoved }: ReleaseCommandsOptions)
           const { data } = await changeReleaseGroup(command.release.id, command.revision, { action: "detach" }, command.key);
           return { kind: "detach", result: data };
         }
+        case "default": {
+          const { data } = await setGroupDefault(command.group.id, command.group.revision, command.target, command.key);
+          return { kind: "default", result: data };
+        }
         case "revert": {
           const { data } = await revertOperation(command.operationId, command.key);
           return { kind: "revert", result: data };
@@ -96,6 +112,7 @@ export function useReleaseCommands({ refresh, onMoved }: ReleaseCommandsOptions)
     onSuccess: (result, command) => {
       if (!scope.isCurrent()) return;
       if (result.kind === "join" || result.kind === "detach") onMoved(result.result.group_id, command.release.id);
+      else if (result.kind === "default") onMoved(result.result.group_id, command.release.id);
       else if (command.kind === "revert" && command.returnGroupId !== undefined) onMoved(command.returnGroupId, command.release.id);
     },
     // 返回 Promise：相关查询刷新完成后命令才算结束，成功提示出现时页面已经是新的。

@@ -6,6 +6,7 @@ export const governanceFailureMessages = {
   idempotency_conflict: "这次操作的标识与之前的另一个请求冲突。请重新发起操作。",
   not_found: "这个版本已不可见（可能刚被重新扫描），无法继续操作。",
   group_not_found: "目标专辑已不存在，或者没有可见的版本。请重新搜索。",
+  not_in_group: "这个版本已不在这张专辑里，或现在不可见，页面已刷新。请核对后再操作。",
   same_group: "这个版本已经在这张专辑里了。",
   already_alone: "这个版本已经是独立专辑，不需要再移出。",
   no_changes: "没有需要修改的内容。",

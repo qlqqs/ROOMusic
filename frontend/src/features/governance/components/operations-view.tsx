@@ -16,18 +16,25 @@ import styles from "./operations-view.module.css";
 type OperationsViewProps = {
   /** URL 里的页码，从 1 起。 */
   page: number;
-  /** 只看这个版本的记录（URL 的 release）；undefined 是全部。 */
+  /** 只看这个版本的记录（URL 的 release）；undefined 是不按版本筛选。 */
   releaseId: string | undefined;
+  /** 看这张专辑的记录（URL 的 group，默认版本的设定等专辑级记录）；与 releaseId 同时给出时取并集；undefined 是不按专辑筛选。 */
+  groupId: string | undefined;
   /** 撤销的命令：由 app 创建（刷新什么、要不要跟随导航由 app 决定）。 */
   commands: ReleaseCommands;
 };
 
-/** 筛选时说明在看谁的记录：标题取自已加载记录里这个版本现在的标题，没有记录时只说“这个版本”。 */
-function ReleaseFilterNote({ data }: { data: OperationPageDTO | undefined }) {
+/**
+ * 筛选时说明在看谁的记录：只按版本筛选时标题取自已加载记录里这个版本现在的标题，没有记录时只说“这个版本”；
+ * 按专辑筛选（专辑详情的“全部记录”同时带版本与专辑）说明是这个版本和这张专辑的记录。
+ */
+function FilterNote({ releaseId, groupId, data }: { releaseId: string | undefined; groupId: string | undefined; data: OperationPageDTO | undefined }) {
   const title = data?.items.find((item) => item.release !== null)?.release?.title;
+  const subject =
+    groupId === undefined ? (title === undefined ? "这个版本" : `《${title}》`) : releaseId === undefined ? "这张专辑" : "这个版本和它所在的专辑";
   return (
     <p className={styles.filter}>
-      <span>只显示{title === undefined ? "这个版本" : `《${title}》`}的记录。</span>
+      <span>只显示{subject}的记录。</span>
       <Link to="/operations" search={{}}>
         查看全部记录
       </Link>
@@ -36,12 +43,13 @@ function ReleaseFilterNote({ data }: { data: OperationPageDTO | undefined }) {
 }
 
 /**
- * 操作记录页的内容（管理员）：管理员对专辑的修改、归组调整与撤销，最新的在前，可以按版本筛选，可撤销的有“撤销”。
+ * 操作记录页的内容（管理员）：管理员对专辑的修改、归组调整、默认版本与撤销，最新的在前，可以按版本与专辑筛选，可撤销的有“撤销”。
  * 页码来自 URL：页码超出末页时用替换历史的方式改到末页（没有数据时回到第 1 页）。
  * 撤销之后记录与“能不能撤销”都来自服务器的最新状态：命令让 governance 的查询失效，列表随之刷新。
  */
-export function OperationsView({ page, releaseId, commands }: OperationsViewProps) {
-  const operations = useOperations({ releaseId, page, pageSize: OPERATION_PAGE_SIZE });
+export function OperationsView({ page, releaseId, groupId, commands }: OperationsViewProps) {
+  const operations = useOperations({ releaseId, groupId, page, pageSize: OPERATION_PAGE_SIZE });
+  const filtered = releaseId !== undefined || groupId !== undefined;
   const navigate = useNavigate();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const revert = useRevertFlow(commands, headingRef);
@@ -57,15 +65,15 @@ export function OperationsView({ page, releaseId, commands }: OperationsViewProp
 
   return (
     <>
-      {releaseId === undefined ? null : <ReleaseFilterNote data={operations.data} />}
+      {filtered ? <FilterNote releaseId={releaseId} groupId={groupId} data={operations.data} /> : null}
       <ReleaseCommandNotice state={commands.state} releaseId={null} hideFailure={revert.target !== null} onRetry={() => commands.retry()} onDismiss={commands.dismiss} />
-      <Panel title={releaseId === undefined ? "全部记录" : "这个版本的记录"} headingRef={headingRef}>
+      <Panel title={!filtered ? "全部记录" : groupId === undefined ? "这个版本的记录" : releaseId === undefined ? "这张专辑的记录" : "这个版本和专辑的记录"} headingRef={headingRef}>
         <QueryContent query={operations} loading={<Skeleton label="正在加载操作记录" lines={4} />}>
           {(data) =>
             outOfRange ? (
               <Skeleton label="正在加载操作记录" lines={4} />
             ) : data.pagination.total === 0 ? (
-              <p>{releaseId === undefined ? "还没有操作记录。修改专辑信息或调整归组之后，记录会出现在这里。" : "这个版本还没有操作记录。"}</p>
+              <p>{!filtered ? "还没有操作记录。修改专辑信息、调整归组或设定默认版本之后，记录会出现在这里。" : groupId === undefined ? "这个版本还没有操作记录。" : "还没有这些记录。"}</p>
             ) : (
               <div aria-busy={operations.isPlaceholderData}>
                 <OperationList caption="操作记录" items={data.items} showRelease onRevert={revert.open} />

@@ -128,12 +128,12 @@ function MembersRoute() {
 
 const membersRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/members", component: MembersRoute });
 
-// page 是记录的页码（2 及以上），release 是只看某个版本的记录；不合法的值显式写成 undefined。
+// page 是记录的页码（2 及以上），release 是只看某个版本的记录，group 是看某张专辑的记录（默认版本）；不合法的值显式写成 undefined。
 function OperationsRoute() {
-  const { page, release } = operationsRoute.useSearch();
+  const { page, release, group } = operationsRoute.useSearch();
   return (
     <AdminGate>
-      <OperationsPage page={page ?? 1} releaseId={release} />
+      <OperationsPage page={page ?? 1} releaseId={release} groupId={group} />
     </AdminGate>
   );
 }

@@ -13,7 +13,7 @@ type AlbumDetailPageProps = {
 };
 
 /**
- * 专辑详情：所有登录用户都能读；管理员在“来源与证据”里多一个完整证据，在头部多一个操作区（编辑发行信息……）。
+ * 专辑详情：所有登录用户都能读；管理员在“来源与证据”里多一个完整证据，在头部多一个操作区（编辑发行信息、设定默认版本……）。
  * 页面标题与 h1 由详情自己给出（取决于选中的版本）。管理员写操作的命令状态由这里持有：写操作之后路由可能换到另一个专辑组，
  * 详情组件会重新挂载，结果提示仍要留在页面上。头部的操作与“修改记录”里的撤销各有一个命令状态，结果提示各自显示在自己的区域。
  */
@@ -39,19 +39,23 @@ export function AlbumDetailPage(props: AlbumDetailPageProps) {
   const renderReleaseActions = useCallback((release: ReleaseDetailDTO) => <AlbumPlaybackActions key={`playback-${release.id}`} release={release} groupId={groupId} />, [groupId]);
   const renderTrackActions = useCallback((track: ReleaseTrackDTO, release: ReleaseDetailDTO) => <TrackPlaybackActions key={track.id} release={release} track={track} groupId={groupId} />, [groupId]);
   const renderAdminActions = useCallback(
-    ({ release, groupId: currentGroupId, releaseCount }: { release: ReleaseDetailDTO; groupId: string; releaseCount: number }) => (
+    ({ release, groupId: currentGroupId, releaseCount, groupRevision, defaultReleaseId }: { release: ReleaseDetailDTO; groupId: string; releaseCount: number; groupRevision: number; defaultReleaseId: string | null }) => (
       <ReleaseAdminActions
         key={`admin-${release.id}`}
         release={{ id: release.id, title: release.title, revision: release.revision }}
         groupId={currentGroupId}
         releaseCount={releaseCount}
+        groupRevision={groupRevision}
+        defaultReleaseId={defaultReleaseId}
         commands={commands}
       />
     ),
     [commands],
   );
   const renderAdminSections = useCallback(
-    ({ release }: { release: ReleaseDetailDTO }) => <ReleaseHistory key={`history-${release.id}`} release={{ id: release.id, title: release.title }} commands={historyCommands} />,
+    ({ release, groupId: currentGroupId }: { release: ReleaseDetailDTO; groupId: string }) => (
+      <ReleaseHistory key={`history-${release.id}`} release={{ id: release.id, title: release.title }} groupId={currentGroupId} commands={historyCommands} />
+    ),
     [historyCommands],
   );
   return <AlbumDetailView {...props} isAdmin={isAdmin}

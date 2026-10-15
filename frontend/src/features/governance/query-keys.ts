@@ -8,7 +8,7 @@ export const governanceKeys = {
   corrections: (generation: number, releaseId: string) => viewerQueryKey(generation, "governance", "corrections", releaseId),
   /** 操作记录的全部页：撤销与修改后前缀失效。 */
   operations: (generation: number) => viewerQueryKey(generation, "governance", "operations"),
-  /** 操作记录的一页：发行筛选、页码与页大小都在键里。 */
-  operationPage: (generation: number, filter: { releaseId: string | null; page: number; pageSize: number }) =>
+  /** 操作记录的一页：发行与专辑筛选、页码与页大小都在键里。 */
+  operationPage: (generation: number, filter: { releaseId: string | null; groupId: string | null; page: number; pageSize: number }) =>
     viewerQueryKey(generation, "governance", "operations", filter),
 };

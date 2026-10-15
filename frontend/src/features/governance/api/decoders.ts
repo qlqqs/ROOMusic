@@ -56,7 +56,7 @@ const groupDefaultResultDecoder = d.object({
 // 目标是发行的记录给 release、album 为 null，目标是专辑的记录反过来；目标已不存在时对应的一项也是 null；
 // 撤销记录与被撤销的记录互相指向（reverts、reverted_by）。
 const MAX_OPERATION_PAGE_ITEMS = 100;
-const OPERATION_TYPES = ["release_correction", "release_group_change", "revert"] as const;
+const OPERATION_TYPES = ["release_correction", "release_group_change", "release_group_default", "revert"] as const;
 
 const operationActorDecoder = d.object({ id: d.uuid(), username: d.string({ max: 200 }) });
 const operationReleaseDecoder = d.object({ id: d.uuid(), title: d.string(), group_id: d.uuid(), visible: d.boolean() });
@@ -73,12 +73,24 @@ const correctionChangesDecoder = d.object({
 const groupSnapshotDecoder = d.object({ group_id: d.uuid(), group_title: d.string() });
 const groupChangesDecoder = d.object({ kind: d.literal("release_group_change"), from: groupSnapshotDecoder, to: groupSnapshotDecoder });
 
-type OperationChanges = d.Infer<typeof correctionChangesDecoder> | d.Infer<typeof groupChangesDecoder>;
+// 设定默认版本：前后的专辑状态是当时的专辑标题与已存的默认版本（null 是自动选择；快照取当时的标题、年份与版本说明，
+// 版本之后改名或变得不可见，记录仍能读）。
+const defaultVersionDecoder = d.object({
+  release_id: d.uuid(),
+  title: d.string(),
+  year: d.nullable(d.integer({ min: 1, max: 9999 })),
+  edition: d.nullable(d.string()),
+});
+const defaultStateDecoder = d.object({ group_title: d.string(), default: d.nullable(defaultVersionDecoder) });
+const defaultChangesDecoder = d.object({ kind: d.literal("release_group_default"), from: defaultStateDecoder, to: defaultStateDecoder });
+
+type OperationChanges = d.Infer<typeof correctionChangesDecoder> | d.Infer<typeof groupChangesDecoder> | d.Infer<typeof defaultChangesDecoder>;
 // 按 kind 选择解码器；未知的 kind 整体拒绝（后端新增操作类型时，样本契约测试先失败，在这里补上才算确认前端已经知道）。
 const operationChangesDecoder: d.Decoder<OperationChanges> = (input, path) => {
   const kind = typeof input === "object" && input !== null && "kind" in input ? input.kind : undefined;
   if (kind === "release_correction") return correctionChangesDecoder(input, path);
   if (kind === "release_group_change") return groupChangesDecoder(input, path);
+  if (kind === "release_group_default") return defaultChangesDecoder(input, path);
   throw new d.DecodeError(`${path}.kind`, "不是已知的操作类型");
 };
 
@@ -126,6 +138,7 @@ export type CorrectionStateDTO = d.Infer<typeof correctionStateDecoder>;
 export type CorrectionResultDTO = d.Infer<typeof correctionResultDecoder>;
 export type GroupChangeResultDTO = d.Infer<typeof groupChangeResultDecoder>;
 export type GroupDefaultResultDTO = d.Infer<typeof groupDefaultResultDecoder>;
+export type DefaultVersionDTO = d.Infer<typeof defaultVersionDecoder>;
 export type OperationItemDTO = d.Infer<typeof operationItemDecoder>;
 export type OperationPageDTO = d.Infer<typeof operationPageDecoder>;
 export type OperationChangesDTO = OperationChanges;

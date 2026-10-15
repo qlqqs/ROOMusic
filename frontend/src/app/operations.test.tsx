@@ -83,7 +83,7 @@ describe("操作记录页：列表", () => {
   it("没有记录时说明记录什么时候出现，没有表格与分页", async () => {
     setup();
     renderApp({ path: "/operations" });
-    expect(await screen.findByText("还没有操作记录。修改专辑信息或调整归组之后，记录会出现在这里。")).toBeTruthy();
+    expect(await screen.findByText("还没有操作记录。修改专辑信息、调整归组或设定默认版本之后，记录会出现在这里。")).toBeTruthy();
     expect(screen.queryByRole("table")).toBeNull();
     expect(screen.queryByRole("navigation", { name: "操作记录分页" })).toBeNull();
   });
@@ -370,10 +370,12 @@ describe("专辑详情：修改记录", () => {
     expect(within(table).queryByRole("columnheader", { name: "专辑" })).toBeNull();
     expect(within(table).getByText(/^流派：/)).toBeTruthy();
     const [request] = api.requestsTo("GET", "/api/v1/operations");
+    // 同时请求这个版本与它所在专辑的记录（专辑级的默认版本记录也在这里），“全部记录”带同样的两个筛选。
     expect(request?.path).toContain(`release_id=${releaseOf(albumC())}`);
+    expect(request?.path).toContain(`group_id=${albumC().id}`);
     expect(request?.path).toContain("page_size=5");
     expect(screen.getByText("共 1 条。")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "全部记录" }).getAttribute("href")).toBe(`/operations?release=${releaseOf(albumC())}`);
+    expect(screen.getByRole("link", { name: "全部记录" }).getAttribute("href")).toBe(`/operations?release=${releaseOf(albumC())}&group=${albumC().id}`);
   });
 
   it("没有记录时说明；记录多于 5 条时只显示最近 5 条并给出总数", async () => {
@@ -383,7 +385,7 @@ describe("专辑详情：修改记录", () => {
     await heading("Gamma Sonatas");
     await screen.findByText("Track 01");
     await user.click(historySummary());
-    expect(await screen.findByText("这个版本还没有修改记录。管理员修改发行信息或调整归组之后，记录会出现在这里。")).toBeTruthy();
+    expect(await screen.findByText("这个版本和这张专辑还没有修改记录。管理员修改发行信息、调整归组或设定默认版本之后，记录会出现在这里。")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "全部记录" })).toBeNull();
 
     for (let revision = 1; revision <= 7; revision += 1) correct(governance, releaseOf(albumC()), revision, "label", `Label ${revision}`);

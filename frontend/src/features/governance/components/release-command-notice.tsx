@@ -22,6 +22,7 @@ const revertedText: Readonly<Record<RevertSubject, string>> = {
   join: "已撤销归组，这个版本回到了原来的专辑。",
   detach: "已撤销移出，这个版本回到了原来的专辑。",
   group: "已撤销这次归组调整，这个版本回到了原来的专辑。",
+  default: "已撤销默认版本的调整。",
   other: "已撤销。",
 };
 
@@ -33,13 +34,17 @@ function successText(command: ReleaseCommand, result: ReleaseCommandResult): str
       return `已把这个版本归入《${result.groupTitle}》。`;
     case "detach":
       return "已把这个版本移出为独立专辑。";
+    case "default":
+      return result.result.default_release_id === null
+        ? "已改回自动选择：这张专辑默认显示年份最早的版本。"
+        : "已把这个版本设为默认版本。专辑列表和打开这张专辑时会先显示它。";
     case "revert":
       return revertedText[command.kind === "revert" ? command.subject : "other"];
   }
 }
 
 /**
- * 管理员写操作的结果（编辑、归组、撤销）：成功、明确的拒绝与结果不确定各有不同的文案和下一步。
+ * 管理员写操作的结果（编辑、归组、默认版本、撤销）：成功、明确的拒绝与结果不确定各有不同的文案和下一步。
  * 成功提示里有“撤销”（撤销本身的成功提示没有）；结果就近显示在操作区，不使用全局 toast。
  */
 export function ReleaseCommandNotice({ state, releaseId, hideFailure, onUndo, onRetry, onDismiss }: ReleaseCommandNoticeProps) {

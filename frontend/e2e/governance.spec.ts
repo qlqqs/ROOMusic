@@ -438,8 +438,9 @@ test.describe("操作记录", () => {
     await expect(page.locator("summary", { hasText: "修改记录" })).toBeFocused();
 
     await page.getByRole("link", { name: "全部记录" }).click();
-    await expect(page).toHaveURL(new RegExp(`/operations\\?release=${releaseId()}$`));
-    await expect(page.getByText("只显示《Sample Symphonies》的记录。")).toBeVisible();
+    // “全部记录”带这个版本与它所在专辑的两个筛选（专辑级的默认版本记录也在其中）。
+    await expect(page).toHaveURL(new RegExp(`/operations\\?release=${releaseId()}&group=${symphonies().id}$`));
+    await expect(page.getByText("只显示这个版本和它所在的专辑的记录。")).toBeVisible();
   });
 
   test("普通成员：导航里没有“操作记录”，直接访问显示需要管理员权限，从不请求记录接口", async ({ page, backend }) => {

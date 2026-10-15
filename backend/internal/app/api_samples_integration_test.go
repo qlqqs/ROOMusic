@@ -505,7 +505,8 @@ func recordOperationSamples(t *testing.T, application *integrationTestApplicatio
 }
 
 // recordGroupDefaultSamples 记录默认版本接口：设定默认版本的成功响应、设定后的组详情（带 revision 与 default_release_id）
-// 与版本对比，以及不在这张专辑里的版本与过期版本号两种错误。素材是前面的归组样本：撤销移出之后，单曲专辑所在的组有三个版本
+// 与版本对比，以及不在这张专辑里的版本与过期版本号两种错误；再记录按专辑筛选的操作记录（专辑目标的记录，album 有值、release 为 null）
+// 和撤销这次设定的响应（目标是专辑）。素材是前面的归组样本：撤销移出之后，单曲专辑所在的组有三个版本
 // （单曲专辑、双碟专辑与 CUE 专辑），默认版本设为不是第一位的双碟专辑；对比里有真实扫描出的格式、人工修正过的字段与没有时长的版本。
 func recordGroupDefaultSamples(t *testing.T, application *integrationTestApplication, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser) {
 	t.Helper()
@@ -522,6 +523,12 @@ func recordGroupDefaultSamples(t *testing.T, application *integrationTestApplica
 	samples.record("release-groups/comparison", call(http.MethodGet, comparisonPath(groupID), nil, admin), http.StatusOK)
 	samples.record("errors/not-in-group", call(http.MethodPost, path, defaultBody(2, uuid.New()), admin, key("0402")), http.StatusConflict)
 	samples.record("errors/revision-conflict-group", call(http.MethodPost, path, defaultBody(1, nil), admin, key("0403")), http.StatusConflict)
+	samples.record("operations/list-by-group", call(http.MethodGet, "/api/v1/operations?group_id="+groupID+"&page_size=10", nil, admin), http.StatusOK)
+	var setOperation string
+	if err := application.database.QueryRow(`SELECT id::text FROM operations WHERE operation_type='release_group_default' ORDER BY created_at DESC, id DESC LIMIT 1`).Scan(&setOperation); err != nil {
+		t.Fatalf("read the default-version operation: %v", err)
+	}
+	samples.record("operations/reverted-default", call(http.MethodPost, revertPath(setOperation), nil, admin, key("0404")), http.StatusOK)
 }
 
 // 样本里的内嵌歌词：同步歌词带元标签、间奏（空行）、同一时间戳的双语两行与一行多个时间戳；纯文本歌词带分段。

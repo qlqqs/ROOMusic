@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { sampleBody } from "../../test/api-samples";
 import { decodeOperationPage, type OperationItemDTO } from "./api/decoders";
-import { changeLines, notRevertibleReason, operationTypeLabel, revertLines } from "./change-summary";
+import { changeLines, defaultVersionText, notRevertibleReason, operationTypeLabel, revertLines } from "./change-summary";
 
 const items = decodeOperationPage(sampleBody("operations/list")).items;
 const itemOf = (type: OperationItemDTO["type"], index = 0): OperationItemDTO => {
@@ -92,5 +92,41 @@ describe("notRevertibleReason", () => {
     expect(notRevertibleReason(join)).toBe("之后又有修改");
     expect(notRevertibleReason({ ...join, release: null })).toBe("专辑已不可见");
     expect(notRevertibleReason({ ...join, release: join.release === null ? null : { ...join.release, visible: false } })).toBe("专辑已不可见");
+  });
+});
+
+// 专辑目标的默认版本记录（album 有值、release 为 null）：样本里是“自动选择 → 双碟专辑”的一次设定。
+const defaultRecord = (() => {
+  const found = decodeOperationPage(sampleBody("operations/list-by-group")).items[0];
+  if (found === undefined) throw new Error("样本里没有默认版本记录");
+  return found;
+})();
+
+describe("默认版本记录", () => {
+  it("类型名；撤销记录写“撤销默认版本调整”", () => {
+    expect(operationTypeLabel(defaultRecord)).toBe("设定默认版本");
+    expect(operationTypeLabel({ type: "revert", changes: defaultRecord.changes })).toBe("撤销默认版本调整");
+  });
+
+  it("改动一行：默认版本前后，版本写标题与（年份 · 版本说明）；撤销预览前后互换", () => {
+    expect(changeLines(defaultRecord)).toEqual(["默认版本：自动选择 → 《Sample Symphonies (corrected)》（Remastered）"]);
+    expect(revertLines(defaultRecord)).toEqual(["默认版本：《Sample Symphonies (corrected)》（Remastered） → 自动选择"]);
+  });
+
+  it("版本的显示：年份与版本说明有才写，都没有只写标题", () => {
+    const version = { release_id: "00000000-0000-4000-8000-000000000001", title: "Sample", year: 2015, edition: "Remaster" };
+    expect(defaultVersionText(version)).toBe("《Sample》（2015 · Remaster）");
+    expect(defaultVersionText({ ...version, edition: null })).toBe("《Sample》（2015）");
+    expect(defaultVersionText({ ...version, year: null })).toBe("《Sample》（Remaster）");
+    expect(defaultVersionText({ ...version, year: null, edition: null })).toBe("《Sample》");
+    expect(defaultVersionText(null)).toBe("自动选择");
+  });
+
+  it("专辑目标的记录按专辑判断能不能撤销：专辑不可见与之后又有调整各有原因", () => {
+    expect(notRevertibleReason(defaultRecord)).toBeNull();
+    expect(notRevertibleReason({ ...defaultRecord, revertible: false })).toBe("之后又有修改");
+    expect(notRevertibleReason({ ...defaultRecord, revertible: false, album: defaultRecord.album === null ? null : { ...defaultRecord.album, visible: false } })).toBe("专辑已不可见");
+    expect(notRevertibleReason({ ...defaultRecord, revertible: false, album: null })).toBe("专辑已不可见");
+    expect(notRevertibleReason({ ...defaultRecord, revertible: false, reverted_by: "00000000-0000-4000-8000-000000000009" })).toBe("已撤销");
   });
 });

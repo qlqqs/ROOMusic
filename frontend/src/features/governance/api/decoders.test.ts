@@ -133,6 +133,7 @@ describe("decodeGroupDefaultResult", () => {
 describe("decodeOperationPage", () => {
   const page = sampleBody("operations/list");
   const filtered = sampleBody("operations/list-by-release");
+  const groupPage = sampleBody("operations/list-by-group");
 
   it("解码操作记录：谁、哪张专辑、改了什么、撤销关系与能不能撤销", () => {
     const decoded = decodeOperationPage(page);
@@ -172,6 +173,20 @@ describe("decodeOperationPage", () => {
     expect(decodeOperationPage(forAlbum).items[0]).toMatchObject({ release: null, album });
   });
 
+  it("解码专辑目标的默认版本记录：album 有值、release 为 null，改动是前后的默认版本快照", () => {
+    const [item] = decodeOperationPage(groupPage).items;
+    expect(item).toMatchObject({ type: "release_group_default", release: null, album: { title: "Sample Symphonies (corrected)", visible: true }, revertible: true });
+    if (item?.changes?.kind !== "release_group_default") throw new Error("应是默认版本的记录");
+    expect(item.changes.from.default).toBeNull();
+    expect(item.changes.to.default).toMatchObject({ title: "Sample Symphonies (corrected)", year: null, edition: "Remastered" });
+    expect(item.changes.to.group_title).toBe("Sample Symphonies (corrected)");
+  });
+
+  it("默认版本记录里前后的默认版本可以都是 null（清除自动选择之前就没有指定的记录不会出现，但快照格式允许）", () => {
+    const cleared = withValue(groupPage, ["items", 0, "changes", "to", "default"], null);
+    expect(decodeOperationPage(cleared).items[0]?.changes).toMatchObject({ kind: "release_group_default", to: { default: null } });
+  });
+
   it("目标发行已不存在、没有改动摘要时仍能解码", () => {
     const orphaned = withValue(withValue(page, ["items", 0, "release"], null), ["items", 0, "changes"], null);
     expect(decodeOperationPage(orphaned).items[0]).toMatchObject({ release: null, changes: null });
@@ -194,6 +209,11 @@ describe("decodeOperationPage", () => {
     ["album 的 id 不是 UUID", withValue(page, ["items", 0, "album"], { id: "album-1", title: "某张专辑", visible: true })],
     ["修正字段名未知", withValue(page, ["items", 3, "changes", "fields", 0, "field"], "source_type")],
     ["归组快照缺少组 ID", without(page, ["items", 0, "changes", "from", "group_id"])],
+    ["默认版本快照缺少版本 ID", without(groupPage, ["items", 0, "changes", "to", "default", "release_id"])],
+    ["默认版本快照的版本 ID 不是 UUID", withValue(groupPage, ["items", 0, "changes", "to", "default", "release_id"], "release-1")],
+    ["默认版本快照缺少标题", without(groupPage, ["items", 0, "changes", "to", "default", "title"])],
+    ["默认版本记录缺少专辑标题", without(groupPage, ["items", 0, "changes", "from", "group_title"])],
+    ["默认版本记录缺少 default 字段", without(groupPage, ["items", 0, "changes", "from", "default"])],
     ["缺少 pagination", without(page, ["pagination"])],
   ])("拒绝：%s", (_name, input) => {
     expect(() => decodeOperationPage(input)).toThrow(d.DecodeError);
@@ -210,7 +230,9 @@ describe("decodeRevertResult", () => {
     expect(result.reverts_operation_id).not.toBe(result.operation_id);
   });
 
-  it("解码专辑目标的撤销响应", () => {
+  it("解码专辑目标的撤销响应（默认版本的撤销）：目标是专辑，版本号是专辑自己的", () => {
+    const result = decodeRevertResult(sampleBody("operations/reverted-default"));
+    expect(result).toMatchObject({ target_type: "release_group", revision: 3 });
     expect(decodeRevertResult(withValue(reverted, ["target_type"], "release_group")).target_type).toBe("release_group");
   });
 

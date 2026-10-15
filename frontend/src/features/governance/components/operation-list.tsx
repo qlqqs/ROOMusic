@@ -16,15 +16,28 @@ type OperationListProps = {
   onRevert: (item: OperationItemDTO) => void;
 };
 
-/** 专辑列：可见的版本链接到它现在所在的专辑（选中这个版本）；已不可见的只写标题，不给打不开的链接。 */
-function ReleaseCell({ release }: { release: OperationItemDTO["release"] }) {
-  if (release === null) return <span className={styles.muted}>专辑已不存在</span>;
-  if (!release.visible) {
+/**
+ * 专辑列：目标是发行的记录，可见的版本链接到它现在所在的专辑（选中这个版本）；目标是专辑的记录（默认版本）链接到专辑本身；
+ * 已不可见的只写标题，不给打不开的链接；目标已不存在时说明这一点。
+ */
+function TargetCell({ item }: { item: OperationItemDTO }) {
+  const { release, album } = item;
+  if (release === null && album === null) return <span className={styles.muted}>专辑已不存在</span>;
+  const target = release ?? album;
+  if (target === null) return null;
+  if (!target.visible) {
     return (
       <>
-        {release.title}
+        {target.title}
         <span className={styles.muted}>（已不可见）</span>
       </>
+    );
+  }
+  if (release === null) {
+    return (
+      <Link to="/albums/$groupId" params={{ groupId: target.id }} search={{ release: undefined }}>
+        {target.title}
+      </Link>
     );
   }
   return (
@@ -53,7 +66,7 @@ function ChangeCell({ item }: { item: OperationItemDTO }) {
  */
 export function OperationList({ caption, items, showRelease, onRevert }: OperationListProps) {
   const columns = useMemo((): Column<OperationItemDTO>[] => {
-    const release: Column<OperationItemDTO>[] = showRelease ? [{ id: "release", header: "专辑", cell: (item) => <ReleaseCell release={item.release} /> }] : [];
+    const release: Column<OperationItemDTO>[] = showRelease ? [{ id: "release", header: "专辑", cell: (item) => <TargetCell item={item} /> }] : [];
     return [
       { id: "time", header: "时间", rowHeader: true, cell: (item) => formatDateTime(item.created_at) },
       { id: "actor", header: "操作者", cell: (item) => item.actor.username },

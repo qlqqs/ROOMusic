@@ -4,12 +4,14 @@ import {
   decodeCorrectionResult,
   decodeCorrectionState,
   decodeGroupChangeResult,
+  decodeGroupDefaultResult,
   decodeOperationPage,
   decodeRevertResult,
   type CorrectableField,
   type CorrectionResultDTO,
   type CorrectionStateDTO,
   type GroupChangeResultDTO,
+  type GroupDefaultResultDTO,
   type OperationPageDTO,
   type RevertResultDTO,
 } from "./decoders";
@@ -58,22 +60,36 @@ export function changeReleaseGroup(
   );
 }
 
+/**
+ * 设定或清除专辑的默认版本：releaseId 是要设为默认版本的发行，null 是改回自动选择。要带界面上看到的专辑的人工修改版本号
+ * （组详情的 revision），专辑在此期间被设定过时返回 409 revision_conflict；版本不在这张专辑里是 409 not_in_group。
+ */
+export function setGroupDefault(groupId: string, expectedRevision: number, releaseId: string | null, idempotencyKey: string): Promise<ApiResponse<GroupDefaultResultDTO>> {
+  return apiRequest(
+    { method: "POST", path: `/api/v1/release-groups/${groupId}/default`, body: { expected_revision: expectedRevision, release_id: releaseId }, idempotencyKey },
+    decodeGroupDefaultResult,
+  );
+}
+
 export type OperationListParams = {
   page: number;
   pageSize: number;
   /** 只看这个发行的记录。 */
   releaseId?: string | undefined;
+  /** 只看这张专辑的记录（专辑目标的记录，如默认版本）；与 releaseId 同时给出时取两者的并集。 */
+  groupId?: string | undefined;
   signal?: AbortSignal | undefined;
 };
 
-/** 操作记录（仅管理员）：按时间倒序分页，可按发行筛选。 */
+/** 操作记录（仅管理员）：按时间倒序分页，可按发行与专辑筛选（都给出时取并集）。 */
 export function fetchOperations(params: OperationListParams): Promise<ApiResponse<OperationPageDTO>> {
   const query = new URLSearchParams({ page: String(params.page), page_size: String(params.pageSize) });
   if (params.releaseId !== undefined) query.set("release_id", params.releaseId);
+  if (params.groupId !== undefined) query.set("group_id", params.groupId);
   return apiRequest({ method: "GET", path: `/api/v1/operations?${query}`, signal: params.signal }, decodeOperationPage);
 }
 
-/** 撤销一条操作：没有请求体；只有发行上最近一次修改可以撤销。 */
+/** 撤销一条操作：没有请求体；只有目标（发行或专辑）上最近一次修改可以撤销。 */
 export function revertOperation(operationId: string, idempotencyKey: string): Promise<ApiResponse<RevertResultDTO>> {
   return apiRequest({ method: "POST", path: `/api/v1/operations/${operationId}/revert`, idempotencyKey }, decodeRevertResult);
 }

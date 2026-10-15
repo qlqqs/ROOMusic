@@ -5,6 +5,8 @@ import { governanceFailureMessages } from "./governance-messages";
 type DetachAlbumDialogProps = {
   /** 要移出的版本；null 表示对话框关闭。revision 是页面读到的人工修改版本号，提交时作为预期版本。 */
   release: (ReleaseTarget & { revision: number }) | null;
+  /** 这个版本是这张专辑生效中的默认版本：要说明移出之后专辑改按自动规则显示，它回来时会重新成为默认版本。 */
+  isDefault: boolean;
   commands: ReleaseCommands;
   onClose: () => void;
 };
@@ -13,7 +15,7 @@ type DetachAlbumDialogProps = {
  * 把这个版本移出为独立专辑前确认，并说明结果：它成为单独的一张专辑，原来的专辑和其他版本不受影响，之后可以撤销。
  * 结果不确定时对话框保持打开，“确认”变成用同一个幂等键“重试移出”；成功或明确的拒绝（例如 409）关闭对话框，由页面上的提示说明结果。
  */
-export function DetachAlbumDialog({ release, commands, onClose }: DetachAlbumDialogProps) {
+export function DetachAlbumDialog({ release, isDefault, commands, onClose }: DetachAlbumDialogProps) {
   const { state } = commands;
   const pending = state.status === "pending" && state.command.kind === "detach";
   const uncertainFailure = state.status === "failed" && state.command.kind === "detach" && state.uncertain ? state : null;
@@ -48,6 +50,7 @@ export function DetachAlbumDialog({ release, commands, onClose }: DetachAlbumDia
       }}
     >
       <p>《{release?.title ?? ""}》会从现在的专辑里分出来，成为单独的一张专辑；这张专辑里的其他版本不受影响。</p>
+      {isDefault ? <p>它是这张专辑的默认版本；移出后专辑改按自动规则显示。它以后回到这张专辑时，会重新成为默认版本。</p> : null}
       <p>不会改动音乐文件。之后可以撤销，也可以再把它归入别的专辑。</p>
     </ConfirmDialog>
   );
