@@ -2,12 +2,10 @@
 
 ## 状态与决策边界
 
-- 状态：**部分批准**（2026-09-28、2026-10-13、2026-10-14）：第十节第 2 项（身份策略）与第 4 项（归组依据）已于 2026-09-28 批准；第 1、3、5、6、7 项在 M3 范围内的取舍
-  已于 2026-10-13 随 M3 规划批准（见决策记录）；第 4 项里默认版本的范围已于 2026-10-14 随 M4 第一项的规划批准；其余（认领与悬挂修正的处理、整组合并拆分、
-  Group 字段继承、`editor`）仍待另行批准。
-  身份策略与 ReleaseGroup 只读接口已由阶段 I 实施（2026-09-30），修正覆盖层、人工归组与撤销已由 M3 实施（合同见[受治理操作合同](../../../.trellis/spec/backend/governance-contracts.md)），
-  默认版本与版本对比已由 M4 第一项实施（合同见[默认版本与版本对比合同](../../../.trellis/spec/backend/default-version-contracts.md)）。
-- 核对日期：2026-09-27；代码证据基线：`6cf76ec`（身份相关行号于 2026-09-28 在 `66678d6` 复核）。B0（2026-09-30）拆包后，下文代码链接已更新到新位置，行号锚点以新文件为准；核对结论仍以该基线为准。
+- 状态：**部分批准**，逐项见决策记录与第十节；认领与悬挂修正的处理、整组合并拆分、Group 字段继承、`editor` 仍待批准。
+  已实施：阶段 I 的身份策略与按组只读接口（2026-09-30），M3 的修正覆盖层、人工归组与撤销（[受治理操作合同](../../../.trellis/spec/backend/governance-contracts.md)），
+  M4 第一项的默认版本与版本对比（[默认版本与版本对比合同](../../../.trellis/spec/backend/default-version-contracts.md)）。
+- 核对日期：2026-09-27；代码证据基线：`6cf76ec`（决策记录里的行号按 `66678d6` 计）。第四节是阶段 I 实施后的现状，其余代码事实以各合同为准。
 - 范围依据：[Core 1 路线](../core-1-roadmap.md)与[架构决策摘要](../architecture-decisions.md)。
 - 推荐方向：保留扫描事实，单独保存经授权的修正意图，由 catalog 生成有效读值；结构变更
   使用显式治理操作，不通过改标题等字段隐式触发。
@@ -27,23 +25,15 @@
 
 ## 一、当前证据与尚未实现的能力
 
-以下是源码事实，不是目标架构已经落地的声明。函数名与表名用于稳定定位；已有测试仅作为
-合同证据阅读，本轮文档任务没有运行这些测试。
+规划时（基线 `6cf76ec`）逐条核对的源码事实表已于 2026-10-15 精简，原表见提交 `f334653` 中的本文件。其中仍约束后续设计的结论：
 
-| 定位 | 当前事实 | 对本决策的约束 |
-| --- | --- | --- |
-| [scanner.go](../../../backend/internal/library/scanner.go)：`stageObservation`、`persistStagedCandidates`；[persist.go](../../../backend/internal/catalog/persist.go)：`PersistCandidate` | 扫描先暂存观察，再按候选短事务写图；重扫更新 Release/Track 列，替换逐轨观察、署名及 Release 字段决策，更新当前归组证据 | 现有列和证据不能直接充当持久人工修正或完整历史 |
-| [organizer.go](../../../backend/internal/catalog/organizer.go)：`OrganizeObservations`、`stableAnchorPartition`、`CandidateIdentity` | 确定性规则生成候选、字段决策与分碟结构；锚点使用 root、候选种类、范围及来源分区，不直接使用展示标题 | 不含标题不等于不受分组、目录或来源集合变化影响 |
-| [identity.go](../../../backend/internal/catalog/identity.go)：`SourceIdentityForObservation`、`legacySourceIdentity`、`legacyCueSourceIdentity` | 物理来源按 root 与相对路径识别；CUE 虚拟轨另含 sheet、父来源、轨号及起始帧；存在旧身份兼容查询 | 是扫描来源匹配规则，不是全局内容身份或任意移动映射器 |
-| [0002](../../../backend/migrations/0002_core_slice.sql)、[0003](../../../backend/migrations/0003_catalog_observations.sql)、[0010](../../../backend/migrations/0010_album_organization.sql)、[0011](../../../backend/migrations/0011_scan_staging_and_identity.sql)、[0012](../../../backend/migrations/0012_track_credits_and_release_metadata.sql) | 已有图实体、来源身份、当前证据、署名及元数据；ReleaseGroup 只有 `id`、`created_at`；没有人工覆盖层或 Release/Track 编辑 revision 合同 | 不能把目录 revision、`observed_at` 或证据行 ID 当成现成的编辑版本号 |
-| [persist.go](../../../backend/internal/catalog/persist.go)：`PersistCandidate` 查找 `candidate_anchor` 后的创建分支 | 未命中锚点时，为新 Release 单独创建 ReleaseGroup；命中时复用该 Release 的 `group_id`；已有 Track 可被更新到另一个 Medium | 没有跨版本语义归并，也没有人工关系与扫描关系冲突的处理层 |
-| [read.go](../../../backend/internal/catalog/read.go)：`releaseSummaryProjection`、`ListReleases`；[handlers.go](../../../backend/internal/catalog/httpapi/handlers.go)：`listReleases`、`releaseDetail`、`releaseEvidence` | 列表、搜索、排序和详情直接读取扫描写入的值；列表/详情要求至少一个 `present` Track；管理员可读存在的 Release 的详细证据 | 有效值必须在后端统一投影；详细证据可见不代表缺失版本能从普通详情访问 |
-| [app.go](../../../backend/internal/app/app.go)：`New` | 只有 Release 读取与证据路由，没有元数据修正或 ReleaseGroup 合并/拆分入口 | M1 不能展示可提交的修正外壳或伪造保存成功 |
-| [扫描持久化测试](../../../backend/internal/library/scanner_persistence_integration_test.go)：`TestPostgreSQLCandidatePersistenceIsIdempotentAndReplacesCurrentEvidence`、`TestPostgreSQLIncompleteRootPersistsValidCandidatesAndCleansStaging` | 固定来源重扫保留 ID 并替换当前证据；不完整扫描也可保留已提交候选，暂存随后清理 | 扫描不是整库快照事务；当前证据和暂存都不是恢复点 |
-
-> 阶段 I（2026-09-30）改变了上表中的身份相关行：`legacySourceIdentity`、`legacyCueSourceIdentity` 已删除；
-> `PersistCandidate` 不再按 `candidate_anchor` 查找 Release，曲目与 Release 的沿用由 `PlanStagedRoot` 写在暂存行上的规划
-> 决定；ReleaseGroup 有按组只读接口。本表保留为规划时的基线证据，现状见第四节。
+- 扫描先暂存观察，再按候选短事务写图（[persist.go](../../../backend/internal/catalog/persist.go) 的 `PersistCandidate`）；重扫更新扫描列，
+  替换逐轨观察、署名与字段决策。扫描不是整库快照事务，当前证据与暂存都不是恢复点，也不能充当持久人工修正或完整历史
+  （[扫描持久化测试](../../../backend/internal/library/scanner_persistence_integration_test.go)）。
+- 物理来源按 root 与相对路径识别，CUE 虚拟轨另含 sheet、父来源、轨号与起始帧（[identity.go](../../../backend/internal/catalog/identity.go)）：
+  这是扫描的来源匹配规则，不是全局内容身份或任意移动映射器。
+- 规划时没有跨版本语义归并，也没有人工关系与扫描关系冲突的处理层；列表与详情要求至少一个 `present` Track，管理员详细证据可见不代表
+  缺失版本能从普通详情访问。阶段 I 之后的身份机制见第四节，有效值、归组与默认版本见各合同。
 
 继承的约束来自[产品目标](../../../.trellis/spec/guides/product-goals.md)、
 [数据库规范](../../../.trellis/spec/backend/database-guidelines.md)及
@@ -127,10 +117,6 @@
 [来源身份测试](../../../backend/internal/library/scan_rules_test.go)
 `TestTrackSourceIdentityIsStableOnlyForSameRootAndPath`。
 
-[0011 迁移](../../../backend/migrations/0011_scan_staging_and_identity.sql)只在无冲突时升级旧
-Release 锚点；会收敛到同一锚点的旧记录保留旧标记，交给后续扫描匹配 Track。这不是人工
-版本合并决策，更不能作为覆盖层自动迁移的充分证据。
-
 ### 推荐的修正绑定及演进规则
 
 修正应引用 catalog 管理的实体身份与明确的适用范围，而不是把 `candidate_anchor` 或
@@ -141,13 +127,13 @@ UUID 外键无法解决内容被替换、Track 被重新挂接或旧 Release 已
 | --- | --- |
 | 同来源、同结构重扫 | 保留实体绑定和修正，只更新观察；相关基值变化可标示待复核，但不得静默删改既有修正 |
 | 仅路径书写被规范化 | 沿用现有安全路径规范化，不把越界、跨 root 或真实改名当成等价路径 |
-| 物理文件或目录重命名、移动（同一 root） | **已实施（阶段 I，2026-09-30）**：只在该 root 遍历完整（未取消，没有遍历、解析、暂存、指纹失败）时，把本轮没有身份匹配的观察，与本 root 中本轮消失（present、有指纹、未被计划沿用）的旧曲目按音频指纹（CUE 另含起止帧）配对；唯一 1:1 完全相同才重绑定到原 UUID，修正与人工关系随之保留。多对多、指纹不同、跨 root 时不重绑定：歧义按原规则把旧来源置为缺失并记诊断，留待人工认领；遍历不完整时含疑似移动的 scope 暂缓写入，留给下一次完整遍历。仍不按标题相似搬移修正 |
+| 物理文件或目录重命名、移动（同一 root） | **已实施（阶段 I）**：该 root 遍历完整时，按音频指纹（CUE 另含起止帧）唯一 1:1 完全相同才重绑定到原 UUID，修正与人工关系随之保留；歧义、指纹不同、跨 root 不重绑定，留待人工认领；遍历不完整时暂缓写入。不按标题相似搬移修正。细则见[目录与扫描流程合同](../../../.trellis/spec/backend/library-scan-contracts.md) |
 | 跨 root 移动、重新注册导致 root 身份变化 | 不推定身份连续；若要转移修正，必须有单独审阅的绑定映射、双方 revision、影响预览和逆操作 |
-| 分桶、最小来源或 CUE 分轨结构变化 | **已实施（阶段 I，2026-09-30）**：Release 按所含曲目的成员关系匹配——候选已规划沿用的曲目严格过半属于同一个既有 Release 时沿用它，多个候选争同一个时重叠多者得（平局：留在原位置者，再按候选键），锚点降为最近一次的位置信息；因此增删文件或最小来源变化不再换 Release ID。无法证明成员关系连续时（新增文件多于原有、被整体替换）新建 Release，原有修正留待人工认领，不静默重挂到新目标 |
+| 分桶、最小来源或 CUE 分轨结构变化 | **已实施（阶段 I）**：Release 按所含曲目的成员关系匹配（严格过半沿用），锚点只是最近一次的位置，增删文件或最小来源变化不再换 Release ID；无法证明成员关系连续时新建 Release，原有修正留待人工认领，不静默重挂到新目标 |
 | Track 来源相同，但扫描拟改变其所属版本 | 字段修正与关系修正分别判断。已确认的关系不能被当前 `medium_id` 重写逻辑绕过；必须先形成 catalog 冲突处理路径 |
 | 合并、拆分或重新归组 | 先明确每个修正的目标映射和冲突决议；不能把 Release 修正复制给全部拆分结果，或按最后写入覆盖合并双方修正 |
 | 完整扫描确认缺失 | 保留实体、修正和证据，不清理人工历史；普通浏览仍遵守 present-only，未来管理入口才负责解释悬挂修正 |
-| 来源重新出现 | 原身份与绑定可确认时继续使用原修正；新身份不自动继承。同路径复用无法证明内容相同：**已实施（阶段 I）**——扫描保存音频指纹，同路径但指纹不同的内容得到新曲目（新 UUID），原曲目失去来源身份并置为缺失 |
+| 来源重新出现 | 原身份与绑定可确认时继续使用原修正；新身份不自动继承。同路径复用无法证明内容相同：**已实施（阶段 I）**，同路径但指纹不同的内容得到新曲目，原曲目置为缺失 |
 | 扫描失败、取消或不完整 | 已提交观察可以保留，但不得负向 missing 对账、删除覆盖或宣称整库回滚；对应来源绑定冲突仍单独可见 |
 
 此处的“隔离”是保留证据、停止有歧义的修正转移或人工关系变更，不是新增文件隔离工具，
@@ -189,10 +175,7 @@ UUID 外键无法解决内容被替换、Track 被重新挂接或旧 Release 已
 
 ## 六、ReleaseGroup 实体化与覆盖层的关系
 
-已有 `release_groups` 表只证明存在关系占位，不证明已支持作品/版本族的语义治理。Release
-保留为不同版本的实体。2026-09-28 批准的安排：阶段 I 提供按组只读接口（此前每个 Release 各占
-一组，接口自然退化为一组一个版本）；组成员调整作为 M3 的试点受治理操作；默认版本、版本对比
-与 Release 合并/拆分在 M4 及之后。
+Release 保留为不同版本的实体。阶段 I 的按组只读接口、M3 的人工归组与 M4 的默认版本见决策记录；Release 合并/拆分仍另行批准。
 
 - **强证据路径**：只有经批准、可追溯且语义层级明确的共同分组标识或明确关系，才可进入
   确定性分组规则；必须核对它描述的是版本族而非单个发行、录音或曲目，并排除相反证据。
@@ -207,8 +190,7 @@ UUID 外键无法解决内容被替换、Track 被重新挂接或旧 Release 已
 - Group 成员调整不是删除/折叠 Release；Release 合并、拆分和 Track 重挂必须分别定义
   类型化操作、修正分配、版本冲突和逆操作。它们不能藏在一次字段编辑里。
 - Group、Release、Track 的覆盖作用域必须独立。未来 Group 展示字段不得反写所有版本
-  的观察；继承和默认版本策略另行确认，不能让某个版本的“设空”意外清空整组。默认版本已于 2026-10-14 确认（见决策记录）：存在组上、失效时回到自动规则，
-  任何版本的修改、移出或不可见都不会清掉它；Group 字段继承仍另行确认。
+  的观察，Group 字段继承另行确认，不能让某个版本的“设空”意外清空整组；默认版本已按此确认（2026-10-14，见决策记录）。
 - 已批准的分组关系应与自动归组观察分开；重扫出现新候选或反证时产生待复核状态，而非
   无记录地覆盖人工归组。弱证据或映射歧义一律保持版本独立。
 
@@ -225,15 +207,9 @@ UUID 外键无法解决内容被替换、Track 被重新挂接或旧 Release 已
 
 ## 八、阶段、迁移与失败恢复
 
-- **M0**：只交付此草案及仓库事实；不改 schema、路由或权限。
-- **B0**：纯拆包，不借拆包改变身份和重扫语义；catalog 先拆，为阶段 I 提供修改落点。
-- **阶段 I（已批准）**：新增音频指纹迁移，实施成员关系匹配与同 root 保守重绑定，用合成 fixture
-  的集成测试证明 ID 稳定；提供 ReleaseGroup 只读接口。不开放任何修正写入。
-- **M1a/M1b**：M1a 使用现有读取与管理 API；M1b 使用阶段 I 的按组只读接口。
-- **M3 候选**：批准有限字段、有效投影和受治理写路径后，才能开放修正；首批试点为字段修正与
-  ReleaseGroup 成员调整。`editor`、新的审批政策和 Agent 能力均不能因覆盖层存在而自动启用。
-- **M4 候选**：在 M3 的写路径、映射和恢复验证通过后，实现默认版本、版本对比与 Release 合并/拆分。默认版本与版本对比已作为 M4 第一项实施（2026-10），
-  Release 合并/拆分、认领与问题处理分别立项。
+- **M0、B0、阶段 I、M1a/M1b（已完成）**：阶段 I 交付身份策略与按组只读接口，用合成 fixture 的集成测试证明 ID 稳定，不开放修正写入。
+- **M3（已实施）**：字段修正、人工归组与撤销。`editor`、新的审批政策和 Agent 能力均不能因覆盖层存在而自动启用。
+- **M4**：依赖 M3 的写路径、映射和恢复验证。默认版本与版本对比已实施（2026-10），认领、问题处理与 Release 合并/拆分分别立项。
 - **M6 候选**：复用相同后端用例，不直接操作覆盖存储，不由本 ADR 预先纳入范围。
 
 实施时只通过新的已审阅迁移演进，不修改既有迁移。旧扫描值作为观察基线，不猜测其中
