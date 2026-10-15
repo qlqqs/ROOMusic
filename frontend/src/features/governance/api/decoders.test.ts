@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 import { decode as d } from "../../../shared/api";
 import { sampleBody } from "../../../test/api-samples";
 import { withValue, without } from "../../../test/mutate";
-import { CORRECTABLE_FIELDS, decodeCorrectionResult, decodeCorrectionState, decodeGroupChangeResult, decodeOperationPage, decodeRevertResult } from "./decoders";
+import {
+  CORRECTABLE_FIELDS,
+  decodeCorrectionResult,
+  decodeCorrectionState,
+  decodeGroupChangeResult,
+  decodeGroupDefaultResult,
+  decodeOperationPage,
+  decodeRevertResult,
+} from "./decoders";
 
 describe("decodeCorrectionState", () => {
   const initial = sampleBody("corrections/get");
@@ -95,6 +103,30 @@ describe("decodeGroupChangeResult", () => {
     ["revision 是字符串", withValue(joined, ["revision"], "2")],
   ])("拒绝：%s", (_name, input) => {
     expect(() => decodeGroupChangeResult(input)).toThrow(d.DecodeError);
+  });
+});
+
+describe("decodeGroupDefaultResult", () => {
+  const set = sampleBody("group-defaults/set");
+
+  it("解码设定的响应：专辑、默认版本、专辑新的版本号和操作 ID", () => {
+    expect(decodeGroupDefaultResult(set)).toMatchObject({ revision: 2 });
+  });
+
+  it("改回自动选择时 default_release_id 是 null，而不是缺失", () => {
+    expect(decodeGroupDefaultResult(withValue(set, ["default_release_id"], null)).default_release_id).toBeNull();
+    expect(() => decodeGroupDefaultResult(without(set, ["default_release_id"]))).toThrow(d.DecodeError);
+  });
+
+  it.each([
+    ["缺少 group_id", without(set, ["group_id"])],
+    ["group_id 不是 UUID", withValue(set, ["group_id"], "group-1")],
+    ["default_release_id 不是 UUID", withValue(set, ["default_release_id"], "release-1")],
+    ["缺少 operation_id", without(set, ["operation_id"])],
+    ["revision 为 0", withValue(set, ["revision"], 0)],
+    ["revision 是字符串", withValue(set, ["revision"], "2")],
+  ])("拒绝：%s", (_name, input) => {
+    expect(() => decodeGroupDefaultResult(input)).toThrow(d.DecodeError);
   });
 });
 

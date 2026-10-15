@@ -18,9 +18,12 @@ const maxReleaseGroupMembers = 100
 var ErrReleaseGroupNotFound = errors.New("release group not found")
 
 const (
-	// releaseGroupMemberOrder 是代表版本规则：年份最早（没有年份排最后），再按创建时间，最后按 ID。M4 引入默认版本后，
-	// 默认版本将排在它之前。
-	releaseGroupMemberOrder = `(NULLIF(releases.year, 0) IS NULL), NULLIF(releases.year, 0), releases.created_at, releases.id`
+	// releaseGroupMemberOrder 是代表版本规则：先是管理员指定的默认版本（release_groups.default_release_id），
+	// 再是年份最早（没有年份排最后）、创建时间、ID。第一项只有在默认版本是这个组的可见成员时才会让某一行排到最前：
+	// 没有指定、指定的版本不可见或已被移出这个组时，它对所有成员都为真，等于没有指定（静默失效，回来时重新生效），
+	// 所以生效条件不需要另写。
+	releaseGroupMemberOrder = `(releases.id IS DISTINCT FROM (SELECT default_group.default_release_id FROM release_groups default_group WHERE default_group.id = releases.group_id)),
+		(NULLIF(releases.year, 0) IS NULL), NULLIF(releases.year, 0), releases.created_at, releases.id`
 
 	// releaseGroupAttentionExpression 是组内全部可见成员的 attention 之和。子查询自己的 FROM 定义了 releases，
 	// 常量里的 releases.* 都解析到子查询自己的行，而不是外层的代表版本。
@@ -96,8 +99,8 @@ func (s *Store) ListReleaseGroups(ctx context.Context, params ListParams) (Relea
 	return ReleaseGroupPage{Items: items, Total: total}, nil
 }
 
-// LoadReleaseGroup 读取一个组的摘要与成员摘要（按代表版本规则排序，最多 maxReleaseGroupMembers 条）。
-// 组不存在或没有可见成员时返回 ErrReleaseGroupNotFound。
+// LoadReleaseGroup 读取一个组的摘要、成员摘要（按代表版本规则排序，最多 maxReleaseGroupMembers 条）、人工修改版本号与生效中的
+// 默认版本。组不存在或没有可见成员时返回 ErrReleaseGroupNotFound。
 func (s *Store) LoadReleaseGroup(ctx context.Context, groupID string) (ReleaseGroupDetail, error) {
 	summary, err := scanReleaseGroupSummary(s.database.QueryRowContext(ctx,
 		"WITH "+releaseGroupRankedCTE(true)+" SELECT "+releaseGroupSummaryProjection+
@@ -130,7 +133,18 @@ func (s *Store) LoadReleaseGroup(ctx context.Context, groupID string) (ReleaseGr
 	if err := rows.Err(); err != nil {
 		return ReleaseGroupDetail{}, err
 	}
-	return ReleaseGroupDetail{ReleaseGroupSummary: summary, Releases: members}, nil
+	detail := ReleaseGroupDetail{ReleaseGroupSummary: summary, Releases: members}
+	var stored sql.NullString
+	if err := s.database.QueryRowContext(ctx, `SELECT edit_revision, default_release_id::text FROM release_groups WHERE id = $1::uuid`, groupID).
+		Scan(&detail.Revision, &stored); err != nil {
+		return ReleaseGroupDetail{}, err
+	}
+	// 已存的默认版本生效，当且仅当它是排在最前的可见成员：这与成员顺序用的是同一条规则，所以 default_release_id
+	// 与 releases[0] 在同一份响应里总是一致的。
+	if stored.Valid && len(members) > 0 && members[0].ID == stored.String {
+		detail.DefaultReleaseID = &stored.String
+	}
+	return detail, nil
 }
 
 // releaseGroupSummaryProjection 是代表版本的摘要投影，后面追加组 ID、可见成员数与 attention 之和。

@@ -149,7 +149,9 @@ function writeGroup(catalog: CatalogData, groupId: string, members: readonly Rel
   };
   if (index >= 0) catalog.groups[index] = summary;
   else catalog.groups.push(summary);
-  catalog.groupDetails.set(groupId, { ...summary, releases: sorted });
+  // 专辑的版本号不随成员变化（归组不改它），所以沿用已有的；默认版本的模型随设定默认版本的操作一起加。
+  const revision = catalog.groupDetails.get(groupId)?.revision ?? 1;
+  catalog.groupDetails.set(groupId, { ...summary, revision, default_release_id: null, releases: sorted });
 }
 
 /** 列表按代表版本的标题、艺人与 ID 排序，与后端一致。 */

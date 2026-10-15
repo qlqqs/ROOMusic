@@ -1,6 +1,7 @@
 {
   "body": {
     "attention_count": 0,
+    "default_release_id": null,
     "id": "00000000-0000-4000-8000-000000000001",
     "release_count": 2,
     "releases": [
@@ -43,7 +44,8 @@
       "title": "Sample Symphonies",
       "track_count": 3,
       "year": 1998
-    }
+    },
+    "revision": 1
   },
   "status": 200
 }

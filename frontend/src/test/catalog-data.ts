@@ -189,9 +189,9 @@ export function releaseEvidenceOf(release: Pick<ReleaseDetailDTO, "id">, overrid
   return { ...sampleEvidence, release_id: release.id, ...overrides };
 }
 
-/** 组详情：组摘要加成员版本（缺省只有代表版本）。release_count 沿用组摘要，需要时由测试改写。 */
+/** 组详情：组摘要加成员版本（缺省只有代表版本）。release_count 沿用组摘要，需要时由测试改写；缺省没有生效中的默认版本。 */
 export function groupDetailOf(group: ReleaseGroupSummaryDTO, releases: ReleaseSummaryDTO[] = [group.representative]): ReleaseGroupDetailDTO {
-  return { ...group, releases };
+  return { ...group, revision: 1, default_release_id: null, releases };
 }
 
 /**

@@ -1,0 +1,74 @@
+{
+  "body": {
+    "attention_count": 0,
+    "default_release_id": "00000000-0000-4000-8000-000000000001",
+    "id": "00000000-0000-4000-8000-000000000002",
+    "release_count": 3,
+    "releases": [
+      {
+        "album_artist": "Sample Orchestra",
+        "artist": "Sample Orchestra",
+        "artwork": {
+          "height": 480,
+          "mime": "image/webp",
+          "resource_id": "sample-listening-cover.webp",
+          "width": 640
+        },
+        "attention_count": 0,
+        "id": "00000000-0000-4000-8000-000000000001",
+        "media_type": null,
+        "medium_count": 2,
+        "source_type": null,
+        "title": "Sample Symphonies (corrected)",
+        "track_count": 3,
+        "year": null
+      },
+      {
+        "album_artist": "Sample Pianist",
+        "artist": "Sample Pianist",
+        "artwork": null,
+        "attention_count": 0,
+        "id": "00000000-0000-4000-8000-000000000003",
+        "media_type": null,
+        "medium_count": 1,
+        "source_type": null,
+        "title": "Sample Preludes",
+        "track_count": 1,
+        "year": 2001
+      },
+      {
+        "album_artist": "Sample Cue Artist",
+        "artist": "Sample Cue Artist",
+        "artwork": null,
+        "attention_count": 0,
+        "id": "00000000-0000-4000-8000-000000000004",
+        "media_type": null,
+        "medium_count": 1,
+        "source_type": null,
+        "title": "Sample Cue Album",
+        "track_count": 2,
+        "year": 2005
+      }
+    ],
+    "representative": {
+      "album_artist": "Sample Orchestra",
+      "artist": "Sample Orchestra",
+      "artwork": {
+        "height": 480,
+        "mime": "image/webp",
+        "resource_id": "sample-listening-cover.webp",
+        "width": 640
+      },
+      "attention_count": 0,
+      "id": "00000000-0000-4000-8000-000000000001",
+      "media_type": null,
+      "medium_count": 2,
+      "source_type": null,
+      "title": "Sample Symphonies (corrected)",
+      "track_count": 3,
+      "year": null
+    },
+    "revision": 2
+  },
+  "status": 200
+}

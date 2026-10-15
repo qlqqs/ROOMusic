@@ -56,8 +56,12 @@ const releaseGroupPageDecoder = d.object({
 });
 
 // 组详情：摘要加成员摘要（至少一个可见成员，最多 100 条；release_count 是完整数量，可以大于 releases 的长度）。
+// revision 是专辑的人工修改版本号（设定默认版本与撤销共用；管理员写操作用它做预期版本）。default_release_id 只在管理员指定的
+// 默认版本正在生效时才有值，此时它就是 releases 的第一项；没有指定、指定的版本不可见或已被移出时为 null（专辑回到自动规则）。
 const releaseGroupDetailDecoder = d.object({
   ...releaseGroupSummaryShape,
+  revision: d.integer({ min: 1 }),
+  default_release_id: d.nullable(d.uuid()),
   releases: d.array(releaseSummaryDecoder, { min: 1, max: MAX_GROUP_RELEASES }),
 });
 

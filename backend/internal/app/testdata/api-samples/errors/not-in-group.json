@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "not_in_group",
+      "message": "这个版本不在这张专辑里，或现在不可见"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

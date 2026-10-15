@@ -24,7 +24,7 @@
     - 现有 operations、catalog 和 app 的测试改动只限于撤销响应的新形状和 `List` 参数的新形状（三处调用）；
     - 新增并集筛选的测试，覆盖分页和总数；
     - 迁移后的约束能拒绝未知的类型和目标类型。
-- [ ] **2. 默认版本的读写接口**
+- [x] **2. 默认版本的读写接口**
   - catalog：代表版本规则的默认项（design §3）；组详情增加 `revision` 与 `default_release_id`；执行器与 `GroupDefaultOperations`（撤销与展示）；
     `POST /api/v1/release-groups/{id}/default`；app 注册新的 Kind；接口样本。
   - 测试：

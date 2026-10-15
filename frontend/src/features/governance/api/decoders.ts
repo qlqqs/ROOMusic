@@ -44,6 +44,14 @@ const groupChangeResultDecoder = d.object({
   operation_id: d.uuid(),
 });
 
+// 设定默认版本成功的响应：专辑、设定之后的默认版本（改回自动选择时为 null）、专辑新的人工修改版本号与这次操作的 ID（撤销用）。
+const groupDefaultResultDecoder = d.object({
+  group_id: d.uuid(),
+  default_release_id: d.nullable(d.uuid()),
+  revision: d.integer({ min: 1 }),
+  operation_id: d.uuid(),
+});
+
 // 操作记录（管理员）。type 是记录自己的类型；changes.kind 是前后状态按哪种类型解释（撤销记录与它所撤销的操作同类型）。
 // 目标是发行的记录给 release、album 为 null，目标是专辑的记录反过来；目标已不存在时对应的一项也是 null；
 // 撤销记录与被撤销的记录互相指向（reverts、reverted_by）。
@@ -108,6 +116,7 @@ const revertResultDecoder = d.object({
 export const decodeCorrectionState = d.defineDecoder(correctionStateDecoder);
 export const decodeCorrectionResult = d.defineDecoder(correctionResultDecoder);
 export const decodeGroupChangeResult = d.defineDecoder(groupChangeResultDecoder);
+export const decodeGroupDefaultResult = d.defineDecoder(groupDefaultResultDecoder);
 export const decodeOperationPage = d.defineDecoder(operationPageDecoder);
 export const decodeRevertResult = d.defineDecoder(revertResultDecoder);
 
@@ -116,6 +125,7 @@ export type CorrectionFieldDTO = d.Infer<typeof correctionFieldDecoder>;
 export type CorrectionStateDTO = d.Infer<typeof correctionStateDecoder>;
 export type CorrectionResultDTO = d.Infer<typeof correctionResultDecoder>;
 export type GroupChangeResultDTO = d.Infer<typeof groupChangeResultDecoder>;
+export type GroupDefaultResultDTO = d.Infer<typeof groupDefaultResultDecoder>;
 export type OperationItemDTO = d.Infer<typeof operationItemDecoder>;
 export type OperationPageDTO = d.Infer<typeof operationPageDecoder>;
 export type OperationChangesDTO = OperationChanges;

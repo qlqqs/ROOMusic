@@ -77,6 +77,16 @@ describe("decodeReleaseGroupDetail", () => {
     expect(group.representative.id).toBe(group.releases[0]?.id);
   });
 
+  it("解码专辑的版本号与默认版本：没有指定时为 null，生效中的默认版本就是第一个成员", () => {
+    expect(decodeReleaseGroupDetail(single)).toMatchObject({ revision: 1, default_release_id: null });
+    expect(decodeReleaseGroupDetail(multiple)).toMatchObject({ revision: 1, default_release_id: null });
+    const withDefault = decodeReleaseGroupDetail(sampleBody("release-groups/get-default"));
+    expect(withDefault.revision).toBe(2);
+    expect(withDefault.release_count).toBe(3);
+    expect(withDefault.default_release_id).toBe(withDefault.releases[0]?.id);
+    expect(withDefault.representative.id).toBe(withDefault.default_release_id);
+  });
+
   it("成员摘要至少一个、最多 100 个；release_count 是完整数量，可以大于成员数", () => {
     const member = (multiple as { releases: unknown[] }).releases[0];
     const withMembers = (count: number) => withValue(multiple, ["releases"], cloneItems(member, count));
@@ -93,6 +103,10 @@ describe("decodeReleaseGroupDetail", () => {
     ["成员的封面宽度为 0", withValue(single, ["releases", 0, "artwork"], { resource_id: "a.png", mime: "image/png", width: 0, height: 1 })],
     ["release_count 为 0", withValue(multiple, ["release_count"], 0)],
     ["组 id 不是 UUID", withValue(multiple, ["id"], "group")],
+    ["缺少 revision", without(multiple, ["revision"])],
+    ["revision 为 0", withValue(multiple, ["revision"], 0)],
+    ["缺少 default_release_id", without(multiple, ["default_release_id"])],
+    ["default_release_id 不是 UUID", withValue(multiple, ["default_release_id"], "release")],
   ])("拒绝：%s", (_name, input) => {
     expect(() => decodeReleaseGroupDetail(input)).toThrow(d.DecodeError);
   });
