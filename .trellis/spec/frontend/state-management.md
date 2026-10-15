@@ -141,6 +141,7 @@ deterministic and the server result/revision replaces the optimistic value.
 - 写操作 hook 在提交时记录会话代次，成功或失败回调先检查代次再更新界面或导航：旧身份的迟到响应不渲染、不导航。
 - 受治理写操作（M3，管理员）沿用同一模型：修改带读取时的 `revision` 作 `expected_revision`，撤销不带版本号（后端判断）；409 `revision_conflict` 说明“刚被修改过”
   并刷新，保留草稿；撤销资格 `revertible` 与记录只来自服务器当前状态，修改后让 governance 的全部查询失效。命令状态由页面持有，细节见[Hook 规范](./hook-guidelines.md)。
+  M4 的默认版本带专辑的 `revision`；组详情刷新期间暂缓地址规范化，见同一规范。
 
 Do not mark an operation complete merely because its request was accepted.
 Follow the returned operation or resource status contract. Change Set and

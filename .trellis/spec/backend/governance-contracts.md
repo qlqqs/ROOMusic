@@ -6,6 +6,8 @@ M3（2026-10）让管理员能修正扫描得到的发行信息、调整版本�
 操作记录表 `operations`、共同写入流程 `operations.Run`、可修正字段与修正表 `release_corrections`、发行的人工修改版本号
 `edit_revision`、有效值视图 `release_effective`、人工归组、撤销、操作记录列表。读取投影（列表、详情、按组读取）的通用规则仍在
 [Catalog REST 合同](./catalog-rest-contracts.md)；扫描的写入不受本文件约束，但**必须保持不碰本文件的表和列**（第 7 节）。
+M4 的第一项（2026-10）在同一流程上增加以专辑为目标的“设定默认版本”，它自己的规则（组的版本号、失效规则、执行器、撤销与对比接口）在
+[默认版本与版本对比合同](./default-version-contracts.md)；本文件只记它对共同流程的扩展（目标类型、撤销响应、列表筛选）。
 
 决策依据：[ADR 0002](../../../docs/architecture/adr/0002-metadata-overlays.md)、
 [ADR 0003](../../../docs/architecture/adr/0003-governed-operations.md) 与任务
@@ -13,8 +15,9 @@ M3（2026-10）让管理员能修正扫描得到的发行信息、调整版本�
 
 ## 2. 数据模型（迁移 0017）
 
-- **`operations`**：每次**成功提交**的受控操作一行（修正、归组、撤销）。列：`id`、`actor_id`、`operation_type`
-  （`release_correction | release_group_change | revert`）、`target_type`（目前只有 `release`）、`target_id`（不设外键：记录可能比目标活得久）、
+- **`operations`**：每次**成功提交**的受控操作一行（修正、归组、默认版本、撤销）。列：`id`、`actor_id`、`operation_type`
+  （`release_correction | release_group_change | release_group_default | revert`，其中 `release_group_default` 由迁移 0018 加入）、`target_type`（`release`；0018 加入 `release_group`，即专辑）、
+  `target_id`（不设外键：记录可能比目标活得久）、
   `idempotency_key`、`fingerprint`、`expected_revision`、`result_revision`、`before_state`/`after_state`（执行器定义的类型化前后状态，撤销的依据）、
   `response`（原样返回客户端，也是同键重放的响应）、`reverts_operation_id`、`request_id`、`created_at`。
   约束都有名字：`operations_revision_ck`（`result = expected + 1`）、`operations_reverts_ck`（只有撤销记录指向原操作）、
@@ -29,7 +32,8 @@ M3（2026-10）让管理员能修正扫描得到的发行信息、调整版本�
   每个字段一次主键上的 `LEFT JOIN`，不被引用的列对应的连接会被优化器去掉。
 - 可修正字段固定为八个，顺序固定：`title`、`album_artist`、`year`、`genre`、`label`、`catalog_number`、`edition`、`barcode`
   （后端 `correctableFields` 与前端 `CORRECTABLE_FIELDS` 一致，样本契约测试守住）。
-- 组（`release_groups`）没有自己的字段，**从不删除**：撤销归组要回到原来的组 ID，空组的地址随之恢复。
+- 组（`release_groups`）在 M3 没有自己的字段（M4 起有默认版本与专辑的版本号，见[默认版本合同](./default-version-contracts.md)），**从不删除**：
+  撤销归组要回到原来的组 ID，空组的地址随之恢复。
 
 ## 3. 共同写入流程 `operations.Run`
 
@@ -52,8 +56,8 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
 - 错误经 `operations.Problem(err)` 映射：`*Failure` 按类别 400/404/409；连接类错误（上下文取消、网络、PostgreSQL `08`/`53`/`57`/`58`）为
   `ErrUnavailable` → `503 database_unavailable`（结果不确定，用**同一个键**重试即可对账）；其余（约束、触发器）为 `ErrOperationFailed` → `500 operation_failed`。
   500 与 503 在 handler 记日志，响应不含内部细节。
-- `Kind` 接口（每种操作类型一个，由拥有业务表的包实现并经 `app` 注册）：`Type()`、`Revert(ctx, tx, operationID, original)`、
-  `Describe(ctx, db, records)`（批量补充列表展示：目标当前状态、改动摘要、`Revertible`）。`RevertExecutor(kind, originalID)` 负责通用部分：
+- `Kind` 接口（每种操作类型一个，由拥有业务表的包实现并经 `app` 注册；目前是修正、归组与默认版本三种）：`Type()`、`Revert(ctx, tx, operationID, original)`、
+  `Describe(ctx, db, records)`（批量补充列表展示：目标当前状态——发行目标给 `Release`、专辑目标给 `Album`——、改动摘要、`Revertible`）。`RevertExecutor(kind, originalID)` 负责通用部分：
   先**单独一条语句** `SELECT … FOR UPDATE` 锁住原记录，再读取它（READ COMMITTED 下带连接的 `FOR UPDATE` 只重检被锁的行，连接来的行仍取自语句快照，
   读不到刚提交的撤销记录），所以对同一条记录的并发撤销串行，后到的得到 `already_reverted`。
 - 不记录执行模式（`assistant`/`steward`/`operator`）：人类管理员直接提交不是 Agent 的 operator 模式，模式字段在 M6 引入。
@@ -90,14 +94,18 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
 
 - `POST /api/v1/operations/{id}/revert`（没有请求体）：先在事务外读一次记录只为按类型找到 `Kind`（不存在 `404 not_found`；类型未注册或本身是撤销
   `409 not_revertible`），其余判断都在 `Run` 里锁住原记录之后做：本身是撤销 `409 not_revertible`，已被撤销 `409 already_reverted`，
-  发行的 `edit_revision` 不等于记录的 `result_revision` `409 revert_conflict`，发行当前不可见 `404 not_found`。成功写一条 `revert` 记录
-  （`reverts_operation_id` 指向原记录），返回 `{operation_id, reverts_operation_id, release_id, revision}`。指纹是 `{type: revert, operation_id}`。
-- `GET /api/v1/operations?page=&page_size=&release_id=`：按时间倒序（再按 ID 倒序）分页，默认 50、最大 100（`400 invalid_pagination`），
-  可按发行筛选（`release_id` 非 UUID `400 invalid_id`）。每条：`{id, type, created_at, actor:{id, username}, release:{id, title, group_id, visible}|null,
-  changes:{kind, …}|null, reverts, reverted_by, revertible}`。`release` 是目标**当前**的有效标题、所在组与可见性（目标已不存在为 `null`）；
-  `changes` 是改动摘要（`release_correction`：每个字段的前后修正意图与当时的有效值；`release_group_change`：前后组 ID 与当时的组标题），
+  目标的人工修改版本号（发行或专辑各自的 `edit_revision`）不等于记录的 `result_revision` `409 revert_conflict`，目标当前不可见 `404 not_found`。
+  成功写一条 `revert` 记录（`reverts_operation_id` 指向原记录），返回 `{operation_id, reverts_operation_id, target_type, target_id, revision}`
+  （M4 起；原来的 `release_id` 只适用于发行，开发阶段不做兼容）。指纹是 `{type: revert, operation_id}`。
+- `GET /api/v1/operations?page=&page_size=&release_id=&group_id=`：按时间倒序（再按 ID 倒序）分页，默认 50、最大 100（`400 invalid_pagination`），
+  可按发行（`release_id`）或专辑（`group_id`，M4）筛选，非 UUID 都是 `400 invalid_id`；**两个都给时取并集**（这个版本的记录加上这张专辑的记录，
+  分页与 `total` 针对并集），`operations.List` 的参数相应是目标列表 `Targets []Target`。每条：`{id, type, created_at, actor:{id, username},
+  release:{id, title, group_id, visible}|null, album:{id, title, visible}|null, changes:{kind, …}|null, reverts, reverted_by, revertible}`。
+  发行目标的记录 `release` 是目标**当前**的有效标题、所在组与可见性、`album` 为 `null`；专辑目标的记录反过来（目标已不存在时两者都是 `null`）。
+  `changes` 是改动摘要（`release_correction`：每个字段的前后修正意图与当时的有效值；`release_group_change`：前后组 ID 与当时的组标题；
+  `release_group_default`：前后的默认版本快照，见[默认版本合同](./default-version-contracts.md)），
   撤销记录的前后状态与它所撤销的操作相反；记录里的状态损坏时 `changes` 为 `null`，不让列表失败。
-  `revertible` = 未被撤销 ∧ 本身不是撤销 ∧ 发行可见 ∧ `edit_revision` 等于记录的 `result_revision`。展示信息由 `Kind.Describe` 按类型批量查询，不逐条查询；
+  `revertible` = 未被撤销 ∧ 本身不是撤销 ∧ 目标可见 ∧ 目标的 `edit_revision` 等于记录的 `result_revision`。展示信息由 `Kind.Describe` 按类型批量查询，不逐条查询；
   操作者用户名经 `identity.Guard.Usernames` 批量取。响应不含请求体、前后状态原文、路径与密钥。
 - 记录永久保留，没有清理，不提供“回滚到某点”。
 
@@ -121,12 +129,13 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
 
 ## 7. 与扫描的关系
 
-- 扫描只更新 `releases` 的扫描值与证据，不碰 `release_corrections`、`edit_revision`、`operations`、`releases.group_id`（既有发行）：
+- 扫描只更新 `releases` 的扫描值与证据，不碰 `release_corrections`、`edit_revision`、`operations`、`releases.group_id`（既有发行），也不更新组行（M4 的默认版本列）：
   修正按视图继续生效、人工归组保持，这是结构保证而不是约定（真实重扫用例守住，见第 9 节）。
 - 扫描值在打开编辑框与提交之间变化不算冲突：`set` 与 `null` 的结果与扫描值无关；`clear` 的结果是提交时的扫描值，响应返回实际有效值。
 - **已知限制（G8）**：成员关系不连续而新建发行时（整张替换等），新发行按扫描值显示、单独成组；旧发行的修正与归组留在旧发行上（不可见但保留，记录里 `visible: false`），
   不自动继承、不提供认领（M4）。
-- 并发：修正事务只锁发行行与自己的修正行，归组事务锁发行行与组行（按 UUID 顺序），扫描事务更新发行行但从不锁组行或修正行，事务都短，不形成环形等待。
+- 并发：修正事务只锁发行行与自己的修正行，归组事务锁发行行与组行（按 UUID 顺序），设定默认版本同样先锁发行行再锁组行，
+  扫描事务更新发行行但从不锁组行或修正行，事务都短，不形成环形等待。
 
 ## 8. 错误码
 
@@ -147,10 +156,13 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
 | 数据库不可用（结果不确定） | `503 database_unavailable` |
 | 业务变化或记录没能写入，已整体回滚 | `500 operation_failed` |
 
+默认版本新增的 `409 not_in_group` 等见[默认版本合同](./default-version-contracts.md)第 8 节。
+
 ## 9. 必需测试与断言点
 
 - `internal/operations`：指纹与错误映射单元测试；PostgreSQL 集成——记录/重放/同键异义、并发同键只执行一次、执行失败与记录写入失败整体回滚、
-  版本契约（`result = expected + 1`）、延迟外键、撤销记录互相指向、列表排序分页筛选、撤销执行器的守卫与对同一条记录的并发撤销。
+  版本契约（`result = expected + 1`）、延迟外键、撤销记录互相指向、列表排序分页筛选（含发行与专辑的并集）、撤销执行器的守卫与对同一条记录的并发撤销、
+  撤销响应的目标类型。
 - `internal/catalog`：视图无修正时与表逐列相同、逐字段叠加与清除、修正行的约束拒绝非法状态、读取返回有效值（含署名与“需要关注”）；
   修正状态迁移（改值/设空/清除、清除后回到重扫值）、拒绝过期/不可见/不存在、确认扫描值消除关注、各处读取一致；
   归组的归入/移出/非法请求无副作用/并发不死锁；撤销恢复每种前态、只动改过的字段、清除后显示现在的扫描值、之后又有修改或目标不可见时被拒绝、
@@ -174,5 +186,6 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
 - M3 **没有**审批队列、editor 角色、“回滚到某点”、扫描基值版本（ADR 0002 的证据绑定针对待审批提案）、物化有效值表（修正行很少，透视代价是主键上的小查询）。
 - 成员写操作（创建、停用/启用、撤销会话）**不在 M3**：暂不要求幂等键、不写操作记录；作为独立小任务接入（补幂等键并写记录，不提供撤销），
   见[身份与成员合同](./identity-contracts.md)。
-- M4：认领（旧发行的修正与归组迁给新发行）、整组合并/拆分、默认版本、问题处理；M6：执行模式字段。
+- M4：默认版本已作为第一项实施（[默认版本合同](./default-version-contracts.md)）；认领（旧发行的修正与归组迁给新发行）、整组合并/拆分、问题处理、
+  扫描反馈仍分别立项；M6：执行模式字段。
 - 前端合同见[状态规范](../frontend/state-management.md)、[组件规范](../frontend/component-guidelines.md)与[前端目录](../frontend/directory-structure.md)。

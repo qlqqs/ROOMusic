@@ -30,8 +30,8 @@ frontend/
     │   ├── library/                # 目录、目录操作记录、扫描记录、扫描详情与诊断
     │   ├── player/                 # 播放器：api、engine（含计次跟踪器、歌词分组与定位）、provider、能力查询、底栏、歌词面板与正在播放页
     │   ├── listening/              # 播放历史：播放上报器（带幂等键、有限重试、会话结束作废）与概览的“最近播放”区块
-    │   ├── governance/             # 受治理操作（M3，管理员）：编辑发行信息、调整归组、撤销、操作记录页与专辑详情的“修改记录”
-    │   └── catalog/                # 专辑：列表（M1b）、详情（M1b）、封面、证据展示，以及概览的计数（M1a）
+    │   ├── governance/             # 受治理操作（M3，管理员）：编辑发行信息、调整归组、设定默认版本（M4）、撤销、操作记录页与专辑详情的“修改记录”
+    │   └── catalog/                # 专辑：列表（M1b）、详情（M1b）、封面、证据展示、默认版本标签与版本对比（M4），以及概览的计数（M1a）
     ├── shared/
     │   ├── api/                    # 请求、错误分类、解码原语、错误信封、重试策略、失败文案
     │   ├── ui/                     # 无策略的表现组件
@@ -55,8 +55,8 @@ features/library/
 
 测试与被测单元同目录。跨页面的整页行为（路由、会话、替身后端）放在 `app/*.test.tsx`；测试共用的替身后端与读取
 后端样本的代码放在 `src/test/`，它们依赖 vitest，不被 Playwright 复用。浏览器冒烟放在 `frontend/e2e/`。
-例外是只依赖解码器与样本读取的纯模块（M1b 的 `catalog-data.ts`：专辑数据与列表、组详情、版本详情、完整证据的接口行为；M3 的 `governance-data.ts`：
-修正、归组、撤销与操作记录的接口行为，含预期版本、幂等重放与各种 409）：
+例外是只依赖解码器与样本读取的纯模块（M1b 的 `catalog-data.ts`：专辑数据与列表、组详情、版本详情、完整证据的接口行为，M4 起还有版本对比；M3 的 `governance-data.ts`：
+修正、归组、撤销与操作记录的接口行为，含预期版本、幂等重放与各种 409，M4 起还有专辑的版本号与默认版本、专辑目标的记录与撤销、按专辑筛选的并集）：
 Vitest 的替身（`fake-catalog.ts`、`fake-governance.ts`）与 Playwright 的受控后端共用它们，让两层对同一份“后端行为”断言；Playwright 运行在 Node 里，
 所以 e2e 只能导入这类纯模块（不能导入 vitest、`*.module.css` 或会连带导入它们的应用代码；各 feature 的 `api/decoders.ts` 只依赖 `shared/api`，真实服务用例可以直接导入）。
 
@@ -67,9 +67,11 @@ features/catalog/
 ├── album-search.ts                 # 列表与详情的 URL 参数校验与规范化（纯函数）、从 history state 取返回列表的参数
 ├── labels.ts                       # 署名与证据词表的中文名，未知值原样显示
 ├── format.ts                       # 卡片摘要、时长、介质标题、署名文字、发行信息条目
-├── api/                            # decoders.ts（含样本往返与上限）、endpoints.ts（列表、组、版本、证据、封面地址）
-├── hooks/                          # use-album-page、use-album、use-release、use-release-evidence、use-library-totals
-└── components/                     # cover、album-card/grid/filters/list-view、album-detail-view、album-header、version-nav、release-media/facts、evidence-section、library-summary
+├── comparison.ts                   # 版本对比表的行、差异与格式文字（M4，纯函数）
+├── api/                            # decoders.ts（含样本往返与上限）、endpoints.ts（列表、组、版本、证据、对比、封面地址）
+├── hooks/                          # use-album-page、use-album、use-release、use-release-evidence、use-release-comparison（M4）、use-library-totals
+└── components/                     # cover、album-card/grid/filters/list-view、album-detail-view、album-header、version-nav、release-media/facts、evidence-section、library-summary、
+                                    # default-version-tag、version-comparison-dialog、comparison-table（M4）
 ```
 
 M3 的 `features/governance/` 实际布局（只列与 library 不同的部分）：
@@ -79,7 +81,7 @@ features/governance/
 ├── labels.ts、field-draft.ts       # 可修正字段的中文名与取值显示；编辑对话框的草稿模型（只记动过的字段，规划要提交的修改与校验）
 ├── change-summary.ts               # 操作记录的类型名、改动逐行描述、撤销前的“会改回什么”预览、不能撤销的原因（纯函数）
 ├── operations-search.ts            # 操作记录页的 URL 参数校验与规范化（纯函数）
-├── api/                            # decoders.ts（含样本往返）、endpoints.ts（修正、归组、撤销、操作记录）
+├── api/                            # decoders.ts（含样本往返）、endpoints.ts（修正、归组、默认版本、撤销、操作记录）
 ├── hooks/                          # use-release-commands（命令状态机）、use-release-corrections、use-operations、use-revert-flow（撤销对话框的开合与焦点兜底）
 └── components/                     # edit-release-dialog、join-album-dialog、detach-album-dialog、release-admin-actions、release-command-notice、
                                     # operation-list、revert-operation-dialog、operations-view（操作记录页内容）、release-history（专辑详情的“修改记录”）
@@ -97,7 +99,8 @@ features/governance/
   不反向导入 app，也不把播放器全局状态放到 shared。进度与离散快照分开订阅。
 - `listening` 拥有播放上报（幂等键、有限重试、会话结束作废）与概览的“最近播放”区块（读取、卡片、清除确认）；经 catalog 公开合同取封面与专辑艺人的显示规则，
   不导入 player：`player` 导入它的上报器，概览页（app 层）组合区块。
-- `governance`（M3）拥有管理员对发行的受治理写操作的界面与命令状态：编辑发行信息、调整归组、撤销、操作记录页与专辑详情的“修改记录”。
+- `governance`（M3）拥有管理员对发行的受治理写操作的界面与命令状态：编辑发行信息、调整归组、撤销、操作记录页与专辑详情的“修改记录”；
+  M4 起还有专辑的默认版本（设定、改回自动选择与撤销）。只读的默认版本标签与版本对比（所有成员可见）在 catalog。
   它导入 catalog 的公开合同（封面、专辑艺人的显示规则、专辑搜索结果），**catalog 从不导入 governance**：专辑详情里的管理员区块由 app 经插槽
   （`renderAdminActions`、`renderAdminSections`）传给 catalog 的详情视图；写操作之后刷新什么缓存、版本换了专辑组之后导航到哪里，由 app 提供给命令 hook，
   governance 不知道别的 feature 的查询键，也不依赖路由的页面。

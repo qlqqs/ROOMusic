@@ -2,7 +2,7 @@
 
 ROOMusic 保留 Core 0 的 Go 后端、数据库与同源部署工具链，不迁移 V0 中已经膨胀的应用容器、AI worker、operator、release overlay 或业务配置。
 
-> **当前状态（2026-10-14）**：Classical 客户端的 M1a 与 M1b 已完成：应用外壳、初始化与登录、扫描目录与扫描详情、成员管理、简版概览，以及专辑浏览（列表、搜索、详情与来源证据），由 Go 同源提供（构建产物提交在 `backend/cmd/roomusic/web`）。M2 的播放也已交付：浏览器直出、ALAC 经 ffmpeg 无损派生、内嵌歌词的同步显示（三组手工实播尚待执行）。M3 让管理员能在专辑详情里修正发行信息（重扫不会覆盖）、把版本归入其他专辑或移出为独立专辑，并撤销自己最近的修改，修改记录在“操作记录”页与详情的“修改记录”里；认领、整组合并拆分与默认版本（M4）尚未实现。设计依据见 [frontend/DESIGN.md](frontend/DESIGN.md)，能力矩阵、已批准的 Core 1 阶段范围和四类 ADR 见 [Core 1 路线](docs/architecture/core-1-roadmap.md)，前端规范见 [前端规范索引](.trellis/spec/frontend/index.md)。
+> **当前状态（2026-10-15）**：Classical 客户端的 M1a 与 M1b 已完成：应用外壳、初始化与登录、扫描目录与扫描详情、成员管理、简版概览，以及专辑浏览（列表、搜索、详情与来源证据），由 Go 同源提供（构建产物提交在 `backend/cmd/roomusic/web`）。M2 的播放也已交付：浏览器直出、ALAC 经 ffmpeg 无损派生、内嵌歌词的同步显示（三组手工实播尚待执行）。M3 让管理员能在专辑详情里修正发行信息（重扫不会覆盖）、把版本归入其他专辑或移出为独立专辑，并撤销自己最近的修改，修改记录在“操作记录”页与详情的“修改记录”里。M4 的第一项让管理员为多版本专辑指定默认版本（专辑列表和打开专辑时先显示它，可撤销），所有成员可以对比一张专辑的各个版本；问题处理、认领、扫描反馈与整组合并拆分（M4 其余各项）尚未实现。设计依据见 [frontend/DESIGN.md](frontend/DESIGN.md)，能力矩阵、已批准的 Core 1 阶段范围和四类 ADR 见 [Core 1 路线](docs/architecture/core-1-roadmap.md)，前端规范见 [前端规范索引](.trellis/spec/frontend/index.md)。
 
 ## 软件目标
 

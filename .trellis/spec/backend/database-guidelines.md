@@ -73,7 +73,7 @@ result; reusing the key for different input returns a conflict.
 前一个持锁事务已提交的记录），因此并发重试只执行一次，其余请求回放已存结果。当前实现见
 `backend/internal/library/httpapi/root_operations.go` 的 `beginRootOperation`。
 
-M3 起，发行字段修正、人工归组与撤销使用共同的 `operations.Run`（`backend/internal/operations`）：它自己开启 READ COMMITTED 事务，
+M3 起，发行字段修正、人工归组与撤销（M4 起还有默认版本的设定）使用共同的 `operations.Run`（`backend/internal/operations`）：它自己开启 READ COMMITTED 事务，
 取得“操作者 + 幂等键”的事务级 advisory lock（`pg_advisory_xact_lock(int, int)`，类别 `OPER`，与迁移锁、扫描锁、目录操作锁 `ROOT` 互不共用键空间），
 查记录并重放或报同键异义，在同一事务里调用拥有业务表的包提供的执行器，再写操作记录，一起提交；业务行引用操作记录的外键是
 `DEFERRABLE INITIALLY DEFERRED`（记录在执行器之后才插入）。被拒绝与失败的尝试不写记录。**READ COMMITTED 下带连接的 `SELECT … FOR UPDATE`
@@ -82,6 +82,10 @@ M3 起，发行字段修正、人工归组与撤销使用共同的 `operations.R
 
 **覆盖层模式**：人工修正放在独立的表（`release_corrections`，没有行就是“没有修正”），扫描只写扫描列，读取经视图（`release_effective`）叠加修正，
 所以重扫不会覆盖修正是结构保证而不是约定；人工修改版本号 `releases.edit_revision` 只由受控操作递增，扫描从不改它，扫描与人工修改因此互不制造冲突。
+
+**迁移 0018（M4，默认版本）**：`release_groups` 增加 `default_release_id`（外键 `ON DELETE SET NULL`，**不约束属于这个组**）与组自己的 `edit_revision`，
+并放宽 `operations` 的类型与目标类型约束（约束名不变，先 `DROP` 再 `ADD`）。默认版本不在别处随归组或扫描清除，而是由读取时的排序判断是否生效
+（可见且仍在这个组里），所以扫描与归组都不用改组行。加锁顺序与归组一致：先发行行、后组行。规则见[默认版本合同](./default-version-contracts.md)。
 
 Do not hold a database transaction open while walking a library tree or reading
 audio tags. Persist scan progress in bounded batches and finalize the scan with

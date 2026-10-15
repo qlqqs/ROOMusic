@@ -169,6 +169,24 @@ API 全样本清单必须注册播放（含派生）与歌词的全部成功样�
 - **变异检查（实践，不入库）**：对新增逻辑逐项临时改坏（可撤销判断、焦点兜底、`staleTime`、地址规范化、同键重试、后端“扫描写入时顺手清掉修正”），确认用例会失败再还原；
   存活的变异必须逐个判断是否等价（例如页面与视图两道 `isAdmin` 把关，去掉一道行为不变）。
 
+## M4 默认版本与版本对比验证分层
+
+最小 Vitest：`npx vitest run src/app/default-version.test.tsx src/app/version-comparison.test.tsx src/features/catalog src/features/governance src/test/api-contract.test.ts`；
+改到归组或详情的地址规范化时再加 `src/app/release-grouping.test.tsx` 与 `src/app/album-detail.test.tsx`。
+
+- **共用的接口行为**：`catalog-data.ts` 增加版本对比（`respondToGroupComparison`），`governance-data.ts` 增加专辑的版本号与默认版本、专辑目标的记录与撤销、
+  按专辑筛选的并集（`respondToGroupDefault` 等）；Vitest 的替身与 Playwright 的受控后端共用。样本契约覆盖 `group-defaults/`、`release-groups/comparison.json`、
+  `get-default.json`、`operations/list-by-group.json`、`reverted-default.json` 与 `not_in_group` 等错误样本。
+- **页面级**：`default-version.test.tsx`（入口与权限、请求体与幂等键、页面停在刚才的版本、提示里撤销、409 与结果不确定、移出默认版本的说明、
+  “修改记录”与操作记录页的专辑级记录与组筛选）；`version-comparison.test.tsx`（标签只在生效中的默认版本上、表格的行与差异读屏文字、空行隐藏、人工修正、
+  格式文字、列头切换后焦点回到入口、读取失败、只剩一个版本、超过 100 个版本）。
+- **地址规范化暂缓**要有确定性用例：命令完成前让组详情的刷新挂起，断言地址没有被旧数据规范化、刷新完成后页面仍在这个版本；先写用例复现 M3 归组落到别的版本的现象，再修。
+- **浏览器冒烟**：`e2e/default-version.spec.ts`（设定、改回、撤销、对比；纯键盘与 Esc；五种宽度下对比对话框在视野内、不超过 90vh、内部滚动、
+  自己没有横向滚动、窄于 768px 时堆叠、axe 与最小字号；差异下划线在真实浏览器里确实画出来）。
+- **真实服务**：`e2e/real/default-version.real.ts`：两张合成 WAV（16 bit / 44.1 kHz 与 24 bit / 96 kHz，`syntheticWav` 的 `format` 参数），年份用修正接口设定，
+  再用归组接口放进同一个组；覆盖页面设定 → 列表与打开专辑都先显示它 → 真实重扫后保持 → 对比标出格式与年份的差异 → 在“修改记录”里撤销；成员只读、写接口 `403`；
+  结束删除素材并重扫。反向验证：临时让扫描清空默认版本，“重扫后保持”用例随即失败。
+
 ## Review Checklist
 
 - [ ] Change belongs to one feature or an explicit app/shared owner.

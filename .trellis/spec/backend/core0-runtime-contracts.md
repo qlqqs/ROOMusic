@@ -32,6 +32,7 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 | 内嵌歌词 | [lyrics-contracts.md](./lyrics-contracts.md) | M2b 歌词：标签提取、`tracks.lyrics`、歌词接口与 LRC 解析规则、测试 |
 | 播放历史 | [listening-contracts.md](./listening-contracts.md) | 阶段 P：`play_history`、计次规则、记录与最近播放与清除接口、按用户隔离、前端计次与上报、测试 |
 | 受治理操作 | [governance-contracts.md](./governance-contracts.md) | 阶段 M3：操作记录与 `operations.Run`、发行字段修正与有效值视图、人工归组、撤销、操作记录接口、测试 |
+| 默认版本与版本对比 | [default-version-contracts.md](./default-version-contracts.md) | M4 第一项：组的默认版本、生效规则、设定与撤销、版本对比、测试 |
 
 ## 2. 接口签名
 
@@ -51,6 +52,7 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 - P：`POST /api/v1/me/plays`、`GET /api/v1/me/plays/recent-releases` 与 `DELETE /api/v1/me/plays`，只作用于当前会话用户，见[播放历史](./listening-contracts.md)。
 - M3（管理员）：`GET|PATCH /api/v1/releases/{id}/corrections`、`POST /api/v1/releases/{id}/group`、`GET /api/v1/operations`、
   `POST /api/v1/operations/{id}/revert`，见[受治理操作](./governance-contracts.md)。
+- M4：`POST /api/v1/release-groups/{id}/default`（管理员）、`GET /api/v1/release-groups/{id}/comparison`，见[默认版本](./default-version-contracts.md)。
 - 前端请求形态为 `apiRequest(spec, decode)`（`frontend/src/shared/api/request.ts`）：成功响应经边界 decoder（第二个参数是状态码，
   同一路径 200 与 202 形状不同时用它核对响应体与状态码相符），
   非 2xx 经统一的错误信封 decoder；响应不是 JSON、信封不合法或 decoder 失败时归为 `invalid_response`，不进入缓存。

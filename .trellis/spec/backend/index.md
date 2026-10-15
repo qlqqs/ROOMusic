@@ -16,8 +16,8 @@ music library.
 Classical / Core 1 的能力路线与四类 ADR 位于
 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)（2026-09-28 已批准阶段顺序与范围）。M0 与路线修订仅更新文档，
 不改变本层现有 API、表结构或权限。B0（行为保持拆包）、阶段 I（身份稳定、按组只读接口）、M2a/M2b（播放与派生）、P（播放历史）与 M3
-（修正覆盖层与受治理操作，见[受治理操作合同](./governance-contracts.md)）已完成；
-认领与合并拆分（M4）、通用审批、editor 角色和 Agent 的实施细节须经对应子任务与 ADR 项批准后再实施。Core 0 限制不是未来阶段的默认授权。
+（修正覆盖层与受治理操作，见[受治理操作合同](./governance-contracts.md)）已完成；M4 的第一项（默认版本与版本对比，见[默认版本合同](./default-version-contracts.md)）已实施；
+M4 的其余各项（问题处理、认领、扫描反馈、合并拆分）、通用审批、editor 角色和 Agent 的实施细节须经对应子任务与 ADR 项批准后再实施。Core 0 限制不是未来阶段的默认授权。
 
 ## Pre-Development Checklist
 
@@ -57,6 +57,7 @@ Before writing or reviewing backend code:
 | [内嵌歌词合同](./lyrics-contracts.md) | M2b 歌词：标签提取与规范化、`tracks.lyrics` 与约束、歌词接口、LRC 解析规则、测试 |
 | [播放历史合同](./listening-contracts.md) | 阶段 P：`play_history`、计次规则与服务端校验、三个接口、最近播放读取规则、前端计次与上报、测试 |
 | [受治理操作合同](./governance-contracts.md) | 阶段 M3：操作记录与共同写入流程 `operations.Run`、发行字段修正与有效值视图、人工归组、撤销、操作记录接口、错误码、测试与真实服务用例 |
+| [默认版本与版本对比合同](./default-version-contracts.md) | M4 第一项：迁移 0018、组的默认版本与版本号、生效与失效规则、设定接口与执行器、撤销与展示、版本对比接口、测试 |
 | [Music Steward And Operation Guidelines](./agent-and-operation-guidelines.md) | Agent modes, Review Subagent, tools, Change Sets, and recovery |
 | [Quality Guidelines](./quality-guidelines.md) | Focused code, forbidden coupling, tests, and gates |
 
