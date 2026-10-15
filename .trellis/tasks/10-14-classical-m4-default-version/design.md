@@ -9,7 +9,7 @@
 - **operations** 扩展为支持“组”这种目标：目标类型常量、记录展示里的专辑信息、撤销响应的目标、列表按组筛选。它仍不导入任何业务包。
 - **扫描不变**：`persist.go` 不改。扫描新建组时新列取默认值，之后从不更新组行（第 8 节）。
 - **前端**：catalog 只读（默认版本标记、版本对比对话框、地址规范化暂缓）；governance 负责写（设为默认版本、改回自动选择、记录与撤销）；
-  app 负责组合（把组的版本号与默认版本交给操作区，命令进行中时让详情页暂缓地址规范化）。catalog 仍不导入 governance。
+  app 负责组合（把组的版本号与默认版本交给操作区）。catalog 仍不导入 governance。
 
 ## 2. 数据模型（迁移 0018）
 
@@ -83,9 +83,10 @@ ALTER TABLE operations DROP CONSTRAINT operations_target_type_ck, ADD CONSTRAINT
   `id, title, artist, album_artist, year, edition, label, catalog_number, barcode, genre, source_type, media_type,
   medium_count, track_count, duration_seconds, formats, corrected_fields`。
   - 文本字段都是有效值（经 `release_effective`）；`corrected_fields` 与发行详情相同。
-  - `medium_count`、`track_count`、`duration_seconds` 只计 present 曲目。`duration_seconds` 是已知时长之和，全部未知时为 null。
+  - `medium_count`、`track_count`、`duration_seconds` 只计 present 曲目。`duration_seconds` 是总时长：只要有一首曲目的时长未知（零、负数与非有限值都算未知）就是 null，
+    不拿已知的部分冒充总数，与专辑详情头部的规则一致（实施第 3 步时由“已知时长之和”改成这条，因为部分之和会让两个版本的差异看起来是真的）。
   - `formats` 是 present 曲目按 `(codec, bit_depth, sample_rate)` 分组的 `[{codec, bit_depth, sample_rate, track_count}]`，
-    按曲目数降序、再按编码排序。不做“音质”判断，也不给出排名。
+    按曲目数降序、再按编码、位深、采样率排序；一个版本最多 32 组，超过时整个读取失败，不静默截断。不做“音质”判断，也不给出排名。
 - 查询数量固定，不逐个成员查询：成员与字段一条、格式汇总一条、修正字段一条，后两条按成员 ID 批量。
 - 不并入组详情：组详情每次打开专辑页都要读，对比只在打开对话框时读。
 
@@ -104,10 +105,12 @@ ALTER TABLE operations DROP CONSTRAINT operations_target_type_ck, ADD CONSTRAINT
   - **人工修正**：有人工修正的值带“人工修正”标记，与侧栏“此版本”一致。
   - **音频格式**：写具体参数，如“FLAC · 24 bit / 96 kHz”；有多种格式时逐项列出，并注明各自的曲目数。不写“最高音质”之类的结论。
   - **数量上限**：版本超过 100 个时说明只比较前 100 个，与版本导航一致。
-- **地址规范化暂缓**：`AlbumDetailView` 新增一个由页面传入的开关，命令进行中时为真，包括命令之后的刷新。
-  - 为什么要暂缓：设定或清除默认版本会换掉代表版本。命令会先把地址带到 `?release=<当前版本>`，再刷新数据。刷新完成之前，
-    缓存里的旧代表版本会让规范化把这个参数去掉，刷新后页面就跳到了别的版本。所以等刷新完成，再按新数据规范化。
-  - M3 归组后的跳转可能有同样的问题（目标专辑已有旧缓存时），实施时先用测试确认现状。
+- **地址规范化暂缓**：组详情正在刷新时，详情视图不做地址规范化，刷新结束再按新数据规范化。
+  - 为什么要暂缓：命令（归入、移出、设定或清除默认版本）会先把地址带到要显示的版本，再刷新数据。刷新完成之前，缓存里的旧成员列表
+    可能不含这个版本，或还把旧的代表版本当作代表版本；按旧数据规范化会把 `release` 参数去掉，刷新后页面就停在了别的版本。
+  - 机制：判据是视图自己读到的“组详情是否正在刷新”（`isFetching`）。原计划的“由页面传入、命令进行中为真”的开关盖不住归组：
+    归入已有缓存的专辑时，命令在新专辑的视图挂载之前就已经结束（刷新只覆盖当时挂载着的查询），而新视图挂载时才开始刷新这张专辑的缓存。
+  - 现状核对：先写了测试，确认 M3 的归组在目标专辑已有缓存时会落在目标专辑原来的代表版本上（`release` 被去掉）；这个测试在本步骤里一起修好。
 
 ### governance（写）
 
@@ -137,7 +140,6 @@ ALTER TABLE operations DROP CONSTRAINT operations_target_type_ck, ADD CONSTRAINT
 ### app
 
 - 页面把组详情的 `revision`、`default_release_id` 经 `renderAdminActions` 的上下文交给操作区。
-- 两个命令状态（头部操作区、“修改记录”）任一处于进行中时，打开详情页的规范化暂缓开关。
 
 ## 8. 与扫描、归组的关系
 

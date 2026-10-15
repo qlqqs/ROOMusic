@@ -1,10 +1,12 @@
 import type { ApiResponse } from "../../../shared/api";
 import { apiRequest } from "../../../shared/api";
 import {
+  decodeReleaseComparison,
   decodeReleaseDetail,
   decodeReleaseEvidence,
   decodeReleaseGroupDetail,
   decodeReleaseGroupPage,
+  type ReleaseComparisonDTO,
   type ReleaseDetailDTO,
   type ReleaseEvidenceDTO,
   type ReleaseGroupDetailDTO,
@@ -28,11 +30,16 @@ export function fetchReleaseGroupPage(params: ReleaseGroupListParams): Promise<A
   return apiRequest({ method: "GET", path: `/api/v1/release-groups?${query}`, signal: params.signal }, decodeReleaseGroupPage);
 }
 
-// 下面三个接口的 ID 由调用方先用 isUuid 校验，不是 UUID 的值不会发请求。
+// 下面几个接口的 ID 由调用方先用 isUuid 校验，不是 UUID 的值不会发请求。
 
 /** 一个专辑组：组摘要加成员版本的摘要（最多 100 个，release_count 是完整数量）。 */
 export function fetchReleaseGroup(groupId: string, signal?: AbortSignal): Promise<ApiResponse<ReleaseGroupDetailDTO>> {
   return apiRequest({ method: "GET", path: `/api/v1/release-groups/${groupId}`, signal }, decodeReleaseGroupDetail);
+}
+
+/** 一张专辑各个版本的对比数据（所有登录用户可读）：发行字段的有效值、介质与曲目、总时长与音频格式汇总，成员顺序与组详情一致。 */
+export function fetchReleaseComparison(groupId: string, signal?: AbortSignal): Promise<ApiResponse<ReleaseComparisonDTO>> {
+  return apiRequest({ method: "GET", path: `/api/v1/release-groups/${groupId}/comparison`, signal }, decodeReleaseComparison);
 }
 
 /** 一个发行版本的详情：介质、曲目、署名与证据摘要。 */

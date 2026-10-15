@@ -25,7 +25,8 @@ type AudioFormat struct {
 	TrackCount int64   `json:"track_count"`
 }
 
-// ComparedRelease 是对比表里的一列。DurationSeconds 是已知时长之和，全部未知时为 nil；
+// ComparedRelease 是对比表里的一列。DurationSeconds 是总时长：只要有一首曲目的时长未知（零、负数与非有限值都算未知），
+// 就是 nil，不拿已知的部分冒充总数（与发行详情页头部的规则一致）；
 // Formats 按曲目数降序、再按编码、位深、采样率排序，没有曲目时是空数组；CorrectedFields 与发行详情相同。
 type ComparedRelease struct {
 	ID              string        `json:"id"`
@@ -57,7 +58,7 @@ type ReleaseComparison struct {
 }
 
 // comparedReleaseQuery 读取成员与字段：一条查询，成员数、默认版本与每个成员的介质、曲目与时长汇总都在里面。
-// 汇总只看 present 曲目，时长只加有限的正数（零、负数与非有限值都当作未知）。
+// 汇总只看 present 曲目；总时长只在每一首曲目的时长都是有限的正数时才给出，否则是 NULL。
 const comparedReleaseQuery = `SELECT releases.id::text, releases.title, releases.artist,
 		NULLIF(BTRIM(releases.album_artist), ''), NULLIF(releases.year, 0),
 		NULLIF(BTRIM(releases.edition), ''), NULLIF(BTRIM(releases.label), ''), NULLIF(BTRIM(releases.catalog_number), ''),
@@ -70,7 +71,8 @@ const comparedReleaseQuery = `SELECT releases.id::text, releases.title, releases
 	CROSS JOIN LATERAL (
 		SELECT COUNT(DISTINCT present_medium.id) AS medium_count,
 		       COUNT(*) AS track_count,
-		       SUM(present_track.duration_seconds) FILTER (WHERE present_track.duration_seconds > 0 AND present_track.duration_seconds < 'Infinity'::float8)::float8 AS duration_seconds
+		       CASE WHEN COUNT(*) FILTER (WHERE present_track.duration_seconds > 0 AND present_track.duration_seconds < 'Infinity'::float8) = COUNT(*)
+		            THEN SUM(present_track.duration_seconds)::float8 END AS duration_seconds
 		FROM media present_medium
 		JOIN tracks present_track ON present_track.medium_id = present_medium.id
 		WHERE present_medium.release_id = releases.id AND present_track.source_status = 'present'

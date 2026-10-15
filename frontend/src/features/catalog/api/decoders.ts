@@ -67,7 +67,7 @@ const releaseGroupDetailDecoder = d.object({
 });
 
 // 版本对比：专辑各个可见版本并排比较的发行字段（有效值）与内容。成员顺序与组详情一致（生效中的默认版本在前，最多 100 个，
-// release_count 是完整数量）。介质、曲目、时长与格式只计当前存在的曲目；时长是已知时长之和，全部未知时为 null；
+// release_count 是完整数量）。介质、曲目、时长与格式只计当前存在的曲目；总时长只在每一首曲目的时长都已知时才有值，否则为 null；
 // 格式按曲目数降序，未知的参数为 null。这里只如实列出参数，不含任何音质判断。
 const audioFormatDecoder = d.object({
   codec: d.nullable(d.string()),

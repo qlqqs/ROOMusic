@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { listApiSampleNames, loadApiSample } from "../../test/api-samples";
-import { decodeReleaseDetail, decodeReleaseEvidence } from "./api/decoders";
+import { decodeReleaseComparison, decodeReleaseDetail, decodeReleaseEvidence } from "./api/decoders";
 import {
   candidateKindLabel,
+  codecLabel,
   confidenceLabel,
   creditRoleLabel,
   evidenceActionLabel,
@@ -20,6 +21,7 @@ describe("词表标签", () => {
     ["处理方式", evidenceActionLabel, "uncertain_apply", "不确定，已暂时采用"],
     ["原因码", reasonCodeLabel, "inconsistent_candidates", "候选值互相不一致"],
     ["归组方式", candidateKindLabel, "box_leaf", "套装里的子目录"],
+    ["音频编码", codecLabel, "alac", "ALAC"],
   ] as const;
 
   it.each(labels)("%s：已知值给中文名，未知值原样显示", (_name, label, known, expected) => {
@@ -57,6 +59,15 @@ describe("词表标签", () => {
       }
       for (const credit of [...release.credits, ...release.media.flatMap((medium) => medium.tracks.flatMap((track) => track.credits))]) {
         check(creditRoleLabel, credit.role, "role");
+      }
+      for (const track of release.media.flatMap((medium) => medium.tracks)) {
+        if (track.codec !== null) check(codecLabel, track.codec, "codec");
+      }
+    }
+    // 版本对比样本里的音频编码。
+    for (const release of decodeReleaseComparison(loadApiSample("release-groups/comparison").body).releases) {
+      for (const format of release.formats) {
+        if (format.codec !== null) check(codecLabel, format.codec, "codec");
       }
     }
     expect(unknown).toEqual([]);

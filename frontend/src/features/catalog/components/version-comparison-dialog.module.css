@@ -1,0 +1,46 @@
+.dialog {
+  width: min(980px, calc(100vw - 2 * var(--space-4)));
+  max-height: min(90vh, calc(100dvh - 2 * var(--space-4)));
+}
+
+.content {
+  min-width: 0;
+}
+
+/* 标题行固定在对话框顶部：窄屏上内容在对话框内部滚动，“关闭”始终可见。 */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-divider);
+  background: var(--color-surface);
+}
+
+.title {
+  min-width: 0;
+  font-size: var(--fs-20);
+}
+
+.body {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-4);
+}
+
+.lead {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.note {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+}

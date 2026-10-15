@@ -108,6 +108,26 @@ describe("归入其他专辑", () => {
     expect(api.requestsTo("POST", /\/revert$/)).toHaveLength(1);
   });
 
+  it("归入一张刚看过、还在缓存里的专辑：旧的成员列表不会把地址规范掉，页面停在这个版本", async () => {
+    setup();
+    const user = userEvent.setup();
+    const { history } = renderApp({ path: `/albums/${albumB().id}` });
+    await heading("Beta Quartets"); // B 的详情进了缓存：此时它只有自己一个版本
+    await user.click(screen.getByRole("link", { name: "返回专辑列表" }));
+    await user.click(await screen.findByRole("link", { name: /Sample Symphonies/ }));
+    await heading("Sample Symphonies");
+    const dialog = await openJoin(user);
+    await search(user, dialog, "Quartet");
+    await user.click(await within(dialog).findByRole("radio", { name: /Beta Quartets/ }));
+    await user.click(within(dialog).getByRole("button", { name: "归入这张专辑" }));
+
+    // 归入成功后页面带到 B 并选中这个版本；B 的缓存还是旧的（没有这个版本），不能因此把 release 参数当作无效去掉。
+    await waitFor(() => expect(history.location.pathname).toBe(`/albums/${albumB().id}`));
+    await heading("Sample Symphonies");
+    expect(new URLSearchParams(history.location.search).get("release")).toBe(releaseOf(albumA()));
+    expect(await screen.findByRole("navigation", { name: "版本" })).toBeTruthy();
+  });
+
   it("搜索词为空或太长时说明原因，不发请求", async () => {
     const { api } = setup();
     const user = userEvent.setup();

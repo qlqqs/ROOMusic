@@ -89,7 +89,7 @@ function ReleaseContent({ release, versioned, isAdmin, renderAdminSections, rend
           </aside>
         </div>
       </div>
-      <EvidenceSection key={release.id} release={release} isAdmin={isAdmin} />
+      <EvidenceSection key={`evidence-${release.id}`} release={release} isAdmin={isAdmin} />
       {isAdmin ? renderAdminSections?.({ release }) : null}
     </>
   );
@@ -140,7 +140,7 @@ function ReleaseBody({ groupId, group, selected, list, isAdmin, renderReleaseAct
         adminActions={detail.data === undefined || !isAdmin ? undefined : renderAdminActions?.({ release: detail.data, groupId, releaseCount: group.release_count })}
       />
       {group.release_count > 1 ? (
-        <VersionNav groupId={groupId} releases={group.releases} releaseCount={group.release_count} representativeId={group.representative.id} list={list} />
+        <VersionNav groupId={groupId} releases={group.releases} releaseCount={group.release_count} representativeId={group.representative.id} defaultReleaseId={group.default_release_id} list={list} />
       ) : null}
       {gone ? (
         <ReleaseGone groupId={groupId} group={group} selected={selected} />
@@ -164,7 +164,10 @@ function AlbumDetailContent({ groupId, release: requested, list, isAdmin, render
   const navigate = useNavigate();
   const data = group.data;
   const canonical = data === undefined ? undefined : canonicalRelease(data, requested);
-  const needsNormalizing = data !== undefined && canonical !== requested;
+  // 组详情正在刷新时不规范化：写操作（归组、默认版本）会先把地址带到要显示的版本、再刷新数据，缓存里的旧成员列表这时
+  // 可能还不含这个版本，或还把旧的代表版本当作代表版本；按旧数据规范化会把 release 参数去掉，刷新完成后页面就停在了别的版本。
+  // 等刷新结束，再按新数据规范化。
+  const needsNormalizing = data !== undefined && !group.isFetching && canonical !== requested;
   const normalize = useEffectEvent(() =>
     // 替换历史项，返回键不会回到被规范掉的地址；列表参数随之保留，“返回专辑列表”仍然有效。
     void navigate({ to: "/albums/$groupId", params: { groupId }, search: { release: canonical }, state: { albumList: list }, replace: true }),

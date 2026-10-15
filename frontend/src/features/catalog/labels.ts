@@ -75,3 +75,20 @@ export const candidateKindLabel = labeller({
   loose_album: "散放的专辑",
   loose_unknown: "散放的未知文件",
 });
+
+/**
+ * 音频编码的显示名。清单按扫描器写入的取值核对（internal/library/parser/parser.go 的 Codec；WAV 按格式标签区分 pcm、ieee_float 与 wav_extensible）。
+ * 接口按字符串返回，未知取值原样显示。
+ */
+export const codecLabel = labeller({
+  flac: "FLAC",
+  alac: "ALAC",
+  aac: "AAC",
+  mp3: "MP3",
+  vorbis: "Vorbis",
+  opus: "Opus",
+  wav: "WAV",
+  pcm: "WAV（PCM）",
+  ieee_float: "WAV（浮点）",
+  wav_extensible: "WAV（扩展格式）",
+});

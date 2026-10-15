@@ -67,18 +67,18 @@ func comparedIDs(comparison ReleaseComparison) []string {
 	return ids
 }
 
-// 对比读取的内容：有效值（含人工修正与修正为空）、只计 present 曲目的介质、曲目与时长（全部未知时为 null）、
-// 格式分组与排序（曲目数降序、再按编码、位深、采样率；未知的参数是 null），以及 corrected_fields。
+// 对比读取的内容：有效值（含人工修正与修正为空）、只计 present 曲目的介质、曲目与时长（有一首曲目的时长未知就是 null，
+// 不拿已知部分冒充总数）、格式分组与排序（曲目数降序、再按编码、位深、采样率；未知的参数是 null），以及 corrected_fields。
 func TestPostgreSQLReleaseComparisonReportsEffectiveValuesAndContent(t *testing.T) {
 	fixture := newCorrectionFixture(t)
 
-	// A：两个介质，三首 present（FLAC 16/44.1k，其中一首时长未知）和一首 missing（不计入）；有版本说明、厂牌等字段。
+	// A：两个介质，四首 present（FLAC 16/44.1k，时长都已知）和一首 missing（不计入）；有版本说明、厂牌等字段。
 	a := fixture.versionOf("Alpha", 1998)
 	fixture.exec(`UPDATE releases SET edition='Remastered', label='Label A', catalog_number='CAT-A', barcode='111', genre='Classical', source_type='physical', media_type='cd' WHERE id=$1::uuid`, a.releaseID)
 	first := fixture.track(a, "A1", "present", 100.5)
 	second := fixture.track(a, "A2", "present", 200.0)
 	secondMedium := fixture.secondMedium(a)
-	third := fixture.track(secondMedium, "A3", "present", nil)
+	third := fixture.track(secondMedium, "A3", "present", 50.0)
 	gone := fixture.track(secondMedium, "A4", "missing", 999.0)
 	for _, track := range []string{first, second, third, gone} {
 		fixture.audio(track, "flac", 16, 44100)
@@ -86,7 +86,8 @@ func TestPostgreSQLReleaseComparisonReportsEffectiveValuesAndContent(t *testing.
 	// 发行自带的那首曲目（visibleRelease 造的，versionOf 里已有一首 100 秒的 present 曲目）也是 FLAC 16/44.1k。
 	fixture.exec(`UPDATE tracks SET codec='flac', bit_depth=16, sample_rate=44100 WHERE medium_id=$1::uuid AND title='曲目'`, a.mediumID)
 
-	// B：一个介质；两首 ALAC 24/96k、一首时长为零的 FLAC 16/44.1k（零是未知）、一首编码只有空白、采样率为零的曲目（参数未知）。
+	// B：一个介质；三首 ALAC 24/96k、一首时长为零的 FLAC 16/44.1k（零是未知）、一首时长为空且编码只有空白、采样率为零的曲目（参数未知）；
+	// 有两首曲目的时长未知，所以总时长是 null，而不是已知部分之和 700 秒。
 	b := fixture.versionOf("Beta", 2005)
 	alac1, alac2, zero, blank := fixture.track(b, "B1", "present", 300.0), fixture.track(b, "B2", "present", 300.0), fixture.track(b, "B3", "present", 0), fixture.track(b, "B4", "present", nil)
 	fixture.audio(alac1, "alac", 24, 96000)
@@ -133,7 +134,7 @@ func TestPostgreSQLReleaseComparisonReportsEffectiveValuesAndContent(t *testing.
 	wantA := ComparedRelease{
 		ID: a.releaseID, Title: "Alpha (corrected)", Artist: "艺术家", AlbumArtist: ptr("专辑艺术家"), Year: nil,
 		Edition: ptr("Remastered"), Label: ptr("Label A"), CatalogNumber: ptr("CAT-A"), Barcode: ptr("111"), Genre: ptr("Classical"),
-		SourceType: ptr("physical"), MediaType: ptr("cd"), MediumCount: 2, TrackCount: 4, DurationSeconds: ptr(100.5 + 200.0 + 100.0),
+		SourceType: ptr("physical"), MediaType: ptr("cd"), MediumCount: 2, TrackCount: 4, DurationSeconds: ptr(100.0 + 100.5 + 200.0 + 50.0),
 		Formats:         []AudioFormat{{Codec: ptr("flac"), BitDepth: ptr(16), SampleRate: ptr(44100), TrackCount: 4}},
 		CorrectedFields: []string{"title", "year"},
 	}
@@ -142,7 +143,7 @@ func TestPostgreSQLReleaseComparisonReportsEffectiveValuesAndContent(t *testing.
 	}
 	wantB := ComparedRelease{
 		ID: b.releaseID, Title: "Beta", Artist: "艺术家", AlbumArtist: ptr("专辑艺术家"), Year: ptr(2005),
-		MediumCount: 1, TrackCount: 5, DurationSeconds: ptr(300.0 + 300.0 + 100.0),
+		MediumCount: 1, TrackCount: 5, DurationSeconds: nil,
 		Formats: []AudioFormat{
 			{Codec: ptr("alac"), BitDepth: ptr(24), SampleRate: ptr(96000), TrackCount: 3},
 			{Codec: ptr("flac"), BitDepth: ptr(16), SampleRate: ptr(44100), TrackCount: 1},

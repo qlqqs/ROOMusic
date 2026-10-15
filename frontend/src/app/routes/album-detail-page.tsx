@@ -36,12 +36,12 @@ export function AlbumDetailPage(props: AlbumDetailPageProps) {
   // “修改记录”里的撤销另有一个命令状态：结果提示就近显示在记录区，不与头部的操作结果混在一起。
   const historyCommands = useReleaseCommands({ refresh, onMoved: showRelease });
   // 插槽保持同一个函数引用，曲目行才能跳过没有变化的重绘。
-  const renderReleaseActions = useCallback((release: ReleaseDetailDTO) => <AlbumPlaybackActions key={release.id} release={release} groupId={groupId} />, [groupId]);
+  const renderReleaseActions = useCallback((release: ReleaseDetailDTO) => <AlbumPlaybackActions key={`playback-${release.id}`} release={release} groupId={groupId} />, [groupId]);
   const renderTrackActions = useCallback((track: ReleaseTrackDTO, release: ReleaseDetailDTO) => <TrackPlaybackActions key={track.id} release={release} track={track} groupId={groupId} />, [groupId]);
   const renderAdminActions = useCallback(
     ({ release, groupId: currentGroupId, releaseCount }: { release: ReleaseDetailDTO; groupId: string; releaseCount: number }) => (
       <ReleaseAdminActions
-        key={release.id}
+        key={`admin-${release.id}`}
         release={{ id: release.id, title: release.title, revision: release.revision }}
         groupId={currentGroupId}
         releaseCount={releaseCount}
@@ -51,7 +51,7 @@ export function AlbumDetailPage(props: AlbumDetailPageProps) {
     [commands],
   );
   const renderAdminSections = useCallback(
-    ({ release }: { release: ReleaseDetailDTO }) => <ReleaseHistory key={release.id} release={{ id: release.id, title: release.title }} commands={historyCommands} />,
+    ({ release }: { release: ReleaseDetailDTO }) => <ReleaseHistory key={`history-${release.id}`} release={{ id: release.id, title: release.title }} commands={historyCommands} />,
     [historyCommands],
   );
   return <AlbumDetailView {...props} isAdmin={isAdmin}

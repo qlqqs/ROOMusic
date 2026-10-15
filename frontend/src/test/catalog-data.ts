@@ -2,6 +2,9 @@ import {
   decodeReleaseDetail,
   decodeReleaseEvidence,
   decodeReleaseGroupPage,
+  type AudioFormatDTO,
+  type ComparedReleaseDTO,
+  type ReleaseComparisonDTO,
   type ReleaseDetailDTO,
   type ReleaseEvidenceDTO,
   type ReleaseGroupDetailDTO,
@@ -275,4 +278,68 @@ export function respondToReleaseEvidence(data: CatalogData, id: string): ApiResu
   const release = releaseDetailFor(data, id);
   if (release === undefined) return failure(404, "not_found", "发行版本不存在");
   return { status: 200, body: data.evidence.get(id) ?? releaseEvidenceOf(release) };
+}
+
+// ---- 版本对比 ----
+
+/**
+ * 一个版本在对比里的一列，取自它的详情（与接口一致）：有效字段、介质数与曲目数（只计详情里列出的曲目）、总时长（每一首曲目的时长都已知才有值，
+ * 否则 null）、按 (编码, 位深, 采样率) 分组的格式（曲目数降序，再按编码、位深、采样率；未知的排最后）与人工修正的字段名。
+ */
+function comparedReleaseOf(detail: ReleaseDetailDTO): ComparedReleaseDTO {
+  const tracks = detail.media.flatMap((medium) => medium.tracks);
+  const durations = tracks.map((track) => track.duration_seconds);
+  const known = durations.length > 0 && durations.every((seconds) => seconds !== null && seconds > 0);
+  const formats = new Map<string, AudioFormatDTO>();
+  for (const track of tracks) {
+    const key = JSON.stringify([track.codec, track.bit_depth, track.sample_rate]);
+    const existing = formats.get(key);
+    if (existing === undefined) formats.set(key, { codec: track.codec, bit_depth: track.bit_depth, sample_rate: track.sample_rate, track_count: 1 });
+    else existing.track_count += 1;
+  }
+  // 升序，没有值（null）的排最后。
+  const nullsLast = (a: string | number | null, b: string | number | null): number => (a === b ? 0 : a === null ? 1 : b === null ? -1 : a < b ? -1 : 1);
+  const byParameters = (a: AudioFormatDTO, b: AudioFormatDTO) =>
+    b.track_count - a.track_count || nullsLast(a.codec, b.codec) || nullsLast(a.bit_depth, b.bit_depth) || nullsLast(a.sample_rate, b.sample_rate);
+  return {
+    id: detail.id,
+    title: detail.title,
+    artist: detail.artist,
+    album_artist: detail.album_artist,
+    year: detail.year,
+    edition: detail.edition,
+    label: detail.label,
+    catalog_number: detail.catalog_number,
+    barcode: detail.barcode,
+    genre: detail.genre,
+    source_type: detail.source_type,
+    media_type: detail.media_type,
+    medium_count: detail.medium_count,
+    track_count: detail.track_count,
+    duration_seconds: known ? durations.reduce<number>((total, seconds) => total + (seconds ?? 0), 0) : null,
+    formats: [...formats.values()].sort(byParameters),
+    corrected_fields: detail.corrected_fields,
+  };
+}
+
+/**
+ * GET /release-groups/{id}/comparison：组不存在返回 404；成员顺序与组详情相同（生效中的默认版本在前）；
+ * 组详情仍列出、详情却是 404 的版本（被重新扫描后不可见）不在对比里，版本数相应减少。
+ */
+export function respondToGroupComparison(data: CatalogData, id: string): ApiResult {
+  const group = groupDetailFor(data, id);
+  if (group === undefined) return failure(404, "not_found", "发行组不存在");
+  const releases = group.releases.flatMap((member) => {
+    const detail = releaseDetailFor(data, member.id);
+    return detail === undefined ? [] : [comparedReleaseOf(detail)];
+  });
+  if (releases.length === 0) return failure(404, "not_found", "发行组不存在");
+  const first = releases[0];
+  const comparison: ReleaseComparisonDTO = {
+    group_id: group.id,
+    default_release_id: group.default_release_id !== null && first?.id === group.default_release_id ? group.default_release_id : null,
+    release_count: group.release_count - (group.releases.length - releases.length),
+    releases,
+  };
+  return { status: 200, body: comparison };
 }
