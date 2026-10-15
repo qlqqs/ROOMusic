@@ -2,14 +2,12 @@
 
 ## 状态与决策边界
 
-- 状态：**部分批准**（2026-09-28、2026-09-29、2026-10-13）：第九节第 1 项中的 M3 首批试点范围（2026-09-28），第 4 项中的目录目标绑定缺口与旧记录策略（2026-09-29，F2），
-  以及第 1 项其余、第 2–6 项在 M3 范围内的取舍（2026-10-13，M3 规划，见决策记录）已批准并由 M3 实施（合同见[受治理操作合同](../../../.trellis/spec/backend/governance-contracts.md)）；
-  第 7 项中 M4 的第一种版本关系操作（设定默认版本，2026-10-14，见决策记录）已批准并实施（合同见[默认版本与版本对比合同](../../../.trellis/spec/backend/default-version-contracts.md)）；
-  第 7 项其余（Release 合并/拆分、修正迁移等结构操作与 M6 Agent 的边界）、审批队列、链式恢复与 `editor` 仍是草案，未授权新增权限或业务实施。另：F3（2026-10-02）把成员写操作的幂等延到 M3 决定，
-  M3 裁决（G6，2026-10-13）**不纳入 M3**，作为独立小任务接入。
-- 核对日期：2026-09-27；代码证据基线：`6cf76ec`。B0（2026-09-30）拆包后，下文代码链接已更新到新位置；核对结论仍以该基线为准。
+- 状态：**部分批准**，逐项见决策记录与第九节：M3 的最小共同合同、字段修正与人工归组、单条撤销与操作记录（2026-10-13）已实施
+  （[受治理操作合同](../../../.trellis/spec/backend/governance-contracts.md)），M4 的设定默认版本（2026-10-14）已实施
+  （[默认版本与版本对比合同](../../../.trellis/spec/backend/default-version-contracts.md)）。第 7 项其余（Release 合并/拆分、修正迁移等结构操作与 M6 Agent 的边界）、
+  审批队列、链式恢复与 `editor` 仍是草案，未授权新增权限或业务实施；成员写操作的幂等与记录不纳入 M3（G6），作为独立小任务接入。
+- 核对日期：2026-09-27；代码证据基线：`6cf76ec`。第一节已于 2026-10-15 精简，现状以各合同为准。
 - 范围依据：[Core 1 路线](../core-1-roadmap.md)与[架构决策摘要](../architecture-decisions.md)。
-  下文风险分类、审批政策和 `editor` 均未获实施批准，在 M3 规划时裁决。
 - 推荐方向：从目录管理和有限元数据修正提炼最小共同操作合同，保留类型化业务执行器，
   不构建任意 SQL/字段修改器、完整事件溯源或通用文件恢复系统。
 - 适用候选阶段：M3 的受治理数据库写入，M4 的结构治理；Steward 运行时及独立审查属于
@@ -29,19 +27,15 @@
 
 ## 一、仓库事实：目录操作是窄实现，不是通用治理平台
 
-函数名与表名用于定位。已有测试只作源码合同证据，本轮未运行 Go 或数据库测试。
+规划时（基线 `6cf76ec`）逐条核对的仓库事实表已于 2026-10-15 精简，原表见提交 `f334653` 中的本文件。其中仍约束后续设计的结论：
 
-| 定位 | 当前事实 | 不能据此宣称 |
-| --- | --- | --- |
-| [0006_multi_user.sql](../../../backend/migrations/0006_multi_user.sql)、[guard.go](../../../backend/internal/identity/guard.go)：`Authenticate`、`RequireAdmin` | 用户角色仅 `admin`、`user`；会话查询检查到期、撤销与用户禁用；管理员检查在后端 | 已有 `editor`、自定义权限或 Agent 身份授权 |
-| [app.go](../../../backend/internal/app/app.go)、[roots.go](../../../backend/internal/library/httpapi/roots.go)：`New`、`addRoot` | 有目录注册、停用、恢复和目录操作列表；注册验证允许根和路径安全，要求同源、管理员及幂等键 | 有通用变更集、审批队列、任意历史点恢复 API |
-| [root_operations.go](../../../backend/internal/library/httpapi/root_operations.go)：`updateRoot`、`restoreRoot` | 锁定目录行，检查 `expected_revision` 和状态；资源修改与成功操作记录同事务，revision 递增 | 对所有业务写入均有 revision/事务治理 |
-| [0007_root_operations.sql](../../../backend/migrations/0007_root_operations.sql) | `library_root_operations` 保存 actor、类型、幂等键/指纹、前后状态、revision、响应、request ID；类型限于 create/disable/restore | 已有独立 Change Set、追加式生命周期 Journal、审批对象、检查点仓库或逆操作注册表 |
-| [root_operations.go](../../../backend/internal/library/httpapi/root_operations.go)：`beginRootOperation`、`rootOperations` | 目录新增/停用/恢复共用入口：按 actor/操作类型/幂等键在事务内加锁后查结果，指纹含目标，同键请求串行；历史只向管理员返回最近 100 条安全摘要 | 目录以外的作用域、任意作用域的完整审计检索、任意操作链重放或通用并发重试已全面验证 |
-| [handlers.go](../../../backend/internal/identity/httpapi/handlers.go)：`createUser`、`updateUser`、`revokeUserSessions` | 成员创建、禁用/启用、会话撤销独立实现；禁用用户与撤销其会话有事务保护 | 这些写入已经进入目录操作记录，或都能撤销 |
-| [persist.go](../../../backend/internal/catalog/persist.go)：`PersistCandidate`；[scanner.go](../../../backend/internal/library/scanner.go)：`finalizeScan`；[0011](../../../backend/migrations/0011_scan_staging_and_identity.sql) | 扫描按候选提交并替换当前证据；暂存会清理；仅完整成功终态允许 missing 对账 | 每个扫描字段都有 Change Set，或扫描日志能恢复到过去的目录/元数据快照 |
-| [操作规范](../../../.trellis/spec/backend/agent-and-operation-guidelines.md) | 长期合同区分 Change Set、Journal、Checkpoint、Reversible Executor 和三种执行模式 | Review Subagent、Operator 运行时、标签/文件操作已经实现 |
-| [目录操作集成测试](../../../backend/internal/app/auth_root_operations_integration_test.go)：`TestPostgreSQLRootOperationTransactionsAndConflicts`、`TestPostgreSQLRootOperationIdempotencyBindsTarget`、`TestPostgreSQLRootOperationConcurrentRetriesConverge`、`TestPostgreSQLRootOperationHistoryIsAdminOnlyAndRedacted` | 有串行重试、键冲突、跨目标同键冲突、同键并发收敛、路由 ID 校验、降权后重放、revision 冲突、缺失逆向依据、记录失败回滚和历史权限/脱敏断言 | 覆盖通用审批、批量撤销链或所有失败生命周期 |
+- 角色只有 `admin`、`user`，管理员检查在后端（[guard.go](../../../backend/internal/identity/guard.go) 的 `RequireAdmin`）；没有 `editor`、自定义权限或 Agent 身份授权。
+- 目录新增、停用、恢复是窄实现（[root_operations.go](../../../backend/internal/library/httpapi/root_operations.go)，表 `library_root_operations`），
+  合同见[目录与扫描流程合同](../../../.trellis/spec/backend/library-scan-contracts.md)的“目录新增与操作幂等”。M3 的共同流程 `operations.Run` 没有把它迁入，
+  它也不是通用的变更集、审批队列或任意历史点恢复。成员写操作各自实现（[handlers.go](../../../backend/internal/identity/httpapi/handlers.go)），见状态段。
+- 扫描按候选提交并替换当前证据，仅完整成功终态允许 `missing` 对账；扫描日志不能恢复到过去的目录或元数据快照。
+- [操作规范](../../../.trellis/spec/backend/agent-and-operation-guidelines.md)区分 Change Set、Journal、Checkpoint、Reversible Executor 与三种执行模式，
+  但 Review Subagent、Operator 运行时与标签/文件操作都没有实现。
 
 ### 当前可恢复性与缺口
 
@@ -51,15 +45,8 @@
   revision。create 记录的空前态不是删除根目录、移除已有资料库或通用撤销注册的充分依据。
 - 恢复目录配置不恢复音乐文件、已扫描元数据或被外部程序删除的内容，也不等于恢复某次
   扫描。当前停用/恢复不应被 UI 命名为整库“检查点回滚”。
-- 表允许 `failed` 状态，但当前写入点只插入成功操作；校验拒绝和事务失败通常返回错误，
-  不会生成完整的失败 Journal。不能因为列存在就宣称所有尝试已经持久审计。
-- **目标绑定缺口（已由 F2 修复，2026-09-29）**：原停用指纹只有状态与预期 revision，恢复指纹只有
-  预期 revision，均没有路由中的 root ID；重放查询又只按 actor/类型/键定位，同一 actor 将同键
-  同 body 用于另一个 root 时，会拿到前一 root 的已存响应而目标不变（F2 已动态复现）。现指纹含
-  小写 root ID，同键请求在事务内加锁串行，跨目标同键返回 `idempotency_conflict`；旧记录不做兼容，
-  升级后重试返回 409。失败尝试仍不写记录，键作用域仍是 actor 加操作类型。
-- 重放查询位于修改事务之前；现有测试证明的是串行重试路径，不足以承诺并发同键请求
-  都返回相同结果。通用合同实施前必须补齐并发收敛验证，不能直接复制该流程并声称完备。
+- 表允许 `failed` 状态，但写入点只插入成功操作，校验拒绝与事务失败不写记录；不能因为列存在就宣称所有尝试已经持久审计。
+- 目标绑定与同键并发的缺口已由 F2 修复（2026-09-29，见决策记录）：指纹含目标，同键请求在事务内加锁串行，并发只执行一次。
 
 ## 二、治理对象、角色与风险分类草案
 
@@ -250,22 +237,18 @@ Operator。审查证据必须有界且脱敏，不提供数据库连接、媒体
 
 | 阶段 | 建议边界（除现状外均待批准） |
 | --- | --- |
-| M0 | 记录本草案与代码缺口，不更改当前目录合同或权限 |
-| M1 | 使用现有目录/成员管理与扫描 API；只展示有实际依据的目录操作摘要，隐藏通用审批及扫描恢复点 |
-| B0 | 行为保持拆包；目标幂等修复、通用操作、权限和新增错误语义须独立审阅，不混入纯重构 |
-| M3 | 明确选择最小共同合同或轻量替代；首批试点为字段修正与 ReleaseGroup 成员调整（2026-09-28 已批准，见“决策记录”）；成员管理是否纳入需另列范围，不声称已全部治理 |
-| M4 | 依赖 M3，逐类批准默认版本、Release 合并/拆分等版本关系操作、修正迁移及逆操作，不直接开放任意合并/拆分；设定默认版本已批准并实施（2026-10-14，见“决策记录”） |
+| M0、M1、B0 | 已完成：不改目录合同与权限，M1 只展示有实际依据的目录操作摘要，拆包不混入行为修改 |
+| M3 | 已实施：最小共同合同，字段修正与 ReleaseGroup 成员调整（见决策记录）；成员管理不纳入，不声称已全部治理 |
+| M4 | 依赖 M3，逐类批准版本关系操作、修正迁移及逆操作，不直接开放任意合并/拆分；设定默认版本已实施（见决策记录） |
 | M5 | 个人收藏/歌单继续走归属与资源授权，不强塞共享治理审批 |
 | M6 | Agent 身份委托、工具注册、独立审查与模式选择经单独批准并验证后，才复用同一执行权威 |
 
 ### 渐进迁移
 
 1. 通过新迁移演进，不改已共享迁移。先补现有窄合同的测试及经批准的缺口修复，再扩展
-   新能力。F2（2026-09-29）按“开发阶段不做兼容”裁决，指纹改变后旧停用/恢复记录不再重放，重试
-   返回 409；后续再改指纹或记录格式时，先确认是否有需要保留的已存结果，没有就不设兼容窗口。
-2. 历史目录记录可经只读适配展示为“旧目录操作”，保留原 ID、actor、revision、响应与
-   原语义；不能补造 `change_set_id` 对应的历史意图、批准、mode、policy 或未记录的失败。
-   若迁移建立新关联 ID，必须标明是迁移关联而非当时已存在的事实。
+   新能力。按“开发阶段不做兼容”（F2，见决策记录），改指纹或记录格式时先确认是否有需要保留的已存结果，没有就不设兼容窗口。
+2. 目录操作记录不迁移（2026-10-13，见决策记录）；以后若要一起展示，只能只读适配并保留原语义，
+   不能补造历史意图、批准、mode、policy 或未记录的失败。
 3. 历史 restore 仅保留原来明确支持的恢复依据；不得从空前态推导 create 可逆，更不能
    把旧扫描记录导入检查点或承诺跨全部历史的链式撤销。
 4. 一次操作只有一个执行权威；若过渡期写入新旧记录，必须同事务且有明确幂等归属，
