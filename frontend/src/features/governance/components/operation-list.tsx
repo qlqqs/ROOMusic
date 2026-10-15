@@ -69,7 +69,7 @@ export function OperationList({ caption, items, showRelease, onRevert }: Operati
     const release: Column<OperationItemDTO>[] = showRelease ? [{ id: "release", header: "专辑", cell: (item) => <TargetCell item={item} /> }] : [];
     return [
       { id: "time", header: "时间", rowHeader: true, cell: (item) => formatDateTime(item.created_at) },
-      { id: "actor", header: "操作者", cell: (item) => item.actor.username },
+      { id: "actor", header: "操作者", cell: (item) => <span className={styles.actor}>{item.actor.username}</span> },
       ...release,
       { id: "change", header: "改动", cell: (item) => <ChangeCell item={item} /> },
       {

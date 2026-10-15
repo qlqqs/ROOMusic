@@ -132,7 +132,8 @@
     font-weight: var(--font-heading-weight);
   }
 
-  .cell {
+  /* 版本名在左、值在右：选择器要比上面的 .table td（块级）更具体，否则版本名会落在值的上面一行。 */
+  .table .cell {
     display: grid;
     grid-template-columns: minmax(4.5em, 24%) minmax(0, 1fr);
     gap: var(--space-2);

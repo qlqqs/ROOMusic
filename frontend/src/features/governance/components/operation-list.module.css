@@ -2,6 +2,14 @@
   color: var(--text-secondary);
 }
 
+/* 用户名只在词与词之间换行：表格按内容分配列宽，改动列的文字很长时，短名字不会被挤到在词中间断开（如“curato / r”）。
+   用户名没有长度上限，所以它最多占 10em，超长的名字在这个宽度里断开，不撑出横向滚动。 */
+.actor {
+  display: inline-block;
+  max-inline-size: 10em;
+  overflow-wrap: break-word;
+}
+
 .change {
   display: grid;
   gap: 2px;

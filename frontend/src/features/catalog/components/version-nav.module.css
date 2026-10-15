@@ -31,6 +31,8 @@
 
 .link {
   display: grid;
+  /* 各行贴着左边、按内容取宽：否则“默认版本”标签会被拉满整个版本卡片，与别处贴着文字的标签不一致。 */
+  justify-items: start;
   gap: 2px;
   min-width: 0;
   min-height: var(--control-height);

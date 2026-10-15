@@ -47,7 +47,12 @@ test.describe("设定默认版本", () => {
     expect(set?.body).toEqual({ expected_revision: 1, release_id: versions[1]?.id });
     expect(set?.idempotencyKey).toMatch(uuidPattern);
     // 它成为代表版本：排在版本导航第一位并带标签，地址不再带 release，页面仍显示它。
-    await expect(versionNav(page).getByRole("link", { name: /^版本 1 默认版本/ })).toBeVisible();
+    const first = versionNav(page).getByRole("link", { name: /^版本 1 默认版本/ });
+    await expect(first).toBeVisible();
+    // 标签贴着文字，不被版本卡片（网格）拉满整行。
+    const tagWidth = (await first.getByText("默认版本").boundingBox())?.width ?? 0;
+    const cardWidth = (await first.boundingBox())?.width ?? 0;
+    expect(tagWidth, "“默认版本”标签的宽度").toBeLessThan(cardWidth / 2);
     await expect(page).not.toHaveURL(/release=/);
     await expect(shownTracks(page)).toHaveText("13 首");
     await expect(page.getByRole("button", { name: "改回自动选择" })).toBeVisible();
@@ -181,6 +186,16 @@ test.describe("版本对比", () => {
       // 窄于 640px 的容器堆叠成“版本 N：值”，其余是真正的表格。
       const display = await dialog.locator("tbody tr").first().evaluate((element) => getComputedStyle(element).display);
       expect(display, `对比表的布局 @${width}px`).toBe(width < 768 ? "block" : "table-row");
+      if (width < 768) {
+        // 堆叠时版本名在左、值在右（同一行），不是上下两行。
+        const layout = await dialog.locator("tbody td").first().evaluate((element) => {
+          const value = element.firstElementChild?.getBoundingClientRect();
+          return { display: getComputedStyle(element).display, label: getComputedStyle(element, "::before").content, valueLeft: value?.left ?? 0, cellLeft: element.getBoundingClientRect().left };
+        });
+        expect(layout.display, `堆叠的格是网格 @${width}px`).toBe("grid");
+        expect(layout.label, `堆叠的格带版本名 @${width}px`).toMatch(/版本 1/);
+        expect(layout.valueLeft - layout.cellLeft, `值在版本名的右边 @${width}px`).toBeGreaterThan(40);
+      }
     }
   });
 });
@@ -198,6 +213,11 @@ test.describe("默认版本的记录", () => {
     await page.goto("/operations");
     const table = page.getByRole("table", { name: "操作记录" });
     await expect(table.getByText("设定默认版本", { exact: true })).toBeVisible();
+    // 改动列很长时，操作者的短名字仍在一行里，不在词中间断开（如“curato / r”）。
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const actor = table.getByRole("cell", { name: "curator", exact: true }).first();
+    const lineHeight = await actor.evaluate((element) => parseFloat(getComputedStyle(element).lineHeight));
+    expect((await actor.locator("span").boundingBox())?.height ?? 0, "操作者占一行").toBeLessThan(lineHeight * 1.5);
     // 默认版本（标题很长的版本 2）是专辑的代表版本，专辑列链接的文字就是它的标题。
     await expect(table.getByRole("link", { name: LONG_TITLE.slice(0, 20) }).first()).toBeVisible();
     for (const width of widths) {
