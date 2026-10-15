@@ -6,6 +6,7 @@ import { loadApiSample, sampleBody } from "../../src/test/api-samples";
 import {
   albumGroups,
   catalogDataOf,
+  respondToGroupComparison,
   respondToGroupDetail,
   respondToGroupList,
   respondToReleaseDetail,
@@ -17,6 +18,7 @@ import {
   respondToCorrect,
   respondToCorrections,
   respondToGroupChange,
+  respondToGroupDefault,
   respondToOperations,
   respondToRevert,
   type GovernanceData,
@@ -47,7 +49,7 @@ export type RecordedCall = { method: string; path: string; body: unknown; idempo
  * 接口只做筛选与分页）；没有专门登记的组、版本与证据按列表里的摘要合成，特别安排的（多版本、长内容、被重扫掉的版本）登记进对应的 Map。
  */
 export type ApiMock = CatalogData & {
-  /** 管理员对发行的受治理操作（字段修正、归组、撤销、操作记录）的状态与行为，与上面的专辑数据共用：修改会反映到列表与详情。 */
+  /** 管理员对发行与专辑的受治理操作（字段修正、归组、默认版本、撤销、操作记录）的状态与行为，与上面的专辑数据共用：修改会反映到列表与详情。 */
   governance: GovernanceData;
   setupRequired: boolean;
   /** 当前会话的用户名；null 表示没有有效会话。 */
@@ -350,6 +352,15 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
     const operationRevert = /^\/api\/v1\/operations\/([^/]+)\/revert$/.exec(path);
     if (operationRevert !== null && method === "POST") {
       return guarded(method, path, true, () => respondToRevert(mock.governance, operationRevert[1] ?? "", headers["idempotency-key"] ?? null));
+    }
+
+    // 专辑级的接口：版本对比（登录即可读）与默认版本的设定（只有管理员）。
+    const groupRoute = /^\/api\/v1\/release-groups\/([^/]+)\/(default|comparison)$/.exec(path);
+    if (groupRoute !== null) {
+      const [, groupId = "", suffix] = groupRoute;
+      if (suffix === "default" && method === "POST") return guarded(method, path, true, () => respondToGroupDefault(mock.governance, groupId, headers["idempotency-key"] ?? null, body));
+      if (suffix === "comparison" && method === "GET") return guarded(method, path, false, () => respondToGroupComparison(mock, groupId));
+      return sample("errors/method-not-allowed");
     }
 
     // 专辑详情：组详情与版本详情登录即可读，完整证据只有管理员能读。

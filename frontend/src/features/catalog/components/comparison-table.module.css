@@ -91,7 +91,8 @@
     display: block;
   }
 
-  .corner {
+  /* 左上角的空表头：堆叠时不显示。选择器要比上面的 .table th（块级）更具体，否则它仍占一个空的弹性项，列头会多出一段缩进。 */
+  .table .corner {
     display: none;
   }
 

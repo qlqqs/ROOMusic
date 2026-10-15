@@ -33,8 +33,8 @@ function ComparisonBody({ comparison, groupId, list, onClose }: Pick<ContentProp
   return (
     <>
       <p className={styles.lead}>
-        以 {versionLabel(0)} 为基准：与它不同的内容用金色下划线标出，没有记录的写“—”。
-        {first?.id === comparison.default_release_id ? ` ${versionLabel(0)} 是这张专辑的默认版本。` : ""} 这里只如实列出各版本的信息，不做优劣判断。
+        以{versionLabel(0)} 为基准：与它不同的内容用金色下划线标出，没有记录的写“—”。
+        {first?.id === comparison.default_release_id ? `${versionLabel(0)} 是这张专辑的默认版本。` : ""}这里只如实列出各版本的信息，不做优劣判断。
       </p>
       <ComparisonTable
         releases={releases}

@@ -113,7 +113,7 @@ describe("版本对比：对话框", () => {
     // 列头：版本名；默认版本带标签；每列一个“查看这个版本”。
     const headers = within(table).getAllByRole("columnheader").map((header) => header.textContent);
     expect(headers).toEqual(["项目", "版本 1 默认版本查看这个版本（版本 1）", "版本 2查看这个版本（版本 2）", "版本 3查看这个版本（版本 3）"]);
-    expect(within(dialog).getByText(/以 版本 1 为基准/)).toBeTruthy();
+    expect(within(dialog).getByText(/以版本 1 为基准/)).toBeTruthy();
     expect(within(dialog).getByText(/版本 1 是这张专辑的默认版本/)).toBeTruthy();
 
     // 行：标题与专辑艺人各版本相同，不出现；介质类型与来源类型都没有值，整行隐藏。
