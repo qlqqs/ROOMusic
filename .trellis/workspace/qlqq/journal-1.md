@@ -844,3 +844,56 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 - 成员写操作接入操作记录（G6，独立小任务，补幂等键并写记录，不提供撤销）；M4 规划（认领、整组合并拆分、默认版本、问题处理）待用户指示
 - F1 手工实播与 F3 远端 CI 仍按用户裁决延后；浏览器验证只有 Linux Chromium 的自动化证据，没有人工读屏验证
 - 已接受的限制：被扫描判定为新发行时不继承旧发行的修正与归组（认领属于 M4）；播放队列里已有条目的专辑名与专辑艺人不随修正即时更新（刷新页面或重新加入队列后用新值）
+
+
+## Session 30: M4 默认版本与版本对比
+<!-- trellis-session: v=2 fp=8bc353b0fc71645f -->
+
+**Date**: 2026-10-15
+**Task**: M4 默认版本与版本对比
+**Branch**: `main`
+
+### Summary
+
+管理员可以为多版本专辑指定默认版本（成为代表版本：卡片、列表排序、打开专辑与版本导航跟着变），可改回自动选择与撤销，失效时静默回到“年份最早”；所有成员可以对比一张专辑的各个版本（发行字段与格式汇总，不做音质结论）；用户确认布局后归档。
+
+### Main Changes
+
+- 后端：迁移 0018（release_groups 的 default_release_id 与组自己的 edit_revision，operations 放宽类型与目标类型约束）；代表版本规则加默认项，生效与失效由排序得出，扫描与归组都不改它；POST /release-groups/{id}/default 的执行器（先锁发行后锁组、not_in_group、no_changes 比较已存的值）与撤销、展示的 Kind；GET /release-groups/{id}/comparison（固定三条查询、总时长有一首未知即为 null、格式组合上限 32）；operations 的撤销响应改为目标类型加目标 ID，列表按专辑筛选并与发行取并集
+- 前端：版本导航的“默认版本”标签与“对比版本”对话框（字段 × 版本，差异下划线加读屏文字，窄屏堆叠）；命令第五种意图 default，成功后先导航再刷新，页面停在刚才的版本；组详情刷新期间暂缓地址规范化（视图读 isFetching，顺带修好 M3 归组落到别的版本的问题）；操作记录的专辑列、改动行、组筛选与“修改记录”的并集；内嵌产物每个前端提交重新构建
+- 测试与文档：后端集成测试覆盖生效与失效、写入状态、撤销、并发不死锁与真实重扫；Vitest、Playwright（五种宽度、axe、纯键盘）与真实服务用例（两张合成 WAV，16/44.1 与 24/96）；新增默认版本与版本对比合同，同步规范、DESIGN、ADR 0002/0003 决策记录、路线图（M4 分五项立项）与父任务；收尾截图后修正三处布局并加断言；归档并修正相对链接
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `59ca218` | docs(governance): 规划默认版本与版本对比（M4 第一项） |
+| `9aa02aa` | chore(task): 启动 M4 默认版本与版本对比 |
+| `4b51a32` | docs(governance): 更正 M3 文档里关于播放队列的措辞 |
+| `3b3793b` | feat(governance): 迁移 0018 与操作记录的专辑目标（M4 第 1 步） |
+| `71ba314` | feat(catalog): 默认版本的读写接口（M4 第 2 步） |
+| `b356463` | feat(catalog): 版本对比接口（M4 第 3 步） |
+| `6f35d01` | feat(catalog): 专辑页的默认版本标签与版本对比对话框（M4 第 4 步） |
+| `0ad6219` | feat(governance): 设为默认版本、改回自动选择、记录与撤销（M4 第 5 步） |
+| `04e2728` | test(e2e): 默认版本与版本对比的浏览器用例（M4 第 6 步） |
+| `2864d46` | test(e2e): 默认版本的真实服务用例（M4 第 7 步） |
+| `e905586` | docs(catalog): 同步默认版本与版本对比的规范、设计与路线（M4 第 8 步） |
+| `c3b13cf` | style(catalog): 默认版本标签、对比表窄屏与操作者列的布局修正（M4 第 9 步） |
+| `8e1b4b1` | docs(catalog): 记录 M4 默认版本与版本对比的实施结果与验收对照 |
+| `e090231` | chore(task): archive 10-14-classical-m4-default-version |
+| `e832ef1` | docs(catalog): 修正 M4 默认版本任务归档后的相对链接 |
+
+### Testing
+
+- [OK] [OK] 收尾时在最终树上、隔离 PostgreSQL 上重跑 gofmt、go vet、go test -race ./internal/operations/...、catalog、app、cmd 与 library 的测试，全部通过（含接口样本逐字比较，核对关键集成用例确实运行）
+- [OK] [OK] lint、tsc、全量 Vitest 70 文件 1474 项（导出的暂存树）、Playwright（路由模拟）227 项、真实服务 33 项（新增 6 加治理 4 加播放 23）通过；内嵌产物在导出树上重新构建后与提交逐文件一致；Markdown 相对链接 605 个、断链 0；task.py validate 通过
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- M4 的其余各项（问题处理、认领、扫描反馈、Release 合并与拆分）待用户选择并先做规划；成员写操作接入操作记录（M3 的 G6）仍是独立小任务
+- F1 手工实播与 F3 远端 CI 仍按用户裁决延后；浏览器验证只有 Linux Chromium 的自动化证据，没有人工读屏验证
+- 已接受的限制：失效中的默认版本在页面上看不出来，也不能单独清除；版本对比不做曲目逐首对应；默认版本对所有成员相同（个人偏好属于 M5）
