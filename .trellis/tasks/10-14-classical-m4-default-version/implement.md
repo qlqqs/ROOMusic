@@ -64,7 +64,7 @@
 - [x] **6. Playwright（路由模拟）**
   - 先在 `src/test/governance-data.ts` 补上默认版本与对比的共享行为，Vitest 的假接口与 Playwright 的模拟共用。
   - 用例：设定、改回、撤销、对比；五种宽度、axe（WCAG 2.1 A/AA）、纯键盘；对话框内部不溢出（滚动宽度检查）。
-- [ ] **7. 真实服务用例**
+- [x] **7. 真实服务用例**
   - `frontend/e2e/real/` 新增用例。素材是两张合成 WAV 专辑；`syntheticWav` 增加可选的采样率与位深，让其中一张是 24 bit / 96 kHz。WAV 的 INFO 不带年份，年份用 M3 的修正接口设定。
   - 流程：
     1. 把两张专辑归到一起；

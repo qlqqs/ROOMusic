@@ -114,21 +114,23 @@ function riffChunk(id: string, payload: Buffer): Buffer {
 }
 
 /**
- * 合成的 WAV（立体声、16 位、44.1 kHz，默认 0.2 秒），带 INFO 标签：曲名（INAM）、专辑（IPRD）、艺人（IART）。
+ * 合成的 WAV（立体声，默认 16 位、44.1 kHz、0.2 秒），带 INFO 标签：曲名（INAM）、专辑（IPRD）、艺人（IART）。
  * fill 是音频数据每个字节的值：不同专辑用不同的值，内容指纹才互不相同；同一个路径改标签时保持 fill，
- * 扫描认为是同一首曲目只是标签变了。
+ * 扫描认为是同一首曲目只是标签变了。format 可以改位深与采样率（例如 24 位、96 kHz），版本对比据此区分音频格式。
  */
-export function syntheticWav(tags: { title: string; album: string; artist: string }, fill: number, seconds = 0.2): Buffer {
+export function syntheticWav(tags: { title: string; album: string; artist: string }, fill: number, seconds = 0.2, format: { sampleRate?: number; bitDepth?: number } = {}): Buffer {
+  const { sampleRate = 44_100, bitDepth = 16 } = format;
+  const blockAlign = 2 * (bitDepth / 8); // 立体声
   const info = ([["INAM", tags.title], ["IPRD", tags.album], ["IART", tags.artist]] as const).map(([id, text]) => riffChunk(id, Buffer.from(`${text}\0`, "utf8")));
-  const format = Buffer.alloc(16);
-  format.writeUInt16LE(1, 0); // PCM
-  format.writeUInt16LE(2, 2); // 声道
-  format.writeUInt32LE(44_100, 4);
-  format.writeUInt32LE(44_100 * 4, 8);
-  format.writeUInt16LE(4, 12);
-  format.writeUInt16LE(16, 14);
-  const audio = Buffer.alloc(Math.round(44_100 * seconds) * 4, fill);
-  const chunks = Buffer.concat([riffChunk("fmt ", format), riffChunk("LIST", Buffer.concat([Buffer.from("INFO", "latin1"), ...info])), riffChunk("data", audio)]);
+  const fmt = Buffer.alloc(16);
+  fmt.writeUInt16LE(1, 0); // PCM
+  fmt.writeUInt16LE(2, 2); // 声道
+  fmt.writeUInt32LE(sampleRate, 4);
+  fmt.writeUInt32LE(sampleRate * blockAlign, 8);
+  fmt.writeUInt16LE(blockAlign, 12);
+  fmt.writeUInt16LE(bitDepth, 14);
+  const audio = Buffer.alloc(Math.round(sampleRate * seconds) * blockAlign, fill);
+  const chunks = Buffer.concat([riffChunk("fmt ", fmt), riffChunk("LIST", Buffer.concat([Buffer.from("INFO", "latin1"), ...info])), riffChunk("data", audio)]);
   const header = Buffer.alloc(12);
   header.write("RIFF", 0, "latin1");
   header.writeUInt32LE(4 + chunks.length, 4);
