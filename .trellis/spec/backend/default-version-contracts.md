@@ -11,7 +11,7 @@ M4 的第一项（2026-10）让管理员为多版本专辑指定**默认版本**
 - 扫描**必须保持不碰本文件的两列**（第 7 节）。
 
 决策依据：[ADR 0002](../../../docs/architecture/adr/0002-metadata-overlays.md) 与 [ADR 0003](../../../docs/architecture/adr/0003-governed-operations.md) 的
-2026-10-14 决策记录，任务 [M4 默认版本与版本对比](../../tasks/10-14-classical-m4-default-version/prd.md)（裁决 K1–K9）。
+2026-10-14 决策记录，任务 [M4 默认版本与版本对比](../../tasks/archive/2026-10/10-14-classical-m4-default-version/prd.md)（裁决 K1–K9）。
 
 ## 2. 数据模型（迁移 0018）
 

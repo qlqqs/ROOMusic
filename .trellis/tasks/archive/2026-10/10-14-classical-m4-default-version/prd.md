@@ -16,7 +16,7 @@
 **代表版本现在怎么定、在哪里起作用**
 
 - 规则：可见成员中年份最早（没有年份排最后），其次创建最早，最后 ID 最小（`backend/internal/catalog/groups.go:21-23`，
-  [Catalog REST 合同](../../spec/backend/catalog-rest-contracts.md)“按组读取”）。两处都写明“M4 引入默认版本后，默认版本排在最前”。
+  [Catalog REST 合同](../../../../spec/backend/catalog-rest-contracts.md)“按组读取”）。两处都写明“M4 引入默认版本后，默认版本排在最前”。
 - 作用：
   - 专辑卡片的封面、标题与艺人（`frontend/src/features/catalog/components/album-card.tsx:21`）；
   - 列表排序（`groups.go:57`、`groups.go:77`）；
@@ -43,7 +43,7 @@
 
 **设计依据**
 
-- [DESIGN](../../../frontend/DESIGN.md)：
+- [DESIGN](../../../../../frontend/DESIGN.md)：
   - 用版本标签和差异下划线表达“为什么不同”（第 58 行）；
   - 版本对比对话框 `min(980px,100%)`、最大 `90vh`，窄屏内部滚动（第 175 行）；
   - 不把高采样率称作“最高音质”，也不按数组下标认定为同一首录音（第 291 行）；
@@ -55,9 +55,9 @@
   - “资料库的默认播放版本”（第 515 行）；
   - 操作记录“为《范特西》设置默认版本 · 撤销”（第 567 行）。
 - 决策约束：
-  - [ADR 0003](../../../docs/architecture/adr/0003-governed-operations.md) 第 255 行：M4 逐类批准默认版本等版本关系操作；
-  - [ADR 0002](../../../docs/architecture/adr/0002-metadata-overlays.md) 第 207 行：默认版本策略另行确认，不能让某个版本的“设空”清空整组；第 279 行：默认版本范围另行批准；
-  - [路线图](../../../docs/architecture/core-1-roadmap.md) 第 97 行：证据可追溯，结构变更走统一执行。
+  - [ADR 0003](../../../../../docs/architecture/adr/0003-governed-operations.md) 第 255 行：M4 逐类批准默认版本等版本关系操作；
+  - [ADR 0002](../../../../../docs/architecture/adr/0002-metadata-overlays.md) 第 207 行：默认版本策略另行确认，不能让某个版本的“设空”清空整组；第 279 行：默认版本范围另行批准；
+  - [路线图](../../../../../docs/architecture/core-1-roadmap.md) 第 97 行：证据可追溯，结构变更走统一执行。
 
 ## 裁决
 
