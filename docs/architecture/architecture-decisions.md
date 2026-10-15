@@ -38,7 +38,8 @@ backend/migrations/*.sql     # embed.FS 迁移；已共享文件不改写
 backend/cmd/roomusic/web/    # 前端生产构建（随源码提交，由 Go 内嵌；CI 检查漂移）
 frontend/src/               # M1a 重建的 Classical 客户端（布局见前端目录结构规范）
 frontend/e2e/               # Playwright 冒烟、无障碍与响应式检查
-frontend/DESIGN.md          # Classical 设计依据；标注“M1a 实现”的条目是实际采用的值
+frontend/DESIGN.md          # Classical 设计依据（第 1–4 节）；标注“M1a 实现”的条目是实际采用的值
+frontend/DESIGN-*.md        # 设计依据的第 5–7 节（components）与第 8–10 节（acceptance）
 frontend-desgin/            # 已入库原型及设计工具资产，保持原样
 ```
 

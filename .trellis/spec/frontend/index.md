@@ -46,7 +46,7 @@ Before writing or reviewing frontend code:
 
 | Guide | Contract |
 | --- | --- |
-| [Classical 设计依据](../../../frontend/DESIGN.md) | 原型来源、设计变量、布局、组件状态和落地差异 |
+| [Classical 设计依据](../../../frontend/DESIGN.md) | 原型来源、设计变量、布局（第 1–4 节）；组件状态、播放与页面能力见 [DESIGN-components.md](../../../frontend/DESIGN-components.md)（第 5–7 节），落地差异与验收见 [DESIGN-acceptance.md](../../../frontend/DESIGN-acceptance.md)（第 8–10 节） |
 | [Core 1 路线](../../../docs/architecture/core-1-roadmap.md) | 当前能力、已批准阶段与依赖、ADR 裁决状态、旧任务承接与实施门禁 |
 | [Directory Structure](./directory-structure.md) | App composition, feature ownership, public boundaries, and shared code |
 | [Component Guidelines](./component-guidelines.md) | Presentational contracts, workflow states, accessibility, and composition |
