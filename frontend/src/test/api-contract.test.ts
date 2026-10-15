@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { decodePlaybackFormats, decodeTrackLyrics, decodeTrackPlayback, decodeTrackPreparing } from "../features/player/api/decoders";
 import { decodeLoggedOut, decodeSetupStatus, decodeViewer } from "../features/auth/api/decoders";
 import {
+  decodeReleaseComparison,
   decodeReleaseDetail,
   decodeReleaseEvidence,
   decodeReleaseGroupDetail,
@@ -90,6 +91,7 @@ const successContracts: Record<string, Contract> = {
   "release-groups/get": { status: 200, decode: decodeReleaseGroupDetail },
   "release-groups/get-multiple": { status: 200, decode: decodeReleaseGroupDetail },
   "release-groups/get-default": { status: 200, decode: decodeReleaseGroupDetail },
+  "release-groups/comparison": { status: 200, decode: decodeReleaseComparison },
   "releases/get": { status: 200, decode: decodeReleaseDetail },
   "releases/get-single": { status: 200, decode: decodeReleaseDetail },
   "releases/get-cue": { status: 200, decode: decodeReleaseDetail },

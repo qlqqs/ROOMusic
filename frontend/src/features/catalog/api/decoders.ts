@@ -13,6 +13,7 @@ const MAX_EVIDENCE_CANDIDATES = 20;
 const MAX_EVIDENCE_SOURCE_REFS = 100;
 const MAX_EVIDENCE_TEXT = 500; // 证据里的值、候选、原因码与来源引用，后端按 500 字节截断
 const MAX_CORRECTED_FIELDS = 16; // 有人工修正的字段名；后端目前可修正 8 个字段，留出余量
+const MAX_COMPARED_FORMATS = 32; // 版本对比里一个版本的不同音频参数组合（maxComparedFormats）
 
 const artworkDecoder = d.object({
   resource_id: d.string({ min: 1, max: 255 }),
@@ -63,6 +64,44 @@ const releaseGroupDetailDecoder = d.object({
   revision: d.integer({ min: 1 }),
   default_release_id: d.nullable(d.uuid()),
   releases: d.array(releaseSummaryDecoder, { min: 1, max: MAX_GROUP_RELEASES }),
+});
+
+// 版本对比：专辑各个可见版本并排比较的发行字段（有效值）与内容。成员顺序与组详情一致（生效中的默认版本在前，最多 100 个，
+// release_count 是完整数量）。介质、曲目、时长与格式只计当前存在的曲目；时长是已知时长之和，全部未知时为 null；
+// 格式按曲目数降序，未知的参数为 null。这里只如实列出参数，不含任何音质判断。
+const audioFormatDecoder = d.object({
+  codec: d.nullable(d.string()),
+  bit_depth: d.nullable(d.integer({ min: 1 })),
+  sample_rate: d.nullable(d.integer({ min: 1 })),
+  track_count: d.integer({ min: 1 }),
+});
+
+const comparedReleaseDecoder = d.object({
+  id: d.uuid(),
+  title: d.string(),
+  artist: d.string(),
+  album_artist: d.nullable(d.string()),
+  year: d.nullable(d.integer({ min: 1, max: 9999 })),
+  edition: d.nullable(d.string()),
+  label: d.nullable(d.string()),
+  catalog_number: d.nullable(d.string()),
+  barcode: d.nullable(d.string()),
+  genre: d.nullable(d.string()),
+  source_type: d.nullable(d.string()),
+  media_type: d.nullable(d.string()),
+  medium_count: d.integer({ min: 0 }),
+  track_count: d.integer({ min: 0 }),
+  duration_seconds: d.nullable(d.number({ min: 0 })),
+  formats: d.array(audioFormatDecoder, { max: MAX_COMPARED_FORMATS }),
+  // 字段名按字符串解码（与发行详情一致）：后端新增可修正字段不会让对比失败。
+  corrected_fields: d.array(d.string({ min: 1, max: 64 }), { max: MAX_CORRECTED_FIELDS }),
+});
+
+const releaseComparisonDecoder = d.object({
+  group_id: d.uuid(),
+  default_release_id: d.nullable(d.uuid()),
+  release_count: d.integer({ min: 1 }),
+  releases: d.array(comparedReleaseDecoder, { min: 1, max: MAX_GROUP_RELEASES }),
 });
 
 // 署名的角色与证据里的各种词表都按字符串解码：后端新增取值不会让页面解码失败，显示时由 labels 给已知值中文标签。
@@ -201,6 +240,7 @@ const releaseEvidenceDecoder = d.object({
 export const decodeReleaseGroupPage = d.defineDecoder(releaseGroupPageDecoder);
 export const decodeReleaseGroupDetail = d.defineDecoder(releaseGroupDetailDecoder);
 export const decodeReleaseDetail = d.defineDecoder(releaseDetailDecoder);
+export const decodeReleaseComparison = d.defineDecoder(releaseComparisonDecoder);
 export const decodeReleaseEvidence = d.defineDecoder(releaseEvidenceDecoder);
 
 export type ArtworkDTO = d.Infer<typeof artworkDecoder>;
@@ -209,6 +249,9 @@ export type ReleaseGroupSummaryDTO = d.Infer<typeof releaseGroupSummaryDecoder>;
 export type ReleaseGroupPageDTO = d.Infer<typeof releaseGroupPageDecoder>;
 export type ReleaseGroupDetailDTO = d.Infer<typeof releaseGroupDetailDecoder>;
 export type ReleaseDetailDTO = d.Infer<typeof releaseDetailDecoder>;
+export type ReleaseComparisonDTO = d.Infer<typeof releaseComparisonDecoder>;
+export type ComparedReleaseDTO = d.Infer<typeof comparedReleaseDecoder>;
+export type AudioFormatDTO = d.Infer<typeof audioFormatDecoder>;
 export type ReleaseMediumDTO = d.Infer<typeof mediumDecoder>;
 export type ReleaseTrackDTO = d.Infer<typeof trackDecoder>;
 export type ReleaseCreditDTO = d.Infer<typeof creditDecoder>;

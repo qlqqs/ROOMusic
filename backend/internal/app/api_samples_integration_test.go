@@ -504,9 +504,9 @@ func recordOperationSamples(t *testing.T, application *integrationTestApplicatio
 	samples.record("operations/list-by-release", call(http.MethodGet, "/api/v1/operations?release_id="+cueRelease+"&page_size=2", nil, admin), http.StatusOK)
 }
 
-// recordGroupDefaultSamples 记录默认版本接口：设定默认版本的成功响应、设定后的组详情（带 revision 与 default_release_id），
-// 以及不在这张专辑里的版本与过期版本号两种错误。素材是前面的归组样本：撤销移出之后，单曲专辑所在的组有三个版本
-// （单曲专辑、双碟专辑与 CUE 专辑），默认版本设为不是第一位的双碟专辑。
+// recordGroupDefaultSamples 记录默认版本接口：设定默认版本的成功响应、设定后的组详情（带 revision 与 default_release_id）
+// 与版本对比，以及不在这张专辑里的版本与过期版本号两种错误。素材是前面的归组样本：撤销移出之后，单曲专辑所在的组有三个版本
+// （单曲专辑、双碟专辑与 CUE 专辑），默认版本设为不是第一位的双碟专辑；对比里有真实扫描出的格式、人工修正过的字段与没有时长的版本。
 func recordGroupDefaultSamples(t *testing.T, application *integrationTestApplication, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser) {
 	t.Helper()
 	var groupID, doubleID string
@@ -519,6 +519,7 @@ func recordGroupDefaultSamples(t *testing.T, application *integrationTestApplica
 	}
 	samples.record("group-defaults/set", call(http.MethodPost, path, defaultBody(1, doubleID), admin, key("0401")), http.StatusOK)
 	samples.record("release-groups/get-default", call(http.MethodGet, "/api/v1/release-groups/"+groupID, nil, admin), http.StatusOK)
+	samples.record("release-groups/comparison", call(http.MethodGet, comparisonPath(groupID), nil, admin), http.StatusOK)
 	samples.record("errors/not-in-group", call(http.MethodPost, path, defaultBody(2, uuid.New()), admin, key("0402")), http.StatusConflict)
 	samples.record("errors/revision-conflict-group", call(http.MethodPost, path, defaultBody(1, nil), admin, key("0403")), http.StatusConflict)
 }

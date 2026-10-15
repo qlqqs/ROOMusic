@@ -535,7 +535,7 @@ func TestPostgreSQLGroupDefaultDescribe(t *testing.T) {
 	}
 }
 
-func ptr(value int) *int { return &value }
+func ptr[T any](value T) *T { return &value }
 
 func ptrString(value string) *string { return &value }
 

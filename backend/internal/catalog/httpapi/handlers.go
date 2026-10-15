@@ -45,6 +45,7 @@ func (handlers *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/releases/{id}", handlers.releaseDetail)
 	mux.HandleFunc("GET /api/v1/release-groups", handlers.listReleaseGroups)
 	mux.HandleFunc("GET /api/v1/release-groups/{id}", handlers.releaseGroupDetail)
+	mux.HandleFunc("GET /api/v1/release-groups/{id}/comparison", handlers.releaseGroupComparison)
 	mux.HandleFunc("POST /api/v1/release-groups/{id}/default", handlers.setReleaseGroupDefault)
 	mux.HandleFunc("GET /api/v1/artworks/{id}", handlers.artworkResource)
 	mux.HandleFunc("GET /api/v1/tracks/{id}/lyrics", handlers.trackLyrics)

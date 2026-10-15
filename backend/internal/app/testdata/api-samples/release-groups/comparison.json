@@ -1,0 +1,92 @@
+{
+  "body": {
+    "default_release_id": "00000000-0000-4000-8000-000000000001",
+    "group_id": "00000000-0000-4000-8000-000000000002",
+    "release_count": 3,
+    "releases": [
+      {
+        "album_artist": "Sample Orchestra",
+        "artist": "Sample Orchestra",
+        "barcode": "0123456789012",
+        "catalog_number": "SL-0001",
+        "corrected_fields": [
+          "title",
+          "year",
+          "label"
+        ],
+        "duration_seconds": 720,
+        "edition": "Remastered",
+        "formats": [
+          {
+            "bit_depth": 16,
+            "codec": "flac",
+            "sample_rate": 44100,
+            "track_count": 3
+          }
+        ],
+        "genre": "Classical",
+        "id": "00000000-0000-4000-8000-000000000001",
+        "label": "Corrected Label",
+        "media_type": null,
+        "medium_count": 2,
+        "source_type": null,
+        "title": "Sample Symphonies (corrected)",
+        "track_count": 3,
+        "year": null
+      },
+      {
+        "album_artist": "Sample Pianist",
+        "artist": "Sample Pianist",
+        "barcode": null,
+        "catalog_number": null,
+        "corrected_fields": [],
+        "duration_seconds": 240,
+        "edition": null,
+        "formats": [
+          {
+            "bit_depth": 16,
+            "codec": "flac",
+            "sample_rate": 44100,
+            "track_count": 1
+          }
+        ],
+        "genre": null,
+        "id": "00000000-0000-4000-8000-000000000003",
+        "label": null,
+        "media_type": null,
+        "medium_count": 1,
+        "source_type": null,
+        "title": "Sample Preludes",
+        "track_count": 1,
+        "year": 2001
+      },
+      {
+        "album_artist": "Sample Cue Artist",
+        "artist": "Sample Cue Artist",
+        "barcode": null,
+        "catalog_number": null,
+        "corrected_fields": [],
+        "duration_seconds": 240,
+        "edition": null,
+        "formats": [
+          {
+            "bit_depth": 16,
+            "codec": "flac",
+            "sample_rate": 44100,
+            "track_count": 2
+          }
+        ],
+        "genre": null,
+        "id": "00000000-0000-4000-8000-000000000004",
+        "label": null,
+        "media_type": null,
+        "medium_count": 1,
+        "source_type": null,
+        "title": "Sample Cue Album",
+        "track_count": 2,
+        "year": 2005
+      }
+    ]
+  },
+  "status": 200
+}

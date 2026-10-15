@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { decode as d } from "../../../shared/api";
 import { sampleBody } from "../../../test/api-samples";
 import { withValue, without } from "../../../test/mutate";
-import { decodeReleaseDetail, decodeReleaseEvidence, decodeReleaseGroupDetail, decodeReleaseGroupPage } from "./decoders";
+import { decodeReleaseComparison, decodeReleaseDetail, decodeReleaseEvidence, decodeReleaseGroupDetail, decodeReleaseGroupPage } from "./decoders";
 
 describe("decodeReleaseGroupPage", () => {
   const page = sampleBody("release-groups/list-one-with-artwork");
@@ -109,6 +109,71 @@ describe("decodeReleaseGroupDetail", () => {
     ["default_release_id 不是 UUID", withValue(multiple, ["default_release_id"], "release")],
   ])("拒绝：%s", (_name, input) => {
     expect(() => decodeReleaseGroupDetail(input)).toThrow(d.DecodeError);
+  });
+});
+
+describe("decodeReleaseComparison", () => {
+  const comparison = sampleBody("release-groups/comparison");
+  const first = (comparison as { releases: unknown[] }).releases[0];
+
+  it("解码版本对比：默认版本在前，人工修正、未知时长与格式如实保留", () => {
+    const decoded = decodeReleaseComparison(comparison);
+    expect(decoded.release_count).toBe(3);
+    expect(decoded.default_release_id).toBe(decoded.releases[0]?.id);
+    expect(decoded.releases.map((release) => release.title)).toEqual(["Sample Symphonies (corrected)", "Sample Preludes", "Sample Cue Album"]);
+    expect(decoded.releases[0]).toMatchObject({
+      year: null,
+      label: "Corrected Label",
+      corrected_fields: ["title", "year", "label"],
+      medium_count: 2,
+      track_count: 3,
+      duration_seconds: 720,
+      formats: [{ codec: "flac", bit_depth: 16, sample_rate: 44100, track_count: 3 }],
+    });
+    expect(decoded.releases[1]?.corrected_fields).toEqual([]);
+  });
+
+  it("自动选择时 default_release_id 是 null；时长与格式参数未知时是 null", () => {
+    expect(decodeReleaseComparison(withValue(comparison, ["default_release_id"], null)).default_release_id).toBeNull();
+    const unknown = withValue(
+      withValue(comparison, ["releases", 0, "duration_seconds"], null),
+      ["releases", 0, "formats"],
+      [{ codec: null, bit_depth: null, sample_rate: null, track_count: 3 }],
+    );
+    expect(decodeReleaseComparison(unknown).releases[0]).toMatchObject({ duration_seconds: null, formats: [{ codec: null, bit_depth: null, sample_rate: null }] });
+    expect(decodeReleaseComparison(withValue(comparison, ["releases", 0, "formats"], [])).releases[0]?.formats).toEqual([]);
+  });
+
+  it("版本至少一个、最多 100 个；release_count 是完整数量；一个版本最多 32 种格式", () => {
+    const withReleases = (count: number) => withValue(comparison, ["releases"], cloneItems(first, count));
+    expect(decodeReleaseComparison(withReleases(100)).releases).toHaveLength(100);
+    expect(() => decodeReleaseComparison(withReleases(101))).toThrow(d.DecodeError);
+    expect(() => decodeReleaseComparison(withReleases(0))).toThrow(d.DecodeError);
+    expect(decodeReleaseComparison(withValue(comparison, ["release_count"], 250)).release_count).toBe(250);
+    const format = (first as { formats: unknown[] }).formats[0];
+    const withFormats = (count: number) => withValue(comparison, ["releases", 0, "formats"], cloneItems(format, count));
+    expect(decodeReleaseComparison(withFormats(32)).releases[0]?.formats).toHaveLength(32);
+    expect(() => decodeReleaseComparison(withFormats(33))).toThrow(d.DecodeError);
+  });
+
+  it.each([
+    ["缺少 group_id", without(comparison, ["group_id"])],
+    ["缺少 default_release_id", without(comparison, ["default_release_id"])],
+    ["default_release_id 不是 UUID", withValue(comparison, ["default_release_id"], "release")],
+    ["release_count 为 0", withValue(comparison, ["release_count"], 0)],
+    ["缺少 releases", without(comparison, ["releases"])],
+    ["版本缺少 formats", without(comparison, ["releases", 0, "formats"])],
+    ["版本缺少 corrected_fields", without(comparison, ["releases", 0, "corrected_fields"])],
+    ["版本缺少 duration_seconds", without(comparison, ["releases", 0, "duration_seconds"])],
+    ["时长为负", withValue(comparison, ["releases", 0, "duration_seconds"], -1)],
+    ["年份为 0", withValue(comparison, ["releases", 0, "year"], 0)],
+    ["介质数是字符串", withValue(comparison, ["releases", 0, "medium_count"], "2")],
+    ["格式的曲目数为 0", withValue(comparison, ["releases", 0, "formats", 0, "track_count"], 0)],
+    ["格式的位深为 0", withValue(comparison, ["releases", 0, "formats", 0, "bit_depth"], 0)],
+    ["格式缺少 sample_rate", without(comparison, ["releases", 0, "formats", 0, "sample_rate"])],
+    ["版本 id 不是 UUID", withValue(comparison, ["releases", 1, "id"], "release")],
+  ])("拒绝：%s", (_name, input) => {
+    expect(() => decodeReleaseComparison(input)).toThrow(d.DecodeError);
   });
 });
 

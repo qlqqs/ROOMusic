@@ -56,3 +56,27 @@ func (handlers *Handlers) releaseGroupDetail(responseWriter http.ResponseWriter,
 	}
 	httpserver.WriteJSON(responseWriter, http.StatusOK, detail)
 }
+
+// releaseGroupComparison 返回一张专辑各个可见版本的对比数据（所有登录成员）：成员顺序与组详情一致，最多 100 个，
+// release_count 是完整数量。组不存在或没有可见成员是 404；读取失败按组详情的约定返回 503。
+func (handlers *Handlers) releaseGroupComparison(responseWriter http.ResponseWriter, request *http.Request) {
+	if _, err := handlers.guard.Authenticate(request); err != nil {
+		handlers.guard.WriteUnauthenticated(responseWriter, request)
+		return
+	}
+	groupID := request.PathValue("id")
+	if !uuid.Valid(groupID) {
+		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_id", "发行组标识无效")
+		return
+	}
+	comparison, err := handlers.store.LoadReleaseComparison(request.Context(), groupID)
+	if errors.Is(err, catalog.ErrReleaseGroupNotFound) {
+		httpserver.WriteError(responseWriter, request, http.StatusNotFound, "not_found", "发行组不存在")
+		return
+	}
+	if err != nil {
+		httpserver.WriteError(responseWriter, request, http.StatusServiceUnavailable, "database_unavailable", "无法读取版本对比")
+		return
+	}
+	httpserver.WriteJSON(responseWriter, http.StatusOK, comparison)
+}
