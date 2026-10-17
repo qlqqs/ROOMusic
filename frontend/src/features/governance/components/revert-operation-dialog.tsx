@@ -33,6 +33,7 @@ function revertIntentOf(item: OperationItemDTO, current: ReleaseTarget | undefin
   if (item.changes?.kind === "release_group_change") {
     return { kind: "revert", release, operationId: item.id, subject: "group", returnGroupId: item.changes.from.group_id };
   }
+  if (item.changes?.kind === "release_issue_review") return { kind: "revert", release, operationId: item.id, subject: "review" };
   return { kind: "revert", release, operationId: item.id, subject: item.changes === null ? "other" : "correct" };
 }
 

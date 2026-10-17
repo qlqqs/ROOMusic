@@ -399,7 +399,14 @@ describe("操作记录里的核对", () => {
       ["核对问题", "缺失曲目（1 首）：标记为已核对"],
       ["核对问题", "归组冲突：标记为已核对"],
     ]);
-    expect(within(rows[0] as HTMLElement).getByRole("button", { name: /^撤销/ })).toBeTruthy();
     expect(within(rows[1] as HTMLElement).getByText("之后又有修改")).toBeTruthy();
+
+    // 在操作记录页撤销最近一条（取消核对）：确认对话框写明会改回什么，成功提示说的是核对，不是字段修改。
+    const user = userEvent.setup();
+    await user.click(within(rows[0] as HTMLElement).getByRole("button", { name: /^撤销/ }));
+    const confirm = await screen.findByRole("dialog", { name: "撤销这次核对？" });
+    expect(within(confirm).getByText("归组冲突：标记为已核对")).toBeTruthy();
+    await user.click(within(confirm).getByRole("button", { name: "撤销" }));
+    expect(await screen.findByText("已撤销这次核对，问题恢复到之前的状态。")).toBeTruthy();
   });
 });
