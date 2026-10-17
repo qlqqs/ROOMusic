@@ -90,7 +90,7 @@ M4 的第一项（2026-10）让管理员为多版本专辑指定**默认版本**
 - 扫描不碰 `release_groups` 的这两列（新建组时取默认值，之后从不更新组行），所以重扫后默认版本保持，这是结构保证
   （`TestPostgreSQLDefaultVersionSurvivesARealRescan` 与真实服务用例守住）。
 - 归组不改组的默认版本与版本号：把默认版本移出后原专辑回到自动规则；撤销这次移出，它回到原专辑并重新成为默认版本。
-- 整张替换后新建的发行不继承默认版本（与 M3 的 G8 一致）：旧的默认版本失效，专辑回到自动规则。
+- 整张替换后新建的发行不继承默认版本（与 M3 的 G8 一致）：旧的默认版本失效，专辑回到自动规则。M4 第三项起可以认领：新版本进入那张专辑时接任默认版本，否则那张专辑改回自动选择（[认领合同](./claim-contracts.md)）。
 - 并发：设定先锁发行行再锁组行，归组也是先发行后组（组行按 UUID 顺序），扫描从不锁组行，不形成环形等待。
 
 ## 8. 错误码（新增）
@@ -118,7 +118,7 @@ M4 的第一项（2026-10）让管理员为多版本专辑指定**默认版本**
   并发请求；**合成素材真实重扫后默认版本保持**。`comparison_api_integration_test.go`——权限（普通成员可读、未登录 401）、错误与读取。
   接口样本：`group-defaults/set.json`、`release-groups/get-default.json`、`release-groups/comparison.json`、`operations/list-by-group.json`、
   `operations/reverted-default.json`、`errors/not-in-group.json`、`errors/revision-conflict-group.json`。
-- 真实服务：`frontend/e2e/real/default-version.real.ts`（见[前端质量规范](../frontend/quality-guidelines.md)）。
+- 真实服务：`frontend/e2e/real/default-version.real.ts`（见[前端验证分层](../frontend/quality-verification-layers.md)）。
 - 运行 `go test -race -count=1 ./internal/operations/...` 与 `go test -count=1 ./internal/catalog/... ./internal/app -run 'Default|Comparison|Group'`
   （PostgreSQL 集成需隔离 PostgreSQL 18，见[质量规范](./quality-guidelines.md)；用例名不一定含 `Group`，过滤条件不能只写它）。
 
@@ -128,4 +128,4 @@ M4 的第一项（2026-10）让管理员为多版本专辑指定**默认版本**
 - 版本对比只比较发行级字段与格式汇总，不做曲目逐首对应，也不提供“切换播放版本”（需要另外的数据合同，见 [DESIGN-components.md](../../../frontend/DESIGN-components.md) 第 6 节：不按数组下标认定为同一首录音）。
 - 默认版本对所有成员都一样；个人默认版本或偏好属于 M5。不按格式参数自动挑选“最高音质”。
 - 回退：关闭两个新路由（设定默认版本、版本对比），保留数据与记录；代表版本规则里的默认项可以保留，没有新的设定就不起作用。不写 down 迁移。
-- M4 的其余各项分别立项：问题处理已作为第二项实施（[核对合同](./issue-review-contracts.md)），认领、扫描反馈、Release 合并与拆分未立项。
+- M4 的其余各项分别立项：问题处理已作为第二项实施（[核对合同](./issue-review-contracts.md)），认领已作为第三项实施（[认领合同](./claim-contracts.md)），扫描反馈、Release 合并与拆分未立项。

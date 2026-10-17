@@ -90,7 +90,7 @@ M4 的第二项（2026-10）把“需要关注”拆成可以逐条说明与处�
 ## 7. 与扫描、认领的关系
 
 - 扫描不读写核对表、不改版本号与操作记录：依据不变的重扫之后核对保持，依据变了就重新计入（结构保证，`TestPostgreSQLIssueReviewsSurviveARealRescan` 与真实服务用例守住）。
-- 成员关系不连续而新建的发行（M3 的 G8，见[受治理操作合同](./governance-contracts.md)第 7 节）是新版本，没有核对，问题重新出现；旧版本的核对随旧版本留存（不可见）。迁移属于认领（M4 第三项）。
+- 成员关系不连续而新建的发行（M3 的 G8，见[受治理操作合同](./governance-contracts.md)第 7 节）是新版本，没有核对，问题重新出现；旧版本的核对随旧版本留存（不可见）。M4 第三项起管理员可以把它们认领给新版本（依据与原核对人、时间原样迁移，缺失曲目的核对除外，见[认领合同](./claim-contracts.md)）。
 - 全部文件都找不到的版本不可见，不在问题页，也不计入“需要关注”（现状不变）。
 
 ## 8. 错误码（新增）
@@ -114,7 +114,7 @@ M4 的第二项（2026-10）把“需要关注”拆成可以逐条说明与处�
   并发请求；读取接口的权限与 400；**合成素材真实重扫后核对保持、依据变了重新计入**。接口样本：`issue-reviews/{reviewed,unreviewed}.json`、
   `release-issues/{list,list-reviewed,list-missing-tracks,get,get-reviewed}.json`、`operations/{list-issue-reviews,reverted-issue-review}.json`、
   `errors/{issue-changed,invalid-filter,revision-conflict-issue}.json`（依据令牌规范化为顺序编号）。
-- 真实服务：`frontend/e2e/real/issues.real.ts`（见[前端质量规范](../frontend/quality-guidelines.md)）。
+- 真实服务：`frontend/e2e/real/issues.real.ts`（见[前端验证分层](../frontend/quality-verification-layers.md)）。
 - 运行 `go test -race -count=1 ./internal/operations/...` 与 `go test -count=1 ./internal/catalog/... ./internal/app/...`（PostgreSQL 集成需隔离 PostgreSQL 18，
   见[质量规范](./quality-guidelines.md)）。
 

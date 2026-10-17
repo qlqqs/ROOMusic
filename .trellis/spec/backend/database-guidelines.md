@@ -91,6 +91,8 @@ M3 起，发行字段修正、人工归组与撤销（M4 起还有默认版本�
 扫描从不读写它，依据由读取时比较，依据变了问题就重新计入。核对只锁发行行；撤销时若要写回的前态有核对行（例如撤销“取消核对”），写回的行引用一条更早的操作记录，**先给那条记录加 KEY SHARE 锁、再锁发行行**，
 与撤销那条记录的顺序（先 FOR UPDATE 记录、再锁发行行）一致，否则两个撤销交叉时死锁。规则见[核对合同](./issue-review-contracts.md)。
 
+**迁移 0020（M4，认领）**：不新增表，只放宽 `operations_type_ck`（增加 `release_claim`）并建一个部分表达式索引 `operations_claim_source_index`（`after_state #>> '{source,release_id}'`，只含认领与它们的撤销记录），让操作记录能按**来源**发行筛选。认领按“记录 → 发行行（UUID 升序）→ 组行（UUID 升序）”加锁，新版本归入旧版本原来的组，旧版本移进新建的空组（组从不删除）；扫描仍不读写这四类状态。规则见[认领合同](./claim-contracts.md)。
+
 Do not hold a database transaction open while walking a library tree or reading
 audio tags. Persist scan progress in bounded batches and finalize the scan with
 a transaction that applies negative reconciliation only when the outcome is

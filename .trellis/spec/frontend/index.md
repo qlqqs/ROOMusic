@@ -20,7 +20,7 @@ M2a 的播放器入口与生命周期见[状态规范](./state-management.md)、
 2026-10：M3 增加管理员的受治理写操作（`features/governance`）：专辑详情里编辑发行信息、调整归组与撤销，“资料库”下的“操作记录”页与详情里的“修改记录”；
 普通成员没有编辑入口，只看到有效值与“人工修正”标记（后端合同见[受治理操作合同](../backend/governance-contracts.md)）。
 M4 的第一项增加默认版本（管理员在专辑详情设定、可撤销）与版本对比（所有成员，专辑详情的“对比版本”），合同见[默认版本与版本对比合同](../backend/default-version-contracts.md)；
-第二项增加管理员的“元数据问题”页（`/issues`：按版本列出问题，核对、取消核对与撤销），合同见[元数据问题与核对合同](../backend/issue-review-contracts.md)。依赖与路由方案的决策见
+第二项增加管理员的“元数据问题”页（`/issues`：按版本列出问题，核对、取消核对与撤销），合同见[元数据问题与核对合同](../backend/issue-review-contracts.md)；第三项增加管理员的“待认领”页（`/claims`：把已不可见的旧版本上的修改认领给新版本，可撤销），合同见[认领合同](../backend/claim-contracts.md)。依赖与路由方案的决策见
 [前端基础 ADR](../../../docs/architecture/adr/0001-frontend-foundations.md) 决策记录，阶段和
 能力矩阵见 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)，M1a 的设计与验证记录见任务
 [M1a 技术设计](../../tasks/archive/2026-10/09-28-classical-m1a-shell-admin/design.md)。各规范文件区分“已实现的合同”与尚未实现的目标
@@ -55,6 +55,8 @@ Before writing or reviewing frontend code:
 | [State Management](./state-management.md) | Server, URL, session, and local state ownership |
 | [Type Safety](./type-safety.md) | Strict TypeScript, DTO decoding, and exhaustive domain states |
 | [Quality Guidelines](./quality-guidelines.md) | Tests, accessibility, gates, and forbidden shortcuts |
+| [前端验证分层](./quality-verification-layers.md) | 各阶段（M2a 播放、M3、M4 三项）的测试分层：最小 Vitest 命令、共用接口行为、页面级、浏览器冒烟、真实服务用例 |
+| [受治理操作的组件约定](./governance-components.md) | 编辑发行信息、归组、默认版本、元数据问题页、待认领页与操作记录的组件约定 |
 | [播放器设计规范](./player-design-guidelines.md) | 工作台视觉层级、响应式布局、播放交互与可访问性 |
 | [Core 0 当前运行合同](../backend/core0-runtime-contracts.md) | 平台层 REST 通则、HTTP 缓存、环境、CI 与专题合同索引 |
 | [身份与成员合同](../backend/identity-contracts.md) | 查看者响应、密码规则、成员与初始化接口的错误映射 |
@@ -64,6 +66,7 @@ Before writing or reviewing frontend code:
 | [受治理操作合同](../backend/governance-contracts.md) | M3 的修正、归组、撤销、操作记录接口与错误码，前端命令与界面据此 |
 | [默认版本与版本对比合同](../backend/default-version-contracts.md) | M4 的默认版本（设定、生效规则、撤销）与版本对比接口 |
 | [元数据问题与核对合同](../backend/issue-review-contracts.md) | M4 的问题列表、版本的问题、核对与撤销接口，“需要关注”的三类拆分 |
+| [认领合同](../backend/claim-contracts.md) | M4 第三项：待认领的判定与推荐、预览与令牌、认领与撤销、读取接口 |
 
 ## Quality Check
 

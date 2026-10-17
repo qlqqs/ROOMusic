@@ -17,7 +17,7 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 
 ### 专题文件
 
-本合同按主题拆分，每个规范文件不超过 24 KB（规则见 [后端规范索引](./index.md)）。本文件保留平台层合同与后续技术债；
+本合同按主题拆分，每个规范文件不超过 24 KB（规则见 [后端规范索引](./index.md)）。本文件保留平台层合同；后续技术债在 [core0-tech-debt.md](./core0-tech-debt.md)；
 其余主题各有一个文件，沿用同样的七节结构，没有内容的节省略：
 
 | 主题 | 文件 | 内容 |
@@ -34,6 +34,7 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 | 受治理操作 | [governance-contracts.md](./governance-contracts.md) | 阶段 M3：操作记录与 `operations.Run`、发行字段修正与有效值视图、人工归组、撤销、操作记录接口、测试 |
 | 默认版本与版本对比 | [default-version-contracts.md](./default-version-contracts.md) | M4 第一项：组的默认版本、生效规则、设定与撤销、版本对比、测试 |
 | 元数据问题与核对 | [issue-review-contracts.md](./issue-review-contracts.md) | M4 第二项：“需要关注”的三类拆分、核对与撤销、问题读取、测试 |
+| 认领 | [claim-contracts.md](./claim-contracts.md) | M4 第三项：待认领的判定与推荐、预览与令牌、认领与撤销、读取接口、测试 |
 
 ## 2. 接口签名
 
@@ -53,7 +54,7 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 - P：`POST /api/v1/me/plays`、`GET /api/v1/me/plays/recent-releases` 与 `DELETE /api/v1/me/plays`，只作用于当前会话用户，见[播放历史](./listening-contracts.md)。
 - M3（管理员）：`GET|PATCH /api/v1/releases/{id}/corrections`、`POST /api/v1/releases/{id}/group`、`GET /api/v1/operations`、
   `POST /api/v1/operations/{id}/revert`，见[受治理操作](./governance-contracts.md)。
-- M4：`POST /api/v1/release-groups/{id}/default`（管理员）、`GET /api/v1/release-groups/{id}/comparison`，见[默认版本](./default-version-contracts.md)；问题与核对见上表。
+- M4：`POST /api/v1/release-groups/{id}/default`（管理员）、`GET /api/v1/release-groups/{id}/comparison`，见[默认版本](./default-version-contracts.md)；问题与核对、认领（`GET /api/v1/release-claims`、`GET /api/v1/releases/{id}/claim-preview`、`POST /api/v1/releases/{id}/claim` 等）见上表。
 - 前端请求形态为 `apiRequest(spec, decode)`（`frontend/src/shared/api/request.ts`）：成功响应经边界 decoder（第二个参数是状态码，
   同一路径 200 与 202 形状不同时用它核对响应体与状态码相符），
   非 2xx 经统一的错误信封 decoder；响应不是 JSON、信封不合法或 decoder 失败时归为 `invalid_response`，不进入缓存。
@@ -226,30 +227,4 @@ Authorization/session token、密码、数据库 URL、完整 NAS 路径或音�
 
 ## 后续技术债
 
-- HTTP 请求现在通过 `http.request.completed` 事件记录状态码、耗时和路由模板；M3 起发行修正、归组与撤销写操作记录，用户
-  创建/禁用/会话撤销仍无幂等键与操作记录（M3 裁决 G6 不纳入，独立小任务）。
-- ~~前端源码已删除~~：2026-10-01 由 M1a 按 Classical 设计重建，依赖精确固定（见 ADR 0001 决策记录）。
-- M1a 前端发现的后端缺口（M1a 不改后端，如实呈现，记入后续任务）。2026-10-02 由 F3 修复的条目划掉，其余仍待办：
-  - ~~没有扫描历史列表~~：F3 新增 `GET /api/v1/scans`（管理员）与扫描目录页的“扫描记录”，见 [扫描协调合同](./scan-coordination-contracts.md)。
-  - ~~`/auth/me` 不返回用户 ID~~：F3 起 `/auth/me`、登录与初始化管理员的响应都带 `id`，前端按 ID 判断“你”与同一查看者。
-  - 成员列表无分页，不能创建管理员或修改角色（M3 没有引入 `editor`，仍是候选）。
-  - 成员写操作无幂等键：F3 裁决延到 M3，**M3 裁决（G6）不纳入**，接入见 [身份与成员合同](./identity-contracts.md)；前端保持“结果不明时刷新列表核对”。
-  - ~~`listUsers` 会静默跳过读取失败的行~~、~~`createUser` 与 `setupAdmin` 把任何写入失败映射成 409~~、~~`invalid_input` 的文案写
-    “12 个字符”而规则按字节~~（另有过长密码在 bcrypt 处变成 500）、~~`PATCH /users/{id}` 与撤销会话对格式不对的 ID 返回 503，撤销
-    未知用户也返回 200~~：F3 已修复，见 [身份与成员合同](./identity-contracts.md)。
-  - ~~401 信封的 message 与角色无关~~：F3 起统一为“需要登录”。
-  - 没有查询允许根目录的接口，新增目录只能手输服务器上的绝对路径。
-  - ~~`httpserver.Frontend` 不设缓存头；`/assets/`、`/licenses/` 这类目录路径会返回目录列表；封面缓存头 `private, max-age=86400`~~：
-    F3 已修复，见上文“HTTP 缓存”。
-- ~~M1b 真实接口冒烟（2026-10-03，见任务 `09-28-classical-m1b-album-browsing` 的 `research/real-api-smoke.md`）发现的封面发现缺口~~：
-  2026-10-03 由 F4（任务 `10-03-classical-f4-artwork-discovery`）修复，规则见 [目录与扫描流程合同](./library-scan-contracts.md)的“封面来源与文件夹封面发现”：
-  - ~~CUE 专辑拿不到文件夹封面~~：虚拟路径推不出真实目录；现在用观察的 `Directory`（sheet 所在目录）。
-  - ~~多碟专辑只在第一张碟的文件夹里找封面~~：现在先查发行目录（各碟的父目录），再按碟序查各碟目录。
-  - ~~封面文件名只认全小写~~（F4 规划时的只读统计发现）：Linux 区分大小写，`Cover.JPG` 等找不到；现在不区分大小写。
-  - 查找范围仍限于发行自己的目录：Box 叶子不查 Box 父目录，CUE 不查跨目录的音频目录。
-- ~~未匹配的 `/api/` 仍落入前端 fallback~~：2026-09-29 由 F1 修复。`/api` 兜底返回 JSON 404/405/503，
-  完成日志的 `route_template` 记为 `<unmatched>`，见上文校验与错误矩阵。
-- ~~2026-09-27 静态审查：停用/恢复指纹未含路由 root ID，同键同 body 跨目标会重放前一个 root 的结果~~：
-  2026-09-29 由 F2 动态复现并修复。指纹现含小写 root ID，同键请求串行，旧记录不做兼容，见
-  [目录与扫描流程合同](./library-scan-contracts.md)的“目录新增与操作幂等”。目录操作仍是窄实现，不是通用幂等模板：失败尝试不写记录，通用操作合同由 M3 建立（`operations.Run`，目录操作没有迁入），
-  见 [ADR 0003](../../../docs/architecture/adr/0003-governed-operations.md)。
+后续技术债已移到 [core0-tech-debt.md](./core0-tech-debt.md)（总览接近 24 KB 的上限；内容原样搬移）。

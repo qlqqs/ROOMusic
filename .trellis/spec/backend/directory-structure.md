@@ -35,10 +35,10 @@ backend/
 │   │   └── httpapi/                # 记录一次播放、最近播放、清除
 │   ├── operations/                 # 受治理操作的共同流程：操作记录、同一操作者同一键的串行与重放、同一事务写记录、撤销与展示的 Kind 接口（不含业务表、规则与 HTTP）
 │   │   └── httpapi/                # 操作记录列表与撤销（不导入 catalog，各类型的撤销经 Kind 由 app 注入）
-│   └── catalog/                    # 观察合同、扫描暂存表、身份规划、organizer、来源身份、Release 图写入、读取投影、修正、人工归组、默认版本与核对问题的执行器、有效值视图、版本对比、问题的读取
+│   └── catalog/                    # 观察合同、扫描暂存表、身份规划、organizer、来源身份、Release 图写入、读取投影、修正、人工归组、默认版本、核对问题与认领的执行器、有效值视图、版本对比、问题与待认领的读取
 │       ├── metadata/               # 署名、空白规范化、有界文本、艺人名规则（叶子包）
 │       ├── artwork/                # 受管封面：校验、落盘、关联、读取
-│       └── httpapi/                # Release 列表/详情/证据、按组读取与版本对比、封面读取、修正、人工归组、默认版本、问题列表与核对
+│       └── httpapi/                # Release 列表/详情/证据、按组读取与版本对比、封面读取、修正、人工归组、默认版本、问题列表与核对、认领的预览与写入、待认领的读取
 ├── migrations/
 └── testdata/                       # small repository-wide fixtures only
 ```
@@ -67,7 +67,7 @@ backend/
   conservative grouping rules. M3 起还拥有发行字段的修正表 `release_corrections`、人工修改版本号 `releases.edit_revision`、有效值视图
   `release_effective`，以及字段修正与人工归组的执行器和逆执行器（在 `operations.Run` 给的事务里执行，不碰鉴权、幂等与操作记录表）；
   M4 起还拥有专辑的默认版本与版本号（`release_groups.default_release_id`、`edit_revision`）、默认版本的执行器与逆执行器，以及版本对比的读取；
-  第二项起还拥有核对表 `release_issue_reviews`、“需要关注”的三类拆分（`issues.go`）、核对的执行器与逆执行器，以及问题的读取（核对时间与操作者经 `operations.Load` 读取）。扫描暂存表（`scan_observations`）与身份规划（曲目重绑定、Release 成员关系匹配）也归它：
+  第二项起还拥有核对表 `release_issue_reviews`、“需要关注”的三类拆分（`issues.go`）、核对的执行器与逆执行器，以及问题的读取（核对时间与操作者经 `operations.Load` 读取）；第三项起还拥有“待认领”的判定与推荐（`claims.go`）、认领的预览与执行器（`claim.go`）、它的撤销与展示（`claim_revert.go`）和待认领的读取（`claim_read.go`）。扫描暂存表（`scan_observations`）与身份规划（曲目重绑定、Release 成员关系匹配）也归它：
   library 经 `catalog.StageObservation` 等函数写入暂存，规划需要读文件时通过 catalog 定义的窄端口
   `catalog.Fingerprinter` 向 library 取值（library 在注册 root 内校验路径后调用 parser），catalog 不导入 library 或
   parser，两边不读对方的私有表。

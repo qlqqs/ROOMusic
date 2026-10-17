@@ -17,7 +17,7 @@ Classical / Core 1 的能力路线与四类 ADR 位于
 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)（2026-09-28 已批准阶段顺序与范围）。M0 与路线修订仅更新文档，
 不改变本层现有 API、表结构或权限。B0（行为保持拆包）、阶段 I（身份稳定、按组只读接口）、M2a/M2b（播放与派生）、P（播放历史）与 M3
 （修正覆盖层与受治理操作，见[受治理操作合同](./governance-contracts.md)）已完成；M4 的第一项（默认版本与版本对比，见[默认版本合同](./default-version-contracts.md)）与第二项（问题处理，见[核对合同](./issue-review-contracts.md)）已实施；
-M4 的其余各项（认领、扫描反馈、合并拆分）、通用审批、editor 角色和 Agent 的实施细节须经对应子任务与 ADR 项批准后再实施。Core 0 限制不是未来阶段的默认授权。
+M4 的第三项（认领，见[认领合同](./claim-contracts.md)）同月实施；M4 的其余各项（扫描反馈、合并拆分）、通用审批、editor 角色和 Agent 的实施细节须经对应子任务与 ADR 项批准后再实施。Core 0 限制不是未来阶段的默认授权。
 
 ## Pre-Development Checklist
 
@@ -46,7 +46,7 @@ Before writing or reviewing backend code:
 | [Database Guidelines](./database-guidelines.md) | PostgreSQL ownership, transactions, migrations, revisions, and idempotency |
 | [Error Handling](./error-handling.md) | Classified application errors and stable REST responses |
 | [Logging Guidelines](./logging-guidelines.md) | Structured JSON events, correlation, and redaction |
-| [Core 0 当前运行合同](./core0-runtime-contracts.md) | 总览：平台层 REST 通则、HTTP 缓存、迁移、环境、CI、完成日志，以及后续技术债和专题文件表 |
+| [Core 0 当前运行合同](./core0-runtime-contracts.md) | 总览：平台层 REST 通则、HTTP 缓存、迁移、环境、CI、完成日志，以及专题文件表（后续技术债在 [core0-tech-debt.md](./core0-tech-debt.md)） |
 | [身份与成员合同](./identity-contracts.md) | 密码规则、初始化与成员接口、用户停用事务、写入失败映射 |
 | [目录与扫描流程合同](./library-scan-contracts.md) | 目录幂等、扫描完整性、暂存与身份规划、CUE、抓轨日志、封面发现 |
 | [扫描协调合同](./scan-coordination-contracts.md) | 扫描状态与记录、持久化取消、跨进程协调锁 |
@@ -59,6 +59,7 @@ Before writing or reviewing backend code:
 | [受治理操作合同](./governance-contracts.md) | 阶段 M3：操作记录与共同写入流程 `operations.Run`、发行字段修正与有效值视图、人工归组、撤销、操作记录接口、错误码、测试与真实服务用例 |
 | [默认版本与版本对比合同](./default-version-contracts.md) | M4 第一项：迁移 0018、组的默认版本与版本号、生效与失效规则、设定接口与执行器、撤销与展示、版本对比接口、测试 |
 | [元数据问题与核对合同](./issue-review-contracts.md) | M4 第二项：迁移 0019、“需要关注”的三类拆分、依据与依据令牌、核对接口与执行器、撤销与展示、问题列表与版本的问题、测试 |
+| [认领合同](./claim-contracts.md) | M4 第三项：迁移 0020、待认领的判定与推荐、预览与令牌、认领的执行器与撤销、读取接口、测试 |
 | [Music Steward And Operation Guidelines](./agent-and-operation-guidelines.md) | Agent modes, Review Subagent, tools, Change Sets, and recovery |
 | [Quality Guidelines](./quality-guidelines.md) | Focused code, forbidden coupling, tests, and gates |
 

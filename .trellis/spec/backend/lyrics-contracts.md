@@ -98,7 +98,7 @@ CUE 虚拟轨没有歌词：它的观察由 CUE 事实构造，不复制父文�
 - 配置隔离的 `ROOMUSIC_TEST_DATABASE_URL` 后运行 `go test ./internal/library/ ./internal/app/ -run 'TestPostgreSQL'`：
   扫描写入、重写标签后的更新与清空、CUE 场景、`tracks_lyrics_ck` 的全部格；接口的 401、400、404、200 与 `null`；`TestPostgreSQLAPIResponseSamples`
   的同步、纯文本、没有歌词三份样本（前端解码器读取同一批样本）。
-- 前端与真实服务的用例见[前端质量规范](../frontend/quality-guidelines.md)：面板各状态、跟随与暂停跟随、键盘、五种宽度、axe；
+- 前端与真实服务的用例见[前端验证分层](../frontend/quality-verification-layers.md)：面板各状态、跟随与暂停跟随、键盘、五种宽度、axe；
   `./scripts/playback-e2e.sh` 经真实扫描核对 FLAC 与 ALAC 素材的歌词、CUE 虚拟轨无歌词，以及真实点击后的播放位置。
 
 ## 9. 错误与正确做法

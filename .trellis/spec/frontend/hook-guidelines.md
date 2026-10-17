@@ -22,7 +22,7 @@ or alternative business-policy engines.
   没有 `retry`。`onSettled` 返回刷新相关查询的 Promise，命令在刷新完成后才结束；回调先经 `scope.isCurrent()` 检查发起时的会话
   代次，旧会话的迟到结果不更新界面、不导航。开始与取消扫描（`useStartScan`、`useCancelScan`）是更简单的 mutation：开始扫描
   重复发送只会得到同一个扫描，不需要幂等键；取消被接受不等于已取消，结束前先刷新扫描状态，按钮保持忙碌。
-- **受治理命令 hook**（M3，`useReleaseCommands`）：同一个命令状态机承载 M3 的四种意图（修正、归入、移出、撤销；M4 增加第五、第六种，见本条末尾），每个新意图在发起时生成幂等键，
+- **受治理命令 hook**（M3，`useReleaseCommands`）：同一个命令状态机承载 M3 的四种意图（修正、归入、移出、撤销；M4 增加第五、第六、第七种，见本条末尾），每个新意图在发起时生成幂等键，
   结果不确定时 `retry` 沿用同一个命令与键；`refresh` 与 `onMoved` 由 app 传入（governance 不知道别的 feature 的查询键，也不依赖路由）。
   版本换了专辑组之后**先导航再刷新**：`onMoved` 在 mutation 的 `onSuccess` 里同步调用，刷新放在 `onSettled`——否则刷新读到“原来的专辑已没有这个版本”，
   详情页的地址规范化与这次导航争抢、旧专辑闪一下“专辑不存在”。返回的对象只在状态变化时换新（`useMemo`），页面才能把它放进 `useCallback` 的依赖。
@@ -33,6 +33,8 @@ or alternative business-policy engines.
   M4 第二项增加第六种意图 `review`（`{release, revision, issue, action, basis?}`，核对带页面读到的依据令牌，取消核对不带）：不移动版本，不调用 `onMoved`；
   撤销它的命令 `subject` 是 `review`（成功提示说“已撤销这次核对”），撤销对话框按记录的改动类型 `release_issue_review` 选它。`409 issue_changed` 与修正的
   `revision_conflict` 一样经 `onSettled` 刷新，页面说明“刚刚变了”。
+  M4 第三项增加第七种意图 `claim`（`{release, revision, source: {id, title}, sourceRevision, preview}`，`release` 是新版本，`preview` 是预览令牌）：认领发生在待认领页，那里不跟随版本的移动，不调用 `onMoved`；遇到 `claim_changed` 或 `revision_conflict` 后经 `onSettled` 刷新，页面重新读取详情与预览；结果不确定时用同一个键重试。撤销沿用 `revert`，`subject` 增加 `claim`；从操作记录撤销认领之后页面跟着新版本回到认领之前所在的组（记录改动摘要里的 `previous_group_id`，与撤销归组相同；撤销记录不带）。
+- **待认领页的查询**（M4 第三项，`useClaims`、`useClaim`、`useClaimPreview`、`useClaimHints`）：都是 `staleTime: 0`，每次打开重新读取（旧版本的集合、推荐和预览令牌都随扫描与认领变化）；列表翻页时 `keepPreviousData`，详情与预览换版本不保留上一个的数据；预览与提示 `retry: false`（失败就是没有，不为线索重试三次）；键都在 `governanceKeys.all` 之下，命令结束时整体失效。
 - **问题页的查询**（M4，`useIssues`、`useReleaseIssues`）：问题列表一页一个条目（状态、类别、页码与页大小都在键里），翻页与换筛选时 `keepPreviousData`；
   版本的问题按版本 ID 一个条目，换版本不保留上一个版本的数据。两者 `staleTime` 都是 0：问题随扫描变化，依据令牌要与服务器当前的情况一致。
   键都在 `governanceKeys.all` 之下，命令结束时整体失效，再由 app 的 `refresh` 更新目录的“需要关注”。
