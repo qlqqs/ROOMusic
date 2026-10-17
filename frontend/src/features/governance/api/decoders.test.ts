@@ -8,6 +8,7 @@ import {
   decodeCorrectionState,
   decodeGroupChangeResult,
   decodeGroupDefaultResult,
+  decodeIssueReviewResult,
   decodeOperationPage,
   decodeRevertResult,
 } from "./decoders";
@@ -106,6 +107,27 @@ describe("decodeGroupChangeResult", () => {
   });
 });
 
+describe("decodeIssueReviewResult", () => {
+  const reviewed = sampleBody("issue-reviews/reviewed");
+  const unreviewed = sampleBody("issue-reviews/unreviewed");
+
+  it("解码核对与取消核对的响应：问题、现在是否有核对、新的版本号和操作 ID", () => {
+    expect(decodeIssueReviewResult(reviewed)).toMatchObject({ issue: "grouping", reviewed: true, revision: 2 });
+    expect(decodeIssueReviewResult(unreviewed)).toMatchObject({ issue: "grouping", reviewed: false, revision: 4 });
+  });
+
+  it.each([
+    ["缺少 release_id", without(reviewed, ["release_id"])],
+    ["不能核对的问题", withValue(reviewed, ["issue"], "title")],
+    ["缺少 reviewed", without(reviewed, ["reviewed"])],
+    ["reviewed 不是布尔值", withValue(reviewed, ["reviewed"], "true")],
+    ["revision 为 0", withValue(reviewed, ["revision"], 0)],
+    ["缺少 operation_id", without(reviewed, ["operation_id"])],
+  ])("拒绝：%s", (_name, input) => {
+    expect(() => decodeIssueReviewResult(input)).toThrow(d.DecodeError);
+  });
+});
+
 describe("decodeGroupDefaultResult", () => {
   const set = sampleBody("group-defaults/set");
 
@@ -187,6 +209,20 @@ describe("decodeOperationPage", () => {
     expect(decodeOperationPage(cleared).items[0]?.changes).toMatchObject({ kind: "release_group_default", to: { default: null } });
   });
 
+  it("解码核对问题的记录：问题与前后是否有核对，缺失曲目的核对带曲目数，撤销记录的前后相反", () => {
+    const items = decodeOperationPage(sampleBody("operations/list-issue-reviews")).items;
+    expect(items.map((item) => [item.type, item.changes?.kind === "release_issue_review" ? item.changes.issue : null])).toEqual([
+      ["revert", "grouping"],
+      ["release_issue_review", "grouping"],
+      ["release_issue_review", "missing_tracks"],
+      ["release_issue_review", "grouping"],
+    ]);
+    const [revert, unreview, missing] = items;
+    expect(revert?.changes).toMatchObject({ from: { reviewed: false }, to: { reviewed: true } });
+    expect(unreview?.changes).toMatchObject({ from: { reviewed: true, track_count: null }, to: { reviewed: false, track_count: null } });
+    expect(missing?.changes).toMatchObject({ from: { reviewed: false, track_count: null }, to: { reviewed: true, track_count: 1 } });
+  });
+
   it("目标发行已不存在、没有改动摘要时仍能解码", () => {
     const orphaned = withValue(withValue(page, ["items", 0, "release"], null), ["items", 0, "changes"], null);
     expect(decodeOperationPage(orphaned).items[0]).toMatchObject({ release: null, changes: null });
@@ -210,6 +246,9 @@ describe("decodeOperationPage", () => {
     ["修正字段名未知", withValue(page, ["items", 3, "changes", "fields", 0, "field"], "source_type")],
     ["归组快照缺少组 ID", without(page, ["items", 0, "changes", "from", "group_id"])],
     ["默认版本快照缺少版本 ID", without(groupPage, ["items", 0, "changes", "to", "default", "release_id"])],
+    ["核对问题的问题未知", withValue(sampleBody("operations/list-issue-reviews"), ["items", 0, "changes", "issue"], "title")],
+    ["核对问题缺少前态", without(sampleBody("operations/list-issue-reviews"), ["items", 0, "changes", "from"])],
+    ["核对问题的曲目数是负数", withValue(sampleBody("operations/list-issue-reviews"), ["items", 2, "changes", "to", "track_count"], -1)],
     ["默认版本快照的版本 ID 不是 UUID", withValue(groupPage, ["items", 0, "changes", "to", "default", "release_id"], "release-1")],
     ["默认版本快照缺少标题", without(groupPage, ["items", 0, "changes", "to", "default", "title"])],
     ["默认版本记录缺少专辑标题", without(groupPage, ["items", 0, "changes", "from", "group_title"])],

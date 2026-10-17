@@ -130,3 +130,41 @@ describe("默认版本记录", () => {
     expect(notRevertibleReason({ ...defaultRecord, revertible: false, reverted_by: "00000000-0000-4000-8000-000000000009" })).toBe("已撤销");
   });
 });
+
+// 核对问题的记录：样本里依次是核对归组冲突、核对缺失曲目（1 首）、取消核对归组冲突与撤销这次取消。
+const issueRecords = decodeOperationPage(sampleBody("operations/list-issue-reviews")).items;
+const issueRecord = (index: number): OperationItemDTO => {
+  const found = issueRecords[index];
+  if (found === undefined) throw new Error(`样本里没有第 ${index} 条核对记录`);
+  return found;
+};
+
+describe("核对问题记录", () => {
+  it("类型名；撤销记录写“撤销核对”", () => {
+    expect(operationTypeLabel(issueRecord(1))).toBe("核对问题");
+    expect(operationTypeLabel(issueRecord(0))).toBe("撤销核对");
+  });
+
+  it("改动一行：问题与“标记为已核对”或“取消核对”，缺失曲目带曲目数；撤销记录写恢复成了什么", () => {
+    expect(changeLines(issueRecord(3))).toEqual(["归组冲突：标记为已核对"]);
+    expect(changeLines(issueRecord(2))).toEqual(["缺失曲目（1 首）：标记为已核对"]);
+    expect(changeLines(issueRecord(1))).toEqual(["归组冲突：取消核对"]);
+    expect(changeLines(issueRecord(0))).toEqual(["归组冲突：标记为已核对"]);
+  });
+
+  it("撤销预览前后互换：撤销核对是取消核对，撤销取消核对是重新标记", () => {
+    expect(revertLines(issueRecord(2))).toEqual(["缺失曲目（1 首）：取消核对"]);
+    expect(revertLines(issueRecord(1))).toEqual(["归组冲突：标记为已核对"]);
+  });
+
+  it("来源类型与介质类型用字段的中文名", () => {
+    const changes = { kind: "release_issue_review" as const, issue: "media_type" as const, from: { reviewed: false, track_count: null }, to: { reviewed: true, track_count: null } };
+    expect(changeLines({ changes })).toEqual(["介质类型：标记为已核对"]);
+    expect(changeLines({ changes: { ...changes, issue: "source_type" } })).toEqual(["来源类型：标记为已核对"]);
+  });
+
+  it("“之后又有修改”与“撤销不能再撤销”的原因与其他记录相同", () => {
+    expect(notRevertibleReason(issueRecord(2))).toBe("之后又有修改");
+    expect(notRevertibleReason(issueRecord(0))).toBe("撤销不能再撤销");
+  });
+});

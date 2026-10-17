@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "issue_changed",
+      "message": "扫描刚刚改变了这个问题，请重新读取后再核对"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

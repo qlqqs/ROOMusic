@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/library/parser/parsertest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
@@ -287,6 +288,8 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	recordOperationSamples(t, application, samples, call, admin)
 	// 默认版本（M4）：它改变这张专辑的代表版本，并新增专辑目标的记录，所以放在上面的样本之后，已有样本不受影响。
 	recordGroupDefaultSamples(t, application, samples, call, admin)
+	// 核对问题（M4 第二项）：新建一张有问题的合成专辑，放在最后，已有样本不受影响。
+	recordIssueReviewSamples(t, application, samples, call, admin)
 
 	samples.finish()
 }
@@ -529,6 +532,40 @@ func recordGroupDefaultSamples(t *testing.T, application *integrationTestApplica
 		t.Fatalf("read the default-version operation: %v", err)
 	}
 	samples.record("operations/reverted-default", call(http.MethodPost, revertPath(setOperation), nil, admin, key("0404")), http.StatusOK)
+}
+
+// recordIssueReviewSamples 记录核对问题的接口：核对归组冲突、核对缺失曲目、取消核对与撤销取消核对的响应，依据已变化与过期版本号两种错误，
+// 以及这张专辑的操作记录（三种改动摘要都有）。素材是直接写库的一张合成专辑：同一目录的归组冲突与一首缺失曲目
+// （扫描从不改它们，与扫描造出的完全相同；真实重扫见 TestPostgreSQLIssueReviewsSurviveARealRescan）。
+func recordIssueReviewSamples(t *testing.T, application *integrationTestApplication, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser) {
+	t.Helper()
+	rootID := uuid.New()
+	mustExec(t, application, `INSERT INTO library_roots(id,path,status,revision) VALUES($1::uuid,$2,'active',1)`, rootID, filepath.Join(application.allowedRoot, "issues"))
+	releaseID, _ := insertGroupedRelease(t, application, rootID, groupedRelease{title: "Sample Split Album", artist: "Sample Quartet", year: 2012, tracks: []string{"present", "missing"}})
+	mustExec(t, application, `INSERT INTO release_grouping_evidence(release_id,candidate_kind,rule_id,source_refs,reason) VALUES($1::uuid,'same_dir_split','organizer_v2','["split/01.flac","split/02.flac"]','same_directory_conflict')`, releaseID)
+	store := catalog.NewStore(application.database)
+	token := func(issue string) string {
+		t.Helper()
+		token, err := store.LoadIssueBasisToken(context.Background(), releaseID, issue)
+		if err != nil || token == "" {
+			t.Fatalf("load the %s basis token: %q, %v", issue, token, err)
+		}
+		return token
+	}
+	path := issueReviewPath(releaseID)
+	key := func(suffix string) map[string]string {
+		return map[string]string{"Idempotency-Key": "00000000-0000-4000-8000-00000000" + suffix}
+	}
+	samples.record("issue-reviews/reviewed", call(http.MethodPost, path, reviewBody(1, "grouping", token("grouping")), admin, key("0501")), http.StatusOK)
+	samples.record("errors/issue-changed", call(http.MethodPost, path, reviewBody(2, "missing_tracks", strings.Repeat("0", 64)), admin, key("0502")), http.StatusConflict)
+	if response := call(http.MethodPost, path, reviewBody(2, "missing_tracks", token("missing_tracks")), admin, key("0503")); response.Code != http.StatusOK {
+		t.Fatalf("review the missing tracks: HTTP %d: %s", response.Code, response.Body.String())
+	}
+	unreviewed := call(http.MethodPost, path, unreviewBody(3, "grouping"), admin, key("0504"))
+	samples.record("issue-reviews/unreviewed", unreviewed, http.StatusOK)
+	samples.record("errors/revision-conflict-issue", call(http.MethodPost, path, unreviewBody(3, "missing_tracks"), admin, key("0505")), http.StatusConflict)
+	samples.record("operations/reverted-issue-review", call(http.MethodPost, revertPath(decodeJSONMap(t, unreviewed)["operation_id"].(string)), nil, admin, key("0506")), http.StatusOK)
+	samples.record("operations/list-issue-reviews", call(http.MethodGet, "/api/v1/operations?release_id="+releaseID+"&page_size=10", nil, admin), http.StatusOK)
 }
 
 // 样本里的内嵌歌词：同步歌词带元标签、间奏（空行）、同一时间戳的双语两行与一行多个时间戳；纯文本歌词带分段。

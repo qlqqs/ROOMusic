@@ -40,6 +40,7 @@ const titles = {
   release_correction: "撤销这次修改？",
   release_group_change: "撤销这次归组调整？",
   release_group_default: "撤销这次默认版本调整？",
+  release_issue_review: "撤销这次核对？",
 } as const;
 
 /**

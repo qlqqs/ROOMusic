@@ -483,6 +483,7 @@ export function respondToGroupDefault(data: GovernanceData, groupId: string, key
 function invertChanges(changes: OperationChangesDTO): OperationChangesDTO {
   if (changes.kind === "release_group_change") return { kind: "release_group_change", from: changes.to, to: changes.from };
   if (changes.kind === "release_group_default") return { kind: "release_group_default", from: changes.to, to: changes.from };
+  if (changes.kind === "release_issue_review") return { kind: "release_issue_review", issue: changes.issue, from: changes.to, to: changes.from };
   return { kind: "release_correction", fields: changes.fields.map((field) => ({ field: field.field, before: field.after, after: field.before })) };
 }
 

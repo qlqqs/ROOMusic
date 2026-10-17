@@ -52,11 +52,24 @@ const groupDefaultResultDecoder = d.object({
   operation_id: d.uuid(),
 });
 
+// 核对问题（M4 第二项）：可以标记为已核对的四类问题，与后端 backend/internal/catalog/issue_review.go 的取值一致。
+export const REVIEWABLE_ISSUES = ["grouping", "missing_tracks", "source_type", "media_type"] as const;
+export type ReviewableIssue = (typeof REVIEWABLE_ISSUES)[number];
+
+// 核对或取消核对成功的响应：发行、问题、现在是否有核对、新的人工修改版本号与这次操作的 ID（撤销用）。
+const issueReviewResultDecoder = d.object({
+  release_id: d.uuid(),
+  issue: d.oneOf(REVIEWABLE_ISSUES),
+  reviewed: d.boolean(),
+  revision: d.integer({ min: 1 }),
+  operation_id: d.uuid(),
+});
+
 // 操作记录（管理员）。type 是记录自己的类型；changes.kind 是前后状态按哪种类型解释（撤销记录与它所撤销的操作同类型）。
 // 目标是发行的记录给 release、album 为 null，目标是专辑的记录反过来；目标已不存在时对应的一项也是 null；
 // 撤销记录与被撤销的记录互相指向（reverts、reverted_by）。
 const MAX_OPERATION_PAGE_ITEMS = 100;
-const OPERATION_TYPES = ["release_correction", "release_group_change", "release_group_default", "revert"] as const;
+const OPERATION_TYPES = ["release_correction", "release_group_change", "release_group_default", "release_issue_review", "revert"] as const;
 
 const operationActorDecoder = d.object({ id: d.uuid(), username: d.string({ max: 200 }) });
 const operationReleaseDecoder = d.object({ id: d.uuid(), title: d.string(), group_id: d.uuid(), visible: d.boolean() });
@@ -84,13 +97,27 @@ const defaultVersionDecoder = d.object({
 const defaultStateDecoder = d.object({ group_title: d.string(), default: d.nullable(defaultVersionDecoder) });
 const defaultChangesDecoder = d.object({ kind: d.literal("release_group_default"), from: defaultStateDecoder, to: defaultStateDecoder });
 
-type OperationChanges = d.Infer<typeof correctionChangesDecoder> | d.Infer<typeof groupChangesDecoder> | d.Infer<typeof defaultChangesDecoder>;
+// 核对问题：前后是否有核对；缺失曲目的核对另给依据里的曲目数（其余为 null）。
+const issueReviewStateDecoder = d.object({ reviewed: d.boolean(), track_count: d.nullable(d.integer({ min: 0 })) });
+const issueReviewChangesDecoder = d.object({
+  kind: d.literal("release_issue_review"),
+  issue: d.oneOf(REVIEWABLE_ISSUES),
+  from: issueReviewStateDecoder,
+  to: issueReviewStateDecoder,
+});
+
+type OperationChanges =
+  | d.Infer<typeof correctionChangesDecoder>
+  | d.Infer<typeof groupChangesDecoder>
+  | d.Infer<typeof defaultChangesDecoder>
+  | d.Infer<typeof issueReviewChangesDecoder>;
 // 按 kind 选择解码器；未知的 kind 整体拒绝（后端新增操作类型时，样本契约测试先失败，在这里补上才算确认前端已经知道）。
 const operationChangesDecoder: d.Decoder<OperationChanges> = (input, path) => {
   const kind = typeof input === "object" && input !== null && "kind" in input ? input.kind : undefined;
   if (kind === "release_correction") return correctionChangesDecoder(input, path);
   if (kind === "release_group_change") return groupChangesDecoder(input, path);
   if (kind === "release_group_default") return defaultChangesDecoder(input, path);
+  if (kind === "release_issue_review") return issueReviewChangesDecoder(input, path);
   throw new d.DecodeError(`${path}.kind`, "不是已知的操作类型");
 };
 
@@ -129,6 +156,7 @@ export const decodeCorrectionState = d.defineDecoder(correctionStateDecoder);
 export const decodeCorrectionResult = d.defineDecoder(correctionResultDecoder);
 export const decodeGroupChangeResult = d.defineDecoder(groupChangeResultDecoder);
 export const decodeGroupDefaultResult = d.defineDecoder(groupDefaultResultDecoder);
+export const decodeIssueReviewResult = d.defineDecoder(issueReviewResultDecoder);
 export const decodeOperationPage = d.defineDecoder(operationPageDecoder);
 export const decodeRevertResult = d.defineDecoder(revertResultDecoder);
 
@@ -138,6 +166,7 @@ export type CorrectionStateDTO = d.Infer<typeof correctionStateDecoder>;
 export type CorrectionResultDTO = d.Infer<typeof correctionResultDecoder>;
 export type GroupChangeResultDTO = d.Infer<typeof groupChangeResultDecoder>;
 export type GroupDefaultResultDTO = d.Infer<typeof groupDefaultResultDecoder>;
+export type IssueReviewResultDTO = d.Infer<typeof issueReviewResultDecoder>;
 export type DefaultVersionDTO = d.Infer<typeof defaultVersionDecoder>;
 export type OperationItemDTO = d.Infer<typeof operationItemDecoder>;
 export type OperationPageDTO = d.Infer<typeof operationPageDecoder>;

@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "revision_conflict",
+      "message": "这张专辑刚被修改过，请刷新后再试"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

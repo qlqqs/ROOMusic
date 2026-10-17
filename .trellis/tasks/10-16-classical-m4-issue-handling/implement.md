@@ -19,7 +19,7 @@
   - 迁移 0019（design §3）；`operations.TypeReleaseIssueReview`。
   - `releaseAttentionExpression` 拆成三个具名常量再相加，加入核对的排除；另加三个“已核对”常量（design §4）。
   - 门禁：没有核对行时既有集成测试与接口样本不变。新测试：手工写入核对行后三类各自减少，组的计数与 `attention=required` 一致。
-- [ ] **2. 核对的写入与撤销**
+- [x] **2. 核对的写入与撤销**
   - `catalog/issue_review.go`：依据 SQL、令牌、请求解析与指纹、执行器、`Kind`（撤销、展示）；`catalog/httpapi` 的写接口；`app.go` 注册（design §5、§6）。
   - 集成测试：四类核对各自消除计数；`issue_changed`（令牌不符、问题已不存在）、`no_changes`、`revision_conflict`、`not_found`、
     同源与权限、同键重放与同键异义；过期判断（来源路径变了、候选变了、曲目回来又缺失、新缺失的曲目只计新的）；

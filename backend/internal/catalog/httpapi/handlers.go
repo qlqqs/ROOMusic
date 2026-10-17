@@ -42,6 +42,7 @@ func (handlers *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/releases/{id}/corrections", handlers.releaseCorrections)
 	mux.HandleFunc("PATCH /api/v1/releases/{id}/corrections", handlers.correctRelease)
 	mux.HandleFunc("POST /api/v1/releases/{id}/group", handlers.changeReleaseGroup)
+	mux.HandleFunc("POST /api/v1/releases/{id}/issue-review", handlers.reviewReleaseIssue)
 	mux.HandleFunc("GET /api/v1/releases/{id}", handlers.releaseDetail)
 	mux.HandleFunc("GET /api/v1/release-groups", handlers.listReleaseGroups)
 	mux.HandleFunc("GET /api/v1/release-groups/{id}", handlers.releaseGroupDetail)

@@ -74,7 +74,8 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	libraryapi.New(database, guard, libraryService, settings.AllowedLibraryRoots, logger).Register(mux)
 	catalogapi.New(database, guard, settings.DataDirectory, logger).Register(mux)
 	// 受治理操作的撤销与展示：每种操作类型的能力由拥有对应业务表的包提供，operations/httpapi 不导入业务包。
-	operationsapi.New(database, guard, logger, catalog.CorrectionOperations(), catalog.GroupChangeOperations(), catalog.GroupDefaultOperations()).Register(mux)
+	operationsapi.New(database, guard, logger, catalog.CorrectionOperations(), catalog.GroupChangeOperations(), catalog.GroupDefaultOperations(),
+		catalog.IssueReviewOperations()).Register(mux)
 	playbackService := playback.NewService(database, settings.AllowedLibraryRoots, playback.WithDerivation(assembly.derivation))
 	playbackapi.New(guard, playbackService, lifecycle, logger, playbackapi.Options{
 		RecheckInterval: assembly.playbackRecheckInterval, PreflightWait: assembly.playbackPreflightWait,

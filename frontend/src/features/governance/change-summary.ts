@@ -1,7 +1,7 @@
 import type { DefaultVersionDTO, OperationChangesDTO, OperationItemDTO } from "./api/decoders";
-import { correctionFieldLabels, displayValue } from "./labels";
+import { correctionFieldLabels, displayValue, reviewableIssueLabels } from "./labels";
 
-/** 记录自己的类型：修正、归组与默认版本按它改的东西命名；撤销记录写“撤销”，并说明撤销的是哪一类（记录坏了读不出改动时只写“撤销”）。 */
+/** 记录自己的类型：修正、归组、默认版本与核对按它改的东西命名；撤销记录写“撤销”，并说明撤销的是哪一类（记录坏了读不出改动时只写“撤销”）。 */
 export function operationTypeLabel(item: Pick<OperationItemDTO, "type" | "changes">): string {
   switch (item.type) {
     case "release_correction":
@@ -10,10 +10,13 @@ export function operationTypeLabel(item: Pick<OperationItemDTO, "type" | "change
       return "调整归组";
     case "release_group_default":
       return "设定默认版本";
+    case "release_issue_review":
+      return "核对问题";
     case "revert":
       if (item.changes?.kind === "release_correction") return "撤销修改";
       if (item.changes?.kind === "release_group_change") return "撤销归组调整";
       if (item.changes?.kind === "release_group_default") return "撤销默认版本调整";
+      if (item.changes?.kind === "release_issue_review") return "撤销核对";
       return "撤销";
   }
 }
@@ -27,7 +30,8 @@ export function defaultVersionText(version: DefaultVersionDTO | null): string {
 
 /**
  * 改动逐条一行。字段修正写“字段：前 → 后”（取当时的有效值），恢复扫描值与留空另加说明；归组写专辑的移动（标题是当时用户看到的专辑名）；
- * 默认版本写“默认版本：自动选择 → 《标题》（年份 · 版本说明）”（版本取当时的快照）。
+ * 默认版本写“默认版本：自动选择 → 《标题》（年份 · 版本说明）”（版本取当时的快照）；核对写“归组冲突：标记为已核对”或“…：取消核对”，
+ * 缺失曲目带上核对时的曲目数，如“缺失曲目（3 首）：标记为已核对”。
  * reverse 为 true 时前后互换，写出“撤销之后会变成什么”：撤销前的预览用它，读起来是“改回去”。
  * 改动内容不可读（记录里的状态损坏）时只说明这一点，不让列表失败。
  */
@@ -39,6 +43,12 @@ function linesOf(changes: OperationChangesDTO | null, reverse: boolean): string[
   if (changes.kind === "release_group_default") {
     const [from, to] = reverse ? [changes.to, changes.from] : [changes.from, changes.to];
     return [`默认版本：${defaultVersionText(from.default)} → ${defaultVersionText(to.default)}`];
+  }
+  if (changes.kind === "release_issue_review") {
+    const [from, to] = reverse ? [changes.to, changes.from] : [changes.from, changes.to];
+    const trackCount = (to.reviewed ? to : from).track_count;
+    const label = trackCount === null ? reviewableIssueLabels[changes.issue] : `${reviewableIssueLabels[changes.issue]}（${trackCount} 首）`;
+    return [`${label}：${to.reviewed ? "标记为已核对" : "取消核对"}`];
   }
   return changes.fields.map((field) => {
     const [from, to] = reverse ? [field.after, field.before] : [field.before, field.after];
