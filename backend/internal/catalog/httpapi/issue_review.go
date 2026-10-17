@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
@@ -67,4 +68,67 @@ func (handlers *Handlers) reviewReleaseIssue(responseWriter http.ResponseWriter,
 		return
 	}
 	httpserver.WriteJSON(responseWriter, http.StatusOK, result.Response)
+}
+
+// listReleaseIssues 返回有问题的可见版本的一页（管理员）：status 是 open（默认）或 reviewed，category 是 fields、grouping、
+// missing_tracks（不给是全部）；另给筛选项上的数字。检查顺序是 401、403、400（分页 invalid_pagination、筛选 invalid_filter）、200。
+func (handlers *Handlers) listReleaseIssues(responseWriter http.ResponseWriter, request *http.Request) {
+	if _, ok := handlers.guard.RequireAdmin(responseWriter, request); !ok {
+		return
+	}
+	page, pageSize, err := httpserver.ParsePagination(request, defaultReleasePageSize, maxReleaseRows)
+	if err != nil {
+		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_pagination", "分页参数无效")
+		return
+	}
+	query := request.URL.Query()
+	status, validStatus := catalog.ParseIssueListStatus(query["status"])
+	category, validCategory := catalog.ParseIssueListCategory(query["category"])
+	if !validStatus || !validCategory {
+		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_filter", "问题筛选条件无效")
+		return
+	}
+	result, err := handlers.store.ListIssues(request.Context(), catalog.IssueListParams{Status: status, Category: category, Page: page, PageSize: pageSize})
+	if errors.Is(err, catalog.ErrQuery) {
+		httpserver.WriteError(responseWriter, request, http.StatusServiceUnavailable, "database_unavailable", "服务暂不可用")
+		return
+	}
+	if err != nil {
+		httpserver.WriteError(responseWriter, request, http.StatusServiceUnavailable, "database_error", "无法读取问题列表")
+		return
+	}
+	httpserver.WriteJSON(responseWriter, http.StatusOK, map[string]any{
+		"items":      result.Items,
+		"summary":    result.Summary,
+		"pagination": map[string]any{"page": page, "page_size": pageSize, "total": result.Total},
+	})
+}
+
+// releaseIssues 返回一个可见版本的全部问题（管理员）：拿不准的字段、归组冲突与缺失曲目，可以核对的问题带依据令牌与核对状态，
+// 核对人的用户名在这里批量补上。检查顺序是 401、403、400（非 UUID）、404（不存在或不可见）、200。
+func (handlers *Handlers) releaseIssues(responseWriter http.ResponseWriter, request *http.Request) {
+	if _, ok := handlers.guard.RequireAdmin(responseWriter, request); !ok {
+		return
+	}
+	releaseID, ok := releaseIDFromPath(responseWriter, request)
+	if !ok {
+		return
+	}
+	issues, err := handlers.store.LoadReleaseIssues(request.Context(), releaseID)
+	if err == nil {
+		var names map[string]string
+		if names, err = handlers.guard.Usernames(request.Context(), issues.ReviewerIDs()); err == nil {
+			issues.SetReviewerNames(names)
+		}
+	}
+	switch {
+	case errors.Is(err, catalog.ErrReleaseNotFound):
+		httpserver.WriteError(responseWriter, request, http.StatusNotFound, "not_found", "发行版本不存在")
+	case errors.Is(err, catalog.ErrQuery):
+		httpserver.WriteError(responseWriter, request, http.StatusServiceUnavailable, "database_unavailable", "服务暂不可用")
+	case err != nil:
+		httpserver.WriteError(responseWriter, request, http.StatusServiceUnavailable, "database_error", "无法读取这个版本的问题")
+	default:
+		httpserver.WriteJSON(responseWriter, http.StatusOK, issues)
+	}
 }

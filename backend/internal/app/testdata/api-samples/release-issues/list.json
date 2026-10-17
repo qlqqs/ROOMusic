@@ -1,0 +1,80 @@
+{
+  "body": {
+    "items": [
+      {
+        "edition": "Live",
+        "group_id": "00000000-0000-4000-8000-000000000001",
+        "open": {
+          "fields": 1,
+          "grouping": 1,
+          "missing_tracks": 1
+        },
+        "release": {
+          "album_artist": null,
+          "artist": "Sample Quartet",
+          "artwork": null,
+          "attention_count": 3,
+          "id": "00000000-0000-4000-8000-000000000002",
+          "media_type": null,
+          "medium_count": 1,
+          "source_type": null,
+          "title": "Sample Split Album",
+          "track_count": 1,
+          "year": 2012
+        },
+        "reviewed": {
+          "fields": 0,
+          "grouping": 0,
+          "missing_tracks": 0
+        }
+      },
+      {
+        "edition": null,
+        "group_id": "00000000-0000-4000-8000-000000000003",
+        "open": {
+          "fields": 0,
+          "grouping": 1,
+          "missing_tracks": 0
+        },
+        "release": {
+          "album_artist": null,
+          "artist": "Sample Quartet",
+          "artwork": null,
+          "attention_count": 1,
+          "id": "00000000-0000-4000-8000-000000000004",
+          "media_type": null,
+          "medium_count": 1,
+          "source_type": null,
+          "title": "Sample Split Album II",
+          "track_count": 1,
+          "year": 2012
+        },
+        "reviewed": {
+          "fields": 0,
+          "grouping": 0,
+          "missing_tracks": 0
+        }
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "page_size": 50,
+      "total": 2
+    },
+    "summary": {
+      "open": {
+        "all": 2,
+        "fields": 1,
+        "grouping": 2,
+        "missing_tracks": 1
+      },
+      "reviewed": {
+        "all": 0,
+        "fields": 0,
+        "grouping": 0,
+        "missing_tracks": 0
+      }
+    }
+  },
+  "status": 200
+}

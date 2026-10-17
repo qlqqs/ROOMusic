@@ -8,8 +8,10 @@ import {
   decodeCorrectionState,
   decodeGroupChangeResult,
   decodeGroupDefaultResult,
+  decodeIssuePage,
   decodeIssueReviewResult,
   decodeOperationPage,
+  decodeReleaseIssues,
   decodeRevertResult,
 } from "./decoders";
 
@@ -125,6 +127,73 @@ describe("decodeIssueReviewResult", () => {
     ["缺少 operation_id", without(reviewed, ["operation_id"])],
   ])("拒绝：%s", (_name, input) => {
     expect(() => decodeIssueReviewResult(input)).toThrow(d.DecodeError);
+  });
+});
+
+describe("decodeIssuePage", () => {
+  const page = sampleBody("release-issues/list");
+  const reviewed = sampleBody("release-issues/list-reviewed");
+
+  it("解码问题列表：版本摘要、版本说明、待处理与已核对的数目，以及筛选项上的数字", () => {
+    const decoded = decodeIssuePage(page);
+    expect(decoded.items.map((item) => [item.release.title, item.edition, item.open])).toEqual([
+      ["Sample Split Album", "Live", { fields: 1, grouping: 1, missing_tracks: 1 }],
+      ["Sample Split Album II", null, { fields: 0, grouping: 1, missing_tracks: 0 }],
+    ]);
+    for (const item of decoded.items) {
+      expect(item.open.fields + item.open.grouping + item.open.missing_tracks).toBe(item.release.attention_count);
+    }
+    expect(decoded.summary.open).toEqual({ all: 2, fields: 1, grouping: 2, missing_tracks: 1 });
+    expect(decodeIssuePage(reviewed).items[0]?.reviewed).toEqual({ fields: 0, grouping: 1, missing_tracks: 1 });
+  });
+
+  it.each([
+    ["缺少 summary", without(page, ["summary"])],
+    ["缺少 reviewed", without(page, ["items", 0, "reviewed"])],
+    ["归组数目大于 1", withValue(page, ["items", 0, "open", "grouping"], 2)],
+    ["数目是负数", withValue(page, ["items", 0, "open", "fields"], -1)],
+    ["group_id 不是 UUID", withValue(page, ["items", 0, "group_id"], "group-1")],
+    ["缺少版本摘要", without(page, ["items", 0, "release"])],
+    ["筛选项缺少 all", without(page, ["summary", "open", "all"])],
+  ])("拒绝：%s", (_name, input) => {
+    expect(() => decodeIssuePage(input)).toThrow(d.DecodeError);
+  });
+});
+
+describe("decodeReleaseIssues", () => {
+  const issues = sampleBody("release-issues/get");
+  const reviewed = sampleBody("release-issues/get-reviewed");
+
+  it("解码版本的问题：字段（只有来源与介质类型可以核对）、归组冲突与同一目录的其他版本、缺失曲目", () => {
+    const decoded = decodeReleaseIssues(issues);
+    expect(decoded.fields).toEqual([expect.objectContaining({ field: "media_type", value: "CD", candidates: ["CD", "Vinyl"], reviewable: true, status: "open", review: null })]);
+    expect(decoded.grouping).toMatchObject({ reason_codes: ["same_directory_conflict"], source_refs: ["split/01.flac", "split/02.flac"], status: "open" });
+    expect(decoded.grouping?.siblings.map((sibling) => sibling.title)).toEqual(["Sample Split Album II"]);
+    expect(decoded.missing_tracks).toMatchObject({ count: 1, truncated: false, status: "open" });
+  });
+
+  it("核对之后：归组冲突已核对并带核对人；之后又有曲目缺失时缺失曲目回到待处理，核对仍在", () => {
+    const decoded = decodeReleaseIssues(reviewed);
+    expect(decoded.grouping).toMatchObject({ status: "reviewed", review: { reviewer: { username: "curator" } } });
+    expect(decoded.missing_tracks).toMatchObject({ count: 2, status: "open", review: { reviewer: { username: "curator" } } });
+    expect(decoded.missing_tracks?.tracks.map((track) => track.reviewed)).toEqual([true, false]);
+  });
+
+  it("没有归组冲突与缺失曲目时两者为 null", () => {
+    const clean = withValue(withValue(withValue(issues, ["grouping"], null), ["missing_tracks"], null), ["fields"], []);
+    expect(decodeReleaseIssues(clean)).toMatchObject({ fields: [], grouping: null, missing_tracks: null });
+  });
+
+  it.each([
+    ["依据令牌长度不对", withValue(issues, ["grouping", "basis"], "abc")],
+    ["未知的状态", withValue(issues, ["grouping", "status"], "ignored")],
+    ["缺失曲目为空却不是 null", withValue(issues, ["missing_tracks", "tracks"], [])],
+    ["曲目缺少最后一次看到的时间", without(issues, ["missing_tracks", "tracks", 0, "last_seen_at"])],
+    ["核对缺少核对人", withValue(reviewed, ["grouping", "review", "reviewer"], null)],
+    ["同一目录的版本缺少标题", without(issues, ["grouping", "siblings", 0, "title"])],
+    ["缺少 revision", without(issues, ["revision"])],
+  ])("拒绝：%s", (_name, input) => {
+    expect(() => decodeReleaseIssues(input)).toThrow(d.DecodeError);
   });
 });
 

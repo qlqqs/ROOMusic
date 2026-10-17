@@ -1,0 +1,84 @@
+{
+  "body": {
+    "fields": [
+      {
+        "basis": "0000000000000000000000000000000000000000000000000000000000000001",
+        "candidates": [
+          "CD",
+          "Vinyl"
+        ],
+        "field": "media_type",
+        "reason_code": "inconsistent_candidates",
+        "review": null,
+        "reviewable": true,
+        "status": "open",
+        "value": "CD"
+      }
+    ],
+    "group_id": "00000000-0000-4000-8000-000000000001",
+    "grouping": {
+      "basis": "0000000000000000000000000000000000000000000000000000000000000002",
+      "reason_codes": [
+        "same_directory_conflict"
+      ],
+      "review": {
+        "operation_id": "00000000-0000-4000-8000-000000000002",
+        "reviewed_at": "2026-01-01T00:00:01Z",
+        "reviewer": {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "username": "curator"
+        }
+      },
+      "siblings": [
+        {
+          "group_id": "00000000-0000-4000-8000-000000000004",
+          "release_id": "00000000-0000-4000-8000-000000000005",
+          "title": "Sample Split Album II"
+        }
+      ],
+      "source_refs": [
+        "split/01.flac",
+        "split/02.flac"
+      ],
+      "status": "reviewed",
+      "truncated": false
+    },
+    "missing_tracks": {
+      "basis": "0000000000000000000000000000000000000000000000000000000000000003",
+      "count": 2,
+      "review": {
+        "operation_id": "00000000-0000-4000-8000-000000000006",
+        "reviewed_at": "2026-01-01T00:00:02Z",
+        "reviewer": {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "username": "curator"
+        }
+      },
+      "status": "open",
+      "tracks": [
+        {
+          "id": "00000000-0000-4000-8000-000000000007",
+          "last_seen_at": "2026-01-01T00:00:00Z",
+          "medium_position": 1,
+          "position": 2,
+          "reviewed": true,
+          "source": "00000000-0000-4000-8000-000000000008/1.flac",
+          "title": "Sample Split Album track 2"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000009",
+          "last_seen_at": "2026-01-01T00:00:03Z",
+          "medium_position": 1,
+          "position": 3,
+          "reviewed": false,
+          "source": "split/03.flac",
+          "title": "Sample Split Album track 3"
+        }
+      ],
+      "truncated": false
+    },
+    "release_id": "00000000-0000-4000-8000-000000000008",
+    "revision": 5
+  },
+  "status": 200
+}

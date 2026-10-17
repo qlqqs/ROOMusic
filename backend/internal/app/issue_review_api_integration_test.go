@@ -301,9 +301,23 @@ func TestPostgreSQLIssueReviewsSurviveARealRescan(t *testing.T) {
 	}
 	review := func(releaseID, issue string) {
 		t.Helper()
-		token, err := store.LoadIssueBasisToken(context.Background(), releaseID, issue)
-		if err != nil || token == "" {
-			t.Fatalf("the %s issue of %s has no basis (%v)", issue, releaseID, err)
+		var detail catalog.ReleaseIssues
+		getJSON(t, application, &admin, "/api/v1/releases/"+releaseID+"/issues", &detail)
+		token := ""
+		switch issue {
+		case "grouping":
+			token = detail.Grouping.Basis
+		case "missing_tracks":
+			token = detail.MissingTracks.Basis
+		default:
+			for _, field := range detail.Fields {
+				if field.Field == issue && field.Basis != nil {
+					token = *field.Basis
+				}
+			}
+		}
+		if stored, err := store.LoadIssueBasisToken(context.Background(), releaseID, issue); err != nil || token == "" || token != stored {
+			t.Fatalf("the %s issue of %s: token from the detail %q, stored %q (%v)", issue, releaseID, token, stored, err)
 		}
 		if response := application.request(t, http.MethodPost, issueReviewPath(releaseID), reviewBody(revisionOf(releaseID), issue, token), &admin, idempotencyHeader(uuid.New())); response.Code != http.StatusOK {
 			t.Fatalf("review %s: HTTP %d: %s", issue, response.Code, response.Body.String())
@@ -349,7 +363,98 @@ func TestPostgreSQLIssueReviewsSurviveARealRescan(t *testing.T) {
 	if attentionOf(albumOne) != beforeOne || attentionOf(suites) != beforeSuites {
 		t.Fatalf("after the basis changed: %d, %d; want everything counted again: %d, %d", attentionOf(albumOne), attentionOf(suites), beforeOne, beforeSuites)
 	}
+	// 详情说明“核对之后情况变了”：三类问题都回到待处理，核对行还在。
+	var stale catalog.ReleaseIssues
+	getJSON(t, application, &admin, "/api/v1/releases/"+suites+"/issues", &stale)
+	for _, field := range stale.Fields {
+		if field.Field == "media_type" && (field.Status != "open" || field.Review == nil) {
+			t.Fatalf("the media type after its candidates changed = %+v", field)
+		}
+	}
+	if stale.MissingTracks == nil || stale.MissingTracks.Status != "open" || stale.MissingTracks.Review == nil {
+		t.Fatalf("the missing tracks after the track went missing again = %+v", stale.MissingTracks)
+	}
+	getJSON(t, application, &admin, "/api/v1/releases/"+albumOne+"/issues", &stale)
+	if stale.Grouping == nil || stale.Grouping.Status != "open" || stale.Grouping.Review == nil {
+		t.Fatalf("the grouping conflict after its files changed = %+v", stale.Grouping)
+	}
 	if countRows(t, application, `SELECT COUNT(*) FROM release_issue_reviews`) != reviewsBefore || countRows(t, application, `SELECT COUNT(*) FROM operations`) != operationsBefore {
 		t.Fatal("a rescan deleted the stale reviews or changed the operation records")
+	}
+}
+
+// 读取接口：只有管理员；筛选与分页的 400；版本的问题带依据令牌、核对人的用户名；与核对接口用同一个令牌。
+func TestPostgreSQLIssueReadAPI(t *testing.T) {
+	environment := newIssueEnvironment(t)
+	application := environment.application
+	for _, testCase := range []struct {
+		name   string
+		user   *integrationTestUser
+		path   string
+		status int
+		code   string
+	}{
+		{"list without a session", nil, "/api/v1/release-issues", 401, "unauthorized"},
+		{"list as an ordinary member", &environment.ordinary, "/api/v1/release-issues", 403, "forbidden"},
+		{"detail without a session", nil, "/api/v1/releases/" + environment.a + "/issues", 401, "unauthorized"},
+		{"detail as an ordinary member", &environment.ordinary, "/api/v1/releases/" + environment.a + "/issues", 403, "forbidden"},
+		{"unknown status", &environment.admin, "/api/v1/release-issues?status=ignored", 400, "invalid_filter"},
+		{"empty status", &environment.admin, "/api/v1/release-issues?status=", 400, "invalid_filter"},
+		{"two statuses", &environment.admin, "/api/v1/release-issues?status=open&status=reviewed", 400, "invalid_filter"},
+		{"unknown category", &environment.admin, "/api/v1/release-issues?category=artwork", 400, "invalid_filter"},
+		{"page zero", &environment.admin, "/api/v1/release-issues?page=0", 400, "invalid_pagination"},
+		{"page size over the limit", &environment.admin, "/api/v1/release-issues?page_size=101", 400, "invalid_pagination"},
+		{"malformed release id", &environment.admin, "/api/v1/releases/not-a-uuid/issues", 400, "invalid_id"},
+		{"release without visible tracks", &environment.admin, "/api/v1/releases/" + environment.hidden + "/issues", 404, "not_found"},
+		{"unknown release", &environment.admin, "/api/v1/releases/" + uuid.New() + "/issues", 404, "not_found"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			requireAPIError(t, application.request(t, http.MethodGet, testCase.path, nil, testCase.user, nil), testCase.status, testCase.code)
+		})
+	}
+
+	// 列表：A（1 个字段、1 个归组、1 首缺失）与 B（2 个字段），各类之和等于 attention_count。
+	var listing struct {
+		Items []struct {
+			Release struct {
+				ID             string `json:"id"`
+				AttentionCount int64  `json:"attention_count"`
+			} `json:"release"`
+			Open catalog.IssueCounts `json:"open"`
+		} `json:"items"`
+		Summary    catalog.IssueSummary `json:"summary"`
+		Pagination struct {
+			Total int64 `json:"total"`
+		} `json:"pagination"`
+	}
+	getJSON(t, application, &environment.admin, "/api/v1/release-issues", &listing)
+	if len(listing.Items) != 2 || listing.Items[0].Release.ID != environment.a || listing.Items[1].Release.ID != environment.b || listing.Pagination.Total != 2 {
+		t.Fatalf("issue list = %+v", listing)
+	}
+	for _, item := range listing.Items {
+		if item.Open.Fields+item.Open.Grouping+item.Open.MissingTracks != item.Release.AttentionCount {
+			t.Fatalf("%s: open %+v does not sum to attention_count %d", item.Release.ID, item.Open, item.Release.AttentionCount)
+		}
+	}
+	if listing.Summary.Open != (catalog.IssueSummaryCounts{All: 2, Fields: 2, Grouping: 1, MissingTracks: 1}) {
+		t.Fatalf("summary = %+v", listing.Summary)
+	}
+
+	// 详情的令牌就是核对要带回的令牌；核对之后带上核对人的用户名。
+	var detail catalog.ReleaseIssues
+	getJSON(t, application, &environment.admin, "/api/v1/releases/"+environment.a+"/issues", &detail)
+	if detail.Grouping == nil || detail.Grouping.Basis != environment.token(t, environment.a, "grouping") || detail.MissingTracks == nil || detail.MissingTracks.Count != 1 {
+		t.Fatalf("detail = %+v", detail)
+	}
+	if response := environment.postReview(t, &environment.admin, environment.a, uuid.New(), reviewBody(detail.Revision, "grouping", detail.Grouping.Basis)); response.Code != http.StatusOK {
+		t.Fatalf("review with the token from the detail: HTTP %d: %s", response.Code, response.Body.String())
+	}
+	getJSON(t, application, &environment.admin, "/api/v1/releases/"+environment.a+"/issues", &detail)
+	var username string
+	if err := application.database.QueryRow(`SELECT username FROM users WHERE id=$1::uuid`, environment.admin.id).Scan(&username); err != nil {
+		t.Fatalf("read the admin's username: %v", err)
+	}
+	if detail.Grouping.Status != "reviewed" || detail.Grouping.Review == nil || detail.Grouping.Review.Reviewer.ID != environment.admin.id || detail.Grouping.Review.Reviewer.Username != username {
+		t.Fatalf("grouping after the review = %+v (review %+v)", detail.Grouping, detail.Grouping.Review)
 	}
 }

@@ -534,15 +534,27 @@ func recordGroupDefaultSamples(t *testing.T, application *integrationTestApplica
 	samples.record("operations/reverted-default", call(http.MethodPost, revertPath(setOperation), nil, admin, key("0404")), http.StatusOK)
 }
 
-// recordIssueReviewSamples 记录核对问题的接口：核对归组冲突、核对缺失曲目、取消核对与撤销取消核对的响应，依据已变化与过期版本号两种错误，
-// 以及这张专辑的操作记录（三种改动摘要都有）。素材是直接写库的一张合成专辑：同一目录的归组冲突与一首缺失曲目
-// （扫描从不改它们，与扫描造出的完全相同；真实重扫见 TestPostgreSQLIssueReviewsSurviveARealRescan）。
+// recordIssueReviewSamples 记录问题的读取与核对接口：问题列表（待处理、已核对、按类别筛选）与版本的问题（字段、归组冲突与同一目录的
+// 另一个版本、缺失曲目；最后一份带已核对的归组与“核对之后又有曲目缺失”），核对归组冲突、核对缺失曲目、取消核对与撤销取消核对的响应，
+// 依据已变化、过期版本号与筛选条件无效三种错误，以及这张专辑的操作记录。素材是直接写库的两张同一目录的合成专辑：
+// 一张有拿不准的介质类型、归组冲突与一首缺失曲目，另一张只有归组冲突（扫描从不改这些行，与扫描造出的相同；
+// 真实重扫见 TestPostgreSQLIssueReviewsSurviveARealRescan）。
 func recordIssueReviewSamples(t *testing.T, application *integrationTestApplication, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser) {
 	t.Helper()
 	rootID := uuid.New()
 	mustExec(t, application, `INSERT INTO library_roots(id,path,status,revision) VALUES($1::uuid,$2,'active',1)`, rootID, filepath.Join(application.allowedRoot, "issues"))
 	releaseID, _ := insertGroupedRelease(t, application, rootID, groupedRelease{title: "Sample Split Album", artist: "Sample Quartet", year: 2012, tracks: []string{"present", "missing"}})
-	mustExec(t, application, `INSERT INTO release_grouping_evidence(release_id,candidate_kind,rule_id,source_refs,reason) VALUES($1::uuid,'same_dir_split','organizer_v2','["split/01.flac","split/02.flac"]','same_directory_conflict')`, releaseID)
+	siblingID, _ := insertGroupedRelease(t, application, rootID, groupedRelease{title: "Sample Split Album II", artist: "Sample Quartet", year: 2012, tracks: []string{"present"}})
+	mustExec(t, application, `UPDATE releases SET relative_directory='split', edition='Live' WHERE id=$1::uuid OR id=$2::uuid`, releaseID, siblingID)
+	mustExec(t, application, `UPDATE releases SET edition=NULL WHERE id=$1::uuid`, siblingID)
+	for _, id := range []string{releaseID, siblingID} {
+		mustExec(t, application, `INSERT INTO release_grouping_evidence(release_id,candidate_kind,rule_id,source_refs,reason) VALUES($1::uuid,'same_dir_split','organizer_v2','["split/01.flac","split/02.flac"]','same_directory_conflict')`, id)
+	}
+	mustExec(t, application, `INSERT INTO release_field_decisions(release_id,field_key,selected_value,selected_source,confidence,action,rule_id,candidates,reason)
+		VALUES($1::uuid,'media_type',to_jsonb('CD'::text),'tag','medium','uncertain_apply','majority_v1',to_jsonb(ARRAY['CD','Vinyl']::text[]),'inconsistent_candidates')`, releaseID)
+	samples.record("release-issues/list", call(http.MethodGet, "/api/v1/release-issues", nil, admin), http.StatusOK)
+	samples.record("release-issues/get", call(http.MethodGet, "/api/v1/releases/"+releaseID+"/issues", nil, admin), http.StatusOK)
+	samples.record("errors/invalid-filter", call(http.MethodGet, "/api/v1/release-issues?status=ignored", nil, admin), http.StatusBadRequest)
 	store := catalog.NewStore(application.database)
 	token := func(issue string) string {
 		t.Helper()
@@ -566,6 +578,12 @@ func recordIssueReviewSamples(t *testing.T, application *integrationTestApplicat
 	samples.record("errors/revision-conflict-issue", call(http.MethodPost, path, unreviewBody(3, "missing_tracks"), admin, key("0505")), http.StatusConflict)
 	samples.record("operations/reverted-issue-review", call(http.MethodPost, revertPath(decodeJSONMap(t, unreviewed)["operation_id"].(string)), nil, admin, key("0506")), http.StatusOK)
 	samples.record("operations/list-issue-reviews", call(http.MethodGet, "/api/v1/operations?release_id="+releaseID+"&page_size=10", nil, admin), http.StatusOK)
+	// 核对之后又有一首曲目缺失：缺失曲目回到待处理，核对行仍在。
+	mustExec(t, application, `INSERT INTO tracks(id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,source_kind)
+		SELECT $2::uuid, media.id, 3, 'Sample Split Album track 3', 'Sample Quartet', 1, $3::uuid, 'split/03.flac', 'missing', NOW(), 'physical' FROM media WHERE media.release_id=$1::uuid`, releaseID, uuid.New(), rootID)
+	samples.record("release-issues/get-reviewed", call(http.MethodGet, "/api/v1/releases/"+releaseID+"/issues", nil, admin), http.StatusOK)
+	samples.record("release-issues/list-reviewed", call(http.MethodGet, "/api/v1/release-issues?status=reviewed", nil, admin), http.StatusOK)
+	samples.record("release-issues/list-missing-tracks", call(http.MethodGet, "/api/v1/release-issues?category=missing_tracks&page_size=1", nil, admin), http.StatusOK)
 }
 
 // 样本里的内嵌歌词：同步歌词带元标签、间奏（空行）、同一时间戳的双语两行与一行多个时间戳；纯文本歌词带分段。
@@ -845,9 +863,11 @@ var (
 	// sampleUUIDPattern 匹配字符串中出现的每一个 UUID，包括嵌在路径里的（例如播放预检的音频地址）。
 	sampleUUIDPattern = regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
 	sampleTimePattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$`)
+	// sampleDigestPattern 匹配整个字符串是 SHA-256 十六进制摘要的值（问题的依据令牌）：依据含 UUID 与时间，摘要每次运行都不同。
+	sampleDigestPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
 
-// encodeAPISample 把响应写成 {"status":…, "body":…}：用 UseNumber 保留数字原样，规范化 UUID 与时间，
+// encodeAPISample 把响应写成 {"status":…, "body":…}：用 UseNumber 保留数字原样，规范化 UUID、时间与依据令牌，
 // 按键排序、两空格缩进、末尾换行，使重复运行得到完全相同的字节。
 func encodeAPISample(t *testing.T, name string, status int, body []byte) []byte {
 	t.Helper()
@@ -879,10 +899,11 @@ type sampleNormalizer struct {
 	uuidOrder []string
 	uuids     map[string]string
 	instants  map[int64]string
+	digests   map[string]string
 }
 
 func newSampleNormalizer() *sampleNormalizer {
-	return &sampleNormalizer{uuids: map[string]string{}, instants: map[int64]string{}}
+	return &sampleNormalizer{uuids: map[string]string{}, instants: map[int64]string{}, digests: map[string]string{}}
 }
 
 func (normalizer *sampleNormalizer) collect(value any) {
@@ -906,6 +927,11 @@ func (normalizer *sampleNormalizer) collect(value any) {
 		if sampleTimePattern.MatchString(typed) {
 			if parsed, err := time.Parse(time.RFC3339Nano, typed); err == nil {
 				normalizer.instants[parsed.UnixNano()] = ""
+			}
+		}
+		if sampleDigestPattern.MatchString(typed) {
+			if _, seen := normalizer.digests[typed]; !seen {
+				normalizer.digests[typed] = fmt.Sprintf("%064d", len(normalizer.digests)+1)
 			}
 		}
 	}
@@ -945,6 +971,9 @@ func (normalizer *sampleNormalizer) replace(value any) any {
 			if parsed, err := time.Parse(time.RFC3339Nano, typed); err == nil {
 				return normalizer.instants[parsed.UnixNano()]
 			}
+		}
+		if digest, isDigest := normalizer.digests[typed]; isDigest {
+			return digest
 		}
 		return sampleUUIDPattern.ReplaceAllStringFunc(typed, func(found string) string {
 			return normalizer.uuids[strings.ToLower(found)]

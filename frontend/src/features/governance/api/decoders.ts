@@ -1,4 +1,5 @@
 import { decode as d } from "../../../shared/api";
+import { releaseSummaryDecoder } from "../../catalog";
 
 // 发行字段修正（M3）的响应解码。可修正的字段与后端 backend/internal/catalog/corrections.go 的 correctableFields 一致，
 // 顺序也是接口返回的顺序。后端新增可修正字段时，样本契约测试先失败，在这里补上才算确认前端已经知道。
@@ -63,6 +64,107 @@ const issueReviewResultDecoder = d.object({
   reviewed: d.boolean(),
   revision: d.integer({ min: 1 }),
   operation_id: d.uuid(),
+});
+
+// 问题列表与版本的问题（管理员）。上限与后端一致（backend/internal/catalog/issue_read.go）：超界的响应整体拒绝。
+const MAX_ISSUE_PAGE_ITEMS = 100;
+const MAX_FIELD_ISSUES = 100; // 字段决定的上限（maxReleaseEvidence）
+const MAX_ISSUE_CANDIDATES = 20;
+const MAX_ISSUE_SOURCE_REFS = 100;
+const MAX_ISSUE_SIBLINGS = 20;
+const MAX_ISSUE_MISSING_TRACKS = 1000;
+const MAX_ISSUE_TEXT = 500; // 值、候选、原因码与来源路径，后端按 500 字节截断
+
+const ISSUE_STATUSES = ["open", "reviewed"] as const;
+export type IssueStatus = (typeof ISSUE_STATUSES)[number];
+
+const issueCountsDecoder = d.object({
+  fields: d.integer({ min: 0 }),
+  grouping: d.integer({ min: 0, max: 1 }),
+  missing_tracks: d.integer({ min: 0 }),
+});
+const issueSummaryCountsDecoder = d.object({
+  all: d.integer({ min: 0 }),
+  fields: d.integer({ min: 0 }),
+  grouping: d.integer({ min: 0 }),
+  missing_tracks: d.integer({ min: 0 }),
+});
+
+// 列表的一行：版本摘要（attention_count 等于 open 三项之和）、所在的组、版本说明，以及待处理与已核对的数目；
+// summary 是筛选项上的数字，不随类别筛选与分页变化。
+const issueListItemDecoder = d.object({
+  release: releaseSummaryDecoder,
+  group_id: d.uuid(),
+  edition: d.nullable(d.string()),
+  open: issueCountsDecoder,
+  reviewed: issueCountsDecoder,
+});
+const issuePageDecoder = d.object({
+  items: d.array(issueListItemDecoder, { max: MAX_ISSUE_PAGE_ITEMS }),
+  summary: d.object({ open: issueSummaryCountsDecoder, reviewed: issueSummaryCountsDecoder }),
+  pagination: d.object({
+    page: d.integer({ min: 1 }),
+    page_size: d.integer({ min: 1, max: MAX_ISSUE_PAGE_ITEMS }),
+    total: d.integer({ min: 0 }),
+  }),
+});
+
+// 核对状态：设下它的操作、时间与核对人（用户已不存在时用户名为空串）。
+const issueReviewDecoder = d.object({
+  operation_id: d.uuid(),
+  reviewed_at: d.timestamp(),
+  reviewer: d.object({ id: d.uuid(), username: d.string({ max: 200 }) }),
+});
+// 依据令牌：问题依据的 SHA-256，核对时原样带回。
+const basisDecoder = d.string({ min: 64, max: 64 });
+const issueTextDecoder = d.string({ max: MAX_ISSUE_TEXT });
+
+// 字段名按字符串解码（与证据一致）；只有来源类型与介质类型 reviewable 为真，并带依据令牌。
+const fieldIssueDecoder = d.object({
+  field: d.string({ min: 1, max: 64 }),
+  value: d.nullable(issueTextDecoder),
+  reason_code: d.nullable(issueTextDecoder),
+  candidates: d.array(issueTextDecoder, { max: MAX_ISSUE_CANDIDATES }),
+  reviewable: d.boolean(),
+  basis: d.nullable(basisDecoder),
+  status: d.oneOf(ISSUE_STATUSES),
+  review: d.nullable(issueReviewDecoder),
+});
+const groupingIssueDecoder = d.object({
+  reason_codes: d.array(issueTextDecoder, { max: MAX_ISSUE_CANDIDATES }),
+  source_refs: d.array(issueTextDecoder, { max: MAX_ISSUE_SOURCE_REFS }),
+  truncated: d.boolean(),
+  siblings: d.array(d.object({ release_id: d.uuid(), group_id: d.uuid(), title: d.string() }), { max: MAX_ISSUE_SIBLINGS }),
+  basis: basisDecoder,
+  status: d.oneOf(ISSUE_STATUSES),
+  review: d.nullable(issueReviewDecoder),
+});
+const missingTrackDecoder = d.object({
+  id: d.uuid(),
+  title: d.string(),
+  medium_position: d.integer({ min: 0 }),
+  position: d.integer({ min: 0 }),
+  source: issueTextDecoder,
+  last_seen_at: d.timestamp(),
+  reviewed: d.boolean(),
+});
+const missingTracksIssueDecoder = d.object({
+  count: d.integer({ min: 1 }),
+  tracks: d.array(missingTrackDecoder, { min: 1, max: MAX_ISSUE_MISSING_TRACKS }),
+  truncated: d.boolean(),
+  basis: basisDecoder,
+  status: d.oneOf(ISSUE_STATUSES),
+  review: d.nullable(issueReviewDecoder),
+});
+
+// 一个版本的全部问题：status 为 open 而 review 不为 null，就是“核对之后情况变了”。
+const releaseIssuesDecoder = d.object({
+  release_id: d.uuid(),
+  group_id: d.uuid(),
+  revision: d.integer({ min: 1 }),
+  fields: d.array(fieldIssueDecoder, { max: MAX_FIELD_ISSUES }),
+  grouping: d.nullable(groupingIssueDecoder),
+  missing_tracks: d.nullable(missingTracksIssueDecoder),
 });
 
 // 操作记录（管理员）。type 是记录自己的类型；changes.kind 是前后状态按哪种类型解释（撤销记录与它所撤销的操作同类型）。
@@ -157,6 +259,8 @@ export const decodeCorrectionResult = d.defineDecoder(correctionResultDecoder);
 export const decodeGroupChangeResult = d.defineDecoder(groupChangeResultDecoder);
 export const decodeGroupDefaultResult = d.defineDecoder(groupDefaultResultDecoder);
 export const decodeIssueReviewResult = d.defineDecoder(issueReviewResultDecoder);
+export const decodeIssuePage = d.defineDecoder(issuePageDecoder);
+export const decodeReleaseIssues = d.defineDecoder(releaseIssuesDecoder);
 export const decodeOperationPage = d.defineDecoder(operationPageDecoder);
 export const decodeRevertResult = d.defineDecoder(revertResultDecoder);
 
@@ -167,6 +271,15 @@ export type CorrectionResultDTO = d.Infer<typeof correctionResultDecoder>;
 export type GroupChangeResultDTO = d.Infer<typeof groupChangeResultDecoder>;
 export type GroupDefaultResultDTO = d.Infer<typeof groupDefaultResultDecoder>;
 export type IssueReviewResultDTO = d.Infer<typeof issueReviewResultDecoder>;
+export type IssueCountsDTO = d.Infer<typeof issueCountsDecoder>;
+export type IssueListItemDTO = d.Infer<typeof issueListItemDecoder>;
+export type IssuePageDTO = d.Infer<typeof issuePageDecoder>;
+export type IssueReviewDTO = d.Infer<typeof issueReviewDecoder>;
+export type FieldIssueDTO = d.Infer<typeof fieldIssueDecoder>;
+export type GroupingIssueDTO = d.Infer<typeof groupingIssueDecoder>;
+export type MissingTrackDTO = d.Infer<typeof missingTrackDecoder>;
+export type MissingTracksIssueDTO = d.Infer<typeof missingTracksIssueDecoder>;
+export type ReleaseIssuesDTO = d.Infer<typeof releaseIssuesDecoder>;
 export type DefaultVersionDTO = d.Infer<typeof defaultVersionDecoder>;
 export type OperationItemDTO = d.Infer<typeof operationItemDecoder>;
 export type OperationPageDTO = d.Infer<typeof operationPageDecoder>;

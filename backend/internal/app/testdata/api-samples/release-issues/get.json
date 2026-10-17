@@ -1,0 +1,61 @@
+{
+  "body": {
+    "fields": [
+      {
+        "basis": "0000000000000000000000000000000000000000000000000000000000000001",
+        "candidates": [
+          "CD",
+          "Vinyl"
+        ],
+        "field": "media_type",
+        "reason_code": "inconsistent_candidates",
+        "review": null,
+        "reviewable": true,
+        "status": "open",
+        "value": "CD"
+      }
+    ],
+    "group_id": "00000000-0000-4000-8000-000000000001",
+    "grouping": {
+      "basis": "0000000000000000000000000000000000000000000000000000000000000002",
+      "reason_codes": [
+        "same_directory_conflict"
+      ],
+      "review": null,
+      "siblings": [
+        {
+          "group_id": "00000000-0000-4000-8000-000000000002",
+          "release_id": "00000000-0000-4000-8000-000000000003",
+          "title": "Sample Split Album II"
+        }
+      ],
+      "source_refs": [
+        "split/01.flac",
+        "split/02.flac"
+      ],
+      "status": "open",
+      "truncated": false
+    },
+    "missing_tracks": {
+      "basis": "0000000000000000000000000000000000000000000000000000000000000003",
+      "count": 1,
+      "review": null,
+      "status": "open",
+      "tracks": [
+        {
+          "id": "00000000-0000-4000-8000-000000000004",
+          "last_seen_at": "2026-01-01T00:00:00Z",
+          "medium_position": 1,
+          "position": 2,
+          "reviewed": false,
+          "source": "00000000-0000-4000-8000-000000000005/1.flac",
+          "title": "Sample Split Album track 2"
+        }
+      ],
+      "truncated": false
+    },
+    "release_id": "00000000-0000-4000-8000-000000000005",
+    "revision": 1
+  },
+  "status": 200
+}
