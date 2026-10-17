@@ -1,5 +1,6 @@
 {
   "body": {
+    "edition": "Live",
     "fields": [
       {
         "basis": "0000000000000000000000000000000000000000000000000000000000000001",
@@ -53,6 +54,19 @@
         }
       ],
       "truncated": false
+    },
+    "release": {
+      "album_artist": null,
+      "artist": "Sample Quartet",
+      "artwork": null,
+      "attention_count": 3,
+      "id": "00000000-0000-4000-8000-000000000005",
+      "media_type": null,
+      "medium_count": 1,
+      "source_type": null,
+      "title": "Sample Split Album",
+      "track_count": 1,
+      "year": 2012
     },
     "release_id": "00000000-0000-4000-8000-000000000005",
     "revision": 1

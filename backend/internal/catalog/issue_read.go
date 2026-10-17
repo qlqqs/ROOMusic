@@ -230,12 +230,15 @@ type MissingTracksIssue struct {
 	Review    *IssueReviewInfo `json:"review"`
 }
 
-// ReleaseIssues 是一个可见版本的全部问题。Fields 永远非 nil；没有归组冲突或缺失曲目时对应一项为 null。
+// ReleaseIssues 是一个可见版本的全部问题。Release 是版本摘要（页面的标题与“需要关注”），Edition 是版本说明；
+// Fields 永远非 nil；没有归组冲突或缺失曲目时对应一项为 null。
 // 状态 open 表示还有待处理的部分；有核对行（Review 非空）而状态是 open，就是“核对之后情况变了”。
 type ReleaseIssues struct {
 	ReleaseID     string              `json:"release_id"`
 	GroupID       string              `json:"group_id"`
 	Revision      int64               `json:"revision"`
+	Release       ReleaseSummary      `json:"release"`
+	Edition       *string             `json:"edition"`
 	Fields        []FieldIssue        `json:"fields"`
 	Grouping      *GroupingIssue      `json:"grouping"`
 	MissingTracks *MissingTracksIssue `json:"missing_tracks"`
@@ -286,15 +289,22 @@ func issueStatus(open bool) string {
 // LoadReleaseIssues 读取一个可见版本的全部问题；不存在或不可见时返回 ErrReleaseNotFound。
 func (s *Store) LoadReleaseIssues(ctx context.Context, releaseID string) (ReleaseIssues, error) {
 	result := ReleaseIssues{ReleaseID: releaseID, Fields: []FieldIssue{}}
-	var sourceRoot, directory sql.NullString
-	err := s.database.QueryRowContext(ctx, `SELECT releases.group_id::text, releases.edit_revision, releases.source_root_id::text, releases.relative_directory
-		FROM `+releaseSource+` WHERE releases.id=$1::uuid AND `+releaseVisiblePredicate, releaseID).Scan(&result.GroupID, &result.Revision, &sourceRoot, &directory)
+	var sourceRoot, directory, edition sql.NullString
+	var columns releaseSummaryColumns
+	err := s.database.QueryRowContext(ctx, `SELECT `+releaseSummaryProjection+`, releases.group_id::text, releases.edit_revision,
+			releases.source_root_id::text, releases.relative_directory, NULLIF(BTRIM(releases.edition), '')
+		FROM `+releaseSource+releaseSummaryArtworkJoin+` WHERE releases.id=$1::uuid AND `+releaseVisiblePredicate, releaseID).
+		Scan(append(columns.targets(), &result.GroupID, &result.Revision, &sourceRoot, &directory, &edition)...)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ReleaseIssues{}, ErrReleaseNotFound
 	}
 	if err != nil {
 		return ReleaseIssues{}, fmt.Errorf("%w: load release: %w", ErrQuery, err)
 	}
+	if result.Release, err = columns.summary(); err != nil {
+		return ReleaseIssues{}, err
+	}
+	result.Edition = stringPointerFromNull(edition)
 	reviews, err := s.loadIssueReviews(ctx, releaseID)
 	if err != nil {
 		return ReleaseIssues{}, err

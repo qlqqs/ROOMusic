@@ -1,8 +1,8 @@
-import { Disc3, History, Music2, FolderSearch, LayoutDashboard, Users, type LucideIcon } from "lucide-react";
+import { ClipboardCheck, Disc3, History, Music2, FolderSearch, LayoutDashboard, Users, type LucideIcon } from "lucide-react";
 import type { UserRole } from "../../features/auth";
 
 export type NavItem = {
-  to: "/" | "/albums" | "/now-playing" | "/library" | "/members" | "/operations";
+  to: "/" | "/albums" | "/now-playing" | "/library" | "/issues" | "/members" | "/operations";
   label: string;
   icon: LucideIcon;
   /** 只有管理员看到；后端仍然独立鉴权，这里只决定显示。 */
@@ -17,6 +17,7 @@ const navItems: readonly NavItem[] = [
   { to: "/albums", label: "专辑", icon: Disc3, adminOnly: false, group: "聆听" },
   { to: "/now-playing", label: "正在播放", icon: Music2, adminOnly: false, group: "聆听" },
   { to: "/library", label: "扫描目录", icon: FolderSearch, adminOnly: true, group: "资料库" },
+  { to: "/issues", label: "元数据问题", icon: ClipboardCheck, adminOnly: true, group: "资料库" },
   { to: "/members", label: "成员", icon: Users, adminOnly: true, group: "资料库" },
   { to: "/operations", label: "操作记录", icon: History, adminOnly: true, group: "资料库" },
 ];

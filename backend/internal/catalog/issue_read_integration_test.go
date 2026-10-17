@@ -132,8 +132,9 @@ func TestPostgreSQLReleaseIssuesDetail(t *testing.T) {
 	}
 
 	issues := fixture.releaseIssues(release.releaseID)
-	if issues.ReleaseID != release.releaseID || issues.GroupID != release.groupID || issues.Revision != 1 {
-		t.Fatalf("header = %+v", issues)
+	if issues.ReleaseID != release.releaseID || issues.GroupID != release.groupID || issues.Revision != 1 ||
+		issues.Release.ID != release.releaseID || issues.Release.Title != "有问题的版本" || issues.Release.AttentionCount != 6 || issues.Edition != nil {
+		t.Fatalf("header = %+v (release %+v)", issues, issues.Release)
 	}
 	// 字段：修正过的流派不列出；只有来源类型与介质类型可以核对、带依据令牌。
 	byField := map[string]FieldIssue{}

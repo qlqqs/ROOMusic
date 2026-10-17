@@ -5,14 +5,21 @@ import {
   decodeCorrectionState,
   decodeGroupChangeResult,
   decodeGroupDefaultResult,
+  decodeIssuePage,
+  decodeIssueReviewResult,
   decodeOperationPage,
+  decodeReleaseIssues,
   decodeRevertResult,
   type CorrectableField,
   type CorrectionResultDTO,
   type CorrectionStateDTO,
   type GroupChangeResultDTO,
   type GroupDefaultResultDTO,
+  type IssuePageDTO,
+  type IssueReviewResultDTO,
   type OperationPageDTO,
+  type ReleaseIssuesDTO,
+  type ReviewableIssue,
   type RevertResultDTO,
 } from "./decoders";
 
@@ -92,4 +99,42 @@ export function fetchOperations(params: OperationListParams): Promise<ApiRespons
 /** 撤销一条操作：没有请求体；只有目标（发行或专辑）上最近一次修改可以撤销。 */
 export function revertOperation(operationId: string, idempotencyKey: string): Promise<ApiResponse<RevertResultDTO>> {
   return apiRequest({ method: "POST", path: `/api/v1/operations/${operationId}/revert`, idempotencyKey }, decodeRevertResult);
+}
+
+export type IssueListParams = {
+  status: "open" | "reviewed";
+  /** 只看这一类问题；undefined 是全部类别。 */
+  category?: "fields" | "grouping" | "missing_tracks" | undefined;
+  page: number;
+  pageSize: number;
+  signal?: AbortSignal | undefined;
+};
+
+/** 问题列表（仅管理员）：有待处理（或已核对）问题的版本，按专辑名排序，另带筛选项上的数字。 */
+export function fetchIssues(params: IssueListParams): Promise<ApiResponse<IssuePageDTO>> {
+  const query = new URLSearchParams({ status: params.status, page: String(params.page), page_size: String(params.pageSize) });
+  if (params.category !== undefined) query.set("category", params.category);
+  return apiRequest({ method: "GET", path: `/api/v1/release-issues?${query}`, signal: params.signal }, decodeIssuePage);
+}
+
+/** 一个版本的全部问题（仅管理员）：字段、归组冲突与缺失曲目，可以核对的问题带依据令牌与核对状态。 */
+export function fetchReleaseIssues(releaseId: string, signal?: AbortSignal): Promise<ApiResponse<ReleaseIssuesDTO>> {
+  return apiRequest({ method: "GET", path: `/api/v1/releases/${releaseId}/issues`, signal }, decodeReleaseIssues);
+}
+
+/** 核对的请求体：review 带页面读到的依据令牌（页面打开之后问题变了时 409 issue_changed），unreview 取消核对。 */
+export type IssueReviewBody = { action: "review"; basis: string } | { action: "unreview" };
+
+/** 核对或取消核对一类问题：要带页面读到的发行的人工修改版本号。 */
+export function reviewReleaseIssue(
+  releaseId: string,
+  expectedRevision: number,
+  issue: ReviewableIssue,
+  body: IssueReviewBody,
+  idempotencyKey: string,
+): Promise<ApiResponse<IssueReviewResultDTO>> {
+  return apiRequest(
+    { method: "POST", path: `/api/v1/releases/${releaseId}/issue-review`, body: { expected_revision: expectedRevision, issue, ...body }, idempotencyKey },
+    decodeIssueReviewResult,
+  );
 }

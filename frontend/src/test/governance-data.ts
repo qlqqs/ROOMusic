@@ -1,12 +1,18 @@
 import type { ReleaseGroupSummaryDTO, ReleaseSummaryDTO } from "../features/catalog/api/decoders";
 import {
   CORRECTABLE_FIELDS,
+  REVIEWABLE_ISSUES,
   type CorrectableField,
   type CorrectionFieldDTO,
   type CorrectionStateDTO,
   type DefaultVersionDTO,
+  type FieldIssueDTO,
+  type IssueCountsDTO,
+  type IssueListItemDTO,
   type OperationChangesDTO,
   type OperationItemDTO,
+  type ReleaseIssuesDTO,
+  type ReviewableIssue,
 } from "../features/governance/api/decoders";
 import { failure, groupDetailFor, releaseDetailFor, releaseSummaryFor, type ApiResult, type CatalogData } from "./catalog-data";
 
@@ -28,7 +34,7 @@ type ReleaseState = {
   baseArtist: string;
 };
 
-type OperationType = "release_correction" | "release_group_change" | "release_group_default" | "revert";
+type OperationType = "release_correction" | "release_group_change" | "release_group_default" | "release_issue_review" | "revert";
 
 /** 记录的目标：发行（修正、归组）或专辑（默认版本）。 */
 type OperationTarget = { type: "release" | "release_group"; id: string };
@@ -50,12 +56,30 @@ type OperationRecord = {
 /** 专辑自己的状态：人工修改版本号（设定、清除默认版本与撤销递增；修正与归组不改它）与已存的默认版本（可能是失效中的，即不是这个专辑的成员）。 */
 type GroupState = { revision: number; defaultReleaseId: string | null };
 
+/**
+ * 一个版本的问题（扫描结论）：拿不准的字段（值、原因与候选）、归组冲突（涉及的文件）与缺失曲目。依据令牌由内容算出：
+ * 内容不变令牌不变，scanIssues 改了内容就是“扫描之后情况变了”。核对记住核对时的令牌与操作，令牌不同时问题重新是待处理。
+ */
+export type IssueSeed = {
+  fields?: readonly { field: string; value: string | null; reason: string; candidates: readonly string[] }[];
+  grouping?: { sourceRefs: readonly string[]; siblings?: readonly { releaseId: string; groupId: string; title: string }[] } | null;
+  missing?: readonly { id: string; title: string; medium: number; position: number; source: string; lastSeenAt: string }[];
+};
+
+type IssueReview = { basis: string; operationId: string; reviewedAt: string };
+/** 缺失曲目的核对逐首记住：核对时每首曲目的“最后一次看到”的时间。 */
+type MissingReview = IssueReview & { tracks: ReadonlyMap<string, string> };
+
+type IssueState = { seed: IssueSeed; reviews: Map<ReviewableIssue, IssueReview | MissingReview> };
+
 export type GovernanceData = {
   catalog: CatalogData;
   /** 记录里的操作者。 */
   actor: { id: string; username: string };
   releases: Map<string, ReleaseState>;
   groups: Map<string, GroupState>;
+  /** 有问题的版本（测试用 seedIssues 预置）；没有登记的版本没有问题，“需要关注”取专辑数据里的值。 */
+  issues: Map<string, IssueState>;
   /** 按发生的先后顺序保存；列表时倒序。 */
   operations: OperationRecord[];
   idempotency: Map<string, { fingerprint: string; result: ApiResult }>;
@@ -68,6 +92,7 @@ export function governanceDataOf(catalog: CatalogData): GovernanceData {
     actor: { id: "00000000-0000-4000-8000-000000000002", username: "curator" },
     releases: new Map(),
     groups: new Map(),
+    issues: new Map(),
     operations: [],
     idempotency: new Map(),
     counter: 0,
@@ -327,6 +352,7 @@ export function respondToCorrect(data: GovernanceData, releaseId: string, key: s
   state.corrections = next;
   state.revision += 1;
   syncRelease(data, releaseId);
+  syncAttention(data, releaseId);
   const toIntentDTO = (intent: Intent) => (intent === null ? null : intent.mode === "null" ? { mode: "null" as const } : { mode: "set" as const, value: intent.value });
   const record = nextOperation(
     data,
@@ -541,6 +567,7 @@ export function respondToRevert(data: GovernanceData, operationId: string, key: 
   if (original.target.type === "release") {
     targetState.revision += 1;
     syncRelease(data, original.target.id);
+    syncAttention(data, original.target.id);
   }
   // 专辑目标的撤销（restore 里已经递增了专辑的版本号并重写了组）。
   const revert = nextOperation(data, "revert", original.target, targetState.revision, invertChanges(original.changes), () => undefined, original.id);
@@ -548,5 +575,269 @@ export function respondToRevert(data: GovernanceData, operationId: string, key: 
   return remember(data, key, fingerprint, {
     status: 200,
     body: { operation_id: revert.id, reverts_operation_id: original.id, target_type: original.target.type, target_id: original.target.id, revision: targetState.revision },
+  });
+}
+
+// ---- 元数据问题与核对 ----
+
+/** 依据令牌：问题内容的稳定摘要（64 位十六进制，形状与后端相同）。内容不变令牌不变。 */
+function tokenOf(content: unknown): string {
+  const text = JSON.stringify(content);
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < text.length; index += 1) hash = Math.imul(hash ^ text.charCodeAt(index), 0x01000193) >>> 0;
+  return hash.toString(16).padStart(8, "0").repeat(8);
+}
+
+const fieldOf = (seed: IssueSeed, field: string) => seed.fields?.find((candidate) => candidate.field === field);
+
+/** 一类问题现在的依据令牌；问题现在不存在时为 null。 */
+function issueBasis(seed: IssueSeed, issue: ReviewableIssue): string | null {
+  if (issue === "grouping") return seed.grouping == null ? null : tokenOf(seed.grouping.sourceRefs);
+  if (issue === "missing_tracks") return seed.missing === undefined || seed.missing.length === 0 ? null : tokenOf(seed.missing.map((track) => [track.id, track.lastSeenAt]));
+  const field = fieldOf(seed, issue);
+  return field === undefined ? null : tokenOf([field.reason, field.value, field.candidates]);
+}
+
+function reviewValid(state: IssueState, issue: ReviewableIssue): boolean {
+  const review = state.reviews.get(issue);
+  return review !== undefined && review.basis === issueBasis(state.seed, issue);
+}
+
+/** 缺失曲目逐首判断：这首在核对的依据里，并且最后一次看到的时间没变。 */
+function trackReviewed(state: IssueState, track: { id: string; lastSeenAt: string }): boolean {
+  const review = state.reviews.get("missing_tracks") as MissingReview | undefined;
+  return review !== undefined && review.tracks.get(track.id) === track.lastSeenAt;
+}
+
+/** 字段是否还算问题：有人工修正的字段不算（专辑艺人的修正覆盖展示艺人）。 */
+function fieldStillOpen(data: GovernanceData, releaseId: string, field: string): boolean {
+  const correction = data.releases.get(releaseId)?.corrections;
+  if (correction === undefined) return true;
+  const key = field === "artist" ? "album_artist" : field;
+  return !CORRECTABLE_FIELDS.some((name) => name === key && correction[name] !== null);
+}
+
+function countsOf(data: GovernanceData, releaseId: string, state: IssueState): { open: IssueCountsDTO; reviewed: IssueCountsDTO } {
+  const fields = (state.seed.fields ?? []).filter((field) => fieldStillOpen(data, releaseId, field.field));
+  const reviewedField = (field: string) => (field === "source_type" || field === "media_type") && reviewValid(state, field);
+  const missing = state.seed.missing ?? [];
+  const groupingReviewed = state.seed.grouping != null && reviewValid(state, "grouping");
+  return {
+    open: {
+      fields: fields.filter((field) => !reviewedField(field.field)).length,
+      grouping: state.seed.grouping != null && !groupingReviewed ? 1 : 0,
+      missing_tracks: missing.filter((track) => !trackReviewed(state, track)).length,
+    },
+    reviewed: {
+      fields: fields.filter((field) => reviewedField(field.field)).length,
+      grouping: groupingReviewed ? 1 : 0,
+      missing_tracks: missing.filter((track) => trackReviewed(state, track)).length,
+    },
+  };
+}
+
+const sumOf = (counts: IssueCountsDTO) => counts.fields + counts.grouping + counts.missing_tracks;
+
+/** 把版本的“需要关注”写回专辑数据的各处（列表、组详情的成员与合计、版本详情），与后端用同一个算法得到的数一致。 */
+function syncAttention(data: GovernanceData, releaseId: string): void {
+  const state = data.issues.get(releaseId);
+  const groupId = groupIdOf(data.catalog, releaseId);
+  if (state === undefined || groupId === undefined) return;
+  const attention = sumOf(countsOf(data, releaseId, state).open);
+  writeGroup(data, groupId, membersOf(data.catalog, groupId).map((member) => (member.id === releaseId ? { ...member, attention_count: attention } : member)));
+  const detail = data.catalog.releases.get(releaseId) ?? releaseDetailFor(data.catalog, releaseId);
+  if (detail !== undefined) data.catalog.releases.set(releaseId, { ...detail, attention_count: attention });
+}
+
+/** 测试预置：给版本登记问题（扫描结论），“需要关注”随之变为待处理数目之和。 */
+export function seedIssues(data: GovernanceData, releaseId: string, seed: IssueSeed): void {
+  if (releaseSummaryFor(data.catalog, releaseId) === undefined) throw new Error(`没有发行 ${releaseId}`);
+  data.issues.set(releaseId, { seed, reviews: new Map() });
+  syncAttention(data, releaseId);
+}
+
+/** 模拟一次重新扫描：版本的问题变成新的样子（核对行保留，依据变了的问题重新计入）。 */
+export function scanIssues(data: GovernanceData, releaseId: string, seed: IssueSeed): void {
+  const state = data.issues.get(releaseId);
+  if (state === undefined) throw new Error(`发行 ${releaseId} 没有登记问题`);
+  state.seed = seed;
+  syncAttention(data, releaseId);
+}
+
+function issueDetailOf(data: GovernanceData, releaseId: string, state: IssueState): ReleaseIssuesDTO {
+  const summary = releaseSummaryFor(data.catalog, releaseId) as ReleaseSummaryDTO;
+  const detail = releaseDetailFor(data.catalog, releaseId);
+  const groupId = groupIdOf(data.catalog, releaseId) as string;
+  const reviewOf = (issue: ReviewableIssue) => {
+    const review = state.reviews.get(issue);
+    return review === undefined ? null : { operation_id: review.operationId, reviewed_at: review.reviewedAt, reviewer: data.actor };
+  };
+  const fields = (state.seed.fields ?? [])
+    .filter((field) => fieldStillOpen(data, releaseId, field.field))
+    .map((field): FieldIssueDTO => {
+      const reviewable = field.field === "source_type" || field.field === "media_type";
+      const issue = field.field as ReviewableIssue;
+      return {
+        field: field.field,
+        value: field.value,
+        reason_code: field.reason,
+        candidates: [...field.candidates],
+        reviewable,
+        basis: reviewable ? issueBasis(state.seed, issue) : null,
+        status: reviewable && reviewValid(state, issue) ? "reviewed" : "open",
+        review: reviewable ? reviewOf(issue) : null,
+      };
+    })
+    .sort((a, b) => a.field.localeCompare(b.field));
+  const { grouping } = state.seed;
+  const missing = state.seed.missing ?? [];
+  const counts = countsOf(data, releaseId, state);
+  return {
+    release_id: releaseId,
+    group_id: groupId,
+    revision: stateOf(data, releaseId)?.revision ?? 1,
+    release: { ...summary, attention_count: sumOf(counts.open) },
+    edition: detail?.edition ?? null,
+    fields,
+    grouping:
+      grouping == null
+        ? null
+        : {
+            reason_codes: ["same_directory_conflict"],
+            source_refs: [...grouping.sourceRefs],
+            truncated: false,
+            siblings: (grouping.siblings ?? []).map((sibling) => ({ release_id: sibling.releaseId, group_id: sibling.groupId, title: sibling.title })),
+            basis: issueBasis(state.seed, "grouping") as string,
+            status: reviewValid(state, "grouping") ? "reviewed" : "open",
+            review: reviewOf("grouping"),
+          },
+    missing_tracks:
+      missing.length === 0
+        ? null
+        : {
+            count: missing.length,
+            tracks: missing.map((track) => ({
+              id: track.id,
+              title: track.title,
+              medium_position: track.medium,
+              position: track.position,
+              source: track.source,
+              last_seen_at: track.lastSeenAt,
+              reviewed: trackReviewed(state, track),
+            })),
+            truncated: false,
+            basis: issueBasis(state.seed, "missing_tracks") as string,
+            status: counts.open.missing_tracks > 0 ? "open" : "reviewed",
+            review: reviewOf("missing_tracks"),
+          },
+  };
+}
+
+/** GET /releases/{id}/issues：版本不可见 404；没有登记问题的版本返回空的问题。 */
+export function respondToReleaseIssues(data: GovernanceData, releaseId: string): ApiResult {
+  if (releaseDetailFor(data.catalog, releaseId) === undefined || groupIdOf(data.catalog, releaseId) === undefined) return failure(404, "not_found", "发行版本不存在");
+  const state: IssueState = data.issues.get(releaseId) ?? { seed: {}, reviews: new Map() };
+  return { status: 200, body: issueDetailOf(data, releaseId, state) };
+}
+
+const ISSUE_PAGE_MAX = 100;
+
+/** GET /release-issues：状态、类别与分页；按有效标题、艺人与 ID 排序；summary 是筛选项上的数字。 */
+export function respondToIssues(data: GovernanceData, query: URLSearchParams): ApiResult {
+  const page = Number(query.get("page") ?? "1");
+  const pageSize = Number(query.get("page_size") ?? "50");
+  if (!Number.isInteger(page) || page < 1 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > ISSUE_PAGE_MAX) return failure(400, "invalid_pagination", "分页参数无效");
+  const status = query.get("status") ?? "open";
+  const category = query.get("category");
+  if ((status !== "open" && status !== "reviewed") || (category !== null && category !== "fields" && category !== "grouping" && category !== "missing_tracks")) {
+    return failure(400, "invalid_filter", "问题筛选条件无效");
+  }
+  const rows: IssueListItemDTO[] = [];
+  for (const [releaseId, state] of data.issues) {
+    const summary = releaseSummaryFor(data.catalog, releaseId);
+    const groupId = groupIdOf(data.catalog, releaseId);
+    if (summary === undefined || groupId === undefined || releaseDetailFor(data.catalog, releaseId) === undefined) continue;
+    const counts = countsOf(data, releaseId, state);
+    rows.push({ release: { ...summary, attention_count: sumOf(counts.open) }, group_id: groupId, edition: releaseDetailFor(data.catalog, releaseId)?.edition ?? null, ...counts });
+  }
+  rows.sort(
+    (a, b) => lower(a.release.title).localeCompare(lower(b.release.title)) || lower(a.release.artist).localeCompare(lower(b.release.artist)) || a.release.id.localeCompare(b.release.id),
+  );
+  const has = (counts: IssueCountsDTO, which: string | null) => (which === null ? sumOf(counts) > 0 : counts[which as keyof IssueCountsDTO] > 0);
+  const summaryOf = (side: "open" | "reviewed") => ({
+    all: rows.filter((row) => has(row[side], null)).length,
+    fields: rows.filter((row) => has(row[side], "fields")).length,
+    grouping: rows.filter((row) => has(row[side], "grouping")).length,
+    missing_tracks: rows.filter((row) => has(row[side], "missing_tracks")).length,
+  });
+  const matching = rows.filter((row) => has(row[status], category));
+  const start = (page - 1) * pageSize;
+  return {
+    status: 200,
+    body: {
+      items: matching.slice(start, start + pageSize),
+      summary: { open: summaryOf("open"), reviewed: summaryOf("reviewed") },
+      pagination: { page, page_size: pageSize, total: matching.length },
+    },
+  };
+}
+
+type RawReviewBody = { expected_revision?: unknown; issue?: unknown; action?: unknown; basis?: unknown };
+
+/**
+ * POST /releases/{id}/issue-review：依据后端 issue_review.go 的检查顺序：请求体无效 400、幂等重放、版本不可见 404、版本号过期 409 revision_conflict；
+ * review 时问题不存在或依据令牌不同 409 issue_changed，已经核对过且仍有效 400 no_changes；unreview 时没有核对 400 no_changes。
+ * 成功后发行的版本号加一，记录一条“核对问题”；撤销把核对恢复成前态。
+ */
+export function respondToIssueReview(data: GovernanceData, releaseId: string, key: string | null, body: unknown): ApiResult {
+  const raw = (body ?? {}) as RawReviewBody;
+  if (key === null) return failure(400, "invalid_input", "请求需要 Idempotency-Key（UUID）");
+  if (typeof raw.expected_revision !== "number" || raw.expected_revision < 1) return failure(400, "invalid_input", "版本号无效");
+  const issue = REVIEWABLE_ISSUES.find((candidate) => candidate === raw.issue);
+  if (issue === undefined) return failure(400, "invalid_input", "这类问题不能标记为已核对");
+  if (raw.action === "review" && (typeof raw.basis !== "string" || raw.basis === "")) return failure(400, "invalid_input", "核对需要问题的依据");
+  if (raw.action !== "review" && raw.action !== "unreview") return failure(400, "invalid_input", "核对动作无效");
+  const fingerprint = JSON.stringify({ type: "review", releaseId, expectedRevision: raw.expected_revision, issue, action: raw.action, basis: raw.basis ?? null });
+  const replay = replayOrConflict(data, key, fingerprint);
+  if (replay !== null) return replay;
+  const release = stateOf(data, releaseId);
+  if (release === undefined || groupIdOf(data.catalog, releaseId) === undefined) return failure(404, "not_found", "发行版本不存在");
+  if (release.revision !== raw.expected_revision) return failure(409, "revision_conflict", "这张专辑刚被修改过，请刷新后再试");
+  const state: IssueState = data.issues.get(releaseId) ?? { seed: {}, reviews: new Map() };
+  data.issues.set(releaseId, state);
+  const previous = state.reviews.get(issue);
+  let next: IssueReview | MissingReview | undefined;
+  if (raw.action === "review") {
+    const basis = issueBasis(state.seed, issue);
+    if (basis === null || basis !== raw.basis) return failure(409, "issue_changed", "扫描刚刚改变了这个问题，请重新读取后再核对");
+    const open = countsOf(data, releaseId, state).open;
+    const stillOpen = issue === "grouping" ? open.grouping > 0 : issue === "missing_tracks" ? open.missing_tracks > 0 : !reviewValid(state, issue);
+    if (!stillOpen) return failure(400, "no_changes", "这个问题已经核对过了");
+    next = { basis, operationId: "", reviewedAt: "" };
+    if (issue === "missing_tracks") next = { ...next, tracks: new Map((state.seed.missing ?? []).map((track) => [track.id, track.lastSeenAt])) };
+  } else if (previous === undefined) {
+    return failure(400, "no_changes", "这个问题没有核对过");
+  }
+  const trackCount = (review: IssueReview | MissingReview | undefined) => (review !== undefined && "tracks" in review ? review.tracks.size : null);
+  release.revision += 1;
+  const record = nextOperation(
+    data,
+    "release_issue_review",
+    { type: "release", id: releaseId },
+    release.revision,
+    { kind: "release_issue_review", issue, from: { reviewed: previous !== undefined, track_count: trackCount(previous) }, to: { reviewed: next !== undefined, track_count: trackCount(next) } },
+    () => {
+      if (previous === undefined) state.reviews.delete(issue);
+      else state.reviews.set(issue, previous);
+      syncAttention(data, releaseId);
+    },
+  );
+  if (next === undefined) state.reviews.delete(issue);
+  else state.reviews.set(issue, { ...next, operationId: record.id, reviewedAt: record.createdAt });
+  syncRelease(data, releaseId);
+  syncAttention(data, releaseId);
+  return remember(data, key, fingerprint, {
+    status: 200,
+    body: { release_id: releaseId, issue, reviewed: next !== undefined, revision: release.revision, operation_id: record.id },
   });
 }

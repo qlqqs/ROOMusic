@@ -1,5 +1,6 @@
 import { decode as d } from "../../../shared/api";
-import { releaseSummaryDecoder } from "../../catalog";
+// 直接取 catalog 的解码器模块而不是公开入口：公开入口连带导入组件与 CSS，Playwright（Node）里的受控后端导入这个文件时加载不了。
+import { releaseSummaryDecoder } from "../../catalog/api/decoders";
 
 // 发行字段修正（M3）的响应解码。可修正的字段与后端 backend/internal/catalog/corrections.go 的 correctableFields 一致，
 // 顺序也是接口返回的顺序。后端新增可修正字段时，样本契约测试先失败，在这里补上才算确认前端已经知道。
@@ -157,11 +158,14 @@ const missingTracksIssueDecoder = d.object({
   review: d.nullable(issueReviewDecoder),
 });
 
-// 一个版本的全部问题：status 为 open 而 review 不为 null，就是“核对之后情况变了”。
+// 一个版本的全部问题：release 是版本摘要（页面的标题与“需要关注”），edition 是版本说明；
+// status 为 open 而 review 不为 null，就是“核对之后情况变了”。
 const releaseIssuesDecoder = d.object({
   release_id: d.uuid(),
   group_id: d.uuid(),
   revision: d.integer({ min: 1 }),
+  release: releaseSummaryDecoder,
+  edition: d.nullable(d.string()),
   fields: d.array(fieldIssueDecoder, { max: MAX_FIELD_ISSUES }),
   grouping: d.nullable(groupingIssueDecoder),
   missing_tracks: d.nullable(missingTracksIssueDecoder),

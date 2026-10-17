@@ -99,6 +99,8 @@
   --layout-page-inset-x: 44px;
   --layout-page-inset-y: 34px;
   --layout-topbar-height: 56px;
+  /* 元数据问题页的列表栏（两栏时）；详情最宽 860px，容器窄于约 900px 时改为顺序导航。 */
+  --layout-issue-list-width: 380px;
 
   /* 控件最小高度：桌面 36px，触屏与窄屏 44px（见下方媒体查询）。 */
   --control-height: 36px;

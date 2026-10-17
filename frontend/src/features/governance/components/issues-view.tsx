@@ -1,0 +1,185 @@
+import { Link, useNavigate } from "@tanstack/react-router";
+import { ArrowLeft } from "lucide-react";
+import { useRef, type ReactNode } from "react";
+import { formatCount } from "../../../shared/lib/number";
+import { pageCountOf } from "../../../shared/lib/pagination";
+import { useClampedPage } from "../../../shared/lib/use-clamped-page";
+import { failureOf, isHttpFailure } from "../../../shared/api";
+import { Notice, Pagination, QueryContent, Skeleton, VisuallyHidden } from "../../../shared/ui";
+import { useContainerWide } from "../hooks/use-container-wide";
+import { useIssues, useReleaseIssues } from "../hooks/use-issues";
+import { issueCategoryLabels } from "../issue-text";
+import { ISSUE_CATEGORIES, type IssueCategory, type IssuesSearch } from "../issues-search";
+import { IssueList } from "./issue-list";
+import type { FieldIssueDTO, IssuePageDTO } from "../api/decoders";
+import { ReleaseIssuesDetail, type ReviewSubject } from "./release-issues-detail";
+import styles from "./issues-view.module.css";
+
+/** 两栏的最小容器宽度：列表 380px 加详情的合理宽度；更窄时改为顺序导航（先列表、后详情）。 */
+const TWO_COLUMN_MIN_WIDTH = 900;
+
+type IssuesViewProps = {
+  search: IssuesSearch;
+  /** 详情各节的操作（核对、编辑发行信息）；只读时不给。 */
+  renderFieldActions?: ((fields: readonly FieldIssueDTO[], releaseId: string) => ReactNode) | undefined;
+  renderReviewAction?: ((subject: ReviewSubject, releaseId: string) => ReactNode) | undefined;
+  /** 详情上方的结果提示（核对、撤销的结果），由调用方提供。 */
+  notice?: ReactNode;
+};
+
+/** 筛选项上的数字：读屏读作“，2 个版本”，看得见的只是数字。 */
+function FilterCount({ count }: { count: string }) {
+  return (
+    <>
+      {" "}
+      <span className={styles.count} aria-hidden="true">
+        {count}
+      </span>
+      <VisuallyHidden>，{count} 个版本</VisuallyHidden>
+    </>
+  );
+}
+
+/** 筛选：状态（待处理、已核对）与类别，都是链接（写进地址），当前项带 aria-current；数字来自 summary，不随类别与分页变化。 */
+function IssueFilters({ search, summary }: { search: IssuesSearch; summary: IssuePageDTO["summary"] | undefined }) {
+  const status = search.status ?? "open";
+  const counts = summary?.[status];
+  const countOf = (category: IssueCategory | undefined) => {
+    if (counts === undefined) return null;
+    return formatCount(category === undefined ? counts.all : counts[category]);
+  };
+  return (
+    <div className={styles.filters}>
+      <nav aria-label="问题状态" className={styles.filterRow}>
+        {(["open", "reviewed"] as const).map((target) => (
+          <Link
+            key={target}
+            to="/issues"
+            search={{ status: target === "reviewed" ? "reviewed" : undefined, category: search.category }}
+            aria-current={status === target ? "page" : undefined}
+            className={styles.filter}
+          >
+            {target === "open" ? "待处理" : "已核对"}
+            {summary === undefined ? null : <FilterCount count={formatCount(summary[target].all)} />}
+          </Link>
+        ))}
+      </nav>
+      <nav aria-label="问题类别" className={styles.filterRow}>
+        {[undefined, ...ISSUE_CATEGORIES].map((category) => (
+          <Link
+            key={category ?? "all"}
+            to="/issues"
+            search={{ status: search.status, category }}
+            aria-current={search.category === category ? "page" : undefined}
+            className={styles.filter}
+          >
+            {category === undefined ? "全部" : issueCategoryLabels[category]}
+            {countOf(category) === null ? null : <FilterCount count={countOf(category) as string} />}
+          </Link>
+        ))}
+      </nav>
+    </div>
+  );
+}
+
+/** 一个版本的问题：读取、加载与失败态；成功后交给详情组件。换版本时按 key 重新挂载。版本已不可见（404）时就地说明，不给无用的“重试”。 */
+function IssueDetailPane({ releaseId, renderFieldActions, renderReviewAction }: { releaseId: string } & Pick<IssuesViewProps, "renderFieldActions" | "renderReviewAction">) {
+  const issues = useReleaseIssues(releaseId);
+  if (issues.status === "error" && isHttpFailure(failureOf(issues.error), 404, "not_found")) {
+    return <Notice tone="warning">这个版本现在不可见（可能刚被重新扫描，文件都找不到了），没有可以处理的问题。</Notice>;
+  }
+  return (
+    <QueryContent query={issues} loading={<Skeleton label="正在加载这个版本的问题" lines={6} />}>
+      {(data) => (
+        <ReleaseIssuesDetail
+          issues={data}
+          renderFieldActions={renderFieldActions === undefined ? undefined : (fields) => renderFieldActions(fields, releaseId)}
+          renderReviewAction={renderReviewAction === undefined ? undefined : (subject) => renderReviewAction(subject, releaseId)}
+        />
+      )}
+    </QueryContent>
+  );
+}
+
+/**
+ * “元数据问题”页的内容（管理员）：按版本列出“需要关注”的问题，可以按状态与类别筛选；选中的版本写进地址（release）。
+ * 容器足够宽时两栏（列表在左，选中的版本的问题在右）；窄于约 900px 时顺序导航：地址有 release 只显示详情与“返回问题列表”，没有只显示列表。
+ * 处理完、离开当前筛选的版本仍保持选中，详情说明“已经没有待处理的问题”，页面不跳走。页码越界时用替换历史项的方式改到末页。
+ */
+export function IssuesView({ search, renderFieldActions, renderReviewAction, notice }: IssuesViewProps) {
+  const status = search.status ?? "open";
+  const page = search.page ?? 1;
+  const issues = useIssues({ status, category: search.category, page });
+  const navigate = useNavigate();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const wide = useContainerWide(containerRef, TWO_COLUMN_MIN_WIDTH);
+  const pagination = issues.data?.pagination;
+  const outOfRange = useClampedPage({
+    page,
+    pageCount: pagination === undefined ? 0 : pageCountOf(pagination.total, pagination.page_size),
+    ready: pagination !== undefined && !issues.isPlaceholderData,
+    onOutOfRange: (lastPage) => void navigate({ to: "/issues", search: (previous) => ({ ...previous, page: lastPage > 1 ? lastPage : undefined }), replace: true }),
+  });
+
+  const list = (
+    <section className={styles.listColumn} aria-labelledby="issues-list-title">
+      <h2 id="issues-list-title" className={styles.listTitle}>
+        有问题的版本
+      </h2>
+      <IssueFilters search={search} summary={issues.data?.summary} />
+      <QueryContent query={issues} loading={<Skeleton label="正在加载问题列表" lines={6} />}>
+        {(data) =>
+          outOfRange ? (
+            <Skeleton label="正在加载问题列表" lines={6} />
+          ) : data.pagination.total === 0 ? (
+            <p className={styles.empty}>
+              {status === "reviewed" ? "没有已核对的问题。" : search.category === undefined ? "没有待处理的问题。扫描发现新的问题时会出现在这里。" : "这一类没有待处理的问题。"}
+            </p>
+          ) : (
+            <div aria-busy={issues.isPlaceholderData} className={styles.listBody}>
+              <IssueList items={data.items} status={status} selectedId={search.release} />
+              <p className={styles.note}>共 {formatCount(data.pagination.total)} 个版本，按专辑名排列。</p>
+              <Pagination
+                label="问题列表分页"
+                page={data.pagination.page}
+                pageCount={pageCountOf(data.pagination.total, data.pagination.page_size)}
+                renderLink={(target, props) => <Link to="/issues" search={(previous) => ({ ...previous, page: target > 1 ? target : undefined })} {...props} />}
+              />
+            </div>
+          )
+        }
+      </QueryContent>
+    </section>
+  );
+
+  const detail =
+    search.release === undefined ? (
+      <p className={styles.placeholder}>从列表里选一个版本，查看它的问题和依据。</p>
+    ) : (
+      <IssueDetailPane key={search.release} releaseId={search.release} renderFieldActions={renderFieldActions} renderReviewAction={renderReviewAction} />
+    );
+
+  return (
+    <div ref={containerRef} className={styles.view} data-layout={wide ? "columns" : "sequential"}>
+      {wide ? (
+        <>
+          {list}
+          <div className={styles.detailColumn}>
+            {notice}
+            {detail}
+          </div>
+        </>
+      ) : search.release === undefined ? (
+        list
+      ) : (
+        <div className={styles.detailColumn}>
+          <Link to="/issues" search={(previous) => ({ ...previous, release: undefined })} className={styles.back}>
+            <ArrowLeft size={16} aria-hidden="true" /> 返回问题列表
+          </Link>
+          {notice}
+          {detail}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -19,7 +19,10 @@ import {
   respondToCorrections,
   respondToGroupChange,
   respondToGroupDefault,
+  respondToIssueReview,
+  respondToIssues,
   respondToOperations,
+  respondToReleaseIssues,
   respondToRevert,
   type GovernanceData,
 } from "../../src/test/governance-data";
@@ -338,16 +341,19 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
       });
     }
 
-    // 受治理操作（只有管理员）：字段修正、归组、操作记录与撤销。
-    const releaseGovernance = /^\/api\/v1\/releases\/([^/]+)\/(corrections|group)$/.exec(path);
+    // 受治理操作（只有管理员）：字段修正、归组、元数据问题与核对、操作记录与撤销。
+    const releaseGovernance = /^\/api\/v1\/releases\/([^/]+)\/(corrections|group|issues|issue-review)$/.exec(path);
     if (releaseGovernance !== null) {
       const [, releaseId = "", suffix] = releaseGovernance;
       const key = headers["idempotency-key"] ?? null;
       if (suffix === "corrections" && method === "GET") return guarded(method, path, true, () => respondToCorrections(mock.governance, releaseId));
       if (suffix === "corrections" && method === "PATCH") return guarded(method, path, true, () => respondToCorrect(mock.governance, releaseId, key, body));
       if (suffix === "group" && method === "POST") return guarded(method, path, true, () => respondToGroupChange(mock.governance, releaseId, key, body));
+      if (suffix === "issues" && method === "GET") return guarded(method, path, true, () => respondToReleaseIssues(mock.governance, releaseId));
+      if (suffix === "issue-review" && method === "POST") return guarded(method, path, true, () => respondToIssueReview(mock.governance, releaseId, key, body));
       return sample("errors/method-not-allowed");
     }
+    if (key === "GET /api/v1/release-issues") return guarded(method, path, true, () => respondToIssues(mock.governance, search));
     if (key === "GET /api/v1/operations") return guarded(method, path, true, () => respondToOperations(mock.governance, search));
     const operationRevert = /^\/api\/v1\/operations\/([^/]+)\/revert$/.exec(path);
     if (operationRevert !== null && method === "POST") {

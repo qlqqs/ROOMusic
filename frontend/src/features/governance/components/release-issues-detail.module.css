@@ -1,0 +1,97 @@
+.detail {
+  display: grid;
+  gap: var(--space-6);
+  align-content: start;
+  min-width: 0;
+  max-width: 860px;
+}
+
+.header {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.title {
+  overflow-wrap: anywhere;
+  font-size: var(--fs-25);
+  /* 被滚动到视野顶部时（例如窄屏从列表进入详情）不被窄屏的吸顶栏盖住。 */
+  scroll-margin-top: calc(var(--layout-topbar-height) + var(--space-3));
+}
+
+.meta {
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.section {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-divider);
+}
+
+.explain {
+  max-width: 64ch;
+  font-size: var(--fs-14);
+}
+
+.review {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  min-width: 0;
+  font-size: var(--fs-14);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.stale {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-accent-800);
+}
+
+.facts {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.facts h4 {
+  font-size: var(--fs-14);
+}
+
+.paths,
+.siblings {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding-inline-start: var(--space-4);
+  font-size: var(--fs-14);
+  overflow-wrap: anywhere;
+}
+
+.fieldState {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.openTrack {
+  font-weight: 600;
+}
+
+.note {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+}
+
+/* 字段名（“介质类型”）不在字中间折行：窄表格里宁可让其他列多折几行。 */
+.fieldName {
+  white-space: nowrap;
+}
