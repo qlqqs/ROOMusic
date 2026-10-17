@@ -9,7 +9,7 @@ import (
 // Kind 是一种操作类型的撤销与展示能力，由拥有对应业务表的包实现，经 app 注册给传输层（operations/httpapi），
 // 所以 operations 不需要知道任何业务规则。一个类型对应一个 Kind；撤销记录的状态与它所撤销的操作同类型（见 Record.ChangeType）。
 type Kind interface {
-	// Type 是它处理的 operation_type（TypeReleaseCorrection、TypeReleaseGroupChange、TypeReleaseGroupDefault、TypeReleaseIssueReview）。
+	// Type 是它处理的 operation_type（TypeReleaseCorrection、TypeReleaseGroupChange、TypeReleaseGroupDefault、TypeReleaseIssueReview、TypeReleaseClaim）。
 	Type() string
 	// Revert 在 RevertExecutor 提供的事务里撤销 original：锁定目标、核对 original 是目标上最近一次修改
 	// （目标的人工修改版本号等于 original.ResultRevision，否则返回 revert_conflict）、恢复前态，返回撤销记录的目标、前后版本与前后状态。

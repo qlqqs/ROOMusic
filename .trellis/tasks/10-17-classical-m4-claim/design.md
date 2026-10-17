@@ -41,7 +41,7 @@ K1 定的依据是**同一目录和文件路径**。推荐只决定排序与提�
 | 理由码 | 条件 | 对应的真实情形 |
 | --- | --- | --- |
 | `same_files` | O 的路径集合里有路径与 N 的某首 present 曲目相同（同一 root 内） | 原地整张换成另一份音频；新增的文件不少于原有的，原有曲目改挂到 N |
-| `same_directory` | `O.source_root_id = N.source_root_id` 且 `O.relative_directory = N.relative_directory` | 目录还在，文件全换了名字 |
+| `same_directory` | `O.source_root_id = N.source_root_id` 且 `O.relative_directory = N.relative_directory` | 目录不变，文件名与内容都换了（整张重新抓轨并改了名） |
 
 - 排序：两个理由都命中的在前；然后按 `same_files` 命中的路径数，多的在前；再按 N 的有效标题和 ID。最多返回 5 个。
 - 查询边界：O 的路径最多是 100 条加上 O 名下的曲目（单个发行的曲目数在扫描里有界）。路径比较走 `tracks_bound_source_path_uq`
@@ -51,6 +51,12 @@ K1 定的依据是**同一目录和文件路径**。推荐只决定排序与提�
   先选专辑，专辑里有多个版本时再选其中一个（读 `GET /api/v1/release-groups/{id}`）。别的目录、别的 root 的版本都能这样选到。
 - 专辑详情里的提示（K4）用同一组条件反过来查：哪些待认领的旧版本把当前可见版本 N 列为推荐，最多 3 个。
   做法是先列出同一 root 下的待认领旧版本（待认领的版本很少），再逐个按上面的条件检查 N；不从 N 出发反查整个库。
+- **真实扫描核对过的事实**（`TestPostgreSQLClaimCluesSurviveARealRescan`，合成 FLAC）：
+  - 原地替换：旧曲目留在原路径，标为缺失并失去来源身份，新曲目在同一路径上；归组依据仍是原来的两个文件。
+  - 新增文件（2 首加 3 首）：原有曲目整体改挂到新发行，旧发行名下一首曲目都不剩，只有归组依据还记得原来的文件清单。
+  - 目录不变、文件名与内容都换了：新旧发行同目录、没有相同的文件，所以只命中 `same_directory`。
+  - **单纯的文件改名（内容不变）不会新建发行**：扫描按内容指纹把曲目重绑定到新路径，发行沿用，不属于认领。
+  - 旧曲目是否还持有来源身份取决于情形（原地替换时被新曲目腾出；整体换名时仍持有，由完整扫描标为缺失）。推荐比较的是候选的 present 曲目，旧曲目的身份状态不影响结果。
 - 音频指纹不在推荐依据里。跨 root 移动、目录与文件名都改了的情形推荐不出来，只能手动搜索（PRD“已接受的限制”）。
 
 ## 4. 数据模型（迁移 0020）
@@ -167,7 +173,7 @@ CREATE INDEX operations_claim_source_index ON operations ((after_state #>> '{sou
   - 每项：`{release: {id, title, artist, year, edition}, album: {id, title, other_release_count} | null, location: {root_name, directory}, last_seen_at, holds: {corrections: [字段], album, default, reviews: [问题]}}`。
     推荐只在详情里计算，列表不算。
   - 标题用有效值：有修正时就是修正值，这正是管理员认得出的名字。
-  - `root_name` 取 `library_roots.name`，没有时用路径末段（与目录列表一致），不返回绝对路径。`album.title` 是那个组里任一发行的有效标题
+  - `root_name` 取扫描目录路径的末段（`library_roots` 没有 `name` 列，与扫描目录列表的 `filepath.Base(path)` 一致），不返回绝对路径。`album.title` 是那个组里任一发行的有效标题
     （先取可见的代表版本，没有就取最早创建的成员），组里没有别的发行时 `album` 是 `null`。
   - 分页与其他列表相同：默认 50，最大 100，非法参数 `400 invalid_pagination`。
 - **`GET /api/v1/release-claims/{id}`**：一个旧版本的详情。包括列表项的全部字段，再加上：

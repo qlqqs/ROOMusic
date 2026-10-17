@@ -16,14 +16,14 @@
 
 ## 步骤
 
-- [ ] **1. 迁移 0020 与待认领的判定（只读，无行为变化）**
+- [x] **1. 迁移 0020 与待认领的判定（只读，无行为变化）**
   - 迁移 0020：放宽 `operations_type_ck`，建 `operations_claim_source_index`（design §4）；`operations.TypeReleaseClaim`。
   - `catalog/claims.go`：`releaseClaimablePredicate`、路径集合与推荐的 SQL（design §2、§3）。
   - 门禁：既有集成测试与全部接口样本逐字不变。
   - 新集成测试：
     - 四类人工状态各自让不可见的版本成为待认领；可见的、或没有人工状态的不是；
     - “组里有别的发行”包括不可见的成员；
-    - 推荐：用 `writeSyntheticTrack`/`runScan` 造出原地替换、新增文件、文件改名三种情形，前两种命中 `same_files`，第三种只命中 `same_directory`；
+    - 推荐：用 `writeSyntheticTrack`/`runScan` 造出原地替换、新增文件、目录不变而文件整体换了名字与内容三种情形（单纯改名不新建发行，不属于认领），前两种命中 `same_files`，第三种只命中 `same_directory`；
       最多 5 个，排序符合规则。
 - [ ] **2. 认领的预览与写入**
   - `catalog/claim.go`：预览（`items` 与令牌）、请求解析与指纹、`ClaimExecutor`；`catalog/httpapi` 的预览与写接口（design §5、§6）。
