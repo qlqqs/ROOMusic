@@ -15,7 +15,7 @@
 
 ## 步骤
 
-- [ ] **1. 迁移 0019 与“需要关注”的三类拆分（无行为变化）**
+- [x] **1. 迁移 0019 与“需要关注”的三类拆分（无行为变化）**
   - 迁移 0019（design §3）；`operations.TypeReleaseIssueReview`。
   - `releaseAttentionExpression` 拆成三个具名常量再相加，加入核对的排除；另加三个“已核对”常量（design §4）。
   - 门禁：没有核对行时既有集成测试与接口样本不变。新测试：手工写入核对行后三类各自减少，组的计数与 `attention=required` 一致。

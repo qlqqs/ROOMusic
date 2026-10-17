@@ -32,10 +32,12 @@ import (
 )
 
 const (
-	// TypeReleaseCorrection、TypeReleaseGroupChange、TypeReleaseGroupDefault 与 TypeRevert 是 operations.operation_type 允许的取值。
+	// TypeReleaseCorrection、TypeReleaseGroupChange、TypeReleaseGroupDefault、TypeReleaseIssueReview 与 TypeRevert
+	// 是 operations.operation_type 允许的取值。
 	TypeReleaseCorrection   = "release_correction"
 	TypeReleaseGroupChange  = "release_group_change"
 	TypeReleaseGroupDefault = "release_group_default"
+	TypeReleaseIssueReview  = "release_issue_review"
 	TypeRevert              = "revert"
 
 	// TargetRelease 与 TargetReleaseGroup 是 operations.target_type 允许的取值：发行，以及专辑（release_groups 的一行）。

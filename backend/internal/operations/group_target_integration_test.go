@@ -68,7 +68,7 @@ func violatedConstraint(err error) string {
 	return ""
 }
 
-// 迁移 0018：新增的两列有默认值与约束；operations 接受专辑目标与新的操作类型，仍然拒绝其他取值。
+// 迁移 0018：新增的两列有默认值与约束；operations 接受专辑目标与新的操作类型（0019 再加核对问题），仍然拒绝其他取值。
 func TestPostgreSQLReleaseGroupColumnsAndOperationConstraints(t *testing.T) {
 	fixture := newRunFixture(t)
 
@@ -107,6 +107,10 @@ func TestPostgreSQLReleaseGroupColumnsAndOperationConstraints(t *testing.T) {
 	}
 	if err := insertRecord(TypeReleaseGroupDefault, TargetReleaseGroup); err != nil {
 		t.Fatalf("a default-version record targeting a group: %v", err)
+	}
+	// 迁移 0019 加入核对问题，目标是发行（这里只检查类型约束，目标 ID 不设外键）。
+	if err := insertRecord(TypeReleaseIssueReview, TargetRelease); err != nil {
+		t.Fatalf("an issue-review record targeting a release: %v", err)
 	}
 	for name, testCase := range map[string]struct{ operationType, targetType, constraint string }{
 		"unknown type":        {"release_merge", TargetReleaseGroup, "operations_type_ck"},

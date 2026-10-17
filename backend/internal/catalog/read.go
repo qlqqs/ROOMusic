@@ -36,30 +36,8 @@ const (
 		WHERE visible_media.release_id = releases.id
 		  AND visible_tracks.source_status = 'present'
 	)`
-	releaseAttentionExpression = `(
-		(SELECT COUNT(DISTINCT decision.field_key)
-		 FROM release_field_decisions decision
-		 WHERE decision.release_id = releases.id
-		   AND decision.action = 'uncertain_apply'
-		   AND NOT EXISTS (
-			SELECT 1 FROM release_corrections correction
-			WHERE correction.release_id = decision.release_id
-			  AND correction.field = CASE decision.field_key WHEN 'artist' THEN 'album_artist' ELSE decision.field_key END
-		   ))
-		+ CASE WHEN EXISTS (
-			SELECT 1 FROM release_grouping_evidence grouping
-			WHERE grouping.release_id = releases.id
-			  AND NULLIF(BTRIM(grouping.reason), '') IS NOT NULL
-		  ) THEN 1 ELSE 0 END
-		+ (SELECT COUNT(DISTINCT COALESCE(
-			NULLIF(missing_track.source_identity, ''),
-			missing_track.source_root_id::text || ':' || missing_track.relative_path
-		  ))
-		  FROM tracks missing_track
-		  JOIN media missing_medium ON missing_medium.id = missing_track.medium_id
-		  WHERE missing_medium.release_id = releases.id
-		    AND missing_track.source_status = 'missing')
-	)`
+	// releaseAttentionExpression 是“需要关注”：三类待处理问题的数目之和（见 issues.go）。
+	releaseAttentionExpression = `(` + releaseOpenFieldIssues + ` + ` + releaseOpenGroupingIssue + ` + ` + releaseOpenMissingTracks + `)`
 	// releaseSearchPredicate 是 Release 搜索的命中条件（参数 $1 已转义 LIKE 通配符）：标题、艺人、专辑艺人，
 	// 或任一 present 曲目的标题。/releases 与 /release-groups 共用它，保证搜索语义一致。
 	releaseSearchPredicate = `(
