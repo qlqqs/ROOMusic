@@ -3,8 +3,8 @@ import { useCallback, useMemo } from "react";
 import { failureOf, isOutcomeUncertain, type ApiFailure } from "../../../shared/api";
 import { newIdempotencyKey } from "../../../shared/lib/ids";
 import { useViewerScope } from "../../auth";
-import type { CorrectableField, CorrectionResultDTO, GroupChangeResultDTO, GroupDefaultResultDTO, IssueReviewResultDTO, RevertResultDTO, ReviewableIssue } from "../api/decoders";
-import { changeReleaseGroup, correctRelease, reviewReleaseIssue, revertOperation, setGroupDefault, type CorrectionChanges } from "../api/endpoints";
+import type { ClaimResultDTO, CorrectableField, CorrectionResultDTO, GroupChangeResultDTO, GroupDefaultResultDTO, IssueReviewResultDTO, RevertResultDTO, ReviewableIssue } from "../api/decoders";
+import { changeReleaseGroup, claimRelease, correctRelease, reviewReleaseIssue, revertOperation, setGroupDefault, type CorrectionChanges } from "../api/endpoints";
 import { governanceKeys } from "../query-keys";
 
 /** 命令作用的发行：id 用来发请求，title 只用来写提示文字。 */
@@ -43,11 +43,26 @@ export type ReleaseIntent =
       basis?: string | undefined;
     }
   | {
+      /**
+       * 把已不可见的旧版本上的人工修改迁给新版本（release）。revision 与 sourceRevision 是预览里读到的两个版本的人工修改版本号，
+       * preview 是预览令牌：预览之后状态变了后端返回 409 claim_changed 或 revision_conflict，页面重新读取预览。
+       */
+      kind: "claim";
+      release: ReleaseTarget;
+      revision: number;
+      source: ReleaseTarget;
+      sourceRevision: number;
+      preview: string;
+    }
+  | {
       kind: "revert";
       release: ReleaseTarget;
       operationId: string;
       subject: RevertSubject;
-      /** 撤销归组、默认版本调整或认领之后页面要显示的专辑（归组是原来的组，默认版本是这张专辑，认领是认领之前新版本所在的组）；字段修正的撤销没有。操作记录页不跟随（它的 onMoved 什么也不做）。 */
+      /**
+       * 撤销归组、默认版本调整或认领之后页面要显示的专辑（归组是原来的组，默认版本是这张专辑，认领是认领之前新版本所在的组）；字段修正的撤销没有。
+       * 操作记录页不跟随（它的 onMoved 什么也不做）。认领只在待认领页发起，那里不跟随，所以只有从记录撤销认领时才带它。
+       */
       returnGroupId?: string | undefined;
     };
 
@@ -63,6 +78,7 @@ export type ReleaseCommandResult =
   | { kind: "detach"; result: GroupChangeResultDTO }
   | { kind: "default"; result: GroupDefaultResultDTO }
   | { kind: "review"; result: IssueReviewResultDTO }
+  | { kind: "claim"; result: ClaimResultDTO }
   | { kind: "revert"; result: RevertResultDTO };
 
 export type ReleaseCommandState =
@@ -90,7 +106,7 @@ type ReleaseCommandsOptions = {
 };
 
 /**
- * 管理员对发行与专辑的写操作：修正字段、归入其他专辑、移出为独立专辑、设定或清除默认版本、核对问题与撤销。悲观更新：只在后端确认并刷新相关查询之后才算完成，
+ * 管理员对发行与专辑的写操作：修正字段、归入其他专辑、移出为独立专辑、设定或清除默认版本、核对问题、认领与撤销。悲观更新：只在后端确认并刷新相关查询之后才算完成，
  * 不做乐观修改；无论成败（包括 409 冲突与结果不确定）都刷新，让界面显示的是服务器当前的状态。
  * 同一时刻只有一个命令；写操作从不自动重试，重试由用户显式触发。
  */
@@ -122,6 +138,10 @@ export function useReleaseCommands({ refresh, onMoved }: ReleaseCommandsOptions)
           const body = command.action === "review" ? { action: "review" as const, basis: command.basis ?? "" } : { action: "unreview" as const };
           const { data } = await reviewReleaseIssue(command.release.id, command.revision, command.issue, body, command.key);
           return { kind: "review", result: data };
+        }
+        case "claim": {
+          const { data } = await claimRelease(command.release.id, { expectedRevision: command.revision, sourceId: command.source.id, sourceRevision: command.sourceRevision, preview: command.preview }, command.key);
+          return { kind: "claim", result: data };
         }
         case "revert": {
           const { data } = await revertOperation(command.operationId, command.key);

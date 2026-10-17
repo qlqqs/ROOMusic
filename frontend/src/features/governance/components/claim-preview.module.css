@@ -1,0 +1,77 @@
+.preview {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.title {
+  font-size: var(--fs-17);
+}
+
+.items {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 7.5em minmax(0, 1fr);
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-divider);
+  font-size: var(--fs-14);
+}
+
+.item:last-child {
+  border-bottom: 1px solid var(--color-divider);
+}
+
+/* 去向用文字徽标表达（迁移、保留、改回自动选择），不只靠颜色。 */
+.action {
+  align-self: start;
+  justify-self: start;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.item[data-action="move"] .action {
+  border-color: var(--color-accent-700);
+  background: var(--color-selected);
+}
+
+.text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.heading {
+  font-weight: 600;
+}
+
+.empty,
+.note {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+}
+
+.submit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+@media (max-width: 767px) {
+  .item {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1);
+  }
+}

@@ -24,6 +24,8 @@ export const governanceKeys = {
   claimPage: (generation: number, filter: { page: number; pageSize: number }) => viewerQueryKey(generation, "governance", "claims", filter),
   /** 一个待认领的旧版本的详情（修改明细与推荐）。 */
   claim: (generation: number, releaseId: string) => viewerQueryKey(generation, "governance", "claim", releaseId),
+  /** 认领的预览：新版本与旧版本都在键里；在 all 前缀下，认领、撤销与别的修改之后随 governance 一起失效，页面重新读到最新的预览与令牌。 */
+  claimPreview: (generation: number, releaseId: string, sourceId: string) => viewerQueryKey(generation, "governance", "claim-preview", releaseId, sourceId),
   /** 专辑详情里的“可能接替了……”提示。 */
   claimHints: (generation: number, releaseId: string) => viewerQueryKey(generation, "governance", "claim-hints", releaseId),
 };

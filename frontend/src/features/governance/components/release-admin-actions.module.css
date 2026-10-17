@@ -19,3 +19,23 @@
   min-height: var(--control-height);
   padding: 0 var(--space-2);
 }
+
+/* “可能接替了已不可见的……”是线索：低调的一行文字加一个链接，不是警告。 */
+.hints {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-14);
+}
+
+.hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  min-width: 0;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}

@@ -4,6 +4,8 @@ import {
   decodeClaimDetail,
   decodeClaimHints,
   decodeClaimPage,
+  decodeClaimPreview,
+  decodeClaimResult,
   decodeCorrectionResult,
   decodeCorrectionState,
   decodeGroupChangeResult,
@@ -16,6 +18,8 @@ import {
   type ClaimDetailDTO,
   type ClaimHintsDTO,
   type ClaimPageDTO,
+  type ClaimPreviewDTO,
+  type ClaimResultDTO,
   type CorrectableField,
   type CorrectionResultDTO,
   type CorrectionStateDTO,
@@ -161,4 +165,39 @@ export function fetchClaim(releaseId: string, signal?: AbortSignal): Promise<Api
 /** 把这个可见版本列为推荐的待认领旧版本（仅管理员，最多 3 个），专辑详情据此提示“可能接替了已不可见的《…》”。 */
 export function fetchClaimHints(releaseId: string, signal?: AbortSignal): Promise<ApiResponse<ClaimHintsDTO>> {
   return apiRequest({ method: "GET", path: `/api/v1/releases/${releaseId}/claim-hints`, signal }, decodeClaimHints);
+}
+
+/**
+ * 认领的预览（仅管理员）：把旧版本 sourceId 认领给新版本 releaseId，逐项说明哪些会迁移、哪些因为新版本已有而保留、哪张专辑会改回自动选择，
+ * 以及两个版本的版本号和提交时要带回的令牌。新版本不可见或旧版本不存在 404，旧版本现在不需要认领 409 not_claimable。
+ */
+export function fetchClaimPreview(releaseId: string, sourceId: string, signal?: AbortSignal): Promise<ApiResponse<ClaimPreviewDTO>> {
+  const query = new URLSearchParams({ source: sourceId });
+  return apiRequest({ method: "GET", path: `/api/v1/releases/${releaseId}/claim-preview?${query}`, signal }, decodeClaimPreview);
+}
+
+export type ClaimBody = {
+  /** 新版本的人工修改版本号（预览里的 revision）。 */
+  expectedRevision: number;
+  sourceId: string;
+  /** 旧版本的人工修改版本号（预览里的 source_revision）。 */
+  sourceRevision: number;
+  /** 预览令牌：提交时状态与预览不同（页面打开之后又扫描或修改过）返回 409 claim_changed。 */
+  preview: string;
+};
+
+/**
+ * 把旧版本上的人工修改一次迁给新版本：要带预览里的两个版本号和令牌，任一过期返回 409 revision_conflict 或 claim_changed，
+ * 页面重新读取预览。同样要求幂等键与同源请求。
+ */
+export function claimRelease(releaseId: string, body: ClaimBody, idempotencyKey: string): Promise<ApiResponse<ClaimResultDTO>> {
+  return apiRequest(
+    {
+      method: "POST",
+      path: `/api/v1/releases/${releaseId}/claim`,
+      body: { expected_revision: body.expectedRevision, source_release_id: body.sourceId, source_revision: body.sourceRevision, preview: body.preview },
+      idempotencyKey,
+    },
+    decodeClaimResult,
+  );
 }

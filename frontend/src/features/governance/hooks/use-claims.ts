@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useViewerScope } from "../../auth";
-import { fetchClaim, fetchClaimHints, fetchClaims } from "../api/endpoints";
+import { fetchClaim, fetchClaimHints, fetchClaimPreview, fetchClaims } from "../api/endpoints";
 import { governanceKeys } from "../query-keys";
 
 /** 待认领列表每页的条数（后端默认 50，上限 100）；显式传给后端，不依赖它的默认值。 */
@@ -45,5 +45,23 @@ export function useClaimHints(releaseId: string) {
     queryFn: ({ signal }) => fetchClaimHints(releaseId, signal),
     select: (response) => response.data.items,
     staleTime: 0,
+    // 线索不值得为它重试三次：失败就是没有提示。
+    retry: false,
+  });
+}
+
+/**
+ * 认领的预览：把旧版本认领给新版本会怎样。targetId 为 undefined 时不请求。令牌要与服务器当前的情况一致，所以每次打开都重新读取，
+ * 不保留上一对版本的数据；认领、撤销与别的修改之后随 governance 的查询一起失效。预览读取失败（旧版本现在不需要认领、新版本不可见……）由调用方说明。
+ */
+export function useClaimPreview(sourceId: string, targetId: string | undefined) {
+  const { generation } = useViewerScope();
+  return useQuery({
+    queryKey: governanceKeys.claimPreview(generation, targetId ?? "", sourceId),
+    queryFn: ({ signal }) => fetchClaimPreview(targetId ?? "", sourceId, signal),
+    select: (response) => response.data,
+    enabled: targetId !== undefined,
+    staleTime: 0,
+    retry: false,
   });
 }

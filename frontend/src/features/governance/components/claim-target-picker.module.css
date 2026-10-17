@@ -1,0 +1,110 @@
+.picker {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.group {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.legend {
+  padding: 0;
+  margin-bottom: var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+}
+
+.list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.option {
+  display: grid;
+  grid-template-columns: auto 56px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.option:hover {
+  background: var(--color-hover);
+}
+
+/* 选中项加粗边框与轻底，不只靠颜色。 */
+.option:has(input:checked) {
+  border-color: var(--color-accent-700);
+  background: var(--color-selected);
+  box-shadow: inset 0 0 0 1px var(--color-accent-700);
+}
+
+.option:has(input:focus-visible) {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.cover {
+  min-width: 0;
+}
+
+.text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.optionTitle {
+  overflow-wrap: anywhere;
+  font-family: var(--font-heading);
+  font-size: var(--fs-17);
+}
+
+.optionMeta,
+.hint {
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.search {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.searchRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.searchField {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.searchButton {
+  align-self: flex-start;
+  /* 与输入框的标签行对齐：标签占一行，按钮对齐输入框。 */
+  margin-top: 28px;
+}
+
+@media (max-width: 767px) {
+  .searchButton {
+    margin-top: 0;
+  }
+}

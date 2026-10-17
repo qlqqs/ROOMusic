@@ -5,7 +5,10 @@ import {
   type CorrectableField,
   type CorrectionFieldDTO,
   type ClaimDetailDTO,
+  type ClaimEffect,
   type ClaimEntryDTO,
+  type ClaimItemDTO,
+  type ClaimPreviewDTO,
   type CorrectionStateDTO,
   type DefaultVersionDTO,
   type FieldIssueDTO,
@@ -84,6 +87,8 @@ export type GovernanceData = {
   issues: Map<string, IssueState>;
   /** 待认领的旧版本（测试用 seedClaim 预置）：已不可见、留有人工修改，值就是接口的详情响应；列表项从详情截取。 */
   claims: Map<string, ClaimDetailDTO>;
+  /** 旧版本上迁移的核对在新版本上的效果（预览里的 effect）；没有登记的问题按 no_issue。 */
+  claimEffects: Map<string, Partial<Record<ReviewableIssue, ClaimEffect>>>;
   /** 按发生的先后顺序保存；列表时倒序。 */
   operations: OperationRecord[];
   idempotency: Map<string, { fingerprint: string; result: ApiResult }>;
@@ -98,6 +103,7 @@ export function governanceDataOf(catalog: CatalogData): GovernanceData {
     groups: new Map(),
     issues: new Map(),
     claims: new Map(),
+    claimEffects: new Map(),
     operations: [],
     idempotency: new Map(),
     counter: 0,
@@ -851,9 +857,13 @@ export function respondToIssueReview(data: GovernanceData, releaseId: string, ke
 
 // ---- 待认领（M4 第三项）----
 
-/** 测试预置：登记一个待认领的旧版本；detail 就是 GET /release-claims/{id} 的响应体。 */
-export function seedClaim(data: GovernanceData, detail: ClaimDetailDTO): void {
+/**
+ * 测试预置：登记一个待认领的旧版本；detail 就是 GET /release-claims/{id} 的响应体。effects 是旧版本上迁移的核对在新版本上的效果
+ * （valid：新版本有同样的问题、依据相同；stale：依据不同；默认 no_issue：新版本没有这类问题）。
+ */
+export function seedClaim(data: GovernanceData, detail: ClaimDetailDTO, effects: Partial<Record<ReviewableIssue, ClaimEffect>> = {}): void {
   data.claims.set(detail.release.id, detail);
+  data.claimEffects.set(detail.release.id, effects);
 }
 
 const CLAIM_PAGE_MAX = 100;
@@ -890,4 +900,221 @@ export function respondToClaimHints(data: GovernanceData, releaseId: string): Ap
     .slice(0, CLAIM_HINTS_MAX)
     .map((detail) => ({ id: detail.release.id, title: detail.release.title }));
   return { status: 200, body: { items } };
+}
+
+// ---- 认领的预览与写入 ----
+
+/** 后端认领的核对类别顺序（claimReviewOrder）；前端 REVIEWABLE_ISSUES 的顺序不同，预览按后端的来。 */
+const CLAIM_REVIEW_ORDER: readonly ReviewableIssue[] = ["source_type", "media_type", "grouping", "missing_tracks"];
+
+/** 目标现在的修正意图（与旧版本的 correction 同形状）。 */
+function intentDTO(intent: Intent): { mode: "set"; value: string | number } | { mode: "null" } | undefined {
+  if (intent === null) return undefined;
+  return intent.mode === "null" ? { mode: "null" } : { mode: "set", value: intent.value };
+}
+
+type ClaimPlan = { items: ClaimItemDTO[]; moveAlbum: boolean; leaveAlbum: boolean; finalGroup: string };
+
+/** 与后端 buildClaimPlan 同序同规则：修正、专辑、默认版本、核对。 */
+function claimPlanOf(data: GovernanceData, detail: ClaimDetailDTO, targetId: string): ClaimPlan {
+  const target = stateOf(data, targetId) as ReleaseState;
+  const targetGroup = groupIdOf(data.catalog, targetId) as string;
+  const effects = data.claimEffects.get(detail.release.id) ?? {};
+  const targetReviews = data.issues.get(targetId)?.reviews;
+  const items: ClaimItemDTO[] = [];
+  for (const correction of detail.corrections) {
+    const current = intentDTO(target.corrections[correction.field]);
+    items.push(
+      current === undefined
+        ? { kind: "correction", field: correction.field, action: "move", from: correction.correction }
+        : { kind: "correction", field: correction.field, action: "skip", reason: "target_has_correction", from: correction.correction, to: current },
+    );
+  }
+  let moveAlbum = false;
+  let finalGroup = targetGroup;
+  const leaveAlbum = detail.album !== null;
+  if (detail.album !== null) {
+    const group = detail.album.id;
+    if (targetGroup === group) items.push({ kind: "album", group, action: "skip", reason: "already_in_album" });
+    else if (membersOf(data.catalog, targetGroup).length > 1) items.push({ kind: "album", group, action: "skip", reason: "target_in_album" });
+    else {
+      items.push({ kind: "album", group, action: "move" });
+      moveAlbum = true;
+      finalGroup = group;
+    }
+  }
+  for (const album of [...detail.default_of].sort((a, b) => a.id.localeCompare(b.id))) {
+    items.push({ kind: "default", group: album.id, action: finalGroup === album.id ? "move" : "reset" });
+  }
+  for (const issue of CLAIM_REVIEW_ORDER) {
+    if (!detail.reviews.some((review) => review.issue === issue)) continue;
+    if (issue === "missing_tracks") items.push({ kind: "review", issue, action: "skip", reason: "not_transferable" });
+    else if (targetReviews?.has(issue) === true) items.push({ kind: "review", issue, action: "skip", reason: "target_has_review" });
+    else items.push({ kind: "review", issue, action: "move", effect: effects[issue] ?? "no_issue" });
+  }
+  return { items, moveAlbum, leaveAlbum, finalGroup };
+}
+
+/** 令牌只取决于来源、目标与各项的去向（不含展示用的效果）：与后端一样，状态变了令牌就变。 */
+const claimTokenOf = (sourceId: string, targetId: string, items: readonly ClaimItemDTO[]): string =>
+  tokenOf({ sourceId, targetId, items: items.map((item) => [item.kind, item.field ?? null, item.issue ?? null, item.group ?? null, item.action, item.reason ?? null]) });
+
+/** 预览与写入共用的检查：新版本不可见 404；旧版本不在待认领里 409 not_claimable。 */
+function claimContext(data: GovernanceData, sourceId: string, targetId: string): { detail: ClaimDetailDTO; target: ReleaseState } | ApiResult {
+  const target = stateOf(data, targetId);
+  if (target === undefined || groupIdOf(data.catalog, targetId) === undefined) return failure(404, "not_found", "发行版本不存在");
+  const detail = data.claims.get(sourceId);
+  if (detail === undefined) return failure(409, "not_claimable", "这个版本现在不需要认领：它可见，或已经没有人工修改");
+  return { detail, target };
+}
+
+const isFailure = (value: { detail: ClaimDetailDTO; target: ReleaseState } | ApiResult): value is ApiResult => "status" in value;
+
+/** GET /releases/{id}/claim-preview?source=：逐项说明旧版本上的修改会怎么处理，带两个版本的版本号和令牌。 */
+export function respondToClaimPreview(data: GovernanceData, targetId: string, query: URLSearchParams): ApiResult {
+  const sources = query.getAll("source");
+  if (sources.length !== 1 || !/^[0-9a-f-]{36}$/i.test(sources[0] ?? "")) return failure(400, "invalid_id", "旧版本标识无效");
+  const sourceId = (sources[0] as string).toLowerCase();
+  if (sourceId === targetId) return failure(400, "invalid_input", "不能把一个版本认领给它自己");
+  const context = claimContext(data, sourceId, targetId);
+  if (isFailure(context)) return context;
+  const plan = claimPlanOf(data, context.detail, targetId);
+  const body: ClaimPreviewDTO = {
+    release: { id: targetId, title: String(effectiveOf(context.target, "title")), group_id: groupIdOf(data.catalog, targetId) as string, visible: true },
+    source: { id: sourceId, title: context.detail.release.title, group_id: context.detail.album?.id ?? uuidOf("a", 800), visible: false },
+    revision: context.target.revision,
+    source_revision: context.detail.revision,
+    items: plan.items,
+    token: claimTokenOf(sourceId, targetId, plan.items),
+  };
+  return { status: 200, body };
+}
+
+type RawClaimBody = { expected_revision?: unknown; source_release_id?: unknown; source_revision?: unknown; preview?: unknown };
+
+/** 把迁移的字段、保留的字段与各类的去向整理成响应和记录里的摘要。 */
+function summarizeClaimPlan(plan: ClaimPlan) {
+  const pick = (action: string) => ({
+    corrections: plan.items.filter((item) => item.kind === "correction" && (action === "move" ? item.action === "move" : item.action === "skip")).map((item) => item.field as CorrectableField),
+    album: plan.items.some((item) => item.kind === "album" && (action === "move" ? item.action === "move" : item.action === "skip")),
+    reviews: plan.items.filter((item) => item.kind === "review" && (action === "move" ? item.action === "move" : item.action === "skip")).map((item) => item.issue as ReviewableIssue),
+  });
+  const defaults = plan.items.filter((item) => item.kind === "default");
+  return {
+    moved: pick("move"),
+    skipped: pick("skip"),
+    defaults: { moved: defaults.filter((item) => item.action === "move").map((item) => item.group as string), reset: defaults.filter((item) => item.action === "reset").map((item) => item.group as string) },
+  };
+}
+
+/**
+ * POST /releases/{id}/claim：依据后端 claim.go 的检查顺序：请求体无效 400、幂等重放、新版本不可见 404、旧版本不需要认领 409 not_claimable、
+ * 任一版本号不等 409 revision_conflict、预览令牌与现在的不同 409 claim_changed；成功后按预览迁移，两个版本的版本号各加一，旧版本离开待认领，
+ * 记录一条“认领”，撤销把一切还原（包括把旧版本放回待认领）。
+ */
+export function respondToClaimRelease(data: GovernanceData, targetId: string, key: string | null, body: unknown): ApiResult {
+  const raw = (body ?? {}) as RawClaimBody;
+  if (key === null) return failure(400, "invalid_input", "请求需要 Idempotency-Key（UUID）");
+  if (typeof raw.expected_revision !== "number" || raw.expected_revision < 1 || typeof raw.source_revision !== "number" || raw.source_revision < 1) return failure(400, "invalid_input", "版本号无效");
+  if (typeof raw.source_release_id !== "string" || !/^[0-9a-f-]{36}$/i.test(raw.source_release_id)) return failure(400, "invalid_input", "旧版本标识无效");
+  const sourceId = raw.source_release_id.toLowerCase();
+  if (sourceId === targetId) return failure(400, "invalid_input", "不能把一个版本认领给它自己");
+  if (typeof raw.preview !== "string" || raw.preview === "") return failure(400, "invalid_input", "认领需要预览的令牌");
+  const fingerprint = JSON.stringify({ type: "claim", targetId, sourceId, expectedRevision: raw.expected_revision, sourceRevision: raw.source_revision, preview: raw.preview });
+  const replay = replayOrConflict(data, key, fingerprint);
+  if (replay !== null) return replay;
+  const context = claimContext(data, sourceId, targetId);
+  if (isFailure(context)) return context;
+  const { detail, target } = context;
+  if (target.revision !== raw.expected_revision || detail.revision !== raw.source_revision) return failure(409, "revision_conflict", "这张专辑刚被修改过，请刷新后再试");
+  const plan = claimPlanOf(data, detail, targetId);
+  if (claimTokenOf(sourceId, targetId, plan.items) !== raw.preview) return failure(409, "claim_changed", "两个版本的状态在预览之后变了，请重新查看预览");
+
+  // 拍下执行前的状态：撤销要把它们原样还回去。
+  const before = {
+    corrections: { ...target.corrections },
+    group: groupIdOf(data.catalog, targetId) as string,
+    reviews: new Map(data.issues.get(targetId)?.reviews ?? []),
+    hadIssueState: data.issues.has(targetId),
+    groups: new Map([...detail.default_of.map((album) => album.id), ...(plan.moveAlbum ? [plan.finalGroup] : [])].map((id) => [id, { ...groupStateOf(data, id) }])),
+    effects: data.claimEffects.get(sourceId) ?? {},
+  };
+  const summary = summarizeClaimPlan(plan);
+  const sourceTitle = detail.release.title;
+
+  for (const item of plan.items) {
+    if (item.kind === "correction" && item.action === "move" && item.field !== undefined) {
+      const correction = detail.corrections.find((candidate) => candidate.field === item.field);
+      if (correction !== undefined) target.corrections[item.field] = correction.correction.mode === "null" ? { mode: "null" } : { mode: "set", value: correction.correction.value as string | number };
+    }
+  }
+  if (plan.moveAlbum) moveRelease(data, targetId, plan.finalGroup);
+  for (const item of plan.items) {
+    if (item.kind !== "default" || item.group === undefined) continue;
+    const group = groupStateOf(data, item.group);
+    group.defaultReleaseId = item.action === "move" ? targetId : null;
+    group.revision += 1;
+  }
+  const issueState = data.issues.get(targetId) ?? { seed: {}, reviews: new Map() };
+  data.issues.set(targetId, issueState);
+  // 核对行引用这次认领的记录：nextOperation 会把计数加一后取同一个编号。
+  const claimOperationId = uuidOf("f", data.counter + 1);
+  for (const item of plan.items) {
+    if (item.kind !== "review" || item.action !== "move" || item.issue === undefined) continue;
+    const original = detail.reviews.find((review) => review.issue === item.issue);
+    // 效果为 valid 时依据与新版本现在的相同；其余（stale、no_issue）依据不同，核对不生效。
+    const basis = item.effect === "valid" ? (issueBasis(issueState.seed, item.issue) ?? "migrated") : "migrated";
+    issueState.reviews.set(item.issue, { basis, operationId: claimOperationId, reviewedAt: original?.reviewed_at ?? "2026-01-01T00:00:00Z" });
+  }
+  target.revision += 1;
+  data.claims.delete(sourceId);
+  // 再同步一次：组的成员（含新版本的归属）、标题与需要关注的合计。
+  syncRelease(data, targetId);
+  syncAttention(data, targetId);
+  for (const id of before.groups.keys()) {
+    const members = membersOf(data.catalog, id);
+    if (members.length > 0) writeGroup(data, id, members);
+  }
+  sortGroups(data.catalog);
+
+  const record = nextOperation(
+    data,
+    "release_claim",
+    { type: "release", id: targetId },
+    target.revision,
+    { kind: "release_claim", source: { id: sourceId, title: sourceTitle, visible: false }, previous_group_id: before.group, moved: { ...summary.moved, defaults: summary.defaults.moved.length }, skipped: { ...summary.skipped, defaults: 0 } },
+    () => {
+      target.corrections = { ...before.corrections };
+      if (plan.moveAlbum) moveRelease(data, targetId, before.group);
+      for (const [id, saved] of before.groups) {
+        const group = groupStateOf(data, id);
+        group.defaultReleaseId = saved.defaultReleaseId;
+        group.revision += 1;
+      }
+      const restoredIssues = data.issues.get(targetId);
+      if (before.hadIssueState && restoredIssues !== undefined) restoredIssues.reviews = new Map(before.reviews);
+      else data.issues.delete(targetId);
+      data.claims.set(sourceId, detail);
+      data.claimEffects.set(sourceId, before.effects);
+      for (const id of before.groups.keys()) {
+        const members = membersOf(data.catalog, id);
+        if (members.length > 0) writeGroup(data, id, members);
+      }
+    },
+  );
+  return remember(data, key, fingerprint, {
+    status: 200,
+    body: {
+      release_id: targetId,
+      source_release_id: sourceId,
+      group_id: groupIdOf(data.catalog, targetId) as string,
+      previous_group_id: before.group,
+      revision: target.revision,
+      source_revision: detail.revision + 1,
+      operation_id: record.id,
+      moved: summary.moved,
+      skipped: summary.skipped,
+      defaults: summary.defaults,
+    },
+  });
 }

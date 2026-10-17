@@ -48,38 +48,12 @@
   overflow-wrap: anywhere;
 }
 
-.suggestions {
-  display: grid;
-  gap: var(--space-3);
+/* 认领提交期间不能换选择；fieldset 本身不画边框与内边距。 */
+.pickerLock {
+  min-width: 0;
   margin: 0;
   padding: 0;
-  list-style: none;
-}
-
-.suggestion {
-  display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
-  gap: var(--space-3);
-  align-items: start;
-  min-width: 0;
-}
-
-.suggestionText {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.suggestionTitle {
-  overflow-wrap: anywhere;
-  font-family: var(--font-heading);
-  font-size: var(--fs-17);
-}
-
-.reason {
-  color: var(--text-secondary);
-  font-size: var(--fs-14);
-  font-variant-numeric: lining-nums tabular-nums;
+  border: 0;
 }
 
 .hidden {

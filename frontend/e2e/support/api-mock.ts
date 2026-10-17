@@ -17,6 +17,8 @@ import {
   governanceDataOf,
   respondToClaim,
   respondToClaimHints,
+  respondToClaimPreview,
+  respondToClaimRelease,
   respondToClaims,
   respondToCorrect,
   respondToCorrections,
@@ -345,7 +347,7 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
     }
 
     // 受治理操作（只有管理员）：字段修正、归组、元数据问题与核对、操作记录与撤销。
-    const releaseGovernance = /^\/api\/v1\/releases\/([^/]+)\/(corrections|group|issues|issue-review)$/.exec(path);
+    const releaseGovernance = /^\/api\/v1\/releases\/([^/]+)\/(corrections|group|issues|issue-review|claim|claim-hints|claim-preview)$/.exec(path);
     if (releaseGovernance !== null) {
       const [, releaseId = "", suffix] = releaseGovernance;
       const key = headers["idempotency-key"] ?? null;
@@ -354,6 +356,8 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
       if (suffix === "group" && method === "POST") return guarded(method, path, true, () => respondToGroupChange(mock.governance, releaseId, key, body));
       if (suffix === "issues" && method === "GET") return guarded(method, path, true, () => respondToReleaseIssues(mock.governance, releaseId));
       if (suffix === "claim-hints" && method === "GET") return guarded(method, path, true, () => respondToClaimHints(mock.governance, releaseId));
+      if (suffix === "claim-preview" && method === "GET") return guarded(method, path, true, () => respondToClaimPreview(mock.governance, releaseId, search));
+      if (suffix === "claim" && method === "POST") return guarded(method, path, true, () => respondToClaimRelease(mock.governance, releaseId, key, body));
       if (suffix === "issue-review" && method === "POST") return guarded(method, path, true, () => respondToIssueReview(mock.governance, releaseId, key, body));
       return sample("errors/method-not-allowed");
     }

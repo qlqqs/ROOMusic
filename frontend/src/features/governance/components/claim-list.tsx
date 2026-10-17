@@ -24,7 +24,7 @@ export function ClaimList({ items, selectedId }: ClaimListProps) {
           <li key={item.release.id} className={styles.item}>
             <Link
               to="/claims"
-              search={(previous) => ({ ...previous, release: item.release.id })}
+              search={(previous) => ({ ...previous, release: item.release.id, target: undefined })}
               aria-current={selected ? "page" : undefined}
               className={styles.link}
             >

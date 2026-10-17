@@ -13,3 +13,4 @@ export type { ArtworkDTO, ReleaseDetailDTO, ReleaseGroupSummaryDTO, ReleaseMediu
 export { useReleaseLoader } from "./hooks/use-release-loader";
 export { useCatalogRefresh } from "./hooks/use-catalog-refresh";
 export { useAlbumSearchResults } from "./hooks/use-album-search-results";
+export { useAlbum } from "./hooks/use-album";

@@ -1,91 +1,20 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { formatDateTime } from "../shared/lib/time";
-import { albumGroup } from "../test/catalog-data";
-import { claimDetail, claimReleaseId, suggestionOf } from "../test/claim-data";
+import { claimDetail, claimReleaseId } from "../test/claim-data";
+import { alpha, beta, narrowContainer, reviewedAt, setup } from "../test/claims-setup";
 import { installFakeApi, installFakeSession, installOverviewApi } from "../test/fake-api";
 import { installCatalogApi } from "../test/fake-catalog";
 import { installGovernanceApi } from "../test/fake-governance";
-import { respondToClaims, seedClaim, type GovernanceData } from "../test/governance-data";
+import { respondToClaims, seedClaim } from "../test/governance-data";
 import { jsonResponse } from "../test/http";
 import { renderApp } from "../test/render-app";
-
-// 两张可见专辑：新版本 Alpha（旧版本 1 的推荐）与 Beta；三个待认领的旧版本：1 最新、2 次之（和 Gamma 同在一张专辑里）、3 最久。
-const alpha = () => albumGroup(1, { title: "Alpha Suites New Rip", artist: "Alpha Cellist", year: 1998 });
-const beta = () => albumGroup(2, { title: "Beta Quartets", artist: "Beta Quartet", year: 1990 });
-
-const reviewedAt = "2026-01-05T09:30:00Z";
-
-function seed(governance: GovernanceData) {
-  seedClaim(
-    governance,
-    claimDetail(1, {
-      title: "Alpha Suites (corrected)",
-      artist: "Alpha Cellist",
-      edition: "Remaster",
-      directory: "Alpha/Suites",
-      lastSeenAt: "2026-01-20T08:00:00Z",
-      suggestions: [suggestionOf(alpha(), ["same_files", "same_directory"], 12, "Remaster"), suggestionOf(beta(), ["same_directory"], 0)],
-    }),
-  );
-  seedClaim(
-    governance,
-    claimDetail(2, {
-      title: "Gamma Sonatas",
-      artist: "Gamma Duo",
-      directory: "Gamma",
-      lastSeenAt: "2026-01-10T08:00:00Z",
-      corrections: [{ field: "year", correction: { mode: "null" }, scan_value: 2003 }],
-      album: {
-        id: "00000000-0000-4000-8000-0000000000f1",
-        title: "Gamma Sonatas Collection",
-        siblings: [
-          { id: "00000000-0000-4000-8000-0000000000d1", title: "Gamma Sonatas Collection (live)", visible: true },
-          { id: "00000000-0000-4000-8000-0000000000d2", title: "Gamma Sonatas Collection (hidden)", visible: false },
-        ],
-      },
-      defaultOf: [{ id: "00000000-0000-4000-8000-0000000000f1", title: "Gamma Sonatas Collection" }],
-      reviews: [
-        { issue: "source_type", reviewed_at: reviewedAt, reviewer: { id: "00000000-0000-4000-8000-000000000002", username: "curator" } },
-        { issue: "grouping", reviewed_at: reviewedAt, reviewer: { id: "00000000-0000-4000-8000-000000000009", username: "" } },
-      ],
-    }),
-  );
-  seedClaim(governance, claimDetail(3, { title: "Delta Partitas", artist: "Delta Player", directory: "", lastSeenAt: "2025-12-01T08:00:00Z" }));
-}
-
-function setup(options: { role?: "admin" | "user" } = {}) {
-  const api = installFakeApi();
-  installFakeSession(api, { current: options.role === "user" ? "listener" : "curator" });
-  installOverviewApi(api);
-  const catalog = installCatalogApi(api, { groups: [alpha(), beta()] });
-  const governance = installGovernanceApi(api, catalog);
-  seed(governance);
-  return { api, catalog, governance };
-}
 
 const heading = (name: string, level = 1) => screen.findByRole("heading", { level, name });
 const claimList = () => screen.getByRole("heading", { level: 2, name: "已不可见、留有修改的版本" }).closest("section") as HTMLElement;
 // 列表里的旧版本链接：位于列表的 ul 内，不含分页导航里的页码链接。
 const listLinks = () => within(claimList()).getAllByRole("link").filter((link) => link.closest("ul") !== null && link.closest("nav") === null);
-
-/** jsdom 没有 ResizeObserver：待认领页按宽屏处理。窄屏的测试装一个报告指定宽度的替身。 */
-const originalResizeObserver = globalThis.ResizeObserver;
-afterEach(() => {
-  globalThis.ResizeObserver = originalResizeObserver;
-});
-function narrowContainer(width: number) {
-  globalThis.ResizeObserver = class {
-    constructor(private readonly callback: ResizeObserverCallback) {}
-    observe(target: Element) {
-      target.getBoundingClientRect = () => ({ width, height: 600, x: 0, y: 0, top: 0, left: 0, right: width, bottom: 600, toJSON: () => ({}) }) as DOMRect;
-      this.callback([], this as unknown as ResizeObserver);
-    }
-    unobserve() {}
-    disconnect() {}
-  } as unknown as typeof ResizeObserver;
-}
 
 describe("待认领页：入口与权限", () => {
   it("管理员在“资料库”下看到“待认领”，点进去是待认领页，不显示数量", async () => {
@@ -209,13 +138,14 @@ describe("待认领页：详情", () => {
     expect(screen.queryByRole("heading", { level: 3, name: "所在的专辑" })).toBeNull();
     expect(screen.queryByRole("heading", { level: 3, name: /问题核对/ })).toBeNull();
 
-    const suggestions = screen.getByRole("heading", { level: 3, name: "可能接替它的版本" }).closest("section") as HTMLElement;
-    expect(within(suggestions).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
-      expect.stringContaining("推荐的理由：同样的文件（12 个）、同一目录"),
-      expect.stringContaining("推荐的理由：同一目录"),
+    // 推荐的版本是带名称的单选组，每项写明理由；还没有选中任何一个。
+    const suggestions = screen.getByRole("group", { name: "推荐的版本（按文件路径与目录）" });
+    const options = within(suggestions).getAllByRole("radio");
+    expect(options.map((option) => (option.closest("label") as HTMLElement).textContent)).toEqual([
+      expect.stringContaining("同样的文件（12 个）、同一目录"),
+      expect.stringContaining("同一目录"),
     ]);
-    const alphaLink = within(suggestions).getByRole("link", { name: /Alpha Suites New Rip/ });
-    expect(alphaLink.getAttribute("href")).toBe(`/albums/${alpha().id}?release=${alpha().representative.id}`);
+    expect(options.every((option) => !(option as HTMLInputElement).checked)).toBe(true);
     expect(api.requestsTo("GET", `/api/v1/release-claims/${claimReleaseId(1)}`)).toHaveLength(1);
   });
 
@@ -239,7 +169,7 @@ describe("待认领页：详情", () => {
       `归组冲突（用户已不存在）${formatDateTime(reviewedAt)}`,
     ]);
     expect(screen.getByRole("heading", { level: 3, name: "字段修正（1 项）" })).toBeTruthy();
-    expect(screen.getByText("没有找到文件或目录相同的版本。")).toBeTruthy();
+    expect(screen.getByText("没有找到文件或目录相同的版本，可以在下面搜索。")).toBeTruthy();
     // 年份明确设为空，扫描值是 2003。
     expect(within(screen.getByRole("table", { name: "旧版本上的字段修正" })).getAllByRole("row")[1]?.textContent).toBe("年份设为空2003");
   });

@@ -1,7 +1,8 @@
 import { Link } from "@tanstack/react-router";
-import { Bookmark, ClipboardCheck, Combine, PencilLine, RotateCcw, Split } from "lucide-react";
+import { ArrowRightLeft, Bookmark, ClipboardCheck, Combine, PencilLine, RotateCcw, Split } from "lucide-react";
 import { useState } from "react";
 import { Button } from "../../../shared/ui";
+import { useClaimHints } from "../hooks/use-claims";
 import type { ReleaseCommand, ReleaseCommandResult, ReleaseCommands, ReleaseTarget } from "../hooks/use-release-commands";
 import { DetachAlbumDialog } from "./detach-album-dialog";
 import { EditReleaseDialog } from "./edit-release-dialog";
@@ -33,6 +34,8 @@ export function undoIntent(command: ReleaseCommand, result: ReleaseCommandResult
       return { kind: "revert" as const, release: command.release, operationId: result.result.operation_id, subject: "default" as const, returnGroupId: result.result.group_id };
     case "review":
       return { kind: "revert" as const, release: command.release, operationId: result.result.operation_id, subject: "review" as const };
+    case "claim":
+      return { kind: "revert" as const, release: command.release, operationId: result.result.operation_id, subject: "claim" as const };
     case "revert":
       return null;
   }
@@ -47,6 +50,8 @@ export function undoIntent(command: ReleaseCommand, result: ReleaseCommandResult
  */
 export function ReleaseAdminActions({ release, groupId, releaseCount, groupRevision, defaultReleaseId, commands }: ReleaseAdminActionsProps) {
   const [dialog, setDialog] = useState<"edit" | "join" | "detach" | null>(null);
+  // 提示只是线索：读取中、失败或没有时什么也不显示，不打扰页面。
+  const hints = useClaimHints(release.id).data ?? [];
   const isDefault = release.id === defaultReleaseId;
   const defaultPending = commands.state.status === "pending" && commands.state.command.kind === "default";
   const open = (next: "edit" | "join" | "detach") => {
@@ -86,6 +91,19 @@ export function ReleaseAdminActions({ release, groupId, releaseCount, groupRevis
           </Link>
         ) : null}
       </div>
+      {hints.length === 0 ? null : (
+        <ul className={styles.hints} aria-label="可能接替了已不可见的版本">
+          {hints.map((hint) => (
+            <li key={hint.id} className={styles.hint}>
+              <ArrowRightLeft size={16} aria-hidden="true" />
+              <span>可能接替了已不可见的《{hint.title}》</span>
+              <Link to="/claims" search={{ release: hint.id, target: release.id }} aria-label={`查看并认领《${hint.title}》，它可能被这个版本接替了`}>
+                查看并认领
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
       <ReleaseCommandNotice
         state={commands.state}
         releaseId={release.id}
