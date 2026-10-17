@@ -73,7 +73,9 @@ function FieldsSection({ fields, renderFieldActions, renderReviewAction }: { fie
   ];
   return (
     <section className={styles.section} aria-labelledby="issues-fields">
-      <h3 id="issues-fields">拿不准的字段</h3>
+      <h3 id="issues-fields" tabIndex={-1}>
+        拿不准的字段
+      </h3>
       <p className={styles.explain}>扫描没有把握的字段。来源类型与介质类型不能修改，看过之后可以标记为已核对；其余字段在“编辑发行信息”里修改或确认扫描值。</p>
       <DataTable caption="拿不准的字段" columns={columns} rows={fields} rowKey={(field) => field.field} />
       {renderFieldActions?.(fields)}
@@ -84,7 +86,9 @@ function FieldsSection({ fields, renderFieldActions, renderReviewAction }: { fie
 function GroupingSection({ grouping, renderReviewAction }: { grouping: GroupingIssueDTO } & Pick<ReleaseIssuesDetailProps, "renderReviewAction">) {
   return (
     <section className={styles.section} aria-labelledby="issues-grouping">
-      <h3 id="issues-grouping">同一目录的归组冲突</h3>
+      <h3 id="issues-grouping" tabIndex={-1}>
+        同一目录的归组冲突
+      </h3>
       <p className={styles.explain}>
         {`${grouping.reason_codes.map((code) => reasonCodeLabel(code)).join("；")}：这个目录里各曲目的专辑标签没有过半数，扫描按标签拆成了几个版本。如果它们其实是同一张专辑，可以在专辑页“归入其他专辑”；确认拆分没有问题，就标记为已核对。`}
       </p>
@@ -131,7 +135,9 @@ function MissingTracksSection({ missing, renderReviewAction }: { missing: Missin
   ];
   return (
     <section className={styles.section} aria-labelledby="issues-missing">
-      <h3 id="issues-missing">缺失的曲目（{formatCount(missing.count)} 首）</h3>
+      <h3 id="issues-missing" tabIndex={-1}>
+        缺失的曲目（{formatCount(missing.count)} 首）
+      </h3>
       <p className={styles.explain}>完整扫描时找不到这些文件。把文件放回原处并重新扫描，它们会自动恢复；确认文件已不需要，就标记为已核对，之后新缺失的曲目仍会提醒。</p>
       <ReviewState status={missing.status} review={missing.review} staleText="核对之后又有曲目缺失" />
       {renderReviewAction?.({ issue: "missing_tracks", basis: missing.basis, status: missing.status, review: missing.review })}
@@ -143,6 +149,7 @@ function MissingTracksSection({ missing, renderReviewAction }: { missing: Missin
 
 /**
  * 一个版本的问题：头部是专辑名与“需要关注”，然后逐节列出拿不准的字段、同一目录的归组冲突与缺失的曲目（没有的节不出现）。
+ * 各节的标题可以被程序聚焦（tabIndex=-1，不进 Tab 顺序）：核对之后按钮换掉时焦点落在这里。
  * 都没有时说明“这个版本已经没有待处理的问题”（处理完之后版本仍保持选中，页面不跳走）。
  */
 export function ReleaseIssuesDetail({ issues, renderFieldActions, renderReviewAction }: ReleaseIssuesDetailProps) {

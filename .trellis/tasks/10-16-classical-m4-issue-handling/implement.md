@@ -38,7 +38,7 @@
 - [x] **5. 前端：核对、取消核对与撤销**
   - 命令意图与结果提示；从详情打开“编辑发行信息”；`issue_changed` 后重新读取；操作记录与“修改记录”的文案；专辑详情的“查看问题”。
   - Vitest：每类的核对与取消、撤销、冲突与结果不确定时的重试、提交后各处计数一起变化。
-- [ ] **6. Playwright（受控后端）**：主流程、五种宽度不溢出、axe（WCAG 2.1 A/AA）、纯键盘；`src/test/governance-data.ts` 增加问题与核对的接口行为，
+- [x] **6. Playwright（受控后端）**：主流程、五种宽度不溢出、axe（WCAG 2.1 A/AA）、纯键盘；`src/test/governance-data.ts` 增加问题与核对的接口行为，
   Vitest 替身与受控后端共用。
 - [ ] **7. 真实服务用例**：`frontend/e2e/real/issues.real.ts`，用合成 WAV 造出归组冲突与缺失曲目，在页面上核对、重扫、取消与撤销；用例结束删除素材并重扫。
 - [ ] **8. 文档同步**：新增后端规范 `issue-review-contracts.md`；同步受治理操作合同与 catalog 合同的“需要关注”、前端规范、

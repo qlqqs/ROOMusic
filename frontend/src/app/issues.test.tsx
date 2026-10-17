@@ -240,6 +240,19 @@ describe("元数据问题页：核对、取消核对与撤销", () => {
     expect(catalog.groups.find((group) => group.id === albumA().id)?.attention_count).toBe(2);
   });
 
+  it("核对之后按钮换成“取消核对”：焦点落在这一节的标题上，不掉回页面顶部", async () => {
+    setup();
+    const user = userEvent.setup();
+    renderApp({ path: `/issues?release=${releaseOf(albumA())}` });
+    const button = within(sectionOf(await detailOf("Alpha Suites"), "同一目录的归组冲突")).getByRole("button", { name: "标记为已核对：归组冲突" });
+    button.focus();
+    await user.keyboard("{Enter}");
+    await screen.findByText(/已把“归组冲突”标记为已核对/);
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("heading", { level: 3, name: "同一目录的归组冲突" })));
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "取消核对：归组冲突" }));
+  });
+
   it("结果提示里的“撤销”恢复核对之前的状态；取消核对也可以撤销，恢复原来的核对", async () => {
     const { governance } = setup();
     const user = userEvent.setup();

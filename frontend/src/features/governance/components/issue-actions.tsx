@@ -1,5 +1,5 @@
 import { BadgeCheck, PencilLine, Undo2 } from "lucide-react";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Button } from "../../../shared/ui";
 import type { FieldIssueDTO, ReleaseIssuesDTO } from "../api/decoders";
 import type { ReleaseCommands } from "../hooks/use-release-commands";
@@ -17,10 +17,22 @@ type ReleaseRef = Pick<ReleaseIssuesDTO, "release_id" | "revision"> & { title: s
  */
 export function ReviewAction({ subject, release, commands }: { subject: ReviewSubject; release: ReleaseRef; commands: ReleaseCommands }) {
   const label = reviewableIssueLabels[subject.issue];
+  const rowRef = useRef<HTMLDivElement>(null);
+  const hadFocus = useRef(false);
+  // 核对或取消之后按钮换成另一个（标记为已核对 ↔ 取消核对），被点的按钮已不在页面上，焦点会掉回页面顶部：
+  // 这时把焦点带到这一节的标题（tabIndex=-1，不进 Tab 顺序），下一次 Tab 就到新的按钮。
+  useLayoutEffect(() => {
+    if (!hadFocus.current) return;
+    const row = rowRef.current;
+    if (row !== null && row.contains(document.activeElement)) return;
+    hadFocus.current = false;
+    if (document.activeElement === null || document.activeElement === document.body) row?.closest("section")?.querySelector<HTMLElement>("h3")?.focus();
+  });
   const pending = commands.state.status === "pending" && commands.state.command.kind === "review" && commands.state.command.issue === subject.issue && commands.state.command.release.id === release.release_id;
   const pendingAction = pending && commands.state.status === "pending" && commands.state.command.kind === "review" ? commands.state.command.action : null;
   const target = { id: release.release_id, title: release.title };
   const submit = (action: "review" | "unreview") => {
+    hadFocus.current = rowRef.current?.contains(document.activeElement) ?? false;
     commands.dismiss();
     commands.submit({ kind: "review", release: target, revision: release.revision, issue: subject.issue, action, basis: action === "review" ? subject.basis : undefined });
   };
@@ -28,7 +40,7 @@ export function ReviewAction({ subject, release, commands }: { subject: ReviewSu
   const unreviewText = pendingAction === "unreview" ? "正在取消…" : "取消核对";
   // 可访问名称用 aria-label 一次写全：看不见的后缀单独成段时，浏览器会在全角冒号前插入空格。
   return (
-    <div className={styles.row}>
+    <div ref={rowRef} className={styles.row}>
       {subject.status === "open" ? (
         <Button icon={<BadgeCheck size={16} />} busy={pendingAction === "review"} aria-label={`${reviewText}：${label}`} onClick={() => submit("review")}>
           {reviewText}
