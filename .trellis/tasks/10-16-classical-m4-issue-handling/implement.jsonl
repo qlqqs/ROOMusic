@@ -1,0 +1,16 @@
+{"file": ".trellis/spec/backend/governance-contracts.md", "reason": "共同写入流程 operations.Run、Kind、撤销规则与操作记录列表；本任务新增核对操作类型并复用发行的版本号"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "attention_count 的算法与按组读取；本任务把“需要关注”拆成三类并加入核对的排除"}
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "扫描如何重写字段决定、归组依据与缺失标记；本任务要求扫描不读写核对表"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移、具名约束、事务边界与锁顺序"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "错误信封、同源校验、接口样本与技术债"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "分类错误与稳定的 REST 错误码（新增 issue_changed、invalid_filter）"}
+{"file": ".trellis/spec/backend/default-version-contracts.md", "reason": "上一种受治理操作的完整写法（执行器、撤销、展示、测试），本任务照此实现"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "查看者代次的查询键、写操作的悲观更新与失效、地址参数规范化"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "useReleaseCommands 命令状态机、幂等键与结果不确定时的重试"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "对话框、表格、可访问性与 CSS Modules"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "governance 与 catalog 的边界、app 插槽组合与新页面的位置"}
+{"file": "frontend/DESIGN.md", "reason": "问题收件箱的布局 token（380px 列表、860px 详情）与断点"}
+{"file": "frontend/DESIGN-components.md", "reason": "页面能力矩阵里“元数据问题”一行与“需要关注”的含义"}
+{"file": "frontend/DESIGN-acceptance.md", "reason": "落地差异表：原型的忽略与应用只是本地状态，本任务要记下按版本列出的差异"}
+{"file": "docs/architecture/adr/0002-metadata-overlays.md", "reason": "“已人工处理”与原始规则仍有疑问分别表达（第三节），本任务裁决问题状态"}
+{"file": "docs/architecture/adr/0003-governed-operations.md", "reason": "M4 逐类批准的操作（第十节第 7 项），本任务批准“核对问题”"}
