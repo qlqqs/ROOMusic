@@ -13,5 +13,6 @@ export const governanceFailureMessages = {
   not_revertible: "这条记录不能撤销。",
   already_reverted: "这条操作已经撤销过了，记录已刷新。",
   revert_conflict: "这张专辑之后又被修改过，不能撤销这一条。只有最近一次修改可以撤销。",
+  issue_changed: "扫描刚刚改变了这个问题，已重新读取，请看过之后再核对。",
   forbidden: "你的账号没有执行这个操作的权限。",
 } as const;

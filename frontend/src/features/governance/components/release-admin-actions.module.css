@@ -10,3 +10,12 @@
   align-items: center;
   gap: var(--space-2);
 }
+
+/* “查看问题”是导航（链接），不是命令：用链接的样子，与按钮对齐。 */
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--control-height);
+  padding: 0 var(--space-2);
+}

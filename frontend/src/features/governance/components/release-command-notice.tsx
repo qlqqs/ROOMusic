@@ -1,7 +1,7 @@
 import { describeFailure, isHttpFailure } from "../../../shared/api";
 import { Button, Notice } from "../../../shared/ui";
 import type { ReleaseCommand, ReleaseCommandResult, ReleaseCommandState, RevertSubject } from "../hooks/use-release-commands";
-import { correctionFieldLabels } from "../labels";
+import { correctionFieldLabels, reviewableIssueLabels } from "../labels";
 import { governanceFailureMessages } from "./governance-messages";
 
 type ReleaseCommandNoticeProps = {
@@ -23,6 +23,7 @@ const revertedText: Readonly<Record<RevertSubject, string>> = {
   detach: "已撤销移出，这个版本回到了原来的专辑。",
   group: "已撤销这次归组调整，这个版本回到了原来的专辑。",
   default: "已撤销默认版本的调整。",
+  review: "已撤销这次核对，问题恢复到之前的状态。",
   other: "已撤销。",
 };
 
@@ -38,6 +39,10 @@ function successText(command: ReleaseCommand, result: ReleaseCommandResult): str
       return result.result.default_release_id === null
         ? "已改回自动选择：这张专辑默认显示年份最早的版本。"
         : "已把这个版本设为默认版本。专辑列表和打开这张专辑时会先显示它。";
+    case "review": {
+      const label = reviewableIssueLabels[result.result.issue];
+      return result.result.reviewed ? `已把“${label}”标记为已核对，它不再计入“需要关注”。扫描发现情况变了会重新提醒。` : `已取消“${label}”的核对，它重新计入“需要关注”。`;
+    }
     case "revert":
       return revertedText[command.kind === "revert" ? command.subject : "other"];
   }
@@ -81,6 +86,13 @@ export function ReleaseCommandNotice({ state, releaseId, hideFailure, onUndo, on
   }
 
   if (hideFailure) return null;
+  if (!state.uncertain && isHttpFailure(state.failure, 409, "issue_changed")) {
+    return (
+      <Notice tone="warning" title="这个问题刚刚变了" action={dismiss}>
+        扫描刚刚改变了这个问题，已重新读取，请看过之后再核对。
+      </Notice>
+    );
+  }
   if (!state.uncertain && isHttpFailure(state.failure, 409, "revision_conflict")) {
     return (
       <Notice tone="warning" title="这张专辑刚被修改过" action={dismiss}>

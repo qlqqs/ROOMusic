@@ -42,7 +42,7 @@ export function AlbumDetailPage(props: AlbumDetailPageProps) {
     ({ release, groupId: currentGroupId, releaseCount, groupRevision, defaultReleaseId }: { release: ReleaseDetailDTO; groupId: string; releaseCount: number; groupRevision: number; defaultReleaseId: string | null }) => (
       <ReleaseAdminActions
         key={`admin-${release.id}`}
-        release={{ id: release.id, title: release.title, revision: release.revision }}
+        release={{ id: release.id, title: release.title, revision: release.revision, attentionCount: release.attention_count }}
         groupId={currentGroupId}
         releaseCount={releaseCount}
         groupRevision={groupRevision}

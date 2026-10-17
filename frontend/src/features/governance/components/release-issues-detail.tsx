@@ -89,6 +89,7 @@ function GroupingSection({ grouping, renderReviewAction }: { grouping: GroupingI
         {`${grouping.reason_codes.map((code) => reasonCodeLabel(code)).join("；")}：这个目录里各曲目的专辑标签没有过半数，扫描按标签拆成了几个版本。如果它们其实是同一张专辑，可以在专辑页“归入其他专辑”；确认拆分没有问题，就标记为已核对。`}
       </p>
       <ReviewState status={grouping.status} review={grouping.review} staleText="核对之后涉及的文件变了" />
+      {renderReviewAction?.({ issue: "grouping", basis: grouping.basis, status: grouping.status, review: grouping.review })}
       <div className={styles.facts}>
         <h4>涉及的文件</h4>
         <ul className={styles.paths}>
@@ -112,7 +113,6 @@ function GroupingSection({ grouping, renderReviewAction }: { grouping: GroupingI
         )}
         {grouping.truncated ? <p className={styles.note}>内容较多，这里只列出一部分。</p> : null}
       </div>
-      {renderReviewAction?.({ issue: "grouping", basis: grouping.basis, status: grouping.status, review: grouping.review })}
     </section>
   );
 }
@@ -134,9 +134,9 @@ function MissingTracksSection({ missing, renderReviewAction }: { missing: Missin
       <h3 id="issues-missing">缺失的曲目（{formatCount(missing.count)} 首）</h3>
       <p className={styles.explain}>完整扫描时找不到这些文件。把文件放回原处并重新扫描，它们会自动恢复；确认文件已不需要，就标记为已核对，之后新缺失的曲目仍会提醒。</p>
       <ReviewState status={missing.status} review={missing.review} staleText="核对之后又有曲目缺失" />
+      {renderReviewAction?.({ issue: "missing_tracks", basis: missing.basis, status: missing.status, review: missing.review })}
       <DataTable caption="缺失的曲目" columns={columns} rows={missing.tracks} rowKey={(track) => track.id} />
       {missing.truncated ? <p className={styles.note}>只列出前 {formatCount(missing.tracks.length)} 首；核对覆盖全部 {formatCount(missing.count)} 首。</p> : null}
-      {renderReviewAction?.({ issue: "missing_tracks", basis: missing.basis, status: missing.status, review: missing.review })}
     </section>
   );
 }

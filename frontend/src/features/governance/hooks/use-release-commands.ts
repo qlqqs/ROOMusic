@@ -3,15 +3,18 @@ import { useCallback, useMemo } from "react";
 import { failureOf, isOutcomeUncertain, type ApiFailure } from "../../../shared/api";
 import { newIdempotencyKey } from "../../../shared/lib/ids";
 import { useViewerScope } from "../../auth";
-import type { CorrectableField, CorrectionResultDTO, GroupChangeResultDTO, GroupDefaultResultDTO, RevertResultDTO } from "../api/decoders";
-import { changeReleaseGroup, correctRelease, revertOperation, setGroupDefault, type CorrectionChanges } from "../api/endpoints";
+import type { CorrectableField, CorrectionResultDTO, GroupChangeResultDTO, GroupDefaultResultDTO, IssueReviewResultDTO, RevertResultDTO, ReviewableIssue } from "../api/decoders";
+import { changeReleaseGroup, correctRelease, reviewReleaseIssue, revertOperation, setGroupDefault, type CorrectionChanges } from "../api/endpoints";
 import { governanceKeys } from "../query-keys";
 
 /** 命令作用的发行：id 用来发请求，title 只用来写提示文字。 */
 export type ReleaseTarget = { id: string; title: string };
 
-/** 被撤销的操作是哪一种：成功提示据此说明恢复了什么。group 是从操作记录里撤销的归组调整（记录不区分归入与移出），default 是默认版本的调整。 */
-export type RevertSubject = "correct" | "join" | "detach" | "group" | "default" | "other";
+/**
+ * 被撤销的操作是哪一种：成功提示据此说明恢复了什么。group 是从操作记录里撤销的归组调整（记录不区分归入与移出），default 是默认版本的调整，
+ * review 是核对与取消核对。
+ */
+export type RevertSubject = "correct" | "join" | "detach" | "group" | "default" | "review" | "other";
 
 export type ReleaseIntent =
   | { kind: "correct"; release: ReleaseTarget; revision: number; changes: CorrectionChanges; fields: readonly CorrectableField[] }
@@ -26,6 +29,18 @@ export type ReleaseIntent =
       release: ReleaseTarget;
       group: { id: string; revision: number };
       target: string | null;
+    }
+  | {
+      /**
+       * 核对（action 为 review，带页面读到的依据令牌）或取消核对一类问题。revision 是页面读到的发行的人工修改版本号；
+       * 依据在页面打开之后变了时后端返回 409 issue_changed，页面重新读取。
+       */
+      kind: "review";
+      release: ReleaseTarget;
+      revision: number;
+      issue: ReviewableIssue;
+      action: "review" | "unreview";
+      basis?: string | undefined;
     }
   | {
       kind: "revert";
@@ -47,6 +62,7 @@ export type ReleaseCommandResult =
   | { kind: "join"; result: GroupChangeResultDTO; groupTitle: string }
   | { kind: "detach"; result: GroupChangeResultDTO }
   | { kind: "default"; result: GroupDefaultResultDTO }
+  | { kind: "review"; result: IssueReviewResultDTO }
   | { kind: "revert"; result: RevertResultDTO };
 
 export type ReleaseCommandState =
@@ -74,7 +90,7 @@ type ReleaseCommandsOptions = {
 };
 
 /**
- * 管理员对发行与专辑的写操作：修正字段、归入其他专辑、移出为独立专辑、设定或清除默认版本与撤销。悲观更新：只在后端确认并刷新相关查询之后才算完成，
+ * 管理员对发行与专辑的写操作：修正字段、归入其他专辑、移出为独立专辑、设定或清除默认版本、核对问题与撤销。悲观更新：只在后端确认并刷新相关查询之后才算完成，
  * 不做乐观修改；无论成败（包括 409 冲突与结果不确定）都刷新，让界面显示的是服务器当前的状态。
  * 同一时刻只有一个命令；写操作从不自动重试，重试由用户显式触发。
  */
@@ -101,6 +117,11 @@ export function useReleaseCommands({ refresh, onMoved }: ReleaseCommandsOptions)
         case "default": {
           const { data } = await setGroupDefault(command.group.id, command.group.revision, command.target, command.key);
           return { kind: "default", result: data };
+        }
+        case "review": {
+          const body = command.action === "review" ? { action: "review" as const, basis: command.basis ?? "" } : { action: "unreview" as const };
+          const { data } = await reviewReleaseIssue(command.release.id, command.revision, command.issue, body, command.key);
+          return { kind: "review", result: data };
         }
         case "revert": {
           const { data } = await revertOperation(command.operationId, command.key);
