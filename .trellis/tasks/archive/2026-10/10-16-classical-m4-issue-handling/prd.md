@@ -47,7 +47,7 @@
 
 **写入路径与约束**
 
-- 受治理写入只走 `operations.Run`：只有管理员、`Idempotency-Key`、预期版本、成功写一条记录、按类型注册撤销（[受治理操作合同](../../spec/backend/governance-contracts.md)）。
+- 受治理写入只走 `operations.Run`：只有管理员、`Idempotency-Key`、预期版本、成功写一条记录、按类型注册撤销（[受治理操作合同](../../../../spec/backend/governance-contracts.md)）。
 - 操作记录表的类型与目标类型有检查约束（`backend/migrations/0017_governed_operations.sql:23-24`，0018 放宽过一次）；新增操作类型需要迁移。
 - 扫描每次重写 `release_field_decisions` 与 `release_grouping_evidence`（`persist.go:98-104`、`:124-127`），**不碰**修正表、版本号与操作记录（结构保证）。
   所以任何“已处理”的状态都不能存在这两张扫描表里，否则下一次扫描就没了。
@@ -57,15 +57,15 @@
 - 原型（`frontend-desgin/ROOMusic 原型.dc.html:249-300`、`:523-548`）：左侧问题列表（380px，类型筛选），右侧详情（标题、说明、当前/建议对照、依据、
   风险说明，按钮“交给 Steward / 忽略 / 应用修正”，处理后显示“已修正 / 已忽略”与“撤销”）。样例问题大多依赖**外部参照源**（缺封面、缺 VCD、
   艺人别名、发行日期精度）或**结构操作**（拆分 Release、移出重复曲目），这些都没有数据来源或不在本项。
-- [DESIGN-acceptance.md](../../../frontend/DESIGN-acceptance.md) 第 8 节：原型的应用、忽略、撤销只是本地状态，“整理属于 M4”，不能复用前端按钮历史作为恢复依据；
+- [DESIGN-acceptance.md](../../../../../frontend/DESIGN-acceptance.md) 第 8 节：原型的应用、忽略、撤销只是本地状态，“整理属于 M4”，不能复用前端按钮历史作为恢复依据；
   缺失介质自动补建、外部参照“隐藏或只呈现已有证据”；置信度阈值不是后端规则。
-- [DESIGN-components.md](../../../frontend/DESIGN-components.md) 第 7 节：“需要关注”与全库问题收件箱不是同一能力；全库问题收件箱与整理属于 M4。
-- [DESIGN.md](../../../frontend/DESIGN.md) 3.4：问题收件箱列表 `380px`、详情最大 `860px`，窄屏改顺序导航。
-- [ADR 0002](../../../docs/architecture/adr/0002-metadata-overlays.md) 第三节：“已人工处理”与原始规则仍有疑问应分别表达，具体问题状态属于后续设计；
+- [DESIGN-components.md](../../../../../frontend/DESIGN-components.md) 第 7 节：“需要关注”与全库问题收件箱不是同一能力；全库问题收件箱与整理属于 M4。
+- [DESIGN.md](../../../../../frontend/DESIGN.md) 3.4：问题收件箱列表 `380px`、详情最大 `860px`，窄屏改顺序导航。
+- [ADR 0002](../../../../../docs/architecture/adr/0002-metadata-overlays.md) 第三节：“已人工处理”与原始规则仍有疑问应分别表达，具体问题状态属于后续设计；
   第十节第 7 项：M4 = 认领、合并拆分、默认版本、问题处理。
-- [ADR 0003](../../../docs/architecture/adr/0003-governed-operations.md) 第二节：扫描观察不按发现的字段建人工变更集，不把扫描记录展示成可撤销检查点；
+- [ADR 0003](../../../../../docs/architecture/adr/0003-governed-operations.md) 第二节：扫描观察不按发现的字段建人工变更集，不把扫描记录展示成可撤销检查点；
   第十节第 7 项：M4 的结构操作逐类批准。
-- [路线图](../../../docs/architecture/core-1-roadmap.md) M4 行：本地可解释问题；证据可追溯，结构变更走统一执行；无自动弱相似合并。
+- [路线图](../../../../../docs/architecture/core-1-roadmap.md) M4 行：本地可解释问题；证据可追溯，结构变更走统一执行；无自动弱相似合并。
 
 ## 裁决
 
