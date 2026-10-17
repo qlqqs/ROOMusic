@@ -290,6 +290,7 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	recordGroupDefaultSamples(t, application, samples, call, admin)
 	// 核对问题（M4 第二项）：新建一张有问题的合成专辑，放在最后，已有样本不受影响。
 	recordIssueReviewSamples(t, application, samples, call, admin)
+	recordClaimSamples(t, application, samples, call, admin)
 
 	samples.finish()
 }
@@ -584,6 +585,44 @@ func recordIssueReviewSamples(t *testing.T, application *integrationTestApplicat
 	samples.record("release-issues/get-reviewed", call(http.MethodGet, "/api/v1/releases/"+releaseID+"/issues", nil, admin), http.StatusOK)
 	samples.record("release-issues/list-reviewed", call(http.MethodGet, "/api/v1/release-issues?status=reviewed", nil, admin), http.StatusOK)
 	samples.record("release-issues/list-missing-tracks", call(http.MethodGet, "/api/v1/release-issues?category=missing_tracks&page_size=1", nil, admin), http.StatusOK)
+}
+
+// recordClaimSamples 记录认领接口：预览（四类迁移、跳过新版本已有的修正与已核对的问题、缺失曲目的核对不迁移）、认领的成功响应、
+// 认领之后旧版本不再待认领（not_claimable），以及预览已过期（claim_changed）与版本号过期两种错误。素材是直接写库的合成发行：
+// 旧版本有两个字段修正、与另一个版本同在一张专辑里并且是它的默认版本、核对了归组冲突和缺失曲目，已经没有可见的曲目；
+// 新版本是可见的独立专辑，已有流派修正。
+func recordClaimSamples(t *testing.T, application *integrationTestApplication, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser) {
+	t.Helper()
+	rootID := uuid.New()
+	mustExec(t, application, `INSERT INTO library_roots(id,path,status,revision) VALUES($1::uuid,$2,'active',1)`, rootID, filepath.Join(application.allowedRoot, "claims"))
+	albumID := uuid.New()
+	mustExec(t, application, `INSERT INTO release_groups(id) VALUES($1::uuid)`, albumID)
+	sourceID, _ := insertGroupedRelease(t, application, rootID, groupedRelease{title: "Sample Replaced Album", artist: "Sample Trio", year: 2001, groupID: albumID, tracks: []string{"missing", "missing"}})
+	insertGroupedRelease(t, application, rootID, groupedRelease{title: "Sample Replaced Album (reissue)", artist: "Sample Trio", year: 2008, groupID: albumID, tracks: []string{"present"}})
+	targetID, _ := insertGroupedRelease(t, application, rootID, groupedRelease{title: "Sample Replaced Album (new rip)", artist: "Sample Trio", year: 2001, tracks: []string{"present", "present"}})
+	mustExec(t, application, `UPDATE releases SET relative_directory='replaced' WHERE id IN ($1::uuid, $2::uuid)`, sourceID, targetID)
+	mustExec(t, application, `INSERT INTO release_grouping_evidence(release_id,candidate_kind,rule_id,source_refs,reason) VALUES($1::uuid,'same_dir_split','organizer_v2','["replaced/01.flac","replaced/02.flac"]','same_directory_conflict')`, sourceID)
+	mustExec(t, application, `UPDATE release_groups SET default_release_id=$1::uuid WHERE id=$2::uuid`, sourceID, albumID)
+	operationID := uuid.New()
+	mustExec(t, application, `INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id)
+		SELECT $1::uuid, id, 'release_correction', 'release', $2::uuid, $3::uuid, 'f', 1, 2, '{}', '{}', '{}', 'sample' FROM users WHERE role = 'admin' ORDER BY created_at LIMIT 1`, operationID, sourceID, uuid.New())
+	mustExec(t, application, `INSERT INTO release_corrections(release_id,field,mode,text_value,operation_id) VALUES($1::uuid,'title','set','Sample Replaced Album (corrected)',$2::uuid),($1::uuid,'label','set','Sample Label',$2::uuid)`, sourceID, operationID)
+	mustExec(t, application, `INSERT INTO release_issue_reviews(release_id,issue,basis,operation_id)
+		SELECT release_id, 'grouping', jsonb_build_object('reason', reason, 'source_refs', source_refs), $2::uuid FROM release_grouping_evidence WHERE release_id=$1::uuid`, sourceID, operationID)
+	mustExec(t, application, `INSERT INTO release_corrections(release_id,field,mode,text_value,operation_id) VALUES($1::uuid,'label','set','Sample New Label',$2::uuid)`, targetID, operationID)
+
+	key := func(suffix string) map[string]string {
+		return map[string]string{"Idempotency-Key": "00000000-0000-4000-8000-00000000" + suffix}
+	}
+	previewResponse := call(http.MethodGet, claimPreviewPath(targetID, sourceID), nil, admin)
+	samples.record("release-claims/preview", previewResponse, http.StatusOK)
+	preview := decodeJSONMap(t, previewResponse)
+	revision, sourceRevision, token := int64(preview["revision"].(float64)), int64(preview["source_revision"].(float64)), preview["token"].(string)
+	samples.record("errors/claim-changed", call(http.MethodPost, claimPath(targetID), claimBody(revision, sourceRevision, sourceID, strings.Repeat("0", 64)), admin, key("0601")), http.StatusConflict)
+	samples.record("errors/revision-conflict-claim", call(http.MethodPost, claimPath(targetID), claimBody(revision+5, sourceRevision, sourceID, token), admin, key("0602")), http.StatusConflict)
+	samples.record("release-claims/claimed", call(http.MethodPost, claimPath(targetID), claimBody(revision, sourceRevision, sourceID, token), admin, key("0603")), http.StatusOK)
+	samples.record("errors/not-claimable", call(http.MethodPost, claimPath(targetID), claimBody(revision+1, sourceRevision+1, sourceID, token), admin, key("0604")), http.StatusConflict)
+	samples.record("releases/get-claimed", call(http.MethodGet, "/api/v1/releases/"+targetID, nil, admin), http.StatusOK)
 }
 
 // 样本里的内嵌歌词：同步歌词带元标签、间奏（空行）、同一时间戳的双语两行与一行多个时间戳；纯文本歌词带分段。

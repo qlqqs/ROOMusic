@@ -1,0 +1,34 @@
+{
+  "body": {
+    "defaults": {
+      "moved": [
+        "00000000-0000-4000-8000-000000000001"
+      ],
+      "reset": []
+    },
+    "group_id": "00000000-0000-4000-8000-000000000001",
+    "moved": {
+      "album": true,
+      "corrections": [
+        "title"
+      ],
+      "reviews": [
+        "grouping"
+      ]
+    },
+    "operation_id": "00000000-0000-4000-8000-000000000002",
+    "previous_group_id": "00000000-0000-4000-8000-000000000003",
+    "release_id": "00000000-0000-4000-8000-000000000004",
+    "revision": 2,
+    "skipped": {
+      "album": false,
+      "corrections": [
+        "label"
+      ],
+      "reviews": []
+    },
+    "source_release_id": "00000000-0000-4000-8000-000000000005",
+    "source_revision": 2
+  },
+  "status": 200
+}

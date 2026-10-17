@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "claim_changed",
+      "message": "两个版本的状态在预览之后变了，请重新查看预览"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

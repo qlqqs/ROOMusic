@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "not_claimable",
+      "message": "这个版本现在不需要认领：它可见，或已经没有人工修改"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

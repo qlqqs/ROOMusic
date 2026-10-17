@@ -1,0 +1,70 @@
+{
+  "body": {
+    "album_artist": null,
+    "artist": "Sample Trio",
+    "artwork": null,
+    "attention_count": 0,
+    "barcode": null,
+    "candidate_kind": "ordinary_directory",
+    "catalog_number": null,
+    "corrected_fields": [
+      "title",
+      "label"
+    ],
+    "credits": [],
+    "edition": null,
+    "evidence": [],
+    "genre": null,
+    "id": "00000000-0000-4000-8000-000000000001",
+    "label": "Sample New Label",
+    "media": [
+      {
+        "id": "00000000-0000-4000-8000-000000000002",
+        "position": 1,
+        "title": "Medium",
+        "tracks": [
+          {
+            "artist": "Sample Trio",
+            "bit_depth": null,
+            "bitrate": null,
+            "channels": null,
+            "codec": null,
+            "credits": [],
+            "cue": null,
+            "duration_seconds": null,
+            "id": "00000000-0000-4000-8000-000000000003",
+            "position": 1,
+            "sample_rate": null,
+            "source": "0.flac",
+            "source_kind": "physical",
+            "title": "Sample Replaced Album (new rip) track 1"
+          },
+          {
+            "artist": "Sample Trio",
+            "bit_depth": null,
+            "bitrate": null,
+            "channels": null,
+            "codec": null,
+            "credits": [],
+            "cue": null,
+            "duration_seconds": null,
+            "id": "00000000-0000-4000-8000-000000000004",
+            "position": 2,
+            "sample_rate": null,
+            "source": "1.flac",
+            "source_kind": "physical",
+            "title": "Sample Replaced Album (new rip) track 2"
+          }
+        ]
+      }
+    ],
+    "media_type": null,
+    "medium_count": 1,
+    "revision": 2,
+    "source_type": null,
+    "title": "Sample Replaced Album (corrected)",
+    "track_count": 2,
+    "year": 2001
+  },
+  "status": 200
+}

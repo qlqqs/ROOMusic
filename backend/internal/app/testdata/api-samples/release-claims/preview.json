@@ -1,0 +1,61 @@
+{
+  "body": {
+    "items": [
+      {
+        "action": "move",
+        "field": "title",
+        "from": {
+          "mode": "set",
+          "value": "Sample Replaced Album (corrected)"
+        },
+        "kind": "correction"
+      },
+      {
+        "action": "skip",
+        "field": "label",
+        "from": {
+          "mode": "set",
+          "value": "Sample Label"
+        },
+        "kind": "correction",
+        "reason": "target_has_correction",
+        "to": {
+          "mode": "set",
+          "value": "Sample New Label"
+        }
+      },
+      {
+        "action": "move",
+        "group": "00000000-0000-4000-8000-000000000001",
+        "kind": "album"
+      },
+      {
+        "action": "move",
+        "group": "00000000-0000-4000-8000-000000000001",
+        "kind": "default"
+      },
+      {
+        "action": "move",
+        "effect": "no_issue",
+        "issue": "grouping",
+        "kind": "review"
+      }
+    ],
+    "release": {
+      "group_id": "00000000-0000-4000-8000-000000000002",
+      "id": "00000000-0000-4000-8000-000000000003",
+      "title": "Sample Replaced Album (new rip)",
+      "visible": true
+    },
+    "revision": 1,
+    "source": {
+      "group_id": "00000000-0000-4000-8000-000000000001",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "title": "Sample Replaced Album (corrected)",
+      "visible": false
+    },
+    "source_revision": 1,
+    "token": "0000000000000000000000000000000000000000000000000000000000000001"
+  },
+  "status": 200
+}
