@@ -1,6 +1,6 @@
 # M4 问题处理
 
-> 状态：2026-10-16 创建，同日完成需求讨论（K1–K5），2026-10-17 写完技术设计与执行计划，同日用户批准最终规划摘要，进入实施。
+> 状态：2026-10-16 创建，同日完成需求讨论（K1–K5），2026-10-17 用户批准最终规划摘要；同日实施完成，布局经用户确认（见“实施结果”）。
 > 技术设计见 [design.md](design.md)，执行计划见 [implement.md](implement.md)。
 
 ## 目标与用户价值
@@ -116,6 +116,48 @@
 - 路线：人工选择（route a，用户批准最终规划摘要）。选择者：用户（qlqq）。
 - 2026-10-16：用户从“下一步”候选里选定“问题处理”（推荐项）；K1–K5 依次选择推荐项。K6–K8 是规划细节，在最终摘要里一并请用户批准。
 - 2026-10-17：用户回复“批准”，最终规划摘要（含 K6–K8、取舍与九步计划）原样生效，进入实施。理由：产品裁决都由用户逐条做出，K6–K8 与取舍随摘要一并确认。
+- 2026-10-17：A11 用户看过合成数据的宽屏与窄屏布局图（问题页的列表与详情三节、已核对与“核对之后情况变了”、操作记录页、专辑详情的“查看问题”）后选择“布局可以，继续收尾（推荐）”。
+
+## 实施结果（2026-10-17）
+
+提交（均在 `main`，未推送）：`edc79c8` 规划；`5f2a9af` 启动；`7aaa14a` 迁移 0019 与“需要关注”的三类拆分（无行为变化）；`ea85e9a` 核对的写入与撤销；
+`fea575f` 问题列表与版本的问题；`1e2f63b` 问题页（只读）；`6585fb1` 核对、取消核对与撤销，专辑详情的“查看问题”；`df93999` 浏览器用例（含核对之后的焦点修正）；
+`ec522c8` 真实服务用例（含从记录撤销核对时的提示修正）；`0b074f1` 文档同步。收尾（本结果、归档、链接修正与 journal）随后提交。
+
+| 编号 | 结果 | 证据 |
+| --- | --- | --- |
+| A1 | 达成 | `TestPostgreSQLIssueListCountsFiltersAndSummary`（筛选、分页、`summary`）、`TestPostgreSQLIssueReadAPI`（只有管理员，401/403，`invalid_filter` 与 `invalid_pagination`）；Vitest `issues.test.tsx`（导航入口不显示数量、成员没有入口且不请求接口、筛选与选中写进地址）；Playwright 与真实服务里普通成员读写接口都是 403 |
+| A2 | 达成 | `TestPostgreSQLReleaseIssuesDetail`（字段、归组冲突与同一目录的其他版本、缺失曲目与最后一次看到的时间）、`TestPostgreSQLReleaseIssuesBounds`（同一目录最多 20 个、缺失曲目最多 1000 首、依据覆盖全部）；Vitest 的详情三节；真实服务：页面写出涉及的文件、同一目录的另外两个版本与缺失曲目的文件 |
+| A3 | 达成 | `TestPostgreSQLIssueReviewsExcludeReviewedIssuesFromAttention`（各类核对只压下自己那一类，组的计数与“只看需要关注”跟着变）；Vitest：核对后列表行、筛选项数字与专辑数据的“需要关注”一起变，编辑发行信息确认扫描值后版本留在原处并说明没有待处理的问题；真实服务：核对后“只看需要关注”不再列出这个版本 |
+| A4 | 达成 | `TestPostgreSQLRevertIssueReview`（撤销恢复前态与原核对人，过期的也恢复，`revert_conflict`，撤销不能再撤销）、`…ReplaysWithTheSameKey`、`TestPostgreSQLIssueReviewStateTransitions`（取消核对，含过期的行）；Vitest：“已核对 · 用户名 · 时间”、提示里撤销、撤销取消核对恢复原来的核对人、从操作记录页撤销；真实服务：在“修改记录”里撤销取消核对 |
+| A5 | 达成 | `TestPostgreSQLIssueReviewsSurviveARealRescan`（合成 FLAC：原样重扫核对保持；来源文件变了、介质候选变了、曲目回来后再次缺失时重新计入；扫描不改核对行与记录）；真实服务用例（合成 WAV，3/2/2 三种专辑标签）同样覆盖；反向验证：临时让归组依据的比较总为真，`TestPostgreSQLIssueReviewsSurviveARealRescan` 随即失败，已还原 |
+| A6 | 达成 | `TestPostgreSQLIssueReviewRejectsInvalidRequestsWithoutSideEffects`、`TestPostgreSQLIssueReviewAPIRejectsUnauthorizedAndInvalidRequestsWithoutSideEffects`（`issue_changed`、`revision_conflict`、`no_changes`、404、跨源与非管理员 403、401、各种 400 都没有副作用）、`…APIReviewUnreviewRevertAndRecords`（同键重放与同键异义）、`…APIConcurrentRequests`、`TestPostgreSQLIssueBasisTokenIsStable`；不死锁：`TestPostgreSQLIssueReviewsAndOtherChangesNeverDeadlock` 与 `TestPostgreSQLRevertingAnUnreviewAndTheOriginalReviewDoNotDeadlock`（去掉 KEY SHARE 锁时报 `40P01`）；Vitest 与 Playwright 的 `issue_changed` 重新读取、结果不确定时同一个键重试 |
+| A7 | 达成 | `TestPostgreSQLIssueReviewDescribe`（问题、前后是否有核对、缺失曲目的曲目数、能否撤销）；`change-summary.test.ts`（“核对问题”“撤销核对”“归组冲突：标记为已核对”“缺失曲目（1 首）：取消核对”）；Vitest 的操作记录页 |
+| A8 | 达成 | 第 1 步提交时既有集成测试与全部接口样本逐字不变；新样本只在最后追加；`TestPostgreSQLIssueListCountsFiltersAndSummary`、`TestPostgreSQLReleaseIssuesDetail`、`TestPostgreSQLIssueReadAPI` 与真实服务用例都断言各类待处理数目之和等于 `attention_count` |
+| A9 | 达成 | Playwright（路由模拟）全量 234 项通过，其中 `issues.spec.ts` 7 项：主流程、`issue_changed`、编辑发行信息、“查看问题”、成员没有入口，五种宽度下 1280/1440 两栏（列表 380px、详情不超过 860px）、更窄顺序导航、不溢出、最小字号与 axe，纯键盘；全量 Vitest 73 个文件 1544 项；真实服务 38 项（新增 5 项） |
+| A10 | 达成 | `0b074f1`：新增 `issue-review-contracts.md` 并同步受治理操作、Catalog REST、数据库、目录结构、运行合同、错误处理、默认版本合同、前端规范、DESIGN 三份、ADR 0002/0003 决策记录、路线图、架构决策摘要、产品目标、README 与父任务；规范文件都不超过 24,000 字节；`trellis-check` 逐条对照代码核对并修正了 8 处 |
+| A11 | 达成 | 见“规划决策记录”2026-10-17；截图前在预览里修正了列表行的密度、长标题的行数、详情标题的层级与字段名换行，核对按钮移到核对状态旁边 |
+
+验证：收尾时在最终提交的树上、隔离 PostgreSQL（`roomusic-test`，空闲端口、随机库名，用后 `down -v`）上重跑 `gofmt -l .`、`go vet ./...`、`go test -race -count=1 ./internal/operations/...`、
+`go test -count=1 ./internal/catalog/... ./internal/app/... ./cmd/... ./internal/library/... ./internal/platform/...`（含接口样本逐字比较），全部通过，并核对 19 个问题相关的集成用例确实运行而不是跳过。
+前端：`npm run lint`、`npx tsc --noEmit`、全量 Vitest 73 个文件 1544 项（在导出的暂存树上）、`npm run build` 后内嵌产物与提交的逐文件一致、Playwright（路由模拟）234 项、
+真实服务 38 项（`./scripts/playback-e2e.sh`，步骤 7）。各步骤的变异检查（依据比较、逐首判断、失效、焦点、撤销提示、死锁锁）见各提交说明。
+没有运行 Go 全量测试中与本任务无关的包（`identity`、`playback`、`listening` 等）：本任务只改了 `operations`、`catalog`、`app` 与迁移，扫描写入路径没有改动。
+
+### 与设计的差异
+
+已补记在 [design.md](design.md) 第 14 节：撤销取消核对的加锁顺序、版本的问题接口带版本摘要、样本规范化依据令牌、解码器的导入路径、可访问名称、
+核对之后的焦点、从记录撤销核对时的提示，以及 1024px 视口是顺序导航。
+
+### 已接受的限制与后续
+
+- 会有少量多余的提醒：候选值的排列顺序变了、文件改名都会让问题重新提醒一次（K2 已接受）；来源路径最多 100 条，超出部分的变化发现不了。
+- 核对与字段修正共用发行的版本号：核对之后要撤销更早的修正，需要先撤销这次核对，或者直接再改一次。
+- 成员关系不连续而新建的发行没有核对，问题重新出现；旧版本的核对随旧版本留存，迁移属于认领（M4 第三项）。
+- 浏览器验证只有 Linux Chromium 的自动化证据（五种宽度、axe、键盘），没有 Safari、Firefox 与 Windows 的实际渲染，也没有人工读屏验证。
+- 部署后无需额外操作：迁移 0019 只新增一张表并放宽约束，没有核对行时“需要关注”与升级前逐项相同，不需要重扫。
+- 后续（均未启动）：M4 的其余各项（认领、扫描反馈、Release 合并与拆分）分别立项；成员写操作接入操作记录（M3 的 G6，独立小任务）。
+  F1 手工实播与 F3 远端 CI 仍按用户裁决延后。
 
 ## 范围外
 
