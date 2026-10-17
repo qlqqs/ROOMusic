@@ -55,7 +55,7 @@
     操作记录与“修改记录”的文案。
   - Vitest：每类的迁移与跳过的预览文字、`claim_changed` 与 `revision_conflict` 后重新读取、结果不确定时用同一个键重试、提交后焦点落在结果提示上、
     撤销后页面回到原来的专辑、提交后列表与专辑数据一起刷新。
-- [ ] **7. Playwright（受控后端）**：主流程、五种宽度不溢出、axe（WCAG 2.1 A/AA）、纯键盘；`src/test/governance-data.ts` 增加认领的接口行为，Vitest 替身与受控后端共用。
+- [x] **7. Playwright（受控后端）**：主流程、五种宽度不溢出、axe（WCAG 2.1 A/AA）、纯键盘；`src/test/governance-data.ts` 增加认领的接口行为，Vitest 替身与受控后端共用。
 - [ ] **8. 真实服务用例**：`frontend/e2e/real/claims.real.ts`：用合成 WAV 建两版专辑，在页面上修正、归组、设默认版本、核对；整张替换其中一版并重扫；
   在“待认领”里按推荐认领，检查专辑页；撤销后再认领；最后删除素材并重扫。先用一个临时 Go 测试（`writeSyntheticTrack`/`runScan`）验证这个扫描情形，再跑慢的 `playback-e2e.sh`。
 - [ ] **9. 文档同步**：新增后端规范 `claim-contracts.md`；同步受治理操作合同（第 7 节的 G8 限制改为指向认领）、核对合同第 7 节、Catalog REST 合同、数据库、目录结构、
