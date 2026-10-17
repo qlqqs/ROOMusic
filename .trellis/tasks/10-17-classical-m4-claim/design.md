@@ -168,6 +168,8 @@ CREATE INDEX operations_claim_source_index ON operations ((after_state #>> '{sou
   - 撤销不要求新版本可见。认领之后新版本又被整张替换、变得不可见时，撤销仍能把人工状态还给旧版本。
     这一点与其他操作类型（目标不可见就 404）不同，因为这种撤销的目的就是把修改还给另一个版本。
 - **Describe**：改动摘要是 `{kind: "release_claim", source: {id, title, visible}, moved: {corrections: [字段], album: bool, defaults: 数量, reviews: [问题]}, skipped: {corrections, album, defaults, reviews}}`。
+  `source.title` 取记录里的名字：认领记录用认领之前的有效标题（用户认领时认得的那个名字），撤销记录用恢复之后的；`visible` 才取现在的状态。
+  认领会把旧版本的修正清走，现在的有效标题已是扫描值，若取现在的，操作记录里的名字就和用户认领时看到的不一样（真实服务用例发现）。
   `moved` 与 `skipped` 由记录的前后状态推导，不另存：新版本上操作号是这条记录的修正是迁来的；核对看依据与操作号是否原样出现在新版本上
   （缺失曲目的核对因此总在 `skipped`）；专辑看新版本是否进了来源原来的组；`defaults` 是接任默认版本的专辑数（改回自动选择的不算）。
   专辑只给数量，不给标题：页面用“接任了 N 张专辑的默认版本”就够，不必为每条记录再查专辑的代表版本。

@@ -284,13 +284,18 @@ func (claimKind) Describe(ctx context.Context, database operations.Queryer, reco
 			continue
 		}
 		sourceID := strings.ToLower(after.Source.ReleaseID)
-		source := claimSourceRef{ID: sourceID}
+		// 来源的名字是记录里的：用户认领时认得的那个名字（认领之前的有效标题；撤销记录取恢复之后的）。认领会把旧版本的修正清走，
+		// 现在的有效标题已是扫描值，页面上的名字就和用户认领时看到的不一样了；是否可见才是现在的状态。
+		source := claimSourceRef{ID: sourceID, Title: after.Source.Title}
+		if record.Type == operations.TypeReleaseClaim {
+			source.Title = before.Source.Title
+		}
 		var sourceRevision int64
 		sourceExists := true
-		err := database.QueryRowContext(ctx, `SELECT releases.title, releases.edit_revision, `+releaseVisiblePredicate+` FROM `+releaseSource+` WHERE releases.id=$1::uuid`, sourceID).
-			Scan(&source.Title, &sourceRevision, &source.Visible)
+		err := database.QueryRowContext(ctx, `SELECT releases.edit_revision, `+releaseVisiblePredicate+` FROM `+releaseSource+` WHERE releases.id=$1::uuid`, sourceID).
+			Scan(&sourceRevision, &source.Visible)
 		if errors.Is(err, sql.ErrNoRows) {
-			sourceExists, source.Title = false, after.Source.Title
+			sourceExists = false
 		} else if err != nil {
 			return nil, err
 		}

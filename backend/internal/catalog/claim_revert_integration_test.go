@@ -257,6 +257,16 @@ func TestPostgreSQLClaimDescribe(t *testing.T) {
 		t.Errorf("description = %+v; want the new release and revertible", description)
 	}
 
+	// 来源的名字是认领时用户认得的那个：认领把旧版本的修正清走之后，它现在的有效标题已是扫描值，记录里仍写认领之前的名字；
+	// 撤销记录写恢复之后的名字（修正回来了）。
+	if changes.Source.Title != "我改过的标题" {
+		t.Errorf("source title in the claim record = %q, want the title the administrator knew when claiming %q", changes.Source.Title, "我改过的标题")
+	}
+	var currentTitle string
+	if err := fixture.database.QueryRow(`SELECT title FROM release_effective WHERE id=$1::uuid`, scenario.source.releaseID).Scan(&currentTitle); err != nil || currentTitle != "旧版本" {
+		t.Fatalf("the old release's current effective title = %q (%v), want its scan value %q once the corrections moved away", currentTitle, err, "旧版本")
+	}
+
 	// 新版本不可见仍可撤销；之后又有修改就不可撤销（新版本、旧版本、专辑各自）。
 	fixture.exec(`UPDATE tracks SET source_status='missing' WHERE medium_id=$1::uuid`, scenario.target.mediumID)
 	if got := describe(record)[claim.OperationID]; !got.Revertible || got.Release == nil || got.Release.Visible {
@@ -285,7 +295,7 @@ func TestPostgreSQLClaimDescribe(t *testing.T) {
 		t.Fatal(err)
 	}
 	revertChanges, ok := describe(revertRecord)[revert.OperationID].Changes.(claimChanges)
-	if !ok || revertChanges.Source.ID != scenario.source.releaseID || revertChanges.Moved != nil || revertChanges.Skipped != nil || revertChanges.PreviousGroupID != "" {
+	if !ok || revertChanges.Source.ID != scenario.source.releaseID || revertChanges.Source.Title != "我改过的标题" || revertChanges.Moved != nil || revertChanges.Skipped != nil || revertChanges.PreviousGroupID != "" {
 		t.Errorf("the revert's changes = %+v", describe(revertRecord)[revert.OperationID].Changes)
 	}
 }
