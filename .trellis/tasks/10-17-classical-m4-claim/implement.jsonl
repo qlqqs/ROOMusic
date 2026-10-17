@@ -1,0 +1,18 @@
+{"file": ".trellis/spec/backend/governance-contracts.md", "reason": "共同写入流程 operations.Run、Kind、撤销规则与操作记录列表；本任务新增认领操作类型，第 7 节的 G8 限制由认领解决"}
+{"file": ".trellis/spec/backend/issue-review-contracts.md", "reason": "核对表、依据与撤销时 KEY SHARE 的加锁顺序；认领要迁移核对并保留原 operation_id"}
+{"file": ".trellis/spec/backend/default-version-contracts.md", "reason": "组的默认版本、组自己的版本号与先锁发行后锁组的顺序；认领要把默认版本交给新版本或改回自动选择"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "可见性、按组读取与代表版本规则、接口样本；本任务新增预览、认领与待认领的读取接口"}
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "扫描何时新建发行（成员关系严格过半）、原地替换与缺失标记；扫描不读写治理表的结构保证"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移、具名约束、部分索引、事务边界与锁顺序"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "错误信封、同源校验、接口样本与技术债"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "分类错误与稳定的 REST 错误码（新增 not_claimable、claim_changed）"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "catalog 与 operations 的包边界与依赖规则"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "查看者代次的查询键、写操作的悲观更新与失效、地址参数规范化"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "useReleaseCommands 命令状态机（新增第七种意图 claim）、幂等键与结果不确定时的重试"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "单选列表、对话框、表格、可访问性与 CSS Modules"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "governance 与 catalog 的边界、app 插槽组合与新页面的位置"}
+{"file": "frontend/DESIGN.md", "reason": "两栏布局 token（380px 列表、860px 详情）与断点，待认领页沿用问题页的结构"}
+{"file": "frontend/DESIGN-components.md", "reason": "页面能力矩阵与 M3/M4 管理员操作区的组件约定"}
+{"file": "frontend/DESIGN-acceptance.md", "reason": "落地差异表与“认领、合并拆分仍另议”的待确认项"}
+{"file": "docs/architecture/adr/0002-metadata-overlays.md", "reason": "第四节：无法证明成员关系连续时新建发行，原有修正留待人工认领、不静默重挂；第十节第 6、7 项"}
+{"file": "docs/architecture/adr/0003-governed-operations.md", "reason": "第十节第 7 项：认领（修正迁移）是须逐类批准的结构操作"}

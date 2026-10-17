@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端测试与门禁、隔离 PostgreSQL、集成测试必须真跑"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端测试、axe、五种宽度、纯键盘与内嵌产物"}
+{"file": ".trellis/spec/backend/governance-contracts.md", "reason": "受治理写入与撤销的必需测试与断言点（拒绝无副作用、重放、并发、真实重扫）"}
+{"file": ".trellis/spec/backend/issue-review-contracts.md", "reason": "迁移核对后的有效性与死锁回归（KEY SHARE 锁）"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "没有认领时既有接口样本逐字不变"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "认领从扫描结论、写入、撤销到界面与操作记录的跨层数据流核对"}

@@ -1,0 +1,239 @@
+# M4 认领：技术设计
+
+需求与裁决见 [prd.md](prd.md)，执行计划见 [implement.md](implement.md)。本文写的是实现方式，需求以 PRD 为准。
+
+## 1. 边界与能力归属
+
+- **catalog** 拥有全部业务规则：待认领的判定、推荐、预览、认领的执行器与它的撤销和展示（`operations.Kind`）。要迁移的四类人工状态都在 catalog 的表里：
+  `release_corrections`、`releases.group_id`、`release_groups.default_release_id`、`release_issue_reviews`。
+- **operations** 增加一种操作类型 `release_claim`，`Run` 与 `RevertExecutor` 不改；记录列表增加一个筛选条件 `Sources`（第 7 节）。
+  目标类型仍是 `release`，目标是**新版本**；旧版本的 ID 与状态写在记录的前后状态里。
+- **扫描不变**：扫描照旧只写扫描列与证据，不读写修正、核对、组行与操作记录，这个结构保证不变。认领只在管理员提交时发生，没有自动认领。
+- **governance 前端**新增“待认领”页与认领流程；专辑详情里的提示与“查看问题”放在同一个管理员操作区（app 组合）。
+
+## 2. 待认领的判定
+
+**旧版本（待认领）**：发行行存在、**不可见**（`releaseVisiblePredicate` 为假：没有 present 曲目），并且至少留有下列一项**人工状态**：
+
+1. 有 `release_corrections` 行；
+2. 所在的组里有**别的发行**（不论可见与否）。扫描从不把新发行放进已有的组，所以组里有别的发行只可能来自人工归组；
+3. 是某个组的 `default_release_id`（失效中的默认版本也算）；
+4. 有 `release_issue_reviews` 行（过期的也算）。
+
+第 2 项看“有别的发行”，不看“有别的可见发行”。这样同一张专辑的两个版本都被整张替换之后，先认领一个，另一个仍能认领回这张专辑。
+
+**新版本（认领目标）**：任意**可见**的发行，不是旧版本自己。
+
+认领成功后，旧版本的四类状态都已移走或清除（第 5 节），它不再满足判定，从列表消失。文件回来、旧版本又可见时，它也不再待认领（K5）。
+判定写成一个 SQL 谓词常量 `releaseClaimablePredicate`（`claims.go`），列表、详情、预览与执行器共用，与 `issues.go` 的做法相同。
+
+## 3. 推荐（只读，规则固定）
+
+K1 定的依据是**同一目录和文件路径**。推荐只决定排序与提示，不会自动执行。旧版本 O 的**路径集合**是：
+
+- O 名下全部曲目的 `(source_root_id, relative_path)`，原地替换后缺失的旧曲目仍保留路径；
+- O 的归组依据 `release_grouping_evidence.source_refs` 里的相对路径，与 O 同一 root，最多 100 条。
+
+第二种是 O **最后一次被扫描时**的文件清单。O 不再被沿用之后，扫描不会再重写这一行。新增文件导致原有曲目整体改挂到新发行时，O 名下已经一首曲目都不剩，只有这一行还记得原来的文件。
+
+候选是可见版本 N（N ≠ O），满足下面任一条件：
+
+| 理由码 | 条件 | 对应的真实情形 |
+| --- | --- | --- |
+| `same_files` | O 的路径集合里有路径与 N 的某首 present 曲目相同（同一 root 内） | 原地整张换成另一份音频；新增的文件不少于原有的，原有曲目改挂到 N |
+| `same_directory` | `O.source_root_id = N.source_root_id` 且 `O.relative_directory = N.relative_directory` | 目录还在，文件全换了名字 |
+
+- 排序：两个理由都命中的在前；然后按 `same_files` 命中的路径数，多的在前；再按 N 的有效标题和 ID。最多返回 5 个。
+- 查询边界：O 的路径最多是 100 条加上 O 名下的曲目（单个发行的曲目数在扫描里有界）。路径比较走 `tracks_bound_source_path_uq`
+  （只含持有来源身份的曲目，扫描里它们就是 present 的），每条路径一次索引查找，不扫全表。`same_directory` 没有可用的索引
+  （`releases_source_directory` 已在迁移 0010 删除），按 root 与目录在 `releases` 上过滤；它只在打开一个旧版本的详情时算一次，代价可以接受，规模变大再加索引。
+- 没有候选时推荐为空，页面只提供手动搜索（K1）。手动搜索复用“归入其他专辑”的专辑搜索（`useAlbumSearchResults`，`GET /api/v1/release-groups?q=`，只含可见版本）：
+  先选专辑，专辑里有多个版本时再选其中一个（读 `GET /api/v1/release-groups/{id}`）。别的目录、别的 root 的版本都能这样选到。
+- 专辑详情里的提示（K4）用同一组条件反过来查：哪些待认领的旧版本把当前可见版本 N 列为推荐，最多 3 个。
+  做法是先列出同一 root 下的待认领旧版本（待认领的版本很少），再逐个按上面的条件检查 N；不从 N 出发反查整个库。
+- 音频指纹不在推荐依据里。跨 root 移动、目录与文件名都改了的情形推荐不出来，只能手动搜索（PRD“已接受的限制”）。
+
+## 4. 数据模型（迁移 0020）
+
+只放宽操作类型约束，不新增表：
+
+```sql
+ALTER TABLE operations DROP CONSTRAINT operations_type_ck;
+ALTER TABLE operations ADD CONSTRAINT operations_type_ck
+    CHECK (operation_type IN ('release_correction', 'release_group_change', 'release_group_default',
+                              'release_issue_review', 'release_claim', 'revert'));
+CREATE INDEX operations_claim_source_index ON operations ((after_state #>> '{source,release_id}'), created_at DESC, id DESC)
+    WHERE (after_state #>> '{source,release_id}') IS NOT NULL;
+```
+
+- 不建“认领关系”表。认领之后旧版本上什么都不剩，前后状态完整记在操作记录里，撤销以它为依据；待认领列表由谓词实时算出。
+- 部分表达式索引用于“修改记录”与操作记录页同时找到**来源**是某个版本的认领记录与它们的撤销记录（第 7 节）。其他类型的状态里没有 `source` 键，不进这个索引。
+- 不写 down 迁移。按 ADR 0002 第十节第 7 项，回退是关闭写入路由、保留数据。
+
+## 5. 认领的写入
+
+`POST /api/v1/releases/{id}/claim`，`{id}` 是**新版本**。请求体是 `{expected_revision, source_release_id, source_revision, preview}`：
+
+- `expected_revision`：页面读到的新版本 `edit_revision`。
+- `source_revision`：旧版本的 `edit_revision`。
+- `preview`：预览令牌（第 6 节）。它防止提交时认领的状态与管理员看到的预览不同。
+
+**检查顺序**：同源（403）→ 管理员（401/403）→ 路由 ID 与 `source_release_id` 是 UUID（`400 invalid_id`）→ 两者相同（`400 invalid_input`）→
+`Idempotency-Key`（`400 invalid_input`）→ 请求体（`invalid_json` / `invalid_input`）→ `operations.Run`。
+
+**指纹**：`{type: release_claim, release_id, expected_revision, source_release_id, source_revision, preview}`。
+
+**执行器 `ClaimExecutor`** 在同一个事务里依次执行：
+
+1. **加锁**，顺序固定：
+   - 先对旧版本核对行引用的操作记录加 `FOR KEY SHARE`。核对行迁到新版本时保留原来的 `operation_id`（核对人与时间不变），提交时的外键检查会加同一种锁；
+     而撤销那条更早的记录会先 `FOR UPDATE` 锁它、再锁发行行。不先加这把锁就会死锁（核对合同第 5 节）。
+   - 再按 UUID 顺序 `FOR UPDATE` 两个发行行（`lockReleaseRow`，不要求可见）。
+   - 最后按 UUID 顺序锁涉及的组行（`lockGroups`）：新版本现在的组、旧版本现在的组，以及以旧版本为默认版本的组（锁住之后重新读默认版本）。
+   这与归组、默认版本的顺序一致（先锁发行、后锁组）。扫描只更新发行行，从不锁组行，所以不会形成环形等待。
+2. 新版本不存在或不可见：`404 not_found`。旧版本不存在：`404 not_found`。旧版本可见，或不满足第 2 节的判定：`409 not_claimable`。
+3. 任一版本号不等：`409 revision_conflict`。
+4. 重新计算预览，令牌不等：`409 claim_changed`，页面重新读取。
+5. 按预览执行（K2、K3）。四类全部跳过（例如都与新版本冲突，按 K3 保留新版本的）也照样执行：旧版本的修改仍被清走、留在记录里，这次认领表示“新版本已经接替了它”，
+   旧版本因此离开待认领列表；撤销可以恢复。没有 `no_changes`：能走到这里的旧版本一定留有人工状态（第 2 节）。
+   - **字段修正**：旧版本的每一条修正，如果新版本没有同一字段的修正，就复制过去（`operation_id` 写本次操作）；新版本已有就跳过。然后删除旧版本的全部修正行。
+   - **专辑**：旧版本所在的组 G 里有别的发行时，按新版本现在的情况分三种：
+     - 新版本已经在 G 里：这一项不用做；
+     - 新版本所在的专辑里没有别的**可见**版本（页面上是单版本专辑）：新版本的 `group_id` 改成 G。它原来的组随之变空，按现状保留（组从不删除）；
+     - 新版本所在的专辑里有别的可见版本（页面上是多版本专辑）：跳过（K3）。
+   - **旧版本移出原来的组**：只要旧版本的组里有别的发行，就把旧版本移进一个新建的空组（与“移出为独立专辑”同样的做法）。
+     这样第 2 节第 2 项对它不再成立，旧版本才会离开待认领列表；它不可见，这个组也不出现在任何列表里。新版本跳过了专辑一项时同样移出，
+     原来的专辑关系写在记录的前态里，撤销可以恢复。
+   - **默认版本**：对每个以旧版本为默认版本的组 D（通常就是 G；旧版本被移出某张专辑之后，那张专辑的设定也还指向它）：
+     新版本在 D 里（原来就在，或刚刚进入），就把 `D.default_release_id` 改成新版本；否则改成空（自动选择）。旧版本不可见，原来的设定本来就处于失效状态，
+     改成空不改变页面上的显示。两种情况 `D.edit_revision` 都加一，预览里写明结果。
+   - **核对**：来源类型、介质类型与归组冲突的核对，如果新版本没有同一类核对，就把依据与原来的 `operation_id` 原样复制过去（核对人与时间不变），
+     有效性仍在读取时判断（K2 第 ④ 点）；新版本已有就跳过。字段修正则写本次操作的 ID：这条修正是这次认领设到新版本上的。
+     **缺失曲目的核对不迁移**：它的依据是旧版本自己的曲目 ID 与最后一次看到的时间，新版本的缺失曲目是别的曲目，照搬也不会生效；旧版本不可见，这条核对也不再有意义。
+     预览里写明“缺失曲目的核对不迁移”。然后删除旧版本的全部核对行。
+6. 两个发行的 `edit_revision` 各加一。旧版本也被修改了：它的修正与核对被移走、离开了原来的组。
+7. 记录的前后状态是撤销的依据，类型化，前态和后态都写全：
+   ```text
+   {source: {release_id, revision, title, group_id, corrections: {字段: {意图, operation_id}}, reviews: {问题: {basis, operation_id}}},
+    target: {release_id, revision, title, group_id, corrections: {…}, reviews: {…}},
+    groups: {组 ID: {revision, default_release_id}}}
+   ```
+
+**响应**：`{release_id, source_release_id, group_id, previous_group_id, revision, source_revision, operation_id, moved, skipped}`。
+`group_id` 与 `previous_group_id` 是新版本认领后与认领前所在的组（前端据此导航与撤销后返回）；
+`moved` 是 `{corrections: [字段], album: bool, defaults: [组 ID], reviews: [问题]}`，`skipped` 是 `{corrections: [字段], album: bool, reviews: [问题]}`。
+同键同义重放返回同一份响应。
+
+记录的 `expected_revision` 与 `result_revision` 是**新版本**的。`Outcome` 只有一对版本号，撤销规则以目标为准；旧版本与各组的版本号写在前后状态里，撤销时一并核对。
+
+## 6. 预览
+
+`GET /api/v1/releases/{id}/claim-preview?source=<旧版本 ID>`（只有管理员）：
+
+- 新版本不可见：`404 not_found`。旧版本不存在：`404 not_found`。旧版本不满足判定：`409 not_claimable`。
+- 返回 `{release, source, revision, source_revision, items, token}`。`release` 是新版本摘要，`source` 是旧版本信息。
+  - `items` 逐项列出四类：`{kind: "correction" | "album" | "default" | "review", field?, issue?, from, to, action: "move" | "skip" | "reset", reason?}`。
+    `skip` 的 `reason` 是 `target_has_correction`、`target_has_review`、`target_in_album`、`already_in_album` 或 `not_transferable`（缺失曲目的核对）。`reset` 只用于默认版本：新版本没有进入那张专辑，所以那张专辑改回自动选择。
+  - 字段修正写出旧版本的意图（改成某个值或设为空），以及新版本现在的有效值。
+  - 核对写出问题类别，以及迁移后在新版本上是否仍有效：用新版本现在的依据与旧依据比较，相同才有效，不同就写明“会重新提醒”（K2 第 ④ 点）。
+  - `token` 是预览内容的 JSONB 文本取 SHA-256，不含展示用的标题。执行器重新计算后比较，做法与核对的依据令牌相同。
+- 预览只读、不加锁。页面打开到提交之间状态变了，由令牌和版本号拦下。
+
+## 7. 撤销与操作记录
+
+`ClaimOperations()` 实现 `operations.Kind`，由 `app` 注册：
+
+- **Revert**：
+  - 先对前态里引用到的更早的操作记录加 `FOR KEY SHARE` 锁。原因：撤销会写回带原 `operation_id` 的修正行与核对行，提交时的外键检查会加同一种锁（核对合同第 5 节的死锁教训）。
+  - 再按第 5 节的顺序锁住两个发行行和涉及的组行。
+  - 以下任一不等就是 `409 revert_conflict`，不做部分撤销：新版本的 `edit_revision` 与原记录的 `result_revision`；旧版本的版本号与后态里的值；各组的版本号与后态里的值。
+  - 然后逐项写回**前态**：两个发行的修正行与核对行（连同原来的 `operation_id`，核对人仍是原来的人），两个发行的 `group_id`，各组的 `default_release_id`。
+    两个发行的版本号加一；改过默认版本的组，版本号也加一。撤销本身不能再撤销（共同规则）。
+  - 撤销记录的前后状态与认领同形状（前态是撤销前的样子，后态是恢复后的样子），所以按来源筛选也能找到它。
+  - 撤销不要求新版本可见。认领之后新版本又被整张替换、变得不可见时，撤销仍能把人工状态还给旧版本。
+    这一点与其他操作类型（目标不可见就 404）不同，因为这种撤销的目的就是把修改还给另一个版本。
+- **Describe**：改动摘要是 `{kind: "release_claim", source: {id, title, visible}, moved: {corrections: [字段], album: {title} | null, default: [专辑标题], reviews: [问题]}, skipped: {…}}`。
+  目标信息照常用 `loadReleaseInfos`（新版本）。`revertible` 的条件：新版本版本号等于 `result_revision`，且旧版本版本号等于后态里的值；不要求可见。
+- **操作记录列表**：按版本筛选（`release_id`）时，除了以这个版本为目标的记录，还要列出以它为**来源**的认领记录。
+  做法是 `operations.ListParams` 增加 `Sources`：按 `after_state #>> '{source,release_id}'` 匹配，走第 4 节的部分索引，结果与 `Targets` 取并集。
+- **与其他记录的关系**：认领之后，被移走的修正与核对的原记录目标仍是旧版本，而旧版本的版本号已经变了，所以它们不能再单独撤销（`revert_conflict`），
+  这与“只撤销最近一次修改”一致。复制到新版本的修正属于这次认领；要改就再改一次，或者撤销认领。
+
+## 8. 读取接口（只有管理员）
+
+- **`GET /api/v1/release-claims?page=&page_size=`**：待认领的旧版本列表。
+  - 排序：按最后一次被看到的时间倒序（K5），再按 ID。这个时间取旧版本名下曲目 `observed_at` 的最大值；名下没有曲目时取归组依据的 `observed_at`，
+    都没有时取发行的创建时间。
+  - 每项：`{release: {id, title, artist, year, edition}, album: {id, title, other_release_count} | null, location: {root_name, directory}, last_seen_at, holds: {corrections: [字段], album, default, reviews: [问题]}}`。
+    推荐只在详情里计算，列表不算。
+  - 标题用有效值：有修正时就是修正值，这正是管理员认得出的名字。
+  - `root_name` 取 `library_roots.name`，没有时用路径末段（与目录列表一致），不返回绝对路径。`album.title` 是那个组里任一发行的有效标题
+    （先取可见的代表版本，没有就取最早创建的成员），组里没有别的发行时 `album` 是 `null`。
+  - 分页与其他列表相同：默认 50，最大 100，非法参数 `400 invalid_pagination`。
+- **`GET /api/v1/release-claims/{id}`**：一个旧版本的详情。包括列表项的全部字段，再加上：
+  - 留着的修改明细：字段的意图与扫描值；专辑里其他版本的标题及是否可见；它是哪张专辑的默认版本；核对的问题类别、核对人与时间；
+  - 推荐（第 3 节）：每项带理由码与命中的路径数，最多 5 个。
+  - 不满足判定时返回 `404 not_found`。
+- **`GET /api/v1/releases/{id}/claim-hints`**：给专辑详情用的提示，列出把这个可见版本列为推荐的旧版本（最多 3 个，`{id, title}`），没有时是空数组。
+  与“查看问题”一样，只有管理员的操作区请求它。
+- 路径一律经过 `SafeRelativeSourceRef`，与证据一致。
+
+## 9. 前端（governance）
+
+- 路由 `/claims`（`AdminGate`）。导航“资料库”里，在“元数据问题”之后加“待认领”，不显示数量。地址参数是 `page` 和 `release`（选中的旧版本，UUID）。
+- **两栏与顺序导航**：沿用问题页的结构与 `useContainerWide`。容器宽于 900px 时两栏（列表 380px，详情最宽 860px）；更窄时先列表后详情，详情里有“返回列表”。
+- **列表行**：旧版本标题；原来的专辑（多版本时写“《…》的版本之一”）；`root_name / directory`；最后一次看到的时间；留着的修改（如“修正 3 项 · 专辑 · 默认版本 · 核对 1 项”）。
+- **详情**：
+  - 留着的修改分节列出。
+  - “推荐的版本”是带封面的单选列表：标题、年份、版本说明和理由的文字（如“同样的文件（12 个）”“同一目录”）。
+  - 下面是“搜索其他版本”：先按标题、艺人或曲目名搜专辑（与“归入其他专辑”同一个搜索），再在专辑里选版本；结果也是单选列表。
+  - 选中版本后显示**预览**（第 6 节的逐项列表：会迁移的、保留新版本的及原因、改回自动选择的专辑），按钮是“认领到《…》”。
+  - 不弹二次确认：预览就是确认，结果也可以撤销。成功后就近提示“已认领到《…》”，带“撤销”和“打开这张专辑”。
+- **专辑详情的提示**（K4）：`claim-hints` 不为空时，管理员操作区显示“可能接替了已不可见的《…》”，链接到 `/claims?release=<旧版本>`，并预选当前版本。
+- **命令**：`useReleaseCommands` 增加第七种意图 `claim`：`release` 是新版本，另带 `source`、两个版本号和预览令牌。
+  遇到 `claim_changed` 或 `revision_conflict` 后重新读取详情与预览；结果不确定时用同一个键重试。撤销沿用 `revert`，`subject` 增加 `"claim"`；
+  在专辑页撤销时，`returnGroupId` 是认领前新版本所在的组（`previous_group_id`），页面跟着新版本回去，与撤销归组相同。
+- **操作记录**：类型名是“认领”。改动行写“从《旧标题》（已不可见）认领：修正 3 项、专辑、默认版本、核对 1 项”；跳过的项另起一行：“保留这个版本已有的：标题”。
+  不能撤销的原因（`notRevertibleReason`）对认领单独判断：认领不要求可见，所以不写“专辑已不可见”，只写“之后又有修改”（任一方又被修改过）。
+- **可访问性**：
+  - 列表与推荐都是带名称的单选组。
+  - 预览是带标题的列表，“会迁移”与“保留”用文字区分，不只靠颜色。
+  - 提交后焦点落在结果提示上。这是问题处理留下的教训：按钮被替换后，焦点不能掉到 `body`。
+
+## 10. 与扫描、其他操作的关系
+
+- 扫描不读写认领涉及的四类人工状态。所以认领之后重扫：修正按视图继续生效，归组与默认版本保持，核对在依据相同时仍有效。这是结构保证，由真实重扫用例守住。
+- 旧版本文件回来（又可见）时，它身上已经没有人工状态，自己是一张单独的专辑。它与新版本是两个可见版本，各自显示扫描值与各自的修改。撤销认领可以把修改还给它。
+- 认领后的新版本可以照常修正、归组、核对、设为默认版本。做过这些新修改之后，认领就不能再撤销（`revert_conflict`）。
+
+## 11. 错误码（新增）
+
+| 条件 | 响应 |
+| --- | --- |
+| 旧版本现在可见，或已不再留有人工修改 | `409 not_claimable` |
+| 预览令牌与现在的不同（页面打开之后有扫描或修改） | `409 claim_changed` |
+| 新版本与旧版本相同 | `400 invalid_input` |
+
+其余错误码与受治理操作合同第 8 节相同：401、403、400、`404 not_found`、`409 revision_conflict`、`idempotency_conflict`、撤销的各种 409、`503`、`500`。
+
+## 12. 迁移、兼容与回退
+
+- 迁移 0020 只放宽约束、建一个部分表达式索引，不改写数据。没有认领记录时，所有既有接口与页面的输出逐项不变（接口样本门禁）。
+- 回退：关闭认领的写入路由与页面入口。已做的认领保留：数据都在既有的表里，记录照常可读。
+
+## 13. 取舍
+
+- **不建认领关系表，推荐用现有线索**：扫描不能写治理表；成员增加时，旧版本名下的曲目已经改挂走了，只有归组依据的路径还记得它最后的文件清单。
+  代价是最多 100 条，CUE 等情形下路径可能对不上（推荐少一些，有手动搜索兜底）。
+- **目标是新版本，一次认领一条记录**：与“只撤销最近一次修改”的规则对齐。旧版本与各组的版本号写进状态一并核对，不做部分撤销。
+- **专辑关系看“组里有别的发行”**：会多列出一些成员全都不可见的组，好处是同组的多个旧版本可以逐个认领回同一张专辑。
+- **认领后旧版本移进新建的空组**：只有这样它才会离开待认领列表；不可见的空组不出现在任何地方，撤销时回到原组。
+- **不做放弃（K5）**：没有接替者的旧版本留在列表里，按最后一次看到的时间沉到后面。
+
+## 14. 已知限制
+
+- 推荐只看文件路径与目录。目录与文件名都改了（含跨 root 移动）的版本推荐不出来，需要手动搜索。
+- 认领之后，被移走的修正与核对的原记录不能再单独撤销（旧版本的版本号已变）。
+- 归组依据的路径最多 100 条，超出部分的文件不参与推荐。
+- 旧版本的专辑关系以它现在所在的组为准。同一张专辑的几个版本先后被替换，而前一个的新版本没有进入这张专辑（它已在别的多版本专辑里）时，
+  后面的旧版本可能看不出原来的专辑关系，需要认领之后手动归组。
