@@ -15,6 +15,9 @@ import {
 } from "../../src/test/catalog-data";
 import {
   governanceDataOf,
+  respondToClaim,
+  respondToClaimHints,
+  respondToClaims,
   respondToCorrect,
   respondToCorrections,
   respondToGroupChange,
@@ -350,10 +353,14 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
       if (suffix === "corrections" && method === "PATCH") return guarded(method, path, true, () => respondToCorrect(mock.governance, releaseId, key, body));
       if (suffix === "group" && method === "POST") return guarded(method, path, true, () => respondToGroupChange(mock.governance, releaseId, key, body));
       if (suffix === "issues" && method === "GET") return guarded(method, path, true, () => respondToReleaseIssues(mock.governance, releaseId));
+      if (suffix === "claim-hints" && method === "GET") return guarded(method, path, true, () => respondToClaimHints(mock.governance, releaseId));
       if (suffix === "issue-review" && method === "POST") return guarded(method, path, true, () => respondToIssueReview(mock.governance, releaseId, key, body));
       return sample("errors/method-not-allowed");
     }
     if (key === "GET /api/v1/release-issues") return guarded(method, path, true, () => respondToIssues(mock.governance, search));
+    if (key === "GET /api/v1/release-claims") return guarded(method, path, true, () => respondToClaims(mock.governance, search));
+    const claimRead = /^\/api\/v1\/release-claims\/([^/]+)$/.exec(path);
+    if (claimRead !== null && method === "GET") return guarded(method, path, true, () => respondToClaim(mock.governance, claimRead[1] ?? ""));
     if (key === "GET /api/v1/operations") return guarded(method, path, true, () => respondToOperations(mock.governance, search));
     const operationRevert = /^\/api\/v1\/operations\/([^/]+)\/revert$/.exec(path);
     if (operationRevert !== null && method === "POST") {

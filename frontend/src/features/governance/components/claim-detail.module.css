@@ -1,0 +1,87 @@
+.detail {
+  display: grid;
+  gap: var(--space-6);
+  align-content: start;
+  min-width: 0;
+  max-width: 860px;
+}
+
+.header {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.title {
+  overflow-wrap: anywhere;
+  font-size: var(--fs-25);
+  /* 被滚动到视野顶部时（例如窄屏从列表进入详情）不被窄屏的吸顶栏盖住。 */
+  scroll-margin-top: calc(var(--layout-topbar-height) + var(--space-3));
+}
+
+.meta {
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.section {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-divider);
+}
+
+.explain {
+  max-width: 64ch;
+  font-size: var(--fs-14);
+}
+
+.bullets {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding-inline-start: var(--space-4);
+  font-size: var(--fs-14);
+  overflow-wrap: anywhere;
+}
+
+.suggestions {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.suggestion {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+  min-width: 0;
+}
+
+.suggestionText {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.suggestionTitle {
+  overflow-wrap: anywhere;
+  font-family: var(--font-heading);
+  font-size: var(--fs-17);
+}
+
+.reason {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.hidden {
+  color: var(--text-secondary);
+}

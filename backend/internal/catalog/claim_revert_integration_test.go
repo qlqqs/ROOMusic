@@ -90,6 +90,18 @@ func TestPostgreSQLRevertClaimRestoresEverything(t *testing.T) {
 		t.Fatal("the claim changed nothing")
 	}
 	targetRevision, sourceRevision, albumRevision := fixture.revisionOf(scenario.target.releaseID), fixture.revisionOf(scenario.source.releaseID), fixture.groupRevision(scenario.album)
+	// 认领改变了新版本所在的专辑（单版本专辑归入了旧版本的专辑）：记录的摘要写明认领之前的组，从记录撤销时页面据此回去。
+	claimRecord, err := operations.Load(context.Background(), fixture.database, claim.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	described, err := ClaimOperations().Describe(context.Background(), fixture.database, []operations.Record{claimRecord})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changes, ok := described[claim.OperationID].Changes.(claimChanges); !ok || changes.PreviousGroupID != scenario.target.groupID || changes.PreviousGroupID == scenario.album {
+		t.Errorf("described changes = %+v, want the previous group %s (not the old album %s)", described[claim.OperationID].Changes, scenario.target.groupID, scenario.album)
+	}
 
 	revert := scenario.mustRevertClaim(t, claim.OperationID)
 	if after := scenario.trace(); !reflect.DeepEqual(after, before) {
@@ -237,6 +249,10 @@ func TestPostgreSQLClaimDescribe(t *testing.T) {
 		!reflect.DeepEqual(changes.Moved.Reviews, []string{IssueSourceType, IssueGrouping}) {
 		t.Errorf("moved %+v, skipped %+v", changes.Moved, changes.Skipped)
 	}
+	// 认领之前新版本已经在 other 的专辑里（上面归入的）：撤销认领之后页面要跟着它回到那里，而不是它最初的组。
+	if changes.PreviousGroupID != other.groupID {
+		t.Errorf("previous group = %q, want the group the new release was in before the claim %q", changes.PreviousGroupID, other.groupID)
+	}
 	if description.Release == nil || description.Release.ID != scenario.target.releaseID || !description.Revertible {
 		t.Errorf("description = %+v; want the new release and revertible", description)
 	}
@@ -269,7 +285,7 @@ func TestPostgreSQLClaimDescribe(t *testing.T) {
 		t.Fatal(err)
 	}
 	revertChanges, ok := describe(revertRecord)[revert.OperationID].Changes.(claimChanges)
-	if !ok || revertChanges.Source.ID != scenario.source.releaseID || revertChanges.Moved != nil || revertChanges.Skipped != nil {
+	if !ok || revertChanges.Source.ID != scenario.source.releaseID || revertChanges.Moved != nil || revertChanges.Skipped != nil || revertChanges.PreviousGroupID != "" {
 		t.Errorf("the revert's changes = %+v", describe(revertRecord)[revert.OperationID].Changes)
 	}
 }

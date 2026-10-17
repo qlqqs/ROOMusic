@@ -1,6 +1,9 @@
 import type { ApiResponse } from "../../../shared/api";
 import { apiRequest } from "../../../shared/api";
 import {
+  decodeClaimDetail,
+  decodeClaimHints,
+  decodeClaimPage,
   decodeCorrectionResult,
   decodeCorrectionState,
   decodeGroupChangeResult,
@@ -10,6 +13,9 @@ import {
   decodeOperationPage,
   decodeReleaseIssues,
   decodeRevertResult,
+  type ClaimDetailDTO,
+  type ClaimHintsDTO,
+  type ClaimPageDTO,
   type CorrectableField,
   type CorrectionResultDTO,
   type CorrectionStateDTO,
@@ -137,4 +143,22 @@ export function reviewReleaseIssue(
     { method: "POST", path: `/api/v1/releases/${releaseId}/issue-review`, body: { expected_revision: expectedRevision, issue, ...body }, idempotencyKey },
     decodeIssueReviewResult,
   );
+}
+
+export type ClaimListParams = { page: number; pageSize: number; signal?: AbortSignal | undefined };
+
+/** 待认领的旧版本（仅管理员）：已不可见、但留有人工修改的版本，最近看到的在前。 */
+export function fetchClaims(params: ClaimListParams): Promise<ApiResponse<ClaimPageDTO>> {
+  const query = new URLSearchParams({ page: String(params.page), page_size: String(params.pageSize) });
+  return apiRequest({ method: "GET", path: `/api/v1/release-claims?${query}`, signal: params.signal }, decodeClaimPage);
+}
+
+/** 一个待认领的旧版本（仅管理员）：留着的修改明细与推荐的新版本；不满足待认领的判定时 404。 */
+export function fetchClaim(releaseId: string, signal?: AbortSignal): Promise<ApiResponse<ClaimDetailDTO>> {
+  return apiRequest({ method: "GET", path: `/api/v1/release-claims/${releaseId}`, signal }, decodeClaimDetail);
+}
+
+/** 把这个可见版本列为推荐的待认领旧版本（仅管理员，最多 3 个），专辑详情据此提示“可能接替了已不可见的《…》”。 */
+export function fetchClaimHints(releaseId: string, signal?: AbortSignal): Promise<ApiResponse<ClaimHintsDTO>> {
+  return apiRequest({ method: "GET", path: `/api/v1/releases/${releaseId}/claim-hints`, signal }, decodeClaimHints);
 }

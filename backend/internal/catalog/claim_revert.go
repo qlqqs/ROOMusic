@@ -200,11 +200,13 @@ func lockOperationRecords(ctx context.Context, tx *sql.Tx, ids []string) error {
 }
 
 // claimChanges 是改动摘要：来源版本的信息，以及迁移与保留的各类（撤销记录只带来源）。
+// PreviousGroupID 是认领之前新版本所在的组：从记录撤销认领时，页面要跟着新版本回到那里（撤销记录不带）。
 type claimChanges struct {
-	Kind    string         `json:"kind"`
-	Source  claimSourceRef `json:"source"`
-	Moved   *claimSummary  `json:"moved,omitempty"`
-	Skipped *claimSummary  `json:"skipped,omitempty"`
+	Kind            string         `json:"kind"`
+	Source          claimSourceRef `json:"source"`
+	PreviousGroupID string         `json:"previous_group_id,omitempty"`
+	Moved           *claimSummary  `json:"moved,omitempty"`
+	Skipped         *claimSummary  `json:"skipped,omitempty"`
 }
 
 type claimSourceRef struct {
@@ -295,7 +297,7 @@ func (claimKind) Describe(ctx context.Context, database operations.Queryer, reco
 		changes := claimChanges{Kind: operations.TypeReleaseClaim, Source: source}
 		if record.Type == operations.TypeReleaseClaim {
 			moved, skipped := summarizeClaim(record.ID, before, after)
-			changes.Moved, changes.Skipped = &moved, &skipped
+			changes.Moved, changes.Skipped, changes.PreviousGroupID = &moved, &skipped, before.Target.GroupID
 		}
 		description.Changes = changes
 

@@ -34,6 +34,9 @@ function revertIntentOf(item: OperationItemDTO, current: ReleaseTarget | undefin
     return { kind: "revert", release, operationId: item.id, subject: "group", returnGroupId: item.changes.from.group_id };
   }
   if (item.changes?.kind === "release_issue_review") return { kind: "revert", release, operationId: item.id, subject: "review" };
+  if (item.changes?.kind === "release_claim") {
+    return { kind: "revert", release, operationId: item.id, subject: "claim", returnGroupId: item.changes.previous_group_id };
+  }
   return { kind: "revert", release, operationId: item.id, subject: item.changes === null ? "other" : "correct" };
 }
 
@@ -42,6 +45,7 @@ const titles = {
   release_group_change: "撤销这次归组调整？",
   release_group_default: "撤销这次默认版本调整？",
   release_issue_review: "撤销这次核对？",
+  release_claim: "撤销这次认领？",
 } as const;
 
 /**

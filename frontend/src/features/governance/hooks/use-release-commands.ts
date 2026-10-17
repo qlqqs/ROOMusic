@@ -12,9 +12,9 @@ export type ReleaseTarget = { id: string; title: string };
 
 /**
  * 被撤销的操作是哪一种：成功提示据此说明恢复了什么。group 是从操作记录里撤销的归组调整（记录不区分归入与移出），default 是默认版本的调整，
- * review 是核对与取消核对。
+ * review 是核对与取消核对，claim 是认领（修正、专辑、默认版本与核对一起还给旧版本）。
  */
-export type RevertSubject = "correct" | "join" | "detach" | "group" | "default" | "review" | "other";
+export type RevertSubject = "correct" | "join" | "detach" | "group" | "default" | "review" | "claim" | "other";
 
 export type ReleaseIntent =
   | { kind: "correct"; release: ReleaseTarget; revision: number; changes: CorrectionChanges; fields: readonly CorrectableField[] }
@@ -47,7 +47,7 @@ export type ReleaseIntent =
       release: ReleaseTarget;
       operationId: string;
       subject: RevertSubject;
-      /** 撤销归组或默认版本调整之后页面要显示的专辑（归组是原来的组，默认版本是这张专辑）；字段修正的撤销没有。操作记录页不跟随（它的 onMoved 什么也不做）。 */
+      /** 撤销归组、默认版本调整或认领之后页面要显示的专辑（归组是原来的组，默认版本是这张专辑，认领是认领之前新版本所在的组）；字段修正的撤销没有。操作记录页不跟随（它的 onMoved 什么也不做）。 */
       returnGroupId?: string | undefined;
     };
 

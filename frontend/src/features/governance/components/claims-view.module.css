@@ -1,0 +1,58 @@
+.view {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+/* 两栏：列表 380px（DESIGN 3.4 的 --layout-issue-list-width），详情占余下的宽度、最多 860px。 */
+.view[data-layout="columns"] {
+  grid-template-columns: var(--layout-issue-list-width) minmax(0, 1fr);
+  align-items: start;
+}
+
+.listColumn {
+  display: grid;
+  gap: var(--space-3);
+  align-content: start;
+  min-width: 0;
+}
+
+.view[data-layout="columns"] .listColumn {
+  padding-inline-end: var(--space-4);
+  border-inline-end: 1px solid var(--color-divider);
+}
+
+.listTitle {
+  font-size: var(--fs-17);
+}
+
+.listBody {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.detailColumn {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+  min-width: 0;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  justify-self: start;
+  font-size: var(--fs-14);
+}
+
+.placeholder,
+.empty {
+  color: var(--text-secondary);
+}
+
+.note {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+}

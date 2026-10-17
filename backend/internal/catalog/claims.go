@@ -33,9 +33,10 @@ const releaseClaimablePredicate = `(NOT ` + releaseVisiblePredicate + `
 		OR EXISTS (SELECT 1 FROM release_issue_reviews claim_review WHERE claim_review.release_id = releases.id)
 	))`
 
-// ClaimSuggestion 是一个推荐的新版本：可见版本的摘要、理由码与命中的路径数。
+// ClaimSuggestion 是一个推荐的新版本：可见版本的摘要与它所在的组（页面据此打开它的专辑）、版本说明、理由码与命中的路径数。
 type ClaimSuggestion struct {
 	Release ReleaseSummary `json:"release"`
+	GroupID string         `json:"group_id"`
 	Edition *string        `json:"edition"`
 	Reasons []string       `json:"reasons"`
 	// SameFiles 是旧版本的路径集合里与这个版本的 present 曲目相同的路径数（没有命中 same_files 时为 0）。
@@ -86,7 +87,7 @@ func (s *Store) LoadClaimSuggestions(ctx context.Context, sourceID string) ([]Cl
 				AND releases.relative_directory = origin.relative_directory
 			WHERE origin.source_root_id IS NOT NULL AND origin.relative_directory IS NOT NULL
 		)
-		SELECT `+releaseSummaryProjection+`, NULLIF(BTRIM(releases.edition), ''),
+		SELECT `+releaseSummaryProjection+`, releases.group_id::text, NULLIF(BTRIM(releases.edition), ''),
 			COALESCE(same_files.hits, 0), same_files.release_id IS NOT NULL, same_directory.release_id IS NOT NULL
 		FROM `+releaseSource+releaseSummaryArtworkJoin+`
 		LEFT JOIN same_files ON same_files.release_id = releases.id
@@ -106,7 +107,7 @@ func (s *Store) LoadClaimSuggestions(ctx context.Context, sourceID string) ([]Cl
 		var suggestion ClaimSuggestion
 		var edition sql.NullString
 		var byFiles, byDirectory bool
-		if err := rows.Scan(append(columns.targets(), &edition, &suggestion.SameFiles, &byFiles, &byDirectory)...); err != nil {
+		if err := rows.Scan(append(columns.targets(), &suggestion.GroupID, &edition, &suggestion.SameFiles, &byFiles, &byDirectory)...); err != nil {
 			return nil, err
 		}
 		if suggestion.Release, err = columns.summary(); err != nil {

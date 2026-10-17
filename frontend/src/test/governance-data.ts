@@ -4,6 +4,8 @@ import {
   REVIEWABLE_ISSUES,
   type CorrectableField,
   type CorrectionFieldDTO,
+  type ClaimDetailDTO,
+  type ClaimEntryDTO,
   type CorrectionStateDTO,
   type DefaultVersionDTO,
   type FieldIssueDTO,
@@ -34,7 +36,7 @@ type ReleaseState = {
   baseArtist: string;
 };
 
-type OperationType = "release_correction" | "release_group_change" | "release_group_default" | "release_issue_review" | "revert";
+type OperationType = "release_correction" | "release_group_change" | "release_group_default" | "release_issue_review" | "release_claim" | "revert";
 
 /** 记录的目标：发行（修正、归组）或专辑（默认版本）。 */
 type OperationTarget = { type: "release" | "release_group"; id: string };
@@ -80,6 +82,8 @@ export type GovernanceData = {
   groups: Map<string, GroupState>;
   /** 有问题的版本（测试用 seedIssues 预置）；没有登记的版本没有问题，“需要关注”取专辑数据里的值。 */
   issues: Map<string, IssueState>;
+  /** 待认领的旧版本（测试用 seedClaim 预置）：已不可见、留有人工修改，值就是接口的详情响应；列表项从详情截取。 */
+  claims: Map<string, ClaimDetailDTO>;
   /** 按发生的先后顺序保存；列表时倒序。 */
   operations: OperationRecord[];
   idempotency: Map<string, { fingerprint: string; result: ApiResult }>;
@@ -93,6 +97,7 @@ export function governanceDataOf(catalog: CatalogData): GovernanceData {
     releases: new Map(),
     groups: new Map(),
     issues: new Map(),
+    claims: new Map(),
     operations: [],
     idempotency: new Map(),
     counter: 0,
@@ -510,6 +515,8 @@ function invertChanges(changes: OperationChangesDTO): OperationChangesDTO {
   if (changes.kind === "release_group_change") return { kind: "release_group_change", from: changes.to, to: changes.from };
   if (changes.kind === "release_group_default") return { kind: "release_group_default", from: changes.to, to: changes.from };
   if (changes.kind === "release_issue_review") return { kind: "release_issue_review", issue: changes.issue, from: changes.to, to: changes.from };
+  // 认领的撤销记录只带来源（没有 moved、skipped 与认领之前的组）。
+  if (changes.kind === "release_claim") return { kind: "release_claim", source: changes.source };
   return { kind: "release_correction", fields: changes.fields.map((field) => ({ field: field.field, before: field.after, after: field.before })) };
 }
 
@@ -840,4 +847,47 @@ export function respondToIssueReview(data: GovernanceData, releaseId: string, ke
     status: 200,
     body: { release_id: releaseId, issue, reviewed: next !== undefined, revision: release.revision, operation_id: record.id },
   });
+}
+
+// ---- 待认领（M4 第三项）----
+
+/** 测试预置：登记一个待认领的旧版本；detail 就是 GET /release-claims/{id} 的响应体。 */
+export function seedClaim(data: GovernanceData, detail: ClaimDetailDTO): void {
+  data.claims.set(detail.release.id, detail);
+}
+
+const CLAIM_PAGE_MAX = 100;
+
+/** 详情里列表项的部分：release、album、location、last_seen_at 与 holds。 */
+function claimEntryOf(detail: ClaimDetailDTO): ClaimEntryDTO {
+  return { release: detail.release, album: detail.album, location: detail.location, last_seen_at: detail.last_seen_at, holds: detail.holds };
+}
+
+/** GET /release-claims：按最后一次被看到的时间倒序（再按 ID）、分页，参数无效 400 invalid_pagination。 */
+export function respondToClaims(data: GovernanceData, query: URLSearchParams): ApiResult {
+  const page = Number(query.get("page") ?? "1");
+  const pageSize = Number(query.get("page_size") ?? "50");
+  if (!Number.isInteger(page) || page < 1 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > CLAIM_PAGE_MAX) return failure(400, "invalid_pagination", "分页参数无效");
+  const rows = [...data.claims.values()].sort((a, b) => Date.parse(b.last_seen_at) - Date.parse(a.last_seen_at) || a.release.id.localeCompare(b.release.id));
+  const start = (page - 1) * pageSize;
+  return { status: 200, body: { items: rows.slice(start, start + pageSize).map(claimEntryOf), pagination: { page, page_size: pageSize, total: rows.length } } };
+}
+
+/** GET /release-claims/{id}：不满足待认领的判定（没有登记，或认领之后）404。 */
+export function respondToClaim(data: GovernanceData, releaseId: string): ApiResult {
+  const detail = data.claims.get(releaseId);
+  return detail === undefined ? failure(404, "not_found", "发行版本不存在") : { status: 200, body: detail };
+}
+
+const CLAIM_HINTS_MAX = 3;
+
+/** GET /releases/{id}/claim-hints：把这个可见版本列为推荐的待认领旧版本（最近看到的在前，最多 3 个）；版本不可见 404。 */
+export function respondToClaimHints(data: GovernanceData, releaseId: string): ApiResult {
+  if (releaseDetailFor(data.catalog, releaseId) === undefined) return failure(404, "not_found", "发行版本不存在");
+  const items = [...data.claims.values()]
+    .filter((detail) => detail.suggestions.some((suggestion) => suggestion.release.id === releaseId))
+    .sort((a, b) => Date.parse(b.last_seen_at) - Date.parse(a.last_seen_at) || a.release.id.localeCompare(b.release.id))
+    .slice(0, CLAIM_HINTS_MAX)
+    .map((detail) => ({ id: detail.release.id, title: detail.release.title }));
+  return { status: 200, body: { items } };
 }

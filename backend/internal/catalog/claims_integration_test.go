@@ -228,6 +228,21 @@ func TestPostgreSQLClaimSuggestions(t *testing.T) {
 	if err != nil || suggestions == nil || len(suggestions) != 0 {
 		t.Fatalf("suggestions for a release without clues = %#v, %v; want an empty non-nil slice", suggestions, err)
 	}
+
+	// 每个推荐带它所在的组：页面据此打开新版本的专辑。
+	listed, err := fixture.store.LoadClaimSuggestions(context.Background(), old.releaseID)
+	if err != nil || len(listed) == 0 {
+		t.Fatalf("suggestions = %v, %v", listed, err)
+	}
+	for _, suggestion := range listed {
+		var group string
+		if err := fixture.database.QueryRow(`SELECT group_id::text FROM releases WHERE id=$1::uuid`, suggestion.Release.ID).Scan(&group); err != nil {
+			t.Fatalf("read the group of %s: %v", suggestion.Release.ID, err)
+		}
+		if suggestion.GroupID != group {
+			t.Errorf("suggestion %s has group %q, want %q", suggestion.Release.ID, suggestion.GroupID, group)
+		}
+	}
 }
 
 // 旧版本名下的曲目路径是独立于归组依据的线索：归组依据最多 100 条，没有它（或被截断）时仍能靠名下的曲目命中。

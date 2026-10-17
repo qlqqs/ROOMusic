@@ -1,7 +1,7 @@
-import type { DefaultVersionDTO, OperationChangesDTO, OperationItemDTO } from "./api/decoders";
+import type { ClaimSummaryDTO, DefaultVersionDTO, OperationChangesDTO, OperationItemDTO } from "./api/decoders";
 import { correctionFieldLabels, displayValue, reviewableIssueLabels } from "./labels";
 
-/** 记录自己的类型：修正、归组、默认版本与核对按它改的东西命名；撤销记录写“撤销”，并说明撤销的是哪一类（记录坏了读不出改动时只写“撤销”）。 */
+/** 记录自己的类型：修正、归组、默认版本、核对与认领按它改的东西命名；撤销记录写“撤销”，并说明撤销的是哪一类（记录坏了读不出改动时只写“撤销”）。 */
 export function operationTypeLabel(item: Pick<OperationItemDTO, "type" | "changes">): string {
   switch (item.type) {
     case "release_correction":
@@ -12,11 +12,14 @@ export function operationTypeLabel(item: Pick<OperationItemDTO, "type" | "change
       return "设定默认版本";
     case "release_issue_review":
       return "核对问题";
+    case "release_claim":
+      return "认领";
     case "revert":
       if (item.changes?.kind === "release_correction") return "撤销修改";
       if (item.changes?.kind === "release_group_change") return "撤销归组调整";
       if (item.changes?.kind === "release_group_default") return "撤销默认版本调整";
       if (item.changes?.kind === "release_issue_review") return "撤销核对";
+      if (item.changes?.kind === "release_claim") return "撤销认领";
       return "撤销";
   }
 }
@@ -26,6 +29,17 @@ export function defaultVersionText(version: DefaultVersionDTO | null): string {
   if (version === null) return "自动选择";
   const detail = [version.year === null ? null : String(version.year), version.edition].filter((part) => part !== null).join(" · ");
   return detail === "" ? `《${version.title}》` : `《${version.title}》（${detail}）`;
+}
+
+/** 认领迁移了（或保留了）哪几类：修正写字段名，专辑、默认版本与核对写类别，如“修正 标题、流派；专辑；默认版本；核对 来源类型”。没有内容时是 null。 */
+function claimPartsText(summary: ClaimSummaryDTO): string | null {
+  const parts = [
+    summary.corrections.length === 0 ? null : `修正 ${summary.corrections.map((field) => correctionFieldLabels[field]).join("、")}`,
+    summary.album ? "专辑" : null,
+    summary.defaults === 0 ? null : summary.defaults === 1 ? "默认版本" : `默认版本（${summary.defaults} 张专辑）`,
+    summary.reviews.length === 0 ? null : `核对 ${summary.reviews.map((issue) => reviewableIssueLabels[issue]).join("、")}`,
+  ].filter((part) => part !== null);
+  return parts.length === 0 ? null : parts.join("；");
 }
 
 /**
@@ -43,6 +57,17 @@ function linesOf(changes: OperationChangesDTO | null, reverse: boolean): string[
   if (changes.kind === "release_group_default") {
     const [from, to] = reverse ? [changes.to, changes.from] : [changes.from, changes.to];
     return [`默认版本：${defaultVersionText(from.default)} → ${defaultVersionText(to.default)}`];
+  }
+  if (changes.kind === "release_claim") {
+    const source = `《${changes.source.title}》${changes.source.visible ? "" : "（已不可见）"}`;
+    // 撤销记录（没有 moved 与 skipped），以及撤销认领之前的确认（reverse），都只能说修改回到了旧版本。
+    if (reverse || changes.moved === undefined || changes.skipped === undefined) return [`把迁走的修改还给${source}`];
+    const moved = claimPartsText(changes.moved);
+    const kept = claimPartsText(changes.skipped);
+    return [
+      moved === null ? `从${source}认领：没有迁移任何修改` : `从${source}认领：${moved}`,
+      ...(kept === null ? [] : [`保留这个版本已有的：${kept}`]),
+    ];
   }
   if (changes.kind === "release_issue_review") {
     const [from, to] = reverse ? [changes.to, changes.from] : [changes.from, changes.to];
@@ -72,6 +97,8 @@ export function notRevertibleReason(item: Pick<OperationItemDTO, "type" | "rever
   if (item.revertible) return null;
   if (item.type === "revert") return "撤销不能再撤销";
   if (item.reverted_by !== null) return "已撤销";
+  // 认领的撤销不要求新版本可见（它的目的就是把修改还给旧版本），所以不写“专辑已不可见”：能不能撤销只看之后有没有修改。
+  if (item.type === "release_claim") return "之后又有修改";
   // 目标是发行的记录看发行，目标是专辑的记录看专辑：专辑没有可见版本了，就没有可以撤销的东西。
   const target = item.release ?? item.album;
   if (target === null || !target.visible) return "专辑已不可见";

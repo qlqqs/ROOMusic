@@ -175,7 +175,7 @@ const releaseIssuesDecoder = d.object({
 // 目标是发行的记录给 release、album 为 null，目标是专辑的记录反过来；目标已不存在时对应的一项也是 null；
 // 撤销记录与被撤销的记录互相指向（reverts、reverted_by）。
 const MAX_OPERATION_PAGE_ITEMS = 100;
-const OPERATION_TYPES = ["release_correction", "release_group_change", "release_group_default", "release_issue_review", "revert"] as const;
+const OPERATION_TYPES = ["release_correction", "release_group_change", "release_group_default", "release_issue_review", "release_claim", "revert"] as const;
 
 const operationActorDecoder = d.object({ id: d.uuid(), username: d.string({ max: 200 }) });
 const operationReleaseDecoder = d.object({ id: d.uuid(), title: d.string(), group_id: d.uuid(), visible: d.boolean() });
@@ -212,11 +212,29 @@ const issueReviewChangesDecoder = d.object({
   to: issueReviewStateDecoder,
 });
 
+// 认领（M4 第三项）：改动摘要写明来源（已不可见的旧版本）、迁移了什么与保留了什么；撤销记录只带来源，没有 moved 与 skipped。
+// defaults 是接任默认版本的专辑数（改回自动选择的不算）。
+const claimSummaryDecoder = d.object({
+  corrections: d.array(d.oneOf(CORRECTABLE_FIELDS), { max: CORRECTABLE_FIELDS.length }),
+  album: d.boolean(),
+  defaults: d.integer({ min: 0 }),
+  reviews: d.array(d.oneOf(REVIEWABLE_ISSUES), { max: REVIEWABLE_ISSUES.length }),
+});
+const claimChangesDecoder = d.object({
+  kind: d.literal("release_claim"),
+  source: d.object({ id: d.uuid(), title: d.string(), visible: d.boolean() }),
+  // 认领之前新版本所在的组：从记录撤销认领时页面跟着新版本回到那里；撤销记录没有它。
+  previous_group_id: d.optional(d.uuid()),
+  moved: d.optional(claimSummaryDecoder),
+  skipped: d.optional(claimSummaryDecoder),
+});
+
 type OperationChanges =
   | d.Infer<typeof correctionChangesDecoder>
   | d.Infer<typeof groupChangesDecoder>
   | d.Infer<typeof defaultChangesDecoder>
-  | d.Infer<typeof issueReviewChangesDecoder>;
+  | d.Infer<typeof issueReviewChangesDecoder>
+  | d.Infer<typeof claimChangesDecoder>;
 // 按 kind 选择解码器；未知的 kind 整体拒绝（后端新增操作类型时，样本契约测试先失败，在这里补上才算确认前端已经知道）。
 const operationChangesDecoder: d.Decoder<OperationChanges> = (input, path) => {
   const kind = typeof input === "object" && input !== null && "kind" in input ? input.kind : undefined;
@@ -224,6 +242,7 @@ const operationChangesDecoder: d.Decoder<OperationChanges> = (input, path) => {
   if (kind === "release_group_change") return groupChangesDecoder(input, path);
   if (kind === "release_group_default") return defaultChangesDecoder(input, path);
   if (kind === "release_issue_review") return issueReviewChangesDecoder(input, path);
+  if (kind === "release_claim") return claimChangesDecoder(input, path);
   throw new d.DecodeError(`${path}.kind`, "不是已知的操作类型");
 };
 
@@ -258,6 +277,119 @@ const revertResultDecoder = d.object({
   revision: d.integer({ min: 1 }),
 });
 
+// 待认领（M4 第三项，管理员）：已不可见、但留有人工修改的旧版本。上限与后端一致（backend/internal/catalog/claim_read.go）。
+const MAX_CLAIM_PAGE_ITEMS = 100;
+const MAX_CLAIM_SIBLINGS = 20;
+const MAX_CLAIM_SUGGESTIONS = 5;
+const MAX_CLAIM_HINTS = 3;
+const MAX_CLAIM_PATH = 500; // 目录与名称，后端按 500 字节截断
+
+const claimReleaseDecoder = d.object({
+  id: d.uuid(),
+  title: d.string(),
+  artist: d.string(),
+  year: d.nullable(d.integer({ min: 1, max: 9999 })),
+  edition: d.nullable(d.string()),
+});
+const claimEntryShape = {
+  release: claimReleaseDecoder,
+  // 旧版本和别的发行同在一张专辑里时才有；title 是别的成员里按代表版本规则排第一的有效标题。
+  album: d.nullable(d.object({ id: d.uuid(), title: d.string(), other_release_count: d.integer({ min: 1 }) })),
+  // 扫描目录的名称（路径末段）与相对目录；不安全的目录是空串。不含绝对路径。
+  location: d.object({ root_name: d.string({ max: MAX_CLAIM_PATH }), directory: d.string({ max: MAX_CLAIM_PATH }) }),
+  last_seen_at: d.timestamp(),
+  holds: d.object({
+    corrections: d.array(d.oneOf(CORRECTABLE_FIELDS), { max: CORRECTABLE_FIELDS.length }),
+    album: d.boolean(),
+    default: d.boolean(),
+    reviews: d.array(d.oneOf(REVIEWABLE_ISSUES), { max: REVIEWABLE_ISSUES.length }),
+  }),
+};
+const claimEntryDecoder = d.object(claimEntryShape);
+const claimPageDecoder = d.object({
+  items: d.array(claimEntryDecoder, { max: MAX_CLAIM_PAGE_ITEMS }),
+  pagination: d.object({
+    page: d.integer({ min: 1 }),
+    page_size: d.integer({ min: 1, max: MAX_CLAIM_PAGE_ITEMS }),
+    total: d.integer({ min: 0 }),
+  }),
+});
+
+// 推荐的新版本：可见版本的摘要、版本说明、理由码（同样的文件、同一目录）与命中的路径数。理由码按字符串解码，后端新增理由时原样显示。
+const claimSuggestionDecoder = d.object({
+  release: releaseSummaryDecoder,
+  group_id: d.uuid(),
+  edition: d.nullable(d.string()),
+  reasons: d.array(d.string({ min: 1, max: 64 }), { max: 4 }),
+  same_files: d.integer({ min: 0 }),
+});
+
+// 详情：列表项的全部字段在顶层，再加旧版本的版本号、修正明细（意图与扫描值）、同专辑的别的发行、作为默认版本的专辑、核对与推荐。
+const claimDetailDecoder = d.object({
+  ...claimEntryShape,
+  revision: d.integer({ min: 1 }),
+  corrections: d.array(d.object({ field: d.oneOf(CORRECTABLE_FIELDS), correction: correctionDecoder, scan_value: d.nullable(fieldValueDecoder) }), {
+    max: CORRECTABLE_FIELDS.length,
+  }),
+  siblings: d.array(d.object({ id: d.uuid(), title: d.string(), visible: d.boolean() }), { max: MAX_CLAIM_SIBLINGS }),
+  default_of: d.array(d.object({ id: d.uuid(), title: d.string() }), { max: MAX_CLAIM_SIBLINGS }),
+  reviews: d.array(
+    d.object({ issue: d.oneOf(REVIEWABLE_ISSUES), reviewed_at: d.timestamp(), reviewer: d.object({ id: d.uuid(), username: d.string({ max: 200 }) }) }),
+    { max: REVIEWABLE_ISSUES.length },
+  ),
+  suggestions: d.array(claimSuggestionDecoder, { max: MAX_CLAIM_SUGGESTIONS }),
+});
+
+// 专辑详情用的提示：把这个可见版本列为推荐的待认领旧版本。
+const claimHintsDecoder = d.object({ items: d.array(d.object({ id: d.uuid(), title: d.string() }), { max: MAX_CLAIM_HINTS }) });
+
+// 预览里一项的去向：迁移、保留（新版本已有的或无法迁移的）、改回自动选择（只用于默认版本）。
+export const CLAIM_ACTIONS = ["move", "skip", "reset"] as const;
+export const CLAIM_ITEM_KINDS = ["correction", "album", "default", "review"] as const;
+// 迁移的核对在新版本上的效果：立即生效、依据不同会重新提醒、新版本上没有这类问题暂时无事可压。
+export const CLAIM_EFFECTS = ["valid", "stale", "no_issue"] as const;
+const claimItemDecoder = d.object({
+  kind: d.oneOf(CLAIM_ITEM_KINDS),
+  field: d.optional(d.oneOf(CORRECTABLE_FIELDS)),
+  issue: d.optional(d.oneOf(REVIEWABLE_ISSUES)),
+  group: d.optional(d.uuid()),
+  action: d.oneOf(CLAIM_ACTIONS),
+  // 跳过的原因按字符串解码（target_has_correction、target_has_review、target_in_album、already_in_album、not_transferable）。
+  reason: d.optional(d.string({ min: 1, max: 64 })),
+  effect: d.optional(d.oneOf(CLAIM_EFFECTS)),
+  from: d.optional(correctionDecoder),
+  to: d.optional(correctionDecoder),
+});
+const claimPreviewReleaseDecoder = d.object({ id: d.uuid(), title: d.string(), group_id: d.uuid(), visible: d.boolean() });
+const MAX_CLAIM_ITEMS = 32; // 修正 8 项、专辑 1 项、默认版本若干、核对 4 项
+const claimPreviewDecoder = d.object({
+  release: claimPreviewReleaseDecoder,
+  source: claimPreviewReleaseDecoder,
+  revision: d.integer({ min: 1 }),
+  source_revision: d.integer({ min: 1 }),
+  items: d.array(claimItemDecoder, { max: MAX_CLAIM_ITEMS }),
+  token: basisDecoder,
+});
+
+// 认领成功的响应：新版本认领之后与之前所在的组、两个版本新的版本号、各类的去向与这次操作的 ID（撤销用）。
+const claimResultSummaryDecoder = d.object({
+  corrections: d.array(d.oneOf(CORRECTABLE_FIELDS), { max: CORRECTABLE_FIELDS.length }),
+  album: d.boolean(),
+  reviews: d.array(d.oneOf(REVIEWABLE_ISSUES), { max: REVIEWABLE_ISSUES.length }),
+});
+const claimResultDecoder = d.object({
+  release_id: d.uuid(),
+  source_release_id: d.uuid(),
+  group_id: d.uuid(),
+  previous_group_id: d.uuid(),
+  revision: d.integer({ min: 1 }),
+  source_revision: d.integer({ min: 1 }),
+  operation_id: d.uuid(),
+  moved: claimResultSummaryDecoder,
+  skipped: claimResultSummaryDecoder,
+  defaults: d.object({ moved: d.array(d.uuid(), { max: MAX_CLAIM_ITEMS }), reset: d.array(d.uuid(), { max: MAX_CLAIM_ITEMS }) }),
+});
+
 export const decodeCorrectionState = d.defineDecoder(correctionStateDecoder);
 export const decodeCorrectionResult = d.defineDecoder(correctionResultDecoder);
 export const decodeGroupChangeResult = d.defineDecoder(groupChangeResultDecoder);
@@ -267,6 +399,11 @@ export const decodeIssuePage = d.defineDecoder(issuePageDecoder);
 export const decodeReleaseIssues = d.defineDecoder(releaseIssuesDecoder);
 export const decodeOperationPage = d.defineDecoder(operationPageDecoder);
 export const decodeRevertResult = d.defineDecoder(revertResultDecoder);
+export const decodeClaimPage = d.defineDecoder(claimPageDecoder);
+export const decodeClaimDetail = d.defineDecoder(claimDetailDecoder);
+export const decodeClaimHints = d.defineDecoder(claimHintsDecoder);
+export const decodeClaimPreview = d.defineDecoder(claimPreviewDecoder);
+export const decodeClaimResult = d.defineDecoder(claimResultDecoder);
 
 export type CorrectionIntentDTO = d.Infer<typeof correctionDecoder>;
 export type CorrectionFieldDTO = d.Infer<typeof correctionFieldDecoder>;
@@ -289,3 +426,14 @@ export type OperationItemDTO = d.Infer<typeof operationItemDecoder>;
 export type OperationPageDTO = d.Infer<typeof operationPageDecoder>;
 export type OperationChangesDTO = OperationChanges;
 export type RevertResultDTO = d.Infer<typeof revertResultDecoder>;
+export type ClaimEntryDTO = d.Infer<typeof claimEntryDecoder>;
+export type ClaimPageDTO = d.Infer<typeof claimPageDecoder>;
+export type ClaimDetailDTO = d.Infer<typeof claimDetailDecoder>;
+export type ClaimSuggestionDTO = d.Infer<typeof claimSuggestionDecoder>;
+export type ClaimHintsDTO = d.Infer<typeof claimHintsDecoder>;
+export type ClaimItemDTO = d.Infer<typeof claimItemDecoder>;
+export type ClaimPreviewDTO = d.Infer<typeof claimPreviewDecoder>;
+export type ClaimResultDTO = d.Infer<typeof claimResultDecoder>;
+export type ClaimSummaryDTO = d.Infer<typeof claimSummaryDecoder>;
+export type ClaimAction = (typeof CLAIM_ACTIONS)[number];
+export type ClaimEffect = (typeof CLAIM_EFFECTS)[number];

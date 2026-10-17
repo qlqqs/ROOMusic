@@ -18,4 +18,12 @@ export const governanceKeys = {
     viewerQueryKey(generation, "governance", "issues", filter),
   /** 一个版本的问题（依据令牌、核对状态）。 */
   releaseIssues: (generation: number, releaseId: string) => viewerQueryKey(generation, "governance", "release-issues", releaseId),
+  /** 待认领列表的全部页：认领与撤销后前缀失效。 */
+  claims: (generation: number) => viewerQueryKey(generation, "governance", "claims"),
+  /** 待认领列表的一页：页码与页大小在键里。 */
+  claimPage: (generation: number, filter: { page: number; pageSize: number }) => viewerQueryKey(generation, "governance", "claims", filter),
+  /** 一个待认领的旧版本的详情（修改明细与推荐）。 */
+  claim: (generation: number, releaseId: string) => viewerQueryKey(generation, "governance", "claim", releaseId),
+  /** 专辑详情里的“可能接替了……”提示。 */
+  claimHints: (generation: number, releaseId: string) => viewerQueryKey(generation, "governance", "claim-hints", releaseId),
 };

@@ -73,6 +73,7 @@
     "suggestions": [
       {
         "edition": null,
+        "group_id": "00000000-0000-4000-8000-000000000005",
         "reasons": [
           "same_directory"
         ],
@@ -81,7 +82,7 @@
           "artist": "Sample Trio",
           "artwork": null,
           "attention_count": 0,
-          "id": "00000000-0000-4000-8000-000000000005",
+          "id": "00000000-0000-4000-8000-000000000006",
           "media_type": null,
           "medium_count": 1,
           "source_type": null,
