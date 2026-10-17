@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 30
-- **Last Active**: 2026-10-15
+- **Total Sessions**: 31
+- **Last Active**: 2026-10-17
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~899 | Active |
+| `journal-1.md` | ~950 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 31 | 2026-10-17 | M4 元数据问题处理 | `edc79c8`, `5f2a9af`, `7aaa14a`, `ea85e9a`, `fea575f`, `1e2f63b`, `6585fb1`, `df93999`, `ec522c8`, `0b074f1`, `9e2293a`, `a07cd07`, `c73d61a` | `main` |
 | 30 | 2026-10-15 | M4 默认版本与版本对比 | `59ca218`, `9aa02aa`, `4b51a32`, `3b3793b`, `71ba314`, `b356463`, `6f35d01`, `0ad6219`, `04e2728`, `2864d46`, `e905586`, `c3b13cf`, `8e1b4b1`, `e090231`, `e832ef1` | `main` |
 | 29 | 2026-10-14 | M3 修正覆盖层与受治理操作 | `f182760`, `c8c7e7c`, `1a36869`, `b054ec3`, `bf62b00`, `0fcb636`, `9c28da3`, `b2e17ce`, `53c886e`, `20c7913`, `084c1d0`, `60f9373`, `d82cd73`, `f5a9ecf` | `main` |
 | 28 | 2026-10-11 | P 服务端播放历史 | `b611c13`, `733248f`, `ecf0bb1`, `ee05b97`, `7de1750`, `e94b77d`, `d70f7e9`, `8718340`, `e65c286`, `04cd0bc`, `48e422e` | `main` |

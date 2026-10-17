@@ -897,3 +897,54 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 - M4 的其余各项（问题处理、认领、扫描反馈、Release 合并与拆分）待用户选择并先做规划；成员写操作接入操作记录（M3 的 G6）仍是独立小任务
 - F1 手工实播与 F3 远端 CI 仍按用户裁决延后；浏览器验证只有 Linux Chromium 的自动化证据，没有人工读屏验证
 - 已接受的限制：失效中的默认版本在页面上看不出来，也不能单独清除；版本对比不做曲目逐首对应；默认版本对所有成员相同（个人偏好属于 M5）
+
+
+## Session 31: M4 元数据问题处理
+<!-- trellis-session: v=2 fp=87f0ff75a35b56a4 -->
+
+**Date**: 2026-10-17
+**Task**: M4 元数据问题处理
+**Branch**: `main`
+
+### Summary
+
+管理员的“元数据问题”页按版本列出“需要关注”的三类问题（拿不准的字段、同一目录的归组冲突、缺失曲目）与依据；字段沿用“编辑发行信息”，来源与介质类型、归组冲突与缺失曲目可以标记为已核对（可撤销，记住依据，扫描之后情况变了重新提醒，缺失曲目逐首判断）；用户确认布局后归档。
+
+### Main Changes
+
+- 后端：迁移 0019（核对表 release_issue_reviews，operations 放宽类型约束）；“需要关注”拆成三类待处理与已核对（issues.go），没有核对时与原算法逐项相同；依据与依据令牌（JSONB 文本取 SHA-256）；POST /releases/{id}/issue-review 的执行器（issue_changed、no_changes，只锁发行行）与撤销、展示的 Kind，撤销取消核对时先给引用的记录加 KEY SHARE 锁防止死锁；GET /release-issues（状态、类别、summary）与 GET /releases/{id}/issues（字段、归组与同一目录的其他版本、缺失曲目，核对人与时间）
+- 前端：governance 新增 /issues 问题页（两栏与顺序导航按容器宽度切换、筛选是链接带数字）、详情三节的核对与取消核对（不弹确认，提示里撤销，issue_changed 重新读取），命令 hook 的第六种意图 review，专辑详情的“查看问题”，操作记录的“核对问题”；governance-data 增加问题与核对的接口行为，Vitest 与受控后端共用
+- 测试与文档：后端集成测试覆盖计数、依据与过期、拒绝无副作用、撤销、并发不死锁与合成素材真实重扫；Vitest、Playwright（五种宽度、axe、纯键盘）与真实服务用例（合成 WAV，3/2/2 三种专辑标签）；浏览器与真实服务用例各发现一个问题（核对之后焦点掉回顶部、从记录撤销核对的提示写错），都已修好并补回归；新增核对合同并同步规范、DESIGN、ADR 0002/0003、路线图与父任务；归档并修正相对链接
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `edc79c8` | docs(catalog): 规划元数据问题处理（M4 第二项） |
+| `5f2a9af` | chore(task): 启动 M4 元数据问题处理 |
+| `7aaa14a` | feat(catalog): 迁移 0019 与“需要关注”的三类拆分（M4 问题处理第 1 步） |
+| `ea85e9a` | feat(catalog): 核对问题的写入与撤销（M4 问题处理第 2 步） |
+| `fea575f` | feat(catalog): 问题列表与版本的问题（M4 问题处理第 3 步） |
+| `1e2f63b` | feat(governance): 元数据问题页（只读）（M4 问题处理第 4 步） |
+| `6585fb1` | feat(governance): 核对、取消核对与撤销，专辑详情的“查看问题”（M4 问题处理第 5 步） |
+| `df93999` | test(e2e): 元数据问题的浏览器用例，核对之后焦点落在这一节的标题上（M4 问题处理第 6 步） |
+| `ec522c8` | test(e2e): 元数据问题的真实服务用例，从记录撤销核对时的提示（M4 问题处理第 7 步） |
+| `0b074f1` | docs(catalog): 同步元数据问题与核对的规范、设计与路线（M4 问题处理第 8 步） |
+| `9e2293a` | docs(catalog): 记录 M4 问题处理的实施结果与验收对照 |
+| `a07cd07` | chore(task): archive 10-16-classical-m4-issue-handling |
+| `c73d61a` | docs(catalog): 修正 M4 问题处理任务归档后的相对链接 |
+
+### Testing
+
+- [OK] [OK] 收尾时在最终提交的树上、隔离 PostgreSQL 上重跑 gofmt、go vet、go test -race ./internal/operations/...、catalog、app、cmd、library 与 platform 的测试，全部通过（含接口样本逐字比较，19 个问题相关的集成用例确实运行）
+- [OK] [OK] lint、tsc、全量 Vitest 73 文件 1544 项（导出的暂存树）、Playwright（路由模拟）234 项、真实服务 38 项（新增 5 加默认版本 6、治理 4 与播放 23）通过；内嵌产物在导出树上重新构建后与提交逐文件一致；Markdown 相对链接 652 个、断链 0；task.py validate 通过
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- M4 的其余各项（认领、扫描反馈、Release 合并与拆分）待用户选择并先做规划；认领要包含核对的迁移；成员写操作接入操作记录（M3 的 G6）仍是独立小任务
+- F1 手工实播与 F3 远端 CI 仍按用户裁决延后；浏览器验证只有 Linux Chromium 的自动化证据，没有人工读屏验证
+- 已接受的限制：候选值顺序变化或文件改名会多提醒一次；核对与修正共用发行的版本号；新建发行（G8）没有核对，问题重新出现
