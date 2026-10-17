@@ -23,7 +23,7 @@ codes may refine these classes without changing their HTTP meaning.
 | `approval_required`, `review_required`, `capability_denied` | 403 | The selected mode has not satisfied its approval or tool policy |
 | `not_found` | 404 | Authorized resource is absent |
 | `method_not_allowed` | 405 | 已注册的 `/api/` 路径不支持该方法；响应带 `Allow` 头列出支持的方法 |
-| `revision_conflict`, `idempotency_conflict`, `setup_closed` | 409 | Current state conflicts with the command |
+| `revision_conflict`, `idempotency_conflict`, `setup_closed`, `issue_changed` | 409 | Current state conflicts with the command（`issue_changed`：核对时问题已不是页面看到的样子，见[核对合同](./issue-review-contracts.md)） |
 | `precondition_failed` | 412 | Explicit request precondition no longer holds |
 | `unavailable`, `review_unavailable` | 503 | A required dependency or Steward reviewer is temporarily unavailable |
 | `internal` | 500 | Unexpected implementation or infrastructure failure |

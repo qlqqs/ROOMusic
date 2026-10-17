@@ -22,7 +22,7 @@ or alternative business-policy engines.
   没有 `retry`。`onSettled` 返回刷新相关查询的 Promise，命令在刷新完成后才结束；回调先经 `scope.isCurrent()` 检查发起时的会话
   代次，旧会话的迟到结果不更新界面、不导航。开始与取消扫描（`useStartScan`、`useCancelScan`）是更简单的 mutation：开始扫描
   重复发送只会得到同一个扫描，不需要幂等键；取消被接受不等于已取消，结束前先刷新扫描状态，按钮保持忙碌。
-- **受治理命令 hook**（M3，`useReleaseCommands`）：同一个命令状态机承载 M3 的四种意图（修正、归入、移出、撤销；M4 增加第五种，见本条末尾），每个新意图在发起时生成幂等键，
+- **受治理命令 hook**（M3，`useReleaseCommands`）：同一个命令状态机承载 M3 的四种意图（修正、归入、移出、撤销；M4 增加第五、第六种，见本条末尾），每个新意图在发起时生成幂等键，
   结果不确定时 `retry` 沿用同一个命令与键；`refresh` 与 `onMoved` 由 app 传入（governance 不知道别的 feature 的查询键，也不依赖路由）。
   版本换了专辑组之后**先导航再刷新**：`onMoved` 在 mutation 的 `onSuccess` 里同步调用，刷新放在 `onSettled`——否则刷新读到“原来的专辑已没有这个版本”，
   详情页的地址规范化与这次导航争抢、旧专辑闪一下“专辑不存在”。返回的对象只在状态变化时换新（`useMemo`），页面才能把它放进 `useCallback` 的依赖。
@@ -30,6 +30,16 @@ or alternative business-policy engines.
   M4 增加第五种意图 `default`（`{release, group: {id, revision}, target}`，`target` 为 null 是改回自动选择）：专辑不变，但代表版本可能变了，
   所以成功后同样先 `onMoved(group_id, release.id)` 让页面停在刚才的版本（它不再是代表版本时地址带上 `release`），再刷新。
   撤销专辑级记录（默认版本）时，命令里的版本取页面当前显示的版本、`returnGroupId` 是这张专辑；操作记录页没有当前版本，不跟随导航。
+  M4 第二项增加第六种意图 `review`（`{release, revision, issue, action, basis?}`，核对带页面读到的依据令牌，取消核对不带）：不移动版本，不调用 `onMoved`；
+  撤销它的命令 `subject` 是 `review`（成功提示说“已撤销这次核对”），撤销对话框按记录的改动类型 `release_issue_review` 选它。`409 issue_changed` 与修正的
+  `revision_conflict` 一样经 `onSettled` 刷新，页面说明“刚刚变了”。
+- **问题页的查询**（M4，`useIssues`、`useReleaseIssues`）：问题列表一页一个条目（状态、类别、页码与页大小都在键里），翻页与换筛选时 `keepPreviousData`；
+  版本的问题按版本 ID 一个条目，换版本不保留上一个版本的数据。两者 `staleTime` 都是 0：问题随扫描变化，依据令牌要与服务器当前的情况一致。
+  键都在 `governanceKeys.all` 之下，命令结束时整体失效，再由 app 的 `refresh` 更新目录的“需要关注”。
+- **容器宽度**（M4，`useContainerWide`）：问题页按自己的宽度在两栏与顺序导航之间切换（看容器不看视口，带侧栏时 1024px 视口里内容区不到 900px）。两种布局渲染的元素不同，
+  只靠 CSS 容器查询做不到，所以用 `ResizeObserver` 量宽度；没有 `ResizeObserver`（jsdom）时按宽屏处理，测试要窄屏时自己提供。
+- **核对之后的焦点**（M4，`ReviewAction`）：核对或取消之后被点的按钮换成另一个，焦点会掉回页面顶部；这时把焦点带到这一节的标题（`tabIndex=-1`），
+  下一次 Tab 就到新的按钮。由 Playwright 的纯键盘用例发现，Vitest 有回归用例。
 - **地址规范化暂缓**（M4，`AlbumDetailView`）：组详情正在刷新（`isFetching`）时不做地址规范化，刷新结束再按新数据规范化。命令先导航、后刷新，
   刷新完成之前缓存里的旧成员列表可能还不含这个版本，或还把旧的代表版本当作代表版本，按旧数据规范化会去掉 `release`，页面停在别的版本。
   判据必须是视图自己读到的刷新状态，不能是“页面传入、命令进行中为真”的开关：归入一张已有缓存的专辑时，命令在新专辑的视图挂载之前就结束了

@@ -8,6 +8,7 @@ M3（2026-10）让管理员能修正扫描得到的发行信息、调整版本�
 [Catalog REST 合同](./catalog-rest-contracts.md)；扫描的写入不受本文件约束，但**必须保持不碰本文件的表和列**（第 7 节）。
 M4 的第一项（2026-10）在同一流程上增加以专辑为目标的“设定默认版本”，它自己的规则（组的版本号、失效规则、执行器、撤销与对比接口）在
 [默认版本与版本对比合同](./default-version-contracts.md)；本文件只记它对共同流程的扩展（目标类型、撤销响应、列表筛选）。
+M4 的第二项（2026-10）增加以发行为目标的“核对问题”（与修正、归组共用发行的版本号），规则在[元数据问题与核对合同](./issue-review-contracts.md)。
 
 决策依据：[ADR 0002](../../../docs/architecture/adr/0002-metadata-overlays.md)、
 [ADR 0003](../../../docs/architecture/adr/0003-governed-operations.md) 与任务
@@ -15,15 +16,15 @@ M4 的第一项（2026-10）在同一流程上增加以专辑为目标的“设�
 
 ## 2. 数据模型（迁移 0017）
 
-- **`operations`**：每次**成功提交**的受控操作一行（修正、归组、默认版本、撤销）。列：`id`、`actor_id`、`operation_type`
-  （`release_correction | release_group_change | release_group_default | revert`，其中 `release_group_default` 由迁移 0018 加入）、`target_type`（`release`；0018 加入 `release_group`，即专辑）、
+- **`operations`**：每次**成功提交**的受控操作一行（修正、归组、默认版本、核对、撤销）。列：`id`、`actor_id`、`operation_type`
+  （`release_correction | release_group_change | release_group_default | release_issue_review | revert`，`release_group_default` 由迁移 0018、`release_issue_review` 由 0019 加入）、`target_type`（`release`；0018 加入 `release_group`，即专辑）、
   `target_id`（不设外键：记录可能比目标活得久）、
   `idempotency_key`、`fingerprint`、`expected_revision`、`result_revision`、`before_state`/`after_state`（执行器定义的类型化前后状态，撤销的依据）、
   `response`（原样返回客户端，也是同键重放的响应）、`reverts_operation_id`、`request_id`、`created_at`。
   约束都有名字：`operations_revision_ck`（`result = expected + 1`）、`operations_reverts_ck`（只有撤销记录指向原操作）、
   `operations_actor_key_uq`（`(actor_id, idempotency_key)`）、`operations_reverts_uq`（一条操作至多被撤销一次）。
-- **`releases.edit_revision`**（`BIGINT NOT NULL DEFAULT 1`，`> 0`）：发行的人工修改版本号。**只有受控操作（修正、归组、撤销）递增，扫描从不改它。**
-  字段修正与归组共用同一个号，所以撤销规则只有一句话：只能撤销这个发行**最近一次**修改。
+- **`releases.edit_revision`**（`BIGINT NOT NULL DEFAULT 1`，`> 0`）：发行的人工修改版本号。**只有受控操作（修正、归组、核对、撤销）递增，扫描从不改它。**
+  字段修正、归组与核对共用同一个号，所以撤销规则只有一句话：只能撤销这个发行**最近一次**修改。
 - **`release_corrections`**：当前的修正意图，`PRIMARY KEY (release_id, field)`，没有行就是“没有修正”。`mode` 为 `set`（改成某个值，
   等于扫描值也是有效修正）或 `null`（明确设为空）；标题与专辑艺人不能是 `null`；`set` 的值非空、不超过 4096 字节，年份是 1–9999 的整数。
   `operation_id` 指向设下这个意图的操作，外键 `DEFERRABLE INITIALLY DEFERRED`（记录在执行器之后才插入）。
@@ -56,7 +57,7 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
 - 错误经 `operations.Problem(err)` 映射：`*Failure` 按类别 400/404/409；连接类错误（上下文取消、网络、PostgreSQL `08`/`53`/`57`/`58`）为
   `ErrUnavailable` → `503 database_unavailable`（结果不确定，用**同一个键**重试即可对账）；其余（约束、触发器）为 `ErrOperationFailed` → `500 operation_failed`。
   500 与 503 在 handler 记日志，响应不含内部细节。
-- `Kind` 接口（每种操作类型一个，由拥有业务表的包实现并经 `app` 注册；目前是修正、归组与默认版本三种）：`Type()`、`Revert(ctx, tx, operationID, original)`、
+- `Kind` 接口（每种操作类型一个，由拥有业务表的包实现并经 `app` 注册；目前是修正、归组、默认版本与核对四种）：`Type()`、`Revert(ctx, tx, operationID, original)`、
   `Describe(ctx, db, records)`（批量补充列表展示：目标当前状态——发行目标给 `Release`、专辑目标给 `Album`——、改动摘要、`Revertible`）。`RevertExecutor(kind, originalID)` 负责通用部分：
   先**单独一条语句** `SELECT … FOR UPDATE` 锁住原记录，再读取它（READ COMMITTED 下带连接的 `FOR UPDATE` 只重检被锁的行，连接来的行仍取自语句快照，
   读不到刚提交的撤销记录），所以对同一条记录的并发撤销串行，后到的得到 `already_reverted`。
@@ -103,7 +104,8 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
   release:{id, title, group_id, visible}|null, album:{id, title, visible}|null, changes:{kind, …}|null, reverts, reverted_by, revertible}`。
   发行目标的记录 `release` 是目标**当前**的有效标题、所在组与可见性、`album` 为 `null`；专辑目标的记录反过来（目标已不存在时两者都是 `null`）。
   `changes` 是改动摘要（`release_correction`：每个字段的前后修正意图与当时的有效值；`release_group_change`：前后组 ID 与当时的组标题；
-  `release_group_default`：前后的默认版本快照，见[默认版本合同](./default-version-contracts.md)），
+  `release_group_default`：前后的默认版本快照，见[默认版本合同](./default-version-contracts.md)；`release_issue_review`：问题与前后是否有核对，
+  见[核对合同](./issue-review-contracts.md)），
   撤销记录的前后状态与它所撤销的操作相反；记录里的状态损坏时 `changes` 为 `null`，不让列表失败。
   `revertible` = 未被撤销 ∧ 本身不是撤销 ∧ 目标可见 ∧ 目标的 `edit_revision` 等于记录的 `result_revision`。展示信息由 `Kind.Describe` 按类型批量查询，不逐条查询；
   操作者用户名经 `identity.Guard.Usernames` 批量取。响应不含请求体、前后状态原文、路径与密钥。
@@ -115,7 +117,7 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
   `releaseSource = "release_effective releases"`（别名仍叫 `releases`），所以展示、排序与搜索用的都是有效值。扫描与身份规划读写 `releases` 本表。
 - **无修正时与旧行为逐项一致**（`TestPostgreSQLEffectiveViewEqualsTheTableWithoutCorrections` 与既有按组/列表样本测试守住）。
 - **需要关注**：`uncertain_apply` 的字段决定如果该字段有修正（`set` 或 `null`）就不计数，`artist` 由专辑艺人的修正覆盖；分组原因与缺失曲目照旧计数；
-  清除修正后扫描的不确定重新计入。
+  清除修正后扫描的不确定重新计入。M4 第二项起被仍然有效的核对压下的问题也不计数（[核对合同](./issue-review-contracts.md)第 3 节）。
 - **制作人员**：详情的专辑级署名里，专辑艺人有修正时用修正值替换扫描写入的 `album_artist` 署名。
 - **证据**：发行详情增加 `revision` 与 `corrected_fields`（有修正的字段名，固定顺序，没有时是空数组，所有登录成员可见，不含修正值的来源与操作者）；
   证据摘要与管理员完整证据照旧写扫描结论，不把人工选择伪装成高置信标签。
@@ -134,7 +136,8 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
 - 扫描值在打开编辑框与提交之间变化不算冲突：`set` 与 `null` 的结果与扫描值无关；`clear` 的结果是提交时的扫描值，响应返回实际有效值。
 - **已知限制（G8）**：成员关系不连续而新建发行时（整张替换等），新发行按扫描值显示、单独成组；旧发行的修正与归组留在旧发行上（不可见但保留，记录里 `visible: false`），
   不自动继承、不提供认领（M4）。
-- 并发：修正事务只锁发行行与自己的修正行，归组事务锁发行行与组行（按 UUID 顺序），设定默认版本同样先锁发行行再锁组行，
+- 并发：修正事务只锁发行行与自己的修正行，归组事务锁发行行与组行（按 UUID 顺序），设定默认版本同样先锁发行行再锁组行，核对只锁发行行
+  （撤销时若要写回的前态有核对行，先给它引用的更早记录加 KEY SHARE 锁，见[核对合同](./issue-review-contracts.md)第 5 节），
   扫描事务更新发行行但从不锁组行或修正行，事务都短，不形成环形等待。
 
 ## 8. 错误码
@@ -186,6 +189,6 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
 - M3 **没有**审批队列、editor 角色、“回滚到某点”、扫描基值版本（ADR 0002 的证据绑定针对待审批提案）、物化有效值表（修正行很少，透视代价是主键上的小查询）。
 - 成员写操作（创建、停用/启用、撤销会话）**不在 M3**：暂不要求幂等键、不写操作记录；作为独立小任务接入（补幂等键并写记录，不提供撤销），
   见[身份与成员合同](./identity-contracts.md)。
-- M4：默认版本已作为第一项实施（[默认版本合同](./default-version-contracts.md)）；认领（旧发行的修正与归组迁给新发行）、整组合并/拆分、问题处理、
-  扫描反馈仍分别立项；M6：执行模式字段。
+- M4：默认版本已作为第一项实施（[默认版本合同](./default-version-contracts.md)），问题处理作为第二项实施（[核对合同](./issue-review-contracts.md)）；
+  认领（旧发行的修正、归组与核对迁给新发行）、整组合并/拆分、扫描反馈仍分别立项；M6：执行模式字段。
 - 前端合同见[状态规范](../frontend/state-management.md)、[组件规范](../frontend/component-guidelines.md)与[前端目录](../frontend/directory-structure.md)。

@@ -56,9 +56,11 @@ features/library/
 测试与被测单元同目录。跨页面的整页行为（路由、会话、替身后端）放在 `app/*.test.tsx`；测试共用的替身后端与读取
 后端样本的代码放在 `src/test/`，它们依赖 vitest，不被 Playwright 复用。浏览器冒烟放在 `frontend/e2e/`。
 例外是只依赖解码器与样本读取的纯模块（M1b 的 `catalog-data.ts`：专辑数据与列表、组详情、版本详情、完整证据的接口行为，M4 起还有版本对比；M3 的 `governance-data.ts`：
-修正、归组、撤销与操作记录的接口行为，含预期版本、幂等重放与各种 409，M4 起还有专辑的版本号与默认版本、专辑目标的记录与撤销、按专辑筛选的并集）：
+修正、归组、撤销与操作记录的接口行为，含预期版本、幂等重放与各种 409，M4 起还有专辑的版本号与默认版本、专辑目标的记录与撤销、按专辑筛选的并集，
+以及问题与核对：`seedIssues` 预置扫描结论、`scanIssues` 模拟依据变了的重扫，依据令牌、过期、`issue_changed` 与“需要关注”的重算）：
 Vitest 的替身（`fake-catalog.ts`、`fake-governance.ts`）与 Playwright 的受控后端共用它们，让两层对同一份“后端行为”断言；Playwright 运行在 Node 里，
 所以 e2e 只能导入这类纯模块（不能导入 vitest、`*.module.css` 或会连带导入它们的应用代码；各 feature 的 `api/decoders.ts` 只依赖 `shared/api`，真实服务用例可以直接导入）。
+一个 feature 的解码器要复用另一个的解码器时，直接取对方的 `api/decoders` 模块（governance 取 catalog 的版本摘要解码器）：公开入口会连带导入组件与样式。
 
 M1b 的 `features/catalog/` 实际布局（只列与 library 不同的部分）：
 
@@ -81,10 +83,13 @@ features/governance/
 ├── labels.ts、field-draft.ts       # 可修正字段的中文名与取值显示；编辑对话框的草稿模型（只记动过的字段，规划要提交的修改与校验）
 ├── change-summary.ts               # 操作记录的类型名、改动逐行描述、撤销前的“会改回什么”预览、不能撤销的原因（纯函数）
 ├── operations-search.ts            # 操作记录页的 URL 参数校验与规范化（纯函数）
-├── api/                            # decoders.ts（含样本往返）、endpoints.ts（修正、归组、默认版本、撤销、操作记录）
-├── hooks/                          # use-release-commands（命令状态机）、use-release-corrections、use-operations、use-revert-flow（撤销对话框的开合与焦点兜底）
+├── issues-search.ts、issue-text.ts # 问题页的 URL 参数（status、category、page、release）；类别名与每行的数目文字（M4，纯函数）
+├── api/                            # decoders.ts（含样本往返）、endpoints.ts（修正、归组、默认版本、问题与核对、撤销、操作记录）
+├── hooks/                          # use-release-commands（命令状态机）、use-release-corrections、use-operations、use-revert-flow（撤销对话框的开合与焦点兜底）、
+│                                   # use-issues（问题列表与版本的问题）、use-container-wide（问题页的两栏与顺序导航）
 └── components/                     # edit-release-dialog、join-album-dialog、detach-album-dialog、release-admin-actions、release-command-notice、
-                                    # operation-list、revert-operation-dialog、operations-view（操作记录页内容）、release-history（专辑详情的“修改记录”）
+                                    # operation-list、revert-operation-dialog、operations-view（操作记录页内容）、release-history（专辑详情的“修改记录”）、
+                                    # issues-view、issue-list、release-issues-detail、issue-actions（元数据问题页，M4）
 ```
 
 ## 归属
@@ -100,7 +105,8 @@ features/governance/
 - `listening` 拥有播放上报（幂等键、有限重试、会话结束作废）与概览的“最近播放”区块（读取、卡片、清除确认）；经 catalog 公开合同取封面与专辑艺人的显示规则，
   不导入 player：`player` 导入它的上报器，概览页（app 层）组合区块。
 - `governance`（M3）拥有管理员对发行的受治理写操作的界面与命令状态：编辑发行信息、调整归组、撤销、操作记录页与专辑详情的“修改记录”；
-  M4 起还有专辑的默认版本（设定、改回自动选择与撤销）。只读的默认版本标签与版本对比（所有成员可见）在 catalog。
+  M4 起还有专辑的默认版本（设定、改回自动选择与撤销）与“元数据问题”页（`/issues`：问题列表与详情、核对、取消核对与撤销，专辑详情的“查看问题”经现有插槽）。
+  只读的默认版本标签与版本对比（所有成员可见）在 catalog；问题页用的证据字段与原因码的中文名由 catalog 公开。
   它导入 catalog 的公开合同（封面、专辑艺人的显示规则、专辑搜索结果），**catalog 从不导入 governance**：专辑详情里的管理员区块由 app 经插槽
   （`renderAdminActions`、`renderAdminSections`）传给 catalog 的详情视图；写操作之后刷新什么缓存、版本换了专辑组之后导航到哪里，由 app 提供给命令 hook，
   governance 不知道别的 feature 的查询键，也不依赖路由的页面。

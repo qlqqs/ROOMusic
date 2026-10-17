@@ -187,6 +187,19 @@ API 全样本清单必须注册播放（含派生）与歌词的全部成功样�
   再用归组接口放进同一个组；覆盖页面设定 → 列表与打开专辑都先显示它 → 真实重扫后保持 → 对比标出格式与年份的差异 → 在“修改记录”里撤销；成员只读、写接口 `403`；
   结束删除素材并重扫。反向验证：临时让扫描清空默认版本，“重扫后保持”用例随即失败。
 
+## M4 问题处理验证分层
+
+最小 Vitest：`npx vitest run src/app/issues.test.tsx src/app/shell src/features/governance src/test/api-contract.test.ts`。
+
+- **共用的接口行为**：`governance-data.ts` 增加问题与核对（`seedIssues`、`scanIssues`、`respondToIssues`、`respondToReleaseIssues`、`respondToIssueReview`）：依据令牌由内容算出，
+  内容变了令牌就变，过期、`issue_changed` 与“需要关注”的重算与后端一致。样本契约覆盖 `release-issues/`、`issue-reviews/`、`operations/list-issue-reviews.json` 等。
+- **页面级**：`issues.test.tsx`（入口与权限、列表与筛选的数字与地址、空态与错误态、详情三节、窄与宽容器、核对与列表和数字一起变化、提示里撤销、
+  撤销取消核对恢复原来的核对人、`issue_changed`、过期、结果不确定、编辑发行信息、“查看问题”、操作记录的名称与改动行、从记录撤销时的提示、核对之后的焦点）。
+- **浏览器冒烟**：`e2e/issues.spec.ts`（主流程、`issue_changed`、编辑发行信息、“查看问题”、成员没有入口；五种宽度下 1280/1440 两栏、更窄顺序导航、不溢出、axe 与最小字号；纯键盘）。
+- **真实服务**：`e2e/real/issues.real.ts`：同一目录三种专辑标签（3/2/2，没有过半数）的合成 WAV 拆成三个版本，删一个文件造出缺失曲目；页面核对 → 原样重扫保持 →
+  加一个文件后归组冲突重新提醒 → 取消核对并在“修改记录”里撤销；成员 `403`；结束删除素材并重扫。
+- 这一项的浏览器与真实服务用例各发现一个替身测试漏掉的问题（核对之后焦点掉回页面顶部；从记录撤销核对时提示写成字段修改），都已补 Vitest 回归用例。
+
 ## Review Checklist
 
 - [ ] Change belongs to one feature or an explicit app/shared owner.
