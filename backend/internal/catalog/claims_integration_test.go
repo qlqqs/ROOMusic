@@ -133,7 +133,7 @@ func TestPostgreSQLClaimSuggestions(t *testing.T) {
 	fixture.exec(`UPDATE releases SET relative_directory='old' WHERE id=$1::uuid`, old.releaseID)
 	fixture.exec(`UPDATE tracks SET relative_path='old/01.flac' WHERE medium_id=$1::uuid`, old.mediumID)
 	fixture.exec(`INSERT INTO release_grouping_evidence(release_id,candidate_kind,rule_id,source_refs,reason) VALUES($1::uuid,'ordinary_directory','organizer_v2',$2::jsonb,'')`,
-		old.releaseID, `["old/02.flac","old/03.flac","old/04.flac","old/05.flac","old/06.flac","old/07.flac","../escape.flac","/abs.flac"]`)
+		old.releaseID, `["old/02.flac","old/03.flac","old/04.flac","old/05.flac","old/06.flac","old/07.flac","old/09.flac","../escape.flac","/abs.flac"]`)
 	fixture.correct(old.releaseID, "title", "我改过的标题")
 
 	// 原地替换：同一路径上的新曲目（新版本的目录就是 old）。
@@ -175,7 +175,7 @@ func TestPostgreSQLClaimSuggestions(t *testing.T) {
 	fixture.exec(`UPDATE tracks SET relative_path='old/01.flac' WHERE medium_id=$1::uuid`, gone.mediumID)
 
 	// 排序：两个理由都命中的在前，按 same_files 命中数；然后只命中一个理由的（同样按命中数、标题）。
-	// 路径集合是 old/01（名下的曲目）与 old/02…old/07（归组依据；越界与绝对路径不会命中任何曲目）。
+	// 路径集合是 old/01（名下的曲目）与 old/02…old/07、old/09（归组依据；越界与绝对路径不会命中任何曲目）。
 	got := fixture.suggested(old.releaseID)
 	want := []string{
 		"新增文件的新版本|[same_files same_directory]|2",
@@ -187,12 +187,23 @@ func TestPostgreSQLClaimSuggestions(t *testing.T) {
 		t.Fatalf("suggestions = %q\nwant %q", got, want)
 	}
 
-	// missing 的曲目（原地替换后失去来源身份的旧曲目）不算命中：推荐只看 present 的曲目。
+	// missing 的曲目不算命中：推荐只看 present 的曲目。原地替换后失去来源身份的旧曲目，
+	// 以及整体换名之后仍持有来源身份、由完整扫描标为缺失的旧曲目（路径唯一性只约束持有身份的行，所以它与旧版本的路径不冲突），
+	// 都不能让候选命中 same_files。
 	stale := fixture.release("只有缺失曲目的版本")
 	fixture.exec(`UPDATE releases SET relative_directory='stale' WHERE id=$1::uuid`, stale.releaseID)
 	fixture.trackAt(stale, "old/02.flac", "missing")
 	if got := fixture.suggested(old.releaseID); !reflect.DeepEqual(got, want) {
 		t.Fatalf("a missing track changed the suggestions: %q\nwant %q", got, want)
+	}
+	held := fixture.release("另有可见曲目、缺失曲目持有身份的版本")
+	fixture.exec(`UPDATE releases SET relative_directory='held' WHERE id=$1::uuid`, held.releaseID)
+	fixture.trackAt(held, "held/now.flac", "present") // 候选必须可见，否则不论路径怎么对都不会被推荐
+	fixture.exec(`INSERT INTO tracks(id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,source_kind,source_identity,duration_seconds)
+		VALUES(gen_random_uuid(),$1::uuid,1,'缺失但持有身份','艺术家',1,$2::uuid,'old/09.flac','missing',NOW(),'physical',$3,100)`,
+		held.mediumID, fixture.rootID, fmt.Sprintf("%s:physical:v1:old/09.flac", fixture.rootID))
+	if got := fixture.suggested(old.releaseID); !reflect.DeepEqual(got, want) {
+		t.Fatalf("a missing track that holds a source identity changed the suggestions: %q\nwant %q", got, want)
 	}
 
 	// 旧版本自己的文件回来、变得可见之后（这里用一首独立路径的曲目代替；路径也在它的归组依据里，目录也与自己相同），

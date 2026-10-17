@@ -614,6 +614,11 @@ func recordClaimSamples(t *testing.T, application *integrationTestApplication, s
 	key := func(suffix string) map[string]string {
 		return map[string]string{"Idempotency-Key": "00000000-0000-4000-8000-00000000" + suffix}
 	}
+	// 读取：待认领的列表与详情（含推荐）、专辑详情用的提示；都在认领之前（认领之后旧版本就不再待认领）。
+	samples.record("release-claims/list", call(http.MethodGet, "/api/v1/release-claims", nil, admin), http.StatusOK)
+	samples.record("release-claims/get", call(http.MethodGet, claimReadPath(sourceID), nil, admin), http.StatusOK)
+	samples.record("release-claims/hints", call(http.MethodGet, claimHintsPath(targetID), nil, admin), http.StatusOK)
+	samples.record("errors/not-claimable-release", call(http.MethodGet, claimReadPath(targetID), nil, admin), http.StatusNotFound)
 	previewResponse := call(http.MethodGet, claimPreviewPath(targetID, sourceID), nil, admin)
 	samples.record("release-claims/preview", previewResponse, http.StatusOK)
 	preview := decodeJSONMap(t, previewResponse)

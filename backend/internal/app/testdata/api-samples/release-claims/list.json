@@ -1,0 +1,42 @@
+{
+  "body": {
+    "items": [
+      {
+        "album": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "other_release_count": 1,
+          "title": "Sample Replaced Album (reissue)"
+        },
+        "holds": {
+          "album": true,
+          "corrections": [
+            "label",
+            "title"
+          ],
+          "default": true,
+          "reviews": [
+            "grouping"
+          ]
+        },
+        "last_seen_at": "2026-01-01T00:00:00Z",
+        "location": {
+          "directory": "replaced",
+          "root_name": "claims"
+        },
+        "release": {
+          "artist": "Sample Trio",
+          "edition": null,
+          "id": "00000000-0000-4000-8000-000000000002",
+          "title": "Sample Replaced Album (corrected)",
+          "year": 2001
+        }
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "page_size": 50,
+      "total": 1
+    }
+  },
+  "status": 200
+}

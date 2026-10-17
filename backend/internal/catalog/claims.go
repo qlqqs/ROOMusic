@@ -42,14 +42,15 @@ type ClaimSuggestion struct {
 	SameFiles int64 `json:"same_files"`
 }
 
-// claimPathSet 是旧版本 O 的路径集合：名下全部曲目的 (root, 相对路径)（原地替换后缺失的旧曲目仍保留路径），
-// 再加上归组依据里 O 同一 root 的来源路径（最后一次被扫描时的文件清单，最多 100 条）。
-// 参数 $1 是 O 的 ID；UNION 已去重。
-const claimPathSet = `(
+// claimPathSetFor 是旧版本 O 的路径集合：名下全部曲目的 (root, 相对路径)（原地替换后缺失的旧曲目仍保留路径），
+// 再加上归组依据里 O 同一 root 的来源路径（最后一次被扫描时的文件清单，最多 100 条）。origin 是 O 的 ID 的 SQL 表达式；
+// UNION 已去重。
+func claimPathSetFor(origin string) string {
+	return `(
 	SELECT claim_track.source_root_id AS root_id, claim_track.relative_path
 	FROM tracks claim_track
 	JOIN media claim_medium ON claim_medium.id = claim_track.medium_id
-	WHERE claim_medium.release_id = $1::uuid
+	WHERE claim_medium.release_id = ` + origin + `
 	UNION
 	SELECT claim_origin.source_root_id, claim_ref.value
 	FROM releases claim_origin
@@ -57,8 +58,9 @@ const claimPathSet = `(
 	CROSS JOIN LATERAL jsonb_array_elements_text(
 		CASE WHEN jsonb_typeof(claim_evidence.source_refs) = 'array' THEN claim_evidence.source_refs ELSE '[]'::jsonb END
 	) AS claim_ref(value)
-	WHERE claim_origin.id = $1::uuid AND claim_origin.source_root_id IS NOT NULL
+	WHERE claim_origin.id = ` + origin + ` AND claim_origin.source_root_id IS NOT NULL
 )`
+}
 
 // LoadClaimSuggestions 返回旧版本 sourceID 的推荐版本，最多 maxClaimSuggestions 个，只含可见版本。
 // 理由是下面任一条（可以同时命中）：same_files（路径集合里有路径与候选的某首 present 曲目相同，同一 root）；
@@ -69,7 +71,7 @@ func (s *Store) LoadClaimSuggestions(ctx context.Context, sourceID string) ([]Cl
 	rows, err := s.database.QueryContext(ctx, `
 		WITH origin AS (
 			SELECT id, source_root_id, relative_directory FROM releases WHERE id = $1::uuid
-		), path_set AS (SELECT root_id, relative_path FROM `+claimPathSet+` WHERE relative_path <> ''),
+		), path_set AS (SELECT root_id, relative_path FROM `+claimPathSetFor("$1::uuid")+` WHERE relative_path <> ''),
 		same_files AS (
 			SELECT claim_medium.release_id AS release_id, COUNT(*) AS hits
 			FROM path_set

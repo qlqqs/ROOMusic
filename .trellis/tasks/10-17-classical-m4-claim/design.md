@@ -186,15 +186,22 @@ CREATE INDEX operations_claim_source_index ON operations ((after_state #>> '{sou
   - 每项：`{release: {id, title, artist, year, edition}, album: {id, title, other_release_count} | null, location: {root_name, directory}, last_seen_at, holds: {corrections: [字段], album, default, reviews: [问题]}}`。
     推荐只在详情里计算，列表不算。
   - 标题用有效值：有修正时就是修正值，这正是管理员认得出的名字。
-  - `root_name` 取扫描目录路径的末段（`library_roots` 没有 `name` 列，与扫描目录列表的 `filepath.Base(path)` 一致），不返回绝对路径。`album.title` 是那个组里任一发行的有效标题
-    （先取可见的代表版本，没有就取最早创建的成员），组里没有别的发行时 `album` 是 `null`。
-  - 分页与其他列表相同：默认 50，最大 100，非法参数 `400 invalid_pagination`。
-- **`GET /api/v1/release-claims/{id}`**：一个旧版本的详情。包括列表项的全部字段，再加上：
-  - 留着的修改明细：字段的意图与扫描值；专辑里其他版本的标题及是否可见；它是哪张专辑的默认版本；核对的问题类别、核对人与时间；
-  - 推荐（第 3 节）：每项带理由码与命中的路径数，最多 5 个。
+  - `root_name` 取扫描目录路径的末段（`library_roots` 没有 `name` 列，与扫描目录列表的 `filepath.Base(path)` 一致），不返回绝对路径；`directory` 经过
+    `SafeRelativeSourceRef`，不安全的（`..`、绝对路径、盘符）不返回，是空串。
+  - `album.title` 是那张专辑的名字：**不含旧版本自己**（它的名字已经显示在行的标题里）的成员里，按代表版本规则排第一的有效标题——可见成员优先，
+    然后是默认版本、年份最早、创建时间。没有可见成员时规则不变（与有可见成员时连续，专辑的名字不会因为可见性变化而突然换掉）。
+    组里没有别的发行时 `album` 是 `null`。`other_release_count` 是组里别的发行数（不论可见）。
+  - 同一张专辑里的几个旧版本各自一项：先认领一个，另一个仍能认领回这张专辑。
+  - 响应是 `{items, pagination: {page, page_size, total}}`；分页与其他列表相同：默认 50，最大 100，非法参数 `400 invalid_pagination`。
+- **`GET /api/v1/release-claims/{id}`**：一个旧版本的详情。列表项的全部字段在顶层，再加上：
+  - `revision`：旧版本的版本号；
+  - `corrections`：`[{field, correction: {mode, value?}, scan_value}]`，按字段表的固定顺序；
+  - `siblings`：同一张专辑里别的发行 `[{id, title, visible}]`（最多 20）；`default_of`：它是默认版本的专辑 `[{id, title}]`；
+  - `reviews`：`[{issue, reviewed_at, reviewer: {id, username}}]`，核对人的用户名由传输层补上；
+  - `suggestions`：推荐（第 3 节），每项 `{release, edition, reasons, same_files}`，最多 5 个。
   - 不满足判定时返回 `404 not_found`。
-- **`GET /api/v1/releases/{id}/claim-hints`**：给专辑详情用的提示，列出把这个可见版本列为推荐的旧版本（最多 3 个，`{id, title}`），没有时是空数组。
-  与“查看问题”一样，只有管理员的操作区请求它。
+- **`GET /api/v1/releases/{id}/claim-hints`**：给专辑详情用的提示，响应 `{items: [{id, title}]}`，列出把这个可见版本列为推荐的旧版本（最多 3 个，最近看到的在前），没有时是空数组。
+  命中条件与推荐相同，但不受推荐 5 个的上限限制。版本不存在或不可见返回 `404 not_found`。与“查看问题”一样，只有管理员的操作区请求它。
 - 路径一律经过 `SafeRelativeSourceRef`，与证据一致。
 
 ## 9. 前端（governance）

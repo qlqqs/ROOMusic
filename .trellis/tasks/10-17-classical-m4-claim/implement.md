@@ -41,7 +41,7 @@
   - 集成测试：撤销逐项恢复两个版本与各组的前态（修正与核对的原 `operation_id`、组、默认版本）；新版本之后又修改过、旧版本或组的版本号变了时 `revert_conflict`；
     新版本变得不可见时仍可撤销；撤销不能再撤销；`Describe` 的改动摘要与 `revertible`；按版本筛选同时列出以它为来源的认领与撤销记录。
   - 接口样本：记录列表里的认领项与撤销项。
-- [ ] **4. 待认领的读取**
+- [x] **4. 待认领的读取**
   - `GET /api/v1/release-claims`、`GET /api/v1/release-claims/{id}`、`GET /api/v1/releases/{id}/claim-hints`（design §8）。
   - 集成测试：只有管理员；排序（最后一次看到的时间）与分页；`root_name` 与目录不含绝对路径；`album` 的标题取法；详情的修改明细与推荐；
     `claim-hints` 与详情的推荐一致；认领之后从列表消失、旧版本可见之后不再列出。

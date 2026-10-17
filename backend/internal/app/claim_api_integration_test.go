@@ -3,6 +3,7 @@ package app
 import (
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -389,5 +390,103 @@ func TestPostgreSQLClaimRevertAPIRefusesAfterLaterChanges(t *testing.T) {
 	requireAPIError(t, environment.application.request(t, http.MethodPost, revertPath(claimID), nil, &environment.admin, idempotencyHeader(uuid.New())), 409, "revert_conflict")
 	if environment.state(t) != before {
 		t.Error("a refused revert changed the state")
+	}
+}
+
+func claimReadPath(releaseID string) string { return "/api/v1/release-claims/" + releaseID }
+
+func claimHintsPath(releaseID string) string { return "/api/v1/releases/" + releaseID + "/claim-hints" }
+
+// 待认领的读取接口：只有管理员；分页参数与错误码；列表按最后一次被看到的时间倒序，每项写明原来的专辑、位置（不含绝对路径）与留着的修改；
+// 详情带修正明细与核对人的用户名；提示给专辑详情用；认领之后旧版本从列表消失。
+func TestPostgreSQLClaimReadAPI(t *testing.T) {
+	environment := newClaimEnvironment(t)
+	application := environment.application
+	for _, testCase := range []struct {
+		name   string
+		user   *integrationTestUser
+		path   string
+		status int
+		code   string
+	}{
+		{"list without a session", nil, "/api/v1/release-claims", 401, "unauthorized"},
+		{"list as an ordinary member", &environment.ordinary, "/api/v1/release-claims", 403, "forbidden"},
+		{"detail without a session", nil, claimReadPath(environment.a), 401, "unauthorized"},
+		{"detail as an ordinary member", &environment.ordinary, claimReadPath(environment.a), 403, "forbidden"},
+		{"hints without a session", nil, claimHintsPath(environment.b), 401, "unauthorized"},
+		{"hints as an ordinary member", &environment.ordinary, claimHintsPath(environment.b), 403, "forbidden"},
+		{"page zero", &environment.admin, "/api/v1/release-claims?page=0", 400, "invalid_pagination"},
+		{"page size over the limit", &environment.admin, "/api/v1/release-claims?page_size=101", 400, "invalid_pagination"},
+		{"malformed id in the detail", &environment.admin, claimReadPath("not-a-uuid"), 400, "invalid_id"},
+		{"malformed id in the hints", &environment.admin, claimHintsPath("not-a-uuid"), 400, "invalid_id"},
+		{"a visible release is not claimable", &environment.admin, claimReadPath(environment.b), 404, "not_found"},
+		{"a hidden release without manual state", &environment.admin, claimReadPath(environment.hidden), 404, "not_found"},
+		{"an unknown release", &environment.admin, claimReadPath(uuid.New()), 404, "not_found"},
+		{"hints of a release without visible tracks", &environment.admin, claimHintsPath(environment.a), 404, "not_found"},
+		{"hints of an unknown release", &environment.admin, claimHintsPath(uuid.New()), 404, "not_found"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			requireAPIError(t, application.request(t, http.MethodGet, testCase.path, nil, testCase.user, nil), testCase.status, testCase.code)
+		})
+	}
+
+	// 列表：A 是唯一的旧版本（有标题修正），位置只有扫描目录的名称与相对目录。
+	response := application.request(t, http.MethodGet, "/api/v1/release-claims", nil, &environment.admin, nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("list: HTTP %d: %s", response.Code, response.Body.String())
+	}
+	if strings.Contains(response.Body.String(), application.allowedRoot) {
+		t.Fatalf("the list leaks the absolute path of the library: %s", response.Body.String())
+	}
+	listing := decodeJSONMap(t, response)
+	items := listing["items"].([]any)
+	pagination := listing["pagination"].(map[string]any)
+	if len(items) != 1 || pagination["total"].(float64) != 1 || pagination["page"].(float64) != 1 || pagination["page_size"].(float64) != 50 {
+		t.Fatalf("list = %v", listing)
+	}
+	item := items[0].(map[string]any)
+	release, location, holds := item["release"].(map[string]any), item["location"].(map[string]any), item["holds"].(map[string]any)
+	if release["id"] != environment.a || release["title"] != "我改过的 A" || item["album"] != nil || item["last_seen_at"] == nil ||
+		location["root_name"] != filepath.Base(application.allowedRoot) || location["directory"] != "Album A" ||
+		holds["album"] != false || holds["default"] != false || len(holds["corrections"].([]any)) != 1 || len(holds["reviews"].([]any)) != 0 {
+		t.Fatalf("list item = %v", item)
+	}
+
+	// 详情：修正明细（意图与扫描值）、没有推荐（B 不在 A 的目录里，也没有相同的文件）。
+	detail := decodeJSONMap(t, application.request(t, http.MethodGet, claimReadPath(environment.a), nil, &environment.admin, nil))
+	corrections := detail["corrections"].([]any)
+	if len(corrections) != 1 || corrections[0].(map[string]any)["field"] != "title" || corrections[0].(map[string]any)["scan_value"] != "Album A" ||
+		detail["revision"].(float64) != 2 || len(detail["suggestions"].([]any)) != 0 || len(detail["reviews"].([]any)) != 0 {
+		t.Fatalf("detail = %v", detail)
+	}
+
+	// 推荐与提示：让 B 与 A 同目录，A 的详情推荐 B，B 的提示是 A。
+	mustExec(t, application, `UPDATE releases SET relative_directory='Album A' WHERE id=$1::uuid`, environment.b)
+	detail = decodeJSONMap(t, application.request(t, http.MethodGet, claimReadPath(environment.a), nil, &environment.admin, nil))
+	suggestions := detail["suggestions"].([]any)
+	if len(suggestions) != 1 || suggestions[0].(map[string]any)["release"].(map[string]any)["id"] != environment.b ||
+		suggestions[0].(map[string]any)["reasons"].([]any)[0] != "same_directory" {
+		t.Fatalf("suggestions = %v", suggestions)
+	}
+	hints := decodeJSONMap(t, application.request(t, http.MethodGet, claimHintsPath(environment.b), nil, &environment.admin, nil))["items"].([]any)
+	if len(hints) != 1 || hints[0].(map[string]any)["id"] != environment.a || hints[0].(map[string]any)["title"] != "我改过的 A" {
+		t.Fatalf("hints = %v", hints)
+	}
+	if none := decodeJSONMap(t, application.request(t, http.MethodGet, claimHintsPath(environment.visible), nil, &environment.admin, nil))["items"].([]any); len(none) != 0 {
+		t.Fatalf("hints of an unrelated release = %v", none)
+	}
+
+	// 认领之后旧版本从列表、详情与提示里消失。
+	revision, sourceRevision, token := environment.previewToken(t)
+	if claimed := environment.claim(t, &environment.admin, environment.b, uuid.New(), claimBody(revision, sourceRevision, environment.a, token)); claimed.Code != http.StatusOK {
+		t.Fatalf("claim: HTTP %d: %s", claimed.Code, claimed.Body.String())
+	}
+	after := decodeJSONMap(t, application.request(t, http.MethodGet, "/api/v1/release-claims", nil, &environment.admin, nil))
+	if len(after["items"].([]any)) != 0 || after["pagination"].(map[string]any)["total"].(float64) != 0 {
+		t.Fatalf("list after the claim = %v", after)
+	}
+	requireAPIError(t, application.request(t, http.MethodGet, claimReadPath(environment.a), nil, &environment.admin, nil), 404, "not_found")
+	if gone := decodeJSONMap(t, application.request(t, http.MethodGet, claimHintsPath(environment.b), nil, &environment.admin, nil))["items"].([]any); len(gone) != 0 {
+		t.Fatalf("hints after the claim = %v", gone)
 	}
 }
