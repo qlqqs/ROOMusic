@@ -77,7 +77,7 @@ func optionalID(value string) *string {
 }
 
 // listOperations 按时间倒序分页返回操作记录（管理员），可按发行筛选（release_id）、按专辑筛选（group_id）；
-// 两个都给时取并集，即这个版本的记录加上这张专辑的记录。检查顺序是 401、403、400（分页、release_id、group_id）、200。
+// 两个都给时取并集，即这个版本的记录加上这张专辑的记录；按版本筛选还包含以它为来源的认领记录。检查顺序是 401、403、400（分页、release_id、group_id）、200。
 func (handlers *Handlers) listOperations(responseWriter http.ResponseWriter, request *http.Request) {
 	if _, ok := handlers.guard.RequireAdmin(responseWriter, request); !ok {
 		return
@@ -94,6 +94,7 @@ func (handlers *Handlers) listOperations(responseWriter http.ResponseWriter, req
 			return
 		}
 		params.Targets = append(params.Targets, operations.Target{Type: operations.TargetRelease, ID: strings.ToLower(releaseID)})
+		params.Sources = append(params.Sources, strings.ToLower(releaseID))
 	}
 	if groupID := request.URL.Query().Get("group_id"); groupID != "" {
 		if !uuid.Valid(groupID) {

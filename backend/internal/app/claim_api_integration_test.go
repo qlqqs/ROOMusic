@@ -263,3 +263,131 @@ func TestPostgreSQLClaimAPIConcurrentRequests(t *testing.T) {
 		t.Fatalf("%d concurrent claims succeeded (%+v -> %+v); want exactly one", succeeded, before, after)
 	}
 }
+
+// operationItems 读取操作记录列表，按类型与 ID 返回每一项（解码成 map，改动摘要的形状按类型而不同）。
+func (environment *claimEnvironment) operationItems(t *testing.T, query string) []map[string]any {
+	t.Helper()
+	response := environment.application.request(t, http.MethodGet, "/api/v1/operations"+query, nil, &environment.admin, nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("list operations: HTTP %d: %s", response.Code, response.Body.String())
+	}
+	items := []map[string]any{}
+	for _, item := range decodeJSONMap(t, response)["items"].([]any) {
+		items = append(items, item.(map[string]any))
+	}
+	return items
+}
+
+func itemOfType(items []map[string]any, operationType string) map[string]any {
+	for _, item := range items {
+		if item["type"] == operationType {
+			return item
+		}
+	}
+	return nil
+}
+
+// 认领与它的撤销出现在操作记录里：按新版本筛选（目标）与按旧版本筛选（来源）都找得到；改动摘要写明来源、迁移与保留；
+// 经 HTTP 撤销之后原记录标为已撤销，撤销记录只带来源。
+func TestPostgreSQLClaimOperationRecordsAndRevertAPI(t *testing.T) {
+	environment := newClaimEnvironment(t)
+	revision, sourceRevision, token := environment.previewToken(t)
+	claimed := environment.claim(t, &environment.admin, environment.b, uuid.New(), claimBody(revision, sourceRevision, environment.a, token))
+	if claimed.Code != http.StatusOK {
+		t.Fatalf("claim: HTTP %d: %s", claimed.Code, claimed.Body.String())
+	}
+	claimID := decodeJSONMap(t, claimed)["operation_id"].(string)
+
+	// 按新版本、按旧版本筛选都能找到这条认领记录。
+	for name, query := range map[string]string{"by the new release": "?release_id=" + environment.b, "by the old release": "?release_id=" + environment.a, "unfiltered": ""} {
+		claim := itemOfType(environment.operationItems(t, query), "release_claim")
+		if claim == nil || claim["id"] != claimID {
+			t.Fatalf("%s: the claim is not listed: %v", name, claim)
+		}
+	}
+	// 另一个不相干的版本筛选不出来。
+	if other := itemOfType(environment.operationItems(t, "?release_id="+environment.hidden), "release_claim"); other != nil {
+		t.Errorf("an unrelated release lists the claim: %v", other)
+	}
+	claim := itemOfType(environment.operationItems(t, "?release_id="+environment.b), "release_claim")
+	release := claim["release"].(map[string]any)
+	changes := claim["changes"].(map[string]any)
+	source := changes["source"].(map[string]any)
+	moved := changes["moved"].(map[string]any)
+	if release["id"] != environment.b || release["visible"] != true || changes["kind"] != "release_claim" ||
+		source["id"] != environment.a || source["visible"] != false || claim["revertible"] != true || claim["reverted_by"] != nil {
+		t.Fatalf("the claim record = %v", claim)
+	}
+	if corrections := moved["corrections"].([]any); len(corrections) != 1 || corrections[0] != "title" {
+		t.Errorf("moved = %v", moved)
+	}
+
+	// 普通成员读不到、也撤销不了。
+	requireAPIError(t, environment.application.request(t, http.MethodGet, "/api/v1/operations", nil, &environment.ordinary, nil), 403, "forbidden")
+	requireAPIError(t, environment.application.request(t, http.MethodPost, revertPath(claimID), nil, &environment.ordinary, idempotencyHeader(uuid.New())), 403, "forbidden")
+
+	before := environment.state(t)
+	reverted := environment.application.request(t, http.MethodPost, revertPath(claimID), nil, &environment.admin, idempotencyHeader(uuid.New()))
+	if reverted.Code != http.StatusOK {
+		t.Fatalf("revert the claim: HTTP %d: %s", reverted.Code, reverted.Body.String())
+	}
+	result := decodeJSONMap(t, reverted)
+	if result["reverts_operation_id"] != claimID || result["target_type"] != "release" || result["target_id"] != environment.b ||
+		int64(result["revision"].(float64)) != before.targetRevision+1 {
+		t.Fatalf("revert result = %v", result)
+	}
+	// 修正行的总数在认领与撤销中都是一条（只是换了发行）；撤销之后标题修正回到旧版本，新版本没有。
+	if after := environment.state(t); after.corrections != before.corrections || after.targetGroup != before.targetGroup {
+		t.Errorf("the revert changed something it should not: %+v -> %+v", before, after)
+	}
+	if countRows(t, environment.application, `SELECT COUNT(*) FROM release_corrections WHERE release_id=$1::uuid AND field='title'`, environment.a) != 1 ||
+		countRows(t, environment.application, `SELECT COUNT(*) FROM release_corrections WHERE release_id=$1::uuid`, environment.b) != 0 {
+		t.Error("the title correction did not go back to the old release")
+	}
+	// B 不再显示迁来的标题；旧版本重新待认领（预览又可用）。
+	detail := decodeJSONMap(t, environment.application.request(t, http.MethodGet, "/api/v1/releases/"+environment.b, nil, &environment.ordinary, nil))
+	if detail["title"] == "我改过的 A" {
+		t.Error("the new release still shows the migrated title after the revert")
+	}
+	if preview := environment.preview(t, &environment.admin, environment.b, environment.a); preview.Code != http.StatusOK {
+		t.Errorf("the old release is not claimable again after the revert: HTTP %d: %s", preview.Code, preview.Body.String())
+	}
+
+	// 列表：原记录标为已撤销、不可再撤销；撤销记录带着来源，也能按旧版本筛选到。
+	for name, query := range map[string]string{"by the new release": "?release_id=" + environment.b, "by the old release": "?release_id=" + environment.a} {
+		items := environment.operationItems(t, query)
+		claim, revert := itemOfType(items, "release_claim"), itemOfType(items, "revert")
+		if claim == nil || claim["reverted_by"] == nil || claim["revertible"] != false {
+			t.Errorf("%s: the reverted claim = %v", name, claim)
+		}
+		if revert == nil || revert["reverts"] != claimID || revert["revertible"] != false {
+			t.Errorf("%s: the revert record = %v", name, revert)
+			continue
+		}
+		revertChanges := revert["changes"].(map[string]any)
+		if revertChanges["kind"] != "release_claim" || revertChanges["source"].(map[string]any)["id"] != environment.a || revertChanges["moved"] != nil {
+			t.Errorf("%s: the revert changes = %v", name, revertChanges)
+		}
+	}
+	requireAPIError(t, environment.application.request(t, http.MethodPost, revertPath(claimID), nil, &environment.admin, idempotencyHeader(uuid.New())), 409, "already_reverted")
+}
+
+// 认领之后新版本又被修改：认领不能再撤销，列表里 revertible 为假，撤销是 409 revert_conflict。
+func TestPostgreSQLClaimRevertAPIRefusesAfterLaterChanges(t *testing.T) {
+	environment := newClaimEnvironment(t)
+	revision, sourceRevision, token := environment.previewToken(t)
+	claimID := decodeJSONMap(t, environment.claim(t, &environment.admin, environment.b, uuid.New(), claimBody(revision, sourceRevision, environment.a, token)))["operation_id"].(string)
+	response := environment.application.request(t, http.MethodPatch, "/api/v1/releases/"+environment.b+"/corrections",
+		correctionBody(int(revision)+1, map[string]any{"genre": setChange("后来改的")}), &environment.admin, idempotencyHeader(uuid.New()))
+	if response.Code != http.StatusOK {
+		t.Fatalf("a later correction: HTTP %d: %s", response.Code, response.Body.String())
+	}
+	if claim := itemOfType(environment.operationItems(t, "?release_id="+environment.b), "release_claim"); claim == nil || claim["revertible"] != false {
+		t.Errorf("the claim after a later change = %v", claim)
+	}
+	before := environment.state(t)
+	requireAPIError(t, environment.application.request(t, http.MethodPost, revertPath(claimID), nil, &environment.admin, idempotencyHeader(uuid.New())), 409, "revert_conflict")
+	if environment.state(t) != before {
+		t.Error("a refused revert changed the state")
+	}
+}

@@ -1,0 +1,80 @@
+{
+  "body": {
+    "items": [
+      {
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "username": "curator"
+        },
+        "album": null,
+        "changes": {
+          "kind": "release_claim",
+          "moved": {
+            "album": true,
+            "corrections": [
+              "title"
+            ],
+            "defaults": 1,
+            "reviews": [
+              "grouping"
+            ]
+          },
+          "skipped": {
+            "album": false,
+            "corrections": [
+              "label"
+            ],
+            "defaults": 0,
+            "reviews": []
+          },
+          "source": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "title": "Sample Replaced Album",
+            "visible": false
+          }
+        },
+        "created_at": "2026-01-01T00:00:01Z",
+        "id": "00000000-0000-4000-8000-000000000003",
+        "release": {
+          "group_id": "00000000-0000-4000-8000-000000000004",
+          "id": "00000000-0000-4000-8000-000000000005",
+          "title": "Sample Replaced Album (corrected)",
+          "visible": true
+        },
+        "reverted_by": null,
+        "revertible": true,
+        "reverts": null,
+        "type": "release_claim"
+      },
+      {
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "username": "curator"
+        },
+        "album": null,
+        "changes": {
+          "fields": [],
+          "kind": "release_correction"
+        },
+        "created_at": "2026-01-01T00:00:00Z",
+        "id": "00000000-0000-4000-8000-000000000006",
+        "release": {
+          "group_id": "00000000-0000-4000-8000-000000000007",
+          "id": "00000000-0000-4000-8000-000000000002",
+          "title": "Sample Replaced Album",
+          "visible": false
+        },
+        "reverted_by": null,
+        "revertible": false,
+        "reverts": null,
+        "type": "release_correction"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "page_size": 10,
+      "total": 2
+    }
+  },
+  "status": 200
+}

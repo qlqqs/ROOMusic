@@ -623,6 +623,14 @@ func recordClaimSamples(t *testing.T, application *integrationTestApplication, s
 	samples.record("release-claims/claimed", call(http.MethodPost, claimPath(targetID), claimBody(revision, sourceRevision, sourceID, token), admin, key("0603")), http.StatusOK)
 	samples.record("errors/not-claimable", call(http.MethodPost, claimPath(targetID), claimBody(revision+1, sourceRevision+1, sourceID, token), admin, key("0604")), http.StatusConflict)
 	samples.record("releases/get-claimed", call(http.MethodGet, "/api/v1/releases/"+targetID, nil, admin), http.StatusOK)
+	// 操作记录里的认领：按旧版本（来源）筛选也能找到；撤销之后撤销记录同样带着来源。
+	samples.record("operations/list-claims", call(http.MethodGet, "/api/v1/operations?release_id="+sourceID+"&page_size=10", nil, admin), http.StatusOK)
+	var claimOperation string
+	if err := application.database.QueryRow(`SELECT id::text FROM operations WHERE operation_type='release_claim' ORDER BY created_at DESC, id DESC LIMIT 1`).Scan(&claimOperation); err != nil {
+		t.Fatalf("read the claim operation: %v", err)
+	}
+	samples.record("operations/reverted-claim", call(http.MethodPost, revertPath(claimOperation), nil, admin, key("0605")), http.StatusOK)
+	samples.record("operations/list-claims-reverted", call(http.MethodGet, "/api/v1/operations?release_id="+sourceID+"&page_size=10", nil, admin), http.StatusOK)
 }
 
 // 样本里的内嵌歌词：同步歌词带元标签、间奏（空行）、同一时间戳的双语两行与一行多个时间戳；纯文本歌词带分段。

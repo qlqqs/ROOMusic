@@ -159,15 +159,20 @@ CREATE INDEX operations_claim_source_index ON operations ((after_state #>> '{sou
 
 - **Revert**：
   - 先对前态里引用到的更早的操作记录加 `FOR KEY SHARE` 锁。原因：撤销会写回带原 `operation_id` 的修正行与核对行，提交时的外键检查会加同一种锁（核对合同第 5 节的死锁教训）。
-  - 再按第 5 节的顺序锁住两个发行行和涉及的组行。
-  - 以下任一不等就是 `409 revert_conflict`，不做部分撤销：新版本的 `edit_revision` 与原记录的 `result_revision`；旧版本的版本号与后态里的值；各组的版本号与后态里的值。
-  - 然后逐项写回**前态**：两个发行的修正行与核对行（连同原来的 `operation_id`，核对人仍是原来的人），两个发行的 `group_id`，各组的 `default_release_id`。
-    两个发行的版本号加一；改过默认版本的组，版本号也加一。撤销本身不能再撤销（共同规则）。
+  - 再按第 5 节的顺序锁住两个发行行，最后按 UUID 顺序锁前态里出现的全部组。认领时新建的那个空组（旧版本移进去的）不在前态里，不锁也不核对：
+    它不可见、没有入口，撤销之后组从不删除，空组留着无害。
+  - 以下任一不等就是 `409 revert_conflict`，不做部分撤销：新版本的 `edit_revision` 与原记录的 `result_revision`；旧版本的版本号与后态里的值；前态里各组的版本号与后态里的值。
+  - 然后逐项写回**前态**：两个发行的修正行与核对行（先清掉现有的，再连同原来的 `operation_id` 原样写回，核对人仍是原来的人），两个发行的 `group_id`，
+    各组的 `default_release_id`（只写与现在不同的）。两个发行的版本号加一；默认版本被写回的组，版本号也加一。撤销本身不能再撤销（共同规则）。
   - 撤销记录的前后状态与认领同形状（前态是撤销前的样子，后态是恢复后的样子），所以按来源筛选也能找到它。
   - 撤销不要求新版本可见。认领之后新版本又被整张替换、变得不可见时，撤销仍能把人工状态还给旧版本。
     这一点与其他操作类型（目标不可见就 404）不同，因为这种撤销的目的就是把修改还给另一个版本。
-- **Describe**：改动摘要是 `{kind: "release_claim", source: {id, title, visible}, moved: {corrections: [字段], album: {title} | null, default: [专辑标题], reviews: [问题]}, skipped: {…}}`。
-  目标信息照常用 `loadReleaseInfos`（新版本）。`revertible` 的条件：新版本版本号等于 `result_revision`，且旧版本版本号等于后态里的值；不要求可见。
+- **Describe**：改动摘要是 `{kind: "release_claim", source: {id, title, visible}, moved: {corrections: [字段], album: bool, defaults: 数量, reviews: [问题]}, skipped: {corrections, album, defaults, reviews}}`。
+  `moved` 与 `skipped` 由记录的前后状态推导，不另存：新版本上操作号是这条记录的修正是迁来的；核对看依据与操作号是否原样出现在新版本上
+  （缺失曲目的核对因此总在 `skipped`）；专辑看新版本是否进了来源原来的组；`defaults` 是接任默认版本的专辑数（改回自动选择的不算）。
+  专辑只给数量，不给标题：页面用“接任了 N 张专辑的默认版本”就够，不必为每条记录再查专辑的代表版本。
+  **撤销记录只带 `kind` 与 `source`**，不带 `moved` 与 `skipped`（对撤销来说它们没有意义）。
+  目标信息照常用 `loadReleaseInfos`（新版本）。`revertible` 的条件：新版本版本号等于 `result_revision`，旧版本版本号与前态里各组的版本号等于后态里的值；不要求可见。
 - **操作记录列表**：按版本筛选（`release_id`）时，除了以这个版本为目标的记录，还要列出以它为**来源**的认领记录。
   做法是 `operations.ListParams` 增加 `Sources`：按 `after_state #>> '{source,release_id}'` 匹配，走第 4 节的部分索引，结果与 `Targets` 取并集。
 - **与其他记录的关系**：认领之后，被移走的修正与核对的原记录目标仍是旧版本，而旧版本的版本号已经变了，所以它们不能再单独撤销（`revert_conflict`），

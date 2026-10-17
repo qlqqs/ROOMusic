@@ -109,10 +109,12 @@ type Target struct {
 	ID   string
 }
 
-// ListParams 是记录列表的已校验参数：Page 与 PageSize 都大于 0；Targets 非空时只列这些目标上的记录（并集），为空时列出全部。
-// 并集让专辑详情的“修改记录”同时列出一个版本的记录和这张专辑的记录。
+// ListParams 是记录列表的已校验参数：Page 与 PageSize 都大于 0；Targets 与 Sources 都为空时列出全部，否则只列这些目标上的记录，
+// 以及来源是 Sources 里某个发行的记录（并集）。并集让专辑详情的“修改记录”同时列出一个版本的记录和这张专辑的记录，
+// 也让一个版本的记录同时包含以它为来源的认领（认领记录的目标是新版本，来源写在记录的状态里）。
 type ListParams struct {
 	Targets  []Target
+	Sources  []string // 发行 ID（UUID）；匹配记录后态里的 source.release_id，认领与它的撤销记录都带这个键
 	Page     int
 	PageSize int
 }
@@ -123,18 +125,27 @@ type Page struct {
 	Total int64
 }
 
+// listFilter 返回列表的 WHERE 子句（没有筛选时为空）和它的参数。来源的表达式必须与迁移 0020 里的部分索引逐字一致才能走索引；
+// 测试用同一个函数拼出 EXPLAIN，所以表达式一旦不一致就会被发现。
+func listFilter(params ListParams) (where string, arguments []any) {
+	if len(params.Targets) == 0 && len(params.Sources) == 0 {
+		return "", nil
+	}
+	clauses := make([]string, 0, len(params.Targets)+len(params.Sources))
+	for _, target := range params.Targets {
+		clauses = append(clauses, "(o.target_type = $"+strconv.Itoa(len(arguments)+1)+" AND o.target_id = $"+strconv.Itoa(len(arguments)+2)+"::uuid)")
+		arguments = append(arguments, target.Type, target.ID)
+	}
+	for _, source := range params.Sources {
+		clauses = append(clauses, "(o.after_state #>> '{source,release_id}') = $"+strconv.Itoa(len(arguments)+1))
+		arguments = append(arguments, source)
+	}
+	return " WHERE " + strings.Join(clauses, " OR "), arguments
+}
+
 // List 按时间倒序（再按 ID 倒序）返回一页记录。
 func List(ctx context.Context, database Queryer, params ListParams) (Page, error) {
-	where := ""
-	arguments := []any{}
-	if len(params.Targets) > 0 {
-		clauses := make([]string, len(params.Targets))
-		for index, target := range params.Targets {
-			clauses[index] = "(o.target_type = $" + strconv.Itoa(2*index+1) + " AND o.target_id = $" + strconv.Itoa(2*index+2) + "::uuid)"
-			arguments = append(arguments, target.Type, target.ID)
-		}
-		where = " WHERE " + strings.Join(clauses, " OR ")
-	}
+	where, arguments := listFilter(params)
 	var total int64
 	if err := database.QueryRowContext(ctx, "SELECT COUNT(*) FROM operations o"+where, arguments...).Scan(&total); err != nil {
 		return Page{}, fmt.Errorf("%w: count operations: %w", ErrQuery, err)

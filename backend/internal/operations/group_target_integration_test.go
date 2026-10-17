@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -228,4 +229,113 @@ func TestPostgreSQLRevertExecutorReportsTheGroupTarget(t *testing.T) {
 	} else if status, code := problemOf(err); status != 409 || code != "not_revertible" {
 		t.Fatalf("revert of a revert: status %d, code %q; want 409 not_revertible", status, code)
 	}
+}
+
+// insertClaimLikeRecord 直接写一条状态里带 source.release_id 的记录（认领与它的撤销记录都是这个形状）；operations 不知道认领的业务规则。
+// reverts 非空时它是撤销记录，指向被撤销的那条记录（约束要求撤销记录与 reverts_operation_id 同时出现）。
+func (fixture *runFixture) insertClaimLikeRecord(operationType, targetID, sourceID, reverts string) string {
+	fixture.t.Helper()
+	id := uuid.New()
+	state := `{"source":{"release_id":"` + sourceID + `"},"target":{"release_id":"` + targetID + `"}}`
+	var revertsID any
+	if reverts != "" {
+		revertsID = reverts
+	}
+	fixture.exec(`INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id,reverts_operation_id)
+		VALUES($1::uuid,$2::uuid,$3,'release',$4::uuid,$5::uuid,'f',1,2,$6::jsonb,$6::jsonb,'{}','test',$7::uuid)`, id, fixture.actorID, operationType, targetID, uuid.New(), state, revertsID)
+	return id
+}
+
+// 按来源筛选：认领记录的目标是新版本，来源写在记录的后态里；按来源版本筛选时认领与它的撤销记录都能找到，
+// 与按目标的筛选取并集；其他类型的记录没有 source 键，不参与匹配。
+func TestPostgreSQLListFiltersBySourceRelease(t *testing.T) {
+	fixture := newRunFixture(t)
+	ctx := context.Background()
+	oldRelease, newRelease, otherRelease := uuid.New(), uuid.New(), uuid.New()
+	for _, id := range []string{oldRelease, newRelease, otherRelease} {
+		fixture.exec(`INSERT INTO releases(id,group_id,title,artist) VALUES($1::uuid,$2::uuid,'x','y')`, id, fixture.groupID)
+	}
+	claim := fixture.insertClaimLikeRecord(TypeReleaseClaim, newRelease, oldRelease, "")
+	revert := fixture.insertClaimLikeRecord(TypeRevert, newRelease, oldRelease, claim)
+	fixture.insertClaimLikeRecord(TypeReleaseClaim, otherRelease, uuid.New(), "")
+	// 一条没有 source 键的记录（修正），目标就是旧版本。
+	correction, err := Run(ctx, fixture.database, fixture.spec(fixture.actorID, uuid.New(), TypeReleaseCorrection, map[string]any{"n": 1}), fixture.bump(1, nil))
+	if err != nil {
+		t.Fatalf("seed a correction: %v", err)
+	}
+	idsOf := func(page Page) []string {
+		ids := make([]string, len(page.Items))
+		for index, item := range page.Items {
+			ids[index] = item.ID
+		}
+		slices.Sort(ids)
+		return ids
+	}
+	list := func(params ListParams) Page {
+		params.Page, params.PageSize = 1, 100
+		page, err := List(ctx, fixture.database, params)
+		if err != nil {
+			t.Fatalf("List(%+v): %v", params, err)
+		}
+		return page
+	}
+
+	bySource := list(ListParams{Sources: []string{oldRelease}})
+	if want := []string{claim, revert}; !slices.Equal(idsOf(bySource), sortedCopy(want)) || bySource.Total != 2 {
+		t.Errorf("List(source) = %v (total %d), want the claim and its revert %v", idsOf(bySource), bySource.Total, want)
+	}
+	byTarget := list(ListParams{Targets: []Target{{TargetRelease, newRelease}}})
+	if want := []string{claim, revert}; !slices.Equal(idsOf(byTarget), sortedCopy(want)) {
+		t.Errorf("List(target) = %v, want %v", idsOf(byTarget), want)
+	}
+	// 并集：按旧版本筛选时既有以它为来源的认领，也有以它为目标的修正；记录只出现一次。
+	union := list(ListParams{Targets: []Target{{TargetRelease, fixture.releaseID}}, Sources: []string{fixture.releaseID}})
+	if want := []string{correction.OperationID}; !slices.Equal(idsOf(union), want) {
+		t.Errorf("List(target and source of the seeded release) = %v, want only its correction %v", idsOf(union), want)
+	}
+	both := list(ListParams{Targets: []Target{{TargetRelease, fixture.releaseID}}, Sources: []string{oldRelease}})
+	if want := []string{claim, revert, correction.OperationID}; !slices.Equal(idsOf(both), sortedCopy(want)) || both.Total != 3 {
+		t.Errorf("List(union) = %v (total %d), want %v", idsOf(both), both.Total, want)
+	}
+	// 另一个来源的认领不会被带出来；没有任何匹配时是空页而不是 nil。
+	if none := list(ListParams{Sources: []string{uuid.New()}}); none.Total != 0 || none.Items == nil || len(none.Items) != 0 {
+		t.Errorf("List(unknown source) = %+v, want an empty non-nil page", none)
+	}
+	if others := list(ListParams{Sources: []string{oldRelease, otherRelease}}); others.Total != 2 {
+		t.Errorf("List(two sources, one with no claim as source) total = %d, want 2 (the other claim has another source)", others.Total)
+	}
+
+	// List 里写的表达式要能用上迁移 0020 的部分表达式索引。小表上优化器本来就会选顺序扫描，所以关掉顺序扫描再看计划：
+	// 表达式与索引不一致时规划器没有别的办法，计划里就不会出现这个索引。
+	connection, err := fixture.database.Conn(ctx)
+	if err != nil {
+		t.Fatalf("open a connection: %v", err)
+	}
+	defer connection.Close()
+	if _, err := connection.ExecContext(ctx, `SET enable_seqscan = off`); err != nil {
+		t.Fatalf("disable sequential scans: %v", err)
+	}
+	where, arguments := listFilter(ListParams{Sources: []string{oldRelease}})
+	rows, err := connection.QueryContext(ctx, `EXPLAIN (COSTS OFF) SELECT o.id FROM operations o`+where, arguments...)
+	if err != nil {
+		t.Fatalf("explain: %v", err)
+	}
+	defer rows.Close()
+	plan := ""
+	for rows.Next() {
+		var line string
+		if err := rows.Scan(&line); err != nil {
+			t.Fatal(err)
+		}
+		plan += line + "\n"
+	}
+	if !strings.Contains(plan, "operations_claim_source_index") {
+		t.Errorf("the source filter does not use the partial index:\n%s", plan)
+	}
+}
+
+func sortedCopy(values []string) []string {
+	result := slices.Clone(values)
+	slices.Sort(result)
+	return result
 }

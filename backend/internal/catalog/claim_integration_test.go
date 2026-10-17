@@ -746,12 +746,13 @@ func TestPostgreSQLClaimsAndOtherChangesNeverDeadlock(t *testing.T) {
 		return value
 	}
 	anyRecord := func() (id, operationType string) {
-		_ = fixture.database.QueryRow(`SELECT id::text, operation_type FROM operations WHERE operation_type IN ('release_issue_review','release_correction','release_group_change','release_group_default') ORDER BY random() LIMIT 1`).Scan(&id, &operationType)
+		_ = fixture.database.QueryRow(`SELECT id::text, operation_type FROM operations WHERE operation_type IN ('release_issue_review','release_correction','release_group_change','release_group_default','release_claim') ORDER BY random() LIMIT 1`).Scan(&id, &operationType)
 		return id, operationType
 	}
 	kinds := map[string]operations.Kind{
 		operations.TypeReleaseIssueReview: IssueReviewOperations(), operations.TypeReleaseCorrection: CorrectionOperations(),
 		operations.TypeReleaseGroupChange: GroupChangeOperations(), operations.TypeReleaseGroupDefault: GroupDefaultOperations(),
+		operations.TypeReleaseClaim: ClaimOperations(),
 	}
 	run := func(operationType string, request interface{ Fingerprint() string }, executor operations.Executor) error {
 		_, err := operations.Run(context.Background(), fixture.database, operations.Spec{
@@ -802,10 +803,13 @@ func TestPostgreSQLClaimsAndOtherChangesNeverDeadlock(t *testing.T) {
 						t.Errorf("simulated scan: %v", scanErr)
 						return
 					}
-					// 扫描还会更新它沿用的发行行（标题等扫描列），只锁发行行、从不锁组行。
-					if _, scanErr := fixture.database.Exec(`UPDATE releases SET artist = artist WHERE id = ANY($1::text[]::uuid[])`, []string{sources[random.Intn(len(sources))].releaseID, targets[random.Intn(len(targets))].releaseID}); scanErr != nil {
-						t.Errorf("simulated scan update: %v", scanErr)
-						return
+					// 扫描还会更新它沿用的发行行（标题等扫描列），只锁发行行、从不锁组行。真实扫描逐个发行各自一条 UPDATE（persistRelease），
+					// 不会在一条语句里同时锁两个发行，所以这里也逐个更新。
+					for _, releaseID := range []string{sources[random.Intn(len(sources))].releaseID, targets[random.Intn(len(targets))].releaseID} {
+						if _, scanErr := fixture.database.Exec(`UPDATE releases SET artist = artist WHERE id = $1::uuid`, releaseID); scanErr != nil {
+							t.Errorf("simulated scan update: %v", scanErr)
+							return
+						}
 					}
 					continue
 				}
