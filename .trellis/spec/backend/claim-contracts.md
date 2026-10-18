@@ -11,7 +11,7 @@ M4 的第三项（2026-10）让管理员把**已不可见的旧版本**上的人
 - 扫描**必须保持不读写这四类状态与操作记录**（第 9 节）。认领只在管理员提交时发生，没有自动认领。
 
 决策依据：[ADR 0002](../../../docs/architecture/adr/0002-metadata-overlays.md) 与 [ADR 0003](../../../docs/architecture/adr/0003-governed-operations.md) 的
-2026-10-17 决策记录，任务 [M4 认领](../../tasks/10-17-classical-m4-claim/prd.md)（裁决 K1–K9）。
+2026-10-17 决策记录，任务 [M4 认领](../../tasks/archive/2026-10/10-17-classical-m4-claim/prd.md)（裁决 K1–K9）。
 
 ## 2. 数据模型（迁移 0020）
 

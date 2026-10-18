@@ -8,12 +8,12 @@
 扫描在“证明不了是同一个版本”时会新建发行。管理员之前在旧发行上做的修改（字段修正、归入的专辑、默认版本、问题核对）会留在旧发行上，
 而旧发行从此不可见：这些修改看不到效果，也无法再改动或撤销。认领让管理员把这些修改接到扫描新建的发行上，不必凭记忆重做一遍。
 
-这是 Core 1 阶段 M4 的第三项（[路线图](../../../docs/architecture/core-1-roadmap.md) M4 行的 ③“认领：旧发行的修正与归组迁给新发行”），
+这是 Core 1 阶段 M4 的第三项（[路线图](../../../../../docs/architecture/core-1-roadmap.md) M4 行的 ③“认领：旧发行的修正与归组迁给新发行”），
 对应父任务需求 R6。用户 2026-10-17 说“继续 M4 的下一个规划”，按路线顺序立项。
 
 ## 背景（已核对的事实）
 
-**什么时候扫描会新建发行**（[ADR 0002](../../../docs/architecture/adr/0002-metadata-overlays.md) 第四节第 134 行，阶段 I 已实施）
+**什么时候扫描会新建发行**（[ADR 0002](../../../../../docs/architecture/adr/0002-metadata-overlays.md) 第四节第 134 行，阶段 I 已实施）
 
 - 发行按曲目成员关系沿用：一个候选里已沿用的曲目**严格过半**属于同一个既有发行时，才沿用它的 ID
   （`backend/internal/catalog/identity_plan.go:365` 的 `allocateReleases`，`:383` 的 `overlap*2>tt.total`）；否则写入时新建发行与一个新组
@@ -39,14 +39,14 @@
 - 操作记录里这些记录还在，专辑列写“标题（已不可见）”，不能撤销（`frontend/src/features/governance/components/operation-list.tsx:28`；
   `backend/internal/catalog/revert.go:269` 的可撤销条件含 `info.Visible`）。
 
-**旧发行上可能留着的人工状态**（都以发行或组为目标，走[受治理操作合同](../../spec/backend/governance-contracts.md)的 `operations.Run`）
+**旧发行上可能留着的人工状态**（都以发行或组为目标，走[受治理操作合同](../../../../spec/backend/governance-contracts.md)的 `operations.Run`）
 
 | 状态 | 存放位置 | 与新发行的关系 |
 | --- | --- | --- |
 | 字段修正（八个字段的 set / null） | `release_corrections`（每个字段至多一行） | 新发行按扫描值显示，没有修正（M3 的 G8，`governance-contracts.md` 第 7 节） |
 | 归入的专辑 | `releases.group_id` | 新发行自己一个新组；旧组如果没有别的可见版本，就从列表消失 |
-| 默认版本 | `release_groups.default_release_id` 指向旧发行 | 旧发行不可见时静默失效，组改按“年份最早”（[默认版本合同](../../spec/backend/default-version-contracts.md)） |
-| 问题核对（来源类型、介质类型、归组冲突、缺失曲目） | `release_issue_reviews`，依据是扫描结论 | 新发行没有核对，问题重新出现（[核对合同](../../spec/backend/issue-review-contracts.md)第 7 节：“迁移属于认领”） |
+| 默认版本 | `release_groups.default_release_id` 指向旧发行 | 旧发行不可见时静默失效，组改按“年份最早”（[默认版本合同](../../../../spec/backend/default-version-contracts.md)） |
+| 问题核对（来源类型、介质类型、归组冲突、缺失曲目） | `release_issue_reviews`，依据是扫描结论 | 新发行没有核对，问题重新出现（[核对合同](../../../../spec/backend/issue-review-contracts.md)第 7 节：“迁移属于认领”） |
 
 **推荐能用的线索**
 
@@ -63,7 +63,7 @@
 - ADR 0002 第四节：无法证明成员关系连续时新建发行，“原有修正留待人工认领，不静默重挂到新目标”；不按标题相似度搬移修正；
   合并、拆分时“不能把 Release 修正复制给全部拆分结果，或按最后写入覆盖合并双方修正”（第 136 行）。
 - ADR 0002 第十节第 6、7 项与 ADR 0003 第十节第 7 项：认领（“修正迁移”）是 M4 的结构操作，须逐类批准；回退方式是关闭写入路由、保留数据。
-- [DESIGN-acceptance.md](../../../frontend/DESIGN-acceptance.md) 第 116 行写着“认领、合并拆分仍另议”；原型里没有认领的界面。
+- [DESIGN-acceptance.md](../../../../../frontend/DESIGN-acceptance.md) 第 116 行写着“认领、合并拆分仍另议”；原型里没有认领的界面。
 
 ## 裁决
 
@@ -151,7 +151,7 @@ K1 里的“别的目录”也包括别的扫描目录（root）。管理员逐�
 ### 与设计的差异
 
 已补记在 [design.md](design.md)：令牌只含来源与目标的 ID 加各项的去向（不含展示字段），核对的效果是 `valid`/`stale`/`no_issue` 三态，操作记录里来源的名字取记录里的名字，响应里默认版本单列 `defaults`，
-以及列表是链接列表、推荐是单选组、专辑详情的提示读取失败不重试。设计文档为守住注入上限从 30 KB 压到约 20 KB：与合同重复的机制说明改为指向 [认领合同](../../spec/backend/claim-contracts.md)。
+以及列表是链接列表、推荐是单选组、专辑详情的提示读取失败不重试。设计文档为守住注入上限从 30 KB 压到约 20 KB：与合同重复的机制说明改为指向 [认领合同](../../../../spec/backend/claim-contracts.md)。
 
 ### 已接受的限制与后续
 

@@ -28,7 +28,7 @@
 判定写成一个 SQL 谓词常量 `releaseClaimablePredicate`（`claims.go`），列表、详情、预览与执行器共用，与 `issues.go` 的做法相同。
 
 ## 3. 推荐（只读，规则固定）
-推荐只决定排序与提示，不自动执行。依据是**文件路径与目录**；规则（路径集合、两个理由码、排序、上限 5 个、索引与边界）在[认领合同](../../spec/backend/claim-contracts.md)第 4 节，这里只记决策与取舍：
+推荐只决定排序与提示，不自动执行。依据是**文件路径与目录**；规则（路径集合、两个理由码、排序、上限 5 个、索引与边界）在[认领合同](../../../../spec/backend/claim-contracts.md)第 4 节，这里只记决策与取舍：
 
 - 旧版本的路径集合除了名下曲目的路径，还要包括归组依据 `source_refs`（最多 100 条）：新增文件使原有曲目整体改挂走之后，旧版本名下一首曲目都不剩，只有这一行还记得它最后的文件清单。
 - 比较的是候选的 present 曲目，旧曲目是否还持有来源身份取决于情形，不影响结果。`same_directory` 没有可用的索引（`releases_source_directory` 已在迁移 0010 删除），只在打开详情时算一次，规模变大再加索引。
@@ -56,7 +56,7 @@ CREATE INDEX operations_claim_source_index ON operations ((after_state #>> '{sou
 - 不写 down 迁移。按 ADR 0002 第十节第 7 项，回退是关闭写入路由、保留数据。
 
 ## 5. 认领的写入
-`POST /api/v1/releases/{id}/claim`，`{id}` 是**新版本**；请求体 `{expected_revision, source_release_id, source_revision, preview}`。检查顺序、指纹、执行器的步骤与响应见[认领合同](../../spec/backend/claim-contracts.md)第 6 节，这里记决策：
+`POST /api/v1/releases/{id}/claim`，`{id}` 是**新版本**；请求体 `{expected_revision, source_release_id, source_revision, preview}`。检查顺序、指纹、执行器的步骤与响应见[认领合同](../../../../spec/backend/claim-contracts.md)第 6 节，这里记决策：
 
 - **加锁顺序**：先对旧版本核对行引用的操作记录加 `FOR KEY SHARE`，再按 UUID 升序锁两个发行行，最后按 UUID 升序锁涉及的组行。核对行带着原 `operation_id` 迁到新版本，提交时的外键检查会加同一种锁，
   而撤销那条更早的记录会先 `FOR UPDATE` 锁它、再锁发行行；不先加这把锁就会死锁（核对合同第 5 节）。扫描只更新发行行、从不锁组行，所以不会形成环形等待。
@@ -70,7 +70,7 @@ CREATE INDEX operations_claim_source_index ON operations ((after_state #>> '{sou
 - 响应的 `group_id`/`previous_group_id` 是新版本认领之后与之前所在的组（“打开这张专辑”用前者），`moved`/`skipped` 是 `{corrections, album, reviews}`，默认版本单列 `defaults: {moved: [组 ID], reset: [组 ID]}`。
 
 ## 6. 预览
-`GET /api/v1/releases/{id}/claim-preview?source=<旧版本 ID>`（只有管理员，不加锁）。每一项的类别、去向、跳过的原因与核对的三种效果（`valid`/`stale`/`no_issue`）见[认领合同](../../spec/backend/claim-contracts.md)第 5 节，这里记决策：
+`GET /api/v1/releases/{id}/claim-preview?source=<旧版本 ID>`（只有管理员，不加锁）。每一项的类别、去向、跳过的原因与核对的三种效果（`valid`/`stale`/`no_issue`）见[认领合同](../../../../spec/backend/claim-contracts.md)第 5 节，这里记决策：
 
 - 预览与执行器共用纯函数 `buildClaimPlan`，按同一份状态快照得出每一项的去向，所以“预览写的就是执行的”是结构保证。
 - **核对的效果是三态**：最初只有 `valid` 布尔，“新版本现在没有这类问题”会被写成“会重新提醒”，而根本没有问题可提醒，所以拆成 `valid` / `stale` / `no_issue`。
@@ -79,7 +79,7 @@ CREATE INDEX operations_claim_source_index ON operations ((after_state #>> '{sou
 - 预览只读、不加锁。页面打开到提交之间状态变了，由令牌和版本号拦下。
 
 ## 7. 撤销与操作记录
-`ClaimOperations()` 实现 `operations.Kind`，由 `app` 注册。完整规则见[认领合同](../../spec/backend/claim-contracts.md)第 7 节，这里记决策：
+`ClaimOperations()` 实现 `operations.Kind`，由 `app` 注册。完整规则见[认领合同](../../../../spec/backend/claim-contracts.md)第 7 节，这里记决策：
 
 - **撤销前态而不是反向操作**：先对前态引用的更早记录加 `FOR KEY SHARE`，再按第 5 节的顺序锁两个发行行和前态里的各组；新版本的版本号、旧版本的版本号、各组的版本号任一与记录不等就是 `revert_conflict`，不做部分撤销。
   认领时新建的空组不在前态里，不锁、不核对，撤销之后留着无害。
@@ -91,7 +91,7 @@ CREATE INDEX operations_claim_source_index ON operations ((after_state #>> '{sou
 - **与其他记录的关系**：认领之后，被移走的修正与核对的原记录目标仍是旧版本，旧版本的版本号已变，所以它们不能再单独撤销（`revert_conflict`），与“只撤销最近一次修改”一致。
 
 ## 8. 读取接口（只有管理员）
-三个读接口（待认领列表、一个旧版本的详情、专辑详情用的提示）的响应与检查顺序见[认领合同](../../spec/backend/claim-contracts.md)第 8 节，这里记决策：
+三个读接口（待认领列表、一个旧版本的详情、专辑详情用的提示）的响应与检查顺序见[认领合同](../../../../spec/backend/claim-contracts.md)第 8 节，这里记决策：
 
 - 列表按最后一次被看到的时间倒序（K5）：名下曲目 `observed_at` 的最大值；名下没有曲目时取归组依据的 `observed_at`，都没有时取发行的创建时间。没有接替者的会沉到后面。
 - 标题用有效值：有修正时就是修正后的名字，这正是管理员认得出的名字。`album.title` 是**不含旧版本自己**的成员里按代表版本规则排第一的有效标题（它自己的名字已显示在行的标题里），可见成员优先。
