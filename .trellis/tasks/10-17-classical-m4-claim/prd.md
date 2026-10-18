@@ -1,6 +1,6 @@
 # M4 认领
 
-> 状态：2026-10-17 创建，同日完成需求讨论（K1–K5），用户批准最终规划摘要（含 K6–K9）；实施中。
+> 状态：2026-10-17 创建，同日完成需求讨论（K1–K5），用户批准最终规划摘要（含 K6–K9）；2026-10-18 实施完成，布局经用户确认，已归档。
 > 技术设计见 [design.md](design.md)，执行计划见 [implement.md](implement.md)。
 
 ## 目标与用户价值
@@ -119,6 +119,50 @@ K1 里的“别的目录”也包括别的扫描目录（root）。管理员逐�
 - 路线：人工选择（route a，用户批准最终规划摘要）。选择者：用户（qlqq）。
 - 2026-10-17：用户说“继续 M4 的下一个规划”，按路线顺序立项认领；K1–K5 依次选择推荐项。K6–K9 是规划细节，在最终摘要里一并请用户批准。
 - 2026-10-17：用户回复“批准”，最终规划摘要（含 K6–K9、已接受的限制与十步计划）原样生效，进入实施。理由：产品裁决都由用户逐条做出，K6–K9 与取舍随摘要一并确认。
+
+## 实施结果（2026-10-18）
+
+提交（均在 `main`，未推送）：`bc70737` 规划；`21fe5e7` 启动；`05de626` 迁移 0020 与待认领的判定、推荐；`6c7bd5b` 认领的预览与写入；`b809f16` 认领的撤销、展示与操作记录；
+`35667b8` 待认领的读取与真实重扫验证；`33f40ea` 待认领页（只读）；`6858ac2` 选择、预览、认领与撤销，专辑详情的提示；`fd1a331` 浏览器用例；`3971163` 真实服务用例（含操作记录里来源名字的修正）；
+`fe8e939` 文档同步；`a89befa` 收尾截图复核发现的三处布局修正。收尾（本结果、归档、链接修正与 journal）随后提交。
+
+| 编号 | 结果 | 证据 |
+| --- | --- | --- |
+| A1 | 达成 | `TestPostgreSQLListClaims`（顺序、分页、总数）、`…ListClaimsAlbumAndDefault`、`…ListClaimsLocationNeverLeaksAbsolutePaths`、`TestPostgreSQLClaimReadAPI`（401、403、`invalid_pagination`）；Vitest `claims.test.tsx`（导航入口、选中与页码写进地址、普通成员没有入口且不请求接口）；真实服务里普通成员读写接口都是 403 |
+| A2 | 达成 | `TestPostgreSQLClaimCluesSurviveARealRescan`（合成 FLAC 真实重扫：原地替换与新增文件命中 `same_files`，目录不变而文件整体换了的只命中 `same_directory`）、`TestPostgreSQLClaimSuggestions`（排序、理由）、`…AreBoundedAndCapped`（路径上限 100、推荐上限 5）；Vitest `claim-flow.test.tsx` 与 Playwright：推荐写“同样的文件（N 个）”“同一目录”，搜索能选到别的目录的版本（多版本专辑再选其中一个）；真实服务：三个同样的文件与同一目录 |
+| A3 | 达成 | `TestPostgreSQLClaimKeepsWhatTheNewReleaseAlreadyHas`、`…ClaimAlbumCases`、`…ClaimSkipsMissingTrackReviewsAndEverythingCanBeSkipped`、`…ClaimedReviewsAreValidOnlyWhenTheBasisMatches`（`valid`/`stale`/`no_issue` 三态）、`TestPostgreSQLClaimPreviewAPI`；Vitest 的预览逐项文字；Playwright 主流程断言五项的文字 |
+| A4 | 达成 | `TestPostgreSQLClaimMovesAllFourKinds`（修正、专辑、默认版本、核对四类，旧版本上不再留任何一类并离开待认领）、`…ClaimWithoutAnAlbum`、`…SkipsMissingTrackReviewsAndEverythingCanBeSkipped`（全部被跳过也执行）；真实服务：认领之后专辑页、默认版本与“需要关注”都在新版本上，旧版本不再待认领 |
+| A5 | 达成 | `TestPostgreSQLClaimRejectionsLeaveNoTrace`（`not_claimable`、`revision_conflict`、新旧相同、404 都没有副作用）、`…DetectsChangesAfterThePreview`（`claim_changed`）、`…ReplaysWithTheSameKey`、`TestPostgreSQLClaimAPIRejectsUnauthorizedAndInvalidRequestsWithoutSideEffects`（401、跨源与非管理员 403、各种 400）、`…ClaimAPIClaimsAndReplays`（同键重放与同键异义）、`…ClaimAPIConcurrentRequests`；死锁：`TestPostgreSQLClaimsAndOtherChangesNeverDeadlock`（认领、修正、归组、默认版本、核对、撤销与模拟的扫描随机交错）、`…ClaimAndRevertingTheOriginalReviewDoNotDeadlock` 与 `…RevertingAClaimAndTheOriginalReviewDoNotDeadlock`（去掉 KEY SHARE 锁时 PostgreSQL 报 `40P01`） |
+| A6 | 达成 | `TestPostgreSQLRevertClaimRestoresEverything`（含原核对人）、`…RestoresWhatWasSkipped`、`…RejectsLaterChanges`（`revert_conflict`）、`…FollowsTheCommonRules`（撤销不能再撤销）、`…WorksWhenTheNewReleaseBecameInvisible`、`TestPostgreSQLClaimRevertAPIRefusesAfterLaterChanges`；Vitest 与 Playwright：提示里、操作记录页里撤销，之后又有修改时写明“之后又有修改”；真实服务：撤销后旧版本又在待认领里，可以再认领一次 |
+| A7 | 达成 | `TestPostgreSQLClaimDescribe`（来源名字取记录里的、迁移与保留的各类、`revertible`）、`TestPostgreSQLClaimOperationRecordsAndRevertAPI`、`TestPostgreSQLListFiltersBySourceRelease`（按来源筛选，走部分索引）；`change-summary.test.ts`；Playwright：操作记录写“认领”与“从《…》（已不可见）认领：修正 标题、流派；专辑；默认版本；核对 介质类型”，跳过的另起一行 |
+| A8 | 达成 | Vitest `claim-flow.test.tsx`（专辑详情提示：只有被推荐的版本有、最多 3 个、读取失败不提示）；Playwright：点“查看并认领”进入 `/claims?release=…&target=…`，旧版本选中、当前版本已预选；真实服务：管理员打开新版本的专辑页看到提示 |
+| A9 | 达成 | `TestPostgreSQLClaimSurvivesRealRescans`（合成 FLAC：四类人工状态做好、整张替换并重扫、旧版本待认领且推荐命中、认领后原样重扫四类保持且核对仍有效、扫描不改操作记录、撤销把四类还给旧版本）；真实服务用例（合成 WAV）同样覆盖整条链路。反向验证（实际执行并还原）：让认领不清除旧版本的修正、让迁移的核对依据被改坏、让页面提交的令牌被丢掉、让页面把旧版本号写成新版本的，真实服务的“在页面上认领”随即失败 |
+| A10 | 达成 | 第 1 步提交时既有集成测试与全部接口样本逐字不变；新样本只在最后追加；`TestPostgreSQLAPIResponseSamples` 与前端样本往返契约通过 |
+| A11 | 达成 | Playwright（路由模拟）全量 246 项通过，其中 `claims.spec.ts` 12 项：主流程、预览之后别人改了新版本、搜索、专辑详情的提示、操作记录、成员没有入口；五种宽度下 1280/1440 两栏（列表 380px、详情不超过 860px）、更窄顺序导航、不溢出、最小字号与 axe；纯键盘；三项截图复核发现的布局回归；全量 Vitest 77 个文件 1616 项；真实服务 44 项（新增 6 项）通过 |
+| A12 | 达成 | `fe8e939`：新增 `claim-contracts.md` 并同步受治理操作、核对、默认版本、Catalog REST、数据库、目录结构、运行合同、错误处理、前端规范、DESIGN 三份、ADR 0002/0003 决策记录、路线图、架构决策摘要、产品目标、README 与父任务；所有 `.trellis/spec` 文件不超过 24,000 字节（为此按主题拆出 `core0-tech-debt.md`、`governance-components.md`、`quality-verification-layers.md`，逐项核对没有丢失）；导出暂存树上 505 个相对链接无一失效 |
+| A13 | 达成 | 2026-10-18 用户看过合成数据的宽屏（1440）与窄屏（375）截图后确认布局：待认领页（列表、详情与推荐、搜索其他版本、预览、结果提示）、专辑详情的提示、操作记录。截图前我自己复核发现并修了三处（`a89befa`，各有回归断言与变异检查）：操作记录里“撤销”被断成“撤 / 销”两行（随后时间列的日期断成“2026-01- / 03”）、搜索按钮停在输入框上方、窄屏提示的图标单独占一行 |
+
+验证：收尾时在最终提交的树上、隔离 PostgreSQL（`roomusic-test`，空闲端口、随机库名，用后 `down -v`）上运行 `gofmt -l .`、`go vet ./...`、`go test -race -count=1 ./internal/operations/...`、
+`go test -count=1 ./internal/catalog/... ./internal/app/... ./cmd/...`（含接口样本逐字比较），以及单独运行 `./internal/library/... ./internal/platform/...`，全部通过；认领相关的 39 个集成用例确实运行（PASS，没有 SKIP）。
+前端：导出暂存树上 `npm run lint`、`npx tsc --noEmit`；全量 Vitest 77 个文件 1616 项；`npm run build` 后内嵌产物与提交的逐文件一致；Playwright（路由模拟）全量 246 项；
+真实服务全量 44 项（`./scripts/playback-e2e.sh`）。各步骤的变异检查见各提交说明（待认领的判定、令牌、加锁顺序、撤销、读取、页面的各种状态、真实服务的四个变异与来源名字的两个变异、三处布局的六个变异）。
+没有运行 Go 全量测试中与本任务无关的包（`identity`、`playback`、`listening` 等）：本任务没有改动它们，扫描写入路径也没有改动。
+
+### 与设计的差异
+
+已补记在 [design.md](design.md)：令牌只含来源与目标的 ID 加各项的去向（不含展示字段），核对的效果是 `valid`/`stale`/`no_issue` 三态，操作记录里来源的名字取记录里的名字，响应里默认版本单列 `defaults`，
+以及列表是链接列表、推荐是单选组、专辑详情的提示读取失败不重试。设计文档为守住注入上限从 30 KB 压到约 20 KB：与合同重复的机制说明改为指向 [认领合同](../../spec/backend/claim-contracts.md)。
+
+### 已接受的限制与后续
+
+- 推荐只看文件路径与目录；归组依据的路径最多 100 条；认领之后被移走的修正与核对的原记录不能再单独撤销；没有接替者的旧版本一直留在列表里（见上文“已接受的限制”）。
+- 浏览器验证只有 Linux Chromium 的自动化证据（五种宽度、axe、键盘），没有 Safari、Firefox 与 Windows 的实际渲染，也没有人工读屏验证。
+- 播放键盘与歌词的 Playwright 用例在整套并行运行时偶尔不稳定（与本任务无关，隔离运行都通过；本次收尾的全量运行 246 项一次通过）。
+- 同一个测试数据库上并行运行 `./internal/library/...` 与 `./internal/app/...` 偶尔出现一次 `scan_coordination_unavailable`：扫描互斥是整个数据库范围的 advisory lock，而测试只按 schema 隔离，
+  `library` 的两个生命周期用例持有这把锁时会让 `app` 里的扫描启动失败（用第二个会话持有这把锁可以稳定复现）。本任务没有改动扫描代码；单独运行任一包都通过。尚无后续任务，建议给这两个用例换成专用数据库或串行运行。
+- ADR 0002 与 0003 现在是 31,962 与 31,415 字节，低于 32,768 的注入上限但余量很小；下一项（扫描反馈或合并拆分）要先精简再增补。
+- 部署后无需额外操作：迁移 0020 只放宽一个约束并新增一个索引，没有认领记录时所有既有接口与页面逐项不变，不需要重扫。
+- 后续（均未启动）：M4 的其余各项（扫描反馈、Release 合并与拆分）分别立项；成员写操作接入操作记录（M3 的 G6，独立小任务）。F1 手工实播与 F3 远端 CI 仍按用户裁决延后。
 
 ## 已接受的限制（2026-10-17 随最终摘要确认）
 
