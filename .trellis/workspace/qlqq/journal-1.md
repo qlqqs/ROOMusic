@@ -985,6 +985,7 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 | `fe8e939` | docs(catalog): 同步认领的规范、设计与路线（M4 认领第 9 步） |
 | `a89befa` | style(governance): 认领的收尾布局修正（操作记录表、搜索行、专辑详情的提示） |
 | `099267c` | docs(catalog): 记录 M4 认领的实施结果与验收对照 |
+| `b913986` | chore(task): archive 10-17-classical-m4-claim |
 | `2e205b9` | docs(catalog): 修正 M4 认领任务归档后的相对链接 |
 
 ### Testing
