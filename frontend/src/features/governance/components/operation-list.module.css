@@ -29,8 +29,21 @@
   color: var(--text-secondary);
 }
 
+/* 时间只在日期与时分之间换行：日期里的连字符也是换行点，列被挤窄时会断成“2026-01- / 03”。日期与时分各自不换行，中间的空格是唯一的换行点。 */
+.timePart {
+  white-space: nowrap;
+}
+
+/* 操作列的内容很短（“撤销”按钮、不能撤销的原因），不能在字中间断开：表格按内容分配列宽，改动列的摘要很长时这一列会被挤到最窄，
+   而中文随处可以换行，“撤销”就成了“撤 / 销”两行。 */
+.reason {
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
 /* 文字按钮自带左右内边距：向左收回，让“撤销”与同一列里其他文字（已撤销、之后又有修改）和列标题左对齐。 */
 .revert {
   display: inline-block;
   margin-inline-start: calc(-1 * var(--space-2));
+  white-space: nowrap;
 }

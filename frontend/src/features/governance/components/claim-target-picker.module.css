@@ -85,26 +85,19 @@
   gap: var(--space-2);
 }
 
+/* 输入框与按钮始终并排（网格不换行，所以按钮的位置与宽度无关）；输入框收窄也仍然够用。 */
 .searchRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   gap: var(--space-2);
 }
 
 .searchField {
-  flex: 1 1 240px;
   min-width: 0;
 }
 
+/* 输入框上面有一行标签：按钮下移同样的高度，与输入框顶端对齐。 */
 .searchButton {
-  align-self: flex-start;
-  /* 与输入框的标签行对齐：标签占一行，按钮对齐输入框。 */
   margin-top: 28px;
-}
-
-@media (max-width: 767px) {
-  .searchButton {
-    margin-top: 0;
-  }
 }

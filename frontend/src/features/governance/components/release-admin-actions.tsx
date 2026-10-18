@@ -95,9 +95,9 @@ export function ReleaseAdminActions({ release, groupId, releaseCount, groupRevis
         <ul className={styles.hints} aria-label="可能接替了已不可见的版本">
           {hints.map((hint) => (
             <li key={hint.id} className={styles.hint}>
-              <ArrowRightLeft size={16} aria-hidden="true" />
+              <ArrowRightLeft size={16} aria-hidden="true" className={styles.hintIcon} />
               <span>可能接替了已不可见的《{hint.title}》</span>
-              <Link to="/claims" search={{ release: hint.id, target: release.id }} aria-label={`查看并认领《${hint.title}》，它可能被这个版本接替了`}>
+              <Link to="/claims" search={{ release: hint.id, target: release.id }} className={styles.hintLink} aria-label={`查看并认领《${hint.title}》，它可能被这个版本接替了`}>
                 查看并认领
               </Link>
             </li>

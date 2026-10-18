@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { albumGroup, groupDetailOf, releaseVersions } from "../src/test/catalog-data";
 import { claimDetail, claimReleaseId, suggestionOf } from "../src/test/claim-data";
 import { seedClaim } from "../src/test/governance-data";
@@ -89,6 +89,39 @@ const claimList = (page: Page) => page.locator("section").filter({ has: page.get
 const claimDetailOf = (page: Page, title: string) => page.getByRole("article").filter({ has: page.getByRole("heading", { level: 2, name: title }) });
 const pickSuggestion = (page: Page, title: string) => page.getByRole("group", { name: "推荐的版本（按文件路径与目录）" }).getByRole("radio", { name: new RegExp(title) });
 const claimButton = (page: Page, title: string) => page.getByRole("button", { name: `认领到《${title}》` });
+
+/** 元素里第一个文本节点的前 length 个字符占了几行：日期被断成“2026-01- / 03”时是 2。 */
+async function leadingTextLines(locator: Locator, length: number): Promise<number> {
+  return locator.evaluate((element, count) => {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+      const text = node.textContent ?? "";
+      if (text.trim() === "") continue;
+      const range = document.createRange();
+      range.setStart(node, 0);
+      range.setEnd(node, Math.min(count, text.length));
+      return new Set([...range.getClientRects()].filter((rect) => rect.width > 0).map((rect) => Math.round(rect.top))).size;
+    }
+    return 0;
+  }, length);
+}
+
+/**
+ * 元素里第一段可见文字占了几行（按每个字的矩形的顶端去重）。用来发现按钮或短句在字中间被断成两行：
+ * 按钮的高度有最小值，两行字也塞得进去，所以量高度发现不了。视觉隐藏的说明在第一段文字之后，不会被数进来。
+ */
+async function firstTextLines(locator: Locator): Promise<number> {
+  return locator.evaluate((element) => {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+      if ((node.textContent ?? "").trim() === "") continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      return new Set([...range.getClientRects()].filter((rect) => rect.width > 0).map((rect) => Math.round(rect.top))).size;
+    }
+    return 0;
+  });
+}
 
 test.describe("待认领：主流程", () => {
   test("从导航进入，选中旧版本，选推荐、看预览、认领；提示里的“撤销”把旧版本还回待认领", async ({ page, backend }) => {
@@ -258,6 +291,74 @@ test.describe("待认领：布局与可访问性", () => {
     await expectNoHorizontalOverflow(page, "认领成功的提示 @375px");
     await expectMinimumFontSize(page, "认领成功的提示 @375px");
     await expectNoSeriousViolations(page, "认领成功的提示 @375px");
+  });
+
+  test("操作记录里认领的摘要很长时，操作列的“撤销”与不能撤销的原因不在字中间断开，时间列的日期也不断开", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "curator" });
+    start(mock);
+    await page.goto(claimsPath(oldId, suitesId()));
+    await claimButton(page, "Bach: Cello Suites (new rip)").click();
+    await expect(page.getByText(/已把《Bach: Cello Suites \(my corrections\)》上的修改认领到/)).toBeVisible();
+    // 改动列写着长长的摘要时，表格会把别的列挤到最窄：按钮若可以在字中间断开，就成了“撤 / 销”两行。
+    for (const width of [1024, 1280, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/operations");
+      const revert = page.getByRole("row").nth(1).getByRole("button", { name: /撤销/ });
+      await expect(revert).toBeVisible();
+      await page.evaluate(() => document.fonts.ready);
+      expect(await firstTextLines(revert), `“撤销”按钮的文字行数 @${width}px`).toBe(1);
+    }
+    await page.getByRole("row").nth(1).getByRole("button", { name: /撤销/ }).click();
+    await page.getByRole("dialog", { name: "撤销这次认领？" }).getByRole("button", { name: "撤销" }).click();
+    await expect(page.getByText("已撤销这次认领：修改还给了已不可见的旧版本，这个版本回到认领之前的样子。")).toBeVisible();
+    for (const width of [1024, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/operations");
+      const reason = page.getByRole("cell", { name: "撤销不能再撤销" });
+      await expect(reason).toBeVisible();
+      await page.evaluate(() => document.fonts.ready);
+      expect(await firstTextLines(reason), `“撤销不能再撤销”的行数 @${width}px`).toBe(1);
+      expect(await firstTextLines(page.getByRole("cell", { name: "已撤销" })), `“已撤销”的行数 @${width}px`).toBe(1);
+      // 操作列不再被挤窄之后，被挤的是别的列：时间的日期（2026-01-03）不能在中间断开，最多在日期与时间之间换行。
+      for (const row of [1, 2]) {
+        const time = page.getByRole("row").nth(row).getByRole("rowheader");
+        expect(await leadingTextLines(time, "2026-01-03".length), `第 ${row} 行日期的行数 @${width}px`).toBe(1);
+      }
+    }
+  });
+
+  test("搜索其他版本：各种宽度下按钮都与输入框顶端对齐，不跑到输入框的上方", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "curator" });
+    start(mock);
+    // 输入框上面有一行标签：按钮没有对齐输入框时，会停在标签那一行，比输入框高出约一行字。
+    for (const width of [320, 375, 600, 767, 768, 900, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(claimsPath(oldId));
+      const search = page.getByRole("search", { name: "搜索其他版本" });
+      await expect(search).toBeVisible();
+      await page.evaluate(() => document.fonts.ready);
+      const input = await search.getByRole("textbox").boundingBox();
+      const button = await search.getByRole("button", { name: "搜索" }).boundingBox();
+      if (input === null || button === null) throw new Error(`没有量到搜索行 @${width}px`);
+      expect(Math.abs(button.y - input.y), `按钮与输入框顶端对齐 @${width}px（输入框 y=${Math.round(input.y)}，按钮 y=${Math.round(button.y)}）`).toBeLessThanOrEqual(3);
+      await expectNoHorizontalOverflow(page, `搜索行 @${width}px`);
+    }
+  });
+
+  test("专辑详情的“可能接替了……”提示：图标跟着文字的第一行，窄屏换行时不单独占一行", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "curator" });
+    start(mock);
+    for (const width of [375, 600, 900, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`/albums/${suites().id}`);
+      const hint = page.getByRole("list", { name: "可能接替了已不可见的版本" }).getByRole("listitem");
+      await expect(hint).toBeVisible();
+      await page.evaluate(() => document.fonts.ready);
+      const tops = await hint.evaluate((item) => ({ icon: item.querySelector("svg")?.getBoundingClientRect().top ?? -1, text: item.querySelector("span")?.getBoundingClientRect().top ?? -1 }));
+      expect(Math.abs(tops.icon - tops.text), `图标与文字第一行的顶端相差 @${width}px`).toBeLessThan(8);
+      await expect(hint.getByRole("link", { name: /查看并认领/ })).toBeVisible();
+      await expectNoHorizontalOverflow(page, `专辑详情的提示 @${width}px`);
+    }
   });
 
   test("只用键盘：选旧版本、选推荐（方向键）、认领、撤销，焦点环可见，认领之后焦点不丢", async ({ page, backend }) => {

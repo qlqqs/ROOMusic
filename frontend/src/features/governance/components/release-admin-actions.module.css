@@ -31,11 +31,18 @@
 }
 
 .hint {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-1) var(--space-2);
   min-width: 0;
   color: var(--text-secondary);
   overflow-wrap: anywhere;
+}
+
+/* 图标、文字与链接按行内排版：窄屏时跟着文字换行，图标不会因为文字放不下而单独占一行。 */
+.hintIcon {
+  display: inline-block;
+  margin-inline-end: var(--space-1);
+  vertical-align: -3px;
+}
+
+.hintLink {
+  margin-inline-start: var(--space-2);
 }

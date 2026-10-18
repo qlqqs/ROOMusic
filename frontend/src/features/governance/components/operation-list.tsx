@@ -47,6 +47,18 @@ function TargetCell({ item }: { item: OperationItemDTO }) {
   );
 }
 
+/** 时间：日期与时分各自一段、不在中间换行；两段之间仍是一个空格，文字内容与 formatDateTime 的结果相同。 */
+function TimeCell({ value }: { value: string }) {
+  const text = formatDateTime(value);
+  const gap = text.indexOf(" ");
+  if (gap < 0) return <>{text}</>;
+  return (
+    <>
+      <span className={styles.timePart}>{text.slice(0, gap)}</span> <span className={styles.timePart}>{text.slice(gap + 1)}</span>
+    </>
+  );
+}
+
 function ChangeCell({ item }: { item: OperationItemDTO }) {
   return (
     <div className={styles.change}>
@@ -68,7 +80,7 @@ export function OperationList({ caption, items, showRelease, onRevert }: Operati
   const columns = useMemo((): Column<OperationItemDTO>[] => {
     const release: Column<OperationItemDTO>[] = showRelease ? [{ id: "release", header: "专辑", cell: (item) => <TargetCell item={item} /> }] : [];
     return [
-      { id: "time", header: "时间", rowHeader: true, cell: (item) => formatDateTime(item.created_at) },
+      { id: "time", header: "时间", rowHeader: true, cell: (item) => <TimeCell value={item.created_at} /> },
       { id: "actor", header: "操作者", cell: (item) => <span className={styles.actor}>{item.actor.username}</span> },
       ...release,
       { id: "change", header: "改动", cell: (item) => <ChangeCell item={item} /> },
@@ -77,7 +89,7 @@ export function OperationList({ caption, items, showRelease, onRevert }: Operati
         header: "操作",
         cell: (item) => {
           const reason = notRevertibleReason(item);
-          if (reason !== null) return <span className={styles.muted}>{reason}</span>;
+          if (reason !== null) return <span className={styles.reason}>{reason}</span>;
           return (
             <span className={styles.revert}>
               <Button variant="text" onClick={() => onRevert(item)}>
