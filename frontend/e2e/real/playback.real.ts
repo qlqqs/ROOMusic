@@ -1,6 +1,5 @@
-import { appendFile, copyFile, mkdir, utimes } from "node:fs/promises";
+import { appendFile, copyFile, mkdir, rm, utimes } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import http from "node:http";
 import { expect, test, type Page } from "@playwright/test";
 import { decodeTrackLyrics, decodeTrackPlayback, decodeTrackPreparing } from "../../src/features/player/api/decoders";
 import { admin, body, catalog, clearPlayHistory, decodeError, decodeID, decodeRoot, decodeSetup, findTrack, fixtureRoot, login, mediaState, observeMedia, origin, playsPath, playTrack, post, recentReleases, scan, type Albums } from "./support";
@@ -86,37 +85,43 @@ test("FLAC 真实 seek，自然切到下一首；切页不断播，刷新暂停�
 test("ALAC 音频请求不会启动转换：转换前 409，预检完成后才能读取 audio/flac，并支持 Range", async ({ page }) => {
   const probeDirectory = join(fixtureRoot, "probe");
   const probeFile = join(probeDirectory, "alac-probe.m4a");
-  await mkdir(probeDirectory, { recursive: true });
-  await copyFile(join(fixtureRoot, "formats", "alac-16-44100.m4a"), probeFile);
-  await utimes(probeFile, new Date(), new Date(Date.now() - 86_400_000));
-  await scan(page.request);
-  const item = findTrack(await catalog(page.request), "alac-probe.m4a");
-  const audio = `/api/v1/tracks/${item.track.id}/audio`;
-  const before = await page.request.get(audio);
-  expect(before.status()).toBe(409);
-  expect(decodeError(await before.json()).error.code).toBe("derivation_not_ready");
-  const head = await page.request.head(audio);
-  expect(head.status()).toBe(409);
-  // 预检会等待转换完成（合成素材约 1 秒）：返回 200 与派生表示。
-  const preflight = await page.request.get(`/api/v1/tracks/${item.track.id}/playback`);
-  expect(preflight.status()).toBe(200);
-  const ready = decodeTrackPlayback(await preflight.json());
-  expect(ready.representation).toMatchObject({ kind: "derived", mime_type: "audio/flac", codecs: null, url: audio });
-  const full = await page.request.get(audio);
-  expect(full.status()).toBe(200);
-  expect(full.headers()["content-type"]).toBe("audio/flac");
-  expect(full.headers()["cache-control"]).toBe("private, no-store");
-  expect(full.headers()["accept-ranges"]).toBe("bytes");
-  expect(full.headers()["etag"]).toMatch(/^"[0-9a-f]{32}"$/);
-  const content = await full.body();
-  expect(content.length).toBe(ready.representation.size_bytes);
-  expect(content.subarray(0, 4).toString("latin1")).toBe("fLaC");
-  const partial = await page.request.get(audio, { headers: { Range: "bytes=0-3" } });
-  expect(partial.status()).toBe(206);
-  expect((await partial.body()).toString("latin1")).toBe("fLaC");
-  expect(partial.headers()["etag"]).toBe(full.headers()["etag"]);
-  const outOfRange = await page.request.get(audio, { headers: { Range: `bytes=${content.length}-` } });
-  expect(outOfRange.status()).toBe(416);
+  try {
+    await mkdir(probeDirectory, { recursive: true });
+    await copyFile(join(fixtureRoot, "formats", "alac-16-44100.m4a"), probeFile);
+    await utimes(probeFile, new Date(), new Date(Date.now() - 86_400_000));
+    await scan(page.request);
+    const item = findTrack(await catalog(page.request), "alac-probe.m4a");
+    const audio = `/api/v1/tracks/${item.track.id}/audio`;
+    const before = await page.request.get(audio);
+    expect(before.status()).toBe(409);
+    expect(decodeError(await before.json()).error.code).toBe("derivation_not_ready");
+    const head = await page.request.head(audio);
+    expect(head.status()).toBe(409);
+    // 预检会等待转换完成（合成素材约 1 秒）：返回 200 与派生表示。
+    const preflight = await page.request.get(`/api/v1/tracks/${item.track.id}/playback`);
+    expect(preflight.status()).toBe(200);
+    const ready = decodeTrackPlayback(await preflight.json());
+    expect(ready.representation).toMatchObject({ kind: "derived", mime_type: "audio/flac", codecs: null, url: audio });
+    const full = await page.request.get(audio);
+    expect(full.status()).toBe(200);
+    expect(full.headers()["content-type"]).toBe("audio/flac");
+    expect(full.headers()["cache-control"]).toBe("private, no-store");
+    expect(full.headers()["accept-ranges"]).toBe("bytes");
+    expect(full.headers()["etag"]).toMatch(/^"[0-9a-f]{32}"$/);
+    const content = await full.body();
+    expect(content.length).toBe(ready.representation.size_bytes);
+    expect(content.subarray(0, 4).toString("latin1")).toBe("fLaC");
+    const partial = await page.request.get(audio, { headers: { Range: "bytes=0-3" } });
+    expect(partial.status()).toBe(206);
+    expect((await partial.body()).toString("latin1")).toBe("fLaC");
+    expect(partial.headers()["etag"]).toBe(full.headers()["etag"]);
+    const outOfRange = await page.request.get(audio, { headers: { Range: `bytes=${content.length}-` } });
+    expect(outOfRange.status()).toBe(416);
+  } finally {
+    // 探针由本用例拥有；删除后重扫，避免后续 worker 初始化时多出一首。
+    await rm(probeDirectory, { recursive: true, force: true });
+    await scan(page.request);
+  }
 });
 
 for (const source of ["alac-16-44100.m4a", "alac-24-48000.m4a"]) {
@@ -354,48 +359,31 @@ test("另一标签页退出：本页停止并清除队列和刷新恢复数据",
   await other.close();
 });
 
-test("管理员撤销：真正受背压的长连接响应被截断，新请求返回401", async ({ page, request }) => {
+test("管理员撤销会话后：新的预检与音频请求均返回 401 unauthorized", async ({ page, request }) => {
   await login(request);
   const created = await body(await post(request, "/api/v1/users", { username: "slow-listener", password: admin.password }));
   // 用户 ID 使用已存在的登录 decoder 验证，禁止未经检查的 JSON 强转。
-  await login(page.request, { username: "slow-listener", password: admin.password });
   const user = decodeID(created);
+  const listener = await login(page.request, { username: "slow-listener", password: admin.password });
+  expect(listener.id).toBe(user.id);
   const item = findTrack(albums, "slow.wav");
-  const cookies = await page.context().cookies(origin);
-  const cookie = cookies.map((entry) => `${entry.name}=${entry.value}`).join("; ");
-  let clientTimedOut = false;
-  const response = await new Promise<http.IncomingMessage>((resolve, reject) => {
-    const req = http.get(`${origin}/api/v1/tracks/${item.track.id}/audio`, { headers: { Cookie: cookie } }, resolve);
-    req.on("error", reject);
-    req.setTimeout(30_000, () => { clientTimedOut = true; req.destroy(new Error("慢速传输超时")); });
-  });
-  let received = 0;
-  response.pause();
-  const completed = new Promise<boolean>((resolve) => {
-    response.on("data", (chunk: Buffer) => { received += chunk.length; });
-    response.on("end", () => resolve(true));
-    response.on("error", () => resolve(false));
-    response.on("aborted", () => resolve(false));
-  });
-  try {
-    expect(response.statusCode).toBe(200);
-    const length = Number(response.headers["content-length"]);
-    expect(length).toBeGreaterThan(24 * 1024 * 1024);
-    await body(await post(request, `/api/v1/users/${user.id}/sessions/revoke`, {}));
-    const denied = await page.request.get(`/api/v1/tracks/${item.track.id}/audio`);
-    expect(denied.status()).toBe(401);
-    // 原生 TCP 客户端暂停接收超过生产复核间隔，然后释放背压。
-    // 已交付缓冲不能收回；这里证明后续服务端读取被切断，不声称浏览器缓冲即时消失。
-    await new Promise((resolve) => setTimeout(resolve, 11_000));
-    const resumedAt = Date.now();
-    response.resume();
-    expect(await completed).toBe(false);
-    expect(clientTimedOut, "客户端超时不能冒充服务端撤销").toBe(false);
-    expect(Date.now() - resumedAt, "释放背压后应在复核间隔内切断").toBeLessThan(10_000);
-    expect(received).toBeLessThan(length);
-  } finally {
-    response.destroy();
-  }
+  const playback = `/api/v1/tracks/${item.track.id}/playback`;
+  const audio = `/api/v1/tracks/${item.track.id}/audio`;
+  const before = await page.request.get(playback);
+  expect(before.status()).toBe(200);
+  expect(decodeTrackPlayback(await before.json())).toMatchObject({ track_id: item.track.id, representation: { kind: "original", url: audio } });
+  const readable = await page.request.get(audio, { headers: { Range: "bytes=0-3" } });
+  expect(readable.status()).toBe(206);
+  expect((await readable.body()).toString("latin1")).toBe("RIFF");
+
+  await body(await post(request, `/api/v1/users/${user.id}/sessions/revoke`, {}));
+  // C1 只在新请求时核对会话；不再要求撤销切断已建立的传输。
+  const deniedPreflight = await page.request.get(playback);
+  expect(deniedPreflight.status()).toBe(401);
+  expect(decodeError(await deniedPreflight.json()).error.code).toBe("unauthorized");
+  const deniedAudio = await page.request.get(audio);
+  expect(deniedAudio.status()).toBe(401);
+  expect(decodeError(await deniedAudio.json()).error.code).toBe("unauthorized");
 });
 
 test("播放中停用目录：下一首显示所在目录已停用，专辑仍可浏览", async ({ page }) => {

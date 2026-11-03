@@ -68,7 +68,7 @@ FILE "image.flac" WAVE
     TITLE "Virtual Second"
     INDEX 01 00:01:00
 CUE
-# 大型 PCM 素材迫使服务端遭遇 TCP 背压，不能用已缓存的三秒音频冒充长传输复核。
+# 180 秒 PCM 素材用于真实拖动与播放历史门槛验证，以及跨标签页退出时的停播清理。
 python3 - "$TEMP_DIR/library/slow/slow.wav" <<'PY'
 import struct, sys
 samples = 44100 * 180 * 4
