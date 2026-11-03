@@ -17,7 +17,7 @@ Core 0 的阶段目标是最小可用闭环（前端的当前进度见上方说�
 ## 环境组成
 
 - Go 1.25.10
-- Node.js 24.16.0
+- Node.js 24.22.1
 - PostgreSQL 18
 - Redis 8
 - Meilisearch 1.45.0
@@ -150,7 +150,7 @@ npm run test:e2e                                    # Playwright：先构建，�
 
 仓库提供 [GitHub Actions 工作流](.github/workflows/ci.yml)，在每个 Pull Request、
 推送到 `main` 以及手动触发时运行。工作流使用 `.mise.toml` 中的 Go `1.25.10`
-和 Node.js `24.16.0`，并行执行三组必需门禁：
+和 Node.js `24.22.1`，并行执行三组必需门禁：
 
 - 后端：`gofmt`、普通测试、`-race` 测试、`go vet` 和 `go build`；
 - 前端：`npm ci`、ESLint、TypeScript 检查、Vitest、production build 与 `backend/cmd/roomusic/web` 漂移检查，

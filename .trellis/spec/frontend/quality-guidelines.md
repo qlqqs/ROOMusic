@@ -6,7 +6,7 @@
 2026-10-01 的 M1a 起，CI 与本地都运行真实的前端门禁：没有“源码缺失则跳过”的分支，Vitest 不再使用 `--passWithNoTests`。
 Node 版本由 `.mise.toml` 管理，安装使用 `npm ci`。仓库没有 formatter；无障碍由 Playwright 加 axe-core 在浏览器里扫描。
 
-The current [README](../../../README.md) establishes Node.js 24.16.0 through the
+The current [README](../../../README.md) establishes Node.js 24.22.1 through the
 repository development toolchain. Do not rely on an undocumented global version.
 
 ## Required Practices
