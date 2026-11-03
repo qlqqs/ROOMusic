@@ -37,3 +37,37 @@
 ## 范围外
 
 任何行为修复、接口或 SQL 改动、`catalog/httpapi` 的拆分、新的测试框架或测试专用包。
+
+## 实施结果（2026-11-03）
+
+后端由 `codex/gpt-6-astra` 实施，前端重构由 `claude/claude-opus-5-5` 实施，特征测试与验收测试由 `codex/gpt-6-astra` 编写和执行；主会话逐步审阅 diff 与测试输出后提交。
+
+| 提交 | 内容 |
+| --- | --- |
+| `207d1aa` | 播放引擎的 16 个特征测试（F1） |
+| `7de47c4` | B1：拆出 `catalog/ingest`（10 个文件、4 个测试） |
+| `eb4ef50` | B2：`fields.go` 下沉字段词表；`catalog/internal/releasesql` 收 21 个 SQL 片段、2 个限额常量与 7 个格式化函数 |
+| `654c8d7` | B3：移出 `catalog/governance`（10 个文件、12 个测试），`governance.Store` 承接 9 个治理读取方法 |
+| `3b20141` | 播放引擎显式状态与模块拆分（F2、F3），重建内嵌产物 |
+| `b99c246` | B4：`parser.go` 拆成 10 个文件 |
+| `a472208` | B5：12 份文档的路径与符号同步 |
+| `4fec4b0` | 真实服务用例同步 C1 的播放合同（收尾验证发现） |
+
+| 编号 | 结果 |
+| --- | --- |
+| A1 | 每一步都在隔离 PostgreSQL 上跑 `go test -race`（catalog、library、app，B3 加 governance），214 个集成用例 PASS、零 SKIP；140 个接口样本 SHA-256 不变；B2、B3 的声明语法树与字符串字面量在统一名字后一致 |
+| A2 | `go list` 确认 `catalog` 只导入 `catalog/internal/releasesql` 与 `platform/uuid`，不再导入 `operations`、`metadata`、`ingest`、`governance`；依赖规则测试为三个新包声明规则并通过 |
+| A3 | `catalog` 为拆分只新增 6 个顶层导出（`CorrectableField`、`CorrectableFields`、`LoadCorrectionIntents`、`MaxEvidenceSourceRefs`、`MaxReleaseEvidence`、`ReleaseSummaryColumns`）；SQL 片段只在 `catalog/internal/releasesql`。catalog 根目录从 18 个文件 5099 行降到 8 个文件 1534 行 |
+| A4 | `Lifecycle`、`RestorePhase`、`Pipeline`（status 收进各变体）取代 `attached`、`finished`、`restoreStarted`、`restoring`、`restoreRetry` 与管线六个字段；`player-engine.ts` 1281 → 1159 行，另拆出 5 个模块；`player-engine.test.ts` 的原有断言零改动，16 个特征测试在重构前后都通过 |
+| A5 | 导出树上：lint、typecheck、全量 Vitest 78 个文件 1649 项、构建通过，内嵌产物 119 个文件与提交逐个一致；Playwright（路由模拟）246 项通过 |
+| A6 | `parser.go` 拆分前后声明、注释与字符串逐字节一致，`go doc -all` 输出不变；解析器 241 项测试通过 |
+| A7 | 12 份文档的旧路径与符号已同步，157 个相对链接与 10 个锚点有效 |
+
+收尾验证（导出树，`a472208`）：后端 6 组包 477 个顶层测试通过，其中 245 个 PostgreSQL 集成用例零 SKIP（只有 3 个真实音乐的 opt-in 用例跳过）。真实服务用例第一次失败 2 个：撤销会话的用例仍要求 C1 已删除的在途切断，另一个是它引起的素材计数连锁失败。修正测试后，在 `206d4e0` 加修正的导出树上 44 项全部通过（播放 23、治理 4、默认版本 6、问题 5、认领 6）。另有一次服务启动超时，重跑后没有复现，原因未查明。
+
+与设计的偏差：
+- F2、F3 合成一个提交，因为两步是在同一份工作区里连续完成的。
+- 订阅回调里同步调用 `pause()` 时，旧实现仍会发出一次结果会被丢弃的预检，新实现直接中止。界面不会在回调里发命令，走不到这条路径。
+- 核心的 comparison 测试改用核心自己的夹具，默认版本改用 SQL 直接准备。
+
+验证中看到、但不属于本任务的问题：`npm ci` 报告 17 项依赖漏洞（13 moderate、4 high）；主 JS 包 559.57 kB，超过 500 kB 的构建警告。
