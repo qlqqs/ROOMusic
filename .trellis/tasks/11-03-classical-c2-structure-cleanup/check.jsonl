@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "包职责与依赖方向；拆包后要同步"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端测试、隔离 PostgreSQL 与接口样本"}
+{"file": ".trellis/spec/backend/governance-contracts.md", "reason": "治理组的共同写入流程与 Kind；拆到 catalog/governance 后行为不变"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "播放器快照、detach 与 endSession、保存键的合同，重构不能改"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "生命周期状态用可辨识联合加穷尽 switch"}
+{"file": ".trellis/spec/frontend/player-design-guidelines.md", "reason": "播放器行为约定"}
