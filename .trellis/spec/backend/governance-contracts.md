@@ -188,8 +188,10 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
 ## 11. 边界与后续
 
 - M3 **没有**审批队列、editor 角色、“回滚到某点”、扫描基值版本（ADR 0002 的证据绑定针对待审批提案）、物化有效值表（修正行很少，透视代价是主键上的小查询）。
-- 成员写操作（创建、停用/启用、撤销会话）**不在 M3**：暂不要求幂等键、不写操作记录；作为独立小任务接入（补幂等键并写记录，不提供撤销），
+- 成员写操作（创建、停用/启用、撤销会话）**不在 M3**：暂不要求幂等键、不写操作记录；原计划的接入任务已于 2026-11-03 撤销（R4），
   见[身份与成员合同](./identity-contracts.md)。
 - M4：默认版本已作为第一项实施（[默认版本合同](./default-version-contracts.md)），问题处理作为第二项实施（[核对合同](./issue-review-contracts.md)），认领作为第三项实施（[认领合同](./claim-contracts.md)）；
-  整组合并/拆分、扫描反馈仍分别立项；M6：执行模式字段。
+  2026-11-03 起整组合并/拆分搁置、扫描反馈移到 M5 之后；M6：执行模式字段。
+- **新写操作的轻量标准**（2026-11-03，R4，只有一个管理员）：接入 `Run`（记录与幂等是现成的）；有反向操作可以恢复的类型不提供撤销——`Kind.Revert` 返回
+  `409 not_revertible`，`Describe` 的 `Revertible` 恒为假；预览令牌只在预览依赖版本号覆盖不到的状态时才加。已实施的五种类型不变。见[路线调整](../../../docs/architecture/core-1-roadmap.md#2026-11-03-路线调整)。
 - 前端合同见[状态规范](../frontend/state-management.md)、[组件规范](../frontend/component-guidelines.md)与[前端目录](../frontend/directory-structure.md)。
