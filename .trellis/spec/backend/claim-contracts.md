@@ -3,8 +3,8 @@
 ## 1. 范围与触发
 
 M4 的第三项（2026-10）让管理员把**已不可见的旧版本**上的人工修改一次迁给扫描新建的**新版本**：字段修正、所在的专辑、默认版本与问题核对四类。
-新增或修改以下内容时必须阅读并更新本文件：迁移 0020、“待认领”的判定谓词（`backend/internal/catalog/claims.go`）、推荐、认领的预览与执行器
-（`claim.go`）、认领的撤销与展示（`claim_revert.go`，`ClaimOperations`）、待认领的读取（`claim_read.go`）、操作记录按来源筛选。
+新增或修改以下内容时必须阅读并更新本文件：迁移 0020、“待认领”的判定谓词（`backend/internal/catalog/governance/claims.go`）、推荐、认领的预览与执行器
+（`governance/claim.go`）、认领的撤销与展示（`governance/claim_revert.go`，`governance.ClaimOperations`）、待认领的读取（`governance/claim_read.go`）、操作记录按来源筛选。
 
 - 共同写入流程（幂等、记录、撤销框架、操作记录列表）仍在[受治理操作合同](./governance-contracts.md)；本文件只写认领自己的规则。
 - 四类人工状态各自的规则在[受治理操作合同](./governance-contracts.md)（修正、归组）、[默认版本合同](./default-version-contracts.md)与[核对合同](./issue-review-contracts.md)。
@@ -25,7 +25,7 @@ M4 的第三项（2026-10）让管理员把**已不可见的旧版本**上的人
 
 ## 3. 待认领的判定
 
-**旧版本**：发行行存在、**不可见**（`releaseVisiblePredicate` 为假），并且留有下列至少一项人工状态：有 `release_corrections` 行；所在的组里有**别的发行**（不论可见与否）；
+**旧版本**：发行行存在、**不可见**（`releasesql.ReleaseVisiblePredicate` 为假），并且留有下列至少一项人工状态：有 `release_corrections` 行；所在的组里有**别的发行**（不论可见与否）；
 是某个组的 `default_release_id`（失效中的也算）；有 `release_issue_reviews` 行（过期的也算）。
 扫描从不把新发行放进已有的组，所以组里有别的发行只可能来自人工归组；看“有别的发行”而不是“有别的可见发行”，同一张专辑的两个版本都被替换之后仍能逐个认领回这张专辑。
 **新版本**：任意可见的发行，不是旧版本自己。
@@ -79,8 +79,8 @@ M4 的第三项（2026-10）让管理员把**已不可见的旧版本**上的人
 
 - **检查顺序**：同源（403）→ 管理员（401/403）→ 路由 ID（`400 invalid_id`）→ `Idempotency-Key`（`400 invalid_input`）→ 请求体（`invalid_json`；版本号小于 1、
   `source_release_id` 非 UUID、与新版本相同、缺 `preview` 都是 `400 invalid_input`）→ `operations.Run`。
-- **指纹**：`{type: release_claim, release_id, expected_revision, source_release_id, source_revision, preview}`（`ClaimRequest.Fingerprint`）。
-- **执行器 `ClaimExecutor`**，在同一个事务里：
+- **指纹**：`{type: release_claim, release_id, expected_revision, source_release_id, source_revision, preview}`（`governance.ClaimRequest.Fingerprint`）。
+- **执行器 `governance.ClaimExecutor`**，在同一个事务里：
   1. **加锁，顺序固定**：先对旧版本核对行引用的操作记录加 `FOR KEY SHARE`；再按 UUID 升序 `FOR UPDATE` 两个发行行（`lockReleaseRow`，不要求可见）；最后按 UUID 升序锁涉及的组行
      （新版本的组、旧版本的组、以旧版本为默认版本的组）。这与归组、默认版本的顺序一致（先发行、后组）；扫描只更新发行行、从不锁组行，所以不会形成环形等待。
      先锁记录的原因同核对合同第 5 节：核对行带着原 `operation_id` 迁到新版本，提交时的外键检查会给那条记录加 KEY SHARE 锁，而撤销那条更早的记录会先 `FOR UPDATE` 锁它、再锁发行行。
@@ -98,7 +98,7 @@ M4 的第三项（2026-10）让管理员把**已不可见的旧版本**上的人
 
 ## 7. 撤销与展示
 
-`ClaimOperations()` 实现 `operations.Kind`，由 `app` 注册：
+`governance.ClaimOperations()` 实现 `operations.Kind`，由 `app` 注册：
 
 - **Revert**：先对前态引用到的更早的操作记录加 `FOR KEY SHARE`（写回的修正行与核对行带原 `operation_id`），再按 UUID 顺序锁两个发行行，最后锁前态里的各个组
   （认领时新建的空组不在前态里，不锁、不核对，撤销之后留着无害）。**以下任一不等就是 `409 revert_conflict`，不做部分撤销**：新版本的 `edit_revision` 与记录的 `result_revision`；
@@ -146,7 +146,7 @@ M4 的第三项（2026-10）让管理员把**已不可见的旧版本**上的人
 
 ## 11. 必需测试与断言点
 
-- `internal/catalog`：`claims_integration_test.go`——四类人工状态各自让不可见的版本待认领，可见的与没有人工状态的不是；推荐的两个理由、排序、上限与有界性。
+- `internal/catalog/governance`：`claims_integration_test.go`——四类人工状态各自让不可见的版本待认领，可见的与没有人工状态的不是；推荐的两个理由、排序、上限与有界性。
   `claim_integration_test.go`——四类迁移、新版本已有的保留、专辑的各种情形、没有专辑、缺失曲目的核对不迁移与全部跳过、迁移的核对仅在依据相同时有效、各种拒绝都没有副作用、
   预览之后的变化被令牌拦下、同键重放、预览只读、与修正、归组、默认版本、核对、扫描随机交错不死锁，以及认领与撤销那条核对的原记录交叉的死锁回归（去掉 KEY SHARE 锁时报 `40P01`）。
   `claim_revert_integration_test.go`——撤销恢复全部前态与原核对人、跳过的也恢复、之后又有修改被拒绝、新版本不可见仍可撤销、`Describe`（含记录里的来源名字）、撤销与原核对交叉不死锁。

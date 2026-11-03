@@ -24,10 +24,10 @@
 
 规划时（基线 `6cf76ec`）逐条核对的源码事实表已于 2026-10-15 精简，原表见提交 `f334653` 中的本文件。其中仍约束后续设计的结论：
 
-- 扫描先暂存观察，再按候选短事务写图（[persist.go](../../../backend/internal/catalog/persist.go) 的 `PersistCandidate`）；重扫更新扫描列，
+- 扫描先暂存观察，再按候选短事务写图（[persist.go](../../../backend/internal/catalog/ingest/persist.go) 的 `ingest.PersistCandidate`）；重扫更新扫描列，
   替换逐轨观察、署名与字段决策。扫描不是整库快照事务，当前证据与暂存都不是恢复点，也不能充当持久人工修正或完整历史
   （[扫描持久化测试](../../../backend/internal/library/scanner_persistence_integration_test.go)）。
-- 物理来源按 root 与相对路径识别，CUE 虚拟轨另含 sheet、父来源、轨号与起始帧（[identity.go](../../../backend/internal/catalog/identity.go)）：
+- 物理来源按 root 与相对路径识别，CUE 虚拟轨另含 sheet、父来源、轨号与起始帧（[identity.go](../../../backend/internal/catalog/ingest/identity.go)）：
   这是扫描的来源匹配规则，不是全局内容身份或任意移动映射器。
 - 规划时没有跨版本语义归并，也没有人工关系与扫描关系冲突的处理层；列表与详情要求至少一个 `present` Track，管理员详细证据可见不代表
   缺失版本能从普通详情访问。阶段 I 之后的身份机制见第四节，有效值、归组与默认版本见各合同。
@@ -105,9 +105,9 @@
 | `candidate_anchor` | root、`v2`、候选种类、规范化范围；散落文件与同目录拆分候选另用组内最小相对路径作分区。**只记录最近一次的位置**，不参与查找、不要求唯一 | 无：不再影响 Release ID |
 | 现有图 UUID | Track 见上；Release：候选已规划沿用的曲目严格过半属于同一 Release 时沿用（重叠多者得，平局留在原位置的一方，再按候选键），否则新建 Release 与 ReleaseGroup | 新增文件多于原有（如 2 轨加 3 轨）、整张专辑被替换、跨 root 时 Release 是新的；新 Release 不自动继承旧 Release 的人工意图 |
 
-定位：[identity.go](../../../backend/internal/catalog/identity.go) 的来源身份、[identity_plan.go](../../../backend/internal/catalog/identity_plan.go)
-的 `PlanStagedRoot` 规划、[persist.go](../../../backend/internal/catalog/persist.go) 与 [persist_track.go](../../../backend/internal/catalog/persist_track.go)
-的按计划写入、[organizer.go](../../../backend/internal/catalog/organizer.go) 的 `stableAnchorPartition` 和 `CandidateIdentity`、
+定位：[identity.go](../../../backend/internal/catalog/ingest/identity.go) 的来源身份、[identity_plan.go](../../../backend/internal/catalog/ingest/identity_plan.go)
+的 `ingest.PlanStagedRoot` 规划、[persist.go](../../../backend/internal/catalog/ingest/persist.go) 与 [persist_track.go](../../../backend/internal/catalog/ingest/persist_track.go)
+的按计划写入、[organizer.go](../../../backend/internal/catalog/ingest/organizer.go) 的 `stableAnchorPartition` 和 `ingest.CandidateIdentity`、
 [指纹](../../../backend/internal/library/parser/fingerprint.go)；测试见
 [改名/移动/互换等场景](../../../backend/internal/library/identity_rebinding_integration_test.go)与
 [Release 成员关系](../../../backend/internal/library/release_membership_integration_test.go)，来源身份规范化见

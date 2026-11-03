@@ -4,7 +4,7 @@
 
 M4 的第一项（2026-10）让管理员为多版本专辑指定**默认版本**，也让所有登录成员**对比**一张专辑的各个版本。新增或修改以下内容时必须阅读并更新本文件：
 `release_groups.default_release_id` 与 `release_groups.edit_revision`、代表版本规则里的默认项、组详情的 `revision` 与 `default_release_id`、
-设定默认版本的接口与执行器、它的撤销与展示（`GroupDefaultOperations`）、版本对比接口。
+设定默认版本的接口与执行器、它的撤销与展示（`governance.GroupDefaultOperations`）、版本对比接口。
 
 - 共同写入流程（幂等、记录、撤销框架、操作记录列表）仍在[受治理操作合同](./governance-contracts.md)；本文件只写默认版本这种操作自己的规则。
 - 按组读取的通用规则（可见性、搜索、排序、分页）仍在 [Catalog REST 合同](./catalog-rest-contracts.md)。
@@ -26,7 +26,7 @@ M4 的第一项（2026-10）让管理员为多版本专辑指定**默认版本**
 
 - **生效条件**：已存的默认版本可见（至少一条 `present` 曲目）**并且**现在属于这个组时生效。否则**静默失效**：专辑回到自动规则（年份最早），
   不清除这一列；版本回来（文件恢复、撤销移出、被归回）时重新生效。生效条件不另写代码，由排序自然得出：参与排序的只有这个组的可见成员。
-- **代表版本规则**：`releaseGroupMemberOrder`（`backend/internal/catalog/groups.go`）的第一项是
+- **代表版本规则**：`releasesql.ReleaseGroupMemberOrder`（`backend/internal/catalog/internal/releasesql/release.go`）的第一项是
   `releases.id IS DISTINCT FROM (SELECT default_release_id FROM release_groups WHERE id = releases.group_id)`。默认版本这一项为 false，排在最前；
   其余照旧：年份最早（没有年份排最后）、创建时间、ID。列表排名、组详情的成员顺序、版本对比、`representativeTitle`（归组与默认版本记录的标题快照）
   与 `loadAlbumInfos`（操作记录的专辑标题）共用这一个常量，所以卡片、列表排序、打开专辑时显示的版本、版本导航的顺序一起跟着变，不另写规则。
@@ -41,8 +41,8 @@ M4 的第一项（2026-10）让管理员为多版本专辑指定**默认版本**
 
 - **检查顺序**：同源（403）→ 管理员（401/403）→ 路由 ID（`400 invalid_id`）→ `Idempotency-Key`（`400 invalid_input`）→ 请求体
   （JSON 非法 `invalid_json`；`expected_revision < 1`，或 `release_id` 缺失、不是字符串、不是 UUID，都是 `400 invalid_input`：漏写不能当成“改回自动选择”）→ `operations.Run`。
-- **指纹**：`{type: release_group_default, group_id, expected_revision, release_id | null}`，ID 都转小写（`GroupDefaultRequest.Fingerprint`）。
-- **执行器**（`GroupDefaultExecutor`，在 `Run` 的事务里）：
+- **指纹**：`{type: release_group_default, group_id, expected_revision, release_id | null}`，ID 都转小写（`governance.GroupDefaultRequest.Fingerprint`）。
+- **执行器**（`governance.GroupDefaultExecutor`，在 `Run` 的事务里）：
   1. 设为默认时先 `FOR UPDATE` 锁目标发行行（不要求可见），再锁组行；清除时只锁组行。顺序与归组一致（先发行、后组），同时进行不会成环。
   2. 组不存在或没有可见成员：`404 not_found`。
   3. 组的 `edit_revision` 不等于 `expected_revision`：`409 revision_conflict`。
@@ -57,7 +57,7 @@ M4 的第一项（2026-10）让管理员为多版本专辑指定**默认版本**
 
 ## 5. 撤销与展示
 
-`GroupDefaultOperations()` 实现 `operations.Kind`，由 `app` 注册：
+`governance.GroupDefaultOperations()` 实现 `operations.Kind`，由 `app` 注册：
 
 - **Revert**：前态的默认版本不是 null 时先锁那个发行行（它已不存在时 `409 revert_conflict`），再锁组行。组没有可见成员 `404 not_found`；
   组的 `edit_revision` 不等于原记录的 `result_revision` 是 `409 revert_conflict`（只能撤销专辑**最近一次**默认版本调整）。然后把 `default_release_id`
@@ -108,11 +108,11 @@ M4 的第一项（2026-10）让管理员为多版本专辑指定**默认版本**
 
 ## 9. 必需测试与断言点
 
-- `internal/catalog`：`group_default_integration_test.go`——设定后代表版本、列表排序、组详情的成员顺序与标题快照都跟着变，没有设定时逐项不变；
+- `internal/catalog`：`governance/group_default_integration_test.go`——设定后代表版本、列表排序、组详情的成员顺序与标题快照都跟着变，没有设定时逐项不变；
   失效（不可见、被移出）与回来重新生效；钉住自动选出的版本、清除失效中的默认版本；`not_in_group`、`no_changes`、过期版本与 404 都没有副作用；
   撤销恢复每种前态（含失效中的前态）、之后又有调整时 `revert_conflict`、同键重放；`Describe` 的专辑、改动与可撤销；
   设定与归组同时进行不死锁、对同一个版本的设定与移出串行。`comparison_integration_test.go`——有效值与 `corrected_fields`、只计 present 曲目、
-  未知时长、格式分组与排序与 32 组上限、成员顺序与默认版本、100 个上限与固定查询数、404。`group_default_test.go`：指纹。
+  未知时长、格式分组与排序与 32 组上限、成员顺序与默认版本、100 个上限与固定查询数、404。`governance/group_default_test.go`：指纹。
 - `internal/operations`：`group_target_integration_test.go`——迁移后的约束拒绝未知的类型与目标类型、并集筛选（分页与总数）、撤销响应的目标。
 - `internal/app`：`group_default_api_integration_test.go`——401、跨源与非管理员 403、各种 400 都没有副作用；设定、清除、撤销与读取；同键重放与同键异义；
   并发请求；**合成素材真实重扫后默认版本保持**。`comparison_api_integration_test.go`——权限（普通成员可读、未登录 401）、错误与读取。

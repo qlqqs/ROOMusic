@@ -143,7 +143,7 @@ maps; application code coordinates authority and business rules; adapters
 enforce physical storage constraints.
 
 目标边界要求 library scanner 通过窄 catalog 合同提交观察，不直接写 catalog 私有表
-或替代其图不变量。B0 之后 library 只经 `catalog.PersistCandidate`、`catalog.MarkMissingSources`
+或替代其图不变量。B0 之后 library 只经 `ingest.PersistCandidate`、`ingest.MarkMissingSources`
 提交，图表的 SQL 只在 catalog 内；B0 只迁移职责并保持行为，人工关系保护等新规则留待后续获批任务。
 
 ## Core safety invariants

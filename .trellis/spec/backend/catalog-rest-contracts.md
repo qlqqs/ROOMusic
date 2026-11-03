@@ -81,7 +81,7 @@
 ### 有效值投影（M3）
 
 - 所有读取（列表、详情、搜索、排序、分页、按组读取、代表版本规则、最近播放的曲目位置）的发行来源是视图 `release_effective`
-  （常量 `releaseSource`，别名仍叫 `releases`）：标题、专辑艺人、年份、流派、厂牌、编号、版本说明、条码在有修正时取修正值（设空为空），
+  （常量 `releasesql.ReleaseSource`，别名仍叫 `releases`）：标题、专辑艺人、年份、流派、厂牌、编号、版本说明、条码在有修正时取修正值（设空为空），
   展示艺人 `artist` 跟随专辑艺人的修正。扫描与身份规划读写 `releases` 本表。**没有修正时与扫描值逐项一致。**
 - `attention_count` 不计已有修正的字段（`artist` 由专辑艺人的修正覆盖），分组原因与缺失曲目照旧；详情的专辑级署名里，专辑艺人有修正时用修正值。
 - M4 第二项起 `attention_count` 是三类**待处理**问题之和（拿不准的字段、同一目录的归组冲突、缺失曲目），被仍然有效的核对压下的不计；
@@ -97,7 +97,7 @@
 - **可见性**：成员 Release 的可见条件与 `/releases` 相同（至少一条 `present` 曲目）。组至少有一个可见成员才出现；
   `release_count` 只数可见成员；只有不可见成员的组、不存在的组，详情返回 `404 not_found`。
 - **代表版本**：管理员指定的默认版本（M4）排在最前，但只在它是这个组的可见成员时生效，否则静默失效、回到自动规则；其余是可见成员中年份最早者
-  （没有年份排最后），其次创建最早，最后 ID 最小。规则是常量 `releaseGroupMemberOrder`，生效与失效的细节见[默认版本合同](./default-version-contracts.md)第 3 节。
+  （没有年份排最后），其次创建最早，最后 ID 最小。规则是常量 `releasesql.ReleaseGroupMemberOrder`，生效与失效的细节见[默认版本合同](./default-version-contracts.md)第 3 节。
   组详情的 `releases` 与版本对比按同一规则排序，最多 100 条，`release_count` 仍是完整数量；`representative` 与 `releases[0]` 相同。
   **没有设定默认版本时，代表版本、顺序与接口样本和 M3 逐项一致。**
 - **搜索**：任一可见成员命中 `/releases` 的搜索条件（同一个 SQL 谓词），组即命中；只命中不可见成员的不算。
@@ -170,6 +170,6 @@ for _, release := range releases {
 列并校验安全边界：
 
 ```go
-query := "SELECT " + releaseSummaryProjection + " FROM releases" + releaseSummaryArtworkJoin
+query := "SELECT " + releasesql.ReleaseSummaryProjection + " FROM releases" + releasesql.ReleaseSummaryArtworkJoin
 summary, err := scanReleaseSummary(db.QueryRowContext(ctx, query+" WHERE releases.id=$1::uuid", id))
 ```

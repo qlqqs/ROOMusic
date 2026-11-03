@@ -33,14 +33,14 @@ M4 的第三项（2026-10）增加“认领”：把不可见旧发行上的修�
   `edition`、`barcode` 取修正值（`null` 为空，没有修正取扫描值）；展示艺人 `artist` 跟随专辑艺人的修正；另带 `edit_revision`；其余列原样。
   每个字段一次主键上的 `LEFT JOIN`，不被引用的列对应的连接会被优化器去掉。
 - 可修正字段固定为八个，顺序固定：`title`、`album_artist`、`year`、`genre`、`label`、`catalog_number`、`edition`、`barcode`
-  （后端 `correctableFields` 与前端 `CORRECTABLE_FIELDS` 一致，样本契约测试守住）。
+  （后端 `catalog.CorrectableFields` 与前端 `CORRECTABLE_FIELDS` 一致，样本契约测试守住）。
 - 组（`release_groups`）在 M3 没有自己的字段（M4 起有默认版本与专辑的版本号，见[默认版本合同](./default-version-contracts.md)），**从不删除**：
   撤销归组要回到原来的组 ID，空组的地址随之恢复。
 
 ## 3. 共同写入流程 `operations.Run`
 
 `operations` 包只含流程与记录，不含业务表、规则与 HTTP；业务由拥有表的包提供的执行器完成。依赖方向：`operations` 只依赖 `platform/uuid`；
-`catalog` 与 `catalog/httpapi` 依赖 `operations`；`operations/httpapi` 不导入 catalog（catalog 的能力经 `operations.Kind` 由 `app` 注入）。
+`catalog/governance` 与 `catalog/httpapi` 依赖 `operations`；`operations/httpapi` 不导入 catalog/governance（catalog/governance 的能力经 `operations.Kind` 由 `app` 注入）。
 
 ```text
 handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请求体 → 计算指纹
@@ -115,7 +115,7 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
 ## 5. 有效值投影
 
 - 所有 catalog 读取（列表、详情、搜索、排序、分页、按组读取、代表版本规则、最近播放的曲目位置）的发行来源是常量
-  `releaseSource = "release_effective releases"`（别名仍叫 `releases`），所以展示、排序与搜索用的都是有效值。扫描与身份规划读写 `releases` 本表。
+  `releasesql.ReleaseSource = "release_effective releases"`（别名仍叫 `releases`），所以展示、排序与搜索用的都是有效值。扫描与身份规划读写 `releases` 本表。
 - **无修正时与旧行为逐项一致**（`TestPostgreSQLEffectiveViewEqualsTheTableWithoutCorrections` 与既有按组/列表样本测试守住）。
 - **需要关注**：`uncertain_apply` 的字段决定如果该字段有修正（`set` 或 `null`）就不计数，`artist` 由专辑艺人的修正覆盖；分组原因与缺失曲目照旧计数；
   清除修正后扫描的不确定重新计入。M4 第二项起被仍然有效的核对压下的问题也不计数（[核对合同](./issue-review-contracts.md)第 3 节）。
@@ -167,7 +167,7 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
 - `internal/operations`：指纹与错误映射单元测试；PostgreSQL 集成——记录/重放/同键异义、并发同键只执行一次、执行失败与记录写入失败整体回滚、
   版本契约（`result = expected + 1`）、延迟外键、撤销记录互相指向、列表排序分页筛选（含发行与专辑的并集）、撤销执行器的守卫与对同一条记录的并发撤销、
   撤销响应的目标类型。
-- `internal/catalog`：视图无修正时与表逐列相同、逐字段叠加与清除、修正行的约束拒绝非法状态、读取返回有效值（含署名与“需要关注”）；
+- `internal/catalog`、`internal/catalog/governance`：视图无修正时与表逐列相同、逐字段叠加与清除、修正行的约束拒绝非法状态、读取返回有效值（含署名与“需要关注”）；
   修正状态迁移（改值/设空/清除、清除后回到重扫值）、拒绝过期/不可见/不存在、确认扫描值消除关注、各处读取一致；
   归组的归入/移出/非法请求无副作用/并发不死锁；撤销恢复每种前态、只动改过的字段、清除后显示现在的扫描值、之后又有修改或目标不可见时被拒绝、
   `Describe` 的目标/改动/可撤销。

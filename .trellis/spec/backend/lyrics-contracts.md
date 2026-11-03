@@ -14,7 +14,7 @@
 
 - `parser.AudioObservation.Lyrics`、`LyricsSource`：规范化后的原文与来源键；没有有效歌词时两者都为空。解析器不解析 LRC。
 - `parser.NormalizeLyrics(raw) (string, bool)`；常量 `MaxLyricsBytes = 64 KiB`；来源键常量 `LyricsSource*`。
-- `catalog.SourceObservation.Lyrics`、`LyricsSource`（JSON `lyrics`、`lyrics_source`，`omitempty`），随暂存观察进入整理与曲目写入。
+- `ingest.SourceObservation.Lyrics`、`LyricsSource`（JSON `lyrics`、`lyrics_source`，`omitempty`），随暂存观察进入整理与曲目写入。
 - `tracks.lyrics`、`tracks.lyrics_source`（迁移 `0015_track_lyrics.sql`）。
 - `catalog.ParseLyrics(raw) (Lyrics, bool)`：纯函数；`catalog.Store.LoadTrackLyrics(ctx, trackID) (TrackLyrics, error)`，曲目不存在或非 `present` 为 `catalog.ErrTrackNotFound`。
 - `GET /api/v1/tracks/{id}/lyrics`，注册在 `catalog/httpapi`。
@@ -49,7 +49,7 @@ CUE 虚拟轨没有歌词：它的观察由 CUE 事实构造，不复制父文�
 `lyrics_source` 非空且属于四个来源键。约束里 `lyrics_source IS NOT NULL` 必须显式写出：CHECK 在结果为未知（NULL）时放行，
 只靠 `IN` 挡不住“有歌词、没有来源”（集成测试覆盖这一格）。迁移只增加列与约束，不改写已有数据。
 
-`persist_track.go` 的 INSERT 与 UPDATE 都写这两列，观察没有歌词时写 NULL，所以重扫会更新或清空歌词；曲目身份、Release 匹配与内容指纹不受影响。
+`catalog/ingest/persist_track.go` 的 INSERT 与 UPDATE 都写这两列，观察没有歌词时写 NULL，所以重扫会更新或清空歌词；曲目身份、Release 匹配与内容指纹不受影响。
 已入库的曲目迁移后没有歌词，重扫一次才会有。暂存的观察 JSON 带歌词（最多 64 KiB，远小于 24 MiB 的暂存上限）。
 
 ## 5. 接口
