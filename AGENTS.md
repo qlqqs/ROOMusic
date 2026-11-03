@@ -32,3 +32,5 @@ Managed by Trellis. Edits outside this block are preserved; edits inside may be 
 - 验证修改时优先运行与改动直接相关的最小测试集。
 - 除非用户明确要求、修改影响范围无法局部覆盖，或局部验证失败需要进一步定位，否则不要运行全量测试。
 - 在最终说明中列出实际执行的验证命令；如果未运行全量测试，简要说明原因。
+
+开始工作前，请读取 /home/qlqq/workspace/AGENTS.md 中的本机环境说明。
