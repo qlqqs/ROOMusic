@@ -1002,3 +1002,49 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 - M4 的其余各项（扫描反馈、Release 合并与拆分）待用户选择并先做规划；成员写操作接入操作记录（M3 的 G6）仍是独立小任务；ADR 0002 与 0003 现在是 31,962 与 31,415 字节，下一项要先精简再增补
 - 同一个测试数据库上并行运行 library 与 app 两个包时偶尔出现一次 scan_coordination_unavailable（扫描互斥是整个数据库范围的 advisory lock，测试只按 schema 隔离，用第二个会话持有这把锁可稳定复现），本任务没有改动扫描代码，尚无后续任务；单独运行任一包都通过
 - F1 手工实播与 F3 远端 CI 仍按用户裁决延后；浏览器验证只有 Linux Chromium 的自动化证据，没有人工读屏验证；已接受的限制：推荐只看路径与目录，认领之后被移走的修正与核对的原记录不能再单独撤销
+
+
+## Session 33: 路线调整与 C1 删除播放中的定时复核
+<!-- trellis-session: v=2 fp=315413b8ca1edb43 -->
+
+**Date**: 2026-11-03
+**Task**: 路线调整与 C1 删除播放中的定时复核
+**Branch**: `main`
+
+### Summary
+
+代码与架构评估后，用户确认只有一个管理员，裁决路线调整 R1–R5（合并拆分搁置、扫描反馈移到 M5 之后、删除在途复核、新写操作轻量标准并撤销 G6、流程减负），新增 C1、C2 并定 Core 1 收口范围；拆出 ADR 0002/0003 的决策记录；C1 由后端子代理实施并验收归档。
+
+### Main Changes
+
+- 路线：core-1-roadmap.md 新增“2026-11-03 路线调整”，ADR 0002/0003/0004 各补一行决策，父任务完成范围改为 M4 ①–③ 加 C1、C2，M2a 遗留验收的远端 CI 记为已通过（运行 39090601105）
+- ADR 0002、0003 的决策记录原样移到 *-decisions.md，拼回后与原文逐字节一致，两份 ADR 降到约 26KB 与 25KB
+- C1：删除 RecheckingReader、StillPlayable、Prepared.RootID 等在途复核代码，保留只认生命周期的 LifecycleReader；新请求照常鉴权；同步播放合同与 ADR 0004 正文
+- 分工改为 ~/.claude/CLAUDE.md 的约定：主会话规划、派活、验收与提交，后端与测试交给 codex/gpt-6-astra，前端交给 claude-opus-5-5
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3f7ded3` | chore(toolchain): 升级 Node.js 到 24.22.1 |
+| `d16c7a1` | docs: AGENTS.md 提示开始工作前先读本机环境说明 |
+| `440e3d0` | docs(roadmap): 2026-11-03 路线调整（裁决 R1–R5） |
+| `84fa4ad` | docs(adr): 把 ADR 0002、0003 的决策记录原样移到单独文件 |
+| `641bdef` | chore(task): 规划并启动 C1，建立 C2 子任务 |
+| `89ab4b4` | refactor(playback): 删除播放中的定时复核（C1） |
+| `4219475` | docs(task): 记录 C1 的实施结果并启动 C2 |
+| `400ed9d` | chore(task): archive 11-03-classical-c1-drop-stream-recheck |
+
+### Testing
+
+- [OK] C1：隔离 PostgreSQL 上 go test -race ./internal/playback/... ./internal/app/...，180 个顶层测试（90 个集成）、598 项子测试 PASS、零 SKIP，含接口样本与真实 ffmpeg 派生；gofmt、go vet、依赖规则测试通过
+- [OK] 文档：改动的 Markdown 相对链接与锚点无断链，task.py validate 通过；未跑前端与全量后端测试（改动不涉及）
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- C2 进行中：后端 B1（拆 catalog/ingest）与前端 F2/F3（播放引擎显式状态）并行；之后 B2、B3、B4、B5 与前端验收 F4，然后 Core 1 收口
+- 提交 207d1aa 的说明里“按现状固定”的“状”字被写成了乱码，按约定未 amend，待用户决定

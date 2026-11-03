@@ -2,7 +2,7 @@
 
 ## 来源
 
-2026-11-03 [路线调整](../../../docs/architecture/core-1-roadmap.md#2026-11-03-路线调整)的 R3（修订 ADR 0004 K3 的在途部分）：只有一个管理员，
+2026-11-03 [路线调整](../../../../../docs/architecture/core-1-roadmap.md#2026-11-03-路线调整)的 R3（修订 ADR 0004 K3 的在途部分）：只有一个管理员，
 “停用成员后他正在播的那首最多 10 秒就断”价值很低，删掉已建立传输的定时复核，只在建立传输时鉴权并核对来源。
 
 ## 范围
@@ -14,7 +14,7 @@
   日志只剩 `shutdown` 一种原因。保留的读取器按剩下的职责命名（例如只认生命周期上下文的读取器），不保留空的复核外壳。
 - 不变：每个新请求（预检与串流）照常鉴权、核对来源与目录启用；停用目录禁止播放；`private, no-store`；Range 与 416 的 JSON 信封；
   派生（ALAC → FLAC）的流程、“无人等待 10 秒后取消转换”（K4，与本任务无关）；前端行为。
-- 同步文档：[播放合同](../../spec/backend/playback-contracts.md)、[无损派生合同](../../spec/backend/playback-derivation-contracts.md)
+- 同步文档：[播放合同](../../../../spec/backend/playback-contracts.md)、[无损派生合同](../../../../spec/backend/playback-derivation-contracts.md)
   里关于在途复核的描述，ADR 0004 正文里描述 10 秒复核为现行行为的地方（决策记录不改，2026-11-03 那一行已写明），
   路线图 C1 行的状态。
 
