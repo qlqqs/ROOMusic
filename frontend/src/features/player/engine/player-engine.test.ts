@@ -2081,3 +2081,339 @@ describe("计一次播放（阶段 P）", () => {
     expect(h.played).toEqual([]);
   });
 });
+
+describe("characterization (C2)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  const restorableTrack = track("a", {
+    trackId: "00000000-0000-4000-8000-000000000011",
+    releaseId: "00000000-0000-4000-8000-000000000012",
+    groupId: "00000000-0000-4000-8000-000000000013",
+  });
+
+  /** 不去重：同一 status 的重复通知也是要保留的现状。 */
+  function collectStatuses(h: Harness) {
+    const statuses: ReturnType<typeof state>["status"][] = [];
+    h.engine.subscribe(() => statuses.push(state(h).status));
+    return statuses;
+  }
+
+  it("1：attach 前 playTracks 再 endSession 中止预检，迟到结果不设置 src", async () => {
+    const h = createHarness({}, { attach: false });
+    let resolve: (value: TrackPlaybackResult) => void = () => undefined;
+    h.preflight("track-a", () => new Promise((done) => (resolve = done)));
+    h.engine.playTracks([track("a")]);
+    expect(signalOf(h, 0).aborted).toBe(false);
+
+    h.engine.endSession();
+    expect(signalOf(h, 0).aborted).toBe(true);
+    expect(h.audio.getAttribute("src")).toBeNull();
+    resolve(playbackOf("track-a"));
+    await settle();
+    expect(h.audio.sources).toEqual([]);
+    expect(h.audio.playCalls).toBe(0);
+    expect(state(h)).toMatchObject({ status: "idle", current: null, queue: { entries: [] } });
+    expect(savedFor(h)).toBeNull();
+  });
+
+  it("1：attach 前 playTracks 已设置 src，endSession 仍移除来源并中断媒体", async () => {
+    const h = createHarness({}, { attach: false });
+    h.engine.playTracks([track("a")]);
+    await settle();
+    expect(h.audio.getAttribute("src")).toBe("/api/v1/tracks/track-a/audio");
+    const loads = h.audio.loadCalls;
+
+    h.engine.endSession();
+    expect(h.audio.getAttribute("src")).toBeNull();
+    expect(h.audio.loadCalls).toBe(loads + 1);
+    expect(h.audio.paused).toBe(true);
+    expect(state(h)).toMatchObject({ status: "idle", current: null, queue: { entries: [] } });
+    expect(savedFor(h)).toBeNull();
+  });
+
+  it("2：attach 前已有命令使恢复停住并阻挡保存，直到下一次操作（固定现状，见 C2 PRD 的已知行为）", async () => {
+    const h = createHarness({}, { attach: false });
+    h.engine.playTracks([restorableTrack]);
+    await settle();
+    const before = h.sessionStorage.data.get(queueStorageKey(userId));
+    expect(loadSavedQueue(h.sessionStorage, userId)?.entries).toHaveLength(1);
+    h.engine.attach();
+    await settle();
+    expect(state(h).restoring).toBe(true);
+    expect(h.loadRelease).not.toHaveBeenCalled();
+
+    h.audio.loadMetadata(100);
+    h.audio.beginPlaying();
+    h.audio.tick(23);
+    vi.advanceTimersByTime(10_000);
+    window.dispatchEvent(new Event("pagehide"));
+    expect(state(h)).toMatchObject({ status: "playing", restoring: true });
+    expect(progress(h).positionSeconds).toBe(23);
+    expect(h.sessionStorage.data.get(queueStorageKey(userId))).toBe(before);
+
+    h.engine.enqueue([track("b")]);
+    expect(state(h).restoring).toBe(false);
+    expect(savedFor(h)).toMatchObject({ entries: [{ entryId: "e1" }, { entryId: "e2" }], positionSeconds: 23 });
+    h.audio.tick(28);
+    vi.advanceTimersByTime(5_000);
+    expect(savedFor(h)?.positionSeconds).toBe(28);
+  });
+
+  it("3：恢复可重试后 enqueue 保留 transient，retry 加载当前项并恢复保存", async () => {
+    const loadRelease = vi.fn(() => Promise.reject(networkError()));
+    const h = createHarness({ loadRelease }, { attach: false });
+    saveQueue(h.sessionStorage, userId, {
+      entries: [{ entryId: "restored-1", trackId: restorableTrack.trackId, releaseId: restorableTrack.releaseId, groupId: restorableTrack.groupId }],
+      currentEntryId: "restored-1",
+      mode: "sequential",
+      positionSeconds: 22,
+      history: [],
+    });
+    const before = h.sessionStorage.data.get(queueStorageKey(userId));
+    h.engine.attach();
+    await settle();
+    expect(state(h)).toMatchObject({ restoring: false, fault: { kind: "transient" }, current: null });
+    window.dispatchEvent(new Event("pagehide"));
+    expect(h.sessionStorage.data.get(queueStorageKey(userId))).toBe(before);
+
+    h.engine.enqueue([track("b")]);
+    expect(state(h)).toMatchObject({ status: "paused", fault: { kind: "transient" }, current: { entryId: "e1" } });
+    expect(h.loadPlayback).not.toHaveBeenCalled();
+    // enqueue 已经结束恢复重试阶段，保存当下队列；retry 不能再走发行恢复。
+    expect(savedFor(h)).toMatchObject({ entries: [{ entryId: "e1", trackId: "track-b" }], positionSeconds: 0 });
+    h.engine.retry();
+    expect(state(h)).toMatchObject({ status: "loading", fault: null });
+    await settle();
+    expect(loadRelease).toHaveBeenCalledTimes(1);
+    expect(preflightedTracks(h)).toEqual(["track-b"]);
+    expect(h.audio.sources).toEqual(["/api/v1/tracks/track-b/audio"]);
+    h.audio.loadMetadata(100);
+    h.audio.beginPlaying();
+    h.audio.tick(19);
+    vi.advanceTimersByTime(5_000);
+    expect(savedFor(h)).toMatchObject({ currentEntryId: "e1", positionSeconds: 19 });
+  });
+
+  it("4：正在准备的定时等待期间 detach，停止预检并保持 paused", async () => {
+    const h = createHarness();
+    h.preflightSequence("track-a", [preparing, playbackOf("track-a", "derived")], 0);
+    h.engine.playTracks([track("a")]);
+    await settle();
+    expect(state(h).status).toBe("preparing");
+    vi.advanceTimersByTime(999);
+    await settle();
+    expect(preflightedTracks(h)).toEqual(["track-a"]);
+
+    h.engine.detach();
+    expect(state(h).status).toBe("paused");
+    vi.advanceTimersByTime(60_000);
+    await settle();
+    expect(preflightedTracks(h)).toEqual(["track-a"]);
+    expect(h.audio.sources).toEqual([]);
+    expect(h.audio.playCalls).toBe(0);
+    expect(state(h)).toMatchObject({ status: "paused", fault: null, current: { entryId: "e1" } });
+  });
+
+  it.each(["预检在途", "准备轮询在途"] as const)("5：%s时 stop 中止请求、位置归零并保持 paused", async (phase) => {
+    const h = createHarness();
+    await playAndStart(h, [track("a")]);
+    h.audio.tick(37);
+    h.engine.detach();
+    h.engine.attach();
+    let resolve: (value: TrackPlaybackResult) => void = () => undefined;
+    let polls = 0;
+    h.preflight("track-a", () => {
+      if (phase === "准备轮询在途" && polls++ === 0) {
+        h.clock.now += 20_000;
+        return Promise.resolve(preparing);
+      }
+      return new Promise((done) => (resolve = done));
+    });
+    h.engine.play();
+    await settle();
+    expect(state(h).status).toBe(phase === "预检在途" ? "loading" : "preparing");
+    expect(progress(h).positionSeconds).toBe(37);
+    const calls = h.loadPlayback.mock.calls.length;
+    expect(signalOf(h, calls - 1).aborted).toBe(false);
+
+    h.engine.stop();
+    expect(signalOf(h, calls - 1).aborted).toBe(true);
+    expect(state(h).status).toBe("paused");
+    expect(progress(h)).toEqual({ positionSeconds: 0, durationSeconds: null, seekable: false });
+    expect(savedFor(h)?.positionSeconds).toBe(0);
+    resolve(playbackOf("track-a", "derived"));
+    await settle();
+    vi.advanceTimersByTime(60_000);
+    await settle();
+    expect(h.loadPlayback).toHaveBeenCalledTimes(calls);
+    expect(h.audio.sources).toEqual(["/api/v1/tracks/track-a/audio"]);
+    expect(h.audio.getAttribute("src")).toBeNull();
+    expect(h.audio.playCalls).toBe(1);
+    expect(state(h).status).toBe("paused");
+
+    h.preflight("track-a", () => Promise.resolve(playbackOf("track-a")));
+    h.engine.play();
+    await settle();
+    h.audio.loadMetadata(100);
+    expect(h.audio.currentTime).toBe(0);
+  });
+
+  it("5：准备轮询的定时等待期间 stop 取消后续预检并将位置归零", async () => {
+    const h = createHarness();
+    await playAndStart(h, [track("a")]);
+    h.audio.tick(37);
+    h.preflightSequence("track-a", [preparing, playbackOf("track-a", "derived")], 0);
+    h.audio.fail(2);
+    await settle();
+    expect(state(h).status).toBe("preparing");
+    expect(progress(h).positionSeconds).toBe(37);
+    expect(preflightedTracks(h)).toEqual(["track-a", "track-a"]);
+
+    h.engine.stop();
+    vi.advanceTimersByTime(60_000);
+    await settle();
+    expect(preflightedTracks(h)).toEqual(["track-a", "track-a"]);
+    expect(state(h).status).toBe("paused");
+    expect(progress(h)).toEqual({ positionSeconds: 0, durationSeconds: null, seekable: false });
+    expect(savedFor(h)?.positionSeconds).toBe(0);
+    expect(h.audio.getAttribute("src")).toBeNull();
+  });
+
+  it("6：普通加载的完整 status 通知序列", async () => {
+    const h = createHarness();
+    const statuses = collectStatuses(h);
+    await playAndStart(h, [track("a")]);
+    expect(statuses).toEqual(["loading", "playing"]);
+  });
+
+  it("6：202 到就绪的完整 status 通知序列，loading 通知先于设置 src", async () => {
+    const h = createHarness();
+    const statuses = collectStatuses(h);
+    const sources: (string | null)[] = [];
+    h.engine.subscribe(() => sources.push(h.audio.getAttribute("src")));
+    h.preflightSequence("track-a", [preparing, preparing, playbackOf("track-a", "derived")], 0);
+    h.engine.playTracks([track("a")]);
+    await settle();
+    vi.advanceTimersByTime(1_000);
+    await settle();
+    vi.advanceTimersByTime(1_000);
+    await settle();
+    h.audio.loadMetadata(100);
+    h.audio.beginPlaying();
+    expect(preflightedTracks(h)).toEqual(["track-a", "track-a", "track-a"]);
+    expect(statuses).toEqual(["loading", "preparing", "loading", "playing"]);
+    expect(sources).toEqual([null, null, null, "/api/v1/tracks/track-a/audio"]);
+  });
+
+  it("6：媒体错误再分类并前进的完整 status 通知序列", async () => {
+    const h = createHarness();
+    const statuses = collectStatuses(h);
+    await playAndStart(h, [track("a"), track("b")]);
+    h.audio.fail(3);
+    await settle();
+    h.audio.loadMetadata(100);
+    h.audio.beginPlaying();
+    expect(state(h).failures).toEqual({ e1: "decode_failed" });
+    expect(currentTitle(h)).toBe("曲目 b");
+    expect(preflightedTracks(h)).toEqual(["track-a", "track-a", "track-b"]);
+    expect(statuses).toEqual(["loading", "playing", "loading", "loading", "playing"]);
+  });
+
+  it("6：单曲循环的完整 status 通知序列，不重新预检", async () => {
+    const h = createHarness();
+    h.engine.setMode("repeat_one");
+    const statuses = collectStatuses(h);
+    await playAndStart(h, [track("a")]);
+    h.audio.finish();
+    await settle();
+    expect(h.audio.currentTime).toBe(0);
+    h.audio.beginPlaying();
+    expect(preflightedTracks(h)).toEqual(["track-a"]);
+    expect(h.audio.playCalls).toBe(2);
+    expect(statuses).toEqual(["loading", "playing", "loading", "playing"]);
+  });
+
+  it("7：准备轮询收到 401 后 paused、没有 fault，保留原位置", async () => {
+    const h = createHarness();
+    await playAndStart(h, [track("a")]);
+    h.audio.tick(31);
+    h.preflightSequence("track-a", [preparing], 0);
+    h.audio.fail(2);
+    await settle();
+    expect(state(h).status).toBe("preparing");
+    expect(progress(h).positionSeconds).toBe(31);
+    h.fail("track-a", httpError(401, "unauthorized"));
+    vi.advanceTimersByTime(1_000);
+    await settle();
+    expect(state(h)).toMatchObject({ status: "paused", fault: null, failures: {}, current: { entryId: "e1" } });
+    expect(progress(h)).toEqual({ positionSeconds: 31, durationSeconds: null, seekable: false });
+    expect(h.audio.getAttribute("src")).toBeNull();
+    vi.advanceTimersByTime(60_000);
+    await settle();
+    expect(preflightedTracks(h)).toEqual(["track-a", "track-a", "track-a"]);
+    window.dispatchEvent(new Event("pagehide"));
+    expect(savedFor(h)?.positionSeconds).toBe(31);
+  });
+
+  it("8：单曲循环重播被 NotAllowed 拒绝后 paused 仍定时保存（固定现状，见 C2 PRD 的已知行为）", async () => {
+    const h = createHarness();
+    h.engine.setMode("repeat_one");
+    await playAndStart(h, [track("a")]);
+    h.audio.playBehavior = "not-allowed";
+    h.audio.finish();
+    await settle();
+    expect(state(h)).toMatchObject({ status: "paused", fault: { kind: "autoplay_blocked" } });
+    expect(h.audio.paused).toBe(true);
+    expect(h.audio.playCalls).toBe(2);
+    expect(savedFor(h)?.positionSeconds).toBe(0);
+
+    // 只改 fake 的位置，不发媒体事件或命令：存储变化只能来自仍在运行的定时保存。
+    h.audio.currentTime = 7;
+    vi.advanceTimersByTime(4_999);
+    expect(savedFor(h)?.positionSeconds).toBe(0);
+    vi.advanceTimersByTime(1);
+    expect(savedFor(h)?.positionSeconds).toBe(7);
+    h.audio.currentTime = 9;
+    vi.advanceTimersByTime(5_000);
+    expect(savedFor(h)?.positionSeconds).toBe(9);
+    expect(state(h)).toMatchObject({ status: "paused", fault: { kind: "autoplay_blocked" } });
+    expect(preflightedTracks(h)).toEqual(["track-a"]);
+  });
+
+  it.each(["媒体错误先到", "play 拒绝先到"] as const)("9：%s时媒体错误与 play 拒绝只启动一条分类链", async (order) => {
+    const h = createHarness();
+    const events = collectEvents(h);
+    const statuses = collectStatuses(h);
+    let rejectPlay: (reason: unknown) => void = () => undefined;
+    // 只替换现有 fake 的公开 play 方法，精确控制两种失败的到达顺序。
+    vi.spyOn(h.audio, "play").mockImplementationOnce(() => new Promise<void>((_resolve, reject) => (rejectPlay = reject)));
+    h.engine.playTracks([track("a"), track("b")]);
+    await settle();
+    let resolveClassification: (value: TrackPlaybackResult) => void = () => undefined;
+    h.preflight("track-a", () => new Promise((resolve) => (resolveClassification = resolve)));
+    const rejection = new DOMException("不支持的来源", "NotSupportedError");
+    if (order === "媒体错误先到") {
+      h.audio.fail(3);
+      rejectPlay(rejection);
+    } else {
+      rejectPlay(rejection);
+      await settle();
+      h.audio.fail(3);
+    }
+    await settle();
+    expect(preflightedTracks(h)).toEqual(["track-a", "track-a"]);
+    expect(signalOf(h, 1).aborted).toBe(false);
+    expect(state(h).status).toBe("loading");
+
+    resolveClassification(playbackOf("track-a"));
+    await settle();
+    expect(preflightedTracks(h)).toEqual(["track-a", "track-a", "track-b"]);
+    expect(state(h).failures).toEqual({ e1: "decode_failed" });
+    expect(currentTitle(h)).toBe("曲目 b");
+    expect(h.audio.sources).toEqual(["/api/v1/tracks/track-a/audio", "/api/v1/tracks/track-b/audio"]);
+    expect(events.map((event) => event.kind)).toEqual(["track_started", "track_started"]);
+    expect(statuses).toEqual(["loading", "loading", "loading"]);
+  });
+});
