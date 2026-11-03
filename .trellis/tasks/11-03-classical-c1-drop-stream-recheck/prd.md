@@ -32,3 +32,18 @@
 ## 范围外
 
 前端改动、派生缓存、CUE、任何新的鉴权机制。
+
+## 实施结果（2026-11-03）
+
+由后端子代理（`codex/gpt-6-astra`）实施，主会话审阅 diff 与测试输出后验收；提交 `89ab4b4`。
+
+| 编号 | 结果 |
+| --- | --- |
+| A1 | 删除 `RecheckingReader`、`DefaultRecheckInterval`、`Check`、`StillPlayable`、`ReasonFor`、`AbortReason`/`AbortError` 与全部原因常量、`Options.RecheckInterval`、`WithPlaybackRecheckInterval`，以及只给复核用的 `Prepared.RootID`；`grep -rn "Recheck\|StillPlayable" backend` 零命中 |
+| A2 | 保留的 `LifecycleReader` 只认应用生命周期；`TestLifecycleReader*`、`TestLogAbortedSuppressesShutdownWhenClientDisconnectedFirst`、`TestPostgreSQLPlaybackStreamIsAbortedOnShutdown`、`TestPostgreSQLPlaybackRealConnectionIsClosedOnShutdown`、`TestPostgreSQLPlaybackDerivedStreamIsAbortedOnShutdown` 覆盖停机中止、恰好一条 `shutdown` 日志与客户端先断开不记录 |
+| A3 | 撤销会话、停用成员后预检与音频（GET/HEAD、Range、条件请求）均 401；停用目录后新请求 409 `root_disabled`；原有用例保留并加强 |
+| A4 | 删除 9 个在途切断与复核用例，没有 `t.Skip` |
+| A5 | 隔离 PostgreSQL 上 `go test -race ./internal/playback/... ./internal/app/...`：180 个顶层测试（90 个集成），子测试 598 项全部 PASS、零 SKIP，含 `TestPostgreSQLAPIResponseSamples` 与真实 ffmpeg 派生；返工后受影响的 2 个集成用例与 80 个单元用例 PASS；依赖规则测试通过 |
+| A6 | 播放合同、派生合同、后端规范索引、目录结构、扫描合同与 ADR 0004 正文同步（决策记录未改）；7 份文档 92 个相对链接通过；路线文档 32,676 字节、ADR 0004 30,776 字节 |
+
+未运行前端测试与全量后端测试：改动只在 playback、app 两个包与文档，前端不受影响。
