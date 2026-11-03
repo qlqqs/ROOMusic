@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { memoryStorage } from "../../../test/memory-storage";
+import { playerTrack } from "../../../test/player-data";
 import {
   clearSavedQueue,
   defaultVolume,
   loadSavedQueue,
   loadVolume,
   queueStorageKey,
+  savedEntriesOf,
   saveQueue,
   saveVolume,
   VOLUME_STORAGE_KEY,
@@ -106,6 +108,16 @@ describe("队列的保存与恢复", () => {
     expect(saveQueue(broken, userId, saved)).toBe(false);
     expect(() => clearSavedQueue(broken, userId)).not.toThrow();
     expect(() => clearSavedQueue(null, userId)).not.toThrow();
+  });
+
+  it("要保存的条目只含标识；同一个条目数组得到同一个结果，数组变了才重建", () => {
+    const entries = [{ entryId: "e1", track: playerTrack("a", { trackId: trackA, releaseId: release, groupId: group }) }];
+    const ids = savedEntriesOf(entries);
+    expect(ids).toEqual([{ entryId: "e1", trackId: trackA, releaseId: release, groupId: group }]);
+    expect(savedEntriesOf(entries)).toBe(ids);
+    const next = [...entries];
+    expect(savedEntriesOf(next)).not.toBe(ids);
+    expect(savedEntriesOf(next)).toEqual(ids);
   });
 });
 

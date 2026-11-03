@@ -3,7 +3,7 @@
 //   不存标题、路径或凭据（不把私有服务器数据放进浏览器持久层）；会话结束时删除。
 // - 音量与静音：localStorage，是设备偏好，不含任何私有数据，不随会话清除。
 import { decode as d } from "../../../shared/api";
-import { MAX_QUEUE_ENTRIES, playModes, type PlayMode } from "./queue";
+import { MAX_QUEUE_ENTRIES, playModes, type PlayMode, type QueueEntry } from "./queue";
 
 export type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
@@ -72,6 +72,19 @@ export function loadSavedQueue(storage: StorageLike | null, userId: string): Sav
     clearSavedQueue(storage, userId);
     return null;
   }
+}
+
+/** 队列条目数组 → 要保存的条目标识，按数组引用缓存：队列没变时（播放中定时保存只有位置在变）不重建上万个条目。 */
+const savedEntriesCache = new WeakMap<readonly QueueEntry[], SavedQueue["entries"]>();
+
+/** 队列条目 → 要保存的条目标识（不含标题等曲目信息）。同一个条目数组返回同一个结果数组，saveQueue 据此复用条目的 JSON。 */
+export function savedEntriesOf(source: readonly QueueEntry[]): SavedQueue["entries"] {
+  let entries = savedEntriesCache.get(source);
+  if (entries === undefined) {
+    entries = source.map((entry) => ({ entryId: entry.entryId, trackId: entry.track.trackId, releaseId: entry.track.releaseId, groupId: entry.track.groupId }));
+    savedEntriesCache.set(source, entries);
+  }
+  return entries;
 }
 
 /** 条目数组 → 它的 JSON。队列没变时引擎传入同一个数组，播放中每 5 秒的保存就不必再序列化上万个条目。 */
