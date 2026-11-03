@@ -168,7 +168,7 @@ func TestPostgreSQLPlaybackPrepareOpensAScannedFLAC(t *testing.T) {
 		t.Fatalf("Prepare: %v", err)
 	}
 	defer prepared.File.Close()
-	if prepared.TrackID != trackID || prepared.RootID != fixture.rootID || prepared.Size != 8192 {
+	if prepared.TrackID != trackID || prepared.Size != 8192 {
 		t.Fatalf("Prepared = %+v", prepared)
 	}
 	if prepared.Format.MIMEType != "audio/flac" || prepared.Format.Codecs != "" || len(prepared.ETag) != 32 {
@@ -266,7 +266,7 @@ func TestPostgreSQLPlaybackPrepareRejectsUnreadableAndChangedSources(t *testing.
 	}
 }
 
-func TestPostgreSQLPlaybackPrepareRechecksTheRegisteredRootAgainstTheAllowList(t *testing.T) {
+func TestPostgreSQLPlaybackPrepareValidatesTheRegisteredRootAgainstTheAllowList(t *testing.T) {
 	fixture := newPlaybackFixture(t)
 	trackID := fixture.insertPlayableFLAC(t, "01.flac")
 
@@ -304,33 +304,4 @@ func TestPostgreSQLPlaybackReportsDatabaseFailuresAsErrDatabase(t *testing.T) {
 	}
 	broken := NewService(closed, []string{fixture.allowedRoot})
 	requirePrepareError(t, broken, trackID, ErrDatabase)
-	if err := broken.StillPlayable(context.Background(), trackID, fixture.rootID); !errors.Is(err, ErrDatabase) {
-		t.Fatalf("StillPlayable with a broken database = %v, want ErrDatabase", err)
-	}
-}
-
-func TestPostgreSQLPlaybackStillPlayableFollowsTrackAndRootState(t *testing.T) {
-	fixture := newPlaybackFixture(t)
-	trackID := fixture.insertPlayableFLAC(t, "01.flac")
-	ctx := context.Background()
-
-	if err := fixture.service.StillPlayable(ctx, trackID, fixture.rootID); err != nil {
-		t.Fatalf("StillPlayable for a healthy track: %v", err)
-	}
-	if err := fixture.service.StillPlayable(ctx, trackID, uuid.New()); !errors.Is(err, ErrTrackNotFound) {
-		t.Fatalf("StillPlayable with a different root = %v, want ErrTrackNotFound", err)
-	}
-	if err := fixture.service.StillPlayable(ctx, uuid.New(), fixture.rootID); !errors.Is(err, ErrTrackNotFound) {
-		t.Fatalf("StillPlayable for an unknown track = %v, want ErrTrackNotFound", err)
-	}
-
-	fixture.exec(t, `UPDATE library_roots SET status='disabled' WHERE id=$1::uuid`, fixture.rootID)
-	if err := fixture.service.StillPlayable(ctx, trackID, fixture.rootID); !errors.Is(err, ErrRootDisabled) {
-		t.Fatalf("StillPlayable in a disabled root = %v, want ErrRootDisabled", err)
-	}
-	fixture.exec(t, `UPDATE library_roots SET status='active' WHERE id=$1::uuid`, fixture.rootID)
-	fixture.exec(t, `UPDATE tracks SET source_status='missing' WHERE id=$1::uuid`, trackID)
-	if err := fixture.service.StillPlayable(ctx, trackID, fixture.rootID); !errors.Is(err, ErrTrackNotFound) {
-		t.Fatalf("StillPlayable for a missing track = %v, want ErrTrackNotFound", err)
-	}
 }

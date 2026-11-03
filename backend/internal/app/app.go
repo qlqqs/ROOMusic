@@ -36,14 +36,8 @@ type App struct {
 type Option func(*options)
 
 type options struct {
-	playbackRecheckInterval time.Duration
-	playbackPreflightWait   time.Duration
-	derivation              playback.Derivation
-}
-
-// WithPlaybackRecheckInterval 设置已建立的音频传输复核会话与目录的间隔（默认 playback.DefaultRecheckInterval）。
-func WithPlaybackRecheckInterval(interval time.Duration) Option {
-	return func(settings *options) { settings.playbackRecheckInterval = interval }
+	playbackPreflightWait time.Duration
+	derivation            playback.Derivation
 }
 
 // WithPlaybackPreflightWait 设置预检等待派生完成的最长时间（默认 playback.DefaultPreflightWait）。
@@ -78,7 +72,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		catalog.IssueReviewOperations(), catalog.ClaimOperations()).Register(mux)
 	playbackService := playback.NewService(database, settings.AllowedLibraryRoots, playback.WithDerivation(assembly.derivation))
 	playbackapi.New(guard, playbackService, lifecycle, logger, playbackapi.Options{
-		RecheckInterval: assembly.playbackRecheckInterval, PreflightWait: assembly.playbackPreflightWait,
+		PreflightWait: assembly.playbackPreflightWait,
 	}).Register(mux)
 	listeningapi.New(guard, listening.NewService(database)).Register(mux)
 	httpserver.RegisterAPIFallback(mux, httpserver.APINotFoundHandler(mux))

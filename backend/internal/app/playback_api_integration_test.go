@@ -145,7 +145,6 @@ func TestPostgreSQLPlaybackAudioRequiresLoginAndRevealsNothingWithoutIt(t *testi
 	application := newIntegrationTestApplication(t)
 	library := createPlaybackLibrary(t, application)
 	trackID := library.addTrack(t, application, playbackTrackSpec{relative: "a.flac", content: flacBytes(4096)})
-	user := application.createUser(t, "user")
 
 	for _, path := range []string{audioPath(trackID), "/api/v1/tracks/" + trackID + "/playback", "/api/v1/playback/formats", audioPath("not-a-uuid"), audioPath(uuid.New())} {
 		for _, method := range []string{http.MethodGet, http.MethodHead} {
@@ -169,9 +168,34 @@ func TestPostgreSQLPlaybackAudioRequiresLoginAndRevealsNothingWithoutIt(t *testi
 		}
 	}
 
-	// 会话撤销后同样是 401。
-	mustExec(t, application, `UPDATE sessions SET revoked_at=NOW() WHERE user_id=$1::uuid`, user.id)
-	requireAPIError(t, application.request(t, http.MethodGet, audioPath(trackID), nil, &user, nil), http.StatusUnauthorized, "unauthorized")
+	// 撤销会话或停用成员后，每个新请求仍先鉴权，包括预检、HEAD、Range 和条件请求。
+	for _, testCase := range []struct{ name, query string }{
+		{"session revoked", `UPDATE sessions SET revoked_at=NOW() WHERE user_id=$1::uuid`},
+		{"member disabled", `UPDATE users SET disabled_at=NOW() WHERE id=$1::uuid`},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			user := application.createUser(t, "user")
+			mustExec(t, application, testCase.query, user.id)
+			for _, target := range []string{audioPath(trackID), preflightPath(trackID)} {
+				for _, method := range []string{http.MethodGet, http.MethodHead} {
+					for _, headers := range []map[string]string{nil, {"Range": "bytes=0-9"}, {"If-None-Match": "*"}} {
+						response := application.request(t, method, target, nil, &user, headers)
+						if response.Code != http.StatusUnauthorized {
+							t.Fatalf("%s %s = HTTP %d, want 401", method, target, response.Code)
+						}
+						if method == http.MethodGet {
+							requireAPIError(t, response, http.StatusUnauthorized, "unauthorized")
+						}
+						for _, header := range []string{"Content-Range", "ETag", "Accept-Ranges", "Last-Modified"} {
+							if response.Header().Get(header) != "" {
+								t.Fatalf("unauthorized request leaks %s", header)
+							}
+						}
+					}
+				}
+			}
+		})
+	}
 }
 
 func TestPostgreSQLPlaybackAudioStreamsTheOriginalFileWithProtectedHeaders(t *testing.T) {

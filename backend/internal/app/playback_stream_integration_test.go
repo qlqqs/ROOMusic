@@ -17,9 +17,6 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/identity"
 )
 
-// streamRecheckInterval 把复核间隔缩短到可以快速验证；生产值是 playback.DefaultRecheckInterval（10 秒）。
-const streamRecheckInterval = 50 * time.Millisecond
-
 // lockedBuffer 是并发安全的日志缓冲：处理请求的 goroutine 写入，测试在它结束之后读取。
 type lockedBuffer struct {
 	mutex  sync.Mutex
@@ -57,46 +54,65 @@ func logEvents(t *testing.T, logs *lockedBuffer, name string) []map[string]any {
 	return events
 }
 
-// blockingResponseWriter 让测试在服务端写出第一块音频时把它挂起：此时处理请求的 goroutine 停在写出上，
-// 测试可以先改变数据库状态，再放行写出，下一次读取就必然发生在复核间隔之后。
+// blockingResponseWriter 在第一块音频写出后挂起，测试通过通道确定传输已建立再取消生命周期。
+// forward 非空时交给真实连接并刷新；ctx 模拟真实客户端断开时 Write 返回错误。
 type blockingResponseWriter struct {
 	header     http.Header
 	status     int
 	firstWrite chan struct{}
 	release    chan struct{}
 	once       sync.Once
-	mutex      sync.Mutex
-	written    int
+	released   sync.Once
+	body       bytes.Buffer
+	forward    http.ResponseWriter
+	ctx        context.Context
 }
 
-func newBlockingResponseWriter() *blockingResponseWriter {
-	return &blockingResponseWriter{header: http.Header{}, firstWrite: make(chan struct{}), release: make(chan struct{})}
+func newBlockingResponseWriter(ctx context.Context) *blockingResponseWriter {
+	return &blockingResponseWriter{header: http.Header{}, firstWrite: make(chan struct{}), release: make(chan struct{}), ctx: ctx}
 }
 
-func (writer *blockingResponseWriter) Header() http.Header { return writer.header }
+func (writer *blockingResponseWriter) Header() http.Header {
+	if writer.forward != nil {
+		return writer.forward.Header()
+	}
+	return writer.header
+}
 
 func (writer *blockingResponseWriter) WriteHeader(status int) {
-	writer.mutex.Lock()
-	defer writer.mutex.Unlock()
 	if writer.status == 0 {
 		writer.status = status
+		if writer.forward != nil {
+			writer.forward.WriteHeader(status)
+		}
 	}
 }
 
 func (writer *blockingResponseWriter) Write(data []byte) (int, error) {
+	if err := writer.ctx.Err(); err != nil {
+		return 0, err
+	}
+	n, err := writer.body.Write(data)
+	if writer.forward != nil {
+		n, err = writer.forward.Write(data)
+		if err == nil {
+			err = http.NewResponseController(writer.forward).Flush()
+		}
+	}
 	writer.once.Do(func() { close(writer.firstWrite) })
 	<-writer.release
-	writer.mutex.Lock()
-	defer writer.mutex.Unlock()
-	writer.written += len(data)
-	return len(data), nil
+	if disconnected := writer.ctx.Err(); disconnected != nil {
+		return n, disconnected
+	}
+	return n, err
 }
 
-func (writer *blockingResponseWriter) bytesWritten() int {
-	writer.mutex.Lock()
-	defer writer.mutex.Unlock()
-	return writer.written
+func (writer *blockingResponseWriter) unblock() {
+	writer.released.Do(func() { close(writer.release) })
 }
+
+// bytesWritten 仅在 handler 结束后读取，避免与写出并发。
+func (writer *blockingResponseWriter) bytesWritten() int { return writer.body.Len() }
 
 // startStream 在后台处理一个音频请求，返回挂起的写出端和处理结束的信号。
 func startStream(t *testing.T, application *integrationTestApplication, user *integrationTestUser, trackID string, requestContext context.Context) (*blockingResponseWriter, <-chan struct{}) {
@@ -104,8 +120,9 @@ func startStream(t *testing.T, application *integrationTestApplication, user *in
 	request := httptest.NewRequest(http.MethodGet, audioPath(trackID), nil).WithContext(requestContext)
 	request.Host = "roomusic.test"
 	request.AddCookie(&http.Cookie{Name: identity.SessionCookieName, Value: user.token})
-	writer := newBlockingResponseWriter()
+	writer := newBlockingResponseWriter(requestContext)
 	done := make(chan struct{})
+	t.Cleanup(func() { finishStream(t, writer, done) })
 	go func() {
 		defer close(done)
 		application.handler.ServeHTTP(writer, request)
@@ -120,8 +137,7 @@ func startStream(t *testing.T, application *integrationTestApplication, user *in
 
 func finishStream(t *testing.T, writer *blockingResponseWriter, done <-chan struct{}) {
 	t.Helper()
-	time.Sleep(4 * streamRecheckInterval) // 保证放行之后的第一次读取已经过了复核间隔
-	close(writer.release)
+	writer.unblock()
 	select {
 	case <-done:
 	case <-time.After(10 * time.Second):
@@ -131,73 +147,50 @@ func finishStream(t *testing.T, writer *blockingResponseWriter, done <-chan stru
 
 const streamFileSize = 1 << 20
 
-func TestPostgreSQLPlaybackStreamIsCutWhenAccessIsWithdrawn(t *testing.T) {
-	for _, testCase := range []struct {
-		name     string
-		reason   string
-		level    string
-		withdraw func(t *testing.T, application *integrationTestApplication, library playbackLibrary, user integrationTestUser, trackID string)
-	}{
-		{"session revoked", "session_invalid", "INFO", func(t *testing.T, application *integrationTestApplication, _ playbackLibrary, user integrationTestUser, _ string) {
-			mustExec(t, application, `UPDATE sessions SET revoked_at=NOW() WHERE user_id=$1::uuid`, user.id)
-		}},
-		{"member disabled", "session_invalid", "INFO", func(t *testing.T, application *integrationTestApplication, _ playbackLibrary, user integrationTestUser, _ string) {
-			mustExec(t, application, `UPDATE users SET disabled_at=NOW() WHERE id=$1::uuid`, user.id)
-		}},
-		{"root disabled", "root_disabled", "INFO", func(t *testing.T, application *integrationTestApplication, library playbackLibrary, _ integrationTestUser, _ string) {
-			mustExec(t, application, `UPDATE library_roots SET status='disabled' WHERE id=$1::uuid`, library.rootID)
-		}},
-		{"track no longer present", "track_unavailable", "INFO", func(t *testing.T, application *integrationTestApplication, _ playbackLibrary, _ integrationTestUser, trackID string) {
-			mustExec(t, application, `UPDATE tracks SET source_status='missing' WHERE id=$1::uuid`, trackID)
-		}},
-		{"database fails while rechecking", "check_failed", "ERROR", func(t *testing.T, application *integrationTestApplication, _ playbackLibrary, _ integrationTestUser, _ string) {
-			// 会话与成员仍然有效，只有目录表读不出来：复核必须失败即关闭，而不是放行。
-			mustExec(t, application, `DROP TABLE library_roots CASCADE`)
-		}},
-		{"application shutting down", "shutdown", "INFO", func(t *testing.T, application *integrationTestApplication, _ playbackLibrary, _ integrationTestUser, _ string) {
-			application.shutdown()
-		}},
-	} {
-		t.Run(testCase.name, func(t *testing.T) {
-			logs := &lockedBuffer{}
-			application := newIntegrationTestApplicationWithLogger(t, slog.New(slog.NewJSONHandler(logs, nil)), WithPlaybackRecheckInterval(streamRecheckInterval))
-			library := createPlaybackLibrary(t, application)
-			trackID := library.addTrack(t, application, playbackTrackSpec{relative: "long.flac", content: flacBytes(streamFileSize)})
-			user := application.createUser(t, "user")
+func TestPostgreSQLPlaybackStreamIsAbortedOnShutdown(t *testing.T) {
+	logs := &lockedBuffer{}
+	application := newIntegrationTestApplicationWithLogger(t, slog.New(slog.NewJSONHandler(logs, nil)))
+	library := createPlaybackLibrary(t, application)
+	content := flacBytes(streamFileSize)
+	trackID := library.addTrack(t, application, playbackTrackSpec{relative: "long.flac", content: content})
+	user := application.createUser(t, "user")
 
-			writer, done := startStream(t, application, &user, trackID, context.Background())
-			testCase.withdraw(t, application, library, user, trackID)
-			finishStream(t, writer, done)
+	writer, done := startStream(t, application, &user, trackID, context.Background())
+	application.shutdown()
+	finishStream(t, writer, done)
 
-			if written := writer.bytesWritten(); written == 0 || written >= streamFileSize {
-				t.Fatalf("delivered %d of %d bytes; want some audio, then a cut before the end", written, streamFileSize)
-			}
-			if writer.status != http.StatusOK {
-				t.Fatalf("status = %d, want 200 (the headers were already sent when the stream was cut)", writer.status)
-			}
-			aborted := logEvents(t, logs, "playback.stream.aborted")
-			if len(aborted) != 1 {
-				t.Fatalf("playback.stream.aborted events = %d, want 1: %s", len(aborted), logs.String())
-			}
-			event := aborted[0]
-			if event["reason"] != testCase.reason || event["track_id"] != trackID || event["level"] != testCase.level {
-				t.Fatalf("abort event = %v, want reason %s, track %s, level %s", event, testCase.reason, trackID, testCase.level)
-			}
-			if request, _ := event["request_id"].(string); request == "" {
-				t.Fatalf("abort event has no request_id: %v", event)
-			}
-			for _, secret := range []string{application.allowedRoot, "playback-library", "long.flac", user.token} {
-				if strings.Contains(logs.String(), secret) {
-					t.Fatalf("logs leak %q: %s", secret, logs.String())
-				}
-			}
-		})
+	if written := writer.bytesWritten(); written == 0 || written >= streamFileSize {
+		t.Fatalf("delivered %d of %d bytes; want some audio, then a cut before the end", written, streamFileSize)
+	}
+	if writer.status != http.StatusOK || !bytes.Equal(writer.body.Bytes(), content[:writer.bytesWritten()]) {
+		t.Fatalf("shutdown changed the established response or appended a non-audio body: HTTP %d", writer.status)
+	}
+	requireShutdownEvent(t, logs, trackID)
+	for _, secret := range []string{application.allowedRoot, "playback-library", "long.flac", user.token} {
+		if strings.Contains(logs.String(), secret) {
+			t.Fatalf("logs leak %q: %s", secret, logs.String())
+		}
 	}
 }
 
-func TestPostgreSQLPlaybackStreamContinuesWhileEveryRecheckPasses(t *testing.T) {
+func requireShutdownEvent(t *testing.T, logs *lockedBuffer, trackID string) {
+	t.Helper()
+	aborted := logEvents(t, logs, "playback.stream.aborted")
+	if len(aborted) != 1 {
+		t.Fatalf("playback.stream.aborted events = %d, want 1: %s", len(aborted), logs.String())
+	}
+	event := aborted[0]
+	if event["reason"] != "shutdown" || event["track_id"] != trackID || event["level"] != "INFO" {
+		t.Fatalf("abort event = %v, want shutdown, track %s, INFO", event, trackID)
+	}
+	if request, _ := event["request_id"].(string); request == "" {
+		t.Fatalf("abort event has no request_id: %v", event)
+	}
+}
+
+func TestPostgreSQLPlaybackStreamCompletesWithoutShutdown(t *testing.T) {
 	logs := &lockedBuffer{}
-	application := newIntegrationTestApplicationWithLogger(t, slog.New(slog.NewJSONHandler(logs, nil)), WithPlaybackRecheckInterval(streamRecheckInterval))
+	application := newIntegrationTestApplicationWithLogger(t, slog.New(slog.NewJSONHandler(logs, nil)))
 	library := createPlaybackLibrary(t, application)
 	trackID := library.addTrack(t, application, playbackTrackSpec{relative: "long.flac", content: flacBytes(streamFileSize)})
 	user := application.createUser(t, "user")
@@ -206,7 +199,7 @@ func TestPostgreSQLPlaybackStreamContinuesWhileEveryRecheckPasses(t *testing.T) 
 	finishStream(t, writer, done)
 
 	if written := writer.bytesWritten(); written != streamFileSize {
-		t.Fatalf("delivered %d of %d bytes although nothing was withdrawn", written, streamFileSize)
+		t.Fatalf("delivered %d of %d bytes without shutdown", written, streamFileSize)
 	}
 	if aborted := logEvents(t, logs, "playback.stream.aborted"); len(aborted) != 0 {
 		t.Fatalf("unexpected abort events: %v", aborted)
@@ -214,61 +207,84 @@ func TestPostgreSQLPlaybackStreamContinuesWhileEveryRecheckPasses(t *testing.T) 
 }
 
 func TestPostgreSQLPlaybackStreamDoesNotLogAClientDisconnectAsAServerAbort(t *testing.T) {
-	logs := &lockedBuffer{}
-	application := newIntegrationTestApplicationWithLogger(t, slog.New(slog.NewJSONHandler(logs, nil)), WithPlaybackRecheckInterval(streamRecheckInterval))
-	library := createPlaybackLibrary(t, application)
-	trackID := library.addTrack(t, application, playbackTrackSpec{relative: "long.flac", content: flacBytes(streamFileSize)})
-	user := application.createUser(t, "user")
+	for _, shutdown := range []bool{false, true} {
+		name := "client disconnect"
+		if shutdown {
+			name = "client disconnect before shutdown"
+		}
+		t.Run(name, func(t *testing.T) {
+			logs := &lockedBuffer{}
+			application := newIntegrationTestApplicationWithLogger(t, slog.New(slog.NewJSONHandler(logs, nil)))
+			library := createPlaybackLibrary(t, application)
+			trackID := library.addTrack(t, application, playbackTrackSpec{relative: "long.flac", content: flacBytes(streamFileSize)})
+			user := application.createUser(t, "user")
 
-	requestContext, disconnect := context.WithCancel(context.Background())
-	writer, done := startStream(t, application, &user, trackID, requestContext)
-	disconnect()
-	finishStream(t, writer, done)
+			requestContext, disconnect := context.WithCancel(context.Background())
+			defer disconnect()
+			writer, done := startStream(t, application, &user, trackID, requestContext)
+			disconnect()
+			if shutdown {
+				application.shutdown()
+			}
+			finishStream(t, writer, done)
 
-	if written := writer.bytesWritten(); written >= streamFileSize {
-		t.Fatalf("delivered the whole file (%d bytes) to a disconnected client", written)
-	}
-	if aborted := logEvents(t, logs, "playback.stream.aborted"); len(aborted) != 0 {
-		t.Fatalf("a client disconnect was logged as a server abort: %v", aborted)
+			if written := writer.bytesWritten(); written == 0 || written >= streamFileSize {
+				t.Fatalf("delivered %d bytes; want an established stream cut before completion", written)
+			}
+			if aborted := logEvents(t, logs, "playback.stream.aborted"); len(aborted) != 0 {
+				t.Fatalf("a client disconnect was logged as a server abort: %v", aborted)
+			}
+		})
 	}
 }
 
-// 真实连接：net/http 在响应长度不足时关闭连接，客户端读到的是提前结束的响应，而不是一个“完整”的文件。
-func TestPostgreSQLPlaybackRealConnectionIsClosedAfterRevocation(t *testing.T) {
-	application := newIntegrationTestApplication(t, WithPlaybackRecheckInterval(streamRecheckInterval))
+// 真实连接不依赖网络缓冲大小：第一块响应已刷新时服务端仍挂起，停机后放行，客户端必须收到提前结束而非 JSON。
+func TestPostgreSQLPlaybackRealConnectionIsClosedOnShutdown(t *testing.T) {
+	logs := &lockedBuffer{}
+	application := newIntegrationTestApplicationWithLogger(t, slog.New(slog.NewJSONHandler(logs, nil)))
 	library := createPlaybackLibrary(t, application)
-	// 文件要大于回环连接两端的缓冲，服务端才会在客户端停止读取时停在写出上。
-	const size = 24 << 20
-	trackID := library.addTrack(t, application, playbackTrackSpec{relative: "very-long.flac", content: flacBytes(size)})
+	content := flacBytes(streamFileSize)
+	trackID := library.addTrack(t, application, playbackTrackSpec{relative: "long.flac", content: content})
 	user := application.createUser(t, "user")
-	server := httptest.NewServer(application.handler)
+	writer := newBlockingResponseWriter(context.Background())
+	done := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
+		defer close(done)
+		writer.forward = responseWriter
+		writer.ctx = request.Context()
+		application.handler.ServeHTTP(writer, request)
+	}))
 	t.Cleanup(server.Close)
+	t.Cleanup(writer.unblock)
 
 	request, err := http.NewRequest(http.MethodGet, server.URL+audioPath(trackID), nil)
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
 	request.AddCookie(&http.Cookie{Name: identity.SessionCookieName, Value: user.token})
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := &http.Client{Timeout: 10 * time.Second}
 	response, err := client.Do(request)
 	if err != nil {
 		t.Fatalf("request audio: %v", err)
 	}
 	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK || response.ContentLength != size {
+	if response.StatusCode != http.StatusOK || response.ContentLength != streamFileSize {
 		t.Fatalf("response: HTTP %d, Content-Length %d", response.StatusCode, response.ContentLength)
 	}
-	received, err := io.ReadFull(response.Body, make([]byte, 64<<10))
-	if err != nil {
-		t.Fatalf("read the first chunk: %v", err)
+	select {
+	case <-writer.firstWrite:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the established response did not reach the write barrier")
 	}
-	mustExec(t, application, `UPDATE sessions SET revoked_at=NOW() WHERE user_id=$1::uuid`, user.id)
-	time.Sleep(4 * streamRecheckInterval)
-	rest, err := io.Copy(io.Discard, response.Body)
+	application.shutdown()
+	writer.unblock()
+	got, err := io.ReadAll(response.Body)
 	if !errors.Is(err, io.ErrUnexpectedEOF) {
-		t.Fatalf("reading after the revocation = %d bytes, %v; want the connection to be cut (unexpected EOF)", rest, err)
+		t.Fatalf("reading after shutdown = %d bytes, %v; want unexpected EOF", len(got), err)
 	}
-	if total := int64(received) + rest; total >= size {
-		t.Fatalf("received %d of %d bytes after the session was revoked", total, size)
+	if len(got) == 0 || len(got) >= len(content) || !bytes.Equal(got, content[:len(got)]) {
+		t.Fatalf("received %d bytes; want only an incomplete audio prefix", len(got))
 	}
+	finishStream(t, writer, done)
+	requireShutdownEvent(t, logs, trackID)
 }

@@ -498,12 +498,12 @@ func TestPostgreSQLPlaybackPreflightWaitEndsWhenTheApplicationShutsDown(t *testi
 	}
 }
 
-func TestPostgreSQLPlaybackDerivedStreamIsCutWhenTheRootIsDisabled(t *testing.T) {
+func TestPostgreSQLPlaybackDerivedStreamIsAbortedOnShutdown(t *testing.T) {
 	logs := &lockedBuffer{}
 	fake := newFakeDerivation(t)
 	fake.content = func(string) []byte { return flacBytes(streamFileSize) }
 	application := newIntegrationTestApplicationWithLogger(t, slog.New(slog.NewJSONHandler(logs, nil)),
-		WithDerivation(fake), WithPlaybackPreflightWait(derivationPreflightWait), WithPlaybackRecheckInterval(streamRecheckInterval))
+		WithDerivation(fake), WithPlaybackPreflightWait(derivationPreflightWait))
 	library := createPlaybackLibrary(t, application)
 	trackID := library.addTrack(t, application, alacSpec("long.m4a", mp4Bytes(4096)))
 	user := application.createUser(t, "user")
@@ -512,16 +512,13 @@ func TestPostgreSQLPlaybackDerivedStreamIsCutWhenTheRootIsDisabled(t *testing.T)
 	}
 
 	writer, done := startStream(t, application, &user, trackID, context.Background())
-	mustExec(t, application, `UPDATE library_roots SET status='disabled' WHERE id=$1::uuid`, library.rootID)
+	application.shutdown()
 	finishStream(t, writer, done)
 
 	if written := writer.bytesWritten(); written == 0 || written >= streamFileSize {
 		t.Fatalf("delivered %d of %d derived bytes; want some audio, then a cut before the end", written, streamFileSize)
 	}
-	aborted := logEvents(t, logs, "playback.stream.aborted")
-	if len(aborted) != 1 || aborted[0]["reason"] != "root_disabled" || aborted[0]["track_id"] != trackID {
-		t.Fatalf("abort events = %v, want one root_disabled event for the track", aborted)
-	}
+	requireShutdownEvent(t, logs, trackID)
 }
 
 // 以下用真实的 ffmpeg 与合成 ALAC 素材验证端到端的无损派生；没有设置 ROOMUSIC_TEST_FFMPEG 时跳过。

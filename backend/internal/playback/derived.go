@@ -99,7 +99,7 @@ func (service *Service) prepareDerived(target resolved) (*Prepared, error) {
 		return nil, fmt.Errorf("open derived file: %w", err)
 	}
 	return &Prepared{
-		TrackID: target.source.TrackID, RootID: target.source.RootID, Format: target.format,
+		TrackID: target.source.TrackID, Format: target.format,
 		File: file, Size: size, ETag: derivedEntityTagValue(target.source.TrackID, key),
 	}, nil
 }

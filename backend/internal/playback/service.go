@@ -13,7 +13,7 @@ import (
 var (
 	// ErrTrackNotFound 表示曲目不存在，或它的来源已不是 present。
 	ErrTrackNotFound = errors.New("playback track not found")
-	// ErrRootDisabled 表示曲目所在的登记根目录已停用；停用目录同时停止播放，专辑仍可浏览。
+	// ErrRootDisabled 表示曲目所在的登记根目录已停用；拒绝新的播放请求，不切断已建立传输，专辑仍可浏览。
 	ErrRootDisabled = errors.New("playback root disabled")
 	// ErrNotDirectlyPlayable 表示曲目不能交付：CUE 虚拟轨（需要切分），或（来源类别、编码）不在当前格式表中
 	// （包括派生不可用时的 ALAC）。
@@ -52,7 +52,6 @@ func NewService(database catalog.Queryer, allowedRoots []string, options ...Serv
 // 直出时它是源文件；派生时它是缓存里经过核对的 FLAC，Size 与 ETag 描述派生文件。
 type Prepared struct {
 	TrackID string
-	RootID  string
 	Format  Format
 	File    *os.File
 	Size    int64
@@ -121,28 +120,7 @@ func (service *Service) Prepare(ctx context.Context, trackID string) (*Prepared,
 	if err != nil {
 		return nil, err
 	}
-	return &Prepared{TrackID: target.source.TrackID, RootID: target.source.RootID, Format: target.format, File: opened.File, Size: opened.Size, ETag: opened.ETag}, nil
-}
-
-// StillPlayable 复核已建立的传输是否仍应继续：曲目仍是 present 且仍在原目录，目录仍启用。
-// 它不重新打开文件：已打开的句柄指向同一个文件，内容被替换会在重新扫描后使曲目不再 present。
-// 错误是 ErrTrackNotFound、ErrRootDisabled 或 ErrDatabase。
-func (service *Service) StillPlayable(ctx context.Context, trackID, rootID string) error {
-	source, err := service.sources.LoadTrackSource(ctx, trackID)
-	if err != nil {
-		return classifyLookup(err)
-	}
-	if source.RootID != rootID {
-		return ErrTrackNotFound
-	}
-	location, err := service.loadRoot(ctx, rootID)
-	if err != nil {
-		return err
-	}
-	if !location.Active {
-		return ErrRootDisabled
-	}
-	return nil
+	return &Prepared{TrackID: target.source.TrackID, Format: target.format, File: opened.File, Size: opened.Size, ETag: opened.ETag}, nil
 }
 
 func (service *Service) loadRoot(ctx context.Context, rootID string) (library.RootLocation, error) {

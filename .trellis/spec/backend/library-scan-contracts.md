@@ -252,4 +252,4 @@ if decision.Source == "folder" {
 }
 ```
 
-M2a 中停用目录同时禁止其曲目播放（专辑仍可浏览）；新请求与在途复核语义见[播放合同](./playback-contracts.md)。
+停用目录拒绝新的播放请求，已建立传输不因此切断，专辑仍可浏览；具体语义见[播放合同](./playback-contracts.md)。

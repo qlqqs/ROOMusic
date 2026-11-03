@@ -3,12 +3,12 @@
 ## 1. 范围与触发
 
 M2b 让浏览器不能直接解码的 ALAC 曲目也能播放：服务端用 ffmpeg 把 ALAC 无损转换成 FLAC，核对解码后的 PCM 与源相同才发布，
-缓存在受管目录里，之后按与直出相同的鉴权、来源核对、Range 与 10 秒复核交付。不做有损转码、码率档位、实时流式转码、
+缓存在受管目录里，之后按与直出相同的新请求鉴权、来源核对、Range 与停机中止规则交付。不做有损转码、码率档位、实时流式转码、
 扫描后预生成与多实例共享缓存；CUE 精确分轨延后。项目不分发 ffmpeg，由部署者安装。
 
 包与依赖方向：`backend/internal/playback/derivation`（缓存、任务、ffmpeg 适配、输出核对；不含 HTTP，不读数据库，不依赖任何内部包）；
 `playback`（格式表、`Preflight` 与 `Prepare` 编排；依赖 `catalog`、`library`、`playback/derivation`）；`playback/httpapi`（传输）；
-`app`（`OpenDerivation` 与装配）。通用的播放接口、安全打开与复核见 [播放合同](./playback-contracts.md)，本文只写派生新增与改变的部分。
+`app`（`OpenDerivation` 与装配）。通用的播放接口、安全打开与停机中止见 [播放合同](./playback-contracts.md)，本文只写派生新增与改变的部分。
 设计与验证见 [M2b 任务](../../tasks/archive/2026-10/10-09-classical-m2b-derived-playback/design.md) 与
 [ADR 0004](../../../docs/architecture/adr/0004-media-delivery.md)。
 
@@ -69,7 +69,7 @@ M2b 让浏览器不能直接解码的 ALAC 曲目也能播放：服务端用 ffm
 - 来源核对与直出相同（打开、核对大小/修改时间/容器后立即关闭源句柄），并要求扫描记录有内容指纹（没有则 409 `source_changed`，需重新扫描）；
 - 缓存命中：`Content-Type: audio/flac`、`Cache-Control: private, no-store`、`X-Content-Type-Options: nosniff`、`Accept-Ranges: bytes`，
   强 ETag = `SHA-256("derived|"+曲目 ID+"|"+缓存键)` 前 32 个十六进制字符，与原文件的 ETag 不同；Range、If-Range、416、条件请求规则同直出；
-  读取经 `NewRecheckingReader`，每 10 秒复核会话/成员与 `StillPlayable`；
+  已建立传输仅受应用生命周期约束，不再定时复核会话、成员或来源；
 - 未命中：409 `derivation_not_ready`（JSON），不启动转换。目录停用、来源缺失或变化后即使缓存仍在也拒绝。
 
 ### 3.4 新增错误码
@@ -138,7 +138,7 @@ M2b 让浏览器不能直接解码的 ALAC 曲目也能播放：服务端用 ffm
   覆盖键、索引重建、淘汰、同键合并（假转换器与假时钟）、宽限期取消、上限、失败记忆、`STREAMINFO`、进程组回收（挂起的假 ffmpeg 脚本）、配置校验、缓存目录与音乐根的重叠检查。
 - `TestFFmpeg…`（`ROOMUSIC_TEST_FFMPEG` 指向固定版本，未设置时跳过）：真实转换与 PCM 核对、自检、损坏输入、`-fs` 超限、不覆盖已有输出。
 - `TestPostgreSQLPlayback…`（需要隔离数据库；真实 ffmpeg 用例同时需要 `ROOMUSIC_TEST_FFMPEG`）：格式表含派生项、202/200、状态码与检查顺序（转换之前不启动）、
-  稳定错误码与 `Retry-After`、关停时长轮询结束、派生流在目录停用时被切断、真实 ffmpeg 下 ALAC 两组参数的 STREAMINFO 与 PCM 逐位相同、
+  稳定错误码与 `Retry-After`、关停时长轮询结束、目录停用后新预检与音频请求被拒绝、已建立派生流在停机时中止、真实 ffmpeg 下 ALAC 两组参数的 STREAMINFO 与 PCM 逐位相同、
   保留大小与修改时间的原地改写在转换前被拒绝。`TestPostgreSQLAPIResponseSamples` 用假派生记录样本（任何机器上相同）。
 - `scripts/test-integration.sh` 总是通过 `scripts/ffmpeg-pinned.sh` 取出 ffmpeg 并运行 `TestPostgreSQL|TestFFmpeg`；取不到时失败，不静默跳过派生用例。
 - `./scripts/playback-e2e.sh`：同一个 ffmpeg 经 `ROOMUSIC_FFMPEG_PATH` 交给隔离服务；ALAC 两组参数由真实 Chromium 解码 `audio/flac`、真实拖动、自然结束，

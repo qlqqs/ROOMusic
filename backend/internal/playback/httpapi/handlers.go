@@ -1,5 +1,5 @@
 // Package httpapi 是曲目播放的 REST 传输层：格式表、播放前预检（含派生等待）与音频交付。
-// handler 只做鉴权、参数解析与响应映射；来源核对、安全打开与派生编排在 playback，已建立传输的复核也由 playback 的读取器执行。
+// handler 只做鉴权、参数解析与响应映射；来源核对、安全打开与派生编排在 playback，已建立传输的停机中止由 playback 的读取器执行。
 package httpapi
 
 import (
@@ -19,18 +19,15 @@ import (
 
 // Handlers 汇集播放相关的 HTTP handler。
 type Handlers struct {
-	guard           *identity.Guard
-	service         *playback.Service
-	lifecycle       context.Context
-	logger          *slog.Logger
-	recheckInterval time.Duration
-	preflightWait   time.Duration
+	guard         *identity.Guard
+	service       *playback.Service
+	lifecycle     context.Context
+	logger        *slog.Logger
+	preflightWait time.Duration
 }
 
 // Options 调整 handler 的时间参数；零值取生产默认值，只有测试需要缩短它们。
 type Options struct {
-	// RecheckInterval 是已建立传输复核授权与来源的间隔，0 表示 playback.DefaultRecheckInterval。
-	RecheckInterval time.Duration
 	// PreflightWait 是预检等待派生完成的最长时间，0 表示 playback.DefaultPreflightWait。
 	PreflightWait time.Duration
 }
@@ -38,15 +35,12 @@ type Options struct {
 // New 返回播放 handler。lifecycle 是应用的生命周期上下文：它结束（进程关停）时所有已建立的音频传输都会中止，
 // 预检中的派生等待也立即结束，不会让 Shutdown 等满超时。
 func New(guard *identity.Guard, service *playback.Service, lifecycle context.Context, logger *slog.Logger, options Options) *Handlers {
-	if options.RecheckInterval <= 0 {
-		options.RecheckInterval = playback.DefaultRecheckInterval
-	}
 	if options.PreflightWait <= 0 {
 		options.PreflightWait = playback.DefaultPreflightWait
 	}
 	return &Handlers{
 		guard: guard, service: service, lifecycle: lifecycle, logger: logger,
-		recheckInterval: options.RecheckInterval, preflightWait: options.PreflightWait,
+		preflightWait: options.PreflightWait,
 	}
 }
 
@@ -175,11 +169,11 @@ func (handlers *Handlers) audio(responseWriter http.ResponseWriter, request *htt
 	header.Set("Cache-Control", "private, no-store")
 	header.Set("ETag", entityTag)
 	header.Set("X-Content-Type-Options", "nosniff")
-	reader := playback.NewRecheckingReader(prepared.File, handlers.lifecycle, handlers.recheckInterval, time.Now, handlers.recheck(request, prepared))
+	reader := playback.NewLifecycleReader(prepared.File, handlers.lifecycle)
 	// 修改时间传零值：不发 Last-Modified，只用强 ETag 做条件请求与 If-Range。响应头发出之后出错只会中止传输。
 	http.ServeContent(responseWriter, request, "", time.Time{}, reader)
-	if reason, aborted := reader.Aborted(); aborted {
-		handlers.logAborted(request, prepared.TrackID, reason)
+	if reader.Aborted() {
+		handlers.logAborted(request, prepared.TrackID)
 	}
 }
 
@@ -241,31 +235,13 @@ func (handlers *Handlers) writePrepareError(responseWriter http.ResponseWriter, 
 	}
 }
 
-// recheck 返回已建立传输的复核：会话与成员仍然有效，曲目仍是 present 且目录仍启用。任一失败都使传输中止。
-func (handlers *Handlers) recheck(request *http.Request, prepared *playback.Prepared) playback.Check {
-	return func() error {
-		if _, err := handlers.guard.Authenticate(request); err != nil {
-			return &playback.AbortError{Reason: playback.AbortSessionInvalid, Err: err}
-		}
-		if err := handlers.service.StillPlayable(request.Context(), prepared.TrackID, prepared.RootID); err != nil {
-			return &playback.AbortError{Reason: playback.ReasonFor(err), Err: err}
-		}
-		return nil
-	}
-}
-
-// logAborted 记录服务端中止传输；只含曲目 ID 与原因类别，不含路径。客户端先断开时不是服务端的中止，不记录。
-// 复核时数据库不可用（失败即关闭）是需要运维关注的意外，其余是预期的撤销结果。
-func (handlers *Handlers) logAborted(request *http.Request, trackID string, reason playback.AbortReason) {
+// logAborted 记录停机中止；只含曲目 ID、请求 ID 与 shutdown 原因，不含路径。客户端先断开时不记录。
+func (handlers *Handlers) logAborted(request *http.Request, trackID string) {
 	if request.Context().Err() != nil {
 		return
 	}
-	level := slog.LevelInfo
-	if reason == playback.AbortCheckFailed {
-		level = slog.LevelError
-	}
-	handlers.logger.Log(context.Background(), level, "playback stream aborted", "event", "playback.stream.aborted",
-		"request_id", request.Header.Get("X-Request-ID"), "track_id", trackID, "reason", string(reason))
+	handlers.logger.Info("playback stream aborted", "event", "playback.stream.aborted",
+		"request_id", request.Header.Get("X-Request-ID"), "track_id", trackID, "reason", "shutdown")
 }
 
 // ifRangeMatches 按 RFC 9110 判断 If-Range 是否命中当前表示：只有与当前强校验值逐字相等的实体标签命中，

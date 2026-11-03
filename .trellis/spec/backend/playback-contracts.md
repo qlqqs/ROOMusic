@@ -9,7 +9,7 @@ M2a 在既有同源会话与只读音乐源之上新增播放格式表、预检�
 [ADR 0004](../../../docs/architecture/adr/0004-media-delivery.md)。三组手工实播未完成前不能宣称整个 M2a 已验收。
 
 M2b 增加 ALAC 的无损派生交付：格式项带 `delivery`，预检可返回 202，音频接口可交付已完成的派生文件，新增三个错误码。
-配置、缓存、转换流程、上限与测试见 [M2b 无损派生合同](./playback-derivation-contracts.md)；本文的检查顺序、安全打开、Range 与复核规则对两种交付一致。
+配置、缓存、转换流程、上限与测试见 [M2b 无损派生合同](./playback-derivation-contracts.md)；本文的检查顺序、安全打开、Range 与停机中止规则对两种交付一致。
 
 ## 2. 签名
 
@@ -19,11 +19,11 @@ M2b 增加 ALAC 的无损派生交付：格式项带 `delivery`，预检可返�
 - `catalog.Store.LoadTrackSource(ctx, trackID)`：公开曲目来源合同；非 `present` 与不存在统一为 `catalog.ErrTrackNotFound`。
 - `library.LoadRootLocation(ctx, querier, rootID)`：返回登记根目录与启用状态。
 - `playback.NewService(database, allowedRoots, options...)`：`WithDerivation(...)` 启用派生，不传则 ALAC 保持不能直接播放。
-- `playback.Service.Prepare(ctx, trackID)`：返回 `Prepared{TrackID, RootID, Format, File, Size, ETag}`，调用方负责关闭文件；
+- `playback.Service.Prepare(ctx, trackID)`：返回 `Prepared{TrackID, Format, File, Size, ETag}`，调用方负责关闭文件；
   派生格式返回缓存中的派生文件，未就绪为 `ErrDerivationNotReady`，从不启动转换。
 - `playback.Service.Preflight(ctx, trackID, userID, wait)`：返回 `Representation`；唯一会启动或加入转换的入口。
-- `playback.Service.StillPlayable(ctx, trackID, rootID)`：复核来源仍 `present`、仍属于原 root，root 仍启用。
-- `playback.NewRecheckingReader(...)`：可定位读取器，生产默认每 10 秒在下一次读取前复核。
+- `playback.NewLifecycleReader(file io.ReadSeeker, lifecycle context.Context) *playback.LifecycleReader`：可定位读取器，
+  只因应用生命周期结束而中止读取；`Aborted() bool` 供 handler 在响应结束后判断是否记停机日志。
 
 ## 3. 请求、响应与资源合同
 
@@ -59,14 +59,15 @@ Range 仅接受单个 `bytes=N-M`、`bytes=N-` 或 `bytes=-N`；畸形、多范�
 带 `Content-Range: bytes */<大小>`。先判断 If-Range：只有当前强 ETag 逐字命中才保留范围，
 不匹配、弱标签或日期使 Range 被忽略并返回完整表示，不应先拒绝其 Range。
 
-已经建立的流在读取前每 10 秒同步复核会话/成员与 `StillPlayable`；任一失败（含数据库错误）即关闭。
-应用生命周期结束也中止。头已经发出后只切断连接，绝不在音频尾部追加 JSON。
-记录 `playback.stream.aborted`，字段为安全的曲目 ID、请求 ID 与
-`session_invalid|track_unavailable|root_disabled|check_failed|shutdown`，不含路径。
-客户端主动断连不记录成服务端撤销。
+2026-11-03 C1 按 R3 删除在途周期复核：每个新请求仍鉴权并核对来源；已经建立的流不再查询会话、成员或目录状态。
+应用生命周期结束时，读取器返回上下文错误且不交付该次字节；`ServeContent` 停止写出，响应长度不足使 `net/http` 关闭连接。
+读取前后都检查生命周期，不强制打断底层阻塞读取；底层返回后若已取消则丢弃该次字节。
+头已经发出后只切断连接，绝不在音频尾部追加 JSON。
+每次停机中止只记录一条 `playback.stream.aborted`，字段为安全的曲目 ID、请求 ID 与 `reason=shutdown`，不含路径。
+客户端先断开不记录停机中止日志。
 
-根停用同时禁止播放，但已入库专辑仍可浏览。新请求立即拒绝；在途传输复核上界不包含网络缓冲，
-浏览器已缓存的音频无法收回。前端本地会话结束须立即停播并清空，不等待服务端 10 秒复核。
+根停用同时禁止新的播放请求，但已入库专辑仍可浏览。停用成员、撤销会话或停用目录后，已建立传输不因此切断，
+后续预检与音频请求按原错误合同拒绝。浏览器已缓存的音频无法收回；前端本地会话结束仍须立即停播并清空。
 
 ## 4. 验证与错误矩阵
 
@@ -93,18 +94,20 @@ Range 仅接受单个 `bytes=N-M`、`bytes=N-` 或 `bytes=-N`；畸形、多范�
 - 正常：登录后预检 FLAC 成功，200 原字节、206 子范围与后缀范围一致；HEAD 无正文。ALAC 预检等待转换后 200 `derived`，
   音频是经核对的 `audio/flac`，Range 与 ETag 针对派生文件。
 - 边界：过期 If-Range 配畸形 Range 仍按完整表示 200；24 bit extensible WAV 与 CUE 虚拟轨明确不可直出。
-- 失败：停用目录后预检拒绝，已建立的长连接按复核切断；更新标签但未重扫提示 `source_changed`。
-- 缓冲：短素材通常早已下载完成，管理员撤销后音频可能仍在浏览器缓冲中；不能据此断言复核失效或声称即时收回。
+- 失败：停用目录后新预检与音频请求拒绝，已建立的长连接不因此切断；更新标签但未重扫提示 `source_changed`。
+- 缓冲：短素材通常早已下载完成，管理员撤销后音频可能仍在浏览器缓冲中；不能声称即时收回。
 
 ## 6. 必需测试与断言
 
-- `go test -race ./internal/playback/... ./internal/app/... -run 'Test(CheckRange|Rechecking|PackageDependency)'`：
-  范围、复核、关停与依赖方向。格式/容器、ETag、安全打开与素材测试同样在能力包内。
+- `go test -race ./internal/playback/... ./internal/app/... -run 'Test(CheckRange|Lifecycle|PackageDependency)'`：
+  范围、生命周期取消与依赖方向。格式/容器、ETag、安全打开与素材测试同样在能力包内。
 - 配置隔离的 `ROOMUSIC_TEST_DATABASE_URL` 后运行
   `go test -race ./internal/playback/... ./internal/app/... -run 'TestPostgreSQLPlayback' -count=1`：
-  查找顺序、来源变化、链接逃逸/FIFO、HTTP 头、Range、预检及真实慢速连接撤销。
-- `TestPostgreSQLPlaybackRealConnectionIsClosedAfterRevocation` 与流式读取测试是长连接撤销的证据，
-  短素材浏览器测试不能替代它们。
+  查找顺序、来源变化、链接逃逸/FIFO、HTTP 头、Range、预检、新请求拒绝及真实连接停机中止。
+- `TestLifecycleReaderAbortsAndStaysAbortedOnShutdown` 与 `TestLifecycleReaderDiscardsBytesWhenShutdownOccursDuringRead`
+  证明取消后读取返回错误、不再交付字节；`TestPostgreSQLPlaybackRealConnectionIsClosedOnShutdown` 验证真实连接提前结束与唯一的
+  `reason=shutdown` 日志；`TestPostgreSQLPlaybackStreamDoesNotLogAClientDisconnectAsAServerAbort` 验证客户端先断开不记录。
+- 保留停用成员、撤销会话后新预检与音频请求 401，以及停用目录后 409 `root_disabled` 的用例；删除在途撤销切断用例，不跳过。
 - `TestPostgreSQLAPIResponseSamples` 守住接口样本（含派生表示、202 与派生错误码）；前端 decoder 读取同一批样本。
 - 派生的用例与断言见 [M2b 无损派生合同](./playback-derivation-contracts.md) 第 7 节。
 - `./scripts/playback-e2e.sh`：临时合成媒体、固定版本的 ffmpeg、真实 Go 与 Chromium 解码/定位/恢复，含 ALAC 派生播放；不使用真实 `music/`。
@@ -113,7 +116,7 @@ Range 仅接受单个 `bytes=N-M`、`bytes=N-` 或 `bytes=-N`；畸形、多范�
 ## 7. 错误与正确做法
 
 错误：先按文件路径读取并计算长度，再检查 Cookie；让 `ServeContent` 默认生成多范围或纯文本错误；
-用短音频的暂停状态证明服务器撤销长连接。
+把新请求鉴权扩展成在途周期复核，或把客户端断开误记为停机。
 
 正确：以曲目 ID 查当前权限与来源，安全打开后对句柄核对，应用先分类单范围错误，
-分别记录真实浏览器解码与慢速连接的撤销断言。源文件、私有路径、凭据不进入前端持久化或普通日志。
+分别验证真实浏览器解码、新请求拒绝与已建立连接的停机中止。源文件、私有路径、凭据不进入前端持久化或普通日志。
