@@ -1,4 +1,4 @@
-package catalog
+package governance
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
@@ -55,9 +56,9 @@ const (
 
 // claimedFieldOrder 是修正字段的固定顺序，预览与记录里字段按它排列。
 var claimedFieldOrder = func() []string {
-	names := make([]string, len(correctableFields))
-	for index, field := range correctableFields {
-		names[index] = field.name
+	names := make([]string, len(catalog.CorrectableFields))
+	for index, field := range catalog.CorrectableFields {
+		names[index] = field.Name
 	}
 	return names
 }()
@@ -98,8 +99,8 @@ type claimSide struct {
 
 // claimedCorrection 是一个字段的修正意图和设下它的操作。
 type claimedCorrection struct {
-	Intent      CorrectionIntent `json:"intent"`
-	OperationID string           `json:"operation_id"`
+	Intent      catalog.CorrectionIntent `json:"intent"`
+	OperationID string                   `json:"operation_id"`
 }
 
 // claimGroupState 是认领涉及的一个组的快照：版本号与默认版本（空表示自动选择）。
@@ -233,9 +234,9 @@ func loadClaimSide(ctx context.Context, database operations.Queryer, releaseID s
 		if err := rows.Scan(&name, &mode, &text, &year, &operationID); err != nil {
 			return claimSide{}, err
 		}
-		intent := CorrectionIntent{Mode: mode}
+		intent := catalog.CorrectionIntent{Mode: mode}
 		switch {
-		case mode != CorrectionSet:
+		case mode != catalog.CorrectionSet:
 		case year.Valid:
 			intent.Value = int(year.Int64)
 		default:
@@ -273,7 +274,7 @@ func loadClaimSnapshot(ctx context.Context, database operations.Queryer, sourceI
 	var targetVisible bool
 	err := database.QueryRowContext(ctx, `SELECT `+releasesql.ReleaseVisiblePredicate+` FROM releases WHERE releases.id=$1::uuid`, targetID).Scan(&targetVisible)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && !targetVisible) {
-		return claimSnapshot{}, ErrReleaseNotFound
+		return claimSnapshot{}, catalog.ErrReleaseNotFound
 	}
 	if err != nil {
 		return claimSnapshot{}, err
@@ -281,7 +282,7 @@ func loadClaimSnapshot(ctx context.Context, database operations.Queryer, sourceI
 	var claimable bool
 	err = database.QueryRowContext(ctx, `SELECT `+releaseClaimablePredicate+` FROM `+releasesql.ReleaseSource+` WHERE releases.id=$1::uuid`, sourceID).Scan(&claimable)
 	if errors.Is(err, sql.ErrNoRows) {
-		return claimSnapshot{}, ErrReleaseNotFound
+		return claimSnapshot{}, catalog.ErrReleaseNotFound
 	}
 	if err != nil {
 		return claimSnapshot{}, err
@@ -367,10 +368,10 @@ func (s *Store) PreviewClaim(ctx context.Context, sourceID, targetID string) (Cl
 	snapshot, err := loadClaimSnapshot(ctx, s.database, sourceID, targetID, false)
 	if err != nil {
 		var failure *operations.Failure
-		if errors.Is(err, ErrReleaseNotFound) || errors.As(err, &failure) {
+		if errors.Is(err, catalog.ErrReleaseNotFound) || errors.As(err, &failure) {
 			return ClaimPreview{}, err
 		}
-		return ClaimPreview{}, fmt.Errorf("%w: preview claim: %w", ErrQuery, err)
+		return ClaimPreview{}, fmt.Errorf("%w: preview claim: %w", catalog.ErrQuery, err)
 	}
 	plan := buildClaimPlan(snapshot)
 	annotateClaimItems(ctx, s.database, snapshot, &plan)
@@ -486,7 +487,7 @@ func ClaimExecutor(request ClaimRequest) operations.Executor {
 		}
 
 		snapshot, err := loadClaimSnapshot(ctx, tx, sourceID, targetID, true)
-		if errors.Is(err, ErrReleaseNotFound) {
+		if errors.Is(err, catalog.ErrReleaseNotFound) {
 			return operations.Outcome{}, operations.NotFound("not_found", "发行版本不存在")
 		}
 		if err != nil {
@@ -672,11 +673,11 @@ func loadClaimRecordState(ctx context.Context, tx *sql.Tx, snapshot claimSnapsho
 }
 
 // correctableFieldByName 按名字找可修正字段。
-func correctableFieldByName(name string) (correctableField, bool) {
-	for _, field := range correctableFields {
-		if field.name == name {
+func correctableFieldByName(name string) (catalog.CorrectableField, bool) {
+	for _, field := range catalog.CorrectableFields {
+		if field.Name == name {
 			return field, true
 		}
 	}
-	return correctableField{}, false
+	return catalog.CorrectableField{}, false
 }

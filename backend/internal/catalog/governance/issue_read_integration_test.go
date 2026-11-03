@@ -1,17 +1,19 @@
-package catalog
+package governance
 
 import (
 	"context"
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 )
 
 // 问题的读取：列表、筛选项数字与详情都来自 issues.go 的同一批常量，所以各类待处理数目之和等于 attention_count。
 
 func (fixture *correctionFixture) listIssues(status, category string, page, pageSize int) IssuePage {
 	fixture.t.Helper()
-	result, err := fixture.store.ListIssues(context.Background(), IssueListParams{Status: status, Category: category, Page: page, PageSize: pageSize})
+	result, err := fixture.governance.ListIssues(context.Background(), IssueListParams{Status: status, Category: category, Page: page, PageSize: pageSize})
 	if err != nil {
 		fixture.t.Fatalf("list issues (%s, %s): %v", status, category, err)
 	}
@@ -20,7 +22,7 @@ func (fixture *correctionFixture) listIssues(status, category string, page, page
 
 func (fixture *correctionFixture) releaseIssues(releaseID string) ReleaseIssues {
 	fixture.t.Helper()
-	issues, err := fixture.store.LoadReleaseIssues(context.Background(), releaseID)
+	issues, err := fixture.governance.LoadReleaseIssues(context.Background(), releaseID)
 	if err != nil {
 		fixture.t.Fatalf("load the issues of %s: %v", releaseID, err)
 	}
@@ -107,7 +109,7 @@ func TestPostgreSQLIssueListCountsFiltersAndSummary(t *testing.T) {
 	}
 
 	// 与“需要关注”一致：列表里的版本就是 attention=required 的版本。
-	attention, err := fixture.store.ListReleases(context.Background(), ListParams{AttentionRequired: true, Page: 1, PageSize: 50})
+	attention, err := fixture.store.ListReleases(context.Background(), catalog.ListParams{AttentionRequired: true, Page: 1, PageSize: 50})
 	if err != nil || attention.Total != open.Total {
 		t.Fatalf("attention=required lists %d (%v), the issue list %d", attention.Total, err, open.Total)
 	}
@@ -219,7 +221,7 @@ func TestPostgreSQLReleaseIssuesDetail(t *testing.T) {
 	if clean := fixture.releaseIssues(sibling.releaseID); len(clean.Fields) != 0 || clean.Fields == nil || clean.Grouping != nil || clean.MissingTracks != nil {
 		t.Fatalf("a release without issues = %+v", clean)
 	}
-	if _, err := fixture.store.LoadReleaseIssues(context.Background(), invisible.releaseID); err != ErrReleaseNotFound {
+	if _, err := fixture.governance.LoadReleaseIssues(context.Background(), invisible.releaseID); err != catalog.ErrReleaseNotFound {
 		t.Fatalf("an invisible release: %v, want ErrReleaseNotFound", err)
 	}
 }

@@ -1,4 +1,4 @@
-package catalog
+package governance
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
@@ -73,10 +74,10 @@ func TestPostgreSQLJoinMovesAVersionIntoAnotherAlbum(t *testing.T) {
 		t.Fatalf("target group = %+v, %v; want two versions, the earlier year representative and attention 3", detail, err)
 	}
 	// 原组没有可见版本：从列表消失、详情找不到；组行仍在（撤销时回到它）。
-	if _, err := fixture.store.LoadReleaseGroup(ctx, moved.groupID); !errors.Is(err, ErrReleaseGroupNotFound) {
+	if _, err := fixture.store.LoadReleaseGroup(ctx, moved.groupID); !errors.Is(err, catalog.ErrReleaseGroupNotFound) {
 		t.Fatalf("the emptied group is still readable: %v", err)
 	}
-	groups, err := fixture.store.ListReleaseGroups(ctx, ListParams{Page: 1, PageSize: 10})
+	groups, err := fixture.store.ListReleaseGroups(ctx, catalog.ListParams{Page: 1, PageSize: 10})
 	if err != nil || groups.Total != 1 || groups.Items[0].ID != target.groupID {
 		t.Fatalf("group list = %+v, %v; want only the target group", groups, err)
 	}
@@ -86,7 +87,7 @@ func TestPostgreSQLJoinMovesAVersionIntoAnotherAlbum(t *testing.T) {
 		t.Fatalf("the emptied group was deleted")
 	}
 	// 搜索按组内任一成员命中；/releases 列表不受影响（每个版本仍是一行）。
-	releases, err := fixture.store.ListReleases(ctx, ListParams{Page: 1, PageSize: 10})
+	releases, err := fixture.store.ListReleases(ctx, catalog.ListParams{Page: 1, PageSize: 10})
 	if err != nil || releases.Total != 2 {
 		t.Fatalf("release list = %+v, %v; want both versions", releases, err)
 	}
@@ -121,7 +122,7 @@ func TestPostgreSQLDetachMakesAVersionItsOwnAlbum(t *testing.T) {
 	if result.PreviousGroupID != first.groupID || result.GroupID == first.groupID || result.GroupID == second.groupID || result.Revision != 3 {
 		t.Fatalf("detach result = %+v; want a brand new group at revision 3", result)
 	}
-	groups, err := fixture.store.ListReleaseGroups(ctx, ListParams{Page: 1, PageSize: 10})
+	groups, err := fixture.store.ListReleaseGroups(ctx, catalog.ListParams{Page: 1, PageSize: 10})
 	if err != nil || groups.Total != 2 {
 		t.Fatalf("group list = %+v, %v; want two albums again", groups, err)
 	}
@@ -275,8 +276,8 @@ func TestPostgreSQLConcurrentGroupChangesDoNotDeadlock(t *testing.T) {
 		t.Fatalf("%d succeeded and %d found the target group already empty; want exactly one of each", succeeded, notFound)
 	}
 	// 结果一致：所有版本都在可见的组里，没有版本丢失。
-	groups, err := fixture.store.ListReleaseGroups(context.Background(), ListParams{Page: 1, PageSize: 10})
-	releases, _ := fixture.store.ListReleases(context.Background(), ListParams{Page: 1, PageSize: 10})
+	groups, err := fixture.store.ListReleaseGroups(context.Background(), catalog.ListParams{Page: 1, PageSize: 10})
+	releases, _ := fixture.store.ListReleases(context.Background(), catalog.ListParams{Page: 1, PageSize: 10})
 	if err != nil || groups.Total != 1 || releases.Total != 2 {
 		t.Fatalf("after the race: groups %+v (%v), releases %d; want one group holding both versions", groups, err, releases.Total)
 	}

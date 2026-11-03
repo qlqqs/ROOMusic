@@ -31,26 +31,26 @@ func (counter *countingQueryer) QueryRowContext(ctx context.Context, query strin
 }
 
 // intoGroup 把发行放进另一个组（直接写库：这里测的是读取，不是归组流程）。
-func (fixture *correctionFixture) intoGroup(release placementRelease, groupID string) {
+func (fixture *effectiveFixture) intoGroup(release placementRelease, groupID string) {
 	fixture.t.Helper()
 	fixture.exec(`UPDATE releases SET group_id=$2::uuid WHERE id=$1::uuid`, release.releaseID, groupID)
 }
 
 // audio 给曲目写上编码、位深与采样率；nil 表示这一项没有值。
-func (fixture *correctionFixture) audio(trackID string, codec any, bitDepth, sampleRate any) {
+func (fixture *effectiveFixture) audio(trackID string, codec any, bitDepth, sampleRate any) {
 	fixture.t.Helper()
 	fixture.exec(`UPDATE tracks SET codec=$2, bit_depth=$3, sample_rate=$4 WHERE id=$1::uuid`, trackID, codec, bitDepth, sampleRate)
 }
 
 // secondMedium 给发行加第二个介质，返回只带这个介质的占位（供 track 使用）。
-func (fixture *correctionFixture) secondMedium(release placementRelease) placementRelease {
+func (fixture *effectiveFixture) secondMedium(release placementRelease) placementRelease {
 	fixture.t.Helper()
 	second := placementRelease{groupID: release.groupID, releaseID: release.releaseID, mediumID: uuid.New()}
 	fixture.exec(`INSERT INTO media(id,release_id,position,title) VALUES($1::uuid,$2::uuid,2,'Medium 2')`, second.mediumID, release.releaseID)
 	return second
 }
 
-func (fixture *correctionFixture) comparison(groupID string) ReleaseComparison {
+func (fixture *effectiveFixture) comparison(groupID string) ReleaseComparison {
 	fixture.t.Helper()
 	comparison, err := fixture.store.LoadReleaseComparison(context.Background(), groupID)
 	if err != nil {
@@ -70,7 +70,7 @@ func comparedIDs(comparison ReleaseComparison) []string {
 // 对比读取的内容：有效值（含人工修正与修正为空）、只计 present 曲目的介质、曲目与时长（有一首曲目的时长未知就是 null，
 // 不拿已知部分冒充总数）、格式分组与排序（曲目数降序、再按编码、位深、采样率；未知的参数是 null），以及 corrected_fields。
 func TestPostgreSQLReleaseComparisonReportsEffectiveValuesAndContent(t *testing.T) {
-	fixture := newCorrectionFixture(t)
+	fixture := newEffectiveFixture(t)
 
 	// A：两个介质，四首 present（FLAC 16/44.1k，时长都已知）和一首 missing（不计入）；有版本说明、厂牌等字段。
 	a := fixture.versionOf("Alpha", 1998)
@@ -195,7 +195,7 @@ func asJSON(value any) string {
 
 // 默认版本在前，并且与组详情一致；默认版本失效（不可见）时顺序回到自动规则，DefaultReleaseID 为 null。
 func TestPostgreSQLReleaseComparisonFollowsTheRepresentativeRule(t *testing.T) {
-	fixture := newCorrectionFixture(t)
+	fixture := newEffectiveFixture(t)
 	early, middle, late := fixture.versionOf("Early", 1990), fixture.versionOf("Middle", 2000), fixture.versionOf("Late", 2010)
 	group := early.groupID
 	fixture.intoGroup(middle, group)
@@ -230,7 +230,7 @@ func TestPostgreSQLReleaseComparisonFollowsTheRepresentativeRule(t *testing.T) {
 
 // 最多 100 个成员、release_count 是完整数量；成员与它们的顺序和组详情一致；无论多少个版本，只发三条查询。
 func TestPostgreSQLReleaseComparisonIsBoundedAndUsesAFixedNumberOfQueries(t *testing.T) {
-	fixture := newCorrectionFixture(t)
+	fixture := newEffectiveFixture(t)
 	const versions = 105
 	first := fixture.versionOf("Version 0", 1900)
 	group := first.groupID
@@ -273,7 +273,7 @@ func TestPostgreSQLReleaseComparisonIsBoundedAndUsesAFixedNumberOfQueries(t *tes
 
 // 一个版本里的不同音频参数组合不超过 32 个：刚好 32 个可以读，33 个让整个读取失败（不是静默截断）。
 func TestPostgreSQLReleaseComparisonBoundsTheFormatsOfAVersion(t *testing.T) {
-	fixture := newCorrectionFixture(t)
+	fixture := newEffectiveFixture(t)
 	release := fixture.versionOf("Many formats", 2000)
 	fixture.exec(`UPDATE tracks SET codec='flac', bit_depth=16, sample_rate=44100 WHERE medium_id=$1::uuid`, release.mediumID)
 	for index := 1; index < maxComparedFormats; index++ {
@@ -291,7 +291,7 @@ func TestPostgreSQLReleaseComparisonBoundsTheFormatsOfAVersion(t *testing.T) {
 
 // 组不存在、组里没有可见成员都是 ErrReleaseGroupNotFound；单版本的专辑可以读（界面只是不提供入口）。
 func TestPostgreSQLReleaseComparisonReportsMissingAlbums(t *testing.T) {
-	fixture := newCorrectionFixture(t)
+	fixture := newEffectiveFixture(t)
 	ctx := context.Background()
 	hidden := fixture.release("Hidden only")
 	fixture.track(hidden, "Gone", "missing", 10.0)
@@ -318,4 +318,55 @@ func upper(value string) string {
 		}
 	}
 	return string(out)
+}
+
+// versionOf 造一个可见的版本：独立的组、给定的标题与年份。
+func (fixture *effectiveFixture) versionOf(title string, year int) placementRelease {
+	fixture.t.Helper()
+	release := fixture.visibleRelease(title)
+	fixture.exec(`UPDATE releases SET year=$2 WHERE id=$1::uuid`, release.releaseID, year)
+	return release
+}
+
+// setVisible 让发行有或没有可见曲目：把它唯一的曲目标成 present 或 missing。
+func (fixture *effectiveFixture) setVisible(release placementRelease, visible bool) {
+	fixture.t.Helper()
+	status := "missing"
+	if visible {
+		status = "present"
+	}
+	fixture.exec(`UPDATE tracks SET source_status=$2 WHERE medium_id=$1::uuid`, release.mediumID, status)
+}
+
+// membersOf 读取组详情里的成员顺序与生效中的默认版本。
+func (fixture *effectiveFixture) membersOf(groupID string) (order []string, detail ReleaseGroupDetail) {
+	fixture.t.Helper()
+	detail, err := fixture.store.LoadReleaseGroup(context.Background(), groupID)
+	if err != nil {
+		fixture.t.Fatalf("load group %s: %v", groupID, err)
+	}
+	for _, member := range detail.Releases {
+		order = append(order, member.ID)
+	}
+	return order, detail
+}
+
+func ptr[T any](value T) *T { return &value }
+
+// mustSetDefault 为核心读取测试准备默认版本，不调用治理流程；SQL 与治理写入使用同一条更新语句。
+// 这里仅核对测试状态，设定流程的响应与操作记录仍由治理包的集成测试验证。
+func (fixture *effectiveFixture) mustSetDefault(groupID string, expectedRevision int64, releaseID string) {
+	fixture.t.Helper()
+	fixture.exec(`UPDATE release_groups SET default_release_id=$2::uuid, edit_revision = edit_revision + 1 WHERE id=$1::uuid`, groupID, releaseID)
+	var revision int64
+	if err := fixture.database.QueryRow(`SELECT edit_revision FROM release_groups WHERE id=$1::uuid`, groupID).Scan(&revision); err != nil {
+		fixture.t.Fatalf("read group revision: %v", err)
+	}
+	var stored sql.NullString
+	if err := fixture.database.QueryRow(`SELECT default_release_id::text FROM release_groups WHERE id=$1::uuid`, groupID).Scan(&stored); err != nil {
+		fixture.t.Fatalf("read the stored default: %v", err)
+	}
+	if revision != expectedRevision+1 || !stored.Valid || stored.String != releaseID {
+		fixture.t.Fatalf("default fixture = %q at revision %d, want %q at revision %d", stored.String, revision, releaseID, expectedRevision+1)
+	}
 }

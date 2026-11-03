@@ -1,4 +1,4 @@
-package catalog
+package governance
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 )
 
@@ -148,7 +149,7 @@ func TestPostgreSQLRevertClaimRestoresWhatWasSkipped(t *testing.T) {
 	other := fixture.versionOf("新版本的同专辑版本", 2015)
 	fixture.mustChangeGroup(scenario.target.releaseID, fixture.revisionOf(scenario.target.releaseID), GroupJoin, other.groupID)
 	fixture.uncertainField(scenario.target.releaseID, "source_type", "CD", []string{"CD", "SACD"})
-	fixture.mustCorrect(scenario.target.releaseID, fixture.revisionOf(scenario.target.releaseID), map[string]CorrectionChange{"title": {Mode: CorrectionSet, Text: "新版本自己的标题"}})
+	fixture.mustCorrect(scenario.target.releaseID, fixture.revisionOf(scenario.target.releaseID), map[string]CorrectionChange{"title": {Mode: catalog.CorrectionSet, Text: "新版本自己的标题"}})
 	fixture.mustReview(scenario.target.releaseID, IssueSourceType, IssueReview)
 	before := scenario.trace(other.groupID)
 
@@ -164,7 +165,7 @@ func TestPostgreSQLRevertClaimRestoresWhatWasSkipped(t *testing.T) {
 func TestPostgreSQLRevertClaimRejectsLaterChanges(t *testing.T) {
 	for name, change := range map[string]func(*claimScenario){
 		"the new release was edited": func(scenario *claimScenario) {
-			scenario.fixture.mustCorrect(scenario.target.releaseID, scenario.fixture.revisionOf(scenario.target.releaseID), map[string]CorrectionChange{"label": {Mode: CorrectionSet, Text: "后来改的"}})
+			scenario.fixture.mustCorrect(scenario.target.releaseID, scenario.fixture.revisionOf(scenario.target.releaseID), map[string]CorrectionChange{"label": {Mode: catalog.CorrectionSet, Text: "后来改的"}})
 		},
 		"the old release was edited": func(scenario *claimScenario) {
 			scenario.fixture.exec(`UPDATE releases SET edit_revision = edit_revision + 1 WHERE id=$1::uuid`, scenario.source.releaseID)
@@ -224,7 +225,7 @@ func TestPostgreSQLClaimDescribe(t *testing.T) {
 	fixture := scenario.fixture
 	other := fixture.versionOf("新版本的同专辑版本", 2015)
 	fixture.mustChangeGroup(scenario.target.releaseID, fixture.revisionOf(scenario.target.releaseID), GroupJoin, other.groupID)
-	fixture.mustCorrect(scenario.target.releaseID, fixture.revisionOf(scenario.target.releaseID), map[string]CorrectionChange{"title": {Mode: CorrectionSet, Text: "新版本自己的标题"}})
+	fixture.mustCorrect(scenario.target.releaseID, fixture.revisionOf(scenario.target.releaseID), map[string]CorrectionChange{"title": {Mode: catalog.CorrectionSet, Text: "新版本自己的标题"}})
 	_, claim := scenario.mustClaim(t)
 	record, err := operations.Load(context.Background(), fixture.database, claim.OperationID)
 	if err != nil {

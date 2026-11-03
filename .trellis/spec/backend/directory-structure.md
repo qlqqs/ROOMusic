@@ -35,7 +35,8 @@ backend/
 │   │   └── httpapi/                # 记录一次播放、最近播放、清除
 │   ├── operations/                 # 受治理操作的共同流程：操作记录、同一操作者同一键的串行与重放、同一事务写记录、撤销与展示的 Kind 接口（不含业务表、规则与 HTTP）
 │   │   └── httpapi/                # 操作记录列表与撤销（不导入 catalog，各类型的撤销经 Kind 由 app 注入）
-│   └── catalog/                    # Release 图读取投影、修正、人工归组、默认版本、核对问题与认领的执行器、有效值视图、版本对比、问题与待认领的读取
+│   └── catalog/                    # Release 图与有效值读取投影、版本对比、修正字段词表与修正意图读取
+│       ├── governance/             # 修正、人工归组、默认版本、问题核对与认领的执行器、逆执行器及治理读取 Store
 │       ├── ingest/                 # 观察合同、扫描暂存表、身份规划、organizer、来源身份与 Release 图写入（不导入 catalog 核心）
 │       ├── internal/releasesql/    # 仅 catalog 子树可导入的共享 SQL 片段与纯格式化函数（无内部依赖）
 │       ├── metadata/               # 署名、空白规范化、有界文本、艺人名规则（叶子包）
@@ -46,11 +47,13 @@ backend/
 ```
 
 `<能力>/httpapi` 是该能力的 REST 传输层，各自提供 `Register(mux)` 注册路由；应用服务放在能力包本身
-（例如 `library.Service`、`catalog.Store`、`identity.Guard`）。
+（例如 `library.Service`、`catalog.Store`、`governance.Store`、`identity.Guard`）。
 
-C2 的 B2 将修正字段词表、修正意图类型与读取函数放在核心 `fields.go`，核心读取不再依赖治理实现文件。
-共享 SQL 片段与纯格式化函数位于 `catalog/internal/releasesql`；摘要扫描辅助类型与哨兵错误仍在核心，
-`catalog.SafeRelativeSourceRef` 保留公开入口并委托给共享实现，治理实现尚未移出 catalog 根包。
+C2 的 B3 已将治理实现移到 `catalog/governance`，其 `Store` 经 `NewStore(catalog.Queryer)` 构造；
+`catalog/httpapi` 分别持有核心与治理 Store，治理调用不再经过核心 Store。核心 `fields.go` 保留修正字段词表、
+修正意图类型与读取函数；共享 SQL 片段与纯格式化函数位于 `catalog/internal/releasesql`。
+摘要扫描辅助类型与哨兵错误仍在核心，治理继续使用核心错误而不重复定义；
+`catalog.SafeRelativeSourceRef` 保留公开入口并委托给共享实现。
 
 ## Deferred
 
@@ -69,10 +72,15 @@ C2 的 B2 将修正字段词表、修正意图类型与读取函数放在核心 
   revocation, and admin/user authorization decisions.
 - `library` owns allowed-root registration workflows, read-only source
   discovery, parsers, scan runs, diagnostics, and missing-source reconciliation.
-- `catalog` 拥有 ReleaseGroup、Release、Medium、Track 的读取投影与字段来源读取。M3 起还拥有发行字段的修正表 `release_corrections`、人工修改版本号 `releases.edit_revision`、有效值视图
-  `release_effective`，以及字段修正与人工归组的执行器和逆执行器（在 `operations.Run` 给的事务里执行，不碰鉴权、幂等与操作记录表）；
-  M4 起还拥有专辑的默认版本与版本号（`release_groups.default_release_id`、`edit_revision`）、默认版本的执行器与逆执行器，以及版本对比的读取；
-  第二项起还拥有核对表 `release_issue_reviews`、“需要关注”的三类拆分（`internal/releasesql/issues.go`）、核对的执行器与逆执行器，以及问题的读取（核对时间与操作者经 `operations.Load` 读取）；第三项起还拥有“待认领”的判定与推荐（`claims.go`）、认领的预览与执行器（`claim.go`）、它的撤销与展示（`claim_revert.go`）和待认领的读取（`claim_read.go`）。
+- `catalog` 核心拥有 ReleaseGroup、Release、Medium、Track 的读取投影与字段来源读取、有效值视图 `release_effective` 的读取、
+  组的生效默认版本与版本对比读取。`fields.go` 保存修正字段词表与修正意图读取；“需要关注”的三类表达式由
+  `internal/releasesql/issues.go` 提供，核心不依赖治理执行器。
+- `catalog/governance` 拥有发行字段修正表 `release_corrections`、人工修改版本号 `releases.edit_revision`、人工归组、
+  专辑默认版本与版本号（`release_groups.default_release_id`、`edit_revision`）、核对表 `release_issue_reviews` 的治理流程，
+  提供对应执行器与逆执行器（在 `operations.Run` 给的事务里执行，不碰鉴权、幂等与操作记录表）。
+  `governance.Store` 读取修正状态、问题及待认领信息；核对时间与操作者经 `operations.Load` 读取。
+  待认领判定与推荐位于 `governance/claims.go`，认领预览与执行器位于 `governance/claim.go`，
+  撤销与展示位于 `governance/claim_revert.go`，待认领读取位于 `governance/claim_read.go`。
 - `catalog/ingest` 拥有扫描观察合同、保守整理规则、扫描暂存表（`scan_observations`）、身份规划（曲目重绑定、Release 成员关系匹配）与 Release 图的扫描写入。
   library 经 `ingest.StageObservation` 等函数写入暂存，规划需要读文件时通过 ingest 定义的窄端口
   `ingest.Fingerprinter` 向 library 取值（library 在注册 root 内校验路径后调用 parser）。ingest 不导入 catalog 核心、library 或
@@ -88,7 +96,7 @@ C2 的 B2 将修正字段词表、修正意图类型与读取函数放在核心 
 - `search` owns query semantics and result projections while PostgreSQL remains
   the authority. It cannot write catalog truth through a search projection.
 - `operations`（M3）拥有操作记录表 `operations`、共同写入流程 `Run`（幂等键串行与重放、同键异义冲突、同一事务写记录、错误分类）与撤销、展示的 `Kind`
-  接口（M4 起目标可以是发行或专辑，列表按目标的并集筛选）；它不含业务表、规则与 HTTP，依赖只有 `platform/uuid`。业务表与版本号列留在拥有它们的能力里（catalog），各类型的撤销能力由 catalog 实现、
+  接口（M4 起目标可以是发行或专辑，列表按目标的并集筛选）；它不含业务表、规则与 HTTP，依赖只有 `platform/uuid`。业务表与版本号列留在拥有它们的能力里（catalog 子树），各类型的撤销能力由 `catalog/governance` 实现、
   经 `app` 注册给 `operations/httpapi`。Change Set、审批与执行模式尚未实现，见[治理合同](./governance-contracts.md)。
   Original sketch for later phases: Change Sets, Operation Journal events, and supported inverse actions.
 - `platform` owns mechanisms shared by the process, never feature policy.
@@ -124,10 +132,12 @@ clearly named application service, not a circular callback chain.
 每个包在 `packageRules` 中声明允许依赖的内部包，以及是否可以使用 `net/http`（能力核心 `catalog`、
 `library`、`parser` 不可以）。新增包必须先声明规则，测试才会通过；CI 的 `go test ./...` 会运行它。
 
-C2 的 B1 拆包后，`catalog/ingest` 只允许导入内部包 `catalog/metadata` 与 `platform/uuid`，不允许使用 `net/http`；
-`library` 增加对 `catalog/ingest` 的依赖。治理实现尚在 catalog 根包，`corrections.go` 仍使用 `catalog/metadata`。
-B2 新增的 `catalog/internal/releasesql` 不允许导入其他内部包，且不允许使用 `net/http`。
-核心当前允许依赖 `catalog/internal/releasesql`、`catalog/metadata`、`operations` 与 `platform/uuid`，且不导入 ingest。
+C2 的 B3 拆包后，核心 `catalog` 只允许导入内部包 `catalog/internal/releasesql` 与 `platform/uuid`，
+不导入 `operations`、`catalog/metadata`、`catalog/ingest` 或 `catalog/governance`。
+`catalog/governance` 允许导入 `catalog`、`catalog/internal/releasesql`、`catalog/metadata`、`operations` 与 `platform/uuid`；
+`catalog/httpapi` 与 `app` 增加对治理包的依赖，五种操作的撤销与展示实现由 `app` 从治理包注册。
+`catalog/ingest` 只允许导入内部包 `catalog/metadata` 与 `platform/uuid`，`library` 经它写入扫描结果。
+`catalog/internal/releasesql` 不允许导入其他内部包。核心、治理、ingest 与 releasesql 均不允许使用 `net/http`。
 
 ## File And Package Naming
 

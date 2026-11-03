@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
@@ -56,14 +57,14 @@ func (handlers *Handlers) claimRelease(responseWriter http.ResponseWriter, reque
 		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_input", message)
 		return
 	}
-	change := catalog.ClaimRequest{
+	change := governance.ClaimRequest{
 		ReleaseID: releaseID, ExpectedRevision: body.ExpectedRevision,
 		SourceID: strings.ToLower(body.SourceReleaseID), SourceRevision: body.SourceRevision, Preview: body.Preview,
 	}
 	result, err := operations.Run(request.Context(), handlers.database, operations.Spec{
 		ActorID: actor.ID, Type: operations.TypeReleaseClaim, Key: key,
 		Fingerprint: change.Fingerprint(), RequestID: request.Header.Get("X-Request-ID"),
-	}, catalog.ClaimExecutor(change))
+	}, governance.ClaimExecutor(change))
 	if err != nil {
 		handlers.writeOperationError(responseWriter, request, err)
 		return
@@ -91,7 +92,7 @@ func (handlers *Handlers) claimPreview(responseWriter http.ResponseWriter, reque
 		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_input", "不能把一个版本认领给它自己")
 		return
 	}
-	preview, err := handlers.store.PreviewClaim(request.Context(), sourceID, releaseID)
+	preview, err := handlers.governance.PreviewClaim(request.Context(), sourceID, releaseID)
 	var failure *operations.Failure
 	switch {
 	case errors.Is(err, catalog.ErrReleaseNotFound):

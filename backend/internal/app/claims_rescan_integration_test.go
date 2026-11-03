@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
@@ -28,13 +28,13 @@ type claimRescanEnvironment struct {
 	application *integrationTestApplication
 	admin       integrationTestUser
 	library     string
-	store       *catalog.Store
+	store       *governance.Store
 }
 
 func newClaimRescanEnvironment(t *testing.T, albums ...string) *claimRescanEnvironment {
 	t.Helper()
 	application := newIntegrationTestApplication(t)
-	environment := &claimRescanEnvironment{application: application, admin: application.createUser(t, "admin"), store: catalog.NewStore(application.database)}
+	environment := &claimRescanEnvironment{application: application, admin: application.createUser(t, "admin"), store: governance.NewStore(application.database)}
 	environment.library = createLibraryDirectory(t, application, "classical")
 	for index, album := range albums {
 		for number := 1; number <= 2; number++ {
@@ -135,9 +135,9 @@ func TestPostgreSQLClaimCluesSurviveARealRescan(t *testing.T) {
 		reasons          []string
 		sameFiles        int64
 	}{
-		{"replaced", replacedOld, []string{catalog.ClaimReasonSameFiles, catalog.ClaimReasonSameDirectory}, 2},
-		{"grown", grownOld, []string{catalog.ClaimReasonSameFiles, catalog.ClaimReasonSameDirectory}, 2},
-		{"renamed", renamedOld, []string{catalog.ClaimReasonSameDirectory}, 0},
+		{"replaced", replacedOld, []string{governance.ClaimReasonSameFiles, governance.ClaimReasonSameDirectory}, 2},
+		{"grown", grownOld, []string{governance.ClaimReasonSameFiles, governance.ClaimReasonSameDirectory}, 2},
+		{"renamed", renamedOld, []string{governance.ClaimReasonSameDirectory}, 0},
 	} {
 		t.Run(testCase.directory, func(t *testing.T) {
 			newID, hiddenID := environment.releaseIDs(t, testCase.directory)
@@ -176,7 +176,7 @@ type claimFlow struct {
 func newClaimFlow(t *testing.T) *claimFlow {
 	t.Helper()
 	application := newIntegrationTestApplication(t)
-	environment := &claimRescanEnvironment{application: application, admin: application.createUser(t, "admin"), store: catalog.NewStore(application.database)}
+	environment := &claimRescanEnvironment{application: application, admin: application.createUser(t, "admin"), store: governance.NewStore(application.database)}
 	environment.library = createLibraryDirectory(t, application, "classical")
 	flow := &claimFlow{environment}
 	flow.writeSet(t, "a", 10, "Old")

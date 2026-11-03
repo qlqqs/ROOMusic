@@ -1,4 +1,4 @@
-package catalog
+package governance
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 )
@@ -32,24 +33,24 @@ type correctionKind struct{}
 func (correctionKind) Type() string { return operations.TypeReleaseCorrection }
 
 // restoredIntent 校验记录里存下的前态意图并还原成写入需要的类型：JSON 里的数字是 float64，年份要还原成整数。
-func restoredIntent(field correctableField, intent *CorrectionIntent) (*CorrectionIntent, error) {
+func restoredIntent(field catalog.CorrectableField, intent *catalog.CorrectionIntent) (*catalog.CorrectionIntent, error) {
 	if intent == nil {
 		return nil, nil
 	}
 	switch {
-	case intent.Mode == CorrectionNull && intent.Value == nil:
-		return &CorrectionIntent{Mode: CorrectionNull}, nil
-	case intent.Mode != CorrectionSet:
-	case field.year:
+	case intent.Mode == catalog.CorrectionNull && intent.Value == nil:
+		return &catalog.CorrectionIntent{Mode: catalog.CorrectionNull}, nil
+	case intent.Mode != catalog.CorrectionSet:
+	case field.IsYear:
 		if year, isNumber := intent.Value.(float64); isNumber && year == float64(int(year)) && year >= 1 && year <= 9999 {
-			return &CorrectionIntent{Mode: CorrectionSet, Value: int(year)}, nil
+			return &catalog.CorrectionIntent{Mode: catalog.CorrectionSet, Value: int(year)}, nil
 		}
 	default:
 		if text, isText := intent.Value.(string); isText && text != "" {
-			return &CorrectionIntent{Mode: CorrectionSet, Value: text}, nil
+			return &catalog.CorrectionIntent{Mode: catalog.CorrectionSet, Value: text}, nil
 		}
 	}
-	return nil, fmt.Errorf("recorded correction for %s is malformed", field.name)
+	return nil, fmt.Errorf("recorded correction for %s is malformed", field.Name)
 }
 
 // Revert 把被这条修正改过的字段恢复成它之前的意图（没有修正、设值或设空），清除修正后显示的是当前的扫描值。
@@ -65,7 +66,7 @@ func (correctionKind) Revert(ctx context.Context, tx *sql.Tx, operationID string
 	if err := json.Unmarshal(original.Before, &recorded); err != nil {
 		return operations.Outcome{}, fmt.Errorf("decode recorded correction state: %w", err)
 	}
-	current, err := loadCorrectionIntents(ctx, tx, original.TargetID)
+	current, err := catalog.LoadCorrectionIntents(ctx, tx, original.TargetID)
 	if err != nil {
 		return operations.Outcome{}, err
 	}
@@ -74,10 +75,10 @@ func (correctionKind) Revert(ctx context.Context, tx *sql.Tx, operationID string
 		return operations.Outcome{}, err
 	}
 
-	before := correctionRecordState{Fields: map[string]*CorrectionIntent{}, Effective: map[string]any{}}
-	after := correctionRecordState{Fields: map[string]*CorrectionIntent{}, Effective: map[string]any{}}
-	for index, field := range correctableFields {
-		intent, wasChanged := recorded.Fields[field.name]
+	before := correctionRecordState{Fields: map[string]*catalog.CorrectionIntent{}, Effective: map[string]any{}}
+	after := correctionRecordState{Fields: map[string]*catalog.CorrectionIntent{}, Effective: map[string]any{}}
+	for index, field := range catalog.CorrectableFields {
+		intent, wasChanged := recorded.Fields[field.Name]
 		if !wasChanged {
 			continue
 		}
@@ -85,13 +86,13 @@ func (correctionKind) Revert(ctx context.Context, tx *sql.Tx, operationID string
 		if err != nil {
 			return operations.Outcome{}, err
 		}
-		if now, has := current[field.name]; has {
-			before.Fields[field.name] = &now
+		if now, has := current[field.Name]; has {
+			before.Fields[field.Name] = &now
 		} else {
-			before.Fields[field.name] = nil
+			before.Fields[field.Name] = nil
 		}
-		before.Effective[field.name] = effectiveBefore[index]
-		after.Fields[field.name] = restored
+		before.Effective[field.Name] = effectiveBefore[index]
+		after.Fields[field.Name] = restored
 		if err := writeIntent(ctx, tx, original.TargetID, field, restored, operationID); err != nil {
 			return operations.Outcome{}, err
 		}
@@ -103,9 +104,9 @@ func (correctionKind) Revert(ctx context.Context, tx *sql.Tx, operationID string
 	if err != nil {
 		return operations.Outcome{}, err
 	}
-	for index, field := range correctableFields {
-		if _, restoredField := after.Fields[field.name]; restoredField {
-			after.Effective[field.name] = effectiveAfter[index]
+	for index, field := range catalog.CorrectableFields {
+		if _, restoredField := after.Fields[field.Name]; restoredField {
+			after.Effective[field.Name] = effectiveAfter[index]
 		}
 	}
 	return operations.Outcome{
@@ -123,8 +124,8 @@ type correctionFieldChange struct {
 }
 
 type correctionFieldState struct {
-	Correction *CorrectionIntent `json:"correction"`
-	Effective  any               `json:"effective"`
+	Correction *catalog.CorrectionIntent `json:"correction"`
+	Effective  any                       `json:"effective"`
 }
 
 func (correctionKind) Describe(ctx context.Context, database operations.Queryer, records []operations.Record) (map[string]operations.Description, error) {
@@ -138,12 +139,12 @@ func (correctionKind) Describe(ctx context.Context, database operations.Queryer,
 		var before, after correctionRecordState
 		if json.Unmarshal(record.Before, &before) == nil && json.Unmarshal(record.After, &after) == nil {
 			fields := []correctionFieldChange{}
-			for _, field := range correctableFields {
-				if _, changed := after.Fields[field.name]; changed {
+			for _, field := range catalog.CorrectableFields {
+				if _, changed := after.Fields[field.Name]; changed {
 					fields = append(fields, correctionFieldChange{
-						Field:  field.name,
-						Before: correctionFieldState{Correction: before.Fields[field.name], Effective: before.Effective[field.name]},
-						After:  correctionFieldState{Correction: after.Fields[field.name], Effective: after.Effective[field.name]},
+						Field:  field.Name,
+						Before: correctionFieldState{Correction: before.Fields[field.Name], Effective: before.Effective[field.Name]},
+						After:  correctionFieldState{Correction: after.Fields[field.Name], Effective: after.Effective[field.Name]},
 					})
 				}
 			}

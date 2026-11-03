@@ -20,8 +20,8 @@ const (
 	maxReleaseCredits      = 100
 	maxTrackCredits        = 100
 	maxReleaseTrackCredits = 10000
-	maxReleaseEvidence     = 100
-	maxEvidenceSourceRefs  = 100
+	MaxReleaseEvidence     = 100
+	MaxEvidenceSourceRefs  = 100
 	legacyCandidateKind    = "legacy"
 	// releaseSearchPredicate 是 Release 搜索的命中条件（参数 $1 已转义 LIKE 通配符）：标题、艺人、专辑艺人，
 	// 或任一 present 曲目的标题。/releases 与 /release-groups 共用它，保证搜索语义一致。
@@ -336,14 +336,14 @@ func (s *Store) LoadReleaseCredits(ctx context.Context, releaseID string) ([]Rel
 }
 
 func (s *Store) LoadReleaseEvidenceSummary(ctx context.Context, releaseID string) ([]ReleaseEvidenceSummary, error) {
-	rows, err := s.database.QueryContext(ctx, `SELECT field_key,selected_source,confidence,action,rule_id FROM release_field_decisions WHERE release_id=$1::uuid ORDER BY field_key LIMIT $2`, releaseID, maxReleaseEvidence+1)
+	rows, err := s.database.QueryContext(ctx, `SELECT field_key,selected_source,confidence,action,rule_id FROM release_field_decisions WHERE release_id=$1::uuid ORDER BY field_key LIMIT $2`, releaseID, MaxReleaseEvidence+1)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	evidence := make([]ReleaseEvidenceSummary, 0)
 	for rows.Next() {
-		if len(evidence) == maxReleaseEvidence {
+		if len(evidence) == MaxReleaseEvidence {
 			return nil, errors.New("release evidence projection exceeds bound")
 		}
 		var item ReleaseEvidenceSummary
@@ -365,12 +365,12 @@ func (s *Store) LoadReleaseEvidence(ctx context.Context, releaseID string) (Rele
 		FROM release_field_decisions
 		WHERE release_id=$1::uuid
 		ORDER BY field_key
-		LIMIT $2`, releaseID, maxReleaseEvidence+1)
+		LIMIT $2`, releaseID, MaxReleaseEvidence+1)
 	if err != nil {
 		return ReleaseEvidence{}, err
 	}
 	for rows.Next() {
-		if len(result.Fields) == maxReleaseEvidence {
+		if len(result.Fields) == MaxReleaseEvidence {
 			result.Truncated = true
 			break
 		}
@@ -419,7 +419,7 @@ func (s *Store) LoadReleaseEvidence(ctx context.Context, releaseID string) (Rele
 		return ReleaseEvidence{}, err
 	}
 	grouping.CandidateKind = normalizeCandidateKind(grouping.CandidateKind)
-	sourceRefs, truncated, err := releasesql.DecodeBoundedStringArray(sourceRefsJSON, maxEvidenceSourceRefs, true)
+	sourceRefs, truncated, err := releasesql.DecodeBoundedStringArray(sourceRefsJSON, MaxEvidenceSourceRefs, true)
 	if err != nil {
 		return ReleaseEvidence{}, err
 	}
@@ -432,22 +432,22 @@ func (s *Store) LoadReleaseEvidence(ctx context.Context, releaseID string) (Rele
 }
 
 func scanReleaseSummary(row interface{ Scan(...any) error }) (ReleaseSummary, error) {
-	var columns releaseSummaryColumns
-	if err := row.Scan(columns.targets()...); err != nil {
+	var columns ReleaseSummaryColumns
+	if err := row.Scan(columns.ScanTargets()...); err != nil {
 		return ReleaseSummary{}, err
 	}
-	return columns.summary()
+	return columns.Summary()
 }
 
-// releaseSummaryColumns 收集 releasesql.ReleaseSummaryProjection 的原始列。targets 给出 Scan 的目标（调用方可以在后面追加自己的列），
-// summary 再解释 nullable 列并校验封面；列表、详情与按组投影都经过它，只有一处解释这些列。
-type releaseSummaryColumns struct {
+// ReleaseSummaryColumns 收集 releasesql.ReleaseSummaryProjection 的原始列。ScanTargets 给出 Scan 的目标（调用方可以在后面追加自己的列），
+// Summary 再解释 nullable 列并校验封面；列表、详情与按组投影都经过它，只有一处解释这些列。
+type ReleaseSummaryColumns struct {
 	result                                                             ReleaseSummary
 	albumArtist, sourceType, mediaType, artworkResourceID, artworkMIME sql.NullString
 	year, artworkWidth, artworkHeight                                  sql.NullInt64
 }
 
-func (columns *releaseSummaryColumns) targets() []any {
+func (columns *ReleaseSummaryColumns) ScanTargets() []any {
 	return []any{
 		&columns.result.ID,
 		&columns.result.Title,
@@ -466,7 +466,7 @@ func (columns *releaseSummaryColumns) targets() []any {
 	}
 }
 
-func (columns *releaseSummaryColumns) summary() (ReleaseSummary, error) {
+func (columns *ReleaseSummaryColumns) Summary() (ReleaseSummary, error) {
 	result := columns.result
 	result.AlbumArtist = releasesql.StringPointerFromNull(columns.albumArtist)
 	result.Year = releasesql.IntPointerFromNull(columns.year)

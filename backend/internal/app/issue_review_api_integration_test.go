@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
@@ -28,13 +28,13 @@ func unreviewBody(revision int64, issue string) map[string]any {
 // issueEnvironment 在 groupEnvironment 的基础上给 A 加上可以核对的问题：同一目录的归组冲突与一首缺失曲目。
 type issueEnvironment struct {
 	*groupEnvironment
-	store *catalog.Store
+	store *governance.Store
 }
 
 func newIssueEnvironment(t *testing.T) *issueEnvironment {
 	t.Helper()
 	environment := &issueEnvironment{groupEnvironment: newGroupEnvironment(t)}
-	environment.store = catalog.NewStore(environment.application.database)
+	environment.store = governance.NewStore(environment.application.database)
 	mustExec(t, environment.application, `INSERT INTO release_grouping_evidence(release_id,candidate_kind,rule_id,source_refs,reason) VALUES($1::uuid,'same_dir_split','organizer_v2','["a/01.flac","a/02.flac"]','same_directory_conflict')`, environment.a)
 	mustExec(t, environment.application, `INSERT INTO tracks(id,medium_id,position,title,artist,disc_number,source_root_id,relative_path,source_status,observed_at,source_kind)
 		SELECT $2::uuid, media.id, 9, 'Missing', 'Artist A', 1, $3::uuid, 'a/09.flac', 'missing', NOW(), 'physical' FROM media WHERE media.release_id=$1::uuid`, environment.a, uuid.New(), environment.rootID)
@@ -279,7 +279,7 @@ func TestPostgreSQLIssueReviewsSurviveARealRescan(t *testing.T) {
 	}
 	runScan(t, application, &admin)
 
-	store := catalog.NewStore(application.database)
+	store := governance.NewStore(application.database)
 	// idOf 返回这个标题唯一的可见发行（重扫可能留下同名但不可见的旧发行）。
 	idOf := func(title string) string {
 		t.Helper()
@@ -301,7 +301,7 @@ func TestPostgreSQLIssueReviewsSurviveARealRescan(t *testing.T) {
 	}
 	review := func(releaseID, issue string) {
 		t.Helper()
-		var detail catalog.ReleaseIssues
+		var detail governance.ReleaseIssues
 		getJSON(t, application, &admin, "/api/v1/releases/"+releaseID+"/issues", &detail)
 		token := ""
 		switch issue {
@@ -364,7 +364,7 @@ func TestPostgreSQLIssueReviewsSurviveARealRescan(t *testing.T) {
 		t.Fatalf("after the basis changed: %d, %d; want everything counted again: %d, %d", attentionOf(albumOne), attentionOf(suites), beforeOne, beforeSuites)
 	}
 	// 详情说明“核对之后情况变了”：三类问题都回到待处理，核对行还在。
-	var stale catalog.ReleaseIssues
+	var stale governance.ReleaseIssues
 	getJSON(t, application, &admin, "/api/v1/releases/"+suites+"/issues", &stale)
 	for _, field := range stale.Fields {
 		if field.Field == "media_type" && (field.Status != "open" || field.Review == nil) {
@@ -420,9 +420,9 @@ func TestPostgreSQLIssueReadAPI(t *testing.T) {
 				ID             string `json:"id"`
 				AttentionCount int64  `json:"attention_count"`
 			} `json:"release"`
-			Open catalog.IssueCounts `json:"open"`
+			Open governance.IssueCounts `json:"open"`
 		} `json:"items"`
-		Summary    catalog.IssueSummary `json:"summary"`
+		Summary    governance.IssueSummary `json:"summary"`
 		Pagination struct {
 			Total int64 `json:"total"`
 		} `json:"pagination"`
@@ -436,12 +436,12 @@ func TestPostgreSQLIssueReadAPI(t *testing.T) {
 			t.Fatalf("%s: open %+v does not sum to attention_count %d", item.Release.ID, item.Open, item.Release.AttentionCount)
 		}
 	}
-	if listing.Summary.Open != (catalog.IssueSummaryCounts{All: 2, Fields: 2, Grouping: 1, MissingTracks: 1}) {
+	if listing.Summary.Open != (governance.IssueSummaryCounts{All: 2, Fields: 2, Grouping: 1, MissingTracks: 1}) {
 		t.Fatalf("summary = %+v", listing.Summary)
 	}
 
 	// 详情的令牌就是核对要带回的令牌；核对之后带上核对人的用户名。
-	var detail catalog.ReleaseIssues
+	var detail governance.ReleaseIssues
 	getJSON(t, application, &environment.admin, "/api/v1/releases/"+environment.a+"/issues", &detail)
 	if detail.Grouping == nil || detail.Grouping.Basis != environment.token(t, environment.a, "grouping") || detail.MissingTracks == nil || detail.MissingTracks.Count != 1 {
 		t.Fatalf("detail = %+v", detail)

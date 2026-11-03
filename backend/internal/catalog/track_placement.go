@@ -89,12 +89,12 @@ func (s *Store) LoadTrackPlacements(ctx context.Context, trackIDs []string) (map
 	defer releaseRows.Close()
 	releases := make(map[string]releaseRow, len(releaseIDs))
 	for releaseRows.Next() {
-		var columns releaseSummaryColumns
+		var columns ReleaseSummaryColumns
 		var groupID string
-		if err := releaseRows.Scan(append(columns.targets(), &groupID)...); err != nil {
+		if err := releaseRows.Scan(append(columns.ScanTargets(), &groupID)...); err != nil {
 			return nil, fmt.Errorf("load track placements: %w", err)
 		}
-		summary, err := columns.summary()
+		summary, err := columns.Summary()
 		if err != nil {
 			return nil, fmt.Errorf("load track placements: %w", err)
 		}

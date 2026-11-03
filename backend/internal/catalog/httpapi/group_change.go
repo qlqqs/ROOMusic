@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
@@ -43,21 +43,21 @@ func (handlers *Handlers) changeReleaseGroup(responseWriter http.ResponseWriter,
 	case body.ExpectedRevision < 1:
 		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_input", "版本号无效")
 		return
-	case body.Action == catalog.GroupJoin && !uuid.Valid(body.GroupID):
+	case body.Action == governance.GroupJoin && !uuid.Valid(body.GroupID):
 		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_input", "目标专辑标识无效")
 		return
-	case body.Action == catalog.GroupDetach && body.GroupID != "":
+	case body.Action == governance.GroupDetach && body.GroupID != "":
 		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_input", "移出为独立专辑时不需要目标专辑")
 		return
-	case body.Action != catalog.GroupJoin && body.Action != catalog.GroupDetach:
+	case body.Action != governance.GroupJoin && body.Action != governance.GroupDetach:
 		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_input", "归组动作无效")
 		return
 	}
-	change := catalog.GroupChangeRequest{ReleaseID: releaseID, ExpectedRevision: body.ExpectedRevision, Action: body.Action, GroupID: strings.ToLower(body.GroupID)}
+	change := governance.GroupChangeRequest{ReleaseID: releaseID, ExpectedRevision: body.ExpectedRevision, Action: body.Action, GroupID: strings.ToLower(body.GroupID)}
 	result, err := operations.Run(request.Context(), handlers.database, operations.Spec{
 		ActorID: actor.ID, Type: operations.TypeReleaseGroupChange, Key: key,
 		Fingerprint: change.Fingerprint(), RequestID: request.Header.Get("X-Request-ID"),
-	}, catalog.GroupChangeExecutor(change))
+	}, governance.GroupChangeExecutor(change))
 	if err != nil {
 		handlers.writeOperationError(responseWriter, request, err)
 		return

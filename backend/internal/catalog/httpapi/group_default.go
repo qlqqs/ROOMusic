@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
@@ -52,11 +52,11 @@ func (handlers *Handlers) setReleaseGroupDefault(responseWriter http.ResponseWri
 		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_input", message)
 		return
 	}
-	change := catalog.GroupDefaultRequest{GroupID: strings.ToLower(groupID), ExpectedRevision: body.ExpectedRevision, ReleaseID: releaseID}
+	change := governance.GroupDefaultRequest{GroupID: strings.ToLower(groupID), ExpectedRevision: body.ExpectedRevision, ReleaseID: releaseID}
 	result, err := operations.Run(request.Context(), handlers.database, operations.Spec{
 		ActorID: actor.ID, Type: operations.TypeReleaseGroupDefault, Key: key,
 		Fingerprint: change.Fingerprint(), RequestID: request.Header.Get("X-Request-ID"),
-	}, catalog.GroupDefaultExecutor(change))
+	}, governance.GroupDefaultExecutor(change))
 	if err != nil {
 		handlers.writeOperationError(responseWriter, request, err)
 		return

@@ -1,4 +1,4 @@
-package catalog
+package governance
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
@@ -40,16 +41,16 @@ func (fixture *correctionFixture) intentOf(releaseID, field string) string {
 	switch {
 	case !has:
 		return "none"
-	case intent.Mode == CorrectionNull:
+	case intent.Mode == catalog.CorrectionNull:
 		return "null"
 	default:
 		return fmt.Sprintf("set:%v", intent.Value)
 	}
 }
 
-func mustIntents(fixture *correctionFixture, releaseID string) map[string]CorrectionIntent {
+func mustIntents(fixture *correctionFixture, releaseID string) map[string]catalog.CorrectionIntent {
 	fixture.t.Helper()
-	intents, err := loadCorrectionIntents(context.Background(), fixture.database, releaseID)
+	intents, err := catalog.LoadCorrectionIntents(context.Background(), fixture.database, releaseID)
 	if err != nil {
 		fixture.t.Fatalf("load correction intents: %v", err)
 	}
@@ -68,8 +69,8 @@ func TestPostgreSQLRevertRestoresEveryPreviousCorrectionIntent(t *testing.T) {
 		name    string
 		intents []intent
 	}{
-		{"genre", []intent{{"none", CorrectionChange{Mode: CorrectionClear}}, {"set:古典", CorrectionChange{Mode: CorrectionSet, Text: "古典"}}, {"set:爵士", CorrectionChange{Mode: CorrectionSet, Text: "爵士"}}, {"null", CorrectionChange{Mode: CorrectionNull}}}},
-		{"year", []intent{{"none", CorrectionChange{Mode: CorrectionClear}}, {"set:1975", CorrectionChange{Mode: CorrectionSet, Year: 1975}}, {"set:1999", CorrectionChange{Mode: CorrectionSet, Year: 1999}}, {"null", CorrectionChange{Mode: CorrectionNull}}}},
+		{"genre", []intent{{"none", CorrectionChange{Mode: catalog.CorrectionClear}}, {"set:古典", CorrectionChange{Mode: catalog.CorrectionSet, Text: "古典"}}, {"set:爵士", CorrectionChange{Mode: catalog.CorrectionSet, Text: "爵士"}}, {"null", CorrectionChange{Mode: catalog.CorrectionNull}}}},
+		{"year", []intent{{"none", CorrectionChange{Mode: catalog.CorrectionClear}}, {"set:1975", CorrectionChange{Mode: catalog.CorrectionSet, Year: 1975}}, {"set:1999", CorrectionChange{Mode: catalog.CorrectionSet, Year: 1999}}, {"null", CorrectionChange{Mode: catalog.CorrectionNull}}}},
 	} {
 		for _, from := range field.intents {
 			for _, to := range field.intents {
@@ -80,7 +81,7 @@ func TestPostgreSQLRevertRestoresEveryPreviousCorrectionIntent(t *testing.T) {
 					release := fixture.visibleRelease(field.name + from.name + to.name)
 					fixture.exec(`UPDATE releases SET genre='扫描流派', year=2001 WHERE id=$1::uuid`, release.releaseID)
 					revision := int64(1)
-					if from.change.Mode != CorrectionClear {
+					if from.change.Mode != catalog.CorrectionClear {
 						revision = fixture.mustCorrect(release.releaseID, revision, map[string]CorrectionChange{field.name: from.change}).Revision
 					}
 					before := fixture.intentOf(release.releaseID, field.name)
@@ -117,8 +118,8 @@ func TestPostgreSQLRevertOnlyTouchesTheFieldsTheOperationChanged(t *testing.T) {
 	release := fixture.visibleRelease("原标题")
 	fixture.exec(`UPDATE releases SET genre='扫描流派', year=2001 WHERE id=$1::uuid`, release.releaseID)
 
-	first := fixture.mustCorrect(release.releaseID, 1, map[string]CorrectionChange{"title": {Mode: CorrectionSet, Text: "新标题"}, "year": {Mode: CorrectionSet, Year: 1975}})
-	second := fixture.mustCorrect(release.releaseID, first.Revision, map[string]CorrectionChange{"genre": {Mode: CorrectionNull}})
+	first := fixture.mustCorrect(release.releaseID, 1, map[string]CorrectionChange{"title": {Mode: catalog.CorrectionSet, Text: "新标题"}, "year": {Mode: catalog.CorrectionSet, Year: 1975}})
+	second := fixture.mustCorrect(release.releaseID, first.Revision, map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionNull}})
 
 	// 只有最近一次修改可以撤销：先撤销第一次会被拒绝，不覆盖第二次。
 	if _, err := fixture.revert(kind, first.OperationID); err == nil {
@@ -161,7 +162,7 @@ func TestPostgreSQLRevertToNoCorrectionShowsTheCurrentScannedValue(t *testing.T)
 	fixture := newCorrectionFixture(t)
 	kind := CorrectionOperations()
 	release := fixture.visibleRelease("原标题")
-	applied := fixture.mustCorrect(release.releaseID, 1, map[string]CorrectionChange{"title": {Mode: CorrectionSet, Text: "人工标题"}})
+	applied := fixture.mustCorrect(release.releaseID, 1, map[string]CorrectionChange{"title": {Mode: catalog.CorrectionSet, Text: "人工标题"}})
 	fixture.exec(`UPDATE releases SET title='重扫后的标题' WHERE id=$1::uuid`, release.releaseID) // 模拟重扫
 	fixture.mustRevert(kind, applied.OperationID)
 	if got := mustState(t, fixture, release.releaseID); fieldOf(t, got, "title").EffectiveValue != "重扫后的标题" || fieldOf(t, got, "title").Correction != nil {
@@ -175,14 +176,14 @@ func TestPostgreSQLRevertIsRefusedAfterLaterEditsOrWhenTheTargetIsHidden(t *test
 	alpha, beta := fixture.versionOf("Alpha", 2000), fixture.versionOf("Beta", 2005)
 
 	// 字段修正与归组共用版本号：归组之后不能撤销之前的修正；修正之后不能撤销之前的归组。
-	corrected := fixture.mustCorrect(alpha.releaseID, 1, map[string]CorrectionChange{"genre": {Mode: CorrectionSet, Text: "古典"}})
+	corrected := fixture.mustCorrect(alpha.releaseID, 1, map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionSet, Text: "古典"}})
 	_, joined := fixture.mustChangeGroup(alpha.releaseID, corrected.Revision, GroupJoin, beta.groupID)
 	if _, err := fixture.revert(correction, corrected.OperationID); err == nil {
 		t.Fatal("a correction was reverted after a later group change")
 	} else if status, code := revertProblem(err); status != 409 || code != "revert_conflict" {
 		t.Fatalf("error = %v (status %d, code %q), want revert_conflict", err, status, code)
 	}
-	later := fixture.mustCorrect(alpha.releaseID, corrected.Revision+1, map[string]CorrectionChange{"genre": {Mode: CorrectionNull}})
+	later := fixture.mustCorrect(alpha.releaseID, corrected.Revision+1, map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionNull}})
 	if _, err := fixture.revert(groupChange, joined.OperationID); err == nil {
 		t.Fatal("a group change was reverted after a later correction")
 	} else if status, code := revertProblem(err); status != 409 || code != "revert_conflict" {
@@ -270,7 +271,7 @@ func TestPostgreSQLDescribeReportsTargetsChangesAndRevertibility(t *testing.T) {
 	correctionKind, groupKind := CorrectionOperations(), GroupChangeOperations()
 	alpha, beta := fixture.versionOf("Alpha", 2000), fixture.versionOf("Beta", 2005)
 
-	corrected := fixture.mustCorrect(alpha.releaseID, 1, map[string]CorrectionChange{"title": {Mode: CorrectionSet, Text: "Alpha (corrected)"}, "year": {Mode: CorrectionNull}})
+	corrected := fixture.mustCorrect(alpha.releaseID, 1, map[string]CorrectionChange{"title": {Mode: catalog.CorrectionSet, Text: "Alpha (corrected)"}, "year": {Mode: catalog.CorrectionNull}})
 	_, joined := fixture.mustChangeGroup(alpha.releaseID, corrected.Revision, GroupJoin, beta.groupID)
 
 	load := func(operationID string) operations.Record {
@@ -298,12 +299,12 @@ func TestPostgreSQLDescribeReportsTargetsChangesAndRevertibility(t *testing.T) {
 		Fields []struct {
 			Field  string `json:"field"`
 			Before struct {
-				Correction *CorrectionIntent `json:"correction"`
-				Effective  any               `json:"effective"`
+				Correction *catalog.CorrectionIntent `json:"correction"`
+				Effective  any                       `json:"effective"`
 			} `json:"before"`
 			After struct {
-				Correction *CorrectionIntent `json:"correction"`
-				Effective  any               `json:"effective"`
+				Correction *catalog.CorrectionIntent `json:"correction"`
+				Effective  any                       `json:"effective"`
 			} `json:"after"`
 		} `json:"fields"`
 	}

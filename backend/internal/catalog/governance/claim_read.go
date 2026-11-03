@@ -1,4 +1,4 @@
-package catalog
+package governance
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
 )
 
@@ -88,7 +89,7 @@ const claimEntrySource = ` FROM ` + releasesql.ReleaseSource + ` LEFT JOIN libra
 
 // albumTitleOf 返回一个组的标题：组里一个发行的有效标题，先取可见成员里按代表版本规则排第一的，没有可见成员就取最早创建的成员。
 // excluding 是不参与取名的发行（旧版本自己）：它的名字已经显示在行的标题里，专辑的名字要取别的成员的。
-func albumTitleOf(ctx context.Context, database Queryer, groupID, excluding string) (string, error) {
+func albumTitleOf(ctx context.Context, database catalog.Queryer, groupID, excluding string) (string, error) {
 	var title string
 	err := database.QueryRowContext(ctx, `SELECT releases.title FROM `+releasesql.ReleaseSource+` WHERE releases.group_id=$1::uuid AND releases.id<>$2::uuid
 		ORDER BY (CASE WHEN `+releasesql.ReleaseVisiblePredicate+` THEN 0 ELSE 1 END), `+releasesql.ReleaseGroupMemberOrder+`, releases.created_at, releases.id LIMIT 1`, groupID, excluding).Scan(&title)
@@ -119,7 +120,7 @@ func identifiers(joined string) []string {
 }
 
 // finish 解释 nullable 列，补上专辑与位置；album 只在组里有别的发行时有。
-func (columns *claimEntryColumns) finish(ctx context.Context, database Queryer) (ClaimEntry, error) {
+func (columns *claimEntryColumns) finish(ctx context.Context, database catalog.Queryer) (ClaimEntry, error) {
 	entry := columns.entry
 	entry.Release.Year = releasesql.IntPointerFromNull(columns.year)
 	entry.Release.Edition = releasesql.StringPointerFromNull(columns.edition)
@@ -155,12 +156,12 @@ func claimLocation(rootName, directory sql.NullString) (string, string) {
 func (s *Store) ListClaims(ctx context.Context, params ClaimListParams) (ClaimPage, error) {
 	page := ClaimPage{Items: []ClaimEntry{}}
 	if err := s.database.QueryRowContext(ctx, `SELECT COUNT(*) FROM `+releasesql.ReleaseSource+` WHERE `+releaseClaimablePredicate).Scan(&page.Total); err != nil {
-		return ClaimPage{}, fmt.Errorf("%w: count claims: %w", ErrQuery, err)
+		return ClaimPage{}, fmt.Errorf("%w: count claims: %w", catalog.ErrQuery, err)
 	}
 	rows, err := s.database.QueryContext(ctx, `SELECT `+claimEntryProjection+claimEntrySource+` WHERE `+releaseClaimablePredicate+`
 		ORDER BY `+claimLastSeen+` DESC, releases.id LIMIT $1 OFFSET $2`, params.PageSize, (params.Page-1)*params.PageSize)
 	if err != nil {
-		return ClaimPage{}, fmt.Errorf("%w: list claims: %w", ErrQuery, err)
+		return ClaimPage{}, fmt.Errorf("%w: list claims: %w", catalog.ErrQuery, err)
 	}
 	defer rows.Close()
 	var all []claimEntryColumns
@@ -187,9 +188,9 @@ func (s *Store) ListClaims(ctx context.Context, params ClaimListParams) (ClaimPa
 
 // ClaimCorrection 是旧版本上的一个字段修正：字段、修正意图与扫描值。
 type ClaimCorrection struct {
-	Field      string           `json:"field"`
-	Correction CorrectionIntent `json:"correction"`
-	ScanValue  any              `json:"scan_value"`
+	Field      string                   `json:"field"`
+	Correction catalog.CorrectionIntent `json:"correction"`
+	ScanValue  any                      `json:"scan_value"`
 }
 
 // ClaimAlbumDetail 是旧版本原来所在的专辑里的别的发行：标题、是否可见。
@@ -246,10 +247,10 @@ func (s *Store) LoadClaim(ctx context.Context, releaseID string) (ClaimDetail, e
 	err := s.database.QueryRowContext(ctx, `SELECT `+claimEntryProjection+`, releases.edit_revision`+claimEntrySource+` WHERE releases.id=$1::uuid AND `+releaseClaimablePredicate, releaseID).
 		Scan(append(columns.targets(), &revision)...)
 	if errors.Is(err, sql.ErrNoRows) {
-		return ClaimDetail{}, ErrReleaseNotFound
+		return ClaimDetail{}, catalog.ErrReleaseNotFound
 	}
 	if err != nil {
-		return ClaimDetail{}, fmt.Errorf("%w: load claim: %w", ErrQuery, err)
+		return ClaimDetail{}, fmt.Errorf("%w: load claim: %w", catalog.ErrQuery, err)
 	}
 	entry, err := columns.finish(ctx, s.database)
 	if err != nil {
@@ -258,7 +259,7 @@ func (s *Store) LoadClaim(ctx context.Context, releaseID string) (ClaimDetail, e
 	detail := ClaimDetail{ClaimEntry: entry, Revision: revision,
 		Corrections: []ClaimCorrection{}, Siblings: []ClaimAlbumSibling{}, DefaultOf: []ClaimAlbumRef{}, Reviews: []ClaimReviewDetail{}}
 
-	intents, err := loadCorrectionIntents(ctx, s.database, releaseID)
+	intents, err := catalog.LoadCorrectionIntents(ctx, s.database, releaseID)
 	if err != nil {
 		return ClaimDetail{}, err
 	}
@@ -266,9 +267,9 @@ func (s *Store) LoadClaim(ctx context.Context, releaseID string) (ClaimDetail, e
 	if err != nil {
 		return ClaimDetail{}, err
 	}
-	for index, field := range correctableFields {
-		if intent, ok := intents[field.name]; ok {
-			detail.Corrections = append(detail.Corrections, ClaimCorrection{Field: field.name, Correction: intent, ScanValue: scanned[index]})
+	for index, field := range catalog.CorrectableFields {
+		if intent, ok := intents[field.Name]; ok {
+			detail.Corrections = append(detail.Corrections, ClaimCorrection{Field: field.Name, Correction: intent, ScanValue: scanned[index]})
 		}
 	}
 	siblings, err := s.database.QueryContext(ctx, `SELECT releases.id::text, releases.title, `+releasesql.ReleaseVisiblePredicate+` FROM `+releasesql.ReleaseSource+`
@@ -353,10 +354,10 @@ func (s *Store) LoadClaimHints(ctx context.Context, releaseID string) ([]ClaimHi
 	var visible bool
 	err := s.database.QueryRowContext(ctx, `SELECT `+releasesql.ReleaseVisiblePredicate+` FROM releases WHERE releases.id = $1::uuid`, releaseID).Scan(&visible)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && !visible) {
-		return nil, ErrReleaseNotFound
+		return nil, catalog.ErrReleaseNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("%w: claim hints: %w", ErrQuery, err)
+		return nil, fmt.Errorf("%w: claim hints: %w", catalog.ErrQuery, err)
 	}
 	rows, err := s.database.QueryContext(ctx, `
 		WITH target AS (
@@ -375,7 +376,7 @@ func (s *Store) LoadClaimHints(ctx context.Context, releaseID string) ([]ClaimHi
 		  )
 		ORDER BY `+claimLastSeen+` DESC, releases.id LIMIT $2`, releaseID, maxClaimHints)
 	if err != nil {
-		return nil, fmt.Errorf("%w: claim hints: %w", ErrQuery, err)
+		return nil, fmt.Errorf("%w: claim hints: %w", catalog.ErrQuery, err)
 	}
 	defer rows.Close()
 	hints := []ClaimHint{}

@@ -1,4 +1,4 @@
-package catalog
+package governance
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
@@ -49,7 +50,7 @@ func newVisibleClaimScenario(t *testing.T) *claimScenario {
 	scenario := &claimScenario{fixture: fixture, source: source, sibling: sibling, target: target}
 
 	fixture.mustCorrect(source.releaseID, 1, map[string]CorrectionChange{
-		"title": {Mode: CorrectionSet, Text: "我改过的标题"}, "genre": {Mode: CorrectionSet, Text: "古典"}})
+		"title": {Mode: catalog.CorrectionSet, Text: "我改过的标题"}, "genre": {Mode: catalog.CorrectionSet, Text: "古典"}})
 	fixture.mustReview(source.releaseID, IssueSourceType, IssueReview)
 	fixture.mustReview(source.releaseID, IssueGrouping, IssueReview)
 	scenario.album = sibling.groupID
@@ -60,7 +61,7 @@ func newVisibleClaimScenario(t *testing.T) *claimScenario {
 
 func (scenario *claimScenario) preview(t *testing.T) ClaimPreview {
 	t.Helper()
-	preview, err := scenario.fixture.store.PreviewClaim(context.Background(), scenario.source.releaseID, scenario.target.releaseID)
+	preview, err := scenario.fixture.governance.PreviewClaim(context.Background(), scenario.source.releaseID, scenario.target.releaseID)
 	if err != nil {
 		t.Fatalf("preview the claim: %v", err)
 	}
@@ -121,7 +122,7 @@ func itemsOf(items []ClaimItem, album string) []string {
 }
 
 func (scenario *claimScenario) correctionFields(releaseID string) []string {
-	intents, err := loadCorrectionIntents(context.Background(), scenario.fixture.database, releaseID)
+	intents, err := catalog.LoadCorrectionIntents(context.Background(), scenario.fixture.database, releaseID)
 	if err != nil {
 		scenario.fixture.t.Fatalf("read corrections: %v", err)
 	}
@@ -262,7 +263,7 @@ func TestPostgreSQLClaimKeepsWhatTheNewReleaseAlreadyHas(t *testing.T) {
 	other := fixture.versionOf("新版本的同专辑版本", 2015)
 	fixture.mustChangeGroup(scenario.target.releaseID, fixture.revisionOf(scenario.target.releaseID), GroupJoin, other.groupID)
 	fixture.uncertainField(scenario.target.releaseID, "source_type", "CD", []string{"CD", "SACD"})
-	fixture.mustCorrect(scenario.target.releaseID, fixture.revisionOf(scenario.target.releaseID), map[string]CorrectionChange{"title": {Mode: CorrectionSet, Text: "新版本自己的标题"}})
+	fixture.mustCorrect(scenario.target.releaseID, fixture.revisionOf(scenario.target.releaseID), map[string]CorrectionChange{"title": {Mode: catalog.CorrectionSet, Text: "新版本自己的标题"}})
 	fixture.mustReview(scenario.target.releaseID, IssueSourceType, IssueReview)
 
 	preview := scenario.preview(t)
@@ -343,7 +344,7 @@ func TestPostgreSQLClaimWithoutAnAlbum(t *testing.T) {
 	fixture := newCorrectionFixture(t)
 	source, _ := fixture.issueRelease("独立的旧版本")
 	target := fixture.versionOf("新版本", 2020)
-	fixture.mustCorrect(source.releaseID, 1, map[string]CorrectionChange{"label": {Mode: CorrectionSet, Text: "厂牌"}})
+	fixture.mustCorrect(source.releaseID, 1, map[string]CorrectionChange{"label": {Mode: catalog.CorrectionSet, Text: "厂牌"}})
 	fixture.mustSetDefault(source.groupID, fixture.groupRevision(source.groupID), source.releaseID)
 	fixture.exec(`UPDATE tracks SET source_status='missing' WHERE medium_id=$1::uuid`, source.mediumID)
 	scenario := &claimScenario{fixture: fixture, source: source, target: target, album: source.groupID}
@@ -380,7 +381,7 @@ func TestPostgreSQLClaimSkipsMissingTrackReviewsAndEverythingCanBeSkipped(t *tes
 	fixture.uncertainField(scenario.target.releaseID, "source_type", "CD", []string{"CD", "SACD"})
 	fixture.groupingConflict(scenario.target.releaseID, `["x/01.flac","x/02.flac"]`)
 	fixture.mustCorrect(scenario.target.releaseID, fixture.revisionOf(scenario.target.releaseID), map[string]CorrectionChange{
-		"title": {Mode: CorrectionSet, Text: "新标题"}, "genre": {Mode: CorrectionSet, Text: "新流派"}})
+		"title": {Mode: catalog.CorrectionSet, Text: "新标题"}, "genre": {Mode: catalog.CorrectionSet, Text: "新流派"}})
 	fixture.mustReview(scenario.target.releaseID, IssueSourceType, IssueReview)
 	fixture.mustReview(scenario.target.releaseID, IssueGrouping, IssueReview)
 	fixture.exec(`UPDATE release_groups SET default_release_id=NULL WHERE id=$1::uuid`, scenario.album)
@@ -520,7 +521,7 @@ func TestPostgreSQLClaimDetectsChangesAfterThePreview(t *testing.T) {
 	t.Run("the new release gained a correction", func(t *testing.T) {
 		scenario := newClaimScenario(t)
 		preview := scenario.preview(t)
-		scenario.fixture.mustCorrect(scenario.target.releaseID, scenario.fixture.revisionOf(scenario.target.releaseID), map[string]CorrectionChange{"title": {Mode: CorrectionSet, Text: "后来改的"}})
+		scenario.fixture.mustCorrect(scenario.target.releaseID, scenario.fixture.revisionOf(scenario.target.releaseID), map[string]CorrectionChange{"title": {Mode: catalog.CorrectionSet, Text: "后来改的"}})
 		_, err := scenario.claimWith(scenario.request(preview))
 		var failure *operations.Failure
 		if !errors.As(err, &failure) || failure.Code != "revision_conflict" {
@@ -531,7 +532,7 @@ func TestPostgreSQLClaimDetectsChangesAfterThePreview(t *testing.T) {
 		scenario := newClaimScenario(t)
 		// 另一个新版本的计划与这个完全相同（都是单版本专辑、没有修正与核对）：令牌仍与具体的一对版本绑定。
 		other := scenario.fixture.versionOf("另一个新版本", 2021)
-		otherPreview, err := scenario.fixture.store.PreviewClaim(context.Background(), scenario.source.releaseID, other.releaseID)
+		otherPreview, err := scenario.fixture.governance.PreviewClaim(context.Background(), scenario.source.releaseID, other.releaseID)
 		if err != nil {
 			t.Fatalf("preview for the other release: %v", err)
 		}
@@ -554,16 +555,16 @@ func TestPostgreSQLClaimDetectsChangesAfterThePreview(t *testing.T) {
 		target := fixture.versionOf("新版本", 2020)
 		makeSource := func(title string) placementRelease {
 			source, _ := fixture.issueRelease(title)
-			fixture.mustCorrect(source.releaseID, 1, map[string]CorrectionChange{"genre": {Mode: CorrectionSet, Text: "古典"}})
+			fixture.mustCorrect(source.releaseID, 1, map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionSet, Text: "古典"}})
 			fixture.exec(`UPDATE tracks SET source_status='missing' WHERE medium_id=$1::uuid`, source.mediumID)
 			return source
 		}
 		first, second := makeSource("第一个旧版本"), makeSource("第二个旧版本")
-		firstPreview, err := fixture.store.PreviewClaim(context.Background(), first.releaseID, target.releaseID)
+		firstPreview, err := fixture.governance.PreviewClaim(context.Background(), first.releaseID, target.releaseID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		secondPreview, err := fixture.store.PreviewClaim(context.Background(), second.releaseID, target.releaseID)
+		secondPreview, err := fixture.governance.PreviewClaim(context.Background(), second.releaseID, target.releaseID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -670,13 +671,13 @@ func TestPostgreSQLClaimPreviewIsReadOnlyAndTokenTracksState(t *testing.T) {
 
 	// 可见的旧版本、没有人工状态的版本都是 not_claimable；不可见的新版本与不存在的版本是 not found。
 	var failure *operations.Failure
-	if _, err := fixture.store.PreviewClaim(context.Background(), scenario.sibling.releaseID, scenario.target.releaseID); !errors.As(err, &failure) || failure.Code != "not_claimable" {
+	if _, err := fixture.governance.PreviewClaim(context.Background(), scenario.sibling.releaseID, scenario.target.releaseID); !errors.As(err, &failure) || failure.Code != "not_claimable" {
 		t.Errorf("previewing a visible source: %v, want not_claimable", err)
 	}
-	if _, err := fixture.store.PreviewClaim(context.Background(), scenario.source.releaseID, scenario.source.releaseID); !errors.Is(err, ErrReleaseNotFound) {
+	if _, err := fixture.governance.PreviewClaim(context.Background(), scenario.source.releaseID, scenario.source.releaseID); !errors.Is(err, catalog.ErrReleaseNotFound) {
 		t.Errorf("previewing a hidden target: %v, want not found", err)
 	}
-	if _, err := fixture.store.PreviewClaim(context.Background(), uuid.New(), scenario.target.releaseID); !errors.Is(err, ErrReleaseNotFound) {
+	if _, err := fixture.governance.PreviewClaim(context.Background(), uuid.New(), scenario.target.releaseID); !errors.Is(err, catalog.ErrReleaseNotFound) {
 		t.Errorf("previewing an unknown source: %v, want not found", err)
 	}
 }
@@ -728,7 +729,7 @@ func TestPostgreSQLClaimsAndOtherChangesNeverDeadlock(t *testing.T) {
 	album := fixture.versionOf("共同的专辑", 2000)
 	for index := 0; index < 3; index++ {
 		source, _ := fixture.issueRelease("旧版本")
-		fixture.mustCorrect(source.releaseID, 1, map[string]CorrectionChange{"genre": {Mode: CorrectionSet, Text: "古典"}})
+		fixture.mustCorrect(source.releaseID, 1, map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionSet, Text: "古典"}})
 		fixture.mustReview(source.releaseID, IssueGrouping, IssueReview)
 		fixture.mustChangeGroup(source.releaseID, fixture.revisionOf(source.releaseID), GroupJoin, album.groupID)
 		sources = append(sources, source)
@@ -773,7 +774,7 @@ func TestPostgreSQLClaimsAndOtherChangesNeverDeadlock(t *testing.T) {
 				switch random.Intn(8) {
 				case 0, 1, 2:
 					// 认领：现取预览，预览可能马上过期。
-					preview, previewErr := fixture.store.PreviewClaim(context.Background(), source.releaseID, target.releaseID)
+					preview, previewErr := fixture.governance.PreviewClaim(context.Background(), source.releaseID, target.releaseID)
 					if previewErr != nil {
 						err = previewErr
 						break
@@ -781,7 +782,7 @@ func TestPostgreSQLClaimsAndOtherChangesNeverDeadlock(t *testing.T) {
 					request := ClaimRequest{ReleaseID: target.releaseID, ExpectedRevision: preview.Revision, SourceID: source.releaseID, SourceRevision: preview.SourceRevision, Preview: preview.Token}
 					err = run(operations.TypeReleaseClaim, request, ClaimExecutor(request))
 				case 3:
-					request := CorrectionRequest{ReleaseID: target.releaseID, ExpectedRevision: revisionOf(target.releaseID), Changes: map[string]CorrectionChange{"genre": {Mode: CorrectionSet, Text: "流派" + string(rune('A'+random.Intn(3)))}}}
+					request := CorrectionRequest{ReleaseID: target.releaseID, ExpectedRevision: revisionOf(target.releaseID), Changes: map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionSet, Text: "流派" + string(rune('A'+random.Intn(3)))}}}
 					err = run(operations.TypeReleaseCorrection, request, CorrectionExecutor(request))
 				case 4:
 					request := GroupChangeRequest{ReleaseID: target.releaseID, ExpectedRevision: revisionOf(target.releaseID), Action: GroupJoin, GroupID: album.groupID}
@@ -818,7 +819,7 @@ func TestPostgreSQLClaimsAndOtherChangesNeverDeadlock(t *testing.T) {
 					successes.Add(1)
 
 				default:
-					if status, code, _ := operations.Problem(err); status != 400 && status != 404 && status != 409 && !errors.Is(err, ErrReleaseNotFound) {
+					if status, code, _ := operations.Problem(err); status != 400 && status != 404 && status != 409 && !errors.Is(err, catalog.ErrReleaseNotFound) {
 						t.Errorf("concurrent operation failed with status %d (%s): %v", status, code, err)
 						return
 					}

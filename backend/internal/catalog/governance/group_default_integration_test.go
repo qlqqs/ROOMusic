@@ -1,4 +1,4 @@
-package catalog
+package governance
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
@@ -75,7 +76,7 @@ func (fixture *correctionFixture) setVisible(release placementRelease, visible b
 }
 
 // membersOf 读取组详情里的成员顺序与生效中的默认版本。
-func (fixture *correctionFixture) membersOf(groupID string) (order []string, detail ReleaseGroupDetail) {
+func (fixture *correctionFixture) membersOf(groupID string) (order []string, detail catalog.ReleaseGroupDetail) {
 	fixture.t.Helper()
 	detail, err := fixture.store.LoadReleaseGroup(context.Background(), groupID)
 	if err != nil {
@@ -87,7 +88,7 @@ func (fixture *correctionFixture) membersOf(groupID string) (order []string, det
 	return order, detail
 }
 
-func (fixture *correctionFixture) requireOrder(groupID string, want ...string) ReleaseGroupDetail {
+func (fixture *correctionFixture) requireOrder(groupID string, want ...string) catalog.ReleaseGroupDetail {
 	fixture.t.Helper()
 	order, detail := fixture.membersOf(groupID)
 	if !slices.Equal(order, want) {
@@ -99,7 +100,7 @@ func (fixture *correctionFixture) requireOrder(groupID string, want ...string) R
 	return detail
 }
 
-func (fixture *correctionFixture) requireDefault(detail ReleaseGroupDetail, want string) {
+func (fixture *correctionFixture) requireDefault(detail catalog.ReleaseGroupDetail, want string) {
 	fixture.t.Helper()
 	switch {
 	case want == "" && detail.DefaultReleaseID != nil:
@@ -155,7 +156,7 @@ func TestPostgreSQLDefaultVersionBecomesTheRepresentative(t *testing.T) {
 	if detail.Revision != 1 || detail.Representative.Title != "Alpha" {
 		t.Fatalf("group without a default = revision %d, representative %q; want 1 and Alpha", detail.Revision, detail.Representative.Title)
 	}
-	groups, err := fixture.store.ListReleaseGroups(ctx, ListParams{Page: 1, PageSize: 10})
+	groups, err := fixture.store.ListReleaseGroups(ctx, catalog.ListParams{Page: 1, PageSize: 10})
 	if err != nil || len(groups.Items) != 2 || groups.Items[0].ID != group || groups.Items[1].ID != standalone.groupID {
 		t.Fatalf("group list without a default = %+v, %v; want the album first", groups, err)
 	}
@@ -175,7 +176,7 @@ func TestPostgreSQLDefaultVersionBecomesTheRepresentative(t *testing.T) {
 		t.Fatalf("group with a default = revision %d, representative %q, %d versions", detail.Revision, detail.Representative.Title, detail.ReleaseCount)
 	}
 	// 专辑卡片显示默认版本，列表按它的标题排序（Zulu 排在 Middle 之后）。
-	groups, err = fixture.store.ListReleaseGroups(ctx, ListParams{Page: 1, PageSize: 10})
+	groups, err = fixture.store.ListReleaseGroups(ctx, catalog.ListParams{Page: 1, PageSize: 10})
 	if err != nil || len(groups.Items) != 2 || groups.Items[0].ID != standalone.groupID || groups.Items[1].ID != group || groups.Items[1].Representative.ID != hires.releaseID {
 		t.Fatalf("group list with a default = %+v, %v; want Middle first and the album shown as its default", groups, err)
 	}
@@ -226,7 +227,7 @@ func TestPostgreSQLDefaultVersionGoesDormantAndComesBack(t *testing.T) {
 	if detail.ReleaseCount != 1 || fixture.storedDefault(group) != hires.releaseID || fixture.groupRevision(group) != 2 {
 		t.Fatalf("while the default is missing: %d versions, stored %q, revision %d; want 1, the default kept, revision 2", detail.ReleaseCount, fixture.storedDefault(group), fixture.groupRevision(group))
 	}
-	groups, err := fixture.store.ListReleaseGroups(ctx, ListParams{Page: 1, PageSize: 10})
+	groups, err := fixture.store.ListReleaseGroups(ctx, catalog.ListParams{Page: 1, PageSize: 10})
 	if err != nil || len(groups.Items) != 1 || groups.Items[0].Representative.ID != original.releaseID {
 		t.Fatalf("group list while the default is missing = %+v, %v; want the original as the card", groups, err)
 	}

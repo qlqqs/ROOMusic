@@ -1,4 +1,4 @@
-package catalog
+package governance
 
 import (
 	"context"
@@ -7,13 +7,15 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 )
 
 // 待认领的读取（阶段 M4 第三项第 4 步）：列表、详情与专辑详情用的提示。
 
 func (fixture *correctionFixture) listClaims(page, pageSize int) ClaimPage {
 	fixture.t.Helper()
-	result, err := fixture.store.ListClaims(context.Background(), ClaimListParams{Page: page, PageSize: pageSize})
+	result, err := fixture.governance.ListClaims(context.Background(), ClaimListParams{Page: page, PageSize: pageSize})
 	if err != nil {
 		fixture.t.Fatalf("list claims: %v", err)
 	}
@@ -38,13 +40,13 @@ func (fixture *correctionFixture) seen(release placementRelease, age time.Durati
 func TestPostgreSQLListClaims(t *testing.T) {
 	fixture := newCorrectionFixture(t)
 	visible := fixture.versionOf("可见版本", 2000)
-	fixture.mustCorrect(visible.releaseID, 1, map[string]CorrectionChange{"label": {Mode: CorrectionSet, Text: "可见的版本有修正也不是旧版本"}})
+	fixture.mustCorrect(visible.releaseID, 1, map[string]CorrectionChange{"label": {Mode: catalog.CorrectionSet, Text: "可见的版本有修正也不是旧版本"}})
 
 	// 三个旧版本：最久没见的、较新的、最新的。
 	oldest, _ := fixture.issueRelease("最久没见的")
-	fixture.mustCorrect(oldest.releaseID, 1, map[string]CorrectionChange{"genre": {Mode: CorrectionSet, Text: "古典"}})
+	fixture.mustCorrect(oldest.releaseID, 1, map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionSet, Text: "古典"}})
 	middle, _ := fixture.issueRelease("中间的")
-	fixture.mustCorrect(middle.releaseID, 1, map[string]CorrectionChange{"label": {Mode: CorrectionSet, Text: "厂牌"}, "title": {Mode: CorrectionSet, Text: "我改过的标题"}})
+	fixture.mustCorrect(middle.releaseID, 1, map[string]CorrectionChange{"label": {Mode: catalog.CorrectionSet, Text: "厂牌"}, "title": {Mode: catalog.CorrectionSet, Text: "我改过的标题"}})
 	fixture.mustReview(middle.releaseID, IssueGrouping, IssueReview)
 	newest, _ := fixture.issueRelease("最新的")
 	fixture.mustReview(newest.releaseID, IssueSourceType, IssueReview)
@@ -162,7 +164,7 @@ func TestPostgreSQLListClaimsLocationNeverLeaksAbsolutePaths(t *testing.T) {
 		want      string
 	}{{"album/disc 1", "album/disc 1"}, {"../outside", ""}, {"/etc", ""}, {"C:/x", ""}, {"", ""}} {
 		release, _ := fixture.issueRelease("旧版本")
-		fixture.mustCorrect(release.releaseID, 1, map[string]CorrectionChange{"genre": {Mode: CorrectionSet, Text: "古典"}})
+		fixture.mustCorrect(release.releaseID, 1, map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionSet, Text: "古典"}})
 		fixture.exec(`UPDATE tracks SET source_status='missing' WHERE medium_id=$1::uuid`, release.mediumID)
 		fixture.exec(`UPDATE releases SET relative_directory=$2 WHERE id=$1::uuid`, release.releaseID, testCase.directory)
 		var location ClaimLocation
@@ -182,7 +184,7 @@ func TestPostgreSQLListClaimsLocationNeverLeaksAbsolutePaths(t *testing.T) {
 func TestPostgreSQLLoadClaim(t *testing.T) {
 	scenario := newClaimScenario(t)
 	fixture := scenario.fixture
-	detail, err := fixture.store.LoadClaim(context.Background(), scenario.source.releaseID)
+	detail, err := fixture.governance.LoadClaim(context.Background(), scenario.source.releaseID)
 	if err != nil {
 		t.Fatalf("load the claim: %v", err)
 	}
@@ -209,7 +211,7 @@ func TestPostgreSQLLoadClaim(t *testing.T) {
 
 	// 推荐：新版本在同一目录里。
 	fixture.exec(`UPDATE releases SET relative_directory='album' WHERE id IN ($1::uuid, $2::uuid)`, scenario.source.releaseID, scenario.target.releaseID)
-	detail, err = fixture.store.LoadClaim(context.Background(), scenario.source.releaseID)
+	detail, err = fixture.governance.LoadClaim(context.Background(), scenario.source.releaseID)
 	if err != nil || len(detail.Suggestions) != 1 || detail.Suggestions[0].Release.ID != scenario.target.releaseID ||
 		!reflect.DeepEqual(detail.Suggestions[0].Reasons, []string{ClaimReasonSameDirectory}) {
 		t.Errorf("suggestions = %+v, %v", detail.Suggestions, err)
@@ -217,13 +219,13 @@ func TestPostgreSQLLoadClaim(t *testing.T) {
 
 	// 不满足判定：可见的版本、什么人工状态都没有的版本、不存在的版本。
 	for name, id := range map[string]string{"visible": scenario.sibling.releaseID, "plain hidden": fixture.hiddenRelease("什么都没有").releaseID, "unknown": "00000000-0000-4000-8000-000000000009"} {
-		if _, err := fixture.store.LoadClaim(context.Background(), id); !errors.Is(err, ErrReleaseNotFound) {
+		if _, err := fixture.governance.LoadClaim(context.Background(), id); !errors.Is(err, catalog.ErrReleaseNotFound) {
 			t.Errorf("%s: error = %v, want ErrReleaseNotFound", name, err)
 		}
 	}
 	// 认领之后旧版本不再待认领。
 	scenario.mustClaim(t)
-	if _, err := fixture.store.LoadClaim(context.Background(), scenario.source.releaseID); !errors.Is(err, ErrReleaseNotFound) {
+	if _, err := fixture.governance.LoadClaim(context.Background(), scenario.source.releaseID); !errors.Is(err, catalog.ErrReleaseNotFound) {
 		t.Errorf("after the claim: error = %v, want ErrReleaseNotFound", err)
 	}
 	if page := fixture.listClaims(1, 10); page.Total != 0 {
@@ -262,7 +264,7 @@ func TestPostgreSQLLoadClaimHints(t *testing.T) {
 	fixture.mustReviewDirect(unrelated.releaseID)
 	fixture.hiddenRelease("同一目录但什么人工状态都没有")
 
-	hints, err := fixture.store.LoadClaimHints(context.Background(), newer.releaseID)
+	hints, err := fixture.governance.LoadClaimHints(context.Background(), newer.releaseID)
 	if err != nil {
 		t.Fatalf("load hints: %v", err)
 	}
@@ -275,7 +277,7 @@ func TestPostgreSQLLoadClaimHints(t *testing.T) {
 	}
 	// 与推荐一致：提示里的旧版本，它的详情推荐里都有这个新版本。
 	for _, hint := range hints {
-		detail, err := fixture.store.LoadClaim(context.Background(), hint.ID)
+		detail, err := fixture.governance.LoadClaim(context.Background(), hint.ID)
 		if err != nil {
 			t.Fatalf("load the claim of a hint: %v", err)
 		}
@@ -300,25 +302,25 @@ func TestPostgreSQLLoadClaimHints(t *testing.T) {
 	fixture.exec(`UPDATE tracks SET relative_path='elsewhere/x.flac' WHERE medium_id=$1::uuid`, lost.mediumID)
 	fixture.mustReviewDirect(lost.releaseID)
 	fixture.exec(`UPDATE release_grouping_evidence SET source_refs='["lost/gone.flac"]'::jsonb WHERE release_id=$1::uuid`, lost.releaseID)
-	if none, err := fixture.store.LoadClaimHints(context.Background(), partial.releaseID); err != nil || len(none) != 0 {
+	if none, err := fixture.governance.LoadClaimHints(context.Background(), partial.releaseID); err != nil || len(none) != 0 {
 		t.Errorf("hints for a release whose only match is a missing track = %+v, %v; want none", none, err)
 	}
 
 	// 没有命中的版本没有提示（空切片，不是 nil）；不可见或不存在的版本是 not found。
 	other := fixture.versionOf("别的新版本", 2021)
 	fixture.exec(`UPDATE releases SET relative_directory='elsewhere' WHERE id=$1::uuid`, other.releaseID)
-	if none, err := fixture.store.LoadClaimHints(context.Background(), other.releaseID); err != nil || none == nil || len(none) != 0 {
+	if none, err := fixture.governance.LoadClaimHints(context.Background(), other.releaseID); err != nil || none == nil || len(none) != 0 {
 		t.Errorf("hints without a match = %#v, %v", none, err)
 	}
 	for name, id := range map[string]string{"hidden": unrelated.releaseID, "unknown": "00000000-0000-4000-8000-000000000009"} {
-		if _, err := fixture.store.LoadClaimHints(context.Background(), id); !errors.Is(err, ErrReleaseNotFound) {
+		if _, err := fixture.governance.LoadClaimHints(context.Background(), id); !errors.Is(err, catalog.ErrReleaseNotFound) {
 			t.Errorf("%s: error = %v, want ErrReleaseNotFound", name, err)
 		}
 	}
 	// 认领之后这个旧版本不再提示。
 	scenarioFixture := &claimScenario{fixture: fixture, source: olds[4], target: newer}
 	scenarioFixture.mustClaim(t)
-	again, err := fixture.store.LoadClaimHints(context.Background(), newer.releaseID)
+	again, err := fixture.governance.LoadClaimHints(context.Background(), newer.releaseID)
 	if err != nil || len(again) != 3 || again[0].ID != olds[3].releaseID {
 		t.Errorf("hints after claiming one = %+v, %v", again, err)
 	}

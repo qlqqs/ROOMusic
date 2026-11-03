@@ -149,12 +149,12 @@ const releaseGroupSummaryProjection = releasesql.ReleaseSummaryProjection + `,
 		` + releaseGroupAttentionExpression
 
 func scanReleaseGroupSummary(row interface{ Scan(...any) error }) (ReleaseGroupSummary, error) {
-	var columns releaseSummaryColumns
+	var columns ReleaseSummaryColumns
 	var group ReleaseGroupSummary
-	if err := row.Scan(append(columns.targets(), &group.ID, &group.ReleaseCount, &group.AttentionCount)...); err != nil {
+	if err := row.Scan(append(columns.ScanTargets(), &group.ID, &group.ReleaseCount, &group.AttentionCount)...); err != nil {
 		return ReleaseGroupSummary{}, err
 	}
-	representative, err := columns.summary()
+	representative, err := columns.Summary()
 	if err != nil {
 		return ReleaseGroupSummary{}, err
 	}

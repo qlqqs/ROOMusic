@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
@@ -40,7 +41,7 @@ func (handlers *Handlers) releaseCorrections(responseWriter http.ResponseWriter,
 	if !ok {
 		return
 	}
-	state, err := handlers.store.LoadCorrectionState(request.Context(), releaseID)
+	state, err := handlers.governance.LoadCorrectionState(request.Context(), releaseID)
 	switch {
 	case errors.Is(err, catalog.ErrReleaseNotFound):
 		httpserver.WriteError(responseWriter, request, http.StatusNotFound, "not_found", "发行版本不存在")
@@ -74,8 +75,8 @@ func (handlers *Handlers) correctRelease(responseWriter http.ResponseWriter, req
 		return
 	}
 	var body struct {
-		ExpectedRevision int64                                  `json:"expected_revision"`
-		Changes          map[string]catalog.RawCorrectionChange `json:"changes"`
+		ExpectedRevision int64                                     `json:"expected_revision"`
+		Changes          map[string]governance.RawCorrectionChange `json:"changes"`
 	}
 	if !httpserver.DecodeJSON(responseWriter, request, &body) {
 		return
@@ -84,16 +85,16 @@ func (handlers *Handlers) correctRelease(responseWriter http.ResponseWriter, req
 		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_input", "版本号无效")
 		return
 	}
-	changes, err := catalog.ParseCorrectionChanges(body.Changes)
+	changes, err := governance.ParseCorrectionChanges(body.Changes)
 	if err != nil {
 		handlers.writeOperationError(responseWriter, request, err)
 		return
 	}
-	correction := catalog.CorrectionRequest{ReleaseID: releaseID, ExpectedRevision: body.ExpectedRevision, Changes: changes}
+	correction := governance.CorrectionRequest{ReleaseID: releaseID, ExpectedRevision: body.ExpectedRevision, Changes: changes}
 	result, err := operations.Run(request.Context(), handlers.database, operations.Spec{
 		ActorID: actor.ID, Type: operations.TypeReleaseCorrection, Key: key,
 		Fingerprint: correction.Fingerprint(), RequestID: request.Header.Get("X-Request-ID"),
-	}, catalog.CorrectionExecutor(correction))
+	}, governance.CorrectionExecutor(correction))
 	if err != nil {
 		handlers.writeOperationError(responseWriter, request, err)
 		return

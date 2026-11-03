@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 )
@@ -42,27 +43,27 @@ func (handlers *Handlers) reviewReleaseIssue(responseWriter http.ResponseWriter,
 	switch {
 	case body.ExpectedRevision < 1:
 		message = "版本号无效"
-	case !catalog.ReviewableIssue(body.Issue):
+	case !governance.ReviewableIssue(body.Issue):
 		message = "这类问题不能标记为已核对"
-	case body.Action == catalog.IssueReview && (body.Basis == nil || *body.Basis == ""):
+	case body.Action == governance.IssueReview && (body.Basis == nil || *body.Basis == ""):
 		message = "核对需要问题的依据"
-	case body.Action == catalog.IssueUnreview && body.Basis != nil:
+	case body.Action == governance.IssueUnreview && body.Basis != nil:
 		message = "取消核对时不需要依据"
-	case body.Action != catalog.IssueReview && body.Action != catalog.IssueUnreview:
+	case body.Action != governance.IssueReview && body.Action != governance.IssueUnreview:
 		message = "核对动作无效"
 	}
 	if message != "" {
 		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_input", message)
 		return
 	}
-	change := catalog.IssueReviewRequest{ReleaseID: releaseID, ExpectedRevision: body.ExpectedRevision, Issue: body.Issue, Action: body.Action}
+	change := governance.IssueReviewRequest{ReleaseID: releaseID, ExpectedRevision: body.ExpectedRevision, Issue: body.Issue, Action: body.Action}
 	if body.Basis != nil {
 		change.Basis = *body.Basis
 	}
 	result, err := operations.Run(request.Context(), handlers.database, operations.Spec{
 		ActorID: actor.ID, Type: operations.TypeReleaseIssueReview, Key: key,
 		Fingerprint: change.Fingerprint(), RequestID: request.Header.Get("X-Request-ID"),
-	}, catalog.IssueReviewExecutor(change))
+	}, governance.IssueReviewExecutor(change))
 	if err != nil {
 		handlers.writeOperationError(responseWriter, request, err)
 		return
@@ -82,13 +83,13 @@ func (handlers *Handlers) listReleaseIssues(responseWriter http.ResponseWriter, 
 		return
 	}
 	query := request.URL.Query()
-	status, validStatus := catalog.ParseIssueListStatus(query["status"])
-	category, validCategory := catalog.ParseIssueListCategory(query["category"])
+	status, validStatus := governance.ParseIssueListStatus(query["status"])
+	category, validCategory := governance.ParseIssueListCategory(query["category"])
 	if !validStatus || !validCategory {
 		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_filter", "问题筛选条件无效")
 		return
 	}
-	result, err := handlers.store.ListIssues(request.Context(), catalog.IssueListParams{Status: status, Category: category, Page: page, PageSize: pageSize})
+	result, err := handlers.governance.ListIssues(request.Context(), governance.IssueListParams{Status: status, Category: category, Page: page, PageSize: pageSize})
 	if errors.Is(err, catalog.ErrQuery) {
 		httpserver.WriteError(responseWriter, request, http.StatusServiceUnavailable, "database_unavailable", "服务暂不可用")
 		return
@@ -114,7 +115,7 @@ func (handlers *Handlers) releaseIssues(responseWriter http.ResponseWriter, requ
 	if !ok {
 		return
 	}
-	issues, err := handlers.store.LoadReleaseIssues(request.Context(), releaseID)
+	issues, err := handlers.governance.LoadReleaseIssues(request.Context(), releaseID)
 	if err == nil {
 		var names map[string]string
 		if names, err = handlers.guard.Usernames(request.Context(), issues.ReviewerIDs()); err == nil {

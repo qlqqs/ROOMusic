@@ -1,10 +1,11 @@
-package catalog
+package governance
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
 )
 
@@ -37,10 +38,10 @@ const releaseClaimablePredicate = `(NOT ` + releasesql.ReleaseVisiblePredicate +
 
 // ClaimSuggestion 是一个推荐的新版本：可见版本的摘要与它所在的组（页面据此打开它的专辑）、版本说明、理由码与命中的路径数。
 type ClaimSuggestion struct {
-	Release ReleaseSummary `json:"release"`
-	GroupID string         `json:"group_id"`
-	Edition *string        `json:"edition"`
-	Reasons []string       `json:"reasons"`
+	Release catalog.ReleaseSummary `json:"release"`
+	GroupID string                 `json:"group_id"`
+	Edition *string                `json:"edition"`
+	Reasons []string               `json:"reasons"`
 	// SameFiles 是旧版本的路径集合里与这个版本的 present 曲目相同的路径数（没有命中 same_files 时为 0）。
 	SameFiles int64 `json:"same_files"`
 }
@@ -100,19 +101,19 @@ func (s *Store) LoadClaimSuggestions(ctx context.Context, sourceID string) ([]Cl
 			COALESCE(same_files.hits, 0) DESC, LOWER(releases.title), releases.id
 		LIMIT $2`, sourceID, maxClaimSuggestions)
 	if err != nil {
-		return nil, fmt.Errorf("%w: claim suggestions: %w", ErrQuery, err)
+		return nil, fmt.Errorf("%w: claim suggestions: %w", catalog.ErrQuery, err)
 	}
 	defer rows.Close()
 	suggestions := []ClaimSuggestion{}
 	for rows.Next() {
-		var columns releaseSummaryColumns
+		var columns catalog.ReleaseSummaryColumns
 		var suggestion ClaimSuggestion
 		var edition sql.NullString
 		var byFiles, byDirectory bool
-		if err := rows.Scan(append(columns.targets(), &suggestion.GroupID, &edition, &suggestion.SameFiles, &byFiles, &byDirectory)...); err != nil {
+		if err := rows.Scan(append(columns.ScanTargets(), &suggestion.GroupID, &edition, &suggestion.SameFiles, &byFiles, &byDirectory)...); err != nil {
 			return nil, err
 		}
-		if suggestion.Release, err = columns.summary(); err != nil {
+		if suggestion.Release, err = columns.Summary(); err != nil {
 			return nil, err
 		}
 		suggestion.Edition = releasesql.StringPointerFromNull(edition)

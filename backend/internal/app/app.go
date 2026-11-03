@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	catalogapi "github.com/qlqq/roomusic/backend/internal/catalog/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	identityapi "github.com/qlqq/roomusic/backend/internal/identity/httpapi"
@@ -68,8 +68,8 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	libraryapi.New(database, guard, libraryService, settings.AllowedLibraryRoots, logger).Register(mux)
 	catalogapi.New(database, guard, settings.DataDirectory, logger).Register(mux)
 	// 受治理操作的撤销与展示：每种操作类型的能力由拥有对应业务表的包提供，operations/httpapi 不导入业务包。
-	operationsapi.New(database, guard, logger, catalog.CorrectionOperations(), catalog.GroupChangeOperations(), catalog.GroupDefaultOperations(),
-		catalog.IssueReviewOperations(), catalog.ClaimOperations()).Register(mux)
+	operationsapi.New(database, guard, logger, governance.CorrectionOperations(), governance.GroupChangeOperations(), governance.GroupDefaultOperations(),
+		governance.IssueReviewOperations(), governance.ClaimOperations()).Register(mux)
 	playbackService := playback.NewService(database, settings.AllowedLibraryRoots, playback.WithDerivation(assembly.derivation))
 	playbackapi.New(guard, playbackService, lifecycle, logger, playbackapi.Options{
 		PreflightWait: assembly.playbackPreflightWait,

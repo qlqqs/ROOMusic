@@ -1,4 +1,4 @@
-package catalog
+package governance
 
 import (
 	"context"
@@ -115,7 +115,7 @@ func (fixture *effectiveFixture) trackAt(release placementRelease, path, status 
 // suggested 返回推荐的标题、理由与命中数，按返回的顺序。
 func (fixture *effectiveFixture) suggested(sourceID string) []string {
 	fixture.t.Helper()
-	suggestions, err := fixture.store.LoadClaimSuggestions(context.Background(), sourceID)
+	suggestions, err := fixture.governance.LoadClaimSuggestions(context.Background(), sourceID)
 	if err != nil {
 		fixture.t.Fatalf("load suggestions: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestPostgreSQLClaimSuggestions(t *testing.T) {
 	// 它不会把自己推荐给自己。
 	fixture.exec(`UPDATE release_grouping_evidence SET source_refs = source_refs || '["old/back.flac"]'::jsonb WHERE release_id=$1::uuid`, old.releaseID)
 	back := fixture.trackAt(old, "old/back.flac", "present")
-	selfSuggestions, err := fixture.store.LoadClaimSuggestions(context.Background(), old.releaseID)
+	selfSuggestions, err := fixture.governance.LoadClaimSuggestions(context.Background(), old.releaseID)
 	if err != nil {
 		t.Fatalf("load suggestions for a release that is visible again: %v", err)
 	}
@@ -225,13 +225,13 @@ func TestPostgreSQLClaimSuggestions(t *testing.T) {
 	// 一个不满足任何线索的旧版本没有推荐，结果是空数组而不是 nil。
 	lonely := fixture.hiddenRelease("孤立的旧版本")
 	fixture.exec(`UPDATE tracks SET relative_path='lonely/01.flac' WHERE medium_id=$1::uuid`, lonely.mediumID)
-	suggestions, err := fixture.store.LoadClaimSuggestions(context.Background(), lonely.releaseID)
+	suggestions, err := fixture.governance.LoadClaimSuggestions(context.Background(), lonely.releaseID)
 	if err != nil || suggestions == nil || len(suggestions) != 0 {
 		t.Fatalf("suggestions for a release without clues = %#v, %v; want an empty non-nil slice", suggestions, err)
 	}
 
 	// 每个推荐带它所在的组：页面据此打开新版本的专辑。
-	listed, err := fixture.store.LoadClaimSuggestions(context.Background(), old.releaseID)
+	listed, err := fixture.governance.LoadClaimSuggestions(context.Background(), old.releaseID)
 	if err != nil || len(listed) == 0 {
 		t.Fatalf("suggestions = %v, %v", listed, err)
 	}

@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 )
 
@@ -19,7 +20,7 @@ func (handlers *Handlers) listReleaseClaims(responseWriter http.ResponseWriter, 
 		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_pagination", "分页参数无效")
 		return
 	}
-	result, err := handlers.store.ListClaims(request.Context(), catalog.ClaimListParams{Page: page, PageSize: pageSize})
+	result, err := handlers.governance.ListClaims(request.Context(), governance.ClaimListParams{Page: page, PageSize: pageSize})
 	if errors.Is(err, catalog.ErrQuery) {
 		httpserver.WriteError(responseWriter, request, http.StatusServiceUnavailable, "database_unavailable", "服务暂不可用")
 		return
@@ -44,7 +45,7 @@ func (handlers *Handlers) releaseClaim(responseWriter http.ResponseWriter, reque
 	if !ok {
 		return
 	}
-	detail, err := handlers.store.LoadClaim(request.Context(), releaseID)
+	detail, err := handlers.governance.LoadClaim(request.Context(), releaseID)
 	if err == nil {
 		var names map[string]string
 		if names, err = handlers.guard.Usernames(request.Context(), detail.ReviewerIDs()); err == nil {
@@ -73,7 +74,7 @@ func (handlers *Handlers) releaseClaimHints(responseWriter http.ResponseWriter, 
 	if !ok {
 		return
 	}
-	hints, err := handlers.store.LoadClaimHints(request.Context(), releaseID)
+	hints, err := handlers.governance.LoadClaimHints(request.Context(), releaseID)
 	switch {
 	case errors.Is(err, catalog.ErrReleaseNotFound):
 		httpserver.WriteError(responseWriter, request, http.StatusNotFound, "not_found", "发行版本不存在")

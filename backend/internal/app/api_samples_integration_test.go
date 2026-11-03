@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/library/parser/parsertest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
@@ -556,7 +556,7 @@ func recordIssueReviewSamples(t *testing.T, application *integrationTestApplicat
 	samples.record("release-issues/list", call(http.MethodGet, "/api/v1/release-issues", nil, admin), http.StatusOK)
 	samples.record("release-issues/get", call(http.MethodGet, "/api/v1/releases/"+releaseID+"/issues", nil, admin), http.StatusOK)
 	samples.record("errors/invalid-filter", call(http.MethodGet, "/api/v1/release-issues?status=ignored", nil, admin), http.StatusBadRequest)
-	store := catalog.NewStore(application.database)
+	store := governance.NewStore(application.database)
 	token := func(issue string) string {
 		t.Helper()
 		token, err := store.LoadIssueBasisToken(context.Background(), releaseID, issue)

@@ -1,4 +1,4 @@
-package catalog
+package governance
 
 import (
 	"bytes"
@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
@@ -197,11 +198,11 @@ func TestPostgreSQLCorrectionStateTransitions(t *testing.T) {
 	fixture.exec(`UPDATE releases SET artist='扫描艺人', album_artist=NULL, year=0, genre='扫描流派', label=NULL WHERE id=$1::uuid`, release.releaseID)
 
 	// 初始状态：没有修正；没有专辑艺人时扫描值是展示艺人；年份 0 与缺失的文本是 null。
-	state, err := fixture.store.LoadCorrectionState(ctx, release.releaseID)
-	if err != nil || state.Revision != 1 || state.ReleaseID != release.releaseID || len(state.Fields) != len(CorrectableFieldNames()) {
+	state, err := fixture.governance.LoadCorrectionState(ctx, release.releaseID)
+	if err != nil || state.Revision != 1 || state.ReleaseID != release.releaseID || len(state.Fields) != len(catalog.CorrectableFieldNames()) {
 		t.Fatalf("initial state = %+v, %v", state, err)
 	}
-	for index, name := range CorrectableFieldNames() {
+	for index, name := range catalog.CorrectableFieldNames() {
 		if state.Fields[index].Field != name || state.Fields[index].Correction != nil {
 			t.Fatalf("field %d = %+v, want %q without a correction", index, state.Fields[index], name)
 		}
@@ -344,7 +345,7 @@ func TestPostgreSQLCorrectionRejectsStaleInvisibleAndUnknownReleases(t *testing.
 		if status, code, _ := operations.Problem(err); status != 404 || code != "not_found" {
 			t.Errorf("%s release: error = %v (status %d, code %q), want 404 not_found", name, err, status, code)
 		}
-		if _, err := fixture.store.LoadCorrectionState(context.Background(), releaseID); !errors.Is(err, ErrReleaseNotFound) {
+		if _, err := fixture.governance.LoadCorrectionState(context.Background(), releaseID); !errors.Is(err, catalog.ErrReleaseNotFound) {
 			t.Errorf("%s release: LoadCorrectionState error = %v, want ErrReleaseNotFound", name, err)
 		}
 	}
@@ -357,7 +358,7 @@ func TestPostgreSQLCorrectionRejectsStaleInvisibleAndUnknownReleases(t *testing.
 
 func mustState(t *testing.T, fixture *correctionFixture, releaseID string) CorrectionState {
 	t.Helper()
-	state, err := fixture.store.LoadCorrectionState(context.Background(), releaseID)
+	state, err := fixture.governance.LoadCorrectionState(context.Background(), releaseID)
 	if err != nil {
 		t.Fatalf("LoadCorrectionState: %v", err)
 	}
@@ -419,11 +420,11 @@ func TestPostgreSQLCorrectedValuesAreConsistentAcrossReads(t *testing.T) {
 		"title": {Mode: "set", Text: "Alpha (corrected)"}, "album_artist": {Mode: "set", Text: "Corrected Artist"}, "year": {Mode: "null"},
 	})
 
-	list, err := fixture.store.ListReleases(ctx, ListParams{Page: 1, PageSize: 10})
+	list, err := fixture.store.ListReleases(ctx, catalog.ListParams{Page: 1, PageSize: 10})
 	if err != nil || list.Total != 2 || list.Items[0].Title != "Alpha (corrected)" || list.Items[0].Artist != "Corrected Artist" || list.Items[0].Year != nil {
 		t.Fatalf("list = %+v, %v; want the corrected release first with its corrected artist and no year", list, err)
 	}
-	groups, err := fixture.store.ListReleaseGroups(ctx, ListParams{Search: "Corrected", Page: 1, PageSize: 10})
+	groups, err := fixture.store.ListReleaseGroups(ctx, catalog.ListParams{Search: "Corrected", Page: 1, PageSize: 10})
 	if err != nil || groups.Total != 1 || groups.Items[0].Representative.ID != zulu.releaseID || groups.Items[0].Representative.AlbumArtist == nil || *groups.Items[0].Representative.AlbumArtist != "Corrected Artist" {
 		t.Fatalf("group search = %+v, %v", groups, err)
 	}

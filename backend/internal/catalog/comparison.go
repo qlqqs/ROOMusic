@@ -169,7 +169,7 @@ func (s *Store) loadComparedFormats(ctx context.Context, ids []string, index map
 	return rows.Err()
 }
 
-// loadComparedCorrections 一条查询取出这些版本有人工修正的字段名，每个版本内按 correctableFields 的顺序。
+// loadComparedCorrections 一条查询取出这些版本有人工修正的字段名，每个版本内按 CorrectableFields 的顺序。
 func (s *Store) loadComparedCorrections(ctx context.Context, ids []string, index map[string]int, releases []ComparedRelease) error {
 	rows, err := s.database.QueryContext(ctx, `SELECT release_id::text, field FROM release_corrections WHERE release_id = ANY($1::text[]::uuid[])`, ids)
 	if err != nil {
@@ -190,9 +190,9 @@ func (s *Store) loadComparedCorrections(ctx context.Context, ids []string, index
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	order := make(map[string]int, len(correctableFields))
-	for position, field := range correctableFields {
-		order[field.name] = position
+	order := make(map[string]int, len(CorrectableFields))
+	for position, field := range CorrectableFields {
+		order[field.Name] = position
 	}
 	for releaseID, fields := range corrected {
 		names := make([]string, 0, len(fields))
