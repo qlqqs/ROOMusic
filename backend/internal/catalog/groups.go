@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
 )
 
 // 按组读取：把可见 Release 按 group_id 归拢，给出成员数、attention 之和与代表版本。组的可见性、搜索与 attention
@@ -18,21 +20,14 @@ const maxReleaseGroupMembers = 100
 var ErrReleaseGroupNotFound = errors.New("release group not found")
 
 const (
-	// releaseGroupMemberOrder 是代表版本规则：先是管理员指定的默认版本（release_groups.default_release_id），
-	// 再是年份最早（没有年份排最后）、创建时间、ID。第一项只有在默认版本是这个组的可见成员时才会让某一行排到最前：
-	// 没有指定、指定的版本不可见或已被移出这个组时，它对所有成员都为真，等于没有指定（静默失效，回来时重新生效），
-	// 所以生效条件不需要另写。
-	releaseGroupMemberOrder = `(releases.id IS DISTINCT FROM (SELECT default_group.default_release_id FROM release_groups default_group WHERE default_group.id = releases.group_id)),
-		(NULLIF(releases.year, 0) IS NULL), NULLIF(releases.year, 0), releases.created_at, releases.id`
-
 	// releaseGroupAttentionExpression 是组内全部可见成员的 attention 之和。子查询自己的 FROM 定义了 releases，
 	// 常量里的 releases.* 都解析到子查询自己的行，而不是外层的代表版本。
-	releaseGroupAttentionExpression = `(SELECT COALESCE(SUM(` + releaseAttentionExpression + `), 0)::bigint
-		FROM ` + releaseSource + ` WHERE releases.group_id = ranked.group_id AND ` + releaseVisiblePredicate + `)`
+	releaseGroupAttentionExpression = `(SELECT COALESCE(SUM(` + releasesql.ReleaseAttentionExpression + `), 0)::bigint
+		FROM ` + releasesql.ReleaseSource + ` WHERE releases.group_id = ranked.group_id AND ` + releasesql.ReleaseVisiblePredicate + `)`
 
 	// releaseGroupAnyMemberMatchesSearch 在任一可见成员命中 /releases 的搜索条件时为真。
-	releaseGroupAnyMemberMatchesSearch = `EXISTS (SELECT 1 FROM ` + releaseSource + `
-		WHERE releases.group_id = ranked.group_id AND ` + releaseVisiblePredicate + ` AND ` + releaseSearchPredicate + `)`
+	releaseGroupAnyMemberMatchesSearch = `EXISTS (SELECT 1 FROM ` + releasesql.ReleaseSource + `
+		WHERE releases.group_id = ranked.group_id AND ` + releasesql.ReleaseVisiblePredicate + ` AND ` + releaseSearchPredicate + `)`
 )
 
 // releaseGroupRankedCTE 为每个可见 Release 标出它在组内的名次（1 为代表版本）与组内可见成员数。onlyGroup 为真时只看
@@ -44,10 +39,10 @@ func releaseGroupRankedCTE(onlyGroup bool) string {
 	}
 	return `ranked AS (
 		SELECT releases.id, releases.group_id,
-		       ROW_NUMBER() OVER (PARTITION BY releases.group_id ORDER BY ` + releaseGroupMemberOrder + `) AS member_rank,
+		       ROW_NUMBER() OVER (PARTITION BY releases.group_id ORDER BY ` + releasesql.ReleaseGroupMemberOrder + `) AS member_rank,
 		       COUNT(*) OVER (PARTITION BY releases.group_id) AS release_count
-		FROM ` + releaseSource + `
-		WHERE ` + releaseVisiblePredicate + groupFilter + `
+		FROM ` + releasesql.ReleaseSource + `
+		WHERE ` + releasesql.ReleaseVisiblePredicate + groupFilter + `
 	)`
 }
 
@@ -75,7 +70,7 @@ func (s *Store) ListReleaseGroups(ctx context.Context, params ListParams) (Relea
 		return ReleaseGroupPage{}, fmt.Errorf("%w: count release groups: %w", ErrQuery, err)
 	}
 	listQuery := "WITH " + releaseGroupRankedCTE(false) + " SELECT " + releaseGroupSummaryProjection +
-		" FROM ranked JOIN " + releaseSource + " ON releases.id = ranked.id" + releaseSummaryArtworkJoin +
+		" FROM ranked JOIN " + releasesql.ReleaseSource + " ON releases.id = ranked.id" + releasesql.ReleaseSummaryArtworkJoin +
 		" WHERE ranked.member_rank = 1" + filters +
 		" ORDER BY LOWER(releases.title),LOWER(releases.artist),releases.id LIMIT $" + strconv.Itoa(len(queryArgs)+1) +
 		" OFFSET $" + strconv.Itoa(len(queryArgs)+2)
@@ -104,7 +99,7 @@ func (s *Store) ListReleaseGroups(ctx context.Context, params ListParams) (Relea
 func (s *Store) LoadReleaseGroup(ctx context.Context, groupID string) (ReleaseGroupDetail, error) {
 	summary, err := scanReleaseGroupSummary(s.database.QueryRowContext(ctx,
 		"WITH "+releaseGroupRankedCTE(true)+" SELECT "+releaseGroupSummaryProjection+
-			" FROM ranked JOIN "+releaseSource+" ON releases.id = ranked.id"+releaseSummaryArtworkJoin+
+			" FROM ranked JOIN "+releasesql.ReleaseSource+" ON releases.id = ranked.id"+releasesql.ReleaseSummaryArtworkJoin+
 			" WHERE ranked.member_rank = 1",
 		groupID))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -114,9 +109,9 @@ func (s *Store) LoadReleaseGroup(ctx context.Context, groupID string) (ReleaseGr
 		return ReleaseGroupDetail{}, err
 	}
 	rows, err := s.database.QueryContext(ctx,
-		"SELECT "+releaseSummaryProjection+" FROM "+releaseSource+releaseSummaryArtworkJoin+
-			" WHERE releases.group_id = $1::uuid AND "+releaseVisiblePredicate+
-			" ORDER BY "+releaseGroupMemberOrder+" LIMIT $2",
+		"SELECT "+releasesql.ReleaseSummaryProjection+" FROM "+releasesql.ReleaseSource+releasesql.ReleaseSummaryArtworkJoin+
+			" WHERE releases.group_id = $1::uuid AND "+releasesql.ReleaseVisiblePredicate+
+			" ORDER BY "+releasesql.ReleaseGroupMemberOrder+" LIMIT $2",
 		groupID, maxReleaseGroupMembers)
 	if err != nil {
 		return ReleaseGroupDetail{}, err
@@ -148,7 +143,7 @@ func (s *Store) LoadReleaseGroup(ctx context.Context, groupID string) (ReleaseGr
 }
 
 // releaseGroupSummaryProjection 是代表版本的摘要投影，后面追加组 ID、可见成员数与 attention 之和。
-const releaseGroupSummaryProjection = releaseSummaryProjection + `,
+const releaseGroupSummaryProjection = releasesql.ReleaseSummaryProjection + `,
 		ranked.group_id::text,
 		ranked.release_count,
 		` + releaseGroupAttentionExpression

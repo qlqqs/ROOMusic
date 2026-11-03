@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
@@ -24,7 +25,7 @@ func (fixture *effectiveFixture) hiddenRelease(title string) placementRelease {
 func (fixture *effectiveFixture) claimable(releaseID string) bool {
 	fixture.t.Helper()
 	var result bool
-	if err := fixture.database.QueryRow(`SELECT `+releaseClaimablePredicate+` FROM `+releaseSource+` WHERE releases.id = $1::uuid`, releaseID).Scan(&result); err != nil {
+	if err := fixture.database.QueryRow(`SELECT `+releaseClaimablePredicate+` FROM `+releasesql.ReleaseSource+` WHERE releases.id = $1::uuid`, releaseID).Scan(&result); err != nil {
 		fixture.t.Fatalf("evaluate the claimable predicate: %v", err)
 	}
 	return result

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
 )
 
 func TestCatalogEvidenceProjectionRejectsUnsafeSourceReferences(t *testing.T) {
@@ -21,7 +23,7 @@ func TestCatalogEvidenceProjectionRejectsUnsafeSourceReferences(t *testing.T) {
 		{value: "../outside.flac"},
 		{value: "Album/../../outside.flac"},
 		{value: ".\n./outside.flac"},
-		{value: strings.Repeat("a", maxEvidenceStringBytes-3) + "/..."},
+		{value: strings.Repeat("a", releasesql.MaxEvidenceStringBytes-3) + "/..."},
 	} {
 		got, ok := SafeRelativeSourceRef(testCase.value)
 		if ok != testCase.ok || got != testCase.want {
@@ -29,7 +31,7 @@ func TestCatalogEvidenceProjectionRejectsUnsafeSourceReferences(t *testing.T) {
 		}
 	}
 
-	values, truncated, err := decodeBoundedStringArray(`["Album/01.flac","/srv/private.flac","../outside.flac"]`, 10, true)
+	values, truncated, err := releasesql.DecodeBoundedStringArray(`["Album/01.flac","/srv/private.flac","../outside.flac"]`, 10, true)
 	if err != nil {
 		t.Fatalf("decode bounded source references: %v", err)
 	}

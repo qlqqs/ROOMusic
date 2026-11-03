@@ -10,11 +10,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 )
 
 // 核对问题（阶段 M4 第二项）。管理员把来源类型、介质类型、归组冲突或缺失曲目标记为“已核对”，或取消核对；
-// 核对行记住当时的依据（issues.go），依据之后变了问题就重新计入“需要关注”。写入只经 operations.Run 的共同流程，
+// 核对行记住当时的依据（internal/releasesql/issues.go），依据之后变了问题就重新计入“需要关注”。写入只经 operations.Run 的共同流程，
 // 与修正、归组共用发行的人工修改版本号，只锁发行行。
 
 // 可以核对的四类问题，也是 release_issue_reviews.issue 允许的取值。
@@ -45,15 +46,15 @@ func ReviewableIssue(issue string) bool {
 func currentIssueBasisQuery(issue string) string {
 	switch issue {
 	case IssueGrouping:
-		return `SELECT (` + groupingIssueBasis + `)::text FROM release_grouping_evidence grouping
+		return `SELECT (` + releasesql.GroupingIssueBasis + `)::text FROM release_grouping_evidence grouping
 			WHERE grouping.release_id = $1::uuid AND NULLIF(BTRIM(grouping.reason), '') IS NOT NULL`
 	case IssueMissingTracks:
-		return `SELECT jsonb_build_object('tracks', jsonb_object_agg(missing_track.id::text, ` + missingTrackSeenAt + `))::text
+		return `SELECT jsonb_build_object('tracks', jsonb_object_agg(missing_track.id::text, ` + releasesql.MissingTrackSeenAt + `))::text
 			FROM tracks missing_track JOIN media missing_medium ON missing_medium.id = missing_track.medium_id
 			WHERE missing_medium.release_id = $1::uuid AND missing_track.source_status = 'missing'
 			HAVING COUNT(*) > 0`
 	default:
-		return `SELECT (` + fieldIssueBasis + `)::text FROM release_field_decisions decision
+		return `SELECT (` + releasesql.FieldIssueBasis + `)::text FROM release_field_decisions decision
 			WHERE decision.release_id = $1::uuid AND decision.field_key = $2 AND decision.action = 'uncertain_apply'`
 	}
 }
@@ -87,14 +88,14 @@ func issueBasisToken(basis string) string {
 	return hex.EncodeToString(digest[:])
 }
 
-// issueReviewOpenQuery 判断一类问题现在是否还有没被核对压下的部分（参数 $1 是发行 ID）：issues.go 的待处理数目大于 0。
+// issueReviewOpenQuery 判断一类问题现在是否还有没被核对压下的部分（参数 $1 是发行 ID）：internal/releasesql/issues.go 的待处理数目大于 0。
 func issueReviewOpenQuery(issue string) string {
-	open := releaseOpenGroupingIssue
+	open := releasesql.ReleaseOpenGroupingIssue
 	switch issue {
 	case IssueMissingTracks:
-		open = releaseOpenMissingTracks
+		open = releasesql.ReleaseOpenMissingTracks
 	case IssueSourceType, IssueMediaType:
-		open = `(SELECT COUNT(*) ` + fieldIssueRows + ` AND decision.field_key = $2 AND NOT ` + fieldReviewValid + `)`
+		open = `(SELECT COUNT(*) ` + releasesql.FieldIssueRows + ` AND decision.field_key = $2 AND NOT ` + releasesql.FieldReviewValid + `)`
 	}
 	return `SELECT ` + open + ` > 0 FROM releases WHERE releases.id = $1::uuid`
 }

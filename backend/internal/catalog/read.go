@@ -3,14 +3,14 @@ package catalog
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
-	pathpkg "path"
 	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
 )
 
 const (
@@ -21,23 +21,8 @@ const (
 	maxTrackCredits        = 100
 	maxReleaseTrackCredits = 10000
 	maxReleaseEvidence     = 100
-	maxEvidenceCandidates  = 20
 	maxEvidenceSourceRefs  = 100
-	maxEvidenceStringBytes = 500
 	legacyCandidateKind    = "legacy"
-	// releaseSource 是所有读取投影的 Release 来源：视图 release_effective 在扫描值之上叠加人工修正（迁移 0017），
-	// 别名仍叫 releases，所以下面的谓词、投影与 groups.go、track_placement.go 里的 releases.* 列都解析到有效值。
-	// 没有修正时它与 releases 表的读取结果逐列相同。扫描与身份规划不经过它，仍读写 releases 本表。
-	releaseSource           = `release_effective releases`
-	releaseVisiblePredicate = `EXISTS (
-		SELECT 1
-		FROM tracks visible_tracks
-		JOIN media visible_media ON visible_media.id = visible_tracks.medium_id
-		WHERE visible_media.release_id = releases.id
-		  AND visible_tracks.source_status = 'present'
-	)`
-	// releaseAttentionExpression 是“需要关注”：三类待处理问题的数目之和（见 issues.go）。
-	releaseAttentionExpression = `(` + releaseOpenFieldIssues + ` + ` + releaseOpenGroupingIssue + ` + ` + releaseOpenMissingTracks + `)`
 	// releaseSearchPredicate 是 Release 搜索的命中条件（参数 $1 已转义 LIKE 通配符）：标题、艺人、专辑艺人，
 	// 或任一 present 曲目的标题。/releases 与 /release-groups 共用它，保证搜索语义一致。
 	releaseSearchPredicate = `(
@@ -52,30 +37,6 @@ const (
 			  AND search_track.title ILIKE '%' || $1 || '%' ESCAPE '~'
 		)
 	)`
-	releaseSummaryProjection = `releases.id::text,
-		releases.title,
-		releases.artist,
-		NULLIF(BTRIM(releases.album_artist), ''),
-		NULLIF(releases.year, 0),
-		NULLIF(BTRIM(releases.source_type), ''),
-		NULLIF(BTRIM(releases.media_type), ''),
-		(SELECT COUNT(DISTINCT present_medium.id)
-		 FROM media present_medium
-		 JOIN tracks present_track ON present_track.medium_id = present_medium.id
-		 WHERE present_medium.release_id = releases.id
-		   AND present_track.source_status = 'present'),
-		(SELECT COUNT(*)
-		 FROM tracks present_track
-		 JOIN media present_medium ON present_medium.id = present_track.medium_id
-		 WHERE present_medium.release_id = releases.id
-		   AND present_track.source_status = 'present'),
-		` + releaseAttentionExpression + `,
-		release_artwork.storage_key,
-		release_artwork.mime_type,
-		release_artwork.width,
-		release_artwork.height`
-	releaseSummaryArtworkJoin = ` LEFT JOIN release_artworks release_artwork
-		ON release_artwork.release_id = releases.id`
 )
 
 // Queryer 是读取 Release 图所需的最小数据库能力。
@@ -120,21 +81,21 @@ type ReleaseHeader struct {
 
 // ListReleases 按标题、艺人排序返回可见 Release 的一页。查询执行失败时错误包含 ErrQuery。
 func (s *Store) ListReleases(ctx context.Context, params ListParams) (ReleasePage, error) {
-	whereClause := " WHERE " + releaseVisiblePredicate
+	whereClause := " WHERE " + releasesql.ReleaseVisiblePredicate
 	queryArgs := []any{}
 	if params.Search != "" {
 		whereClause += " AND " + releaseSearchPredicate
 		queryArgs = append(queryArgs, escapeLikePattern(params.Search))
 	}
 	if params.AttentionRequired {
-		whereClause += " AND " + releaseAttentionExpression + " > 0"
+		whereClause += " AND " + releasesql.ReleaseAttentionExpression + " > 0"
 	}
 
 	var total int64
-	if err := s.database.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+releaseSource+whereClause, queryArgs...).Scan(&total); err != nil {
+	if err := s.database.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+releasesql.ReleaseSource+whereClause, queryArgs...).Scan(&total); err != nil {
 		return ReleasePage{}, fmt.Errorf("%w: count releases: %w", ErrQuery, err)
 	}
-	listQuery := "SELECT " + releaseSummaryProjection + " FROM " + releaseSource + releaseSummaryArtworkJoin + whereClause +
+	listQuery := "SELECT " + releasesql.ReleaseSummaryProjection + " FROM " + releasesql.ReleaseSource + releasesql.ReleaseSummaryArtworkJoin + whereClause +
 		" ORDER BY LOWER(releases.title),LOWER(releases.artist),releases.id LIMIT $" + strconv.Itoa(len(queryArgs)+1) +
 		" OFFSET $" + strconv.Itoa(len(queryArgs)+2)
 	listArgs := append(append([]any{}, queryArgs...), params.PageSize, (params.Page-1)*params.PageSize)
@@ -179,11 +140,11 @@ func (s *Store) LoadReleaseHeader(ctx context.Context, releaseID string) (Releas
 	}
 	return ReleaseHeader{
 		CandidateKind:   normalizeCandidateKind(candidateKind.String),
-		Genre:           stringPointerFromNull(genre),
-		CatalogNumber:   stringPointerFromNull(catalogNumber),
-		Edition:         stringPointerFromNull(edition),
-		Label:           stringPointerFromNull(label),
-		Barcode:         stringPointerFromNull(barcode),
+		Genre:           releasesql.StringPointerFromNull(genre),
+		CatalogNumber:   releasesql.StringPointerFromNull(catalogNumber),
+		Edition:         releasesql.StringPointerFromNull(edition),
+		Label:           releasesql.StringPointerFromNull(label),
+		Barcode:         releasesql.StringPointerFromNull(barcode),
 		Revision:        revision,
 		CorrectedFields: corrected,
 	}, nil
@@ -199,7 +160,7 @@ func (s *Store) ReleaseExists(ctx context.Context, releaseID string) (bool, erro
 // LoadReleaseSummary 读取可见 Release 的摘要；不存在或没有可见曲目时返回 ErrReleaseNotFound。
 func (s *Store) LoadReleaseSummary(ctx context.Context, releaseID string) (ReleaseSummary, error) {
 	summary, err := scanReleaseSummary(s.database.QueryRowContext(ctx,
-		"SELECT "+releaseSummaryProjection+" FROM "+releaseSource+releaseSummaryArtworkJoin+" WHERE releases.id=$1::uuid AND "+releaseVisiblePredicate,
+		"SELECT "+releasesql.ReleaseSummaryProjection+" FROM "+releasesql.ReleaseSource+releasesql.ReleaseSummaryArtworkJoin+" WHERE releases.id=$1::uuid AND "+releasesql.ReleaseVisiblePredicate,
 		releaseID,
 	))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -263,21 +224,21 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 			Title:           trackTitle,
 			Artist:          trackArtist,
 			Position:        trackPosition,
-			Source:          safeSourceLabel(sourcePath),
+			Source:          releasesql.SafeSourceLabel(sourcePath),
 			SourceKind:      sourceKind,
 			DurationSeconds: floatPointerFromNull(duration),
-			Codec:           stringPointerFromNull(codec),
-			BitDepth:        intPointerFromNull(bitDepth),
-			SampleRate:      intPointerFromNull(sampleRate),
-			Channels:        intPointerFromNull(channels),
-			Bitrate:         intPointerFromNull(bitrate),
+			Codec:           releasesql.StringPointerFromNull(codec),
+			BitDepth:        releasesql.IntPointerFromNull(bitDepth),
+			SampleRate:      releasesql.IntPointerFromNull(sampleRate),
+			Channels:        releasesql.IntPointerFromNull(channels),
+			Bitrate:         releasesql.IntPointerFromNull(bitrate),
 			Credits:         []ReleaseCredit{},
 		}
 		if strings.Contains(strings.ToLower(sourceKind), "cue") || cueIndex.Valid || cueEnd.Valid || isrc.Valid {
 			track.Cue = &ReleaseCue{
-				IndexFrames: intPointerFromNull(cueIndex),
-				EndFrames:   intPointerFromNull(cueEnd),
-				ISRC:        stringPointerFromNull(isrc),
+				IndexFrames: releasesql.IntPointerFromNull(cueIndex),
+				EndFrames:   releasesql.IntPointerFromNull(cueEnd),
+				ISRC:        releasesql.StringPointerFromNull(isrc),
 			}
 			if cueIndex.Valid {
 				seconds := float64(cueIndex.Int64) / 75
@@ -421,13 +382,13 @@ func (s *Store) LoadReleaseEvidence(ctx context.Context, releaseID string) (Rele
 			return ReleaseEvidence{}, err
 		}
 		if strings.TrimSpace(value) != "" {
-			bounded := boundedDisplayString(value)
+			bounded := releasesql.BoundedDisplayString(value)
 			item.Value = &bounded
 			result.Truncated = result.Truncated || bounded != value
 		}
 		item.Candidates = []string{}
 		if candidatesJSON.Valid {
-			candidates, truncated, decodeErr := decodeBoundedStringArray(candidatesJSON.String, maxEvidenceCandidates, false)
+			candidates, truncated, decodeErr := releasesql.DecodeBoundedStringArray(candidatesJSON.String, releasesql.MaxEvidenceCandidates, false)
 			if decodeErr != nil {
 				rows.Close()
 				return ReleaseEvidence{}, decodeErr
@@ -436,7 +397,7 @@ func (s *Store) LoadReleaseEvidence(ctx context.Context, releaseID string) (Rele
 			result.Truncated = result.Truncated || truncated
 		}
 		if strings.TrimSpace(reason) != "" {
-			bounded := boundedDisplayString(reason)
+			bounded := releasesql.BoundedDisplayString(reason)
 			item.ReasonCode = &bounded
 			result.Truncated = result.Truncated || bounded != reason
 		}
@@ -458,13 +419,13 @@ func (s *Store) LoadReleaseEvidence(ctx context.Context, releaseID string) (Rele
 		return ReleaseEvidence{}, err
 	}
 	grouping.CandidateKind = normalizeCandidateKind(grouping.CandidateKind)
-	sourceRefs, truncated, err := decodeBoundedStringArray(sourceRefsJSON, maxEvidenceSourceRefs, true)
+	sourceRefs, truncated, err := releasesql.DecodeBoundedStringArray(sourceRefsJSON, maxEvidenceSourceRefs, true)
 	if err != nil {
 		return ReleaseEvidence{}, err
 	}
 	grouping.SourceRefs = sourceRefs
 	result.Truncated = result.Truncated || truncated
-	grouping.ReasonCodes, truncated = splitBoundedReasonCodes(reason)
+	grouping.ReasonCodes, truncated = releasesql.SplitBoundedReasonCodes(reason)
 	result.Truncated = result.Truncated || truncated
 	result.Grouping = &grouping
 	return result, nil
@@ -478,7 +439,7 @@ func scanReleaseSummary(row interface{ Scan(...any) error }) (ReleaseSummary, er
 	return columns.summary()
 }
 
-// releaseSummaryColumns 收集 releaseSummaryProjection 的原始列。targets 给出 Scan 的目标（调用方可以在后面追加自己的列），
+// releaseSummaryColumns 收集 releasesql.ReleaseSummaryProjection 的原始列。targets 给出 Scan 的目标（调用方可以在后面追加自己的列），
 // summary 再解释 nullable 列并校验封面；列表、详情与按组投影都经过它，只有一处解释这些列。
 type releaseSummaryColumns struct {
 	result                                                             ReleaseSummary
@@ -507,10 +468,10 @@ func (columns *releaseSummaryColumns) targets() []any {
 
 func (columns *releaseSummaryColumns) summary() (ReleaseSummary, error) {
 	result := columns.result
-	result.AlbumArtist = stringPointerFromNull(columns.albumArtist)
-	result.Year = intPointerFromNull(columns.year)
-	result.SourceType = stringPointerFromNull(columns.sourceType)
-	result.MediaType = stringPointerFromNull(columns.mediaType)
+	result.AlbumArtist = releasesql.StringPointerFromNull(columns.albumArtist)
+	result.Year = releasesql.IntPointerFromNull(columns.year)
+	result.SourceType = releasesql.StringPointerFromNull(columns.sourceType)
+	result.MediaType = releasesql.StringPointerFromNull(columns.mediaType)
 	var err error
 	result.Artwork, err = releaseArtworkFromProjection(columns.artworkResourceID, columns.artworkMIME, columns.artworkWidth, columns.artworkHeight)
 	if err != nil {
@@ -555,91 +516,8 @@ func releaseArtworkFromProjection(resourceID, mime sql.NullString, width, height
 	}, nil
 }
 
-func decodeBoundedStringArray(raw string, limit int, sourceRefs bool) ([]string, bool, error) {
-	var decoded []string
-	if err := json.Unmarshal([]byte(raw), &decoded); err != nil {
-		return nil, false, fmt.Errorf("decode evidence string array: %w", err)
-	}
-	result := make([]string, 0, min(len(decoded), limit))
-	truncated := len(decoded) > limit
-	for _, value := range decoded {
-		if len(result) == limit {
-			truncated = true
-			break
-		}
-		if sourceRefs {
-			safe, ok := SafeRelativeSourceRef(value)
-			if !ok {
-				truncated = true
-				continue
-			}
-			normalizedInput := strings.TrimSpace(strings.ReplaceAll(value, `\`, "/"))
-			truncated = truncated || safe != normalizedInput
-			result = append(result, safe)
-			continue
-		}
-		bounded := boundedDisplayString(value)
-		if bounded == "" {
-			truncated = true
-			continue
-		}
-		truncated = truncated || bounded != value
-		result = append(result, bounded)
-	}
-	return result, truncated, nil
-}
-
 func SafeRelativeSourceRef(value string) (string, bool) {
-	value = strings.TrimSpace(strings.ReplaceAll(value, `\`, "/"))
-	value = boundedDisplayString(value)
-	if value == "" || strings.ContainsRune(value, 0) || strings.HasPrefix(value, "/") || strings.HasPrefix(value, "//") {
-		return "", false
-	}
-	firstSegment := strings.SplitN(value, "/", 2)[0]
-	if strings.Contains(firstSegment, ":") {
-		return "", false
-	}
-	cleaned := pathpkg.Clean(value)
-	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
-		return "", false
-	}
-	return cleaned, cleaned != ""
-}
-
-func splitBoundedReasonCodes(raw string) ([]string, bool) {
-	if strings.TrimSpace(raw) == "" {
-		return []string{}, false
-	}
-	parts := strings.Split(raw, ";")
-	result := make([]string, 0, min(len(parts), maxEvidenceCandidates))
-	truncated := len(parts) > maxEvidenceCandidates
-	for _, part := range parts {
-		if len(result) == maxEvidenceCandidates {
-			break
-		}
-		part = boundedDisplayString(strings.TrimSpace(part))
-		if part != "" {
-			result = append(result, part)
-		}
-	}
-	return result, truncated
-}
-
-func boundedDisplayString(value string) string {
-	value = strings.TrimSpace(strings.Map(func(character rune) rune {
-		if character < 0x20 || character == 0x7f {
-			return -1
-		}
-		return character
-	}, value))
-	if len(value) <= maxEvidenceStringBytes {
-		return value
-	}
-	value = value[:maxEvidenceStringBytes]
-	for value != "" && !utf8.ValidString(value) {
-		value = value[:len(value)-1]
-	}
-	return value
+	return releasesql.SafeRelativeSourceRef(value)
 }
 
 func normalizeCandidateKind(value string) string {
@@ -649,31 +527,6 @@ func normalizeCandidateKind(value string) string {
 	default:
 		return legacyCandidateKind
 	}
-}
-
-func safeSourceLabel(relativePath string) string {
-	relativePath = strings.ReplaceAll(relativePath, `\`, "/")
-	label := boundedDisplayString(pathpkg.Base(relativePath))
-	if label == "" || label == "." || label == "/" {
-		return "未知来源"
-	}
-	return label
-}
-
-func stringPointerFromNull(value sql.NullString) *string {
-	if !value.Valid {
-		return nil
-	}
-	result := value.String
-	return &result
-}
-
-func intPointerFromNull(value sql.NullInt64) *int {
-	if !value.Valid {
-		return nil
-	}
-	result := int(value.Int64)
-	return &result
 }
 
 func floatPointerFromNull(value sql.NullFloat64) *float64 {

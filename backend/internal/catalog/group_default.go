@@ -8,10 +8,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 )
 
-// 默认版本（阶段 M4）。管理员可以为一张多版本专辑指定一个默认版本，它成为专辑的代表版本（releaseGroupMemberOrder 把它排在最前）；
+// 默认版本（阶段 M4）。管理员可以为一张多版本专辑指定一个默认版本，它成为专辑的代表版本（releasesql.ReleaseGroupMemberOrder 把它排在最前）；
 // 没有指定时仍按“年份最早”自动选择。默认版本存在 release_groups.default_release_id，不要求它属于这个组：扫描与归组都不改这一列，
 // 它只在“这个发行可见、并且现在属于这个组”时生效，否则静默失效、回到自动规则，版本回来时重新生效。
 // 专辑有自己的人工修改版本号 release_groups.edit_revision，只有这里的设定、清除与撤销递增它（归组递增的是发行的版本号）。
@@ -61,7 +62,7 @@ type groupDefaultState struct {
 
 // lockReleaseRow 锁住发行行（不要求可见），返回它所在的组与是否可见；发行不存在时 exists 为 false。
 func lockReleaseRow(ctx context.Context, tx *sql.Tx, releaseID string) (groupID string, visible, exists bool, err error) {
-	err = tx.QueryRowContext(ctx, `SELECT releases.group_id::text, `+releaseVisiblePredicate+` FROM releases WHERE releases.id=$1::uuid FOR UPDATE`, releaseID).
+	err = tx.QueryRowContext(ctx, `SELECT releases.group_id::text, `+releasesql.ReleaseVisiblePredicate+` FROM releases WHERE releases.id=$1::uuid FOR UPDATE`, releaseID).
 		Scan(&groupID, &visible)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, false, nil
@@ -91,7 +92,7 @@ func lockVisibleGroup(ctx context.Context, tx *sql.Tx, groupID string) (lockedGr
 	}
 	locked.defaultRelease = stored.String
 	var visible bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM `+releaseSource+` WHERE releases.group_id=$1::uuid AND `+releaseVisiblePredicate+`)`, groupID).Scan(&visible); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM `+releasesql.ReleaseSource+` WHERE releases.group_id=$1::uuid AND `+releasesql.ReleaseVisiblePredicate+`)`, groupID).Scan(&visible); err != nil {
 		return lockedGroup{}, err
 	}
 	if !visible {
@@ -106,7 +107,7 @@ func loadDefaultSnapshot(ctx context.Context, tx *sql.Tx, releaseID string) (*de
 		return nil, nil
 	}
 	var snapshot defaultVersionSnapshot
-	err := tx.QueryRowContext(ctx, `SELECT releases.id::text, releases.title, NULLIF(releases.year, 0), NULLIF(BTRIM(releases.edition), '') FROM `+releaseSource+` WHERE releases.id=$1::uuid`, releaseID).
+	err := tx.QueryRowContext(ctx, `SELECT releases.id::text, releases.title, NULLIF(releases.year, 0), NULLIF(BTRIM(releases.edition), '') FROM `+releasesql.ReleaseSource+` WHERE releases.id=$1::uuid`, releaseID).
 		Scan(&snapshot.ReleaseID, &snapshot.Title, &snapshot.Year, &snapshot.Edition)
 	if err != nil {
 		return nil, err
@@ -299,9 +300,9 @@ func loadAlbumInfos(ctx context.Context, database operations.Queryer, records []
 	rows, err := database.QueryContext(ctx, `SELECT album.id::text, album.edit_revision, representative.title, COALESCE(representative.visible, FALSE)
 		FROM release_groups album
 		LEFT JOIN LATERAL (
-			SELECT releases.title, `+releaseVisiblePredicate+` AS visible FROM `+releaseSource+`
+			SELECT releases.title, `+releasesql.ReleaseVisiblePredicate+` AS visible FROM `+releasesql.ReleaseSource+`
 			WHERE releases.group_id = album.id
-			ORDER BY NOT (`+releaseVisiblePredicate+`), `+releaseGroupMemberOrder+` LIMIT 1
+			ORDER BY NOT (`+releasesql.ReleaseVisiblePredicate+`), `+releasesql.ReleaseGroupMemberOrder+` LIMIT 1
 		) representative ON TRUE
 		WHERE album.id = ANY($1::text[]::uuid[])`, ids)
 	if err != nil {

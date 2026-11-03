@@ -11,6 +11,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 )
@@ -20,35 +21,8 @@ import (
 // 明确设为空（null）；没有这一行就是“没有修正”，字段显示当前的扫描值。写入只经 operations.Run 的共同流程（鉴权、
 // 幂等、预期版本与操作记录由它和传输层负责），这里提供它的执行器与读取投影。
 
-// 修正的三种修改方式：set 与 null 是存下来的意图，clear 删除意图（回到当前的扫描值）。
-const (
-	CorrectionSet   = "set"
-	CorrectionNull  = "null"
-	CorrectionClear = "clear"
-
-	// maxCorrectionTextBytes 与表约束 release_corrections_value_ck 一致。
-	maxCorrectionTextBytes = 4096
-)
-
-// correctableField 描述首批可修正的一个发行字段（G2）。
-type correctableField struct {
-	name     string
-	label    string // 用于错误说明的中文名
-	year     bool   // 年份是整数，其余是文本
-	required bool   // 不能设为空：标题与专辑艺人
-}
-
-// correctableFields 的顺序就是接口里 fields 的顺序，也是 correctionValueProjection 的列顺序。
-var correctableFields = []correctableField{
-	{name: "title", label: "标题", required: true},
-	{name: "album_artist", label: "专辑艺人", required: true},
-	{name: "year", label: "年份", year: true},
-	{name: "genre", label: "流派"},
-	{name: "label", label: "厂牌"},
-	{name: "catalog_number", label: "编号"},
-	{name: "edition", label: "版本说明"},
-	{name: "barcode", label: "条码"},
-}
+// maxCorrectionTextBytes 与表约束 release_corrections_value_ck 一致。
+const maxCorrectionTextBytes = 4096
 
 func correctableFieldNamed(name string) (correctableField, bool) {
 	for _, field := range correctableFields {
@@ -57,15 +31,6 @@ func correctableFieldNamed(name string) (correctableField, bool) {
 		}
 	}
 	return correctableField{}, false
-}
-
-// CorrectableFieldNames 返回可修正字段的名称，按接口里的固定顺序。
-func CorrectableFieldNames() []string {
-	names := make([]string, len(correctableFields))
-	for index, field := range correctableFields {
-		names[index] = field.name
-	}
-	return names
 }
 
 // RawCorrectionChange 是请求体里对一个字段的修改：Mode 是 set、null 或 clear，Value 只有 set 时有值
@@ -179,12 +144,6 @@ func (request CorrectionRequest) Fingerprint() string {
 	})
 }
 
-// CorrectionIntent 是一个字段当前的修正意图（没有修正时没有它）：set 带值，null 表示明确设为空。
-type CorrectionIntent struct {
-	Mode  string `json:"mode"`
-	Value any    `json:"value,omitempty"`
-}
-
 // CorrectionField 是编辑发行信息时一个字段的状态：扫描值、当前的修正意图（没有时为 null）、有效值，
 // 以及扫描对这个字段的处理是否不确定。年份的值是整数，其余是字符串；没有值时是 null。
 type CorrectionField struct {
@@ -216,7 +175,7 @@ const correctionValueProjection = `releases.title,
 		NULLIF(BTRIM(releases.genre), ''), NULLIF(BTRIM(releases.label), ''), NULLIF(BTRIM(releases.catalog_number), ''),
 		NULLIF(BTRIM(releases.edition), ''), NULLIF(BTRIM(releases.barcode), '')`
 
-// loadFieldValues 读取八个字段的值（字符串、整数或 nil）；source 是 releases（扫描值）或 releaseSource（有效值）。
+// loadFieldValues 读取八个字段的值（字符串、整数或 nil）；source 是 releases（扫描值）或 releasesql.ReleaseSource（有效值）。
 func loadFieldValues(ctx context.Context, database Queryer, source, releaseID string) ([]any, error) {
 	var title, albumArtist string
 	var year sql.NullInt64
@@ -238,40 +197,12 @@ func loadFieldValues(ctx context.Context, database Queryer, source, releaseID st
 	return []any{title, albumArtist, yearValue, text(genre), text(label), text(catalogNumber), text(edition), text(barcode)}, nil
 }
 
-// loadCorrectionIntents 读取发行当前的修正意图，键是字段名。
-func loadCorrectionIntents(ctx context.Context, database Queryer, releaseID string) (map[string]CorrectionIntent, error) {
-	rows, err := database.QueryContext(ctx, `SELECT field, mode, text_value, year_value FROM release_corrections WHERE release_id=$1::uuid`, releaseID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	intents := map[string]CorrectionIntent{}
-	for rows.Next() {
-		var name, mode string
-		var text sql.NullString
-		var year sql.NullInt64
-		if err := rows.Scan(&name, &mode, &text, &year); err != nil {
-			return nil, err
-		}
-		intent := CorrectionIntent{Mode: mode}
-		switch {
-		case mode != CorrectionSet:
-		case year.Valid:
-			intent.Value = int(year.Int64)
-		default:
-			intent.Value = text.String
-		}
-		intents[name] = intent
-	}
-	return intents, rows.Err()
-}
-
 // loadCorrectionState 读取发行的修正状态；发行不存在或没有可见曲目时返回 ErrReleaseNotFound。第一条查询先读版本号：
 // 读取期间若有修改提交，返回的版本号比数据旧，提交修改时会得到版本冲突，不会基于过期的状态覆盖新状态。
 func loadCorrectionState(ctx context.Context, database Queryer, releaseID string) (CorrectionState, error) {
 	state := CorrectionState{ReleaseID: strings.ToLower(releaseID)}
 	var visible bool
-	err := database.QueryRowContext(ctx, `SELECT releases.edit_revision, `+releaseVisiblePredicate+` FROM releases WHERE releases.id=$1::uuid`, releaseID).Scan(&state.Revision, &visible)
+	err := database.QueryRowContext(ctx, `SELECT releases.edit_revision, `+releasesql.ReleaseVisiblePredicate+` FROM releases WHERE releases.id=$1::uuid`, releaseID).Scan(&state.Revision, &visible)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && !visible) {
 		return CorrectionState{}, ErrReleaseNotFound
 	}
@@ -282,7 +213,7 @@ func loadCorrectionState(ctx context.Context, database Queryer, releaseID string
 	if err != nil {
 		return CorrectionState{}, err
 	}
-	effective, err := loadFieldValues(ctx, database, releaseSource, releaseID)
+	effective, err := loadFieldValues(ctx, database, releasesql.ReleaseSource, releaseID)
 	if err != nil {
 		return CorrectionState{}, err
 	}
@@ -334,21 +265,6 @@ func (s *Store) LoadCorrectionState(ctx context.Context, releaseID string) (Corr
 	return state, err
 }
 
-// loadCorrectedFieldNames 返回发行有修正的字段名，按 correctableFields 的顺序；没有修正时是空切片。
-func loadCorrectedFieldNames(ctx context.Context, database Queryer, releaseID string) ([]string, error) {
-	intents, err := loadCorrectionIntents(ctx, database, releaseID)
-	if err != nil {
-		return nil, err
-	}
-	names := []string{}
-	for _, field := range correctableFields {
-		if _, corrected := intents[field.name]; corrected {
-			names = append(names, field.name)
-		}
-	}
-	return names, nil
-}
-
 // correctionRecordState 是操作记录里的类型化状态：被改字段的修正意图（null 表示没有修正）与这些字段当时的有效值。
 // 撤销用前态的意图恢复，不把历史有效值写回扫描列；有效值只供操作记录显示。
 type correctionRecordState struct {
@@ -367,7 +283,7 @@ type lockedRelease struct {
 func lockVisibleRelease(ctx context.Context, tx *sql.Tx, releaseID string) (lockedRelease, error) {
 	var locked lockedRelease
 	var visible bool
-	err := tx.QueryRowContext(ctx, `SELECT releases.edit_revision, releases.group_id::text, `+releaseVisiblePredicate+` FROM releases WHERE releases.id=$1::uuid FOR UPDATE`, releaseID).
+	err := tx.QueryRowContext(ctx, `SELECT releases.edit_revision, releases.group_id::text, `+releasesql.ReleaseVisiblePredicate+` FROM releases WHERE releases.id=$1::uuid FOR UPDATE`, releaseID).
 		Scan(&locked.revision, &locked.groupID, &visible)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && !visible) {
 		return lockedRelease{}, operations.NotFound("not_found", "发行版本不存在")
@@ -397,7 +313,7 @@ func CorrectionExecutor(request CorrectionRequest) operations.Executor {
 		if err != nil {
 			return operations.Outcome{}, err
 		}
-		effectiveBefore, err := loadFieldValues(ctx, tx, releaseSource, request.ReleaseID)
+		effectiveBefore, err := loadFieldValues(ctx, tx, releasesql.ReleaseSource, request.ReleaseID)
 		if err != nil {
 			return operations.Outcome{}, err
 		}

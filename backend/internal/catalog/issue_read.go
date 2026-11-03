@@ -7,11 +7,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 )
 
 // 问题的读取（阶段 M4 第二项，只有管理员）：问题列表按版本列出各类待处理与已核对的数目，版本的问题逐条给出原因、依据与核对状态。
-// 数目都来自 issues.go 的常量，所以列表、详情与“需要关注”一致；可以核对的问题带依据令牌，核对时带回（issue_review.go）。
+// 数目都来自 internal/releasesql/issues.go 的常量，所以列表、详情与“需要关注”一致；可以核对的问题带依据令牌，核对时带回（issue_review.go）。
 
 const (
 	// maxIssueSiblings 是归组冲突详情里同一目录其他版本的上限。
@@ -76,13 +77,13 @@ type IssuePage struct {
 // issueCountsCTE 为每个可见版本算出六个数目（三类待处理，再三类已核对），列表、总数与筛选项数字都从它读。
 const issueCountsCTE = `issue_counts AS (
 		SELECT releases.id,
-			` + releaseOpenFieldIssues + ` AS open_fields,
-			` + releaseOpenGroupingIssue + ` AS open_grouping,
-			` + releaseOpenMissingTracks + ` AS open_missing,
-			` + releaseReviewedFieldIssues + ` AS reviewed_fields,
-			` + releaseReviewedGroupingIssue + ` AS reviewed_grouping,
-			` + releaseReviewedMissingTracks + ` AS reviewed_missing
-		FROM ` + releaseSource + ` WHERE ` + releaseVisiblePredicate + `
+			` + releasesql.ReleaseOpenFieldIssues + ` AS open_fields,
+			` + releasesql.ReleaseOpenGroupingIssue + ` AS open_grouping,
+			` + releasesql.ReleaseOpenMissingTracks + ` AS open_missing,
+			` + releasesql.ReleaseReviewedFieldIssues + ` AS reviewed_fields,
+			` + releasesql.ReleaseReviewedGroupingIssue + ` AS reviewed_grouping,
+			` + releasesql.ReleaseReviewedMissingTracks + ` AS reviewed_missing
+		FROM ` + releasesql.ReleaseSource + ` WHERE ` + releasesql.ReleaseVisiblePredicate + `
 	)`
 
 // issueFilter 返回状态与类别对应的条件（列来自 issue_counts）；参数已经校验过。
@@ -135,11 +136,11 @@ func (s *Store) ListIssues(ctx context.Context, params IssueListParams) (IssuePa
 		page.Total = counts.All
 	}
 
-	rows, err := s.database.QueryContext(ctx, `WITH `+issueCountsCTE+` SELECT `+releaseSummaryProjection+`,
+	rows, err := s.database.QueryContext(ctx, `WITH `+issueCountsCTE+` SELECT `+releasesql.ReleaseSummaryProjection+`,
 			releases.group_id::text, NULLIF(BTRIM(releases.edition), ''),
 			issue_counts.open_fields, issue_counts.open_grouping, issue_counts.open_missing,
 			issue_counts.reviewed_fields, issue_counts.reviewed_grouping, issue_counts.reviewed_missing
-		FROM issue_counts JOIN `+releaseSource+` ON releases.id = issue_counts.id`+releaseSummaryArtworkJoin+`
+		FROM issue_counts JOIN `+releasesql.ReleaseSource+` ON releases.id = issue_counts.id`+releasesql.ReleaseSummaryArtworkJoin+`
 		WHERE `+issueFilter(params.Status, params.Category)+`
 		ORDER BY LOWER(releases.title), LOWER(releases.artist), releases.id
 		LIMIT $1 OFFSET $2`, params.PageSize, (params.Page-1)*params.PageSize)
@@ -159,7 +160,7 @@ func (s *Store) ListIssues(ctx context.Context, params IssueListParams) (IssuePa
 		if item.Release, err = columns.summary(); err != nil {
 			return IssuePage{}, err
 		}
-		item.Edition = stringPointerFromNull(edition)
+		item.Edition = releasesql.StringPointerFromNull(edition)
 		page.Items = append(page.Items, item)
 	}
 	return page, rows.Err()
@@ -291,9 +292,9 @@ func (s *Store) LoadReleaseIssues(ctx context.Context, releaseID string) (Releas
 	result := ReleaseIssues{ReleaseID: releaseID, Fields: []FieldIssue{}}
 	var sourceRoot, directory, edition sql.NullString
 	var columns releaseSummaryColumns
-	err := s.database.QueryRowContext(ctx, `SELECT `+releaseSummaryProjection+`, releases.group_id::text, releases.edit_revision,
+	err := s.database.QueryRowContext(ctx, `SELECT `+releasesql.ReleaseSummaryProjection+`, releases.group_id::text, releases.edit_revision,
 			releases.source_root_id::text, releases.relative_directory, NULLIF(BTRIM(releases.edition), '')
-		FROM `+releaseSource+releaseSummaryArtworkJoin+` WHERE releases.id=$1::uuid AND `+releaseVisiblePredicate, releaseID).
+		FROM `+releasesql.ReleaseSource+releasesql.ReleaseSummaryArtworkJoin+` WHERE releases.id=$1::uuid AND `+releasesql.ReleaseVisiblePredicate, releaseID).
 		Scan(append(columns.targets(), &result.GroupID, &result.Revision, &sourceRoot, &directory, &edition)...)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ReleaseIssues{}, ErrReleaseNotFound
@@ -304,7 +305,7 @@ func (s *Store) LoadReleaseIssues(ctx context.Context, releaseID string) (Releas
 	if result.Release, err = columns.summary(); err != nil {
 		return ReleaseIssues{}, err
 	}
-	result.Edition = stringPointerFromNull(edition)
+	result.Edition = releasesql.StringPointerFromNull(edition)
 	reviews, err := s.loadIssueReviews(ctx, releaseID)
 	if err != nil {
 		return ReleaseIssues{}, err
@@ -352,14 +353,14 @@ func (s *Store) loadIssueReviews(ctx context.Context, releaseID string) (map[str
 	return reviews, nil
 }
 
-// loadFieldIssues、loadGroupingIssue 与 loadMissingTracksIssue 在 issues.go 定义问题的同一批行上读取明细（LATERAL 子查询里
+// loadFieldIssues、loadGroupingIssue 与 loadMissingTracksIssue 在 internal/releasesql/issues.go 定义问题的同一批行上读取明细（LATERAL 子查询里
 // releases 是这个版本），所以详情里待处理的条目与“需要关注”的计数一致。
 func (s *Store) loadFieldIssues(ctx context.Context, result *ReleaseIssues, reviews map[string]*IssueReviewInfo) error {
 	rows, err := s.database.QueryContext(ctx, `SELECT issue.field_key, issue.value, issue.reason, issue.candidates, issue.basis, issue.reviewed
 		FROM releases JOIN LATERAL (
 			SELECT decision.field_key, COALESCE(decision.selected_value #>> '{}', '') AS value, COALESCE(decision.reason, '') AS reason,
-				COALESCE(decision.candidates::text, '[]') AS candidates, (`+fieldIssueBasis+`)::text AS basis, `+fieldReviewValid+` AS reviewed
-			`+fieldIssueRows+`
+				COALESCE(decision.candidates::text, '[]') AS candidates, (`+releasesql.FieldIssueBasis+`)::text AS basis, `+releasesql.FieldReviewValid+` AS reviewed
+			`+releasesql.FieldIssueRows+`
 		) issue ON TRUE
 		WHERE releases.id = $1::uuid
 		ORDER BY issue.field_key
@@ -378,13 +379,13 @@ func (s *Store) loadFieldIssues(ctx context.Context, result *ReleaseIssues, revi
 		if err := rows.Scan(&issue.Field, &value, &reason, &candidates, &basis, &reviewed); err != nil {
 			return err
 		}
-		if bounded := boundedDisplayString(value); bounded != "" {
+		if bounded := releasesql.BoundedDisplayString(value); bounded != "" {
 			issue.Value = &bounded
 		}
-		if bounded := boundedDisplayString(reason); bounded != "" {
+		if bounded := releasesql.BoundedDisplayString(reason); bounded != "" {
 			issue.ReasonCode = &bounded
 		}
-		if issue.Candidates, _, err = decodeBoundedStringArray(candidates, maxEvidenceCandidates, false); err != nil {
+		if issue.Candidates, _, err = releasesql.DecodeBoundedStringArray(candidates, releasesql.MaxEvidenceCandidates, false); err != nil {
 			return err
 		}
 		issue.Reviewable = issue.Field == IssueSourceType || issue.Field == IssueMediaType
@@ -404,8 +405,8 @@ func (s *Store) loadGroupingIssue(ctx context.Context, result *ReleaseIssues, re
 	var reviewed bool
 	err := s.database.QueryRowContext(ctx, `SELECT issue.reason, issue.source_refs, issue.basis, issue.reviewed
 		FROM releases JOIN LATERAL (
-			SELECT grouping.reason, grouping.source_refs::text AS source_refs, (`+groupingIssueBasis+`)::text AS basis, `+groupingReviewValid+` AS reviewed
-			`+groupingIssueRows+`
+			SELECT grouping.reason, grouping.source_refs::text AS source_refs, (`+releasesql.GroupingIssueBasis+`)::text AS basis, `+releasesql.GroupingReviewValid+` AS reviewed
+			`+releasesql.GroupingIssueRows+`
 		) issue ON TRUE
 		WHERE releases.id = $1::uuid`, result.ReleaseID).Scan(&reason, &sourceRefs, &basis, &reviewed)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -416,15 +417,15 @@ func (s *Store) loadGroupingIssue(ctx context.Context, result *ReleaseIssues, re
 	}
 	issue := GroupingIssue{Siblings: []IssueSibling{}, Basis: issueBasisToken(basis), Status: issueStatus(!reviewed), Review: reviews[IssueGrouping]}
 	var truncated bool
-	if issue.SourceRefs, truncated, err = decodeBoundedStringArray(sourceRefs, maxEvidenceSourceRefs, true); err != nil {
+	if issue.SourceRefs, truncated, err = releasesql.DecodeBoundedStringArray(sourceRefs, maxEvidenceSourceRefs, true); err != nil {
 		return err
 	}
 	issue.Truncated = truncated
-	issue.ReasonCodes, truncated = splitBoundedReasonCodes(reason)
+	issue.ReasonCodes, truncated = releasesql.SplitBoundedReasonCodes(reason)
 	issue.Truncated = issue.Truncated || truncated
 	if sourceRoot.Valid && directory.Valid {
-		rows, err := s.database.QueryContext(ctx, `SELECT releases.id::text, releases.group_id::text, releases.title FROM `+releaseSource+`
-			WHERE releases.source_root_id = $1::uuid AND releases.relative_directory = $2 AND releases.id <> $3::uuid AND `+releaseVisiblePredicate+`
+		rows, err := s.database.QueryContext(ctx, `SELECT releases.id::text, releases.group_id::text, releases.title FROM `+releasesql.ReleaseSource+`
+			WHERE releases.source_root_id = $1::uuid AND releases.relative_directory = $2 AND releases.id <> $3::uuid AND `+releasesql.ReleaseVisiblePredicate+`
 			ORDER BY LOWER(releases.title), LOWER(releases.artist), releases.id LIMIT $4`, sourceRoot.String, directory.String, result.ReleaseID, maxIssueSiblings+1)
 		if err != nil {
 			return fmt.Errorf("%w: load grouping siblings: %w", ErrQuery, err)
@@ -459,7 +460,7 @@ func (s *Store) loadMissingTracksIssue(ctx context.Context, result *ReleaseIssue
 	}
 	issue := MissingTracksIssue{Tracks: []MissingTrack{}, Basis: issueBasisToken(basis), Review: reviews[IssueMissingTracks]}
 	var open int64
-	if err := s.database.QueryRowContext(ctx, `SELECT `+releaseOpenMissingTracks+` FROM releases WHERE releases.id = $1::uuid`, result.ReleaseID).Scan(&open); err != nil {
+	if err := s.database.QueryRowContext(ctx, `SELECT `+releasesql.ReleaseOpenMissingTracks+` FROM releases WHERE releases.id = $1::uuid`, result.ReleaseID).Scan(&open); err != nil {
 		return fmt.Errorf("%w: count open missing tracks: %w", ErrQuery, err)
 	}
 	issue.Status = issueStatus(open > 0)
@@ -467,8 +468,8 @@ func (s *Store) loadMissingTracksIssue(ctx context.Context, result *ReleaseIssue
 			issue.reviewed, COUNT(*) OVER ()
 		FROM releases JOIN LATERAL (
 			SELECT missing_track.id::text AS id, missing_track.title, missing_medium.position AS medium_position, missing_track.position,
-				missing_track.relative_path, missing_track.observed_at, `+missingTrackReviewValid+` AS reviewed
-			`+missingTrackRows+`
+				missing_track.relative_path, missing_track.observed_at, `+releasesql.MissingTrackReviewValid+` AS reviewed
+			`+releasesql.MissingTrackRows+`
 		) issue ON TRUE
 		WHERE releases.id = $1::uuid
 		ORDER BY issue.medium_position, issue.position, issue.id
@@ -483,12 +484,12 @@ func (s *Store) loadMissingTracksIssue(ctx context.Context, result *ReleaseIssue
 		if err := rows.Scan(&track.ID, &track.Title, &track.MediumPosition, &track.Position, &path, &track.LastSeenAt, &track.Reviewed, &issue.Count); err != nil {
 			return err
 		}
-		if safe, ok := SafeRelativeSourceRef(path); ok {
+		if safe, ok := releasesql.SafeRelativeSourceRef(path); ok {
 			track.Source = safe
 		} else {
-			track.Source = safeSourceLabel(path)
+			track.Source = releasesql.SafeSourceLabel(path)
 		}
-		track.Title = boundedDisplayString(track.Title)
+		track.Title = releasesql.BoundedDisplayString(track.Title)
 		issue.Tracks = append(issue.Tracks, track)
 	}
 	if err := rows.Err(); err != nil {

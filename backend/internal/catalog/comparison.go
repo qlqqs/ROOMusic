@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
 )
 
 // 版本对比（阶段 M4）：一张专辑的各个版本并排比较发行级字段与内容（介质、曲目、时长、音频格式）。只读，所有登录成员可用。
@@ -67,7 +69,7 @@ const comparedReleaseQuery = `SELECT releases.id::text, releases.title, releases
 		present.medium_count, present.track_count, present.duration_seconds,
 		COUNT(*) OVER (),
 		(SELECT default_group.default_release_id::text FROM release_groups default_group WHERE default_group.id = releases.group_id)
-	FROM ` + releaseSource + `
+	FROM ` + releasesql.ReleaseSource + `
 	CROSS JOIN LATERAL (
 		SELECT COUNT(DISTINCT present_medium.id) AS medium_count,
 		       COUNT(*) AS track_count,
@@ -77,8 +79,8 @@ const comparedReleaseQuery = `SELECT releases.id::text, releases.title, releases
 		JOIN tracks present_track ON present_track.medium_id = present_medium.id
 		WHERE present_medium.release_id = releases.id AND present_track.source_status = 'present'
 	) present
-	WHERE releases.group_id = $1::uuid AND ` + releaseVisiblePredicate + `
-	ORDER BY ` + releaseGroupMemberOrder + `
+	WHERE releases.group_id = $1::uuid AND ` + releasesql.ReleaseVisiblePredicate + `
+	ORDER BY ` + releasesql.ReleaseGroupMemberOrder + `
 	LIMIT $2`
 
 // LoadReleaseComparison 读取一张专辑各个可见版本的对比数据。组不存在或没有可见成员时返回 ErrReleaseGroupNotFound。
@@ -101,10 +103,10 @@ func (s *Store) LoadReleaseComparison(ctx context.Context, groupID string) (Rele
 			&sourceType, &mediaType, &release.MediumCount, &release.TrackCount, &duration, &comparison.ReleaseCount, &stored); err != nil {
 			return ReleaseComparison{}, err
 		}
-		release.AlbumArtist, release.Year = stringPointerFromNull(albumArtist), intPointerFromNull(year)
-		release.Edition, release.Label, release.CatalogNumber = stringPointerFromNull(edition), stringPointerFromNull(label), stringPointerFromNull(catalogNumber)
-		release.Barcode, release.Genre = stringPointerFromNull(barcode), stringPointerFromNull(genre)
-		release.SourceType, release.MediaType = stringPointerFromNull(sourceType), stringPointerFromNull(mediaType)
+		release.AlbumArtist, release.Year = releasesql.StringPointerFromNull(albumArtist), releasesql.IntPointerFromNull(year)
+		release.Edition, release.Label, release.CatalogNumber = releasesql.StringPointerFromNull(edition), releasesql.StringPointerFromNull(label), releasesql.StringPointerFromNull(catalogNumber)
+		release.Barcode, release.Genre = releasesql.StringPointerFromNull(barcode), releasesql.StringPointerFromNull(genre)
+		release.SourceType, release.MediaType = releasesql.StringPointerFromNull(sourceType), releasesql.StringPointerFromNull(mediaType)
 		release.DurationSeconds = floatPointerFromNull(duration)
 		release.Formats, release.CorrectedFields = []AudioFormat{}, []string{}
 		comparison.Releases = append(comparison.Releases, release)
@@ -154,7 +156,7 @@ func (s *Store) loadComparedFormats(ctx context.Context, ids []string, index map
 		if err := rows.Scan(&releaseID, &codec, &bitDepth, &sampleRate, &format.TrackCount); err != nil {
 			return err
 		}
-		format.Codec, format.BitDepth, format.SampleRate = stringPointerFromNull(codec), intPointerFromNull(bitDepth), intPointerFromNull(sampleRate)
+		format.Codec, format.BitDepth, format.SampleRate = releasesql.StringPointerFromNull(codec), releasesql.IntPointerFromNull(bitDepth), releasesql.IntPointerFromNull(sampleRate)
 		position, known := index[releaseID]
 		if !known {
 			return errors.New("comparison formats name a release outside the compared set")

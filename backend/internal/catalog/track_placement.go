@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
@@ -80,8 +81,8 @@ func (s *Store) LoadTrackPlacements(ctx context.Context, trackIDs []string) (map
 		groupID string
 		summary ReleaseSummary
 	}
-	releaseRows, err := s.database.QueryContext(ctx, "SELECT "+releaseSummaryProjection+", releases.group_id::text FROM "+releaseSource+
-		releaseSummaryArtworkJoin+" WHERE releases.id = ANY($1::text[]::uuid[])", releaseIDs)
+	releaseRows, err := s.database.QueryContext(ctx, "SELECT "+releasesql.ReleaseSummaryProjection+", releases.group_id::text FROM "+releasesql.ReleaseSource+
+		releasesql.ReleaseSummaryArtworkJoin+" WHERE releases.id = ANY($1::text[]::uuid[])", releaseIDs)
 	if err != nil {
 		return nil, fmt.Errorf("load track placements: %w", err)
 	}

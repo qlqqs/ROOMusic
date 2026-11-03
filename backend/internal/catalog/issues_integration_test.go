@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
@@ -25,9 +26,9 @@ func (counts issueCounts) open() int64 {
 func (fixture *effectiveFixture) issueCounts(releaseID string) issueCounts {
 	fixture.t.Helper()
 	var counts issueCounts
-	query := `SELECT ` + releaseOpenFieldIssues + `, ` + releaseOpenGroupingIssue + `, ` + releaseOpenMissingTracks + `, ` +
-		releaseReviewedFieldIssues + `, ` + releaseReviewedGroupingIssue + `, ` + releaseReviewedMissingTracks +
-		` FROM ` + releaseSource + ` WHERE releases.id = $1::uuid`
+	query := `SELECT ` + releasesql.ReleaseOpenFieldIssues + `, ` + releasesql.ReleaseOpenGroupingIssue + `, ` + releasesql.ReleaseOpenMissingTracks + `, ` +
+		releasesql.ReleaseReviewedFieldIssues + `, ` + releasesql.ReleaseReviewedGroupingIssue + `, ` + releasesql.ReleaseReviewedMissingTracks +
+		` FROM ` + releasesql.ReleaseSource + ` WHERE releases.id = $1::uuid`
 	if err := fixture.database.QueryRow(query, releaseID).Scan(&counts.openFields, &counts.openGrouping, &counts.openMissing,
 		&counts.reviewedFields, &counts.reviewedGrouping, &counts.reviewedMissing); err != nil {
 		fixture.t.Fatalf("read issue counts: %v", err)
@@ -55,18 +56,18 @@ func (fixture *effectiveFixture) reviewIssue(releaseID, issue string) {
 	fixture.t.Helper()
 	operationID := uuid.New()
 	statement := `INSERT INTO release_issue_reviews(release_id,issue,basis,operation_id)
-		SELECT decision.release_id, decision.field_key, ` + fieldIssueBasis + `, $3::uuid
+		SELECT decision.release_id, decision.field_key, ` + releasesql.FieldIssueBasis + `, $3::uuid
 		FROM release_field_decisions decision WHERE decision.release_id = $1::uuid AND decision.field_key = $2`
 	arguments := []any{releaseID, issue, operationID}
 	switch issue {
 	case "grouping":
 		statement = `INSERT INTO release_issue_reviews(release_id,issue,basis,operation_id)
-			SELECT grouping.release_id, 'grouping', ` + groupingIssueBasis + `, $2::uuid
+			SELECT grouping.release_id, 'grouping', ` + releasesql.GroupingIssueBasis + `, $2::uuid
 			FROM release_grouping_evidence grouping WHERE grouping.release_id = $1::uuid`
 		arguments = []any{releaseID, operationID}
 	case "missing_tracks":
 		statement = `INSERT INTO release_issue_reviews(release_id,issue,basis,operation_id)
-			SELECT $1::uuid, 'missing_tracks', jsonb_build_object('tracks', jsonb_object_agg(missing_track.id::text, ` + missingTrackSeenAt + `)), $2::uuid
+			SELECT $1::uuid, 'missing_tracks', jsonb_build_object('tracks', jsonb_object_agg(missing_track.id::text, ` + releasesql.MissingTrackSeenAt + `)), $2::uuid
 			FROM tracks missing_track JOIN media missing_medium ON missing_medium.id = missing_track.medium_id
 			WHERE missing_medium.release_id = $1::uuid AND missing_track.source_status = 'missing'`
 		arguments = []any{releaseID, operationID}

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"strings"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
@@ -75,16 +76,16 @@ func lockGroups(ctx context.Context, tx *sql.Tx, groupIDs ...string) (map[string
 // visibleMembersExcept 返回组里除 releaseID 之外的可见版本数。
 func visibleMembersExcept(ctx context.Context, tx *sql.Tx, groupID, releaseID string) (int, error) {
 	var count int
-	err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM `+releaseSource+` WHERE releases.group_id=$1::uuid AND releases.id<>$2::uuid AND `+releaseVisiblePredicate,
+	err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM `+releasesql.ReleaseSource+` WHERE releases.group_id=$1::uuid AND releases.id<>$2::uuid AND `+releasesql.ReleaseVisiblePredicate,
 		groupID, releaseID).Scan(&count)
 	return count, err
 }
 
-// representativeTitle 返回组的代表版本的有效标题（代表版本规则见 releaseGroupMemberOrder）。
+// representativeTitle 返回组的代表版本的有效标题（代表版本规则见 releasesql.ReleaseGroupMemberOrder）。
 func representativeTitle(ctx context.Context, tx *sql.Tx, groupID string) (string, error) {
 	var title string
-	err := tx.QueryRowContext(ctx, `SELECT releases.title FROM `+releaseSource+` WHERE releases.group_id=$1::uuid AND `+releaseVisiblePredicate+
-		` ORDER BY `+releaseGroupMemberOrder+` LIMIT 1`, groupID).Scan(&title)
+	err := tx.QueryRowContext(ctx, `SELECT releases.title FROM `+releasesql.ReleaseSource+` WHERE releases.group_id=$1::uuid AND `+releasesql.ReleaseVisiblePredicate+
+		` ORDER BY `+releasesql.ReleaseGroupMemberOrder+` LIMIT 1`, groupID).Scan(&title)
 	return title, err
 }
 
@@ -141,7 +142,7 @@ func GroupChangeExecutor(request GroupChangeRequest) operations.Executor {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO release_groups(id) VALUES($1::uuid)`, target); err != nil {
 				return operations.Outcome{}, err
 			}
-			if err := tx.QueryRowContext(ctx, `SELECT title FROM `+releaseSource+` WHERE releases.id=$1::uuid`, request.ReleaseID).Scan(&targetTitle); err != nil {
+			if err := tx.QueryRowContext(ctx, `SELECT title FROM `+releasesql.ReleaseSource+` WHERE releases.id=$1::uuid`, request.ReleaseID).Scan(&targetTitle); err != nil {
 				return operations.Outcome{}, err
 			}
 		default:

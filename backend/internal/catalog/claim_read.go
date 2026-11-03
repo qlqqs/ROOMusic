@@ -8,10 +8,12 @@ import (
 	pathpkg "path"
 	"strings"
 	"time"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
 )
 
 // 待认领的读取（阶段 M4 第三项，只有管理员）：列表、一个旧版本的详情（留着的修改明细与推荐），以及专辑详情用的“可能接替了……”提示。
-// 判定与推荐的规则在 claims.go；这里只做投影。路径一律经过 SafeRelativeSourceRef，不返回绝对路径。
+// 判定与推荐的规则在 claims.go；这里只做投影。路径一律经过 releasesql.SafeRelativeSourceRef，不返回绝对路径。
 
 // maxClaimHints 是专辑详情里“可能接替了已不可见的《…》”的旧版本上限。
 const maxClaimHints = 3
@@ -82,14 +84,14 @@ const claimEntryProjection = `releases.id::text, releases.title, releases.artist
 	EXISTS (SELECT 1 FROM release_groups claim_default WHERE claim_default.default_release_id = releases.id),
 	COALESCE((SELECT string_agg(claim_review.issue, ',' ORDER BY claim_review.issue) FROM release_issue_reviews claim_review WHERE claim_review.release_id = releases.id), '')`
 
-const claimEntrySource = ` FROM ` + releaseSource + ` LEFT JOIN library_roots claim_root ON claim_root.id = releases.source_root_id`
+const claimEntrySource = ` FROM ` + releasesql.ReleaseSource + ` LEFT JOIN library_roots claim_root ON claim_root.id = releases.source_root_id`
 
 // albumTitleOf 返回一个组的标题：组里一个发行的有效标题，先取可见成员里按代表版本规则排第一的，没有可见成员就取最早创建的成员。
 // excluding 是不参与取名的发行（旧版本自己）：它的名字已经显示在行的标题里，专辑的名字要取别的成员的。
 func albumTitleOf(ctx context.Context, database Queryer, groupID, excluding string) (string, error) {
 	var title string
-	err := database.QueryRowContext(ctx, `SELECT releases.title FROM `+releaseSource+` WHERE releases.group_id=$1::uuid AND releases.id<>$2::uuid
-		ORDER BY (CASE WHEN `+releaseVisiblePredicate+` THEN 0 ELSE 1 END), `+releaseGroupMemberOrder+`, releases.created_at, releases.id LIMIT 1`, groupID, excluding).Scan(&title)
+	err := database.QueryRowContext(ctx, `SELECT releases.title FROM `+releasesql.ReleaseSource+` WHERE releases.group_id=$1::uuid AND releases.id<>$2::uuid
+		ORDER BY (CASE WHEN `+releasesql.ReleaseVisiblePredicate+` THEN 0 ELSE 1 END), `+releasesql.ReleaseGroupMemberOrder+`, releases.created_at, releases.id LIMIT 1`, groupID, excluding).Scan(&title)
 	return title, err
 }
 
@@ -119,8 +121,8 @@ func identifiers(joined string) []string {
 // finish 解释 nullable 列，补上专辑与位置；album 只在组里有别的发行时有。
 func (columns *claimEntryColumns) finish(ctx context.Context, database Queryer) (ClaimEntry, error) {
 	entry := columns.entry
-	entry.Release.Year = intPointerFromNull(columns.year)
-	entry.Release.Edition = stringPointerFromNull(columns.edition)
+	entry.Release.Year = releasesql.IntPointerFromNull(columns.year)
+	entry.Release.Edition = releasesql.StringPointerFromNull(columns.edition)
 	entry.Location.RootName, entry.Location.Directory = claimLocation(columns.rootName, columns.directory)
 	entry.Holds.Corrections, entry.Holds.Reviews = identifiers(columns.corrections), identifiers(columns.reviews)
 	if columns.siblings > 0 {
@@ -134,7 +136,7 @@ func (columns *claimEntryColumns) finish(ctx context.Context, database Queryer) 
 	return entry, nil
 }
 
-// claimLocation 返回旧版本最后所在的位置：扫描目录的显示名，以及经 SafeRelativeSourceRef 清理过的相对目录（不安全或为空时是空串）。
+// claimLocation 返回旧版本最后所在的位置：扫描目录的显示名，以及经 releasesql.SafeRelativeSourceRef 清理过的相对目录（不安全或为空时是空串）。
 func claimLocation(rootName, directory sql.NullString) (string, string) {
 	name := strings.TrimSpace(rootName.String)
 	if name == "" {
@@ -143,7 +145,7 @@ func claimLocation(rootName, directory sql.NullString) (string, string) {
 	if !directory.Valid || strings.TrimSpace(directory.String) == "" {
 		return name, ""
 	}
-	if safe, ok := SafeRelativeSourceRef(directory.String); ok {
+	if safe, ok := releasesql.SafeRelativeSourceRef(directory.String); ok {
 		return name, pathpkg.Clean(safe)
 	}
 	return name, ""
@@ -152,7 +154,7 @@ func claimLocation(rootName, directory sql.NullString) (string, string) {
 // ListClaims 返回待认领的旧版本的一页，按最后一次被看到的时间倒序（没有接替者的会沉到后面），再按 ID。查询执行失败时错误包含 ErrQuery。
 func (s *Store) ListClaims(ctx context.Context, params ClaimListParams) (ClaimPage, error) {
 	page := ClaimPage{Items: []ClaimEntry{}}
-	if err := s.database.QueryRowContext(ctx, `SELECT COUNT(*) FROM `+releaseSource+` WHERE `+releaseClaimablePredicate).Scan(&page.Total); err != nil {
+	if err := s.database.QueryRowContext(ctx, `SELECT COUNT(*) FROM `+releasesql.ReleaseSource+` WHERE `+releaseClaimablePredicate).Scan(&page.Total); err != nil {
 		return ClaimPage{}, fmt.Errorf("%w: count claims: %w", ErrQuery, err)
 	}
 	rows, err := s.database.QueryContext(ctx, `SELECT `+claimEntryProjection+claimEntrySource+` WHERE `+releaseClaimablePredicate+`
@@ -269,7 +271,7 @@ func (s *Store) LoadClaim(ctx context.Context, releaseID string) (ClaimDetail, e
 			detail.Corrections = append(detail.Corrections, ClaimCorrection{Field: field.name, Correction: intent, ScanValue: scanned[index]})
 		}
 	}
-	siblings, err := s.database.QueryContext(ctx, `SELECT releases.id::text, releases.title, `+releaseVisiblePredicate+` FROM `+releaseSource+`
+	siblings, err := s.database.QueryContext(ctx, `SELECT releases.id::text, releases.title, `+releasesql.ReleaseVisiblePredicate+` FROM `+releasesql.ReleaseSource+`
 		WHERE releases.group_id=(SELECT group_id FROM releases WHERE id=$1::uuid) AND releases.id<>$1::uuid ORDER BY releases.created_at, releases.id LIMIT 20`, releaseID)
 	if err != nil {
 		return ClaimDetail{}, err
@@ -349,7 +351,7 @@ type ClaimHint struct {
 // 命中条件与推荐一致，但不受推荐 5 个的上限限制：排在后面的版本也算“可能接替”。releaseID 不存在或不可见时返回 ErrReleaseNotFound。
 func (s *Store) LoadClaimHints(ctx context.Context, releaseID string) ([]ClaimHint, error) {
 	var visible bool
-	err := s.database.QueryRowContext(ctx, `SELECT `+releaseVisiblePredicate+` FROM releases WHERE releases.id = $1::uuid`, releaseID).Scan(&visible)
+	err := s.database.QueryRowContext(ctx, `SELECT `+releasesql.ReleaseVisiblePredicate+` FROM releases WHERE releases.id = $1::uuid`, releaseID).Scan(&visible)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && !visible) {
 		return nil, ErrReleaseNotFound
 	}
@@ -358,9 +360,9 @@ func (s *Store) LoadClaimHints(ctx context.Context, releaseID string) ([]ClaimHi
 	}
 	rows, err := s.database.QueryContext(ctx, `
 		WITH target AS (
-			SELECT releases.id, releases.source_root_id, releases.relative_directory FROM `+releaseSource+` WHERE releases.id = $1::uuid AND `+releaseVisiblePredicate+`
+			SELECT releases.id, releases.source_root_id, releases.relative_directory FROM `+releasesql.ReleaseSource+` WHERE releases.id = $1::uuid AND `+releasesql.ReleaseVisiblePredicate+`
 		)
-		SELECT releases.id::text, releases.title FROM `+releaseSource+`, target
+		SELECT releases.id::text, releases.title FROM `+releasesql.ReleaseSource+`, target
 		WHERE `+releaseClaimablePredicate+`
 		  AND (
 			(releases.source_root_id = target.source_root_id AND releases.relative_directory = target.relative_directory)

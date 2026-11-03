@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
 )
 
 // 认领（阶段 M4 第三项）：扫描在“证明不了是同一个版本”时新建发行，旧发行不可见，它上面的人工修改（字段修正、所在的专辑、
@@ -25,7 +27,7 @@ const (
 // releaseClaimablePredicate 在发行行存在、不可见（没有 present 曲目），并且至少留有一项人工状态时为真；引用外层的 releases。
 // 组里“有别的发行”不看可见与否：扫描从不把新发行放进已有的组，所以组里有别的发行只可能来自人工归组，
 // 而且同一张专辑的两个版本都被替换之后，先认领一个，另一个仍能认领回这张专辑。
-const releaseClaimablePredicate = `(NOT ` + releaseVisiblePredicate + `
+const releaseClaimablePredicate = `(NOT ` + releasesql.ReleaseVisiblePredicate + `
 	AND (
 		EXISTS (SELECT 1 FROM release_corrections claim_correction WHERE claim_correction.release_id = releases.id)
 		OR EXISTS (SELECT 1 FROM releases claim_sibling WHERE claim_sibling.group_id = releases.group_id AND claim_sibling.id <> releases.id)
@@ -83,16 +85,16 @@ func (s *Store) LoadClaimSuggestions(ctx context.Context, sourceID string) ([]Cl
 			GROUP BY claim_medium.release_id
 		), same_directory AS (
 			SELECT releases.id AS release_id
-			FROM origin JOIN `+releaseSource+` ON releases.source_root_id = origin.source_root_id
+			FROM origin JOIN `+releasesql.ReleaseSource+` ON releases.source_root_id = origin.source_root_id
 				AND releases.relative_directory = origin.relative_directory
 			WHERE origin.source_root_id IS NOT NULL AND origin.relative_directory IS NOT NULL
 		)
-		SELECT `+releaseSummaryProjection+`, releases.group_id::text, NULLIF(BTRIM(releases.edition), ''),
+		SELECT `+releasesql.ReleaseSummaryProjection+`, releases.group_id::text, NULLIF(BTRIM(releases.edition), ''),
 			COALESCE(same_files.hits, 0), same_files.release_id IS NOT NULL, same_directory.release_id IS NOT NULL
-		FROM `+releaseSource+releaseSummaryArtworkJoin+`
+		FROM `+releasesql.ReleaseSource+releasesql.ReleaseSummaryArtworkJoin+`
 		LEFT JOIN same_files ON same_files.release_id = releases.id
 		LEFT JOIN same_directory ON same_directory.release_id = releases.id
-		WHERE releases.id <> $1::uuid AND `+releaseVisiblePredicate+`
+		WHERE releases.id <> $1::uuid AND `+releasesql.ReleaseVisiblePredicate+`
 		  AND (same_files.release_id IS NOT NULL OR same_directory.release_id IS NOT NULL)
 		ORDER BY (same_files.release_id IS NOT NULL AND same_directory.release_id IS NOT NULL) DESC,
 			COALESCE(same_files.hits, 0) DESC, LOWER(releases.title), releases.id
@@ -113,7 +115,7 @@ func (s *Store) LoadClaimSuggestions(ctx context.Context, sourceID string) ([]Cl
 		if suggestion.Release, err = columns.summary(); err != nil {
 			return nil, err
 		}
-		suggestion.Edition = stringPointerFromNull(edition)
+		suggestion.Edition = releasesql.StringPointerFromNull(edition)
 		suggestion.Reasons = []string{}
 		if byFiles {
 			suggestion.Reasons = append(suggestion.Reasons, ClaimReasonSameFiles)

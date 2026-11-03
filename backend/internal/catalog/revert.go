@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 )
 
@@ -68,7 +69,7 @@ func (correctionKind) Revert(ctx context.Context, tx *sql.Tx, operationID string
 	if err != nil {
 		return operations.Outcome{}, err
 	}
-	effectiveBefore, err := loadFieldValues(ctx, tx, releaseSource, original.TargetID)
+	effectiveBefore, err := loadFieldValues(ctx, tx, releasesql.ReleaseSource, original.TargetID)
 	if err != nil {
 		return operations.Outcome{}, err
 	}
@@ -98,7 +99,7 @@ func (correctionKind) Revert(ctx context.Context, tx *sql.Tx, operationID string
 	if _, err := tx.ExecContext(ctx, `UPDATE releases SET edit_revision = edit_revision + 1 WHERE id=$1::uuid`, original.TargetID); err != nil {
 		return operations.Outcome{}, err
 	}
-	effectiveAfter, err := loadFieldValues(ctx, tx, releaseSource, original.TargetID)
+	effectiveAfter, err := loadFieldValues(ctx, tx, releasesql.ReleaseSource, original.TargetID)
 	if err != nil {
 		return operations.Outcome{}, err
 	}
@@ -191,7 +192,7 @@ func (groupChangeKind) Revert(ctx context.Context, tx *sql.Tx, operationID strin
 	// 原来的组可能已经空了：回去的就是这个版本自己，用它的有效标题。
 	originTitle, err := representativeTitle(ctx, tx, origin)
 	if errors.Is(err, sql.ErrNoRows) {
-		err = tx.QueryRowContext(ctx, `SELECT title FROM `+releaseSource+` WHERE releases.id=$1::uuid`, original.TargetID).Scan(&originTitle)
+		err = tx.QueryRowContext(ctx, `SELECT title FROM `+releasesql.ReleaseSource+` WHERE releases.id=$1::uuid`, original.TargetID).Scan(&originTitle)
 	}
 	if err != nil {
 		return operations.Outcome{}, err
@@ -240,8 +241,8 @@ func loadReleaseInfos(ctx context.Context, database operations.Queryer, records 
 	if len(ids) == 0 {
 		return infos, nil
 	}
-	rows, err := database.QueryContext(ctx, `SELECT releases.id::text, releases.title, releases.group_id::text, releases.edit_revision, `+releaseVisiblePredicate+
-		` FROM `+releaseSource+` WHERE releases.id = ANY($1::text[]::uuid[])`, ids)
+	rows, err := database.QueryContext(ctx, `SELECT releases.id::text, releases.title, releases.group_id::text, releases.edit_revision, `+releasesql.ReleaseVisiblePredicate+
+		` FROM `+releasesql.ReleaseSource+` WHERE releases.id = ANY($1::text[]::uuid[])`, ids)
 	if err != nil {
 		return nil, err
 	}

@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
@@ -216,7 +217,7 @@ func (snapshot claimSnapshot) token(plan claimPlan) string {
 // loadClaimSide 读取一个版本的人工状态快照（修正与核对）；forUpdate 时对核对行加 FOR UPDATE（调用方已锁住发行行，只是保险）。
 func loadClaimSide(ctx context.Context, database operations.Queryer, releaseID string, forUpdate bool) (claimSide, error) {
 	side := claimSide{ReleaseID: releaseID, Corrections: map[string]claimedCorrection{}, Reviews: map[string]claimReviewState{}}
-	if err := database.QueryRowContext(ctx, `SELECT releases.title, releases.group_id::text, releases.edit_revision FROM `+releaseSource+` WHERE releases.id=$1::uuid`, releaseID).
+	if err := database.QueryRowContext(ctx, `SELECT releases.title, releases.group_id::text, releases.edit_revision FROM `+releasesql.ReleaseSource+` WHERE releases.id=$1::uuid`, releaseID).
 		Scan(&side.Title, &side.GroupID, &side.Revision); err != nil {
 		return claimSide{}, err
 	}
@@ -270,7 +271,7 @@ func loadClaimSide(ctx context.Context, database operations.Queryer, releaseID s
 func loadClaimSnapshot(ctx context.Context, database operations.Queryer, sourceID, targetID string, forUpdate bool) (claimSnapshot, error) {
 	snapshot := claimSnapshot{Groups: map[string]claimGroupState{}}
 	var targetVisible bool
-	err := database.QueryRowContext(ctx, `SELECT `+releaseVisiblePredicate+` FROM releases WHERE releases.id=$1::uuid`, targetID).Scan(&targetVisible)
+	err := database.QueryRowContext(ctx, `SELECT `+releasesql.ReleaseVisiblePredicate+` FROM releases WHERE releases.id=$1::uuid`, targetID).Scan(&targetVisible)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && !targetVisible) {
 		return claimSnapshot{}, ErrReleaseNotFound
 	}
@@ -278,7 +279,7 @@ func loadClaimSnapshot(ctx context.Context, database operations.Queryer, sourceI
 		return claimSnapshot{}, err
 	}
 	var claimable bool
-	err = database.QueryRowContext(ctx, `SELECT `+releaseClaimablePredicate+` FROM `+releaseSource+` WHERE releases.id=$1::uuid`, sourceID).Scan(&claimable)
+	err = database.QueryRowContext(ctx, `SELECT `+releaseClaimablePredicate+` FROM `+releasesql.ReleaseSource+` WHERE releases.id=$1::uuid`, sourceID).Scan(&claimable)
 	if errors.Is(err, sql.ErrNoRows) {
 		return claimSnapshot{}, ErrReleaseNotFound
 	}
@@ -299,7 +300,7 @@ func loadClaimSnapshot(ctx context.Context, database operations.Queryer, sourceI
 		Scan(&snapshot.SourceGroupHasOthers); err != nil {
 		return claimSnapshot{}, err
 	}
-	if err := database.QueryRowContext(ctx, `SELECT COUNT(*) FROM `+releaseSource+` WHERE releases.group_id=$1::uuid AND releases.id<>$2::uuid AND `+releaseVisiblePredicate,
+	if err := database.QueryRowContext(ctx, `SELECT COUNT(*) FROM `+releasesql.ReleaseSource+` WHERE releases.group_id=$1::uuid AND releases.id<>$2::uuid AND `+releasesql.ReleaseVisiblePredicate,
 		snapshot.Target.GroupID, targetID).Scan(&snapshot.TargetOthersVisible); err != nil {
 		return claimSnapshot{}, err
 	}

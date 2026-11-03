@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 )
 
@@ -292,7 +293,7 @@ func (claimKind) Describe(ctx context.Context, database operations.Queryer, reco
 		}
 		var sourceRevision int64
 		sourceExists := true
-		err := database.QueryRowContext(ctx, `SELECT releases.edit_revision, `+releaseVisiblePredicate+` FROM `+releaseSource+` WHERE releases.id=$1::uuid`, sourceID).
+		err := database.QueryRowContext(ctx, `SELECT releases.edit_revision, `+releasesql.ReleaseVisiblePredicate+` FROM `+releasesql.ReleaseSource+` WHERE releases.id=$1::uuid`, sourceID).
 			Scan(&sourceRevision, &source.Visible)
 		if errors.Is(err, sql.ErrNoRows) {
 			sourceExists = false
