@@ -37,7 +37,9 @@
     "10-11-classical-m3-governed-corrections",
     "10-14-classical-m4-default-version",
     "10-16-classical-m4-issue-handling",
-    "10-17-classical-m4-claim"
+    "10-17-classical-m4-claim",
+    "11-03-classical-c1-drop-stream-recheck",
+    "11-03-classical-c2-structure-cleanup"
   ],
   "parent": null,
   "relatedFiles": [

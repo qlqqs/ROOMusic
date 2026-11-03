@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/playback-contracts.md", "reason": "检查顺序、安全打开、Range、在途复核与关停的现行合同；本任务删除在途复核、保留关停中止"}
+{"file": ".trellis/spec/backend/playback-derivation-contracts.md", "reason": "派生流程与 K4 的取消语义不变；其中提到在途复核的地方要同步"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "包依赖方向与 dependency_rules_test 的规则"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端测试与隔离 PostgreSQL 的要求"}
