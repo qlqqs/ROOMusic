@@ -1,7 +1,8 @@
-package catalog
+package ingest
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,7 +22,14 @@ const (
 // StagingDB 是读写扫描暂存表所需的最小数据库能力。
 type StagingDB interface {
 	Execer
-	Queryer
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+// queryer 是读取扫描暂存表所需的最小数据库能力。
+type queryer interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 
 // StageObservation 把 observation 写入 scanID 中 rootID 的暂存表；同一相对路径再次暂存会覆盖，并清除该行
@@ -76,11 +84,11 @@ func StageObservation(ctx context.Context, database StagingDB, scanID, rootID st
 
 // StagedScopes 返回 rootID 在本次扫描中 organization_scope 大于 after 的下一页待写入 scope（升序，页大小有界）。
 // 被规划暂缓的 scope 不在其中。没有更多 scope 时返回空切片；逐页传入上一页最后一个 scope 即可遍历全部。
-func StagedScopes(ctx context.Context, database Queryer, scanID, rootID, after string) ([]string, error) {
+func StagedScopes(ctx context.Context, database queryer, scanID, rootID, after string) ([]string, error) {
 	return stagedScopePage(ctx, database, scanID, rootID, after, false)
 }
 
-func stagedScopePage(ctx context.Context, database Queryer, scanID, rootID, after string, includeWithheld bool) ([]string, error) {
+func stagedScopePage(ctx context.Context, database queryer, scanID, rootID, after string, includeWithheld bool) ([]string, error) {
 	rows, err := database.QueryContext(ctx, `SELECT DISTINCT organization_scope FROM scan_observations
 		WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND organization_scope>$3 AND ($4 OR NOT withheld)
 		ORDER BY organization_scope LIMIT $5`, scanID, rootID, after, includeWithheld, stagedScopePageSize)
@@ -100,12 +108,12 @@ func stagedScopePage(ctx context.Context, database Queryer, scanID, rootID, afte
 }
 
 // LoadStagedScope 按相对路径顺序读取一个 organization scope 的全部暂存观察；超过上限时返回错误而不是无界读取。
-func LoadStagedScope(ctx context.Context, database Queryer, scanID, rootID, scope string) ([]SourceObservation, error) {
+func LoadStagedScope(ctx context.Context, database queryer, scanID, rootID, scope string) ([]SourceObservation, error) {
 	return loadStagedScope(ctx, database, scanID, rootID, scope, true)
 }
 
 // loadStagedScope 的 withArtwork 为假时不读取封面字节：规划只需要整理结果，不需要封面。
-func loadStagedScope(ctx context.Context, database Queryer, scanID, rootID, scope string, withArtwork bool) ([]SourceObservation, error) {
+func loadStagedScope(ctx context.Context, database queryer, scanID, rootID, scope string, withArtwork bool) ([]SourceObservation, error) {
 	column := "observation"
 	if !withArtwork {
 		column = "observation - 'artwork'"

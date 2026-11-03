@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/ingest"
 	"github.com/qlqq/roomusic/backend/internal/library/parser"
 )
 
@@ -196,9 +196,9 @@ func TestDiscoverCandidateRipLogEvidenceRequiresExplicitSignatureAndSkipsSymlink
 		t.Fatalf("create log symlink: %v", err)
 	}
 
-	candidate := catalog.OrganizedCandidate{
-		Anchor:  catalog.CandidateAnchor{Kind: catalog.CandidateOrdinary, Scope: "Album"},
-		Mediums: map[int][]catalog.OrganizedTrack{1: {{Observation: catalog.SourceObservation{RelativePath: "Album/01.flac", Directory: "Album"}}}},
+	candidate := ingest.OrganizedCandidate{
+		Anchor:  ingest.CandidateAnchor{Kind: ingest.CandidateOrdinary, Scope: "Album"},
+		Mediums: map[int][]ingest.OrganizedTrack{1: {{Observation: ingest.SourceObservation{RelativePath: "Album/01.flac", Directory: "Album"}}}},
 	}
 	references, diagnostics := discoverCandidateRipLogEvidence(registeredRoot{ID: "root", Path: rootPath}, candidate)
 	if !reflect.DeepEqual(references, []string{"Album/eac.LOG", "Album/xld.log"}) || len(diagnostics) != 0 {

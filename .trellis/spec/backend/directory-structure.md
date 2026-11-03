@@ -24,7 +24,7 @@ backend/
 │   │   └── uuid/                   # UUID 生成与格式校验
 │   ├── identity/                   # 会话、密码、Guard（同源、登录、管理员校验）
 │   │   └── httpapi/                # setup、登录登出、成员管理
-│   ├── library/                    # 路径校验、扫描引擎（遍历、解析、把观察交给 catalog 暂存）、诊断、扫描执行锁与中断恢复、Service
+│   ├── library/                    # 路径校验、扫描引擎（遍历、解析、把观察交给 catalog/ingest 暂存）、诊断、扫描执行锁与中断恢复、Service
 │   │   ├── parser/                 # 音频与 CUE 解析、与标签无关的音频内容指纹（叶子包）
 │   │   │   └── parsertest/         # 仅测试使用：合成音频夹具
 │   │   └── httpapi/                # 目录、目录操作、扫描
@@ -35,7 +35,8 @@ backend/
 │   │   └── httpapi/                # 记录一次播放、最近播放、清除
 │   ├── operations/                 # 受治理操作的共同流程：操作记录、同一操作者同一键的串行与重放、同一事务写记录、撤销与展示的 Kind 接口（不含业务表、规则与 HTTP）
 │   │   └── httpapi/                # 操作记录列表与撤销（不导入 catalog，各类型的撤销经 Kind 由 app 注入）
-│   └── catalog/                    # 观察合同、扫描暂存表、身份规划、organizer、来源身份、Release 图写入、读取投影、修正、人工归组、默认版本、核对问题与认领的执行器、有效值视图、版本对比、问题与待认领的读取
+│   └── catalog/                    # Release 图读取投影、修正、人工归组、默认版本、核对问题与认领的执行器、有效值视图、版本对比、问题与待认领的读取
+│       ├── ingest/                 # 观察合同、扫描暂存表、身份规划、organizer、来源身份与 Release 图写入（不导入 catalog 核心）
 │       ├── metadata/               # 署名、空白规范化、有界文本、艺人名规则（叶子包）
 │       ├── artwork/                # 受管封面：校验、落盘、关联、读取
 │       └── httpapi/                # Release 列表/详情/证据、按组读取与版本对比、封面读取、修正、人工归组、默认版本、问题列表与核对、认领的预览与写入、待认领的读取
@@ -63,14 +64,15 @@ backend/
   revocation, and admin/user authorization decisions.
 - `library` owns allowed-root registration workflows, read-only source
   discovery, parsers, scan runs, diagnostics, and missing-source reconciliation.
-- `catalog` owns ReleaseGroup, Release, Medium, Track, key field provenance, and
-  conservative grouping rules. M3 起还拥有发行字段的修正表 `release_corrections`、人工修改版本号 `releases.edit_revision`、有效值视图
+- `catalog` 拥有 ReleaseGroup、Release、Medium、Track 的读取投影与字段来源读取。M3 起还拥有发行字段的修正表 `release_corrections`、人工修改版本号 `releases.edit_revision`、有效值视图
   `release_effective`，以及字段修正与人工归组的执行器和逆执行器（在 `operations.Run` 给的事务里执行，不碰鉴权、幂等与操作记录表）；
   M4 起还拥有专辑的默认版本与版本号（`release_groups.default_release_id`、`edit_revision`）、默认版本的执行器与逆执行器，以及版本对比的读取；
-  第二项起还拥有核对表 `release_issue_reviews`、“需要关注”的三类拆分（`issues.go`）、核对的执行器与逆执行器，以及问题的读取（核对时间与操作者经 `operations.Load` 读取）；第三项起还拥有“待认领”的判定与推荐（`claims.go`）、认领的预览与执行器（`claim.go`）、它的撤销与展示（`claim_revert.go`）和待认领的读取（`claim_read.go`）。扫描暂存表（`scan_observations`）与身份规划（曲目重绑定、Release 成员关系匹配）也归它：
-  library 经 `catalog.StageObservation` 等函数写入暂存，规划需要读文件时通过 catalog 定义的窄端口
-  `catalog.Fingerprinter` 向 library 取值（library 在注册 root 内校验路径后调用 parser），catalog 不导入 library 或
-  parser，两边不读对方的私有表。
+  第二项起还拥有核对表 `release_issue_reviews`、“需要关注”的三类拆分（`issues.go`）、核对的执行器与逆执行器，以及问题的读取（核对时间与操作者经 `operations.Load` 读取）；第三项起还拥有“待认领”的判定与推荐（`claims.go`）、认领的预览与执行器（`claim.go`）、它的撤销与展示（`claim_revert.go`）和待认领的读取（`claim_read.go`）。
+- `catalog/ingest` 拥有扫描观察合同、保守整理规则、扫描暂存表（`scan_observations`）、身份规划（曲目重绑定、Release 成员关系匹配）与 Release 图的扫描写入。
+  library 经 `ingest.StageObservation` 等函数写入暂存，规划需要读文件时通过 ingest 定义的窄端口
+  `ingest.Fingerprinter` 向 library 取值（library 在注册 root 内校验路径后调用 parser）。ingest 不导入 catalog 核心、library 或
+  parser。library 经 ingest 公开合同完成扫描写入；ingest 的负向对账保留读取 `scan_runs.started_at` 的既有跨表查询，本次不改变。
+  library 的读取侧仍通过 `catalog.SafeRelativeSourceRef` 等核心合同取值。
 - `playback` 拥有只读直出、派生交付编排与停机中止，经 catalog、library 公开合同读取来源，经 `playback/derivation` 的窄端口取得派生文件；
   HTTP 层经 identity 鉴权。具体错误、Range 与资源关闭规则见[播放合同](./playback-contracts.md)。
   `playback/derivation` 拥有缓存目录、转换任务与 ffmpeg 适配，不知道曲目与权限，由 `playback` 提供源文件版本与“安全打开并核对”的回调，
@@ -116,6 +118,10 @@ clearly named application service, not a circular callback chain.
 依赖方向由 `internal/app/dependency_rules_test.go` 强制：它读取每个 `internal/` 包的导入，要求
 每个包在 `packageRules` 中声明允许依赖的内部包，以及是否可以使用 `net/http`（能力核心 `catalog`、
 `library`、`parser` 不可以）。新增包必须先声明规则，测试才会通过；CI 的 `go test ./...` 会运行它。
+
+C2 的 B1 拆包后，`catalog/ingest` 只允许导入内部包 `catalog/metadata` 与 `platform/uuid`，不允许使用 `net/http`；
+`library` 增加对 `catalog/ingest` 的依赖。治理实现尚在 catalog 根包，`corrections.go` 仍使用 `catalog/metadata`，
+因此核心当前仍允许依赖 `catalog/metadata`、`operations` 与 `platform/uuid`，且不导入 ingest。
 
 ## File And Package Naming
 

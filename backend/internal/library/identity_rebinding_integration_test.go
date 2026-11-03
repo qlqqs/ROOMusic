@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/ingest"
 	"github.com/qlqq/roomusic/backend/internal/library/parser/parsertest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
@@ -384,7 +384,7 @@ func TestPostgreSQLIncompleteScanDefersMovesUntilCompleteScan(t *testing.T) {
 
 // cancelingFingerprinter 在第一次被调用时取消 context，模拟扫描在规划期间被取消。
 type cancelingFingerprinter struct {
-	inner  catalog.Fingerprinter
+	inner  ingest.Fingerprinter
 	cancel context.CancelFunc
 }
 
@@ -432,7 +432,7 @@ func TestPostgreSQLCanceledScanDoesNotRebind(t *testing.T) {
 		moveFixture(t, root, "Album", "Renamed")
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		service.fingerprinter = func(root registeredRoot) catalog.Fingerprinter {
+		service.fingerprinter = func(root registeredRoot) ingest.Fingerprinter {
 			return cancelingFingerprinter{inner: rootFingerprinter{root: root}, cancel: cancel}
 		}
 		scanID := insertRunningScan(t, fixture)
@@ -605,7 +605,7 @@ func TestPostgreSQLCompleteRootRebindsWhenAnotherRootIsUnavailable(t *testing.T)
 
 // recordingFingerprinter 统计对每个文件的指纹计算次数，并可让指定文件失败。
 type recordingFingerprinter struct {
-	inner    catalog.Fingerprinter
+	inner    ingest.Fingerprinter
 	calls    *atomic.Int64
 	failPath string
 }
@@ -623,7 +623,7 @@ func TestPostgreSQLUnchangedFilesReuseStoredFingerprints(t *testing.T) {
 	root := insertScannerRoot(t, fixture, "reuse-fingerprints")
 	service := scannerTestApplication(fixture)
 	var calls atomic.Int64
-	service.fingerprinter = func(root registeredRoot) catalog.Fingerprinter {
+	service.fingerprinter = func(root registeredRoot) ingest.Fingerprinter {
 		return recordingFingerprinter{inner: rootFingerprinter{root: root}, calls: &calls}
 	}
 	// MD5 全零的文件没有免费指纹，只能经 Fingerprinter 计算。
@@ -658,7 +658,7 @@ func TestPostgreSQLFingerprintFailureDefersScope(t *testing.T) {
 	root := insertScannerRoot(t, fixture, "fingerprint-failure")
 	service := scannerTestApplication(fixture)
 	var calls atomic.Int64
-	service.fingerprinter = func(root registeredRoot) catalog.Fingerprinter {
+	service.fingerprinter = func(root registeredRoot) ingest.Fingerprinter {
 		return recordingFingerprinter{inner: rootFingerprinter{root: root}, calls: &calls, failPath: "Broken Album/01.flac"}
 	}
 	writeAudio(t, root, "Broken Album/01.flac", audioFile{seed: 1, title: "One", album: "Broken Album", track: 1, zeroMD5: true})
@@ -808,7 +808,7 @@ func TestPostgreSQLPersistRejectsObservationsWithoutPlan(t *testing.T) {
 	root := insertScannerRoot(t, fixture, "persist-without-plan")
 	service := scannerTestApplication(fixture)
 	scanID := insertRunningScan(t, fixture)
-	observation := catalog.SourceObservation{RelativePath: "Album/01.flac", Directory: "Album", Title: "One", Album: "Album", Artist: "Artist", TrackNumber: 1, DiscNumber: 1, SourceKind: "flac_vorbis_comment"}
+	observation := ingest.SourceObservation{RelativePath: "Album/01.flac", Directory: "Album", Title: "One", Album: "Album", Artist: "Artist", TrackNumber: 1, DiscNumber: 1, SourceKind: "flac_vorbis_comment"}
 	if err := stageObservation(context.Background(), fixture.database, scanID, root.ID, observation); err != nil {
 		t.Fatalf("stage observation: %v", err)
 	}
@@ -827,7 +827,7 @@ func TestPostgreSQLPersistRollsBackWhenPlannedTrackDisappears(t *testing.T) {
 	fixture := newLibraryFixture(t)
 	root := insertScannerRoot(t, fixture, "planned-track-disappears")
 	service := scannerTestApplication(fixture)
-	observation := catalog.SourceObservation{RelativePath: "Album/01.flac", Directory: "Album", Title: "One", Album: "Album", Artist: "Artist", TrackNumber: 1, DiscNumber: 1, SourceKind: "flac_vorbis_comment"}
+	observation := ingest.SourceObservation{RelativePath: "Album/01.flac", Directory: "Album", Title: "One", Album: "Album", Artist: "Artist", TrackNumber: 1, DiscNumber: 1, SourceKind: "flac_vorbis_comment"}
 	if err := persistTestObservations(context.Background(), service, fixture, insertRunningScan(t, fixture), root, observation); err != nil {
 		t.Fatalf("first persist: %v", err)
 	}

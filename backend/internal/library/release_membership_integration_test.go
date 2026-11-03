@@ -3,7 +3,7 @@ package library
 import (
 	"testing"
 
-	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/ingest"
 )
 
 type releaseRow struct {
@@ -84,7 +84,7 @@ func TestPostgreSQLAddedEarlierFileKeepsReleaseIdentity(t *testing.T) {
 		writeAudio(t, root, "03 Three.flac", audioFile{seed: 3, title: "Three", album: "Loose Album", track: 3})
 		requireScanStatus(t, runTestScan(t, fixture, service, root), "succeeded")
 		before := visibleReleases(t, fixture, root.ID)
-		if len(before) != 1 || before[0].Kind != string(catalog.CandidateLooseAlbum) || before[0].Tracks != 2 {
+		if len(before) != 1 || before[0].Kind != string(ingest.CandidateLooseAlbum) || before[0].Tracks != 2 {
 			t.Fatalf("首次扫描的 Release = %+v，期望一个散落专辑", before)
 		}
 
@@ -113,7 +113,7 @@ func TestPostgreSQLAddedEarlierFileKeepsReleaseIdentity(t *testing.T) {
 			t.Fatalf("同目录三张专辑应拆成三个 Release：%v", before)
 		}
 		for _, release := range visibleReleases(t, fixture, root.ID) {
-			if release.Kind != string(catalog.CandidateSameDirSplit) {
+			if release.Kind != string(ingest.CandidateSameDirSplit) {
 				t.Fatalf("Release %+v 不是同目录拆分候选", release)
 			}
 		}
@@ -198,7 +198,7 @@ func TestPostgreSQLDirectoryRenameKeepsReleaseIdentity(t *testing.T) {
 	if err := fixture.database.QueryRow(`SELECT candidate_anchor,group_id::text FROM releases WHERE id=$1::uuid`, before[0].ID).Scan(&anchor, &currentGroup); err != nil {
 		t.Fatalf("read release location: %v", err)
 	}
-	if want := catalog.CandidateIdentity(root.ID, catalog.CandidateAnchor{Kind: catalog.CandidateOrdinary, Scope: "New Name"}); anchor != want {
+	if want := ingest.CandidateIdentity(root.ID, ingest.CandidateAnchor{Kind: ingest.CandidateOrdinary, Scope: "New Name"}); anchor != want {
 		t.Fatalf("锚点 = %q，期望更新为最近一次的位置 %q", anchor, want)
 	}
 	if currentGroup != groupID {
@@ -322,7 +322,7 @@ func TestPostgreSQLMinorityOverlapCreatesNewRelease(t *testing.T) {
 	}
 	// 新旧 Release 的锚点相同：锚点只是位置信息，不再要求唯一。
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM releases WHERE source_root_id=$1::uuid AND candidate_anchor=$2`, 2, root.ID,
-		catalog.CandidateIdentity(root.ID, catalog.CandidateAnchor{Kind: catalog.CandidateOrdinary, Scope: "Album"}))
+		ingest.CandidateIdentity(root.ID, ingest.CandidateAnchor{Kind: ingest.CandidateOrdinary, Scope: "Album"}))
 }
 
 func TestPostgreSQLExactlyHalfOverlapIsNotAMajority(t *testing.T) {

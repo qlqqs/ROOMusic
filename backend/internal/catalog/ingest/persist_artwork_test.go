@@ -1,4 +1,4 @@
-package catalog
+package ingest
 
 import (
 	"reflect"

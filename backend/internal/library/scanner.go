@@ -18,8 +18,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/artwork"
+	"github.com/qlqq/roomusic/backend/internal/catalog/ingest"
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"github.com/qlqq/roomusic/backend/internal/library/parser"
 )
@@ -183,7 +183,7 @@ func (service *Service) finalizeScan(ctx context.Context, connection *sql.Conn, 
 		status = "canceled"
 	}
 	if scanStatusAllowsMissingReconciliation(status) {
-		if err := catalog.MarkMissingSources(ctx, transaction, scanID, rootIDs); err != nil {
+		if err := ingest.MarkMissingSources(ctx, transaction, scanID, rootIDs); err != nil {
 			return "", err
 		}
 	}
@@ -221,7 +221,7 @@ func (service *Service) loadRegisteredRoots(context context.Context, executor sc
 
 func (service *Service) scanRoot(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot) (returnError error) {
 	// 遍历前必须清理同一扫描重试留下的旧行，否则旧 observation 会混入本次候选。
-	if err := catalog.ClearStagedObservations(ctx, executor, scanID, root.ID); err != nil {
+	if err := ingest.ClearStagedObservations(ctx, executor, scanID, root.ID); err != nil {
 		cleanupError := fmt.Errorf("clear stale staged observations: %w", err)
 		if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, "", "staging_write_failure", "无法清理扫描暂存观察"); diagnosticError != nil {
 			cleanupError = errors.Join(cleanupError, fmt.Errorf("record staging cleanup diagnostic: %w", diagnosticError))
@@ -231,7 +231,7 @@ func (service *Service) scanRoot(ctx context.Context, executor scanExecutor, sca
 	defer func() {
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		cleanupError := catalog.ClearStagedObservations(cleanupCtx, executor, scanID, root.ID)
+		cleanupError := ingest.ClearStagedObservations(cleanupCtx, executor, scanID, root.ID)
 		if cleanupError == nil {
 			return
 		}
@@ -397,7 +397,7 @@ func (service *Service) scanRoot(ctx context.Context, executor scanExecutor, sca
 			}
 			return nil
 		}
-		physicalObservation := catalog.SourceObservation{RelativePath: relativePath, Directory: catalog.DirectoryOf(relativePath), Title: observation.Title, Album: observation.Album, AlbumArtist: observation.AlbumArtist, Artist: observation.Artist, SourceType: observation.SourceType, MediaType: observation.MediaType, Genre: observation.Genre, CatalogNumber: observation.Catalog, Edition: observation.Edition, Label: observation.Label, Barcode: observation.Barcode, Year: observation.Year, TrackNumber: observation.TrackNumber, DiscNumber: observation.DiscNumber, SourceKind: observation.SourceKind, InferredFields: observation.InferredFields, FieldSources: observationFieldSources(observation), DurationSeconds: observation.DurationSeconds, Codec: observation.Codec, BitDepth: observation.BitDepth, SampleRate: observation.SampleRate, Channels: observation.Channels, Bitrate: observation.Bitrate, Artwork: observation.Artwork, ArtworkMIME: observation.ArtworkMIME, Credits: append([]metadata.Credit(nil), observation.Credits...), Lyrics: observation.Lyrics, LyricsSource: observation.LyricsSource, SourceSize: fileInfo.Size(), SourceModifiedAt: fileInfo.ModTime(), ContentFingerprint: observation.ContentFingerprint}
+		physicalObservation := ingest.SourceObservation{RelativePath: relativePath, Directory: ingest.DirectoryOf(relativePath), Title: observation.Title, Album: observation.Album, AlbumArtist: observation.AlbumArtist, Artist: observation.Artist, SourceType: observation.SourceType, MediaType: observation.MediaType, Genre: observation.Genre, CatalogNumber: observation.Catalog, Edition: observation.Edition, Label: observation.Label, Barcode: observation.Barcode, Year: observation.Year, TrackNumber: observation.TrackNumber, DiscNumber: observation.DiscNumber, SourceKind: observation.SourceKind, InferredFields: observation.InferredFields, FieldSources: observationFieldSources(observation), DurationSeconds: observation.DurationSeconds, Codec: observation.Codec, BitDepth: observation.BitDepth, SampleRate: observation.SampleRate, Channels: observation.Channels, Bitrate: observation.Bitrate, Artwork: observation.Artwork, ArtworkMIME: observation.ArtworkMIME, Credits: append([]metadata.Credit(nil), observation.Credits...), Lyrics: observation.Lyrics, LyricsSource: observation.LyricsSource, SourceSize: fileInfo.Size(), SourceModifiedAt: fileInfo.ModTime(), ContentFingerprint: observation.ContentFingerprint}
 		// 注册根本身不是 album 证据。目录 fallback 只在根目录以下有效；根级文件缺少
 		// album tag 时必须保持为彼此独立的 loose-unknown candidates。
 		if physicalObservation.Directory == "" && physicalObservation.InferredFields["album"] {
@@ -420,7 +420,7 @@ func (service *Service) scanRoot(ctx context.Context, executor scanExecutor, sca
 		captureProcessingError(err)
 	}
 	if ctx.Err() == nil && err == nil {
-		if alignErr := catalog.AlignCueStagingScopes(ctx, executor, scanID, root.ID); alignErr != nil {
+		if alignErr := ingest.AlignCueStagingScopes(ctx, executor, scanID, root.ID); alignErr != nil {
 			complete = false
 			captureProcessingError(alignErr)
 			if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, "", "staging_write_failure", "无法对齐 CUE 父来源"); diagnosticError != nil {
@@ -462,7 +462,7 @@ func cueTrackCanBeStaged(track parser.CueTrack) bool {
 	return track.ReferenceStatus == "present" && track.IndexPresent
 }
 
-func buildCueVirtualObservation(parent parser.AudioObservation, document parser.CueDocument, cue parser.CueTrack, sheetRelativePath string) catalog.SourceObservation {
+func buildCueVirtualObservation(parent parser.AudioObservation, document parser.CueDocument, cue parser.CueTrack, sheetRelativePath string) ingest.SourceObservation {
 	observation := parent
 	observation.InferredFields = cloneBoolMap(parent.InferredFields)
 	observation.SourceKind = "cue_virtual"
@@ -512,12 +512,12 @@ func buildCueVirtualObservation(parent parser.AudioObservation, document parser.
 	delete(observation.InferredFields, "track_number")
 	fieldSources["track_number"] = "cue_track"
 
-	referencedIdentity := catalog.NormalizedPath(cue.ReferencedFile)
-	parentRelative := catalog.NormalizedPath(filepath.ToSlash(filepath.Join(filepath.Dir(sheetRelativePath), referencedIdentity)))
+	referencedIdentity := ingest.NormalizedPath(cue.ReferencedFile)
+	parentRelative := ingest.NormalizedPath(filepath.ToSlash(filepath.Join(filepath.Dir(sheetRelativePath), referencedIdentity)))
 	virtualPath := sheetRelativePath + "#track-" + strconv.Itoa(cue.Number) + "@" + parentRelative + "#index-" + strconv.Itoa(cue.IndexFrames)
-	return catalog.SourceObservation{
+	return ingest.SourceObservation{
 		RelativePath:          virtualPath,
-		Directory:             catalog.DirectoryOf(sheetRelativePath),
+		Directory:             ingest.DirectoryOf(sheetRelativePath),
 		Title:                 observation.Title,
 		Album:                 observation.Album,
 		AlbumArtist:           observation.AlbumArtist,
@@ -579,7 +579,7 @@ const (
 )
 
 // stageObservation 先校验并规范化观察里的相对路径与 CUE 引用（路径安全属于 library），再交给 catalog 写入暂存表。
-func stageObservation(ctx context.Context, executor scanExecutor, scanID, rootID string, observation catalog.SourceObservation) error {
+func stageObservation(ctx context.Context, executor scanExecutor, scanID, rootID string, observation ingest.SourceObservation) error {
 	identity, err := createTrackSourceIdentity(rootID, observation.RelativePath)
 	if err != nil {
 		return err
@@ -593,14 +593,14 @@ func stageObservation(ctx context.Context, executor scanExecutor, scanID, rootID
 			return fmt.Errorf("invalid staged CUE reference: %w", err)
 		}
 	}
-	return catalog.StageObservation(ctx, executor, scanID, rootID, observation)
+	return ingest.StageObservation(ctx, executor, scanID, rootID, observation)
 }
 
 func (service *Service) persistStagedCandidates(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot) error {
 	var firstErr error
 	lastScope := ""
 	for {
-		scopes, err := catalog.StagedScopes(ctx, executor, scanID, root.ID, lastScope)
+		scopes, err := ingest.StagedScopes(ctx, executor, scanID, root.ID, lastScope)
 		if err != nil {
 			return err
 		}
@@ -608,16 +608,16 @@ func (service *Service) persistStagedCandidates(ctx context.Context, executor sc
 			break
 		}
 		for _, scope := range scopes {
-			observations, loadErr := catalog.LoadStagedScope(ctx, executor, scanID, root.ID, scope)
+			observations, loadErr := ingest.LoadStagedScope(ctx, executor, scanID, root.ID, scope)
 			if loadErr != nil {
 				if firstErr == nil {
 					firstErr = loadErr
 				}
 				continue
 			}
-			for _, candidate := range catalog.OrganizeObservations(observations) {
+			for _, candidate := range ingest.OrganizeObservations(observations) {
 				ripLogRefs, diagnostics := discoverCandidateRipLogEvidence(root, candidate)
-				catalog.ApplyRipLogEvidence(&candidate, ripLogRefs)
+				ingest.ApplyRipLogEvidence(&candidate, ripLogRefs)
 				for _, diagnostic := range diagnostics {
 					if diagnosticErr := service.recordDiagnosticWith(ctx, executor, scanID, diagnostic.RelativePath, diagnostic.Kind, diagnostic.Message); diagnosticErr != nil && firstErr == nil {
 						firstErr = diagnosticErr
@@ -639,7 +639,7 @@ type ripLogDiagnostic struct {
 	Message      string
 }
 
-func discoverCandidateRipLogEvidence(root registeredRoot, candidate catalog.OrganizedCandidate) ([]string, []ripLogDiagnostic) {
+func discoverCandidateRipLogEvidence(root registeredRoot, candidate ingest.OrganizedCandidate) ([]string, []ripLogDiagnostic) {
 	directories := candidateSourceDirectories(candidate)
 	references := make([]string, 0)
 	diagnostics := make([]ripLogDiagnostic, 0)
@@ -667,13 +667,13 @@ func discoverCandidateRipLogEvidence(root registeredRoot, candidate catalog.Orga
 			continue
 		}
 		for _, entry := range entries {
-			if len(references) == catalog.MaxGroupingEvidenceRefs {
+			if len(references) == ingest.MaxGroupingEvidenceRefs {
 				break
 			}
 			if !strings.EqualFold(filepath.Ext(entry.Name()), ".log") || entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
 				continue
 			}
-			relativePath := catalog.NormalizedPath(filepath.ToSlash(filepath.Join(directory, entry.Name())))
+			relativePath := ingest.NormalizedPath(filepath.ToSlash(filepath.Join(directory, entry.Name())))
 			if _, err := createTrackSourceIdentity(root.ID, relativePath); err != nil {
 				continue
 			}
@@ -699,11 +699,11 @@ func discoverCandidateRipLogEvidence(root registeredRoot, candidate catalog.Orga
 	return references, diagnostics
 }
 
-func candidateSourceDirectories(candidate catalog.OrganizedCandidate) []string {
+func candidateSourceDirectories(candidate ingest.OrganizedCandidate) []string {
 	seen := map[string]bool{}
 	directories := make([]string, 0)
 	add := func(value string) {
-		value = catalog.NormalizedPath(value)
+		value = ingest.NormalizedPath(value)
 		if seen[value] {
 			return
 		}
@@ -715,7 +715,7 @@ func candidateSourceDirectories(candidate catalog.OrganizedCandidate) []string {
 		for _, track := range tracks {
 			directory := track.Observation.Directory
 			if directory == "" {
-				directory = catalog.DirectoryOf(track.Observation.RelativePath)
+				directory = ingest.DirectoryOf(track.Observation.RelativePath)
 			}
 			add(directory)
 		}
@@ -773,8 +773,8 @@ func observationFieldSources(observation parser.AudioObservation) map[string]str
 
 // persistOneCandidate 用 catalog 的独立短事务写入一个候选；封面在事务提交后为该 Release 绑定，
 // 封面失败以 errArtworkBinding 包装返回。曲目沿用还是新建由规划决定，见 planRootIdentities。
-func (service *Service) persistOneCandidate(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, candidate catalog.OrganizedCandidate) error {
-	releaseID, err := catalog.PersistCandidate(ctx, executor, scanID, root.ID, candidate)
+func (service *Service) persistOneCandidate(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, candidate ingest.OrganizedCandidate) error {
+	releaseID, err := ingest.PersistCandidate(ctx, executor, scanID, root.ID, candidate)
 	if err != nil {
 		return err
 	}
@@ -818,7 +818,7 @@ func isWithin(root, path string) bool {
 // saveArtworkForRelease 为 Release 取得封面并交给受管存储：优先用候选曲目里的内嵌封面，否则按
 // catalog 给出的目录顺序（发行目录、再各曲目目录）发现文件夹封面；两者都没有时移除既有关联。
 // 文件夹封面发现失败以原错误返回，不当作没有封面。
-func (service *Service) saveArtworkForRelease(ctx context.Context, executor scanExecutor, releaseID string, root registeredRoot, candidate catalog.OrganizedCandidate) error {
+func (service *Service) saveArtworkForRelease(ctx context.Context, executor scanExecutor, releaseID string, root registeredRoot, candidate ingest.OrganizedCandidate) error {
 	var data []byte
 	var mimeType string
 	sourceType := "embedded"

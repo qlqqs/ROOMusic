@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/ingest"
 	"github.com/qlqq/roomusic/backend/internal/library/parser/parsertest"
 )
 
@@ -161,7 +161,7 @@ func TestPostgreSQLEmbeddedArtworkOutranksFolderArtwork(t *testing.T) {
 	root := insertScannerRoot(t, fixture, "embedded-over-folder")
 	application := scannerTestApplication(fixture)
 	writeScanFixtureFile(t, root, "Album/cover.png", pngArtworkOfWidth(3))
-	observation := catalog.SourceObservation{RelativePath: "Album/01.flac", Directory: "Album", Title: "Track", Album: "Release", Artist: "Artist", TrackNumber: 1, DiscNumber: 1, SourceKind: "flac_vorbis_comment", Artwork: pngArtworkOfWidth(9), ArtworkMIME: "image/png"}
+	observation := ingest.SourceObservation{RelativePath: "Album/01.flac", Directory: "Album", Title: "Track", Album: "Release", Artist: "Artist", TrackNumber: 1, DiscNumber: 1, SourceKind: "flac_vorbis_comment", Artwork: pngArtworkOfWidth(9), ArtworkMIME: "image/png"}
 	if err := persistTestObservations(context.Background(), application, fixture, insertRunningScan(t, fixture), root, observation); err != nil {
 		t.Fatalf("persist embedded artwork: %v", err)
 	}
