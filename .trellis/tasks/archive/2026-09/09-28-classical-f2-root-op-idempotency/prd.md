@@ -1,6 +1,6 @@
 # F2：目录操作幂等指纹绑定目标目录
 
-> 父任务：[Classical 重设计 / Core 1](../../../09-27-classical-core-1/prd.md)。2026-09-28 由[路线修订任务](../09-28-core-1-roadmap-revision/design.md)创建，2026-09-29 完成规划。
+> 父任务：[Classical 重设计 / Core 1](../../2026-11/09-27-classical-core-1/prd.md)。2026-09-28 由[路线修订任务](../09-28-core-1-roadmap-revision/design.md)创建，2026-09-29 完成规划。
 > 涉及事务与并发语义，按复杂任务管理：技术设计见 [design.md](design.md)，执行顺序与验证命令见 [implement.md](implement.md)。
 
 ## 目标与用户价值

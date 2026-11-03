@@ -1,7 +1,7 @@
 # 阶段 I：身份稳定与 ReleaseGroup 只读
 
 > 状态：已实施并验证（2026-09-30 用户批准规划后分六步实施，见文末“实施结果”）。父任务见
-> [Classical 重设计 / Core 1](../../../09-27-classical-core-1/prd.md)；2026-09-28 由[路线修订任务](../09-28-core-1-roadmap-revision/design.md)
+> [Classical 重设计 / Core 1](../../2026-11/09-27-classical-core-1/prd.md)；2026-09-28 由[路线修订任务](../09-28-core-1-roadmap-revision/design.md)
 > （第二部分）创建。技术设计见 [design.md](design.md)，执行计划见 [implement.md](implement.md)，
 > 核实事实与推导见 [research/identity-analysis.md](research/identity-analysis.md)。
 

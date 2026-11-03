@@ -1,7 +1,7 @@
 # M1b：专辑浏览
 
 > 状态：已实施（2026-10-02 完成规划并获用户批准，F3 归档后同日启动，2026-10-03 实施完成；结果见“实施结果与验收对照”）。2026-09-28 由[路线修订任务](../../2026-09/09-28-core-1-roadmap-revision/design.md)（第二部分）创建。
-> 父任务见 [Classical 重设计 / Core 1](../../../09-27-classical-core-1/prd.md)。技术设计见 [design.md](design.md)，执行顺序与验证命令见 [implement.md](implement.md)。
+> 父任务见 [Classical 重设计 / Core 1](../../2026-11/09-27-classical-core-1/prd.md)。技术设计见 [design.md](design.md)，执行顺序与验证命令见 [implement.md](implement.md)。
 
 ## 目标与用户价值
 

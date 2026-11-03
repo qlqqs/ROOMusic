@@ -2,7 +2,7 @@
 
 ## 来源
 
-2026-11-03 [路线调整](../../../docs/architecture/core-1-roadmap.md#2026-11-03-路线调整)的 C2：代码评估认为可读性的主要短板是
+2026-11-03 [路线调整](../../../../../docs/architecture/core-1-roadmap.md#2026-11-03-路线调整)的 C2：代码评估认为可读性的主要短板是
 复杂度集中——`internal/catalog` 约 9.2k 行、五项治理功能挤在一个包里，`player-engine.ts` 1281 行靠一组布尔标记维持隐式状态，
 `library/parser/parser.go` 2117 行。本任务是**纯重构**，为以后的功能降低成本。
 

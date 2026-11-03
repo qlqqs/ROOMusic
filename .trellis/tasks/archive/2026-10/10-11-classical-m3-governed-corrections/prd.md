@@ -4,7 +4,7 @@
 
 Core 1 阶段 M3：让管理员能修正扫描得到的发行信息、把同一作品的不同版本归到一起；这些人工结果不会被下一次扫描冲掉，
 谁改了什么有记录，改错了能撤销，音乐文件始终不写。它是 M4（问题处理、版本对比与默认版本、Release 合并拆分）与 M6（Steward 提案）
-复用的写路径基础（[路线图](../../../../../docs/architecture/core-1-roadmap.md) M3 行，父任务 [R5](../../../09-27-classical-core-1/prd.md)）。
+复用的写路径基础（[路线图](../../../../../docs/architecture/core-1-roadmap.md) M3 行，父任务 [R5](../../2026-11/09-27-classical-core-1/prd.md)）。
 技术设计见 [design.md](design.md)，执行计划见 [implement.md](implement.md)。
 
 ## 背景与已确认的事实

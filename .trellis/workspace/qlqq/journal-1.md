@@ -1048,3 +1048,56 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 
 - C2 进行中：后端 B1（拆 catalog/ingest）与前端 F2/F3（播放引擎显式状态）并行；之后 B2、B3、B4、B5 与前端验收 F4，然后 Core 1 收口
 - 提交 207d1aa 的说明里“按现状固定”的“状”字被写成了乱码，按约定未 amend，待用户决定
+
+
+## Session 34: C2 结构整理与 Core 1 收口
+<!-- trellis-session: v=2 fp=a1785ce5b763d2bd -->
+
+**Date**: 2026-11-03
+**Task**: C2 结构整理与 Core 1 收口
+**Branch**: `main`
+
+### Summary
+
+按 ~/.claude/CLAUDE.md 的分工完成 C2：catalog 拆成读取核心、ingest、governance 与 internal/releasesql，播放引擎改成显式状态并拆出模块，parser.go 同包拆文件；收尾的导出树验证发现 C1 漏改的真实服务用例并修正；之后按路线调整的范围完成 Core 1 收口并归档父任务。
+
+### Main Changes
+
+- 后端：catalog 根目录 5099 行降到 1534 行，只为拆分导出 6 个声明，不再导入 operations 与 metadata；governance.Store 承接 9 个治理读取方法；parser.go 拆成 10 个文件，go doc 输出不变
+- 前端：先补 16 个特征测试固定现状，再用 Lifecycle、RestorePhase、Pipeline 取代 11 个隐式状态字段，拆出失败分类、媒体会话、预取与队列恢复模块；原有测试断言零改动
+- 真实服务用例：撤销会话的用例同步 C1 合同（新请求 401，不再要求切断已建立的连接），ALAC 探针用例自己清理素材
+- 文档：12 份规范与架构文档同步新路径；路线文档的“当前基线”原样移到 core-1-baseline.md；父任务写入 Core 1 收口记录（R1–R9 的交付、延期与移出）并归档，M2a 遗留验收成为独立任务
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e8ff3ff` | docs(task): 规划 C2 结构整理 |
+| `207d1aa` | test(player): 播放引擎的特征测试（C2 前端第 1 步） |
+| `7de47c4` | refactor(catalog): 拆出 catalog/ingest（C2 后端第 1 步） |
+| `eb4ef50` | refactor(catalog): 下沉字段词表并建立 catalog/internal/releasesql（C2 后端第 2 步） |
+| `654c8d7` | refactor(catalog): 移出 catalog/governance（C2 后端第 3 步） |
+| `3b20141` | refactor(player): 播放引擎改成显式状态（C2 前端第 2、3 步） |
+| `b99c246` | refactor(parser): parser.go 按格式与职责拆成多个文件（C2 后端第 4 步） |
+| `a472208` | docs: 同步 catalog 拆包后的路径与符号（C2 后端第 5 步） |
+| `206d4e0` | docs(roadmap): 把“当前基线”一节原样移到 core-1-baseline.md |
+| `4fec4b0` | test(e2e): 真实服务用例同步 C1 的播放合同 |
+| `4068faf` | docs(task): 记录 C2 的实施结果与验收对照 |
+| `3c597f8` | chore(task): archive 11-03-classical-c2-structure-cleanup |
+| `424886e` | docs(task): Core 1 收口记录 |
+| `a93de8b` | chore(task): archive 09-27-classical-core-1 |
+
+### Testing
+
+- [OK] 每一步：隔离 PostgreSQL 上 go test -race，214 个集成用例零 SKIP，140 个接口样本 SHA-256 不变；B2、B3、B4 做了语法树与字符串字面量一致性检查
+- [OK] 收尾导出树：后端 477 个顶层测试（245 个集成零 SKIP），前端 lint、typecheck、Vitest 1649、构建与内嵌产物 119 个文件一致，Playwright 246；真实服务首次 2 个失败，修正测试后 44 项全部通过
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- M5 各项（收藏、歌单、历史页面、搜索规范化、艺人与别名）待用户选择后分别立项，新写操作按 R4
+- 遗留：三组手工实播；npm 17 项依赖漏洞与 559 kB 主包警告；测试库上 scan_coordination_unavailable 偶发；207d1aa 的提交说明有一个乱码字，未 amend
+- 本地 main 有大量未推送的提交，推送需用户说“推送”

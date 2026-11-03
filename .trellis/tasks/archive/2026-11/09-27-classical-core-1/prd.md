@@ -9,8 +9,8 @@
 ## 创建时事实基线（2026-09-27）
 
 - 当前仓库基线为 `6cf76ec`。设计稿已入库；`frontend/src/` 和 `frontend/DESIGN.md` 不存在，CI 保留前端重置占位路径。
-- 旧任务 `09-04-music-client-experience` 仍为 `in_progress`，其中的旧视觉、模拟播放和浏览器本地个人数据方案不能直接作为本轮实现依据。（2026-09-28 已按已取代归档，见[归档记录](../archive/2026-09/09-04-music-client-experience/prd.md)。）
-- 文件定位和原型/API 差异见[事实与建议记录](../archive/2026-09/09-27-classical-m0-alignment/research/baseline.md)。
+- 旧任务 `09-04-music-client-experience` 仍为 `in_progress`，其中的旧视觉、模拟播放和浏览器本地个人数据方案不能直接作为本轮实现依据。（2026-09-28 已按已取代归档，见[归档记录](../../2026-09/09-04-music-client-experience/prd.md)。）
+- 文件定位和原型/API 差异见[事实与建议记录](../../2026-09/09-27-classical-m0-alignment/research/baseline.md)。
 
 ## 源需求与验收映射
 
@@ -28,32 +28,32 @@
 
 ## 阶段任务映射
 
-2026-09-28 路线修订（任务 [09-28-core-1-roadmap-revision](../archive/2026-09/09-28-core-1-roadmap-revision/prd.md)，裁决 D1–D6）
+2026-09-28 路线修订（任务 [09-28-core-1-roadmap-revision](../../2026-09/09-28-core-1-roadmap-revision/prd.md)，裁决 D1–D6）
 后，Core 1 = M0、B0、I、M1a、M1b、M2a、M2b、P、M3、M4，外加独立修复 F1、F2（2026-10-02 增加 F3，2026-10-03 增加 F4）；M5、M6 为后续阶段。
-详细依赖与验收出口见 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)。先后依赖写在各子任务中，
+详细依赖与验收出口见 [Core 1 路线](../../../../../docs/architecture/core-1-roadmap.md)。先后依赖写在各子任务中，
 父子关系只表达归属。
 
 | 阶段 | 内容 | 前置与边界 | 任务状态 |
 | --- | --- | --- | --- |
-| M0 | 设计定稿、规范清理、阶段范围、四类 ADR 草案 | 仅文档与规划，不改业务代码 | [已完成并归档](../archive/2026-09/09-27-classical-m0-alignment/prd.md)，工作提交 `850d274` |
-| 路线修订 | 评估收口、D1–D6 裁决、路线/ADR/spec/架构图同步、创建下一批子任务 | 仅文档与任务记录 | [已完成并归档](../archive/2026-09/09-28-core-1-roadmap-revision/prd.md)，工作提交 `7cf9b97` |
-| B0 | 纯重构：先拆 catalog，再拆 platform/postgres、library（含解析器），最后拆 httpserver、identity、各 httpapi 与 app | 无；可与 M1a 并行，不夹带业务变更 | [已完成并归档](../archive/2026-09/09-28-classical-b0-package-split/prd.md)（2026-09-30） |
-| I | 音频指纹、同 root 保守重绑定、按成员关系匹配 Release、ID 稳定性测试、ReleaseGroup 只读接口 | B0 的 catalog 部分 | [已完成并归档](../archive/2026-09/09-28-classical-i-identity-groups/prd.md)（2026-09-30） |
-| M1a | 应用外壳、认证、现有目录/扫描/成员管理、简版概览、恢复真实构建门禁 | ADR 0001 第 1–5 项已批准；只消费现有 API，可与 B0、I 并行 | [已完成并归档](../archive/2026-10/09-28-classical-m1a-shell-admin/prd.md)（2026-10-01，提交 `66a0e05`–`4220960` 加文档同步） |
-| M1b | 专辑列表与详情（按组形态，单版本自然退化） | 阶段 I 的按组接口；M1a（已完成）；F3 | [已完成并归档](../archive/2026-10/09-28-classical-m1b-album-browsing/prd.md)（2026-10-03，提交 `bcac926`–`6dd30bd` 加文档同步；K9 的视觉取舍已由用户确认） |
-| F1 | 未知 `/api/` 路径返回 JSON 404 | 无 | [已完成并归档](../archive/2026-09/09-28-classical-f1-api-json-404/prd.md)（2026-09-29） |
-| F2 | 目录操作幂等指纹纳入目标目录 ID | 无；建议先于或与 M1a 同期 | [已完成并归档](../archive/2026-09/09-28-classical-f2-root-op-idempotency/prd.md)（2026-09-29） |
-| F3 | M1a 遗留的后端缺口：扫描记录、查看者 ID、成员接口错误映射、HTTP 缓存头（成员写操作幂等延到 M3） | 无；先于 M1b | [已完成并归档](../archive/2026-10/10-02-classical-f3-backend-gaps/prd.md)（2026-10-02，提交 `ec92090`–`9b97c9d` 加文档同步） |
-| F4 | M1b 冒烟发现的后端封面发现缺口：CUE 专辑、多碟专辑的父目录封面，另含文件名大小写 | 无；先于 M2a | [已完成并归档](../archive/2026-10/10-03-classical-f4-artwork-discovery/prd.md)（2026-10-03，提交 `b66f569` 加文档同步） |
-| M2a | 鉴权直出串流、播放引擎、浏览器能力判定 | M1a 外壳；实播矩阵在规划时确定 | [已完成并归档](../archive/2026-10/10-03-classical-m2a-direct-playback/prd.md)（2026-10-07，提交 `d1c976d`–`13a9cfe` 加文档同步；ALAC 在 Safari 实播前移出格式表，三组手工实播、ALAC 恢复与远端 CI 见下一行） |
-| M2a 遗留验收 | 三组手工实播、Safari 上恢复 ALAC、下次推送后的远端 CI | M2a；需要用户的 macOS 与 Windows 实机 | [规划中](../10-06-m2a-acceptance-followup/prd.md)（2026-10-06 创建；2026-10-09 用户决定延后手工实播，先推进开发） |
-| M2b 派生播放 | ffmpeg 无损派生缓存，ALAC 经 FLAC 在所有浏览器播放 | M2a；ADR 0004 第 2、4、6 项与第 5、7 项派生部分随规划获批 | [已完成并归档](../archive/2026-10/10-09-classical-m2b-derived-playback/prd.md)（2026-10-10；`ef306f7`–`5ac806b` 加文档同步；用户装好 ffmpeg 后的真实播放确认、三组手工实播与远端 CI 见后续验收任务） |
-| M2b 歌词 | 扫描时提取内嵌歌词、歌词接口、正在播放页逐行同步 | M2a；建议在派生播放之后实施 | [已完成并归档](../archive/2026-10/10-09-classical-m2b-lyrics/prd.md)（2026-10-11：提取与保存 `d6c9fd4`、接口与同步显示 `62023a1`、真实服务用例 `ca17fa3`，加文档与测试补充；布局已由用户确认；重扫真实库后的实际查看与三组手工实播见任务 PRD 与后续验收任务） |
-| M2b CUE 分轨 | CUE 虚拟轨的精确切分（需批准 ADR 0004 第 3 项） | M2b 派生播放的缓存与任务管理 | 延后：2026-10-09 用户裁决，真实库扫描后没有 CUE 虚拟轨（见[调研](../archive/2026-10/10-09-classical-m2b-derived-playback/research/library-evidence.md)） |
-| P | 服务端播放历史 | 阶段 I；M2a | [已完成并归档](../archive/2026-10/10-11-classical-p-play-history/prd.md)（2026-10-11：数据表与规则 `ecf0bb1`、接口 `ee05b97`、计次与上报 `7de1750`、概览“最近播放” `e94b77d`、真实服务用例 `d70f7e9`，加文档同步；布局已由用户确认；Safari、Firefox 与 Windows 浏览器里的实际渲染见三组手工实播的“最近播放”一行） |
-| M3 | 修正覆盖层与受治理操作；试点为字段修正与 ReleaseGroup 成员调整 | 阶段 I；ADR 0002/0003 相关待批项获批 | [已完成并归档](../archive/2026-10/10-11-classical-m3-governed-corrections/prd.md)（2026-10-14，提交 `c8c7e7c`–`084c1d0` 加文档同步；布局已由用户确认，见任务 PRD） |
-| M4 | 问题投影、版本对比/默认版本、扫描反馈；之后 Release 合并拆分 | M3；Core 1 仅人工确认归组 | 分项立项：第一项[默认版本与版本对比](../archive/2026-10/10-14-classical-m4-default-version/prd.md)已完成并归档（2026-10-15，提交 `3b3793b`–`c3b13cf` 加文档同步；2026-10-14 用户批准规划：管理员逐张指定、失效回到自动规则、所有成员可对比；布局已由用户确认）；第二项[问题处理](../archive/2026-10/10-16-classical-m4-issue-handling/prd.md)已完成（2026-10-17，提交 `7aaa14a`–`ec522c8` 加文档同步 `0b074f1`；用户批准规划：管理员的问题页按版本列出，来源/介质类型、归组冲突与缺失曲目可以标记为已核对，情况变了重新提醒；布局已由用户确认）；第三项[认领](../archive/2026-10/10-17-classical-m4-claim/prd.md)已实施（2026-10-17，提交 `05de626`–`3971163` 加文档同步；用户批准规划：管理员在“待认领”页把不可见旧版本上的修正、专辑、默认版本与核对按推荐或搜索迁给新版本，新版本已有的以新版本为准，可撤销；布局确认与归档见任务 PRD）；扫描反馈、Release 合并与拆分未立项；2026-11-03 的[路线调整](../../../docs/architecture/core-1-roadmap.md#2026-11-03-路线调整)把扫描反馈移到 M5 之后、合并与拆分搁置 |
-| C1 | 删除播放中每 10 秒的复核，只在建立传输时检查（R3） | 无 | [已完成](../archive/2026-11/11-03-classical-c1-drop-stream-recheck/prd.md)（2026-11-03，`89ab4b4`） |
+| M0 | 设计定稿、规范清理、阶段范围、四类 ADR 草案 | 仅文档与规划，不改业务代码 | [已完成并归档](../../2026-09/09-27-classical-m0-alignment/prd.md)，工作提交 `850d274` |
+| 路线修订 | 评估收口、D1–D6 裁决、路线/ADR/spec/架构图同步、创建下一批子任务 | 仅文档与任务记录 | [已完成并归档](../../2026-09/09-28-core-1-roadmap-revision/prd.md)，工作提交 `7cf9b97` |
+| B0 | 纯重构：先拆 catalog，再拆 platform/postgres、library（含解析器），最后拆 httpserver、identity、各 httpapi 与 app | 无；可与 M1a 并行，不夹带业务变更 | [已完成并归档](../../2026-09/09-28-classical-b0-package-split/prd.md)（2026-09-30） |
+| I | 音频指纹、同 root 保守重绑定、按成员关系匹配 Release、ID 稳定性测试、ReleaseGroup 只读接口 | B0 的 catalog 部分 | [已完成并归档](../../2026-09/09-28-classical-i-identity-groups/prd.md)（2026-09-30） |
+| M1a | 应用外壳、认证、现有目录/扫描/成员管理、简版概览、恢复真实构建门禁 | ADR 0001 第 1–5 项已批准；只消费现有 API，可与 B0、I 并行 | [已完成并归档](../../2026-10/09-28-classical-m1a-shell-admin/prd.md)（2026-10-01，提交 `66a0e05`–`4220960` 加文档同步） |
+| M1b | 专辑列表与详情（按组形态，单版本自然退化） | 阶段 I 的按组接口；M1a（已完成）；F3 | [已完成并归档](../../2026-10/09-28-classical-m1b-album-browsing/prd.md)（2026-10-03，提交 `bcac926`–`6dd30bd` 加文档同步；K9 的视觉取舍已由用户确认） |
+| F1 | 未知 `/api/` 路径返回 JSON 404 | 无 | [已完成并归档](../../2026-09/09-28-classical-f1-api-json-404/prd.md)（2026-09-29） |
+| F2 | 目录操作幂等指纹纳入目标目录 ID | 无；建议先于或与 M1a 同期 | [已完成并归档](../../2026-09/09-28-classical-f2-root-op-idempotency/prd.md)（2026-09-29） |
+| F3 | M1a 遗留的后端缺口：扫描记录、查看者 ID、成员接口错误映射、HTTP 缓存头（成员写操作幂等延到 M3） | 无；先于 M1b | [已完成并归档](../../2026-10/10-02-classical-f3-backend-gaps/prd.md)（2026-10-02，提交 `ec92090`–`9b97c9d` 加文档同步） |
+| F4 | M1b 冒烟发现的后端封面发现缺口：CUE 专辑、多碟专辑的父目录封面，另含文件名大小写 | 无；先于 M2a | [已完成并归档](../../2026-10/10-03-classical-f4-artwork-discovery/prd.md)（2026-10-03，提交 `b66f569` 加文档同步） |
+| M2a | 鉴权直出串流、播放引擎、浏览器能力判定 | M1a 外壳；实播矩阵在规划时确定 | [已完成并归档](../../2026-10/10-03-classical-m2a-direct-playback/prd.md)（2026-10-07，提交 `d1c976d`–`13a9cfe` 加文档同步；ALAC 在 Safari 实播前移出格式表，三组手工实播、ALAC 恢复与远端 CI 见下一行） |
+| M2a 遗留验收 | 三组手工实播、Safari 上恢复 ALAC、下次推送后的远端 CI | M2a；需要用户的 macOS 与 Windows 实机 | [规划中](../../../10-06-m2a-acceptance-followup/prd.md)（2026-10-06 创建；2026-10-09 用户决定延后手工实播，先推进开发） |
+| M2b 派生播放 | ffmpeg 无损派生缓存，ALAC 经 FLAC 在所有浏览器播放 | M2a；ADR 0004 第 2、4、6 项与第 5、7 项派生部分随规划获批 | [已完成并归档](../../2026-10/10-09-classical-m2b-derived-playback/prd.md)（2026-10-10；`ef306f7`–`5ac806b` 加文档同步；用户装好 ffmpeg 后的真实播放确认、三组手工实播与远端 CI 见后续验收任务） |
+| M2b 歌词 | 扫描时提取内嵌歌词、歌词接口、正在播放页逐行同步 | M2a；建议在派生播放之后实施 | [已完成并归档](../../2026-10/10-09-classical-m2b-lyrics/prd.md)（2026-10-11：提取与保存 `d6c9fd4`、接口与同步显示 `62023a1`、真实服务用例 `ca17fa3`，加文档与测试补充；布局已由用户确认；重扫真实库后的实际查看与三组手工实播见任务 PRD 与后续验收任务） |
+| M2b CUE 分轨 | CUE 虚拟轨的精确切分（需批准 ADR 0004 第 3 项） | M2b 派生播放的缓存与任务管理 | 延后：2026-10-09 用户裁决，真实库扫描后没有 CUE 虚拟轨（见[调研](../../2026-10/10-09-classical-m2b-derived-playback/research/library-evidence.md)） |
+| P | 服务端播放历史 | 阶段 I；M2a | [已完成并归档](../../2026-10/10-11-classical-p-play-history/prd.md)（2026-10-11：数据表与规则 `ecf0bb1`、接口 `ee05b97`、计次与上报 `7de1750`、概览“最近播放” `e94b77d`、真实服务用例 `d70f7e9`，加文档同步；布局已由用户确认；Safari、Firefox 与 Windows 浏览器里的实际渲染见三组手工实播的“最近播放”一行） |
+| M3 | 修正覆盖层与受治理操作；试点为字段修正与 ReleaseGroup 成员调整 | 阶段 I；ADR 0002/0003 相关待批项获批 | [已完成并归档](../../2026-10/10-11-classical-m3-governed-corrections/prd.md)（2026-10-14，提交 `c8c7e7c`–`084c1d0` 加文档同步；布局已由用户确认，见任务 PRD） |
+| M4 | 问题投影、版本对比/默认版本、扫描反馈；之后 Release 合并拆分 | M3；Core 1 仅人工确认归组 | 分项立项：第一项[默认版本与版本对比](../../2026-10/10-14-classical-m4-default-version/prd.md)已完成并归档（2026-10-15，提交 `3b3793b`–`c3b13cf` 加文档同步；2026-10-14 用户批准规划：管理员逐张指定、失效回到自动规则、所有成员可对比；布局已由用户确认）；第二项[问题处理](../../2026-10/10-16-classical-m4-issue-handling/prd.md)已完成（2026-10-17，提交 `7aaa14a`–`ec522c8` 加文档同步 `0b074f1`；用户批准规划：管理员的问题页按版本列出，来源/介质类型、归组冲突与缺失曲目可以标记为已核对，情况变了重新提醒；布局已由用户确认）；第三项[认领](../../2026-10/10-17-classical-m4-claim/prd.md)已实施（2026-10-17，提交 `05de626`–`3971163` 加文档同步；用户批准规划：管理员在“待认领”页把不可见旧版本上的修正、专辑、默认版本与核对按推荐或搜索迁给新版本，新版本已有的以新版本为准，可撤销；布局确认与归档见任务 PRD）；扫描反馈、Release 合并与拆分未立项；2026-11-03 的[路线调整](../../../../../docs/architecture/core-1-roadmap.md#2026-11-03-路线调整)把扫描反馈移到 M5 之后、合并与拆分搁置 |
+| C1 | 删除播放中每 10 秒的复核，只在建立传输时检查（R3） | 无 | [已完成](../11-03-classical-c1-drop-stream-recheck/prd.md)（2026-11-03，`89ab4b4`） |
 | C2 | 结构整理：拆 `internal/catalog`、播放引擎显式状态机、视情况拆解析器；纯重构 | C1 之后（不强制） | [已完成](../11-03-classical-c2-structure-cleanup/prd.md)（2026-11-03，`7de47c4`–`a472208`，另有 `207d1aa`、`4fec4b0`） |
 | M5 | 搜索规范化、艺人实体/别名、收藏/歌单/历史页面；之后是扫描反馈 | C2 | Core 1 之后 |
 | M6 | Steward 只读问答、受控提案、独立审查 | M3/M4 的工具与操作合同；外部元数据源另立项 | Core 1 之后 |
@@ -100,7 +100,7 @@ M1 的“只读客户端”指不新增元数据整理写路径，不禁止恢�
 
 ## Core 1 收口记录（2026-11-03）
 
-用户要求“完成 C1、C2 和收口”。按 2026-11-03 [路线调整](../../../docs/architecture/core-1-roadmap.md#2026-11-03-路线调整)确定的范围收尾：
+用户要求“完成 C1、C2 和收口”。按 2026-11-03 [路线调整](../../../../../docs/architecture/core-1-roadmap.md#2026-11-03-路线调整)确定的范围收尾：
 M0、路线修订、B0、I、M1a、M1b、F1–F4、M2a、M2b（派生、歌词）、P、M3、M4 ①–③、C1、C2 全部完成并归档。
 
 ### 源需求的交付或延期
@@ -125,7 +125,7 @@ C2 收尾时在导出的提交树上跑了一次完整验证，结果记录在 [
 
 ### 留给 Core 1 之后的事项
 
-- M2a 遗留验收（[`10-06-m2a-acceptance-followup`](../10-06-m2a-acceptance-followup/prd.md)）：父任务归档后成为独立任务，只剩三组手工实播。
+- M2a 遗留验收（[`10-06-m2a-acceptance-followup`](../../../10-06-m2a-acceptance-followup/prd.md)）：父任务归档后成为独立任务，只剩三组手工实播。
 - 依赖：`npm ci` 报告 17 项漏洞（13 moderate、4 high）；主 JS 包 559.57 kB，超过 500 kB 的构建警告。
 - 测试：library 与 app 在同一个测试库上并行时偶尔出现 `scan_coordination_unavailable`，原因是扫描锁按整个数据库生效；真实服务脚本有一次启动超时没有复现。
 - 播放引擎三项按现状固定的边界行为，见 C2 PRD 的“已知、但本任务不修的行为”。

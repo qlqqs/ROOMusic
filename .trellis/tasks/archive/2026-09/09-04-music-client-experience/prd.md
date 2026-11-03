@@ -1,6 +1,6 @@
 # 完善音乐客户端前端体验
 
-> **已取代，未交付（2026-09-28）**：本任务已被 [Classical 重设计 / Core 1](../../../09-27-classical-core-1/prd.md)
+> **已取代，未交付（2026-09-28）**：本任务已被 [Classical 重设计 / Core 1](../../2026-11/09-27-classical-core-1/prd.md)
 > 取代（meta：`outcome=superseded`、`superseded_by=09-27-classical-core-1`），按路线修订任务
 > `09-28-core-1-roadmap-revision` 的裁决 D5 归档。本任务的实现代码从未提交，`frontend/src/` 已于
 > 2026-09-27 删除；旧视觉、模拟播放与浏览器本地个人库方案不再作为实施依据。归档工具会把状态写成

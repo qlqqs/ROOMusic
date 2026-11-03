@@ -3,7 +3,7 @@
 ## 定位
 
 本文承接上一轮建议，供 M0 整理和后续子任务研究，不宣称这些能力或依赖已经存在。
-当前事实以[基线记录](../archive/2026-09/09-27-classical-m0-alignment/research/baseline.md)为准。
+当前事实以[基线记录](../../2026-09/09-27-classical-m0-alignment/research/baseline.md)为准。
 
 ## 能力边界
 
@@ -53,5 +53,5 @@
 
 ## M0 产物入口
 
-阶段/能力矩阵和四份 ADR 统一从 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md) 进入（2026-09-28 起 ADR 为部分批准）。
+阶段/能力矩阵和四份 ADR 统一从 [Core 1 路线](../../../../../docs/architecture/core-1-roadmap.md) 进入（2026-09-28 起 ADR 为部分批准）。
 本文件保留总体候选摘要，精确决策状态以对应 ADR 的“决策记录”为准；尚未批准的技术不能因链接建立而转为已采纳。

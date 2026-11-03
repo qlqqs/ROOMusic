@@ -2,7 +2,7 @@
 
 > 状态：已完成（2026-10-01）。2026-09-28 由[路线修订任务](../../2026-09/09-28-core-1-roadmap-revision/design.md)（第二部分）创建，
 > 2026-10-01 规划获批并实施：规划提交 `2e84149`，实施提交 `66a0e05`–`4220960`，另有文档同步提交。
-> 父任务见 [Classical 重设计 / Core 1](../../../09-27-classical-core-1/prd.md)。技术设计见 [design.md](design.md)，执行计划与实施发现见
+> 父任务见 [Classical 重设计 / Core 1](../../2026-11/09-27-classical-core-1/prd.md)。技术设计见 [design.md](design.md)，执行计划与实施发现见
 > [implement.md](implement.md)，真实接口冒烟记录见 [research/real-api-smoke.md](research/real-api-smoke.md)。
 
 ## 目标与用户价值
