@@ -466,6 +466,8 @@ test("同步歌词：当前行随播放位置变化并保持在中部，点击�
   const items = lyrics.getByRole("listitem");
   const current = lyrics.locator("[aria-current='true']");
   await expect(items).toHaveCount(LYRIC_LINES);
+  // openNowPlaying 在真实播放后才暂停，位置可能已越过第 1 行的窗口（100 ms 减 40 ms 提前容差），先归零再断言。
+  await setMediaTime(page, 0);
   await expect(lyrics.getByText("内嵌歌词 · 逐行同步 · 点任一行跳到该处", { exact: true })).toBeVisible();
   await expect(current).toContainText("第 1 行歌词");
 
