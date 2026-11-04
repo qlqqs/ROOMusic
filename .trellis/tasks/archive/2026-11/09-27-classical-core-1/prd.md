@@ -126,7 +126,7 @@ C2 收尾时在导出的提交树上跑了一次完整验证，结果记录在 [
 ### 留给 Core 1 之后的事项
 
 - M2a 遗留验收（[`10-06-m2a-acceptance-followup`](../../../10-06-m2a-acceptance-followup/prd.md)）：父任务归档后成为独立任务，只剩三组手工实播。
-- 依赖：`npm ci` 报告 17 项漏洞（13 moderate、4 high）；主 JS 包 559.57 kB，超过 500 kB 的构建警告。
-- 测试：library 与 app 在同一个测试库上并行时偶尔出现 `scan_coordination_unavailable`，原因是扫描锁按整个数据库生效；真实服务脚本有一次启动超时没有复现。
+- 依赖：`npm ci` 报告 17 项漏洞（13 moderate、4 high）；主 JS 包 559.57 kB，超过 500 kB 的构建警告。（2026-11-04 已由 `11-04-maintenance-deps-bundle-scanlock` 处理）
+- 测试：library 与 app 在同一个测试库上并行时偶尔出现 `scan_coordination_unavailable`，原因是扫描锁按整个数据库生效；真实服务脚本有一次启动超时没有复现。（扫描锁一项 2026-11-04 已由同一任务处理）
 - 播放引擎三项按现状固定的边界行为，见 C2 PRD 的“已知、但本任务不修的行为”。
 - 下一步：M5 各项（收藏、歌单、历史页面、搜索规范化、艺人与别名）分别立项，新写操作按 R4 的轻量标准。

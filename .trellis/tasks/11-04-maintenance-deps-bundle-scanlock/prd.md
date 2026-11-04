@@ -40,3 +40,18 @@
 - 在导出的提交树上跑一次：后端改动涉及的包、前端 lint/类型检查/Vitest/Playwright、`scripts/playback-e2e.sh` 真实服务用例。
 - 界面不变，不需要截图复核。
 - 推送前做只读检查（远端头是本地祖先、没有疑似密钥、新增大文件），然后 `git push origin main`。
+
+## 实施结果（2026-11-04）
+
+| 项 | 提交 | 结果 |
+| --- | --- | --- |
+| A 扫描锁 | `1248d5d` | 锁改为 `(SCAN, hashtext(current_schema()))`，取得时保存实际键、解锁不重算。修复前 `go test -count=5 ./internal/library/... ./internal/app/...` 复现 2 次失败（`acquired=false`，3663 通过）；修复后 3710 通过、0 失败。补齐合同第 6 节要求而原先缺失的测试（同 schema 竞争、失败方复用活动扫描、unlock 后重取、`MaxOpenConns=1` 快速失败），新增跨 schema 不阻塞与解锁键测试；同步合同与 `operations.go`、`root_operations.go` 的注释 |
+| B 依赖漏洞 | `0861a82` | vite 8.2.2→8.2.4、vitest 4.1.11→4.1.12，`npm audit fix` 刷新 undici、zod、source-map-js、seroval；`npm audit` 17→0，构建产物不变 |
+| C 分包 | `486e819` | `rolldownOptions.output.codeSplitting.groups` 拆出 react（189.60 kB）、tanstack（109.36 kB）、lucide（9.69 kB），入口 559.57→250.61 kB，CSS 逐字不变，无体积警告；改一处应用代码重建时只有入口块换哈希 |
+| 收尾发现 | `a47ca36` | Playwright 一次 flaky：同步歌词用例在真实播放后暂停，位置可能越过第 1 行（基线即有的时序假设）。先把位置归零再断言，单测重复 20 次通过 |
+
+**与 PRD 的偏差**：B 的 minimatch 用 `overrides` 从 10.2.6 提到 11.0.4，跨了主版本（eslint 声明 `^10`）。保留的理由：只影响开发期 lint、不进产物；换版本前后检查的 357 个文件与 0 个问题完全一致，规则用 `--stdin` 抽查仍生效。要回退删掉 `overrides` 即可，代价是 10 个 moderate 回来。
+
+**收尾验证**（导出树，含 `a47ca36`）：`npm ci`、`npm audit`（0）、lint、typecheck、build（无体积警告，`backend/cmd/roomusic/web` 与提交一致）；Vitest 1649 通过；Playwright 246 通过、0 flaky；隔离库上 `go vet ./...` 与 `go test -race -count=1 ./cmd/roomusic/... ./internal/library/... ./internal/app/... ./internal/operations/...`：顶层 249 通过、3 SKIP（未设 `ROOMUSIC_REAL_MUSIC_ROOT` 的真实音乐只读测试），PostgreSQL 集成 155 个顶层全部通过、0 SKIP；`scripts/playback-e2e.sh` 44/44。没有跑后端全量 `go test ./...`：改动只在 library 与 operations 的注释，所测包已覆盖。
+
+**部署提示**：新旧扫描器的锁键不同，升级时不要让旧进程与新进程同时运行（单实例部署自然满足）。
