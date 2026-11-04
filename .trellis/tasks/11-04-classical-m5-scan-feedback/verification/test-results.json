@@ -1,0 +1,2326 @@
+{
+  "说明": "仅指定后端范围及后续新增HTTP回归；媒体检查使用仓库合成fixture，不表示访问真实音乐库。无测试文件的辅助包不是跳过测试用例。",
+  "runs": [
+    {
+      "command": "go test -race -json ./internal/library/... ./internal/catalog/... ./internal/app -count=1",
+      "raw_log": "/tmp/roomusic-m5f-backend-final-race.jsonl",
+      "sha256": "fd9f426b162ccdccbe10afd4d90c96c54fdc03b61479137c776f9d7d7cc60dba",
+      "top_level": 434,
+      "postgres_top_level": 272,
+      "test_skips": [],
+      "failures": [],
+      "packages": [
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/httpapi",
+          "action": "skip",
+          "elapsed": 0
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser/parsertest",
+          "action": "skip",
+          "elapsed": 0
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql",
+          "action": "pass",
+          "elapsed": 1.037
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/metadata",
+          "action": "pass",
+          "elapsed": 1.039
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "action": "pass",
+          "elapsed": 1.639
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/artwork",
+          "action": "pass",
+          "elapsed": 2.617
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/httpapi",
+          "action": "pass",
+          "elapsed": 3.282
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "action": "pass",
+          "elapsed": 28.537
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "action": "pass",
+          "elapsed": 40.077
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "action": "pass",
+          "elapsed": 93.982
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "action": "pass",
+          "elapsed": 97.421
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "action": "pass",
+          "elapsed": 202.843
+        }
+      ],
+      "governance_matrix_leaves": [
+        "TestPostgreSQLScanFeedbackGovernanceArtwork",
+        "TestPostgreSQLScanFeedbackGovernanceSourceVacateClaim/reparent_false",
+        "TestPostgreSQLScanFeedbackGovernanceSourceVacateClaim/reparent_true",
+        "TestPostgreSQLScanFeedbackGovernanceRegroup/governance_first_false",
+        "TestPostgreSQLScanFeedbackGovernanceRegroup/governance_first_true",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/candidate/correction",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/candidate/correction_revert",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/candidate/default",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/candidate/default_clear",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/candidate/default_revert",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/candidate/regroup",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/candidate/regroup_revert",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/candidate/review",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/candidate/review_revert",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/artwork/correction",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/artwork/correction_revert",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/artwork/default",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/artwork/default_clear",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/artwork/default_revert",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/artwork/regroup",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/artwork/regroup_revert",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/artwork/review",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/artwork/review_revert",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/missing/correction",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/missing/correction_revert",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/missing/default",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/missing/default_clear",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/missing/default_revert",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/missing/regroup",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/missing/regroup_revert",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/missing/review",
+        "TestPostgreSQLScanFeedbackGovernanceManualState/missing/review_revert",
+        "TestPostgreSQLScanFeedbackGovernanceFeedbackLockTimeout",
+        "TestPostgreSQLScanFeedbackGovernanceFinalizeMissing",
+        "TestPostgreSQLScanFeedbackGovernanceClaimAndRevert/candidate/revert_false",
+        "TestPostgreSQLScanFeedbackGovernanceClaimAndRevert/candidate/revert_true",
+        "TestPostgreSQLScanFeedbackGovernanceClaimAndRevert/artwork/revert_false",
+        "TestPostgreSQLScanFeedbackGovernanceClaimAndRevert/artwork/revert_true",
+        "TestPostgreSQLScanFeedbackGovernanceClaimAndRevert/missing/revert_false",
+        "TestPostgreSQLScanFeedbackGovernanceClaimAndRevert/missing/revert_true",
+        "TestPostgreSQLScanFeedbackGovernanceCancelHolderLossReleasesLocks/prior_candidate_committed_false",
+        "TestPostgreSQLScanFeedbackGovernanceCancelHolderLossReleasesLocks/prior_candidate_committed_true"
+      ],
+      "tests": [
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql",
+          "name": "TestBoundedDisplayString",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestObservationFieldSourcesDistinguishFallbacks",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestFolderArtworkDoesNotFollowSymlink",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestFolderArtworkRejectsInvalidNamedCandidate",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestFolderArtworkReadFailureIsReported",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestFolderArtworkMatchesNamesCaseInsensitively",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql",
+          "name": "TestDecodeBoundedStringArray",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql",
+          "name": "TestSplitBoundedReasonCodes",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql",
+          "name": "TestSafeSourceLabel",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql",
+          "name": "TestPointersFromNull",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/httpapi",
+          "name": "TestReleaseAttentionFilterAllowlist",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/httpapi",
+          "name": "TestReleaseListPaginationContract",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/httpapi",
+          "name": "TestReleaseSearchParsingTrimsAndEscapesWildcards",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/artwork",
+          "name": "TestArtworkDimensionsRejectMalformedAndReadWebP",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/artwork",
+          "name": "TestSafeStorageKeyOnlyAcceptsContentAddressedNames",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/artwork",
+          "name": "TestReadReturnsTheStoredBytesAndFailsClosed",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/metadata",
+          "name": "TestSplitArtistNamesFlattensConservativeSeparators",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/metadata",
+          "name": "TestCanonicalArtistNamesApplyOfficialAliasesAndDeduplicate",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/metadata",
+          "name": "TestCanonicalTrackArtistUsesStableDisplayOrder",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestFolderArtworkCaseOnlyVariantsPreferLowercaseThenByteOrder",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestFolderArtworkNamePriorityIgnoresCase",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestParseFolderMetadataSupportedPatterns",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestParseFolderMetadataRejectsUnmatchedAndOversizedNames",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestFolderArtworkSearchesDirectoriesInOrder",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestFolderArtworkSkipsInvalidFileInEarlierDirectory",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestFolderArtworkMissingDirectoryIsSkipped",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestFolderMetadataOnlySupplementsMissingCandidateFields",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestFolderArtworkDirectoryReadFailureIsReported",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestArtworkPersistenceFailureKeepsDiagnosticCategory",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestFolderMetadataDoesNotChangeCandidateIdentity",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestStrictMultidiscFolderMetadataDoesNotUseParentScope",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestPlanStagedRootRequiresFingerprinter",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestOrganizeLooseAndUnknown",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestDiscoverCandidateRipLogEvidenceRequiresExplicitSignatureAndSkipsSymlink",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestContentFingerprintIgnoresTags",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestOrganizeMajorityDeterministic",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestOrganizeStrictMultidisc",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestOrganizeStrictMultidiscUsesPhysicalDiscFolderEvidence",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestOrganizeStrictMultidiscWithoutAlbumTagUsesParentFolder",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestOrganizeSameDirectoryConflictUsesMajorityOrStableSplit",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestOrganizeNonContiguousDiscDirectoriesStayLeafCandidates",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestOrganizeRootUnknownAndCueIdentityAreExplicit",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestOrganizeTagAlbumOutranksFolderFallback",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestOrganizeAlbumArtistKeepsAuthoritativeProvenance",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestOrganizeMissingAlbumArtistRemainsCompatibleWithKnownRelease",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestResolveCuePhysicalCoexistenceUsesExplicitParent",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestSingleCueTrackEnrichesInferredPhysicalMetadata",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestCueCandidateIncludesExplicitParentOutsideSheetDirectory",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestSingleCueTrackRetainsCueFactsOnPhysicalIdentity",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestContentFingerprintDetectsAudioChange",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestOrganizerEvidenceListsAreBounded",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestOrganizerAssignsStableFallbackTrackPositions",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestOrganizerFallbackPositionsPreserveExplicitTags",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestRipLogEvidenceFillsOnlyMissingReleaseSemantics",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestContentFingerprintOfMatchesTheFileVariant",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestFLACFingerprintFallsBackWhenMD5IsZero",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestArtworkDirectoriesFollowReleaseDirectoryThenTracks",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestArtworkDirectoriesDoNotLeaveCrossDirectoryCueSheetDirectory",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestArtworkDirectoriesDeduplicateAndOrderTracksByPosition",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestEmbeddedArtworkPicksFirstTrackInDiscThenPositionOrder",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestMP3FingerprintStripsLeadingAndTrailingTags",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestOggFingerprintIgnoresCommentPagination",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestM4AFingerprintHashesAllMediaData",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestWAVFingerprintHashesFormatAndDataChunks",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestContentFingerprintHonorsCancellation",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestContentFingerprintIsEmptyWhenThereIsNoAudioPayload",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestContentFingerprintRejectsUnsupportedAndDamagedFiles",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestNormalizeLyrics",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestFLACParserReadsVorbisLyrics",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestOggAndOpusParsersReadVorbisLyrics",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestM4AParserReadsLyrics",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestMP3ParserReadsUSLTLyrics",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestMP3ParserPicksTheUSLTFrameWithAnEmptyDescriptor",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestMP3ParserIgnoresMalformedUSLTFrames",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestID3FrameSizeFollowsTheTagVersion",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestRemoveUnsynchronisation",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestParseM4AReaderParsesLateMoovAndRawITunesAtoms",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestParseM4AReaderParsesALACConfigAndLargesize",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestParseM4AReaderRejectsTruncatedAtomWithoutPanic",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestParseM4AReaderRejectsTooManyTopLevelAtoms",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestParseM4AReaderRejectsContainerWithoutAudioSampleEntry",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestParseM4ATextDecodingIsStrictAndBounded",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestParseM4AWriterAndAllowlistedFreeformMetadata",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestEstimatedBitrateRejectsUnrepresentableFacts",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestParseExistingTagParsersRetainAlbumArtist",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestParseFLACRetainsReleaseMetadataAndTrackCredits",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestParseMP3DecodesUTF16AndReadsMPEGFacts",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestDecodeID3TextSupportsDeclaredEncodings",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestParseMP3AttachedPictureKeepsMIMESeparateFromDescription",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestFilenameFallbackMarksOnlyMissingPositionsInferred",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestParseWAVReaderSkipsLargePayloadAndParsesFacts",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestParseWAVReaderRejectsContainerWithoutAudioChunks",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestParseOggAndOpusIdentificationFacts",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestParseCueDocumentSupportsMultiFileMetadataAndIndexRanges",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestParseCueDocumentDecodesSupportedEncodingsAndReportsUnsafeReference",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestParseCueDecoderSupportsGBKShiftJISAndBig5",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestParseCueDocumentBoundsInputAndSymlinkContainment",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestParseCueDocumentAllowsParentReferenceWithinExplicitRoot",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestParseCueDocumentRejectsNonRegularReference",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestParseCueDocumentClassifiesMalformedIndexSequences",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestSplitCreditNamesUsesArtistRules",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestAudioParsersReturnMetadataAndRejectInvalidInput",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestFLACParserReadsAllCommentsAfterLongValue",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestPlaybackFixturesMatchTheirDocumentedFacts",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestPlaybackFixturesAreAllCoveredAndSmall",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestRealMusicReadOnlySmoke",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/parser",
+          "name": "TestRealMusicFingerprintCoverage",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLScanFeedbackClaimHintsBatch",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/artwork",
+          "name": "TestPostgreSQLScanFeedbackArtworkChanges",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestPostgreSQLReleaseComparisonReportsEffectiveValuesAndContent",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLRescanKeepsTrackIdentity",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestAPIFallbackReturnsJSONErrors",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestAPIFallbackKeepsFrontendAndHealthRoutes",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/httpapi",
+          "name": "TestPostgreSQLRecentlyAddedHTTPContract",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/httpapi",
+          "name": "TestReleaseGroupSortAllowlist",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLScanFeedbackClaimHintsBeyondForwardLimit",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestClaimHintsBatchBounds",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestPostgreSQLScanFeedbackCandidateChanges",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestPostgreSQLReleaseComparisonFollowsTheRepresentativeRule",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLDirectoryRenameRebindsTracks",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLClaimMovesAllFourKinds",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestPostgreSQLScanFeedbackMoveRestoreAndMissing",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLMovedFileKeepsTrackIdentity",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLClaimKeepsWhatTheNewReleaseAlreadyHas",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestPostgreSQLReleaseComparisonIsBoundedAndUsesAFixedNumberOfQueries",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLSwappedFilesFollowContent",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestPostgreSQLScanFeedbackMissingBatchesAtomic",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestPostgreSQLReleaseComparisonBoundsTheFormatsOfAVersion",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLClaimAlbumCases",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLSwappedFilesAcrossDirectoriesFollowContent",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestPostgreSQLScanFeedbackWriteFailurePreservesCandidate",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestPostgreSQLReleaseComparisonReportsMissingAlbums",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLClaimWithoutAnAlbum",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLIdenticalAudioIsNotRebound",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestPostgreSQLEffectiveViewEqualsTheTableWithoutCorrections",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestPostgreSQLScanFeedbackGovernanceLockTimeoutReleasesLocks",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLClaimSkipsMissingTrackReviewsAndEverythingCanBeSkipped",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLIncompleteScanDefersMovesUntilCompleteScan",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestPostgreSQLEffectiveViewAppliesAndRemovesCorrectionsPerField",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestPostgreSQLScanFeedbackGovernanceReadsGroupAfterReleaseLock",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLClaimedReviewsAreValidOnlyWhenTheBasisMatches",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestPostgreSQLCorrectionRowsRejectInvalidStates",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestPostgreSQLScanFeedbackScopeDenominator",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLClaimRejectionsLeaveNoTrace",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLCanceledScanDoesNotRebind",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestPostgreSQLReadsReturnEffectiveValues",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestPostgreSQLScanFeedbackProjectionFields",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLCrossRootMoveGetsNewIdentity",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestPostgreSQLReleaseCreditsFollowTheAlbumArtistCorrection",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestPostgreSQLScanFeedbackNewThenMissingPriority",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLAPIResponseSamples",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLReplacedContentGetsNewIdentity",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestPostgreSQLAttentionIgnoresCorrectedFields",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestPostgreSQLScanFeedbackMissingVersionDoesNotHideWholeAlbum",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLArtworkCachingUsesETagAndRevalidation",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLCueDirectoryRenameRebindsVirtualTracks",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestPostgreSQLIssueReviewRowsRejectInvalidStates",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestPostgreSQLScanFeedbackGovernanceDoesNotRewriteEarlierVisibility",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLArtworkServesFreshBytesWhenTheTagDiffers",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLCompleteRootRebindsWhenAnotherRootIsUnavailable",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestPostgreSQLScanFeedbackStagingCleanupIsExplicit",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestPostgreSQLIssueReviewsExcludeReviewedIssuesFromAttention",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestParseLyricsSynced",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestParseLyricsOffset",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestParseLyricsPlain",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestParseLyricsWithNothingToShow",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestParseLyricsLimits",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestLyricsJSONShape",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestCatalogEvidenceProjectionRejectsUnsafeSourceReferences",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestReleaseArtworkProjectionValidation",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestReleaseSummaryJSONAlwaysIncludesArtwork",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestEscapeLikePatternEscapesWildcards",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLArtworkRejectsUnsafeStorageKeys",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLClaimDetectsChangesAfterThePreview",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestPostgreSQLScanFeedbackSchemaBoundsAndLegacy",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLUnchangedFilesReuseStoredFingerprints",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLJSONResponsesAreNotCacheable",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLClaimReplaysWithTheSameKey",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestPostgreSQLScanFeedbackCanonicalCredits",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLFingerprintFailureDefersScope",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLPermissionMatrixAndImmediateSessionInvalidation",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLClaimPreviewIsReadOnlyAndTokenTracksState",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+          "name": "TestPostgreSQLScanFeedbackGovernanceChangedLockSetFallsBack",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLSingleTrackCueMergedTrackKeepsIdentityOnRename",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLRootOperationTransactionsAndConflicts",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanAfterMigrationBackfillsFingerprintsWithoutChangingIdentity",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestPostgreSQLRecentAdditionsExplain",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLRootOperationIdempotencyBindsTarget",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLIncompleteScanDefersReplacedContent",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestPostgreSQLRecentAdditionsProjectionAndSort",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLRootOperationConcurrentRetriesConverge",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLTrackPathUniquenessOnlyConstrainsBoundRows",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestPostgreSQLScanAddedAlbumsHistoryAndSnapshot",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestScanAddedAlbumsPaginationBounds",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLRootOperationHistoryIsAdminOnlyAndRedacted",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLPersistRejectsObservationsWithoutPlan",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestPostgreSQLLoadTrackDuration",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLUserTransactionProtectsLastAdmin",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLPersistRollsBackWhenPlannedTrackDisappears",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestRealMusicLyricsCoverage",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestPostgreSQLLoadTrackPlacements",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestLoadTrackPlacementsWithoutUsableInputDoesNotQuery",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLScanCancellationIsPersistentAndIdempotent",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLClaimAndRevertingTheOriginalReviewDoNotDeadlock",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestPostgreSQLLoadTrackPlacementsFailClosedOnMalformedArtwork",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestLoadTrackSummariesInputBounds",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLCatalogReadProjectionAndEvidencePermissions",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLAddedEarlierFileKeepsReleaseIdentity",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestPostgreSQLLoadTrackSummaries",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLClaimsAndOtherChangesNeverDeadlock",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLClaimAPIRejectsUnauthorizedAndInvalidRequestsWithoutSideEffects",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestPostgreSQLLoadTrackSummariesUnknownDurationAndLimit",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLClaimPreviewAPI",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestPostgreSQLLoadTrackSummariesRejectsEmptySourceKind",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+          "name": "TestPositiveAudioInt",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLRemovedSmallestFileKeepsReleaseIdentity",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLListClaims",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLClaimAPIClaimsAndReplays",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLDirectoryRenameKeepsReleaseIdentity",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLListClaimsAlbumAndDefault",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLClaimAPIConcurrentRequests",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLMovedFileJoinsTargetRelease",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLListClaimsLocationNeverLeaksAbsolutePaths",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLClaimOperationRecordsAndRevertAPI",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLLoadClaim",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLClaimRevertAPIRefusesAfterLaterChanges",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLSplitReleaseKeepsIdentityForLargerPart",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLLoadClaimHints",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLClaimReadAPI",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLMinorityOverlapCreatesNewRelease",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLRevertClaimRestoresEverything",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLExactlyHalfOverlapIsNotAMajority",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLRevertClaimRestoresWhatWasSkipped",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanCoordinationReusesActiveScanAndReleasesHolder",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLClaimCluesSurviveARealRescan",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanCoordinationRejectsSingleConnectionPool",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanCoordinationSeparatesSchemas",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanCoordinationUnlockUsesSavedKeysAfterSearchPathChange",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLRevertClaimRejectsLaterChanges",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanFeedbackBoundariesEmptyRoots",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLRevertClaimFollowsTheCommonRules",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLClaimSurvivesRealRescans",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLRevertClaimWorksWhenTheNewReleaseBecameInvisible",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLComparisonAPIPermissionsErrorsAndReads",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanFeedbackBoundariesFileDrift",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLCorrectionsAPIRejectsUnauthorizedAndInvalidRequestsWithoutSideEffects",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLClaimDescribe",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLCorrectionsAPIStateAndSuccess",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanFeedbackBoundariesIncompleteCountRemainsIncomplete",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLCorrectionsAPIIdempotencyAndConflicts",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLCorrectionsAPIConcurrentRequests",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanFeedbackBoundariesCanceledStagesFreeze",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLCorrectionsSurviveARealRescanAndShowEverywhere",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPackageDependencyDirections",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestOpenDerivationReportsAnUnusableFFmpegAndKeepsTheApplicationRunning",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestFFmpegOpenDerivationOpensTheCacheWithTheConfiguredBinary",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestOpenDerivationRefusesACacheDirectoryThatOverlapsALibraryRoot",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestOpenDerivationAcceptsASiblingDirectoryWithTheSamePrefix",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestResolveForCreateKeepsTheMissingTail",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestIsWithin",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLGroupChangeAPIRejectsUnauthorizedAndInvalidRequestsWithoutSideEffects",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanFeedbackBoundariesReportTimeoutSavepoint",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLRevertingAClaimAndTheOriginalReviewDoNotDeadlock",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLGroupChangeAPIJoinDetachAndReads",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanFeedbackBoundariesReadFailures",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLClaimablePredicate",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLGroupChangeAPIConcurrentRequests",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanFeedbackBoundariesProgressTimeoutKeepsHolder",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLClaimSuggestions",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLClaimSuggestionsUseTheReleasesOwnTracksWithoutEvidence",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLManualGroupingSurvivesARealRescan",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanFeedbackBoundariesReportRepeatableRead",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLClaimSuggestionsAreBoundedAndCapped",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestParseCorrectionChanges",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestCorrectionFingerprintCoversTheCompleteSemantics",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLGroupDefaultAPIRejectsUnauthorizedAndInvalidRequestsWithoutSideEffects",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanFeedbackBoundariesHintReadFailure",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLCorrectionStateTransitions",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLGroupDefaultAPISetClearRevertAndReads",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanFeedbackBoundariesScopeCountFailure",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLCorrectionRejectsStaleInvisibleAndUnknownReleases",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLGroupDefaultAPIConcurrentRequests",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLConfirmingTheScannedValueClearsAttention",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLCorrectedValuesAreConsistentAcrossReads",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLJoinMovesAVersionIntoAnotherAlbum",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLDefaultVersionSurvivesARealRescan",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanFeedbackBoundariesFinalizationTimeout",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLDetachMakesAVersionItsOwnAlbum",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLHistoryHTTPIsolationAndDelete",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanFeedbackBoundariesRootLoadFailure",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLGroupChangeRejectsInvalidRequestsWithoutSideEffects",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLHistoryHTTPValidationAndFailures",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanFeedbackBoundariesRestoreTimeoutFailure",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestScanFeedbackBoundariesCanceledPhaseAndEmptyCount",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestScanFeedbackBoundariesSynchronousFlush",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestScanFeedbackBoundariesBatchAndRetryClock",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestScanFeedbackBoundariesTerminalPresentation",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestScanFeedbackBoundariesWeightedStageTransitions",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestScanFeedbackBoundariesCountingBatch",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLConcurrentGroupChangesDoNotDeadlock",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLHistoryHTTPProjectionFailure",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanFeedbackCountAndMonotonicSnapshots",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLDefaultVersionBecomesTheRepresentative",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLDefaultVersionGoesDormantAndComesBack",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLSetDefaultRejectsInvalidRequestsWithoutSideEffects",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLPinningTheAutomaticVersionAndClearingADormantDefault",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLIdentityResponsesCarryUserID",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLRevertGroupDefault",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanFeedbackRealScanReportAndFailureIsolation",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLRevertGroupDefaultReplaysWithTheSameKey",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanFeedbackRecoveryAndTerminalFreeze",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLGroupDefaultDescribe",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanFeedbackUnavailableRootAndCanceledCount",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLSaveObservationCreatesSeparateDiscMedia",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLDefaultVersionAndGroupChangesNeverDeadlock",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanRecoverySkipsLiveHolder",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLSetDefaultAndDetachQueueOnTheSameRelease",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestGroupDefaultRequestFingerprint",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLCanceledScanDoesNotReconcileMissingSources",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestScanProgressWeightedBoundaries",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestScanProgressCandidateDefinition",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestScanProgressDriftCancellationAndOverflow",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestValidateLibraryPathEnforcesRealContainment",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestRegisteredRootMustRemainARealDirectory",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestFileSymlinkTargetsMustRemainWithinRoot",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestMissingReconciliationRequiresSuccessfulTerminalState",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestScannerOnlyDiagnosesKnownUnsupportedAudioExtensions",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestTrackSourceIdentityIsStableOnlyForSameRootAndPath",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLIssueListCountsFiltersAndSummary",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLCueAlbumGetsFolderArtworkAndRescanRebindsIt",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLReleaseIssuesDetail",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLStrictMultiDiscUsesParentFolderArtwork",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLStrictMultiDiscParentArtworkOutranksFirstDisc",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLStrictMultiDiscFallsBackToDiscFolderArtwork",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLReleaseIssuesBounds",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLBoxLeafDoesNotUseBoxParentArtwork",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLIssueReviewStateTransitions",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLEmbeddedArtworkOutranksFolderArtwork",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLIssueReviewRejectsInvalidRequestsWithoutSideEffects",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanStoresUpdatesAndClearsEmbeddedLyrics",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLIssueBasisTokenIsStable",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLSetupAdminMapsOnlyUniqueViolationsToSetupClosed",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLCueVirtualTracksHaveNoLyricsButTranscriptTracksKeepThem",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLRevertIssueReview",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLTrackLyricsConstraint",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestBuildCueVirtualObservationClonesMutableProvenancePerTrack",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestBuildCueVirtualObservationDistinguishesSheetAndTrackPerformer",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestCueReferenceCompletionAndStagingPolicy",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestCanonicalCreditObservationsAreStableAndDeduplicated",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestScanRootFailsWhenInitialStagingCleanupFails",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestScanRootRecordsInitialStagingCleanupFailure",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestScanRootPreservesEarlyFailureWhenExitStagingCleanupFails",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestScanRootReturnsDiagnosticPersistenceFailure",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLRevertIssueReviewReplaysWithTheSameKey",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLCandidatePersistenceIsIdempotentAndReplacesCurrentEvidence",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLIssueReviewDescribe",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLCandidateTransactionRollsBackOnEvidenceFailure",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLIncompleteRootPersistsValidCandidatesAndCleansStaging",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLIssueReviewsAndOtherChangesNeverDeadlock",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanRootReportsTerminalStagingCleanupFailure",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanRootRejectsNonRegularAudioSource",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanPersistsExplicitRipLogCDSemantics",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanRootPersistsCueSheetMetadata",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLScanRootAlignsCrossDirectoryCueParent",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLCueStagingAlignsParentAndPersistsVirtualIdentity",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLRevertingAnUnreviewAndTheOriginalReviewDoNotDeadlock",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestIssueReviewRequestFingerprint",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLArtworkLinkFailureRemovesNewManagedFile",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLManagedArtworkIsRevalidatedAndCleanupErrorsPropagate",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLOrganizationMigrationConsolidatesLegacyCurrentRows",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLRevertRestoresEveryPreviousCorrectionIntent",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLCreateUserMapsOnlyUniqueViolationsToUsernameTaken",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestPostgreSQLOrganizationMigrationLeavesConflictingLegacyAnchors",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library",
+          "name": "TestScanDiagnosticProjectionDoesNotEchoStoredHostPaths",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLRevertOnlyTouchesTheFieldsTheOperationChanged",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLUserRoutesRejectMalformedAndUnknownIDs",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLRevertToNoCorrectionShowsTheCurrentScannedValue",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLListUsersFailsLoudlyOnUnreadableRows",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLRevertIsRefusedAfterLaterEditsOrWhenTheTargetIsHidden",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLUnauthenticatedMessageIsRoleNeutral",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLRevertOfAGroupChangeMovesTheVersionBack",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLIssueReviewAPIRejectsUnauthorizedAndInvalidRequestsWithoutSideEffects",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+          "name": "TestPostgreSQLDescribeReportsTargetsChangesAndRevertibility",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLIssueReviewAPIReviewUnreviewRevertAndRecords",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLIssueReviewAPIConcurrentRequests",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLIssueReviewsSurviveARealRescan",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLIssueReadAPI",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLListeningRequestsAreCheckedInOrder",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLListeningHistoryIsPrivateEvenFromAdministrators",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLListeningResponseShapesAndDisabledMembers",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLListeningFollowsTracksThroughRescans",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLTrackLyricsRequireLoginAndCheckInputInOrder",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLTrackLyricsAreServedParsedToAnyMember",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLOperationsAPIListsRecordsForAdministratorsOnly",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLRevertAPIRejectsUnauthorizedAndInvalidRequestsWithoutSideEffects",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLRevertAPIUndoesCorrectionsAndGroupChangesAndReplays",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLRevertAPIConcurrentRequests",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLPlaybackAudioRequiresLoginAndRevealsNothingWithoutIt",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLPlaybackAudioStreamsTheOriginalFileWithProtectedHeaders",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLPlaybackAudioRejectsUnusableRangesWithAJSON416",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLPlaybackChecksRunInTheDocumentedOrder",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLPlaybackPreflightDescribesTheOriginalRepresentation",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLPlaybackFormatsListTheDirectlyPlayableCombinationsWithoutDerivation",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLPlaybackRoutesRejectOtherMethods",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLPlaybackFormatsAddTheDerivedFormatWhenDerivationIsEnabled",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLPlaybackPreflightWaitsForTheDerivationAndAudioServesTheCachedFile",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLPlaybackDirectFormatsNeverTouchTheDerivation",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLPlaybackChecksPrecedeAnyConversion",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLPlaybackDerivationFailuresHaveStableErrorCodes",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLPlaybackUnexpectedDerivationErrorsAreInternalErrorsAndLogged",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLPlaybackPreflightWaitEndsWhenTheApplicationShutsDown",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLPlaybackDerivedStreamIsAbortedOnShutdown",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLPlaybackDerivesALACLosslesslyWithFFmpeg",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLPlaybackRejectsASourceRewrittenInPlaceBeforeConverting",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLPlaybackStreamIsAbortedOnShutdown",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLPlaybackStreamCompletesWithoutShutdown",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLPlaybackStreamDoesNotLogAClientDisconnectAsAServerAbort",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLPlaybackRealConnectionIsClosedOnShutdown",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLReleaseGroupListMirrorsReleaseList",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLReleaseGroupRepresentativeAndCounts",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLReleaseGroupDetailErrors",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestRoutesResolveToRegisteredPatterns",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLScanFeedbackGovernanceArtwork",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLScanFeedbackGovernanceSourceVacateClaim",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLScanFeedbackGovernanceRegroup",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLScanFeedbackGovernanceManualState",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLScanFeedbackGovernanceFeedbackLockTimeout",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLScanFeedbackGovernanceFinalizeMissing",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLScanFeedbackGovernanceClaimAndRevert",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLScanFeedbackGovernanceCancelHolderLossReleasesLocks",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLScanFeedbackAPIResponseSamples",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLScanListIsAdminOnlyAndValidatesPagination",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLScanListOrdersPagesAndMatchesScanDetails",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLScanListReportsDatabaseFailures",
+          "action": "pass"
+        }
+      ]
+    },
+    {
+      "command": "go test -race -json ./internal/library/httpapi ./internal/app -run 'ScanFeedbackPresenter|ScanFeedbackReportDatabaseErrors' -count=1",
+      "raw_log": "/tmp/roomusic-m5f-final-http-tests.jsonl",
+      "sha256": "0c6c2adc7b40b5d9b08300b39b4b3ee4fd17d0141deb608f7921d827d85db761",
+      "top_level": 2,
+      "postgres_top_level": 1,
+      "test_skips": [],
+      "failures": [],
+      "packages": [
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/httpapi",
+          "action": "pass",
+          "elapsed": 1.02
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "action": "pass",
+          "elapsed": 1.581
+        }
+      ],
+      "governance_matrix_leaves": [],
+      "tests": [
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/library/httpapi",
+          "name": "TestScanFeedbackPresenterRedactsRootIdentity",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/qlqq/roomusic/backend/internal/app",
+          "name": "TestPostgreSQLScanFeedbackReportDatabaseErrors",
+          "action": "pass"
+        }
+      ]
+    }
+  ]
+}

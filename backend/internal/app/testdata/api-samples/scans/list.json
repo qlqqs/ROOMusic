@@ -2,15 +2,18 @@
   "body": {
     "items": [
       {
-        "cancel_requested_at": "2026-01-01T00:00:07Z",
+        "cancel_requested_at": "2026-01-01T00:00:08Z",
         "diagnostics": {
           "counts": [],
           "total": 0
         },
         "finished_at": null,
         "id": "00000000-0000-4000-8000-000000000001",
+        "progress": null,
+        "report_status": "legacy",
+        "root_progress": null,
         "scan_run_id": "00000000-0000-4000-8000-000000000001",
-        "started_at": "2026-01-01T00:00:06Z",
+        "started_at": "2026-01-01T00:00:07Z",
         "status": "running"
       },
       {
@@ -19,10 +22,31 @@
           "counts": [],
           "total": 0
         },
-        "finished_at": "2026-01-01T00:00:05Z",
+        "finished_at": "2026-01-01T00:00:06Z",
         "id": "00000000-0000-4000-8000-000000000002",
+        "progress": {
+          "completed": 1,
+          "count_complete": true,
+          "files_changed": false,
+          "files_counted": 1,
+          "files_processed": 1,
+          "files_total": 1,
+          "percent_bp": 10000,
+          "phase": "saving",
+          "total": 1,
+          "unit": "scopes",
+          "updated_at": "2026-01-01T00:00:06Z",
+          "version": 1
+        },
+        "report_status": "ready",
+        "root_progress": {
+          "id": null,
+          "index": null,
+          "name": null,
+          "total": 1
+        },
         "scan_run_id": "00000000-0000-4000-8000-000000000002",
-        "started_at": "2026-01-01T00:00:04Z",
+        "started_at": "2026-01-01T00:00:05Z",
         "status": "succeeded"
       },
       {
@@ -36,8 +60,29 @@
           ],
           "total": 1
         },
-        "finished_at": "2026-01-01T00:00:03Z",
+        "finished_at": "2026-01-01T00:00:04Z",
         "id": "00000000-0000-4000-8000-000000000003",
+        "progress": {
+          "completed": 0,
+          "count_complete": true,
+          "files_changed": false,
+          "files_counted": 2,
+          "files_processed": 2,
+          "files_total": 2,
+          "percent_bp": 9900,
+          "phase": "saving",
+          "total": 0,
+          "unit": "scopes",
+          "updated_at": "2026-01-01T00:00:03Z",
+          "version": 1
+        },
+        "report_status": "partial",
+        "root_progress": {
+          "id": "00000000-0000-4000-8000-000000000004",
+          "index": 2,
+          "name": "classical-b",
+          "total": 2
+        },
         "scan_run_id": "00000000-0000-4000-8000-000000000003",
         "started_at": "2026-01-01T00:00:02Z",
         "status": "incomplete"
@@ -66,8 +111,11 @@
           "total": 4
         },
         "finished_at": "2026-01-01T00:00:01Z",
-        "id": "00000000-0000-4000-8000-000000000004",
-        "scan_run_id": "00000000-0000-4000-8000-000000000004",
+        "id": "00000000-0000-4000-8000-000000000005",
+        "progress": null,
+        "report_status": "legacy",
+        "root_progress": null,
+        "scan_run_id": "00000000-0000-4000-8000-000000000005",
         "started_at": "2026-01-01T00:00:00Z",
         "status": "failed"
       }

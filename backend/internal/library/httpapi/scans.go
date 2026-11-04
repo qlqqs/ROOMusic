@@ -32,7 +32,7 @@ func (handlers *Handlers) startScan(responseWriter http.ResponseWriter, request 
 	if result.Started {
 		status = http.StatusAccepted
 	}
-	httpserver.WriteJSON(responseWriter, status, result.Scan)
+	httpserver.WriteJSON(responseWriter, status, presentScan(result.Scan, true))
 }
 
 // 扫描记录列表的页大小：默认 20、上限 100。
@@ -57,13 +57,14 @@ func (handlers *Handlers) listScans(responseWriter http.ResponseWriter, request 
 		return
 	}
 	httpserver.WriteJSON(responseWriter, http.StatusOK, map[string]any{
-		"items":      result.Items,
+		"items":      presentScans(result.Items, true),
 		"pagination": map[string]any{"page": page, "page_size": pageSize, "total": result.Total},
 	})
 }
 
 func (handlers *Handlers) scanStatus(responseWriter http.ResponseWriter, request *http.Request) {
-	if _, err := handlers.guard.Authenticate(request); err != nil {
+	actor, authErr := handlers.guard.Authenticate(request)
+	if authErr != nil {
 		handlers.guard.WriteUnauthenticated(responseWriter, request)
 		return
 	}
@@ -81,11 +82,12 @@ func (handlers *Handlers) scanStatus(responseWriter http.ResponseWriter, request
 		}
 		return
 	}
-	httpserver.WriteJSON(responseWriter, http.StatusOK, scan)
+	httpserver.WriteJSON(responseWriter, http.StatusOK, presentScan(scan, actor.Role == "admin"))
 }
 
 func (handlers *Handlers) activeScan(responseWriter http.ResponseWriter, request *http.Request) {
-	if _, err := handlers.guard.Authenticate(request); err != nil {
+	actor, authErr := handlers.guard.Authenticate(request)
+	if authErr != nil {
 		handlers.guard.WriteUnauthenticated(responseWriter, request)
 		return
 	}
@@ -94,7 +96,11 @@ func (handlers *Handlers) activeScan(responseWriter http.ResponseWriter, request
 		httpserver.WriteError(responseWriter, request, 503, "database_unavailable", "无法读取扫描状态")
 		return
 	}
-	httpserver.WriteJSON(responseWriter, http.StatusOK, map[string]any{"scan": scan})
+	var result any
+	if scan != nil {
+		result = presentScan(*scan, actor.Role == "admin")
+	}
+	httpserver.WriteJSON(responseWriter, http.StatusOK, map[string]any{"scan": result})
 }
 
 func (handlers *Handlers) cancelScan(responseWriter http.ResponseWriter, request *http.Request) {
@@ -126,7 +132,7 @@ func (handlers *Handlers) cancelScan(responseWriter http.ResponseWriter, request
 	if result.Requested {
 		status = http.StatusAccepted
 	}
-	httpserver.WriteJSON(responseWriter, status, result.Scan)
+	httpserver.WriteJSON(responseWriter, status, presentScan(result.Scan, true))
 }
 
 func (handlers *Handlers) diagnostics(responseWriter http.ResponseWriter, request *http.Request) {
@@ -154,4 +160,59 @@ func (handlers *Handlers) diagnostics(responseWriter http.ResponseWriter, reques
 		return
 	}
 	httpserver.WriteJSON(responseWriter, 200, map[string]any{"items": page.Items, "summary": page.Summary})
+}
+
+// 所有扫描响应共用角色 presenter；普通成员不获得根的身份或名称。
+func presentScan(scan library.Scan, admin bool) any {
+	var root any
+	if scan.RootProgress != nil {
+		r := scan.RootProgress
+		value := map[string]any{"index": r.Index, "total": r.Total}
+		if admin {
+			value["id"] = r.ID
+			value["name"] = r.Name
+		}
+		root = value
+	}
+	return struct {
+		library.Scan
+		Root any `json:"root_progress"`
+	}{Scan: scan, Root: root}
+}
+func presentScans(scans []library.Scan, admin bool) []any {
+	result := make([]any, 0, len(scans))
+	for _, scan := range scans {
+		result = append(result, presentScan(scan, admin))
+	}
+	return result
+}
+func (handlers *Handlers) scanReport(w http.ResponseWriter, r *http.Request) {
+	if _, ok := handlers.guard.RequireAdmin(w, r); !ok {
+		return
+	}
+	id := r.PathValue("id")
+	if !uuid.Valid(id) {
+		httpserver.WriteError(w, r, 400, "invalid_id", "扫描标识无效")
+		return
+	}
+	page, pageSize, err := httpserver.ParsePagination(r, defaultScanPageSize, maxScanPageSize)
+	if err != nil {
+		httpserver.WriteError(w, r, 400, "invalid_pagination", "分页参数无效")
+		return
+	}
+	report, err := handlers.service.GetScanReport(r.Context(), id, page, pageSize)
+	switch {
+	case errors.Is(err, library.ErrScanNotFound):
+		httpserver.WriteError(w, r, 404, "not_found", "扫描不存在")
+	case errors.Is(err, library.ErrReportLegacy):
+		httpserver.WriteError(w, r, 404, "scan_report_not_available", "这次扫描没有报告")
+	case errors.Is(err, library.ErrReportPending):
+		httpserver.WriteError(w, r, 409, "scan_report_not_ready", "扫描报告尚未完成")
+	case errors.Is(err, library.ErrReportUnavailable):
+		httpserver.WriteError(w, r, 503, "scan_report_unavailable", "扫描结果已保留，报告未能生成")
+	case err != nil:
+		httpserver.WriteError(w, r, 503, "database_unavailable", "无法读取扫描报告")
+	default:
+		httpserver.WriteJSON(w, 200, report)
+	}
 }

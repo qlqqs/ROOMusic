@@ -27,6 +27,11 @@ type Execer interface {
 // 写在暂存行上的规划决定，因此调用前必须已完成规划；锚点只是 Release 最近一次的位置，不参与查找。
 // 成功时返回 Release ID；封面不在本事务内，由调用方在提交后处理。
 func PersistCandidate(ctx context.Context, database TxBeginner, scanID, rootID string, candidate OrganizedCandidate) (releaseID string, err error) {
+	return PersistCandidateWithFeedback(ctx, database, scanID, rootID, candidate, nil)
+}
+
+// PersistCandidateWithFeedback 在同一候选事务中记录扫描变更；反馈故障不改变核心写入。
+func PersistCandidateWithFeedback(ctx context.Context, database TxBeginner, scanID, rootID string, candidate OrganizedCandidate, feedback *ScanFeedback) (releaseID string, err error) {
 	tx, err := database.BeginTx(ctx, nil)
 	if err != nil {
 		return "", err
@@ -42,6 +47,10 @@ func PersistCandidate(ctx context.Context, database TxBeginner, scanID, rootID s
 	if err != nil {
 		return "", err
 	}
+	if err = feedback.beginCandidate(ctx, tx, plans, plannedReleaseID, rootID, candidate); err != nil {
+		return "", err
+	}
+	trackIDs := make([]string, 0, len(plans))
 	if releaseID, err = persistRelease(ctx, tx, rootID, candidate, plannedReleaseID); err != nil {
 		return "", err
 	}
@@ -72,6 +81,7 @@ func PersistCandidate(ctx context.Context, database TxBeginner, scanID, rootID s
 			if trackID, err = persistTrack(ctx, tx, scanID, rootID, mediumID, disc, placedTrack, observation, plan); err != nil {
 				return "", err
 			}
+			trackIDs = append(trackIDs, trackID)
 			if _, err = tx.ExecContext(ctx, "DELETE FROM track_observations WHERE track_id=$1::uuid", trackID); err != nil {
 				return "", err
 			}
@@ -124,6 +134,9 @@ func PersistCandidate(ctx context.Context, database TxBeginner, scanID, rootID s
 	if _, err = tx.ExecContext(ctx, `INSERT INTO release_grouping_evidence(release_id,candidate_kind,rule_id,source_refs,reason,scan_run_id)
 		VALUES($1::uuid,$2,$3,to_jsonb($4::text[]),$5,$6::uuid)
 		ON CONFLICT(release_id) DO UPDATE SET candidate_kind=EXCLUDED.candidate_kind,rule_id=EXCLUDED.rule_id,source_refs=EXCLUDED.source_refs,reason=EXCLUDED.reason,scan_run_id=EXCLUDED.scan_run_id,observed_at=NOW()`, releaseID, candidate.Anchor.Kind, "organizer_v2", refs, strings.Join(candidate.Attention, ";"), scanID); err != nil {
+		return "", err
+	}
+	if err = feedback.finishCandidate(ctx, tx, releaseID, trackIDs); err != nil {
 		return "", err
 	}
 	if err = tx.Commit(); err != nil {
@@ -240,7 +253,7 @@ func nullableCueFrame(value int, present bool) any {
 // 只有以 succeeded 终态完成的扫描才允许调用：不完整的扫描不能做负向对账。
 func MarkMissingSources(ctx context.Context, database Execer, scanID string, rootIDs []string) error {
 	for _, rootID := range rootIDs {
-		if _, err := database.ExecContext(ctx, "UPDATE tracks SET source_status='missing' WHERE source_root_id=$1::uuid AND observed_at < (SELECT started_at FROM scan_runs WHERE id=$2::uuid)", rootID, scanID); err != nil {
+		if _, err := database.ExecContext(ctx, "UPDATE tracks SET source_status='missing' WHERE source_status='present' AND source_root_id=$1::uuid AND observed_at < (SELECT started_at FROM scan_runs WHERE id=$2::uuid)", rootID, scanID); err != nil {
 			return err
 		}
 	}

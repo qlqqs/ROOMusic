@@ -54,6 +54,7 @@ func (handlers *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/releases/{id}", handlers.releaseDetail)
 	mux.HandleFunc("GET /api/v1/release-issues", handlers.listReleaseIssues)
 	mux.HandleFunc("GET /api/v1/release-groups", handlers.listReleaseGroups)
+	mux.HandleFunc("GET /api/v1/release-groups/recently-added", handlers.recentlyAddedReleaseGroups)
 	mux.HandleFunc("GET /api/v1/release-groups/{id}", handlers.releaseGroupDetail)
 	mux.HandleFunc("GET /api/v1/release-groups/{id}/comparison", handlers.releaseGroupComparison)
 	mux.HandleFunc("POST /api/v1/release-groups/{id}/default", handlers.setReleaseGroupDefault)
@@ -86,8 +87,8 @@ const (
 	maxReleaseRows         = 100
 )
 
-// parseReleaseListParams 解析 /releases 与 /release-groups 共用的查询参数（合同要求两者的参数、默认值、上限与错误码
-// 完全相同，所以只在这里解析一次）。参数非法时写出 400 错误并返回 false。
+// parseReleaseListParams 解析 /releases 与 /release-groups 共用的搜索、筛选和分页参数。组排序单独解析。
+// 参数非法时写出 400 错误并返回 false。
 func parseReleaseListParams(responseWriter http.ResponseWriter, request *http.Request) (catalog.ListParams, bool) {
 	page, pageSize, err := httpserver.ParsePagination(request, defaultReleasePageSize, maxReleaseRows)
 	if err != nil {

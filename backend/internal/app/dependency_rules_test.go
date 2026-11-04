@@ -37,7 +37,7 @@ var packageRules = map[string]packageRule{
 	"operations/httpapi":             {imports: []string{"identity", "operations", "platform/httpserver", "platform/uuid"}, http: true},
 	"library/parser":                 {imports: []string{"catalog/metadata"}},
 	"library/parser/parsertest":      {},
-	"library":                        {imports: []string{"catalog", "catalog/artwork", "catalog/ingest", "catalog/metadata", "library/parser", "platform/uuid"}},
+	"library":                        {imports: []string{"catalog", "catalog/governance", "catalog/artwork", "catalog/ingest", "catalog/metadata", "library/parser", "platform/uuid"}},
 	"playback/derivation":            {},
 	"playback":                       {imports: []string{"catalog", "library", "playback/derivation"}},
 	"listening":                      {imports: []string{"catalog"}},

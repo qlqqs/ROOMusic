@@ -546,3 +546,17 @@ ROOMUSIC_UPDATE_API_SAMPLES=1 go test ./internal/app -run '^TestPostgreSQLAPIRes
 - 未实施、未迁移、未运行 Go/npm/Playwright/数据库测试；没有连接任何容器或数据库。纯文档规划优先静态核对，不运行全量测试。
 - 本轮静态核对命令：`git diff --check -- .trellis/tasks/11-04-classical-m5-scan-feedback/design.md`；另用 `python3 -` 检查文档空白、代码围栏配对与必需章节，并以 Fraction 核对权重示例、跨根边界、零总数退化与单调性（新文件未跟踪时仅 git diff 不能覆盖内容）。
 - 规划选择已记录：人工路线，qlqq 经主会话作出 D1–D4 裁决，结果与理由见 §0/§10.2；本轮只修订文档，不改任务状态或启动实施。
+
+
+## 实测结果
+
+2026-11-04 提交前复验：recent 与 `sort=added_at_desc` 使用短只读 REPEATABLE READ 事务，开始后 `SET LOCAL jit = off`；配置失败按查询错误返回。集成测试证明事务内为 off，提交/回滚后同一连接仍为原默认值，不影响连接池或数据库全局配置。
+
+在 **100,000 曲目、10,000 发行、8,000 组、5%曲目缺失**（7,800可见组）下，真实普通成员完整 HTTP 请求，正常构建、每状态/端点40次正式样本的服务端 p95：
+
+| 辅助元数据空表状态 | 最近新增（门槛150ms） | 加入时间排序首页50项（门槛300ms） |
+| --- | ---: | ---: |
+| 未 ANALYZE | **100.959ms** | **194.115ms** |
+| ANALYZE 后 | **104.354ms** | **229.816ms** |
+
+均达标；只关闭事务内 JIT，未改查询形状、索引或其它 planner 开关。ANALYZE 仅用于测试准备，不在业务事务执行。此为当前机器暖缓存顺序请求基线，不承诺冷盘或多用户并发 SLA。完整计划、测量边界与复现证据见 [规模验证](verification/catalog-explain.md)，原始 HTTP 样本见 [JIT-only 基线](verification/catalog-http-performance-jit-only.md)。

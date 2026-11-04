@@ -7,6 +7,27 @@
     },
     "finished_at": "2026-01-01T00:00:01Z",
     "id": "00000000-0000-4000-8000-000000000001",
+    "progress": {
+      "completed": 1,
+      "count_complete": true,
+      "files_changed": false,
+      "files_counted": 1,
+      "files_processed": 1,
+      "files_total": 1,
+      "percent_bp": 10000,
+      "phase": "saving",
+      "total": 1,
+      "unit": "scopes",
+      "updated_at": "2026-01-01T00:00:01Z",
+      "version": 1
+    },
+    "report_status": "ready",
+    "root_progress": {
+      "id": null,
+      "index": null,
+      "name": null,
+      "total": 1
+    },
     "scan_run_id": "00000000-0000-4000-8000-000000000001",
     "started_at": "2026-01-01T00:00:00Z",
     "status": "succeeded"

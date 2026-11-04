@@ -49,6 +49,7 @@ Before writing or reviewing backend code:
 | [Core 0 当前运行合同](./core0-runtime-contracts.md) | 总览：平台层 REST 通则、HTTP 缓存、迁移、环境、CI、完成日志，以及专题文件表（后续技术债在 [core0-tech-debt.md](./core0-tech-debt.md)） |
 | [身份与成员合同](./identity-contracts.md) | 密码规则、初始化与成员接口、用户停用事务、写入失败映射 |
 | [目录与扫描流程合同](./library-scan-contracts.md) | 目录幂等、扫描完整性、暂存与身份规划、CUE、抓轨日志、封面发现 |
+| [扫描反馈合同](./scan-feedback-contracts.md) | M5：全根计数、逐根加权进度、报告、最近新增、反馈降级与治理锁顺序 |
 | [扫描协调合同](./scan-coordination-contracts.md) | 扫描状态与记录、持久化取消、跨进程协调锁 |
 | [真实库 Smoke 合同](./real-library-smoke-contracts.md) | 真实音乐只读验收与 V0 对照 |
 | [Catalog REST 合同](./catalog-rest-contracts.md) | Release 列表/详情/evidence、按组接口、封面摘要、可见性和错误合同 |

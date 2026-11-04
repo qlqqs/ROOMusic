@@ -778,6 +778,8 @@ func waitForScanToFinish(t *testing.T, application *integrationTestApplication, 
 }
 
 type apiSampleRecorder struct {
+	// scope 非空时仅管理对应子目录；扫描反馈的独立样本不互相覆盖。
+	scope     string
 	t         *testing.T
 	samples   map[string][]byte
 	forbidden []string
@@ -822,7 +824,7 @@ func (recorder *apiSampleRecorder) record(name string, response *httptest.Respon
 	recorder.samples[name] = encodeAPISample(t, name, response.Code, response.Body.Bytes())
 }
 
-// finish 只维护原有合同样本；personal 的独立 recorder 负责自己的目录与错误前缀。
+// finish 只维护当前 recorder 的样本；默认集不覆盖 personal 与 scan-feedback 的独立样本。
 func (recorder *apiSampleRecorder) finish() {
 	t := recorder.t
 	t.Helper()
@@ -841,7 +843,7 @@ func (recorder *apiSampleRecorder) finish() {
 			if err != nil {
 				return err
 			}
-			if isPersonalAPISample(filepath.ToSlash(relative)) {
+			if !recorder.ownsSample(filepath.ToSlash(relative)) {
 				return nil
 			}
 			return os.Remove(path)
@@ -870,7 +872,7 @@ func (recorder *apiSampleRecorder) finish() {
 		if relErr != nil {
 			return relErr
 		}
-		if isPersonalAPISample(filepath.ToSlash(relative)) {
+		if !recorder.ownsSample(filepath.ToSlash(relative)) {
 			return nil
 		}
 		content, readErr := os.ReadFile(path)
@@ -902,6 +904,42 @@ func (recorder *apiSampleRecorder) finish() {
 	if len(problems) > 0 {
 		t.Fatalf("API 响应样本与提交的文件不一致：\n  %s\n如果这是有意的合同变更，请运行 %s=1 ./scripts/test-integration.sh 重写样本，并同步前端 decoder 与契约测试。",
 			strings.Join(problems, "\n  "), updateAPISamplesEnv)
+	}
+}
+
+// ownsSample 同时保留 personal 的目录/错误前缀隔离与扫描反馈的子目录隔离。
+func (recorder *apiSampleRecorder) ownsSample(name string) bool {
+	if recorder.scope != "" {
+		return strings.HasPrefix(name, recorder.scope+"/")
+	}
+	return !strings.HasPrefix(name, "scan-feedback/") && !isPersonalAPISample(name)
+}
+
+// 两套独立样本加入后，比较和重写都必须使用相同的所有权边界。
+func TestAPISampleRecorderOwnership(t *testing.T) {
+	for _, sample := range []struct {
+		name     string
+		ordinary bool
+		feedback bool
+	}{
+		{"release-groups/list.json", true, false},
+		{"scans/active.json", true, false},
+		{"errors/not-found-api.json", true, false},
+		{"favorites/list.json", false, false},
+		{"playlists/list.json", false, false},
+		{"errors/personal-not-found.json", false, false},
+		{"scan-feedback/report-ready.json", false, true},
+	} {
+		t.Run(sample.name, func(t *testing.T) {
+			ordinary := &apiSampleRecorder{}
+			feedback := &apiSampleRecorder{scope: "scan-feedback"}
+			if got := ordinary.ownsSample(sample.name); got != sample.ordinary {
+				t.Errorf("默认样本所有权 = %v，期望 %v", got, sample.ordinary)
+			}
+			if got := feedback.ownsSample(sample.name); got != sample.feedback {
+				t.Errorf("扫描反馈样本所有权 = %v，期望 %v", got, sample.feedback)
+			}
+		})
 	}
 }
 

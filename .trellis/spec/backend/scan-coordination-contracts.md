@@ -34,7 +34,7 @@ mutex 只保护本进程的 worker 引用。
 
 ## 3. 请求、响应与生命周期合同
 
-`ScanDTO` 的 JSON 字段固定为：
+`ScanDTO` 的原有七个 JSON 字段为（M5 增量字段见下文）：
 
 ```json
 {
@@ -154,3 +154,13 @@ go app.runScan(scanID, execution) // worker 由应用生命周期和持久化取
 
 终态仍必须在 holder 连接上的单个事务中锁定 `scan_runs`，并仅在判定为
 `succeeded` 后执行 `missing` 对账。
+
+## 8. M5 进度、报告与恢复补充
+
+`ScanDTO` 增加 `progress/root_progress/report_status`，所有入口统一角色presenter。普通成员可看阶段、基点与根序号，省略根id/name；管理员有身份快照但无绝对路径。历史扫描为null/null/legacy；报告仅管理员，完整字段/错误矩阵见 [扫描反馈合同](./scan-feedback-contracts.md)。
+
+全根先计数，之后逐根读取/整理/保存，阶段可随换根回到reading_tags而全局百分比不减。256单位或1秒安全边界刷新；服务端短语句超时不主动中断holder；running+version+seq拒绝迟到写。成功终态才10000，报告可能unavailable，非成功冻结。
+
+终态事务先锁scan_runs，取消意图优先；仅succeeded做一次全根missing。missing的catalog锁序为全部既有发行升序FOR UPDATE→独立锁后重读→组升序FOR SHARE，不能持组再加发行锁；扫描不取治理操作锁。报告savepoint失败不得回滚核心missing。
+
+RecoverInterruptedScans与StartScan遗留恢复在取得协调锁后同一事务分批读取至多256个running ID、改incomplete/unavailable并经ingest.ClearScansStaging清对应暂存。不得清理其他活扫描，也不重算进度或missing。若取消正在执行的SQL使holder断连，worker退出且连接/锁释放后由此恢复路径收口，而不是借另一个连接继续stale write。

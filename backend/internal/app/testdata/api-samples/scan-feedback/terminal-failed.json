@@ -1,0 +1,34 @@
+{
+  "body": {
+    "cancel_requested_at": null,
+    "diagnostics": {
+      "counts": [],
+      "total": 0
+    },
+    "finished_at": "2026-01-01T00:00:02Z",
+    "id": "00000000-0000-4000-8000-000000000001",
+    "progress": {
+      "completed": 150,
+      "count_complete": true,
+      "files_changed": false,
+      "files_counted": 400,
+      "files_processed": 250,
+      "files_total": 400,
+      "percent_bp": 4965,
+      "phase": "reading_tags",
+      "total": 300,
+      "unit": "files",
+      "updated_at": "2026-01-01T00:00:01Z",
+      "version": 1
+    },
+    "report_status": "unavailable",
+    "root_progress": {
+      "index": 2,
+      "total": 2
+    },
+    "scan_run_id": "00000000-0000-4000-8000-000000000001",
+    "started_at": "2026-01-01T00:00:00Z",
+    "status": "failed"
+  },
+  "status": 200
+}

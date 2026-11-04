@@ -40,7 +40,8 @@ func releaseGroupRankedCTE(onlyGroup bool) string {
 	return `ranked AS (
 		SELECT releases.id, releases.group_id,
 		       ROW_NUMBER() OVER (PARTITION BY releases.group_id ORDER BY ` + releasesql.ReleaseGroupMemberOrder + `) AS member_rank,
-		       COUNT(*) OVER (PARTITION BY releases.group_id) AS release_count
+		       COUNT(*) OVER (PARTITION BY releases.group_id) AS release_count,
+		       MIN(releases.created_at) OVER (PARTITION BY releases.group_id) AS added_at
 		FROM ` + releasesql.ReleaseSource + `
 		WHERE ` + releasesql.ReleaseVisiblePredicate + groupFilter + `
 	)`
@@ -52,7 +53,7 @@ type ReleaseGroupPage struct {
 	Total int64
 }
 
-// ListReleaseGroups 返回至少有一个可见成员的组的一页。排序取代表版本的标题、艺人与 ID，与 /releases 的排序一致；
+// ListReleaseGroups 返回至少有一个可见成员的组的一页。默认按代表版本的标题、艺人与 ID 排序，也支持加入时间倒序；
 // 任一可见成员命中搜索、可见成员的 attention 之和大于 0 时组才命中对应的筛选。查询执行失败时错误包含 ErrQuery。
 func (s *Store) ListReleaseGroups(ctx context.Context, params ListParams) (ReleaseGroupPage, error) {
 	filters := ""
@@ -72,7 +73,7 @@ func (s *Store) ListReleaseGroups(ctx context.Context, params ListParams) (Relea
 	listQuery := "WITH " + releaseGroupRankedCTE(false) + " SELECT " + releaseGroupSummaryProjection +
 		" FROM ranked JOIN " + releasesql.ReleaseSource + " ON releases.id = ranked.id" + releasesql.ReleaseSummaryArtworkJoin +
 		" WHERE ranked.member_rank = 1" + filters +
-		" ORDER BY LOWER(releases.title),LOWER(releases.artist),releases.id LIMIT $" + strconv.Itoa(len(queryArgs)+1) +
+		" ORDER BY " + releaseGroupOrder(params.Sort) + " LIMIT $" + strconv.Itoa(len(queryArgs)+1) +
 		" OFFSET $" + strconv.Itoa(len(queryArgs)+2)
 	listArgs := append(append([]any{}, queryArgs...), params.PageSize, (params.Page-1)*params.PageSize)
 	rows, err := s.database.QueryContext(ctx, listQuery, listArgs...)
@@ -142,22 +143,23 @@ func (s *Store) LoadReleaseGroup(ctx context.Context, groupID string) (ReleaseGr
 	return detail, nil
 }
 
-// releaseGroupSummaryProjection 是代表版本的摘要投影，后面追加组 ID、可见成员数与 attention 之和。
+// releaseGroupSummaryProjection 是代表版本摘要，追加组 ID、可见成员数、attention 之和与最早可见加入时间。
 const releaseGroupSummaryProjection = releasesql.ReleaseSummaryProjection + `,
 		ranked.group_id::text,
 		ranked.release_count,
-		` + releaseGroupAttentionExpression
+		` + releaseGroupAttentionExpression + `, ranked.added_at`
 
 func scanReleaseGroupSummary(row interface{ Scan(...any) error }) (ReleaseGroupSummary, error) {
 	var columns ReleaseSummaryColumns
 	var group ReleaseGroupSummary
-	if err := row.Scan(append(columns.ScanTargets(), &group.ID, &group.ReleaseCount, &group.AttentionCount)...); err != nil {
+	if err := row.Scan(append(columns.ScanTargets(), &group.ID, &group.ReleaseCount, &group.AttentionCount, &group.AddedAt)...); err != nil {
 		return ReleaseGroupSummary{}, err
 	}
 	representative, err := columns.Summary()
 	if err != nil {
 		return ReleaseGroupSummary{}, err
 	}
+	group.AddedAt = group.AddedAt.UTC()
 	group.Representative = representative
 	return group, nil
 }

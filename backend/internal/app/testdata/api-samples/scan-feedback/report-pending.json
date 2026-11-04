@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "scan_report_not_ready",
+      "message": "扫描报告尚未完成"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

@@ -1,0 +1,36 @@
+{
+  "body": {
+    "cancel_requested_at": null,
+    "diagnostics": {
+      "counts": [],
+      "total": 0
+    },
+    "finished_at": null,
+    "id": "00000000-0000-4000-8000-000000000001",
+    "progress": {
+      "completed": 0,
+      "count_complete": false,
+      "files_changed": false,
+      "files_counted": 0,
+      "files_processed": 0,
+      "files_total": null,
+      "percent_bp": 0,
+      "phase": "counting",
+      "total": 0,
+      "unit": "roots",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "version": 1
+    },
+    "report_status": "pending",
+    "root_progress": {
+      "id": null,
+      "index": null,
+      "name": null,
+      "total": 0
+    },
+    "scan_run_id": "00000000-0000-4000-8000-000000000001",
+    "started_at": "2026-01-01T00:00:00Z",
+    "status": "running"
+  },
+  "status": 202
+}
