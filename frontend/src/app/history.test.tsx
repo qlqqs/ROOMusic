@@ -122,7 +122,7 @@ describe("我的音乐历史页", () => {
     await waitFor(() => expect(new URLSearchParams(history.location.search).get("page")).toBe("2"));
   });
 
-  it("超末页保留地址并说明总数，回到第一页可恢复记录", async () => {
+  it("超末页保留地址并提示本页没有记录，回到第一页可恢复记录", async () => {
     setup();
     const { history } = renderApp({ path: "/me/history?page=9" });
     expect(await screen.findByText(/这一页没有记录。/)).toBeTruthy();

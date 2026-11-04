@@ -48,12 +48,12 @@ describe("待认领页：列表", () => {
       `Gamma Sonatas 原来在《Gamma Sonatas Collection》的专辑里 classical / Gamma 最后一次看到 ${formatDateTime("2026-01-10T08:00:00Z")} 修正 1 项 · 专辑 · 默认版本 · 核对 2 项`,
       `Delta Partitas classical 最后一次看到 ${formatDateTime("2025-12-01T08:00:00Z")} 修正 2 项`,
     ]);
-    expect(screen.getByText("共 3 个版本，最近看到的在前。")).toBeTruthy();
+    expect(screen.getByText("共 3 个版本")).toBeTruthy();
     expect(screen.getByText("从列表里选一个版本。")).toBeTruthy();
     expect(api.requestsTo("GET", "/api/v1/release-claims").at(-1)?.path).toBe("/api/v1/release-claims?page=1&page_size=30");
   });
 
-  it("没有待认领的版本时说明什么时候会出现，不显示分页", async () => {
+  it("没有待认领的版本时显示空态，不显示分页", async () => {
     const api = installFakeApi();
     installFakeSession(api, { current: "curator" });
     installOverviewApi(api);

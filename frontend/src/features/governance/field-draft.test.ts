@@ -65,12 +65,12 @@ describe("fieldError", () => {
     }
   });
 
-  it("拒绝控制字符；文本不超过 4096 字节（中文按字节计）", () => {
+  it("拒绝控制字符；文本不超过 4096 字节（中文按字节计），超限提示内容太长", () => {
     expect(fieldError("genre", { mode: "custom", text: "a\u0007b" })).toBe("含有不允许的字符。");
     expect(fieldError("genre", { mode: "custom", text: "x".repeat(4096) })).toBeNull();
-    expect(fieldError("genre", { mode: "custom", text: "x".repeat(4097) })).toContain("4096");
+    expect(fieldError("genre", { mode: "custom", text: "x".repeat(4097) })).toBe("内容太长了。");
     expect(fieldError("genre", { mode: "custom", text: "古".repeat(1365) })).toBeNull(); // 4095 字节
-    expect(fieldError("genre", { mode: "custom", text: "古".repeat(1366) })).toContain("4096"); // 4098 字节
+    expect(fieldError("genre", { mode: "custom", text: "古".repeat(1366) })).toBe("内容太长了。"); // 4098 字节
   });
 });
 

@@ -172,7 +172,8 @@ const states: State[] = [
     reach: async (page, mock) => {
       mock.groups = [];
       await page.goto("/albums");
-      await expect(page.getByText(/请等待管理员添加音乐目录/)).toBeVisible();
+      await expect(page.getByText("资料库里还没有专辑。", { exact: true })).toBeVisible();
+      await expect(page.getByText(/请等待管理员添加音乐目录/)).toHaveCount(0);
     },
   },
   {

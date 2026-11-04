@@ -130,7 +130,8 @@ test.describe("扫描", () => {
     await expect(heading(page, "扫描详情")).toBeVisible();
     await expect(page).toHaveURL(/\/library\/scans\/[0-9a-f-]{36}$/);
     await expect(phaseTag(page)).toHaveText("运行中");
-    await expect(page.getByRole("region", { name: "状态" })).toContainText("不显示百分比或剩余时间");
+    await expect(page.getByRole("region", { name: "状态" }).getByText("正在扫描。", { exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: "状态" })).not.toContainText("不显示百分比或剩余时间");
 
     // 每次快进 2 秒触发一次轮询；受控后端在第二次读取时把扫描置为终态。
     await expect(async () => {
