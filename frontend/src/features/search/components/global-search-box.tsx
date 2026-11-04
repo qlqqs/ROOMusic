@@ -135,7 +135,8 @@ export function GlobalSearchBox({ currentQuery, onNavigate, className }: GlobalS
       void navigate({ to: "/albums/$groupId", params: { groupId: group.id }, search: { release: releaseId === group.representative.id ? undefined : releaseId } });
     } else {
       const { item } = option;
-      void navigate({ to: "/albums/$groupId", params: { groupId: item.group_id }, search: { release: item.release.id } });
+      // 打开曲目当前所在的发行，并定位到这一首（滚到、短暂高亮、焦点放在这一行）；不直接播放，不打断正在听的队列。
+      void navigate({ to: "/albums/$groupId", params: { groupId: item.group_id }, search: { release: item.release.id, track: item.track_id } });
     }
     onNavigate?.();
   }

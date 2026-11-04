@@ -60,7 +60,13 @@
   font-variant-numeric: lining-nums tabular-nums;
 }
 
+/* 匹配说明最多两行，超出用省略号；完整文字仍在 DOM 里，卡片链接的可访问名称不受影响。 */
 .note {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
   color: var(--text-accent);
   font-size: var(--fs-12);
 }

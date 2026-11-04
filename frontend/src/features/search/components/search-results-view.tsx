@@ -13,8 +13,10 @@ import styles from "./search-results-view.module.css";
 type SearchResultsViewProps = {
   /** 地址里的查询词与两栏页码（路由已校验）。 */
   search: SearchPageSearch;
-  /** 曲目一行的动作：由 app 组合播放器（以及之后的收藏与歌单）。 */
+  /** 曲目一行的动作：由 app 组合（播放、心形、“更多”）。 */
   renderTrackActions: (item: SearchTrackItemDTO) => ReactNode;
+  /** 包住一页曲目行的范围（例如一次读出这一页的收藏状态）：由 app 提供；传入稳定的函数引用。 */
+  renderTrackRowsScope?: ((items: readonly SearchTrackItemDTO[], children: ReactNode) => ReactNode) | undefined;
   /** 曲目栏上方的提示（例如无法检查播放能力时的重试）：由 app 提供，没有时不渲染。 */
   tracksNotice?: ReactNode;
 };
@@ -26,7 +28,7 @@ const COMPACT_TITLE_LENGTH = 40;
  * 搜索结果页：专辑、曲目两栏，各自加载、失败、重试与分页（只改自己那一栏的页码）。⑤ 的艺人栏放在两栏之前。
  * 页面里的搜索框只在窄屏出现（宽屏用侧栏的那一个）；没有查询词时任何宽度都显示它。
  */
-export function SearchResultsView({ search, renderTrackActions, tracksNotice }: SearchResultsViewProps) {
+export function SearchResultsView({ search, renderTrackActions, renderTrackRowsScope, tracksNotice }: SearchResultsViewProps) {
   const q = search.q;
   const title = q === undefined ? "搜索" : `搜索“${q}”`;
   return (
@@ -37,7 +39,7 @@ export function SearchResultsView({ search, renderTrackActions, tracksNotice }: 
       {q === undefined ? null : (
         <div className={styles.sections}>
           <AlbumSection search={search} q={q} />
-          <TrackSection search={search} q={q} renderTrackActions={renderTrackActions} notice={tracksNotice} />
+          <TrackSection search={search} q={q} renderTrackActions={renderTrackActions} renderRowsScope={renderTrackRowsScope} notice={tracksNotice} />
         </div>
       )}
     </Page>
@@ -59,7 +61,19 @@ function AlbumSection({ search, q }: { search: SearchPageSearch; q: string }) {
   );
 }
 
-function TrackSection({ search, q, renderTrackActions, notice }: { search: SearchPageSearch; q: string; renderTrackActions: SearchResultsViewProps["renderTrackActions"]; notice: ReactNode }) {
+function TrackSection({
+  search,
+  q,
+  renderTrackActions,
+  renderRowsScope,
+  notice,
+}: {
+  search: SearchPageSearch;
+  q: string;
+  renderTrackActions: SearchResultsViewProps["renderTrackActions"];
+  renderRowsScope: SearchResultsViewProps["renderTrackRowsScope"];
+  notice: ReactNode;
+}) {
   const tracks = useTrackResults(q, search.tracks_page ?? 1);
   return (
     <ResultSection
@@ -72,7 +86,11 @@ function TrackSection({ search, q, renderTrackActions, notice }: { search: Searc
       {(items) => (
         <>
           {notice}
-          <TrackResults items={items} renderTrackActions={renderTrackActions} />
+          {renderRowsScope === undefined ? (
+            <TrackResults items={items} renderTrackActions={renderTrackActions} />
+          ) : (
+            renderRowsScope(items, <TrackResults items={items} renderTrackActions={renderTrackActions} />)
+          )}
         </>
       )}
     </ResultSection>

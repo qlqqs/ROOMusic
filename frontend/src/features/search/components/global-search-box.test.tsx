@@ -71,6 +71,8 @@ describe("全局搜索建议框", () => {
     expect(new URL(requests()[0]?.path ?? "", "http://localhost").searchParams.get("limit")).toBe("5");
     await tick(1);
     expect(screen.getAllByRole("option")).toHaveLength(4);
+    expect(within(screen.getByRole("listbox", { name: "搜索建议" })).queryByRole("button", { name: /收藏/ })).toBeNull();
+    expect(api.requestsTo("POST", "/api/v1/me/favorites/lookup")).toHaveLength(0);
     expect(api.requestsTo("GET", "/api/v1/search")).toHaveLength(0);
   });
 
@@ -149,6 +151,7 @@ describe("全局搜索建议框", () => {
     const releaseId = kind === "专辑" ? album.matched_release_id : track.release.id;
     await waitFor(() => expect(history.location.pathname).toBe(`/albums/${groupId}`));
     expect(new URLSearchParams(history.location.search).get("release")).toBe(releaseId);
+    expect(new URLSearchParams(history.location.search).get("track")).toBe(kind === "曲目" ? track.track_id : null);
   });
 
   it.each(["专辑", "曲目"])("%s建议显示作曲命中的完整原文，而不是查询词", async (kind) => {

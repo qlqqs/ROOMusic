@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { decodeCatalogState } from "../../src/features/catalog/api/decoders";
 import { decodeTrackResults } from "../../src/features/search/api/decoders";
-import { body, fixtureRoot, login, mediaState, observeMedia, prepareLibrary, scan, syntheticWav } from "./support";
+import { decodeFavoriteTracksPage } from "../../src/features/personal/api/decoders";
+import { body, fixtureRoot, login, mediaState, observeMedia, origin, prepareLibrary, scan, syntheticWav } from "./support";
 
 const folder = join(fixtureRoot, "search-normalization");
 const examples = [
@@ -26,7 +27,7 @@ test.describe("真实搜索规范化", () => {
     await scan(request);
   });
   for (const item of examples) {
-    test(`${item.q} 找到 ${item.title} 并从结果实播`, async ({ page }) => {
+    test(`${item.q} 找到 ${item.title} 并收藏持久化、从结果实播`, async ({ page }) => {
       await login(page.request);
       const result = decodeTrackResults(await body(await page.request.get(`/api/v1/search?type=tracks&q=${encodeURIComponent(item.q)}`)));
       expect(result.catalog_state.search_mode).toBe("normalized");
@@ -36,9 +37,20 @@ test.describe("真实搜索规范化", () => {
       const empty = decodeTrackResults(await body(await page.request.get("/api/v1/search?type=tracks&q=SEARCH_NO_MATCH_987654321")));
       expect(empty.items).toEqual([]);
       expect(empty.pagination.total).toBe(0);
+      if (hit === undefined) throw new Error("没有找到合成搜索曲目");
+      await body(await page.request.delete(`/api/v1/me/favorites/tracks/${hit.track_id}`, { headers: { Origin: origin } }));
       await observeMedia(page);
       await page.goto(`/search?q=${encodeURIComponent(item.q)}`);
       const row = page.getByRole("row").filter({ has: page.getByText(item.title, { exact: true }) });
+      const heart = row.getByRole("button", { name: `收藏《${item.title}》`, exact: true });
+      await expect(heart).toHaveAttribute("aria-pressed", "false");
+      await heart.click();
+      await expect(heart).toHaveAttribute("aria-pressed", "true");
+      // 等服务端读回落盘结果，不能只把乐观心形当作成功；刷新后仍在搜索页验证。
+      await expect.poll(async () => decodeFavoriteTracksPage(await body(await page.request.get("/api/v1/me/favorites/tracks"))).items.map((entry) => entry.track.track_id)).toContain(hit.track_id);
+      await page.reload();
+      await expect(heart).toHaveAttribute("aria-pressed", "true");
+      await expect(heart).toBeEnabled();
       await row.getByRole("button", { name: /^播放 / }).click();
       await expect.poll(async () => (await mediaState(page))?.paused).toBe(false);
       await expect.poll(async () => (await mediaState(page))?.time).toBeGreaterThan(0);

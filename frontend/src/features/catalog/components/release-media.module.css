@@ -76,6 +76,49 @@
   border-top: 1px solid var(--color-divider);
 }
 
+/*
+ * 从全局搜索定位到的行：金色轻底加左侧细线，约 2.5 秒内渐隐（左侧细线让它不只靠底色）。
+ * 行左右没有内边距，曲目号与时长贴着内容盒的两边，所以高亮与焦点环都往行外画，不加边框、不加内边距，高亮开始、结束时内容不移动：
+ * - 底色铺满行，细线是向左偏移 3px 的阴影（画在行外），右边再用向右偏移 6px 的阴影把底色延伸出去；
+ *   只往水平方向，不压到上下相邻的行。时长与高亮右边缘之间因此留有 6px，曲目号右对齐在 3.2em 的列里，离细线更远。
+ * - 焦点环向外偏移 4px，与时长之间留 4px，不再压在文字上。
+ * 6px 正好在介质分段为 paint 包含留出的 6px 余量之内，不会被裁掉；上下方向伸出的焦点环落在相邻行 9.2px 的内边距里，不碰文字。
+ */
+.track:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 4px;
+}
+
+.track[data-located] {
+  animation: located 2.5s ease-out forwards;
+}
+
+@keyframes located {
+  from {
+    background: var(--color-selected);
+    box-shadow:
+      -3px 0 0 0 var(--color-accent-700),
+      6px 0 0 0 var(--color-selected);
+  }
+  to {
+    background: transparent;
+    box-shadow:
+      -3px 0 0 0 transparent,
+      6px 0 0 0 transparent;
+  }
+}
+
+/* 减少动态效果：同一套底色、延伸与细线，只是不渐隐，高亮期间保持静态，结束时直接去掉。 */
+@media (prefers-reduced-motion: reduce) {
+  .track[data-located] {
+    animation: none;
+    background: var(--color-selected);
+    box-shadow:
+      -3px 0 0 0 var(--color-accent-700),
+      6px 0 0 0 var(--color-selected);
+  }
+}
+
 .number {
   color: var(--text-secondary);
   font-size: var(--fs-14);

@@ -1,8 +1,15 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { loadSavedQueue } from "../features/player/engine/persistence";
+import { decodeSearchSuggestions } from "../features/search/api/decoders";
+import { sampleBody } from "../test/api-samples";
+import { albumGroup, groupDetailOf, releaseVersions } from "../test/catalog-data";
+import { installCatalogApi } from "../test/fake-catalog";
 import { deferred } from "../test/deferred";
 import { installFakeApi, installFakeSession } from "../test/fake-api";
+import { installPersonalApi } from "../test/fake-personal";
+import { seedPersonalTracks, seedPlaylist } from "../test/personal-data";
 import { FakeAudio } from "../test/fake-audio";
 import { jsonResponse } from "../test/http";
 import { renderApp } from "../test/render-app";
@@ -23,11 +30,13 @@ beforeEach(() => {
   vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue("probably");
   sessionStorage.clear();
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 function setup(distinctResults = false) {
   const api = installFakeApi();
-  installFakeSession(api, { current: "listener" });
+  const session = installFakeSession(api, { current: "listener" });
+  const personal = installPersonalApi(api, { session });
+  seedPersonalTracks(personal, [firstTrack]);
   const pageFor = (url: string) => {
     const params = paramsOf(url);
     const type = params.get("type");
@@ -48,7 +57,7 @@ function setup(distinctResults = false) {
   const respond = (url: string) => jsonResponse(200, pageFor(url));
   api.on("GET", path, (request) => respond(request.path));
   const requests = (type: Kind) => api.requestsTo("GET", path).filter((request) => paramsOf(request.path).get("type") === type);
-  return { api, respond, requests, pageFor };
+  return { api, respond, requests, pageFor, personal };
 }
 
 async function loaded() {
@@ -57,6 +66,130 @@ async function loaded() {
 }
 
 describe("搜索结果页", () => {
+  it("点曲目建议携带 release 与 track，只导航、不改变已有队列与音频", async () => {
+    const { api } = setup();
+    const audio = new FakeAudio();
+    vi.stubGlobal("Audio", class { constructor() { return audio; } });
+    const suggestion = { ...firstTrack, track_id: "00000000-0000-4000-8000-000000000099", title: "另一首建议曲目" };
+    const data = decodeSearchSuggestions(sampleBody("search/suggestions"));
+    data.tracks.items = [suggestion];
+    api.on("GET", "/api/v1/search/suggestions", () => jsonResponse(200, data));
+    const album = { ...albumGroup(9, { release_count: 2 }), id: suggestion.group_id };
+    const versions = releaseVersions(album, 2);
+    const second = versions[1];
+    if (second === undefined) throw new Error("缺少非代表版本");
+    versions[1] = { ...second, id: suggestion.release.id };
+    const catalog = installCatalogApi(api, { groups: [album] });
+    catalog.groupDetails.set(album.id, groupDetailOf(album, versions));
+    const { history } = renderApp({ path: "/search?q=爱" });
+    const row = await screen.findByRole("row", { name: new RegExp(firstTrack.title) });
+    await waitFor(() => expect(within(row).getByRole("button", { name: /^播放 / }).hasAttribute("disabled")).toBe(false));
+    // 两个相同曲目的不同队列条目：不能仅比较曲目 ID 集合掩盖队列替换或去重。
+    for (let index = 0; index < 2; index += 1) {
+      await userEvent.click(within(row).getByRole("button", { name: "更多" }));
+      await userEvent.click(screen.getByRole("menuitem", { name: "加入队列" }));
+    }
+    const userId = "00000000-0000-4000-8000-000000000003";
+    const before = loadSavedQueue(sessionStorage, userId);
+    expect(before?.entries).toHaveLength(2);
+    expect(before?.entries.map((entry) => entry.trackId)).toEqual([firstTrack.track_id, firstTrack.track_id]);
+    expect(new Set(before?.entries.map((entry) => entry.entryId)).size).toBe(2);
+    const sources = [...audio.sources];
+    const playCalls = audio.playCalls;
+    const pauseCalls = audio.pauseCalls;
+    const lookupCount = api.requestsTo("POST", "/api/v1/me/favorites/lookup").length;
+    const input = screen.getAllByRole("combobox", { name: "搜索" })[0];
+    if (input === undefined) throw new Error("缺少搜索框");
+    await userEvent.click(input);
+    await userEvent.clear(input);
+    await userEvent.type(input, "建议");
+    const option = await screen.findByRole("option", { name: /另一首建议曲目/ });
+    expect(within(screen.getByRole("listbox", { name: "搜索建议" })).queryByRole("button", { name: /收藏/ })).toBeNull();
+    expect(api.requestsTo("POST", "/api/v1/me/favorites/lookup")).toHaveLength(lookupCount);
+    await userEvent.click(option);
+    await waitFor(() => expect(history.location.pathname).toBe(`/albums/${suggestion.group_id}`));
+    await screen.findByRole("region", { name: "曲目" });
+    expect(new URLSearchParams(history.location.search)).toEqual(new URLSearchParams({ release: suggestion.release.id, track: suggestion.track_id }));
+    expect(loadSavedQueue(sessionStorage, userId)).toEqual(before);
+    expect(audio.sources).toEqual(sources);
+    expect(audio.playCalls).toBe(playCalls);
+    expect(audio.pauseCalls).toBe(pauseCalls);
+    expect(api.requestsTo("GET", /^\/api\/v1\/tracks\/[^/]+\/playback$/)).toHaveLength(0);
+  });
+
+  it("一页多行仅批量查询一次收藏状态，翻曲目页与换词各自读取新一批", async () => {
+    const { api, pageFor } = setup(true);
+    const idsFor = (q: string, page: number) => [1, 2, 3].map((n) => `00000000-0000-4000-8000-${String((q === "爱" ? 100 : 200) + page * 10 + n).padStart(12, "0")}`);
+    api.on("GET", path, (request) => {
+      const params = paramsOf(request.path);
+      const response = pageFor(request.path);
+      if (params.get("type") === "albums") return jsonResponse(200, response);
+      const ids = idsFor(params.get("q") ?? "", Number(params.get("page")));
+      return jsonResponse(200, { ...response, items: ids.map((track_id, index) => ({ ...firstTrack, track_id, title: `结果曲目${index + 1}` })) });
+    });
+    renderApp({ path: "/search?q=爱" });
+    const lookups = () => api.requestsTo("POST", "/api/v1/me/favorites/lookup");
+    async function expectBatch(count: number, ids: string[]) {
+      await waitFor(() => {
+        const hearts = within(section("tracks")).getAllByRole("button", { name: /^收藏《/ });
+        expect(hearts).toHaveLength(3);
+        for (const heart of hearts) expect(heart.hasAttribute("disabled")).toBe(false);
+        expect(lookups()).toHaveLength(count);
+        expect(lookups().at(-1)?.body).toEqual({ track_ids: ids, group_ids: [] });
+      });
+    }
+    await expectBatch(1, idsFor("爱", 1));
+    await userEvent.click(within(section("albums")).getByRole("link", { name: "下一页" }));
+    await screen.findByRole("link", { name: /爱的专辑第2页/ });
+    expect(lookups()).toHaveLength(1);
+    await userEvent.click(within(section("tracks")).getByRole("link", { name: "下一页" }));
+    await expectBatch(2, idsFor("爱", 2));
+    const input = screen.getAllByRole("combobox", { name: "搜索" })[0];
+    if (input === undefined) throw new Error("缺少搜索框");
+    await userEvent.clear(input);
+    await userEvent.type(input, "新词{Enter}");
+    await expectBatch(3, idsFor("新词", 1));
+    expect(lookups().map((request) => request.body)).toEqual([
+      { track_ids: idsFor("爱", 1), group_ids: [] },
+      { track_ids: idsFor("爱", 2), group_ids: [] },
+      { track_ids: idsFor("新词", 1), group_ids: [] },
+    ]);
+  });
+
+  it.each(["正常", "缺失", "不可播"])("%s曲目的心形与添加歌单可用，个人操作不触发播放", async (kind) => {
+    const { api, personal } = setup();
+    const item = { ...firstTrack, present: kind !== "缺失", source: { ...firstTrack.source, ...(kind === "不可播" ? { source_kind: "cue_virtual" } : {}) } };
+    seedPersonalTracks(personal, [item]);
+    const playlist = seedPlaylist(personal, "00000000-0000-4000-8000-000000000003", { name: "搜索收藏歌单" });
+    api.on("GET", path, (request) => jsonResponse(200, paramsOf(request.path).get("type") === "tracks" ? searchTrackPage({ items: [item] }) : albums));
+    renderApp({ path: "/search?q=爱" });
+    const row = await screen.findByRole("row", { name: new RegExp(item.title) });
+    const heart = within(row).getByRole("button", { name: `收藏《${item.title}》` });
+    await waitFor(() => expect(heart.hasAttribute("disabled")).toBe(false));
+    await userEvent.click(heart);
+    await waitFor(() => expect(within(row).getByRole("button", { name: `收藏《${item.title}》` }).getAttribute("aria-pressed")).toBe("true"));
+    expect(api.requestsTo("PUT", `/api/v1/me/favorites/tracks/${item.track_id}`)).toHaveLength(1);
+    if (kind !== "正常") expect(within(row).getByRole("button", { name: /^播放 / }).hasAttribute("disabled")).toBe(true);
+    await userEvent.click(within(row).getByRole("button", { name: "更多" }));
+    if (kind !== "正常") {
+      for (const name of ["下一首播放", "加入队列"]) {
+        const action = screen.getByRole("menuitem", { name });
+        expect(action.hasAttribute("disabled")).toBe(true);
+        await userEvent.click(action);
+      }
+    }
+    const add = screen.getByRole("menuitem", { name: "添加到歌单…" });
+    expect(add.hasAttribute("disabled")).toBe(false);
+    await userEvent.click(add);
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(await within(dialog).findByRole("button", { name: /搜索收藏歌单/ }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(api.requestsTo("POST", `/api/v1/me/playlists/${playlist.state.id}/items`).map((request) => request.body)).toEqual([{ expected_revision: 1, track_ids: [item.track_id] }]);
+    expect(playlist.items.map((entry) => entry.track_id)).toEqual([item.track_id]);
+    expect(api.requestsTo("GET", /^\/api\/v1\/tracks\/[^/]+\/playback$/)).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: "暂停" })).toBeNull();
+  });
+
   it.each(["albums", "tracks"] as const)("%s 独立加载，另一栏结果不受阻塞", async (type) => {
     const { api, respond } = setup();
     const pending = deferred<Response>();

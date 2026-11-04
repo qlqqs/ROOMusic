@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useEffectEvent, useMemo, type ReactNode } from "react";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useCallback, useEffect, useEffectEvent, useMemo, useState, type ReactNode } from "react";
 import { useViewerScope } from "../../auth";
 import { failureOf, isHttpFailure } from "../../../shared/api";
 import { isUuid } from "../../../shared/lib/ids";
@@ -15,7 +15,7 @@ import styles from "./album-detail-view.module.css";
 import { AlbumHeader } from "./album-header";
 import { EvidenceSection } from "./evidence-section";
 import { ReleaseFacts } from "./release-facts";
-import { ReleaseMedia } from "./release-media";
+import { ReleaseMedia, type TrackLocate } from "./release-media";
 import { VersionNav } from "./version-nav";
 
 /** 标题超过这个长度（字符数）时降一级字号，完整显示并换行。 */
@@ -52,6 +52,8 @@ type AlbumDetailViewProps = PlaybackSlots & AdminSlots & {
   groupId: string;
   /** 地址里的 release 参数（路由已校验为 UUID 并转成小写）；没有表示代表版本。 */
   release: string | undefined;
+  /** 地址里的 track 参数：要定位的曲目（路由已校验为 UUID 并转成小写）；没有就不定位。 */
+  track?: string | undefined;
   /** 进入详情之前的列表筛选与页码：“返回专辑列表”据此恢复。 */
   list: AlbumSearch;
   /** 管理员在“来源与证据”里多一个完整证据；后端仍独立鉴权。 */
@@ -74,7 +76,10 @@ function AlbumNotFound({ list }: { list: AlbumSearch }) {
   );
 }
 
-type ReleaseBodyProps = PlaybackSlots & AdminSlots & {
+/** 一次定位请求与它完成后的回报：曲目区处理完（找到并定位，或这个版本里没有它）就调用 onLocated。 */
+type LocateSlot = { locate?: TrackLocate | undefined; onLocated?: ((token: string) => void) | undefined };
+
+type ReleaseBodyProps = PlaybackSlots & AdminSlots & LocateSlot & {
   groupId: string;
   group: ReleaseGroupDetailDTO;
   selected: ReleaseSummaryDTO;
@@ -82,7 +87,7 @@ type ReleaseBodyProps = PlaybackSlots & AdminSlots & {
   isAdmin: boolean;
 };
 
-function ReleaseContent({ groupId, release, versioned, isAdmin, renderAdminSections, renderTrackActions, currentTrackId, currentTrackLabel }: PlaybackSlots & Pick<AdminSlots, "renderAdminSections"> & { groupId: string; release: ReleaseDetailDTO; versioned: boolean; isAdmin: boolean }) {
+function ReleaseContent({ groupId, release, versioned, isAdmin, renderAdminSections, renderTrackActions, currentTrackId, currentTrackLabel, locate, onLocated }: PlaybackSlots & Pick<AdminSlots, "renderAdminSections"> & LocateSlot & { groupId: string; release: ReleaseDetailDTO; versioned: boolean; isAdmin: boolean }) {
   // 版本与插槽不变时保持同一个函数，曲目行才能跳过重绘。
   const renderRowActions = useMemo(() => (renderTrackActions === undefined ? undefined : (track: ReleaseTrackDTO) => renderTrackActions(track, release)), [renderTrackActions, release]);
   return (
@@ -90,7 +95,7 @@ function ReleaseContent({ groupId, release, versioned, isAdmin, renderAdminSecti
       <div className={styles.layout}>
         <div className={styles.columns}>
           <Panel title="曲目">
-            <ReleaseMedia media={release.media} albumArtist={albumArtistOf(release)} currentTrackId={currentTrackId} currentTrackLabel={currentTrackLabel} renderTrackActions={renderRowActions} />
+            <ReleaseMedia media={release.media} albumArtist={albumArtistOf(release)} currentTrackId={currentTrackId} currentTrackLabel={currentTrackLabel} renderTrackActions={renderRowActions} locate={locate} onLocated={onLocated} />
           </Panel>
           <aside className={styles.aside} aria-label="发行信息">
             <ReleaseFacts release={release} versioned={versioned} />
@@ -136,7 +141,7 @@ function ReleaseGone({ groupId, group, selected }: { groupId: string; group: Rel
 }
 
 /** 选中版本的头部、曲目、发行信息与证据。头部用组详情里的摘要先渲染，曲目区单独显示加载态。 */
-function ReleaseBody({ groupId, group, selected, list, isAdmin, renderReleaseActions, renderAdminActions, renderAdminSections, renderTrackActions, renderReleaseScope, currentTrackId, currentTrackLabel }: ReleaseBodyProps) {
+function ReleaseBody({ groupId, group, selected, list, isAdmin, renderReleaseActions, renderAdminActions, renderAdminSections, renderTrackActions, renderReleaseScope, currentTrackId, currentTrackLabel, locate, onLocated }: ReleaseBodyProps) {
   const detail = useRelease(selected.id);
   const gone = detail.isError && isHttpFailure(failureOf(detail.error), 404);
   const content = (
@@ -154,7 +159,7 @@ function ReleaseBody({ groupId, group, selected, list, isAdmin, renderReleaseAct
         <ReleaseGone groupId={groupId} group={group} selected={selected} />
       ) : (
         <QueryContent query={detail} loading={<Skeleton label="正在加载曲目" lines={6} />}>
-          {(data) => <ReleaseContent groupId={groupId} release={data} versioned={group.release_count > 1} isAdmin={isAdmin} renderAdminSections={renderAdminSections} renderTrackActions={renderTrackActions} currentTrackId={currentTrackId} currentTrackLabel={currentTrackLabel} />}
+          {(data) => <ReleaseContent groupId={groupId} release={data} versioned={group.release_count > 1} isAdmin={isAdmin} renderAdminSections={renderAdminSections} renderTrackActions={renderTrackActions} currentTrackId={currentTrackId} currentTrackLabel={currentTrackLabel} locate={locate} onLocated={onLocated} />}
         </QueryContent>
       )}
     </>
@@ -168,7 +173,7 @@ function canonicalRelease(group: ReleaseGroupDetailDTO, requested: string | unde
   return member === undefined || member.id === group.representative.id ? undefined : member.id;
 }
 
-function AlbumDetailContent({ groupId, release: requested, list, isAdmin, renderReleaseActions, renderAdminActions, renderAdminSections, renderTrackActions, renderReleaseScope, currentTrackId, currentTrackLabel }: AlbumDetailViewProps) {
+function AlbumDetailContent({ groupId, release: requested, track, list, isAdmin, renderReleaseActions, renderAdminActions, renderAdminSections, renderTrackActions, renderReleaseScope, currentTrackId, currentTrackLabel }: AlbumDetailViewProps) {
   const group = useAlbum(groupId);
   const navigate = useNavigate();
   const data = group.data;
@@ -179,11 +184,22 @@ function AlbumDetailContent({ groupId, release: requested, list, isAdmin, render
   const needsNormalizing = data !== undefined && !group.isFetching && canonical !== requested;
   const normalize = useEffectEvent(() =>
     // 替换历史项，返回键不会回到被规范掉的地址；列表参数随之保留，“返回专辑列表”仍然有效。
-    void navigate({ to: "/albums/$groupId", params: { groupId }, search: { release: canonical }, state: { albumList: list }, replace: true }),
+    // 要定位的曲目随之保留：规范掉的只是版本参数。
+    void navigate({ to: "/albums/$groupId", params: { groupId }, search: { release: canonical, track }, state: { albumList: list }, replace: true }),
   );
   useEffect(() => {
     if (needsNormalizing) normalize();
   }, [needsNormalizing, canonical]);
+
+  // 定位曲目：每来到一条历史记录（打开、刷新、后退、前进，以及上面规范地址的替换）只定位一次，用历史记录的 key 区分；
+  // 之后的重新渲染、轮询刷新不再滚动或抢焦点。地址还要规范化时先不定位，免得替换之后再定位一次。
+  const arrival = useRouterState({ select: (state) => state.location.state.__TSR_key ?? state.location.state.key ?? state.location.href });
+  const [handled, setHandled] = useState<string | null>(null);
+  const locate = useMemo(
+    (): TrackLocate | undefined => (track === undefined || needsNormalizing || handled === arrival ? undefined : { trackId: track, token: arrival }),
+    [track, needsNormalizing, handled, arrival],
+  );
+  const onLocated = useCallback((token: string) => setHandled(token), []);
 
   if (group.status === "error" && isHttpFailure(failureOf(group.error), 404)) return <AlbumNotFound list={list} />;
 
@@ -197,7 +213,7 @@ function AlbumDetailContent({ groupId, release: requested, list, isAdmin, render
     >
       <QueryContent query={group} loading={<Skeleton label="正在加载专辑" lines={6} />}>
         {(loaded) =>
-          selected === undefined ? null : <ReleaseBody groupId={groupId} group={loaded} selected={selected} list={list} isAdmin={isAdmin} renderReleaseActions={renderReleaseActions} renderAdminActions={renderAdminActions} renderAdminSections={renderAdminSections} renderTrackActions={renderTrackActions} renderReleaseScope={renderReleaseScope} currentTrackId={currentTrackId} currentTrackLabel={currentTrackLabel} />
+          selected === undefined ? null : <ReleaseBody groupId={groupId} group={loaded} selected={selected} list={list} isAdmin={isAdmin} renderReleaseActions={renderReleaseActions} renderAdminActions={renderAdminActions} renderAdminSections={renderAdminSections} renderTrackActions={renderTrackActions} renderReleaseScope={renderReleaseScope} currentTrackId={currentTrackId} currentTrackLabel={currentTrackLabel} locate={locate} onLocated={onLocated} />
         }
       </QueryContent>
     </Page>

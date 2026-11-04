@@ -4,6 +4,7 @@ import { expect, test } from "./support/fixtures";
 import { expectNoDocumentScroll, expectNoHorizontalOverflow, expectVisibleFocusRing } from "./support/checks";
 import { installSearchPlayback, seedSearch } from "./support/search";
 import { mediaState, observeMedia } from "./real/support";
+import { queueSnapshotStep4 } from "./support/search-step4";
 
 const visibleSearch = (page: Page) => page.locator('input[data-global-search]:visible');
 
@@ -177,15 +178,17 @@ test("选择曲目建议只打开所在专辑，不直接播放", async ({ page,
   const mock = await backend.start({ signedInAs: "listener" });
   const { track } = seedSearch(mock);
   await page.goto("/albums");
+  const queueBefore = await queueSnapshotStep4(page);
   await visibleSearch(page).fill("爱");
   const popup = page.getByRole("listbox", { name: "搜索建议", exact: true });
   await expect(popup.getByRole("option")).toHaveCount(3);
   await visibleSearch(page).press("ArrowDown");
   await visibleSearch(page).press("ArrowDown");
   await visibleSearch(page).press("Enter");
-  await expect(page).toHaveURL(new RegExp(`/albums/${track.group_id}\\?release=${track.release.id}`));
+  await expect(page).toHaveURL((url) => url.pathname === `/albums/${track.group_id}` && url.searchParams.get("release") === track.release.id && url.searchParams.get("track") === track.track_id);
   await expect(page.getByRole("heading", { name: track.release.title, exact: true, level: 1 })).toBeVisible();
   await expect(page.getByRole("button", { name: "播放整张专辑", exact: true })).toBeEnabled();
   await expect(page.getByRole("region", { name: "播放器", exact: true })).toHaveCount(0);
   expect(mock.callsTo("GET", /\/playback$/)).toHaveLength(0);
+  expect(await queueSnapshotStep4(page)).toEqual(queueBefore);
 });

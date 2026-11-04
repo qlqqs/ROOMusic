@@ -82,17 +82,27 @@ describe("parseAlbumDetailSearch", () => {
   const id = "00000000-0000-4000-8000-00000000000a";
 
   it("UUID 形状的 release 保留，并统一成小写", () => {
-    expect(parseAlbumDetailSearch({ release: id })).toEqual({ release: id });
-    expect(parseAlbumDetailSearch({ release: id.toUpperCase() })).toEqual({ release: id });
+    expect(parseAlbumDetailSearch({ release: id })).toEqual({ release: id, track: undefined });
+    expect(parseAlbumDetailSearch({ release: id.toUpperCase() })).toEqual({ release: id, track: undefined });
+  });
+
+  it("曲目 UUID 与版本独立校验、规范小写，未知参数不保留", () => {
+    const track = "00000000-0000-4000-8000-00000000000b";
+    expect(parseAlbumDetailSearch({ release: id.toUpperCase(), track: track.toUpperCase(), other: "x" })).toEqual({ release: id, track });
+    expect(parseAlbumDetailSearch({ track })).toEqual({ release: undefined, track });
+    expect(parseAlbumDetailSearch({ release: "invalid", track })).toEqual({ release: undefined, track });
+    for (const value of ["", "abc", 1234, true, null, {}, [track], `${track}x`, ` ${track}`]) {
+      expect(parseAlbumDetailSearch({ release: id, track: value })).toEqual({ release: id, track: undefined });
+    }
   });
 
   it("不是 UUID 的值显式返回 undefined（路由会把校验结果合并到原始查询串上）", () => {
     for (const value of ["", "abc", "1234", 1234, true, null, {}, [id], `${id}x`, ` ${id}`]) {
       const result = parseAlbumDetailSearch({ release: value });
-      expect(result).toEqual({ release: undefined });
+      expect(result).toEqual({ release: undefined, track: undefined });
       expect("release" in result).toBe(true);
     }
-    expect(parseAlbumDetailSearch({})).toEqual({ release: undefined });
+    expect(parseAlbumDetailSearch({})).toEqual({ release: undefined, track: undefined });
   });
 });
 

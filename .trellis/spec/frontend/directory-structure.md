@@ -126,7 +126,8 @@ features/governance/
 - `search`（M5 ④）拥有全局搜索：侧栏的搜索框（组合框与建议）、结果页 `/search` 的 URL 状态（`q`、`albums_page`、`tracks_page`）、两栏结果与专用分页、
   “匹配到了什么”的小字（`match-note.ts`）。它只经 catalog 的 `api/decoders` 与 `api/track-summary` 复用组摘要、曲目安全摘要（`trackSummaryDecoder`，曲目结果在它之外再解码 `match`）与目录状态的解码器，
   曲目标题与艺人的显示规则用 catalog 公开的 `trackTitleOf`、`trackArtistOf`，
-  经公开入口读目录状态（`useCatalogState`）；**不导入 player**：曲目行的播放、下一首、加入队列由 app（`app/routes/search-playback.tsx`）经插槽 `renderTrackActions` 组合，
+  经公开入口读目录状态（`useCatalogState`）；**不导入 player 与 personal**：曲目行用统一的 `TrackActions`（播放、心形、“更多”里的下一首播放、加入队列、添加到歌单…），
+  由 app（`app/routes/search-playback.tsx`）经插槽 `renderTrackActions` 组合，一页曲目的收藏状态经插槽 `renderTrackRowsScope` 由 `TrackFavoritesScope` 一次读出（`app/routes/search-page.tsx`）；建议浮层只用于跳转，没有心形；
   曲目摘要转队列曲目与“能否播放”的判断和其他页共用（`app/routes/track-playback.ts` 的 `playerTrackOfSummary`、`unplayableReason`）。
   外壳（app）放置搜索框、处理“/”快捷键，并在目录状态的 epoch 变大时取消旧代次的搜索请求、让目录缓存失效（`app/shell/use-catalog-epoch-sync.ts`）。
 - 通用 `operations` 拥有 Change Set 与审批的状态及受支持的恢复界面，不是通用 toast（尚未建立；M3 的操作记录与撤销界面在 `governance`）。

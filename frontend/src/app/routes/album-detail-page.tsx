@@ -14,6 +14,8 @@ import styles from "./album-detail-page.module.css";
 type AlbumDetailPageProps = {
   groupId: string;
   release: string | undefined;
+  /** 要定位的曲目（地址里的 track）；没有就不定位。 */
+  track: string | undefined;
   list: AlbumSearch;
 };
 

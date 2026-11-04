@@ -15,6 +15,7 @@ import { playerTrack } from "../test/player-data";
 import { silentPlayRecorder } from "../test/play-recorder";
 import { searchTrackItem } from "../test/search-data";
 import { SearchPlaybackNotice, SearchTrackActions } from "./routes/search-playback";
+import { TrackFavoritesScope } from "./routes/track-favorites-scope";
 
 const cleanups: (() => void)[] = [];
 beforeEach(() => { vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue("probably"); });
@@ -43,7 +44,7 @@ async function setup(item: SearchTrackItemDTO = searchTrackItem(), configure?: (
   render(<QueryClientProvider client={client}><SessionProvider controller={controller}>
     <ViewerScopeProvider viewer={state.viewer} generation={state.generation}>
       <PlayerProvider userId={state.viewer.id} engine={engine}>
-        <SearchPlaybackNotice /><SearchTrackActions item={item} />
+        <TrackFavoritesScope tracks={[item]}><SearchPlaybackNotice /><SearchTrackActions item={item} /></TrackFavoritesScope>
       </PlayerProvider>
     </ViewerScopeProvider>
   </SessionProvider></QueryClientProvider>);
@@ -144,7 +145,9 @@ describe("搜索曲目播放动作", () => {
     expect(screen.getByRole("button", { name: /^播放 / }).hasAttribute("disabled")).toBe(true);
     expect(screen.getByText("正在检查播放能力")).toBeTruthy();
     await act(async () => pending.resolve(jsonResponse(500, { error: { code: "internal_error", message: "读取失败" }, request_id: "formats-error" })));
-    await screen.findByText("无法检查播放能力。");
+    await screen.findByText("无法检查播放能力");
+    expect(screen.getByRole("alert").textContent).toContain("formats-error");
+    expect(screen.getByText("无法检查播放能力，请在曲目列表上方重试。")).toBeTruthy();
     expect(screen.getByRole("button", { name: /^播放 / }).hasAttribute("disabled")).toBe(true);
     api.on("GET", "/api/v1/playback/formats", () => sampleResponse("playback/formats"));
     await userEvent.click(screen.getByRole("button", { name: "重试检查" }));

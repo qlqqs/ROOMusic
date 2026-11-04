@@ -14,7 +14,7 @@
   曲目安全摘要 `TrackSummary` 的解码器与显示规则（`trackTitleOf`、`trackArtistOf`）归 catalog，收藏、歌单（以后的搜索与艺人页）共用。
 - app 负责组合：
   - `app/routes/track-actions.tsx` 的 `TrackActions` 是**所有曲目行的统一动作**：行内播放、心形、“更多”（下一首播放、加入队列、添加到歌单…，
-    再接页面自己的项，例如“从历史中移除”、歌单的移动与移除）。专辑页、历史页、收藏页、歌单详情都用它；以后的搜索结果与艺人页同样接入，不另造一套。
+    再接页面自己的项，例如“从历史中移除”、歌单的移动与移除）。专辑页、历史页、收藏页、歌单详情与全局搜索的曲目结果（M5 ④）都用它；以后的艺人页同样接入，不另造一套。
   - `app/routes/track-playback.ts` 是曲目安全摘要（历史条目同形）→ `PlayerTrack` 的唯一映射与“为什么不能播放”的判断。
   - `app/routes/personal-playback.tsx` 的 `PersonalPlayAll` 是收藏与歌单的“播放全部”。
   - `app/player-personal-actions.tsx` 把心形与“存为歌单”放进 player 的中立插槽；player 不导入 personal。
