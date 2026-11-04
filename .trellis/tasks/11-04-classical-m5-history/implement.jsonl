@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/listening-contracts.md", "reason": "播放历史合同：分层、鉴权、隔离、最近播放规则，本任务要扩展"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "发行摘要与公开函数清单，LoadTrackSummaries 要登记"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "SQL、迁移与隔离测试库约定"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "错误信封与错误码"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "查询键、缓存失效与会话隔离"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "feature 依赖方向：listening 不导入 player，app 层组合"}
+{"file": ".trellis/spec/frontend/player-design-guidelines.md", "reason": "立即播放、下一首、加入队列与 queue_full 语义"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "页面组件、菜单与确认对话框的约定"}
+{"file": ".trellis/spec/frontend/quality-verification-layers.md", "reason": "Vitest、Playwright、真实服务用例分层"}

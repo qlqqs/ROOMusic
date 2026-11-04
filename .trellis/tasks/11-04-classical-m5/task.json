@@ -1,0 +1,28 @@
+{
+  "id": "classical-m5",
+  "name": "classical-m5",
+  "title": "M5：个人音乐与检索",
+  "description": "Core 1 之后的 M5：历史页面、收藏、歌单、搜索规范化、艺人与别名，之后是扫描反馈；各项分别立项",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "qlqq",
+  "assignee": "qlqq",
+  "createdAt": "2026-11-04",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "11-04-classical-m5-history"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
