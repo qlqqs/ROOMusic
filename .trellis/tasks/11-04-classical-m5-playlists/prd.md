@@ -48,3 +48,22 @@
 ## 设计与执行
 
 见 [收藏的 design.md](../11-04-classical-m5-favorites/design.md) 与 [implement.md](../11-04-classical-m5-favorites/implement.md)：收藏与歌单同一条实现线，合同写在一起。
+
+## 实施结果
+
+2026-11-04 完成；提交：`825239c`（后端）、`f5d40fa`（前端与测试）、`d871caa`（同步 M5 之前遗留的过期文案断言）。验证基准为 `git archive f5d40fa` 的全新导出树。
+
+- A1：`backend/internal/app/personal_api_integration_test.go`、`backend/internal/personal/playlist_contracts_integration_test.go` 验证 owner 隔离、他人资源404、401/403；指定 personal/catalog/app/httpserver/listening 范围 race **1046 项通过（348 个顶层；集成612项），0 FAIL / 0 SKIP**。
+- A2：`playlist_contracts_integration_test.go`、`playlist_concurrency_integration_test.go` 随上述 race 通过；`frontend/src/app/playlists.test.tsx` **22/22**，覆盖 CRUD、revision 冲突、适应撤销与临时超限。
+- A3：`e2e/personal.spec.ts` **29/29** 包含鼠标/触屏/键盘排序；真实 `e2e/real/personal.real.ts` 的建歌单、加两首、交换并刷新保持 **1/1**；截图 `frontend/test-results/m5-personal-screenshots/{1440,375}/playlist-dragging.png`（本地、未入库，主会话已复核）。
+- A4：`src/app/add-to-playlist.test.tsx` **14/14**、`player-personal-actions.test.tsx` **10/10**、`playlist-text.test.ts` **27/27**；专辑批量、单首 membership、原子新建与队列去重/同键重试通过。
+- A5：`src/app/routes/personal-playback.test.tsx` **38/38**、`track-actions.test.tsx` **4/4**；覆盖缺失跳过、格式不支持、不补位、1万首上限、失败/迟到会话不清队列及追加整批拒绝。
+- A6：decoder **309/309**、全局样本 **220/220**；五宽/axe/键盘/拖动 **29/29**，真实 personal **2/2**；截图 `frontend/test-results/m5-personal-screenshots/{1440,375}/{playlists,playlist-detail,add-to-playlist}.png`（本地、未入库，主会话已复核）。
+
+性能：沿用提交前正常真实形状320个非 race HTTP 样本验收，本轮未复测；当时全部达到既定 p95 门槛，20张万首歌单卡片低于1s、队列低于2s、详情组合低于300ms；详见[性能实测](../11-04-classical-m5-favorites/research/m5-personal-performance.md)。本次 race 不替代性能实测。
+
+主会话裁决已落地：页签顺序为“收藏 / 歌单 / 历史”，`/me` 默认收藏；时长用“1 小时 20 分”等口语写法，部分未知显示向下取整的“以上”，全部未知只显示曲目数；加入歌单省略零计数，全部已存在用简短提示，混合时保留两组数量；仅取消、无新增行时不加页内“刷新”按钮，离开/换页/换栏/重载清掉保留行；不确定写入后同目标所有心形保持忙碌，直到之后发出的一次读取成功，重读失败则显示“没能确认是否已收藏。”与“重新读取”，不能再次切换。
+
+导出树门禁：`npm ci`、lint、typecheck、build 与同范围 `go vet` 通过；重建 web 与提交原始副本 `diff -r` 完全一致。全量 Vitest 2419 PASS / 5 FAIL、全量模拟 Playwright 279 PASS / 4 FAIL、全量真实服务 45 PASS / 2 FAIL，均 0 SKIP；11 个失败都来自 M5 之前 `6efc902` 改了文案却没同步的断言（各重复 20 轮稳定失败，与本线无关）。`d871caa` 只改测试、把断言改为当前文案并保持原意，之后这 11 项所在的 5 个 Vitest 文件、`a11y`/`library`/`members` 三个浏览器 spec 与 `e2e/real/playback.real.ts` 整文件重跑全部通过（两条 ALAC 完整执行到拖动、seek 与播完），lint、typecheck 通过。
+
+已知风险：极端单发行 10 万轨形状有偏慢的历史证据，未承诺当前实现同口径已达标；未做真实读屏或 Firefox/Safari 手工验收。另有既有问题：密码提示“至少 12 个字符”而实际按 12 字节校验（4 个汉字可通过），来自 `6efc902`，留独立修正。
