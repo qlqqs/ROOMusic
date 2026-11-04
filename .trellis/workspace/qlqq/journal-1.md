@@ -1146,3 +1146,46 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 
 - 推送到 origin/main（用户已授权）
 - M5 选项待用户选择
+
+
+## Session 36: M5 ①：历史页面（规划、实施与收尾）
+<!-- trellis-session: v=2 fp=407b8a765a6eff8b -->
+
+**Date**: 2026-11-04
+**Task**: M5 ①：历史页面（规划、实施与收尾）
+**Branch**: `main`
+
+### Summary
+
+CI actions 升到 v7 并固定 ubuntu-24.04；规划 M5 父任务与历史页子任务；完成“我的音乐”的历史页签（按曲目汇总、播放全部、按曲目移除），收尾验证与截图复核后归档
+
+### Main Changes
+
+- 后端：GET /api/v1/me/plays/tracks、GET /api/v1/me/plays/queue、DELETE /api/v1/me/plays/tracks/{track_id}；catalog LoadTrackSummaries；EXPLAIN 测量后不加迁移
+- 前端：侧栏“我的音乐”、/me/history 页签、行内播放与“更多”菜单、播放全部（1,000 候选）、缺失行、移除与清除确认、概览“全部历史”链接
+- 分工：后端与全部测试 GPT-6-Astra，前端 Opus 5.5，主会话审阅与提交；封面安全校验用例按后端合同裁决移除
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8fd37b2` | ci: actions 升到 Node 24 的 v7 主版本，runner 固定为 ubuntu-24.04 |
+| `0959f0a` | docs(task): 规划 M5 父任务与第一项历史页面 |
+| `55a2e70` | feat(listening): 按曲目汇总的历史接口 |
+| `8237728` | feat(frontend): 我的音乐的历史页签 |
+| `63609b1` | docs(task): 记录 M5 历史页面的实施结果与收尾验证 |
+| `9f9e7cc` | chore(task): archive 11-04-classical-m5-history |
+| `085d480` | docs(task): 修正 M5 历史页面归档后的相对链接，父任务标记第一项完成 |
+
+### Testing
+
+- [OK] 导出树：go test -race catalog/listening/app 533 通过 0 SKIP；Vitest 1,759；Playwright 131；playback-e2e.sh 45/45
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- M5 ② 收藏：按父任务立项规划
+- 本地提交未推送（用户说不推送）
