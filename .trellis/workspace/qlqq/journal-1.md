@@ -1238,3 +1238,45 @@ CI actions 升到 v7 并固定 ubuntu-24.04；规划 M5 父任务与历史页子
 - S 线变基后接上心形与添加到歌单，再做 ⑤ 艺人
 - 后续单独修正：密码提示按字符、校验按字节不一致
 - 本地提交未推送
+
+
+## Session 38: M5 ⑥ 扫描反馈（F 线变基、收尾与合入）
+<!-- trellis-session: v=2 fp=8daf150c94cb090a -->
+
+**Date**: 2026-11-04
+**Task**: M5 ⑥ 扫描反馈（F 线变基、收尾与合入）
+**Branch**: `m5-search-artists`
+
+### Summary
+
+F 线变基到含 P 线的 main（迁移改为 0023/0024），导出树全量全绿，截图复核后合入并归档
+
+### Main Changes
+
+- 扫描进度（多根加权、阶段、单调）、四种终态说明、扫描报告（新增/更新/消失、新增专辑与替身提示）、概览与专辑库“最近新增”
+- 认领合同改正扫描加锁描述：扫描反馈先锁发行、后锁组行，与治理顺序一致
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `34d944b` | feat(library): 扫描进度、报告与最近新增 |
+| `85ab070` | feat(frontend): 扫描进度、报告与最近新增 |
+| `a7f9dba` | fix(frontend): 最近新增只显示能排满的行 |
+| `5564a5a` | docs(task): 记录扫描反馈的实施结果，修正认领合同里扫描加锁的描述 |
+| `899cba6` | merge: M5 F 线：扫描反馈 |
+| `961c3c6` | chore(task): archive 11-04-classical-m5-scan-feedback |
+| `c825e0b` | docs(task): 修正扫描反馈归档后的相对链接，父任务标记该项完成 |
+
+### Testing
+
+- [OK] 导出树 a7f9dba：go race 570 顶层 0 FAIL 0 SKIP；Vitest 2713/0/0；Playwright 295/0/0；真实服务 48/0/0；web 一致
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- S 线：重放前端提交后接心形与添加到歌单，再做 ⑤ 艺人
+- 本地提交未推送
