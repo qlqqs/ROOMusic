@@ -22,7 +22,8 @@ describe("describeFailure", () => {
     expect(describeFailure(http("forbidden", 403)).message).toBe("你没有权限执行此操作。");
     expect(describeFailure(http("database_unavailable", 503)).message).toBe("服务暂时不可用，请稍后重试。");
     expect(describeFailure(http("unauthorized", 401)).message).toBe("登录已失效，请重新登录。");
-    expect(describeFailure(http("origin_forbidden", 403)).message).toContain("访问地址");
+    expect(describeFailure(http("origin_forbidden", 403)).message).toBe("请用正确的网址打开页面后重试。");
+    expect(describeFailure(http("origin_required", 403)).message).toBe("请用正确的网址打开页面后重试。");
   });
 
   it("feature 提供的错误码文案优先于通用文案", () => {

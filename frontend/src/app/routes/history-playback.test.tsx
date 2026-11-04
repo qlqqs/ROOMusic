@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSessionController, SessionProvider, ViewerScopeProvider } from "../../features/auth";
 import { PlayerEngine, PlayerProvider, MAX_QUEUE_ENTRIES } from "../../features/player";
+import { FavoriteStatusScope } from "../../features/personal";
 import { deferred } from "../../test/deferred";
 import { installFakeApi, installFakeSession } from "../../test/fake-api";
 import { FakeAudio } from "../../test/fake-audio";
@@ -12,7 +13,8 @@ import { historyItem, historyQueue } from "../../test/history-data";
 import { jsonResponse } from "../../test/http";
 import { silentPlayRecorder } from "../../test/play-recorder";
 import { playerTrack } from "../../test/player-data";
-import { HistoryPlayAll, HistoryTrackActions, playerTrackOfHistoryItem } from "./history-playback";
+import { HistoryPlayAll, HistoryTrackActions } from "./history-playback";
+import { playerTrackOfSummary as playerTrackOfHistoryItem } from "./track-playback";
 
 const dispose: (() => void)[] = [];
 afterEach(() => { for (const cleanup of dispose.splice(0)) cleanup(); vi.restoreAllMocks(); });
@@ -37,8 +39,8 @@ async function setup() {
   });
   vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue("probably");
   dispose.push(() => { engine.endSession(); controller.dispose(); client.clear(); });
-  const view = (children: ReactNode) => render(<QueryClientProvider client={client}><SessionProvider controller={controller}>
-    <ViewerScopeProvider viewer={state.viewer} generation={state.generation}><PlayerProvider userId={state.viewer.id} engine={engine}>{children}</PlayerProvider></ViewerScopeProvider>
+  const view = (children: ReactNode, trackIds: readonly string[] = []) => render(<QueryClientProvider client={client}><SessionProvider controller={controller}>
+    <ViewerScopeProvider viewer={state.viewer} generation={state.generation}><PlayerProvider userId={state.viewer.id} engine={engine}><FavoriteStatusScope trackIds={trackIds}>{children}</FavoriteStatusScope></PlayerProvider></ViewerScopeProvider>
   </SessionProvider></QueryClientProvider>);
   return { api, session, controller, engine, audio, view };
 }
@@ -77,7 +79,7 @@ describe("历史页播放动作", () => {
   it("行内播放替换旧队列，只放入这一首并开始预检/播放", async () => {
     const { engine, audio, view } = await setup();
     const item = historyItem(1);
-    view(<HistoryTrackActions item={item} onRemove={() => undefined} />);
+    view(<HistoryTrackActions item={item} onRemove={() => undefined} />, [item.track_id]);
     act(() => { engine.enqueue([playerTrack("old-1"), playerTrack("old-2")]); });
     await ready(`播放 ${item.title}`);
     await userEvent.click(screen.getByRole("button", { name: `播放 ${item.title}` }));
@@ -92,7 +94,7 @@ describe("历史页播放动作", () => {
     const { engine, audio, view } = await setup();
     const item = historyItem(1);
     const old = [playerTrack("old-1"), playerTrack("old-2")];
-    view(<HistoryTrackActions item={item} onRemove={() => undefined} />);
+    view(<HistoryTrackActions item={item} onRemove={() => undefined} />, [item.track_id]);
     await act(async () => { engine.playTracks(old); });
     act(() => { audio.loadMetadata(120); audio.beginPlaying(); audio.tick(12); });
     const current = engine.getSnapshot().current;
@@ -112,7 +114,7 @@ describe("历史页播放动作", () => {
   it.each(["下一首播放", "加入队列"])("队列满时 %s 提示且整队不变，不截断", async (action) => {
     const { engine, view } = await setup();
     const item = historyItem(1);
-    view(<HistoryTrackActions item={item} onRemove={() => undefined} />);
+    view(<HistoryTrackActions item={item} onRemove={() => undefined} />, [item.track_id]);
     act(() => { engine.enqueue(Array.from({ length: MAX_QUEUE_ENTRIES }, () => playerTrack("old"))); });
     const before = engine.getSnapshot().queue;
     await ready(`播放 ${item.title}`);

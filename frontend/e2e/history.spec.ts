@@ -81,6 +81,11 @@ for (const width of widths) {
     await expect(row(page, long.title).getByRole("button", { name: `播放 ${long.title}`, exact: true })).toBeEnabled();
     await expect(row(page, missing.title).getByText("文件缺失", { exact: true })).toBeVisible();
     await expect(row(page, missing.title).getByRole("link")).toHaveCount(0);
+    for (const item of [long, missing]) {
+      const heart = row(page, item.title).getByRole("button", { name: `收藏《${item.title}》`, exact: true });
+      await expect(heart).toBeEnabled();
+      await expect(heart).toHaveAttribute("aria-pressed", "false");
+    }
     const muted = await row(page, missing.title).getByText(missing.title, { exact: true }).evaluate((element) => ({ color: getComputedStyle(element).color, secondary: getComputedStyle(document.documentElement).getPropertyValue("--text-secondary").trim() }));
     const secondaryColor = await page.evaluate((value) => { const element = document.createElement("span"); element.style.color = value; document.body.append(element); const color = getComputedStyle(element).color; element.remove(); return color; }, muted.secondary);
     expect(muted.color).toBe(secondaryColor);
@@ -93,7 +98,9 @@ for (const width of widths) {
     // 长表格先滚到操作区，等浏览器交付滚动事件后再点击，避免自动定位的旧 scroll 事件关闭刚打开的菜单。
     await more.evaluate((element) => element.scrollIntoView({ block: "center" }));
     await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    await expect(more).toBeEnabled();
     await more.click();
+    await expect(page.getByRole("menuitem", { name: "添加到歌单…" })).toBeEnabled();
     await expect(page.getByRole("menuitem", { name: "下一首播放" })).toBeDisabled();
     await expect(page.getByRole("menuitem", { name: "加入队列" })).toBeDisabled();
     await page.getByRole("menuitem", { name: "从历史中移除" }).click();
@@ -120,6 +127,9 @@ test("纯键盘：侧栏进入我的音乐，行内播放，更多→移除→�
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1, name: "概览" })).toBeVisible();
   await keyboardActivate(page, page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: "我的音乐" }));
+  await expect(page).toHaveURL(/\/me\/favorites$/);
+  await expect(page.getByRole("navigation", { name: "我的音乐", exact: true }).getByRole("link", { name: "收藏", exact: true })).toHaveAttribute("aria-current", "page");
+  await keyboardActivate(page, page.getByRole("navigation", { name: "我的音乐", exact: true }).getByRole("link", { name: "历史", exact: true }));
   await expect(page).toHaveURL(/\/me\/history$/);
   await expect(table(page)).toBeVisible();
   const play = row(page, first.title).getByRole("button", { name: `播放 ${first.title}`, exact: true });
@@ -129,6 +139,7 @@ test("纯键盘：侧栏进入我的音乐，行内播放，更多→移除→�
   await expect(bar.getByText("正在播放", { exact: true })).toBeVisible();
   await expect(bar).toContainText(first.title);
   await keyboardActivate(page, row(page, first.title).getByRole("button", { name: "更多" }));
+  await expect(page.getByRole("menuitem", { name: "添加到歌单…" })).toBeEnabled();
   await page.keyboard.press("End");
   await expect(page.getByRole("menuitem", { name: "从历史中移除" })).toBeFocused();
   await page.keyboard.press("Enter");
@@ -162,8 +173,10 @@ test("概览全部历史链接直达历史页，/me 直接访问重定向，地�
   await expect(page).toHaveURL(/\/me\/history$/);
   await expect(table(page)).toBeVisible();
   await page.goto("/me");
-  await expect(page).toHaveURL(/\/me\/history$/);
-  await expect(page.getByRole("link", { name: "历史", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page).toHaveURL(/\/me\/favorites$/);
+  const tabs = page.getByRole("navigation", { name: "我的音乐", exact: true });
+  await expect(tabs.getByRole("link")).toHaveText(["收藏", "歌单", "历史"]);
+  await expect(tabs.getByRole("link", { name: "收藏", exact: true })).toHaveAttribute("aria-current", "page");
   await page.goto("/me/history?page=2");
   await expect(row(page, "历史曲目 51")).toBeVisible();
   await expect(row(page, "历史曲目 1")).toHaveCount(0);

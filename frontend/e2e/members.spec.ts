@@ -44,7 +44,7 @@ test.describe("成员管理", () => {
 
     await row("listener").getByRole("button", { name: "停用成员 listener" }).click();
     const dialog = page.getByRole("dialog", { name: "停用成员“listener”？" });
-    await expect(dialog).toContainText("立即退出登录");
+    await expect(dialog.getByText("停用后对方会马上退出登录，之后可以重新启用。", { exact: true })).toBeVisible();
     await dialog.getByRole("button", { name: "停用成员" }).click();
     await expect(page.getByText(/已停用成员“listener”/)).toBeVisible();
     await expect(row("listener")).toContainText("已停用");

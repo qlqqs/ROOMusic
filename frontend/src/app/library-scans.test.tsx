@@ -38,7 +38,7 @@ afterEach(() => {
 });
 
 describe("扫描目录页：扫描区段", () => {
-  it("没有活动扫描：说明扫描范围，提供“开始扫描”", async () => {
+  it("没有活动扫描：显示空闲提示，提供“开始扫描”", async () => {
     setup();
     renderApp({ path: "/library" });
     expect(await screen.findByText("没有正在运行的扫描。")).toBeTruthy();

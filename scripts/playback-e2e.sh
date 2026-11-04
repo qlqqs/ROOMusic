@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 只使用合成素材、独立数据库和 roomusic-test；不读取 .env 或真实音乐目录。
+# 只使用合成素材、独立数据库和独占测试项目；不读取 .env 或真实音乐目录。
 # ALAC 的派生播放用 scripts/ffmpeg-pinned.sh 取出的固定版本 ffmpeg（经 ROOMUSIC_FFMPEG_PATH 交给隔离服务）；取不到时脚本失败，
 # 不会静默退回“ALAC 不能播放”。
 set -Eeuo pipefail
@@ -8,22 +8,28 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 for dependency in docker go npm python3 curl flock; do
   command -v "$dependency" >/dev/null || { echo "缺少依赖：$dependency" >&2; exit 1; }
 done
+# 默认保持原测试项目；并行实现线可显式选择带安全前缀的独占项目。
+COMPOSE_PROJECT="${ROOMUSIC_TEST_COMPOSE_PROJECT:-roomusic-test}"
+[[ "$COMPOSE_PROJECT" =~ ^roomusic-test(-[a-z0-9]+)*$ ]] || {
+  echo '测试项目必须是 roomusic-test 或其小写字母数字后缀项目' >&2; exit 1;
+}
 docker info >/dev/null
 # 与其他使用同一 Compose project 的本入口互斥；已存在的测试容器也不能接管。
 exec 9>"${TMPDIR:-/tmp}/roomusic-playback-e2e.lock"
 flock -n 9 || { echo '已有真实播放测试运行中' >&2; exit 1; }
-[[ -z "$(docker ps -aq --filter label=com.docker.compose.project=roomusic-test)" ]] || {
-  echo 'roomusic-test 已存在；请先结束其他集成测试，本入口不接管已有容器' >&2; exit 1;
-}
-[[ -z "$(docker volume ls -q --filter label=com.docker.compose.project=roomusic-test)" ]] || {
-  echo 'roomusic-test 已有数据卷；拒绝接管历史测试数据' >&2; exit 1;
+# 查询失败必须停下；同时拒绝孤立网络，不能在清理时接管别人的残留资源。
+existing_containers="$(docker ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT")" || { echo '无法检查已有测试容器' >&2; exit 1; }
+existing_volumes="$(docker volume ls -q --filter "label=com.docker.compose.project=$COMPOSE_PROJECT")" || { echo '无法检查已有测试数据卷' >&2; exit 1; }
+existing_networks="$(docker network ls -q --filter "label=com.docker.compose.project=$COMPOSE_PROJECT")" || { echo '无法检查已有测试网络' >&2; exit 1; }
+[[ -z "$existing_containers$existing_volumes$existing_networks" ]] || {
+  echo "$COMPOSE_PROJECT 已有容器、数据卷或网络；拒绝接管历史测试资源" >&2; exit 1;
 }
 # 先于任何临时资源取出 ffmpeg：它只用 docker create/cp（不属于 roomusic-test 项目），失败就直接退出。
 FFMPEG_PATH="$("$ROOT_DIR/scripts/ffmpeg-pinned.sh")"
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/roomusic-playback-e2e.XXXXXXXX")"
 SERVER_PID=''
 COMPOSE_STARTED=false
-COMPOSE=(docker compose --env-file /dev/null -f "$ROOT_DIR/compose.test.yaml" -p roomusic-test)
+COMPOSE=(docker compose --env-file /dev/null -f "$ROOT_DIR/compose.test.yaml" -p "$COMPOSE_PROJECT")
 cleanup() {
   local result=$?
   trap - EXIT INT TERM
@@ -99,6 +105,7 @@ PYCONFIG
 (cd "$ROOT_DIR/frontend" && npm exec tsc -- --noEmit && npm exec vite -- build --config "$TEMP_DIR/vite.config.mts" --outDir "$TEMP_DIR/backend/cmd/roomusic/web" --emptyOutDir)
 (cd "$TEMP_DIR/backend" && go build -o "$TEMP_DIR/roomusic" ./cmd/roomusic)
 # 编译门禁通过后才启动 PostgreSQL，避免源码尚未稳定时创建测试数据库。
+printf '隔离测试：project=%s database=%s pg_port=%s compose=%s\n' "$COMPOSE_PROJECT" "$ROOMUSIC_TEST_PG_DATABASE" "$ROOMUSIC_TEST_PG_PORT" "$ROOT_DIR/compose.test.yaml"
 COMPOSE_STARTED=true
 "${COMPOSE[@]}" up -d --wait postgres
 PORT="$(free_port)"

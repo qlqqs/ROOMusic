@@ -93,10 +93,16 @@ M3 起，发行字段修正、人工归组与撤销（M4 起还有默认版本�
 
 **迁移 0020（M4，认领）**：不新增表，只放宽 `operations_type_ck`（增加 `release_claim`）并建一个部分表达式索引 `operations_claim_source_index`（`after_state #>> '{source,release_id}'`，只含认领与它们的撤销记录），让操作记录能按**来源**发行筛选。认领按“记录 → 发行行（UUID 升序）→ 组行（UUID 升序）”加锁，新版本归入旧版本原来的组，旧版本移进新建的空组（组从不删除）；扫描仍不读写这四类状态。规则见[认领合同](./claim-contracts.md)。
 
+**迁移 0021/0022（M5 P 线，本分支编号）**：独立typed收藏与歌单能力，不借用 `operations.Run`。收藏共用本人集合版本；歌单使用PKEY/PQUO事务锁、间隔键、同事务成功收据与适应撤销。成功收据不随歌单删除，撤销可暂时超过普通10,000首配额；强owner复合外键与引用RESTRICT规则见[本人收藏与歌单合同](./personal-contracts.md)。新增表属于additive迁移，fresh/rerun仍由现有执行器校验，不改既有迁移。
+
 Do not hold a database transaction open while walking a library tree or reading
 audio tags. Persist scan progress in bounded batches and finalize the scan with
 a transaction that applies negative reconciliation only when the outcome is
 complete and successful.
+
+## 延迟敏感只读事务与 JIT
+
+延迟敏感的只读请求可在 `BeginTx` 成功后、业务查询前，用该 `*sql.Tx.ExecContext(ctx, "SET LOCAL jit = off")` 去除 JIT 编译开销；设置失败按查询错误返回并回滚，不能继续读取。只影响当前事务，禁止会话级 `SET`、连接池初始化参数或数据库全局修改。采用者必须有集成测试验证事务内 `current_setting('jit')='off'`，提交/回滚后在同一连接（核对 backend PID）恢复调用前默认值，并测试设置失败后不执行业务查询、不泄漏事务。应保留实际规模的执行计划与延迟证据，尽量从查询形状修复空表误估；禁止更改 `enable_*` 等 planner 开关、其他优化器参数、在业务事务执行 `ANALYZE` 或缩小性能夹具。该许可不扩展到写事务。
 
 ## Domain Integrity
 

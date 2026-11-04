@@ -1,0 +1,95 @@
+/* 歌单的对话框（新建、改名、添加到歌单）：与确认对话框同一种版面。 */
+.dialog {
+  width: min(480px, calc(100vw - 2 * var(--space-4)));
+}
+
+.content {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-4);
+}
+
+/* 标题与下面的表单分开渲染时（表单可以单独复用），标题区不留下边距。 */
+.header {
+  padding: var(--space-4) var(--space-4) 0;
+}
+
+.header + .content {
+  padding-top: var(--space-3);
+}
+
+.title {
+  font-size: var(--fs-20);
+}
+
+.subject {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+/* 歌单的选择列表：每个歌单一行按钮，名字可以很长，数量与“已在歌单里”在下一行。 */
+.list {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.option {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  min-height: var(--control-height);
+  padding: var(--space-2);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.option:enabled:hover {
+  background: var(--color-hover);
+}
+
+.option:enabled:active {
+  background: var(--color-pressed);
+}
+
+.option:disabled {
+  color: var(--text-secondary);
+  cursor: not-allowed;
+}
+
+.option[aria-busy="true"] {
+  cursor: progress;
+}
+
+.optionName {
+  overflow-wrap: anywhere;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+}
+
+.optionMeta {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.more {
+  justify-self: start;
+}

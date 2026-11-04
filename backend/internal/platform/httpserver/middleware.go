@@ -39,6 +39,13 @@ func Middleware(logger *slog.Logger, next http.Handler) http.Handler {
 		recorded := &recordingResponseWriter{ResponseWriter: responseWriter}
 		started := time.Now()
 		defer func() {
+			// 子 mux 会把同一请求的 Pattern 更新为实际叶子路由；只记录注册模板，不回退到原始 URL。
+			if request.Pattern != "" {
+				routeTemplate = request.Pattern
+				if isAPIFallbackPattern(routeTemplate) {
+					routeTemplate = "<unmatched>"
+				}
+			}
 			level := slog.LevelInfo
 			status := recorded.statusCode()
 			if recovered := recover(); recovered != nil {

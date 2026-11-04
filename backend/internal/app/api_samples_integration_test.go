@@ -822,12 +822,30 @@ func (recorder *apiSampleRecorder) record(name string, response *httptest.Respon
 	recorder.samples[name] = encodeAPISample(t, name, response.Code, response.Body.Bytes())
 }
 
-// finish 在比较模式下要求样本与提交的文件逐字一致、没有多余文件；更新模式下重写整个目录。
+// finish 只维护原有合同样本；personal 的独立 recorder 负责自己的目录与错误前缀。
 func (recorder *apiSampleRecorder) finish() {
 	t := recorder.t
 	t.Helper()
 	if os.Getenv(updateAPISamplesEnv) == "1" {
-		if err := os.RemoveAll(apiSamplesDirectory); err != nil {
+		if err := filepath.WalkDir(apiSamplesDirectory, func(path string, entry fs.DirEntry, walkErr error) error {
+			if os.IsNotExist(walkErr) {
+				return nil
+			}
+			if walkErr != nil {
+				return walkErr
+			}
+			if entry.IsDir() {
+				return nil
+			}
+			relative, err := filepath.Rel(apiSamplesDirectory, path)
+			if err != nil {
+				return err
+			}
+			if isPersonalAPISample(filepath.ToSlash(relative)) {
+				return nil
+			}
+			return os.Remove(path)
+		}); err != nil {
 			t.Fatalf("clear sample directory: %v", err)
 		}
 		for name, content := range recorder.samples {
@@ -848,11 +866,17 @@ func (recorder *apiSampleRecorder) finish() {
 		if err != nil || entry.IsDir() {
 			return err
 		}
+		relative, relErr := filepath.Rel(apiSamplesDirectory, path)
+		if relErr != nil {
+			return relErr
+		}
+		if isPersonalAPISample(filepath.ToSlash(relative)) {
+			return nil
+		}
 		content, readErr := os.ReadFile(path)
 		if readErr != nil {
 			return readErr
 		}
-		relative, _ := filepath.Rel(apiSamplesDirectory, path)
 		committed[strings.TrimSuffix(filepath.ToSlash(relative), ".json")] = content
 		return nil
 	})
@@ -1033,4 +1057,9 @@ func (normalizer *sampleNormalizer) replace(value any) any {
 		})
 	}
 	return value
+}
+
+// isPersonalAPISample 将独立样本套件隔离，更新旧样本不能删除新能力的证据。
+func isPersonalAPISample(name string) bool {
+	return strings.HasPrefix(name, "favorites/") || strings.HasPrefix(name, "playlists/") || strings.HasPrefix(name, "errors/personal-")
 }

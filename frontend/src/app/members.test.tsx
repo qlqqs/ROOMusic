@@ -208,7 +208,7 @@ describe("新建成员", () => {
     expect(api.requestsTo("POST", usersPath)[0]?.body).toEqual({ username: "han", password: "密码密码" });
   });
 
-  it("密码最多 72 个字节：超出时不发请求，字段提示当前字节数；恰好 72 个字节（24 个汉字）可以", async () => {
+  it("密码最多 72 个字节：超出时不发请求，字段提示密码太长；恰好 72 个字节（24 个汉字）可以", async () => {
     const { api } = await openMembers();
     await fillForm("wide", "字".repeat(25));
     await create();
@@ -288,7 +288,7 @@ describe("新建成员", () => {
 });
 
 describe("停用、重新启用与撤销会话", () => {
-  it("停用前要确认：对话框说明会立即退出登录、会话全部撤销，初始焦点在取消上；取消不发请求", async () => {
+  it("停用前要确认：对话框说明会马上退出登录、之后可重新启用，初始焦点在取消上；取消不发请求", async () => {
     const { api } = await openMembers();
     await userEvent.click(within(rowOf("listener")).getByRole("button", { name: "停用成员 listener" }));
     const dialog = await screen.findByRole("dialog", { name: "停用成员“listener”？" });

@@ -435,7 +435,7 @@ describe("专辑列表：空库与失败", () => {
     expect(screen.getByText("共 0 张专辑")).toBeTruthy();
   });
 
-  it("资料库没有专辑：普通用户只被告知等待管理员，没有管理入口", async () => {
+  it("资料库没有专辑：普通用户只显示空库提示，没有管理入口", async () => {
     setup({ role: "user", groups: [] });
     renderApp({ path: "/albums" });
     expect(await screen.findByText("资料库里还没有专辑。")).toBeTruthy();

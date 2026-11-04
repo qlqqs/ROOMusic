@@ -18,8 +18,10 @@ type HistoryViewProps = {
   page: number;
   /** 顶部的“播放全部”：由 app 组合播放器动作（listening 不导入 player）；只在有历史时显示。 */
   renderPlayAll: () => ReactNode;
-  /** 一行的播放按钮与“更多”菜单：由 app 组合播放器动作；requestRemove 打开这里的移除确认。 */
+  /** 一行的播放按钮、心形与“更多”菜单：由 app 组合播放器与收藏动作；requestRemove 打开这里的移除确认。 */
   renderTrackActions: (item: HistoryItemDTO, requestRemove: () => void) => ReactNode;
+  /** 包住这一页表格的范围（例如一次读出这一页的收藏状态）：由 app 组合，listening 不知道里面是什么。 */
+  renderRowsScope?: ((items: readonly HistoryItemDTO[], children: ReactNode) => ReactNode) | undefined;
 };
 
 /** 结果提示：移除或清除成功后显示在区块顶部，换页后不再显示移除的提示。 */
@@ -53,7 +55,7 @@ function PlayedAt({ value }: { value: string }) {
  * 文件缺失的曲目灰色显示并标“文件缺失”，专辑名不做链接（专辑可能已不可见），不能播放但能移除；文件回来后由数据自然恢复。
  * 移除与清除都先确认；成功后焦点回到区块标题（打开对话框的控件可能已经不在了），并用状态提示说明结果。
  */
-export function HistoryView({ page, renderPlayAll, renderTrackActions }: HistoryViewProps) {
+export function HistoryView({ page, renderPlayAll, renderTrackActions, renderRowsScope }: HistoryViewProps) {
   const history = useHistoryTracks(page);
   const remove = useRemoveHistoryTrack();
   const clear = useClearPlayHistory();
@@ -138,6 +140,7 @@ export function HistoryView({ page, renderPlayAll, renderTrackActions }: History
     [renderTrackActions],
   );
 
+  const table = (items: readonly HistoryItemDTO[]) => <DataTable caption="播放历史" columns={columns} rows={items} rowKey={(item) => item.track_id} />;
   const hasHistory = history.data?.has_history === true;
   const closeRemove = () => setRemoving(null);
   const closeClear = () => setClearing(false);
@@ -177,7 +180,7 @@ export function HistoryView({ page, renderPlayAll, renderTrackActions }: History
                   </p>
                 ) : (
                   <>
-                    <DataTable caption="播放历史" columns={columns} rows={data.items} rowKey={(item) => item.track_id} />
+                    {renderRowsScope === undefined ? table(data.items) : renderRowsScope(data.items, table(data.items))}
                     <p className={styles.note}>
                       共 {formatCount(data.pagination.total)} 首曲目
                     </p>

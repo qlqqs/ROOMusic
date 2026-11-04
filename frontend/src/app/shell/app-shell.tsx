@@ -4,7 +4,12 @@ import { useEffect, useId, useRef, useState, type MouseEvent, type ReactNode } f
 import { useViewerScope } from "../../features/auth";
 import { usePlayerSelector, PlayerBar, PlayerAnnouncement } from "../../features/player";
 import { Button, ModalDialog } from "../../shared/ui";
+import { CurrentTrackFavorite } from "../player-personal-actions";
+import type { PlayerTrack } from "../../features/player";
 import styles from "./app-shell.module.css";
+
+// 播放器栏当前曲目旁的心形：放不下提示文字，失败的那句只给读屏。模块级函数，引用保持不变。
+const renderBarTrackActions = (track: PlayerTrack) => <CurrentTrackFavorite track={track} message="screen-reader" />;
 import { Brand } from "./brand";
 import { IdentityPanel } from "./identity-panel";
 import { PrimaryNav } from "./primary-nav";
@@ -71,7 +76,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <main id="main" ref={mainRef} tabIndex={-1} className={styles.main}>
         {children}
       </main>
-      {hasPlayer ? <div ref={playerRef} className={styles.player}><PlayerBar /></div> : null}
+      {hasPlayer ? <div ref={playerRef} className={styles.player}><PlayerBar renderCurrentTrackActions={renderBarTrackActions} /></div> : null}
       <ModalDialog open={menuOpen} titleId={menuTitleId} className={styles.drawer} onRequestClose={() => setMenuOpen(false)}>
         <div className={styles.drawerContent}>
           <div className={styles.drawerHeader}>

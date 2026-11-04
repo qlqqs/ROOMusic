@@ -123,7 +123,7 @@ describe("新增目录", () => {
     expect(within(rowOf("classical-b")).getByText("已停用")).toBeTruthy();
   });
 
-  it("路径已登记且启用：说明列表没有变化", async () => {
+  it("路径已登记且启用：提示已经添加过", async () => {
     await openLibrary();
     await addRoot("/music/classical-a");
     expect(await screen.findByText(/已经添加过了。/)).toBeTruthy();

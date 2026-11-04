@@ -7,6 +7,6 @@ export { playModes, upNext, MAX_QUEUE_ENTRIES, type PlayMode, type PlayerTrack, 
 export { playerTrackOf, playerTracksOf } from "./engine/tracks";
 export { unplayableText, type CapabilityTable, type TrackVerdict } from "./engine/capability";
 export { NowPlayingPage } from "./pages/now-playing-page";
-export { AlbumPlaybackActions, TrackPlaybackActions } from "./components/album-playback-actions";
+export { AlbumPlaybackActions } from "./components/album-playback-actions";
 export { PlayerBar } from "./components/player-bar";
 export { PlayerAnnouncement } from "./components/player-feedback";

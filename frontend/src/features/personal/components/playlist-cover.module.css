@@ -1,0 +1,9 @@
+/* 四张封面拼成的方格：整体仍是正方形，与单张封面同样大小。 */
+.mosaic {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  aspect-ratio: 1;
+}

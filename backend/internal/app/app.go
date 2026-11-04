@@ -19,6 +19,8 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/listening"
 	listeningapi "github.com/qlqq/roomusic/backend/internal/listening/httpapi"
 	operationsapi "github.com/qlqq/roomusic/backend/internal/operations/httpapi"
+	"github.com/qlqq/roomusic/backend/internal/personal"
+	personalapi "github.com/qlqq/roomusic/backend/internal/personal/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/platform/config"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"github.com/qlqq/roomusic/backend/internal/playback"
@@ -75,6 +77,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		PreflightWait: assembly.playbackPreflightWait,
 	}).Register(mux)
 	listeningapi.New(guard, listening.NewService(database)).Register(mux)
+	personalapi.New(guard, personal.NewService(database)).Register(mux)
 	httpserver.RegisterAPIFallback(mux, httpserver.APINotFoundHandler(mux))
 	mux.Handle("/", httpserver.Frontend(frontend))
 	return &App{mux: mux, handler: httpserver.Middleware(logger, mux), library: libraryService}

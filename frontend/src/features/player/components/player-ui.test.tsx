@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Profiler, useSyncExternalStore, type ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { albumGroup, releaseDetailOf } from "../../../test/catalog-data";
 import { FakeAudio } from "../../../test/fake-audio";
@@ -13,7 +13,7 @@ import { ApiError } from "../../../shared/api";
 import { PlayerEngine, type EngineDeps, type PlayerProgress, type PlayerSnapshot } from "../engine/player-engine";
 import type { CapabilityTable } from "../engine/capability";
 import type { TrackPlaybackResult } from "../api/endpoints";
-import { AlbumPlaybackActions, TrackPlaybackActions } from "./album-playback-actions";
+import { AlbumPlaybackActions } from "./album-playback-actions";
 import { PlayerBar } from "./player-bar";
 import { PlayerControls } from "./player-controls";
 import { PlayerAnnouncement, PlayerFeedback } from "./player-feedback";
@@ -311,14 +311,14 @@ describe("播放界面", () => {
     expect(screen.getByText(/网页看不到声卡/)).toBeTruthy();
     expect(document.body.textContent).not.toContain("Bit-perfect");
   });
-  it("信号路径的服务端一栏按交付方式写明：直出原文件，或无损转换并核对 PCM", () => {
+  it("信号路径按交付方式区分直出与无损转换，不展示 PCM 校验细节", () => {
     engine.enqueue([playerTrack("1", { source: { sourceKind: "m4a", codec: "alac", bitDepth: 24, sampleRate: 96000, channels: 2, bitrate: null } })]);
     table = { ...table, deliveryOf: () => "derived" };
     const derived = view(<SignalPath />);
     const stage = screen.getByRole("heading", { name: "服务端" }).closest("li");
     expect(stage?.textContent).toContain("无损转换");
-    expect(stage?.textContent).toContain("重新编码为 FLAC，位深、采样率与声道不变");
-    expect(stage?.textContent).toContain("PCM 一致");
+    expect(stage?.textContent).toContain("ALAC 转成 FLAC，位深、采样率与声道不变。");
+    expect(stage?.textContent).not.toContain("PCM");
     expect(stage?.textContent).not.toContain("原文件直出");
     derived.unmount();
 
@@ -398,37 +398,5 @@ describe("专辑播放入口", () => {
     view(<AlbumPlaybackActions release={release()} groupId="group-1" />);
     expect(screen.getByRole("button", { name: "播放整张专辑" }).getAttribute("disabled")).not.toBeNull();
     expect(screen.getByText(/这个版本没有能播放的曲目/)).toBeTruthy();
-  });
-  it("曲目动作只取引擎不订阅快照：调音量、加入队列都不重绘任何一行", () => {
-    const detail = release();
-    const tracks = detail.media[0]?.tracks ?? [];
-    let commits = 0;
-    view(<Profiler id="track-actions" onRender={() => { commits += 1; }}>{tracks.map((track) => <TrackPlaybackActions key={track.id} release={detail} track={track} groupId="group-1" />)}</Profiler>);
-    commits = 0;
-    act(() => { engine.setVolume(0.5); });
-    act(() => { engine.enqueue([playerTrack("1")]); });
-    expect(engine.getSnapshot().queue.entries).toHaveLength(1);
-    expect(commits).toBe(0);
-  });
-  it("ALAC 和 CUE 的禁用原因可见，不只依赖悬停", () => {
-    const detail = release();
-    const tracks = detail.media[0]?.tracks ?? [];
-    view(<>{tracks.slice(1).map((track) => <TrackPlaybackActions key={track.id} release={detail} track={track} groupId="group-1" />)}</>);
-    for (const button of screen.getAllByRole("button", { name: "从这首开始播放" })) expect(button.getAttribute("disabled")).not.toBeNull();
-    expect(screen.getByText("当前浏览器不能解码 ALAC")).toBeTruthy();
-    expect(screen.getByText("CUE 分轨曲目需要切分，目前不能播放")).toBeTruthy();
-  });
-  it("单曲更多菜单下一首播放与加入队列，满队列显示原因", async () => {
-    const detail = release();
-    const track = detail.media[0]?.tracks[0];
-    if (track === undefined) throw new Error("缺少测试曲目");
-    view(<TrackPlaybackActions release={detail} track={track} groupId="group-1" />);
-    await userEvent.click(screen.getByRole("button", { name: "更多" }));
-    await userEvent.click(screen.getByRole("menuitem", { name: "下一首播放" }));
-    expect(engine.getSnapshot().queue.entries).toHaveLength(1);
-    vi.spyOn(engine, "enqueue").mockReturnValue("queue_full");
-    await userEvent.click(screen.getByRole("button", { name: "更多" }));
-    await userEvent.click(screen.getByRole("menuitem", { name: "加入队列" }));
-    expect(screen.getByText("队列已满，请先移除一些条目。")).toBeTruthy();
   });
 });

@@ -3,7 +3,7 @@
 ## 现状与意图
 
 2026-10-01 的 M1a 已按下面的结构重建 `frontend/src/`。目录只为获批页面和真实消费者建立，不预建空文件夹；
-M2a 已建立 `player`，M3 已建立 `governance`；`curation`、通用 `operations`（Change Set 与审批）、`artists`、`personal`、`steward` 随对应获批阶段建立，
+M2a 已建立 `player`，M3 已建立 `governance`，M5 ② ③ 已建立 `personal`；`curation`、通用 `operations`（Change Set 与审批）、`artists`、`steward` 随对应获批阶段建立，
 基础 Release 搜索由 `catalog` 拥有，不为它新增搜索服务。阶段命名和依赖见 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)。
 设计变量集中在 `styles/`，不复制设计工具的运行时。
 
@@ -30,6 +30,7 @@ frontend/
     │   ├── library/                # 目录、目录操作记录、扫描记录、扫描详情与诊断
     │   ├── player/                 # 播放器：api、engine（含计次跟踪器、歌词分组与定位）、provider、能力查询、底栏、歌词面板与正在播放页
     │   ├── listening/              # 播放历史：播放上报器（带幂等键、有限重试、会话结束作废）、概览的“最近播放”区块与“我的音乐”的历史页签（M5 ①）
+    │   ├── personal/               # 收藏与歌单（M5 ② ③）：心形与批量收藏状态、收藏页、歌单列表与详情（拖动与菜单排序、撤销）、“添加到歌单…”与新建对话框、跨标签页刷新
     │   ├── governance/             # 受治理操作（M3，管理员）：编辑发行信息、调整归组、设定默认版本（M4）、撤销、操作记录页与专辑详情的“修改记录”
     │   └── catalog/                # 专辑：列表（M1b）、详情（M1b）、封面、证据展示、默认版本标签与版本对比（M4），以及概览的计数（M1a）
     ├── shared/
@@ -109,7 +110,12 @@ features/governance/
   不导入 player：`player` 导入它的上报器，概览页（app 层）组合区块。历史页的播放动作由 app 组合：`HistoryView` 经插槽 `renderPlayAll` 与
   `renderTrackActions(item, requestRemove)` 接收 `app/routes/history-playback.tsx` 里的“播放全部”与行内播放/“更多”菜单，菜单里的“从历史中移除”调用插槽给的
   `requestRemove`（确认对话框仍归 listening）。`HistoryItem → PlayerTrack` 的映射（`playerTrackOfHistoryItem`）也在 app：player 只经 catalog 公开合同读发行，不认识历史条目。
-  “我的音乐”的布局与页签（`app/routes/me-layout.tsx`）在 app，后续页签（收藏、歌单）沿用同一布局。
+  “我的音乐”的布局与页签（`app/routes/me-layout.tsx`）在 app，页签顺序是收藏、歌单、历史，三个页签共用；`/me` 默认打开收藏。
+- `personal`（M5 ② ③）拥有收藏与歌单：API 与解码器、查询键、心形与批量收藏状态范围、收藏页与歌单页的内容、“添加到歌单…”与新建/改名对话框、
+  “播放全部”候选的读取与跨标签页刷新；只导入 catalog 的公开合同（封面、卡片网格、曲目安全摘要），不导入 player、listening。
+  曲目行的统一动作（`app/routes/track-actions.tsx`：播放、心形、“更多”）、曲目安全摘要到队列曲目的映射（`track-playback.ts`）、收藏与歌单的“播放全部”
+  （`personal-playback.tsx`）以及播放器栏、队列上的心形与“存为歌单”（`app/player-personal-actions.tsx`，经 player 的中立插槽）都在 app。
+  细节见[收藏与歌单的前端约定](./personal-guidelines.md)。
 - `governance`（M3）拥有管理员对发行的受治理写操作的界面与命令状态：编辑发行信息、调整归组、撤销、操作记录页与专辑详情的“修改记录”；
   M4 起还有专辑的默认版本（设定、改回自动选择与撤销）与“元数据问题”页（`/issues`：问题列表与详情、核对、取消核对与撤销，专辑详情的“查看问题”经现有插槽）与“待认领”页（`/claims`：把已不可见的旧版本上的修改认领给新版本，专辑详情的“可能接替了……”提示经同一个插槽）。
   只读的默认版本标签与版本对比（所有成员可见）在 catalog；问题页用的证据字段与原因码的中文名由 catalog 公开。

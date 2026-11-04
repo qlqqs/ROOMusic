@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_PASSWORD_BYTES, MIN_PASSWORD_BYTES, utf8ByteLength, validateNewAccount } from "./account-rules";
+import { MAX_PASSWORD_BYTES, utf8ByteLength, validateNewAccount } from "./account-rules";
 
 describe("utf8ByteLength", () => {
   it("按 UTF-8 字节计算：英文 1 字节、中文 3 字节、emoji 4 字节", () => {
@@ -24,19 +24,19 @@ describe("validateNewAccount", () => {
 
   it("密码至少 12 个字节：4 个中文字符恰好 12 字节，3 个中文字符不够", () => {
     expect(validateNewAccount({ ...valid, password: "密码密码", confirmation: "密码密码" })).toEqual({});
-    expect(validateNewAccount({ ...valid, password: "密码密", confirmation: "密码密" }).password).toContain(String(MIN_PASSWORD_BYTES));
+    expect(validateNewAccount({ ...valid, password: "密码密", confirmation: "密码密" }).password).toBe("密码至少要 12 个字符。");
     expect(validateNewAccount({ ...valid, password: "12345678901", confirmation: "12345678901" }).password).toBeDefined();
     expect(validateNewAccount({ ...valid, password: "123456789012", confirmation: "123456789012" })).toEqual({});
   });
 
-  it("密码最多 72 个字节（bcrypt 的上限）：72 字节可以，73 字节不行，提示里带当前字节数", () => {
+  it("密码最多 72 个字节（bcrypt 的上限）：72 字节可以，超限只提示密码太长", () => {
     const atLimit = "a".repeat(MAX_PASSWORD_BYTES);
     expect(validateNewAccount({ ...valid, password: atLimit, confirmation: atLimit })).toEqual({});
     const over = "a".repeat(MAX_PASSWORD_BYTES + 1);
     expect(validateNewAccount({ ...valid, password: over, confirmation: over }).password).toBe("密码太长了，请短一些。");
     // 24 个中文字符恰好 72 字节，25 个是 75 字节。
     expect(validateNewAccount({ ...valid, password: "字".repeat(24), confirmation: "字".repeat(24) })).toEqual({});
-    expect(validateNewAccount({ ...valid, password: "字".repeat(25), confirmation: "字".repeat(25) }).password).toContain("75");
+    expect(validateNewAccount({ ...valid, password: "字".repeat(25), confirmation: "字".repeat(25) }).password).toBe("密码太长了，请短一些。");
   });
 
   it("两次输入的密码必须一致；密码本身不合格时只提示密码", () => {

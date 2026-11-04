@@ -1,0 +1,9 @@
+{
+  "fixture": "10000 present 曲目、一个发行、本机 TCP、真实 app handler；非浏览器 decoder",
+  "go_json_decode_p50_ms": 101.246633,
+  "go_json_decode_p95_ms": 122.856078,
+  "response_bytes": 5400390,
+  "samples": 5,
+  "tcp_http_p50_ms": 353.457185,
+  "tcp_http_p95_ms": 398.643305
+}

@@ -27,8 +27,24 @@
   `TrackAudioFacts` 为 `SourceKind string; Codec *string; BitDepth,SampleRate,Channels,Bitrate *int`，wire 名称见[播放历史合同](./listening-contracts.md)。
   时长未知/非正/非有限为 null，codec 空白为 null，音频整数未知/非正为 null；source_kind 非空，不返回路径、root ID、指纹或文件时间。
   曲目与按不同发行物化的摘要 CTE 同一语句快照，每发行只算一次摘要，复用有效值来源和封面安全投影；不查文件系统。
+  M5 批量优化把请求所涉发行的 present 介质数、present 曲目数与未核对缺失来源数合并为一次分组聚合，不再每个发行重复三次计数。
+  `releasesql.BatchSummaryCountsCTE` 只消费本批去重的 `summary_release_ids`；`BatchSummaryProjection` 与单发行投影共用有效值/封面列，
+  缺失来源去重及核对依据表达式、字段/归组 attention 规则沿用原实现。两种投影仍由同一 `ReleaseSummaryColumns` 解释，不改外形、可见性、上限或完整摘要计数。
   **缺失摘要例外**：历史保留 missing 曲目的当前发行/组和上次扫描事实，即使该发行全部 missing、present 计数为 0；只在此批量函数不加发行可见性谓词，
   不扩大列表/详情可见性（详情仍可能 404）。缺少历史引用对象或安全投影失败时 listening 整体 503，不静默丢项。
+- 收藏与歌单（M5）的新增公开批量读取位于 `personal_reads.go`、`track_collection_stats.go`，消费者不联表 catalog 私表：
+  - `Store.LoadTrackCollectionStats(ctx context.Context, trackIDs []string) (TrackCollectionStats, error)`：至多 10,000 个不同有效 UUID；与 facts 相同地跳过无效 ID、小写去重，空输入不查库，超限先失败。返回 `MatchedCount,MissingCount,UnknownDurationCount int64; KnownDurationSeconds float64`，不存在身份不计入匹配数，调用方与强引用数核对并 fail closed。missing 保留上次正有限时长；NULL/非正/NaN/±Inf 计未知，累计溢出报错。仅对所请求 tracks 做一条计数/时长聚合，依靠既有强 FK 保证目录身份完整，不加载逐曲行、发行摘要或封面；支持 `NewStore(tx)` 共享调用方快照，无跨请求缓存。使用 PostgreSQL DOUBLE PRECISION 聚合，数值等价测试对小数采用容差，不承诺与逐项 Go 累加逐位相同。
+  - `Store.LoadTrackFacts(ctx context.Context, trackIDs []string) (map[string]TrackFact, error)`：至多 10,000 个不同有效 UUID；
+    `TrackFact` 为 `TrackID,ReleaseID,GroupID string; Present bool; DurationSeconds *float64`，含 missing，读取当前发行/组。
+    时长 NULL、非正、NaN、正负无穷均为 nil；不计算完整发行摘要，不读取封面、路径或存储身份。
+  - `Store.LoadReleaseGroupSummaries(ctx context.Context, groupIDs []string) (map[string]PersonalReleaseGroupSummary, error)`：至多 1,000 个不同有效 UUID；
+    包装为 `GroupID string; Available bool; ReleaseCount int; Representative *ReleaseSummary`。存在但无可见成员的组仍有键，
+    对应 `false / 0 / nil`；真正不存在者无键。此包装不改变既有 `ReleaseGroupSummary.Representative` 非空合同，也不开放不可见发行详情。
+  - 上述 facts 与 group 两者均沿既有批量摘要约定跳过无效 UUID、小写去重；HTTP/消费端仍必须自行拒绝非法用户输入。空输入返回非 nil 空 map、不查库，超限在查询前报错。
+    每次各一条 SQL、同一语句快照，支持 `NewStore(tx)` 参加调用者的事务；不自行开启事务，不逐轨/逐组查详情，返回前关闭 rows 并检查迭代错误。
+  - 组的候选排名只针对请求组，复用 `ReleaseVisiblePredicate`、`ReleaseGroupMemberOrder`，只给可见代表计算
+    `BatchSummaryProjection`，由 `ReleaseSummaryColumns` 校验有效值与安全封面。`ReleaseCount` 是完整可见成员数，不套组详情的 100 成员截断。
+    不可用组不泄露隐藏成员或坏封面；可见代表封面损坏则整批失败，不返回部分结果。查询执行失败保留 `ErrQuery` 与原始错误链；上层负责安全错误信封。
 - 管理员写接口（M3，合同见[受治理操作合同](./governance-contracts.md)）：`GET|PATCH /api/v1/releases/{id}/corrections`、
   `POST /api/v1/releases/{id}/group`、`GET /api/v1/operations`、`POST /api/v1/operations/{id}/revert`；M4 增加
   `POST /api/v1/release-groups/{id}/default`（设定或清除默认版本，见[默认版本合同](./default-version-contracts.md)）。
@@ -159,6 +175,17 @@
 - 封面缓存（F3，`internal/app/artwork_cache_integration_test.go`）：200 带 `ETag` 与 `private, no-cache`；强标签、弱标签、列表与
   `*` 都得到 304 且没有响应体；删除文件后带匹配标签仍是 304；标签不匹配返回新字节；未认证 401、未知资源 404（都不是 304）；
   不安全的存储键返回 404。`catalog/artwork` 的单元测试覆盖 `safeStorageKey` 与 `Read`，`platform/httpserver` 的 `etag_test.go` 覆盖弱比较。
+- M5 卡片统计（`track_collection_stats*_test.go`）：10,000 输入上限、空输入/去重/未知身份、missing 与全部非有限/非正时长、累计溢出、单条 SQL/单连接释放、取消错误链、同一 RR 快照；不能为卡片统计批量计算完整摘要或把组封面排序放到 20 万行聚合中。
+  `TestPostgreSQLTrackCollectionStatsExplain` 测真实形状十万轨/一万发行/八千组、5% missing，空辅助表未 ANALYZE/ANALYZE 两种状态；保持默认计划，并按[数据库规范](./database-guidelines.md#延迟敏感只读事务与-jit)增加只读事务局部 JIT off 对照。
+  跨批摘要等价测试保留1,001轨边界；模拟同一旧来源时使用 `source_identity=NULL` 和相同root/path，不能重复非空来源身份（唯一约束仍有效）。
+- M5 个人数据批量读取（`personal_reads*_test.go`）：空输入、大小写去重、10,000/10,001 轨与 1,000/1,001 组边界；missing 与不存在分离、未知时长安全化、
+  换发行/归组/恢复反映当前位置；空组及全缺失组保留身份而旧详情仍 404；有效修正、默认版本失效、代表排序、完整成员计数、坏封面安全失败。
+  单连接批量读取确认 rows 释放，查询计数确认无 N+1；只读 REPEATABLE READ 事务与取消场景验证共享快照及错误传播。
+  显式诊断 `ROOMUSIC_CATALOG_EXPLAIN=1 go test ./internal/catalog -run '^TestPostgreSQLPersonalCatalogExplain$' -count=1 -v`
+  使用调用方提供的隔离库（`ROOMUSIC_TEST_DATABASE_URL`），建立十万曲目夹具，对实际 SQL 测 10,000 facts、80 组、1,000 同发行/不同发行完整摘要；
+  `ROOMUSIC_CATALOG_EXPLAIN_DIR` 可保存 JSON 执行计划。不启动容器、不禁用顺序扫描或 JIT；诊断默认跳过，不能把跳过当作性能证据。测量与优化前后证据见
+  [M5 catalog 执行计划报告](../../tasks/11-04-classical-m5-favorites/research/m5-personal-catalog-explain.md)；`TestPostgreSQLPersonalCatalogLargeReleaseExplain`
+  另测十万轨单发行、80% missing，区分空元数据表默认统计与完整 ANALYZE；默认统计仍有 JIT 风险，不能用首轮千轨发行的结果代替。额外的摘要等价测试覆盖多碟、同来源缺失去重、有效/过期核对与修正。
 - 运行 `go test ./internal/catalog/... ./internal/app -run 'Release|Catalog|Artwork|Group|Routes|Default|Comparison' -count=1`（M4 的默认版本与对比用例名不一定含 `Group`）；涉及 SQL 投影时，
   还需通过隔离 PostgreSQL 18 的 `./scripts/test-integration.sh`。
 - 发行 REST/前端：present-only 列表、稳定分页/搜索、attention allowlist、详情事实、

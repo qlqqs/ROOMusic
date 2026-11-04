@@ -1,88 +1,30 @@
-import { MoreHorizontal, Play } from "lucide-react";
-import { useId, useState } from "react";
+import { Play } from "lucide-react";
+import { useState } from "react";
 import { formatCount } from "../../shared/lib/number";
-import { Button, FailureNotice, MenuButton, VisuallyHidden } from "../../shared/ui";
-import { HISTORY_QUEUE_LIMIT, historyArtistOf, historyTitleOf, useHistoryQueue, type HistoryItemDTO } from "../../features/listening";
-import { unplayableText, usePlaybackCapabilities, usePlayerEngine, type CapabilityTable, type PlayerTrack } from "../../features/player";
-import styles from "./history-playback.module.css";
+import { Button, FailureNotice } from "../../shared/ui";
+import { HISTORY_QUEUE_LIMIT, useHistoryQueue, type HistoryItemDTO } from "../../features/listening";
+import { usePlaybackCapabilities, usePlayerEngine } from "../../features/player";
+import { QUEUE_FULL_TEXT, TrackActions } from "./track-actions";
+import { playerTrackOfSummary, unplayableReason } from "./track-playback";
+import styles from "./play-all.module.css";
 
 // 历史页的播放动作由 app 组合：listening 不导入 player（player 已导入 listening 的上报器），player 也不认识历史条目。
-// 反馈文案沿用专辑页（features/player/components/album-playback-actions.tsx）。
-
-const QUEUE_FULL_TEXT = "队列已满，请先移除一些条目。";
-
-/** 把历史条目转成队列曲目：与发行详情的转换同一套规则（标题空白写“（无标题）”，艺人空白退回专辑艺人）。 */
-export function playerTrackOfHistoryItem(item: HistoryItemDTO): PlayerTrack {
-  const { release, source } = item;
-  return {
-    trackId: item.track_id,
-    releaseId: release.id,
-    groupId: item.group_id,
-    title: historyTitleOf(item),
-    artist: historyArtistOf(item),
-    albumTitle: release.title,
-    albumArtist: release.album_artist ?? release.artist,
-    durationSeconds: item.duration_seconds,
-    artworkId: release.artwork?.resource_id ?? null,
-    source: {
-      sourceKind: source.source_kind,
-      codec: source.codec,
-      bitDepth: source.bit_depth,
-      sampleRate: source.sample_rate,
-      channels: source.channels,
-      bitrate: source.bitrate,
-    },
-  };
-}
-
-/** 一首历史曲目为什么不能播放；能播放时是 null。文件缺失优先，其次是浏览器与服务端的能力表。 */
-function unplayableReason(item: HistoryItemDTO, table: CapabilityTable | undefined): string | null {
-  if (!item.present) return "文件缺失，不能播放";
-  if (table === undefined) return "正在检查播放能力";
-  const verdict = table.verdictOf({ sourceKind: item.source.source_kind, codec: item.source.codec });
-  return verdict.playable ? null : unplayableText(verdict, item.source.codec);
-}
+// 行内动作是各页共用的 TrackActions（播放、心形、“更多”），“从历史中移除”作为这一页自己的菜单项接在后面。
 
 /**
- * 历史页一行的播放动作：“播放”替换当前队列并只播放这一首（不像专辑页那样从这首起放整张）；
- * “更多”里有“下一首播放”“加入队列”（不打断当前曲目）与“从历史中移除”。不能播放（文件缺失、格式或浏览器不支持）时前两类不可用，
- * 原因经 aria-describedby 可读；移除始终可用。
+ * 历史页一行的动作：“播放”替换当前队列并只播放这一首（不像专辑页那样从这首起放整张）；
+ * “更多”里有“下一首播放”“加入队列”“添加到歌单…”与“从历史中移除”。
  */
 export function HistoryTrackActions({ item, onRemove }: { item: HistoryItemDTO; onRemove: () => void }) {
-  const engine = usePlayerEngine();
-  const capability = usePlaybackCapabilities();
-  const [notice, setNotice] = useState("");
-  const reasonId = useId();
-  const reason = item.present && capability.isError ? "无法检查播放能力，请在“播放全部”旁重试。" : unplayableReason(item, capability.data);
-  const title = historyTitleOf(item);
-  function play() {
-    setNotice(engine.playTracks([playerTrackOfHistoryItem(item)]) === "queue_full" ? QUEUE_FULL_TEXT : "");
-  }
-  function add(kind: "next" | "enqueue") {
-    const track = playerTrackOfHistoryItem(item);
-    const result = kind === "next" ? engine.playNext([track]) : engine.enqueue([track]);
-    setNotice(result === "queue_full" ? "队列已满，请先移除一些条目。" : kind === "next" ? "已设为下一首播放。" : "已加入队列。");
-  }
+  const track = playerTrackOfSummary(item);
   return (
-    <div className={styles.row}>
-      <div className={styles.actions}>
-        <Button icon={<Play size={16} />} aria-label={`播放 ${title}`} disabled={reason !== null} aria-describedby={reason === null ? undefined : reasonId} onClick={play}>
-          播放
-        </Button>
-        <MenuButton
-          label="更多"
-          icon={<MoreHorizontal size={16} />}
-          actions={[
-            { id: "next", label: "下一首播放", disabled: reason !== null, onSelect: () => add("next") },
-            { id: "enqueue", label: "加入队列", disabled: reason !== null, onSelect: () => add("enqueue") },
-            { id: "remove", label: "从历史中移除", onSelect: onRemove },
-          ]}
-        />
-      </div>
-      {/* 文件缺失已由曲目列的“文件缺失”标签显示，这里只给读屏说明按钮为什么不可用。 */}
-      {reason === null ? null : item.present ? <p id={reasonId}>{reason}</p> : <VisuallyHidden><span id={reasonId}>{reason}</span></VisuallyHidden>}
-      <p role="status">{notice}</p>
-    </div>
+    <TrackActions
+      track={track}
+      present={item.present}
+      playName={`播放 ${track.title}`}
+      retryHint="请在“播放全部”旁重试。"
+      extraActions={[{ id: "remove", label: "从历史中移除", onSelect: onRemove }]}
+    />
   );
 }
 
@@ -103,7 +45,7 @@ export function HistoryPlayAll() {
     setNotice("");
     queue.load({
       onLoaded: (data) => {
-        const tracks = data.items.filter((item) => unplayableReason(item, table) === null).map(playerTrackOfHistoryItem);
+        const tracks = data.items.filter((item) => unplayableReason(playerTrackOfSummary(item), item.present, table) === null).map(playerTrackOfSummary);
         const skipped = data.items.length - tracks.length;
         const scope = data.truncated ? `历史太长，只取了最近的 ${formatCount(HISTORY_QUEUE_LIMIT)} 首。` : "";
         if (tracks.length === 0) {

@@ -35,16 +35,17 @@ type TrackSummary struct {
 	Source          TrackAudioFacts `json:"source"`
 }
 
-// 两个物化 CTE 保证同一语句快照，且每个不同发行只计算一次摘要；不扩大目录列表或详情的可见性。
+// 曲目、去重发行及批量计数保持同一语句快照，每发行只计算一次摘要；不扩大目录列表或详情的可见性。
 const loadTrackSummariesSQL = `WITH selected_tracks AS MATERIALIZED (
  SELECT t.id, t.title, t.artist, t.source_status, t.duration_seconds,
  t.source_kind, NULLIF(BTRIM(t.codec), '') AS codec, t.bit_depth, t.sample_rate, t.channels, t.bitrate, m.release_id
  FROM tracks t JOIN media m ON m.id=t.medium_id
  WHERE t.id = ANY($1::text[]::uuid[])
-), summaries (id,title,artist,album_artist,year,source_type,media_type,medium_count,track_count,attention_count,artwork_key,artwork_mime,artwork_width,artwork_height,group_id) AS MATERIALIZED (
- SELECT ` + releasesql.ReleaseSummaryProjection + `, releases.group_id::text
- FROM ` + releasesql.ReleaseSource + releasesql.ReleaseSummaryArtworkJoin + `
- WHERE releases.id IN (SELECT DISTINCT release_id FROM selected_tracks)
+), summary_release_ids AS MATERIALIZED (
+ SELECT DISTINCT release_id AS id FROM selected_tracks
+), ` + releasesql.BatchSummaryCountsCTE + `, summaries (id,title,artist,album_artist,year,source_type,media_type,medium_count,track_count,attention_count,artwork_key,artwork_mime,artwork_width,artwork_height,group_id) AS MATERIALIZED (
+ SELECT ` + releasesql.BatchSummaryProjection + `, releases.group_id::text
+ FROM ` + releasesql.ReleaseSource + ` JOIN summary_release_ids ON summary_release_ids.id=releases.id` + releasesql.BatchSummaryJoins + `
 )
 SELECT t.id::text,t.title,t.artist,t.source_status='present',t.duration_seconds,
  t.source_kind,t.codec,t.bit_depth,t.sample_rate,t.channels,t.bitrate,

@@ -53,6 +53,20 @@ describe("apiRequest 请求形态", () => {
     expect(request?.body).toEqual({ path: "/music/a" });
   });
 
+  it("收藏 PUT 同源携带 Cookie，无请求体时不发送 JSON null 或 Content-Type", async () => {
+    const requests = stubFetch(() => jsonResponse(200, { ok: true }));
+    await apiRequest({ method: "PUT", path: "/api/v1/me/favorites/tracks/00000000-0000-4000-8000-000000000001" }, decodeOk);
+
+    const [request] = requests;
+    expect(request?.method).toBe("PUT");
+    expect(request?.headers.has("Content-Type")).toBe(false);
+    expect(request?.headers.has("Idempotency-Key")).toBe(false);
+    expect(request?.body).toBeUndefined();
+    expect(request?.init.body).toBeUndefined();
+    expect(request?.init.credentials).toBe("same-origin");
+    expect(request?.init.cache).toBe("no-store");
+  });
+
   it("DELETE 同样同源携带 Cookie，不带请求体与 Content-Type，也不带幂等键", async () => {
     const requests = stubFetch(() => jsonResponse(200, { ok: true }));
     await apiRequest({ method: "DELETE", path: "/api/v1/me/plays" }, decodeOk);

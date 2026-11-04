@@ -15,7 +15,8 @@ const MAX_EVIDENCE_TEXT = 500; // 证据里的值、候选、原因码与来源�
 const MAX_CORRECTED_FIELDS = 16; // 有人工修正的字段名；后端目前可修正 8 个字段，留出余量
 const MAX_COMPARED_FORMATS = 32; // 版本对比里一个版本的不同音频参数组合（maxComparedFormats）
 
-const artworkDecoder = d.object({
+// 别的 feature（歌单卡片的封面拼图）经这个模块复用同一个封面摘要解码器。
+export const artworkDecoder = d.object({
   resource_id: d.string({ min: 1, max: 255 }),
   mime: d.string({ min: 1, max: 100 }),
   width: d.integer({ min: 1, max: 100_000 }),

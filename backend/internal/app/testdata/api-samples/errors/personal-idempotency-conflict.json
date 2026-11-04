@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "idempotency_conflict",
+      "message": "幂等键已用于其他请求"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

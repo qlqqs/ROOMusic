@@ -31,6 +31,7 @@ import {
   respondToRevert,
   type GovernanceData,
 } from "../../src/test/governance-data";
+import { personalDataOf, respondToPersonal, type PersonalData } from "../../src/test/personal-data";
 import { gradientPng } from "./png";
 
 // 受控后端：用后端集成测试产出的真实响应样本回答 /api/v1/*，并保持必要的状态（会话、目录、扫描、成员），
@@ -59,6 +60,8 @@ export type RecordedCall = { method: string; path: string; body: unknown; idempo
 export type ApiMock = CatalogData & {
   /** 管理员对发行与专辑的受治理操作（字段修正、归组、默认版本、撤销、操作记录）的状态与行为，与上面的专辑数据共用：修改会反映到列表与详情。 */
   governance: GovernanceData;
+  /** 收藏与歌单按当前会话的用户 ID 隔离；seed helper 与 Vitest 共用。 */
+  personal: PersonalData;
   setupRequired: boolean;
   /** 当前会话的用户名；null 表示没有有效会话。 */
   session: string | null;
@@ -131,6 +134,7 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
     ...catalogDataOf(albumGroups(12, (index) => ({ artwork: index % 3 !== 0, attention_count: index % 4 === 0 ? 1 : 0, release_count: index === 5 ? 2 : 1 }))),
     // 占位：治理数据必须引用 mock 本身（测试会改写 mock.groups 等字段），所以对象建好之后马上换成真正的。
     governance: governanceDataOf(catalogDataOf()),
+    personal: personalDataOf(),
     recentPlays: [],
     hasPlayHistory: false,
     brokenArtworks: new Set(),
@@ -184,6 +188,7 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
   };
 
   mock.governance = governanceDataOf(mock);
+  mock.personal = personalDataOf(mock);
 
   let setupStatusFailures = failSetupStatusTimes;
   let clock = 100;
@@ -225,6 +230,10 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
 
   const handle = (method: string, path: string, headers: Record<string, string>, body: unknown, search: URLSearchParams): Handled => {
     const key = `${method} ${path}`;
+    if (/^\/api\/v1\/me\/(favorites|playlists)(\/|$)/.test(path)) {
+      if (mock.forbid.has(key)) return guarded(method, path, false, () => sample("errors/forbidden"));
+      return respondToPersonal(mock.personal, viewer()?.id ?? null, { method, path: `${path}?${search}`, body, idempotencyKey: headers["idempotency-key"] ?? null });
+    }
     switch (key) {
       case "GET /api/v1/setup/status":
         if (setupStatusFailures > 0) {
@@ -451,7 +460,8 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
     const url = new URL(request.url());
     let body: unknown;
     try {
-      body = request.postDataJSON();
+      // Playwright 对无请求体也返回 null，必须与显式 JSON null 区分，心形 PUT/DELETE 合法地不带 body。
+      body = request.postData() === null ? undefined : request.postDataJSON();
     } catch {
       body = undefined;
     }

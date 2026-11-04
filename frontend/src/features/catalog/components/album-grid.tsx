@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { VisuallyHidden } from "../../../shared/ui";
 import type { ReleaseGroupSummaryDTO } from "../api/decoders";
 import type { AlbumSearch } from "../album-search";
@@ -13,6 +14,11 @@ export function AlbumGrid({ groups, search }: { groups: readonly ReleaseGroupSum
       ))}
     </ul>
   );
+}
+
+/** 与专辑卡片同一种网格（每列至少 160px）：别的功能自己的卡片（例如收藏的专辑）放进来，与专辑库的版面一致。子项是 li。 */
+export function AlbumGridLayout({ children }: { children: ReactNode }) {
+  return <ul className={styles.grid}>{children}</ul>;
 }
 
 const PLACEHOLDER_CARDS = 12;

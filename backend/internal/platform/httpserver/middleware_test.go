@@ -134,3 +134,33 @@ func TestRequestObservationActorID(t *testing.T) {
 		t.Fatalf("actor ID missing from log: %s", logs.String())
 	}
 }
+
+func TestRequestIDMiddlewareNestedMuxUsesSafeLeafPattern(t *testing.T) {
+	for _, tc := range []struct{ method, path, pattern string }{
+		{"GET", "/api/v1/me/playlists/private-id/items?secret=hidden", "GET /api/v1/me/playlists/{playlist_id}/items"},
+		{"POST", "/api/v1/me/playlists/private-id/items", "<unmatched>"},
+		{"GET", "/api/v1/me/playlists/private-id/unknown", "<unmatched>"},
+	} {
+		t.Run(tc.method+tc.path, func(t *testing.T) {
+			var logs bytes.Buffer
+			leaf := http.NewServeMux()
+			leaf.HandleFunc("GET /api/v1/me/playlists/{playlist_id}/items", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+			RegisterAPIFallback(leaf, APINotFoundHandler(leaf))
+			root := http.NewServeMux()
+			root.Handle("/api/v1/me/playlists/", leaf)
+			Middleware(slog.New(slog.NewJSONHandler(&logs, nil)), root).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(tc.method, tc.path, nil))
+			var entry map[string]any
+			if err := json.Unmarshal(logs.Bytes(), &entry); err != nil {
+				t.Fatal(err)
+			}
+			if entry["route_template"] != tc.pattern {
+				t.Fatalf("pattern=%v want %s", entry["route_template"], tc.pattern)
+			}
+			for _, secret := range []string{"private-id", "secret=hidden"} {
+				if strings.Contains(logs.String(), secret) {
+					t.Fatalf("private URL leaked: %s", logs.String())
+				}
+			}
+		})
+	}
+}

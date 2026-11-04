@@ -152,7 +152,8 @@ for (const source of ["alac-16-44100.m4a", "alac-24-48000.m4a"]) {
     await page.getByRole("link", { name: "正在播放", exact: true }).click();
     const server = page.getByRole("heading", { name: "服务端", exact: true }).locator("..");
     await expect(server).toContainText("无损转换");
-    await expect(server).toContainText("PCM 一致");
+    await expect(server.getByText("ALAC 转成 FLAC，位深、采样率与声道不变。", { exact: true })).toBeVisible();
+    await expect(server).not.toContainText("PCM 一致");
     await expect(server).not.toContainText("原文件直出");
     // 真实鼠标拖动原生 slider：暂停后拖到中间，媒体在派生文件上真实 seek。播放栏在每个页面都有，限定在它里面以免与正在播放页的控件重名。
     const bar = page.getByRole("region", { name: "播放器", exact: true });

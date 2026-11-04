@@ -8,7 +8,7 @@ M5 增加按曲目汇总的历史页、播放全部候选与按曲目移除。�
 需求与取舍见[播放历史任务](../../tasks/archive/2026-10/10-11-classical-p-play-history/prd.md)与它的[技术设计](../../tasks/archive/2026-10/10-11-classical-p-play-history/design.md)；
 前端的计次实现与概览区块的状态规则见[播放器设计规范](../frontend/player-design-guidelines.md)与[状态管理规范](../frontend/state-management.md)。
 
-范围外：收藏、歌单、按次数排序、播放统计与推荐、“继续聆听”的进度；暂停记录的开关、删除某一次播放记录（按曲目移除其全部记录已支持）；管理员查看他人的播放；
+范围外：收藏与歌单由独立 `personal` 能力负责（见[本人收藏与歌单合同](./personal-contracts.md)），不扩大 listening；按次数排序、播放统计与推荐、“继续聆听”的进度；暂停记录的开关、删除某一次播放记录（按曲目移除其全部记录已支持）；管理员查看他人的播放；
 外部服务同步；浏览器本地历史的迁移（开发阶段不做兼容）。
 
 ## 2. 签名

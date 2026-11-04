@@ -245,7 +245,7 @@ describe("设定与清除默认版本", () => {
 });
 
 describe("移出默认版本", () => {
-  it("要移出的是默认版本：确认对话框说明移出后专辑改按自动规则，它回来时会重新成为默认版本；撤销移出后它重新是默认版本", async () => {
+  it("要移出的是默认版本：确认对话框说明移出后自动另选版本；撤销移出后它重新是默认版本", async () => {
     const context = setup();
     seedDefault(context.governance, context.album.id, 1, context.versions[1].id);
     const user = userEvent.setup();

@@ -56,6 +56,7 @@ Before writing or reviewing backend code:
 | [无损派生合同](./playback-derivation-contracts.md) | M2b ALAC → FLAC 无损派生：配置与启动、缓存、转换与核对、上限与取消、测试 |
 | [内嵌歌词合同](./lyrics-contracts.md) | M2b 歌词：标签提取与规范化、`tracks.lyrics` 与约束、歌词接口、LRC 解析规则、测试 |
 | [播放历史合同](./listening-contracts.md) | 阶段 P：`play_history`、计次规则与服务端校验、三个接口、最近播放读取规则、前端计次与上报、测试 |
+| [本人收藏与歌单合同](./personal-contracts.md) | M5 P 线：typed 收藏、歌单间隔键/revision、稳定收据、适应撤销、队列限量与精确统计 |
 | [受治理操作合同](./governance-contracts.md) | 阶段 M3：操作记录与共同写入流程 `operations.Run`、发行字段修正与有效值视图、人工归组、撤销、操作记录接口、错误码、测试与真实服务用例 |
 | [默认版本与版本对比合同](./default-version-contracts.md) | M4 第一项：迁移 0018、组的默认版本与版本号、生效与失效规则、设定接口与执行器、撤销与展示、版本对比接口、测试 |
 | [元数据问题与核对合同](./issue-review-contracts.md) | M4 第二项：迁移 0019、“需要关注”的三类拆分、依据与依据令牌、核对接口与执行器、撤销与展示、问题列表与版本的问题、测试 |

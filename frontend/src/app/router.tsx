@@ -8,6 +8,7 @@ import { AuthenticatedLayout } from "./shell/authenticated-layout";
 import { AdminGate } from "./routes/admin-gate";
 import { AlbumDetailPage } from "./routes/album-detail-page";
 import { AlbumsPage } from "./routes/albums-page";
+import { FavoritesPage } from "./routes/favorites-page";
 import { HistoryPage } from "./routes/history-page";
 import { ClaimsPage } from "./routes/claims-page";
 import { IssuesPage } from "./routes/issues-page";
@@ -18,7 +19,9 @@ import { MembersPage } from "./routes/members-page";
 import { NotFoundPage } from "./routes/not-found-page";
 import { OperationsPage } from "./routes/operations-page";
 import { OverviewPage } from "./routes/overview-page";
-import { NowPlayingPage } from "../features/player";
+import { NowPlayingRoute } from "./routes/now-playing-route";
+import { PlaylistDetailPage } from "./routes/playlist-detail-page";
+import { PlaylistsPage } from "./routes/playlists-page";
 import { SetupPage } from "./routes/setup-page";
 
 export type RouterContext = { session: SessionController };
@@ -70,7 +73,7 @@ const authenticatedRoute = createRoute({
   component: AuthenticatedLayout,
 });
 
-const nowPlayingRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/now-playing", component: NowPlayingPage });
+const nowPlayingRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/now-playing", component: NowPlayingRoute });
 
 const overviewRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/", component: OverviewPage });
 
@@ -109,7 +112,7 @@ const meIndexRoute = createRoute({
   getParentRoute: () => meRoute,
   path: "/",
   beforeLoad: () => {
-    throw redirect({ to: "/me/history", replace: true });
+    throw redirect({ to: "/me/favorites", replace: true });
   },
 });
 
@@ -124,6 +127,49 @@ const historyRoute = createRoute({
   path: "/history",
   validateSearch: (search: Record<string, unknown>): { page?: number | undefined } => ({ page: parsePageParam(search["page"]) }),
   component: HistoryRoute,
+});
+
+// tab 只在看“曲目”时出现（专辑是默认），page 只在 2 及以上时出现；两栏各自翻页。不合法的值显式写成 undefined。
+// 超出末页时，页面在读到真实的总数之后替换成末页。
+function FavoritesRoute() {
+  const { tab, page } = favoritesRoute.useSearch();
+  return <FavoritesPage tab={tab ?? "albums"} page={page ?? 1} />;
+}
+
+const favoritesRoute = createRoute({
+  getParentRoute: () => meRoute,
+  path: "/favorites",
+  validateSearch: (search: Record<string, unknown>): { tab?: "tracks" | undefined; page?: number | undefined } => ({
+    tab: search["tab"] === "tracks" ? "tracks" : undefined,
+    page: parsePageParam(search["page"]),
+  }),
+  component: FavoritesRoute,
+});
+
+// 歌单列表与歌单详情：page 只在 2 及以上时出现；歌单 ID 不是 UUID 时由页面显示“歌单不存在”，不发请求。
+function PlaylistsRoute() {
+  const { page } = playlistsRoute.useSearch();
+  return <PlaylistsPage page={page ?? 1} />;
+}
+
+const playlistsRoute = createRoute({
+  getParentRoute: () => meRoute,
+  path: "/playlists",
+  validateSearch: (search: Record<string, unknown>): { page?: number | undefined } => ({ page: parsePageParam(search["page"]) }),
+  component: PlaylistsRoute,
+});
+
+function PlaylistDetailRoute() {
+  const { playlistId } = playlistDetailRoute.useParams();
+  const { page } = playlistDetailRoute.useSearch();
+  return <PlaylistDetailPage playlistId={playlistId} page={page ?? 1} />;
+}
+
+const playlistDetailRoute = createRoute({
+  getParentRoute: () => meRoute,
+  path: "/playlists/$playlistId",
+  validateSearch: (search: Record<string, unknown>): { page?: number | undefined } => ({ page: parsePageParam(search["page"]) }),
+  component: PlaylistDetailRoute,
 });
 
 // 管理页由 AdminGate 把关：非管理员显示“需要管理员权限”，不渲染页面内容，也就不会调用管理接口。
@@ -224,7 +270,7 @@ const scanDetailRoute = createRoute({
 // 已登录用户访问不存在的路径时仍显示在外壳里；未登录用户先被守卫送去登录。
 const notFoundRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "$", component: NotFoundPage });
 
-const routeTree = rootRoute.addChildren([setupRoute, loginRoute, authenticatedRoute.addChildren([overviewRoute, nowPlayingRoute, albumsRoute, albumDetailRoute, meRoute.addChildren([meIndexRoute, historyRoute]), libraryRoute, scanDetailRoute, issuesRoute, claimsRoute, membersRoute, operationsRoute, notFoundRoute])]);
+const routeTree = rootRoute.addChildren([setupRoute, loginRoute, authenticatedRoute.addChildren([overviewRoute, nowPlayingRoute, albumsRoute, albumDetailRoute, meRoute.addChildren([meIndexRoute, historyRoute, favoritesRoute, playlistsRoute, playlistDetailRoute]), libraryRoute, scanDetailRoute, issuesRoute, claimsRoute, membersRoute, operationsRoute, notFoundRoute])]);
 
 export function createAppRouter(context: RouterContext, history?: RouterHistory) {
   return createRouter({ routeTree, context, ...(history === undefined ? {} : { history }) });

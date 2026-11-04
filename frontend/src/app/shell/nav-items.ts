@@ -15,7 +15,7 @@ export type NavItem = {
 const navItems: readonly NavItem[] = [
   { to: "/", label: "概览", icon: LayoutDashboard, adminOnly: false, group: "聆听" },
   { to: "/albums", label: "专辑", icon: Disc3, adminOnly: false, group: "聆听" },
-  // “我的音乐”目前只有历史页签（/me 转到 /me/history）；收藏与歌单随 M5 后续子项加入同一个入口。
+  // “我的音乐”有收藏、歌单与历史三个页签（/me 转到 /me/favorites）。
   { to: "/me", label: "我的音乐", icon: Library, adminOnly: false, group: "聆听" },
   { to: "/now-playing", label: "正在播放", icon: Music2, adminOnly: false, group: "聆听" },
   { to: "/library", label: "扫描目录", icon: FolderSearch, adminOnly: true, group: "资料库" },

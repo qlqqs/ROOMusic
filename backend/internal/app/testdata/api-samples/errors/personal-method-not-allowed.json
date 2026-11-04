@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "method_not_allowed",
+      "message": "接口不支持该请求方法"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 405
+}
