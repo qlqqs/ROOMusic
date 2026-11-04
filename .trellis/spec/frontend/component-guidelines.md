@@ -76,6 +76,11 @@ hook 里，展示在组件里。按 [Classical 设计依据](../../../frontend/D
 
 管理员的受治理写操作、元数据问题页与待认领页（M4 第三项）的组件约定已移到 [governance-components.md](./governance-components.md)（本文件接近 24 KB 的上限；内容原样搬移，之后的增补写在那里）。
 
+## 已实现的收藏与歌单组件（M5 ② ③，`features/personal`）
+
+心形、批量收藏状态范围、收藏页、歌单页、“添加到歌单…”对话框与各页共用的曲目行动作（`app/routes/track-actions.tsx`）的约定写在
+[personal-guidelines.md](./personal-guidelines.md)。
+
 ## 已实现的歌词组件（M2b，`features/player`）
 
 | 组件 | 约定 |

@@ -1,0 +1,23 @@
+/* 心形与它的提示：按钮是只有图标的方形，提示在旁边换行，不撑开所在的行。 */
+.favorite {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  min-width: 0;
+}
+
+.favorite > button:first-child {
+  min-width: var(--control-height);
+  padding-inline: 0;
+}
+
+.message {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  overflow-wrap: anywhere;
+}
+
+.message:empty {
+  display: none;
+}

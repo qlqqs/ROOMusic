@@ -256,8 +256,8 @@ test("ALAC 曲目经服务端转换后播放：先显示“正在准备”，转
   await bar(page).getByRole("link", { name: "队列（2）", exact: true }).click();
   const server = page.getByRole("heading", { name: "服务端", exact: true }).locator("..");
   await expect(server).toContainText("无损转换");
-  await expect(server).toContainText("重新编码为 FLAC");
-  await expect(server).toContainText("PCM 一致");
+  await expect(server).toContainText("ALAC 转成 FLAC，位深、采样率与声道不变。");
+  await expect(server).not.toContainText("PCM");
   await expect(server).not.toContainText("原文件直出");
   await expectNoSeriousViolations(page, "ALAC 正在播放与信号路径");
 });
@@ -319,6 +319,33 @@ for (const width of widths) {
     await expectNoSeriousViolations(page, "正在准备的正在播放页");
   });
 }
+
+test("不可播放曲目的心形与更多仍可用，仅播放、下一首播放与加入队列禁用", async ({ page, backend }) => {
+  const mock = await backend.start({ signedInAs: "listener" });
+  const group = albumGroup(92, { title: "不可播放曲目专项", track_count: 1 });
+  const release = releaseDetailOf(group.representative, {
+    media: mediaOf(group.representative, () => ({ title: "待切分的 CUE 曲目", source_kind: "cue_virtual", codec: "flac" })),
+  });
+  mock.groups = [group];
+  mock.releases.set(release.id, release);
+  await page.goto(`/albums/${group.id}`);
+  const track = page.locator("#main ol > li").filter({ has: page.getByText("待切分的 CUE 曲目", { exact: true }) });
+  const reason = "CUE 分轨曲目需要切分，目前不能播放";
+  const play = track.getByRole("button", { name: "从这首开始播放", exact: true });
+  await expect(play).toBeDisabled();
+  await expect(play).toHaveAccessibleDescription(reason);
+  await expect(track.getByText(reason, { exact: true })).toBeVisible();
+  await expect(track.getByRole("button", { name: "收藏《待切分的 CUE 曲目》", exact: true })).toBeEnabled();
+  const more = track.getByRole("button", { name: "更多", exact: true });
+  await expect(more).toBeEnabled();
+  await more.click();
+  await expect(page.getByRole("menuitem", { name: "下一首播放", exact: true })).toBeDisabled();
+  await expect(page.getByRole("menuitem", { name: "加入队列", exact: true })).toBeDisabled();
+  await expect(page.getByRole("menuitem", { name: "添加到歌单…", exact: true })).toBeEnabled();
+  await page.keyboard.press("Escape");
+  await expect(more).toBeFocused();
+  await expect(bar(page)).toHaveCount(0);
+});
 
 test("纯键盘：播放、下一首播放、不打断当前、切歌、队列上移/移除和清空确认", async ({ page, backend }) => {
   const mock = await backend.start({ signedInAs: "listener" });

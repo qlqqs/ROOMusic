@@ -28,6 +28,11 @@ type PlaybackSlots = {
   /** 播放器的当前曲目与它的状态文字（“正在播放”“已暂停”……）；catalog 只按它显示标记，不判断播放状态。 */
   currentTrackId?: string | undefined;
   currentTrackLabel?: string | undefined;
+  /**
+   * 包住选中版本的头部与曲目区的范围（例如一次读出整个版本的收藏状态，供头部与每一行使用）：版本详情还没读到时 release 是 undefined。
+   * catalog 不知道范围里是什么，只负责把内容交给它；传入稳定的函数引用。
+   */
+  renderReleaseScope?: ((context: { groupId: string; release: ReleaseDetailDTO | undefined }, children: ReactNode) => ReactNode) | undefined;
 };
 
 type AdminSlots = {
@@ -131,10 +136,10 @@ function ReleaseGone({ groupId, group, selected }: { groupId: string; group: Rel
 }
 
 /** 选中版本的头部、曲目、发行信息与证据。头部用组详情里的摘要先渲染，曲目区单独显示加载态。 */
-function ReleaseBody({ groupId, group, selected, list, isAdmin, renderReleaseActions, renderAdminActions, renderAdminSections, renderTrackActions, currentTrackId, currentTrackLabel }: ReleaseBodyProps) {
+function ReleaseBody({ groupId, group, selected, list, isAdmin, renderReleaseActions, renderAdminActions, renderAdminSections, renderTrackActions, renderReleaseScope, currentTrackId, currentTrackLabel }: ReleaseBodyProps) {
   const detail = useRelease(selected.id);
   const gone = detail.isError && isHttpFailure(failureOf(detail.error), 404);
-  return (
+  const content = (
     <>
       <AlbumHeader
         release={selected}
@@ -154,6 +159,7 @@ function ReleaseBody({ groupId, group, selected, list, isAdmin, renderReleaseAct
       )}
     </>
   );
+  return renderReleaseScope === undefined ? content : renderReleaseScope({ groupId, release: detail.data }, content);
 }
 
 /** 地址里的 release 规范成最短形式：只有选中非代表版本时才保留，不在本组成员里的值丢弃。 */
@@ -162,7 +168,7 @@ function canonicalRelease(group: ReleaseGroupDetailDTO, requested: string | unde
   return member === undefined || member.id === group.representative.id ? undefined : member.id;
 }
 
-function AlbumDetailContent({ groupId, release: requested, list, isAdmin, renderReleaseActions, renderAdminActions, renderAdminSections, renderTrackActions, currentTrackId, currentTrackLabel }: AlbumDetailViewProps) {
+function AlbumDetailContent({ groupId, release: requested, list, isAdmin, renderReleaseActions, renderAdminActions, renderAdminSections, renderTrackActions, renderReleaseScope, currentTrackId, currentTrackLabel }: AlbumDetailViewProps) {
   const group = useAlbum(groupId);
   const navigate = useNavigate();
   const data = group.data;
@@ -191,7 +197,7 @@ function AlbumDetailContent({ groupId, release: requested, list, isAdmin, render
     >
       <QueryContent query={group} loading={<Skeleton label="正在加载专辑" lines={6} />}>
         {(loaded) =>
-          selected === undefined ? null : <ReleaseBody groupId={groupId} group={loaded} selected={selected} list={list} isAdmin={isAdmin} renderReleaseActions={renderReleaseActions} renderAdminActions={renderAdminActions} renderAdminSections={renderAdminSections} renderTrackActions={renderTrackActions} currentTrackId={currentTrackId} currentTrackLabel={currentTrackLabel} />
+          selected === undefined ? null : <ReleaseBody groupId={groupId} group={loaded} selected={selected} list={list} isAdmin={isAdmin} renderReleaseActions={renderReleaseActions} renderAdminActions={renderAdminActions} renderAdminSections={renderAdminSections} renderTrackActions={renderTrackActions} renderReleaseScope={renderReleaseScope} currentTrackId={currentTrackId} currentTrackLabel={currentTrackLabel} />
         }
       </QueryContent>
     </Page>

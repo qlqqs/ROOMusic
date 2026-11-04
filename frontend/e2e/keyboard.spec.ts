@@ -48,7 +48,7 @@ test.describe("键盘", () => {
     mock.seedRecentPlays(3);
     await page.goto("/");
     const panel = page.getByRole("region", { name: "最近播放" });
-    const cards = panel.getByRole("link");
+    const cards = panel.getByRole("listitem").getByRole("link");
     await expect(cards).toHaveCount(3);
     await cards.first().focus();
     await expectVisibleFocusRing(page, "最近播放的卡片");
@@ -236,7 +236,8 @@ test.describe("键盘", () => {
     await expect(page.locator("main#main")).toBeFocused();
 
     // 切换版本：Tab 到“版本 2”，Enter；只改查询参数，焦点留在链接上，当前版本随之变化。
-    await tabTo(page, (name) => name.startsWith("版本 2"));
+    // 头部新增收藏与添加到歌单，给它们保留 Tab 停靠点，不直接聚焦版本链接。
+    await tabTo(page, (name) => name.startsWith("版本 2"), 20);
     await expectVisibleFocusRing(page, "版本 2 链接");
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/\?release=[0-9a-f-]{36}$/);
@@ -246,8 +247,8 @@ test.describe("键盘", () => {
     await expect(page.locator("ol > li")).toHaveCount(13);
 
     // 展开证据：Tab 到“来源与证据”，Enter 展开；管理员再 Tab 到“查看完整证据”，Enter 加载。
-    // 13 首曲目各新增播放与更多两个可聚焦控件，仍逐个 Tab 验证到达证据入口。
-    await tabTo(page, (name) => name.startsWith("来源与证据"), 40);
+    // 13 首曲目各有播放、心形与更多，头部另有心形和添加到歌单；仍逐个 Tab 验证到达证据入口。
+    await tabTo(page, (name) => name.startsWith("来源与证据"), 60);
     await expectVisibleFocusRing(page, "来源与证据");
     await page.keyboard.press("Enter");
     await expect(page.getByRole("table", { name: "证据摘要" })).toBeVisible();

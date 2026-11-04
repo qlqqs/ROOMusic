@@ -57,6 +57,7 @@ Before writing or reviewing frontend code:
 | [Quality Guidelines](./quality-guidelines.md) | Tests, accessibility, gates, and forbidden shortcuts |
 | [前端验证分层](./quality-verification-layers.md) | 各阶段（M2a 播放、M3、M4 三项）的测试分层：最小 Vitest 命令、共用接口行为、页面级、浏览器冒烟、真实服务用例 |
 | [受治理操作的组件约定](./governance-components.md) | 编辑发行信息、归组、默认版本、元数据问题页、待认领页与操作记录的组件约定 |
+| [收藏与歌单的前端约定](./personal-guidelines.md) | M5 ② ③：`features/personal` 的归属、查询键与跨标签页刷新、心形与批量状态、收藏页的保留行、歌单的幂等命令、拖动与菜单排序、撤销、“添加到歌单…”与统一曲目行动作 |
 | [播放器设计规范](./player-design-guidelines.md) | 工作台视觉层级、响应式布局、播放交互与可访问性 |
 | [Core 0 当前运行合同](../backend/core0-runtime-contracts.md) | 平台层 REST 通则、HTTP 缓存、环境、CI 与专题合同索引 |
 | [身份与成员合同](../backend/identity-contracts.md) | 查看者响应、密码规则、成员与初始化接口的错误映射 |

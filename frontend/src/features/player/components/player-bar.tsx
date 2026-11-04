@@ -1,11 +1,18 @@
 import { Link } from "@tanstack/react-router";
+import type { ReactNode } from "react";
+import type { PlayerTrack } from "../engine/queue";
 import { usePlayer } from "../player-provider";
 import { PlayerArtwork } from "./player-artwork";
 import { ModeControl, SeekControl, TransportControls, VolumeControl } from "./player-controls";
 import { failureLabels, sourceFormat, statusLabels } from "./player-labels";
 import styles from "./player-bar.module.css";
 
-export function PlayerBar() {
+type PlayerBarProps = {
+  /** 当前曲目旁的动作（例如收藏的心形）：由 app 组合，player 不认识这些功能；没有当前曲目时不调用。 */
+  renderCurrentTrackActions?: ((track: PlayerTrack) => ReactNode) | undefined;
+};
+
+export function PlayerBar({ renderCurrentTrackActions }: PlayerBarProps = {}) {
   const { snapshot } = usePlayer();
   const track = snapshot.current?.track;
   const currentFailure = snapshot.current === null ? undefined : snapshot.failures[snapshot.current.entryId];
@@ -16,7 +23,7 @@ export function PlayerBar() {
         <Link to="/now-playing" className={styles.title}>{track.title}</Link>
         {faultText === null ? null : <p className={styles.fault}>{faultText}</p>}
         <p className={styles.subtitle}>{track.artist} — <Link to="/albums/$groupId" params={{ groupId: track.groupId }} search={{ release: track.releaseId }}>{track.albumTitle}</Link></p>
-      </div></>}
+      </div>{renderCurrentTrackActions === undefined ? null : <div className={styles.trackActions}>{renderCurrentTrackActions(track)}</div>}</>}
     </div>
     <div className={styles.center}><TransportControls compact /><div className={styles.desktop}><SeekControl /></div></div>
     <div className={styles.end}>

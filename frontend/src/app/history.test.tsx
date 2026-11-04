@@ -234,13 +234,20 @@ describe("我的音乐历史页", () => {
     refetch.resolve(jsonResponse(200, historyPage([])));
   });
 
-  it("/me 重定向到历史页，侧栏与历史页签均可达", async () => {
+  it("/me 替换到收藏页，页签顺序为收藏、歌单、历史，历史仍可达", async () => {
     setup();
     const { history } = renderApp({ path: "/me" });
-    await screen.findByRole("table");
-    expect(history.location.pathname).toBe("/me/history");
+    await waitFor(() => expect(history.location.pathname).toBe("/me/favorites"));
+    expect(history.length).toBe(1);
     expect(screen.getByRole("link", { name: "我的音乐" }).getAttribute("href")).toBe("/me");
-    expect(screen.getByRole("link", { name: "历史" }).getAttribute("aria-current")).toBe("page");
+    const tabs = within(screen.getByRole("navigation", { name: "我的音乐" }));
+    expect(tabs.getAllByRole("link").map((link) => link.textContent)).toEqual(["收藏", "歌单", "历史"]);
+    expect(tabs.getByRole("link", { name: "收藏" }).getAttribute("aria-current")).toBe("page");
+    expect(tabs.getByRole("link", { name: "历史" }).getAttribute("aria-current")).toBeNull();
+    await userEvent.click(tabs.getByRole("link", { name: "历史" }));
+    await screen.findByRole("table", { name: "播放历史" });
+    expect(history.location.pathname).toBe("/me/history");
+    expect(tabs.getByRole("link", { name: "历史" }).getAttribute("aria-current")).toBe("page");
   });
 
   it("旧用户在途读取被取消，迟到历史不渲染到新会话", async () => {

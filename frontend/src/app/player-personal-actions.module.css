@@ -1,0 +1,17 @@
+.save {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.notice {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  overflow-wrap: anywhere;
+}
+
+.notice:empty {
+  display: none;
+}

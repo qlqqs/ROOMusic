@@ -1,11 +1,17 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { formatDuration } from "../../../shared/lib/duration";
 import { Button, ConfirmDialog } from "../../../shared/ui";
+import type { PlayerTrack } from "../engine/queue";
 import { usePlayer } from "../player-provider";
 import { failureLabels, statusLabels } from "./player-labels";
 import styles from "./player-queue.module.css";
 
-export function PlayerQueue() {
+type PlayerQueueProps = {
+  /** 队列标题旁的动作（例如“存为歌单”）：拿到的是此刻队列里的曲目（按队列顺序，可能重复）；由 app 组合，player 不认识歌单。 */
+  renderQueueActions?: ((tracks: readonly PlayerTrack[]) => ReactNode) | undefined;
+};
+
+export function PlayerQueue({ renderQueueActions }: PlayerQueueProps = {}) {
   const { engine, snapshot } = usePlayer();
   const [confirm, setConfirm] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -31,7 +37,7 @@ export function PlayerQueue() {
     });
   }
   return <section id="queue" aria-labelledby="queue-heading" className={styles.section}>
-    <div className={styles.header}><h2 ref={heading} id="queue-heading" tabIndex={-1}>队列（{snapshot.queue.entries.length}）</h2><Button disabled={snapshot.queue.entries.length === 0} onClick={() => setConfirm(true)}>清空队列</Button></div>
+    <div className={styles.header}><h2 ref={heading} id="queue-heading" tabIndex={-1}>队列（{snapshot.queue.entries.length}）</h2><div className={styles.headerActions}>{renderQueueActions === undefined || snapshot.queue.entries.length === 0 ? null : renderQueueActions(snapshot.queue.entries.map((entry) => entry.track))}<Button disabled={snapshot.queue.entries.length === 0} onClick={() => setConfirm(true)}>清空队列</Button></div></div>
     {snapshot.queue.mode === "shuffle" ? <p>随机播放时，列表顺序不是实际的播放顺序。</p> : null}
     <ol ref={list} role="list" className={styles.list}>
       {snapshot.queue.entries.map((entry, index) => {

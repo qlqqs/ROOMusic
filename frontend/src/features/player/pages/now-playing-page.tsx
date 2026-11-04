@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import type { ReactNode } from "react";
 import { Page } from "../../../shared/ui";
 import { usePlayer } from "../player-provider";
 import { LyricsPanel } from "../components/lyrics-panel";
@@ -8,9 +9,17 @@ import { PlayerFeedback } from "../components/player-feedback";
 import { PlayerQueue } from "../components/player-queue";
 import { SignalPath } from "../components/signal-path";
 import { statusLabels } from "../components/player-labels";
+import type { PlayerTrack } from "../engine/queue";
 import styles from "./now-playing-page.module.css";
 
-export function NowPlayingPage() {
+type NowPlayingPageProps = {
+  /** 当前曲目的动作（例如收藏的心形），放在标题与艺人下面；由 app 组合。 */
+  renderCurrentTrackActions?: ((track: PlayerTrack) => ReactNode) | undefined;
+  /** 队列标题旁的动作（例如“存为歌单”）；由 app 组合，原样交给队列。 */
+  renderQueueActions?: ((tracks: readonly PlayerTrack[]) => ReactNode) | undefined;
+};
+
+export function NowPlayingPage({ renderCurrentTrackActions, renderQueueActions }: NowPlayingPageProps = {}) {
   const { snapshot } = usePlayer();
   const current = snapshot.current;
   return <Page title="正在播放" actions={<Link to="/albums">去专辑</Link>}>
@@ -25,10 +34,11 @@ export function NowPlayingPage() {
           <h2 className={styles.title} title={current.track.title}>{current.track.title}</h2>
           <p className={styles.artist} title={current.track.artist}>{current.track.artist}</p>
           <p className={styles.album}><Link to="/albums/$groupId" params={{ groupId: current.track.groupId }} search={{ release: current.track.releaseId }} title={current.track.albumTitle}>{current.track.albumTitle}</Link></p>
+          {renderCurrentTrackActions === undefined ? null : <div className={styles.trackActions}>{renderCurrentTrackActions(current.track)}</div>}
           <PlayerControls />
         </div>
       </div>}
-      <SignalPath /><PlayerQueue />
+      <SignalPath /><PlayerQueue renderQueueActions={renderQueueActions} />
     </div>}
   </Page>;
 }

@@ -1,0 +1,19 @@
+/* 专辑头部的动作：播放在上，收藏与“添加到歌单…”一行在下，放不下时换行。 */
+.headerActions {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  margin-bottom: var(--space-3);
+}
+
+.headerActions > :first-child {
+  margin-bottom: 0;
+}
+
+.personal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}

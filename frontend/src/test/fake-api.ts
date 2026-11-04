@@ -1,4 +1,5 @@
 import { sampleBody } from "./api-samples";
+import { installPersonalApi } from "./fake-personal";
 import { jsonResponse, sampleResponse, stubFetch, type RecordedRequest } from "./http";
 import { withValue } from "./mutate";
 
@@ -63,6 +64,9 @@ export function installFakeSession(api: FakeApi, initial: Partial<FakeSession> =
     const account = session.current === null ? undefined : session.accounts[session.current];
     return session.current === null || account === undefined ? null : { id: account.id, username: session.current, role: account.role };
   };
+
+  // 新心形和默认收藏页需要明确的空状态；测试可再次安装带 catalog 的完整替身。
+  installPersonalApi(api, { session });
 
   api.on("GET", "/api/v1/setup/status", () => jsonResponse(200, { setup_required: session.setupRequired }));
   api.on("GET", "/api/v1/auth/me", () => {

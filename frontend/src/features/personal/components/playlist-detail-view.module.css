@@ -1,0 +1,141 @@
+.header {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.meta,
+.note {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.headerActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.manage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.results {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+/* 条目：细线分隔的行。宽度由容器决定：窄于 640px 时操作区换到下一行。 */
+.list {
+  container-type: inline-size;
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--color-divider);
+  list-style: none;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: auto 3em minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  min-width: 0;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-divider);
+  background: var(--color-bg);
+}
+
+/* 拖动中的行浮在其他行之上：阴影与表面色表达“拿起来了”，原位置由其他行让开。 */
+.row[data-dragging] {
+  position: relative;
+  z-index: 1;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+}
+
+/* 把手：鼠标与触屏按住拖动（禁止浏览器把这个手势当成滚动），键盘按空格拿起。 */
+.handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--control-height);
+  min-height: var(--control-height);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: grab;
+  touch-action: none;
+}
+
+.row[data-dragging] .handle {
+  cursor: grabbing;
+}
+
+.handle:hover {
+  background: var(--color-hover);
+  color: var(--text-primary);
+}
+
+.position,
+.duration {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.position {
+  text-align: right;
+}
+
+.body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.title {
+  overflow-wrap: anywhere;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+}
+
+.secondary {
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+}
+
+.tag {
+  margin-top: var(--space-1);
+}
+
+/* 文件缺失的行灰色；“文件缺失”标签用文字表达同一件事。 */
+.row[data-missing] .title {
+  color: var(--text-secondary);
+}
+
+.actions {
+  min-width: 0;
+}
+
+@container (max-width: 640px) {
+  .row {
+    grid-template-columns: auto 2.5em minmax(0, 1fr) auto;
+  }
+
+  .actions {
+    grid-column: 3 / -1;
+  }
+}

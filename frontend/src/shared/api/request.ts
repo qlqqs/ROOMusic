@@ -5,7 +5,7 @@ import { ApiError } from "./errors";
 export type ApiPath = `/api/v1/${string}`;
 
 export type ApiRequestSpec = {
-  method: "GET" | "POST" | "PATCH" | "DELETE";
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: ApiPath;
   body?: unknown;
   idempotencyKey?: string | undefined;
