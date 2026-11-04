@@ -2,7 +2,7 @@
 
 ## 目标
 
-“我的音乐”的第一个页签 `/me/history`：每个成员看到自己听过哪些曲目、最近一次什么时候听、听了几次；可以从这里直接播放、加入队列，或把某首从历史里移除。父任务见 [M5](../11-04-classical-m5/prd.md)。
+“我的音乐”的第一个页签 `/me/history`：每个成员看到自己听过哪些曲目、最近一次什么时候听、听了几次；可以从这里直接播放、加入队列，或把某首从历史里移除。父任务见 [M5](../../../11-04-classical-m5/prd.md)。
 
 ## 决定
 
@@ -57,7 +57,7 @@
 | --- | --- | --- |
 | 1 后端（Astra） | `55a2e70` | 三个接口与 catalog `LoadTrackSummaries`，与 design.md 合同无偏差；9 个样本由真实服务生成。隔离库 32.2 万条、44 个用户上 `EXPLAIN (ANALYZE, BUFFERS)`：两个 GET 走既有索引 Index Only Scan、Heap Fetches 0，首页/queue/深页约 17–22 ms，无排序落盘，**不新增迁移**（数据见 design.md §2）。同步 listening 合同 §1–§8 与 catalog REST §2 |
 | 2+3 前端与测试（Opus 实现，Astra 测试） | `8237728` | `/me` 布局与历史页签；行内播放与“更多”菜单、“播放全部”由 `app/routes/history-playback.tsx` 组合 player，listening 不导入 player；上报、移除、清除与专辑修改后失效 `listeningKeys.all`。测试只改测试文件，未发现实现缺陷；修正了导航与概览链接数的旧断言 |
-| 4 收尾 | 本提交 | 导出树验证与截图复核，见下 |
+| 4 收尾 | `63609b1` | 导出树验证与截图复核，见下 |
 
 **验收对照**：
 - A1：后端集成测试覆盖用户 A/B/管理员互相读删不到、401、写请求跨源 403；前端 `viewer-play-reporter.test.ts`、`history.test.tsx` 覆盖会话隔离。
