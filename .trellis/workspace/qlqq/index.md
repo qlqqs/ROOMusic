@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 34
-- **Last Active**: 2026-11-03
+- **Total Sessions**: 35
+- **Last Active**: 2026-11-04
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1103 | Active |
+| `journal-1.md` | ~1148 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 35 | 2026-11-04 | 维护：依赖漏洞、前端分包、扫描锁测试干扰 | `28fef68`, `0861a82`, `486e819`, `1248d5d`, `a47ca36`, `053a451`, `8ffa19a` | `main` |
 | 34 | 2026-11-03 | C2 结构整理与 Core 1 收口 | `e8ff3ff`, `207d1aa`, `7de47c4`, `eb4ef50`, `654c8d7`, `3b20141`, `b99c246`, `a472208`, `206d4e0`, `4fec4b0`, `4068faf`, `3c597f8`, `424886e`, `a93de8b` | `main` |
 | 33 | 2026-11-03 | 路线调整与 C1 删除播放中的定时复核 | `3f7ded3`, `d16c7a1`, `440e3d0`, `84fa4ad`, `641bdef`, `89ab4b4`, `4219475`, `400ed9d` | `main` |
 | 32 | 2026-10-18 | M4 认领 | `bc70737`, `21fe5e7`, `05de626`, `6c7bd5b`, `b809f16`, `35667b8`, `33f40ea`, `6858ac2`, `fd1a331`, `3971163`, `fe8e939`, `a89befa`, `099267c`, `b913986`, `2e205b9` | `main` |

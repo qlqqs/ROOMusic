@@ -1101,3 +1101,48 @@ Replaced generated Trellis backend/frontend templates with ROOMusic Core 0 contr
 - M5 各项（收藏、歌单、历史页面、搜索规范化、艺人与别名）待用户选择后分别立项，新写操作按 R4
 - 遗留：三组手工实播；npm 17 项依赖漏洞与 559 kB 主包警告；测试库上 scan_coordination_unavailable 偶发；207d1aa 的提交说明有一个乱码字，未 amend
 - 本地 main 有大量未推送的提交，推送需用户说“推送”
+
+
+## Session 35: 维护：依赖漏洞、前端分包、扫描锁测试干扰
+<!-- trellis-session: v=2 fp=4581111679d6d764 -->
+
+**Date**: 2026-11-04
+**Task**: 维护：依赖漏洞、前端分包、扫描锁测试干扰
+**Branch**: `main`
+
+### Summary
+
+处理 Core 1 收口遗留的三项：扫描锁按 schema 收窄、npm audit 17→0、第三方库分包消除体积警告；收尾修掉一个基线就有的歌词 e2e flaky
+
+### Main Changes
+
+- A 扫描锁改为 (SCAN, hashtext(current_schema()))，补齐合同要求的并发/重取/MaxOpenConns=1 测试（1248d5d）
+- B vite 8.2.4、vitest 4.1.12、audit fix 刷新传递依赖，minimatch override 11.0.4（0861a82）
+- C rolldown codeSplitting.groups 拆出 react/tanstack/lucide，入口 559.57→250.61 kB（486e819）
+- 同步歌词 e2e 先归零播放位置（a47ca36）
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `28fef68` | docs(task): 规划依赖漏洞、前端分包与扫描锁测试干扰三项维护 |
+| `0861a82` | build(frontend): 修复 npm audit 报告的依赖漏洞 |
+| `486e819` | build(frontend): 第三方库拆成独立块，消除 500 kB 体积警告 |
+| `1248d5d` | fix(library): 扫描 advisory lock 的作用域收窄到当前 schema |
+| `a47ca36` | test(frontend): 同步歌词用例先把播放位置归零再断言第 1 行 |
+| `053a451` | docs(task): 记录三项维护的实施结果与收尾验证 |
+| `8ffa19a` | chore(task): archive 11-04-maintenance-deps-bundle-scanlock |
+
+### Testing
+
+- [OK] 导出树：npm audit 0、lint、typecheck、build 产物一致、Vitest 1649、Playwright 246 / 0 flaky
+- [OK] 隔离库：go vet ./...；go test -race cmd/roomusic、library、app、operations 顶层 249 通过、PostgreSQL 155 个 0 SKIP；playback-e2e.sh 44/44
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 推送到 origin/main（用户已授权）
+- M5 选项待用户选择
