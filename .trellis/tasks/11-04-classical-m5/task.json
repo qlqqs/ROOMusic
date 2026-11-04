@@ -19,7 +19,12 @@
   "pr_url": null,
   "subtasks": [],
   "children": [
-    "11-04-classical-m5-history"
+    "11-04-classical-m5-history",
+    "11-04-classical-m5-favorites",
+    "11-04-classical-m5-playlists",
+    "11-04-classical-m5-search",
+    "11-04-classical-m5-artists",
+    "11-04-classical-m5-scan-feedback"
   ],
   "parent": null,
   "relatedFiles": [],

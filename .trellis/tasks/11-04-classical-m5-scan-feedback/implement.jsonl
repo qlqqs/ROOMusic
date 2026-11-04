@@ -1,0 +1,11 @@
+{"file": ".trellis/spec/backend/scan-coordination-contracts.md", "reason": "扫描接口、状态与轮询合同"}
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "扫描执行流程与身份规则"}
+{"file": ".trellis/spec/backend/governance-contracts.md", "reason": "认领推荐的依据（替身标记）"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "SQL、迁移与隔离测试库约定"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "错误信封与错误码"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "包归属与依赖规则"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "查询键、缓存失效与会话隔离"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "feature 依赖方向，app 层组合"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "页面组件、菜单、对话框与界面文案约定"}
+{"file": ".trellis/spec/frontend/quality-verification-layers.md", "reason": "Vitest、Playwright、真实服务用例分层"}
+{"file": ".trellis/spec/backend/claim-contracts.md", "reason": "认领推荐依据，用于“可能接替了《…》”标记"}
