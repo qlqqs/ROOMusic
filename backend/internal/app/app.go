@@ -5,6 +5,7 @@ package app
 import (
 	"context"
 	"database/sql"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	catalogapi "github.com/qlqq/roomusic/backend/internal/catalog/httpapi"
+	"github.com/qlqq/roomusic/backend/internal/catalog/maintenance"
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	identityapi "github.com/qlqq/roomusic/backend/internal/identity/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/library"
@@ -29,9 +31,10 @@ import (
 
 // App 是装配完成的应用：请求 handler 加上需要在停机时等待的后台工作。
 type App struct {
-	mux     *http.ServeMux
-	handler http.Handler
-	library *library.Service
+	mux         *http.ServeMux
+	handler     http.Handler
+	library     *library.Service
+	catalogDone <-chan struct{}
 }
 
 // Option 调整装配。生产路径不传任何选项；选项只用于测试把时间常量缩短到可以快速验证。
@@ -40,6 +43,8 @@ type Option func(*options)
 type options struct {
 	playbackPreflightWait time.Duration
 	derivation            playback.Derivation
+	// 测试直接插入旧目录夹具时暂停后台，搜索测试再显式回填。
+	pauseCatalogMaintenance bool
 }
 
 // WithPlaybackPreflightWait 设置预检等待派生完成的最长时间（默认 playback.DefaultPreflightWait）。
@@ -54,8 +59,12 @@ func WithDerivation(port playback.Derivation) Option {
 }
 
 // New 装配应用。lifecycle 是应用的生命周期上下文（进程停机时取消）：扫描 worker 与已建立的音频传输都以它为界；
+// 调用方先完成 InitializeCatalog；正常服务不等待后台投影完成。
 // frontend 是前端产物子树。database 为 nil 时路由表照常建立但 /readyz 报告未就绪，供不连接数据库的路由测试使用。
 func New(lifecycle context.Context, settings config.Server, database *sql.DB, frontend fs.FS, logger *slog.Logger, applied ...Option) *App {
+	if logger == nil {
+		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
 	var assembly options
 	for _, apply := range applied {
 		apply(&assembly)
@@ -80,7 +89,34 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	personalapi.New(guard, personal.NewService(database)).Register(mux)
 	httpserver.RegisterAPIFallback(mux, httpserver.APINotFoundHandler(mux))
 	mux.Handle("/", httpserver.Frontend(frontend))
-	return &App{mux: mux, handler: httpserver.Middleware(logger, mux), library: libraryService}
+	catalogDone := make(chan struct{})
+	if database != nil && !assembly.pauseCatalogMaintenance {
+		go func() {
+			defer close(catalogDone)
+			if err := maintenance.Run(lifecycle, database, logger); err != nil && lifecycle.Err() == nil {
+				logger.Error("目录后台维护停止", "event", "catalog_projection_worker_stopped", "module", "catalog")
+			}
+		}()
+	} else {
+		close(catalogDone)
+	}
+	return &App{mux: mux, handler: httpserver.Middleware(logger, mux), library: libraryService, catalogDone: catalogDone}
+}
+
+// InitializeCatalog 在允许扫描与治理写入前短事务登记目标版本，不发现对象或等待回填。
+// 数据库或结构错误返回调用方；规范化预检失败只禁用新投影，保留旧服务。
+func InitializeCatalog(ctx context.Context, database *sql.DB) error {
+	return maintenance.Initialize(ctx, database)
+}
+
+// WaitForCatalogMaintenance 在关闭数据库前有界等待已取消的后台维护退出。
+func (application *App) WaitForCatalogMaintenance(ctx context.Context) error {
+	select {
+	case <-application.catalogDone:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // Handler 返回带请求 ID 与完成日志的完整请求 handler。

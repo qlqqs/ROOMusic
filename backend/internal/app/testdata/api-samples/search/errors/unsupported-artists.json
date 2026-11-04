@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "unsupported_search_type",
+      "message": "暂不支持搜索艺人"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

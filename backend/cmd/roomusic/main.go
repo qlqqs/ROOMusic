@@ -89,6 +89,11 @@ func main() {
 			logger.Error("roomusic scan shutdown timed out", "event", "library.scan.shutdown_timeout", "error", err)
 		}
 	}
+	if application != nil {
+		if err := application.WaitForCatalogMaintenance(shutdownContext); err != nil {
+			logger.Error("目录后台维护退出超时", "event", "catalog_projection_shutdown_timeout", "error", err)
+		}
+	}
 	if derivations != nil {
 		// HTTP 已停止接收请求：终止仍在运行的 ffmpeg（进程组）并删除未完成的临时文件。
 		if err := derivations.Close(5 * time.Second); err != nil {
@@ -110,6 +115,10 @@ func main() {
 func openDatabase(ctx context.Context, databaseURL string) (*sql.DB, error) {
 	connection, err := postgres.Open(ctx, databaseURL)
 	if err != nil {
+		return nil, err
+	}
+	if err := app.InitializeCatalog(ctx, connection); err != nil {
+		_ = connection.Close()
 		return nil, err
 	}
 	if err := library.RecoverInterruptedScans(ctx, connection); err != nil {

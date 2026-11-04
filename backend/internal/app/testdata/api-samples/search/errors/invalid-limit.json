@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_limit",
+      "message": "建议数量无效"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

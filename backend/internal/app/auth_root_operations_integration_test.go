@@ -64,6 +64,9 @@ func newIntegrationTestApplicationWithLogger(t *testing.T, logger *slog.Logger, 
 		}
 	})
 
+	if err := InitializeCatalog(ctx, database); err != nil {
+		t.Fatalf("initialize catalog: %v", err)
+	}
 	allowedRoot := t.TempDir()
 	dataDirectory := t.TempDir()
 	config := config.Server{
@@ -71,6 +74,8 @@ func newIntegrationTestApplicationWithLogger(t *testing.T, logger *slog.Logger, 
 		DataDirectory:       dataDirectory,
 	}
 	scanContext, cancelScans := context.WithCancel(context.Background())
+	// 旧接口夹具直接写 SQL，默认保留 legacy；搜索测试显式启动真实后台。
+	applied = append([]Option{func(settings *options) { settings.pauseCatalogMaintenance = true }}, applied...)
 	application := New(scanContext, config, database, testFrontend(), logger, applied...)
 	// 后注册先执行：测试结束（含中途失败）时先取消并等待扫描 worker 退出，再关闭数据库、清理 schema。
 	t.Cleanup(func() {
@@ -79,6 +84,9 @@ func newIntegrationTestApplicationWithLogger(t *testing.T, logger *slog.Logger, 
 		defer cancelWait()
 		if err := application.WaitForScans(waitContext); err != nil {
 			t.Errorf("wait for scan workers: %v", err)
+		}
+		if err := application.WaitForCatalogMaintenance(waitContext); err != nil {
+			t.Errorf("wait for catalog worker: %v", err)
 		}
 	})
 	return &integrationTestApplication{

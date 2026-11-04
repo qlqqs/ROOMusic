@@ -1,0 +1,60 @@
+{
+  "body": {
+    "catalog_state": {
+      "artists_state": "unavailable",
+      "epoch": 1,
+      "search_mode": "legacy"
+    },
+    "items": [
+      {
+        "artist": "钢琴演奏者",
+        "duration_seconds": 183.5,
+        "group_id": "00000000-0000-4000-8000-000000000001",
+        "match": {
+          "alias": null,
+          "artist_id": null,
+          "field": "track_title",
+          "kind": "exact",
+          "original": "Summer",
+          "release_id": "00000000-0000-4000-8000-000000000002",
+          "role": null,
+          "track_id": "00000000-0000-4000-8000-000000000003"
+        },
+        "present": true,
+        "release": {
+          "album_artist": "さユり",
+          "artist": "Beyoncé",
+          "artwork": null,
+          "attention_count": 1,
+          "id": "00000000-0000-4000-8000-000000000002",
+          "media_type": null,
+          "medium_count": 1,
+          "source_type": null,
+          "title": "ＡＢＣ 愛",
+          "track_count": 2,
+          "year": 2000
+        },
+        "source": {
+          "bit_depth": 24,
+          "bitrate": null,
+          "channels": 2,
+          "codec": "flac",
+          "sample_rate": 96000,
+          "source_kind": "flac_vorbis_comment"
+        },
+        "title": "Summer",
+        "track_id": "00000000-0000-4000-8000-000000000003"
+      }
+    ],
+    "pagination": {
+      "has_more": false,
+      "page": 1,
+      "page_size": 50,
+      "total": 1,
+      "total_relation": "eq"
+    },
+    "query": "Summer",
+    "type": "tracks"
+  },
+  "status": 200
+}

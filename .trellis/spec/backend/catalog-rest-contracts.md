@@ -8,8 +8,11 @@
 “有效值投影”）；修正、人工归组、撤销与操作记录的接口见[受治理操作合同](./governance-contracts.md)。M4 起代表版本可以是管理员指定的默认版本，
 另有版本对比的只读接口，见[默认版本与版本对比合同](./default-version-contracts.md)。
 
+M5 ④新增规范化搜索与在线投影：完整规则见[搜索合同](./search-contracts.md)。搜索发布后旧两列表有 q 默认按相关性排序，组列表显式加入时间排序仍保留；未发布沿用 ILIKE，无 q 原排序不变。
+
 ## 2. 接口与数据签名
 
+- `GET /api/v1/catalog/status`、`GET /api/v1/search/suggestions`、`GET /api/v1/search`：仅专辑/曲目，状态、Match、安全曲目摘要和 1000/gte 专用分页见[搜索合同](./search-contracts.md)。
 - `GET /api/v1/releases?q=<string>&attention=required&page=<int>&page_size=<int>`
 - `GET /api/v1/releases/{id}`
 - `GET /api/v1/releases/{id}/evidence`：仅管理员。
@@ -128,9 +131,10 @@
 - **搜索**：任一可见成员命中 `/releases` 的搜索条件（同一个 SQL 谓词），组即命中；只命中不可见成员的不算。
 - **attention**：`attention_count` 是全部可见成员 attention 之和（不可见成员不计）；`attention=required` 取其大于 0 的组，
   与代表版本自己的 `attention_count` 无关。
-- **排序**：省略或 `sort=title` 取代表版本的 `LOWER(title)`、`LOWER(artist)`、ID，与 `/releases` 一致；
+- **无 q 的排序（以及新搜索未发布时的旧 q 回退）**：省略或 `sort=title` 取代表版本的 `LOWER(title)`、`LOWER(artist)`、ID，与 `/releases` 一致；
   `sort=added_at_desc` 取 `added_at DESC, group_id DESC`。空值、未知值、重复 `sort` 参数均为 `400 invalid_sort`。
-  `/releases` 不增加此排序能力。标题排序下没有人工归组时每组恰好一个版本，
+  `/releases` 不增加此排序能力。新搜索已发布且带 q 时，默认/标题入口按搜索相关性排序；显式 `sort=added_at_desc` 保留加入时间倒序，匹配仍使用完整规范化搜索。
+  标题浏览下没有人工归组时每组恰好一个版本，
   此时 `/release-groups` 与 `/releases` 的总数、顺序与代表版本逐项对应，`release_count` 为 1，
   `attention_count` 等于该版本的 `attention_count`。
 - 摘要投影、封面 `LEFT JOIN` 与搜索谓词复用 `/releases` 的同一批 SQL 常量，不逐组查询。

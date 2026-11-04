@@ -201,6 +201,9 @@ func (service *Service) finalizeScan(ctx context.Context, connection *sql.Conn, 
 		return "", err
 	}
 	defer transaction.Rollback()
+	if err := ingest.LockProjectionWrites(ctx, transaction); err != nil {
+		return "", err
+	}
 	var existingStatus string
 	var cancelRequestedAt sql.NullTime
 	if err := transaction.QueryRowContext(ctx, "SELECT status,cancel_requested_at FROM scan_runs WHERE id=$1::uuid FOR UPDATE", scanID).Scan(&existingStatus, &cancelRequestedAt); err != nil {

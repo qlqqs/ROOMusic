@@ -620,7 +620,7 @@ func (fixture *correctionFixture) changeGroupQuiet(releaseID string, expectedRev
 	}, GroupChangeExecutor(request))
 }
 
-// 同一个版本上的设定与移出被一把测试持有的行锁同时挡住：放开之后两个操作按先后各自完成，结果与顺序一致；
+// 同一个版本上的设定与移出被测试行锁及它阻塞的 CATP 写锁挡住：放开后按先后完成，结果与顺序一致；
 // 无论谁先，专辑最终都不再把这个版本当作生效中的默认版本。
 func TestPostgreSQLSetDefaultAndDetachQueueOnTheSameRelease(t *testing.T) {
 	fixture := newCorrectionFixture(t)
@@ -635,6 +635,10 @@ func TestPostgreSQLSetDefaultAndDetachQueueOnTheSameRelease(t *testing.T) {
 		t.Fatalf("begin the lock holder: %v", err)
 	}
 	t.Cleanup(func() { _ = holder.Rollback() })
+	var holderPID int
+	if err := holder.QueryRow(`SELECT pg_backend_pid()`).Scan(&holderPID); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := holder.Exec(`SELECT id FROM releases WHERE id=$1::uuid FOR UPDATE`, hires.releaseID); err != nil {
 		t.Fatalf("lock the release: %v", err)
 	}
@@ -651,7 +655,22 @@ func TestPostgreSQLSetDefaultAndDetachQueueOnTheSameRelease(t *testing.T) {
 		_, err := fixture.changeGroupQuiet(hires.releaseID, hiresRevision, GroupDetach, "")
 		outcomes <- outcome{"detach", err}
 	}()
-	waitForLockWaiters(t, fixture.database, 2)
+	drained := false
+	defer func() {
+		_ = holder.Rollback()
+		if !drained {
+			// 失败时也先释放测试锁并等待业务事务结束，不能让 schema 清理与它们交叉。
+			for range 2 {
+				select {
+				case <-outcomes:
+				case <-time.After(5 * time.Second):
+					t.Error("并发治理操作清理超时")
+					return
+				}
+			}
+		}
+	}()
+	waitForLockWaiters(t, fixture.database, holderPID, 2)
 	if err := holder.Rollback(); err != nil {
 		t.Fatalf("release the lock holder: %v", err)
 	}
@@ -660,6 +679,7 @@ func TestPostgreSQLSetDefaultAndDetachQueueOnTheSameRelease(t *testing.T) {
 		result := <-outcomes
 		failures[result.name] = result.err
 	}
+	drained = true
 	// 设定先执行：两个都成功（设定不动版本自己的版本号）；移出先执行：设定发现版本已不在这张专辑里。
 	if failures["detach"] != nil {
 		t.Fatalf("detach failed: %v", failures["detach"])
@@ -670,21 +690,25 @@ func TestPostgreSQLSetDefaultAndDetachQueueOnTheSameRelease(t *testing.T) {
 	fixture.requireDefault(fixture.requireOrder(group, original.releaseID), "")
 }
 
-// waitForLockWaiters 等到至少 count 个会话在等待行锁（只数等 FOR UPDATE 的会话），使请求一定真正重叠。
-func waitForLockWaiters(t *testing.T, database *sql.DB, count int) {
+// waitForLockWaiters 沿测试持锁者的真实阻塞链计数，包含后续等待 CATP 的请求；不误数其他 schema 的测试。
+func waitForLockWaiters(t *testing.T, database *sql.DB, holderPID, count int) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		var waiting int
-		if err := database.QueryRow(`SELECT COUNT(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock'
-			AND pid<>pg_backend_pid() AND query ILIKE '%FOR UPDATE%'`).Scan(&waiting); err != nil {
+		if err := database.QueryRow(`WITH RECURSIVE blocked(pid) AS (
+            SELECT pid FROM pg_stat_activity WHERE datname=current_database() AND $1=ANY(pg_blocking_pids(pid))
+            UNION
+            SELECT activity.pid FROM pg_stat_activity activity JOIN blocked b ON b.pid=ANY(pg_blocking_pids(activity.pid))
+            WHERE activity.datname=current_database()
+        ) SELECT count(*) FROM blocked`, holderPID).Scan(&waiting); err != nil {
 			t.Fatalf("count lock waiters: %v", err)
 		}
 		if waiting >= count {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("expected %d sessions waiting on row locks, got %d", count, waiting)
+			t.Fatalf("expected %d sessions in the test lock chain, got %d", count, waiting)
 		}
 		time.Sleep(20 * time.Millisecond)
 	}

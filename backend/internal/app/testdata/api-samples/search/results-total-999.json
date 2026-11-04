@@ -1,0 +1,60 @@
+{
+  "body": {
+    "catalog_state": {
+      "artists_state": "unavailable",
+      "epoch": 2,
+      "search_mode": "normalized"
+    },
+    "items": [
+      {
+        "artist": "分页艺人",
+        "duration_seconds": null,
+        "group_id": "00000000-0000-4000-8000-000000000001",
+        "match": {
+          "alias": null,
+          "artist_id": null,
+          "field": "track_title",
+          "kind": "contains",
+          "original": "共有 九百 千条 千一 0001",
+          "release_id": "00000000-0000-4000-8000-000000000002",
+          "role": null,
+          "track_id": "00000000-0000-4000-8000-000000000003"
+        },
+        "present": true,
+        "release": {
+          "album_artist": null,
+          "artist": "分页艺人",
+          "artwork": null,
+          "attention_count": 0,
+          "id": "00000000-0000-4000-8000-000000000002",
+          "media_type": null,
+          "medium_count": 1,
+          "source_type": null,
+          "title": "共有 九百 千条 千一 0001",
+          "track_count": 1,
+          "year": null
+        },
+        "source": {
+          "bit_depth": null,
+          "bitrate": null,
+          "channels": null,
+          "codec": null,
+          "sample_rate": null,
+          "source_kind": "flac_vorbis_comment"
+        },
+        "title": "共有 九百 千条 千一 0001",
+        "track_id": "00000000-0000-4000-8000-000000000003"
+      }
+    ],
+    "pagination": {
+      "has_more": true,
+      "page": 1,
+      "page_size": 1,
+      "total": 999,
+      "total_relation": "eq"
+    },
+    "query": "九百",
+    "type": "tracks"
+  },
+  "status": 200
+}

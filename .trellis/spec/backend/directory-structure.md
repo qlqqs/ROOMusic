@@ -181,3 +181,7 @@ repositories directory.
 
 The capability map follows [Modular Design](../guides/modular-design.md) and the
 current [Core 0 PRD](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md).
+
+## M5 ④搜索包增量
+
+`catalog/textnorm` 是纯叶子；`catalog/internal/writegate` 只提供事务 gate；`catalog/internal/searchindex` 只依赖 textnorm 与 releasesql；`catalog/maintenance` 只依赖 textnorm、searchindex、writegate。catalog 核心增加 textnorm/searchindex，ingest 与 governance 增加 searchindex/writegate；app 增加 maintenance。逐包 allowlist 由依赖测试维护，不允许通配放开 catalog 子树，core 仍不得导入 metadata/ingest/governance。完整在线协议见[搜索合同](./search-contracts.md)。

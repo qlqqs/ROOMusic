@@ -81,8 +81,8 @@ type ReleaseHeader struct {
 	CorrectedFields                               []string
 }
 
-// ListReleases 按标题、艺人排序返回可见 Release 的一页。查询执行失败时错误包含 ErrQuery。
-func (s *Store) ListReleases(ctx context.Context, params ListParams) (ReleasePage, error) {
+// listReleasesLegacy 保留旧匹配与浏览顺序；非空 q 的调用方已开启同一读取快照。
+func (s *Store) listReleasesLegacy(ctx context.Context, params ListParams) (ReleasePage, error) {
 	whereClause := " WHERE " + releasesql.ReleaseVisiblePredicate
 	queryArgs := []any{}
 	if params.Search != "" {

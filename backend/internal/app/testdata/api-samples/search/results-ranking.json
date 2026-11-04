@@ -1,0 +1,117 @@
+{
+  "body": {
+    "catalog_state": {
+      "artists_state": "unavailable",
+      "epoch": 2,
+      "search_mode": "normalized"
+    },
+    "items": [
+      {
+        "group": {
+          "added_at": "2026-01-01T00:00:00Z",
+          "attention_count": 0,
+          "id": "00000000-0000-4000-8000-000000000001",
+          "release_count": 1,
+          "representative": {
+            "album_artist": null,
+            "artist": "合成艺人",
+            "artwork": null,
+            "attention_count": 0,
+            "id": "00000000-0000-4000-8000-000000000002",
+            "media_type": null,
+            "medium_count": 1,
+            "source_type": null,
+            "title": "Tune",
+            "track_count": 1,
+            "year": null
+          }
+        },
+        "match": {
+          "alias": null,
+          "artist_id": null,
+          "field": "release_title",
+          "kind": "exact",
+          "original": "Tune",
+          "release_id": "00000000-0000-4000-8000-000000000002",
+          "role": null,
+          "track_id": null
+        },
+        "matched_release_id": "00000000-0000-4000-8000-000000000002"
+      },
+      {
+        "group": {
+          "added_at": "2026-01-01T00:00:00Z",
+          "attention_count": 0,
+          "id": "00000000-0000-4000-8000-000000000003",
+          "release_count": 1,
+          "representative": {
+            "album_artist": null,
+            "artist": "合成艺人",
+            "artwork": null,
+            "attention_count": 0,
+            "id": "00000000-0000-4000-8000-000000000004",
+            "media_type": null,
+            "medium_count": 1,
+            "source_type": null,
+            "title": "Tune extended",
+            "track_count": 1,
+            "year": null
+          }
+        },
+        "match": {
+          "alias": null,
+          "artist_id": null,
+          "field": "release_title",
+          "kind": "prefix",
+          "original": "Tune extended",
+          "release_id": "00000000-0000-4000-8000-000000000004",
+          "role": null,
+          "track_id": null
+        },
+        "matched_release_id": "00000000-0000-4000-8000-000000000004"
+      },
+      {
+        "group": {
+          "added_at": "2026-01-01T00:00:00Z",
+          "attention_count": 0,
+          "id": "00000000-0000-4000-8000-000000000005",
+          "release_count": 1,
+          "representative": {
+            "album_artist": null,
+            "artist": "合成艺人",
+            "artwork": null,
+            "attention_count": 0,
+            "id": "00000000-0000-4000-8000-000000000006",
+            "media_type": null,
+            "medium_count": 1,
+            "source_type": null,
+            "title": "A Tune inside",
+            "track_count": 1,
+            "year": null
+          }
+        },
+        "match": {
+          "alias": null,
+          "artist_id": null,
+          "field": "release_title",
+          "kind": "contains",
+          "original": "A Tune inside",
+          "release_id": "00000000-0000-4000-8000-000000000006",
+          "role": null,
+          "track_id": null
+        },
+        "matched_release_id": "00000000-0000-4000-8000-000000000006"
+      }
+    ],
+    "pagination": {
+      "has_more": false,
+      "page": 1,
+      "page_size": 50,
+      "total": 3,
+      "total_relation": "eq"
+    },
+    "query": "Tune",
+    "type": "albums"
+  },
+  "status": 200
+}

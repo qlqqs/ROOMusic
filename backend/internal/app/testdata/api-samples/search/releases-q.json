@@ -1,0 +1,51 @@
+{
+  "body": {
+    "items": [
+      {
+        "album_artist": null,
+        "artist": "合成艺人",
+        "artwork": null,
+        "attention_count": 0,
+        "id": "00000000-0000-4000-8000-000000000001",
+        "media_type": null,
+        "medium_count": 1,
+        "source_type": null,
+        "title": "Tune",
+        "track_count": 1,
+        "year": null
+      },
+      {
+        "album_artist": null,
+        "artist": "合成艺人",
+        "artwork": null,
+        "attention_count": 0,
+        "id": "00000000-0000-4000-8000-000000000002",
+        "media_type": null,
+        "medium_count": 1,
+        "source_type": null,
+        "title": "Tune extended",
+        "track_count": 1,
+        "year": null
+      },
+      {
+        "album_artist": null,
+        "artist": "合成艺人",
+        "artwork": null,
+        "attention_count": 0,
+        "id": "00000000-0000-4000-8000-000000000003",
+        "media_type": null,
+        "medium_count": 1,
+        "source_type": null,
+        "title": "A Tune inside",
+        "track_count": 1,
+        "year": null
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "page_size": 50,
+      "total": 3
+    }
+  },
+  "status": 200
+}

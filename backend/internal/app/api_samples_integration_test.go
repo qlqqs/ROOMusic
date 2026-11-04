@@ -281,6 +281,7 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	// 播放历史（阶段 P）：放在最后，用管理员自己的历史。
 	recordListeningSamples(t, application, samples, call, admin)
 	recordHistorySamples(t, samples)
+	recordSearchSamples(t, samples)
 	// 字段修正（M3）：修正会改变这张专辑的有效值，所以放在所有其他样本之后。
 	recordCorrectionSamples(t, application, samples, call, admin)
 	// 人工归组（M3）：移动合成的 CUE 专辑，放在最后。

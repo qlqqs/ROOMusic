@@ -232,3 +232,7 @@ scans cannot mark sources missing.
 
 These rules implement the transaction and authority requirements in the
 [Core 0 PRD](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md).
+
+### 并行测试的统计隔离
+
+同库独立 schema 的测试不得执行不带表名的 `ANALYZE`：它不受 `search_path` 限制，会更新其他测试 schema 的统计。需要完整夹具统计时使用 `postgrestest.AnalyzeSchema(t, ctx, db)`，仅枚举当前 schema 的表并以转义后的限定标识符执行；不得为规避污染放松统计断言或改为串行运行。

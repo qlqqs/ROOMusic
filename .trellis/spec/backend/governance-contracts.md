@@ -195,3 +195,7 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
 - **新写操作的轻量标准**（2026-11-03，R4，只有一个管理员）：接入 `Run`（记录与幂等是现成的）；有反向操作可以恢复的类型不提供撤销——`Kind.Revert` 返回
   `409 not_revertible`，`Describe` 的 `Revertible` 恒为假；预览令牌只在预览依赖版本号覆盖不到的状态时才加。已实施的五种类型不变。见[路线调整](../../../docs/architecture/core-1-roadmap.md#2026-11-03-路线调整)。
 - 前端合同见[状态规范](../frontend/state-management.md)、[组件规范](../frontend/component-guidelines.md)与[前端目录](../frontend/directory-structure.md)。
+
+## M5 ④搜索投影挂接
+
+扫描候选及修正/清除/撤销/claim 双方在同事务刷新目标代次搜索投影；CATP 先于业务行锁，失败回滚，后台持锁重读避免覆盖新值。扫描不写治理表，missing 可见性读取实时过滤。详见[搜索合同](./search-contracts.md)。

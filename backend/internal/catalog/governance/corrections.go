@@ -13,6 +13,8 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/searchindex"
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/writegate"
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 )
@@ -282,6 +284,9 @@ type lockedRelease struct {
 // lockVisibleRelease 锁住发行行并返回它的人工修改版本号与所在的组；发行不存在或没有可见曲目时返回 404 分类错误。
 // 所有会改发行的受控操作（修正、归组、撤销）都先锁发行行，所以同一发行上的这些操作互相串行。
 func lockVisibleRelease(ctx context.Context, tx *sql.Tx, releaseID string) (lockedRelease, error) {
+	if err := writegate.Lock(ctx, tx); err != nil {
+		return lockedRelease{}, err
+	}
 	var locked lockedRelease
 	var visible bool
 	err := tx.QueryRowContext(ctx, `SELECT releases.edit_revision, releases.group_id::text, `+releasesql.ReleaseVisiblePredicate+` FROM releases WHERE releases.id=$1::uuid FOR UPDATE`, releaseID).
@@ -348,6 +353,9 @@ func CorrectionExecutor(request CorrectionRequest) operations.Executor {
 			return operations.Outcome{}, operations.Invalid("no_changes", "没有需要修改的内容")
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE releases SET edit_revision = edit_revision + 1 WHERE id=$1::uuid`, request.ReleaseID); err != nil {
+			return operations.Outcome{}, err
+		}
+		if err := searchindex.RefreshRelease(ctx, tx, request.ReleaseID); err != nil {
 			return operations.Outcome{}, err
 		}
 		state, err := loadCorrectionState(ctx, tx, request.ReleaseID)

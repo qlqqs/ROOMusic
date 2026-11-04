@@ -1,0 +1,20 @@
+{
+  "body": {
+    "catalog_state": {
+      "artists_state": "unavailable",
+      "epoch": 2,
+      "search_mode": "normalized"
+    },
+    "items": [],
+    "pagination": {
+      "has_more": false,
+      "page": 22,
+      "page_size": 50,
+      "total": 1000,
+      "total_relation": "gte"
+    },
+    "query": "千一",
+    "type": "tracks"
+  },
+  "status": 200
+}

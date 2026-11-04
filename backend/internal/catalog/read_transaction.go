@@ -22,7 +22,15 @@ func ReadRecentlyAddedReleaseGroups(ctx context.Context, database ReadTransactio
 func ReadReleaseGroupsByAddedAt(ctx context.Context, database ReadTransactionBeginner, params ListParams) (ReleaseGroupPage, error) {
 	params.Sort = ReleaseGroupSortAddedAtDesc
 	return readWithLocalJITOff(ctx, database, func(tx *sql.Tx) (ReleaseGroupPage, error) {
-		return NewStore(tx).ListReleaseGroups(ctx, params)
+		snapshot := NewStore(tx)
+		if params.Search == "" {
+			return snapshot.listReleaseGroupsLegacy(ctx, params)
+		}
+		state, generation, err := snapshot.searchState(ctx)
+		if err != nil {
+			return ReleaseGroupPage{}, err
+		}
+		return snapshot.listReleaseGroupsSearch(ctx, params, state, generation)
 	})
 }
 

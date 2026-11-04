@@ -10,6 +10,7 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/searchindex"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 )
 
@@ -98,6 +99,9 @@ func (correctionKind) Revert(ctx context.Context, tx *sql.Tx, operationID string
 		}
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE releases SET edit_revision = edit_revision + 1 WHERE id=$1::uuid`, original.TargetID); err != nil {
+		return operations.Outcome{}, err
+	}
+	if err := searchindex.RefreshRelease(ctx, tx, original.TargetID); err != nil {
 		return operations.Outcome{}, err
 	}
 	effectiveAfter, err := loadFieldValues(ctx, tx, releasesql.ReleaseSource, original.TargetID)
@@ -199,6 +203,9 @@ func (groupChangeKind) Revert(ctx context.Context, tx *sql.Tx, operationID strin
 		return operations.Outcome{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE releases SET group_id=$2::uuid, edit_revision = edit_revision + 1 WHERE id=$1::uuid`, original.TargetID, origin); err != nil {
+		return operations.Outcome{}, err
+	}
+	if err := searchindex.RefreshRelease(ctx, tx, original.TargetID); err != nil {
 		return operations.Outcome{}, err
 	}
 	return operations.Outcome{

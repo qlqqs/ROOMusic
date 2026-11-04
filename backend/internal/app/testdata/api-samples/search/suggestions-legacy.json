@@ -1,0 +1,100 @@
+{
+  "body": {
+    "albums": {
+      "has_more": false,
+      "items": [
+        {
+          "group": {
+            "added_at": "2026-01-01T00:00:00Z",
+            "attention_count": 1,
+            "id": "00000000-0000-4000-8000-000000000001",
+            "release_count": 2,
+            "representative": {
+              "album_artist": null,
+              "artist": "原版艺人",
+              "artwork": null,
+              "attention_count": 0,
+              "id": "00000000-0000-4000-8000-000000000002",
+              "media_type": null,
+              "medium_count": 1,
+              "source_type": null,
+              "title": "原版专辑",
+              "track_count": 1,
+              "year": 1980
+            }
+          },
+          "match": {
+            "alias": null,
+            "artist_id": null,
+            "field": "track_title",
+            "kind": "exact",
+            "original": "Summer",
+            "release_id": "00000000-0000-4000-8000-000000000003",
+            "role": null,
+            "track_id": "00000000-0000-4000-8000-000000000004"
+          },
+          "matched_release_id": "00000000-0000-4000-8000-000000000003"
+        }
+      ]
+    },
+    "artists": {
+      "has_more": false,
+      "items": []
+    },
+    "available_types": [
+      "albums",
+      "tracks"
+    ],
+    "catalog_state": {
+      "artists_state": "unavailable",
+      "epoch": 1,
+      "search_mode": "legacy"
+    },
+    "query": "Summer",
+    "tracks": {
+      "has_more": false,
+      "items": [
+        {
+          "artist": "钢琴演奏者",
+          "duration_seconds": 183.5,
+          "group_id": "00000000-0000-4000-8000-000000000001",
+          "match": {
+            "alias": null,
+            "artist_id": null,
+            "field": "track_title",
+            "kind": "exact",
+            "original": "Summer",
+            "release_id": "00000000-0000-4000-8000-000000000003",
+            "role": null,
+            "track_id": "00000000-0000-4000-8000-000000000004"
+          },
+          "present": true,
+          "release": {
+            "album_artist": "さユり",
+            "artist": "Beyoncé",
+            "artwork": null,
+            "attention_count": 1,
+            "id": "00000000-0000-4000-8000-000000000003",
+            "media_type": null,
+            "medium_count": 1,
+            "source_type": null,
+            "title": "ＡＢＣ 愛",
+            "track_count": 2,
+            "year": 2000
+          },
+          "source": {
+            "bit_depth": 24,
+            "bitrate": null,
+            "channels": 2,
+            "codec": "flac",
+            "sample_rate": 96000,
+            "source_kind": "flac_vorbis_comment"
+          },
+          "title": "Summer",
+          "track_id": "00000000-0000-4000-8000-000000000004"
+        }
+      ]
+    }
+  },
+  "status": 200
+}
