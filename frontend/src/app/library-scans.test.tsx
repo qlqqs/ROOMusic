@@ -356,7 +356,7 @@ describe("扫描目录页：扫描记录", () => {
 describe("扫描详情：状态", () => {
   const finishedAt = "2026-01-02T00:01:00Z";
   const phases: { label: string; scan: Partial<ScanDTO>; note: RegExp; reconciles: boolean }[] = [
-    { label: "运行中", scan: {}, note: /^正在扫描。$/, reconciles: false },
+    { label: "运行中", scan: {}, note: /^正在准备…$/, reconciles: false },
     {
       label: "取消请求中",
       scan: { cancel_requested_at: "2026-01-02T00:00:30Z" },
@@ -364,12 +364,12 @@ describe("扫描详情：状态", () => {
       reconciles: false,
     },
     { label: "成功", scan: { status: "succeeded", finished_at: finishedAt }, note: /这次没找到的文件已标为缺失/, reconciles: true },
-    { label: "失败", scan: { status: "failed", finished_at: finishedAt }, note: /扫描失败，已有的曲目不受影响/, reconciles: false },
-    { label: "已取消", scan: { status: "canceled", finished_at: finishedAt, cancel_requested_at: "2026-01-02T00:00:30Z" }, note: /扫描已取消，已有的曲目不受影响/, reconciles: false },
-    { label: "不完整", scan: { status: "incomplete", finished_at: finishedAt }, note: /已有的曲目不受影响.*看一下诊断/, reconciles: false },
+    { label: "失败", scan: { status: "failed", finished_at: finishedAt }, note: /扫描失败，没扫到的曲目保持原样/, reconciles: false },
+    { label: "已取消", scan: { status: "canceled", finished_at: finishedAt, cancel_requested_at: "2026-01-02T00:00:30Z" }, note: /扫描已取消，没扫到的曲目保持原样/, reconciles: false },
+    { label: "不完整", scan: { status: "incomplete", finished_at: finishedAt }, note: /没扫到的曲目保持原样.*看一下诊断/, reconciles: false },
   ];
 
-  it.each(phases)("$label：阶段标签与说明互不混同，不出现百分比或剩余时间", async ({ label, scan: overrides, note }) => {
+  it.each(phases)("$label：旧扫描的阶段说明不混同，没有数据时不伪造百分比或剩余时间", async ({ label, scan: overrides, note }) => {
     const { library } = setup();
     const scan = seedScan(library, overrides);
     renderApp({ path: `/library/scans/${scan.id}` });
@@ -377,7 +377,7 @@ describe("扫描详情：状态", () => {
     const panel = await statusPanel();
     expect(within(panel).getByRole("status").textContent).toBe(label);
     expect(within(panel).getByText(note)).toBeTruthy();
-    // 只断言界面没有显示数值进度或预计时间。
+    // 旧扫描没有服务端进度快照，不能把诊断条数当进度；新扫描的确定进度另测。
     expect(panel.textContent).not.toMatch(/\d+\s*%|预计剩余|ETA/);
     // 六种阶段里只有这一种标签出现。
     for (const other of phases.filter((phase) => phase.label !== label)) {

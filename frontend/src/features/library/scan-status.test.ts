@@ -18,10 +18,13 @@ describe("scanPhase", () => {
     expect(new Set(phases.map((phase) => scanPhaseNotes[phase])).size).toBe(6);
   });
 
-  it("失败、已取消、不完整都说明已有的曲目不受影响，运行中不暗示进度", () => {
-    for (const phase of ["failed", "canceled", "incomplete"] as const) expect(scanPhaseNotes[phase]).toContain("已有的曲目不受影响");
-    expect(scanPhaseNotes.succeeded).not.toContain("已有的曲目不受影响");
-    for (const note of Object.values(scanPhaseNotes)) expect(note).not.toMatch(/\d+\s*%/);
+  it("非成功终态说明没扫到的曲目保持原样，不否认已保存的变化", () => {
+    for (const phase of ["failed", "canceled", "incomplete"] as const) expect(scanPhaseNotes[phase]).toContain("没扫到的曲目保持原样");
+    expect(scanPhaseNotes.succeeded).toBe("扫描完成。这次没找到的文件已标为缺失。");
+    expect(scanPhaseNotes.running).toBeNull();
+    expect(scanPhaseNotes.cancel_requested).toBe("正在取消，当前这一步做完就会停下。");
+    for (const note of Object.values(scanPhaseNotes)) expect(note ?? "").not.toContain("已有的曲目不受影响");
+    for (const note of Object.values(scanPhaseNotes)) expect(note ?? "").not.toMatch(/\d+\s*%/);
   });
 });
 

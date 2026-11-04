@@ -1,4 +1,4 @@
-import { catalogDataOf, respondToGroupComparison, respondToGroupDetail, respondToGroupList, respondToReleaseDetail, respondToReleaseEvidence, type ApiResult, type CatalogData } from "./catalog-data";
+import { catalogDataOf, respondToGroupComparison, respondToGroupDetail, respondToGroupList, respondToRecentlyAdded, respondToReleaseDetail, respondToReleaseEvidence, type ApiResult, type CatalogData } from "./catalog-data";
 import type { FakeApi } from "./fake-api";
 import { jsonResponse } from "./http";
 
@@ -9,6 +9,7 @@ import { jsonResponse } from "./http";
 export type FakeCatalog = CatalogData & {
   /** 设置后，对应接口的请求都返回它（例如 503 的 database_unavailable）；改回 null 恢复正常。 */
   listFailure: Response | null;
+  recentlyAddedFailure: Response | null;
   groupFailure: Response | null;
   comparisonFailure: Response | null;
   releaseFailure: Response | null;
@@ -25,6 +26,7 @@ export function installCatalogApi(api: FakeApi, overrides: Partial<FakeCatalog> 
   const catalog: FakeCatalog = {
     ...catalogDataOf(),
     listFailure: null,
+    recentlyAddedFailure: null,
     groupFailure: null,
     comparisonFailure: null,
     releaseFailure: null,
@@ -36,6 +38,9 @@ export function installCatalogApi(api: FakeApi, overrides: Partial<FakeCatalog> 
     const { status, body } = result();
     return jsonResponse(status, body);
   };
+  api.on("GET", "/api/v1/release-groups/recently-added", () =>
+    answer(catalog.recentlyAddedFailure, () => respondToRecentlyAdded(catalog.groups)),
+  );
   api.on("GET", "/api/v1/release-groups", (request) =>
     answer(catalog.listFailure, () => respondToGroupList(catalog.groups, new URL(request.path, "http://localhost").searchParams)),
   );

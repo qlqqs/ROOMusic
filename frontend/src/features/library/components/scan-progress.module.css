@@ -1,0 +1,52 @@
+.progress {
+  display: grid;
+  gap: var(--space-1);
+  max-width: 40rem;
+}
+
+.track {
+  height: 6px;
+  margin-bottom: var(--space-1);
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-300);
+}
+
+.fill {
+  height: 100%;
+  background: var(--color-accent-700);
+}
+
+/* 没有成功结束的扫描：进度停在原处，换成中性色，状态仍由文字与图标表达。 */
+.stopped .fill {
+  background: var(--color-neutral-600);
+}
+
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-3);
+}
+
+.percent {
+  font-variant-numeric: lining-nums tabular-nums;
+  font-weight: 600;
+}
+
+.meta {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  font-variant-numeric: lining-nums tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+@media (forced-colors: active) {
+  .track {
+    border: 1px solid CanvasText;
+  }
+
+  .fill {
+    background: Highlight;
+  }
+}

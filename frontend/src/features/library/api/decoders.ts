@@ -1,4 +1,5 @@
 import { decode as d } from "../../../shared/api";
+import { releaseGroupSummaryWithAddedAtDecoder } from "../../catalog/api/decoders";
 
 export const rootStatuses = ["active", "disabled"] as const;
 export type RootStatus = (typeof rootStatuses)[number];
@@ -73,6 +74,77 @@ const diagnosticsSummaryDecoder = d.object({
   counts: d.array(d.object({ kind: diagnosticKindDecoder, count: d.integer({ min: 0 }) }), { max: 100 }),
 });
 
+/** 在已解码的值上再检查字段之间的关系（单个字段的类型与范围由原语负责）。check 返回违反时的说明，没有问题返回 null。 */
+function refine<T>(inner: d.Decoder<T>, check: (value: T) => string | null): d.Decoder<T> {
+  return (input, path) => {
+    const value = inner(input, path);
+    const problem = check(value);
+    if (problem !== null) throw new d.DecodeError(path, problem);
+    return value;
+  };
+}
+
+/**
+ * 扫描的四个工作阶段（成功不是第五个阶段）：先给所有目录数文件，然后逐个目录读取标签、整理专辑、保存。
+ * 每个阶段的 completed / total 用固定的单位：数文件按目录、读取标签按文件、整理专辑按目录（0 或 1）、保存按专辑范围。
+ */
+export const scanProgressPhases = ["counting", "reading_tags", "organizing", "saving"] as const;
+export type ScanProgressPhase = (typeof scanProgressPhases)[number];
+const scanProgressUnits = ["files", "roots", "scopes"] as const;
+const phaseUnits: Record<ScanProgressPhase, (typeof scanProgressUnits)[number]> = {
+  counting: "roots",
+  reading_tags: "files",
+  organizing: "roots",
+  saving: "scopes",
+};
+
+/** 进度以基点（万分之一）表示；只有成功的扫描才到 10,000。 */
+export const MAX_PERCENT_BP = 10_000;
+
+const count = () => d.integer({ min: 0 });
+
+// 服务端持久化的扫描进度。percent_bp 是加权后的整体工作进度（不是耗时，也不能用来估剩余时间）；files_* 是全局累计，
+// completed / total 是当前目录当前阶段的分子分母，换阶段或换目录时可以重置。计数没结束（或被取消）时 files_total 为 null。
+// files_processed 可以超过 files_total：计数之后目录里多了文件，分母不变。
+const scanProgressDecoder = refine(
+  d.object({
+    version: d.literal(1),
+    phase: d.oneOf(scanProgressPhases),
+    percent_bp: d.integer({ min: 0, max: MAX_PERCENT_BP }),
+    completed: count(),
+    total: count(),
+    unit: d.oneOf(scanProgressUnits),
+    files_counted: count(),
+    files_total: d.nullable(count()),
+    files_processed: count(),
+    count_complete: d.boolean(),
+    files_changed: d.boolean(),
+    updated_at: d.timestamp(),
+  }),
+  (progress) => (progress.unit === phaseUnits[progress.phase] ? null : `阶段 ${progress.phase} 的单位应为 ${phaseUnits[progress.phase]}`),
+);
+
+// 当前目录的序号（1 起）与本次扫描的目录总数，所有登录用户可见；id 与 name 只有管理员的响应才有（普通成员省略这两个键）。
+// 全部目录处理完、正在保存扫描结果时没有当前目录，index 为 null（管理员的 id、name 也为 null）。
+const rootProgressDecoder = refine(
+  d.object({
+    index: d.nullable(d.integer({ min: 1 })),
+    total: count(),
+    id: d.optional(d.nullable(d.uuid())),
+    name: d.optional(d.nullable(d.string({ min: 1, max: 1024 }))),
+  }),
+  (root) => (root.index !== null && root.index > root.total ? "目录序号不应超过目录总数" : null),
+);
+
+/**
+ * 报告的状态：legacy 是本功能上线前的扫描（没有报告）；pending 只出现在运行中；ready 是成功扫描的完整报告；
+ * partial 是没有成功结束的扫描已经保存的那部分变化；unavailable 是报告没能生成（扫描结果本身不受影响）。
+ */
+export const scanReportStatuses = ["legacy", "pending", "ready", "partial", "unavailable"] as const;
+export type ScanReportStatus = (typeof scanReportStatuses)[number];
+
+// progress、root_progress 与 report_status 是后来加的字段：旧服务没有它们，按“缺失 = 没有进度与报告”处理，不伪造进度。
+// 本功能上线前的扫描 progress 与 root_progress 为 null、report_status 为 legacy。
 const scanDecoder = d.object({
   id: d.uuid(),
   scan_run_id: d.uuid(),
@@ -81,10 +153,15 @@ const scanDecoder = d.object({
   finished_at: d.nullable(d.timestamp()),
   cancel_requested_at: d.nullable(d.timestamp()),
   diagnostics: diagnosticsSummaryDecoder,
+  progress: d.optional(d.nullable(scanProgressDecoder)),
+  root_progress: d.optional(d.nullable(rootProgressDecoder)),
+  report_status: d.optional(d.oneOf(scanReportStatuses)),
 });
 
 export const decodeScan = d.defineDecoder(scanDecoder);
 export type ScanDTO = d.Infer<typeof scanDecoder>;
+export type ScanProgressDTO = d.Infer<typeof scanProgressDecoder>;
+export type RootProgressDTO = d.Infer<typeof rootProgressDecoder>;
 
 // 扫描记录一页（仅管理员）：条目与 GET /scans/{id} 相同；每页最多 100 条，total 是全部扫描数。
 const scanPageDecoder = d.object({
@@ -118,3 +195,55 @@ const diagnosticsPageDecoder = d.object({
 export const decodeDiagnosticsPage = d.defineDecoder(diagnosticsPageDecoder);
 export type DiagnosticDTO = d.Infer<typeof diagnosticDecoder>;
 export type DiagnosticsPageDTO = d.Infer<typeof diagnosticsPageDecoder>;
+
+// 扫描报告（仅管理员，GET /scans/{id}/report）：计数与新增专辑的标题、艺人、时间在扫描结束时冻结；
+// album（当前的专辑卡片，当前不可见时为 null）、current_group_id 与 claim_hints 随资料库的现状变化。
+const changeCountsDecoder = d.object({ added: count(), updated: count(), missing: count() });
+
+/** 新增专辑可能接替的已不可见旧版本：每项最多 3 个。 */
+const MAX_CLAIM_HINTS = 3;
+const MAX_REPORT_PAGE_ITEMS = 100;
+
+const addedAlbumDecoder = d.object({
+  group_id_at_scan: d.uuid(),
+  added_at: d.timestamp(),
+  title_at_scan: d.string(),
+  artist_at_scan: d.string(),
+  release_id: d.uuid(),
+  current_group_id: d.nullable(d.uuid()),
+  album: d.nullable(releaseGroupSummaryWithAddedAtDecoder),
+  claim_hints: d.array(d.object({ id: d.uuid(), title: d.string() }), { max: MAX_CLAIM_HINTS }),
+});
+
+const scanReportDecoder = d.object({
+  scan_run_id: d.uuid(),
+  schema_version: d.literal(1),
+  status: d.oneOf(["ready", "partial"] as const),
+  scan_status: d.oneOf(scanStatuses),
+  finalized_at: d.timestamp(),
+  missing_reconciled: d.boolean(),
+  files: d.object({
+    counted: count(),
+    total: d.nullable(count()),
+    processed: count(),
+    count_complete: d.boolean(),
+    changed: d.boolean(),
+  }),
+  albums: changeCountsDecoder,
+  tracks: changeCountsDecoder,
+  // recorded 是这次扫描记下的诊断条数；诊断最多保留 100 条，may_be_truncated 为 true 时实际问题至少这么多。
+  issues: d.object({ recorded: count(), may_be_truncated: d.boolean() }),
+  added_albums: d.object({
+    items: d.array(addedAlbumDecoder, { max: MAX_REPORT_PAGE_ITEMS }),
+    pagination: d.object({
+      page: d.integer({ min: 1 }),
+      page_size: d.integer({ min: 1, max: MAX_REPORT_PAGE_ITEMS }),
+      total: count(),
+    }),
+  }),
+});
+
+export const decodeScanReport = d.defineDecoder(scanReportDecoder);
+export type ScanReportDTO = d.Infer<typeof scanReportDecoder>;
+export type AddedAlbumDTO = d.Infer<typeof addedAlbumDecoder>;
+export type ChangeCountsDTO = d.Infer<typeof changeCountsDecoder>;

@@ -13,6 +13,8 @@ import { scanFailureMessages } from "./root-messages";
 import styles from "./scan-detail.module.css";
 import { ScanDiagnostics } from "./scan-diagnostics";
 import { ScanPhaseTag } from "./scan-phase-tag";
+import { ScanProgress } from "./scan-progress";
+import { ScanReport } from "./scan-report";
 
 const backToLibrary = <Link to="/library">返回扫描目录</Link>;
 
@@ -68,7 +70,8 @@ function ScanStatusPanel({ scan }: { scan: ScanDTO }) {
       <p role="status">
         <ScanPhaseTag phase={phase} />
       </p>
-      <p>{scanPhaseNotes[phase]}</p>
+      <ScanProgress scan={scan} showRoot />
+      {scanPhaseNotes[phase] === null ? null : <p>{scanPhaseNotes[phase]}</p>}
       <ScanFacts scan={scan} />
       {phase === "running" ? <CancelScan scanId={scan.id} /> : null}
     </Panel>
@@ -84,6 +87,7 @@ function ScanDetailContent({ scanId }: { scanId: string }) {
       <QueryContent query={scan} loading={<Skeleton label="正在加载扫描" lines={3} />}>
         {(data) => <ScanStatusPanel scan={data} />}
       </QueryContent>
+      {scan.data === undefined ? null : <ScanReport scan={scan.data} />}
       {scan.data === undefined ? null : <ScanDiagnostics scanId={scanId} finished={finished} />}
     </Page>
   );

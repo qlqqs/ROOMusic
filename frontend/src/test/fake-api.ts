@@ -79,6 +79,15 @@ export function installFakeSession(api: FakeApi, initial: Partial<FakeSession> =
   api.on("GET", "/api/v1/me/plays/recent-releases", () => viewer() === null ? sampleResponse("errors/unauthorized") : sampleResponse("listening/recent-releases-empty"));
   api.on("POST", "/api/v1/me/plays", () => viewer() === null ? sampleResponse("errors/unauthorized") : sampleResponse("listening/play-recorded"));
   api.on("DELETE", "/api/v1/me/plays", () => viewer() === null ? sampleResponse("errors/unauthorized") : sampleResponse("listening/plays-cleared"));
+  // 概览的最近新增默认没有记录；具体场景可覆盖。匿名会话仍被拒绝，不用 404 伪装空列表。
+  api.on("GET", "/api/v1/release-groups/recently-added", () => viewer() === null ? sampleResponse("errors/unauthorized") : sampleResponse("scan-feedback/recent-empty"));
+  // 报告只给管理员；未登记的扫描返回 404，不能以默认成功掩盖遗漏的场景或错误的扫描 ID。
+  api.on("GET", /^\/api\/v1\/scans\/[^/]+\/report$/, () => {
+    const current = viewer();
+    if (current === null) return sampleResponse("scan-feedback/report-unauthorized");
+    if (current.role !== "admin") return sampleResponse("scan-feedback/report-forbidden");
+    return sampleResponse("scan-feedback/report-not-found");
+  });
   api.on("POST", "/api/v1/auth/login", (request) => {
     const { username, password } = request.body as { username: string; password: string };
     const account = session.accounts[username];

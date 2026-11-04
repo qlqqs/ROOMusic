@@ -23,13 +23,13 @@ export function AlbumGridLayout({ children }: { children: ReactNode }) {
 
 const PLACEHOLDER_CARDS = 12;
 
-/** 首次加载的占位：与卡片网格同结构（方形封面加两行文字），不画成空库，也没有动画。 */
-export function AlbumGridSkeleton() {
+/** 首次加载的占位：与卡片网格同结构（方形封面加两行文字），不画成空库，也没有动画。count 是占位卡片数（默认 12）。 */
+export function AlbumGridSkeleton({ count = PLACEHOLDER_CARDS }: { count?: number }) {
   return (
     <div role="status">
       <VisuallyHidden>正在加载专辑</VisuallyHidden>
       <ul className={styles.grid} aria-hidden="true">
-        {Array.from({ length: PLACEHOLDER_CARDS }, (_, index) => (
+        {Array.from({ length: count }, (_, index) => (
           <li key={index} className={styles.placeholder}>
             <span className={styles.placeholderCover} />
             <span className={styles.placeholderLine} />

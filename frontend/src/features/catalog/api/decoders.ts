@@ -40,22 +40,42 @@ const releaseSummaryShape = {
 // 其他 feature（最近播放）经 catalog 的公开入口复用同一个摘要解码器，保证两处对封面等字段的校验一致。
 export const releaseSummaryDecoder = d.object(releaseSummaryShape);
 
+// added_at 是专辑的加入时间：组内当前可见版本里最早的创建时间（不是代表版本的时间，归组、认领后可能变化）。
+// 旧服务没有这个字段，普通列表把它当可选；按加入时间排序与“最近新增”必须有它（见下方的 WithAddedAt）。
 const releaseGroupSummaryShape = {
   id: d.uuid(),
   release_count: d.integer({ min: 1 }),
   attention_count: d.integer({ min: 0 }),
   representative: releaseSummaryDecoder,
+  added_at: d.optional(d.timestamp()),
 };
 const releaseGroupSummaryDecoder = d.object(releaseGroupSummaryShape);
 
+// 必须带加入时间的组摘要：“最近新增”、按加入时间排序的列表与扫描报告里的新增专辑用它。
+// 旧服务会忽略 sort 参数而按标题返回，缺少 added_at 时整体拒绝，不把按标题排列的结果当成“最近新增”显示。
+const releaseGroupSummaryWithAddedAtShape = { ...releaseGroupSummaryShape, added_at: d.timestamp() };
+// 扫描报告（library）经 api/decoders 模块直接复用它，保证两处对专辑卡片字段的校验一致。
+export const releaseGroupSummaryWithAddedAtDecoder = d.object(releaseGroupSummaryWithAddedAtShape);
+
+const paginationDecoder = d.object({
+  page: d.integer({ min: 1 }),
+  page_size: d.integer({ min: 1, max: MAX_PAGE_ITEMS }),
+  total: d.integer({ min: 0 }),
+});
+
 const releaseGroupPageDecoder = d.object({
   items: d.array(releaseGroupSummaryDecoder, { max: MAX_PAGE_ITEMS }),
-  pagination: d.object({
-    page: d.integer({ min: 1 }),
-    page_size: d.integer({ min: 1, max: MAX_PAGE_ITEMS }),
-    total: d.integer({ min: 0 }),
-  }),
+  pagination: paginationDecoder,
 });
+
+const releaseGroupAddedPageDecoder = d.object({
+  items: d.array(releaseGroupSummaryWithAddedAtDecoder, { max: MAX_PAGE_ITEMS }),
+  pagination: paginationDecoder,
+});
+
+/** “最近新增”固定最多 8 项，按加入时间倒序。 */
+export const MAX_RECENTLY_ADDED = 8;
+const recentlyAddedDecoder = d.object({ items: d.array(releaseGroupSummaryWithAddedAtDecoder, { max: MAX_RECENTLY_ADDED }) });
 
 // 组详情：摘要加成员摘要（至少一个可见成员，最多 100 条；release_count 是完整数量，可以大于 releases 的长度）。
 // revision 是专辑的人工修改版本号（设定默认版本与撤销共用；管理员写操作用它做预期版本）。default_release_id 只在管理员指定的
@@ -239,6 +259,8 @@ const releaseEvidenceDecoder = d.object({
 });
 
 export const decodeReleaseGroupPage = d.defineDecoder(releaseGroupPageDecoder);
+export const decodeReleaseGroupAddedPage = d.defineDecoder(releaseGroupAddedPageDecoder);
+export const decodeRecentlyAdded = d.defineDecoder(recentlyAddedDecoder);
 export const decodeReleaseGroupDetail = d.defineDecoder(releaseGroupDetailDecoder);
 export const decodeReleaseDetail = d.defineDecoder(releaseDetailDecoder);
 export const decodeReleaseComparison = d.defineDecoder(releaseComparisonDecoder);
@@ -248,6 +270,8 @@ export type ArtworkDTO = d.Infer<typeof artworkDecoder>;
 export type ReleaseSummaryDTO = d.Infer<typeof releaseSummaryDecoder>;
 export type ReleaseGroupSummaryDTO = d.Infer<typeof releaseGroupSummaryDecoder>;
 export type ReleaseGroupPageDTO = d.Infer<typeof releaseGroupPageDecoder>;
+export type ReleaseGroupSummaryWithAddedAtDTO = d.Infer<typeof releaseGroupSummaryWithAddedAtDecoder>;
+export type RecentlyAddedDTO = d.Infer<typeof recentlyAddedDecoder>;
 export type ReleaseGroupDetailDTO = d.Infer<typeof releaseGroupDetailDecoder>;
 export type ReleaseDetailDTO = d.Infer<typeof releaseDetailDecoder>;
 export type ReleaseComparisonDTO = d.Infer<typeof releaseComparisonDecoder>;

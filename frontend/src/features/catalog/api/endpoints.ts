@@ -3,9 +3,12 @@ import { apiRequest } from "../../../shared/api";
 import {
   decodeReleaseComparison,
   decodeReleaseDetail,
+  decodeRecentlyAdded,
   decodeReleaseEvidence,
+  decodeReleaseGroupAddedPage,
   decodeReleaseGroupDetail,
   decodeReleaseGroupPage,
+  type RecentlyAddedDTO,
   type ReleaseComparisonDTO,
   type ReleaseDetailDTO,
   type ReleaseEvidenceDTO,
@@ -20,6 +23,8 @@ export type ReleaseGroupListParams = {
   attentionRequired: boolean;
   /** 搜索词（标题、艺人、专辑艺人与曲目）；调用方已经去掉首尾空白并限制在 200 字节以内。 */
   search?: string | undefined;
+  /** 排序：省略即按标题（后端默认）；added_at_desc 按加入时间倒序。 */
+  sort?: "added_at_desc" | undefined;
   signal?: AbortSignal | undefined;
 };
 
@@ -27,7 +32,17 @@ export function fetchReleaseGroupPage(params: ReleaseGroupListParams): Promise<A
   const query = new URLSearchParams({ page: String(params.page), page_size: String(params.pageSize) });
   if (params.attentionRequired) query.set("attention", "required");
   if (params.search !== undefined && params.search !== "") query.set("q", params.search);
-  return apiRequest({ method: "GET", path: `/api/v1/release-groups?${query}`, signal: params.signal }, decodeReleaseGroupPage);
+  if (params.sort === undefined) {
+    return apiRequest({ method: "GET", path: `/api/v1/release-groups?${query}`, signal: params.signal }, decodeReleaseGroupPage);
+  }
+  // 按加入时间排序时每项必须带 added_at：旧服务忽略 sort 按标题返回时会被拒绝，不冒充“最近新增”。
+  query.set("sort", params.sort);
+  return apiRequest({ method: "GET", path: `/api/v1/release-groups?${query}`, signal: params.signal }, decodeReleaseGroupAddedPage);
+}
+
+/** 最近新增的专辑（所有登录用户）：按加入时间倒序，固定最多 8 张；接口不接受分页或数量参数。 */
+export function fetchRecentlyAdded(signal?: AbortSignal): Promise<ApiResponse<RecentlyAddedDTO>> {
+  return apiRequest({ method: "GET", path: "/api/v1/release-groups/recently-added", signal }, decodeRecentlyAdded);
 }
 
 // 下面几个接口的 ID 由调用方先用 isUuid 校验，不是 UUID 的值不会发请求。

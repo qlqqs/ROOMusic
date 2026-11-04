@@ -1,12 +1,12 @@
 import { useViewerScope } from "../../features/auth";
-import { LibrarySummary } from "../../features/catalog";
+import { LibrarySummary, RecentlyAddedPanel } from "../../features/catalog";
 import { RecentPlaysPanel } from "../../features/listening";
 import { RootSummary, ScanSummary } from "../../features/library";
 import { MemberSummary } from "../../features/members";
 import { Page } from "../../shared/ui";
 import styles from "./overview-page.module.css";
 
-/** 概览：只组合有真实来源的数据；最近播放占满整行排在最前，管理员另见目录与成员。 */
+/** 概览：只组合有真实来源的数据；最近播放与最近新增各占满一整行排在最前（没有新增专辑时最近新增整块不出现），管理员另见目录与成员。 */
 export function OverviewPage() {
   const { viewer } = useViewerScope();
   const isAdmin = viewer.role === "admin";
@@ -15,6 +15,9 @@ export function OverviewPage() {
       <div className={styles.grid}>
         <div className={styles.wide}>
           <RecentPlaysPanel />
+        </div>
+        <div className={styles.wide}>
+          <RecentlyAddedPanel />
         </div>
         <LibrarySummary isAdmin={isAdmin} />
         <ScanSummary canManage={isAdmin} />

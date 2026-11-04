@@ -5,6 +5,14 @@
 set -Eeuo pipefail
 umask 077
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+# 扫描反馈入口只生成用例自己的三首短 WAV，不准备全套播放素材或 ffmpeg。
+SCAN_FEEDBACK_ONLY=false
+if [[ "${1:-}" == '--scan-feedback-only' ]]; then
+  SCAN_FEEDBACK_ONLY=true
+  shift
+  set -- e2e/real/scan-feedback.real.ts "$@"
+fi
+unset ROOMUSIC_DATABASE_URL ROOMUSIC_TEST_DATABASE_URL
 for dependency in docker go npm python3 curl flock; do
   command -v "$dependency" >/dev/null || { echo "缺少依赖：$dependency" >&2; exit 1; }
 done
@@ -25,7 +33,10 @@ existing_networks="$(docker network ls -q --filter "label=com.docker.compose.pro
   echo "$COMPOSE_PROJECT 已有容器、数据卷或网络；拒绝接管历史测试资源" >&2; exit 1;
 }
 # 先于任何临时资源取出 ffmpeg：它只用 docker create/cp（不属于 roomusic-test 项目），失败就直接退出。
-FFMPEG_PATH="$("$ROOT_DIR/scripts/ffmpeg-pinned.sh")"
+FFMPEG_PATH=''
+if [[ "$SCAN_FEEDBACK_ONLY" == false ]]; then
+  FFMPEG_PATH="$("$ROOT_DIR/scripts/ffmpeg-pinned.sh")"
+fi
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/roomusic-playback-e2e.XXXXXXXX")"
 SERVER_PID=''
 COMPOSE_STARTED=false
@@ -60,7 +71,9 @@ export ROOMUSIC_TEST_PG_DATABASE="playback_${RANDOM}_${RANDOM}"
 export ROOMUSIC_TEST_PG_USER=roomusic_test
 export ROOMUSIC_TEST_PG_PASSWORD=roomusic_test
 export ROOMUSIC_TEST_DATABASE_URL="postgres://${ROOMUSIC_TEST_PG_USER}:${ROOMUSIC_TEST_PG_PASSWORD}@127.0.0.1:${ROOMUSIC_TEST_PG_PORT}/${ROOMUSIC_TEST_PG_DATABASE}?sslmode=disable"
-mkdir -p "$TEMP_DIR/library/formats" "$TEMP_DIR/library/cue" "$TEMP_DIR/library/slow" "$TEMP_DIR/backend"
+mkdir -p "$TEMP_DIR/library" "$TEMP_DIR/backend"
+if [[ "$SCAN_FEEDBACK_ONLY" == false ]]; then
+mkdir -p "$TEMP_DIR/library/formats" "$TEMP_DIR/library/cue" "$TEMP_DIR/library/slow"
 cp "$ROOT_DIR"/backend/testdata/playback/*.{flac,m4a,mp3,wav,ogg,opus} "$TEMP_DIR/library/formats/"
 cp "$ROOT_DIR/backend/testdata/playback/flac-16-44100.flac" "$TEMP_DIR/library/cue/image.flac"
 cat > "$TEMP_DIR/library/cue/image.cue" <<'CUE'
@@ -92,6 +105,7 @@ with open(sys.argv[1], 'wb') as out:
         size = min(samples, len(chunk))
         out.write(chunk[:size]); samples -= size
 PY
+fi
 # 白名单复制编译源树，不接触 backend/data 或其他运行期目录；内嵌资产也只在临时树生成。
 (cd "$ROOT_DIR/backend" && tar --exclude='cmd/roomusic/web' --exclude='.env' --exclude='.env.*' -cf - go.mod go.sum cmd internal migrations testdata) | (cd "$TEMP_DIR/backend" && tar -xf -)
 # Vite 默认会加载 .env；此隔离配置显式关闭 envDir，连前端 .env 也不读取。
@@ -125,5 +139,7 @@ for _ in {1..150}; do
 done
 [[ "$ready" == true ]] || { echo '隔离服务启动超时' >&2; exit 1; }
 # 派生必须已就绪（ffmpeg 自检通过）：否则 ALAC 用例会以“不能播放”失败，这里先给出明确原因。
-grep -q '"event":"playback.derivation.ready"' "$TEMP_DIR/server.log" || { echo '隔离服务没有启用 ALAC 派生（ffmpeg 不可用或自检失败）' >&2; exit 1; }
+if [[ "$SCAN_FEEDBACK_ONLY" == false ]]; then
+  grep -q '"event":"playback.derivation.ready"' "$TEMP_DIR/server.log" || { echo '隔离服务没有启用 ALAC 派生（ffmpeg 不可用或自检失败）' >&2; exit 1; }
+fi
 (cd "$ROOT_DIR/frontend" && npm exec playwright -- test --config playwright.real.config.ts "$@")

@@ -63,8 +63,17 @@ export type RootOperationDTO = d.Infer<typeof rootOperationDecoder>;
 
 列表上限沿用后端：目录操作记录、诊断明细与诊断类别各最多 100 条；后端没有上限的列表（目录、成员）不限条数，只限字段长度。
 数组先检查长度再逐项映射。完整扫描响应以[扫描协调合同](../backend/scan-coordination-contracts.md)和
-[`library.Scan`](../../../backend/internal/library/scans.go)为准，当前没有已扫描文件数或百分比进度；
+[`library.Scan`](../../../backend/internal/library/scans.go)为准；
 不得增加后端未返回的字段，只在边界解码一次 `unknown`，其他消费者只接收类型化结果。
+
+M5 ⑥ 的扫描反馈字段（`features/library/api/decoders.ts`）：`progress`、`root_progress`、`report_status` 是可选字段（缺失 = 旧服务能力，不伪造进度），
+`progress` 与 `root_progress` 还可以是 `null`（旧扫描）。`progress.version` 只接受 1；`phase` 只有 `counting | reading_tags | organizing | saving` 四个值，
+`unit` 必须与阶段对应（counting/organizing 为 `roots`、reading_tags 为 `files`、saving 为 `scopes`）；`percent_bp` 为 0–10,000 的安全整数；
+各计数为非负安全整数，`files_total` 可以为 `null`（计数没有完成）；`files_processed` 可以超过 `files_total`。`root_progress.index` 为 `null` 或 1 起且不超过
+`total`，`id`/`name` 只在管理员响应里出现（可省略、可为 `null`）。`report_status` 只有 `legacy | pending | ready | partial | unavailable`。字段之间的约束用
+decoder 内部的 `refine` 检查，违反时整体拒绝。报告（`decodeScanReport`）的 `schema_version` 只接受 1，`status` 只有 `ready | partial`，新增专辑每页最多 100 项、
+每项认领提示最多 3 个，专辑卡片复用 catalog 的 `releaseGroupSummaryWithAddedAtDecoder`（经 catalog 的 `api/decoders` 模块，不经公开入口）。
+catalog 的组摘要 `added_at` 在普通列表里可选；“最近新增”（最多 8 项）与 `sort=added_at_desc` 的列表必须带它，旧服务忽略排序参数时整体拒绝，不把按标题排列的结果显示成“最近新增”。
 
 请求层 `apiRequest(spec, decode)` 返回 `{ status, data }`（状态码有业务含义：开始扫描 202 新建 / 200 已有，目录新增 201；
 播放预检 200 是表示、202 是“正在准备”，decode 的第二个参数是状态码，供同一路径形状不同的响应核对状态码与响应体相符，否则按 `invalid_response`），

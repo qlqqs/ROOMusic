@@ -6,9 +6,16 @@ export const catalogKeys = {
   all: (generation: number) => viewerQueryKey(generation, "catalog"),
   /** 概览用的专辑数与需要关注的专辑数。 */
   totals: (generation: number) => viewerQueryKey(generation, "catalog", "release-group-totals"),
-  /** 专辑列表的一页：搜索词、筛选与页码都在键里，每种组合各有缓存条目。 */
+  /** 专辑列表的一页：搜索词、筛选、排序与页码都在键里，每种组合各有缓存条目；省略排序与按标题排序是同一个条目。 */
   albumPage: (generation: number, search: AlbumSearch) =>
-    viewerQueryKey(generation, "catalog", "release-groups", { q: search.q ?? null, attention: search.attention ?? null, page: search.page ?? 1 }),
+    viewerQueryKey(generation, "catalog", "release-groups", {
+      q: search.q ?? null,
+      attention: search.attention ?? null,
+      sort: search.sort ?? "title",
+      page: search.page ?? 1,
+    }),
+  /** 概览的“最近新增”（最多 8 张）；在 all 前缀下，扫描与写操作之后随目录一起失效。 */
+  recentlyAdded: (generation: number) => viewerQueryKey(generation, "catalog", "recently-added"),
   /** 搜索专辑的结果（别的功能挑选专辑时用，例如把版本归入其他专辑）：每个搜索词一个条目，与列表页的缓存分开。 */
   albumSearch: (generation: number, search: string) => viewerQueryKey(generation, "catalog", "album-search", search),
   /** 一个专辑组的详情（成员版本摘要）。 */

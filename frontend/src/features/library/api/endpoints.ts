@@ -9,6 +9,7 @@ import {
   decodeRootOperationList,
   decodeScan,
   decodeScanPage,
+  decodeScanReport,
   type DiagnosticsPageDTO,
   type RootChangedDTO,
   type RootCreatedDTO,
@@ -16,6 +17,7 @@ import {
   type RootOperationDTO,
   type ScanDTO,
   type ScanPageDTO,
+  type ScanReportDTO,
 } from "./decoders";
 
 export function fetchRoots(signal?: AbortSignal): Promise<ApiResponse<{ items: RootDTO[] }>> {
@@ -79,4 +81,13 @@ export function cancelScan(scanId: string): Promise<ApiResponse<ScanDTO>> {
 
 export function fetchScanDiagnostics(scanId: string, signal?: AbortSignal): Promise<ApiResponse<DiagnosticsPageDTO>> {
   return apiRequest({ method: "GET", path: `/api/v1/scans/${scanId}/diagnostics`, signal }, decodeDiagnosticsPage);
+}
+
+/**
+ * 扫描报告（仅管理员）：这次扫描新增、更新、消失的专辑与曲目数，以及新增专辑的一页（page 从 1 起，每页最多 100）。
+ * 只有 report_status 为 ready 或 partial 的扫描才请求；报告没能生成时返回 503 scan_report_unavailable。
+ */
+export function fetchScanReport(scanId: string, page: number, pageSize: number, signal?: AbortSignal): Promise<ApiResponse<ScanReportDTO>> {
+  const query = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+  return apiRequest({ method: "GET", path: `/api/v1/scans/${scanId}/report?${query}`, signal }, decodeScanReport);
 }

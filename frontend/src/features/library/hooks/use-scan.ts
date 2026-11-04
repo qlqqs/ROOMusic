@@ -4,6 +4,7 @@ import { useViewerScope } from "../../auth";
 import { fetchScan } from "../api/endpoints";
 import { libraryKeys } from "../query-keys";
 import { isScanFinished } from "../scan-status";
+import { useScanCatalogRefresh } from "./use-scan-catalog-refresh";
 
 /** 运行中扫描的轮询间隔：页面不可见时 TanStack Query 暂停，到终态即停止。 */
 export const SCAN_POLL_MS = 2_000;
@@ -11,6 +12,7 @@ export const SCAN_POLL_MS = 2_000;
 /**
  * 指定扫描的状态。只有运行中（含取消请求中）才轮询；一旦读到终态就停止，并让活动扫描与扫描记录的缓存过期，
  * 这样回到扫描目录页时不会还显示一个已经结束的“活动扫描”，扫描记录里也不会还是“运行中”。
+ * 扫描换目录与从运行变为终态时还让专辑数据过期（见 useScanCatalogRefresh）。
  */
 export function useScan(scanId: string) {
   const { generation } = useViewerScope();
@@ -33,6 +35,7 @@ export function useScan(scanId: string) {
     void queryClient.invalidateQueries({ queryKey: libraryKeys.activeScan(generation) });
     void queryClient.invalidateQueries({ queryKey: libraryKeys.scanHistory(generation) });
   }, [finished, generation, queryClient]);
+  useScanCatalogRefresh(query.data);
 
   return query;
 }

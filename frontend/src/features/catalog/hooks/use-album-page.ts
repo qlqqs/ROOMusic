@@ -21,6 +21,7 @@ export function useAlbumPage(search: AlbumSearch) {
         pageSize: ALBUM_PAGE_SIZE,
         attentionRequired: search.attention === "required",
         search: search.q,
+        sort: search.sort,
         signal,
       }),
     select: (response) => response.data,
