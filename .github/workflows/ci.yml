@@ -13,16 +13,17 @@ concurrency:
   group: roomusic-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# 固定已通过 CI 的 Ubuntu 24.04，以保持真实播放所需的 Chromium 系统库环境；后续升级须单独验证。
 jobs:
   backend:
     name: Backend
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: '1.25.10'
           cache-dependency-path: backend/go.sum
@@ -44,13 +45,13 @@ jobs:
 
   frontend:
     name: Frontend
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '24.22.1'
           cache: npm
@@ -82,7 +83,7 @@ jobs:
         run: npm run test:e2e
       - name: Upload Playwright report
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: |
@@ -93,13 +94,13 @@ jobs:
 
   integration:
     name: PostgreSQL integration and configuration
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: '1.25.10'
           cache-dependency-path: backend/go.sum
@@ -121,18 +122,18 @@ jobs:
 
   playback:
     name: Real playback (Chromium)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: '1.25.10'
           cache-dependency-path: backend/go.sum
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '24.22.1'
           cache: npm
@@ -147,7 +148,7 @@ jobs:
         run: ./scripts/playback-e2e.sh
       - name: Upload real playback diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-real-playback
           path: |
