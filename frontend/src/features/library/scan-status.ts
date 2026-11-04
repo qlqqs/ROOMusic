@@ -26,14 +26,15 @@ export function isScanFinished(scan: Pick<ScanDTO, "status">): boolean {
 }
 
 /**
- * 每种阶段的一句说明。失败、已取消、不完整都不会执行缺失对账（后端只有 succeeded 才会把此前入库、这次没有再出现的来源标为缺失），
- * 所以这几种说“已有的曲目不受影响”；也不暗示扫描有进度：没有总量，不显示百分比或剩余时间。
+ * 每种阶段的一句说明（运行中由进度条说明，没有额外的话）。失败、已取消、不完整都不会执行全部目录的缺失对账
+ * （后端只有 succeeded 才会把此前入库、这次没有再出现的来源标为缺失），所以这几种说“没扫到的曲目保持原样”；
+ * 不再说“已有的曲目不受影响”：停下之前已经保存的变化（包括确认被新文件替换的旧曲目）会保留。
  */
-export const scanPhaseNotes: Record<ScanPhase, string> = {
-  running: "正在扫描。",
+export const scanPhaseNotes: Record<ScanPhase, string | null> = {
+  running: null,
   cancel_requested: "正在取消，当前这一步做完就会停下。",
   succeeded: "扫描完成。这次没找到的文件已标为缺失。",
-  failed: "扫描失败，已有的曲目不受影响。",
-  canceled: "扫描已取消，已有的曲目不受影响。",
-  incomplete: "有些文件没能扫完，已有的曲目不受影响。看一下诊断，处理后再扫一次。",
+  failed: "扫描失败，没扫到的曲目保持原样。",
+  canceled: "扫描已取消，没扫到的曲目保持原样。",
+  incomplete: "有些文件没能扫完，没扫到的曲目保持原样。看一下诊断，处理后再扫一次。",
 };

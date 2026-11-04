@@ -1,0 +1,40 @@
+{
+  "body": {
+    "added_albums": {
+      "items": [],
+      "pagination": {
+        "page": 99,
+        "page_size": 20,
+        "total": 2
+      }
+    },
+    "albums": {
+      "added": 2,
+      "missing": 1,
+      "updated": 1
+    },
+    "files": {
+      "changed": false,
+      "count_complete": true,
+      "counted": 5,
+      "processed": 5,
+      "total": 5
+    },
+    "finalized_at": "2026-01-01T00:00:00Z",
+    "issues": {
+      "may_be_truncated": false,
+      "recorded": 2
+    },
+    "missing_reconciled": true,
+    "scan_run_id": "00000000-0000-4000-8000-000000000001",
+    "scan_status": "succeeded",
+    "schema_version": 1,
+    "status": "ready",
+    "tracks": {
+      "added": 3,
+      "missing": 4,
+      "updated": 1
+    }
+  },
+  "status": 200
+}

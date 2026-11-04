@@ -9,7 +9,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
-// listReleaseGroups 与 /releases 使用同一组参数、默认值、上限与错误码；组的可见性、搜索与 attention 语义见 catalog.ListReleaseGroups。
+// listReleaseGroups 复用发行列表的搜索、筛选和分页，并单独校验组排序。
 func (handlers *Handlers) listReleaseGroups(responseWriter http.ResponseWriter, request *http.Request) {
 	if _, err := handlers.guard.Authenticate(request); err != nil {
 		handlers.guard.WriteUnauthenticated(responseWriter, request)
@@ -20,7 +20,18 @@ func (handlers *Handlers) listReleaseGroups(responseWriter http.ResponseWriter, 
 		return
 	}
 
-	result, err := handlers.store.ListReleaseGroups(request.Context(), params)
+	params.Sort, ok = parseReleaseGroupSort(responseWriter, request)
+	if !ok {
+		return
+	}
+
+	var result catalog.ReleaseGroupPage
+	var err error
+	if params.Sort == catalog.ReleaseGroupSortAddedAtDesc {
+		result, err = catalog.ReadReleaseGroupsByAddedAt(request.Context(), handlers.database, params)
+	} else {
+		result, err = handlers.store.ListReleaseGroups(request.Context(), params)
+	}
 	if errors.Is(err, catalog.ErrQuery) {
 		httpserver.WriteError(responseWriter, request, http.StatusServiceUnavailable, "database_unavailable", "服务暂不可用")
 		return

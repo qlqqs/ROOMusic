@@ -46,7 +46,24 @@ hook 里，展示在组件里。按 [Classical 设计依据](../../../frontend/D
 - 停用与撤销类操作先确认并说明影响范围，恢复与重新启用直接执行；目标是自己时对话框额外提示会被退出登录。
 - 失败文案按**错误码**选择（各 feature 的 `*-messages.ts`，`as const` 映射），不比较后端 message；未知错误码显示后端的安全
   message 与请求 ID（`describeFailure`）。
-- 扫描阶段只在变化时经礼貌型 live region 播报一次，轮询得到相同阶段不重复播报；不显示百分比或剩余时间。
+- 扫描阶段只在变化时经礼貌型 live region 播报一次，轮询得到相同阶段不重复播报。M5 ⑥ 起只有服务端给出的确定进度（`progress.percent_bp`）才显示百分比，
+  前端不推算、不补动画；剩余时间（ETA）仍不做。
+- 扫描进度（M5 ⑥，`library/components/scan-progress.tsx`，概览与扫描详情同源）：只读的 `role="progressbar"`，名称“扫描进度”，`aria-valuemin=0`、
+  `aria-valuemax=100`、`aria-valuenow=floor(percent_bp/100)`（没有成功结束的扫描最多 99），`aria-valuetext` 写出当前目录与阶段、全局文件累计与整体百分比
+  （如“第 2 / 共 3 个目录，读取标签，已处理 1,200 / 2,400 个文件，整体进度 42%”；计数时“正在数文件，已检查 1 / 3 个目录”，不把目录单位读成文件）。
+  没有进度数据时进度条不给数值：运行中说“正在准备”，旧扫描不显示这一块。文件比计数时多时写“已处理 A 个文件（计数时 T 个）”，不写成 A / T。
+  阶段说的是当前目录（允许“第 1 个目录保存”之后是“第 2 个目录读取标签”，整体进度不倒退）；全部目录处理完时是“保存扫描结果”。
+  目录序号所有成员可见，目录名称只在管理员的扫描详情显示。播报用 `aria-live="polite"`，只读阶段/目录那句话（变化时读一次），扫描详情的终态仍由状态标签的
+  `role="status"` 播报。失败、取消、不完整停在停下的位置，换中性色并写“停在……”，不补满；取消请求中仍显示进度。不做滑块，不加键盘调节，不抢焦点。
+- 扫描报告（M5 ⑥，管理员的扫描详情，`scan-report.tsx`）：`ready`/`partial` 才请求；`partial` 用一句话说明“只有停下之前已经保存的变化”；`unavailable`
+  （或读取时 503 `scan_report_unavailable`）只说“这次的报告没能生成，扫描结果已经保存。”；`legacy`/`pending` 不显示。问题数到上限写“至少 100 条”。
+  新增专辑列出扫描时的标题与艺人，现在还看得到就链接到当前所在的专辑，看不到时标“现在看不到了”、不给入口；“可能接替了《…》”的链接沿用
+  `/claims?release=<旧版本>&target=<新发行>`，不在报告里创建认领命令。
+- 概览“最近新增”（M5 ⑥，catalog 的 `RecentlyAddedPanel`）：所有成员可见，接口给最多 8 张，卡片复用 `AlbumGrid`/`AlbumCard`，“查看全部”到 `/albums?sort=added_at_desc`；
+  只显示能排满的行：一行能放 3 张及以上时只显示一行（张数等于列数，最多 8），每行 1–2 张时最多两行。列数由 `useGridColumns` 读浏览器解析出的
+  `grid-template-columns`（auto-fill 展开后的列数）并随 ResizeObserver 更新，列宽规则只写在 CSS 里；多出的卡片不渲染（不可 Tab、读屏读不到）；
+  量不到列数（jsdom 没有布局）时全部显示，测试要验证行数时替换 `getComputedStyle`/ResizeObserver；
+  加载与失败照常显示，成功且为空时整块不渲染（概览外层的 `.wide:empty` 不留空行）；接口 404（旧服务）按没有新增处理。
 - 用户内容（用户名、目录名、专辑与曲目标题等）允许任意位置换行（`overflow-wrap: anywhere`），超长值不撑破布局。**网格项与弹性项还要 `min-width: 0`**：
   `overflow-wrap: anywhere` 只让文字能折行，网格轨道与弹性项的“自动最小宽度”仍可能取内容的最小宽度（尤其是被 `content-visibility` 跳过、保留着上一次渲染宽度的分段），
   窗口先宽后窄时整页横向溢出；M1b 的 Playwright 有“先宽后窄”的回归用例。
@@ -120,8 +137,9 @@ them. Administrative mutations also show pending, success, revision conflict,
 permission loss, and failure without losing the user's context.
 
 扫描视图区分后端的 `running | succeeded | failed | canceled | incomplete`；提交中的
-`pending` 如需展示，只是本地请求状态，不是新增远端扫描枚举。诊断计数不是百分比进度。
-不把不完整扫描标为成功，也不暗示失败扫描移除了缺失音乐。
+`pending` 如需展示，只是本地请求状态，不是新增远端扫描枚举。诊断计数不是百分比进度，也不能用来推算进度。
+不把不完整扫描标为成功，也不暗示失败扫描做了全部目录的缺失对账；停下之前已经保存的变化（包括确认被新文件替换的旧曲目）会保留，
+所以非成功终态说“没扫到的曲目保持原样”，不说“已有的曲目不受影响”。
 
 Use stable entity IDs as React keys. Track numbers, titles, array indexes, and
 file names are not stable identities.
@@ -166,7 +184,7 @@ or sensitive scan diagnostics.
 - Dialogs keep focus inside while open, have an accessible name, and support escape/cancel when
   cancellation is safe（原生 `<dialog>` 的行为见上文）。
 - Status changes and scan progress use appropriately restrained live regions;
-  do not announce every file.
+  do not announce every file.（M5 ⑥：只播报计数/正式处理、目录序号与阶段的变化及终态，换目录即使阶段相同也播报。）
 - Icon-only controls have accessible names and tooltips where meaning is not
   obvious.
 - Do not rely on color alone for scan, evidence, error, or permission status.

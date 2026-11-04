@@ -35,14 +35,14 @@ describe("parseSearchText", () => {
 
 describe("parseAlbumSearch", () => {
   it("合法的值原样保留", () => {
-    expect(parseAlbumSearch({ q: "bach", attention: "required", page: 3 })).toEqual({ q: "bach", attention: "required", page: 3 });
+    expect(parseAlbumSearch({ q: "bach", attention: "required", page: 3 })).toEqual({ q: "bach", attention: "required", sort: undefined, page: 3 });
     expect(parseAlbumSearch({ page: "04" }).page).toBe(4);
   });
 
   it("不合法的值显式返回 undefined（只省略键的话，路由会把原值留在 search 里）", () => {
     const parsed = parseAlbumSearch({ q: "  ", attention: "yes", page: 0 });
-    expect(parsed).toEqual({ q: undefined, attention: undefined, page: undefined });
-    for (const key of ["q", "attention", "page"] as const) expect(key in parsed).toBe(true);
+    expect(parsed).toEqual({ q: undefined, attention: undefined, sort: undefined, page: undefined });
+    for (const key of ["q", "attention", "sort", "page"] as const) expect(key in parsed).toBe(true);
   });
 
   it("attention 只有 required 保留；第 1 页不保留页码；未知参数被丢弃", () => {
@@ -51,7 +51,21 @@ describe("parseAlbumSearch", () => {
     expect(parseAlbumSearch({ page: 1 }).page).toBeUndefined();
     expect(parseAlbumSearch({ page: -2 }).page).toBeUndefined();
     expect(parseAlbumSearch({ page: 2.5 }).page).toBeUndefined();
-    expect(Object.keys(parseAlbumSearch({ other: "x", release: "y" })).sort()).toEqual(["attention", "page", "q"]);
+    expect(Object.keys(parseAlbumSearch({ other: "x", release: "y" })).sort()).toEqual(["attention", "page", "q", "sort"]);
+  });
+});
+
+describe("排序参数", () => {
+  it("只保留最近新增排序，默认和非法排序显式清除", () => {
+    expect(parseAlbumSearch({ sort: "added_at_desc" }).sort).toBe("added_at_desc");
+    for (const sort of [undefined, "title", "added_at_asc", "ADDED_AT_DESC", "", null, 1, [], {}]) {
+      expect(parseAlbumSearch({ sort })).toHaveProperty("sort", undefined);
+    }
+  });
+
+  it("列表历史状态保留排序，排序本身不是搜索筛选", () => {
+    expect(albumListSearchFromState({ albumList: { sort: "added_at_desc", page: 2 } })).toEqual({ q: undefined, attention: undefined, sort: "added_at_desc", page: 2 });
+    expect(isFiltered({ sort: "added_at_desc" })).toBe(false);
   });
 });
 
@@ -84,8 +98,8 @@ describe("parseAlbumDetailSearch", () => {
 
 describe("albumListSearchFromState", () => {
   it("取出卡片链接带进来的列表参数，并经列表自己的校验", () => {
-    expect(albumListSearchFromState({ albumList: { q: " 贝多芬 ", attention: "required", page: 3 } })).toEqual({ q: "贝多芬", attention: "required", page: 3 });
-    expect(albumListSearchFromState({ albumList: { q: "x", attention: "other", page: 1 } })).toEqual({ q: "x", attention: undefined, page: undefined });
+    expect(albumListSearchFromState({ albumList: { q: " 贝多芬 ", attention: "required", page: 3 } })).toEqual({ q: "贝多芬", attention: "required", sort: undefined, page: 3 });
+    expect(albumListSearchFromState({ albumList: { q: "x", attention: "other", page: 1 } })).toEqual({ q: "x", attention: undefined, sort: undefined, page: undefined });
   });
 
   it("没有 state、形状不对或被改写成别的类型时回到不带参数的列表", () => {

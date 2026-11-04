@@ -1,0 +1,102 @@
+{
+  "body": {
+    "added_albums": {
+      "items": [
+        {
+          "added_at": "2026-01-01T00:00:01Z",
+          "album": {
+            "added_at": "2026-01-01T00:00:01Z",
+            "attention_count": 0,
+            "id": "00000000-0000-4000-8000-000000000001",
+            "release_count": 1,
+            "representative": {
+              "album_artist": null,
+              "artist": "Pianist",
+              "artwork": null,
+              "attention_count": 0,
+              "id": "00000000-0000-4000-8000-000000000002",
+              "media_type": null,
+              "medium_count": 1,
+              "source_type": null,
+              "title": "replaced",
+              "track_count": 2,
+              "year": null
+            }
+          },
+          "artist_at_scan": "Pianist",
+          "claim_hints": [
+            {
+              "id": "00000000-0000-4000-8000-000000000003",
+              "title": "我保留的专辑标题"
+            }
+          ],
+          "current_group_id": "00000000-0000-4000-8000-000000000001",
+          "group_id_at_scan": "00000000-0000-4000-8000-000000000001",
+          "release_id": "00000000-0000-4000-8000-000000000002",
+          "title_at_scan": "replaced"
+        },
+        {
+          "added_at": "2026-01-01T00:00:00Z",
+          "album": {
+            "added_at": "2026-01-01T00:00:00Z",
+            "attention_count": 0,
+            "id": "00000000-0000-4000-8000-000000000004",
+            "release_count": 1,
+            "representative": {
+              "album_artist": null,
+              "artist": "Pianist",
+              "artwork": null,
+              "attention_count": 0,
+              "id": "00000000-0000-4000-8000-000000000005",
+              "media_type": null,
+              "medium_count": 1,
+              "source_type": null,
+              "title": "new",
+              "track_count": 1,
+              "year": null
+            }
+          },
+          "artist_at_scan": "Pianist",
+          "claim_hints": [],
+          "current_group_id": "00000000-0000-4000-8000-000000000004",
+          "group_id_at_scan": "00000000-0000-4000-8000-000000000004",
+          "release_id": "00000000-0000-4000-8000-000000000005",
+          "title_at_scan": "new"
+        }
+      ],
+      "pagination": {
+        "page": 1,
+        "page_size": 20,
+        "total": 2
+      }
+    },
+    "albums": {
+      "added": 2,
+      "missing": 1,
+      "updated": 1
+    },
+    "files": {
+      "changed": false,
+      "count_complete": true,
+      "counted": 5,
+      "processed": 5,
+      "total": 5
+    },
+    "finalized_at": "2026-01-01T00:00:02Z",
+    "issues": {
+      "may_be_truncated": true,
+      "recorded": 100
+    },
+    "missing_reconciled": true,
+    "scan_run_id": "00000000-0000-4000-8000-000000000006",
+    "scan_status": "succeeded",
+    "schema_version": 1,
+    "status": "ready",
+    "tracks": {
+      "added": 3,
+      "missing": 4,
+      "updated": 1
+    }
+  },
+  "status": 200
+}

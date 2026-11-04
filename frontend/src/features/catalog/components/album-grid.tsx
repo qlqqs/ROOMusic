@@ -1,14 +1,21 @@
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import { VisuallyHidden } from "../../../shared/ui";
 import type { ReleaseGroupSummaryDTO } from "../api/decoders";
 import type { AlbumSearch } from "../album-search";
 import { AlbumCard } from "./album-card";
 import styles from "./album-grid.module.css";
 
+type AlbumGridProps = {
+  groups: readonly ReleaseGroupSummaryDTO[];
+  search: AlbumSearch;
+  /** 列表元素的引用：需要知道当前列数的调用方（概览的“最近新增”）用它量网格。 */
+  listRef?: Ref<HTMLUListElement>;
+};
+
 /** 卡片网格：列数随容器宽度变化（每列至少 160px），每页最多 48 张。 */
-export function AlbumGrid({ groups, search }: { groups: readonly ReleaseGroupSummaryDTO[]; search: AlbumSearch }) {
+export function AlbumGrid({ groups, search, listRef }: AlbumGridProps) {
   return (
-    <ul className={styles.grid}>
+    <ul className={styles.grid} ref={listRef}>
       {groups.map((group) => (
         <AlbumCard key={group.id} group={group} search={search} />
       ))}
@@ -23,13 +30,16 @@ export function AlbumGridLayout({ children }: { children: ReactNode }) {
 
 const PLACEHOLDER_CARDS = 12;
 
-/** 首次加载的占位：与卡片网格同结构（方形封面加两行文字），不画成空库，也没有动画。 */
-export function AlbumGridSkeleton() {
+/**
+ * 首次加载的占位：与卡片网格同结构（方形封面加两行文字），不画成空库，也没有动画。count 是占位卡片数（默认 12）；
+ * listRef 同 AlbumGrid，让调用方按同一个网格的列数决定占位张数。
+ */
+export function AlbumGridSkeleton({ count = PLACEHOLDER_CARDS, listRef }: { count?: number; listRef?: Ref<HTMLUListElement> }) {
   return (
     <div role="status">
       <VisuallyHidden>正在加载专辑</VisuallyHidden>
-      <ul className={styles.grid} aria-hidden="true">
-        {Array.from({ length: PLACEHOLDER_CARDS }, (_, index) => (
+      <ul className={styles.grid} aria-hidden="true" ref={listRef}>
+        {Array.from({ length: count }, (_, index) => (
           <li key={index} className={styles.placeholder}>
             <span className={styles.placeholderCover} />
             <span className={styles.placeholderLine} />

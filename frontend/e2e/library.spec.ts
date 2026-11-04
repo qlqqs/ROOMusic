@@ -130,7 +130,9 @@ test.describe("扫描", () => {
     await expect(heading(page, "扫描详情")).toBeVisible();
     await expect(page).toHaveURL(/\/library\/scans\/[0-9a-f-]{36}$/);
     await expect(phaseTag(page)).toHaveText("运行中");
-    await expect(page.getByRole("region", { name: "状态" }).getByText("正在扫描。", { exact: true })).toBeVisible();
+    const progress = page.getByRole("progressbar", { name: "扫描进度" });
+    await expect(progress).toHaveAttribute("aria-valuetext", "正在准备");
+    await expect(progress).not.toHaveAttribute("aria-valuenow");
     await expect(page.getByRole("region", { name: "状态" })).not.toContainText("不显示百分比或剩余时间");
 
     // 每次快进 2 秒触发一次轮询；受控后端在第二次读取时把扫描置为终态。
@@ -150,7 +152,7 @@ test.describe("扫描", () => {
     await expect(page.getByRole("button", { name: "开始扫描" })).toBeVisible();
   });
 
-  test("扫描不完整：说明已有的曲目不受影响，列出诊断汇总与明细（路径只显示相对路径）", async ({ page, backend }) => {
+  test("扫描不完整：说明没扫到的曲目保持原样，列出诊断汇总与明细（路径只显示相对路径）", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
     mock.scanOutcome = "incomplete";
     await page.clock.install();
@@ -161,7 +163,7 @@ test.describe("扫描", () => {
       await expect(phaseTag(page)).toHaveText("不完整", { timeout: 500 });
     }).toPass({ timeout: 10_000 });
 
-    await expect(page.getByRole("region", { name: "状态" })).toContainText("已有的曲目不受影响");
+    await expect(page.getByRole("region", { name: "状态" })).toContainText("没扫到的曲目保持原样");
     const summary = page.getByRole("list", { name: "按类别汇总" });
     await expect(summary).toContainText("音频解析失败");
     const table = page.getByRole("table", { name: "诊断明细" });
@@ -186,7 +188,7 @@ test.describe("扫描", () => {
       await page.clock.fastForward(2000);
       await expect(phaseTag(page)).toHaveText("已取消", { timeout: 500 });
     }).toPass({ timeout: 10_000 });
-    await expect(page.getByRole("region", { name: "状态" })).toContainText("已有的曲目不受影响");
+    await expect(page.getByRole("region", { name: "状态" })).toContainText("没扫到的曲目保持原样");
 
     const before = mock.callsTo("GET", `/api/v1/scans/${scan.id}/diagnostics`).length;
     await page.getByRole("button", { name: "刷新诊断" }).click();

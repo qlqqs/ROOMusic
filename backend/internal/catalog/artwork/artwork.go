@@ -82,26 +82,74 @@ func safeStorageKey(key string) bool {
 // 关联写入失败时清理刚写入的文件，替换旧封面后清理不再被引用的旧文件。
 // sourceType 记录来源（"embedded" 或 "folder"）；调用方负责取得字节。
 func (s *Store) Save(ctx context.Context, executor Executor, releaseID string, data []byte, mimeType, sourceType string) error {
+	prepared, err := s.describe(data, mimeType)
+	if err != nil {
+		return err
+	}
+	var previousKey sql.NullString
+	if err := executor.QueryRowContext(ctx, "SELECT storage_key FROM release_artworks WHERE release_id=$1::uuid", releaseID).Scan(&previousKey); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if err := s.writePrepared(data, &prepared); err != nil {
+		return err
+	}
+	hash, key, mimeType, width, height, path, wroteManagedFile := prepared.hash, prepared.key, prepared.mimeType, prepared.width, prepared.height, prepared.path, prepared.wroteManagedFile
+	_, err = executor.ExecContext(ctx, `INSERT INTO release_artworks(release_id,content_hash,mime_type,width,height,storage_key,source_type) VALUES($1::uuid,$2,$3,$4,$5,$6,$7) ON CONFLICT(release_id) DO UPDATE SET content_hash=EXCLUDED.content_hash,mime_type=EXCLUDED.mime_type,width=EXCLUDED.width,height=EXCLUDED.height,storage_key=EXCLUDED.storage_key,source_type=EXCLUDED.source_type`, releaseID, hash, mimeType, width, height, key, sourceType)
+	if err != nil {
+		if wroteManagedFile {
+			if cleanupErr := removeUnreferencedArtwork(ctx, executor, path, key); cleanupErr != nil {
+				return errors.Join(err, fmt.Errorf("remove failed artwork: %w", cleanupErr))
+			}
+		}
+		return err
+	}
+	if previousKey.Valid && previousKey.String != key && filepath.Base(previousKey.String) == previousKey.String {
+		if cleanupErr := removeUnreferencedArtwork(ctx, executor, filepath.Join(s.directory, previousKey.String), previousKey.String); cleanupErr != nil {
+			return fmt.Errorf("remove replaced artwork: %w", cleanupErr)
+		}
+	}
+	return nil
+}
+
+type preparedArtwork struct {
+	hash, key, mimeType, path string
+	width, height             int
+	wroteManagedFile          bool
+}
+
+// describe 只校验字节并确定内容寻址资源，不接触文件或数据库。
+func (s *Store) describe(data []byte, mimeType string) (preparedArtwork, error) {
 	if len(data) > 16<<20 {
-		return fmt.Errorf("artwork too large")
+		return preparedArtwork{}, fmt.Errorf("artwork too large")
 	}
 	detectedMIME := SniffMIME(data)
 	if mimeType == "" {
 		mimeType = detectedMIME
 	}
 	if detectedMIME == "" || mimeType != detectedMIME {
-		return fmt.Errorf("unsupported artwork")
+		return preparedArtwork{}, fmt.Errorf("unsupported artwork")
 	}
 	width, height := dimensions(data, mimeType)
 	if width <= 0 || height <= 0 {
-		return fmt.Errorf("invalid artwork")
-	}
-	var previousKey sql.NullString
-	if err := executor.QueryRowContext(ctx, "SELECT storage_key FROM release_artworks WHERE release_id=$1::uuid", releaseID).Scan(&previousKey); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return err
+		return preparedArtwork{}, fmt.Errorf("invalid artwork")
 	}
 	hash := fmt.Sprintf("%x", sha256.Sum256(data))
 	key := hash + "." + strings.TrimPrefix(strings.TrimPrefix(mimeType, "image/"), "x-")
+	return preparedArtwork{hash: hash, key: key, mimeType: mimeType, path: filepath.Join(s.directory, key), width: width, height: height}, nil
+}
+
+// prepare 在取得发行/组锁之前完成校验和受管文件 I/O。
+func (s *Store) prepare(data []byte, mimeType string) (preparedArtwork, error) {
+	prepared, err := s.describe(data, mimeType)
+	if err != nil {
+		return preparedArtwork{}, err
+	}
+	err = s.writePrepared(data, &prepared)
+	return prepared, err
+}
+
+func (s *Store) writePrepared(data []byte, prepared *preparedArtwork) error {
+	key := prepared.key
 	artworkDirectory := s.directory
 	if err := os.MkdirAll(artworkDirectory, 0o750); err != nil {
 		return err
@@ -144,20 +192,7 @@ func (s *Store) Save(ctx context.Context, executor Executor, releaseID string, d
 		}
 		wroteManagedFile = true
 	}
-	_, err := executor.ExecContext(ctx, `INSERT INTO release_artworks(release_id,content_hash,mime_type,width,height,storage_key,source_type) VALUES($1::uuid,$2,$3,$4,$5,$6,$7) ON CONFLICT(release_id) DO UPDATE SET content_hash=EXCLUDED.content_hash,mime_type=EXCLUDED.mime_type,width=EXCLUDED.width,height=EXCLUDED.height,storage_key=EXCLUDED.storage_key,source_type=EXCLUDED.source_type`, releaseID, hash, mimeType, width, height, key, sourceType)
-	if err != nil {
-		if wroteManagedFile {
-			if cleanupErr := removeUnreferencedArtwork(ctx, executor, path, key); cleanupErr != nil {
-				return errors.Join(err, fmt.Errorf("remove failed artwork: %w", cleanupErr))
-			}
-		}
-		return err
-	}
-	if previousKey.Valid && previousKey.String != key && filepath.Base(previousKey.String) == previousKey.String {
-		if cleanupErr := removeUnreferencedArtwork(ctx, executor, filepath.Join(artworkDirectory, previousKey.String), previousKey.String); cleanupErr != nil {
-			return fmt.Errorf("remove replaced artwork: %w", cleanupErr)
-		}
-	}
+	prepared.wroteManagedFile = wroteManagedFile
 	return nil
 }
 

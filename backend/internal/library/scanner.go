@@ -54,6 +54,7 @@ type scanOutcome struct {
 }
 
 var errArtworkBinding = errors.New("artwork binding failure")
+var errStagingCleanup = errors.New("staging cleanup failure")
 
 func terminalScanStatus(outcome scanOutcome) string {
 	if outcome.Canceled {
@@ -91,16 +92,37 @@ func (service *Service) runScan(scanID string, execution *scanExecution) {
 	}()
 	roots, loadError := service.loadRegisteredRoots(scanContext, execution.connection)
 	outcome := scanOutcome{Complete: loadError == nil, Failed: loadError != nil}
+	if loadError != nil {
+		roots = nil
+	}
+	feedback := newScanFeedback(service, execution.connection, scanID, roots)
+	if loadError == nil && !service.countScanRoots(scanContext, execution.connection, scanID, roots, feedback) {
+		outcome.Complete = false
+	}
 	rootIDs := make([]string, 0, len(roots))
-	for _, root := range roots {
+	for index, root := range roots {
 		if scanContext.Err() != nil {
 			outcome.Complete = false
 			break
 		}
 		rootIDs = append(rootIDs, root.ID)
-		if rootError := service.scanRoot(scanContext, execution.connection, scanID, root); rootError != nil {
+		feedback.selectRoot(index, root)
+		feedback.weight = feedback.counts[index].files
+		if feedback.progress.FilesTotal != nil && *feedback.progress.FilesTotal == 0 {
+			feedback.weight = 1
+		}
+		feedback.phase(scanContext, "reading_tags", feedback.counts[index].files)
+		if rootError := service.scanRoot(scanContext, execution.connection, scanID, root, feedback); rootError != nil {
 			outcome.Complete = false
 			service.logger.Error("scan root incomplete", "event", "library.scan.root_incomplete", "scan_run_id", scanID, "root_id", root.ID, "error", rootError)
+			if errors.Is(rootError, errStagingCleanup) {
+				break
+			}
+		}
+		if scanContext.Err() == nil {
+			feedback.fraction(1, 1)
+			feedback.base += feedback.weight
+			feedback.flush(scanContext, true)
 		}
 	}
 	if scanContext.Err() != nil {
@@ -124,7 +146,16 @@ func (service *Service) runScan(scanID string, execution *scanExecution) {
 	}
 	finalizeContext, finalizeCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer finalizeCancel()
-	status, updateError := service.finalizeScan(finalizeContext, execution.connection, scanID, rootIDs, outcome)
+	if scanContext.Err() == nil && outcome.Complete {
+		feedback.progress.Phase = "saving"
+		feedback.progress.Unit = "scopes"
+		feedback.progress.PercentBP = 9900
+		feedback.root.Index = nil
+		feedback.root.ID = nil
+		feedback.root.Name = nil
+	}
+	feedback.flush(finalizeContext, true)
+	status, updateError := service.finalizeScan(finalizeContext, execution.connection, scanID, rootIDs, outcome, feedback)
 	if updateError != nil {
 		service.logger.Error("scan terminal status persistence failed", "event", "library.scan.terminal_write_failed", "scan_id", scanID, "error", updateError)
 		return
@@ -164,7 +195,7 @@ func (service *Service) pollScanCancellation(ctx context.Context, scanID string,
 	}
 }
 
-func (service *Service) finalizeScan(ctx context.Context, connection *sql.Conn, scanID string, rootIDs []string, outcome scanOutcome) (string, error) {
+func (service *Service) finalizeScan(ctx context.Context, connection *sql.Conn, scanID string, rootIDs []string, outcome scanOutcome, feedbacks ...*scanFeedback) (string, error) {
 	transaction, err := connection.BeginTx(ctx, nil)
 	if err != nil {
 		return "", err
@@ -182,8 +213,13 @@ func (service *Service) finalizeScan(ctx context.Context, connection *sql.Conn, 
 	if cancelRequestedAt.Valid {
 		status = "canceled"
 	}
+	feedback := feedbackArg(feedbacks)
 	if scanStatusAllowsMissingReconciliation(status) {
-		if err := ingest.MarkMissingSources(ctx, transaction, scanID, rootIDs); err != nil {
+		var changes *ingest.ScanFeedback
+		if feedback != nil {
+			changes = feedback.changes
+		}
+		if err := ingest.MarkMissingSourcesWithFeedback(ctx, transaction, scanID, rootIDs, changes); err != nil {
 			return "", err
 		}
 	}
@@ -193,7 +229,7 @@ func (service *Service) finalizeScan(ctx context.Context, connection *sql.Conn, 
 	} else if status == "incomplete" {
 		errorMessage = "scan_incomplete"
 	}
-	if _, err := transaction.ExecContext(ctx, "UPDATE scan_runs SET status=$1,finished_at=NOW(),error_message=$2 WHERE id=$3::uuid AND status='running'", status, errorMessage, scanID); err != nil {
+	if err := finalizeScanFeedback(ctx, transaction, scanID, status, errorMessage, feedback); err != nil {
 		return "", err
 	}
 	if err := transaction.Commit(); err != nil {
@@ -219,10 +255,11 @@ func (service *Service) loadRegisteredRoots(context context.Context, executor sc
 	return roots, rows.Err()
 }
 
-func (service *Service) scanRoot(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot) (returnError error) {
+func (service *Service) scanRoot(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, feedbacks ...*scanFeedback) (returnError error) {
+	feedback := feedbackArg(feedbacks)
 	// 遍历前必须清理同一扫描重试留下的旧行，否则旧 observation 会混入本次候选。
 	if err := ingest.ClearStagedObservations(ctx, executor, scanID, root.ID); err != nil {
-		cleanupError := fmt.Errorf("clear stale staged observations: %w", err)
+		cleanupError := fmt.Errorf("%w: %w", errStagingCleanup, err)
 		if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, "", "staging_write_failure", "无法清理扫描暂存观察"); diagnosticError != nil {
 			cleanupError = errors.Join(cleanupError, fmt.Errorf("record staging cleanup diagnostic: %w", diagnosticError))
 		}
@@ -235,7 +272,7 @@ func (service *Service) scanRoot(ctx context.Context, executor scanExecutor, sca
 		if cleanupError == nil {
 			return
 		}
-		cleanupError = fmt.Errorf("clear staged observations: %w", cleanupError)
+		cleanupError = fmt.Errorf("%w: %w", errStagingCleanup, cleanupError)
 		if diagnosticError := service.recordDiagnosticWith(cleanupCtx, executor, scanID, "", "staging_write_failure", "无法清理扫描暂存观察"); diagnosticError != nil {
 			cleanupError = errors.Join(cleanupError, fmt.Errorf("record staging cleanup diagnostic: %w", diagnosticError))
 		}
@@ -247,7 +284,7 @@ func (service *Service) scanRoot(ctx context.Context, executor scanExecutor, sca
 		}
 		return errors.New("root unavailable")
 	}
-	complete := true
+	complete := feedback == nil || feedback.counts[feedback.current].complete
 	var processingError error
 	processingErrorCount := 0
 	captureProcessingError := func(err error) {
@@ -273,6 +310,9 @@ func (service *Service) scanRoot(ctx context.Context, executor scanExecutor, sca
 		}
 		if entry.IsDir() {
 			return nil
+		}
+		if isScanCandidate(path) {
+			defer feedback.processed(ctx)
 		}
 		if entry.Type()&os.ModeSymlink != 0 {
 			target, targetError := filepath.EvalSymlinks(path)
@@ -420,6 +460,15 @@ func (service *Service) scanRoot(ctx context.Context, executor scanExecutor, sca
 		captureProcessingError(err)
 	}
 	if ctx.Err() == nil && err == nil {
+		if feedback != nil {
+			if feedback.progress.Completed != feedback.counts[feedback.current].files {
+				feedback.progress.FilesChanged = true
+			}
+			feedback.phase(ctx, "organizing", 1)
+		}
+		if !registeredRootAvailable(root.Path) {
+			return errors.Join(errors.New("root unavailable before organizing"), service.recordDiagnosticWith(ctx, executor, scanID, "", "root_unavailable", "注册目录当前不可用"))
+		}
 		if alignErr := ingest.AlignCueStagingScopes(ctx, executor, scanID, root.ID); alignErr != nil {
 			complete = false
 			captureProcessingError(alignErr)
@@ -435,8 +484,28 @@ func (service *Service) scanRoot(ctx context.Context, executor scanExecutor, sca
 		}
 		// 即使其它文件解析失败，也持久化有效 observations（被规划暂缓的 scope 除外）；扫描会进入 incomplete，
 		// 因而不会执行负向 missing 对账。
+		if feedback != nil && ctx.Err() == nil {
+			feedback.progress.Completed = 1
+			feedback.fraction(4, 5)
+			feedback.flush(ctx, true)
+		}
 		if planned {
-			if evidenceErr := service.persistStagedCandidates(ctx, executor, scanID, root); evidenceErr != nil {
+			if !registeredRootAvailable(root.Path) {
+				return errors.Join(errors.New("root unavailable before saving"), service.recordDiagnosticWith(ctx, executor, scanID, "", "root_unavailable", "注册目录当前不可用"))
+			}
+			if feedback != nil {
+				total, countErr := ingest.CountPlannedScopes(ctx, executor, scanID, root.ID)
+				if countErr != nil {
+					// scope 总数仅服务进度；未知时冻结快照，不能跳过目录保存或污染报告健康。
+					feedback.progressUnavailable = true
+					if service.logger != nil {
+						service.logger.Warn("扫描保存进度总数读取失败", "event", "library.scan.progress_count_failed", "scan_run_id", scanID)
+					}
+				} else {
+					feedback.phase(ctx, "saving", total)
+				}
+			}
+			if evidenceErr := service.persistStagedCandidates(ctx, executor, scanID, root, feedback); evidenceErr != nil {
 				complete = false
 				captureProcessingError(evidenceErr)
 				kind, message := candidatePersistenceDiagnostic(evidenceErr)
@@ -596,11 +665,16 @@ func stageObservation(ctx context.Context, executor scanExecutor, scanID, rootID
 	return ingest.StageObservation(ctx, executor, scanID, rootID, observation)
 }
 
-func (service *Service) persistStagedCandidates(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot) error {
+func (service *Service) persistStagedCandidates(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, feedbacks ...*scanFeedback) error {
+	feedback := feedbackArg(feedbacks)
 	var firstErr error
 	lastScope := ""
 	for {
-		scopes, err := ingest.StagedScopes(ctx, executor, scanID, root.ID, lastScope)
+		scopePage := ingest.StagedScopes
+		if feedback != nil {
+			scopePage = ingest.PlannedStagedScopes
+		}
+		scopes, err := scopePage(ctx, executor, scanID, root.ID, lastScope)
 		if err != nil {
 			return err
 		}
@@ -608,11 +682,15 @@ func (service *Service) persistStagedCandidates(ctx context.Context, executor sc
 			break
 		}
 		for _, scope := range scopes {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			observations, loadErr := ingest.LoadStagedScope(ctx, executor, scanID, root.ID, scope)
 			if loadErr != nil {
 				if firstErr == nil {
 					firstErr = loadErr
 				}
+				feedback.scopeDone(ctx)
 				continue
 			}
 			for _, candidate := range ingest.OrganizeObservations(observations) {
@@ -623,10 +701,11 @@ func (service *Service) persistStagedCandidates(ctx context.Context, executor sc
 						firstErr = diagnosticErr
 					}
 				}
-				if persistErr := service.persistOneCandidate(ctx, executor, scanID, root, candidate); persistErr != nil && firstErr == nil {
+				if persistErr := service.persistOneCandidate(ctx, executor, scanID, root, candidate, feedback); persistErr != nil && firstErr == nil {
 					firstErr = persistErr
 				}
 			}
+			feedback.scopeDone(ctx)
 		}
 		lastScope = scopes[len(scopes)-1]
 	}
@@ -773,12 +852,17 @@ func observationFieldSources(observation parser.AudioObservation) map[string]str
 
 // persistOneCandidate 用 catalog 的独立短事务写入一个候选；封面在事务提交后为该 Release 绑定，
 // 封面失败以 errArtworkBinding 包装返回。曲目沿用还是新建由规划决定，见 planRootIdentities。
-func (service *Service) persistOneCandidate(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, candidate ingest.OrganizedCandidate) error {
-	releaseID, err := ingest.PersistCandidate(ctx, executor, scanID, root.ID, candidate)
+func (service *Service) persistOneCandidate(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, candidate ingest.OrganizedCandidate, feedbacks ...*scanFeedback) error {
+	feedback := feedbackArg(feedbacks)
+	var changes *ingest.ScanFeedback
+	if feedback != nil {
+		changes = feedback.changes
+	}
+	releaseID, err := ingest.PersistCandidateWithFeedback(ctx, executor, scanID, root.ID, candidate, changes)
 	if err != nil {
 		return err
 	}
-	if artworkErr := service.saveArtworkForRelease(ctx, executor, releaseID, root, candidate); artworkErr != nil {
+	if artworkErr := service.saveArtworkForRelease(ctx, executor, releaseID, root, candidate, changes); artworkErr != nil {
 		return fmt.Errorf("%w: %v", errArtworkBinding, artworkErr)
 	}
 	return nil
@@ -818,7 +902,7 @@ func isWithin(root, path string) bool {
 // saveArtworkForRelease 为 Release 取得封面并交给受管存储：优先用候选曲目里的内嵌封面，否则按
 // catalog 给出的目录顺序（发行目录、再各曲目目录）发现文件夹封面；两者都没有时移除既有关联。
 // 文件夹封面发现失败以原错误返回，不当作没有封面。
-func (service *Service) saveArtworkForRelease(ctx context.Context, executor scanExecutor, releaseID string, root registeredRoot, candidate ingest.OrganizedCandidate) error {
+func (service *Service) saveArtworkForRelease(ctx context.Context, executor scanExecutor, releaseID string, root registeredRoot, candidate ingest.OrganizedCandidate, feedbacks ...*ingest.ScanFeedback) error {
 	var data []byte
 	var mimeType string
 	sourceType := "embedded"
@@ -833,6 +917,12 @@ func (service *Service) saveArtworkForRelease(ctx context.Context, executor scan
 		}
 	}
 	store := artwork.NewStore(service.dataDirectory)
+	if len(feedbacks) > 0 && feedbacks[0] != nil {
+		if len(data) == 0 {
+			return store.RemoveWithFeedback(ctx, executor, releaseID, feedbacks[0])
+		}
+		return store.SaveWithFeedback(ctx, executor, releaseID, data, mimeType, sourceType, feedbacks[0])
+	}
 	if len(data) == 0 {
 		return store.Remove(ctx, executor, releaseID)
 	}

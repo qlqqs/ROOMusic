@@ -5,14 +5,19 @@ import type { ScanDTO } from "../api/decoders";
 import { scanPhase } from "../scan-status";
 import styles from "./active-scan.module.css";
 import { ScanPhaseTag } from "./scan-phase-tag";
+import { ScanProgress } from "./scan-progress";
 
-/** 活动扫描的一行摘要：阶段、开始时间与诊断数（诊断数不是进度）。管理员可以从这里进入扫描详情。 */
+/**
+ * 活动扫描的摘要：状态、进度条（当前阶段与累计文件数）、开始时间与诊断数（诊断数不是进度）。目录名称不在这里显示，
+ * 多个目录时只说第几个。管理员可以从这里进入扫描详情。
+ */
 export function ActiveScan({ scan, detailLink = false }: { scan: ScanDTO; detailLink?: boolean }) {
   return (
     <div className={styles.active}>
       <p>
         <ScanPhaseTag phase={scanPhase(scan)} />
       </p>
+      <ScanProgress scan={scan} />
       <p className={styles.meta}>
         开始于 {formatDateTime(scan.started_at)}，已发现 {formatCount(scan.diagnostics.total)} 条诊断。
       </p>

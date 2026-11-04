@@ -88,10 +88,27 @@ func StagedScopes(ctx context.Context, database queryer, scanID, rootID, after s
 	return stagedScopePage(ctx, database, scanID, rootID, after, false)
 }
 
+// CountPlannedScopes 返回本根已规划且未暂缓的不同 scope 数，与保存分页使用同一谓词。
+func CountPlannedScopes(ctx context.Context, database queryer, scanID, rootID string) (int64, error) {
+	var count int64
+	err := database.QueryRowContext(ctx, `SELECT COUNT(DISTINCT organization_scope) FROM scan_observations
+  WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND planned AND NOT withheld`, scanID, rootID).Scan(&count)
+	return count, err
+}
+
+// PlannedStagedScopes 用于带反馈的保存阶段，只返回固定分母包含的已规划 scope。
+func PlannedStagedScopes(ctx context.Context, database queryer, scanID, rootID, after string) ([]string, error) {
+	return scopePage(ctx, database, scanID, rootID, after, false, true)
+}
+
 func stagedScopePage(ctx context.Context, database queryer, scanID, rootID, after string, includeWithheld bool) ([]string, error) {
+	return scopePage(ctx, database, scanID, rootID, after, includeWithheld, false)
+}
+
+func scopePage(ctx context.Context, database queryer, scanID, rootID, after string, includeWithheld, plannedOnly bool) ([]string, error) {
 	rows, err := database.QueryContext(ctx, `SELECT DISTINCT organization_scope FROM scan_observations
-		WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND organization_scope>$3 AND ($4 OR NOT withheld)
-		ORDER BY organization_scope LIMIT $5`, scanID, rootID, after, includeWithheld, stagedScopePageSize)
+		WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND organization_scope>$3 AND ($4 OR NOT withheld) AND (NOT $6 OR planned)
+		ORDER BY organization_scope LIMIT $5`, scanID, rootID, after, includeWithheld, stagedScopePageSize, plannedOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -141,6 +158,17 @@ func loadStagedScope(ctx context.Context, database queryer, scanID, rootID, scop
 		}
 	}
 	return observations, rows.Err()
+}
+
+// ClearScansStaging 清理调用方已经确认终态的扫描暂存；终态判断与协调锁由 library 负责。
+// 分块传参避免把恢复清理变成无界的 SQL 参数集合，不读取其他能力的私有表。
+func ClearScansStaging(ctx context.Context, database Execer, scanIDs []string) error {
+	for start := 0; start < len(scanIDs); start += 256 {
+		if _, err := database.ExecContext(ctx, `DELETE FROM scan_observations WHERE scan_run_id=ANY($1::uuid[])`, scanIDs[start:min(start+256, len(scanIDs))]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ClearStagedObservations 删除 rootID 在本次扫描中的全部暂存行。

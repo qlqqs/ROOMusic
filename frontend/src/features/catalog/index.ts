@@ -4,6 +4,7 @@ export { AlbumDetailView } from "./components/album-detail-view";
 export { AlbumListView } from "./components/album-list-view";
 export { Cover } from "./components/cover";
 export { LibrarySummary } from "./components/library-summary";
+export { RecentlyAddedPanel } from "./components/recently-added-panel";
 export { albumArtistOf, albumMeta } from "./format";
 export { evidenceFieldLabel, reasonCodeLabel } from "./labels";
 export { albumListSearchFromState, MAX_SEARCH_BYTES, parseAlbumDetailSearch, parseAlbumSearch, parseSearchText, type AlbumDetailSearch, type AlbumSearch } from "./album-search";

@@ -1,5 +1,6 @@
 import type { BrowserContext } from "@playwright/test";
-import type { DiagnosticsPageDTO, RootDTO, RootOperationDTO, ScanDTO } from "../../src/features/library/api/decoders";
+import type { ReleaseGroupSummaryWithAddedAtDTO } from "../../src/features/catalog/api/decoders";
+import type { DiagnosticsPageDTO, RootDTO, RootOperationDTO, ScanDTO, ScanReportDTO } from "../../src/features/library/api/decoders";
 import type { RecentReleaseDTO } from "../../src/features/listening/api/decoders";
 import type { MemberDTO } from "../../src/features/members/api/decoders";
 import { loadApiSample, sampleBody } from "../../src/test/api-samples";
@@ -9,6 +10,7 @@ import {
   respondToGroupComparison,
   respondToGroupDetail,
   respondToGroupList,
+  respondToRecentlyAdded,
   respondToReleaseDetail,
   respondToReleaseEvidence,
   type CatalogData,
@@ -51,7 +53,7 @@ export type MockOptions = {
   failSetupStatusTimes?: number;
 };
 
-export type RecordedCall = { method: string; path: string; body: unknown; idempotencyKey: string | null };
+export type RecordedCall = { method: string; path: string; search: string; body: unknown; idempotencyKey: string | null };
 
 /**
  * 专辑数据（列表、组详情、版本详情、完整证据）与接口行为同 Vitest 的替身共用 catalog-data.ts：groups 是列表的全部组（已按接口的顺序排好，
@@ -71,6 +73,10 @@ export type ApiMock = CatalogData & {
   users: MemberDTO[];
   scans: Map<string, ScanDTO>;
   activeScanId: string | null;
+  /** 报告保留完整新增列表，接口按请求分页；只有管理员可读。 */
+  scanReports: Map<string, ScanReportDTO>;
+  /** 最近新增的可见组，接口按加入时间排序并限制八项。 */
+  recentlyAdded: ReleaseGroupSummaryWithAddedAtDTO[];
   diagnostics: Map<string, DiagnosticsPageDTO>;
   /** 封面接口对这些资源 ID 返回 404（图片加载失败）；其他资源返回一张合成的渐变 PNG。 */
   brokenArtworks: Set<string>;
@@ -129,6 +135,8 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
     users: (sampleBody("users/list") as { items: MemberDTO[] }).items,
     scans: new Map(),
     activeScanId: null,
+    scanReports: new Map(),
+    recentlyAdded: [],
     diagnostics: new Map(),
     // 默认 12 个专辑：三分之二有封面，每第 4 个需要关注，第 5 个有两个版本。
     ...catalogDataOf(albumGroups(12, (index) => ({ artwork: index % 3 !== 0, attention_count: index % 4 === 0 ? 1 : 0, release_count: index === 5 ? 2 : 1 }))),
@@ -155,6 +163,9 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
         finished_at: null,
         cancel_requested_at: null,
         diagnostics: { total: 0, counts: [] },
+        progress: null,
+        root_progress: null,
+        report_status: "legacy",
         ...overrides,
       };
       mock.scans.set(scan.id, scan);
@@ -200,6 +211,11 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
   const viewer = () => {
     const account = mock.session === null ? undefined : mock.accounts.get(mock.session);
     return mock.session === null || account === undefined ? null : { id: account.id, username: mock.session, role: account.role };
+  };
+  // 普通成员只能看到目录序号，不能收到管理员目录身份。
+  const scanForViewer = (scan: ScanDTO | null): ScanDTO | null => {
+    if (scan === null || viewer()?.role === "admin" || scan.root_progress == null) return scan;
+    return { ...scan, root_progress: { index: scan.root_progress.index, total: scan.root_progress.total } };
   };
   /** 受保护接口的门：未登录 401；被指定禁止或角色不够 403；否则交给处理器。 */
   const guarded = (method: string, path: string, requireAdmin: boolean, handler: () => Handled): Handled => {
@@ -279,6 +295,8 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
           mock.hasPlayHistory = false;
           return json({ deleted });
         });
+      case "GET /api/v1/release-groups/recently-added":
+        return guarded(method, path, false, () => respondToRecentlyAdded(mock.recentlyAdded));
       case "GET /api/v1/release-groups":
         return guarded(method, path, false, () => respondToGroupList(mock.groups, search));
       case "GET /api/v1/library-roots":
@@ -300,7 +318,7 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
           return json({ id: root.id, name: root.name, status: root.status, revision: root.revision }, 201);
         });
       case "GET /api/v1/scans/active":
-        return guarded(method, path, false, () => json({ scan: mock.activeScanId === null ? null : (mock.scans.get(mock.activeScanId) ?? null) }));
+        return guarded(method, path, false, () => json({ scan: scanForViewer(mock.activeScanId === null ? null : (mock.scans.get(mock.activeScanId) ?? null)) }));
       case "GET /api/v1/scans":
         return guarded(method, path, true, () => {
           const page = Number(search.get("page") ?? "1");
@@ -400,13 +418,26 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
       });
     }
 
-    const scanPath = /^\/api\/v1\/scans\/([^/]+)(\/cancel|\/diagnostics)?$/.exec(path);
+    const scanPath = /^\/api\/v1\/scans\/([^/]+)(\/cancel|\/diagnostics|\/report)?$/.exec(path);
     if (scanPath !== null) {
       const id = scanPath[1] ?? "";
       const suffix = scanPath[2];
       return guarded(method, path, suffix !== undefined, () => {
         const scan = mock.scans.get(id);
         if (scan === undefined) return sample("errors/not-found-scan");
+        if (suffix === "/report" && method === "GET") {
+          const page = Number(search.get("page") ?? "1");
+          const pageSize = Number(search.get("page_size") ?? "20");
+          if (!Number.isSafeInteger(page) || page < 1 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) return sample("errors/invalid-pagination");
+          if (scan.report_status === undefined || scan.report_status === "legacy") return sample("scan-feedback/report-legacy");
+          if (scan.status === "running") return sample("scan-feedback/report-pending");
+          const report = mock.scanReports.get(id);
+          if (scan.report_status === "unavailable" || report === undefined) return sample("scan-feedback/report-unavailable");
+          return json({ ...report, added_albums: {
+            items: report.added_albums.items.slice((page - 1) * pageSize, page * pageSize),
+            pagination: { page, page_size: pageSize, total: report.added_albums.items.length },
+          } });
+        }
         if (suffix === "/diagnostics" && method === "GET") return json(mock.diagnostics.get(id) ?? { items: [], summary: { total: 0, counts: [] } });
         if (suffix === "/cancel" && method === "POST") {
           if (scan.status !== "running") return json(scan, 200);
@@ -415,7 +446,7 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
           return json(requested, 202);
         }
         if (suffix === undefined && method === "GET") {
-          if (scan.status !== "running") return json(scan);
+          if (scan.status !== "running") return json(scanForViewer(scan));
           // 取消请求被接受后，扫描还要走完当前步骤：第一次读取仍是“取消请求中”，下一次读取它已经停下。
           if (scan.cancel_requested_at !== null) {
             const afterCancel = (cancelReads.get(id) ?? 0) + 1;
@@ -425,7 +456,7 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
           const reads = (scanReads.get(id) ?? 0) + 1;
           scanReads.set(id, reads);
           if (mock.scanFinishesAfterReads !== null && reads >= mock.scanFinishesAfterReads) return json(finishScan(scan, mock.scanOutcome));
-          return json(scan);
+          return json(scanForViewer(scan));
         }
         return sample("errors/method-not-allowed");
       });
@@ -465,7 +496,7 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
     } catch {
       body = undefined;
     }
-    mock.calls.push({ method: request.method(), path: url.pathname, body, idempotencyKey: request.headers()["idempotency-key"] ?? null });
+    mock.calls.push({ method: request.method(), path: url.pathname, search: url.search, body, idempotencyKey: request.headers()["idempotency-key"] ?? null });
     // 封面是图片，不是 JSON：未登录 401，被标记的资源 404，其余返回合成的渐变图。
     const artwork = /^\/api\/v1\/artworks\/([^/]+)$/.exec(url.pathname);
     if (artwork !== null && request.method() === "GET") {

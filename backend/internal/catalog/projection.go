@@ -1,5 +1,7 @@
 package catalog
 
+import "time"
+
 // 以下类型是 Release 读取投影，JSON 标签是 REST 合同的一部分，由 catalog REST 合同规范约束。
 
 type ReleaseSummary struct {
@@ -109,6 +111,7 @@ type ReleaseEvidence struct {
 // ReleaseGroupSummary 是按组读取的摘要：组 ID、可见成员数、可见成员 attention 之和，以及代表版本的完整摘要（含封面）。
 // M3 人工归组之前每组恰好一个版本，代表版本就是它；组内有多个版本时，代表版本按 ReleaseGroupDetail 中的成员顺序排在最前。
 type ReleaseGroupSummary struct {
+	AddedAt        time.Time      `json:"added_at"`
 	ID             string         `json:"id"`
 	ReleaseCount   int64          `json:"release_count"`
 	AttentionCount int64          `json:"attention_count"`

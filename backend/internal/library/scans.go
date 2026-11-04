@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/ingest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
@@ -82,6 +83,9 @@ type Scan struct {
 	FinishedAt        *time.Time         `json:"finished_at"`
 	CancelRequestedAt *time.Time         `json:"cancel_requested_at"`
 	Diagnostics       DiagnosticsSummary `json:"diagnostics"`
+	Progress          *ScanProgress      `json:"progress"`
+	RootProgress      *RootProgress      `json:"-"`
+	ReportStatus      string             `json:"report_status"`
 }
 
 type DiagnosticCount struct {
@@ -104,7 +108,9 @@ type Diagnostic struct {
 func scanRow(row interface{ Scan(...any) error }) (Scan, error) {
 	result := Scan{Diagnostics: DiagnosticsSummary{Counts: []DiagnosticCount{}}}
 	var finishedAt, cancelRequestedAt sql.NullTime
-	err := row.Scan(&result.ID, &result.Status, &result.StartedAt, &finishedAt, &cancelRequestedAt)
+	var feedback feedbackRow
+	destinations := append([]any{&result.ID, &result.Status, &result.StartedAt, &finishedAt, &cancelRequestedAt}, feedback.destinations()...)
+	err := row.Scan(destinations...)
 	result.ScanRunID = result.ID
 	if finishedAt.Valid {
 		value := finishedAt.Time
@@ -114,10 +120,11 @@ func scanRow(row interface{ Scan(...any) error }) (Scan, error) {
 		value := cancelRequestedAt.Time
 		result.CancelRequestedAt = &value
 	}
+	feedback.apply(&result)
 	return result, err
 }
 
-const scanSelectColumns = "id::text,status,started_at,finished_at,cancel_requested_at"
+const scanSelectColumns = "id::text,status,started_at,finished_at,cancel_requested_at" + scanFeedbackColumns
 
 // GetScan 读取一次扫描及其诊断汇总；不存在时返回 ErrScanNotFound。
 func (service *Service) GetScan(ctx context.Context, id string) (Scan, error) {
@@ -326,13 +333,13 @@ func (service *Service) StartScan(ctx context.Context) (StartResult, error) {
 		return StartResult{}, fmt.Errorf("%w: %v", ErrStartFailed, err)
 	}
 	defer transaction.Rollback()
-	if _, err := transaction.ExecContext(ctx, `UPDATE scan_runs SET status='incomplete',finished_at=NOW(),error_message='process_restarted' WHERE status='running'`); err != nil {
+	if err := recoverScanRows(ctx, transaction); err != nil {
 		_ = transaction.Rollback()
 		_ = execution.close(context.Background())
 		return StartResult{}, fmt.Errorf("%w: %v", ErrStartFailed, err)
 	}
 	scanID := uuid.New()
-	if _, err := transaction.ExecContext(ctx, "INSERT INTO scan_runs(id,status,started_at) VALUES($1::uuid,'running',NOW())", scanID); err != nil {
+	if _, err := transaction.ExecContext(ctx, `INSERT INTO scan_runs(id,status,started_at,feedback_version,phase,progress_bp,phase_completed,phase_total,progress_updated_at,progress_seq,files_counted,files_processed,count_complete,files_changed,roots_total,report_state) VALUES($1::uuid,'running',NOW(),1,'counting',0,0,0,NOW(),0,0,0,false,false,0,'pending')`, scanID); err != nil {
 		_ = transaction.Rollback()
 		_ = execution.close(context.Background())
 		return StartResult{}, fmt.Errorf("%w: %v", ErrStartFailed, err)
@@ -463,11 +470,48 @@ func RecoverInterruptedScans(ctx context.Context, database *sql.DB) (err error) 
 			err = fmt.Errorf("release scan recovery lock: %w", closeErr)
 		}
 	}()
-	_, err = holder.connection.ExecContext(ctx, `UPDATE scan_runs
-		SET status='incomplete', finished_at=NOW(), error_message='process_restarted'
-		WHERE status='running'`)
+	transaction, err := holder.connection.BeginTx(ctx, nil)
 	if err != nil {
+		return fmt.Errorf("begin scan recovery: %w", err)
+	}
+	defer transaction.Rollback()
+	if err := recoverScanRows(ctx, transaction); err != nil {
 		return fmt.Errorf("recover interrupted scans: %w", err)
 	}
-	return nil
+	return transaction.Commit()
+}
+
+// 调用者必须先持有协调锁；仅清理本事务确认转为终态的扫描，不碰其它活扫描。
+func recoverScanRows(ctx context.Context, tx *sql.Tx) error {
+	for {
+		rows, err := tx.QueryContext(ctx, `SELECT id::text FROM scan_runs WHERE status='running' ORDER BY id LIMIT 256 FOR UPDATE`)
+		if err != nil {
+			return err
+		}
+		ids := make([]string, 0, 256)
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return err
+			}
+			ids = append(ids, id)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return err
+		}
+		if len(ids) == 0 {
+			return nil
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE scan_runs SET status='incomplete',finished_at=NOW(),error_message='process_restarted',
+ report_state=CASE WHEN feedback_version=1 THEN 'unavailable' ELSE report_state END
+ WHERE id=ANY($1::uuid[]) AND status='running'`, ids); err != nil {
+			return err
+		}
+		if err := ingest.ClearScansStaging(ctx, tx, ids); err != nil {
+			return err
+		}
+	}
 }

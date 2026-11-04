@@ -41,4 +41,5 @@ func (handlers *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/scans/{id}", handlers.scanStatus)
 	mux.HandleFunc("POST /api/v1/scans/{id}/cancel", handlers.cancelScan)
 	mux.HandleFunc("GET /api/v1/scans/{id}/diagnostics", handlers.diagnostics)
+	mux.HandleFunc("GET /api/v1/scans/{id}/report", handlers.scanReport)
 }

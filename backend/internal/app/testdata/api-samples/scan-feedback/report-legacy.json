@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "scan_report_not_available",
+      "message": "这次扫描没有报告"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 404
+}

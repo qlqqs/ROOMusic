@@ -5,13 +5,17 @@ import { utf8ByteLength } from "../auth";
 /** 搜索词的上限与后端一致：200 个 UTF-8 字节（超过时后端返回 invalid_query）。 */
 export const MAX_SEARCH_BYTES = 200;
 
+/** 专辑列表的排序：按标题是默认值（不写进 URL），另有按加入时间倒序的“最近新增”。 */
+export type AlbumSort = "added_at_desc";
+
 /**
- * 专辑列表的 URL 状态：搜索词、只看需要关注、页码。第 1 页是默认值，不写进 URL。
+ * 专辑列表的 URL 状态：搜索词、只看需要关注、排序、页码。默认值（按标题、第 1 页）不写进 URL。
  * 每个字段写成 `T | undefined`：路由把校验结果合并到原始查询串上，不合法的值必须显式返回 undefined。
  */
 export type AlbumSearch = {
   q?: string | undefined;
   attention?: "required" | undefined;
+  sort?: AlbumSort | undefined;
   page?: number | undefined;
 };
 
@@ -26,11 +30,12 @@ export function parseSearchText(value: unknown): string | undefined {
   return trimmed === "" || utf8ByteLength(trimmed) > MAX_SEARCH_BYTES ? undefined : trimmed;
 }
 
-/** 路由的 validateSearch：只有 attention=required 保留；页码只保留 2 及以上的整数。 */
+/** 路由的 validateSearch：只有 attention=required 与 sort=added_at_desc 保留（sort=title 是默认值，同样不写进 URL）；页码只保留 2 及以上的整数。 */
 export function parseAlbumSearch(search: Record<string, unknown>): AlbumSearch {
   return {
     q: parseSearchText(search["q"]),
     attention: search["attention"] === "required" ? "required" : undefined,
+    sort: search["sort"] === "added_at_desc" ? "added_at_desc" : undefined,
     page: parsePageParam(search["page"]),
   };
 }

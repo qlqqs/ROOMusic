@@ -19,7 +19,7 @@ function resultsTitle(search: AlbumSearch): string {
 }
 
 /**
- * 专辑列表：搜索与筛选、卡片网格、分页。搜索词、筛选与页码都在地址里（可刷新、可前进后退）；页码越界时用替换历史的方式改到末页。
+ * 专辑列表：搜索、筛选与排序、卡片网格、分页。搜索词、筛选、排序与页码都在地址里（可刷新、可前进后退）；页码越界时用替换历史的方式改到末页。
  * 翻页与改筛选时旧结果保持可见并标明“正在更新”。isAdmin 只决定空库时的说明，后端仍独立鉴权。
  */
 export function AlbumListView({ search, isAdmin }: { search: AlbumSearch; isAdmin: boolean }) {
@@ -65,7 +65,10 @@ export function AlbumListView({ search, isAdmin }: { search: AlbumSearch; isAdmi
             if (data.pagination.total === 0) {
               return filtered ? (
                 <p>
-                  没有符合条件的专辑。 <Link to="/albums">清除筛选</Link>
+                  没有符合条件的专辑。{" "}
+                  <Link to="/albums" search={{ sort: search.sort }}>
+                    清除筛选
+                  </Link>
                 </p>
               ) : isAdmin ? (
                 <p>
@@ -83,7 +86,12 @@ export function AlbumListView({ search, isAdmin }: { search: AlbumSearch; isAdmi
                   page={data.pagination.page}
                   pageCount={pageCountOf(data.pagination.total, data.pagination.page_size)}
                   renderLink={(target, props) => (
-                    <Link to="/albums" search={{ q: search.q, attention: search.attention, page: target > 1 ? target : undefined }} onClick={showResultsTop} {...props} />
+                    <Link
+                      to="/albums"
+                      search={{ q: search.q, attention: search.attention, sort: search.sort, page: target > 1 ? target : undefined }}
+                      onClick={showResultsTop}
+                      {...props}
+                    />
                   )}
                 />
               </div>

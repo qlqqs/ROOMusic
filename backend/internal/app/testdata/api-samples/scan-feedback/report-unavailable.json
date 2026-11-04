@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "scan_report_unavailable",
+      "message": "扫描结果已保留，报告未能生成"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 503
+}

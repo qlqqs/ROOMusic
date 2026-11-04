@@ -26,6 +26,7 @@ const withArtwork = decodeReleaseGroupPage(sampleBody("release-groups/list-one-w
 const uuidOf = (prefix: string, index: number) => `00000000-0000-4000-8000-${prefix}${String(index).padStart(11, "0")}`;
 
 export type GroupOverrides = {
+  added_at?: string;
   title?: string;
   artist?: string;
   album_artist?: string | null;
@@ -46,6 +47,7 @@ export function albumGroup(index: number, overrides: GroupOverrides = {}): Relea
   const attention = overrides.attention_count ?? 0;
   return {
     id: uuidOf("a", index),
+    added_at: overrides.added_at ?? "2026-11-04T00:00:00Z",
     release_count: overrides.release_count ?? 1,
     attention_count: attention,
     representative: {
@@ -81,7 +83,7 @@ export function failure(status: number, code: string, message: string): ApiResul
 /**
  * 专辑列表接口（GET /release-groups）的行为，依据后端：page 至少 1、page_size 1 到 100（缺省 50）、搜索词最多 200 字节、
  * attention 只接受 required，否则 400；搜索匹配代表版本的标题、艺人与专辑艺人（不区分大小写）；超出末页返回空列表而总数照常。
- * groups 已按接口应有的顺序排好：这里只做筛选与分页，不重新排序，用来证明页面按接口的顺序显示。
+ * 默认标题顺序由 groups 预置（可反排以证明页面不自作主张排序）；added_at_desc 按加入时间与组 ID 降序，再筛选与分页。
  */
 export function respondToGroupList(groups: readonly ReleaseGroupSummaryDTO[], query: URLSearchParams): ApiResult {
   const page = Number(query.get("page") ?? "1");
@@ -89,13 +91,18 @@ export function respondToGroupList(groups: readonly ReleaseGroupSummaryDTO[], qu
   if (!Number.isInteger(page) || page < 1 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) {
     return failure(400, "invalid_pagination", "分页参数无效");
   }
+  const sort = query.get("sort");
+  if (query.getAll("sort").length > 1 || (sort !== null && sort !== "title" && sort !== "added_at_desc")) {
+    return failure(400, "invalid_sort", "排序参数无效");
+  }
   const search = query.get("q");
   if (search !== null && (search.trim() === "" || utf8Length(search) > 200)) return failure(400, "invalid_query", "搜索条件无效");
   const attention = query.get("attention");
   if (attention !== null && attention !== "required") return failure(400, "invalid_attention", "检查筛选条件无效");
 
   const needle = search?.toLowerCase();
-  const matches = groups.filter((group) => {
+  const ordered = sort === "added_at_desc" ? [...groups].sort(compareAddedGroups) : groups;
+  const matches = ordered.filter((group) => {
     if (attention !== null && group.attention_count === 0) return false;
     if (needle === undefined) return true;
     const release = group.representative;
@@ -103,6 +110,15 @@ export function respondToGroupList(groups: readonly ReleaseGroupSummaryDTO[], qu
   });
   const start = (page - 1) * pageSize;
   return { status: 200, body: { items: matches.slice(start, start + pageSize), pagination: { page, page_size: pageSize, total: matches.length } } };
+}
+
+/** 最近新增与列表复用同一稳定顺序；未登记加入时间的旧服务形状不参与新接口。 */
+function compareAddedGroups(left: ReleaseGroupSummaryDTO, right: ReleaseGroupSummaryDTO): number {
+  return Date.parse(right.added_at ?? "1970-01-01T00:00:00Z") - Date.parse(left.added_at ?? "1970-01-01T00:00:00Z") || right.id.localeCompare(left.id);
+}
+
+export function respondToRecentlyAdded(groups: readonly ReleaseGroupSummaryDTO[]): ApiResult {
+  return { status: 200, body: { items: groups.filter((group) => group.added_at !== undefined).sort(compareAddedGroups).slice(0, 8) } };
 }
 
 // ---- 组详情、版本详情与完整证据 ----

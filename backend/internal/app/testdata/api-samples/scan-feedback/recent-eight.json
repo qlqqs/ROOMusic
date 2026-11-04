@@ -1,0 +1,159 @@
+{
+  "body": {
+    "items": [
+      {
+        "added_at": "2026-01-01T00:00:07Z",
+        "attention_count": 0,
+        "id": "00000000-0000-4000-8000-000000000001",
+        "release_count": 1,
+        "representative": {
+          "album_artist": null,
+          "artist": "合成艺人",
+          "artwork": null,
+          "attention_count": 0,
+          "id": "00000000-0000-4000-8000-000000000002",
+          "media_type": null,
+          "medium_count": 1,
+          "source_type": null,
+          "title": "最近专辑 09",
+          "track_count": 1,
+          "year": 2009
+        }
+      },
+      {
+        "added_at": "2026-01-01T00:00:06Z",
+        "attention_count": 0,
+        "id": "00000000-0000-4000-8000-000000000003",
+        "release_count": 1,
+        "representative": {
+          "album_artist": null,
+          "artist": "合成艺人",
+          "artwork": null,
+          "attention_count": 0,
+          "id": "00000000-0000-4000-8000-000000000004",
+          "media_type": null,
+          "medium_count": 1,
+          "source_type": null,
+          "title": "最近专辑 08",
+          "track_count": 1,
+          "year": 2008
+        }
+      },
+      {
+        "added_at": "2026-01-01T00:00:05Z",
+        "attention_count": 0,
+        "id": "00000000-0000-4000-8000-000000000005",
+        "release_count": 1,
+        "representative": {
+          "album_artist": null,
+          "artist": "合成艺人",
+          "artwork": null,
+          "attention_count": 0,
+          "id": "00000000-0000-4000-8000-000000000006",
+          "media_type": null,
+          "medium_count": 1,
+          "source_type": null,
+          "title": "最近专辑 07",
+          "track_count": 1,
+          "year": 2007
+        }
+      },
+      {
+        "added_at": "2026-01-01T00:00:04Z",
+        "attention_count": 0,
+        "id": "00000000-0000-4000-8000-000000000007",
+        "release_count": 1,
+        "representative": {
+          "album_artist": null,
+          "artist": "合成艺人",
+          "artwork": null,
+          "attention_count": 0,
+          "id": "00000000-0000-4000-8000-000000000008",
+          "media_type": null,
+          "medium_count": 1,
+          "source_type": null,
+          "title": "最近专辑 06",
+          "track_count": 1,
+          "year": 2006
+        }
+      },
+      {
+        "added_at": "2026-01-01T00:00:03Z",
+        "attention_count": 0,
+        "id": "00000000-0000-4000-8000-000000000009",
+        "release_count": 1,
+        "representative": {
+          "album_artist": null,
+          "artist": "合成艺人",
+          "artwork": null,
+          "attention_count": 0,
+          "id": "00000000-0000-4000-8000-000000000010",
+          "media_type": null,
+          "medium_count": 1,
+          "source_type": null,
+          "title": "最近专辑 05",
+          "track_count": 1,
+          "year": 2005
+        }
+      },
+      {
+        "added_at": "2026-01-01T00:00:02Z",
+        "attention_count": 0,
+        "id": "00000000-0000-4000-8000-000000000011",
+        "release_count": 1,
+        "representative": {
+          "album_artist": null,
+          "artist": "合成艺人",
+          "artwork": null,
+          "attention_count": 0,
+          "id": "00000000-0000-4000-8000-000000000012",
+          "media_type": null,
+          "medium_count": 1,
+          "source_type": null,
+          "title": "最近专辑 04",
+          "track_count": 1,
+          "year": 2004
+        }
+      },
+      {
+        "added_at": "2026-01-01T00:00:01Z",
+        "attention_count": 0,
+        "id": "00000000-0000-4000-8000-000000000013",
+        "release_count": 1,
+        "representative": {
+          "album_artist": null,
+          "artist": "合成艺人",
+          "artwork": null,
+          "attention_count": 0,
+          "id": "00000000-0000-4000-8000-000000000014",
+          "media_type": null,
+          "medium_count": 1,
+          "source_type": null,
+          "title": "最近专辑 03",
+          "track_count": 1,
+          "year": 2003
+        }
+      },
+      {
+        "added_at": "2026-01-01T00:00:00Z",
+        "attention_count": 0,
+        "id": "00000000-0000-4000-8000-000000000015",
+        "release_count": 1,
+        "representative": {
+          "album_artist": null,
+          "artist": "合成艺人",
+          "artwork": null,
+          "attention_count": 0,
+          "id": "00000000-0000-4000-8000-000000000016",
+          "media_type": null,
+          "medium_count": 1,
+          "source_type": null,
+          "title": "最近专辑 02",
+          "track_count": 1,
+          "year": 2002
+        }
+      }
+    ]
+  },
+  "status": 200
+}

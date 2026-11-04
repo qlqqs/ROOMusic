@@ -6,7 +6,8 @@ import { MAX_SEARCH_BYTES, parseSearchText, type AlbumSearch } from "../album-se
 import styles from "./album-filters.module.css";
 
 /**
- * 搜索与筛选：搜索词显式提交（按钮或回车），每次提交一条历史；“只看需要关注”立即生效；提交与切换筛选都回到第 1 页。
+ * 搜索、筛选与排序：搜索词显式提交（按钮或回车），每次提交一条历史；“只看需要关注”与排序立即生效；提交、切换筛选与换排序都回到第 1 页，
+ * 其余条件保留。
  * 输入框的内容在地址变化（后退、前进、清除）时跟着地址走，没有提交的草稿不写进地址。
  */
 export function AlbumFilters({ search }: { search: AlbumSearch }) {
@@ -31,14 +32,14 @@ export function AlbumFilters({ search }: { search: AlbumSearch }) {
       return;
     }
     setError(null);
-    void navigate({ to: "/albums", search: { q: parseSearchText(draft), attention: search.attention, page: undefined } });
+    void navigate({ to: "/albums", search: { q: parseSearchText(draft), attention: search.attention, sort: search.sort, page: undefined } });
   };
 
   const clear = () => {
     setDraft("");
     setError(null);
     inputRef.current?.focus();
-    void navigate({ to: "/albums", search: { q: undefined, attention: search.attention, page: undefined } });
+    void navigate({ to: "/albums", search: { q: undefined, attention: search.attention, sort: search.sort, page: undefined } });
   };
 
   return (
@@ -67,9 +68,26 @@ export function AlbumFilters({ search }: { search: AlbumSearch }) {
           <input
             type="checkbox"
             checked={search.attention === "required"}
-            onChange={(event) => void navigate({ to: "/albums", search: { q: search.q, attention: event.target.checked ? "required" : undefined, page: undefined } })}
+            onChange={(event) =>
+              void navigate({ to: "/albums", search: { q: search.q, attention: event.target.checked ? "required" : undefined, sort: search.sort, page: undefined } })
+            }
           />
           <span>只看需要关注</span>
+        </label>
+        <label className={styles.sort}>
+          <span>排序</span>
+          <select
+            value={search.sort ?? "title"}
+            onChange={(event) =>
+              void navigate({
+                to: "/albums",
+                search: { q: search.q, attention: search.attention, sort: event.target.value === "added_at_desc" ? "added_at_desc" : undefined, page: undefined },
+              })
+            }
+          >
+            <option value="title">按标题</option>
+            <option value="added_at_desc">最近新增</option>
+          </select>
         </label>
       </div>
     </form>

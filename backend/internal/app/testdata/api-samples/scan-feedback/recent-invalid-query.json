@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_query",
+      "message": "最近新增不接受查询参数"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

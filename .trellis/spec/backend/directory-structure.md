@@ -87,7 +87,7 @@ C2 的 B3 已将治理实现移到 `catalog/governance`，其 `Store` 经 `NewSt
   library 经 `ingest.StageObservation` 等函数写入暂存，规划需要读文件时通过 ingest 定义的窄端口
   `ingest.Fingerprinter` 向 library 取值（library 在注册 root 内校验路径后调用 parser）。ingest 不导入 catalog 核心、library 或
   parser。library 经 ingest 公开合同完成扫描写入；ingest 的负向对账保留读取 `scan_runs.started_at` 的既有跨表查询，本次不改变。
-  library 的读取侧仍通过 `catalog.SafeRelativeSourceRef` 等核心合同取值。
+  library 的读取侧仍通过 `catalog.SafeRelativeSourceRef` 等核心合同取值。M5 管理员报告另消费 `catalog.Store.ListScanAddedAlbums` 与 `catalog/governance.Store.LoadClaimHintsBatch` 的公开只读入口，共用library拥有的只读RR事务，不查询catalog/治理私表。
 - `playback` 拥有只读直出、派生交付编排与停机中止，经 catalog、library 公开合同读取来源，经 `playback/derivation` 的窄端口取得派生文件；
   HTTP 层经 identity 鉴权。具体错误、Range 与资源关闭规则见[播放合同](./playback-contracts.md)。
   `playback/derivation` 拥有缓存目录、转换任务与 ffmpeg 适配，不知道曲目与权限，由 `playback` 提供源文件版本与“安全打开并核对”的回调，

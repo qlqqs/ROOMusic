@@ -60,6 +60,8 @@ var (
 
 // ListParams 是 Release 列表的已校验参数：Search 已去除首尾空白，Page 与 PageSize 都大于 0。
 type ListParams struct {
+	// Sort 仅用于组列表；空值等价于标题排序。发行列表忽略它。
+	Sort              ReleaseGroupSort
 	Search            string
 	AttentionRequired bool
 	Page, PageSize    int

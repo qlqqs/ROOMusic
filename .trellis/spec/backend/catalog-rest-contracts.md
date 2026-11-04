@@ -13,7 +13,8 @@
 - `GET /api/v1/releases?q=<string>&attention=required&page=<int>&page_size=<int>`
 - `GET /api/v1/releases/{id}`
 - `GET /api/v1/releases/{id}/evidence`：仅管理员。
-- `GET /api/v1/release-groups?q=<string>&attention=required&page=<int>&page_size=<int>`
+- `GET /api/v1/release-groups?q=<string>&attention=required&page=<int>&page_size=<int>&sort=title|added_at_desc`
+- `GET /api/v1/release-groups/recently-added`：所有登录成员，固定最近八张，无查询参数，返回 `{items:[组摘要]}`。
 - `GET /api/v1/release-groups/{id}`
 - `GET /api/v1/release-groups/{id}/comparison`：版本对比（M4，所有登录成员），响应与规则见[默认版本与版本对比合同](./default-version-contracts.md)第 6 节。
 - `GET /api/v1/artworks/{resource_id}`：认证后读取受管封面；响应带 `ETag`，支持 `If-None-Match` 的 `304`（见第 3 节）。
@@ -52,7 +53,7 @@
   计数，以及 `artwork: null | {resource_id,mime,width,height}`。
 - `artwork` 是在既有 Release 摘要上追加的向后兼容（additive）字段；真实音频播放仍
   明确延期，不属于当前 Catalog REST 合同。
-- ReleaseGroup 摘要：`{id, release_count, attention_count, representative}`，`representative`
+- ReleaseGroup 摘要：`{id, release_count, attention_count, added_at, representative}`，`representative`
   是代表版本的完整 Release 摘要（含封面）。组详情在摘要上加 `releases`（成员 Release 摘要数组）、`revision`（专辑的人工修改版本号，M4）
   与 `default_release_id`（生效中的默认版本，M4；失效或没有设定时为 `null`，非空时等于 `releases[0].id`）；组摘要（列表）没有这两个字段。
   两个接口都只读；人工归组由治理合同的 `POST /releases/{id}/group` 提供，默认版本由 `POST /release-groups/{id}/default` 提供。
@@ -115,7 +116,7 @@
 
 ### 按组读取（阶段 I，只读）
 
-- **参数与错误码**与 `/releases` 完全相同：`page`、`page_size`（默认 1/50，最大 100）、`q`（最多 200 字节）、
+- **共同参数与错误码**与 `/releases` 相同，组另有独立的 `sort` 白名单：`page`、`page_size`（默认 1/50，最大 100）、`q`（最多 200 字节）、
   `attention=required`，错误码 `invalid_pagination`、`invalid_query`、`invalid_attention`；详情的非 UUID 为
   `400 invalid_id`。响应是 `{items:[组摘要], pagination:{page,page_size,total}}`，`total` 是满足条件的组数。
 - **可见性**：成员 Release 的可见条件与 `/releases` 相同（至少一条 `present` 曲目）。组至少有一个可见成员才出现；
@@ -127,10 +128,35 @@
 - **搜索**：任一可见成员命中 `/releases` 的搜索条件（同一个 SQL 谓词），组即命中；只命中不可见成员的不算。
 - **attention**：`attention_count` 是全部可见成员 attention 之和（不可见成员不计）；`attention=required` 取其大于 0 的组，
   与代表版本自己的 `attention_count` 无关。
-- **排序**：代表版本的 `LOWER(title)`、`LOWER(artist)`、ID，与 `/releases` 一致。没有人工归组时每组恰好一个版本，
+- **排序**：省略或 `sort=title` 取代表版本的 `LOWER(title)`、`LOWER(artist)`、ID，与 `/releases` 一致；
+  `sort=added_at_desc` 取 `added_at DESC, group_id DESC`。空值、未知值、重复 `sort` 参数均为 `400 invalid_sort`。
+  `/releases` 不增加此排序能力。标题排序下没有人工归组时每组恰好一个版本，
   此时 `/release-groups` 与 `/releases` 的总数、顺序与代表版本逐项对应，`release_count` 为 1，
   `attention_count` 等于该版本的 `attention_count`。
 - 摘要投影、封面 `LEFT JOIN` 与搜索谓词复用 `/releases` 的同一批 SQL 常量，不逐组查询。
+
+### 最近新增与扫描新增项（M5 扫描反馈）
+
+- `added_at` 在组摘要、组详情、最近新增与报告当前卡片中均为 RFC 3339 时间，取**当前组内所有可见发行**的最早 `created_at`，
+  不是组创建时间或代表版本创建时间；先计算窗口 `MIN`，再筛选搜索，命中较新成员不会改写组加入时间。
+- 可见性继续复用 `ReleaseVisiblePredicate`，不额外按 root 是否禁用过滤；默认版本仍只控制代表版本。
+  归组、认领、撤销或最早成员不可见可改变加入时间；恢复旧成员采用原创建时间，不当作新加入。
+- 最近新增固定 `added_at DESC, group_id DESC LIMIT 8`，不执行 COUNT；空列表必须是 `[]`，不可见组不返回。
+  任何查询参数（包括 sort/limit/page/page_size/q/attention）均为 `400 invalid_query`；认证先于参数检查。
+  读取失败为 `503 database_unavailable`，不能假装成空列表。索引 `releases(group_id, created_at, id)` 在迁移 0024 建立，
+  不能覆盖跨表可见性与全组时间聚合；性能需以实际 EXPLAIN 为准。
+- `catalog.NewStore(queryer).ListScanAddedAlbums(ctx, scanID, page, pageSize)` 是 library 管理员报告的公开读取入口。
+  返回 `ScanAddedAlbumPage{Items,Total}`；页大小 1–100，页码正数，检查 offset 溢出。
+  历史来源是 `scan_added_releases`，按 `added_at DESC, release_id DESC` 分页，total 按历史关联计数，不因当前状态过滤或归组去重。
+  `group_id_at_creation/title_at_creation/artist_at_creation` 映射为 DTO 的 `group_id_at_scan/title_at_scan/artist_at_scan`。
+  每项同时返回冻结的 `added_at/release_id`；当前发行可见时批量补 `current_group_id` 和 `album`（共用组摘要投影），
+  当前发行不可见或已不存在时这两项均为 null，即使它所属组仍有其他可见发行，也不提供误导的播放卡片。
+- `governance.NewStore(queryer).LoadClaimHintsBatch(ctx, releaseIDs)` 批量补管理员专属的 `claim_hints: [{id,title}]`。
+  最多 100 个输入 ID，非法 UUID 报错，小写去重，空输入不查库；不存在、不可见或无提示的目标返回非 nil 空切片。
+  同一条集合 SQL 按目标分区、每个目标最多三条；复用待认领谓词、旧路径集合和最后观察时间排序，路径命中或同目录任一成立即可，
+  不受正向推荐五条上限限制。认领后提示消失，撤销后按当前条件恢复；读取故障传回调用方安全 503，不冒充没有提示。
+- library 在鉴权之后开启**短、只读 REPEATABLE READ**，报告表、上述两种 Store 共享同一个 Queryer，最后统一提交；
+  这些读取入口不另开事务，不读取文件。library 负责扫描状态/报告可用性与最终 DTO 的分页及提示组合，catalog 不读扫描私有状态。
 
 ## 4. 校验与错误矩阵
 
@@ -142,6 +168,9 @@
 | ReleaseGroup 不存在，或没有任何可见成员 | 组详情与版本对比返回 `404 not_found` |
 | 组详情或版本对比的 ID 不是 UUID | `400 invalid_id` |
 | 版本对比的读取失败 | `503 database_unavailable` |
+| 组列表 sort 空值、未知或重复 | `400 invalid_sort` |
+| 最近新增带任意查询参数 | `400 invalid_query` |
+| 最近新增查询或投影失败 | `503 database_unavailable` |
 | 组列表的读取失败 | `503 database_unavailable`（查询无法执行）或 `503 database_error`，不回显 SQL |
 | 无 `release_artworks` 关系 | 列表与详情返回显式 `artwork: null` |
 | 封面四列完整且合法 | 列表与详情返回相同 artwork 对象 |
@@ -190,6 +219,11 @@
   还需通过隔离 PostgreSQL 18 的 `./scripts/test-integration.sh`。
 - 发行 REST/前端：present-only 列表、稳定分页/搜索、attention allowlist、详情事实、
   管理员 evidence 权限、路径脱敏、nullable/enum/数组上限和 malformed payload；按组接口与 `/releases` 逐项对应。
+
+- 扫描反馈定向验证：`recent_additions_integration_test.go` 覆盖空/八张/多版本 MIN、默认代表、搜索、稳定翻页、禁用 root、缺失/恢复、历史项不丢失与跨连接快照；
+  `httpapi/recent_additions_integration_test.go` 覆盖两种角色、401 优先、参数拒绝与安全 503；
+  `governance/claim_hints_batch_integration_test.go` 覆盖批量与单条等价、每目标上限、反向不受五条限制、认领/撤销与同一快照；
+  `recent_additions_explain_integration_test.go` 按环境变量显式启用规模测量，保留生产 SQL 的实际计划，不作为普通单元测试的必跑性能负载。
 
 ## 7. 错误与正确示例
 

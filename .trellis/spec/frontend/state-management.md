@@ -35,8 +35,10 @@ not a second editable source of truth.
   catalog into a client store.
 - Refetch or invalidate the smallest affected resource after a mutation.
 - Treat 401, 403, 409, and 503 as distinct states.
-- 扫描状态来自持久 scan-run 资源；当前没有已扫描文件数或百分比进度，诊断计数不能
-  替代总进度。本地提交状态不能新增远端枚举或改写成功、失败、取消和不完整终态。
+- 扫描状态来自持久 scan-run 资源。M5 ⑥ 起新扫描带服务端持久化的进度（`progress`：四个工作阶段、整体基点 `percent_bp`、
+  全局文件计数；`root_progress`：第几个 / 共几个目录）与报告状态（`report_status`）；本功能上线前的扫描与旧服务没有这些字段
+  （`progress: null` 或缺失、`report_status: legacy`），前端不补算、不伪造进度。诊断计数仍不能替代总进度。本地提交状态不能新增远端枚举或改写成功、
+  失败、取消和不完整终态。
 - PostgreSQL remains the Core 0 authority. The frontend must not assume
   Meilisearch lag, Redis task semantics, or subscriptions.
 
@@ -52,12 +54,20 @@ request.
   最多 2 次（`shouldRetryQuery`），4xx 与无效响应不重试；写操作从不自动重试。
 - 轮询只发生在有意义的时候：扫描详情运行中（含取消请求中）每 2 秒一次，到终态即停止并让活动扫描与扫描记录查询失效；活动扫描只在
   确有扫描时每 5 秒刷新，没有活动扫描时不轮询。页面不可见时暂停（沿用 Query 默认的 `refetchIntervalInBackground: false`），
-  重新可见时立即刷新。诊断在运行中只手动刷新，到终态时自动刷新一次。
+  重新可见时立即刷新。诊断在运行中只手动刷新，到终态时自动刷新一次。进度随这两个轮询一起到达，不另加轮询器、SSE 或 WebSocket。
+- 扫描与专辑数据（M5 ⑥，`library/hooks/use-scan-catalog-refresh.ts`，活动扫描与扫描详情两个 hook 都用）：观察到的运行中扫描结束（任一终态，
+  非成功也可能已经提交了变化）、消失或换成另一个，以及同一个扫描在正式处理阶段从第 i 个目录换到更后的目录时，让 `catalogKeys.all` 失效
+  （专辑列表、组与版本详情、概览的数字与“最近新增”）；计数阶段换目录不算，轮询间隔里跳过几个目录也只失效一次，第一次读到不失效。
+- 扫描报告（M5 ⑥，仅管理员）：`libraryKeys.scanReportPage(generation, scanId, page, pageSize)`，前缀 `libraryKeys.scanReports(generation)`
+  （经 library 公开入口的 `scanReportsQueryKey` 给 app）。只在扫描已结束且 `report_status` 为 `ready`/`partial` 时 `enabled`，不轮询；
+  翻页是组件内状态并用 `keepPreviousData`。`503 scan_report_unavailable` 是确定结果，不按普通 503 重试，显示“报告没能生成”的一句话。
+  认领、撤销、归组之后 app 的 `useReleaseDataRefresh` 让报告前缀失效：新增专辑现在所在的专辑与“可能接替了……”随之更新，历史计数不变。
 - 扫描记录（F3，`GET /scans`，仅管理员）自己不轮询，由事件让它失效：启动扫描（`onSettled`）、活动扫描消失或换成另一个、
   扫描详情到达终态；失效按 `libraryKeys.scanHistory(generation)` 前缀覆盖所有页。翻页用 `keepPreviousData` 保留上一页，
   新页到达前表格不闪空。
 - 响应不是 JSON、信封不合法或 decoder 失败时按 `invalid_response` 失败，结果不进入缓存。
-- 专辑（M1b，`features/catalog/query-keys.ts` 的 `catalogKeys`）：列表一页一个条目（搜索词、筛选与页码都在键里），翻页与改筛选时用 `keepPreviousData` 保留上一份结果，
+- 专辑（M1b，`features/catalog/query-keys.ts` 的 `catalogKeys`）：列表一页一个条目（搜索词、筛选、排序与页码都在键里；M5 ⑥ 起排序规范化为
+  `title | added_at_desc`，省略与按标题是同一条目，“最近新增”不复用标题排序的缓存），概览的“最近新增”是 `catalogKeys.recentlyAdded`（在 `all` 前缀下），翻页与改筛选时用 `keepPreviousData` 保留上一份结果，
   页面标明“正在更新”，保留的结果是占位数据，不能用来判断页码是否越界；组详情、版本详情各按 ID 一个条目；完整证据只有管理员且点了“查看完整证据”才 `enabled`，
   普通用户从不创建这个查询。选中的版本在组详情里还是成员、读详情却是 404（两次请求之间被重新扫描）时就地提示，并让组详情与该版本的查询失效，
   重新读到的成员列表决定还有哪些版本。
@@ -79,13 +89,14 @@ documented defaults without sending arbitrary backend fields.
 并回到第 1 页。页码超出末页（总数缩小、手改 URL）时用**替换**历史项的方式改到末页，没有数据时回到第 1 页；翻页时保留的上一页
 （占位数据）不能用来判断当前页是否越界。`shared/ui` 的 `Pagination` 只负责结构与可访问语义，链接由调用方用路由 `Link` 生成。
 已实现的专辑列表（M1b，`/albums`）沿用同一约定：`q`（去掉首尾空白后非空且不超过 200 个 UTF-8 字节，与后端上限一致，超限的值丢弃；路由会把形如数字的值
-解析成数字，`?q=1984` 按原文本处理）、`attention`（只有 `required` 保留）、`page`（≥2 才写）。搜索显式提交（回车或“搜索”按钮），不做输入即搜，每次提交一条历史；
+解析成数字，`?q=1984` 按原文本处理）、`attention`（只有 `required` 保留）、`sort`（M5 ⑥：只有 `added_at_desc` 写进地址，按标题是默认值不写；
+其他值丢弃）、`page`（≥2 才写）。换排序与提交搜索、切换筛选一样回到第 1 页并保留其他条件，翻页、清除搜索与“清除筛选”保留排序。搜索显式提交（回车或“搜索”按钮），不做输入即搜，每次提交一条历史；
 提交搜索、清除、切换筛选时把页码置为 `undefined`，翻页只改页码；搜索框里输入过程中的草稿是局部状态，地址变化（前进、后退、清除）时由地址重新派生。
 越界页码的规范化抽成 `shared/lib/use-clamped-page.ts`（扫描记录同样使用）。点页码链接时把结果区标题滚到视野顶部并聚焦（页码链接在结果下方，不挪的话新的一页停在滚到底的位置，
 键盘用户要倒着穿过整页卡片），改搜索词或筛选不挪焦点。
 
 M1a 的 URL 形状已定：`/`、`/setup`、`/login?redirect=`、`/library`（可带 `scan_page`）、`/library/scans/$scanId`、`/members`；旧 hash 链接与
-`?release=` 不做兼容（开发阶段不做兼容）。M1b 增加 `/albums`（`q`、`attention`、`page`）与 `/albums/$groupId`（`release`）。
+`?release=` 不做兼容（开发阶段不做兼容）。M1b 增加 `/albums`（`q`、`attention`、`page`；M5 ⑥ 增加 `sort`）与 `/albums/$groupId`（`release`）。
 无论采用路径参数还是查询参数，都只在边界读取/trim/校验一次 opaque ID，拒绝空值及超过 255 个 JavaScript 字符单元的值，避免任意长值进入请求。
 打开/关闭详情必须能恢复列表筛选与页码。
 
