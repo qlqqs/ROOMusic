@@ -19,8 +19,16 @@
 - `GET /api/v1/artworks/{resource_id}`：认证后读取受管封面；响应带 `ETag`，支持 `If-None-Match` 的 `304`（见第 3 节）。
 - `GET /api/v1/tracks/{id}/lyrics`：认证后读取曲目的内嵌歌词（所有登录成员；非 UUID 400、不存在或非 `present` 404；没有歌词是 200 加 `lyrics: null`）。
   它与发行接口同属 catalog 的只读投影，提取、保存、解析规则与响应形状见[内嵌歌词合同](./lyrics-contracts.md)。
-- 播放历史（阶段 P）只经 catalog 的两个公开读取函数使用目录：`Store.LoadTrackDuration`（present 曲目的时长，未知为 0）与
-  `Store.LoadTrackPlacements`（present 曲目的标题、组与所在发行摘要，摘要与列表同一个投影），不读 catalog 的私有表；规则见[播放历史合同](./listening-contracts.md)。
+- 播放历史（阶段 P / M5）只经 catalog 的三个公开读取函数使用目录：`Store.LoadTrackDuration`（present 曲目的时长，未知为 0）与
+  `Store.LoadTrackPlacements`（present 曲目的标题、组与所在发行摘要，摘要与列表同一个投影），以及 M5 的
+  `Store.LoadTrackSummaries(ctx, trackIDs) (map[string]TrackSummary, error)`（**含 missing** 的标题、艺人、present、时长、当前组/发行与安全音频事实），不读 catalog 私有表。
+  新函数无效 UUID 跳过、小写去重，空输入不查库，最多 1,000 个不同有效 ID，超限错误，不存在者无键；旧 Placements 仍仅返回 present，不改概览语义。
+  `TrackSummary` 为 `TrackID,Title,Artist,GroupID string; Present bool; DurationSeconds *float64; Release ReleaseSummary; Source TrackAudioFacts`；
+  `TrackAudioFacts` 为 `SourceKind string; Codec *string; BitDepth,SampleRate,Channels,Bitrate *int`，wire 名称见[播放历史合同](./listening-contracts.md)。
+  时长未知/非正/非有限为 null，codec 空白为 null，音频整数未知/非正为 null；source_kind 非空，不返回路径、root ID、指纹或文件时间。
+  曲目与按不同发行物化的摘要 CTE 同一语句快照，每发行只算一次摘要，复用有效值来源和封面安全投影；不查文件系统。
+  **缺失摘要例外**：历史保留 missing 曲目的当前发行/组和上次扫描事实，即使该发行全部 missing、present 计数为 0；只在此批量函数不加发行可见性谓词，
+  不扩大列表/详情可见性（详情仍可能 404）。缺少历史引用对象或安全投影失败时 listening 整体 503，不静默丢项。
 - 管理员写接口（M3，合同见[受治理操作合同](./governance-contracts.md)）：`GET|PATCH /api/v1/releases/{id}/corrections`、
   `POST /api/v1/releases/{id}/group`、`GET /api/v1/operations`、`POST /api/v1/operations/{id}/revert`；M4 增加
   `POST /api/v1/release-groups/{id}/default`（设定或清除默认版本，见[默认版本合同](./default-version-contracts.md)）。

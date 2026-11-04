@@ -1,0 +1,10 @@
+{
+  "body": {
+    "has_history": false,
+    "items": [],
+    "limit": 1000,
+    "total": 0,
+    "truncated": false
+  },
+  "status": 200
+}

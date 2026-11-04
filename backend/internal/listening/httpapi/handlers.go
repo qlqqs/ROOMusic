@@ -1,5 +1,5 @@
-// Package httpapi 是播放历史的 REST 传输层：记录一次播放、读取最近播放的发行、清除自己的历史。
-// 三个路由都只作用于当前会话用户，路径与请求体里没有用户 ID，管理员也只能操作自己的记录；
+// Package httpapi 是播放历史的 REST 传输层：记录、最近发行、按曲目历史、队列候选与删除自己的历史。
+// 所有路由都只作用于当前会话用户，路径与请求体里没有用户 ID，管理员也只能操作自己的记录；
 // handler 只做同源校验、鉴权、解码与响应映射，SQL 与规则在 listening。
 package httpapi
 
@@ -30,6 +30,9 @@ func (handlers *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/me/plays", handlers.record)
 	mux.HandleFunc("GET /api/v1/me/plays/recent-releases", handlers.recentReleases)
 	mux.HandleFunc("DELETE /api/v1/me/plays", handlers.clear)
+	mux.HandleFunc("GET /api/v1/me/plays/tracks", handlers.tracks)
+	mux.HandleFunc("GET /api/v1/me/plays/queue", handlers.queue)
+	mux.HandleFunc("DELETE /api/v1/me/plays/tracks/{track_id}", handlers.deleteTrack)
 }
 
 // playRequest 用指针区分“缺失”与零值：缺失的字段是 invalid_input，不会被当成 0。

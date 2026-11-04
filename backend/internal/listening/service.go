@@ -1,5 +1,5 @@
 // Package listening 拥有播放历史：每个用户各自的真实播放记录（play_history 表）、计一次播放的服务端校验、
-// “最近播放的发行”读取与清除。记录引用曲目 ID，发行归属属于 catalog，只经 catalog 的公开读取函数换算，
+// “最近播放的发行”、按曲目汇总的历史读取与删除。记录引用曲目 ID，发行归属属于 catalog，只经 catalog 的公开读取函数换算，
 // 这里不读目录的私有表。本包不含 HTTP；用户 ID、幂等键与曲目 ID 都必须是 UUID 文本，由传输层校验。
 package listening
 
@@ -47,6 +47,7 @@ type Database interface {
 type Catalog interface {
 	LoadTrackDuration(ctx context.Context, trackID string) (float64, error)
 	LoadTrackPlacements(ctx context.Context, trackIDs []string) (map[string]catalog.TrackPlacement, error)
+	LoadTrackSummaries(ctx context.Context, trackIDs []string) (map[string]catalog.TrackSummary, error)
 }
 
 // Service 是播放历史的应用服务。它不做鉴权：调用方（传输层）把当前会话用户的 ID 传进来，所有 SQL 都带 user_id。

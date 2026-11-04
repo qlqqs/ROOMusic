@@ -399,6 +399,20 @@ func TestPostgreSQLListeningFollowsTracksThroughRescans(t *testing.T) {
 		t.Fatalf("Alpha item = %+v, want release %s and the stray track %s", item, alphaRelease, stray)
 	}
 
+	historyItem := func(id string) listening.HistoryItem {
+		t.Helper()
+		for _, item := range historyTracksOf(t, application, &member, "").Items {
+			if item.TrackID == id {
+				return item
+			}
+		}
+		t.Fatalf("missing history track %s", id)
+		return listening.HistoryItem{}
+	}
+	if item := historyItem(stray); item.Release.ID != alphaRelease || item.GroupID != alphaGroup {
+		t.Fatalf("initial history placement: %+v", item)
+	}
+
 	// 杂音曲目移到 Gamma 的目录：曲目 ID 不变，记录跟着它显示在 Gamma 的发行里。
 	move("Alpha/stray.flac", "Gamma/03.flac")
 	scanTheLibrary(t, application, &admin)
@@ -412,6 +426,10 @@ func TestPostgreSQLListeningFollowsTracksThroughRescans(t *testing.T) {
 	}
 	if item := itemOf(recent, "Alpha"); item.LastTrack.ID != alpha1 {
 		t.Fatalf("Alpha item after the move = %+v, want last track %s", item, alpha1)
+	}
+
+	if item := historyItem(stray); item.Release.ID != gammaRelease || item.GroupID != gammaGroup || !item.Present {
+		t.Fatalf("history after move: %+v", item)
 	}
 
 	// 目录改名：曲目与发行 ID 都不变，最近播放仍显示同一批专辑。
@@ -438,6 +456,11 @@ func TestPostgreSQLListeningFollowsTracksThroughRescans(t *testing.T) {
 	}
 	requireAPIError(t, postPlay(t, application, &member, uuid.New(), beta1, 119), http.StatusNotFound, "not_found")
 
+	if item := historyItem(beta1); item.Present || item.Title != "Beta 1" || item.Artist != "Sample Artist" || item.Release.ID != betaRelease || item.Release.Title != "Beta" || item.PlayCount != 1 || item.DurationSeconds == nil || *item.DurationSeconds != 240 {
+		t.Fatalf("missing history metadata: %+v", item)
+	}
+	requireAPIError(t, application.request(t, http.MethodGet, "/api/v1/releases/"+betaRelease, nil, &member, nil), http.StatusNotFound, "not_found")
+
 	// 文件回来：沿用原曲目 ID，记录照常出现。
 	write("Beta/01.flac", 40, "Beta", "Beta 1", 1)
 	scanTheLibrary(t, application, &admin)
@@ -445,4 +468,7 @@ func TestPostgreSQLListeningFollowsTracksThroughRescans(t *testing.T) {
 		t.Fatalf("the returned file got a new track ID")
 	}
 	requireTitles(t, recentReleasesOf(t, application, &member), "Gamma", "Alpha", "Beta")
+	if item := historyItem(beta1); !item.Present || item.Release.ID != betaRelease || item.PlayCount != 1 {
+		t.Fatalf("history after recovery: %+v", item)
+	}
 }

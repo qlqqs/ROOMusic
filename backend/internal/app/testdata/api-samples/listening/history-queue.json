@@ -1,0 +1,47 @@
+{
+  "body": {
+    "has_history": true,
+    "items": [
+      {
+        "artist": "艺术家",
+        "duration_seconds": 240,
+        "group_id": "00000000-0000-4000-8000-000000000001",
+        "last_played_at": "2026-01-01T00:00:00Z",
+        "play_count": 2,
+        "present": true,
+        "release": {
+          "album_artist": null,
+          "artist": "艺术家",
+          "artwork": {
+            "height": 480,
+            "mime": "image/webp",
+            "resource_id": "sample-history-cover.webp",
+            "width": 640
+          },
+          "attention_count": 0,
+          "id": "00000000-0000-4000-8000-000000000002",
+          "media_type": null,
+          "medium_count": 1,
+          "source_type": null,
+          "title": "专辑",
+          "track_count": 1,
+          "year": null
+        },
+        "source": {
+          "bit_depth": 24,
+          "bitrate": 500000,
+          "channels": 2,
+          "codec": "flac",
+          "sample_rate": 96000,
+          "source_kind": "flac_vorbis_comment"
+        },
+        "title": "曲目",
+        "track_id": "00000000-0000-4000-8000-000000000003"
+      }
+    ],
+    "limit": 1000,
+    "total": 1,
+    "truncated": false
+  },
+  "status": 200
+}

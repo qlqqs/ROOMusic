@@ -65,6 +65,27 @@ total 与本页同一语句快照；空页的 LEFT JOIN 元数据行不输出为
 
 **不新增迁移**：`(user_id,track_id,played_at DESC)` 已覆盖用户筛选、曲目聚合、计数及删除；现有查询也是同类聚合（`backend/migrations/0016_play_history.sql:18-19`；`backend/internal/listening/recent.go:88-106`）。另建 `(user_id,played_at DESC,track_id)` 不能免除聚合排序/准确计数，不凭“M5”注释预建索引。待实现时确认：隔离库准备重复播放密集/曲目密集、多用户、1,000 边界及深页，用 `EXPLAIN (ANALYZE, BUFFERS)` 看扫描行数、聚合、排序/落盘、heap fetch 与耗时，并测 catalog 摘要；DELETE 仅 EXPLAIN，或在可回滚测试事务中 ANALYZE。个人规模仍需 O(H) 扫描本人记录，1,000 只限制返回/补全，不建汇总表。当前最新为 `0020_release_claims.sql`；若测量证明需迁移，从届时最新编号之后追加（当前 0021），不改 0016（`.trellis/spec/backend/database-guidelines.md:31-43,126-138`）。
 
+### 实施测量（2026-11-04，步骤 1）
+
+只在 `roomusic-test` Compose 项目中测试：绝对路径 `compose.test.yaml`、`--env-file /dev/null`、空闲端口、随机库名；每组独立 schema，未连接用户实例。使用应用源码中的实际 SQL，执行 `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)`；数据准备后 `VACUUM ANALYZE`，默认 PostgreSQL 18 参数。耗时是本机单次执行值，不是服务 SLA。
+
+历史表共 322,001 条：重复密集用户 100 首/100,000 次，曲目密集用户 20,000 首/20,000 次，另两用户分别 1,000/1,001 首；额外 40 用户各 5,000 次（200,000 条干扰数据）。
+
+| 数据/查询 | 实际扫描本人记录 | 执行耗时 | 排序/访问 |
+| --- | ---: | ---: | --- |
+| 重复密集，tracks 首页 / queue | 各 100,000 | 17.93 / 17.38 ms | 聚合为 100 行；内存 quicksort，最大 34 KB |
+| 曲目密集，tracks 首页 / queue | 各 20,000 | 20.54 / 22.26 ms | top-N 32 / 189 KB；queue 外层排序 118 KB |
+| 曲目密集，深页 OFFSET 19,950 / 超末 OFFSET 30,000 | 各 20,000 | 22.24 / 22.48 ms | 内存 quicksort，最大 2,175 KB；超末仍返回 total |
+| 1,000 / 1,001 边界，tracks 首页 | 1,000 / 1,001 | 1.20 / 1.18 ms | top-N 32 KB |
+| 1,000 / 1,001 边界，queue | 1,000 / 1,001 | 1.80 / 1.83 ms | 内存 quicksort，最大 118 KB |
+| 按曲目 DELETE（重复密集用户的 1,000 次记录） | 1,000 | 2.76 ms | 既有索引 Bitmap Index/Heap Scan；事务内 ANALYZE 后回滚，核对本人仍为 100,000 条 |
+
+两个 GET 均使用 `play_history_user_track_idx` 的 Index Only Scan，只扫描目标用户，Heap Fetches=0；没有扫描其余用户记录，没有排序落盘或临时块读写。总数和汇总仍需 O(H)，不是由 LIMIT 把扫描裁到 1,000。
+
+catalog 另准备 21,000 曲目/1,001 发行（含 missing）：50 个不同发行的 50 首约 9.84 ms；1,000 个不同发行的 1,000 首约 225.63 ms（首轮 447.55 ms）；同一发行 1,000 首约 112.94 ms。候选按 tracks 主键只取 50/1,000 行，摘要 CTE 分别产生 50/1,000/1 行，证实同发行不重复算摘要。不同发行场景下三个曲目计数分支各检查约 20,000 行，均经已有 medium/track 索引；无落盘。
+
+catalog 的 1,000 候选触发 JIT：两种队列场景编译各约 113.22/106.28 ms；仅测试会话 `SET jit=off` 的对照为 79.22/6.19 ms（50 首 8.98 ms），说明主要额外开销并非缺少索引。生产参数未修改，不为本项全局关闭 JIT。**结论：不新增迁移 0021，不改 0016**；目前没有支持追加索引的测量证据。未来若规模/延迟目标变化，应重新评估摘要/JIT 与准确计数成本，而不是预建另一组时间索引。
+
 ## 3. catalog 公开合同与分层
 
 新增函数，不改变旧 `LoadTrackPlacements` 的 present-only 语义，否则概览行为改变（`backend/internal/catalog/track_placement.go:12-54`）：

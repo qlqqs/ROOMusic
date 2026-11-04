@@ -1,0 +1,12 @@
+{
+  "body": {
+    "has_history": true,
+    "items": [],
+    "pagination": {
+      "page": 2,
+      "page_size": 50,
+      "total": 1
+    }
+  },
+  "status": 200
+}
