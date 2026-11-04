@@ -50,3 +50,26 @@
 ## 设计与执行
 
 接口合同见 [design.md](design.md)（后端 agent 起草、主会话审阅）：三个新接口 `GET /api/v1/me/plays/tracks`、`GET /api/v1/me/plays/queue`、`DELETE /api/v1/me/plays/tracks/{track_id}`，catalog 新增 `LoadTrackSummaries`，暂不加迁移。执行步骤见 [implement.md](implement.md)。
+
+## 实施结果（2026-11-04）
+
+| 步骤 | 提交 | 结果 |
+| --- | --- | --- |
+| 1 后端（Astra） | `55a2e70` | 三个接口与 catalog `LoadTrackSummaries`，与 design.md 合同无偏差；9 个样本由真实服务生成。隔离库 32.2 万条、44 个用户上 `EXPLAIN (ANALYZE, BUFFERS)`：两个 GET 走既有索引 Index Only Scan、Heap Fetches 0，首页/queue/深页约 17–22 ms，无排序落盘，**不新增迁移**（数据见 design.md §2）。同步 listening 合同 §1–§8 与 catalog REST §2 |
+| 2+3 前端与测试（Opus 实现，Astra 测试） | `8237728` | `/me` 布局与历史页签；行内播放与“更多”菜单、“播放全部”由 `app/routes/history-playback.tsx` 组合 player，listening 不导入 player；上报、移除、清除与专辑修改后失效 `listeningKeys.all`。测试只改测试文件，未发现实现缺陷；修正了导航与概览链接数的旧断言 |
+| 4 收尾 | 本提交 | 导出树验证与截图复核，见下 |
+
+**验收对照**：
+- A1：后端集成测试覆盖用户 A/B/管理员互相读删不到、401、写请求跨源 403；前端 `viewer-play-reporter.test.ts`、`history.test.tsx` 覆盖会话隔离。
+- A2：`history_integration_test.go` 覆盖汇总、次数、同时间按 track_id、分页不重不漏、超末页与 100/101 页大小。
+- A3：后端覆盖缺失保留元数据、重扫恢复、换发行后返回当前发行；前端覆盖缺失行灰色、标“文件缺失”、播放类操作不可用、专辑名不是链接。
+- A4：后端覆盖只删本人该曲目、重试返回 0、概览随之更新；前端覆盖取消不发请求、确认后行消失。
+- A5、A6：`history-playback.test.tsx` 覆盖单首替换队列、入队不打断、队列满不截断、加入/跳过计数与截断提示、全不可播放时队列不变；截图里 1,001 首合成历史选择 998 首、跳过 2 首并提示只处理最近 1,000 首。
+- A7：导航、`/me` 重定向、`?page=N` 恢复、概览“全部历史”链接由 Vitest 与 `e2e/history.spec.ts` 覆盖。
+- A8：9 个样本解码器往返；五种宽度无横向溢出、三处 axe 零违规、纯键盘完成播放/移除/清除；真实服务用例验证播放过半后历史次数为 1、移除后在页面、接口与刷新后都消失。
+
+**主会话裁决**：测试 agent 新增的两项封面拒绝用例（`resource_id` 含 `../`、`image/svg+xml`）被移除——封面解码器是 catalog 既有共享解码器，只承诺长度与尺寸；安全 basename 与 MIME 白名单是后端合同（`.trellis/spec/backend/catalog-rest-contracts.md:57,69`），前端拼地址用 `encodeURIComponent`。
+
+**收尾验证**（`git archive HEAD` 导出树，HEAD `8237728`）：`npm ci`（0 vulnerabilities）、lint、typecheck；隔离库上 `go test -race ./internal/catalog ./internal/listening/... ./internal/app -count=1` 533 通过、0 SKIP（PostgreSQL 集成顶层 119 个），`go vet` 同范围通过；`npx vitest run` 80 文件 1,759 通过；`npx playwright test e2e/history.spec.ts e2e/auth.spec.ts e2e/a11y.spec.ts e2e/player.spec.ts --retries=0` 131 通过、0 flaky；`scripts/playback-e2e.sh` 45/45。重建的 `backend/cmd/roomusic/web` 123 个文件与提交一致。后端只跑改动涉及的三个包，没有跑 `go test ./...`：改动不出 catalog、listening 与 app。
+
+**截图复核**：1440 与 375 的历史页、移除确认、截断提示、空态与概览（合成数据，临时 spec 未入库）由主会话复核。超长标题与专辑名正常换行，缺失行灰色且专辑名不是链接，62 组“播放/更多”按钮同行、按钮文字都是一行，对话框在视口内，无需返工。
