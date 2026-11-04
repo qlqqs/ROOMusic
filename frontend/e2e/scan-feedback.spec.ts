@@ -8,6 +8,56 @@ import { feedbackWidths, longAlbumTitle, longRootName, seedScanFeedback, setScan
 const progress = (page: Page) => page.getByRole("progressbar", { name: "扫描进度" });
 const report = (page: Page) => page.getByRole("region", { name: "扫描报告" });
 
+// 固定五宽的期望行形状，独立于产品的列数计算，防止只检查“不溢出”而漏掉多余行。
+const recentRows: Record<(typeof feedbackWidths)[number], readonly number[]> = {
+  360: [1, 1],
+  390: [2, 2],
+  768: [2, 2],
+  1280: [5],
+  1440: [6],
+};
+
+async function expectRecentRows(page: Page, expectedRows: readonly number[], supplied: readonly { id: string }[]) {
+  const recent = page.getByRole("region", { name: "最近新增" });
+  const count = expectedRows.reduce((sum, row) => sum + row, 0);
+  const expectedHrefs = supplied.slice(0, count).map(({ id }) => `/albums/${id}`);
+  const cards = recent.getByRole("listitem").getByRole("link");
+  await expect(cards).toHaveCount(count);
+  // DOM 查询包括 CSS 隐藏项：多出的卡片必须未渲染，而不是仅被视觉裁切。
+  await expect(recent.locator("li")).toHaveCount(count);
+  expect(await cards.evaluateAll((links) => links.map((link) => link.getAttribute("href")))).toEqual(expectedHrefs);
+  for (const { id } of supplied.slice(count)) {
+    await expect(page.locator(`a[href="/albums/${id}"]`), "超出行数的卡片不在 DOM 中").toHaveCount(0);
+  }
+  // 按真实元素的 top 分组：宽屏所有卡片同一 top，窄屏至多两个 top，并且每行张数正确。
+  await expect.poll(() => recent.getByRole("listitem").evaluateAll((items) => {
+    const rows = new Map<number, number>();
+    for (const item of items) {
+      const top = item.getBoundingClientRect().top;
+      rows.set(top, (rows.get(top) ?? 0) + 1);
+    }
+    return [...rows.values()];
+  }), { message: "最近新增必须按实际位置排成指定的完整行" }).toEqual(expectedRows);
+  return expectedHrefs;
+}
+
+async function expectRecentTabOrder(page: Page, expectedHrefs: readonly string[]) {
+  const recent = page.getByRole("region", { name: "最近新增" });
+  await tabTo(page, (name) => name === "查看全部", 40);
+  await expect(recent.getByRole("link", { name: "查看全部" })).toBeFocused();
+  const focusedHrefs: (string | null)[] = [];
+  for (const href of expectedHrefs) {
+    await page.keyboard.press("Tab");
+    await expect(recent.locator(`a[href="${href}"]`)).toBeFocused();
+    focusedHrefs.push(await page.evaluate(() => document.activeElement?.getAttribute("href") ?? null));
+  }
+  expect(focusedHrefs, "Tab 顺序只包含实际显示的专辑卡片").toEqual(expectedHrefs);
+  await page.keyboard.press("Tab");
+  expect(await recent.evaluate((element) => element.contains(document.activeElement)), "最后一张之后立即离开最近新增，不能 Tab 到省略项").toBe(false);
+  await page.keyboard.press("Shift+Tab");
+  await expect(recent.getByRole("listitem").last().getByRole("link")).toBeFocused();
+}
+
 async function verifyLayout(page: Page, label: string) {
   await expectNoHorizontalOverflow(page, label);
   await expectNoDocumentScroll(page, label);
@@ -63,8 +113,10 @@ for (const width of feedbackWidths) {
     await page.goto("/");
     await expect(page.getByRole("region", { name: "最近新增" })).toBeVisible();
     await expect(page.getByRole("region", { name: "最近新增" }).getByRole("link", { name: new RegExp("^" + longAlbumTitle) })).toBeVisible();
+    const expectedHrefs = await expectRecentRows(page, recentRows[width], mock.recentlyAdded.slice(0, 8));
     await verifyLayout(page, `${width} 最近新增`);
     await capture(page, info, "recently-added");
+    await expectRecentTabOrder(page, expectedHrefs);
   });
 }
 
@@ -94,7 +146,8 @@ test("纯键盘打开报告、翻页并把焦点送回新增专辑标题", async
 });
 
 for (const signedInAs of ["curator", "listener"] as const) {
-  test(`${signedInAs} 能看进度和最多八张最近新增，查看全部使用加入时间排序`, async ({ page, backend }) => {
+  test(`${signedInAs} 能看进度和按行限制的最近新增，查看全部使用加入时间排序`, async ({ page, backend }) => {
+    await page.setViewportSize({ width: 1280, height: 1000 });
     const mock = await backend.start({ signedInAs });
     seedScanFeedback(mock);
     await page.goto("/");
@@ -102,7 +155,7 @@ for (const signedInAs of ["curator", "listener"] as const) {
     await expect(progress(page)).toHaveAttribute("aria-valuetext", /第 1 \/ 共 2 个目录/);
     await expect(page.getByText(longRootName, { exact: false })).toHaveCount(0);
     const recent = page.getByRole("region", { name: "最近新增" });
-    await expect(recent.getByRole("listitem")).toHaveCount(8);
+    await expectRecentRows(page, recentRows[1280], mock.recentlyAdded.slice(0, 8));
     await expect(recent.getByRole("listitem").first()).toContainText(longAlbumTitle);
     await expect(recent).not.toContainText("新增专辑 02");
     await recent.getByRole("link", { name: "查看全部" }).click();

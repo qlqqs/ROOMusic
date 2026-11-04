@@ -59,7 +59,10 @@ hook 里，展示在组件里。按 [Classical 设计依据](../../../frontend/D
   （或读取时 503 `scan_report_unavailable`）只说“这次的报告没能生成，扫描结果已经保存。”；`legacy`/`pending` 不显示。问题数到上限写“至少 100 条”。
   新增专辑列出扫描时的标题与艺人，现在还看得到就链接到当前所在的专辑，看不到时标“现在看不到了”、不给入口；“可能接替了《…》”的链接沿用
   `/claims?release=<旧版本>&target=<新发行>`，不在报告里创建认领命令。
-- 概览“最近新增”（M5 ⑥，catalog 的 `RecentlyAddedPanel`）：所有成员可见，最多 8 张，卡片复用 `AlbumGrid`/`AlbumCard`，“查看全部”到 `/albums?sort=added_at_desc`；
+- 概览“最近新增”（M5 ⑥，catalog 的 `RecentlyAddedPanel`）：所有成员可见，接口给最多 8 张，卡片复用 `AlbumGrid`/`AlbumCard`，“查看全部”到 `/albums?sort=added_at_desc`；
+  只显示能排满的行：一行能放 3 张及以上时只显示一行（张数等于列数，最多 8），每行 1–2 张时最多两行。列数由 `useGridColumns` 读浏览器解析出的
+  `grid-template-columns`（auto-fill 展开后的列数）并随 ResizeObserver 更新，列宽规则只写在 CSS 里；多出的卡片不渲染（不可 Tab、读屏读不到）；
+  量不到列数（jsdom 没有布局）时全部显示，测试要验证行数时替换 `getComputedStyle`/ResizeObserver；
   加载与失败照常显示，成功且为空时整块不渲染（概览外层的 `.wide:empty` 不留空行）；接口 404（旧服务）按没有新增处理。
 - 用户内容（用户名、目录名、专辑与曲目标题等）允许任意位置换行（`overflow-wrap: anywhere`），超长值不撑破布局。**网格项与弹性项还要 `min-width: 0`**：
   `overflow-wrap: anywhere` 只让文字能折行，网格轨道与弹性项的“自动最小宽度”仍可能取内容的最小宽度（尤其是被 `content-visibility` 跳过、保留着上一次渲染宽度的分段），
