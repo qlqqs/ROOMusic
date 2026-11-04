@@ -7,8 +7,8 @@ const containers: Record<string, string> = { flac_vorbis_comment: "FLAC", m4a: "
 /** 服务端环节按当前表示显示：直出原文件，或无损转换（ALAC 解码后重新编码为 FLAC，位深、采样率与声道不变，发布前核对解码后的 PCM 一致）。 */
 function ServerStage({ delivery }: { delivery: "original" | "derived" | "pending" }) {
   if (delivery === "pending") return <><p>读取中</p><p>正在取得服务端的交付方式。</p></>;
-  if (delivery === "derived") return <><p>无损转换</p><p>ALAC 解码后重新编码为 FLAC，位深、采样率与声道不变；发布前核对两者解码后的 PCM 一致。播放前仍需核对来源与权限。</p></>;
-  return <><p>原文件直出</p><p>字节不改动，不转码。播放前仍需核对来源与权限。</p></>;
+  if (delivery === "derived") return <><p>无损转换</p><p>ALAC 转成 FLAC，位深、采样率与声道不变。</p></>;
+  return <><p>原文件直出</p><p>原样发送，不转码。</p></>;
 }
 export function SignalPath() {
   const { snapshot } = usePlayer();
@@ -29,7 +29,7 @@ export function SignalPath() {
       </dl></li>
       <li><h3>服务端</h3><ServerStage delivery={delivery} /></li>
       <li><h3>浏览器</h3><p>{statusLabels[snapshot.status]}</p><p>由浏览器解码，可能按输出设备重新采样。</p></li>
-      <li><h3>系统输出</h3><p>未知</p><p>网页无法得知声卡的实际格式与音量链路。</p></li>
+      <li><h3>系统输出</h3><p>未知</p><p>网页看不到声卡的实际格式。</p></li>
     </ol>
   </section>;
 }

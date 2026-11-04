@@ -33,7 +33,7 @@ describe("validateNewAccount", () => {
     const atLimit = "a".repeat(MAX_PASSWORD_BYTES);
     expect(validateNewAccount({ ...valid, password: atLimit, confirmation: atLimit })).toEqual({});
     const over = "a".repeat(MAX_PASSWORD_BYTES + 1);
-    expect(validateNewAccount({ ...valid, password: over, confirmation: over }).password).toBe("密码不能超过 72 个字节（现在是 73 个）。");
+    expect(validateNewAccount({ ...valid, password: over, confirmation: over }).password).toBe("密码太长了，请短一些。");
     // 24 个中文字符恰好 72 字节，25 个是 75 字节。
     expect(validateNewAccount({ ...valid, password: "字".repeat(24), confirmation: "字".repeat(24) })).toEqual({});
     expect(validateNewAccount({ ...valid, password: "字".repeat(25), confirmation: "字".repeat(25) }).password).toContain("75");

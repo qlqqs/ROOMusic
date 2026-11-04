@@ -73,12 +73,12 @@ export function OperationsView({ page, releaseId, groupId, commands }: Operation
             outOfRange ? (
               <Skeleton label="正在加载操作记录" lines={4} />
             ) : data.pagination.total === 0 ? (
-              <p>{!filtered ? "还没有操作记录。修改专辑信息、调整归组或设定默认版本之后，记录会出现在这里。" : groupId === undefined ? "这个版本还没有操作记录。" : "还没有这些记录。"}</p>
+              <p>{!filtered ? "还没有操作记录。" : groupId === undefined ? "这个版本还没有操作记录。" : "还没有这些记录。"}</p>
             ) : (
               <div aria-busy={operations.isPlaceholderData}>
                 <OperationList caption="操作记录" items={data.items} showRelease onRevert={revert.open} />
                 <p className={styles.note}>
-                  共 {formatCount(data.pagination.total)} 条记录，最新的在前，每页 {data.pagination.page_size} 条。
+                  共 {formatCount(data.pagination.total)} 条记录
                 </p>
                 <Pagination
                   label="操作记录分页"

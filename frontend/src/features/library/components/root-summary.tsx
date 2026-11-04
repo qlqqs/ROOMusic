@@ -10,7 +10,7 @@ export function RootSummary() {
     <Panel title="音乐目录" action={<Link to="/library">管理目录</Link>}>
       <QueryContent query={roots} loading={<Skeleton label="正在加载目录" lines={2} />}>
         {(items) => {
-          if (items.length === 0) return <p>还没有登记音乐目录。</p>;
+          if (items.length === 0) return <p>还没有音乐目录。</p>;
           const summary = summarizeRoots(items);
           return (
             <StatList

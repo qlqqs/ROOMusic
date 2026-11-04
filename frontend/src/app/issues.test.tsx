@@ -89,8 +89,8 @@ describe("元数据问题页：列表与筛选", () => {
     const categories = screen.getByRole("navigation", { name: "问题类别" });
     expect(within(categories).getAllByRole("link").map((link) => link.getAttribute("aria-label"))).toEqual(["全部，2 个版本", "字段，2 个版本", "归组，1 个版本", "缺失曲目，1 个版本"]);
     expect(within(categories).getAllByRole("link").map((link) => link.textContent)).toEqual(["全部2", "字段2", "归组1", "缺失曲目1"]);
-    expect(screen.getByText("共 2 个版本，按专辑名排列。")).toBeTruthy();
-    expect(screen.getByText("从列表里选一个版本，查看它的问题和依据。")).toBeTruthy();
+    expect(screen.getByText("共 2 个版本")).toBeTruthy();
+    expect(screen.getByText("从列表里选一个版本。")).toBeTruthy();
     expect(api.requestsTo("GET", "/api/v1/release-issues").at(-1)?.path).toBe("/api/v1/release-issues?status=open&page=1&page_size=30");
   });
 
@@ -118,7 +118,7 @@ describe("元数据问题页：列表与筛选", () => {
     installOverviewApi(api);
     installGovernanceApi(api, installCatalogApi(api, { groups: [albumC()] }));
     renderApp({ path: "/issues" });
-    expect(await screen.findByText("没有待处理的问题。扫描发现新的问题时会出现在这里。")).toBeTruthy();
+    expect(await screen.findByText("没有待处理的问题。")).toBeTruthy();
     expect(screen.queryByRole("navigation", { name: "问题列表分页" })).toBeNull();
   });
 
@@ -179,7 +179,7 @@ describe("元数据问题页：详情", () => {
 
     catalog.hiddenReleases.add(releaseOf(albumA()));
     renderApp({ path: `/issues?release=${releaseOf(albumA())}` });
-    expect(await screen.findByText("这个版本现在不可见（可能刚被重新扫描，文件都找不到了），没有可以处理的问题。")).toBeTruthy();
+    expect(await screen.findByText("这个版本已经找不到了，可能刚重新扫描过。")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
   });
 
@@ -221,7 +221,7 @@ describe("元数据问题页：核对、取消核对与撤销", () => {
     expect(within(detail).getByText(/需要关注：3/)).toBeTruthy();
     await user.click(within(sectionOf(detail, "同一目录的归组冲突")).getByRole("button", { name: "标记为已核对：归组冲突" }));
 
-    expect(await screen.findByText("已把“归组冲突”标记为已核对，它不再计入“需要关注”。扫描发现情况变了会重新提醒。")).toBeTruthy();
+    expect(await screen.findByText("已把“归组冲突”标记为已核对。")).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
     const [request] = api.requestsTo("POST", reviewPath(releaseOf(albumA())));
     expect(request?.body).toEqual({ expected_revision: 1, issue: "grouping", action: "review", basis: expect.stringMatching(/^[0-9a-f]{64}$/) });
@@ -271,7 +271,7 @@ describe("元数据问题页：核对、取消核对与撤销", () => {
     await screen.findByText(/已把“缺失曲目”标记为已核对/);
     const reviewedAt = within(sectionOf(await detailOf("Alpha Suites"), "缺失的曲目（1 首）")).getByText(/^curator · /).textContent;
     await user.click(within(sectionOf(await detailOf("Alpha Suites"), "缺失的曲目（1 首）")).getByRole("button", { name: "取消核对：缺失曲目" }));
-    expect(await screen.findByText("已取消“缺失曲目”的核对，它重新计入“需要关注”。")).toBeTruthy();
+    expect(await screen.findByText("已取消“缺失曲目”的核对。")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "撤销" }));
     await screen.findByText("已撤销这次核对，问题恢复到之前的状态。");
     await waitFor(() => expect(within(sectionOf(screen.getByRole("article"), "缺失的曲目（1 首）")).getByText(/^curator · /).textContent).toBe(reviewedAt));
@@ -355,7 +355,7 @@ describe("元数据问题页：核对、取消核对与撤销", () => {
     await user.click(await within(dialog).findByRole("button", { name: /确认扫描值/ }));
     await user.click(within(dialog).getByRole("button", { name: "保存修改" }));
     expect(await screen.findByText(/已保存修改：标题/)).toBeTruthy();
-    await waitFor(() => expect(screen.getByText("扫描结论里已经没有问题了。")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("已经没有问题了。")).toBeTruthy());
     expect(screen.getByText(/这个版本已经没有待处理的问题。/)).toBeTruthy();
     // 处理完的版本仍然选中，列表里说明已经没有待处理的问题（它不在当前筛选里了，但不跳走）。
     expect(within(issueList()).queryByRole("link", { name: /Beta Quartets/ })).toBeNull();

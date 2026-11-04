@@ -32,7 +32,7 @@ export function ScanSection() {
         {(scan) =>
           scan === null ? (
             <div className={styles.idle}>
-              <p>没有正在运行的扫描。扫描会读取所有启用的目录并更新资料库；已停用的目录不会被扫描。</p>
+              <p>没有正在运行的扫描。</p>
               <div>
                 <Button variant="primary" icon={<Play size={16} />} busy={start.isPending} onClick={begin}>
                   {start.isPending ? "正在开始…" : "开始扫描"}
@@ -54,7 +54,7 @@ export function ScanSection() {
       ) : null}
       {start.isSuccess && start.data.status === 200 ? (
         <Notice tone="info">
-          已有扫描在运行，没有新建扫描。{" "}
+          已经有扫描在运行。{" "}
           <Link to="/library/scans/$scanId" params={{ scanId: start.data.data.id }}>
             查看这个扫描
           </Link>

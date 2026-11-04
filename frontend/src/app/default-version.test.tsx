@@ -109,7 +109,7 @@ describe("设定与清除默认版本", () => {
     await onVersion("4 首");
     await user.click(await screen.findByRole("button", { name: "设为默认版本" }));
 
-    expect(await screen.findByText("已把这个版本设为默认版本。专辑列表和打开这张专辑时会先显示它。")).toBeTruthy();
+    expect(await screen.findByText("已把这个版本设为默认版本。")).toBeTruthy();
     const [request] = context.api.requestsTo("POST", defaultPath(context.album.id));
     expect(request?.body).toEqual({ expected_revision: 1, release_id: context.versions[1].id });
     expect(request?.headers.get("Idempotency-Key")).toMatch(UUID);
@@ -240,7 +240,7 @@ describe("设定与清除默认版本", () => {
     await onVersion("4 首");
     context.api.on("POST", defaultPath(context.album.id), () => jsonResponse(409, { error: { code: "not_in_group", message: "这个版本不在这张专辑里，或现在不可见" }, request_id: "r-default" }));
     await user.click(await screen.findByRole("button", { name: "设为默认版本" }));
-    expect(await screen.findByText("这个版本已不在这张专辑里，或现在不可见，页面已刷新。请核对后再操作。")).toBeTruthy();
+    expect(await screen.findByText("这个版本已经不在这张专辑里了，页面已刷新。")).toBeTruthy();
   });
 });
 
@@ -253,7 +253,7 @@ describe("移出默认版本", () => {
     expect(shownTracks()).toBe("4 首");
     await user.click(await screen.findByRole("button", { name: "移出为独立专辑" }));
     const dialog = await screen.findByRole("dialog", { name: "把这个版本移出为独立专辑？" });
-    expect(within(dialog).getByText("它是这张专辑的默认版本；移出后专辑改按自动规则显示。它以后回到这张专辑时，会重新成为默认版本。")).toBeTruthy();
+    expect(within(dialog).getByText("它是这张专辑的默认版本，移出后会自动另选一个。")).toBeTruthy();
     await user.click(within(dialog).getByRole("button", { name: "移出" }));
     await screen.findByText("已把这个版本移出为独立专辑。");
 

@@ -18,8 +18,8 @@ const backToLibrary = <Link to="/library">返回扫描目录</Link>;
 
 function ScanNotFound() {
   return (
-    <Page title="扫描不存在" description="没有找到这个扫描。" actions={backToLibrary}>
-      <p>请检查地址是否正确。目前没有扫描历史列表，结束的扫描只能通过它的地址找回。</p>
+    <Page title="扫描不存在" actions={backToLibrary}>
+      <p>请检查地址是否正确。</p>
     </Page>
   );
 }
@@ -79,9 +79,8 @@ function ScanDetailContent({ scanId }: { scanId: string }) {
   const scan = useScan(scanId);
   if (scan.status === "error" && isHttpFailure(failureOf(scan.error), 404)) return <ScanNotFound />;
   const finished = scan.data !== undefined && isScanFinished(scan.data);
-  const description = scan.data !== undefined && !finished ? "扫描的状态与诊断。运行中每 2 秒刷新一次状态，页面隐藏时暂停。" : "扫描的状态与诊断。";
   return (
-    <Page title="扫描详情" description={description} actions={backToLibrary}>
+    <Page title="扫描详情" actions={backToLibrary}>
       <QueryContent query={scan} loading={<Skeleton label="正在加载扫描" lines={3} />}>
         {(data) => <ScanStatusPanel scan={data} />}
       </QueryContent>

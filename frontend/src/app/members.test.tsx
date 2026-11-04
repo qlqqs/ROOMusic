@@ -95,7 +95,7 @@ describe("成员页：访问与列表", () => {
     expect(within(rowOf("listener")).getByText("你")).toBeTruthy();
     expect(within(rowOf("curator")).queryByText("你")).toBeNull();
     await userEvent.click(within(rowOf("listener")).getByRole("button", { name: "撤销会话 listener" }));
-    expect(within(await screen.findByRole("dialog")).getByText("这是你自己的账号：确认后你会被立即退出登录。")).toBeTruthy();
+    expect(within(await screen.findByRole("dialog")).getByText("这是你自己的账号，确认后你会马上退出登录。")).toBeTruthy();
   });
 
   it("查看者的 ID 不在列表里：即使有同名成员，也没有任何一行标“你”，确认框不提示是自己的账号", async () => {
@@ -120,9 +120,11 @@ describe("成员页：访问与列表", () => {
     expect(within(nav).getByRole("link", { name: "扫描目录" })).toBeTruthy();
   });
 
-  it("新建表单说明只能创建“成员”角色，目前不能创建管理员或修改角色", async () => {
+  it("新建表单只能创建“成员”角色：没有选择角色的控件", async () => {
     await openMembers();
-    expect(screen.getByText("新成员的角色是“成员”。目前不能在这里创建管理员或修改成员的角色。")).toBeTruthy();
+    const form = screen.getByRole("button", { name: "创建成员" }).closest("form") as HTMLElement;
+    expect(within(form).queryByRole("radio")).toBeNull();
+    expect(within(form).queryByRole("combobox")).toBeNull();
   });
 
   it("成员直接访问：显示“需要管理员权限”，不请求成员接口，导航里也没有这一项", async () => {
@@ -180,7 +182,7 @@ describe("新建成员", () => {
     await userEvent.type(screen.getByLabelText("用户名"), "newbie");
     await userEvent.type(screen.getByLabelText("密码"), "short");
     await create();
-    expect(await screen.findByText("密码至少需要 12 个字节。")).toBeTruthy();
+    expect(await screen.findByText("密码至少要 12 个字符。")).toBeTruthy();
     expect(document.activeElement).toBe(screen.getByLabelText("密码"));
 
     await userEvent.clear(screen.getByLabelText("密码"));
@@ -196,7 +198,7 @@ describe("新建成员", () => {
     const { api } = await openMembers();
     await fillForm("han", "密码密");
     await create();
-    expect(await screen.findByText("密码至少需要 12 个字节。")).toBeTruthy();
+    expect(await screen.findByText("密码至少要 12 个字符。")).toBeTruthy();
     expect(api.requestsTo("POST", usersPath)).toHaveLength(0);
 
     await userEvent.type(screen.getByLabelText("密码"), "码");
@@ -210,7 +212,7 @@ describe("新建成员", () => {
     const { api } = await openMembers();
     await fillForm("wide", "字".repeat(25));
     await create();
-    expect(await screen.findByText("密码不能超过 72 个字节（现在是 75 个）。")).toBeTruthy();
+    expect(await screen.findByText("密码太长了，请短一些。")).toBeTruthy();
     expect(document.activeElement).toBe(screen.getByLabelText("密码"));
     expect(api.requestsTo("POST", usersPath)).toHaveLength(0);
 
@@ -245,7 +247,7 @@ describe("新建成员", () => {
     await fillForm("newbie");
     await create();
     const alert = await screen.findByRole("alert");
-    expect(within(alert).getByText("用户名不能为空，密码需要 12 到 72 个字节。")).toBeTruthy();
+    expect(within(alert).getByText("用户名不能为空，密码至少 12 个字符，也不能太长。")).toBeTruthy();
     expect(within(alert).getByText("操作没有完成")).toBeTruthy();
   });
 
@@ -256,8 +258,8 @@ describe("新建成员", () => {
 
     const alert = await screen.findByRole("alert");
     expect(within(alert).getByText("结果未确认")).toBeTruthy();
-    expect(within(alert).getByText(/无法确认操作是否已经完成/)).toBeTruthy();
-    expect(within(alert).getByText(/列表已刷新。请核对成员的当前状态/)).toBeTruthy();
+    expect(within(alert).getByText(/不确定操作有没有完成/)).toBeTruthy();
+    expect(within(alert).getByText(/列表已刷新，请看一下成员现在的状态再操作/)).toBeTruthy();
     expect(within(alert).queryByRole("button", { name: "重试" })).toBeNull();
     expect(await screen.findByRole("rowheader", { name: /^lost-response/ })).toBeTruthy();
     expect((screen.getByLabelText("用户名") as HTMLInputElement).value).toBe("lost-response");
@@ -290,7 +292,7 @@ describe("停用、重新启用与撤销会话", () => {
     const { api } = await openMembers();
     await userEvent.click(within(rowOf("listener")).getByRole("button", { name: "停用成员 listener" }));
     const dialog = await screen.findByRole("dialog", { name: "停用成员“listener”？" });
-    expect(within(dialog).getByText(/立即退出登录，全部会话都会被撤销，在重新启用之前无法再登录/)).toBeTruthy();
+    expect(within(dialog).getByText(/停用后对方会马上退出登录，之后可以重新启用/)).toBeTruthy();
     expect(within(dialog).queryByText(/这是你自己的账号/)).toBeNull();
     expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "取消" }));
 
@@ -332,7 +334,7 @@ describe("停用、重新启用与撤销会话", () => {
     const { api, members } = await openMembers();
     await userEvent.click(within(rowOf("listener")).getByRole("button", { name: "撤销会话 listener" }));
     const dialog = await screen.findByRole("dialog", { name: "撤销成员“listener”的全部会话？" });
-    expect(within(dialog).getByText(/账号本身不受影响，仍可再次登录/)).toBeTruthy();
+    expect(within(dialog).getByText(/对方的所有设备都会退出登录，需要重新登录/)).toBeTruthy();
     await userEvent.click(within(dialog).getByRole("button", { name: "撤销会话" }));
 
     expect(await screen.findByText(/已撤销成员“listener”的全部会话/)).toBeTruthy();
@@ -344,12 +346,11 @@ describe("停用、重新启用与撤销会话", () => {
     await openMembers();
     await userEvent.click(within(rowOf("curator")).getByRole("button", { name: "停用成员 curator" }));
     const dialog = await screen.findByRole("dialog", { name: "停用成员“curator”？" });
-    expect(within(dialog).getByText("这是你自己的账号：确认后你会被立即退出登录。")).toBeTruthy();
-    expect(within(dialog).getByText("如果这是最后一个启用的管理员，服务器会拒绝停用。")).toBeTruthy();
+    expect(within(dialog).getByText("这是你自己的账号，确认后你会马上退出登录。")).toBeTruthy();
     await userEvent.click(within(dialog).getByRole("button", { name: "停用成员" }));
 
     const alert = await screen.findByRole("alert");
-    expect(within(alert).getByText("不能停用最后一个启用的管理员。请先确保还有另一个启用的管理员。")).toBeTruthy();
+    expect(within(alert).getByText("不能停用最后一个管理员。")).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
     // 会话没有结束：仍在成员页，列表仍显示自己启用。
     expect(screen.getByRole("heading", { level: 1, name: "成员" })).toBeTruthy();
@@ -373,7 +374,7 @@ describe("停用、重新启用与撤销会话", () => {
     await openMembers();
     await userEvent.click(within(rowOf("curator")).getByRole("button", { name: "撤销会话 curator" }));
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText("这是你自己的账号：确认后你会被立即退出登录。")).toBeTruthy();
+    expect(within(dialog).getByText("这是你自己的账号，确认后你会马上退出登录。")).toBeTruthy();
     await userEvent.click(within(dialog).getByRole("button", { name: "撤销会话" }));
     expect(await heading("登录")).toBeTruthy();
   });

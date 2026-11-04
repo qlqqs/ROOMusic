@@ -9,7 +9,7 @@ import styles from "./history-playback.module.css";
 // 历史页的播放动作由 app 组合：listening 不导入 player（player 已导入 listening 的上报器），player 也不认识历史条目。
 // 反馈文案沿用专辑页（features/player/components/album-playback-actions.tsx）。
 
-const QUEUE_FULL_TEXT = "队列已满，最多容纳 10,000 条，请先移除一些条目。";
+const QUEUE_FULL_TEXT = "队列已满，请先移除一些条目。";
 
 /** 把历史条目转成队列曲目：与发行详情的转换同一套规则（标题空白写“（无标题）”，艺人空白退回专辑艺人）。 */
 export function playerTrackOfHistoryItem(item: HistoryItemDTO): PlayerTrack {
@@ -105,9 +105,9 @@ export function HistoryPlayAll() {
       onLoaded: (data) => {
         const tracks = data.items.filter((item) => unplayableReason(item, table) === null).map(playerTrackOfHistoryItem);
         const skipped = data.items.length - tracks.length;
-        const scope = data.truncated ? `只处理了最近的 ${formatCount(HISTORY_QUEUE_LIMIT)} 首历史曲目。` : "";
+        const scope = data.truncated ? `历史太长，只取了最近的 ${formatCount(HISTORY_QUEUE_LIMIT)} 首。` : "";
         if (tracks.length === 0) {
-          setNotice(`${data.items.length === 0 ? "历史里已经没有曲目" : `这 ${formatCount(data.items.length)} 首历史曲目都不能播放`}，队列保持不变。${scope}`);
+          setNotice(`${data.items.length === 0 ? "历史里已经没有曲目了" : `这 ${formatCount(data.items.length)} 首都不能播放`}，队列没有变。${scope}`);
           return;
         }
         if (engine.playTracks(tracks) === "queue_full") {
@@ -125,7 +125,7 @@ export function HistoryPlayAll() {
           {queue.pending ? "正在读取历史…" : "播放全部"}
         </Button>
       </div>
-      {disabledReason === null ? <p>按最近播放的顺序，最多放入最近的 {formatCount(HISTORY_QUEUE_LIMIT)} 首，跳过不能播放的曲目。</p> : <p>{disabledReason}</p>}
+      {disabledReason === null ? null : <p>{disabledReason}</p>}
       {capability.isError ? <FailureNotice error={capability.error} action={<Button onClick={() => void capability.refetch()}>重试检查</Button>} /> : null}
       {queue.error === null ? null : <FailureNotice error={queue.error} title="无法读取历史" action={<Button onClick={start}>重试</Button>} />}
       <p role="status">{notice}</p>

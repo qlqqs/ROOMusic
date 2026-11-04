@@ -12,7 +12,7 @@ import { jsonResponse } from "../test/http";
 import { renderApp } from "../test/render-app";
 
 const heading = (name: string, level = 1) => screen.findByRole("heading", { level, name });
-const claimList = () => screen.getByRole("heading", { level: 2, name: "已不可见、留有修改的版本" }).closest("section") as HTMLElement;
+const claimList = () => screen.getByRole("heading", { level: 2, name: "留有修改的旧版本" }).closest("section") as HTMLElement;
 // 列表里的旧版本链接：位于列表的 ul 内，不含分页导航里的页码链接。
 const listLinks = () => within(claimList()).getAllByRole("link").filter((link) => link.closest("ul") !== null && link.closest("nav") === null);
 
@@ -49,7 +49,7 @@ describe("待认领页：列表", () => {
       `Delta Partitas classical 最后一次看到 ${formatDateTime("2025-12-01T08:00:00Z")} 修正 2 项`,
     ]);
     expect(screen.getByText("共 3 个版本，最近看到的在前。")).toBeTruthy();
-    expect(screen.getByText("从列表里选一个版本，查看它留着的修改和可能接替它的版本。")).toBeTruthy();
+    expect(screen.getByText("从列表里选一个版本。")).toBeTruthy();
     expect(api.requestsTo("GET", "/api/v1/release-claims").at(-1)?.path).toBe("/api/v1/release-claims?page=1&page_size=30");
   });
 
@@ -59,7 +59,7 @@ describe("待认领页：列表", () => {
     installOverviewApi(api);
     installGovernanceApi(api, installCatalogApi(api, { groups: [alpha()] }));
     renderApp({ path: "/claims" });
-    expect(await screen.findByText("没有待认领的版本。扫描新建了发行、而旧发行上留有你做过的修改时，会出现在这里。")).toBeTruthy();
+    expect(await screen.findByText("没有待认领的版本。")).toBeTruthy();
     expect(screen.queryByRole("navigation", { name: "待认领列表分页" })).toBeNull();
   });
 
@@ -126,7 +126,7 @@ describe("待认领页：详情", () => {
     await waitFor(() => expect(history.location.search).toBe(`?release=${claimReleaseId(1)}`));
     expect(await heading("Alpha Suites (corrected)", 2)).toBeTruthy();
     expect(listLinks()[0]?.getAttribute("aria-current")).toBe("page");
-    expect(screen.getByText(/已不可见：扫描没有在原来的位置找到它的音乐文件。最后在 classical \/ Alpha\/Suites/)).toBeTruthy();
+    expect(screen.getByText(/扫描时没找到它的音乐文件，最后一次是 .* 在 classical \/ Alpha\/Suites 看到的。/)).toBeTruthy();
 
     const corrections = screen.getByRole("table", { name: "旧版本上的字段修正" });
     expect(within(corrections).getAllByRole("row").map((row) => row.textContent)).toEqual([
@@ -139,7 +139,7 @@ describe("待认领页：详情", () => {
     expect(screen.queryByRole("heading", { level: 3, name: /问题核对/ })).toBeNull();
 
     // 推荐的版本是带名称的单选组，每项写明理由；还没有选中任何一个。
-    const suggestions = screen.getByRole("group", { name: "推荐的版本（按文件路径与目录）" });
+    const suggestions = screen.getByRole("group", { name: "推荐的版本" });
     const options = within(suggestions).getAllByRole("radio");
     expect(options.map((option) => (option.closest("label") as HTMLElement).textContent)).toEqual([
       expect.stringContaining("同样的文件（12 个）、同一目录"),
@@ -202,14 +202,14 @@ describe("待认领页：详情", () => {
     await act(async () => {
       await history.push("/claims?release=not-a-uuid");
     });
-    expect(await screen.findByText("从列表里选一个版本，查看它留着的修改和可能接替它的版本。")).toBeTruthy();
+    expect(await screen.findByText("从列表里选一个版本。")).toBeTruthy();
   });
 
   it("旧版本已不需要认领（404）时就地说明，不给无用的重试", async () => {
     const { governance } = setup();
     governance.claims.delete(claimReleaseId(1));
     renderApp({ path: `/claims?release=${claimReleaseId(1)}` });
-    expect(await screen.findByText("这个版本现在不需要认领：它的文件回来了，或者它的修改已经认领给了别的版本。")).toBeTruthy();
+    expect(await screen.findByText("这个版本已经不需要认领了。")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
   });
 });
@@ -221,13 +221,13 @@ describe("待认领页：窄容器的顺序导航", () => {
     const user = userEvent.setup();
     const { history } = renderApp({ path: "/claims" });
     await screen.findByRole("link", { name: /Alpha Suites \(corrected\)/ });
-    expect(screen.queryByText("从列表里选一个版本，查看它留着的修改和可能接替它的版本。")).toBeNull();
+    expect(screen.queryByText("从列表里选一个版本。")).toBeNull();
     await user.click(screen.getByRole("link", { name: /Alpha Suites \(corrected\)/ }));
     expect(await heading("Alpha Suites (corrected)", 2)).toBeTruthy();
-    expect(screen.queryByRole("heading", { level: 2, name: "已不可见、留有修改的版本" })).toBeNull();
+    expect(screen.queryByRole("heading", { level: 2, name: "留有修改的旧版本" })).toBeNull();
     await user.click(screen.getByRole("link", { name: "返回待认领列表" }));
     await waitFor(() => expect(history.location.search).toBe(""));
-    expect(await screen.findByRole("heading", { level: 2, name: "已不可见、留有修改的版本" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { level: 2, name: "留有修改的旧版本" })).toBeTruthy();
   });
 });
 

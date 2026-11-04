@@ -131,14 +131,14 @@ test.describe("专辑列表", () => {
     const mock = await backend.start({ signedInAs: "curator" });
     mock.groups = [];
     await page.goto("/albums");
-    await expect(page.getByText(/资料库里还没有专辑。添加音乐目录并完成一次扫描后/)).toBeVisible();
+    await expect(page.getByText(/资料库里还没有专辑。添加音乐目录并扫描后就会出现。/)).toBeVisible();
     await page.getByRole("link", { name: "前往扫描目录" }).click();
     await expect(heading(page, "扫描目录")).toBeVisible();
 
     const memberPage = await page.context().newPage();
     mock.session = "listener";
     await memberPage.goto("/albums");
-    await expect(memberPage.getByText("资料库里还没有专辑。请等待管理员添加音乐目录并完成扫描。")).toBeVisible();
+    await expect(memberPage.getByText("资料库里还没有专辑。", { exact: true })).toBeVisible();
     await expect(memberPage.getByRole("link", { name: "前往扫描目录" })).toHaveCount(0);
   });
 
@@ -237,7 +237,6 @@ test.describe("专辑详情", () => {
 
     await evidenceSummary(page).click();
     await expect(page.getByRole("table", { name: "证据摘要" })).toBeVisible();
-    await expect(page.getByText(/并不表示信息有误/)).toBeVisible();
     await expect(page.getByRole("button", { name: /完整证据/ })).toHaveCount(0);
     expect(mock.callsTo("GET", /\/evidence$/)).toHaveLength(0);
   });
@@ -268,7 +267,7 @@ test.describe("专辑详情", () => {
     await page.goto(`/albums/${group.id}`);
     await evidenceSummary(page).click();
     await page.getByRole("button", { name: "查看完整证据" }).click();
-    await expect(page.getByRole("alert")).toContainText("你的账号没有查看完整证据的权限。");
+    await expect(page.getByRole("alert")).toContainText("你没有权限查看完整证据。");
     await expect(page.getByRole("table", { name: "证据摘要" })).toBeVisible();
     await expect(trackRows(page)).toHaveCount(2);
   });
@@ -308,13 +307,13 @@ test.describe("专辑详情", () => {
     mock.hiddenReleases.add(versions[1]?.id ?? "");
     await page.goto(`/albums/${group.id}?release=${versions[1]?.id}`);
 
-    await expect(page.getByText("这个版本已不可见")).toBeVisible();
+    await expect(page.getByText("这个版本已经找不到了")).toBeVisible();
     await expect(page.getByRole("navigation", { name: "版本" })).toBeVisible();
     await expect(trackRows(page)).toHaveCount(0);
     await page.getByRole("link", { name: "查看代表版本" }).click();
     await expect(page).toHaveURL(new RegExp(`/albums/${group.id}$`));
     await expect(trackRows(page)).toHaveCount(12);
-    await expect(page.getByText("这个版本已不可见")).toHaveCount(0);
+    await expect(page.getByText("这个版本已经找不到了")).toHaveCount(0);
   });
 
   test("专辑不存在：组 ID 不是 UUID 时不发请求，服务器没有这个组时同样提示", async ({ page, backend }) => {

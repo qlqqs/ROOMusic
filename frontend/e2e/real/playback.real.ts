@@ -331,7 +331,7 @@ test("播放过半后历史页出现这首且次数为 1，从历史移除后页
   await row.getByRole("button", { name: "更多" }).click();
   await page.getByRole("menuitem", { name: "从历史中移除" }).click();
   const dialog = page.getByRole("dialog", { name: "从历史中移除这首曲目？" });
-  await expect(dialog).toContainText("全部 1 次记录，不影响其他成员");
+  await expect(dialog).toContainText("的播放记录会被移除，不能恢复。");
   await dialog.getByRole("button", { name: "从历史中移除", exact: true }).click();
   await expect(row).toHaveCount(0);
   await expect(page.getByText(/^还没有播放记录。/)).toBeVisible();

@@ -170,7 +170,7 @@ test("概览全部历史链接直达历史页，/me 直接访问重定向，地�
   await page.reload();
   await expect(row(page, "历史曲目 51")).toBeVisible();
   await page.goto("/me/history?page=9");
-  await expect(page.getByText(/第 9 页没有记录/)).toBeVisible();
+  await expect(page.getByText(/这一页没有记录。/)).toBeVisible();
   await expect(page).toHaveURL(/\?page=9$/);
   await page.getByRole("link", { name: "回到第一页" }).click();
   await expect(row(page, "历史曲目 1")).toBeVisible();

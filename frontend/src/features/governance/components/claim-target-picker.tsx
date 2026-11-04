@@ -37,7 +37,7 @@ function Suggestions({ suggestions, selectedId, onSelect }: PickerProps) {
   if (suggestions.length === 0) return <p className={styles.hint}>没有找到文件或目录相同的版本，可以在下面搜索。</p>;
   return (
     <fieldset className={styles.group}>
-      <legend className={styles.legend}>推荐的版本（按文件路径与目录）</legend>
+      <legend className={styles.legend}>推荐的版本</legend>
       <ul className={styles.list}>
         {suggestions.map((suggestion) => (
           <li key={suggestion.release.id}>
@@ -106,7 +106,7 @@ function SearchResults({ query, selectedId, onSelect }: { query: string; selecte
             </li>
           ))}
         </ul>
-        {more ? <p className={styles.hint}>只显示最相关的 {groups.length} 张专辑；找不到的话，请输入更精确的搜索词。</p> : null}
+        {more ? <p className={styles.hint}>只显示最相关的 {groups.length} 张专辑，找不到可以换个更准确的词。</p> : null}
       </fieldset>
       {chosen !== null && chosen.release_count > 1 ? <GroupVersions group={chosen} selectedId={selectedId} onSelect={onSelect} /> : null}
     </>
@@ -126,7 +126,7 @@ export function ClaimTargetPicker({ suggestions, selectedId, onSelect }: PickerP
     event.preventDefault();
     const bytes = utf8ByteLength(draft.trim());
     if (bytes > MAX_SEARCH_BYTES) {
-      setSearchError(`搜索词最多 ${MAX_SEARCH_BYTES} 个字节（约 ${Math.floor(MAX_SEARCH_BYTES / 3)} 个汉字），现在是 ${bytes} 个字节。`);
+      setSearchError("搜索词太长了，请短一些。");
       return;
     }
     const text = parseSearchText(draft);
@@ -146,7 +146,7 @@ export function ClaimTargetPicker({ suggestions, selectedId, onSelect }: PickerP
           <div className={styles.searchField}>
             <TextField
               label="搜索其他版本"
-              description="按标题、艺人或曲目名查找专辑，可以选到别的目录、别的扫描目录里的版本。"
+              description="按标题、艺人或曲目名查找。"
               type="text"
               inputMode="search"
               enterKeyHint="search"

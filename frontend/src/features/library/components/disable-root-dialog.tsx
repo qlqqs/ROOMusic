@@ -47,8 +47,7 @@ export function DisableRootDialog({ root, commands, onClose }: DisableRootDialog
         onClose();
       }}
     >
-      <p>停用后，扫描会跳过这个目录，其中的曲目也不能播放。</p>
-      <p>已经入库的内容会保留，不会因为停用而被标为缺失。恢复后即可播放。浏览器已缓存的音频无法收回。</p>
+      <p>停用后，扫描会跳过这个目录，里面的曲目也不能播放。恢复后就能再播。</p>
     </ConfirmDialog>
   );
 }

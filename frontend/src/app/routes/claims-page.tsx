@@ -14,7 +14,7 @@ export function ClaimsPage({ search }: { search: ClaimsSearch }) {
   const refresh = useReleaseDataRefresh();
   const commands = useReleaseCommands({ refresh, onMoved: stayOnPage });
   return (
-    <Page title="待认领" description="扫描新建了发行、而旧发行已经不可见时，你在旧发行上做过的修改（字段修正、所在的专辑、默认版本、问题核对）被留在原处。这里列出它们，并推荐可能接替它们的新版本；选中后先预览，再把修改迁过去。">
+    <Page title="待认领" description="旧版本在重新扫描后不见了，你在上面做的修改会留在这里，可以迁到新版本上。">
       <ClaimsView search={search} commands={commands} />
     </Page>
   );

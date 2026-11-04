@@ -171,13 +171,13 @@ describe("专辑列表：搜索", () => {
     expect(listRequests(api).every((path) => !path.includes("q="))).toBe(true);
   });
 
-  it("超过 200 字节：不发请求，说明上限与现状，不静默丢弃", async () => {
+  it("超过 200 字节：不发请求，提示搜索词太长，不静默丢弃", async () => {
     const { api } = setup();
     renderApp({ path: "/albums" });
     await waitFor(() => expect(albumLinks()).toHaveLength(48));
     const before = listRequests(api).length;
     await userEvent.type(searchBox(), "长".repeat(70) + "{Enter}"); // 70 个汉字 = 210 字节
-    expect(await screen.findByText("搜索词最多 200 个字节（约 66 个汉字），现在是 210 个字节。")).toBeTruthy();
+    expect(await screen.findByText("搜索词太长了，请短一些。")).toBeTruthy();
     expect(searchBox().getAttribute("aria-invalid")).toBe("true");
     expect(listRequests(api)).toHaveLength(before);
   });
@@ -430,7 +430,7 @@ describe("专辑列表：空库与失败", () => {
   it("资料库没有专辑：管理员提示去扫描目录，并给出链接", async () => {
     setup({ groups: [] });
     renderApp({ path: "/albums" });
-    expect(await screen.findByText(/资料库里还没有专辑。添加音乐目录并完成一次扫描后/)).toBeTruthy();
+    expect(await screen.findByText(/资料库里还没有专辑。添加音乐目录并扫描后就会出现。/)).toBeTruthy();
     expect(screen.getByRole("link", { name: "前往扫描目录" }).getAttribute("href")).toBe("/library");
     expect(screen.getByText("共 0 张专辑")).toBeTruthy();
   });
@@ -438,7 +438,7 @@ describe("专辑列表：空库与失败", () => {
   it("资料库没有专辑：普通用户只被告知等待管理员，没有管理入口", async () => {
     setup({ role: "user", groups: [] });
     renderApp({ path: "/albums" });
-    expect(await screen.findByText("资料库里还没有专辑。请等待管理员添加音乐目录并完成扫描。")).toBeTruthy();
+    expect(await screen.findByText("资料库里还没有专辑。")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "前往扫描目录" })).toBeNull();
   });
 

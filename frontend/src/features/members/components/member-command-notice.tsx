@@ -13,13 +13,13 @@ type MemberCommandNoticeProps = {
 function successText(command: MemberCommand): string {
   switch (command.kind) {
     case "create":
-      return `已创建成员“${command.username}”。该成员可以用这个用户名和你设置的密码登录。`;
+      return `已创建成员“${command.username}”。`;
     case "disable":
-      return `已停用成员“${command.member.username}”。该成员的全部会话已被撤销，重新启用之前无法登录。`;
+      return `已停用成员“${command.member.username}”，对方已退出登录。`;
     case "enable":
-      return `已重新启用成员“${command.member.username}”。该成员可以再次登录。`;
+      return `已重新启用成员“${command.member.username}”。`;
     case "revoke":
-      return `已撤销成员“${command.member.username}”的全部会话。该成员需要重新登录。`;
+      return `已撤销成员“${command.member.username}”的全部会话，对方需要重新登录。`;
   }
 }
 
@@ -53,7 +53,7 @@ export function MemberCommandNotice({ state, scope, onDismiss }: MemberCommandNo
   return (
     <Notice tone="error" title={state.uncertain ? "结果未确认" : "操作没有完成"} requestId={description.requestId} action={dismiss}>
       <p>{description.message}</p>
-      {state.uncertain ? <p>列表已刷新。请核对成员的当前状态，再决定是否重新操作。</p> : null}
+      {state.uncertain ? <p>列表已刷新，请看一下成员现在的状态再操作。</p> : null}
     </Notice>
   );
 }

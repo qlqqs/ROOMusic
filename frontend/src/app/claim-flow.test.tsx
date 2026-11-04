@@ -22,7 +22,7 @@ describe("认领：选择接替的版本", () => {
   it("推荐的版本是带名称的单选组；点选之后地址里有 target（替换历史项），预览出现", async () => {
     setup();
     const { history } = renderApp({ path: `/claims?release=${oldId}` });
-    const group = await screen.findByRole("group", { name: "推荐的版本（按文件路径与目录）" });
+    const group = await screen.findByRole("group", { name: "推荐的版本" });
     expect(screen.queryByRole("region", { name: /认领到/ })).toBeNull();
     const entriesBefore = history.length;
     await user().click(within(group).getByRole("radio", { name: /Alpha Suites New Rip/ }));
@@ -36,7 +36,7 @@ describe("认领：选择接替的版本", () => {
     setup();
     const { history } = renderApp({ path: `/claims?release=${oldId}&target=${alphaId()}` });
     expect(await preview()).toBeTruthy();
-    expect((within(screen.getByRole("group", { name: "推荐的版本（按文件路径与目录）" })).getByRole("radio", { name: /Alpha Suites New Rip/ }) as HTMLInputElement).checked).toBe(true);
+    expect((within(screen.getByRole("group", { name: "推荐的版本" })).getByRole("radio", { name: /Alpha Suites New Rip/ }) as HTMLInputElement).checked).toBe(true);
     await user().click(screen.getByRole("link", { name: /Gamma Sonatas/ }));
     await waitFor(() => expect(history.location.search).toBe(`?release=${claimReleaseId(2)}`));
     expect(screen.queryByRole("region", { name: /认领到/ })).toBeNull();
@@ -101,7 +101,7 @@ describe("认领：选择接替的版本", () => {
     await user().click(box);
     await user().paste("长".repeat(120));
     await user().keyboard("{Enter}");
-    expect(await screen.findByText(/搜索词最多 \d+ 个字节/)).toBeTruthy();
+    expect(await screen.findByText("搜索词太长了，请短一些。")).toBeTruthy();
     expect(api.requestsTo("GET", "/api/v1/release-groups").filter((request) => request.path.includes("q="))).toHaveLength(0);
   });
 });
@@ -110,7 +110,7 @@ describe("认领：选中的版本不可用", () => {
   it("选中的新版本现在不可见或不存在（预览 404）：就地说明，请重新选择，没有认领按钮和重试", async () => {
     setup();
     renderApp({ path: `/claims?release=${oldId}&target=00000000-0000-4000-8000-00000000dead` });
-    expect(await screen.findByText("选中的版本现在不可见或不存在，请重新选择。")).toBeTruthy();
+    expect(await screen.findByText("选中的版本已经找不到了，请重新选一个。")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^认领到/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
   });
@@ -119,7 +119,7 @@ describe("认领：选中的版本不可用", () => {
     const { api } = setup();
     api.on("GET", /\/claim-preview$/, () => jsonResponse(409, { error: { code: "not_claimable", message: "x" }, request_id: "r" }));
     renderApp({ path: `/claims?release=${oldId}&target=${alphaId()}` });
-    expect(await screen.findByText("这个旧版本现在不需要认领：它的文件回来了，或者它的修改已经认领给了别的版本。")).toBeTruthy();
+    expect(await screen.findByText("这个旧版本已经不需要认领了。")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^认领到/ })).toBeNull();
   });
 });
@@ -146,7 +146,7 @@ describe("认领：预览逐项说明", () => {
       "迁移修正 · 流派旧版本的“流派”改成“Baroque”，迁到这个版本。",
       "迁移所在的专辑这个版本会归入旧版本原来的专辑《Full Collection》，旧版本离开这张专辑。",
       "迁移默认版本这个版本接任《Full Collection》的默认版本。",
-      "迁移核对 · 介质类型旧版本上的核对（连同核对人与时间）迁到这个版本。这个版本现在有同样的问题，依据相同，核对立即生效。",
+      "迁移核对 · 介质类型旧版本上的核对迁到这个版本。这个版本有同样的问题，核对会直接生效。",
     ]);
     expect(items.map((item) => item.getAttribute("data-action"))).toEqual(["move", "move", "move", "move", "move"]);
   });
@@ -178,11 +178,11 @@ describe("认领：预览逐项说明", () => {
     const items = await previewItems();
     expect(items.map((item) => item.getAttribute("data-action"))).toEqual(["skip", "skip", "reset", "skip", "skip"]);
     expect(items.map((item) => item.textContent)).toEqual([
-      "保留修正 · 标题这个版本已经有自己的修正（改成“Delta (my title)”），以它为准；旧版本的不迁移，撤销认领可以恢复。旧版本的“标题”改成“Old Title”。",
-      "保留所在的专辑这个版本已经在另一张有多个版本的专辑里，不再归入《Kept Collection》；之后可以在专辑页手动归入。旧版本会离开《Kept Collection》。",
-      "改回自动选择默认版本这个版本不会进入《Kept Collection》，所以它的默认版本改回自动选择（旧版本已不可见，页面上的显示不变）。",
-      "保留核对 · 来源类型这个版本已经核对过这一类问题，以它为准；旧版本的不迁移，撤销认领可以恢复。",
-      "保留核对 · 缺失曲目缺失曲目的核对针对旧版本自己的那几首曲目，不迁移。",
+      "保留修正 · 标题这个版本已经有自己的修正（改成“Delta (my title)”），以它为准。旧版本的“标题”改成“Old Title”。",
+      "保留所在的专辑这个版本已经在另一张专辑里，不会归入《Kept Collection》，需要的话可以在专辑页手动归入。旧版本会离开《Kept Collection》。",
+      "改回自动选择默认版本这个版本不会进入《Kept Collection》，所以它的默认版本改回自动选择。",
+      "保留核对 · 来源类型这个版本已经核对过这一类问题，以它为准。",
+      "保留核对 · 缺失曲目缺失曲目的核对只属于旧版本，不迁移。",
     ]);
   });
 
@@ -203,11 +203,11 @@ describe("认领：预览逐项说明", () => {
     const items = await previewItems();
     const effects = items.map((item) => item.textContent ?? "");
     expect(effects[0]).toContain("核对 · 来源类型");
-    expect(effects[0]).toContain("依据相同，核对立即生效");
+    expect(effects[0]).toContain("有同样的问题，核对会直接生效");
     expect(effects[1]).toContain("核对 · 介质类型");
-    expect(effects[1]).toContain("依据不同，核对不生效，问题会重新提醒");
+    expect(effects[1]).toContain("核对不会生效，问题会再次提醒");
     expect(effects[2]).toContain("核对 · 归组冲突");
-    expect(effects[2]).toContain("这个版本现在没有这类问题，核对暂时无事可压");
+    expect(effects[2]).toContain("这个版本现在没有这类问题，以后出现同样的问题时才生效");
   });
 
   it("旧版本上没有可以迁移的修改时说明这一点，仍然可以认领", async () => {
@@ -227,7 +227,7 @@ describe("认领：提交、结果与撤销", () => {
     renderApp({ path: `/claims?release=${oldId}&target=${alphaId()}` });
     await user().click(await claimButton("Alpha Suites New Rip"));
     const notice = await screen.findByText(/已把《Alpha Suites \(corrected\)》上的修改认领到《Alpha Suites New Rip》/);
-    expect(notice.textContent).toBe("已把《Alpha Suites (corrected)》上的修改认领到《Alpha Suites New Rip》：修正 标题、流派。重新扫描不会冲掉它们。");
+    expect(notice.textContent).toBe("已把《Alpha Suites (corrected)》上的修改认领到《Alpha Suites New Rip》：修正 标题、流派。");
     const post = claimsPost(api, alphaId());
     expect(post).toHaveLength(1);
     const body = post[0]?.body as { expected_revision: number; source_release_id: string; source_revision: number; preview: string };
@@ -240,8 +240,8 @@ describe("认领：提交、结果与撤销", () => {
     expect(within(status).getByRole("button", { name: "撤销" })).toBeTruthy();
     expect(within(status).getByRole("link", { name: "打开这张专辑" }).getAttribute("href")).toBe(`/albums/${alpha().id}?release=${alphaId()}`);
     // 旧版本不再待认领：从列表消失，详情说明不需要认领。
-    await waitFor(() => expect(within(screen.getByRole("heading", { level: 2, name: "已不可见、留有修改的版本" }).closest("section") as HTMLElement).queryByRole("link", { name: /Alpha Suites \(corrected\)/ })).toBeNull());
-    expect(screen.getByText("这个版本现在不需要认领：它的文件回来了，或者它的修改已经认领给了别的版本。")).toBeTruthy();
+    await waitFor(() => expect(within(screen.getByRole("heading", { level: 2, name: "留有修改的旧版本" }).closest("section") as HTMLElement).queryByRole("link", { name: /Alpha Suites \(corrected\)/ })).toBeNull());
+    expect(screen.getByText("这个版本已经不需要认领了。")).toBeTruthy();
   });
 
   it("认领改变了新版本所在的专辑：“打开这张专辑”指向它现在所在的专辑，不是认领之前的", async () => {
@@ -284,7 +284,7 @@ describe("认领：提交、结果与撤销", () => {
     expect(text).toContain("没有迁移任何修改，它已有的都保留了。");
   });
 
-  it("默认版本改回自动选择时，提示里说明（旧版本不可见，显示不变）", async () => {
+  it("默认版本改回自动选择时，提示里说明", async () => {
     const { governance } = setup();
     seedClaim(
       governance,
@@ -297,7 +297,7 @@ describe("认领：提交、结果与撤销", () => {
     );
     renderApp({ path: `/claims?release=${claimReleaseId(9)}&target=${alphaId()}` });
     await user().click(await claimButton("Alpha Suites New Rip"));
-    expect((await screen.findByText(/有 1 张专辑的默认版本改回了自动选择/)).textContent).toContain("旧版本不可见，显示不变");
+    expect((await screen.findByText(/有 1 张专辑的默认版本改回了自动选择/)).textContent).toContain("有 1 张专辑的默认版本改回了自动选择。");
   });
 
   it("撤销：提示“已撤销这次认领”，旧版本回到待认领列表，认领的两个版本号与记录对得上", async () => {
@@ -306,8 +306,8 @@ describe("认领：提交、结果与撤销", () => {
     await user().click(await claimButton("Alpha Suites New Rip"));
     await screen.findByText(/已把《Alpha Suites \(corrected\)》上的修改认领到/);
     await user().click(screen.getByRole("button", { name: "撤销" }));
-    expect(await screen.findByText("已撤销这次认领：修改还给了已不可见的旧版本，这个版本回到认领之前的样子。")).toBeTruthy();
-    const list = screen.getByRole("heading", { level: 2, name: "已不可见、留有修改的版本" }).closest("section") as HTMLElement;
+    expect(await screen.findByText("已撤销这次认领，修改还给了旧版本。")).toBeTruthy();
+    const list = screen.getByRole("heading", { level: 2, name: "留有修改的旧版本" }).closest("section") as HTMLElement;
     expect(await within(list).findByRole("link", { name: /Alpha Suites \(corrected\)/ })).toBeTruthy();
     expect(api.requestsTo("POST", /\/operations\/[^/]+\/revert$/)).toHaveLength(1);
     // 撤销之后又能认领一次。
@@ -382,7 +382,7 @@ describe("认领：失败与不确定的结果", () => {
       return jsonResponse(result.status, result.body);
     });
     await user().click(button);
-    const group = screen.getByRole("group", { name: "推荐的版本（按文件路径与目录）" });
+    const group = screen.getByRole("group", { name: "推荐的版本" });
     // 通过祖先 fieldset 禁用的控件：input.disabled 属性仍是 false，但 :disabled 匹配（浏览器里也不能操作）。
     await waitFor(() => expect(within(group).getByRole("radio", { name: /Beta Quartets/ }).matches(":disabled")).toBe(true));
     expect(screen.getByRole("button", { name: "正在认领…" })).toBeTruthy();
@@ -517,7 +517,7 @@ describe("认领记录：修改记录里的撤销", () => {
 
     // 页面跟着新版本回到认领之前所在的专辑，结果提示仍在页面上。
     await waitFor(() => expect(history.location.pathname).toBe(`/albums/${alpha().id}`));
-    expect(await screen.findByText("已撤销这次认领：修改还给了已不可见的旧版本，这个版本回到认领之前的样子。")).toBeTruthy();
+    expect(await screen.findByText("已撤销这次认领，修改还给了旧版本。")).toBeTruthy();
   });
 
   it("操作记录页里撤销认领：留在操作记录页，不跟随专辑的新位置", async () => {
@@ -533,7 +533,7 @@ describe("认领记录：修改记录里的撤销", () => {
     expect(row.textContent).toContain("认领");
     await user().click(within(row).getByRole("button", { name: /撤销/ }));
     await user().click(within(await screen.findByRole("dialog", { name: "撤销这次认领？" })).getByRole("button", { name: "撤销" }));
-    expect(await screen.findByText("已撤销这次认领：修改还给了已不可见的旧版本，这个版本回到认领之前的样子。")).toBeTruthy();
+    expect(await screen.findByText("已撤销这次认领，修改还给了旧版本。")).toBeTruthy();
     expect(claimed.history.location.pathname).toBe("/operations");
   });
 });

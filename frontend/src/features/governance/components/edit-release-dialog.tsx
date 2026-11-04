@@ -95,7 +95,7 @@ function FieldEditor({ field, draft, error, disabled, onChange }: FieldEditorPro
 }
 
 function summaryOf(changedFields: readonly CorrectableField[], errorCount: number): string {
-  if (errorCount > 0) return `有 ${errorCount} 个字段的输入需要修改，改好之后才能保存。`;
+  if (errorCount > 0) return `有 ${errorCount} 个字段需要改好才能保存。`;
   if (changedFields.length === 0) return "还没有修改任何字段。";
   return `将修改：${changedFields.map((field) => correctionFieldLabels[field]).join("、")}。`;
 }
@@ -146,7 +146,7 @@ function EditFields({ release, state, commands, onClose }: EditFieldsProps) {
           <FailureNotice error={failed.error} context="write" messages={governanceFailureMessages} title="结果未确认" />
         ) : isHttpFailure(failed.failure, 409, "revision_conflict") ? (
           <Notice tone="warning" title="这张专辑刚被修改过">
-            已重新载入最新的扫描值与修正；你的输入还在，请核对后再保存。
+            已重新载入，你的输入还在，请核对后再保存。
           </Notice>
         ) : (
           <FailureNotice error={failed.error} context="write" messages={governanceFailureMessages} title="没有保存" />
@@ -189,7 +189,6 @@ function EditReleaseForm({ titleId, headingRef, release, commands, onClose }: Ed
       <h2 id={titleId} ref={headingRef} tabIndex={-1} className={styles.title}>
         编辑发行信息
       </h2>
-      <p className={styles.lead}>这里的修改只保存在 ROOMusic 里，不会改动音乐文件；重新扫描也不会覆盖它们。</p>
       {corrections.data !== undefined ? (
         <EditFields titleId={titleId} release={release} state={corrections.data} commands={commands} onClose={onClose} />
       ) : (

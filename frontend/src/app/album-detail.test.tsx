@@ -515,8 +515,8 @@ describe("专辑详情：不存在与失败", () => {
     catalog.hiddenReleases.add(gone);
     const { history } = renderApp({ path: `/albums/${album.id}?release=${gone}` });
 
-    expect(await screen.findByText("这个版本已不可见")).toBeTruthy();
-    expect(screen.getByText(/可能刚被重新扫描/)).toBeTruthy();
+    expect(await screen.findByText("这个版本已经找不到了")).toBeTruthy();
+    expect(screen.getByText(/可能刚重新扫描过/)).toBeTruthy();
     // 页面其余部分仍在：标题、头部与版本导航。
     expect(screen.getByRole("heading", { level: 1, name: "Sample Symphonies" })).toBeTruthy();
     expect(screen.getByRole("navigation", { name: "版本" })).toBeTruthy();
@@ -526,7 +526,7 @@ describe("专辑详情：不存在与失败", () => {
     await userEvent.click(screen.getByRole("link", { name: "查看代表版本" }));
     await waitFor(() => expect(history.location.search).toBe(""));
     await screen.findByText("Track 1-01");
-    expect(screen.queryByText("这个版本已不可见")).toBeNull();
+    expect(screen.queryByText("这个版本已经找不到了")).toBeNull();
     // 点链接让组详情过期并重新读取，版本导航随之刷新。
     await waitFor(() => expect(groupRequests(api)).toHaveLength(2));
   });
@@ -536,13 +536,13 @@ describe("专辑详情：不存在与失败", () => {
     const { api, catalog } = setup({ groups: [album] });
     catalog.hiddenReleases.add(album.representative.id);
     renderApp({ path: `/albums/${album.id}` });
-    expect(await screen.findByText("这个版本已不可见")).toBeTruthy();
+    expect(await screen.findByText("这个版本已经找不到了")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "查看代表版本" })).toBeNull();
 
     catalog.hiddenReleases.clear();
     await userEvent.click(screen.getByRole("button", { name: "刷新" }));
     expect(await screen.findByText("Track 1-01")).toBeTruthy();
-    expect(screen.queryByText("这个版本已不可见")).toBeNull();
+    expect(screen.queryByText("这个版本已经找不到了")).toBeNull();
     expect(groupRequests(api).length).toBeGreaterThanOrEqual(2);
   });
 
@@ -607,8 +607,6 @@ describe("专辑详情：来源与证据", () => {
     expect(rows).toHaveLength(10); // 表头加九个字段
     expect(within(rows[1] as HTMLElement).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["音频标签", "高", "直接采用", "majority_v1"]);
     expect(within(rows[1] as HTMLElement).getByRole("rowheader").textContent).toBe("专辑艺人");
-    // “需要关注”只是提示，不写成已确认的错误。
-    expect(screen.getByText(/并不表示信息有误/)).toBeTruthy();
 
     // 再点一次折叠，内容随之移除。
     await userEvent.click(screen.getByText("来源与证据"));
@@ -683,7 +681,7 @@ describe("专辑详情：来源与证据", () => {
     await screen.findByText("Track 1-01");
     await userEvent.click(screen.getByText("来源与证据"));
     await userEvent.click(await screen.findByRole("button", { name: "查看完整证据" }));
-    expect(await screen.findByText("证据内容过长，已被截断，下面只显示前面的部分。")).toBeTruthy();
+    expect(await screen.findByText("证据太长，只显示了前面一部分。")).toBeTruthy();
     expect(screen.getByRole("table", { name: "字段证据" })).toBeTruthy();
   });
 
@@ -700,8 +698,8 @@ describe("专辑详情：来源与证据", () => {
   });
 
   it.each([
-    ["403", "errors/forbidden", "你的账号没有查看完整证据的权限。"],
-    ["404", "errors/not-found-release", "这个版本已不可见（可能刚被重新扫描），无法读取完整证据。"],
+    ["403", "errors/forbidden", "你没有权限查看完整证据。"],
+    ["404", "errors/not-found-release", "这个版本已经找不到了，可能刚重新扫描过。"],
   ])("完整证据 %s：就地提示，页面其他部分不受影响", async (_status, sample, message) => {
     const album = symphonies();
     const { catalog } = setup({ groups: [album] });

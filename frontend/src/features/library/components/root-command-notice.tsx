@@ -14,15 +14,15 @@ function successText(result: RootCommandResult): { tone: "success" | "info" | "w
   switch (result.kind) {
     case "create":
       if (result.root.status === "disabled") {
-        return { tone: "warning", text: `目录“${result.root.name}”已经登记，当前处于停用状态，没有自动恢复。需要扫描它时，请先在列表中恢复。` };
+        return { tone: "warning", text: `目录“${result.root.name}”已经添加过，现在是停用的。要扫描它，请先在列表里恢复。` };
       }
       return result.alreadyListed
-        ? { tone: "info", text: `目录“${result.root.name}”已经登记，列表没有变化。` }
-        : { tone: "success", text: `已添加目录“${result.root.name}”。下一次扫描会包含它。` };
+        ? { tone: "info", text: `目录“${result.root.name}”已经添加过了。` }
+        : { tone: "success", text: `已添加目录“${result.root.name}”，扫描后就能看到里面的专辑。` };
     case "disable":
-      return { tone: "success", text: `已停用目录“${result.name}”。扫描会跳过它，其中的曲目也不能播放；已入库的信息保留，恢复后即可播放。` };
+      return { tone: "success", text: `已停用目录“${result.name}”，里面的曲目暂时不能播放，恢复后就能再播。` };
     case "restore":
-      return { tone: "success", text: `已恢复目录“${result.name}”。下一次扫描会包含它，其中的曲目可以播放。` };
+      return { tone: "success", text: `已恢复目录“${result.name}”，里面的曲目可以播放了。` };
   }
 }
 
@@ -66,7 +66,7 @@ export function RootCommandNotice({ state, onRetry, onDismiss }: RootCommandNoti
       }
     >
       <p>{description.message}</p>
-      {state.uncertain ? <p>列表已刷新。如果目录仍是原来的状态，可以重试；重试沿用同一个操作标识，不会重复执行。</p> : null}
+      {state.uncertain ? <p>列表已刷新。如果目录还是原来的状态，可以重试。</p> : null}
     </Notice>
   );
 }

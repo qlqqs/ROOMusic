@@ -14,7 +14,7 @@ import { renderApp } from "../test/render-app";
 const plays = "/api/v1/me/plays";
 const tracks = `${plays}/tracks`;
 const recent = `${plays}/recent-releases`;
-const emptyText = "还没有播放记录。一首曲目播放到一半（最长 4 分钟）就会记在这里。";
+const emptyText = "还没有播放记录。曲目听过一半就会记在这里。";
 const first = historyItem(1);
 const second = historyItem(2);
 const row = (title: string) => screen.getByRole("row", { name: new RegExp(title) });
@@ -125,7 +125,7 @@ describe("我的音乐历史页", () => {
   it("超末页保留地址并说明总数，回到第一页可恢复记录", async () => {
     setup();
     const { history } = renderApp({ path: "/me/history?page=9" });
-    expect(await screen.findByText(/第 9 页没有记录：你的历史共有 2 首曲目/)).toBeTruthy();
+    expect(await screen.findByText(/这一页没有记录。/)).toBeTruthy();
     expect(new URLSearchParams(history.location.search).get("page")).toBe("9");
     expect(screen.queryByText(emptyText)).toBeNull();
     await userEvent.click(screen.getByRole("link", { name: "回到第一页" }));
@@ -164,8 +164,7 @@ describe("我的音乐历史页", () => {
     await screen.findByRole("table");
     const caches = seedCaches(runtime);
     let dialog = await openRemove();
-    expect(within(dialog).getByText(/全部 3 次记录，不影响其他成员/)).toBeTruthy();
-    expect(within(dialog).getByText("移除后不能恢复。")).toBeTruthy();
+    expect(within(dialog).getByText(/的播放记录会被移除，不能恢复。/)).toBeTruthy();
     await userEvent.click(within(dialog).getByRole("button", { name: "取消" }));
     expect(api.requestsTo("DELETE", `${tracks}/${first.track_id}`)).toHaveLength(0);
     expect(row(first.title)).toBeTruthy();
@@ -212,8 +211,7 @@ describe("我的音乐历史页", () => {
     const caches = seedCaches(runtime);
     await userEvent.click(screen.getByRole("button", { name: "清除全部历史" }));
     let dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText("清除后不能恢复。")).toBeTruthy();
-    expect(within(dialog).getByText(/不影响其他成员/)).toBeTruthy();
+    expect(within(dialog).getByText("全部播放记录都会被清除，不能恢复。")).toBeTruthy();
     await userEvent.click(within(dialog).getByRole("button", { name: "取消" }));
     expect(api.requestsTo("DELETE", plays)).toHaveLength(0);
     api.on("DELETE", plays, () => sampleResponse("errors/database-unavailable"));

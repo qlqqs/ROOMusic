@@ -24,10 +24,10 @@ export function AlbumPlaybackActions({ release, groupId }: { release: ReleaseDet
   const tracks = playerTracksOf(release, groupId);
   const playable = capability.data === undefined ? [] : tracks.filter((track) => reasonOf(track, capability.data) === null);
   const skipped = tracks.length - playable.length;
-  const disabledReason = capability.isError ? "无法检查播放能力，请重试。" : capability.data === undefined ? "正在检查播放能力…" : playable.length === 0 ? "这个版本没有可以播放的曲目，请查看下方各曲目的原因。" : null;
+  const disabledReason = capability.isError ? "无法检查播放能力，请重试。" : capability.data === undefined ? "正在检查播放能力…" : playable.length === 0 ? "这个版本没有能播放的曲目。" : null;
   function perform(kind: "play" | "enqueue") {
     const result = kind === "play" ? engine.playTracks(playable) : engine.enqueue(playable);
-    if (result === "queue_full") { setNotice("队列已满，最多容纳 10,000 条，请先移除一些条目。"); return; }
+    if (result === "queue_full") { setNotice("队列已满，请先移除一些条目。"); return; }
     setNotice(`${kind === "play" ? "已选择" : "已加入队列"} ${playable.length} 首${skipped === 0 ? "。" : `，跳过 ${skipped} 首不可播放的曲目。`}`);
   }
   return <div className={styles.container}>
@@ -51,7 +51,7 @@ export function TrackPlaybackActions({ release, track, groupId }: { release: Rel
   function play() {
     const playable = playerTracksOf(release, groupId).filter((entry) => reasonOf(entry, capability.data) === null);
     if (engine.playTracks(playable, playable.findIndex((entry) => entry.trackId === track.id)) === "queue_full") {
-      setNotice("队列已满，最多容纳 10,000 条，请先移除一些条目。");
+      setNotice("队列已满，请先移除一些条目。");
       return;
     }
     const skipped = release.media.reduce((total, medium) => total + medium.tracks.length, 0) - playable.length;

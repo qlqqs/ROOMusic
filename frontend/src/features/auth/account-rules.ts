@@ -13,17 +13,17 @@ export function utf8ByteLength(value: string): number {
 export type NewAccountInput = { username: string; password: string; confirmation: string };
 export type NewAccountErrors = { username?: string; password?: string; confirmation?: string };
 
-export const passwordHint = `需要 ${MIN_PASSWORD_BYTES} 到 ${MAX_PASSWORD_BYTES} 个字节（英文字符占 1 个字节，中文字符占 3 个字节）。`;
+export const passwordHint = `至少 ${MIN_PASSWORD_BYTES} 个字符。`;
 
 /** 后端以 invalid_input 拒绝不合规的用户名或密码时显示的说明（界面按错误码选文案）。 */
-export const invalidAccountMessage = `用户名不能为空，密码需要 ${MIN_PASSWORD_BYTES} 到 ${MAX_PASSWORD_BYTES} 个字节。`;
+export const invalidAccountMessage = `用户名不能为空，密码至少 ${MIN_PASSWORD_BYTES} 个字符，也不能太长。`;
 
 export function validateNewAccount(input: NewAccountInput): NewAccountErrors {
   const errors: NewAccountErrors = {};
   if (input.username.trim() === "") errors.username = "请输入用户名。";
   const passwordBytes = utf8ByteLength(input.password);
-  if (passwordBytes < MIN_PASSWORD_BYTES) errors.password = `密码至少需要 ${MIN_PASSWORD_BYTES} 个字节。`;
-  else if (passwordBytes > MAX_PASSWORD_BYTES) errors.password = `密码不能超过 ${MAX_PASSWORD_BYTES} 个字节（现在是 ${passwordBytes} 个）。`;
+  if (passwordBytes < MIN_PASSWORD_BYTES) errors.password = `密码至少要 ${MIN_PASSWORD_BYTES} 个字符。`;
+  else if (passwordBytes > MAX_PASSWORD_BYTES) errors.password = "密码太长了，请短一些。";
   else if (input.confirmation !== input.password) errors.confirmation = "两次输入的密码不一致。";
   return errors;
 }

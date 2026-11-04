@@ -11,7 +11,7 @@ export function OverviewPage() {
   const { viewer } = useViewerScope();
   const isAdmin = viewer.role === "admin";
   return (
-    <Page title="概览" description="你最近播放的专辑，以及资料库与扫描的当前状态。">
+    <Page title="概览">
       <div className={styles.grid}>
         <div className={styles.wide}>
           <RecentPlaysPanel />

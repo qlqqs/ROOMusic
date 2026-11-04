@@ -41,7 +41,7 @@ describe("扫描目录页：扫描区段", () => {
   it("没有活动扫描：说明扫描范围，提供“开始扫描”", async () => {
     setup();
     renderApp({ path: "/library" });
-    expect(await screen.findByText(/没有正在运行的扫描。扫描会读取所有启用的目录/)).toBeTruthy();
+    expect(await screen.findByText("没有正在运行的扫描。")).toBeTruthy();
     expect(screen.getByRole("button", { name: "开始扫描" })).toBeTruthy();
   });
 
@@ -65,7 +65,7 @@ describe("扫描目录页：扫描区段", () => {
     const running = seedScan(library, {}, true);
     await userEvent.click(button);
 
-    expect(await screen.findByText(/已有扫描在运行，没有新建扫描/)).toBeTruthy();
+    expect(await screen.findByText(/已经有扫描在运行。/)).toBeTruthy();
     expect(history.location.pathname).toBe("/library");
     const links = screen.getAllByRole("link", { name: /查看/ });
     expect(links.some((link) => link.getAttribute("href") === `/library/scans/${running.id}`)).toBe(true);
@@ -126,7 +126,7 @@ describe("扫描目录页：扫描区段", () => {
     library.scans.set(scan.id, { ...scan, status: "succeeded", finished_at: "2026-01-02T00:01:00Z" });
     library.activeScanId = null;
     await tick(5000);
-    expect(await screen.findByText(/没有正在运行的扫描。扫描会读取/)).toBeTruthy();
+    expect(await screen.findByText("没有正在运行的扫描。")).toBeTruthy();
     expect(screen.getByRole("button", { name: "开始扫描" })).toBeTruthy();
     expect(reads()).toBeGreaterThan(first);
 
@@ -169,7 +169,7 @@ describe("扫描目录页：扫描记录", () => {
     setup();
     renderApp({ path: "/library" });
     const region = await historyRegion();
-    expect(await within(region).findByText("还没有扫描记录。开始一次扫描后，它会出现在这里。")).toBeTruthy();
+    expect(await within(region).findByText("还没有扫描记录。")).toBeTruthy();
     expect(within(region).queryByRole("table")).toBeNull();
     expect(within(region).queryByRole("navigation")).toBeNull();
   });
@@ -202,7 +202,7 @@ describe("扫描目录页：扫描记录", () => {
     // 每行的链接文字相同，开始时间在可访问名称里，读屏的链接列表里分得清。
     const link = within(third).getByRole("link", { name: `查看详情（${formatDateTime(failed.started_at)} 开始的扫描）` });
     expect(link.getAttribute("href")).toBe(`/library/scans/${failed.id}`);
-    expect(within(await historyRegion()).getByText(/共 3 次扫描，最新的在前，每页 20 条。/)).toBeTruthy();
+    expect(within(await historyRegion()).getByText("共 3 次扫描")).toBeTruthy();
   });
 
   it("从记录进入详情：显示该次扫描的状态", async () => {
@@ -329,7 +329,7 @@ describe("扫描目录页：扫描记录", () => {
     library.scans.set(scan.id, { ...scan, status: "failed", finished_at: "2026-02-01T00:03:00Z" });
     library.activeScanId = null;
     await tick(5000);
-    expect(await screen.findByText(/没有正在运行的扫描。扫描会读取/)).toBeTruthy();
+    expect(await screen.findByText("没有正在运行的扫描。")).toBeTruthy();
     await waitFor(() => expect(within(rowAt(screen.getByRole("table", { name: "扫描记录" }), 0)).getByText("失败")).toBeTruthy());
     expect(within(rowAt(screen.getByRole("table", { name: "扫描记录" }), 0)).queryByText("进行中")).toBeNull();
   });
@@ -356,17 +356,17 @@ describe("扫描目录页：扫描记录", () => {
 describe("扫描详情：状态", () => {
   const finishedAt = "2026-01-02T00:01:00Z";
   const phases: { label: string; scan: Partial<ScanDTO>; note: RegExp; reconciles: boolean }[] = [
-    { label: "运行中", scan: {}, note: /没有预先统计的总量，所以不显示百分比或剩余时间/, reconciles: false },
+    { label: "运行中", scan: {}, note: /^正在扫描。$/, reconciles: false },
     {
       label: "取消请求中",
       scan: { cancel_requested_at: "2026-01-02T00:00:30Z" },
-      note: /取消请求已提交，等待扫描停止/,
+      note: /正在取消，当前这一步做完就会停下/,
       reconciles: false,
     },
-    { label: "成功", scan: { status: "succeeded", finished_at: finishedAt }, note: /此前入库、这次没有再出现的来源已标为缺失/, reconciles: true },
-    { label: "失败", scan: { status: "failed", finished_at: finishedAt }, note: /没有执行缺失对账/, reconciles: false },
-    { label: "已取消", scan: { status: "canceled", finished_at: finishedAt, cancel_requested_at: "2026-01-02T00:00:30Z" }, note: /没有执行缺失对账/, reconciles: false },
-    { label: "不完整", scan: { status: "incomplete", finished_at: finishedAt }, note: /没有执行缺失对账.*请查看诊断/, reconciles: false },
+    { label: "成功", scan: { status: "succeeded", finished_at: finishedAt }, note: /这次没找到的文件已标为缺失/, reconciles: true },
+    { label: "失败", scan: { status: "failed", finished_at: finishedAt }, note: /扫描失败，已有的曲目不受影响/, reconciles: false },
+    { label: "已取消", scan: { status: "canceled", finished_at: finishedAt, cancel_requested_at: "2026-01-02T00:00:30Z" }, note: /扫描已取消，已有的曲目不受影响/, reconciles: false },
+    { label: "不完整", scan: { status: "incomplete", finished_at: finishedAt }, note: /已有的曲目不受影响.*看一下诊断/, reconciles: false },
   ];
 
   it.each(phases)("$label：阶段标签与说明互不混同，不出现百分比或剩余时间", async ({ label, scan: overrides, note }) => {
@@ -377,7 +377,7 @@ describe("扫描详情：状态", () => {
     const panel = await statusPanel();
     expect(within(panel).getByRole("status").textContent).toBe(label);
     expect(within(panel).getByText(note)).toBeTruthy();
-    // 说明文字会明确写“不显示百分比或剩余时间”；这里只断言界面没有真的显示数值进度或预计时间。
+    // 只断言界面没有显示数值进度或预计时间。
     expect(panel.textContent).not.toMatch(/\d+\s*%|预计剩余|ETA/);
     // 六种阶段里只有这一种标签出现。
     for (const other of phases.filter((phase) => phase.label !== label)) {
@@ -425,7 +425,7 @@ describe("扫描详情：状态", () => {
 
     // 终态让活动扫描的缓存过期：回到扫描目录页时立刻显示没有活动扫描，而不是等 30 秒的保鲜期或下一次轮询。
     await userEvent.click(screen.getByRole("link", { name: "返回扫描目录" }));
-    expect(await screen.findByText(/没有正在运行的扫描。扫描会读取/)).toBeTruthy();
+    expect(await screen.findByText("没有正在运行的扫描。")).toBeTruthy();
   });
 
   it("页面隐藏时暂停轮询，重新可见时立刻刷新", async () => {
@@ -466,7 +466,7 @@ describe("扫描详情：取消", () => {
 
     const panel = await statusPanel();
     await waitFor(() => expect(within(panel).getByRole("status").textContent).toBe("取消请求中"));
-    expect(within(panel).getByText(/取消请求已提交，等待扫描停止/)).toBeTruthy();
+    expect(within(panel).getByText(/正在取消，当前这一步做完就会停下/)).toBeTruthy();
     expect(within(panel).queryByRole("button", { name: /取消扫描|正在请求取消/ })).toBeNull();
     expect(screen.queryByText("已取消")).toBeNull();
     expect(api.requestsTo("POST", `${scanPath(scan)}/cancel`)).toHaveLength(1);

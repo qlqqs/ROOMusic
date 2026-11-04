@@ -14,7 +14,7 @@ import { renderApp } from "../test/render-app";
 
 const recentPath = "/api/v1/me/plays/recent-releases";
 const playsPath = "/api/v1/me/plays";
-const emptyText = "还没有播放记录。一首曲目播放到一半（最长 4 分钟）就会记在这里。";
+const emptyText = "还没有播放记录。曲目听过一半就会记在这里。";
 const hiddenText = "没有可显示的播放记录：播放过的曲目目前都不在资料库里。";
 
 function sampleItem(): RecentReleaseDTO {
@@ -137,8 +137,7 @@ describe("概览的“最近播放”", () => {
       if (opener === null) throw new Error("没有清除按钮");
       await userEvent.click(opener);
       const dialog = await screen.findByRole("dialog", { name: "清除播放历史？" });
-      expect(within(dialog).getByText("将清除你自己的全部播放记录，不影响其他成员。")).toBeTruthy();
-      expect(within(dialog).getByText("清除后不能恢复。")).toBeTruthy();
+      expect(within(dialog).getByText("全部播放记录都会被清除，不能恢复。")).toBeTruthy();
       expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "取消" }));
 
       await userEvent.click(within(dialog).getByRole("button", { name: "取消" }));

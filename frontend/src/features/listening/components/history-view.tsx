@@ -170,7 +170,7 @@ export function HistoryView({ page, renderPlayAll, renderTrackActions }: History
                 {renderPlayAll()}
                 {data.items.length === 0 ? (
                   <p>
-                    第 {formatCount(page)} 页没有记录：你的历史共有 {formatCount(data.pagination.total)} 首曲目，{pageCount === 1 ? "只有 1 页" : `共 ${formatCount(pageCount)} 页`}。{" "}
+                    这一页没有记录。{" "}
                     <Link to="/me/history" search={{}}>
                       回到第一页
                     </Link>
@@ -179,7 +179,7 @@ export function HistoryView({ page, renderPlayAll, renderTrackActions }: History
                   <>
                     <DataTable caption="播放历史" columns={columns} rows={data.items} rowKey={(item) => item.track_id} />
                     <p className={styles.note}>
-                      共 {formatCount(data.pagination.total)} 首曲目，按最近一次播放排序，每页 {data.pagination.page_size} 首；播放次数是这首曲目在你的历史里记下的次数。
+                      共 {formatCount(data.pagination.total)} 首曲目
                     </p>
                     <Pagination
                       label="播放历史分页"

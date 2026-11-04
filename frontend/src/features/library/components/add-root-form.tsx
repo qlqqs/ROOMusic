@@ -45,7 +45,7 @@ export function AddRootForm({ commands, path, onPathChange }: AddRootFormProps) 
     <form className={styles.form} onSubmit={submit} noValidate>
       <TextField
         label="目录路径"
-        description="输入服务器上的绝对路径，例如 /music/classical。它必须位于服务器配置的允许音乐根目录之内；界面只显示目录名，不显示完整路径。"
+        description="服务器上的绝对路径，例如 /music/classical"
         value={path}
         error={error}
         autoComplete="off"

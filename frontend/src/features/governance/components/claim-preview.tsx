@@ -45,8 +45,8 @@ export function ClaimPreview({ detail, targetId, commands }: ClaimPreviewProps) 
 
   if (preview.status === "error") {
     const failure = failureOf(preview.error);
-    if (isHttpFailure(failure, 404, "not_found")) return <Notice tone="warning">选中的版本现在不可见或不存在，请重新选择。</Notice>;
-    if (isHttpFailure(failure, 409, "not_claimable")) return <Notice tone="warning">这个旧版本现在不需要认领：它的文件回来了，或者它的修改已经认领给了别的版本。</Notice>;
+    if (isHttpFailure(failure, 404, "not_found")) return <Notice tone="warning">选中的版本已经找不到了，请重新选一个。</Notice>;
+    if (isHttpFailure(failure, 409, "not_claimable")) return <Notice tone="warning">这个旧版本已经不需要认领了。</Notice>;
     return <FailureNotice error={preview.error} action={<Button onClick={() => void preview.refetch()}>重试</Button>} />;
   }
   if (preview.data === undefined) return <Skeleton label="正在生成认领预览" lines={4} />;
@@ -72,7 +72,7 @@ export function ClaimPreview({ detail, targetId, commands }: ClaimPreviewProps) 
         认领到《{data.release.title}》会怎样
       </h3>
       {data.items.length === 0 ? <p className={styles.empty}>旧版本上没有可以迁移的修改。</p> : <PreviewItems preview={data} detail={detail} />}
-      <p className={styles.note}>旧版本上的这些修改会随认领清走，它从待认领里消失。不会改动音乐文件，认领之后可以撤销。</p>
+      <p className={styles.note}>认领之后可以撤销。</p>
       <div className={styles.submit}>
         <Button variant="primary" busy={pending} onClick={submit}>
           {pending ? "正在认领…" : uncertain ? "重试认领" : `认领到《${data.release.title}》`}

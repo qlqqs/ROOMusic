@@ -145,7 +145,7 @@ describe("历史页播放动作", () => {
     view(<HistoryPlayAll />);
     await ready("播放全部");
     await userEvent.click(screen.getByRole("button", { name: "播放全部" }));
-    expect(await screen.findByText("已选择 999 首，跳过 1 首不可播放的曲目。只处理了最近的 1,000 首历史曲目。")).toBeTruthy();
+    expect(await screen.findByText("已选择 999 首，跳过 1 首不可播放的曲目。历史太长，只取了最近的 1,000 首。")).toBeTruthy();
     expect(queueIds(engine)).toEqual(items.slice(1, 1000).map((item) => item.track_id));
   });
 
@@ -158,7 +158,7 @@ describe("历史页播放动作", () => {
     const before = engine.getSnapshot().queue;
     await ready("播放全部");
     await userEvent.click(screen.getByRole("button", { name: "播放全部" }));
-    expect(await screen.findByText(truncated ? "这 1,000 首历史曲目都不能播放，队列保持不变。只处理了最近的 1,000 首历史曲目。" : "这 2 首历史曲目都不能播放，队列保持不变。")).toBeTruthy();
+    expect(await screen.findByText(truncated ? "这 1,000 首都不能播放，队列没有变。历史太长，只取了最近的 1,000 首。" : "这 2 首都不能播放，队列没有变。")).toBeTruthy();
     expect(engine.getSnapshot().queue).toBe(before);
   });
 

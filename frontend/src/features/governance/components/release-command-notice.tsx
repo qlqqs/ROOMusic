@@ -33,14 +33,14 @@ const revertedText: Readonly<Record<RevertSubject, string>> = {
   group: "已撤销这次归组调整，这个版本回到了原来的专辑。",
   default: "已撤销默认版本的调整。",
   review: "已撤销这次核对，问题恢复到之前的状态。",
-  claim: "已撤销这次认领：修改还给了已不可见的旧版本，这个版本回到认领之前的样子。",
+  claim: "已撤销这次认领，修改还给了旧版本。",
   other: "已撤销。",
 };
 
 function successText(command: ReleaseCommand, result: ReleaseCommandResult): string {
   switch (result.kind) {
     case "correct":
-      return `已保存修改：${(command.kind === "correct" ? command.fields : []).map((field) => correctionFieldLabels[field]).join("、")}。重新扫描不会覆盖它们。`;
+      return `已保存修改：${(command.kind === "correct" ? command.fields : []).map((field) => correctionFieldLabels[field]).join("、")}。`;
     case "join":
       return `已把这个版本归入《${result.groupTitle}》。`;
     case "detach":
@@ -48,12 +48,12 @@ function successText(command: ReleaseCommand, result: ReleaseCommandResult): str
     case "default":
       return result.result.default_release_id === null
         ? "已改回自动选择：这张专辑默认显示年份最早的版本。"
-        : "已把这个版本设为默认版本。专辑列表和打开这张专辑时会先显示它。";
+        : "已把这个版本设为默认版本。";
     case "claim":
       return claimResultText(command.kind === "claim" ? command.source.title : "", command.release.title, result.result);
     case "review": {
       const label = reviewableIssueLabels[result.result.issue];
-      return result.result.reviewed ? `已把“${label}”标记为已核对，它不再计入“需要关注”。扫描发现情况变了会重新提醒。` : `已取消“${label}”的核对，它重新计入“需要关注”。`;
+      return result.result.reviewed ? `已把“${label}”标记为已核对。` : `已取消“${label}”的核对。`;
     }
     case "revert":
       return revertedText[command.kind === "revert" ? command.subject : "other"];
@@ -132,7 +132,7 @@ export function ReleaseCommandNotice({ state, releaseId, hideFailure, onUndo, on
   if (!state.uncertain && state.command.kind === "claim" && isHttpFailure(state.failure, 409, "not_claimable")) {
     return (
       <Notice tone="warning" title="这个旧版本现在不需要认领" action={dismiss}>
-        它的文件回来了，或者它的修改已经认领给了别的版本。
+        可能它的文件回来了，或者已经认领过了。
       </Notice>
     );
   }
@@ -160,7 +160,7 @@ export function ReleaseCommandNotice({ state, releaseId, hideFailure, onUndo, on
       }
     >
       <p>{description.message}</p>
-      {state.uncertain ? <p>页面已刷新。如果内容仍是原来的样子，可以重试；重试沿用同一个操作标识，不会重复执行。</p> : null}
+      {state.uncertain ? <p>页面已刷新。如果内容还是原来的样子，可以重试。</p> : null}
     </Notice>
   );
 }

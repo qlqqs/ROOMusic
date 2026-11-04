@@ -93,7 +93,7 @@ function GroupingEvidence({ grouping }: { grouping: ReleaseGroupingEvidenceDTO |
 function EvidenceDetail({ evidence, corrected }: { evidence: ReleaseEvidenceDTO; corrected: readonly string[] }) {
   return (
     <div className={styles.detail}>
-      {evidence.truncated ? <Notice tone="warning">证据内容过长，已被截断，下面只显示前面的部分。</Notice> : null}
+      {evidence.truncated ? <Notice tone="warning">证据太长，只显示了前面一部分。</Notice> : null}
       {evidence.fields.length === 0 ? (
         <p>没有字段证据。</p>
       ) : (
@@ -107,8 +107,8 @@ function EvidenceDetail({ evidence, corrected }: { evidence: ReleaseEvidenceDTO;
 
 // 完整证据接口只有管理员能读：403 只会在角色刚被改动时出现，404 表示版本已经不可见。
 const failureMessages = {
-  forbidden: "你的账号没有查看完整证据的权限。",
-  not_found: "这个版本已不可见（可能刚被重新扫描），无法读取完整证据。",
+  forbidden: "你没有权限查看完整证据。",
+  not_found: "这个版本已经找不到了，可能刚重新扫描过。",
 } as const;
 
 /**
@@ -125,7 +125,6 @@ function FullEvidence({ releaseId, corrected }: { releaseId: string; corrected: 
       <h3 id={headingId} className={styles.subheading}>
         完整证据
       </h3>
-      <p className={styles.note}>字段取值、候选值、原因码与归组依据，只有管理员能看到。</p>
       <div>
         <Button busy={loading} onClick={() => (requested ? void evidence.refetch() : setRequested(true))}>
           {loading ? "正在加载…" : requested ? "重新加载完整证据" : "查看完整证据"}
@@ -153,11 +152,8 @@ export function EvidenceSection({ release, isAdmin }: { release: ReleaseDetailDT
   const count = release.evidence.length;
   return (
     <Disclosure title="来源与证据" detail={`（${formatCount(count)} 项）`}>
-      <p className={styles.note}>
-        这里记录各项信息是怎样得到的。“需要关注”只是提示依据不够确定，或有来源文件暂时找不到，需要人工核对，并不表示信息有误。
-      </p>
       {release.corrected_fields.length === 0 ? null : (
-        <p className={styles.note}>标有“人工修正”的字段，页面显示的是管理员改过的值；下面仍然记录扫描得到的结论，重新扫描不会覆盖人工修正。</p>
+        <p className={styles.note}>标有“人工修正”的字段，页面上显示的是改过的值。</p>
       )}
       {count === 0 ? (
         <p>这个版本没有记录证据。</p>

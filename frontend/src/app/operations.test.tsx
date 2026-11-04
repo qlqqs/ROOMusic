@@ -83,7 +83,7 @@ describe("操作记录页：列表", () => {
   it("没有记录时说明记录什么时候出现，没有表格与分页", async () => {
     setup();
     renderApp({ path: "/operations" });
-    expect(await screen.findByText("还没有操作记录。修改专辑信息、调整归组或设定默认版本之后，记录会出现在这里。")).toBeTruthy();
+    expect(await screen.findByText("还没有操作记录。")).toBeTruthy();
     expect(screen.queryByRole("table")).toBeNull();
     expect(screen.queryByRole("navigation", { name: "操作记录分页" })).toBeNull();
   });
@@ -124,7 +124,7 @@ describe("操作记录页：列表", () => {
     const { history } = renderApp({ path: "/operations" });
     const table = await screen.findByRole("table", { name: "操作记录" });
     expect(within(table).getAllByRole("row")).toHaveLength(21);
-    expect(screen.getByText("共 25 条记录，最新的在前，每页 20 条。")).toBeTruthy();
+    expect(screen.getByText("共 25 条记录")).toBeTruthy();
     expect(api.requestsTo("GET", "/api/v1/operations")[0]?.path).toContain("page=1&page_size=20");
 
     const pagination = screen.getByRole("navigation", { name: "操作记录分页" });
@@ -225,7 +225,7 @@ describe("操作记录页：撤销", () => {
     expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "取消" }));
     expect(within(dialog).getByText(/撤销 curator 在 .+ 做的“修改发行信息”。《Gamma Sonatas》会改回：/)).toBeTruthy();
     expect(within(dialog).getByText(/^流派：Sonata → .+（恢复为扫描值）$/)).toBeTruthy();
-    expect(within(dialog).getByText("不会改动音乐文件。撤销会留下一条自己的记录，它不能再被撤销；需要时可以重新修改。")).toBeTruthy();
+    expect(within(dialog).getByText("撤销之后不能再撤销，需要时可以重新修改。")).toBeTruthy();
 
     const target = governance.operations[3];
     await user.click(within(dialog).getByRole("button", { name: "撤销" }));
@@ -385,7 +385,7 @@ describe("专辑详情：修改记录", () => {
     await heading("Gamma Sonatas");
     await screen.findByText("Track 01");
     await user.click(historySummary());
-    expect(await screen.findByText("这个版本和这张专辑还没有修改记录。管理员修改发行信息、调整归组或设定默认版本之后，记录会出现在这里。")).toBeTruthy();
+    expect(await screen.findByText("还没有修改记录。")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "全部记录" })).toBeNull();
 
     for (let revision = 1; revision <= 7; revision += 1) correct(governance, releaseOf(albumC()), revision, "label", `Label ${revision}`);

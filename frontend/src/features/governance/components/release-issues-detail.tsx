@@ -76,7 +76,6 @@ function FieldsSection({ fields, renderFieldActions, renderReviewAction }: { fie
       <h3 id="issues-fields" tabIndex={-1}>
         拿不准的字段
       </h3>
-      <p className={styles.explain}>扫描没有把握的字段。来源类型与介质类型不能修改，看过之后可以标记为已核对；其余字段在“编辑发行信息”里修改或确认扫描值。</p>
       <DataTable caption="拿不准的字段" columns={columns} rows={fields} rowKey={(field) => field.field} />
       {renderFieldActions?.(fields)}
     </section>
@@ -90,7 +89,7 @@ function GroupingSection({ grouping, renderReviewAction }: { grouping: GroupingI
         同一目录的归组冲突
       </h3>
       <p className={styles.explain}>
-        {`${grouping.reason_codes.map((code) => reasonCodeLabel(code)).join("；")}：这个目录里各曲目的专辑标签没有过半数，扫描按标签拆成了几个版本。如果它们其实是同一张专辑，可以在专辑页“归入其他专辑”；确认拆分没有问题，就标记为已核对。`}
+        {`${grouping.reason_codes.map((code) => reasonCodeLabel(code)).join("；")}：这个目录被拆成了几个版本。如果其实是同一张专辑，可以在专辑页“归入其他专辑”。`}
       </p>
       <ReviewState status={grouping.status} review={grouping.review} staleText="核对之后涉及的文件变了" />
       {renderReviewAction?.({ issue: "grouping", basis: grouping.basis, status: grouping.status, review: grouping.review })}
@@ -138,11 +137,11 @@ function MissingTracksSection({ missing, renderReviewAction }: { missing: Missin
       <h3 id="issues-missing" tabIndex={-1}>
         缺失的曲目（{formatCount(missing.count)} 首）
       </h3>
-      <p className={styles.explain}>完整扫描时找不到这些文件。把文件放回原处并重新扫描，它们会自动恢复；确认文件已不需要，就标记为已核对，之后新缺失的曲目仍会提醒。</p>
+      <p className={styles.explain}>扫描时找不到这些文件。放回原处再扫描就会恢复；不需要了就标记为已核对。</p>
       <ReviewState status={missing.status} review={missing.review} staleText="核对之后又有曲目缺失" />
       {renderReviewAction?.({ issue: "missing_tracks", basis: missing.basis, status: missing.status, review: missing.review })}
       <DataTable caption="缺失的曲目" columns={columns} rows={missing.tracks} rowKey={(track) => track.id} />
-      {missing.truncated ? <p className={styles.note}>只列出前 {formatCount(missing.tracks.length)} 首；核对覆盖全部 {formatCount(missing.count)} 首。</p> : null}
+      {missing.truncated ? <p className={styles.note}>只列出前 {formatCount(missing.tracks.length)} 首。</p> : null}
     </section>
   );
 }
@@ -171,7 +170,7 @@ export function ReleaseIssuesDetail({ issues, renderFieldActions, renderReviewAc
           </Link>
         </p>
       </header>
-      {empty ? <p>扫描结论里已经没有问题了。</p> : null}
+      {empty ? <p>已经没有问题了。</p> : null}
       {issues.fields.length === 0 ? null : <FieldsSection fields={issues.fields} renderFieldActions={renderFieldActions} renderReviewAction={renderReviewAction} />}
       {issues.grouping === null ? null : <GroupingSection grouping={issues.grouping} renderReviewAction={renderReviewAction} />}
       {issues.missing_tracks === null ? null : <MissingTracksSection missing={issues.missing_tracks} renderReviewAction={renderReviewAction} />}

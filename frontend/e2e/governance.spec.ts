@@ -47,7 +47,7 @@ test.describe("编辑发行信息", () => {
 
     await expect(dialog).toBeHidden();
     await expect(heading(page, "Sample Symphonies (corrected)")).toBeVisible();
-    await expect(page.getByText("已保存修改：标题、年份。重新扫描不会覆盖它们。")).toBeVisible();
+    await expect(page.getByText("已保存修改：标题、年份。")).toBeVisible();
     const [call] = mock.callsTo("PATCH", `/api/v1/releases/${releaseId()}/corrections`);
     expect(call?.body).toEqual({ expected_revision: 1, changes: { title: { mode: "set", value: "Sample Symphonies (corrected)" }, year: { mode: "set", value: 1975 } } });
     expect(call?.idempotencyKey).toMatch(uuidPattern);
@@ -169,7 +169,7 @@ test.describe("编辑发行信息：宽度与无障碍", () => {
     await expect(dialog.getByRole("group", { name: "条码" })).toBeVisible();
     await dialog.getByRole("group", { name: "年份" }).getByRole("radio", { name: "自定义" }).check();
     await dialog.getByRole("textbox", { name: "年份（自定义）" }).fill("19x5");
-    await expect(dialog.getByText("年份必须是 1 到 9999 的整数。")).toBeVisible();
+    await expect(dialog.getByText("请填写有效的年份。")).toBeVisible();
     for (const width of widths) {
       await page.setViewportSize({ width, height: 800 });
       await page.evaluate(() => document.fonts.ready);
@@ -192,7 +192,7 @@ test.describe("编辑发行信息：宽度与无障碍", () => {
     const dialog = page.getByRole("dialog", { name: "编辑发行信息" });
     await dialog.getByRole("group", { name: "流派" }).getByRole("radio", { name: "留空" }).check();
     await dialog.getByRole("button", { name: "保存修改" }).click();
-    await expect(page.getByText("已保存修改：流派。重新扫描不会覆盖它们。")).toBeVisible();
+    await expect(page.getByText("已保存修改：流派。")).toBeVisible();
     for (const width of widths) {
       await page.setViewportSize({ width, height: 900 });
       await expectNoHorizontalOverflow(page, `修改后的提示 @${width}px`);
@@ -211,7 +211,6 @@ test.describe("调整归组", () => {
 
     await page.getByRole("button", { name: "归入其他专辑…" }).click();
     const dialog = page.getByRole("dialog", { name: "把这个版本归入其他专辑" });
-    await expect(dialog.getByText("输入标题或艺人，找到要归入的专辑。")).toBeVisible();
     await dialog.getByRole("textbox", { name: "搜索专辑" }).fill("Quartet");
     await dialog.getByRole("textbox", { name: "搜索专辑" }).press("Enter");
     await dialog.getByRole("radio", { name: /Beta Quartets/ }).check();

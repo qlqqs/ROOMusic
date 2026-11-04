@@ -82,7 +82,7 @@ describe("编辑发行信息：入口与读取", () => {
     expect(within(dialog).getByRole("button", { name: "重试" })).toBeTruthy();
     api.on("GET", correctionsPath, () => jsonResponse(404, { error: { code: "not_found", message: "发行版本不存在" }, request_id: "r-2" }));
     await user.click(within(dialog).getByRole("button", { name: "重试" }));
-    expect(await within(dialog).findByText("这个版本已不可见（可能刚被重新扫描），无法继续操作。")).toBeTruthy();
+    expect(await within(dialog).findByText("这个版本已经找不到了，可能刚重新扫描过。")).toBeTruthy();
     expect(within(dialog).queryByRole("button", { name: "重试" })).toBeNull();
     await user.click(within(dialog).getByRole("button", { name: "关闭" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "编辑发行信息" })).toBeNull());
@@ -127,7 +127,7 @@ describe("编辑发行信息：保存", () => {
 
     // 页面显示新的有效值；提示说明保存了什么并给出“撤销”；焦点回到打开对话框的按钮。
     expect(await screen.findByRole("heading", { level: 1, name: "Sample Symphonies (corrected)" })).toBeTruthy();
-    expect(screen.getByText("已保存修改：标题、年份、流派。重新扫描不会覆盖它们。")).toBeTruthy();
+    expect(screen.getByText("已保存修改：标题、年份、流派。")).toBeTruthy();
     expect(screen.getByRole("button", { name: "撤销" })).toBeTruthy();
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "编辑发行信息" }));
     expect(screen.getAllByText("1975").length).toBeGreaterThan(0);
@@ -144,15 +144,15 @@ describe("编辑发行信息：保存", () => {
     const year = field(dialog, "年份").getByRole("textbox", { name: "年份（自定义）" });
     await user.clear(year);
     await user.type(year, "19x5");
-    expect(field(dialog, "年份").getByText("年份必须是 1 到 9999 的整数。")).toBeTruthy();
+    expect(field(dialog, "年份").getByText("请填写有效的年份。")).toBeTruthy();
     expect(year.getAttribute("aria-invalid")).toBe("true");
     expect(saveButton(dialog).hasAttribute("disabled")).toBe(true);
-    expect(within(dialog).getByText("有 1 个字段的输入需要修改，改好之后才能保存。")).toBeTruthy();
+    expect(within(dialog).getByText("有 1 个字段需要改好才能保存。")).toBeTruthy();
 
     await user.click(field(dialog, "标题").getByRole("radio", { name: "自定义" }));
     await user.clear(field(dialog, "标题").getByRole("textbox", { name: "标题（自定义）" }));
     expect(field(dialog, "标题").getByText("标题不能为空。")).toBeTruthy();
-    expect(within(dialog).getByText("有 2 个字段的输入需要修改，改好之后才能保存。")).toBeTruthy();
+    expect(within(dialog).getByText("有 2 个字段需要改好才能保存。")).toBeTruthy();
 
     await user.clear(year);
     await user.type(year, "1975");
@@ -222,7 +222,7 @@ describe("编辑发行信息：冲突与结果不确定", () => {
     await user.click(saveButton(dialog));
 
     expect(await within(dialog).findByText("这张专辑刚被修改过")).toBeTruthy();
-    expect(within(dialog).getByText("已重新载入最新的扫描值与修正；你的输入还在，请核对后再保存。")).toBeTruthy();
+    expect(within(dialog).getByText("已重新载入，你的输入还在，请核对后再保存。")).toBeTruthy();
     expect((title as HTMLInputElement).value).toBe("我的标题");
     // 没有动过的流派显示最新的状态（别人刚设的 Jazz），而不是我打开时的样子。
     await waitFor(() => expect((field(dialog, "流派").getByRole("radio", { name: "自定义" }) as HTMLInputElement).checked).toBe(true));
@@ -264,7 +264,7 @@ describe("编辑发行信息：冲突与结果不确定", () => {
     expect(requests).toHaveLength(2);
     expect(requests[1]?.headers.get("Idempotency-Key")).toBe(requests[0]?.headers.get("Idempotency-Key"));
     expect(requests[1]?.body).toEqual(requests[0]?.body);
-    expect(screen.getByText("已保存修改：条码。重新扫描不会覆盖它们。")).toBeTruthy();
+    expect(screen.getByText("已保存修改：条码。")).toBeTruthy();
   });
 
   it("后端拒绝（400 invalid_correction）：留在对话框里显示后端给出的说明，可以改了再存", async () => {
@@ -318,7 +318,7 @@ describe("撤销与人工修正的标记", () => {
     await within(dialog).findByRole("group", { name: prefixed("标题") });
     await user.click(field(dialog, "流派").getByRole("radio", { name: "留空" }));
     await user.click(saveButton(dialog));
-    await screen.findByText("已保存修改：流派。重新扫描不会覆盖它们。");
+    await screen.findByText("已保存修改：流派。");
     // 别人在此期间又改了这张专辑：撤销被拒绝。
     respondToCorrect(governance, releaseId, "00000000-0000-4000-8000-0000000000c2", { expected_revision: 2, changes: { label: { mode: "null" } } });
     await user.click(screen.getByRole("button", { name: "撤销" }));
@@ -353,7 +353,7 @@ describe("撤销与人工修正的标记", () => {
     expect(rowOf("标题")?.textContent).toContain("人工修正");
     expect(rowOf("年份")?.textContent).toContain("人工修正");
     expect(rowOf("专辑艺人")?.textContent).not.toContain("人工修正");
-    expect(screen.getByText(/标有“人工修正”的字段，页面显示的是管理员改过的值/)).toBeTruthy();
+    expect(screen.getByText(/标有“人工修正”的字段，页面上显示的是改过的值/)).toBeTruthy();
     // 普通成员看不到谁改的，也没有任何编辑入口。
     expect(screen.queryByRole("button", { name: "编辑发行信息" })).toBeNull();
     expect(screen.queryByText("curator")).toBeNull();

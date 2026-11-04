@@ -32,7 +32,6 @@ export function MemberManagement() {
   return (
     <>
       <Panel title="新建成员">
-        <p>新成员的角色是“成员”。目前不能在这里创建管理员或修改成员的角色。</p>
         <CreateMemberForm commands={commands} />
         <MemberCommandNotice state={state} scope="create" onDismiss={commands.dismiss} />
       </Panel>

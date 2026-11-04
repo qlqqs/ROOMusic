@@ -154,7 +154,7 @@ const states: State[] = [
       await page.goto("/albums");
       await page.getByRole("textbox", { name: "搜索专辑" }).fill("长".repeat(70));
       await page.getByRole("button", { name: "搜索" }).click();
-      await expect(page.getByText(/搜索词最多 200 个字节/)).toBeVisible();
+      await expect(page.getByText("搜索词太长了，请短一些。")).toBeVisible();
     },
   },
   {
@@ -277,7 +277,7 @@ const states: State[] = [
       const versions = seedVersions(mock, group);
       mock.hiddenReleases.add(versions[1]?.id ?? "");
       await page.goto(`/albums/${group.id}?release=${versions[1]?.id}`);
-      await expect(page.getByText("这个版本已不可见")).toBeVisible();
+      await expect(page.getByText("这个版本已经找不到了")).toBeVisible();
     },
   },
   {

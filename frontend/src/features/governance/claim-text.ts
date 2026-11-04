@@ -62,9 +62,9 @@ export function claimResultText(sourceTitle: string, targetTitle: string, result
   const sentences = [
     moved === ""
       ? `《${targetTitle}》已经接替了《${sourceTitle}》：没有迁移任何修改，它已有的都保留了。`
-      : `已把《${sourceTitle}》上的修改认领到《${targetTitle}》：${moved}。重新扫描不会冲掉它们。`,
+      : `已把《${sourceTitle}》上的修改认领到《${targetTitle}》：${moved}。`,
     kept === null || moved === "" ? null : `保留了这个版本已有的：${kept}。`,
-    result.defaults.reset.length === 0 ? null : `有 ${result.defaults.reset.length} 张专辑的默认版本改回了自动选择（旧版本不可见，显示不变）。`,
+    result.defaults.reset.length === 0 ? null : `有 ${result.defaults.reset.length} 张专辑的默认版本改回了自动选择。`,
   ];
   return sentences.filter((item) => item !== null).join("");
 }
@@ -98,9 +98,9 @@ function albumTitleIn(detail: Pick<ClaimDetailDTO, "album" | "default_of">, grou
 
 /** 迁移的核对在新版本上的效果。 */
 function reviewEffectText(item: ClaimItemDTO): string {
-  if (item.effect === "valid") return "这个版本现在有同样的问题，依据相同，核对立即生效。";
-  if (item.effect === "stale") return "这个版本现在有同类问题，但依据不同，核对不生效，问题会重新提醒。";
-  if (item.effect === "no_issue") return "这个版本现在没有这类问题，核对暂时无事可压；将来出现依据相同的问题时才生效。";
+  if (item.effect === "valid") return "这个版本有同样的问题，核对会直接生效。";
+  if (item.effect === "stale") return "这个版本的同类问题情况不同，核对不会生效，问题会再次提醒。";
+  if (item.effect === "no_issue") return "这个版本现在没有这类问题，以后出现同样的问题时才生效。";
   return "";
 }
 
@@ -108,15 +108,15 @@ function reviewEffectText(item: ClaimItemDTO): string {
 function skipReasonText(item: ClaimItemDTO, albumTitle: string): string {
   switch (item.reason) {
     case "target_has_correction":
-      return `这个版本已经有自己的修正（${item.to === undefined ? "" : intentText(item.to)}），以它为准；旧版本的不迁移，撤销认领可以恢复。`;
+      return `这个版本已经有自己的修正（${item.to === undefined ? "" : intentText(item.to)}），以它为准。`;
     case "target_has_review":
-      return "这个版本已经核对过这一类问题，以它为准；旧版本的不迁移，撤销认领可以恢复。";
+      return "这个版本已经核对过这一类问题，以它为准。";
     case "target_in_album":
-      return `这个版本已经在另一张有多个版本的专辑里，不再归入${albumTitle}；之后可以在专辑页手动归入。`;
+      return `这个版本已经在另一张专辑里，不会归入${albumTitle}，需要的话可以在专辑页手动归入。`;
     case "already_in_album":
       return `这个版本已经在${albumTitle}里。`;
     case "not_transferable":
-      return "缺失曲目的核对针对旧版本自己的那几首曲目，不迁移。";
+      return "缺失曲目的核对只属于旧版本，不迁移。";
     default:
       return item.reason ?? "";
   }
@@ -140,11 +140,11 @@ export function claimItemText(item: ClaimItemDTO, detail: Pick<ClaimDetailDTO, "
     case "default":
       return item.action === "move"
         ? { heading: "默认版本", body: `这个版本接任${albumTitle}的默认版本。` }
-        : { heading: "默认版本", body: `这个版本不会进入${albumTitle}，所以它的默认版本改回自动选择（旧版本已不可见，页面上的显示不变）。` };
+        : { heading: "默认版本", body: `这个版本不会进入${albumTitle}，所以它的默认版本改回自动选择。` };
     case "review": {
       const name = item.issue === undefined ? "问题" : reviewableIssueLabels[item.issue];
       return item.action === "move"
-        ? { heading: `核对 · ${name}`, body: `旧版本上的核对（连同核对人与时间）迁到这个版本。${reviewEffectText(item)}` }
+        ? { heading: `核对 · ${name}`, body: `旧版本上的核对迁到这个版本。${reviewEffectText(item)}` }
         : { heading: `核对 · ${name}`, body: skipReasonText(item, albumTitle) };
     }
   }

@@ -6,7 +6,7 @@ import { Page } from "../../shared/ui";
 export function AlbumsPage({ search }: { search: AlbumSearch }) {
   const { viewer } = useViewerScope();
   return (
-    <Page title="专辑" description="浏览并搜索资料库里的专辑。">
+    <Page title="专辑">
       <AlbumListView search={search} isAdmin={viewer.role === "admin"} />
     </Page>
   );

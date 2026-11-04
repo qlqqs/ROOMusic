@@ -224,7 +224,7 @@ describe("版本对比：对话框", () => {
     renderApp({ path: `/albums/${album.id}` });
     await heading("Sample Symphonies");
     const dialog = await openDialog(user);
-    expect(await within(dialog).findByText("现在只有一个可见版本")).toBeTruthy();
+    expect(await within(dialog).findByText("现在只有一个版本")).toBeTruthy();
     expect(within(dialog).queryByRole("table")).toBeNull();
   });
 

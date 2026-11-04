@@ -6,13 +6,13 @@ describe("describeFailure", () => {
     const failure = { kind: "network", requestId: "web-1" } as const;
     expect(describeFailure(failure).message).toContain("无法连接到服务器");
     const write = describeFailure(failure, { context: "write" });
-    expect(write.message).toContain("无法确认操作是否已经完成");
+    expect(write.message).toContain("不确定操作有没有完成");
     expect(write.requestId).toBe("web-1");
   });
 
   it("无效响应带请求 ID", () => {
     const description = describeFailure({ kind: "invalid_response", status: 200, requestId: "web-2" });
-    expect(description.message).toContain("无法识别的响应");
+    expect(description.message).toContain("无法识别");
     expect(description.requestId).toBe("web-2");
   });
 

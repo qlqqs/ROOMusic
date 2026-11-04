@@ -44,7 +44,7 @@ function SearchResults({ query, currentGroupId, selectedId, disabled, onSelect }
   const groups = results.data.items.filter((group) => group.id !== currentGroupId);
   const more = results.data.pagination.total > results.data.items.length;
   if (groups.length === 0) {
-    return <p className={styles.hint}>{more ? "前几张匹配的专辑里没有可以归入的，请输入更精确的搜索词。" : "没有找到可以归入的专辑。可以换个搜索词再试。"}</p>;
+    return <p className={styles.hint}>{more ? "没找到可以归入的专辑，换个更准确的词试试。" : "没有找到可以归入的专辑。可以换个搜索词再试。"}</p>;
   }
   return (
     <fieldset className={styles.results} disabled={disabled}>
@@ -68,7 +68,7 @@ function SearchResults({ query, currentGroupId, selectedId, disabled, onSelect }
           </li>
         ))}
       </ul>
-      {more ? <p className={styles.hint}>只显示最相关的 {results.data.items.length} 张专辑；找不到的话，请输入更精确的搜索词。</p> : null}
+      {more ? <p className={styles.hint}>只显示最相关的 {results.data.items.length} 张专辑，找不到可以换个更准确的词。</p> : null}
     </fieldset>
   );
 }
@@ -99,7 +99,7 @@ function JoinAlbumForm({ titleId, headingRef, release, currentGroupId, commands,
     event.preventDefault();
     const bytes = utf8ByteLength(draft.trim());
     if (bytes > MAX_SEARCH_BYTES) {
-      setSearchError(`搜索词最多 ${MAX_SEARCH_BYTES} 个字节（约 ${Math.floor(MAX_SEARCH_BYTES / 3)} 个汉字），现在是 ${bytes} 个字节。`);
+      setSearchError("搜索词太长了，请短一些。");
       return;
     }
     const text = parseSearchText(draft);
@@ -129,7 +129,7 @@ function JoinAlbumForm({ titleId, headingRef, release, currentGroupId, commands,
         把这个版本归入其他专辑
       </h2>
       <p className={styles.lead}>
-        《{release.title}》会和你选择的专辑放在一起，作为同一张专辑的版本显示。不会改动音乐文件，之后可以撤销。
+        《{release.title}》会和你选的专辑合在一起，之后可以撤销。
       </p>
       <form role="search" aria-label="搜索要归入的专辑" className={styles.search} onSubmit={search}>
         <div className={styles.searchRow}>
@@ -154,7 +154,7 @@ function JoinAlbumForm({ titleId, headingRef, release, currentGroupId, commands,
           </div>
         </div>
       </form>
-      {query === undefined ? <p className={styles.hint}>输入标题或艺人，找到要归入的专辑。</p> : <SearchResults query={query} currentGroupId={currentGroupId} selectedId={selected?.id ?? null} disabled={pending} onSelect={(group) => setSelectedId(group.id)} />}
+      {query === undefined ? null : <SearchResults query={query} currentGroupId={currentGroupId} selectedId={selected?.id ?? null} disabled={pending} onSelect={(group) => setSelectedId(group.id)} />}
       <div className={styles.footer}>
         {selected === null ? null : (
           <p className={styles.preview} role="status">

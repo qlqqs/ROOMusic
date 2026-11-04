@@ -6,7 +6,7 @@ export function LoginPage() {
   const notice = session.status === "anonymous" ? session.notice : null;
   const username = session.status === "anonymous" ? session.username : null;
   return (
-    <AuthLayout title="登录" description="登录后管理你的音乐资料库。">
+    <AuthLayout title="登录">
       <LoginForm notice={notice} initialUsername={username} />
     </AuthLayout>
   );

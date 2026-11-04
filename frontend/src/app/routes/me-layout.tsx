@@ -8,7 +8,7 @@ import styles from "./me-layout.module.css";
  */
 export function MeLayout() {
   return (
-    <Page title="我的音乐" description="只属于你自己的聆听记录，其他成员和管理员都看不到。">
+    <Page title="我的音乐">
       <nav aria-label="我的音乐" className={styles.tabs}>
         <ul className={styles.list}>
           <li>

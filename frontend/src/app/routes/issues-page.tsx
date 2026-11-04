@@ -13,7 +13,7 @@ export function IssuesPage({ search }: { search: IssuesSearch }) {
   const refresh = useReleaseDataRefresh();
   const commands = useReleaseCommands({ refresh, onMoved: stayOnPage });
   return (
-    <Page title="元数据问题" description="扫描拿不准、需要人看一眼的地方，按版本列出。字段可以在“编辑发行信息”里修改；来源与介质类型、归组冲突与缺失曲目看过之后可以标记为已核对，扫描发现情况变了会重新提醒。">
+    <Page title="元数据问题">
       <IssuesView search={search} commands={commands} />
     </Page>
   );

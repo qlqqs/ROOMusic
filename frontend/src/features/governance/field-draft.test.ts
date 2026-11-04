@@ -58,10 +58,10 @@ describe("fieldError", () => {
     expect(fieldError("genre", { mode: "custom", text: " 古典 " })).toBeNull();
   });
 
-  it("年份必须是 1 到 9999 的整数", () => {
+  it("年份必须是 1 到 9999 的整数，否则提示填写有效的年份", () => {
     for (const text of ["1", "1975", "9999", " 2001 "]) expect(fieldError("year", { mode: "custom", text })).toBeNull();
     for (const text of ["0", "10000", "19.5", "二〇〇一", "1e3", "-5", "+5", "abc"]) {
-      expect(fieldError("year", { mode: "custom", text }), text).toBe("年份必须是 1 到 9999 的整数。");
+      expect(fieldError("year", { mode: "custom", text }), text).toBe("请填写有效的年份。");
     }
   });
 
@@ -111,7 +111,7 @@ describe("planChanges", () => {
 
   it("有错误的字段只报告错误，不进入提交；其余字段照常提交", () => {
     const planned = planChanges(initial, { title: { mode: "empty", text: "" }, year: { mode: "custom", text: "abc" }, genre: { mode: "empty", text: "" } });
-    expect(planned.errors).toEqual({ title: "标题不能留空。", year: "年份必须是 1 到 9999 的整数。" });
+    expect(planned.errors).toEqual({ title: "标题不能留空。", year: "请填写有效的年份。" });
     expect(planned.changes).toEqual({ genre: { mode: "null" } });
     expect(planned.fields).toEqual(["genre"]);
   });

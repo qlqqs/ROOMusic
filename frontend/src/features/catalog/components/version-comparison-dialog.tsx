@@ -26,15 +26,15 @@ function ComparisonBody({ comparison, groupId, list, onClose }: Pick<ContentProp
   const { releases } = comparison;
   // 对话框打开期间别人重新扫描、版本只剩一个：没有可以对比的内容，如实说明。
   if (releases.length < 2) {
-    return <Notice tone="info" title="现在只有一个可见版本">这张专辑刚发生了变化，没有可以对比的版本。关闭后页面会刷新版本列表。</Notice>;
+    return <Notice tone="info" title="现在只有一个版本">这张专辑刚有变化，没有可以对比的版本了。</Notice>;
   }
   const rows = comparisonRows(releases);
   const first = releases[0];
   return (
     <>
       <p className={styles.lead}>
-        以{versionLabel(0)} 为基准：与它不同的内容用金色下划线标出，没有记录的写“—”。
-        {first?.id === comparison.default_release_id ? `${versionLabel(0)} 是这张专辑的默认版本。` : ""}这里只如实列出各版本的信息，不做优劣判断。
+        和{versionLabel(0)} 不同的地方用金色下划线标出。
+        {first?.id === comparison.default_release_id ? `${versionLabel(0)} 是这张专辑的默认版本。` : ""}
       </p>
       <ComparisonTable
         releases={releases}

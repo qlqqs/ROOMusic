@@ -16,7 +16,7 @@ test.describe("目录", () => {
 
     await page.getByLabel("目录路径").fill("/etc");
     await page.getByRole("button", { name: "添加目录" }).click();
-    await expect(page.getByText("路径不在服务器允许的音乐根目录内，或不是有效的绝对路径。")).toBeVisible();
+    await expect(page.getByText("这个路径不在允许的音乐目录里，或者不是绝对路径。")).toBeVisible();
     await expect(page.getByLabel("目录路径")).toHaveValue("/etc");
 
     await page.getByLabel("目录路径").fill("/music/new-album");
@@ -36,7 +36,7 @@ test.describe("目录", () => {
     await page.goto("/library");
     await rootsTable(page).getByRole("button", { name: "停用目录 classical-a" }).click();
     const dialog = page.getByRole("dialog", { name: "停用目录“classical-a”？" });
-    await expect(dialog).toContainText("已经入库的内容会保留");
+    await expect(dialog).toContainText("恢复后就能再播");
     await dialog.getByRole("button", { name: "停用目录" }).click();
     await expect(page.getByText(/已停用目录“classical-a”/)).toBeVisible();
     await expect(dialog).toBeHidden();
@@ -61,7 +61,7 @@ test.describe("目录", () => {
     mock.roots = mock.roots.map((root) => (root.name === "classical-a" ? { ...root, revision: 7 } : root));
 
     await dialog.getByRole("button", { name: "停用目录" }).click();
-    await expect(page.getByRole("alert").filter({ hasText: "目录已发生变化，列表已刷新" })).toBeVisible();
+    await expect(page.getByRole("alert").filter({ hasText: "目录刚有变化，列表已刷新" })).toBeVisible();
     await expect(dialog).toBeHidden();
     await expect(rootsTable(page).getByRole("row", { name: /classical-a/ })).toContainText("启用");
   });
@@ -149,7 +149,7 @@ test.describe("扫描", () => {
     await expect(page.getByRole("button", { name: "开始扫描" })).toBeVisible();
   });
 
-  test("扫描不完整：说明没有执行缺失对账，列出诊断汇总与明细（路径只显示相对路径）", async ({ page, backend }) => {
+  test("扫描不完整：说明已有的曲目不受影响，列出诊断汇总与明细（路径只显示相对路径）", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
     mock.scanOutcome = "incomplete";
     await page.clock.install();
@@ -160,7 +160,7 @@ test.describe("扫描", () => {
       await expect(phaseTag(page)).toHaveText("不完整", { timeout: 500 });
     }).toPass({ timeout: 10_000 });
 
-    await expect(page.getByRole("region", { name: "状态" })).toContainText("没有执行缺失对账");
+    await expect(page.getByRole("region", { name: "状态" })).toContainText("已有的曲目不受影响");
     const summary = page.getByRole("list", { name: "按类别汇总" });
     await expect(summary).toContainText("音频解析失败");
     const table = page.getByRole("table", { name: "诊断明细" });
@@ -178,14 +178,14 @@ test.describe("扫描", () => {
 
     await page.getByRole("button", { name: "取消扫描" }).click();
     await expect(phaseTag(page)).toHaveText("取消请求中");
-    await expect(page.getByRole("region", { name: "状态" })).toContainText("取消请求已提交，等待扫描停止");
+    await expect(page.getByRole("region", { name: "状态" })).toContainText("正在取消，当前这一步做完就会停下");
     await expect(page.getByRole("button", { name: "取消扫描" })).toHaveCount(0);
 
     await expect(async () => {
       await page.clock.fastForward(2000);
       await expect(phaseTag(page)).toHaveText("已取消", { timeout: 500 });
     }).toPass({ timeout: 10_000 });
-    await expect(page.getByRole("region", { name: "状态" })).toContainText("没有执行缺失对账");
+    await expect(page.getByRole("region", { name: "状态" })).toContainText("已有的曲目不受影响");
 
     const before = mock.callsTo("GET", `/api/v1/scans/${scan.id}/diagnostics`).length;
     await page.getByRole("button", { name: "刷新诊断" }).click();

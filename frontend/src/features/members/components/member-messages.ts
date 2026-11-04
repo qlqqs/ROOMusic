@@ -4,6 +4,6 @@ import { invalidAccountMessage } from "../../auth";
 export const memberFailureMessages = {
   username_taken: "用户名已存在，请换一个。",
   invalid_input: invalidAccountMessage,
-  last_admin: "不能停用最后一个启用的管理员。请先确保还有另一个启用的管理员。",
+  last_admin: "不能停用最后一个管理员。",
   not_found: "成员已不存在，列表已刷新。",
 } as const;

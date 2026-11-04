@@ -42,7 +42,7 @@ test.describe("设定默认版本", () => {
     await expect(versionNav(page).getByText("默认版本")).toHaveCount(0);
 
     await page.getByRole("button", { name: "设为默认版本" }).click();
-    await expect(page.getByText("已把这个版本设为默认版本。专辑列表和打开这张专辑时会先显示它。")).toBeVisible();
+    await expect(page.getByText("已把这个版本设为默认版本。")).toBeVisible();
     const [set] = defaultCalls(mock);
     expect(set?.body).toEqual({ expected_revision: 1, release_id: versions[1]?.id });
     expect(set?.idempotencyKey).toMatch(uuidPattern);
@@ -80,7 +80,7 @@ test.describe("设定默认版本", () => {
     await tabTo(page, (name) => name === "设为默认版本", 40);
     await expectVisibleFocusRing(page, "设为默认版本按钮");
     await page.keyboard.press("Enter");
-    await expect(page.getByText("已把这个版本设为默认版本。专辑列表和打开这张专辑时会先显示它。")).toBeVisible();
+    await expect(page.getByText("已把这个版本设为默认版本。")).toBeVisible();
     // 提交之后焦点没有丢到页面顶部：仍在这个按钮上（它现在叫“改回自动选择”）。
     await expect(page.getByRole("button", { name: "改回自动选择" })).toBeFocused();
     await tabTo(page, (name) => name === "撤销", 8);

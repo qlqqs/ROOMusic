@@ -34,7 +34,7 @@ export function RootSection() {
       <QueryContent query={roots} loading={<Skeleton label="正在加载目录" lines={3} />}>
         {(items) =>
           items.length === 0 ? (
-            <p>还没有登记音乐目录。在上方输入服务器上的绝对路径，添加第一个目录。</p>
+            <p>还没有音乐目录，在上方添加一个。</p>
           ) : (
             <RootTable
               roots={items}

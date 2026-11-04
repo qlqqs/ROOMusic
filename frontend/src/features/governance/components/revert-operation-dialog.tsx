@@ -100,7 +100,7 @@ export function RevertOperationDialog({ item, current, commands, onClose }: Reve
               <li key={index}>{line}</li>
             ))}
           </ul>
-          <p>不会改动音乐文件。撤销会留下一条自己的记录，它不能再被撤销；需要时可以重新修改。</p>
+          <p>撤销之后不能再撤销，需要时可以重新修改。</p>
         </>
       )}
     </ConfirmDialog>

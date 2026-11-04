@@ -3,10 +3,10 @@
 
 export const governanceFailureMessages = {
   revision_conflict: "这张专辑刚被修改过，页面已刷新。请核对当前内容后再操作。",
-  idempotency_conflict: "这次操作的标识与之前的另一个请求冲突。请重新发起操作。",
-  not_found: "这个版本已不可见（可能刚被重新扫描），无法继续操作。",
+  idempotency_conflict: "操作冲突了，请再试一次。",
+  not_found: "这个版本已经找不到了，可能刚重新扫描过。",
   group_not_found: "目标专辑已不存在，或者没有可见的版本。请重新搜索。",
-  not_in_group: "这个版本已不在这张专辑里，或现在不可见，页面已刷新。请核对后再操作。",
+  not_in_group: "这个版本已经不在这张专辑里了，页面已刷新。",
   same_group: "这个版本已经在这张专辑里了。",
   already_alone: "这个版本已经是独立专辑，不需要再移出。",
   no_changes: "没有需要修改的内容。",
@@ -14,5 +14,5 @@ export const governanceFailureMessages = {
   already_reverted: "这条操作已经撤销过了，记录已刷新。",
   revert_conflict: "这张专辑之后又被修改过，不能撤销这一条。只有最近一次修改可以撤销。",
   issue_changed: "扫描刚刚改变了这个问题，已重新读取，请看过之后再核对。",
-  forbidden: "你的账号没有执行这个操作的权限。",
+  forbidden: "你没有权限做这个操作。",
 } as const;

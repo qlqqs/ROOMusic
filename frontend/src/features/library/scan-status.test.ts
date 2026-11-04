@@ -18,9 +18,9 @@ describe("scanPhase", () => {
     expect(new Set(phases.map((phase) => scanPhaseNotes[phase])).size).toBe(6);
   });
 
-  it("失败、已取消、不完整都说明没有执行缺失对账，运行中不暗示进度", () => {
-    for (const phase of ["failed", "canceled", "incomplete"] as const) expect(scanPhaseNotes[phase]).toContain("没有执行缺失对账");
-    expect(scanPhaseNotes.succeeded).not.toContain("没有执行缺失对账");
+  it("失败、已取消、不完整都说明已有的曲目不受影响，运行中不暗示进度", () => {
+    for (const phase of ["failed", "canceled", "incomplete"] as const) expect(scanPhaseNotes[phase]).toContain("已有的曲目不受影响");
+    expect(scanPhaseNotes.succeeded).not.toContain("已有的曲目不受影响");
     for (const note of Object.values(scanPhaseNotes)) expect(note).not.toMatch(/\d+\s*%/);
   });
 });

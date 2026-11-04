@@ -58,12 +58,12 @@ export function ScanHistorySection({ page }: { page: number }) {
           outOfRange ? (
             <Skeleton label="正在加载扫描记录" lines={3} />
           ) : data.pagination.total === 0 ? (
-            <p>还没有扫描记录。开始一次扫描后，它会出现在这里。</p>
+            <p>还没有扫描记录。</p>
           ) : (
             <div aria-busy={history.isPlaceholderData}>
               <DataTable caption="扫描记录" columns={columns} rows={data.items} rowKey={(scan) => scan.id} />
               <p className={styles.note}>
-                共 {formatCount(data.pagination.total)} 次扫描，最新的在前，每页 {data.pagination.page_size} 条。
+                共 {formatCount(data.pagination.total)} 次扫描
               </p>
               <Pagination
                 label="扫描记录分页"

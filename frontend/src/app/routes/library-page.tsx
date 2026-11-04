@@ -7,7 +7,7 @@ import { Page } from "../../shared/ui";
  */
 export function LibraryPage({ scanPage }: { scanPage: number }) {
   return (
-    <Page title="扫描目录" description="管理音乐目录并启动扫描。界面只显示目录名，不显示服务器上的完整路径。">
+    <Page title="扫描目录">
       <ScanSection />
       <RootSection />
       <ScanHistorySection page={scanPage} />

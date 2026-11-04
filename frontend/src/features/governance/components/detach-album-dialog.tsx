@@ -49,9 +49,9 @@ export function DetachAlbumDialog({ release, isDefault, commands, onClose }: Det
         onClose();
       }}
     >
-      <p>《{release?.title ?? ""}》会从现在的专辑里分出来，成为单独的一张专辑；这张专辑里的其他版本不受影响。</p>
-      {isDefault ? <p>它是这张专辑的默认版本；移出后专辑改按自动规则显示。它以后回到这张专辑时，会重新成为默认版本。</p> : null}
-      <p>不会改动音乐文件。之后可以撤销，也可以再把它归入别的专辑。</p>
+      <p>《{release?.title ?? ""}》会从现在的专辑里分出来，成为单独的一张专辑。</p>
+      {isDefault ? <p>它是这张专辑的默认版本，移出后会自动另选一个。</p> : null}
+      <p>之后可以撤销。</p>
     </ConfirmDialog>
   );
 }

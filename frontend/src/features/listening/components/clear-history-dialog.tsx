@@ -9,7 +9,7 @@ type ClearHistoryDialogProps = {
 };
 
 /**
- * 清除播放历史前的确认：说明影响范围（只有自己的记录）与后果（不能恢复）。
+ * 清除播放历史前的确认：说明后果（不能恢复）。
  * 失败时对话框保持打开，错误显示在其中，“确认”变成“重试清除”（清除是幂等的，重试安全）。
  */
 export function ClearHistoryDialog({ open, state, onConfirm, onCancel }: ClearHistoryDialogProps) {
@@ -24,8 +24,7 @@ export function ClearHistoryDialog({ open, state, onConfirm, onCancel }: ClearHi
       onConfirm={onConfirm}
       onCancel={onCancel}
     >
-      <p>将清除你自己的全部播放记录，不影响其他成员。</p>
-      <p>清除后不能恢复。</p>
+      <p>全部播放记录都会被清除，不能恢复。</p>
     </ConfirmDialog>
   );
 }

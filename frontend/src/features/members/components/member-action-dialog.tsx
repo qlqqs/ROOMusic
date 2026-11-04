@@ -29,15 +29,11 @@ export function MemberActionDialog({ action, isSelf, pending, onConfirm, onCance
       onConfirm={onConfirm}
       onCancel={onCancel}
     >
-      {isSelf ? <Notice tone="warning">这是你自己的账号：确认后你会被立即退出登录。</Notice> : null}
+      {isSelf ? <Notice tone="warning">这是你自己的账号，确认后你会马上退出登录。</Notice> : null}
       {disabling ? (
-        <>
-          <p>停用后，该成员会被立即退出登录，全部会话都会被撤销，在重新启用之前无法再登录。</p>
-          <p>账号不会被删除，之后可以重新启用。</p>
-          {action?.member.role === "admin" ? <p>如果这是最后一个启用的管理员，服务器会拒绝停用。</p> : null}
-        </>
+        <p>停用后对方会马上退出登录，之后可以重新启用。</p>
       ) : (
-        <p>该成员会被立即退出登录，所有已登录的设备都需要重新登录。账号本身不受影响，仍可再次登录。</p>
+        <p>对方的所有设备都会退出登录，需要重新登录。</p>
       )}
     </ConfirmDialog>
   );

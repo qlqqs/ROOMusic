@@ -76,7 +76,7 @@ describe("扫描目录页：访问与列表", () => {
   it("空列表时提示添加第一个目录", async () => {
     setup({ library: { roots: [], operations: [] } });
     renderApp({ path: "/library" });
-    expect(await screen.findByText(/还没有登记音乐目录/)).toBeTruthy();
+    expect(await screen.findByText(/还没有音乐目录/)).toBeTruthy();
     expect(screen.getByText("还没有目录操作记录。")).toBeTruthy();
   });
 });
@@ -100,13 +100,13 @@ describe("新增目录", () => {
     await addRoot("/elsewhere/album");
 
     const input = screen.getByLabelText("目录路径") as HTMLInputElement;
-    expect(await screen.findByText("路径不在服务器允许的音乐根目录内，或不是有效的绝对路径。")).toBeTruthy();
+    expect(await screen.findByText("这个路径不在允许的音乐目录里，或者不是绝对路径。")).toBeTruthy();
     expect(input.getAttribute("aria-invalid")).toBe("true");
     expect(input.value).toBe("/elsewhere/album");
     expect(screen.queryByRole("alert")).toBeNull();
 
     await userEvent.type(input, "x");
-    expect(screen.queryByText("路径不在服务器允许的音乐根目录内，或不是有效的绝对路径。")).toBeNull();
+    expect(screen.queryByText("这个路径不在允许的音乐目录里，或者不是绝对路径。")).toBeNull();
   });
 
   it("没有填写路径：不发请求，提示填写", async () => {
@@ -119,14 +119,14 @@ describe("新增目录", () => {
   it("路径已登记且停用：说明已登记但没有自动恢复，列表不变", async () => {
     await openLibrary();
     await addRoot("/music/classical-b");
-    expect(await screen.findByText(/已经登记，当前处于停用状态，没有自动恢复/)).toBeTruthy();
+    expect(await screen.findByText(/已经添加过，现在是停用的/)).toBeTruthy();
     expect(within(rowOf("classical-b")).getByText("已停用")).toBeTruthy();
   });
 
   it("路径已登记且启用：说明列表没有变化", async () => {
     await openLibrary();
     await addRoot("/music/classical-a");
-    expect(await screen.findByText(/已经登记，列表没有变化/)).toBeTruthy();
+    expect(await screen.findByText(/已经添加过了。/)).toBeTruthy();
   });
 
   it("响应丢失（服务端已执行）：提示结果未确认，列表已显示新目录，重试沿用同一个幂等键且不重复创建", async () => {
@@ -135,13 +135,13 @@ describe("新增目录", () => {
 
     const alert = await screen.findByRole("alert");
     expect(within(alert).getByText("结果未确认")).toBeTruthy();
-    expect(within(alert).getByText(/无法确认操作是否已经完成/)).toBeTruthy();
+    expect(within(alert).getByText(/不确定操作有没有完成/)).toBeTruthy();
     expect(await screen.findByRole("rowheader", { name: "lost-response" })).toBeTruthy();
     expect((screen.getByLabelText("目录路径") as HTMLInputElement).value).toBe("/music/lost-response");
 
     const operationsBefore = library.operations.length;
     await userEvent.click(within(alert).getByRole("button", { name: "重试" }));
-    expect(await screen.findByText(/已经登记，列表没有变化/)).toBeTruthy();
+    expect(await screen.findByText(/已经添加过了。/)).toBeTruthy();
 
     const [first, second] = api.requestsTo("POST", rootsPath);
     expect(second?.headers.get("Idempotency-Key")).toBe(first?.headers.get("Idempotency-Key"));
@@ -161,7 +161,7 @@ describe("新增目录", () => {
     await userEvent.type(input, "/music/other");
 
     await userEvent.click(within(alert).getByRole("button", { name: "重试" }));
-    await screen.findByText(/已经登记，列表没有变化/);
+    await screen.findByText(/已经添加过了。/);
     expect(api.requestsTo("POST", rootsPath).at(-1)?.body).toEqual({ path: "/music/first-try" });
     expect(input.value).toBe("/music/other");
   });
@@ -187,10 +187,7 @@ describe("停用目录", () => {
   it("停用前要确认：对话框说明影响范围，初始焦点在取消上；取消不发请求", async () => {
     const { api } = await openLibrary();
     const dialog = await openDisableDialog();
-    expect(within(dialog).getByText("停用后，扫描会跳过这个目录，其中的曲目也不能播放。")).toBeTruthy();
-    expect(within(dialog).getByText(/不会因为停用而被标为缺失/)).toBeTruthy();
-    expect(within(dialog).getByText(/恢复后即可播放/)).toBeTruthy();
-    expect(within(dialog).getByText(/浏览器已缓存的音频无法收回/)).toBeTruthy();
+    expect(within(dialog).getByText("停用后，扫描会跳过这个目录，里面的曲目也不能播放。恢复后就能再播。")).toBeTruthy();
     expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "取消" }));
 
     await userEvent.click(within(dialog).getByRole("button", { name: "取消" }));
@@ -240,7 +237,7 @@ describe("停用目录", () => {
 
     await userEvent.click(within(dialog).getByRole("button", { name: "停用目录" }));
     const alert = await screen.findByRole("alert");
-    expect(within(alert).getByText(/目录已发生变化，列表已刷新/)).toBeTruthy();
+    expect(within(alert).getByText(/目录刚有变化，列表已刷新/)).toBeTruthy();
     expect(within(alert).getByText("操作没有完成")).toBeTruthy();
     expect(within(alert).queryByRole("button", { name: "重试" })).toBeNull();
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -268,7 +265,7 @@ describe("停用目录", () => {
     api.on("PATCH", `${rootsPath}/${classicalA}`, () => sampleResponse("errors/idempotency-conflict"));
     await userEvent.click(within(await openDisableDialog()).getByRole("button", { name: "停用目录" }));
     const alert = await screen.findByRole("alert");
-    expect(within(alert).getByText("这次操作的标识与之前的另一个请求冲突。请重新发起操作。")).toBeTruthy();
+    expect(within(alert).getByText("操作冲突了，请再试一次。")).toBeTruthy();
     expect(within(alert).queryByRole("button", { name: "重试" })).toBeNull();
   });
 
@@ -278,7 +275,7 @@ describe("停用目录", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: "停用目录" }));
 
     expect(await within(dialog).findByText("结果未确认")).toBeTruthy();
-    expect(within(dialog).getByText(/无法确认操作是否已经完成/)).toBeTruthy();
+    expect(within(dialog).getByText(/不确定操作有没有完成/)).toBeTruthy();
     expect(await within(rowOf("classical-a")).findByText("已停用")).toBeTruthy();
     const operationsBefore = library.operations.length;
 
@@ -345,7 +342,7 @@ describe("恢复目录", () => {
     if (second === undefined) throw new Error("没有种子目录");
     library.roots[1] = { ...second, revision: 9 };
     await userEvent.click(within(rowOf("classical-b")).getByRole("button", { name: "恢复目录 classical-b" }));
-    expect(await screen.findByText(/目录已发生变化，列表已刷新/)).toBeTruthy();
+    expect(await screen.findByText(/目录刚有变化，列表已刷新/)).toBeTruthy();
     expect(within(rowOf("classical-b")).getByText("已停用")).toBeTruthy();
   });
 

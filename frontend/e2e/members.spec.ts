@@ -15,7 +15,6 @@ test.describe("成员管理", () => {
     const mock = await backend.start({ signedInAs: "curator" });
     await page.goto("/members");
     await expect(heading(page, "成员")).toBeVisible();
-    await expect(page.getByText("新成员的角色是“成员”。目前不能在这里创建管理员或修改成员的角色。")).toBeVisible();
 
     await page.getByRole("button", { name: "创建成员" }).click();
     await expect(page.getByText("请输入用户名。")).toBeVisible();
@@ -67,9 +66,9 @@ test.describe("成员管理", () => {
     await page.goto("/members");
     await membersTable(page).getByRole("button", { name: "停用成员 curator" }).click();
     const dialog = page.getByRole("dialog", { name: "停用成员“curator”？" });
-    await expect(dialog).toContainText("这是你自己的账号：确认后你会被立即退出登录。");
+    await expect(dialog).toContainText("这是你自己的账号，确认后你会马上退出登录。");
     await dialog.getByRole("button", { name: "停用成员" }).click();
-    await expect(page.getByRole("alert").filter({ hasText: "不能停用最后一个启用的管理员" })).toBeVisible();
+    await expect(page.getByRole("alert").filter({ hasText: "不能停用最后一个管理员" })).toBeVisible();
     await expect(heading(page, "成员")).toBeVisible();
   });
 

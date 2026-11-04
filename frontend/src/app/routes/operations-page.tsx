@@ -13,7 +13,7 @@ export function OperationsPage({ page, releaseId, groupId }: { page: number; rel
   const refresh = useReleaseDataRefresh();
   const commands = useReleaseCommands({ refresh, onMoved: stayOnPage });
   return (
-    <Page title="操作记录" description="管理员对专辑信息的修改、归组调整、默认版本的设定与撤销，最新的在前。只有最近一次修改可以撤销；目录的新增、停用与恢复记录在“扫描目录”页。">
+    <Page title="操作记录" description="只有最近一次修改可以撤销。">
       <OperationsView page={page} releaseId={releaseId} groupId={groupId} commands={commands} />
     </Page>
   );

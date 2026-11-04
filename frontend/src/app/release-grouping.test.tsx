@@ -70,7 +70,6 @@ describe("归入其他专辑", () => {
     const { history } = renderApp({ path: `/albums/${albumA().id}` });
     await heading("Sample Symphonies");
     const dialog = await openJoin(user);
-    expect(within(dialog).getByText("输入标题或艺人，找到要归入的专辑。")).toBeTruthy();
     const confirmButton = within(dialog).getByRole("button", { name: "归入这张专辑" });
     expect(confirmButton.hasAttribute("disabled")).toBe(true);
 
@@ -141,7 +140,7 @@ describe("归入其他专辑", () => {
     await user.click(within(dialog).getByRole("textbox", { name: "搜索专辑" }));
     await user.paste("古".repeat(70)); // 210 字节
     await user.keyboard("{Enter}");
-    expect(within(dialog).getByText(/搜索词最多 200 个字节/)).toBeTruthy();
+    expect(within(dialog).getByText("搜索词太长了，请短一些。")).toBeTruthy();
     expect(api.requestsTo("GET", "/api/v1/release-groups")).toHaveLength(before);
   });
 
@@ -156,7 +155,7 @@ describe("归入其他专辑", () => {
     await search(user, dialog, "Opus");
     await within(dialog).findByRole("radio", { name: /Opus 1 Many/ });
     expect(within(dialog).getAllByRole("radio")).toHaveLength(10);
-    expect(within(dialog).getByText("只显示最相关的 10 张专辑；找不到的话，请输入更精确的搜索词。")).toBeTruthy();
+    expect(within(dialog).getByText("只显示最相关的 10 张专辑，找不到可以换个更准确的词。")).toBeTruthy();
     await user.click(within(dialog).getByRole("radio", { name: /Opus 1 Many/ }));
     expect(within(dialog).getByRole("status")).toBeTruthy();
     await user.clear(within(dialog).getByRole("textbox", { name: "搜索专辑" }));

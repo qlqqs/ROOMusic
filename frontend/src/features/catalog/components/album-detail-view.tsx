@@ -63,7 +63,7 @@ function BackToList({ list }: { list: AlbumSearch }) {
 
 function AlbumNotFound({ list }: { list: AlbumSearch }) {
   return (
-    <Page title="专辑不存在" description="没有找到这张专辑。" actions={<BackToList list={list} />}>
+    <Page title="专辑不存在" actions={<BackToList list={list} />}>
       <p>它可能已被移除，或者地址不正确。</p>
     </Page>
   );
@@ -114,7 +114,7 @@ function ReleaseGone({ groupId, group, selected }: { groupId: string; group: Rel
   return (
     <Notice
       tone="warning"
-      title="这个版本已不可见"
+      title="这个版本已经找不到了"
       action={
         isRepresentative ? (
           <Button onClick={refreshGroup}>刷新</Button>
@@ -125,7 +125,7 @@ function ReleaseGone({ groupId, group, selected }: { groupId: string; group: Rel
         )
       }
     >
-      可能刚被重新扫描。{isRepresentative ? "刷新后会显示这张专辑现在的内容。" : "可以回到这张专辑的代表版本。"}
+      可能刚重新扫描过。{isRepresentative ? "刷新后会显示这张专辑现在的内容。" : "可以回到这张专辑的代表版本。"}
     </Notice>
   );
 }

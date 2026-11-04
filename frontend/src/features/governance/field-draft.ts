@@ -52,10 +52,10 @@ export function fieldError(field: CorrectableField, draft: FieldDraft): string |
   const text = normalizeText(draft.text);
   if (text === "") return canBeEmpty(field) ? "请输入内容；要清空这个字段，请选择“留空”。" : `${label}不能为空。`;
   if (field === "year") {
-    return /^\d{1,4}$/.test(text) && Number(text) >= 1 ? null : "年份必须是 1 到 9999 的整数。";
+    return /^\d{1,4}$/.test(text) && Number(text) >= 1 ? null : "请填写有效的年份。";
   }
   if (hasControlCharacter(text)) return "含有不允许的字符。";
-  if (new TextEncoder().encode(text).length > MAX_TEXT_BYTES) return `内容太长，不能超过 ${MAX_TEXT_BYTES} 字节。`;
+  if (new TextEncoder().encode(text).length > MAX_TEXT_BYTES) return "内容太长了。";
   return null;
 }
 

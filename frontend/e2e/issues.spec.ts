@@ -78,7 +78,7 @@ test.describe("元数据问题：主流程", () => {
     await section(page, "缺失的曲目（1 首）").getByRole("button", { name: "标记为已核对：缺失曲目" }).click();
     await expect(page.getByText(/已把“缺失曲目”标记为已核对/)).toBeVisible();
     await section(page, "缺失的曲目（1 首）").getByRole("button", { name: "取消核对：缺失曲目" }).click();
-    await expect(page.getByText("已取消“缺失曲目”的核对，它重新计入“需要关注”。")).toBeVisible();
+    await expect(page.getByText("已取消“缺失曲目”的核对。")).toBeVisible();
     await page.getByRole("button", { name: "撤销", exact: true }).click();
     await expect(page.getByText("已撤销这次核对，问题恢复到之前的状态。")).toBeVisible();
     await expect(section(page, "缺失的曲目（1 首）").getByRole("button", { name: "取消核对：缺失曲目" })).toBeVisible();
@@ -107,7 +107,7 @@ test.describe("元数据问题：主流程", () => {
     await dialog.getByRole("button", { name: "确认扫描值" }).click();
     await dialog.getByRole("button", { name: "保存修改" }).click();
     await expect(page.getByText(/已保存修改：标题/)).toBeVisible();
-    await expect(page.getByText("扫描结论里已经没有问题了。")).toBeVisible();
+    await expect(page.getByText("已经没有问题了。")).toBeVisible();
     await expect(page.getByRole("heading", { level: 2, name: "Beethoven: String Quartets" })).toBeVisible();
     await expect(issueList(page).getByRole("link", { name: /^Beethoven/ })).toHaveCount(0);
   });
@@ -208,7 +208,7 @@ test.describe("元数据问题：布局与可访问性", () => {
     await tabTo(page, (name) => name === "取消核对：归组冲突", 30);
     await expectVisibleFocusRing(page, "取消核对");
     await page.keyboard.press("Enter");
-    await expect(page.getByText("已取消“归组冲突”的核对，它重新计入“需要关注”。")).toBeVisible();
+    await expect(page.getByText("已取消“归组冲突”的核对。")).toBeVisible();
     expect(reviewCalls(mock, releaseOf(suites())).map((call) => (call.body as { action: string }).action)).toEqual(["review", "review", "unreview"]);
   });
 });

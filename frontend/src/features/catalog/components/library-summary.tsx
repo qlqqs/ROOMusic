@@ -14,35 +14,32 @@ export function LibrarySummary({ isAdmin }: { isAdmin: boolean }) {
           data.total === 0 ? (
             <p>
               {isAdmin
-                ? "资料库里还没有专辑。添加音乐目录并完成一次扫描后，专辑会出现在这里。"
-                : "资料库里还没有专辑。请等待管理员添加音乐目录并完成扫描。"}
+                ? "资料库里还没有专辑。添加音乐目录并扫描后就会出现。"
+                : "资料库里还没有专辑。"}
             </p>
           ) : (
-            <>
-              <StatList
-                items={[
-                  {
-                    label: "专辑",
-                    value: (
-                      <Link to="/albums" className={styles.statLink}>
-                        {formatCount(data.total)}
-                        <VisuallyHidden>，查看全部专辑</VisuallyHidden>
-                      </Link>
-                    ),
-                  },
-                  {
-                    label: "需要关注",
-                    value: (
-                      <Link to="/albums" search={{ attention: "required" }} className={styles.statLink}>
-                        {formatCount(data.attention)}
-                        <VisuallyHidden>，查看需要关注的专辑</VisuallyHidden>
-                      </Link>
-                    ),
-                  },
-                ]}
-              />
-              <p className={styles.note}>“需要关注”表示有待核对的元数据，不代表一定有错。</p>
-            </>
+            <StatList
+              items={[
+                {
+                  label: "专辑",
+                  value: (
+                    <Link to="/albums" className={styles.statLink}>
+                      {formatCount(data.total)}
+                      <VisuallyHidden>，查看全部专辑</VisuallyHidden>
+                    </Link>
+                  ),
+                },
+                {
+                  label: "需要关注",
+                  value: (
+                    <Link to="/albums" search={{ attention: "required" }} className={styles.statLink}>
+                      {formatCount(data.attention)}
+                      <VisuallyHidden>，查看需要关注的专辑</VisuallyHidden>
+                    </Link>
+                  ),
+                },
+              ]}
+            />
           )
         }
       </QueryContent>

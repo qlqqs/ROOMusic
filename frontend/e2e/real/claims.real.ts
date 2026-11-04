@@ -133,7 +133,7 @@ test("旧版本出现在“待认领”：写明原来的专辑、位置和留�
   await expect(page.getByRole("table", { name: "旧版本上的问题核对" })).toContainText("归组冲突");
 
   // 推荐：新版本排第一，两个理由都命中；同目录的 X、Y 只是同一目录。
-  const options = page.getByRole("group", { name: "推荐的版本（按文件路径与目录）" }).getByRole("radio");
+  const options = page.getByRole("group", { name: "推荐的版本" }).getByRole("radio");
   await expect(options.first()).toBeVisible();
   const first = options.first().locator("xpath=ancestor::label");
   await expect(first).toContainText(one.album);
@@ -147,7 +147,7 @@ test("在页面上认领：预览四类都迁移、核对立即生效；认领�
   await page.setViewportSize({ width: 1440, height: 900 });
   expect((await issuesOf(page.request, newOneId)).release.attention_count).toBe(1);
   await page.goto(`/claims?release=${oldOne.releaseId}`);
-  await page.getByRole("group", { name: "推荐的版本（按文件路径与目录）" }).getByRole("radio").first().check();
+  await page.getByRole("group", { name: "推荐的版本" }).getByRole("radio").first().check();
   await expect(page).toHaveURL(new RegExp(`target=${newOneId}`));
   const items = page.getByRole("list", { name: "认领会怎样处理旧版本上的修改" }).getByRole("listitem");
   await expect(items).toHaveCount(4);
@@ -155,7 +155,7 @@ test("在页面上认领：预览四类都迁移、核对立即生效；认领�
   await expect(items.nth(1)).toContainText(`迁移所在的专辑这个版本会归入旧版本原来的专辑《${two}》`);
   await expect(items.nth(2)).toContainText(`迁移默认版本这个版本接任《${two}》的默认版本`);
   await expect(items.nth(3)).toContainText("迁移核对 · 归组冲突");
-  await expect(items.nth(3)).toContainText("这个版本现在有同样的问题，依据相同，核对立即生效");
+  await expect(items.nth(3)).toContainText("这个版本有同样的问题，核对会直接生效");
 
   const operationsBefore = await operationTotal(page.request);
   await claimButton(page).click();
@@ -198,7 +198,7 @@ test("撤销认领：新版本回到认领之前，旧版本又在待认领里�
   await expect(row).toContainText(`从《${one.corrected}》（已不可见）认领：修正 标题；专辑；默认版本；核对 归组冲突`);
   await row.getByRole("button", { name: /^撤销/ }).click();
   await page.getByRole("dialog", { name: "撤销这次认领？" }).getByRole("button", { name: "撤销" }).click();
-  await expect(page.getByText("已撤销这次认领：修改还给了已不可见的旧版本，这个版本回到认领之前的样子。")).toBeVisible();
+  await expect(page.getByText("已撤销这次认领，修改还给了旧版本。")).toBeVisible();
 
   // 新版本：扫描值的标题、没有核对、不在 Two 的专辑里；旧版本拿回了它的四类状态。
   expect((await releaseOf(page.request, newOneId)).title).toBe(one.album);

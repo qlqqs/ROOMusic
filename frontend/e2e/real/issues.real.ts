@@ -139,7 +139,7 @@ test("原样重扫之后核对保持，扫描不改核对与操作记录；A 多
 test("取消核对之后重新计入；在专辑的“修改记录”里撤销这次取消，核对回来；更早的核对之后又有修改，不能撤销", async ({ page }) => {
   await page.goto(`/issues?release=${splitA.releaseId}`);
   await section(page, /^缺失的曲目/).getByRole("button", { name: "取消核对：缺失曲目" }).click();
-  await expect(page.getByText("已取消“缺失曲目”的核对，它重新计入“需要关注”。")).toBeVisible();
+  await expect(page.getByText("已取消“缺失曲目”的核对。")).toBeVisible();
   expect(await attentionOf(page.request, splitA.releaseId)).toBe(1);
 
   await page.goto(`/albums/${splitA.groupId}`);

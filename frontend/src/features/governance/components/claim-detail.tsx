@@ -107,11 +107,11 @@ export function ClaimDetail({ detail, targetId, onSelectTarget, commands }: Clai
         </h2>
         <p className={styles.meta}>{[release.artist, release.edition].filter((part) => part !== null).join(" · ")}</p>
         <p className={styles.meta}>
-          已不可见：扫描没有在原来的位置找到它的音乐文件。最后在 {locationText(detail.location)}，{formatDateTime(detail.last_seen_at)} 最后一次看到。
+          扫描时没找到它的音乐文件，最后一次是 {formatDateTime(detail.last_seen_at)} 在 {locationText(detail.location)} 看到的。
         </p>
       </header>
       <p className={styles.explain}>
-        扫描认为这是另一个版本，新建了一个发行，你在这个旧版本上做过的修改被留在原处，看不到效果，也改不了。下面是它留着的修改。
+        你在这个旧版本上做的修改现在看不到效果，下面是它留着的修改。
       </p>
       {detail.corrections.length === 0 ? null : <CorrectionsSection corrections={detail.corrections} />}
       <AlbumSection detail={detail} />
@@ -120,7 +120,7 @@ export function ClaimDetail({ detail, targetId, onSelectTarget, commands }: Clai
         <h3 id="claim-target" tabIndex={-1}>
           选择接替它的版本
         </h3>
-        <p className={styles.explain}>选一个现在可见的版本，旧版本上的修改会迁给它。新版本上已经有的修改以新版本为准，下面的预览逐项说明。</p>
+        <p className={styles.explain}>旧版本上的修改会迁给你选的版本，新版本已有的修改不会被覆盖。</p>
         <fieldset className={styles.pickerLock} disabled={pending}>
           <ClaimTargetPicker suggestions={detail.suggestions} selectedId={targetId} onSelect={onSelectTarget} />
         </fieldset>

@@ -85,9 +85,9 @@ const claimsPath = (release?: string, target?: string) => {
   return query.size === 0 ? "/claims" : `/claims?${query}`;
 };
 const claimCalls = (mock: ApiMock, releaseId: string) => mock.callsTo("POST", `/api/v1/releases/${releaseId}/claim`);
-const claimList = (page: Page) => page.locator("section").filter({ has: page.getByRole("heading", { level: 2, name: "已不可见、留有修改的版本" }) });
+const claimList = (page: Page) => page.locator("section").filter({ has: page.getByRole("heading", { level: 2, name: "留有修改的旧版本" }) });
 const claimDetailOf = (page: Page, title: string) => page.getByRole("article").filter({ has: page.getByRole("heading", { level: 2, name: title }) });
-const pickSuggestion = (page: Page, title: string) => page.getByRole("group", { name: "推荐的版本（按文件路径与目录）" }).getByRole("radio", { name: new RegExp(title) });
+const pickSuggestion = (page: Page, title: string) => page.getByRole("group", { name: "推荐的版本" }).getByRole("radio", { name: new RegExp(title) });
 const claimButton = (page: Page, title: string) => page.getByRole("button", { name: `认领到《${title}》` });
 
 /** 元素里第一个文本节点的前 length 个字符占了几行：日期被断成“2026-01- / 03”时是 2。 */
@@ -134,7 +134,7 @@ test.describe("待认领：主流程", () => {
     await claimList(page).getByRole("link", { name: /^Bach: Cello Suites \(my corrections\)/ }).click();
     await expect(page).toHaveURL(new RegExp(`release=${oldId}`));
     const shown = claimDetailOf(page, "Bach: Cello Suites (my corrections)");
-    await expect(shown.getByText(/已不可见：扫描没有在原来的位置找到它的音乐文件/)).toBeVisible();
+    await expect(shown.getByText(/扫描时没找到它的音乐文件/)).toBeVisible();
 
     await pickSuggestion(page, "Bach: Cello Suites \\(new rip\\)").check();
     await expect(page).toHaveURL(new RegExp(`target=${suitesId()}`));
@@ -143,7 +143,7 @@ test.describe("待认领：主流程", () => {
     await expect(items.nth(0)).toContainText("迁移修正 · 标题");
     await expect(items.nth(2)).toContainText("迁移所在的专辑这个版本会归入旧版本原来的专辑《Bach: Cello Suites Collection》");
     await expect(items.nth(3)).toContainText("迁移默认版本这个版本接任《Bach: Cello Suites Collection》的默认版本");
-    await expect(items.nth(4)).toContainText("这个版本现在有同样的问题，依据相同，核对立即生效");
+    await expect(items.nth(4)).toContainText("这个版本有同样的问题，核对会直接生效");
 
     await claimButton(page, "Bach: Cello Suites (new rip)").click();
     // 提示写的是发起命令时的标题：认领之前新版本还叫 (new rip)。
@@ -152,11 +152,11 @@ test.describe("待认领：主流程", () => {
     expect(call?.body).toEqual({ expected_revision: expect.any(Number), source_release_id: oldId, source_revision: 2, preview: expect.stringMatching(/^[0-9a-f]{64}$/) });
     expect(call?.idempotencyKey).toMatch(uuidPattern);
     await expect(claimList(page).getByRole("link", { name: /^Bach: Cello Suites \(my corrections\)/ })).toHaveCount(0);
-    await expect(page.getByText("这个版本现在不需要认领：它的文件回来了，或者它的修改已经认领给了别的版本。")).toBeVisible();
+    await expect(page.getByText("这个版本已经不需要认领了。")).toBeVisible();
     await expect(page.getByRole("link", { name: "打开这张专辑" })).toHaveAttribute("href", /\/albums\/00000000-0000-4000-8000-0000000000f7\?release=/);
 
     await page.getByRole("button", { name: "撤销", exact: true }).click();
-    await expect(page.getByText("已撤销这次认领：修改还给了已不可见的旧版本，这个版本回到认领之前的样子。")).toBeVisible();
+    await expect(page.getByText("已撤销这次认领，修改还给了旧版本。")).toBeVisible();
     await expect(claimList(page).getByRole("link", { name: /^Bach: Cello Suites \(my corrections\)/ })).toBeVisible();
     expect(mock.callsTo("POST", /\/revert$/)).toHaveLength(1);
   });
@@ -219,7 +219,7 @@ test.describe("待认领：主流程", () => {
     await expect(row).toContainText("从《Bach: Cello Suites (my corrections)》（已不可见）认领：修正 标题、流派；专辑；默认版本；核对 介质类型");
     await row.getByRole("button", { name: /撤销/ }).click();
     await page.getByRole("dialog", { name: "撤销这次认领？" }).getByRole("button", { name: "撤销" }).click();
-    await expect(page.getByText("已撤销这次认领：修改还给了已不可见的旧版本，这个版本回到认领之前的样子。")).toBeVisible();
+    await expect(page.getByText("已撤销这次认领，修改还给了旧版本。")).toBeVisible();
     await expect(page.getByRole("row").nth(1)).toContainText("撤销认领");
     await expect(page.getByRole("row").nth(2)).toContainText("已撤销");
   });
@@ -257,9 +257,9 @@ test.describe("待认领：布局与可访问性", () => {
       await expectNoSeriousViolations(page, `待认领详情与预览 @${width}px`);
       if (width >= 768) await expectNoDocumentScroll(page, `待认领详情与预览 @${width}px`);
       if (columns === "sequential") {
-        await expect(page.getByRole("heading", { level: 2, name: "已不可见、留有修改的版本" })).toHaveCount(0);
+        await expect(page.getByRole("heading", { level: 2, name: "留有修改的旧版本" })).toHaveCount(0);
         await page.getByRole("link", { name: "返回待认领列表" }).click();
-        await expect(page.getByRole("heading", { level: 2, name: "已不可见、留有修改的版本" })).toBeVisible();
+        await expect(page.getByRole("heading", { level: 2, name: "留有修改的旧版本" })).toBeVisible();
         await expectNoHorizontalOverflow(page, `待认领列表 @${width}px`);
         await expectNoSeriousViolations(page, `待认领列表 @${width}px`);
       } else {
@@ -310,7 +310,7 @@ test.describe("待认领：布局与可访问性", () => {
     }
     await page.getByRole("row").nth(1).getByRole("button", { name: /撤销/ }).click();
     await page.getByRole("dialog", { name: "撤销这次认领？" }).getByRole("button", { name: "撤销" }).click();
-    await expect(page.getByText("已撤销这次认领：修改还给了已不可见的旧版本，这个版本回到认领之前的样子。")).toBeVisible();
+    await expect(page.getByText("已撤销这次认领，修改还给了旧版本。")).toBeVisible();
     for (const width of [1024, 1280]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto("/operations");
@@ -389,7 +389,7 @@ test.describe("待认领：布局与可访问性", () => {
     await tabTo(page, (name) => name === "撤销", 10);
     await expectVisibleFocusRing(page, "撤销");
     await page.keyboard.press("Enter");
-    await expect(page.getByText("已撤销这次认领：修改还给了已不可见的旧版本，这个版本回到认领之前的样子。")).toBeVisible();
+    await expect(page.getByText("已撤销这次认领，修改还给了旧版本。")).toBeVisible();
     expect(await focusedName(page)).not.toBe("BODY");
     expect(claimCalls(mock, suitesId())).toHaveLength(1);
     expect(mock.callsTo("POST", /\/revert$/)).toHaveLength(1);

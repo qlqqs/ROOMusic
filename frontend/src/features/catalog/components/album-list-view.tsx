@@ -69,10 +69,10 @@ export function AlbumListView({ search, isAdmin }: { search: AlbumSearch; isAdmi
                 </p>
               ) : isAdmin ? (
                 <p>
-                  资料库里还没有专辑。添加音乐目录并完成一次扫描后，专辑会出现在这里。 <Link to="/library">前往扫描目录</Link>
+                  资料库里还没有专辑。添加音乐目录并扫描后就会出现。 <Link to="/library">前往扫描目录</Link>
                 </p>
               ) : (
-                <p>资料库里还没有专辑。请等待管理员添加音乐目录并完成扫描。</p>
+                <p>资料库里还没有专辑。</p>
               );
             }
             return (

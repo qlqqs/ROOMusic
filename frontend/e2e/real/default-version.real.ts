@@ -93,7 +93,7 @@ test("页面上设为默认版本：打开专辑与专辑列表都先显示它�
   await versionNav(page).getByRole("link", { name: /^版本 2 / }).click();
   await expect(level1(page, hires.album)).toBeVisible();
   await page.getByRole("button", { name: "设为默认版本" }).click();
-  await expect(page.getByText("已把这个版本设为默认版本。专辑列表和打开这张专辑时会先显示它。")).toBeVisible();
+  await expect(page.getByText("已把这个版本设为默认版本。")).toBeVisible();
 
   // 页面停在刚才的版本；它成为代表版本，排在版本导航第一位并带标签。
   await expect(level1(page, hires.album)).toBeVisible();

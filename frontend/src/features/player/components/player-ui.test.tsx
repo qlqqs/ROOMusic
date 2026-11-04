@@ -143,7 +143,7 @@ describe("播放界面", () => {
     await act(async () => { engine.playTracks([playerTrack("1")]); await settle(); });
     expect(engine.getSnapshot().status).toBe("preparing");
     expect(screen.getByText("正在准备")).toBeTruthy();
-    expect(screen.getByRole("status").textContent).toBe("正在准备：曲目 1，服务端正在无损转换，完成后开始播放。");
+    expect(screen.getByRole("status").textContent).toBe("正在准备：曲目 1，转换完成后开始播放。");
     expect(screen.queryByRole("button", { name: "播放" })).toBeNull();
     await act(async () => { vi.advanceTimersByTime(1000); await settle(); });
     expect(signals).toHaveLength(2);
@@ -308,7 +308,7 @@ describe("播放界面", () => {
     for (const name of ["源文件", "服务端", "浏览器", "系统输出"]) expect(screen.getByRole("heading", { name })).toBeTruthy();
     expect(screen.getByText("MP4 / M4A")).toBeTruthy();
     expect(screen.getByText("48 kHz")).toBeTruthy();
-    expect(screen.getByText(/网页无法得知声卡/)).toBeTruthy();
+    expect(screen.getByText(/网页看不到声卡/)).toBeTruthy();
     expect(document.body.textContent).not.toContain("Bit-perfect");
   });
   it("信号路径的服务端一栏按交付方式写明：直出原文件，或无损转换并核对 PCM", () => {
@@ -390,14 +390,14 @@ describe("专辑播放入口", () => {
     vi.spyOn(engine, "playTracks").mockReturnValue("queue_full");
     view(<AlbumPlaybackActions release={release()} groupId="group-1" />);
     await userEvent.click(screen.getByRole("button", { name: "播放整张专辑" }));
-    expect(screen.getByRole("status").textContent).toContain("最多容纳 10,000 条");
+    expect(screen.getByRole("status").textContent).toContain("队列已满，请先移除一些条目。");
     expect(engine.getSnapshot().queue.entries).toHaveLength(0);
   });
   it("一首都不能播放时禁用整张动作并在头部解释", () => {
     table = { verdictOf: () => ({ playable: false, reason: "format_not_direct" }), deliveryOf: () => null };
     view(<AlbumPlaybackActions release={release()} groupId="group-1" />);
     expect(screen.getByRole("button", { name: "播放整张专辑" }).getAttribute("disabled")).not.toBeNull();
-    expect(screen.getByText(/这个版本没有可以播放的曲目/)).toBeTruthy();
+    expect(screen.getByText(/这个版本没有能播放的曲目/)).toBeTruthy();
   });
   it("曲目动作只取引擎不订阅快照：调音量、加入队列都不重绘任何一行", () => {
     const detail = release();

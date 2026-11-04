@@ -33,7 +33,7 @@ function ClaimDetailPane({ releaseId, targetId, commands }: { releaseId: string;
   const claim = useClaim(releaseId);
   const navigate = useNavigate();
   if (claim.status === "error" && isHttpFailure(failureOf(claim.error), 404, "not_found")) {
-    return <Notice tone="warning">这个版本现在不需要认领：它的文件回来了，或者它的修改已经认领给了别的版本。</Notice>;
+    return <Notice tone="warning">这个版本已经不需要认领了。</Notice>;
   }
   return (
     <QueryContent query={claim} loading={<Skeleton label="正在加载这个版本留着的修改" lines={6} />}>
@@ -78,18 +78,18 @@ export function ClaimsView({ search, commands }: ClaimsViewProps) {
   const list = (
     <section className={styles.listColumn} aria-labelledby="claims-list-title">
       <h2 id="claims-list-title" className={styles.listTitle}>
-        已不可见、留有修改的版本
+        留有修改的旧版本
       </h2>
       <QueryContent query={claims} loading={<Skeleton label="正在加载待认领的版本" lines={6} />}>
         {(data) =>
           outOfRange ? (
             <Skeleton label="正在加载待认领的版本" lines={6} />
           ) : data.pagination.total === 0 ? (
-            <p className={styles.empty}>没有待认领的版本。扫描新建了发行、而旧发行上留有你做过的修改时，会出现在这里。</p>
+            <p className={styles.empty}>没有待认领的版本。</p>
           ) : (
             <div aria-busy={claims.isPlaceholderData} className={styles.listBody}>
               <ClaimList items={data.items} selectedId={search.release} />
-              <p className={styles.note}>共 {formatCount(data.pagination.total)} 个版本，最近看到的在前。</p>
+              <p className={styles.note}>共 {formatCount(data.pagination.total)} 个版本</p>
               <Pagination
                 label="待认领列表分页"
                 page={data.pagination.page}
@@ -105,7 +105,7 @@ export function ClaimsView({ search, commands }: ClaimsViewProps) {
 
   const detail =
     search.release === undefined ? (
-      <p className={styles.placeholder}>从列表里选一个版本，查看它留着的修改和可能接替它的版本。</p>
+      <p className={styles.placeholder}>从列表里选一个版本。</p>
     ) : (
       <ClaimDetailPane key={search.release} releaseId={search.release} targetId={search.target} commands={commands} />
     );

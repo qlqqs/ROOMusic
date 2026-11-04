@@ -87,7 +87,7 @@ function IssueFilters({ search, summary }: { search: IssuesSearch; summary: Issu
 function IssueDetailPane({ releaseId, commands }: { releaseId: string; commands: ReleaseCommands }) {
   const issues = useReleaseIssues(releaseId);
   if (issues.status === "error" && isHttpFailure(failureOf(issues.error), 404, "not_found")) {
-    return <Notice tone="warning">这个版本现在不可见（可能刚被重新扫描，文件都找不到了），没有可以处理的问题。</Notice>;
+    return <Notice tone="warning">这个版本已经找不到了，可能刚重新扫描过。</Notice>;
   }
   return (
     <QueryContent query={issues} loading={<Skeleton label="正在加载这个版本的问题" lines={6} />}>
@@ -137,12 +137,12 @@ export function IssuesView({ search, commands }: IssuesViewProps) {
             <Skeleton label="正在加载问题列表" lines={6} />
           ) : data.pagination.total === 0 ? (
             <p className={styles.empty}>
-              {status === "reviewed" ? "没有已核对的问题。" : search.category === undefined ? "没有待处理的问题。扫描发现新的问题时会出现在这里。" : "这一类没有待处理的问题。"}
+              {status === "reviewed" ? "没有已核对的问题。" : search.category === undefined ? "没有待处理的问题。" : "这一类没有待处理的问题。"}
             </p>
           ) : (
             <div aria-busy={issues.isPlaceholderData} className={styles.listBody}>
               <IssueList items={data.items} status={status} selectedId={search.release} />
-              <p className={styles.note}>共 {formatCount(data.pagination.total)} 个版本，按专辑名排列。</p>
+              <p className={styles.note}>共 {formatCount(data.pagination.total)} 个版本</p>
               <Pagination
                 label="问题列表分页"
                 page={data.pagination.page}
@@ -158,7 +158,7 @@ export function IssuesView({ search, commands }: IssuesViewProps) {
 
   const detail =
     search.release === undefined ? (
-      <p className={styles.placeholder}>从列表里选一个版本，查看它的问题和依据。</p>
+      <p className={styles.placeholder}>从列表里选一个版本。</p>
     ) : (
       <IssueDetailPane key={search.release} releaseId={search.release} commands={commands} />
     );

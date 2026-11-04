@@ -42,7 +42,7 @@ describe("FailureNotice", () => {
 
   it("写请求的网络失败说明结果未知", () => {
     render(<FailureNotice error={new ApiError({ kind: "network", requestId: "web-1" })} context="write" />);
-    expect(screen.getByRole("alert").textContent).toContain("无法确认操作是否已经完成");
+    expect(screen.getByRole("alert").textContent).toContain("不确定操作有没有完成");
   });
 
   it("不是 ApiError 的错误显示未预期的错误，不泄露内部信息", () => {

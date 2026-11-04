@@ -32,7 +32,7 @@ export function PlayerQueue() {
   }
   return <section id="queue" aria-labelledby="queue-heading" className={styles.section}>
     <div className={styles.header}><h2 ref={heading} id="queue-heading" tabIndex={-1}>队列（{snapshot.queue.entries.length}）</h2><Button disabled={snapshot.queue.entries.length === 0} onClick={() => setConfirm(true)}>清空队列</Button></div>
-    {snapshot.queue.mode === "shuffle" ? <p>随机模式：列表顺序不代表实际播放顺序，上一首沿播放历史返回。</p> : null}
+    {snapshot.queue.mode === "shuffle" ? <p>随机播放时，列表顺序不是实际的播放顺序。</p> : null}
     <ol ref={list} role="list" className={styles.list}>
       {snapshot.queue.entries.map((entry, index) => {
         const current = entry.entryId === snapshot.current?.entryId;

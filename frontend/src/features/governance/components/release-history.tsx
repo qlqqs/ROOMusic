@@ -21,7 +21,7 @@ function HistoryBody({ releaseId, groupId, onRevert }: { releaseId: string; grou
     <QueryContent query={history} loading={<Skeleton label="正在加载修改记录" lines={3} />}>
       {({ items, pagination }) =>
         pagination.total === 0 ? (
-          <p>这个版本和这张专辑还没有修改记录。管理员修改发行信息、调整归组或设定默认版本之后，记录会出现在这里。</p>
+          <p>还没有修改记录。</p>
         ) : (
           <>
             <OperationList caption="修改记录" items={items} showRelease={false} onRevert={onRevert} />

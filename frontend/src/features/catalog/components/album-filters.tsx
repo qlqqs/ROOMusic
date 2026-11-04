@@ -26,8 +26,8 @@ export function AlbumFilters({ search }: { search: AlbumSearch }) {
     event.preventDefault();
     const bytes = utf8ByteLength(draft.trim());
     if (bytes > MAX_SEARCH_BYTES) {
-      // 不静默丢弃：说明上限与现状（常见汉字每个占 3 个字节）。
-      setError(`搜索词最多 ${MAX_SEARCH_BYTES} 个字节（约 ${Math.floor(MAX_SEARCH_BYTES / 3)} 个汉字），现在是 ${bytes} 个字节。`);
+      // 不静默丢弃：提示搜索词太长。
+      setError("搜索词太长了，请短一些。");
       return;
     }
     setError(null);

@@ -1,4 +1,3 @@
-import { formatCount } from "../../../shared/lib/number";
 import { ConfirmDialog, FailureNotice } from "../../../shared/ui";
 import type { HistoryItemDTO } from "../api/decoders";
 import { historyTitleOf } from "../format";
@@ -13,7 +12,7 @@ type RemoveTrackDialogProps = {
 };
 
 /**
- * 从历史中移除一首曲目前的确认：说明影响范围（只有自己的记录，这首曲目的全部播放次数）与后果（不能恢复）。
+ * 从历史中移除一首曲目前的确认：说明后果（不能恢复）。
  * 失败时对话框保持打开，错误显示在其中，“确认”变成“重试移除”（移除是幂等的删除，重试安全）。
  */
 export function RemoveTrackDialog({ item, state, onConfirm, onCancel }: RemoveTrackDialogProps) {
@@ -29,12 +28,7 @@ export function RemoveTrackDialog({ item, state, onConfirm, onCancel }: RemoveTr
       onCancel={onCancel}
     >
       {item === null ? null : (
-        <>
-          <p>
-            将从你的播放历史中移除《{historyTitleOf(item)}》的全部 {formatCount(item.play_count)} 次记录，不影响其他成员。
-          </p>
-          <p>移除后不能恢复。</p>
-        </>
+        <p>《{historyTitleOf(item)}》的播放记录会被移除，不能恢复。</p>
       )}
     </ConfirmDialog>
   );
