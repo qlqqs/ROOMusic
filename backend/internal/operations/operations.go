@@ -45,8 +45,8 @@ const (
 	TargetRelease      = "release"
 	TargetReleaseGroup = "release_group"
 
-	// lockClass 是操作 advisory lock 的固定类别（ASCII 的 OPER）。两参数锁与迁移锁、扫描锁（单个 bigint 键）、
-	// 目录操作锁（ROOT 类别）互不共用键空间。
+	// lockClass 是操作 advisory lock 的固定类别（ASCII 的 OPER）。两参数锁与迁移锁（单个 bigint 键）、
+	// 扫描锁（SCAN 类别）、目录操作锁（ROOT 类别）互不共用键空间。
 	lockClass int32 = 0x4f504552
 )
 

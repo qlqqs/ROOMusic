@@ -44,7 +44,7 @@ func operationFingerprint(v any) string {
 }
 
 // rootOperationLockClass 是目录操作 advisory lock 的固定类别（ASCII 的 ROOT）。
-// 两参数锁与迁移锁、扫描锁使用的单个 bigint 键锁互不共用键空间。
+// 两参数锁与迁移锁（单个 bigint 键）、扫描锁（SCAN 类别）互不共用键空间。
 const rootOperationLockClass int32 = 0x524f4f54
 
 // rootOperationLockKey 把同一 actor、操作类型和幂等键映射到同一把锁。碰撞只会让无关请求多排一次队，

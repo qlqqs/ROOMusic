@@ -25,10 +25,13 @@ var (
 	ErrQuery = errors.New("library query failed")
 )
 
-const scanAdvisoryLockKey int64 = 0x5343414e
+// scanAdvisoryLockClass 是扫描锁的固定类别（ASCII 的 SCAN）；第二个键限定当前 schema。
+const scanAdvisoryLockClass int32 = 0x5343414e
 
 type scanExecution struct {
 	connection *sql.Conn
+	lockClass  int32
+	lockKey    int32
 }
 
 func acquireScanExecution(ctx context.Context, database *sql.DB) (*scanExecution, bool, error) {
@@ -39,8 +42,12 @@ func acquireScanExecution(ctx context.Context, database *sql.DB) (*scanExecution
 	if err != nil {
 		return nil, false, err
 	}
+	execution := &scanExecution{connection: connection}
 	var acquired bool
-	if err := connection.QueryRowContext(ctx, "SELECT pg_try_advisory_lock($1::bigint)", scanAdvisoryLockKey).Scan(&acquired); err != nil {
+	// 在取得锁的同一条语句中保存实际键值，解锁不再依赖可能变化的 search_path。
+	if err := connection.QueryRowContext(ctx, `SELECT lock_class,lock_key,pg_try_advisory_lock(lock_class,lock_key)
+		FROM (SELECT $1::int AS lock_class,hashtext(current_schema()) AS lock_key) AS scan_lock`, scanAdvisoryLockClass).
+		Scan(&execution.lockClass, &execution.lockKey, &acquired); err != nil {
 		_ = connection.Close()
 		return nil, false, err
 	}
@@ -48,7 +55,7 @@ func acquireScanExecution(ctx context.Context, database *sql.DB) (*scanExecution
 		_ = connection.Close()
 		return nil, false, nil
 	}
-	return &scanExecution{connection: connection}, true, nil
+	return execution, true, nil
 }
 
 func (execution *scanExecution) close(ctx context.Context) error {
@@ -56,7 +63,7 @@ func (execution *scanExecution) close(ctx context.Context) error {
 		return nil
 	}
 	var unlocked bool
-	err := execution.connection.QueryRowContext(ctx, "SELECT pg_advisory_unlock($1::bigint)", scanAdvisoryLockKey).Scan(&unlocked)
+	err := execution.connection.QueryRowContext(ctx, "SELECT pg_advisory_unlock($1::int,$2::int)", execution.lockClass, execution.lockKey).Scan(&unlocked)
 	closeErr := execution.connection.Close()
 	if err != nil {
 		return err

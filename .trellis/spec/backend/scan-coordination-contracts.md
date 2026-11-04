@@ -5,7 +5,7 @@
 
 ## 1. 范围与触发
 
-当代码创建、恢复、查询、取消或结束全库扫描时，必须遵守本场景。其目标是在多个
+当代码创建、恢复、查询、取消或结束全库扫描时，必须遵守本场景。其目标是在同一 schema 的多个
 ROOMusic 进程之间只允许一个扫描执行器，并保证取消、停机、数据库故障或执行权丢失
 不会触发错误的 `missing` 对账。PostgreSQL 同时是扫描状态和执行资格的权威；进程内
 mutex 只保护本进程的 worker 引用。
@@ -23,9 +23,14 @@ mutex 只保护本进程的 worker 引用。
 - `POST /api/v1/scans/{id}/cancel`：管理员持久化取消意图；请求不等待 worker 结束。
 - `scan_runs.cancel_requested_at TIMESTAMPTZ NULL`：`NULL` 表示未请求取消，首次取消写入
   数据库时间，重复取消用 `COALESCE(cancel_requested_at, NOW())` 保留原时间。
-- `scanAdvisoryLockKey = 0x5343414e`：专用 `database/sql.Conn` 调用
-  `pg_try_advisory_lock(bigint)` 获取 PostgreSQL session advisory lock，并在 worker
-  结束时显式 unlock 后关闭连接。
+- 扫描锁使用两个 `int4` 键：固定类别 `0x5343414e`（ASCII `SCAN`，十进制
+  `1396916558`，可放入 `int4`）和 `hashtext(current_schema())`。专用
+  `database/sql.Conn` 调用 `pg_try_advisory_lock(0x5343414e::int, hashtext(current_schema()))`
+  获取 PostgreSQL session advisory lock；作用域为当前 schema，与受保护的 `scan_runs`
+  一致，不同 schema 的扫描互不阻塞。生产只有一个 schema 时，扫描互斥行为不变。
+- 取得锁时将实际的两个键值保存在 `scanExecution` 中；worker 或恢复路径结束时，按保存的
+  键调用 `pg_advisory_unlock(int, int)`，再关闭专用连接。解锁不得重新计算
+  `current_schema()`，即使 holder 的 `search_path` 改变，也必须释放原先取得的锁。
 
 ## 3. 请求、响应与生命周期合同
 
@@ -105,8 +110,14 @@ mutex 只保护本进程的 worker 引用。
 
 - PostgreSQL/HTTP：首次与重复取消均返回 `202`，时间戳持久且幂等；终态取消返回
   `200` 且终态不可逆；未知 ID、匿名和普通用户分别验证错误 envelope 与无副作用。
-- PostgreSQL 并发：两个独立连接竞争 `0x5343414e` 时只有一个成功；失败实例复用活动
-  ID；unlock/close 后可重新获取；`MaxOpenConns=1` 快速失败而非阻塞。
+- PostgreSQL 同 schema 并发：两条独立物理连接竞争
+  `(0x5343414e::int, hashtext(current_schema()))` 时只有一个成功；失败实例的 `StartScan`
+  复用活动扫描 ID，不创建替代扫描；unlock/close 后另一独立连接可重新获取；
+  `MaxOpenConns=1` 快速失败而非等待超时或阻塞，且不启动 worker 或创建扫描行。
+- PostgreSQL schema 隔离：用两次 `postgrestest.NewSchema` 创建不同 schema，两边可以
+  同时取得并持有各自的扫描锁，作用域与各自的 `scan_runs` 一致。
+- PostgreSQL 解锁键：验证 holder 保存实际的两个 `int4` 键；改变 holder 的 `search_path`
+  后，close 仍释放原键，原 schema 的独立连接可以重新取得锁。
 - PostgreSQL 恢复：活 holder 存在时遗留行保持 `running`；释放后恢复为
   `incomplete`，且不创建替代扫描。
 - PostgreSQL 终态：取消请求覆盖成功候选并得到 `canceled`；取消、失败和不完整均保持
