@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/scan-coordination-contracts.md", "reason": "A：扫描锁合同，键描述需同步"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "A：隔离测试库与 schema 约定"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "B、C：依赖版本与构建产物约定"}
+{"file": ".trellis/spec/frontend/quality-verification-layers.md", "reason": "B、C：Vitest/Playwright/真实服务用例的分层"}
