@@ -3,6 +3,7 @@ import { sanitizeRedirect, type SessionController } from "../features/auth";
 import { albumListSearchFromState, parseAlbumDetailSearch, parseAlbumSearch, type AlbumDetailSearch, type AlbumSearch } from "../features/catalog";
 import { parseClaimsSearch, parseIssuesSearch, parseOperationsSearch, type ClaimsSearch, type IssuesSearch, type OperationsSearch } from "../features/governance";
 import { ScanDetail } from "../features/library";
+import { parseSearchPageSearch, type SearchPageSearch } from "../features/search";
 import { parsePageParam } from "../shared/lib/pagination";
 import { AuthenticatedLayout } from "./shell/authenticated-layout";
 import { AdminGate } from "./routes/admin-gate";
@@ -22,6 +23,7 @@ import { OverviewPage } from "./routes/overview-page";
 import { NowPlayingRoute } from "./routes/now-playing-route";
 import { PlaylistDetailPage } from "./routes/playlist-detail-page";
 import { PlaylistsPage } from "./routes/playlists-page";
+import { SearchPage } from "./routes/search-page";
 import { SetupPage } from "./routes/setup-page";
 
 export type RouterContext = { session: SessionController };
@@ -103,6 +105,18 @@ const albumDetailRoute = createRoute({
   path: "/albums/$groupId",
   validateSearch: (search: Record<string, unknown>): AlbumDetailSearch => parseAlbumDetailSearch(search),
   component: AlbumDetailRoute,
+});
+
+// 全局搜索的结果页：所有登录用户都能用。q 与两栏各自的页码都在地址里（页码只在 2 及以上出现）；不合法的值显式写成 undefined。
+function SearchRoute() {
+  return <SearchPage search={searchRoute.useSearch()} />;
+}
+
+const searchRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/search",
+  validateSearch: (search: Record<string, unknown>): SearchPageSearch => parseSearchPageSearch(search),
+  component: SearchRoute,
 });
 
 // “我的音乐”：只属于当前用户的数据，所有登录用户都能用。/me 本身没有内容，转到第一个页签（替换历史项，返回键不会回到 /me）。
@@ -270,7 +284,7 @@ const scanDetailRoute = createRoute({
 // 已登录用户访问不存在的路径时仍显示在外壳里；未登录用户先被守卫送去登录。
 const notFoundRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "$", component: NotFoundPage });
 
-const routeTree = rootRoute.addChildren([setupRoute, loginRoute, authenticatedRoute.addChildren([overviewRoute, nowPlayingRoute, albumsRoute, albumDetailRoute, meRoute.addChildren([meIndexRoute, historyRoute, favoritesRoute, playlistsRoute, playlistDetailRoute]), libraryRoute, scanDetailRoute, issuesRoute, claimsRoute, membersRoute, operationsRoute, notFoundRoute])]);
+const routeTree = rootRoute.addChildren([setupRoute, loginRoute, authenticatedRoute.addChildren([overviewRoute, nowPlayingRoute, albumsRoute, albumDetailRoute, searchRoute, meRoute.addChildren([meIndexRoute, historyRoute, favoritesRoute, playlistsRoute, playlistDetailRoute]), libraryRoute, scanDetailRoute, issuesRoute, claimsRoute, membersRoute, operationsRoute, notFoundRoute])]);
 
 export function createAppRouter(context: RouterContext, history?: RouterHistory) {
   return createRouter({ routeTree, context, ...(history === undefined ? {} : { history }) });

@@ -1,0 +1,33 @@
+/* 与共用分页（shared/ui/pagination）同一套外观。 */
+.pagination {
+  margin-block-start: var(--space-3);
+}
+
+.list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-14);
+}
+
+/* 链接与不可用文字有相同的最小高度：触屏与窄屏上命中区域不低于控件高度。 */
+.link,
+.unavailable,
+.current {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-height);
+}
+
+.unavailable,
+.current {
+  color: var(--text-secondary);
+}
+
+.current {
+  font-variant-numeric: lining-nums tabular-nums;
+}

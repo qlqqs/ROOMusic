@@ -114,7 +114,7 @@ function SearchResults({ query, selectedId, onSelect }: { query: string; selecte
 }
 
 /**
- * 选择接替旧版本的新版本：先是按文件路径与目录推荐的版本（单选），然后是“搜索其他版本”——按标题、艺人或曲目名搜专辑（与“归入其他专辑”同一个搜索），
+ * 选择接替旧版本的新版本：先是按文件路径与目录推荐的版本（单选），然后是“搜索其他版本”——按搜索词找专辑（与“归入其他专辑”同一个搜索），
  * 选中专辑后再选它的版本（专辑只有一个版本就直接选中）。别的目录、别的扫描目录里的版本都能这样选到。选择写进地址，由调用方持有。
  */
 export function ClaimTargetPicker({ suggestions, selectedId, onSelect }: PickerProps) {
@@ -131,7 +131,7 @@ export function ClaimTargetPicker({ suggestions, selectedId, onSelect }: PickerP
     }
     const text = parseSearchText(draft);
     if (text === undefined) {
-      setSearchError("请输入标题、艺人或曲目名。");
+      setSearchError("请输入搜索词。");
       return;
     }
     setSearchError(null);
@@ -146,7 +146,6 @@ export function ClaimTargetPicker({ suggestions, selectedId, onSelect }: PickerP
           <div className={styles.searchField}>
             <TextField
               label="搜索其他版本"
-              description="按标题、艺人或曲目名查找。"
               type="text"
               inputMode="search"
               enterKeyHint="search"

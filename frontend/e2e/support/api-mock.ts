@@ -34,6 +34,7 @@ import {
   type GovernanceData,
 } from "../../src/test/governance-data";
 import { personalDataOf, respondToPersonal, type PersonalData } from "../../src/test/personal-data";
+import { respondToSearch, searchDataOf, type SearchData } from "../../src/test/search-data";
 import { gradientPng } from "./png";
 
 // 受控后端：用后端集成测试产出的真实响应样本回答 /api/v1/*，并保持必要的状态（会话、目录、扫描、成员），
@@ -64,6 +65,8 @@ export type ApiMock = CatalogData & {
   governance: GovernanceData;
   /** 收藏与歌单按当前会话的用户 ID 隔离；seed helper 与 Vitest 共用。 */
   personal: PersonalData;
+  /** 搜索结果须按完整查询显式登记，未登记返回 404。 */
+  search: SearchData;
   setupRequired: boolean;
   /** 当前会话的用户名；null 表示没有有效会话。 */
   session: string | null;
@@ -121,6 +124,7 @@ function seedRoots(): RootDTO[] {
 export async function installApiMock(context: BrowserContext, options: MockOptions = {}): Promise<ApiMock> {
   const { setupRequired = false, signedInAs = null, failSetupStatusTimes = 0 } = options;
   const mock: ApiMock = {
+    search: searchDataOf(),
     setupRequired,
     session: signedInAs,
     accounts: setupRequired
@@ -281,6 +285,11 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
       case "POST /api/v1/auth/logout":
         mock.session = null;
         return sample("auth/logout");
+      case "GET /api/v1/search":
+      case "GET /api/v1/search/suggestions":
+        return guarded(method, path, false, () => respondToSearch(mock.search, path, search));
+      case "GET /api/v1/catalog/status":
+        return guarded(method, path, false, () => sample("search/catalog-status-ready"));
       case "GET /api/v1/playback/formats":
         return guarded(method, path, false, () => sample("playback/formats"));
       case "GET /api/v1/me/plays/recent-releases":

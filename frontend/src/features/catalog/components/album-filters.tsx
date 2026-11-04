@@ -48,7 +48,6 @@ export function AlbumFilters({ search }: { search: AlbumSearch }) {
         <TextField
           ref={inputRef}
           label="搜索专辑"
-          description="按标题、艺人或曲目名查找。"
           name="q"
           type="text"
           inputMode="search"

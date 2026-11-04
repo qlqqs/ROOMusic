@@ -1,6 +1,7 @@
 import type { ApiResponse } from "../../../shared/api";
 import { apiRequest } from "../../../shared/api";
 import {
+  decodeCatalogState,
   decodeReleaseComparison,
   decodeReleaseDetail,
   decodeRecentlyAdded,
@@ -8,6 +9,7 @@ import {
   decodeReleaseGroupAddedPage,
   decodeReleaseGroupDetail,
   decodeReleaseGroupPage,
+  type CatalogStateDTO,
   type RecentlyAddedDTO,
   type ReleaseComparisonDTO,
   type ReleaseDetailDTO,
@@ -65,6 +67,11 @@ export function fetchRelease(releaseId: string, signal?: AbortSignal): Promise<A
 /** 完整证据（仅管理员）：字段值、候选、原因码与分组证据。 */
 export function fetchReleaseEvidence(releaseId: string, signal?: AbortSignal): Promise<ApiResponse<ReleaseEvidenceDTO>> {
   return apiRequest({ method: "GET", path: `/api/v1/releases/${releaseId}/evidence`, signal }, decodeReleaseEvidence);
+}
+
+/** 目录状态（所有登录用户可读）：搜索与艺人数据的代次和是否已准备好。 */
+export function fetchCatalogStatus(signal?: AbortSignal): Promise<ApiResponse<CatalogStateDTO>> {
+  return apiRequest({ method: "GET", path: "/api/v1/catalog/status", signal }, decodeCatalogState);
 }
 
 /**

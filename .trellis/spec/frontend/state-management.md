@@ -294,6 +294,21 @@ Cookie、凭据、服务器路径和治理操作结果不得写进浏览器持�
   与专辑、扫描记录不同，**页码超出末页时不规范化地址**（不使用 `useClampedPage`）：显示“这一页没有记录。”与“回到第一页”的链接（产品裁决，2026-11-04）。
   点页码链接时把结果区标题滚到视野顶部并聚焦（与专辑列表相同）。
 
+### M5 ④ 全局搜索的查询键、URL 与目录状态
+
+- 目录状态 `GET /catalog/status`（`{ epoch, search_mode, artists_state }`）是服务器状态，键 `catalogStateKeys.current(g)`（`viewerQueryKey(g, "catalog-state")`，不在 `catalog` 前缀下）。
+  已登录外壳挂载时读取，回到前台总是重读（`refetchOnWindowFocus: "always"`），`search_mode=legacy` 或 `artists_state=preparing` 期间每 3 秒轮询（页面隐藏时暂停），都就绪后停止；
+  其他使用者 `refetchOnMount: false`，不重复请求。④ 的 `artists_state` 固定为 `unavailable`，不算在准备。
+- 搜索的键带两个代次：`g` 是会话代次，`e` 是目录 epoch，二者不能混用。`searchKeys.suggestions(g, e, q, limit)`、`searchKeys.page(g, e, type, q, page, pageSize)`，
+  q 是去掉首尾空白的用户输入，不在浏览器里做规范化。目录状态还没读到时搜索不发请求；状态读取失败时 e 记为 -1，搜索照常。
+- 搜索响应带回的 `catalog_state.epoch` 比缓存新时：先把这份结果放进新 epoch 的键下，再更新目录状态（页面按新键直接显示，不重复请求）；旧 epoch 的迟到响应只落在旧键下，不会把状态改回去。
+  外壳看到 epoch 变大时取消仍在路上的旧 epoch 搜索请求、让 `catalog` 前缀失效（专辑页带搜索词的结果换成新的匹配方式），不动地址里的查询词与页码，不碰播放器。
+- 修改专辑数据之后（`useReleaseDataRefresh`）同时让 `searchKeys.all(g)` 失效：修正后的字段立即参与匹配。
+- URL：`/search?q=&albums_page=&tracks_page=`；q 与专辑列表同一个校验（去掉首尾空白后非空且不超过 200 字节），页码只在 2 及以上写进地址；换 q 时两栏都回到第 1 页，翻一栏只改这一栏的页码。
+  ⑤ 加入艺人栏时增加 `artists_page`。页码超出时显示“这一页没有结果”与回到第一页的链接，不改写地址；搜索的 total 超过 1,000 时只是下界（显示“1,000+”），翻页只看 `has_more`，不计算末页。
+- 搜索框的草稿、建议浮层的开合与选中项是组件内局部状态；在结果页时输入框跟着地址里的 q 走（“按属性重置状态”）。输入稍停 250 ms 才查询建议，输入法组合中不查询；
+  换词时旧请求经 AbortSignal 取消，慢响应只落在它自己的键下。
+
 See [Hook Guidelines](./hook-guidelines.md),
 [Cross-Layer Thinking](../guides/cross-layer-thinking-guide.md), and the
 [Core 0 PRD](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md).

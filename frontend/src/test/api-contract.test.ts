@@ -4,6 +4,8 @@ import { decodeLoggedOut, decodeSetupStatus, decodeViewer } from "../features/au
 import {
   decodeRecentlyAdded,
   decodeReleaseGroupAddedPage,
+  decodeCatalogState,
+  releaseSummaryDecoder,
   decodeReleaseComparison,
   decodeReleaseDetail,
   decodeReleaseEvidence,
@@ -63,12 +65,19 @@ import {
   decodePlaylistRenamed,
   decodePlaylistsPage,
 } from "../features/personal/api/decoders";
-import { decodeErrorEnvelope } from "../shared/api";
+import { decodeAlbumResults, decodeTrackResults, decodeSearchSuggestions } from "../features/search/api/decoders";
+import { decode as d, decodeErrorEnvelope } from "../shared/api";
 import { listApiSampleNames, loadApiSample } from "./api-samples";
 
 // 契约测试：后端的每个真实响应样本都必须有一个 decoder 能解码，并且 decoder 保留了样本里的全部字段
 // （往返后与样本相同）。后端新增字段时，样本测试先失败；在这里补上 decoder 才算确认前端已经知道这个字段。
 type Contract = { status: number; decode: (input: unknown) => unknown };
+
+// 旧 /releases 列表未被界面消费，合同测试复用生产摘要 decoder 验证兼容形状。
+const decodeLegacyReleasePage = d.defineDecoder(d.object({
+  items: d.array(releaseSummaryDecoder, { max: 100 }),
+  pagination: d.object({ page: d.integer({ min: 1 }), page_size: d.integer({ min: 1, max: 100 }), total: d.integer({ min: 0 }) }),
+}));
 
 const successContracts: Record<string, Contract> = {
   "scan-feedback/active-member": { status: 200, decode: decodeActiveScan },
@@ -115,6 +124,45 @@ const successContracts: Record<string, Contract> = {
   "scan-feedback/terminal-incomplete": { status: 200, decode: decodeScan },
   "scan-feedback/terminal-succeeded": { status: 200, decode: decodeScan },
   "scan-feedback/zero-files": { status: 200, decode: decodeScan },
+  "search/albums-legacy": { status: 200, decode: decodeAlbumResults },
+  "search/albums-non-representative-match": { status: 200, decode: decodeAlbumResults },
+  "search/albums": { status: 200, decode: decodeAlbumResults },
+  "search/catalog-status-legacy": { status: 200, decode: decodeCatalogState },
+  "search/catalog-status-ready": { status: 200, decode: decodeCatalogState },
+  "search/groups-no-q": { status: 200, decode: decodeReleaseGroupPage },
+  "search/groups-q": { status: 200, decode: decodeReleaseGroupPage },
+  "search/legacy-groups-q": { status: 200, decode: decodeReleaseGroupPage },
+  "search/legacy-releases-q": { status: 200, decode: decodeLegacyReleasePage },
+  "search/releases-no-q": { status: 200, decode: decodeLegacyReleasePage },
+  "search/releases-q": { status: 200, decode: decodeLegacyReleasePage },
+  "search/results-after-publish": { status: 200, decode: decodeTrackResults },
+  "search/results-blank": { status: 200, decode: decodeTrackResults },
+  "search/results-capped-out-of-range": { status: 200, decode: decodeTrackResults },
+  "search/results-capped-page-21": { status: 200, decode: decodeTrackResults },
+  "search/results-empty": { status: 200, decode: decodeAlbumResults },
+  "search/results-literal-wildcards": { status: 200, decode: decodeTrackResults },
+  "search/results-out-of-range": { status: 200, decode: decodeTrackResults },
+  "search/results-ranking": { status: 200, decode: decodeAlbumResults },
+  "search/results-single-character": { status: 200, decode: decodeTrackResults },
+  "search/results-total-1000": { status: 200, decode: decodeTrackResults },
+  "search/results-total-1001": { status: 200, decode: decodeTrackResults },
+  "search/results-total-999": { status: 200, decode: decodeTrackResults },
+  "search/results-total-capped": { status: 200, decode: decodeTrackResults },
+  "search/suggestions-empty": { status: 200, decode: decodeSearchSuggestions },
+  "search/suggestions-legacy": { status: 200, decode: decodeSearchSuggestions },
+  "search/suggestions-limit": { status: 200, decode: decodeSearchSuggestions },
+  "search/suggestions-single-character": { status: 200, decode: decodeSearchSuggestions },
+  "search/suggestions": { status: 200, decode: decodeSearchSuggestions },
+  "search/tracks-artist-match": { status: 200, decode: decodeTrackResults },
+  "search/tracks-catalog-number-match": { status: 200, decode: decodeTrackResults },
+  "search/tracks-conductor-match": { status: 200, decode: decodeTrackResults },
+  "search/tracks-credit-match": { status: 200, decode: decodeTrackResults },
+  "search/tracks-label-match": { status: 200, decode: decodeTrackResults },
+  "search/tracks-legacy": { status: 200, decode: decodeTrackResults },
+  "search/tracks-null-facts": { status: 200, decode: decodeTrackResults },
+  "search/tracks-performer-match": { status: 200, decode: decodeTrackResults },
+  "search/tracks-producer-match": { status: 200, decode: decodeTrackResults },
+  "search/tracks": { status: 200, decode: decodeTrackResults },
   "playback/formats": { status: 200, decode: decodePlaybackFormats },
   "tracks/playback": { status: 200, decode: decodeTrackPlayback },
   "tracks/playback-derived": { status: 200, decode: decodeTrackPlayback },
@@ -288,6 +336,15 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "scan-feedback/report-unavailable": { status: 503, code: "scan_report_unavailable" },
   "scan-feedback/sort-duplicate": { status: 400, code: "invalid_sort" },
   "scan-feedback/sort-invalid": { status: 400, code: "invalid_sort" },
+  "search/errors/database-unavailable": { status: 503, code: "database_unavailable" },
+  "search/errors/invalid-control": { status: 400, code: "invalid_query" },
+  "search/errors/invalid-limit": { status: 400, code: "invalid_limit" },
+  "search/errors/invalid-pagination": { status: 400, code: "invalid_pagination" },
+  "search/errors/invalid-query": { status: 400, code: "invalid_query" },
+  "search/errors/invalid-type": { status: 400, code: "invalid_search_type" },
+  "search/errors/invalid-utf8": { status: 400, code: "invalid_query" },
+  "search/errors/unauthorized": { status: 401, code: "unauthorized" },
+  "search/errors/unsupported-artists": { status: 400, code: "unsupported_search_type" },
   "errors/root-disabled": { status: 409, code: "root_disabled" },
   "errors/not-directly-playable": { status: 409, code: "not_directly_playable" },
   "errors/source-unavailable": { status: 409, code: "source_unavailable" },

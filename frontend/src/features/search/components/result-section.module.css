@@ -1,0 +1,19 @@
+.count {
+  margin: 0;
+  color: var(--text-secondary);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.results {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.results[aria-busy="true"] {
+  opacity: 0.6;
+}
+
+.empty {
+  margin: 0;
+}

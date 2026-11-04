@@ -135,7 +135,7 @@ describe("归入其他专辑", () => {
     const dialog = await openJoin(user);
     const before = api.requestsTo("GET", "/api/v1/release-groups").length;
     await user.type(within(dialog).getByRole("textbox", { name: "搜索专辑" }), "   {Enter}");
-    expect(within(dialog).getByText("请输入标题、艺人或曲目名。")).toBeTruthy();
+    expect(within(dialog).getByText("请输入搜索词。")).toBeTruthy();
     await user.clear(within(dialog).getByRole("textbox", { name: "搜索专辑" }));
     await user.click(within(dialog).getByRole("textbox", { name: "搜索专辑" }));
     await user.paste("古".repeat(70)); // 210 字节

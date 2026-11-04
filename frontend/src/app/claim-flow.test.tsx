@@ -96,7 +96,7 @@ describe("认领：选择接替的版本", () => {
     const search = await screen.findByRole("search", { name: "搜索其他版本" });
     const box = within(search).getByRole("textbox", { name: /搜索其他版本/ });
     await user().type(box, "   {Enter}");
-    expect(await screen.findByText("请输入标题、艺人或曲目名。")).toBeTruthy();
+    expect(await screen.findByText("请输入搜索词。")).toBeTruthy();
     await user().clear(box);
     await user().click(box);
     await user().paste("长".repeat(120));

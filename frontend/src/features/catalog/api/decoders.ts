@@ -49,7 +49,8 @@ const releaseGroupSummaryShape = {
   representative: releaseSummaryDecoder,
   added_at: d.optional(d.timestamp()),
 };
-const releaseGroupSummaryDecoder = d.object(releaseGroupSummaryShape);
+// 全局搜索的专辑结果（features/search）复用同一个组摘要解码器。
+export const releaseGroupSummaryDecoder = d.object(releaseGroupSummaryShape);
 
 // 必须带加入时间的组摘要：“最近新增”、按加入时间排序的列表与扫描报告里的新增专辑用它。
 // 旧服务会忽略 sort 参数而按标题返回，缺少 added_at 时整体拒绝，不把按标题排列的结果当成“最近新增”显示。
@@ -258,6 +259,14 @@ const releaseEvidenceDecoder = d.object({
   truncated: d.boolean(),
 });
 
+// 目录状态（GET /catalog/status，搜索响应里也带同一快照）：epoch 是不透明的单调整数，变大说明搜索或艺人数据换了一代；
+// search_mode 为 legacy 时新搜索还在后台准备，搜索照常可用，只是匹配方式是旧的。
+export const catalogStateDecoder = d.object({
+  epoch: d.integer({ min: 0 }),
+  search_mode: d.oneOf(["legacy", "normalized"]),
+  artists_state: d.oneOf(["unavailable", "preparing", "ready"]),
+});
+
 export const decodeReleaseGroupPage = d.defineDecoder(releaseGroupPageDecoder);
 export const decodeReleaseGroupAddedPage = d.defineDecoder(releaseGroupAddedPageDecoder);
 export const decodeRecentlyAdded = d.defineDecoder(recentlyAddedDecoder);
@@ -265,6 +274,7 @@ export const decodeReleaseGroupDetail = d.defineDecoder(releaseGroupDetailDecode
 export const decodeReleaseDetail = d.defineDecoder(releaseDetailDecoder);
 export const decodeReleaseComparison = d.defineDecoder(releaseComparisonDecoder);
 export const decodeReleaseEvidence = d.defineDecoder(releaseEvidenceDecoder);
+export const decodeCatalogState = d.defineDecoder(catalogStateDecoder);
 
 export type ArtworkDTO = d.Infer<typeof artworkDecoder>;
 export type ReleaseSummaryDTO = d.Infer<typeof releaseSummaryDecoder>;
@@ -285,3 +295,4 @@ export type ReleaseEvidenceSummaryDTO = d.Infer<typeof evidenceSummaryDecoder>;
 export type ReleaseEvidenceDTO = d.Infer<typeof releaseEvidenceDecoder>;
 export type ReleaseFieldEvidenceDTO = d.Infer<typeof fieldEvidenceDecoder>;
 export type ReleaseGroupingEvidenceDTO = d.Infer<typeof groupingEvidenceDecoder>;
+export type CatalogStateDTO = d.Infer<typeof catalogStateDecoder>;

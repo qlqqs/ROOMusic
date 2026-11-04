@@ -1,0 +1,22 @@
+.box {
+  max-width: 480px;
+  margin-bottom: var(--space-6);
+}
+
+/* 宽屏有侧栏的搜索框，页面里不重复；窄屏（与外壳的断点一致）才显示。 */
+.narrowBox {
+  max-width: 480px;
+  margin-bottom: var(--space-6);
+}
+
+@media (min-width: 768px) {
+  .narrowBox {
+    display: none;
+  }
+}
+
+.sections {
+  display: grid;
+  gap: var(--space-8);
+  min-width: 0;
+}
