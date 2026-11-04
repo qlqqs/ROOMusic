@@ -5,7 +5,7 @@ import { useCatalogRefresh } from "../../features/catalog";
 import { listeningKeys } from "../../features/listening";
 
 /**
- * 修改专辑数据（字段、归组、撤销）之后要重新读取的缓存：目录与版本详情，以及概览的“最近播放”。
+ * 修改专辑数据（字段、归组、撤销）之后要重新读取的缓存：目录与版本详情，以及本人的播放历史（概览的“最近播放”与历史页显示的专辑）。
  * 由 app 组合：governance 不知道 catalog 与 listening 的查询键。返回稳定的函数，可以放进 hook 的依赖。
  */
 export function useReleaseDataRefresh(): () => Promise<unknown> {
@@ -13,7 +13,7 @@ export function useReleaseDataRefresh(): () => Promise<unknown> {
   const { generation } = useViewerScope();
   const refreshCatalog = useCatalogRefresh();
   return useCallback(
-    () => Promise.all([refreshCatalog(), queryClient.invalidateQueries({ queryKey: listeningKeys.recentReleases(generation) })]),
+    () => Promise.all([refreshCatalog(), queryClient.invalidateQueries({ queryKey: listeningKeys.all(generation) })]),
     [refreshCatalog, queryClient, generation],
   );
 }

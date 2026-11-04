@@ -1,0 +1,40 @@
+.results {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.title {
+  display: block;
+}
+
+/* 艺人在标题下一行，字号与颜色降一级；表格的行标题用标题字体，这里换回正文字体。 */
+.artist {
+  display: block;
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: var(--fs-14);
+  font-weight: 400;
+}
+
+.tag {
+  display: block;
+  margin-top: var(--space-1);
+  font-family: var(--font-body);
+  font-weight: 400;
+}
+
+/* 文件缺失的行整行灰色（用次级文字色，仍满足对比度；缺失行的专辑名不是链接）；不能播放由“文件缺失”标签与操作区的禁用说明表达，不只靠颜色。 */
+.missing {
+  color: var(--text-secondary);
+}
+
+/* 时间只在日期与时分之间换行（与操作记录相同）。 */
+.timePart {
+  white-space: nowrap;
+}
+
+.note {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+}

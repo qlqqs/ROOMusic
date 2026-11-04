@@ -40,7 +40,7 @@ import {
   decodeReleaseIssues,
   decodeRevertResult,
 } from "../features/governance/api/decoders";
-import { decodePlaysCleared, decodeRecentReleases, decodeRecordedPlay } from "../features/listening/api/decoders";
+import { decodeHistoryQueue, decodeHistoryTracks, decodeTrackPlaysDeleted, decodePlaysCleared, decodeRecentReleases, decodeRecordedPlay } from "../features/listening/api/decoders";
 import { decodeErrorEnvelope } from "../shared/api";
 import { listApiSampleNames, loadApiSample } from "./api-samples";
 
@@ -138,6 +138,15 @@ const successContracts: Record<string, Contract> = {
   "listening/recent-releases": { status: 200, decode: decodeRecentReleases },
   "listening/play-recorded": { status: 201, decode: decodeRecordedPlay },
   "listening/plays-cleared": { status: 200, decode: decodePlaysCleared },
+  "listening/history-tracks": { status: 200, decode: decodeHistoryTracks },
+  "listening/history-tracks-missing": { status: 200, decode: decodeHistoryTracks },
+  "listening/history-tracks-empty": { status: 200, decode: decodeHistoryTracks },
+  "listening/history-tracks-out-of-range": { status: 200, decode: decodeHistoryTracks },
+  "listening/history-queue": { status: 200, decode: decodeHistoryQueue },
+  "listening/history-queue-empty": { status: 200, decode: decodeHistoryQueue },
+  "listening/history-queue-truncated": { status: 200, decode: decodeHistoryQueue },
+  "listening/track-plays-deleted": { status: 200, decode: decodeTrackPlaysDeleted },
+  "listening/track-plays-deleted-empty": { status: 200, decode: decodeTrackPlaysDeleted },
 };
 
 // 错误样本都用统一信封；这里同时记录界面要处理的错误码与状态码。

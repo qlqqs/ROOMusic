@@ -78,7 +78,8 @@ const states: State[] = [
     reach: async (page, mock) => {
       mock.seedRecentPlays(8);
       await page.goto("/");
-      await expect(page.getByRole("region", { name: "最近播放" }).getByRole("link")).toHaveCount(8);
+      await expect(page.getByRole("region", { name: "最近播放" }).getByRole("link")).toHaveCount(9);
+      await expect(page.getByRole("link", { name: "全部历史", exact: true })).toHaveAttribute("href", "/me/history");
     },
   },
   {

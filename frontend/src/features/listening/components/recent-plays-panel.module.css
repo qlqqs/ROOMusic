@@ -6,3 +6,11 @@
   padding: 0;
   list-style: none;
 }
+
+/* 标题右侧的“全部历史”与“清除播放历史”：窄屏时可以换行，链接与按钮的文字基线对齐。 */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-4);
+}

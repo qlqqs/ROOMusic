@@ -8,10 +8,12 @@ import { AuthenticatedLayout } from "./shell/authenticated-layout";
 import { AdminGate } from "./routes/admin-gate";
 import { AlbumDetailPage } from "./routes/album-detail-page";
 import { AlbumsPage } from "./routes/albums-page";
+import { HistoryPage } from "./routes/history-page";
 import { ClaimsPage } from "./routes/claims-page";
 import { IssuesPage } from "./routes/issues-page";
 import { LibraryPage } from "./routes/library-page";
 import { LoginPage } from "./routes/login-page";
+import { MeLayout } from "./routes/me-layout";
 import { MembersPage } from "./routes/members-page";
 import { NotFoundPage } from "./routes/not-found-page";
 import { OperationsPage } from "./routes/operations-page";
@@ -98,6 +100,30 @@ const albumDetailRoute = createRoute({
   path: "/albums/$groupId",
   validateSearch: (search: Record<string, unknown>): AlbumDetailSearch => parseAlbumDetailSearch(search),
   component: AlbumDetailRoute,
+});
+
+// “我的音乐”：只属于当前用户的数据，所有登录用户都能用。/me 本身没有内容，转到第一个页签（替换历史项，返回键不会回到 /me）。
+const meRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/me", component: MeLayout });
+
+const meIndexRoute = createRoute({
+  getParentRoute: () => meRoute,
+  path: "/",
+  beforeLoad: () => {
+    throw redirect({ to: "/me/history", replace: true });
+  },
+});
+
+// page 是历史的页码，只在 2 及以上时出现；不合法的值显式写成 undefined。超出末页时页面显示空页，不改写地址。
+function HistoryRoute() {
+  const { page } = historyRoute.useSearch();
+  return <HistoryPage page={page ?? 1} />;
+}
+
+const historyRoute = createRoute({
+  getParentRoute: () => meRoute,
+  path: "/history",
+  validateSearch: (search: Record<string, unknown>): { page?: number | undefined } => ({ page: parsePageParam(search["page"]) }),
+  component: HistoryRoute,
 });
 
 // 管理页由 AdminGate 把关：非管理员显示“需要管理员权限”，不渲染页面内容，也就不会调用管理接口。
@@ -198,7 +224,7 @@ const scanDetailRoute = createRoute({
 // 已登录用户访问不存在的路径时仍显示在外壳里；未登录用户先被守卫送去登录。
 const notFoundRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "$", component: NotFoundPage });
 
-const routeTree = rootRoute.addChildren([setupRoute, loginRoute, authenticatedRoute.addChildren([overviewRoute, nowPlayingRoute, albumsRoute, albumDetailRoute, libraryRoute, scanDetailRoute, issuesRoute, claimsRoute, membersRoute, operationsRoute, notFoundRoute])]);
+const routeTree = rootRoute.addChildren([setupRoute, loginRoute, authenticatedRoute.addChildren([overviewRoute, nowPlayingRoute, albumsRoute, albumDetailRoute, meRoute.addChildren([meIndexRoute, historyRoute]), libraryRoute, scanDetailRoute, issuesRoute, claimsRoute, membersRoute, operationsRoute, notFoundRoute])]);
 
 export function createAppRouter(context: RouterContext, history?: RouterHistory) {
   return createRouter({ routeTree, context, ...(history === undefined ? {} : { history }) });

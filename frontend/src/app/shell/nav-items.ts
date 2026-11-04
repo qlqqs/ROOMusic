@@ -1,8 +1,8 @@
-import { ArrowRightLeft, ClipboardCheck, Disc3, History, Music2, FolderSearch, LayoutDashboard, Users, type LucideIcon } from "lucide-react";
+import { ArrowRightLeft, ClipboardCheck, Disc3, History, Library, Music2, FolderSearch, LayoutDashboard, Users, type LucideIcon } from "lucide-react";
 import type { UserRole } from "../../features/auth";
 
 export type NavItem = {
-  to: "/" | "/albums" | "/now-playing" | "/library" | "/issues" | "/claims" | "/members" | "/operations";
+  to: "/" | "/albums" | "/me" | "/now-playing" | "/library" | "/issues" | "/claims" | "/members" | "/operations";
   label: string;
   icon: LucideIcon;
   /** 只有管理员看到；后端仍然独立鉴权，这里只决定显示。 */
@@ -11,10 +11,12 @@ export type NavItem = {
   group: string | null;
 };
 
-// 只列真实可用的页面；艺人、收藏与 Steward 留待对应阶段。
+// 只列真实可用的页面；艺人与 Steward 留待对应阶段。
 const navItems: readonly NavItem[] = [
   { to: "/", label: "概览", icon: LayoutDashboard, adminOnly: false, group: "聆听" },
   { to: "/albums", label: "专辑", icon: Disc3, adminOnly: false, group: "聆听" },
+  // “我的音乐”目前只有历史页签（/me 转到 /me/history）；收藏与歌单随 M5 后续子项加入同一个入口。
+  { to: "/me", label: "我的音乐", icon: Library, adminOnly: false, group: "聆听" },
   { to: "/now-playing", label: "正在播放", icon: Music2, adminOnly: false, group: "聆听" },
   { to: "/library", label: "扫描目录", icon: FolderSearch, adminOnly: true, group: "资料库" },
   { to: "/issues", label: "元数据问题", icon: ClipboardCheck, adminOnly: true, group: "资料库" },

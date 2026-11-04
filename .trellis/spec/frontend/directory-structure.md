@@ -22,14 +22,14 @@ frontend/
     │   ├── runtime.ts              # createAppRuntime：缓存、会话控制器、路由与清理的唯一接线
     │   ├── router.tsx              # 路由树与守卫
     │   ├── shell/                  # 外壳、侧栏、窄屏导航、身份区、导航项
-    │   ├── routes/                 # 页面组合与整页状态（登录、无权限、不存在、服务不可用）
+    │   ├── routes/                 # 页面组合与整页状态（登录、无权限、不存在、服务不可用）；跨 feature 的组合（如历史页的播放动作 history-playback.tsx）
     │   └── *.test.tsx              # 页面级测试：经应用运行时与替身后端验证整页行为
     ├── features/
     │   ├── auth/                   # 初始化、登录、退出、会话生命周期与跨标签页同步
     │   ├── members/                # 成员列表与管理（管理其他账号，生命周期与 auth 不同）
     │   ├── library/                # 目录、目录操作记录、扫描记录、扫描详情与诊断
     │   ├── player/                 # 播放器：api、engine（含计次跟踪器、歌词分组与定位）、provider、能力查询、底栏、歌词面板与正在播放页
-    │   ├── listening/              # 播放历史：播放上报器（带幂等键、有限重试、会话结束作废）与概览的“最近播放”区块
+    │   ├── listening/              # 播放历史：播放上报器（带幂等键、有限重试、会话结束作废）、概览的“最近播放”区块与“我的音乐”的历史页签（M5 ①）
     │   ├── governance/             # 受治理操作（M3，管理员）：编辑发行信息、调整归组、设定默认版本（M4）、撤销、操作记录页与专辑详情的“修改记录”
     │   └── catalog/                # 专辑：列表（M1b）、详情（M1b）、封面、证据展示、默认版本标签与版本对比（M4），以及概览的计数（M1a）
     ├── shared/
@@ -104,8 +104,12 @@ features/governance/
 - `catalog` 拥有 Release/ReleaseGroup 的列表与详情、Medium/Track 展示、来源与封面展示（M1b 实现），以及概览里的专辑数。
 - `player` 拥有单一媒体生命周期、队列/模式/恢复、浏览器能力与播放界面；只经 catalog 公开合同读发行，
   不反向导入 app，也不把播放器全局状态放到 shared。进度与离散快照分开订阅。
-- `listening` 拥有播放上报（幂等键、有限重试、会话结束作废）与概览的“最近播放”区块（读取、卡片、清除确认）；经 catalog 公开合同取封面与专辑艺人的显示规则，
-  不导入 player：`player` 导入它的上报器，概览页（app 层）组合区块。
+- `listening` 拥有播放上报（幂等键、有限重试、会话结束作废）、概览的“最近播放”区块（读取、卡片、“全部历史”链接、清除确认）与“我的音乐”的历史页签内容
+  （M5 ①，`HistoryView`：按曲目汇总的列表、分页、缺失行、移除与清除确认，以及“播放全部”候选的读取 `useHistoryQueue`）；经 catalog 公开合同取封面与专辑艺人的显示规则，
+  不导入 player：`player` 导入它的上报器，概览页（app 层）组合区块。历史页的播放动作由 app 组合：`HistoryView` 经插槽 `renderPlayAll` 与
+  `renderTrackActions(item, requestRemove)` 接收 `app/routes/history-playback.tsx` 里的“播放全部”与行内播放/“更多”菜单，菜单里的“从历史中移除”调用插槽给的
+  `requestRemove`（确认对话框仍归 listening）。`HistoryItem → PlayerTrack` 的映射（`playerTrackOfHistoryItem`）也在 app：player 只经 catalog 公开合同读发行，不认识历史条目。
+  “我的音乐”的布局与页签（`app/routes/me-layout.tsx`）在 app，后续页签（收藏、歌单）沿用同一布局。
 - `governance`（M3）拥有管理员对发行的受治理写操作的界面与命令状态：编辑发行信息、调整归组、撤销、操作记录页与专辑详情的“修改记录”；
   M4 起还有专辑的默认版本（设定、改回自动选择与撤销）与“元数据问题”页（`/issues`：问题列表与详情、核对、取消核对与撤销，专辑详情的“查看问题”经现有插槽）与“待认领”页（`/claims`：把已不可见的旧版本上的修改认领给新版本，专辑详情的“可能接替了……”提示经同一个插槽）。
   只读的默认版本标签与版本对比（所有成员可见）在 catalog；问题页用的证据字段与原因码的中文名由 catalog 公开。

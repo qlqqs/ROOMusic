@@ -1,18 +1,19 @@
+import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { Button, Notice, Panel, QueryContent, Skeleton } from "../../../shared/ui";
 import { useClearPlayHistory } from "../hooks/use-clear-play-history";
 import { useRecentReleases } from "../hooks/use-recent-releases";
+import { PLAY_COUNT_RULE_TEXT } from "../format";
 import { ClearHistoryDialog } from "./clear-history-dialog";
 import { RecentReleaseCard } from "./recent-release-card";
 import styles from "./recent-plays-panel.module.css";
 
-/** 空态说明计次规则：用户才知道为什么刚听过的曲目还没出现。 */
-const EMPTY_TEXT = "还没有播放记录。一首曲目播放到一半（最长 4 分钟）就会记在这里。";
 /** 有记录、但播放过的曲目目前都不在资料库里（文件缺失）：不显示它们，但用户仍可以清除。 */
 const HIDDEN_TEXT = "没有可显示的播放记录：播放过的曲目目前都不在资料库里。";
 
 /**
- * 概览的“最近播放”区块：当前用户最近播放的专辑（最多 8 张，每张一次，最近的在前）与清除自己全部历史的按钮。
+ * 概览的“最近播放”区块：当前用户最近播放的专辑（最多 8 张，每张一次，最近的在前）、去历史页的“全部历史”链接与清除自己全部历史的按钮。
+ * 有任何记录（含文件缺失、卡片里不显示的）时才有“全部历史”与清除：历史页仍会列出缺失的曲目，可以逐首移除。
  * 记录只属于当前用户，清除前需要确认；清除成功后焦点回到区块标题（打开对话框的按钮已经不存在了），并用状态提示说明结果。
  */
 export function RecentPlaysPanel() {
@@ -36,12 +37,25 @@ export function RecentPlaysPanel() {
 
   return (
     <>
-      <Panel title="最近播放" headingRef={headingRef} action={hasHistory ? <Button onClick={() => setConfirming(true)}>清除播放历史</Button> : undefined}>
+      <Panel
+        title="最近播放"
+        headingRef={headingRef}
+        action={
+          hasHistory ? (
+            <span className={styles.actions}>
+              <Link to="/me/history" search={{}}>
+                全部历史
+              </Link>
+              <Button onClick={() => setConfirming(true)}>清除播放历史</Button>
+            </span>
+          ) : undefined
+        }
+      >
         {cleared && !hasHistory ? <Notice tone="success">已清除你的播放历史。</Notice> : null}
         <QueryContent query={recent} loading={<Skeleton label="正在加载最近播放" lines={3} />}>
           {(data) =>
             data.items.length === 0 ? (
-              <p>{data.has_history ? HIDDEN_TEXT : EMPTY_TEXT}</p>
+              <p>{data.has_history ? HIDDEN_TEXT : PLAY_COUNT_RULE_TEXT}</p>
             ) : (
               <ul className={styles.grid}>
                 {data.items.map((item) => (

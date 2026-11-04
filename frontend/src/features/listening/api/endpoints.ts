@@ -1,9 +1,14 @@
 import type { ApiResponse } from "../../../shared/api";
 import { apiRequest } from "../../../shared/api";
 import {
+  decodeHistoryQueue,
+  decodeHistoryTracks,
   decodePlaysCleared,
   decodeRecentReleases,
   decodeRecordedPlay,
+  decodeTrackPlaysDeleted,
+  type HistoryQueueDTO,
+  type HistoryTracksDTO,
   type PlaysClearedDTO,
   type RecentReleasesDTO,
   type RecordedPlayDTO,
@@ -37,4 +42,20 @@ export function fetchRecentReleases(signal?: AbortSignal): Promise<ApiResponse<R
 /** 清除当前用户的全部播放历史；没有记录时 deleted 为 0，重复调用安全。 */
 export function deletePlayHistory(signal?: AbortSignal): Promise<ApiResponse<PlaysClearedDTO>> {
   return apiRequest({ method: "DELETE", path: "/api/v1/me/plays", signal }, decodePlaysCleared);
+}
+
+/** 当前用户的历史，一首曲目一行：按最后一次播放倒序，时间相同按曲目 ID；页码超出末页时返回空的 items 与真实的总数。 */
+export function fetchHistoryTracks(params: { page: number; pageSize: number; signal?: AbortSignal | undefined }): Promise<ApiResponse<HistoryTracksDTO>> {
+  const query = new URLSearchParams({ page: String(params.page), page_size: String(params.pageSize) });
+  return apiRequest({ method: "GET", path: `/api/v1/me/plays/tracks?${query}`, signal: params.signal }, decodeHistoryTracks);
+}
+
+/** “播放全部”的候选：与历史页同一顺序的最近最多 1,000 首，不受当前页影响；能否播放由调用方判断。 */
+export function fetchHistoryQueue(signal?: AbortSignal): Promise<ApiResponse<HistoryQueueDTO>> {
+  return apiRequest({ method: "GET", path: "/api/v1/me/plays/queue", signal }, decodeHistoryQueue);
+}
+
+/** 从当前用户的历史中移除一首曲目的全部记录；没有记录时 deleted 为 0，重复调用安全。 */
+export function deleteTrackPlays(trackId: string, signal?: AbortSignal): Promise<ApiResponse<PlaysClearedDTO>> {
+  return apiRequest({ method: "DELETE", path: `/api/v1/me/plays/tracks/${encodeURIComponent(trackId)}`, signal }, decodeTrackPlaysDeleted);
 }

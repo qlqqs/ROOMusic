@@ -113,8 +113,8 @@ test.describe("权限", () => {
     const mock = await backend.start({ signedInAs: "listener" });
     await page.goto("/library");
     await expect(heading(page, "需要管理员权限")).toBeVisible();
-    // 成员导航包含概览、专辑与正在播放：没有扫描目录与成员这两个管理入口。
-    await expect(page.getByRole("navigation", { name: "主导航" }).getByRole("link")).toHaveText(["概览", "专辑", "正在播放"]);
+    // 成员导航包含概览、专辑、我的音乐与正在播放：没有扫描目录与成员这两个管理入口。
+    await expect(page.getByRole("navigation", { name: "主导航" }).getByRole("link")).toHaveText(["概览", "专辑", "我的音乐", "正在播放"]);
     expect(mock.callsTo("GET", "/api/v1/library-roots")).toHaveLength(0);
     expect(mock.callsTo("GET", "/api/v1/library-root-operations")).toHaveLength(0);
   });

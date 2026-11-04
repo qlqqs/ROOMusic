@@ -1,6 +1,7 @@
 import { appendFile, copyFile, mkdir, rm, utimes } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
+import { decode as d } from "../../src/shared/api";
 import { decodeTrackLyrics, decodeTrackPlayback, decodeTrackPreparing } from "../../src/features/player/api/decoders";
 import { admin, body, catalog, clearPlayHistory, decodeError, decodeID, decodeRoot, decodeSetup, findTrack, fixtureRoot, login, mediaState, observeMedia, origin, playsPath, playTrack, post, recentReleases, scan, type Albums } from "./support";
 
@@ -300,6 +301,44 @@ test("播放过半后服务端记下这一次，概览的“最近播放”显�
   await page.reload();
   await expect(panel.getByText(/^还没有播放记录。/)).toBeVisible();
   await expect(panel.getByRole("button", { name: "清除播放历史", exact: true })).toHaveCount(0);
+});
+
+// M5：放在末尾故意改坏源文件的用例之前，沿用本组每次先清空历史的隔离方式。
+// 仍用真实服务与原生媒体事件；这里只解码断言所需的安全字段，不把应用样式带进 Node。
+const decodeHistory = d.defineDecoder(d.object({
+  items: d.array(d.object({ track_id: d.uuid(), title: d.string(), play_count: d.integer({ min: 1 }) }), { max: 100 }),
+  has_history: d.boolean(),
+  pagination: d.object({ total: d.integer({ min: 0 }) }),
+}));
+
+test("播放过半后历史页出现这首且次数为 1，从历史移除后页面与服务端都不再显示", async ({ page }) => {
+  await clearPlayHistory(page.request);
+  const item = findTrack(albums, "flac-16-44100.flac");
+  const duration = item.track.duration_seconds ?? 0;
+  expect(duration).toBeGreaterThan(1);
+  const reports = watchPlayReports(page);
+  await playTrack(page, item);
+  const history = async () => decodeHistory(await body(await page.request.get(`${playsPath}/tracks`)));
+  await expect.poll(async () => (await history()).items, { timeout: 15_000 }).toEqual([{ track_id: item.track.id, title: item.track.title, play_count: 1 }]);
+  await page.getByRole("region", { name: "播放器", exact: true }).getByRole("button", { name: "暂停", exact: true }).click();
+  expect(reports.filter((report) => report.track_id === item.track.id)).toHaveLength(1);
+  expect(reports.find((report) => report.track_id === item.track.id)?.played_seconds ?? 0).toBeGreaterThanOrEqual(Math.min(duration / 2, 240));
+  await page.goto("/me/history");
+  const row = page.getByRole("table", { name: "播放历史" }).getByRole("row").filter({ has: page.getByText(item.track.title, { exact: true }) });
+  await expect(row).toBeVisible();
+  await expect(row.getByRole("cell", { name: "1", exact: true })).toBeVisible();
+  await expect(row.getByRole("link", { name: item.release.title, exact: true })).toHaveAttribute("href", `/albums/${item.groupId}?release=${item.release.id}`);
+  await row.getByRole("button", { name: "更多" }).click();
+  await page.getByRole("menuitem", { name: "从历史中移除" }).click();
+  const dialog = page.getByRole("dialog", { name: "从历史中移除这首曲目？" });
+  await expect(dialog).toContainText("全部 1 次记录，不影响其他成员");
+  await dialog.getByRole("button", { name: "从历史中移除", exact: true }).click();
+  await expect(row).toHaveCount(0);
+  await expect(page.getByText(/^还没有播放记录。/)).toBeVisible();
+  expect(await history()).toEqual({ items: [], has_history: false, pagination: { total: 0 } });
+  expect(await recentReleases(page.request)).toEqual({ items: [], has_history: false });
+  await page.reload();
+  await expect(page.getByText(/^还没有播放记录。/)).toBeVisible();
 });
 
 test("只拖动、几乎没有出声的播放不产生记录：拖到接近末尾再自然播完", async ({ page }) => {

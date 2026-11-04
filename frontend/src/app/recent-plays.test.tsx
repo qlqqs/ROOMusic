@@ -69,6 +69,7 @@ describe("概览的“最近播放”", () => {
     expect(await within(panel).findByText(emptyText)).toBeTruthy();
     expect(within(panel).queryByRole("status")).toBeNull();
     expect(clearButton(panel)).toBeNull();
+    expect(within(panel).queryByRole("link", { name: "全部历史" })).toBeNull();
   });
 
   it("按接口给的顺序显示专辑：整张卡片是链接，指向播放过的版本，写明专辑艺人与上次播放时间", async () => {
@@ -76,7 +77,9 @@ describe("概览的“最近播放”", () => {
     setup(items);
     renderApp();
     const panel = await region();
-    const links = await within(panel).findAllByRole("link");
+    const links = await within(panel).findAllByRole("link", { name: /^专辑 / });
+    expect(within(panel).getByRole("link", { name: "全部历史" }).getAttribute("href")).toBe("/me/history");
+    expect(within(panel).getAllByRole("link")).toHaveLength(items.length + 1);
     expect(links.map((link) => link.getAttribute("href"))).toEqual(items.map((item) => `/albums/${item.group_id}?release=${item.release.id}`));
     // 专辑艺人缺失时退回到艺人；链接名称里写着上次播放的时间。封面是装饰，不进名称。
     expect(within(panel).getByRole("link", { name: `专辑 3 艺术家 3 上次播放 ${formatDateTime("2026-01-03T08:30:00Z")}` })).toBe(links[0]);
@@ -101,6 +104,7 @@ describe("概览的“最近播放”", () => {
     renderApp();
     const panel = await region();
     expect(await within(panel).findByText(hiddenText)).toBeTruthy();
+    expect(within(panel).getByRole("link", { name: "全部历史" }).getAttribute("href")).toBe("/me/history");
     expect(within(panel).queryByText(emptyText)).toBeNull();
     expect(clearButton(panel)).toBeTruthy();
   });
@@ -141,7 +145,7 @@ describe("概览的“最近播放”", () => {
       expect(screen.queryByRole("dialog")).toBeNull();
       expect(api.requestsTo("DELETE", playsPath)).toHaveLength(0);
       expect(document.activeElement).toBe(opener);
-      expect(within(panel).getAllByRole("link")).toHaveLength(2);
+      expect(within(panel).getAllByRole("link")).toHaveLength(3);
 
       await userEvent.click(opener);
       await userEvent.click(within(await screen.findByRole("dialog", { name: "清除播放历史？" })).getByRole("button", { name: "清除播放历史" }));
@@ -209,7 +213,7 @@ describe("概览的“最近播放”", () => {
       await userEvent.click(within(dialog).getByRole("button", { name: "清除播放历史" }));
       expect(await within(dialog).findByRole("alert")).toBeTruthy();
       expect(within(dialog).getByText("结果未确认")).toBeTruthy();
-      expect(within(panel).getAllByRole("link")).toHaveLength(1);
+      expect(within(panel).getAllByRole("link")).toHaveLength(2);
 
       await userEvent.click(within(dialog).getByRole("button", { name: "重试清除" }));
       await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
