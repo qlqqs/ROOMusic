@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "favorites_changed",
+      "message": "收藏已更新，请刷新后再试。"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

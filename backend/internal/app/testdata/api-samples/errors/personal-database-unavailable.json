@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "database_unavailable",
+      "message": "个人音乐暂时不可用"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 503
+}

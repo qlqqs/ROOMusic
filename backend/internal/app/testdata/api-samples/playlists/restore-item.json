@@ -1,0 +1,23 @@
+{
+  "body": {
+    "item": {
+      "added_at": "2026-01-01T00:00:01Z",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "position": 3,
+      "track_id": "00000000-0000-4000-8000-000000000002"
+    },
+    "outcome": "restored",
+    "placement": "original",
+    "playlist": {
+      "created_at": "2026-01-01T00:00:00Z",
+      "id": "00000000-0000-4000-8000-000000000003",
+      "name": "书房聆听",
+      "over_limit_count": 0,
+      "revision": 10,
+      "track_count": 3,
+      "track_limit": 10000,
+      "updated_at": "2026-01-01T00:00:02Z"
+    }
+  },
+  "status": 200
+}

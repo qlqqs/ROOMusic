@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_json",
+      "message": "请求格式无效"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

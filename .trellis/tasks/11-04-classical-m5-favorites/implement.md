@@ -24,3 +24,16 @@
 - 历史页的行动作改由 `track-actions.tsx` 组合，改动时搜索 `frontend/e2e/real/` 与 `scripts/playback-e2e.sh` 里依赖旧菜单结构的断言。
 - 共享热点（`app.go`、`dependency_rules_test.go`、`router.tsx`、`me-layout.tsx`、`album-detail-page.tsx`、`history-playback.tsx`、播放器插槽、`shared/api/request.ts`）由本线先改，F、S 线变基时接入，不各自另造。
 - 回滚点：步骤 1 与步骤 2+3 各是独立提交；前端提交连同重建的内嵌产物与锁文件。
+
+## 步骤 1 提交前追加验收（2026-11-04）
+
+主会话已审阅接口、迁移与测试，批准以下后端内部性能优化；不改变外部合同、不新增 Go 依赖、不动前端及内嵌产物，不提交。
+
+1. 将三份阶段性后端报告移到本任务 `research/`，修正引用；最终结论与关键数字写入 design §10“实测结果”。
+2. 独立合成 100,000 首 / 10,000 个发行 / 8,000 个组（每发行 10 首、5% missing）的真实形状；元数据辅助表空且未 ANALYZE、全部 ANALYZE 两阶段均测。20 张各 10,000 首卡片、20,000 首收藏及 10,000 首歌单，规模不得缩减。
+3. 真实 app 经本机 TCP，包含认证、服务端 SQL/投影、JSON 编码及完整响应发送；单独记录客户端收完 body 与 Go 解码时间。非 race 每场景至少 20 个有效样本，以 nearest-rank p95 验收：列表首屏 ≤1,000ms、两类队列 ≤2,000ms、收藏页与歌单详情首屏 ≤300ms。
+4. 未达标时在 catalog 公开读取与 personal 有界读取内优化，保留事务快照、完整统计、权限和封面顺序；仅经实测证明 JIT 编译影响延迟后，允许在延迟敏感只读事务开始后执行 `SET LOCAL jit = off`，并按数据库规范集成验证事务内设置与事务外默认值不变；仍禁止关闭其他 planner 开关、改优化器参数或在业务事务执行 ANALYZE。极端十万轨单发行/80% missing 保留既有证据，不作为本次优化目标。
+5. 重跑步骤 1 的指定 race/vet/依赖规则和两组样本回放，集成 0 SKIP；保留更新前后样本 SHA-256 对比。隔离项目仍为 `roomusic-test-m5p`，唯一启动器负责随机库及空闲端口，结束后 `down -v`。
+
+
+追加验收已完成：真实形状双统计状态共320个有效HTTP样本，全部p95门槛通过；最终race 315个顶层/930项（集成223个顶层/591项），0 FAIL、0 SKIP，vet/依赖规则/样本回放通过。219份golden（含personal70份）SHA不变。三份报告已迁入research；本轮文件与隔离库清理证明见[后端交付](research/m5-personal-backend-handoff.md)及[验收清单](research/backend-followup-verification.json)。仅步骤1追加验收完成，不代表步骤2–4或整个任务完成，未提交。

@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "playlist_limit_reached",
+      "message": "歌单数量已达上限"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "revision_conflict",
+      "message": "歌单已在其他页面修改，请刷新后再试。"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

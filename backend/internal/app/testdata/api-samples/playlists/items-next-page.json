@@ -1,0 +1,57 @@
+{
+  "body": {
+    "items": [
+      {
+        "added_at": "2026-01-01T00:00:01Z",
+        "id": "00000000-0000-4000-8000-000000000001",
+        "position": 2,
+        "track": {
+          "artist": "艺术家",
+          "duration_seconds": 120,
+          "group_id": "00000000-0000-4000-8000-000000000002",
+          "present": true,
+          "release": {
+            "album_artist": null,
+            "artist": "艺术家",
+            "artwork": null,
+            "attention_count": 0,
+            "id": "00000000-0000-4000-8000-000000000003",
+            "media_type": null,
+            "medium_count": 1,
+            "source_type": null,
+            "title": "专辑",
+            "track_count": 1,
+            "year": null
+          },
+          "source": {
+            "bit_depth": 24,
+            "bitrate": null,
+            "channels": 2,
+            "codec": "flac",
+            "sample_rate": 96000,
+            "source_kind": "flac_vorbis_comment"
+          },
+          "title": "合成曲目 2",
+          "track_id": "00000000-0000-4000-8000-000000000004"
+        }
+      }
+    ],
+    "page_after_item_id": null,
+    "pagination": {
+      "page": 2,
+      "page_size": 1,
+      "total": 2
+    },
+    "playlist": {
+      "created_at": "2026-01-01T00:00:00Z",
+      "id": "00000000-0000-4000-8000-000000000005",
+      "name": "周末聆听",
+      "over_limit_count": 0,
+      "revision": 1,
+      "track_count": 2,
+      "track_limit": 10000,
+      "updated_at": "2026-01-01T00:00:00Z"
+    }
+  },
+  "status": 200
+}

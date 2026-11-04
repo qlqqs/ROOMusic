@@ -1,0 +1,23 @@
+{
+  "body": {
+    "item": {
+      "added_at": "2026-01-01T00:00:01Z",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "position": 1,
+      "track_id": "00000000-0000-4000-8000-000000000002"
+    },
+    "outcome": "restored",
+    "placement": "end",
+    "playlist": {
+      "created_at": "2026-01-01T00:00:00Z",
+      "id": "00000000-0000-4000-8000-000000000003",
+      "name": "恢复位置",
+      "over_limit_count": 0,
+      "revision": 5,
+      "track_count": 1,
+      "track_limit": 10000,
+      "updated_at": "2026-01-01T00:00:02Z"
+    }
+  },
+  "status": 200
+}

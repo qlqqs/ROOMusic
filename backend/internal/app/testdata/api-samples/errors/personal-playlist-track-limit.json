@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "playlist_track_limit_reached",
+      "message": "歌单曲目数量已达上限，请先移除部分曲目。"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

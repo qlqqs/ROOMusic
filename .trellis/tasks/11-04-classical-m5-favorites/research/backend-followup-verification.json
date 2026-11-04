@@ -1,0 +1,1483 @@
+{
+  "date": "2026-11-04",
+  "scope": "步骤1后端提交前追加验收；不含前端、web产物、全仓测试或提交",
+  "race": {
+    "command": "go test -race ./internal/personal/... ./internal/catalog/... ./internal/app -count=1 -json",
+    "started_at": "2026-11-04T12:26:29.883002322Z",
+    "finished_at": "2026-11-04T12:29:34.626005348Z",
+    "top_level": 315,
+    "including_subtests": 930,
+    "integration_top_level": 223,
+    "integration_including_subtests": 591,
+    "fail": 0,
+    "skip": 0,
+    "packages": [
+      {
+        "Package": "github.com/qlqq/roomusic/backend/internal/personal/httpapi",
+        "Elapsed": 1.211
+      },
+      {
+        "Package": "github.com/qlqq/roomusic/backend/internal/catalog/httpapi",
+        "Elapsed": 1.022
+      },
+      {
+        "Package": "github.com/qlqq/roomusic/backend/internal/catalog/metadata",
+        "Elapsed": 1.024
+      },
+      {
+        "Package": "github.com/qlqq/roomusic/backend/internal/catalog/artwork",
+        "Elapsed": 1.025
+      },
+      {
+        "Package": "github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql",
+        "Elapsed": 1.029
+      },
+      {
+        "Package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+        "Elapsed": 1.052
+      },
+      {
+        "Package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "Elapsed": 70.404
+      },
+      {
+        "Package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "Elapsed": 80.128
+      },
+      {
+        "Package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "Elapsed": 136.513
+      },
+      {
+        "Package": "github.com/qlqq/roomusic/backend/internal/app",
+        "Elapsed": 183.791
+      }
+    ],
+    "log_sha256": "5f911784962edb8851dad295811757754483e07fecf1d5234d743a1f8bb515fb",
+    "integration_classification": "*_integration_test.go中声明或TestPostgreSQL开头的顶层测试及其实际通过子测试；按包+测试名去重",
+    "integration_tests": [
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPersonalHTTPIsolationReplayAndSessions",
+        "source": "backend/internal/app/personal_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPersonalHTTPMethodsAndDatabaseFailures",
+        "source": "backend/internal/app/personal_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPersonalHTTPNormalizedInputsAndPageBoundaries",
+        "source": "backend/internal/app/personal_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPersonalHTTPStrictValidation",
+        "source": "backend/internal/app/personal_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPersonalRealisticFixtureDistribution",
+        "source": "backend/internal/app/personal_realistic_performance_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPersonalRealisticPercentiles",
+        "source": "backend/internal/app/personal_realistic_performance_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLAPIResponseSamples",
+        "source": "backend/internal/app/api_samples_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLArtworkCachingUsesETagAndRevalidation",
+        "source": "backend/internal/app/artwork_cache_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLArtworkRejectsUnsafeStorageKeys",
+        "source": "backend/internal/app/artwork_cache_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLArtworkServesFreshBytesWhenTheTagDiffers",
+        "source": "backend/internal/app/artwork_cache_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLCatalogReadProjectionAndEvidencePermissions",
+        "source": "backend/internal/app/catalog_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLClaimAPIClaimsAndReplays",
+        "source": "backend/internal/app/claim_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLClaimAPIConcurrentRequests",
+        "source": "backend/internal/app/claim_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLClaimAPIRejectsUnauthorizedAndInvalidRequestsWithoutSideEffects",
+        "source": "backend/internal/app/claim_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLClaimCluesSurviveARealRescan",
+        "source": "backend/internal/app/claims_rescan_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLClaimOperationRecordsAndRevertAPI",
+        "source": "backend/internal/app/claim_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLClaimPreviewAPI",
+        "source": "backend/internal/app/claim_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLClaimReadAPI",
+        "source": "backend/internal/app/claim_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLClaimRevertAPIRefusesAfterLaterChanges",
+        "source": "backend/internal/app/claim_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLClaimSurvivesRealRescans",
+        "source": "backend/internal/app/claims_rescan_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLComparisonAPIPermissionsErrorsAndReads",
+        "source": "backend/internal/app/comparison_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLCorrectionsAPIConcurrentRequests",
+        "source": "backend/internal/app/corrections_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLCorrectionsAPIIdempotencyAndConflicts",
+        "source": "backend/internal/app/corrections_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLCorrectionsAPIRejectsUnauthorizedAndInvalidRequestsWithoutSideEffects",
+        "source": "backend/internal/app/corrections_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLCorrectionsAPIStateAndSuccess",
+        "source": "backend/internal/app/corrections_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLCorrectionsSurviveARealRescanAndShowEverywhere",
+        "source": "backend/internal/app/corrections_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLCreateUserMapsOnlyUniqueViolationsToUsernameTaken",
+        "source": "backend/internal/app/identity_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLDefaultVersionSurvivesARealRescan",
+        "source": "backend/internal/app/group_default_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLGroupChangeAPIConcurrentRequests",
+        "source": "backend/internal/app/group_change_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLGroupChangeAPIJoinDetachAndReads",
+        "source": "backend/internal/app/group_change_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLGroupChangeAPIRejectsUnauthorizedAndInvalidRequestsWithoutSideEffects",
+        "source": "backend/internal/app/group_change_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLGroupDefaultAPIConcurrentRequests",
+        "source": "backend/internal/app/group_default_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLGroupDefaultAPIRejectsUnauthorizedAndInvalidRequestsWithoutSideEffects",
+        "source": "backend/internal/app/group_default_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLGroupDefaultAPISetClearRevertAndReads",
+        "source": "backend/internal/app/group_default_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLHistoryHTTPIsolationAndDelete",
+        "source": "backend/internal/app/history_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLHistoryHTTPProjectionFailure",
+        "source": "backend/internal/app/history_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLHistoryHTTPValidationAndFailures",
+        "source": "backend/internal/app/history_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLIdentityResponsesCarryUserID",
+        "source": "backend/internal/app/identity_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLIssueReadAPI",
+        "source": "backend/internal/app/issue_review_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLIssueReviewAPIConcurrentRequests",
+        "source": "backend/internal/app/issue_review_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLIssueReviewAPIRejectsUnauthorizedAndInvalidRequestsWithoutSideEffects",
+        "source": "backend/internal/app/issue_review_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLIssueReviewAPIReviewUnreviewRevertAndRecords",
+        "source": "backend/internal/app/issue_review_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLIssueReviewsSurviveARealRescan",
+        "source": "backend/internal/app/issue_review_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLJSONResponsesAreNotCacheable",
+        "source": "backend/internal/app/artwork_cache_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLListUsersFailsLoudlyOnUnreadableRows",
+        "source": "backend/internal/app/identity_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLListeningFollowsTracksThroughRescans",
+        "source": "backend/internal/app/listening_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLListeningHistoryIsPrivateEvenFromAdministrators",
+        "source": "backend/internal/app/listening_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLListeningRequestsAreCheckedInOrder",
+        "source": "backend/internal/app/listening_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLListeningResponseShapesAndDisabledMembers",
+        "source": "backend/internal/app/listening_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLManualGroupingSurvivesARealRescan",
+        "source": "backend/internal/app/group_change_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLOperationsAPIListsRecordsForAdministratorsOnly",
+        "source": "backend/internal/app/operations_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLPermissionMatrixAndImmediateSessionInvalidation",
+        "source": "backend/internal/app/auth_root_operations_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLPersonalAPIResponseSamples",
+        "source": "backend/internal/app/personal_samples_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLPersonalHTTPPerformance",
+        "source": "backend/internal/app/personal_performance_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLPersonalRealisticHTTPPerformance",
+        "source": "backend/internal/app/personal_realistic_performance_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLPlaybackAudioRejectsUnusableRangesWithAJSON416",
+        "source": "backend/internal/app/playback_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLPlaybackAudioRequiresLoginAndRevealsNothingWithoutIt",
+        "source": "backend/internal/app/playback_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLPlaybackAudioStreamsTheOriginalFileWithProtectedHeaders",
+        "source": "backend/internal/app/playback_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLPlaybackChecksPrecedeAnyConversion",
+        "source": "backend/internal/app/playback_derivation_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLPlaybackChecksRunInTheDocumentedOrder",
+        "source": "backend/internal/app/playback_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLPlaybackDerivationFailuresHaveStableErrorCodes",
+        "source": "backend/internal/app/playback_derivation_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLPlaybackDerivedStreamIsAbortedOnShutdown",
+        "source": "backend/internal/app/playback_derivation_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLPlaybackDerivesALACLosslesslyWithFFmpeg",
+        "source": "backend/internal/app/playback_derivation_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLPlaybackDirectFormatsNeverTouchTheDerivation",
+        "source": "backend/internal/app/playback_derivation_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLPlaybackFormatsAddTheDerivedFormatWhenDerivationIsEnabled",
+        "source": "backend/internal/app/playback_derivation_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLPlaybackFormatsListTheDirectlyPlayableCombinationsWithoutDerivation",
+        "source": "backend/internal/app/playback_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLPlaybackPreflightDescribesTheOriginalRepresentation",
+        "source": "backend/internal/app/playback_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLPlaybackPreflightWaitEndsWhenTheApplicationShutsDown",
+        "source": "backend/internal/app/playback_derivation_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLPlaybackPreflightWaitsForTheDerivationAndAudioServesTheCachedFile",
+        "source": "backend/internal/app/playback_derivation_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLPlaybackRealConnectionIsClosedOnShutdown",
+        "source": "backend/internal/app/playback_stream_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLPlaybackRejectsASourceRewrittenInPlaceBeforeConverting",
+        "source": "backend/internal/app/playback_derivation_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLPlaybackRoutesRejectOtherMethods",
+        "source": "backend/internal/app/playback_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLPlaybackStreamCompletesWithoutShutdown",
+        "source": "backend/internal/app/playback_stream_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLPlaybackStreamDoesNotLogAClientDisconnectAsAServerAbort",
+        "source": "backend/internal/app/playback_stream_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLPlaybackStreamIsAbortedOnShutdown",
+        "source": "backend/internal/app/playback_stream_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLPlaybackUnexpectedDerivationErrorsAreInternalErrorsAndLogged",
+        "source": "backend/internal/app/playback_derivation_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLReleaseGroupDetailErrors",
+        "source": "backend/internal/app/release_groups_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLReleaseGroupListMirrorsReleaseList",
+        "source": "backend/internal/app/release_groups_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLReleaseGroupRepresentativeAndCounts",
+        "source": "backend/internal/app/release_groups_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLRevertAPIConcurrentRequests",
+        "source": "backend/internal/app/operations_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLRevertAPIRejectsUnauthorizedAndInvalidRequestsWithoutSideEffects",
+        "source": "backend/internal/app/operations_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLRevertAPIUndoesCorrectionsAndGroupChangesAndReplays",
+        "source": "backend/internal/app/operations_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLRootOperationConcurrentRetriesConverge",
+        "source": "backend/internal/app/auth_root_operations_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLRootOperationHistoryIsAdminOnlyAndRedacted",
+        "source": "backend/internal/app/auth_root_operations_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLRootOperationIdempotencyBindsTarget",
+        "source": "backend/internal/app/auth_root_operations_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLRootOperationTransactionsAndConflicts",
+        "source": "backend/internal/app/auth_root_operations_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLScanCancellationIsPersistentAndIdempotent",
+        "source": "backend/internal/app/auth_root_operations_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLScanListIsAdminOnlyAndValidatesPagination",
+        "source": "backend/internal/app/scan_history_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLScanListOrdersPagesAndMatchesScanDetails",
+        "source": "backend/internal/app/scan_history_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLScanListReportsDatabaseFailures",
+        "source": "backend/internal/app/scan_history_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLSetupAdminMapsOnlyUniqueViolationsToSetupClosed",
+        "source": "backend/internal/app/identity_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLTrackLyricsAreServedParsedToAnyMember",
+        "source": "backend/internal/app/lyrics_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLTrackLyricsRequireLoginAndCheckInputInOrder",
+        "source": "backend/internal/app/lyrics_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLUnauthenticatedMessageIsRoleNeutral",
+        "source": "backend/internal/app/identity_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLUserRoutesRejectMalformedAndUnknownIDs",
+        "source": "backend/internal/app/identity_api_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "test": "TestPostgreSQLUserTransactionProtectsLastAdmin",
+        "source": "backend/internal/app/auth_root_operations_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestLoadTrackPlacementsWithoutUsableInputDoesNotQuery",
+        "source": "backend/internal/catalog/track_placement_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestLoadTrackSummariesInputBounds",
+        "source": "backend/internal/catalog/track_summary_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLAttentionIgnoresCorrectedFields",
+        "source": "backend/internal/catalog/effective_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLCorrectionRowsRejectInvalidStates",
+        "source": "backend/internal/catalog/effective_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLEffectiveViewAppliesAndRemovesCorrectionsPerField",
+        "source": "backend/internal/catalog/effective_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLEffectiveViewEqualsTheTableWithoutCorrections",
+        "source": "backend/internal/catalog/effective_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLIssueReviewRowsRejectInvalidStates",
+        "source": "backend/internal/catalog/issues_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLIssueReviewsExcludeReviewedIssuesFromAttention",
+        "source": "backend/internal/catalog/issues_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLLoadReleaseGroupSummaries",
+        "source": "backend/internal/catalog/personal_reads_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLLoadTrackDuration",
+        "source": "backend/internal/catalog/track_placement_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLLoadTrackFacts",
+        "source": "backend/internal/catalog/personal_reads_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLLoadTrackPlacements",
+        "source": "backend/internal/catalog/track_placement_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLLoadTrackPlacementsFailClosedOnMalformedArtwork",
+        "source": "backend/internal/catalog/track_placement_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLLoadTrackSummaries",
+        "source": "backend/internal/catalog/track_summary_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLLoadTrackSummariesRejectsEmptySourceKind",
+        "source": "backend/internal/catalog/track_summary_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLLoadTrackSummariesUnknownDurationAndLimit",
+        "source": "backend/internal/catalog/track_summary_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLPersonalBatchSummaryParity",
+        "source": "backend/internal/catalog/personal_reads_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLPersonalCatalogExplain",
+        "source": "backend/internal/catalog/personal_reads_explain_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLPersonalCatalogLargeReleaseExplain",
+        "source": "backend/internal/catalog/personal_reads_explain_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLPersonalReadsBoundsAndSnapshot",
+        "source": "backend/internal/catalog/personal_reads_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLPersonalReleaseGroupOrderAndFullCount",
+        "source": "backend/internal/catalog/personal_reads_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLReadsReturnEffectiveValues",
+        "source": "backend/internal/catalog/effective_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLReleaseComparisonBoundsTheFormatsOfAVersion",
+        "source": "backend/internal/catalog/comparison_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLReleaseComparisonFollowsTheRepresentativeRule",
+        "source": "backend/internal/catalog/comparison_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLReleaseComparisonIsBoundedAndUsesAFixedNumberOfQueries",
+        "source": "backend/internal/catalog/comparison_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLReleaseComparisonReportsEffectiveValuesAndContent",
+        "source": "backend/internal/catalog/comparison_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLReleaseComparisonReportsMissingAlbums",
+        "source": "backend/internal/catalog/comparison_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLReleaseCreditsFollowTheAlbumArtistCorrection",
+        "source": "backend/internal/catalog/effective_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLTrackCollectionStats",
+        "source": "backend/internal/catalog/track_collection_stats_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLTrackCollectionStatsExplain",
+        "source": "backend/internal/catalog/track_collection_stats_explain_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLTrackCollectionStatsSnapshot",
+        "source": "backend/internal/catalog/track_collection_stats_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "test": "TestPostgreSQLTrackSummaryChunkParity",
+        "source": "backend/internal/catalog/track_summary_chunk_parity_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestCorrectionFingerprintCoversTheCompleteSemantics",
+        "source": "backend/internal/catalog/governance/corrections_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestParseCorrectionChanges",
+        "source": "backend/internal/catalog/governance/corrections_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLClaimAlbumCases",
+        "source": "backend/internal/catalog/governance/claim_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLClaimAndRevertingTheOriginalReviewDoNotDeadlock",
+        "source": "backend/internal/catalog/governance/claim_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLClaimDescribe",
+        "source": "backend/internal/catalog/governance/claim_revert_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLClaimDetectsChangesAfterThePreview",
+        "source": "backend/internal/catalog/governance/claim_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLClaimKeepsWhatTheNewReleaseAlreadyHas",
+        "source": "backend/internal/catalog/governance/claim_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLClaimMovesAllFourKinds",
+        "source": "backend/internal/catalog/governance/claim_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLClaimPreviewIsReadOnlyAndTokenTracksState",
+        "source": "backend/internal/catalog/governance/claim_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLClaimRejectionsLeaveNoTrace",
+        "source": "backend/internal/catalog/governance/claim_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLClaimReplaysWithTheSameKey",
+        "source": "backend/internal/catalog/governance/claim_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLClaimSkipsMissingTrackReviewsAndEverythingCanBeSkipped",
+        "source": "backend/internal/catalog/governance/claim_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLClaimSuggestions",
+        "source": "backend/internal/catalog/governance/claims_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLClaimSuggestionsAreBoundedAndCapped",
+        "source": "backend/internal/catalog/governance/claims_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLClaimSuggestionsUseTheReleasesOwnTracksWithoutEvidence",
+        "source": "backend/internal/catalog/governance/claims_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLClaimWithoutAnAlbum",
+        "source": "backend/internal/catalog/governance/claim_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLClaimablePredicate",
+        "source": "backend/internal/catalog/governance/claims_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLClaimedReviewsAreValidOnlyWhenTheBasisMatches",
+        "source": "backend/internal/catalog/governance/claim_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLClaimsAndOtherChangesNeverDeadlock",
+        "source": "backend/internal/catalog/governance/claim_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLConcurrentGroupChangesDoNotDeadlock",
+        "source": "backend/internal/catalog/governance/group_change_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLConfirmingTheScannedValueClearsAttention",
+        "source": "backend/internal/catalog/governance/corrections_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLCorrectedValuesAreConsistentAcrossReads",
+        "source": "backend/internal/catalog/governance/corrections_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLCorrectionRejectsStaleInvisibleAndUnknownReleases",
+        "source": "backend/internal/catalog/governance/corrections_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLCorrectionStateTransitions",
+        "source": "backend/internal/catalog/governance/corrections_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLDefaultVersionAndGroupChangesNeverDeadlock",
+        "source": "backend/internal/catalog/governance/group_default_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLDefaultVersionBecomesTheRepresentative",
+        "source": "backend/internal/catalog/governance/group_default_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLDefaultVersionGoesDormantAndComesBack",
+        "source": "backend/internal/catalog/governance/group_default_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLDescribeReportsTargetsChangesAndRevertibility",
+        "source": "backend/internal/catalog/governance/revert_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLDetachMakesAVersionItsOwnAlbum",
+        "source": "backend/internal/catalog/governance/group_change_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLGroupChangeRejectsInvalidRequestsWithoutSideEffects",
+        "source": "backend/internal/catalog/governance/group_change_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLGroupDefaultDescribe",
+        "source": "backend/internal/catalog/governance/group_default_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLIssueBasisTokenIsStable",
+        "source": "backend/internal/catalog/governance/issue_review_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLIssueListCountsFiltersAndSummary",
+        "source": "backend/internal/catalog/governance/issue_read_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLIssueReviewDescribe",
+        "source": "backend/internal/catalog/governance/issue_review_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLIssueReviewRejectsInvalidRequestsWithoutSideEffects",
+        "source": "backend/internal/catalog/governance/issue_review_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLIssueReviewStateTransitions",
+        "source": "backend/internal/catalog/governance/issue_review_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLIssueReviewsAndOtherChangesNeverDeadlock",
+        "source": "backend/internal/catalog/governance/issue_review_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLJoinMovesAVersionIntoAnotherAlbum",
+        "source": "backend/internal/catalog/governance/group_change_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLListClaims",
+        "source": "backend/internal/catalog/governance/claim_read_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLListClaimsAlbumAndDefault",
+        "source": "backend/internal/catalog/governance/claim_read_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLListClaimsLocationNeverLeaksAbsolutePaths",
+        "source": "backend/internal/catalog/governance/claim_read_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLLoadClaim",
+        "source": "backend/internal/catalog/governance/claim_read_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLLoadClaimHints",
+        "source": "backend/internal/catalog/governance/claim_read_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLPinningTheAutomaticVersionAndClearingADormantDefault",
+        "source": "backend/internal/catalog/governance/group_default_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLReleaseIssuesBounds",
+        "source": "backend/internal/catalog/governance/issue_read_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLReleaseIssuesDetail",
+        "source": "backend/internal/catalog/governance/issue_read_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLRevertClaimFollowsTheCommonRules",
+        "source": "backend/internal/catalog/governance/claim_revert_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLRevertClaimRejectsLaterChanges",
+        "source": "backend/internal/catalog/governance/claim_revert_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLRevertClaimRestoresEverything",
+        "source": "backend/internal/catalog/governance/claim_revert_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLRevertClaimRestoresWhatWasSkipped",
+        "source": "backend/internal/catalog/governance/claim_revert_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLRevertClaimWorksWhenTheNewReleaseBecameInvisible",
+        "source": "backend/internal/catalog/governance/claim_revert_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLRevertGroupDefault",
+        "source": "backend/internal/catalog/governance/group_default_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLRevertGroupDefaultReplaysWithTheSameKey",
+        "source": "backend/internal/catalog/governance/group_default_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLRevertIsRefusedAfterLaterEditsOrWhenTheTargetIsHidden",
+        "source": "backend/internal/catalog/governance/revert_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLRevertIssueReview",
+        "source": "backend/internal/catalog/governance/issue_review_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLRevertIssueReviewReplaysWithTheSameKey",
+        "source": "backend/internal/catalog/governance/issue_review_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLRevertOfAGroupChangeMovesTheVersionBack",
+        "source": "backend/internal/catalog/governance/revert_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLRevertOnlyTouchesTheFieldsTheOperationChanged",
+        "source": "backend/internal/catalog/governance/revert_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLRevertRestoresEveryPreviousCorrectionIntent",
+        "source": "backend/internal/catalog/governance/revert_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLRevertToNoCorrectionShowsTheCurrentScannedValue",
+        "source": "backend/internal/catalog/governance/revert_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLRevertingAClaimAndTheOriginalReviewDoNotDeadlock",
+        "source": "backend/internal/catalog/governance/claim_revert_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLRevertingAnUnreviewAndTheOriginalReviewDoNotDeadlock",
+        "source": "backend/internal/catalog/governance/issue_review_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLSetDefaultAndDetachQueueOnTheSameRelease",
+        "source": "backend/internal/catalog/governance/group_default_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "test": "TestPostgreSQLSetDefaultRejectsInvalidRequestsWithoutSideEffects",
+        "source": "backend/internal/catalog/governance/group_default_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPersonalNamesAndOrderIntervals",
+        "source": "backend/internal/personal/playlists_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLFavoriteLookupLargeBatchDoesNotReadCatalog",
+        "source": "backend/internal/personal/favorite_queue_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLFavoriteQueueFiltersBeforeLimitAndKeepsSnapshot",
+        "source": "backend/internal/personal/favorite_queue_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLFavoritesConcurrentToggleAndRevisionExhaustion",
+        "source": "backend/internal/personal/favorites_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLFavoritesPaginationCurrentPlacementAndFallback",
+        "source": "backend/internal/personal/favorites_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLFavoritesProjectionFailureRollsBack",
+        "source": "backend/internal/personal/favorites_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLFavoritesToggleIsolationAndAvailability",
+        "source": "backend/internal/personal/favorites_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLPersonalOrderRebalanceExplain",
+        "source": "backend/internal/personal/order_explain_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLPersonalPerformance",
+        "source": "backend/internal/personal/performance_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLPersonalPlaylistCRUDRetryAndIsolation",
+        "source": "backend/internal/personal/playlists_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLPersonalPlaylistConcurrentKeysQuotaAndCancellation",
+        "source": "backend/internal/personal/playlists_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLPersonalPlaylistOrderReferenceAndRebalance",
+        "source": "backend/internal/personal/playlists_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLPersonalPlaylistOverLimitRestore",
+        "source": "backend/internal/personal/playlists_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLPersonalPlaylistUndoPolicies",
+        "source": "backend/internal/personal/playlists_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLPersonalSchemaLifecycleAndRevisionExhaustion",
+        "source": "backend/internal/personal/playlists_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLPlaylistCancelQuotaAndRowWait",
+        "source": "backend/internal/personal/playlist_concurrency_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLPlaylistCanonicalReceiptsAllCommands",
+        "source": "backend/internal/personal/playlist_contracts_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLPlaylistNoopsAndScopedTargets",
+        "source": "backend/internal/personal/playlist_contracts_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLPlaylistQueueOverLimitAndLargeCardPage",
+        "source": "backend/internal/personal/playlist_reads_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLPlaylistQuotaPrecedesDeleteRowAndFreshCreateCount",
+        "source": "backend/internal/personal/playlist_concurrency_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLPlaylistReadProjectionFailures",
+        "source": "backend/internal/personal/playlist_reads_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLPlaylistReadsStatisticsPaginationAndIsolation",
+        "source": "backend/internal/personal/playlist_reads_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLPlaylistReceiptFailureRollsBackAllCommands",
+        "source": "backend/internal/personal/playlist_contracts_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLPlaylistRestoreWaitsForLatestMembersAndReplaysToken",
+        "source": "backend/internal/personal/playlist_concurrency_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLPlaylistRestoreWaitsForMovedPredecessor",
+        "source": "backend/internal/personal/playlist_concurrency_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLPlaylistSingleItemNoopsAndRevisionExhaustionRollback",
+        "source": "backend/internal/personal/playlist_contracts_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLPlaylistUndoFirstItemAndConsumedToken",
+        "source": "backend/internal/personal/playlist_contracts_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLPlaylistUndoReferenceConstraints",
+        "source": "backend/internal/personal/playlist_contracts_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLPlaylistWaitingNoopChecksCurrentRevision",
+        "source": "backend/internal/personal/playlist_concurrency_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLReadTransactionJITIsLocal",
+        "source": "backend/internal/personal/read_tx_integration_test.go"
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/personal",
+        "test": "TestPostgreSQLServiceReadTransactionJITLifecycle",
+        "source": "backend/internal/personal/read_tx_integration_test.go"
+      }
+    ]
+  },
+  "vet": {
+    "command": "go vet ./internal/personal/... ./internal/catalog/... ./internal/app",
+    "exit_code": 0
+  },
+  "build": {
+    "command": "go build ./internal/personal/... ./internal/catalog/... ./internal/app",
+    "exit_code": 0
+  },
+  "dependency_rules": {
+    "passed": [
+      "TestPackageDependencyDirections"
+    ],
+    "fail": 0,
+    "skip": 0
+  },
+  "api_samples": {
+    "replay": {
+      "passed": [
+        "TestPostgreSQLAPIResponseSamples",
+        "TestPostgreSQLPersonalAPIResponseSamples"
+      ],
+      "fail": 0,
+      "skip": 0
+    },
+    "total": 219,
+    "personal": 70,
+    "changed": [],
+    "sha256_before_equals_after": true,
+    "sha256_by_file": {
+      "backend/internal/app/testdata/api-samples/auth/login.json": "9a24637c71815900280ed0ed0baa91143dcc517d8a52db58a770f4e73436626f",
+      "backend/internal/app/testdata/api-samples/auth/logout.json": "afdd0b13afe08dc8bf5f71231259bdc4b4637f707991d4d07d71d351f9f41fe9",
+      "backend/internal/app/testdata/api-samples/auth/me-admin.json": "9a24637c71815900280ed0ed0baa91143dcc517d8a52db58a770f4e73436626f",
+      "backend/internal/app/testdata/api-samples/auth/me-user.json": "b31d159ff5f81a9db43d1988d2d807926a5c6108827884366d0d8185db458237",
+      "backend/internal/app/testdata/api-samples/auth/setup-admin-created.json": "df6569cc60b08f76210a27eea2ab8938b6f3d6e4aeae793d7778017f9f9782f2",
+      "backend/internal/app/testdata/api-samples/auth/setup-status-completed.json": "60c706b09d3afbe9361b5a0ef784611f03736abc3ce653995ff2c7de3be96b8d",
+      "backend/internal/app/testdata/api-samples/auth/setup-status-required.json": "ea793b750327f63ff0587c357b9af428ade94f790dafb71f309f06dd7c826ed8",
+      "backend/internal/app/testdata/api-samples/corrections/get-corrected.json": "af2ccfd8f7c5bd0d220a6a666b3ec1788fa3980f4ced58b4cb318e87b9809a26",
+      "backend/internal/app/testdata/api-samples/corrections/get.json": "d64569b8a7bf6b46385ffb00e1e1d0c01ec168691a50384bb834fd21b04a5334",
+      "backend/internal/app/testdata/api-samples/corrections/patched.json": "5cf38193126d96745e3ff46a7cfd4de875d1b1e1f91fc262d2fcf031ae9f5351",
+      "backend/internal/app/testdata/api-samples/errors/already-alone.json": "42128781d163f4d170895d1232979661b3a33abeed741562f5fce14951a95fab",
+      "backend/internal/app/testdata/api-samples/errors/already-reverted.json": "b4c420fcd559419e7e60a8eb83e372b137fd8c8875eaeff8343fec5bfbd2fa6d",
+      "backend/internal/app/testdata/api-samples/errors/claim-changed.json": "c28e4331396ecf3e2afdc5dfa50073b7484754ed3d593ed28b2e1cc7fb872512",
+      "backend/internal/app/testdata/api-samples/errors/database-unavailable.json": "6e85d22fb2d6570e794844827d9d4b453adfed1937d63de67e63596438936e67",
+      "backend/internal/app/testdata/api-samples/errors/derivation-busy.json": "ddc60a41b6ee90941c15b49da154017450e3c570b24f1c900bae8468abef94aa",
+      "backend/internal/app/testdata/api-samples/errors/derivation-failed.json": "743ad1c3546b00c526bce98ed53adecd2f64c500371e328c189a8f1f5320d02c",
+      "backend/internal/app/testdata/api-samples/errors/derivation-not-ready.json": "5f87c46718e1e8fcdf397828f0c7660d4b98c8eac1294f3ecd1ba8ecfe1a6b93",
+      "backend/internal/app/testdata/api-samples/errors/forbidden.json": "0f29bb1c27d27ba5bf12f212075baad49619727f5c3bae8c7eb8cd4d4a50c96d",
+      "backend/internal/app/testdata/api-samples/errors/group-not-found.json": "74507407f56d95a5fff01fb81e81ad609f144194fd1c221868858c2763723b71",
+      "backend/internal/app/testdata/api-samples/errors/idempotency-conflict.json": "d9cc09d9204772ad4ae3335df602d3fb58a8038e7d39fafea94d86cf998a251b",
+      "backend/internal/app/testdata/api-samples/errors/invalid-correction.json": "eda15c6430090ef50833e13469005c675f25f211602958db3e0b8116855d9fb9",
+      "backend/internal/app/testdata/api-samples/errors/invalid-credentials.json": "7ae54eed4cd8b081bf40f61d951ed20dd215ebd492feb2c7cd24cea88ebc1bbd",
+      "backend/internal/app/testdata/api-samples/errors/invalid-filter.json": "c52ea493c88cf5a234bf527ae5c9edd3f8ef8fe2e49cc08032f1ce0df10f0cec",
+      "backend/internal/app/testdata/api-samples/errors/invalid-id-user.json": "85271add9951fd88bd8323e5780f36b3ef6de79ee0b41c76d1f64cc93d5c2aaa",
+      "backend/internal/app/testdata/api-samples/errors/invalid-id.json": "1f1d36b96a2af614c598301559adbb8b3fccd47bb74f2ee5ebbd3caaba12c846",
+      "backend/internal/app/testdata/api-samples/errors/invalid-input-missing-idempotency-key.json": "76a41f802c29e855057b539c1c6f5da45d24c36c260f21f60c8cb32ee1beb0a1",
+      "backend/internal/app/testdata/api-samples/errors/invalid-input.json": "313a546a3288e7b73a51bfdac8afe2eef91b2b60d2b3a22f2b6f23f48616bc76",
+      "backend/internal/app/testdata/api-samples/errors/invalid-library-path.json": "97349f455997810b7e5f1650999a82bb8e62cd65f7ce4c11659df06aba887770",
+      "backend/internal/app/testdata/api-samples/errors/invalid-pagination.json": "e61d9eccd8ead75b8ee216f521143fd5b0b85476bb955a2c0f9f55760235494f",
+      "backend/internal/app/testdata/api-samples/errors/issue-changed.json": "7145278fb41046f3b7d982e25277467980982e77ea73b39d7a2d6263f9e2ea0b",
+      "backend/internal/app/testdata/api-samples/errors/last-admin.json": "025c0ab9aecf090d345b7a1877eb495e698ef7f8e855c25238b69e8d9e283503",
+      "backend/internal/app/testdata/api-samples/errors/method-not-allowed.json": "7de566b34f6a84cc7d740ccebff303075a0f4594b4afa63fbb60b2c1ea1964e3",
+      "backend/internal/app/testdata/api-samples/errors/no-changes.json": "beec69f46e2bb5636609c8b9de677c401f6697298228526a0d72be2f2f9ebef9",
+      "backend/internal/app/testdata/api-samples/errors/not-claimable-release.json": "35316e6b31f66601e82617a881d2ff60fab76ebd71dcfd8128d6dfe217c4380b",
+      "backend/internal/app/testdata/api-samples/errors/not-claimable.json": "6554edc9f3d3967eb2a139014c2eb7b1df4ec247c88a3d15659b099577dabb1a",
+      "backend/internal/app/testdata/api-samples/errors/not-directly-playable.json": "02b76f51af82f138c67506448e7f3a442a7d0bae2f79c30cf9074ebdc9bd7162",
+      "backend/internal/app/testdata/api-samples/errors/not-found-api.json": "f945abd0f18074898da85a119736fb8cb5db9dea10e2930adb30e087fc26ace2",
+      "backend/internal/app/testdata/api-samples/errors/not-found-operation.json": "10e73adf2ebf16c74232453d8edc0a21d65498e4dd8fe0448c53c77ec601d1dd",
+      "backend/internal/app/testdata/api-samples/errors/not-found-release-group.json": "53257199eb3f184e33b9a00b2d02c83057c26caaa25396d37cf647c045141590",
+      "backend/internal/app/testdata/api-samples/errors/not-found-release.json": "35316e6b31f66601e82617a881d2ff60fab76ebd71dcfd8128d6dfe217c4380b",
+      "backend/internal/app/testdata/api-samples/errors/not-found-scan.json": "9d27ab736bcad409fa2b6784ad3e5ccdce03caf15b1abce3dec1111b95af1698",
+      "backend/internal/app/testdata/api-samples/errors/not-found-track.json": "5062dc56e1eeff0311d7cbc630e88cfcd8755e73d562f9a041d81392f46352a5",
+      "backend/internal/app/testdata/api-samples/errors/not-found-user.json": "9e3e4ed141d23dbe153565713f7656678f965dc4a2442c82c25991ca158ccd91",
+      "backend/internal/app/testdata/api-samples/errors/not-in-group.json": "169245c7b92f28c67a7e386360f4e918ed37399636918d74bd158b8270c9effc",
+      "backend/internal/app/testdata/api-samples/errors/not-revertible.json": "01a24c86c769856f67805648525e9a97d03e91c46cf5189f5eea227e17533e70",
+      "backend/internal/app/testdata/api-samples/errors/origin-forbidden.json": "adf3b76ceff5349e1fa3a3c5170cf89f850a4b692701e47af6cccbe3e87a535f",
+      "backend/internal/app/testdata/api-samples/errors/personal-database-unavailable.json": "c6e37ce81d7f69baf6d5db63762d333d1f5a43fc2c255c53397b41f88efa441d",
+      "backend/internal/app/testdata/api-samples/errors/personal-favorites-changed.json": "620b12906c84c05c56559b588c68b771c3ca6b2f4b892e399a0f6700da4dee56",
+      "backend/internal/app/testdata/api-samples/errors/personal-idempotency-conflict.json": "d9cc09d9204772ad4ae3335df602d3fb58a8038e7d39fafea94d86cf998a251b",
+      "backend/internal/app/testdata/api-samples/errors/personal-invalid-input.json": "5cb05267fd36f704ade246e9cb2c706ab5048d03d93f187ab35375f7eaf3b3b3",
+      "backend/internal/app/testdata/api-samples/errors/personal-invalid-json.json": "0733d659d4639c5429f265de7e857374e3e507a5fdef2a8323dd8377bb43e5d8",
+      "backend/internal/app/testdata/api-samples/errors/personal-invalid-pagination.json": "e61d9eccd8ead75b8ee216f521143fd5b0b85476bb955a2c0f9f55760235494f",
+      "backend/internal/app/testdata/api-samples/errors/personal-method-not-allowed.json": "7de566b34f6a84cc7d740ccebff303075a0f4594b4afa63fbb60b2c1ea1964e3",
+      "backend/internal/app/testdata/api-samples/errors/personal-not-found.json": "4105a017560d36693a32d740c138635a3e2a18c72bb30fb9c6b760b1d35e5ed9",
+      "backend/internal/app/testdata/api-samples/errors/personal-origin-forbidden.json": "adf3b76ceff5349e1fa3a3c5170cf89f850a4b692701e47af6cccbe3e87a535f",
+      "backend/internal/app/testdata/api-samples/errors/personal-origin-required.json": "879266b87a3325c483be1b8753e59780a8f3a241c4a6df9499383eaace32c30e",
+      "backend/internal/app/testdata/api-samples/errors/personal-playlist-limit.json": "bc7294ea59603860d9b5da3e157d33bcca699a885c1024e92f8d9364628b1e0e",
+      "backend/internal/app/testdata/api-samples/errors/personal-playlist-track-limit.json": "36bc6ca618fca429ce8914dc7414de1dc45390c21309c833626b7738d45cb1ae",
+      "backend/internal/app/testdata/api-samples/errors/personal-revision-conflict.json": "4b43e343c5decfcd0d9fdc296c5d0dc1d43e90ba7c856b4556df859deefa5a67",
+      "backend/internal/app/testdata/api-samples/errors/personal-unauthorized.json": "c985499aa89181f6f9aadee77897b2d236770e6e77f9073132f70944ebdde14d",
+      "backend/internal/app/testdata/api-samples/errors/play-too-short.json": "0ae3c6908a6b5a35888d95d87b207368c7cec5a54c48b626c418475f0f417bc7",
+      "backend/internal/app/testdata/api-samples/errors/range-not-satisfiable.json": "ac416998325f41228f08181325ed8113b1a49809f3689f39447acdaa3ba0beca",
+      "backend/internal/app/testdata/api-samples/errors/revert-conflict.json": "896bd28b0919844d950e7959d90a702a0d1444199b2bfeb74f966553fa00fe91",
+      "backend/internal/app/testdata/api-samples/errors/revision-conflict-claim.json": "f85f7f02c93bf3310c5ab4e41169acb7c6b88d2b346f9a2dacaec18bda48163b",
+      "backend/internal/app/testdata/api-samples/errors/revision-conflict-group.json": "f85f7f02c93bf3310c5ab4e41169acb7c6b88d2b346f9a2dacaec18bda48163b",
+      "backend/internal/app/testdata/api-samples/errors/revision-conflict-issue.json": "f85f7f02c93bf3310c5ab4e41169acb7c6b88d2b346f9a2dacaec18bda48163b",
+      "backend/internal/app/testdata/api-samples/errors/revision-conflict-release.json": "f85f7f02c93bf3310c5ab4e41169acb7c6b88d2b346f9a2dacaec18bda48163b",
+      "backend/internal/app/testdata/api-samples/errors/revision-conflict.json": "edcdf9b2a4b4b4ac1cdc986b05eabd1f604d6860a7f54dc6e5b7e1d19713ad65",
+      "backend/internal/app/testdata/api-samples/errors/root-disabled.json": "9a14374f0b62b11ed6b7369250c3154ce6c974b598fd24e64f4548c48e3c6b22",
+      "backend/internal/app/testdata/api-samples/errors/same-group.json": "3ef8ed31034d5f266f017afc93c6dafd4e561a23c2c431cfb50a9912245328ac",
+      "backend/internal/app/testdata/api-samples/errors/setup-closed.json": "f0c193cd8fb1490ac260833e4a6c4904551d4bde57a4b3425b55cde7565add70",
+      "backend/internal/app/testdata/api-samples/errors/source-changed.json": "a6c851b11043a561c5ba84fe882cd2bb3af440a7992d926cc6eab5283cf2086e",
+      "backend/internal/app/testdata/api-samples/errors/source-unavailable.json": "ddf2ef8dc9a2dcc40037063b210fbea1ca63b9b84d5ed1bd3ebdcd4f2383da74",
+      "backend/internal/app/testdata/api-samples/errors/unauthorized.json": "c985499aa89181f6f9aadee77897b2d236770e6e77f9073132f70944ebdde14d",
+      "backend/internal/app/testdata/api-samples/errors/username-taken.json": "b4f5b7d47582a4742ee4b0eeefc38240effd8c5a05e7ee9c4ff7e56ee87ddee3",
+      "backend/internal/app/testdata/api-samples/favorites/album-delete.json": "ad77fa93446ba6236b0d607b5356b2921bd28477c6b9d4d60dba3357d59b754e",
+      "backend/internal/app/testdata/api-samples/favorites/album-put.json": "4c846480b9454b1bc0e3e59e16afc132d72d837d1c2f024fa5964c2edfca081a",
+      "backend/internal/app/testdata/api-samples/favorites/albums-empty.json": "f806f4558ab0b7a1ba054acde026587fe3a9474c49f85c219d85e016a5810bf9",
+      "backend/internal/app/testdata/api-samples/favorites/albums-unavailable.json": "1a10bd74939a3386a6787f6faf9875318eab540fe6ce991c5fea075ea3632962",
+      "backend/internal/app/testdata/api-samples/favorites/albums.json": "988e2c9a4db7b2a0613de5b74ec7b5f1431065a0b96283944c8c0fe55950983f",
+      "backend/internal/app/testdata/api-samples/favorites/lookup-empty.json": "81701f0f953a74dc8a00724cc16cfdecca9bce2e7e111322deeec1437472c713",
+      "backend/internal/app/testdata/api-samples/favorites/lookup.json": "800b247dd49b261022a817119f7756eaa03c70713539775eeaf139dfab66ef31",
+      "backend/internal/app/testdata/api-samples/favorites/queue-empty.json": "ed3d8b752f58e141a00e0f13af80459be0b2aa55205e3931d3dabfc9a17994e8",
+      "backend/internal/app/testdata/api-samples/favorites/queue-missing.json": "32177dc04f40d2c220a4286eb6051f63297e8de51e0083c266181197970993e9",
+      "backend/internal/app/testdata/api-samples/favorites/queue.json": "3f9ba460afc2f8f06340440ac27823ee51f225c34dae365b584990715880b25e",
+      "backend/internal/app/testdata/api-samples/favorites/track-delete-repeated.json": "4f7d09e4fe8edf780546554262e3315c8d46f666003576658a5ebe82d4e5ccd8",
+      "backend/internal/app/testdata/api-samples/favorites/track-delete.json": "4f7d09e4fe8edf780546554262e3315c8d46f666003576658a5ebe82d4e5ccd8",
+      "backend/internal/app/testdata/api-samples/favorites/track-put-repeated.json": "5e558600d0ef366fdb7654f4f787f6b1289fec189c25cef3dd14858bed043901",
+      "backend/internal/app/testdata/api-samples/favorites/track-put.json": "5e558600d0ef366fdb7654f4f787f6b1289fec189c25cef3dd14858bed043901",
+      "backend/internal/app/testdata/api-samples/favorites/tracks-empty.json": "f806f4558ab0b7a1ba054acde026587fe3a9474c49f85c219d85e016a5810bf9",
+      "backend/internal/app/testdata/api-samples/favorites/tracks-missing.json": "ab0dc29701412a5e5308f3c3c8c55dd44cabe431bb7a0f4eb92cf43ca307d562",
+      "backend/internal/app/testdata/api-samples/favorites/tracks-out-of-range.json": "c36196374164c35cd2a64e164ed321cc199063cfaedf1a3395d7d587b9f7d998",
+      "backend/internal/app/testdata/api-samples/favorites/tracks.json": "2bbfc38dbca7302552c8934747e56d996ccc4eb4883819f93a770d43404f37cc",
+      "backend/internal/app/testdata/api-samples/group-changes/detached.json": "787167ccb41b9446081ff0215300f24b3adb8eac72d25e6f0b74fb14d60c6082",
+      "backend/internal/app/testdata/api-samples/group-changes/joined.json": "7c08634b1cad41d850594b817e5c84d384df13705e954b07e393fcf297cb8dd0",
+      "backend/internal/app/testdata/api-samples/group-defaults/set.json": "c83e8d138e7ea71aa8583eef5f9d9bd13dae7bd5230367e1be9c597a3bbab512",
+      "backend/internal/app/testdata/api-samples/issue-reviews/reviewed.json": "3df53b805f1d0a690a88322b73fbd3c7b692d458c0bd562e2c450f0d5f4f926e",
+      "backend/internal/app/testdata/api-samples/issue-reviews/unreviewed.json": "2486f3ab6936951abe3387ffac901482ad51770c3a4a6b6105bd6667328a2002",
+      "backend/internal/app/testdata/api-samples/library-root-operations/list-empty.json": "fca05424f2a91f59466d1a1ee3fe71f7e044918295143a875b93739520960bbf",
+      "backend/internal/app/testdata/api-samples/library-root-operations/list.json": "79c90deffa16a28bedd468d56bd57097f74754cb6857a801b63cc786a38b2270",
+      "backend/internal/app/testdata/api-samples/library-roots/create-existing-disabled.json": "c334d6d18e32933f96440621628125169ad0aed6761bdd415ec0f4b724bb4f3c",
+      "backend/internal/app/testdata/api-samples/library-roots/create.json": "3c5546f21abdfb43544132ef9eb39d8432da1042e9ff1ad6aa4fcf5df1740941",
+      "backend/internal/app/testdata/api-samples/library-roots/disable.json": "883666d22bf54179d35d5dd9abdf0471c30e15561bd717f76cddc20afd82d903",
+      "backend/internal/app/testdata/api-samples/library-roots/list-empty.json": "fca05424f2a91f59466d1a1ee3fe71f7e044918295143a875b93739520960bbf",
+      "backend/internal/app/testdata/api-samples/library-roots/list.json": "b0a66caabfa3bc8eea818b699d8af01e2dfb8683a4e5eea7b718378e490a2b1a",
+      "backend/internal/app/testdata/api-samples/library-roots/restore.json": "24997ebfddaa44860e526a92cc8efec8d59c3d94ffadb9a65a39e9c02daee3bf",
+      "backend/internal/app/testdata/api-samples/listening/history-queue-empty.json": "8643670675ec5081898ffbfdb1ef0aac24337d3e3bc31541e57d05375877e5a8",
+      "backend/internal/app/testdata/api-samples/listening/history-queue-truncated.json": "018b4ec3df6cc5136aa22426c8a87da4dbbfb073125a4536ebc61f460e90c88c",
+      "backend/internal/app/testdata/api-samples/listening/history-queue.json": "24cc2083f9e7912e8b8eb202f8977c1665e715b9cc048ff7ba0d012c19817fda",
+      "backend/internal/app/testdata/api-samples/listening/history-tracks-empty.json": "a4f1a7b3d52e04f2e65821ae3be8ef91c31d17217307b3e22e81b73c43b696b4",
+      "backend/internal/app/testdata/api-samples/listening/history-tracks-missing.json": "8c909048ea1b772cf14f885f0160734583ba37f0000dcab14323cd1a49bcb329",
+      "backend/internal/app/testdata/api-samples/listening/history-tracks-out-of-range.json": "c22cc78ffe8ef7dad3a131ad283a04c576eb02b61645d7ea765ae043dff438c3",
+      "backend/internal/app/testdata/api-samples/listening/history-tracks.json": "35da95f5369693b3384e3724d981f14272950a2f90e278714baca2c2e0021890",
+      "backend/internal/app/testdata/api-samples/listening/play-recorded.json": "bf9bd8017699e15e36f15a2451a50d91f59551d88b9ead65a741242b9f041ae3",
+      "backend/internal/app/testdata/api-samples/listening/plays-cleared.json": "d15ab175e579b8096d3a775036d9d51c8c92fa8e0b3f5e8a7578ff99114e8192",
+      "backend/internal/app/testdata/api-samples/listening/recent-releases-empty.json": "438b24e94f9bd9c66d5811fbd3ccc81cff3017f25290af68786948197f2c87e8",
+      "backend/internal/app/testdata/api-samples/listening/recent-releases.json": "fa827571cef2e24496a2d2768e84de0be957de5e06d52be541cdc549269b1838",
+      "backend/internal/app/testdata/api-samples/listening/track-plays-deleted-empty.json": "b9429001b4ba84d536cc4881f50184c8d32a941676016d6e67d229dfa46ea557",
+      "backend/internal/app/testdata/api-samples/listening/track-plays-deleted.json": "08e6fa0e96a3e667b695dd24a6396fac2301311db594528118e0551640cd6852",
+      "backend/internal/app/testdata/api-samples/operations/list-by-group.json": "6c78464aa614cd5a6c3a1f6f4c4efff696684c62a528dd14491429fc9ee464d4",
+      "backend/internal/app/testdata/api-samples/operations/list-by-release.json": "9db1eed4d406da6803e0dd8f577d4f44f642eefbad59bd634244011953b285cb",
+      "backend/internal/app/testdata/api-samples/operations/list-claims-reverted.json": "d6b71c645c1e01971061cc1603bf05bfc4e8b5e72f2217630eff93d316017423",
+      "backend/internal/app/testdata/api-samples/operations/list-claims.json": "d065fc2e6589ec6f5342277674b69fa493a2ffe3a752a1c3172a4bb70f065557",
+      "backend/internal/app/testdata/api-samples/operations/list-issue-reviews.json": "4eb70adf6da8dfbcaf6cbb485a2db1b9bb5b9d924ed61957d78fccbfe84a563f",
+      "backend/internal/app/testdata/api-samples/operations/list.json": "8ae7b677f22ccc97faae19de68fa1dc94111f468ce6bd7a6e1ab154e6e6d0b4c",
+      "backend/internal/app/testdata/api-samples/operations/reverted-claim.json": "bf8a74e878e8d80ce195ff32c2dd238909a8d1381f62802533a943fd7ec7f7ab",
+      "backend/internal/app/testdata/api-samples/operations/reverted-default.json": "4a68cfff78eb873bc6c0863e60269f89e6d6b1ae0820e90c9997fc496b742fb3",
+      "backend/internal/app/testdata/api-samples/operations/reverted-issue-review.json": "689e1e5d2bdd337460819b77f357d4337ea1c783fea805be64135058383036f7",
+      "backend/internal/app/testdata/api-samples/operations/reverted.json": "5e3d261ffe140444cb9c74685319b3381eaf932f7d2a0b9ad06e2c59785f3848",
+      "backend/internal/app/testdata/api-samples/playback/formats.json": "fe7cfa979b3b264561fb1e1a88dc8b0c2bdaaa995b2b8ea001730f06588c5034",
+      "backend/internal/app/testdata/api-samples/playlists/add-items-all-existing.json": "65aeddbc5164290b978da7e8d207bc4ea90352fd7eb54b5f922581ce96b82a36",
+      "backend/internal/app/testdata/api-samples/playlists/add-items-input-duplicates.json": "255904d8a7506539915f1640a0d117f59c72d32e1fc493c67393a0a0ff4e3cb5",
+      "backend/internal/app/testdata/api-samples/playlists/add-items.json": "b31e15fcef45c25f69037b3b611b508d56a656e457649ea7cfd5a9c2adeb934e",
+      "backend/internal/app/testdata/api-samples/playlists/containing-track-empty.json": "b6d53d9e2491027f3a4e4c9134db8cc99e0c567e8357bc37dfa759432ab3bff0",
+      "backend/internal/app/testdata/api-samples/playlists/containing-track.json": "ea83960b1f2e22d5832e37d0013ede75eacf15ae920509e95fa46cd2b3d1952c",
+      "backend/internal/app/testdata/api-samples/playlists/create-replayed.json": "90e7df92ab68eeb7446c60c7095aa7447db830392580a768b057e7b291eff149",
+      "backend/internal/app/testdata/api-samples/playlists/create-with-tracks.json": "90e7df92ab68eeb7446c60c7095aa7447db830392580a768b057e7b291eff149",
+      "backend/internal/app/testdata/api-samples/playlists/create.json": "fb308881e7d5f0bb44e2b8f72e86646aaba091b310db7daa07a0c893f935b927",
+      "backend/internal/app/testdata/api-samples/playlists/delete-replayed.json": "a804ded57c5b3ebddabbaf151ff2de14e013c4be549cfb139f74f22fe10d497f",
+      "backend/internal/app/testdata/api-samples/playlists/delete.json": "a804ded57c5b3ebddabbaf151ff2de14e013c4be549cfb139f74f22fe10d497f",
+      "backend/internal/app/testdata/api-samples/playlists/detail-over-limit.json": "4606671a42595356b41284bdb3165b8ca1984ddafdac1e299c07e75f85b3b713",
+      "backend/internal/app/testdata/api-samples/playlists/detail.json": "c3d6d48ba4d5ce6979190c508338815802f37d86c4f88be7c49e9cca047c8853",
+      "backend/internal/app/testdata/api-samples/playlists/items-empty.json": "f3c3338bf16214bdab526ae9be96cd86b835db9d3dd322eb2c8cc66914515ae1",
+      "backend/internal/app/testdata/api-samples/playlists/items-missing.json": "1033883812af479ae987d7acfd1014400250278296aebae12ee3ed68adaa4894",
+      "backend/internal/app/testdata/api-samples/playlists/items-next-page.json": "c79ba8cd5f264a5cb93f3d24fe2dafa8cc6dd07760c05bfadf4987331f3e0aad",
+      "backend/internal/app/testdata/api-samples/playlists/items-out-of-range.json": "2910bad12b7109c7d9dea57d331b0dfbd708d05f00ac884feb22116796e57e40",
+      "backend/internal/app/testdata/api-samples/playlists/items.json": "6080eec449dd574cec77d34ee5143c7086527283fdde8dfd9b8ec16e3897c914",
+      "backend/internal/app/testdata/api-samples/playlists/list-empty.json": "049fbee55ac310f4887e64c03ad3cc771940b211c02dd98c670377c575dc4559",
+      "backend/internal/app/testdata/api-samples/playlists/list-unknown-duration.json": "702bb3bd8957762c504759c1fcb84d25e29fa1cee0d923a347124d90b0a009e2",
+      "backend/internal/app/testdata/api-samples/playlists/list.json": "84908a8507f34bc9b69e959b4a0558e0b36414d9694f9682fbedd3cd56136ee5",
+      "backend/internal/app/testdata/api-samples/playlists/move-before.json": "3e5a65e30b2ae00a88ae7487ed711392430267968e84677335d8a53d4e1f514a",
+      "backend/internal/app/testdata/api-samples/playlists/move-down.json": "c2eb6e8b2e681b54deb39c7005506d9b64146937762eb6627fafb3138346119b",
+      "backend/internal/app/testdata/api-samples/playlists/move-first.json": "a17ebffc512a6ea80801e7a51545cebf71e4fa89d15d9519f40a1c77911be6c0",
+      "backend/internal/app/testdata/api-samples/playlists/move-last.json": "a1cd952413e7971712b50c1ed567c59e1f373bfb8e1db19a16ae52edc3283185",
+      "backend/internal/app/testdata/api-samples/playlists/move-noop.json": "49ba39d0b7e704b383ecf7fd79d174fa16e6bf64207617437fb752d010bfe690",
+      "backend/internal/app/testdata/api-samples/playlists/move-up.json": "f9b772f0a46d7be804c280d45e7ac5d6fa583b41e80591f922d88f6f653ade99",
+      "backend/internal/app/testdata/api-samples/playlists/queue-empty.json": "f4810365b9eda0bee98fea0fdb51502f2625ea7b56808168d576e3c78662777c",
+      "backend/internal/app/testdata/api-samples/playlists/queue-missing.json": "09a39b88d2377e52c6166c6f634e8e9aa445449829d48dbe1f8fb6629d193ccf",
+      "backend/internal/app/testdata/api-samples/playlists/queue.json": "fff4f7c0a207e0c2f64160e24c993343e324f4435c23d9a4191b14e0aa42a8bc",
+      "backend/internal/app/testdata/api-samples/playlists/remove-item.json": "632c9ae31615f814767530153c7ac76491a03c9e23707a267b4d4adfa23137e7",
+      "backend/internal/app/testdata/api-samples/playlists/rename-noop.json": "281c9318f9a4f456f4cb681d9f75971e8509eac4f950765ad6fc97aae99779ea",
+      "backend/internal/app/testdata/api-samples/playlists/rename.json": "f350103014f6a020df61c12d0933e98929a5e54fdb085360d3b09dd022623efb",
+      "backend/internal/app/testdata/api-samples/playlists/restore-after-previous.json": "89e44f877c10ba8b99e5fd6860852d1390f88a2a89d2414f293534af3ca9cf3d",
+      "backend/internal/app/testdata/api-samples/playlists/restore-already-present.json": "8e4d270dbb5d05bc8e873ea3c6e7b6a6e52ebc23a5a0b04bc72d81e6534f09c8",
+      "backend/internal/app/testdata/api-samples/playlists/restore-at-end.json": "474e3b3c693108f8e39c683822513e98f4e78679f32ccdbfa43811eca346bba6",
+      "backend/internal/app/testdata/api-samples/playlists/restore-item.json": "19abb45f8460f246d5a2acd1ead4556b63d113c5188491c63b377b2ada0f759f",
+      "backend/internal/app/testdata/api-samples/playlists/restore-original-index.json": "1cd3a8072deb5e41f8cc565a1717ec84f6c4d390ea05809b5ae4accd6bf96acf",
+      "backend/internal/app/testdata/api-samples/playlists/restore-over-limit.json": "b67db4cfd1a39a0688e38227bb8bd503ba1b13816660876bedde027d7c91552b",
+      "backend/internal/app/testdata/api-samples/release-claims/claimed.json": "b535ae42fa28d7b1cb3958eba6c7fbaa98ec63208a4e74f7534920ca3ffb95f9",
+      "backend/internal/app/testdata/api-samples/release-claims/get.json": "d2916ebe517c60c0bf443be9daf63c6f77be1d9e18b9bb8f92970046e25aafdf",
+      "backend/internal/app/testdata/api-samples/release-claims/hints.json": "837d556236b0008ec60c29130534e970537b12d55d363c76a7acb294a61c931f",
+      "backend/internal/app/testdata/api-samples/release-claims/list.json": "211013fd21679200dbb32614ebd00a1debc9fe45adb9f36dace8c1d347ee2b95",
+      "backend/internal/app/testdata/api-samples/release-claims/preview.json": "481843d5198b7b96bcbbcdef0659740ed24f166291b6200930ba0aeb7d3f5c7a",
+      "backend/internal/app/testdata/api-samples/release-groups/comparison.json": "7a471d78309004bc1dcc6570d51f95c01755bd4e3c3d1b986aef932b931941a9",
+      "backend/internal/app/testdata/api-samples/release-groups/get-default.json": "d2136b3ec0eac3b7f70d29a28f6b117c8c3e956210b9840bc689b6e3bdb52ea7",
+      "backend/internal/app/testdata/api-samples/release-groups/get-multiple.json": "d5aeaab38911e74c8bd2b055d490766d66b28451001584ecba3f37ad2b3f28f4",
+      "backend/internal/app/testdata/api-samples/release-groups/get.json": "dc160daac3b244fba2ad792745215f98d4cbfc8078488d4d5d1f01905c293e58",
+      "backend/internal/app/testdata/api-samples/release-groups/list-empty.json": "7e9ce59d2e603174211b50ffc7dae13619eb593a47a7fb89a704a49cf977f136",
+      "backend/internal/app/testdata/api-samples/release-groups/list-one-with-artwork.json": "55589c5f05f2ceba6909081cbc7f8de30a51928ccfbca9467c50b85c010f5c93",
+      "backend/internal/app/testdata/api-samples/release-groups/list-one.json": "404d1d842e8316f96d7cceb6f8afeefe206dad8acbb47507d081c31297b38168",
+      "backend/internal/app/testdata/api-samples/release-issues/get-reviewed.json": "2fa28e0fa369e874111736e5ae058f7cb0902549c7c19de6df785bca11b97b62",
+      "backend/internal/app/testdata/api-samples/release-issues/get.json": "c5b0f28b9abe04b0ce2c62600944e58d63f7a72dfc01d11d31540b62a43fe3b2",
+      "backend/internal/app/testdata/api-samples/release-issues/list-missing-tracks.json": "bcb034061ecd68c0a8bdc4611fe325551432fad0654cd3830e1d31829d048acf",
+      "backend/internal/app/testdata/api-samples/release-issues/list-reviewed.json": "038ae61b6cb6b6f9566f814cb1d365f0e5dc0215db5fae74230440e2e6ef950c",
+      "backend/internal/app/testdata/api-samples/release-issues/list.json": "3615667f932bed8f93654ed03cbb17898c73aa62e4d4c2bbc1c1eaa9d718b07e",
+      "backend/internal/app/testdata/api-samples/releases/evidence.json": "312534495adb844db895a1fd8b0fb8425840a3c31162537d873596d656286f4f",
+      "backend/internal/app/testdata/api-samples/releases/get-claimed.json": "6a9339357263ad29425c632f3338175f8eb7ab3298c52e91b2e70f86bf933692",
+      "backend/internal/app/testdata/api-samples/releases/get-corrected.json": "ac6c10d69baa626d73991fc83a07118cca10ab1146f512342253907d871341cd",
+      "backend/internal/app/testdata/api-samples/releases/get-cue.json": "316d0757ee3c738622d0eb6d89c3ea0b68b956cadecb6fd06888e0cc56601998",
+      "backend/internal/app/testdata/api-samples/releases/get-single.json": "6205eadb4dea07c811d130e37a544aca9ef56d9973c9227081839b4b9c605c98",
+      "backend/internal/app/testdata/api-samples/releases/get.json": "3a2b9814a339940b177a45a7f09ac3e2171ff732b6c2a900b004b9014b901b2c",
+      "backend/internal/app/testdata/api-samples/scans/active-none.json": "0fcd8f88c47acf5d49ae20460acdbbddfabfa6e6c0b4b9bd7d475bd3192afdb9",
+      "backend/internal/app/testdata/api-samples/scans/active-running.json": "18a87ed89b0b309fe1c612c47bc382a0c4271b435d0d8dff245f19ba5e653311",
+      "backend/internal/app/testdata/api-samples/scans/cancel-already-finished.json": "f4491ce3c97148d0e68eb5ec8481ad37c3eb7971ed68d30adcc1c041d963cf14",
+      "backend/internal/app/testdata/api-samples/scans/cancel-requested.json": "7f53e1f2aeb7ba292ee2769b051ec77c166177e7cfb9b3835f461ef9fd9c2b04",
+      "backend/internal/app/testdata/api-samples/scans/diagnostics-empty.json": "7675dc984f3c5c938a280522d93990e4a4b8a2bf1956a66d1025e1130a38ccbf",
+      "backend/internal/app/testdata/api-samples/scans/diagnostics-multiple-kinds.json": "b787b28b90ef944eaf56359b068d223d34ae51504e11aa5e8b6845e504f13204",
+      "backend/internal/app/testdata/api-samples/scans/diagnostics.json": "7b4a49136f0b6993656eea25de9e7e65a8bb0233a891ddd8f26ad031065febcd",
+      "backend/internal/app/testdata/api-samples/scans/get-cancel-requested.json": "f869d39478ac30d8a066571a34007ed687db4d4883dbc5236cb5b6fefdef3396",
+      "backend/internal/app/testdata/api-samples/scans/get-canceled.json": "f4491ce3c97148d0e68eb5ec8481ad37c3eb7971ed68d30adcc1c041d963cf14",
+      "backend/internal/app/testdata/api-samples/scans/get-failed.json": "60bf52f77ad7d44635c7d3d786033d01b1dee8adf317de6390269a9617cc1b18",
+      "backend/internal/app/testdata/api-samples/scans/get-incomplete.json": "d5012544121124686e38d818e31e103199f4b66a69dbca2a2fdaecbf198a710b",
+      "backend/internal/app/testdata/api-samples/scans/get-running.json": "1e4c69e6d6fb075bef14c3453d75d5bb3608b60bbdef38543831daec832ebb64",
+      "backend/internal/app/testdata/api-samples/scans/get-succeeded.json": "b19b063044fcaa3d79a00219654e0aa16ca8b9f799ceb001862a9e4c41797b09",
+      "backend/internal/app/testdata/api-samples/scans/list-empty.json": "049fbee55ac310f4887e64c03ad3cc771940b211c02dd98c670377c575dc4559",
+      "backend/internal/app/testdata/api-samples/scans/list.json": "08d181ecae9db7069ca2999cd0e6c7f0ae426db72568d4f958d160cd35b11af1",
+      "backend/internal/app/testdata/api-samples/scans/start-created.json": "96b8a36aafb1d045c75010098b196a556557f7030e25ca64d8ff20b70e60b607",
+      "backend/internal/app/testdata/api-samples/scans/start-existing.json": "1e4c69e6d6fb075bef14c3453d75d5bb3608b60bbdef38543831daec832ebb64",
+      "backend/internal/app/testdata/api-samples/tracks/lyrics-none.json": "b35991a8cb0210c2db84965df1eac167d5a62c775088735bef739be538ae860c",
+      "backend/internal/app/testdata/api-samples/tracks/lyrics-plain.json": "0c7c395b729f7fbd96122ffb9d0e75ae20807e35d58a6c13731b546cff122158",
+      "backend/internal/app/testdata/api-samples/tracks/lyrics-synced.json": "e0ec64ab5b0a91edcea95158ea82c3ea836413b8a9189090356947f5124c9e00",
+      "backend/internal/app/testdata/api-samples/tracks/playback-derived.json": "2ca2678f0282bd7150ab8c505e10d465f8bd45f6473712d35ec6d613955d398f",
+      "backend/internal/app/testdata/api-samples/tracks/playback-preparing.json": "cdf80764219563782d5fc67da0e46aba411f444fffab982f09c82827befd76fd",
+      "backend/internal/app/testdata/api-samples/tracks/playback.json": "c19f11790773c53b73d80ad61f228c4fb8f59be749d124e9e7262c5afa629cba",
+      "backend/internal/app/testdata/api-samples/users/create.json": "5098a4eaeb794db319e261b2a1a071c6c4ff9f57a3a5b05dd14db7d8074e98ea",
+      "backend/internal/app/testdata/api-samples/users/disable.json": "d18bdfe87b2ff89f81150ba17df3222fb84c27540e8d9eaf3933edc43a79bbec",
+      "backend/internal/app/testdata/api-samples/users/enable.json": "bda6ccac592647f1714e6bc2632b875306ae4f8f723fae32efa85b8a1f0913f3",
+      "backend/internal/app/testdata/api-samples/users/list.json": "07faa8afa4477deda46983bb5728bab5f1c228211261a3895909819c60891b96",
+      "backend/internal/app/testdata/api-samples/users/revoke-sessions.json": "01aef16c3084307040646956c77a2be4d9ad293c3910f20f13ba8bad7aeabf9d"
+    }
+  },
+  "realistic_http": {
+    "report": "realistic-performance/final.json",
+    "sha256": "088679d4e9b00cc87a8e9065293fbd3c6c6ce3317ae275cc5b8331b8a35d9225",
+    "valid": true,
+    "samples_per_scenario_per_stage": 20,
+    "stages": 2,
+    "scenarios_per_stage": 8,
+    "valid_samples": 320,
+    "warmup_samples": 16,
+    "all_sla_pass": true,
+    "race_used_for_sla": false
+  },
+  "current_explain": {
+    "directory": "realistic-performance/catalog-explain/realistic-cards",
+    "plans": 28,
+    "test": "TestPostgreSQLTrackCollectionStatsExplain",
+    "nonrace_elapsed_seconds": 9.858,
+    "skip": 0
+  },
+  "initial_race_failure": {
+    "test": "TestPostgreSQLTrackSummaryChunkParity",
+    "cause": "新增夹具重复了非空source_identity，触发23505唯一约束；不是生产实现错误",
+    "fix": "同一旧来源改为NULL source_identity及相同root/path；绑定身份只给唯一present轨",
+    "verification": "定向race通过后重新运行整个指定race范围，不排除该测试；生产代码未变，正式HTTP测量仍适用"
+  },
+  "changed_backend_files": [
+    "backend/internal/app/personal_realistic_performance_integration_test.go",
+    "backend/internal/app/testdata/personal-realistic-scale.sql",
+    "backend/internal/catalog/track_collection_stats.go",
+    "backend/internal/catalog/track_collection_stats_explain_integration_test.go",
+    "backend/internal/catalog/track_collection_stats_integration_test.go",
+    "backend/internal/catalog/track_collection_stats_test.go",
+    "backend/internal/catalog/track_summary_chunk_parity_integration_test.go",
+    "backend/internal/personal/performance_integration_test.go",
+    "backend/internal/personal/playlist_reads.go",
+    "backend/internal/personal/playlist_reads_integration_test.go",
+    "backend/internal/personal/playlist_statistics.go",
+    "backend/internal/personal/playlist_statistics_test.go",
+    "backend/internal/personal/projection_test.go",
+    "backend/internal/personal/read_tx_integration_test.go",
+    "backend/internal/personal/read_tx_test.go",
+    "backend/internal/personal/service.go"
+  ],
+  "go_dependencies_unchanged": true,
+  "migrations_unchanged": [
+    "0021_favorites.sql",
+    "0022_playlists.sql"
+  ],
+  "cleanup": {
+    "compose_project": "roomusic-test-m5p",
+    "completed": true,
+    "completed_at": "2026-11-04T12:31:17.841065+00:00",
+    "command": "docker compose --env-file /dev/null -f /home/qlqq/.paseo/worktrees/2i6geckb/m5-personal/compose.test.yaml -p roomusic-test-m5p down -v",
+    "containers_volumes_networks_remaining": 0,
+    "credentials_file_removed": true,
+    "session_default_jit_before_shutdown": "on"
+  }
+}

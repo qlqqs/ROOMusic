@@ -17,13 +17,20 @@ const (
 	// ReleaseAttentionExpression 是“需要关注”：三类待处理问题的数目之和（见 issues.go）。
 	ReleaseAttentionExpression = `(` + ReleaseOpenFieldIssues + ` + ` + ReleaseOpenGroupingIssue + ` + ` + ReleaseOpenMissingTracks + `)`
 
-	ReleaseSummaryProjection = `releases.id::text,
+	releaseSummaryIdentityProjection = `releases.id::text,
 		releases.title,
 		releases.artist,
 		NULLIF(BTRIM(releases.album_artist), ''),
 		NULLIF(releases.year, 0),
 		NULLIF(BTRIM(releases.source_type), ''),
-		NULLIF(BTRIM(releases.media_type), ''),
+		NULLIF(BTRIM(releases.media_type), '')`
+
+	releaseSummaryArtworkProjection = `release_artwork.storage_key,
+		release_artwork.mime_type,
+		release_artwork.width,
+		release_artwork.height`
+
+	ReleaseSummaryProjection = releaseSummaryIdentityProjection + `,
 		(SELECT COUNT(DISTINCT present_medium.id)
 		 FROM media present_medium
 		 JOIN tracks present_track ON present_track.medium_id = present_medium.id
@@ -34,11 +41,7 @@ const (
 		 JOIN media present_medium ON present_medium.id = present_track.medium_id
 		 WHERE present_medium.release_id = releases.id
 		   AND present_track.source_status = 'present'),
-		` + ReleaseAttentionExpression + `,
-		release_artwork.storage_key,
-		release_artwork.mime_type,
-		release_artwork.width,
-		release_artwork.height`
+		` + ReleaseAttentionExpression + `,` + releaseSummaryArtworkProjection
 
 	ReleaseSummaryArtworkJoin = ` LEFT JOIN release_artworks release_artwork
 		ON release_artwork.release_id = releases.id`

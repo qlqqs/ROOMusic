@@ -33,6 +33,8 @@ backend/
 │   │   └── httpapi/                # 格式表、曲目预检（含派生等待）与音频
 │   ├── listening/                  # 播放历史：每用户的真实播放记录、计次门槛校验、最近播放的发行与清除（发行归属只经 catalog 公开函数换算）
 │   │   └── httpapi/                # 记录一次播放、最近播放、清除
+│   ├── personal/                   # 本人收藏、歌单、排序、幂等收据与适应撤销；目录事实只经 catalog 公开读取
+│   │   └── httpapi/                # 本人路由、严格解码与鉴权，不含 SQL
 │   ├── operations/                 # 受治理操作的共同流程：操作记录、同一操作者同一键的串行与重放、同一事务写记录、撤销与展示的 Kind 接口（不含业务表、规则与 HTTP）
 │   │   └── httpapi/                # 操作记录列表与撤销（不导入 catalog，各类型的撤销经 Kind 由 app 注入）
 │   └── catalog/                    # Release 图与有效值读取投影、版本对比、修正字段词表与修正意图读取
@@ -93,6 +95,8 @@ C2 的 B3 已将治理实现移到 `catalog/governance`，其 `Store` 经 `NewSt
 - `listening` 拥有播放历史（`play_history` 表）：计次门槛的服务端校验、按用户隔离的记录、最近播放的发行与清除；曲目时长与所在发行只经
   `catalog.LoadTrackDuration`、`catalog.LoadTrackPlacements` 读取，HTTP 层经 identity 鉴权，所有 SQL 都带 `user_id`，路径与请求体里没有用户 ID。
   见[播放历史合同](./listening-contracts.md)。
+- `personal` 拥有收藏及歌单的本人关系、集合/歌单修订号、成功幂等收据与撤销凭证；只经 `catalog` 批量读取安全事实，
+  不进入 `operations.Run`、不扩大 `listening`，参见[本人收藏与歌单合同](./personal-contracts.md)。
 - `search` owns query semantics and result projections while PostgreSQL remains
   the authority. It cannot write catalog truth through a search projection.
 - `operations`（M3）拥有操作记录表 `operations`、共同写入流程 `Run`（幂等键串行与重放、同键异义冲突、同一事务写记录、错误分类）与撤销、展示的 `Kind`
