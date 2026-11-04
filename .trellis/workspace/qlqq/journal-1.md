@@ -1189,3 +1189,52 @@ CI actions 升到 v7 并固定 ubuntu-24.04；规划 M5 父任务与历史页子
 
 - M5 ② 收藏：按父任务立项规划
 - 本地提交未推送（用户说不推送）
+
+
+## Session 37: M5 ② 收藏与 ③ 歌单（P 线实施与收尾）
+<!-- trellis-session: v=2 fp=b8f4505053e3b743 -->
+
+**Date**: 2026-11-04
+**Task**: M5 ② 收藏与 ③ 歌单（P 线实施与收尾）
+**Branch**: `m5-search-artists`
+
+### Summary
+
+批准并启动 M5 剩余五项的三线并行；P 线完成收藏（专辑/曲目、各处心形、收藏页）与歌单（增删、拖动与菜单排序、撤销、添加到歌单、存为歌单），导出树验证后合入 main 并归档
+
+### Main Changes
+
+- 后端：personal 包与 HTTP 接口；favorites/playlists 迁移；catalog 轻量曲目与带可用性的专辑摘要读取；延迟敏感只读事务可 SET LOCAL jit = off（写入 database-guidelines）
+- 前端：features/personal、统一曲目行动作 track-actions、专辑头部与播放器心形、/me/favorites、/me/playlists 与详情、@dnd-kit 拖动、跨标签页心形同步
+- 顺带修正 6efc902 改文案后遗留的 11 个过期断言（d871caa，只改测试）
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `858ecf0` | chore(task): 批准并启动 M5 剩余五项 |
+| `f84ed00` | chore(task): 记录 M5 三条实现线的分支 |
+| `825239c` | feat(personal): 收藏与歌单接口 |
+| `f5d40fa` | feat(frontend): 收藏与歌单 |
+| `d871caa` | test(frontend): 断言跟上精简后的界面文案 |
+| `b96e16e` | docs(task): 记录收藏与歌单的实施结果 |
+| `a7973f9` | merge: M5 P 线：收藏与歌单 |
+| `9a7aa64` | chore(task): archive 11-04-classical-m5-favorites |
+| `7607913` | chore(task): archive 11-04-classical-m5-playlists |
+| `0ebdf2a` | docs(task): 修正收藏与歌单归档后的相对链接，父任务标记两项完成 |
+
+### Testing
+
+- [OK] 导出树：go test -race personal/catalog/app/httpserver/listening 1046 通过 0 SKIP；lint/typecheck/build 通过，web 一致
+- [OK] 全量 Vitest 2419/5、Playwright 279/4、真实服务 45/2 的失败均为既有过期断言；修正后相关文件整文件重跑全部通过（含 ALAC 完整播放）
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- F 线变基到 main，迁移改号为 0023/0024，导出树验证后合入
+- S 线变基后接上心形与添加到歌单，再做 ⑤ 艺人
+- 后续单独修正：密码提示按字符、校验按字节不一致
+- 本地提交未推送

@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 36
+- **Total Sessions**: 37
 - **Last Active**: 2026-11-04
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1191 | Active |
+| `journal-1.md` | ~1240 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 37 | 2026-11-04 | M5 ② 收藏与 ③ 歌单（P 线实施与收尾） | `858ecf0`, `f84ed00`, `825239c`, `f5d40fa`, `d871caa`, `b96e16e`, `a7973f9`, `9a7aa64`, `7607913`, `0ebdf2a` | `m5-search-artists` |
 | 36 | 2026-11-04 | M5 ①：历史页面（规划、实施与收尾） | `8fd37b2`, `0959f0a`, `55a2e70`, `8237728`, `63609b1`, `9f9e7cc`, `085d480` | `main` |
 | 35 | 2026-11-04 | 维护：依赖漏洞、前端分包、扫描锁测试干扰 | `28fef68`, `0861a82`, `486e819`, `1248d5d`, `a47ca36`, `053a451`, `8ffa19a` | `main` |
 | 34 | 2026-11-03 | C2 结构整理与 Core 1 收口 | `e8ff3ff`, `207d1aa`, `7de47c4`, `eb4ef50`, `654c8d7`, `3b20141`, `b99c246`, `a472208`, `206d4e0`, `4fec4b0`, `4068faf`, `3c597f8`, `424886e`, `a93de8b` | `main` |
