@@ -7,7 +7,7 @@
 1. 三份阶段性报告已由 `docs/architecture/` 移至当前任务 `research/`，所有相对链接已校验。长期架构目录不再含这三个文件；[design §10](../design.md#10-性能预期与必须验证的-explain)末尾仅保留结论、关键数字及报告链接。
 2. 新真实形状100,000轨/10,000发行/8,000组、每发行10轨、5%missing；20张各10,000首卡片、20,000收藏、10,000首歌单，均保留另一用户干扰。空辅助表未ANALYZE/ANALYZE两种状态分别验收，未缩减规模。
 3. 服务端及完整TCP的p95全部通过，20样本×8场景×2阶段=320有效样本；已重跑指定race、vet、依赖规则和全部API样本回放。
-4. 最新JIT许可已写入 [database-guidelines.md](../../../spec/backend/database-guidelines.md#延迟敏感只读事务与-jit)：只在延迟敏感只读事务BEGIN后使用SET LOCAL，失败回滚；同PID提交/回滚恢复默认值；禁止其他planner参数、会话/全局改值及业务ANALYZE。F/S线可引用。
+4. 最新JIT许可已写入 [database-guidelines.md](../../../../../spec/backend/database-guidelines.md#延迟敏感只读事务与-jit)：只在延迟敏感只读事务BEGIN后使用SET LOCAL，失败回滚；同PID提交/回滚恢复默认值；禁止其他planner参数、会话/全局改值及业务ANALYZE。F/S线可引用。
 
 ## 优化、功能与外部合同
 

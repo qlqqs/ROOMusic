@@ -23,7 +23,7 @@
 
 ### 真实形状与统计状态
 
-- 独立夹具 [personal-realistic-scale.sql](../../../../backend/internal/app/testdata/personal-realistic-scale.sql)：100,000轨、10,000发行、8,000组，每发行恰好10轨，5,000 missing；不依赖 S 线夹具。
+- 独立夹具 [personal-realistic-scale.sql](../../../../../../backend/internal/app/testdata/personal-realistic-scale.sql)：100,000轨、10,000发行、8,000组，每发行恰好10轨，5,000 missing；不依赖 S 线夹具。
 - 本人20,000收藏，1,000 missing；20张歌单各10,000轨/500 missing。每张歌单跨10,000发行、8,000组，不用所有卡片重复同一小集合。相邻歌单环形重叠5,000轨，20张并集恰好100,000轨，每轨出现两次。
 - 另一用户100,000曲目收藏、8,000专辑收藏、20张歌单，保留owner干扰。页/队列核对总量、顺序、missing、omitted与完整统计；未缩小夹具以过门槛。
 - 核心表两阶段均有统计；修正、问题核对、字段决定、归组依据、封面等辅助表为空。第一阶段检查 `reltuples=-1`、无手动或自动 ANALYZE；第二阶段仅由测试准备器 ANALYZE 后检查 `reltuples=0`。每阶段开始和结束均核对。
@@ -33,7 +33,7 @@
 
 1. catalog 公开 `LoadTrackCollectionStats`：至多10,000不同有效UUID，只从owner的tracks表返回匹配/缺失/未知时长计数及正有限时长之和，不传完整事实行或所有组。空输入不查库，未知身份由匹配计数暴露；NULL、NaN、±Infinity和非正时长仍为未知，SUM溢出失败。personal不读catalog私表。
 2. 卡片按既有最多10,000引用批次完整聚合。封面仅补前四个不同组的位置事实，32起指数窗口、单批上限10,000，四组齐全后停止该部分投影；missing或无封面的组也占位。统计不随封面提前停止，撤销超限成员仍全量统计；跨批顺序、计数和RR快照保持。
-3. 按获批规则，读事务局部关闭JIT，去掉空辅助表误估触发的编译成本。SET失败保留错误链、回滚且不继续业务；集成验证实际Service入口在同一PID上事务内off、提交/回滚后恢复默认，写事务不执行SET。规则已写入[数据库规范](../../../spec/backend/database-guidelines.md#延迟敏感只读事务与-jit)，供F/S线引用。
+3. 按获批规则，读事务局部关闭JIT，去掉空辅助表误估触发的编译成本。SET失败保留错误链、回滚且不继续业务；集成验证实际Service入口在同一PID上事务内off、提交/回滚后恢复默认，写事务不执行SET。规则已写入[数据库规范](../../../../../spec/backend/database-guidelines.md#延迟敏感只读事务与-jit)，供F/S线引用。
 4. 不引入跨请求缓存、派生持久统计、额外Go依赖或200,000输入公开API；HTTP路径/字段/状态码和golden合同不变。
 
 ### 试验与证据归属

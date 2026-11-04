@@ -2,7 +2,7 @@
 
 ## 1. 范围与触发
 
-`backend/internal/personal` 拥有本人曲目/专辑收藏与歌单；`personal/httpapi` 只做守卫、严格输入校验和呈现。变更个人关系、排序、撤销、重试、分页、队列或个人摘要时先读本合同。产品裁决以[设计 §12](../../tasks/11-04-classical-m5-favorites/design.md)为准。
+`backend/internal/personal` 拥有本人曲目/专辑收藏与歌单；`personal/httpapi` 只做守卫、严格输入校验和呈现。变更个人关系、排序、撤销、重试、分页、队列或个人摘要时先读本合同。产品裁决以[设计 §12](../../tasks/archive/2026-11/11-04-classical-m5-favorites/design.md)为准。
 
 - 不扩大 listening，不改变播放历史的 1,000 候选队列，不调用 `operations.Run`。
 - SQL 仅访问本人收藏、歌单、条目、撤销和收据表；不 JOIN catalog/identity 的私表。目录读取由消费端 `personal.Catalog` 端口提供，同一用例事务使用 `catalog.NewStore(tx)`。
@@ -153,7 +153,7 @@ PUT/DELETE 不需幂等键。READ COMMITTED 事务先确保本人 state，再锁
 - 样本套件各管范围：旧 recorder 的清理/对比跳过上述personal范围，personal recorder只管理自己70个；更新任一套不能删除另一套。
 - catalog 新读测试：10,000 facts/1,000组上限、missing/空组、当前归属、无效时长、安全封面、单连接/重复ID。
 - 依赖规则和race/vet按本任务指定范围；集成必须实际运行，0 SKIP。性能诊断启用 `ROOMUSIC_CATALOG_EXPLAIN=1`，不能把无URL的Skip当通过。
-- 数据库仅隔离 Compose 项目 `roomusic-test-m5p`，空闲端口、随机库名、`--env-file /dev/null`，本次URL传测试，用完 `down -v`；不得操作业务数据库或其他实现线项目。具体实测证据见[个人性能报告](../../tasks/11-04-classical-m5-favorites/research/m5-personal-performance.md)和[Catalog 执行计划报告](../../tasks/11-04-classical-m5-favorites/research/m5-personal-catalog-explain.md)。
+- 数据库仅隔离 Compose 项目 `roomusic-test-m5p`，空闲端口、随机库名、`--env-file /dev/null`，本次URL传测试，用完 `down -v`；不得操作业务数据库或其他实现线项目。具体实测证据见[个人性能报告](../../tasks/archive/2026-11/11-04-classical-m5-favorites/research/m5-personal-performance.md)和[Catalog 执行计划报告](../../tasks/archive/2026-11/11-04-classical-m5-favorites/research/m5-personal-catalog-explain.md)。
 
 ## 7. 错误做法与正确做法
 

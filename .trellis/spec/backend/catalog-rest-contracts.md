@@ -184,7 +184,7 @@
   显式诊断 `ROOMUSIC_CATALOG_EXPLAIN=1 go test ./internal/catalog -run '^TestPostgreSQLPersonalCatalogExplain$' -count=1 -v`
   使用调用方提供的隔离库（`ROOMUSIC_TEST_DATABASE_URL`），建立十万曲目夹具，对实际 SQL 测 10,000 facts、80 组、1,000 同发行/不同发行完整摘要；
   `ROOMUSIC_CATALOG_EXPLAIN_DIR` 可保存 JSON 执行计划。不启动容器、不禁用顺序扫描或 JIT；诊断默认跳过，不能把跳过当作性能证据。测量与优化前后证据见
-  [M5 catalog 执行计划报告](../../tasks/11-04-classical-m5-favorites/research/m5-personal-catalog-explain.md)；`TestPostgreSQLPersonalCatalogLargeReleaseExplain`
+  [M5 catalog 执行计划报告](../../tasks/archive/2026-11/11-04-classical-m5-favorites/research/m5-personal-catalog-explain.md)；`TestPostgreSQLPersonalCatalogLargeReleaseExplain`
   另测十万轨单发行、80% missing，区分空元数据表默认统计与完整 ANALYZE；默认统计仍有 JIT 风险，不能用首轮千轨发行的结果代替。额外的摘要等价测试覆盖多碟、同来源缺失去重、有效/过期核对与修正。
 - 运行 `go test ./internal/catalog/... ./internal/app -run 'Release|Catalog|Artwork|Group|Routes|Default|Comparison' -count=1`（M4 的默认版本与对比用例名不一定含 `Group`）；涉及 SQL 投影时，
   还需通过隔离 PostgreSQL 18 的 `./scripts/test-integration.sh`。

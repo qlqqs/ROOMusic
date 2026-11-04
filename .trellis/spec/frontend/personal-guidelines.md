@@ -1,7 +1,7 @@
 # 收藏与歌单的前端约定（M5 ② ③）
 
 本文件记录 `features/personal` 与 app 层组合的已实现合同。接口形状见任务
-[收藏与歌单技术设计](../../tasks/11-04-classical-m5-favorites/design.md) §4–§6、§9 与后端
+[收藏与歌单技术设计](../../tasks/archive/2026-11/11-04-classical-m5-favorites/design.md) §4–§6、§9 与后端
 [个人数据合同](../backend/personal-contracts.md)；组件与状态的通则仍以[组件规范](./component-guidelines.md)、[状态规范](./state-management.md)为准。
 
 ## 归属与依赖
