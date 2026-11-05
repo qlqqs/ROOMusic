@@ -1,0 +1,17 @@
+{
+  "utc": "2026-11-05T16:25:39.302904+00:00",
+  "project": "roomusic-drill",
+  "checks": {
+    "containers": [],
+    "volumes": [],
+    "networks": [],
+    "images": [],
+    "owned_anonymous_volumes_removed": true,
+    "ports_18090_18443_free": true,
+    "tmp_removed": true,
+    "clone_removed": true,
+    "evidence_retained": true,
+    "known_secrets_scan_passed": true
+  },
+  "result": "passed"
+}

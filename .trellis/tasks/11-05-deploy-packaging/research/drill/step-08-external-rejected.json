@@ -1,0 +1,14 @@
+{
+  "request_evidence": [
+    {
+      "time": "2026-11-05T16:01:17.792009872Z",
+      "event": "http.request.completed",
+      "request_id": "web-5ae0d67867afbafe",
+      "method": "POST",
+      "route_template": "POST /api/v1/auth/login",
+      "status": 403
+    }
+  ],
+  "user_confirmed_url": "https://music.qlqqs.com:8888",
+  "classification": "用户从清单外的真实反代入口访问，403 符合设计；此前未抓取原始 Origin，结合用户确认网址与来源拒绝结果记录。"
+}

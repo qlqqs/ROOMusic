@@ -1,0 +1,94 @@
+{
+  "observed_requests": [
+    {
+      "event": "login.request.headers",
+      "index": 1,
+      "utc": "2026-11-05T16:09:20.208448+00:00",
+      "method": "POST",
+      "path": "/api/v1/auth/login",
+      "tcp_peer": "192.168.50.1:37128",
+      "tcp_server": "10.203.51.3:8080",
+      "headers": {
+        "Origin": [
+          "https://music.qlqqs.com:8888"
+        ],
+        "Host": [
+          "music.qlqqs.com:8888"
+        ],
+        "Referer": [
+          "https://music.qlqqs.com:8888/login"
+        ],
+        "User-Agent": [
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36"
+        ]
+      }
+    },
+    {
+      "event": "login.request.headers",
+      "index": 2,
+      "utc": "2026-11-05T16:10:43.564587+00:00",
+      "method": "POST",
+      "path": "/api/v1/auth/login",
+      "tcp_peer": "192.168.50.206:57474",
+      "tcp_server": "10.203.51.3:8080",
+      "headers": {
+        "Origin": [
+          "http://192.168.50.206:18090"
+        ],
+        "Host": [
+          "192.168.50.206:18090"
+        ],
+        "Referer": [
+          "http://192.168.50.206:18090/login"
+        ],
+        "User-Agent": [
+          "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36"
+        ]
+      }
+    }
+  ],
+  "app_log_events": [
+    {
+      "time": "2026-11-05T16:09:20.270496974Z",
+      "event": "identity.login.failed",
+      "request_id": "web-757521fca87d5c8b",
+      "source": "192.168.50.1",
+      "username": "drill-admin",
+      "consecutive_failures": 1,
+      "case": "B-真实反代"
+    },
+    {
+      "time": "2026-11-05T16:09:20.270561856Z",
+      "event": "http.request.completed",
+      "request_id": "web-757521fca87d5c8b",
+      "method": "POST",
+      "route_template": "POST /api/v1/auth/login",
+      "status": 401,
+      "case": "B-真实反代"
+    },
+    {
+      "time": "2026-11-05T16:10:43.625174772Z",
+      "event": "identity.login.failed",
+      "request_id": "web-626c558e38d99d4f",
+      "source": "192.168.50.206",
+      "username": "drill-admin",
+      "consecutive_failures": 1,
+      "case": "A-宿主机替代"
+    },
+    {
+      "time": "2026-11-05T16:10:43.625237259Z",
+      "event": "http.request.completed",
+      "request_id": "web-626c558e38d99d4f",
+      "method": "POST",
+      "route_template": "POST /api/v1/auth/login",
+      "status": 401,
+      "case": "A-宿主机替代"
+    }
+  ],
+  "conclusion": {
+    "B": "通过：真实反代 Origin 正确保留、清单内请求进入登录核对并返回401；TCP 对端与 source 一致。",
+    "A_local": "本机替代测试通过；只证明宿主机直连，不证明另一台局域网设备的真实 IP。",
+    "step_8_3": "真实跨设备局域网来源未验证，不得标为通过。",
+    "step_9_14": "未执行，等待用户是否接受验证缺口的确认。"
+  }
+}
