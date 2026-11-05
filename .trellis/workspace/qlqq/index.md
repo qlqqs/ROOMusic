@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 40
+- **Total Sessions**: 41
 - **Last Active**: 2026-11-05
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1360 | Active |
+| `journal-1.md` | ~1410 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 41 | 2026-11-05 | 账户与密码 | `552f875`, `da4297e`, `54b65e6`, `fea965d`, `811ba7c`, `ca0d1e7`, `41f8c21`, `eae3877`, `0ef1816`, `4d33243`, `276b382`, `8d8474b` | `main` |
 | 40 | 2026-11-05 | M5 父任务收尾、密码规则与规范拆分 | `5c78563`, `2cc2ce4`, `e51cc31`, `4403121`, `00eba2d` | `main` |
 | 39 | 2026-11-05 | M5 S 线：搜索规范化、艺人与别名收尾合入 | `4534454`, `44c146c`, `a7e3609`, `482a10d`, `b504037`, `9bfb58b`, `1480b25`, `2ca3be5`, `4323b55`, `3b61d28`, `2ff146e`, `ac0d422` | `main` |
 | 38 | 2026-11-04 | M5 ⑥ 扫描反馈（F 线变基、收尾与合入） | `34d944b`, `85ab070`, `a7f9dba`, `5564a5a`, `899cba6`, `961c3c6`, `c825e0b` | `m5-search-artists` |

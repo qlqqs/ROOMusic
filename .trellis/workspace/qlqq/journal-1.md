@@ -1358,3 +1358,53 @@ F 线变基到含 P 线的 main（迁移改为 0023/0024），导出树全量全
 ### Next Steps
 
 - 推送需用户说“推送”
+
+
+## Session 41: 账户与密码
+<!-- trellis-session: v=2 fp=a103cc27f1405c29 -->
+
+**Date**: 2026-11-05
+**Task**: 账户与密码
+**Branch**: `main`
+
+### Summary
+
+成员自助改密码、管理员重置成员密码、命令行恢复（scripts/reset-password.sh），艺人候选可查看与恢复已忽略；测试改由 GPT-6.1-Sol 编写和执行
+
+### Main Changes
+
+- POST /auth/password（当前会话保留、其他撤销，当前密码错误 403）与 POST /users/{id}/password（全部撤销，停用成员可重置，对自己 403）
+- roomusic reset-password 子命令：只连库不迁移，退出码 0/1/2/130，脚本透传退出码
+- GET /artist-candidates?ignored=true 与前端“待处理 / 已忽略”切换、逐条恢复提示
+- 验收修正：状态链接 aria-current、改密码成功结果移进对话框、文案精简
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `552f875` | docs(task): 账户与密码的规划文档 |
+| `da4297e` | feat(identity): 自助改密码、管理员重置与命令行恢复，艺人候选可列出已忽略 |
+| `54b65e6` | test(identity): 改密码、重置、命令行恢复与已忽略候选的集成测试和接口样本 |
+| `fea965d` | feat(frontend): 修改密码、重置成员密码与艺人候选的已忽略视图 |
+| `811ba7c` | fix(governance): 候选状态切换只把当前项标为 aria-current |
+| `ca0d1e7` | test(frontend): 改密码、重置与已忽略候选的 Vitest、接口样本往返、Playwright 与真实服务用例 |
+| `41f8c21` | docs: 同步身份、艺人候选与会话规范，路线图成员一行与 README 的忘记密码 |
+| `eae3877` | fix(auth): 改密码的成功结果显示在对话框里，不再挤占侧栏 |
+| `0ef1816` | test(frontend): 改密码成功后对话框内的结果、焦点与侧栏布局回归 |
+| `4d33243` | docs(task): 账户与密码记录实施结果与验收 |
+| `276b382` | chore(task): archive 11-05-account-password |
+| `8d8474b` | docs(task): 修正账户与密码任务归档后的相对链接 |
+
+### Testing
+
+- [OK] 后端 32 个集成与命令行测试、8 个接口样本
+- [OK] Vitest 相关文件 629 通过；模拟 Playwright 账户子集 87/87，五宽与 axe 无违规
+- [OK] 导出树 ca0d1e7：内嵌资产一致，真实服务用例 55/55；修正后 account.real.ts 2/2
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 10-06-m2a-acceptance-followup 仍等手工实播
