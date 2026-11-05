@@ -1,6 +1,6 @@
 # M5 ④ 搜索与 ⑤ 艺人：执行计划
 
-需求见 [④ prd](prd.md) 与 [⑤ prd](../11-04-classical-m5-artists/prd.md)，合同见 [design.md](design.md)。属于父任务的 **S 线**（[父任务](../../../11-04-classical-m5/prd.md)“一次规划、并行实现”），合入顺序第 3（P、F 之后）。分工按 `~/.claude/CLAUDE.md`：后端与所有测试由 GPT-6-Astra，前端由 Opus 5.5；子 agent 不提交，主会话审阅后在本线 worktree 里按步骤提交。
+需求见 [④ prd](prd.md) 与 [⑤ prd](../11-04-classical-m5-artists/prd.md)，合同见 [design.md](design.md)。属于父任务的 **S 线**（[父任务](../11-04-classical-m5/prd.md)“一次规划、并行实现”），合入顺序第 3（P、F 之后）。分工按 `~/.claude/CLAUDE.md`：后端与所有测试由 GPT-6-Astra，前端由 Opus 5.5；子 agent 不提交，主会话审阅后在本线 worktree 里按步骤提交。
 
 ## 并行环境
 
