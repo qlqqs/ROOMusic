@@ -1,7 +1,7 @@
 # 艺人与别名的前端约定（M5 ⑤）
 
 本文件记录 `features/artists` 与相关 feature、app 层组合的已实现合同。接口形状见任务
-[搜索与艺人联合设计](../../tasks/11-04-classical-m5-search/design.md) §7–§12 与后端[艺人合同](../backend/artist-contracts.md)；
+[搜索与艺人联合设计](../../tasks/archive/2026-11/11-04-classical-m5-search/design.md) §7–§12 与后端[艺人合同](../backend/artist-contracts.md)；
 艺人收藏的接口见[收藏与歌单技术设计](../../tasks/archive/2026-11/11-04-classical-m5-favorites/design.md) §8。组件与状态的通则仍以
 [组件规范](./component-guidelines.md)、[状态规范](./state-management.md)、[收藏与歌单约定](./personal-guidelines.md)为准。
 
