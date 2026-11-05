@@ -1280,3 +1280,40 @@ F 线变基到含 P 线的 main（迁移改为 0023/0024），导出树全量全
 
 - S 线：重放前端提交后接心形与添加到歌单，再做 ⑤ 艺人
 - 本地提交未推送
+
+
+## Session 39: M5 S 线：搜索规范化、艺人与别名收尾合入
+<!-- trellis-session: v=2 fp=35e66a1481e95ab5 -->
+
+**Date**: 2026-11-05
+**Task**: M5 S 线：搜索规范化、艺人与别名收尾合入
+**Branch**: `main`
+
+### Summary
+
+④⑤ 合入 main（4323b55）并归档；热门艺人搜索从 21 s 修到约 400 ms；用户裁决回填性能按正式运行达标（I9/I10），测试量收敛为相关测试加一次真实服务合跑（31/0/0）
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4534454` | feat(catalog): 搜索规范化与全局搜索接口 |
+| `44c146c` | feat(frontend): 全局搜索 |
+| `a7e3609` | feat(frontend): 搜索结果接入收藏与歌单，建议里的曲目打开后定位 |
+| `482a10d` | feat(catalog): 艺人身份、别名与治理，艺人收藏，后台回填 |
+| `b504037` | feat(frontend): 艺人页、别名与合并拆分治理，艺人收藏 |
+| `9bfb58b` | fix(frontend): 艺人概况只在分隔处换行，首字母导航宽屏一行排完 |
+| `1480b25` | perf(catalog): 热门艺人搜索不再逐条展开整位艺人的署名 |
+| `2ca3be5` | docs(task): 记录搜索与艺人的实施结果，新增艺人真实服务测试 |
+| `4323b55` | merge: M5 S 线：搜索规范化、艺人与别名 |
+| `3b61d28` | chore(task): archive 11-04-classical-m5-search |
+| `2ff146e` | chore(task): archive 11-04-classical-m5-artists |
+| `ac0d422` | docs(task): 修正搜索与艺人归档后的相对链接，父任务标记两项完成 |
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- M5 父任务跨项验收与归档；密码提示字符/字节不一致；超体积 spec 文档整理
