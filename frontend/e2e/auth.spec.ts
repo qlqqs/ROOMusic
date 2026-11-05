@@ -1,4 +1,4 @@
-import { changedPassword, passwordDialog } from "./support/account-password";
+import { changedPassword, expectLogoutInViewport, expectPasswordChanged, fillPasswordChange, passwordDialog } from "./support/account-password";
 import { artistKeyActivate as keyActivate, artistTabTo as keyboardTabTo } from "./support/artists";
 import { expectFocusStaysInDialog } from "./support/keyboard";
 import { expect, test } from "./support/fixtures";
@@ -175,9 +175,12 @@ test.describe("账户密码：自助修改", () => {
     await page.keyboard.press("ControlOrMeta+A");
     await page.keyboard.type("curator-password");
     await keyActivate(page, dialog.getByRole("button", { name: "修改密码", exact: true }));
+    const done = await expectPasswordChanged(page);
+    await expect(page).toHaveURL(originalURL);
+    await keyActivate(page, done);
     await expect(dialog).toBeHidden();
     await expect(trigger).toBeFocused();
-    await expect(page.getByRole("region", { name: "当前用户" })).toContainText("密码已修改。");
+    await expect(page.getByRole("region", { name: "当前用户" })).not.toContainText("密码已修改。");
     await expect(heading(page, "专辑")).toBeVisible();
     await expect(page).toHaveURL(originalURL);
     expect(mock.session).toBe("curator");
@@ -195,6 +198,39 @@ test.describe("账户密码：自助修改", () => {
     await expect(heading(page, "专辑")).toBeVisible();
     await expect(page.getByRole("region", { name: "当前用户" })).toContainText("curator");
   });
+
+  for (const closeWith of ["完成", "Esc"] as const) {
+    test(`成功结果留在对话框，${closeWith}关闭回到入口、重开空表单且退出按钮完整在视口`, async ({ page, backend }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      const mock = await backend.start({ signedInAs: "curator" });
+      await page.goto("/");
+      await expect(heading(page, "概览")).toBeVisible();
+      await expectLogoutInViewport(page);
+      const trigger = page.getByRole("button", { name: "修改密码", exact: true });
+      await keyActivate(page, trigger);
+      await fillPasswordChange(page);
+      await keyActivate(page, passwordDialog(page).getByRole("button", { name: "修改密码", exact: true }));
+      const done = await expectPasswordChanged(page);
+      if (closeWith === "完成") await keyActivate(page, done);
+      else await page.keyboard.press("Escape");
+      await expect(passwordDialog(page)).toBeHidden();
+      await expect(trigger).toBeFocused();
+      await expect(page.getByRole("region", { name: "当前用户" })).not.toContainText("密码已修改。");
+      await expect(page.getByText("密码已修改。", { exact: true })).toHaveCount(0);
+      await expectLogoutInViewport(page);
+      await page.keyboard.press("Enter");
+      const reopened = passwordDialog(page);
+      await expect(reopened.getByRole("heading", { name: "修改密码", exact: true })).toBeFocused();
+      for (const label of ["当前密码", "新密码", "确认新密码"]) await expect(reopened.getByLabel(label, { exact: true })).toHaveValue("");
+      await expect(reopened.getByRole("button", { name: "完成", exact: true })).toHaveCount(0);
+      await expect(reopened.getByText("密码已修改。", { exact: true })).toHaveCount(0);
+      await page.keyboard.press("Escape");
+      await expect(trigger).toBeFocused();
+      await expectLogoutInViewport(page);
+      expect(mock.callsTo("POST", "/api/v1/auth/password")).toHaveLength(1);
+      expect(mock.session).toBe("curator");
+    });
+  }
 
   for (const invalid of [
     { name: "缺少当前密码", current: "", password: changedPassword, confirmation: changedPassword, field: "当前密码", error: "请输入当前密码。" },
@@ -243,4 +279,31 @@ test.describe("账户密码：自助修改", () => {
     await expect(menuTrigger).toBeFocused();
     await expect(heading(page, "概览")).toBeVisible();
   });
+  test("窄屏成功后Esc仅关密码结果对话框，抽屉与入口焦点保留且重开为空", async ({ page, backend }) => {
+    await page.setViewportSize({ width: 375, height: 900 });
+    const mock = await backend.start({ signedInAs: "curator" });
+    await page.goto("/");
+    await keyActivate(page, page.getByRole("button", { name: "菜单", exact: true }));
+    const drawer = page.getByRole("dialog", { name: "菜单", exact: true });
+    const trigger = drawer.getByRole("button", { name: "修改密码", exact: true });
+    await keyActivate(page, trigger);
+    await fillPasswordChange(page);
+    await keyActivate(page, passwordDialog(page).getByRole("button", { name: "修改密码", exact: true }));
+    await expectPasswordChanged(page);
+    await page.keyboard.press("Escape");
+    await expect(passwordDialog(page)).toBeHidden();
+    await expect(drawer).toBeVisible();
+    await expect(drawer).toHaveJSProperty("open", true);
+    await expect(trigger).toBeFocused();
+    await expect(drawer.getByRole("region", { name: "当前用户" })).not.toContainText("密码已修改。");
+    await page.keyboard.press("Enter");
+    for (const label of ["当前密码", "新密码", "确认新密码"]) await expect(passwordDialog(page).getByLabel(label, { exact: true })).toHaveValue("");
+    await expect(passwordDialog(page).getByRole("button", { name: "完成", exact: true })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(drawer).toBeVisible();
+    await expect(trigger).toBeFocused();
+    expect(mock.callsTo("POST", "/api/v1/auth/password")).toHaveLength(1);
+    expect(mock.session).toBe("curator");
+  });
+
 });

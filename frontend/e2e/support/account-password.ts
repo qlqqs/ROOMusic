@@ -26,7 +26,7 @@ export async function fillPasswordChange(page: Page, current = "curator-password
   await dialog.getByLabel("确认新密码", { exact: true }).fill(confirmation);
 }
 
-export const accountLayoutScenes = ["身份区", "身份区成功提示", "修改密码对话框", "成员三按钮", "重置密码对话框", "停用成员重置对话框", "候选待处理", "候选已忽略"] as const;
+export const accountLayoutScenes = ["身份区", "对话框内成功", "成功关闭后身份区", "修改密码对话框", "成员三按钮", "重置密码对话框", "停用成员重置对话框", "候选待处理", "候选已忽略"] as const;
 export const accountAxeScenes = [...accountLayoutScenes, "当前密码错误", "新密码字段错误", "改密码结果未确认", "重置密码字段错误", "重置密码成功提示", "重置密码失败提示", "候选已忽略空态"] as const;
 export type AccountScene = (typeof accountAxeScenes)[number];
 
@@ -90,5 +90,44 @@ export async function openAccountScene(page: Page, mock: ApiMock, scene: Account
   if (scene === "当前密码错误") await expect(dialog.getByText("当前密码不对。", { exact: true })).toBeVisible();
   else if (scene === "新密码字段错误") await expect(dialog.getByText("密码至少要 12 位。", { exact: true })).toBeVisible();
   else if (scene === "改密码结果未确认") await expect(dialog.getByRole("alert")).toContainText("结果未确认");
-  else await expect(page.getByRole("region", { name: "当前用户" }).getByRole("status")).toContainText("密码已修改。");
+  else {
+    const done = await expectPasswordChanged(page);
+    if (scene === "成功关闭后身份区") {
+      await done.press("Enter");
+      await expect(dialog).toBeHidden();
+      await expect(page.getByRole("region", { name: "当前用户" })).not.toContainText("密码已修改。");
+    }
+  }
+}
+
+/** 成功结果不是 live region：焦点移到唯一的“完成”，由其描述关联读出结果。 */
+export async function expectPasswordChanged(page: Page): Promise<Locator> {
+  const dialog = passwordDialog(page);
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "修改密码", exact: true })).toBeVisible();
+  const result = dialog.getByText("密码已修改。", { exact: true });
+  await expect(result).toBeVisible();
+  await expect(dialog.getByRole("status")).toHaveCount(0);
+  await expect(result).not.toHaveAttribute("role", "status");
+  await expect(dialog.locator("input[type=password]")).toHaveCount(0);
+  const done = dialog.getByRole("button", { name: "完成", exact: true });
+  await expect(done).toBeFocused();
+  await expect(done).toHaveAccessibleDescription("密码已修改。");
+  const resultId = await result.getAttribute("id");
+  if (resultId === null || resultId === "") throw new Error("成功结果必须有 id，供完成按钮关联描述");
+  await expect(done).toHaveAttribute("aria-describedby", resultId);
+  return done;
+}
+
+/** 不借助滚动把退出按钮移进来：整个按钮（包括底边）原本就在视口里。 */
+export async function expectLogoutInViewport(page: Page): Promise<void> {
+  const bounds = await page.getByRole("button", { name: "退出登录", exact: true }).boundingBox();
+  const viewport = page.viewportSize();
+  if (bounds === null || viewport === null) throw new Error("退出登录按钮与视口必须有可测量边界");
+  expect(bounds.x, "退出按钮左边界").toBeGreaterThanOrEqual(0);
+  expect(bounds.y, "退出按钮上边界").toBeGreaterThanOrEqual(0);
+  expect(bounds.width, "退出按钮宽度").toBeGreaterThan(0);
+  expect(bounds.height, "退出按钮高度").toBeGreaterThan(0);
+  expect(bounds.x + bounds.width, "退出按钮右边界").toBeLessThanOrEqual(viewport.width);
+  expect(bounds.y + bounds.height, "退出按钮底边界").toBeLessThanOrEqual(viewport.height);
 }

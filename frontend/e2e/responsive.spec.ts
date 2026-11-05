@@ -1,4 +1,6 @@
-import { accountLayoutScenes, openAccountScene } from "./support/account-password";
+import { mkdir } from "node:fs/promises";
+import { resolve } from "node:path";
+import { accountLayoutScenes, expectLogoutInViewport, openAccountScene } from "./support/account-password";
 import type { Page } from "@playwright/test";
 import { sampleBody } from "../src/test/api-samples";
 import { albumGroups } from "../src/test/catalog-data";
@@ -317,8 +319,12 @@ test.describe("账户密码：五宽布局", () => {
           expect(bounds?.x ?? -1).toBeGreaterThanOrEqual(0);
           expect((bounds?.x ?? 0) + (bounds?.width ?? 0)).toBeLessThanOrEqual(width);
         }
+        if (width === 1440 && (scene === "身份区" || scene === "成功关闭后身份区")) await expectLogoutInViewport(page);
         if (width === 375 || width === 1440) {
-          const path = testInfo.outputPath(`${scene}-${width}.png`);
+          // 截图放在独立目录；auth/axe 使用其他 output，不能清掉供主会话复核的图片。
+          const directory = resolve(import.meta.dirname, "../test-results/account-screenshots");
+          await mkdir(directory, { recursive: true });
+          const path = resolve(directory, `${scene}-${width}.png`);
           await page.screenshot({ path, fullPage: true });
           await testInfo.attach(`${scene}-${width}`, { path, contentType: "image/png" });
         }

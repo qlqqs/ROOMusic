@@ -469,6 +469,7 @@ test.describe("账户密码：axe全部规则无违规", () => {
         const mock = await backend.start({ signedInAs: "curator" });
         await openAccountScene(page, mock, scene);
         await page.evaluate(() => document.fonts.ready);
+        // 包含对话框内成功和关闭后的身份区；成功结果的描述与焦点由共用场景同时断言。
         const { violations } = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
         expect(violations.map(({ id, impact, nodes }) => ({ id, impact, targets: nodes.map(({ target }) => target) })), `${scene} @${width}px：axe全部违规为空`).toEqual([]);
         await expectMinimumFontSize(page, `${scene} @${width}px`);

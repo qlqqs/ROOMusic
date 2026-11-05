@@ -21,9 +21,10 @@ async function openPasswordChange() {
   const channel = { notifyChanged: vi.fn(), onChanged: () => () => undefined, close: vi.fn() };
   const rendered = renderApp({ path: "/members", channel });
   await screen.findByRole("rowheader", { name: /^listener/ });
-  await userEvent.click(screen.getByRole("button", { name: "修改密码" }));
+  const trigger = screen.getByRole("button", { name: "修改密码" });
+  await userEvent.click(trigger);
   const dialogElement = await screen.findByRole("dialog", { name: "修改密码" });
-  return { api, session, channel, ...rendered, dialogElement, dialog: within(dialogElement) };
+  return { api, session, channel, ...rendered, trigger, dialogElement, dialog: within(dialogElement) };
 }
 
 type Context = Awaited<ReturnType<typeof openPasswordChange>>;
@@ -46,8 +47,43 @@ function expectFieldError(context: Context, label: string, message: string) {
   expect(document.activeElement).toBe(input);
 }
 
+/** 成功后留在对话框里：结果只读一次，焦点交给唯一的“完成”按钮。 */
+async function expectPasswordChanged(context: Context) {
+  const done = await context.dialog.findByRole<HTMLButtonElement>("button", { name: "完成" });
+  expect(screen.getByRole("dialog", { name: "修改密码" })).toBe(context.dialogElement);
+  expect(context.dialog.getByRole("heading", { level: 2, name: "修改密码" })).toBeTruthy();
+  const result = context.dialog.getByText("密码已修改。");
+  expect(screen.getAllByText("密码已修改。")).toEqual([result]);
+  expect(result.closest("dialog")).toBe(context.dialogElement);
+  expect(context.dialog.queryByRole("status")).toBeNull();
+  expect(context.dialog.queryByRole("alert")).toBeNull();
+  expect(result.closest('[role="status"], [aria-live]')).toBeNull();
+  expect(context.dialog.getAllByRole("button")).toEqual([done]);
+  expect(done.disabled).toBe(false);
+  const describedBy = done.getAttribute("aria-describedby");
+  expect(describedBy).toBeTruthy();
+  expect(describedBy?.split(" ").map((id) => document.getElementById(id))).toContain(result);
+  await waitFor(() => expect(document.activeElement).toBe(done));
+  for (const label of ["当前密码", "新密码", "确认新密码"]) expect(context.dialog.queryByLabelText(label)).toBeNull();
+  expect(context.dialogElement.querySelector("form")).toBeNull();
+  return done;
+}
+
+async function expectClosedAndReopenEmpty(context: Context) {
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(document.activeElement).toBe(context.trigger);
+  expect(screen.queryByText("密码已修改。")).toBeNull();
+  await userEvent.click(context.trigger);
+  const dialog = within(await screen.findByRole("dialog", { name: "修改密码" }));
+  expect(document.activeElement).toBe(dialog.getByRole("heading", { level: 2, name: "修改密码" }));
+  for (const label of ["当前密码", "新密码", "确认新密码"]) expect(dialog.getByLabelText<HTMLInputElement>(label).value).toBe("");
+  expect(dialog.queryByRole("button", { name: "完成" })).toBeNull();
+  expect(dialog.queryByText("密码已修改。")).toBeNull();
+  expect(dialog.queryByRole("alert")).toBeNull();
+}
+
 describe("V1/V5：身份区修改密码", () => {
-  it("成功保持当前页、会话代次与缓存，不重建会话、不广播，并显示成功提示", async () => {
+  it("成功保留会话代次与缓存，焦点到结果态完成按钮；点击后关闭归还焦点，再打开空表单", async () => {
     const context = await openPasswordChange();
     const { runtime, api, session, channel, history } = context;
     const generation = runtime.session.currentGeneration();
@@ -59,7 +95,7 @@ describe("V1/V5：身份区修改密码", () => {
     const broadcasts = channel.notifyChanged.mock.calls.length;
     await fill(context);
     await submit(context);
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    const done = await expectPasswordChanged(context);
 
     expect(history.location.pathname).toBe("/members");
     expect(screen.getByRole("heading", { level: 1, name: "成员" })).toBeTruthy();
@@ -82,9 +118,19 @@ describe("V1/V5：身份区修改密码", () => {
     expect(request?.headers.get("Idempotency-Key")).toBeNull();
     expect(request?.init.credentials).toBe("same-origin");
     expect(document.body.textContent).not.toContain(newPassword);
-    expect(screen.getByText("密码已修改。")).toBeTruthy();
-    await userEvent.click(screen.getByRole("button", { name: "关闭" }));
-    expect(screen.queryByText("密码已修改。")).toBeNull();
+    await userEvent.click(done);
+    await expectClosedAndReopenEmpty(context);
+    expect(runtime.session.currentGeneration()).toBe(generation);
+    expect(runtime.session.getSnapshot()).toBe(sessionState);
+    for (const { query, data } of cache) {
+      expect(runtime.queryClient.getQueryCache().get(query.queryHash)).toBe(query);
+      expect(query.state.data).toBe(data);
+      expect(query.state.isInvalidated).toBe(false);
+    }
+    expect(clear).not.toHaveBeenCalled();
+    expect(invalidation).not.toHaveBeenCalled();
+    expect(channel.notifyChanged).toHaveBeenCalledTimes(broadcasts);
+    expect(api.requestsTo("POST", passwordPath)).toHaveLength(1);
   });
 
   it("403 当前密码错误关联字段、聚焦且保留输入，不退出登录；改对后可再次提交", async () => {
@@ -106,7 +152,8 @@ describe("V1/V5：身份区修改密码", () => {
     await userEvent.type(context.dialog.getByLabelText("当前密码"), oldPassword);
     expect(context.dialog.queryByText("当前密码不对。")).toBeNull();
     await submit(context);
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await expectPasswordChanged(context);
+    expect(context.runtime.session.currentGeneration()).toBe(generation);
     expect(context.api.requestsTo("POST", passwordPath)).toHaveLength(2);
   });
 
@@ -140,7 +187,7 @@ describe("V1/V5：身份区修改密码", () => {
     expect(context.runtime.session.getSnapshot().status).toBe("authenticated");
     context.api.on("POST", passwordPath, () => sampleResponse("auth/password-changed"));
     await submit(context);
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await expectPasswordChanged(context);
     expect(context.api.requestsTo("POST", passwordPath)).toHaveLength(2);
   });
 
@@ -168,7 +215,7 @@ describe("V1/V5：身份区修改密码", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("提交中禁止取消与 Esc，重复提交只发一次请求；完成后才能关闭", async () => {
+  it("提交中禁止取消与 Esc；成功后可用 Esc 关闭归还焦点，重新打开空表单", async () => {
     const context = await openPasswordChange();
     const gate = deferred<Response>();
     context.api.on("POST", passwordPath, () => gate.promise);
@@ -187,7 +234,12 @@ describe("V1/V5：身份区修改密码", () => {
     fireEvent.submit(form);
     expect(context.api.requestsTo("POST", passwordPath)).toHaveLength(1);
     await act(async () => { gate.resolve(sampleResponse("auth/password-changed")); });
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await expectPasswordChanged(context);
+    const successCancel = new Event("cancel", { cancelable: true });
+    fireEvent(context.dialogElement, successCancel);
+    expect(successCancel.defaultPrevented).toBe(true);
+    await expectClosedAndReopenEmpty(context);
+    expect(context.api.requestsTo("POST", passwordPath)).toHaveLength(1);
   });
 
   it("本地校验按当前密码、新密码、确认依次聚焦，失败不发请求", async () => {
