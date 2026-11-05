@@ -30,14 +30,14 @@
 
 ## 验收
 
-- [ ] A1 配置 `http://192.168.50.206:8080,https://music.example.com` 时：两个来源的登录、写操作、退出都成功；http 登录的 `Set-Cookie` 没有 `Secure`，https 登录的有。
-- [ ] A2 同一配置下，`http://music.example.com`、`https://192.168.50.206:8080`、其他主机、带路径或用户信息的 `Origin`、缺少 `Origin` 的写请求都被拒绝且不写库。
-- [ ] A3 清单格式错误时拒绝启动，错误信息指出配置项；只配 http 来源也能启动。（原“生产不配清单拒绝启动”已由 O8 / A6 取代。）
-- [ ] A4 不配清单的开发环境下，现有 `RequireSameOrigin` 与配置的单元测试结论不变；旧模式三条路径（协议开关、`PUBLIC_URL` 主机、`request.Host`）各有正反例。
+- [x] A1 配置 `http://192.168.50.206:8080,https://music.example.com` 时：两个来源的登录、写操作、退出都成功；http 登录的 `Set-Cookie` 没有 `Secure`，https 登录的有。
+- [x] A2 同一配置下，`http://music.example.com`、`https://192.168.50.206:8080`、其他主机、带路径或用户信息的 `Origin`、缺少 `Origin` 的写请求都被拒绝且不写库。
+- [x] A3 清单格式错误时拒绝启动，错误信息指出配置项；只配 http 来源也能启动。（原“生产不配清单拒绝启动”已由 O8 / A6 取代。）
+- [x] A4 不配清单的开发环境下，现有 `RequireSameOrigin` 与配置的单元测试结论不变；旧模式三条路径（协议开关、`PUBLIC_URL` 主机、`request.Host`）各有正反例。
   （不实际运行 `./scripts/dev.sh`：它会启动用户自己的 `roomusic` 开发库；现有集成测试都在旧模式下运行，已覆盖开发配置。）
-- [ ] A5 后端相关单元测试与 identity 相关的 PostgreSQL 集成测试通过；接口 JSON 样本不变。
+- [x] A5 后端相关单元测试与 identity 相关的 PostgreSQL 集成测试通过；接口 JSON 样本不变。
 
-- [ ] A6 生产不配清单时：`http://192.168.50.206:18090`（Host `192.168.50.206:18090`）与 `https://music.qlqqs.com:8888`（Host `music.qlqqs.com:8888`）
+- [x] A6 生产不配清单时：`http://192.168.50.206:18090`（Host `192.168.50.206:18090`）与 `https://music.qlqqs.com:8888`（Host `music.qlqqs.com:8888`）
   两个来源的登录、写操作、退出都成功，http 的 `Set-Cookie` 没有 `Secure`、https 的有；Origin 与 Host 不一致、`Origin: null`、缺少 Host 时
   `403 origin_forbidden` 且不写库，缺少 Origin 时 `403 origin_required`；带 `X-Forwarded-Host`、`X-Forwarded-Proto` 或 `Forwarded` 不改变结论；
   生产同时设置 `ROOMUSIC_SECURE_COOKIES` 或 `ROOMUSIC_PUBLIC_URL` 时拒绝启动；`docker compose ... --env-file .env.prod.example config --quiet` 仍通过。
@@ -46,6 +46,15 @@
 
 - 设计稿（[design.md](./design.md)）的取舍：有清单时 `ROOMUSIC_SECURE_COOKIES` 出现即拒绝启动，`ROOMUSIC_PUBLIC_URL` 必须在清单内（仍给 Vite 用）；Cookie 由 `SetSessionCookie` / `ClearSessionCookie` 读请求的 `Origin` 决定。主会话 2026-11-05 采纳。
 - 增补（O8，design §9）：模式由 `config` 一次算出（`legacy` / `allow-list` / `same-host`）；生产不配清单时出现 `ROOMUSIC_SECURE_COOKIES` 或 `ROOMUSIC_PUBLIC_URL` 即拒绝启动；拒绝来源时写 `identity.origin.rejected` 诊断日志（§9.5）；packaging design 的相关段落一并改为“不填清单”。主会话 2026-11-05 采纳。
+
+## 实施结果（2026-11-05）
+
+- 提交：`db4b4f3`（清单模式与按来源设置 Cookie）、`06450d0`（主机一致模式，D8 增补）、`a931fb5`（登记 `platform/weborigin` 的包依赖规则，收尾门禁发现）。
+- A1、A2：`identity_api_integration_test.go` 的 `TestPostgreSQLAllowedOrigins*`；A6：`TestPostgreSQLSameHost*`（两个来源登录、改密码、退出，Secure 区分；Host 不一致、`Origin: null`、缺 Host 均 403 且不写库；转发头不改变结论），隔离库 PASS 非 SKIP。
+- A3、A4：`config_test.go` 的 `TestLoadOriginModeMatrix`、`TestLoadOriginValidationOrder` 覆盖 design §9.1 全表；旧模式既有用例未改。
+- A5：接口 JSON 样本未变；来源合同拆为 [identity-origin-contracts.md](../../spec/backend/identity-origin-contracts.md)。
+- 生产实测：正式实例按主机一致模式运行，Host 一致的登录请求得 401（进入密码核对），Origin 与 Host 不一致得 `403 origin_forbidden` 并记录 `identity.origin.rejected mode=same-host`（[正式启动记录](../11-05-deploy-packaging/research/launch.md)）。
+- 审阅补充：`OriginMode` 零值按旧模式装配（design §9.2），直接构造 `config.Server{}` 的测试夹具不必改；清单模式的集成夹具显式写模式。
 
 ## 范围外
 
