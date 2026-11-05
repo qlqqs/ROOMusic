@@ -383,8 +383,7 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
       case "POST /api/v1/users":
         return guarded(method, path, true, () => {
           const { username, password } = body as { username: string; password: string };
-          const passwordBytes = new TextEncoder().encode(password).length;
-          if (username.trim() === "" || passwordBytes < 12 || passwordBytes > 72) return sample("errors/invalid-input");
+          if (username.trim() === "" || !/^[\x20-\x7E]{12,72}$/.test(password)) return sample("errors/invalid-input");
           if (mock.users.some((user) => user.username === username)) return sample("errors/username-taken");
           const created: MemberDTO = { id: uuidOf("e", counter++), username, role: "user", disabled: false, created_at: now() };
           mock.users = [...mock.users, created].sort((left, right) => (left.username < right.username ? -1 : 1));

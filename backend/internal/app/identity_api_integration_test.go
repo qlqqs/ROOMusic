@@ -189,14 +189,18 @@ CREATE TRIGGER mark_setup_completed AFTER INSERT ON users FOR EACH ROW EXECUTE F
 			username string
 			password string
 		}{
-			{"11 bytes", "curator", strings.Repeat("a", 11)},
-			{"73 bytes", "curator", strings.Repeat("a", 73)},
-			{"25 CJK characters are 75 bytes", "curator", strings.Repeat("字", 25)},
+			{"11 ASCII characters", "curator", strings.Repeat("a", 11)},
+			{"73 ASCII characters", "curator", strings.Repeat("a", 73)},
+			{"Chinese", "curator", strings.Repeat("字", 4)},
+			{"fullwidth", "curator", "abcdefghijkＡ"},
+			{"emoji", "curator", "abcdefghijk😀"},
+			{"tab", "curator", "abcdefghijk\t"},
+			{"newline", "curator", "abcdefghijk\n"},
 			{"blank username", "  ", identityTestPassword},
 		} {
 			response := application.request(t, http.MethodPost, "/api/v1/setup/admin", accountBody(testCase.username, testCase.password), nil, nil)
 			requireAPIError(t, response, http.StatusBadRequest, "invalid_input")
-			if message := apiErrorMessage(t, response); message != "用户名不能为空，密码需要 12 到 72 个字节" {
+			if message := apiErrorMessage(t, response); message != "用户名不能为空，密码需要 12 到 72 位英文字母、数字或符号" {
 				t.Fatalf("%s: unexpected message %q", testCase.name, message)
 			}
 		}
@@ -204,8 +208,8 @@ CREATE TRIGGER mark_setup_completed AFTER INSERT ON users FOR EACH ROW EXECUTE F
 		requireAPIError(t, application.request(t, http.MethodPost, "/api/v1/setup/admin", "not an object", nil, nil), http.StatusBadRequest, "invalid_json")
 		requireNothingWritten(t, application)
 
-		// 恰好 72 字节的密码可以完成初始化，之后用同一个密码登录。
-		longPassword := strings.Repeat("字", 24)
+		// 恰好 72 位 ASCII 的密码可以完成初始化，之后用同一个密码登录。
+		longPassword := strings.Repeat("a", 72)
 		requireIdentityBody(t, setup(t, application, longPassword), http.StatusCreated, "curator", "admin")
 		login := application.request(t, http.MethodPost, "/api/v1/auth/login", accountBody("curator", longPassword), nil, nil)
 		requireIdentityBody(t, login, http.StatusOK, "curator", "admin")
@@ -237,25 +241,33 @@ func TestPostgreSQLCreateUserMapsOnlyUniqueViolationsToUsernameTaken(t *testing.
 	}
 	requireIdentityBody(t, create("unaffected", identityTestPassword), http.StatusCreated, "unaffected", "user")
 
-	// 密码长度按 UTF-8 字节计：12–72 通过，其余返回 400；通过的密码都能登录（bcrypt 处理了完整的 72 字节）。
+	// 密码只允许 12–72 位可打印 ASCII（含空格），其余返回 400；通过的密码都能登录。
 	for index, testCase := range []struct {
 		name     string
 		password string
 		status   int
 	}{
-		{"11 bytes", strings.Repeat("a", 11), http.StatusBadRequest},
-		{"12 bytes", strings.Repeat("a", 12), http.StatusCreated},
-		{"72 bytes", strings.Repeat("a", 72), http.StatusCreated},
-		{"73 bytes", strings.Repeat("a", 73), http.StatusBadRequest},
-		{"24 CJK characters are 72 bytes", strings.Repeat("字", 24), http.StatusCreated},
-		{"25 CJK characters are 75 bytes", strings.Repeat("字", 25), http.StatusBadRequest},
+		{"11 ASCII characters", strings.Repeat("a", 11), http.StatusBadRequest},
+		{"12 ASCII characters", strings.Repeat("a", 12), http.StatusCreated},
+		{"72 ASCII characters", strings.Repeat("a", 72), http.StatusCreated},
+		{"73 ASCII characters", strings.Repeat("a", 73), http.StatusBadRequest},
+		{"Chinese", strings.Repeat("字", 4), http.StatusBadRequest},
+		{"Chinese at 72 bytes", strings.Repeat("字", 24), http.StatusBadRequest},
+		{"fullwidth", "abcdefghijkＡ", http.StatusBadRequest},
+		{"emoji", "abcdefghijk😀", http.StatusBadRequest},
+		{"tab", "abcdefghijk\t", http.StatusBadRequest},
+		{"newline", "abcdefghijk\n", http.StatusBadRequest},
+		{"spaces and symbols", " Abc123!@#~  ", http.StatusCreated},
 	} {
 		username := fmt.Sprintf("bounds-%d", index)
 		response := create(username, testCase.password)
 		if testCase.status == http.StatusBadRequest {
 			requireAPIError(t, response, http.StatusBadRequest, "invalid_input")
-			if message := apiErrorMessage(t, response); message != "用户名不能为空，密码需要 12 到 72 个字节" {
+			if message := apiErrorMessage(t, response); message != "用户名不能为空，密码需要 12 到 72 位英文字母、数字或符号" {
 				t.Fatalf("%s: unexpected message %q", testCase.name, message)
+			}
+			if count := countRows(t, application, `SELECT COUNT(*) FROM users WHERE username=$1`, username); count != 0 {
+				t.Fatalf("%s: invalid password left %d users behind", testCase.name, count)
 			}
 			continue
 		}

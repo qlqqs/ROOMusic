@@ -32,35 +32,48 @@ func TestVerifyPasswordSupportsLegacyHash(t *testing.T) {
 	}
 }
 
-func TestValidPasswordLengthCountsUTF8Bytes(t *testing.T) {
+func TestValidPassword(t *testing.T) {
 	cases := []struct {
 		name     string
 		password string
 		valid    bool
 	}{
 		{"empty", "", false},
-		{"11 bytes", strings.Repeat("a", 11), false},
-		{"12 bytes", strings.Repeat("a", 12), true},
-		{"72 bytes", strings.Repeat("a", 72), true},
-		{"73 bytes", strings.Repeat("a", 73), false},
-		{"3 CJK characters are 9 bytes", strings.Repeat("字", 3), false},
-		{"4 CJK characters are 12 bytes", strings.Repeat("字", 4), true},
-		{"24 CJK characters are 72 bytes", strings.Repeat("字", 24), true},
-		{"25 CJK characters are 75 bytes", strings.Repeat("字", 25), false},
+		{"11 ASCII characters", strings.Repeat("a", 11), false},
+		{"12 ASCII characters", strings.Repeat("a", 12), true},
+		{"72 ASCII characters", strings.Repeat("a", 72), true},
+		{"73 ASCII characters", strings.Repeat("a", 73), false},
+		{"Chinese", strings.Repeat("字", 4), false},
+		{"Chinese at 72 bytes", strings.Repeat("字", 24), false},
+		{"mixed Chinese", "abcdefghijk字", false},
+		{"fullwidth", "abcdefghijkＡ", false},
+		{"emoji", "abcdefghijk😀", false},
+		{"tab", "abcdefghijk\t", false},
+		{"newline", "abcdefghijk\n", false},
+		{"carriage return", "abcdefghijk\r", false},
+		{"NUL", "abcdefghijk\x00", false},
+		{"below printable ASCII", "abcdefghijk\x1f", false},
+		{"DEL", "abcdefghijk\x7f", false},
+		{"non-ASCII byte", "abcdefghijk\x80", false},
+		{"spaces", " Abc123!@#~  ", true},
+		{"only spaces", strings.Repeat(" ", 12), true},
+		{"symbols", "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~", true},
 	}
 	for _, testCase := range cases {
-		if got := ValidPasswordLength(testCase.password); got != testCase.valid {
-			t.Errorf("%s: ValidPasswordLength = %v, want %v", testCase.name, got, testCase.valid)
-		}
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := ValidPassword(testCase.password); got != testCase.valid {
+				t.Errorf("ValidPassword = %v, want %v", got, testCase.valid)
+			}
+		})
 	}
 }
 
-// bcrypt 对超过 72 字节的输入返回错误；MaxPasswordBytes 必须与之一致，否则过长的密码会变成 500。
-func TestMaxPasswordBytesMatchesBcryptLimit(t *testing.T) {
-	if _, err := HashPassword(strings.Repeat("a", MaxPasswordBytes)); err != nil {
-		t.Fatalf("hash a password of MaxPasswordBytes: %v", err)
+// bcrypt 对超过 72 字节的输入返回错误；MaxPasswordLength 必须与之一致，否则过长的密码会变成 500。
+func TestMaxPasswordLengthMatchesBcryptLimit(t *testing.T) {
+	if _, err := HashPassword(strings.Repeat("a", MaxPasswordLength)); err != nil {
+		t.Fatalf("hash a password of MaxPasswordLength: %v", err)
 	}
-	if _, err := HashPassword(strings.Repeat("a", MaxPasswordBytes+1)); err == nil {
-		t.Fatal("bcrypt accepted a password longer than MaxPasswordBytes; raise MaxPasswordBytes or revisit the rule")
+	if _, err := HashPassword(strings.Repeat("a", MaxPasswordLength+1)); err == nil {
+		t.Fatal("bcrypt accepted a password longer than MaxPasswordLength; raise MaxPasswordLength or revisit the rule")
 	}
 }

@@ -12,10 +12,10 @@ describe("TextField", () => {
   });
 
   it("说明文字通过 aria-describedby 关联到输入框", () => {
-    render(<TextField label="密码" type="password" description="至少 12 个字符（按 UTF-8 字节计算）" />);
+    render(<TextField label="密码" type="password" description="至少 12 位，可用英文字母、数字和符号。" />);
     const input = screen.getByLabelText("密码");
     expect(input.getAttribute("aria-invalid")).toBeNull();
-    expect(input.getAttribute("aria-describedby")).toBe(screen.getByText(/至少 12 个字符/).id);
+    expect(input.getAttribute("aria-describedby")).toBe(screen.getByText(/至少 12 位/).id);
   });
 
   it("字段错误同时标记 aria-invalid 并与输入框关联，说明与错误都可读", () => {

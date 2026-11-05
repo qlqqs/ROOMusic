@@ -152,7 +152,7 @@ describe("登录与初始化", () => {
     await userEvent.type(screen.getByLabelText("密码"), "short");
     await userEvent.type(screen.getByLabelText("确认密码"), "short");
     await userEvent.click(screen.getByRole("button", { name: "创建管理员并登录" }));
-    expect(screen.getByText(/密码至少要 12 个字符/)).toBeTruthy();
+    expect(screen.getByText(/密码至少要 12 位/)).toBeTruthy();
     expect(api.requestsTo("POST", "/api/v1/setup/admin")).toHaveLength(0);
   });
 

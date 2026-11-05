@@ -17,8 +17,8 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
-// invalidAccountMessage 是用户名或密码不合规时的提示；密码长度按 UTF-8 字节计，范围取自 identity 的规则。
-var invalidAccountMessage = fmt.Sprintf("用户名不能为空，密码需要 %d 到 %d 个字节", identity.MinPasswordBytes, identity.MaxPasswordBytes)
+// invalidAccountMessage 是用户名或密码不合规时的提示；密码只允许可打印 ASCII，长度范围取自 identity 的规则。
+var invalidAccountMessage = fmt.Sprintf("用户名不能为空，密码需要 %d 到 %d 位英文字母、数字或符号", identity.MinPasswordLength, identity.MaxPasswordLength)
 
 // isUniqueViolation 报告 err 是否为 PostgreSQL 唯一约束冲突（SQLSTATE 23505）。
 // 只有它才表示“已存在”；其他数据库错误必须如实报告为不可用，不能伪装成冲突。
@@ -82,7 +82,7 @@ func (handlers *Handlers) setupAdmin(responseWriter http.ResponseWriter, request
 	if !httpserver.DecodeJSON(responseWriter, request, &input) {
 		return
 	}
-	if strings.TrimSpace(input.Username) == "" || !identity.ValidPasswordLength(input.Password) {
+	if strings.TrimSpace(input.Username) == "" || !identity.ValidPassword(input.Password) {
 		httpserver.WriteError(responseWriter, request, 400, "invalid_input", invalidAccountMessage)
 		return
 	}
@@ -218,7 +218,7 @@ func (handlers *Handlers) createUser(w http.ResponseWriter, r *http.Request) {
 	if !httpserver.DecodeJSON(w, r, &in) {
 		return
 	}
-	if strings.TrimSpace(in.Username) == "" || !identity.ValidPasswordLength(in.Password) {
+	if strings.TrimSpace(in.Username) == "" || !identity.ValidPassword(in.Password) {
 		httpserver.WriteError(w, r, 400, "invalid_input", invalidAccountMessage)
 		return
 	}

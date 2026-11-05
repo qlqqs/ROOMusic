@@ -17,9 +17,9 @@
 
 ### 身份与成员接口
 
-- 密码按 UTF-8 **字节**计，至少 12、至多 72（`identity.MinPasswordBytes`、`MaxPasswordBytes`，由 `identity.ValidPasswordLength`
-  判断）。72 是 bcrypt 实际处理的字节数，`golang.org/x/crypto` 对更长的输入返回 `ErrPasswordTooLong`，所以上限必须在入口拒绝，
-  否则初始化与新建成员会变成 500。不合规返回 `400 invalid_input`，文案按字节说明；登录不检查密码长度。
+- 初始化管理员与新建成员的密码只允许 12–72 位可打印 ASCII（U+0020–U+007E，含空格），由
+  `identity.ValidPassword` 与 `MinPasswordLength`、`MaxPasswordLength` 统一校验。字符数与字节数一致，且不超过 bcrypt 的 72 字节上限。
+  不合规返回 `400 invalid_input`，不调用 bcrypt、不写库；提示“用户名不能为空，密码需要 12 到 72 位英文字母、数字或符号”。登录不检查新密码规则，兼容已有账号。
 - 写入失败只按 PostgreSQL 唯一约束冲突（`*pgconn.PgError`，SQLSTATE `23505`）判断“已存在”：新建成员映射 `409 username_taken`，
   初始化管理员（插入用户、写入初始化标记或提交）映射 `409 setup_closed`。其他数据库错误一律 `503 database_unavailable`，
   不伪装成冲突。
@@ -47,7 +47,7 @@
 | 用户目标不存在 | `404 not_found`，事务回滚 |
 | 禁用最后一个启用管理员 | `409 last_admin`，不改用户或 session |
 | 用户 SQL/事务失败 | `503 database_unavailable` 或分类错误，不返回成功 |
-| 初始化管理员或新建成员时用户名为空白，或密码少于 12 或超过 72 个字节 | `400 invalid_input`，文案按字节说明；不调用 bcrypt，不写库 |
+| 初始化管理员或新建成员时用户名为空白，或密码不在 12–72 位范围内，或包含可打印 ASCII 之外的字符 | `400 invalid_input`，文案说明长度与字符范围；不调用 bcrypt，不写库 |
 | 新建成员的用户名唯一约束冲突（SQLSTATE `23505`） | `409 username_taken` |
 | 新建成员的其他数据库错误（触发器异常、约束以外的失败） | `503 database_unavailable`，不返回 409 |
 | 初始化管理员：已初始化，或插入/写标记/提交时的唯一约束冲突（另一次初始化抢先） | `409 setup_closed` |
@@ -66,9 +66,9 @@
 
 - 身份与成员（F3，`internal/app/identity_api_integration_test.go`，PostgreSQL）：三处查看者响应带 `id` 且与成员列表一致；
   初始化管理员与新建成员只把唯一约束冲突映射为 409（用测试库里的触发器注入 `RAISE EXCEPTION`，SQLSTATE 是 `P0001` 而不是
-  `23505`，必须得到 503 且没有部分写入）；密码 11/12/72/73 字节的边界；非 UUID 与未知用户 ID；`listUsers` 遇到读不了的行
-  返回 503；401 文案与角色无关；非法 JSON 只写一个信封。`identity/password_test.go` 另测多字节字符按字节计，以及 72 与 bcrypt
-  的上限一致。
+  `23505`，必须得到 503 且没有部分写入）；密码 11/12/72/73 位 ASCII 的边界；非 UUID 与未知用户 ID；`listUsers` 遇到读不了的行
+  返回 503；401 文案与角色无关；非法 JSON 只写一个信封。`identity/password_test.go` 另测中文、全角、emoji 与控制字符（含制表符、换行）拒绝，
+  空格与各种符号接受，以及 72 位 ASCII 与 bcrypt 的上限一致。
 
 ## 7. 错误与正确示例
 
@@ -123,7 +123,7 @@ if _, err := db.ExecContext(ctx, insertUser, id, in.Username, hash); err != nil 
 if !httpserver.DecodeJSON(w, r, &in) {
 	return
 }
-if strings.TrimSpace(in.Username) == "" || !identity.ValidPasswordLength(in.Password) {
+if strings.TrimSpace(in.Username) == "" || !identity.ValidPassword(in.Password) {
 	httpserver.WriteError(w, r, 400, "invalid_input", invalidAccountMessage)
 	return
 }

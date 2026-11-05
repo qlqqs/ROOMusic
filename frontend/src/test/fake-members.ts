@@ -14,10 +14,10 @@ export type FakeMembers = {
 };
 
 const byUsername = (left: MemberDTO, right: MemberDTO) => (left.username < right.username ? -1 : left.username > right.username ? 1 : 0);
-const utf8Length = (value: string) => new TextEncoder().encode(value).length;
+const validPassword = (value: string) => /^[\x20-\x7E]{12,72}$/.test(value);
 
 /**
- * 成员接口的替身，行为依据后端实现：未登录 401、非管理员 403；新建只能是 user 角色，用户名去空白后非空且密码 12 到 72 字节，
+ * 成员接口的替身，行为依据后端实现：未登录 401、非管理员 403；新建只能是 user 角色，用户名去空白后非空且密码是 12 到 72 位可打印 ASCII，
  * 重复用户名 409；路径里的 ID 不是 UUID 时 400，成员不存在时 404（含撤销会话）；停用最后一个启用的管理员 409 last_admin；停用与撤销会话会撤销目标的全部会话
  * （目标是当前登录的账号时，替身把会话置为失效，之后的请求得到 401）。成员写操作没有幂等保证。
  */
@@ -59,7 +59,7 @@ export function installMembersApi(api: FakeApi, session: FakeSession, overrides:
       const denied = admin();
       if (denied !== null) return denied;
       const { username, password } = request.body as { username: string; password: string };
-      if (username.trim() === "" || utf8Length(password) < 12 || utf8Length(password) > 72) return sampleResponse("errors/invalid-input");
+      if (username.trim() === "" || !validPassword(password)) return sampleResponse("errors/invalid-input");
       if (members.users.some((user) => user.username === username)) return sampleResponse("errors/username-taken");
       const created: MemberDTO = {
         id: `00000000-0000-4000-8000-${String(nextUser++).padStart(12, "0")}`,

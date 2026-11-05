@@ -1,8 +1,8 @@
 // auth 的公开入口：会话生命周期、已登录范围、登录与初始化表单。其他 feature 与 app 只经这里使用，不引用 auth 内部文件。
 export {
   invalidAccountMessage,
-  MAX_PASSWORD_BYTES,
-  MIN_PASSWORD_BYTES,
+  MAX_PASSWORD_LENGTH,
+  MIN_PASSWORD_LENGTH,
   passwordHint,
   utf8ByteLength,
   validateNewAccount,

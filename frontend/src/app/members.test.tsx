@@ -182,7 +182,7 @@ describe("新建成员", () => {
     await userEvent.type(screen.getByLabelText("用户名"), "newbie");
     await userEvent.type(screen.getByLabelText("密码"), "short");
     await create();
-    expect(await screen.findByText("密码至少要 12 个字符。")).toBeTruthy();
+    expect(await screen.findByText("密码至少要 12 位。")).toBeTruthy();
     expect(document.activeElement).toBe(screen.getByLabelText("密码"));
 
     await userEvent.clear(screen.getByLabelText("密码"));
@@ -194,23 +194,26 @@ describe("新建成员", () => {
     expect(api.requestsTo("POST", usersPath)).toHaveLength(0);
   });
 
-  it("密码长度按 UTF-8 字节计：4 个汉字（12 字节）可以，3 个汉字（9 字节）不行", async () => {
+  it("密码只能用英文字母、数字和符号：中文密码不发请求，字段提示；换成英文后可以创建", async () => {
     const { api } = await openMembers();
-    await fillForm("han", "密码密");
+    await fillForm("han", "密码密码密码密码密码密码");
     await create();
-    expect(await screen.findByText("密码至少要 12 个字符。")).toBeTruthy();
+    expect(await screen.findByText("密码只能用英文字母、数字和符号。")).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByLabelText("密码"));
     expect(api.requestsTo("POST", usersPath)).toHaveLength(0);
 
-    await userEvent.type(screen.getByLabelText("密码"), "码");
-    await userEvent.type(screen.getByLabelText("确认密码"), "码");
+    await userEvent.clear(screen.getByLabelText("密码"));
+    await userEvent.clear(screen.getByLabelText("确认密码"));
+    await userEvent.type(screen.getByLabelText("密码"), "abcdefghijkl");
+    await userEvent.type(screen.getByLabelText("确认密码"), "abcdefghijkl");
     await create();
     expect(await screen.findByText(/已创建成员“han”/)).toBeTruthy();
-    expect(api.requestsTo("POST", usersPath)[0]?.body).toEqual({ username: "han", password: "密码密码" });
+    expect(api.requestsTo("POST", usersPath)[0]?.body).toEqual({ username: "han", password: "abcdefghijkl" });
   });
 
-  it("密码最多 72 个字节：超出时不发请求，字段提示密码太长；恰好 72 个字节（24 个汉字）可以", async () => {
+  it("密码最多 72 位：超出时不发请求，字段提示密码太长；恰好 72 位可以", async () => {
     const { api } = await openMembers();
-    await fillForm("wide", "字".repeat(25));
+    await fillForm("wide", "a".repeat(73));
     await create();
     expect(await screen.findByText("密码太长了，请短一些。")).toBeTruthy();
     expect(document.activeElement).toBe(screen.getByLabelText("密码"));
@@ -218,11 +221,11 @@ describe("新建成员", () => {
 
     await userEvent.clear(screen.getByLabelText("密码"));
     await userEvent.clear(screen.getByLabelText("确认密码"));
-    await userEvent.type(screen.getByLabelText("密码"), "字".repeat(24));
-    await userEvent.type(screen.getByLabelText("确认密码"), "字".repeat(24));
+    await userEvent.type(screen.getByLabelText("密码"), "a".repeat(72));
+    await userEvent.type(screen.getByLabelText("确认密码"), "a".repeat(72));
     await create();
     expect(await screen.findByText(/已创建成员“wide”/)).toBeTruthy();
-    expect(api.requestsTo("POST", usersPath)[0]?.body).toEqual({ username: "wide", password: "字".repeat(24) });
+    expect(api.requestsTo("POST", usersPath)[0]?.body).toEqual({ username: "wide", password: "a".repeat(72) });
   });
 
   it("用户名已存在（409）：错误显示在用户名旁并保留输入，页面上没有重复的提示，改了用户名后错误消失", async () => {
@@ -247,7 +250,7 @@ describe("新建成员", () => {
     await fillForm("newbie");
     await create();
     const alert = await screen.findByRole("alert");
-    expect(within(alert).getByText("用户名不能为空，密码至少 12 个字符，也不能太长。")).toBeTruthy();
+    expect(within(alert).getByText("用户名不能为空，密码至少 12 位，只能用英文字母、数字和符号。")).toBeTruthy();
     expect(within(alert).getByText("操作没有完成")).toBeTruthy();
   });
 

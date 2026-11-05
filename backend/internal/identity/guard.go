@@ -127,16 +127,24 @@ func (guard *Guard) SetSessionCookie(responseWriter http.ResponseWriter, token s
 	http.SetCookie(responseWriter, &http.Cookie{Name: SessionCookieName, Value: token, Path: "/", HttpOnly: true, Secure: guard.secureCookies, SameSite: http.SameSiteLaxMode, Expires: time.Now().Add(24 * time.Hour)})
 }
 
-// 密码长度按 UTF-8 字节计。bcrypt 只处理前 72 个字节，x/crypto 对更长的输入直接返回错误，
-// 所以上限必须在入口处拒绝，否则过长的密码会变成 500。
+// 新密码只允许可打印 ASCII（含空格），使字符数与字节数一致。
+// bcrypt 的输入上限是 72 字节，必须在创建入口拒绝超限输入，避免返回 500。
 const (
-	MinPasswordBytes = 12
-	MaxPasswordBytes = 72
+	MinPasswordLength = 12
+	MaxPasswordLength = 72
 )
 
-// ValidPasswordLength 报告密码的字节数是否在 MinPasswordBytes 到 MaxPasswordBytes 之间（含两端）。
-func ValidPasswordLength(password string) bool {
-	return len(password) >= MinPasswordBytes && len(password) <= MaxPasswordBytes
+// ValidPassword 报告密码是否为 12–72 位可打印 ASCII（U+0020–U+007E）。
+func ValidPassword(password string) bool {
+	if len(password) < MinPasswordLength || len(password) > MaxPasswordLength {
+		return false
+	}
+	for i := 0; i < len(password); i++ {
+		if password[i] < 0x20 || password[i] > 0x7e {
+			return false
+		}
+	}
+	return true
 }
 
 // HashPassword 用 bcrypt 生成密码哈希。
