@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_filter",
+      "message": "候选筛选条件无效"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

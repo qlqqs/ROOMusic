@@ -481,3 +481,27 @@ func openConcurrentMigrationDatabases(t *testing.T) (*sql.DB, *sql.DB) {
 	})
 	return first, second
 }
+
+func TestPostgreSQLConnectDoesNotMigrate(t *testing.T) {
+	scopedURL := postgrestest.NewSchema(t, "roomusic_connect_no_migration_")
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	database, err := Connect(ctx, scopedURL)
+	if err != nil {
+		t.Fatalf("连接空 schema：%v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+	if err := database.PingContext(ctx); err != nil {
+		t.Fatalf("Connect 返回的连接不可用：%v", err)
+	}
+	var relations int
+	if err := database.QueryRowContext(ctx, `SELECT count(*) FROM pg_class WHERE relnamespace=current_schema()::regnamespace`).Scan(&relations); err != nil || relations != 0 {
+		t.Fatalf("Connect 在空 schema 中创建了对象：relations=%d err=%v", relations, err)
+	}
+	for _, table := range []string{"schema_migrations", "users", "sessions"} {
+		var exists bool
+		if err := database.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM pg_class WHERE relnamespace=current_schema()::regnamespace AND relname=$1)`, table).Scan(&exists); err != nil || exists {
+			t.Errorf("Connect 不应创建 %s：exists=%t err=%v", table, exists, err)
+		}
+	}
+}

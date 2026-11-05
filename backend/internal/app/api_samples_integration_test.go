@@ -125,6 +125,22 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	samples.record("users/list", call(http.MethodGet, "/api/v1/users", nil, admin), http.StatusOK)
 	samples.record("users/enable", call(http.MethodPatch, "/api/v1/users/"+ids["archivist"], map[string]bool{"disabled": false}, admin), http.StatusOK)
 	samples.record("users/revoke-sessions", call(http.MethodPost, "/api/v1/users/"+ids["listener"]+"/sessions/revoke", map[string]any{}, admin), http.StatusOK)
+	// 只改 archivist 的密码，并在录完后恢复；后续 listener 登录与管理员会话保持原样。
+	const (
+		sampleChangedPassword = "archivist-changed-secret"
+		sampleWrongPassword   = "wrong-current-secret"
+		sampleInvalidPassword = "bad-next-11"
+	)
+	samples.forbid(sampleChangedPassword)
+	samples.forbid(sampleWrongPassword)
+	samples.forbid(sampleInvalidPassword)
+	archivist := login(call(http.MethodPost, "/api/v1/auth/login", credentials("archivist", sampleArchivistPassword), nil))
+	samples.record("errors/current-password-incorrect", call(http.MethodPost, "/api/v1/auth/password", ownPasswordBody(sampleWrongPassword, sampleChangedPassword), archivist), http.StatusForbidden)
+	samples.record("errors/invalid-input-password", call(http.MethodPost, "/api/v1/auth/password", ownPasswordBody(sampleArchivistPassword, sampleInvalidPassword), archivist), http.StatusBadRequest)
+	samples.record("auth/password-changed", call(http.MethodPost, "/api/v1/auth/password", ownPasswordBody(sampleArchivistPassword, sampleChangedPassword), archivist), http.StatusOK)
+	samples.record("errors/self-password-reset", call(http.MethodPost, "/api/v1/users/"+ids["curator"]+"/password", map[string]string{"password": sampleChangedPassword}, admin), http.StatusForbidden)
+	samples.record("users/password-reset", call(http.MethodPost, "/api/v1/users/"+ids["archivist"]+"/password", map[string]string{"password": sampleArchivistPassword}, admin), http.StatusOK)
+
 	if response := call(http.MethodGet, "/api/v1/auth/me", nil, listener); response.Code != http.StatusUnauthorized {
 		t.Fatalf("revoked member session still works: HTTP %d: %s", response.Code, response.Body.String())
 	}
@@ -818,11 +834,46 @@ func (recorder *apiSampleRecorder) record(name string, response *httptest.Respon
 	}
 	body := response.Body.String()
 	for _, secret := range recorder.forbidden {
-		if strings.Contains(body, secret) {
+		if apiSampleContainsSecret(body, secret) {
 			t.Fatalf("sample %s contains a forbidden value %q: %s", name, secret, body)
 		}
 	}
 	recorder.samples[name] = encodeAPISample(t, name, response.Code, response.Body.Bytes())
+}
+
+// apiSampleContainsSecret 仅豁免新增接口公开的四个合同标识；密码字段、哈希与凭据仍禁止录入。
+func apiSampleContainsSecret(body, secret string) bool {
+	if secret == "password" {
+		for _, identifier := range []string{`"password_changed"`, `"password_reset"`, `"current_password_incorrect"`, `"self_password_reset"`} {
+			body = strings.ReplaceAll(body, identifier, "")
+		}
+	}
+	return strings.Contains(body, secret)
+}
+
+func TestAPISamplesPasswordRedaction(t *testing.T) {
+	for _, tc := range []struct {
+		name, body, secret string
+		want               bool
+	}{
+		{"改密响应", `{"password_changed":true}`, "password", false},
+		{"重置响应", `{"password_reset":true}`, "password", false},
+		{"当前密码错误码", `{"error":{"code":"current_password_incorrect"}}`, "password", false},
+		{"重置自己错误码", `{"error":{"code":"self_password_reset"}}`, "password", false},
+		{"密码字段", `{"password":"secret"}`, "password", true},
+		{"新密码字段", `{"new_password":"secret"}`, "password", true},
+		{"当前密码字段", `{"current_password":"secret"}`, "password", true},
+		{"密码哈希字段", `{"password_hash":"hash"}`, "password", true},
+		{"包含公开标识也不放过密码", `{"password_changed":true,"password":"secret"}`, "password", true},
+		{"凭据值", `{"message":"archivist-changed-secret"}`, "archivist-changed-secret", true},
+		{"会话令牌", `{"token":"a1b2c3"}`, "a1b2c3", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := apiSampleContainsSecret(tc.body, tc.secret); got != tc.want {
+				t.Fatalf("脱敏检测 = %v，期望 %v", got, tc.want)
+			}
+		})
+	}
 }
 
 // finish 只维护当前 recorder 的样本；默认集不覆盖 personal 与 scan-feedback 的独立样本。

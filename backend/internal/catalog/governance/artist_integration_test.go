@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/artistgraph"
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/writegate"
 	"github.com/qlqq/roomusic/backend/internal/operations"
@@ -505,6 +506,157 @@ func TestPostgreSQLArtistCandidateIgnoreRescanAndRestore(t *testing.T) {
 	listed, err = ListArtistCandidates(context.Background(), f.database, 1, 50)
 	if err != nil || len(listed.Items) != 0 {
 		t.Fatalf("explicit split candidate %+v %v", listed, err)
+	}
+}
+
+// 候选信号由真实投影刷新产生，不直接写候选表或忽略表。
+func newArtistIgnoredCandidatesFixture(t *testing.T) *artistFixture {
+	t.Helper()
+	f := newArtistFixture(t)
+	f.exec(`INSERT INTO artist_tag_evidence(track_id,role,tag_key,occurrence_index,raw_value,source_kind)
+ VALUES($1::uuid,'track_artist','ARTIST',0,'Alpha','tag'),($1::uuid,'track_artist','ARTIST',1,'Beta','tag')`, f.trackA)
+	f.refresh(f.first.releaseID)
+	return f
+}
+
+func (f *artistFixture) setCandidateIgnored(candidate ArtistCandidate, ignored bool) operations.Result {
+	f.t.Helper()
+	request := ArtistCandidateIgnoreRequest{
+		ArtistID: candidate.Left.ID, ExpectedRevision: f.revision(candidate.Left.ID),
+		OtherArtistID: candidate.Right.ID, OtherExpectedRevision: f.revision(candidate.Right.ID),
+		KeyPairs: candidate.KeyPairs, Ignored: &ignored,
+	}
+	if err := request.Normalize(); err != nil {
+		f.t.Fatal(err)
+	}
+	result, err := f.run(operations.TypeArtistCandidateIgnore, uuid.New(), request.Fingerprint(), f.governor.CandidateIgnoreExecutor(request))
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	return result
+}
+
+func TestPostgreSQLArtistIgnoredCandidatesListAndRestore(t *testing.T) {
+	f := newArtistIgnoredCandidatesFixture(t)
+	ctx := context.Background()
+	pending, err := ListArtistCandidates(ctx, f.database, 1, 50)
+	if err != nil || pending.Pagination.Total != 1 || len(pending.Items) != 1 {
+		t.Fatalf("忽略前候选：%+v，错误：%v", pending, err)
+	}
+	original := pending.Items[0]
+	f.setCandidateIgnored(original, true)
+	assertLists := func(ignored bool) {
+		t.Helper()
+		pending, err := ListArtistCandidates(ctx, f.database, 1, 50)
+		if err != nil {
+			t.Fatal(err)
+		}
+		hidden, err := ListIgnoredArtistCandidates(ctx, f.database, 1, 50)
+		if err != nil {
+			t.Fatal(err)
+		}
+		visible, empty := pending, hidden
+		if ignored {
+			visible, empty = hidden, pending
+		}
+		if empty.Pagination.Total != 0 || len(empty.Items) != 0 || visible.Pagination.Total != 1 || len(visible.Items) != 1 {
+			t.Fatalf("ignored=%t，待处理：%+v，已忽略：%+v", ignored, pending, hidden)
+		}
+		candidate := visible.Items[0]
+		if candidate.Left.ID != original.Left.ID || candidate.Right.ID != original.Right.ID ||
+			!reflect.DeepEqual(candidate.KeyPairs, original.KeyPairs) || candidate.EvidenceCount != original.EvidenceCount ||
+			!reflect.DeepEqual(candidate.Reasons, original.Reasons) {
+			t.Fatalf("候选身份、名字对或依据发生变化：%+v，原候选：%+v", candidate, original)
+		}
+	}
+	assertLists(true)
+	snapshot := f.intentSnapshot()
+	f.refresh(f.first.releaseID, f.second.releaseID)
+	if f.intentSnapshot() != snapshot {
+		t.Fatal("刷新覆盖了忽略意图或版本")
+	}
+	assertLists(true)
+	f.setCandidateIgnored(original, false)
+	assertLists(false)
+	snapshot = f.intentSnapshot()
+	f.refresh(f.first.releaseID, f.second.releaseID)
+	if f.intentSnapshot() != snapshot {
+		t.Fatal("刷新覆盖了恢复意图或版本")
+	}
+	assertLists(false)
+}
+
+func TestPostgreSQLArtistIgnoredCandidatesExcludeMergedPairs(t *testing.T) {
+	f := newArtistIgnoredCandidatesFixture(t)
+	ctx := context.Background()
+	pending, err := ListArtistCandidates(ctx, f.database, 1, 50)
+	if err != nil || len(pending.Items) != 1 {
+		t.Fatalf("准备合并候选：%+v，错误：%v", pending, err)
+	}
+	f.setCandidateIgnored(pending.Items[0], true)
+	hidden, err := ListIgnoredArtistCandidates(ctx, f.database, 1, 50)
+	if err != nil || hidden.Pagination.Total != 1 || len(hidden.Items) != 1 {
+		t.Fatalf("合并前已忽略列表：%+v，错误：%v", hidden, err)
+	}
+	f.merge()
+	assertEmpty := func() {
+		t.Helper()
+		for name, list := range map[string]func(context.Context, *sql.DB, int, int) (catalog.ArtistPage[ArtistCandidate], error){
+			"待处理": ListArtistCandidates, "已忽略": ListIgnoredArtistCandidates,
+		} {
+			page, err := list(ctx, f.database, 1, 50)
+			if err != nil || page.Pagination.Total != 0 || len(page.Items) != 0 {
+				t.Fatalf("合并后%s仍有候选：%+v，错误：%v", name, page, err)
+			}
+		}
+	}
+	assertEmpty()
+	f.refresh(f.first.releaseID, f.second.releaseID)
+	assertEmpty()
+}
+
+func TestPostgreSQLArtistIgnoredCandidatesOrderAndPaging(t *testing.T) {
+	f := newArtistIgnoredCandidatesFixture(t)
+	// 较早忽略的一对有更多依据，确保忽略时间优先于原有的依据数排序。
+	f.exec(`INSERT INTO artist_tag_evidence(track_id,role,tag_key,occurrence_index,raw_value,source_kind)
+ VALUES($1::uuid,'track_artist','ARTIST',0,'Alpha','tag'),($1::uuid,'track_artist','ARTIST',1,'Beta','tag')`, f.trackB)
+	third := f.release("第三张")
+	track := f.track(third, "丙轨", "present", 100.0)
+	f.exec(`UPDATE releases SET artist='Gamma',album_artist='Delta' WHERE id=$1::uuid`, third.releaseID)
+	f.exec(`UPDATE tracks SET artist='Gamma' WHERE id=$1::uuid`, track)
+	f.refresh(f.first.releaseID, f.second.releaseID, third.releaseID)
+	ctx := context.Background()
+	pending, err := ListArtistCandidates(ctx, f.database, 1, 50)
+	if err != nil || pending.Pagination.Total != 2 || len(pending.Items) != 2 || pending.Items[0].EvidenceCount <= pending.Items[1].EvidenceCount {
+		t.Fatalf("准备不同依据数的两对候选：%+v，错误：%v", pending, err)
+	}
+	older, newer := pending.Items[0], pending.Items[1]
+	for i, candidate := range []ArtistCandidate{older, newer} {
+		result := f.setCandidateIgnored(candidate, true)
+		// 固定操作时间，不靠 sleep 或数据库时钟分辨率决定先后。
+		f.exec(`UPDATE operations SET created_at='2026-01-01T00:00:00Z'::timestamptz+($2::int*interval '1 second') WHERE id=$1::uuid`, result.OperationID, i)
+	}
+	pending, err = ListArtistCandidates(ctx, f.database, 1, 50)
+	if err != nil || pending.Pagination.Total != 0 || len(pending.Items) != 0 {
+		t.Fatalf("忽略后仍有待处理：%+v，错误：%v", pending, err)
+	}
+	all, err := ListIgnoredArtistCandidates(ctx, f.database, 1, 50)
+	if err != nil || all.Pagination.Total != 2 || len(all.Items) != 2 ||
+		!reflect.DeepEqual(all.Items[0].KeyPairs, newer.KeyPairs) || !reflect.DeepEqual(all.Items[1].KeyPairs, older.KeyPairs) {
+		t.Fatalf("已忽略未按最近时间排序：%+v，错误：%v", all, err)
+	}
+	for page := 1; page <= 3; page++ {
+		got, err := ListIgnoredArtistCandidates(ctx, f.database, page, 1)
+		if err != nil || got.Pagination.Page != page || got.Pagination.PageSize != 1 || got.Pagination.Total != 2 {
+			t.Fatalf("第%d页分页信息：%+v，错误：%v", page, got, err)
+		}
+		if page == 3 {
+			if len(got.Items) != 0 {
+				t.Fatalf("超出范围的页不为空：%+v", got)
+			}
+		} else if len(got.Items) != 1 || !reflect.DeepEqual(got.Items[0], all.Items[page-1]) {
+			t.Fatalf("第%d页与完整排序不一致：%+v", page, got)
+		}
 	}
 }
 

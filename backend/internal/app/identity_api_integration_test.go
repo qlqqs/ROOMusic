@@ -1,14 +1,21 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"sort"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/identity"
+	identityapi "github.com/qlqq/roomusic/backend/internal/identity/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
@@ -364,4 +371,385 @@ func TestPostgreSQLUnauthenticatedMessageIsRoleNeutral(t *testing.T) {
 			t.Fatalf("%s: message %q names a role or differs from the neutral text", testCase.name, message)
 		}
 	}
+}
+
+// passwordEnvironment 通过真实身份接口准备两份成员会话与一份管理员会话。
+type passwordEnvironment struct {
+	application           *integrationTestApplication
+	admin, member, second integrationTestUser
+}
+
+func newPasswordEnvironment(t *testing.T) *passwordEnvironment {
+	t.Helper()
+	a := newIntegrationTestApplication(t)
+	setup := a.request(t, http.MethodPost, "/api/v1/setup/admin", accountBody("curator", identityTestPassword), nil, nil)
+	requireIdentityBody(t, setup, 201, "curator", "admin")
+	admin := loginPasswordUser(t, a, "curator", identityTestPassword, "admin")
+	created := a.request(t, http.MethodPost, "/api/v1/users", accountBody("listener", identityTestPassword), &admin, nil)
+	requireIdentityBody(t, created, 201, "listener", "user")
+	member := loginPasswordUser(t, a, "listener", identityTestPassword, "user")
+	second := loginPasswordUser(t, a, "listener", identityTestPassword, "user")
+	return &passwordEnvironment{application: a, admin: admin, member: member, second: second}
+}
+
+func loginPasswordUser(t *testing.T, a *integrationTestApplication, username, password, role string) integrationTestUser {
+	t.Helper()
+	response := a.request(t, http.MethodPost, "/api/v1/auth/login", accountBody(username, password), nil, nil)
+	return integrationTestUser{id: requireIdentityBody(t, response, 200, username, role), token: sessionTokenFrom(t, response)}
+}
+
+func ownPasswordBody(current, next string) map[string]string {
+	return map[string]string{"current_password": current, "new_password": next}
+}
+
+func (e *passwordEnvironment) change(t *testing.T, current, next string) *httptest.ResponseRecorder {
+	t.Helper()
+	return e.application.request(t, http.MethodPost, "/api/v1/auth/password", ownPasswordBody(current, next), &e.member, nil)
+}
+
+func requirePasswordSuccess(t *testing.T, response *httptest.ResponseRecorder, field string) {
+	t.Helper()
+	if response.Code != 200 || !reflect.DeepEqual(decodeJSONMap(t, response), map[string]any{field: true}) {
+		t.Fatalf("密码接口响应不符：HTTP %d %s", response.Code, response.Body.String())
+	}
+	if response.Header().Get("Content-Type") != "application/json" || response.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("密码接口响应头不符：%v", response.Header())
+	}
+	if cookies := response.Header().Values("Set-Cookie"); len(cookies) != 0 {
+		t.Fatalf("密码接口不应重设 Cookie：%v", cookies)
+	}
+}
+
+func requirePasswordSession(t *testing.T, a *integrationTestApplication, user *integrationTestUser, status int) {
+	t.Helper()
+	response := a.request(t, http.MethodGet, "/api/v1/auth/me", nil, user, nil)
+	if status == 401 {
+		requireAPIError(t, response, 401, "unauthorized")
+	} else if response.Code != status {
+		t.Fatalf("会话状态：HTTP %d %s，期望 %d", response.Code, response.Body.String(), status)
+	}
+}
+
+// passwordDatabaseState 比较所有身份行与会话行，包含哈希、过期时间和撤销时间，不只比较数量。
+func passwordDatabaseState(t *testing.T, a *integrationTestApplication) string {
+	t.Helper()
+	var state string
+	if err := a.database.QueryRow(`SELECT jsonb_build_object(
+		'users',(SELECT COALESCE(jsonb_agg(to_jsonb(u) ORDER BY u.id),'[]'::jsonb) FROM users u),
+		'sessions',(SELECT COALESCE(jsonb_agg(to_jsonb(s) ORDER BY s.token_hash),'[]'::jsonb) FROM sessions s),
+		'operations',(SELECT count(*) FROM operations))::text`).Scan(&state); err != nil {
+		t.Fatalf("读取身份快照：%v", err)
+	}
+	return state
+}
+
+func requirePasswordStateUnchanged(t *testing.T, a *integrationTestApplication, before string) {
+	t.Helper()
+	if passwordDatabaseState(t, a) != before {
+		t.Fatal("失败的密码操作改变了用户、会话或操作记录")
+	}
+}
+
+func installRejectingPasswordSessionTrigger(t *testing.T, a *integrationTestApplication) {
+	t.Helper()
+	mustExec(t, a, `CREATE FUNCTION reject_password_session_update() RETURNS trigger LANGUAGE plpgsql AS $$
+	BEGIN RAISE EXCEPTION 'password test rejection' USING ERRCODE='P0001'; END $$;
+	CREATE TRIGGER reject_password_session_update BEFORE UPDATE ON sessions
+	FOR EACH ROW EXECUTE FUNCTION reject_password_session_update()`)
+}
+
+func TestPostgreSQLChangeOwnPasswordKeepsCurrentSessionAndRevokesOthers(t *testing.T) {
+	e := newPasswordEnvironment(t)
+	a := e.application
+	var expiresBefore, expiresAfter time.Time
+	if err := a.database.QueryRow(`SELECT expires_at FROM sessions WHERE token_hash=$1`, identity.HashSessionToken(e.member.token)).Scan(&expiresBefore); err != nil {
+		t.Fatal(err)
+	}
+	var adminBefore string
+	if err := a.database.QueryRow(`SELECT row_to_json(s)::text FROM sessions s WHERE token_hash=$1`, identity.HashSessionToken(e.admin.token)).Scan(&adminBefore); err != nil {
+		t.Fatal(err)
+	}
+	next := "changed-member-password"
+	requirePasswordSuccess(t, e.change(t, identityTestPassword, next), "password_changed")
+	requirePasswordSession(t, a, &e.member, 200)
+	requirePasswordSession(t, a, &e.second, 401)
+	requirePasswordSession(t, a, &e.admin, 200)
+	if err := a.database.QueryRow(`SELECT expires_at FROM sessions WHERE token_hash=$1`, identity.HashSessionToken(e.member.token)).Scan(&expiresAfter); err != nil || !expiresAfter.Equal(expiresBefore) {
+		t.Fatalf("当前会话到期时间发生变化：%v", err)
+	}
+	var adminAfter string
+	if err := a.database.QueryRow(`SELECT row_to_json(s)::text FROM sessions s WHERE token_hash=$1`, identity.HashSessionToken(e.admin.token)).Scan(&adminAfter); err != nil || adminBefore != adminAfter {
+		t.Fatalf("其他账号会话发生变化：%v", err)
+	}
+	requireAPIError(t, a.request(t, http.MethodPost, "/api/v1/auth/login", accountBody("listener", identityTestPassword), nil, nil), 401, "invalid_credentials")
+	loginPasswordUser(t, a, "listener", next, "user")
+	if countRows(t, a, `SELECT count(*) FROM operations`) != 0 {
+		t.Fatal("密码操作不应写入治理记录")
+	}
+}
+
+func TestPostgreSQLChangeOwnPasswordRejectsWrongCurrentPassword(t *testing.T) {
+	e := newPasswordEnvironment(t)
+	before := passwordDatabaseState(t, e.application)
+	response := e.change(t, "wrong-current-password", "changed-member-password")
+	requireAPIError(t, response, 403, "current_password_incorrect")
+	if message := apiErrorMessage(t, response); message != "当前密码不正确" {
+		t.Fatalf("当前密码错误提示：%q", message)
+	}
+	requirePasswordStateUnchanged(t, e.application, before)
+	requirePasswordSession(t, e.application, &e.member, 200)
+	requirePasswordSession(t, e.application, &e.second, 200)
+	loginPasswordUser(t, e.application, "listener", identityTestPassword, "user")
+}
+
+func TestPostgreSQLChangeOwnPasswordValidatesNewPassword(t *testing.T) {
+	e := newPasswordEnvironment(t)
+	before := passwordDatabaseState(t, e.application)
+	for _, tc := range []struct{ name, next string }{
+		{"11位", strings.Repeat("a", 11)}, {"73位", strings.Repeat("a", 73)},
+		{"中文", "abcdefghijk中"}, {"制表符", "abcdefghijk\t"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			requireAPIError(t, e.change(t, identityTestPassword, tc.next), 400, "invalid_input")
+			requirePasswordStateUnchanged(t, e.application, before)
+		})
+	}
+	// 两项都错时必须先拒绝新密码，不把它误报为当前密码不正确。
+	requireAPIError(t, e.change(t, "wrong", "short"), 400, "invalid_input")
+	for _, body := range []any{"not an object", nil, []string{"array"}} {
+		response := e.application.request(t, http.MethodPost, "/api/v1/auth/password", body, &e.member, nil)
+		requireAPIError(t, response, 400, "invalid_json")
+		decoder := json.NewDecoder(strings.NewReader(response.Body.String()))
+		var envelope any
+		if err := decoder.Decode(&envelope); err != nil {
+			t.Fatal(err)
+		}
+		if err := decoder.Decode(&envelope); err != io.EOF {
+			t.Fatalf("非法 JSON 响应不是单个信封：%v", err)
+		}
+		requirePasswordStateUnchanged(t, e.application, before)
+	}
+	requirePasswordSession(t, e.application, &e.member, 200)
+	requirePasswordSession(t, e.application, &e.second, 200)
+	current := identityTestPassword
+	for _, next := range []string{strings.Repeat("a", 12), strings.Repeat("b", 72)} {
+		requirePasswordSuccess(t, e.change(t, current, next), "password_changed")
+		loginPasswordUser(t, e.application, "listener", next, "user")
+		current = next
+	}
+	// 与当前密码相同也允许，仍保留当前会话、撤销其他设备。
+	requirePasswordSuccess(t, e.change(t, current, current), "password_changed")
+	requirePasswordSession(t, e.application, &e.member, 200)
+}
+
+func TestPostgreSQLChangeOwnPasswordRequiresSessionAndOrigin(t *testing.T) {
+	e := newPasswordEnvironment(t)
+	a := e.application
+	body := ownPasswordBody(identityTestPassword, "changed-member-password")
+	before := passwordDatabaseState(t, a)
+	requireAPIError(t, a.request(t, http.MethodPost, "/api/v1/auth/password", body, nil, nil), 401, "unauthorized")
+	requireAPIError(t, a.request(t, http.MethodPost, "/api/v1/auth/password", body, &e.member, map[string]string{"Origin": ""}), 403, "origin_required")
+	requireAPIError(t, a.request(t, http.MethodPost, "/api/v1/auth/password", body, &e.member, map[string]string{"Origin": "http://untrusted.example"}), 403, "origin_forbidden")
+	requirePasswordStateUnchanged(t, a, before)
+	mustExec(t, a, `UPDATE sessions SET expires_at=NOW()-INTERVAL '1 second' WHERE token_hash=$1`, identity.HashSessionToken(e.second.token))
+	requireAPIError(t, a.request(t, http.MethodPost, "/api/v1/auth/password", body, &e.second, nil), 401, "unauthorized")
+	// 直接停用但保留有效 session，证明鉴权本身会检查用户状态。
+	mustExec(t, a, `UPDATE users SET disabled_at=NOW() WHERE id=$1::uuid`, e.member.id)
+	before = passwordDatabaseState(t, a)
+	requireAPIError(t, e.change(t, identityTestPassword, "changed-member-password"), 401, "unauthorized")
+	requirePasswordStateUnchanged(t, a, before)
+}
+
+func TestPostgreSQLChangeOwnPasswordIsAtomic(t *testing.T) {
+	e := newPasswordEnvironment(t)
+	installRejectingPasswordSessionTrigger(t, e.application)
+	before := passwordDatabaseState(t, e.application)
+	requireAPIError(t, e.change(t, identityTestPassword, "changed-member-password"), 503, "database_unavailable")
+	requirePasswordStateUnchanged(t, e.application, before)
+	requirePasswordSession(t, e.application, &e.member, 200)
+	requirePasswordSession(t, e.application, &e.second, 200)
+	loginPasswordUser(t, e.application, "listener", identityTestPassword, "user")
+}
+
+func TestPostgreSQLConcurrentOwnPasswordChangesSucceedOnce(t *testing.T) {
+	e := newPasswordEnvironment(t)
+	a := e.application
+	holder, err := a.database.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	var requests sync.WaitGroup
+	finished := make(chan struct{})
+	t.Cleanup(func() {
+		cancel()
+		_ = holder.Rollback()
+		select {
+		case <-finished:
+		case <-time.After(5 * time.Second):
+			t.Error("取消后密码请求未退出")
+		}
+	})
+	// 即使准备阶段失败，也保证清理等待的协程能结束。
+	defer func() { go func() { requests.Wait(); close(finished) }() }()
+	var holderPID int
+	if err := holder.QueryRow(`SELECT pg_backend_pid()`).Scan(&holderPID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := holder.Exec(`SELECT 1 FROM users WHERE id=$1::uuid FOR UPDATE`, e.member.id); err != nil {
+		t.Fatal(err)
+	}
+	body, err := json.Marshal(ownPasswordBody(identityTestPassword, "concurrent-new-password"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	responses := make(chan *httptest.ResponseRecorder, 2)
+	for range 2 {
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/password", strings.NewReader(string(body))).WithContext(ctx)
+		request.Host = "roomusic.test"
+		request.Header.Set("Origin", a.origin)
+		request.Header.Set("Content-Type", "application/json")
+		request.AddCookie(&http.Cookie{Name: identity.SessionCookieName, Value: e.member.token})
+		requests.Add(1)
+		go func() {
+			defer requests.Done()
+			response := httptest.NewRecorder()
+			a.handler.ServeHTTP(response, request)
+			responses <- response
+		}()
+	}
+	// 只统计当前 holder 直接或间接阻塞的连接，不让其他测试 schema 凑足屏障。
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		var waiting int
+		err := a.database.QueryRowContext(ctx, `WITH RECURSIVE blocked(pid) AS (
+		 SELECT pid FROM pg_stat_activity WHERE $1::int=ANY(pg_blocking_pids(pid))
+		 UNION
+		 SELECT activity.pid FROM pg_stat_activity activity JOIN blocked b ON b.pid=ANY(pg_blocking_pids(activity.pid))
+		) SELECT count(*) FROM blocked`, holderPID).Scan(&waiting)
+		if err != nil {
+			t.Fatalf("读取密码请求锁等待：%v", err)
+		}
+		if waiting >= 2 {
+			break
+		}
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			t.Fatal("两个密码请求未同时竞争用户锁")
+		}
+	}
+	if err := holder.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	statuses := []int{}
+	for range 2 {
+		select {
+		case response := <-responses:
+			statuses = append(statuses, response.Code)
+			if response.Code == 403 {
+				requireAPIError(t, response, 403, "current_password_incorrect")
+			}
+		case <-ctx.Done():
+			t.Fatal("并发改密码未完成")
+		}
+	}
+	sort.Ints(statuses)
+	if !reflect.DeepEqual(statuses, []int{200, 403}) {
+		t.Fatalf("并发改密码状态：%v", statuses)
+	}
+	requirePasswordSession(t, a, &e.member, 200)
+	requirePasswordSession(t, a, &e.second, 401)
+	loginPasswordUser(t, a, "listener", "concurrent-new-password", "user")
+}
+
+func TestPostgreSQLAdminResetPasswordRevokesAllSessions(t *testing.T) {
+	e := newPasswordEnvironment(t)
+	a := e.application
+	response := a.request(t, http.MethodPost, "/api/v1/users/"+e.member.id+"/password", map[string]string{"password": "reset-member-password"}, &e.admin, nil)
+	requirePasswordSuccess(t, response, "password_reset")
+	requirePasswordSession(t, a, &e.member, 401)
+	requirePasswordSession(t, a, &e.second, 401)
+	requirePasswordSession(t, a, &e.admin, 200)
+	requireAPIError(t, a.request(t, http.MethodPost, "/api/v1/auth/login", accountBody("listener", identityTestPassword), nil, nil), 401, "invalid_credentials")
+	loginPasswordUser(t, a, "listener", "reset-member-password", "user")
+	if countRows(t, a, `SELECT count(*) FROM operations`) != 0 {
+		t.Fatal("重置不应写入治理记录")
+	}
+}
+
+func TestPostgreSQLAdminResetPasswordKeepsDisabledMemberDisabled(t *testing.T) {
+	e := newPasswordEnvironment(t)
+	a := e.application
+	path := "/api/v1/users/" + e.member.id
+	response := a.request(t, http.MethodPatch, path, map[string]bool{"disabled": true}, &e.admin, nil)
+	if response.Code != 200 {
+		t.Fatal(response.Body.String())
+	}
+	var disabledBefore, disabledAfter time.Time
+	if err := a.database.QueryRow(`SELECT disabled_at FROM users WHERE id=$1::uuid`, e.member.id).Scan(&disabledBefore); err != nil {
+		t.Fatal(err)
+	}
+	requirePasswordSuccess(t, a.request(t, http.MethodPost, path+"/password", map[string]string{"password": "reset-disabled-password"}, &e.admin, nil), "password_reset")
+	if err := a.database.QueryRow(`SELECT disabled_at FROM users WHERE id=$1::uuid`, e.member.id).Scan(&disabledAfter); err != nil || !disabledBefore.Equal(disabledAfter) {
+		t.Fatalf("重置改变了停用状态：%v", err)
+	}
+	requirePasswordSession(t, a, &e.member, 401)
+	requirePasswordSession(t, a, &e.second, 401)
+	requireAPIError(t, a.request(t, http.MethodPost, "/api/v1/auth/login", accountBody("listener", "reset-disabled-password"), nil, nil), 401, "invalid_credentials")
+	response = a.request(t, http.MethodPatch, path, map[string]bool{"disabled": false}, &e.admin, nil)
+	if response.Code != 200 {
+		t.Fatal(response.Body.String())
+	}
+	loginPasswordUser(t, a, "listener", "reset-disabled-password", "user")
+}
+
+func TestPostgreSQLAdminResetPasswordRejectsInvalidRequests(t *testing.T) {
+	e := newPasswordEnvironment(t)
+	a := e.application
+	path := "/api/v1/users/" + e.member.id + "/password"
+	body := map[string]string{"password": "reset-member-password"}
+	before := passwordDatabaseState(t, a)
+	for _, tc := range []struct {
+		name, path string
+		body       any
+		user       *integrationTestUser
+		headers    map[string]string
+		status     int
+		code       string
+	}{
+		{"未登录", path, body, nil, nil, 401, "unauthorized"},
+		{"普通成员", path, body, &e.member, nil, 403, "forbidden"},
+		{"非UUID", "/api/v1/users/not-a-uuid/password", body, &e.admin, nil, 400, "invalid_id"},
+		{"未知成员", "/api/v1/users/" + uuid.New() + "/password", body, &e.admin, nil, 404, "not_found"},
+		{"重置自己", "/api/v1/users/" + e.admin.id + "/password", body, &e.admin, nil, 403, "self_password_reset"},
+		{"大写UUID重置自己", "/api/v1/users/" + strings.ToUpper(e.admin.id) + "/password", body, &e.admin, nil, 403, "self_password_reset"},
+		{"11位", path, map[string]string{"password": strings.Repeat("a", 11)}, &e.admin, nil, 400, "invalid_input"},
+		{"73位", path, map[string]string{"password": strings.Repeat("a", 73)}, &e.admin, nil, 400, "invalid_input"},
+		{"中文", path, map[string]string{"password": "abcdefghijk中"}, &e.admin, nil, 400, "invalid_input"},
+		{"缺Origin", path, body, &e.admin, map[string]string{"Origin": ""}, 403, "origin_required"},
+		{"跨源", path, body, &e.admin, map[string]string{"Origin": "http://untrusted.example"}, 403, "origin_forbidden"},
+		{"非法JSON", path, "not an object", &e.admin, nil, 400, "invalid_json"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			requireAPIError(t, a.request(t, http.MethodPost, tc.path, tc.body, tc.user, tc.headers), tc.status, tc.code)
+			requirePasswordStateUnchanged(t, a, before)
+		})
+	}
+	t.Run("非UUID不访问业务数据库", func(t *testing.T) {
+		// 鉴权仍用隔离库；handler 的业务数据库为 nil，一旦越过 ID 校验访问它就会 panic。
+		mux := http.NewServeMux()
+		identityapi.New(nil, identity.NewGuard(a.database, false, "")).Register(mux)
+		withoutDatabase := *a
+		withoutDatabase.handler = mux
+		requireAPIError(t, withoutDatabase.request(t, http.MethodPost, "/api/v1/users/not-a-uuid/password", body, &e.admin, nil), 400, "invalid_id")
+		requirePasswordStateUnchanged(t, a, before)
+	})
+	installRejectingPasswordSessionTrigger(t, a)
+	requireAPIError(t, a.request(t, http.MethodPost, path, body, &e.admin, nil), 503, "database_unavailable")
+	requirePasswordStateUnchanged(t, a, before)
+	requirePasswordSession(t, a, &e.member, 200)
+	requirePasswordSession(t, a, &e.second, 200)
+	requirePasswordSession(t, a, &e.admin, 200)
 }

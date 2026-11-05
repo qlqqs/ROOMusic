@@ -646,6 +646,11 @@ func recordArtistCandidateSamples(t *testing.T, s *apiSampleRecorder) {
 		}
 	}
 	ignore("governance/artist-ignore", true)
+	ignored := artistSampleItems(t, f.get("governance/artist-candidates-ignored", "/api/v1/artist-candidates?ignored=true"), 1)[0].(map[string]any)
+	if !reflect.DeepEqual(ignored["key_pairs"], candidate["key_pairs"]) ||
+		ignored["left"].(map[string]any)["id"] != left || ignored["right"].(map[string]any)["id"] != right {
+		t.Fatal("已忽略候选的身份或名字对发生变化")
+	}
 	artistSampleItems(t, f.get("governance/artist-candidates-empty", "/api/v1/artist-candidates"), 0)
 	scan()
 	artistSampleItems(t, f.get("governance/artist-candidates-after-rescan", "/api/v1/artist-candidates"), 0)
@@ -653,6 +658,30 @@ func recordArtistCandidateSamples(t *testing.T, s *apiSampleRecorder) {
 	if r := f.call("GET", "/api/v1/artist-candidates", nil, &f.admin); len(decodeJSONMap(t, r)["items"].([]any)) != 1 {
 		t.Fatal("取消忽略没有恢复候选")
 	}
+	artistSampleItems(t, f.get("governance/artist-candidates-ignored-empty", "/api/v1/artist-candidates?ignored=true"), 0)
+	f.error("artists/errors/invalid-candidate-filter", "GET", "/api/v1/artist-candidates?ignored=yes", nil, 400, "invalid_filter")
+	for _, query := range []string{"ignored=true&ignored=false", "ignored=true&ignored=true"} {
+		r := f.call("GET", "/api/v1/artist-candidates?"+query, nil, &f.admin)
+		requireAPIError(t, r, 400, "invalid_filter")
+	}
+	// 恢复后重新读取和完整扫描都必须保留同一名字对；不改变后续样本的治理版本。
+	scan()
+	for _, query := range []string{"", "?ignored=false"} {
+		response := f.call("GET", "/api/v1/artist-candidates"+query, nil, &f.admin)
+		if response.Code != 200 {
+			t.Fatalf("恢复后读取候选：%d %s", response.Code, response.Body.String())
+		}
+		restored := artistSampleItems(t, decodeJSONMap(t, response), 1)[0].(map[string]any)
+		if !reflect.DeepEqual(restored["key_pairs"], candidate["key_pairs"]) ||
+			restored["left"].(map[string]any)["id"] != left || restored["right"].(map[string]any)["id"] != right {
+			t.Fatal("恢复后真实重扫丢失候选身份或名字对")
+		}
+	}
+	r := f.call("GET", "/api/v1/artist-candidates?ignored=true", nil, &f.admin)
+	if r.Code != 200 {
+		t.Fatalf("恢复后读取已忽略：%d %s", r.Code, r.Body.String())
+	}
+	artistSampleItems(t, decodeJSONMap(t, r), 0)
 	// 相同旧键对再次忽略，新原始写法对必须仍能提示。
 	body := map[string]any{"expected_revision": f.revision(left), "other_artist_id": right, "other_expected_revision": f.revision(right), "key_pairs": candidate["key_pairs"], "ignored": true}
 	if r := f.call("POST", "/api/v1/artists/"+left+"/candidate-ignore", body, &f.admin); r.Code != 200 {
@@ -797,6 +826,7 @@ governance/artist-merge governance/artist-merge-replayed governance/artist-split
 governance/artist-split-new governance/artist-split-restored-id governance/artist-name-set governance/artist-name-auto
 governance/artist-candidates governance/artist-candidates-empty governance/artist-ignore governance/artist-unignore
 governance/artist-candidates-after-rescan governance/artist-candidates-new-key-pair
+governance/artist-candidates-ignored governance/artist-candidates-ignored-empty artists/errors/invalid-candidate-filter
 governance/artist-merge-not-ready governance/artist-split-not-ready governance/artist-rename-not-ready
 operations/artists operations/artist-source-filter operations/artist-union-filter operations/artist-damaged-state
 favorites/artists favorites/artists-empty favorites/artist-added favorites/artist-removed favorites/artist-unavailable
