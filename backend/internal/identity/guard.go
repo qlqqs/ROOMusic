@@ -11,10 +11,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"github.com/qlqq/roomusic/backend/internal/platform/weborigin"
@@ -43,8 +45,10 @@ type User struct{ ID, Username, Role string }
 type Guard struct {
 	database       *sql.DB
 	allowedOrigins map[string]bool // 非 nil 即清单模式。
-	secureCookies  bool            // 仅旧模式。
-	publicURL      string          // 仅旧模式。
+	sameHost       bool            // 主机一致模式。
+	logger         *slog.Logger
+	secureCookies  bool   // 仅旧模式。
+	publicURL      string // 仅旧模式。
 }
 
 // NewGuard 返回旧模式守卫。secureCookies 决定会话 Cookie 的 Secure 标志与允许的来源协议（https）；
@@ -63,6 +67,17 @@ func NewGuardWithAllowedOrigins(database *sql.DB, origins []string) *Guard {
 		allowed[origin] = true
 	}
 	return &Guard{database: database, allowedOrigins: allowed}
+}
+
+// NewGuardWithSameHost 返回主机一致模式守卫：Origin 与请求 Host 规范化后一致就放行，协议不限。
+func NewGuardWithSameHost(database *sql.DB) *Guard {
+	return &Guard{database: database, sameHost: true}
+}
+
+// WithLogger 在装配时注入来源拒绝日志的记录器；未注入时使用默认记录器。
+func (guard *Guard) WithLogger(logger *slog.Logger) *Guard {
+	guard.logger = logger
+	return guard
 }
 
 // Authenticate 返回请求会话对应的用户；缺少、过期、已撤销的会话或已禁用的用户都返回错误。
@@ -108,9 +123,9 @@ func (guard *Guard) RequireSameOrigin(responseWriter http.ResponseWriter, reques
 		httpserver.WriteError(responseWriter, request, http.StatusForbidden, "origin_required", "请求缺少来源校验")
 		return false
 	}
-	if guard.allowedOrigins != nil {
-		normalized, err := weborigin.ParseRequest(origin)
-		if err != nil || !guard.allowedOrigins[normalized] {
+	if guard.allowedOrigins != nil || guard.sameHost {
+		if _, trusted := guard.trustedOrigin(request); !trusted {
+			guard.logRejectedOrigin(request)
 			httpserver.WriteError(responseWriter, request, http.StatusForbidden, "origin_forbidden", "请求来源不受信任")
 			return false
 		}
@@ -144,6 +159,47 @@ func (guard *Guard) RequireSameOrigin(responseWriter http.ResponseWriter, reques
 	return true
 }
 
+// trustedOrigin 返回已规范化且被当前模式接受的来源；仅用于清单模式与主机一致模式。
+func (guard *Guard) trustedOrigin(request *http.Request) (string, bool) {
+	origin, err := weborigin.ParseRequest(request.Header.Get("Origin"))
+	if err != nil {
+		return "", false
+	}
+	if guard.allowedOrigins != nil {
+		return origin, guard.allowedOrigins[origin]
+	}
+	if guard.sameHost {
+		scheme, _, _ := strings.Cut(origin, "://")
+		host, err := weborigin.FromHost(scheme, request.Host)
+		return origin, err == nil && host == origin
+	}
+	return "", false
+}
+
+func (guard *Guard) logRejectedOrigin(request *http.Request) {
+	mode := "allow-list"
+	if guard.sameHost {
+		mode = "same-host"
+	}
+	bounded := func(value string) string {
+		if len(value) > 256 {
+			value = value[:256]
+		}
+		// 与登录日志一致，清理截断后的不完整或非法 UTF-8，避免 JSON 替换字符扩大字段。
+		if !utf8.ValidString(value) {
+			value = strings.ToValidUTF8(value, "")
+		}
+		return value
+	}
+	logger := guard.logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+	logger.WarnContext(request.Context(), "请求来源不受信任", "event", "identity.origin.rejected",
+		"module", "identity", "request_id", request.Header.Get("X-Request-ID"),
+		"mode", bounded(mode), "origin", bounded(request.Header.Get("Origin")), "host", bounded(request.Host))
+}
+
 // SetSessionCookie 写出 24 小时有效的 HttpOnly 会话 Cookie。
 func (guard *Guard) SetSessionCookie(responseWriter http.ResponseWriter, request *http.Request, token string) {
 	http.SetCookie(responseWriter, &http.Cookie{Name: SessionCookieName, Value: token, Path: "/", HttpOnly: true, Secure: guard.cookieSecure(request), SameSite: http.SameSiteLaxMode, Expires: time.Now().Add(24 * time.Hour)})
@@ -151,11 +207,11 @@ func (guard *Guard) SetSessionCookie(responseWriter http.ResponseWriter, request
 
 // cookieSecure 与来源校验共用解析规则；写 Cookie 的调用方必须先通过 RequireSameOrigin。
 func (guard *Guard) cookieSecure(request *http.Request) bool {
-	if guard.allowedOrigins == nil {
+	if guard.allowedOrigins == nil && !guard.sameHost {
 		return guard.secureCookies
 	}
-	origin, err := weborigin.ParseRequest(request.Header.Get("Origin"))
-	return err == nil && guard.allowedOrigins[origin] && strings.HasPrefix(origin, "https://")
+	origin, trusted := guard.trustedOrigin(request)
+	return trusted && strings.HasPrefix(origin, "https://")
 }
 
 // 新密码只允许可打印 ASCII（含空格），使字符数与字节数一致。

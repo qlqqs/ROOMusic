@@ -23,6 +23,7 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 | 主题 | 文件 | 内容 |
 | --- | --- | --- |
 | 身份与成员 | [identity-contracts.md](./identity-contracts.md) | 密码规则、初始化与成员接口、用户停用事务、写入失败映射 |
+| 来源与会话 Cookie | [identity-origin-contracts.md](./identity-origin-contracts.md) | 三模式配置、Host 规范化、Cookie Secure 与来源拒绝日志 |
 | 目录与扫描流程 | [library-scan-contracts.md](./library-scan-contracts.md) | 目录新增与操作幂等、扫描完整性、暂存与身份规划、曲目与 Release 身份、CUE、抓轨日志、艺人与 AlbumArtist、封面 |
 | 扫描协调 | [scan-coordination-contracts.md](./scan-coordination-contracts.md) | 扫描状态与记录、持久化取消、跨进程协调锁 |
 | 真实库 Smoke | [real-library-smoke-contracts.md](./real-library-smoke-contracts.md) | 真实音乐只读验收、V0 对照 |
@@ -132,8 +133,9 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
   CI 运行真实构建与资产漂移检查（M1a 恢复）。开发
   `vite.config.dev.ts` 才允许自定义 Host 和 API 代理。
 - 开发 Vite 通过公网反代访问时，`allowedHosts` 只放行 `ROOMUSIC_PUBLIC_URL` 的主机名，
-  不得使用 `allowedHosts: true`；后端在未配置 `ROOMUSIC_ALLOWED_ORIGINS` 时按 `ROOMUSIC_PUBLIC_URL`、Origin scheme/host
-  和 `ROOMUSIC_SECURE_COOKIES` 校验写请求；配置清单后只按清单，Cookie 的 `Secure` 跟随请求来源协议。
+  不得使用 `allowedHosts: true`；后端在非生产且未配置 `ROOMUSIC_ALLOWED_ORIGINS` 时按 `ROOMUSIC_PUBLIC_URL`、Origin scheme/host
+  和 `ROOMUSIC_SECURE_COOKIES` 校验写请求；生产未配置清单时按主机一致校验，只比较规范化的 Origin 与请求 Host；
+  配置清单后只按清单。主机一致与清单模式的 Cookie `Secure` 都跟随请求来源协议，任何模式都不读转发头。
 - `.env.dev`、`.env.prod`、`.env` 是本机配置，必须被 Git 忽略；仓库只跟踪不含真实值的
   `.env.example` 与 `.env.prod.example`。开发脚本默认读 `.env.dev`，生产显式读 `.env.prod`，不再 source 根目录 `.env`。`backend/data/` 等运行期数据（含封面缓存与 `media-cache/` 派生缓存）同样不得提交。
 - ALAC 派生需要 ffmpeg：生产镜像构建时从固定摘要镜像复制，开发由部署者安装（项目不单独分发二进制）；`ROOMUSIC_FFMPEG_PATH`（绝对路径，空则在 `PATH` 中查找）与
@@ -144,7 +146,7 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 - 生产镜像固定 Go、Alpine、PostgreSQL 基础镜像版本与摘要，ffmpeg 与 `scripts/ffmpeg-pinned.sh` 同一摘要；
   使用已提交的前端，不依赖 Node。uid 1000 运行，音乐只读挂载，缓存与数据库卷分离。
   应用只发布 IPv4 8090，生产固定子网 `10.203.50.0/24`（演练 `10.203.51.0/24`），与开发同时运行互不影响。
-  入口等数据库接受连接后启动，`/readyz` 用于镜像健康检查。生产要求非空 `ROOMUSIC_ALLOWED_ORIGINS`，格式与冲突由后端校验。
+  入口等数据库接受连接后启动，`/readyz` 用于镜像健康检查。生产的 `ROOMUSIC_ALLOWED_ORIGINS` 可选，不配时按主机一致模式，反代须保留 Host（含端口）与 Origin；格式与冲突由后端校验。
 - tools 镜像含随提交打包的备份/恢复脚本，PostgreSQL 版本与数据库相同；每日 `pg_dump -Fc`，保留 14 天，失败有日志，
   超过 26 小时无成功备份即不健康；不备份 `/data` 或音乐文件。停止只用 `stop`、不删卷，密码恢复用 `make prod-reset-password U=<用户名>`。
   运维与恢复步骤见[部署说明](../../../deploy/production/README.md)。

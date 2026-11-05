@@ -271,7 +271,7 @@ func NewGuardWithSameHost(database *sql.DB) *Guard
 ```
 
 `app.New` 按 `settings.OriginMode` 三选一：`allow-list` → `NewGuardWithAllowedOrigins`，`same-host` → `NewGuardWithSameHost`，
-`legacy` → `NewGuard(database, settings.SecureCookies, settings.PublicURL)`；其他值 panic（装配错误）。`NewGuard`、
+`legacy` 或零值 `""` → `NewGuard(database, settings.SecureCookies, settings.PublicURL)`；其他值 panic（装配错误）。零值按旧模式是为了让直接构造 `config.Server{}` 的现有测试夹具不必改（O5）；`config.Load` 总会显式写出模式，生产不会落到零值。（主会话 2026-11-05 实现审阅时补充）`NewGuard`、
 `NewGuardWithAllowedOrigins` 签名与行为不变。
 
 清单模式与主机一致模式共用一个内部函数，`RequireSameOrigin` 和 `cookieSecure` 都调它，保证校验与 Cookie 用同一结论：

@@ -21,40 +21,10 @@
 
 ### 来源与会话 Cookie（2026-11-05）
 
-来源解析由 `platform/weborigin` 共用：`ParseConfigured(origin string) (string, error)` 用于配置，
-`ParseRequest(origin string) (string, error)` 用于请求。配置入口是 `config.Load`，结果保存在 `config.Server.AllowedOrigins []string`。
-
-| `ROOMUSIC_ALLOWED_ORIGINS` 格式 | 规则 |
-| --- | --- |
-| 列表 | 逗号分隔，去掉每项首尾空白、忽略空项；规范化后去重并保持首次出现顺序 |
-| 协议与主机 | 仅 http/https，必须有主机，两者都规范化为小写；主机仅 ASCII，国际化域名写 punycode，不允许 `*` 通配 |
-| IPv6 | 字面量必须带方括号，如 `http://[fd00::1]:8090` |
-| 端口 | 可省略；显式端口为 1–65535 的十进制数，http 的 80 与 https 的 443 去掉，其他端口保留 |
-| 路径与附加信息 | 不允许用户信息、查询、片段；配置路径仅允许空或单独 `/`（去掉），请求路径必须为空 |
-| 错误 | 拒绝启动，错误指出 `ROOMUSIC_ALLOWED_ORIGINS` 和出错项；进程沿用 `platform.config.invalid` 事件 |
-
-| 配置组合 | 唯一解释 |
-| --- | --- |
-| 清单非空（清单模式） | 来源判断与 Cookie `Secure` 只看请求 `Origin` 和清单；不依赖请求 Host、`X-Forwarded-*` 或 `Forwarded` |
-| 清单模式且 `ROOMUSIC_SECURE_COOKIES` 非空（任何值） | 拒绝启动：`ROOMUSIC_SECURE_COOKIES cannot be combined with ROOMUSIC_ALLOWED_ORIGINS; the Secure flag follows each origin's scheme` |
-| 清单模式且设置 `ROOMUSIC_PUBLIC_URL` | 先按原有规则校验格式，规范化后必须属于清单，否则 `ROOMUSIC_PUBLIC_URL must be one of ROOMUSIC_ALLOWED_ORIGINS`；仅供 Vite 的 `allowedHosts` 使用，不参与后端判断 |
-| 清单为空且非生产（旧模式） | 原逻辑不变：`ROOMUSIC_SECURE_COOKIES` 决定协议和 Cookie `Secure`；设了 `ROOMUSIC_PUBLIC_URL` 比较它的主机，否则比较请求 Host |
-| 清单为空且 `ROOMUSIC_ENV=production` | 拒绝启动：`ROOMUSIC_ALLOWED_ORIGINS must list at least one origin in production` |
-
-生产不再要求 `SECURE_COOKIES=true`，只含 http 的清单也能启动；清单与旧开关冲突就报错，避免操作者误以为 Cookie 始终带 `Secure`。
-`ROOMUSIC_PUBLIC_URL` 的旧格式检查仍不允许路径（包括末尾 `/`）；清单的末尾斜杠宽容规则不改变旧配置合同。
-
-- `NewGuard(database *sql.DB, secureCookies bool, publicURL string) *Guard` 保留旧行为；
-  `NewGuardWithAllowedOrigins(database *sql.DB, origins []string) *Guard` 要求已规范化的非空清单，空清单 panic（装配错误）。
-  `app.New` 按 `len(settings.AllowedOrigins) > 0` 选择后者，否则选前者。
-- `RequireSameOrigin(w http.ResponseWriter, r *http.Request) bool` 签名不变：先检查 `Origin` 是否缺少（`403 origin_required`）；
-  清单模式下解析失败或不在清单返回 `403 origin_forbidden`，否则通过；旧模式仍按原来的协议、`PUBLIC_URL` 主机或请求 Host 校验。
-  两个错误的 message 仍分别是“请求缺少来源校验”“请求来源不受信任”，信封不变。请求中的 `null`、`file://`、路径、查询和用户信息均不通过清单校验。
-- `SetSessionCookie(w http.ResponseWriter, r *http.Request, token string)` 与 `ClearSessionCookie(w http.ResponseWriter, r *http.Request)`
-  必须在 `RequireSameOrigin` 通过后调用。清单模式重新解析同一 `Origin`，仅清单内的 https 来源令 `Secure=true`；其他情况为 false。
-  旧模式直接使用全局 `secureCookies`。登录/退出均先校验来源，拒绝来源不得写会话或 Cookie。
-- Cookie 名仍为 `roomusic_session`，`HttpOnly`、`SameSite=Lax`、`Path=/` 不变；登录 `Expires` 为 24 小时，退出 `MaxAge=-1`。
-  没有 CORS、Cookie 改名或转发头信任机制。
+完整的三模式配置表、`FromHost` / 守卫签名、判定顺序与 Cookie 规则见[来源与会话 Cookie 合同](./identity-origin-contracts.md)，
+触及来源配置、守卫或应用装配时必须同时读取。`config.Load` 一次确定 `legacy` / `allow-list` / `same-host`，
+生产默认不填清单，按 Origin 与请求 Host 规范化后是否一致放行；清单仍可选，开发无清单的旧行为不变。
+清单与主机一致模式共用 `trustedOrigin` 判定来源与 Cookie `Secure`，拒绝时记录有界的 `identity.origin.rejected` WARN 日志。
 
 ### 身份与成员接口
 
@@ -155,7 +125,8 @@ func (t *LoginThrottle) Begin(username, source string, fingerprint [8]byte) (*At
 | 条件 | 行为 |
 | --- | --- |
 | 清单模式下来源解析失败或不在清单 | `403 origin_forbidden`，不写库、不写 Cookie |
-| 写请求缺少来源（两种模式） | `403 origin_required`，不写库、不写 Cookie |
+| 主机一致模式下来源解析失败、Host 缺失或不一致 | `403 origin_forbidden`，不写库、不写 Cookie |
+| 写请求缺少来源（三种模式） | `403 origin_required`，不写库、不写 Cookie |
 | 登录/当前密码核对限速 | `429 too_many_attempts` + `Retry-After`，不核对、不计数 |
 | 登录查用户错误（非 `sql.ErrNoRows`） | `503 database_unavailable`，不计数 |
 | 登录不存在/停用/密码错误 | `401 invalid_credentials`，同提示、计数及 bcrypt 成本 |
@@ -197,8 +168,10 @@ func (t *LoginThrottle) Begin(username, source string, fingerprint [8]byte) (*At
   保留事务测试，检查日志脱敏/仅开始记 WARN。补 `errors/too-many-attempts` 样本及前端提示、不掉线测试（测试步骤负责）。
 - `platform/weborigin` 表驱动覆盖大小写、默认/非默认端口、IPv6 方括号、配置允许而请求拒绝末尾 `/`；
   拒绝路径/查询/片段/用户信息、`null`、file/ftp、空主机、端口 0/65536、非 ASCII 主机与通配。
-- `platform/config` 清理来源相关环境变量，覆盖清单规范化/去重、非法项错误包含配置名及该项、生产缺清单失败、
+- `platform/config` 清理来源相关环境变量，覆盖清单规范化/去重、非法项错误包含配置名及该项、三模式组合与冲突优先级、生产缺清单进入主机一致模式、
   纯 http 清单及未设置旧开关成功、旧开关冲突、`PUBLIC_URL` 清单内/外、旧模式读取结果不变。
+- 主机一致模式按[来源合同的必需测试](./identity-origin-contracts.md#6-必需测试)覆盖 `FromHost` 全部合法/非法边界、
+  同主机双协议与非默认端口、Host 缺失/错配、转发头无效、登录/退出 Cookie、日志字段与 256 字节上限；集成验证拒绝不写库。
 - `identity` 的无数据库守卫测试覆盖双来源通过、协议错配/其他主机/非法格式/缺来源拒绝；Host 和转发头不影响清单模式；
   登录/退出 Cookie 的 `Secure`、`HttpOnly`、`SameSite`、`Path`；旧模式协议、`PUBLIC_URL` 主机、请求 Host 三条路径各有正反例。
 - `internal/app/identity_api_integration_test.go` 用清单配置装配，两个来源分别登录、写操作和退出成功并核对 Cookie；
@@ -219,9 +192,10 @@ func (t *LoginThrottle) Begin(username, source string, fingerprint [8]byte) (*At
 
 ### 来源与 Cookie
 
-错误：根据 `X-Forwarded-Proto` 或请求 Host 放行清单外来源，或者未校验就创建会话并设置 Cookie。
+错误：根据转发头放行，按请求 Host 放行清单外来源，或未校验就创建会话并设置 Cookie。
+任何模式都不按转发头放行；清单模式不看 Host，主机一致模式只比较 `request.Host`。
 正确：登录/退出先调用 `RequireSameOrigin(w, r)`，失败立即返回；登录创建会话后调用 `SetSessionCookie(w, r, token)`，
-退出调用 `ClearSessionCookie(w, r)`。两者共用 `weborigin.ParseRequest`，不另写来源解析或转发头规则。
+退出调用 `ClearSessionCookie(w, r)`。清单与主机一致模式的校验和 Cookie 共用 `trustedOrigin`，不另写来源解析或转发头规则。
 
 ### Wrong
 

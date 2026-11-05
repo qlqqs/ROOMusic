@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -780,6 +781,7 @@ func newAllowedOriginsIntegrationTestApplication(t *testing.T) *integrationTestA
 	root, data := t.TempDir(), t.TempDir()
 	lifecycle, stop := context.WithCancel(context.Background())
 	application := New(lifecycle, config.Server{
+		OriginMode:          config.OriginModeAllowList,
 		AllowedOrigins:      []string{"http://192.168.50.206:8080", "https://music.example.com"},
 		AllowedLibraryRoots: []string{root},
 		DataDirectory:       data,
@@ -916,4 +918,205 @@ func TestPostgreSQLAllowedOriginsRejectBeforeIdentityWrites(t *testing.T) {
 		})
 	}
 	requirePasswordSession(t, application, user, http.StatusOK)
+}
+
+// newSameHostIntegrationTestApplication 显式装配主机一致模式；仅连接一次性测试库并使用独立 schema。
+func newSameHostIntegrationTestApplication(t *testing.T) *integrationTestApplication {
+	t.Helper()
+	scopedURL := postgrestest.NewSchema(t, "roomusic_same_host_")
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	database, err := postgres.Open(ctx, scopedURL)
+	if err != nil {
+		t.Fatalf("打开主机一致测试隔离库：%v", err)
+	}
+	t.Cleanup(func() {
+		if err := database.Close(); err != nil {
+			t.Errorf("关闭主机一致测试隔离库：%v", err)
+		}
+	})
+	if err := InitializeCatalog(ctx, database); err != nil {
+		t.Fatalf("初始化主机一致测试目录：%v", err)
+	}
+	root, data := t.TempDir(), t.TempDir()
+	lifecycle, stop := context.WithCancel(context.Background())
+	application := New(lifecycle, config.Server{
+		Environment:         "production",
+		OriginMode:          config.OriginModeSameHost,
+		AllowedLibraryRoots: []string{root},
+		DataDirectory:       data,
+	}, database, testFrontend(), slog.New(slog.NewTextHandler(io.Discard, nil)), func(settings *options) {
+		settings.pauseCatalogMaintenance = true
+	})
+	t.Cleanup(func() {
+		stop()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := application.WaitForScans(ctx); err != nil {
+			t.Errorf("等待主机一致测试扫描停止：%v", err)
+		}
+		if err := application.WaitForCatalogMaintenance(ctx); err != nil {
+			t.Errorf("等待主机一致测试维护停止：%v", err)
+		}
+	})
+	return &integrationTestApplication{app: application, database: database, handler: application.Handler(), origin: "http://192.168.50.206:18090", allowedRoot: root, dataDirectory: data, shutdown: stop}
+}
+
+// requestWithHost 直接设置 Go 的 request.Host，不把 Host 放在普通 Header 或转发头中冒充。
+func (application *integrationTestApplication) requestWithHost(t *testing.T, method, path, host string, body any, user *integrationTestUser, headers map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+	var requestBody io.Reader
+	if body != nil {
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			t.Fatalf("编码主机一致测试请求：%v", err)
+		}
+		requestBody = bytes.NewReader(encoded)
+	}
+	request := httptest.NewRequest(method, path, requestBody)
+	request.Host = host
+	if body != nil {
+		request.Header.Set("Content-Type", "application/json")
+	}
+	if method != http.MethodGet && method != http.MethodHead {
+		request.Header.Set("Origin", application.origin)
+	}
+	if user != nil {
+		request.AddCookie(&http.Cookie{Name: identity.SessionCookieName, Value: user.token})
+	}
+	for name, value := range headers {
+		request.Header.Set(name, value)
+	}
+	response := httptest.NewRecorder()
+	application.handler.ServeHTTP(response, request)
+	return response
+}
+
+func TestPostgreSQLSameHostIdentityLifecycle(t *testing.T) {
+	application := newSameHostIntegrationTestApplication(t)
+	setup := application.requestWithHost(t, http.MethodPost, "/api/v1/setup/admin", "192.168.50.206:18090", accountBody("curator", identityTestPassword), nil, nil)
+	adminID := requireIdentityBody(t, setup, http.StatusCreated, "curator", "admin")
+	password := identityTestPassword
+	for _, tc := range []struct {
+		name, origin, host string
+		secure, forwarded  bool
+	}{
+		{"http", "http://192.168.50.206:18090", "192.168.50.206:18090", false, false},
+		{"https", "https://music.qlqqs.com:8888", "music.qlqqs.com:8888", true, false},
+		{"http with forwarded headers", "http://192.168.50.206:18090", "192.168.50.206:18090", false, true},
+		{"https with forwarded headers", "https://music.qlqqs.com:8888", "music.qlqqs.com:8888", true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			headers := map[string]string{"Origin": tc.origin}
+			if tc.forwarded {
+				proto := "http"
+				if !tc.secure {
+					proto = "https"
+				}
+				headers["X-Forwarded-Host"] = "evil.example:1234"
+				headers["X-Forwarded-Proto"] = proto
+				headers["Forwarded"] = "host=evil.example:1234;proto=" + proto
+			}
+			before := countRows(t, application, `SELECT count(*) FROM sessions`)
+			login := application.requestWithHost(t, http.MethodPost, "/api/v1/auth/login", tc.host, accountBody("curator", password), nil, headers)
+			if got := requireIdentityBody(t, login, http.StatusOK, "curator", "admin"); got != adminID {
+				t.Fatalf("登录返回 ID %q，期望 %q", got, adminID)
+			}
+			requireOriginSessionCookie(t, login, tc.secure, false)
+			user := &integrationTestUser{id: adminID, token: sessionTokenFrom(t, login)}
+			if after := countRows(t, application, `SELECT count(*) FROM sessions`); after != before+1 {
+				t.Fatalf("登录后 sessions=%d，期望 %d", after, before+1)
+			}
+			requirePasswordSession(t, application, user, http.StatusOK)
+
+			nextPassword := "same-host-" + tc.name + "-password"
+			changed := application.requestWithHost(t, http.MethodPost, "/api/v1/auth/password", tc.host, ownPasswordBody(password, nextPassword), user, headers)
+			requirePasswordSuccess(t, changed, "password_changed")
+			var hash string
+			if err := application.database.QueryRow(`SELECT password_hash FROM users WHERE id=$1::uuid`, adminID).Scan(&hash); err != nil || !identity.VerifyPassword(hash, nextPassword) || identity.VerifyPassword(hash, password) {
+				t.Fatalf("主机一致来源改密码未正确持久化：%v", err)
+			}
+			password = nextPassword
+			requirePasswordSession(t, application, user, http.StatusOK)
+
+			logout := application.requestWithHost(t, http.MethodPost, "/api/v1/auth/logout", tc.host, nil, user, headers)
+			if logout.Code != http.StatusOK || !reflect.DeepEqual(decodeJSONMap(t, logout), map[string]any{"logged_out": true}) {
+				t.Fatalf("退出响应不符：HTTP %d %s", logout.Code, logout.Body.String())
+			}
+			requireOriginSessionCookie(t, logout, tc.secure, true)
+			if active := countRows(t, application, `SELECT count(*) FROM sessions WHERE token_hash=$1 AND revoked_at IS NULL`, identity.HashSessionToken(user.token)); active != 0 {
+				t.Fatal("退出未撤销数据库中的当前会话")
+			}
+			requirePasswordSession(t, application, user, http.StatusUnauthorized)
+		})
+	}
+}
+
+func TestPostgreSQLSameHostRejectBeforeIdentityWrites(t *testing.T) {
+	application := newSameHostIntegrationTestApplication(t)
+	setup := application.requestWithHost(t, http.MethodPost, "/api/v1/setup/admin", "192.168.50.206:18090", accountBody("curator", identityTestPassword), nil, nil)
+	adminID := requireIdentityBody(t, setup, http.StatusCreated, "curator", "admin")
+	login := application.requestWithHost(t, http.MethodPost, "/api/v1/auth/login", "music.qlqqs.com:8888", accountBody("curator", identityTestPassword), nil, map[string]string{"Origin": "https://music.qlqqs.com:8888"})
+	requireIdentityBody(t, login, http.StatusOK, "curator", "admin")
+	user := &integrationTestUser{id: adminID, token: sessionTokenFrom(t, login)}
+	for _, tc := range []struct {
+		name, host, origin, code string
+		headers                  map[string]string
+	}{
+		{"mismatched Host", "10.0.0.1:8080", "https://music.qlqqs.com:8888", "origin_forbidden", nil},
+		{"X-Forwarded-Host cannot repair", "10.0.0.1:8080", "https://music.qlqqs.com:8888", "origin_forbidden", map[string]string{"X-Forwarded-Host": "music.qlqqs.com:8888"}},
+		{"X-Forwarded-Proto cannot repair", "10.0.0.1:8080", "https://music.qlqqs.com:8888", "origin_forbidden", map[string]string{"X-Forwarded-Proto": "https"}},
+		{"Forwarded cannot repair", "10.0.0.1:8080", "https://music.qlqqs.com:8888", "origin_forbidden", map[string]string{"Forwarded": "host=music.qlqqs.com:8888;proto=https"}},
+		{"all forwarded headers cannot repair", "10.0.0.1:8080", "https://music.qlqqs.com:8888", "origin_forbidden", map[string]string{"X-Forwarded-Host": "music.qlqqs.com:8888", "X-Forwarded-Proto": "https", "Forwarded": "host=music.qlqqs.com:8888;proto=https"}},
+		{"lost port", "music.qlqqs.com", "https://music.qlqqs.com:8888", "origin_forbidden", nil},
+		{"null Origin", "music.qlqqs.com:8888", "null", "origin_forbidden", nil},
+		{"missing Host", "", "https://music.qlqqs.com:8888", "origin_forbidden", nil},
+		{"missing Origin", "music.qlqqs.com:8888", "", "origin_required", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			headers := map[string]string{"Origin": tc.origin}
+			for name, value := range tc.headers {
+				headers[name] = value
+			}
+			for _, action := range []struct {
+				name, path string
+				body       any
+				user       *integrationTestUser
+			}{
+				{"login", "/api/v1/auth/login", accountBody("curator", identityTestPassword), nil},
+				{"password", "/api/v1/auth/password", ownPasswordBody(identityTestPassword, "forbidden-same-host-password"), user},
+				{"logout", "/api/v1/auth/logout", nil, user},
+			} {
+				t.Run(action.name, func(t *testing.T) {
+					before := passwordDatabaseState(t, application)
+					sessionsBefore := countRows(t, application, `SELECT count(*) FROM sessions`)
+					response := application.requestWithHost(t, http.MethodPost, action.path, tc.host, action.body, action.user, headers)
+					requireAPIError(t, response, http.StatusForbidden, tc.code)
+					if len(response.Header().Values("Set-Cookie")) != 0 {
+						t.Fatal("拒绝来源不得设置或清除 Cookie")
+					}
+					if after := countRows(t, application, `SELECT count(*) FROM sessions`); after != sessionsBefore {
+						t.Fatalf("被拒绝请求使 sessions 从 %d 变为 %d", sessionsBefore, after)
+					}
+					requirePasswordStateUnchanged(t, application, before)
+				})
+			}
+		})
+	}
+	requirePasswordSession(t, application, user, http.StatusOK)
+}
+
+func TestPostgreSQLSameHostReadOnlyIgnoresOrigin(t *testing.T) {
+	application := newSameHostIntegrationTestApplication(t)
+	for _, origin := range []string{"", "null", "https://evil.example"} {
+		t.Run("Origin="+origin, func(t *testing.T) {
+			response := application.requestWithHost(t, http.MethodGet, "/api/v1/setup/status", "10.0.0.1:8080", nil, nil, map[string]string{"Origin": origin})
+			if response.Code != http.StatusOK || !reflect.DeepEqual(decodeJSONMap(t, response), map[string]any{"setup_required": true}) {
+				t.Fatalf("只读请求不得受来源检查限制：HTTP %d %s", response.Code, response.Body.String())
+			}
+			if len(response.Header().Values("Set-Cookie")) != 0 {
+				t.Fatal("只读请求不应写 Cookie")
+			}
+		})
+	}
 }

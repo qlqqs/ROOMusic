@@ -76,11 +76,17 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		apply(&assembly)
 	}
 	var guard *identity.Guard
-	if len(settings.AllowedOrigins) > 0 {
+	switch settings.OriginMode {
+	case config.OriginModeAllowList:
 		guard = identity.NewGuardWithAllowedOrigins(database, settings.AllowedOrigins)
-	} else {
+	case config.OriginModeSameHost:
+		guard = identity.NewGuardWithSameHost(database)
+	case "", config.OriginModeLegacy:
 		guard = identity.NewGuard(database, settings.SecureCookies, settings.PublicURL)
+	default:
+		panic("app: invalid origin mode")
 	}
+	guard.WithLogger(logger)
 	libraryService := library.NewService(lifecycle, database, settings.DataDirectory, logger)
 
 	mux := http.NewServeMux()

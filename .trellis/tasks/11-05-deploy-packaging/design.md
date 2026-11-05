@@ -444,11 +444,13 @@ ls -l /home/qlqq/roomusic-backups
 
 ### 8.2 首次部署
 
+来源配置以 [origins design 第 9 节](../11-05-deploy-origins/design.md#9-主机一致模式d82026-11-05-增补) 为准：默认不填清单，反代保留 Host 与 Origin；启动后先初始化管理员，再开放公网反代。
+
 ```bash
 cd /home/qlqq/workspace/ROOMusic
 mkdir -p /home/qlqq/roomusic-backups
 cp .env.prod.example .env.prod && chmod 600 .env.prod
-# 编辑 .env.prod：数据库密码（openssl rand -hex 24 生成）、来源清单、端口等
+# 编辑 .env.prod：数据库密码（openssl rand -hex 24 生成）、端口等；不填来源清单（主机一致模式）
 docker compose -p roomusic-prod -f deploy/production/compose.yaml --env-file .env.prod config --quiet
 make prod
 make prod-status
@@ -481,7 +483,7 @@ make prod
 | 重启 | `make prod` | `<生产 compose> restart` |
 | 停止 | `make prod-stop`（只停，容器与数据都保留；`make prod` 继续） | `<生产 compose> stop` |
 | 改配置后生效 | `make prod`（镜像已存在会跳过构建） | — |
-| 加公网域名 | 在 `.env.prod` 的 `ROOMUSIC_ALLOWED_ORIGINS` 末尾加 `,https://<域名>`，再 `make prod` | — |
+| 加公网域名 | 默认不填来源清单，反代保留浏览器的 Host（含端口）与 Origin 即可直接用；主动使用清单时再追加公网来源并 `make prod` | — |
 
 部署说明用醒目的一句话提醒：**不要**运行 `docker compose … down -v`，它会删掉数据库卷；`make prod*` 的任何命令都不会删卷。
 重置密码后若登录仍提示次数太多，等一分钟再试（见限速设计第 6 节）。
@@ -493,7 +495,7 @@ make prod
 | 变量 | 必填 | 说明（模板里每项一句） |
 | --- | --- | --- |
 | `ROOMUSIC_DB_PASSWORD` | 是 | 数据库密码，只用字母和数字（会放进连接地址），可用 `openssl rand -hex 24` 生成；首次启动后再改不会改数据库里的密码 |
-| `ROOMUSIC_ALLOWED_ORIGINS` | 是 | 允许访问的网址，逗号分隔，如 `http://192.168.50.206:8090,https://music.example.com` |
+| `ROOMUSIC_ALLOWED_ORIGINS` | 否 | 默认不填，走主机一致模式，反代须保留 Host（含端口）与 Origin；只想放行固定网址或反代无法保留 Host 时再填清单 |
 | `ROOMUSIC_HTTP_PORT` | 是 | 局域网访问端口，填 8090 |
 | `ROOMUSIC_MUSIC_DIR` | 是 | 宿主机上的音乐目录，容器里只读挂成 `/music` |
 | `ROOMUSIC_BACKUP_DIR` | 是 | 宿主机上的备份目录，需先创建 |
@@ -597,7 +599,7 @@ make prod
 
 全程不碰开发环境：不运行 `make dev`、`make dev-reset`，不对 `roomusic-postgres-1` 执行任何停止、重启或写操作。
 
-1. 在仓库根目录按 8.2 创建 `.env.prod`（`ROOMUSIC_HTTP_PORT=8090`，来源清单先只填 `http://192.168.50.206:8090`，密码随机生成且不打印，`chmod 600`），
+1. 在仓库根目录按 8.2 创建 `.env.prod`（`ROOMUSIC_HTTP_PORT=8090`，不填来源清单（主机一致模式），密码随机生成且不打印，`chmod 600`），
    `mkdir -p /home/qlqq/roomusic-backups`；`<生产 compose> config --quiet`。
 2. **开发库基线**：重复 10.1 步骤 0（状态、启动时间、卷创建时间、三项计数）。
 3. **命令检查（只打印，不执行）**：`scripts/production.sh --dry-run stop` 的输出是 `docker compose -p roomusic-prod … stop`，没有 `down`、`-v`；

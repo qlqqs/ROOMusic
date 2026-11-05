@@ -14,7 +14,7 @@ services:
       ROOMUSIC_ENV: production
       ROOMUSIC_HTTP_ADDR: ":8080"
       ROOMUSIC_DATABASE_URL: "postgres://roomusic:${ROOMUSIC_DB_PASSWORD:?请在 .env.prod 中设置 ROOMUSIC_DB_PASSWORD}@postgres:5432/roomusic?sslmode=disable"
-      ROOMUSIC_ALLOWED_ORIGINS: "${ROOMUSIC_ALLOWED_ORIGINS:?请在 .env.prod 中设置 ROOMUSIC_ALLOWED_ORIGINS}"
+      ROOMUSIC_ALLOWED_ORIGINS: "${ROOMUSIC_ALLOWED_ORIGINS:-}"
       ROOMUSIC_ALLOWED_LIBRARY_ROOTS: /music
       ROOMUSIC_DATA_DIR: /data
       ROOMUSIC_FFMPEG_PATH: /usr/local/bin/ffmpeg

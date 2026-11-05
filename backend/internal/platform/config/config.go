@@ -21,6 +21,15 @@ const (
 	maxMediaCacheMiB = 1 << 30
 )
 
+// OriginMode 是配置加载时确定的来源校验模式。
+type OriginMode string
+
+const (
+	OriginModeLegacy    OriginMode = "legacy"     // 非生产且清单为空：保留旧行为。
+	OriginModeAllowList OriginMode = "allow-list" // 清单非空。
+	OriginModeSameHost  OriginMode = "same-host"  // 生产且清单为空。
+)
+
 // Server 是进程启动所需的配置。
 type Server struct {
 	Address             string
@@ -28,6 +37,7 @@ type Server struct {
 	DatabaseURL         string
 	AllowedLibraryRoots []string
 	AllowedOrigins      []string
+	OriginMode          OriginMode
 	SecureCookies       bool
 	DataDirectory       string
 	PublicURL           string
@@ -75,8 +85,19 @@ func Load() (Server, error) {
 	if err != nil {
 		return Server{}, err
 	}
-	if config.Environment == "production" && len(config.AllowedOrigins) == 0 {
-		return Server{}, fmt.Errorf("ROOMUSIC_ALLOWED_ORIGINS must list at least one origin in production")
+	switch {
+	case len(config.AllowedOrigins) > 0:
+		config.OriginMode = OriginModeAllowList
+	case config.Environment == "production":
+		if strings.TrimSpace(os.Getenv("ROOMUSIC_SECURE_COOKIES")) != "" {
+			return Server{}, fmt.Errorf("ROOMUSIC_SECURE_COOKIES is not used in production; the Secure flag follows each origin's scheme")
+		}
+		if publicURL != "" {
+			return Server{}, fmt.Errorf("ROOMUSIC_PUBLIC_URL is not used in production; list origins in ROOMUSIC_ALLOWED_ORIGINS to restrict access")
+		}
+		config.OriginMode = OriginModeSameHost
+	default:
+		config.OriginMode = OriginModeLegacy
 	}
 	return config, nil
 }
@@ -102,7 +123,7 @@ func configuredAllowedOrigins(publicURL string) ([]string, error) {
 	if len(origins) == 0 {
 		return origins, nil
 	}
-	if os.Getenv("ROOMUSIC_SECURE_COOKIES") != "" {
+	if strings.TrimSpace(os.Getenv("ROOMUSIC_SECURE_COOKIES")) != "" {
 		return nil, fmt.Errorf("ROOMUSIC_SECURE_COOKIES cannot be combined with ROOMUSIC_ALLOWED_ORIGINS; the Secure flag follows each origin's scheme")
 	}
 	if publicURL != "" {

@@ -58,3 +58,53 @@ func TestParseOriginsRejectsInvalidInput(t *testing.T) {
 		})
 	}
 }
+
+func TestFromHost(t *testing.T) {
+	for _, tc := range []struct {
+		name, scheme, host, want string
+	}{
+		{"lowercase host", "https", "Music.Example.COM", "https://music.example.com"},
+		{"https default port", "https", "Music.Example.com:443", "https://music.example.com"},
+		{"http default port", "http", "Music.Example.com:80", "http://music.example.com"},
+		{"http keeps 443", "http", "music.example.com:443", "http://music.example.com:443"},
+		{"https keeps 80", "https", "music.example.com:80", "https://music.example.com:80"},
+		{"nondefault port", "https", "music.qlqqs.com:8888", "https://music.qlqqs.com:8888"},
+		{"LAN address", "http", "192.168.50.206:18090", "http://192.168.50.206:18090"},
+		{"minimum port", "http", "h:1", "http://h:1"},
+		{"maximum port", "https", "h:65535", "https://h:65535"},
+		{"IPv6", "http", "[fd00::1]:8090", "http://[fd00::1]:8090"},
+		{"IPv6 case and default port", "https", "[FD00::AB]:443", "https://[fd00::ab]"},
+		{"IPv6 text preserved", "http", "[fd00:0:0:0:0:0:0:1]", "http://[fd00:0:0:0:0:0:0:1]"},
+		{"trailing dot preserved", "https", "Music.Example.com.", "https://music.example.com."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := FromHost(tc.scheme, tc.host)
+			if err != nil || got != tc.want {
+				t.Fatalf("FromHost(%q, %q) = %q, %v，期望 %q", tc.scheme, tc.host, got, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestFromHostRejectsInvalidInput(t *testing.T) {
+	for _, host := range []string{
+		"", "a/b", "a?b", "a#b", "u@h", `a\b`, "a b", " a", "a ", "a\tb", "a\nb", "a\rb", "a\x00b", "a\x7fb", "a\u00a0b",
+		"a%41", "音乐.example", "*", "*.example.com", "h:", "h:0", "h:65536", "h:x", "h:-1",
+		"fd00::1", "fd00::1:8090", "[fd00::1%eth0]", "[fd00::1%25eth0]", "[fd00::1", "[not-ipv6]",
+	} {
+		for _, scheme := range []string{"http", "https"} {
+			t.Run(scheme+"/"+host, func(t *testing.T) {
+				if got, err := FromHost(scheme, host); err == nil {
+					t.Fatalf("FromHost(%q, %q) = %q，必须拒绝非法 Host", scheme, host, got)
+				}
+			})
+		}
+	}
+	for _, scheme := range []string{"", "ftp", "file", "ws", "HTTP", "HTTPS", " https"} {
+		t.Run("scheme/"+scheme, func(t *testing.T) {
+			if got, err := FromHost(scheme, "music.example.com"); err == nil {
+				t.Fatalf("FromHost(%q, host) = %q，必须拒绝非法协议", scheme, got)
+			}
+		})
+	}
+}

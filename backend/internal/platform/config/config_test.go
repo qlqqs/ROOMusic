@@ -93,7 +93,7 @@ func TestLoadAllowedOriginsNormalizesAndDeduplicates(t *testing.T) {
 	}
 }
 
-func TestLoadProductionRequiresAllowedOrigins(t *testing.T) {
+func TestLoadProductionWithoutAllowedOrigins(t *testing.T) {
 	for _, value := range []string{"", " , , "} {
 		for _, secure := range []string{"", "true", "false"} {
 			t.Run(value+"/secure="+secure, func(t *testing.T) {
@@ -101,9 +101,13 @@ func TestLoadProductionRequiresAllowedOrigins(t *testing.T) {
 				t.Setenv("ROOMUSIC_ENV", "production")
 				t.Setenv("ROOMUSIC_ALLOWED_ORIGINS", value)
 				t.Setenv("ROOMUSIC_SECURE_COOKIES", secure)
-				_, err := Load()
-				if err == nil || !strings.Contains(err.Error(), "ROOMUSIC_ALLOWED_ORIGINS") {
-					t.Fatalf("生产缺少清单：%v，期望错误指出 ROOMUSIC_ALLOWED_ORIGINS", err)
+				settings, err := Load()
+				if secure == "" {
+					if err != nil || settings.OriginMode != OriginModeSameHost {
+						t.Fatalf("生产缺少清单：mode=%q err=%v，期望主机一致模式", settings.OriginMode, err)
+					}
+				} else if err == nil || !strings.Contains(err.Error(), "ROOMUSIC_SECURE_COOKIES") {
+					t.Fatalf("生产缺少清单且设旧开关：%v，期望旧开关冲突", err)
 				}
 			})
 		}
@@ -124,13 +128,19 @@ func TestLoadProductionAcceptsOriginsWithoutLegacyCookieSetting(t *testing.T) {
 	}
 }
 
-func TestLoadAllowedOriginsRejectsLegacyCookieSetting(t *testing.T) {
+func TestLoadAllowedOriginsChecksLegacyCookieSetting(t *testing.T) {
 	for _, value := range []string{"true", "false", "invalid", " "} {
 		t.Run(value, func(t *testing.T) {
 			setRequired(t)
 			t.Setenv("ROOMUSIC_ALLOWED_ORIGINS", "http://192.168.50.206:8080,https://music.example.com")
 			t.Setenv("ROOMUSIC_SECURE_COOKIES", value)
-			_, err := Load()
+			settings, err := Load()
+			if strings.TrimSpace(value) == "" {
+				if err != nil || settings.OriginMode != OriginModeAllowList {
+					t.Fatalf("空白旧开关应视为空：mode=%q err=%v", settings.OriginMode, err)
+				}
+				return
+			}
 			if err == nil || !strings.Contains(err.Error(), "ROOMUSIC_SECURE_COOKIES") || !strings.Contains(err.Error(), "ROOMUSIC_ALLOWED_ORIGINS") {
 				t.Fatalf("清单与非空旧开关 %q 冲突，期望错误指出两个配置项，得到 %v", value, err)
 			}
@@ -203,6 +213,83 @@ func TestLoadLegacyOriginSettingsRemainUnchanged(t *testing.T) {
 			settings, err := Load()
 			if err != nil || len(settings.AllowedOrigins) != 0 || settings.SecureCookies != tc.wantSecure || settings.PublicURL != strings.TrimSpace(tc.publicURL) {
 				t.Fatalf("旧模式读取不符：AllowedOrigins=%v SecureCookies=%v PublicURL=%q err=%v", settings.AllowedOrigins, settings.SecureCookies, settings.PublicURL, err)
+			}
+		})
+	}
+}
+
+func TestLoadOriginModeMatrix(t *testing.T) {
+	const (
+		allowListConflict = "ROOMUSIC_SECURE_COOKIES cannot be combined with ROOMUSIC_ALLOWED_ORIGINS; the Secure flag follows each origin's scheme"
+		productionSecure  = "ROOMUSIC_SECURE_COOKIES is not used in production; the Secure flag follows each origin's scheme"
+		productionPublic  = "ROOMUSIC_PUBLIC_URL is not used in production; list origins in ROOMUSIC_ALLOWED_ORIGINS to restrict access"
+	)
+	for _, tc := range []struct {
+		name, environment, origins, secure, publicURL string
+		wantMode                                      OriginMode
+		wantError                                     string
+	}{
+		{"row 1 allow-list conflicts with secure", "production", "https://music.example.com", "true", "", "", allowListConflict},
+		{"row 2 allow-list without legacy settings", "production", "http://192.168.50.206:18090", "", "", OriginModeAllowList, ""},
+		{"row 3 public URL normalized into allow-list", "development", "https://music.example.com", "", " HTTPS://Music.Example.COM:443 ", OriginModeAllowList, ""},
+		{"row 4 public URL outside allow-list", "production", "https://music.example.com", "", "http://music.example.com", "", "ROOMUSIC_PUBLIC_URL must be one of ROOMUSIC_ALLOWED_ORIGINS"},
+		{"row 5 production conflicts with secure", "production", "", "true", "", "", productionSecure},
+		{"row 6 production conflicts with public URL", "production", "", "", "https://music.example.com", "", productionPublic},
+		{"row 7 production defaults to same-host", "production", "", "", "", OriginModeSameHost, ""},
+		{"row 8 development preserves legacy", "development", "", "true", " https://music.example.com ", OriginModeLegacy, ""},
+		{"production false still conflicts", "production", "", "false", "", "", productionSecure},
+		{"production invalid secure still conflicts", "production", "", "invalid", "", "", productionSecure},
+		{"production secure takes precedence over public URL", "production", "", "true", "https://music.example.com", "", productionSecure},
+		{"production false takes precedence over public URL", "production", "", "false", "https://music.example.com", "", productionSecure},
+		{"production empty list entries are same-host", "production", " , , ", "", "", OriginModeSameHost, ""},
+		{"production whitespace settings are empty", "production", " ", " \t ", " \t ", OriginModeSameHost, ""},
+		{"allow-list false still conflicts", "development", "https://music.example.com", "false", "", "", allowListConflict},
+		{"dev remains legacy", "dev", " , ", "false", "http://localhost:5173", OriginModeLegacy, ""},
+		{"test remains legacy", "test", "", "", "", OriginModeLegacy, ""},
+		{"legacy only exact true enables secure", "development", "", " true ", "", OriginModeLegacy, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setRequired(t)
+			t.Setenv("ROOMUSIC_ENV", tc.environment)
+			t.Setenv("ROOMUSIC_ALLOWED_ORIGINS", tc.origins)
+			t.Setenv("ROOMUSIC_SECURE_COOKIES", tc.secure)
+			t.Setenv("ROOMUSIC_PUBLIC_URL", tc.publicURL)
+			settings, err := Load()
+			if tc.wantError != "" {
+				if err == nil || err.Error() != tc.wantError {
+					t.Fatalf("Load 错误 = %v，期望 %q", err, tc.wantError)
+				}
+				return
+			}
+			if err != nil || settings.OriginMode != tc.wantMode {
+				t.Fatalf("Load mode=%q err=%v，期望模式 %q", settings.OriginMode, err, tc.wantMode)
+			}
+			if tc.wantMode == OriginModeLegacy && (settings.SecureCookies != (tc.secure == "true") || settings.PublicURL != strings.TrimSpace(tc.publicURL) || len(settings.AllowedOrigins) != 0) {
+				t.Fatalf("旧模式读取发生变化：SecureCookies=%v PublicURL=%q AllowedOrigins=%v", settings.SecureCookies, settings.PublicURL, settings.AllowedOrigins)
+			}
+		})
+	}
+}
+
+func TestLoadOriginValidationOrder(t *testing.T) {
+	for _, tc := range []struct {
+		name, origins, secure, publicURL, wantError string
+	}{
+		{"public URL format before list format and conflicts", "null", "true", "https://music.example.com/app", "ROOMUSIC_PUBLIC_URL must be an absolute origin"},
+		{"public URL format before production secure conflict", "", "true", "https://music.example.com/", "ROOMUSIC_PUBLIC_URL must be an absolute origin"},
+		{"list format before secure conflict", "null", "true", "", `ROOMUSIC_ALLOWED_ORIGINS item "null"`},
+		{"list format before public URL membership", "null", "", "https://music.example.com", `ROOMUSIC_ALLOWED_ORIGINS item "null"`},
+		{"list secure conflict before public URL membership", "https://music.example.com", "true", "https://other.example.com", "ROOMUSIC_SECURE_COOKIES cannot be combined with ROOMUSIC_ALLOWED_ORIGINS"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setRequired(t)
+			t.Setenv("ROOMUSIC_ENV", "production")
+			t.Setenv("ROOMUSIC_ALLOWED_ORIGINS", tc.origins)
+			t.Setenv("ROOMUSIC_SECURE_COOKIES", tc.secure)
+			t.Setenv("ROOMUSIC_PUBLIC_URL", tc.publicURL)
+			_, err := Load()
+			if err == nil || !strings.HasPrefix(err.Error(), tc.wantError) {
+				t.Fatalf("Load 错误 = %v，期望优先报告 %q", err, tc.wantError)
 			}
 		})
 	}

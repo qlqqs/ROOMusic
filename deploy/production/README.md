@@ -41,7 +41,7 @@ chmod 600 .env.prod
 | 变量 | 必填 / 默认 | 含义 |
 | --- | --- | --- |
 | `ROOMUSIC_DB_PASSWORD` | 必填 | 仅字母数字，建议随机 48 位十六进制；首次启动后改配置不会改库内密码 |
-| `ROOMUSIC_ALLOWED_ORIGINS` | 必填 | 逗号分隔访问来源，先填 `http://192.168.50.206:8090` |
+| `ROOMUSIC_ALLOWED_ORIGINS` | 可选 / 不填 | 默认主机一致模式；只想放行固定网址或反代无法保留 Host 时，填逗号分隔的完整来源 |
 | `ROOMUSIC_HTTP_PORT` | 必填 | 填 `8090`，开发保留 `8080` |
 | `ROOMUSIC_MUSIC_DIR` | 必填 | 已存在的绝对目录，本机为 `/home/qlqq/workspace/ROOMusic/music` |
 | `ROOMUSIC_BACKUP_DIR` | 必填 | 已存在且 uid 1000 可写的绝对目录，本机为 `/home/qlqq/roomusic-backups` |
@@ -53,13 +53,30 @@ chmod 600 .env.prod
 
 目录和端口按 `KEY=值` 写字面量，不用 `${变量}` 或命令替换；路径可加成对引号。音乐目录需要 uid 1000 可读，备份目录需要 uid 1000 可写。
 路径不存在时启动失败，不会自动创建 root 所有的空目录。不要填写 `ROOMUSIC_SECURE_COOKIES` 或 `ROOMUSIC_PUBLIC_URL`；
-生产的 Cookie 安全属性跟随清单内请求的来源协议，http 不带 Secure，https 带 Secure。来源不允许通配或路径，反代须保留浏览器的 Origin。
+生产的 Cookie 安全属性跟随请求的来源协议，http 不带 Secure，https 带 Secure。默认不填清单，写请求的 Origin 与请求 Host
+规范化后一致即放行；反代须原样保留浏览器的 Host（含端口）与 Origin。nginx 的 Host 转发配置为：
+
+```nginx
+proxy_set_header Host $http_host;
+```
+
+不要用 `$host`（会丢掉 `:8888` 等端口），也不要把 Host 改成上游地址。若 Host 被改写，页面仍能浏览，但登录、收藏等写操作会返回
+`403 origin_forbidden`，页面提示“请用正确的网址打开页面后重试。”；局域网直连不受影响。查看 `identity.origin.rejected` 日志的
+`mode`、`origin`、`host`（各最多 256 字节）可定位差异。两种解决办法：
+
+1. 修正反代，使 Host（含端口）与 Origin 原样转发。
+2. 做不到时，在 `.env.prod` 填写 `ROOMUSIC_ALLOWED_ORIGINS`，包含所有允许的入口（如 `http://192.168.50.206:8090,https://music.example.com:8888`），
+   再 `make prod`。清单模式不看 Host，但仍须保留 Origin；来源不允许通配或路径。
+
+不要靠 `X-Forwarded-Host`、`X-Forwarded-Proto` 或 `Forwarded` 修复，应用在任何模式都不读取这些转发头。
 
 ```bash
 docker compose -p roomusic-prod -f deploy/production/compose.yaml --env-file .env.prod config --quiet
 make prod
 make prod-status
 ```
+
+**启动后先初始化管理员，再开放公网反代**，避免未初始化窗口被他人抢先创建管理员。
 
 打开 `http://192.168.50.206:8090`，按页面提示创建管理员，再添加音乐目录 **`/music`**（或其子目录），不是宿主机路径。
 首次库为空，不迁移开发库。生产镜像已包含固定版本的 ffmpeg，启动时仍会进行 ALAC 派生自检。
@@ -125,7 +142,9 @@ docker image rm roomusic-prod-app:<旧sha> roomusic-prod-tools:<旧sha>
 
 ### 日后增加公网入口
 
-用户自行配置外部反代和 HTTPS 后，在 `.env.prod` 的 `ROOMUSIC_ALLOWED_ORIGINS` 末尾追加 `,https://<域名>`，然后 `make prod`。
+用户自行配置外部反代和 HTTPS 后，默认主机一致模式下，反代保留浏览器的 Host（含端口）与 Origin 即可直接用，不需要修改配置；
+若主动使用清单模式，则把完整公网来源加入清单后 `make prod`。
+
 局域网 IP 与公网域名分别使用自己的 Cookie。应用不信任 `X-Forwarded-*`；登录限速使用 TCP 对端来源，经反代的用户共享该来源。
 不要把应用端口另行发布到 IPv6；局域网真实来源地址仍须在上线演练中从另一台设备实测。
 本机 Docker 默认地址池可能覆盖 `192.168.50.0/24`；本配置使用固定子网，其他项目的地址池调整不在本文操作范围内。
