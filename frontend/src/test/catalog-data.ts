@@ -5,6 +5,7 @@ import {
   type AudioFormatDTO,
   type ComparedReleaseDTO,
   type ReleaseComparisonDTO,
+  type ReleaseCreditDTO,
   type ReleaseDetailDTO,
   type ReleaseEvidenceDTO,
   type ReleaseGroupDetailDTO,
@@ -143,7 +144,11 @@ function splitTracks(trackCount: number, mediumCount: number): number[] {
 }
 
 /** 曲目的个别字段；参数是介质与曲目在介质内的序号，都从 1 起。 */
-export type TrackOverrides = (medium: number, track: number) => Partial<ReleaseTrackDTO>;
+/** 合成数据里的署名：艺人引用（M5 ⑤）可以省略，省略时是空数组（艺人数据还在整理时接口给的就是空数组）。 */
+type CreditInput = Omit<ReleaseCreditDTO, "artist_refs"> & Partial<Pick<ReleaseCreditDTO, "artist_refs">>;
+const withRefs = (credits: readonly CreditInput[]): ReleaseCreditDTO[] => credits.map((credit) => ({ ...credit, artist_refs: credit.artist_refs ?? [] }));
+
+export type TrackOverrides = (medium: number, track: number) => Partial<Omit<ReleaseTrackDTO, "credits">> & { credits?: readonly CreditInput[] };
 
 /**
  * 按摘要里的介质数与曲目数造出介质与曲目：标题 “Track 介质-序号”（只有一张介质时是 “Track 序号”），时长已知且各不相同，
@@ -170,11 +175,13 @@ export function mediaOf(release: Pick<ReleaseSummaryDTO, "id" | "artist" | "medi
           position: track,
           source: `d${medium}-${label}.flac`,
           duration_seconds: 100 + track * 10 + medium,
-          credits: [
-            { role: "composer", name: "Sample Composer" },
-            { role: "conductor", name: "Sample Conductor" },
-          ],
           ...trackOverrides(medium, track),
+          credits: withRefs(
+            trackOverrides(medium, track).credits ?? [
+              { role: "composer", name: "Sample Composer" },
+              { role: "conductor", name: "Sample Conductor" },
+            ],
+          ),
         };
       }),
     };
@@ -182,7 +189,8 @@ export function mediaOf(release: Pick<ReleaseSummaryDTO, "id" | "artist" | "medi
 }
 
 /** 版本详情里摘要之外的字段，缺省取样本里完整的取值（有厂牌、编号、条码、版本说明与流派）。 */
-export type ReleaseDetailOverrides = Partial<Omit<ReleaseDetailDTO, keyof ReleaseSummaryDTO>> & Partial<Pick<ReleaseDetailDTO, "source_type" | "media_type">>;
+export type ReleaseDetailOverrides = Partial<Omit<ReleaseDetailDTO, keyof ReleaseSummaryDTO | "credits">> &
+  Partial<Pick<ReleaseDetailDTO, "source_type" | "media_type">> & { credits?: readonly CreditInput[] };
 
 /** 从摘要合成版本详情：介质与曲目按摘要的数量生成，署名只有专辑艺人，证据摘要取样本。 */
 export function releaseDetailOf(summary: ReleaseSummaryDTO, overrides: ReleaseDetailOverrides = {}): ReleaseDetailDTO {
@@ -195,11 +203,11 @@ export function releaseDetailOf(summary: ReleaseSummaryDTO, overrides: ReleaseDe
     label: sampleRelease.label,
     barcode: sampleRelease.barcode,
     media: mediaOf(summary),
-    credits: [{ role: "album_artist", name: summary.album_artist ?? summary.artist }],
     evidence: sampleRelease.evidence,
     revision: 1,
     corrected_fields: [],
     ...overrides,
+    credits: withRefs(overrides.credits ?? [{ role: "album_artist", name: summary.album_artist ?? summary.artist }]),
   };
 }
 

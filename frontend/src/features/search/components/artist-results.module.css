@@ -1,0 +1,39 @@
+.list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-2) var(--space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--space-1) 0;
+}
+
+.name {
+  overflow-wrap: anywhere;
+  font-size: var(--fs-15);
+}
+
+.meta,
+.note {
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* 匹配说明最多两行，超出用省略号；完整文字仍在 DOM 里。 */
+.note {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  color: var(--text-accent);
+  font-size: var(--fs-12);
+}

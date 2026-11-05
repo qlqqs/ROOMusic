@@ -2,11 +2,13 @@ import type { ApiResponse } from "../../../shared/api";
 import { apiRequest } from "../../../shared/api";
 import {
   decodeFavoriteAlbumsPage,
+  decodeFavoriteArtistsPage,
   decodeFavoriteLookup,
   decodeFavoriteQueue,
   decodeFavoriteToggle,
   decodeFavoriteTracksPage,
   type FavoriteAlbumsPageDTO,
+  type FavoriteArtistsPageDTO,
   type FavoriteKind,
   type FavoriteLookupDTO,
   type FavoriteQueueDTO,
@@ -34,16 +36,29 @@ export function fetchFavoriteAlbums(params: ListParams): Promise<ApiResponse<Fav
   return apiRequest({ method: "GET", path: `${favoritesPath}/albums?${listQuery(params)}`, signal: params.signal }, decodeFavoriteAlbumsPage);
 }
 
-const kindSegment: Record<FavoriteKind, string> = { track: "tracks", album: "albums" };
+/** 收藏的艺人，一页：合并过的按合并后的艺人显示一次，按收藏时间倒序。艺人数据还在整理时返回 503 artist_catalog_preparing。 */
+export function fetchFavoriteArtists(params: ListParams): Promise<ApiResponse<FavoriteArtistsPageDTO>> {
+  return apiRequest({ method: "GET", path: `${favoritesPath}/artists?${listQuery(params)}`, signal: params.signal }, decodeFavoriteArtistsPage);
+}
 
-/** 收藏（PUT）或取消收藏（DELETE）一首曲目或一张专辑。两者都是幂等的，不带请求体，也不需要幂等键。 */
+const kindSegment: Record<FavoriteKind, string> = { track: "tracks", album: "albums", artist: "artists" };
+
+/** 收藏（PUT）或取消收藏（DELETE）一首曲目、一张专辑或一位艺人。两者都是幂等的，不带请求体，也不需要幂等键。艺人数据还在整理时艺人的切换返回 409 artist_catalog_not_ready。 */
 export function setFavorite(kind: FavoriteKind, id: string, favorited: boolean): Promise<ApiResponse<FavoriteToggleDTO>> {
   return apiRequest({ method: favorited ? "PUT" : "DELETE", path: `${favoritesPath}/${kindSegment[kind]}/${encodeURIComponent(id)}` }, decodeFavoriteToggle);
 }
 
-/** 一批曲目与专辑的收藏状态，一次请求。 */
+/**
+ * 一批曲目与专辑的收藏状态，一次请求。艺人的状态另发一次（lookupArtistFavorites）：艺人数据还在整理时带艺人的请求整体失败，
+ * 不能连累曲目与专辑的心形。
+ */
 export function lookupFavorites(ids: { trackIds: readonly string[]; groupIds: readonly string[] }, signal?: AbortSignal): Promise<ApiResponse<FavoriteLookupDTO>> {
   return apiRequest({ method: "POST", path: `${favoritesPath}/lookup`, body: { track_ids: ids.trackIds, group_ids: ids.groupIds }, signal }, decodeFavoriteLookup);
+}
+
+/** 一批艺人的收藏状态（与曲目、专辑分开请求）。艺人数据还在整理时返回 503 artist_catalog_preparing。 */
+export function lookupArtistFavorites(artistIds: readonly string[], signal?: AbortSignal): Promise<ApiResponse<FavoriteLookupDTO>> {
+  return apiRequest({ method: "POST", path: `${favoritesPath}/lookup`, body: { track_ids: [], group_ids: [], artist_ids: artistIds }, signal }, decodeFavoriteLookup);
 }
 
 /** 收藏曲目的“播放全部”候选：先去掉文件缺失的，再按收藏顺序取前 10,000 首，并给出省略的数量。 */

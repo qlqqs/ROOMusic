@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { ArtistNames } from "../../catalog";
 import type { PlayerTrack } from "../engine/queue";
 import { usePlayer } from "../player-provider";
 import { PlayerArtwork } from "./player-artwork";
@@ -12,6 +13,8 @@ type PlayerBarProps = {
   renderCurrentTrackActions?: ((track: PlayerTrack) => ReactNode) | undefined;
 };
 
+const noRefs: readonly never[] = [];
+
 export function PlayerBar({ renderCurrentTrackActions }: PlayerBarProps = {}) {
   const { snapshot } = usePlayer();
   const track = snapshot.current?.track;
@@ -22,7 +25,7 @@ export function PlayerBar({ renderCurrentTrackActions }: PlayerBarProps = {}) {
       {track === undefined ? null : <><div className={styles.cover}><PlayerArtwork track={track} /></div><div className={styles.text}>
         <Link to="/now-playing" className={styles.title}>{track.title}</Link>
         {faultText === null ? null : <p className={styles.fault}>{faultText}</p>}
-        <p className={styles.subtitle}>{track.artist} — <Link to="/albums/$groupId" params={{ groupId: track.groupId }} search={{ release: track.releaseId }}>{track.albumTitle}</Link></p>
+        <p className={styles.subtitle}><ArtistNames text={track.artist} refs={track.artistRefs ?? noRefs} /> — <Link to="/albums/$groupId" params={{ groupId: track.groupId }} search={{ release: track.releaseId }}>{track.albumTitle}</Link></p>
       </div>{renderCurrentTrackActions === undefined ? null : <div className={styles.trackActions}>{renderCurrentTrackActions(track)}</div>}</>}
     </div>
     <div className={styles.center}><TransportControls compact /><div className={styles.desktop}><SeekControl /></div></div>

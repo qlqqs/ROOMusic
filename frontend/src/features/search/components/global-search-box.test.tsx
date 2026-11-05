@@ -239,7 +239,7 @@ describe("全局搜索建议框", () => {
     expect(popup.textContent).not.toContain("没有找到");
     await act(async () => response.resolve(sampleResponse("search/suggestions-empty")));
     await tick(1);
-    expect(popup.textContent).toContain("没有找到匹配的专辑或曲目");
+    expect(popup.textContent).toBe("没有找到匹配的内容。");
     expect(screen.queryAllByRole("option")).toHaveLength(0);
     expect(popup.getAttribute("aria-busy")).toBeNull();
   });

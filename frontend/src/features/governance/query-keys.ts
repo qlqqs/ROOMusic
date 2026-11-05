@@ -9,7 +9,7 @@ export const governanceKeys = {
   /** 操作记录的全部页：撤销与修改后前缀失效。 */
   operations: (generation: number) => viewerQueryKey(generation, "governance", "operations"),
   /** 操作记录的一页：发行与专辑筛选、页码与页大小都在键里。 */
-  operationPage: (generation: number, filter: { releaseId: string | null; groupId: string | null; page: number; pageSize: number }) =>
+  operationPage: (generation: number, filter: { releaseId: string | null; groupId: string | null; artistId: string | null; page: number; pageSize: number }) =>
     viewerQueryKey(generation, "governance", "operations", filter),
   /** 问题列表的全部页：核对与修改后前缀失效。 */
   issues: (generation: number) => viewerQueryKey(generation, "governance", "issues"),
@@ -26,6 +26,13 @@ export const governanceKeys = {
   claim: (generation: number, releaseId: string) => viewerQueryKey(generation, "governance", "claim", releaseId),
   /** 认领的预览：新版本与旧版本都在键里；在 all 前缀下，认领、撤销与别的修改之后随 governance 一起失效，页面重新读到最新的预览与令牌。 */
   claimPreview: (generation: number, releaseId: string, sourceId: string) => viewerQueryKey(generation, "governance", "claim-preview", releaseId, sourceId),
+  /** “可能是同一位”的候选的全部页：合并、忽略之后前缀失效（在 all 前缀下）。 */
+  artistCandidates: (generation: number) => viewerQueryKey(generation, "governance", "artist-candidates"),
+  artistCandidatePage: (generation: number, filter: { page: number; pageSize: number }) => viewerQueryKey(generation, "governance", "artist-candidates", filter),
+  /** 之前并入这位艺人的旧身份（拆开对话框的“拆回”）。在 all 前缀下，任何治理之后随之失效。 */
+  artistMergedSources: (generation: number, artistId: string) => viewerQueryKey(generation, "governance", "artist-merged-sources", artistId),
+  /** 拆开的预览：艺人、范围都在键里；在 all 前缀下，任何治理之后随之失效。 */
+  artistSplitPreview: (generation: number, artistId: string, scope: unknown) => viewerQueryKey(generation, "governance", "artist-split-preview", artistId, scope),
   /** 专辑详情里的“可能接替了……”提示。 */
   claimHints: (generation: number, releaseId: string) => viewerQueryKey(generation, "governance", "claim-hints", releaseId),
 };

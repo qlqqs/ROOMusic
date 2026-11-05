@@ -1,0 +1,43 @@
+/* 与专辑列表的筛选同一套外观（features/catalog 的 album-filters）。 */
+.form {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.input {
+  max-width: 36rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+}
+
+.select {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-height);
+}
+
+.select select {
+  min-height: var(--control-height);
+  padding: 4px 8px;
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--fs-14);
+}
+
+.select select:hover {
+  border-color: var(--color-neutral-800);
+}
+
+.select select:focus-visible {
+  border-color: var(--color-accent-700);
+  outline-offset: 0;
+}

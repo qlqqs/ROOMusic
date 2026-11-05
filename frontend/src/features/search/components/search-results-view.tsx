@@ -2,9 +2,11 @@ import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { Page } from "../../../shared/ui";
 import type { SearchTrackItemDTO } from "../api/decoders";
-import { useAlbumResults, useTrackResults } from "../hooks/use-search-results";
+import { useCatalogState } from "../../catalog";
+import { useAlbumResults, useArtistResults, useTrackResults } from "../hooks/use-search-results";
 import type { SearchPageSearch } from "../search-params";
 import { AlbumResults } from "./album-results";
+import { ArtistResults } from "./artist-results";
 import { GlobalSearchBox } from "./global-search-box";
 import { ResultSection } from "./result-section";
 import { TrackResults } from "./track-results";
@@ -25,11 +27,13 @@ type SearchResultsViewProps = {
 const COMPACT_TITLE_LENGTH = 40;
 
 /**
- * 搜索结果页：专辑、曲目两栏，各自加载、失败、重试与分页（只改自己那一栏的页码）。⑤ 的艺人栏放在两栏之前。
+ * 搜索结果页：艺人（就绪时）、专辑、曲目各一栏，各自加载、失败、重试与分页（只改自己那一栏的页码）。
  * 页面里的搜索框只在窄屏出现（宽屏用侧栏的那一个）；没有查询词时任何宽度都显示它。
  */
 export function SearchResultsView({ search, renderTrackActions, renderTrackRowsScope, tracksNotice }: SearchResultsViewProps) {
   const q = search.q;
+  // 艺人栏只在艺人数据就绪时出现；整理中不出现，也不说明。
+  const artistsReady = useCatalogState().data?.artists_state === "ready";
   const title = q === undefined ? "搜索" : `搜索“${q}”`;
   return (
     <Page title={title} compactTitle={title.length > COMPACT_TITLE_LENGTH}>
@@ -38,11 +42,27 @@ export function SearchResultsView({ search, renderTrackActions, renderTrackRowsS
       </div>
       {q === undefined ? null : (
         <div className={styles.sections}>
+          {artistsReady ? <ArtistSection search={search} q={q} /> : null}
           <AlbumSection search={search} q={q} />
           <TrackSection search={search} q={q} renderTrackActions={renderTrackActions} renderRowsScope={renderTrackRowsScope} notice={tracksNotice} />
         </div>
       )}
     </Page>
+  );
+}
+
+function ArtistSection({ search, q }: { search: SearchPageSearch; q: string }) {
+  const artists = useArtistResults(q, search.artists_page ?? 1, true);
+  return (
+    <ResultSection
+      title="艺人"
+      unit="位"
+      query={artists}
+      emptyText="没有找到匹配的艺人。"
+      renderPageLink={(target, props) => <Link to="/search" search={{ ...search, artists_page: target > 1 ? target : undefined }} {...props} />}
+    >
+      {(items) => <ArtistResults items={items} />}
+    </ResultSection>
   );
 }
 

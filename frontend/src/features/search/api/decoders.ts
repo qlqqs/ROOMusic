@@ -1,10 +1,11 @@
 import { decode as d } from "../../../shared/api";
 import { utf8ByteLength } from "../../auth/account-rules";
+import { artistSummaryDecoder } from "../../catalog/api/artist-summary";
 import { catalogStateDecoder, releaseGroupSummaryDecoder } from "../../catalog/api/decoders";
 import { trackSummaryDecoder, type TrackSummaryDTO } from "../../catalog/api/track-summary";
 
 // 全局搜索（GET /search/suggestions 与 GET /search）的响应。上限与后端合同一致，超界的响应整体拒绝，而不是截断后显示。
-// 合同见任务 11-04-classical-m5-search 的 design.md §9。④ 只有专辑与曲目两类；艺人栏随 ⑤ 加入，届时在这里扩展。
+// 合同见任务 11-04-classical-m5-search 的 design.md §9。专辑与曲目两类总在；艺人一类（M5 ⑤）只在艺人数据就绪时出现。
 
 /** 每类建议最多几条（limit 的上限）。 */
 export const MAX_SUGGESTION_LIMIT = 8;
@@ -74,10 +75,11 @@ const trackItemDecoder: d.Decoder<TrackSummaryDTO & { match: d.Infer<typeof matc
   match: trackMatchDecoder(input, path).match,
 });
 
-// ④ 没有艺人结果：建议里的 artists 总是空的。⑤ 换成艺人摘要的解码器。
-const noArtistItem: d.Decoder<never> = (_input, path) => {
-  throw new d.DecodeError(path, "④ 没有艺人结果");
-};
+// 艺人结果（M5 ⑤）：艺人摘要加命中说明；按别名找到时 match.field 是 artist_alias，alias 是匹配到的别名。
+const artistItemDecoder = d.object({
+  artist: artistSummaryDecoder,
+  match: matchDecoder,
+});
 
 // 搜索专用的分页：total 不超过 1,000；total_relation 为 gte 时 total 是下界（固定为 1,000），不能据此算末页，翻页只看 has_more。
 // 计数与页查询来自同一快照，三者不能互相矛盾：
@@ -113,7 +115,7 @@ const suggestionsShape = d.object({
   query: utf8String(MAX_QUERY_BYTES),
   catalog_state: catalogStateDecoder,
   available_types: d.array(d.oneOf(searchTypes), { max: searchTypes.length }),
-  artists: suggestionGroup(noArtistItem),
+  artists: suggestionGroup(artistItemDecoder),
   albums: suggestionGroup(albumItemDecoder),
   tracks: suggestionGroup(trackItemDecoder),
 });
@@ -125,6 +127,7 @@ const suggestionsDecoder: d.Decoder<d.Infer<typeof suggestionsShape>> = (input, 
   if (new Set(types).size !== types.length) throw new d.DecodeError(typesPath, "类别不能重复");
   if (!types.includes("albums") || !types.includes("tracks")) throw new d.DecodeError(typesPath, "应包含专辑与曲目");
   if (types.includes("artists") !== (suggestions.catalog_state.artists_state === "ready")) throw new d.DecodeError(typesPath, "与艺人数据的状态不一致");
+  if (!types.includes("artists") && suggestions.artists.items.length > 0) throw new d.DecodeError(`${path}.artists`, "艺人不可搜索时不应有艺人建议");
   return suggestions;
 };
 
@@ -137,18 +140,22 @@ const resultsDecoder = <const T extends SearchType, I>(type: T, item: d.Decoder<
     pagination: searchPaginationDecoder,
   });
 
+const artistResultsDecoder = resultsDecoder("artists", artistItemDecoder);
 const albumResultsDecoder = resultsDecoder("albums", albumItemDecoder);
 const trackResultsDecoder = resultsDecoder("tracks", trackItemDecoder);
 
 export const decodeSearchSuggestions = d.defineDecoder(suggestionsDecoder);
+export const decodeArtistResults = d.defineDecoder(artistResultsDecoder);
 export const decodeAlbumResults = d.defineDecoder(albumResultsDecoder);
 export const decodeTrackResults = d.defineDecoder(trackResultsDecoder);
 export const decodeSearchPagination = d.defineDecoder(searchPaginationDecoder);
 
 export type SearchMatchDTO = d.Infer<typeof matchDecoder>;
+export type SearchArtistItemDTO = d.Infer<typeof artistItemDecoder>;
 export type SearchAlbumItemDTO = d.Infer<typeof albumItemDecoder>;
 export type SearchTrackItemDTO = d.Infer<typeof trackItemDecoder>;
 export type SearchPaginationDTO = d.Infer<typeof searchPaginationDecoder>;
 export type SearchSuggestionsDTO = d.Infer<typeof suggestionsDecoder>;
+export type ArtistResultsDTO = d.Infer<typeof artistResultsDecoder>;
 export type AlbumResultsDTO = d.Infer<typeof albumResultsDecoder>;
 export type TrackResultsDTO = d.Infer<typeof trackResultsDecoder>;

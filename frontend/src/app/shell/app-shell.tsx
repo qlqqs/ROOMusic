@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type MouseEvent, type ReactNode } f
 import { useViewerScope } from "../../features/auth";
 import { usePlayerSelector, PlayerBar, PlayerAnnouncement } from "../../features/player";
 import { GLOBAL_SEARCH_INPUT_SELECTOR, GlobalSearchBox } from "../../features/search";
+import { ArtistLinksScope } from "../../features/catalog";
 import { Button, ModalDialog } from "../../shared/ui";
 import { CurrentTrackFavorite } from "../player-personal-actions";
 import type { PlayerTrack } from "../../features/player";
@@ -98,6 +99,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
+    // 艺人名能不能做成链接：整个已登录界面只读一次目录状态（主内容与播放器里的艺人名都在范围里）。
+    <ArtistLinksScope>
     <div ref={frameRef} className={styles.frame} data-player={hasPlayer ? "visible" : undefined}>
       <PlayerAnnouncement />
       <a href="#main" className={styles.skipLink} onClick={skipToMain}>
@@ -135,5 +138,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </ModalDialog>
     </div>
+    </ArtistLinksScope>
   );
 }

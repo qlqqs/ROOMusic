@@ -76,7 +76,7 @@ function setup() {
     favorited = next;
   };
   const lookup = () => {
-    const body: FavoriteLookupDTO = { revision, tracks: [{ track_id: trackId, favorited }], albums: [] };
+    const body: FavoriteLookupDTO = { revision, tracks: [{ track_id: trackId, favorited }], albums: [], artists: [] };
     return jsonResponse(200, body);
   };
   const commit = (next: boolean) => {

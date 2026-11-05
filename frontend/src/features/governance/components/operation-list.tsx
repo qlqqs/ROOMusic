@@ -10,7 +10,7 @@ type OperationListProps = {
   /** 表格的可访问名称。 */
   caption: string;
   items: readonly OperationItemDTO[];
-  /** 是否有“专辑”列：某个版本自己的记录里专辑就是这个版本，不重复。 */
+  /** 是否有“对象”列（专辑或艺人）：某个版本自己的记录里专辑就是这个版本，不重复。 */
   showRelease: boolean;
   /** 点“撤销”：由调用方打开确认对话框，列表不直接发请求。 */
   onRevert: (item: OperationItemDTO) => void;
@@ -21,7 +21,17 @@ type OperationListProps = {
  * 已不可见的只写标题，不给打不开的链接；目标已不存在时说明这一点。
  */
 function TargetCell({ item }: { item: OperationItemDTO }) {
-  const { release, album } = item;
+  const { release, album, artist } = item;
+  // 目标是艺人的记录（M5 ⑤）：链接到艺人页（已经合并进别的艺人时，艺人页会带到现在的艺人）；没有可显示的曲目时只写名字。
+  if (artist !== null) {
+    return artist.visible || artist.redirect_artist_id !== null ? (
+      <Link to="/artists/$artistId" params={{ artistId: artist.id }}>
+        {artist.name}
+      </Link>
+    ) : (
+      <>{artist.name}</>
+    );
+  }
   if (release === null && album === null) return <span className={styles.muted}>专辑已不存在</span>;
   const target = release ?? album;
   if (target === null) return null;
@@ -78,7 +88,7 @@ function ChangeCell({ item }: { item: OperationItemDTO }) {
  */
 export function OperationList({ caption, items, showRelease, onRevert }: OperationListProps) {
   const columns = useMemo((): Column<OperationItemDTO>[] => {
-    const release: Column<OperationItemDTO>[] = showRelease ? [{ id: "release", header: "专辑", cell: (item) => <TargetCell item={item} /> }] : [];
+    const release: Column<OperationItemDTO>[] = showRelease ? [{ id: "release", header: "对象", cell: (item) => <TargetCell item={item} /> }] : [];
     return [
       { id: "time", header: "时间", rowHeader: true, cell: (item) => <TimeCell value={item.created_at} /> },
       { id: "actor", header: "操作者", cell: (item) => <span className={styles.actor}>{item.actor.username}</span> },

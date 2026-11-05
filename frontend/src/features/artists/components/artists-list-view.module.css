@@ -1,0 +1,85 @@
+.initials {
+  margin-block: var(--space-4);
+}
+
+.initialList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-variant-numeric: lining-nums;
+}
+
+/* 每个字母至少是一个控件大小的命中区；当前分组用金色轻底加下划线，不只靠颜色。 */
+.initial {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--control-height);
+  min-height: var(--control-height);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-14);
+}
+
+.initial[aria-current="page"] {
+  background: var(--color-selected);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.results {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.results[aria-busy="true"] {
+  opacity: 0.6;
+}
+
+.groups {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.group {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.groupHeading {
+  font-size: var(--fs-17);
+  font-variant-numeric: lining-nums;
+}
+
+.list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-2) var(--space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--space-1) 0;
+}
+
+.name {
+  overflow-wrap: anywhere;
+  font-size: var(--fs-15);
+}
+
+.meta {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  overflow-wrap: anywhere;
+  font-variant-numeric: lining-nums tabular-nums;
+}

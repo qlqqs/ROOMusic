@@ -523,6 +523,8 @@ function invertChanges(changes: OperationChangesDTO): OperationChangesDTO {
   if (changes.kind === "release_issue_review") return { kind: "release_issue_review", issue: changes.issue, from: changes.to, to: changes.from };
   // 认领的撤销记录只带来源（没有 moved、skipped 与认领之前的组）。
   if (changes.kind === "release_claim") return { kind: "release_claim", source: changes.source };
+  // 艺人的治理（M5 ⑤）没有撤销，这里不会遇到；原样返回只为让类型完整。
+  if (changes.kind === "artist_merge" || changes.kind === "artist_split" || changes.kind === "artist_rename" || changes.kind === "artist_candidate_ignore") return changes;
   return { kind: "release_correction", fields: changes.fields.map((field) => ({ field: field.field, before: field.after, after: field.before })) };
 }
 
@@ -535,14 +537,14 @@ function itemOf(data: GovernanceData, record: OperationRecord): OperationItemDTO
     // 专辑没有可见成员时标题取记录里当时的专辑名。
     const fallback = record.changes.kind === "release_group_default" ? record.changes.to.group_title : "";
     const album = { id: groupId, title: albumTitleOf(data.catalog, groupId) || fallback, visible };
-    return { ...common, release: null, album, revertible: notReverted && visible && groupStateOf(data, groupId).revision === record.resultRevision };
+    return { ...common, release: null, album, artist: null, revertible: notReverted && visible && groupStateOf(data, groupId).revision === record.resultRevision };
   }
   const releaseId = record.target.id;
   const detail = releaseDetailFor(data.catalog, releaseId);
   const groupId = groupIdOf(data.catalog, releaseId);
   const state = data.releases.get(releaseId);
   const release = detail === undefined || groupId === undefined ? null : { id: releaseId, title: detail.title, group_id: groupId, visible: true };
-  return { ...common, release, album: null, revertible: notReverted && release !== null && state !== undefined && state.revision === record.resultRevision };
+  return { ...common, release, album: null, artist: null, revertible: notReverted && release !== null && state !== undefined && state.revision === record.resultRevision };
 }
 
 export function respondToOperations(data: GovernanceData, query: URLSearchParams): ApiResult {

@@ -1,6 +1,13 @@
 import type { ApiResponse } from "../../../shared/api";
 import { apiRequest } from "../../../shared/api";
 import {
+  decodeArtistCandidatePage,
+  decodeArtistIgnoreResult,
+  decodeArtistMergeResult,
+  decodeArtistMergedSources,
+  decodeArtistRenameResult,
+  decodeArtistSplitPreview,
+  decodeArtistSplitResult,
   decodeClaimDetail,
   decodeClaimHints,
   decodeClaimPage,
@@ -15,6 +22,13 @@ import {
   decodeOperationPage,
   decodeReleaseIssues,
   decodeRevertResult,
+  type ArtistCandidatePageDTO,
+  type ArtistIgnoreResultDTO,
+  type ArtistMergeResultDTO,
+  type ArtistMergedSourceDTO,
+  type ArtistRenameResultDTO,
+  type ArtistSplitPreviewDTO,
+  type ArtistSplitResultDTO,
   type ClaimDetailDTO,
   type ClaimHintsDTO,
   type ClaimPageDTO,
@@ -95,6 +109,8 @@ export type OperationListParams = {
   releaseId?: string | undefined;
   /** 只看这张专辑的记录（专辑目标的记录，如默认版本）；与 releaseId 同时给出时取两者的并集。 */
   groupId?: string | undefined;
+  /** 只看这位艺人的记录（M5 ⑤：它作为目标、被并入或被恢复的都算）；与上面两项同时给出时取并集。 */
+  artistId?: string | undefined;
   signal?: AbortSignal | undefined;
 };
 
@@ -103,6 +119,7 @@ export function fetchOperations(params: OperationListParams): Promise<ApiRespons
   const query = new URLSearchParams({ page: String(params.page), page_size: String(params.pageSize) });
   if (params.releaseId !== undefined) query.set("release_id", params.releaseId);
   if (params.groupId !== undefined) query.set("group_id", params.groupId);
+  if (params.artistId !== undefined) query.set("artist_id", params.artistId);
   return apiRequest({ method: "GET", path: `/api/v1/operations?${query}`, signal: params.signal }, decodeOperationPage);
 }
 
@@ -200,4 +217,94 @@ export function claimRelease(releaseId: string, body: ClaimBody, idempotencyKey:
     },
     decodeClaimResult,
   );
+}
+
+// ---- 艺人的治理（M5 ⑤，管理员）----
+// 写接口都要求幂等键与同源请求；预期版本号来自页面读到的艺人详情。艺人数据还在整理时新的写操作返回 409 artist_catalog_not_ready。
+
+/** 把 source 并入路径里的艺人（target）：source 的名字变成 target 的别名。双方都带预期版本号。 */
+export function mergeArtist(
+  targetId: string,
+  body: { expectedRevision: number; sourceId: string; sourceExpectedRevision: number },
+  idempotencyKey: string,
+): Promise<ApiResponse<ArtistMergeResultDTO>> {
+  return apiRequest(
+    {
+      method: "POST",
+      path: `/api/v1/artists/${targetId}/merge`,
+      body: { expected_revision: body.expectedRevision, source_artist_id: body.sourceId, source_expected_revision: body.sourceExpectedRevision },
+      idempotencyKey,
+    },
+    decodeArtistMergeResult,
+  );
+}
+
+/** 之前并入这位艺人、现在可以拆回原身份的艺人（管理员只读）。 */
+export function fetchArtistMergedSources(artistId: string, signal?: AbortSignal): Promise<ApiResponse<{ items: ArtistMergedSourceDTO[] }>> {
+  return apiRequest({ method: "GET", path: `/api/v1/artists/${artistId}/merged-sources`, signal }, decodeArtistMergedSources);
+}
+
+/** 拆开的范围：别名整体拆回，或在选中的专辑上把这些名字分给另一位艺人。 */
+export type ArtistSplitScope = { mode: "aliases"; nameKeyIds: readonly string[] } | { mode: "albums"; groupIds: readonly string[]; nameKeyIds: readonly string[] };
+
+function scopeBody(scope: ArtistSplitScope) {
+  return scope.mode === "aliases" ? { mode: "aliases", name_key_ids: scope.nameKeyIds } : { mode: "albums", group_ids: scope.groupIds, name_key_ids: scope.nameKeyIds };
+}
+
+/** 拆开前的预览（只读，不写操作记录）：会动到多少版本与曲目，以及提交时要带回的依据。 */
+export function previewArtistSplit(artistId: string, scope: ArtistSplitScope, signal?: AbortSignal): Promise<ApiResponse<ArtistSplitPreviewDTO>> {
+  return apiRequest({ method: "POST", path: `/api/v1/artists/${artistId}/split-preview`, body: scopeBody(scope), signal }, decodeArtistSplitPreview);
+}
+
+/** 拆给谁：新的艺人（可以给一个显示名），或恢复之前合并进来的那位（它现在指向这位艺人）。 */
+export type ArtistSplitTarget = { kind: "new"; displayName?: string | undefined } | { kind: "restore"; artistId: string; expectedRevision: number };
+
+export function splitArtist(
+  artistId: string,
+  body: { expectedRevision: number; basis: string; scope: ArtistSplitScope; target: ArtistSplitTarget },
+  idempotencyKey: string,
+): Promise<ApiResponse<ArtistSplitResultDTO>> {
+  const target =
+    body.target.kind === "new"
+      ? { kind: "new", ...(body.target.displayName === undefined ? {} : { display_name: body.target.displayName }) }
+      : { kind: "restore", artist_id: body.target.artistId, expected_revision: body.target.expectedRevision };
+  return apiRequest(
+    { method: "POST", path: `/api/v1/artists/${artistId}/split`, body: { ...scopeBody(body.scope), expected_revision: body.expectedRevision, basis: body.basis, target }, idempotencyKey },
+    decodeArtistSplitResult,
+  );
+}
+
+/** 改主显示名（set），或改回按最常见的写法自动显示（auto）。 */
+export function renameArtist(
+  artistId: string,
+  body: { expectedRevision: number; name: { mode: "set"; name: string } | { mode: "auto" } },
+  idempotencyKey: string,
+): Promise<ApiResponse<ArtistRenameResultDTO>> {
+  return apiRequest(
+    { method: "PATCH", path: `/api/v1/artists/${artistId}/name`, body: { expected_revision: body.expectedRevision, ...body.name }, idempotencyKey },
+    decodeArtistRenameResult,
+  );
+}
+
+/** 忽略（ignored=true）或恢复（false）一条“可能是同一位”的提示：按看到的名字键对记住。 */
+export function ignoreArtistCandidate(
+  artistId: string,
+  body: { expectedRevision: number; otherId: string; otherExpectedRevision: number; keyPairs: readonly { left_key_id: string; right_key_id: string }[]; ignored: boolean },
+  idempotencyKey: string,
+): Promise<ApiResponse<ArtistIgnoreResultDTO>> {
+  return apiRequest(
+    {
+      method: "POST",
+      path: `/api/v1/artists/${artistId}/candidate-ignore`,
+      body: { expected_revision: body.expectedRevision, other_artist_id: body.otherId, other_expected_revision: body.otherExpectedRevision, key_pairs: body.keyPairs, ignored: body.ignored },
+      idempotencyKey,
+    },
+    decodeArtistIgnoreResult,
+  );
+}
+
+/** “可能是同一位”的候选，一页（管理员）：按证据数降序。艺人数据还在整理时返回 503 artist_catalog_preparing。 */
+export function fetchArtistCandidates(params: { page: number; pageSize: number; signal?: AbortSignal | undefined }): Promise<ApiResponse<ArtistCandidatePageDTO>> {
+  const query = new URLSearchParams({ page: String(params.page), page_size: String(params.pageSize) });
+  return apiRequest({ method: "GET", path: `/api/v1/artist-candidates?${query}`, signal: params.signal }, decodeArtistCandidatePage);
 }

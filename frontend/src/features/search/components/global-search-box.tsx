@@ -3,8 +3,8 @@ import { Search } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { cx } from "../../../shared/lib/class-names";
 import { VisuallyHidden } from "../../../shared/ui";
-import { albumArtistOf } from "../../catalog";
-import type { SearchAlbumItemDTO, SearchTrackItemDTO } from "../api/decoders";
+import { albumArtistOf, artistMetaText } from "../../catalog";
+import type { SearchAlbumItemDTO, SearchArtistItemDTO, SearchTrackItemDTO } from "../api/decoders";
 import { useSearchSuggestions } from "../hooks/use-search-suggestions";
 import { matchNote } from "../match-note";
 import { draftQueryOf, searchPageFor } from "../search-params";
@@ -18,6 +18,7 @@ export const SUGGESTION_DEBOUNCE_MS = 250;
 export const GLOBAL_SEARCH_INPUT_SELECTOR = "input[data-global-search]";
 
 type Option =
+  | { kind: "artist"; item: SearchArtistItemDTO }
   | { kind: "album"; item: SearchAlbumItemDTO }
   | { kind: "track"; item: SearchTrackItemDTO }
   | { kind: "all"; q: string };
@@ -42,7 +43,7 @@ function popupPositionOf(anchor: HTMLElement): PopupPosition {
 }
 
 /**
- * 全局搜索框（ARIA 组合框）：输入稍停（250 ms，输入法组合中不查询）在下方给出专辑与曲目各前几条建议，最后一项是“查看全部结果”。
+ * 全局搜索框（ARIA 组合框）：输入稍停（250 ms，输入法组合中不查询）在下方给出艺人（就绪时）、专辑与曲目各前几条建议，最后一项是“查看全部结果”。
  * 上下键在建议间移动，Enter 打开选中的建议、没有选中时进入结果页，Esc 收起建议；焦点始终留在输入框里。
  * 浮层用 fixed 定位，侧栏的滚动区不会把它裁掉，窄屏菜单（模态对话框）里同样可用。
  */
@@ -86,10 +87,11 @@ export function GlobalSearchBox({ currentQuery, onNavigate, className }: GlobalS
     data === undefined
       ? []
       : [
+          ...data.artists.items.map((item): Option => ({ kind: "artist", item })),
           ...data.albums.items.map((item): Option => ({ kind: "album", item })),
           ...data.tracks.items.map((item): Option => ({ kind: "track", item })),
         ];
-  const hasAny = options.length > 0 || data?.albums.has_more === true || data?.tracks.has_more === true;
+  const hasAny = options.length > 0 || data?.artists.has_more === true || data?.albums.has_more === true || data?.tracks.has_more === true;
   if (readyQuery !== null && (hasAny || suggestions.isError || !settled)) options.push({ kind: "all", q: readyQuery });
   const activeIndex = active < options.length ? active : -1;
 
@@ -130,7 +132,9 @@ export function GlobalSearchBox({ currentQuery, onNavigate, className }: GlobalS
       return;
     }
     close();
-    if (option.kind === "album") {
+    if (option.kind === "artist") {
+      void navigate({ to: "/artists/$artistId", params: { artistId: option.item.artist.id } });
+    } else if (option.kind === "album") {
       const { group, matched_release_id: releaseId } = option.item;
       void navigate({ to: "/albums/$groupId", params: { groupId: group.id }, search: { release: releaseId === group.representative.id ? undefined : releaseId } });
     } else {
@@ -165,6 +169,7 @@ export function GlobalSearchBox({ currentQuery, onNavigate, className }: GlobalS
   }
 
   const optionId = (index: number) => `${listboxId}-${index}`;
+  const artistCount = data?.artists.items.length ?? 0;
   const albumCount = data?.albums.items.length ?? 0;
 
   function renderOption(option: Option, index: number): ReactNode {
@@ -183,6 +188,18 @@ export function GlobalSearchBox({ currentQuery, onNavigate, className }: GlobalS
         <div key="all" {...common} className={cx(common.className, styles.all)}>
           <Search size={16} aria-hidden="true" />
           <span className={styles.primary}>查看“{option.q}”的全部结果</span>
+        </div>
+      );
+    }
+    if (option.kind === "artist") {
+      const { artist } = option.item;
+      const meta = artistMetaText(artist);
+      const note = matchNote(option.item.match, [artist.name]);
+      return (
+        <div key={`artist-${artist.id}`} {...common}>
+          <span className={styles.primary}>{artist.name}</span>
+          {meta === "" ? null : <span className={styles.secondary}>{meta}</span>}
+          {note === null ? null : <span className={styles.note}>{note}</span>}
         </div>
       );
     }
@@ -213,17 +230,18 @@ export function GlobalSearchBox({ currentQuery, onNavigate, className }: GlobalS
     );
   }
 
-  const albumOptions = options.slice(0, albumCount);
+  const artistOptions = options.slice(0, artistCount);
+  const albumOptions = options.slice(artistCount, artistCount + albumCount);
   const trackOptions = options.filter((option) => option.kind === "track");
   const allOption = options.at(-1)?.kind === "all" ? options.at(-1) : undefined;
   let statusText = "";
   if (showPopup) {
     if (suggestions.isError) statusText = "暂时无法给出建议。";
     else if (!settled && options.length <= 1) statusText = "正在查找…";
-    else if (settled && !hasAny) statusText = "没有找到匹配的专辑或曲目。";
+    else if (settled && !hasAny) statusText = "没有找到匹配的内容。";
   }
   // 读屏只在建议稳定后播报一次（条数或没有结果），输入过程中不逐字打扰。
-  const announced = !showPopup ? "" : suggestions.isError ? statusText : !settled ? "" : hasAny ? `${albumOptions.length + trackOptions.length} 条建议` : statusText;
+  const announced = !showPopup ? "" : suggestions.isError ? statusText : !settled ? "" : hasAny ? `${artistOptions.length + albumOptions.length + trackOptions.length} 条建议` : statusText;
 
   return (
     <div
@@ -298,8 +316,9 @@ export function GlobalSearchBox({ currentQuery, onNavigate, className }: GlobalS
             {statusText}
           </p>
         )}
-        {albumOptions.length === 0 ? null : <OptionGroup label="专辑">{albumOptions.map((option, index) => renderOption(option, index))}</OptionGroup>}
-        {trackOptions.length === 0 ? null : <OptionGroup label="曲目">{trackOptions.map((option, index) => renderOption(option, albumCount + index))}</OptionGroup>}
+        {artistOptions.length === 0 ? null : <OptionGroup label="艺人">{artistOptions.map((option, index) => renderOption(option, index))}</OptionGroup>}
+        {albumOptions.length === 0 ? null : <OptionGroup label="专辑">{albumOptions.map((option, index) => renderOption(option, artistCount + index))}</OptionGroup>}
+        {trackOptions.length === 0 ? null : <OptionGroup label="曲目">{trackOptions.map((option, index) => renderOption(option, artistCount + albumCount + index))}</OptionGroup>}
         {allOption === undefined ? null : renderOption(allOption, options.length - 1)}
       </div>
     </div>

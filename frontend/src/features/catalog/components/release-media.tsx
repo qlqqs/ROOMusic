@@ -2,9 +2,11 @@ import { AudioLines } from "lucide-react";
 import { memo, useEffect, useId, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { formatCount } from "../../../shared/lib/number";
 import { StatusTag, VisuallyHidden } from "../../../shared/ui";
-import type { ReleaseMediumDTO, ReleaseTrackDTO } from "../api/decoders";
+import type { ReleaseCreditDTO, ReleaseMediumDTO, ReleaseTrackDTO } from "../api/decoders";
 import { formatDuration } from "../../../shared/lib/duration";
-import { creditsText, mediumHeading } from "../format";
+import { mediumHeading } from "../format";
+import { creditRoleLabel } from "../labels";
+import { ArtistNames } from "./artist-names";
 import styles from "./release-media.module.css";
 
 /** 一次定位请求：token 区分不同的到达（同一首曲目在后退、前进时会以新的 token 再来一次）。 */
@@ -45,7 +47,7 @@ const TrackRow = memo(function TrackRow({
 }: Pick<ReleaseMediaProps, "albumArtist" | "renderTrackActions"> & { track: ReleaseTrackDTO; marker: string | undefined; focusToken: string | undefined; highlighted: boolean }) {
   const title = track.title.trim() === "" ? "（无标题）" : track.title;
   const artist = track.artist.trim();
-  const credits = creditsText(track.credits);
+  const credits = track.credits;
   const isCue = track.source_kind === "cue_virtual" || track.cue !== null;
   const rowRef = useRef<HTMLLIElement>(null);
   useEffect(() => {
@@ -70,8 +72,16 @@ const TrackRow = memo(function TrackRow({
           {marker === undefined ? null : <StatusTag icon={<AudioLines size={12} />}>{marker}</StatusTag>}
           {isCue ? <StatusTag>CUE 分轨</StatusTag> : null}
         </p>
-        {artist === "" || artist === albumArtist ? null : <p className={styles.secondary}>{artist}</p>}
-        {credits === "" ? null : <p className={styles.secondary}>{credits}</p>}
+        {artist === "" || artist === albumArtist ? null : (
+          <p className={styles.secondary}>
+            <ArtistNames text={artist} refs={track.artist_refs} />
+          </p>
+        )}
+        {credits.length === 0 ? null : (
+          <p className={styles.secondary}>
+            <CreditsLine credits={credits} />
+          </p>
+        )}
       </div>
       <span className={styles.duration}>
         {track.duration_seconds === null ? (
@@ -87,6 +97,32 @@ const TrackRow = memo(function TrackRow({
     </li>
   );
 });
+
+/** 曲目行里的署名：“作曲：甲、乙；指挥：丙”，角色与姓名都保持接口给出的顺序；艺人就绪时每个名字是链接。 */
+function CreditsLine({ credits }: { credits: readonly ReleaseCreditDTO[] }) {
+  const groups = new Map<string, ReleaseCreditDTO[]>();
+  for (const credit of credits) {
+    const list = groups.get(credit.role);
+    if (list === undefined) groups.set(credit.role, [credit]);
+    else list.push(credit);
+  }
+  return (
+    <>
+      {Array.from(groups, ([role, entries], groupIndex) => (
+        <span key={role}>
+          {groupIndex === 0 ? null : "；"}
+          {creditRoleLabel(role)}：
+          {entries.map((credit, index) => (
+            <span key={`${credit.name}:${index}`}>
+              {index === 0 ? null : "、"}
+              <ArtistNames text={credit.name} refs={credit.artist_refs} />
+            </span>
+          ))}
+        </span>
+      ))}
+    </>
+  );
+}
 
 // 跳到某一张介质：把标题滚到视野里并聚焦（读屏随之读出“第 N 张”），不改地址、不增加历史项。
 function jumpTo(event: MouseEvent<HTMLAnchorElement>, headingId: string) {

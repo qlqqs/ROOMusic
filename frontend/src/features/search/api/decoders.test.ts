@@ -49,7 +49,7 @@ describe("搜索响应 decoder", () => {
   it.each(["artists", "albums", "tracks"])("建议 %s 的 items/has_more 必传", (kind) => {
     for (const field of ["items", "has_more"]) expect(() => decodeSearchSuggestions(without(suggestions, [kind, field]))).toThrow(d.DecodeError);
   });
-  it("④拒绝艺人结果", () => {
+  it("拒绝缺少摘要和匹配字段的艺人建议", () => {
     expect(() => decodeSearchSuggestions(withValue(suggestions, ["artists", "items"], [{}]))).toThrow(d.DecodeError);
   });
   it.each([
@@ -62,7 +62,7 @@ describe("搜索响应 decoder", () => {
     ["不可用艺人却被列为可搜索", ["artists", "albums", "tracks"]],
     ["重复类别", ["albums", "albums"]],
   ])("拒绝建议能力非法组合：%s", (_label, available) => {
-    expect(() => decodeSearchSuggestions(withValue(suggestions, ["available_types"], available))).toThrow(d.DecodeError);
+    expect(() => decodeSearchSuggestions(withValue(withValue(suggestions, ["catalog_state", "artists_state"], "unavailable"), ["available_types"], available))).toThrow(d.DecodeError);
   });
 });
 

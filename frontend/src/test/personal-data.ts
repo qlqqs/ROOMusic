@@ -92,7 +92,7 @@ export function personalTracksOf(catalog: CatalogData): TrackSummaryDTO[] {
     for (const medium of detail.media) {
       for (const track of medium.tracks) {
         tracks.set(track.id, {
-          track_id: track.id, title: track.title, artist: track.artist, group_id: placement.groupId,
+          track_id: track.id, title: track.title, artist: track.artist, artist_refs: track.artist_refs, group_id: placement.groupId,
           present: !catalog.hiddenReleases.has(releaseId), duration_seconds: track.duration_seconds, release: summary,
           source: { source_kind: track.source_kind, codec: track.codec, bit_depth: track.bit_depth, sample_rate: track.sample_rate, channels: track.channels, bitrate: track.bitrate },
         });
@@ -413,7 +413,7 @@ function respond(data: PersonalData, userId: string | null, request: PersonalReq
     const ids = trackIds(body.track_ids, true);
     const groups = body.group_ids === undefined ? [] : body.group_ids;
     if (ids === null || !Array.isArray(groups) || groups.length > 1_000 || !groups.every(uuid)) return invalid();
-    return success({ revision: user.revision, tracks: [...new Set(ids)].map((id) => ({ track_id: id, favorited: user.tracks.has(id) })), albums: [...new Set(groups.map((id: string) => id.toLowerCase()))].map((id) => ({ group_id: id, favorited: user.albums.has(id) })) });
+    return success({ revision: user.revision, tracks: [...new Set(ids)].map((id) => ({ track_id: id, favorited: user.tracks.has(id) })), albums: [...new Set(groups.map((id: string) => id.toLowerCase()))].map((id) => ({ group_id: id, favorited: user.albums.has(id) })), artists: [] });
   }
   if (kind === "favoriteTrack" || kind === "favoriteAlbum") {
     if (objectBody(request.body, [], true) === null) return invalid();

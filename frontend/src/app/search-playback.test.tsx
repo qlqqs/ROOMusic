@@ -75,7 +75,7 @@ describe("搜索曲目播放动作", () => {
     expect(queue.mode).toBe("repeat_all");
     expect(queue.entries[0]?.track).toEqual({
       trackId: item.track_id, releaseId: item.release.id, groupId: item.group_id,
-      title: item.title, artist: item.artist, albumTitle: item.release.title, albumArtist: item.release.album_artist ?? item.release.artist,
+      title: item.title, artist: item.artist, artistRefs: item.artist_refs, albumTitle: item.release.title, albumArtist: item.release.album_artist ?? item.release.artist,
       durationSeconds: item.duration_seconds, artworkId: item.release.artwork?.resource_id ?? null,
       source: { sourceKind: item.source.source_kind, codec: item.source.codec, bitDepth: item.source.bit_depth, sampleRate: item.source.sample_rate, channels: item.source.channels, bitrate: item.source.bitrate },
     });

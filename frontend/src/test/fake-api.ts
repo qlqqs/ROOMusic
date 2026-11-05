@@ -139,3 +139,5 @@ export function installFakeSearch(api: FakeApi, data: SearchData = searchDataOf(
   }
   return data;
 }
+
+export { installArtistsApi } from "./fake-artists";

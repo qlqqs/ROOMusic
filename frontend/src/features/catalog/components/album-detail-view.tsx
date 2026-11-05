@@ -7,7 +7,9 @@ import { isUuid } from "../../../shared/lib/ids";
 import { Button, Notice, Page, Panel, QueryContent, Skeleton } from "../../../shared/ui";
 import type { ReleaseDetailDTO, ReleaseGroupDetailDTO, ReleaseSummaryDTO, ReleaseTrackDTO } from "../api/decoders";
 import type { AlbumSearch } from "../album-search";
+import { albumArtistRefsOf } from "../api/track-summary";
 import { albumArtistOf } from "../format";
+import { ArtistNames } from "./artist-names";
 import { useAlbum } from "../hooks/use-album";
 import { useRelease } from "../hooks/use-release";
 import { catalogKeys } from "../query-keys";
@@ -208,7 +210,7 @@ function AlbumDetailContent({ groupId, release: requested, track, list, isAdmin,
     <Page
       title={selected?.title ?? "专辑"}
       compactTitle={selected !== undefined && selected.title.length > LONG_TITLE_CHARS}
-      {...(selected === undefined ? {} : { description: albumArtistOf(selected) })}
+      {...(selected === undefined ? {} : { description: <ArtistNames text={albumArtistOf(selected)} refs={albumArtistRefsOf(selected)} /> })}
       actions={<BackToList list={list} />}
     >
       <QueryContent query={group} loading={<Skeleton label="正在加载专辑" lines={6} />}>

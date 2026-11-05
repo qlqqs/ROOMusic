@@ -1,12 +1,12 @@
 import { readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
-import { decodeAlbumResults, decodeSearchSuggestions, decodeTrackResults } from "../../src/features/search/api/decoders";
+import { decodeAlbumResults, decodeArtistResults, decodeSearchSuggestions, decodeTrackResults } from "../../src/features/search/api/decoders";
 import { sampleBody } from "../../src/test/api-samples";
 import { groupDetailOf, releaseDetailOf } from "../../src/test/catalog-data";
-import { searchAlbumItem, searchAlbumPage, searchRequestKey, searchTrackItem, searchTrackPage } from "../../src/test/search-data";
+import { searchAlbumItem, searchAlbumPage, searchArtistPage, searchRequestKey, searchTrackItem, searchTrackPage } from "../../src/test/search-data";
 import type { ApiMock } from "./api-mock";
 
-/** 显式登记“爱”的两栏与建议；长文案只用于排版压力测试，不模拟后端规范化算法。 */
+/** 显式登记“爱”的专辑/曲目、空艺人栏与建议；长文案只用于排版压力测试，不模拟后端规范化算法。 */
 export function seedSearch(mock: ApiMock, long = false) {
   const album = searchAlbumItem();
   const track = searchTrackItem();
@@ -19,6 +19,14 @@ export function seedSearch(mock: ApiMock, long = false) {
     track.title = "爱之乐章 " + "LongUnbrokenTrack".repeat(8);
     track.artist = "音乐家 ".repeat(20);
     track.release.title = album.group.representative.title;
+    // 就绪时 ArtistNames 显示 ref.name；单艺人长文案夹具必须同步原文与引用，不能退回空 refs 绕过链接排版。
+    const albumRef = album.group.representative.artist_refs?.[0];
+    const trackRef = track.artist_refs?.[0];
+    if (album.group.representative.artist_refs?.length !== 1 || track.artist_refs?.length !== 1 || albumRef === undefined || trackRef === undefined) {
+      throw new Error("长署名搜索夹具需要一位专辑艺人与一位曲目艺人的引用");
+    }
+    album.group.representative.artist_refs = [{ ...albumRef, name: album.group.representative.artist, display_name: album.group.representative.artist }];
+    track.artist_refs = [{ ...trackRef, name: track.artist, display_name: track.artist }];
     album.match = { ...album.match, field: "credit", role: "composer", original: "爱之作曲家 " + "長署名Composer".repeat(6) };
     track.match = { ...track.match, field: "label", role: null, original: "爱之厂牌 " + "LongRecordLabel".repeat(20) };
   }
@@ -33,6 +41,7 @@ export function seedSearch(mock: ApiMock, long = false) {
   const register = (path: string, params: Record<string, string>, body: unknown) =>
     mock.search.responses.set(searchRequestKey(path, new URLSearchParams(params)), { status: 200, body });
   register("/api/v1/search/suggestions", { q: "爱" }, suggestions);
+  register("/api/v1/search", { q: "爱", type: "artists", page_size: "12" }, decodeArtistResults(searchArtistPage({ items: [], pagination: { page_size: 12 } })));
   register("/api/v1/search", { q: "爱", type: "albums", page_size: "12" }, decodeAlbumResults(searchAlbumPage({ items: [album], pagination: { page_size: 12 } })));
   register("/api/v1/search", { q: "爱", type: "tracks", page_size: "20" }, decodeTrackResults(searchTrackPage({ items: [track], pagination: { page_size: 20 } })));
   return { album, track };

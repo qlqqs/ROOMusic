@@ -54,6 +54,7 @@ function setup(initialTracks: FavoriteTrackDTO[] = [first, second], initialAlbum
     const input = decodeLookupInput(request.body);
     return jsonResponse(200, {
       revision: state.revision,
+      artists: [],
       tracks: input.track_ids.map((track_id) => ({ track_id, favorited: state.tracks.some((item) => item.track.track_id === track_id) })),
       albums: input.group_ids.map((group_id) => ({ group_id, favorited: state.albums.some((item) => item.album.group_id === group_id) })),
     });

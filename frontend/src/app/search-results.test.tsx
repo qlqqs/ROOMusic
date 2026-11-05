@@ -13,7 +13,7 @@ import { seedPersonalTracks, seedPlaylist } from "../test/personal-data";
 import { FakeAudio } from "../test/fake-audio";
 import { jsonResponse } from "../test/http";
 import { renderApp } from "../test/render-app";
-import { searchAlbumItem, searchAlbumPage, searchTrackItem, searchTrackPage } from "../test/search-data";
+import { searchAlbumItem, searchAlbumPage, searchArtistPage, searchTrackItem, searchTrackPage } from "../test/search-data";
 
 const albums = searchAlbumPage();
 const tracks = searchTrackPage();
@@ -43,6 +43,7 @@ function setup(distinctResults = false) {
     const page = Number(params.get("page"));
     const pageSize = Number(params.get("page_size"));
     const q = params.get("q") ?? "";
+    if (type === "artists") return searchArtistPage({ query: q, items: [], pagination: { page, page_size: pageSize } });
     let result = type === "albums" ? albums : tracks;
     if (distinctResults) {
       // 两个显式测试查询的各页有不同身份，不能靠只更新页码/标题蒙混通过。
@@ -123,7 +124,7 @@ describe("搜索结果页", () => {
     api.on("GET", path, (request) => {
       const params = paramsOf(request.path);
       const response = pageFor(request.path);
-      if (params.get("type") === "albums") return jsonResponse(200, response);
+      if (params.get("type") !== "tracks") return jsonResponse(200, response);
       const ids = idsFor(params.get("q") ?? "", Number(params.get("page")));
       return jsonResponse(200, { ...response, items: ids.map((track_id, index) => ({ ...firstTrack, track_id, title: `结果曲目${index + 1}` })) });
     });
@@ -161,7 +162,7 @@ describe("搜索结果页", () => {
     const item = { ...firstTrack, present: kind !== "缺失", source: { ...firstTrack.source, ...(kind === "不可播" ? { source_kind: "cue_virtual" } : {}) } };
     seedPersonalTracks(personal, [item]);
     const playlist = seedPlaylist(personal, "00000000-0000-4000-8000-000000000003", { name: "搜索收藏歌单" });
-    api.on("GET", path, (request) => jsonResponse(200, paramsOf(request.path).get("type") === "tracks" ? searchTrackPage({ items: [item] }) : albums));
+    api.on("GET", path, (request) => jsonResponse(200, paramsOf(request.path).get("type") === "artists" ? searchArtistPage({ items: [] }) : paramsOf(request.path).get("type") === "tracks" ? searchTrackPage({ items: [item] }) : albums));
     renderApp({ path: "/search?q=爱" });
     const row = await screen.findByRole("row", { name: new RegExp(item.title) });
     const heart = within(row).getByRole("button", { name: `收藏《${item.title}》` });
@@ -252,6 +253,7 @@ describe("搜索结果页", () => {
     const { api, pageFor } = setup();
     api.on("GET", path, (request) => {
       const response = pageFor(request.path);
+      if (response.type === "artists") return jsonResponse(200, response);
       return jsonResponse(200, { ...response, pagination: { ...response.pagination, total, total_relation: "eq", has_more: false } });
     });
     renderApp({ path: "/search?q=爱&albums_page=84&tracks_page=50" });
@@ -348,6 +350,7 @@ describe("搜索结果页", () => {
     const { api } = setup();
     api.on("GET", path, (request) => {
       const type = paramsOf(request.path).get("type");
+      if (type === "artists") return jsonResponse(200, searchArtistPage({ query: "查询别写法", items: [] }));
       return jsonResponse(200, type === "albums"
         ? searchAlbumPage({ query: "查询别写法", items: [{ ...firstAlbum, match: { ...firstAlbum.match, field, role, original } }] })
         : searchTrackPage({ query: "查询别写法", items: [{ ...firstTrack, match: { ...firstTrack.match, field, role, original } }] }));
@@ -366,7 +369,7 @@ describe("搜索结果页", () => {
     const { api } = setup();
     const albumTitle = "原样专辑标题";
     const trackTitle = "原样曲目标题";
-    api.on("GET", path, (request) => jsonResponse(200, paramsOf(request.path).get("type") === "albums"
+    api.on("GET", path, (request) => jsonResponse(200, paramsOf(request.path).get("type") === "artists" ? searchArtistPage({ query: "原样", items: [] }) : paramsOf(request.path).get("type") === "albums"
       ? searchAlbumPage({ items: [{ ...firstAlbum, group: { ...firstAlbum.group, representative: { ...firstAlbum.group.representative, title: albumTitle } }, match: { ...firstAlbum.match, field: "release_title", role: null, original: albumTitle } }] })
       : searchTrackPage({ items: [{ ...firstTrack, title: trackTitle, match: { ...firstTrack.match, field: "track_title", role: null, original: trackTitle } }] })));
     renderApp({ path: "/search?q=原样" });
@@ -385,6 +388,6 @@ describe("搜索结果页", () => {
     renderApp({ path: "/search?q=爱" });
     await loaded();
     const row = screen.getByRole("row", { name: new RegExp(firstTrack.title) });
-    expect(within(row).getByRole("link").getAttribute("href")).toBe(`/albums/${firstTrack.group_id}?release=${firstTrack.release.id}`);
+    expect(within(row).getByRole("link", { name: firstTrack.release.title }).getAttribute("href")).toBe(`/albums/${firstTrack.group_id}?release=${firstTrack.release.id}`);
   });
 });

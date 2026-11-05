@@ -9,6 +9,7 @@ import { PlayerFeedback } from "../components/player-feedback";
 import { PlayerQueue } from "../components/player-queue";
 import { SignalPath } from "../components/signal-path";
 import { statusLabels } from "../components/player-labels";
+import { ArtistNames } from "../../catalog";
 import type { PlayerTrack } from "../engine/queue";
 import styles from "./now-playing-page.module.css";
 
@@ -32,7 +33,7 @@ export function NowPlayingPage({ renderCurrentTrackActions, renderQueueActions }
         <div className={styles.info}>
           <p>{statusLabels[snapshot.status]} · 第 {snapshot.queue.entries.findIndex((entry) => entry.entryId === current.entryId) + 1} 首 / 共 {snapshot.queue.entries.length} 首</p>
           <h2 className={styles.title} title={current.track.title}>{current.track.title}</h2>
-          <p className={styles.artist} title={current.track.artist}>{current.track.artist}</p>
+          <p className={styles.artist} title={current.track.artist}><ArtistNames text={current.track.artist} refs={current.track.artistRefs ?? []} /></p>
           <p className={styles.album}><Link to="/albums/$groupId" params={{ groupId: current.track.groupId }} search={{ release: current.track.releaseId }} title={current.track.albumTitle}>{current.track.albumTitle}</Link></p>
           {renderCurrentTrackActions === undefined ? null : <div className={styles.trackActions}>{renderCurrentTrackActions(current.track)}</div>}
           <PlayerControls />

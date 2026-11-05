@@ -1,3 +1,15 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import {
+  decodeArtistPage, decodeArtistDetail, decodeArtistNamesPage, decodeArtistAlbumsPage,
+  decodeArtistTracksPage, decodeArtistQueue, decodeArtistParticipationAlbumsPage,
+} from "../features/artists/api/decoders";
+import {
+  decodeArtistCandidatePage, decodeArtistIgnoreResult, decodeArtistMergeResult,
+  decodeArtistRenameResult, decodeArtistSplitResult, decodeArtistSplitPreview, decodeArtistMergedSources,
+} from "../features/governance/api/decoders";
+import { decodeFavoriteArtistsPage } from "../features/personal/api/decoders";
+import { decodeArtistResults } from "../features/search/api/decoders";
 import { describe, expect, it } from "vitest";
 import { decodePlaybackFormats, decodeTrackLyrics, decodeTrackPlayback, decodeTrackPreparing } from "../features/player/api/decoders";
 import { decodeLoggedOut, decodeSetupStatus, decodeViewer } from "../features/auth/api/decoders";
@@ -67,6 +79,7 @@ import {
 } from "../features/personal/api/decoders";
 import { decodeAlbumResults, decodeTrackResults, decodeSearchSuggestions } from "../features/search/api/decoders";
 import { decode as d, decodeErrorEnvelope } from "../shared/api";
+import { decodeTrackSummaries } from "../features/catalog/api/track-summary";
 import { listApiSampleNames, loadApiSample } from "./api-samples";
 
 // 契约测试：后端的每个真实响应样本都必须有一个 decoder 能解码，并且 decoder 保留了样本里的全部字段
@@ -80,6 +93,88 @@ const decodeLegacyReleasePage = d.defineDecoder(d.object({
 }));
 
 const successContracts: Record<string, Contract> = {
+  // I1/I2/I4/I6：独立 adjudication recorder 的正式真实样本，不复用合成响应。
+  "artists/adjudication/albums-any-empty": { status: 200, decode: decodeArtistParticipationAlbumsPage },
+  "artists/adjudication/albums-any-page": { status: 200, decode: decodeArtistParticipationAlbumsPage },
+  "artists/adjudication/albums-any-query": { status: 200, decode: decodeArtistParticipationAlbumsPage },
+  "artists/adjudication/albums-any": { status: 200, decode: decodeArtistParticipationAlbumsPage },
+  "artists/adjudication/albums-default-after-any": { status: 200, decode: decodeArtistAlbumsPage },
+  "artists/adjudication/albums-default-query": { status: 200, decode: decodeArtistAlbumsPage },
+  "artists/adjudication/albums-default": { status: 200, decode: decodeArtistAlbumsPage },
+  "artists/adjudication/merged-sources-after-restore": { status: 200, decode: decodeArtistMergedSources },
+  "artists/adjudication/merged-sources-empty-keys": { status: 200, decode: decodeArtistMergedSources },
+  "artists/adjudication/merged-sources-empty": { status: 200, decode: decodeArtistMergedSources },
+  "artists/adjudication/merged-sources": { status: 200, decode: decodeArtistMergedSources },
+  "artists/adjudication/role-album-artist": { status: 200, decode: decodeArtistPage },
+  "artists/adjudication/role-release-artist": { status: 200, decode: decodeArtistPage },
+  "artists/adjudication/tracks-summaries-after-merge": { status: 200, decode: decodeTrackSummaries },
+  "artists/adjudication/tracks-summaries-preparing": { status: 200, decode: decodeTrackSummaries },
+  "artists/adjudication/tracks-summaries-unknown": { status: 200, decode: decodeTrackSummaries },
+  "artists/adjudication/tracks-summaries": { status: 200, decode: decodeTrackSummaries },
+  // M5 ⑤：真实 handler 生成的艺人、治理、收藏与别名搜索增量样本。
+  "artists/albums": { status: 200, decode: decodeArtistAlbumsPage },
+  "artists/detail-redirect": { status: 200, decode: decodeArtistDetail },
+  "artists/detail-unavailable": { status: 200, decode: decodeArtistDetail },
+  "artists/detail": { status: 200, decode: decodeArtistDetail },
+  "artists/list-album-count": { status: 200, decode: decodeArtistPage },
+  "artists/list-empty": { status: 200, decode: decodeArtistPage },
+  "artists/list-initial": { status: 200, decode: decodeArtistPage },
+  "artists/list-name": { status: 200, decode: decodeArtistPage },
+  "artists/list-out-of-range": { status: 200, decode: decodeArtistPage },
+  "artists/list-role": { status: 200, decode: decodeArtistPage },
+  "artists/names-out-of-range": { status: 200, decode: decodeArtistNamesPage },
+  "artists/names": { status: 200, decode: decodeArtistNamesPage },
+  "artists/queue-empty": { status: 200, decode: decodeArtistQueue },
+  "artists/queue-random": { status: 200, decode: decodeArtistQueue },
+  "artists/queue": { status: 200, decode: decodeArtistQueue },
+  "artists/role-tracks-missing": { status: 200, decode: decodeArtistTracksPage },
+  "artists/role-tracks": { status: 200, decode: decodeArtistTracksPage },
+  "catalog/status-all-ready": { status: 200, decode: decodeCatalogState },
+  "catalog/status-artists-preparing": { status: 200, decode: decodeCatalogState },
+  "catalog/status-search-ready": { status: 200, decode: decodeCatalogState },
+  "favorites/artist-added": { status: 200, decode: decodeFavoriteToggle },
+  "favorites/artist-lookup": { status: 200, decode: decodeFavoriteLookup },
+  "favorites/artist-removed": { status: 200, decode: decodeFavoriteToggle },
+  "favorites/artist-unavailable": { status: 200, decode: decodeFavoriteArtistsPage },
+  "favorites/artists-empty": { status: 200, decode: decodeFavoriteArtistsPage },
+  "favorites/artists-merged-deduplicated": { status: 200, decode: decodeFavoriteArtistsPage },
+  "favorites/artists-restored": { status: 200, decode: decodeFavoriteArtistsPage },
+  "favorites/artists": { status: 200, decode: decodeFavoriteArtistsPage },
+  "governance/artist-candidates-after-rescan": { status: 200, decode: decodeArtistCandidatePage },
+  "governance/artist-candidates-empty": { status: 200, decode: decodeArtistCandidatePage },
+  "governance/artist-candidates-new-key-pair": { status: 200, decode: decodeArtistCandidatePage },
+  "governance/artist-candidates": { status: 200, decode: decodeArtistCandidatePage },
+  "governance/artist-ignore": { status: 200, decode: decodeArtistIgnoreResult },
+  "governance/artist-merge-replayed": { status: 200, decode: decodeArtistMergeResult },
+  "governance/artist-merge": { status: 200, decode: decodeArtistMergeResult },
+  "governance/artist-name-auto": { status: 200, decode: decodeArtistRenameResult },
+  "governance/artist-name-set": { status: 200, decode: decodeArtistRenameResult },
+  "governance/artist-split-new": { status: 200, decode: decodeArtistSplitResult },
+  "governance/artist-split-preview-albums": { status: 200, decode: decodeArtistSplitPreview },
+  "governance/artist-split-preview-aliases": { status: 200, decode: decodeArtistSplitPreview },
+  "governance/artist-split-restored-id": { status: 200, decode: decodeArtistSplitResult },
+  "governance/artist-unignore": { status: 200, decode: decodeArtistIgnoreResult },
+  "operations/artist-damaged-state": { status: 200, decode: decodeOperationPage },
+  "operations/artist-source-filter": { status: 200, decode: decodeOperationPage },
+  "operations/artist-union-filter": { status: 200, decode: decodeOperationPage },
+  "operations/artists": { status: 200, decode: decodeOperationPage },
+  "search/albums-alias-match": { status: 200, decode: decodeAlbumResults },
+  "search/artist-correction-legacy-albums-new": { status: 200, decode: decodeAlbumResults },
+  "search/artist-correction-legacy-albums-old": { status: 200, decode: decodeAlbumResults },
+  "search/artist-correction-legacy-tracks-new": { status: 200, decode: decodeTrackResults },
+  "search/artist-correction-legacy-tracks-old": { status: 200, decode: decodeTrackResults },
+  "search/artist-correction-legacy": { status: 200, decode: decodeCorrectionResult },
+  "search/artist-correction-normalized-albums-new": { status: 200, decode: decodeAlbumResults },
+  "search/artist-correction-normalized-albums-old": { status: 200, decode: decodeAlbumResults },
+  "search/artist-correction-normalized-artists": { status: 200, decode: decodeArtistResults },
+  "search/artist-correction-normalized-tracks-new": { status: 200, decode: decodeTrackResults },
+  "search/artist-correction-normalized-tracks-old": { status: 200, decode: decodeTrackResults },
+  "search/artist-correction-normalized": { status: 200, decode: decodeCorrectionResult },
+  "search/artists-alias-match": { status: 200, decode: decodeArtistResults },
+  "search/artists": { status: 200, decode: decodeArtistResults },
+  "search/same-name-split-results": { status: 200, decode: decodeArtistResults },
+  "search/suggestions-artists": { status: 200, decode: decodeSearchSuggestions },
+  "search/tracks-alias-match": { status: 200, decode: decodeTrackResults },
   "scan-feedback/active-member": { status: 200, decode: decodeActiveScan },
   "scan-feedback/active-none": { status: 200, decode: decodeActiveScan },
   "scan-feedback/cancel-requested": { status: 202, decode: decodeScan },
@@ -321,6 +416,58 @@ const successContracts: Record<string, Contract> = {
 
 // 错误样本都用统一信封；这里同时记录界面要处理的错误码与状态码。
 const errorContracts: Record<string, { status: number; code: string }> = {
+  "artists/adjudication/albums-any-preparing": { status: 503, code: "artist_catalog_preparing" },
+  "artists/adjudication/albums-empty-participation": { status: 400, code: "invalid_artist_participation" },
+  "artists/adjudication/albums-invalid-pagination": { status: 400, code: "invalid_pagination" },
+  "artists/adjudication/albums-invalid-participation": { status: 400, code: "invalid_artist_participation" },
+  "artists/adjudication/albums-long-query": { status: 400, code: "invalid_query" },
+  "artists/adjudication/albums-repeated-participation": { status: 400, code: "invalid_artist_participation" },
+  "artists/adjudication/albums-repeated-query": { status: 400, code: "invalid_query" },
+  "artists/adjudication/merged-sources-forbidden": { status: 403, code: "forbidden" },
+  "artists/adjudication/merged-sources-invalid-id": { status: 400, code: "invalid_id" },
+  "artists/adjudication/merged-sources-not-found": { status: 404, code: "not_found" },
+  "artists/adjudication/merged-sources-preparing": { status: 503, code: "artist_catalog_preparing" },
+  "artists/adjudication/merged-sources-unauthorized": { status: 401, code: "unauthorized" },
+  "artists/adjudication/tracks-summaries-empty": { status: 400, code: "invalid_input" },
+  "artists/adjudication/tracks-summaries-invalid-id": { status: 400, code: "invalid_input" },
+  "artists/adjudication/tracks-summaries-origin-forbidden": { status: 403, code: "origin_forbidden" },
+  "artists/adjudication/tracks-summaries-origin-required": { status: 403, code: "origin_required" },
+  "artists/adjudication/tracks-summaries-over-limit": { status: 400, code: "invalid_input" },
+  "artists/adjudication/tracks-summaries-unauthorized": { status: 401, code: "unauthorized" },
+  "artists/detail-preparing": { status: 503, code: "artist_catalog_preparing" },
+  "artists/errors/artist-redirected": { status: 409, code: "artist_redirected" },
+  "artists/errors/artist-scope-changed": { status: 409, code: "artist_scope_changed" },
+  "artists/errors/artist-scope-too-large": { status: 409, code: "artist_scope_too_large" },
+  "artists/errors/database-unavailable": { status: 503, code: "database_unavailable" },
+  "artists/errors/forbidden": { status: 403, code: "forbidden" },
+  "artists/errors/idempotency-conflict": { status: 409, code: "idempotency_conflict" },
+  "artists/errors/invalid-artist-name": { status: 400, code: "invalid_artist_name" },
+  "artists/errors/invalid-id": { status: 400, code: "invalid_id" },
+  "artists/errors/invalid-initial": { status: 400, code: "invalid_artist_initial" },
+  "artists/errors/invalid-limit": { status: 400, code: "invalid_limit" },
+  "artists/errors/invalid-order": { status: 400, code: "invalid_queue_order" },
+  "artists/errors/invalid-pagination": { status: 400, code: "invalid_pagination" },
+  "artists/errors/invalid-query": { status: 400, code: "invalid_query" },
+  "artists/errors/invalid-role": { status: 400, code: "invalid_artist_role" },
+  "artists/errors/invalid-seed": { status: 400, code: "invalid_seed" },
+  "artists/errors/invalid-sort": { status: 400, code: "invalid_artist_sort" },
+  "artists/errors/invalid-type": { status: 400, code: "invalid_search_type" },
+  "artists/errors/no-changes": { status: 400, code: "no_changes" },
+  "artists/errors/not-found": { status: 404, code: "not_found" },
+  "artists/errors/not-revertible": { status: 409, code: "not_revertible" },
+  "artists/errors/origin-forbidden": { status: 403, code: "origin_forbidden" },
+  "artists/errors/origin-required": { status: 403, code: "origin_required" },
+  "artists/errors/revision-conflict": { status: 409, code: "revision_conflict" },
+  "artists/errors/same-artist": { status: 409, code: "same_artist" },
+  "artists/errors/unauthorized": { status: 401, code: "unauthorized" },
+  "artists/list-preparing": { status: 503, code: "artist_catalog_preparing" },
+  "artists/queue-preparing": { status: 503, code: "artist_catalog_preparing" },
+  "favorites/artists-preparing": { status: 503, code: "artist_catalog_preparing" },
+  "governance/artist-merge-not-ready": { status: 409, code: "artist_catalog_not_ready" },
+  "governance/artist-rename-not-ready": { status: 409, code: "artist_catalog_not_ready" },
+  "governance/artist-split-not-ready": { status: 409, code: "artist_catalog_not_ready" },
+  "search/artists-preparing": { status: 503, code: "artist_catalog_preparing" },
+  "search/errors/invalid-type-singular": { status: 400, code: "invalid_search_type" },
   "scan-feedback/list-forbidden": { status: 403, code: "forbidden" },
   "scan-feedback/recent-invalid-query": { status: 400, code: "invalid_query" },
   "scan-feedback/recent-unauthorized": { status: 401, code: "unauthorized" },
@@ -344,7 +491,6 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "search/errors/invalid-type": { status: 400, code: "invalid_search_type" },
   "search/errors/invalid-utf8": { status: 400, code: "invalid_query" },
   "search/errors/unauthorized": { status: 401, code: "unauthorized" },
-  "search/errors/unsupported-artists": { status: 400, code: "unsupported_search_type" },
   "errors/root-disabled": { status: 409, code: "root_disabled" },
   "errors/not-directly-playable": { status: 409, code: "not_directly_playable" },
   "errors/source-unavailable": { status: 409, code: "source_unavailable" },
@@ -439,4 +585,26 @@ describe("API 样本契约", () => {
     expect(envelope.error.code).toBe(contract.code);
     expect(envelope.request_id).toBe("sample-request");
   });
+});
+
+// 一万项真实响应不入库；显式配置仓外目录后验证完整响应，不能用裁剪的小样本替代。
+const largeSamplesDirectory = process.env["ROOMUSIC_ARTIST_LARGE_SAMPLES_DIR"];
+it.skipIf(largeSamplesDirectory === undefined)("仓外艺人截断队列：完整 10000 项解码往返且无缺失/重复曲目", () => {
+  if (largeSamplesDirectory === undefined) throw new Error("缺少 ROOMUSIC_ARTIST_LARGE_SAMPLES_DIR");
+  const raw: unknown = JSON.parse(readFileSync(resolve(largeSamplesDirectory, "artists/queue-truncated.json"), "utf8"));
+  if (typeof raw !== "object" || raw === null || !("status" in raw) || !("body" in raw)) {
+    throw new Error("巨型样本不是 {status, body} 结构");
+  }
+  expect(raw.status).toBe(200);
+  const queue = decodeArtistQueue(raw.body);
+  expect(queue).toEqual(raw.body);
+  expect(queue.items).toHaveLength(10_000);
+  expect(queue.returned).toBe(10_000);
+  expect(queue.returned).toBe(Math.min(queue.total, queue.limit));
+  expect(queue.truncated).toBe(queue.total > queue.returned);
+  expect(queue.total).toBe(10_001);
+  expect(queue.truncated).toBe(true);
+  expect(queue.missing_total).toBe(1);
+  expect(new Set(queue.items.map((track) => track.track_id)).size).toBe(10_000);
+  expect(queue.items.every((track) => track.present)).toBe(true);
 });

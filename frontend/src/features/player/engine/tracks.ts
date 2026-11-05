@@ -1,4 +1,4 @@
-import type { ReleaseDetailDTO, ReleaseTrackDTO } from "../../catalog";
+import { albumArtistRefsOf, type ReleaseDetailDTO, type ReleaseTrackDTO } from "../../catalog";
 import type { PlayerTrack } from "./queue";
 
 /** 把发行详情里的一首曲目转成队列曲目。groupId 来自路由（发行详情不带组 ID）。 */
@@ -10,6 +10,7 @@ export function playerTrackOf(release: ReleaseDetailDTO, track: ReleaseTrackDTO,
     groupId,
     title: track.title.trim() === "" ? "（无标题）" : track.title,
     artist: track.artist.trim() === "" ? albumArtist : track.artist,
+    artistRefs: track.artist.trim() === "" ? albumArtistRefsOf(release) : track.artist_refs,
     albumTitle: release.title,
     albumArtist,
     durationSeconds: track.duration_seconds,

@@ -41,6 +41,8 @@ for (const width of [320, 375, 390, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     const mock = await backend.start({ signedInAs: "listener" });
     const { album, track } = seedSearch(mock, true);
+    expect(track.artist_refs?.map((ref) => ref.name).join(" / "), "长曲目署名与艺人引用必须一致").toBe(track.artist);
+    expect(album.group.representative.artist_refs?.map((ref) => ref.name).join(" / "), "长专辑署名与艺人引用必须一致").toBe(album.group.representative.artist);
     await page.goto("/albums");
     await expect(page.getByRole("heading", { name: "专辑", exact: true })).toBeVisible();
     await page.keyboard.press("/");
@@ -113,6 +115,9 @@ for (const width of [320, 375, 390, 768, 1024, 1440]) {
     await input.press("Enter");
     await expect(page).toHaveURL(/\/search\?q=/);
     await expect(page.getByRole("table", { name: "曲目结果" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "艺人", exact: true })).toBeVisible();
+    await expect(page.getByText("没有找到匹配的艺人。", { exact: true })).toBeVisible();
+    await expect(page.getByRole("alert")).toHaveCount(0);
     const albums = page.getByRole("heading", { name: "专辑", exact: true });
     const tracks = page.getByRole("heading", { name: "曲目", exact: true });
     const albumBox = await albums.boundingBox();
@@ -122,6 +127,7 @@ for (const width of [320, 375, 390, 768, 1024, 1440]) {
     expect(trackBox?.y).toBeGreaterThan((albumBox?.y ?? 0) + (albumBox?.height ?? 0));
     // D6 只约束建议：结果页曲目标题、艺人与匹配说明仍可自然换行。
     const table = page.getByRole("table", { name: "曲目结果" });
+    await expect(table.getByRole("link", { name: track.artist, exact: true })).toBeVisible();
     for (const text of [track.title, track.artist, `厂牌：${track.match.original}`]) {
       const content = table.getByText(text, { exact: true });
       expect(await textLines(content)).toBeGreaterThan(1);

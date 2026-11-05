@@ -4,6 +4,7 @@ import { formatCount } from "../../../shared/lib/number";
 import { pageCountOf } from "../../../shared/lib/pagination";
 import { formatDateTime } from "../../../shared/lib/time";
 import { Button, DataTable, Notice, Pagination, Panel, QueryContent, Skeleton, StatusTag, type Column } from "../../../shared/ui";
+import { ArtistNames, trackArtistRefsOf } from "../../catalog";
 import type { HistoryItemDTO } from "../api/decoders";
 import { historyArtistOf, historyTitleOf, PLAY_COUNT_RULE_TEXT } from "../format";
 import { useClearPlayHistory } from "../hooks/use-clear-play-history";
@@ -91,7 +92,9 @@ export function HistoryView({ page, renderPlayAll, renderTrackActions, renderRow
         cell: (item) => (
           <Muted item={item}>
             <span className={styles.title}>{historyTitleOf(item)}</span>
-            <span className={styles.artist}>{historyArtistOf(item)}</span>
+            <span className={styles.artist}>
+              <ArtistNames text={historyArtistOf(item)} refs={trackArtistRefsOf(item)} />
+            </span>
             {item.present ? null : (
               <span className={styles.tag}>
                 <StatusTag tone="outline">文件缺失</StatusTag>

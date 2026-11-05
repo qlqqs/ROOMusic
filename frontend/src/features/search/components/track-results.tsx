@@ -4,7 +4,7 @@ import { formatDuration } from "../../../shared/lib/duration";
 import { DataTable, StatusTag, type Column } from "../../../shared/ui";
 import type { SearchTrackItemDTO } from "../api/decoders";
 import { matchNote } from "../match-note";
-import { trackArtistOf, trackTitleOf } from "../../catalog";
+import { ArtistNames, trackArtistOf, trackArtistRefsOf, trackTitleOf } from "../../catalog";
 import styles from "./track-results.module.css";
 
 type TrackResultsProps = {
@@ -31,7 +31,9 @@ export function TrackResults({ items, renderTrackActions }: TrackResultsProps) {
           return (
             <div className={item.present ? undefined : styles.missing}>
               <span className={styles.title}>{title}</span>
-              <span className={styles.artist}>{artist}</span>
+              <span className={styles.artist}>
+                <ArtistNames text={artist} refs={trackArtistRefsOf(item)} />
+              </span>
               {note === null ? null : <span className={styles.note}>{note}</span>}
               {item.present ? null : (
                 <span className={styles.tag}>

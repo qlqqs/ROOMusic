@@ -1,11 +1,12 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useViewerScope } from "../../auth";
 import type { CatalogStateDTO } from "../../catalog";
-import { fetchAlbumResults, fetchTrackResults } from "../api/endpoints";
+import { fetchAlbumResults, fetchArtistResults, fetchTrackResults } from "../api/endpoints";
 import { searchKeys } from "../query-keys";
 import { adoptNewerCatalogState, keepPreviousInSameEpoch, useSearchEpoch } from "./search-epoch";
 
 /** 结果页每栏一页几条：专辑是卡片（两行左右），曲目是列表；两栏同在一页，第一屏能看到曲目栏的开头。 */
+export const ARTIST_RESULTS_PAGE_SIZE = 12;
 export const ALBUM_RESULTS_PAGE_SIZE = 12;
 export const TRACK_RESULTS_PAGE_SIZE = 20;
 
@@ -14,11 +15,12 @@ export const TRACK_RESULTS_PAGE_SIZE = 20;
  * 两栏的查询各自缓存；搜索响应带回更新的目录状态时，结果放进新代次的键下。
  */
 function useResultsPage<T extends { catalog_state: CatalogStateDTO }>(
-  type: "albums" | "tracks",
+  type: "artists" | "albums" | "tracks",
   q: string,
   page: number,
   pageSize: number,
   fetchPage: (params: { q: string; page: number; pageSize: number; signal: AbortSignal }) => Promise<{ status: number; data: T }>,
+  enabled = true,
 ) {
   const { generation } = useViewerScope();
   const queryClient = useQueryClient();
@@ -33,9 +35,14 @@ function useResultsPage<T extends { catalog_state: CatalogStateDTO }>(
       return response;
     },
     select: (response) => response.data,
-    enabled: epoch !== undefined,
+    enabled: enabled && epoch !== undefined,
     placeholderData: keepPreviousInSameEpoch(epoch ?? -1),
   });
+}
+
+/** 艺人一栏（M5 ⑤）：只在艺人数据就绪时请求（enabled 由调用方按目录状态决定）。 */
+export function useArtistResults(q: string, page: number, enabled: boolean) {
+  return useResultsPage("artists", q, page, ARTIST_RESULTS_PAGE_SIZE, fetchArtistResults, enabled);
 }
 
 export function useAlbumResults(q: string, page: number) {

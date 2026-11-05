@@ -14,6 +14,14 @@ export function operationTypeLabel(item: Pick<OperationItemDTO, "type" | "change
       return "核对问题";
     case "release_claim":
       return "认领";
+    case "artist_merge":
+      return "合并艺人";
+    case "artist_split":
+      return "拆开艺人";
+    case "artist_rename":
+      return "修改艺人主名";
+    case "artist_candidate_ignore":
+      return item.changes?.kind === "artist_candidate_ignore" && !item.changes.ignored ? "恢复“可能是同一位”的提示" : "忽略“可能是同一位”的提示";
     case "revert":
       if (item.changes?.kind === "release_correction") return "撤销修改";
       if (item.changes?.kind === "release_group_change") return "撤销归组调整";
@@ -49,8 +57,36 @@ function claimPartsText(summary: ClaimSummaryDTO): string | null {
  * reverse 为 true 时前后互换，写出“撤销之后会变成什么”：撤销前的预览用它，读起来是“改回去”。
  * 改动内容不可读（记录里的状态损坏）时只说明这一点，不让列表失败。
  */
+/** 一次艺人治理影响的范围：“1 个名字、12 个版本、150 首曲目”，为 0 的不写。 */
+function artistScopeText(scope: { name_count: number; release_count: number; track_count: number }): string {
+  return [
+    scope.name_count === 0 ? null : `${scope.name_count} 个名字`,
+    scope.release_count === 0 ? null : `${scope.release_count} 个版本`,
+    scope.track_count === 0 ? null : `${scope.track_count} 首曲目`,
+  ]
+    .filter((part) => part !== null)
+    .join("、");
+}
+
 function linesOf(changes: OperationChangesDTO | null, reverse: boolean): string[] {
   if (changes === null) return ["无法显示改动内容"];
+  // 艺人的治理不能撤销（reverse 用不到）：合并写“‘甲’并入‘乙’”，拆开写拆出到谁，改名写“主名：前 → 后”（改回自动时注明）。
+  if (changes.kind === "artist_merge") {
+    const scope = artistScopeText(changes);
+    return [`“${changes.source.name}”并入“${changes.target.name}”`, ...(scope === "" ? [] : [`涉及 ${scope}`])];
+  }
+  if (changes.kind === "artist_split") {
+    const scope = artistScopeText(changes);
+    const how = changes.mode === "aliases" ? "把别名拆成" : "按专辑把署名分给";
+    return [`从“${changes.source.name}”${how}“${changes.target.name}”`, ...(scope === "" ? [] : [`涉及 ${scope}`])];
+  }
+  if (changes.kind === "artist_rename") {
+    const note = changes.to.source === "auto" ? "（按最常见的写法）" : "";
+    return [`主名：${changes.from.name} → ${changes.to.name}${note}`];
+  }
+  if (changes.kind === "artist_candidate_ignore") {
+    return [changes.ignored ? `不再提示与“${changes.other_artist.name}”可能是同一位` : `恢复与“${changes.other_artist.name}”可能是同一位的提示`];
+  }
   if (changes.kind === "release_group_change") {
     return reverse ? [`从《${changes.to.group_title}》移回《${changes.from.group_title}》`] : [`从《${changes.from.group_title}》移到《${changes.to.group_title}》`];
   }
@@ -96,6 +132,11 @@ export function revertLines(item: Pick<OperationItemDTO, "changes">): string[] {
 export function notRevertibleReason(item: Pick<OperationItemDTO, "type" | "revertible" | "reverted_by" | "release" | "album">): string | null {
   if (item.revertible) return null;
   if (item.type === "revert") return "撤销不能再撤销";
+  // 艺人的治理没有撤销：用相反的操作恢复（合并后拆开、拆开后合并、改名后再改名）。
+  if (item.type === "artist_merge") return "需要时可以拆开";
+  if (item.type === "artist_split") return "需要时可以再合并";
+  if (item.type === "artist_rename") return "需要时可以再改名";
+  if (item.type === "artist_candidate_ignore") return "不能撤销";
   if (item.reverted_by !== null) return "已撤销";
   // 认领的撤销不要求新版本可见（它的目的就是把修改还给旧版本），所以不写“专辑已不可见”：能不能撤销只看之后有没有修改。
   if (item.type === "release_claim") return "之后又有修改";

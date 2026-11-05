@@ -1,5 +1,5 @@
 import { decodeCatalogState } from "../features/catalog/api/decoders";
-import { decodeAlbumResults, decodeTrackResults, type AlbumResultsDTO, type TrackResultsDTO, type SearchPaginationDTO } from "../features/search/api/decoders";
+import { decodeAlbumResults, decodeArtistResults, decodeTrackResults, type ArtistResultsDTO, type AlbumResultsDTO, type TrackResultsDTO, type SearchPaginationDTO } from "../features/search/api/decoders";
 import { loadApiSample, sampleBody } from "./api-samples";
 
 export type SearchResponse = { status: number; body: unknown };
@@ -56,5 +56,13 @@ export function searchAlbumPage(options: PageOptions<AlbumResultsDTO> = {}): Alb
 export function searchTrackPage(options: PageOptions<TrackResultsDTO> = {}): TrackResultsDTO {
   const items = options.items ?? [searchTrackItem()];
   return { query: "爱", catalog_state: readyCatalogState(), ...options, type: "tracks", items,
+    pagination: { page: 1, page_size: 50, total: items.length, total_relation: "eq", has_more: false, ...options.pagination } };
+}
+
+/** 艺人栏复用真实搜索样本，分页覆盖与专辑、曲目相同。 */
+export function searchArtistPage(options: PageOptions<ArtistResultsDTO> = {}): ArtistResultsDTO {
+  const sample = decodeArtistResults(sampleBody("search/artists"));
+  const items = options.items ?? sample.items;
+  return { query: "爱", catalog_state: readyCatalogState(), ...options, type: "artists", items,
     pagination: { page: 1, page_size: 50, total: items.length, total_relation: "eq", has_more: false, ...options.pagination } };
 }

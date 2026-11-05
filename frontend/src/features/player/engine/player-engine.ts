@@ -29,6 +29,7 @@ import {
   jumpTo,
   moveEntry,
   MAX_QUEUE_ENTRIES,
+  patchTrackMetadata,
   removeEntry,
   replaceQueue,
   retreat,
@@ -38,6 +39,7 @@ import {
   type QueueEntry,
   type QueueEnv,
   type QueueState,
+  type TrackDisplayMetadata,
 } from "./queue";
 import { loadSavedReleases, rebuildQueue } from "./queue-restore";
 
@@ -369,6 +371,19 @@ export class PlayerEngine {
       this.stopPlayback();
       this.afterQueueChange();
     }
+  }
+
+  /**
+   * 刷新已在队列里的曲目的显示元数据（M5 ⑤：艺人数据就绪或艺人治理之后补上、更新艺人链接）：
+   * 不改顺序、当前项、播放状态与进度，不重新加载音频，也不改刷新恢复的记录（它只存 ID）。
+   */
+  updateTrackMetadata(patches: ReadonlyMap<string, TrackDisplayMetadata>): void {
+    if (this.ended) return;
+    const next = patchTrackMetadata(this.queue, patches);
+    if (next === this.queue) return;
+    this.queue = next;
+    this.syncMediaSession();
+    this.commit();
   }
 
   moveEntry(entryId: string, delta: -1 | 1): void {

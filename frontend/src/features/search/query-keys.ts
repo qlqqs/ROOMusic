@@ -6,7 +6,7 @@ export const searchKeys = {
   /** 搜索的全部查询：修改专辑数据、epoch 变化后整体失效或取消。 */
   all: (generation: number) => viewerQueryKey(generation, "search"),
   suggestions: (generation: number, epoch: number, q: string, limit: number) => viewerQueryKey(generation, "search", "suggestions", { e: epoch, q, limit }),
-  page: (generation: number, epoch: number, type: "albums" | "tracks", q: string, page: number, pageSize: number) =>
+  page: (generation: number, epoch: number, type: "artists" | "albums" | "tracks", q: string, page: number, pageSize: number) =>
     viewerQueryKey(generation, "search", "results", { e: epoch, type, q, page, pageSize }),
 };
 

@@ -1,5 +1,5 @@
 import { decode as d } from "../../../shared/api";
-import { releaseSummaryDecoder } from "../../catalog";
+import { artistRefsDecoder, releaseSummaryDecoder } from "../../catalog/api/decoders";
 
 // 上限与后端一致（backend/internal/listening 的 RecentReleaseLimit）：超界的响应整体拒绝，而不是截断后显示。
 const MAX_RECENT_RELEASES = 8;
@@ -55,6 +55,7 @@ const historyItemDecoder = d.object({
   present: d.boolean(),
   title: d.string(),
   artist: d.string(),
+  artist_refs: artistRefsDecoder,
   duration_seconds: d.nullable(d.number({ min: 0 })),
   group_id: d.uuid(),
   release: releaseSummaryDecoder,

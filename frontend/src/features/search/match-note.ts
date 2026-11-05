@@ -3,8 +3,9 @@ import type { MatchField, MatchRole, SearchMatchDTO } from "./api/decoders";
 // “匹配到了什么”的小字：命中的不是这一行已经显示的文字时（例如作曲者、厂牌、编号），用一小段“字段：原文”说明，
 // 不加别的解释，不做高亮（规范化会改变字数，按偏移高亮会错位）。
 
+// 发行艺人与专辑艺人都叫“专辑艺人”（I6）。
 const roleNames: Readonly<Record<MatchRole, string>> = {
-  release_artist: "艺人",
+  release_artist: "专辑艺人",
   album_artist: "专辑艺人",
   track_artist: "曲目艺人",
   composer: "作曲",
@@ -15,7 +16,7 @@ const roleNames: Readonly<Record<MatchRole, string>> = {
 
 const fieldNames: Readonly<Record<MatchField, string>> = {
   release_title: "专辑",
-  release_artist: "艺人",
+  release_artist: "专辑艺人",
   album_artist: "专辑艺人",
   track_title: "曲目",
   track_artist: "曲目艺人",

@@ -5,7 +5,7 @@ import { FakeAudio } from "../../test/fake-audio";
 import { installFakeApi, installFakeSession } from "../../test/fake-api";
 import { jsonResponse } from "../../test/http";
 import { renderApp } from "../../test/render-app";
-import { readyCatalogState, searchAlbumPage, searchTrackPage } from "../../test/search-data";
+import { readyCatalogState, searchAlbumPage, searchArtistPage, searchTrackPage } from "../../test/search-data";
 import type { CatalogStateDTO } from "../../features/catalog";
 
 let audio: FakeAudio;
@@ -70,7 +70,7 @@ describe("外壳目录状态自动同步", () => {
       const options = { query: params.get("q") ?? "", catalog_state: state(), pagination: {
         page: Number(params.get("page")), page_size: Number(params.get("page_size")), total: 1000, total_relation: "gte" as const, has_more: true,
       } };
-      return jsonResponse(200, params.get("type") === "albums" ? searchAlbumPage(options) : searchTrackPage(options));
+      return jsonResponse(200, params.get("type") === "artists" ? searchArtistPage(options) : params.get("type") === "albums" ? searchAlbumPage(options) : searchTrackPage(options));
     });
     api.on("GET", /\/tracks\/[^/]+\/playback$/, (request) => {
       const id = request.path.split("/").at(-2);
@@ -86,7 +86,10 @@ describe("外壳目录状态自动同步", () => {
     const before = { sources: [...audio.sources], loads: audio.loadCalls, plays: audio.playCalls };
     publish();
     await tick(3000);
-    expect(api.requestsTo("GET", "/api/v1/search")).toHaveLength(4);
+    const searchRequests = api.requestsTo("GET", "/api/v1/search");
+    expect(searchRequests).toHaveLength(5);
+    expect(searchRequests.map((request) => new URL(request.path, "http://test").searchParams.get("type")).sort()).toEqual(["albums", "albums", "artists", "tracks", "tracks"]);
+    expect(screen.queryByRole("alert")).toBeNull();
     expect(new URLSearchParams(history.location.search)).toEqual(new URLSearchParams({ q: "爱", albums_page: "2", tracks_page: "3" }));
     expect(audio.currentTime).toBe(17);
     expect(audio.paused).toBe(false);

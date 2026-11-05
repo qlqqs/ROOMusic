@@ -20,6 +20,9 @@ export const personalKeys = {
   favoriteLookups: (generation: number) => viewerQueryKey(generation, "personal", "favorites", "lookup"),
   favoriteLookup: (generation: number, ids: { trackIds: readonly string[]; groupIds: readonly string[] }) =>
     viewerQueryKey(generation, "personal", "favorites", "lookup", lookupIdsKey(ids)),
+  /** 一批艺人的收藏状态（与曲目、专辑的批量状态分开请求，同在 lookup 前缀下，一起修补与失效）。 */
+  favoriteArtistLookup: (generation: number, artistIds: readonly string[]) =>
+    viewerQueryKey(generation, "personal", "favorites", "lookup", { artistIds: [...new Set(artistIds.map((id) => id.toLowerCase()))].sort() }),
   favoriteQueue: (generation: number) => viewerQueryKey(generation, "personal", "favorites", "track", "queue"),
   /** 心形切换的写操作（前缀）：批量状态据此叠加进行中的切换。 */
   favoriteToggles: (generation: number) => viewerQueryKey(generation, "personal", "favorite-toggle"),

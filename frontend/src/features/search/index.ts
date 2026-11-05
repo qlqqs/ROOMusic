@@ -3,5 +3,5 @@
 export { GLOBAL_SEARCH_INPUT_SELECTOR, GlobalSearchBox } from "./components/global-search-box";
 export { SearchResultsView } from "./components/search-results-view";
 export { parseSearchPageSearch, type SearchPageSearch } from "./search-params";
-export type { SearchTrackItemDTO } from "./api/decoders";
+export type { SearchArtistItemDTO, SearchTrackItemDTO } from "./api/decoders";
 export { epochOfSearchKey, searchKeys } from "./query-keys";
