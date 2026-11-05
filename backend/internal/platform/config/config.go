@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/qlqq/roomusic/backend/internal/platform/weborigin"
 )
 
 const (
@@ -25,6 +27,7 @@ type Server struct {
 	Environment         string
 	DatabaseURL         string
 	AllowedLibraryRoots []string
+	AllowedOrigins      []string
 	SecureCookies       bool
 	DataDirectory       string
 	PublicURL           string
@@ -68,10 +71,47 @@ func Load() (Server, error) {
 	if len(config.AllowedLibraryRoots) == 0 {
 		return Server{}, fmt.Errorf("ROOMUSIC_ALLOWED_LIBRARY_ROOTS must contain at least one root")
 	}
-	if config.Environment == "production" && !config.SecureCookies {
-		return Server{}, fmt.Errorf("ROOMUSIC_SECURE_COOKIES must be true in production")
+	config.AllowedOrigins, err = configuredAllowedOrigins(publicURL)
+	if err != nil {
+		return Server{}, err
+	}
+	if config.Environment == "production" && len(config.AllowedOrigins) == 0 {
+		return Server{}, fmt.Errorf("ROOMUSIC_ALLOWED_ORIGINS must list at least one origin in production")
 	}
 	return config, nil
+}
+
+// configuredAllowedOrigins 规范化并按首次出现顺序去重；清单模式拒绝含糊的旧配置。
+func configuredAllowedOrigins(publicURL string) ([]string, error) {
+	var origins []string
+	seen := make(map[string]bool)
+	for _, item := range strings.Split(os.Getenv("ROOMUSIC_ALLOWED_ORIGINS"), ",") {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		origin, err := weborigin.ParseConfigured(item)
+		if err != nil {
+			return nil, fmt.Errorf("ROOMUSIC_ALLOWED_ORIGINS item %q %w", item, err)
+		}
+		if !seen[origin] {
+			origins = append(origins, origin)
+			seen[origin] = true
+		}
+	}
+	if len(origins) == 0 {
+		return origins, nil
+	}
+	if os.Getenv("ROOMUSIC_SECURE_COOKIES") != "" {
+		return nil, fmt.Errorf("ROOMUSIC_SECURE_COOKIES cannot be combined with ROOMUSIC_ALLOWED_ORIGINS; the Secure flag follows each origin's scheme")
+	}
+	if publicURL != "" {
+		origin, err := weborigin.ParseConfigured(publicURL)
+		if err != nil || !seen[origin] {
+			return nil, fmt.Errorf("ROOMUSIC_PUBLIC_URL must be one of ROOMUSIC_ALLOWED_ORIGINS")
+		}
+	}
+	return origins, nil
 }
 
 // configuredMediaCacheMaxBytes 读取派生缓存上限（MiB，整数）并换算为字节；未设置用默认值，非法值使配置加载失败。

@@ -66,7 +66,26 @@ mise run env-check
 ./scripts/prod.sh
 ```
 
-生产配置必须设置 `ROOMUSIC_SECURE_COOKIES=true`。生产脚本不会启动 Vite，也不要求安装 Make。
+生产配置必须设置非空的 `ROOMUSIC_ALLOWED_ORIGINS`，例如：
+
+```dotenv
+ROOMUSIC_ALLOWED_ORIGINS=http://192.168.50.206:8090,https://music.example.com
+```
+
+来源必须是 `http(s)://host[:port]`，实际端口要与访问入口一致；示例中的 `8090` 需相应配置监听端口或端口映射。
+逗号分隔的每项会去掉首尾空白，忽略空项并去重；协议与主机名转为小写，默认端口 80/443 和单独的末尾 `/` 会去掉。
+IPv6 地址必须带方括号；国际化域名使用 punycode；不允许通配、用户信息、其他路径、查询或片段。
+清单格式错误或生产清单为空时拒绝启动；只配 http 来源也可启动。
+
+清单模式下删除 `ROOMUSIC_SECURE_COOKIES`（即使是 `false` 也冲突），通常也不设置 `ROOMUSIC_PUBLIC_URL`；
+若保留后者供 Vite 使用，须符合原有格式要求且规范化后属于清单，但不参与后端来源判断。
+写请求只按 `Origin` 与清单匹配，不依赖请求 Host 或任何转发头；登录及退出的 Cookie 在 https 来源下带 `Secure`，http 下不带，
+`HttpOnly`、`SameSite=Lax`、路径与有效期不变。局域网使用 IP、公网使用域名，让两个入口的 Cookie 按主机隔离。
+
+未配置清单的非生产环境保持旧模式：`ROOMUSIC_SECURE_COOKIES` 决定来源协议和 Cookie 的 `Secure`，
+来源主机与 `ROOMUSIC_PUBLIC_URL`（设置时）或请求 Host 比较。开发试用清单时需加入 Vite 的实际来源（如 `http://localhost:5173`），
+删除 `ROOMUSIC_SECURE_COOKIES`，并删除或调整 `ROOMUSIC_PUBLIC_URL` 使它属于清单。
+生产脚本不会启动 Vite，也不要求安装 Make。
 `scripts/prod.sh` 默认先执行前端构建（`npm run build`，产物输出到 `backend/cmd/roomusic/web` 并由 Go 内嵌），设置 `ROOMUSIC_SKIP_BUILD=1`
 可使用已提交的产物直接启动。
 

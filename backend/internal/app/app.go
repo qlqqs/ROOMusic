@@ -69,7 +69,12 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	for _, apply := range applied {
 		apply(&assembly)
 	}
-	guard := identity.NewGuard(database, settings.SecureCookies, settings.PublicURL)
+	var guard *identity.Guard
+	if len(settings.AllowedOrigins) > 0 {
+		guard = identity.NewGuardWithAllowedOrigins(database, settings.AllowedOrigins)
+	} else {
+		guard = identity.NewGuard(database, settings.SecureCookies, settings.PublicURL)
+	}
 	libraryService := library.NewService(lifecycle, database, settings.DataDirectory, logger)
 
 	mux := http.NewServeMux()

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
+	"github.com/qlqq/roomusic/backend/internal/platform/weborigin"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -40,15 +41,28 @@ type User struct{ ID, Username, Role string }
 
 // Guard 校验请求的会话与来源。它只读 sessions、users 表，写响应时使用统一错误信封。
 type Guard struct {
-	database      *sql.DB
-	secureCookies bool
-	publicURL     string
+	database       *sql.DB
+	allowedOrigins map[string]bool // 非 nil 即清单模式。
+	secureCookies  bool            // 仅旧模式。
+	publicURL      string          // 仅旧模式。
 }
 
-// NewGuard 返回守卫。secureCookies 决定会话 Cookie 的 Secure 标志与允许的来源协议（https）；
+// NewGuard 返回旧模式守卫。secureCookies 决定会话 Cookie 的 Secure 标志与允许的来源协议（https）；
 // publicURL 非空时来源主机必须与之一致，否则与请求 Host 一致。
 func NewGuard(database *sql.DB, secureCookies bool, publicURL string) *Guard {
 	return &Guard{database: database, secureCookies: secureCookies, publicURL: publicURL}
+}
+
+// NewGuardWithAllowedOrigins 返回清单模式守卫；origins 必须已规范化，空清单属于装配错误。
+func NewGuardWithAllowedOrigins(database *sql.DB, origins []string) *Guard {
+	if len(origins) == 0 {
+		panic("identity: allowed origins must not be empty")
+	}
+	allowed := make(map[string]bool, len(origins))
+	for _, origin := range origins {
+		allowed[origin] = true
+	}
+	return &Guard{database: database, allowedOrigins: allowed}
 }
 
 // Authenticate 返回请求会话对应的用户；缺少、过期、已撤销的会话或已禁用的用户都返回错误。
@@ -94,6 +108,14 @@ func (guard *Guard) RequireSameOrigin(responseWriter http.ResponseWriter, reques
 		httpserver.WriteError(responseWriter, request, http.StatusForbidden, "origin_required", "请求缺少来源校验")
 		return false
 	}
+	if guard.allowedOrigins != nil {
+		normalized, err := weborigin.ParseRequest(origin)
+		if err != nil || !guard.allowedOrigins[normalized] {
+			httpserver.WriteError(responseWriter, request, http.StatusForbidden, "origin_forbidden", "请求来源不受信任")
+			return false
+		}
+		return true
+	}
 	originURL, err := url.Parse(origin)
 	if err != nil || originURL.User != nil || originURL.Path != "" || originURL.RawQuery != "" || originURL.Fragment != "" {
 		httpserver.WriteError(responseWriter, request, http.StatusForbidden, "origin_forbidden", "请求来源不受信任")
@@ -123,8 +145,17 @@ func (guard *Guard) RequireSameOrigin(responseWriter http.ResponseWriter, reques
 }
 
 // SetSessionCookie 写出 24 小时有效的 HttpOnly 会话 Cookie。
-func (guard *Guard) SetSessionCookie(responseWriter http.ResponseWriter, token string) {
-	http.SetCookie(responseWriter, &http.Cookie{Name: SessionCookieName, Value: token, Path: "/", HttpOnly: true, Secure: guard.secureCookies, SameSite: http.SameSiteLaxMode, Expires: time.Now().Add(24 * time.Hour)})
+func (guard *Guard) SetSessionCookie(responseWriter http.ResponseWriter, request *http.Request, token string) {
+	http.SetCookie(responseWriter, &http.Cookie{Name: SessionCookieName, Value: token, Path: "/", HttpOnly: true, Secure: guard.cookieSecure(request), SameSite: http.SameSiteLaxMode, Expires: time.Now().Add(24 * time.Hour)})
+}
+
+// cookieSecure 与来源校验共用解析规则；写 Cookie 的调用方必须先通过 RequireSameOrigin。
+func (guard *Guard) cookieSecure(request *http.Request) bool {
+	if guard.allowedOrigins == nil {
+		return guard.secureCookies
+	}
+	origin, err := weborigin.ParseRequest(request.Header.Get("Origin"))
+	return err == nil && guard.allowedOrigins[origin] && strings.HasPrefix(origin, "https://")
 }
 
 // 新密码只允许可打印 ASCII（含空格），使字符数与字节数一致。
@@ -172,8 +203,8 @@ func VerifyPassword(encodedHash, password string) bool {
 }
 
 // ClearSessionCookie 让浏览器删除会话 Cookie。
-func (guard *Guard) ClearSessionCookie(responseWriter http.ResponseWriter) {
-	http.SetCookie(responseWriter, &http.Cookie{Name: SessionCookieName, Value: "", Path: "/", HttpOnly: true, Secure: guard.secureCookies, SameSite: http.SameSiteLaxMode, MaxAge: -1})
+func (guard *Guard) ClearSessionCookie(responseWriter http.ResponseWriter, request *http.Request) {
+	http.SetCookie(responseWriter, &http.Cookie{Name: SessionCookieName, Value: "", Path: "/", HttpOnly: true, Secure: guard.cookieSecure(request), SameSite: http.SameSiteLaxMode, MaxAge: -1})
 }
 
 // Usernames 批量返回这些用户的用户名，键是小写 UUID；不存在的用户没有键。操作记录页用它显示“谁”。

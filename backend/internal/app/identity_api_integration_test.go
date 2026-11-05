@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -16,7 +17,10 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	identityapi "github.com/qlqq/roomusic/backend/internal/identity/httpapi"
+	"github.com/qlqq/roomusic/backend/internal/platform/config"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
+	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
+	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
@@ -752,4 +756,164 @@ func TestPostgreSQLAdminResetPasswordRejectsInvalidRequests(t *testing.T) {
 	requirePasswordSession(t, a, &e.member, 200)
 	requirePasswordSession(t, a, &e.second, 200)
 	requirePasswordSession(t, a, &e.admin, 200)
+}
+
+// newAllowedOriginsIntegrationTestApplication 只连接 ROOMUSIC_TEST_DATABASE_URL 指定的一次性库，
+// 每个测试再用独立 schema；与既有夹具不同，直接以清单配置装配真实应用，防止漏测 app.New 的分支。
+func newAllowedOriginsIntegrationTestApplication(t *testing.T) *integrationTestApplication {
+	t.Helper()
+	scopedURL := postgrestest.NewSchema(t, "roomusic_origins_")
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	database, err := postgres.Open(ctx, scopedURL)
+	if err != nil {
+		t.Fatalf("打开来源测试隔离库：%v", err)
+	}
+	t.Cleanup(func() {
+		if err := database.Close(); err != nil {
+			t.Errorf("关闭来源测试隔离库：%v", err)
+		}
+	})
+	if err := InitializeCatalog(ctx, database); err != nil {
+		t.Fatalf("初始化来源测试目录：%v", err)
+	}
+	root, data := t.TempDir(), t.TempDir()
+	lifecycle, stop := context.WithCancel(context.Background())
+	application := New(lifecycle, config.Server{
+		AllowedOrigins:      []string{"http://192.168.50.206:8080", "https://music.example.com"},
+		AllowedLibraryRoots: []string{root},
+		DataDirectory:       data,
+	}, database, testFrontend(), slog.New(slog.NewTextHandler(io.Discard, nil)), func(settings *options) {
+		settings.pauseCatalogMaintenance = true
+	})
+	t.Cleanup(func() {
+		stop()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := application.WaitForScans(ctx); err != nil {
+			t.Errorf("等待来源测试扫描停止：%v", err)
+		}
+		if err := application.WaitForCatalogMaintenance(ctx); err != nil {
+			t.Errorf("等待来源测试维护停止：%v", err)
+		}
+	})
+	return &integrationTestApplication{app: application, database: database, handler: application.Handler(), origin: "http://192.168.50.206:8080", allowedRoot: root, dataDirectory: data, shutdown: stop}
+}
+
+func requireOriginSessionCookie(t *testing.T, response *httptest.ResponseRecorder, secure, clear bool) {
+	t.Helper()
+	cookies := response.Result().Cookies()
+	if len(cookies) != 1 {
+		t.Fatalf("期望恰好一个会话 Cookie，得到 %d", len(cookies))
+	}
+	cookie := cookies[0]
+	if cookie.Name != identity.SessionCookieName || cookie.Secure != secure || !cookie.HttpOnly || cookie.SameSite != http.SameSiteLaxMode || cookie.Path != "/" || cookie.Domain != "" {
+		t.Fatalf("会话 Cookie 属性不符：name=%q secure=%v（期望 %v）httpOnly=%v sameSite=%v path=%q domain=%q", cookie.Name, cookie.Secure, secure, cookie.HttpOnly, cookie.SameSite, cookie.Path, cookie.Domain)
+	}
+	if clear {
+		if cookie.Value != "" || cookie.MaxAge != -1 {
+			t.Fatal("退出必须清空 Cookie 并设置 MaxAge=-1")
+		}
+	} else if cookie.Value == "" || cookie.MaxAge != 0 || cookie.Expires.Before(time.Now().Add(24*time.Hour-time.Minute)) || cookie.Expires.After(time.Now().Add(24*time.Hour)) {
+		t.Fatal("登录必须设置非空会话 Cookie、24 小时 Expires 与默认 MaxAge")
+	}
+}
+
+func TestPostgreSQLAllowedOriginsIdentityLifecycle(t *testing.T) {
+	application := newAllowedOriginsIntegrationTestApplication(t)
+	setup := application.request(t, http.MethodPost, "/api/v1/setup/admin", accountBody("curator", identityTestPassword), nil, nil)
+	adminID := requireIdentityBody(t, setup, http.StatusCreated, "curator", "admin")
+	password := identityTestPassword
+	for _, tc := range []struct {
+		name, origin, nextPassword string
+		secure                     bool
+	}{
+		{"http", "http://192.168.50.206:8080", "http-origin-password", false},
+		{"https", "https://music.example.com", "https-origin-password", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// request 夹具的 Host 固定为 roomusic.test；清单来源与 Host 不同也必须通过。
+			headers := map[string]string{"Origin": tc.origin, "X-Forwarded-Host": "evil.example", "X-Forwarded-Proto": "http", "Forwarded": "host=evil.example;proto=http"}
+			before := countRows(t, application, `SELECT count(*) FROM sessions`)
+			login := application.request(t, http.MethodPost, "/api/v1/auth/login", accountBody("curator", password), nil, headers)
+			if got := requireIdentityBody(t, login, http.StatusOK, "curator", "admin"); got != adminID {
+				t.Fatalf("登录返回 ID %q，期望 %q", got, adminID)
+			}
+			requireOriginSessionCookie(t, login, tc.secure, false)
+			user := &integrationTestUser{id: adminID, token: sessionTokenFrom(t, login)}
+			if after := countRows(t, application, `SELECT count(*) FROM sessions`); after != before+1 {
+				t.Fatalf("登录后 sessions=%d，期望 %d", after, before+1)
+			}
+			requirePasswordSession(t, application, user, http.StatusOK)
+
+			changed := application.request(t, http.MethodPost, "/api/v1/auth/password", ownPasswordBody(password, tc.nextPassword), user, headers)
+			requirePasswordSuccess(t, changed, "password_changed")
+			var hash string
+			if err := application.database.QueryRow(`SELECT password_hash FROM users WHERE id=$1::uuid`, adminID).Scan(&hash); err != nil || !identity.VerifyPassword(hash, tc.nextPassword) || identity.VerifyPassword(hash, password) {
+				t.Fatalf("清单来源改密码未正确持久化：%v", err)
+			}
+			password = tc.nextPassword
+			requirePasswordSession(t, application, user, http.StatusOK)
+
+			logout := application.request(t, http.MethodPost, "/api/v1/auth/logout", nil, user, headers)
+			if logout.Code != http.StatusOK || !reflect.DeepEqual(decodeJSONMap(t, logout), map[string]any{"logged_out": true}) {
+				t.Fatalf("退出响应不符：HTTP %d %s", logout.Code, logout.Body.String())
+			}
+			requireOriginSessionCookie(t, logout, tc.secure, true)
+			if active := countRows(t, application, `SELECT count(*) FROM sessions WHERE token_hash=$1 AND revoked_at IS NULL`, identity.HashSessionToken(user.token)); active != 0 {
+				t.Fatal("退出未撤销数据库中的当前会话")
+			}
+			requirePasswordSession(t, application, user, http.StatusUnauthorized)
+		})
+	}
+}
+
+func TestPostgreSQLAllowedOriginsRejectBeforeIdentityWrites(t *testing.T) {
+	application := newAllowedOriginsIntegrationTestApplication(t)
+	setup := application.request(t, http.MethodPost, "/api/v1/setup/admin", accountBody("curator", identityTestPassword), nil, nil)
+	adminID := requireIdentityBody(t, setup, http.StatusCreated, "curator", "admin")
+	login := application.request(t, http.MethodPost, "/api/v1/auth/login", accountBody("curator", identityTestPassword), nil, map[string]string{"Origin": "https://music.example.com"})
+	requireIdentityBody(t, login, http.StatusOK, "curator", "admin")
+	user := &integrationTestUser{id: adminID, token: sessionTokenFrom(t, login)}
+	for _, tc := range []struct{ name, origin, code string }{
+		{"http scheme mismatch", "http://music.example.com", "origin_forbidden"},
+		{"https scheme mismatch", "https://192.168.50.206:8080", "origin_forbidden"},
+		{"other host", "https://evil.example", "origin_forbidden"},
+		{"request Host", "http://roomusic.test", "origin_forbidden"},
+		{"path", "https://music.example.com/app", "origin_forbidden"},
+		{"trailing slash", "https://music.example.com/", "origin_forbidden"},
+		{"credentials", "https://user@music.example.com", "origin_forbidden"},
+		{"query", "https://music.example.com?x=1", "origin_forbidden"},
+		{"fragment", "https://music.example.com#x", "origin_forbidden"},
+		{"null", "null", "origin_forbidden"},
+		{"missing", "", "origin_required"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			headers := map[string]string{"Origin": tc.origin, "X-Forwarded-Host": "music.example.com", "X-Forwarded-Proto": "https", "Forwarded": "host=music.example.com;proto=https"}
+			for _, action := range []struct {
+				name, path string
+				body       any
+				user       *integrationTestUser
+			}{
+				{"login", "/api/v1/auth/login", accountBody("curator", identityTestPassword), nil},
+				{"password", "/api/v1/auth/password", ownPasswordBody(identityTestPassword, "forbidden-origin-password"), user},
+				{"logout", "/api/v1/auth/logout", nil, user},
+			} {
+				t.Run(action.name, func(t *testing.T) {
+					before := passwordDatabaseState(t, application)
+					sessionsBefore := countRows(t, application, `SELECT count(*) FROM sessions`)
+					response := application.request(t, http.MethodPost, action.path, action.body, action.user, headers)
+					requireAPIError(t, response, http.StatusForbidden, tc.code)
+					if cookies := response.Header().Values("Set-Cookie"); len(cookies) != 0 {
+						t.Fatal("拒绝来源不得设置或清除 Cookie")
+					}
+					if after := countRows(t, application, `SELECT count(*) FROM sessions`); after != sessionsBefore {
+						t.Fatalf("被拒绝请求使 sessions 从 %d 变为 %d", sessionsBefore, after)
+					}
+					requirePasswordStateUnchanged(t, application, before)
+				})
+			}
+		})
+	}
+	requirePasswordSession(t, application, user, http.StatusOK)
 }

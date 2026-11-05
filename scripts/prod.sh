@@ -10,7 +10,7 @@ source "$ENV_FILE"
 set +a
 export ROOMUSIC_ENV=production
 export ROOMUSIC_HTTP_ADDR="${ROOMUSIC_HTTP_ADDR:-:8080}"
-[[ "${ROOMUSIC_SECURE_COOKIES:-}" == "true" ]] || { echo "生产环境必须设置 ROOMUSIC_SECURE_COOKIES=true" >&2; exit 1; }
+[[ -n "${ROOMUSIC_ALLOWED_ORIGINS:-}" ]] || { echo "生产环境必须设置 ROOMUSIC_ALLOWED_ORIGINS" >&2; exit 1; }
 
 if [[ "${ROOMUSIC_SKIP_BUILD:-0}" != "1" ]]; then
   (cd "$ROOT_DIR/frontend" && npm run build)

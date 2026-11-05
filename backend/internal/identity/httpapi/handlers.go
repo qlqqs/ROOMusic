@@ -157,7 +157,7 @@ func (handlers *Handlers) login(responseWriter http.ResponseWriter, request *htt
 		httpserver.WriteError(responseWriter, request, 503, "database_unavailable", "服务暂不可用")
 		return
 	}
-	handlers.guard.SetSessionCookie(responseWriter, token)
+	handlers.guard.SetSessionCookie(responseWriter, request, token)
 	httpserver.WriteJSON(responseWriter, 200, map[string]string{"id": userID, "username": input.Username, "role": role})
 }
 
@@ -168,7 +168,7 @@ func (handlers *Handlers) logout(responseWriter http.ResponseWriter, request *ht
 	if cookie, err := request.Cookie(identity.SessionCookieName); err == nil {
 		_, _ = handlers.database.ExecContext(request.Context(), "UPDATE sessions SET revoked_at=NOW() WHERE token_hash=$1", identity.HashSessionToken(cookie.Value))
 	}
-	handlers.guard.ClearSessionCookie(responseWriter)
+	handlers.guard.ClearSessionCookie(responseWriter, request)
 	httpserver.WriteJSON(responseWriter, 200, map[string]bool{"logged_out": true})
 }
 

@@ -65,7 +65,7 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 ### 请求与响应
 
 - 状态变更请求必须通过 Origin 校验、HttpOnly session 和后端角色授权；前端
-  角色仅控制展示。
+  角色仅控制展示。来源规则见[身份合同](./identity-contracts.md)“来源与会话 Cookie”。
 - 错误 envelope 为 `{ "error": { "code": string, "message": string }, "request_id": string }`。
   消息不得包含 SQL、绝对路径、密码、token 或数据库 URL。
 - 前端 transport 沿用 Cookie credentials（`same-origin`）与 JSON 请求体的 Content-Type
@@ -128,15 +128,15 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
   CI 运行真实构建与资产漂移检查（M1a 恢复）。开发
   `vite.config.dev.ts` 才允许自定义 Host 和 API 代理。
 - 开发 Vite 通过公网反代访问时，`allowedHosts` 只放行 `ROOMUSIC_PUBLIC_URL` 的主机名，
-  不得使用 `allowedHosts: true`；后端仍按 `ROOMUSIC_PUBLIC_URL`、Origin scheme/host
-  和 Secure Cookie 校验写请求。
+  不得使用 `allowedHosts: true`；后端在未配置 `ROOMUSIC_ALLOWED_ORIGINS` 时按 `ROOMUSIC_PUBLIC_URL`、Origin scheme/host
+  和 `ROOMUSIC_SECURE_COOKIES` 校验写请求；配置清单后只按清单，Cookie 的 `Secure` 跟随请求来源协议。
 - `.env.dev`、`.env` 是本机配置，必须被 Git 忽略；仓库只跟踪不含真实值的
   `.env.example`。`backend/data/` 等运行期数据（含封面缓存与 `media-cache/` 派生缓存）同样不得提交。
 - ALAC 派生需要部署者安装 ffmpeg（项目不分发）：`ROOMUSIC_FFMPEG_PATH`（绝对路径，空则在 `PATH` 中查找）与
   `ROOMUSIC_MEDIA_CACHE_MAX_MIB`（默认 10240，最小 256）；找不到或自检失败时应用照常启动，ALAC 保持“不能直接播放”。
   `scripts/ffmpeg-pinned.sh` 取出按摘要固定的 ffmpeg 7.1.1，测试、CI 与推荐部署共用。详见[无损派生合同](./playback-derivation-contracts.md)。
 - `scripts/dev.sh` 默认只确保 PostgreSQL、Go 和 Vite；Redis/Meilisearch 是
-  Compose/mise 可选服务。`scripts/prod.sh` 不启动 Node 服务。
+  Compose/mise 可选服务。`scripts/prod.sh` 不启动 Node 服务，要求非空的 `ROOMUSIC_ALLOWED_ORIGINS`，格式和冲突由后端校验。
 
 ### CI 质量门禁
 

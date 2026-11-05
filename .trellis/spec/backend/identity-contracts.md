@@ -2,7 +2,7 @@
 
 ## 1. 范围与触发
 
-当代码涉及初始化管理员、登录与当前用户（查看者）响应、成员创建/停用/会话撤销、改密码与重置密码、命令行恢复密码、密码规则，以及这些接口的写入失败映射时，
+当代码涉及初始化管理员、登录与当前用户（查看者）响应、成员创建/停用/会话撤销、改密码与重置密码、命令行恢复密码、密码规则、来源校验与会话 Cookie，以及这些接口的写入失败映射时，
 遵守本合同。请求与响应的通用规则（错误信封、JSON 请求体、分页）、HTTP 缓存与数据库迁移见
 [Core 0 当前运行合同](./core0-runtime-contracts.md)；目录新增与停用、恢复的幂等见 [目录与扫描流程合同](./library-scan-contracts.md)。
 
@@ -18,6 +18,43 @@
   用独立端点，不扩展 `PATCH /users/{id}`（那里只接受 `disabled`）。
 
 ## 3. 合同
+
+### 来源与会话 Cookie（2026-11-05）
+
+来源解析由 `platform/weborigin` 共用：`ParseConfigured(origin string) (string, error)` 用于配置，
+`ParseRequest(origin string) (string, error)` 用于请求。配置入口是 `config.Load`，结果保存在 `config.Server.AllowedOrigins []string`。
+
+| `ROOMUSIC_ALLOWED_ORIGINS` 格式 | 规则 |
+| --- | --- |
+| 列表 | 逗号分隔，去掉每项首尾空白、忽略空项；规范化后去重并保持首次出现顺序 |
+| 协议与主机 | 仅 http/https，必须有主机，两者都规范化为小写；主机仅 ASCII，国际化域名写 punycode，不允许 `*` 通配 |
+| IPv6 | 字面量必须带方括号，如 `http://[fd00::1]:8090` |
+| 端口 | 可省略；显式端口为 1–65535 的十进制数，http 的 80 与 https 的 443 去掉，其他端口保留 |
+| 路径与附加信息 | 不允许用户信息、查询、片段；配置路径仅允许空或单独 `/`（去掉），请求路径必须为空 |
+| 错误 | 拒绝启动，错误指出 `ROOMUSIC_ALLOWED_ORIGINS` 和出错项；进程沿用 `platform.config.invalid` 事件 |
+
+| 配置组合 | 唯一解释 |
+| --- | --- |
+| 清单非空（清单模式） | 来源判断与 Cookie `Secure` 只看请求 `Origin` 和清单；不依赖请求 Host、`X-Forwarded-*` 或 `Forwarded` |
+| 清单模式且 `ROOMUSIC_SECURE_COOKIES` 非空（任何值） | 拒绝启动：`ROOMUSIC_SECURE_COOKIES cannot be combined with ROOMUSIC_ALLOWED_ORIGINS; the Secure flag follows each origin's scheme` |
+| 清单模式且设置 `ROOMUSIC_PUBLIC_URL` | 先按原有规则校验格式，规范化后必须属于清单，否则 `ROOMUSIC_PUBLIC_URL must be one of ROOMUSIC_ALLOWED_ORIGINS`；仅供 Vite 的 `allowedHosts` 使用，不参与后端判断 |
+| 清单为空且非生产（旧模式） | 原逻辑不变：`ROOMUSIC_SECURE_COOKIES` 决定协议和 Cookie `Secure`；设了 `ROOMUSIC_PUBLIC_URL` 比较它的主机，否则比较请求 Host |
+| 清单为空且 `ROOMUSIC_ENV=production` | 拒绝启动：`ROOMUSIC_ALLOWED_ORIGINS must list at least one origin in production` |
+
+生产不再要求 `SECURE_COOKIES=true`，只含 http 的清单也能启动；清单与旧开关冲突就报错，避免操作者误以为 Cookie 始终带 `Secure`。
+`ROOMUSIC_PUBLIC_URL` 的旧格式检查仍不允许路径（包括末尾 `/`）；清单的末尾斜杠宽容规则不改变旧配置合同。
+
+- `NewGuard(database *sql.DB, secureCookies bool, publicURL string) *Guard` 保留旧行为；
+  `NewGuardWithAllowedOrigins(database *sql.DB, origins []string) *Guard` 要求已规范化的非空清单，空清单 panic（装配错误）。
+  `app.New` 按 `len(settings.AllowedOrigins) > 0` 选择后者，否则选前者。
+- `RequireSameOrigin(w http.ResponseWriter, r *http.Request) bool` 签名不变：先检查 `Origin` 是否缺少（`403 origin_required`）；
+  清单模式下解析失败或不在清单返回 `403 origin_forbidden`，否则通过；旧模式仍按原来的协议、`PUBLIC_URL` 主机或请求 Host 校验。
+  两个错误的 message 仍分别是“请求缺少来源校验”“请求来源不受信任”，信封不变。请求中的 `null`、`file://`、路径、查询和用户信息均不通过清单校验。
+- `SetSessionCookie(w http.ResponseWriter, r *http.Request, token string)` 与 `ClearSessionCookie(w http.ResponseWriter, r *http.Request)`
+  必须在 `RequireSameOrigin` 通过后调用。清单模式重新解析同一 `Origin`，仅清单内的 https 来源令 `Secure=true`；其他情况为 false。
+  旧模式直接使用全局 `secureCookies`。登录/退出均先校验来源，拒绝来源不得写会话或 Cookie。
+- Cookie 名仍为 `roomusic_session`，`HttpOnly`、`SameSite=Lax`、`Path=/` 不变；登录 `Expires` 为 24 小时，退出 `MaxAge=-1`。
+  没有 CORS、Cookie 改名或转发头信任机制。
 
 ### 身份与成员接口
 
@@ -73,6 +110,8 @@
 
 | 条件 | 行为 |
 | --- | --- |
+| 清单模式下来源解析失败或不在清单 | `403 origin_forbidden`，不写库、不写 Cookie |
+| 写请求缺少来源（两种模式） | `403 origin_required`，不写库、不写 Cookie |
 | 用户目标不存在 | `404 not_found`，事务回滚 |
 | 禁用最后一个启用管理员 | `409 last_admin`，不改用户或 session |
 | 用户 SQL/事务失败 | `503 database_unavailable` 或分类错误，不返回成功 |
@@ -93,11 +132,24 @@
 
 ## 5. 正确、基准与错误案例
 
+- 来源正确案例：清单同时允许局域网 http 与公网 https，分别登录/退出时 Cookie 的 `Secure` 跟随来源；反代改写 Host 不影响判断。
+- 来源基准案例：非生产未设置清单时，既有 `NewGuard(..., false, "")` 和开发配置继续按旧模式工作。
+- 来源错误案例：清单设置后仍保留 `ROOMUSIC_SECURE_COOKIES=false`，必须拒绝启动，不能静默忽略。
+
 - 正确：管理员状态变更锁定同一组管理员行，session 撤销与 `disabled_at` 一起提交；
   两个并发禁用请求至多成功一个。
 - 错误：忽略 `Exec` 错误后返回 200。
 
 ## 6. 必需测试
+
+- `platform/weborigin` 表驱动覆盖大小写、默认/非默认端口、IPv6 方括号、配置允许而请求拒绝末尾 `/`；
+  拒绝路径/查询/片段/用户信息、`null`、file/ftp、空主机、端口 0/65536、非 ASCII 主机与通配。
+- `platform/config` 清理来源相关环境变量，覆盖清单规范化/去重、非法项错误包含配置名及该项、生产缺清单失败、
+  纯 http 清单及未设置旧开关成功、旧开关冲突、`PUBLIC_URL` 清单内/外、旧模式读取结果不变。
+- `identity` 的无数据库守卫测试覆盖双来源通过、协议错配/其他主机/非法格式/缺来源拒绝；Host 和转发头不影响清单模式；
+  登录/退出 Cookie 的 `Secure`、`HttpOnly`、`SameSite`、`Path`；旧模式协议、`PUBLIC_URL` 主机、请求 Host 三条路径各有正反例。
+- `internal/app/identity_api_integration_test.go` 用清单配置装配，两个来源分别登录、写操作和退出成功并核对 Cookie；
+  拒绝来源登录为 403 且 sessions 不增加。数据库用隔离测试库，JSON 样本不重写。
 
 - 身份与成员（F3，`internal/app/identity_api_integration_test.go`，PostgreSQL）：三处查看者响应带 `id` 且与成员列表一致；
   初始化管理员与新建成员只把唯一约束冲突映射为 409（用测试库里的触发器注入 `RAISE EXCEPTION`，SQLSTATE 是 `P0001` 而不是
@@ -111,6 +163,12 @@
   用户不存在与密码不合规时数据不变；输出不含密码和数据库地址；首尾空格保留。`platform/postgres` 测 `Connect` 不迁移。
 
 ## 7. 错误与正确示例
+
+### 来源与 Cookie
+
+错误：根据 `X-Forwarded-Proto` 或请求 Host 放行清单外来源，或者未校验就创建会话并设置 Cookie。
+正确：登录/退出先调用 `RequireSameOrigin(w, r)`，失败立即返回；登录创建会话后调用 `SetSessionCookie(w, r, token)`，
+退出调用 `ClearSessionCookie(w, r)`。两者共用 `weborigin.ParseRequest`，不另写来源解析或转发头规则。
 
 ### Wrong
 
