@@ -4,10 +4,12 @@ import {
   decodeCreatedMember,
   decodeMemberDisabledState,
   decodeMemberList,
+  decodePasswordReset,
   decodeSessionsRevoked,
   type CreatedMemberDTO,
   type MemberDisabledStateDTO,
   type MemberListDTO,
+  type PasswordResetDTO,
   type SessionsRevokedDTO,
 } from "./decoders";
 
@@ -33,4 +35,12 @@ export function setMemberDisabled(id: string, disabled: boolean): Promise<ApiRes
 /** 撤销该成员的全部会话；成员不存在时返回 404 not_found。 */
 export function revokeMemberSessions(id: string): Promise<ApiResponse<SessionsRevokedDTO>> {
   return apiRequest({ method: "POST", path: `/api/v1/users/${id}/sessions/revoke` }, decodeSessionsRevoked);
+}
+
+/**
+ * 替成员设一个新密码，并撤销该成员的全部会话；停用的成员重置后仍是停用。
+ * 对自己调用返回 403 self_password_reset（改自己的密码要走“修改密码”，验证当前密码）。
+ */
+export function resetMemberPassword(id: string, password: string): Promise<ApiResponse<PasswordResetDTO>> {
+  return apiRequest({ method: "POST", path: `/api/v1/users/${id}/password`, body: { password } }, decodePasswordReset);
 }

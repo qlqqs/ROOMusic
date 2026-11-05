@@ -14,10 +14,12 @@ type MemberTableProps = {
   onDisable: (member: MemberDTO) => void;
   onEnable: (member: MemberDTO) => void;
   onRevoke: (member: MemberDTO) => void;
+  /** 其他成员（启用或停用）的行才有“重置密码”；自己改密码走侧栏的“修改密码”。 */
+  onResetPassword: (member: MemberDTO) => void;
 };
 
-/** 成员列表：用户名、角色、状态、创建时间与可用操作。停用与撤销会话要确认，重新启用直接执行。 */
-export function MemberTable({ members, viewerId, busy, onDisable, onEnable, onRevoke }: MemberTableProps) {
+/** 成员列表：用户名、角色、状态、创建时间与可用操作。停用与撤销会话要确认，重新启用直接执行，重置密码在对话框里输入新密码。 */
+export function MemberTable({ members, viewerId, busy, onDisable, onEnable, onRevoke, onResetPassword }: MemberTableProps) {
   const columns: Column<MemberDTO>[] = [
     {
       id: "username",
@@ -65,6 +67,11 @@ export function MemberTable({ members, viewerId, busy, onDisable, onEnable, onRe
                 撤销会话
               </Button>
             </>
+          )}
+          {member.id === viewerId ? null : (
+            <Button busy={busy} aria-label={`重置成员 ${member.username} 的密码`} onClick={() => onResetPassword(member)}>
+              重置密码
+            </Button>
           )}
         </span>
       ),

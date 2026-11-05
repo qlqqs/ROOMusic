@@ -2,6 +2,7 @@ import type { ApiResponse } from "../../../shared/api";
 import { apiRequest } from "../../../shared/api";
 import {
   decodeLoggedOut,
+  decodePasswordChanged,
   decodeSetupStatus,
   decodeViewer,
   type SetupStatusDTO,
@@ -31,4 +32,17 @@ export function postLogin(credentials: Credentials): Promise<ApiResponse<ViewerD
 
 export function postLogout(): Promise<ApiResponse<{ logged_out: true }>> {
   return apiRequest({ method: "POST", path: "/api/v1/auth/logout", body: {}, session: "none" }, decodeLoggedOut);
+}
+
+export type PasswordChange = { currentPassword: string; newPassword: string };
+
+/**
+ * 修改自己的密码。保持默认的 session: "required"：真正的 401 unauthorized 照常结束会话；
+ * 当前密码不对是 403 current_password_incorrect，只拒绝这次操作。“再输入一次”只在前端比较，不传给后端。
+ */
+export function changeOwnPassword(input: PasswordChange): Promise<ApiResponse<{ password_changed: true }>> {
+  return apiRequest(
+    { method: "POST", path: "/api/v1/auth/password", body: { current_password: input.currentPassword, new_password: input.newPassword } },
+    decodePasswordChanged,
+  );
 }

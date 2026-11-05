@@ -10,6 +10,6 @@ export { ReleaseAdminActions } from "./components/release-admin-actions";
 export { ReleaseHistory } from "./components/release-history";
 export { useReleaseCommands, type ReleaseCommands } from "./hooks/use-release-commands";
 export { ArtistAdminActions } from "./components/artist-admin-actions";
-export { ArtistCandidatesView } from "./components/artist-candidates-view";
+export { ArtistCandidatesView, type ArtistCandidateStatus } from "./components/artist-candidates-view";
 export { useArtistCommands, type ArtistCommands } from "./hooks/use-artist-commands";
 export { governanceKeys } from "./query-keys";

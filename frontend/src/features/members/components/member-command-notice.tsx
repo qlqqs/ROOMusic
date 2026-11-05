@@ -1,7 +1,7 @@
 import { describeFailure, isHttpFailure } from "../../../shared/api";
 import { Button, Notice } from "../../../shared/ui";
 import type { MemberCommand, MemberCommandState } from "../hooks/use-member-commands";
-import { memberFailureMessages } from "./member-messages";
+import { memberFailureMessages, resetPasswordFailureMessages } from "./member-messages";
 
 type MemberCommandNoticeProps = {
   state: MemberCommandState;
@@ -20,6 +20,8 @@ function successText(command: MemberCommand): string {
       return `已重新启用成员“${command.member.username}”。`;
     case "revoke":
       return `已撤销成员“${command.member.username}”的全部会话，对方需要重新登录。`;
+    case "reset-password":
+      return `已重置“${command.member.username}”的密码。`;
   }
 }
 
@@ -46,10 +48,19 @@ export function MemberCommandNotice({ state, scope, onDismiss }: MemberCommandNo
   }
 
   if (state.command.kind === "create" && isHttpFailure(state.failure, 409, "username_taken")) return null;
+  const resetting = state.command.kind === "reset-password";
   const description =
     state.failure === null
       ? { message: "发生了未预期的错误，请刷新页面后重试。", requestId: null }
-      : describeFailure(state.failure, { context: "write", messages: memberFailureMessages });
+      : describeFailure(state.failure, { context: "write", messages: resetting ? resetPasswordFailureMessages : memberFailureMessages });
+  // 列表看不出密码有没有换：重置的结果不确定时直接请用户再重置一次（再设一次同样的密码没有坏处）。
+  if (resetting && state.uncertain) {
+    return (
+      <Notice tone="error" title="结果未确认" requestId={description.requestId} action={dismiss}>
+        不确定密码有没有重置好，可以再重置一次。
+      </Notice>
+    );
+  }
   return (
     <Notice tone="error" title={state.uncertain ? "结果未确认" : "操作没有完成"} requestId={description.requestId} action={dismiss}>
       <p>{description.message}</p>

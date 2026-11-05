@@ -40,6 +40,8 @@ export function ModalDialog({ open, titleId, onRequestClose, initialFocus, class
       className={cx(styles.dialog, className)}
       aria-labelledby={titleId}
       onCancel={(event) => {
+        // React 让 cancel 沿组件树冒泡：嵌套在另一个对话框里（窄屏菜单里的“修改密码”）时，Esc 只关闭最上层的这一个。
+        if (event.target !== event.currentTarget) return;
         event.preventDefault();
         onRequestClose();
       }}

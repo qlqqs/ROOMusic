@@ -215,12 +215,12 @@ const playlistDetailRoute = createRoute({
   component: PlaylistDetailRoute,
 });
 
-// “可能是同一位”的候选（M5 ⑤，管理员）：page 是页码（2 及以上）。
+// “可能是同一位”的候选（M5 ⑤，管理员）：status 只在看“已忽略”时出现，page 是页码（2 及以上）；不合法的值显式写成 undefined。
 function ArtistCandidatesRoute() {
-  const { page } = artistCandidatesRoute.useSearch();
+  const { page, status } = artistCandidatesRoute.useSearch();
   return (
     <AdminGate>
-      <ArtistCandidatesPage page={page ?? 1} />
+      <ArtistCandidatesPage page={page ?? 1} status={status ?? "pending"} />
     </AdminGate>
   );
 }
@@ -228,7 +228,10 @@ function ArtistCandidatesRoute() {
 const artistCandidatesRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: "/artist-candidates",
-  validateSearch: (search: Record<string, unknown>): { page?: number | undefined } => ({ page: parsePageParam(search["page"]) }),
+  validateSearch: (search: Record<string, unknown>): { page?: number | undefined; status?: "ignored" | undefined } => ({
+    page: parsePageParam(search["page"]),
+    status: search["status"] === "ignored" ? "ignored" : undefined,
+  }),
   component: ArtistCandidatesRoute,
 });
 

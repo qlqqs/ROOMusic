@@ -102,6 +102,17 @@ export function installFakeSession(api: FakeApi, initial: Partial<FakeSession> =
     session.current = null;
     return sampleResponse("auth/logout");
   });
+  // 修改自己的密码：先校验新密码（400 invalid_input），再核对当前密码（403 current_password_incorrect，会话不变）。
+  // 替身只有一个会话，成功后当前会话保留；其他会话被撤销由后端测试覆盖。
+  api.on("POST", "/api/v1/auth/password", (request) => {
+    const account = session.current === null ? undefined : session.accounts[session.current];
+    if (account === undefined) return sampleResponse("errors/unauthorized");
+    const { current_password: current, new_password: next } = request.body as { current_password: string; new_password: string };
+    if (!/^[\x20-\x7E]{12,72}$/.test(next)) return jsonResponse(400, { error: { code: "invalid_input", message: "新密码需要 12 到 72 位英文字母、数字或符号" }, request_id: "fake-request" });
+    if (account.password !== current) return jsonResponse(403, { error: { code: "current_password_incorrect", message: "当前密码不正确" }, request_id: "fake-request" });
+    account.password = next;
+    return jsonResponse(200, { password_changed: true });
+  });
   api.on("POST", "/api/v1/setup/admin", (request) => {
     if (!session.setupRequired) return sampleResponse("errors/setup-closed");
     const { username, password } = request.body as { username: string; password: string };

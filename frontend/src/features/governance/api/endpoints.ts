@@ -303,8 +303,12 @@ export function ignoreArtistCandidate(
   );
 }
 
-/** “可能是同一位”的候选，一页（管理员）：按证据数降序。艺人数据还在整理时返回 503 artist_catalog_preparing。 */
-export function fetchArtistCandidates(params: { page: number; pageSize: number; signal?: AbortSignal | undefined }): Promise<ApiResponse<ArtistCandidatePageDTO>> {
+/**
+ * “可能是同一位”的候选，一页（管理员）。待处理的按证据数降序；ignored 为 true 时是已忽略的，最近忽略的在前。
+ * 艺人数据还在整理时返回 503 artist_catalog_preparing。
+ */
+export function fetchArtistCandidates(params: { page: number; pageSize: number; ignored: boolean; signal?: AbortSignal | undefined }): Promise<ApiResponse<ArtistCandidatePageDTO>> {
   const query = new URLSearchParams({ page: String(params.page), page_size: String(params.pageSize) });
+  if (params.ignored) query.set("ignored", "true");
   return apiRequest({ method: "GET", path: `/api/v1/artist-candidates?${query}`, signal: params.signal }, decodeArtistCandidatePage);
 }

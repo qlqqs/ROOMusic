@@ -313,6 +313,16 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
       case "POST /api/v1/auth/logout":
         mock.session = null;
         return sample("auth/logout");
+      case "POST /api/v1/auth/password": {
+        // 先校验新密码，再核对当前密码；当前密码不对是 403，会话不变。只有一个会话，成功后保留。
+        const account = mock.session === null ? undefined : mock.accounts.get(mock.session);
+        if (account === undefined) return sample("errors/unauthorized");
+        const { current_password: current, new_password: next } = body as { current_password: string; new_password: string };
+        if (!/^[\x20-\x7E]{12,72}$/.test(next)) return json({ error: { code: "invalid_input", message: "新密码需要 12 到 72 位英文字母、数字或符号" }, request_id: "sample-request" }, 400);
+        if (account.password !== current) return json({ error: { code: "current_password_incorrect", message: "当前密码不正确" }, request_id: "sample-request" }, 403);
+        account.password = next;
+        return json({ password_changed: true });
+      }
       case "GET /api/v1/search":
       case "GET /api/v1/search/suggestions":
         return guarded(method, path, false, () => respondToSearch(mock.search, path, search));
@@ -495,6 +505,20 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
           return json(scanForViewer(scan));
         }
         return sample("errors/method-not-allowed");
+      });
+    }
+
+    if (/^\/api\/v1\/users\/[^/]+\/password$/.test(path) && method === "POST") {
+      // 重置成员密码：对自己 403 self_password_reset；停用的成员也能重置，仍是停用；该成员的会话全部撤销。
+      return guarded(method, path, true, () => {
+        const target = mock.users.find((user) => user.id === idIn(path, "users"));
+        if (target === undefined) return sample("errors/not-found-user");
+        if (target.username === mock.session) return json({ error: { code: "self_password_reset", message: "修改自己的密码需要提供当前密码" }, request_id: "sample-request" }, 403);
+        const { password } = body as { password: string };
+        if (!/^[\x20-\x7E]{12,72}$/.test(password)) return json({ error: { code: "invalid_input", message: "新密码需要 12 到 72 位英文字母、数字或符号" }, request_id: "sample-request" }, 400);
+        const account = mock.accounts.get(target.username);
+        if (account !== undefined) account.password = password;
+        return json({ password_reset: true });
       });
     }
 

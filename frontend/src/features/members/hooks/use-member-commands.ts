@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { failureOf, isOutcomeUncertain, type ApiFailure } from "../../../shared/api";
 import { useViewerScope } from "../../auth";
 import type { MemberDTO } from "../api/decoders";
-import { createMember, revokeMemberSessions, setMemberDisabled } from "../api/endpoints";
+import { createMember, resetMemberPassword, revokeMemberSessions, setMemberDisabled } from "../api/endpoints";
 import { memberKeys } from "../query-keys";
 
 export type MemberTarget = Pick<MemberDTO, "id" | "username">;
@@ -11,7 +11,9 @@ export type MemberCommand =
   | { kind: "create"; username: string; password: string }
   | { kind: "disable"; member: MemberTarget }
   | { kind: "enable"; member: MemberTarget }
-  | { kind: "revoke"; member: MemberTarget };
+  | { kind: "revoke"; member: MemberTarget }
+  /** disabled 记下发起时成员是否停用（沿用合同里的形状；结果文案现在不再区分）。 */
+  | { kind: "reset-password"; member: MemberTarget & { disabled: boolean }; password: string };
 
 export type MemberCommandState =
   | { status: "idle" }
@@ -39,11 +41,14 @@ async function execute(command: MemberCommand): Promise<void> {
     case "revoke":
       await revokeMemberSessions(command.member.id);
       return;
+    case "reset-password":
+      await resetMemberPassword(command.member.id, command.password);
+      return;
   }
 }
 
 /**
- * 成员的新建、停用、重新启用与撤销会话。后端没有幂等键，同一个请求发两次就执行两次，所以这里没有“重试”：
+ * 成员的新建、停用、重新启用、撤销会话与重置密码。后端没有幂等键，同一个请求发两次就执行两次，所以这里没有“重试”：
  * 无论成败（包括结果不确定）都刷新成员列表，让用户核对服务器上的当前状态，再决定是否重新操作。
  * 对自己的操作成功后，后端已经撤销了当前会话，随后的列表刷新得到 401，由会话边界回到登录页。
  */

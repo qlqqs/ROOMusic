@@ -25,6 +25,7 @@ export function IssueList({ items, status, selectedId }: IssueListProps) {
         return (
           <li key={item.release.id} className={styles.item}>
             <Link
+              from="/issues"
               to="/issues"
               search={(previous) => ({ ...previous, release: item.release.id })}
               aria-current={selected ? "page" : undefined}

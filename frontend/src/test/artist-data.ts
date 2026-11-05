@@ -132,9 +132,18 @@ export function respondToArtists(data: ArtistData, method: string, url: URL, bod
     }
   }
   if (data.state !== "ready") return artistError(write ? "artist_catalog_not_ready" : "artist_catalog_preparing", write ? 409 : 503);
-  if (path === "/api/v1/artist-candidates" && method === "GET") return ok(page(data.candidates
-    .map((item) => ({ ...item, key_pairs: item.key_pairs.filter((pair) => !data.ignored.has(pairKey(pair.left_key_id, pair.right_key_id))) }))
-    .filter((item) => item.key_pairs.length > 0 && !data.details.get(item.left.id)?.redirect_artist_id && !data.details.get(item.right.id)?.redirect_artist_id), query));
+  if (path === "/api/v1/artist-candidates" && method === "GET") {
+    // ignored 只接受单个 true / false；已忽略的只保留被忽略的名字对，按最近忽略的在前（集合保留插入顺序，恢复再忽略会排到最后）。
+    const filter = query.getAll("ignored");
+    if (filter.length > 1 || (filter.length === 1 && filter[0] !== "true" && filter[0] !== "false")) return artistError("invalid_filter", 400);
+    const ignoredView = filter[0] === "true";
+    const order = [...data.ignored];
+    const ignoredAt = (item: ArtistCandidateDTO) => Math.max(...item.key_pairs.map((pair) => order.indexOf(pairKey(pair.left_key_id, pair.right_key_id))));
+    const items = data.candidates
+      .map((item) => ({ ...item, key_pairs: item.key_pairs.filter((pair) => data.ignored.has(pairKey(pair.left_key_id, pair.right_key_id)) === ignoredView) }))
+      .filter((item) => item.key_pairs.length > 0 && !data.details.get(item.left.id)?.redirect_artist_id && !data.details.get(item.right.id)?.redirect_artist_id);
+    return ok(page(ignoredView ? items.sort((left, right) => ignoredAt(right) - ignoredAt(left)) : items, query));
+  }
   if (path === "/api/v1/artists" && method === "GET") {
     let items = [...data.details.values()].filter((item) => item.artist.available && item.redirect_artist_id === null).map((item) => item.artist);
     const q = query.get("q")?.trim().toLocaleLowerCase();

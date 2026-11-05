@@ -19,3 +19,6 @@ export const decodeSetupStatus = d.defineDecoder(setupStatusDecoder);
 export type SetupStatusDTO = d.Infer<typeof setupStatusDecoder>;
 
 export const decodeLoggedOut = d.defineDecoder(d.object({ logged_out: d.literal(true) }));
+
+// POST /auth/password 成功：当前会话不变，本人的其他会话已被撤销。
+export const decodePasswordChanged = d.defineDecoder(d.object({ password_changed: d.literal(true) }));

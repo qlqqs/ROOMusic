@@ -19,7 +19,7 @@ const validPassword = (value: string) => /^[\x20-\x7E]{12,72}$/.test(value);
 /**
  * 成员接口的替身，行为依据后端实现：未登录 401、非管理员 403；新建只能是 user 角色，用户名去空白后非空且密码是 12 到 72 位可打印 ASCII，
  * 重复用户名 409；路径里的 ID 不是 UUID 时 400，成员不存在时 404（含撤销会话）；停用最后一个启用的管理员 409 last_admin；停用与撤销会话会撤销目标的全部会话
- * （目标是当前登录的账号时，替身把会话置为失效，之后的请求得到 401）。成员写操作没有幂等保证。
+ * （目标是当前登录的账号时，替身把会话置为失效，之后的请求得到 401）；重置密码对自己 403 self_password_reset，停用的成员也能重置。成员写操作没有幂等保证。
  */
 export function installMembersApi(api: FakeApi, session: FakeSession, overrides: Partial<FakeMembers> = {}): FakeMembers {
   const members: FakeMembers = {
@@ -100,6 +100,27 @@ export function installMembersApi(api: FakeApi, session: FakeSession, overrides:
       if (target === undefined) return sampleResponse("errors/not-found-user");
       revokeSessionsOf(target);
       return jsonResponse(200, { revoked: true });
+    }),
+  );
+
+  // 重置成员密码：对自己 403 self_password_reset；停用的成员也能重置，仍是停用；该成员的会话全部撤销。
+  api.on("POST", /^\/api\/v1\/users\/[^/]+\/password$/, (request) =>
+    unreliable(() => {
+      const denied = admin();
+      if (denied !== null) return denied;
+      if (malformedId(request.path)) return sampleResponse("errors/invalid-id-user");
+      const id = idOf(request.path).toLowerCase();
+      if (session.current !== null && session.accounts[session.current]?.id.toLowerCase() === id) {
+        return jsonResponse(403, { error: { code: "self_password_reset", message: "修改自己的密码需要提供当前密码" }, request_id: "fake-request" });
+      }
+      const { password } = request.body as { password: string };
+      if (!validPassword(password)) return jsonResponse(400, { error: { code: "invalid_input", message: "新密码需要 12 到 72 位英文字母、数字或符号" }, request_id: "fake-request" });
+      const target = members.users.find((user) => user.id === id);
+      if (target === undefined) return sampleResponse("errors/not-found-user");
+      const account = session.accounts[target.username];
+      if (account !== undefined) account.password = password;
+      revokeSessionsOf(target);
+      return jsonResponse(200, { password_reset: true });
     }),
   );
 

@@ -31,3 +31,9 @@ const sessionsRevokedDecoder = d.object({ revoked: d.literal(true) });
 
 export const decodeSessionsRevoked = d.defineDecoder(sessionsRevokedDecoder);
 export type SessionsRevokedDTO = d.Infer<typeof sessionsRevokedDecoder>;
+
+// POST /users/{id}/password：新密码已生效，该成员的全部会话已撤销。
+const passwordResetDecoder = d.object({ password_reset: d.literal(true) });
+
+export const decodePasswordReset = d.defineDecoder(passwordResetDecoder);
+export type PasswordResetDTO = d.Infer<typeof passwordResetDecoder>;

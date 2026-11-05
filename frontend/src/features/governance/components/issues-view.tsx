@@ -122,7 +122,7 @@ export function IssuesView({ search, commands }: IssuesViewProps) {
     page,
     pageCount: pagination === undefined ? 0 : pageCountOf(pagination.total, pagination.page_size),
     ready: pagination !== undefined && !issues.isPlaceholderData,
-    onOutOfRange: (lastPage) => void navigate({ to: "/issues", search: (previous) => ({ ...previous, page: lastPage > 1 ? lastPage : undefined }), replace: true }),
+    onOutOfRange: (lastPage) => void navigate({ from: "/issues", to: "/issues", search: (previous) => ({ ...previous, page: lastPage > 1 ? lastPage : undefined }), replace: true }),
   });
 
   const list = (
@@ -147,7 +147,7 @@ export function IssuesView({ search, commands }: IssuesViewProps) {
                 label="问题列表分页"
                 page={data.pagination.page}
                 pageCount={pageCountOf(data.pagination.total, data.pagination.page_size)}
-                renderLink={(target, props) => <Link to="/issues" search={(previous) => ({ ...previous, page: target > 1 ? target : undefined })} {...props} />}
+                renderLink={(target, props) => <Link from="/issues" to="/issues" search={(previous) => ({ ...previous, page: target > 1 ? target : undefined })} {...props} />}
               />
             </div>
           )
@@ -192,7 +192,7 @@ export function IssuesView({ search, commands }: IssuesViewProps) {
         list
       ) : (
         <div className={styles.detailColumn}>
-          <Link to="/issues" search={(previous) => ({ ...previous, release: undefined })} className={styles.back}>
+          <Link from="/issues" to="/issues" search={(previous) => ({ ...previous, release: undefined })} className={styles.back}>
             <ArrowLeft size={16} aria-hidden="true" /> 返回问题列表
           </Link>
           {notice}
