@@ -100,6 +100,9 @@ function CandidateStatusFilter({ status }: { status: ArtistCandidateStatus }) {
           key={target}
           to="/artist-candidates"
           search={{ status: target === "ignored" ? "ignored" : undefined }}
+          // Link 激活时自己设 aria-current；默认的部分匹配会忽略值为 undefined 的 status，让“待处理”在已忽略视图里也算激活。
+          // explicitUndefined 让 status: undefined 参与比较：只有地址里没有 status 时“待处理”才是当前项，page 不影响。
+          activeOptions={{ explicitUndefined: true }}
           aria-current={status === target ? "page" : undefined}
           className={styles.filter}
         >
