@@ -7,7 +7,7 @@
 #   scripts/ffmpeg-pinned.sh          # 取出（如需要）并打印路径
 #   scripts/ffmpeg-pinned.sh --image  # 只打印固定的镜像引用（scripts/gen-playback-fixtures.sh 共用同一处定义）
 #
-# 升级镜像须重新核对派生素材与测试，并同步更新这里的摘要与版本前缀。
+# 升级镜像须重新核对派生素材与测试，并同步更新这里的摘要与版本前缀、deploy/production/Dockerfile 中的镜像引用。
 set -euo pipefail
 
 FFMPEG_IMAGE="mwader/static-ffmpeg@sha256:11a44711684c0b9f754c047dcd64235b8b52deab251bd0e0a86f22faa160749c"

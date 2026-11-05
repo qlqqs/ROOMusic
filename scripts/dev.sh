@@ -8,16 +8,6 @@ set -a
 # shellcheck disable=SC1090
 source "$ENV_FILE"
 set +a
-requested_environment="${ROOMUSIC_ENV:-}"
-requested_database_url="${ROOMUSIC_DATABASE_URL:-}"
-if [[ -f "$ROOT_DIR/.env" && "${ROOMUSIC_ENV_FILE:-}" == "$ROOT_DIR/.env" ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source "$ROOT_DIR/.env"
-  set +a
-fi
-[[ -n "$requested_environment" ]] && ROOMUSIC_ENV="$requested_environment"
-[[ -n "$requested_database_url" ]] && ROOMUSIC_DATABASE_URL="$requested_database_url"
 export ROOMUSIC_ENV="${ROOMUSIC_ENV:-dev}"
 export ROOMUSIC_HTTP_ADDR="${ROOMUSIC_HTTP_ADDR:-:8080}"
 

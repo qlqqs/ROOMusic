@@ -22,9 +22,10 @@ Core 0 的阶段目标是最小可用闭环（前端的当前进度见上方说�
 - Redis 8
 - Meilisearch 1.45.0
 
-Go 与 Node.js 在宿主机运行；PostgreSQL、Redis 和 Meilisearch 由 Docker Compose 承载。三个服务的端口只绑定到 `127.0.0.1`。
+开发时 Go 与 Node.js 在宿主机运行；PostgreSQL、Redis 和 Meilisearch 由 Docker Compose 承载，依赖端口只绑定到 `127.0.0.1`。
+生产使用独立的应用、PostgreSQL 与备份容器，不运行 Redis、Meilisearch。
 
-## 首次使用
+## 开发环境
 
 安装工具链：
 
@@ -50,21 +51,37 @@ mise run env-up
 mise run env-check
 ```
 
-## 快捷开发工作流
+### 快捷开发工作流
 
 默认复制 `.env.example` 为 `.env.dev`（或通过 `ROOMUSIC_ENV_FILE` 指定配置）并填写本地 PostgreSQL 密码，可用一条命令启动 PostgreSQL、Go 后端和 Vite 开发服务：
 
 ```bash
-./scripts/dev.sh
+make dev
 ```
 
-前端开发地址为 `http://localhost:5173`，后端地址为 `http://localhost:8080`。如需经公网反代访问 Vite，把 `.env.dev` 中的 `ROOMUSIC_PUBLIC_URL` 设为反代后的外部地址，Vite 只会放行该主机名。React 修改由 Vite 热更新；Go 或迁移文件修改会自动重启后端。按 `Ctrl-C` 会同时停止两个开发进程，PostgreSQL 容器保持运行。也可使用 `make dev` 作为便利入口。
+前端开发地址为 `http://localhost:5173`，后端地址为 `http://localhost:8080`。如需经公网反代访问 Vite，把 `.env.dev` 中的 `ROOMUSIC_PUBLIC_URL` 设为反代后的外部地址，Vite 只会放行该主机名。React 修改由 Vite 热更新；Go 或迁移文件修改会自动重启后端。按 `Ctrl-C` 会同时停止两个开发进程，PostgreSQL 容器保持运行。
 
-生产环境使用无后缀 `.env`，由 Go 单体直接提供 `8080`：
+## 生产环境
 
-```bash
-./scripts/prod.sh
-```
+开发与生产可以同时运行，配置分别是 `.env.dev` 与 `.env.prod`，开发端口 8080（Vite 5173）、生产端口 8090；
+项目、网络、数据库和缓存卷各自独立。生产只用 `main`（或 `REF=`）已提交的代码，从 Git 导出构建镜像，并使用该提交的 Compose，
+工作区的未提交改动不会进入镜像。构建无需 Node，前端用已提交的内嵌产物。
+首次配置、备份与恢复步骤见 [生产部署说明](deploy/production/README.md)。
+
+| 用途 | 命令 |
+| --- | --- |
+| 构建、升级前备份、启动 | `make prod` |
+| 回退指定提交 | `make prod REF=<提交>` |
+| 停止（保留容器与数据卷） | `make prod-stop` |
+| 状态与运行版本 | `make prod-status` |
+| 日志 | `make prod-logs` |
+| 立即备份 | `make prod-backup` |
+| 重置密码 | `make prod-reset-password U=<用户名>` |
+
+升级前备份失败就不换应用版本；不要用 `down -v` 停止生产。`.env.prod` 不提交，建议另存一份；
+`git clean -x` 会删除它和被忽略的 `music/`。根目录 `.env` 不再作为脚本配置使用。
+
+### 来源配置
 
 生产配置必须设置非空的 `ROOMUSIC_ALLOWED_ORIGINS`，例如：
 
@@ -85,21 +102,19 @@ IPv6 地址必须带方括号；国际化域名使用 punycode；不允许通配
 未配置清单的非生产环境保持旧模式：`ROOMUSIC_SECURE_COOKIES` 决定来源协议和 Cookie 的 `Secure`，
 来源主机与 `ROOMUSIC_PUBLIC_URL`（设置时）或请求 Host 比较。开发试用清单时需加入 Vite 的实际来源（如 `http://localhost:5173`），
 删除 `ROOMUSIC_SECURE_COOKIES`，并删除或调整 `ROOMUSIC_PUBLIC_URL` 使它属于清单。
-生产脚本不会启动 Vite，也不要求安装 Make。
-`scripts/prod.sh` 默认先执行前端构建（`npm run build`，产物输出到 `backend/cmd/roomusic/web` 并由 Go 内嵌），设置 `ROOMUSIC_SKIP_BUILD=1`
-可使用已提交的产物直接启动。
 
 ### 忘记密码
 
 成员忘记密码时，请管理员在“成员”页点这一行的“重置密码”设一个新密码，再告诉对方；对方登录后可以在侧栏“修改密码”里改成自己的。
 
-管理员自己忘记密码时，在服务器上执行：
+管理员自己忘记密码时，在服务器上按环境执行：
 
 ```bash
-./scripts/reset-password.sh <用户名>
+make prod-reset-password U=<用户名>       # 生产：在运行中的容器内执行
+./scripts/reset-password.sh <用户名>      # 开发：读取 .env.dev（或 ROOMUSIC_ENV_FILE）
 ```
 
-脚本读取与 `scripts/prod.sh` 相同的 `.env`（或 `ROOMUSIC_ENV_FILE`），在终端里输入两次新密码（不回显）；也可以从管道传入一行。
+在终端里输入两次新密码（不回显）；开发脚本也可以从管道读取一行，且拒绝生产配置。
 它只连接数据库，不跑迁移，不需要停服务；成功后这个账号在所有设备上退出登录。用户不存在、密码不合规或数据库连不上时退出码为 1，参数错误为 2。
 
 如需重新体验首次初始化流程，开发环境可清空业务数据：
@@ -122,7 +137,7 @@ mise run env-down
 
 浏览器大多不能解码 ALAC。服务端会在第一次播放时用 ffmpeg 把 ALAC 无损转换成 FLAC（位深、采样率与声道不变，发布前核对转换前后解码出的 PCM 完全相同），
 缓存在 `<数据目录>/media-cache`（默认 `ROOMUSIC_DATA_DIR=./data`），之后和其他曲目一样经鉴权播放；等待转换时播放栏显示“正在准备”。
-项目**不分发 ffmpeg**，需要播放 ALAC 的部署者自行安装，任选其一：
+生产镜像构建时会从固定摘要的上游镜像复制 ffmpeg，无需另行安装；项目不单独分发 ffmpeg 二进制。开发环境需要自行安装，任选其一：
 
 ```bash
 ./scripts/ffmpeg-pinned.sh            # 取出按摘要固定的静态 ffmpeg 7.1.1（需要 docker），打印可执行文件路径
@@ -187,11 +202,11 @@ npm run test:e2e                                    # Playwright：先构建，�
 - 后端：`gofmt`、普通测试、`-race` 测试、`go vet` 和 `go build`；
 - 前端：`npm ci`、ESLint、TypeScript 检查、Vitest、production build 与 `backend/cmd/roomusic/web` 漂移检查，
   然后安装 Chromium 并运行 Playwright 冒烟、无障碍与响应式检查（失败时上传报告）；
-- 集成与配置：Shell 语法、两个 Compose 配置和
+- 集成与配置：Shell 语法、开发/测试/生产 Compose 配置、镜像固定版本一致性和
   `./scripts/test-integration.sh` 提供的 PostgreSQL 18 集成测试。
 
 任一命令失败都会使工作流失败。CI 不启动 Redis 或 Meilisearch，不读取生产
-`.env`，也不使用真实音乐目录。以下列出等价门禁；本地验证按改动选择最小相关集合，
+`.env.prod`，也不使用真实音乐目录。以下列出等价门禁；本地验证按改动选择最小相关集合，
 不是每次都运行全部。仅文档变更检查链接与 diff 即可：
 
 ```bash
@@ -203,9 +218,13 @@ npm run test:e2e                                    # Playwright：先构建，�
 git diff --exit-code -- backend/cmd/roomusic/web
 test -z "$(git ls-files --others --exclude-standard -- backend/cmd/roomusic/web)"
 (cd frontend && npx playwright install --with-deps chromium && npm run test:e2e)
-bash -n scripts/*.sh
+for script in scripts/*.sh deploy/production/*.sh; do bash -n "$script"; done
 PG_PASSWORD=ci-placeholder MEILI_MASTER_KEY=ci-placeholder docker compose config --quiet
 docker compose -f compose.test.yaml config --quiet
+docker compose -f deploy/production/compose.yaml --env-file .env.prod.example config --quiet
+grep -qF "$(scripts/ffmpeg-pinned.sh --image)" deploy/production/Dockerfile
+grep -qF "golang:$(sed -n 's/^go = "\(.*\)"/\1/p' .mise.toml)-" deploy/production/Dockerfile
+grep -qF "$(sed -n 's/^x-postgres-image: &postgres-image //p' deploy/production/compose.yaml) AS tools" deploy/production/Dockerfile
 ./scripts/test-integration.sh
 git diff --check
 ```

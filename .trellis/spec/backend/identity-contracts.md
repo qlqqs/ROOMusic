@@ -135,7 +135,7 @@ func (t *LoginThrottle) Begin(username, source string, fingerprint [8]byte) (*At
 
 ### 命令行恢复（2026-11-05）
 
-- `roomusic reset-password <用户名>`（`cmd/roomusic/reset_password.go`，运维入口 `scripts/reset-password.sh`，读取同一个 `.env`）。
+- `roomusic reset-password <用户名>`（`cmd/roomusic/reset_password.go`，运维入口：生产 `make prod-reset-password U=<用户名>`（在运行中的应用容器内执行），开发 `scripts/reset-password.sh`（读取 `.env.dev`，拒绝生产配置））。
   不带参数启动时仍是服务；`help`、`-h`、`--help` 输出用法；其他参数是未知命令。
 - 只读 `config.DatabaseURL()`，只调用 `postgres.Connect`（连接与 ping，不迁移、不初始化目录、不恢复扫描、不启动 HTTP）。
 - 终端里隐藏输入、输入两次；不在终端时从 stdin 读一行（最多 4 KiB，只去掉末尾换行，不 `TrimSpace`）。读密码不计时；

@@ -1,0 +1,6 @@
+*
+!backend/
+backend/data/
+!deploy/production/entrypoint.sh
+!deploy/production/backup.sh
+!deploy/production/restore.sh

@@ -1,0 +1,109 @@
+name: roomusic-prod
+
+x-postgres-image: &postgres-image postgres:18.1-alpine3.23@sha256:aa6eb304ddb6dd26df23d05db4e5cb05af8951cda3e0dc57731b771e0ef4ab29
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "5" }
+
+services:
+  app:
+    # 由提交导出构建，不从工作区构建或在线拉取应用镜像。
+    image: "${ROOMUSIC_IMAGE:-roomusic-prod-app:current}"
+    pull_policy: never
+    environment:
+      ROOMUSIC_ENV: production
+      ROOMUSIC_HTTP_ADDR: ":8080"
+      ROOMUSIC_DATABASE_URL: "postgres://roomusic:${ROOMUSIC_DB_PASSWORD:?请在 .env.prod 中设置 ROOMUSIC_DB_PASSWORD}@postgres:5432/roomusic?sslmode=disable"
+      ROOMUSIC_ALLOWED_ORIGINS: "${ROOMUSIC_ALLOWED_ORIGINS:?请在 .env.prod 中设置 ROOMUSIC_ALLOWED_ORIGINS}"
+      ROOMUSIC_ALLOWED_LIBRARY_ROOTS: /music
+      ROOMUSIC_DATA_DIR: /data
+      ROOMUSIC_FFMPEG_PATH: /usr/local/bin/ffmpeg
+      ROOMUSIC_MEDIA_CACHE_MAX_MIB: "${ROOMUSIC_MEDIA_CACHE_MAX_MIB:-10240}"
+    ports:
+      # 只发布 IPv4，避免公网 IPv6 绕过外部反代。
+      - "0.0.0.0:${ROOMUSIC_HTTP_PORT:?请在 .env.prod 中设置 ROOMUSIC_HTTP_PORT}:8080"
+    volumes:
+      - type: bind
+        source: "${ROOMUSIC_MUSIC_DIR:?请在 .env.prod 中设置 ROOMUSIC_MUSIC_DIR}"
+        target: /music
+        read_only: true
+        bind: { create_host_path: false }
+      - app-data:/data
+    read_only: true
+    tmpfs: ["/tmp:size=64m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      postgres: { condition: service_healthy, restart: true }
+    networks: [roomusic]
+    restart: unless-stopped
+    logging: *logging
+
+  postgres:
+    image: *postgres-image
+    environment:
+      POSTGRES_DB: roomusic
+      POSTGRES_USER: roomusic
+      POSTGRES_PASSWORD: "${ROOMUSIC_DB_PASSWORD:?请在 .env.prod 中设置 ROOMUSIC_DB_PASSWORD}"
+    volumes: [postgres-data:/var/lib/postgresql]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U roomusic -d roomusic"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    stop_grace_period: 60s
+    networks: [roomusic]
+    restart: unless-stopped
+    logging: *logging
+    # 数据库不发布端口。
+
+  backup:
+    image: "${ROOMUSIC_TOOLS_IMAGE:-roomusic-prod-tools:current}"
+    pull_policy: never
+    user: "1000:1000"
+    entrypoint: ["/bin/sh", "/opt/roomusic/backup.sh"]
+    command: ["loop"]
+    environment:
+      PGHOST: postgres
+      PGUSER: roomusic
+      PGDATABASE: roomusic
+      PGPASSWORD: "${ROOMUSIC_DB_PASSWORD:?请在 .env.prod 中设置 ROOMUSIC_DB_PASSWORD}"
+      TZ: "${ROOMUSIC_TIMEZONE:-Asia/Shanghai}"
+      ROOMUSIC_BACKUP_HOUR: "${ROOMUSIC_BACKUP_HOUR:-3}"
+      ROOMUSIC_BACKUP_KEEP_DAYS: "${ROOMUSIC_BACKUP_KEEP_DAYS:-14}"
+    volumes:
+      - type: bind
+        source: "${ROOMUSIC_BACKUP_DIR:?请在 .env.prod 中设置 ROOMUSIC_BACKUP_DIR}"
+        target: /backups
+        bind: { create_host_path: false }
+    healthcheck:
+      test: ["CMD", "/bin/sh", "/opt/roomusic/backup.sh", "check"]
+      interval: 10m
+      timeout: 10s
+      start_period: 15m
+      start_interval: 10s
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [roomusic]
+    restart: unless-stopped
+    logging: *logging
+
+  restore-check:
+    profiles: [tools]
+    image: "${ROOMUSIC_TOOLS_IMAGE:-roomusic-prod-tools:current}"
+    pull_policy: never
+    user: postgres
+    network_mode: none
+    entrypoint: ["/bin/sh", "/opt/roomusic/restore.sh", "_inside"]
+    tmpfs: ["/tmp:size=4g,mode=1777"]
+
+networks:
+  roomusic:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: "${ROOMUSIC_SUBNET:?请在 .env.prod 中设置 ROOMUSIC_SUBNET}"
+
+volumes:
+  postgres-data:
+  app-data:

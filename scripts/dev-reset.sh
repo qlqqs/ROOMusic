@@ -4,12 +4,12 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 requested_environment="${ROOMUSIC_ENV:-}"
 requested_database_url="${ROOMUSIC_DATABASE_URL:-}"
-if [[ -f "$ROOT_DIR/.env" ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source "$ROOT_DIR/.env"
-  set +a
-fi
+ENV_FILE="${ROOMUSIC_ENV_FILE:-$ROOT_DIR/.env.dev}"
+[[ -f "$ENV_FILE" ]] || { echo "缺少开发配置：$ENV_FILE" >&2; exit 1; }
+set -a
+# shellcheck disable=SC1090
+source "$ENV_FILE"
+set +a
 [[ -n "$requested_environment" ]] && ROOMUSIC_ENV="$requested_environment"
 [[ -n "$requested_database_url" ]] && ROOMUSIC_DATABASE_URL="$requested_database_url"
 

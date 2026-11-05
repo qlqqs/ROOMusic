@@ -38,7 +38,8 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 
 ## 2. 接口签名
 
-- 生产启动：`go -C backend run ./cmd/roomusic`，由 `scripts/prod.sh` 从仓库根目录调用。
+- 生产启动：`make prod`（`scripts/production.sh`）从 `main`（或 `REF=`）导出构建应用与 tools 镜像，
+  使用该提交的 `deploy/production/compose.yaml` 启动，项目为 `roomusic-prod`；升级前总是备份，失败不换应用版本。
 - 开发启动：`./scripts/dev.sh`，默认读取 `.env.dev`，Go 运行在 `backend/`，
   Vite 通过开发配置代理 `/api` 到 `:8080`。
 - HTTP：`POST /api/v1/users`、`PATCH /api/v1/users/{id}`、
@@ -59,6 +60,9 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
   同一路径 200 与 202 形状不同时用它核对响应体与状态码相符），
   非 2xx 经统一的错误信封 decoder；响应不是 JSON、信封不合法或 decoder 失败时归为 `invalid_response`，不进入缓存。
   函数名不构成架构限制，合同是“边界解码一次、失败安全分类”。
+
+- 部署运维：`scripts/production.sh [--dry-run] up [--ref <提交>]`、`stop|status|logs|backup`、`reset-password <用户名>`、
+  `build-image [--ref <提交>] [--prefix <前缀>]`；恢复：`deploy/production/restore.sh check|production <备份>`。
 
 ## 3. 合同
 
@@ -130,13 +134,20 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 - 开发 Vite 通过公网反代访问时，`allowedHosts` 只放行 `ROOMUSIC_PUBLIC_URL` 的主机名，
   不得使用 `allowedHosts: true`；后端在未配置 `ROOMUSIC_ALLOWED_ORIGINS` 时按 `ROOMUSIC_PUBLIC_URL`、Origin scheme/host
   和 `ROOMUSIC_SECURE_COOKIES` 校验写请求；配置清单后只按清单，Cookie 的 `Secure` 跟随请求来源协议。
-- `.env.dev`、`.env` 是本机配置，必须被 Git 忽略；仓库只跟踪不含真实值的
-  `.env.example`。`backend/data/` 等运行期数据（含封面缓存与 `media-cache/` 派生缓存）同样不得提交。
-- ALAC 派生需要部署者安装 ffmpeg（项目不分发）：`ROOMUSIC_FFMPEG_PATH`（绝对路径，空则在 `PATH` 中查找）与
+- `.env.dev`、`.env.prod`、`.env` 是本机配置，必须被 Git 忽略；仓库只跟踪不含真实值的
+  `.env.example` 与 `.env.prod.example`。开发脚本默认读 `.env.dev`，生产显式读 `.env.prod`，不再 source 根目录 `.env`。`backend/data/` 等运行期数据（含封面缓存与 `media-cache/` 派生缓存）同样不得提交。
+- ALAC 派生需要 ffmpeg：生产镜像构建时从固定摘要镜像复制，开发由部署者安装（项目不单独分发二进制）；`ROOMUSIC_FFMPEG_PATH`（绝对路径，空则在 `PATH` 中查找）与
   `ROOMUSIC_MEDIA_CACHE_MAX_MIB`（默认 10240，最小 256）；找不到或自检失败时应用照常启动，ALAC 保持“不能直接播放”。
   `scripts/ffmpeg-pinned.sh` 取出按摘要固定的 ffmpeg 7.1.1，测试、CI 与推荐部署共用。详见[无损派生合同](./playback-derivation-contracts.md)。
 - `scripts/dev.sh` 默认只确保 PostgreSQL、Go 和 Vite；Redis/Meilisearch 是
-  Compose/mise 可选服务。`scripts/prod.sh` 不启动 Node 服务，要求非空的 `ROOMUSIC_ALLOWED_ORIGINS`，格式和冲突由后端校验。
+  Compose/mise 可选服务。开发的 `mise run env-*` 显式使用 `--env-file .env.dev`。
+- 生产镜像固定 Go、Alpine、PostgreSQL 基础镜像版本与摘要，ffmpeg 与 `scripts/ffmpeg-pinned.sh` 同一摘要；
+  使用已提交的前端，不依赖 Node。uid 1000 运行，音乐只读挂载，缓存与数据库卷分离。
+  应用只发布 IPv4 8090，生产固定子网 `10.203.50.0/24`（演练 `10.203.51.0/24`），与开发同时运行互不影响。
+  入口等数据库接受连接后启动，`/readyz` 用于镜像健康检查。生产要求非空 `ROOMUSIC_ALLOWED_ORIGINS`，格式与冲突由后端校验。
+- tools 镜像含随提交打包的备份/恢复脚本，PostgreSQL 版本与数据库相同；每日 `pg_dump -Fc`，保留 14 天，失败有日志，
+  超过 26 小时无成功备份即不健康；不备份 `/data` 或音乐文件。停止只用 `stop`、不删卷，密码恢复用 `make prod-reset-password U=<用户名>`。
+  运维与恢复步骤见[部署说明](../../../deploy/production/README.md)。
 
 ### CI 质量门禁
 
@@ -149,8 +160,8 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 - 生产构建之后执行 `git diff --exit-code -- backend/cmd/roomusic/web`，并检查该目录没有未跟踪生成文件；
   随后 `npx playwright install --with-deps chromium` 与 `npm run test:e2e`（对生产构建的浏览器冒烟、无障碍与
   响应式检查，失败时上传报告）。
-  集成 job 执行 `bash -n scripts/*.sh`、两个 Compose
-  配置校验和 `./scripts/test-integration.sh`；后者先经 `scripts/ffmpeg-pinned.sh` 取出固定版本 ffmpeg（取不到即失败，
+  集成 job 逐个执行 `bash -n` 检查 `scripts/*.sh` 与 `deploy/production/*.sh`，校验开发、测试、生产三个 Compose
+  及 ffmpeg、Go、PostgreSQL 固定版本一致性（CI 不构建镜像），并运行 `./scripts/test-integration.sh`；后者先经 `scripts/ffmpeg-pinned.sh` 取出固定版本 ffmpeg（取不到即失败，
   派生用例不得静默跳过），真实启动 PostgreSQL 18 并运行 `TestPostgreSQL|TestFFmpeg`，结束时清理专用容器和数据卷。
   真实播放 job 运行 `./scripts/playback-e2e.sh`，同样经该脚本取得同一个 ffmpeg。
 - **API 响应样本**：集成测试 `TestPostgreSQLAPIResponseSamples`（`backend/internal/app/api_samples_integration_test.go`）
@@ -160,7 +171,7 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
   decoder。样本由集成作业把关漂移，前端作业读取它们（`frontend/src/test/api-contract.test.ts`，Playwright 的受控响应也取自样本）。
   测试断言样本不含允许根目录的绝对路径、临时目录前缀、`password`、`roomusic_session`、会话令牌与测试密码；扫描素材是临时目录里的
   合成文件，不读取真实音乐。
-- CI 不启动或依赖 Redis/Meilisearch，不读取生产 `.env`，也不使用真实音乐目录。普通
+- CI 不启动或依赖 Redis/Meilisearch，不读取生产 `.env.prod`，也不使用真实音乐目录。普通
   测试因未设置 `ROOMUSIC_TEST_DATABASE_URL` 而跳过时，不得被视为 PostgreSQL 集成门禁
   通过。
 
@@ -192,6 +203,9 @@ Authorization/session token、密码、数据库 URL、完整 NAS 路径或音�
 
 | 条件 | 行为 |
 | --- | --- |
+| 部署参数错误 / 找不到提交 | 退出 2；执行或备份失败退出 1，不执行后续换版本 |
+| 生产未运行 | backup / reset-password 退出 1；status 提示但退出 0 |
+| 恢复前备份失败 / 恢复失败 | 前者不覆盖库；后者保持应用停止并打印安全备份的恢复命令 |
 | session 缺少/未知 `role` | decoder 拒绝，不能默认为 admin |
 | 请求体不是合法 JSON | `400 invalid_json`，响应里只有一个错误信封 |
 | 未登录访问需要登录的接口 | `401 unauthorized`，message“需要登录”，与角色无关 |
@@ -207,8 +221,13 @@ Authorization/session token、密码、数据库 URL、完整 NAS 路径或音�
 ## 5. 正确、基准与错误案例
 
 - 错误：把 `role` 缺失解释为 admin。
+- 部署：正确是导出提交后构建且备份成功才换版本；错误是直接从脏工作区构建或备份失败仍继续。
+  同一提交的两镜像 revision 匹配时可复用，仍须备份；停止用 `stop`，不用 `down -v`。
 
 ## 6. 必需测试
+
+- 部署：逐脚本语法检查、生产模板 Compose 校验、三项版本一致性、导出树的 app/tools 构建；
+  演练验证脏工作区隔离、备份失败不换版本、恢复核对/失败停机、乱序重启，以及开发卷不变。只打印命令不等于实际部署通过。
 
 - 前端 decoder/transport 测试随 feature 边界组织（M1a 已建立）：每个 decoder 有样本与反例（缺字段、错类型、未知枚举、超界）、
   请求层覆盖内容类型、损坏 JSON、HTML 回落页、信封不合法、网络失败与取消；所有后端样本由契约测试逐个解码并往返比较。
@@ -222,7 +241,7 @@ Authorization/session token、密码、数据库 URL、完整 NAS 路径或音�
   `10-02-classical-f3-backend-gaps` 的 `research/cache-headers-smoke.md`（只用合成数据）。
 - 运行门禁：`npm run lint`、`npm run typecheck`、`npm run test`、
   `gofmt -l .`、`go test ./... -count=1`、`go vet ./...`、`go build ./...`、
-  `go test -race ./... -count=1`、`bash -n scripts/*.sh`、两个 Compose 配置校验、
+  `go test -race ./... -count=1`、逐个脚本的 `bash -n`、三个 Compose 配置与镜像版本一致性校验、
   `./scripts/test-integration.sh` 和 `git diff --check`（按改动取最小集合）。
 
 ## 后续技术债

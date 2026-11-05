@@ -105,7 +105,8 @@ jobs:
           go-version: '1.25.10'
           cache-dependency-path: backend/go.sum
       - name: Set up shell checks
-        run: bash -n scripts/*.sh
+        run: |
+          for script in scripts/*.sh; do bash -n "$script"; done
       - name: Validate Compose configuration
         env:
           PG_PASSWORD: ci-placeholder
@@ -113,6 +114,11 @@ jobs:
         run: |
           docker compose config --quiet
           docker compose -f compose.test.yaml config --quiet
+          docker compose -f deploy/production/compose.yaml --env-file .env.prod.example config --quiet
+          for script in deploy/production/*.sh; do bash -n "$script"; done
+          grep -qF "$(scripts/ffmpeg-pinned.sh --image)" deploy/production/Dockerfile
+          grep -qF "golang:$(sed -n 's/^go = "\(.*\)"/\1/p' .mise.toml)-" deploy/production/Dockerfile
+          grep -qF "$(sed -n 's/^x-postgres-image: &postgres-image //p' deploy/production/compose.yaml) AS tools" deploy/production/Dockerfile
       - name: Run PostgreSQL 18 and pinned ffmpeg integration tests
         env:
           ROOMUSIC_TEST_PG_PASSWORD: ci-placeholder
