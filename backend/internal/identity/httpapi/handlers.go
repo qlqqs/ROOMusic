@@ -1,6 +1,6 @@
 // Package httpapi 是身份能力的 REST 传输层：初始化管理员、登录登出、当前用户与成员管理。
 // 权限判断由 identity.Guard 完成；这里的 handler 只解码请求、调用守卫和映射响应。
-// 成员写入的 SQL 暂留在 handler 中（B0 技术债，随成员管理审计一并抽出）。
+// 已有的成员写入 SQL 暂留在 handler 中（B0 技术债）；改密码与重置的 SQL 在 identity/passwords.go。
 package httpapi
 
 import (

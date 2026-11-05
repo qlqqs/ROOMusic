@@ -3,7 +3,7 @@
 ## Status And Intent
 
 后端已按能力拆到 `backend/internal/`（B0，2026-09-30 完成，行为保持的纯重构）。`backend/cmd/roomusic`
-只剩进程入口 `main.go` 与前端产物 `web/`；迁移位于 `backend/migrations/`。下方“Current Layout”是实际布局，
+只剩进程入口 `main.go`、子命令 `reset_password.go` 与前端产物 `web/`；迁移位于 `backend/migrations/`。下方“Current Layout”是实际布局，
 “Deferred”列出尚未创建的层和能力。实现尚未满足拆分触发条件时不要创建空目录或伪接口。
 
 ## Current Layout
@@ -11,7 +11,8 @@
 ```text
 backend/
 ├── cmd/roomusic/
-│   ├── main.go                     # 进程入口：加载配置、连接数据库、装配 app、HTTP 生命周期
+│   ├── main.go                     # 进程入口：加载配置、连接数据库、装配 app、HTTP 生命周期；带参数时分派子命令
+│   ├── reset_password.go           # 子命令 reset-password：读密码、只连库、映射退出码（见身份与成员合同）
 │   └── web/                        # Vite 生产产物（go:embed），不手工编辑
 ├── internal/
 │   ├── app/                        # 组合根：装配服务与 handler、挂载全部路由、降级 handler
@@ -19,7 +20,7 @@ backend/
 │   │   ├── config/                 # 环境变量解码与校验
 │   │   ├── httpserver/             # 请求 ID 与完成日志中间件、JSON 与错误信封、/api 兜底、
 │   │   │                           # 前端静态资源、健康检查
-│   │   ├── postgres/               # 连接与迁移执行器
+│   │   ├── postgres/               # 连接与迁移执行器：Connect 只连接与 ping，Open = Connect + 迁移
 │   │   │   └── postgrestest/       # 仅测试使用：隔离 schema 的测试库
 │   │   └── uuid/                   # UUID 生成与格式校验
 │   ├── identity/                   # 会话、密码、Guard（同源、登录、管理员校验）
@@ -67,6 +68,7 @@ C2 的 B3 已将治理实现移到 `catalog/governance`，其 `Store` 经 `NewSt
   （含 F2 的幂等流程），与“handler 不含 SQL”的规则不符。M3 的新操作（修正、归组、撤销）已按 `operations.Run` 实现，handler 只做解析、鉴权与响应映射；
   目录操作与成员管理没有迁入共同流程（目录操作记录不并入操作记录页，成员写操作的接入见[治理合同](./governance-contracts.md)第 11 节与
   [身份与成员合同](./identity-contracts.md)），下一次改动它们时再抽出用例。扫描相关 handler 已只做解析、鉴权和响应映射。
+  2026-11-05 新增的改密码与重置接口从一开始就把 SQL 放在 `identity/passwords.go`，已有的成员写入 SQL 原样不动。
 
 ## Ownership
 
