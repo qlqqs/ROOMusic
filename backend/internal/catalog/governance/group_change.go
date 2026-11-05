@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
-	"github.com/qlqq/roomusic/backend/internal/catalog/internal/searchindex"
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/writegate"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
@@ -161,7 +160,7 @@ func GroupChangeExecutor(request GroupChangeRequest) operations.Executor {
 		if _, err := tx.ExecContext(ctx, `UPDATE releases SET group_id=$2::uuid, edit_revision = edit_revision + 1 WHERE id=$1::uuid`, request.ReleaseID, target); err != nil {
 			return operations.Outcome{}, err
 		}
-		if err := searchindex.RefreshRelease(ctx, tx, request.ReleaseID); err != nil {
+		if err := refreshGovernedRelease(ctx, tx, request.ReleaseID); err != nil {
 			return operations.Outcome{}, err
 		}
 		return operations.Outcome{

@@ -1,0 +1,8 @@
+{
+  "body": {
+    "artists_state": "preparing",
+    "epoch": 3,
+    "search_mode": "normalized"
+  },
+  "status": 200
+}

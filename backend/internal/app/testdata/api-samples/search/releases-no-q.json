@@ -3,10 +3,18 @@
     "items": [
       {
         "album_artist": null,
+        "album_artist_refs": [],
         "artist": "合成艺人",
+        "artist_refs": [
+          {
+            "artist_id": "00000000-0000-4000-8000-000000000001",
+            "display_name": "合成艺人",
+            "name": "合成艺人"
+          }
+        ],
         "artwork": null,
         "attention_count": 0,
-        "id": "00000000-0000-4000-8000-000000000001",
+        "id": "00000000-0000-4000-8000-000000000002",
         "media_type": null,
         "medium_count": 1,
         "source_type": null,
@@ -16,10 +24,18 @@
       },
       {
         "album_artist": null,
+        "album_artist_refs": [],
         "artist": "合成艺人",
+        "artist_refs": [
+          {
+            "artist_id": "00000000-0000-4000-8000-000000000001",
+            "display_name": "合成艺人",
+            "name": "合成艺人"
+          }
+        ],
         "artwork": null,
         "attention_count": 0,
-        "id": "00000000-0000-4000-8000-000000000002",
+        "id": "00000000-0000-4000-8000-000000000003",
         "media_type": null,
         "medium_count": 1,
         "source_type": null,
@@ -29,10 +45,18 @@
       },
       {
         "album_artist": null,
+        "album_artist_refs": [],
         "artist": "合成艺人",
+        "artist_refs": [
+          {
+            "artist_id": "00000000-0000-4000-8000-000000000001",
+            "display_name": "合成艺人",
+            "name": "合成艺人"
+          }
+        ],
         "artwork": null,
         "attention_count": 0,
-        "id": "00000000-0000-4000-8000-000000000003",
+        "id": "00000000-0000-4000-8000-000000000004",
         "media_type": null,
         "medium_count": 1,
         "source_type": null,
@@ -42,10 +66,18 @@
       },
       {
         "album_artist": null,
+        "album_artist_refs": [],
         "artist": "合成艺人",
+        "artist_refs": [
+          {
+            "artist_id": "00000000-0000-4000-8000-000000000001",
+            "display_name": "合成艺人",
+            "name": "合成艺人"
+          }
+        ],
         "artwork": null,
         "attention_count": 0,
-        "id": "00000000-0000-4000-8000-000000000004",
+        "id": "00000000-0000-4000-8000-000000000005",
         "media_type": null,
         "medium_count": 1,
         "source_type": null,
@@ -55,10 +87,18 @@
       },
       {
         "album_artist": null,
+        "album_artist_refs": [],
         "artist": "原版艺人",
+        "artist_refs": [
+          {
+            "artist_id": "00000000-0000-4000-8000-000000000006",
+            "display_name": "原版艺人",
+            "name": "原版艺人"
+          }
+        ],
         "artwork": null,
         "attention_count": 0,
-        "id": "00000000-0000-4000-8000-000000000005",
+        "id": "00000000-0000-4000-8000-000000000007",
         "media_type": null,
         "medium_count": 1,
         "source_type": null,
@@ -68,10 +108,24 @@
       },
       {
         "album_artist": "さユり",
+        "album_artist_refs": [
+          {
+            "artist_id": "00000000-0000-4000-8000-000000000008",
+            "display_name": "さユり",
+            "name": "さユり"
+          }
+        ],
         "artist": "Beyoncé",
+        "artist_refs": [
+          {
+            "artist_id": "00000000-0000-4000-8000-000000000009",
+            "display_name": "Beyoncé",
+            "name": "Beyoncé"
+          }
+        ],
         "artwork": null,
         "attention_count": 1,
-        "id": "00000000-0000-4000-8000-000000000006",
+        "id": "00000000-0000-4000-8000-000000000010",
         "media_type": null,
         "medium_count": 1,
         "source_type": null,

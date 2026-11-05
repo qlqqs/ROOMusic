@@ -35,6 +35,7 @@ type AudioObservation struct {
 	Label                   string
 	Barcode                 string
 	Credits                 []metadata.Credit
+	ArtistTagEvidence       []metadata.ArtistTagEvidence
 	RawAtoms                map[string]string
 	// ContentFingerprint 是解析时无需额外读盘就能得到的内容指纹（FLAC 的音频 MD5、OGG 的音频包哈希）；
 	// 其他格式为空，需要时用 ContentFingerprint 函数计算。

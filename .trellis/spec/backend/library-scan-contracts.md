@@ -2,8 +2,7 @@
 
 ## 1. 范围与触发
 
-当代码涉及目录（library root）的新增、停用、恢复及其幂等，或扫描的遍历、暂存、身份规划、Release Graph 写入、CUE、抓轨日志、
-艺人与 AlbumArtist 整理、封面发现与绑定时，遵守本合同。扫描状态、持久化取消与跨进程协调见
+目录生命周期、幂等及扫描（遍历、暂存、身份规划、Release Graph、CUE、抓轨、署名与封面）遵守本合同。扫描状态、持久化取消与跨进程协调见
 [扫描协调合同](./scan-coordination-contracts.md)；发行读取接口见 [Catalog REST 合同](./catalog-rest-contracts.md)；内嵌歌词的提取与保存见[歌词合同](./lyrics-contracts.md)；
 通用请求与响应、迁移执行器与 CI 见 [Core 0 当前运行合同](./core0-runtime-contracts.md)。
 
@@ -96,9 +95,8 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 - Track artist 与 composer/conductor/performer/producer 使用同一组保守拆分规则：明确的
   `; `、`；`、` / `、`feat.`、`ft.`、`with`、`、` 可拆分；紧凑 `/`、`,`、`&`
   只按已固化规则处理，`Simon & Garfunkel`、`Earth, Wind & Fire`、`AC/DC` 等固定组合
-  保持整体。只有显式官方别名表可以改变 canonical display name；禁止用相似度猜别名。
-  最终 Track artist 对 canonical 名去重、稳定排序并以 ` / ` 连接，原 tag observation
-  仍保留为来源证据。
+  保持整体。M5 ⑤移除硬编码别名，只按原写法精确去重、排序并以 ` / ` 连接；名字键与主显示名由artistgraph解析，禁止相似度猜人。
+  原始重复标签、种子、同事务解析及重扫不写人工意图的完整规则见[艺人合同](./artist-contracts.md)。
 - 缺失 `AlbumArtist` 表示未知，不是与唯一明确值冲突：相同权威 album 下只有一个明确
   `AlbumArtist` 时，缺失值与该 partition 兼容；出现多个明确值时仍按多数决或稳定拆分。
   生成 Release artist/credit 时，只要存在明确 `AlbumArtist`，就先在这些值之间决策，
@@ -145,7 +143,7 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 | rip log 无明确签名、签名晚于 64 KiB 或为 symlink | 不产生 CD 语义，不读取超出预算的内容 |
 | 明确 rip log 与 `folder` 补充值并存 | 选定 CD 并把 decision provenance 提升为 `rip_log`；不得保留重复字段决定 |
 | 明确 rip log 与 tag/CUE/音频规格决定冲突 | 保留明确来源，不允许抓轨日志覆盖 |
-| 多艺人/credit 含明确分隔符或官方别名 | 按保守规则拆分、官方表归一、去重；固定组合名不得误拆 |
+| 多艺人/credit 含明确分隔符或明确别名 | 按保守规则拆分、原写法去重；身份同键归一由后端投影负责，固定组合名不得误拆 |
 | 相同 album 的部分 Track 缺少 AlbumArtist，且其它 Track 只有一个明确值 | 保持同一候选，明确 AlbumArtist 优先于 Track Artist |
 | 命名 folder artwork 非普通文件、为空、超限或格式损坏，且所有查找目录里没有别的可用封面 | `artwork_failure`，保留已有关系，不解释为封面删除 |
 | 前一个目录里的命名封面无效，后一个目录里有可用封面 | 用后一个目录的封面，不报错 |
@@ -179,7 +177,7 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 - 正确：目录名先补了 WEB/CD 等来源值，但同 candidate 存在明确 EAC/XLD 日志时，
   抓轨规则可以替换 `folder` 决定；tag 或 CUE 的明确来源仍保持不变。
 - 正确：`Artist Beta, Artist Alpha` 作为 Track artist 被拆分后以稳定顺序展示；已登记的
-  官方别名合并为 canonical 名，而固定组合名不会因包含 `/`、`,` 或 `&` 被误拆。
+  别名不再改写事实显示名，固定组合名不会因包含 `/`、`,` 或 `&` 被误拆。
 - 正确：一张专辑只有一轨提供 `AlbumArtist`、其余轨只提供各自 Artist 时仍形成一个
   candidate，Release artist 与 credit 使用明确 `AlbumArtist`；缺失轨不伪造自己的 tag。
 - 正确：已存在的 content-addressed 封面文件被破坏后，重扫按期望字节修复；旧 key

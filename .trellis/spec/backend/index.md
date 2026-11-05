@@ -53,6 +53,8 @@ Before writing or reviewing backend code:
 | [扫描协调合同](./scan-coordination-contracts.md) | 扫描状态与记录、持久化取消、跨进程协调锁 |
 | [真实库 Smoke 合同](./real-library-smoke-contracts.md) | 真实音乐只读验收与 V0 对照 |
 | [搜索规范化与在线投影合同](./search-contracts.md) | M5 ④字符规范化、内置 OpenCC、后台回填、事务双写、两栏搜索和有界计数 |
+| [艺人身份与浏览合同](./artist-contracts.md) | M5 ⑤：名字键、署名与治理、整理期、引用、队列及收藏端口 |
+| [目录批量摘要合同](./catalog-summary-contracts.md) | 历史/个人数据安全摘要、批量上限和缺失语义 |
 | [Catalog REST 合同](./catalog-rest-contracts.md) | Release 列表/详情/evidence、按组接口、封面摘要、可见性和错误合同 |
 | [播放直出合同](./playback-contracts.md) | M2a 格式表、预检、音频 Range、安全打开与停机中止；M2b 的 `delivery`、202 与派生错误码 |
 | [无损派生合同](./playback-derivation-contracts.md) | M2b ALAC → FLAC 无损派生：配置与启动、缓存、转换与核对、上限与取消、测试 |

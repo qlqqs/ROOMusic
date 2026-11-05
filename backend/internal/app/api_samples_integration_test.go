@@ -910,10 +910,16 @@ func (recorder *apiSampleRecorder) finish() {
 
 // ownsSample 同时保留 personal 的目录/错误前缀隔离与扫描反馈的子目录隔离。
 func (recorder *apiSampleRecorder) ownsSample(name string) bool {
+	if strings.HasPrefix(name, "artists/adjudication/") {
+		return recorder.scope == "artists/adjudication"
+	}
+	if recorder.scope == "artist-increment" {
+		return isArtistAPISample(name)
+	}
 	if recorder.scope != "" {
 		return strings.HasPrefix(name, recorder.scope+"/")
 	}
-	return !strings.HasPrefix(name, "scan-feedback/") && !isPersonalAPISample(name)
+	return !strings.HasPrefix(name, "scan-feedback/") && !isPersonalAPISample(name) && !isArtistAPISample(name)
 }
 
 // 两套独立样本加入后，比较和重写都必须使用相同的所有权边界。

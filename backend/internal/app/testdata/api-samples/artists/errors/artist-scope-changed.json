@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "artist_scope_changed",
+      "message": "署名范围已变化，请重新预览"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

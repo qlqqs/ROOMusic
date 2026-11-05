@@ -39,7 +39,7 @@ type SearchPagination struct {
 	HasMore       bool   `json:"has_more"`
 }
 
-// SearchParams 已由 HTTP 边界验证；这里只支持④的专辑和曲目。
+// SearchParams 已由 HTTP 边界验证；支持专辑、曲目及已发布的艺人。
 type SearchParams struct {
 	Query          string
 	Type           string
@@ -60,10 +60,10 @@ type SearchSuggestionSection[T any] struct {
 }
 
 type SearchSuggestions struct {
-	Query          string                                   `json:"query"`
-	CatalogState   CatalogState                             `json:"catalog_state"`
-	AvailableTypes []string                                 `json:"available_types"`
-	Artists        SearchSuggestionSection[struct{}]        `json:"artists"`
-	Albums         SearchSuggestionSection[SearchAlbumItem] `json:"albums"`
-	Tracks         SearchSuggestionSection[SearchTrackItem] `json:"tracks"`
+	Query          string                                    `json:"query"`
+	CatalogState   CatalogState                              `json:"catalog_state"`
+	AvailableTypes []string                                  `json:"available_types"`
+	Artists        SearchSuggestionSection[SearchArtistItem] `json:"artists"`
+	Albums         SearchSuggestionSection[SearchAlbumItem]  `json:"albums"`
+	Tracks         SearchSuggestionSection[SearchTrackItem]  `json:"tracks"`
 }

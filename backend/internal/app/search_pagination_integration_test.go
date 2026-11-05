@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -78,6 +79,17 @@ func TestPostgreSQLSearchBoundedCountsPaginationAndSuggestions(t *testing.T) {
 					}
 				}
 			}
+			availableTypes := []string{"albums", "tracks"}
+			var sharedArtist catalog.ArtistSummary
+			artistCount := 0
+			if mode == "normalized" {
+				availableTypes = []string{"artists", "albums", "tracks"}
+				artistCount = 1
+				sharedArtist = requireSearchArtistByName(t, app, &user, "共有", []string{"composer", "performer"})
+				if sharedArtist.AlbumCount != 1002 || sharedArtist.TrackCount != 1002 {
+					t.Fatalf("艺人跨角色参与未去重：%+v", sharedArtist)
+				}
+			}
 			for _, limit := range []int{1, 5, 8} {
 				suffix := ""
 				if limit != 5 {
@@ -88,8 +100,14 @@ func TestPostgreSQLSearchBoundedCountsPaginationAndSuggestions(t *testing.T) {
 				if err := json.Unmarshal(response.Body.Bytes(), &suggestions); err != nil {
 					t.Fatal(err)
 				}
-				if len(suggestions.Albums.Items) != limit || len(suggestions.Tracks.Items) != limit || !suggestions.Albums.HasMore || !suggestions.Tracks.HasMore || suggestions.Artists.Items == nil || len(suggestions.Artists.Items) != 0 || suggestions.Artists.HasMore {
+				if len(suggestions.Albums.Items) != limit || len(suggestions.Tracks.Items) != limit || !suggestions.Albums.HasMore || !suggestions.Tracks.HasMore || suggestions.Artists.Items == nil || len(suggestions.Artists.Items) != artistCount || !reflect.DeepEqual(suggestions.AvailableTypes, availableTypes) || suggestions.Artists.HasMore {
 					t.Fatalf("建议上限：%s", response.Body.String())
+				}
+				if mode == "normalized" {
+					item := suggestions.Artists.Items[0]
+					if !reflect.DeepEqual(item.Artist, sharedArtist) || item.Match.Kind != "exact" || item.Match.Field != "artist_name" || item.Match.Original != "共有" || item.Match.ArtistID == nil || *item.Match.ArtistID != sharedArtist.ID || item.Match.Role != nil || item.Match.Alias != nil || item.Match.ReleaseID != nil || item.Match.TrackID != nil {
+						t.Fatalf("建议艺人身份/命中不符：%+v", item)
+					}
 				}
 				var raw map[string]map[string]json.RawMessage
 				var envelope map[string]json.RawMessage

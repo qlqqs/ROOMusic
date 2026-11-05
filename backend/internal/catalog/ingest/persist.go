@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/artistgraph"
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/searchindex"
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/writegate"
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
@@ -54,6 +55,10 @@ func PersistCandidateWithFeedback(ctx context.Context, database TxBeginner, scan
 		return "", err
 	}
 	if err = feedback.beginCandidate(ctx, tx, plans, plannedReleaseID, rootID, candidate); err != nil {
+		return "", err
+	}
+	artistReleaseIDs, err := artistPreviousReleases(ctx, tx, rootID, candidate, plans)
+	if err != nil {
 		return "", err
 	}
 	trackIDs := make([]string, 0, len(plans))
@@ -104,6 +109,9 @@ func PersistCandidateWithFeedback(ctx context.Context, database TxBeginner, scan
 					return "", err
 				}
 			}
+			if err = persistArtistEvidence(ctx, tx, trackID, observation.ArtistTagEvidence); err != nil {
+				return "", err
+			}
 			if err = searchindex.RefreshTrack(ctx, tx, trackID); err != nil {
 				return "", err
 			}
@@ -143,6 +151,9 @@ func PersistCandidateWithFeedback(ctx context.Context, database TxBeginner, scan
 	if _, err = tx.ExecContext(ctx, `INSERT INTO release_grouping_evidence(release_id,candidate_kind,rule_id,source_refs,reason,scan_run_id)
 		VALUES($1::uuid,$2,$3,to_jsonb($4::text[]),$5,$6::uuid)
 		ON CONFLICT(release_id) DO UPDATE SET candidate_kind=EXCLUDED.candidate_kind,rule_id=EXCLUDED.rule_id,source_refs=EXCLUDED.source_refs,reason=EXCLUDED.reason,scan_run_id=EXCLUDED.scan_run_id,observed_at=NOW()`, releaseID, candidate.Anchor.Kind, "organizer_v2", refs, strings.Join(candidate.Attention, ";"), scanID); err != nil {
+		return "", err
+	}
+	if err = artistgraph.Refresh(ctx, tx, append(artistReleaseIDs, releaseID)); err != nil {
 		return "", err
 	}
 	if err = searchindex.RefreshRelease(ctx, tx, releaseID); err != nil {
@@ -288,6 +299,9 @@ func MarkMissingSources(ctx context.Context, tx *sql.Tx, scanID string, rootIDs 
 		err = rows.Err()
 		rows.Close()
 		if err != nil {
+			return err
+		}
+		if err = refreshMissingArtists(ctx, tx, ids); err != nil {
 			return err
 		}
 		if err = searchindex.RefreshTrackVisibility(ctx, tx, ids); err != nil {

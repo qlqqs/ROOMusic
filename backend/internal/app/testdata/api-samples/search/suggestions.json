@@ -11,10 +11,18 @@
             "release_count": 2,
             "representative": {
               "album_artist": null,
+              "album_artist_refs": [],
               "artist": "原版艺人",
+              "artist_refs": [
+                {
+                  "artist_id": "00000000-0000-4000-8000-000000000002",
+                  "display_name": "原版艺人",
+                  "name": "原版艺人"
+                }
+              ],
               "artwork": null,
               "attention_count": 0,
-              "id": "00000000-0000-4000-8000-000000000002",
+              "id": "00000000-0000-4000-8000-000000000003",
               "media_type": null,
               "medium_count": 1,
               "source_type": null,
@@ -29,11 +37,11 @@
             "field": "release_title",
             "kind": "contains",
             "original": "ＡＢＣ 愛",
-            "release_id": "00000000-0000-4000-8000-000000000003",
+            "release_id": "00000000-0000-4000-8000-000000000004",
             "role": null,
             "track_id": null
           },
-          "matched_release_id": "00000000-0000-4000-8000-000000000003"
+          "matched_release_id": "00000000-0000-4000-8000-000000000004"
         }
       ]
     },
@@ -42,12 +50,13 @@
       "items": []
     },
     "available_types": [
+      "artists",
       "albums",
       "tracks"
     ],
     "catalog_state": {
-      "artists_state": "unavailable",
-      "epoch": 2,
+      "artists_state": "ready",
+      "epoch": 4,
       "search_mode": "normalized"
     },
     "query": "爱",
@@ -56,6 +65,13 @@
       "items": [
         {
           "artist": "钢琴演奏者",
+          "artist_refs": [
+            {
+              "artist_id": "00000000-0000-4000-8000-000000000005",
+              "display_name": "钢琴演奏者",
+              "name": "钢琴演奏者"
+            }
+          ],
           "duration_seconds": 183.5,
           "group_id": "00000000-0000-4000-8000-000000000001",
           "match": {
@@ -64,17 +80,31 @@
             "field": "release_title",
             "kind": "contains",
             "original": "ＡＢＣ 愛",
-            "release_id": "00000000-0000-4000-8000-000000000003",
+            "release_id": "00000000-0000-4000-8000-000000000004",
             "role": null,
             "track_id": null
           },
           "present": true,
           "release": {
             "album_artist": "さユり",
+            "album_artist_refs": [
+              {
+                "artist_id": "00000000-0000-4000-8000-000000000006",
+                "display_name": "さユり",
+                "name": "さユり"
+              }
+            ],
             "artist": "Beyoncé",
+            "artist_refs": [
+              {
+                "artist_id": "00000000-0000-4000-8000-000000000007",
+                "display_name": "Beyoncé",
+                "name": "Beyoncé"
+              }
+            ],
             "artwork": null,
             "attention_count": 1,
-            "id": "00000000-0000-4000-8000-000000000003",
+            "id": "00000000-0000-4000-8000-000000000004",
             "media_type": null,
             "medium_count": 1,
             "source_type": null,
@@ -91,10 +121,17 @@
             "source_kind": "flac_vorbis_comment"
           },
           "title": "Summer",
-          "track_id": "00000000-0000-4000-8000-000000000004"
+          "track_id": "00000000-0000-4000-8000-000000000008"
         },
         {
           "artist": "曲目藝人",
+          "artist_refs": [
+            {
+              "artist_id": "00000000-0000-4000-8000-000000000009",
+              "display_name": "曲目藝人",
+              "name": "曲目藝人"
+            }
+          ],
           "duration_seconds": null,
           "group_id": "00000000-0000-4000-8000-000000000001",
           "match": {
@@ -103,17 +140,31 @@
             "field": "release_title",
             "kind": "contains",
             "original": "ＡＢＣ 愛",
-            "release_id": "00000000-0000-4000-8000-000000000003",
+            "release_id": "00000000-0000-4000-8000-000000000004",
             "role": null,
             "track_id": null
           },
           "present": true,
           "release": {
             "album_artist": "さユり",
+            "album_artist_refs": [
+              {
+                "artist_id": "00000000-0000-4000-8000-000000000006",
+                "display_name": "さユり",
+                "name": "さユり"
+              }
+            ],
             "artist": "Beyoncé",
+            "artist_refs": [
+              {
+                "artist_id": "00000000-0000-4000-8000-000000000007",
+                "display_name": "Beyoncé",
+                "name": "Beyoncé"
+              }
+            ],
             "artwork": null,
             "attention_count": 1,
-            "id": "00000000-0000-4000-8000-000000000003",
+            "id": "00000000-0000-4000-8000-000000000004",
             "media_type": null,
             "medium_count": 1,
             "source_type": null,
@@ -130,7 +181,7 @@
             "source_kind": "flac_vorbis_comment"
           },
           "title": "无音频事实",
-          "track_id": "00000000-0000-4000-8000-000000000005"
+          "track_id": "00000000-0000-4000-8000-000000000010"
         }
       ]
     }

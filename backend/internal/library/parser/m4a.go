@@ -514,15 +514,19 @@ func parseM4AItem(reader io.ReaderAt, atom m4aAtom, observation *AudioObservatio
 	}
 	for _, value := range values {
 		if itemType == "----" {
-			parseM4AFreeformValue(freeformMean, freeformName, value.value, value.typeCode[:], observation)
+			if err := parseM4AFreeformValue(freeformMean, freeformName, value.value, value.typeCode[:], observation); err != nil {
+				return err
+			}
 			continue
 		}
-		parseM4AItemValue(itemType, value.value, value.typeCode[:], observation)
+		if err := parseM4AItemValue(itemType, value.value, value.typeCode[:], observation); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func parseM4AItemValue(itemType string, value, typeCode []byte, observation *AudioObservation) {
+func parseM4AItemValue(itemType string, value, typeCode []byte, observation *AudioObservation) error {
 	if observation.RawAtoms == nil {
 		observation.RawAtoms = make(map[string]string)
 	}
@@ -537,7 +541,7 @@ func parseM4AItemValue(itemType string, value, typeCode []byte, observation *Aud
 				observation.DiscNumber = number
 			}
 		}
-		return
+		return nil
 	}
 	if itemType == "covr" {
 		if len(value) > 0 && len(value) <= int(maxM4AMetadataAtom) {
@@ -551,16 +555,23 @@ func parseM4AItemValue(itemType string, value, typeCode []byte, observation *Aud
 				observation.ArtworkMIME = "application/octet-stream"
 			}
 		}
-		return
+		return nil
 	}
 	if itemType == "\xa9lyr" {
 		// 歌词保留换行且可达 64 KiB，不能走有界的单行文本解码，也不放进 RawAtoms 证据。
 		setM4ALyrics(observation, value, typeCode)
-		return
+		return nil
+	}
+	key := strings.ReplaceAll(itemType, "\xa9", "©")
+	if role := artistTagRole(key); role != "" {
+		raw := decodeM4ARawText(value, binary.BigEndian.Uint32(typeCode))
+		if err := captureArtistTag(observation, key, raw); err != nil {
+			return err
+		}
 	}
 	text := decodeM4AText(value, binary.BigEndian.Uint32(typeCode))
 	if text == "" {
-		return
+		return nil
 	}
 	if _, present := observation.RawAtoms[itemType]; present || len(observation.RawAtoms) < maxM4ARawAtoms {
 		observation.RawAtoms[itemType] = text
@@ -568,8 +579,6 @@ func parseM4AItemValue(itemType string, value, typeCode []byte, observation *Aud
 	switch itemType {
 	case "\xa9nam":
 		observation.Title = text
-	case "\xa9ART":
-		observation.Artist = text
 	case "aART":
 		observation.AlbumArtist = text
 	case "\xa9alb":
@@ -583,17 +592,31 @@ func parseM4AItemValue(itemType string, value, typeCode []byte, observation *Aud
 	case "\xa9cmt":
 		// 评论仅作为 RawAtoms 证据保留，不映射到当前观察合同未拥有的业务字段。
 	}
+	return nil
 }
 
-func parseM4AFreeformValue(mean, name string, value, typeCode []byte, observation *AudioObservation) {
+func parseM4AFreeformValue(mean, name string, value, typeCode []byte, observation *AudioObservation) error {
 	if mean != "com.apple.iTunes" || observation == nil {
-		return
+		return nil
+	}
+	key := "----:" + name
+	name = strings.ToUpper(strings.TrimSpace(name))
+	if role := artistTagRole(name); role != "" {
+		raw := decodeM4ARawText(value, binary.BigEndian.Uint32(typeCode))
+		if err := captureArtistTagRole(observation, role, key, raw); err != nil {
+			return err
+		}
+		text := metadata.BoundedText(raw)
+		// freeform 专辑艺人此前不参与选择；只留原文证据，不覆盖 aART 的既有选择。
+		if role != "track_artist" && role != "album_artist" {
+			addObservationCredits(observation, role, text)
+		}
+		return nil
 	}
 	text := decodeM4AText(value, binary.BigEndian.Uint32(typeCode))
 	if text == "" {
-		return
+		return nil
 	}
-	name = strings.ToUpper(strings.TrimSpace(name))
 	switch name {
 	case "LABEL":
 		if observation.Label == "" {
@@ -604,19 +627,23 @@ func parseM4AFreeformValue(mean, name string, value, typeCode []byte, observatio
 			observation.Barcode = text
 		}
 	default:
-		return
+		return nil
 	}
 	if observation.RawAtoms == nil {
 		observation.RawAtoms = make(map[string]string)
 	}
-	key := "----:" + name
+	key = "----:" + name
 	if _, present := observation.RawAtoms[key]; present || len(observation.RawAtoms) < maxM4ARawAtoms {
 		observation.RawAtoms[key] = text
 	}
+	return nil
 }
 
 func decodeM4AText(value []byte, dataType uint32) string {
-	value = bytes.Trim(value, " \t\r\n")
+	return metadata.BoundedText(decodeM4ARawText(bytes.Trim(value, " \t\r\n"), dataType))
+}
+
+func decodeM4ARawText(value []byte, dataType uint32) string {
 	if len(value) == 0 {
 		return ""
 	}
@@ -639,11 +666,11 @@ func decodeM4AText(value []byte, dataType uint32) string {
 		if !validUTF16Units(units) {
 			return ""
 		}
-		return metadata.BoundedText(string(utf16.Decode(units)))
+		return strings.TrimRight(string(utf16.Decode(units)), "\x00")
 	}
-	value = bytes.Trim(value, "\x00 \t\r\n")
+	value = bytes.TrimRight(value, "\x00")
 	if utf8.Valid(value) {
-		return metadata.BoundedText(string(value))
+		return string(value)
 	}
 	return ""
 }

@@ -28,11 +28,17 @@
 
 扫描候选、M3 修正/清除/撤销、claim 双方/撤销，在业务行锁之前取得 CATP，事实/有效值变化、input_revision、目标代次投影及完成标记同事务提交。失败回滚业务，禁止提交后 best-effort。missing 保留索引值并实时 join 状态排除，不为搜索引入额外负向对账。归组不复制到投影，代表/默认版本在读取时按既有规则确定。
 
+### 同事务有界批量曲目刷新
+
+`searchindex.RefreshTracks(ctx, tx, ids)`只接收本事务已实际改变事实的曲目ID集合，调用者已持CATP。先规范ID大小写/去重/排序，一次读取目标state，再按128项处理全部chunk；每个ID只Touch一次input_revision，完整读取当前轨/四角色credit，复用单轨Apply的原造值、规范化与预算校验，同事务删除/写入搜索值、search_title、完成代次/revision及live_updated。空集合无操作，非法ID仍由参数`::uuid[]`拒绝，不能新增包依赖或放宽allowlist。所有chunk共用外部事务，后段错误/取消必须回滚前段及上层事实更新；不能把128当对象总上限。
+
+艺人可信原文恢复只收集display实际改变的轨，按相同有界块更新tracks.artist，再调用此端口；未变更轨不Touch。单轨RefreshTrack/Apply合同不变，不用批接口复制另一套造值规则。必需测试：260项跨chunk与逐轨结果等价、重复ID只递增一次、四credit/多名顺序、missing/空/未知UUID/旧revision、封闭清单live_updated、后段失败与取消全事务回滚、graph130轨恢复而未变化轨revision不变。批量化减少往返不代表串行热计划或完整回填自动达标。
+
 ## 在线回填与发布
 
 `Initialize` 只登记版本/代次、关闭不匹配的读能力；不发现对象、不等待回填。服务 ready 不依赖投影完成。`Run` 使用专用连接维护 advisory lock 选主，各批事务在同一连接上；该选主锁不排斥扫描/M3，CATP 只保护短批。
 
-后台一致快照建立含 missing 的持久清单及固定分母。只预取 ID，CATP 后重新读当前事实、有效修正和 input_revision；已完成目标代次且 revision 相等则跳过。投影、subject 完成标记、清单进度同事务。新增对象由实时写者维护，不会因 UUID 落在游标前漏掉；大库分批，批间至少让出 50ms，取消回滚未提交批，重启续跑已提交清单。
+后台一致快照建立含 missing 的持久清单及固定分母。只预取 ID，CATP 后重新读当前事实、有效修正和 input_revision；已完成目标代次且 revision 相等则跳过。投影、subject 完成标记、清单进度同事务。新增对象由实时写者维护，不会因 UUID 落在游标前漏掉；大库分批，提交释放CATP后按整批实测耗时自适应让出（正耗时小于200ms时取十分之一、最低10ms；无有效耗时或至少200ms时保守50ms），取消回滚未提交批，重启续跑已提交清单。
 
 最终在短 gate 中校验 build/目标代次、封闭清单、当前对象覆盖和 revision；仅全部满足才原子更新 published 版本/代次、ready 与 epoch。开始构建和发布递增 epoch，批次不递增。查询只在目标/发布元组全部相等、当前二进制版本相等且 ready 时读取新投影，否则完整走 legacy；不拼接半成品。
 
@@ -85,3 +91,19 @@ q 去首尾空白后最多 200 UTF-8 字节；新接口拒绝非法 UTF-8 与非
 候选事务先取得 CATP，再捕获反馈前态、写目录事实与搜索投影，最后在独立反馈保存点记录后态并提交。反馈故障可降级，但不能回滚核心搜索投影；投影故障则候选整体回滚，不留下新增报告。F 的全根 missing 入口每批最多 256 个 ID，在核心区域同事务刷新搜索可见性完成标记，再记录反馈，不能只修改已不再被扫描调用的旧 missing 入口。搜索沿用既有 epoch 协议，不因普通扫描额外递增 epoch。
 
 加入时间读取入口已有只读 RR 时，在该事务读取状态并调用快照内查询，不嵌套 `searchSnapshot`，不把任意事务视作已满足 RR。共享助手保留 `ErrQuery` 与底层错误链，配置失败必须短路回滚，事务结束恢复连接原 JIT 配置。
+
+## M5 ⑤三栏与别名增量
+
+`artists_state`进入preparing/ready，状态epoch组合两项能力代次。建议页ready时available_types含artists，未就绪不查询半图；艺人结果读取未就绪返回503 artist_catalog_preparing。旧专辑/曲目检索继续服务，所有摘要refs在同快照检查ready。
+
+名字匹配先查artist_search_names，再经有效署名关系传播到发行/曲目；单轨credit不得泄漏到兄弟轨。主名匹配用artist_name，别名为artist_alias并返回明确artist_id/alias及传播role；计数/排序/分页仍沿原1000阈值，旧路由精确total不变。艺人数组项目为`{artist:ArtistSummary,match}`。
+
+release_artist/album_artist/track_artist多名按保守拆分分别保存有position的搜索值，单条original保持4096字节预算，不截掉整串末端署名。姓名索引原始/规范化字段与generation仍由Go产生；合并源人工主名通过source_artist_id派生别名，不抢全局名字键。完整身份/整理/DTO规则与验收规模见[艺人合同](./artist-contracts.md)，性能结论以任务报告为准。
+
+### 联合回填验收的证据边界
+
+`BenchmarkPostgreSQLSearchScale`以真实生产maintenance、原规模及5预热/30测量运行。总context可长于36分钟，但回填墙钟单独计时；按I8对整轮所有已提交应用批CATP持有合并计算p95≤200ms/p99≤500ms；最大值保留归因，不再中途停止，phase统计仅供归因。持有从客户端收到首次CATP获取成功至COMMIT成功返回，排除获取等待，包含提交返回开销；不能拿`batch_ms`或phase p95平均值代替。
+
+应用批由事务内实际成功更新work/phase完成进度及COMMIT识别，提交即入统计，批次日志只做确认。提交后LoadState失败、缺失/重复/错phase确认或`catalog_projection_backfill_failed`必须保留该提交并使验收失败；生产重试不能擦掉第一次失败。回滚/失败COMMIT/清单发现/发布/在线写者不冒充成功应用批。纯回归必须覆盖“应用COMMIT→状态读取失败→失败标记提交→错误重试”的原提交不漏计，以及COMMIT回调失败留证不反锁diagnostics互斥量。
+
+回填期负载要核验真实扫描succeeded及本轮观察/目录事实、M3修订号递增与有效值回读。艺人阶段覆盖同时要求写前及写后状态仍building，避免发布夹在GET revision与PATCH之间造成假覆盖。成功后join负载与采样器、关闭独立monitor及详细在线trace，才开始统计更新与正式只读测量。诊断预填图的SQL计划不能替代从空投影开始的生产回填结果；正式运行完成回填、搜索、EXPLAIN及队列各项测量再统一判定；性能不达标不能抹掉，真实请求/数据库错误仍保留首因并安全停止。回填期M3全部成功且p95≤1s、扫描全部成功、播放/搜索无503。不能只展示重试后的成功分布。

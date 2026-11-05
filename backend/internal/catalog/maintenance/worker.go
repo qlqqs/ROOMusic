@@ -15,9 +15,23 @@ import (
 
 const maintenanceNamespace = 0x4341544d // CATM：只排斥后台维护者。
 
-// Run 在专用连接上选主，并在同一连接运行全部批事务。调用方拥有 goroutine 与取消生命周期。
-// 可恢复错误仅安全记录并退避；已提交进度保留。就绪或取消后退出。
-func Run(ctx context.Context, db *sql.DB, logger *slog.Logger) error {
+// RunOptions 的收藏端口由 app 装配；维护包不依赖 personal 或其私有表。
+type RunOptions struct {
+	RefreshArtistResolutions func(context.Context, *sql.Tx, map[string]string) error
+}
+
+var ErrArtistResolutionRefreshRequired = errors.New("artist resolution refresh callback required")
+
+// Run 在专用连接上选主，先搜索后艺人；调用方拥有 goroutine 与取消生命周期。
+// 可恢复错误安全记录并退避，已提交进度保留。缺少发布回调属于装配错误，直接返回。
+func Run(ctx context.Context, db *sql.DB, logger *slog.Logger, options ...RunOptions) error {
+	var opts RunOptions
+	if len(options) > 1 {
+		return errors.New("catalog maintenance accepts one options value")
+	}
+	if len(options) == 1 {
+		opts = options[0]
+	}
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -27,10 +41,10 @@ func Run(ctx context.Context, db *sql.DB, logger *slog.Logger) error {
 			var acquired bool
 			err = conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock($1::integer,$2::integer)`, maintenanceNamespace, 1).Scan(&acquired)
 			if err == nil && acquired {
-				err = runLocked(ctx, conn, logger)
+				err = runLocked(ctx, conn, logger, opts)
 				releaseLease(conn)
-				if err == nil {
-					return nil
+				if err == nil || errors.Is(err, ErrArtistResolutionRefreshRequired) {
+					return err
 				}
 			} else {
 				if err != nil {
@@ -64,7 +78,14 @@ func releaseLease(conn *sql.Conn) {
 	_ = conn.Close()
 }
 
-func runLocked(ctx context.Context, conn *sql.Conn, logger *slog.Logger) (err error) {
+func runLocked(ctx context.Context, conn *sql.Conn, logger *slog.Logger, options RunOptions) error {
+	if err := runSearchLocked(ctx, conn, logger); err != nil {
+		return err
+	}
+	return runArtistsLocked(ctx, conn, logger, options)
+}
+
+func runSearchLocked(ctx context.Context, conn *sql.Conn, logger *slog.Logger) (err error) {
 	state, err := searchindex.LoadState(ctx, conn)
 	if err != nil {
 		return err
@@ -98,6 +119,7 @@ func runLocked(ctx context.Context, conn *sql.Conn, logger *slog.Logger) (err er
 		if err != nil {
 			return err
 		}
+		yield := batchYield(result.Duration)
 		if result.BatchSize == 0 {
 			published, err := publishOrRepair(ctx, conn, state)
 			if err != nil {
@@ -109,7 +131,7 @@ func runLocked(ctx context.Context, conn *sql.Conn, logger *slog.Logger) (err er
 				return nil
 			}
 		} else {
-			sample := float64(result.Duration+50*time.Millisecond) / float64(result.BatchSize)
+			sample := float64(result.Duration+yield) / float64(result.BatchSize)
 			if averagePerSubject == 0 {
 				averagePerSubject = sample
 			} else {
@@ -123,7 +145,7 @@ func runLocked(ctx context.Context, conn *sql.Conn, logger *slog.Logger) (err er
 				"build_id", state.BuildID, "target_generation", state.TargetGeneration, "textnorm_version", state.TextnormVersion,
 				"search_projection_version", state.SearchProjectionVersion, "phase", result.Phase, "completed", result.Completed, "total", result.Total,
 				"batch_size", result.BatchSize, "written", result.Written, "skipped_current", result.BatchSize-result.Written,
-				"batch_ms", result.Duration.Milliseconds(), "elapsed_ms", time.Since(started).Milliseconds(),
+				"batch_ms", result.Duration.Milliseconds(), "yield_ms", float64(yield)/float64(time.Millisecond), "yield_status", "planned", "elapsed_ms", time.Since(started).Milliseconds(),
 				"live_updated", current.LiveUpdated, "eta_ms", int64(averagePerSubject*float64(result.Total-result.Completed)/float64(time.Millisecond)))
 			if result.Kind == "track" {
 				trackLimit = adaptLimit(trackLimit, 500, result.Duration)
@@ -131,8 +153,8 @@ func runLocked(ctx context.Context, conn *sql.Conn, logger *slog.Logger) (err er
 				releaseLimit = adaptLimit(releaseLimit, 100, result.Duration)
 			}
 		}
-		// 每批提交并释放 CATP 后至少让出 50ms，让扫描和前台写入有机会前进。
-		if err = wait(ctx, 50*time.Millisecond); err != nil {
+		// 每批提交并释放 CATP 后正时长让出；日志中的 yield_ms 为计划值，取消时可提前结束。
+		if err = wait(ctx, yield); err != nil {
 			return err
 		}
 	}

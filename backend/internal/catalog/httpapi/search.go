@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -47,10 +48,7 @@ func (handlers *Handlers) search(w http.ResponseWriter, r *http.Request) {
 	}
 	kind := r.URL.Query().Get("type")
 	switch kind {
-	case "albums", "tracks":
-	case "artists":
-		httpserver.WriteError(w, r, http.StatusBadRequest, "unsupported_search_type", "暂不支持搜索艺人")
-		return
+	case "albums", "tracks", "artists":
 	default:
 		httpserver.WriteError(w, r, http.StatusBadRequest, "invalid_search_type", "搜索类型无效")
 		return
@@ -112,6 +110,14 @@ func (handlers *Handlers) catalogStatus(w http.ResponseWriter, r *http.Request) 
 }
 
 func (handlers *Handlers) writeSearchError(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, catalog.ErrArtistCatalogPreparing) {
+		handlers.writeArtistReadError(w, r, err)
+		return
+	}
+	if errors.Is(err, catalog.ErrUnsupportedSearchType) {
+		httpserver.WriteError(w, r, http.StatusBadRequest, "unsupported_search_type", "暂不支持搜索艺人")
+		return
+	}
 	handlers.logger.ErrorContext(r.Context(), "目录搜索读取失败", "error", err)
 	httpserver.WriteError(w, r, http.StatusServiceUnavailable, "database_unavailable", "暂时无法读取搜索结果")
 }

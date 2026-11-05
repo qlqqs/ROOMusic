@@ -2,6 +2,18 @@ package httpapi
 
 import "net/http"
 
+func (h *Handlers) favoriteArtists(w http.ResponseWriter, r *http.Request, user string) {
+	page, ok := parsePage(w, r, 50, 100, 0)
+	if !ok {
+		return
+	}
+	result, err := h.service.FavoriteArtists(r.Context(), user, page)
+	respond(w, r, result, err)
+}
+func (h *Handlers) favoriteArtist(w http.ResponseWriter, r *http.Request, user string) {
+	h.setFavorite(w, r, user, "artist", "artist_id")
+}
+
 func (h *Handlers) favoriteTracks(w http.ResponseWriter, r *http.Request, user string) {
 	page, ok := parsePage(w, r, 50, 100, 0)
 	if !ok {
@@ -49,7 +61,7 @@ func (h *Handlers) lookup(w http.ResponseWriter, r *http.Request, user string) {
 	if _, ok := query(w, r); !ok {
 		return
 	}
-	input, ok := decodeObject(w, r, false, "track_ids", "group_ids")
+	input, ok := decodeObject(w, r, false, "track_ids", "group_ids", "artist_ids")
 	if !ok {
 		return
 	}
@@ -63,6 +75,11 @@ func (h *Handlers) lookup(w http.ResponseWriter, r *http.Request, user string) {
 		invalidInput(w, r)
 		return
 	}
-	result, err := h.service.LookupFavorites(r.Context(), user, tracks, groups)
+	artists, ok := input.ids("artist_ids", false, 1000)
+	if !ok {
+		invalidInput(w, r)
+		return
+	}
+	result, err := h.service.LookupFavorites(r.Context(), user, tracks, groups, artists)
 	respond(w, r, result, err)
 }

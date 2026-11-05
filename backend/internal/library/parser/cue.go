@@ -9,40 +9,44 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 )
 
 type CueTrack struct {
-	Number           int
-	Title, Artist    string
-	PerformerPresent bool
-	IndexFrames      int
-	IndexPresent     bool
-	ReferencedFile   string
-	FileType         string
-	Indexes          map[int]int
-	EndFrames        int
-	EndPresent       bool
-	DurationFrames   int
-	DurationSeconds  float64
-	ISRC             string
-	SheetTitle       string
-	SheetArtist      string
-	Genre            string
-	Date             string
-	Catalog          string
-	ReferenceStatus  string
+	ArtistTagEvidence []metadata.ArtistTagEvidence
+	Number            int
+	Title, Artist     string
+	PerformerPresent  bool
+	IndexFrames       int
+	IndexPresent      bool
+	ReferencedFile    string
+	FileType          string
+	Indexes           map[int]int
+	EndFrames         int
+	EndPresent        bool
+	DurationFrames    int
+	DurationSeconds   float64
+	ISRC              string
+	SheetTitle        string
+	SheetArtist       string
+	Genre             string
+	Date              string
+	Catalog           string
+	ReferenceStatus   string
 }
 
 type CueDocument struct {
-	Tracks      []CueTrack
-	Files       []CueFileReference
-	Title       string
-	Artist      string
-	Genre       string
-	Date        string
-	Catalog     string
-	Encoding    string
-	Diagnostics []string
+	ArtistTagEvidence []metadata.ArtistTagEvidence
+	Tracks            []CueTrack
+	Files             []CueFileReference
+	Title             string
+	Artist            string
+	Genre             string
+	Date              string
+	Catalog           string
+	Encoding          string
+	Diagnostics       []string
 }
 
 func parseCue(path string) ([]CueTrack, string, error) {
@@ -182,12 +186,19 @@ func ParseCueDocument(path string, containmentRoot ...string) (CueDocument, erro
 				document.Title = value
 			}
 		case "PERFORMER":
-			value := cueValue(tokens[1:])
+			// 在展示修剪之前保留解码原文；不能用 cueValue 静默截断。
+			value := strings.Join(tokens[1:], " ")
 			if currentTrack != nil {
-				currentTrack.Artist = value
+				if err := appendArtistEvidence(&currentTrack.ArtistTagEvidence, "track_artist", "PERFORMER", value, "cue_track"); err != nil {
+					return CueDocument{}, err
+				}
+				currentTrack.Artist = artistEvidenceDisplay(currentTrack.ArtistTagEvidence, "track_artist")
 				currentTrack.PerformerPresent = true
 			} else {
-				document.Artist = value
+				if err := appendArtistEvidence(&document.ArtistTagEvidence, "album_artist", "PERFORMER", value, "cue_sheet"); err != nil {
+					return CueDocument{}, err
+				}
+				document.Artist = strings.TrimSpace(value)
 			}
 		case "REM":
 			if len(tokens) < 3 {
@@ -247,8 +258,11 @@ func ParseCueDocument(path string, containmentRoot ...string) (CueDocument, erro
 		document.Tracks[index].Genre = document.Genre
 		document.Tracks[index].Date = document.Date
 		document.Tracks[index].Catalog = document.Catalog
+		if len(document.ArtistTagEvidence)+len(document.Tracks[index].ArtistTagEvidence) > metadata.MaxArtistTagEvidenceItems {
+			return CueDocument{}, errors.New("artist tag evidence exceeds item limit")
+		}
 		if document.Tracks[index].Artist == "" {
-			document.Tracks[index].Artist = document.Artist
+			document.Tracks[index].Artist = artistEvidenceDisplay(document.ArtistTagEvidence, "album_artist")
 		}
 		if !document.Tracks[index].IndexPresent {
 			appendCueDiagnostic(&document, fmt.Sprintf("missing INDEX 01 for track %d", document.Tracks[index].Number))

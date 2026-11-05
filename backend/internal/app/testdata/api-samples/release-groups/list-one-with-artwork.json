@@ -8,7 +8,9 @@
         "release_count": 1,
         "representative": {
           "album_artist": "Sample Pianist",
+          "album_artist_refs": [],
           "artist": "Sample Pianist",
+          "artist_refs": [],
           "artwork": {
             "height": 480,
             "mime": "image/webp",

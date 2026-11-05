@@ -176,7 +176,7 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 		m.id::text,m.position,m.title,
 		t.id::text,t.title,t.artist,t.position,t.relative_path,t.source_kind,
 		NULLIF(t.duration_seconds,0),NULLIF(BTRIM(t.codec),''),NULLIF(t.bit_depth,0),NULLIF(t.sample_rate,0),NULLIF(t.channels,0),NULLIF(t.bitrate,0),
-		t.cue_index_frames,t.cue_end_frames,NULLIF(BTRIM(t.cue_isrc),'')
+		t.cue_index_frames,t.cue_end_frames,NULLIF(BTRIM(t.cue_isrc),''),`+releasesql.TrackArtistRefsProjection+`
 		FROM media m
 		JOIN tracks t ON t.medium_id=m.id AND t.source_status='present'
 		WHERE m.release_id=$1::uuid
@@ -201,6 +201,7 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 		}
 		var mediumID, mediumTitle, trackID, trackTitle, trackArtist, sourcePath, sourceKind string
 		var mediumPosition, trackPosition int
+		var artistRefs []byte
 		var duration sql.NullFloat64
 		var codec, isrc sql.NullString
 		var bitDepth, sampleRate, channels, bitrate, cueIndex, cueEnd sql.NullInt64
@@ -208,7 +209,7 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 			&mediumID, &mediumPosition, &mediumTitle,
 			&trackID, &trackTitle, &trackArtist, &trackPosition, &sourcePath, &sourceKind,
 			&duration, &codec, &bitDepth, &sampleRate, &channels, &bitrate,
-			&cueIndex, &cueEnd, &isrc,
+			&cueIndex, &cueEnd, &isrc, &artistRefs,
 		); err != nil {
 			return nil, err
 		}
@@ -236,6 +237,10 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 			Bitrate:         releasesql.IntPointerFromNull(bitrate),
 			Credits:         []ReleaseCredit{},
 		}
+		track.ArtistRefs, err = decodeArtistRefs(artistRefs)
+		if err != nil {
+			return nil, err
+		}
 		if strings.Contains(strings.ToLower(sourceKind), "cue") || cueIndex.Valid || cueEnd.Valid || isrc.Valid {
 			track.Cue = &ReleaseCue{
 				IndexFrames: releasesql.IntPointerFromNull(cueIndex),
@@ -259,7 +264,7 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 		return nil, err
 	}
 	creditRows, err := s.database.QueryContext(ctx, `SELECT
-		t.id::text,c.role,c.name
+		t.id::text,c.role,c.name,`+releasesql.TrackCreditArtistRefsProjection+`
 		FROM track_credits c
 		JOIN tracks t ON t.id=c.track_id AND t.source_status='present'
 		JOIN media m ON m.id=t.medium_id
@@ -278,7 +283,12 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 		}
 		var trackID string
 		var credit ReleaseCredit
-		if err := creditRows.Scan(&trackID, &credit.Role, &credit.Name); err != nil {
+		var refs []byte
+		if err := creditRows.Scan(&trackID, &credit.Role, &credit.Name, &refs); err != nil {
+			return nil, err
+		}
+		credit.ArtistRefs, err = decodeArtistRefs(refs)
+		if err != nil {
 			return nil, err
 		}
 		location, exists := trackLocations[trackID]
@@ -304,7 +314,7 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 // LoadReleaseCredits 读取专辑级署名。专辑艺人有人工修正时，扫描写入的 album_artist 署名被修正值取代，
 // 与头部显示的有效专辑艺人一致；其余署名原样。
 func (s *Store) LoadReleaseCredits(ctx context.Context, releaseID string) ([]ReleaseCredit, error) {
-	rows, err := s.database.QueryContext(ctx, `SELECT role,name FROM (
+	rows, err := s.database.QueryContext(ctx, `SELECT role,name,`+releasesql.ReleaseCreditArtistRefsProjection+` FROM (
 			SELECT credit.role,credit.name,credit.position
 			FROM release_credits credit
 			WHERE credit.release_id=$1::uuid
@@ -326,7 +336,12 @@ func (s *Store) LoadReleaseCredits(ctx context.Context, releaseID string) ([]Rel
 			return nil, errors.New("release credit projection exceeds bound")
 		}
 		var credit ReleaseCredit
-		if err := rows.Scan(&credit.Role, &credit.Name); err != nil {
+		var refs []byte
+		if err := rows.Scan(&credit.Role, &credit.Name, &refs); err != nil {
+			return nil, err
+		}
+		credit.ArtistRefs, err = decodeArtistRefs(refs)
+		if err != nil {
 			return nil, err
 		}
 		credits = append(credits, credit)
@@ -445,6 +460,7 @@ func scanReleaseSummary(row interface{ Scan(...any) error }) (ReleaseSummary, er
 // Summary 再解释 nullable 列并校验封面；列表、详情与按组投影都经过它，只有一处解释这些列。
 type ReleaseSummaryColumns struct {
 	result                                                             ReleaseSummary
+	artistRefs, albumArtistRefs                                        []byte
 	albumArtist, sourceType, mediaType, artworkResourceID, artworkMIME sql.NullString
 	year, artworkWidth, artworkHeight                                  sql.NullInt64
 }
@@ -465,6 +481,8 @@ func (columns *ReleaseSummaryColumns) ScanTargets() []any {
 		&columns.artworkMIME,
 		&columns.artworkWidth,
 		&columns.artworkHeight,
+		&columns.artistRefs,
+		&columns.albumArtistRefs,
 	}
 }
 
@@ -475,6 +493,14 @@ func (columns *ReleaseSummaryColumns) Summary() (ReleaseSummary, error) {
 	result.SourceType = releasesql.StringPointerFromNull(columns.sourceType)
 	result.MediaType = releasesql.StringPointerFromNull(columns.mediaType)
 	var err error
+	result.ArtistRefs, err = decodeArtistRefs(columns.artistRefs)
+	if err != nil {
+		return ReleaseSummary{}, err
+	}
+	result.AlbumArtistRefs, err = decodeArtistRefs(columns.albumArtistRefs)
+	if err != nil {
+		return ReleaseSummary{}, err
+	}
 	result.Artwork, err = releaseArtworkFromProjection(columns.artworkResourceID, columns.artworkMIME, columns.artworkWidth, columns.artworkHeight)
 	if err != nil {
 		return ReleaseSummary{}, err

@@ -440,7 +440,9 @@ func (service *Service) scanRoot(ctx context.Context, executor scanExecutor, sca
 			}
 			return nil
 		}
-		physicalObservation := ingest.SourceObservation{RelativePath: relativePath, Directory: ingest.DirectoryOf(relativePath), Title: observation.Title, Album: observation.Album, AlbumArtist: observation.AlbumArtist, Artist: observation.Artist, SourceType: observation.SourceType, MediaType: observation.MediaType, Genre: observation.Genre, CatalogNumber: observation.Catalog, Edition: observation.Edition, Label: observation.Label, Barcode: observation.Barcode, Year: observation.Year, TrackNumber: observation.TrackNumber, DiscNumber: observation.DiscNumber, SourceKind: observation.SourceKind, InferredFields: observation.InferredFields, FieldSources: observationFieldSources(observation), DurationSeconds: observation.DurationSeconds, Codec: observation.Codec, BitDepth: observation.BitDepth, SampleRate: observation.SampleRate, Channels: observation.Channels, Bitrate: observation.Bitrate, Artwork: observation.Artwork, ArtworkMIME: observation.ArtworkMIME, Credits: append([]metadata.Credit(nil), observation.Credits...), Lyrics: observation.Lyrics, LyricsSource: observation.LyricsSource, SourceSize: fileInfo.Size(), SourceModifiedAt: fileInfo.ModTime(), ContentFingerprint: observation.ContentFingerprint}
+		physicalObservation := buildPhysicalSourceObservation(observation, relativePath)
+		physicalObservation.SourceSize = fileInfo.Size()
+		physicalObservation.SourceModifiedAt = fileInfo.ModTime()
 		// 注册根本身不是 album 证据。目录 fallback 只在根目录以下有效；根级文件缺少
 		// album tag 时必须保持为彼此独立的 loose-unknown candidates。
 		if physicalObservation.Directory == "" && physicalObservation.InferredFields["album"] {
@@ -534,6 +536,10 @@ func cueTrackCanBeStaged(track parser.CueTrack) bool {
 	return track.ReferenceStatus == "present" && track.IndexPresent
 }
 
+func buildPhysicalSourceObservation(observation parser.AudioObservation, relativePath string) ingest.SourceObservation {
+	return ingest.SourceObservation{RelativePath: relativePath, Directory: ingest.DirectoryOf(relativePath), Title: observation.Title, Album: observation.Album, AlbumArtist: observation.AlbumArtist, Artist: observation.Artist, SourceType: observation.SourceType, MediaType: observation.MediaType, Genre: observation.Genre, CatalogNumber: observation.Catalog, Edition: observation.Edition, Label: observation.Label, Barcode: observation.Barcode, Year: observation.Year, TrackNumber: observation.TrackNumber, DiscNumber: observation.DiscNumber, SourceKind: observation.SourceKind, InferredFields: observation.InferredFields, FieldSources: observationFieldSources(observation), DurationSeconds: observation.DurationSeconds, Codec: observation.Codec, BitDepth: observation.BitDepth, SampleRate: observation.SampleRate, Channels: observation.Channels, Bitrate: observation.Bitrate, Artwork: observation.Artwork, ArtworkMIME: observation.ArtworkMIME, Credits: append([]metadata.Credit(nil), observation.Credits...), ArtistTagEvidence: append([]metadata.ArtistTagEvidence(nil), observation.ArtistTagEvidence...), Lyrics: observation.Lyrics, LyricsSource: observation.LyricsSource, ContentFingerprint: observation.ContentFingerprint}
+}
+
 func buildCueVirtualObservation(parent parser.AudioObservation, document parser.CueDocument, cue parser.CueTrack, sheetRelativePath string) ingest.SourceObservation {
 	observation := parent
 	observation.InferredFields = cloneBoolMap(parent.InferredFields)
@@ -622,7 +628,28 @@ func buildCueVirtualObservation(parent parser.AudioObservation, document parser.
 		CueEndPresent:         cue.EndPresent,
 		CueISRC:               cue.ISRC,
 		ContentFingerprint:    parent.ContentFingerprint,
+		ArtistTagEvidence:     cueArtistTagEvidence(parent, document, cue, fieldSources),
 	}
+}
+
+// cueArtistTagEvidence 只把实际用于虚拟轨署名的来源带入；被 CUE 覆盖的父标签不冒充本轨证据。
+func cueArtistTagEvidence(parent parser.AudioObservation, document parser.CueDocument, cue parser.CueTrack, sources map[string]string) []metadata.ArtistTagEvidence {
+	var evidence []metadata.ArtistTagEvidence
+	for _, entry := range parent.ArtistTagEvidence {
+		if entry.Role == "track_artist" && sources["artist"] != "cue_track" && sources["artist"] != "cue_sheet" ||
+			entry.Role == "album_artist" && sources["album_artist"] != "cue_sheet" {
+			evidence = append(evidence, entry)
+		}
+	}
+	evidence = append(evidence, document.ArtistTagEvidence...)
+	evidence = append(evidence, cue.ArtistTagEvidence...)
+	if sources["artist"] == "cue_sheet" {
+		for _, entry := range document.ArtistTagEvidence {
+			entry.Role = "track_artist"
+			evidence = append(evidence, entry)
+		}
+	}
+	return evidence
 }
 
 func registeredRootAvailable(root string) bool {
@@ -652,6 +679,9 @@ const (
 
 // stageObservation 先校验并规范化观察里的相对路径与 CUE 引用（路径安全属于 library），再交给 catalog 写入暂存表。
 func stageObservation(ctx context.Context, executor scanExecutor, scanID, rootID string, observation ingest.SourceObservation) error {
+	if err := metadata.ValidateArtistTagEvidence(observation.ArtistTagEvidence); err != nil {
+		return err
+	}
 	identity, err := createTrackSourceIdentity(rootID, observation.RelativePath)
 	if err != nil {
 		return err

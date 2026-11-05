@@ -11,10 +11,18 @@
             "release_count": 1,
             "representative": {
               "album_artist": null,
+              "album_artist_refs": [],
               "artist": "合成艺人",
+              "artist_refs": [
+                {
+                  "artist_id": "00000000-0000-4000-8000-000000000002",
+                  "display_name": "合成艺人",
+                  "name": "合成艺人"
+                }
+              ],
               "artwork": null,
               "attention_count": 0,
-              "id": "00000000-0000-4000-8000-000000000002",
+              "id": "00000000-0000-4000-8000-000000000003",
               "media_type": null,
               "medium_count": 1,
               "source_type": null,
@@ -29,11 +37,11 @@
             "field": "release_title",
             "kind": "exact",
             "original": "Tune",
-            "release_id": "00000000-0000-4000-8000-000000000002",
+            "release_id": "00000000-0000-4000-8000-000000000003",
             "role": null,
             "track_id": null
           },
-          "matched_release_id": "00000000-0000-4000-8000-000000000002"
+          "matched_release_id": "00000000-0000-4000-8000-000000000003"
         }
       ]
     },
@@ -42,12 +50,13 @@
       "items": []
     },
     "available_types": [
+      "artists",
       "albums",
       "tracks"
     ],
     "catalog_state": {
-      "artists_state": "unavailable",
-      "epoch": 2,
+      "artists_state": "ready",
+      "epoch": 4,
       "search_mode": "normalized"
     },
     "query": "Tune",
@@ -56,6 +65,13 @@
       "items": [
         {
           "artist": "合成艺人",
+          "artist_refs": [
+            {
+              "artist_id": "00000000-0000-4000-8000-000000000002",
+              "display_name": "合成艺人",
+              "name": "合成艺人"
+            }
+          ],
           "duration_seconds": null,
           "group_id": "00000000-0000-4000-8000-000000000001",
           "match": {
@@ -64,17 +80,25 @@
             "field": "release_title",
             "kind": "exact",
             "original": "Tune",
-            "release_id": "00000000-0000-4000-8000-000000000002",
+            "release_id": "00000000-0000-4000-8000-000000000003",
             "role": null,
             "track_id": null
           },
           "present": true,
           "release": {
             "album_artist": null,
+            "album_artist_refs": [],
             "artist": "合成艺人",
+            "artist_refs": [
+              {
+                "artist_id": "00000000-0000-4000-8000-000000000002",
+                "display_name": "合成艺人",
+                "name": "合成艺人"
+              }
+            ],
             "artwork": null,
             "attention_count": 0,
-            "id": "00000000-0000-4000-8000-000000000002",
+            "id": "00000000-0000-4000-8000-000000000003",
             "media_type": null,
             "medium_count": 1,
             "source_type": null,
@@ -91,7 +115,7 @@
             "source_kind": "physical"
           },
           "title": "Tune track 1",
-          "track_id": "00000000-0000-4000-8000-000000000003"
+          "track_id": "00000000-0000-4000-8000-000000000004"
         }
       ]
     }

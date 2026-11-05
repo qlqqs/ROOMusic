@@ -1,0 +1,178 @@
+{
+  "body": {
+    "items": [
+      {
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "username": "artist-curator"
+        },
+        "album": null,
+        "artist": {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "name": "同名艺人",
+          "redirect_artist_id": null,
+          "visible": true
+        },
+        "changes": {
+          "kind": "artist_split",
+          "mode": "albums",
+          "name_count": 1,
+          "release_count": 1,
+          "source": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "name": "同名艺人"
+          },
+          "target": {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "name": "同名艺人甲"
+          },
+          "track_count": 1
+        },
+        "created_at": "2026-01-01T00:00:04Z",
+        "id": "00000000-0000-4000-8000-000000000004",
+        "release": null,
+        "reverted_by": null,
+        "revertible": false,
+        "reverts": null,
+        "type": "artist_split"
+      },
+      {
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "username": "artist-curator"
+        },
+        "album": null,
+        "artist": {
+          "id": "00000000-0000-4000-8000-000000000005",
+          "name": "邓丽君",
+          "redirect_artist_id": null,
+          "visible": true
+        },
+        "changes": {
+          "kind": "artist_split",
+          "mode": "aliases",
+          "name_count": 1,
+          "release_count": 1,
+          "source": {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "name": "邓丽君"
+          },
+          "target": {
+            "id": "00000000-0000-4000-8000-000000000006",
+            "name": "Teresa Teng"
+          },
+          "track_count": 1
+        },
+        "created_at": "2026-01-01T00:00:03Z",
+        "id": "00000000-0000-4000-8000-000000000007",
+        "release": null,
+        "reverted_by": null,
+        "revertible": false,
+        "reverts": null,
+        "type": "artist_split"
+      },
+      {
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "username": "artist-curator"
+        },
+        "album": null,
+        "artist": {
+          "id": "00000000-0000-4000-8000-000000000005",
+          "name": "邓丽君",
+          "redirect_artist_id": null,
+          "visible": true
+        },
+        "changes": {
+          "from": {
+            "name": "邓丽君精选",
+            "source": "manual"
+          },
+          "kind": "artist_rename",
+          "to": {
+            "name": "邓丽君",
+            "source": "auto"
+          }
+        },
+        "created_at": "2026-01-01T00:00:02Z",
+        "id": "00000000-0000-4000-8000-000000000008",
+        "release": null,
+        "reverted_by": null,
+        "revertible": false,
+        "reverts": null,
+        "type": "artist_rename"
+      },
+      {
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "username": "artist-curator"
+        },
+        "album": null,
+        "artist": {
+          "id": "00000000-0000-4000-8000-000000000005",
+          "name": "邓丽君",
+          "redirect_artist_id": null,
+          "visible": true
+        },
+        "changes": {
+          "from": {
+            "name": "邓丽君",
+            "source": "auto"
+          },
+          "kind": "artist_rename",
+          "to": {
+            "name": "邓丽君精选",
+            "source": "manual"
+          }
+        },
+        "created_at": "2026-01-01T00:00:01Z",
+        "id": "00000000-0000-4000-8000-000000000009",
+        "release": null,
+        "reverted_by": null,
+        "revertible": false,
+        "reverts": null,
+        "type": "artist_rename"
+      },
+      {
+        "actor": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "username": "artist-curator"
+        },
+        "album": null,
+        "artist": {
+          "id": "00000000-0000-4000-8000-000000000005",
+          "name": "邓丽君",
+          "redirect_artist_id": null,
+          "visible": true
+        },
+        "changes": {
+          "kind": "artist_merge",
+          "name_count": 1,
+          "release_count": 1,
+          "source": {
+            "id": "00000000-0000-4000-8000-000000000006",
+            "name": "Teresa Teng"
+          },
+          "target": {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "name": "邓丽君"
+          },
+          "track_count": 1
+        },
+        "created_at": "2026-01-01T00:00:00Z",
+        "id": "00000000-0000-4000-8000-000000000010",
+        "release": null,
+        "reverted_by": null,
+        "revertible": false,
+        "reverts": null,
+        "type": "artist_merge"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "page_size": 50,
+      "total": 5
+    }
+  },
+  "status": 200
+}

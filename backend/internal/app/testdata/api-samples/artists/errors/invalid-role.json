@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_artist_role",
+      "message": "署名角色无效"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

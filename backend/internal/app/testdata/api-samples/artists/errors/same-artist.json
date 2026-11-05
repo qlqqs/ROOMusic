@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "same_artist",
+      "message": "不能合并同一位艺人"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

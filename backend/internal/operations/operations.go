@@ -25,6 +25,7 @@ import (
 	"hash/fnv"
 	"io"
 	"net"
+	"sort"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -32,18 +33,22 @@ import (
 )
 
 const (
-	// TypeReleaseCorrection、TypeReleaseGroupChange、TypeReleaseGroupDefault、TypeReleaseIssueReview、TypeReleaseClaim 与 TypeRevert
-	// 是 operations.operation_type 允许的取值。
-	TypeReleaseCorrection   = "release_correction"
-	TypeReleaseGroupChange  = "release_group_change"
-	TypeReleaseGroupDefault = "release_group_default"
-	TypeReleaseIssueReview  = "release_issue_review"
-	TypeReleaseClaim        = "release_claim"
-	TypeRevert              = "revert"
+	// Type 常量是 operations.operation_type 允许的发行、专辑、艺人治理与撤销类型。
+	TypeReleaseCorrection     = "release_correction"
+	TypeReleaseGroupChange    = "release_group_change"
+	TypeReleaseGroupDefault   = "release_group_default"
+	TypeReleaseIssueReview    = "release_issue_review"
+	TypeReleaseClaim          = "release_claim"
+	TypeRevert                = "revert"
+	TypeArtistMerge           = "artist_merge"
+	TypeArtistSplit           = "artist_split"
+	TypeArtistRename          = "artist_rename"
+	TypeArtistCandidateIgnore = "artist_candidate_ignore"
 
-	// TargetRelease 与 TargetReleaseGroup 是 operations.target_type 允许的取值：发行，以及专辑（release_groups 的一行）。
+	// Target 常量是 operations.target_type 允许的目标：发行、专辑与艺人。
 	TargetRelease      = "release"
 	TargetReleaseGroup = "release_group"
+	TargetArtist       = "artist"
 
 	// lockClass 是操作 advisory lock 的固定类别（ASCII 的 OPER）。两参数锁与迁移锁（单个 bigint 键）、
 	// 扫描锁（SCAN 类别）、目录操作锁（ROOT 类别）互不共用键空间。
@@ -135,6 +140,7 @@ type Spec struct {
 type Outcome struct {
 	TargetType       string
 	TargetID         string
+	Targets          []Target // 额外受影响目标；艺人主目标也自动记入关联。
 	ExpectedRevision int64
 	ResultRevision   int64 // 必须等于 ExpectedRevision + 1
 	Before, After    any   // 类型化的前后状态，序列化成 JSON；撤销依据它们
@@ -232,6 +238,9 @@ func Run(ctx context.Context, database *sql.DB, spec Spec, execute Executor) (Re
 		}
 		return Result{}, classify("insert operation record", err)
 	}
+	if err := insertArtistTargets(ctx, tx, operationID, outcome); err != nil {
+		return Result{}, classify("insert artist targets", err)
+	}
 	if err = tx.Commit(); err != nil {
 		return Result{}, classify("commit", err)
 	}
@@ -278,4 +287,31 @@ func isConnectionError(err error) bool {
 	return errors.As(err, &connectError) || errors.As(err, &networkError) ||
 		errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) ||
 		errors.Is(err, driver.ErrBadConn) || errors.Is(err, sql.ErrConnDone)
+}
+
+// insertArtistTargets 只持久化执行器提供的身份引用，不查询其他能力的私有表。
+func insertArtistTargets(ctx context.Context, tx *sql.Tx, operationID string, outcome Outcome) error {
+	targets := append([]Target{{Type: outcome.TargetType, ID: outcome.TargetID}}, outcome.Targets...)
+	seen := map[string]bool{}
+	ids := make([]string, 0, len(targets))
+	for _, target := range targets {
+		if target.Type != TargetArtist {
+			continue
+		}
+		id := strings.ToLower(target.ID)
+		if !uuid.Valid(id) {
+			return errors.New("invalid artist operation target")
+		}
+		if !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	sort.Strings(ids)
+	_, err := tx.ExecContext(ctx, `INSERT INTO operations_artist_targets(operation_id,artist_id)
+ SELECT $1::uuid, unnest($2::text[]::uuid[])`, operationID, ids)
+	return err
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/artistgraph"
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/searchindex"
 	"github.com/qlqq/roomusic/backend/internal/catalog/textnorm"
 )
@@ -41,6 +42,20 @@ func (s *Store) searchState(ctx context.Context) (CatalogState, int64, error) {
 		return CatalogState{}, 0, err
 	}
 	result := CatalogState{Epoch: state.CatalogEpoch, SearchMode: "legacy", ArtistsState: "unavailable"}
+	var artistEpoch int64
+	if err := s.database.QueryRowContext(ctx, `SELECT catalog_epoch FROM catalog_projection_state WHERE capability='artists'`).Scan(&artistEpoch); err == nil {
+		result.Epoch += artistEpoch
+		ready, err := artistgraph.Ready(ctx, s.database)
+		if err != nil {
+			return CatalogState{}, 0, err
+		}
+		result.ArtistsState = "preparing"
+		if ready {
+			result.ArtistsState = "ready"
+		}
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return CatalogState{}, 0, err
+	}
 	// 字表损坏不阻断旧目录；成功预检之前绝不调用 Text/CatalogNumber。
 	if state.Ready() && textnorm.LoadEmbedded() == nil {
 		result.SearchMode = "normalized"
@@ -54,6 +69,9 @@ func (s *Store) LoadCatalogState(ctx context.Context) (CatalogState, error) {
 }
 
 func emptySearchItems(kind string) any {
+	if kind == "artists" {
+		return []SearchArtistItem{}
+	}
 	if kind == "albums" {
 		return []SearchAlbumItem{}
 	}
@@ -62,13 +80,26 @@ func emptySearchItems(kind string) any {
 
 // Search 返回一栏的完整安全摘要及有界计数，空页也保留全局计数下界。
 func (s *Store) Search(ctx context.Context, params SearchParams) (SearchResult, error) {
-	if params.Type != "albums" && params.Type != "tracks" {
+	if params.Type != "albums" && params.Type != "tracks" && params.Type != "artists" {
 		return SearchResult{}, ErrUnsupportedSearchType
 	}
 	return searchSnapshot(ctx, s, func(snapshot *Store, state CatalogState, generation int64) (SearchResult, error) {
 		result := SearchResult{Query: params.Query, Type: params.Type, CatalogState: state, Items: emptySearchItems(params.Type),
 			Pagination: SearchPagination{Page: params.Page, PageSize: params.PageSize, TotalRelation: "eq"}}
+		if params.Type == "artists" {
+			if state.ArtistsState == "unavailable" {
+				return SearchResult{}, ErrUnsupportedSearchType
+			}
+			if state.ArtistsState != "ready" {
+				return SearchResult{}, ErrArtistCatalogPreparing
+			}
+			items, pagination, err := snapshot.searchArtists(ctx, params.Query, params.Page, params.PageSize, true)
+			result.Items = items
+			result.Pagination = pagination
+			return result, err
+		}
 		plan := newSearchPlan(params.Query, params.Type, state.SearchMode, generation)
+		plan.artistAliases = state.ArtistsState == "ready"
 		if plan.empty {
 			return result, nil
 		}
@@ -102,11 +133,23 @@ func boundedSearchTotal(total int64) (int64, string) {
 func (s *Store) SearchSuggestions(ctx context.Context, query string, limit int) (SearchSuggestions, error) {
 	return searchSnapshot(ctx, s, func(snapshot *Store, state CatalogState, generation int64) (SearchSuggestions, error) {
 		result := SearchSuggestions{Query: query, CatalogState: state, AvailableTypes: []string{"albums", "tracks"},
-			Artists: SearchSuggestionSection[struct{}]{Items: []struct{}{}},
+			Artists: SearchSuggestionSection[SearchArtistItem]{Items: []SearchArtistItem{}},
 			Albums:  SearchSuggestionSection[SearchAlbumItem]{Items: []SearchAlbumItem{}},
 			Tracks:  SearchSuggestionSection[SearchTrackItem]{Items: []SearchTrackItem{}}}
+		if state.ArtistsState == "ready" {
+			result.AvailableTypes = []string{"artists", "albums", "tracks"}
+		}
 		for _, kind := range result.AvailableTypes {
+			if kind == "artists" {
+				items, pagination, err := snapshot.searchArtists(ctx, query, 1, limit, false)
+				if err != nil {
+					return SearchSuggestions{}, err
+				}
+				result.Artists = SearchSuggestionSection[SearchArtistItem]{Items: items, HasMore: pagination.HasMore}
+				continue
+			}
 			plan := newSearchPlan(query, kind, state.SearchMode, generation)
+			plan.artistAliases = state.ArtistsState == "ready"
 			if plan.empty {
 				continue
 			}

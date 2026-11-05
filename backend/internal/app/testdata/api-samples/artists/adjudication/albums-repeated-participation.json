@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_artist_participation",
+      "message": "专辑参与范围无效"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

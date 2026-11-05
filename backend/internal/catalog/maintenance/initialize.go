@@ -10,7 +10,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/catalog/textnorm"
 )
 
-// Initialize 在正常写者启动前登记目标；只接触一行状态，不发现对象、不回填。
+// Initialize 在正常写者启动前登记目标；只接触能力状态行，不发现对象、不回填。
 // 内置表坏掉时记 failed 并保留旧搜索，不能因此阻断普通 ready。
 func Initialize(ctx context.Context, db *sql.DB) error {
 	preflightErr := textnorm.LoadEmbedded()
@@ -40,6 +40,9 @@ func Initialize(ctx context.Context, db *sql.DB) error {
 		if err != nil {
 			return err
 		}
+	}
+	if err = initializeArtists(ctx, tx, preflightErr); err != nil {
+		return err
 	}
 	return tx.Commit()
 }

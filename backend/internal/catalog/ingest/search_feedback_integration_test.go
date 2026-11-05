@@ -13,10 +13,17 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/searchindex"
 	"github.com/qlqq/roomusic/backend/internal/catalog/maintenance"
+	"github.com/qlqq/roomusic/backend/internal/personal"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
-func searchFeedbackPublish(t *testing.T, db *sql.DB) searchindex.State {
+// searchFeedbackPublication 分别保存内部搜索投影状态与对外目录状态；⑤ 的目录 epoch 还包含艺人发布。
+type searchFeedbackPublication struct {
+	searchindex.State
+	Catalog catalog.CatalogState
+}
+
+func searchFeedbackPublish(t *testing.T, db *sql.DB) searchFeedbackPublication {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -24,14 +31,22 @@ func searchFeedbackPublish(t *testing.T, db *sql.DB) searchindex.State {
 	if err := maintenance.Initialize(ctx, db); err != nil {
 		t.Fatal(err)
 	}
-	if err := maintenance.Run(ctx, db, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
+	if err := maintenance.Run(ctx, db, slog.New(slog.NewTextHandler(io.Discard, nil)), maintenance.RunOptions{RefreshArtistResolutions: personal.RefreshArtistResolution}); err != nil {
 		t.Fatal(err)
 	}
 	after := searchFeedbackState(t, db)
 	if !after.Ready() || after.CatalogEpoch != before.CatalogEpoch+1 {
 		t.Fatalf("发布状态错误：before=%+v after=%+v", before, after)
 	}
-	return after
+	// Run 同步等待搜索和艺人维护结束；不能在只有搜索 ready 时取对外 epoch。
+	published, err := catalog.NewStore(db).LoadCatalogState(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if published.SearchMode != "normalized" || published.ArtistsState != "ready" {
+		t.Fatalf("目录尚未完整发布：%+v", published)
+	}
+	return searchFeedbackPublication{State: after, Catalog: published}
 }
 
 func searchFeedbackState(t *testing.T, db *sql.DB) searchindex.State {
@@ -133,10 +148,10 @@ func TestPostgreSQLSearchFeedbackSameScanChanges(t *testing.T) {
 		t.Fatalf("missing revision=%d", got)
 	}
 	for _, kind := range []string{"tracks", "albums"} {
-		searchFeedbackQuery(t, db, state.CatalogEpoch, kind, "更新乐曲", 1)
-		searchFeedbackQuery(t, db, state.CatalogEpoch, kind, "新增专辑", 1)
-		searchFeedbackQuery(t, db, state.CatalogEpoch, kind, "消失曲", 0)
-		searchFeedbackQuery(t, db, state.CatalogEpoch, kind, "旧曲", 0)
+		searchFeedbackQuery(t, db, state.Catalog.Epoch, kind, "更新乐曲", 1)
+		searchFeedbackQuery(t, db, state.Catalog.Epoch, kind, "新增专辑", 1)
+		searchFeedbackQuery(t, db, state.Catalog.Epoch, kind, "消失曲", 0)
+		searchFeedbackQuery(t, db, state.Catalog.Epoch, kind, "旧曲", 0)
 	}
 	if got := searchFeedbackCount(t, db, `SELECT COUNT(*) FROM catalog_search_values WHERE track_id=$1 AND field='track_title' AND normalized_value='消失曲'`, missing); got != 1 {
 		t.Fatal("missing 不应删除原搜索值")
@@ -205,11 +220,11 @@ func TestPostgreSQLSearchFeedbackCandidateProjectionFailureRollsBack(t *testing.
 						t.Fatalf("%s 留下失败候选记录", table)
 					}
 				}
-				if got := searchFeedbackState(t, db); got != state {
+				if got := searchFeedbackState(t, db); got != state.State {
 					t.Fatalf("回滚后搜索状态变化：%+v", got)
 				}
-				searchFeedbackQuery(t, db, state.CatalogEpoch, "tracks", "原曲", 1)
-				searchFeedbackQuery(t, db, state.CatalogEpoch, "tracks", "未提交", 0)
+				searchFeedbackQuery(t, db, state.Catalog.Epoch, "tracks", "原曲", 1)
+				searchFeedbackQuery(t, db, state.Catalog.Epoch, "tracks", "未提交", 0)
 			})
 		}
 	}
@@ -233,8 +248,8 @@ func TestPostgreSQLSearchFeedbackFailurePreservesCandidateAndMissing(t *testing.
 	}
 	track := feedbackTracks(t, db, release)[0]
 	revision := searchFeedbackRevision(t, db, track)
-	searchFeedbackQuery(t, db, state.CatalogEpoch, "tracks", "繁体乐曲", 1)
-	searchFeedbackQuery(t, db, state.CatalogEpoch, "albums", "繁体乐曲", 1)
+	searchFeedbackQuery(t, db, state.Catalog.Epoch, "tracks", "繁体乐曲", 1)
+	searchFeedbackQuery(t, db, state.Catalog.Epoch, "albums", "繁体乐曲", 1)
 	for _, table := range []string{"scan_catalog_changes", "scan_added_releases"} {
 		if got := searchFeedbackCount(t, db, `SELECT COUNT(*) FROM `+table+` WHERE scan_run_id=$1`, f.scanID); got != 0 {
 			t.Fatalf("%s 留下半份反馈", table)
@@ -246,8 +261,8 @@ func TestPostgreSQLSearchFeedbackFailurePreservesCandidateAndMissing(t *testing.
 	if got := searchFeedbackRevision(t, db, track); got != revision+1 {
 		t.Fatalf("已降级 missing 未刷新：%d", got)
 	}
-	searchFeedbackQuery(t, db, state.CatalogEpoch, "tracks", "繁体乐曲", 0)
-	searchFeedbackQuery(t, db, state.CatalogEpoch, "albums", "繁体乐曲", 0)
+	searchFeedbackQuery(t, db, state.Catalog.Epoch, "tracks", "繁体乐曲", 0)
+	searchFeedbackQuery(t, db, state.Catalog.Epoch, "albums", "繁体乐曲", 0)
 }
 
 func TestPostgreSQLSearchFeedbackMissingDegradationRefreshesProjection(t *testing.T) {
@@ -292,8 +307,8 @@ func TestPostgreSQLSearchFeedbackMissingDegradationRefreshesProjection(t *testin
 			if got := searchFeedbackCount(t, db, `SELECT COUNT(*) FROM scan_catalog_changes WHERE scan_run_id=$1`, scanID); got != 0 {
 				t.Fatal("保留了半份反馈")
 			}
-			searchFeedbackQuery(t, db, state.CatalogEpoch, "tracks", "繁体曲", 0)
-			searchFeedbackQuery(t, db, state.CatalogEpoch, "albums", "繁体曲", 0)
+			searchFeedbackQuery(t, db, state.Catalog.Epoch, "tracks", "繁体曲", 0)
+			searchFeedbackQuery(t, db, state.Catalog.Epoch, "albums", "繁体曲", 0)
 		})
 	}
 }
@@ -340,10 +355,10 @@ func TestPostgreSQLSearchFeedbackMissingBatchesProjectionFailureRollsBack(t *tes
 	if got := searchFeedbackCount(t, db, `SELECT COUNT(*) FROM scan_catalog_changes WHERE scan_run_id=$1`, f.scanID); got != 0 {
 		t.Fatal("失败 missing 留下反馈")
 	}
-	if got := searchFeedbackState(t, db); got != state {
+	if got := searchFeedbackState(t, db); got != state.State {
 		t.Fatalf("失败后发布状态改变：%+v", got)
 	}
-	searchFeedbackQuery(t, db, state.CatalogEpoch, "tracks", "批次曲", 600)
+	searchFeedbackQuery(t, db, state.Catalog.Epoch, "tracks", "批次曲", 600)
 	feedbackExec(t, db, `DROP TRIGGER reject_second_search_batch ON catalog_projection_subject_state`)
 	searchFeedbackMissing(t, db, f, root)
 	if f.Broken() {
@@ -355,7 +370,7 @@ func TestPostgreSQLSearchFeedbackMissingBatchesProjectionFailureRollsBack(t *tes
 	if got := feedbackSummary(t, db, f); got != (ScanChangeSummary{Albums: ChangeCounts{Missing: 1}, Tracks: ChangeCounts{Missing: 600}}) {
 		t.Fatalf("重试报告：%+v", got)
 	}
-	searchFeedbackQuery(t, db, state.CatalogEpoch, "tracks", "批次曲", 0)
+	searchFeedbackQuery(t, db, state.Catalog.Epoch, "tracks", "批次曲", 0)
 }
 
 func TestPostgreSQLSearchFeedbackMissingTakesGateBeforeBusinessLocks(t *testing.T) {

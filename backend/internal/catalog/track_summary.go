@@ -28,6 +28,7 @@ type TrackSummary struct {
 	TrackID         string          `json:"track_id"`
 	Title           string          `json:"title"`
 	Artist          string          `json:"artist"`
+	ArtistRefs      []ArtistRef     `json:"artist_refs"`
 	GroupID         string          `json:"group_id"`
 	Present         bool            `json:"present"`
 	DurationSeconds *float64        `json:"duration_seconds"`
@@ -43,15 +44,16 @@ const loadTrackSummariesSQL = `WITH selected_tracks AS MATERIALIZED (
  WHERE t.id = ANY($1::text[]::uuid[])
 ), summary_release_ids AS MATERIALIZED (
  SELECT DISTINCT release_id AS id FROM selected_tracks
-), ` + releasesql.BatchSummaryCountsCTE + `, summaries (id,title,artist,album_artist,year,source_type,media_type,medium_count,track_count,attention_count,artwork_key,artwork_mime,artwork_width,artwork_height,group_id) AS MATERIALIZED (
+), ` + releasesql.SelectedTrackArtistRefsCTE + `, ` + releasesql.BatchSummaryCountsCTE + `, ` + releasesql.BatchSummaryArtistRefsCTE + `, summaries (id,title,artist,album_artist,year,source_type,media_type,medium_count,track_count,attention_count,artwork_key,artwork_mime,artwork_width,artwork_height,artist_refs,album_artist_refs,group_id) AS MATERIALIZED (
  SELECT ` + releasesql.BatchSummaryProjection + `, releases.group_id::text
  FROM ` + releasesql.ReleaseSource + ` JOIN summary_release_ids ON summary_release_ids.id=releases.id` + releasesql.BatchSummaryJoins + `
 )
 SELECT t.id::text,t.title,t.artist,t.source_status='present',t.duration_seconds,
  t.source_kind,t.codec,t.bit_depth,t.sample_rate,t.channels,t.bitrate,
  s.id,s.title,s.artist,s.album_artist,s.year,s.source_type,s.media_type,s.medium_count,s.track_count,s.attention_count,
- s.artwork_key,s.artwork_mime,s.artwork_width,s.artwork_height,s.group_id
-FROM selected_tracks t JOIN summaries s ON s.id=t.release_id::text`
+ s.artwork_key,s.artwork_mime,s.artwork_width,s.artwork_height,s.artist_refs,s.album_artist_refs,s.group_id,COALESCE(track_artist_refs.artist_refs,'[]'::jsonb)
+FROM selected_tracks t JOIN summaries s ON s.id=t.release_id::text
+ LEFT JOIN track_artist_refs ON track_artist_refs.track_id=t.id`
 
 // LoadTrackSummaries 批量读取含 missing 的曲目摘要；无效 UUID 跳过、小写去重，不存在者无键。
 // 空输入不查库，不同有效 ID 最多 1,000 个；缺失曲目仍保留标题、艺人、发行及扫描事实。
@@ -84,14 +86,19 @@ func (s *Store) LoadTrackSummaries(ctx context.Context, trackIDs []string) (map[
 	for rows.Next() {
 		var item TrackSummary
 		var columns ReleaseSummaryColumns
+		var refs []byte
 		var duration sql.NullFloat64
 		var codec sql.NullString
 		var depth, rate, channels, bitrate sql.NullInt64
 		targets := []any{&item.TrackID, &item.Title, &item.Artist, &item.Present, &duration,
 			&item.Source.SourceKind, &codec, &depth, &rate, &channels, &bitrate}
 		targets = append(targets, columns.ScanTargets()...)
-		targets = append(targets, &item.GroupID)
+		targets = append(targets, &item.GroupID, &refs)
 		if err := rows.Scan(targets...); err != nil {
+			return nil, fmt.Errorf("load track summaries: %w", err)
+		}
+		item.ArtistRefs, err = decodeArtistRefs(refs)
+		if err != nil {
 			return nil, fmt.Errorf("load track summaries: %w", err)
 		}
 		item.Release, err = columns.Summary()

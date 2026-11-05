@@ -199,7 +199,7 @@ func TestPostgreSQLSearchRankingLegacyListsAndEmpty(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(before, after) {
 		t.Fatalf("no-query browsing changed: %+v %+v %v", before, after, err)
 	}
-	if _, err := f.store.Search(ctx, SearchParams{Type: "artists", Page: 1, PageSize: 50}); !errors.Is(err, ErrUnsupportedSearchType) {
+	if _, err := f.store.Search(ctx, SearchParams{Type: "artists", Page: 1, PageSize: 50}); !errors.Is(err, ErrArtistCatalogPreparing) {
 		t.Fatal(err)
 	}
 }

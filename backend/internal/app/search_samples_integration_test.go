@@ -74,6 +74,27 @@ func recordSearchSamples(t *testing.T, samples *apiSampleRecorder) {
 	} {
 		record(tc.name, tc.path)
 	}
+	// ⑤只补身份：四种署名必须仍只命中本轨，不能因为别名投影把同专辑的 sibling 带进来。
+	for _, credit := range []struct{ query, role, original string }{
+		{"久石譲", "composer", "久石譲"}, {"指挥者", "conductor", "指揮者"},
+		{"演奏者", "performer", "演奏者"}, {"制作人", "producer", "製作人"},
+	} {
+		page := requireSearchTracks(t, app, &user, credit.query, fixture.trackIDs[0])
+		match := page.Items[0].Match
+		if match.Field != "credit" || match.Kind != "exact" || match.Role == nil || *match.Role != credit.role || match.Original != credit.original || match.ArtistID == nil || match.Alias != nil {
+			t.Fatalf("⑤改变了④署名匹配语义：%+v", match)
+		}
+	}
+	artistPage := requireSearchTracks(t, app, &user, "曲目艺人", fixture.trackIDs[1])
+	if match := artistPage.Items[0].Match; match.Field != "track_artist" || match.Kind != "exact" || match.Original != "曲目藝人" || match.ArtistID == nil || match.Alias != nil {
+		t.Fatalf("曲目艺人匹配改变：%+v", match)
+	}
+	releasePage := requireSearchTracks(t, app, &user, "beyonce", fixture.trackIDs[0], fixture.trackIDs[1])
+	for _, item := range releasePage.Items {
+		if match := item.Match; match.Field != "release_artist" || match.Kind != "exact" || match.Original != "Beyoncé" || match.ArtistID == nil || match.Alias != nil {
+			t.Fatalf("发行艺人匹配改变：%+v", match)
+		}
+	}
 	samples.record("search/errors/unauthorized", app.request(t, http.MethodGet, searchURL("tracks", "爱"), nil, nil, map[string]string{"X-Request-ID": sampleRequestID}), 401)
 	for _, tc := range []struct{ name, path string }{
 		{"invalid-query", searchURL("tracks", strings.Repeat("爱", 67))},
@@ -81,7 +102,7 @@ func recordSearchSamples(t *testing.T, samples *apiSampleRecorder) {
 		{"invalid-control", searchURL("tracks", "a\x00b")},
 		{"invalid-limit", "/api/v1/search/suggestions?q=x&limit=9"},
 		{"invalid-type", "/api/v1/search?type=unknown&q=x"},
-		{"unsupported-artists", "/api/v1/search?type=artists&q=x"},
+		{"invalid-type-singular", "/api/v1/search?type=artist&q=x"},
 		{"invalid-pagination", searchURL("tracks", "x") + "&page_size=101"},
 	} {
 		samples.record("search/errors/"+tc.name, call(tc.path), 400)
@@ -157,7 +178,7 @@ func TestPostgreSQLSearchResponseSamples(t *testing.T) {
 			t.Fatal(err)
 		}
 		name = strings.TrimSuffix(filepath.ToSlash(name), ".json")
-		if _, exists := samples.samples[name]; !exists {
+		if _, exists := samples.samples[name]; !exists && !isArtistAPISample(name) {
 			t.Errorf("多余搜索样本：%s", path)
 		}
 	}

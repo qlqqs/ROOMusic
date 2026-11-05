@@ -16,6 +16,8 @@ func TestSplitArtistNamesFlattensConservativeSeparators(t *testing.T) {
 		{name: "compact slash", input: "Artist Alpha/Artist Beta", want: []string{"Artist Alpha", "Artist Beta"}},
 		{name: "fixed ampersand group", input: "Simon & Garfunkel", want: []string{"Simon & Garfunkel"}},
 		{name: "fixed slash group", input: "AC/DC", want: []string{"AC/DC"}},
+		{name: "fixed comma group", input: "Earth, Wind & Fire", want: []string{"Earth, Wind & Fire"}},
+		{name: "control cleanup before fixed group", input: "AC/\x00DC", want: []string{"AC/DC"}},
 	}
 
 	for _, tt := range tests {
@@ -27,11 +29,11 @@ func TestSplitArtistNamesFlattensConservativeSeparators(t *testing.T) {
 	}
 }
 
-func TestCanonicalArtistNamesApplyOfficialAliasesAndDeduplicate(t *testing.T) {
-	got := CanonicalArtistNames("Jay Chou / 周杰倫 / Guest Artist")
-	want := []string{"周杰伦", "Guest Artist"}
+func TestCanonicalArtistNamesPreserveSpellingsAndDeduplicateExactNames(t *testing.T) {
+	got := CanonicalArtistNames("Jay Chou / 周杰倫 / 周杰伦 / jay chou / Jay Chou / Guest Artist")
+	want := []string{"Jay Chou", "周杰倫", "周杰伦", "jay chou", "Guest Artist"}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("艺人别名归一结果 = %#v，期望 %#v", got, want)
+		t.Fatalf("艺人原文去重结果 = %#v，期望 %#v", got, want)
 	}
 }
 

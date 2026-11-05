@@ -1,8 +1,8 @@
 {
   "body": {
     "catalog_state": {
-      "artists_state": "unavailable",
-      "epoch": 2,
+      "artists_state": "ready",
+      "epoch": 4,
       "search_mode": "normalized"
     },
     "items": [],

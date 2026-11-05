@@ -13,7 +13,6 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
-	"github.com/qlqq/roomusic/backend/internal/catalog/internal/searchindex"
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/writegate"
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"github.com/qlqq/roomusic/backend/internal/operations"
@@ -355,7 +354,7 @@ func CorrectionExecutor(request CorrectionRequest) operations.Executor {
 		if _, err := tx.ExecContext(ctx, `UPDATE releases SET edit_revision = edit_revision + 1 WHERE id=$1::uuid`, request.ReleaseID); err != nil {
 			return operations.Outcome{}, err
 		}
-		if err := searchindex.RefreshRelease(ctx, tx, request.ReleaseID); err != nil {
+		if err := refreshGovernedRelease(ctx, tx, request.ReleaseID); err != nil {
 			return operations.Outcome{}, err
 		}
 		state, err := loadCorrectionState(ctx, tx, request.ReleaseID)

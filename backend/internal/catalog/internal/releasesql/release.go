@@ -41,7 +41,7 @@ const (
 		 JOIN media present_medium ON present_medium.id = present_track.medium_id
 		 WHERE present_medium.release_id = releases.id
 		   AND present_track.source_status = 'present'),
-		` + ReleaseAttentionExpression + `,` + releaseSummaryArtworkProjection
+		` + ReleaseAttentionExpression + `,` + releaseSummaryArtworkProjection + `,` + releaseSummaryArtistRefsProjection
 
 	ReleaseSummaryArtworkJoin = ` LEFT JOIN release_artworks release_artwork
 		ON release_artwork.release_id = releases.id`

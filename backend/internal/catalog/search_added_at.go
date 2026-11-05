@@ -18,7 +18,7 @@ func (s *Store) searchGroupsByAddedAt(ctx context.Context, plan searchPlan, para
 	}
 	query += " ORDER BY " + releaseGroupOrder(params.Sort) + " LIMIT $" + strconv.Itoa(len(plan.args)+1) + " OFFSET $" + strconv.Itoa(len(plan.args)+2)
 	args := append(append([]any{}, plan.args...), params.PageSize, (params.Page-1)*params.PageSize)
-	rows, err := s.database.QueryContext(ctx, query, args...)
+	rows, err := s.database.QueryContext(ctx, plan.withArtistAliases(query), args...)
 	if err != nil {
 		return result, err
 	}

@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_seed",
+      "message": "随机种子无效"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

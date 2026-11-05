@@ -22,52 +22,40 @@ func parseOggStream(path string, requireOpus bool) (AudioObservation, error) {
 	o := AudioObservation{SourceKind: "ogg_vorbis_comment", InferredFields: map[string]bool{}}
 	opusHead := false
 	codecHeader := false
+	// 注释可跨多个页，一页也可包含多个包；只有完整包才能产生署名证据。
+	var packet []byte
 	pos := 0
 	for pos+27 <= len(data) {
 		if string(data[pos:pos+4]) != "OggS" {
 			return o, fmt.Errorf("invalid OGG page")
 		}
-		segments := int(data[pos+26])
-		end := pos + 27 + segments
-		if end > len(data) {
+		table := pos + 27
+		cursor := table + int(data[pos+26])
+		if cursor > len(data) {
 			return o, fmt.Errorf("truncated OGG page")
 		}
-		total := 0
-		for _, n := range data[pos+27 : end] {
-			total += int(n)
-		}
-		if end+total > len(data) {
-			return o, fmt.Errorf("truncated OGG packet")
-		}
-		packet := data[end : end+total]
-		if bytes.HasPrefix(packet, []byte("\x01vorbis")) {
-			codecHeader = true
-			o.Codec = "vorbis"
-			if len(packet) >= 30 {
-				o.Channels = int(packet[11])
-				o.SampleRate = int(binary.LittleEndian.Uint32(packet[12:16]))
-				if nominal := int32(binary.LittleEndian.Uint32(packet[20:24])); nominal > 0 {
-					o.Bitrate = int(nominal / 1000)
-				}
+		for _, segmentLength := range data[table:cursor] {
+			end := cursor + int(segmentLength)
+			if end > len(data) {
+				return o, fmt.Errorf("truncated OGG packet")
 			}
-		}
-		if bytes.HasPrefix(packet, []byte("\x03vorbis")) {
-			parseVorbisComments(packet[7:], &o)
-		}
-		if bytes.HasPrefix(packet, []byte("OpusTags")) {
-			parseVorbisComments(packet[8:], &o)
-			o.SourceKind = "opus_tags"
-		}
-		if bytes.HasPrefix(packet, []byte("OpusHead")) {
-			opusHead = true
-			codecHeader = true
-			o.Codec = "opus"
-			if len(packet) >= 19 {
-				o.Channels = int(packet[9])
-				o.SampleRate = 48000
+			if len(packet)+int(segmentLength) > 16<<20 {
+				return o, fmt.Errorf("OGG packet too large")
 			}
+			packet = append(packet, data[cursor:end]...)
+			cursor = end
+			if segmentLength == 255 {
+				continue
+			}
+			if err := parseOggPacket(packet, &o, &codecHeader, &opusHead); err != nil {
+				return o, err
+			}
+			packet = packet[:0]
 		}
-		pos = end + total
+		pos = cursor
+	}
+	if len(packet) != 0 {
+		return o, fmt.Errorf("truncated OGG packet")
 	}
 	if pos != len(data) {
 		return o, fmt.Errorf("invalid OGG trailing data")
@@ -83,3 +71,38 @@ func parseOggStream(path string, requireOpus bool) (AudioObservation, error) {
 }
 
 func parseOpus(path string) (AudioObservation, error) { return parseOggStream(path, true) }
+
+func parseOggPacket(packet []byte, o *AudioObservation, codecHeader, opusHead *bool) error {
+	if bytes.HasPrefix(packet, []byte("\x01vorbis")) {
+		*codecHeader = true
+		o.Codec = "vorbis"
+		if len(packet) >= 30 {
+			o.Channels = int(packet[11])
+			o.SampleRate = int(binary.LittleEndian.Uint32(packet[12:16]))
+			if nominal := int32(binary.LittleEndian.Uint32(packet[20:24])); nominal > 0 {
+				o.Bitrate = int(nominal / 1000)
+			}
+		}
+	}
+	if bytes.HasPrefix(packet, []byte("\x03vorbis")) {
+		if err := parseVorbisComments(packet[7:], o); err != nil {
+			return err
+		}
+	}
+	if bytes.HasPrefix(packet, []byte("OpusTags")) {
+		o.SourceKind = "opus_tags"
+		if err := parseVorbisComments(packet[8:], o); err != nil {
+			return err
+		}
+	}
+	if bytes.HasPrefix(packet, []byte("OpusHead")) {
+		*opusHead = true
+		*codecHeader = true
+		o.Codec = "opus"
+		if len(packet) >= 19 {
+			o.Channels = int(packet[9])
+			o.SampleRate = 48000
+		}
+	}
+	return nil
+}

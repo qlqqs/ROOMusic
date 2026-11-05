@@ -96,7 +96,7 @@ func (f *fixture) batch(conn *sql.Conn, s searchindex.State, releaseLimit, track
 }
 func (f *fixture) run() {
 	f.t.Helper()
-	if err := Run(f.ctx, f.db, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
+	if err := Run(f.ctx, f.db, slog.New(slog.NewTextHandler(io.Discard, nil)), artistTestOptions()); err != nil {
 		f.t.Fatal(err)
 	}
 }
@@ -341,7 +341,7 @@ func TestPostgreSQLCatalogBackfillDuringRealScan(t *testing.T) {
 	}
 	releaseLease(conn)
 	var logs bytes.Buffer
-	if err := Run(f.ctx, f.db, slog.New(slog.NewJSONHandler(&logs, nil))); err != nil {
+	if err := Run(f.ctx, f.db, slog.New(slog.NewJSONHandler(&logs, nil)), artistTestOptions()); err != nil {
 		t.Fatal(err)
 	}
 	if !f.state().Ready() {
@@ -379,7 +379,7 @@ func TestPostgreSQLCatalogBackfillSingleWriterCancellation(t *testing.T) {
 	// 一个维护者持有专用会话锁；第二个只能等待，取消不得发现清单或写入投影。
 	owner := f.lease()
 	ctx, cancel := context.WithTimeout(f.ctx, 80*time.Millisecond)
-	err := Run(ctx, f.db, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	err := Run(ctx, f.db, slog.New(slog.NewTextHandler(io.Discard, nil)), artistTestOptions())
 	cancel()
 	if !errors.Is(err, context.DeadlineExceeded) {
 		releaseLease(owner)
@@ -443,7 +443,7 @@ func TestPostgreSQLCatalogBackfillOwnerCancellationReleasesLease(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(f.ctx)
 	done := make(chan error, 1)
-	go func() { done <- Run(ctx, f.db, slog.New(slog.NewTextHandler(io.Discard, nil))) }()
+	go func() { done <- Run(ctx, f.db, slog.New(slog.NewTextHandler(io.Discard, nil)), artistTestOptions()) }()
 	defer cancel()
 	// 清单建立不占CATP；看到封闭清单后，拥有维护锁的worker必然在等测试gate。
 	deadline := time.After(5 * time.Second)

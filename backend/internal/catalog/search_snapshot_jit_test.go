@@ -147,6 +147,9 @@ func (c *localJITTestConnection) QueryContext(_ context.Context, query string, _
 	if !c.active || !c.configured || !strings.Contains(query, "FROM catalog_projection_state") {
 		return nil, fmt.Errorf("搜索状态不在已配置事务内读取: %s", query)
 	}
+	if strings.Contains(query, "SELECT catalog_epoch") {
+		return &localJITStateRows{done: true}, nil
+	}
 	c.events = append(c.events, "state")
 	if c.failure == "state" {
 		return nil, c.cause

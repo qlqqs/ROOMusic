@@ -21,6 +21,10 @@ func TestPostgreSQLSearchTrackSummaryNullabilityAndSafety(t *testing.T) {
 			if mode == "normalized" {
 				publishSearch(t, app)
 			}
+			var artistID string
+			if mode == "normalized" {
+				artistID = requireSearchArtistByName(t, app, &user, "展示艺人", []string{"release_artist", "track_artist"}).ID
+			}
 			for index, title := range []string{"完整音频", "未知音频"} {
 				response := searchResponse(t, app, &user, searchURL("tracks", title))
 				var raw struct {
@@ -33,7 +37,7 @@ func TestPostgreSQLSearchTrackSummaryNullabilityAndSafety(t *testing.T) {
 					t.Fatalf("安全摘要：%s", response.Body.String())
 				}
 				item := raw.Items[0]
-				requireSearchKeys(t, item, "track_id", "title", "artist", "present", "duration_seconds", "group_id", "release", "source", "match")
+				requireSearchKeys(t, item, "track_id", "title", "artist", "artist_refs", "present", "duration_seconds", "group_id", "release", "source", "match")
 				var source, release, match map[string]json.RawMessage
 				for _, target := range []struct {
 					key   string
@@ -44,7 +48,7 @@ func TestPostgreSQLSearchTrackSummaryNullabilityAndSafety(t *testing.T) {
 					}
 				}
 				requireSearchKeys(t, source, "source_kind", "codec", "bit_depth", "sample_rate", "channels", "bitrate")
-				requireSearchKeys(t, release, "id", "title", "artist", "album_artist", "year", "source_type", "media_type", "medium_count", "track_count", "attention_count", "artwork")
+				requireSearchKeys(t, release, "id", "title", "artist", "artist_refs", "album_artist_refs", "album_artist", "year", "source_type", "media_type", "medium_count", "track_count", "attention_count", "artwork")
 				requireSearchKeys(t, match, "kind", "field", "role", "original", "artist_id", "alias", "release_id", "track_id")
 				for _, key := range []string{"role", "artist_id", "alias"} {
 					if string(match[key]) != "null" {
@@ -61,6 +65,9 @@ func TestPostgreSQLSearchTrackSummaryNullabilityAndSafety(t *testing.T) {
 					t.Fatal(err)
 				}
 				track := decoded.Items[0]
+				requireSearchArtistRefs(t, track.ArtistRefs, artistID, "展示艺人")
+				requireSearchArtistRefs(t, track.Release.ArtistRefs, artistID, "展示艺人")
+				requireSearchArtistRefs(t, track.Release.AlbumArtistRefs, "", "")
 				if track.TrackID != fixture.trackIDs[index] || track.Release.ID != fixture.releaseID || track.GroupID != fixture.groupID || !track.Present || track.Source.SourceKind != "flac_vorbis_comment" {
 					t.Fatalf("TrackSummary 关系不完整：%+v", track)
 				}
@@ -150,6 +157,26 @@ func TestPostgreSQLSearchRankingGroupRepresentativeAndLegacyRoutes(t *testing.T)
 	var afterGroups releaseGroupListResponse
 	getJSON(t, app, &user, "/api/v1/releases", &afterReleases)
 	getJSON(t, app, &user, "/api/v1/release-groups", &afterGroups)
+	artistID := requireSearchArtistByName(t, app, &user, "Artist", []string{"release_artist", "track_artist"}).ID
+	// 独立验证 refs 后只归一这两个新增字段；其余摘要、数量、顺序与代表版本仍完整比较。
+	for _, phase := range []struct {
+		releases *releaseListResponse
+		groups   *releaseGroupListResponse
+		artistID string
+	}{{&beforeReleases, &beforeGroups, ""}, {&afterReleases, &afterGroups, artistID}} {
+		for i := range phase.releases.Items {
+			item := &phase.releases.Items[i]
+			requireSearchArtistRefs(t, item.ArtistRefs, phase.artistID, "Artist")
+			requireSearchArtistRefs(t, item.AlbumArtistRefs, "", "")
+			item.ArtistRefs, item.AlbumArtistRefs = nil, nil
+		}
+		for i := range phase.groups.Items {
+			item := &phase.groups.Items[i].Representative
+			requireSearchArtistRefs(t, item.ArtistRefs, phase.artistID, "Artist")
+			requireSearchArtistRefs(t, item.AlbumArtistRefs, "", "")
+			item.ArtistRefs, item.AlbumArtistRefs = nil, nil
+		}
+	}
 	if !reflect.DeepEqual(beforeReleases, afterReleases) || !reflect.DeepEqual(beforeGroups, afterGroups) {
 		t.Fatal("发布改变了无 q 的目录结果或排序")
 	}
@@ -217,5 +244,16 @@ func TestPostgreSQLSearchUnsafeProjectionFailsClosed(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func requireSearchArtistRefs(t *testing.T, refs []catalog.ArtistRef, artistID, name string) {
+	t.Helper()
+	want := []catalog.ArtistRef{}
+	if artistID != "" {
+		want = append(want, catalog.ArtistRef{ArtistID: artistID, Name: name, DisplayName: name})
+	}
+	if !reflect.DeepEqual(refs, want) {
+		t.Fatalf("艺人引用：%+v，期望非 null 数组 %+v", refs, want)
 	}
 }

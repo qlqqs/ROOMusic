@@ -1,8 +1,8 @@
 {
   "body": {
     "catalog_state": {
-      "artists_state": "unavailable",
-      "epoch": 2,
+      "artists_state": "ready",
+      "epoch": 4,
       "search_mode": "normalized"
     },
     "items": [
@@ -14,10 +14,18 @@
           "release_count": 2,
           "representative": {
             "album_artist": null,
+            "album_artist_refs": [],
             "artist": "原版艺人",
+            "artist_refs": [
+              {
+                "artist_id": "00000000-0000-4000-8000-000000000002",
+                "display_name": "原版艺人",
+                "name": "原版艺人"
+              }
+            ],
             "artwork": null,
             "attention_count": 0,
-            "id": "00000000-0000-4000-8000-000000000002",
+            "id": "00000000-0000-4000-8000-000000000003",
             "media_type": null,
             "medium_count": 1,
             "source_type": null,
@@ -32,11 +40,11 @@
           "field": "release_title",
           "kind": "exact",
           "original": "原版专辑",
-          "release_id": "00000000-0000-4000-8000-000000000002",
+          "release_id": "00000000-0000-4000-8000-000000000003",
           "role": null,
           "track_id": null
         },
-        "matched_release_id": "00000000-0000-4000-8000-000000000002"
+        "matched_release_id": "00000000-0000-4000-8000-000000000003"
       }
     ],
     "pagination": {

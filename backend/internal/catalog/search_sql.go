@@ -18,6 +18,7 @@ type searchPlan struct {
 	matchPredicate   string
 	args             []any
 	empty            bool
+	artistAliases    bool
 }
 
 func newSearchPlan(query, kind, mode string, generation int64) searchPlan {
@@ -55,7 +56,7 @@ func newSearchPlan(query, kind, mode string, generation int64) searchPlan {
 
 func (p searchPlan) countSQL(bounded bool, attention bool) string {
 	if p.mode == "normalized" {
-		return p.normalizedCountSQL(bounded, attention)
+		return p.withArtistAliases(p.normalizedCountSQL(bounded, attention))
 	}
 	prefix, subject := p.hits, "hits"
 	var candidates string
@@ -142,7 +143,12 @@ const searchRoleOrder = `CASE role WHEN 'composer' THEN 0 WHEN 'conductor' THEN 
 
 func (p searchPlan) pageSQL(attention bool) string {
 	if p.mode == "normalized" {
-		return p.normalizedPageSQL(attention)
+		query := p.normalizedPageSQL(attention)
+		if p.artistAliases {
+			query = strings.Replace(query, "v.id AS value_id,", "v.id AS value_id,v.artist_id,v.alias,", 1)
+			query = strings.Replace(query, "d.original_value,d.match_rank FROM", "d.original_value,d.match_rank,d.artist_id::text,d.alias FROM", 1)
+		}
+		return p.withArtistAliases(query)
 	}
 	query := `WITH ` + p.hits + `, ` + p.entityHitsSQL() + `, best AS MATERIALIZED (
 	 SELECT DISTINCT ON (entity_id) entity_id,matched_release_id,track_id,field,role,original_value,match_rank,value_id
@@ -220,7 +226,11 @@ func (s *Store) searchPageFiltered(ctx context.Context, plan searchPlan, limit, 
 		var hit searchHit
 		var matchedRelease, trackID sql.NullString
 		var rank int
-		if err := rows.Scan(&hit.ID, &matchedRelease, &trackID, &hit.Match.Field, &hit.Match.Role, &hit.Match.Original, &rank); err != nil {
+		targets := []any{&hit.ID, &matchedRelease, &trackID, &hit.Match.Field, &hit.Match.Role, &hit.Match.Original, &rank}
+		if plan.artistAliases && plan.mode == "normalized" {
+			targets = append(targets, &hit.Match.ArtistID, &hit.Match.Alias)
+		}
+		if err := rows.Scan(targets...); err != nil {
 			return nil, false, err
 		}
 		if matchedRelease.Valid {
@@ -247,6 +257,13 @@ func (s *Store) searchPageFiltered(ctx context.Context, plan searchPlan, limit, 
 func (s *Store) prepareSearchPlan(ctx context.Context, plan searchPlan) (searchPlan, error) {
 	if plan.mode != "normalized" || plan.empty {
 		return plan, nil
+	}
+	if plan.artistAliases {
+		if err := s.database.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM artist_search_names n
+   WHERE n.projection_generation=(SELECT published_generation FROM catalog_projection_state WHERE capability='artists')
+   AND n.short_grams @> ARRAY[$1]::text[] AND (n.normalized_value||'') LIKE '%'||$2||'%' ESCAPE '~')`, plan.args[2], plan.args[1]).Scan(&plan.artistAliases); err != nil {
+			return plan, err
+		}
 	}
 	var textTrigram, numberTrigram bool
 	if err := s.database.QueryRowContext(ctx, `SELECT $1::text ~ '[[:alnum:]]{3}',$2::text ~ '[[:alnum:]]{3}'`, plan.args[0], plan.args[3]).Scan(&textTrigram, &numberTrigram); err != nil {

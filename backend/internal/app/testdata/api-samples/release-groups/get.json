@@ -8,7 +8,9 @@
     "releases": [
       {
         "album_artist": "Sample Orchestra",
+        "album_artist_refs": [],
         "artist": "Sample Orchestra",
+        "artist_refs": [],
         "artwork": null,
         "attention_count": 0,
         "id": "00000000-0000-4000-8000-000000000002",
@@ -22,7 +24,9 @@
     ],
     "representative": {
       "album_artist": "Sample Orchestra",
+      "album_artist_refs": [],
       "artist": "Sample Orchestra",
+      "artist_refs": [],
       "artwork": null,
       "attention_count": 0,
       "id": "00000000-0000-4000-8000-000000000002",

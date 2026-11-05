@@ -16,6 +16,7 @@ func (s *Store) ListReleases(ctx context.Context, params ListParams) (ReleasePag
 		}
 		result := ReleasePage{Items: []ReleaseSummary{}}
 		plan := newSearchPlan(params.Search, "releases", state.SearchMode, generation)
+		plan.artistAliases = state.ArtistsState == "ready"
 		if plan.empty {
 			return result, nil
 		}
@@ -66,6 +67,7 @@ func (snapshot *Store) listReleaseGroupsSearch(ctx context.Context, params ListP
 	}
 	result := ReleaseGroupPage{Items: []ReleaseGroupSummary{}}
 	plan := newSearchPlan(params.Search, "albums", state.SearchMode, generation)
+	plan.artistAliases = state.ArtistsState == "ready"
 	if plan.empty {
 		return result, nil
 	}

@@ -12,7 +12,7 @@ M5 ④新增规范化搜索与在线投影：完整规则见[搜索合同](./sea
 
 ## 2. 接口与数据签名
 
-- `GET /api/v1/catalog/status`、`GET /api/v1/search/suggestions`、`GET /api/v1/search`：仅专辑/曲目，状态、Match、安全曲目摘要和 1000/gte 专用分页见[搜索合同](./search-contracts.md)。
+- `GET /api/v1/catalog/status`、`GET /api/v1/search/suggestions`、`GET /api/v1/search`：专辑/曲目/艺人三栏，状态、Match、安全曲目摘要和 1000/gte 专用分页见[搜索合同](./search-contracts.md)。
 - `GET /api/v1/releases?q=<string>&attention=required&page=<int>&page_size=<int>`
 - `GET /api/v1/releases/{id}`
 - `GET /api/v1/releases/{id}/evidence`：仅管理员。
@@ -23,32 +23,7 @@ M5 ④新增规范化搜索与在线投影：完整规则见[搜索合同](./sea
 - `GET /api/v1/artworks/{resource_id}`：认证后读取受管封面；响应带 `ETag`，支持 `If-None-Match` 的 `304`（见第 3 节）。
 - `GET /api/v1/tracks/{id}/lyrics`：认证后读取曲目的内嵌歌词（所有登录成员；非 UUID 400、不存在或非 `present` 404；没有歌词是 200 加 `lyrics: null`）。
   它与发行接口同属 catalog 的只读投影，提取、保存、解析规则与响应形状见[内嵌歌词合同](./lyrics-contracts.md)。
-- 播放历史（阶段 P / M5）只经 catalog 的三个公开读取函数使用目录：`Store.LoadTrackDuration`（present 曲目的时长，未知为 0）与
-  `Store.LoadTrackPlacements`（present 曲目的标题、组与所在发行摘要，摘要与列表同一个投影），以及 M5 的
-  `Store.LoadTrackSummaries(ctx, trackIDs) (map[string]TrackSummary, error)`（**含 missing** 的标题、艺人、present、时长、当前组/发行与安全音频事实），不读 catalog 私有表。
-  新函数无效 UUID 跳过、小写去重，空输入不查库，最多 1,000 个不同有效 ID，超限错误，不存在者无键；旧 Placements 仍仅返回 present，不改概览语义。
-  `TrackSummary` 为 `TrackID,Title,Artist,GroupID string; Present bool; DurationSeconds *float64; Release ReleaseSummary; Source TrackAudioFacts`；
-  `TrackAudioFacts` 为 `SourceKind string; Codec *string; BitDepth,SampleRate,Channels,Bitrate *int`，wire 名称见[播放历史合同](./listening-contracts.md)。
-  时长未知/非正/非有限为 null，codec 空白为 null，音频整数未知/非正为 null；source_kind 非空，不返回路径、root ID、指纹或文件时间。
-  曲目与按不同发行物化的摘要 CTE 同一语句快照，每发行只算一次摘要，复用有效值来源和封面安全投影；不查文件系统。
-  M5 批量优化把请求所涉发行的 present 介质数、present 曲目数与未核对缺失来源数合并为一次分组聚合，不再每个发行重复三次计数。
-  `releasesql.BatchSummaryCountsCTE` 只消费本批去重的 `summary_release_ids`；`BatchSummaryProjection` 与单发行投影共用有效值/封面列，
-  缺失来源去重及核对依据表达式、字段/归组 attention 规则沿用原实现。两种投影仍由同一 `ReleaseSummaryColumns` 解释，不改外形、可见性、上限或完整摘要计数。
-  **缺失摘要例外**：历史保留 missing 曲目的当前发行/组和上次扫描事实，即使该发行全部 missing、present 计数为 0；只在此批量函数不加发行可见性谓词，
-  不扩大列表/详情可见性（详情仍可能 404）。缺少历史引用对象或安全投影失败时 listening 整体 503，不静默丢项。
-- 收藏与歌单（M5）的新增公开批量读取位于 `personal_reads.go`、`track_collection_stats.go`，消费者不联表 catalog 私表：
-  - `Store.LoadTrackCollectionStats(ctx context.Context, trackIDs []string) (TrackCollectionStats, error)`：至多 10,000 个不同有效 UUID；与 facts 相同地跳过无效 ID、小写去重，空输入不查库，超限先失败。返回 `MatchedCount,MissingCount,UnknownDurationCount int64; KnownDurationSeconds float64`，不存在身份不计入匹配数，调用方与强引用数核对并 fail closed。missing 保留上次正有限时长；NULL/非正/NaN/±Inf 计未知，累计溢出报错。仅对所请求 tracks 做一条计数/时长聚合，依靠既有强 FK 保证目录身份完整，不加载逐曲行、发行摘要或封面；支持 `NewStore(tx)` 共享调用方快照，无跨请求缓存。使用 PostgreSQL DOUBLE PRECISION 聚合，数值等价测试对小数采用容差，不承诺与逐项 Go 累加逐位相同。
-  - `Store.LoadTrackFacts(ctx context.Context, trackIDs []string) (map[string]TrackFact, error)`：至多 10,000 个不同有效 UUID；
-    `TrackFact` 为 `TrackID,ReleaseID,GroupID string; Present bool; DurationSeconds *float64`，含 missing，读取当前发行/组。
-    时长 NULL、非正、NaN、正负无穷均为 nil；不计算完整发行摘要，不读取封面、路径或存储身份。
-  - `Store.LoadReleaseGroupSummaries(ctx context.Context, groupIDs []string) (map[string]PersonalReleaseGroupSummary, error)`：至多 1,000 个不同有效 UUID；
-    包装为 `GroupID string; Available bool; ReleaseCount int; Representative *ReleaseSummary`。存在但无可见成员的组仍有键，
-    对应 `false / 0 / nil`；真正不存在者无键。此包装不改变既有 `ReleaseGroupSummary.Representative` 非空合同，也不开放不可见发行详情。
-  - 上述 facts 与 group 两者均沿既有批量摘要约定跳过无效 UUID、小写去重；HTTP/消费端仍必须自行拒绝非法用户输入。空输入返回非 nil 空 map、不查库，超限在查询前报错。
-    每次各一条 SQL、同一语句快照，支持 `NewStore(tx)` 参加调用者的事务；不自行开启事务，不逐轨/逐组查详情，返回前关闭 rows 并检查迭代错误。
-  - 组的候选排名只针对请求组，复用 `ReleaseVisiblePredicate`、`ReleaseGroupMemberOrder`，只给可见代表计算
-    `BatchSummaryProjection`，由 `ReleaseSummaryColumns` 校验有效值与安全封面。`ReleaseCount` 是完整可见成员数，不套组详情的 100 成员截断。
-    不可用组不泄露隐藏成员或坏封面；可见代表封面损坏则整批失败，不返回部分结果。查询执行失败保留 `ErrQuery` 与原始错误链；上层负责安全错误信封。
+- 历史、收藏与歌单消费的批量安全摘要、上限、缺失语义和同快照约定见[目录批量摘要合同](./catalog-summary-contracts.md)。
 - 管理员写接口（M3，合同见[受治理操作合同](./governance-contracts.md)）：`GET|PATCH /api/v1/releases/{id}/corrections`、
   `POST /api/v1/releases/{id}/group`、`GET /api/v1/operations`、`POST /api/v1/operations/{id}/revert`；M4 增加
   `POST /api/v1/release-groups/{id}/default`（设定或清除默认版本，见[默认版本合同](./default-version-contracts.md)）。
@@ -63,7 +38,7 @@ M5 ④新增规范化搜索与在线投影：完整规则见[搜索合同](./sea
 - Release 详情在摘要之外加 `revision`（发行的人工修改版本号，写操作用它做预期版本）与 `corrected_fields`（有人工修正的字段名，固定顺序，
   没有时是空数组）；所有登录成员可见，不含修正值的来源与操作者。
 - Release 详情的 `edition`、`label`、`barcode` 为 nullable string；每条 Track 的
-  `credits` 项为 `{role,name}`，`role` 只允许
+  `credits` 项为 `{role,name,artist_refs}`，`role` 只允许
   `composer | conductor | performer | producer`。每轨最多 100 条、单个 Release 最多
   10,000 条 Track credits，超限后端 fail closed，前端 decoder 同样拒绝。
 
@@ -246,3 +221,9 @@ for _, release := range releases {
 query := "SELECT " + releasesql.ReleaseSummaryProjection + " FROM releases" + releasesql.ReleaseSummaryArtworkJoin
 summary, err := scanReleaseSummary(db.QueryRowContext(ctx, query+" WHERE releases.id=$1::uuid", id))
 ```
+
+## 8. M5 艺人增量
+
+艺人列表/详情/名字/专辑/角色曲目/队列、原署名 refs 与整理期状态见[艺人合同](./artist-contracts.md)。`ArtistRef={artist_id,name,display_name}`；ReleaseSummary 增加 `artist_refs/album_artist_refs`，TrackSummary/ReleaseTrack/ReleaseCredit 增加 `artist_refs`，数组必传、每项最多100；未就绪为 `[]`，旧文本与播放能力不变。
+
+I1/I2/I4/I6已补：管理员merged-sources、albums participation=any/q、成员POST tracks/summaries、album_artist筛选并集；外形与错误见[艺人合同](./artist-contracts.md#8-实施裁决-i1--i4管理员恢复来源与成员批量摘要)。

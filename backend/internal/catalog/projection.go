@@ -5,17 +5,19 @@ import "time"
 // 以下类型是 Release 读取投影，JSON 标签是 REST 合同的一部分，由 catalog REST 合同规范约束。
 
 type ReleaseSummary struct {
-	ID             string          `json:"id"`
-	Title          string          `json:"title"`
-	Artist         string          `json:"artist"`
-	AlbumArtist    *string         `json:"album_artist"`
-	Year           *int            `json:"year"`
-	SourceType     *string         `json:"source_type"`
-	MediaType      *string         `json:"media_type"`
-	MediumCount    int64           `json:"medium_count"`
-	TrackCount     int64           `json:"track_count"`
-	AttentionCount int64           `json:"attention_count"`
-	Artwork        *ReleaseArtwork `json:"artwork"`
+	ID              string          `json:"id"`
+	Title           string          `json:"title"`
+	Artist          string          `json:"artist"`
+	ArtistRefs      []ArtistRef     `json:"artist_refs"`
+	AlbumArtistRefs []ArtistRef     `json:"album_artist_refs"`
+	AlbumArtist     *string         `json:"album_artist"`
+	Year            *int            `json:"year"`
+	SourceType      *string         `json:"source_type"`
+	MediaType       *string         `json:"media_type"`
+	MediumCount     int64           `json:"medium_count"`
+	TrackCount      int64           `json:"track_count"`
+	AttentionCount  int64           `json:"attention_count"`
+	Artwork         *ReleaseArtwork `json:"artwork"`
 }
 
 type ReleaseCue struct {
@@ -30,6 +32,7 @@ type ReleaseTrack struct {
 	ID              string          `json:"id"`
 	Title           string          `json:"title"`
 	Artist          string          `json:"artist"`
+	ArtistRefs      []ArtistRef     `json:"artist_refs"`
 	Position        int             `json:"position"`
 	Source          string          `json:"source"`
 	SourceKind      string          `json:"source_kind"`
@@ -58,8 +61,9 @@ type ReleaseArtwork struct {
 }
 
 type ReleaseCredit struct {
-	Role string `json:"role"`
-	Name string `json:"name"`
+	Role       string      `json:"role"`
+	Name       string      `json:"name"`
+	ArtistRefs []ArtistRef `json:"artist_refs"`
 }
 
 type ReleaseEvidenceSummary struct {

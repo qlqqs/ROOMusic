@@ -1,0 +1,55 @@
+{
+  "body": {
+    "items": [
+      {
+        "evidence_count": 1,
+        "key_pairs": [
+          {
+            "left_key_id": "00000000-0000-4000-8000-000000000001",
+            "right_key_id": "00000000-0000-4000-8000-000000000002"
+          }
+        ],
+        "left": {
+          "album_count": 1,
+          "available": true,
+          "id": "00000000-0000-4000-8000-000000000003",
+          "initial_group": "A",
+          "name": "Alpha Singer",
+          "roles": [
+            "release_artist",
+            "track_artist"
+          ],
+          "track_count": 1
+        },
+        "reasons": [
+          {
+            "kind": "same_track_role",
+            "left_name": "Alpha Singer",
+            "release_id": "00000000-0000-4000-8000-000000000004",
+            "right_name": "Gamma Singer",
+            "role": "track_artist",
+            "track_id": "00000000-0000-4000-8000-000000000005"
+          }
+        ],
+        "right": {
+          "album_count": 1,
+          "available": true,
+          "id": "00000000-0000-4000-8000-000000000006",
+          "initial_group": "G",
+          "name": "Gamma Singer",
+          "roles": [
+            "release_artist",
+            "track_artist"
+          ],
+          "track_count": 1
+        }
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "page_size": 50,
+      "total": 1
+    }
+  },
+  "status": 200
+}

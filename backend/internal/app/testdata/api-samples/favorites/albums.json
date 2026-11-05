@@ -9,7 +9,9 @@
           "release_count": 1,
           "representative": {
             "album_artist": null,
+            "album_artist_refs": [],
             "artist": "艺术家",
+            "artist_refs": [],
             "artwork": null,
             "attention_count": 0,
             "id": "00000000-0000-4000-8000-000000000002",

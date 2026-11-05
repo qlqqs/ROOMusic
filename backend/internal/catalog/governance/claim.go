@@ -11,7 +11,6 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
-	"github.com/qlqq/roomusic/backend/internal/catalog/internal/searchindex"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
@@ -627,7 +626,7 @@ func executeClaimPlan(ctx context.Context, tx *sql.Tx, operationID string, snaps
 	}
 
 	for _, id := range []string{sourceID, targetID} {
-		if err := searchindex.RefreshRelease(ctx, tx, id); err != nil {
+		if err := refreshGovernedRelease(ctx, tx, id); err != nil {
 			return operations.Outcome{}, err
 		}
 	}

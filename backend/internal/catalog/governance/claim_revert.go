@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
-	"github.com/qlqq/roomusic/backend/internal/catalog/internal/searchindex"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 )
 
@@ -167,7 +166,7 @@ func (claimKind) Revert(ctx context.Context, tx *sql.Tx, operationID string, ori
 	}
 
 	for _, id := range []string{sourceID, targetID} {
-		if err := searchindex.RefreshRelease(ctx, tx, id); err != nil {
+		if err := refreshGovernedRelease(ctx, tx, id); err != nil {
 			return operations.Outcome{}, err
 		}
 	}

@@ -4,6 +4,7 @@
     "items": [
       {
         "artist": "艺术家",
+        "artist_refs": [],
         "duration_seconds": null,
         "group_id": "00000000-0000-4000-8000-000000000001",
         "last_played_at": "2026-01-01T00:00:00Z",
@@ -11,7 +12,9 @@
         "present": false,
         "release": {
           "album_artist": null,
+          "album_artist_refs": [],
           "artist": "艺术家",
+          "artist_refs": [],
           "artwork": {
             "height": 480,
             "mime": "image/webp",

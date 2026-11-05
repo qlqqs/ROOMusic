@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/maintenance"
+	"github.com/qlqq/roomusic/backend/internal/personal"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
@@ -60,56 +60,19 @@ func insertSearchRelease(t *testing.T, app *integrationTestApplication, root str
 	return result
 }
 
-// 测试只调用公开维护入口，等待真实发布，不直接伪造 ready 或写派生表。
+// 测试只调用公开维护入口，等待搜索和艺人完整发布；不在两能力切换之间取消 worker，避免 refs 时有时无。
 func publishSearch(t *testing.T, app *integrationTestApplication) catalog.CatalogState {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	done := make(chan error, 1)
-	go func() { done <- maintenance.Run(ctx, app.database, slog.New(slog.NewTextHandler(io.Discard, nil))) }()
-	finished := false
-	defer func() {
-		cancel()
-		if !finished {
-			select {
-			case err := <-done:
-				if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-					t.Errorf("停止搜索后台：%v", err)
-				}
-			case <-time.After(5 * time.Second):
-				t.Error("搜索后台未按时退出")
-			}
-		}
-	}()
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		state, err := catalog.NewStore(app.database).LoadCatalogState(ctx)
-		if err != nil {
-			t.Fatalf("读取目录状态：%v", err)
-		}
-		if state.SearchMode == "normalized" {
-			if state.ArtistsState != "unavailable" {
-				t.Fatalf("④不应启用艺人：%+v", state)
-			}
-			return state
-		}
-		select {
-		case err := <-done:
-			finished = true
-			if err != nil {
-				t.Fatalf("搜索后台退出：%v", err)
-			}
-			// Run 允许发布成功后返回；仍以公开状态确认发布结果。
-			state, err = catalog.NewStore(app.database).LoadCatalogState(ctx)
-			if err != nil || state.SearchMode != "normalized" {
-				t.Fatalf("后台退出但未发布：%+v，%v", state, err)
-			}
-			return state
-		case <-ctx.Done():
-			t.Fatalf("等待搜索发布超时：%+v", state)
-		case <-ticker.C:
-		}
+	defer cancel()
+	if err := maintenance.Run(ctx, app.database, slog.New(slog.NewTextHandler(io.Discard, nil)), maintenance.RunOptions{RefreshArtistResolutions: personal.RefreshArtistResolution}); err != nil {
+		t.Fatalf("目录后台退出：%v", err)
 	}
+	state, err := catalog.NewStore(app.database).LoadCatalogState(ctx)
+	if err != nil || state.SearchMode != "normalized" || state.ArtistsState != "ready" {
+		t.Fatalf("后台退出但未完整发布：%+v，%v", state, err)
+	}
+	return state
 }
 
 func searchURL(kind, query string) string {

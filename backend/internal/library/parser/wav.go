@@ -64,7 +64,9 @@ func parseWAV(path string) (AudioObservation, error) {
 			if _, err := io.ReadFull(file, chunk); err != nil {
 				return o, fmt.Errorf("truncated WAV LIST chunk")
 			}
-			parseWAVInfo(chunk, &o)
+			if err := parseWAVInfo(chunk, &o); err != nil {
+				return o, err
+			}
 		case "data":
 			dataBytes += size
 			if _, err := file.Seek(size, io.SeekCurrent); err != nil {
@@ -117,18 +119,22 @@ func parseWAVFormat(chunk []byte, observation *AudioObservation, byteRate *int) 
 	return nil
 }
 
-func parseWAVInfo(chunk []byte, observation *AudioObservation) {
+func parseWAVInfo(chunk []byte, observation *AudioObservation) error {
 	if len(chunk) < 4 || string(chunk[:4]) != "INFO" {
-		return
+		return nil
 	}
 	for position := 4; position+8 <= len(chunk); {
 		key := string(chunk[position : position+4])
 		size := int(binary.LittleEndian.Uint32(chunk[position+4 : position+8]))
 		position += 8
 		if size < 0 || position+size > len(chunk) {
-			return
+			return nil
 		}
-		value := strings.TrimSpace(string(bytes.TrimRight(chunk[position:position+size], "\x00")))
+		raw := string(bytes.TrimRight(chunk[position:position+size], "\x00"))
+		if err := captureArtistTag(observation, key, raw); err != nil {
+			return err
+		}
+		value := strings.TrimSpace(raw)
 		position += size
 		if size%2 == 1 {
 			position++
@@ -136,10 +142,9 @@ func parseWAVInfo(chunk []byte, observation *AudioObservation) {
 		switch key {
 		case "INAM":
 			observation.Title = value
-		case "IART":
-			observation.Artist = value
 		case "IPRD":
 			observation.Album = value
 		}
 	}
+	return nil
 }

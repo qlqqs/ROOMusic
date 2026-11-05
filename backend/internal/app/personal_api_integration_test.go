@@ -57,9 +57,19 @@ func TestPersonalHTTPStrictValidation(t *testing.T) {
 		{"POST", base + "/items/" + item + "/move", `{"expected_revision":1,"action":"before"}`},
 		{"POST", base + "/items/" + item + "/move", `{"expected_revision":1,"action":"up","position":1}`},
 		{"POST", favoritesURL + "/lookup", `{"track_ids":null}`}, {"POST", favoritesURL + "/lookup", `{"group_ids":[false]}`},
-		{"POST", favoritesURL + "/lookup", `{"artist_ids":[]}`}, {"PUT", favoritesURL + "/tracks/not-an-id", `{}`},
+		{"POST", favoritesURL + "/lookup", `{"artist_ids":{}}`}, {"PUT", favoritesURL + "/tracks/not-an-id", `{}`},
 	} {
 		requireAPIError(t, personalRaw(f.app, tc.method, tc.path, tc.body, &f.user, nil), 400, "invalid_input")
+	}
+	// ⑤允许省略或显式空的艺人数组；准备态隔离另由 personal/httpapi 的
+	// TestPostgreSQLArtistLookupEmptyInputWhilePreparing 验证，不能把合法扩展当作未知字段。
+	for _, input := range []string{`{}`, `{"artist_ids":[]}`} {
+		response := personalOK(t, personalRaw(f.app, "POST", favoritesURL+"/lookup", input, &f.user, nil), 200)
+		body := personalBody(t, response)
+		artists, ok := body["artists"].([]any)
+		if !ok || len(artists) != 0 || response.Header().Get("Retry-After") != "" {
+			t.Fatalf("空艺人lookup不应依赖艺人准备态: %s", response.Body)
+		}
 	}
 	for _, path := range []string{favoritesURL + "/tracks", favoritesURL + "/albums", playlistsURL, base + "/items"} {
 		requireAPIError(t, f.call("GET", path+"?page=0", nil), 400, "invalid_pagination")

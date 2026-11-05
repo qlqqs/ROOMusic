@@ -1,8 +1,8 @@
 {
   "body": {
     "error": {
-      "code": "unsupported_search_type",
-      "message": "暂不支持搜索艺人"
+      "code": "invalid_artist_participation",
+      "message": "专辑参与范围无效"
     },
     "request_id": "sample-request"
   },

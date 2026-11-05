@@ -38,18 +38,19 @@ type SourceObservation struct {
 	Bitrate         int               `json:"bitrate,omitempty"`
 
 	// CUE 事实只保存安全的相对引用；虚拟轨身份包含 sheet、父来源、轨号与 INDEX 01。
-	CueSheetPath          string            `json:"cue_sheet_path,omitempty"`
-	CueParentRelativePath string            `json:"cue_parent_relative_path,omitempty"`
-	CueReferencedFile     string            `json:"cue_referenced_file,omitempty"`
-	CueIndexFrames        int               `json:"cue_index_frames,omitempty"`
-	CueIndexPresent       bool              `json:"cue_index_present,omitempty"`
-	CueEndFrames          int               `json:"cue_end_frames,omitempty"`
-	CueEndPresent         bool              `json:"cue_end_present,omitempty"`
-	CueISRC               string            `json:"cue_isrc,omitempty"`
-	Artwork               []byte            `json:"artwork,omitempty"`
-	ArtworkMIME           string            `json:"artwork_mime,omitempty"`
-	RelatedSourceRefs     []string          `json:"related_source_refs,omitempty"`
-	Credits               []metadata.Credit `json:"credits,omitempty"`
+	CueSheetPath          string                       `json:"cue_sheet_path,omitempty"`
+	CueParentRelativePath string                       `json:"cue_parent_relative_path,omitempty"`
+	CueReferencedFile     string                       `json:"cue_referenced_file,omitempty"`
+	CueIndexFrames        int                          `json:"cue_index_frames,omitempty"`
+	CueIndexPresent       bool                         `json:"cue_index_present,omitempty"`
+	CueEndFrames          int                          `json:"cue_end_frames,omitempty"`
+	CueEndPresent         bool                         `json:"cue_end_present,omitempty"`
+	CueISRC               string                       `json:"cue_isrc,omitempty"`
+	Artwork               []byte                       `json:"artwork,omitempty"`
+	ArtworkMIME           string                       `json:"artwork_mime,omitempty"`
+	RelatedSourceRefs     []string                     `json:"related_source_refs,omitempty"`
+	Credits               []metadata.Credit            `json:"credits,omitempty"`
+	ArtistTagEvidence     []metadata.ArtistTagEvidence `json:"artist_tag_evidence,omitempty"`
 
 	// 内嵌歌词的规范化原文与来源键（见 parser.NormalizeLyrics）；没有有效歌词时为空。CUE 虚拟轨没有歌词。
 	Lyrics       string `json:"lyrics,omitempty"`

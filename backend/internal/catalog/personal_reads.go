@@ -84,14 +84,14 @@ const loadPersonalReleaseGroupSummariesSQL = `WITH selected_groups AS MATERIALIZ
  ORDER BY releases.group_id, ` + releasesql.ReleaseGroupMemberOrder + `
 ), summary_release_ids AS MATERIALIZED (
  SELECT id FROM representatives
-), ` + releasesql.BatchSummaryCountsCTE + `, summaries (group_id,release_count,id,title,artist,album_artist,year,source_type,media_type,medium_count,track_count,attention_count,artwork_key,artwork_mime,artwork_width,artwork_height) AS MATERIALIZED (
+), ` + releasesql.BatchSummaryCountsCTE + `, ` + releasesql.BatchSummaryArtistRefsCTE + `, summaries (group_id,release_count,id,title,artist,album_artist,year,source_type,media_type,medium_count,track_count,attention_count,artwork_key,artwork_mime,artwork_width,artwork_height,artist_refs,album_artist_refs) AS MATERIALIZED (
  SELECT representatives.group_id, representatives.release_count, ` + releasesql.BatchSummaryProjection + `
  FROM representatives JOIN ` + releasesql.ReleaseSource + ` ON releases.id=representatives.id` + releasesql.BatchSummaryJoins + `
 )
 SELECT g.id::text, COALESCE(s.release_count,0),
  COALESCE(s.id,''),COALESCE(s.title,''),COALESCE(s.artist,''),s.album_artist,s.year,s.source_type,s.media_type,
  COALESCE(s.medium_count,0),COALESCE(s.track_count,0),COALESCE(s.attention_count,0),
- s.artwork_key,s.artwork_mime,s.artwork_width,s.artwork_height
+ s.artwork_key,s.artwork_mime,s.artwork_width,s.artwork_height,COALESCE(s.artist_refs,'[]'::jsonb),COALESCE(s.album_artist_refs,'[]'::jsonb)
 FROM selected_groups g LEFT JOIN summaries s ON s.group_id=g.id`
 
 // LoadReleaseGroupSummaries 批量读取至多 1,000 个不同有效 UUID；不存在者无键。

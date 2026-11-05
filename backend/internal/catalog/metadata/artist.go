@@ -1,10 +1,11 @@
-// Package metadata 收纳元数据值的规则：空白规范化、有界文本、署名，以及艺人名的拆分与别名归一。
+// Package metadata 收纳元数据值的规则：空白规范化、有界文本、署名，以及艺人名的保守拆分。
 // 它是叶子包，只依赖标准库，供解析器与 catalog 共同使用。
 package metadata
 
 import (
 	"sort"
 	"strings"
+	"unicode"
 )
 
 // artistSeparatorRules 与已确认的 V0 scanner 保持同一组保守分隔语义。
@@ -17,31 +18,14 @@ var knownFixedArtistGroups = map[string]bool{
 	"ac/dc":              true,
 }
 
-type officialArtistAliasEntry struct {
-	canonical string
-	aliases   []string
-}
-
-// officialArtistAliasEntries 只包含 V0 已固化的高确定性官方/准官方别名。
-// 罗马字名或不同文字形式不能靠字符串相似度推断。
-var officialArtistAliasEntries = []officialArtistAliasEntry{
-	{canonical: "周杰伦", aliases: []string{"周杰伦", "周杰倫", "Jay Chou"}},
-}
-
-var officialArtistAliasIndex = func() map[string]string {
-	index := make(map[string]string)
-	for _, entry := range officialArtistAliasEntries {
-		for _, alias := range entry.aliases {
-			if key := artistLookupKey(alias); key != "" {
-				index[key] = entry.canonical
-			}
-		}
-	}
-	return index
-}()
-
 func splitArtistNames(raw string) []string {
-	raw = BoundedText(raw)
+	// 清除控制字符的旧规则保持不变，但多值聚合串不能套单值截断预算。
+	raw = strings.TrimSpace(strings.Map(func(character rune) rune {
+		if unicode.IsControl(character) {
+			return -1
+		}
+		return character
+	}, raw))
 	if raw == "" {
 		return nil
 	}
@@ -74,16 +58,15 @@ func splitArtistNames(raw string) []string {
 	return []string{raw}
 }
 
+// CanonicalArtistNames 只保守拆分并按原写法精确去重，不解析艺人身份或别名。
+// 调用方须先校验原始单值预算；合成展示串可包含多个有界姓名，不按整串截断。
 func CanonicalArtistNames(raw string) []string {
 	parts := splitArtistNames(raw)
 	result := make([]string, 0, len(parts))
 	seen := make(map[string]bool, len(parts))
 	for _, part := range parts {
-		name := strings.TrimSpace(part)
-		if alias, ok := officialArtistAliasIndex[artistLookupKey(name)]; ok {
-			name = alias
-		}
-		key := artistLookupKey(name)
+		name := BoundedText(part)
+		key := name
 		if key == "" || seen[key] {
 			continue
 		}
@@ -172,8 +155,4 @@ func isLikelyFixedAmpersandGroup(parts []string) bool {
 
 func isKnownFixedArtistGroup(raw string) bool {
 	return knownFixedArtistGroups[strings.ToLower(strings.TrimSpace(raw))]
-}
-
-func artistLookupKey(raw string) string {
-	return strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(raw)), " "))
 }

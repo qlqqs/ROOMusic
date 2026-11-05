@@ -1,0 +1,24 @@
+{
+  "body": {
+    "artist": {
+      "album_count": 0,
+      "available": false,
+      "id": "00000000-0000-4000-8000-000000000001",
+      "initial_group": "T",
+      "name": "Teresa Teng",
+      "roles": [],
+      "track_count": 0
+    },
+    "name_source": "auto",
+    "names": [],
+    "names_pagination": {
+      "page": 1,
+      "page_size": 20,
+      "total": 0
+    },
+    "redirect_artist_id": "00000000-0000-4000-8000-000000000002",
+    "revision": 2,
+    "role_counts": []
+  },
+  "status": 200
+}

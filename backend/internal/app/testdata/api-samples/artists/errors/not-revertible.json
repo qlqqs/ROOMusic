@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "not_revertible",
+      "message": "请通过拆开、合并或再次改名恢复"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

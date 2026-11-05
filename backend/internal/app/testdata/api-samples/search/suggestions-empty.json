@@ -9,12 +9,13 @@
       "items": []
     },
     "available_types": [
+      "artists",
       "albums",
       "tracks"
     ],
     "catalog_state": {
-      "artists_state": "unavailable",
-      "epoch": 2,
+      "artists_state": "ready",
+      "epoch": 4,
       "search_mode": "normalized"
     },
     "query": "查无结果",

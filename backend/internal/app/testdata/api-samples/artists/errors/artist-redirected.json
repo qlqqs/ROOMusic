@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "artist_redirected",
+      "message": "艺人已合并，请刷新后再试"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

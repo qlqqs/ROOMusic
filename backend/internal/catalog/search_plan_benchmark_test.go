@@ -56,7 +56,9 @@ func BenchmarkPostgreSQLSearchPlans(b *testing.B) {
 					if state.SearchMode != "normalized" {
 						b.Fatal("恢复的合成 schema 必须已发布搜索投影")
 					}
-					p, err := snapshot.prepareSearchPlan(ctx, newSearchPlan(query, kind, state.SearchMode, generation))
+					plan := newSearchPlan(query, kind, state.SearchMode, generation)
+					plan.artistAliases = state.ArtistsState == "ready"
+					p, err := snapshot.prepareSearchPlan(ctx, plan)
 					if err != nil {
 						return false, err
 					}

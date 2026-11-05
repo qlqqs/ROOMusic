@@ -53,3 +53,8 @@ func readWithLocalJITOff[T any](ctx context.Context, database ReadTransactionBeg
 	}
 	return result, nil
 }
+
+// ReadWithLocalJITOff 供 catalog 子包复用同一只读快照与事务局部 JIT 策略。
+func ReadWithLocalJITOff[T any](ctx context.Context, database ReadTransactionBeginner, read func(*sql.Tx) (T, error)) (T, error) {
+	return readWithLocalJITOff(ctx, database, read)
+}

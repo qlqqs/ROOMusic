@@ -35,13 +35,22 @@ type AlbumInfo struct {
 	Visible bool   `json:"visible"`
 }
 
+// ArtistInfo 是艺人操作的当前安全摘要。
+type ArtistInfo struct {
+	ID               string  `json:"id"`
+	Name             string  `json:"name"`
+	Visible          bool    `json:"visible"`
+	RedirectArtistID *string `json:"redirect_artist_id"`
+}
+
 // Description 是一条记录在列表里的展示信息，由 Kind.Describe 批量提供。目标是发行的记录给 Release，目标是专辑的记录给 Album，
-// 另一项为 nil。
+// 其他目标项为 nil；艺人类型提供 Artist。
 type Description struct {
 	Release    *ReleaseInfo // 目标发行；发行已不存在时为 nil
 	Album      *AlbumInfo   // 目标专辑；专辑已不存在时为 nil
-	Changes    any          // 改动摘要（可序列化成 JSON，结构由类型决定，含 kind 字段）
-	Revertible bool         // 目标现在仍可撤销这条记录；是否未被撤销、是否本身是撤销由调用方判断
+	Artist     *ArtistInfo
+	Changes    any  // 改动摘要（可序列化成 JSON，结构由类型决定，含 kind 字段）
+	Revertible bool // 目标现在仍可撤销这条记录；是否未被撤销、是否本身是撤销由调用方判断
 }
 
 // RevertResult 是撤销成功的响应：新的撤销记录、被撤销的记录，以及目标（类型与 ID）和它新的人工修改版本号。

@@ -78,9 +78,10 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	identityapi.New(database, guard).Register(mux)
 	libraryapi.New(database, guard, libraryService, settings.AllowedLibraryRoots, logger).Register(mux)
 	catalogapi.New(database, guard, settings.DataDirectory, logger).Register(mux)
+	catalogapi.NewArtistGovernance(database, guard, logger, artistResolutionAdapter{}).Register(mux)
 	// 受治理操作的撤销与展示：每种操作类型的能力由拥有对应业务表的包提供，operations/httpapi 不导入业务包。
 	operationsapi.New(database, guard, logger, governance.CorrectionOperations(), governance.GroupChangeOperations(), governance.GroupDefaultOperations(),
-		governance.IssueReviewOperations(), governance.ClaimOperations()).Register(mux)
+		governance.IssueReviewOperations(), governance.ClaimOperations(), governance.ArtistMergeKind{}, governance.ArtistSplitKind{}, governance.ArtistRenameKind{}, governance.ArtistCandidateIgnoreKind{}).Register(mux)
 	playbackService := playback.NewService(database, settings.AllowedLibraryRoots, playback.WithDerivation(assembly.derivation))
 	playbackapi.New(guard, playbackService, lifecycle, logger, playbackapi.Options{
 		PreflightWait: assembly.playbackPreflightWait,
@@ -93,7 +94,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	if database != nil && !assembly.pauseCatalogMaintenance {
 		go func() {
 			defer close(catalogDone)
-			if err := maintenance.Run(lifecycle, database, logger); err != nil && lifecycle.Err() == nil {
+			if err := maintenance.Run(lifecycle, database, logger, maintenance.RunOptions{RefreshArtistResolutions: personal.RefreshArtistResolution}); err != nil && lifecycle.Err() == nil {
 				logger.Error("目录后台维护停止", "event", "catalog_projection_worker_stopped", "module", "catalog")
 			}
 		}()
@@ -137,4 +138,11 @@ func Degraded(frontend fs.FS, logger *slog.Logger) http.Handler {
 	}))
 	mux.Handle("/", httpserver.Frontend(frontend))
 	return httpserver.Middleware(logger, mux)
+}
+
+// artistResolutionAdapter 将收藏owner的窄事务端口注入治理，不扩大包依赖。
+type artistResolutionAdapter struct{}
+
+func (artistResolutionAdapter) RefreshArtistResolution(ctx context.Context, tx *sql.Tx, mapping map[string]string) error {
+	return personal.RefreshArtistResolution(ctx, tx, mapping)
 }

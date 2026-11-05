@@ -1,0 +1,43 @@
+{
+  "body": {
+    "artist_id": "00000000-0000-4000-8000-000000000001",
+    "basis": "0000000000000000000000000000000000000000000000000000000000000001",
+    "limits": {
+      "groups": 100,
+      "name_keys": 100,
+      "overrides": 10000,
+      "releases": 1000,
+      "tracks": 100000
+    },
+    "revision": 1,
+    "scope": {
+      "excluded_scope_count": 0,
+      "excluded_scopes": [],
+      "groups": [
+        {
+          "group_id": "00000000-0000-4000-8000-000000000002",
+          "release_ids": [
+            "00000000-0000-4000-8000-000000000003"
+          ],
+          "revision": 1
+        }
+      ],
+      "mode": "albums",
+      "name_count": 1,
+      "name_key_ids": [
+        "00000000-0000-4000-8000-000000000004"
+      ],
+      "release_count": 1,
+      "release_ids": [
+        "00000000-0000-4000-8000-000000000003"
+      ],
+      "roles": [
+        "album_artist",
+        "release_artist",
+        "track_artist"
+      ],
+      "track_count": 1
+    }
+  },
+  "status": 200
+}

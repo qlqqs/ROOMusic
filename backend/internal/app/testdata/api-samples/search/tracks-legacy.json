@@ -1,13 +1,14 @@
 {
   "body": {
     "catalog_state": {
-      "artists_state": "unavailable",
-      "epoch": 1,
+      "artists_state": "preparing",
+      "epoch": 2,
       "search_mode": "legacy"
     },
     "items": [
       {
         "artist": "钢琴演奏者",
+        "artist_refs": [],
         "duration_seconds": 183.5,
         "group_id": "00000000-0000-4000-8000-000000000001",
         "match": {
@@ -23,7 +24,9 @@
         "present": true,
         "release": {
           "album_artist": "さユり",
+          "album_artist_refs": [],
           "artist": "Beyoncé",
+          "artist_refs": [],
           "artwork": null,
           "attention_count": 1,
           "id": "00000000-0000-4000-8000-000000000002",

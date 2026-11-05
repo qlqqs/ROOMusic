@@ -1,7 +1,9 @@
 {
   "body": {
     "album_artist": null,
+    "album_artist_refs": [],
     "artist": "Sample Trio",
+    "artist_refs": [],
     "artwork": null,
     "attention_count": 0,
     "barcode": null,
@@ -25,6 +27,7 @@
         "tracks": [
           {
             "artist": "Sample Trio",
+            "artist_refs": [],
             "bit_depth": null,
             "bitrate": null,
             "channels": null,
@@ -41,6 +44,7 @@
           },
           {
             "artist": "Sample Trio",
+            "artist_refs": [],
             "bit_depth": null,
             "bitrate": null,
             "channels": null,

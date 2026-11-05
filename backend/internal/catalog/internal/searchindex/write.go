@@ -5,9 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"strings"
-	"unicode/utf8"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/textnorm"
 )
@@ -75,23 +72,9 @@ func Apply(ctx context.Context, tx *sql.Tx, s State, kind, id string) (written b
 	if err != nil {
 		return false, err
 	}
-	sortTitle := ""
-	for i := range values {
-		value := &values[i]
-		if !utf8.ValidString(value.Original) || len(value.Original) > 4096 {
-			return false, errors.New("search source text exceeds budget or is invalid")
-		}
-		value.Normalized = textnorm.Text(value.Original)
-		if value.Field == "catalog_number" {
-			value.Normalized = textnorm.CatalogNumber(value.Original)
-		}
-		if len(value.Normalized) > 65536 {
-			return false, errors.New("normalized search text exceeds budget")
-		}
-		if value.Field == "release_title" || value.Field == "track_title" {
-			sortTitle = value.Normalized
-		}
-		value.Grams = ShortGrams(value.Normalized)
+	sortTitle, err := normalizeValues(values)
+	if err != nil {
+		return false, err
 	}
 	column := "release_id"
 	if kind == "track" {
@@ -130,9 +113,7 @@ type value struct {
 func loadValues(ctx context.Context, tx *sql.Tx, kind, id string) ([]value, error) {
 	values := []value{}
 	add := func(field, role, raw string, position int) {
-		if strings.TrimSpace(raw) != "" {
-			values = append(values, value{Field: field, Role: role, Position: position, Original: raw})
-		}
+		values = appendValue(values, field, role, raw, position)
 	}
 	if kind == "release" {
 		var title, artist, albumArtist, label, number string
@@ -172,12 +153,10 @@ func loadValues(ctx context.Context, tx *sql.Tx, kind, id string) ([]value, erro
 		if err := rows.Scan(&role, &name, &position); err != nil {
 			return nil, err
 		}
-		switch role {
-		case "composer", "conductor", "performer", "producer":
-		default:
-			return nil, fmt.Errorf("unsupported search credit role")
+		values, err = appendCredit(values, role, name, position)
+		if err != nil {
+			return nil, err
 		}
-		add("credit", role, name, position)
 	}
 	return values, rows.Err()
 }

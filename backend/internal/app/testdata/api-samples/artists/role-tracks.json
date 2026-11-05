@@ -1,0 +1,163 @@
+{
+  "body": {
+    "artist_id": "00000000-0000-4000-8000-000000000001",
+    "items": [
+      {
+        "artist": "邓丽君",
+        "artist_refs": [
+          {
+            "artist_id": "00000000-0000-4000-8000-000000000001",
+            "display_name": "邓丽君",
+            "name": "邓丽君"
+          }
+        ],
+        "duration_seconds": 120,
+        "group_id": "00000000-0000-4000-8000-000000000002",
+        "present": true,
+        "release": {
+          "album_artist": "邓丽君",
+          "album_artist_refs": [
+            {
+              "artist_id": "00000000-0000-4000-8000-000000000001",
+              "display_name": "邓丽君",
+              "name": "邓丽君"
+            }
+          ],
+          "artist": "邓丽君",
+          "artist_refs": [
+            {
+              "artist_id": "00000000-0000-4000-8000-000000000001",
+              "display_name": "邓丽君",
+              "name": "邓丽君"
+            }
+          ],
+          "artwork": null,
+          "attention_count": 1,
+          "id": "00000000-0000-4000-8000-000000000003",
+          "media_type": null,
+          "medium_count": 1,
+          "source_type": null,
+          "title": "海边夜曲",
+          "track_count": 2,
+          "year": null
+        },
+        "source": {
+          "bit_depth": 16,
+          "bitrate": null,
+          "channels": 2,
+          "codec": "flac",
+          "sample_rate": 44100,
+          "source_kind": "flac_vorbis_comment"
+        },
+        "title": "曲目1-1",
+        "track_id": "00000000-0000-4000-8000-000000000004"
+      },
+      {
+        "artist": "邓丽君",
+        "artist_refs": [
+          {
+            "artist_id": "00000000-0000-4000-8000-000000000001",
+            "display_name": "邓丽君",
+            "name": "邓丽君"
+          }
+        ],
+        "duration_seconds": 120,
+        "group_id": "00000000-0000-4000-8000-000000000002",
+        "present": true,
+        "release": {
+          "album_artist": "邓丽君",
+          "album_artist_refs": [
+            {
+              "artist_id": "00000000-0000-4000-8000-000000000001",
+              "display_name": "邓丽君",
+              "name": "邓丽君"
+            }
+          ],
+          "artist": "邓丽君",
+          "artist_refs": [
+            {
+              "artist_id": "00000000-0000-4000-8000-000000000001",
+              "display_name": "邓丽君",
+              "name": "邓丽君"
+            }
+          ],
+          "artwork": null,
+          "attention_count": 1,
+          "id": "00000000-0000-4000-8000-000000000003",
+          "media_type": null,
+          "medium_count": 1,
+          "source_type": null,
+          "title": "海边夜曲",
+          "track_count": 2,
+          "year": null
+        },
+        "source": {
+          "bit_depth": 16,
+          "bitrate": null,
+          "channels": 2,
+          "codec": "flac",
+          "sample_rate": 44100,
+          "source_kind": "flac_vorbis_comment"
+        },
+        "title": "曲目1-2",
+        "track_id": "00000000-0000-4000-8000-000000000005"
+      },
+      {
+        "artist": "邓丽君",
+        "artist_refs": [
+          {
+            "artist_id": "00000000-0000-4000-8000-000000000001",
+            "display_name": "邓丽君",
+            "name": "邓丽君"
+          }
+        ],
+        "duration_seconds": 120,
+        "group_id": "00000000-0000-4000-8000-000000000002",
+        "present": false,
+        "release": {
+          "album_artist": "邓丽君",
+          "album_artist_refs": [
+            {
+              "artist_id": "00000000-0000-4000-8000-000000000001",
+              "display_name": "邓丽君",
+              "name": "邓丽君"
+            }
+          ],
+          "artist": "邓丽君",
+          "artist_refs": [
+            {
+              "artist_id": "00000000-0000-4000-8000-000000000001",
+              "display_name": "邓丽君",
+              "name": "邓丽君"
+            }
+          ],
+          "artwork": null,
+          "attention_count": 1,
+          "id": "00000000-0000-4000-8000-000000000003",
+          "media_type": null,
+          "medium_count": 1,
+          "source_type": null,
+          "title": "海边夜曲",
+          "track_count": 2,
+          "year": null
+        },
+        "source": {
+          "bit_depth": 16,
+          "bitrate": null,
+          "channels": 2,
+          "codec": "flac",
+          "sample_rate": 44100,
+          "source_kind": "flac_vorbis_comment"
+        },
+        "title": "曲目1-3",
+        "track_id": "00000000-0000-4000-8000-000000000006"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "page_size": 50,
+      "total": 3
+    }
+  },
+  "status": 200
+}

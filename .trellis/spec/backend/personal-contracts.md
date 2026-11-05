@@ -7,7 +7,7 @@
 - 不扩大 listening，不改变播放历史的 1,000 候选队列，不调用 `operations.Run`。
 - SQL 仅访问本人收藏、歌单、条目、撤销和收据表；不 JOIN catalog/identity 的私表。目录读取由消费端 `personal.Catalog` 端口提供，同一用例事务使用 `catalog.NewStore(tx)`。
 - core 只依赖 `catalog`、`platform/uuid`；HTTP 只依赖 `identity`、`personal`、`platform/httpserver`、`platform/uuid`，app 组合。精确白名单由 `TestPackageDependencyDirections` 验证。
-- 艺人收藏由 S 线后续接入：新增 typed 表，沿用 `personal_favorite_state`；不预建 artists 表，不把原锚点改成 canonical 身份。后续 CATP→本人 state 的锁序、事务内派生刷新和准备态遵守设计 §8。
+- 艺人收藏由 S 线 `0027_artist_favorites.sql` 接入：独立 typed 表，沿用 `personal_favorite_state`；依赖0026艺人表，不把原锚点改成canonical身份。CATP→本人 state 的锁序、事务内派生刷新和准备态遵守设计 §8。
 
 ## 2. 签名与数据权威
 
@@ -162,3 +162,15 @@ PUT/DELETE 不需幂等键。READ COMMITTED 事务先确保本人 state，再锁
 - 错误：收据按30天TTL删、删除歌单顺带删；正确：保留完整成功去重依据至用户删除，未来归档也必须透明重放。
 - 错误：只读取10001项把 omitted猜成1；正确：轻量遍历全体精确计数，只保留10,000完整摘要窗口。
 - 错误：`SELECT id::text ... ORDER BY id` 意外对文本排序；正确：限定权威 UUID 列，EXPLAIN 验证实际索引和排序节点。
+
+## 8. M5 ⑤艺人收藏
+
+`artist_favorites(user_id,artist_id,resolved_artist_id,created_at,PRIMARY KEY(user_id,artist_id))`，原ID与解析ID各有artists RESTRICT FK，用户删除级联。沿用personal_favorite_state，不接operations.Run。合并不改原锚点/时间，也不在(user,resolved)加唯一约束。
+
+- GET `/me/favorites/artists` → `{items:[{artist,available,created_at}],pagination,revision}`，只对本人按resolved_artist_id分组/MAX(created_at)，再排序分页；精确total，revision冲突仍favorites_changed。
+- PUT/DELETE `/me/favorites/artists/{id}` → `{target_kind:"artist",target_id,resolved_artist_id,favorited,created_at,revision}`。先CATP→ready/解析→本人state；PUT新收藏记请求锚点，已等价收藏不重复改意图；DELETE清本人全部等价锚点，不删别人的收藏。
+- POST lookup追加可选artist_ids（最多1000），响应增加非null artists数组，每项artist_id/resolved_artist_id/favorited。无艺人ID完全不读catalog，旧group/track能力不受整理影响。
+- `catalog.NewStore(tx).ResolveArtists(ctx,nil)`仍检查ready：空艺人收藏列表也必须503而不是假空。艺人读为503 artist_catalog_preparing，写为409 artist_catalog_not_ready；真正DB错误仍安全503。
+- `RefreshArtistResolution(ctx,tx,mapping map[string]string) error`由app注入治理/后台发布：按1000原ID分批，先收集全部受影响用户，再UUID升序锁state，完成全部解析刷新后每个实际变化用户revision仅+1；调用方持CATP且失败整体回滚。无私表跨界或内部提交。
+
+必测合并前双收藏→合并后单项/精确分页→取消所有等价锚点→restore旧ID恢复；两个用户隔离、不可用身份保留；解析刷新失败连治理记录回滚；整理期间空列表503和写409。错误做法是先分页后Go去重或逐批递增同用户版本；正确做法是数据库先聚合及全映射后统一递增。

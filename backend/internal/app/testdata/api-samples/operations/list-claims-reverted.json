@@ -7,6 +7,7 @@
           "username": "curator"
         },
         "album": null,
+        "artist": null,
         "changes": {
           "kind": "release_claim",
           "source": {
@@ -34,6 +35,7 @@
           "username": "curator"
         },
         "album": null,
+        "artist": null,
         "changes": {
           "kind": "release_claim",
           "moved": {
@@ -80,6 +82,7 @@
           "username": "curator"
         },
         "album": null,
+        "artist": null,
         "changes": {
           "fields": [],
           "kind": "release_correction"

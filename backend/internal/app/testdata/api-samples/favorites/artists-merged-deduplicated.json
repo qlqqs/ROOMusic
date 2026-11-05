@@ -1,0 +1,30 @@
+{
+  "body": {
+    "items": [
+      {
+        "artist": {
+          "album_count": 2,
+          "available": true,
+          "id": "00000000-0000-4000-8000-000000000001",
+          "initial_group": "D",
+          "name": "邓丽君",
+          "roles": [
+            "release_artist",
+            "album_artist",
+            "track_artist"
+          ],
+          "track_count": 3
+        },
+        "available": true,
+        "created_at": "2026-01-01T00:00:00Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "page_size": 50,
+      "total": 1
+    },
+    "revision": 3
+  },
+  "status": 200
+}

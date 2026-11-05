@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_queue_order",
+      "message": "队列排序无效"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

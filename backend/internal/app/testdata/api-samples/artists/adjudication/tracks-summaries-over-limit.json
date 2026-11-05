@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_input",
+      "message": "曲目标识列表无效"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

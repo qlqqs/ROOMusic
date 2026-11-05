@@ -1,0 +1,20 @@
+{
+  "body": {
+    "catalog_state": {
+      "artists_state": "preparing",
+      "epoch": 2,
+      "search_mode": "legacy"
+    },
+    "items": [],
+    "pagination": {
+      "has_more": false,
+      "page": 1,
+      "page_size": 50,
+      "total": 0,
+      "total_relation": "eq"
+    },
+    "query": "修正前目录词",
+    "type": "tracks"
+  },
+  "status": 200
+}

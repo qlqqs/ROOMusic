@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
 func TestPostgreSQLSearchAPIAuthenticationAndParameters(t *testing.T) {
@@ -33,7 +34,7 @@ func TestPostgreSQLSearchAPIAuthenticationAndParameters(t *testing.T) {
 			for _, tc := range []struct{ path, code string }{
 				{"/api/v1/search?q=x", "invalid_search_type"},
 				{"/api/v1/search?type=unknown&q=x", "invalid_search_type"},
-				{"/api/v1/search?type=artists&q=x", "unsupported_search_type"},
+				{"/api/v1/search?type=artist&q=x", "invalid_search_type"},
 				{"/api/v1/search?type=tracks&page=0", "invalid_pagination"},
 				{"/api/v1/search?type=tracks&page=-1", "invalid_pagination"},
 				{"/api/v1/search?type=tracks&page=9223372036854775807&page_size=100", "invalid_pagination"},
@@ -46,6 +47,16 @@ func TestPostgreSQLSearchAPIAuthenticationAndParameters(t *testing.T) {
 			} {
 				requireAPIError(t, app.request(t, http.MethodGet, tc.path, nil, &user, nil), 400, tc.code)
 			}
+			availableTypes := []string{"albums", "tracks"}
+			if mode == "legacy" {
+				requireAPIError(t, app.request(t, http.MethodGet, searchURL("artists", "x"), nil, &user, nil), 503, "artist_catalog_preparing")
+			} else {
+				availableTypes = []string{"artists", "albums", "tracks"}
+				artists := searchRead[catalog.SearchArtistItem](t, app, &user, searchURL("artists", "x"))
+				if artists.Type != "artists" || artists.Query != "x" || artists.CatalogState.ArtistsState != "ready" || artists.Items == nil || len(artists.Items) != 0 || artists.Pagination != (catalog.SearchPagination{Page: 1, PageSize: 50, TotalRelation: "eq"}) {
+					t.Fatalf("就绪艺人搜索：%+v", artists)
+				}
+			}
 			page := searchRead[catalog.SearchTrackItem](t, app, &user, "/api/v1/search?type=tracks&type=artists&q=%20%09&page=1&page=0&page_size=100&page_size=101")
 			if page.Pagination != (catalog.SearchPagination{Page: 1, PageSize: 100, TotalRelation: "eq"}) || page.Query != "" || page.CatalogState.SearchMode != mode {
 				t.Fatalf("空查询/首值策略：%+v", page)
@@ -55,7 +66,7 @@ func TestPostgreSQLSearchAPIAuthenticationAndParameters(t *testing.T) {
 			if err := json.Unmarshal(response.Body.Bytes(), &suggestions); err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(suggestions.AvailableTypes, []string{"albums", "tracks"}) || suggestions.Artists.Items == nil || suggestions.Albums.Items == nil || suggestions.Tracks.Items == nil || len(suggestions.Artists.Items)+len(suggestions.Albums.Items)+len(suggestions.Tracks.Items) != 0 || suggestions.Artists.HasMore || suggestions.Albums.HasMore || suggestions.Tracks.HasMore {
+			if !reflect.DeepEqual(suggestions.AvailableTypes, availableTypes) || suggestions.Artists.Items == nil || suggestions.Albums.Items == nil || suggestions.Tracks.Items == nil || len(suggestions.Artists.Items)+len(suggestions.Albums.Items)+len(suggestions.Tracks.Items) != 0 || suggestions.Artists.HasMore || suggestions.Albums.HasMore || suggestions.Tracks.HasMore {
 				t.Fatalf("空建议：%s", response.Body.String())
 			}
 		})
@@ -82,13 +93,13 @@ func TestPostgreSQLSearchNormalizationFieldsAndVisibility(t *testing.T) {
 		own                          bool
 	}{
 		{"abc 爱", "release_title", "", "ＡＢＣ 愛", false},
-		{"BEYONCE", "release_artist", "", "Beyoncé", false},
-		{"サユリ", "album_artist", "", "さユり", false},
+		{"BEYONCE", "release_artist", "release_artist", "Beyoncé", false},
+		{"サユリ", "album_artist", "album_artist", "さユり", false},
 		{"etiquette 唱片", "label", "", "Étiquette 唱片", false},
 		{"srcl 1234", "catalog_number", "", "ＳＲＣＬ－１２３４", false},
 		{"srcl1234", "catalog_number", "", "ＳＲＣＬ－１２３４", false},
 		{"summer", "track_title", "", "Ｓｕｍｍｅｒ", true},
-		{"曲目艺人", "track_artist", "", "曲目藝人", true},
+		{"曲目艺人", "track_artist", "track_artist", "曲目藝人", true},
 		{"作曲周杰伦", "credit", "composer", "作曲周杰倫", true},
 		{"指挥サユリ", "credit", "conductor", "指揮さユり", true},
 		{"演奏beyonce", "credit", "performer", "演奏Beyoncé", true},
@@ -105,12 +116,23 @@ func TestPostgreSQLSearchNormalizationFieldsAndVisibility(t *testing.T) {
 			for _, item := range tracks.Items {
 				matches = append(matches, item.Match)
 			}
+			var artistID string
+			if tc.role != "" {
+				artistID = requireSearchArtistByName(t, app, &user, tc.original, []string{tc.role}).ID
+			}
 			for _, match := range matches {
-				if match.Kind != "exact" || match.Field != tc.field || match.Original != tc.original || match.ArtistID != nil || match.Alias != nil || match.ReleaseID == nil || *match.ReleaseID != fixture.releaseID {
+				if match.Kind != "exact" || match.Field != tc.field || match.Original != tc.original || match.Alias != nil || match.ReleaseID == nil || *match.ReleaseID != fixture.releaseID {
 					t.Fatalf("命中说明不保留原文/关系：%+v", match)
 				}
-				if tc.role != "" && (match.Role == nil || *match.Role != tc.role) {
-					t.Fatalf("credit 角色：%+v", match)
+				if artistID == "" {
+					if match.ArtistID != nil || match.Role != nil {
+						t.Fatalf("非署名命中不得带艺人身份或角色：%+v", match)
+					}
+				} else if match.ArtistID == nil || *match.ArtistID != artistID || match.Role == nil || *match.Role != tc.role {
+					t.Fatalf("署名命中身份或角色不符：%+v，期望 %s/%s", match, artistID, tc.role)
+				}
+				if !tc.own && match.TrackID != nil {
+					t.Fatalf("发行级命中不得伪造曲目来源：%+v", match)
 				}
 				if tc.own && (match.TrackID == nil || *match.TrackID != fixture.trackIDs[0]) {
 					t.Fatalf("曲目级命中来源：%+v", match)
@@ -131,4 +153,26 @@ func TestPostgreSQLSearchNormalizationFieldsAndVisibility(t *testing.T) {
 	requireSearchTracks(t, app, &user, "作曲周杰伦")
 	requireSearchAlbums(t, app, &user, "作曲周杰伦")
 	requireSearchTracks(t, app, &user, "etiquette 唱片", fixture.trackIDs[1])
+}
+
+// 从独立艺人读取接口核验身份，避免只检查搜索返回了某个非空 UUID。
+func requireSearchArtistByName(t *testing.T, app *integrationTestApplication, user *integrationTestUser, name string, roles []string) catalog.ArtistSummary {
+	t.Helper()
+	var page catalog.ArtistPage[catalog.ArtistSummary]
+	getJSON(t, app, user, "/api/v1/artists?q="+url.QueryEscape(name), &page)
+	var matches []catalog.ArtistSummary
+	for _, artist := range page.Items {
+		if artist.Name == name {
+			matches = append(matches, artist)
+		}
+	}
+	if len(matches) != 1 || !uuid.Valid(matches[0].ID) || !matches[0].Available || !reflect.DeepEqual(matches[0].Roles, roles) {
+		t.Fatalf("艺人身份 %q/%v 不符：%+v", name, roles, page)
+	}
+	var detail catalog.ArtistDetail
+	getJSON(t, app, user, "/api/v1/artists/"+matches[0].ID, &detail)
+	if !reflect.DeepEqual(detail.Artist, matches[0]) || detail.RedirectArtistID != nil {
+		t.Fatalf("艺人详情身份不符：%+v", detail)
+	}
+	return matches[0]
 }

@@ -240,7 +240,7 @@ func finishPersonalSamples(t *testing.T, recorder *apiSampleRecorder) {
 			return err
 		}
 		name := strings.TrimSuffix(filepath.ToSlash(relative), ".json")
-		if strings.HasPrefix(name, "favorites/") || strings.HasPrefix(name, "playlists/") || strings.HasPrefix(name, "errors/personal-") {
+		if isPersonalAPISample(name) && !isArtistAPISample(name) {
 			if _, ok := recorder.samples[name]; !ok {
 				t.Errorf("未覆盖的个人样本：%s", name)
 			}
