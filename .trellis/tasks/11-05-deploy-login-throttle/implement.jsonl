@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "后端规范索引与开发前检查"}
+{"file": ".trellis/spec/backend/identity-contracts.md", "reason": "登录、改密码、reset-password 与错误映射合同"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "新增限速错误码的信封规则"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "限速事件的结构化日志与脱敏"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端规范索引"}
+{"file": ".trellis/spec/frontend/session-lifecycle.md", "reason": "登录错误不能被当作会话结束"}
+{"file": ".trellis/tasks/11-05-deploy-launch/prd.md", "reason": "父任务决定 D4/D5"}

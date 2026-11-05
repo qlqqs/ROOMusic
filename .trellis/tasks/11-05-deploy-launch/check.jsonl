@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "核对收尾门禁覆盖 CI 全部检查"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "核对部署后的运行合同与配置一致"}

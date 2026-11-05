@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "环境变量、迁移、健康检查与 CI 合同"}
+{"file": ".trellis/spec/backend/playback-derivation-contracts.md", "reason": "ffmpeg 固定版本、媒体缓存目录与音乐目录分离"}
+{"file": ".trellis/spec/backend/identity-contracts.md", "reason": "reset-password 子命令的用法与退出码"}
+{"file": ".trellis/spec/backend/real-library-smoke-contracts.md", "reason": "真实音乐只读验收的既有做法"}
+{"file": ".trellis/tasks/11-05-deploy-launch/prd.md", "reason": "父任务已确认事实（子网冲突、开发库）与跨子任务验收"}

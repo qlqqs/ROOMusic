@@ -1,0 +1,30 @@
+{
+  "id": "deploy-launch",
+  "name": "deploy-launch",
+  "title": "部署上线：局域网与公网同时可用",
+  "description": "在本机用 Docker Compose 部署 ROOMusic，局域网 http 与外部反代的公网 https 同时可登录使用，含登录限速、备份与上线演练",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "qlqq",
+  "assignee": "qlqq",
+  "createdAt": "2026-11-05",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "11-05-deploy-origins",
+    "11-05-deploy-login-throttle",
+    "11-05-deploy-packaging"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

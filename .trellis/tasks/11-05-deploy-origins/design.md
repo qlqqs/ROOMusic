@@ -1,0 +1,213 @@
+# 设计：来源清单与按来源设置会话 Cookie
+
+需求见 [prd.md](./prd.md)，父任务决定 D1、D5 见[部署上线](../11-05-deploy-launch/prd.md)。
+
+## 1. 边界与改动文件
+
+只改后端的配置与身份守卫，不改前端代码，不改任何接口的 JSON 形状和错误码。
+
+| 文件 | 改动 |
+| --- | --- |
+| `backend/internal/platform/weborigin/weborigin.go`（新） | 来源的解析与规范化，配置和守卫共用 |
+| `backend/internal/platform/weborigin/weborigin_test.go`（新） | 规范化表驱动测试 |
+| `backend/internal/platform/config/config.go` | 读 `ROOMUSIC_ALLOWED_ORIGINS`；改生产校验；增加冲突校验 |
+| `backend/internal/platform/config/config_test.go` | 新增配置用例；`setRequired` 清掉三个相关变量 |
+| `backend/internal/identity/guard.go` | 来源策略分“清单模式”和“旧模式”；`SetSessionCookie` / `ClearSessionCookie` 改签名 |
+| `backend/internal/identity/guard_test.go`（新） | 两种模式的来源与 Cookie 单元测试 |
+| `backend/internal/identity/httpapi/handlers.go` | 登录、退出的两处 Cookie 调用多传 `request` |
+| `backend/internal/app/app.go` | 按配置选守卫构造函数 |
+| `backend/internal/app/identity_api_integration_test.go` | 清单模式的 PostgreSQL 集成用例 |
+| `scripts/prod.sh` | 把 `SECURE_COOKIES=true` 检查换成“清单非空”检查 |
+| `.env.example`、`README.md` | 配置说明 |
+| `.trellis/spec/backend/identity-contracts.md`、`core0-runtime-contracts.md` | 合同（见第 7 节） |
+
+`NewGuard(database, secureCookies, publicURL)` 的签名和行为不变，现有约 15 处测试调用不用动。
+
+## 2. 配置合同
+
+### 2.1 `ROOMUSIC_ALLOWED_ORIGINS`
+
+- 语法：用逗号分隔的来源列表，每一项前后的空白去掉；去掉空白后是空的项（例如末尾多一个逗号）忽略。
+- 每一项必须是 `scheme://host[:port]`，用 `weborigin.ParseConfigured` 解析：
+  - `scheme` 只能是 `http` 或 `https`，不区分大小写，规范化为小写；
+  - 必须有主机；主机规范化为小写；IPv6 字面量必须带方括号（`http://[fd00::1]:8090`）；
+  - 主机只能是 ASCII（国际化域名写 punycode，跟浏览器发出的 `Origin` 一致）；不允许 `*` 通配；
+  - 端口可选，必须是 1–65535 的十进制数；与协议默认端口相同时去掉（`http:80`、`https:443`）；
+  - 不允许用户信息、查询、片段；路径只允许为空或单独一个 `/`（规范化时去掉，照顾从地址栏复制来的末尾斜杠），其他路径都报错。
+- 规范化结果是 `scheme://host` 或 `scheme://host:port`；重复项去重，保持首次出现的顺序。
+- 出错时 `config.Load` 返回错误，进程按现有 `platform.config.invalid` 事件退出。错误信息指出配置项和出错的那一项，例如：
+  `ROOMUSIC_ALLOWED_ORIGINS item "https://music.example.com/app" must be http(s)://host[:port] without path, query or credentials`。
+  （来源不是秘密，可以原样写进错误；现有配置错误都是英文，保持一致。）
+
+### 2.2 两种模式与 `SECURE_COOKIES` / `PUBLIC_URL` 的唯一解释
+
+用“清单是否非空”区分两种模式，同一时刻只有一种生效：
+
+| 情况 | 结果 |
+| --- | --- |
+| 清单非空（**清单模式**） | 来源判断和 Cookie `Secure` 只看清单与请求的 `Origin`；后端不读 `ROOMUSIC_SECURE_COOKIES`，也不用 `ROOMUSIC_PUBLIC_URL` 做任何判断 |
+| 清单模式下 `ROOMUSIC_SECURE_COOKIES` 非空（不论值） | 拒绝启动：`ROOMUSIC_SECURE_COOKIES cannot be combined with ROOMUSIC_ALLOWED_ORIGINS; the Secure flag follows each origin's scheme` |
+| 清单模式下设置了 `ROOMUSIC_PUBLIC_URL` | 仍按现有规则校验格式；规范化后必须等于清单中的某一项，否则拒绝启动（`ROOMUSIC_PUBLIC_URL must be one of ROOMUSIC_ALLOWED_ORIGINS`）。它在后端只是被核对，不参与判断；它继续给 Vite 的 `allowedHosts` 用 |
+| 清单为空且非生产（**旧模式**） | 与现在逐项一致：协议由 `SECURE_COOKIES` 决定，设了 `PUBLIC_URL` 比较它的主机，否则比较 `request.Host`；Cookie `Secure` 取 `SECURE_COOKIES` |
+| 清单为空且 `ROOMUSIC_ENV=production` | 拒绝启动：`ROOMUSIC_ALLOWED_ORIGINS must list at least one origin in production` |
+
+- 删除“生产必须 `SECURE_COOKIES=true`”。生产只剩“必须有清单”，于是生产必然是清单模式；`SECURE_COOKIES` 在生产里出现就报错。
+- 清单只含 http 来源时也能启动（A3）。
+- `config.Server` 增加 `AllowedOrigins []string`（已规范化）；`SecureCookies`、`PublicURL` 字段保留，只在旧模式下有意义。
+- 为什么冲突就报错而不是“清单优先、静默忽略”：运维者照旧模板写了 `SECURE_COOKIES=true` 再加 http 局域网来源，静默忽略会让他以为
+  Cookie 一直带 `Secure`。报错只多一次改配置，换来不存在两种读法。
+
+### 2.3 环境变量示例
+
+```dotenv
+# 生产（仓库根目录 .env.prod，见部署打包设计第 16 节）
+ROOMUSIC_ALLOWED_ORIGINS=http://192.168.50.206:8090,https://music.example.com
+# 不设置 ROOMUSIC_SECURE_COOKIES 与 ROOMUSIC_PUBLIC_URL
+```
+
+开发 `.env.dev` 不改：不设清单就是旧模式。若想在开发中试清单模式，清单里要写 Vite 的来源 `http://localhost:5173`，并删掉
+`ROOMUSIC_SECURE_COOKIES`。
+
+## 3. 守卫合同
+
+### 3.1 结构
+
+```go
+// guard.go
+type Guard struct {
+	database       *sql.DB
+	allowedOrigins map[string]bool // 非 nil 即清单模式；键是 weborigin 规范化结果
+	secureCookies  bool            // 仅旧模式
+	publicURL      string          // 仅旧模式
+}
+
+// NewGuard 返回旧模式守卫（行为与现在一致），供开发、测试与未配置清单的环境使用。
+func NewGuard(database *sql.DB, secureCookies bool, publicURL string) *Guard
+
+// NewGuardWithAllowedOrigins 返回清单模式守卫；origins 必须已由 weborigin 规范化（config.Load 保证），为空时 panic（装配错误）。
+func NewGuardWithAllowedOrigins(database *sql.DB, origins []string) *Guard
+```
+
+`app.New` 中：`len(settings.AllowedOrigins) > 0` 用 `NewGuardWithAllowedOrigins`，否则 `NewGuard(...)`（旧调用不变）。
+
+### 3.2 `RequireSameOrigin`（签名不变）
+
+```text
+origin := request.Header.Get("Origin")
+origin == ""                         → 403 origin_required（两种模式相同）
+清单模式：
+  normalized, err := weborigin.ParseRequest(origin)
+  err != nil 或 !allowedOrigins[normalized] → 403 origin_forbidden
+  否则通过
+旧模式：现有代码原样保留（协议、PUBLIC_URL 主机、request.Host）
+```
+
+- `ParseRequest` 比 `ParseConfigured` 严格一点：路径必须为空（浏览器发出的 `Origin` 不带斜杠，带 `/` 就拒绝）；`null`、
+  `file://`、没有主机、带用户信息或查询的一律解析失败。规范化规则（大小写、默认端口）与配置相同，所以
+  `HTTPS://Music.Example.com:443` 与清单里的 `https://music.example.com` 相等。
+- 清单模式**不看** `request.Host`，**不读** `X-Forwarded-Host`、`X-Forwarded-Proto`、`Forwarded`（D5）。外部反代改写 Host 不影响判断。
+- 错误信封、状态码、message 都不变（O6）。
+
+### 3.3 会话 Cookie
+
+签名改为带 `request`：
+
+```go
+func (guard *Guard) SetSessionCookie(w http.ResponseWriter, r *http.Request, token string)
+func (guard *Guard) ClearSessionCookie(w http.ResponseWriter, r *http.Request)
+```
+
+`Secure` 由内部的 `guard.cookieSecure(r)` 决定：
+
+- 旧模式：返回 `guard.secureCookies`（与现在相同）。
+- 清单模式：`ParseRequest(r.Header.Get("Origin"))` 成功、在清单里且协议是 `https` 时为 `true`，其余为 `false`。
+  调用方都已先通过 `RequireSameOrigin`，所以实际只有“https 来源 → true / http 来源 → false”两种结果；万一将来有调用方
+  没先校验，未通过校验的来源得到 `false`，但这种请求本来就不应走到写 Cookie，第 6 节的单元测试锁定“先校验”的调用顺序。
+
+其他属性（`HttpOnly`、`SameSite=Lax`、`Path=/`、24 小时 `Expires`、清除时 `MaxAge=-1`）不变（O3）。
+
+为什么传 `request` 而不是让 `RequireSameOrigin` 返回已校验的来源：`RequireSameOrigin` 有几十个调用点分布在各能力的 handler 里，
+改返回值会牵动全部；而写 Cookie 只有登录和退出两处。重新解析一次 `Origin` 的成本可以忽略，规则与校验用的是同一个函数。
+
+### 3.4 其他调用点
+
+- `handlers.go` 的 `login`、`logout` 各改一行，多传 `request`。
+- 其他能力的 handler 只调用 `RequireSameOrigin`，签名不变，无需改动。
+- `cmd/roomusic/reset_password_test.go` 与各包测试用 `NewGuard(..., false, "")` 或 `config.Server{PublicURL: ...}`，都是旧模式，结论不变。
+- `scripts/playback-e2e.sh` 设 `PUBLIC_URL` + `SECURE_COOKIES=false`、不设清单，仍是旧模式，不用改。
+- `frontend/e2e/real/` 经同一个 playback-e2e 服务运行，不用改。
+
+## 4. 兼容性
+
+- 不配清单的开发、测试环境逐项不变（O5）：`./scripts/dev.sh`、Vite 代理、集成测试、Playwright 都不改配置。
+- 生产环境旧配置（只有 `SECURE_COOKIES=true`）升级后会拒绝启动并指明要配 `ROOMUSIC_ALLOWED_ORIGINS`。目前没有在运行的生产实例
+  （父任务事实），不需要迁移步骤。
+- `scripts/prod.sh` 的检查改为 `[[ -n "${ROOMUSIC_ALLOWED_ORIGINS:-}" ]]`，提示“生产环境必须设置 ROOMUSIC_ALLOWED_ORIGINS”；
+  其余格式校验交给后端，不在 shell 里重复。
+- 浏览器侧：同一主机名上 http 与 https 的 Cookie 互不覆盖的问题不会出现，因为局域网用 IP、公网用域名，主机不同、Cookie 各自独立。
+
+## 5. 考虑过但不选
+
+| 方案 | 不选的原因 |
+| --- | --- |
+| 清单优先，静默忽略 `SECURE_COOKIES` / `PUBLIC_URL` | 同一份配置有两种读法，违背 O4 |
+| 直接删除 `SECURE_COOKIES` / `PUBLIC_URL` | 开发经公网反代访问 Vite 的现有流程依赖它们（O5 要求不改） |
+| 按 `X-Forwarded-Proto` 决定 `Secure` | D5 明确不信任转发头；局域网直连的人也能伪造这个头 |
+| Cookie 始终不带 `Secure` | 公网 https 上失去 Secure 保护，不必要地降级 |
+| 允许通配（`https://*.example.com`） | 家用单实例只有两三个固定入口，通配增加误放行面 |
+| `RequireSameOrigin` 返回已校验来源 | 牵动所有能力的 handler（见 3.3） |
+| 把规范化函数放在 `config` 或 `identity` 里 | 两边都要用；放 `identity` 会让 `config` 反向依赖业务包，放 `config` 会让守卫依赖进程配置包。独立的 `platform/weborigin` 有两个真实使用方、语义相同 |
+
+## 6. 测试清单（最小相关集）
+
+单元测试（不需要数据库）：
+
+- `weborigin_test.go`：表驱动——大小写、默认端口 80/443 去掉、非默认端口保留、IPv6 方括号、配置允许末尾 `/` 而请求不允许、
+  路径/查询/片段/用户信息、`null`、`file://`、`ftp://`、空主机、端口 0 与 65536、非 ASCII 主机、`*` 通配。
+- `config_test.go`：`setRequired` 增加清空 `ROOMUSIC_ALLOWED_ORIGINS`、`ROOMUSIC_SECURE_COOKIES`、`ROOMUSIC_PUBLIC_URL`；
+  用例：清单解析与去重；生产不配清单报错且信息含配置项名；生产只配 http 来源能启动；生产不设 `SECURE_COOKIES` 能启动（原来报错）；
+  清单 + `SECURE_COOKIES` 非空报错；清单 + `PUBLIC_URL` 不在清单中报错、在清单中通过；格式错误的项报错且信息含该项；
+  不配清单的开发环境 `SecureCookies` / `PublicURL` 读取结果与现在相同。
+- `guard_test.go`（`httptest`，`NewGuard*(nil, ...)`）：
+  - 清单 `http://192.168.50.206:8080,https://music.example.com`：两个来源通过；`http://music.example.com`、`https://192.168.50.206:8080`、
+    其他主机、带路径、带用户信息、`null` 得到 `origin_forbidden`，缺少得到 `origin_required`（A2）；
+    `Host: evil.example` 加允许的来源仍通过，`Host` 与来源相同但来源不在清单里仍拒绝；带 `X-Forwarded-Host/Proto` 不改变结论。
+  - `SetSessionCookie` / `ClearSessionCookie`：https 来源带 `Secure`，http 来源不带；`HttpOnly`、`SameSite=Lax`、`Path=/` 不变（A1 的单元部分）。
+  - 旧模式：现有三条路径（`secureCookies` 决定协议、`publicURL` 主机、`request.Host`）各一条正反例，锁定 O5。
+
+PostgreSQL 集成测试（`internal/app/identity_api_integration_test.go`，新增一个用清单配置装配应用的用例）：
+
+- 用 `config.Server{AllowedOrigins: [...]}` 装配；从两个来源各登录一次，检查 `Set-Cookie` 的 `Secure`；各做一次写操作
+  （`POST /auth/password` 或退出），成功；退出的 `Set-Cookie` 同样按来源。
+- 不被允许的来源登录：403 且 `sessions` 表没有新增行（A2 的“不写库”）。
+
+运行命令（实现与测试 agent 按需执行，不扩大到全量）：
+
+```bash
+(cd backend && test -z "$(gofmt -l ./internal/platform ./internal/identity ./internal/app)")
+go -C backend test ./internal/platform/weborigin ./internal/platform/config ./internal/identity/... -count=1
+go -C backend vet ./internal/platform/... ./internal/identity/... ./internal/app
+# 集成：在 roomusic-test 隔离库上只跑身份相关用例
+docker compose -f compose.test.yaml -p roomusic-test --env-file /dev/null up -d --wait postgres
+ROOMUSIC_TEST_DATABASE_URL=postgres://roomusic_test:roomusic_test@127.0.0.1:55432/roomusic_test?sslmode=disable \
+  go -C backend test ./internal/app -run 'TestPostgreSQL.*(Identity|Login|Origin|Password|Session)' -count=1
+docker compose -f compose.test.yaml -p roomusic-test --env-file /dev/null down -v
+```
+
+接口 JSON 样本不应变化（A5）：不运行 `ROOMUSIC_UPDATE_API_SAMPLES=1`；样本比对用例随上面的集成测试运行即可。
+A4 的 `./scripts/dev.sh` 登录可用由测试 agent 手动启动一次确认（不配清单）。
+
+## 7. 需要更新的 spec 段落
+
+- `identity-contracts.md`：第 1 节范围加“来源校验与会话 Cookie”；第 3 节新增“来源与会话 Cookie（2026-11-05）”小节，写入 2.1、2.2 的表、
+  3.2 的判定顺序与 3.3 的 `Secure` 规则；第 4 节错误矩阵加“清单模式下来源不在清单 / 缺少来源”两行；第 6 节必需测试加第 6 节的用例。
+- `core0-runtime-contracts.md`：“请求与响应”第一条补一句“来源规则见身份合同”；“环境与资产”中开发 Vite 那一条（现第 130–132 行）改为
+  “后端在未配置 `ROOMUSIC_ALLOWED_ORIGINS` 时按 `ROOMUSIC_PUBLIC_URL`、Origin scheme/host 和 `ROOMUSIC_SECURE_COOKIES` 校验；配置清单后只按清单”；
+  `scripts/prod.sh` 那一条补“要求 `ROOMUSIC_ALLOWED_ORIGINS`”。
+- `.env.example`：在 `ROOMUSIC_SECURE_COOKIES` / `ROOMUSIC_PUBLIC_URL` 上方说明它们只用于开发；新增注释掉的
+  `# ROOMUSIC_ALLOWED_ORIGINS=` 并写一句“生产必填，见 .env.prod.example”（该模板由部署打包任务新增）。
+
+## 8. 回滚
+
+单个提交即可回退：恢复 `guard.go`、`config.go`、`handlers.go`、`app.go` 和 `prod.sh`，删除 `weborigin` 包与新测试。没有迁移、没有数据变化。
+已经按新规则发出的 Cookie 回滚后照常可用（名字、值、路径不变）。

@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "后端规范索引与开发前检查"}
+{"file": ".trellis/spec/backend/identity-contracts.md", "reason": "来源校验、会话 Cookie 与登录接口合同"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "环境变量、REST 通则与生产配置要求"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "origin_forbidden 等错误信封"}
+{"file": ".trellis/tasks/11-05-deploy-launch/prd.md", "reason": "父任务决定 D1/D5 与跨子任务验收"}
