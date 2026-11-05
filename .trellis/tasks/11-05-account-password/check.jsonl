@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/identity-contracts.md", "reason": "核对密码接口、会话撤销与错误矩阵"}
+{"file": ".trellis/spec/backend/artist-contracts.md", "reason": "核对已忽略候选列表与恢复"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端测试覆盖与门禁"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端测试、五宽、axe、截图"}
+{"file": ".trellis/spec/frontend/quality-verification-layers.md", "reason": "模拟 Playwright 与真实服务用例的分层"}
+{"file": ".trellis/spec/frontend/session-lifecycle.md", "reason": "改密码后会话行为"}

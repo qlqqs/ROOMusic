@@ -1,0 +1,13 @@
+{"file": ".trellis/spec/backend/identity-contracts.md", "reason": "身份与成员接口、密码规则、停用事务与错误矩阵，A1–A3 在此扩展"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "错误信封、JSON 请求体、同源校验与日志脱敏的通用规则"}
+{"file": ".trellis/spec/backend/artist-contracts.md", "reason": "艺人候选与忽略的合同，A4 在此扩展"}
+{"file": ".trellis/spec/backend/governance-contracts.md", "reason": "operations.Run 与 candidate-ignore 的治理写入规则"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "事务、锁与 SQL 约定"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "包依赖规则，命令行子命令放置位置"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端测试与质量门禁"}
+{"file": ".trellis/spec/frontend/session-lifecycle.md", "reason": "会话失效、401 处理与查看者状态，A1 改密码后保持当前会话"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "对话框、表单与按钮组件用法"}
+{"file": ".trellis/spec/frontend/governance-components.md", "reason": "艺人候选页与治理命令提示组件"}
+{"file": ".trellis/spec/frontend/artist-guidelines.md", "reason": "艺人候选页的交互规则"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "接口 decoder 与样本往返"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端测试、五宽、axe 与截图要求"}
