@@ -10,7 +10,7 @@
 
 - `backend/internal/identity/httpapi/handlers.go:137-162` 登录：用户不存在或停用时直接返回 401，不调用 bcrypt，
   密码错误时调用一次 bcrypt。两种失败的耗时不同，可以据此探测用户名是否存在。
-- 自助改密码 `POST /auth/password` 核对当前密码，错误返回 `403 current_password_incorrect`（[身份与成员合同](../../spec/backend/identity-contracts.md)），只有已登录的会话能调用。
+- 自助改密码 `POST /auth/password` 核对当前密码，错误返回 `403 current_password_incorrect`（[身份与成员合同](../../../../spec/backend/identity-contracts.md)），只有已登录的会话能调用。
 - 经外部反代时，后端看到的对端地址是反代的地址，不能按 IP 区分用户；但能区分“经反代”和“局域网直连”（D5）。
 - 前端请求层把 `401 unauthorized` 当作会话结束（同一合同第 49 行附近），新的限速错误不能复用 401。
 

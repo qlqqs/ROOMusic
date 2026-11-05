@@ -25,7 +25,7 @@
 | O4 | 去掉“生产必须 `ROOMUSIC_SECURE_COOKIES=true`”的硬性要求，改为 O1 的“生产必须配置清单”（后者已由 O8 取代）。`ROOMUSIC_SECURE_COOKIES` 与 `ROOMUSIC_PUBLIC_URL` 在后端的去留、与清单同时出现时的规则由设计确定，但必须只有一种解释并写进合同 |
 | O5 | 没有配置清单的非生产环境（开发、测试）行为与现在逐项一致：现有开发流程、Vite 代理、集成测试和 Playwright 不需要改配置 |
 | O6 | 被拒绝的来源仍返回现有的 `403 origin_forbidden` / `origin_required`，错误信封不变 |
-| O7 | 更新 `.env.example`、README 的配置说明、[身份与成员合同](../../spec/backend/identity-contracts.md) 与 [Core 0 当前运行合同](../../spec/backend/core0-runtime-contracts.md)；`scripts/prod.sh` 的 `SECURE_COOKIES` 检查跟着调整 |
+| O7 | 更新 `.env.example`、README 的配置说明、[身份与成员合同](../../../../spec/backend/identity-contracts.md) 与 [Core 0 当前运行合同](../../../../spec/backend/core0-runtime-contracts.md)；`scripts/prod.sh` 的 `SECURE_COOKIES` 检查跟着调整 |
 | O8 | （D8，2026-11-05 增补）生产不配清单时改走“主机一致模式”，不再拒绝启动：写请求的 `Origin` 与请求 `Host` 规范化后一致就放行，协议不限；Cookie 的 `Secure` 跟随 `Origin` 协议；仍不读 `X-Forwarded-*` 与 `Forwarded`。清单保留为可选配置，配了就按清单。各种配置组合只有一种行为（见 design §9.1），O5 不变。生产 Compose 与模板中清单改为可选，部署说明要求反代保留浏览器的 Host 与 Origin |
 
 ## 验收
@@ -52,7 +52,7 @@
 - 提交：`db4b4f3`（清单模式与按来源设置 Cookie）、`06450d0`（主机一致模式，D8 增补）、`a931fb5`（登记 `platform/weborigin` 的包依赖规则，收尾门禁发现）。
 - A1、A2：`identity_api_integration_test.go` 的 `TestPostgreSQLAllowedOrigins*`；A6：`TestPostgreSQLSameHost*`（两个来源登录、改密码、退出，Secure 区分；Host 不一致、`Origin: null`、缺 Host 均 403 且不写库；转发头不改变结论），隔离库 PASS 非 SKIP。
 - A3、A4：`config_test.go` 的 `TestLoadOriginModeMatrix`、`TestLoadOriginValidationOrder` 覆盖 design §9.1 全表；旧模式既有用例未改。
-- A5：接口 JSON 样本未变；来源合同拆为 [identity-origin-contracts.md](../../spec/backend/identity-origin-contracts.md)。
+- A5：接口 JSON 样本未变；来源合同拆为 [identity-origin-contracts.md](../../../../spec/backend/identity-origin-contracts.md)。
 - 生产实测：正式实例按主机一致模式运行，Host 一致的登录请求得 401（进入密码核对），Origin 与 Host 不一致得 `403 origin_forbidden` 并记录 `identity.origin.rejected mode=same-host`（[正式启动记录](../11-05-deploy-packaging/research/launch.md)）。
 - 审阅补充：`OriginMode` 零值按旧模式装配（design §9.2），直接构造 `config.Server{}` 的测试夹具不必改；清单模式的集成夹具显式写模式。
 

@@ -8,7 +8,7 @@
 
 ## 已确认的事实（2026-11-05 检查）
 
-- 功能闭环已具备（Core 1 与 M5 收口，见 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)）；缺的是部署层面。
+- 功能闭环已具备（Core 1 与 M5 收口，见 [Core 1 路线](../../../../../docs/architecture/core-1-roadmap.md)）；缺的是部署层面。
 - **同一实例现在不能同时服务 http 与 https**：
   - `backend/internal/platform/config/config.go:71` 生产模式强制 `ROOMUSIC_SECURE_COOKIES=true`，会话 Cookie 带 `Secure`，浏览器在 http 局域网地址上不保存它。
   - `backend/internal/identity/guard.go:103-110` 写请求的 `Origin` 协议只能是 http 或 https 之一，由同一个开关决定。

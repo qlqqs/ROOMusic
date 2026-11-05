@@ -4,7 +4,7 @@
 
 涉及 `platform/weborigin`、`platform/config` 的来源配置、`identity.Guard`、`app.New` 或生产反代时读取本合同。
 本专题由[身份与成员合同](./identity-contracts.md)拆出，避免单文件超过 24,000 字节；其他身份接口与错误信封不变。
-依据为 [origins design 第 9 节](../../tasks/11-05-deploy-origins/design.md#9-主机一致模式d82026-11-05-增补)。
+依据为 [origins design 第 9 节](../../tasks/archive/2026-11/11-05-deploy-origins/design.md#9-主机一致模式d82026-11-05-增补)。
 
 ## 2. 接口签名
 

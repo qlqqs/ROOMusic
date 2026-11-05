@@ -1408,3 +1408,56 @@ F 线变基到含 P 线的 main（迁移改为 0023/0024），导出树全量全
 ### Next Steps
 
 - 10-06-m2a-acceptance-followup 仍等手工实播
+
+
+## Session 42: 部署上线：局域网与公网同时可用
+<!-- trellis-session: v=2 fp=3c849166812b8ab2 -->
+
+**Date**: 2026-11-05
+**Task**: 部署上线：局域网与公网同时可用
+**Branch**: `main`
+
+### Summary
+
+完成部署上线父任务及三个子任务：来源校验（清单模式与生产默认的主机一致模式）、登录与改密码限速、Docker Compose 生产打包与备份；演练第 0–8 步通过，第 9–12 步按用户决定跳过；正式实例 roomusic-prod 已在 8090 运行，管理员由用户初始化。
+
+### Main Changes
+
+- 来源：ROOMUSIC_ALLOWED_ORIGINS 可选清单；生产不配清单时 Origin 与请求 Host 一致即放行，Cookie Secure 跟随来源协议，不读转发头，拒绝时记 identity.origin.rejected
+- 限速：用户名+TCP 对端 5 次失败起 1 分钟翻倍至 15 分钟，来源 30 次/分钟；改密码按用户 ID；429 too_many_attempts；DB 错误 503 不计数
+- 打包：git archive 构建应用与 tools 镜像，roomusic-prod Compose（固定子网 10.203.50.0/24、8090 仅 IPv4）、每日备份保留 14 天、升级前备份、恢复核对脚本；.env.dev / .env.prod 两套配置与 make prod*
+- 收尾修复：登记 platform/weborigin 依赖规则；CATM/CATP 锁按 schema 隔离（修复部署前 main CI 已红的集成争锁）；player 纯键盘 e2e 改用 60 秒素材
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4a53754` | docs(task): 部署上线的规划文档 |
+| `db4b4f3` | feat(identity): 来源清单与按来源设置会话 Cookie |
+| `d0f1a56` | feat(identity): 登录与改密码核对当前密码的限速 |
+| `263d757` | feat(deploy): 生产镜像、Compose、备份恢复与 make prod 命令 |
+| `faf5e9f` | docs(task): 上线演练记录与主机一致模式设计 |
+| `06450d0` | feat(identity): 生产不配来源清单时按主机一致放行 |
+| `e6d9fb6` | docs(task): 正式启动记录 |
+| `a931fb5` | test(app): 登记 platform/weborigin 的包依赖规则 |
+| `dafbc4c` | fix(catalog): 维护租约与目录写锁按 schema 隔离 |
+| `420f0e7` | test(e2e): 纯键盘播放用例改用 60 秒素材，避免自然播完抢先切歌 |
+| `d961792` | docs(task): 部署上线实施结果 |
+| `9429275` | chore(task): archive 11-05-deploy-origins |
+| `6679da7` | chore(task): archive 11-05-deploy-login-throttle |
+| `2d6f30b` | chore(task): archive 11-05-deploy-packaging |
+| `988077c` | chore(task): archive 11-05-deploy-launch |
+
+### Testing
+
+- [OK] 收尾门禁导出树 dafbc4c：race、全量 Vitest、test-integration.sh、playback-e2e 55/55 等通过；420f0e7 重跑 lint/typecheck/test:e2e 476/476 无重试
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 用户在局域网初始化管理员后，把公网反代改指向 8090
+- internal/app 集成包串行接近 10 分钟默认超时，需拆包或分组
+- 未验证：重启自动恢复、备份恢复到临时库、/data 卷丢失后重扫补封面
