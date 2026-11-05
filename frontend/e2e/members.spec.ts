@@ -1,3 +1,4 @@
+import { changedPassword, memberRow } from "./support/account-password";
 import { expect, test } from "./support/fixtures";
 import { heading } from "./support/locators";
 import type { Page } from "@playwright/test";
@@ -80,5 +81,62 @@ test.describe("成员管理", () => {
     await page.getByRole("dialog").getByRole("button", { name: "停用成员" }).click();
     await expect(heading(page, "登录")).toBeVisible();
     await expect(page.getByRole("table", { name: "成员列表" })).toHaveCount(0);
+  });
+});
+
+test.describe("账户密码：管理员重置", () => {
+  for (const { username, disabled } of [{ username: "listener", disabled: false }, { username: "archivist", disabled: true }]) {
+    test(`重置${disabled ? "停用" : "启用"}成员密码，自己无入口且请求只有password无幂等键`, async ({ page, backend }) => {
+      const mock = await backend.start({ signedInAs: "curator" });
+      await page.goto("/members");
+      await expect(memberRow(page, "curator").getByRole("button", { name: /重置/ })).toHaveCount(0);
+      const row = memberRow(page, username);
+      await expect(row.getByRole("button")).toHaveCount(disabled ? 2 : 3);
+      await row.getByRole("button", { name: `重置成员 ${username} 的密码`, exact: true }).click();
+      const dialog = page.getByRole("dialog", { name: `重置“${username}”的密码`, exact: true });
+      await expect(dialog).toContainText(disabled ? "对方仍是停用状态，重新启用后才能登录。" : "对方需要用新密码重新登录。");
+      await dialog.getByLabel("新密码", { exact: true }).fill(changedPassword);
+      await dialog.getByLabel("确认新密码", { exact: true }).fill(changedPassword);
+      await dialog.getByRole("button", { name: "重置密码", exact: true }).click();
+      await expect(dialog).toBeHidden();
+      await expect(page.getByRole("status").filter({ hasText: `已重置“${username}”的密码。` })).toBeVisible();
+      await expect(row).toContainText(disabled ? "已停用" : "启用");
+      expect(mock.users.find((user) => user.username === username)?.disabled).toBe(disabled);
+      const calls = mock.callsTo("POST", /\/users\/[^/]+\/password$/);
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.path).toBe(`/api/v1/users/${mock.users.find((user) => user.username === username)?.id}/password`);
+      expect(calls[0]?.body).toEqual({ password: changedPassword });
+      expect(calls[0]?.idempotencyKey).toBeNull();
+      await expect(page.locator("body")).not.toContainText(changedPassword);
+      await expect(heading(page, "成员")).toBeVisible();
+      expect(mock.session).toBe("curator");
+    });
+  }
+
+  test("重置密码本地校验与取消，不向服务器发送密码", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "curator" });
+    await page.goto("/members");
+    const trigger = memberRow(page, "listener").getByRole("button", { name: "重置成员 listener 的密码", exact: true });
+    await trigger.click();
+    const dialog = page.getByRole("dialog", { name: "重置“listener”的密码", exact: true });
+    for (const { password, confirmation, field, error } of [
+      { password: "x".repeat(11), confirmation: "x".repeat(11), field: "新密码", error: "密码至少要 12 位。" },
+      { password: "x".repeat(73), confirmation: "x".repeat(73), field: "新密码", error: "密码太长了，请短一些。" },
+      { password: "new-password-中文", confirmation: "new-password-中文", field: "新密码", error: "密码只能用英文字母、数字和符号。" },
+      { password: changedPassword, confirmation: "different-password", field: "确认新密码", error: "两次输入的密码不一致。" },
+    ]) {
+      await dialog.getByLabel("新密码", { exact: true }).fill(password);
+      await dialog.getByLabel("确认新密码", { exact: true }).fill(confirmation);
+      await dialog.getByRole("button", { name: "重置密码", exact: true }).click();
+      await expect(dialog.getByText(error, { exact: true })).toBeVisible();
+      await expect(dialog.getByLabel(field, { exact: true })).toBeFocused();
+      expect(mock.callsTo("POST", /\/users\/[^/]+\/password$/)).toHaveLength(0);
+    }
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+    await trigger.press("Enter");
+    await expect(dialog.getByLabel("新密码", { exact: true })).toHaveValue("");
+    await expect(dialog.getByLabel("确认新密码", { exact: true })).toHaveValue("");
   });
 });

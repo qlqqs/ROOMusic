@@ -158,3 +158,60 @@ test("艺人稳定性：候选只提示、纯键盘忽略与恢复提示", async
   expect(mock.callsTo("POST", /\/revert$/)).toHaveLength(0);
   expect(mock.callsTo("POST", /\/merge$/)).toHaveLength(0);
 });
+
+test("账户密码：纯键盘忽略候选→已忽略恢复→待处理，刷新后保持", async ({ page, backend }) => {
+  const mock = await backend.start({ signedInAs: "curator" });
+  const seed = seedArtistsE2E(mock);
+  const candidate = seed.data.candidates[0];
+  if (candidate === undefined) throw new Error("样本必须包含候选");
+  await page.goto("/artist-candidates");
+  const filters = page.getByRole("navigation", { name: "候选状态", exact: true });
+  await expect(filters.getByRole("link", { name: "待处理", exact: true })).toHaveAttribute("aria-current", "page");
+  await artistKeyActivate(page, page.getByRole("button", { name: /^忽略“/ }));
+  await expect(page.getByText("现在没有需要确认的候选。", { exact: true })).toBeVisible();
+  await artistKeyActivate(page, filters.getByRole("link", { name: "已忽略", exact: true }));
+  await expect(page).toHaveURL(/\/artist-candidates\?status=ignored$/);
+  await expect(filters.getByRole("link", { name: "已忽略", exact: true })).toHaveAttribute("aria-current", "page");
+  const restore = page.getByRole("button", { name: /^恢复“/ });
+  await expect(restore).toBeVisible();
+  await expect(page.getByRole("button", { name: /^合并“/ })).toHaveCount(0);
+  // 重新载入后从持久列表恢复，而不是依赖“刚忽略”的临时提示。
+  await page.reload();
+  await expect(restore).toBeVisible();
+  const beforeRestore = mock.calls.length;
+  await artistKeyActivate(page, restore);
+  await expect(page.getByText("没有忽略过的候选。", { exact: true })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: /^已恢复/ })).toBeVisible();
+  const restoreCalls = mock.calls.slice(beforeRestore);
+  const writeIndex = restoreCalls.findIndex((call) => call.method === "POST" && call.path.endsWith("/candidate-ignore"));
+  expect(writeIndex).toBeGreaterThanOrEqual(2);
+  for (const id of [candidate.left.id, candidate.right.id]) {
+    expect(restoreCalls.slice(0, writeIndex).some((call) => call.method === "GET" && call.path === `/api/v1/artists/${id}`)).toBe(true);
+  }
+  await artistKeyActivate(page, filters.getByRole("link", { name: "待处理", exact: true }));
+  await expect(page).toHaveURL(/\/artist-candidates$/);
+  await expect(page.getByRole("button", { name: /^忽略“/ })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("button", { name: /^忽略“/ })).toBeVisible();
+  await expect(filters.getByRole("link", { name: "待处理", exact: true })).toHaveAttribute("aria-current", "page");
+  const commands = mock.callsTo("POST", /\/candidate-ignore$/);
+  expect(commands).toHaveLength(2);
+  expect(commands[0]?.body).toMatchObject({ ignored: true, other_artist_id: candidate.right.id, key_pairs: candidate.key_pairs });
+  expect(commands[1]?.body).toMatchObject({ ignored: false, other_artist_id: candidate.right.id, key_pairs: candidate.key_pairs });
+  expect(commands[0]?.idempotencyKey).toMatch(uuid);
+  expect(commands[1]?.idempotencyKey).toMatch(uuid);
+  expect(commands[1]?.idempotencyKey).not.toBe(commands[0]?.idempotencyKey);
+  expect(mock.callsTo("GET", "/api/v1/artist-candidates").some((call) => new URLSearchParams(call.search).get("ignored") === "true")).toBe(true);
+  expect(mock.callsTo("POST", /\/(merge|revert)$/)).toHaveLength(0);
+});
+
+// 单独守住筛选语义，避免它的失败提前中断上面的键盘恢复闭环。
+test("账户密码：已忽略视图只标记一个当前筛选", async ({ page, backend }) => {
+  const mock = await backend.start({ signedInAs: "curator" });
+  seedArtistsE2E(mock);
+  await page.goto("/artist-candidates?status=ignored");
+  await expect(page.getByText("没有忽略过的候选。", { exact: true })).toBeVisible();
+  const filters = page.getByRole("navigation", { name: "候选状态", exact: true });
+  await expect(filters.getByRole("link", { name: "已忽略", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(filters.getByRole("link", { name: "待处理", exact: true })).not.toHaveAttribute("aria-current", "page");
+});

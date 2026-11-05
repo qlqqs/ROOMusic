@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, utf8ByteLength, validateNewAccount } from "./account-rules";
+import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, utf8ByteLength, validateNewAccount, validateNewPassword, validatePasswordChange } from "./account-rules";
 
 describe("utf8ByteLength", () => {
   it("按 UTF-8 字节计算：英文 1 字节、中文 3 字节、emoji 4 字节", () => {
@@ -55,5 +55,65 @@ describe("validateNewAccount", () => {
     const errors = validateNewAccount({ ...valid, password: "short", confirmation: "other" });
     expect(errors.password).toBeDefined();
     expect(errors.confirmation).toBeUndefined();
+  });
+});
+
+
+describe("validateNewPassword：改密码与重置共用的完整边界", () => {
+  it.each([
+    ["空密码", "", "密码至少要 12 位。"],
+    ["11 位", "a".repeat(11), "密码至少要 12 位。"],
+    ["12 位", "a".repeat(12), undefined],
+    ["72 位", "a".repeat(72), undefined],
+    ["73 位", "a".repeat(73), "密码太长了，请短一些。"],
+    ["中文", "password1234密", "密码只能用英文字母、数字和符号。"],
+    ["全角", "ｐａｓｓｗｏｒｄ１２３４", "密码只能用英文字母、数字和符号。"],
+    ["emoji", "password1234😀", "密码只能用英文字母、数字和符号。"],
+    ["NUL", "password1234\0", "密码只能用英文字母、数字和符号。"],
+    ["制表符", "password1234\t", "密码只能用英文字母、数字和符号。"],
+    ["换行", "password1234\n", "密码只能用英文字母、数字和符号。"],
+    ["回车", "password1234\r", "密码只能用英文字母、数字和符号。"],
+    ["ASCII 下界之前", "password1234\x1f", "密码只能用英文字母、数字和符号。"],
+    ["DEL", "password1234\x7f", "密码只能用英文字母、数字和符号。"],
+    ["ASCII 之后", "password1234\x80", "密码只能用英文字母、数字和符号。"],
+    ["不换行空格", "password1234\u00a0", "密码只能用英文字母、数字和符号。"],
+    ["ASCII 下界空格", " ".repeat(12), undefined],
+    ["ASCII 上界波浪线", "~".repeat(12), undefined],
+    ["首尾空格保留", " password12 ", undefined],
+  ])("%s", (_name, password, message) => {
+    expect(validateNewPassword(password, password)).toEqual(message === undefined ? {} : { password: message });
+  });
+
+  it("确认输入严格相等，不去空格；密码错误优先于确认错误", () => {
+    expect(validateNewPassword(" password12 ", "password12")).toEqual({ confirmation: "两次输入的密码不一致。" });
+    expect(validateNewPassword("abcdefghijkl", "")).toEqual({ confirmation: "两次输入的密码不一致。" });
+    expect(validateNewPassword("short", "different")).toEqual({ password: "密码至少要 12 位。" });
+    expect(validateNewPassword("密".repeat(73), "different")).toEqual({ password: "密码只能用英文字母、数字和符号。" });
+  });
+});
+
+describe("validatePasswordChange", () => {
+  const next = { password: "abcdefghijkl", confirmation: "abcdefghijkl" };
+
+  it("空当前密码需要提示，并保留新密码与确认错误", () => {
+    expect(validatePasswordChange({ current: "", ...next })).toEqual({ current: "请输入当前密码。" });
+    expect(validatePasswordChange({ current: "", password: "short", confirmation: "other" })).toEqual({
+      current: "请输入当前密码。", password: "密码至少要 12 位。",
+    });
+    expect(validatePasswordChange({ current: "", ...next, confirmation: "different" })).toEqual({
+      current: "请输入当前密码。", confirmation: "两次输入的密码不一致。",
+    });
+  });
+
+  it.each(["x", "旧密码", " ", "a".repeat(73)])("当前密码 %s 只校验非空，旧账号仍能改密码", (current) => {
+    expect(validatePasswordChange({ current, ...next })).toEqual({});
+  });
+
+  it.each(["", "a".repeat(11), "a".repeat(12), "a".repeat(72), "a".repeat(73), "password1234密", "password1234\t"])("新密码 %j 复用同一规则", (password) => {
+    expect(validatePasswordChange({ current: "old", password, confirmation: password })).toEqual(validateNewPassword(password, password));
+  });
+
+  it("允许新旧密码相同，也可以只退出其他设备", () => {
+    expect(validatePasswordChange({ current: next.password, ...next })).toEqual({});
   });
 });

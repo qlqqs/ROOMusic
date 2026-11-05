@@ -135,7 +135,10 @@ export function respondToArtists(data: ArtistData, method: string, url: URL, bod
   if (path === "/api/v1/artist-candidates" && method === "GET") {
     // ignored 只接受单个 true / false；已忽略的只保留被忽略的名字对，按最近忽略的在前（集合保留插入顺序，恢复再忽略会排到最后）。
     const filter = query.getAll("ignored");
-    if (filter.length > 1 || (filter.length === 1 && filter[0] !== "true" && filter[0] !== "false")) return artistError("invalid_filter", 400);
+    if (filter.length > 1 || (filter.length === 1 && filter[0] !== "true" && filter[0] !== "false")) {
+      const { status, body } = loadApiSample("artists/errors/invalid-candidate-filter");
+      return { status, body };
+    }
     const ignoredView = filter[0] === "true";
     const order = [...data.ignored];
     const ignoredAt = (item: ArtistCandidateDTO) => Math.max(...item.key_pairs.map((pair) => order.indexOf(pairKey(pair.left_key_id, pair.right_key_id))));

@@ -318,10 +318,10 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
         const account = mock.session === null ? undefined : mock.accounts.get(mock.session);
         if (account === undefined) return sample("errors/unauthorized");
         const { current_password: current, new_password: next } = body as { current_password: string; new_password: string };
-        if (!/^[\x20-\x7E]{12,72}$/.test(next)) return json({ error: { code: "invalid_input", message: "新密码需要 12 到 72 位英文字母、数字或符号" }, request_id: "sample-request" }, 400);
-        if (account.password !== current) return json({ error: { code: "current_password_incorrect", message: "当前密码不正确" }, request_id: "sample-request" }, 403);
+        if (!/^[\x20-\x7E]{12,72}$/.test(next)) return sample("errors/invalid-input-password");
+        if (account.password !== current) return sample("errors/current-password-incorrect");
         account.password = next;
-        return json({ password_changed: true });
+        return sample("auth/password-changed");
       }
       case "GET /api/v1/search":
       case "GET /api/v1/search/suggestions":
@@ -513,12 +513,12 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
       return guarded(method, path, true, () => {
         const target = mock.users.find((user) => user.id === idIn(path, "users"));
         if (target === undefined) return sample("errors/not-found-user");
-        if (target.username === mock.session) return json({ error: { code: "self_password_reset", message: "修改自己的密码需要提供当前密码" }, request_id: "sample-request" }, 403);
+        if (target.username === mock.session) return sample("errors/self-password-reset");
         const { password } = body as { password: string };
-        if (!/^[\x20-\x7E]{12,72}$/.test(password)) return json({ error: { code: "invalid_input", message: "新密码需要 12 到 72 位英文字母、数字或符号" }, request_id: "sample-request" }, 400);
+        if (!/^[\x20-\x7E]{12,72}$/.test(password)) return sample("errors/invalid-input-password");
         const account = mock.accounts.get(target.username);
         if (account !== undefined) account.password = password;
-        return json({ password_reset: true });
+        return sample("users/password-reset");
       });
     }
 

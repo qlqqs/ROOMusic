@@ -12,7 +12,7 @@ import { decodeFavoriteArtistsPage } from "../features/personal/api/decoders";
 import { decodeArtistResults } from "../features/search/api/decoders";
 import { describe, expect, it } from "vitest";
 import { decodePlaybackFormats, decodeTrackLyrics, decodeTrackPlayback, decodeTrackPreparing } from "../features/player/api/decoders";
-import { decodeLoggedOut, decodeSetupStatus, decodeViewer } from "../features/auth/api/decoders";
+import { decodeLoggedOut, decodePasswordChanged, decodeSetupStatus, decodeViewer } from "../features/auth/api/decoders";
 import {
   decodeRecentlyAdded,
   decodeReleaseGroupAddedPage,
@@ -40,6 +40,7 @@ import {
   decodeMemberDisabledState,
   decodeMemberList,
   decodeSessionsRevoked,
+  decodePasswordReset,
 } from "../features/members/api/decoders";
 import {
   decodeClaimDetail,
@@ -141,6 +142,8 @@ const successContracts: Record<string, Contract> = {
   "favorites/artists-restored": { status: 200, decode: decodeFavoriteArtistsPage },
   "favorites/artists": { status: 200, decode: decodeFavoriteArtistsPage },
   "governance/artist-candidates-after-rescan": { status: 200, decode: decodeArtistCandidatePage },
+  "governance/artist-candidates-ignored": { status: 200, decode: decodeArtistCandidatePage },
+  "governance/artist-candidates-ignored-empty": { status: 200, decode: decodeArtistCandidatePage },
   "governance/artist-candidates-empty": { status: 200, decode: decodeArtistCandidatePage },
   "governance/artist-candidates-new-key-pair": { status: 200, decode: decodeArtistCandidatePage },
   "governance/artist-candidates": { status: 200, decode: decodeArtistCandidatePage },
@@ -271,11 +274,13 @@ const successContracts: Record<string, Contract> = {
   "auth/login": { status: 200, decode: decodeViewer },
   "auth/me-admin": { status: 200, decode: decodeViewer },
   "auth/me-user": { status: 200, decode: decodeViewer },
+  "auth/password-changed": { status: 200, decode: decodePasswordChanged },
   "auth/logout": { status: 200, decode: decodeLoggedOut },
   "users/list": { status: 200, decode: decodeMemberList },
   "users/create": { status: 201, decode: decodeCreatedMember },
   "users/disable": { status: 200, decode: decodeMemberDisabledState },
   "users/enable": { status: 200, decode: decodeMemberDisabledState },
+  "users/password-reset": { status: 200, decode: decodePasswordReset },
   "users/revoke-sessions": { status: 200, decode: decodeSessionsRevoked },
   "library-roots/list-empty": { status: 200, decode: decodeRootList },
   "library-roots/list": { status: 200, decode: decodeRootList },
@@ -441,6 +446,7 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "artists/errors/database-unavailable": { status: 503, code: "database_unavailable" },
   "artists/errors/forbidden": { status: 403, code: "forbidden" },
   "artists/errors/idempotency-conflict": { status: 409, code: "idempotency_conflict" },
+  "artists/errors/invalid-candidate-filter": { status: 400, code: "invalid_filter" },
   "artists/errors/invalid-artist-name": { status: 400, code: "invalid_artist_name" },
   "artists/errors/invalid-id": { status: 400, code: "invalid_id" },
   "artists/errors/invalid-initial": { status: 400, code: "invalid_artist_initial" },
@@ -504,6 +510,9 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "errors/unauthorized": { status: 401, code: "unauthorized" },
   "errors/forbidden": { status: 403, code: "forbidden" },
   "errors/origin-forbidden": { status: 403, code: "origin_forbidden" },
+  "errors/current-password-incorrect": { status: 403, code: "current_password_incorrect" },
+  "errors/self-password-reset": { status: 403, code: "self_password_reset" },
+  "errors/invalid-input-password": { status: 400, code: "invalid_input" },
   "errors/invalid-credentials": { status: 401, code: "invalid_credentials" },
   "errors/setup-closed": { status: 409, code: "setup_closed" },
   "errors/invalid-input": { status: 400, code: "invalid_input" },

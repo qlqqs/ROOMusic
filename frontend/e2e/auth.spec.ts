@@ -1,3 +1,6 @@
+import { changedPassword, passwordDialog } from "./support/account-password";
+import { artistKeyActivate as keyActivate, artistTabTo as keyboardTabTo } from "./support/artists";
+import { expectFocusStaysInDialog } from "./support/keyboard";
 import { expect, test } from "./support/fixtures";
 import { heading } from "./support/locators";
 
@@ -113,8 +116,8 @@ test.describe("权限", () => {
     const mock = await backend.start({ signedInAs: "listener" });
     await page.goto("/library");
     await expect(heading(page, "需要管理员权限")).toBeVisible();
-    // 成员导航包含概览、专辑、我的音乐与正在播放：没有扫描目录与成员这两个管理入口。
-    await expect(page.getByRole("navigation", { name: "主导航" }).getByRole("link")).toHaveText(["概览", "专辑", "我的音乐", "正在播放"]);
+    // 艺人信息就绪时也显示艺人入口；普通成员仍没有扫描目录与成员等管理入口。
+    await expect(page.getByRole("navigation", { name: "主导航" }).getByRole("link")).toHaveText(["概览", "专辑", "艺人", "我的音乐", "正在播放"]);
     expect(mock.callsTo("GET", "/api/v1/library-roots")).toHaveLength(0);
     expect(mock.callsTo("GET", "/api/v1/library-root-operations")).toHaveLength(0);
   });
@@ -134,5 +137,110 @@ test.describe("权限", () => {
     await page.goto("/nowhere");
     await expect(heading(page, "页面不存在")).toBeVisible();
     await expect(page.getByRole("navigation", { name: "主导航" })).toBeVisible();
+  });
+});
+
+test.describe("账户密码：自助修改", () => {
+  test("纯键盘输错当前密码后字段报错，再改对成功且不掉线", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "curator" });
+    await page.goto("/albums?q=Album%200");
+    await expect(heading(page, "专辑")).toBeVisible();
+    const originalURL = page.url();
+    const meReads = mock.callsTo("GET", "/api/v1/auth/me").length;
+    const trigger = page.getByRole("button", { name: "修改密码", exact: true });
+    await keyActivate(page, trigger);
+    const dialog = passwordDialog(page);
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "修改密码", exact: true })).toBeFocused();
+    const current = dialog.getByLabel("当前密码", { exact: true });
+    const next = dialog.getByLabel("新密码", { exact: true });
+    const confirm = dialog.getByLabel("确认新密码", { exact: true });
+    await keyboardTabTo(page, current);
+    await page.keyboard.type("wrong-current-password");
+    await keyboardTabTo(page, next);
+    await page.keyboard.type(changedPassword);
+    await keyboardTabTo(page, confirm);
+    await page.keyboard.type(changedPassword);
+    await keyActivate(page, dialog.getByRole("button", { name: "修改密码", exact: true }));
+    await expect(dialog.getByText("当前密码不对。", { exact: true })).toBeVisible();
+    await expect(current).toHaveAttribute("aria-invalid", "true");
+    await expect(current).toHaveAccessibleDescription("当前密码不对。");
+    await expect(current).toBeFocused();
+    await expect(next).toHaveValue(changedPassword);
+    await expect(confirm).toHaveValue(changedPassword);
+    await expect(page).toHaveURL(originalURL);
+    expect(mock.session).toBe("curator");
+    expect(mock.accounts.get("curator")?.password).toBe("curator-password");
+
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.type("curator-password");
+    await keyActivate(page, dialog.getByRole("button", { name: "修改密码", exact: true }));
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+    await expect(page.getByRole("region", { name: "当前用户" })).toContainText("密码已修改。");
+    await expect(heading(page, "专辑")).toBeVisible();
+    await expect(page).toHaveURL(originalURL);
+    expect(mock.session).toBe("curator");
+    expect(mock.accounts.get("curator")?.password).toBe(changedPassword);
+    expect(mock.callsTo("GET", "/api/v1/auth/me")).toHaveLength(meReads);
+    expect(mock.callsTo("POST", "/api/v1/auth/logout")).toHaveLength(0);
+    const calls = mock.callsTo("POST", "/api/v1/auth/password");
+    expect(calls.map(({ body }) => body)).toEqual([
+      { current_password: "wrong-current-password", new_password: changedPassword },
+      { current_password: "curator-password", new_password: changedPassword },
+    ]);
+    expect(calls.every(({ idempotencyKey }) => idempotencyKey === null)).toBe(true);
+    await expect(page.locator("body")).not.toContainText(changedPassword);
+    await page.reload();
+    await expect(heading(page, "专辑")).toBeVisible();
+    await expect(page.getByRole("region", { name: "当前用户" })).toContainText("curator");
+  });
+
+  for (const invalid of [
+    { name: "缺少当前密码", current: "", password: changedPassword, confirmation: changedPassword, field: "当前密码", error: "请输入当前密码。" },
+    { name: "新密码11位", current: "curator-password", password: "x".repeat(11), confirmation: "x".repeat(11), field: "新密码", error: "密码至少要 12 位。" },
+    { name: "新密码73位", current: "curator-password", password: "x".repeat(73), confirmation: "x".repeat(73), field: "新密码", error: "密码太长了，请短一些。" },
+    { name: "新密码含中文", current: "curator-password", password: "new-password-中文", confirmation: "new-password-中文", field: "新密码", error: "密码只能用英文字母、数字和符号。" },
+    { name: "确认不一致", current: "curator-password", password: changedPassword, confirmation: "different-password", field: "确认新密码", error: "两次输入的密码不一致。" },
+  ]) {
+    test(`${invalid.name}本地拦截，不发改密码请求`, async ({ page, backend }) => {
+      const mock = await backend.start({ signedInAs: "curator" });
+      await page.goto("/");
+      await keyActivate(page, page.getByRole("button", { name: "修改密码", exact: true }));
+      const dialog = passwordDialog(page);
+      await dialog.getByLabel("当前密码", { exact: true }).fill(invalid.current);
+      await dialog.getByLabel("新密码", { exact: true }).fill(invalid.password);
+      await dialog.getByLabel("确认新密码", { exact: true }).fill(invalid.confirmation);
+      await dialog.getByRole("button", { name: "修改密码", exact: true }).click();
+      await expect(dialog.getByText(invalid.error, { exact: true })).toBeVisible();
+      await expect(dialog.getByLabel(invalid.field, { exact: true })).toBeFocused();
+      await expect(dialog.getByLabel(invalid.field, { exact: true })).toHaveAttribute("aria-invalid", "true");
+      expect(mock.callsTo("POST", "/api/v1/auth/password")).toHaveLength(0);
+      expect(mock.accounts.get("curator")?.password).toBe("curator-password");
+    });
+  }
+
+  test("窄屏菜单内纯键盘打开修改密码，Esc仅关密码对话框且菜单保持", async ({ page, backend }) => {
+    await page.setViewportSize({ width: 375, height: 800 });
+    const mock = await backend.start({ signedInAs: "curator" });
+    await page.goto("/");
+    const menuTrigger = page.getByRole("button", { name: "菜单", exact: true });
+    await keyActivate(page, menuTrigger);
+    const drawer = page.getByRole("dialog", { name: "菜单", exact: true });
+    const trigger = drawer.getByRole("button", { name: "修改密码", exact: true });
+    await keyActivate(page, trigger);
+    const dialog = passwordDialog(page);
+    await expect(dialog).toBeVisible();
+    await expectFocusStaysInDialog(page, dialog, 8);
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(drawer).toBeVisible();
+    await expect(drawer).toHaveJSProperty("open", true);
+    await expect(trigger).toBeFocused();
+    expect(mock.callsTo("POST", "/api/v1/auth/password")).toHaveLength(0);
+    await page.keyboard.press("Escape");
+    await expect(drawer).toBeHidden();
+    await expect(menuTrigger).toBeFocused();
+    await expect(heading(page, "概览")).toBeVisible();
   });
 });

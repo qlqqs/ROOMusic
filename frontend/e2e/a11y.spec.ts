@@ -1,3 +1,5 @@
+import AxeBuilder from "@axe-core/playwright";
+import { accountAxeScenes, openAccountScene } from "./support/account-password";
 import type { Page } from "@playwright/test";
 import { sampleBody } from "../src/test/api-samples";
 import { albumGroups } from "../src/test/catalog-data";
@@ -457,4 +459,20 @@ test.describe("axe 扫描（手机 375px）", () => {
     await expectNoSeriousViolations(page, "窄屏菜单");
     await expectMinimumFontSize(page, "窄屏菜单");
   });
+});
+
+test.describe("账户密码：axe全部规则无违规", () => {
+  for (const width of [375, 1280]) {
+    for (const scene of accountAxeScenes) {
+      test(`${scene} @${width}px`, async ({ page, backend }) => {
+        await page.setViewportSize({ width, height: 900 });
+        const mock = await backend.start({ signedInAs: "curator" });
+        await openAccountScene(page, mock, scene);
+        await page.evaluate(() => document.fonts.ready);
+        const { violations } = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+        expect(violations.map(({ id, impact, nodes }) => ({ id, impact, targets: nodes.map(({ target }) => target) })), `${scene} @${width}px：axe全部违规为空`).toEqual([]);
+        await expectMinimumFontSize(page, `${scene} @${width}px`);
+      });
+    }
+  }
 });

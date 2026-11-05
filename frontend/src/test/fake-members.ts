@@ -111,16 +111,16 @@ export function installMembersApi(api: FakeApi, session: FakeSession, overrides:
       if (malformedId(request.path)) return sampleResponse("errors/invalid-id-user");
       const id = idOf(request.path).toLowerCase();
       if (session.current !== null && session.accounts[session.current]?.id.toLowerCase() === id) {
-        return jsonResponse(403, { error: { code: "self_password_reset", message: "修改自己的密码需要提供当前密码" }, request_id: "fake-request" });
+        return sampleResponse("errors/self-password-reset");
       }
       const { password } = request.body as { password: string };
-      if (!validPassword(password)) return jsonResponse(400, { error: { code: "invalid_input", message: "新密码需要 12 到 72 位英文字母、数字或符号" }, request_id: "fake-request" });
+      if (!validPassword(password)) return sampleResponse("errors/invalid-input-password");
       const target = members.users.find((user) => user.id === id);
       if (target === undefined) return sampleResponse("errors/not-found-user");
       const account = session.accounts[target.username];
       if (account !== undefined) account.password = password;
       revokeSessionsOf(target);
-      return jsonResponse(200, { password_reset: true });
+      return sampleResponse("users/password-reset");
     }),
   );
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { decode as d } from "../../../shared/api";
 import { sampleBody } from "../../../test/api-samples";
 import { withValue, without } from "../../../test/mutate";
-import { decodeCreatedMember, decodeMemberDisabledState, decodeMemberList, decodeSessionsRevoked } from "./decoders";
+import { decodePasswordReset, decodeCreatedMember, decodeMemberDisabledState, decodeMemberList, decodeSessionsRevoked } from "./decoders";
 
 describe("decodeMemberList", () => {
   const list = sampleBody("users/list");
@@ -64,5 +64,28 @@ describe("decodeMemberDisabledState 与 decodeSessionsRevoked", () => {
   it("撤销会话只接受 revoked 为 true", () => {
     expect(decodeSessionsRevoked(sampleBody("users/revoke-sessions"))).toEqual({ revoked: true });
     expect(() => decodeSessionsRevoked({ revoked: false })).toThrow(d.DecodeError);
+  });
+});
+
+
+describe("decodePasswordReset", () => {
+  const success = sampleBody("users/password-reset");
+
+  it("真实 handler 样本往返不丢字段", () => {
+    expect(decodePasswordReset(success)).toEqual(success);
+    expect(decodePasswordReset(success)).toEqual({ password_reset: true });
+  });
+
+  it.each([
+    ["缺字段", without(success, ["password_reset"])],
+    ["false", withValue(success, ["password_reset"], false)],
+    ["字符串", withValue(success, ["password_reset"], "true")],
+    ["数字", withValue(success, ["password_reset"], 1)],
+    ["字段 null", withValue(success, ["password_reset"], null)],
+    ["数组", []],
+    ["null", null],
+    ["另一种密码响应", sampleBody("auth/password-changed")],
+  ])("拒绝：%s", (_name, input) => {
+    expect(() => decodePasswordReset(input)).toThrow(d.DecodeError);
   });
 });

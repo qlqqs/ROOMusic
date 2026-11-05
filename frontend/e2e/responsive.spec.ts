@@ -1,3 +1,4 @@
+import { accountLayoutScenes, openAccountScene } from "./support/account-password";
 import type { Page } from "@playwright/test";
 import { sampleBody } from "../src/test/api-samples";
 import { albumGroups } from "../src/test/catalog-data";
@@ -294,4 +295,34 @@ test.describe("窗口先宽后窄", () => {
       await expectNoHorizontalOverflow(page, `先宽后窄 @${width}px`);
     }
   });
+});
+
+test.describe("账户密码：五宽布局", () => {
+  for (const scene of accountLayoutScenes) {
+    for (const width of widths) {
+      test(`${scene} @${width}px`, async ({ page, backend }, testInfo) => {
+        await page.setViewportSize({ width, height: 900 });
+        const mock = await backend.start({ signedInAs: "curator" });
+        await openAccountScene(page, mock, scene);
+        await page.evaluate(() => document.fonts.ready);
+        const label = `${scene} @${width}px`;
+        await expectNoHorizontalOverflow(page, label);
+        await expectNoDocumentScroll(page, label);
+        await expectMinimumFontSize(page, label);
+        // 页面度量看不到 top-layer 对话框内部的溢出，两层模态各自检查。
+        for (const dialog of await page.locator("dialog[open]").all()) {
+          expect(await dialog.evaluate((node) => node.scrollWidth - node.clientWidth), `${label}：对话框内部无横向滚动`).toBeLessThanOrEqual(0);
+          const bounds = await dialog.boundingBox();
+          expect(bounds, `${label}：对话框有可见边界`).not.toBeNull();
+          expect(bounds?.x ?? -1).toBeGreaterThanOrEqual(0);
+          expect((bounds?.x ?? 0) + (bounds?.width ?? 0)).toBeLessThanOrEqual(width);
+        }
+        if (width === 375 || width === 1440) {
+          const path = testInfo.outputPath(`${scene}-${width}.png`);
+          await page.screenshot({ path, fullPage: true });
+          await testInfo.attach(`${scene}-${width}`, { path, contentType: "image/png" });
+        }
+      });
+    }
+  }
 });

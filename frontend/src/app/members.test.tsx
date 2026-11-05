@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { deferred } from "../test/deferred";
@@ -466,5 +466,170 @@ describe("概览里的入口", () => {
     await heading("概览");
     expect(screen.queryByRole("link", { name: "管理成员" })).toBeNull();
     expect(screen.queryByRole("heading", { level: 2, name: "成员" })).toBeNull();
+  });
+});
+
+const resetPasswordPath = /^\/api\/v1\/users\/[^/]+\/password$/;
+
+async function openReset(username = "listener", options: Parameters<typeof setup>[0] = {}) {
+  const context = await openMembers(options);
+  await userEvent.click(within(rowOf(username)).getByRole("button", { name: `重置成员 ${username} 的密码` }));
+  const element = await screen.findByRole("dialog", { name: `重置“${username}”的密码` });
+  return { ...context, element, dialog: within(element) };
+}
+
+type ResetContext = Awaited<ReturnType<typeof openReset>>;
+
+async function fillReset(context: ResetContext, next = password, confirmation = next) {
+  for (const [label, value] of [["新密码", next], ["确认新密码", confirmation]] as const) {
+    const input = context.dialog.getByLabelText(label);
+    await userEvent.clear(input);
+    if (value) await userEvent.type(input, value);
+  }
+}
+
+const submitReset = (context: ResetContext) => userEvent.click(context.dialog.getByRole("button", { name: "重置密码" }));
+
+function resetFieldError(context: ResetContext, label: string, message: string) {
+  const input = context.dialog.getByLabelText(label);
+  expect(input.getAttribute("aria-invalid")).toBe("true");
+  expect(input.getAttribute("aria-describedby")?.split(" ").map((id) => document.getElementById(id)?.textContent).join(" ")).toContain(message);
+  expect(document.activeElement).toBe(input);
+}
+
+describe("V2/V5：管理员重置成员密码", () => {
+  it("自己按 ID 不提供重置入口，启用和停用的其他成员都有入口", async () => {
+    await openMembers();
+    expect(within(rowOf("curator")).queryByRole("button", { name: /重置/ })).toBeNull();
+    for (const username of ["listener", "archivist"]) {
+      expect(within(rowOf(username)).getByRole("button", { name: `重置成员 ${username} 的密码` })).toBeTruthy();
+    }
+  });
+
+  it("用户名相同但 ID 对上 listener 时，仅 listener 那行不提供重置", async () => {
+    const { session, members } = setup();
+    const account = session.accounts.curator;
+    if (account === undefined) throw new Error("缺少管理员账号");
+    account.id = memberId(members, "listener");
+    renderApp({ path: "/members" });
+    await screen.findByRole("rowheader", { name: /^listener/ });
+    expect(within(rowOf("listener")).queryByRole("button", { name: /重置/ })).toBeNull();
+    expect(within(rowOf("curator")).getByRole("button", { name: "重置成员 curator 的密码" })).toBeTruthy();
+  });
+
+  it("启用成员的确认说明提示用新密码重新登录", async () => {
+    const context = await openReset();
+    expect(context.dialog.getByText("对方需要用新密码重新登录。")).toBeTruthy();
+  });
+
+  it("带输入框的重置密码对话框初始焦点在标题", async () => {
+    const context = await openReset();
+    expect(document.activeElement).toBe(context.dialog.getByRole("heading", { level: 2, name: "重置“listener”的密码" }));
+  });
+
+  it.each(["listener", "archivist"])("重置 %s 只提交密码、不带幂等键，刷新列表且不改变停用状态", async (username) => {
+    const context = await openReset(username);
+    const id = memberId(context.members, username);
+    const disabled = context.members.users.find((member) => member.id === id)?.disabled;
+    const generation = context.runtime.session.currentGeneration();
+    const reads = context.api.requestsTo("GET", usersPath).length;
+    // 为停用成员显式登记可核对的旧凭据，重置后仍不得更改 disabled。
+    context.session.accounts[username] = { id, password: "old-member-password", role: "user" };
+    if (disabled) expect(context.dialog.getByText("对方仍是停用状态，重新启用后才能登录。")).toBeTruthy();
+    await fillReset(context);
+    await submitReset(context);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(context.api.requestsTo("GET", usersPath).length).toBeGreaterThan(reads);
+    expect(context.api.requestsTo("POST", resetPasswordPath)).toHaveLength(1);
+    const request = context.api.requestsTo("POST", resetPasswordPath)[0];
+    expect(request?.path).toBe(`${usersPath}/${id}/password`);
+    expect(request?.body).toEqual({ password });
+    expect(request?.headers.get("Idempotency-Key")).toBeNull();
+    expect(context.session.accounts[username]?.password).toBe(password);
+    expect(context.members.users.find((member) => member.id === id)?.disabled).toBe(disabled);
+    expect(context.runtime.session.currentGeneration()).toBe(generation);
+    expect(context.session.current).toBe("curator");
+    expect(document.body.textContent).not.toContain(password);
+    expect(screen.getByText(`已重置“${username}”的密码。`)).toBeTruthy();
+  });
+
+  it("本地校验覆盖长度、字符与确认，错误关联字段并聚焦，不发送请求", async () => {
+    const context = await openReset();
+    await submitReset(context);
+    resetFieldError(context, "新密码", "密码至少要 12 位。");
+    for (const [value, message] of [["a".repeat(11), "密码至少要 12 位。"], ["a".repeat(73), "密码太长了，请短一些。"], ["password1234密", "密码只能用英文字母、数字和符号。"]] as const) {
+      await fillReset(context, value);
+      await submitReset(context);
+      resetFieldError(context, "新密码", message);
+    }
+    await fillReset(context, password, "different-password");
+    await submitReset(context);
+    resetFieldError(context, "确认新密码", "两次输入的密码不一致。");
+    expect(context.api.requestsTo("POST", resetPasswordPath)).toHaveLength(0);
+    for (const label of ["新密码", "确认新密码"]) expect(context.dialog.getByLabelText(label).getAttribute("autocomplete")).toBe("new-password");
+  });
+
+  it("404 关闭对话框并刷新列表，已经消失的成员不再显示", async () => {
+    const context = await openReset();
+    const reads = context.api.requestsTo("GET", usersPath).length;
+    context.members.users = context.members.users.filter((member) => member.username !== "listener");
+    await fillReset(context);
+    await submitReset(context);
+    expect(await screen.findByText("成员已不存在，列表已刷新。")).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(context.api.requestsTo("GET", usersPath).length).toBeGreaterThan(reads);
+    expect(screen.queryByRole("rowheader", { name: /^listener/ })).toBeNull();
+    expect(context.history.location.pathname).toBe("/members");
+    expect(context.api.requestsTo("POST", resetPasswordPath)).toHaveLength(1);
+  });
+
+  it("400 密码规则不提用户名，关闭对话框并刷新列表", async () => {
+    const context = await openReset();
+    const reads = context.api.requestsTo("GET", usersPath).length;
+    context.api.on("POST", resetPasswordPath, () => sampleResponse("errors/invalid-input-password"));
+    await fillReset(context);
+    await submitReset(context);
+    const alert = await screen.findByRole("alert");
+    expect(within(alert).getByText("新密码至少 12 位，只能用英文字母、数字和符号。")).toBeTruthy();
+    expect(within(alert).queryByText(/用户名不能为空/)).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(context.api.requestsTo("GET", usersPath).length).toBeGreaterThan(reads);
+  });
+
+  it.each(["loseRequests", "loseResponses"] as const)("%s 时结果未确认但仍刷新列表，不自动重试、不带幂等键", async (loss) => {
+    const context = await openReset("listener", { members: { [loss]: 1 } });
+    const reads = context.api.requestsTo("GET", usersPath).length;
+    await fillReset(context);
+    await submitReset(context);
+    const alert = await screen.findByRole("alert");
+    expect(within(alert).getByText("结果未确认")).toBeTruthy();
+    expect(within(alert).queryByRole("button", { name: "重试" })).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(context.api.requestsTo("GET", usersPath).length).toBeGreaterThan(reads);
+    const writes = context.api.requestsTo("POST", resetPasswordPath);
+    expect(writes).toHaveLength(1);
+    expect(writes[0]?.headers.get("Idempotency-Key")).toBeNull();
+    expect(context.session.accounts.listener?.password).toBe(loss === "loseResponses" ? password : "listener-password");
+    expect(context.history.location.pathname).toBe("/members");
+  });
+
+  it("提交中不能 Esc 或取消，命令结束后才关闭且不重复发送", async () => {
+    const context = await openReset();
+    const gate = deferred<Response>();
+    context.api.on("POST", resetPasswordPath, () => gate.promise);
+    await fillReset(context);
+    await submitReset(context);
+    expect(context.dialog.getByRole<HTMLButtonElement>("button", { name: "取消" }).disabled).toBe(true);
+    expect(context.dialog.getByRole("button", { name: "正在重置…" }).getAttribute("aria-busy")).toBe("true");
+    const cancel = new Event("cancel", { cancelable: true });
+    fireEvent(context.element, cancel);
+    expect(cancel.defaultPrevented).toBe(true);
+    expect(screen.getByRole("dialog")).toBe(context.element);
+    const form = context.dialog.getByRole("button", { name: "正在重置…" }).closest("form");
+    if (form === null) throw new Error("缺少重置密码表单");
+    fireEvent.submit(form);
+    expect(context.api.requestsTo("POST", resetPasswordPath)).toHaveLength(1);
+    gate.resolve(sampleResponse("users/password-reset"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 });

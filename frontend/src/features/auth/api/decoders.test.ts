@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { decode as d } from "../../../shared/api";
 import { sampleBody } from "../../../test/api-samples";
 import { withValue, without } from "../../../test/mutate";
-import { decodeLoggedOut, decodeSetupStatus, decodeViewer } from "./decoders";
+import { decodePasswordChanged, decodeLoggedOut, decodeSetupStatus, decodeViewer } from "./decoders";
 
 describe("decodeViewer", () => {
   const admin = sampleBody("auth/me-admin");
@@ -45,5 +45,28 @@ describe("decodeLoggedOut", () => {
     expect(decodeLoggedOut(sampleBody("auth/logout"))).toEqual({ logged_out: true });
     expect(() => decodeLoggedOut({ logged_out: false })).toThrow(d.DecodeError);
     expect(() => decodeLoggedOut({})).toThrow(d.DecodeError);
+  });
+});
+
+
+describe("decodePasswordChanged", () => {
+  const success = sampleBody("auth/password-changed");
+
+  it("真实 handler 样本往返不丢字段", () => {
+    expect(decodePasswordChanged(success)).toEqual(success);
+    expect(decodePasswordChanged(success)).toEqual({ password_changed: true });
+  });
+
+  it.each([
+    ["缺字段", without(success, ["password_changed"])],
+    ["false", withValue(success, ["password_changed"], false)],
+    ["字符串", withValue(success, ["password_changed"], "true")],
+    ["数字", withValue(success, ["password_changed"], 1)],
+    ["字段 null", withValue(success, ["password_changed"], null)],
+    ["数组", []],
+    ["null", null],
+    ["另一种密码响应", sampleBody("users/password-reset")],
+  ])("拒绝：%s", (_name, input) => {
+    expect(() => decodePasswordChanged(input)).toThrow(d.DecodeError);
   });
 });
