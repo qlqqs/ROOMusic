@@ -1,5 +1,5 @@
 import { KeyRound } from "lucide-react";
-import { useId, useRef, useState, type FormEvent, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent, type RefObject } from "react";
 import { describeFailure, failureOf, isHttpFailure, isOutcomeUncertain } from "../../../shared/api";
 import { Button, ModalDialog, Notice, TextField } from "../../../shared/ui";
 import { newPasswordRuleMessage, passwordHint, validatePasswordChange, type PasswordChangeErrors } from "../account-rules";
@@ -8,48 +8,25 @@ import { useViewerScope } from "../session/session-context";
 import styles from "./change-password-dialog.module.css";
 
 /**
- * 侧栏身份区的“修改密码”：按钮、对话框与成功提示。成功后对话框关闭，提示留在身份区，当前页面不掉线。
+ * 侧栏身份区的“修改密码”：按钮与对话框。成功的结果显示在对话框里，身份区不放提示（侧栏太窄），当前页面不掉线。
  */
 export function ChangePasswordButton() {
   const { viewer } = useViewerScope();
   const mutation = usePasswordChange();
   const [open, setOpen] = useState(false);
-  const [changed, setChanged] = useState(false);
   return (
     <>
-      {changed ? (
-        <Notice
-          tone="success"
-          action={
-            <Button variant="text" onClick={() => setChanged(false)}>
-              关闭
-            </Button>
-          }
-        >
-          密码已修改。
-        </Notice>
-      ) : null}
       <Button
         variant="text"
         icon={<KeyRound size={16} />}
         onClick={() => {
           mutation.reset();
-          setChanged(false);
           setOpen(true);
         }}
       >
         修改密码
       </Button>
-      <ChangePasswordDialog
-        open={open}
-        username={viewer.username}
-        mutation={mutation}
-        onClose={() => setOpen(false)}
-        onSucceeded={() => {
-          setOpen(false);
-          setChanged(true);
-        }}
-      />
+      <ChangePasswordDialog open={open} username={viewer.username} mutation={mutation} onClose={() => setOpen(false)} />
     </>
   );
 }
@@ -60,17 +37,54 @@ type ChangePasswordDialogProps = {
   username: string;
   mutation: PasswordChangeMutation;
   onClose: () => void;
-  onSucceeded: () => void;
 };
 
-/** 修改密码的对话框：提交中 Esc 与“取消”暂时无效；当前密码不对、新密码不合规显示在字段旁，其余失败留在对话框里。 */
-export function ChangePasswordDialog({ open, username, mutation, onClose, onSucceeded }: ChangePasswordDialogProps) {
+/**
+ * 修改密码的对话框：提交中 Esc 与“取消”暂时无效；当前密码不对、新密码不合规显示在字段旁，其余失败留在对话框里。
+ * 成功后对话框不关，表单换成结果和“完成”，点“完成”或按 Esc 关闭。
+ */
+export function ChangePasswordDialog({ open, username, mutation, onClose }: ChangePasswordDialogProps) {
   const titleId = useId();
   const headingRef = useRef<HTMLHeadingElement>(null);
   return (
     <ModalDialog open={open} titleId={titleId} initialFocus={headingRef} className={styles.dialog} onRequestClose={() => (mutation.pending ? undefined : onClose())}>
-      <ChangePasswordForm titleId={titleId} headingRef={headingRef} username={username} mutation={mutation} onClose={onClose} onSucceeded={onSucceeded} />
+      <ChangePasswordContent titleId={titleId} headingRef={headingRef} username={username} mutation={mutation} onClose={onClose} />
     </ModalDialog>
+  );
+}
+
+type ContentProps = Omit<ChangePasswordDialogProps, "open"> & { titleId: string; headingRef: RefObject<HTMLHeadingElement | null> };
+
+/** 对话框的内容只在打开时挂载：每次打开都从表单开始。 */
+function ChangePasswordContent(props: ContentProps) {
+  const [changed, setChanged] = useState(false);
+  return changed ? <PasswordChanged {...props} /> : <ChangePasswordForm {...props} onSucceeded={() => setChanged(true)} />;
+}
+
+/**
+ * 成功的结果。提交按钮随表单一起卸载，焦点会丢，所以移到“完成”上（唯一的操作，回车即关闭）；
+ * 结果文字经 aria-describedby 关联到“完成”，读屏在焦点到达时一起读出。
+ */
+function PasswordChanged({ titleId, headingRef, onClose }: ContentProps) {
+  const resultId = useId();
+  const doneRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    doneRef.current?.focus();
+  }, []);
+  return (
+    <div className={styles.content}>
+      <h2 id={titleId} ref={headingRef} tabIndex={-1} className={styles.title}>
+        修改密码
+      </h2>
+      <p id={resultId} className={styles.lead}>
+        密码已修改。
+      </p>
+      <div className={styles.actions}>
+        <Button ref={doneRef} variant="primary" aria-describedby={resultId} onClick={onClose}>
+          完成
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -83,7 +97,7 @@ function ChangePasswordForm({
   mutation,
   onClose,
   onSucceeded,
-}: Omit<ChangePasswordDialogProps, "open"> & { titleId: string; headingRef: RefObject<HTMLHeadingElement | null> }) {
+}: ContentProps & { onSucceeded: () => void }) {
   const [current, setCurrent] = useState("");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
