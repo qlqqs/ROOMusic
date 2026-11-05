@@ -10,9 +10,8 @@ import {
   AlbumGridLayout,
   AlbumGridSkeleton,
   ArtistNames,
-  artistMetaText,
+  ArtistMeta,
   artistRoleLabels,
-  artistRolesText,
   Cover,
   trackArtistOf,
   trackArtistRefsOf,
@@ -97,12 +96,12 @@ export function ArtistDetailView({ artistId, search, onRedirect, renderHeaderAct
     );
   }
   const { artist } = data;
-  const description = [artistMetaText(artist), artistRolesText(artist.roles)].filter((part) => part !== "").join(" · ");
+  const hasDescription = artist.album_count > 0 || artist.track_count > 0 || artist.roles.length > 0;
   return (
     <Page
       title={artist.name}
       compactTitle={artist.name.length > 80}
-      {...(description === "" ? {} : { description })}
+      {...(hasDescription ? { description: <ArtistMeta artist={artist} withRoles /> } : {})}
       actions={<div className={styles.headerActions}>{renderHeaderActions(data)}</div>}
     >
       {renderAdminActions === undefined ? null : renderAdminActions(data)}

@@ -92,3 +92,48 @@ export async function openArtistScene(page: Page, data: ArtistSceneData, scene: 
     await expect(dialog.getByRole("button", { name: "拆开", exact: true })).toBeEnabled();
   }
 }
+
+/**
+ * 艺人概况（“1 张专辑 · 2 首曲目 · 专辑艺人、曲目艺人”）里每一段各自占几行：数量（“1 张专辑”）与每个身份名（“曲目艺人”）。
+ * 逐字取位置，一段里的字落在不同的行就是段内换行（例如“曲目艺 / 人”），那一段的行数大于 1。返回 [段文字, 行数]。
+ */
+export async function artistMetaSegmentLines(scope: Locator): Promise<[string, number][]> {
+  return scope.evaluate((root) => {
+    const count = /^[\d,]+ (?:张专辑|首曲目)$/;
+    const role = /^(?:专辑艺人|曲目艺人|作曲|指挥|演奏|制作人)(?:、(?:专辑艺人|曲目艺人|作曲|指挥|演奏|制作人))*$/;
+    /** 文字节点里 [start, end) 这些字落在几行（按每个字的上沿归行）。 */
+    const linesOf = (node: Text, start: number, end: number) => {
+      const tops: number[] = [];
+      for (let i = start; i < end; i += 1) {
+        const range = document.createRange();
+        range.setStart(node, i);
+        range.setEnd(node, i + 1);
+        const rect = range.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) tops.push(rect.top);
+      }
+      tops.sort((a, b) => a - b);
+      let lines = 0;
+      let last = -Infinity;
+      for (const top of tops) {
+        if (top - last > 4) lines += 1;
+        last = top;
+      }
+      return lines;
+    };
+    const result: [string, number][] = [];
+    for (const span of Array.from(root.querySelectorAll("span"))) {
+      const node = span.firstChild;
+      if (span.childNodes.length !== 1 || !(node instanceof Text)) continue;
+      const text = node.data;
+      if (count.test(text)) result.push([text, linesOf(node, 0, text.length)]);
+      else if (role.test(text)) {
+        let offset = 0;
+        for (const label of text.split("、")) {
+          result.push([label, linesOf(node, offset, offset + label.length)]);
+          offset += label.length + 1;
+        }
+      }
+    }
+    return result;
+  });
+}

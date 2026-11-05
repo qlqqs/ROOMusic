@@ -5,6 +5,8 @@ import { expectNoDocumentScroll, expectNoHorizontalOverflow, expectVisibleFocusR
 import { installSearchPlayback, seedSearch } from "./support/search";
 import { mediaState, observeMedia } from "./real/support";
 import { queueSnapshotStep4 } from "./support/search-step4";
+import { artistMetaSegmentLines } from "./support/artists";
+import { seedArtistsE2E } from "./support/artist-seed";
 
 const visibleSearch = (page: Page) => page.locator('input[data-global-search]:visible');
 
@@ -198,3 +200,20 @@ test("选择曲目建议只打开所在专辑，不直接播放", async ({ page,
   expect(mock.callsTo("GET", /\/playback$/)).toHaveLength(0);
   expect(await queueSnapshotStep4(page)).toEqual(queueBefore);
 });
+
+for (const width of [320, 375, 1024, 1440]) {
+  test(`${width}px 搜索结果艺人栏：概况只在“·”“、”处换行`, async ({ page, backend }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const mock = await backend.start({ signedInAs: "listener" });
+    const seed = seedArtistsE2E(mock, { merged: true });
+    await page.goto(`/search?q=${encodeURIComponent(seed.query)}`);
+    const heading = page.getByRole("heading", { name: "艺人", exact: true });
+    await expect(heading).toBeVisible();
+    await expect(page.locator("#main").getByRole("link", { name: seed.artist.name, exact: true }).first()).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    const section = page.getByRole("region", { name: "艺人", exact: true });
+    const segments = await artistMetaSegmentLines(section);
+    expect(segments.length, "艺人栏里应有概况段").toBeGreaterThan(0);
+    expect(segments.filter(([, lines]) => lines !== 1), `${width}px 段内换行`).toEqual([]);
+  });
+}

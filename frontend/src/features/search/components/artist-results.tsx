@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { artistMetaText, artistRolesText } from "../../catalog";
+import { ArtistMeta } from "../../catalog";
 import type { SearchArtistItemDTO } from "../api/decoders";
 import { matchNote } from "../match-note";
 import styles from "./artist-results.module.css";
@@ -10,14 +10,13 @@ export function ArtistResults({ items }: { items: readonly SearchArtistItemDTO[]
     <ul className={styles.list}>
       {items.map((item) => {
         const { artist } = item;
-        const meta = [artistMetaText(artist), artistRolesText(artist.roles)].filter((part) => part !== "").join(" · ");
         const note = matchNote(item.match, [artist.name]);
         return (
           <li key={artist.id} className={styles.item}>
             <Link to="/artists/$artistId" params={{ artistId: artist.id }} className={styles.name}>
               {artist.name}
             </Link>
-            {meta === "" ? null : <span className={styles.meta}>{meta}</span>}
+            <ArtistMeta artist={artist} withRoles className={styles.meta} />
             {note === null ? null : <span className={styles.note}>{note}</span>}
           </li>
         );

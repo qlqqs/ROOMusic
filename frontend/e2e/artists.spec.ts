@@ -1,5 +1,5 @@
 import { expect, test } from "./support/fixtures";
-import { artistKeyActivate, artistScenes, artistTabTo, artistWidths, expectArtistLayout, openArtistScene } from "./support/artists";
+import { artistKeyActivate, artistMetaSegmentLines, artistScenes, artistTabTo, artistWidths, expectArtistLayout, openArtistScene } from "./support/artists";
 import { seedArtistsE2E } from "./support/artist-seed";
 
 for (const width of artistWidths) {
@@ -125,3 +125,28 @@ test("艺人稳定性：收藏、别名搜索打开同一艺人，取消收藏�
   expect(mock.callsTo("PUT", `/api/v1/me/favorites/artists/${seed.artist.id}`)).toHaveLength(1);
   expect(mock.callsTo("DELETE", `/api/v1/me/favorites/artists/${seed.artist.id}`)).toHaveLength(1);
 });
+
+for (const width of artistWidths) {
+  test(`${width}px 艺人列表布局：概况只在“·”“、”处换行，首字母导航最后一行不只剩一项${width === 1440 ? "，1440 下一行排完" : ""}`, async ({ page, backend }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const mock = await backend.start({ signedInAs: "listener" });
+    const seed = seedArtistsE2E(mock);
+    await page.goto("/artists");
+    await expect(page.getByRole("heading", { name: "全部艺人", exact: true })).toBeVisible();
+    await expect(page.locator("#main").getByRole("link", { name: seed.artist.name, exact: true })).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+
+    // 概况：每一段（数量、身份名）都只占一行，不会出现“曲目艺 / 人”。
+    const segments = await artistMetaSegmentLines(page.locator("#main"));
+    expect(segments.length, "列表里应有概况段").toBeGreaterThan(0);
+    expect(segments.filter(([, lines]) => lines !== 1), `${width}px 段内换行`).toEqual([]);
+
+    // 首字母导航：按每项的上沿分行；1440 下只有一行，其他宽度最后一行至少两项。
+    const tops = await page.getByRole("navigation", { name: "首字母" }).getByRole("link").evaluateAll((links) => links.map((link) => Math.round(link.getBoundingClientRect().top)));
+    expect(tops).toHaveLength(29);
+    const rows = [...new Set(tops)].sort((a, b) => a - b);
+    const lastRow = tops.filter((top) => top === rows.at(-1)).length;
+    if (width === 1440) expect(rows, "1440 下首字母导航一行排完").toHaveLength(1);
+    else expect(lastRow, `${width}px 首字母导航最后一行只剩一项`).toBeGreaterThan(1);
+  });
+}

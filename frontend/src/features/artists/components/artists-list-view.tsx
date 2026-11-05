@@ -4,7 +4,7 @@ import { formatCount } from "../../../shared/lib/number";
 import { pageCountOf } from "../../../shared/lib/pagination";
 import { useClampedPage } from "../../../shared/lib/use-clamped-page";
 import { Pagination, Panel, QueryContent, Skeleton } from "../../../shared/ui";
-import { artistInitialGroups, artistMetaText, artistRoleLabels, artistRolesText, initialGroupLabel, type ArtistInitialGroup, type ArtistSummaryDTO } from "../../catalog";
+import { artistInitialGroups, ArtistMeta, artistRoleLabels, initialGroupLabel, type ArtistInitialGroup, type ArtistSummaryDTO } from "../../catalog";
 import type { ArtistsSearch } from "../artist-search";
 import { ARTISTS_PAGE_SIZE, isArtistCatalogPreparing, useArtistsPage } from "../hooks/use-artists";
 import { ArtistFilters } from "./artist-filters";
@@ -42,14 +42,12 @@ function InitialNav({ search }: { search: ArtistsSearch }) {
 }
 
 function ArtistItem({ artist }: { artist: ArtistSummaryDTO }) {
-  const meta = artistMetaText(artist);
-  const roles = artistRolesText(artist.roles);
   return (
     <li className={styles.item}>
       <Link to="/artists/$artistId" params={{ artistId: artist.id }} className={styles.name}>
         {artist.name}
       </Link>
-      {meta === "" && roles === "" ? null : <span className={styles.meta}>{[meta, roles].filter((part) => part !== "").join(" · ")}</span>}
+      <ArtistMeta artist={artist} withRoles className={styles.meta} />
     </li>
   );
 }

@@ -13,6 +13,7 @@ export { releaseSummaryDecoder } from "./api/decoders";
 export { albumArtistRefsOf, MAX_TRACK_SUMMARY_BATCH, trackArtistOf, trackArtistRefsOf, trackSummaryDecoder, trackTitleOf, type TrackSummaryDTO } from "./api/track-summary";
 export { artistFilterRoles, artistInitialGroups, artistMetaText, artistRoleLabels, artistRoles, artistRolesText, artistSummaryDecoder, initialGroupLabel, type ArtistInitialGroup, type ArtistRole, type ArtistSummaryDTO } from "./api/artist-summary";
 export { ArtistLinksScope, ArtistNames, useArtistLinksReady } from "./components/artist-names";
+export { ArtistMeta } from "./components/artist-meta";
 export { AlbumGridLayout, AlbumGridSkeleton } from "./components/album-grid";
 export type { ArtistRefDTO, ArtworkDTO, ReleaseDetailDTO, ReleaseGroupSummaryDTO, ReleaseMediumDTO, ReleaseSummaryDTO, ReleaseTrackDTO } from "./api/decoders";
 export type { CatalogStateDTO } from "./api/decoders";
