@@ -1,0 +1,109 @@
+{
+  "utc": "2026-11-05T16:57:16.019036+00:00",
+  "revision": "06450d0ce2d721e01e412f74ea3927b8d256ffe1",
+  "services": {
+    "app": {
+      "name": "/roomusic-prod-app-1",
+      "image": "roomusic-prod-app:06450d0ce2d7",
+      "project": "roomusic-prod",
+      "status": "running",
+      "health": "healthy",
+      "revision": "06450d0ce2d721e01e412f74ea3927b8d256ffe1",
+      "restart": "unless-stopped",
+      "ports": {
+        "8080/tcp": [
+          {
+            "HostIp": "0.0.0.0",
+            "HostPort": "8090"
+          }
+        ]
+      },
+      "mounts": [
+        {
+          "Type": "volume",
+          "Name": "roomusic-prod_app-data",
+          "Source": "/var/lib/docker/volumes/roomusic-prod_app-data/_data",
+          "Destination": "/data",
+          "Driver": "local",
+          "Mode": "rw",
+          "RW": true,
+          "Propagation": ""
+        },
+        {
+          "Type": "bind",
+          "Source": "/home/qlqq/workspace/ROOMusic/music",
+          "Destination": "/music",
+          "Mode": "",
+          "RW": false,
+          "Propagation": "rprivate"
+        }
+      ]
+    },
+    "postgres": {
+      "name": "/roomusic-prod-postgres-1",
+      "image": "postgres:18.1-alpine3.23@sha256:aa6eb304ddb6dd26df23d05db4e5cb05af8951cda3e0dc57731b771e0ef4ab29",
+      "project": "roomusic-prod",
+      "status": "running",
+      "health": "healthy",
+      "revision": "",
+      "restart": "unless-stopped",
+      "ports": {
+        "5432/tcp": null
+      },
+      "mounts": [
+        {
+          "Type": "volume",
+          "Name": "roomusic-prod_postgres-data",
+          "Source": "/var/lib/docker/volumes/roomusic-prod_postgres-data/_data",
+          "Destination": "/var/lib/postgresql",
+          "Driver": "local",
+          "Mode": "rw",
+          "RW": true,
+          "Propagation": ""
+        }
+      ]
+    },
+    "backup": {
+      "name": "/roomusic-prod-backup-1",
+      "image": "roomusic-prod-tools:06450d0ce2d7",
+      "project": "roomusic-prod",
+      "status": "running",
+      "health": "healthy",
+      "revision": "06450d0ce2d721e01e412f74ea3927b8d256ffe1",
+      "restart": "unless-stopped",
+      "ports": {
+        "5432/tcp": null
+      },
+      "mounts": [
+        {
+          "Type": "bind",
+          "Source": "/home/qlqq/roomusic-backups",
+          "Destination": "/backups",
+          "Mode": "",
+          "RW": true,
+          "Propagation": "rprivate"
+        },
+        {
+          "Type": "volume",
+          "Name": "77766f5059666fd22367e47d2813af4c273b5a406b6cf708cc067d607f2a8189",
+          "Source": "/var/lib/docker/volumes/77766f5059666fd22367e47d2813af4c273b5a406b6cf708cc067d607f2a8189/_data",
+          "Destination": "/var/lib/postgresql",
+          "Driver": "local",
+          "Mode": "",
+          "RW": true,
+          "Propagation": ""
+        }
+      ]
+    }
+  },
+  "origin_mode": "same-host",
+  "subnet": "10.203.50.0/24",
+  "backups": [
+    {
+      "file": "roomusic-20261106-005546-manual.dump",
+      "bytes": 839,
+      "mode": "600",
+      "uid": 1000
+    }
+  ]
+}

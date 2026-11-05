@@ -1,0 +1,8 @@
+{
+  "status": 200,
+  "setup_required": true,
+  "heading": "创建管理员",
+  "writes_sent": 0,
+  "blocked_writes": [],
+  "screenshot": "launch/setup-uninitialized.png"
+}

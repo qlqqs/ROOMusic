@@ -1,0 +1,10 @@
+{
+  "utc": "2026-11-05T16:54:35.769774+00:00",
+  "state": "running 2026-10-26T03:13:45.497579973Z",
+  "volume_created": "2026-09-01T09:54:51Z",
+  "counts": {
+    "schema_max_version": "12",
+    "users": "1",
+    "releases": "68"
+  }
+}

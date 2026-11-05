@@ -1,0 +1,60 @@
+{
+  "utc": "2026-11-05T16:58:28.413785+00:00",
+  "login_requests_sent": 2,
+  "initialization_still_required": true,
+  "responses": [
+    {
+      "case": "a",
+      "origin": "http://192.168.50.206:8090",
+      "host": "192.168.50.206:8090",
+      "status": 401,
+      "code": "invalid_credentials",
+      "request_id": "launch-a-ee19bbb1528a45f7a42960d8aa5ddf66"
+    },
+    {
+      "case": "b",
+      "origin": "https://music.qlqqs.com:8888",
+      "host": "192.168.50.206:8090",
+      "status": 403,
+      "code": "origin_forbidden",
+      "request_id": "launch-b-3aa8247d00df4f7caee3684bc574d4f5"
+    }
+  ],
+  "app_events": [
+    {
+      "time": "2026-11-05T16:58:28.534695174Z",
+      "level": "INFO",
+      "request_id": "launch-a-ee19bbb1528a45f7a42960d8aa5ddf66",
+      "source": "192.168.50.206",
+      "event": "identity.login.failed"
+    },
+    {
+      "time": "2026-11-05T16:58:28.534839115Z",
+      "level": "WARN",
+      "event": "http.request.completed",
+      "request_id": "launch-a-ee19bbb1528a45f7a42960d8aa5ddf66",
+      "method": "POST",
+      "route_template": "POST /api/v1/auth/login",
+      "status": 401
+    },
+    {
+      "time": "2026-11-05T16:58:28.535997723Z",
+      "level": "WARN",
+      "event": "identity.origin.rejected",
+      "request_id": "launch-b-3aa8247d00df4f7caee3684bc574d4f5",
+      "mode": "same-host",
+      "origin": "https://music.qlqqs.com:8888",
+      "host": "192.168.50.206:8090"
+    },
+    {
+      "time": "2026-11-05T16:58:28.536042959Z",
+      "level": "WARN",
+      "event": "http.request.completed",
+      "request_id": "launch-b-3aa8247d00df4f7caee3684bc574d4f5",
+      "method": "POST",
+      "route_template": "POST /api/v1/auth/login",
+      "status": 403
+    }
+  ],
+  "result": "passed"
+}
