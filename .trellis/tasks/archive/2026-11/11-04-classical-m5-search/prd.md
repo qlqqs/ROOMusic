@@ -56,7 +56,7 @@
 
 - S1–S3：规则、繁简表与字段匹配由 catalog 单元与 PostgreSQL 集成测试覆盖；建议、结果页、分页、`/` 聚焦、`?q=` 刷新与播放/收藏/加入歌单由 Vitest 与 `e2e/search.spec.ts` 覆盖。
 - S4：十万轨隔离库（证据在仓外 `~/.local/share/roomusic-evidence/m5-artists/`）。多字符 p95：“交响曲 第009”建议 173 ms／首屏 231 ms，“交响曲 第00999号”311／258 ms；五万轨共享艺人“周杰伦/周杰倫”修复后约 560／400 ms（用户裁决 I10 定为 1 s 门槛）。单字“爱/周”建议 259／1045 ms、首屏 177／950 ms，第 100 页 170 ms，均照实记录。回填期间播放与搜索无 503。
-- S5：接口样本与解码器往返、五宽无溢出、axe、键盘由 `src/test/api-contract.test.ts` 与 `e2e/search.spec.ts` 覆盖；真实服务 `e2e/real/search.real.ts` 2 项随 ⑤ 收尾同批通过。
+- S5：接口样本与解码器往返、五宽无溢出、axe、键盘由 `src/test/api-contract.test.ts` 与 `e2e/search.spec.ts` 覆盖；真实服务 `e2e/real/search.real.ts` 2 项随 ⑤ 收尾同批通过。模拟 Playwright `e2e/search.spec.ts` 9/9（320–1440 六宽），axe 无违规，1440/390 纯键盘搜索播放通过；截图 1440/390 的建议与结果共 4 张（`frontend/test-results/m5-search/`，未入库），主会话复核，记录见 [research/step3-tests-report.md](research/step3-tests-report.md)。
 
 测试量按用户 2026-11-05 要求收敛：全量 Vitest（3603 项）与全影响 race（2229 项）各只在定稿前跑过一次，此后的小改动只跑相关测试，未在导出树上重跑全量。
 

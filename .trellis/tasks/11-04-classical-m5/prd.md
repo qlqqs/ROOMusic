@@ -50,6 +50,12 @@ Core 1 之后的第一个阶段：让每个成员有自己的历史、收藏与�
 - 共享数据的写操作（艺人、别名）按 R4：接入 `operations.Run`，有反向操作的不另做撤销。
 - 每个子项收尾跑 Playwright 与真实服务用例；界面改动做截图复核。
 
-## 待决问题
+## 实施结果
 
-无（各子项的问题在子任务里裁决）。
+2026-11-05 六个子项全部完成并归档。① 历史直接在 `main` 上交付；② ③ 经 P 线合入（`a7973f9`，迁移 0021–0022），⑥ 经 F 线合入（`899cba6`，0023–0024），④ ⑤ 经 S 线合入（`4323b55`，0025–0030）。
+
+跨项验收（2026-11-05 对 `main` 只读核对）：
+
+- 个人数据隔离：历史、收藏、艺人收藏与歌单的路由都在 `/api/v1/me/...` 下，用户只取自会话（`backend/internal/personal/httpapi/handlers.go:79-91`、`backend/internal/listening/httpapi/handlers.go`），`listening`、`personal` 两包的 SQL 全部带 `user_id`。两处有意例外：歌单重排的外层 UPDATE 按已按用户限定的 CTE 主键匹配（`personal/playlist_order.go:15-20`）；艺人合并、拆分与后台回填时刷新收藏的解析投影（`personal/artist_resolution.go`），不改用户收藏本身。停用只写 `disabled_at` 并撤销会话（`identity/httpapi/handlers.go:305,333`），不删数据；个人表的 `ON DELETE CASCADE` 只在删除用户行时触发。
+- 共享写入：艺人合并、拆开、改名与忽略候选四个写接口都经 `operations.Run` 记录（`catalog/httpapi/artist_governance.go:145`），别名只随合并、拆开改变归属；四种操作有反向操作，不另做撤销（`governance/artist_describe.go:163-202`）。扫描时的自动整理与启动后的回填不是 HTTP 入口，按设计不进操作记录。
+- 收尾验证：六个子任务的实施结果都记录了模拟 Playwright、真实服务用例与截图复核（search、artists 的通过数与截图记录在核对时补入）。
