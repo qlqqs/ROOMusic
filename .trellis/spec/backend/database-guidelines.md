@@ -245,6 +245,8 @@ These rules implement the transaction and authority requirements in the
 
 0029仅新增`artist_effective_backfill_idx(artist_id,name_id,track_id,release_id)`。依据完整规模同SQL有无索引计划，支持热门身份计票及逐个不同名字遍历；不改旧迁移、Version或ready，不在DDL预填派生。迁移fresh/rerun仍由统一执行器检验。索引磁盘/WAL/写放大及完整批提交耗时必须一起记录；不能因cost下降不再触发JIT就把写事务关闭JIT当等价实现。
 
+0030仅新增有效署名的`(artist_id,track_id) INCLUDE(release_id,role)`与`(artist_id,release_id) INCLUDE(track_id,role)`部分覆盖索引（对应来源非NULL），服务前台热门艺人命中说明的分支定位。不改既有迁移、事实、代次或发布状态；I9已接受回填性能，不为本轮新索引重启回填验收。
+
 ### I8：纯派生回填批的局部异步提交许可
 
 仅单worker回填**应用批**可选择在该`*sql.Tx`内执行`SET LOCAL synchronous_commit = off`；选择前必须逐项审计写集：只含可从既存权威重建的派生投影及其自身进度/完成代次，二者仍原子提交。崩溃恢复可重做未持久化批，不允许投影和进度分开提交。该许可不是全局默认，也不是必须采用。

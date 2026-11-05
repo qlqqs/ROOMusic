@@ -16,10 +16,17 @@ func (p searchPlan) withArtistAliases(query string) string {
  AND n.short_grams @> ARRAY[$3]::text[] AND (n.normalized_value||'') LIKE '%'||$2||'%' ESCAPE '~'
  ), search_values_with_artists AS NOT MATERIALIZED (
  SELECT v.id,v.release_id,v.track_id,v.field,v.role,v.original_value,v.normalized_value,v.short_grams,v.projection_generation,
- (SELECT min(e.artist_id::text)::uuid FROM artist_effective_credits e JOIN artist_names cn ON cn.id=e.name_id
- WHERE (e.track_id=v.track_id OR e.release_id=v.release_id)
+ (SELECT min(credit.artist_id::text)::uuid FROM (
+ SELECT e.artist_id FROM artist_effective_credits e JOIN artist_names cn ON cn.id=e.name_id
+ WHERE e.track_id=v.track_id
  AND e.role=CASE WHEN v.field IN ('release_artist','album_artist','track_artist') THEN v.field ELSE v.role END
- AND cn.spelling=v.original_value HAVING count(DISTINCT e.artist_id)=1) AS artist_id,
+ AND cn.spelling=v.original_value
+ UNION ALL
+ SELECT e.artist_id FROM artist_effective_credits e JOIN artist_names cn ON cn.id=e.name_id
+ WHERE e.release_id=v.release_id
+ AND e.role=CASE WHEN v.field IN ('release_artist','album_artist','track_artist') THEN v.field ELSE v.role END
+ AND cn.spelling=v.original_value
+ ) credit HAVING count(DISTINCT credit.artist_id)=1) AS artist_id,
  NULL::text AS alias FROM catalog_search_values v
  UNION ALL
  SELECT n.id,e.release_id,e.track_id,'artist_alias',e.role,n.original_value,n.normalized_value,n.short_grams,$7::bigint,n.artist_id,n.original_value

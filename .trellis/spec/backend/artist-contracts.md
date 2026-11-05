@@ -39,7 +39,7 @@
 
 串行prepared计划也需取证，不能只用新连接的custom计划证明热门性能。主名按本批身份轨级署名作4097行策略探测：不超过4096沿稀疏关联，超过时先MATERIALIZED非present轨集合避免generic逐署名探测tracks；探测只选择等价SQL，不限制完整计票、别名或输出。4097是符合条件行的消费界限，不是物理扫描上限；密集分支可能读取全tracks过滤非present，成本必须计入CATP，不能称无全库读取。不得用planner/JIT开关强制计划。密集轨票按身份LATERAL完整聚合，避免低可见页时将整批热门署名合并外部排序；入口必须先按数据库uuid类型DISTINCT，不能用文本去重替代旧ANY的集合语义。回归用独立热门身份触发dense，再以同一目标的发行票与轨票竞争证明混合大小写ID不重复乘轨票；仅对纯轨名字比较不足以抓住同比翻倍。扫描显示署名仅在实际变化时按128项批量更新，再经searchindex.RefreshTracks同事务刷新；未变化轨不得推进搜索revision。
 
-`artistgraph.ArtistInputNameCost(raw string) int`提供原始输入的保守名字成本（拆分数量至少1），仅供调度；maintenance不得直接导入metadata或复制拆分规则。发行批在CATP内读当前marker后，按待办UUID连续前缀估计本批输入：起步10轨/64名字，最多50轨/256名字，并与发行数自适应并用；missing轨计入，按当前发行/轨索引入口查询，不依赖未生成effective。已完成项不消耗刷新预算；首个超预算subject仍完整执行，不能饿死或标假完成。估计提前结束必须标不完整，不能用估计代替真实graph/marker；估计或刷新失败整批回滚。profile阶段独立，批间释放gate后与搜索worker共用自适应让出：正的整批实测耗时小于200ms时取十分之一、最低10ms；无有效耗时或至少200ms时保守50ms。耗时含取锁等待和COMMIT，长批/争用因此仍多让出；context可中止等待。日志yield_ms是计划值（yield_status=planned），不是实测等待或CATP持有。该调度不是保证200ms的数学上限，超大完整subject及COMMIT尖峰必须计入整轮分布和最大值归因，按I8统一判定而非单次尖峰中断。
+`artistgraph.ArtistInputNameCost(raw string) int`提供原始输入的保守名字成本（拆分数量至少1），仅供调度；maintenance不得直接导入metadata或复制拆分规则。发行批在CATP内读当前marker后，按待办UUID连续前缀估计本批输入：起步10轨/64名字，最多50轨/256名字，并与发行数自适应并用；missing轨计入，按当前发行/轨索引入口查询，不依赖未生成effective。已完成项不消耗刷新预算；首个超预算subject仍完整执行，不能饿死或标假完成。估计提前结束必须标不完整，不能用估计代替真实graph/marker；估计或刷新失败整批回滚。profile阶段独立，批间释放gate后与搜索worker共用自适应让出：正的整批实测耗时小于200ms时取十分之一、最低10ms；无有效耗时或至少200ms时保守50ms。耗时含取锁等待和COMMIT，长批/争用因此仍多让出；context可中止等待。日志yield_ms是计划值（yield_status=planned），不是实测等待或CATP持有。该调度不是保证200ms的数学上限，超大完整subject及COMMIT尖峰必须计入整轮分布和最大值归因，历史I8按完整分布判定而非单次尖峰中断；用户I9已接受该轮回填结果，不再测量或优化回填。
 
 必需回归：跨256项预取/新名字/全文哈希不一致/回滚；超过256个作用域别名不截断；全missing零票回退、跨角色一票、人工主名/seed/redirect/被M3遮盖的新身份；真实输入估计/连续前缀/超大missing主体完整/零署名续跑/估计SQL失败不提交进度。性能证据必须区分诊断集合预置与空投影生产回填，同SQL有无索引对照、索引大小和写放大不得隐去。
 
@@ -47,7 +47,7 @@
 
 所有GET先鉴权与参数校验。`GET /artists`：q≤200字节，initial=A–Z/kana/#，role七项白名单，sort=name/album_count，分页1/50、最大100。只列有present参与且未重定向的身份。`role=album_artist`匹配发行级release_artist或album_artist任一；`role=release_artist`仍只匹配本身，DTO七项roles词表不变。名字按首字母分组/C规范化键/ID；专辑数排序不分组。首字母采用固定Unicode17 Unihan kMandarin首音表，不扩为拼音搜索。
 
-`ArtistSummary={id,name,initial_group,album_count,track_count,roles,available}`，数字为全角色去重可见group/present轨数，role筛选只筛身份。发行级署名的曲目参与取其全部轨。
+`ArtistSummary={id,name,initial_group,album_count,track_count,roles,available}`，数字为全角色去重可见group/present轨数，role筛选只筛身份。发行级署名的曲目参与取其全部轨。摘要读取先按身份/来源去重，再将发行级展开的present轨与轨级present轨取完整并集，按当前归组计数；七项角色分别做present存在性判断，避免先物化“角色×曲目”再重复去重。不能由去重轨集合丢弃角色，也不缓存可能过期的参与数；详情含missing参与明细仍用原完整参与关系。
 
 - `GET /artists/{id}`：artist/revision/name_source/names/names_pagination/role_counts/redirect_artist_id；首批20名字；旧重定向ID仍200，保留安全摘要，子路由解析canonical；空身份available=false而不是404。
 - `/names`：`{id,key_id,name,is_display_name,origin}` 分页，按key拆分不可只拆繁体写法。
@@ -86,7 +86,7 @@
 
 治理幂等/双方revision/冲突/全事务回滚/不可撤销；重扫前后四意图表与revision快照；按专辑作用域、移动、未来新轨/新版本；候选仅两信号、忽略名字键对长期有效；整理期间503/409且播放旧能力可用；回填中断重启、实时写先后交错与原子发布；ready后M3遮盖的新scan身份仍有空profile/搜索名字/本代marker且不捎带无关身份；合并双方收藏去重/取消/恢复旧ID；真实handler样本；队列10001先全量随机再限10000。
 
-搜索验收规模与门槛严格按S设计§4.5：100000present+10000missing、10000发行/约8000组、至少20000艺人、2艺人/4credit、20%别名、50000轨倾斜。预热5/测30，≥2字符p95≤300ms、单字符≤1000ms；任一未达标必须回报实测，不减规模或阈值。原始证据仓外，不把代码存在等同验收通过。2026-11-05主会话I8修订：联合回填≤36分钟；完整已提交应用批CATP分布p95≤200ms/p99≤500ms，最大值照实记录归因、不作中途停止条件。回填期M3全部成功且p95≤1s、扫描全部成功、播放/搜索不出现503；正式运行完成各项测量再统一判定。旧max≤1s是主会话口径而非用户要求，详见S设计§15.2b末I8。
+搜索规模保留100000present+10000missing、10000发行/约8000组、至少20000艺人、2艺人/4credit、20%别名、50000轨倾斜。2026-11-05用户I9/I10取代历史性能门槛：回填以I8正式运行结果判定达标，不再测量或优化；前台仅“周杰伦”“周杰倫”的建议与三栏首屏各5次预热/30次测量，p95≤1秒。单字、深页及10000首队列等只照实记录。保留同一规模夹具供失败定位和仅热门词复测，不以缩小规模或截断候选提速；原始证据仓外。历史300/1000ms、36分钟、CATP p95/p99及前台回填数字保留历史报告，不再作为本轮门槛。正确性、不跳对象、不提前发布及ready/播放可用合同不变，详见S设计§15.2b I9/I10。
 
 ## 7. 错误与正确
 

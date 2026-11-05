@@ -105,13 +105,7 @@ func (s *Store) loadArtistSummaries(ctx context.Context, ids []string) (map[stri
 	if len(ids) == 0 {
 		return result, nil
 	}
-	rows, err := s.database.QueryContext(ctx, `WITH `+artistParticipationCTE+`, counts AS (
- SELECT artist_id,count(DISTINCT group_id) FILTER (WHERE present) AS albums,
- count(DISTINCT track_id) FILTER (WHERE present) AS tracks FROM artist_participation GROUP BY artist_id
- ) SELECT a.id::text,p.effective_display_name,p.initial_group,COALESCE(c.albums,0),COALESCE(c.tracks,0),
- to_json(ARRAY(SELECT role FROM (SELECT DISTINCT role FROM artist_participation ap WHERE ap.artist_id=a.id AND present) roles ORDER BY `+artistRoleOrder+`))
- FROM artists a JOIN artist_profiles p ON p.artist_id=a.id LEFT JOIN counts c ON c.artist_id=a.id
- WHERE a.id=ANY($1::uuid[])`, ids)
+	rows, err := s.database.QueryContext(ctx, artistSummarySQL, ids)
 	if err != nil {
 		return nil, fmt.Errorf("%w: artist summaries: %w", ErrQuery, err)
 	}

@@ -19,7 +19,7 @@ import (
 func BenchmarkPostgreSQLSearchPlans(b *testing.B) {
 	schema := os.Getenv("ROOMUSIC_SEARCH_PLAN_SCHEMA")
 	output := os.Getenv("ROOMUSIC_SEARCH_PLAN_OUTPUT")
-	if b.N != 1 || !regexp.MustCompile(`^search_scale_[a-z0-9_]+$`).MatchString(schema) || output == "" {
+	if b.N != 1 || !regexp.MustCompile(`^(search_scale_[a-z0-9_]+|i10_search_[a-f0-9]{32})$`).MatchString(schema) || output == "" {
 		b.Fatal("必须指定合成 ROOMUSIC_SEARCH_PLAN_SCHEMA、ROOMUSIC_SEARCH_PLAN_OUTPUT，并使用 -benchtime=1x")
 	}
 	scoped, err := postgrestest.ScopedURL(postgrestest.BaseURL(b), schema)
@@ -35,7 +35,12 @@ func BenchmarkPostgreSQLSearchPlans(b *testing.B) {
 		b.Fatal(err)
 	}
 	queries := []string{"交响曲 第00999号", "周杰伦", "爱"}
-	if raw := os.Getenv("ROOMUSIC_SEARCH_PLAN_QUERIES"); raw != "" {
+	kinds, operations := []string{"albums", "tracks", "releases"}, []string{"count", "page"}
+	exactCountsOnly := os.Getenv("EXACT_COUNTS_ONLY") == "1"
+	if exactCountsOnly {
+		// 定向对比旧精确计数的生产 SQL，不访问旧路由；禁止额外词或分页混入证据。
+		queries, kinds, operations = []string{"周杰伦"}, []string{"albums", "releases"}, []string{"count"}
+	} else if raw := os.Getenv("ROOMUSIC_SEARCH_PLAN_QUERIES"); raw != "" {
 		queries = strings.Split(raw, "|")
 	}
 	type record struct {
@@ -49,8 +54,8 @@ func BenchmarkPostgreSQLSearchPlans(b *testing.B) {
 	}
 	records := []record{}
 	for _, query := range queries {
-		for _, kind := range []string{"albums", "tracks", "releases"} {
-			for _, op := range []string{"count", "page"} {
+		for _, kind := range kinds {
+			for _, op := range operations {
 				ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 				_, err := searchSnapshot(ctx, NewStore(db), func(snapshot *Store, state CatalogState, generation int64) (bool, error) {
 					if state.SearchMode != "normalized" {
@@ -62,7 +67,7 @@ func BenchmarkPostgreSQLSearchPlans(b *testing.B) {
 					if err != nil {
 						return false, err
 					}
-					sqlText, args := p.countSQL(kind != "releases", false), append([]any(nil), p.args...)
+					sqlText, args := p.countSQL(!exactCountsOnly && kind != "releases", false), append([]any(nil), p.args...)
 					if op == "page" {
 						sqlText, args = p.pageSQL(false), append(args, 51, 0)
 					}

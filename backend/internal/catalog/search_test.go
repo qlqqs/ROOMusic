@@ -129,3 +129,51 @@ func TestSearchDenseSubjectPredicateBoundary(t *testing.T) {
 		}
 	}
 }
+
+// 说明查询的两种来源必须分别定位，不能退化为每个来源扫描热门艺人的全部署名。
+func TestSearchDescriptionsUseDisjointSubjectBranches(t *testing.T) {
+	if err := textnorm.LoadEmbedded(); err != nil {
+		t.Fatal(err)
+	}
+	for _, aliases := range []bool{false, true} {
+		for _, kind := range []string{"albums", "tracks", "releases"} {
+			plan := newSearchPlan("周杰伦", kind, "normalized", 1)
+			plan.artistAliases = aliases
+			query := plan.pageSQL(false)
+			for _, forbidden := range []string{"v.track_id=ps.track_id OR", "e.track_id=v.track_id OR"} {
+				if strings.Contains(query, forbidden) {
+					t.Fatalf("%s 仍有跨来源 OR：%s", kind, forbidden)
+				}
+			}
+			table := "catalog_search_values"
+			if aliases {
+				table = "search_values_with_artists"
+			}
+			for _, relation := range []string{"track_id=ps.track_id", "release_id=ps.release_id"} {
+				if !strings.Contains(query, "FROM "+table+" WHERE "+relation) {
+					t.Fatalf("%s 缺少说明来源分支：%s", kind, relation)
+				}
+			}
+			if (kind != "tracks") != strings.Contains(query, "release_id=ps.release_id AND ps.track_id IS NULL") {
+				t.Fatalf("%s 发行说明不能重复扇出到兄弟曲目", kind)
+			}
+		}
+	}
+}
+
+func TestSearchExactCountsStartFromMatchingSources(t *testing.T) {
+	if err := textnorm.LoadEmbedded(); err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range []string{"albums", "tracks", "releases"} {
+		plan := newSearchPlan("周杰伦", kind, "normalized", 1)
+		plan.artistAliases = true
+		query := plan.countSQL(false, kind != "tracks")
+		if strings.Contains(query, "count_probe") || strings.Contains(query, "LIMIT 1001") || strings.Contains(query, "OFFSET 0") {
+			t.Fatalf("%s 精确计数仍沿逐实体密集探测路径：%s", kind, query)
+		}
+		if !strings.Contains(query, "hit_subjects AS MATERIALIZED") {
+			t.Fatalf("%s 缺少完整命中来源边界", kind)
+		}
+	}
+}

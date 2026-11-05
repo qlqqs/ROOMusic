@@ -52,17 +52,25 @@ func (p searchPlan) normalizedPageSQL(attention bool) string {
    SELECT p.entity_id,p.match_rank,t.id,releases.id FROM page p JOIN releases ON ` + relation + `
    JOIN media m ON m.release_id=releases.id JOIN tracks t ON t.medium_id=m.id WHERE t.source_status='present'`
 	}
-	subjectMatch := `(v.track_id=ps.track_id OR v.release_id=ps.release_id)`
+	// 两个来源互斥，分别做参数化读取后合并。不能将 OR 下推到热门身份的全部署名：
+	// 即使有 artist_id 索引，也会对每个页内来源重复过滤该身份的数万条署名。
+	releaseGuard := ""
 	if p.kind != "tracks" {
-		subjectMatch = `(v.track_id=ps.track_id OR (ps.track_id IS NULL AND v.release_id=ps.release_id))`
+		releaseGuard = " AND ps.track_id IS NULL"
 	}
+	columns := "id,track_id,field,role,original_value,normalized_value,projection_generation,short_grams"
+	if p.artistAliases {
+		columns += ",artist_id,alias"
+	}
+	descriptionValues := `SELECT ` + columns + ` FROM catalog_search_values WHERE track_id=ps.track_id
+ UNION ALL
+ SELECT ` + columns + ` FROM catalog_search_values WHERE release_id=ps.release_id` + releaseGuard
 	// 每个已选页的来源先取最佳说明，再对实体取最优；绝不限制匹配候选或可翻页结果。
 	query += `), descriptions AS (
   SELECT DISTINCT ON (ps.entity_id) ps.entity_id,ps.release_id AS matched_release_id,h.*
   FROM page_sources ps JOIN LATERAL (
    SELECT v.track_id,v.field,v.role,v.original_value,v.id AS value_id,` + normalizedSearchRank + ` AS match_rank
-   FROM catalog_search_values v WHERE ` + subjectMatch + `
-   AND ` + p.matchPredicate + ` AND (` + normalizedSearchRank + `)=ps.match_rank
+   FROM (` + descriptionValues + ` OFFSET 0) v WHERE ` + p.matchPredicate + ` AND (` + normalizedSearchRank + `)=ps.match_rank
    ORDER BY match_rank,` + p.fieldPriority() + `,` + searchRoleOrder + `,v.original_value COLLATE "C",v.track_id,v.id LIMIT 1
   ) h ON TRUE
   ORDER BY ps.entity_id,h.match_rank,` + p.fieldPriority() + `,` + searchRoleOrder + `,

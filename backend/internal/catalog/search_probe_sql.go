@@ -119,14 +119,21 @@ func (p searchPlan) denseCountCandidatesSQL(attention bool) string {
 	return query
 }
 
-// normalizedCountSQL 仅在探测确认稀疏时物化完整原始命中（不超过4096行），
+// normalizedCountSQL 的有界计数仅在探测确认稀疏时物化完整原始命中（不超过4096行），
 // 不物化或聚合传播后的实体。计数仍从唯一实体基表做半连接，LIMIT1001先于COUNT。
+// 旧列表的精确计数没有早停机会，直接使用全部原始命中，避免逐实体关联全库。
 // 显式的原始命中边界防止新增关系索引后planner反向逐曲目扫描值表。
 func (p searchPlan) normalizedCountSQL(bounded, attention bool) string {
 	prefix := `WITH count_probe AS MATERIALIZED (` + rawHitProbeSQL(p.matchPredicate) + `),
  hit_subjects AS MATERIALIZED (
  SELECT v.release_id,v.track_id FROM catalog_search_values v
  WHERE (SELECT n FROM count_probe)<=4096 AND ` + p.matchPredicate + `)`
+	if !bounded {
+		// 旧列表必须精确计数，无早停收益；从完整索引命中传播，而非逐个未命中实体
+		// 重复检查它的全部曲目。这里只物化原始来源，仍按唯一实体基表计数。
+		prefix = `WITH hit_subjects AS MATERIALIZED (
+ SELECT v.release_id,v.track_id FROM catalog_search_values v WHERE ` + p.matchPredicate + `)`
+	}
 	var candidates string
 	if p.kind == "tracks" {
 		candidates = `SELECT t.id FROM tracks t JOIN media m ON m.id=t.medium_id
@@ -153,11 +160,12 @@ func (p searchPlan) normalizedCountSQL(bounded, attention bool) string {
 			candidates += ` AND ` + p.attentionSQL(entity)
 		}
 	}
-	broad := p.denseCountCandidatesSQL(attention)
-	if bounded {
-		candidates += ` LIMIT 1001`
-		broad += ` LIMIT 1001`
+	if !bounded {
+		return prefix + ` SELECT COUNT(*) FROM (` + candidates + `) counted`
 	}
+	broad := p.denseCountCandidatesSQL(attention)
+	candidates += ` LIMIT 1001`
+	broad += ` LIMIT 1001`
 	return prefix + ` SELECT COUNT(*) FROM (SELECT * FROM (` + candidates + `) sparse WHERE (SELECT n FROM count_probe)<=4096
  UNION ALL SELECT * FROM (` + broad + `) dense) counted`
 }

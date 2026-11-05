@@ -568,3 +568,81 @@ maintenance真实跑完search：557.505s，120000 subjects、820000 values、零
 - I8代码主要为graph显示署名/搜索批量写、主名密集/稀疏等价路径与uuid级去重、maintenance有界正让出，以及正式harness完整分布/前台指标/最终封口。此次I8无新增迁移，既有0026–0029不变；A接口与样本不变。
 - search/artist/database后端spec、S设计实施修订与ADR0002 decisions已同步；旧max≤1秒已更正为主会话旧口径。最终静态审查见i8-check.md末节，逐条区分检查者与owner实际执行证据。
 - 正式结束后正常down -v；04:24:43 UTC确认项目容器/卷/网络均0，凭据env已删除，证据resource-cleanup.txt。未连接用户库、未触碰前端、未提交、未推送。
+
+## 2026-11-05 I9/I10：定向热门艺人搜索完成
+
+**当前裁决**：I9已接受上一轮回填性能；本轮只为一次原规模夹具运行maintenance到ready，未采集、判定或优化回填。I10只验收“周杰伦”“周杰倫”的建议与三栏首屏p95≤1000ms；其余仅记录。未重造夹具、未跑旧路由时延对照、未跑全量测试或race。
+
+### 修复与计划证据
+
+- **0030**新增`artist_effective_credits(artist_id,track_id) INCLUDE(release_id,role)`及`(artist_id,release_id) INCLUDE(track_id,role)`部分覆盖索引（对应来源非NULL）；命中说明和原值身份归属将track/release OR拆为独立分支。不改变传播、排序、返回结构或候选集合。
+- 旧精确计数从完整命中来源传播后按唯一实体计数，避免逐实体重复关联；新接口bounded计数仍保留1001阈值。旧explain-03的index8/9是**旧路由精确计数**，不是新首屏bounded计数，不能混称首屏2秒。
+- 首轮建议仍超标，同库EXPLAIN确认艺人摘要先按角色展开15万行再去重；改为先去重署名来源，再取完整present曲目并集，按当前归组计数，七角色独立存在性判断。与旧参与关系结果完全一致；不缓存计数、不改详情missing语义。
+
+| 生产SQL/关键节点 | 修复前 | 修复后 |
+|---|---:|---:|
+| 专辑首屏分页/说明 | 21494.420ms；热门artist过滤59999行×3366轮 | 159.971ms；组合索引按artist+track定位，过滤丢弃0 |
+| 建议专辑分页/说明 | 2476.808ms | 46.121ms |
+| 曲目首屏分页/说明 | 956.668ms | 28.503ms |
+| 旧发行精确count | 2014.730ms，Seq Scan releases逐实体重复探测 | 651.655ms，该计划无Seq Scan releases |
+| 旧专辑组精确count | 1322.081ms | 758.703ms；仍有小维表扫描，releases全表读取本身1.496ms，不伪称所有Seq Scan消失 |
+| 摘要同库generic诊断 | 976.411ms；temp读/写4337/4343 blocks | 432.606ms；356/357 blocks；两版均5custom+3generic，结果均5000组/50000轨及同角色 |
+
+历史对照为`scale-i8-20261105T025149Z/explain-03.json`；新分页数值取`i10-search/attempt-02/explain-hot-01-*.json`。精确计数在`exact-counts-01/plans.json`；摘要前后同库证据在`summary-diagnostic-01/`。计划耗时不冒充HTTP p95；原始SQL、参数、SHA和完整BUFFERS均仓外保存。
+
+### 正式定向结果
+
+唯一原规模：100000 present＋10000 missing轨、10000发行、8000组、20000共享参与艺人、4000不同key别名，热门艺人/厂牌各50000 present轨；680000署名事实、820000搜索值。create与reuse核对同一schema、夹具SHA及完整计数。
+
+每个热门词每轮均5预热＋30测量，真实handler包括鉴权、计数、分页、摘要、序列化；三栏并发计整屏墙钟，不含外部网络。
+
+| 查询 | 历史建议/首屏p95 ms | 首轮建议/首屏p95 ms | 最终同库建议/首屏p95 ms | I10 |
+|---|---:|---:|---:|---|
+| 周杰伦 | 3674.033 / 21648.577 | 1071.246 / 931.580 | **557.930 / 400.520** | PASS |
+| 周杰倫 | 3729.150 / 21860.786 | 1095.953 / 928.845 | **564.673 / 395.360** | PASS |
+
+首轮attempt-01完整采集、exit1；未掩盖失败。同库定位、修摘要后仅reuse热门词及其计划，attempt-02 `Complete/Finalized/Pass=true`、exit0；没有第二次seed、maintenance或ANALYZE，没有重复补测。
+
+**补测仅首轮（最终摘要优化之前）**，遵照授权不复测；以下无时延门槛，少量样本不作30次p95保证：
+
+| 项目 | 实测 |
+|---|---|
+| 爱（1预热/3测） | 建议中位数257.099ms、样本p95 259.163ms；三栏168.834/176.905ms |
+| 周（1预热/3测） | 建议中位数1045.098ms、样本p95 1045.226ms；三栏949.855/949.937ms |
+| 交响曲目第100页 | 169.570ms，50项，total=1000/gte且has_more |
+| 按专辑10000首队列（3测） | 1223.554 / 1134.444 / 1114.473ms；10402984字节 |
+| 随机10000首队列（3测） | 2295.669 / 2307.121 / 2355.395ms；10403394字节 |
+| 队列实际在途取消（1次） | 取消后0.137ms返回503，无部分items；释放阻塞锁后连接可用 |
+
+两种队列各返回10000/总50000，missing_total=0、truncated=true。首轮19个计划文件/100条计划记录含计数、分页、补全、短词、深页及队列；最终另收两个热门词8个文件，未跑26词矩阵。
+
+### 实际验证命令与结果
+
+以下命令在`backend`目录运行；DB均由主控唯一隔离项目提供，选择集PG集成0 SKIP：
+
+```text
+go test ./internal/catalog -run '^(TestSearch|TestPostgreSQL(Search|NormalizedSearch|ArtistReadParticipationAndAliases|ArtistListCountsAndSearchDeepPages))' -count=1 -v
+  PASS（20顶层搜索测试）
+go test ./internal/catalog -run '^TestPostgreSQL(ArtistSummaryMatchesParticipation|ArtistReadPreparingAndUnavailable|ArtistReadParticipationAndAliases|ArtistReadCanonicalPersonalAndSafety|ArtistListCountsAndSearchDeepPages|SearchAliasSubjectBranches)$' -count=1 -v
+  PASS（6顶层PG测试）
+go test ./internal/app -run '^TestI10' -count=1 -v
+  PASS（9项pure harness测试）
+go vet ./... && go build ./...
+  PASS（摘要最终修订后再次通过）
+```
+
+**测试范围偏差如实列出**：还执行了1项`go test ./internal/platform/postgres -run '^TestPostgreSQLMigrationFreshAndRerunMetadata$' -count=1 -v`，PASS；它是0030迁移的定点验证，但超出了本轮“查询所在包”的严格测试限制。没有跑全影响race或全量go test。新增dense-aliases测试初跑因测试探针漏绑定`$5`类型失败，补类型后PASS，失败/复验日志均保留，并非删除业务断言。
+
+规模入口为`go test ./internal/app -run '^$' -bench '^BenchmarkPostgreSQLSearchI10$' -benchtime=1x -count=1 -timeout=160m -v`，`ROOMUSIC_I10_TIMEOUT=150m`，MODE依次create、reuse、cleanup；create/reuse命令及退出码分别落仓外`create-command.txt`/`reuse-command.txt`及对应log/exit。精确计数只执行一次`EXACT_COUNTS_ONLY=1 ... -bench '^BenchmarkPostgreSQLSearchPlans$' -run '^$' -benchtime=1x`，没有旧路由HTTP对照。所有局部编译、测试和计划日志见`i10-search/validation/`、`exact-counts-01/`、`summary-diagnostic-01/regression.log`。
+
+### 改动文件与清理
+
+- `backend/migrations/0030_artist_search_subject_indexes.sql`。
+- `backend/internal/catalog/`：`search_aliases.go`、`search_ranked_sql.go`、`search_probe_sql.go`、`search_test.go`、`search_aliases_integration_test.go`、`search_plan_benchmark_test.go`、`artists_personal.go`、`artists_summary_sql.go`、`artists_summary_integration_test.go`。
+- `backend/internal/app/`：`catalog_scale_i10_test.go`、`catalog_scale_i10_lifecycle_test.go`、`catalog_scale_i10_unit_test.go`。
+- `.trellis/spec/backend/`：`search-contracts.md`、`artist-contracts.md`、`database-guidelines.md`；本报告与`verification/i10-check.md`。用户I9/I10所在design改动保留，不由本轮回退。
+
+原始证据根目录（纯文本路径）：
+`/home/qlqq/.local/share/roomusic-evidence/m5-artists/i10-search/`
+
+显式cleanup已删除本轮schema；随后原隔离项目正常down -v。2026-11-05 06:50:17 UTC核验容器/卷/网络均0、凭据env删除，见`resource-cleanup.txt`。未连接用户容器/库，未提交、未推送；工作区并发前端改动不属于本轮，未修改或回退。
