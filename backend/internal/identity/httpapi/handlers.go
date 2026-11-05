@@ -55,9 +55,11 @@ func (handlers *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/login", handlers.login)
 	mux.HandleFunc("POST /api/v1/auth/logout", handlers.logout)
 	mux.HandleFunc("GET /api/v1/auth/me", handlers.me)
+	mux.HandleFunc("POST /api/v1/auth/password", handlers.changePassword)
 	mux.HandleFunc("GET /api/v1/users", handlers.listUsers)
 	mux.HandleFunc("POST /api/v1/users", handlers.createUser)
 	mux.HandleFunc("PATCH /api/v1/users/{id}", handlers.updateUser)
+	mux.HandleFunc("POST /api/v1/users/{id}/password", handlers.resetPassword)
 	mux.HandleFunc("POST /api/v1/users/{id}/sessions/revoke", handlers.revokeUserSessions)
 }
 

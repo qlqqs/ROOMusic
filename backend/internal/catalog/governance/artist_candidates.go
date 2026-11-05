@@ -41,8 +41,35 @@ const artistCandidatesGroupedSQL = artistCandidateResolvedSQL + `, visible AS MA
  FROM ranked GROUP BY first_artist,second_artist,chunk
 )`
 
+// 已忽略分支沿用相同的解析与分块规则，忽略时间来自受治理操作的提交记录。
+const ignoredArtistCandidatesGroupedSQL = artistCandidateResolvedSQL + `, visible AS MATERIALIZED (
+ SELECT r.*,LEAST(left_artist_id,right_artist_id) AS first_artist,GREATEST(left_artist_id,right_artist_id) AS second_artist,
+ (SELECT o.created_at FROM artist_candidate_ignores i JOIN operations o ON o.id=i.operation_id
+ WHERE i.left_key_id=r.left_key_id AND i.right_key_id=r.right_key_id) AS ignored_at
+ FROM resolved r WHERE left_artist_id<>right_artist_id AND EXISTS (
+ SELECT 1 FROM artist_candidate_ignores i WHERE i.left_key_id=r.left_key_id AND i.right_key_id=r.right_key_id)
+), pairs AS (
+ SELECT first_artist,second_artist,left_key_id,right_key_id,count(*) AS evidence_count,max(ignored_at) AS ignored_at FROM visible
+ GROUP BY first_artist,second_artist,left_key_id,right_key_id
+), ranked AS (
+ SELECT *, (row_number() OVER (PARTITION BY first_artist,second_artist ORDER BY left_key_id,right_key_id)-1)/100 AS chunk FROM pairs
+), grouped AS (
+ SELECT first_artist,second_artist,chunk,sum(evidence_count)::bigint AS evidence_count,max(ignored_at) AS ignored_at,
+ jsonb_agg(jsonb_build_object('left_key_id',left_key_id,'right_key_id',right_key_id) ORDER BY left_key_id,right_key_id) AS key_pairs
+ FROM ranked GROUP BY first_artist,second_artist,chunk
+)`
+
 // ListArtistCandidates 对同一艺人的超过一百对名字分块分页；忽略不会吞掉未展示的名字对。
 func ListArtistCandidates(ctx context.Context, db *sql.DB, page, size int) (catalog.ArtistPage[ArtistCandidate], error) {
+	return listArtistCandidates(ctx, db, page, size, false)
+}
+
+// ListIgnoredArtistCandidates 按最近忽略时间列出仍然有效的候选名字对。
+func ListIgnoredArtistCandidates(ctx context.Context, db *sql.DB, page, size int) (catalog.ArtistPage[ArtistCandidate], error) {
+	return listArtistCandidates(ctx, db, page, size, true)
+}
+
+func listArtistCandidates(ctx context.Context, db *sql.DB, page, size int, ignored bool) (catalog.ArtistPage[ArtistCandidate], error) {
 	result := catalog.ArtistPage[ArtistCandidate]{Items: []ArtistCandidate{}, Pagination: catalog.ArtistPagination{Page: page, PageSize: size}}
 	if page < 1 || size < 1 || size > 100 {
 		return result, invalidArtistScope()
@@ -59,10 +86,16 @@ func ListArtistCandidates(ctx context.Context, db *sql.DB, page, size int) (cata
 	if !ready {
 		return result, ErrArtistPreviewPreparing
 	}
-	if err := tx.QueryRowContext(ctx, artistCandidatesGroupedSQL+` SELECT count(*) FROM grouped`).Scan(&result.Pagination.Total); err != nil {
+	groupedSQL := artistCandidatesGroupedSQL
+	orderSQL := "g.evidence_count DESC,g.first_artist,g.second_artist,g.chunk"
+	if ignored {
+		groupedSQL = ignoredArtistCandidatesGroupedSQL
+		orderSQL = "g.ignored_at DESC," + orderSQL
+	}
+	if err := tx.QueryRowContext(ctx, groupedSQL+` SELECT count(*) FROM grouped`).Scan(&result.Pagination.Total); err != nil {
 		return result, err
 	}
-	rows, err := tx.QueryContext(ctx, artistCandidatesGroupedSQL+` SELECT g.first_artist::text,g.second_artist::text,g.evidence_count,g.key_pairs,
+	rows, err := tx.QueryContext(ctx, groupedSQL+` SELECT g.first_artist::text,g.second_artist::text,g.evidence_count,g.key_pairs,
  COALESCE((SELECT jsonb_agg(reason ORDER BY id) FROM (
  SELECT v.id,jsonb_strip_nulls(jsonb_build_object('kind',v.kind,'track_id',v.track_id,'release_id',v.release_id,'role',v.role,
  'left_name',CASE WHEN v.left_artist_id=v.first_artist THEN v.left_name ELSE v.right_name END,
@@ -70,7 +103,7 @@ func ListArtistCandidates(ctx context.Context, db *sql.DB, page, size int) (cata
  FROM visible v JOIN ranked r ON r.first_artist=v.first_artist AND r.second_artist=v.second_artist
  AND r.left_key_id=v.left_key_id AND r.right_key_id=v.right_key_id
  WHERE r.first_artist=g.first_artist AND r.second_artist=g.second_artist AND r.chunk=g.chunk ORDER BY v.id LIMIT 3) samples),'[]'::jsonb)
- FROM grouped g ORDER BY g.evidence_count DESC,g.first_artist,g.second_artist,g.chunk LIMIT $1 OFFSET $2`, size, (page-1)*size)
+ FROM grouped g ORDER BY `+orderSQL+` LIMIT $1 OFFSET $2`, size, (page-1)*size)
 	if err != nil {
 		return result, err
 	}

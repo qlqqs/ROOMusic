@@ -55,14 +55,15 @@ func Load() (Server, error) {
 	if err != nil {
 		return Server{}, err
 	}
-	config := Server{Address: configuredAddress(), Environment: configuredEnvironment(), DatabaseURL: strings.TrimSpace(os.Getenv("ROOMUSIC_DATABASE_URL")), SecureCookies: os.Getenv("ROOMUSIC_SECURE_COOKIES") == "true", DataDirectory: dataDirectory, PublicURL: publicURL, FFmpegPath: ffmpegPath, MediaCacheMaxBytes: mediaCacheMaxBytes}
+	databaseURL, err := DatabaseURL()
+	if err != nil {
+		return Server{}, err
+	}
+	config := Server{Address: configuredAddress(), Environment: configuredEnvironment(), DatabaseURL: databaseURL, SecureCookies: os.Getenv("ROOMUSIC_SECURE_COOKIES") == "true", DataDirectory: dataDirectory, PublicURL: publicURL, FFmpegPath: ffmpegPath, MediaCacheMaxBytes: mediaCacheMaxBytes}
 	for _, configuredRoot := range strings.Split(os.Getenv("ROOMUSIC_ALLOWED_LIBRARY_ROOTS"), ",") {
 		if root := strings.TrimSpace(configuredRoot); root != "" {
 			config.AllowedLibraryRoots = append(config.AllowedLibraryRoots, root)
 		}
-	}
-	if config.DatabaseURL == "" {
-		return Server{}, fmt.Errorf("ROOMUSIC_DATABASE_URL is required")
 	}
 	if len(config.AllowedLibraryRoots) == 0 {
 		return Server{}, fmt.Errorf("ROOMUSIC_ALLOWED_LIBRARY_ROOTS must contain at least one root")
@@ -98,4 +99,13 @@ func configuredAddress() string {
 		return address
 	}
 	return ":8080"
+}
+
+// DatabaseURL 仅读取恢复密码所需的数据库配置，不要求服务启动配置。
+func DatabaseURL() (string, error) {
+	value := strings.TrimSpace(os.Getenv("ROOMUSIC_DATABASE_URL"))
+	if value == "" {
+		return "", fmt.Errorf("ROOMUSIC_DATABASE_URL is required")
+	}
+	return value, nil
 }

@@ -237,12 +237,21 @@ func (h *ArtistGovernanceHandlers) candidates(w http.ResponseWriter, r *http.Req
 	if _, ok := h.base.guard.RequireAdmin(w, r); !ok {
 		return
 	}
+	ignored, err := artistReadEnum(r, "ignored", "false", "true", "false")
+	if err != nil {
+		httpserver.WriteError(w, r, 400, "invalid_filter", "候选筛选条件无效")
+		return
+	}
 	page, size, err := httpserver.ParsePagination(r, 50, 100)
 	if err != nil {
 		httpserver.WriteError(w, r, 400, "invalid_pagination", "分页参数无效")
 		return
 	}
-	result, err := governance.ListArtistCandidates(r.Context(), h.base.database, page, size)
+	list := governance.ListArtistCandidates
+	if ignored == "true" {
+		list = governance.ListIgnoredArtistCandidates
+	}
+	result, err := list(r.Context(), h.base.database, page, size)
 	if err != nil {
 		h.readError(w, r, err)
 		return

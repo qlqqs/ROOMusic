@@ -30,6 +30,9 @@ import (
 var frontendAssets embed.FS
 
 func main() {
+	if len(os.Args) > 1 {
+		os.Exit(runCLICommand(os.Args[1:]))
+	}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	applicationContext, stopApplication := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopApplication()

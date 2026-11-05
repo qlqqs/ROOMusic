@@ -51,6 +51,19 @@ func (columns migrationMetadataColumns) complete() bool {
 
 // Open 连接数据库、探测可用性并应用嵌入的迁移。成功时调用方拥有返回的连接。
 func Open(ctx context.Context, databaseURL string) (*sql.DB, error) {
+	connection, err := Connect(ctx, databaseURL)
+	if err != nil {
+		return nil, err
+	}
+	if err := applyMigrations(ctx, connection); err != nil {
+		_ = connection.Close()
+		return nil, err
+	}
+	return connection, nil
+}
+
+// Connect 只连接数据库并探测可用性，不迁移或初始化业务数据。
+func Connect(ctx context.Context, databaseURL string) (*sql.DB, error) {
 	connection, err := sql.Open("pgx", databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
@@ -58,10 +71,6 @@ func Open(ctx context.Context, databaseURL string) (*sql.DB, error) {
 	if err := connection.PingContext(ctx); err != nil {
 		_ = connection.Close()
 		return nil, fmt.Errorf("ping database: %w", err)
-	}
-	if err := applyMigrations(ctx, connection); err != nil {
-		_ = connection.Close()
-		return nil, err
 	}
 	return connection, nil
 }
