@@ -80,3 +80,32 @@
 ## 设计与执行
 
 跨了 identity、catalog 治理、进程入口和前端，按 R5 另写 [design.md](design.md) 与 [implement.md](implement.md)。不需要数据库迁移。
+
+## 实施结果
+
+2026-11-05 完成。分工：后端 GPT-6-Astra，前端 Claude Opus 5.5，测试编写与执行 GPT-6.1-Sol，主会话规划、验收与提交。
+
+| 提交 | 内容 |
+| --- | --- |
+| `552f875` | 规划文档 |
+| `da4297e` | 后端：改密码、重置、`reset-password` 子命令与脚本、已忽略候选 |
+| `54b65e6` | 后端测试 32 个与接口样本 8 个 |
+| `fea965d` | 前端：修改密码、重置成员密码、候选“待处理 / 已忽略” |
+| `811ba7c` | 修正：两个状态链接同时是 `aria-current`（3b 的 Playwright 发现） |
+| `ca0d1e7` | 前端测试：Vitest、样本往返、Playwright、`account.real.ts` |
+| `41f8c21` | A5：身份、艺人、目录结构、会话与治理规范，路线图成员一行，README“忘记密码” |
+| `eae3877`、`0ef1816` | 修正：改密码成功结果移进对话框（截图复核发现侧栏提示挤成两行、把“退出登录”推出 1440×900 视口）及回归测试 |
+
+与设计不同的地方（验收时裁定）：
+
+- 命令行的 30 秒超时只从读完密码后开始算，人输入密码不计时；`scripts/reset-password.sh` 先编译到临时目录再运行，透传退出码（`go run` 会把 2 改成 1）。
+- 文案按全局规则精简：改密码成功“密码已修改。”，结果不确定“不确定改好了没有，可以退出后用新密码登录试试。”，重置说明“对方需要用新密码重新登录。”，重置成功“已重置“{用户名}”的密码。”。
+- 带输入框的两个对话框初始焦点在标题上；改密码成功后焦点在“完成”上。窄屏菜单里按 Esc 只关最上层对话框（`shared/ui/modal-dialog.tsx`）。
+
+验收对照：
+
+- V1–V3：`identity_api_integration_test.go` 的 `ChangeOwnPassword*`、`AdminResetPassword*`，`ResetPasswordCommand*` 与 `cmd/roomusic/reset_password_test.go`，`ConnectDoesNotMigrate`；真实服务用例 `account.real.ts` 2/2（A1 当前页不掉线、另一浏览器 401、旧密码失效；A2 全部会话 401、新密码能登录、自己那一行没有入口、普通成员 403）。
+- V4：`ArtistIgnoredCandidates{ListAndRestore,ExcludeMergedPairs,OrderAndPaging}` 与艺人样本；模拟 Playwright 的纯键盘忽略→已忽略恢复→刷新保持。按 K6 不做真实服务用例：真实用例的合成素材产生不了艺人候选。
+- V5：Vitest 相关八文件 629 通过、1 跳过（既有仓外大样本未配置）；模拟 Playwright 五文件首轮 212 例（修正后失败项重跑通过），成功态修正后账户子集 87/87（五宽、axe 违规为空）。
+- 收尾：对 `ca0d1e7` 的导出树 `npm ci` 与构建，内嵌资产 124 个文件逐字节一致；真实服务用例 10 个文件 55/55（`--retries=0`，155 秒）。`eae3877` 只改了一个前端文件，之后在工作树上跑相关 Vitest、账户 Playwright 子集与 `account.real.ts`（2/2），没有再跑整套。
+- 截图复核：1440 与 375 下身份区、两个对话框、对话框内成功、成员表、候选两个视图（`frontend/test-results/account-screenshots/`，不提交）。
