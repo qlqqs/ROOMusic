@@ -13,17 +13,17 @@ const bar = (page: Page) => page.getByRole("region", { name: "播放器", exact:
 const queue = (page: Page) => page.locator("#queue > ol > li");
 
 /** 按 Range 提供合成 FLAC（直出与派生的音频地址共用）。 */
-async function fulfillFlac(route: Route) {
+async function fulfillFlac(route: Route, audio = flac) {
   const range = /^bytes=(\d+)-(\d*)$/.exec(route.request().headers()["range"] ?? "");
   const start = Number(range?.[1] ?? 0);
-  const end = Math.min(Number(range?.[2] || flac.length - 1), flac.length - 1);
+  const end = Math.min(Number(range?.[2] || audio.length - 1), audio.length - 1);
   if (start > end) {
-    await route.fulfill({ status: 416, headers: { "Content-Range": `bytes */${flac.length}` } });
+    await route.fulfill({ status: 416, headers: { "Content-Range": `bytes */${audio.length}` } });
     return;
   }
-  await route.fulfill({ status: range ? 206 : 200, contentType: "audio/flac", body: flac.subarray(start, end + 1), headers: {
+  await route.fulfill({ status: range ? 206 : 200, contentType: "audio/flac", body: audio.subarray(start, end + 1), headers: {
     "Accept-Ranges": "bytes", "Content-Length": String(end - start + 1),
-    ...(range ? { "Content-Range": `bytes ${start}-${end}/${flac.length}` } : {}),
+    ...(range ? { "Content-Range": `bytes ${start}-${end}/${audio.length}` } : {}),
   } });
 }
 
@@ -52,13 +52,13 @@ async function observeAudio(page: Page) {
   });
 }
 
-async function installPlayback(page: Page, mock: ApiMock, long = false) {
+async function installPlayback(page: Page, mock: ApiMock, long = false, audio = { body: flac, durationSeconds: 3 }) {
   const group = albumGroup(91, { title: long ? LONG_TITLE : "播放专项专辑", artist: long ? LONG_ARTIST : "合成艺术家", track_count: 18 });
   const release = releaseDetailOf(group.representative, {
     media: mediaOf(group.representative, (_medium, track) => ({
       title: long ? `${track} ${track === 1 ? LONG_TITLE : LONG_TOKEN}` : `合成曲目 ${track}`,
       artist: long ? LONG_ARTIST : "合成艺术家", source_kind: "flac_vorbis_comment", codec: "flac",
-      duration_seconds: 3, bit_depth: 16, sample_rate: 44100, channels: 2, cue: null,
+      duration_seconds: audio.durationSeconds, bit_depth: 16, sample_rate: 44100, channels: 2, cue: null,
     })),
   });
   mock.groups = [group];
@@ -66,9 +66,9 @@ async function installPlayback(page: Page, mock: ApiMock, long = false) {
   await page.route("**/api/v1/playback/formats", (route) => route.fulfill({ json: { items: [{ source_kind: "flac_vorbis_comment", codec: "flac", delivery: "original", mime_type: "audio/flac", codecs: null }] } }));
   await page.route("**/api/v1/tracks/*/playback", (route) => {
     const id = new URL(route.request().url()).pathname.split("/").at(-2);
-    return route.fulfill({ json: { track_id: id, representation: { kind: "original", url: `/api/v1/tracks/${id}/audio`, mime_type: "audio/flac", codecs: null, size_bytes: flac.length } } });
+    return route.fulfill({ json: { track_id: id, representation: { kind: "original", url: `/api/v1/tracks/${id}/audio`, mime_type: "audio/flac", codecs: null, size_bytes: audio.body.length } } });
   });
-  await page.route("**/api/v1/tracks/*/audio", fulfillFlac);
+  await page.route("**/api/v1/tracks/*/audio", (route) => fulfillFlac(route, audio.body));
   await mockLyrics(page);
   await observeAudio(page);
   await page.goto(`/albums/${group.id}`);
@@ -228,7 +228,7 @@ async function installDerivedPlayback(page: Page, mock: ApiMock, options: Derive
     }
     await route.fulfill({ json: { track_id: id, representation: { kind: "derived", url: `/api/v1/tracks/${id}/audio`, mime_type: "audio/flac", codecs: null, size_bytes: flac.length } } }).catch(() => undefined);
   });
-  await page.route("**/api/v1/tracks/*/audio", fulfillFlac);
+  await page.route("**/api/v1/tracks/*/audio", (route) => fulfillFlac(route));
   await mockLyrics(page);
   await observeAudio(page);
   await page.goto(`/albums/${group.id}`);
@@ -349,12 +349,21 @@ test("不可播放曲目的心形与更多仍可用，仅播放、下一首播�
 
 test("纯键盘：播放、下一首播放、不打断当前、切歌、队列上移/移除和清空确认", async ({ page, backend }) => {
   const mock = await backend.start({ signedInAs: "listener" });
-  const { release } = await installPlayback(page, mock);
+  // Tab 遍历可能超过短素材的 3 秒；专用的 60 秒音频长于用例默认超时，避免自然结束抢先推进队列。
+  // 仍由真实 Audio 解码播放，不替换媒体事件；其他用例保留短素材以验证自然结束与歌词。
+  // 素材由 scripts/ffmpeg-pinned.sh 指定的编码器生成：
+  // -f lavfi -i anullsrc=r=44100:cl=stereo -t 60 -ac 2 -fflags +bitexact -flags:a +bitexact -c:a flac -sample_fmt s16 -map_metadata -1 keyboard-60s.flac
+  const { release } = await installPlayback(page, mock, false, {
+    body: readFileSync(new URL("./support/audio/keyboard-60s.flac", import.meta.url)),
+    durationSeconds: 60,
+  });
   const third = release.media[0]?.tracks[2];
   if (!third) throw new Error("专项素材缺少第三首");
   await keyboardActivate(page, page.getByRole("button", { name: "播放整张专辑", exact: true }));
   await expect.poll(async () => (await media(page))?.paused).toBe(false);
+  await expect.poll(async () => (await media(page))?.duration).toBe(60);
   await keyboardActivate(page, bar(page).getByRole("button", { name: "暂停", exact: true }));
+  await expect.poll(async () => (await media(page))?.paused).toBe(true);
   const firstSrc = (await media(page))?.src;
   await keyboardActivate(page, page.locator("#main ol > li").nth(2).getByRole("button", { name: "更多", exact: true }));
   await page.getByRole("menuitem", { name: "下一首播放", exact: true }).press("Enter");
@@ -364,6 +373,7 @@ test("纯键盘：播放、下一首播放、不打断当前、切歌、队列�
   await expect.poll(async () => (await media(page))?.src).toContain(third.id);
   await expect.poll(async () => (await media(page))?.paused).toBe(false);
   await keyboardActivate(page, bar(page).getByRole("button", { name: "暂停", exact: true }));
+  await expect.poll(async () => (await media(page))?.paused).toBe(true);
   await keyboardActivate(page, bar(page).getByRole("link", { name: "队列（19）", exact: true }));
   await expect(queue(page)).toHaveCount(19);
   await expect(queue(page).nth(1)).toContainText(third.title);
