@@ -18,7 +18,7 @@
 
 ## 1. 接口合同
 
-通用规则沿用 [Core 0 运行合同](../../spec/backend/core0-runtime-contracts.md)：错误信封 `{ "error": { "code", "message" }, "request_id" }`、
+通用规则沿用 [Core 0 运行合同](../../../../spec/backend/core0-runtime-contracts.md)：错误信封 `{ "error": { "code", "message" }, "request_id" }`、
 `Cache-Control: no-store`、`DecodeJSON` 解码失败只写一个 `400 invalid_json` 信封。写接口先做同源校验。
 
 新增的两个密码接口与已有成员写操作一样：**没有 `Idempotency-Key`，不写操作记录**（G6 / R4 照旧）。
@@ -41,7 +41,7 @@
 - **不用 401。** 前端请求层在 `status === 401 && code === "unauthorized"` 时触发会话边界（`shared/api/request.ts:87`），
   401 在本项目里统一表示“需要登录”。当前密码输错并不意味着会话失效，用 401 容易被后续改动误当成掉线，把用户踢回登录页。
 - **不用 400。** 400 在这里表示“请求本身不合规”（`invalid_input` / `invalid_json`）；当前密码是合规的输入，只是不对。
-- **用 403。** [会话生命周期规范](../../spec/frontend/session-lifecycle.md)已经约定“403 只拒绝当前操作或页面，不结束会话”，语义正合适。
+- **用 403。** [会话生命周期规范](../../../../spec/frontend/session-lifecycle.md)已经约定“403 只拒绝当前操作或页面，不结束会话”，语义正合适。
   错误码 `current_password_incorrect` 和 `forbidden`（需要管理员权限）不同，前端按错误码选文案，不会混淆。
 
 #### 处理顺序与事务
