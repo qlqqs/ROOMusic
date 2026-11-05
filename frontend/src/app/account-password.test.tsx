@@ -157,6 +157,37 @@ describe("V1/V5：身份区修改密码", () => {
     expect(context.api.requestsTo("POST", passwordPath)).toHaveLength(2);
   });
 
+  it("B5b：429 显示当前密码限速提示，保留会话、缓存和输入，仍可提交", async () => {
+    const context = await openPasswordChange();
+    const generation = context.runtime.session.currentGeneration();
+    const state = context.runtime.session.getSnapshot();
+    const cache = context.runtime.queryClient.getQueryCache().getAll().map((query) => ({ query, data: query.state.data }));
+    const broadcasts = context.channel.notifyChanged.mock.calls.length;
+    context.api.on("POST", passwordPath, () => sampleResponse("errors/too-many-attempts", { "Retry-After": "60" }));
+    await fill(context);
+    await submit(context);
+    const alert = await context.dialog.findByRole("alert");
+    expect(alert.textContent).toContain("当前密码输错次数太多，请过几分钟再试。");
+    expect(context.dialog.queryByText("结果未确认")).toBeNull();
+    expect(context.dialog.getByLabelText("当前密码").getAttribute("aria-invalid")).not.toBe("true");
+    expect(context.dialog.getByLabelText<HTMLInputElement>("当前密码").value).toBe(oldPassword);
+    expect(context.dialog.getByLabelText<HTMLInputElement>("新密码").value).toBe(newPassword);
+    expect(context.history.location.pathname).toBe("/members");
+    expect(context.runtime.session.getSnapshot()).toEqual(state);
+    expect(context.runtime.session.currentGeneration()).toBe(generation);
+    expect(context.channel.notifyChanged.mock.calls).toHaveLength(broadcasts);
+    for (const item of cache) {
+      expect(context.runtime.queryClient.getQueryCache().get(item.query.queryHash)).toBe(item.query);
+      expect(item.query.state.data).toBe(item.data);
+    }
+    expect(context.api.requestsTo("POST", passwordPath)).toHaveLength(1);
+    expect(context.dialog.getByRole<HTMLButtonElement>("button", { name: "修改密码" }).disabled).toBe(false);
+    await submit(context);
+    await context.dialog.findByText("当前密码输错次数太多，请过几分钟再试。");
+    expect(context.api.requestsTo("POST", passwordPath)).toHaveLength(2);
+    expect(context.runtime.session.currentGeneration()).toBe(generation);
+  });
+
   it("400 invalid_input 只提示新密码规则，不显示账号规则或后端原文", async () => {
     const context = await openPasswordChange();
     context.api.on("POST", passwordPath, () => sampleResponse("errors/invalid-input-password"));

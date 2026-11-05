@@ -514,6 +514,7 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "errors/self-password-reset": { status: 403, code: "self_password_reset" },
   "errors/invalid-input-password": { status: 400, code: "invalid_input" },
   "errors/invalid-credentials": { status: 401, code: "invalid_credentials" },
+  "errors/too-many-attempts": { status: 429, code: "too_many_attempts" },
   "errors/setup-closed": { status: 409, code: "setup_closed" },
   "errors/invalid-input": { status: 400, code: "invalid_input" },
   "errors/invalid-input-missing-idempotency-key": { status: 400, code: "invalid_input" },

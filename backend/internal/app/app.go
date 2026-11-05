@@ -41,10 +41,16 @@ type App struct {
 type Option func(*options)
 
 type options struct {
+	loginThrottle         *identity.LoginThrottle
 	playbackPreflightWait time.Duration
 	derivation            playback.Derivation
 	// 测试直接插入旧目录夹具时暂停后台，搜索测试再显式回填。
 	pauseCatalogMaintenance bool
+}
+
+// WithLoginThrottle 为测试注入带可控时钟的限速器；默认每个应用使用独立实例。
+func WithLoginThrottle(throttle *identity.LoginThrottle) Option {
+	return func(settings *options) { settings.loginThrottle = throttle }
 }
 
 // WithPlaybackPreflightWait 设置预检等待派生完成的最长时间（默认 playback.DefaultPreflightWait）。
@@ -80,7 +86,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", httpserver.HealthHandler)
 	mux.HandleFunc("GET /readyz", httpserver.ReadyHandler(func() bool { return database != nil }))
-	identityapi.New(database, guard).Register(mux)
+	identityapi.New(database, guard, assembly.loginThrottle, logger).Register(mux)
 	libraryapi.New(database, guard, libraryService, settings.AllowedLibraryRoots, logger).Register(mux)
 	catalogapi.New(database, guard, settings.DataDirectory, logger).Register(mux)
 	catalogapi.NewArtistGovernance(database, guard, logger, artistResolutionAdapter{}).Register(mux)

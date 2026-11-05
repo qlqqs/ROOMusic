@@ -2,7 +2,7 @@
 
 ## 1. 范围与触发
 
-当代码涉及初始化管理员、登录与当前用户（查看者）响应、成员创建/停用/会话撤销、改密码与重置密码、命令行恢复密码、密码规则、来源校验与会话 Cookie，以及这些接口的写入失败映射时，
+当代码涉及初始化管理员、登录与当前用户（查看者）响应、成员创建/停用/会话撤销、改密码与重置密码、命令行恢复密码、密码规则、登录与当前密码核对的限速、来源校验与会话 Cookie，以及这些接口的写入失败映射时，
 遵守本合同。请求与响应的通用规则（错误信封、JSON 请求体、分页）、HTTP 缓存与数据库迁移见
 [Core 0 当前运行合同](./core0-runtime-contracts.md)；目录新增与停用、恢复的幂等见 [目录与扫描流程合同](./library-scan-contracts.md)。
 
@@ -76,6 +76,45 @@
   不重试，刷新列表让管理员核对。
 - `Guard.Usernames(ctx, ids)`（M3）批量返回用户 ID（小写 UUID）到用户名，不存在的用户没有键；操作记录页用它显示“谁”，只返回用户名，不返回角色或其他字段。
 
+### 登录限速（2026-11-05）
+
+策略在 `identity/throttle.go`，SQL 在 `identity/login.go`，日志在 handler。
+构造：`NewLoginThrottle(now func() time.Time)`。
+
+```go
+func (t *LoginThrottle) Begin(username, source string, fingerprint [8]byte) (*Attempt, error)
+```
+
+`Login` 返回 LoginResult（User/Token）、Attempt、error；凭据错仍带 Attempt：Failures/LockedFor 为快照，Succeeded 清本组合、撤本次额度。`ThrottledError` 含 `Scope`（account/source）、`RetryAfter`、`Started`（首次来源暂停）。
+`identityapi.New(database, guard, throttle, logger)`：nil 限速器用真实时钟，nil logger 丢弃；`app.WithLoginThrottle` 注入假时钟。
+独立实例，重启清空；每操作读一次时钟。
+
+- 来源仅取 `RemoteAddr`：`netip.ParseAddrPort` 失败再 `ParseAddr`，失败用 `unknown`；去 zone、`Unmap()`，IPv4 完整地址、IPv6 掩码后的 /64。
+  不读转发头、不改写 RemoteAddr；反代共用来源，局域网独立。
+- 用户名原样匹配，不折叠/去空白；键存 `sha256(username)` 与来源。
+
+| 常量 | 规则 |
+| --- | --- |
+| `accountThreshold=5` | 第 5 次失败仍 401，后续拒绝不计数、不延长等待 |
+| `baseWait=1m`、`maxWait=15m` | 第 5–9 次失败后等 1/2/4/8/15 分钟，此后 15；移位先判上限 |
+| `accountForget=24h` | 最后失败满 24 小时遗忘；成功只清本组合 |
+| `sourceLimit=30`、`sourceWindow=1m`、`sourcePause=1m` | 窗口含在途预计数，第 31 次拒绝并暂停 1 分钟，成功撤额度 |
+| `maxAccounts=10000`、`maxSources=4096` | 每来源最多 30 项；每分钟随 Begin 清理，无后台协程 |
+
+清理未锁定且满 24h 的账号、窗口空且暂停结束的来源；满表先清理再淘汰最旧失败项。
+窗口 `(now-1m, now]`；按尝试标识撤回，旧尝试不删重建状态。
+
+顺序：同源 → JSON → 来源检查（拒绝不查库）→ 查启用用户 → 指纹 → Begin 持锁复查并**预计数** → bcrypt。
+`sql.ErrNoRows` 视为凭据错，其他读错 503、不计数。不存在/停用做等价 bcrypt：`sync.Once` 用随机串和 DefaultCost 建虚拟哈希。
+旧 SHA-256 校验不变；正确时 Succeeded，再建 24h 会话；写错 503、不计数。
+指纹取 `sha256(password_hash)` 前 8 字节，不存在/停用为零；变化丢弃旧状态，重置后可立即登录。
+账号锁定仍查库识别指纹、不核对密码；来源暂停不随重置解除，最多再等 1 分钟。
+429 `too_many_attempts` 带 Retry-After（剩余时间向上取整秒数，至少 1），登录文案“登录失败次数太多，请过几分钟再试”，不结束会话。
+
+日志：401 写 INFO `identity.login.failed`：`module=identity`、`request_id`、`source`、`username`、`consecutive_failures`；
+开始等待写 WARN `identity.login.throttled`，加 `scope`、`retry_after_seconds`，来源事件省略用户名/次数。
+用户名截前 64 字节并清理非法 UTF-8，request_id 取 X-Request-ID；不记密码/哈希/指纹/Cookie。重复拒绝只记 HTTP 完成事件。
+
 ### 改密码与重置密码（2026-11-05）
 
 - 业务都在 `identity/passwords.go`：`ChangeOwnPassword`、`ResetPassword`、`ResetPasswordByUsername` 共用 `setPasswordTx`；
@@ -83,6 +122,10 @@
   bcrypt 都在事务外完成，不在持有行锁时做慢计算。
 - 自助改密码：当前会话保留（令牌与到期时间不变），本人其他会话全部撤销。事务内先锁用户行、再锁当前会话行，
   锁内的哈希和事务外读到的不同就按当前密码错误处理，两个并发请求最多成功一个。新密码可以和当前密码相同（效果是退出其他设备）。
+- `ChangeOwnPassword` 增加 db 后的 `throttle *LoginThrottle` 参数：校验新密码、读哈希后，用 `BeginPassword(userID, fingerprint)`
+  先计数再核对。键为独立命名空间的 `"password:"+用户 ID`，不分来源、无来源额度，其余规则同登录。
+  第 5 次错仍 403，随后 429 `too_many_attempts` + Retry-After，文案“当前密码输错次数太多，请过几分钟再试”。
+  核对正确后退出用例时清除（含后续数据库失败），原事务复核不变。
 - 当前密码错误返回 `403 current_password_incorrect`，不用 401：前端请求层把 `401 unauthorized` 当作会话结束，
   而输错当前密码不代表掉线（见[会话生命周期规范](../frontend/session-lifecycle.md)）。
 - 管理员重置：撤销该成员的全部会话；停用的成员也可以重置，`disabled_at` 不动；不锁管理员集合（不改变启用管理员数量）。
@@ -99,6 +142,7 @@
   读完并校验后，连库与重置共用 30 秒超时。用户名精确匹配，与登录一致。成功后该账号全部会话撤销，停用状态不变。
 - 退出码：成功 0；参数错误或未知命令 2；读不到密码、两次不一致、密码不合规、缺少 `ROOMUSIC_DATABASE_URL`、连不上数据库、
   用户不存在、其他数据库错误都是 1；被中断 130，先恢复终端状态。输出只用固定文案，不打印底层错误，不出现密码和数据库地址。
+- 重置后限速随新密码指纹失效；来源暂停最多仍需 1 分钟。
 - 包装脚本先编译到临时目录再运行，原样透传退出码（`go run` 会把 2 改成 1）。
 
 ### 用户停用事务
@@ -112,6 +156,9 @@
 | --- | --- |
 | 清单模式下来源解析失败或不在清单 | `403 origin_forbidden`，不写库、不写 Cookie |
 | 写请求缺少来源（两种模式） | `403 origin_required`，不写库、不写 Cookie |
+| 登录/当前密码核对限速 | `429 too_many_attempts` + `Retry-After`，不核对、不计数 |
+| 登录查用户错误（非 `sql.ErrNoRows`） | `503 database_unavailable`，不计数 |
+| 登录不存在/停用/密码错误 | `401 invalid_credentials`，同提示、计数及 bcrypt 成本 |
 | 用户目标不存在 | `404 not_found`，事务回滚 |
 | 禁用最后一个启用管理员 | `409 last_admin`，不改用户或 session |
 | 用户 SQL/事务失败 | `503 database_unavailable` 或分类错误，不返回成功 |
@@ -132,6 +179,8 @@
 
 ## 5. 正确、基准与错误案例
 
+- 限速正确：公网失败不挡局域网。错误：bcrypt 后计数、429 当掉线。
+
 - 来源正确案例：清单同时允许局域网 http 与公网 https，分别登录/退出时 Cookie 的 `Secure` 跟随来源；反代改写 Host 不影响判断。
 - 来源基准案例：非生产未设置清单时，既有 `NewGuard(..., false, "")` 和开发配置继续按旧模式工作。
 - 来源错误案例：清单设置后仍保留 `ROOMUSIC_SECURE_COOKIES=false`，必须拒绝启动，不能静默忽略。
@@ -142,6 +191,10 @@
 
 ## 6. 必需测试
 
+- 限速假时钟：阈值/各等待档、拒绝不延期、成功只清本组合、来源隔离、30/31 边界与窗口到期、成功撤额度、并发第 6 次拒绝及 race；
+  指纹变化、24h 遗忘、两表上限/清理/最旧淘汰、同时间戳撤回与旧尝试不删重建状态；来源解析各种地址及非法输入。
+- 身份集成：429/Retry-After/到点恢复、来源隔离/上限、不存在/停用同码同计数、读错 503 不计数、重置解除、T9 跨来源共用且无来源额度；
+  保留事务测试，检查日志脱敏/仅开始记 WARN。补 `errors/too-many-attempts` 样本及前端提示、不掉线测试（测试步骤负责）。
 - `platform/weborigin` 表驱动覆盖大小写、默认/非默认端口、IPv6 方括号、配置允许而请求拒绝末尾 `/`；
   拒绝路径/查询/片段/用户信息、`null`、file/ftp、空主机、端口 0/65536、非 ASCII 主机与通配。
 - `platform/config` 清理来源相关环境变量，覆盖清单规范化/去重、非法项错误包含配置名及该项、生产缺清单失败、

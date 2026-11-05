@@ -194,10 +194,13 @@ function ChangePasswordForm({
   );
 }
 
+/** 当前密码输错太多次被限速：不是这个字段填错了，放在对话框的失败提示里，不放字段旁。 */
+const failureText = { too_many_attempts: "当前密码输错次数太多，请过几分钟再试。" };
+
 /** 字段以外的失败：结果不确定时告诉用户怎么核对（不自动重试），其余按错误码选文案。 */
 function PasswordChangeFailure({ failure }: { failure: Failure }) {
   const apiFailure = failureOf(failure.error);
-  const description = apiFailure === null ? { message: "发生了未预期的错误，请刷新页面后重试。", requestId: null } : describeFailure(apiFailure, { context: "write" });
+  const description = apiFailure === null ? { message: "发生了未预期的错误，请刷新页面后重试。", requestId: null } : describeFailure(apiFailure, { context: "write", messages: failureText });
   return (
     <Notice tone="error" title={failure.uncertain ? "结果未确认" : "没有修改"} requestId={description.requestId}>
       {failure.uncertain ? "不确定改好了没有，可以退出后用新密码登录试试。" : description.message}

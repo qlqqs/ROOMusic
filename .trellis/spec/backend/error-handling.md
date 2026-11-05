@@ -25,6 +25,7 @@ codes may refine these classes without changing their HTTP meaning.
 | `method_not_allowed` | 405 | 已注册的 `/api/` 路径不支持该方法；响应带 `Allow` 头列出支持的方法 |
 | `revision_conflict`, `idempotency_conflict`, `setup_closed`, `issue_changed`, `claim_changed`, `not_claimable` | 409 | Current state conflicts with the command（`issue_changed`：核对时问题已不是页面看到的样子，见[核对合同](./issue-review-contracts.md)；`claim_changed`、`not_claimable`：认领的预览已过期、旧版本不需要认领，见[认领合同](./claim-contracts.md)） |
 | `precondition_failed` | 412 | Explicit request precondition no longer holds |
+| `too_many_attempts` | 429 | 同一账号或来源的尝试过多，稍后再试；带 `Retry-After`，不表示会话失效 |
 | `unavailable`, `review_unavailable` | 503 | A required dependency or Steward reviewer is temporarily unavailable |
 | `internal` | 500 | Unexpected implementation or infrastructure failure |
 

@@ -7,9 +7,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/qlqq/roomusic/backend/internal/identity"
@@ -41,11 +45,19 @@ func userIDFromPath(w http.ResponseWriter, r *http.Request) (string, bool) {
 type Handlers struct {
 	database *sql.DB
 	guard    *identity.Guard
+	throttle *identity.LoginThrottle
+	logger   *slog.Logger
 }
 
 // New 返回身份 handler。
-func New(database *sql.DB, guard *identity.Guard) *Handlers {
-	return &Handlers{database: database, guard: guard}
+func New(database *sql.DB, guard *identity.Guard, throttle *identity.LoginThrottle, logger *slog.Logger) *Handlers {
+	if throttle == nil {
+		throttle = identity.NewLoginThrottle(time.Now)
+	}
+	if logger == nil {
+		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+	return &Handlers{database: database, guard: guard, throttle: throttle, logger: logger}
 }
 
 // Register 在 mux 上注册身份相关路由。
@@ -145,20 +157,58 @@ func (handlers *Handlers) login(responseWriter http.ResponseWriter, request *htt
 	if !httpserver.DecodeJSON(responseWriter, request, &input) {
 		return
 	}
-	var userID, passwordHash, role string
-	err := handlers.database.QueryRowContext(request.Context(), "SELECT id::text,password_hash,role FROM users WHERE username=$1 AND disabled_at IS NULL", input.Username).Scan(&userID, &passwordHash, &role)
-	if err != nil || !identity.VerifyPassword(passwordHash, input.Password) {
+	source := identity.SourceOf(request.RemoteAddr)
+	result, attempt, err := identity.Login(request.Context(), handlers.database, handlers.throttle, input.Username, input.Password, source)
+	var throttled *identity.ThrottledError
+	switch {
+	case errors.Is(err, identity.ErrInvalidCredentials):
+		handlers.logLoginFailure(request, input.Username, source, attempt)
 		httpserver.WriteError(responseWriter, request, 401, "invalid_credentials", "用户名或密码错误")
 		return
-	}
-	token := identity.GenerateSessionToken()
-	_, err = handlers.database.ExecContext(request.Context(), "INSERT INTO sessions (token_hash,user_id,expires_at) VALUES ($1,$2::uuid,NOW()+INTERVAL '24 hours')", identity.HashSessionToken(token), userID)
-	if err != nil {
+	case errors.As(err, &throttled):
+		if throttled.Started {
+			handlers.logger.WarnContext(request.Context(), "登录来源开始等待", "event", "identity.login.throttled",
+				"module", "identity", "request_id", request.Header.Get("X-Request-ID"), "scope", "source",
+				"source", source, "retry_after_seconds", retryAfterSeconds(throttled.RetryAfter))
+		}
+		writeThrottledError(responseWriter, request, throttled, "登录失败次数太多，请过几分钟再试")
+		return
+	case err != nil:
 		httpserver.WriteError(responseWriter, request, 503, "database_unavailable", "服务暂不可用")
 		return
 	}
-	handlers.guard.SetSessionCookie(responseWriter, request, token)
-	httpserver.WriteJSON(responseWriter, 200, map[string]string{"id": userID, "username": input.Username, "role": role})
+	handlers.guard.SetSessionCookie(responseWriter, request, result.Token)
+	httpserver.WriteJSON(responseWriter, 200, map[string]string{"id": result.User.ID, "username": result.User.Username, "role": result.User.Role})
+}
+
+func retryAfterSeconds(wait time.Duration) int64 {
+	seconds := int64(wait / time.Second)
+	if wait%time.Second != 0 {
+		seconds++
+	}
+	return max(1, seconds)
+}
+
+func writeThrottledError(w http.ResponseWriter, r *http.Request, err *identity.ThrottledError, message string) {
+	w.Header().Set("Retry-After", strconv.FormatInt(retryAfterSeconds(err.RetryAfter), 10))
+	httpserver.WriteError(w, r, http.StatusTooManyRequests, "too_many_attempts", message)
+}
+
+func (handlers *Handlers) logLoginFailure(r *http.Request, username, source string, attempt *identity.Attempt) {
+	// 只截取有界前缀，再清理不完整或非法 UTF-8；不把整个不受信任的用户名复制进日志。
+	if len(username) > 64 {
+		username = username[:64]
+	}
+	if !utf8.ValidString(username) {
+		username = strings.ToValidUTF8(username, "")
+	}
+	fields := []any{"module", "identity", "request_id", r.Header.Get("X-Request-ID"),
+		"source", source, "username", username, "consecutive_failures", attempt.Failures()}
+	handlers.logger.InfoContext(r.Context(), "登录凭据核对失败", append(fields, "event", "identity.login.failed")...)
+	if wait := attempt.LockedFor(); wait > 0 {
+		handlers.logger.WarnContext(r.Context(), "登录账号开始等待", append(fields, "event", "identity.login.throttled",
+			"scope", "account", "retry_after_seconds", retryAfterSeconds(wait))...)
+	}
 }
 
 func (handlers *Handlers) logout(responseWriter http.ResponseWriter, request *http.Request) {

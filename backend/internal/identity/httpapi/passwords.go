@@ -26,7 +26,7 @@ func (handlers *Handlers) changePassword(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	cookie, _ := r.Cookie(identity.SessionCookieName)
-	if err := identity.ChangeOwnPassword(r.Context(), handlers.database, user.ID, identity.HashSessionToken(cookie.Value), input.CurrentPassword, input.NewPassword); err != nil {
+	if err := identity.ChangeOwnPassword(r.Context(), handlers.database, handlers.throttle, user.ID, identity.HashSessionToken(cookie.Value), input.CurrentPassword, input.NewPassword); err != nil {
 		handlers.writePasswordError(w, r, err, "无法修改密码")
 		return
 	}
@@ -63,8 +63,11 @@ func (handlers *Handlers) resetPassword(w http.ResponseWriter, r *http.Request) 
 }
 
 func (handlers *Handlers) writePasswordError(w http.ResponseWriter, r *http.Request, err error, message string) {
+	var throttled *identity.ThrottledError
 	var hashError *identity.PasswordHashError
 	switch {
+	case errors.As(err, &throttled):
+		writeThrottledError(w, r, throttled, "当前密码输错次数太多，请过几分钟再试")
 	case errors.Is(err, identity.ErrInvalidPassword):
 		httpserver.WriteError(w, r, 400, "invalid_input", identity.PasswordRuleMessage)
 	case errors.Is(err, identity.ErrWrongCurrentPassword):

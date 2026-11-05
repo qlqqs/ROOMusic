@@ -70,6 +70,12 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 		return map[string]string{"username": username, "password": password}
 	}
 
+	// 专用的不存在用户名只触发限速样本，不改变其他样本的账号状态。
+	for i := 0; i < 5; i++ {
+		requireAPIError(t, call(http.MethodPost, "/api/v1/auth/login", credentials("throttle-sample-missing", "wrong-sample-password"), nil), http.StatusUnauthorized, "invalid_credentials")
+	}
+	samples.record("errors/too-many-attempts", call(http.MethodPost, "/api/v1/auth/login", credentials("throttle-sample-missing", "wrong-sample-password"), nil), http.StatusTooManyRequests)
+
 	// 初始化与登录。
 	samples.record("auth/setup-status-required", call(http.MethodGet, "/api/v1/setup/status", nil, nil), http.StatusOK)
 	samples.record("errors/invalid-input", call(http.MethodPost, "/api/v1/setup/admin", credentials("curator", "short"), nil), http.StatusBadRequest)

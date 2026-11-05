@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "too_many_attempts",
+      "message": "登录失败次数太多，请过几分钟再试"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 429
+}

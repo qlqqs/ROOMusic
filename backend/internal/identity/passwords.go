@@ -27,7 +27,7 @@ func (e *PasswordHashError) Unwrap() error { return e.Err }
 type ResetResult struct{ Disabled bool }
 
 // ChangeOwnPassword 验证当前密码，原子修改密码并保留当前会话、撤销其他会话。
-func ChangeOwnPassword(ctx context.Context, db *sql.DB, userID string, sessionTokenHash []byte, current, next string) error {
+func ChangeOwnPassword(ctx context.Context, db *sql.DB, throttle *LoginThrottle, userID string, sessionTokenHash []byte, current, next string) error {
 	if !ValidPassword(next) {
 		return ErrInvalidPassword
 	}
@@ -39,9 +39,15 @@ func ChangeOwnPassword(ctx context.Context, db *sql.DB, userID string, sessionTo
 	if err != nil {
 		return fmt.Errorf("read current password: %w", err)
 	}
+	attempt, err := throttle.BeginPassword(userID, passwordFingerprint(previousHash))
+	if err != nil {
+		return err
+	}
 	if !VerifyPassword(previousHash, current) {
 		return ErrWrongCurrentPassword
 	}
+	// 核对正确不算失败，即使后续事务或哈希生成失败，也不占用尝试额度。
+	defer attempt.Succeeded()
 	hash, err := HashPassword(next)
 	if err != nil {
 		return &PasswordHashError{Err: err}

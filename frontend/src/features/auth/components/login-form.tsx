@@ -11,6 +11,11 @@ const noticeText: Record<SessionNotice, string> = {
   setup_closed: "初始化已经完成，请登录。",
 };
 
+const failureText = {
+  invalid_credentials: "用户名或密码错误。",
+  too_many_attempts: "登录失败次数太多，请过几分钟再试。",
+};
+
 type FieldErrors = { username?: string; password?: string };
 
 type LoginFormProps = {
@@ -42,7 +47,7 @@ export function LoginForm({ notice, initialUsername }: LoginFormProps) {
     <form className={styles.form} onSubmit={submit} noValidate aria-label="登录">
       {notice === null ? null : <Notice>{noticeText[notice]}</Notice>}
       {login.isError ? (
-        <FailureNotice error={login.error} messages={{ invalid_credentials: "用户名或密码错误。" }} />
+        <FailureNotice error={login.error} messages={failureText} />
       ) : null}
       <div className={styles.fields}>
         <TextField

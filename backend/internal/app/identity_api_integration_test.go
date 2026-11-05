@@ -744,7 +744,7 @@ func TestPostgreSQLAdminResetPasswordRejectsInvalidRequests(t *testing.T) {
 	t.Run("非UUID不访问业务数据库", func(t *testing.T) {
 		// 鉴权仍用隔离库；handler 的业务数据库为 nil，一旦越过 ID 校验访问它就会 panic。
 		mux := http.NewServeMux()
-		identityapi.New(nil, identity.NewGuard(a.database, false, "")).Register(mux)
+		identityapi.New(nil, identity.NewGuard(a.database, false, ""), nil, nil).Register(mux)
 		withoutDatabase := *a
 		withoutDatabase.handler = mux
 		requireAPIError(t, withoutDatabase.request(t, http.MethodPost, "/api/v1/users/not-a-uuid/password", body, &e.admin, nil), 400, "invalid_id")
