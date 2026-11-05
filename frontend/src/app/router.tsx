@@ -3,6 +3,8 @@ import { sanitizeRedirect, type SessionController } from "../features/auth";
 import { albumListSearchFromState, parseAlbumDetailSearch, parseAlbumSearch, type AlbumDetailSearch, type AlbumSearch } from "../features/catalog";
 import { parseClaimsSearch, parseIssuesSearch, parseOperationsSearch, type ClaimsSearch, type IssuesSearch, type OperationsSearch } from "../features/governance";
 import { ScanDetail } from "../features/library";
+import { parseSearchPageSearch, type SearchPageSearch } from "../features/search";
+import { parseArtistDetailSearch, parseArtistsSearch, type ArtistDetailSearch, type ArtistsSearch } from "../features/artists";
 import { parsePageParam } from "../shared/lib/pagination";
 import { AuthenticatedLayout } from "./shell/authenticated-layout";
 import { AdminGate } from "./routes/admin-gate";
@@ -22,6 +24,10 @@ import { OverviewPage } from "./routes/overview-page";
 import { NowPlayingRoute } from "./routes/now-playing-route";
 import { PlaylistDetailPage } from "./routes/playlist-detail-page";
 import { PlaylistsPage } from "./routes/playlists-page";
+import { SearchPage } from "./routes/search-page";
+import { ArtistCandidatesPage } from "./routes/artist-candidates-page";
+import { ArtistDetailPage } from "./routes/artist-detail-page";
+import { ArtistsPage } from "./routes/artists-page";
 import { SetupPage } from "./routes/setup-page";
 
 export type RouterContext = { session: SessionController };
@@ -89,13 +95,13 @@ const albumsRoute = createRoute({
   component: AlbumsRoute,
 });
 
-// 详情：release 只在选中非代表版本时出现，规范化（不在本组成员里的值丢弃）由详情页在组详情返回后做。
+// 详情：track 是要定位的曲目（从全局搜索的建议点进来），每次来到这条历史记录定位一次；release 只在选中非代表版本时出现，规范化（不在本组成员里的值丢弃）由详情页在组详情返回后做。
 // 组 ID 不是 UUID 等情况也由详情页自己说明；“返回专辑列表”的参数来自卡片链接带进来的 history state。
 function AlbumDetailRoute() {
   const { groupId } = albumDetailRoute.useParams();
-  const { release } = albumDetailRoute.useSearch();
+  const { release, track } = albumDetailRoute.useSearch();
   const state = useLocation({ select: (location) => location.state });
-  return <AlbumDetailPage groupId={groupId} release={release} list={albumListSearchFromState(state)} />;
+  return <AlbumDetailPage groupId={groupId} release={release} track={track} list={albumListSearchFromState(state)} />;
 }
 
 const albumDetailRoute = createRoute({
@@ -103,6 +109,43 @@ const albumDetailRoute = createRoute({
   path: "/albums/$groupId",
   validateSearch: (search: Record<string, unknown>): AlbumDetailSearch => parseAlbumDetailSearch(search),
   component: AlbumDetailRoute,
+});
+
+// 全局搜索的结果页：所有登录用户都能用。q 与两栏各自的页码都在地址里（页码只在 2 及以上出现）；不合法的值显式写成 undefined。
+function SearchRoute() {
+  return <SearchPage search={searchRoute.useSearch()} />;
+}
+
+const searchRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/search",
+  validateSearch: (search: Record<string, unknown>): SearchPageSearch => parseSearchPageSearch(search),
+  component: SearchRoute,
+});
+
+// 艺人（M5 ⑤）：所有登录用户都能浏览。列表的查找词、首字母、角色、排序与页码，艺人页的专辑、曲目、名字页码与曲目栏的角色都在地址里；
+// 不合法的值显式写成 undefined。艺人 ID 不是 UUID 时由页面显示“艺人不存在”，不发请求。
+function ArtistsRoute() {
+  return <ArtistsPage search={artistsRoute.useSearch()} />;
+}
+
+const artistsRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/artists",
+  validateSearch: (search: Record<string, unknown>): ArtistsSearch => parseArtistsSearch(search),
+  component: ArtistsRoute,
+});
+
+function ArtistDetailRoute() {
+  const { artistId } = artistDetailRoute.useParams();
+  return <ArtistDetailPage artistId={artistId} search={artistDetailRoute.useSearch()} />;
+}
+
+const artistDetailRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/artists/$artistId",
+  validateSearch: (search: Record<string, unknown>): ArtistDetailSearch => parseArtistDetailSearch(search),
+  component: ArtistDetailRoute,
 });
 
 // “我的音乐”：只属于当前用户的数据，所有登录用户都能用。/me 本身没有内容，转到第一个页签（替换历史项，返回键不会回到 /me）。
@@ -129,7 +172,7 @@ const historyRoute = createRoute({
   component: HistoryRoute,
 });
 
-// tab 只在看“曲目”时出现（专辑是默认），page 只在 2 及以上时出现；两栏各自翻页。不合法的值显式写成 undefined。
+// tab 只在看“曲目”或“艺人”时出现（专辑是默认），page 只在 2 及以上时出现；三栏各自翻页。不合法的值显式写成 undefined。
 // 超出末页时，页面在读到真实的总数之后替换成末页。
 function FavoritesRoute() {
   const { tab, page } = favoritesRoute.useSearch();
@@ -139,8 +182,8 @@ function FavoritesRoute() {
 const favoritesRoute = createRoute({
   getParentRoute: () => meRoute,
   path: "/favorites",
-  validateSearch: (search: Record<string, unknown>): { tab?: "tracks" | undefined; page?: number | undefined } => ({
-    tab: search["tab"] === "tracks" ? "tracks" : undefined,
+  validateSearch: (search: Record<string, unknown>): { tab?: "tracks" | "artists" | undefined; page?: number | undefined } => ({
+    tab: search["tab"] === "tracks" ? "tracks" : search["tab"] === "artists" ? "artists" : undefined,
     page: parsePageParam(search["page"]),
   }),
   component: FavoritesRoute,
@@ -170,6 +213,23 @@ const playlistDetailRoute = createRoute({
   path: "/playlists/$playlistId",
   validateSearch: (search: Record<string, unknown>): { page?: number | undefined } => ({ page: parsePageParam(search["page"]) }),
   component: PlaylistDetailRoute,
+});
+
+// “可能是同一位”的候选（M5 ⑤，管理员）：page 是页码（2 及以上）。
+function ArtistCandidatesRoute() {
+  const { page } = artistCandidatesRoute.useSearch();
+  return (
+    <AdminGate>
+      <ArtistCandidatesPage page={page ?? 1} />
+    </AdminGate>
+  );
+}
+
+const artistCandidatesRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/artist-candidates",
+  validateSearch: (search: Record<string, unknown>): { page?: number | undefined } => ({ page: parsePageParam(search["page"]) }),
+  component: ArtistCandidatesRoute,
 });
 
 // 管理页由 AdminGate 把关：非管理员显示“需要管理员权限”，不渲染页面内容，也就不会调用管理接口。
@@ -204,10 +264,10 @@ const membersRoute = createRoute({ getParentRoute: () => authenticatedRoute, pat
 
 // page 是记录的页码（2 及以上），release 是只看某个版本的记录，group 是看某张专辑的记录（默认版本）；不合法的值显式写成 undefined。
 function OperationsRoute() {
-  const { page, release, group } = operationsRoute.useSearch();
+  const { page, release, group, artist } = operationsRoute.useSearch();
   return (
     <AdminGate>
-      <OperationsPage page={page ?? 1} releaseId={release} groupId={group} />
+      <OperationsPage page={page ?? 1} releaseId={release} groupId={group} artistId={artist} />
     </AdminGate>
   );
 }
@@ -270,7 +330,7 @@ const scanDetailRoute = createRoute({
 // 已登录用户访问不存在的路径时仍显示在外壳里；未登录用户先被守卫送去登录。
 const notFoundRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "$", component: NotFoundPage });
 
-const routeTree = rootRoute.addChildren([setupRoute, loginRoute, authenticatedRoute.addChildren([overviewRoute, nowPlayingRoute, albumsRoute, albumDetailRoute, meRoute.addChildren([meIndexRoute, historyRoute, favoritesRoute, playlistsRoute, playlistDetailRoute]), libraryRoute, scanDetailRoute, issuesRoute, claimsRoute, membersRoute, operationsRoute, notFoundRoute])]);
+const routeTree = rootRoute.addChildren([setupRoute, loginRoute, authenticatedRoute.addChildren([overviewRoute, nowPlayingRoute, albumsRoute, albumDetailRoute, searchRoute, artistsRoute, artistDetailRoute, meRoute.addChildren([meIndexRoute, historyRoute, favoritesRoute, playlistsRoute, playlistDetailRoute]), libraryRoute, scanDetailRoute, issuesRoute, claimsRoute, artistCandidatesRoute, membersRoute, operationsRoute, notFoundRoute])]);
 
 export function createAppRouter(context: RouterContext, history?: RouterHistory) {
   return createRouter({ routeTree, context, ...(history === undefined ? {} : { history }) });

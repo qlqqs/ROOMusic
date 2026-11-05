@@ -1,0 +1,72 @@
+{
+  "body": {
+    "fields": [
+      {
+        "correction": {
+          "mode": "set",
+          "value": "提交即命中新词legacy"
+        },
+        "effective_value": "提交即命中新词legacy",
+        "field": "title",
+        "scan_value": "修正前目录词",
+        "uncertain": false
+      },
+      {
+        "correction": {
+          "mode": "set",
+          "value": "修正署名legacy"
+        },
+        "effective_value": "修正署名legacy",
+        "field": "album_artist",
+        "scan_value": "原始录音者",
+        "uncertain": false
+      },
+      {
+        "correction": null,
+        "effective_value": null,
+        "field": "year",
+        "scan_value": null,
+        "uncertain": false
+      },
+      {
+        "correction": null,
+        "effective_value": null,
+        "field": "genre",
+        "scan_value": null,
+        "uncertain": false
+      },
+      {
+        "correction": null,
+        "effective_value": null,
+        "field": "label",
+        "scan_value": null,
+        "uncertain": false
+      },
+      {
+        "correction": null,
+        "effective_value": null,
+        "field": "catalog_number",
+        "scan_value": null,
+        "uncertain": false
+      },
+      {
+        "correction": null,
+        "effective_value": null,
+        "field": "edition",
+        "scan_value": null,
+        "uncertain": false
+      },
+      {
+        "correction": null,
+        "effective_value": null,
+        "field": "barcode",
+        "scan_value": null,
+        "uncertain": false
+      }
+    ],
+    "operation_id": "00000000-0000-4000-8000-000000000001",
+    "release_id": "00000000-0000-4000-8000-000000000002",
+    "revision": 2
+  },
+  "status": 200
+}

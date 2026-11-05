@@ -14,7 +14,7 @@
   曲目安全摘要 `TrackSummary` 的解码器与显示规则（`trackTitleOf`、`trackArtistOf`）归 catalog，收藏、歌单（以后的搜索与艺人页）共用。
 - app 负责组合：
   - `app/routes/track-actions.tsx` 的 `TrackActions` 是**所有曲目行的统一动作**：行内播放、心形、“更多”（下一首播放、加入队列、添加到歌单…，
-    再接页面自己的项，例如“从历史中移除”、歌单的移动与移除）。专辑页、历史页、收藏页、歌单详情都用它；以后的搜索结果与艺人页同样接入，不另造一套。
+    再接页面自己的项，例如“从历史中移除”、歌单的移动与移除）。专辑页、历史页、收藏页、歌单详情与全局搜索的曲目结果（M5 ④）都用它；以后的艺人页同样接入，不另造一套。
   - `app/routes/track-playback.ts` 是曲目安全摘要（历史条目同形）→ `PlayerTrack` 的唯一映射与“为什么不能播放”的判断。
   - `app/routes/personal-playback.tsx` 的 `PersonalPlayAll` 是收藏与歌单的“播放全部”。
   - `app/player-personal-actions.tsx` 把心形与“存为歌单”放进 player 的中立插槽；player 不导入 personal。
@@ -34,6 +34,13 @@
 - 跨标签页：`PersonalSync` 挂在已登录布局里，用 `BroadcastChannel("roomusic:personal")` 只发 `{scope: "favorites" | "playlists"}`，
   收到后只让自己当前代次的对应前缀失效、不再转发；窗口聚焦或页面重新可见时让 `personal` 前缀失效（不受 30 秒新鲜期限制）。
   不传用户、内容或请求载荷；数据库的版本号仍是并发权威。
+
+## 艺人收藏（M5 ⑤）
+
+- 收藏页第三栏“艺人”（`?tab=artists`）：一行一位，名字链接到艺人页、下面是概况，心形在右；合并过的按合并后的艺人显示一次；暂时没有存在的曲目时标“暂时不可用”，仍可取消。
+  保留行、翻页带集合版本与“列表有更新”与另外两栏相同。艺人数据还在整理（503 `artist_catalog_preparing`）时只说一句，不显示成“还没有收藏”。
+- `FavoriteStatusScope` 的 `artistIds` 另发一次 lookup（只带 `artist_ids`）：整理中只有艺人的心形读不到状态，曲目与专辑不受影响。lookup 的 `artists` 按输入 ID 回答，
+  `resolved_artist_id` 是它现在对应的艺人；范围按两者都能查到。心形切换 409 `artist_catalog_not_ready` 时说“艺人信息正在整理，请稍后再试。”。
 
 ## 心形
 

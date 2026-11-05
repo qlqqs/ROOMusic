@@ -1,0 +1,10 @@
+{
+  "body": {
+    "artist_id": "00000000-0000-4000-8000-000000000001",
+    "ignored": true,
+    "operation_id": "00000000-0000-4000-8000-000000000002",
+    "other_revision": 2,
+    "revision": 2
+  },
+  "status": 200
+}

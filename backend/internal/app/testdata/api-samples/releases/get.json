@@ -1,7 +1,9 @@
 {
   "body": {
     "album_artist": "Sample Orchestra",
+    "album_artist_refs": [],
     "artist": "Sample Orchestra",
+    "artist_refs": [],
     "artwork": null,
     "attention_count": 0,
     "barcode": "0123456789012",
@@ -10,6 +12,7 @@
     "corrected_fields": [],
     "credits": [
       {
+        "artist_refs": [],
         "name": "Sample Orchestra",
         "role": "album_artist"
       }
@@ -91,20 +94,24 @@
         "tracks": [
           {
             "artist": "Sample Orchestra",
+            "artist_refs": [],
             "bit_depth": 16,
             "bitrate": null,
             "channels": 2,
             "codec": "flac",
             "credits": [
               {
+                "artist_refs": [],
                 "name": "Sample Composer",
                 "role": "composer"
               },
               {
+                "artist_refs": [],
                 "name": "Sample Conductor",
                 "role": "conductor"
               },
               {
+                "artist_refs": [],
                 "name": "Sample Soloist",
                 "role": "performer"
               }
@@ -120,20 +127,24 @@
           },
           {
             "artist": "Sample Soloist",
+            "artist_refs": [],
             "bit_depth": 16,
             "bitrate": null,
             "channels": 2,
             "codec": "flac",
             "credits": [
               {
+                "artist_refs": [],
                 "name": "Sample Composer",
                 "role": "composer"
               },
               {
+                "artist_refs": [],
                 "name": "Sample Conductor",
                 "role": "conductor"
               },
               {
+                "artist_refs": [],
                 "name": "Sample Soloist",
                 "role": "performer"
               }
@@ -156,20 +167,24 @@
         "tracks": [
           {
             "artist": "Sample Orchestra",
+            "artist_refs": [],
             "bit_depth": 16,
             "bitrate": null,
             "channels": 2,
             "codec": "flac",
             "credits": [
               {
+                "artist_refs": [],
                 "name": "Sample Composer",
                 "role": "composer"
               },
               {
+                "artist_refs": [],
                 "name": "Sample Conductor",
                 "role": "conductor"
               },
               {
+                "artist_refs": [],
                 "name": "Sample Soloist",
                 "role": "performer"
               }

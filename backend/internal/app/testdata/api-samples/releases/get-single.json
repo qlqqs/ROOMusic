@@ -1,7 +1,9 @@
 {
   "body": {
     "album_artist": "Sample Pianist",
+    "album_artist_refs": [],
     "artist": "Sample Pianist",
+    "artist_refs": [],
     "artwork": {
       "height": 480,
       "mime": "image/webp",
@@ -15,6 +17,7 @@
     "corrected_fields": [],
     "credits": [
       {
+        "artist_refs": [],
         "name": "Sample Pianist",
         "role": "album_artist"
       }
@@ -61,6 +64,7 @@
         "tracks": [
           {
             "artist": "Sample Pianist",
+            "artist_refs": [],
             "bit_depth": 16,
             "bitrate": null,
             "channels": 2,

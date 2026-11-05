@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "artist_catalog_preparing",
+      "message": "艺人资料正在整理，请稍后重试。"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 503
+}

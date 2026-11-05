@@ -1,0 +1,14 @@
+2026-11-04：仅检查并清理 roomusic-test-m5s 隔离项目。
+其他连接数=0
+advisory锁数=0
+ Container roomusic-test-m5s-postgres-1  Stopping
+ Container roomusic-test-m5s-postgres-1  Stopped
+ Container roomusic-test-m5s-postgres-1  Removing
+ Container roomusic-test-m5s-postgres-1  Removed
+ Volume roomusic-test-m5s_roomusic-test-postgres-data  Removing
+ Network roomusic-test-m5s_default  Removing
+ Network roomusic-test-m5s_default  Removed
+ Volume roomusic-test-m5s_roomusic-test-postgres-data  Removed
+残留本项目容器：
+残留本项目卷：
+本线临时数据库env已删除。

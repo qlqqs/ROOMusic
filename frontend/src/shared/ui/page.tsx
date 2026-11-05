@@ -7,7 +7,8 @@ type PageProps = {
   title: string;
   /** 标题很长（例如超过 80 个字符的专辑名）时降一级字号：完整显示并换行，不侵占操作区。 */
   compactTitle?: boolean;
-  description?: string;
+  /** 标题下的一行说明；可以含链接（例如专辑页的艺人名）。 */
+  description?: ReactNode;
   /** 页头右侧的主要操作。 */
   actions?: ReactNode;
   children: ReactNode;

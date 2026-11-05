@@ -1,0 +1,57 @@
+{
+  "body": {
+    "items": [
+      {
+        "artist": "Teresa Teng",
+        "artist_refs": [
+          {
+            "artist_id": "00000000-0000-4000-8000-000000000001",
+            "display_name": "邓丽君",
+            "name": "Teresa Teng"
+          }
+        ],
+        "duration_seconds": 120,
+        "group_id": "00000000-0000-4000-8000-000000000002",
+        "present": true,
+        "release": {
+          "album_artist": "Teresa Teng",
+          "album_artist_refs": [
+            {
+              "artist_id": "00000000-0000-4000-8000-000000000001",
+              "display_name": "邓丽君",
+              "name": "Teresa Teng"
+            }
+          ],
+          "artist": "Teresa Teng",
+          "artist_refs": [
+            {
+              "artist_id": "00000000-0000-4000-8000-000000000001",
+              "display_name": "邓丽君",
+              "name": "Teresa Teng"
+            }
+          ],
+          "artwork": null,
+          "attention_count": 0,
+          "id": "00000000-0000-4000-8000-000000000003",
+          "media_type": null,
+          "medium_count": 1,
+          "source_type": null,
+          "title": "英文现场",
+          "track_count": 1,
+          "year": null
+        },
+        "source": {
+          "bit_depth": 16,
+          "bitrate": null,
+          "channels": 2,
+          "codec": "flac",
+          "sample_rate": 44100,
+          "source_kind": "flac_vorbis_comment"
+        },
+        "title": "曲目2-1",
+        "track_id": "00000000-0000-4000-8000-000000000004"
+      }
+    ]
+  },
+  "status": 200
+}

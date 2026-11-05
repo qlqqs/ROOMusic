@@ -1,0 +1,63 @@
+{
+  "body": {
+    "artist_id": "00000000-0000-4000-8000-000000000001",
+    "items": [
+      {
+        "artist": "失联艺人",
+        "artist_refs": [
+          {
+            "artist_id": "00000000-0000-4000-8000-000000000001",
+            "display_name": "失联艺人",
+            "name": "失联艺人"
+          }
+        ],
+        "duration_seconds": 120,
+        "group_id": "00000000-0000-4000-8000-000000000002",
+        "present": false,
+        "release": {
+          "album_artist": "失联艺人",
+          "album_artist_refs": [
+            {
+              "artist_id": "00000000-0000-4000-8000-000000000001",
+              "display_name": "失联艺人",
+              "name": "失联艺人"
+            }
+          ],
+          "artist": "失联艺人",
+          "artist_refs": [
+            {
+              "artist_id": "00000000-0000-4000-8000-000000000001",
+              "display_name": "失联艺人",
+              "name": "失联艺人"
+            }
+          ],
+          "artwork": null,
+          "attention_count": 1,
+          "id": "00000000-0000-4000-8000-000000000003",
+          "media_type": null,
+          "medium_count": 0,
+          "source_type": null,
+          "title": "暂不可用专辑",
+          "track_count": 0,
+          "year": null
+        },
+        "source": {
+          "bit_depth": 16,
+          "bitrate": null,
+          "channels": 2,
+          "codec": "flac",
+          "sample_rate": 44100,
+          "source_kind": "flac_vorbis_comment"
+        },
+        "title": "曲目5-1",
+        "track_id": "00000000-0000-4000-8000-000000000004"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "page_size": 50,
+      "total": 1
+    }
+  },
+  "status": 200
+}

@@ -854,9 +854,9 @@ func mergeSingleCueEvidence(physical SourceObservation, cues []SourceObservation
 	} else {
 		physical.FieldSources = cloneStringMap(physical.FieldSources)
 	}
-	mergeText := func(field string, target *string, value string) {
+	mergeText := func(field string, target *string, value string) bool {
 		if value == "" || (*target != "" && !physical.InferredFields[field]) {
-			return
+			return false
 		}
 		*target = value
 		delete(physical.InferredFields, field)
@@ -865,13 +865,37 @@ func mergeSingleCueEvidence(physical SourceObservation, cues []SourceObservation
 		} else {
 			physical.FieldSources[field] = "cue_sheet"
 		}
+		return true
 	}
 	mergeText("title", &physical.Title, cue.Title)
-	mergeText("artist", &physical.Artist, cue.Artist)
+	artistAdopted := mergeText("artist", &physical.Artist, cue.Artist)
 	mergeText("album", &physical.Album, cue.Album)
-	mergeText("album_artist", &physical.AlbumArtist, cue.AlbumArtist)
+	albumArtistAdopted := mergeText("album_artist", &physical.AlbumArtist, cue.AlbumArtist)
 	mergeText("genre", &physical.Genre, cue.Genre)
 	mergeText("catalog_number", &physical.CatalogNumber, cue.CatalogNumber)
+	if artistAdopted || albumArtistAdopted {
+		adoptedSources := map[string]string{}
+		if artistAdopted {
+			adoptedSources["track_artist"] = physical.FieldSources["artist"]
+		}
+		if albumArtistAdopted {
+			adoptedSources["album_artist"] = physical.FieldSources["album_artist"]
+		}
+		var evidence []metadata.ArtistTagEvidence
+		for _, entry := range physical.ArtistTagEvidence {
+			if _, replaced := adoptedSources[entry.Role]; !replaced {
+				evidence = append(evidence, entry)
+			}
+		}
+		for _, entry := range cue.ArtistTagEvidence {
+			if source, adopted := adoptedSources[entry.Role]; adopted && entry.SourceKind == source {
+				evidence = append(evidence, entry)
+			}
+		}
+		// 两个有界输入合并后仍须满足每轨 100 项。不得截断或去重来掩盖溢出；
+		// 原样交给 PersistCandidate 的 ValidateArtistTagEvidence，使整个候选失败并回滚。
+		physical.ArtistTagEvidence = evidence
+	}
 	if cue.Year > 0 && physical.Year == 0 {
 		physical.Year = cue.Year
 		physical.FieldSources["year"] = cue.FieldSources["year"]

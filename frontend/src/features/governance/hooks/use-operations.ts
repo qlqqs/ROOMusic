@@ -13,6 +13,8 @@ type OperationsOptions = {
   releaseId?: string | undefined;
   /** 只看这张专辑的记录（默认版本的设定等）；与 releaseId 同时给出时取并集。 */
   groupId?: string | undefined;
+  /** 只看这位艺人的记录（M5 ⑤）。 */
+  artistId?: string | undefined;
   page: number;
   pageSize: number;
 };
@@ -22,11 +24,11 @@ type OperationsOptions = {
  * 记录与“能不能撤销”要反映服务器当前的状态：自己的修改与撤销之后由命令让 governance 的全部查询失效，
  * 别的管理员的修改靠每次打开都重新读取（staleTime 为 0，先显示缓存、随即刷新），不沿用全局的 30 秒新鲜期。
  */
-export function useOperations({ releaseId, groupId, page, pageSize }: OperationsOptions) {
+export function useOperations({ releaseId, groupId, artistId, page, pageSize }: OperationsOptions) {
   const { generation } = useViewerScope();
   return useQuery({
-    queryKey: governanceKeys.operationPage(generation, { releaseId: releaseId ?? null, groupId: groupId ?? null, page, pageSize }),
-    queryFn: ({ signal }) => fetchOperations({ page, pageSize, releaseId, groupId, signal }),
+    queryKey: governanceKeys.operationPage(generation, { releaseId: releaseId ?? null, groupId: groupId ?? null, artistId: artistId ?? null, page, pageSize }),
+    queryFn: ({ signal }) => fetchOperations({ page, pageSize, releaseId, groupId, artistId, signal }),
     select: (response) => response.data,
     placeholderData: keepPreviousData,
     staleTime: 0,

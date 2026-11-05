@@ -38,6 +38,7 @@ async function setup(initial: readonly FavoriteTarget[] = []) {
       revision,
       tracks: ids.track_ids.map((id) => ({ track_id: id, favorited: server.has(`track:${id.toLowerCase()}`) })),
       albums: ids.group_ids.map((id) => ({ group_id: id, favorited: server.has(`album:${id.toLowerCase()}`) })),
+      artists: [],
     };
     return jsonResponse(200, body);
   };

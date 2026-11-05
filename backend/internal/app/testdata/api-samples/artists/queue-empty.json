@@ -1,0 +1,14 @@
+{
+  "body": {
+    "artist_id": "00000000-0000-4000-8000-000000000001",
+    "items": [],
+    "limit": 10000,
+    "missing_total": 1,
+    "order": "album",
+    "returned": 0,
+    "seed": null,
+    "total": 0,
+    "truncated": false
+  },
+  "status": 200
+}

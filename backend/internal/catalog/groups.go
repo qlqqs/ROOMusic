@@ -53,9 +53,9 @@ type ReleaseGroupPage struct {
 	Total int64
 }
 
-// ListReleaseGroups 返回至少有一个可见成员的组的一页。默认按代表版本的标题、艺人与 ID 排序，也支持加入时间倒序；
+// listReleaseGroupsLegacy 保留旧组列表路径，默认按代表版本的标题、艺人与 ID 排序，也支持加入时间倒序；
 // 任一可见成员命中搜索、可见成员的 attention 之和大于 0 时组才命中对应的筛选。查询执行失败时错误包含 ErrQuery。
-func (s *Store) ListReleaseGroups(ctx context.Context, params ListParams) (ReleaseGroupPage, error) {
+func (s *Store) listReleaseGroupsLegacy(ctx context.Context, params ListParams) (ReleaseGroupPage, error) {
 	filters := ""
 	queryArgs := []any{}
 	if params.Search != "" {

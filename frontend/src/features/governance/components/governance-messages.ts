@@ -16,3 +16,18 @@ export const governanceFailureMessages = {
   issue_changed: "扫描刚刚改变了这个问题，已重新读取，请看过之后再核对。",
   forbidden: "你没有权限做这个操作。",
 } as const;
+
+// 艺人的治理（M5 ⑤）：同样按错误码选文案。
+export const artistFailureMessages = {
+  revision_conflict: "这位艺人刚被修改过，页面已刷新。请看过之后再操作。",
+  idempotency_conflict: "操作冲突了，请再试一次。",
+  not_found: "这位艺人已经找不到了。",
+  same_artist: "不能把艺人并入自己。",
+  artist_redirected: "这位艺人已经并入了别的艺人，页面已刷新。",
+  artist_scope_changed: "刚才的预览已经过时，已重新读取，请再确认一次。",
+  artist_scope_too_large: "一次涉及的曲目太多了，请分几次做。",
+  artist_catalog_not_ready: "艺人信息正在整理，请稍后再试。",
+  invalid_artist_name: "名字不能为空，也不能太长。",
+  no_changes: "没有需要修改的内容。",
+  forbidden: "你没有权限做这个操作。",
+} as const;

@@ -47,7 +47,9 @@ func parseFLAC(path string) (AudioObservation, error) {
 			}
 			observation.ContentFingerprint = flacMD5Fingerprint(block)
 		case 4:
-			parseVorbisComments(block, &observation)
+			if err := parseVorbisComments(block, &observation); err != nil {
+				return observation, err
+			}
 		}
 	}
 	return applyFilenameFallback(path, observation), nil
@@ -82,36 +84,39 @@ func decodeFLACStreamInfo(block []byte) (sampleRate, channels, bitDepth int, tot
 	return sampleRate, channels, bitDepth, totalSamples
 }
 
-func parseVorbisComments(block []byte, observation *AudioObservation) {
+func parseVorbisComments(block []byte, observation *AudioObservation) error {
 	reader := bufio.NewReader(strings.NewReader(string(block)))
 	var vendorLength uint32
 	if binary.Read(reader, binary.LittleEndian, &vendorLength) != nil {
-		return
+		return nil
 	}
 	if vendorLength > uint32(len(block)) {
-		return
+		return nil
 	}
 	commentVendor := make([]byte, vendorLength)
 	if _, err := io.ReadFull(reader, commentVendor); err != nil {
-		return
+		return nil
 	}
 	var commentCount uint32
 	if binary.Read(reader, binary.LittleEndian, &commentCount) != nil {
-		return
+		return nil
 	}
 	for index := uint32(0); index < commentCount; index++ {
 		var commentLength uint32
 		if binary.Read(reader, binary.LittleEndian, &commentLength) != nil || commentLength > 1<<20 {
-			return
+			return fmt.Errorf("invalid Vorbis comment")
 		}
 		value := make([]byte, commentLength)
 		if _, err := io.ReadFull(reader, value); err != nil {
-			return
+			return fmt.Errorf("invalid Vorbis comment")
 		}
 		keyValue := strings.SplitN(string(value), "=", 2)
 		if len(keyValue) != 2 {
 			continue
 		}
-		setAudioTag(observation, keyValue[0], keyValue[1])
+		if err := setAudioTag(observation, keyValue[0], keyValue[1]); err != nil {
+			return err
+		}
 	}
+	return nil
 }

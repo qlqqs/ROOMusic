@@ -61,7 +61,7 @@ describe("历史页播放动作", () => {
     item.release.artwork = { resource_id: "cover.png", mime: "image/png", width: 640, height: 480 };
     expect(playerTrackOfHistoryItem(item)).toEqual({
       trackId: item.track_id, releaseId: item.release.id, groupId: item.group_id,
-      title: item.title, artist: item.artist, albumTitle: item.release.title,
+      title: item.title, artist: item.artist, artistRefs: item.artist_refs, albumTitle: item.release.title,
       albumArtist: item.release.album_artist ?? item.release.artist, durationSeconds: 120, artworkId: "cover.png",
       source: { sourceKind: "flac_vorbis_comment", codec: "flac", bitDepth: 16, sampleRate: 44100, channels: 2, bitrate: null },
     });

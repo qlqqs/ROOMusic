@@ -1,0 +1,17 @@
+{
+  "recorded_date": "2026-11-04",
+  "cpu": "AMD Ryzen Threadripper 1920X 12-Core Processor",
+  "ram_mib": 32094.3984375,
+  "kernel": "6.8.0-147-generic",
+  "go": "go version go1.25.10 linux/amd64",
+  "filesystem": "ext2/ext3",
+  "postgres_image": "postgres:18-alpine",
+  "postgres_digest": "postgres@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2",
+  "compose_project": "roomusic-test-m5s",
+  "postgres_extension": {
+    "pg_trgm": "1.6",
+    "schema": "public"
+  },
+  "search_jit": "SET LOCAL jit = off（只读RR事务）",
+  "measurement": "真实app handler，含鉴权/计数/排序/摘要/序列化；httptest不计外部网络；两栏并发，5次预热及30次测量"
+}

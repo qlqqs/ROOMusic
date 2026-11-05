@@ -36,7 +36,9 @@ func parseMP3(path string) (AudioObservation, error) {
 		if _, err = io.ReadFull(file, data); err != nil {
 			return observation, err
 		}
-		parseID3Frames(data, &observation, header[3], header[5])
+		if err := parseID3Frames(data, &observation, header[3], header[5]); err != nil {
+			return observation, err
+		}
 		audioStart = int64(size)
 		if header[5]&0x10 != 0 {
 			audioStart += 10
@@ -51,7 +53,7 @@ func parseMP3(path string) (AudioObservation, error) {
 }
 
 // parseID3Frames 解析标签体里的帧；major 是 ID3v2 主版本号，tagFlags 是标签头的标志字节。
-func parseID3Frames(data []byte, observation *AudioObservation, major, tagFlags byte) {
+func parseID3Frames(data []byte, observation *AudioObservation, major, tagFlags byte) error {
 	if major == 3 && tagFlags&0x80 != 0 {
 		// v2.3 的同步消除作用于整个标签体（含帧头）；v2.4 改为逐帧标志，在 id3FramePayload 里处理。
 		data = removeUnsynchronisation(data)
@@ -63,7 +65,7 @@ func parseID3Frames(data []byte, observation *AudioObservation, major, tagFlags 
 		formatFlags := data[offset+9]
 		offset += 10
 		if frameSize <= 0 || offset+frameSize > len(data) {
-			return
+			return nil
 		}
 		frame := data[offset : offset+frameSize]
 		offset += frameSize
@@ -90,14 +92,29 @@ func parseID3Frames(data []byte, observation *AudioObservation, major, tagFlags 
 		if len(frame) < 2 {
 			continue
 		}
+		if role := artistTagRole(frameID); role != "" {
+			payload, ok := id3FramePayload(frame, major, formatFlags)
+			if !ok {
+				continue
+			}
+			for index, raw := range decodeID3ArtistValues(payload) {
+				if err := captureArtistTag(observation, frameID, raw); err != nil {
+					return err
+				}
+				value := metadata.BoundedText(raw)
+				if role == "album_artist" && index == 0 {
+					observation.AlbumArtist = value
+				}
+				if role != "track_artist" && role != "album_artist" {
+					addObservationCredits(observation, role, value)
+				}
+			}
+			continue
+		}
 		value := decodeID3Text(frame)
 		switch frameID {
 		case "TIT2":
 			observation.Title = value
-		case "TPE1":
-			observation.Artist = value
-		case "TPE2":
-			observation.AlbumArtist = value
 		case "TALB":
 			observation.Album = value
 		case "TRCK":
@@ -110,14 +127,11 @@ func parseID3Frames(data []byte, observation *AudioObservation, major, tagFlags 
 			observation.Year = ParseYear(value)
 		case "TSRC":
 			observation.ISRC = value
-		case "TCOM":
-			addObservationCredits(observation, "composer", value)
-		case "TPE3":
-			addObservationCredits(observation, "conductor", value)
 		case "TPUB":
 			observation.Label = value
 		}
 	}
+	return nil
 }
 
 // id3FrameSize 读取 offset 处帧头里的 4 字节大小。v2.3 是普通大端整数；v2.4 规定为 synchsafe 整数，
@@ -369,4 +383,60 @@ func decodeID3UTF16(value []byte, littleEndian bool) string {
 		return ""
 	}
 	return metadata.BoundedText(string(utf16.Decode(units)))
+}
+
+// decodeID3ArtistValues 保留每个文本值的原文；NUL 是 ID3 多值边界，不是姓名分隔规则。
+func decodeID3ArtistValues(frame []byte) []string {
+	if len(frame) < 2 {
+		return nil
+	}
+	text := frame[1:]
+	var decoded string
+	switch frame[0] {
+	case 0:
+		var value strings.Builder
+		for _, b := range text {
+			value.WriteRune(rune(b))
+		}
+		decoded = value.String()
+	case 1, 2:
+		littleEndian := false
+		if frame[0] == 1 {
+			if len(text) < 2 || (text[0] != 0xff || text[1] != 0xfe) && (text[0] != 0xfe || text[1] != 0xff) {
+				return nil
+			}
+			littleEndian = text[0] == 0xff
+			text = text[2:]
+		}
+		if len(text)%2 != 0 {
+			return nil
+		}
+		units := make([]uint16, len(text)/2)
+		for i := range units {
+			if littleEndian {
+				units[i] = binary.LittleEndian.Uint16(text[i*2:])
+			} else {
+				units[i] = binary.BigEndian.Uint16(text[i*2:])
+			}
+		}
+		if !validUTF16Units(units) {
+			return nil
+		}
+		decoded = string(utf16.Decode(units))
+	case 3:
+		if !utf8.Valid(text) {
+			return nil
+		}
+		decoded = string(text)
+	default:
+		return nil
+	}
+	values := strings.Split(strings.TrimRight(decoded, "\x00"), "\x00")
+	if frame[0] == 1 {
+		// 部分写入器为后续值重复携带 BOM；它属于编码，不属于姓名原文。
+		for i := range values {
+			values[i] = strings.TrimPrefix(values[i], "\ufeff")
+		}
+	}
+	return values
 }

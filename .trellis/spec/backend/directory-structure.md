@@ -181,3 +181,13 @@ repositories directory.
 
 The capability map follows [Modular Design](../guides/modular-design.md) and the
 current [Core 0 PRD](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md).
+
+## M5 ④搜索包增量
+
+`catalog/textnorm` 是纯叶子；`catalog/internal/writegate` 只提供事务 gate；`catalog/internal/searchindex` 只依赖 textnorm 与 releasesql；`catalog/maintenance` 只依赖 textnorm、searchindex、writegate。catalog 核心增加 textnorm/searchindex，ingest 与 governance 增加 searchindex/writegate；app 增加 maintenance。逐包 allowlist 由依赖测试维护，不允许通配放开 catalog 子树，core 仍不得导入 metadata/ingest/governance。完整在线协议见[搜索合同](./search-contracts.md)。
+
+## M5 ⑤艺人包增量
+
+`catalog/internal/artistgraph`仅依赖textnorm、metadata、searchindex、uuid，负责事实和派生，扫描读意图但不写意图。catalog核心、ingest、governance、maintenance可依赖它；searchindex新增metadata以拆多值署名。catalog核心增加writegate供personal窄公开入口，governance增加textnorm用于范围验证；app注入personal刷新函数，catalog/governance不反向导入personal。精确allowlist见依赖规则测试。
+
+maintenance的原始名字工作量估计经`artistgraph.ArtistInputNameCost`窄端口，不能直接导入metadata或复制拆分算法。调整批处理时先跑`TestPackageDependencyDirections`，不得为纯函数复用扩张allowlist。

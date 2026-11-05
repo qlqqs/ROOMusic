@@ -104,7 +104,7 @@ function JoinAlbumForm({ titleId, headingRef, release, currentGroupId, commands,
     }
     const text = parseSearchText(draft);
     if (text === undefined) {
-      setSearchError("请输入标题、艺人或曲目名。");
+      setSearchError("请输入搜索词。");
       return;
     }
     setSearchError(null);
@@ -136,7 +136,6 @@ function JoinAlbumForm({ titleId, headingRef, release, currentGroupId, commands,
           <div className={styles.searchField}>
             <TextField
               label="搜索专辑"
-              description="按标题、艺人或曲目名查找。"
               type="text"
               inputMode="search"
               enterKeyHint="search"
@@ -190,7 +189,7 @@ function JoinAlbumForm({ titleId, headingRef, release, currentGroupId, commands,
 }
 
 /**
- * 把这个版本归入其他专辑（管理员）：按标题、艺人或曲目名搜索，选中后预览会和哪张专辑放在一起，确认后提交。
+ * 把这个版本归入其他专辑（管理员）：按搜索词找专辑，选中后预览会和哪张专辑放在一起，确认后提交。
  * 搜索结果不含这个版本现在所在的专辑；409 与目标专辑已不存在时对话框保持打开并说明；结果不确定时“归入”变成用同一个幂等键“重试归入”。
  */
 export function JoinAlbumDialog({ open, release, currentGroupId, commands, onClose }: JoinAlbumDialogProps) {

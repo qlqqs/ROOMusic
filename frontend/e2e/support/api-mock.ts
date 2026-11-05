@@ -1,5 +1,5 @@
-import type { BrowserContext } from "@playwright/test";
-import type { ReleaseGroupSummaryWithAddedAtDTO } from "../../src/features/catalog/api/decoders";
+import type { Request, Route } from "@playwright/test";
+import { decodeCatalogState, type CatalogStateDTO, type ReleaseGroupSummaryWithAddedAtDTO } from "../../src/features/catalog/api/decoders";
 import type { DiagnosticsPageDTO, RootDTO, RootOperationDTO, ScanDTO, ScanReportDTO } from "../../src/features/library/api/decoders";
 import type { RecentReleaseDTO } from "../../src/features/listening/api/decoders";
 import type { MemberDTO } from "../../src/features/members/api/decoders";
@@ -34,6 +34,8 @@ import {
   type GovernanceData,
 } from "../../src/test/governance-data";
 import { personalDataOf, respondToPersonal, type PersonalData } from "../../src/test/personal-data";
+import { respondToSearch, searchDataOf, type SearchData } from "../../src/test/search-data";
+import { artistCatalogState, artistSummaryOriginError, artistError, respondToArtistFavorites, respondToArtists, respondToArtistSummaries, type ArtistData } from "../../src/test/artist-data";
 import { gradientPng } from "./png";
 
 // 受控后端：用后端集成测试产出的真实响应样本回答 /api/v1/*，并保持必要的状态（会话、目录、扫描、成员），
@@ -64,6 +66,12 @@ export type ApiMock = CatalogData & {
   governance: GovernanceData;
   /** 收藏与歌单按当前会话的用户 ID 隔离；seed helper 与 Vitest 共用。 */
   personal: PersonalData;
+  /** 搜索结果须按完整查询显式登记，未登记返回 404。 */
+  search: SearchData;
+  /** 艺人模拟仅由艺人用例启用，旧用例的默认响应保持不变。 */
+  artists: ArtistData | null;
+  /** 可推进 epoch 验证 preparing → ready，不依赖真实等待。 */
+  catalogState: CatalogStateDTO;
   setupRequired: boolean;
   /** 当前会话的用户名；null 表示没有有效会话。 */
   session: string | null;
@@ -118,9 +126,16 @@ function seedRoots(): RootDTO[] {
   return (sampleBody("library-roots/list") as { items: RootDTO[] }).items;
 }
 
-export async function installApiMock(context: BrowserContext, options: MockOptions = {}): Promise<ApiMock> {
+/** 仅暴露拦截器真正使用的端口，Vitest 可执行同一路由回调而不启动浏览器。 */
+export type ApiMockRoute = Pick<Route, "fulfill" | "abort"> & { request: () => Pick<Request, "url" | "method" | "headers" | "postData" | "postDataJSON"> };
+type ApiMockContext = { route: (pattern: string, handler: (route: ApiMockRoute) => Promise<void>) => Promise<unknown> };
+
+export async function installApiMock(context: ApiMockContext, options: MockOptions = {}): Promise<ApiMock> {
   const { setupRequired = false, signedInAs = null, failSetupStatusTimes = 0 } = options;
   const mock: ApiMock = {
+    search: searchDataOf(),
+    artists: null,
+    catalogState: decodeCatalogState(sampleBody("search/catalog-status-ready")),
     setupRequired,
     session: signedInAs,
     accounts: setupRequired
@@ -244,8 +259,25 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
     mock.operations.unshift({ id: uuidOf("b", counter++), created_at: now(), ...item });
   };
 
-  const handle = (method: string, path: string, headers: Record<string, string>, body: unknown, search: URLSearchParams): Handled => {
+  const handle = (method: string, path: string, headers: Record<string, string>, body: unknown, search: URLSearchParams, requestOrigin: string, invalidJSON: boolean, requestURL: URL): Handled => {
     const key = `${method} ${path}`;
+    if (mock.artists !== null && /^\/api\/v1\/(artists(?:\/|$)|artist-candidates$)/.test(path)) {
+      const artists = mock.artists;
+      const requireAdmin = method !== "GET" || path.endsWith("/merged-sources") || path === "/api/v1/artist-candidates";
+      return guarded(method, path, requireAdmin, () => respondToArtists(artists, method, requestURL, body, headers["idempotency-key"] ?? null));
+    }
+    if (mock.artists !== null) {
+      const artists = mock.artists;
+      const artistLookup = path === "/api/v1/me/favorites/lookup" && body !== null && typeof body === "object" && "artist_ids" in body && Array.isArray(body.artist_ids) && body.artist_ids.length > 0;
+      if (/^\/api\/v1\/me\/favorites\/artists(?:\/|$)/.test(path) || artistLookup) {
+        return guarded(method, path, false, () => respondToArtistFavorites(artists, method, new URL(`${path}?${search}`, "http://mock.local"), body, viewer()?.id));
+      }
+      if (key === "POST /api/v1/tracks/summaries") {
+        const error = artistSummaryOriginError(headers.origin ?? null, requestOrigin);
+        if (error !== null) return error;
+        return guarded(method, path, false, () => invalidJSON ? artistError("invalid_json", 400) : respondToArtistSummaries(artists, body));
+      }
+    }
     if (/^\/api\/v1\/me\/(favorites|playlists)(\/|$)/.test(path)) {
       if (mock.forbid.has(key)) return guarded(method, path, false, () => sample("errors/forbidden"));
       return respondToPersonal(mock.personal, viewer()?.id ?? null, { method, path: `${path}?${search}`, body, idempotencyKey: headers["idempotency-key"] ?? null });
@@ -281,6 +313,11 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
       case "POST /api/v1/auth/logout":
         mock.session = null;
         return sample("auth/logout");
+      case "GET /api/v1/search":
+      case "GET /api/v1/search/suggestions":
+        return guarded(method, path, false, () => respondToSearch(mock.search, path, search));
+      case "GET /api/v1/catalog/status":
+        return guarded(method, path, false, () => json(mock.artists === null ? mock.catalogState : artistCatalogState(mock.artists)));
       case "GET /api/v1/playback/formats":
         return guarded(method, path, false, () => sample("playback/formats"));
       case "GET /api/v1/me/plays/recent-releases":
@@ -490,10 +527,12 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
     const request = route.request();
     const url = new URL(request.url());
     let body: unknown;
+    let invalidJSON = false;
     try {
       // Playwright 对无请求体也返回 null，必须与显式 JSON null 区分，心形 PUT/DELETE 合法地不带 body。
       body = request.postData() === null ? undefined : request.postDataJSON();
     } catch {
+      invalidJSON = true;
       body = undefined;
     }
     mock.calls.push({ method: request.method(), path: url.pathname, search: url.search, body, idempotencyKey: request.headers()["idempotency-key"] ?? null });
@@ -510,7 +549,7 @@ export async function installApiMock(context: BrowserContext, options: MockOptio
       await route.fulfill({ status: 200, contentType: "image/png", headers: { "Cache-Control": "private, no-cache" }, body: gradientPng(96, seed) });
       return;
     }
-    const handled = handle(request.method(), url.pathname, request.headers(), body, url.searchParams);
+    const handled = handle(request.method(), url.pathname, request.headers(), body, url.searchParams, url.origin, invalidJSON, url);
     if (handled === "abort") {
       await route.abort("failed");
       return;

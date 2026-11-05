@@ -1,7 +1,9 @@
 {
   "body": {
     "album_artist": "Sample Cue Artist",
+    "album_artist_refs": [],
     "artist": "Sample Cue Artist",
+    "artist_refs": [],
     "artwork": null,
     "attention_count": 0,
     "barcode": null,
@@ -10,6 +12,7 @@
     "corrected_fields": [],
     "credits": [
       {
+        "artist_refs": [],
         "name": "Sample Cue Artist",
         "role": "album_artist"
       }
@@ -56,6 +59,7 @@
         "tracks": [
           {
             "artist": "Sample Cue Artist",
+            "artist_refs": [],
             "bit_depth": 16,
             "bitrate": null,
             "channels": 2,
@@ -78,6 +82,7 @@
           },
           {
             "artist": "Sample Cue Artist",
+            "artist_refs": [],
             "bit_depth": 16,
             "bitrate": null,
             "channels": 2,

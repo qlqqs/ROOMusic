@@ -11,6 +11,7 @@
           "title": "Sample Symphonies (corrected)",
           "visible": true
         },
+        "artist": null,
         "changes": {
           "from": {
             "default": null,

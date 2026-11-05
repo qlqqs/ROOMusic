@@ -3,7 +3,7 @@ export { PlayerProvider, usePlayer, usePlayerEngine, usePlayerProgress, usePlaye
 export { usePlaybackCapabilities } from "./hooks/use-playback-capabilities";
 export { useCurrentTrackMarker } from "./hooks/use-current-track-marker";
 export { PlayerEngine, type AddResult, type EngineDeps, type PlayerEvent, type PlayerFault, type PlayerProgress, type PlayerSnapshot, type PlayerStatus, type PlaybackFailureReason } from "./engine/player-engine";
-export { playModes, upNext, MAX_QUEUE_ENTRIES, type PlayMode, type PlayerTrack, type QueueEntry, type QueueState, type SourceFacts } from "./engine/queue";
+export { playModes, upNext, MAX_QUEUE_ENTRIES, type PlayMode, type PlayerTrack, type QueueEntry, type QueueState, type SourceFacts, type TrackDisplayMetadata } from "./engine/queue";
 export { playerTrackOf, playerTracksOf } from "./engine/tracks";
 export { unplayableText, type CapabilityTable, type TrackVerdict } from "./engine/capability";
 export { NowPlayingPage } from "./pages/now-playing-page";

@@ -1,0 +1,112 @@
+/*
+ * 首字母导航（全部、A–Z、假名、#，共 29 项）：列数按导航自己的宽度定，放得下时一行排完；
+ * 放不下时选的列数都不会让最后一行只剩一项（29 = 15 + 14 = 10 + 10 + 9 = 6 × 4 + 5）。
+ * 每格至少是一个控件大小的命中区（宽屏 36px，窄屏 44px）。
+ */
+.initials {
+  container-type: inline-size;
+  margin-block: var(--space-4);
+}
+
+.initialList {
+  --initial-columns: 6;
+  display: grid;
+  grid-template-columns: repeat(var(--initial-columns), minmax(0, 1fr));
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-variant-numeric: lining-nums;
+}
+
+@container (min-width: 470px) {
+  .initialList {
+    --initial-columns: 10;
+  }
+}
+
+@container (min-width: 600px) {
+  .initialList {
+    --initial-columns: 15;
+    gap: 4px;
+  }
+}
+
+@container (min-width: 1100px) {
+  .initialList {
+    --initial-columns: 29;
+    gap: 2px;
+  }
+}
+
+/* 当前分组用金色轻底加下划线，不只靠颜色。 */
+.initial {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--control-height);
+  padding: 0 2px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-14);
+  white-space: nowrap;
+}
+
+.initial[aria-current="page"] {
+  background: var(--color-selected);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.results {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.results[aria-busy="true"] {
+  opacity: 0.6;
+}
+
+.groups {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.group {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.groupHeading {
+  font-size: var(--fs-17);
+  font-variant-numeric: lining-nums;
+}
+
+.list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-2) var(--space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--space-1) 0;
+}
+
+.name {
+  overflow-wrap: anywhere;
+  font-size: var(--fs-15);
+}
+
+.meta {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  overflow-wrap: anywhere;
+  font-variant-numeric: lining-nums tabular-nums;
+}

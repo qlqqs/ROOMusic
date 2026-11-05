@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/searchindex"
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
@@ -94,10 +95,27 @@ func persistTrack(ctx context.Context, tx *sql.Tx, scanID, rootID, mediumID stri
 // 被腾出的曲目失去来源身份；它若没有在本轮计划中被别的观察沿用，内容已不在该路径，同时置为 missing。
 // 计划由后续候选接手的曲目保持 present，扫描中途取消时，下一次完整遍历仍能把它放进消失集合重新配对。
 func vacateSourceIdentity(ctx context.Context, tx *sql.Tx, scanID, rootID, identity, plannedTrackID string) error {
-	_, err := tx.ExecContext(ctx, `UPDATE tracks SET source_identity=NULL,
+	rows, err := tx.QueryContext(ctx, `UPDATE tracks SET source_identity=NULL,
 			source_status=CASE WHEN EXISTS (SELECT 1 FROM scan_observations planned
 				WHERE planned.scan_run_id=$3::uuid AND planned.root_id=$4::uuid AND planned.planned_track_id=tracks.id)
 				THEN source_status ELSE 'missing' END
-		WHERE source_identity=$1 AND id IS DISTINCT FROM $2::uuid`, identity, nullableString(plannedTrackID), scanID, rootID)
-	return err
+		WHERE source_identity=$1 AND id IS DISTINCT FROM $2::uuid RETURNING id::text`, identity, nullableString(plannedTrackID), scanID, rootID)
+	if err != nil {
+		return err
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	return searchindex.RefreshTrackVisibility(ctx, tx, ids)
 }

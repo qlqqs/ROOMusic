@@ -1,0 +1,140 @@
+.headerActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.results {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.results[aria-busy="true"] {
+  opacity: 0.6;
+}
+
+.names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.name {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* 与专辑库同一种卡片（features/catalog 的 album-card）。 */
+.album {
+  min-width: 0;
+}
+
+.card {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.cardTitle {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-family: var(--font-heading);
+  font-size: var(--fs-17);
+  font-weight: var(--font-heading-weight);
+  line-height: 1.3;
+}
+
+.card:hover .cardTitle {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.cardMeta {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.cardTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+}
+
+.roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 选中的角色：下划线加金色轻底，不只靠颜色。 */
+.role {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  min-height: var(--control-height);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.role[aria-current="page"] {
+  background: var(--color-selected);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.roleCount,
+.single {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* 与历史页的曲目列同一套外观。 */
+.trackTitle {
+  display: block;
+}
+
+.trackArtist {
+  display: block;
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: var(--fs-14);
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+.tag {
+  display: block;
+  margin-top: var(--space-1);
+  font-family: var(--font-body);
+  font-weight: 400;
+}
+
+.missing {
+  color: var(--text-secondary);
+}
+
+.duration {
+  white-space: nowrap;
+  font-variant-numeric: lining-nums tabular-nums;
+}

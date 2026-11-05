@@ -1,0 +1,77 @@
+{
+  "日期": "2026-11-04",
+  "范围": "M5 ④ 步骤3，仅测试与测试基础设施",
+  "vitest": {
+    "文件数": 20,
+    "总数": 592,
+    "通过": 583,
+    "失败": 9,
+    "失败用例": [
+      {
+        "文件": "src/features/search/api/decoders.test.ts",
+        "用例": "搜索响应 decoder 按 UTF-8 字节预算拒绝超长 query"
+      },
+      {
+        "文件": "src/features/search/api/decoders.test.ts",
+        "用例": "搜索响应 decoder 按 UTF-8 字节预算拒绝超长 original"
+      },
+      {
+        "文件": "src/features/search/api/decoders.test.ts",
+        "用例": "搜索响应 decoder 拒绝建议能力非法组合：不可用艺人却被列为可搜索"
+      },
+      {
+        "文件": "src/features/search/api/decoders.test.ts",
+        "用例": "搜索响应 decoder 拒绝建议能力非法组合：重复类别"
+      },
+      {
+        "文件": "src/features/search/api/decoders.test.ts",
+        "用例": "搜索专用分页 拒绝计数与 has_more 矛盾 {\"page\":1,\"page_size\":50,\"total\":0,\"total_relation\":\"eq\",\"has_more\":true}"
+      },
+      {
+        "文件": "src/features/search/api/decoders.test.ts",
+        "用例": "搜索专用分页 拒绝计数与 has_more 矛盾 {\"page\":1,\"page_size\":50,\"total\":100,\"total_relation\":\"eq\",\"has_more\":false}"
+      },
+      {
+        "文件": "src/features/search/api/decoders.test.ts",
+        "用例": "搜索专用分页 拒绝计数与 has_more 矛盾 {\"page\":20,\"page_size\":50,\"total\":1000,\"total_relation\":\"eq\",\"has_more\":true}"
+      },
+      {
+        "文件": "src/features/search/api/decoders.test.ts",
+        "用例": "搜索专用分页 拒绝计数与 has_more 矛盾 {\"page\":1,\"page_size\":50,\"total\":1000,\"total_relation\":\"gte\",\"has_more\":false}"
+      },
+      {
+        "文件": "src/features/search/hooks/use-search-results.test.tsx",
+        "用例": "搜索结果 epoch 隔离 epoch 上升时不把旧结果当成新代次的翻页占位显示"
+      }
+    ]
+  },
+  "真实服务": {
+    "通过": 2,
+    "失败": 0,
+    "用例": [
+      "爱与乐章→愛與樂章，从结果实播",
+      "ＡＢＣ１２３→ABC123，从结果实播"
+    ]
+  },
+  "浏览器": {
+    "总数": 9,
+    "通过": 7,
+    "失败": 2,
+    "宽度": [
+      320,
+      375,
+      390,
+      768,
+      1024,
+      1440
+    ],
+    "失败原因": "1024和1440下长标题把时长3:04挤成两行",
+    "axe违规": 0
+  },
+  "门禁": {
+    "lint": "通过",
+    "typecheck": "通过",
+    "build": "通过",
+    "diff-check": "通过"
+  }
+}

@@ -7,6 +7,7 @@
           "username": "curator"
         },
         "album": null,
+        "artist": null,
         "changes": {
           "from": {
             "group_id": "00000000-0000-4000-8000-000000000002",
@@ -37,6 +38,7 @@
           "username": "curator"
         },
         "album": null,
+        "artist": null,
         "changes": {
           "from": {
             "group_id": "00000000-0000-4000-8000-000000000003",
@@ -67,6 +69,7 @@
           "username": "curator"
         },
         "album": null,
+        "artist": null,
         "changes": {
           "from": {
             "group_id": "00000000-0000-4000-8000-000000000007",
@@ -97,6 +100,7 @@
           "username": "curator"
         },
         "album": null,
+        "artist": null,
         "changes": {
           "fields": [
             {

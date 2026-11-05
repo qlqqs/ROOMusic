@@ -1,0 +1,30 @@
+{
+  "test_events": {
+    "pass": 1782,
+    "fail": 1
+  },
+  "top_level_tests": {
+    "pass": 617,
+    "fail": 1
+  },
+  "postgres_top_level_tests": {
+    "pass": 361,
+    "fail": 1
+  },
+  "packages": {
+    "pass": 20,
+    "skip": 2,
+    "fail": 1
+  },
+  "failures": [
+    {
+      "package": "github.com/qlqq/roomusic/backend/internal/app",
+      "test": "TestPostgreSQLCatalogHTTPPerformance"
+    },
+    {
+      "package": "github.com/qlqq/roomusic/backend/internal/app",
+      "test": null
+    }
+  ],
+  "skipped_tests": []
+}

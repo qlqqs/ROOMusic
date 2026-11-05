@@ -1,0 +1,71 @@
+{
+  "body": {
+    "catalog_state": {
+      "artists_state": "ready",
+      "epoch": 4,
+      "search_mode": "normalized"
+    },
+    "items": [
+      {
+        "artist": {
+          "album_count": 1,
+          "available": true,
+          "id": "00000000-0000-4000-8000-000000000001",
+          "initial_group": "T",
+          "name": "同名艺人",
+          "roles": [
+            "release_artist",
+            "album_artist",
+            "track_artist"
+          ],
+          "track_count": 1
+        },
+        "match": {
+          "alias": null,
+          "artist_id": "00000000-0000-4000-8000-000000000001",
+          "field": "artist_name",
+          "kind": "exact",
+          "original": "同名艺人",
+          "release_id": null,
+          "role": null,
+          "track_id": null
+        }
+      },
+      {
+        "artist": {
+          "album_count": 1,
+          "available": true,
+          "id": "00000000-0000-4000-8000-000000000002",
+          "initial_group": "T",
+          "name": "同名艺人甲",
+          "roles": [
+            "release_artist",
+            "album_artist",
+            "track_artist"
+          ],
+          "track_count": 1
+        },
+        "match": {
+          "alias": "同名艺人",
+          "artist_id": "00000000-0000-4000-8000-000000000002",
+          "field": "artist_alias",
+          "kind": "exact",
+          "original": "同名艺人",
+          "release_id": null,
+          "role": null,
+          "track_id": null
+        }
+      }
+    ],
+    "pagination": {
+      "has_more": false,
+      "page": 1,
+      "page_size": 50,
+      "total": 2,
+      "total_relation": "eq"
+    },
+    "query": "同名艺人",
+    "type": "artists"
+  },
+  "status": 200
+}

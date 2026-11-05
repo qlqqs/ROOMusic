@@ -31,6 +31,8 @@ frontend/
     │   ├── player/                 # 播放器：api、engine（含计次跟踪器、歌词分组与定位）、provider、能力查询、底栏、歌词面板与正在播放页
     │   ├── listening/              # 播放历史：播放上报器（带幂等键、有限重试、会话结束作废）、概览的“最近播放”区块与“我的音乐”的历史页签（M5 ①）
     │   ├── personal/               # 收藏与歌单（M5 ② ③）：心形与批量收藏状态、收藏页、歌单列表与详情（拖动与菜单排序、撤销）、“添加到歌单…”与新建对话框、跨标签页刷新
+    │   ├── search/                 # 全局搜索（M5 ④）：侧栏搜索框与建议、结果页的艺人（M5 ⑤）、专辑、曲目各栏与分页、匹配说明
+    │   ├── artists/                # 艺人（M5 ⑤）：艺人列表（首字母、两种排序、角色筛选）与艺人页（名字、专辑、按角色的曲目），播放与管理经插槽由 app 组合
     │   ├── governance/             # 受治理操作（M3，管理员）：编辑发行信息、调整归组、设定默认版本（M4）、撤销、操作记录页与专辑详情的“修改记录”
     │   └── catalog/                # 专辑：列表（M1b）、详情（M1b）、封面、证据展示、默认版本标签与版本对比（M4），以及概览的计数（M1a）
     ├── shared/
@@ -122,7 +124,16 @@ features/governance/
   它导入 catalog 的公开合同（封面、专辑艺人的显示规则、专辑搜索与专辑详情的读取），**catalog 从不导入 governance**：专辑详情里的管理员区块由 app 经插槽
   （`renderAdminActions`、`renderAdminSections`）传给 catalog 的详情视图；写操作之后刷新什么缓存、版本换了专辑组之后导航到哪里，由 app 提供给命令 hook，
   governance 不知道别的 feature 的查询键，也不依赖路由的页面。
-- `search` 拥有查询与筛选的 URL 状态和结果展示（尚未建立）。
+- `search`（M5 ④）拥有全局搜索：侧栏的搜索框（组合框与建议）、结果页 `/search` 的 URL 状态（`q`、`albums_page`、`tracks_page`）、两栏结果与专用分页、
+  “匹配到了什么”的小字（`match-note.ts`）。它只经 catalog 的 `api/decoders` 与 `api/track-summary` 复用组摘要、曲目安全摘要（`trackSummaryDecoder`，曲目结果在它之外再解码 `match`）与目录状态的解码器，
+  曲目标题与艺人的显示规则用 catalog 公开的 `trackTitleOf`、`trackArtistOf`，
+  经公开入口读目录状态（`useCatalogState`）；**不导入 player 与 personal**：曲目行用统一的 `TrackActions`（播放、心形、“更多”里的下一首播放、加入队列、添加到歌单…），
+  由 app（`app/routes/search-playback.tsx`）经插槽 `renderTrackActions` 组合，一页曲目的收藏状态经插槽 `renderTrackRowsScope` 由 `TrackFavoritesScope` 一次读出（`app/routes/search-page.tsx`）；建议浮层只用于跳转，没有心形；
+  曲目摘要转队列曲目与“能否播放”的判断和其他页共用（`app/routes/track-playback.ts` 的 `playerTrackOfSummary`、`unplayableReason`）。
+  外壳（app）放置搜索框、处理“/”快捷键，并在目录状态的 epoch 变大时取消旧代次的搜索请求、让目录缓存失效（`app/shell/use-catalog-epoch-sync.ts`）。
+- `artists`（M5 ⑤）拥有艺人列表与艺人页的 API、解码器、查询键（带目录 epoch）、URL 校验与视图；只导入 catalog 的公开合同（艺人摘要、艺人引用、可点的艺人名
+  `ArtistNames`、封面与卡片网格），不导入 player、personal、governance、search。艺人页的播放全部/随机播放（`app/routes/artist-playback.tsx`）、心形、曲目行动作与
+  管理员的合并/拆开/改名（governance 的 `ArtistAdminActions`）由 app 经插槽组合（`app/routes/artist-detail-page.tsx`）。详细合同见[艺人约定](./artist-guidelines.md)。
 - 通用 `operations` 拥有 Change Set 与审批的状态及受支持的恢复界面，不是通用 toast（尚未建立；M3 的操作记录与撤销界面在 `governance`）。
 - `shared/api` 拥有同源请求、凭据、请求关联、响应体处理、错误信封、重试策略与解码原语；feature 的端点与 DTO 留在 feature。
   `fetch` 只在 `shared/api/request.ts` 中调用，由 ESLint 规则保证。

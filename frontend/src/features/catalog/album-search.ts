@@ -46,17 +46,20 @@ export function isFiltered(search: AlbumSearch): boolean {
 }
 
 /**
- * 专辑详情的 URL 状态：选中的版本。release 只在选中非代表版本时出现；代表版本（默认）不写进 URL。
- * 字段写成 `T | undefined`，原因同上。
+ * 专辑详情的 URL 状态：选中的版本与要定位的曲目。release 只在选中非代表版本时出现；代表版本（默认）不写进 URL。
+ * track 是从别处（全局搜索的建议）点进来时要定位的曲目：每次来到这一条历史记录（打开、刷新、后退、前进）定位一次，
+ * 曲目不在选中的版本里就什么也不做。切换版本的链接不带它。字段写成 `T | undefined`，原因同上。
  */
 export type AlbumDetailSearch = {
   release?: string | undefined;
+  track?: string | undefined;
 };
 
-/** 路由的 validateSearch（详情页）：只有 UUID 形状的 release 保留，并统一成小写，与接口给的成员 ID 直接比较。 */
+/** 路由的 validateSearch（详情页）：只有 UUID 形状的 release 与 track 保留，并统一成小写，与接口给的 ID 直接比较。 */
 export function parseAlbumDetailSearch(search: Record<string, unknown>): AlbumDetailSearch {
   const release = search["release"];
-  return { release: isUuid(release) ? release.toLowerCase() : undefined };
+  const track = search["track"];
+  return { release: isUuid(release) ? release.toLowerCase() : undefined, track: isUuid(track) ? track.toLowerCase() : undefined };
 }
 
 /**

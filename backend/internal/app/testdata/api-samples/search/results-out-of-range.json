@@ -1,0 +1,20 @@
+{
+  "body": {
+    "catalog_state": {
+      "artists_state": "ready",
+      "epoch": 4,
+      "search_mode": "normalized"
+    },
+    "items": [],
+    "pagination": {
+      "has_more": false,
+      "page": 2,
+      "page_size": 50,
+      "total": 1,
+      "total_relation": "eq"
+    },
+    "query": "summer",
+    "type": "tracks"
+  },
+  "status": 200
+}

@@ -1,0 +1,20 @@
+{
+  "body": {
+    "catalog_state": {
+      "artists_state": "ready",
+      "epoch": 4,
+      "search_mode": "normalized"
+    },
+    "items": [],
+    "pagination": {
+      "has_more": false,
+      "page": 1,
+      "page_size": 50,
+      "total": 0,
+      "total_relation": "eq"
+    },
+    "query": "提交即命中新词legacy",
+    "type": "albums"
+  },
+  "status": 200
+}

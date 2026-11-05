@@ -1,0 +1,40 @@
+/* 与历史页的曲目列同一套外观（features/listening 的 history-view）。 */
+.title {
+  display: block;
+}
+
+.artist,
+.note {
+  display: block;
+  font-family: var(--font-body);
+  font-size: var(--fs-14);
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+.artist {
+  color: var(--text-secondary);
+}
+
+.note {
+  margin-top: 2px;
+  color: var(--text-accent);
+  font-size: var(--fs-12);
+}
+
+.tag {
+  display: block;
+  margin-top: var(--space-1);
+  font-family: var(--font-body);
+  font-weight: 400;
+}
+
+.missing {
+  color: var(--text-secondary);
+}
+
+/* 时长始终一行：标题很长时表格会压缩其他列，“3:04”不能被折成两行；这一列按内容取宽度。 */
+.duration {
+  white-space: nowrap;
+  font-variant-numeric: lining-nums tabular-nums;
+}

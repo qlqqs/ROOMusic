@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_artist_name",
+      "message": "艺人名不能为空"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

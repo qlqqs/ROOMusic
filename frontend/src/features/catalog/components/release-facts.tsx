@@ -1,7 +1,9 @@
 import { Fragment } from "react";
 import { Panel } from "../../../shared/ui";
 import type { ReleaseDetailDTO } from "../api/decoders";
-import { groupCredits, isFieldCorrected, releaseFacts } from "../format";
+import type { ReleaseCreditDTO } from "../api/decoders";
+import { isFieldCorrected, releaseFacts } from "../format";
+import { ArtistNames } from "./artist-names";
 import { creditRoleLabel } from "../labels";
 import { ManualCorrectionTag } from "./manual-correction-tag";
 import styles from "./release-facts.module.css";
@@ -18,7 +20,10 @@ type ReleaseFactsProps = {
  */
 export function ReleaseFacts({ release, versioned }: ReleaseFactsProps) {
   const facts = releaseFacts(release);
-  const credits = groupCredits(release.credits);
+  // 按角色归并，角色与姓名都保持接口给出的顺序；艺人就绪时每个名字是链接。
+  const groups = new Map<string, ReleaseCreditDTO[]>();
+  for (const credit of release.credits) groups.set(credit.role, [...(groups.get(credit.role) ?? []), credit]);
+  const credits = Array.from(groups, ([role, entries]) => ({ role, entries }));
   return (
     <>
       <Panel title={versioned ? "此版本" : "发行信息"}>
@@ -49,7 +54,14 @@ export function ReleaseFacts({ release, versioned }: ReleaseFactsProps) {
             {credits.map((group) => (
               <Fragment key={group.role}>
                 <dt>{creditRoleLabel(group.role)}</dt>
-                <dd>{group.names.join("、")}</dd>
+                <dd>
+                  {group.entries.map((credit, index) => (
+                    <Fragment key={`${credit.name}:${index}`}>
+                      {index === 0 ? null : "、"}
+                      <ArtistNames text={credit.name} refs={credit.artist_refs} />
+                    </Fragment>
+                  ))}
+                </dd>
               </Fragment>
             ))}
           </dl>

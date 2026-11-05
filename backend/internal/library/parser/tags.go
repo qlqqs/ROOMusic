@@ -37,16 +37,17 @@ func parseNumber(value string) int {
 	return returnValue
 }
 
-func setAudioTag(observation *AudioObservation, key, value string) {
+func setAudioTag(observation *AudioObservation, key, value string) error {
 	if setAudioLyrics(observation, key, value) {
-		return
+		return nil
+	}
+	if err := captureArtistTag(observation, key, value); err != nil {
+		return err
 	}
 	value = metadata.BoundedText(value)
 	switch strings.ToUpper(key) {
 	case "TITLE", "TRACKTITLE":
 		observation.Title = value
-	case "ARTIST":
-		observation.Artist = value
 	case "ALBUMARTIST", "ALBUM ARTIST":
 		observation.AlbumArtist = value
 	case "ALBUM", "ALBUMTITLE":
@@ -88,6 +89,7 @@ func setAudioTag(observation *AudioObservation, key, value string) {
 	case "MEDIA", "MEDIATYPE":
 		observation.MediaType = value
 	}
+	return nil
 }
 
 func addObservationCredits(observation *AudioObservation, role, value string) {

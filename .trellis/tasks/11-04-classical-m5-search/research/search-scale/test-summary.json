@@ -1,0 +1,93 @@
+{
+  "delivery": {
+    "top_level_tests": 381,
+    "postgresql_tests": 259,
+    "skipped_events": 0,
+    "failed_events": 0,
+    "packages": [
+      {
+        "package": "github.com/qlqq/roomusic/backend/cmd/roomusic",
+        "tests": 3,
+        "postgresql_tests": 0
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "tests": 110,
+        "postgresql_tests": 100
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "tests": 44,
+        "postgresql_tests": 27
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/governance",
+        "tests": 66,
+        "postgresql_tests": 62
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/httpapi",
+        "tests": 5,
+        "postgresql_tests": 0
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/ingest",
+        "tests": 29,
+        "postgresql_tests": 0
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/internal/searchindex",
+        "tests": 3,
+        "postgresql_tests": 0
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/internal/writegate",
+        "tests": 1,
+        "postgresql_tests": 0
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/maintenance",
+        "tests": 7,
+        "postgresql_tests": 6
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/textnorm",
+        "tests": 17,
+        "postgresql_tests": 0
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/library",
+        "tests": 84,
+        "postgresql_tests": 56
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/platform/postgres",
+        "tests": 12,
+        "postgresql_tests": 8
+      }
+    ]
+  },
+  "final-followup": {
+    "top_level_tests": 29,
+    "postgresql_tests": 21,
+    "skipped_events": 0,
+    "failed_events": 0,
+    "packages": [
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/app",
+        "tests": 14,
+        "postgresql_tests": 13
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog",
+        "tests": 12,
+        "postgresql_tests": 8
+      },
+      {
+        "package": "github.com/qlqq/roomusic/backend/internal/catalog/httpapi",
+        "tests": 3,
+        "postgresql_tests": 0
+      }
+    ]
+  }
+}

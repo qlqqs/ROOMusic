@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useViewerScope } from "../../auth";
-import type { FavoriteAlbumsPageDTO, FavoriteTracksPageDTO, PersonalQueueDTO } from "../api/decoders";
-import { fetchFavoriteAlbums, fetchFavoriteTracks, fetchFavoriteTracksQueue } from "../api/favorites";
+import type { FavoriteAlbumsPageDTO, FavoriteArtistsPageDTO, FavoriteTracksPageDTO, PersonalQueueDTO } from "../api/decoders";
+import { fetchFavoriteAlbums, fetchFavoriteArtists, fetchFavoriteTracks, fetchFavoriteTracksQueue } from "../api/favorites";
 import { fetchPlaylistQueue } from "../api/playlists";
 import { personalKeys } from "../query-keys";
 
@@ -28,6 +28,18 @@ export function useFavoriteAlbums(page: number, revision: number | null) {
     queryKey: personalKeys.favoriteList(generation, "album", params),
     queryFn: ({ signal }) => fetchFavoriteAlbums({ ...params, signal }),
     select: (response): FavoriteAlbumsPageDTO => response.data,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** 收藏艺人的一页（与专辑、曲目的页码各自独立）。艺人数据还在整理时读取失败为 503 artist_catalog_preparing。 */
+export function useFavoriteArtists(page: number, revision: number | null) {
+  const { generation } = useViewerScope();
+  const params = { page, pageSize: FAVORITES_PAGE_SIZE, revision };
+  return useQuery({
+    queryKey: personalKeys.favoriteList(generation, "artist", params),
+    queryFn: ({ signal }) => fetchFavoriteArtists({ ...params, signal }),
+    select: (response): FavoriteArtistsPageDTO => response.data,
     placeholderData: keepPreviousData,
   });
 }

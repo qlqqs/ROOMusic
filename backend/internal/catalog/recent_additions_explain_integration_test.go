@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
 )
 
 type explainedRead struct {
@@ -50,9 +52,7 @@ func TestPostgreSQLRecentAdditionsExplain(t *testing.T) {
  SELECT md5('explain-track-'||n||'-'||p)::uuid,md5('explain-medium-'||n)::uuid,p,'合成曲目','合成艺人',1,
  $1::uuid,'synthetic/'||n||'/'||p||'.flac',CASE WHEN n%40=0 OR (n%4=1 AND p=1) THEN 'missing' ELSE 'present' END,NOW(),'physical',180
  FROM generate_series(1,10000) n CROSS JOIN generate_series(1,10) p`, f.rootID)
-	for _, table := range []string{"release_groups", "releases", "media", "tracks"} {
-		f.exec("ANALYZE " + table)
-	}
+	postgrestest.AnalyzeSchema(t, context.Background(), f.database, "release_groups", "releases", "media", "tracks")
 	var report strings.Builder
 	report.WriteString("# 最近新增与加入时间排序：规模验证\n\n## 环境与方法\n\n- 一次性 Compose 项目 roomusic-test-m5f，随机测试数据库、独立 schema；没有访问用户数据。\n- 合成 8,000 组、10,000 发行、100,000 曲目，5,000 曲目 missing（5%）；前2,000组双版本，其余单版本，其中250发行整版缺失、2,500发行各缺失1轨，共7,800个可见组。\n- 核心四表仅在测试准备时 ANALYZE。五个空元数据辅助表禁止自动统计，先验证未 ANALYZE（reltuples=-1），再显式 ANALYZE（reltuples=0）。业务请求不执行 ANALYZE、不修改任何 enable_* 或全局/会话配置。\n- 每个只读 REPEATABLE READ 事务开始后 SET LOCAL jit = off；同一物理连接事务内 SHOW jit=off，结束后与连接原默认值相同。\n- 下文捕获真实 Store 查询和参数，含分页COUNT，运行 EXPLAIN (ANALYZE, BUFFERS)。完整 HTTP 服务端 p95 见本文件的 HTTP 结果小节和 catalog-http-performance.md；SQL执行时间不能代替HTTP门槛。\n")
 	var version string
@@ -76,9 +76,7 @@ func TestPostgreSQLRecentAdditionsExplain(t *testing.T) {
 		if analyzed {
 			name = "辅助空表已 ANALYZE"
 			want = 0
-			for _, table := range auxiliary {
-				f.exec("ANALYZE " + table)
-			}
+			postgrestest.AnalyzeSchema(t, ctx, conn, auxiliary...)
 		}
 		fmt.Fprintf(&report, "\n## %s\n\n", name)
 		for _, table := range auxiliary {

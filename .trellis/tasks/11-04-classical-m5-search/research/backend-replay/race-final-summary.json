@@ -1,0 +1,17 @@
+{
+  "test_events": {
+    "pass": 1784
+  },
+  "top_level_tests": {
+    "pass": 619
+  },
+  "postgres_top_level_tests": {
+    "pass": 363
+  },
+  "packages": {
+    "pass": 22,
+    "skip": 1
+  },
+  "failures": [],
+  "skipped_tests": []
+}

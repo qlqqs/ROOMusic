@@ -27,10 +27,12 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	h.route(queue, "GET /api/v1/me/favorites/tracks/queue", false, h.favoriteQueue)
 	h.route(favorites, "GET /api/v1/me/favorites/tracks", false, h.favoriteTracks)
 	h.route(favorites, "GET /api/v1/me/favorites/albums", false, h.favoriteAlbums)
+	h.route(favorites, "GET /api/v1/me/favorites/artists", false, h.favoriteArtists)
 	h.route(favorites, "POST /api/v1/me/favorites/lookup", true, h.lookup)
 	for _, method := range []string{"PUT", "DELETE"} {
 		h.route(favorites, method+" /api/v1/me/favorites/tracks/{track_id}", true, h.favoriteTrack)
 		h.route(favorites, method+" /api/v1/me/favorites/albums/{group_id}", true, h.favoriteAlbum)
+		h.route(favorites, method+" /api/v1/me/favorites/artists/{artist_id}", true, h.favoriteArtist)
 	}
 	httpserver.RegisterAPIFallback(favorites, httpserver.APINotFoundHandler(favorites))
 	httpserver.RegisterAPIFallback(queue, httpserver.APINotFoundHandler(queue))
@@ -96,6 +98,11 @@ func respond(w http.ResponseWriter, r *http.Request, result any, err error) {
 func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	status, code, message := 503, "database_unavailable", "个人音乐暂时不可用"
 	switch {
+	case errors.Is(err, personal.ErrArtistCatalogPreparing):
+		status, code, message = 503, "artist_catalog_preparing", "艺人资料正在整理，请稍后重试。"
+		w.Header().Set("Retry-After", "3")
+	case errors.Is(err, personal.ErrArtistCatalogNotReady):
+		status, code, message = 409, "artist_catalog_not_ready", "艺人资料正在整理，请稍后重试。"
 	case errors.Is(err, personal.ErrInvalidInput):
 		status, code, message = 400, "invalid_input", "请求参数无效"
 	case errors.Is(err, personal.ErrNotFound):

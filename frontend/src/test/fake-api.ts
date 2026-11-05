@@ -1,6 +1,7 @@
 import { sampleBody } from "./api-samples";
 import { installPersonalApi } from "./fake-personal";
 import { jsonResponse, sampleResponse, stubFetch, type RecordedRequest } from "./http";
+import { respondToSearch, searchDataOf, type SearchData } from "./search-data";
 import { withValue } from "./mutate";
 
 type Handler = (request: RecordedRequest) => Response | Promise<Response>;
@@ -73,6 +74,8 @@ export function installFakeSession(api: FakeApi, initial: Partial<FakeSession> =
     const current = viewer();
     return current === null ? sampleResponse("errors/unauthorized") : jsonResponse(200, current);
   });
+  // 默认采用已发布的搜索状态；需要回填或错误状态的用例显式覆盖，不默认登记搜索响应。
+  api.on("GET", "/api/v1/catalog/status", () => viewer() === null ? sampleResponse("errors/unauthorized") : sampleResponse("search/catalog-status-ready"));
   // 已登录外壳中的专辑播放动作读取格式表；错误场景可以显式覆盖这个默认响应。
   api.on("GET", "/api/v1/playback/formats", () => viewer() === null ? sampleResponse("errors/unauthorized") : sampleResponse("playback/formats"));
   // 已登录外壳里的播放历史：概览读取最近播放（默认没有记录）、播放器上报一次播放、清除历史。响应取自后端样本，需要数据的测试自行覆盖。
@@ -124,3 +127,17 @@ export function installOverviewApi(api: FakeApi, options: { albums?: number; att
   api.on("GET", "/api/v1/library-roots", () => sampleResponse("library-roots/list"));
   api.on("GET", "/api/v1/users", () => sampleResponse("users/list"));
 }
+
+/** 搜索只响应显式登记的条目；可与浏览器替身共享同一组响应。 */
+export function installFakeSearch(api: FakeApi, data: SearchData = searchDataOf()): SearchData {
+  for (const path of ["/api/v1/search", "/api/v1/search/suggestions"]) {
+    api.on("GET", path, (request) => {
+      const url = new URL(request.path, "http://localhost");
+      const { status, body } = respondToSearch(data, url.pathname, url.searchParams);
+      return jsonResponse(status, body);
+    });
+  }
+  return data;
+}
+
+export { installArtistsApi } from "./fake-artists";

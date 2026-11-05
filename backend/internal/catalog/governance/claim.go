@@ -625,6 +625,12 @@ func executeClaimPlan(ctx context.Context, tx *sql.Tx, operationID string, snaps
 		}
 	}
 
+	for _, id := range []string{sourceID, targetID} {
+		if err := refreshGovernedRelease(ctx, tx, id); err != nil {
+			return operations.Outcome{}, err
+		}
+	}
+
 	after, err := loadClaimRecordState(ctx, tx, snapshot)
 	if err != nil {
 		return operations.Outcome{}, err

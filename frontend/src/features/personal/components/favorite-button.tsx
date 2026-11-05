@@ -18,12 +18,13 @@ type FavoriteButtonProps = {
 };
 
 /**
- * 心形：切换按钮（aria-pressed），读屏名称是“收藏《标题》”，已收藏为实心。状态来自所在的 FavoriteStatusScope；
+ * 心形：切换按钮（aria-pressed），读屏名称是“收藏《标题》”（艺人写“收藏“名字””：书名号只用于作品名），已收藏为实心。状态来自所在的 FavoriteStatusScope；
  * 点下去先按新状态显示，失败时回到原状态并说一句。同一目标的切换还没结束时，再点不起作用。
  * 结果不确定（写请求可能已经执行）时，所有位置的这个目标都保持忙碌，直到重新读到确定的状态；重读也失败时仍然不能切换，
  * 旁边说一句并给“重新读取”。
  */
 export function FavoriteButton({ target, message = "visible" }: FavoriteButtonProps) {
+  const subject = target.kind === "artist" ? `“${target.title}”` : `《${target.title}》`;
   const status = useFavoriteStatus();
   const { toggle, failure } = useFavoriteToggle(target.kind, target.id);
   const pressed = status.statusOf(target.kind, target.id);
@@ -44,7 +45,7 @@ export function FavoriteButton({ target, message = "visible" }: FavoriteButtonPr
     <Button
       variant="text"
       icon={<Heart size={18} fill={pressed === true ? "currentColor" : "none"} />}
-      aria-label={`收藏《${target.title}》`}
+      aria-label={`收藏${subject}`}
       aria-pressed={pressed ?? false}
       title={hint}
       disabled={pressed === undefined}
@@ -57,7 +58,7 @@ export function FavoriteButton({ target, message = "visible" }: FavoriteButtonPr
     />
   );
   const retry = waiting ? (
-    <Button variant="text" aria-label={`重新读取《${target.title}》的收藏状态`} onClick={status.reread}>
+    <Button variant="text" aria-label={`重新读取${subject}的收藏状态`} onClick={status.reread}>
       重新读取
     </Button>
   ) : null;

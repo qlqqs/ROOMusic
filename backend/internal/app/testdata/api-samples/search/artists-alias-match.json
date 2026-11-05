@@ -1,0 +1,46 @@
+{
+  "body": {
+    "catalog_state": {
+      "artists_state": "ready",
+      "epoch": 4,
+      "search_mode": "normalized"
+    },
+    "items": [
+      {
+        "artist": {
+          "album_count": 2,
+          "available": true,
+          "id": "00000000-0000-4000-8000-000000000001",
+          "initial_group": "D",
+          "name": "邓丽君",
+          "roles": [
+            "release_artist",
+            "album_artist",
+            "track_artist"
+          ],
+          "track_count": 3
+        },
+        "match": {
+          "alias": "Teresa Teng",
+          "artist_id": "00000000-0000-4000-8000-000000000001",
+          "field": "artist_alias",
+          "kind": "exact",
+          "original": "Teresa Teng",
+          "release_id": null,
+          "role": null,
+          "track_id": null
+        }
+      }
+    ],
+    "pagination": {
+      "has_more": false,
+      "page": 1,
+      "page_size": 50,
+      "total": 1,
+      "total_relation": "eq"
+    },
+    "query": "Teresa Teng",
+    "type": "artists"
+  },
+  "status": 200
+}

@@ -18,6 +18,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
 )
 
 const catalogHTTPPerfWarmups = 5
@@ -76,9 +78,7 @@ func TestPostgreSQLCatalogHTTPPerformance(t *testing.T) {
 	catalogHTTPPerfSeed(t, connection, app.allowedRoot)
 	client := newCatalogHTTPPerfClient(t, app.handler)
 	client.login(t)
-	for _, table := range catalogHTTPPerfCoreTables {
-		catalogHTTPPerfExec(t, connection, "ANALYZE "+table)
-	}
+	postgrestest.AnalyzeSchema(t, context.Background(), connection, catalogHTTPPerfCoreTables...)
 	catalogHTTPPerfExec(t, connection, "SELECT pg_stat_force_next_flush()")
 	cases := []struct {
 		name, path string
@@ -91,9 +91,7 @@ func TestPostgreSQLCatalogHTTPPerformance(t *testing.T) {
 	for phase, label := range []string{"辅助空表未 ANALYZE", "辅助空表已 ANALYZE"} {
 		fmt.Fprintf(&report, "\n## %s\n", label)
 		if phase == 1 {
-			for _, table := range catalogHTTPPerfAuxTables {
-				catalogHTTPPerfExec(t, connection, "ANALYZE "+table)
-			}
+			postgrestest.AnalyzeSchema(t, context.Background(), connection, catalogHTTPPerfAuxTables...)
 			catalogHTTPPerfExec(t, connection, "SELECT pg_stat_force_next_flush()")
 		}
 		catalogHTTPPerfStats(t, connection, phase == 1, "请求前", &report)

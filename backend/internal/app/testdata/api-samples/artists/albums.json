@@ -1,0 +1,49 @@
+{
+  "body": {
+    "artist_id": "00000000-0000-4000-8000-000000000001",
+    "items": [
+      {
+        "credited_release_id": "00000000-0000-4000-8000-000000000002",
+        "group": {
+          "added_at": "2026-01-01T00:00:00Z",
+          "attention_count": 1,
+          "id": "00000000-0000-4000-8000-000000000003",
+          "release_count": 1,
+          "representative": {
+            "album_artist": "邓丽君",
+            "album_artist_refs": [
+              {
+                "artist_id": "00000000-0000-4000-8000-000000000001",
+                "display_name": "邓丽君",
+                "name": "邓丽君"
+              }
+            ],
+            "artist": "邓丽君",
+            "artist_refs": [
+              {
+                "artist_id": "00000000-0000-4000-8000-000000000001",
+                "display_name": "邓丽君",
+                "name": "邓丽君"
+              }
+            ],
+            "artwork": null,
+            "attention_count": 1,
+            "id": "00000000-0000-4000-8000-000000000002",
+            "media_type": null,
+            "medium_count": 1,
+            "source_type": null,
+            "title": "海边夜曲",
+            "track_count": 2,
+            "year": null
+          }
+        }
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "page_size": 50,
+      "total": 1
+    }
+  },
+  "status": 200
+}

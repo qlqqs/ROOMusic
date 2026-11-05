@@ -1,0 +1,48 @@
+{
+  "body": {
+    "artist": {
+      "album_count": 0,
+      "available": false,
+      "id": "00000000-0000-4000-8000-000000000001",
+      "initial_group": "S",
+      "name": "失联艺人",
+      "roles": [],
+      "track_count": 0
+    },
+    "name_source": "auto",
+    "names": [
+      {
+        "id": "00000000-0000-4000-8000-000000000002",
+        "is_display_name": true,
+        "key_id": "00000000-0000-4000-8000-000000000003",
+        "name": "失联艺人",
+        "origin": "scan"
+      }
+    ],
+    "names_pagination": {
+      "page": 1,
+      "page_size": 20,
+      "total": 1
+    },
+    "redirect_artist_id": null,
+    "revision": 1,
+    "role_counts": [
+      {
+        "present": 0,
+        "role": "release_artist",
+        "total": 1
+      },
+      {
+        "present": 0,
+        "role": "album_artist",
+        "total": 1
+      },
+      {
+        "present": 0,
+        "role": "track_artist",
+        "total": 1
+      }
+    ]
+  },
+  "status": 200
+}

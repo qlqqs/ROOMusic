@@ -19,13 +19,15 @@ const TrackLimit = 10000
 const MaxRevision int64 = 9007199254740991
 
 var (
-	ErrInvalidInput        = errors.New("invalid personal input")
-	ErrNotFound            = errors.New("personal resource not found")
-	ErrRevisionConflict    = errors.New("playlist revision conflict")
-	ErrFavoritesChanged    = errors.New("favorites changed")
-	ErrIdempotencyConflict = errors.New("personal idempotency conflict")
-	ErrPlaylistLimit       = errors.New("playlist limit reached")
-	ErrTrackLimit          = errors.New("playlist track limit reached")
+	ErrInvalidInput           = errors.New("invalid personal input")
+	ErrNotFound               = errors.New("personal resource not found")
+	ErrRevisionConflict       = errors.New("playlist revision conflict")
+	ErrFavoritesChanged       = errors.New("favorites changed")
+	ErrIdempotencyConflict    = errors.New("personal idempotency conflict")
+	ErrPlaylistLimit          = errors.New("playlist limit reached")
+	ErrTrackLimit             = errors.New("playlist track limit reached")
+	ErrArtistCatalogPreparing = errors.New("artist catalog preparing")
+	ErrArtistCatalogNotReady  = errors.New("artist catalog not ready")
 )
 
 // Catalog 是个人关系消费的只读目录端口；事务内实例共享同一个快照。
@@ -37,12 +39,17 @@ type Catalog interface {
 }
 
 type Service struct {
-	database   *sql.DB
-	catalogFor func(*sql.Tx) Catalog
+	database         *sql.DB
+	catalogFor       func(*sql.Tx) Catalog
+	artistCatalogFor func(*sql.Tx) ArtistCatalog
 }
 
 func NewService(db *sql.DB) *Service {
-	return &Service{database: db, catalogFor: func(tx *sql.Tx) Catalog { return catalog.NewStore(tx) }}
+	return &Service{
+		database:         db,
+		catalogFor:       func(tx *sql.Tx) Catalog { return catalog.NewStore(tx) },
+		artistCatalogFor: func(tx *sql.Tx) ArtistCatalog { return catalog.NewStore(tx) },
+	}
 }
 
 // Page 是经传输层校验的分页参数，Revision 为空表示读取当前版本。

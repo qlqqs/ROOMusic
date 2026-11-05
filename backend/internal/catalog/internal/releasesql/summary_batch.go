@@ -15,10 +15,11 @@ const BatchSummaryCountsCTE = `summary_counts AS MATERIALIZED (
 )`
 
 // BatchSummaryProjection 与 ReleaseSummaryProjection 的列顺序、有效值和安全封面合同完全相同。
-// 仅曲目计数改从 BatchSummaryCountsCTE 读取，字段问题与归组问题继续由原有规则解释。
+// 曲目计数来自 BatchSummaryCountsCTE，refs 来自 BatchSummaryArtistRefsCTE；字段问题与归组规则不变。
 const BatchSummaryProjection = releaseSummaryIdentityProjection + `,
  COALESCE(summary_counts.medium_count,0),COALESCE(summary_counts.track_count,0),
  (` + ReleaseOpenFieldIssues + ` + ` + ReleaseOpenGroupingIssue + ` + COALESCE(summary_counts.missing_count,0)),
- ` + releaseSummaryArtworkProjection
+ ` + releaseSummaryArtworkProjection + `,COALESCE(summary_artist_refs.artist_refs,'[]'::jsonb),COALESCE(summary_artist_refs.album_artist_refs,'[]'::jsonb)`
 
-const BatchSummaryJoins = ` LEFT JOIN summary_counts ON summary_counts.release_id=releases.id` + ReleaseSummaryArtworkJoin
+const BatchSummaryJoins = ` LEFT JOIN summary_counts ON summary_counts.release_id=releases.id
+ LEFT JOIN summary_artist_refs ON summary_artist_refs.release_id=releases.id` + ReleaseSummaryArtworkJoin

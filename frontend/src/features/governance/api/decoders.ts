@@ -1,6 +1,7 @@
 import { decode as d } from "../../../shared/api";
 // 直接取 catalog 的解码器模块而不是公开入口：公开入口连带导入组件与 CSS，Playwright（Node）里的受控后端导入这个文件时加载不了。
 import { releaseSummaryDecoder } from "../../catalog/api/decoders";
+import { artistRoles, artistSummaryDecoder } from "../../catalog/api/artist-summary";
 
 // 发行字段修正（M3）的响应解码。可修正的字段与后端 backend/internal/catalog/corrections.go 的 correctableFields 一致，
 // 顺序也是接口返回的顺序。后端新增可修正字段时，样本契约测试先失败，在这里补上才算确认前端已经知道。
@@ -175,11 +176,25 @@ const releaseIssuesDecoder = d.object({
 // 目标是发行的记录给 release、album 为 null，目标是专辑的记录反过来；目标已不存在时对应的一项也是 null；
 // 撤销记录与被撤销的记录互相指向（reverts、reverted_by）。
 const MAX_OPERATION_PAGE_ITEMS = 100;
-const OPERATION_TYPES = ["release_correction", "release_group_change", "release_group_default", "release_issue_review", "release_claim", "revert"] as const;
+const OPERATION_TYPES = [
+  "release_correction",
+  "release_group_change",
+  "release_group_default",
+  "release_issue_review",
+  "release_claim",
+  "revert",
+  "artist_merge",
+  "artist_split",
+  "artist_rename",
+  "artist_candidate_ignore",
+] as const;
+export type OperationType = (typeof OPERATION_TYPES)[number];
 
 const operationActorDecoder = d.object({ id: d.uuid(), username: d.string({ max: 200 }) });
 const operationReleaseDecoder = d.object({ id: d.uuid(), title: d.string(), group_id: d.uuid(), visible: d.boolean() });
 const operationAlbumDecoder = d.object({ id: d.uuid(), title: d.string(), visible: d.boolean() });
+// 目标是艺人的记录（M5 ⑤）：艺人现在的名字；已经合并进别的艺人时 redirect_artist_id 是现在的艺人，没有可显示的曲目时 visible 为 false。
+const operationArtistDecoder = d.object({ id: d.uuid(), name: d.string(), visible: d.boolean(), redirect_artist_id: d.nullable(d.uuid()) });
 
 const fieldStateDecoder = d.object({ correction: d.nullable(correctionDecoder), effective: d.nullable(fieldValueDecoder) });
 const correctionChangesDecoder = d.object({
@@ -229,7 +244,26 @@ const claimChangesDecoder = d.object({
   skipped: d.optional(claimSummaryDecoder),
 });
 
+// 艺人的治理（M5 ⑤，都不能撤销：合并的反向是拆开，改名的反向是再改名）。名字是当时的快照。
+const artistSnapshotDecoder = d.object({ id: d.uuid(), name: d.string() });
+const artistScopeCounts = { name_count: d.integer({ min: 0 }), release_count: d.integer({ min: 0 }), track_count: d.integer({ min: 0 }) };
+const artistMergeChangesDecoder = d.object({ kind: d.literal("artist_merge"), source: artistSnapshotDecoder, target: artistSnapshotDecoder, ...artistScopeCounts });
+const artistSplitChangesDecoder = d.object({
+  kind: d.literal("artist_split"),
+  mode: d.oneOf(["aliases", "albums"]),
+  source: artistSnapshotDecoder,
+  target: artistSnapshotDecoder,
+  ...artistScopeCounts,
+});
+const artistNameStateDecoder = d.object({ name: d.string(), source: d.oneOf(["auto", "manual"]) });
+const artistRenameChangesDecoder = d.object({ kind: d.literal("artist_rename"), from: artistNameStateDecoder, to: artistNameStateDecoder });
+const artistIgnoreChangesDecoder = d.object({ kind: d.literal("artist_candidate_ignore"), other_artist: artistSnapshotDecoder, ignored: d.boolean() });
+
 type OperationChanges =
+  | d.Infer<typeof artistMergeChangesDecoder>
+  | d.Infer<typeof artistSplitChangesDecoder>
+  | d.Infer<typeof artistRenameChangesDecoder>
+  | d.Infer<typeof artistIgnoreChangesDecoder>
   | d.Infer<typeof correctionChangesDecoder>
   | d.Infer<typeof groupChangesDecoder>
   | d.Infer<typeof defaultChangesDecoder>
@@ -243,6 +277,10 @@ const operationChangesDecoder: d.Decoder<OperationChanges> = (input, path) => {
   if (kind === "release_group_default") return defaultChangesDecoder(input, path);
   if (kind === "release_issue_review") return issueReviewChangesDecoder(input, path);
   if (kind === "release_claim") return claimChangesDecoder(input, path);
+  if (kind === "artist_merge") return artistMergeChangesDecoder(input, path);
+  if (kind === "artist_split") return artistSplitChangesDecoder(input, path);
+  if (kind === "artist_rename") return artistRenameChangesDecoder(input, path);
+  if (kind === "artist_candidate_ignore") return artistIgnoreChangesDecoder(input, path);
   throw new d.DecodeError(`${path}.kind`, "不是已知的操作类型");
 };
 
@@ -253,6 +291,7 @@ const operationItemDecoder = d.object({
   actor: operationActorDecoder,
   release: d.nullable(operationReleaseDecoder),
   album: d.nullable(operationAlbumDecoder),
+  artist: d.nullable(operationArtistDecoder),
   changes: d.nullable(operationChangesDecoder),
   reverts: d.nullable(d.uuid()),
   reverted_by: d.nullable(d.uuid()),
@@ -272,7 +311,7 @@ const operationPageDecoder = d.object({
 const revertResultDecoder = d.object({
   operation_id: d.uuid(),
   reverts_operation_id: d.uuid(),
-  target_type: d.oneOf(["release", "release_group"] as const),
+  target_type: d.oneOf(["release", "release_group", "artist"] as const),
   target_id: d.uuid(),
   revision: d.integer({ min: 1 }),
 });
@@ -389,6 +428,136 @@ const claimResultDecoder = d.object({
   skipped: claimResultSummaryDecoder,
   defaults: d.object({ moved: d.array(d.uuid(), { max: MAX_CLAIM_ITEMS }), reset: d.array(d.uuid(), { max: MAX_CLAIM_ITEMS }) }),
 });
+
+// ---- 艺人的治理（M5 ⑤，管理员）----
+
+/** “可能是同一位”每页的上限、每条候选给出的理由样例与名字键对的上限。 */
+const MAX_CANDIDATE_PAGE_ITEMS = 100;
+const MAX_CANDIDATE_REASONS = 3;
+const MAX_CANDIDATE_KEY_PAIRS = 100;
+/** 拆开的预览一次最多的名字键与专辑。 */
+export const MAX_SPLIT_NAME_KEYS = 100;
+export const MAX_SPLIT_GROUPS = 100;
+
+const artistRevisionDecoder = d.integer({ min: 1 });
+
+// 合并：target（路径里的艺人）的新版本号，被并入的 source 的新版本号与它现在指向的艺人。
+const artistMergeResultDecoder = d.object({
+  artist_id: d.uuid(),
+  operation_id: d.uuid(),
+  revision: artistRevisionDecoder,
+  source: d.object({ id: d.uuid(), revision: artistRevisionDecoder, redirect_artist_id: d.uuid() }),
+});
+
+// 拆开的范围：别名整体拆回（aliases）或按专辑拆同名的人（albums）。groups 是选中的专辑展开成的版本快照；
+// excluded_scopes 是已经分给别人、不在这次范围里的部分（预览里列明，不抢）。它的条目形状由后端样本确认后再细化，这里只核对是数组。
+const splitScopeDecoder = d.object({
+  mode: d.oneOf(["aliases", "albums"]),
+  name_key_ids: d.array(d.uuid(), { max: MAX_SPLIT_NAME_KEYS }),
+  name_count: d.integer({ min: 0 }),
+  groups: d.array(d.object({ group_id: d.uuid(), release_ids: d.array(d.uuid(), { max: 1000 }), revision: artistRevisionDecoder }), { max: MAX_SPLIT_GROUPS }),
+  release_ids: d.array(d.uuid(), { max: 1000 }),
+  release_count: d.integer({ min: 0 }),
+  track_count: d.integer({ min: 0 }),
+  roles: d.array(d.oneOf(artistRoles), { max: artistRoles.length }),
+  excluded_scope_count: d.integer({ min: 0 }),
+  excluded_scopes: d.array((input: unknown) => input, { max: 1000 }),
+});
+
+// 拆开的预览（只读）：basis 是服务端对当时状态算出的依据，提交时原样带回；状态变了返回 409 artist_scope_changed，需要重新预览。
+const splitPreviewDecoder = d.object({
+  artist_id: d.uuid(),
+  revision: artistRevisionDecoder,
+  basis: d.string({ min: 1, max: 128 }),
+  scope: splitScopeDecoder,
+  limits: d.object({ groups: d.integer({ min: 0 }), name_keys: d.integer({ min: 0 }), overrides: d.integer({ min: 0 }), releases: d.integer({ min: 0 }), tracks: d.integer({ min: 0 }) }),
+});
+
+const splitResultDecoder = d.object({
+  artist_id: d.uuid(),
+  operation_id: d.uuid(),
+  revision: artistRevisionDecoder,
+  scope_summary: splitScopeDecoder,
+  target: d.object({ id: d.uuid(), revision: artistRevisionDecoder }),
+});
+
+const renameResultDecoder = d.object({
+  artist_id: d.uuid(),
+  operation_id: d.uuid(),
+  revision: artistRevisionDecoder,
+  display_name: d.string(),
+  name_source: d.oneOf(["auto", "manual"]),
+});
+
+const ignoreResultDecoder = d.object({
+  artist_id: d.uuid(),
+  operation_id: d.uuid(),
+  revision: artistRevisionDecoder,
+  other_revision: artistRevisionDecoder,
+  ignored: d.boolean(),
+});
+
+// “可能是同一位”的候选：两位艺人、实际看到的名字键对（忽略时原样提交）、最多 3 个理由样例与证据数。只是提示，不是同一人的结论。
+// 理由的 kind 按字符串解码（显示时给已知的中文说明，未知的原样不显示细节）；同一曲目同一角色的理由带曲目与角色。
+const candidateReasonDecoder = d.object({
+  kind: d.string({ min: 1, max: 64 }),
+  release_id: d.uuid(),
+  track_id: d.optional(d.nullable(d.uuid())),
+  role: d.optional(d.nullable(d.oneOf(artistRoles))),
+  left_name: d.string(),
+  right_name: d.string(),
+});
+const artistCandidateDecoder = d.object({
+  left: artistSummaryDecoder,
+  right: artistSummaryDecoder,
+  key_pairs: d.array(d.object({ left_key_id: d.uuid(), right_key_id: d.uuid() }), { min: 1, max: MAX_CANDIDATE_KEY_PAIRS }),
+  reasons: d.array(candidateReasonDecoder, { max: MAX_CANDIDATE_REASONS }),
+  evidence_count: d.integer({ min: 1 }),
+});
+const artistCandidatePageDecoder = d.object({
+  items: d.array(artistCandidateDecoder, { max: MAX_CANDIDATE_PAGE_ITEMS }),
+  pagination: d.object({
+    page: d.integer({ min: 1 }),
+    page_size: d.integer({ min: 1, max: MAX_CANDIDATE_PAGE_ITEMS }),
+    total: d.integer({ min: 0 }),
+  }),
+});
+
+// 之前并入这位艺人、现在可以拆回原身份的艺人（管理员只读，I1）：name_key_ids 是那次合并带过来、现在仍归这位艺人的名字键（可能为空）；
+// revision 是旧身份现在的版本号（恢复时的预期版本）。
+const MAX_MERGED_SOURCES = 100;
+const mergedSourcesDecoder = d.object({
+  items: d.array(
+    d.object({
+      artist_id: d.uuid(),
+      name: d.string(),
+      revision: artistRevisionDecoder,
+      name_key_ids: d.array(d.uuid(), { max: MAX_SPLIT_NAME_KEYS }),
+      operation_id: d.uuid(),
+      merged_at: d.timestamp(),
+    }),
+    { max: MAX_MERGED_SOURCES },
+  ),
+});
+
+export const decodeArtistMergedSources = d.defineDecoder(mergedSourcesDecoder);
+export type ArtistMergedSourceDTO = d.Infer<typeof mergedSourcesDecoder>["items"][number];
+
+export const decodeArtistMergeResult = d.defineDecoder(artistMergeResultDecoder);
+export const decodeArtistSplitPreview = d.defineDecoder(splitPreviewDecoder);
+export const decodeArtistSplitResult = d.defineDecoder(splitResultDecoder);
+export const decodeArtistRenameResult = d.defineDecoder(renameResultDecoder);
+export const decodeArtistIgnoreResult = d.defineDecoder(ignoreResultDecoder);
+export const decodeArtistCandidatePage = d.defineDecoder(artistCandidatePageDecoder);
+
+export type ArtistMergeResultDTO = d.Infer<typeof artistMergeResultDecoder>;
+export type ArtistSplitScopeDTO = d.Infer<typeof splitScopeDecoder>;
+export type ArtistSplitPreviewDTO = d.Infer<typeof splitPreviewDecoder>;
+export type ArtistSplitResultDTO = d.Infer<typeof splitResultDecoder>;
+export type ArtistRenameResultDTO = d.Infer<typeof renameResultDecoder>;
+export type ArtistIgnoreResultDTO = d.Infer<typeof ignoreResultDecoder>;
+export type ArtistCandidateDTO = d.Infer<typeof artistCandidateDecoder>;
+export type ArtistCandidatePageDTO = d.Infer<typeof artistCandidatePageDecoder>;
 
 export const decodeCorrectionState = d.defineDecoder(correctionStateDecoder);
 export const decodeCorrectionResult = d.defineDecoder(correctionResultDecoder);

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/writegate"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
@@ -57,6 +58,9 @@ type groupRecordState struct {
 // lockGroups 按 UUID 顺序锁住这些组行（不存在的组不会出现在结果里），返回存在的组。所有会锁多个组的操作都用同一个顺序，
 // 所以两个涉及同一对组的归组互相等待而不会死锁。
 func lockGroups(ctx context.Context, tx *sql.Tx, groupIDs ...string) (map[string]bool, error) {
+	if err := writegate.Lock(ctx, tx); err != nil {
+		return nil, err
+	}
 	rows, err := tx.QueryContext(ctx, `SELECT id::text FROM release_groups WHERE id = ANY($1::text[]::uuid[]) ORDER BY id FOR UPDATE`, groupIDs)
 	if err != nil {
 		return nil, err
@@ -154,6 +158,9 @@ func GroupChangeExecutor(request GroupChangeRequest) operations.Executor {
 			return operations.Outcome{}, err
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE releases SET group_id=$2::uuid, edit_revision = edit_revision + 1 WHERE id=$1::uuid`, request.ReleaseID, target); err != nil {
+			return operations.Outcome{}, err
+		}
+		if err := refreshGovernedRelease(ctx, tx, request.ReleaseID); err != nil {
 			return operations.Outcome{}, err
 		}
 		return operations.Outcome{

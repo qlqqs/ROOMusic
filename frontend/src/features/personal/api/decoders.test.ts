@@ -5,6 +5,7 @@ import { withValue, without } from "../../../test/mutate";
 import {
   decodeContainingTrack,
   decodeFavoriteAlbumsPage,
+  decodeFavoriteArtistsPage,
   decodeFavoriteLookup,
   decodeFavoriteQueue,
   decodeFavoriteToggle,
@@ -26,6 +27,15 @@ type Contract = { status: number; decode: (input: unknown) => unknown };
 
 // 显式登记每份样本，新增或删除样本都必须同步审查，不按文件名猜解码器。
 const contracts: Record<string, Contract> = {
+  "favorites/artist-added": { status: 200, decode: decodeFavoriteToggle },
+  "favorites/artist-lookup": { status: 200, decode: decodeFavoriteLookup },
+  "favorites/artist-removed": { status: 200, decode: decodeFavoriteToggle },
+  "favorites/artist-unavailable": { status: 200, decode: decodeFavoriteArtistsPage },
+  "favorites/artists-empty": { status: 200, decode: decodeFavoriteArtistsPage },
+  "favorites/artists-merged-deduplicated": { status: 200, decode: decodeFavoriteArtistsPage },
+  "favorites/artists-preparing": { status: 503, decode: decodeErrorEnvelope },
+  "favorites/artists-restored": { status: 200, decode: decodeFavoriteArtistsPage },
+  "favorites/artists": { status: 200, decode: decodeFavoriteArtistsPage },
   "favorites/album-delete": { status: 200, decode: decodeFavoriteToggle },
   "favorites/album-put": { status: 200, decode: decodeFavoriteToggle },
   "favorites/albums-empty": { status: 200, decode: decodeFavoriteAlbumsPage },
@@ -271,7 +281,12 @@ describe("收藏与歌单真实接口样本", () => {
 });
 
 describe("个人数据的枚举与字段关系", () => {
-  it.each(["artist", "TRACK", "", null, 1])("拒绝非法收藏目标类别 %s", (kind) => {
+  it("艺人属于有效收藏目标类别", () => {
+    const body = withValue(sampleBody("favorites/track-put"), ["target_kind"], "artist");
+    expect(decodeFavoriteToggle(body)).toStrictEqual(body);
+  });
+
+  it.each(["performer", "TRACK", "", null, 1])("拒绝非法收藏目标类别 %s", (kind) => {
     expect(() => decodeFavoriteToggle(withValue(sampleBody("favorites/track-put"), ["target_kind"], kind))).toThrow(d.DecodeError);
   });
 

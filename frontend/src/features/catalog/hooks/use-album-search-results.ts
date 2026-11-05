@@ -7,7 +7,7 @@ import { catalogKeys } from "../query-keys";
 export const ALBUM_SEARCH_RESULT_LIMIT = 10;
 
 /**
- * 按标题、艺人或曲目名搜索专辑（所有登录用户可读），给别的功能挑选专辑用（例如把版本归入其他专辑）。
+ * 按搜索词找专辑（所有登录用户可读），给别的功能挑选专辑用（例如把版本归入其他专辑）。
  * search 为 undefined 时不请求；搜索词由调用方先校验（去掉首尾空白、不超过 200 字节）。结果与列表页的缓存分开。
  */
 export function useAlbumSearchResults(search: string | undefined) {

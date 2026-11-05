@@ -1,0 +1,924 @@
+{
+  "generator_version": 1,
+  "unicode_version": "17.0.0",
+  "unihan_zip_sha256": "f7a48b2b545acfaa77b2d607ae28747404ce02baefee16396c5d2d7a8ef34b5e",
+  "readings_sha256": "575e69c9ad85a4737a889a4f94cbd987042a90a1a6cc16dd3f4ed995c715b17c",
+  "license_sha256": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
+  "source_header": "# Unihan_Readings.txt\n# Date: 2025-07-24 00:00:00 GMT [KL]\n# Unicode Version 17.0.0\n#\n# Unicode Character Database\n# © 2025 Unicode®, Inc.\n# Unicode and the Unicode Logo are registered trademarks of Unicode, Inc. in the U.S. and other countries.\n# For terms of use and license, see https://www.unicode.org/terms_of_use.html\n#\n# For documentation, see https://www.unicode.org/reports/tr38/\n#\n# This file contains data on the following fields from the Unihan database:\n#\tkCantonese\n#\tkDefinition\n#\tkFanqie\n#\tkHangul\n#\tkHanyuPinlu\n#\tkHanyuPinyin\n#\tkJapanese\n#\tkJapaneseKun\n#\tkJapaneseOn\n#\tkKorean\n#\tkMandarin\n#\tkSMSZD2003Readings\n#\tkTang\n#\tkTGHZ2013\n#\tkVietnamese\n#\tkXHC1983\n#\tkZhuang\n#",
+  "initials_sha256": "8a419bf46181d6026aa6780202480461c4269266779b28f83fd499cfa045d364",
+  "entry_count": 44348,
+  "multiple_readings_count": 101,
+  "multiple_readings": [
+    {
+      "codepoint": "U+3A85",
+      "readings": [
+        "gèng",
+        "gēng"
+      ],
+      "selected": "gèng",
+      "initial": "G"
+    },
+    {
+      "codepoint": "U+3D14",
+      "readings": [
+        "jí",
+        "xī"
+      ],
+      "selected": "jí",
+      "initial": "J"
+    },
+    {
+      "codepoint": "U+43F2",
+      "readings": [
+        "tī",
+        "dié"
+      ],
+      "selected": "tī",
+      "initial": "T"
+    },
+    {
+      "codepoint": "U+4E07",
+      "readings": [
+        "wàn",
+        "mò"
+      ],
+      "selected": "wàn",
+      "initial": "W"
+    },
+    {
+      "codepoint": "U+4E7E",
+      "readings": [
+        "qián",
+        "gān"
+      ],
+      "selected": "qián",
+      "initial": "Q"
+    },
+    {
+      "codepoint": "U+4F32",
+      "readings": [
+        "ní",
+        "nǐ"
+      ],
+      "selected": "ní",
+      "initial": "N"
+    },
+    {
+      "codepoint": "U+4FFE",
+      "readings": [
+        "bǐ",
+        "bì"
+      ],
+      "selected": "bǐ",
+      "initial": "B"
+    },
+    {
+      "codepoint": "U+524B",
+      "readings": [
+        "kēi",
+        "kè"
+      ],
+      "selected": "kēi",
+      "initial": "K"
+    },
+    {
+      "codepoint": "U+5256",
+      "readings": [
+        "pōu",
+        "pǒ"
+      ],
+      "selected": "pōu",
+      "initial": "P"
+    },
+    {
+      "codepoint": "U+527D",
+      "readings": [
+        "piāo",
+        "piào"
+      ],
+      "selected": "piāo",
+      "initial": "P"
+    },
+    {
+      "codepoint": "U+535C",
+      "readings": [
+        "bo",
+        "bǔ"
+      ],
+      "selected": "bo",
+      "initial": "B"
+    },
+    {
+      "codepoint": "U+53DA",
+      "readings": [
+        "xiá",
+        "jiǎ"
+      ],
+      "selected": "xiá",
+      "initial": "X"
+    },
+    {
+      "codepoint": "U+5447",
+      "readings": [
+        "mèn",
+        "qǐ"
+      ],
+      "selected": "mèn",
+      "initial": "M"
+    },
+    {
+      "codepoint": "U+5477",
+      "readings": [
+        "xiā",
+        "xiá"
+      ],
+      "selected": "xiā",
+      "initial": "X"
+    },
+    {
+      "codepoint": "U+5575",
+      "readings": [
+        "bo",
+        "bō"
+      ],
+      "selected": "bo",
+      "initial": "B"
+    },
+    {
+      "codepoint": "U+55EF",
+      "readings": [
+        "ǹg",
+        "en"
+      ],
+      "selected": "ǹg",
+      "initial": "N"
+    },
+    {
+      "codepoint": "U+55F2",
+      "readings": [
+        "diǎ",
+        "diē"
+      ],
+      "selected": "diǎ",
+      "initial": "D"
+    },
+    {
+      "codepoint": "U+5638",
+      "readings": [
+        "fǔ",
+        "wǔ"
+      ],
+      "selected": "fǔ",
+      "initial": "F"
+    },
+    {
+      "codepoint": "U+5660",
+      "readings": [
+        "dā",
+        "dá"
+      ],
+      "selected": "dā",
+      "initial": "D"
+    },
+    {
+      "codepoint": "U+5730",
+      "readings": [
+        "de",
+        "dì"
+      ],
+      "selected": "de",
+      "initial": "D"
+    },
+    {
+      "codepoint": "U+574B",
+      "readings": [
+        "bèn",
+        "fèn"
+      ],
+      "selected": "bèn",
+      "initial": "B"
+    },
+    {
+      "codepoint": "U+57EB",
+      "readings": [
+        "tǎng",
+        "chǒng"
+      ],
+      "selected": "tǎng",
+      "initial": "T"
+    },
+    {
+      "codepoint": "U+5824",
+      "readings": [
+        "dī",
+        "tí"
+      ],
+      "selected": "dī",
+      "initial": "D"
+    },
+    {
+      "codepoint": "U+5CDB",
+      "readings": [
+        "liè",
+        "lǐ"
+      ],
+      "selected": "liè",
+      "initial": "L"
+    },
+    {
+      "codepoint": "U+5D3E",
+      "readings": [
+        "yào",
+        "yǎo"
+      ],
+      "selected": "yào",
+      "initial": "Y"
+    },
+    {
+      "codepoint": "U+5DA6",
+      "readings": [
+        "shàn",
+        "zhān"
+      ],
+      "selected": "shàn",
+      "initial": "S"
+    },
+    {
+      "codepoint": "U+5DEE",
+      "readings": [
+        "chà",
+        "chā"
+      ],
+      "selected": "chà",
+      "initial": "C"
+    },
+    {
+      "codepoint": "U+5E06",
+      "readings": [
+        "fān",
+        "fán"
+      ],
+      "selected": "fān",
+      "initial": "F"
+    },
+    {
+      "codepoint": "U+5F77",
+      "readings": [
+        "páng",
+        "fǎng"
+      ],
+      "selected": "páng",
+      "initial": "P"
+    },
+    {
+      "codepoint": "U+5FB5",
+      "readings": [
+        "zhǐ",
+        "zhēng"
+      ],
+      "selected": "zhǐ",
+      "initial": "Z"
+    },
+    {
+      "codepoint": "U+647D",
+      "readings": [
+        "biào",
+        "biāo"
+      ],
+      "selected": "biào",
+      "initial": "B"
+    },
+    {
+      "codepoint": "U+6597",
+      "readings": [
+        "dòu",
+        "dǒu"
+      ],
+      "selected": "dòu",
+      "initial": "D"
+    },
+    {
+      "codepoint": "U+6753",
+      "readings": [
+        "biāo",
+        "sháo"
+      ],
+      "selected": "biāo",
+      "initial": "B"
+    },
+    {
+      "codepoint": "U+6763",
+      "readings": [
+        "mián",
+        "shān"
+      ],
+      "selected": "mián",
+      "initial": "M"
+    },
+    {
+      "codepoint": "U+67C1",
+      "readings": [
+        "tuó",
+        "duò"
+      ],
+      "selected": "tuó",
+      "initial": "T"
+    },
+    {
+      "codepoint": "U+67CF",
+      "readings": [
+        "bǎi",
+        "bó"
+      ],
+      "selected": "bǎi",
+      "initial": "B"
+    },
+    {
+      "codepoint": "U+6846",
+      "readings": [
+        "kuàng",
+        "kuāng"
+      ],
+      "selected": "kuàng",
+      "initial": "K"
+    },
+    {
+      "codepoint": "U+68D3",
+      "readings": [
+        "bèi",
+        "bàng"
+      ],
+      "selected": "bèi",
+      "initial": "B"
+    },
+    {
+      "codepoint": "U+696F",
+      "readings": [
+        "dùn",
+        "shǔn"
+      ],
+      "selected": "dùn",
+      "initial": "D"
+    },
+    {
+      "codepoint": "U+69ED",
+      "readings": [
+        "qì",
+        "cù"
+      ],
+      "selected": "qì",
+      "initial": "Q"
+    },
+    {
+      "codepoint": "U+6B3B",
+      "readings": [
+        "xū",
+        "hū"
+      ],
+      "selected": "xū",
+      "initial": "X"
+    },
+    {
+      "codepoint": "U+6C3E",
+      "readings": [
+        "fán",
+        "fàn"
+      ],
+      "selected": "fán",
+      "initial": "F"
+    },
+    {
+      "codepoint": "U+6C3F",
+      "readings": [
+        "jiǔ",
+        "guǐ"
+      ],
+      "selected": "jiǔ",
+      "initial": "J"
+    },
+    {
+      "codepoint": "U+6C88",
+      "readings": [
+        "shěn",
+        "chén"
+      ],
+      "selected": "shěn",
+      "initial": "S"
+    },
+    {
+      "codepoint": "U+6C93",
+      "readings": [
+        "dá",
+        "tà"
+      ],
+      "selected": "dá",
+      "initial": "D"
+    },
+    {
+      "codepoint": "U+6D13",
+      "readings": [
+        "qì",
+        "suǒ"
+      ],
+      "selected": "qì",
+      "initial": "Q"
+    },
+    {
+      "codepoint": "U+7094",
+      "readings": [
+        "quē",
+        "guì"
+      ],
+      "selected": "quē",
+      "initial": "Q"
+    },
+    {
+      "codepoint": "U+725A",
+      "readings": [
+        "chèng",
+        "chēng"
+      ],
+      "selected": "chèng",
+      "initial": "C"
+    },
+    {
+      "codepoint": "U+753A",
+      "readings": [
+        "tǐng",
+        "dīng"
+      ],
+      "selected": "tǐng",
+      "initial": "T"
+    },
+    {
+      "codepoint": "U+756C",
+      "readings": [
+        "shē",
+        "yú"
+      ],
+      "selected": "shē",
+      "initial": "S"
+    },
+    {
+      "codepoint": "U+767F",
+      "readings": [
+        "bié",
+        "qié"
+      ],
+      "selected": "bié",
+      "initial": "B"
+    },
+    {
+      "codepoint": "U+7704",
+      "readings": [
+        "miàn",
+        "miǎn"
+      ],
+      "selected": "miàn",
+      "initial": "M"
+    },
+    {
+      "codepoint": "U+77AD",
+      "readings": [
+        "liào",
+        "liǎo"
+      ],
+      "selected": "liào",
+      "initial": "L"
+    },
+    {
+      "codepoint": "U+7809",
+      "readings": [
+        "huā",
+        "huò"
+      ],
+      "selected": "huā",
+      "initial": "H"
+    },
+    {
+      "codepoint": "U+784A",
+      "readings": [
+        "huì",
+        "wěi"
+      ],
+      "selected": "huì",
+      "initial": "H"
+    },
+    {
+      "codepoint": "U+784D",
+      "readings": [
+        "yín",
+        "xiàn"
+      ],
+      "selected": "yín",
+      "initial": "Y"
+    },
+    {
+      "codepoint": "U+7888",
+      "readings": [
+        "hūn",
+        "mín"
+      ],
+      "selected": "hūn",
+      "initial": "H"
+    },
+    {
+      "codepoint": "U+78A1",
+      "readings": [
+        "zhóu",
+        "dú"
+      ],
+      "selected": "zhóu",
+      "initial": "Z"
+    },
+    {
+      "codepoint": "U+7B7D",
+      "readings": [
+        "ōu",
+        "wú"
+      ],
+      "selected": "ōu",
+      "initial": "O"
+    },
+    {
+      "codepoint": "U+7E43",
+      "readings": [
+        "běng",
+        "bēng"
+      ],
+      "selected": "běng",
+      "initial": "B"
+    },
+    {
+      "codepoint": "U+8019",
+      "readings": [
+        "bà",
+        "pá"
+      ],
+      "selected": "bà",
+      "initial": "B"
+    },
+    {
+      "codepoint": "U+8052",
+      "readings": [
+        "guō",
+        "guā"
+      ],
+      "selected": "guō",
+      "initial": "G"
+    },
+    {
+      "codepoint": "U+808B",
+      "readings": [
+        "lèi",
+        "lè"
+      ],
+      "selected": "lèi",
+      "initial": "L"
+    },
+    {
+      "codepoint": "U+813F",
+      "readings": [
+        "biǎo",
+        "biāo"
+      ],
+      "selected": "biǎo",
+      "initial": "B"
+    },
+    {
+      "codepoint": "U+820D",
+      "readings": [
+        "shě",
+        "shè"
+      ],
+      "selected": "shě",
+      "initial": "S"
+    },
+    {
+      "codepoint": "U+828E",
+      "readings": [
+        "xiōng",
+        "qiōng"
+      ],
+      "selected": "xiōng",
+      "initial": "X"
+    },
+    {
+      "codepoint": "U+8298",
+      "readings": [
+        "bǐ",
+        "pí"
+      ],
+      "selected": "bǐ",
+      "initial": "B"
+    },
+    {
+      "codepoint": "U+82E7",
+      "readings": [
+        "níng",
+        "zhù"
+      ],
+      "selected": "níng",
+      "initial": "N"
+    },
+    {
+      "codepoint": "U+83F9",
+      "readings": [
+        "zū",
+        "jū"
+      ],
+      "selected": "zū",
+      "initial": "Z"
+    },
+    {
+      "codepoint": "U+840E",
+      "readings": [
+        "wěi",
+        "wēi"
+      ],
+      "selected": "wěi",
+      "initial": "W"
+    },
+    {
+      "codepoint": "U+8439",
+      "readings": [
+        "biān",
+        "biǎn"
+      ],
+      "selected": "biān",
+      "initial": "B"
+    },
+    {
+      "codepoint": "U+8457",
+      "readings": [
+        "zhù",
+        "zhe"
+      ],
+      "selected": "zhù",
+      "initial": "Z"
+    },
+    {
+      "codepoint": "U+84C7",
+      "readings": [
+        "gū",
+        "gǔ"
+      ],
+      "selected": "gū",
+      "initial": "G"
+    },
+    {
+      "codepoint": "U+84FB",
+      "readings": [
+        "zí",
+        "jí"
+      ],
+      "selected": "zí",
+      "initial": "Z"
+    },
+    {
+      "codepoint": "U+8508",
+      "readings": [
+        "piào",
+        "biāo"
+      ],
+      "selected": "piào",
+      "initial": "P"
+    },
+    {
+      "codepoint": "U+8543",
+      "readings": [
+        "bō",
+        "fān"
+      ],
+      "selected": "bō",
+      "initial": "B"
+    },
+    {
+      "codepoint": "U+8581",
+      "readings": [
+        "ào",
+        "yù"
+      ],
+      "selected": "ào",
+      "initial": "A"
+    },
+    {
+      "codepoint": "U+8584",
+      "readings": [
+        "báo",
+        "bó"
+      ],
+      "selected": "báo",
+      "initial": "B"
+    },
+    {
+      "codepoint": "U+88B7",
+      "readings": [
+        "qiā",
+        "jiá"
+      ],
+      "selected": "qiā",
+      "initial": "Q"
+    },
+    {
+      "codepoint": "U+8AB0",
+      "readings": [
+        "shuí",
+        "shéi"
+      ],
+      "selected": "shuí",
+      "initial": "S"
+    },
+    {
+      "codepoint": "U+8ADE",
+      "readings": [
+        "piǎn",
+        "pián"
+      ],
+      "selected": "piǎn",
+      "initial": "P"
+    },
+    {
+      "codepoint": "U+8AF7",
+      "readings": [
+        "fěng",
+        "fèng"
+      ],
+      "selected": "fěng",
+      "initial": "F"
+    },
+    {
+      "codepoint": "U+8B58",
+      "readings": [
+        "shí",
+        "shì"
+      ],
+      "selected": "shí",
+      "initial": "S"
+    },
+    {
+      "codepoint": "U+8BBD",
+      "readings": [
+        "fěng",
+        "fèng"
+      ],
+      "selected": "fěng",
+      "initial": "F"
+    },
+    {
+      "codepoint": "U+8BC6",
+      "readings": [
+        "shí",
+        "shì"
+      ],
+      "selected": "shí",
+      "initial": "S"
+    },
+    {
+      "codepoint": "U+8DCC",
+      "readings": [
+        "diē",
+        "dié"
+      ],
+      "selected": "diē",
+      "initial": "D"
+    },
+    {
+      "codepoint": "U+8E63",
+      "readings": [
+        "pán",
+        "mán"
+      ],
+      "selected": "pán",
+      "initial": "P"
+    },
+    {
+      "codepoint": "U+8E6C",
+      "readings": [
+        "dēng",
+        "dèng"
+      ],
+      "selected": "dēng",
+      "initial": "D"
+    },
+    {
+      "codepoint": "U+9002",
+      "readings": [
+        "shì",
+        "kuò"
+      ],
+      "selected": "shì",
+      "initial": "S"
+    },
+    {
+      "codepoint": "U+90FD",
+      "readings": [
+        "dōu",
+        "dū"
+      ],
+      "selected": "dōu",
+      "initial": "D"
+    },
+    {
+      "codepoint": "U+91B1",
+      "readings": [
+        "fā",
+        "pò"
+      ],
+      "selected": "fā",
+      "initial": "F"
+    },
+    {
+      "codepoint": "U+91D0",
+      "readings": [
+        "xī",
+        "lí"
+      ],
+      "selected": "xī",
+      "initial": "X"
+    },
+    {
+      "codepoint": "U+9684",
+      "readings": [
+        "dī",
+        "tí"
+      ],
+      "selected": "dī",
+      "initial": "D"
+    },
+    {
+      "codepoint": "U+9817",
+      "readings": [
+        "pō",
+        "pǒ"
+      ],
+      "selected": "pō",
+      "initial": "P"
+    },
+    {
+      "codepoint": "U+9AEA",
+      "readings": [
+        "fà",
+        "fǎ"
+      ],
+      "selected": "fà",
+      "initial": "F"
+    },
+    {
+      "codepoint": "U+9AEE",
+      "readings": [
+        "fà",
+        "fǎ"
+      ],
+      "selected": "fà",
+      "initial": "F"
+    },
+    {
+      "codepoint": "U+9E83",
+      "readings": [
+        "páo",
+        "biāo"
+      ],
+      "selected": "páo",
+      "initial": "P"
+    },
+    {
+      "codepoint": "U+29DD5",
+      "readings": [
+        "láng",
+        "liáng"
+      ],
+      "selected": "láng",
+      "initial": "L"
+    },
+    {
+      "codepoint": "U+2A7DD",
+      "readings": [
+        "jì",
+        "jī"
+      ],
+      "selected": "jì",
+      "initial": "J"
+    },
+    {
+      "codepoint": "U+321A6",
+      "readings": [
+        "xī",
+        "xì"
+      ],
+      "selected": "xī",
+      "initial": "X"
+    },
+    {
+      "codepoint": "U+321B0",
+      "readings": [
+        "xī",
+        "xí"
+      ],
+      "selected": "xī",
+      "initial": "X"
+    }
+  ],
+  "unknown_count": 0,
+  "unknown": []
+}

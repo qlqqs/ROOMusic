@@ -1,0 +1,105 @@
+{
+  "body": {
+    "catalog_state": {
+      "artists_state": "preparing",
+      "epoch": 2,
+      "search_mode": "legacy"
+    },
+    "items": [
+      {
+        "artist": "原始录音者",
+        "artist_refs": [],
+        "duration_seconds": null,
+        "group_id": "00000000-0000-4000-8000-000000000001",
+        "match": {
+          "alias": null,
+          "artist_id": null,
+          "field": "release_title",
+          "kind": "exact",
+          "original": "提交即命中新词legacy",
+          "release_id": "00000000-0000-4000-8000-000000000002",
+          "role": null,
+          "track_id": null
+        },
+        "present": true,
+        "release": {
+          "album_artist": "修正署名legacy",
+          "album_artist_refs": [],
+          "artist": "修正署名legacy",
+          "artist_refs": [],
+          "artwork": null,
+          "attention_count": 1,
+          "id": "00000000-0000-4000-8000-000000000002",
+          "media_type": null,
+          "medium_count": 1,
+          "source_type": null,
+          "title": "提交即命中新词legacy",
+          "track_count": 2,
+          "year": null
+        },
+        "source": {
+          "bit_depth": null,
+          "bitrate": null,
+          "channels": null,
+          "codec": null,
+          "sample_rate": null,
+          "source_kind": "physical"
+        },
+        "title": "独立曲目",
+        "track_id": "00000000-0000-4000-8000-000000000003"
+      },
+      {
+        "artist": "原始录音者",
+        "artist_refs": [],
+        "duration_seconds": null,
+        "group_id": "00000000-0000-4000-8000-000000000001",
+        "match": {
+          "alias": null,
+          "artist_id": null,
+          "field": "release_title",
+          "kind": "exact",
+          "original": "提交即命中新词legacy",
+          "release_id": "00000000-0000-4000-8000-000000000002",
+          "role": null,
+          "track_id": null
+        },
+        "present": true,
+        "release": {
+          "album_artist": "修正署名legacy",
+          "album_artist_refs": [],
+          "artist": "修正署名legacy",
+          "artist_refs": [],
+          "artwork": null,
+          "attention_count": 1,
+          "id": "00000000-0000-4000-8000-000000000002",
+          "media_type": null,
+          "medium_count": 1,
+          "source_type": null,
+          "title": "提交即命中新词legacy",
+          "track_count": 2,
+          "year": null
+        },
+        "source": {
+          "bit_depth": null,
+          "bitrate": null,
+          "channels": null,
+          "codec": null,
+          "sample_rate": null,
+          "source_kind": "physical"
+        },
+        "title": "独立曲目",
+        "track_id": "00000000-0000-4000-8000-000000000004"
+      }
+    ],
+    "pagination": {
+      "has_more": false,
+      "page": 1,
+      "page_size": 50,
+      "total": 2,
+      "total_relation": "eq"
+    },
+    "query": "提交即命中新词legacy",
+    "type": "tracks"
+  },
+  "status": 200
+}

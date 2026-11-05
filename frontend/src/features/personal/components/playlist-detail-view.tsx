@@ -11,7 +11,7 @@ import { formatCount } from "../../../shared/lib/number";
 import { pageCountOf } from "../../../shared/lib/pagination";
 import { useClampedPage } from "../../../shared/lib/use-clamped-page";
 import { Button, ConfirmDialog, FailureNotice, Notice, Pagination, Panel, Skeleton, StatusTag, VisuallyHidden, type MenuAction } from "../../../shared/ui";
-import { trackArtistOf, trackTitleOf } from "../../catalog";
+import { ArtistNames, trackArtistOf, trackArtistRefsOf, trackTitleOf } from "../../catalog";
 import type { ItemMovedDTO, ItemRemovedDTO, ItemRestoredDTO, PlaylistItemDTO, PlaylistItemsPageDTO, PlaylistSummaryDTO } from "../api/decoders";
 import type { PlaylistMove } from "../api/playlists";
 import type { CommandCallbacks } from "../hooks/use-idempotent-command";
@@ -402,7 +402,7 @@ function PlaylistRow({ item, disabled, actions }: { item: PlaylistItemDTO; disab
       <div className={styles.body}>
         <p className={styles.title}>{title}</p>
         <p className={styles.secondary}>
-          {trackArtistOf(track)}
+          <ArtistNames text={trackArtistOf(track)} refs={trackArtistRefsOf(track)} />
           {" — "}
           {track.present ? (
             <Link to="/albums/$groupId" params={{ groupId: track.group_id }} search={{ release: track.release.id }}>

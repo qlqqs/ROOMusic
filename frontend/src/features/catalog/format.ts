@@ -46,7 +46,7 @@ export function mediumHeading(medium: Pick<ReleaseMediumDTO, "position" | "title
 export type CreditGroup = { role: string; names: string[] };
 
 /** 按角色归并署名，角色与姓名都保持接口给出的顺序。 */
-export function groupCredits(credits: readonly ReleaseCreditDTO[]): CreditGroup[] {
+export function groupCredits(credits: readonly Pick<ReleaseCreditDTO, "role" | "name">[]): CreditGroup[] {
   const groups = new Map<string, string[]>();
   for (const credit of credits) {
     const names = groups.get(credit.role);
@@ -57,7 +57,7 @@ export function groupCredits(credits: readonly ReleaseCreditDTO[]): CreditGroup[
 }
 
 /** 曲目行里的署名：“作曲：甲、乙；指挥：丙”。没有署名时是空字符串。 */
-export function creditsText(credits: readonly ReleaseCreditDTO[]): string {
+export function creditsText(credits: readonly Pick<ReleaseCreditDTO, "role" | "name">[]): string {
   return groupCredits(credits)
     .map((group) => `${creditRoleLabel(group.role)}：${group.names.join("、")}`)
     .join("；");

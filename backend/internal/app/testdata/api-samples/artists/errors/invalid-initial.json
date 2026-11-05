@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_artist_initial",
+      "message": "首字母分组无效"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

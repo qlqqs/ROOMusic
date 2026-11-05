@@ -1,0 +1,11 @@
+{
+  "body": {
+    "items": [],
+    "pagination": {
+      "page": 20,
+      "page_size": 50,
+      "total": 7
+    }
+  },
+  "status": 200
+}

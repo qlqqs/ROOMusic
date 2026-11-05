@@ -31,6 +31,9 @@ func relationForFavorite(kind string) (favoriteRelation, error) {
 
 // SetFavorite 在本人集合锁内执行幂等切换；重复收藏不改变时间或集合版本。
 func (s *Service) SetFavorite(ctx context.Context, userID, kind, targetID string, favorited bool) (FavoriteResult, error) {
+	if kind == "artist" {
+		return s.setArtistFavorite(ctx, userID, targetID, favorited)
+	}
 	relation, err := relationForFavorite(kind)
 	if err != nil {
 		return FavoriteResult{}, err

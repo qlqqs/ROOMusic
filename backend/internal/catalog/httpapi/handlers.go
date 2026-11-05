@@ -39,6 +39,16 @@ func New(database *sql.DB, guard *identity.Guard, dataDirectory string, logger *
 
 // Register 在 mux 上注册目录路由。
 func (handlers *Handlers) Register(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/v1/artists", handlers.listArtists)
+	mux.HandleFunc("GET /api/v1/artists/{id}", handlers.artistDetail)
+	mux.HandleFunc("GET /api/v1/artists/{id}/names", handlers.artistNames)
+	mux.HandleFunc("GET /api/v1/artists/{id}/merged-sources", handlers.artistMergedSources)
+	mux.HandleFunc("GET /api/v1/artists/{id}/albums", handlers.artistAlbums)
+	mux.HandleFunc("GET /api/v1/artists/{id}/tracks", handlers.artistTracks)
+	mux.HandleFunc("GET /api/v1/artists/{id}/queue", handlers.artistQueue)
+	mux.HandleFunc("GET /api/v1/search", handlers.search)
+	mux.HandleFunc("GET /api/v1/search/suggestions", handlers.searchSuggestions)
+	mux.HandleFunc("GET /api/v1/catalog/status", handlers.catalogStatus)
 	mux.HandleFunc("GET /api/v1/releases", handlers.listReleases)
 	mux.HandleFunc("GET /api/v1/releases/{id}/evidence", handlers.releaseEvidence)
 	mux.HandleFunc("GET /api/v1/releases/{id}/corrections", handlers.releaseCorrections)
@@ -60,6 +70,7 @@ func (handlers *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/release-groups/{id}/default", handlers.setReleaseGroupDefault)
 	mux.HandleFunc("GET /api/v1/artworks/{id}", handlers.artworkResource)
 	mux.HandleFunc("GET /api/v1/tracks/{id}/lyrics", handlers.trackLyrics)
+	mux.HandleFunc("POST /api/v1/tracks/summaries", handlers.trackSummaries)
 }
 
 func parseReleaseSearch(request *http.Request) (string, error) {

@@ -1,0 +1,976 @@
+{
+  "CPUCount": 12,
+  "BackfillMS": 0,
+  "Counts": {
+    "catalog_projection_subject_state": 120002,
+    "catalog_search_values": 710004,
+    "release_groups": 8001,
+    "releases": 10001,
+    "track_credits": 440000,
+    "tracks": 110001,
+    "tracks_missing": 10000,
+    "tracks_present": 100001
+  },
+  "Sizes": {
+    "catalog_projection_subject_state": 51249152,
+    "catalog_projection_title_order_idx": 8142848,
+    "catalog_search_release_group_idx": 516096,
+    "catalog_search_values": 365453312,
+    "catalog_search_values_exact_idx": 19365888,
+    "catalog_search_values_short_idx": 18636800,
+    "catalog_search_values_trgm_idx": 14753792,
+    "release_groups": 1220608,
+    "releases": 3383296,
+    "track_credits": 112656384,
+    "tracks": 35209216
+  },
+  "PG": {
+    "collation": "en_US.utf8",
+    "ctype": "en_US.utf8",
+    "jit": "on",
+    "max_connections": "100",
+    "server_encoding": "UTF8",
+    "server_version": "18.6",
+    "shared_buffers": "128MB",
+    "work_mem": "4MB"
+  },
+  "Foreground": {
+    "page_100": {
+      "ColdMS": 134.147998,
+      "MedianMS": 134.147998,
+      "P95MS": 134.147998,
+      "Samples": 1,
+      "TargetMS": 1000,
+      "Pass": true
+    }
+  },
+  "Cases": [
+    {
+      "Query": "交响曲 第00999号",
+      "Suggestions": {
+        "ColdMS": 152.382421,
+        "MedianMS": 126.834819,
+        "P95MS": 136.897202,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Results": {
+        "ColdMS": 121.936898,
+        "MedianMS": 139.602044,
+        "P95MS": 153.749191,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Albums": {
+        "ColdMS": 106.406999,
+        "MedianMS": 79.449784,
+        "P95MS": 92.60084,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Tracks": {
+        "ColdMS": 121.860781,
+        "MedianMS": 139.543762,
+        "P95MS": 153.672914,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "OldReleasesMS": 43.497596,
+      "OldGroupsMS": 60.848905,
+      "SuggestionsDBMS": {
+        "MedianMS": 125.875669,
+        "P95MS": 136.152629
+      },
+      "AlbumsDBMS": {
+        "MedianMS": 78.186293,
+        "P95MS": 91.629931
+      },
+      "TracksDBMS": {
+        "MedianMS": 139.087636,
+        "P95MS": 153.099544
+      },
+      "ResultsDBWorkMS": {
+        "MedianMS": 218.208124,
+        "P95MS": 235.588866
+      }
+    },
+    {
+      "Query": "交响曲 第009",
+      "Suggestions": {
+        "ColdMS": 133.630902,
+        "MedianMS": 128.128335,
+        "P95MS": 137.61387,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Results": {
+        "ColdMS": 151.558561,
+        "MedianMS": 150.36196,
+        "P95MS": 164.489304,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Albums": {
+        "ColdMS": 117.344567,
+        "MedianMS": 101.776998,
+        "P95MS": 108.944415,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Tracks": {
+        "ColdMS": 151.495681,
+        "MedianMS": 150.28932,
+        "P95MS": 164.427187,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "OldReleasesMS": 54.178443,
+      "OldGroupsMS": 85.292528,
+      "SuggestionsDBMS": {
+        "MedianMS": 127.167014,
+        "P95MS": 136.704403
+      },
+      "AlbumsDBMS": {
+        "MedianMS": 100.905624,
+        "P95MS": 107.492224
+      },
+      "TracksDBMS": {
+        "MedianMS": 149.356695,
+        "P95MS": 163.525512
+      },
+      "ResultsDBWorkMS": {
+        "MedianMS": 253.23359299999998,
+        "P95MS": 266.52962
+      }
+    },
+    {
+      "Query": "周杰倫",
+      "Suggestions": {
+        "ColdMS": 93.646738,
+        "MedianMS": 85.265533,
+        "P95MS": 104.411597,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Results": {
+        "ColdMS": 115.541544,
+        "MedianMS": 113.173951,
+        "P95MS": 133.42987,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Albums": {
+        "ColdMS": 115.429529,
+        "MedianMS": 113.070061,
+        "P95MS": 133.291785,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Tracks": {
+        "ColdMS": 55.96708,
+        "MedianMS": 58.168832,
+        "P95MS": 64.13554,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "OldReleasesMS": 211.081616,
+      "OldGroupsMS": 199.856335,
+      "SuggestionsDBMS": {
+        "MedianMS": 84.224461,
+        "P95MS": 103.473013
+      },
+      "AlbumsDBMS": {
+        "MedianMS": 112.410947,
+        "P95MS": 132.469129
+      },
+      "TracksDBMS": {
+        "MedianMS": 57.02279,
+        "P95MS": 63.34391
+      },
+      "ResultsDBWorkMS": {
+        "MedianMS": 169.83066,
+        "P95MS": 190.338457
+      }
+    },
+    {
+      "Query": "周杰伦",
+      "Suggestions": {
+        "ColdMS": 84.81,
+        "MedianMS": 83.436713,
+        "P95MS": 88.921779,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Results": {
+        "ColdMS": 113.044136,
+        "MedianMS": 113.572904,
+        "P95MS": 119.804726,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Albums": {
+        "ColdMS": 112.893838,
+        "MedianMS": 113.464737,
+        "P95MS": 119.738059,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Tracks": {
+        "ColdMS": 56.759095,
+        "MedianMS": 57.893818,
+        "P95MS": 61.220784,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "OldReleasesMS": 203.688233,
+      "OldGroupsMS": 196.663864,
+      "SuggestionsDBMS": {
+        "MedianMS": 82.736551,
+        "P95MS": 88.194476
+      },
+      "AlbumsDBMS": {
+        "MedianMS": 112.434023,
+        "P95MS": 118.148447
+      },
+      "TracksDBMS": {
+        "MedianMS": 56.954879,
+        "P95MS": 60.180084
+      },
+      "ResultsDBWorkMS": {
+        "MedianMS": 168.65744999999998,
+        "P95MS": 177.760009
+      }
+    },
+    {
+      "Query": "爱",
+      "Suggestions": {
+        "ColdMS": 166.484541,
+        "MedianMS": 152.714445,
+        "P95MS": 159.960827,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": true
+      },
+      "Results": {
+        "ColdMS": 136.115125,
+        "MedianMS": 133.791299,
+        "P95MS": 146.046755,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": true
+      },
+      "Albums": {
+        "ColdMS": 123.604945,
+        "MedianMS": 115.638692,
+        "P95MS": 127.555914,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": true
+      },
+      "Tracks": {
+        "ColdMS": 136.035091,
+        "MedianMS": 133.709733,
+        "P95MS": 145.974947,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": true
+      },
+      "OldReleasesMS": 95.431559,
+      "OldGroupsMS": 114.31116,
+      "SuggestionsDBMS": {
+        "MedianMS": 151.751459,
+        "P95MS": 159.342678
+      },
+      "AlbumsDBMS": {
+        "MedianMS": 114.50533,
+        "P95MS": 125.964782
+      },
+      "TracksDBMS": {
+        "MedianMS": 132.947108,
+        "P95MS": 145.220772
+      },
+      "ResultsDBWorkMS": {
+        "MedianMS": 247.585033,
+        "P95MS": 265.742501
+      }
+    },
+    {
+      "Query": "周",
+      "Suggestions": {
+        "ColdMS": 88.482566,
+        "MedianMS": 88.205317,
+        "P95MS": 91.406412,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": true
+      },
+      "Results": {
+        "ColdMS": 110.737946,
+        "MedianMS": 108.167988,
+        "P95MS": 131.772401,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": true
+      },
+      "Albums": {
+        "ColdMS": 110.514958,
+        "MedianMS": 108.046827,
+        "P95MS": 131.631542,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": true
+      },
+      "Tracks": {
+        "ColdMS": 52.809865,
+        "MedianMS": 50.433962,
+        "P95MS": 57.301299,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": true
+      },
+      "OldReleasesMS": 212.983714,
+      "OldGroupsMS": 195.574731,
+      "SuggestionsDBMS": {
+        "MedianMS": 87.537134,
+        "P95MS": 90.128831
+      },
+      "AlbumsDBMS": {
+        "MedianMS": 106.639825,
+        "P95MS": 130.200581
+      },
+      "TracksDBMS": {
+        "MedianMS": 49.396601,
+        "P95MS": 56.503297
+      },
+      "ResultsDBWorkMS": {
+        "MedianMS": 156.726061,
+        "P95MS": 180.220087
+      }
+    },
+    {
+      "Query": "交响",
+      "Suggestions": {
+        "ColdMS": 127.099912,
+        "MedianMS": 120.456833,
+        "P95MS": 128.167437,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Results": {
+        "ColdMS": 141.749737,
+        "MedianMS": 141.067998,
+        "P95MS": 153.038895,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Albums": {
+        "ColdMS": 141.652692,
+        "MedianMS": 140.944972,
+        "P95MS": 152.926539,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Tracks": {
+        "ColdMS": 76.159461,
+        "MedianMS": 72.981255,
+        "P95MS": 80.273698,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "OldReleasesMS": 245.383135,
+      "OldGroupsMS": 234.97293,
+      "SuggestionsDBMS": {
+        "MedianMS": 119.783364,
+        "P95MS": 127.010316
+      },
+      "AlbumsDBMS": {
+        "MedianMS": 139.46017,
+        "P95MS": 151.866703
+      },
+      "TracksDBMS": {
+        "MedianMS": 71.945839,
+        "P95MS": 79.35073
+      },
+      "ResultsDBWorkMS": {
+        "MedianMS": 212.14146200000002,
+        "P95MS": 230.650616
+      }
+    },
+    {
+      "Query": "a",
+      "Suggestions": {
+        "ColdMS": 212.225072,
+        "MedianMS": 209.901798,
+        "P95MS": 220.41012,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": true
+      },
+      "Results": {
+        "ColdMS": 168.632158,
+        "MedianMS": 165.69544,
+        "P95MS": 178.569197,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": true
+      },
+      "Albums": {
+        "ColdMS": 150.56469,
+        "MedianMS": 154.535677,
+        "P95MS": 163.96949,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": true
+      },
+      "Tracks": {
+        "ColdMS": 168.572193,
+        "MedianMS": 165.625856,
+        "P95MS": 178.495766,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": true
+      },
+      "OldReleasesMS": 227.936213,
+      "OldGroupsMS": 234.587378,
+      "SuggestionsDBMS": {
+        "MedianMS": 209.19821,
+        "P95MS": 219.526434
+      },
+      "AlbumsDBMS": {
+        "MedianMS": 153.718455,
+        "P95MS": 163.415069
+      },
+      "TracksDBMS": {
+        "MedianMS": 165.008999,
+        "P95MS": 177.84808
+      },
+      "ResultsDBWorkMS": {
+        "MedianMS": 319.39772100000005,
+        "P95MS": 338.708571
+      }
+    },
+    {
+      "Query": "%",
+      "Suggestions": {
+        "ColdMS": 251.334007,
+        "MedianMS": 251.121966,
+        "P95MS": 284.634114,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": true
+      },
+      "Results": {
+        "ColdMS": 198.803268,
+        "MedianMS": 199.459841,
+        "P95MS": 233.704363,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": true
+      },
+      "Albums": {
+        "ColdMS": 153.137624,
+        "MedianMS": 150.269106,
+        "P95MS": 178.942466,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": true
+      },
+      "Tracks": {
+        "ColdMS": 198.722944,
+        "MedianMS": 199.38066,
+        "P95MS": 233.611447,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": true
+      },
+      "OldReleasesMS": 113.335007,
+      "OldGroupsMS": 146.298637,
+      "SuggestionsDBMS": {
+        "MedianMS": 250.381822,
+        "P95MS": 283.536388
+      },
+      "AlbumsDBMS": {
+        "MedianMS": 149.348971,
+        "P95MS": 177.572833
+      },
+      "TracksDBMS": {
+        "MedianMS": 198.546398,
+        "P95MS": 232.714825
+      },
+      "ResultsDBWorkMS": {
+        "MedianMS": 349.79541900000004,
+        "P95MS": 412.517542
+      }
+    },
+    {
+      "Query": "_",
+      "Suggestions": {
+        "ColdMS": 247.557443,
+        "MedianMS": 251.780345,
+        "P95MS": 266.63232,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": true
+      },
+      "Results": {
+        "ColdMS": 200.556561,
+        "MedianMS": 197.77679,
+        "P95MS": 221.586507,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": true
+      },
+      "Albums": {
+        "ColdMS": 148.754315,
+        "MedianMS": 149.235757,
+        "P95MS": 165.609345,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": true
+      },
+      "Tracks": {
+        "ColdMS": 200.4882,
+        "MedianMS": 197.707839,
+        "P95MS": 221.511162,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": true
+      },
+      "OldReleasesMS": 107.06769,
+      "OldGroupsMS": 152.755509,
+      "SuggestionsDBMS": {
+        "MedianMS": 250.668195,
+        "P95MS": 265.824273
+      },
+      "AlbumsDBMS": {
+        "MedianMS": 148.274373,
+        "P95MS": 164.601082
+      },
+      "TracksDBMS": {
+        "MedianMS": 196.509465,
+        "P95MS": 219.79856
+      },
+      "ResultsDBWorkMS": {
+        "MedianMS": 345.964972,
+        "P95MS": 367.214222
+      }
+    },
+    {
+      "Query": "~",
+      "Suggestions": {
+        "ColdMS": 249.805758,
+        "MedianMS": 252.107748,
+        "P95MS": 269.742963,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": true
+      },
+      "Results": {
+        "ColdMS": 190.514217,
+        "MedianMS": 196.270882,
+        "P95MS": 218.81924,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": true
+      },
+      "Albums": {
+        "ColdMS": 147.047965,
+        "MedianMS": 149.973761,
+        "P95MS": 158.38858,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": true
+      },
+      "Tracks": {
+        "ColdMS": 190.445185,
+        "MedianMS": 196.178044,
+        "P95MS": 218.751942,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": true
+      },
+      "OldReleasesMS": 99.414056,
+      "OldGroupsMS": 148.581865,
+      "SuggestionsDBMS": {
+        "MedianMS": 251.351159,
+        "P95MS": 268.303172
+      },
+      "AlbumsDBMS": {
+        "MedianMS": 149.177622,
+        "P95MS": 157.593936
+      },
+      "TracksDBMS": {
+        "MedianMS": 195.200822,
+        "P95MS": 217.408451
+      },
+      "ResultsDBWorkMS": {
+        "MedianMS": 344.953261,
+        "P95MS": 367.138727
+      }
+    },
+    {
+      "Query": "不存在的长查询xyz",
+      "Suggestions": {
+        "ColdMS": 40.417684,
+        "MedianMS": 38.725437,
+        "P95MS": 40.008847,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Results": {
+        "ColdMS": 50.535459,
+        "MedianMS": 48.841915,
+        "P95MS": 51.315416,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Albums": {
+        "ColdMS": 30.786267,
+        "MedianMS": 30.22327,
+        "P95MS": 31.6361,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Tracks": {
+        "ColdMS": 50.445908,
+        "MedianMS": 48.769728,
+        "P95MS": 51.235293,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "OldReleasesMS": 28.047998,
+      "OldGroupsMS": 35.539296,
+      "SuggestionsDBMS": {
+        "MedianMS": 37.989224,
+        "P95MS": 39.330013
+      },
+      "AlbumsDBMS": {
+        "MedianMS": 29.659454,
+        "P95MS": 31.03141
+      },
+      "TracksDBMS": {
+        "MedianMS": 48.218386,
+        "P95MS": 50.776826
+      },
+      "ResultsDBWorkMS": {
+        "MedianMS": 77.67540500000001,
+        "P95MS": 82.068163
+      }
+    },
+    {
+      "Query": "久石譲",
+      "Suggestions": {
+        "ColdMS": 86.884457,
+        "MedianMS": 88.937473,
+        "P95MS": 95.765213,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Results": {
+        "ColdMS": 122.243099,
+        "MedianMS": 120.389475,
+        "P95MS": 127.464312,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Albums": {
+        "ColdMS": 122.111859,
+        "MedianMS": 120.3084,
+        "P95MS": 127.375002,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Tracks": {
+        "ColdMS": 56.801807,
+        "MedianMS": 58.714835,
+        "P95MS": 65.236888,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "OldReleasesMS": 246.027336,
+      "OldGroupsMS": 233.431323,
+      "SuggestionsDBMS": {
+        "MedianMS": 88.312445,
+        "P95MS": 94.937516
+      },
+      "AlbumsDBMS": {
+        "MedianMS": 119.445803,
+        "P95MS": 126.76092
+      },
+      "TracksDBMS": {
+        "MedianMS": 58.020296,
+        "P95MS": 64.204782
+      },
+      "ResultsDBWorkMS": {
+        "MedianMS": 176.95926,
+        "P95MS": 189.360278
+      }
+    },
+    {
+      "Query": "热门厂牌",
+      "Suggestions": {
+        "ColdMS": 72.118747,
+        "MedianMS": 72.423646,
+        "P95MS": 84.881828,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Results": {
+        "ColdMS": 92.539092,
+        "MedianMS": 97.740094,
+        "P95MS": 113.515992,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Albums": {
+        "ColdMS": 92.468878,
+        "MedianMS": 97.648203,
+        "P95MS": 113.437402,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Tracks": {
+        "ColdMS": 44.734596,
+        "MedianMS": 47.925846,
+        "P95MS": 58.967805,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "OldReleasesMS": 542.17571,
+      "OldGroupsMS": 383.492114,
+      "SuggestionsDBMS": {
+        "MedianMS": 71.746234,
+        "P95MS": 84.198588
+      },
+      "AlbumsDBMS": {
+        "MedianMS": 96.982606,
+        "P95MS": 112.291798
+      },
+      "TracksDBMS": {
+        "MedianMS": 47.129679,
+        "P95MS": 57.871417
+      },
+      "ResultsDBWorkMS": {
+        "MedianMS": 143.833386,
+        "P95MS": 160.498692
+      }
+    },
+    {
+      "Query": "SRCL-1234",
+      "Suggestions": {
+        "ColdMS": 123.911602,
+        "MedianMS": 117.178404,
+        "P95MS": 120.938141,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Results": {
+        "ColdMS": 122.632023,
+        "MedianMS": 119.932079,
+        "P95MS": 132.042932,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Albums": {
+        "ColdMS": 60.485074,
+        "MedianMS": 52.286857,
+        "P95MS": 60.344445,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Tracks": {
+        "ColdMS": 122.552924,
+        "MedianMS": 119.860742,
+        "P95MS": 131.98901,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "OldReleasesMS": 37.505266,
+      "OldGroupsMS": 54.777253,
+      "SuggestionsDBMS": {
+        "MedianMS": 116.385046,
+        "P95MS": 120.274977
+      },
+      "AlbumsDBMS": {
+        "MedianMS": 51.546654,
+        "P95MS": 59.493926
+      },
+      "TracksDBMS": {
+        "MedianMS": 119.315303,
+        "P95MS": 131.360462
+      },
+      "ResultsDBWorkMS": {
+        "MedianMS": 170.714192,
+        "P95MS": 189.17524600000002
+      }
+    },
+    {
+      "Query": "srcl 1234",
+      "Suggestions": {
+        "ColdMS": 123.805554,
+        "MedianMS": 116.587435,
+        "P95MS": 126.992607,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Results": {
+        "ColdMS": 121.58898,
+        "MedianMS": 118.897544,
+        "P95MS": 125.719599,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Albums": {
+        "ColdMS": 55.187344,
+        "MedianMS": 52.45908,
+        "P95MS": 59.933278,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Tracks": {
+        "ColdMS": 121.511602,
+        "MedianMS": 118.846626,
+        "P95MS": 125.662149,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "OldReleasesMS": 35.405456,
+      "OldGroupsMS": 54.49323,
+      "SuggestionsDBMS": {
+        "MedianMS": 115.92051,
+        "P95MS": 126.201093
+      },
+      "AlbumsDBMS": {
+        "MedianMS": 51.859238,
+        "P95MS": 59.164898
+      },
+      "TracksDBMS": {
+        "MedianMS": 118.109395,
+        "P95MS": 125.092474
+      },
+      "ResultsDBWorkMS": {
+        "MedianMS": 170.874818,
+        "P95MS": 181.636855
+      }
+    },
+    {
+      "Query": "在线修正厂牌",
+      "Suggestions": {
+        "ColdMS": 112.956735,
+        "MedianMS": 114.271726,
+        "P95MS": 127.407519,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Results": {
+        "ColdMS": 128.862939,
+        "MedianMS": 112.790533,
+        "P95MS": 129.354452,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Albums": {
+        "ColdMS": 48.848425,
+        "MedianMS": 45.831696,
+        "P95MS": 51.063211,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Tracks": {
+        "ColdMS": 128.767828,
+        "MedianMS": 112.731412,
+        "P95MS": 129.2695,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "OldReleasesMS": 32.91766,
+      "OldGroupsMS": 48.363293,
+      "SuggestionsDBMS": {
+        "MedianMS": 113.59343,
+        "P95MS": 126.455685
+      },
+      "AlbumsDBMS": {
+        "MedianMS": 45.289436,
+        "P95MS": 50.457985
+      },
+      "TracksDBMS": {
+        "MedianMS": 111.855336,
+        "P95MS": 128.737206
+      },
+      "ResultsDBWorkMS": {
+        "MedianMS": 158.302653,
+        "P95MS": 175.956262
+      }
+    }
+  ],
+  "PlanFiles": [
+    "explain-01.json",
+    "explain-02.json",
+    "explain-03.json",
+    "explain-04.json",
+    "explain-05.json",
+    "explain-06.json",
+    "explain-07.json",
+    "explain-08.json",
+    "explain-09.json",
+    "explain-10.json",
+    "explain-11.json",
+    "explain-12.json",
+    "explain-13.json",
+    "explain-14.json",
+    "explain-15.json",
+    "explain-16.json",
+    "explain-17.json"
+  ],
+  "HeapBytes": 3279600,
+  "Notes": [
+    "④不创建艺人实体/别名；夹具包含两万姓名键、每轨两个拼接艺人、四类credits与五万轨热门署名。",
+    "生产 handler 计时包括鉴权、数据库等待、计数、分页、摘要补全和序列化；本机 httptest 不含外部网络。",
+    "合成十万轨根标为 disabled，只扫描独立探针根，避免不存在的合成音频被负向对账；present-only 搜索仍覆盖十万轨。",
+    "本轮复用已完成回填的合成 schema；BackfillMS=0 不代表回填瞬时完成，实际回填计时见首填报告。"
+  ]
+}

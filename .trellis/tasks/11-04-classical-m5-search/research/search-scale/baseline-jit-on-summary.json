@@ -1,0 +1,216 @@
+{
+  "CPUCount": 12,
+  "BackfillMS": 745901.007235,
+  "Counts": {
+    "catalog_projection_subject_state": 120002,
+    "catalog_search_values": 710004,
+    "release_groups": 8001,
+    "releases": 10001,
+    "track_credits": 440000,
+    "tracks": 110001
+  },
+  "Sizes": {
+    "catalog_projection_subject_state": 28090368,
+    "catalog_search_values": 374538240,
+    "catalog_search_values_short_idx": 27148288,
+    "catalog_search_values_trgm_idx": 21438464,
+    "release_groups": 786432,
+    "releases": 2514944,
+    "track_credits": 116867072,
+    "tracks": 36339712
+  },
+  "PG": {
+    "collation": "en_US.utf8",
+    "ctype": "en_US.utf8",
+    "jit": "on",
+    "max_connections": "100",
+    "server_encoding": "UTF8",
+    "server_version": "18.6",
+    "shared_buffers": "128MB",
+    "work_mem": "4MB"
+  },
+  "Foreground": {
+    "audio": {
+      "ColdMS": 2.676463,
+      "MedianMS": 1.215587,
+      "P95MS": 1.809081,
+      "Samples": 705,
+      "TargetMS": 1000,
+      "Pass": true
+    },
+    "correction": {
+      "ColdMS": 25.276849,
+      "MedianMS": 25.276849,
+      "P95MS": 25.276849,
+      "Samples": 1,
+      "TargetMS": 1000,
+      "Pass": true
+    },
+    "legacy_suggestions": {
+      "ColdMS": 2970.233658,
+      "MedianMS": 871.389233,
+      "P95MS": 988.881216,
+      "Samples": 705,
+      "TargetMS": 1000,
+      "Pass": true
+    },
+    "ready": {
+      "ColdMS": 0.052047,
+      "MedianMS": 0.05283,
+      "P95MS": 0.084449,
+      "Samples": 705,
+      "TargetMS": 1000,
+      "Pass": true
+    },
+    "scan_start": {
+      "ColdMS": 25.401842,
+      "MedianMS": 25.401842,
+      "P95MS": 25.401842,
+      "Samples": 1,
+      "TargetMS": 1000,
+      "Pass": true
+    }
+  },
+  "Cases": [
+    {
+      "Query": "交响曲 第00999号",
+      "Suggestions": {
+        "ColdMS": 106.555225,
+        "MedianMS": 124.426376,
+        "P95MS": 136.040196,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Results": {
+        "ColdMS": 787.93818,
+        "MedianMS": 661.408064,
+        "P95MS": 731.377199,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": false
+      },
+      "OldReleasesMS": 628.51894,
+      "OldGroupsMS": 647.171012
+    },
+    {
+      "Query": "交响曲 第009",
+      "Suggestions": {
+        "ColdMS": 180.314779,
+        "MedianMS": 157.655324,
+        "P95MS": 186.709628,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Results": {
+        "ColdMS": 766.293539,
+        "MedianMS": 761.234149,
+        "P95MS": 827.793241,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": false
+      },
+      "OldReleasesMS": 619.35515,
+      "OldGroupsMS": 790.57446
+    },
+    {
+      "Query": "周杰倫",
+      "Suggestions": {
+        "ColdMS": 5328.160975,
+        "MedianMS": 6035.31326,
+        "P95MS": 6553.70428,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": false
+      },
+      "Results": {
+        "ColdMS": 5637.223676,
+        "MedianMS": 6295.288618,
+        "P95MS": 6909.705356,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": false
+      },
+      "OldReleasesMS": 1521.346033,
+      "OldGroupsMS": 6264.760319
+    },
+    {
+      "Query": "周杰伦",
+      "Suggestions": {
+        "ColdMS": 5680.7063,
+        "MedianMS": 5664.847233,
+        "P95MS": 5860.808872,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": false
+      },
+      "Results": {
+        "ColdMS": 6047.986058,
+        "MedianMS": 5826.500389,
+        "P95MS": 6084.383342,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": false
+      },
+      "OldReleasesMS": 1517.745224,
+      "OldGroupsMS": 6661.355318
+    },
+    {
+      "Query": "爱",
+      "Suggestions": {
+        "ColdMS": 1330.070081,
+        "MedianMS": 1276.053617,
+        "P95MS": 1358.639528,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": false
+      },
+      "Results": {
+        "ColdMS": 2469.973223,
+        "MedianMS": 2497.251009,
+        "P95MS": 2652.409021,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": false
+      },
+      "OldReleasesMS": 573.946885,
+      "OldGroupsMS": 1745.159084
+    },
+    {
+      "Query": "周",
+      "Suggestions": {
+        "ColdMS": 6255.674072,
+        "MedianMS": 6104.065134,
+        "P95MS": 6222.435769,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": false
+      },
+      "Results": {
+        "ColdMS": 6261.576071,
+        "MedianMS": 6227.898865,
+        "P95MS": 6393.160749,
+        "Samples": 30,
+        "TargetMS": 1000,
+        "Pass": false
+      },
+      "OldReleasesMS": 1371.791926,
+      "OldGroupsMS": 6703.170937
+    }
+  ],
+  "PlanFiles": [
+    "explain-01.json",
+    "explain-02.json",
+    "explain-03.json",
+    "explain-04.json",
+    "explain-05.json",
+    "explain-06.json"
+  ],
+  "HeapBytes": 2559872,
+  "Notes": [
+    "④不创建艺人实体/别名；夹具包含两万姓名键、每轨两个拼接艺人、四类credits与五万轨热门署名。",
+    "生产 handler 计时包括鉴权、数据库等待、计数、分页、摘要补全和序列化；本机 httptest 不含外部网络。",
+    "合成十万轨根标为 disabled，只扫描独立探针根，避免不存在的合成音频被负向对账；present-only 搜索仍覆盖十万轨。"
+  ]
+}

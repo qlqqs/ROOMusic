@@ -1,0 +1,10 @@
+{
+  "body": {
+    "created_at": null,
+    "favorited": false,
+    "revision": 6,
+    "target_id": "00000000-0000-4000-8000-000000000001",
+    "target_kind": "artist"
+  },
+  "status": 200
+}

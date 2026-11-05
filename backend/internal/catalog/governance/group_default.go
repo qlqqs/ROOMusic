@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/writegate"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 )
 
@@ -62,6 +63,9 @@ type groupDefaultState struct {
 
 // lockReleaseRow 锁住发行行（不要求可见），返回它所在的组与是否可见；发行不存在时 exists 为 false。
 func lockReleaseRow(ctx context.Context, tx *sql.Tx, releaseID string) (groupID string, visible, exists bool, err error) {
+	if err := writegate.Lock(ctx, tx); err != nil {
+		return "", false, false, err
+	}
 	err = tx.QueryRowContext(ctx, `SELECT releases.group_id::text, `+releasesql.ReleaseVisiblePredicate+` FROM releases WHERE releases.id=$1::uuid FOR UPDATE`, releaseID).
 		Scan(&groupID, &visible)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -81,6 +85,9 @@ type lockedGroup struct {
 
 // lockVisibleGroup 锁住组行并返回它的状态；组不存在或没有可见成员时返回 404 分类错误。
 func lockVisibleGroup(ctx context.Context, tx *sql.Tx, groupID string) (lockedGroup, error) {
+	if err := writegate.Lock(ctx, tx); err != nil {
+		return lockedGroup{}, err
+	}
 	var locked lockedGroup
 	var stored sql.NullString
 	err := tx.QueryRowContext(ctx, `SELECT edit_revision, default_release_id::text FROM release_groups WHERE id=$1::uuid FOR UPDATE`, groupID).Scan(&locked.revision, &stored)

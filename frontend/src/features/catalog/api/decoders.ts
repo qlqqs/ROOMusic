@@ -23,12 +23,26 @@ export const artworkDecoder = d.object({
   height: d.integer({ min: 1, max: 100_000 }),
 });
 
+/** 一个署名最多对应的艺人引用数（与后端一致）。 */
+export const MAX_ARTIST_REFS = 100;
+
+// 署名对应的艺人（M5 ⑤）：artist_id 是有效艺人，name 是这处署名的原写法（链接文字用它），display_name 是艺人的主显示名。
+// 艺人数据还在整理时后端给空数组，文字与播放事实照常；前端只消费这些明确的 ID，不按同名字符串猜人。
+export const artistRefDecoder = d.object({
+  artist_id: d.uuid(),
+  name: d.string(),
+  display_name: d.string(),
+});
+export const artistRefsDecoder = d.array(artistRefDecoder, { max: MAX_ARTIST_REFS });
+
 // 摘要：列表里的代表版本、组详情里的成员、发行版本详情的头部共用同一个形状。
 const releaseSummaryShape = {
   id: d.uuid(),
   title: d.string(),
   artist: d.string(),
   album_artist: d.nullable(d.string()),
+  artist_refs: artistRefsDecoder,
+  album_artist_refs: artistRefsDecoder,
   year: d.nullable(d.integer({ min: 1, max: 9999 })),
   source_type: d.nullable(d.string()),
   media_type: d.nullable(d.string()),
@@ -49,7 +63,8 @@ const releaseGroupSummaryShape = {
   representative: releaseSummaryDecoder,
   added_at: d.optional(d.timestamp()),
 };
-const releaseGroupSummaryDecoder = d.object(releaseGroupSummaryShape);
+// 全局搜索的专辑结果（features/search）复用同一个组摘要解码器。
+export const releaseGroupSummaryDecoder = d.object(releaseGroupSummaryShape);
 
 // 必须带加入时间的组摘要：“最近新增”、按加入时间排序的列表与扫描报告里的新增专辑用它。
 // 旧服务会忽略 sort 参数而按标题返回，缺少 added_at 时整体拒绝，不把按标题排列的结果当成“最近新增”显示。
@@ -129,6 +144,7 @@ const releaseComparisonDecoder = d.object({
 const creditDecoder = d.object({
   role: d.string({ min: 1, max: 64 }),
   name: d.string(),
+  artist_refs: artistRefsDecoder,
 });
 
 // CUE 分轨的位置：帧数（每秒 75 帧）与折算出的秒数，字段都可能缺失。
@@ -144,6 +160,7 @@ const trackDecoder = d.object({
   id: d.uuid(),
   title: d.string(),
   artist: d.string(),
+  artist_refs: artistRefsDecoder,
   position: d.integer({ min: 0 }),
   // 只是文件名（或 CUE 分轨的标签），后端不返回路径。
   source: d.string(),
@@ -258,6 +275,14 @@ const releaseEvidenceDecoder = d.object({
   truncated: d.boolean(),
 });
 
+// 目录状态（GET /catalog/status，搜索响应里也带同一快照）：epoch 是不透明的单调整数，变大说明搜索或艺人数据换了一代；
+// search_mode 为 legacy 时新搜索还在后台准备，搜索照常可用，只是匹配方式是旧的。
+export const catalogStateDecoder = d.object({
+  epoch: d.integer({ min: 0 }),
+  search_mode: d.oneOf(["legacy", "normalized"]),
+  artists_state: d.oneOf(["unavailable", "preparing", "ready"]),
+});
+
 export const decodeReleaseGroupPage = d.defineDecoder(releaseGroupPageDecoder);
 export const decodeReleaseGroupAddedPage = d.defineDecoder(releaseGroupAddedPageDecoder);
 export const decodeRecentlyAdded = d.defineDecoder(recentlyAddedDecoder);
@@ -265,8 +290,10 @@ export const decodeReleaseGroupDetail = d.defineDecoder(releaseGroupDetailDecode
 export const decodeReleaseDetail = d.defineDecoder(releaseDetailDecoder);
 export const decodeReleaseComparison = d.defineDecoder(releaseComparisonDecoder);
 export const decodeReleaseEvidence = d.defineDecoder(releaseEvidenceDecoder);
+export const decodeCatalogState = d.defineDecoder(catalogStateDecoder);
 
 export type ArtworkDTO = d.Infer<typeof artworkDecoder>;
+export type ArtistRefDTO = d.Infer<typeof artistRefDecoder>;
 export type ReleaseSummaryDTO = d.Infer<typeof releaseSummaryDecoder>;
 export type ReleaseGroupSummaryDTO = d.Infer<typeof releaseGroupSummaryDecoder>;
 export type ReleaseGroupPageDTO = d.Infer<typeof releaseGroupPageDecoder>;
@@ -285,3 +312,4 @@ export type ReleaseEvidenceSummaryDTO = d.Infer<typeof evidenceSummaryDecoder>;
 export type ReleaseEvidenceDTO = d.Infer<typeof releaseEvidenceDecoder>;
 export type ReleaseFieldEvidenceDTO = d.Infer<typeof fieldEvidenceDecoder>;
 export type ReleaseGroupingEvidenceDTO = d.Infer<typeof groupingEvidenceDecoder>;
+export type CatalogStateDTO = d.Infer<typeof catalogStateDecoder>;

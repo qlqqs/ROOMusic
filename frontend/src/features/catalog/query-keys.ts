@@ -27,3 +27,8 @@ export const catalogKeys = {
   /** 一个发行版本的完整证据（管理员）。 */
   evidence: (generation: number, releaseId: string) => viewerQueryKey(generation, "catalog", "release-evidence", releaseId),
 };
+
+export const catalogStateKeys = {
+  /** 目录状态：不在 catalog 前缀下，修改专辑数据后让目录失效时不会连带重读它。 */
+  current: (generation: number) => viewerQueryKey(generation, "catalog-state"),
+};

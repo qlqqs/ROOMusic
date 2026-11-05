@@ -11,7 +11,9 @@
         },
         "release": {
           "album_artist": "Sample Orchestra",
+          "album_artist_refs": [],
           "artist": "Sample Orchestra",
+          "artist_refs": [],
           "artwork": {
             "height": 480,
             "mime": "image/webp",

@@ -1,0 +1,28 @@
+{
+  "body": {
+    "albums": {
+      "has_more": false,
+      "items": []
+    },
+    "artists": {
+      "has_more": false,
+      "items": []
+    },
+    "available_types": [
+      "artists",
+      "albums",
+      "tracks"
+    ],
+    "catalog_state": {
+      "artists_state": "ready",
+      "epoch": 4,
+      "search_mode": "normalized"
+    },
+    "query": "查无结果",
+    "tracks": {
+      "has_more": false,
+      "items": []
+    }
+  },
+  "status": 200
+}

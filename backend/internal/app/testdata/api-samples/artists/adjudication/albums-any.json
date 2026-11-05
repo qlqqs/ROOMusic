@@ -1,0 +1,94 @@
+{
+  "body": {
+    "artist_id": "00000000-0000-4000-8000-000000000001",
+    "items": [
+      {
+        "credited_release_id": "00000000-0000-4000-8000-000000000002",
+        "group": {
+          "added_at": "2026-01-01T00:00:00Z",
+          "attention_count": 1,
+          "id": "00000000-0000-4000-8000-000000000003",
+          "release_count": 2,
+          "representative": {
+            "album_artist": "同名艺人",
+            "album_artist_refs": [
+              {
+                "artist_id": "00000000-0000-4000-8000-000000000004",
+                "display_name": "同名艺人",
+                "name": "同名艺人"
+              }
+            ],
+            "artist": "同名艺人",
+            "artist_refs": [
+              {
+                "artist_id": "00000000-0000-4000-8000-000000000004",
+                "display_name": "同名艺人",
+                "name": "同名艺人"
+              }
+            ],
+            "artwork": null,
+            "attention_count": 0,
+            "id": "00000000-0000-4000-8000-000000000005",
+            "media_type": null,
+            "medium_count": 1,
+            "source_type": null,
+            "title": "同名乙专辑",
+            "track_count": 1,
+            "year": null
+          }
+        },
+        "roles": [
+          "release_artist",
+          "album_artist",
+          "track_artist"
+        ]
+      },
+      {
+        "credited_release_id": "00000000-0000-4000-8000-000000000006",
+        "group": {
+          "added_at": "2026-01-01T00:00:01Z",
+          "attention_count": 0,
+          "id": "00000000-0000-4000-8000-000000000007",
+          "release_count": 1,
+          "representative": {
+            "album_artist": "Teresa Teng",
+            "album_artist_refs": [
+              {
+                "artist_id": "00000000-0000-4000-8000-000000000008",
+                "display_name": "Teresa Teng",
+                "name": "Teresa Teng"
+              }
+            ],
+            "artist": "Teresa Teng",
+            "artist_refs": [
+              {
+                "artist_id": "00000000-0000-4000-8000-000000000008",
+                "display_name": "Teresa Teng",
+                "name": "Teresa Teng"
+              }
+            ],
+            "artwork": null,
+            "attention_count": 0,
+            "id": "00000000-0000-4000-8000-000000000006",
+            "media_type": null,
+            "medium_count": 1,
+            "source_type": null,
+            "title": "英文现场",
+            "track_count": 1,
+            "year": null
+          }
+        },
+        "roles": [
+          "composer",
+          "performer"
+        ]
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "page_size": 50,
+      "total": 2
+    }
+  },
+  "status": 200
+}

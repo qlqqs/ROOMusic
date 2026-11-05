@@ -232,3 +232,31 @@ scans cannot mark sources missing.
 
 These rules implement the transaction and authority requirements in the
 [Core 0 PRD](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md).
+
+### 并行测试的统计隔离
+
+同库独立 schema 的测试不得执行不带表名的 `ANALYZE`：它不受 `search_path` 限制，会更新其他测试 schema 的统计。需要夹具统计时使用 `postgrestest.AnalyzeSchema(t, ctx, db, onlyTables...)`：无表名时分析完整当前schema；可选allowlist仅接受当前schema存在的普通表/分区表原始名，全部验证通过后再执行，未知表拒绝且不更新任何统计。表标识符只来自PostgreSQL `format('%I.%I')`，重复表去重。分阶段统计测试用allowlist保留辅助空表reltuples=-1→0断言，不得为规避污染放松断言或改为串行运行。
+
+### M5 ⑤迁移与解析缓存
+
+0026集中创建艺人身份/名字/事实/意图/派生/证据/候选及operations artist目标关联，0027创建personal拥有的typed艺人收藏。沿用catalog_projection_state新增artists能力，发行代次标记用于短批续跑；发布前同事务调用个人owner刷新解析。迁移不重写已发布0001–0025，艺人不物理删除；人工意图操作FK延迟检查，扫描不得写它们。接口与验证见[艺人合同](./artist-contracts.md)。
+
+0028增加artist_profiles.applied_generation（默认0）及后台清单artist类型；0不伪造完成，新代次必须由真实派生事务写marker。已有完整ready投影内容不变，无需因marker增加而重新规范化；进行中build补齐身份清单，发布只做有索引的缺口判断。在线写者不能以“补缺”为由把无关全库工作放进CATP临界区。
+
+0029仅新增`artist_effective_backfill_idx(artist_id,name_id,track_id,release_id)`。依据完整规模同SQL有无索引计划，支持热门身份计票及逐个不同名字遍历；不改旧迁移、Version或ready，不在DDL预填派生。迁移fresh/rerun仍由统一执行器检验。索引磁盘/WAL/写放大及完整批提交耗时必须一起记录；不能因cost下降不再触发JIT就把写事务关闭JIT当等价实现。
+
+0030仅新增有效署名的`(artist_id,track_id) INCLUDE(release_id,role)`与`(artist_id,release_id) INCLUDE(track_id,role)`部分覆盖索引（对应来源非NULL），服务前台热门艺人命中说明的分支定位。不改既有迁移、事实、代次或发布状态；I9已接受回填性能，不为本轮新索引重启回填验收。
+
+### I8：纯派生回填批的局部异步提交许可
+
+仅单worker回填**应用批**可选择在该`*sql.Tx`内执行`SET LOCAL synchronous_commit = off`；选择前必须逐项审计写集：只含可从既存权威重建的派生投影及其自身进度/完成代次，二者仍原子提交。崩溃恢复可重做未持久化批，不允许投影和进度分开提交。该许可不是全局默认，也不是必须采用。
+
+禁止用于M3、扫描、任何用户写入、治理意图、个人数据、扫描事实或稳定身份权威；发布事务若刷新收藏也不符合条件。不能仅因函数叫backfill就放行，例如艺人Refresh可能建立身份/名字键并恢复tracks.artist，不可将整条事务视作纯投影。只读JIT许可与此独立，不允许写事务关JIT、planner开关或业务ANALYZE。
+
+采用者必须集成测试：同一连接/PID原设置在批事务内变为off，COMMIT后恢复原值；ROLLBACK/取消也恢复，设置失败短路且不提交进度；M3/扫描/用户写者没有此设置。必须记录实际采用范围和未采用理由，不得仅靠mock断言SQL字符串。错误示例：连接池初始化关闭同步提交，或对包含个人解析刷新/扫描事实的事务一概关闭；正确示例：明确纯搜索派生应用批中局部设置并与进度原子提交，用户业务事务仍用默认持久性。
+
+### 串行回填的计划取证
+
+复用连接的SQL不能只凭新连接一次EXPLAIN判定性能。M5艺人回填曾在第6次从custom转generic后，对热门署名逐条查询tracks，JIT仍为0；必须分清计划切换与JIT成本。诊断先完成未受EXPLAIN扰动的真实串行批，再读取同连接`pg_prepared_statements`计数并对实际prepared语句和实际参数取计划；独立连接回放作对照，保留SQL/SHA/参数及完整提交耗时。原始参数仅允许合成隔离夹具的显式诊断落仓外，不能新增业务原文日志。
+
+按数据密度选等价SQL可以优化，但策略探测上限不能变成业务输出上限。至少覆盖阈值末项改变结果及跨阈值回落，并同时测稀疏/热门/missing：减少热门随机读取可能给稀疏批新增固定扫描成本。计划节点、COMMIT、选批和批间等待分别计时，不拿进程总墙钟误当某阶段时间；所有正式分位数仍取完整提交分布。

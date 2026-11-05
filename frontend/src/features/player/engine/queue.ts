@@ -1,6 +1,8 @@
 // 播放队列的纯函数：条目、四种播放模式、插入、移除、移动、前进与后退。不依赖 React、媒体元素或存储，
 // 随机数与条目 ID 由调用方注入，所以每个语义都能用确定的输入验证。
 
+import type { ArtistRefDTO } from "../../catalog";
+
 export const playModes = ["sequential", "repeat_all", "repeat_one", "shuffle"] as const;
 export type PlayMode = (typeof playModes)[number];
 
@@ -27,6 +29,11 @@ export type PlayerTrack = {
   groupId: string;
   title: string;
   artist: string;
+  /**
+   * 艺人文字对应的艺人（M5 ⑤）：与 artist 同一个回退，名字与链接不会错配。所有构造入口都会给出；缺省（旧的测试数据）等于空数组，
+   * 艺人名显示为纯文字。只用于显示，不进入刷新恢复的记录。
+   */
+  artistRefs?: readonly ArtistRefDTO[];
   albumTitle: string;
   albumArtist: string;
   /** 扫描得到的时长，只用于队列显示；播放进度与时长取自媒体事件。 */
@@ -282,6 +289,41 @@ export function hasNext(state: QueueState): boolean {
   if (state.mode === "repeat_all" || state.mode === "shuffle") return true;
   const at = indexOfEntry(state.entries, state.currentEntryId);
   return at < 0 ? state.entries.length > 0 : at < state.entries.length - 1;
+}
+
+/** 队列条目上只用于显示的字段（M5 ⑤）：刷新它们不影响身份、来源事实与播放。 */
+export type TrackDisplayMetadata = Pick<PlayerTrack, "title" | "artist" | "artistRefs" | "albumTitle" | "albumArtist" | "artworkId">;
+
+function sameRefs(a: PlayerTrack["artistRefs"], b: PlayerTrack["artistRefs"]): boolean {
+  const left = a ?? [];
+  const right = b ?? [];
+  return left.length === right.length && left.every((ref, index) => ref.artist_id === right[index]?.artist_id && ref.name === right[index]?.name && ref.display_name === right[index]?.display_name);
+}
+
+function sameMetadata(track: PlayerTrack, patch: TrackDisplayMetadata): boolean {
+  return (
+    track.title === patch.title &&
+    track.artist === patch.artist &&
+    track.albumTitle === patch.albumTitle &&
+    track.albumArtist === patch.albumArtist &&
+    track.artworkId === patch.artworkId &&
+    sameRefs(track.artistRefs, patch.artistRefs)
+  );
+}
+
+/**
+ * 按曲目 ID 刷新队列条目的显示元数据（同一首的每个条目都改）：条目 ID、顺序、当前项、历史与随机袋都不变，曲目身份与来源事实不动。
+ * 没有任何变化时返回原来的状态（调用方据此不通知界面）。
+ */
+export function patchTrackMetadata(state: QueueState, patches: ReadonlyMap<string, TrackDisplayMetadata>): QueueState {
+  let changed = false;
+  const entries = state.entries.map((entry) => {
+    const patch = patches.get(entry.track.trackId);
+    if (patch === undefined || sameMetadata(entry.track, patch)) return entry;
+    changed = true;
+    return { ...entry, track: { ...entry.track, ...patch } };
+  });
+  return changed ? { ...state, entries } : state;
 }
 
 export function currentEntry(state: QueueState): QueueEntry | null {

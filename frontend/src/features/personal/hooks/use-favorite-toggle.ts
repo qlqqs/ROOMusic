@@ -16,19 +16,26 @@ export function patchLookup(lookup: FavoriteLookupDTO, kind: FavoriteKind, id: s
   if (kind === "track") {
     return { ...lookup, tracks: lookup.tracks.map((track) => (track.track_id.toLowerCase() === target ? { ...track, favorited } : track)) };
   }
+  if (kind === "artist") {
+    // 按输入的 ID 或它现在对应的艺人匹配：合并过的旧 ID 与现在的 ID 是同一位。
+    const matches = (artist: FavoriteLookupDTO["artists"][number]) => artist.artist_id.toLowerCase() === target || artist.resolved_artist_id?.toLowerCase() === target;
+    return { ...lookup, artists: lookup.artists.map((artist) => (matches(artist) ? { ...artist, favorited } : artist)) };
+  }
   return { ...lookup, albums: lookup.albums.map((album) => (album.group_id.toLowerCase() === target ? { ...album, favorited } : album)) };
 }
 
-export type FavoriteToggleFailure = { favorited: boolean; uncertain: boolean; gone: boolean };
+export type FavoriteToggleFailure = { favorited: boolean; uncertain: boolean; gone: boolean; preparing: boolean };
 
 function failureOfToggle(error: unknown, favorited: boolean): FavoriteToggleFailure {
-  return { favorited, uncertain: isOutcomeUncertain(failureOf(error)), gone: isHttpFailure(failureOf(error), 404) };
+  const failure = failureOf(error);
+  return { favorited, uncertain: isOutcomeUncertain(failure), gone: isHttpFailure(failure, 404), preparing: isHttpFailure(failure, 409, "artist_catalog_not_ready") };
 }
 
 /** 切换失败时心形旁边的一句话。 */
-export function favoriteFailureText({ favorited, uncertain, gone }: FavoriteToggleFailure): string {
+export function favoriteFailureText({ favorited, uncertain, gone, preparing }: FavoriteToggleFailure): string {
   if (uncertain) return "不确定是否成功，正在重新读取。";
   if (gone) return "已经找不到它了。";
+  if (preparing) return "艺人信息正在整理，请稍后再试。";
   return favorited ? "没能收藏，请稍后再试。" : "没能取消收藏，请稍后再试。";
 }
 

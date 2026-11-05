@@ -10,6 +10,7 @@ export function historyItem(index: number, overrides: Partial<HistoryItemDTO> = 
     release: group.representative,
     title: `历史曲目 ${index}`,
     artist: `曲目艺人 ${index}`,
+    artist_refs: [],
     present: true,
     play_count: 3,
     last_played_at: "2026-11-04T08:30:00Z",

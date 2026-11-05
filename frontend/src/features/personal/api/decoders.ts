@@ -1,6 +1,7 @@
 import { decode as d } from "../../../shared/api";
 import { artworkDecoder, releaseSummaryDecoder } from "../../catalog/api/decoders";
 import { trackSummaryDecoder } from "../../catalog/api/track-summary";
+import { artistSummaryDecoder } from "../../catalog/api/artist-summary";
 
 // 收藏与歌单接口的解码器（合同见任务 11-04-classical-m5-favorites 的 design.md §4–§6）。只依赖 shared/api 与 catalog 的纯解码模块，
 // 接口样本测试与真实服务用例可以直接导入。超界、计数对不上的响应整体拒绝，而不是截断后显示。
@@ -16,6 +17,7 @@ export const MAX_PLAYLIST_ITEMS_PAGE_SIZE = 100;
 /** 批量心形状态一次最多查的曲目与专辑。 */
 export const MAX_LOOKUP_TRACKS = 10_000;
 export const MAX_LOOKUP_ALBUMS = 1_000;
+export const MAX_LOOKUP_ARTISTS = 1_000;
 /** 每人最多的歌单数；也是“一首曲目在哪些歌单里”的上限。 */
 export const MAX_PLAYLISTS = 1_000;
 /** 歌单名字的上限（按 Unicode 码点）。 */
@@ -102,7 +104,27 @@ const favoriteAlbumsPageDecoder = checked(
   (page) => pageProblem(page) ?? duplicateProblem(page.items.map((item) => item.album.group_id), "items"),
 );
 
-export const favoriteKinds = ["track", "album"] as const;
+// 收藏的艺人（M5 ⑤）：artist 是现在的艺人（合并过的按合并后的显示，同一位只出现一次），created_at 是这些收藏里最晚的时间；
+// 暂时没有存在的曲目时 available 为 false，收藏照样保留、可以取消。
+const favoriteArtistDecoder = checked(
+  d.object({
+    artist: artistSummaryDecoder,
+    created_at: d.timestamp(),
+    available: d.boolean(),
+  }),
+  (item) => (item.available === item.artist.available ? null : "available 与 artist.available 不一致"),
+);
+
+const favoriteArtistsPageDecoder = checked(
+  d.object({
+    items: d.array(favoriteArtistDecoder, { max: MAX_FAVORITES_PAGE_SIZE }),
+    pagination: paginationDecoder(MAX_FAVORITES_PAGE_SIZE),
+    revision: count(),
+  }),
+  (page) => pageProblem(page) ?? duplicateProblem(page.items.map((item) => item.artist.id), "items"),
+);
+
+export const favoriteKinds = ["track", "album", "artist"] as const;
 export type FavoriteKind = (typeof favoriteKinds)[number];
 
 // 收藏或取消一个目标的回执：收藏着时有收藏时间，取消后是 null。
@@ -117,14 +139,19 @@ const favoriteToggleDecoder = checked(
   (result) => (result.favorited === (result.created_at !== null) ? null : "favorited 与 created_at 不一致"),
 );
 
-// 一批曲目与专辑的收藏状态（未知的 ID 是 false）；后端以后可能多给艺人一栏，这里忽略。
+// 一批曲目、专辑与艺人的收藏状态（未知的 ID 是 false）。艺人按输入的 ID 回答：resolved_artist_id 是它现在对应的艺人
+// （合并过的旧 ID 指向合并后的艺人，未知的 ID 是 null）；对等价的任何一条收藏着都是 true。没有请求艺人时 artists 是空数组。
 const favoriteLookupDecoder = checked(
   d.object({
     revision: count(),
     tracks: d.array(d.object({ track_id: d.uuid(), favorited: d.boolean() }), { max: MAX_LOOKUP_TRACKS }),
     albums: d.array(d.object({ group_id: d.uuid(), favorited: d.boolean() }), { max: MAX_LOOKUP_ALBUMS }),
+    artists: d.array(d.object({ artist_id: d.uuid(), resolved_artist_id: d.nullable(d.uuid()), favorited: d.boolean() }), { max: MAX_LOOKUP_ARTISTS }),
   }),
-  (lookup) => duplicateProblem(lookup.tracks.map((track) => track.track_id), "tracks") ?? duplicateProblem(lookup.albums.map((album) => album.group_id), "albums"),
+  (lookup) =>
+    duplicateProblem(lookup.tracks.map((track) => track.track_id), "tracks") ??
+    duplicateProblem(lookup.albums.map((album) => album.group_id), "albums") ??
+    duplicateProblem(lookup.artists.map((artist) => artist.artist_id), "artists"),
 );
 
 // “播放全部”的候选窗口：先去掉文件缺失的，再按顺序取前 10,000 首。计数之间的关系见 queueCountsProblem。
@@ -299,6 +326,7 @@ const containingTrackDecoder = checked(
 
 export const decodeFavoriteTracksPage = d.defineDecoder(favoriteTracksPageDecoder);
 export const decodeFavoriteAlbumsPage = d.defineDecoder(favoriteAlbumsPageDecoder);
+export const decodeFavoriteArtistsPage = d.defineDecoder(favoriteArtistsPageDecoder);
 export const decodeFavoriteToggle = d.defineDecoder(favoriteToggleDecoder);
 export const decodeFavoriteLookup = d.defineDecoder(favoriteLookupDecoder);
 export const decodeFavoriteQueue = d.defineDecoder(favoriteQueueDecoder);
@@ -320,6 +348,8 @@ export type PersonalAlbumDTO = d.Infer<typeof personalAlbumDecoder>;
 export type FavoriteAlbumDTO = d.Infer<typeof favoriteAlbumDecoder>;
 export type FavoriteTracksPageDTO = d.Infer<typeof favoriteTracksPageDecoder>;
 export type FavoriteAlbumsPageDTO = d.Infer<typeof favoriteAlbumsPageDecoder>;
+export type FavoriteArtistDTO = d.Infer<typeof favoriteArtistDecoder>;
+export type FavoriteArtistsPageDTO = d.Infer<typeof favoriteArtistsPageDecoder>;
 export type FavoriteToggleDTO = d.Infer<typeof favoriteToggleDecoder>;
 export type FavoriteLookupDTO = d.Infer<typeof favoriteLookupDecoder>;
 export type FavoriteQueueDTO = d.Infer<typeof favoriteQueueDecoder>;

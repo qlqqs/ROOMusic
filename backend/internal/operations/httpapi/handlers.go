@@ -63,6 +63,7 @@ type operationItem struct {
 	Actor      actorItem               `json:"actor"`
 	Release    *operations.ReleaseInfo `json:"release"`
 	Album      *operations.AlbumInfo   `json:"album"`
+	Artist     *operations.ArtistInfo  `json:"artist"`
 	Changes    any                     `json:"changes"`
 	Reverts    *string                 `json:"reverts"`
 	RevertedBy *string                 `json:"reverted_by"`
@@ -104,6 +105,14 @@ func (handlers *Handlers) listOperations(responseWriter http.ResponseWriter, req
 		params.Targets = append(params.Targets, operations.Target{Type: operations.TargetReleaseGroup, ID: strings.ToLower(groupID)})
 	}
 
+	if artistID := request.URL.Query().Get("artist_id"); artistID != "" {
+		if !uuid.Valid(artistID) {
+			httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_id", "艺人标识无效")
+			return
+		}
+		params.Targets = append(params.Targets, operations.Target{Type: operations.TargetArtist, ID: strings.ToLower(artistID)})
+	}
+
 	listed, err := operations.List(request.Context(), handlers.database, params)
 	if err != nil {
 		handlers.writeListError(responseWriter, request, err)
@@ -143,7 +152,7 @@ func (handlers *Handlers) listOperations(responseWriter http.ResponseWriter, req
 		items = append(items, operationItem{
 			ID: record.ID, Type: record.Type, CreatedAt: record.CreatedAt,
 			Actor:   actorItem{ID: record.ActorID, Username: names[record.ActorID]},
-			Release: description.Release, Album: description.Album, Changes: description.Changes,
+			Release: description.Release, Album: description.Album, Artist: description.Artist, Changes: description.Changes,
 			Reverts: optionalID(record.RevertsID), RevertedBy: optionalID(record.RevertedByID),
 			// 撤销记录不能再被撤销，已被撤销的操作也不能再撤销；其余由类型判断目标现在是否还能撤销。
 			Revertible: description.Revertible && record.Type != operations.TypeRevert && record.RevertedByID == "",

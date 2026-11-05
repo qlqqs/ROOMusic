@@ -1,0 +1,163 @@
+{
+  "CPUCount": 12,
+  "BackfillMS": 0,
+  "Counts": {
+    "catalog_projection_subject_state": 120002,
+    "catalog_search_values": 710004,
+    "release_groups": 8001,
+    "releases": 10001,
+    "track_credits": 440000,
+    "tracks": 110001,
+    "tracks_missing": 10000,
+    "tracks_present": 100001
+  },
+  "Sizes": {
+    "catalog_projection_subject_state": 51249152,
+    "catalog_projection_title_order_idx": 8142848,
+    "catalog_search_release_group_idx": 516096,
+    "catalog_search_values": 365453312,
+    "catalog_search_values_exact_idx": 19365888,
+    "catalog_search_values_short_idx": 18636800,
+    "catalog_search_values_trgm_idx": 14753792,
+    "release_groups": 1220608,
+    "releases": 3383296,
+    "track_credits": 112656384,
+    "tracks": 35209216
+  },
+  "PG": {
+    "collation": "en_US.utf8",
+    "ctype": "en_US.utf8",
+    "jit": "on",
+    "max_connections": "100",
+    "server_encoding": "UTF8",
+    "server_version": "18.6",
+    "shared_buffers": "128MB",
+    "work_mem": "4MB"
+  },
+  "Foreground": {},
+  "Cases": [
+    {
+      "Query": "交响曲 第00999号",
+      "Suggestions": {
+        "ColdMS": 147.086353,
+        "MedianMS": 126.908173,
+        "P95MS": 140.628448,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Results": {
+        "ColdMS": 123.631871,
+        "MedianMS": 139.85443,
+        "P95MS": 152.591073,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Albums": {
+        "ColdMS": 105.918722,
+        "MedianMS": 78.404134,
+        "P95MS": 83.052403,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Tracks": {
+        "ColdMS": 123.548947,
+        "MedianMS": 139.715819,
+        "P95MS": 152.25634,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "OldReleasesMS": 43.568618,
+      "OldGroupsMS": 58.347817
+    },
+    {
+      "Query": "交响曲 第009",
+      "Suggestions": {
+        "ColdMS": 137.036595,
+        "MedianMS": 124.837123,
+        "P95MS": 137.442549,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Results": {
+        "ColdMS": 151.309825,
+        "MedianMS": 150.108067,
+        "P95MS": 168.127628,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Albums": {
+        "ColdMS": 125.170294,
+        "MedianMS": 99.350982,
+        "P95MS": 111.10795,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Tracks": {
+        "ColdMS": 151.205891,
+        "MedianMS": 150.039982,
+        "P95MS": 168.056666,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "OldReleasesMS": 62.477401,
+      "OldGroupsMS": 92.585588
+    },
+    {
+      "Query": "周杰倫",
+      "Suggestions": {
+        "ColdMS": 95.085885,
+        "MedianMS": 83.869953,
+        "P95MS": 87.323705,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Results": {
+        "ColdMS": 121.288919,
+        "MedianMS": 5707.741032,
+        "P95MS": 5849.160182,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": false
+      },
+      "Albums": {
+        "ColdMS": 121.150521,
+        "MedianMS": 113.521166,
+        "P95MS": 123.82594,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": true
+      },
+      "Tracks": {
+        "ColdMS": 61.712687,
+        "MedianMS": 5707.672815,
+        "P95MS": 5849.102093,
+        "Samples": 30,
+        "TargetMS": 300,
+        "Pass": false
+      },
+      "OldReleasesMS": 204.524161,
+      "OldGroupsMS": 189.176228
+    }
+  ],
+  "PlanFiles": [
+    "explain-01.json",
+    "explain-02.json",
+    "explain-03.json"
+  ],
+  "HeapBytes": 2475976,
+  "Notes": [
+    "④不创建艺人实体/别名；夹具包含两万姓名键、每轨两个拼接艺人、四类credits与五万轨热门署名。",
+    "生产 handler 计时包括鉴权、数据库等待、计数、分页、摘要补全和序列化；本机 httptest 不含外部网络。",
+    "合成十万轨根标为 disabled，只扫描独立探针根，避免不存在的合成音频被负向对账；present-only 搜索仍覆盖十万轨。",
+    "本轮复用已完成回填的合成 schema；BackfillMS=0 不代表回填瞬时完成，实际回填计时见首填报告。"
+  ]
+}

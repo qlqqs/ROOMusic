@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "artist_scope_too_large",
+      "message": "本次影响范围过大，请缩小范围"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

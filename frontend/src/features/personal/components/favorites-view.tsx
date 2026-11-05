@@ -6,15 +6,15 @@ import { pageCountOf } from "../../../shared/lib/pagination";
 import { formatDateTime } from "../../../shared/lib/time";
 import { useClampedPage } from "../../../shared/lib/use-clamped-page";
 import { Button, DataTable, FailureNotice, Pagination, Panel, Skeleton, StatusTag, type Column } from "../../../shared/ui";
-import { albumMeta, AlbumGridLayout, AlbumGridSkeleton, Cover, trackArtistOf, trackTitleOf } from "../../catalog";
-import type { FavoriteAlbumDTO, FavoriteTrackDTO } from "../api/decoders";
-import { useFavoriteAlbums, useFavoriteTracks } from "../hooks/use-favorites";
+import { albumMeta, AlbumGridLayout, AlbumGridSkeleton, ArtistNames, artistMetaText, Cover, trackArtistOf, trackArtistRefsOf, trackTitleOf, useCatalogState } from "../../catalog";
+import type { FavoriteAlbumDTO, FavoriteArtistDTO, FavoriteTrackDTO } from "../api/decoders";
+import { useFavoriteAlbums, useFavoriteArtists, useFavoriteTracks } from "../hooks/use-favorites";
 import { useRetainedRows } from "../hooks/use-retained-rows";
 import { FavoriteButton } from "./favorite-button";
 import { FavoriteStatusScope } from "./favorite-status-scope";
 import styles from "./favorites-view.module.css";
 
-export type FavoritesTab = "albums" | "tracks";
+export type FavoritesTab = "albums" | "tracks" | "artists";
 
 type FavoritesViewProps = {
   tab: FavoritesTab;
@@ -29,6 +29,7 @@ type FavoritesViewProps = {
 const tabs: readonly { tab: FavoritesTab; label: string }[] = [
   { tab: "albums", label: "专辑" },
   { tab: "tracks", label: "曲目" },
+  { tab: "artists", label: "艺人" },
 ];
 
 /** 地址里的 tab：专辑是默认，不写进地址。 */
@@ -37,15 +38,19 @@ function tabSearch(tab: FavoritesTab, page?: number) {
 }
 
 /**
- * “我的音乐”的收藏页签：专辑与曲目两栏（写进地址），都按收藏时间倒序。在这一页里取消收藏后，这一行留在原处、心形变空心，
+ * “我的音乐”的收藏页签：专辑、曲目与艺人三栏（写进地址），都按收藏时间倒序。在这一页里取消收藏后，这一行留在原处、心形变空心，
  * 离开这一页或按“刷新”后才消失。翻页时带上第一页的集合版本，期间收藏有变化就重新读这一页，不把两个版本的结果拼在一起。
  */
 export function FavoritesView({ tab, page, renderPlayAll, renderTrackActions }: FavoritesViewProps) {
+  // “艺人”一栏只在后端有艺人能力（整理中或已就绪）时出现，与侧栏的“艺人”入口一致。
+  const artistsState = useCatalogState().data?.artists_state;
+  const artistsAvailable = artistsState === "preparing" || artistsState === "ready";
+  const visibleTabs = artistsAvailable ? tabs : tabs.filter((item) => item.tab !== "artists");
   return (
     <div className={styles.view}>
       <nav aria-label="收藏分类">
         <ul className={styles.switchList}>
-          {tabs.map((item) => (
+          {visibleTabs.map((item) => (
             <li key={item.tab}>
               <Link to="/me/favorites" search={tabSearch(item.tab)} className={styles.switchLink} aria-current={item.tab === tab ? "page" : undefined} activeOptions={{ exact: true, includeSearch: true }}>
                 {item.label}
@@ -54,7 +59,13 @@ export function FavoritesView({ tab, page, renderPlayAll, renderTrackActions }: 
           ))}
         </ul>
       </nav>
-      {tab === "albums" ? <FavoriteAlbumsSection key="albums" page={page} /> : <FavoriteTracksSection key="tracks" page={page} renderPlayAll={renderPlayAll} renderTrackActions={renderTrackActions} />}
+      {tab === "albums" ? (
+        <FavoriteAlbumsSection key="albums" page={page} />
+      ) : tab === "artists" ? (
+        <FavoriteArtistsSection key="artists" page={page} />
+      ) : (
+        <FavoriteTracksSection key="tracks" page={page} renderPlayAll={renderPlayAll} renderTrackActions={renderTrackActions} />
+      )}
     </div>
   );
 }
@@ -128,7 +139,9 @@ function FavoriteTracksSection({ page, renderPlayAll, renderTrackActions }: Omit
         cell: (item) => (
           <div className={item.track.present ? undefined : styles.missing}>
             <span className={styles.title}>{trackTitleOf(item.track)}</span>
-            <span className={styles.artist}>{trackArtistOf(item.track)}</span>
+            <span className={styles.artist}>
+              <ArtistNames text={trackArtistOf(item.track)} refs={trackArtistRefsOf(item.track)} />
+            </span>
             {item.track.present ? null : (
               <span className={styles.tag}>
                 <StatusTag tone="outline">文件缺失</StatusTag>
@@ -304,6 +317,105 @@ function FavoriteAlbumsSection({ page }: { page: number }) {
               <Link
                 to="/me/favorites"
                 search={tabSearch("albums", target)}
+                onClick={() => {
+                  if (list.data !== undefined) carried.carry(target, list.data.revision);
+                  showTop();
+                }}
+                {...props}
+              />
+            )}
+          />
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+/** 收藏的一位艺人：名字是去艺人页的链接，下面是概况；暂时没有存在的曲目时标“暂时不可用”，仍可取消收藏。心形不放进链接里。 */
+function FavoriteArtistRow({ item }: { item: FavoriteArtistDTO }) {
+  const { artist } = item;
+  const meta = artistMetaText(artist);
+  return (
+    <li className={styles.artistRow} data-available={item.available ? undefined : "false"}>
+      <span className={styles.artistText}>
+        <Link to="/artists/$artistId" params={{ artistId: artist.id }} className={styles.artistName}>
+          {artist.name}
+        </Link>
+        {meta === "" ? null : <span className={styles.cardMeta}>{meta}</span>}
+        {item.available ? null : (
+          <span className={styles.cardTags}>
+            <StatusTag tone="outline">暂时不可用</StatusTag>
+          </span>
+        )}
+      </span>
+      <FavoriteButton target={{ kind: "artist", id: artist.id, title: artist.name }} />
+    </li>
+  );
+}
+
+/** 艺人数据还在整理：只说一句，不把它显示成“没有收藏”。 */
+function isPreparing(error: unknown): boolean {
+  return isHttpFailure(failureOf(error), 503, "artist_catalog_preparing");
+}
+
+function FavoriteArtistsSection({ page }: { page: number }) {
+  const carried = useCarriedRevision(page);
+  const list = useFavoriteArtists(page, carried.revision);
+  const changed = carried.dropIfChanged(list.error);
+  const navigate = useNavigate();
+  const { headingRef, showTop } = useResultsTop();
+  const ready = list.data !== undefined && !list.isPlaceholderData && !list.isError;
+  const retained = useRetainedRows(ready ? list.data?.items : undefined, (item) => item.artist.id, `artists:${page}`);
+  const total = list.data?.pagination.total ?? 0;
+  const pageCount = pageCountOf(total, list.data?.pagination.page_size ?? 1);
+  const outOfRange = useClampedPage({
+    page,
+    pageCount,
+    ready: ready && retained.rows.length === 0,
+    onOutOfRange: (target) => void navigate({ to: "/me/favorites", search: tabSearch("artists", target), replace: true }),
+  });
+  const artistIds = useMemo(() => retained.rows.map((item) => item.artist.id), [retained.rows]);
+  const preparing = list.isError && list.data === undefined && isPreparing(list.error);
+  const failure = list.isError && !changed && !preparing ? <FailureNotice error={list.error} action={<Button onClick={() => void list.refetch()}>重试</Button>} /> : null;
+  return (
+    <Panel title="收藏的艺人" headingRef={headingRef}>
+      {failure}
+      {preparing ? (
+        <p role="status">艺人信息正在整理，请稍后再试。</p>
+      ) : list.data === undefined || outOfRange ? (
+        failure === null ? <Skeleton label="正在加载收藏的艺人" lines={4} /> : null
+      ) : total === 0 && retained.rows.length === 0 ? (
+        <p>
+          还没有收藏的艺人。 <Link to="/artists">去艺人页看看</Link>
+        </p>
+      ) : (
+        <div className={styles.results} aria-busy={list.isPlaceholderData || changed}>
+          {retained.hasNew ? <UpdatedHint onRefresh={retained.refresh} /> : null}
+          {retained.rows.length === 0 ? (
+            <p>
+              这一页没有收藏。{" "}
+              <Link to="/me/favorites" search={tabSearch("artists")}>
+                回到第一页
+              </Link>
+            </p>
+          ) : (
+            <FavoriteStatusScope artistIds={artistIds}>
+              <ul className={styles.artistList}>
+                {retained.rows.map((item) => (
+                  <FavoriteArtistRow key={item.artist.id} item={item} />
+                ))}
+              </ul>
+            </FavoriteStatusScope>
+          )}
+          <p className={styles.note}>共 {formatCount(total)} 位艺人</p>
+          <Pagination
+            label="收藏的艺人分页"
+            page={page}
+            pageCount={pageCount}
+            renderLink={(target, props) => (
+              <Link
+                to="/me/favorites"
+                search={tabSearch("artists", target)}
                 onClick={() => {
                   if (list.data !== undefined) carried.carry(target, list.data.revision);
                   showTop();

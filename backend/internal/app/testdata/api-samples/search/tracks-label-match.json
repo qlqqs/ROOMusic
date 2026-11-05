@@ -1,0 +1,141 @@
+{
+  "body": {
+    "catalog_state": {
+      "artists_state": "ready",
+      "epoch": 4,
+      "search_mode": "normalized"
+    },
+    "items": [
+      {
+        "artist": "钢琴演奏者",
+        "artist_refs": [
+          {
+            "artist_id": "00000000-0000-4000-8000-000000000001",
+            "display_name": "钢琴演奏者",
+            "name": "钢琴演奏者"
+          }
+        ],
+        "duration_seconds": 183.5,
+        "group_id": "00000000-0000-4000-8000-000000000002",
+        "match": {
+          "alias": null,
+          "artist_id": null,
+          "field": "label",
+          "kind": "exact",
+          "original": "Étiquette 唱片",
+          "release_id": "00000000-0000-4000-8000-000000000003",
+          "role": null,
+          "track_id": null
+        },
+        "present": true,
+        "release": {
+          "album_artist": "さユり",
+          "album_artist_refs": [
+            {
+              "artist_id": "00000000-0000-4000-8000-000000000004",
+              "display_name": "さユり",
+              "name": "さユり"
+            }
+          ],
+          "artist": "Beyoncé",
+          "artist_refs": [
+            {
+              "artist_id": "00000000-0000-4000-8000-000000000005",
+              "display_name": "Beyoncé",
+              "name": "Beyoncé"
+            }
+          ],
+          "artwork": null,
+          "attention_count": 1,
+          "id": "00000000-0000-4000-8000-000000000003",
+          "media_type": null,
+          "medium_count": 1,
+          "source_type": null,
+          "title": "ＡＢＣ 愛",
+          "track_count": 2,
+          "year": 2000
+        },
+        "source": {
+          "bit_depth": 24,
+          "bitrate": null,
+          "channels": 2,
+          "codec": "flac",
+          "sample_rate": 96000,
+          "source_kind": "flac_vorbis_comment"
+        },
+        "title": "Summer",
+        "track_id": "00000000-0000-4000-8000-000000000006"
+      },
+      {
+        "artist": "曲目藝人",
+        "artist_refs": [
+          {
+            "artist_id": "00000000-0000-4000-8000-000000000007",
+            "display_name": "曲目藝人",
+            "name": "曲目藝人"
+          }
+        ],
+        "duration_seconds": null,
+        "group_id": "00000000-0000-4000-8000-000000000002",
+        "match": {
+          "alias": null,
+          "artist_id": null,
+          "field": "label",
+          "kind": "exact",
+          "original": "Étiquette 唱片",
+          "release_id": "00000000-0000-4000-8000-000000000003",
+          "role": null,
+          "track_id": null
+        },
+        "present": true,
+        "release": {
+          "album_artist": "さユり",
+          "album_artist_refs": [
+            {
+              "artist_id": "00000000-0000-4000-8000-000000000004",
+              "display_name": "さユり",
+              "name": "さユり"
+            }
+          ],
+          "artist": "Beyoncé",
+          "artist_refs": [
+            {
+              "artist_id": "00000000-0000-4000-8000-000000000005",
+              "display_name": "Beyoncé",
+              "name": "Beyoncé"
+            }
+          ],
+          "artwork": null,
+          "attention_count": 1,
+          "id": "00000000-0000-4000-8000-000000000003",
+          "media_type": null,
+          "medium_count": 1,
+          "source_type": null,
+          "title": "ＡＢＣ 愛",
+          "track_count": 2,
+          "year": 2000
+        },
+        "source": {
+          "bit_depth": null,
+          "bitrate": null,
+          "channels": null,
+          "codec": null,
+          "sample_rate": null,
+          "source_kind": "flac_vorbis_comment"
+        },
+        "title": "无音频事实",
+        "track_id": "00000000-0000-4000-8000-000000000008"
+      }
+    ],
+    "pagination": {
+      "has_more": false,
+      "page": 1,
+      "page_size": 50,
+      "total": 2,
+      "total_relation": "eq"
+    },
+    "query": "etiquette 唱片",
+    "type": "tracks"
+  },
+  "status": 200
+}

@@ -1,0 +1,75 @@
+{
+  "body": {
+    "catalog_state": {
+      "artists_state": "ready",
+      "epoch": 4,
+      "search_mode": "normalized"
+    },
+    "items": [
+      {
+        "artist": "合成艺人",
+        "artist_refs": [
+          {
+            "artist_id": "00000000-0000-4000-8000-000000000001",
+            "display_name": "合成艺人",
+            "name": "合成艺人"
+          }
+        ],
+        "duration_seconds": null,
+        "group_id": "00000000-0000-4000-8000-000000000002",
+        "match": {
+          "alias": null,
+          "artist_id": null,
+          "field": "track_title",
+          "kind": "contains",
+          "original": "literal%_~ track 1",
+          "release_id": "00000000-0000-4000-8000-000000000003",
+          "role": null,
+          "track_id": "00000000-0000-4000-8000-000000000004"
+        },
+        "present": true,
+        "release": {
+          "album_artist": null,
+          "album_artist_refs": [],
+          "artist": "合成艺人",
+          "artist_refs": [
+            {
+              "artist_id": "00000000-0000-4000-8000-000000000001",
+              "display_name": "合成艺人",
+              "name": "合成艺人"
+            }
+          ],
+          "artwork": null,
+          "attention_count": 0,
+          "id": "00000000-0000-4000-8000-000000000003",
+          "media_type": null,
+          "medium_count": 1,
+          "source_type": null,
+          "title": "literal%_~",
+          "track_count": 1,
+          "year": null
+        },
+        "source": {
+          "bit_depth": null,
+          "bitrate": null,
+          "channels": null,
+          "codec": null,
+          "sample_rate": null,
+          "source_kind": "physical"
+        },
+        "title": "literal%_~ track 1",
+        "track_id": "00000000-0000-4000-8000-000000000004"
+      }
+    ],
+    "pagination": {
+      "has_more": false,
+      "page": 1,
+      "page_size": 50,
+      "total": 1,
+      "total_relation": "eq"
+    },
+    "query": "%_~",
+    "type": "tracks"
+  },
+  "status": 200
+}

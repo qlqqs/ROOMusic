@@ -103,7 +103,7 @@ func LoadForUpdate(ctx context.Context, tx *sql.Tx, id string) (Record, error) {
 	return Load(ctx, tx, id)
 }
 
-// Target 是列表的一个筛选目标：目标类型（TargetRelease、TargetReleaseGroup）与目标 ID（UUID）。
+// Target 是列表的一个筛选目标：目标类型（TargetRelease、TargetReleaseGroup、TargetArtist）与目标 ID（UUID）。
 type Target struct {
 	Type string
 	ID   string
@@ -133,6 +133,11 @@ func listFilter(params ListParams) (where string, arguments []any) {
 	}
 	clauses := make([]string, 0, len(params.Targets)+len(params.Sources))
 	for _, target := range params.Targets {
+		if target.Type == TargetArtist {
+			clauses = append(clauses, "EXISTS (SELECT 1 FROM operations_artist_targets oat WHERE oat.operation_id=o.id AND oat.artist_id=$"+strconv.Itoa(len(arguments)+1)+"::uuid)")
+			arguments = append(arguments, target.ID)
+			continue
+		}
 		clauses = append(clauses, "(o.target_type = $"+strconv.Itoa(len(arguments)+1)+" AND o.target_id = $"+strconv.Itoa(len(arguments)+2)+"::uuid)")
 		arguments = append(arguments, target.Type, target.ID)
 	}

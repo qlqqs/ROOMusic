@@ -68,7 +68,7 @@ export function RevertOperationDialog({ item, current, commands, onClose }: Reve
   return (
     <ConfirmDialog
       open={item !== null}
-      title={item === null || item.type === "revert" ? "撤销这条操作？" : titles[item.type]}
+      title={item === null || !(item.type in titles) ? "撤销这条操作？" : titles[item.type as keyof typeof titles]}
       confirmLabel={uncertainFailure === null ? "撤销" : "重试撤销"}
       pending={pending}
       error={

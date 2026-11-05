@@ -8,7 +8,9 @@
     "releases": [
       {
         "album_artist": "Sample Orchestra",
+        "album_artist_refs": [],
         "artist": "Sample Orchestra",
+        "artist_refs": [],
         "artwork": {
           "height": 480,
           "mime": "image/webp",
@@ -26,7 +28,9 @@
       },
       {
         "album_artist": "Sample Pianist",
+        "album_artist_refs": [],
         "artist": "Sample Pianist",
+        "artist_refs": [],
         "artwork": null,
         "attention_count": 0,
         "id": "00000000-0000-4000-8000-000000000003",
@@ -39,7 +43,9 @@
       },
       {
         "album_artist": "Sample Cue Artist",
+        "album_artist_refs": [],
         "artist": "Sample Cue Artist",
+        "artist_refs": [],
         "artwork": null,
         "attention_count": 0,
         "id": "00000000-0000-4000-8000-000000000004",
@@ -53,7 +59,9 @@
     ],
     "representative": {
       "album_artist": "Sample Orchestra",
+      "album_artist_refs": [],
       "artist": "Sample Orchestra",
+      "artist_refs": [],
       "artwork": {
         "height": 480,
         "mime": "image/webp",

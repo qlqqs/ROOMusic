@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_query",
+      "message": "搜索条件无效"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

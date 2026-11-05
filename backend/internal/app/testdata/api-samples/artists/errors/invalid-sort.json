@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_artist_sort",
+      "message": "艺人排序无效"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

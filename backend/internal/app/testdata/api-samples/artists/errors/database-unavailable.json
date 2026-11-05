@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "database_unavailable",
+      "message": "暂时无法读取艺人信息"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 503
+}

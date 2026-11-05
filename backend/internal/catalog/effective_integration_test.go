@@ -319,7 +319,7 @@ func TestPostgreSQLReleaseCreditsFollowTheAlbumArtistCorrection(t *testing.T) {
 		}
 		return result
 	}
-	if got, want := credits(scanned.releaseID), []ReleaseCredit{{"album_artist", "扫描专辑艺人"}, {"producer", "制作人"}}; !reflect.DeepEqual(got, want) {
+	if got, want := credits(scanned.releaseID), []ReleaseCredit{{Role: "album_artist", Name: "扫描专辑艺人", ArtistRefs: []ArtistRef{}}, {Role: "producer", Name: "制作人", ArtistRefs: []ArtistRef{}}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("credits without corrections = %v, want %v", got, want)
 	}
 	if got := credits(bare.releaseID); len(got) != 0 {
@@ -328,16 +328,16 @@ func TestPostgreSQLReleaseCreditsFollowTheAlbumArtistCorrection(t *testing.T) {
 
 	fixture.correct(scanned.releaseID, "album_artist", "修正专辑艺人")
 	fixture.correct(bare.releaseID, "album_artist", "补上的专辑艺人")
-	if got, want := credits(scanned.releaseID), []ReleaseCredit{{"album_artist", "修正专辑艺人"}, {"producer", "制作人"}}; !reflect.DeepEqual(got, want) {
+	if got, want := credits(scanned.releaseID), []ReleaseCredit{{Role: "album_artist", Name: "修正专辑艺人", ArtistRefs: []ArtistRef{}}, {Role: "producer", Name: "制作人", ArtistRefs: []ArtistRef{}}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("credits with a corrected album artist = %v, want the scanned credit replaced: %v", got, want)
 	}
-	if got, want := credits(bare.releaseID), []ReleaseCredit{{"album_artist", "补上的专辑艺人"}}; !reflect.DeepEqual(got, want) {
+	if got, want := credits(bare.releaseID), []ReleaseCredit{{Role: "album_artist", Name: "补上的专辑艺人", ArtistRefs: []ArtistRef{}}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("credits for a release that had none = %v, want %v", got, want)
 	}
 	// 其他字段的修正不影响署名。
 	fixture.correct(scanned.releaseID, "title", "改标题不改署名")
 	fixture.clearCorrection(scanned.releaseID, "album_artist")
-	if got, want := credits(scanned.releaseID), []ReleaseCredit{{"album_artist", "扫描专辑艺人"}, {"producer", "制作人"}}; !reflect.DeepEqual(got, want) {
+	if got, want := credits(scanned.releaseID), []ReleaseCredit{{Role: "album_artist", Name: "扫描专辑艺人", ArtistRefs: []ArtistRef{}}, {Role: "producer", Name: "制作人", ArtistRefs: []ArtistRef{}}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("credits after clearing the correction = %v, want the scanned credits back: %v", got, want)
 	}
 }

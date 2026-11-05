@@ -143,3 +143,37 @@ a.card:hover .cardTitle {
 .album[data-available="false"] .card {
   color: var(--text-secondary);
 }
+
+/* 收藏的艺人（M5 ⑤）：一行一位，名字与概况在左，心形在右。 */
+.artistList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-2) var(--space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.artistRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-1) 0;
+  border-top: 1px solid var(--color-divider);
+}
+
+.artistText {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.artistName {
+  overflow-wrap: anywhere;
+}
+
+.artistRow[data-available="false"] .artistName {
+  color: var(--text-secondary);
+}

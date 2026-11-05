@@ -1,0 +1,40 @@
+{
+  "body": {
+    "artist_id": "00000000-0000-4000-8000-000000000001",
+    "operation_id": "00000000-0000-4000-8000-000000000002",
+    "revision": 2,
+    "scope_summary": {
+      "excluded_scope_count": 0,
+      "excluded_scopes": [],
+      "groups": [
+        {
+          "group_id": "00000000-0000-4000-8000-000000000003",
+          "release_ids": [
+            "00000000-0000-4000-8000-000000000004"
+          ],
+          "revision": 1
+        }
+      ],
+      "mode": "albums",
+      "name_count": 1,
+      "name_key_ids": [
+        "00000000-0000-4000-8000-000000000005"
+      ],
+      "release_count": 1,
+      "release_ids": [
+        "00000000-0000-4000-8000-000000000004"
+      ],
+      "roles": [
+        "album_artist",
+        "release_artist",
+        "track_artist"
+      ],
+      "track_count": 1
+    },
+    "target": {
+      "id": "00000000-0000-4000-8000-000000000006",
+      "revision": 1
+    }
+  },
+  "status": 200
+}

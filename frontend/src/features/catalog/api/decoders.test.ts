@@ -204,7 +204,7 @@ describe("decodeReleaseDetail", () => {
     const [first] = release.media[0]?.tracks ?? [];
     expect(first?.credits.map((credit) => credit.role)).toEqual(["composer", "conductor", "performer"]);
     expect(first).toMatchObject({ duration_seconds: 240, codec: "flac", bit_depth: 16, sample_rate: 44100, channels: 2, bitrate: null, cue: null });
-    expect(release.credits).toEqual([{ role: "album_artist", name: "Sample Orchestra" }]);
+    expect(release.credits).toEqual([{ role: "album_artist", name: "Sample Orchestra", artist_refs: [] }]);
     expect(release.evidence).toHaveLength(9);
   });
 
@@ -260,7 +260,7 @@ describe("decodeReleaseDetail", () => {
   });
 
   it("曲目署名也按整张发行版本合计限制（每首最多 100 条，合计最多 10,000 条）", () => {
-    const credit = { role: "performer", name: "Someone" };
+    const credit = { role: "performer", name: "Someone", artist_refs: [] };
     const trackWith = (count: number) => withValue(firstTrack, ["credits"], cloneItems(credit, count));
     const release = (trackCount: number, creditCount: number) =>
       withValue(double, ["media"], [withValue(firstMedium, ["tracks"], cloneItems(trackWith(creditCount), trackCount))]);
@@ -270,7 +270,7 @@ describe("decodeReleaseDetail", () => {
   });
 
   it("Release 署名与证据摘要各最多 100 条", () => {
-    const credit = { role: "producer", name: "Someone" };
+    const credit = { role: "producer", name: "Someone", artist_refs: [] };
     const evidence = (double as { evidence: unknown[] }).evidence[0];
     expect(decodeReleaseDetail(withValue(double, ["credits"], cloneItems(credit, 100))).credits).toHaveLength(100);
     expect(() => decodeReleaseDetail(withValue(double, ["credits"], cloneItems(credit, 101)))).toThrow(d.DecodeError);

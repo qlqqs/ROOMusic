@@ -195,3 +195,15 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
 - **新写操作的轻量标准**（2026-11-03，R4，只有一个管理员）：接入 `Run`（记录与幂等是现成的）；有反向操作可以恢复的类型不提供撤销——`Kind.Revert` 返回
   `409 not_revertible`，`Describe` 的 `Revertible` 恒为假；预览令牌只在预览依赖版本号覆盖不到的状态时才加。已实施的五种类型不变。见[路线调整](../../../docs/architecture/core-1-roadmap.md#2026-11-03-路线调整)。
 - 前端合同见[状态规范](../frontend/state-management.md)、[组件规范](../frontend/component-guidelines.md)与[前端目录](../frontend/directory-structure.md)。
+
+## M5 ④搜索投影挂接
+
+扫描候选及修正/清除/撤销/claim 双方在同事务刷新目标代次搜索投影；CATP 先于业务行锁，失败回滚，后台持锁重读避免覆盖新值。扫描不写治理表，missing 可见性读取实时过滤。详见[搜索合同](./search-contracts.md)。
+
+## M5 ⑤艺人治理增量
+
+新增 `target_type=artist` 与 `artist_merge/artist_split/artist_rename/artist_candidate_ignore`，全部 `Run` + R4不可Revert；双资源revision、名字/发行快照basis、旧ID恢复、候选忽略按名字键对，详见[艺人合同](./artist-contracts.md)。`operations_artist_targets`同事务记录主/次目标，artist_id与release_id/group_id筛选取并集。Describe按页批量补当前艺人，整理期保留历史摘要，坏state仅changes=null。
+
+app注入 `RefreshArtistResolution(ctx,tx,mapping)`；治理不得直接访问personal表。艺人新写未ready为409 artist_catalog_not_ready，既有成功幂等重放仍返回原结果。修正/清除/撤销、claim双方、归组在原CATP事务中刷新艺人有效署名与搜索，扫描不改四张人工意图表或edit_revision。新HTTP与schema验证必须覆盖准备态、revision/幂等、scope冲突、部分写失败回滚和不可撤销。
+
+I1管理员恢复来源读取及历史证据规则见[艺人合同](./artist-contracts.md#8-实施裁决-i1--i4管理员恢复来源与成员批量摘要)；读取不改变治理记录或revision。

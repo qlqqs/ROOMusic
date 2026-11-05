@@ -55,3 +55,15 @@
 ## 设计与执行
 
 见 [④ 搜索的 design.md](../11-04-classical-m5-search/design.md) 与 [implement.md](../11-04-classical-m5-search/implement.md)：④ 与 ⑤ 同一条实现线，④ 先交付规范化函数。
+
+## 实施结果
+
+2026-11-05 完成。提交：`482a10d`（后端：艺人身份、别名与治理、艺人收藏、后台回填，迁移 0026–0029）、`b504037`（前端：艺人页、合并拆分、收藏艺人栏）、`9bfb58b`（概况只在分隔处换行、首字母导航宽屏一行）、`1480b25`（热门艺人搜索，迁移 0030）。设计裁决 I1–I10 记在 [design.md](../11-04-classical-m5-search/design.md) §15.2a/§15.2b 末尾。
+
+- R1–R6：后端由 catalog/personal/operations 的 PostgreSQL 集成测试覆盖（定稿时全影响 race 2229 项通过，PG 0 SKIP）；前端由 Vitest（全量 3603 项一次）与 `e2e/artists*.spec.ts`、`e2e/search.spec.ts` 覆盖，后端交付的 35 份真实样本全部登记往返。
+- 真实服务：新增 `e2e/real/artists.real.ts` 3 项——繁简写法扫描为同一位艺人；管理员合并“邓丽君/Teresa Teng”后按别名搜到、拆回恢复；普通成员收藏随合并与拆回转移。与 `search.real.ts` 2 项、`personal.real.ts` 2 项、`playback.real.ts` 24 项经 `scripts/playback-e2e.sh` 同批运行，31 / 0 / 0，`--retries=0`。
+- 性能（用户裁决 I9）：十万轨联合后台回填 32 分 04 秒；单批 CATP p95 199 ms／p99 276 ms，最大 5986 ms（几乎全在 WAL 提交刷盘，只记录）；回填期间 M3 66/66、扫描 65/65 成功，播放与搜索 1913 次请求无 503。10,000 首队列：专辑顺序约 1.2 s，随机约 2.3 s。
+- 截图：1440/375 共 26 张（合成数据，`/tmp/roomusic-m5-artists-screens/`，未入库），主会话复核；修了概况词中断行和首字母导航分两行，375 下管理员按钮两行、收藏页心形较远保持现状。
+- 后端详细记录：[verification/backend-status.md](verification/backend-status.md)。
+
+已知风险：回填单批最大值受磁盘刷盘影响；单字搜索最慢约 1 s；文件 `state-management.md`、`catalog-rest-contracts.md` 超出建议体积待整理；密码提示“12 字符”与后端按字节计数不一致，另行处理。
