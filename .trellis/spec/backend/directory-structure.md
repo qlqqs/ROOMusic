@@ -138,6 +138,8 @@ clearly named application service, not a circular callback chain.
 每个包在 `packageRules` 中声明允许依赖的内部包，以及是否可以使用 `net/http`（能力核心 `catalog`、
 `library`、`parser` 不可以）。新增包必须先声明规则，测试才会通过；CI 的 `go test ./...` 会运行它。
 
+`platform/weborigin` 是只依赖标准库的平台叶子包；`identity` 与 `platform/config` 允许导入它，共用来源解析与规范化。
+
 C2 的 B3 拆包后，核心 `catalog` 只允许导入内部包 `catalog/internal/releasesql` 与 `platform/uuid`，
 不导入 `operations`、`catalog/metadata`、`catalog/ingest` 或 `catalog/governance`。
 `catalog/governance` 允许导入 `catalog`、`catalog/internal/releasesql`、`catalog/metadata`、`operations` 与 `platform/uuid`；

@@ -23,7 +23,8 @@ type packageRule struct {
 // 新增包必须先在这里声明规则，测试才会通过。
 var packageRules = map[string]packageRule{
 	"platform/uuid":                  {},
-	"platform/config":                {},
+	"platform/weborigin":             {},
+	"platform/config":                {imports: []string{"platform/weborigin"}},
 	"platform/httpserver":            {http: true},
 	"platform/postgres":              {},
 	"platform/postgres/postgrestest": {imports: []string{"platform/uuid"}},
@@ -48,7 +49,7 @@ var packageRules = map[string]packageRule{
 	"listening":                      {imports: []string{"catalog"}},
 	"personal":                       {imports: []string{"catalog", "platform/uuid"}},
 	"personal/httpapi":               {imports: []string{"identity", "personal", "platform/httpserver", "platform/uuid"}, http: true},
-	"identity":                       {imports: []string{"platform/httpserver"}, http: true},
+	"identity":                       {imports: []string{"platform/httpserver", "platform/weborigin"}, http: true},
 	"identity/httpapi":               {imports: []string{"identity", "platform/httpserver", "platform/uuid"}, http: true},
 	"catalog/httpapi":                {imports: []string{"catalog", "catalog/artwork", "catalog/governance", "identity", "operations", "platform/httpserver", "platform/uuid"}, http: true},
 	"library/httpapi":                {imports: []string{"identity", "library", "platform/httpserver", "platform/uuid"}, http: true},
