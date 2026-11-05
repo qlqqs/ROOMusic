@@ -27,6 +27,7 @@ type fixture struct {
 	db                    *sql.DB
 	root, release, medium string
 	ctx                   context.Context
+	leaseKey              int32
 }
 
 func newFixture(t *testing.T, tracks int) *fixture {
@@ -80,7 +81,7 @@ func (f *fixture) lease() *sql.Conn {
 		f.t.Fatal(err)
 	}
 	var locked bool
-	if err = conn.QueryRowContext(f.ctx, `SELECT pg_try_advisory_lock($1::integer,1)`, maintenanceNamespace).Scan(&locked); err != nil || !locked {
+	if f.leaseKey, locked, err = acquireLease(f.ctx, conn); err != nil || !locked {
 		conn.Close()
 		f.t.Fatalf("lease: %v %v", locked, err)
 	}
@@ -116,7 +117,7 @@ func TestPostgreSQLCatalogBackfillRestartAndAtomicPublish(t *testing.T) {
 	}
 	conn := f.lease()
 	if err := discover(f.ctx, conn, state); err != nil {
-		releaseLease(conn)
+		releaseLease(conn, f.leaseKey)
 		t.Fatal(err)
 	}
 	releaseBatch := f.batch(conn, state, 10, 50)
@@ -134,7 +135,7 @@ func TestPostgreSQLCatalogBackfillRestartAndAtomicPublish(t *testing.T) {
 	if err := f.db.QueryRowContext(f.ctx, `SELECT id::text FROM catalog_search_values WHERE track_id IS NOT NULL LIMIT 1`).Scan(&oldValueID); err != nil {
 		t.Fatal(err)
 	}
-	releaseLease(conn)
+	releaseLease(conn, f.leaseKey)
 	if err := Initialize(f.ctx, f.db); err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +170,7 @@ func TestPostgreSQLCatalogBackfillCurrentRevisionRollbackAndRepair(t *testing.T)
 	}
 	state := f.state()
 	conn := f.lease()
-	defer releaseLease(conn)
+	defer releaseLease(conn, f.leaseKey)
 	if err := discover(f.ctx, conn, state); err != nil {
 		t.Fatal(err)
 	}
@@ -339,7 +340,7 @@ func TestPostgreSQLCatalogBackfillDuringRealScan(t *testing.T) {
 	if err := f.db.QueryRowContext(f.ctx, `SELECT id::text FROM catalog_search_values WHERE track_id=$1::uuid AND field='track_title'`, trackID).Scan(&projectedID); err != nil {
 		t.Fatal(err)
 	}
-	releaseLease(conn)
+	releaseLease(conn, f.leaseKey)
 	var logs bytes.Buffer
 	if err := Run(f.ctx, f.db, slog.New(slog.NewJSONHandler(&logs, nil)), artistTestOptions()); err != nil {
 		t.Fatal(err)
@@ -382,21 +383,21 @@ func TestPostgreSQLCatalogBackfillSingleWriterCancellation(t *testing.T) {
 	err := Run(ctx, f.db, slog.New(slog.NewTextHandler(io.Discard, nil)), artistTestOptions())
 	cancel()
 	if !errors.Is(err, context.DeadlineExceeded) {
-		releaseLease(owner)
+		releaseLease(owner, f.leaseKey)
 		t.Fatalf("竞争者取消结果：%v", err)
 	}
 	if f.count(`SELECT count(*) FROM catalog_projection_work`) != 0 {
-		releaseLease(owner)
+		releaseLease(owner, f.leaseKey)
 		t.Fatal("竞争者绕过维护选主锁")
 	}
-	releaseLease(owner)
+	releaseLease(owner, f.leaseKey)
 	// 原会话释放后另一 worker 可完成；完成后连接回池也不能带残留会话锁。
 	f.run()
 	if !f.state().Ready() {
 		t.Fatal("取消竞争者影响了后续发布")
 	}
 	owner = f.lease()
-	releaseLease(owner)
+	releaseLease(owner, f.leaseKey)
 }
 
 func TestPostgreSQLCatalogBackfillVersionUpgradeRejectsStaleBuild(t *testing.T) {
@@ -415,10 +416,10 @@ func TestPostgreSQLCatalogBackfillVersionUpgradeRejectsStaleBuild(t *testing.T) 
 	}
 	conn := f.lease()
 	if _, err := processBatch(f.ctx, conn, previous, 10, 50); !errors.Is(err, errBuildChanged) {
-		releaseLease(conn)
+		releaseLease(conn, f.leaseKey)
 		t.Fatalf("旧任务不能写新代：%v", err)
 	}
-	releaseLease(conn)
+	releaseLease(conn, f.leaseKey)
 	f.run()
 	if !f.state().Ready() || f.state().CatalogEpoch != previous.CatalogEpoch+2 {
 		t.Fatal("新代未原子发布")

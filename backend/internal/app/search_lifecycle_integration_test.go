@@ -20,14 +20,19 @@ func TestPostgreSQLSearchMaintenanceLifecycleKeepsReady(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer lease.Close()
-	// 模拟另一进程已拥有维护锁；正常应用应立即能服务，不能在装配时等回填。
-	if _, err = lease.ExecContext(ctx, `SELECT pg_advisory_lock($1::integer,1)`, 0x4341544d); err != nil {
+	// 模拟同一 schema 的另一进程已拥有维护锁；保存实际键用于解锁。
+	var leaseKey int32
+	if err = lease.QueryRowContext(ctx, `SELECT hashtext(current_schema())`).Scan(&leaseKey); err != nil {
+		t.Fatal(err)
+	}
+	// 正常应用应立即能服务，不能在装配时等回填。
+	if _, err = lease.ExecContext(ctx, `SELECT pg_advisory_lock($1::integer,$2::integer)`, 0x4341544d, leaseKey); err != nil {
 		t.Fatal(err)
 	}
 	locked := true
 	defer func() {
 		if locked {
-			_, _ = lease.ExecContext(context.Background(), `SELECT pg_advisory_unlock($1::integer,1)`, 0x4341544d)
+			_, _ = lease.ExecContext(context.Background(), `SELECT pg_advisory_unlock($1::integer,$2::integer)`, 0x4341544d, leaseKey)
 		}
 	}()
 	life, stop := context.WithCancel(ctx)
@@ -46,7 +51,7 @@ func TestPostgreSQLSearchMaintenanceLifecycleKeepsReady(t *testing.T) {
 	if err = application.WaitForCatalogMaintenance(ctx); err != nil {
 		t.Fatalf("取消后维护者未退出：%v", err)
 	}
-	if _, err = lease.ExecContext(ctx, `SELECT pg_advisory_unlock($1::integer,1)`, 0x4341544d); err != nil {
+	if _, err = lease.ExecContext(ctx, `SELECT pg_advisory_unlock($1::integer,$2::integer)`, 0x4341544d, leaseKey); err != nil {
 		t.Fatal(err)
 	}
 	locked = false

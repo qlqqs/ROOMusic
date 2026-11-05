@@ -84,7 +84,7 @@ func TestPostgreSQLArtistWorkloadPrefixOversizedSubjectAndMarkerResume(t *testin
 	empty := insertArtistWorkloadRelease(t, f, 4, 0, "present", "")
 	state := f.artistState()
 	conn := f.lease()
-	defer releaseLease(conn)
+	defer releaseLease(conn, f.leaseKey)
 	if err := discoverArtists(f.ctx, conn, state, false); err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestPostgreSQLArtistWorkloadEstimateFailureIsAtomicAndCurrentSkipsInputs(t 
 	pending := insertArtistWorkloadRelease(t, f, 2, 1, "present", "Bob")
 	state := f.artistState()
 	conn := f.lease()
-	defer releaseLease(conn)
+	defer releaseLease(conn, f.leaseKey)
 	if err := discoverArtists(f.ctx, conn, state, false); err != nil {
 		t.Fatal(err)
 	}

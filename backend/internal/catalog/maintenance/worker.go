@@ -13,7 +13,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/catalog/textnorm"
 )
 
-const maintenanceNamespace = 0x4341544d // CATM：只排斥后台维护者。
+const maintenanceNamespace = 0x4341544d // CATM：只排斥同一 schema 的后台维护者。
 
 // RunOptions 的收藏端口由 app 装配；维护包不依赖 personal 或其私有表。
 type RunOptions struct {
@@ -38,11 +38,12 @@ func Run(ctx context.Context, db *sql.DB, logger *slog.Logger, options ...RunOpt
 	for ctx.Err() == nil {
 		conn, err := db.Conn(ctx)
 		if err == nil {
+			var key int32
 			var acquired bool
-			err = conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock($1::integer,$2::integer)`, maintenanceNamespace, 1).Scan(&acquired)
+			key, acquired, err = acquireLease(ctx, conn)
 			if err == nil && acquired {
 				err = runLocked(ctx, conn, logger, opts)
-				releaseLease(conn)
+				releaseLease(conn, key)
 				if err == nil || errors.Is(err, ErrArtistResolutionRefreshRequired) {
 					return err
 				}
@@ -67,12 +68,21 @@ func Run(ctx context.Context, db *sql.DB, logger *slog.Logger, options ...RunOpt
 	return ctx.Err()
 }
 
+// acquireLease 与扫描锁一样按 schema 隔离，并保存实际键值，解锁不重算 search_path。
+func acquireLease(ctx context.Context, conn *sql.Conn) (int32, bool, error) {
+	var key int32
+	var acquired bool
+	err := conn.QueryRowContext(ctx, `SELECT lock_key,pg_try_advisory_lock($1::integer,lock_key)
+  FROM (SELECT hashtext(current_schema()) AS lock_key) AS maintenance_lock`, maintenanceNamespace).Scan(&key, &acquired)
+	return key, acquired, err
+}
+
 // releaseLease 不将仍带会话锁的连接放回池；清理失败时丢弃物理连接。
-func releaseLease(conn *sql.Conn) {
+func releaseLease(conn *sql.Conn, key int32) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	var unlocked bool
-	if err := conn.QueryRowContext(ctx, `SELECT pg_advisory_unlock($1::integer,$2::integer)`, maintenanceNamespace, 1).Scan(&unlocked); err != nil || !unlocked {
+	if err := conn.QueryRowContext(ctx, `SELECT pg_advisory_unlock($1::integer,$2::integer)`, maintenanceNamespace, key).Scan(&unlocked); err != nil || !unlocked {
 		_ = conn.Raw(func(any) error { return driver.ErrBadConn })
 	}
 	_ = conn.Close()

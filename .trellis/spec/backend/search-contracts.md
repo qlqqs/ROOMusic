@@ -38,6 +38,8 @@
 
 `Initialize` 只登记版本/代次、关闭不匹配的读能力；不发现对象、不等待回填。服务 ready 不依赖投影完成。`Run` 使用专用连接维护 advisory lock 选主，各批事务在同一连接上；该选主锁不排斥扫描/M3，CATP 只保护短批。
 
+CATM 会话租约与 CATP 事务写锁均使用 `(命名空间, hashtext(current_schema()))`：同一 schema 仍互斥，不同 schema 的隔离测试互不争锁。CATM 在取锁语句中保存实际键，释放时使用保存值，不因 `search_path` 改变而解错锁；清理失败仍丢弃物理连接。单 schema 生产实例的互斥、事务和取消语义不变。
+
 后台一致快照建立含 missing 的持久清单及固定分母。只预取 ID，CATP 后重新读当前事实、有效修正和 input_revision；已完成目标代次且 revision 相等则跳过。投影、subject 完成标记、清单进度同事务。新增对象由实时写者维护，不会因 UUID 落在游标前漏掉；大库分批，提交释放CATP后按整批实测耗时自适应让出（正耗时小于200ms时取十分之一、最低10ms；无有效耗时或至少200ms时保守50ms），取消回滚未提交批，重启续跑已提交清单。
 
 最终在短 gate 中校验 build/目标代次、封闭清单、当前对象覆盖和 revision；仅全部满足才原子更新 published 版本/代次、ready 与 epoch。开始构建和发布递增 epoch，批次不递增。查询只在目标/发布元组全部相等、当前二进制版本相等且 ready 时读取新投影，否则完整走 legacy；不拼接半成品。
@@ -86,6 +88,8 @@ q 去首尾空白后最多 200 UTF-8 字节；新接口拒绝非法 UTF-8 与非
 规范化逐类正反例、真实表哈希/幂等/并发 race；回填重启与扫描交错；扫描与修正/撤销/claim 同事务；401/参数/空查询/短词/通配符/分页 1000 与 1001/非代表成员/missing/安全 DTO/真实 handler 样本。隔离十万 present 曲目库记录真实生产 SQL 的 EXPLAIN ANALYZE BUFFERS、回填耗时和首屏 p95；不得用强制索引、最短长度或截候选规避性能目标。
 
 并发回归不能假定所有业务请求同时等待发行行锁：CATP 之前串行化后，后续请求可能等 advisory 锁。测试以测试持锁连接 PID 的 `pg_blocking_pids` 递归阻塞链证明重叠，不误数其他 schema 的请求；失败时先释放测试锁并等待事务完成，再清理 schema。
+
+`TestPostgreSQLWriteGate*` 与 `TestPostgreSQLMaintenanceLease*` 覆盖跨 schema 同时持锁、同 schema 互斥、事务提交/回滚释放、修改 `search_path` 后用原键解锁及解锁失败丢弃连接。集成门禁保留包间并行；`-p 1` 仅供诊断，不能代替该隔离合同的验证。
 
 ## P/F/S 合并边界
 

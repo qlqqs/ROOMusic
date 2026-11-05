@@ -28,7 +28,7 @@ func TestLockUsesTransactionGateAndReturnsFailure(t *testing.T) {
 		if err := Lock(ctx, e); !errors.Is(err, want) {
 			t.Fatalf("锁错误未原样返回：%v", err)
 		}
-		if e.ctx != ctx || e.query != `SELECT pg_advisory_xact_lock($1::integer, $2::integer)` || len(e.args) != 2 || e.args[0] != 0x43415450 || e.args[1] != 1 {
+		if e.ctx != ctx || e.query != `SELECT pg_advisory_xact_lock($1::integer, hashtext(current_schema()))` || len(e.args) != 1 || e.args[0] != 0x43415450 {
 			t.Fatalf("必须使用调用者事务与独立CATP键空间：%+v", e)
 		}
 	}

@@ -64,51 +64,51 @@ func TestPostgreSQLArtistBackfillRestartCurrentMarkersAndLateUUID(t *testing.T) 
 	}
 	conn := f.lease()
 	if err := runSearchLocked(f.ctx, conn, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
-		releaseLease(conn)
+		releaseLease(conn, f.leaseKey)
 		t.Fatal(err)
 	}
 	if err := discoverArtists(f.ctx, conn, state, false); err != nil {
-		releaseLease(conn)
+		releaseLease(conn, f.leaseKey)
 		t.Fatal(err)
 	}
 	// 实时写者先完成；回填必须保留其署名 ID，不能重复刷新。
 	tx, err := f.db.BeginTx(f.ctx, nil)
 	if err != nil {
-		releaseLease(conn)
+		releaseLease(conn, f.leaseKey)
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
 	if err = writegate.Lock(f.ctx, tx); err != nil {
-		releaseLease(conn)
+		releaseLease(conn, f.leaseKey)
 		t.Fatal(err)
 	}
 	if _, err = tx.ExecContext(f.ctx, `UPDATE releases SET album_artist='新署名' WHERE id=$1::uuid`, f.release); err != nil {
-		releaseLease(conn)
+		releaseLease(conn, f.leaseKey)
 		t.Fatal(err)
 	}
 	if err = artistgraph.Refresh(f.ctx, tx, []string{f.release}); err != nil {
-		releaseLease(conn)
+		releaseLease(conn, f.leaseKey)
 		t.Fatal(err)
 	}
 	if err = tx.Commit(); err != nil {
-		releaseLease(conn)
+		releaseLease(conn, f.leaseKey)
 		t.Fatal(err)
 	}
 	var creditID string
 	if err = f.db.QueryRowContext(f.ctx, `SELECT id::text FROM artist_credits WHERE release_id=$1::uuid AND role='album_artist' LIMIT 1`, f.release).Scan(&creditID); err != nil {
-		releaseLease(conn)
+		releaseLease(conn, f.leaseKey)
 		t.Fatal(err)
 	}
 	result := f.artistBatch(conn, state, 1)
 	if result.BatchSize != 1 || result.Written != 0 || result.Completed != 1 || result.Total != 2 {
-		releaseLease(conn)
+		releaseLease(conn, f.leaseKey)
 		t.Fatalf("未跳过在线写者：%+v", result)
 	}
 	if f.count(`SELECT count(*) FROM artist_credits WHERE id=$1::uuid`, creditID) != 1 {
-		releaseLease(conn)
+		releaseLease(conn, f.leaseKey)
 		t.Fatal("覆盖了在线署名")
 	}
-	releaseLease(conn)
+	releaseLease(conn, f.leaseKey)
 	if err = Initialize(f.ctx, f.db); err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestPostgreSQLArtistBackfillRestartCurrentMarkersAndLateUUID(t *testing.T) 
 		t.Fatal("重启丢失已提交进度")
 	}
 	conn = f.lease()
-	defer releaseLease(conn)
+	defer releaseLease(conn, f.leaseKey)
 	result = f.artistBatch(conn, state, 1)
 	if result.Written != 1 || f.count(`SELECT count(*) FROM artist_projection_releases WHERE release_id=$1::uuid AND applied_generation=$2`, emptyID, state.TargetGeneration) != 1 {
 		t.Fatal("零署名发行缺少完成标记")
@@ -153,7 +153,7 @@ func TestPostgreSQLArtistBackfillPublishRequiresAtomicFavoriteRefresh(t *testing
 	}
 	state := f.artistState()
 	conn := f.lease()
-	defer releaseLease(conn)
+	defer releaseLease(conn, f.leaseKey)
 	if err := runSearchLocked(f.ctx, conn, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
 		t.Fatal(err)
 	}
@@ -234,10 +234,10 @@ func TestPostgreSQLArtistBackfillVersionAndWorkerOrdering(t *testing.T) {
 	}
 	conn := f.lease()
 	if _, err := processArtistBatch(f.ctx, conn, previous, 1, 1); !errors.Is(err, errBuildChanged) {
-		releaseLease(conn)
+		releaseLease(conn, f.leaseKey)
 		t.Fatalf("旧构建仍可写：%v", err)
 	}
-	releaseLease(conn)
+	releaseLease(conn, f.leaseKey)
 	var logs bytes.Buffer
 	calls := 0
 	options := RunOptions{RefreshArtistResolutions: func(ctx context.Context, tx *sql.Tx, mapping map[string]string) error {
@@ -280,7 +280,7 @@ func TestPostgreSQLArtistBackfillMissingCallbackReleasesLease(t *testing.T) {
 		t.Fatal("收藏回调缺失影响搜索或提前发布艺人")
 	}
 	conn := f.lease()
-	releaseLease(conn)
+	releaseLease(conn, f.leaseKey)
 	f.run()
 	if !f.artistState().Ready() {
 		t.Fatal("补充回调后没有续跑发布")
@@ -304,7 +304,7 @@ func TestPostgreSQLArtistBackfillBatchFailureKeepsProgressAndFactsAtomic(t *test
 	f := newFixture(t, 1)
 	state := f.artistState()
 	conn := f.lease()
-	defer releaseLease(conn)
+	defer releaseLease(conn, f.leaseKey)
 	if err := discoverArtists(f.ctx, conn, state, false); err != nil {
 		t.Fatal(err)
 	}

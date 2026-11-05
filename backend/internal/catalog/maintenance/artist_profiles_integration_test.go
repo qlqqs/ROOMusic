@@ -39,49 +39,49 @@ func TestPostgreSQLArtistProfilesBoundedRestartLiveSkipAndLateUUID(t *testing.T)
 	state := f.artistState()
 	conn := f.lease()
 	if err := discoverArtists(f.ctx, conn, state, false); err != nil {
-		releaseLease(conn)
+		releaseLease(conn, f.leaseKey)
 		t.Fatal(err)
 	}
 	total := f.count(`SELECT count(*) FROM artists`)
 	result, err := processArtistBatch(f.ctx, conn, state, 100, 3)
 	if err != nil || result.Kind != "artist" || result.Phase != "artist_profiles" || result.BatchSize != 3 || result.Written != 3 || result.Completed != 3 || result.Total != total {
-		releaseLease(conn)
+		releaseLease(conn, f.leaseKey)
 		t.Fatalf("身份阶段未使用独立限额：%+v %v", result, err)
 	}
 	if f.count(`SELECT count(*) FROM artist_profiles`) != 3 {
-		releaseLease(conn)
+		releaseLease(conn, f.leaseKey)
 		t.Fatal("短批刷新了清单限额外的身份")
 	}
 	// 专用连接仍持 CATM，另一连接却能获取 CATP，证明批结束已让出写 gate。
 	tx, err := f.db.BeginTx(f.ctx, nil)
 	if err != nil {
-		releaseLease(conn)
+		releaseLease(conn, f.leaseKey)
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
 	if _, err = tx.ExecContext(f.ctx, `SET LOCAL lock_timeout='1s'`); err != nil {
-		releaseLease(conn)
+		releaseLease(conn, f.leaseKey)
 		t.Fatal(err)
 	}
 	if err = writegate.Lock(f.ctx, tx); err != nil {
-		releaseLease(conn)
+		releaseLease(conn, f.leaseKey)
 		t.Fatal(err)
 	}
 	liveID := "00000000-0000-4000-8000-000000000005"
 	if err = artistgraph.RefreshProfiles(f.ctx, tx, []string{liveID}); err != nil {
-		releaseLease(conn)
+		releaseLease(conn, f.leaseKey)
 		t.Fatal(err)
 	}
 	if err = tx.Commit(); err != nil {
-		releaseLease(conn)
+		releaseLease(conn, f.leaseKey)
 		t.Fatal(err)
 	}
 	var nameID string
 	if err = f.db.QueryRowContext(f.ctx, `SELECT id::text FROM artist_search_names WHERE artist_id=$1::uuid`, liveID).Scan(&nameID); err != nil {
-		releaseLease(conn)
+		releaseLease(conn, f.leaseKey)
 		t.Fatal(err)
 	}
-	releaseLease(conn)
+	releaseLease(conn, f.leaseKey)
 	if err = Initialize(f.ctx, f.db); err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestPostgreSQLArtistProfilesBoundedRestartLiveSkipAndLateUUID(t *testing.T)
 		t.Fatal("重启丢失身份阶段进度")
 	}
 	conn = f.lease()
-	defer releaseLease(conn)
+	defer releaseLease(conn, f.leaseKey)
 	if err = discoverArtists(f.ctx, conn, state, false); err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +127,7 @@ func TestPostgreSQLArtistProfilesResumeSealedOldBuild(t *testing.T) {
 	f := emptyArtistFixture(t, 12)
 	state := f.artistState()
 	conn := f.lease()
-	defer releaseLease(conn)
+	defer releaseLease(conn, f.leaseKey)
 	if err := discoverArtists(f.ctx, conn, state, false); err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func TestPostgreSQLArtistProfilesFailureRollsBackWholeBatch(t *testing.T) {
 	f := emptyArtistFixture(t, 2)
 	state := f.artistState()
 	conn := f.lease()
-	defer releaseLease(conn)
+	defer releaseLease(conn, f.leaseKey)
 	if err := discoverArtists(f.ctx, conn, state, false); err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +196,7 @@ func TestPostgreSQLArtistProfilesPublishOnlyChecksMissingAndStale(t *testing.T) 
 			f := emptyArtistFixture(t, 1)
 			state := f.artistState()
 			conn := f.lease()
-			defer releaseLease(conn)
+			defer releaseLease(conn, f.leaseKey)
 			if err := runSearchLocked(f.ctx, conn, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
 				t.Fatal(err)
 			}
@@ -232,7 +232,7 @@ func TestPostgreSQLArtistProfilesCancellationRollsBackAndResumes(t *testing.T) {
 	f := emptyArtistFixture(t, 2)
 	state := f.artistState()
 	conn := f.lease()
-	defer releaseLease(conn)
+	defer releaseLease(conn, f.leaseKey)
 	if err := discoverArtists(f.ctx, conn, state, false); err != nil {
 		t.Fatal(err)
 	}

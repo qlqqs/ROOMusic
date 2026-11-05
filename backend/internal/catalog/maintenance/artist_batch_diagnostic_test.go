@@ -137,12 +137,12 @@ func BenchmarkPostgreSQLArtistProcessBatch(t *testing.B) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var acquired bool
-	if err = conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock($1::integer,$2::integer)`, maintenanceNamespace, 1).Scan(&acquired); err != nil || !acquired {
+	key, acquired, err := acquireLease(ctx, conn)
+	if err != nil || !acquired {
 		conn.Close()
 		t.Fatalf("诊断未取得CATM：%v acquired=%v", err, acquired)
 	}
-	defer releaseLease(conn)
+	defer releaseLease(conn, key)
 	r := &artistBatchDiagnosticRunner{t: t, ctx: ctx, db: db, conn: conn, trace: trace, output: output, releaseLimit: 10, profileLimit: 10, budget: initialArtistReleaseBudget(), rewrite: rewrite}
 	fixture, err := os.ReadFile("../../app/testdata/search-scale.sql")
 	if err != nil {

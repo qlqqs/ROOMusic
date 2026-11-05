@@ -12,8 +12,8 @@ type Execer interface {
 }
 
 // Lock 必须在发行、曲目等业务行锁之前取得；操作记录锁仍按既有顺序先取。
-// CATP 与扫描、迁移、operations 和维护选主分别使用不同键空间。
+// CATP 与扫描、迁移、operations 和维护选主分别使用不同键空间；同一 schema 的写者互斥。
 func Lock(ctx context.Context, tx Execer) error {
-	_, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1::integer, $2::integer)`, 0x43415450, 1)
+	_, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1::integer, hashtext(current_schema()))`, 0x43415450)
 	return err
 }
