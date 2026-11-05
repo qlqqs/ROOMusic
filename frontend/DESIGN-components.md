@@ -105,7 +105,7 @@ M2 需补齐无曲目、等待媒体、缓冲、播放、暂停、结束、格�
 导航分为聆听/资料库，只有已交付页面出现。菜单按钮采用键盘模式，不依赖最低浏览器版本未覆盖的 Popover API。
 播放进度有“播放进度”名称与时间 aria-valuetext；仅曲目变化与错误公告，不能逐秒打扰读屏。
 
-入口与同步会话结束清理见[状态规范](../.trellis/spec/frontend/state-management.md)，API/源文件版本与10秒复核见
+入口与同步会话结束清理见[播放与个人状态规范](../.trellis/spec/frontend/playback-and-personal-state.md)，API/源文件版本与10秒复核见
 [播放合同](../.trellis/spec/backend/playback-contracts.md)。格式仍以真实自动化与[三组手工实播记录](../.trellis/tasks/10-06-m2a-acceptance-followup/research/manual-acceptance.md)收口；
 ALAC 不直出（只有 Safari 能解码）：M2b 起服务端用 ffmpeg 无损转换成 FLAC 后交付，等待转换时显示“正在准备”，信号路径写明无损转换；
 ffmpeg 不可用时 ALAC 仍标注“这种格式目前不能直接播放”。精确 CUE 分轨与服务端历史不在 M2b 范围。

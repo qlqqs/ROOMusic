@@ -9,7 +9,7 @@
 2026-10-03：M1b 在这个外壳上增加了专辑浏览：`/albums`（搜索、需要关注筛选、分页、封面卡片）与 `/albums/$groupId`（头部、版本导航、介质与曲目、发行信息、
 折叠的来源与证据，管理员可按需读完整证据），详见[状态](./state-management.md)、[组件](./component-guidelines.md)与[质量](./quality-guidelines.md)规范。
 
-M2a 的播放器入口与生命周期见[状态规范](./state-management.md)、[播放器规范](./player-design-guidelines.md)及
+M2a 的播放器入口与生命周期见[播放与个人状态](./playback-and-personal-state.md)、[播放器规范](./player-design-guidelines.md)及
 [后端播放合同](../backend/playback-contracts.md)。直出仅传原字节；M2b 增加 ALAC 的服务端无损派生与内嵌歌词（见[歌词合同](../backend/lyrics-contracts.md)），阶段 P 增加按用户隔离的服务端播放历史与概览的“最近播放”（见[播放历史合同](../backend/listening-contracts.md)）；
 自动化与三组手工实播分别记录，不把浏览器能力提示当作验收证据。
 
@@ -53,6 +53,8 @@ Before writing or reviewing frontend code:
 | [Component Guidelines](./component-guidelines.md) | Presentational contracts, workflow states, accessibility, and composition |
 | [Hook Guidelines](./hook-guidelines.md) | Stateful coordination, REST access, cancellation, and polling |
 | [State Management](./state-management.md) | Server, URL, session, and local state ownership |
+| [会话生命周期](./session-lifecycle.md) | 会话控制器的状态与代次、清理顺序、401 与 403、跨标签页核对、退出、回跳与初始化 |
+| [播放与个人状态](./playback-and-personal-state.md) | M2a 播放生命周期与恢复、阶段 P 播放上报与最近播放、M5 ① 历史页签与 M5 ④ 全局搜索的查询键、URL 与目录状态 |
 | [Type Safety](./type-safety.md) | Strict TypeScript, DTO decoding, and exhaustive domain states |
 | [Quality Guidelines](./quality-guidelines.md) | Tests, accessibility, gates, and forbidden shortcuts |
 | [前端验证分层](./quality-verification-layers.md) | 各阶段（M2a 播放、M3、M4 三项）的测试分层：最小 Vitest 命令、共用接口行为、页面级、浏览器冒烟、真实服务用例 |
