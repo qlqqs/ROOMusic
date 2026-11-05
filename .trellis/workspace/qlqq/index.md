@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 39
+- **Total Sessions**: 40
 - **Last Active**: 2026-11-05
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1319 | Active |
+| `journal-1.md` | ~1360 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 40 | 2026-11-05 | M5 父任务收尾、密码规则与规范拆分 | `5c78563`, `2cc2ce4`, `e51cc31`, `4403121`, `00eba2d` | `main` |
 | 39 | 2026-11-05 | M5 S 线：搜索规范化、艺人与别名收尾合入 | `4534454`, `44c146c`, `a7e3609`, `482a10d`, `b504037`, `9bfb58b`, `1480b25`, `2ca3be5`, `4323b55`, `3b61d28`, `2ff146e`, `ac0d422` | `main` |
 | 38 | 2026-11-04 | M5 ⑥ 扫描反馈（F 线变基、收尾与合入） | `34d944b`, `85ab070`, `a7f9dba`, `5564a5a`, `899cba6`, `961c3c6`, `c825e0b` | `m5-search-artists` |
 | 37 | 2026-11-04 | M5 ② 收藏与 ③ 歌单（P 线实施与收尾） | `858ecf0`, `f84ed00`, `825239c`, `f5d40fa`, `d871caa`, `b96e16e`, `a7973f9`, `9a7aa64`, `7607913`, `0ebdf2a` | `m5-search-artists` |

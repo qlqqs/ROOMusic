@@ -1317,3 +1317,44 @@ F 线变基到含 P 线的 main（迁移改为 0023/0024），导出树全量全
 ### Next Steps
 
 - M5 父任务跨项验收与归档；密码提示字符/字节不一致；超体积 spec 文档整理
+
+
+## Session 40: M5 父任务收尾、密码规则与规范拆分
+<!-- trellis-session: v=2 fp=afebfba319d55842 -->
+
+**Date**: 2026-11-05
+**Task**: M5 父任务收尾、密码规则与规范拆分
+**Branch**: `main`
+
+### Summary
+
+新账号密码限定为 12–72 位可打印 ASCII（用户裁决不允许中文）；拆分超限的 state-management 与 catalog-rest 规范；M5 跨项验收核对通过，父任务归档
+
+### Main Changes
+
+- identity 密码规则与前端提示
+- spec 拆分为 playback-and-personal-state / session-lifecycle / catalog-rest-verification
+- M5 父任务实施结果与归档
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5c78563` | fix(identity): 新账号密码只允许英文字母、数字和符号 |
+| `2cc2ce4` | docs(spec): 拆分超限的状态管理与目录 REST 规范 |
+| `e51cc31` | docs(task): M5 父任务记录实施结果与跨项验收，补齐搜索与艺人的测试与截图记录 |
+| `4403121` | chore(task): archive 11-04-classical-m5 |
+| `00eba2d` | docs(task): 修正 M5 父任务归档后的相对链接 |
+
+### Testing
+
+- [OK] go test ./internal/identity/... 与 app 身份集成测试 2 项
+- [OK] Vitest 4 文件 71 项、members.spec.ts 4 项、typecheck、eslint
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 推送需用户说“推送”
