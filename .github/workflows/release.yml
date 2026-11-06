@@ -16,17 +16,12 @@ env:
   IMAGE: ghcr.io/qlqqs/roomusic
 
 jobs:
-  ci:
-    name: CI
-    permissions:
-      contents: read
-    uses: ./.github/workflows/ci.yml
-
   prepare:
     name: Validate tag
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
+      actions: read
       contents: read
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -62,10 +57,23 @@ jobs:
           grep -q '__RELEASE_VERSION__' deploy/production/example.env
           echo "version=${REF_NAME#v}" >> "$GITHUB_OUTPUT"
           echo "publish=true" >> "$GITHUB_OUTPUT"
+      # 发布不重跑测试，只要求标签所指提交在 main 上的 CI 已经通过。
+      - name: Require passing CI on main
+        if: steps.version.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          passed=$(gh run list -R "$GITHUB_REPOSITORY" --workflow ci.yml --branch main --commit "$GITHUB_SHA" \
+            --event push --status success --json databaseId --jq length)
+          if [[ "$passed" == 0 ]]; then
+            echo "::error::该提交在 main 上还没有通过的 CI，等 CI 通过后重新推送标签"
+            exit 1
+          fi
 
   build:
     name: Build ${{ matrix.arch }}
-    needs: [ci, prepare]
+    needs: [prepare]
     strategy:
       fail-fast: true
       matrix:

@@ -65,7 +65,7 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 - 部署运维（均在部署目录）：`docker compose exec app /app/roomusic backup|--version|reset-password <用户名>`；
   恢复 `docker compose stop app && docker compose run --rm app restore <备份文件名> && docker compose up -d --wait`。
   备份接口 `GET|POST /api/v1/system/backups`、`GET /api/v1/system/backups/{name}` 与 `GET /api/v1/system/version`（管理员）。
-- 发布：推送标签 `vX.Y.Z` 触发 `.github/workflows/release.yml`（复用 `ci.yml`，原生 amd64 与 arm64 构建，推送 `X.Y.Z`、`X.Y`、`latest`，
+- 发布：推送标签 `vX.Y.Z` 触发 `.github/workflows/release.yml`（不重跑测试，要求该提交在 main 上的 CI 已通过；原生 amd64 与 arm64 构建，推送 `X.Y.Z`、`X.Y`、`latest`，
   Release 附件为写入版本号的 `compose.yaml` 与 `example.env`）；打标签前运行只读检查 `scripts/release-check.sh vX.Y.Z`。
 
 ## 3. 合同
