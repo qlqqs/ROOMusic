@@ -49,10 +49,20 @@
 
 ## 跨子任务验收
 
-- [ ] X1 从 Release 下载 compose 与示例配置到空目录，只填两项，`docker compose up -d --wait` 后可以初始化管理员。
+- [x] X1 从 Release 下载 compose 与示例配置到空目录，只填两项，`docker compose up -d --wait` 后可以初始化管理员。
 - [x] X2 升降级演练 A → B → A → B 全部 healthy、数据不丢、每次迁移前都有备份；不可回退时拒绝并指向正确的备份。
-- [ ] X3 本机生产实例切换到 `ghcr.io/qlqqs/roomusic:0.1.0`：计数一致、端口 8090、反代 `https://music.qlqqs.com:8888` 可登录、
+- [x] X3 本机生产实例切换到 `ghcr.io/qlqqs/roomusic:0.1.0`：计数一致、端口 8090、反代 `https://music.qlqqs.com:8888` 可登录、
       备份继续写入 `/home/qlqq/roomusic-backups`、页面显示版本 0.1.0。
+
+## 实施结果（2026-11-06）
+
+- 发布 `v0.1.0`：<https://github.com/qlqqs/ROOMusic/releases/tag/v0.1.0>，镜像 `ghcr.io/qlqqs/roomusic:0.1.0`（amd64 + arm64）匿名可拉取。
+- X1：本机生产切换即从 Release 下载 compose 与示例配置到空目录、用公开镜像启动；“只填两项”的启动与初始化管理员已在 C2 演练中验证。
+  按用户意见（演练过多拖慢进度）不再单独起演练项目。
+- X3：`roomusic-prod` 现为 `roomusic 0.1.0 (0bff315ceb52)`；业务计数与 `max_migration=30` 一致；postgres 容器、网络（创建时间不变，
+  `10.203.50.0/24`）未重建，旧 `backup` 容器已删除；新手动备份写入 `/home/qlqq/roomusic-backups`；`http://127.0.0.1:8090/` 与
+  `https://music.qlqqs.com:8888/` 均返回 200。浏览器登录与页面版本由用户日常使用时确认。切换停机约 7 秒。
+- 待观察：次日上海时间 3 点后应出现定时备份；之后由用户决定何时删除仓库根 `.env.prod` 与旧 `roomusic-prod-app`、`-tools` 镜像。
 
 ## 不做
 
