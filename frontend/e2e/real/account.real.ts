@@ -57,8 +57,8 @@ test("真实账户 V1：自助改密码保留当前设备、撤销另一设备�
     await signIn(a.request, member.username, originalPassword);
     await signIn(b.request, member.username, originalPassword);
     const page = await a.newPage();
-    await page.goto("/albums");
-    await expect(page.getByRole("heading", { name: "专辑", exact: true })).toBeVisible();
+    await page.goto("/settings/account");
+    await expect(page.getByRole("heading", { name: "账号", exact: true })).toBeVisible();
     const cookies = await a.cookies();
     await page.getByRole("button", { name: "修改密码", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "修改密码", exact: true });
@@ -88,14 +88,16 @@ test("真实账户 V1：自助改密码保留当前设备、撤销另一设备�
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
     await expect(trigger).toBeFocused();
-    await expect(page).toHaveURL(/\/albums$/);
-    await expect(page.getByRole("heading", { name: "专辑", exact: true })).toBeVisible();
+    await expect(page).toHaveURL(/\/settings\/account$/);
+    await expect(page.getByRole("heading", { name: "账号", exact: true })).toBeVisible();
     expect(decodeViewer(await body(await a.request.get("/api/v1/auth/me"))).id).toBe(member.id);
     expect(await a.cookies()).toEqual(cookies);
     await expectSessionEnded(b);
     await expectRejectedLogin(probe.request, member.username, originalPassword);
     expect((await signIn(probe.request, member.username, changedPassword)).id).toBe(member.id);
     await page.reload();
+    await expect(page.getByRole("heading", { name: "账号", exact: true })).toBeVisible();
+    await page.goto("/albums");
     await expect(page.getByRole("heading", { name: "专辑", exact: true })).toBeVisible();
   } finally {
     try {
@@ -126,7 +128,7 @@ test("真实账户 V2：管理员在成员页重置密码，撤销全部成员�
     expect(decodeError(forbiddenBody).error.code).toBe("forbidden");
     expect(decodeViewer(await body(await a.request.get("/api/v1/auth/me"))).id).toBe(member.id);
     await signIn(page.request, admin.username, admin.password);
-    await page.goto("/members");
+    await page.goto("/settings/members");
     const table = page.getByRole("table", { name: "成员列表" });
     const selfRow = table.getByRole("row").filter({ has: page.getByText(admin.username, { exact: true }) });
     await expect(selfRow).toHaveCount(1);
@@ -143,7 +145,7 @@ test("真实账户 V2：管理员在成员页重置密码，撤销全部成员�
     expect(await response.request().headerValue("Idempotency-Key")).toBeNull();
     await expect(dialog).toBeHidden();
     await expect(page.getByRole("status").filter({ hasText: `已重置“${member.username}”的密码` })).toBeVisible();
-    await expect(page).toHaveURL(/\/members$/);
+    await expect(page).toHaveURL(/\/settings\/members$/);
     await expectSessionEnded(a);
     await expectSessionEnded(b);
     await expectRejectedLogin(probe.request, member.username, originalPassword);

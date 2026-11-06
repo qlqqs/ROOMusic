@@ -193,7 +193,7 @@ test("原样重扫之后四类状态都保持，扫描不改操作记录，新�
 
 test("撤销认领：新版本回到认领之前，旧版本又在待认领里；可以再认领一次", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/operations");
+  await page.goto("/settings/operations");
   const row = page.getByRole("row").filter({ hasText: "认领" }).first();
   await expect(row).toContainText(`从《${one.corrected}》（已不可见）认领：修正 标题；专辑；默认版本；核对 归组冲突`);
   await row.getByRole("button", { name: /^撤销/ }).click();

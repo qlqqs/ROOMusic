@@ -212,3 +212,64 @@ npm run typecheck && npm run lint
 - 截图集合不变：设置账号、设置备份、备份删除确认框、备份批量选择、备份批量删除确认框、自动清理确认框、用户菜单，每种场景均有 1440 与 375。
 - 已抽查新截图“设置账号-375.png”“用户菜单-375.png”：账号值恢复正文尺寸，用户按钮贴近抽屉底部且展开菜单位于按钮上方，没有新增出界或错位。
 - 本轮没有发现产品缺陷。最终 14 张图片继续留在上述目录供主会话和用户审阅。
+
+## S4-1 真实服务端到端（2026-11-06）
+
+### 改动文件与边界
+
+本轮基于已提交的后端 `a1db810` 与前端 `f35310b`，只迁移以下五个真实服务测试及更新本报告；没有修改产品代码、隔离脚本或提交 git。
+
+| 文件（相对 `frontend/e2e/real/`） | 修改与保留的断言 |
+| --- | --- |
+| `account.real.ts` | 自助修改密码从 `/settings/account` 进入，关闭与重新打开对话框仍断言焦点、清空表单和停留原页；刷新账号页后继续验证能浏览专辑。成员管理改为 `/settings/members`。原有会话保留/撤销、旧新密码、Cookie、请求内容与无幂等键断言不变。 |
+| `claims.real.ts` | 撤销认领从 `/settings/operations` 进入；认领前后状态与撤销断言不变。 |
+| `governance.real.ts` | 操作记录入口改为 `/settings/operations`；保留普通成员主导航没有操作记录的断言，追加设置分栏也没有操作记录入口的断言；无权限页面与真实接口 403 断言不变。 |
+| `scan-feedback.real.ts` | 扫描报告入口改为 `/settings/library/scans/:id`；真实进度、报告计数、最近新增与成员权限断言不变。 |
+| `playback.real.ts` | 跨标签退出先打开精确名称 `${admin.username} 管理员` 的当前用户按钮，再选择“账号”菜单中的“退出登录”；另一页停播、清空队列与恢复数据的断言不变。 |
+
+### 命令与结果
+
+仓库根目录预检与迁移后复查：
+
+```bash
+rg -n '(/library|/members|/operations|/system/backups|修改密码|退出登录|当前用户)' frontend/e2e/real scripts/playback-e2e.sh
+docker ps -a --filter label=com.docker.compose.project=roomusic-test --format '{{.ID}} {{.Names}} {{.Status}}'
+docker volume ls --filter label=com.docker.compose.project=roomusic-test
+docker network ls --filter label=com.docker.compose.project=roomusic-test
+```
+
+旧页面地址和交互只出现在指定的五个 real 文件；`/api/v1/operations`、`/api/v1/library-roots` 等真实接口路径不变。脚本中的 `/library` 是临时合成素材目录，不是页面地址。运行前没有测试项目资源，无须执行 `down -v`，也没有接管其他运行中的测试。
+
+```bash
+source /home/qlqq/.local/share/playwright-deps/env.sh
+set -o pipefail
+scripts/playback-e2e.sh 2>&1 | tee /tmp/roomusic-s4-real-e2e.log
+```
+
+**退出码 0；55 通过、0 失败、0 跳过，浏览器测试耗时 2.2 分钟。** 包含账号 2、艺人 3、认领 6、默认版本 6、治理 4、元数据问题 5、个人收藏/歌单 2、真实播放 24、扫描反馈 1、搜索 2。脚本中的 TypeScript 检查、临时树生产构建、Go 构建与独立 PostgreSQL 启动均成功。HTML 报告位于 `frontend/coverage/playback-real/report/`。
+
+`frontend/` 下额外门禁：
+
+```bash
+npm run typecheck && npm run lint
+```
+
+**均通过，退出码 0。** 本轮只改真实服务测试，按要求运行完整真实服务套件，未重复执行不受影响的 Vitest 与模拟后端 Playwright 全量。
+
+运行后根目录检查：
+
+```bash
+docker ps -aq --filter label=com.docker.compose.project=roomusic-test
+docker volume ls -q --filter label=com.docker.compose.project=roomusic-test
+docker network ls -q --filter label=com.docker.compose.project=roomusic-test
+git status --short -- backend/cmd/roomusic/web
+git diff --exit-code -- backend/cmd/roomusic/web
+git diff --check -- frontend/e2e/real .trellis/tasks/11-06-settings-page-and-user-menu/research/s3-frontend-tests.md
+```
+
+测试容器、卷、网络均无残留；本轮临时目录已删除。嵌入产物状态为空、差异检查退出码 0；构建只写脚本创建的临时源码树，没有改动工作区 `backend/cmd/roomusic/web`。差异空白检查通过。未操作 `roomusic-prod`、`roomusic-postgres-1` 及其卷、备份、env 文件。
+
+### 可选备份冒烟与产品缺陷
+
+- 本轮未新增“立即备份 → 删除 → 列表消失”的真实冒烟：`command -v pg_dump`、`command -v pg_restore` 均未找到程序，`ROOMUSIC_PG_BIN_DIR` 未配置；脚本也不提供 PostgreSQL 客户端工具。后端备份准备阶段要求这两个工具，因此当前脚本环境不能完成真实备份。没有为此添加 skip、伪造备份或扩大环境配置范围。
+- 本轮没有发现产品缺陷。

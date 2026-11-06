@@ -93,7 +93,7 @@ test("页面上修改标题：重新扫描之后仍是修正值而扫描值随�
   await expect(level1(page, corrected)).toBeVisible();
 
   // 操作记录页：最新的一条是这次修改，写明前后的有效值，可以撤销（重新扫描不会让它失效）。
-  await page.goto("/operations");
+  await page.goto("/settings/operations");
   const table = page.getByRole("table", { name: "操作记录" });
   const row = table.getByRole("row").filter({ hasText: corrected });
   // “撤销”按钮的可访问名称里带着操作类型，所以文字匹配用 exact。
@@ -169,9 +169,10 @@ test("普通成员没有任何编辑入口与操作记录，接口也拒绝：40
   expect((await page.request.post(`/api/v1/releases/${alphaAlbum.releaseId}/group`, { data: { expected_revision: 1, action: "detach" }, headers: headers() })).status()).toBe(403);
   expect((await page.request.post(`/api/v1/operations/${crypto.randomUUID()}/revert`, { headers: headers() })).status()).toBe(403);
 
-  await page.goto("/operations");
+  await page.goto("/settings/operations");
   await expect(page.getByRole("heading", { level: 1, name: "需要管理员权限" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: "操作记录" })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "设置", exact: true }).getByRole("link", { name: "操作记录", exact: true })).toHaveCount(0);
   await page.goto(`/albums/${alphaAlbum.groupId}`);
   await expect(level1(page, remastered)).toBeVisible();
   await expect(page.getByRole("button", { name: "编辑发行信息" })).toHaveCount(0);

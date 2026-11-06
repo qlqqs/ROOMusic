@@ -391,7 +391,8 @@ test("另一标签页退出：本页停止并清除队列和刷新恢复数据",
   await playTrack(page, item);
   const other = await context.newPage();
   await other.goto("/");
-  await other.getByRole("button", { name: "退出登录", exact: true }).click();
+  await other.getByRole("region", { name: "当前用户", exact: true }).getByRole("button", { name: `${admin.username} 管理员`, exact: true }).click();
+  await other.getByRole("menu", { name: "账号", exact: true }).getByRole("menuitem", { name: "退出登录", exact: true }).click();
   await expect(page.getByRole("button", { name: "登录", exact: true })).toBeVisible();
   await expect.poll(async () => (await mediaState(page))?.paused).toBe(true);
   expect(await page.evaluate(() => window.playbackTestMedia.every((audio) => !audio.getAttribute("src")))).toBe(true);

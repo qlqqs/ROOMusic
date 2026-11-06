@@ -72,7 +72,7 @@ test("两张专辑三首合成 WAV：真实扫描 100%、报告计数、最近�
     expect(report.added_albums.items.map((item) => item.current_group_id).sort()).toEqual(albums.map((item) => item.groupId).sort());
 
     await login(page.request);
-    await page.goto(`/library/scans/${result.finished.id}`);
+    await page.goto(`/settings/library/scans/${result.finished.id}`);
     await expect(page.getByRole("progressbar", { name: "扫描进度" })).toHaveAttribute("aria-valuenow", "100");
     const panel = page.getByRole("region", { name: "扫描报告" });
     const table = panel.getByRole("table", { name: "专辑与曲目的变化" });
