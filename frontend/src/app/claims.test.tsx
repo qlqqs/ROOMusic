@@ -272,7 +272,7 @@ describe("操作记录里的认领", () => {
         pagination: { page: 1, page_size: 50, total: 2 },
       }),
     );
-    renderApp({ path: "/operations" });
+    renderApp({ path: "/settings/operations" });
     const table = await screen.findByRole("table");
     const rows = within(table).getAllByRole("row").slice(1);
     expect(rows).toHaveLength(2);
@@ -306,7 +306,7 @@ describe("操作记录里的认领", () => {
         pagination: { page: 1, page_size: 50, total: 1 },
       }),
     );
-    renderApp({ path: "/operations" });
+    renderApp({ path: "/settings/operations" });
     const row = (await screen.findAllByRole("row"))[1];
     expect(row?.textContent).toContain("之后又有修改");
     expect(row?.textContent).not.toContain("专辑已不可见");

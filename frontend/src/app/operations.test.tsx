@@ -59,20 +59,20 @@ function seedMixed(governance: GovernanceData) {
 }
 
 describe("操作记录页：入口与权限", () => {
-  it("管理员在“资料库”下看到“操作记录”，点进去是操作记录页", async () => {
+  it("管理员在设置分栏看到“操作记录”，点进去是操作记录页", async () => {
     setup();
     const user = userEvent.setup();
-    const { history } = renderApp({ path: "/" });
-    const nav = await screen.findByRole("navigation", { name: "主导航" });
+    const { history } = renderApp({ path: "/settings/account" });
+    const nav = await screen.findByRole("navigation", { name: "设置" });
     await user.click(within(nav).getByRole("link", { name: "操作记录" }));
     expect(await heading("操作记录")).toBeTruthy();
-    expect(history.location.pathname).toBe("/operations");
+    expect(history.location.pathname).toBe("/settings/operations");
     expect(within(nav).getByRole("link", { name: "操作记录" }).getAttribute("aria-current")).toBe("page");
   });
 
   it("成员直接访问：显示“需要管理员权限”，不请求操作记录接口，导航里也没有这一项", async () => {
     const { api } = setup({ role: "user" });
-    renderApp({ path: "/operations" });
+    renderApp({ path: "/settings/operations" });
     expect(await heading("需要管理员权限")).toBeTruthy();
     expect(within(screen.getByRole("navigation", { name: "主导航" })).queryByRole("link", { name: "操作记录" })).toBeNull();
     expect(api.requestsTo("GET", "/api/v1/operations")).toHaveLength(0);
@@ -82,7 +82,7 @@ describe("操作记录页：入口与权限", () => {
 describe("操作记录页：列表", () => {
   it("没有记录时说明记录什么时候出现，没有表格与分页", async () => {
     setup();
-    renderApp({ path: "/operations" });
+    renderApp({ path: "/settings/operations" });
     expect(await screen.findByText("还没有操作记录。")).toBeTruthy();
     expect(screen.queryByRole("table")).toBeNull();
     expect(screen.queryByRole("navigation", { name: "操作记录分页" })).toBeNull();
@@ -91,7 +91,7 @@ describe("操作记录页：列表", () => {
   it("最新的在前，写明时间、操作者、专辑与改动；只有可以撤销的记录有“撤销”，其余在同一位置写出原因", async () => {
     const { governance } = setup();
     seedMixed(governance);
-    renderApp({ path: "/operations" });
+    renderApp({ path: "/settings/operations" });
     const table = await screen.findByRole("table", { name: "操作记录" });
     const rows = within(table).getAllByRole("row").slice(1);
     expect(rows).toHaveLength(4);
@@ -121,7 +121,7 @@ describe("操作记录页：列表", () => {
     const { api, governance } = setup();
     for (let revision = 1; revision <= 25; revision += 1) correct(governance, releaseOf(albumC()), revision, "label", `Label ${revision}`);
     const user = userEvent.setup();
-    const { history } = renderApp({ path: "/operations" });
+    const { history } = renderApp({ path: "/settings/operations" });
     const table = await screen.findByRole("table", { name: "操作记录" });
     expect(within(table).getAllByRole("row")).toHaveLength(21);
     expect(screen.getByText("共 25 条记录")).toBeTruthy();
@@ -138,7 +138,7 @@ describe("操作记录页：列表", () => {
   it("页码超出末页时地址改到末页（替换历史），不显示越界的空页", async () => {
     const { governance } = setup();
     for (let revision = 1; revision <= 25; revision += 1) correct(governance, releaseOf(albumC()), revision, "label", `Label ${revision}`);
-    const { history } = renderApp({ path: "/operations?page=9" });
+    const { history } = renderApp({ path: "/settings/operations?page=9" });
     await waitFor(() => expect(history.location.search).toBe("?page=2"));
     expect(await screen.findByRole("table", { name: "操作记录" })).toBeTruthy();
     expect(within(screen.getByRole("navigation", { name: "操作记录分页" })).getByText("第 2 / 2 页")).toBeTruthy();
@@ -148,7 +148,7 @@ describe("操作记录页：列表", () => {
     const { api, governance } = setup();
     seedMixed(governance);
     const user = userEvent.setup();
-    const { history } = renderApp({ path: `/operations?release=${releaseOf(albumC())}` });
+    const { history } = renderApp({ path: `/settings/operations?release=${releaseOf(albumC())}` });
     expect(await screen.findByText("只显示《Gamma Sonatas》的记录。")).toBeTruthy();
     const table = await screen.findByRole("table", { name: "操作记录" });
     expect(within(table).getAllByRole("row")).toHaveLength(2);
@@ -164,11 +164,11 @@ describe("操作记录页：列表", () => {
   it("筛选的版本没有记录时说明这一点；release 不是 UUID 时看全部记录，不向后端发无效的筛选", async () => {
     const { api, governance } = setup();
     correct(governance, releaseOf(albumC()), 1, "genre", "Sonata");
-    const first = renderApp({ path: `/operations?release=${releaseOf(albumA())}` });
+    const first = renderApp({ path: `/settings/operations?release=${releaseOf(albumA())}` });
     expect(await screen.findByText("这个版本还没有操作记录。")).toBeTruthy();
     first.view.unmount();
 
-    renderApp({ path: "/operations?release=not-a-uuid" });
+    renderApp({ path: "/settings/operations?release=not-a-uuid" });
     expect(await screen.findByRole("table", { name: "操作记录" })).toBeTruthy();
     expect(screen.queryByText(/^只显示/)).toBeNull();
     const last = api.requestsTo("GET", "/api/v1/operations").at(-1);
@@ -182,7 +182,7 @@ describe("操作记录页：列表", () => {
     catalog.groups.splice(catalog.groups.findIndex((group) => group.id === albumC().id), 1);
     catalog.groupDetails.delete(albumC().id);
     catalog.releases.delete(releaseOf(albumC()));
-    renderApp({ path: "/operations" });
+    renderApp({ path: "/settings/operations" });
     const table = await screen.findByRole("table", { name: "操作记录" });
     expect(within(table).getByText("专辑已不存在")).toBeTruthy();
     expect(within(table).queryByRole("link")).toBeNull();
@@ -196,7 +196,7 @@ describe("操作记录页：列表", () => {
     // 500 立即显示失败（503 与网络错误会被查询自动重试）。
     api.on("GET", "/api/v1/operations", () => jsonResponse(500, { error: { code: "internal_error", message: "boom" }, request_id: "req-ops-1" }));
     const user = userEvent.setup();
-    renderApp({ path: "/operations" });
+    renderApp({ path: "/settings/operations" });
     expect(await screen.findByText(/req-ops-1/)).toBeTruthy();
     const { respondToOperations } = await import("../test/governance-data");
     api.on("GET", "/api/v1/operations", (request) => {
@@ -219,7 +219,7 @@ describe("操作记录页：撤销", () => {
     const { api, governance } = setup();
     seedMixed(governance);
     const user = userEvent.setup();
-    renderApp({ path: "/operations" });
+    renderApp({ path: "/settings/operations" });
     const dialog = await openRevert(user);
     // 初始焦点在“取消”上，避免回车直接确认；写明谁在何时做的什么、会改回什么，以及撤销本身的性质。
     expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "取消" }));
@@ -251,7 +251,7 @@ describe("操作记录页：撤销", () => {
     const { governance } = setup();
     seedMixed(governance);
     const user = userEvent.setup();
-    renderApp({ path: "/operations" });
+    renderApp({ path: "/settings/operations" });
     const dialog = await openRevert(user);
     await user.click(within(dialog).getByRole("button", { name: "撤销" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
@@ -262,7 +262,7 @@ describe("操作记录页：撤销", () => {
     const { api, governance } = setup();
     seedMixed(governance);
     const user = userEvent.setup();
-    renderApp({ path: "/operations" });
+    renderApp({ path: "/settings/operations" });
     const dialog = await openRevert(user);
     await user.click(within(dialog).getByRole("button", { name: "取消" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
@@ -274,7 +274,7 @@ describe("操作记录页：撤销", () => {
     const { api, governance } = setup();
     seedMixed(governance);
     const user = userEvent.setup();
-    renderApp({ path: "/operations" });
+    renderApp({ path: "/settings/operations" });
     const dialog = await openRevert(user);
     // 打开对话框之后别人又改了这张专辑：服务器上这条已经不是最近一次修改。
     correct(governance, releaseOf(albumC()), 2, "label", "Another Label");
@@ -294,7 +294,7 @@ describe("操作记录页：撤销", () => {
     const { api, governance } = setup();
     seedMixed(governance);
     const user = userEvent.setup();
-    renderApp({ path: "/operations" });
+    renderApp({ path: "/settings/operations" });
     const dialog = await openRevert(user);
     // 另一位管理员刚撤销了它。
     revertFirst(governance, 3);
@@ -310,7 +310,7 @@ describe("操作记录页：撤销", () => {
     const { api, governance } = setup();
     seedMixed(governance);
     const user = userEvent.setup();
-    renderApp({ path: "/operations" });
+    renderApp({ path: "/settings/operations" });
     const dialog = await openRevert(user);
     const target = governance.operations[3];
     api.on("POST", revertPath(target?.id ?? ""), () => {
@@ -338,14 +338,14 @@ describe("操作记录页：撤销", () => {
     correct(governance, releaseOf(albumA()), 1, "label", "Corrected Label");
     join(governance, releaseOf(albumA()), 2, albumB().id);
     const user = userEvent.setup();
-    const { history } = renderApp({ path: "/operations" });
+    const { history } = renderApp({ path: "/settings/operations" });
     const table = await screen.findByRole("table", { name: "操作记录" });
     await user.click(within(table).getByRole("button", { name: /^撤销/ }));
     const dialog = await screen.findByRole("dialog", { name: "撤销这次归组调整？" });
     expect(within(dialog).getByText("从《Beta Quartets》移回《Sample Symphonies》")).toBeTruthy();
     await user.click(within(dialog).getByRole("button", { name: "撤销" }));
     expect(await screen.findByText("已撤销这次归组调整，这个版本回到了原来的专辑。")).toBeTruthy();
-    expect(history.location.pathname).toBe("/operations");
+    expect(history.location.pathname).toBe("/settings/operations");
   });
 });
 
@@ -375,7 +375,7 @@ describe("专辑详情：修改记录", () => {
     expect(request?.path).toContain(`group_id=${albumC().id}`);
     expect(request?.path).toContain("page_size=5");
     expect(screen.getByText("共 1 条。")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "全部记录" }).getAttribute("href")).toBe(`/operations?release=${releaseOf(albumC())}&group=${albumC().id}`);
+    expect(screen.getByRole("link", { name: "全部记录" }).getAttribute("href")).toBe(`/settings/operations?release=${releaseOf(albumC())}&group=${albumC().id}`);
   });
 
   it("没有记录时说明；记录多于 5 条时只显示最近 5 条并给出总数", async () => {

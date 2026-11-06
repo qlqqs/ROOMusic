@@ -38,7 +38,7 @@ function setup(report = reportSample(), overrides: Partial<ScanDTO> = {}, role: 
 }
 
 function renderDetail(scan: ScanDTO) {
-  return renderApp({ path: `/library/scans/${scan.id}` });
+  return renderApp({ path: `/settings/library/scans/${scan.id}` });
 }
 
 function expectChanges(region: HTMLElement, report: ScanReportDTO) {

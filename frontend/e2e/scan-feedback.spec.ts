@@ -80,7 +80,7 @@ for (const width of feedbackWidths) {
     const mock = await backend.start({ signedInAs: "curator" });
     const scan = seedScanFeedback(mock);
     setScanFeedback(mock, scan, "counting-admin");
-    await page.goto(`/library/scans/${scan.id}`);
+    await page.goto(`/settings/library/scans/${scan.id}`);
     await expect(progress(page)).toHaveAttribute("aria-valuetext", /正在数文件.*目录/);
     await expect(page.getByText(`当前目录：${longRootName}`, { exact: false })).toBeVisible();
     await verifyLayout(page, `${width} 数文件`);
@@ -124,7 +124,7 @@ test("纯键盘打开报告、翻页并把焦点送回新增专辑标题", async
   const mock = await backend.start({ signedInAs: "curator" });
   const scan = seedScanFeedback(mock);
   setScanFeedback(mock, scan, "terminal-succeeded", { report_status: "ready" });
-  await page.goto("/library");
+  await page.goto("/settings/library");
   await expect(page.getByRole("table", { name: "扫描记录" })).toBeVisible();
   await tabTo(page, (name) => name.startsWith("查看详情"), 40);
   await expectVisibleFocusRing(page, "打开扫描报告");
@@ -183,7 +183,7 @@ for (const state of ["failed", "canceled", "incomplete"] as const) {
     const scan = seedScanFeedback(mock);
     const snapshot = setScanFeedback(mock, scan, `terminal-${state}`);
     await page.clock.install();
-    await page.goto(`/library/scans/${scan.id}`);
+    await page.goto(`/settings/library/scans/${scan.id}`);
     const percent = String(Math.floor((snapshot.progress?.percent_bp ?? -1) / 100));
     await expect(progress(page)).toHaveAttribute("aria-valuenow", percent);
     await expect(progress(page)).not.toHaveAttribute("aria-valuenow", "100");
@@ -200,7 +200,7 @@ test("跨目录阶段切回读取时整体不倒退，轮询不抢键盘焦点",
   const scan = seedScanFeedback(mock);
   setScanFeedback(mock, scan, "first-root-saved");
   await page.clock.install();
-  await page.goto(`/library/scans/${scan.id}`);
+  await page.goto(`/settings/library/scans/${scan.id}`);
   await expect(progress(page)).toHaveAttribute("aria-valuenow", "28");
   await tabTo(page, (name) => name === "取消扫描", 20);
   const cancel = page.getByRole("button", { name: "取消扫描", exact: true });

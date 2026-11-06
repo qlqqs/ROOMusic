@@ -4,3 +4,5 @@
 .menu button:disabled { color: var(--text-secondary); }
 .menu button:active { background: var(--color-pressed); }
 @media (hover: hover) and (pointer: fine) { .menu button:hover { background: var(--color-hover); } }
+.menu button[data-icon] { display: flex; align-items: center; gap: var(--space-2); }
+.icon { display: inline-flex; flex-shrink: 0; color: var(--text-secondary); }

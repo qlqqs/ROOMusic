@@ -2,3 +2,49 @@
   color: var(--text-secondary);
   font-size: var(--fs-14);
 }
+
+/* 表格上方一行：“全选”与“删除所选（n）”。窄屏也放得下一行。 */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  min-height: var(--control-height);
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-height);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.check input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--color-accent-700);
+  cursor: pointer;
+}
+
+/* 行内的勾选框与时间同一行高：表格单元格有上下内边距，勾选框不需要再撑到控件高度。 */
+td .check {
+  min-height: 0;
+}
+
+/* “下载”与“删除”同一行，不折行。 */
+.actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--space-4);
+  white-space: nowrap;
+}
+
+.failedList {
+  margin: 0;
+  padding-inline-start: 1.2em;
+  font-variant-numeric: lining-nums tabular-nums;
+}

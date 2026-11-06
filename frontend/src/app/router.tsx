@@ -7,6 +7,7 @@ import { parseSearchPageSearch, type SearchPageSearch } from "../features/search
 import { parseArtistDetailSearch, parseArtistsSearch, type ArtistDetailSearch, type ArtistsSearch } from "../features/artists";
 import { parsePageParam } from "../shared/lib/pagination";
 import { AuthenticatedLayout } from "./shell/authenticated-layout";
+import { AccountPage } from "./routes/account-page";
 import { AdminGate } from "./routes/admin-gate";
 import { AlbumDetailPage } from "./routes/album-detail-page";
 import { AlbumsPage } from "./routes/albums-page";
@@ -26,6 +27,7 @@ import { NowPlayingRoute } from "./routes/now-playing-route";
 import { PlaylistDetailPage } from "./routes/playlist-detail-page";
 import { PlaylistsPage } from "./routes/playlists-page";
 import { SearchPage } from "./routes/search-page";
+import { SettingsLayout } from "./routes/settings-layout";
 import { ArtistCandidatesPage } from "./routes/artist-candidates-page";
 import { ArtistDetailPage } from "./routes/artist-detail-page";
 import { ArtistsPage } from "./routes/artists-page";
@@ -79,6 +81,26 @@ const authenticatedRoute = createRoute({
   },
   component: AuthenticatedLayout,
 });
+
+// 旧书签与外部链接：扫描目录、成员、操作记录与备份搬进了设置。挂在根路由下，在登录守卫之前跳转，所以未登录时登录页记住的回跳地址就是新地址；
+// 查询串与 hash 原样保留（不经 validateSearch，未知参数也不丢），替换历史项（返回键不会回到旧地址再跳一次）。
+function legacyRedirectRoute(path: string, from: string, to: string) {
+  return createRoute({
+    getParentRoute: () => rootRoute,
+    path,
+    beforeLoad: ({ location }) => {
+      throw redirect({ href: to + location.pathname.slice(from.length) + location.searchStr + (location.hash === "" ? "" : `#${location.hash}`), replace: true });
+    },
+  });
+}
+
+const legacyRoutes = [
+  legacyRedirectRoute("/library", "/library", "/settings/library"),
+  legacyRedirectRoute("/library/scans/$scanId", "/library", "/settings/library"),
+  legacyRedirectRoute("/members", "/members", "/settings/members"),
+  legacyRedirectRoute("/operations", "/operations", "/settings/operations"),
+  legacyRedirectRoute("/system/backups", "/system/backups", "/settings/backups"),
+];
 
 const nowPlayingRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/now-playing", component: NowPlayingRoute });
 
@@ -236,53 +258,6 @@ const artistCandidatesRoute = createRoute({
   component: ArtistCandidatesRoute,
 });
 
-// 管理页由 AdminGate 把关：非管理员显示“需要管理员权限”，不渲染页面内容，也就不会调用管理接口。
-function LibraryRoute() {
-  const { scan_page: scanPage } = libraryRoute.useSearch();
-  return (
-    <AdminGate>
-      <LibraryPage scanPage={scanPage ?? 1} />
-    </AdminGate>
-  );
-}
-
-// scan_page 是扫描记录的页码，只在 2 及以上时出现；不合法的值显式写成 undefined（路由把校验结果合并到原始查询串上）。
-const libraryRoute = createRoute({
-  getParentRoute: () => authenticatedRoute,
-  path: "/library",
-  validateSearch: (search: Record<string, unknown>): { scan_page?: number | undefined } => ({
-    scan_page: parsePageParam(search["scan_page"]),
-  }),
-  component: LibraryRoute,
-});
-
-function MembersRoute() {
-  return (
-    <AdminGate>
-      <MembersPage />
-    </AdminGate>
-  );
-}
-
-const membersRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/members", component: MembersRoute });
-
-// page 是记录的页码（2 及以上），release 是只看某个版本的记录，group 是看某张专辑的记录（默认版本）；不合法的值显式写成 undefined。
-function OperationsRoute() {
-  const { page, release, group, artist } = operationsRoute.useSearch();
-  return (
-    <AdminGate>
-      <OperationsPage page={page ?? 1} releaseId={release} groupId={group} artistId={artist} />
-    </AdminGate>
-  );
-}
-
-const operationsRoute = createRoute({
-  getParentRoute: () => authenticatedRoute,
-  path: "/operations",
-  validateSearch: (search: Record<string, unknown>): OperationsSearch => parseOperationsSearch(search),
-  component: OperationsRoute,
-});
-
 // status 只在看“已核对”时出现，category 是只看某一类，page 是页码（2 及以上），release 是选中的版本；不合法的值显式写成 undefined。
 function IssuesRoute() {
   return (
@@ -315,6 +290,39 @@ const claimsRoute = createRoute({
   component: ClaimsRoute,
 });
 
+// 设置：/settings 没有内容，转到所有人都有的“账号”（替换历史项，返回键不会回到 /settings）。分栏由布局显示，各管理栏仍由 AdminGate 把关：
+// 非管理员显示“需要管理员权限”，不渲染页面内容，也就不会调用管理接口。
+const settingsRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/settings", component: SettingsLayout });
+
+const settingsIndexRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "/",
+  beforeLoad: () => {
+    throw redirect({ to: "/settings/account", replace: true });
+  },
+});
+
+const accountRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/account", component: AccountPage });
+
+function LibraryRoute() {
+  const { scan_page: scanPage } = libraryRoute.useSearch();
+  return (
+    <AdminGate>
+      <LibraryPage scanPage={scanPage ?? 1} />
+    </AdminGate>
+  );
+}
+
+// scan_page 是扫描记录的页码，只在 2 及以上时出现；不合法的值显式写成 undefined（路由把校验结果合并到原始查询串上）。
+const libraryRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "/library",
+  validateSearch: (search: Record<string, unknown>): { scan_page?: number | undefined } => ({
+    scan_page: parsePageParam(search["scan_page"]),
+  }),
+  component: LibraryRoute,
+});
+
 function ScanDetailRoute() {
   const { scanId } = scanDetailRoute.useParams();
   return (
@@ -324,11 +332,38 @@ function ScanDetailRoute() {
   );
 }
 
-// 参数不是 UUID 时由页面显示“扫描不存在”，不发请求。
+// 与扫描目录平级（扫描目录页不需要 Outlet）；分栏按地址前缀把它算在“扫描目录”下。参数不是 UUID 时由页面显示“扫描不存在”，不发请求。
 const scanDetailRoute = createRoute({
-  getParentRoute: () => authenticatedRoute,
+  getParentRoute: () => settingsRoute,
   path: "/library/scans/$scanId",
   component: ScanDetailRoute,
+});
+
+function MembersRoute() {
+  return (
+    <AdminGate>
+      <MembersPage />
+    </AdminGate>
+  );
+}
+
+const membersRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/members", component: MembersRoute });
+
+// page 是记录的页码（2 及以上），release 是只看某个版本的记录，group 是看某张专辑的记录（默认版本）；不合法的值显式写成 undefined。
+function OperationsRoute() {
+  const { page, release, group, artist } = operationsRoute.useSearch();
+  return (
+    <AdminGate>
+      <OperationsPage page={page ?? 1} releaseId={release} groupId={group} artistId={artist} />
+    </AdminGate>
+  );
+}
+
+const operationsRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "/operations",
+  validateSearch: (search: Record<string, unknown>): OperationsSearch => parseOperationsSearch(search),
+  component: OperationsRoute,
 });
 
 function BackupsRoute() {
@@ -339,13 +374,31 @@ function BackupsRoute() {
   );
 }
 
-// “系统”组目前只有这一页，不设 /system 跳转。
-const backupsRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/system/backups", component: BackupsRoute });
+const backupsRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/backups", component: BackupsRoute });
 
 // 已登录用户访问不存在的路径时仍显示在外壳里；未登录用户先被守卫送去登录。
 const notFoundRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "$", component: NotFoundPage });
 
-const routeTree = rootRoute.addChildren([setupRoute, loginRoute, authenticatedRoute.addChildren([overviewRoute, nowPlayingRoute, albumsRoute, albumDetailRoute, searchRoute, artistsRoute, artistDetailRoute, meRoute.addChildren([meIndexRoute, historyRoute, favoritesRoute, playlistsRoute, playlistDetailRoute]), libraryRoute, scanDetailRoute, issuesRoute, claimsRoute, artistCandidatesRoute, membersRoute, operationsRoute, backupsRoute, notFoundRoute])]);
+const routeTree = rootRoute.addChildren([
+  setupRoute,
+  loginRoute,
+  ...legacyRoutes,
+  authenticatedRoute.addChildren([
+    overviewRoute,
+    nowPlayingRoute,
+    albumsRoute,
+    albumDetailRoute,
+    searchRoute,
+    artistsRoute,
+    artistDetailRoute,
+    meRoute.addChildren([meIndexRoute, historyRoute, favoritesRoute, playlistsRoute, playlistDetailRoute]),
+    issuesRoute,
+    claimsRoute,
+    artistCandidatesRoute,
+    settingsRoute.addChildren([settingsIndexRoute, accountRoute, libraryRoute, scanDetailRoute, membersRoute, operationsRoute, backupsRoute]),
+    notFoundRoute,
+  ]),
+]);
 
 export function createAppRouter(context: RouterContext, history?: RouterHistory) {
   return createRouter({ routeTree, context, ...(history === undefined ? {} : { history }) });

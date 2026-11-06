@@ -1,0 +1,24 @@
+/* 账号信息是正文字号的“名称：值”，不是统计数字：名称小字次要色在上，值在下；长用户名完整显示并换行。 */
+.details {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+}
+
+.item {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.label {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+}
+
+.value {
+  margin: 0;
+  font-size: var(--fs-17);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}

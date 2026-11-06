@@ -40,18 +40,18 @@ afterEach(() => {
 describe("扫描目录页：扫描区段", () => {
   it("没有活动扫描：显示空闲提示，提供“开始扫描”", async () => {
     setup();
-    renderApp({ path: "/library" });
+    renderApp({ path: "/settings/library" });
     expect(await screen.findByText("没有正在运行的扫描。")).toBeTruthy();
     expect(screen.getByRole("button", { name: "开始扫描" })).toBeTruthy();
   });
 
   it("开始扫描（202）后进入该扫描的详情页", async () => {
     const { api } = setup();
-    const { history } = renderApp({ path: "/library" });
+    const { history } = renderApp({ path: "/settings/library" });
     await userEvent.click(await screen.findByRole("button", { name: "开始扫描" }));
 
     expect(await heading("扫描详情")).toBeTruthy();
-    expect(history.location.pathname).toMatch(/^\/library\/scans\/[0-9a-f-]{36}$/);
+    expect(history.location.pathname).toMatch(/^\/settings\/library\/scans\/[0-9a-f-]{36}$/);
     expect(within(await statusPanel()).getByText("运行中")).toBeTruthy();
     const [request] = api.requestsTo("POST", "/api/v1/scans");
     expect(request?.body).toBeUndefined();
@@ -59,16 +59,16 @@ describe("扫描目录页：扫描区段", () => {
 
   it("已有扫描在运行（200）：不新建，留在本页提示并给出进入该扫描的链接", async () => {
     const { library } = setup();
-    const { history } = renderApp({ path: "/library" });
+    const { history } = renderApp({ path: "/settings/library" });
     const button = await screen.findByRole("button", { name: "开始扫描" });
     // 界面还显示“没有活动扫描”时，别处已经开始了扫描。
     const running = seedScan(library, {}, true);
     await userEvent.click(button);
 
     expect(await screen.findByText(/已经有扫描在运行。/)).toBeTruthy();
-    expect(history.location.pathname).toBe("/library");
+    expect(history.location.pathname).toBe("/settings/library");
     const links = screen.getAllByRole("link", { name: /查看/ });
-    expect(links.some((link) => link.getAttribute("href") === `/library/scans/${running.id}`)).toBe(true);
+    expect(links.some((link) => link.getAttribute("href") === `/settings/library/scans/${running.id}`)).toBe(true);
     // 活动扫描摘要随之出现，不再提供“开始扫描”。
     await waitFor(() => expect(screen.queryByRole("button", { name: "开始扫描" })).toBeNull());
   });
@@ -79,7 +79,7 @@ describe("扫描目录页：扫描区段", () => {
       503,
       withValue(sampleBody("errors/database-unavailable"), ["error", "code"], "scan_coordination_unavailable"),
     );
-    const { history } = renderApp({ path: "/library" });
+    const { history } = renderApp({ path: "/settings/library" });
     await userEvent.click(await screen.findByRole("button", { name: "开始扫描" }));
 
     const alert = await screen.findByRole("alert");
@@ -89,26 +89,26 @@ describe("扫描目录页：扫描区段", () => {
     library.startScanFailure = null;
     await userEvent.click(within(alert).getByRole("button", { name: "重试" }));
     expect(await heading("扫描详情")).toBeTruthy();
-    expect(history.location.pathname).toMatch(/^\/library\/scans\//);
+    expect(history.location.pathname).toMatch(/^\/settings\/library\/scans\//);
   });
 
   it("有活动扫描：显示阶段、开始时间、诊断数与详情链接，不提供“开始扫描”", async () => {
     const { library } = setup();
     const scan = seedScan(library, { diagnostics: { total: 2, counts: [{ kind: "parse_failure", count: 2 }] } }, true);
-    renderApp({ path: "/library" });
+    renderApp({ path: "/settings/library" });
 
     expect(await screen.findByText(/已发现 2 条诊断/)).toBeTruthy();
     const section = screen.getByRole("heading", { level: 2, name: "扫描" }).closest("section");
     if (section === null) throw new Error("没有找到扫描区段");
     expect(within(section).getByText("运行中")).toBeTruthy();
-    expect(within(section).getByRole("link", { name: "查看扫描详情" }).getAttribute("href")).toBe(`/library/scans/${scan.id}`);
+    expect(within(section).getByRole("link", { name: "查看扫描详情" }).getAttribute("href")).toBe(`/settings/library/scans/${scan.id}`);
     expect(screen.queryByRole("button", { name: "开始扫描" })).toBeNull();
   });
 
   it("取消请求中的活动扫描显示“取消请求中”，不显示成已取消", async () => {
     const { library } = setup();
     seedScan(library, { cancel_requested_at: "2026-01-02T00:00:05Z" }, true);
-    renderApp({ path: "/library" });
+    renderApp({ path: "/settings/library" });
     expect(await screen.findByText("取消请求中")).toBeTruthy();
     expect(screen.queryByText("已取消")).toBeNull();
   });
@@ -117,7 +117,7 @@ describe("扫描目录页：扫描区段", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const { api, library } = setup();
     const scan = seedScan(library, {}, true);
-    renderApp({ path: "/library" });
+    renderApp({ path: "/settings/library" });
     // 扫描记录里同一个扫描也显示“运行中”：这里只看“扫描”区段里的卡片。
     expect(await within(await screen.findByRole("region", { name: "扫描" })).findByText("运行中")).toBeTruthy();
     const reads = () => api.requestsTo("GET", "/api/v1/scans/active").length;
@@ -167,7 +167,7 @@ const lastScanListRequest = (api: ReturnType<typeof setup>["api"]) => api.reques
 describe("扫描目录页：扫描记录", () => {
   it("没有扫描：说明还没有记录，不显示表格与分页", async () => {
     setup();
-    renderApp({ path: "/library" });
+    renderApp({ path: "/settings/library" });
     const region = await historyRegion();
     expect(await within(region).findByText("还没有扫描记录。")).toBeTruthy();
     expect(within(region).queryByRole("table")).toBeNull();
@@ -184,7 +184,7 @@ describe("扫描目录页：扫描记录", () => {
     });
     const succeeded = seedScan(library, { status: "succeeded", started_at: "2026-01-02T00:00:00Z", finished_at: "2026-01-02T00:02:00Z" });
     const canceling = seedScan(library, { started_at: "2026-01-03T00:00:00Z", cancel_requested_at: "2026-01-03T00:00:10Z" }, true);
-    renderApp({ path: "/library" });
+    renderApp({ path: "/settings/library" });
 
     const table = await historyTable();
     expect(historyRows(table)).toHaveLength(3);
@@ -201,7 +201,7 @@ describe("扫描目录页：扫描记录", () => {
 
     // 每行的链接文字相同，开始时间在可访问名称里，读屏的链接列表里分得清。
     const link = within(third).getByRole("link", { name: `查看详情（${formatDateTime(failed.started_at)} 开始的扫描）` });
-    expect(link.getAttribute("href")).toBe(`/library/scans/${failed.id}`);
+    expect(link.getAttribute("href")).toBe(`/settings/library/scans/${failed.id}`);
     expect(within(await historyRegion()).getByText("共 3 次扫描")).toBeTruthy();
   });
 
@@ -209,7 +209,7 @@ describe("扫描目录页：扫描记录", () => {
     const { library } = setup();
     const scan = seedHistory(library, 1, () => ({ status: "incomplete" }))[0];
     if (scan === undefined) throw new Error("没有预置扫描");
-    renderApp({ path: "/library" });
+    renderApp({ path: "/settings/library" });
     await userEvent.click(await within(await historyTable()).findByRole("link", { name: /^查看详情/ }));
     expect(await heading("扫描详情")).toBeTruthy();
     expect(within(await statusPanel()).getByText("不完整")).toBeTruthy();
@@ -218,7 +218,7 @@ describe("扫描目录页：扫描记录", () => {
   it("超过一页：显示分页，翻页更新地址（第 1 页不写参数），两端的上一页与下一页不可用，翻页请求带页码与页大小", async () => {
     const { api, library } = setup();
     seedHistory(library, 45);
-    const { history } = renderApp({ path: "/library" });
+    const { history } = renderApp({ path: "/settings/library" });
     const nav = await screen.findByRole("navigation", { name: "扫描记录分页" });
     expect(within(nav).getByText("第 1 / 3 页").getAttribute("aria-current")).toBe("page");
     expect(within(nav).queryByRole("link", { name: "上一页" })).toBeNull();
@@ -248,7 +248,7 @@ describe("扫描目录页：扫描记录", () => {
   it("一页放得下时不显示分页", async () => {
     const { library } = setup();
     seedHistory(library, 20);
-    renderApp({ path: "/library" });
+    renderApp({ path: "/settings/library" });
     expect(historyRows(await historyTable())).toHaveLength(20);
     expect(screen.queryByRole("navigation", { name: "扫描记录分页" })).toBeNull();
   });
@@ -265,7 +265,7 @@ describe("扫描目录页：扫描记录", () => {
   ])("地址 %s：请求第 %i 页，不合法的值回到第 1 页", async (search, expectedPage) => {
     const { api, library } = setup();
     seedHistory(library, 45);
-    renderApp({ path: `/library${search}` });
+    renderApp({ path: `/settings/library${search}` });
     await historyTable();
     expect(api.requestsTo("GET", "/api/v1/scans").map((request) => request.path)).toEqual([`/api/v1/scans?page=${expectedPage}&page_size=20`]);
   });
@@ -273,7 +273,7 @@ describe("扫描目录页：扫描记录", () => {
   it("页码超出末页：用替换历史的方式改到末页，不新增历史项，并显示末页的内容", async () => {
     const { library } = setup();
     seedHistory(library, 45);
-    const { history } = renderApp({ path: "/library?scan_page=99" });
+    const { history } = renderApp({ path: "/settings/library?scan_page=99" });
     await waitFor(() => expect(history.location.search).toBe("?scan_page=3"));
     await waitFor(() => expect(historyRows(screen.getByRole("table", { name: "扫描记录" }))).toHaveLength(5));
     expect(within(screen.getByRole("navigation", { name: "扫描记录分页" })).getByText("第 3 / 3 页")).toBeTruthy();
@@ -282,7 +282,7 @@ describe("扫描目录页：扫描记录", () => {
 
   it("没有扫描时带了页码：回到第 1 页的空态，地址里不再有参数", async () => {
     setup();
-    const { history } = renderApp({ path: "/library?scan_page=3" });
+    const { history } = renderApp({ path: "/settings/library?scan_page=3" });
     expect(await within(await historyRegion()).findByText(/还没有扫描记录/)).toBeTruthy();
     await waitFor(() => expect(history.location.search).toBe(""));
     expect(history.length).toBe(1);
@@ -292,7 +292,7 @@ describe("扫描目录页：扫描记录", () => {
     const { api, library } = setup();
     seedHistory(library, 2);
     api.on("GET", "/api/v1/scans", () => sampleResponse("errors/database-unavailable"));
-    renderApp({ path: "/library" });
+    renderApp({ path: "/settings/library" });
     const region = await historyRegion();
     // 503 会被自动重试（最多 2 次，带退避），耗尽后才显示错误。
     const alert = await within(region).findByRole("alert", {}, { timeout: 8000 });
@@ -308,7 +308,7 @@ describe("扫描目录页：扫描记录", () => {
   it("已有扫描在运行（200）：留在本页，扫描记录随之刷新并出现这个运行中的扫描", async () => {
     const { library } = setup();
     seedHistory(library, 1);
-    renderApp({ path: "/library" });
+    renderApp({ path: "/settings/library" });
     const button = await screen.findByRole("button", { name: "开始扫描" });
     expect(historyRows(await historyTable())).toHaveLength(1);
     // 界面还显示“没有活动扫描”时，别处已经开始了扫描。
@@ -323,7 +323,7 @@ describe("扫描目录页：扫描记录", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const { library } = setup();
     const scan = seedScan(library, { started_at: "2026-02-01T00:00:00Z" }, true);
-    renderApp({ path: "/library" });
+    renderApp({ path: "/settings/library" });
     expect(within(rowAt(await historyTable(), 0)).getByText("运行中")).toBeTruthy();
 
     library.scans.set(scan.id, { ...scan, status: "failed", finished_at: "2026-02-01T00:03:00Z" });
@@ -338,7 +338,7 @@ describe("扫描目录页：扫描记录", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const { library } = setup();
     const scan = seedScan(library, { started_at: "2026-02-01T00:00:00Z" }, true);
-    renderApp({ path: "/library" });
+    renderApp({ path: "/settings/library" });
     expect(within(rowAt(await historyTable(), 0)).getByText("运行中")).toBeTruthy();
 
     await userEvent.click(await screen.findByRole("link", { name: "查看扫描详情" }));
@@ -372,7 +372,7 @@ describe("扫描详情：状态", () => {
   it.each(phases)("$label：旧扫描的阶段说明不混同，没有数据时不伪造百分比或剩余时间", async ({ label, scan: overrides, note }) => {
     const { library } = setup();
     const scan = seedScan(library, overrides);
-    renderApp({ path: `/library/scans/${scan.id}` });
+    renderApp({ path: `/settings/library/scans/${scan.id}` });
 
     const panel = await statusPanel();
     expect(within(panel).getByRole("status").textContent).toBe(label);
@@ -389,7 +389,7 @@ describe("扫描详情：状态", () => {
   it("显示开始、结束与取消请求时间、诊断数；运行中没有结束时间", async () => {
     const { library } = setup();
     const scan = seedScan(library, { cancel_requested_at: "2026-01-02T00:00:30Z", diagnostics: { total: 3, counts: [{ kind: "parse_failure", count: 3 }] } });
-    renderApp({ path: `/library/scans/${scan.id}` });
+    renderApp({ path: `/settings/library/scans/${scan.id}` });
     const panel = await statusPanel();
     const facts = within(panel).getByText("开始时间").closest("dl");
     if (facts === null) throw new Error("没有找到事实列表");
@@ -402,7 +402,7 @@ describe("扫描详情：状态", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const { api, library } = setup();
     const scan = seedScan(library, {}, true);
-    renderApp({ path: "/library" });
+    renderApp({ path: "/settings/library" });
     await userEvent.click(await screen.findByRole("link", { name: "查看扫描详情" }));
     const panel = await statusPanel();
     expect(within(panel).getByText("运行中")).toBeTruthy();
@@ -432,7 +432,7 @@ describe("扫描详情：状态", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const { api, library } = setup();
     const scan = seedScan(library);
-    renderApp({ path: `/library/scans/${scan.id}` });
+    renderApp({ path: `/settings/library/scans/${scan.id}` });
     await statusPanel();
     const reads = () => api.requestsTo("GET", scanPath(scan)).length;
 
@@ -449,7 +449,7 @@ describe("扫描详情：状态", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const { api, library } = setup();
     const scan = seedScan(library, { status: "failed", finished_at: "2026-01-02T00:01:00Z" });
-    renderApp({ path: `/library/scans/${scan.id}` });
+    renderApp({ path: `/settings/library/scans/${scan.id}` });
     await statusPanel();
     const first = api.requestsTo("GET", scanPath(scan)).length;
     await tick(60_000);
@@ -461,7 +461,7 @@ describe("扫描详情：取消", () => {
   it("取消请求被接受后显示“取消请求中”，不宣称已取消，也不再提供取消按钮", async () => {
     const { api, library } = setup();
     const scan = seedScan(library);
-    renderApp({ path: `/library/scans/${scan.id}` });
+    renderApp({ path: `/settings/library/scans/${scan.id}` });
     await userEvent.click(await screen.findByRole("button", { name: "取消扫描" }));
 
     const panel = await statusPanel();
@@ -475,7 +475,7 @@ describe("扫描详情：取消", () => {
   it("取消时扫描恰好结束（200）：状态面板显示终态，取消按钮消失，不显示成已取消", async () => {
     const { library } = setup();
     const scan = seedScan(library);
-    renderApp({ path: `/library/scans/${scan.id}` });
+    renderApp({ path: `/settings/library/scans/${scan.id}` });
     const cancel = await screen.findByRole("button", { name: "取消扫描" });
     // 界面还是运行中时，扫描已经结束。
     library.scans.set(scan.id, { ...scan, status: "succeeded", finished_at: "2026-01-02T00:01:00Z" });
@@ -490,7 +490,7 @@ describe("扫描详情：取消", () => {
     const { api, library } = setup();
     const scan = seedScan(library);
     api.on("POST", `${scanPath(scan)}/cancel`, () => sampleResponse("errors/database-unavailable"));
-    renderApp({ path: `/library/scans/${scan.id}` });
+    renderApp({ path: `/settings/library/scans/${scan.id}` });
     await userEvent.click(await screen.findByRole("button", { name: "取消扫描" }));
     const alert = await screen.findByRole("alert");
     expect(within(alert).getByText("服务暂时不可用，请稍后重试。")).toBeTruthy();
@@ -506,7 +506,7 @@ describe("扫描详情：诊断", () => {
     const { library } = setup();
     const scan = seedScan(library, { status: "failed", finished_at: "2026-01-02T00:01:00Z", diagnostics: multiple.summary });
     library.diagnostics.set(scan.id, multiple);
-    renderApp({ path: `/library/scans/${scan.id}` });
+    renderApp({ path: `/settings/library/scans/${scan.id}` });
 
     const summary = await screen.findByRole("list", { name: "按类别汇总" });
     expect(within(summary).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
@@ -530,7 +530,7 @@ describe("扫描详情：诊断", () => {
       withValue(withValue(sampleBody("scans/diagnostics"), ["items", 0, "kind"], "brand_new_kind"), ["summary", "counts", 0, "kind"], "brand_new_kind"),
     );
     library.diagnostics.set(scan.id, unknown);
-    renderApp({ path: `/library/scans/${scan.id}` });
+    renderApp({ path: `/settings/library/scans/${scan.id}` });
     const summary = await screen.findByRole("list", { name: "按类别汇总" });
     expect(within(summary).getByText("brand_new_kind")).toBeTruthy();
     const table = screen.getByRole("table", { name: "诊断明细" });
@@ -540,7 +540,7 @@ describe("扫描详情：诊断", () => {
   it("没有诊断：运行中与已结束分别说明", async () => {
     const { library } = setup();
     const running = seedScan(library);
-    renderApp({ path: `/library/scans/${running.id}` });
+    renderApp({ path: `/settings/library/scans/${running.id}` });
     expect(await screen.findByText("到目前为止没有发现需要检查的问题。")).toBeTruthy();
     expect(screen.queryByRole("table", { name: "诊断明细" })).toBeNull();
   });
@@ -548,7 +548,7 @@ describe("扫描详情：诊断", () => {
   it("已结束的扫描没有诊断：说明本次没有发现问题", async () => {
     const { library } = setup();
     const done = seedScan(library, { status: "succeeded", finished_at: "2026-01-02T00:01:00Z" });
-    renderApp({ path: `/library/scans/${done.id}` });
+    renderApp({ path: `/settings/library/scans/${done.id}` });
     expect(await screen.findByText("本次扫描没有发现需要检查的问题。")).toBeTruthy();
   });
 
@@ -559,7 +559,7 @@ describe("扫描详情：诊断", () => {
       items: Array.from({ length: 100 }, (_, index) => ({ id: String(index + 1), kind: "parse_failure", path: `disc/${index + 1}.flac`, message: "音频文件解析失败" })),
       summary: { total: 150, counts: [{ kind: "parse_failure", count: 150 }] },
     });
-    renderApp({ path: `/library/scans/${scan.id}` });
+    renderApp({ path: `/settings/library/scans/${scan.id}` });
     expect(await screen.findByText("共 150 条诊断，只显示前 100 条明细。")).toBeTruthy();
   });
 
@@ -567,7 +567,7 @@ describe("扫描详情：诊断", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const { api, library } = setup();
     const scan = seedScan(library, { diagnostics: { total: 0, counts: [] } });
-    renderApp({ path: `/library/scans/${scan.id}` });
+    renderApp({ path: `/settings/library/scans/${scan.id}` });
     await screen.findByText("到目前为止没有发现需要检查的问题。");
     const reads = () => api.requestsTo("GET", `${scanPath(scan)}/diagnostics`).length;
     expect(reads()).toBe(1);
@@ -593,7 +593,7 @@ describe("扫描详情：诊断", () => {
   it("一进来就是已结束的扫描：诊断只加载一次", async () => {
     const { api, library } = setup();
     const scan = seedScan(library, { status: "failed", finished_at: "2026-01-02T00:01:00Z" });
-    renderApp({ path: `/library/scans/${scan.id}` });
+    renderApp({ path: `/settings/library/scans/${scan.id}` });
     await screen.findByText("本次扫描没有发现需要检查的问题。");
     expect(api.requestsTo("GET", `${scanPath(scan)}/diagnostics`)).toHaveLength(1);
   });
@@ -602,7 +602,7 @@ describe("扫描详情：诊断", () => {
 describe("扫描详情：访问", () => {
   it("扫描 ID 不是 UUID：直接显示“扫描不存在”，不发任何扫描请求", async () => {
     const { api } = setup();
-    renderApp({ path: "/library/scans/not-a-uuid" });
+    renderApp({ path: "/settings/library/scans/not-a-uuid" });
     expect(await heading("扫描不存在")).toBeTruthy();
     expect(api.requests.filter((request) => request.path.includes("/api/v1/scans/"))).toHaveLength(0);
     expect(screen.getByRole("link", { name: "返回扫描目录" })).toBeTruthy();
@@ -610,7 +610,7 @@ describe("扫描详情：访问", () => {
 
   it("扫描 ID 是 UUID 但服务器返回 404：同样显示“扫描不存在”，不显示诊断区段", async () => {
     setup();
-    renderApp({ path: "/library/scans/00000000-0000-4000-8000-0000000000ff" });
+    renderApp({ path: "/settings/library/scans/00000000-0000-4000-8000-0000000000ff" });
     expect(await heading("扫描不存在")).toBeTruthy();
     expect(screen.queryByRole("heading", { level: 2, name: "诊断" })).toBeNull();
   });
@@ -618,7 +618,7 @@ describe("扫描详情：访问", () => {
   it("成员访问：显示“需要管理员权限”，不请求扫描与诊断", async () => {
     const { api, library } = setup({ role: "user" });
     const scan = seedScan(library);
-    renderApp({ path: `/library/scans/${scan.id}` });
+    renderApp({ path: `/settings/library/scans/${scan.id}` });
     expect(await heading("需要管理员权限")).toBeTruthy();
     expect(api.requests.filter((request) => request.path.includes("/api/v1/scans/"))).toHaveLength(0);
   });
@@ -628,7 +628,7 @@ describe("扫描详情：访问", () => {
     const scan = seedScan(library);
     let failing = true;
     api.on("GET", scanPath(scan), () => (failing ? sampleResponse("errors/database-unavailable") : jsonResponse(200, library.scans.get(scan.id))));
-    renderApp({ path: `/library/scans/${scan.id}` });
+    renderApp({ path: `/settings/library/scans/${scan.id}` });
     const alert = await screen.findByRole("alert", {}, { timeout: 8000 });
     expect(within(alert).getByText(/请求 ID：/)).toBeTruthy();
     failing = false;
@@ -645,10 +645,10 @@ describe("概览里的入口", () => {
     expect(await screen.findByRole("link", { name: "管理目录" })).toBeTruthy();
     expect(await screen.findByRole("link", { name: "查看扫描详情" })).toBeTruthy();
     const hrefs = screen.getAllByRole("link").map((link) => `${link.textContent}→${link.getAttribute("href")}`);
-    expect(hrefs).toContain("管理目录→/library");
-    // 导航与扫描区块各有一个“扫描目录”入口。
-    expect(hrefs.filter((entry) => entry === "扫描目录→/library")).toHaveLength(2);
-    expect(hrefs).toContain(`查看扫描详情→/library/scans/${scan.id}`);
+    expect(hrefs).toContain("管理目录→/settings/library");
+    // 配置入口已移出主导航；概览扫描区块仍有一个入口。
+    expect(hrefs.filter((entry) => entry === "扫描目录→/settings/library")).toHaveLength(1);
+    expect(hrefs).toContain(`查看扫描详情→/settings/library/scans/${scan.id}`);
   });
 
   it("成员的概览只看到扫描状态，没有管理链接", async () => {

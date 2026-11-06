@@ -431,7 +431,7 @@ describe("专辑列表：空库与失败", () => {
     setup({ groups: [] });
     renderApp({ path: "/albums" });
     expect(await screen.findByText(/资料库里还没有专辑。添加音乐目录并扫描后就会出现。/)).toBeTruthy();
-    expect(screen.getByRole("link", { name: "前往扫描目录" }).getAttribute("href")).toBe("/library");
+    expect(screen.getByRole("link", { name: "前往扫描目录" }).getAttribute("href")).toBe("/settings/library");
     expect(screen.getByText("共 0 张专辑")).toBeTruthy();
   });
 
@@ -472,8 +472,12 @@ describe("导航与概览", () => {
     const nav = await screen.findByRole("navigation", { name: "主导航" });
     expect(within(nav).getByRole("link", { name: "专辑" }).getAttribute("aria-current")).toBe("page");
     expect(within(nav).getByRole("link", { name: "概览" }).getAttribute("aria-current")).toBeNull();
-    // 管理页入口仍只对管理员显示。
-    expect(within(nav).queryByRole("link", { name: "扫描目录" }) !== null).toBe(role === "admin");
+    // 配置入口移到设置分栏，仍只对管理员显示。
+    expect(within(nav).queryByRole("link", { name: "扫描目录" })).toBeNull();
+    await userEvent.click(within(screen.getByRole("region", { name: "当前用户" })).getByRole("button"));
+    await userEvent.click(screen.getByRole("menuitem", { name: "设置" }));
+    const settings = await screen.findByRole("navigation", { name: "设置" });
+    expect(within(settings).queryByRole("link", { name: "扫描目录" }) !== null).toBe(role === "admin");
   });
 
   it("概览的两个数字分别链接到全部专辑与只看需要关注的专辑", async () => {

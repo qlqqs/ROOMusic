@@ -527,13 +527,13 @@ describe("认领记录：修改记录里的撤销", () => {
     await user().click(await claimButton("Alpha Suites New Rip"));
     await screen.findByText(/已把《Album Old》上的修改认领到/);
     await act(async () => {
-      await claimed.history.push("/operations");
+      await claimed.history.push("/settings/operations");
     });
     const row = (await screen.findAllByRole("row"))[1] as HTMLElement;
     expect(row.textContent).toContain("认领");
     await user().click(within(row).getByRole("button", { name: /撤销/ }));
     await user().click(within(await screen.findByRole("dialog", { name: "撤销这次认领？" })).getByRole("button", { name: "撤销" }));
     expect(await screen.findByText("已撤销这次认领，修改还给了旧版本。")).toBeTruthy();
-    expect(claimed.history.location.pathname).toBe("/operations");
+    expect(claimed.history.location.pathname).toBe("/settings/operations");
   });
 });

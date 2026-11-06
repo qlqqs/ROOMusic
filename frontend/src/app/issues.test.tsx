@@ -391,7 +391,7 @@ describe("操作记录里的核对", () => {
     review("grouping", 1, detail.grouping.basis, "20000000-0000-4000-8000-000000000001");
     review("missing_tracks", 2, detail.missing_tracks.basis, "20000000-0000-4000-8000-000000000002");
     review("grouping", 3, undefined, "20000000-0000-4000-8000-000000000003");
-    renderApp({ path: "/operations" });
+    renderApp({ path: "/settings/operations" });
     const table = await screen.findByRole("table", { name: "操作记录" });
     const rows = within(table).getAllByRole("row").slice(1);
     expect(rows.map((row) => [within(row).getByText(/^核对问题$|^撤销核对$/).textContent, within(row).getByText(/：(标记为已核对|取消核对)$/).textContent])).toEqual([

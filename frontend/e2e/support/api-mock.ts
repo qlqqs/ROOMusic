@@ -71,7 +71,7 @@ export type ApiMock = CatalogData & {
   search: SearchData;
   /** 艺人模拟仅由艺人用例启用，旧用例的默认响应保持不变。 */
   artists: ArtistData | null;
-  /** “系统 › 备份”：版本、备份状态与文件列表（只有管理员）；行为与 Vitest 的替身共用 system-data.ts。 */
+  /** “设置 › 备份”：版本、备份状态与文件列表、删除与批量删除、自动清理规则（只有管理员）；行为与 Vitest 的替身共用 system-data.ts。 */
   system: SystemData;
   /** 可推进 epoch 验证 preparing → ready，不依赖真实等待。 */
   catalogState: CatalogStateDTO;
@@ -288,13 +288,18 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
       if (mock.forbid.has(key)) return guarded(method, path, false, () => sample("errors/forbidden"));
       return respondToPersonal(mock.personal, viewer()?.id ?? null, { method, path: `${path}?${search}`, body, idempotencyKey: headers["idempotency-key"] ?? null });
     }
-    if (path === "/api/v1/system/version" || path === "/api/v1/system/backups") {
-      if (method === "POST") {
+    // 下载（GET 单份）在路由层直接给附件；这里是读取、立即备份、删除、批量删除与保存清理规则。写请求先查同源，再查身份。
+    if (path === "/api/v1/system/version" || path === "/api/v1/system/backups" || (method !== "GET" && path.startsWith("/api/v1/system/backups/"))) {
+      if (method !== "GET") {
         const origin = headers.origin ?? null;
         if (origin === null) return json({ error: { code: "origin_required", message: "请求缺少来源校验" }, request_id: "sample-request" }, 403);
         if (origin !== requestOrigin) return sample("errors/origin-forbidden");
       }
-      return guarded(method, path, true, () => respondToSystem(mock.system, method, path, systemNow) ?? sample("errors/method-not-allowed"));
+      return guarded(method, path, true, () =>
+        invalidJSON
+          ? json({ error: { code: "invalid_json", message: "请求体不是有效的 JSON" }, request_id: "sample-request" }, 400)
+          : (respondToSystem(mock.system, method, path, systemNow, body) ?? sample("errors/method-not-allowed")),
+      );
     }
     switch (key) {
       case "GET /api/v1/setup/status":

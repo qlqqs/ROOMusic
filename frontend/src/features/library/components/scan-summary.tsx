@@ -10,7 +10,7 @@ import { ActiveScan } from "./active-scan";
 export function ScanSummary({ canManage }: { canManage: boolean }) {
   const scan = useActiveScan();
   return (
-    <Panel title="扫描" action={canManage ? <Link to="/library">扫描目录</Link> : undefined}>
+    <Panel title="扫描" action={canManage ? <Link to="/settings/library">扫描目录</Link> : undefined}>
       <QueryContent query={scan} loading={<Skeleton label="正在加载扫描状态" lines={2} />}>
         {(active) => (active === null ? <p>没有正在运行的扫描。</p> : <ActiveScan scan={active} detailLink={canManage} />)}
       </QueryContent>

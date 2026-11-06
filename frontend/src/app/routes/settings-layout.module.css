@@ -1,0 +1,116 @@
+/* <1024px：内容上方一行横向链接（同“我的音乐”的下边线页签，不显示图标），左右与下方页面内容对齐。 */
+.settings {
+  min-width: 0;
+}
+
+.nav {
+  min-width: 0;
+  padding: var(--space-4) var(--layout-page-inset-x) 0;
+}
+
+.navTitle {
+  display: none;
+}
+
+.list {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--color-divider);
+  list-style: none;
+}
+
+.list li {
+  flex-shrink: 0;
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-height);
+  margin-bottom: -1px;
+  padding: 0 var(--space-1);
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.link:hover {
+  color: var(--text-primary);
+}
+
+.link[aria-current="page"] {
+  border-bottom-color: var(--color-accent-700);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.icon {
+  display: none;
+}
+
+.content {
+  min-width: 0;
+}
+
+/* ≥1024px：左侧竖排分栏（图标加文字，当前项同主导航的选中样式），随页面滚动；顶部与页面标题对齐。 */
+@media (min-width: 1024px) {
+  .settings {
+    display: grid;
+    /* 分栏本身 176px，左侧再加页面的左右内边距，与主内容区的边距一致。 */
+    grid-template-columns: calc(var(--layout-settings-nav-width) + var(--layout-page-inset-x)) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .nav {
+    display: grid;
+    gap: var(--space-1);
+    padding: var(--layout-page-inset-y) 0 var(--space-6) var(--layout-page-inset-x);
+  }
+
+  .navTitle {
+    display: block;
+    padding: 0 var(--space-3);
+    color: var(--text-secondary);
+    font-size: var(--fs-12);
+    letter-spacing: 0.06em;
+  }
+
+  .list {
+    display: grid;
+    gap: 2px;
+    overflow: visible;
+    border-bottom: 0;
+  }
+
+  .link {
+    display: flex;
+    gap: 10px;
+    min-height: var(--control-height);
+    margin-bottom: 0;
+    padding: 0 var(--space-3);
+    border-bottom: 0;
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: var(--fs-15);
+    transition: background-color 0.12s ease;
+  }
+
+  .link:hover {
+    background: var(--color-hover);
+  }
+
+  .link[aria-current="page"] {
+    background: var(--color-selected);
+    color: var(--text-accent);
+  }
+
+  .icon {
+    display: block;
+    flex-shrink: 0;
+  }
+}

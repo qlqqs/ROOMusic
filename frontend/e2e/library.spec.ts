@@ -1,7 +1,7 @@
 import { sampleBody } from "../src/test/api-samples";
 import type { DiagnosticsPageDTO } from "../src/features/library/api/decoders";
 import { expect, test } from "./support/fixtures";
-import { heading, mainNav, uuidPattern } from "./support/locators";
+import { heading, uuidPattern } from "./support/locators";
 import type { Page } from "@playwright/test";
 
 const rootsTable = (page: Page) => page.getByRole("table", { name: "音乐目录列表" });
@@ -10,7 +10,7 @@ const phaseTag = (page: Page) => page.getByRole("region", { name: "状态" }).ge
 test.describe("目录", () => {
   test("添加目录：路径被拒绝显示在字段旁，添加成功出现在列表与操作记录，写请求带幂等键", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
-    await page.goto("/library");
+    await page.goto("/settings/library");
     await expect(heading(page, "扫描目录")).toBeVisible();
     await expect(rootsTable(page).getByRole("rowheader", { name: "classical-a" })).toBeVisible();
 
@@ -33,7 +33,7 @@ test.describe("目录", () => {
 
   test("停用要确认，恢复直接执行；写请求带 revision 与幂等键", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
-    await page.goto("/library");
+    await page.goto("/settings/library");
     await rootsTable(page).getByRole("button", { name: "停用目录 classical-a" }).click();
     const dialog = page.getByRole("dialog", { name: "停用目录“classical-a”？" });
     await expect(dialog).toContainText("恢复后就能再播");
@@ -54,7 +54,7 @@ test.describe("目录", () => {
 
   test("目录在确认期间被别处改动（409）：提示目录已变化并刷新列表", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
-    await page.goto("/library");
+    await page.goto("/settings/library");
     await rootsTable(page).getByRole("button", { name: "停用目录 classical-a" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
@@ -71,18 +71,18 @@ test.describe("扫描记录", () => {
   test("翻页写进地址；后退、前进与刷新都重新显示对应的页；页码超出末页时替换为末页", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
     mock.seedHistory(45);
-    await page.goto("/library");
+    await page.goto("/settings/library");
     const nav = () => page.getByRole("navigation", { name: "扫描记录分页" });
     const rows = () => page.getByRole("table", { name: "扫描记录" }).getByRole("row");
     await expect(nav().getByText("第 1 / 3 页")).toBeVisible();
     await expect(rows()).toHaveCount(21);
 
     await nav().getByRole("link", { name: "下一页" }).click();
-    await expect(page).toHaveURL(/\/library\?scan_page=2$/);
+    await expect(page).toHaveURL(/\/settings\/library\?scan_page=2$/);
     await expect(nav().getByText("第 2 / 3 页")).toBeVisible();
 
     await page.goBack();
-    await expect(page).toHaveURL(/\/library$/);
+    await expect(page).toHaveURL(/\/settings\/library$/);
     await expect(nav().getByText("第 1 / 3 页")).toBeVisible();
     await page.goForward();
     await expect(nav().getByText("第 2 / 3 页")).toBeVisible();
@@ -90,8 +90,8 @@ test.describe("扫描记录", () => {
     await expect(nav().getByText("第 2 / 3 页")).toBeVisible();
 
     // 超出末页：用替换历史的方式改到末页，后退不会回到越界的页码。
-    await page.goto("/library?scan_page=99");
-    await expect(page).toHaveURL(/\/library\?scan_page=3$/);
+    await page.goto("/settings/library?scan_page=99");
+    await expect(page).toHaveURL(/\/settings\/library\?scan_page=3$/);
     await expect(nav().getByText("第 3 / 3 页")).toBeVisible();
     await expect(rows()).toHaveCount(6);
   });
@@ -100,7 +100,7 @@ test.describe("扫描记录", () => {
     const mock = await backend.start({ signedInAs: "curator" });
     mock.seedHistory(3);
     await page.clock.install();
-    await page.goto("/library");
+    await page.goto("/settings/library");
     const table = page.getByRole("table", { name: "扫描记录" });
     await expect(table.getByRole("row")).toHaveCount(4);
     await expect(table.getByRole("row").nth(1)).toContainText("不完整");
@@ -124,11 +124,11 @@ test.describe("扫描", () => {
   test("开始扫描 → 详情页轮询 → 终态后停止（成功）", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
     await page.clock.install();
-    await page.goto("/library");
+    await page.goto("/settings/library");
     await page.getByRole("button", { name: "开始扫描" }).click();
 
     await expect(heading(page, "扫描详情")).toBeVisible();
-    await expect(page).toHaveURL(/\/library\/scans\/[0-9a-f-]{36}$/);
+    await expect(page).toHaveURL(/\/settings\/library\/scans\/[0-9a-f-]{36}$/);
     await expect(phaseTag(page)).toHaveText("运行中");
     const progress = page.getByRole("progressbar", { name: "扫描进度" });
     await expect(progress).toHaveAttribute("aria-valuetext", "正在准备");
@@ -156,7 +156,7 @@ test.describe("扫描", () => {
     const mock = await backend.start({ signedInAs: "curator" });
     mock.scanOutcome = "incomplete";
     await page.clock.install();
-    await page.goto("/library");
+    await page.goto("/settings/library");
     await page.getByRole("button", { name: "开始扫描" }).click();
     await expect(async () => {
       await page.clock.fastForward(2000);
@@ -176,7 +176,7 @@ test.describe("扫描", () => {
     const scan = mock.seedScan({}, true);
     mock.diagnostics.set(scan.id, sampleBody("scans/diagnostics") as DiagnosticsPageDTO);
     await page.clock.install();
-    await page.goto(`/library/scans/${scan.id}`);
+    await page.goto(`/settings/library/scans/${scan.id}`);
     await expect(phaseTag(page)).toHaveText("运行中");
 
     await page.getByRole("button", { name: "取消扫描" }).click();
@@ -197,14 +197,14 @@ test.describe("扫描", () => {
 
   test("扫描 ID 不是 UUID 或服务器没有这个扫描：显示“扫描不存在”", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
-    await page.goto("/library/scans/not-a-uuid");
+    await page.goto("/settings/library/scans/not-a-uuid");
     await expect(heading(page, "扫描不存在")).toBeVisible();
     expect(mock.calls.filter((call) => call.path.startsWith("/api/v1/scans/"))).toHaveLength(0);
 
-    await page.goto("/library/scans/00000000-0000-4000-8000-0000000000ff");
+    await page.goto("/settings/library/scans/00000000-0000-4000-8000-0000000000ff");
     await expect(heading(page, "扫描不存在")).toBeVisible();
     await expect(page.getByRole("link", { name: "返回扫描目录" })).toBeVisible();
-    await mainNav(page).getByRole("link", { name: "扫描目录" }).click();
+    await page.getByRole("navigation", { name: "设置", exact: true }).getByRole("link", { name: "扫描目录" }).click();
     await expect(heading(page, "扫描目录")).toBeVisible();
   });
 });

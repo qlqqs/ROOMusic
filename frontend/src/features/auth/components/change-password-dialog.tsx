@@ -8,7 +8,7 @@ import { useViewerScope } from "../session/session-context";
 import styles from "./change-password-dialog.module.css";
 
 /**
- * 侧栏身份区的“修改密码”：按钮与对话框。成功的结果显示在对话框里，身份区不放提示（侧栏太窄），当前页面不掉线。
+ * 设置 › 账号里的“修改密码”：按钮与对话框。成功的结果显示在对话框里，当前页面不掉线。
  */
 export function ChangePasswordButton() {
   const { viewer } = useViewerScope();
@@ -17,7 +17,6 @@ export function ChangePasswordButton() {
   return (
     <>
       <Button
-        variant="text"
         icon={<KeyRound size={16} />}
         onClick={() => {
           mutation.reset();

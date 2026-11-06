@@ -48,7 +48,7 @@ function FilterNote({ releaseId, groupId, artistId, data }: { releaseId: string 
   return (
     <p className={styles.filter}>
       <span>只显示{subject}的记录。</span>
-      <Link to="/operations" search={{}}>
+      <Link to="/settings/operations" search={{}}>
         查看全部记录
       </Link>
     </p>
@@ -73,7 +73,7 @@ export function OperationsView({ page, releaseId, groupId, artistId, commands }:
     pageCount: pagination === undefined ? 0 : pageCountOf(pagination.total, pagination.page_size),
     ready: pagination !== undefined && !operations.isPlaceholderData,
     onOutOfRange: (lastPage) =>
-      void navigate({ to: "/operations", search: (previous) => ({ ...previous, page: lastPage > 1 ? lastPage : undefined }), replace: true }),
+      void navigate({ to: "/settings/operations", search: (previous) => ({ ...previous, page: lastPage > 1 ? lastPage : undefined }), replace: true }),
   });
 
   return (
@@ -101,7 +101,7 @@ export function OperationsView({ page, releaseId, groupId, artistId, commands }:
                   page={data.pagination.page}
                   pageCount={pageCountOf(data.pagination.total, data.pagination.page_size)}
                   renderLink={(target, props) => (
-                    <Link to="/operations" search={(previous) => ({ ...previous, page: target > 1 ? target : undefined })} {...props} />
+                    <Link to="/settings/operations" search={(previous) => ({ ...previous, page: target > 1 ? target : undefined })} {...props} />
                   )}
                 />
               </div>

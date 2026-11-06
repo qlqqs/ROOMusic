@@ -5,6 +5,7 @@ import { expectMinimumFontSize, expectNoHorizontalOverflow, expectNoSeriousViola
 import { expect, test } from "./support/fixtures";
 import { expectFocusStaysInDialog, focusedName, tabTo } from "./support/keyboard";
 import { heading, mainNav, uuidPattern } from "./support/locators";
+import { openSettings } from "./support/settings";
 
 // 管理员对发行的受治理写操作：编辑发行信息、调整归组、撤销与操作记录。受控后端保持修正与记录的状态，
 // 所以页面能走完整的流程：保存之后列表与详情显示新的有效值，撤销之后回到原来的样子。
@@ -335,14 +336,15 @@ test.describe("调整归组", () => {
 });
 
 test.describe("操作记录", () => {
-  test("操作记录页：从“资料库”导航进入；撤销先确认，成功后提示，列表多一条记录并且不再有可撤销的", async ({ page, backend }) => {
+  test("操作记录页：从用户菜单的设置分栏进入；撤销先确认，成功后提示，列表多一条记录并且不再有可撤销的", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
     mock.groups = [symphonies()];
     seedLabelCorrections(mock, 2);
     await page.goto("/");
-    await mainNav(page).getByRole("link", { name: "操作记录" }).click();
+    await openSettings(page);
+    await page.getByRole("navigation", { name: "设置", exact: true }).getByRole("link", { name: "操作记录" }).click();
     await expect(heading(page, "操作记录")).toBeVisible();
-    await expect(page).toHaveURL(/\/operations$/);
+    await expect(page).toHaveURL(/\/settings\/operations$/);
 
     const table = page.getByRole("table", { name: "操作记录" });
     await expect(table.getByRole("row")).toHaveCount(3);
@@ -369,26 +371,26 @@ test.describe("操作记录", () => {
     const mock = await backend.start({ signedInAs: "curator" });
     mock.groups = [symphonies(), quartets()];
     seedLabelCorrections(mock, 22);
-    await page.goto("/operations");
+    await page.goto("/settings/operations");
     await expect(page.getByRole("table", { name: "操作记录" }).getByRole("row")).toHaveCount(21);
     await page.getByRole("link", { name: "下一页" }).click();
-    await expect(page).toHaveURL(/\/operations\?page=2$/);
+    await expect(page).toHaveURL(/\/settings\/operations\?page=2$/);
     await expect(page.getByRole("table", { name: "操作记录" }).getByRole("row")).toHaveCount(3);
     await expect(page.getByText("第 2 / 2 页")).toBeVisible();
 
-    await page.goto(`/operations?release=${quartets().representative.id}`);
+    await page.goto(`/settings/operations?release=${quartets().representative.id}`);
     await expect(page.getByText("这个版本还没有操作记录。")).toBeVisible();
-    await page.goto(`/operations?release=${releaseId()}`);
+    await page.goto(`/settings/operations?release=${releaseId()}`);
     await expect(page.getByText("只显示《Sample Symphonies》的记录。")).toBeVisible();
     await page.getByRole("link", { name: "查看全部记录" }).click();
-    await expect(page).toHaveURL(/\/operations$/);
+    await expect(page).toHaveURL(/\/settings\/operations$/);
   });
 
   test("只用键盘完成撤销：Tab 到“撤销”，Esc 取消后焦点回到按钮；再次打开并确认，焦点落在区块标题", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
     mock.groups = [symphonies()];
     seedLabelCorrections(mock, 1);
-    await page.goto("/operations");
+    await page.goto("/settings/operations");
     await expect(heading(page, "操作记录")).toBeVisible();
     await expect(page.getByRole("table", { name: "操作记录" })).toBeVisible();
 
@@ -438,16 +440,17 @@ test.describe("操作记录", () => {
 
     await page.getByRole("link", { name: "全部记录" }).click();
     // “全部记录”带这个版本与它所在专辑的两个筛选（专辑级的默认版本记录也在其中）。
-    await expect(page).toHaveURL(new RegExp(`/operations\\?release=${releaseId()}&group=${symphonies().id}$`));
+    await expect(page).toHaveURL(new RegExp(`/settings/operations\\?release=${releaseId()}&group=${symphonies().id}$`));
     await expect(page.getByText("只显示这个版本和它所在的专辑的记录。")).toBeVisible();
   });
 
   test("普通成员：导航里没有“操作记录”，直接访问显示需要管理员权限，从不请求记录接口", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "listener" });
     mock.groups = [symphonies()];
-    await page.goto("/operations");
+    await page.goto("/settings/operations");
     await expect(heading(page, "需要管理员权限")).toBeVisible();
     await expect(mainNav(page).getByRole("link", { name: "操作记录" })).toHaveCount(0);
+    await expect(page.getByRole("navigation", { name: "设置", exact: true }).getByRole("link", { name: "操作记录" })).toHaveCount(0);
     expect(mock.callsTo("GET", "/api/v1/operations")).toHaveLength(0);
     await page.goto(detailPath());
     await expect(heading(page, "Sample Symphonies")).toBeVisible();
@@ -464,7 +467,7 @@ test.describe("操作记录：宽度与无障碍", () => {
     const mock = await backend.start({ signedInAs: "curator" });
     mock.groups = [symphonies()];
     seedLabelCorrections(mock, 23, (index) => (index === 22 ? longTitle : `Label ${index + 1}`));
-    await page.goto("/operations");
+    await page.goto("/settings/operations");
     const table = page.getByRole("table", { name: "操作记录" });
     await expect(table.getByRole("row")).toHaveCount(21);
     await table.getByRole("button", { name: /^撤销/ }).click();
@@ -483,7 +486,7 @@ test.describe("操作记录：宽度与无障碍", () => {
     const mock = await backend.start({ signedInAs: "curator" });
     mock.groups = [symphonies()];
     seedLabelCorrections(mock, 1, () => longTitle);
-    await page.goto("/operations");
+    await page.goto("/settings/operations");
     await page.getByRole("table", { name: "操作记录" }).getByRole("button", { name: /^撤销/ }).click();
     const dialog = page.getByRole("dialog", { name: "撤销这次修改？" });
     await expect(dialog).toBeVisible();

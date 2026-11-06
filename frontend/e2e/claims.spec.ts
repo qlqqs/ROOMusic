@@ -213,7 +213,7 @@ test.describe("待认领：主流程", () => {
     await page.goto(claimsPath(oldId, suitesId()));
     await claimButton(page, "Bach: Cello Suites (new rip)").click();
     await expect(page.getByText(/已把《Bach: Cello Suites \(my corrections\)》上的修改认领到/)).toBeVisible();
-    await page.goto("/operations");
+    await page.goto("/settings/operations");
     const row = page.getByRole("row").nth(1);
     await expect(row).toContainText("认领");
     await expect(row).toContainText("从《Bach: Cello Suites (my corrections)》（已不可见）认领：修正 标题、流派；专辑；默认版本；核对 介质类型");
@@ -302,7 +302,7 @@ test.describe("待认领：布局与可访问性", () => {
     // 改动列写着长长的摘要时，表格会把别的列挤到最窄：按钮若可以在字中间断开，就成了“撤 / 销”两行。
     for (const width of [1024, 1280, 1440]) {
       await page.setViewportSize({ width, height: 900 });
-      await page.goto("/operations");
+      await page.goto("/settings/operations");
       const revert = page.getByRole("row").nth(1).getByRole("button", { name: /撤销/ });
       await expect(revert).toBeVisible();
       await page.evaluate(() => document.fonts.ready);
@@ -313,7 +313,7 @@ test.describe("待认领：布局与可访问性", () => {
     await expect(page.getByText("已撤销这次认领，修改还给了旧版本。")).toBeVisible();
     for (const width of [1024, 1280]) {
       await page.setViewportSize({ width, height: 900 });
-      await page.goto("/operations");
+      await page.goto("/settings/operations");
       const reason = page.getByRole("cell", { name: "撤销不能再撤销" });
       await expect(reason).toBeVisible();
       await page.evaluate(() => document.fonts.ready);

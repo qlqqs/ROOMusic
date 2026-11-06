@@ -294,7 +294,7 @@ describe("修改记录与操作记录里的默认版本", () => {
     expect(request?.path).toContain(`group_id=${context.album.id}`);
     expect(within(table).getByText("设定默认版本")).toBeTruthy();
     expect(within(table).getByText("默认版本：自动选择 → 《Sample Symphonies》（1999 · Remastered）")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "全部记录" }).getAttribute("href")).toBe(`/operations?release=${context.versions[2].id}&group=${context.album.id}`);
+    expect(screen.getByRole("link", { name: "全部记录" }).getAttribute("href")).toBe(`/settings/operations?release=${context.versions[2].id}&group=${context.album.id}`);
 
     await user.click(within(table).getByRole("button", { name: /^撤销/ }));
     const dialog = await screen.findByRole("dialog", { name: "撤销这次默认版本调整？" });
@@ -313,7 +313,7 @@ describe("修改记录与操作记录里的默认版本", () => {
     const context = setup();
     const operationId = seedDefault(context.governance, context.album.id, 1, context.versions[1].id);
     const user = userEvent.setup();
-    const { history } = renderApp({ path: "/operations" });
+    const { history } = renderApp({ path: "/settings/operations" });
     await screen.findByRole("heading", { level: 1, name: "操作记录" });
     const table = await screen.findByRole("table", { name: "操作记录" });
     expect(within(table).getByText("设定默认版本")).toBeTruthy();
@@ -324,7 +324,7 @@ describe("修改记录与操作记录里的默认版本", () => {
     const dialog = await screen.findByRole("dialog", { name: "撤销这次默认版本调整？" });
     await user.click(within(dialog).getByRole("button", { name: "撤销" }));
     expect(await screen.findByText("已撤销默认版本的调整。")).toBeTruthy();
-    expect(history.location.pathname).toBe("/operations");
+    expect(history.location.pathname).toBe("/settings/operations");
     expect(context.api.requestsTo("POST", revertPath(operationId))).toHaveLength(1);
     const rows = within(await screen.findByRole("table", { name: "操作记录" })).getAllByRole("row");
     expect(rows).toHaveLength(3); // 表头、撤销记录、被撤销的记录
@@ -336,7 +336,7 @@ describe("修改记录与操作记录里的默认版本", () => {
     const context = setup();
     seedDefault(context.governance, context.album.id, 1, context.versions[1].id);
     seedDefault(context.governance, context.album.id, 2, null);
-    renderApp({ path: "/operations" });
+    renderApp({ path: "/settings/operations" });
     const table = await screen.findByRole("table", { name: "操作记录" });
     const rows = within(table).getAllByRole("row").slice(1);
     expect(rows).toHaveLength(2);
@@ -349,14 +349,14 @@ describe("修改记录与操作记录里的默认版本", () => {
   it("按专辑筛选的记录页：说明在看这张专辑的记录并请求 group_id；与版本一起筛选时说明是这个版本和它所在的专辑", async () => {
     const context = setup();
     seedDefault(context.governance, context.album.id, 1, context.versions[1].id);
-    const first = renderApp({ path: `/operations?group=${context.album.id}` });
+    const first = renderApp({ path: `/settings/operations?group=${context.album.id}` });
     expect(await screen.findByText("只显示这张专辑的记录。")).toBeTruthy();
     await screen.findByRole("table", { name: "操作记录" });
     expect(context.api.requestsTo("GET", "/api/v1/operations")[0]?.path).toContain(`group_id=${context.album.id}`);
     expect(screen.getByRole("heading", { level: 2, name: "这张专辑的记录" })).toBeTruthy();
     first.view.unmount();
 
-    renderApp({ path: `/operations?release=${context.versions[1].id}&group=${context.album.id}` });
+    renderApp({ path: `/settings/operations?release=${context.versions[1].id}&group=${context.album.id}` });
     expect(await screen.findByText("只显示这个版本和它所在的专辑的记录。")).toBeTruthy();
     expect(await screen.findByRole("heading", { level: 2, name: "这个版本和专辑的记录" })).toBeTruthy();
   });
@@ -367,7 +367,7 @@ describe("修改记录与操作记录里的默认版本", () => {
     // 专辑里的版本都被重新扫描掉了：组详情没有了。
     context.catalog.groups.splice(0, 1);
     context.catalog.groupDetails.delete(context.album.id);
-    renderApp({ path: "/operations" });
+    renderApp({ path: "/settings/operations" });
     const table = await screen.findByRole("table", { name: "操作记录" });
     expect(within(table).queryByRole("link", { name: /Sample Symphonies/ })).toBeNull();
     expect(within(table).getByText("（已不可见）")).toBeTruthy();
@@ -382,7 +382,7 @@ describe("撤销之间的串行", () => {
     const first = seedDefault(context.governance, context.album.id, 1, context.versions[1].id);
     const result = respondToRevert(context.governance, first, nextKey());
     expect(result.status).toBe(200);
-    renderApp({ path: "/operations" });
+    renderApp({ path: "/settings/operations" });
     const table = await screen.findByRole("table", { name: "操作记录" });
     expect(within(table).queryByRole("button", { name: /^撤销/ })).toBeNull();
     expect(within(table).getByText("撤销不能再撤销")).toBeTruthy();

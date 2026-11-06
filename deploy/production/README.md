@@ -46,7 +46,7 @@ docker compose up -d --wait
 | `ROOMUSIC_BACKUP_DIR` | Docker 卷 `backups` | 填绝对路径则把备份放在宿主机目录，需要 uid 1000 可写 |
 | `ROOMUSIC_BACKUP_HOUR` | `3` | 每天几点后自动备份，0–23 |
 | `ROOMUSIC_TIMEZONE` | `Asia/Shanghai` | 自动备份使用的时区 |
-| `ROOMUSIC_BACKUP_KEEP_DAYS` | `14` | 备份保留天数 |
+| `ROOMUSIC_BACKUP_KEEP_DAYS` | `14` | 网页上从未设置过自动清理时，备份保留几天 |
 | `ROOMUSIC_ALLOWED_ORIGINS` | 空 | 反向代理改写了 Host 时使用，见第 5 节 |
 | `ROOMUSIC_MEDIA_CACHE_MAX_MIB` | `10240` | ALAC 转码缓存上限（MiB），最小 256 |
 | `COMPOSE_PROJECT_NAME` | `roomusic-server` | 项目名，决定数据卷和网络的名称；已有实例不要改 |
@@ -94,10 +94,17 @@ docker compose exec app /app/roomusic --version
 
 最低可以降到 `0.1.0`。
 
+`0.1.0` 不认识网页上设置的自动清理，只按 `ROOMUSIC_BACKUP_KEEP_DAYS` 清理旧备份。如果在网页上把保留天数设成了“不限”或比这个值更长，
+降级前先把 `ROOMUSIC_BACKUP_KEEP_DAYS` 调大，不然降级后第一次备份完成时会按它删掉更早的备份。再升级回来，网页上的设置照常生效。
+
 ## 4. 备份与恢复
 
-管理员在“系统 › 备份”可以查看备份状态、立即备份、下载备份文件。默认每天上海时间 3 点后自动备份一次，保留 14 天；
+管理员在“设置 › 备份”可以查看备份状态、立即备份、下载和删除备份文件（可以勾选多份一起删除）。默认每天上海时间 3 点后自动备份一次，保留 14 天；
 每次升级或降级改动数据库前也会备份一次。
+
+同一页的“自动清理”可以设置保留天数和保留份数，两项都可以选“不限”：超过天数的、多出份数的旧备份会在每次备份完成后删除，
+最新的一份始终保留。保存时如果会删掉已有的备份，会先确认要删几份。网页上设置过之后，`ROOMUSIC_BACKUP_KEEP_DAYS` 就不再起作用；
+设置保存在备份目录里，重启或恢复数据库都不会改变它，换了备份目录则回到默认值。
 
 备份只包含数据库，不含音乐文件、封面和 ALAC 转码缓存；需要异地保护时，把备份文件另存到其他机器。
 备份里有账号等私人数据，请妥善保管，只恢复可信来源的文件。

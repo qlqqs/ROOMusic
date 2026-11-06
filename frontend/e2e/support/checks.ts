@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 /** 设计要求验证的五种宽度（DESIGN.md 响应式一节）。 */
 export const widths = [375, 768, 1024, 1280, 1440] as const;
@@ -69,4 +69,25 @@ export async function expectVisibleFocusRing(page: Page, label: string): Promise
   expect(ring, `${label}：没有聚焦元素`).not.toBeNull();
   expect(ring?.style, `${label}：焦点环样式`).not.toBe("none");
   expect(ring?.width ?? 0, `${label}：焦点环宽度`).toBeGreaterThanOrEqual(2);
+}
+
+/** 只量可见文字的实际行数：按钮有最小高度，用高度判断会漏掉中文被挤成两行。 */
+export async function expectSingleTextLine(locator: Locator, includeAriaHidden = false) {
+  const lines = await locator.evaluate((element, includeHidden) => {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    const tops: number[] = [];
+    let node: Node | null;
+    while ((node = walker.nextNode()) !== null) {
+      if (!node.textContent?.trim()) continue;
+      const parent = node.parentElement;
+      if ((!includeHidden && parent?.closest('[aria-hidden="true"]')) || (parent && getComputedStyle(parent).position === "absolute")) continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      for (const rect of range.getClientRects()) {
+        if (rect.width > 0 && rect.height > 0 && !tops.some((top) => Math.abs(top - rect.top) < 2)) tops.push(rect.top);
+      }
+    }
+    return tops.length;
+  }, includeAriaHidden);
+  expect(lines, `${await locator.innerText()}：可见文字保持单行`).toBe(1);
 }

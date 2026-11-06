@@ -59,12 +59,21 @@
   border-radius: 0;
 }
 
+/* 纵向排列，当前用户按钮像宽屏侧栏一样贴在底部；内容多到要滚动时，它随内容排在最后，不遮挡导航。 */
 .drawerContent {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: var(--space-4);
-  align-content: start;
   min-height: 100%;
   padding: var(--space-4);
+}
+
+.drawerContent > * {
+  flex-shrink: 0;
+}
+
+.drawerIdentity {
+  margin-top: auto;
 }
 
 .drawerHeader {
@@ -107,7 +116,7 @@
   }
 
   /*
-   * 导航列表单独滚动，品牌、搜索与底部的当前用户区不动：导航项再多，修改密码和退出也一直在窗口里。
+   * 导航列表单独滚动，品牌、搜索与底部的当前用户按钮不动：导航项再多，设置与退出的入口也一直在窗口里。
    * 内边距抵消外边距，给焦点环（外扩 4px）留出位置，不被滚动区裁掉。
    * 窗口矮到导航只剩几行时，最小高度让侧栏整体滚动，而不是把导航压没。
    * 背景是滚动阴影：两层随内容滚动的纸色遮罩盖住两层固定的阴影，只有上方或下方还有导航项时才露出阴影。

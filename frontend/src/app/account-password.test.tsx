@@ -19,8 +19,8 @@ async function openPasswordChange() {
   const session = installFakeSession(api, { current: "curator" });
   installOverviewApi(api);
   const channel = { notifyChanged: vi.fn(), onChanged: () => () => undefined, close: vi.fn() };
-  const rendered = renderApp({ path: "/members", channel });
-  await screen.findByRole("rowheader", { name: /^listener/ });
+  const rendered = renderApp({ path: "/settings/account", channel });
+  await screen.findByRole("heading", { level: 1, name: "账号" });
   const trigger = screen.getByRole("button", { name: "修改密码" });
   await userEvent.click(trigger);
   const dialogElement = await screen.findByRole("dialog", { name: "修改密码" });
@@ -82,7 +82,7 @@ async function expectClosedAndReopenEmpty(context: Context) {
   expect(dialog.queryByRole("alert")).toBeNull();
 }
 
-describe("V1/V5：身份区修改密码", () => {
+describe("V1/V5：设置账号栏修改密码", () => {
   it("成功保留会话代次与缓存，焦点到结果态完成按钮；点击后关闭归还焦点，再打开空表单", async () => {
     const context = await openPasswordChange();
     const { runtime, api, session, channel, history } = context;
@@ -97,8 +97,8 @@ describe("V1/V5：身份区修改密码", () => {
     await submit(context);
     const done = await expectPasswordChanged(context);
 
-    expect(history.location.pathname).toBe("/members");
-    expect(screen.getByRole("heading", { level: 1, name: "成员" })).toBeTruthy();
+    expect(history.location.pathname).toBe("/settings/account");
+    expect(screen.getByRole("heading", { level: 1, name: "账号" })).toBeTruthy();
     expect(runtime.session.currentGeneration()).toBe(generation);
     expect(runtime.session.getSnapshot()).toBe(sessionState);
     expect(session.current).toBe("curator");
@@ -144,7 +144,7 @@ describe("V1/V5：身份区修改密码", () => {
     expect(context.dialog.getByLabelText<HTMLInputElement>("新密码").value).toBe(newPassword);
     expect(context.dialog.getByLabelText<HTMLInputElement>("确认新密码").value).toBe(newPassword);
     expect(context.dialog.queryByRole("alert")).toBeNull();
-    expect(context.history.location.pathname).toBe("/members");
+    expect(context.history.location.pathname).toBe("/settings/account");
     expect(context.runtime.session.currentGeneration()).toBe(generation);
     expect(context.session.current).toBe("curator");
     expect(context.session.accounts.curator?.password).toBe(oldPassword);
@@ -172,7 +172,7 @@ describe("V1/V5：身份区修改密码", () => {
     expect(context.dialog.getByLabelText("当前密码").getAttribute("aria-invalid")).not.toBe("true");
     expect(context.dialog.getByLabelText<HTMLInputElement>("当前密码").value).toBe(oldPassword);
     expect(context.dialog.getByLabelText<HTMLInputElement>("新密码").value).toBe(newPassword);
-    expect(context.history.location.pathname).toBe("/members");
+    expect(context.history.location.pathname).toBe("/settings/account");
     expect(context.runtime.session.getSnapshot()).toEqual(state);
     expect(context.runtime.session.currentGeneration()).toBe(generation);
     expect(context.channel.notifyChanged.mock.calls).toHaveLength(broadcasts);
@@ -198,7 +198,7 @@ describe("V1/V5：身份区修改密码", () => {
     expect(context.dialog.queryByRole("alert")).toBeNull();
     expect(context.dialog.getByLabelText<HTMLInputElement>("当前密码").value).toBe(oldPassword);
     expect(context.dialog.queryByText(/用户名不能为空|新密码需要 12 到 72/)).toBeNull();
-    expect(context.history.location.pathname).toBe("/members");
+    expect(context.history.location.pathname).toBe("/settings/account");
   });
 
   it.each([

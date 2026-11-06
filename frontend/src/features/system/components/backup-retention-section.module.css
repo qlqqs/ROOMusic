@@ -1,0 +1,122 @@
+.form {
+  display: grid;
+  gap: var(--space-4);
+  justify-items: start;
+  min-width: 0;
+}
+
+/* 两项在宽处并排，窄处上下排列；每项是“名称”一行，下面一行数字框、单位与“不限”。 */
+.fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-8);
+  min-width: 0;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.legend {
+  margin-bottom: 6px;
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+}
+
+.row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.input {
+  width: 8em;
+  min-height: var(--control-height);
+  padding: 6px 10px;
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  caret-color: var(--color-accent-700);
+  font-size: var(--fs-14);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.input:hover:enabled {
+  border-color: var(--color-neutral-800);
+}
+
+.input:focus-visible {
+  border-color: var(--color-accent-700);
+  outline-offset: 0;
+}
+
+.input[aria-invalid="true"] {
+  border-color: var(--color-neutral-900);
+  box-shadow: inset 0 0 0 1px var(--color-neutral-900);
+}
+
+.input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.unit {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-height);
+  margin-inline-start: var(--space-2);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.check input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--color-accent-700);
+  cursor: pointer;
+}
+
+.error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 100%;
+  font-size: var(--fs-14);
+  line-height: 1.5;
+}
+
+.error svg {
+  flex: none;
+  margin-top: 3px;
+}
+
+.error span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* 保存按钮与结果同一行；结果放不下时换到下一行。 */
+.submit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+}
+
+.saved {
+  font-size: var(--fs-14);
+}

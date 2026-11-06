@@ -175,7 +175,8 @@ describe("退出与会话失效", () => {
     const { api } = setup({ current: "curator" });
     const { history, runtime } = renderApp({ path: "/nowhere" });
     await heading("页面不存在");
-    await userEvent.click(screen.getByRole("button", { name: "退出登录" }));
+    await userEvent.click(within(screen.getByRole("region", { name: "当前用户" })).getByRole("button"));
+    await userEvent.click(screen.getByRole("menuitem", { name: "退出登录" }));
     expect(await heading("登录")).toBeTruthy();
     expect(screen.getByText("已退出登录。")).toBeTruthy();
     expect(history.location.pathname).toBe("/login");
@@ -191,7 +192,8 @@ describe("退出与会话失效", () => {
     api.on("POST", "/api/v1/auth/logout", () => {
       throw new TypeError("Failed to fetch");
     });
-    await userEvent.click(screen.getByRole("button", { name: "退出登录" }));
+    await userEvent.click(within(screen.getByRole("region", { name: "当前用户" })).getByRole("button"));
+    await userEvent.click(screen.getByRole("menuitem", { name: "退出登录" }));
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("退出失败");
     expect(screen.getByRole("heading", { level: 1, name: "概览" })).toBeTruthy();
@@ -242,7 +244,8 @@ describe("切换用户时的数据隔离", () => {
 
     await signIn("curator", "curator-password");
     await heading("概览");
-    await userEvent.click(screen.getByRole("button", { name: "退出登录" }));
+    await userEvent.click(within(screen.getByRole("region", { name: "当前用户" })).getByRole("button"));
+    await userEvent.click(screen.getByRole("menuitem", { name: "退出登录" }));
     await heading("登录");
     await signIn("listener", "listener-password");
     await heading("概览");
@@ -345,7 +348,9 @@ describe("外壳", () => {
     await userEvent.click(menuButton);
     const dialog = screen.getByRole("dialog", { name: "菜单" });
     expect(within(dialog).getByRole("navigation", { name: "主导航" })).toBeTruthy();
-    expect(within(dialog).getByRole("button", { name: "退出登录" })).toBeTruthy();
+    await userEvent.click(within(dialog).getByRole("button", { name: "curator 管理员" }));
+    expect(within(dialog).getByRole("menuitem", { name: "退出登录" })).toBeTruthy();
+    await userEvent.keyboard("{Escape}");
     await userEvent.click(within(dialog).getByRole("button", { name: "关闭" }));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(document.activeElement).toBe(menuButton);

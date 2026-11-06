@@ -1,8 +1,8 @@
-import { ArrowRightLeft, ClipboardCheck, Combine, DatabaseBackup, Disc3, History, Library, MicVocal, Music2, FolderSearch, LayoutDashboard, Users, type LucideIcon } from "lucide-react";
+import { ArrowRightLeft, ClipboardCheck, Combine, Disc3, Library, MicVocal, Music2, LayoutDashboard, type LucideIcon } from "lucide-react";
 import type { UserRole } from "../../features/auth";
 
 export type NavItem = {
-  to: "/" | "/albums" | "/artists" | "/me" | "/now-playing" | "/library" | "/issues" | "/claims" | "/artist-candidates" | "/members" | "/operations" | "/system/backups";
+  to: "/" | "/albums" | "/artists" | "/me" | "/now-playing" | "/issues" | "/claims" | "/artist-candidates";
   label: string;
   icon: LucideIcon;
   /** 只有管理员看到；后端仍然独立鉴权，这里只决定显示。 */
@@ -13,7 +13,7 @@ export type NavItem = {
   artists?: true;
 };
 
-// 只列真实可用的页面；Steward 留待对应阶段。
+// 只列真实可用的页面；Steward 留待对应阶段。扫描目录、成员、操作记录与备份在设置页里（入口是侧栏底部的用户菜单）。
 const navItems: readonly NavItem[] = [
   { to: "/", label: "概览", icon: LayoutDashboard, adminOnly: false, group: "聆听" },
   { to: "/albums", label: "专辑", icon: Disc3, adminOnly: false, group: "聆听" },
@@ -21,13 +21,9 @@ const navItems: readonly NavItem[] = [
   // “我的音乐”有收藏、歌单与历史三个页签（/me 转到 /me/favorites）。
   { to: "/me", label: "我的音乐", icon: Library, adminOnly: false, group: "聆听" },
   { to: "/now-playing", label: "正在播放", icon: Music2, adminOnly: false, group: "聆听" },
-  { to: "/library", label: "扫描目录", icon: FolderSearch, adminOnly: true, group: "资料库" },
   { to: "/issues", label: "元数据问题", icon: ClipboardCheck, adminOnly: true, group: "资料库" },
   { to: "/claims", label: "待认领", icon: ArrowRightLeft, adminOnly: true, group: "资料库" },
   { to: "/artist-candidates", label: "可能是同一位", icon: Combine, adminOnly: true, group: "资料库", artists: true },
-  { to: "/members", label: "成员", icon: Users, adminOnly: true, group: "资料库" },
-  { to: "/operations", label: "操作记录", icon: History, adminOnly: true, group: "资料库" },
-  { to: "/system/backups", label: "备份", icon: DatabaseBackup, adminOnly: true, group: "系统" },
 ];
 
 export type NavGroup = { label: string | null; items: readonly NavItem[] };

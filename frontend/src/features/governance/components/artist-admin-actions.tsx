@@ -38,7 +38,7 @@ export function ArtistAdminActions({ artist, commands }: ArtistAdminActionsProps
         <Button icon={<PencilLine size={16} />} onClick={() => open("rename")}>
           修改主名…
         </Button>
-        <Link to="/operations" search={{ artist: artist.id }} className={styles.link}>
+        <Link to="/settings/operations" search={{ artist: artist.id }} className={styles.link}>
           <History size={16} aria-hidden="true" /> 操作记录
         </Link>
       </div>

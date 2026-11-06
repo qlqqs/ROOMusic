@@ -23,7 +23,7 @@ export function ActiveScan({ scan, detailLink = false }: { scan: ScanDTO; detail
       </p>
       {detailLink ? (
         <p>
-          <Link to="/library/scans/$scanId" params={{ scanId: scan.id }}>
+          <Link to="/settings/library/scans/$scanId" params={{ scanId: scan.id }}>
             查看扫描详情
           </Link>
         </p>

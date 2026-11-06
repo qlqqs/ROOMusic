@@ -1,3 +1,4 @@
+import { openSettingsScene, settingsScenes } from "./support/settings";
 import AxeBuilder from "@axe-core/playwright";
 import { accountAxeScenes, openAccountScene } from "./support/account-password";
 import type { Page } from "@playwright/test";
@@ -307,7 +308,7 @@ const states: State[] = [
     name: "扫描目录",
     options: { signedInAs: "curator" },
     reach: async (page) => {
-      await page.goto("/library");
+      await page.goto("/settings/library");
       await expect(page.getByRole("rowheader", { name: "classical-a" })).toBeVisible();
     },
   },
@@ -316,7 +317,7 @@ const states: State[] = [
     options: { signedInAs: "curator" },
     reach: async (page, mock) => {
       mock.seedHistory(25);
-      await page.goto("/library");
+      await page.goto("/settings/library");
       await expect(page.getByRole("table", { name: "扫描记录" })).toBeVisible();
       await expect(page.getByRole("navigation", { name: "扫描记录分页" }).getByText("第 1 / 2 页")).toBeVisible();
     },
@@ -326,7 +327,7 @@ const states: State[] = [
     options: { signedInAs: "curator" },
     reach: async (page, mock) => {
       mock.seedHistory(25);
-      await page.goto("/library?scan_page=2");
+      await page.goto("/settings/library?scan_page=2");
       await expect(page.getByRole("navigation", { name: "扫描记录分页" }).getByText("第 2 / 2 页")).toBeVisible();
     },
   },
@@ -334,7 +335,7 @@ const states: State[] = [
     name: "扫描目录（停用确认对话框）",
     options: { signedInAs: "curator" },
     reach: async (page) => {
-      await page.goto("/library");
+      await page.goto("/settings/library");
       await page.getByRole("button", { name: "停用目录 classical-a" }).click();
       await expect(page.getByRole("dialog", { name: "停用目录“classical-a”？" })).toBeVisible();
     },
@@ -343,7 +344,7 @@ const states: State[] = [
     name: "扫描目录（字段错误与结果提示）",
     options: { signedInAs: "curator" },
     reach: async (page) => {
-      await page.goto("/library");
+      await page.goto("/settings/library");
       await page.getByLabel("目录路径").fill("/music/accessible");
       await page.getByRole("button", { name: "添加目录" }).click();
       await expect(page.getByText(/已添加目录“accessible”/)).toBeVisible();
@@ -358,7 +359,7 @@ const states: State[] = [
     reach: async (page, mock) => {
       mock.scanFinishesAfterReads = null;
       const scan = mock.seedScan({}, true);
-      await page.goto(`/library/scans/${scan.id}`);
+      await page.goto(`/settings/library/scans/${scan.id}`);
       await expect(page.getByRole("button", { name: "取消扫描" })).toBeVisible();
     },
   },
@@ -367,7 +368,7 @@ const states: State[] = [
     options: { signedInAs: "curator" },
     reach: async (page, mock) => {
       const scan = failedScan(mock);
-      await page.goto(`/library/scans/${scan.id}`);
+      await page.goto(`/settings/library/scans/${scan.id}`);
       await expect(page.getByRole("table", { name: "诊断明细" })).toBeVisible();
     },
   },
@@ -375,7 +376,7 @@ const states: State[] = [
     name: "成员",
     options: { signedInAs: "curator" },
     reach: async (page) => {
-      await page.goto("/members");
+      await page.goto("/settings/members");
       await expect(page.getByRole("rowheader", { name: /^listener/ })).toBeVisible();
     },
   },
@@ -383,7 +384,7 @@ const states: State[] = [
     name: "成员（对自己的确认对话框）",
     options: { signedInAs: "curator" },
     reach: async (page) => {
-      await page.goto("/members");
+      await page.goto("/settings/members");
       await page.getByRole("button", { name: "停用成员 curator" }).click();
       await expect(page.getByRole("dialog", { name: "停用成员“curator”？" })).toBeVisible();
     },
@@ -392,7 +393,7 @@ const states: State[] = [
     name: "成员（字段错误与重复用户名）",
     options: { signedInAs: "curator" },
     reach: async (page) => {
-      await page.goto("/members");
+      await page.goto("/settings/members");
       await page.getByLabel("用户名").fill("listener");
       await page.getByLabel("密码", { exact: true }).fill("correct horse battery");
       await page.getByLabel("确认密码").fill("correct horse battery");
@@ -412,7 +413,7 @@ const states: State[] = [
     name: "需要管理员权限",
     options: { signedInAs: "listener" },
     reach: async (page) => {
-      await page.goto("/members");
+      await page.goto("/settings/members");
       await expect(heading(page, "需要管理员权限")).toBeVisible();
     },
   },
@@ -472,6 +473,21 @@ test.describe("账户密码：axe全部规则无违规", () => {
         // 包含对话框内成功和关闭后的身份区；成功结果的描述与焦点由共用场景同时断言。
         const { violations } = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
         expect(violations.map(({ id, impact, nodes }) => ({ id, impact, targets: nodes.map(({ target }) => target) })), `${scene} @${width}px：axe全部违规为空`).toEqual([]);
+        await expectMinimumFontSize(page, `${scene} @${width}px`);
+      });
+    }
+  }
+});
+
+test.describe("设置与用户菜单：axe", () => {
+  for (const width of [1440, 375]) {
+    for (const scene of settingsScenes) {
+      test(`${scene} @${width}px`, async ({ page, backend }) => {
+        await page.setViewportSize({ width, height: 1000 });
+        await backend.start({ signedInAs: "curator" });
+        await openSettingsScene(page, scene);
+        await page.evaluate(() => document.fonts.ready);
+        await expectNoSeriousViolations(page, `${scene} @${width}px`);
         await expectMinimumFontSize(page, `${scene} @${width}px`);
       });
     }

@@ -7,7 +7,7 @@ import { summarizeMembers, useMembers } from "../hooks/use-members";
 export function MemberSummary() {
   const members = useMembers();
   return (
-    <Panel title="成员" action={<Link to="/members">管理成员</Link>}>
+    <Panel title="成员" action={<Link to="/settings/members">管理成员</Link>}>
       <QueryContent query={members} loading={<Skeleton label="正在加载成员" lines={2} />}>
         {(items) => {
           const summary = summarizeMembers(items);

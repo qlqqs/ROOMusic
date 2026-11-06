@@ -27,7 +27,7 @@ function HistoryBody({ releaseId, groupId, onRevert }: { releaseId: string; grou
             <OperationList caption="修改记录" items={items} showRelease={false} onRevert={onRevert} />
             <p className={styles.more}>
               <span>{pagination.total > items.length ? `只显示最近 ${formatCount(items.length)} 条，共 ${formatCount(pagination.total)} 条。` : `共 ${formatCount(pagination.total)} 条。`}</span>
-              <Link to="/operations" search={{ release: releaseId, group: groupId }}>
+              <Link to="/settings/operations" search={{ release: releaseId, group: groupId }}>
                 全部记录
               </Link>
             </p>

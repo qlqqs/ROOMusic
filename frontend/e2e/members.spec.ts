@@ -14,7 +14,7 @@ async function fillForm(page: Page, username: string, password: string, confirma
 test.describe("成员管理", () => {
   test("新建成员：校验不合规的输入，创建成功后出现在列表，重复用户名显示在字段旁，请求没有幂等键", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
-    await page.goto("/members");
+    await page.goto("/settings/members");
     await expect(heading(page, "成员")).toBeVisible();
 
     await page.getByRole("button", { name: "创建成员" }).click();
@@ -40,7 +40,7 @@ test.describe("成员管理", () => {
 
   test("停用 → 重新启用 → 撤销会话：停用与撤销要确认，重新启用直接执行", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
-    await page.goto("/members");
+    await page.goto("/settings/members");
     const row = (name: string) => membersTable(page).getByRole("row", { name: new RegExp(name) });
 
     await row("listener").getByRole("button", { name: "停用成员 listener" }).click();
@@ -64,7 +64,7 @@ test.describe("成员管理", () => {
 
   test("对自己的操作：对话框先提示；停用最后一个管理员被拒绝（409）且会话保留", async ({ page, backend }) => {
     await backend.start({ signedInAs: "curator" });
-    await page.goto("/members");
+    await page.goto("/settings/members");
     await membersTable(page).getByRole("button", { name: "停用成员 curator" }).click();
     const dialog = page.getByRole("dialog", { name: "停用成员“curator”？" });
     await expect(dialog).toContainText("这是你自己的账号，确认后你会马上退出登录。");
@@ -76,7 +76,7 @@ test.describe("成员管理", () => {
   test("停用自己（还有别的管理员）：会话被撤销，随后回到登录页", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
     mock.users = [...mock.users, { id: "00000000-0000-4000-8000-0000000000aa", username: "second", role: "admin", disabled: false, created_at: "2026-01-01T00:00:00Z" }];
-    await page.goto("/members");
+    await page.goto("/settings/members");
     await membersTable(page).getByRole("button", { name: "停用成员 curator" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "停用成员" }).click();
     await expect(heading(page, "登录")).toBeVisible();
@@ -88,7 +88,7 @@ test.describe("账户密码：管理员重置", () => {
   for (const { username, disabled } of [{ username: "listener", disabled: false }, { username: "archivist", disabled: true }]) {
     test(`重置${disabled ? "停用" : "启用"}成员密码，自己无入口且请求只有password无幂等键`, async ({ page, backend }) => {
       const mock = await backend.start({ signedInAs: "curator" });
-      await page.goto("/members");
+      await page.goto("/settings/members");
       await expect(memberRow(page, "curator").getByRole("button", { name: /重置/ })).toHaveCount(0);
       const row = memberRow(page, username);
       await expect(row.getByRole("button")).toHaveCount(disabled ? 2 : 3);
@@ -115,7 +115,7 @@ test.describe("账户密码：管理员重置", () => {
 
   test("重置密码本地校验与取消，不向服务器发送密码", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
-    await page.goto("/members");
+    await page.goto("/settings/members");
     const trigger = memberRow(page, "listener").getByRole("button", { name: "重置成员 listener 的密码", exact: true });
     await trigger.click();
     const dialog = page.getByRole("dialog", { name: "重置“listener”的密码", exact: true });

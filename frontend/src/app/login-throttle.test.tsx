@@ -10,7 +10,7 @@ describe("B5：登录限速", () => {
     const api = installFakeApi();
     installFakeSession(api);
     api.on("POST", "/api/v1/auth/login", () => sampleResponse("errors/too-many-attempts", { "Retry-After": "60" }));
-    const { runtime, history } = renderApp({ path: "/login?redirect=%2Fmembers" });
+    const { runtime, history } = renderApp({ path: "/members" });
     await screen.findByRole("heading", { level: 1, name: "登录" });
     const state = runtime.session.getSnapshot();
     const generation = runtime.session.currentGeneration();
@@ -21,7 +21,7 @@ describe("B5：登录限速", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("登录失败次数太多，请过几分钟再试。");
     expect(history.location.pathname).toBe("/login");
-    expect(new URLSearchParams(history.location.search).get("redirect")).toBe("/members");
+    expect(new URLSearchParams(history.location.search).get("redirect")).toBe("/settings/members");
     expect(runtime.session.getSnapshot()).toEqual(state);
     expect(runtime.session.currentGeneration()).toBe(generation);
     expect(screen.queryByText("登录已失效，请重新登录。")).toBeNull();

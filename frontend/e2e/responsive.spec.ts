@@ -1,3 +1,4 @@
+import { openSettingsScene, settingsScenes } from "./support/settings";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { accountLayoutScenes, expectLogoutInViewport, openAccountScene } from "./support/account-password";
@@ -114,10 +115,10 @@ const operationCases: Case[] = [
       mock.groups = [singleVersionGroup()];
       seedOperations(mock, singleVersionGroup().representative.id, 25);
     },
-    path: () => "/operations",
+    path: () => "/settings/operations",
     title: "操作记录",
   },
-  { name: "操作记录（没有记录）", options: { signedInAs: "curator" }, path: () => "/operations", title: "操作记录" },
+  { name: "操作记录（没有记录）", options: { signedInAs: "curator" }, path: () => "/settings/operations", title: "操作记录" },
   {
     name: "专辑详情（管理员展开修改记录，含超长改动内容）",
     options: { signedInAs: "curator" },
@@ -186,7 +187,7 @@ const cases: Case[] = [
   { name: "概览（管理员）", options: { signedInAs: "curator" }, path: () => "/", title: "概览" },
   { name: "概览（成员）", options: { signedInAs: "listener" }, path: () => "/", title: "概览" },
   ...recentPlaysCases,
-  { name: "扫描目录", options: { signedInAs: "curator" }, path: () => "/library", title: "扫描目录" },
+  { name: "扫描目录", options: { signedInAs: "curator" }, path: () => "/settings/library", title: "扫描目录" },
   { name: "专辑列表", options: { signedInAs: "curator" }, path: () => "/albums", title: "专辑" },
   {
     name: "专辑列表（多页，需要关注与多版本）",
@@ -212,7 +213,7 @@ const cases: Case[] = [
     prepare: (mock) => {
       mock.seedHistory(25);
     },
-    path: () => "/library",
+    path: () => "/settings/library",
     title: "扫描目录",
   },
   {
@@ -223,14 +224,14 @@ const cases: Case[] = [
       const scan = mock.seedScan({ status: "failed", finished_at: "2026-01-02T00:01:00Z", diagnostics: diagnostics.summary });
       mock.diagnostics.set(scan.id, diagnostics);
     },
-    path: (mock) => `/library/scans/${[...mock.scans.keys()][0] ?? ""}`,
+    path: (mock) => `/settings/library/scans/${[...mock.scans.keys()][0] ?? ""}`,
     title: "扫描详情",
   },
   ...detailCases,
   ...operationCases,
-  { name: "成员", options: { signedInAs: "curator" }, path: () => "/members", title: "成员" },
+  { name: "成员", options: { signedInAs: "curator" }, path: () => "/settings/members", title: "成员" },
   { name: "页面不存在", options: { signedInAs: "curator" }, path: () => "/nowhere", title: "页面不存在" },
-  { name: "需要管理员权限", options: { signedInAs: "listener" }, path: () => "/library", title: "需要管理员权限" },
+  { name: "需要管理员权限", options: { signedInAs: "listener" }, path: () => "/settings/library", title: "需要管理员权限" },
   { name: "服务不可用", options: { failSetupStatusTimes: 99 }, path: () => "/", title: "暂时无法使用" },
 ];
 
@@ -319,7 +320,7 @@ test.describe("账户密码：五宽布局", () => {
           expect(bounds?.x ?? -1).toBeGreaterThanOrEqual(0);
           expect((bounds?.x ?? 0) + (bounds?.width ?? 0)).toBeLessThanOrEqual(width);
         }
-        if (width === 1440 && (scene === "身份区" || scene === "成功关闭后身份区")) await expectLogoutInViewport(page);
+        if (width === 1440 && (scene === "账号栏" || scene === "成功关闭后账号栏")) await expectLogoutInViewport(page);
         if (width === 375 || width === 1440) {
           // 截图放在独立目录；auth/axe 使用其他 output，不能清掉供主会话复核的图片。
           const directory = resolve(import.meta.dirname, "../test-results/account-screenshots");
@@ -331,4 +332,115 @@ test.describe("账户密码：五宽布局", () => {
       });
     }
   }
+});
+
+/** 账号值是正文信息，不应恢复成统计数字；限定 main 并核对两项内容，避免误选侧栏或空列表。 */
+async function expectAccountValueFontSize(page: Page): Promise<void> {
+  const main = page.getByRole("main");
+  const values = main.getByRole("definition");
+  await expect(main.getByRole("term")).toHaveText(["用户名", "角色"]);
+  await expect(values).toHaveCount(2);
+  await expect(values).toHaveText(["curator", "管理员"]);
+  const bodyFontSize = await page.locator("body").evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
+  expect(bodyFontSize, "正文必须有可测量字号").toBeGreaterThan(0);
+  for (const value of await values.all()) {
+    await expect(value).toBeVisible();
+    const fontSize = await value.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
+    expect(fontSize, "账号值必须有可测量字号").toBeGreaterThan(0);
+    expect(fontSize, `账号值“${await value.innerText()}”字号不超过正文的 1.2 倍`).toBeLessThanOrEqual(bodyFontSize * 1.2);
+  }
+}
+
+/** 只验证不需要滚动的抽屉，不通过滚动或只查 margin-top 样式来伪造贴底效果。 */
+async function expectDrawerUserAtBottom(page: Page): Promise<void> {
+  const dialog = page.getByRole("dialog", { name: "菜单", exact: true });
+  await expect(dialog).toBeVisible();
+  const { scrollHeight, clientHeight } = await dialog.evaluate((element) => ({ scrollHeight: element.scrollHeight, clientHeight: element.clientHeight }));
+  expect(clientHeight, "菜单抽屉有可测量高度").toBeGreaterThan(0);
+  expect(scrollHeight, "贴底回归的前提：菜单抽屉无需纵向滚动").toBeLessThanOrEqual(clientHeight);
+  const user = dialog.getByRole("region", { name: "当前用户", exact: true }).getByRole("button", { name: "curator 管理员", exact: true });
+  await expect(user).toBeVisible();
+  const dialogBounds = await dialog.boundingBox();
+  const userBounds = await user.boundingBox();
+  if (dialogBounds === null || userBounds === null) throw new Error("菜单抽屉与用户按钮必须有可测量边界");
+  expect(userBounds.height, "用户按钮有可测量高度").toBeGreaterThan(0);
+  const bottomGap = dialogBounds.y + dialogBounds.height - userBounds.y - userBounds.height;
+  expect(bottomGap, "用户按钮底边不能超出菜单抽屉").toBeGreaterThanOrEqual(0);
+  expect(bottomGap, "用户按钮距菜单抽屉底边不超过 24px").toBeLessThanOrEqual(24);
+}
+
+test.describe("设置与用户菜单：布局和截图", () => {
+  for (const width of widths) {
+    for (const scene of settingsScenes) {
+      test(`${scene} @${width}px`, async ({ page, backend }, testInfo) => {
+        await page.setViewportSize({ width, height: 1000 });
+        await backend.start({ signedInAs: "curator" });
+        await openSettingsScene(page, scene);
+        await page.evaluate(() => document.fonts.ready);
+        const label = `${scene} @${width}px`;
+        await expectNoHorizontalOverflow(page, label);
+        await expectNoDocumentScroll(page, label);
+        await expectMinimumFontSize(page, label);
+        if (scene === "设置账号") await expectAccountValueFontSize(page);
+        if (scene === "用户菜单" && width === 375) await expectDrawerUserAtBottom(page);
+        for (const overlay of await page.locator('dialog[open], [role="menu"]').all()) {
+          const bounds = await overlay.boundingBox();
+          expect(bounds, `${label}：浮层有边界`).not.toBeNull();
+          if (bounds === null) throw new Error("浮层不可见");
+          expect(bounds.x).toBeGreaterThanOrEqual(0);
+          expect(bounds.y).toBeGreaterThanOrEqual(0);
+          expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+          expect(bounds.y + bounds.height).toBeLessThanOrEqual(1000);
+          expect(await overlay.evaluate((element) => element.scrollWidth - element.clientWidth), `${label}：浮层内部无横向溢出`).toBeLessThanOrEqual(0);
+        }
+        if (width === 375 || width === 1440) {
+          const directory = resolve(import.meta.dirname, "../test-results/settings-screenshots");
+          await mkdir(directory, { recursive: true });
+          const path = resolve(directory, `${scene}-${width}.png`);
+          await page.screenshot({ path, fullPage: true });
+          await testInfo.attach(`${scene}-${width}`, { path, contentType: "image/png" });
+        }
+      });
+    }
+  }
+});
+
+// 自检只改当前浏览器页面的临时 CSS，不触碰产品文件；确认几何断言确实能拦住截图审阅发现的旧样式。
+test.describe("设置样式回归断言自检", () => {
+  test("账号值恢复 32px 时，用户名和角色的字号检查分别失败", async ({ page, backend }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await backend.start({ signedInAs: "curator" });
+    await openSettingsScene(page, "设置账号");
+    await expectAccountValueFontSize(page);
+    for (const [index, value] of ["curator", "管理员"].entries()) {
+      const style = await page.addStyleTag({ content: `main dl > div:nth-child(${index + 1}) > dd { font-size: 32px !important; }` });
+      try {
+        await expect(page.getByRole("main").getByRole("definition").nth(index)).toHaveCSS("font-size", "32px");
+        await expect(expectAccountValueFontSize(page)).rejects.toThrow(`账号值“${value}”字号不超过正文的 1.2 倍`);
+      } finally {
+        await style.evaluate((element) => element.parentNode?.removeChild(element));
+      }
+      await expectAccountValueFontSize(page);
+    }
+  });
+
+  test("375px 用户菜单取消自动上边距时，展开和折叠状态的贴底检查都失败", async ({ page, backend }) => {
+    await page.setViewportSize({ width: 375, height: 1000 });
+    await backend.start({ signedInAs: "curator" });
+    await openSettingsScene(page, "用户菜单");
+    const menu = page.getByRole("menu", { name: "账号", exact: true });
+    for (const expanded of [true, false]) {
+      if (!expanded) await page.keyboard.press("Escape");
+      if (expanded) await expect(menu).toBeVisible();
+      else await expect(menu).toBeHidden();
+      await expectDrawerUserAtBottom(page);
+      const style = await page.addStyleTag({ content: 'dialog[open] div:has(> section[aria-label="当前用户"]) { margin-top: 0 !important; }' });
+      try {
+        await expect(expectDrawerUserAtBottom(page)).rejects.toThrow("用户按钮距菜单抽屉底边不超过 24px");
+      } finally {
+        await style.evaluate((element) => element.parentNode?.removeChild(element));
+      }
+      await expectDrawerUserAtBottom(page);
+    }
+  });
 });

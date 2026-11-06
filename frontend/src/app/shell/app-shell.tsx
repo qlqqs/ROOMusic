@@ -13,9 +13,9 @@ import styles from "./app-shell.module.css";
 // 播放器栏当前曲目旁的心形：放不下提示文字，失败的那句只给读屏。模块级函数，引用保持不变。
 const renderBarTrackActions = (track: PlayerTrack) => <CurrentTrackFavorite track={track} message="screen-reader" />;
 import { Brand } from "./brand";
-import { IdentityPanel } from "./identity-panel";
 import { PrimaryNav } from "./primary-nav";
 import { useCatalogEpochSync } from "./use-catalog-epoch-sync";
+import { UserMenu } from "./user-menu";
 
 /** 焦点在可编辑的地方时，“/”就是要输入的字符，不拦截。 */
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -24,7 +24,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 /**
- * 已登录界面的外壳。≥768px：左侧导航与主内容各自滚动，当前用户区固定在侧栏底部；<768px：顶部栏加“菜单”按钮，导航在模态对话框里，
+ * 已登录界面的外壳。≥768px：左侧导航与主内容各自滚动，当前用户按钮（点开是设置与退出登录）固定在侧栏底部；<768px：顶部栏加“菜单”按钮，导航在模态对话框里，
  * 页面只有一个滚动区。导航切换页面后，焦点回到主内容区，读屏用户得到页面变化的反馈。
  */
 export function AppShell({ children }: { children: ReactNode }) {
@@ -119,7 +119,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <PrimaryNav role={viewer.role} />
         </div>
         <div className={styles.identity}>
-          <IdentityPanel />
+          <UserMenu />
         </div>
       </div>
       <main id="main" ref={mainRef} tabIndex={-1} className={styles.main}>
@@ -136,7 +136,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
           <GlobalSearchBox currentQuery={searchQuery} onNavigate={() => setMenuOpen(false)} />
           <PrimaryNav role={viewer.role} onNavigate={() => setMenuOpen(false)} />
-          <IdentityPanel />
+          <div className={styles.drawerIdentity}>
+            <UserMenu onNavigate={() => setMenuOpen(false)} />
+          </div>
         </div>
       </ModalDialog>
     </div>

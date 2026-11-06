@@ -22,7 +22,7 @@ export function ScanSection() {
     start.mutate(undefined, {
       onSuccess: (response) => {
         if (!scope.isCurrent() || response.status !== 202) return;
-        void navigate({ to: "/library/scans/$scanId", params: { scanId: response.data.id } });
+        void navigate({ to: "/settings/library/scans/$scanId", params: { scanId: response.data.id } });
       },
     });
 
@@ -55,7 +55,7 @@ export function ScanSection() {
       {start.isSuccess && start.data.status === 200 ? (
         <Notice tone="info">
           已经有扫描在运行。{" "}
-          <Link to="/library/scans/$scanId" params={{ scanId: start.data.data.id }}>
+          <Link to="/settings/library/scans/$scanId" params={{ scanId: start.data.data.id }}>
             查看这个扫描
           </Link>
           。

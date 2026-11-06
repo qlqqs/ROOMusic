@@ -210,7 +210,7 @@ test.describe("默认版本的记录", () => {
     mock.groupDetails.set(album().id, { ...(mock.groupDetails.get(album().id) as NonNullable<ReturnType<typeof mock.groupDetails.get>>), releases: versions.map((version) => (version.id === second.id ? { ...version, title: LONG_TITLE.slice(0, 300) } : version)) });
     seedDefault(mock, second.id, 1, 1);
 
-    await page.goto("/operations");
+    await page.goto("/settings/operations");
     const table = page.getByRole("table", { name: "操作记录" });
     await expect(table.getByText("设定默认版本", { exact: true })).toBeVisible();
     // 改动列很长时，操作者的短名字仍在一行里，不在词中间断开（如“curato / r”）。

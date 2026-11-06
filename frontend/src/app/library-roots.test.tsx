@@ -32,7 +32,7 @@ function rowOf(name: string): HTMLElement {
 
 async function openLibrary(options: Parameters<typeof setup>[0] = {}) {
   const context = setup(options);
-  const rendered = renderApp({ path: "/library" });
+  const rendered = renderApp({ path: "/settings/library" });
   await heading("扫描目录");
   await screen.findByRole("rowheader", { name: "classical-a" });
   return { ...context, ...rendered };
@@ -56,16 +56,15 @@ describe("扫描目录页：访问与列表", () => {
     expect(document.title).toBe("扫描目录 · ROOMusic");
   });
 
-  it("导航里管理员有“资料库”分组下的“扫描目录”，当前页有 aria-current", async () => {
+  it("设置分栏里管理员有“扫描目录”，当前页有 aria-current", async () => {
     await openLibrary();
-    const nav = screen.getByRole("navigation", { name: "主导航" });
-    expect(within(nav).getByText("资料库")).toBeTruthy();
+    const nav = screen.getByRole("navigation", { name: "设置" });
     expect(within(nav).getByRole("link", { name: "扫描目录" }).getAttribute("aria-current")).toBe("page");
   });
 
   it("成员直接访问：显示“需要管理员权限”，不请求任何管理接口，导航里也没有这一项", async () => {
     const { api } = setup({ role: "user" });
-    renderApp({ path: "/library" });
+    renderApp({ path: "/settings/library" });
     expect(await heading("需要管理员权限")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "扫描目录" })).toBeNull();
     for (const path of [rootsPath, "/api/v1/library-root-operations", "/api/v1/scans/active", "/api/v1/scans"]) {
@@ -75,7 +74,7 @@ describe("扫描目录页：访问与列表", () => {
 
   it("空列表时提示添加第一个目录", async () => {
     setup({ library: { roots: [], operations: [] } });
-    renderApp({ path: "/library" });
+    renderApp({ path: "/settings/library" });
     expect(await screen.findByText(/还没有音乐目录/)).toBeTruthy();
     expect(screen.getByText("还没有目录操作记录。")).toBeTruthy();
   });

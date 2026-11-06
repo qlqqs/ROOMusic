@@ -101,6 +101,8 @@
   --layout-topbar-height: 56px;
   /* 元数据问题页的列表栏（两栏时）；详情最宽 860px，容器窄于约 900px 时改为顺序导航。 */
   --layout-issue-list-width: 380px;
+  /* 设置页的左侧分栏（视口 ≥1024px 时）。 */
+  --layout-settings-nav-width: 176px;
 
   /* 控件最小高度：桌面 36px，触屏与窄屏 44px（见下方媒体查询）。 */
   --control-height: 36px;

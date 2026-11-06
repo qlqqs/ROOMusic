@@ -382,7 +382,7 @@ describe("候选和操作记录", () => {
     const context = setup();
     const page = decodeOperationPage(sampleBody("operations/artists"));
     context.api.on("GET", "/api/v1/operations", () => jsonResponse(200, page));
-    renderApp({ path: `/operations?artist=${primary}` });
+    renderApp({ path: `/settings/operations?artist=${primary}` });
     const table = await screen.findByRole("table", { name: "操作记录" });
     expect(within(table).getByRole("columnheader", { name: "对象" })).toBeTruthy();
     expect(await screen.findByRole("heading", { name: "这位艺人的记录" })).toBeTruthy();
@@ -467,11 +467,11 @@ describe("艺人治理：边界补充", () => {
     expect(requests[1]?.body).toEqual(requests[0]?.body);
   });
 
-  it.each(["/artist-candidates", "/operations"])("成员直接访问 %s 也不能加载治理列表", async (path) => {
+  it.each(["/artist-candidates", "/settings/operations"])("成员直接访问 %s 也不能加载治理列表", async (path) => {
     const context = setup(true);
     renderApp({ path });
     await screen.findByRole("heading", { name: "需要管理员权限" });
-    expect(context.api.requestsTo("GET", path === "/operations" ? "/api/v1/operations" : "/api/v1/artist-candidates")).toHaveLength(0);
+    expect(context.api.requestsTo("GET", path === "/settings/operations" ? "/api/v1/operations" : "/api/v1/artist-candidates")).toHaveLength(0);
   });
 
   it("操作记录中不可见艺人只显示名称，已合并艺人仍保留旧身份链接", async () => {
@@ -483,7 +483,7 @@ describe("艺人治理：边界补充", () => {
       { ...original, id: artistTestId(2002), artist: { ...original.artist, id: artistTestId(2003), name: "已经合并的艺人", visible: false, redirect_artist_id: primary } },
     ];
     context.api.on("GET", "/api/v1/operations", () => jsonResponse(200, { items, pagination: { page: 1, page_size: 50, total: 2 } }));
-    renderApp({ path: "/operations" });
+    renderApp({ path: "/settings/operations" });
     const table = within(await screen.findByRole("table", { name: "操作记录" }));
     expect(table.getByText("已不可见的艺人")).toBeTruthy();
     expect(table.queryByRole("link", { name: "已不可见的艺人" })).toBeNull();

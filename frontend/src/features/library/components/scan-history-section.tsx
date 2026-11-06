@@ -25,7 +25,7 @@ const columns: Column<ScanDTO>[] = [
     hideLabelWhenStacked: true,
     // 每一行的链接文字相同：开始时间放进可访问名称，读屏的链接列表里能分辨是哪一次扫描。
     cell: (scan) => (
-      <Link to="/library/scans/$scanId" params={{ scanId: scan.id }}>
+      <Link to="/settings/library/scans/$scanId" params={{ scanId: scan.id }}>
         查看详情
         <VisuallyHidden>（{formatDateTime(scan.started_at)} 开始的扫描）</VisuallyHidden>
       </Link>
@@ -48,7 +48,7 @@ export function ScanHistorySection({ page }: { page: number }) {
     pageCount: pagination === undefined ? 0 : pageCountOf(pagination.total, pagination.page_size),
     ready: pagination !== undefined && !history.isPlaceholderData,
     onOutOfRange: (lastPage) =>
-      void navigate({ to: "/library", search: (previous) => ({ ...previous, scan_page: lastPage > 1 ? lastPage : undefined }), replace: true }),
+      void navigate({ to: "/settings/library", search: (previous) => ({ ...previous, scan_page: lastPage > 1 ? lastPage : undefined }), replace: true }),
   });
 
   return (
@@ -70,7 +70,7 @@ export function ScanHistorySection({ page }: { page: number }) {
                 page={data.pagination.page}
                 pageCount={pageCountOf(data.pagination.total, data.pagination.page_size)}
                 renderLink={(target, props) => (
-                  <Link to="/library" search={(previous) => ({ ...previous, scan_page: target > 1 ? target : undefined })} {...props} />
+                  <Link to="/settings/library" search={(previous) => ({ ...previous, scan_page: target > 1 ? target : undefined })} {...props} />
                 )}
               />
             </div>

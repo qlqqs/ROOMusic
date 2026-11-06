@@ -1,4 +1,4 @@
-import { decodeBackupOverview, decodeBackupCommand, decodeBuildInfo } from "../features/system/api/decoders";
+import { decodeBackupOverview, decodeBackupCommand, decodeBackupDeletions, decodeRetentionSave, decodeBuildInfo } from "../features/system/api/decoders";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
@@ -101,6 +101,11 @@ const successContracts: Record<string, Contract> = {
   "system/backups": { status: 200, decode: decodeBackupOverview },
   "system/backups-running": { status: 200, decode: decodeBackupOverview },
   "system/backups-directory-missing": { status: 200, decode: decodeBackupOverview },
+  "system/backup-deleted": { status: 200, decode: decodeBackupOverview },
+  "system/backups-deleted": { status: 200, decode: decodeBackupDeletions },
+  "system/retention-confirmation-required": { status: 200, decode: decodeRetentionSave },
+  "system/retention-saved": { status: 200, decode: decodeRetentionSave },
+  "system/retention-saved-unlimited": { status: 200, decode: decodeRetentionSave },
   "system/backup-started": { status: 202, decode: decodeBackupCommand },
   "system/backup-already-running": { status: 200, decode: decodeBackupCommand },
   "artists/adjudication/albums-any-empty": { status: 200, decode: decodeArtistParticipationAlbumsPage },
@@ -429,6 +434,8 @@ const successContracts: Record<string, Contract> = {
 
 // 错误样本都用统一信封；这里同时记录界面要处理的错误码与状态码。
 const errorContracts: Record<string, { status: number; code: string }> = {
+  "errors/backup-deletions-invalid": { status: 400, code: "invalid_input" },
+  "errors/backup-retention-invalid": { status: 400, code: "invalid_input" },
   "artists/adjudication/albums-any-preparing": { status: 503, code: "artist_catalog_preparing" },
   "artists/adjudication/albums-empty-participation": { status: 400, code: "invalid_artist_participation" },
   "artists/adjudication/albums-invalid-pagination": { status: 400, code: "invalid_pagination" },

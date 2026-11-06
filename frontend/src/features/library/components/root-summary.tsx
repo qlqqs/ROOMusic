@@ -7,7 +7,7 @@ import { summarizeRoots, useRoots } from "../hooks/use-roots";
 export function RootSummary() {
   const roots = useRoots();
   return (
-    <Panel title="音乐目录" action={<Link to="/library">管理目录</Link>}>
+    <Panel title="音乐目录" action={<Link to="/settings/library">管理目录</Link>}>
       <QueryContent query={roots} loading={<Skeleton label="正在加载目录" lines={2} />}>
         {(items) => {
           if (items.length === 0) return <p>还没有音乐目录。</p>;

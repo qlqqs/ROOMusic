@@ -3,7 +3,8 @@ import { seedVersions } from "./support/albums-data";
 import { expectVisibleFocusRing } from "./support/checks";
 import { expect, test } from "./support/fixtures";
 import { expectFocusStaysInDialog, focusedName, tabTo } from "./support/keyboard";
-import { heading, mainNav } from "./support/locators";
+import { heading } from "./support/locators";
+import { openSettings, userTrigger } from "./support/settings";
 
 // 只用键盘完成主要路径：登录、跳到主要内容、导航、停用确认对话框（焦点进入、约束、Esc 关闭、焦点恢复）、窄屏菜单。
 
@@ -35,7 +36,8 @@ test.describe("键盘", () => {
     await page.keyboard.press("Enter");
     await expect(page.locator("main#main")).toBeFocused();
 
-    await mainNav(page).getByRole("link", { name: "成员" }).focus();
+    await openSettings(page);
+    await page.getByRole("navigation", { name: "设置", exact: true }).getByRole("link", { name: "成员" }).focus();
     await expectVisibleFocusRing(page, "导航链接");
     await page.keyboard.press("Enter");
     await expect(heading(page, "成员")).toBeVisible();
@@ -83,7 +85,7 @@ test.describe("键盘", () => {
 
   test("停用确认对话框：焦点进入且被约束，Esc 关闭并把焦点还给触发按钮，Enter 确认", async ({ page, backend }) => {
     await backend.start({ signedInAs: "curator" });
-    await page.goto("/library");
+    await page.goto("/settings/library");
     const trigger = page.getByRole("button", { name: "停用目录 classical-a" });
     await expect(trigger).toBeVisible();
     await trigger.focus();
@@ -114,14 +116,14 @@ test.describe("键盘", () => {
   test("扫描记录：键盘翻页并进入详情，焦点环可见", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
     mock.seedHistory(25);
-    await page.goto("/library");
+    await page.goto("/settings/library");
     const nav = page.getByRole("navigation", { name: "扫描记录分页" });
     await expect(nav.getByText("第 1 / 2 页")).toBeVisible();
 
     await nav.getByRole("link", { name: "下一页" }).focus();
     await expectVisibleFocusRing(page, "下一页链接");
     await page.keyboard.press("Enter");
-    await expect(page).toHaveURL(/\/library\?scan_page=2$/);
+    await expect(page).toHaveURL(/\/settings\/library\?scan_page=2$/);
     await expect(nav.getByText("第 2 / 2 页")).toBeVisible();
 
     const detail = page.getByRole("table", { name: "扫描记录" }).getByRole("link", { name: /^查看详情/ }).first();
@@ -147,7 +149,14 @@ test.describe("键盘", () => {
     await expect(menu).toBeFocused();
 
     await page.keyboard.press("Enter");
-    await dialog.getByRole("link", { name: "扫描目录" }).focus();
+    await userTrigger(page).focus();
+    await page.keyboard.press("Enter");
+    const accountMenu = dialog.getByRole("menu", { name: "账号", exact: true });
+    await expect(accountMenu.getByRole("menuitem", { name: "设置", exact: true })).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(heading(page, "账号")).toBeVisible();
+    await page.getByRole("navigation", { name: "设置", exact: true }).getByRole("link", { name: "扫描目录" }).focus();
+    await expectVisibleFocusRing(page, "扫描目录分栏链接");
     await page.keyboard.press("Enter");
     await expect(heading(page, "扫描目录")).toBeVisible();
     await expect(dialog).toBeHidden();
@@ -155,7 +164,7 @@ test.describe("键盘", () => {
 
   test("成员页：键盘完成新建（Tab 顺序与 Enter 提交）与对话框确认", async ({ page, backend }) => {
     await backend.start({ signedInAs: "curator" });
-    await page.goto("/members");
+    await page.goto("/settings/members");
     await page.getByLabel("用户名").focus();
     await page.keyboard.type("keyboard-user");
     await page.keyboard.press("Tab");

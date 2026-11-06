@@ -31,7 +31,7 @@ function rowOf(name: string): HTMLElement {
 
 async function openMembers(options: Parameters<typeof setup>[0] = {}) {
   const context = setup(options);
-  const rendered = renderApp({ path: "/members" });
+  const rendered = renderApp({ path: "/settings/members" });
   await heading("成员");
   await screen.findByRole("rowheader", { name: /^listener/ });
   return { ...context, ...rendered };
@@ -88,7 +88,7 @@ describe("成员页：访问与列表", () => {
     if (curator === undefined) throw new Error("替身缺少 curator 账号");
     // 用户名仍是 curator，但 ID 是 listener 那一行的 ID。
     session.accounts.curator = { ...curator, id: memberId(members, "listener") };
-    renderApp({ path: "/members" });
+    renderApp({ path: "/settings/members" });
     await heading("成员");
     await screen.findByRole("rowheader", { name: /^listener/ });
 
@@ -103,7 +103,7 @@ describe("成员页：访问与列表", () => {
     const curator = session.accounts.curator;
     if (curator === undefined) throw new Error("替身缺少 curator 账号");
     session.accounts.curator = { ...curator, id: "00000000-0000-4000-8000-0000000000ee" };
-    renderApp({ path: "/members" });
+    renderApp({ path: "/settings/members" });
     await heading("成员");
     await screen.findByRole("rowheader", { name: /^listener/ });
 
@@ -113,9 +113,9 @@ describe("成员页：访问与列表", () => {
     expect(within(dialog).queryByText(/这是你自己的账号/)).toBeNull();
   });
 
-  it("导航里有“资料库”分组下的“成员”，当前页有 aria-current", async () => {
+  it("设置分栏里有“成员”，当前页有 aria-current", async () => {
     await openMembers();
-    const nav = screen.getByRole("navigation", { name: "主导航" });
+    const nav = screen.getByRole("navigation", { name: "设置" });
     expect(within(nav).getByRole("link", { name: "成员" }).getAttribute("aria-current")).toBe("page");
     expect(within(nav).getByRole("link", { name: "扫描目录" })).toBeTruthy();
   });
@@ -129,7 +129,7 @@ describe("成员页：访问与列表", () => {
 
   it("成员直接访问：显示“需要管理员权限”，不请求成员接口，导航里也没有这一项", async () => {
     const { api } = setup({ role: "user" });
-    renderApp({ path: "/members" });
+    renderApp({ path: "/settings/members" });
     expect(await heading("需要管理员权限")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "成员" })).toBeNull();
     expect(api.requestsTo("GET", usersPath)).toHaveLength(0);
@@ -138,7 +138,7 @@ describe("成员页：访问与列表", () => {
   it("读取失败（403，会话保留）：显示带请求 ID 的拒绝与重试，不退出登录", async () => {
     const { api } = setup();
     api.on("GET", usersPath, () => sampleResponse("errors/forbidden"));
-    renderApp({ path: "/members" });
+    renderApp({ path: "/settings/members" });
     await heading("成员");
     const alert = await screen.findByRole("alert");
     expect(within(alert).getByText("你没有权限执行此操作。")).toBeTruthy();
@@ -363,7 +363,7 @@ describe("停用、重新启用与撤销会话", () => {
   it("停用自己（还有别的管理员）成功后，会话被撤销，随后按 401 流程回到登录页，不再显示成员数据", async () => {
     const { session, members } = setup();
     addAdmin(session, members, "second-admin");
-    renderApp({ path: "/members" });
+    renderApp({ path: "/settings/members" });
     await heading("成员");
     await userEvent.click(await screen.findByRole("button", { name: "停用成员 curator" }));
     await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "停用成员" }));
@@ -457,7 +457,7 @@ describe("概览里的入口", () => {
     setup();
     renderApp({ path: "/" });
     const link = await screen.findByRole("link", { name: "管理成员" });
-    expect(link.getAttribute("href")).toBe("/members");
+    expect(link.getAttribute("href")).toBe("/settings/members");
   });
 
   it("成员的概览看不到成员区块与管理链接", async () => {
@@ -511,7 +511,7 @@ describe("V2/V5：管理员重置成员密码", () => {
     const account = session.accounts.curator;
     if (account === undefined) throw new Error("缺少管理员账号");
     account.id = memberId(members, "listener");
-    renderApp({ path: "/members" });
+    renderApp({ path: "/settings/members" });
     await screen.findByRole("rowheader", { name: /^listener/ });
     expect(within(rowOf("listener")).queryByRole("button", { name: /重置/ })).toBeNull();
     expect(within(rowOf("curator")).getByRole("button", { name: "重置成员 curator 的密码" })).toBeTruthy();
@@ -579,7 +579,7 @@ describe("V2/V5：管理员重置成员密码", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(context.api.requestsTo("GET", usersPath).length).toBeGreaterThan(reads);
     expect(screen.queryByRole("rowheader", { name: /^listener/ })).toBeNull();
-    expect(context.history.location.pathname).toBe("/members");
+    expect(context.history.location.pathname).toBe("/settings/members");
     expect(context.api.requestsTo("POST", resetPasswordPath)).toHaveLength(1);
   });
 
@@ -610,7 +610,7 @@ describe("V2/V5：管理员重置成员密码", () => {
     expect(writes).toHaveLength(1);
     expect(writes[0]?.headers.get("Idempotency-Key")).toBeNull();
     expect(context.session.accounts.listener?.password).toBe(loss === "loseResponses" ? password : "listener-password");
-    expect(context.history.location.pathname).toBe("/members");
+    expect(context.history.location.pathname).toBe("/settings/members");
   });
 
   it("提交中不能 Esc 或取消，命令结束后才关闭且不重复发送", async () => {
