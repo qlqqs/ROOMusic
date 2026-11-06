@@ -95,11 +95,37 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    gap: var(--space-6);
+    gap: var(--space-4);
     min-height: 0;
     padding: var(--space-6) var(--space-3) var(--space-4);
     overflow-y: auto;
     border-right: 1px solid var(--color-divider);
+  }
+
+  .sidebar > * {
+    flex-shrink: 0;
+  }
+
+  /*
+   * 导航列表单独滚动，品牌、搜索与底部的当前用户区不动：导航项再多，修改密码和退出也一直在窗口里。
+   * 内边距抵消外边距，给焦点环（外扩 4px）留出位置，不被滚动区裁掉。
+   * 窗口矮到导航只剩几行时，最小高度让侧栏整体滚动，而不是把导航压没。
+   * 背景是滚动阴影：两层随内容滚动的纸色遮罩盖住两层固定的阴影，只有上方或下方还有导航项时才露出阴影。
+   */
+  .sidebar > .sidebarNav {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: calc(3 * var(--control-height) + 2 * var(--space-1));
+    margin: calc(-1 * var(--space-1));
+    padding: var(--space-1);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scroll-padding-block: var(--space-1);
+    background:
+      linear-gradient(var(--color-bg) 40%, transparent) top / 100% 24px no-repeat local,
+      linear-gradient(transparent, var(--color-bg) 60%) bottom / 100% 24px no-repeat local,
+      radial-gradient(farthest-side at 50% 0, color-mix(in srgb, var(--text-primary) 14%, transparent), transparent) top / 100% 8px no-repeat scroll,
+      radial-gradient(farthest-side at 50% 100%, color-mix(in srgb, var(--text-primary) 14%, transparent), transparent) bottom / 100% 8px no-repeat scroll;
   }
 
   .identity {

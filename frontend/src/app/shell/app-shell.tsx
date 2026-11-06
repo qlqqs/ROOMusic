@@ -24,7 +24,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 /**
- * 已登录界面的外壳。≥768px：左侧导航与主内容各自滚动；<768px：顶部栏加“菜单”按钮，导航在模态对话框里，
+ * 已登录界面的外壳。≥768px：左侧导航与主内容各自滚动，当前用户区固定在侧栏底部；<768px：顶部栏加“菜单”按钮，导航在模态对话框里，
  * 页面只有一个滚动区。导航切换页面后，焦点回到主内容区，读屏用户得到页面变化的反馈。
  */
 export function AppShell({ children }: { children: ReactNode }) {
@@ -115,7 +115,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className={styles.sidebar}>
         <Brand />
         <GlobalSearchBox currentQuery={searchQuery} />
-        <PrimaryNav role={viewer.role} />
+        <div className={styles.sidebarNav}>
+          <PrimaryNav role={viewer.role} />
+        </div>
         <div className={styles.identity}>
           <IdentityPanel />
         </div>
