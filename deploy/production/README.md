@@ -7,16 +7,13 @@ ROOMusic 生产环境只有两个容器：`app` 和 PostgreSQL 18。应用自带
 
 ## 1. 安装
 
-仓库根目录的 `compose.prod.yaml` 和 `.env.prod.example` 与 Release 附件相同。
-
-从 GitHub Release 下载 `compose.yaml` 和 `example.env`。下面的链接总是指向最新版本，也可以把 `latest/download` 换成
-`download/v0.1.0` 指定版本：
+部署文件从 `main` 下载，镜像默认使用 `latest`：
 
 ```bash
 mkdir -p /srv/roomusic && cd /srv/roomusic
-curl -fLO https://github.com/qlqqs/ROOMusic/releases/latest/download/compose.yaml
-curl -fLO https://github.com/qlqqs/ROOMusic/releases/latest/download/example.env
-cp example.env .env && chmod 600 .env
+curl -fL -o compose.yaml https://raw.githubusercontent.com/qlqqs/ROOMusic/main/compose.prod.yaml
+curl -fL -o .env https://raw.githubusercontent.com/qlqqs/ROOMusic/main/.env.prod.example
+chmod 600 .env
 ```
 
 编辑 `.env`，必填两项：
@@ -43,7 +40,7 @@ docker compose up -d --wait
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `ROOMUSIC_VERSION` | 下载的版本 | 镜像版本，不带 `v`；升级或降级时修改 |
+| `ROOMUSIC_VERSION` | `latest` | 镜像版本；固定或降级时填具体版本，不带 `v` |
 | `ROOMUSIC_HTTP_PORT` | `8090` | 网页端口 |
 | `ROOMUSIC_BACKUP_DIR` | Docker 卷 `backups` | 填绝对路径则把备份放在宿主机目录，需要 uid 1000 可写 |
 | `ROOMUSIC_BACKUP_HOUR` | `3` | 每天几点后自动备份，0–23 |
@@ -79,13 +76,14 @@ mkdir -p /srv/roomusic-backups && sudo chown 1000:1000 /srv/roomusic-backups
 
 ## 3. 升级与降级
 
-把 `.env` 里的 `ROOMUSIC_VERSION` 改成目标版本，然后：
+默认使用 `latest`，升级时运行：
 
 ```bash
-docker compose pull
-docker compose up -d --wait
+docker compose pull && docker compose up -d --wait
 docker compose exec app /app/roomusic --version
 ```
+
+要固定或降级版本，把 `.env` 里的 `ROOMUSIC_VERSION` 改成具体版本（如 `0.1.0`，不带 `v`），再执行同样的命令。
 
 应用启动时会比较自己的数据库结构和数据库里的现状：
 

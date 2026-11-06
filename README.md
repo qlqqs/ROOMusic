@@ -17,13 +17,13 @@
 
 需要 Docker 和 Docker Compose v2。
 
-仓库根目录的 `compose.prod.yaml` 和 `.env.prod.example` 与 Release 附件相同。
+部署文件从 `main` 下载，镜像默认使用 `latest`。
 
 ```bash
 mkdir roomusic && cd roomusic
-curl -fLO https://github.com/qlqqs/ROOMusic/releases/latest/download/compose.yaml
-curl -fLO https://github.com/qlqqs/ROOMusic/releases/latest/download/example.env
-cp example.env .env && chmod 600 .env
+curl -fL -o compose.yaml https://raw.githubusercontent.com/qlqqs/ROOMusic/main/compose.prod.yaml
+curl -fL -o .env https://raw.githubusercontent.com/qlqqs/ROOMusic/main/.env.prod.example
+chmod 600 .env
 ```
 
 编辑 `.env`，填两项：
@@ -43,11 +43,13 @@ docker compose up -d --wait
 
 ## 升级与降级
 
-把 `.env` 里的 `ROOMUSIC_VERSION` 改成目标版本，然后：
+默认使用 `latest`，升级时运行：
 
 ```bash
 docker compose pull && docker compose up -d --wait
 ```
+
+要固定或降级版本，把 `.env` 里的 `ROOMUSIC_VERSION` 改成具体版本（如 `0.1.0`，不带 `v`），再执行同样的命令。
 
 数据库结构变化前会先自动备份。最低可以降到 `0.1.0`；遇到无法自动回退的版本，应用不会启动，日志会给出恢复备份的命令。
 
@@ -89,7 +91,7 @@ git tag -a vX.Y.Z -m "ROOMusic vX.Y.Z" && git push origin vX.Y.Z
 ```
 
 推送标签后，GitHub Actions 会确认该提交在 `main` 上的 CI 已经通过，然后构建 amd64 和 arm64 镜像，推送到
-`ghcr.io/qlqqs/roomusic`，并创建附带 `compose.yaml` 和 `example.env` 的 Release。
+`ghcr.io/qlqqs/roomusic`，并发布 Release 说明。
 
 ## 文档
 

@@ -40,8 +40,8 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 
 ## 2. 接口签名
 
-- 生产启动：部署目录放 Release 附件 `compose.yaml` 与由 `example.env` 复制的 `.env`，`docker compose up -d --wait`；
-  镜像 `ghcr.io/qlqqs/roomusic:<版本>`，改 `.env` 的 `ROOMUSIC_VERSION` 即升级或降级（2026-11-06 部署体验改进）。
+- 生产启动：从 `main` 下载 `compose.prod.yaml` 为部署目录的 `compose.yaml`、`.env.prod.example` 为 `.env`，执行 `chmod 600 .env`，填好配置后运行 `docker compose up -d --wait`；
+  镜像默认 `ghcr.io/qlqqs/roomusic:latest`，升级用 `docker compose pull && docker compose up -d --wait`；固定或降级时先改 `.env` 的 `ROOMUSIC_VERSION` 为具体版本（不带 `v`），再执行同样命令（2026-11-06 部署体验改进）。
 - 开发启动：`./scripts/dev.sh`，默认读取 `.env.dev`，Go 运行在 `backend/`，
   Vite 通过开发配置代理 `/api` 到 `:8080`。
 - HTTP：`POST /api/v1/users`、`PATCH /api/v1/users/{id}`、
@@ -68,7 +68,7 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
   备份接口 `GET|POST /api/v1/system/backups`、`GET|DELETE /api/v1/system/backups/{name}`、`POST /api/v1/system/backups/deletions`、
   `PUT /api/v1/system/backups/retention` 与 `GET /api/v1/system/version`（管理员），删除与保留规则见[备份管理](./backup-management-contracts.md)。
 - 发布：推送标签 `vX.Y.Z` 触发 `.github/workflows/release.yml`（不重跑测试，要求该提交在 main 上的 CI 已通过；原生 amd64 与 arm64 构建，推送 `X.Y.Z`、`X.Y`、`latest`，
-  Release 附件为写入版本号的 `compose.yaml` 与 `example.env`）；打标签前运行只读检查 `scripts/release-check.sh vX.Y.Z`。
+  只发布镜像和 Release 说明）；打标签前运行只读检查 `scripts/release-check.sh vX.Y.Z`。
 
 ## 3. 合同
 
@@ -150,7 +150,7 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
   和 `ROOMUSIC_SECURE_COOKIES` 校验写请求；生产未配置清单时按主机一致校验，只比较规范化的 Origin 与请求 Host；
   配置清单后只按清单。主机一致与清单模式的 Cookie `Secure` 都跟随请求来源协议，任何模式都不读转发头。
 - `.env.dev`、`.env.prod`、`.env` 是本机配置，必须被 Git 忽略；仓库只跟踪不含真实值的
-  `.env.dev.example` 与 `.env.prod.example`。开发脚本默认读 `.env.dev`，不 source 根目录 `.env`；生产可在仓库根目录用 `.env.prod`（`docker compose -f compose.prod.yaml --env-file .env.prod up -d --wait`），或在仓库外部署目录用 `.env` 与 Release 的 `compose.yaml`。`backend/data/` 等运行期数据（含封面缓存与 `media-cache/` 派生缓存）同样不得提交。
+  `.env.dev.example` 与 `.env.prod.example`。开发脚本默认读 `.env.dev`，不 source 根目录 `.env`；生产可在仓库根目录用 `.env.prod`（`docker compose -f compose.prod.yaml --env-file .env.prod up -d --wait`），或从 `main` 下载部署文件，在仓库外部署目录用 `.env` 与 `compose.yaml`。部署文件默认使用 `latest`。`backend/data/` 等运行期数据（含封面缓存与 `media-cache/` 派生缓存）同样不得提交。
 - ALAC 派生需要 ffmpeg：生产镜像构建时从固定摘要镜像复制，开发由部署者安装（项目不单独分发二进制）；`ROOMUSIC_FFMPEG_PATH`（绝对路径，空则在 `PATH` 中查找）与
   `ROOMUSIC_MEDIA_CACHE_MAX_MIB`（默认 10240，最小 256）；找不到或自检失败时应用照常启动，ALAC 保持“不能直接播放”。
   `scripts/ffmpeg-pinned.sh` 取出按摘要固定的 ffmpeg 7.1.1，测试、CI 与推荐部署共用。详见[无损派生合同](./playback-derivation-contracts.md)。
@@ -245,7 +245,7 @@ Authorization/session token、密码、数据库 URL、完整 NAS 路径或音�
 ## 5. 正确、基准与错误案例
 
 - 错误：把 `role` 缺失解释为 admin。
-- 部署：正确是镜像只由标签触发的发布工作流从干净检出构建，升降级只改 `ROOMUSIC_VERSION`，结构变化前必有迁移前备份；
+- 部署：正确是镜像只由标签触发的发布工作流从干净检出构建，默认拉取 `latest` 升级，固定或降级时改 `ROOMUSIC_VERSION` 后拉取并启动，结构变化前必有迁移前备份；
   错误是从工作区构建生产镜像、迁移前备份失败仍继续，或在备份前持有高于 `AccessShareLock` 的表锁。停止用 `stop`，不用 `down -v`。
 
 ## 6. 必需测试

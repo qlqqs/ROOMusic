@@ -40,7 +40,7 @@ expect_missing no-music.env ROOMUSIC_MUSIC_DIR
 compose required.env config --format json | jq -e '
   .name == "roomusic-server" and
   (.services | keys) == ["app", "postgres"] and
-  .services.app.image == "ghcr.io/qlqqs/roomusic:__RELEASE_VERSION__" and
+  .services.app.image == "ghcr.io/qlqqs/roomusic:latest" and
   (.services.app.ports | length) == 1 and
   .services.app.ports[0].published == "8090" and
   .services.app.ports[0].target == 8080 and
@@ -66,6 +66,4 @@ compose required.env config --format json | jq -e '
   .networks.roomusic.ipam.config[0].subnet == "10.203.51.0/24"
 ' > /dev/null
 
-grep -qF '__RELEASE_VERSION__' "$ROOT_DIR/compose.prod.yaml"
-grep -qxF 'ROOMUSIC_VERSION=__RELEASE_VERSION__' "$ROOT_DIR/.env.prod.example"
 printf '%s\n' '生产 Compose 静态校验通过'

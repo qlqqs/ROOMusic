@@ -31,8 +31,6 @@ class ReleaseCheckTests(unittest.TestCase):
         self.git("config", "user.email", "release-test@example.invalid")
         self.git("config", "core.hooksPath", "/dev/null")
         self.write("scripts/release-check.sh", SCRIPT.read_text())
-        self.write("compose.prod.yaml", "image: roomusic:__RELEASE_VERSION__\n")
-        self.write(".env.prod.example", "ROOMUSIC_VERSION=__RELEASE_VERSION__\n")
         self.write("backend/cmd/roomusic/web/index.html", "合成前端\n")
         self.commit()
         self.origin = self.root / "origin.git"
@@ -139,11 +137,6 @@ class ReleaseCheckTests(unittest.TestCase):
         self.git("clone", "--bare", str(self.repo), str(self.origin))
         self.git("remote", "add", "origin", str(self.origin))
         self.check(contains="禁止发布敏感文件", hidden="INITIAL_SECRET_MUST_NOT_APPEAR")
-
-    def test_missing_version_placeholder(self):
-        self.write("compose.prod.yaml", "image: fixed-version\n")
-        self.commit()
-        self.check(contains="缺少发布占位符")
 
 
 if __name__ == "__main__":
