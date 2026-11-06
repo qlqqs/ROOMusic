@@ -1,283 +1,196 @@
 # ROOMusic
 
-ROOMusic 保留 Core 0 的 Go 后端、数据库与同源部署工具链，不迁移 V0 中已经膨胀的应用容器、AI worker、operator、release overlay 或业务配置。
+ROOMusic 是给个人、家庭和小型私有群体用的自托管音乐库。它按 `专辑 → 版本 → 碟 → 曲目` 理解你的音乐，而不只是把文件夹列出来；
+一个管理员负责整理，成员各自听歌、收藏和建歌单。整个应用是一个 Go 程序加 PostgreSQL，前端由同一个端口提供。
 
-> **当前状态（2026-11-05）**：Core 1 已收口，M5 已交付：每个成员有自己的播放历史、收藏与歌单，搜索按繁简与写法规范化，艺人有独立页面与受治理的合并、拆开、改名，扫描有进度与报告；成员可以自己改密码，管理员可以重置成员密码，管理员忘记密码时可在服务器上用命令恢复（见[忘记密码](#忘记密码)）。各阶段的详细范围见 [Core 1 路线](docs/architecture/core-1-roadmap.md)。以下是 2026-10-17 时的阶段说明，保留作历史：Classical 客户端的 M1a 与 M1b 已完成：应用外壳、初始化与登录、扫描目录与扫描详情、成员管理、简版概览，以及专辑浏览（列表、搜索、详情与来源证据），由 Go 同源提供（构建产物提交在 `backend/cmd/roomusic/web`）。M2 的播放也已交付：浏览器直出、ALAC 经 ffmpeg 无损派生、内嵌歌词的同步显示（三组手工实播尚待执行）。M3 让管理员能在专辑详情里修正发行信息（重扫不会覆盖）、把版本归入其他专辑或移出为独立专辑，并撤销自己最近的修改，修改记录在“操作记录”页与详情的“修改记录”里。M4 的第一项让管理员为多版本专辑指定默认版本（专辑列表和打开专辑时先显示它，可撤销），所有成员可以对比一张专辑的各个版本；第二项给管理员一个“元数据问题”页，按版本列出“需要关注”的问题与依据，来源与介质类型、归组冲突与缺失曲目看过之后可以标记为已核对（可撤销，扫描发现情况变了会重新提醒）；第三项给管理员一个“待认领”页：扫描因为证明不了是同一个版本而新建了发行时，旧版本上的修改（字段修正、所在的专辑、默认版本、问题核对）会留在不可见的旧版本上，管理员可以按推荐或搜索选一个新版本，看过预览后一次认领过去（新版本已有的以新版本为准，可撤销）；扫描反馈与整组合并拆分（M4 其余各项）尚未实现。设计依据见 [frontend/DESIGN.md](frontend/DESIGN.md)，能力矩阵、已批准的 Core 1 阶段范围和四类 ADR 见 [Core 1 路线](docs/architecture/core-1-roadmap.md)，前端规范见 [前端规范索引](.trellis/spec/frontend/index.md)。
+## 能做什么
 
-## 软件目标
+- **浏览与搜索**：专辑列表、详情、多版本对比，艺人页面；搜索不分繁简与写法。
+- **播放**：浏览器直接播放常见格式；ALAC 在服务端无损转成 FLAC 后播放；内嵌歌词逐行同步显示。
+- **个人数据**：每个成员有自己的播放历史、收藏和歌单，互不影响。
+- **整理（管理员）**：修正发行信息、调整归组、指定默认版本、处理元数据问题、认领重扫后的新版本、合并或拆开艺人；
+  修改都可以撤销，重扫不会覆盖，记录在“操作记录”页。
+- **扫描**：只读扫描允许的音乐目录，有进度和报告；不会写入或改动音乐文件。
+- **账号**：管理员添加成员、重置成员密码；成员自己改密码；管理员忘记密码时在服务器上用命令恢复。
 
-ROOMusic 的长期目标是面向个人、家庭和小型私有群体的自托管音乐库管家。系统以 `ReleaseGroup -> Release -> Medium -> Track` 为核心理解发行版本，而不是只把音乐呈现为文件夹列表。后续能力可以覆盖浏览、搜索、播放、metadata 整理和受控 Agent 操作，但必须建立在稳定身份、来源可解释、后端权限、事务、操作记录和恢复边界之上。
+## 生产部署
 
-Core 0 的阶段目标是最小可用闭环（前端的当前进度见上方说明）：初始化和登录、允许目录内的只读扫描、保守的 Release Graph、Web 浏览、基础搜索，以及目录配置的 Change Set/Operation Journal。Redis、Meilisearch、GraphQL、播放、文件写入和可运行的 Agent runtime 都不是 Core 0 的强制依赖。
+生产由三个容器组成：`app`（应用，内含固定版本的 ffmpeg）、`postgres`（PostgreSQL 18）和 `backup`（每日备份）。
+不需要 Redis 或 Meilisearch。数据库不对外发布端口，应用只在 IPv4 上发布一个端口。
 
-长期只保留一个产品 Agent：`Music Steward`。`Assistant`、`Steward`、`Operator` 是三种审批模式：Assistant 的危险操作由用户批准，Steward 由独立 Review Subagent 审查，Operator 由管理员显式进入后跳过审批直接执行。三种模式仍统一经过后端注册工具、权限和范围校验、结构化日志、Operation Journal 及适用的恢复机制；Operator 不等于无限制 shell、任意 SQL 或任意宿主机文件访问。
+镜像只从 Git 提交构建：默认 `main`，也可以用 `REF=` 指定。工作区里未提交的改动不会进入镜像；构建不需要宿主机装 Go 或 Node，
+前端用仓库里已提交的构建产物。
 
-运行日志不承担“业务 Git”的职责。可恢复变更由 `Change Set + Operation Journal + Checkpoint + Reversible Executor` 描述；Core 0 只实现目录配置的窄闭环，不引入完整 Event Sourcing 或文件级恢复系统。
+完整的配置说明、备份恢复细节和本机实例的具体参数见 [生产部署说明](deploy/production/README.md)。
 
-## 环境组成
+### 准备
 
-- Go 1.25.10
-- Node.js 24.22.1
-- PostgreSQL 18
-- Redis 8
-- Meilisearch 1.45.0
+宿主机需要 Git、Bash、Make、Docker（带 BuildKit）和 Docker Compose v2。构建时要能访问基础镜像、Go 模块和 Alpine 包仓库；
+宿主机已设置的 `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` 会透传给构建。
 
-开发时 Go 与 Node.js 在宿主机运行；PostgreSQL、Redis 和 Meilisearch 由 Docker Compose 承载，依赖端口只绑定到 `127.0.0.1`。
-生产使用独立的应用、PostgreSQL 与备份容器，不运行 Redis、Meilisearch。
+准备两个目录，都要让 uid 1000 能访问：
 
-## 开发环境
+- 音乐目录：可读即可，生产以只读方式挂载为容器内的 `/music`；
+- 备份目录：可写，放在仓库之外。
 
-安装工具链：
-
-```bash
-mise install
-```
-
-如需重建本地开发配置：
-
-```bash
-cp .env.example .env.dev
-```
-
-启动依赖：
+### 首次部署
 
 ```bash
-mise run env-up
+cp .env.prod.example .env.prod
+chmod 600 .env.prod
+# 编辑 .env.prod：替换数据库密码（可用 openssl rand -hex 24 生成），填好端口、音乐目录、备份目录和子网
+docker compose -p roomusic-prod -f deploy/production/compose.yaml --env-file .env.prod config --quiet
+make prod
+make prod-status
 ```
 
-检查环境：
+主要配置：
 
-```bash
-mise run env-check
-```
-
-### 快捷开发工作流
-
-默认复制 `.env.example` 为 `.env.dev`（或通过 `ROOMUSIC_ENV_FILE` 指定配置）并填写本地 PostgreSQL 密码，可用一条命令启动 PostgreSQL、Go 后端和 Vite 开发服务：
-
-```bash
-make dev
-```
-
-前端开发地址为 `http://localhost:5173`，后端地址为 `http://localhost:8080`。如需经公网反代访问 Vite，把 `.env.dev` 中的 `ROOMUSIC_PUBLIC_URL` 设为反代后的外部地址，Vite 只会放行该主机名。React 修改由 Vite 热更新；Go 或迁移文件修改会自动重启后端。按 `Ctrl-C` 会同时停止两个开发进程，PostgreSQL 容器保持运行。
-
-## 生产环境
-
-开发与生产可以同时运行，配置分别是 `.env.dev` 与 `.env.prod`，开发端口 8080（Vite 5173）、生产端口 8090；
-项目、网络、数据库和缓存卷各自独立。生产只用 `main`（或 `REF=`）已提交的代码，从 Git 导出构建镜像，并使用该提交的 Compose，
-工作区的未提交改动不会进入镜像。构建无需 Node，前端用已提交的内嵌产物。
-首次配置、备份与恢复步骤见 [生产部署说明](deploy/production/README.md)。
-
-| 用途 | 命令 |
+| 变量 | 说明 |
 | --- | --- |
-| 构建、升级前备份、启动 | `make prod` |
-| 回退指定提交 | `make prod REF=<提交>` |
-| 停止（保留容器与数据卷） | `make prod-stop` |
-| 状态与运行版本 | `make prod-status` |
-| 日志 | `make prod-logs` |
+| `ROOMUSIC_DB_PASSWORD` | 必填，只用字母和数字。首次启动后再改这里不会改库里的密码 |
+| `ROOMUSIC_HTTP_PORT` | 必填，应用对外端口，例如 `8090` |
+| `ROOMUSIC_MUSIC_DIR` | 必填，宿主机音乐目录的绝对路径 |
+| `ROOMUSIC_BACKUP_DIR` | 必填，宿主机备份目录的绝对路径 |
+| `ROOMUSIC_SUBNET` | 必填，固定的 Docker 子网，例如 `10.203.50.0/24` |
+| `ROOMUSIC_ALLOWED_ORIGINS` | 可选，见下文[访问地址与反代](#访问地址与反代) |
+| `ROOMUSIC_TIMEZONE` / `ROOMUSIC_BACKUP_HOUR` / `ROOMUSIC_BACKUP_KEEP_DAYS` | 可选，备份时区、每天几点后备份、保留天数，默认 `Asia/Shanghai`、`3`、`14` |
+| `ROOMUSIC_MEDIA_CACHE_MAX_MIB` | 可选，ALAC 转换缓存上限，默认 `10240`，最小 `256` |
+
+值写成 `KEY=值` 的字面量，不要用 `${变量}` 或命令替换。不要填 `ROOMUSIC_SECURE_COOKIES` 或 `ROOMUSIC_PUBLIC_URL`，
+生产里填了会拒绝启动。
+
+**`.env.prod` 不在 Git 里，请另存一份。** `git clean -x` 会把它和被忽略的 `music/` 一起删掉，不要在部署目录里运行。
+
+### 首次使用
+
+**先初始化管理员，再开放公网反代**，免得有人抢先创建管理员。
+
+1. 打开 `http://<服务器地址>:<端口>`，按页面提示创建管理员。
+2. 在“扫描目录”里添加 **`/music`**（或它的子目录），这是容器内的路径，不是宿主机路径。
+3. 开始扫描，扫描完就能浏览和播放。
+4. 在“成员”页添加家人或朋友的账号。
+
+### 日常运维
+
+| 操作 | 命令 |
+| --- | --- |
+| 启动或升级（构建 → 备份 → 换版本 → 等待健康） | `make prod` |
+| 回退到指定提交 | `make prod REF=<提交>` |
+| 查看状态、运行版本和地址 | `make prod-status` |
+| 跟随最近 200 行日志 | `make prod-logs` |
 | 立即备份 | `make prod-backup` |
 | 重置密码 | `make prod-reset-password U=<用户名>` |
+| 停止（保留容器和数据） | `make prod-stop` |
 
-升级前备份失败就不换应用版本；不要用 `down -v` 停止生产。`.env.prod` 不提交，建议另存一份；
-`git clean -x` 会删除它和被忽略的 `music/`。根目录 `.env` 不再作为脚本配置使用。
+**不要对生产项目运行 `docker compose … down -v`，它会删除数据库。** 所有 `make prod-*` 命令都不会删数据卷。
+启动和升级只用 `make prod`，不要手工 `docker compose up`：脚本会用目标提交里的 Compose 文件，并清理 shell 里残留的
+`ROOMUSIC_*`、`COMPOSE_*` 变量。手工 `docker compose` 只用来查询、`exec` 或排查，写法见[生产部署说明](deploy/production/README.md#日常运维)。
 
-### 来源配置
+### 升级与回退
 
-**生产默认：主机一致模式。** 不填 `ROOMUSIC_ALLOWED_ORIGINS`，地址栏网址的来源与请求主机（含端口）规范化后一致就放行写请求，
-不限 http/https。登录及退出 Cookie 的 `Secure` 跟随来源协议；反代必须保留浏览器的 Host（含端口）与 Origin，
-nginx 使用 `proxy_set_header Host $http_host;`，不要用会丢端口的 `$host`。不要设置 `ROOMUSIC_SECURE_COOKIES` 或
-`ROOMUSIC_PUBLIC_URL`：生产无清单时这两项非空会拒绝启动。启动后先初始化管理员，再开放公网反代。
+代码合进 `main` 并提交后执行 `make prod`。脚本会先构建镜像，再对当前数据库做一次备份，**备份失败就不换版本**；
+镜像构建失败也不影响正在运行的实例。同一提交的镜像已存在时跳过构建。
 
-**可选：清单模式。** 只想放行固定网址，或反代无法保留 Host 时，设置 `ROOMUSIC_ALLOWED_ORIGINS`，例如：
+数据库迁移在应用启动时自动执行，不提供降级迁移。如果新版本已经跑过新迁移，回退到旧版本会因为不认识新迁移而启动失败，
+这时用升级前的备份恢复后再回退。旧镜像不会自动清理，确认不再需要后按标签删除。
 
-```dotenv
-ROOMUSIC_ALLOWED_ORIGINS=http://192.168.50.206:8090,https://music.example.com
+### 备份与恢复
+
+`backup` 容器每天在设定时间后备份一次 PostgreSQL，保留 14 天，文件为备份目录下的 `roomusic-<时间>.dump`
+（手动备份带 `-manual` 后缀）。超过 26 小时没有成功备份时，`backup` 的健康检查会失败。
+
+备份只包含数据库。音乐文件本身、封面和 ALAC 转换缓存都不在里面；转换缓存可以重新生成。备份和数据库在同一台机器上，
+需要的话请另外做异地备份。备份文件含账号等私人数据，权限为 600，请妥善保管。
+
+```bash
+# 恢复到临时库核对，不动生产
+deploy/production/restore.sh check <备份目录>/roomusic-<时间>-manual.dump
+# 恢复到生产库，会覆盖现有数据；脚本会先自动备份当前库，并要求输入 roomusic-prod 确认
+deploy/production/restore.sh production <备份目录>/roomusic-<时间>-manual.dump
 ```
 
-来源必须是 `http(s)://host[:port]`，实际端口要与访问入口一致；示例中的 `8090` 需相应配置监听端口或端口映射。
-逗号分隔的每项会去掉首尾空白，忽略空项并去重；协议与主机名转为小写，默认端口 80/443 和单独的末尾 `/` 会去掉。
-IPv6 地址必须带方括号；国际化域名使用 punycode；不允许通配、用户信息、其他路径、查询或片段。
-清单格式错误时拒绝启动；只配 http 来源也可启动。
+恢复失败时应用保持停止，脚本会打印用安全备份再恢复一次的命令；不要在失败后自行启动应用。
 
-清单模式下删除 `ROOMUSIC_SECURE_COOKIES`（即使是 `false` 也冲突），通常也不设置 `ROOMUSIC_PUBLIC_URL`；
-若保留后者供 Vite 使用，须符合原有格式要求且规范化后属于清单，但不参与后端来源判断。
-写请求只按 `Origin` 与清单匹配，不依赖请求 Host 或任何转发头；登录及退出的 Cookie 在 https 来源下带 `Secure`，http 下不带，
-`HttpOnly`、`SameSite=Lax`、路径与有效期不变。局域网使用 IP、公网使用域名，让两个入口的 Cookie 按主机隔离。
+### 访问地址与反代
 
-**开发：旧模式。** 未配置清单的非生产环境保持旧模式：`ROOMUSIC_SECURE_COOKIES` 决定来源协议和 Cookie 的 `Secure`，
-来源主机与 `ROOMUSIC_PUBLIC_URL`（设置时）或请求 Host 比较。开发试用清单时需加入 Vite 的实际来源（如 `http://localhost:5173`），
-删除 `ROOMUSIC_SECURE_COOKIES`，并删除或调整 `ROOMUSIC_PUBLIC_URL` 使它属于清单。
+默认不需要配置：浏览器地址栏里的网址和请求的主机（含端口）一致，就允许登录、收藏等写操作，http 和 https 都可以。
+登录 Cookie 在 https 下带 `Secure`，http 下不带。局域网用 IP、公网用域名访问时，两边各自登录。
+
+经过反代时，反代必须原样保留浏览器的 Host（含端口）和 Origin。nginx 写成：
+
+```nginx
+proxy_set_header Host $http_host;
+```
+
+不要用 `$host`，它会丢掉端口。Host 被改写时页面能浏览，但写操作会返回 `403 origin_forbidden`，日志里有 `identity.origin.rejected`。
+修不了反代时，在 `.env.prod` 里列出所有允许的完整网址，再 `make prod`：
+
+```dotenv
+ROOMUSIC_ALLOWED_ORIGINS=http://192.168.1.10:8090,https://music.example.com
+```
+
+每一项都是 `http(s)://主机[:端口]`，不能带路径或通配符。应用不读取 `X-Forwarded-*` 或 `Forwarded` 头；
+登录限速按 TCP 对端地址计算，经过反代的用户会共用一个限速来源。
 
 ### 忘记密码
 
-成员忘记密码时，请管理员在“成员”页点这一行的“重置密码”设一个新密码，再告诉对方；对方登录后可以在侧栏“修改密码”里改成自己的。
+成员忘记密码时，管理员在“成员”页点这一行的“重置密码”设一个新密码告诉对方，对方登录后可以在侧栏“修改密码”里改掉。
 
-管理员自己忘记密码时，在服务器上按环境执行：
-
-```bash
-make prod-reset-password U=<用户名>       # 生产：在运行中的容器内执行
-./scripts/reset-password.sh <用户名>      # 开发：读取 .env.dev（或 ROOMUSIC_ENV_FILE）
-```
-
-在终端里输入两次新密码（不回显）；开发脚本也可以从管道读取一行，且拒绝生产配置。
-它只连接数据库，不跑迁移，不需要停服务；成功后这个账号在所有设备上退出登录。用户不存在、密码不合规或数据库连不上时退出码为 1，参数错误为 2。
-
-如需重新体验首次初始化流程，开发环境可清空业务数据：
+管理员自己忘记密码时，在服务器上运行：
 
 ```bash
-make dev-reset
-# 或 CONFIRM=1 make dev-reset（跳过交互确认）
+make prod-reset-password U=<用户名>
 ```
 
-该命令会删除用户、会话、目录、扫描结果和操作日志，但保留数据库迁移；`ROOMUSIC_ENV=production` 时会拒绝执行。
+在终端里输入两次新密码（不显示）。不需要停服务；成功后这个账号在所有设备上退出登录。重置后如果还提示尝试次数太多，等一分钟再试。
 
-查看日志或停止依赖：
+### 播放与歌词
+
+浏览器大多不能解码 ALAC。服务端第一次播放 ALAC 曲目时用 ffmpeg 把它无损转成 FLAC，缓存在应用的数据卷里，等待时播放栏显示“正在准备”；
+缓存超过上限时按最近使用淘汰。启动时会做一次转换自检，失败时应用照常运行，ALAC 曲目会标注暂时不能播放，日志里有
+`playback.derivation.unavailable`。
+
+歌词取自音频文件的内嵌标签，不读外置 `.lrc`，也不联网获取。从不带歌词的版本升级上来后，需要重新扫描一次才有歌词。
+
+### 日志与健康检查
+
+应用输出结构化 JSON 日志，每个请求结束时写一条 `http.request.completed`，包含请求 ID、路由模板、状态码和耗时，
+不记录查询字符串、请求体、Cookie、密码或完整的音乐路径。健康检查使用 `/readyz`。容器日志按 10 MB × 5 个文件轮转。
+
+## 开发
+
+工具链由 [mise](https://mise.jdx.dev/) 管理：Go 1.25.10、Node.js 24.22.1。开发时 Go 和 Node 在宿主机运行，PostgreSQL 等依赖由
+根目录的 `compose.yaml` 提供，只监听 `127.0.0.1`；Redis 和 Meilisearch 留给后续功能，当前代码不依赖它们。能力和配置只在真正需要时才加。
 
 ```bash
-mise run env-logs
-mise run env-down
+mise install
+cp .env.example .env.dev    # 填写本地 PostgreSQL 密码
+make dev                    # 启动 PostgreSQL、Go 后端（8080）和 Vite（5173）
 ```
 
-## ALAC 播放与 ffmpeg
+React 修改会热更新，Go 或迁移文件修改会自动重启后端，`Ctrl-C` 同时停止两者。开发和生产可以同时运行，配置、端口、数据卷和网络各自独立，
+只共享只读的音乐目录。`make dev-reset` 会清空开发库的业务数据（保留迁移），生产配置下会拒绝执行；
+开发环境重置密码用 `./scripts/reset-password.sh <用户名>`。开发环境播放 ALAC 需要 ffmpeg：运行 `./scripts/ffmpeg-pinned.sh`
+取出固定版本，或用系统包，把路径写进 `ROOMUSIC_FFMPEG_PATH`。
 
-浏览器大多不能解码 ALAC。服务端会在第一次播放时用 ffmpeg 把 ALAC 无损转换成 FLAC（位深、采样率与声道不变，发布前核对转换前后解码出的 PCM 完全相同），
-缓存在 `<数据目录>/media-cache`（默认 `ROOMUSIC_DATA_DIR=./data`），之后和其他曲目一样经鉴权播放；等待转换时播放栏显示“正在准备”。
-生产镜像构建时会从固定摘要的上游镜像复制 ffmpeg，无需另行安装；项目不单独分发 ffmpeg 二进制。开发环境需要自行安装，任选其一：
+### 测试与 CI
 
 ```bash
-./scripts/ffmpeg-pinned.sh            # 取出按摘要固定的静态 ffmpeg 7.1.1（需要 docker），打印可执行文件路径
-# 或用发行版的包（apt install ffmpeg 等），确保它在 PATH 中
+(cd backend && go test ./...)                                     # 后端单元测试；没有测试库时集成测试会跳过
+./scripts/test-integration.sh                                     # 启动一次性 PostgreSQL 18 跑集成测试
+(cd frontend && npm ci && npm run lint && npm run typecheck && npm run test)
+(cd frontend && npm run build)                                    # 输出到 backend/cmd/roomusic/web
+(cd frontend && npm run test:e2e)                                 # Playwright，不需要启动后端
 ```
 
-把路径写进 `ROOMUSIC_FFMPEG_PATH`（绝对路径）；留空则在 `PATH` 中查找。启动时会用内置的一小段 ALAC 跑一遍完整的转换与核对，
-找不到 ffmpeg 或自检失败时应用照常启动，日志有一条 `playback.derivation.unavailable`（带原因类别），ALAC 曲目仍标注“这种格式目前不能直接播放”。
-装好后重启服务即可，无需重新扫描。`ROOMUSIC_MEDIA_CACHE_MAX_MIB`（默认 10240，最小 256）限制缓存大小，超出时按最近使用淘汰。
-缓存目录必须在音乐目录之外（`ROOMUSIC_DATA_DIR` 不能放进 `ROOMUSIC_ALLOWED_LIBRARY_ROOTS` 之内，反之亦然），否则服务拒绝启动。
-派生文件只写入缓存目录，不写音乐目录；不需要的话删除 `media-cache/` 即可。契约与上限见
-[无损派生合同](.trellis/spec/backend/playback-derivation-contracts.md)。
+**改动前端源码的提交要重新构建，并把 `backend/cmd/roomusic/web` 一起提交**，否则 CI 的漂移检查会失败。
+[GitHub Actions](.github/workflows/ci.yml) 在 Pull Request 和推送到 `main` 时运行后端、前端和集成三组检查。
+本地按改动只跑相关的最小测试集即可。
 
-## 内嵌歌词
+## 文档
 
-扫描时从音频标签提取歌词（FLAC、Ogg、Opus 的 `LYRICS` 或 `UNSYNCEDLYRICS`，MP4 的 `©lyr`，MP3 的 ID3v2 `USLT`）并保存在曲目记录里；
-正在播放页显示：带时间轴的 LRC 逐行同步、可点击跳转，没有时间轴的静态显示，没有歌词就如实说明。不读外置 `.lrc` 文件，也不联网获取。
-**升级到带歌词的版本后需要重新扫描一次**，已入库的曲目才有歌词。契约见[内嵌歌词合同](.trellis/spec/backend/lyrics-contracts.md)。
-
-## 前端检查
-
-前端位于 `frontend/`，使用 `npm ci` 按锁文件安装。常用命令（也有对应的 `make frontend-install`、`frontend-check`、`frontend-build`、`frontend-e2e`）：
-
-```bash
-cd frontend
-npm ci
-npm run lint && npm run typecheck && npm run test   # 静态检查与 Vitest（单元、组件、页面级）
-npm run build                                       # 生产构建，输出到 backend/cmd/roomusic/web
-npx playwright install chromium                     # 首次运行浏览器测试前安装；CI 使用 --with-deps
-npm run test:e2e                                    # Playwright：先构建，再对生产构建做冒烟、无障碍与响应式检查
-```
-
-构建产物随源码提交：**每个改动前端源码的提交都要重新构建并一起提交**，否则 CI 的漂移检查失败。浏览器测试的接口由测试内的受控后端响应
-（响应取自后端样本），不需要启动后端或数据库。后端响应的 JSON 样本由 `./scripts/test-integration.sh` 把关，改动 REST 响应时见
-[后端质量规范](.trellis/spec/backend/quality-guidelines.md)。
-
-## PostgreSQL 集成测试
-
-普通 `go test ./...` 不会隐式启动数据库；未设置
-`ROOMUSIC_TEST_DATABASE_URL` 时，PostgreSQL 集成测试会明确跳过。提交或 CI
-门禁应使用独立入口启动一次性的 PostgreSQL 18 容器：
-
-```bash
-./scripts/test-integration.sh
-# 或 mise run test-integration
-```
-
-该脚本先经 `scripts/ffmpeg-pinned.sh` 取出固定版本的 ffmpeg（派生播放的测试需要它；取不到时脚本失败，不会静默跳过），
-然后只启动 `compose.test.yaml` 中的 PostgreSQL，默认监听
-`127.0.0.1:55432`，每个测试使用独立 schema，结束后删除测试容器和数据卷。
-可通过 `ROOMUSIC_TEST_PG_PORT`、`ROOMUSIC_TEST_PG_DATABASE`、
-`ROOMUSIC_TEST_PG_USER`、`ROOMUSIC_TEST_PG_PASSWORD` 调整连接参数；设置
-`ROOMUSIC_TEST_KEEP_DB=true` 可在本地调试时保留容器。CI 应显式执行该入口，
-不能把集成测试跳过当作数据库门禁通过。
-
-## CI 门禁与 HTTP 完成日志
-
-仓库提供 [GitHub Actions 工作流](.github/workflows/ci.yml)，在每个 Pull Request、
-推送到 `main` 以及手动触发时运行。工作流使用 `.mise.toml` 中的 Go `1.25.10`
-和 Node.js `24.22.1`，并行执行三组必需门禁：
-
-- 后端：`gofmt`、普通测试、`-race` 测试、`go vet` 和 `go build`；
-- 前端：`npm ci`、ESLint、TypeScript 检查、Vitest、production build 与 `backend/cmd/roomusic/web` 漂移检查，
-  然后安装 Chromium 并运行 Playwright 冒烟、无障碍与响应式检查（失败时上传报告）；
-- 集成与配置：Shell 语法、开发/测试/生产 Compose 配置、镜像固定版本一致性和
-  `./scripts/test-integration.sh` 提供的 PostgreSQL 18 集成测试。
-
-任一命令失败都会使工作流失败。CI 不启动 Redis 或 Meilisearch，不读取生产
-`.env.prod`，也不使用真实音乐目录。以下列出等价门禁；本地验证按改动选择最小相关集合，
-不是每次都运行全部。仅文档变更检查链接与 diff 即可：
-
-```bash
-(cd backend && test -z "$(gofmt -l .)" && go test ./... -count=1)
-(cd backend && go test -race ./... -count=1 && go vet ./... && go build ./...)
-(cd frontend && npm ci && npm run lint && npm run typecheck)
-(cd frontend && npm run test)
-(cd frontend && npm run build)
-git diff --exit-code -- backend/cmd/roomusic/web
-test -z "$(git ls-files --others --exclude-standard -- backend/cmd/roomusic/web)"
-(cd frontend && npx playwright install --with-deps chromium && npm run test:e2e)
-for script in scripts/*.sh deploy/production/*.sh; do bash -n "$script"; done
-PG_PASSWORD=ci-placeholder MEILI_MASTER_KEY=ci-placeholder docker compose config --quiet
-docker compose -f compose.test.yaml config --quiet
-docker compose -f deploy/production/compose.yaml --env-file .env.prod.example config --quiet
-grep -qF "$(scripts/ffmpeg-pinned.sh --image)" deploy/production/Dockerfile
-grep -qF "golang:$(sed -n 's/^go = "\(.*\)"/\1/p' .mise.toml)-" deploy/production/Dockerfile
-grep -qF "$(sed -n 's/^x-postgres-image: &postgres-image //p' deploy/production/compose.yaml) AS tools" deploy/production/Dockerfile
-./scripts/test-integration.sh
-git diff --check
-```
-
-HTTP 边界在每个请求结束时写出一个结构化 JSON 完成事件。事件名固定为
-`http.request.completed`，并包含请求 ID、方法、ServeMux 路由模板、最终状态、
-响应字节数和非负耗时；认证成功时才附带稳定的 `actor_id`。例如：
-
-```json
-{
-  "event": "http.request.completed",
-  "module": "platform",
-  "message": "http request completed",
-  "request_id": "req-example",
-  "method": "GET",
-  "route_template": "GET /api/v1/releases/{id}",
-  "status": 200,
-  "response_bytes": 512,
-  "duration_ms": 3
-}
-```
-
-`time` 和 `level` 由 JSON `slog` handler 写入；状态小于 400 使用 `INFO`，400--499
-使用 `WARN`，500 及以上使用 `ERROR`。路由使用注册模板，未匹配请求使用
-`<unmatched>`，不会记录查询字符串、请求体、Cookie、session/token、密码、数据库
-URL、完整 NAS 路径或音频/封面内容。`X-Request-ID` 仍会回写响应，并与错误
-envelope 保持关联。
-
-## 数据库迁移执行器
-
-应用启动会从 Go `embed.FS` 读取 `backend/migrations/` 中连续编号的 SQL，使用
-固定事务级 `pg_advisory_xact_lock`（`0x524f4f4d55534943`）防止多实例并发升级。
-每个成功版本在 `schema_migrations` 保存文件名、原始字节 lowercase SHA-256 和
-应用时间；重复启动只校验记录，不重放已完成 SQL。0008 迁移为旧记录增加元数据，
-并兼容历史执行器只记录 0001、0006、0007 的数据库：0002--0005 会被一次性基线
-补记，不会重复执行。
-
-迁移 SQL、DDL 和记录在一个事务中提交；锁等待取消、校验和漂移、未知版本或任一
-SQL 失败都会回滚并阻止服务进入 ready。项目不提供 down migration，生产回退请
-使用数据库备份或新增 forward-fix 迁移，禁止修改已经共享的迁移文件。
-
-## 迁移边界
-
-本次只迁移可复用的开发工具链和基础数据服务配置。以下 V0 内容不会自动迁移：
-
-- PostgreSQL、Redis、Meilisearch 的旧数据卷
-- `.env` 中的生产密码、Token 或 API key
-- `app`、`worker-ai`、`operator` 等应用服务
-- AI provider、MusicBrainz、认证、扫描和发布配置
-
-后续每引入一个实际能力，再同步增加对应依赖与环境变量，避免配置先于功能膨胀。
+- [生产部署说明](deploy/production/README.md)：配置、运维、备份与恢复的完整细节
+- [Core 1 路线](docs/architecture/core-1-roadmap.md)：能力矩阵、各阶段范围与 ADR
+- [前端设计依据](frontend/DESIGN.md)、[前端规范](.trellis/spec/frontend/index.md)、[后端规范](.trellis/spec/backend/index.md)
+- [无损派生合同](.trellis/spec/backend/playback-derivation-contracts.md)、[内嵌歌词合同](.trellis/spec/backend/lyrics-contracts.md)

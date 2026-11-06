@@ -3,6 +3,11 @@
 .env.*
 !.env.example
 !.env.prod.example
+*.pem
+*.key
+
+# 数据库备份
+*.dump
 
 # 本地音乐库与运行期数据
 /music/
@@ -17,13 +22,16 @@
 **/dist/
 /build/
 **/build/
-/coverage/
+# 覆盖率报告，包括真实播放自动化的报告与诊断产物。
+coverage/
 /frontend/test-results/
 /frontend/playwright-report/
-# 真实播放自动化的报告与诊断产物，与模拟浏览器测试隔离。
-/frontend/coverage/playback-real/
 /roomusic
 *.exe
+*.test
+*.out
+__pycache__/
+*.pyc
 *.log
 *.tmp
 
@@ -31,5 +39,11 @@
 .idea/
 .vscode/
 *.swp
+.DS_Store
+
+# Claude Code 本地设置与 worktree
+.claude/settings.local.json
+.claude/worktrees/
+
 # 真实音乐 Smoke 的本地基准与脱敏审计产物
 .roomusic-smoke/
