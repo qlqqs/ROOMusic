@@ -26,6 +26,10 @@
         "source": "manual"
       }
     ],
+    "retention": {
+      "keep_count": null,
+      "keep_days": 14
+    },
     "status": {
       "directory": "ready",
       "last_failure": null,

@@ -76,5 +76,29 @@ func TestPostgreSQLSystemAPIResponseSamples(t *testing.T) {
 	}
 	record("system/backups-running", "GET", "/api/v1/system/backups", 200)
 	record("system/backup-already-running", "POST", "/api/v1/system/backups", 200)
+	// 新接口单独使用稳定素材，不改变上面的既有备份/运行中样本。
+	mutationsDir := t.TempDir()
+	mutations, _, _ := newSystemApplication(t, mutationsDir)
+	mutationsAdmin := mutations.createUser(t, "admin")
+	mutationRecord := func(name, method, path string, body any, status int) {
+		t.Helper()
+		samples.record(name, mutations.request(t, method, path, body, &mutationsAdmin, map[string]string{"X-Request-ID": sampleRequestID}), status)
+	}
+	for i, file := range files {
+		at, err := time.Parse(time.RFC3339, file.at)
+		if err != nil {
+			t.Fatal(err)
+		}
+		systemWriteFile(t, mutationsDir, file.name, make([]byte, files[i].size), at)
+	}
+	mutationRecord("system/backup-deleted", "DELETE", "/api/v1/system/backups/"+files[3].name, nil, 200)
+	mutationRecord("system/backups-deleted", "POST", "/api/v1/system/backups/deletions", map[string]any{"names": []string{files[1].name, "roomusic-20261101-030000.dump", "../invalid"}}, 200)
+	mutationRecord("errors/backup-deletions-invalid", "POST", "/api/v1/system/backups/deletions", map[string]any{"names": []string{}}, 400)
+	// 放回刚删的非最新备份，预览与确认恰好清理两份。
+	systemWriteFile(t, mutationsDir, files[3].name, make([]byte, files[3].size), systemTestNow.Add(-48*time.Hour))
+	mutationRecord("system/retention-confirmation-required", "PUT", "/api/v1/system/backups/retention", map[string]any{"keep_days": 30, "keep_count": 1, "confirm": false}, 200)
+	mutationRecord("system/retention-saved", "PUT", "/api/v1/system/backups/retention", map[string]any{"keep_days": 30, "keep_count": 1, "confirm": true}, 200)
+	mutationRecord("system/retention-saved-unlimited", "PUT", "/api/v1/system/backups/retention", map[string]any{"keep_days": nil, "keep_count": nil}, 200)
+	mutationRecord("errors/backup-retention-invalid", "PUT", "/api/v1/system/backups/retention", map[string]any{"keep_days": 0, "keep_count": nil}, 400)
 	samples.finish()
 }

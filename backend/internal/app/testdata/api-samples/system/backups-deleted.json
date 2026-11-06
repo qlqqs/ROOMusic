@@ -1,0 +1,41 @@
+{
+  "body": {
+    "deleted": [
+      "roomusic-20261105-221530-pre-restore.dump"
+    ],
+    "failed": [],
+    "missing": [
+      "roomusic-20261101-030000.dump",
+      "../invalid"
+    ],
+    "overview": {
+      "backups": [
+        {
+          "created_at": "2026-01-01T00:00:01Z",
+          "name": "roomusic-20261106-030012.dump",
+          "size_bytes": 1572864,
+          "source": "scheduled"
+        },
+        {
+          "created_at": "2026-01-01T00:00:00Z",
+          "name": "roomusic-20261105-090501-pre-migration-17.dump",
+          "size_bytes": 1498112,
+          "source": "pre_migration"
+        }
+      ],
+      "retention": {
+        "keep_count": null,
+        "keep_days": 14
+      },
+      "status": {
+        "directory": "ready",
+        "last_failure": null,
+        "last_success_at": "2026-01-01T00:00:01Z",
+        "next_scheduled_at": null,
+        "running": null
+      },
+      "total": 2
+    }
+  },
+  "status": 200
+}

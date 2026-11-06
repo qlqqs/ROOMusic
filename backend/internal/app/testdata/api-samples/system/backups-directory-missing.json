@@ -1,6 +1,10 @@
 {
   "body": {
     "backups": [],
+    "retention": {
+      "keep_count": null,
+      "keep_days": 14
+    },
     "status": {
       "directory": "missing",
       "last_failure": null,

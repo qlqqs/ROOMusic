@@ -164,3 +164,85 @@ func TestServicePreMigrationBackupNamesOriginalVersion(t *testing.T) {
 		t.Fatalf("来源错误：%+v", overview)
 	}
 }
+
+func TestServiceBackupSuccessUsesSavedRetention(t *testing.T) {
+	for _, source := range []Source{SourceScheduled, SourceManual, SourcePreMigration, SourcePreRestore} {
+		t.Run(string(source), func(t *testing.T) {
+			dir := t.TempDir()
+			now := instant("2026-11-06T12:00:00Z")
+			recent, overCount, expired := "roomusic-20261106-110000-manual.dump", "roomusic-20261106-100000-pre-migration-17.dump", "roomusic-20261001-120000-pre-restore.dump"
+			writeBackup(t, dir, recent, now.Add(-time.Hour))
+			writeBackup(t, dir, overCount, now.Add(-2*time.Hour))
+			writeBackup(t, dir, expired, now.Add(-36*24*time.Hour))
+			logger, output := backupTestLogger()
+			s := NewService(testSettings(dir), logger, WithClock(func() time.Time { return now }), WithRunner(fakeRunner("")), WithDatabaseAccess(fakeDatabase{}))
+			if err := s.writeRetention(Retention{KeepDays: retentionInt(14), KeepCount: retentionInt(2)}); err != nil {
+				t.Fatal(err)
+			}
+			var file File
+			var err error
+			if source == SourcePreMigration {
+				file.Name, err = s.BackupBeforeMigration(context.Background(), nil, postgres.MigrationChange{FromVersion: 17})
+			} else {
+				file, err = s.RunNow(context.Background(), nil, source)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			requireBackupExists(t, dir, file.Name, recent, retentionName)
+			requireBackupMissing(t, dir, overCount, expired)
+			for _, record := range backupLogEvents(t, output, "backup.retention.deleted") {
+				if record["trigger"] != "backup" {
+					t.Fatalf("清理来源错误：%v", record)
+				}
+			}
+		})
+	}
+}
+
+func TestServiceNeverSavedRetentionOnlyUsesConfiguredDays(t *testing.T) {
+	dir := t.TempDir()
+	now := instant("2026-11-06T12:00:00Z")
+	expired := "roomusic-20261001-120000.dump"
+	writeBackup(t, dir, expired, now.Add(-8*24*time.Hour))
+	var kept []string
+	for i := 1; i <= 5; i++ {
+		at := now.Add(-time.Duration(i) * 24 * time.Hour)
+		name := fileName(at, SourceManual, 0)
+		writeBackup(t, dir, name, at)
+		kept = append(kept, name)
+	}
+	settings := testSettings(dir)
+	settings.KeepDays = 7
+	s := NewService(settings, nil, WithClock(func() time.Time { return now }), WithRunner(fakeRunner("")), WithDatabaseAccess(fakeDatabase{}))
+	file, err := s.RunNow(context.Background(), nil, SourceManual)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireBackupExists(t, dir, append(kept, file.Name)...)
+	requireBackupMissing(t, dir, expired, retentionName)
+	overview, err := s.Overview(context.Background())
+	if err != nil || overview.Total != 6 || overview.Retention == nil || overview.Retention.KeepDays == nil || *overview.Retention.KeepDays != 7 || overview.Retention.KeepCount != nil {
+		t.Fatalf("未保存时不能限制份数：%+v %v", overview, err)
+	}
+}
+
+func TestServiceSuccessfulBackupUnlimitedOverridesEnvironment(t *testing.T) {
+	dir := t.TempDir()
+	now := instant("2026-11-06T12:00:00Z")
+	expired := "roomusic-20261001-120000-pre-restore.dump"
+	writeBackup(t, dir, expired, now.Add(-36*24*time.Hour))
+	s := NewService(testSettings(dir), nil, WithClock(func() time.Time { return now }), WithRunner(fakeRunner("")), WithDatabaseAccess(fakeDatabase{}))
+	if err := s.writeRetention(Retention{}); err != nil {
+		t.Fatal(err)
+	}
+	file, err := s.RunNow(context.Background(), nil, SourceManual)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireBackupExists(t, dir, expired, file.Name, retentionName)
+	overview, err := s.Overview(context.Background())
+	if err != nil || overview.Total != 2 || overview.Retention == nil || overview.Retention.KeepDays != nil || overview.Retention.KeepCount != nil {
+		t.Fatalf("保存的不限必须优先于环境变量：%+v %v", overview, err)
+	}
+}

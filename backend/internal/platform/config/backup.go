@@ -15,7 +15,7 @@ type Backup struct {
 	Directory       string
 	CreateDirectory bool // 仅自动创建开发环境的默认目录，不修复显式配置的挂载目录。
 	Hour            int
-	KeepDays        int
+	KeepDays        int // 从未在网页保存保留规则时使用的默认天数。
 	Location        *time.Location
 	PGBinDirectory  string
 }

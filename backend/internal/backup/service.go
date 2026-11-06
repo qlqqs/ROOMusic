@@ -33,6 +33,7 @@ type Service struct {
 	now                       func() time.Time
 	onWaiting                 func()
 	mu                        sync.Mutex
+	retentionMu               sync.Mutex // 串行化规则保存与自动清理，不阻塞手动删除。
 	running                   *Running
 	lastFailure               *Failure
 	retryAt                   time.Time
@@ -127,7 +128,11 @@ func (s *Service) Overview(ctx context.Context) (Overview, error) {
 	if total > 500 {
 		files = files[:500]
 	}
-	return Overview{Status: status, Backups: files, Total: total}, nil
+	var retention *Retention
+	if rule, err := s.effectiveRetention(); err == nil {
+		retention = &rule
+	}
+	return Overview{Status: status, Retention: retention, Backups: files, Total: total}, nil
 }
 func (s *Service) reserve(ctx context.Context, source Source, wait bool) error {
 	for {

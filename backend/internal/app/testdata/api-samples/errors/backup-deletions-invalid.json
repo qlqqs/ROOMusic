@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_input",
+      "message": "要删除的备份无效"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

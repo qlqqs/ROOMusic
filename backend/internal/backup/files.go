@@ -112,6 +112,110 @@ func (s *Service) OpenBackup(name string) (*os.File, fs.FileInfo, error) {
 	}
 	return file, info, nil
 }
+
+// DeleteBackup 只删除已发布的普通备份文件；actorID 只用于日志。
+func (s *Service) DeleteBackup(ctx context.Context, name, actorID string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !fileNamePattern.MatchString(name) {
+		return ErrNotFound
+	}
+	root, err := os.OpenRoot(s.settings.Directory)
+	if err != nil {
+		err = deletionError(err)
+		s.logDeletion(name, actorID, err)
+		return err
+	}
+	defer root.Close()
+	err = deleteIn(root, name)
+	if err == nil {
+		_ = syncDirectory(s.settings.Directory)
+	}
+	s.logDeletion(name, actorID, err)
+	return err
+}
+
+// DeleteBackups 按请求顺序去重，只打开一次目录，分别返回删除、缺失和失败名单。
+func (s *Service) DeleteBackups(ctx context.Context, names []string, actorID string) (DeleteResult, error) {
+	result := DeleteResult{Deleted: []string{}, Missing: []string{}, Failed: []string{}}
+	if err := ctx.Err(); err != nil {
+		return result, err
+	}
+	root, openErr := os.OpenRoot(s.settings.Directory)
+	if openErr == nil {
+		defer root.Close()
+	}
+	// 即使请求中途取消，也刷盘已经成功删除的目录项。
+	defer func() {
+		if len(result.Deleted) > 0 {
+			_ = syncDirectory(s.settings.Directory)
+		}
+	}()
+	seen := make(map[string]bool, len(names))
+	for _, name := range names {
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		var err error
+		if openErr != nil {
+			err = deletionError(openErr)
+		} else {
+			err = deleteIn(root, name)
+		}
+		switch {
+		case err == nil:
+			result.Deleted = append(result.Deleted, name)
+		case errors.Is(err, ErrNotFound):
+			result.Missing = append(result.Missing, name)
+		default:
+			result.Failed = append(result.Failed, name)
+		}
+		s.logDeletion(name, actorID, err)
+	}
+	return result, nil
+}
+
+func deleteIn(root *os.Root, name string) error {
+	if !fileNamePattern.MatchString(name) {
+		return ErrNotFound
+	}
+	info, err := root.Lstat(name)
+	if err != nil {
+		return deletionError(err)
+	}
+	if !info.Mode().IsRegular() {
+		return ErrNotFound
+	}
+	return deletionError(root.Remove(name))
+}
+
+func deletionError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return ErrNotFound
+	}
+	return ErrNotWritable
+}
+
+func (s *Service) logDeletion(name, actorID string, err error) {
+	if err == nil {
+		s.logger.Info("已删除备份", "event", "backup.deleted", "file", name, "actor_id", actorID)
+	} else if errors.Is(err, ErrNotWritable) {
+		// 目录打不开时批量请求全部归入失败；非法输入不能作为路径写入日志。
+		if !fileNamePattern.MatchString(name) {
+			name = ""
+		}
+		s.logger.Warn("无法删除备份", "event", "backup.delete_failed", "file", name, "reason", "not_writable")
+	}
+}
+
 func (s *Service) publish(ctx context.Context, partial *os.File, source Source, version int64) (File, error) {
 	if err := partial.Sync(); err != nil {
 		return File{}, failure("publish", "other")
@@ -162,23 +266,6 @@ func syncDirectory(path string) error {
 	}
 	defer directory.Close()
 	return directory.Sync()
-}
-func (s *Service) retain() {
-	files, err := s.listFiles()
-	if err != nil {
-		s.logger.Warn("无法清理过期备份", "event", "backup.retention_failed")
-		return
-	}
-	cutoff := s.now().Add(-time.Duration(s.settings.KeepDays) * 24 * time.Hour)
-	for _, file := range files {
-		if file.CreatedAt.Before(cutoff) {
-			if err := os.Remove(filepath.Join(s.settings.Directory, file.Name)); err != nil {
-				s.logger.Warn("无法清理过期备份", "event", "backup.retention_failed")
-				continue
-			}
-			s.logger.Info("已清理过期备份", "event", "backup.retention.deleted", "file", file.Name)
-		}
-	}
 }
 func (s *Service) cleanPartials() {
 	entries, err := os.ReadDir(s.settings.Directory)

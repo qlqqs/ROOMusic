@@ -17,8 +17,9 @@ const (
 )
 
 var (
-	ErrBusy     = errors.New("另一份备份正在进行")
-	ErrNotFound = errors.New("备份不存在")
+	ErrBusy        = errors.New("另一份备份正在进行")
+	ErrNotFound    = errors.New("备份不存在")
+	ErrNotWritable = errors.New("备份目录不能写入")
 )
 
 type File struct {
@@ -44,9 +45,21 @@ type Status struct {
 	NextScheduledAt *time.Time `json:"next_scheduled_at"`
 }
 type Overview struct {
-	Status  Status `json:"status"`
-	Backups []File `json:"backups"`
-	Total   int    `json:"total"`
+	Status    Status     `json:"status"`
+	Retention *Retention `json:"retention"`
+	Backups   []File     `json:"backups"`
+	Total     int        `json:"total"`
+}
+
+type DeleteResult struct {
+	Deleted []string `json:"deleted"`
+	Missing []string `json:"missing"`
+	Failed  []string `json:"failed"`
+}
+
+type RetentionResult struct {
+	ConfirmationRequired       bool
+	Deletions, Deleted, Failed int
 }
 
 // Error 只暴露分类，绝不携带子进程原文、连接串或密码。
