@@ -1,0 +1,3 @@
+{"file": ".trellis/tasks/11-06-deploy-ux/research/backend-facts.md", "reason": "现状：生产 compose 必填项、production.sh、CI compose 校验"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "部署方式与运维入口（本任务要改）"}
+{"file": ".trellis/spec/backend/identity-origin-contracts.md", "reason": "来源模式与反代 Host 说明须原样保留进新部署说明"}

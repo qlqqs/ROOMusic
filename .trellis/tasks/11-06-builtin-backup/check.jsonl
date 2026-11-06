@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端门禁：gofmt、vet、-race、集成测试隔离库"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "核对日志不含密码、连接串、pg_dump 原文"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端门禁：lint、typecheck、内嵌产物漂移"}
+{"file": ".trellis/spec/frontend/quality-verification-layers.md", "reason": "核对页面测试与截图层次"}
+{"file": ".trellis/tasks/11-06-deploy-ux/research/backend-facts.md", "reason": "对照旧 backup.sh 语义是否完整保留"}

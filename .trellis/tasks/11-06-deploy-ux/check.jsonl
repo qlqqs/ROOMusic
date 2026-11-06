@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "收尾门禁：与 CI 等价"}
+{"file": ".trellis/spec/backend/core-slice-tooling.md", "reason": "收尾门禁：集成测试与 Playwright 运行方式"}

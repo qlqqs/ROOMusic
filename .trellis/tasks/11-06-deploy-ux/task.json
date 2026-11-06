@@ -1,0 +1,30 @@
+{
+  "id": "deploy-ux",
+  "name": "deploy-ux",
+  "title": "部署体验改进：备份内置、配置精简、版本化镜像与双向迁移",
+  "description": "让生产部署只需 app+postgres、必填项最少，并能通过修改 GHCR 镜像版本号直接升级或降级",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "qlqq",
+  "assignee": "qlqq",
+  "createdAt": "2026-11-06",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "11-06-builtin-backup",
+    "11-06-config-trim",
+    "11-06-versioned-release"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

@@ -1,0 +1,5 @@
+{"file": ".trellis/tasks/11-06-deploy-ux/research/backend-facts.md", "reason": "现状：migrate.go 事务、校验和、unknown version、30 个迁移分类、CI 结构"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "执行器合同（本任务要改）"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "迁移合同第 124 行“不提供 down migration”（本任务要改）"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "platform.migration.* 事件字段"}
+{"file": ".trellis/spec/backend/core-slice-tooling.md", "reason": "集成测试与 CI job 运行方式"}
