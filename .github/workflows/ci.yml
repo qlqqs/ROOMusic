@@ -117,11 +117,17 @@ jobs:
         run: |
           docker compose config --quiet
           docker compose -f compose.test.yaml config --quiet
-          docker compose -f deploy/production/compose.yaml --env-file .env.prod.example config --quiet
+          scripts/check-production-compose.sh
           for script in deploy/production/*.sh; do bash -n "$script"; done
           grep -qF "$(scripts/ffmpeg-pinned.sh --image)" deploy/production/Dockerfile
           grep -qF "golang:$(sed -n 's/^go = "\(.*\)"/\1/p' .mise.toml)-" deploy/production/Dockerfile
-          grep -qF "$(sed -n 's/^x-postgres-image: &postgres-image //p' deploy/production/compose.yaml) AS tools" deploy/production/Dockerfile
+          pg_major=$(sed -n 's/^x-postgres-image: &postgres-image postgres:\([0-9][0-9]*\)\..*/\1/p' deploy/production/compose.yaml)
+          test -n "$pg_major"
+          grep -qF "postgresql${pg_major}-client" deploy/production/Dockerfile
+          grep -qF "PostgreSQL) ${pg_major}\\." deploy/production/Dockerfile
+          grep -qF "$(sed -n 's/^x-postgres-image: &postgres-image //p' deploy/production/compose.yaml)" scripts/pg-client-pinned.sh
+      - name: Test release checks
+        run: python3 scripts/tests/test_release_check.py
       - name: Run PostgreSQL 18 and pinned ffmpeg integration tests
         env:
           ROOMUSIC_TEST_PG_PASSWORD: ci-placeholder

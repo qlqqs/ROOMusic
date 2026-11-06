@@ -29,12 +29,12 @@
 
 ## 验收标准
 
-- [ ] A1 在空目录只放 compose 文件和只填了两项的配置文件，`docker compose config --quiet` 通过；用本地构建的同结构镜像
+- [x] A1 在空目录只放 compose 文件和只填了两项的配置文件，`docker compose config --quiet` 通过；用本地构建的同结构镜像
       `docker compose up -d --wait` 后 app 与 postgres 都 healthy，可以初始化管理员。
-- [ ] A2 缺少任一必填项时 `docker compose config` 报出该项的中文提示。
-- [ ] A3 指定固定子网的方式在演练项目（`10.203.51.0/24`）中实际生效；“不指定时由 Docker 自动分配”只做静态核对（`docker compose config` 中没有 ipam），
+- [x] A2 缺少任一必填项时 `docker compose config` 报出该项的中文提示。
+- [x] A3 指定固定子网的方式在演练项目（`10.203.51.0/24`）中实际生效；“不指定时由 Docker 自动分配”只做静态核对（`docker compose config` 中没有 ipam），
       因为本机自动分配的网段会覆盖局域网，**本机不得创建未固定子网的网络**。
-- [ ] A4 备份目录不填时写入命名卷；填宿主机目录时写入该目录，uid 1000 可写。
+- [x] A4 备份目录不填时写入命名卷；填宿主机目录时写入该目录，uid 1000 可写。
 - [ ] A5 本机过渡步骤在演练项目上按原样执行一遍：沿用旧项目的卷与子网，切换后行数一致、备份目录继续产出新备份。
 - [ ] A6 仓库中不再有指向 `make prod`、`scripts/production.sh`、`.env.prod.example` 旧必填项的引用（`git grep` 检查），CI 的 compose 校验改为新文件。
 

@@ -9,7 +9,7 @@ set -a
 source "$ENV_FILE"
 set +a
 if [[ "${ROOMUSIC_ENV:-}" == production ]]; then
-  echo '生产请用 make prod-reset-password U=<用户名>' >&2
+  echo '生产请在部署目录执行 docker compose exec app /app/roomusic reset-password <用户名>' >&2
   exit 1
 fi
 tmpdir=$(mktemp -d)

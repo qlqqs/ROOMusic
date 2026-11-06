@@ -330,7 +330,7 @@ networks:
 
 - 演练目录 `/tmp/roomusic-drill/`（仓库外），项目 `roomusic-drill`，端口 `18090`，音乐目录用合成曲库（`scripts/gen-playback-fixtures.sh` 产物的副本），
   备份目录 `/tmp/roomusic-drill/backups`（`chown 1000:1000`）。镜像为本地构建并打上 `ghcr.io/qlqqs/roomusic:0.1.0-drill-a` 标签（不推送），`.env` 写 `ROOMUSIC_VERSION=0.1.0-drill-a`。
-- **A1**：空目录只放 compose、`.env`（两项必填 + 版本 + 项目名）和子网 override → `docker compose up -d --wait`，两个服务 healthy，`POST /api/v1/setup` 建管理员成功。
+- **A1**：空目录只放 compose、`.env`（两项必填 + 版本 + 项目名）和子网 override → `docker compose up -d --wait`，两个服务 healthy，`POST /api/v1/setup/admin` 建管理员成功。
 - **A3**：`docker network inspect roomusic-drill_roomusic` 子网为 `10.203.51.0/24`；无 override 的情况由 `check-production-compose.sh` 静态核对。
 - **A4**：不填 `ROOMUSIC_BACKUP_DIR` → `docker compose exec app /app/roomusic backup` 后 `docker run --rm -v roomusic-drill_backups:/b alpine ls -ln /b` 看到属主 1000 的文件；
   改填 `/tmp/roomusic-drill/backups` 后 `up -d` 再备份，文件出现在宿主机目录。

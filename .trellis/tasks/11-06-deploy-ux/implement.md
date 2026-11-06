@@ -34,3 +34,5 @@
 - 2026-11-06 P1 builtin-backup 已提交 `45514a9`。发现既有问题：`internal/app` 集成测试包在全量并行下约 627 秒（HEAD 单包串行 470 秒），
   超过 Go 默认 10 分钟；已把 `scripts/test-integration.sh` 时限设为 15 分钟、CI integration job 设为 30 分钟。
   艺人相关测试重复准备大型夹具是主要耗时，提速留作后续技术债，不在本任务范围。
+- 2026-11-06 P2 versioned-release 已提交 `65fcbbb`。P3 config-trim：C2 在 `roomusic-drill`（`10.203.51.0/24`）验证 A1–A4 通过；
+  本地演练镜像 `ghcr.io/qlqqs/roomusic:0.1.0-drill-a`（基于 `65fcbbb`）保留给 P4。A6 剩余命中只在 `.trellis/spec`，随 P6 更新。

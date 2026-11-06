@@ -1,16 +1,7 @@
-.PHONY: prod prod-stop prod-status prod-logs prod-backup prod-reset-password dev dev-reset backend-test backend-build frontend-install frontend-check frontend-build frontend-e2e
+.PHONY: dev dev-reset backend-test backend-build frontend-install frontend-check frontend-build frontend-e2e
 
 dev:
 	./scripts/dev.sh
-
-prod:
-	./scripts/production.sh up $(if $(REF),--ref '$(REF)')
-
-prod-stop prod-status prod-logs prod-backup:
-	./scripts/production.sh $(patsubst prod-%,%,$@)
-
-prod-reset-password:
-	./scripts/production.sh reset-password '$(U)'
 
 dev-reset:
 	./scripts/dev-reset.sh

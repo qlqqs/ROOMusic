@@ -16,10 +16,6 @@ RUN test -f cmd/roomusic/web/index.html \
 
 FROM mwader/static-ffmpeg@sha256:11a44711684c0b9f754c047dcd64235b8b52deab251bd0e0a86f22faa160749c AS ffmpeg
 
-# 与 compose.yaml 的 x-postgres-image 保持完全一致。
-FROM postgres:18.1-alpine3.23@sha256:aa6eb304ddb6dd26df23d05db4e5cb05af8951cda3e0dc57731b771e0ef4ab29 AS tools
-COPY --chmod=0755 deploy/production/backup.sh deploy/production/restore.sh /opt/roomusic/
-
 FROM alpine:3.23@sha256:f3d55900449227ae9e237ede521e7b665d53a253b42065ba90b9db9275e198ad AS app
 RUN apk add --no-cache ca-certificates postgresql18-client \
  && pg_dump --version | grep -q '^pg_dump (PostgreSQL) 18\.' \
