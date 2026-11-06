@@ -39,8 +39,8 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 
 ## 2. 接口签名
 
-- 生产启动：`make prod`（`scripts/production.sh`）从 `main`（或 `REF=`）导出构建应用与 tools 镜像，
-  使用该提交的 `deploy/production/compose.yaml` 启动，项目为 `roomusic-prod`；升级前总是备份，失败不换应用版本。
+- 生产启动：部署目录放 Release 附件 `compose.yaml` 与由 `example.env` 复制的 `.env`，`docker compose up -d --wait`；
+  镜像 `ghcr.io/qlqqs/roomusic:<版本>`，改 `.env` 的 `ROOMUSIC_VERSION` 即升级或降级（2026-11-06 部署体验改进）。
 - 开发启动：`./scripts/dev.sh`，默认读取 `.env.dev`，Go 运行在 `backend/`，
   Vite 通过开发配置代理 `/api` 到 `:8080`。
 - HTTP：`POST /api/v1/users`、`PATCH /api/v1/users/{id}`、
@@ -62,8 +62,11 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
   非 2xx 经统一的错误信封 decoder；响应不是 JSON、信封不合法或 decoder 失败时归为 `invalid_response`，不进入缓存。
   函数名不构成架构限制，合同是“边界解码一次、失败安全分类”。
 
-- 部署运维：`scripts/production.sh [--dry-run] up [--ref <提交>]`、`stop|status|logs|backup`、`reset-password <用户名>`、
-  `build-image [--ref <提交>] [--prefix <前缀>]`；恢复：`deploy/production/restore.sh check|production <备份>`。
+- 部署运维（均在部署目录）：`docker compose exec app /app/roomusic backup|--version|reset-password <用户名>`；
+  恢复 `docker compose stop app && docker compose run --rm app restore <备份文件名> && docker compose up -d --wait`。
+  备份接口 `GET|POST /api/v1/system/backups`、`GET /api/v1/system/backups/{name}` 与 `GET /api/v1/system/version`（管理员）。
+- 发布：推送标签 `vX.Y.Z` 触发 `.github/workflows/release.yml`（复用 `ci.yml`，原生 amd64 与 arm64 构建，推送 `X.Y.Z`、`X.Y`、`latest`，
+  Release 附件为写入版本号的 `compose.yaml` 与 `example.env`）；打标签前运行只读检查 `scripts/release-check.sh vX.Y.Z`。
 
 ## 3. 合同
 
@@ -121,7 +124,15 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 - `0008_migration_metadata.sql` 为迁移记录增加 `name`/`checksum`。旧版数据库
   可能只有 0001、0006、0007 三条记录；确认这段连续历史后，0002--0005 只做一次
   元数据基线，不重放 SQL。名称或校验和漂移、未发布版本和无法证明连续历史均
-  fail closed；不提供 down migration，生产回退使用备份或 forward-fix。
+  fail closed。
+- 双向迁移（2026-11-06）：从迁移 0031 起每个迁移附带 `NNNN_name.down.sql`（或首行 `-- roomusic:irreversible <理由>`），
+  0001–0030 不得有回退文件；正向执行时回退 SQL 与校验和写进 `schema_migrations.down_sql / down_checksum`（列由执行器在备份后添加）。
+  库里有本程序不认识的、连续的更新迁移且都可回退时，先做迁移前备份，再在同一事务里倒序执行库里的回退 SQL 并删除记录；
+  不可回退、不连续或执行失败都整体回滚、不进入就绪，日志 `platform.migration.downgrade_refused|downgrade_failed` 给出要恢复的备份与完整命令。
+  降级底线为 0.1.0（迁移 30）。作者规则见 [database-guidelines.md](./database-guidelines.md)“回退 SQL 规则”。
+- 迁移前备份：已有库且有待执行的升级或降级时，执行器先调用 `MigrationBackups.BackupBeforeMigration`，失败即不迁移。
+  备份前迁移事务只允许持有迁移 advisory lock 和不高于 `AccessShareLock` 的表锁；任何 DDL（含加回退列、执行 0001、执行 0008）都放在备份成功之后；
+  `pg_dump` 带 `--lock-wait-timeout=60s`。
 - 迁移 SQL、DDL 和记录写入同一事务；锁等待取消或任一步失败都会回滚，只有
   提交成功后才执行中断扫描恢复并进入 ready。
 
@@ -137,7 +148,7 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
   和 `ROOMUSIC_SECURE_COOKIES` 校验写请求；生产未配置清单时按主机一致校验，只比较规范化的 Origin 与请求 Host；
   配置清单后只按清单。主机一致与清单模式的 Cookie `Secure` 都跟随请求来源协议，任何模式都不读转发头。
 - `.env.dev`、`.env.prod`、`.env` 是本机配置，必须被 Git 忽略；仓库只跟踪不含真实值的
-  `.env.example` 与 `.env.prod.example`。开发脚本默认读 `.env.dev`，生产显式读 `.env.prod`，不再 source 根目录 `.env`。`backend/data/` 等运行期数据（含封面缓存与 `media-cache/` 派生缓存）同样不得提交。
+  `.env.example` 与 `deploy/production/example.env`。开发脚本默认读 `.env.dev`，不 source 根目录 `.env`；生产 `.env` 放在仓库外的部署目录。`backend/data/` 等运行期数据（含封面缓存与 `media-cache/` 派生缓存）同样不得提交。
 - ALAC 派生需要 ffmpeg：生产镜像构建时从固定摘要镜像复制，开发由部署者安装（项目不单独分发二进制）；`ROOMUSIC_FFMPEG_PATH`（绝对路径，空则在 `PATH` 中查找）与
   `ROOMUSIC_MEDIA_CACHE_MAX_MIB`（默认 10240，最小 256）；找不到或自检失败时应用照常启动，ALAC 保持“不能直接播放”。
   `scripts/ffmpeg-pinned.sh` 取出按摘要固定的 ffmpeg 7.1.1，测试、CI 与推荐部署共用。详见[无损派生合同](./playback-derivation-contracts.md)。
@@ -145,10 +156,14 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
   Compose/mise 可选服务。开发的 `mise run env-*` 显式使用 `--env-file .env.dev`。
 - 生产镜像固定 Go、Alpine、PostgreSQL 基础镜像版本与摘要，ffmpeg 与 `scripts/ffmpeg-pinned.sh` 同一摘要；
   使用已提交的前端，不依赖 Node。uid 1000 运行，音乐只读挂载，缓存与数据库卷分离。
-  应用只发布 IPv4 8090，生产固定子网 `10.203.50.0/24`（演练 `10.203.51.0/24`），与开发同时运行互不影响。
+  生产 compose 只有 app 与 postgres，顶层 `name: roomusic-server`；必填仅 `ROOMUSIC_DB_PASSWORD`、`ROOMUSIC_MUSIC_DIR`，
+  端口默认 8090（只发布 IPv4），备份目录不填时为命名卷 `backups`、填绝对路径时为绑定挂载。子网默认由 Docker 分配，
+  需要固定时在部署目录放 `compose.override.yaml`；本机生产固定 `10.203.50.0/24`（演练 `10.203.51.0/24`），本机不得创建未固定子网的网络。
   入口等数据库接受连接后启动，`/readyz` 用于镜像健康检查。生产的 `ROOMUSIC_ALLOWED_ORIGINS` 可选，不配时按主机一致模式，反代须保留 Host（含端口）与 Origin；格式与冲突由后端校验。
-- tools 镜像含随提交打包的备份/恢复脚本，PostgreSQL 版本与数据库相同；每日 `pg_dump -Fc`，保留 14 天，失败有日志，
-  超过 26 小时无成功备份即不健康；不备份 `/data` 或音乐文件。停止只用 `stop`、不删卷，密码恢复用 `make prod-reset-password U=<用户名>`。
+- 备份内置在应用（`backend/internal/backup`）：镜像含与数据库同主版本的 `postgresql18-client`；按 `ROOMUSIC_TIMEZONE` 每天
+  `ROOMUSIC_BACKUP_HOUR` 点后 `pg_dump -Fc`，保留 `ROOMUSIC_BACKUP_KEEP_DAYS` 天，另有手动、迁移前与恢复前备份；
+  写临时文件经 `pg_restore --list` 校验后原子发布，advisory lock `ROOMBACK` 串行；不备份 `/data` 或音乐文件。
+  停止只用 `stop`、不删卷，密码恢复用 `docker compose exec app /app/roomusic reset-password <用户名>`。
   运维与恢复步骤见[部署说明](../../../deploy/production/README.md)。
 
 ### CI 质量门禁
@@ -162,8 +177,10 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 - 生产构建之后执行 `git diff --exit-code -- backend/cmd/roomusic/web`，并检查该目录没有未跟踪生成文件；
   随后 `npx playwright install --with-deps chromium` 与 `npm run test:e2e`（对生产构建的浏览器冒烟、无障碍与
   响应式检查，失败时上传报告）。
-  集成 job 逐个执行 `bash -n` 检查 `scripts/*.sh` 与 `deploy/production/*.sh`，校验开发、测试、生产三个 Compose
-  及 ffmpeg、Go、PostgreSQL 固定版本一致性（CI 不构建镜像），并运行 `./scripts/test-integration.sh`；后者先经 `scripts/ffmpeg-pinned.sh` 取出固定版本 ffmpeg（取不到即失败，
+  集成 job 逐个执行 `bash -n` 检查 `scripts/*.sh` 与 `deploy/production/*.sh`，校验开发、测试 Compose，运行
+  `scripts/check-production-compose.sh`（假值、只解析不启动：必填中文提示、服务与端口、备份卷两种形态、override 子网），
+  检查 ffmpeg、Go 与 PostgreSQL 客户端主版本一致性（CI 不构建镜像），运行 `python3 scripts/tests/test_release_check.py`，
+  并运行 `./scripts/test-integration.sh`（时限 15 分钟，job 30 分钟）；后者先经 `scripts/ffmpeg-pinned.sh` 取出固定版本 ffmpeg（取不到即失败，
   派生用例不得静默跳过），真实启动 PostgreSQL 18 并运行 `TestPostgreSQL|TestFFmpeg`，结束时清理专用容器和数据卷。
   真实播放 job 运行 `./scripts/playback-e2e.sh`，同样经该脚本取得同一个 ffmpeg。
 - **API 响应样本**：集成测试 `TestPostgreSQLAPIResponseSamples`（`backend/internal/app/api_samples_integration_test.go`）
@@ -205,8 +222,10 @@ Authorization/session token、密码、数据库 URL、完整 NAS 路径或音�
 
 | 条件 | 行为 |
 | --- | --- |
-| 部署参数错误 / 找不到提交 | 退出 2；执行或备份失败退出 1，不执行后续换版本 |
-| 生产未运行 | backup / reset-password 退出 1；status 提示但退出 0 |
+| 生产 `.env` 缺必填项 | `docker compose config` 退出 1，报出该项的中文提示 |
+| 迁移前备份失败 | 不迁移，app 不进入就绪 |
+| 降级遇到不可回退 / 不连续 / 回退失败 | 整体回滚不改库，app 不就绪；日志给出要恢复的备份与 stop → restore → up 三步命令 |
+| 恢复时还有其他数据库连接 | 拒绝并提示先 `docker compose stop app`（降级模式的 app 不持有连接，恢复不受影响） |
 | 恢复前备份失败 / 恢复失败 | 前者不覆盖库；后者保持应用停止并打印安全备份的恢复命令 |
 | session 缺少/未知 `role` | decoder 拒绝，不能默认为 admin |
 | 请求体不是合法 JSON | `400 invalid_json`，响应里只有一个错误信封 |
@@ -223,13 +242,14 @@ Authorization/session token、密码、数据库 URL、完整 NAS 路径或音�
 ## 5. 正确、基准与错误案例
 
 - 错误：把 `role` 缺失解释为 admin。
-- 部署：正确是导出提交后构建且备份成功才换版本；错误是直接从脏工作区构建或备份失败仍继续。
-  同一提交的两镜像 revision 匹配时可复用，仍须备份；停止用 `stop`，不用 `down -v`。
+- 部署：正确是镜像只由标签触发的发布工作流从干净检出构建，升降级只改 `ROOMUSIC_VERSION`，结构变化前必有迁移前备份；
+  错误是从工作区构建生产镜像、迁移前备份失败仍继续，或在备份前持有高于 `AccessShareLock` 的表锁。停止用 `stop`，不用 `down -v`。
 
 ## 6. 必需测试
 
-- 部署：逐脚本语法检查、生产模板 Compose 校验、三项版本一致性、导出树的 app/tools 构建；
-  演练验证脏工作区隔离、备份失败不换版本、恢复核对/失败停机、乱序重启，以及开发卷不变。只打印命令不等于实际部署通过。
+- 部署：逐脚本语法检查、`check-production-compose.sh`、版本一致性、`test_release_check.py`、actionlint；
+  迁移往返测试（`migrations_rollback_integration_test.go`，改变旧约束或枚举的迁移须补 `rollbackFixtures`）与执行器回退测试；
+  隔离演练项目（固定子网）验证两项必填启动、A → B → A → B、不可回退拒绝与恢复。只打印命令不等于实际部署通过。
 
 - 前端 decoder/transport 测试随 feature 边界组织（M1a 已建立）：每个 decoder 有样本与反例（缺字段、错类型、未知枚举、超界）、
   请求层覆盖内容类型、损坏 JSON、HTML 回落页、信封不合法、网络失败与取消；所有后端样本由契约测试逐个解码并往返比较。

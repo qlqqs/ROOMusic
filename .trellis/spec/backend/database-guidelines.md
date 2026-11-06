@@ -156,18 +156,23 @@ complete and successful.
 
 #### 2. 签名（命令 / 数据库）
 
-- `applyMigrations(ctx context.Context, connection *sql.DB) error` 是启动入口；
-  测试可通过 `applyMigrationsFromFS` 注入 `fs.FS`。
+- `postgres.Open(ctx, url, options...)` 调用 `applyMigrations` 作为启动入口；选项 `WithMigrationBackups`（迁移前备份）、
+  `WithLogger`、`WithMigrationFS`（测试注入迁移集合）；测试也可直接调用 `applyMigrationsFromFS`。
 - `schema_migrations` 至少包含 `version BIGINT PRIMARY KEY`、
   `applied_at TIMESTAMPTZ`、`name TEXT` 和 `checksum TEXT`；迁移 0008 负责追加
-  后两列。
+  后两列。`down_sql TEXT`、`down_checksum TEXT` 由执行器在迁移前备份成功后 `ADD COLUMN IF NOT EXISTS`，不对应迁移文件。
 - 事务必须在执行 SQL、读取 tracking 表和写入元数据时使用同一个
   `*sql.Tx`，锁 key 固定为 `0x524f4f4d55534943`。
 
 #### 3. 合同（输入 / 输出 / 边界）
 
 - 输入是 `embed.FS` 中原始迁移字节；文件名为 `NNNN_name.sql`，版本从 1 连续；
-  校验和是原始字节的 lowercase SHA-256。
+  校验和是原始字节的 lowercase SHA-256。版本 ≥ 31 必须有同名 `NNNN_name.down.sql`，0001–0030 不得有；
+  回退文件首行为 `-- roomusic:irreversible <理由>` 时表示不可回退（理由必填，其后不得有 SQL）。
+- 启动顺序：取锁 → 只读探测与读取历史 → 计划（升级 / 降级 / 不变）→ 有变化且库已存在时迁移前备份 → 补回退列 →
+  降级（倒序执行库里保存的回退 SQL 并删行）或升级 → 记录元数据 → 提交。备份前事务只允许持有迁移 advisory lock
+  和不高于 `AccessShareLock` 的表锁，任何 DDL（含加回退列、执行 0001、执行 0008）都在备份成功之后。
+- 降级执行的是**库里保存的**回退 SQL；当前程序文件中的回退副本与库不同时只记 `platform.migration.rollback_differs` 警告。
 - 成功输出是每个发布版本恰好一行 `version/name/checksum/applied_at`；重复启动
   不重放 SQL，也不改写既有 `applied_at`。
 - tracking 表探测故意使用未限定的 `to_regclass('schema_migrations')`，使探测和
@@ -185,6 +190,10 @@ complete and successful.
 | tracking 表含未发布版本（包括迁移期间新增） | fail closed 并回滚 |
 | 旧库只有可信的 1/6/7 记录 | 将 2--5 一次性基线，不重放旧 SQL |
 | advisory lock 等待被取消、SQL/记录/提交失败 | 回滚全部 DDL 和记录，启动不 ready |
+| 版本 ≥ 31 缺回退文件、0001–0030 有回退文件、回退文件无对应正向迁移、不可回退标记缺理由 | 在开启事务前返回错误 |
+| 迁移前备份失败 | `ErrPreMigrationBackup`，不执行任何 DDL |
+| 库里有未知的更新版本：不连续、缺回退 SQL 或标记不可回退 | `SchemaAheadError`（错误文本保留 `unknown version N`），不改库，日志 `downgrade_refused` |
+| 回退 SQL 执行失败 | `RollbackFailedError`，整体回滚，日志 `downgrade_failed` 附迁移前备份 |
 
 #### 5. 良好 / 基线 / 错误案例
 
@@ -209,6 +218,19 @@ complete and successful.
 正确：在提交前重新读取完整 tracking 表，先验证每一行属于当前发布集合且元数据
   一致，再为缺失的发布版本补记记录。
 
+### 回退 SQL 规则（迁移作者，2026-11-06 起）
+
+1. 每个新迁移同时提交 `.down.sql`；确实无法回退时写 `-- roomusic:irreversible <理由>`，并在任务设计里说明降级时用哪份备份恢复。
+2. 回退要把结构和旧版本依赖的数据合同恢复到升级前：删掉新建的表、列、索引、约束、视图、函数、触发器、类型和种子行，恢复被删除或改窄前的约束。
+   新表、新列里的数据随回退丢弃，这是降级的预期代价。
+3. 新增取值的回退先清理新取值：放宽 CHECK、新增枚举值、新增 `operations.type` 等，回退先 DELETE 或 UPDATE 使用新取值的行，再恢复更窄的约束；
+   往返测试缺少对应的 `rollbackFixtures[v]` 会失败。
+4. 回退 SQL 与正向 SQL 同在一个事务：不得包含 `COMMIT`、`ROLLBACK`、`CONCURRENTLY`、`ALTER TYPE … ADD VALUE`、`VACUUM` 等事务外语句；不得删除扩展等数据库级共享对象。
+5. 恢复唯一性约束前，若新版本允许的重复数据会让重建失败，回退先合并或删除重复行；做不到就标记不可回退。
+6. `.sql` 与 `.down.sql` 一旦进入任何 `vX.Y.Z` 标签都不得修改；回退写错时在之后的版本加修正迁移，并在发布说明写明从受影响版本降级要用备份。
+7. `/data` 目录格式变化要版本化：封面（`<DATA_DIR>/artwork/`）与派生缓存（`<DATA_DIR>/media-cache/v1/`）换新的版本子目录或新文件名，
+   不原地改写旧版本会读的文件。
+
 ## Testing
 
 Repository integration tests use a disposable PostgreSQL database at the
@@ -219,6 +241,9 @@ scans cannot mark sources missing.
 迁移治理测试还必须覆盖全新库、重复启动时间戳稳定、旧 1/6/7 历史升级、名称/
 校验和漂移、未知版本、事务回滚、并发 advisory lock 和锁等待上下文取消；集成
 入口为 `./scripts/test-integration.sh`，使用隔离 schema 和 PostgreSQL 18。
+回退相关：每个带回退的真实迁移由 `migrations_rollback_integration_test.go` 做升级 → 回退 → 再升级往返并比对 schema 快照；
+执行器测试覆盖升降级往返、拒绝不改库、回退 SQL 失败原子回滚、迁移前备份失败、回退副本不同只告警、旧库补列在事务内；
+`internal/backup/migration_backup_integration_test.go` 覆盖库缺回退列与降级前的迁移前备份不被锁住。
 
 ## Anti-Patterns
 

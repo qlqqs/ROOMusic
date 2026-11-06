@@ -35,8 +35,13 @@
 - [x] A3 指定固定子网的方式在演练项目（`10.203.51.0/24`）中实际生效；“不指定时由 Docker 自动分配”只做静态核对（`docker compose config` 中没有 ipam），
       因为本机自动分配的网段会覆盖局域网，**本机不得创建未固定子网的网络**。
 - [x] A4 备份目录不填时写入命名卷；填宿主机目录时写入该目录，uid 1000 可写。
-- [ ] A5 本机过渡步骤在演练项目上按原样执行一遍：沿用旧项目的卷与子网，切换后行数一致、备份目录继续产出新备份。
-- [ ] A6 仓库中不再有指向 `make prod`、`scripts/production.sh`、`.env.prod.example` 旧必填项的引用（`git grep` 检查），CI 的 compose 校验改为新文件。
+- [x] A5 本机过渡步骤在演练项目上按原样执行一遍：沿用旧项目的卷与子网，切换后行数一致、备份目录继续产出新备份。
+- [x] A6 仓库中不再有指向 `make prod`、`scripts/production.sh`、`.env.prod.example` 旧必填项的引用（`git grep` 检查），CI 的 compose 校验改为新文件。
+
+## 实施结果（2026-11-06）
+
+- 提交 `0fcb31b`；C2 演练 A1–A4 通过。P4 按 `deploy/production/README.md` §8 从 `06450d0` 旧式实例切换、A 路线回退再切回，计数一致，
+  网络与 postgres 容器未重建，旧 backup 孤儿容器无残留。A6 的 spec 残留随 P6 清理。
 
 ## 不做
 

@@ -73,7 +73,10 @@ changes the migration owner.
 文件名、校验和和应用时间；名称/校验和漂移或未知未来版本会阻止启动。0001--0007
 属于已共享迁移，只能通过追加迁移修正；旧库中历史上缺少 0002--0005 记录时，
 执行器按已验证的 0001、0006、0007 形态建立一次性元数据基线，不重放旧 SQL。
-迁移失败整体回滚，生产回退使用备份或 forward-fix，不提供 down migration。
+迁移失败整体回滚。2026-11-06 起迁移 0031 及以后必须附带回退 SQL（或显式标记不可回退），
+回退 SQL 随正向迁移存进 `schema_migrations`；旧版本启动时先做迁移前备份，再在同一事务里倒序回退库里不认识的迁移，
+不可回退时拒绝启动并指向要恢复的备份。降级底线为 0.1.0（迁移 30），合同见
+[database-guidelines.md](../../.trellis/spec/backend/database-guidelines.md)。
 
 ## Backend capability ownership
 

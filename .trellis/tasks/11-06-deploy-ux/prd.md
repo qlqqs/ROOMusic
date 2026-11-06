@@ -50,7 +50,7 @@
 ## 跨子任务验收
 
 - [ ] X1 从 Release 下载 compose 与示例配置到空目录，只填两项，`docker compose up -d --wait` 后可以初始化管理员。
-- [ ] X2 升降级演练 A → B → A → B 全部 healthy、数据不丢、每次迁移前都有备份；不可回退时拒绝并指向正确的备份。
+- [x] X2 升降级演练 A → B → A → B 全部 healthy、数据不丢、每次迁移前都有备份；不可回退时拒绝并指向正确的备份。
 - [ ] X3 本机生产实例切换到 `ghcr.io/qlqqs/roomusic:0.1.0`：计数一致、端口 8090、反代 `https://music.qlqqs.com:8888` 可登录、
       备份继续写入 `/home/qlqq/roomusic-backups`、页面显示版本 0.1.0。
 
