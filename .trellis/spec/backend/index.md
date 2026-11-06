@@ -67,6 +67,7 @@ Before writing or reviewing backend code:
 | [默认版本与版本对比合同](./default-version-contracts.md) | M4 第一项：迁移 0018、组的默认版本与版本号、生效与失效规则、设定接口与执行器、撤销与展示、版本对比接口、测试 |
 | [元数据问题与核对合同](./issue-review-contracts.md) | M4 第二项：迁移 0019、“需要关注”的三类拆分、依据与依据令牌、核对接口与执行器、撤销与展示、问题列表与版本的问题、测试 |
 | [认领合同](./claim-contracts.md) | M4 第三项：迁移 0020、待认领的判定与推荐、预览与令牌、认领的执行器与撤销、读取接口、测试 |
+| [备份管理合同](./backup-management-contracts.md) | 删除与批量删除备份、保留规则（天数 / 份数上限、备份目录里的规则文件、未确认不删的保存语义）、测试 |
 | [Music Steward And Operation Guidelines](./agent-and-operation-guidelines.md) | Agent modes, Review Subagent, tools, Change Sets, and recovery |
 | [Quality Guidelines](./quality-guidelines.md) | Focused code, forbidden coupling, tests, and gates |
 

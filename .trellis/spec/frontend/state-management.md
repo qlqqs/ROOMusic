@@ -117,6 +117,12 @@ M1a 的 URL 形状已定：`/`、`/setup`、`/login?redirect=`、`/library`（�
 Do not put session tokens, absolute paths, secrets, raw errors, or uncommitted
 operation payloads in the URL.
 
+### 设置页与旧地址
+
+- 设置页（`/settings/*`）：`settings-layout.tsx` 只放分栏与 `<Outlet />`，不另加 h1（各栏内容组件自带 `Page`）；视口 ≥1024px 左侧分栏，更窄时内容上方一行横向链接。
+  管理员栏照旧由路由层 `AdminGate` 把关，分栏只决定显示哪些项。旧地址（`/library`、`/members`、`/operations`、`/system/backups`）在根路由下、登录守卫之前重定向，
+  `path` 是 `string`，不进类型化路由树，所以旧 `<Link to>` 会被 tsc 拦下；查询参数值等价保留（`%20` 可能变 `+`，重复键不保证）。
+
 ## Local And Global State
 
 Keep state local until two distant, active consumers truly need the same

@@ -36,6 +36,7 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 | 默认版本与版本对比 | [default-version-contracts.md](./default-version-contracts.md) | M4 第一项：组的默认版本、生效规则、设定与撤销、版本对比、测试 |
 | 元数据问题与核对 | [issue-review-contracts.md](./issue-review-contracts.md) | M4 第二项：“需要关注”的三类拆分、核对与撤销、问题读取、测试 |
 | 认领 | [claim-contracts.md](./claim-contracts.md) | M4 第三项：待认领的判定与推荐、预览与令牌、认领与撤销、读取接口、测试 |
+| 备份管理 | [backup-management-contracts.md](./backup-management-contracts.md) | 删除与批量删除备份、保留规则（天数 / 份数上限、规则文件、确认语义）、测试 |
 
 ## 2. 接口签名
 
@@ -64,7 +65,8 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 
 - 部署运维（均在部署目录）：`docker compose exec app /app/roomusic backup|--version|reset-password <用户名>`；
   恢复 `docker compose stop app && docker compose run --rm app restore <备份文件名> && docker compose up -d --wait`。
-  备份接口 `GET|POST /api/v1/system/backups`、`GET /api/v1/system/backups/{name}` 与 `GET /api/v1/system/version`（管理员）。
+  备份接口 `GET|POST /api/v1/system/backups`、`GET|DELETE /api/v1/system/backups/{name}`、`POST /api/v1/system/backups/deletions`、
+  `PUT /api/v1/system/backups/retention` 与 `GET /api/v1/system/version`（管理员），删除与保留规则见[备份管理](./backup-management-contracts.md)。
 - 发布：推送标签 `vX.Y.Z` 触发 `.github/workflows/release.yml`（不重跑测试，要求该提交在 main 上的 CI 已通过；原生 amd64 与 arm64 构建，推送 `X.Y.Z`、`X.Y`、`latest`，
   Release 附件为写入版本号的 `compose.yaml` 与 `example.env`）；打标签前运行只读检查 `scripts/release-check.sh vX.Y.Z`。
 
@@ -161,7 +163,8 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
   需要固定时在部署目录放 `compose.override.yaml`；本机生产固定 `10.203.50.0/24`（演练 `10.203.51.0/24`），本机不得创建未固定子网的网络。
   入口等数据库接受连接后启动，`/readyz` 用于镜像健康检查。生产的 `ROOMUSIC_ALLOWED_ORIGINS` 可选，不配时按主机一致模式，反代须保留 Host（含端口）与 Origin；格式与冲突由后端校验。
 - 备份内置在应用（`backend/internal/backup`）：镜像含与数据库同主版本的 `postgresql18-client`；按 `ROOMUSIC_TIMEZONE` 每天
-  `ROOMUSIC_BACKUP_HOUR` 点后 `pg_dump -Fc`，保留 `ROOMUSIC_BACKUP_KEEP_DAYS` 天，另有手动、迁移前与恢复前备份；
+  `ROOMUSIC_BACKUP_HOUR` 点后 `pg_dump -Fc`，成功后按保留规则清理（天数与份数两个上限，最新一份不删；规则存于备份目录，
+  从未在网页保存时用 `ROOMUSIC_BACKUP_KEEP_DAYS` 天，见[备份管理](./backup-management-contracts.md)），另有手动、迁移前与恢复前备份；
   写临时文件经 `pg_restore --list` 校验后原子发布，advisory lock `ROOMBACK` 串行；不备份 `/data` 或音乐文件。
   停止只用 `stop`、不删卷，密码恢复用 `docker compose exec app /app/roomusic reset-password <用户名>`。
   运维与恢复步骤见[部署说明](../../../deploy/production/README.md)。

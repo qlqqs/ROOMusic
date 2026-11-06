@@ -42,6 +42,13 @@ hook 里，展示在组件里。按 [Classical 设计依据](../../../frontend/D
 
 - 外壳有“跳到主要内容”链接、`nav` 与 `main` 地标；导航用链接，当前页有 `aria-current`；窄屏的“菜单”按钮打开原生 `<dialog>` 模态导航，
   打开时焦点进入，Esc 关闭并把焦点还给“菜单”按钮，选择链接后关闭。
+- 设置页布局与旧地址重定向见[状态规范](./state-management.md)“URL State”。
+- 外壳底部是用户菜单（`app/shell/user-menu.tsx`）：一整行按钮（首字头像、用户名、角色），可访问名称显式写 `aria-label="用户名 角色"`（`.who` 是 grid，空白文本节点不可靠）；
+  菜单向上弹出“设置 / 退出登录”；在 `/settings/*` 时这一行有当前样式（`data-current`，不加 `aria-current`）；退出失败的提示在按钮上方同一 section 内。
+  窄屏对话框里用户区贴底（内容区纵向 flex + `margin-top: auto`），选“设置”先关菜单再关对话框。
+- 菜单用 `useMenu`（`shared/ui/menu-button.tsx`）：`placement: "above" | "below"`、`matchTriggerWidth`、菜单项 `icon`（不进可访问名称）；
+  浮层渲染到 `trigger.closest("dialog") ?? document.body`——模态 `<dialog>` 打开时 body 之外的内容是惰性的，渲染到 body 的菜单在对话框里点不了。
+  `MenuButton` 是它的薄包装。菜单项是按钮，导航类菜单项（“设置”）在 `onSelect` 里 `navigate`，这是“导航用链接”的例外。
 - 管理页由 `AdminGate` 把关：非管理员显示“需要管理员权限”，不渲染页面内容，也就不调用管理接口；后端仍独立鉴权。
 - 停用与撤销类操作先确认并说明影响范围，恢复与重新启用直接执行；目标是自己时对话框额外提示会被退出登录。
 - 失败文案按**错误码**选择（各 feature 的 `*-messages.ts`，`as const` 映射），不比较后端 message；未知错误码显示后端的安全
