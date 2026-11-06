@@ -35,8 +35,8 @@ fi
 
 if command -v psql >/dev/null 2>&1; then
   psql_command=(psql "$database_url")
-elif docker compose ps postgres --status running --format '{{.Service}}' 2>/dev/null | grep -qx postgres; then
-  psql_command=(docker compose exec -T postgres psql -U "$pg_user" -d "$pg_database")
+elif docker compose -f "$ROOT_DIR/compose.dev.yaml" ps postgres --status running --format '{{.Service}}' 2>/dev/null | grep -qx postgres; then
+  psql_command=(docker compose -f "$ROOT_DIR/compose.dev.yaml" exec -T postgres psql -U "$pg_user" -d "$pg_database")
 else
   echo "需要 psql 命令，或运行中的 postgres Compose 服务。" >&2
   exit 1

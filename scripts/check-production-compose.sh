@@ -8,7 +8,7 @@ work=$(mktemp -d)
 trap 'rm -rf -- "$work"' EXIT
 
 # 在独立目录中仅使用假值；不会读取工作区或部署目录的配置，也不创建容器与网络。
-cp "$ROOT_DIR/deploy/production/compose.yaml" "$work/compose.yaml"
+cp "$ROOT_DIR/compose.prod.yaml" "$work/compose.yaml"
 printf '%s\n' 'ROOMUSIC_DB_PASSWORD=ci-placeholder' 'ROOMUSIC_MUSIC_DIR=/srv/music' > "$work/required.env"
 printf '%s\n' 'ROOMUSIC_MUSIC_DIR=/srv/music' > "$work/no-password.env"
 printf '%s\n' 'ROOMUSIC_DB_PASSWORD=ci-placeholder' > "$work/no-music.env"
@@ -66,6 +66,6 @@ compose required.env config --format json | jq -e '
   .networks.roomusic.ipam.config[0].subnet == "10.203.51.0/24"
 ' > /dev/null
 
-grep -qF '__RELEASE_VERSION__' "$ROOT_DIR/deploy/production/compose.yaml"
-grep -qxF 'ROOMUSIC_VERSION=__RELEASE_VERSION__' "$ROOT_DIR/deploy/production/example.env"
+grep -qF '__RELEASE_VERSION__' "$ROOT_DIR/compose.prod.yaml"
+grep -qxF 'ROOMUSIC_VERSION=__RELEASE_VERSION__' "$ROOT_DIR/.env.prod.example"
 printf '%s\n' '生产 Compose 静态校验通过'

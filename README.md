@@ -17,6 +17,8 @@
 
 需要 Docker 和 Docker Compose v2。
 
+仓库根目录的 `compose.prod.yaml` 和 `.env.prod.example` 与 Release 附件相同。
+
 ```bash
 mkdir roomusic && cd roomusic
 curl -fLO https://github.com/qlqqs/ROOMusic/releases/latest/download/compose.yaml
@@ -54,11 +56,11 @@ docker compose pull && docker compose up -d --wait
 ## 开发
 
 工具链由 [mise](https://mise.jdx.dev/) 管理（Go 1.25.10、Node.js 24.22.1）。Go 和 Node 在宿主机运行，PostgreSQL 由根目录的
-`compose.yaml` 提供，只监听 `127.0.0.1`。
+`compose.dev.yaml` 提供，只监听 `127.0.0.1`。
 
 ```bash
 mise install
-cp .env.example .env.dev    # 填写本地 PostgreSQL 密码
+cp .env.dev.example .env.dev # 填写本地 PostgreSQL 密码
 make dev                    # PostgreSQL + Go 后端（8080）+ Vite（5173）
 ```
 

@@ -31,8 +31,8 @@ class ReleaseCheckTests(unittest.TestCase):
         self.git("config", "user.email", "release-test@example.invalid")
         self.git("config", "core.hooksPath", "/dev/null")
         self.write("scripts/release-check.sh", SCRIPT.read_text())
-        self.write("deploy/production/compose.yaml", "image: roomusic:__RELEASE_VERSION__\n")
-        self.write("deploy/production/example.env", "ROOMUSIC_VERSION=__RELEASE_VERSION__\n")
+        self.write("compose.prod.yaml", "image: roomusic:__RELEASE_VERSION__\n")
+        self.write(".env.prod.example", "ROOMUSIC_VERSION=__RELEASE_VERSION__\n")
         self.write("backend/cmd/roomusic/web/index.html", "合成前端\n")
         self.commit()
         self.origin = self.root / "origin.git"
@@ -69,7 +69,7 @@ class ReleaseCheckTests(unittest.TestCase):
         return output
 
     def test_valid_initial_release_and_example_configuration(self):
-        self.write("nested/.env.example", "EXAMPLE=placeholder\n")
+        self.write("nested/.env.dev.example", "EXAMPLE=placeholder\n")
         self.write("nested/.env.prod.example", "EXAMPLE=placeholder\n")
         self.commit()
         self.check(success=True, contains="发布检查通过")
@@ -141,7 +141,7 @@ class ReleaseCheckTests(unittest.TestCase):
         self.check(contains="禁止发布敏感文件", hidden="INITIAL_SECRET_MUST_NOT_APPEAR")
 
     def test_missing_version_placeholder(self):
-        self.write("deploy/production/compose.yaml", "image: fixed-version\n")
+        self.write("compose.prod.yaml", "image: fixed-version\n")
         self.commit()
         self.check(contains="缺少发布占位符")
 

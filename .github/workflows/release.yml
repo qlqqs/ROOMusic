@@ -53,8 +53,8 @@ jobs:
             echo "::error::标签指向的提交不在 main 上"
             exit 1
           fi
-          grep -q '__RELEASE_VERSION__' deploy/production/compose.yaml
-          grep -q '__RELEASE_VERSION__' deploy/production/example.env
+          grep -q '__RELEASE_VERSION__' compose.prod.yaml
+          grep -q '__RELEASE_VERSION__' .env.prod.example
           echo "version=${REF_NAME#v}" >> "$GITHUB_OUTPUT"
           echo "publish=true" >> "$GITHUB_OUTPUT"
       # 发布不重跑测试，只要求标签所指提交在 main 上的 CI 已经通过。
@@ -221,8 +221,8 @@ jobs:
           set -euo pipefail
           out="$RUNNER_TEMP/release"
           mkdir -p "$out"
-          sed "s/__RELEASE_VERSION__/${VERSION}/g" deploy/production/compose.yaml > "$out/compose.yaml"
-          sed "s/__RELEASE_VERSION__/${VERSION}/g" deploy/production/example.env > "$out/example.env"
+          sed "s/__RELEASE_VERSION__/${VERSION}/g" compose.prod.yaml > "$out/compose.yaml"
+          sed "s/__RELEASE_VERSION__/${VERSION}/g" .env.prod.example > "$out/example.env"
           if grep -q '__RELEASE_VERSION__' "$out/compose.yaml" "$out/example.env"; then exit 1; fi
           ROOMUSIC_DB_PASSWORD=ci-placeholder ROOMUSIC_MUSIC_DIR=/srv/music \
             docker compose -f "$out/compose.yaml" --env-file "$out/example.env" config --quiet

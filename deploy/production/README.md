@@ -7,6 +7,8 @@ ROOMusic 生产环境只有两个容器：`app` 和 PostgreSQL 18。应用自带
 
 ## 1. 安装
 
+仓库根目录的 `compose.prod.yaml` 和 `.env.prod.example` 与 Release 附件相同。
+
 从 GitHub Release 下载 `compose.yaml` 和 `example.env`。下面的链接总是指向最新版本，也可以把 `latest/download` 换成
 `download/v0.1.0` 指定版本：
 

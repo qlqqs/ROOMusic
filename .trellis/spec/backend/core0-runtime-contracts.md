@@ -150,7 +150,7 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
   和 `ROOMUSIC_SECURE_COOKIES` 校验写请求；生产未配置清单时按主机一致校验，只比较规范化的 Origin 与请求 Host；
   配置清单后只按清单。主机一致与清单模式的 Cookie `Secure` 都跟随请求来源协议，任何模式都不读转发头。
 - `.env.dev`、`.env.prod`、`.env` 是本机配置，必须被 Git 忽略；仓库只跟踪不含真实值的
-  `.env.example` 与 `deploy/production/example.env`。开发脚本默认读 `.env.dev`，不 source 根目录 `.env`；生产 `.env` 放在仓库外的部署目录。`backend/data/` 等运行期数据（含封面缓存与 `media-cache/` 派生缓存）同样不得提交。
+  `.env.dev.example` 与 `.env.prod.example`。开发脚本默认读 `.env.dev`，不 source 根目录 `.env`；生产可在仓库根目录用 `.env.prod`（`docker compose -f compose.prod.yaml --env-file .env.prod up -d --wait`），或在仓库外部署目录用 `.env` 与 Release 的 `compose.yaml`。`backend/data/` 等运行期数据（含封面缓存与 `media-cache/` 派生缓存）同样不得提交。
 - ALAC 派生需要 ffmpeg：生产镜像构建时从固定摘要镜像复制，开发由部署者安装（项目不单独分发二进制）；`ROOMUSIC_FFMPEG_PATH`（绝对路径，空则在 `PATH` 中查找）与
   `ROOMUSIC_MEDIA_CACHE_MAX_MIB`（默认 10240，最小 256）；找不到或自检失败时应用照常启动，ALAC 保持“不能直接播放”。
   `scripts/ffmpeg-pinned.sh` 取出按摘要固定的 ffmpeg 7.1.1，测试、CI 与推荐部署共用。详见[无损派生合同](./playback-derivation-contracts.md)。

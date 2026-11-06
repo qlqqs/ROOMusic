@@ -14,7 +14,7 @@ export ROOMUSIC_HTTP_ADDR="${ROOMUSIC_HTTP_ADDR:-:8080}"
 ROOMUSIC_PG_BIN_DIR="${ROOMUSIC_PG_BIN_DIR:-$("$ROOT_DIR/scripts/pg-client-pinned.sh")}"
 export ROOMUSIC_PG_BIN_DIR
 
-docker compose up -d --wait postgres
+docker compose -f "$ROOT_DIR/compose.dev.yaml" up -d --wait postgres
 
 backend_pid=""
 frontend_pid=""

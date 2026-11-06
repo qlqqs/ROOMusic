@@ -86,8 +86,10 @@ const fullTree = `ROOMusic/
 ├── plugins/                              # future plugin implementations
 ├── docs/                                 # architecture, API, ADR, security docs
 ├── scripts/                              # development, database, verification
-├── compose.yaml
-├── .env.example
+├── compose.dev.yaml
+├── compose.prod.yaml
+├── .env.dev.example
+├── .env.prod.example
 ├── Makefile
 └── README.md`;
 

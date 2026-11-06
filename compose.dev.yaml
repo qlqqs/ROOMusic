@@ -9,7 +9,7 @@ services:
     environment:
       POSTGRES_DB: "${PG_DATABASE:-roomusic}"
       POSTGRES_USER: "${PG_USER:-roomusic}"
-      POSTGRES_PASSWORD: "${PG_PASSWORD:?请在 .env 中设置 PG_PASSWORD}"
+      POSTGRES_PASSWORD: "${PG_PASSWORD:?请在 .env.dev 中设置 PG_PASSWORD}"
     volumes:
       - postgres-data:/var/lib/postgresql
     healthcheck:
@@ -38,7 +38,7 @@ services:
       - "127.0.0.1:${MEILI_PORT:-7700}:7700"
     environment:
       MEILI_ENV: development
-      MEILI_MASTER_KEY: "${MEILI_MASTER_KEY:?请在 .env 中设置 MEILI_MASTER_KEY}"
+      MEILI_MASTER_KEY: "${MEILI_MASTER_KEY:?请在 .env.dev 中设置 MEILI_MASTER_KEY}"
       MEILI_NO_ANALYTICS: "true"
     volumes:
       - meilisearch-data:/meili_data

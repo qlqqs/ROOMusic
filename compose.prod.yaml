@@ -1,5 +1,6 @@
-# ROOMusic 生产部署：和 .env（由 example.env 复制）放在同一个目录，执行 docker compose up -d。
-# 项目名默认 roomusic-server；本机生产实例在 .env 里用 COMPOSE_PROJECT_NAME 指定为 roomusic-prod。
+# 从 Release 下载时，将 compose.yaml 和由 example.env 复制的 .env 放在一起，执行 chmod 600 .env，再执行 docker compose up -d --wait。
+# 在仓库根目录使用时，将 .env.prod.example 复制为 .env.prod，执行 chmod 600 .env.prod，再执行 docker compose -f compose.prod.yaml --env-file .env.prod up -d --wait。
+# 项目名默认 roomusic-server；本机生产实例可在对应环境文件里用 COMPOSE_PROJECT_NAME 指定为 roomusic-prod。
 name: roomusic-server
 
 x-postgres-image: &postgres-image postgres:18.1-alpine3.23@sha256:aa6eb304ddb6dd26df23d05db4e5cb05af8951cda3e0dc57731b771e0ef4ab29

@@ -39,7 +39,7 @@ blocked = []
 for raw in filter(None, paths):
     path = os.fsdecode(raw)
     name = path.rsplit("/", 1)[-1]
-    example = name == "example.env" or name == ".env.example" or (name.startswith(".env.") and name.endswith(".example"))
+    example = name == "example.env" or (name.startswith(".env.") and name.endswith(".example"))
     private = not example and (name == ".env" or name.startswith(".env."))
     private |= any(fnmatch.fnmatchcase(name, pattern) for pattern in ("*.pem", "*.key", "*.p12", "id_rsa*", "*.dump"))
     if private:
@@ -71,7 +71,7 @@ for raw in filter(None, paths):
 if found:
     sys.exit(1)
 PY
-for file in deploy/production/compose.yaml deploy/production/example.env; do
+for file in compose.prod.yaml .env.prod.example; do
   [[ -f "$file" ]] && grep -q '__RELEASE_VERSION__' "$file" || fail "缺少发布占位符：$file"
 done
 git diff --exit-code HEAD -- backend/cmd/roomusic/web >/dev/null || fail '内嵌前端产物有未提交修改'

@@ -135,7 +135,7 @@ itself, runs a repository update, and returns the database row directly.
 
 - [Core 0 requirements](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md)
 - [Current environment README](../../../README.md)
-- [Current Compose services](../../../compose.yaml)
+- [Current Compose services](../../../compose.dev.yaml)
 - [Architecture canvas](../../../docs/architecture/roomusic-modular-plugin-architecture.canvas.tsx)
 
 The Compose file includes Redis and Meilisearch as development/future services;
