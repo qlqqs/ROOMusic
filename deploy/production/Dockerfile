@@ -14,16 +14,17 @@ FROM mwader/static-ffmpeg@sha256:11a44711684c0b9f754c047dcd64235b8b52deab251bd0e
 FROM postgres:18.1-alpine3.23@sha256:aa6eb304ddb6dd26df23d05db4e5cb05af8951cda3e0dc57731b771e0ef4ab29 AS tools
 COPY --chmod=0755 deploy/production/backup.sh deploy/production/restore.sh /opt/roomusic/
 
-FROM alpine:3.22@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f AS app
-RUN apk add --no-cache ca-certificates postgresql17-client \
+FROM alpine:3.23@sha256:f3d55900449227ae9e237ede521e7b665d53a253b42065ba90b9db9275e198ad AS app
+RUN apk add --no-cache ca-certificates postgresql18-client \
+ && pg_dump --version | grep -q '^pg_dump (PostgreSQL) 18\.' \
  && addgroup -S -g 1000 roomusic && adduser -S -D -H -u 1000 -G roomusic roomusic \
- && mkdir -p /app /data && chown roomusic:roomusic /data
+ && mkdir -p /app /data /backups && chown roomusic:roomusic /data /backups && chmod 0700 /backups
 COPY --from=build /out/roomusic /app/roomusic
 COPY --from=ffmpeg /ffmpeg /usr/local/bin/ffmpeg
 COPY --chmod=0755 deploy/production/entrypoint.sh /app/entrypoint.sh
 USER 1000:1000
 WORKDIR /app
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5m --start-interval=5s --retries=3 \
  CMD wget -q -O /dev/null http://127.0.0.1:8080/readyz || exit 1
 ENTRYPOINT ["/app/entrypoint.sh"]

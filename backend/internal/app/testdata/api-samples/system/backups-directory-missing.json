@@ -1,0 +1,14 @@
+{
+  "body": {
+    "backups": [],
+    "status": {
+      "directory": "missing",
+      "last_failure": null,
+      "last_success_at": null,
+      "next_scheduled_at": null,
+      "running": null
+    },
+    "total": 0
+  },
+  "status": 200
+}

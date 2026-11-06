@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "backup_not_found",
+      "message": "备份不存在"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 404
+}

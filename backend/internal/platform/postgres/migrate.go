@@ -15,7 +15,8 @@ import (
 	"sort"
 	"strconv"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/qlqq/roomusic/backend/migrations"
 )
 
@@ -50,12 +51,12 @@ func (columns migrationMetadataColumns) complete() bool {
 }
 
 // Open 连接数据库、探测可用性并应用嵌入的迁移。成功时调用方拥有返回的连接。
-func Open(ctx context.Context, databaseURL string) (*sql.DB, error) {
+func Open(ctx context.Context, databaseURL string, options ...OpenOption) (*sql.DB, error) {
 	connection, err := Connect(ctx, databaseURL)
 	if err != nil {
 		return nil, err
 	}
-	if err := applyMigrations(ctx, connection); err != nil {
+	if err := applyMigrations(ctx, connection, options...); err != nil {
 		_ = connection.Close()
 		return nil, err
 	}
@@ -64,19 +65,23 @@ func Open(ctx context.Context, databaseURL string) (*sql.DB, error) {
 
 // Connect 只连接数据库并探测可用性，不迁移或初始化业务数据。
 func Connect(ctx context.Context, databaseURL string) (*sql.DB, error) {
-	connection, err := sql.Open("pgx", databaseURL)
+	settings, err := pgx.ParseConfig(databaseURL)
 	if err != nil {
-		return nil, fmt.Errorf("open database: %w", err)
+		return nil, &safeError{message: "数据库连接配置无效", cause: err}
 	}
+	if _, exists := settings.RuntimeParams["application_name"]; !exists {
+		settings.RuntimeParams["application_name"] = "roomusic"
+	}
+	connection := stdlib.OpenDB(*settings)
 	if err := connection.PingContext(ctx); err != nil {
 		_ = connection.Close()
-		return nil, fmt.Errorf("ping database: %w", err)
+		return nil, &safeError{message: "无法连接数据库", cause: err}
 	}
 	return connection, nil
 }
 
-func applyMigrations(ctx context.Context, connection *sql.DB) error {
-	return applyMigrationsFromFS(ctx, connection, migrations.Files)
+func applyMigrations(ctx context.Context, connection *sql.DB, options ...OpenOption) error {
+	return applyMigrationsFromFS(ctx, connection, migrations.Files, options...)
 }
 
 // loadMigrations 在产生任何数据库副作用前发现并校验嵌入的迁移集合。校验和覆盖
@@ -138,7 +143,11 @@ func loadMigrations(source fs.FS) ([]migration, error) {
 	return result, nil
 }
 
-func applyMigrationsFromFS(ctx context.Context, connection *sql.DB, source fs.FS) (err error) {
+func applyMigrationsFromFS(ctx context.Context, connection *sql.DB, source fs.FS, options ...OpenOption) (err error) {
+	var settings openOptions
+	for _, apply := range options {
+		apply(&settings)
+	}
 	if connection == nil {
 		return errors.New("apply migrations: database connection is nil")
 	}
@@ -197,6 +206,28 @@ func applyMigrationsFromFS(ctx context.Context, connection *sql.DB, source fs.FS
 	plan, err := buildMigrationPlan(available, history, columns)
 	if err != nil {
 		return err
+	}
+
+	// 已有库在此之前只查询系统目录与历史，不持有高于 AccessShareLock 的表锁。
+	// 所有 DDL（包括 0008 元数据列）都必须在备份成功之后执行。
+	change := MigrationChange{Direction: MigrationUpgrade, ToVersion: available[len(available)-1].Version}
+	for _, item := range history {
+		if item.Version > change.FromVersion {
+			change.FromVersion = item.Version
+		}
+	}
+	for _, candidate := range available {
+		if !plan.applied[candidate.Version] && !plan.baseline[candidate.Version] {
+			change.Versions = append(change.Versions, candidate.Version)
+		}
+	}
+	if tableExists && len(change.Versions) > 0 && settings.backups != nil {
+		if _, backupErr := settings.backups.BackupBeforeMigration(ctx, connection, change); backupErr != nil {
+			if settings.logger != nil {
+				settings.logger.Error("迁移前备份失败，未执行迁移", "event", "platform.migration.pre_backup_failed", "module", "platform", "from_version", change.FromVersion, "to_version", change.ToVersion)
+			}
+			return &preMigrationBackupError{cause: backupErr}
+		}
 	}
 
 	for _, candidate := range available {

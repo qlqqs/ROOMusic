@@ -1,0 +1,15 @@
+{
+  "body": {
+    "status": {
+      "directory": "ready",
+      "last_failure": null,
+      "last_success_at": "2026-01-01T00:00:00Z",
+      "next_scheduled_at": null,
+      "running": {
+        "source": "manual",
+        "started_at": "2026-01-01T00:00:01Z"
+      }
+    }
+  },
+  "status": 202
+}

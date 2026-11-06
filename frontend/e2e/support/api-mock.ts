@@ -35,6 +35,7 @@ import {
 } from "../../src/test/governance-data";
 import { personalDataOf, respondToPersonal, type PersonalData } from "../../src/test/personal-data";
 import { respondToSearch, searchDataOf, type SearchData } from "../../src/test/search-data";
+import { backupFileAt, backupNotFound, respondToSystem, systemDataOf, type SystemData } from "../../src/test/system-data";
 import { artistCatalogState, artistSummaryOriginError, artistError, respondToArtistFavorites, respondToArtists, respondToArtistSummaries, type ArtistData } from "../../src/test/artist-data";
 import { gradientPng } from "./png";
 
@@ -70,6 +71,8 @@ export type ApiMock = CatalogData & {
   search: SearchData;
   /** 艺人模拟仅由艺人用例启用，旧用例的默认响应保持不变。 */
   artists: ArtistData | null;
+  /** “系统 › 备份”：版本、备份状态与文件列表（只有管理员）；行为与 Vitest 的替身共用 system-data.ts。 */
+  system: SystemData;
   /** 可推进 epoch 验证 preparing → ready，不依赖真实等待。 */
   catalogState: CatalogStateDTO;
   setupRequired: boolean;
@@ -135,6 +138,7 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
   const mock: ApiMock = {
     search: searchDataOf(),
     artists: null,
+    system: systemDataOf(),
     catalogState: decodeCatalogState(sampleBody("search/catalog-status-ready")),
     setupRequired,
     session: signedInAs,
@@ -220,6 +224,8 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
   let clock = 100;
   let counter = 10;
   const now = () => new Date(Date.UTC(2026, 0, 2, 0, 0, clock++)).toISOString();
+  // 备份的种子是 2026-11 的文件，新备份要排在它们之后，所以用自己的时钟。
+  const systemNow = () => new Date(Date.UTC(2026, 10, 6, 4, 0, clock++)).toISOString().replace(".000Z", "Z");
   const scanReads = new Map<string, number>();
   const cancelReads = new Map<string, number>();
 
@@ -281,6 +287,14 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
     if (/^\/api\/v1\/me\/(favorites|playlists)(\/|$)/.test(path)) {
       if (mock.forbid.has(key)) return guarded(method, path, false, () => sample("errors/forbidden"));
       return respondToPersonal(mock.personal, viewer()?.id ?? null, { method, path: `${path}?${search}`, body, idempotencyKey: headers["idempotency-key"] ?? null });
+    }
+    if (path === "/api/v1/system/version" || path === "/api/v1/system/backups") {
+      if (method === "POST") {
+        const origin = headers.origin ?? null;
+        if (origin === null) return json({ error: { code: "origin_required", message: "请求缺少来源校验" }, request_id: "sample-request" }, 403);
+        if (origin !== requestOrigin) return sample("errors/origin-forbidden");
+      }
+      return guarded(method, path, true, () => respondToSystem(mock.system, method, path, systemNow) ?? sample("errors/method-not-allowed"));
     }
     switch (key) {
       case "GET /api/v1/setup/status":
@@ -570,6 +584,23 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
       }
       const seed = [...resourceId].reduce((sum, character) => sum + character.charCodeAt(0), 0);
       await route.fulfill({ status: 200, contentType: "image/png", headers: { "Cache-Control": "private, no-cache" }, body: gradientPng(96, seed) });
+      return;
+    }
+    // 备份下载是附件，不是 JSON：只有管理员；文件名不对是 404 backup_not_found。
+    if (/^\/api\/v1\/system\/backups\/[^/]+$/.test(url.pathname) && request.method() === "GET") {
+      const current = viewer();
+      const file = current?.role === "admin" ? backupFileAt(mock.system, url.pathname) : null;
+      if (file === null) {
+        const failed = current === null ? sample("errors/unauthorized") : current.role !== "admin" ? sample("errors/forbidden") : backupNotFound();
+        if (failed !== "abort") await route.fulfill({ status: failed.status, contentType: "application/json", body: JSON.stringify(failed.body) });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/octet-stream",
+        headers: { "Content-Disposition": `attachment; filename="${file.name}"`, "Cache-Control": "private, no-store" },
+        body: Buffer.from("PGDMP"),
+      });
       return;
     }
     const handled = handle(request.method(), url.pathname, request.headers(), body, url.searchParams, url.origin, invalidJSON, url);

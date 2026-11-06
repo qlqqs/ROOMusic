@@ -1,8 +1,8 @@
-import { ArrowRightLeft, ClipboardCheck, Combine, Disc3, History, Library, MicVocal, Music2, FolderSearch, LayoutDashboard, Users, type LucideIcon } from "lucide-react";
+import { ArrowRightLeft, ClipboardCheck, Combine, DatabaseBackup, Disc3, History, Library, MicVocal, Music2, FolderSearch, LayoutDashboard, Users, type LucideIcon } from "lucide-react";
 import type { UserRole } from "../../features/auth";
 
 export type NavItem = {
-  to: "/" | "/albums" | "/artists" | "/me" | "/now-playing" | "/library" | "/issues" | "/claims" | "/artist-candidates" | "/members" | "/operations";
+  to: "/" | "/albums" | "/artists" | "/me" | "/now-playing" | "/library" | "/issues" | "/claims" | "/artist-candidates" | "/members" | "/operations" | "/system/backups";
   label: string;
   icon: LucideIcon;
   /** 只有管理员看到；后端仍然独立鉴权，这里只决定显示。 */
@@ -27,6 +27,7 @@ const navItems: readonly NavItem[] = [
   { to: "/artist-candidates", label: "可能是同一位", icon: Combine, adminOnly: true, group: "资料库", artists: true },
   { to: "/members", label: "成员", icon: Users, adminOnly: true, group: "资料库" },
   { to: "/operations", label: "操作记录", icon: History, adminOnly: true, group: "资料库" },
+  { to: "/system/backups", label: "备份", icon: DatabaseBackup, adminOnly: true, group: "系统" },
 ];
 
 export type NavGroup = { label: string | null; items: readonly NavItem[] };

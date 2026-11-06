@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/qlqq/roomusic/backend/internal/backup"
+	backupapi "github.com/qlqq/roomusic/backend/internal/backup/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	catalogapi "github.com/qlqq/roomusic/backend/internal/catalog/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/catalog/maintenance"
@@ -41,6 +43,7 @@ type App struct {
 type Option func(*options)
 
 type options struct {
+	backups               *backup.Service
 	loginThrottle         *identity.LoginThrottle
 	playbackPreflightWait time.Duration
 	derivation            playback.Derivation
@@ -63,6 +66,9 @@ func WithPlaybackPreflightWait(wait time.Duration) Option {
 func WithDerivation(port playback.Derivation) Option {
 	return func(settings *options) { settings.derivation = port }
 }
+
+// WithBackups 注入备份能力；不提供时不注册系统接口。
+func WithBackups(service *backup.Service) Option { return func(o *options) { o.backups = service } }
 
 // New 装配应用。lifecycle 是应用的生命周期上下文（进程停机时取消）：扫描 worker 与已建立的音频传输都以它为界；
 // 调用方先完成 InitializeCatalog；正常服务不等待后台投影完成。
@@ -105,6 +111,9 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	}).Register(mux)
 	listeningapi.New(guard, listening.NewService(database)).Register(mux)
 	personalapi.New(guard, personal.NewService(database)).Register(mux)
+	if assembly.backups != nil {
+		backupapi.New(assembly.backups, database, guard, lifecycle).Register(mux)
+	}
 	httpserver.RegisterAPIFallback(mux, httpserver.APINotFoundHandler(mux))
 	mux.Handle("/", httpserver.Frontend(frontend))
 	catalogDone := make(chan struct{})

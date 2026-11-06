@@ -1,3 +1,4 @@
+import { decodeBackupOverview, decodeBackupCommand, decodeBuildInfo } from "../features/system/api/decoders";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
@@ -95,6 +96,13 @@ const decodeLegacyReleasePage = d.defineDecoder(d.object({
 
 const successContracts: Record<string, Contract> = {
   // I1/I2/I4/I6：独立 adjudication recorder 的正式真实样本，不复用合成响应。
+  "system/version-dev": { status: 200, decode: decodeBuildInfo },
+  "system/backups-empty": { status: 200, decode: decodeBackupOverview },
+  "system/backups": { status: 200, decode: decodeBackupOverview },
+  "system/backups-running": { status: 200, decode: decodeBackupOverview },
+  "system/backups-directory-missing": { status: 200, decode: decodeBackupOverview },
+  "system/backup-started": { status: 202, decode: decodeBackupCommand },
+  "system/backup-already-running": { status: 200, decode: decodeBackupCommand },
   "artists/adjudication/albums-any-empty": { status: 200, decode: decodeArtistParticipationAlbumsPage },
   "artists/adjudication/albums-any-page": { status: 200, decode: decodeArtistParticipationAlbumsPage },
   "artists/adjudication/albums-any-query": { status: 200, decode: decodeArtistParticipationAlbumsPage },
@@ -497,6 +505,8 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "search/errors/invalid-type": { status: 400, code: "invalid_search_type" },
   "search/errors/invalid-utf8": { status: 400, code: "invalid_query" },
   "search/errors/unauthorized": { status: 401, code: "unauthorized" },
+  "errors/backup-not-found": { status: 404, code: "backup_not_found" },
+  "errors/backup-busy": { status: 409, code: "backup_busy" },
   "errors/root-disabled": { status: 409, code: "root_disabled" },
   "errors/not-directly-playable": { status: 409, code: "not_directly_playable" },
   "errors/source-unavailable": { status: 409, code: "source_unavailable" },

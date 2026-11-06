@@ -1,0 +1,43 @@
+{
+  "body": {
+    "backups": [
+      {
+        "created_at": "2026-01-01T00:00:03Z",
+        "name": "roomusic-20261106-030012.dump",
+        "size_bytes": 1572864,
+        "source": "scheduled"
+      },
+      {
+        "created_at": "2026-01-01T00:00:02Z",
+        "name": "roomusic-20261105-221530-pre-restore.dump",
+        "size_bytes": 1561210,
+        "source": "pre_restore"
+      },
+      {
+        "created_at": "2026-01-01T00:00:01Z",
+        "name": "roomusic-20261105-090501-pre-migration-17.dump",
+        "size_bytes": 1498112,
+        "source": "pre_migration"
+      },
+      {
+        "created_at": "2026-01-01T00:00:00Z",
+        "name": "roomusic-20261104-153000-manual.dump",
+        "size_bytes": 1480004,
+        "source": "manual"
+      }
+    ],
+    "status": {
+      "directory": "ready",
+      "last_failure": {
+        "at": "2026-01-01T00:00:04Z",
+        "source": "scheduled",
+        "stage": "pg_dump"
+      },
+      "last_success_at": "2026-01-01T00:00:03Z",
+      "next_scheduled_at": null,
+      "running": null
+    },
+    "total": 4
+  },
+  "status": 200
+}

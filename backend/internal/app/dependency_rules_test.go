@@ -22,6 +22,9 @@ type packageRule struct {
 // 各 httpapi 包只依赖本能力、identity 与 platform，且彼此不导入；只有 app 可以装配全部。
 // 新增包必须先在这里声明规则，测试才会通过。
 var packageRules = map[string]packageRule{
+	"backup":                         {imports: []string{"platform/config", "platform/postgres"}},
+	"backup/httpapi":                 {imports: []string{"backup", "identity", "platform/buildinfo", "platform/httpserver"}, http: true},
+	"platform/buildinfo":             {},
 	"platform/uuid":                  {},
 	"platform/weborigin":             {},
 	"platform/config":                {imports: []string{"platform/weborigin"}},
@@ -56,6 +59,7 @@ var packageRules = map[string]packageRule{
 	"playback/httpapi":               {imports: []string{"identity", "platform/httpserver", "platform/uuid", "playback"}, http: true},
 	"listening/httpapi":              {imports: []string{"identity", "listening", "platform/httpserver", "platform/uuid"}, http: true},
 	"app": {imports: []string{
+		"backup", "backup/httpapi",
 		"catalog", "catalog/governance", "catalog/httpapi", "catalog/maintenance", "identity", "identity/httpapi", "library", "library/httpapi", "listening", "listening/httpapi",
 		"personal", "personal/httpapi", "operations/httpapi", "platform/config", "platform/httpserver", "playback", "playback/derivation", "playback/httpapi",
 	}, http: true},

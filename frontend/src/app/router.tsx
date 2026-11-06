@@ -10,6 +10,7 @@ import { AuthenticatedLayout } from "./shell/authenticated-layout";
 import { AdminGate } from "./routes/admin-gate";
 import { AlbumDetailPage } from "./routes/album-detail-page";
 import { AlbumsPage } from "./routes/albums-page";
+import { BackupsPage } from "./routes/backups-page";
 import { FavoritesPage } from "./routes/favorites-page";
 import { HistoryPage } from "./routes/history-page";
 import { ClaimsPage } from "./routes/claims-page";
@@ -330,10 +331,21 @@ const scanDetailRoute = createRoute({
   component: ScanDetailRoute,
 });
 
+function BackupsRoute() {
+  return (
+    <AdminGate>
+      <BackupsPage />
+    </AdminGate>
+  );
+}
+
+// “系统”组目前只有这一页，不设 /system 跳转。
+const backupsRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/system/backups", component: BackupsRoute });
+
 // 已登录用户访问不存在的路径时仍显示在外壳里；未登录用户先被守卫送去登录。
 const notFoundRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "$", component: NotFoundPage });
 
-const routeTree = rootRoute.addChildren([setupRoute, loginRoute, authenticatedRoute.addChildren([overviewRoute, nowPlayingRoute, albumsRoute, albumDetailRoute, searchRoute, artistsRoute, artistDetailRoute, meRoute.addChildren([meIndexRoute, historyRoute, favoritesRoute, playlistsRoute, playlistDetailRoute]), libraryRoute, scanDetailRoute, issuesRoute, claimsRoute, artistCandidatesRoute, membersRoute, operationsRoute, notFoundRoute])]);
+const routeTree = rootRoute.addChildren([setupRoute, loginRoute, authenticatedRoute.addChildren([overviewRoute, nowPlayingRoute, albumsRoute, albumDetailRoute, searchRoute, artistsRoute, artistDetailRoute, meRoute.addChildren([meIndexRoute, historyRoute, favoritesRoute, playlistsRoute, playlistDetailRoute]), libraryRoute, scanDetailRoute, issuesRoute, claimsRoute, artistCandidatesRoute, membersRoute, operationsRoute, backupsRoute, notFoundRoute])]);
 
 export function createAppRouter(context: RouterContext, history?: RouterHistory) {
   return createRouter({ routeTree, context, ...(history === undefined ? {} : { history }) });

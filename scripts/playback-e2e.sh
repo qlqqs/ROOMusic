@@ -25,7 +25,8 @@ docker info >/dev/null
 # 与其他使用同一 Compose project 的本入口互斥；已存在的测试容器也不能接管。
 exec 9>"${TMPDIR:-/tmp}/roomusic-playback-e2e.lock"
 flock -n 9 || { echo '已有真实播放测试运行中' >&2; exit 1; }
-# 查询失败必须停下；同时拒绝孤立网络，不能在清理时接管别人的残留资源。
+# 测试库使用默认 bridge，不创建项目网络；仍拒绝旧版遗留的孤立网络，不能接管他人的资源。
+# 查询失败必须停下。
 existing_containers="$(docker ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT")" || { echo '无法检查已有测试容器' >&2; exit 1; }
 existing_volumes="$(docker volume ls -q --filter "label=com.docker.compose.project=$COMPOSE_PROJECT")" || { echo '无法检查已有测试数据卷' >&2; exit 1; }
 existing_networks="$(docker network ls -q --filter "label=com.docker.compose.project=$COMPOSE_PROJECT")" || { echo '无法检查已有测试网络' >&2; exit 1; }

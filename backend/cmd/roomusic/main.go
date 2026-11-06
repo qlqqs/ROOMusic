@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/app"
+	"github.com/qlqq/roomusic/backend/internal/backup"
 	"github.com/qlqq/roomusic/backend/internal/library"
 	"github.com/qlqq/roomusic/backend/internal/platform/config"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
@@ -41,7 +42,8 @@ func main() {
 		logger.Error("roomusic configuration invalid", "event", "platform.config.invalid", "error", configErr)
 		os.Exit(1)
 	}
-	database, databaseErr := openDatabase(applicationContext, settings.DatabaseURL)
+	backups := backup.NewService(settings.Backup, logger)
+	database, databaseErr := openDatabase(applicationContext, settings.DatabaseURL, postgres.WithMigrationBackups(backups), postgres.WithLogger(logger))
 	if databaseErr != nil {
 		logger.Error("roomusic database unavailable", "event", "platform.database.unavailable", "error", databaseErr)
 	}
@@ -62,6 +64,8 @@ func main() {
 		if derivations != nil {
 			appOptions = append(appOptions, app.WithDerivation(derivations))
 		}
+		backups.Start(applicationContext, database)
+		appOptions = append(appOptions, app.WithBackups(backups))
 		application = app.New(applicationContext, settings, database, frontend, logger, appOptions...)
 		requestHandler = application.Handler()
 	}
@@ -97,6 +101,9 @@ func main() {
 			logger.Error("目录后台维护退出超时", "event", "catalog_projection_shutdown_timeout", "error", err)
 		}
 	}
+	if err := backups.Wait(shutdownContext); err != nil {
+		logger.Error("等待备份退出超时", "event", "backup.shutdown_timeout", "module", "backup")
+	}
 	if derivations != nil {
 		// HTTP 已停止接收请求：终止仍在运行的 ffmpeg（进程组）并删除未完成的临时文件。
 		if err := derivations.Close(5 * time.Second); err != nil {
@@ -115,8 +122,8 @@ func main() {
 }
 
 // openDatabase 连接并迁移数据库，再恢复上次进程遗留的运行中扫描。
-func openDatabase(ctx context.Context, databaseURL string) (*sql.DB, error) {
-	connection, err := postgres.Open(ctx, databaseURL)
+func openDatabase(ctx context.Context, databaseURL string, options ...postgres.OpenOption) (*sql.DB, error) {
+	connection, err := postgres.Open(ctx, databaseURL, options...)
 	if err != nil {
 		return nil, err
 	}

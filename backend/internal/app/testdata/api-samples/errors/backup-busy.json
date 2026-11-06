@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "backup_busy",
+      "message": "另一份备份正在进行，稍后再试"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

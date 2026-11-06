@@ -1,4 +1,4 @@
-// Package postgrestest 为集成测试提供隔离 schema 的 PostgreSQL 连接 URL。
+// Package postgrestest 为集成测试提供隔离 schema 与独立数据库的 PostgreSQL 连接 URL。
 // 它只依赖标准库与 pgx 驱动，不导入 postgres 包，因此 postgres 自己的测试也能使用它。
 package postgrestest
 
@@ -74,4 +74,35 @@ func NewSchema(t testing.TB, prefix string) string {
 		t.Fatalf("scope integration database URL: %v", err)
 	}
 	return scoped
+}
+
+// NewDatabase 创建独立数据库，供 pg_dump 与恢复测试使用，避免 search_path 无法隔离整库工具。
+func NewDatabase(t testing.TB, prefix string) string {
+	t.Helper()
+	base := BaseURL(t)
+	admin, err := sql.Open("pgx", base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := prefix + strings.ReplaceAll(uuid.New(), "-", "")
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if _, err := admin.ExecContext(ctx, `CREATE DATABASE "`+name+`"`); err != nil {
+		admin.Close()
+		t.Fatalf("创建独立测试数据库：%v", err)
+	}
+	t.Cleanup(func() {
+		defer admin.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if _, err := admin.ExecContext(ctx, `DROP DATABASE IF EXISTS "`+name+`" WITH (FORCE)`); err != nil {
+			t.Errorf("清理独立测试数据库：%v", err)
+		}
+	})
+	parsed, err := url.Parse(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed.Path, parsed.RawPath = "/"+name, ""
+	return parsed.String()
 }

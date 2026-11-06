@@ -967,6 +967,9 @@ func (recorder *apiSampleRecorder) finish() {
 
 // ownsSample 同时保留 personal 的目录/错误前缀隔离与扫描反馈的子目录隔离。
 func (recorder *apiSampleRecorder) ownsSample(name string) bool {
+	if isSystemAPISample(name) {
+		return recorder.scope == "system"
+	}
 	if strings.HasPrefix(name, "artists/adjudication/") {
 		return recorder.scope == "artists/adjudication"
 	}
@@ -986,6 +989,8 @@ func TestAPISampleRecorderOwnership(t *testing.T) {
 		ordinary bool
 		feedback bool
 	}{
+		{"system/backups.json", false, false},
+		{"errors/backup-busy.json", false, false},
 		{"release-groups/list.json", true, false},
 		{"scans/active.json", true, false},
 		{"errors/not-found-api.json", true, false},
@@ -995,6 +1000,10 @@ func TestAPISampleRecorderOwnership(t *testing.T) {
 		{"scan-feedback/report-ready.json", false, true},
 	} {
 		t.Run(sample.name, func(t *testing.T) {
+			system := &apiSampleRecorder{scope: "system"}
+			if got := system.ownsSample(sample.name); got != isSystemAPISample(sample.name) {
+				t.Errorf("系统样本所有权 = %v", got)
+			}
 			ordinary := &apiSampleRecorder{}
 			feedback := &apiSampleRecorder{scope: "scan-feedback"}
 			if got := ordinary.ownsSample(sample.name); got != sample.ordinary {

@@ -23,10 +23,11 @@ import (
 )
 
 const (
-	resetTestOldPassword = "old-cli-password-123"
-	resetTestNewPassword = " new-cli-password-456 "
-	resetTestUsage       = "用法：roomusic reset-password <用户名>\n"
-	resetTestRule        = "密码需要 12 到 72 位英文字母、数字或符号。\n"
+	resetTestOldPassword  = "old-cli-password-123"
+	resetTestNewPassword  = " new-cli-password-456 "
+	resetTestUsage        = "用法：roomusic reset-password <用户名>\n"
+	resetTestCommandUsage = "用法：\n  roomusic reset-password <用户名>\n  roomusic backup\n  roomusic restore <备份文件>\n  roomusic --version\n"
+	resetTestRule         = "密码需要 12 到 72 位英文字母、数字或符号。\n"
 )
 
 // 默认夹具禁止读取配置或连接数据库，防止前置拒绝路径意外产生副作用。
@@ -63,13 +64,13 @@ func TestResetPasswordCommandUsage(t *testing.T) {
 		out  string
 		err  string
 	}{
-		{"no command", nil, 2, "", resetTestUsage},
+		{"no command", nil, 2, "", resetTestCommandUsage},
 		{"missing username", []string{"reset-password"}, 2, "", resetTestUsage},
 		{"two usernames", []string{"reset-password", "curator", "listener"}, 2, "", resetTestUsage},
-		{"help", []string{"help"}, 0, resetTestUsage, ""},
-		{"short help", []string{"-h"}, 0, resetTestUsage, ""},
-		{"long help", []string{"--help"}, 0, resetTestUsage, ""},
-		{"unknown command", []string{"unknown"}, 2, "", "未知命令：unknown\n" + resetTestUsage},
+		{"help", []string{"help"}, 0, resetTestCommandUsage, ""},
+		{"short help", []string{"-h"}, 0, resetTestCommandUsage, ""},
+		{"long help", []string{"--help"}, 0, resetTestCommandUsage, ""},
+		{"unknown command", []string{"unknown"}, 2, "", "未知命令：unknown\n" + resetTestCommandUsage},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			env, stdout, stderr := resetCommandTestEnv(t, "")

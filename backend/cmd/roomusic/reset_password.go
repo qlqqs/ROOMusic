@@ -8,9 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/identity"
@@ -58,25 +56,6 @@ func runCLICommand(args []string) int {
 		defer term.Restore(int(os.Stdin.Fd()), state)
 	}
 	return runCommand(args, env)
-}
-
-func runCommand(args []string, env resetPasswordEnv) int {
-	if len(args) == 0 {
-		fmt.Fprintln(env.stderr, resetPasswordUsage)
-		return 2
-	}
-	switch args[0] {
-	case "help", "-h", "--help":
-		fmt.Fprintln(env.stdout, resetPasswordUsage)
-		return 0
-	case "reset-password":
-		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-		defer stop()
-		return runResetPassword(ctx, args[1:], env)
-	default:
-		fmt.Fprintf(env.stderr, "未知命令：%s\n%s\n", args[0], resetPasswordUsage)
-		return 2
-	}
 }
 
 func runResetPassword(ctx context.Context, args []string, env resetPasswordEnv) int {
