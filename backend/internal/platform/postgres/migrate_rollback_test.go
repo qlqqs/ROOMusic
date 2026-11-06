@@ -360,7 +360,7 @@ func TestMigrationRecoveryLogWithoutBackup(t *testing.T) {
 	settings := openOptions{logger: slog.New(slog.NewJSONHandler(&logs, nil))}
 	logMigrationRefused(settings, &SchemaAheadError{DatabaseVersion: 32, SupportedVersion: 30, Version: 31, Name: "0031_test.sql", Reason: "missing_rollback"})
 	record := rollbackLog(t, &logs, "platform.migration.downgrade_refused")
-	if record["restore_backup"] != "" || !strings.Contains(record["message"].(string), "升级前的那份迁移前备份") {
+	if record["restore_backup"] != "" || !strings.Contains(record["message"].(string), "<升级前的迁移前备份>") {
 		t.Fatalf("没有归档时应提供中文兜底提示：%v", record)
 	}
 }

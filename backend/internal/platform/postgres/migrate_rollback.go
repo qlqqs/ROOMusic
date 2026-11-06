@@ -229,9 +229,9 @@ func logMigrationRecovery(settings openOptions, event string, database, supporte
 	}
 	hint := restore
 	if hint == "" {
-		hint = "升级前的那份迁移前备份"
+		hint = "<升级前的迁移前备份>"
 	}
-	message := fmt.Sprintf("数据库来自更新的版本（迁移 %d），迁移 %d 不能自动回退。用 %s 恢复（docker compose run --rm app restore <文件>），或改回能识别迁移 %d 的版本。", database, blocking, hint, database)
+	message := fmt.Sprintf("数据库来自更新的版本（迁移 %d），迁移 %d 不能自动回退。恢复备份：docker compose stop app && docker compose run --rm app restore %s && docker compose up -d --wait；或改回能识别迁移 %d 的版本。", database, blocking, hint, database)
 	attrs := []any{"event", event, "module", "platform", "database_version", database, "supported_version", supported, "blocking_version", blocking, "blocking_name", name, "reason", reason, "detail", detail, "restore_backup", restore, "message", message}
 	if event == "platform.migration.downgrade_failed" {
 		attrs = append(attrs, "backup", backup)

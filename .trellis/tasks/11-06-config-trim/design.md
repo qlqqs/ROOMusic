@@ -253,6 +253,8 @@ networks:
 
 ### 8.1 切换步骤
 
+> 2026-11-06 修订：C1 删除 `make prod*` 后，最终可执行步骤以 `deploy/production/README.md` §8 为准（从运行中镜像的 revision 提取历史 Compose）；下面是规划时的草稿，保留作依据。
+
 1. 记录现状（不打印配置内容）：
    ```bash
    cd /home/qlqq/workspace/ROOMusic && make prod-status

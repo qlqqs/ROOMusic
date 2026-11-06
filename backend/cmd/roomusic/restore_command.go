@@ -61,7 +61,7 @@ func runRestore(ctx context.Context, args []string, env backupCommandEnv) int {
 			fmt.Fprintf(env.stdout, "%s：%d 行\n", table.Name, table.Rows)
 		}
 	}
-	fmt.Fprintln(env.stdout, "已恢复。启动 app：docker compose up -d")
+	fmt.Fprintln(env.stdout, "已恢复。启动 app：docker compose up -d --wait")
 	return 0
 }
 func migrationVersion(summary backup.MigrationSummary) string {

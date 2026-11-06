@@ -448,7 +448,8 @@ RUN apk add --no-cache ca-certificates postgresql18-client \
      （生产 compose 里 `roomusic` 是 `POSTGRES_USER`，即超级用户。）
    - 其他连接：`SELECT application_name FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid() AND backend_type = 'client backend'`；
      有任何一行 → “还有 N 个连接在使用数据库，先停止 app：docker compose stop app” 退出 1。app 的连接池由 `postgres.Connect` 设置 `application_name=roomusic`
-     （URL 未指定时；`pgx.ParseConfig` + `stdlib.OpenDB`），目录后台维护常驻一条连接，所以 app 在跑时一定能检测到（A8）。
+     （URL 未指定时；`pgx.ParseConfig` + `stdlib.OpenDB`），目录后台维护常驻一条连接，所以正常运行的 app 一定能检测到（A8）。迁移被拒或回退失败进入降级模式的 app 不持有连接，此时恢复对数据无害；
+     日志给出的恢复命令先 `docker compose stop app`、最后 `docker compose up -d --wait`，保证 app 重新启动。
 5. 打印并确认：
 
 ```text

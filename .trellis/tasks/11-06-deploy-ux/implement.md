@@ -10,11 +10,11 @@
 | P1 | builtin-backup B1 ‖ B2 → B3 → 提交 | astra ‖ Opus → Sol | 截图结果放进汇报，用户有意见再改 |
 | P2 | versioned-release V1 → V2 → 提交 | astra → Sol | — |
 | P3 | config-trim C1 → C2 → 提交 | astra → Sol | — |
-| P4 | 联合演练（`roomusic-drill`，子网 `10.203.51.0/24`，端口 18090）：① 用当前旧部署方式的提交起一个“旧式”实例并造数据，按 config-trim design §8.1 原样切换到新 compose（config-trim A5）；② versioned-release design §8 的 A → B → A → B 与不可回退场景（versioned-release A5）；③ 恢复命令（builtin-backup A8）。结束 `down -v` 清理 | Sol | — |
+| P4 | 联合演练（`roomusic-drill`，子网 `10.203.51.0/24`，端口 18090）：① 用当前旧部署方式的提交起一个“旧式”实例并造数据，按 `deploy/production/README.md` §8.1 原样切换到新 compose（config-trim A5）；② versioned-release design §8 的 A → B → A → B 与不可回退场景（versioned-release A5）；③ 恢复命令（builtin-backup A8）。结束 `down -v` 清理 | Sol | — |
 | P5 | 在最终提交的导出树上跑一次与 CI 等价的门禁（gofmt、vet、`-race`、全量 Vitest、Playwright、`./scripts/test-integration.sh`、`./scripts/playback-e2e.sh`、compose 校验、actionlint） | 另一个 astra | — |
 | P6 | spec 更新（`database-guidelines.md`、`core0-runtime-contracts.md`、`identity-contracts.md`）、各 PRD 写实施结果 → 提交 | 主会话 | — |
 | P7 | 发布 v0.1.0：推送 main → `gh workflow run release.yml --ref main`（只构建不推送，验证 arm64）→ `scripts/release-check.sh v0.1.0` → 打标签推送 → 观察 Actions → 用户在 GitHub 网页把包设为公开 → 匿名拉取与 `docker manifest inspect` 核对 | 主会话 + 用户 | **用户说“发布”**；包设为公开由用户操作 |
-| P8 | 本机生产切换（config-trim design §8.1 十步），核对计数、版本、备份、网络未重建、反代访问 | 主会话逐条执行 | **切换前用户确认** |
+| P8 | 本机生产切换（`deploy/production/README.md` §8.1 十步），核对计数、版本、备份、网络未重建、反代访问 | 主会话逐条执行 | **切换前用户确认** |
 | P9 | 归档子任务与父任务 → 修相对链接 → 记日志 | 主会话 | — |
 
 ## 跨子任务验收
@@ -27,7 +27,7 @@
 
 - P1–P6 只改仓库，逐步提交；生产不变。
 - P7 发布失败：不打新标签的镜像不会出现；修复后发布 0.1.1（不删除已推送标签，除非用户同意）。
-- P8 切换失败：config-trim design §8.2（A 路线直接换回旧镜像与旧 compose，不需要恢复备份）。
+- P8 切换失败：`deploy/production/README.md` §8.2（A 路线直接换回旧镜像与旧 compose，不需要恢复备份）。
 
 ## 实施记录
 
@@ -36,3 +36,7 @@
   艺人相关测试重复准备大型夹具是主要耗时，提速留作后续技术债，不在本任务范围。
 - 2026-11-06 P2 versioned-release 已提交 `65fcbbb`。P3 config-trim：C2 在 `roomusic-drill`（`10.203.51.0/24`）验证 A1–A4 通过；
   本地演练镜像 `ghcr.io/qlqqs/roomusic:0.1.0-drill-a`（基于 `65fcbbb`）保留给 P4。A6 剩余命中只在 `.trellis/spec`，随 P6 更新。
+- 2026-11-06 P4 联合演练（Sol，证据 `/tmp/roomusic-p4-evidence-20261106-0935/REPORT.md`）：旧实例 `06450d0` → 新 compose → A 路线回退 → 再切换，
+  计数一致、网络与 postgres 容器未重建、旧 backup 孤儿容器无残留；A → B → A → B、B′ 不可回退拒绝与恢复全部符合预期。
+  裁决 D1：降级模式的 app 不持有数据库连接，恢复命令不会拒绝；合同收窄为“检测到其他连接时拒绝”，并把日志恢复提示改成
+  `stop app && run --rm app restore <文件> && up -d --wait` 三步（修正派给 astra）。D2：过渡步骤以 README §8 为准，设计草稿加注。
