@@ -5,6 +5,7 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -107,6 +108,8 @@ jobs:
       - name: Set up shell checks
         run: |
           for script in scripts/*.sh; do bash -n "$script"; done
+      - name: Lint GitHub Actions workflows
+        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12 -color
       - name: Validate Compose configuration
         env:
           PG_PASSWORD: ci-placeholder

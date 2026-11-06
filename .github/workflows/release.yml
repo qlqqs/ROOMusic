@@ -1,0 +1,227 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+  # 手动运行只在两个平台各构建一次，不推送、不发布；用于验证多架构构建。
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: roomusic-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/qlqqs/roomusic
+
+jobs:
+  ci:
+    name: CI
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+
+  prepare:
+    name: Validate tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      publish: ${{ steps.version.outputs.publish }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Resolve version
+        id: version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            echo "version=0.0.0-dryrun" >> "$GITHUB_OUTPUT"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "$GITHUB_EVENT_NAME" != push || "$REF_TYPE" != tag ]]; then exit 1; fi
+          if [[ ! "$REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::标签必须是 vX.Y.Z：$REF_NAME"
+            exit 1
+          fi
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::标签指向的提交不在 main 上"
+            exit 1
+          fi
+          grep -q '__RELEASE_VERSION__' deploy/production/compose.yaml
+          grep -q '__RELEASE_VERSION__' deploy/production/example.env
+          echo "version=${REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.arch }}
+    needs: [ci, prepare]
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+      - name: Log in to GHCR
+        if: needs.prepare.outputs.publish == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          labels: |
+            org.opencontainers.image.title=ROOMusic
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/production/Dockerfile
+          platforms: ${{ matrix.platform }}
+          build-args: |
+            ROOMUSIC_VERSION=${{ needs.prepare.outputs.version }}
+            ROOMUSIC_COMMIT=${{ github.sha }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=${{ needs.prepare.outputs.publish }}
+      - name: Export digest
+        if: needs.prepare.outputs.publish == 'true'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+      - name: Upload digest
+        if: needs.prepare.outputs.publish == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: digests-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Publish multi-arch image
+    needs: [prepare, build]
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v8
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        env:
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: index
+        with:
+          images: ${{ env.IMAGE }}
+          flavor: latest=true
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+          annotations: |
+            org.opencontainers.image.title=ROOMusic
+      - name: Create manifest list
+        env:
+          DOCKER_METADATA_OUTPUT_JSON: ${{ steps.meta.outputs.json }}
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          set -euo pipefail
+          args=()
+          while IFS= read -r tag; do args+=(--tag "$tag"); done < <(jq -r '.tags[]' <<<"$DOCKER_METADATA_OUTPUT_JSON")
+          while IFS= read -r annotation; do args+=(--annotation "$annotation"); done < <(jq -r '.annotations[]' <<<"$DOCKER_METADATA_OUTPUT_JSON")
+          for digest in *; do args+=("${IMAGE}@sha256:${digest}"); done
+          docker buildx imagetools create "${args[@]}"
+      - name: Verify platforms
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools inspect "${IMAGE}:${VERSION}" --format '{{json .Manifest}}' \
+            | jq -e '[.manifests[] | select(.platform != null) | "\(.platform.os)/\(.platform.architecture)"] as $p
+                     | ($p | index("linux/amd64")) != null and ($p | index("linux/arm64")) != null'
+      - name: Check anonymous pull
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          docker logout ghcr.io
+          if ! docker buildx imagetools inspect "${IMAGE}:${VERSION}" >/dev/null 2>&1; then
+            echo "::warning::镜像还不能匿名拉取：首次发布后请在 GitHub 网页上把 roomusic 包设为公开"
+          fi
+
+  release:
+    name: GitHub Release
+    needs: [prepare, merge]
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Write versioned deployment files
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/release"
+          mkdir -p "$out"
+          sed "s/__RELEASE_VERSION__/${VERSION}/g" deploy/production/compose.yaml > "$out/compose.yaml"
+          sed "s/__RELEASE_VERSION__/${VERSION}/g" deploy/production/example.env > "$out/example.env"
+          if grep -q '__RELEASE_VERSION__' "$out/compose.yaml" "$out/example.env"; then exit 1; fi
+          ROOMUSIC_DB_PASSWORD=ci-placeholder ROOMUSIC_MUSIC_DIR=/srv/music \
+            docker compose -f "$out/compose.yaml" --env-file "$out/example.env" config --quiet
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" "$RUNNER_TEMP/release/compose.yaml" "$RUNNER_TEMP/release/example.env" \
+            --verify-tag --title "ROOMusic ${TAG}" --generate-notes

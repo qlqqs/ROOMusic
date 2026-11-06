@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -33,17 +34,22 @@ type migration struct {
 	Name     string
 	SQL      []byte
 	Checksum string
+	Down     *migrationDown
 }
 
 type appliedMigration struct {
-	Version  int64
-	Name     sql.NullString
-	Checksum sql.NullString
+	Version      int64
+	Name         sql.NullString
+	Checksum     sql.NullString
+	DownSQL      sql.NullString
+	DownChecksum sql.NullString
 }
 
 type migrationMetadataColumns struct {
-	Name     bool
-	Checksum bool
+	Name         bool
+	Checksum     bool
+	DownSQL      bool
+	DownChecksum bool
 }
 
 func (columns migrationMetadataColumns) complete() bool {
@@ -81,7 +87,11 @@ func Connect(ctx context.Context, databaseURL string) (*sql.DB, error) {
 }
 
 func applyMigrations(ctx context.Context, connection *sql.DB, options ...OpenOption) error {
-	return applyMigrationsFromFS(ctx, connection, migrations.Files, options...)
+	settings := openOptions{source: migrations.Files}
+	for _, apply := range options {
+		apply(&settings)
+	}
+	return applyMigrationsFromFS(ctx, connection, settings.source, options...)
 }
 
 // loadMigrations 在产生任何数据库副作用前发现并校验嵌入的迁移集合。校验和覆盖
@@ -101,7 +111,12 @@ func loadMigrations(source fs.FS) ([]migration, error) {
 
 	result := make([]migration, 0, len(entries))
 	seenVersions := make(map[int64]string, len(entries))
+	rollbackFiles := make(map[string]bool)
 	for _, entry := range entries {
+		if strings.HasSuffix(entry, ".down.sql") {
+			rollbackFiles[entry] = true
+			continue
+		}
 		if entry != path.Base(entry) {
 			return nil, fmt.Errorf("invalid migration path %q", entry)
 		}
@@ -133,6 +148,37 @@ func loadMigrations(source fs.FS) ([]migration, error) {
 		})
 	}
 
+	for i := range result {
+		candidate := &result[i]
+		name := strings.TrimSuffix(candidate.Name, ".sql") + ".down.sql"
+		if candidate.Version < rollbackRequiredFromVersion {
+			if rollbackFiles[name] {
+				return nil, fmt.Errorf("migration %d (%s) must not have rollback file %s", candidate.Version, candidate.Name, name)
+			}
+			continue
+		}
+		if !rollbackFiles[name] {
+			return nil, fmt.Errorf("migration %d (%s) is missing rollback file %s", candidate.Version, candidate.Name, name)
+		}
+		data, err := fs.ReadFile(source, name)
+		if err != nil {
+			return nil, fmt.Errorf("read rollback file %s: %w", name, err)
+		}
+		down, err := parseMigrationDown(name, data)
+		if err != nil {
+			return nil, err
+		}
+		candidate.Down = &down
+		delete(rollbackFiles, name)
+	}
+	for _, name := range entries {
+		if rollbackFiles[name] {
+			return nil, fmt.Errorf("rollback file %s has no matching forward migration", name)
+		}
+	}
+	if len(result) == 0 {
+		return nil, errors.New("discover migrations: no forward migration files found")
+	}
 	sort.Slice(result, func(i, j int) bool { return result[i].Version < result[j].Version })
 	for index, current := range result {
 		expected := int64(index + 1)
@@ -203,48 +249,59 @@ func applyMigrationsFromFS(ctx context.Context, connection *sql.DB, source fs.FS
 	if err != nil {
 		return err
 	}
-	plan, err := buildMigrationPlan(available, history, columns)
+	plan, change, err := buildMigrationStartupPlan(available, history, columns)
 	if err != nil {
+		var ahead *SchemaAheadError
+		if errors.As(err, &ahead) {
+			logMigrationRefused(settings, ahead)
+		}
 		return err
 	}
+	warnRollbackDifferences(settings, available, history)
 
 	// 已有库在此之前只查询系统目录与历史，不持有高于 AccessShareLock 的表锁。
-	// 所有 DDL（包括 0008 元数据列）都必须在备份成功之后执行。
-	change := MigrationChange{Direction: MigrationUpgrade, ToVersion: available[len(available)-1].Version}
-	for _, item := range history {
-		if item.Version > change.FromVersion {
-			change.FromVersion = item.Version
-		}
-	}
-	for _, candidate := range available {
-		if !plan.applied[candidate.Version] && !plan.baseline[candidate.Version] {
-			change.Versions = append(change.Versions, candidate.Version)
-		}
-	}
+	// 所有 DDL（包括回退列与 0008 元数据列）都必须在备份成功之后执行。
+	var backupName string
 	if tableExists && len(change.Versions) > 0 && settings.backups != nil {
-		if _, backupErr := settings.backups.BackupBeforeMigration(ctx, connection, change); backupErr != nil {
+		var backupErr error
+		backupName, backupErr = settings.backups.BackupBeforeMigration(ctx, connection, change)
+		if backupErr != nil {
 			if settings.logger != nil {
-				settings.logger.Error("迁移前备份失败，未执行迁移", "event", "platform.migration.pre_backup_failed", "module", "platform", "from_version", change.FromVersion, "to_version", change.ToVersion)
+				settings.logger.Error("迁移前备份失败，未执行迁移", "event", "platform.migration.pre_backup_failed", "module", "platform", "direction", change.Direction, "from_version", change.FromVersion, "to_version", change.ToVersion)
 			}
 			return &preMigrationBackupError{cause: backupErr}
 		}
 	}
-
-	for _, candidate := range available {
-		if plan.applied[candidate.Version] || plan.baseline[candidate.Version] {
-			continue
+	if !columns.DownSQL || !columns.DownChecksum {
+		if _, err = transaction.ExecContext(ctx, `ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS down_sql TEXT, ADD COLUMN IF NOT EXISTS down_checksum TEXT`); err != nil {
+			return fmt.Errorf("add migration rollback columns: %w", err)
 		}
-		if candidate.Version == migrationMetadataVersion && columns.complete() {
-			plan.applied[candidate.Version] = true
-			continue
-		}
-		if err = executeMigration(ctx, transaction, candidate); err != nil {
+		columns.DownSQL, columns.DownChecksum = true, true
+	}
+	if change.Direction == MigrationDowngrade {
+		if err = executeMigrationDowngrade(ctx, transaction, history, change, backupName); err != nil {
+			var failed *RollbackFailedError
+			if errors.As(err, &failed) {
+				logMigrationRollbackFailed(settings, failed)
+			}
 			return err
 		}
-		plan.applied[candidate.Version] = true
-		if candidate.Version == migrationMetadataVersion {
-			columns.Name = true
-			columns.Checksum = true
+	} else {
+		for _, candidate := range available {
+			if plan.applied[candidate.Version] || plan.baseline[candidate.Version] {
+				continue
+			}
+			if candidate.Version == migrationMetadataVersion && columns.complete() {
+				plan.applied[candidate.Version] = true
+				continue
+			}
+			if err = executeMigration(ctx, transaction, candidate); err != nil {
+				return err
+			}
+			plan.applied[candidate.Version] = true
+			if candidate.Version == migrationMetadataVersion {
+				columns.Name, columns.Checksum = true, true
+			}
 		}
 	}
 
@@ -259,6 +316,13 @@ func applyMigrationsFromFS(ctx context.Context, connection *sql.DB, source fs.FS
 		return fmt.Errorf("commit migration transaction: %w", err)
 	}
 	committed = true
+	if len(change.Versions) > 0 && settings.logger != nil {
+		event, message := "platform.migration.upgraded", "数据库迁移升级完成"
+		if change.Direction == MigrationDowngrade {
+			event, message = "platform.migration.downgraded", "数据库迁移降级完成"
+		}
+		settings.logger.Info(message, "event", event, "module", "platform", "from_version", change.FromVersion, "to_version", change.ToVersion, "versions", change.Versions, "backup", backupName)
+	}
 	return nil
 }
 
@@ -303,7 +367,17 @@ func schemaMigrationsMetadataColumns(ctx context.Context, transaction *sql.Tx) (
 				WHERE attrelid = to_regclass('schema_migrations')
 				  AND attname = 'checksum'
 				  AND NOT attisdropped
-			)`).Scan(&columns.Name, &columns.Checksum)
+			),
+			EXISTS (
+				SELECT 1 FROM pg_attribute
+				WHERE attrelid = to_regclass('schema_migrations')
+				  AND attname = 'down_sql' AND NOT attisdropped
+			),
+			EXISTS (
+				SELECT 1 FROM pg_attribute
+				WHERE attrelid = to_regclass('schema_migrations')
+				  AND attname = 'down_checksum' AND NOT attisdropped
+			)`).Scan(&columns.Name, &columns.Checksum, &columns.DownSQL, &columns.DownChecksum)
 	return columns, err
 }
 
@@ -316,7 +390,14 @@ func readAppliedMigrations(ctx context.Context, transaction *sql.Tx, columns mig
 	if columns.Checksum {
 		checksumColumn = "checksum"
 	}
-	query := fmt.Sprintf(`SELECT version, %s, %s FROM schema_migrations ORDER BY version`, nameColumn, checksumColumn)
+	downSQLColumn, downChecksumColumn := "NULL::text", "NULL::text"
+	if columns.DownSQL {
+		downSQLColumn = "down_sql"
+	}
+	if columns.DownChecksum {
+		downChecksumColumn = "down_checksum"
+	}
+	query := fmt.Sprintf(`SELECT version, %s, %s, %s, %s FROM schema_migrations ORDER BY version`, nameColumn, checksumColumn, downSQLColumn, downChecksumColumn)
 	rows, err := transaction.QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("read schema_migrations history: %w", err)
@@ -327,7 +408,7 @@ func readAppliedMigrations(ctx context.Context, transaction *sql.Tx, columns mig
 	seen := make(map[int64]struct{})
 	for rows.Next() {
 		var item appliedMigration
-		if err := rows.Scan(&item.Version, &item.Name, &item.Checksum); err != nil {
+		if err := rows.Scan(&item.Version, &item.Name, &item.Checksum, &item.DownSQL, &item.DownChecksum); err != nil {
 			return nil, fmt.Errorf("read schema_migrations row: %w", err)
 		}
 		if _, exists := seen[item.Version]; exists {
@@ -352,15 +433,11 @@ func buildMigrationPlan(available []migration, history []appliedMigration, colum
 		return migrationPlan{}, errors.New("build migration plan: no migrations available")
 	}
 	descriptors := make(map[int64]migration, len(available))
-	maximumAvailable := int64(0)
 	for _, candidate := range available {
 		if _, exists := descriptors[candidate.Version]; exists {
 			return migrationPlan{}, fmt.Errorf("duplicate migration version %d", candidate.Version)
 		}
 		descriptors[candidate.Version] = candidate
-		if candidate.Version > maximumAvailable {
-			maximumAvailable = candidate.Version
-		}
 	}
 	applied := make(map[int64]bool, len(history))
 	for _, item := range history {
@@ -381,9 +458,6 @@ func buildMigrationPlan(available []migration, history []appliedMigration, colum
 		if version > maximumRecorded {
 			maximumRecorded = version
 		}
-	}
-	if maximumRecorded > maximumAvailable {
-		return migrationPlan{}, fmt.Errorf("schema_migrations contains future version %d (latest supported %d)", maximumRecorded, maximumAvailable)
 	}
 
 	baseline := make(map[int64]bool)
@@ -440,14 +514,20 @@ func recordMigrationMetadata(ctx context.Context, transaction *sql.Tx, available
 		if !plan.applied[candidate.Version] && !plan.baseline[candidate.Version] {
 			return fmt.Errorf("migration %d (%s) was neither applied nor baselined", candidate.Version, candidate.Name)
 		}
+		var downSQL, downChecksum any
+		if candidate.Version >= rollbackRequiredFromVersion && candidate.Down != nil {
+			downSQL, downChecksum = string(candidate.Down.SQL), candidate.Down.Checksum
+		}
 		var storedName, storedChecksum sql.NullString
 		if err := transaction.QueryRowContext(ctx, `
-			INSERT INTO schema_migrations(version,name,checksum)
-			VALUES($1,$2,$3)
+			INSERT INTO schema_migrations(version,name,checksum,down_sql,down_checksum)
+			VALUES($1,$2,$3,$4,$5)
 			ON CONFLICT (version) DO UPDATE
 			SET name=COALESCE(schema_migrations.name, EXCLUDED.name),
-			    checksum=COALESCE(schema_migrations.checksum, EXCLUDED.checksum)
-			RETURNING name,checksum`, candidate.Version, candidate.Name, candidate.Checksum).Scan(&storedName, &storedChecksum); err != nil {
+			    checksum=COALESCE(schema_migrations.checksum, EXCLUDED.checksum),
+			    down_sql=COALESCE(schema_migrations.down_sql, EXCLUDED.down_sql),
+			    down_checksum=COALESCE(schema_migrations.down_checksum, EXCLUDED.down_checksum)
+			RETURNING name,checksum`, candidate.Version, candidate.Name, candidate.Checksum, downSQL, downChecksum).Scan(&storedName, &storedChecksum); err != nil {
 			return fmt.Errorf("record migration %d (%s): %w", candidate.Version, candidate.Name, err)
 		}
 		if !storedName.Valid || storedName.String != candidate.Name {

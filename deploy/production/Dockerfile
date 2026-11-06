@@ -1,12 +1,18 @@
 # syntax=docker/dockerfile:1
-# 上下文必须是 Git 导出树；前端使用已提交的内嵌产物，不安装 Node。
-FROM golang:1.25.10-alpine3.22@sha256:26b4d7113039cd51356bd7930ecafd1031d2975dc3b6940ec8ed09457e17cf95 AS build
+# 上下文是仓库根（发布时干净检出或 Git 导出树）；前端使用已提交的内嵌产物，不安装 Node。
+FROM --platform=$BUILDPLATFORM golang:1.25.10-alpine3.22@sha256:26b4d7113039cd51356bd7930ecafd1031d2975dc3b6940ec8ed09457e17cf95 AS build
+ARG TARGETOS
+ARG TARGETARCH
+ARG ROOMUSIC_VERSION=""
+ARG ROOMUSIC_COMMIT=""
 WORKDIR /src
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 COPY backend/ ./
 RUN test -f cmd/roomusic/web/index.html \
- && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/roomusic ./cmd/roomusic
+ && CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -trimpath \
+    -ldflags="-s -w -X github.com/qlqq/roomusic/backend/internal/platform/buildinfo.version=${ROOMUSIC_VERSION} -X github.com/qlqq/roomusic/backend/internal/platform/buildinfo.commit=${ROOMUSIC_COMMIT}" \
+    -o /out/roomusic ./cmd/roomusic
 
 FROM mwader/static-ffmpeg@sha256:11a44711684c0b9f754c047dcd64235b8b52deab251bd0e0a86f22faa160749c AS ffmpeg
 

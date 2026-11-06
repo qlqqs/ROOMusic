@@ -19,6 +19,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/app"
 	"github.com/qlqq/roomusic/backend/internal/backup"
 	"github.com/qlqq/roomusic/backend/internal/library"
+	"github.com/qlqq/roomusic/backend/internal/platform/buildinfo"
 	"github.com/qlqq/roomusic/backend/internal/platform/config"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
 	"github.com/qlqq/roomusic/backend/internal/playback/derivation"
@@ -35,6 +36,12 @@ func main() {
 		os.Exit(runCLICommand(os.Args[1:]))
 	}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	build := buildinfo.Current()
+	version := build.Version
+	if version == "" {
+		version = "dev"
+	}
+	logger.Info("roomusic build", "event", "platform.build.info", "module", "platform", "version", version, "commit", build.Commit)
 	applicationContext, stopApplication := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopApplication()
 	settings, configErr := config.Load()
@@ -75,7 +82,7 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	logger.Info("roomusic server starting", "address", server.Addr)
+	logger.Info("roomusic server starting", "event", "platform.server.starting", "module", "platform", "address", server.Addr, "version", version, "commit", build.Commit)
 	serveErrors := make(chan error, 1)
 	go func() {
 		serveErrors <- server.ListenAndServe()

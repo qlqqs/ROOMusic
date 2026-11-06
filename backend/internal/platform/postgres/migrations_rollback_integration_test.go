@@ -1,0 +1,190 @@
+package postgres
+
+import (
+	"fmt"
+	"io/fs"
+	"reflect"
+	"strings"
+	"testing"
+	"testing/fstest"
+
+	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
+	"github.com/qlqq/roomusic/backend/migrations"
+)
+
+// 新迁移若放宽旧约束或枚举，必须提供新取值数据，证明回退清理了这些数据。
+var rollbackFixtures = map[int64]string{}
+
+func migrationPrefix(available []migration, last int64) fstest.MapFS {
+	source := fstest.MapFS{}
+	for _, m := range available {
+		if m.Version > last {
+			continue
+		}
+		source[m.Name] = &fstest.MapFile{Data: m.SQL}
+		if m.Down != nil {
+			source[m.Down.Name] = &fstest.MapFile{Data: m.Down.SQL}
+		}
+	}
+	return source
+}
+func rollbackNeedsFixture(before, after postgrestest.SchemaSnapshot) bool {
+	for key, value := range before.Structure {
+		next, ok := after.Structure[key]
+		if (strings.HasPrefix(key, "constraint/") || strings.HasPrefix(key, "enum/")) && ok && value != next {
+			return true
+		}
+	}
+	return false
+}
+func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
+	available, err := loadMigrations(migrations.Files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reversible []migration
+	for _, m := range available {
+		if m.Version >= rollbackRequiredFromVersion && m.Down != nil {
+			if m.Down.Irreversible {
+				if m.Down.Reason == "" {
+					t.Fatalf("不可回退迁移缺理由：%d", m.Version)
+				}
+			} else {
+				reversible = append(reversible, m)
+			}
+		}
+	}
+	// 当前无可回退的真实迁移时注入示例；以后自动遍历发布集合，不允许空集伪通过。
+	if len(reversible) == 0 {
+		t.Log("嵌入集合暂无可回退迁移，注入测试 FS 验证往返框架")
+		source := migrationPrefix(available, int64(len(available)))
+		v := int64(len(available)) + 1
+		source[fmt.Sprintf("%04d_roundtrip.sql", v)] = &fstest.MapFile{Data: []byte(`CREATE TABLE roundtrip_probe(id bigint PRIMARY KEY,note text); INSERT INTO roundtrip_probe VALUES(1,'合成种子'); ALTER TABLE users ADD COLUMN roundtrip_note text; CREATE INDEX roundtrip_index ON roundtrip_probe(note);`)}
+		source[fmt.Sprintf("%04d_roundtrip.down.sql", v)] = &fstest.MapFile{Data: []byte(`DROP INDEX roundtrip_index; ALTER TABLE users DROP COLUMN roundtrip_note; DROP TABLE roundtrip_probe;`)}
+		available, err = loadMigrations(source)
+		if err != nil {
+			t.Fatal(err)
+		}
+		reversible = append(reversible, available[len(available)-1])
+	}
+	for _, m := range reversible {
+		t.Run(m.Name, func(t *testing.T) {
+			db := openMigrationTestDatabase(t)
+			// 每个候选独立建 schema，之前即使有不可回退迁移也不会妨碍后续测试。
+			rollbackApply(t, db, migrationPrefix(available, m.Version-1))
+			s0 := rollbackSnapshot(t, db)
+			rollbackApply(t, db, migrationPrefix(available, m.Version))
+			s1 := rollbackSnapshot(t, db)
+			fixture, ok := rollbackFixtures[m.Version]
+			if rollbackNeedsFixture(s0, s1) && !ok {
+				t.Fatalf("迁移 %d 改变旧约束或枚举，必须补 rollbackFixtures 的新取值数据", m.Version)
+			}
+			if fixture != "" {
+				rollbackExec(t, db, fixture)
+			}
+			rollbackApply(t, db, migrationPrefix(available, m.Version-1))
+			s2 := rollbackSnapshot(t, db)
+			if diff := postgrestest.Diff(s0, s2); len(diff) > 0 {
+				t.Fatalf("升级→回退不一致：\n%s", strings.Join(diff, "\n"))
+			}
+			rollbackApply(t, db, migrationPrefix(available, m.Version))
+			s3 := rollbackSnapshot(t, db)
+			// 再升级只比较结构和行数；种子 UUID、时间等合法非确定值不应误报。
+			countsOnly := func(snapshot postgrestest.SchemaSnapshot) postgrestest.SchemaSnapshot {
+				data := make(map[string]string, len(snapshot.Data))
+				for table, value := range snapshot.Data {
+					count, _, _ := strings.Cut(value, " md5=")
+					data[table] = count
+				}
+				return postgrestest.SchemaSnapshot{Structure: snapshot.Structure, Data: data}
+			}
+			if diff := postgrestest.Diff(countsOnly(s1), countsOnly(s3)); len(diff) > 0 {
+				t.Fatalf("再次升级结构/行数不一致：\n%s", strings.Join(diff, "\n"))
+			}
+		})
+	}
+}
+
+func TestPostgreSQLSchemaSnapshotDetectsChanges(t *testing.T) {
+	for _, tc := range []struct{ name, ddl, key string }{
+		{"列", `ALTER TABLE rollback_probe ADD COLUMN leftover text`, "column/rollback_probe/leftover"},
+		{"约束", `ALTER TABLE rollback_probe ADD CONSTRAINT extra_unique UNIQUE(value)`, "constraint/rollback_probe/extra_unique"},
+		{"索引", `CREATE INDEX leftover_idx ON rollback_probe(value)`, "index/leftover_idx"},
+		{"CHECK取值", `ALTER TABLE rollback_probe DROP CONSTRAINT value_check; ALTER TABLE rollback_probe ADD CONSTRAINT value_check CHECK(value IN ('原有数据','新版取值'))`, "constraint/rollback_probe/value_check"},
+		{"数据", `UPDATE rollback_probe SET value='被更改'`, "数据 rollback_probe"},
+		{"残留行", `INSERT INTO rollback_probe VALUES(2,'残留')`, "数据 rollback_probe"},
+		{"视图", `CREATE VIEW leftover_view AS SELECT id FROM rollback_probe`, "view/leftover_view"},
+		{"函数", `CREATE FUNCTION leftover_fn() RETURNS int LANGUAGE sql AS 'SELECT 1'`, "function/leftover_fn"},
+		{"枚举", `CREATE TYPE leftover_enum AS ENUM ('a','b')`, "enum/leftover_enum"},
+		{"域", `CREATE DOMAIN leftover_domain AS int CHECK(VALUE>0)`, "domain/leftover_domain"},
+		{"序列", `CREATE SEQUENCE leftover_seq START 9 INCREMENT 2`, "sequence/leftover_seq"},
+		{"触发器", `CREATE FUNCTION leftover_trigger_fn() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RETURN NEW; END'; CREATE TRIGGER leftover_trigger BEFORE INSERT ON rollback_probe FOR EACH ROW EXECUTE FUNCTION leftover_trigger_fn()`, "trigger/rollback_probe/leftover_trigger"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db := openMigrationTestDatabase(t)
+			source := rollbackTestFS(30)
+			rollbackApply(t, db, source)
+			rollbackExec(t, db, `ALTER TABLE rollback_probe ADD CONSTRAINT value_check CHECK(value <> '禁止')`)
+			before := rollbackSnapshot(t, db)
+			rollbackExec(t, db, tc.ddl)
+			after := rollbackSnapshot(t, db)
+			diff := postgrestest.Diff(before, after)
+			if !strings.Contains(strings.Join(diff, "\n"), tc.key) {
+				t.Fatalf("快照漏检 %s：%v", tc.name, diff)
+			}
+			if tc.name == "CHECK取值" && !rollbackNeedsFixture(before, after) {
+				t.Fatal("约束变化必须要求夹具")
+			}
+		})
+	}
+	t.Run("列序号和schema名称归一化", func(t *testing.T) {
+		first, second := openMigrationTestDatabase(t), openMigrationTestDatabase(t)
+		rollbackApply(t, first, rollbackTestFS(30))
+		rollbackApply(t, second, rollbackTestFS(30))
+		rollbackExec(t, second, `ALTER TABLE rollback_probe ADD COLUMN discarded int; ALTER TABLE rollback_probe DROP COLUMN discarded`)
+		// 最后一列删除再添加，逻辑顺序不变但 attnum 真的改变。
+		rollbackExec(t, second, `ALTER TABLE rollback_probe DROP COLUMN value; ALTER TABLE rollback_probe ADD COLUMN value text; UPDATE rollback_probe SET value='原有数据'`)
+		a, b := rollbackSnapshot(t, first), rollbackSnapshot(t, second)
+		if diff := postgrestest.Diff(a, b); len(diff) > 0 {
+			t.Fatalf("物理列号/schema/applied_at 不应影响快照：%v", diff)
+		}
+		rollbackExec(t, second, `UPDATE schema_migrations SET applied_at=applied_at+interval '1 day'`)
+		if !reflect.DeepEqual(b, rollbackSnapshot(t, second)) {
+			t.Fatal("applied_at 未排除")
+		}
+	})
+	t.Run("千行阈值", func(t *testing.T) {
+		db := openMigrationTestDatabase(t)
+		rollbackApply(t, db, rollbackTestFS(30))
+		rollbackExec(t, db, `CREATE TABLE many_rows(id int); INSERT INTO many_rows SELECT generate_series(1,1001)`)
+		before := rollbackSnapshot(t, db)
+		if before.Data["many_rows"] != "rows=1001" {
+			t.Fatalf("大表不应计算摘要：%v", before.Data)
+		}
+	})
+}
+
+func TestRollbackFixtureDetection(t *testing.T) {
+	for _, key := range []string{"constraint/t/c", "enum/state"} {
+		a := postgrestest.SchemaSnapshot{Structure: map[string]string{key: "old"}}
+		b := postgrestest.SchemaSnapshot{Structure: map[string]string{key: "new"}}
+		if !rollbackNeedsFixture(a, b) {
+			t.Errorf("漏检：%s", key)
+		}
+	}
+}
+
+// 确认嵌入 FS 能被原样复制，不把 .down.sql 算进正向版本数。
+func TestEmbeddedMigrationRollbackFiles(t *testing.T) {
+	available, err := loadMigrations(migrations.Files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	copied := migrationPrefix(available, available[len(available)-1].Version)
+	for name := range copied {
+		raw, err := fs.ReadFile(migrations.Files, name)
+		if err != nil || string(raw) != string(copied[name].Data) {
+			t.Fatalf("复制改变迁移：%s %v", name, err)
+		}
+	}
+}

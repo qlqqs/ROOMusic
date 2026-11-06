@@ -28,7 +28,7 @@ func expectedMigrationCount() int {
 	}
 	count := 0
 	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".sql") {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".sql") && !strings.HasSuffix(entry.Name(), ".down.sql") {
 			count++
 		}
 	}

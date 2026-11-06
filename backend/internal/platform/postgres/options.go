@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"io/fs"
 	"log/slog"
 
 	"github.com/qlqq/roomusic/backend/migrations"
@@ -30,6 +31,7 @@ type MigrationBackups interface {
 type openOptions struct {
 	backups MigrationBackups
 	logger  *slog.Logger
+	source  fs.FS
 }
 type OpenOption func(*openOptions)
 
@@ -37,6 +39,12 @@ func WithMigrationBackups(backups MigrationBackups) OpenOption {
 	return func(o *openOptions) { o.backups = backups }
 }
 func WithLogger(logger *slog.Logger) OpenOption { return func(o *openOptions) { o.logger = logger } }
+
+// WithMigrationFS 替换本次 Open 的迁移集合，供隔离迁移演练与跨包集成测试使用。
+// 不设置时使用二进制内嵌集合；显式传 nil 会在加载时失败。
+func WithMigrationFS(source fs.FS) OpenOption {
+	return func(o *openOptions) { o.source = source }
+}
 
 var ErrPreMigrationBackup = errors.New("迁移前备份失败")
 
