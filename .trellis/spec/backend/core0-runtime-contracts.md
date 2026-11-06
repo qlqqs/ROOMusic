@@ -158,7 +158,7 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
   Compose/mise 可选服务。开发的 `mise run env-*` 显式使用 `--env-file .env.dev`。
 - 生产镜像固定 Go、Alpine、PostgreSQL 基础镜像版本与摘要，ffmpeg 与 `scripts/ffmpeg-pinned.sh` 同一摘要；
   使用已提交的前端，不依赖 Node。uid 1000 运行，音乐只读挂载，缓存与数据库卷分离。
-  生产 compose 只有 app 与 postgres，顶层 `name: roomusic-server`；必填仅 `ROOMUSIC_DB_PASSWORD`、`ROOMUSIC_MUSIC_DIR`，
+  生产 compose 只有 app 与 postgres，顶层 `name: roomusic-server`，容器名固定为 `roomusic` 与 `roomusic-postgres`（同一台机器只能运行一份，演练须另改容器名）；必填仅 `ROOMUSIC_DB_PASSWORD`、`ROOMUSIC_MUSIC_DIR`，
   端口默认 8090（只发布 IPv4），备份目录不填时为命名卷 `backups`、填绝对路径时为绑定挂载。子网默认由 Docker 分配，
   需要固定时在部署目录放 `compose.override.yaml`；本机生产固定 `10.203.50.0/24`（演练 `10.203.51.0/24`），本机不得创建未固定子网的网络。
   入口等数据库接受连接后启动，`/readyz` 用于镜像健康检查。生产的 `ROOMUSIC_ALLOWED_ORIGINS` 可选，不配时按主机一致模式，反代须保留 Host（含端口）与 Origin；格式与冲突由后端校验。

@@ -41,6 +41,8 @@ compose required.env config --format json | jq -e '
   .name == "roomusic-server" and
   (.services | keys) == ["app", "postgres"] and
   .services.app.image == "ghcr.io/qlqqs/roomusic:latest" and
+  .services.app.container_name == "roomusic" and
+  .services.postgres.container_name == "roomusic-postgres" and
   (.services.app.ports | length) == 1 and
   .services.app.ports[0].published == "8090" and
   .services.app.ports[0].target == 8080 and

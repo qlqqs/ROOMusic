@@ -11,6 +11,7 @@ x-logging: &logging
 services:
   app:
     image: "ghcr.io/qlqqs/roomusic:${ROOMUSIC_VERSION:-latest}"
+    container_name: roomusic
     environment:
       ROOMUSIC_ENV: production
       ROOMUSIC_HTTP_ADDR: ":8080"
@@ -48,6 +49,7 @@ services:
 
   postgres:
     image: *postgres-image
+    container_name: roomusic-postgres
     environment:
       POSTGRES_DB: roomusic
       POSTGRES_USER: roomusic
