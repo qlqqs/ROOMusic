@@ -1,6 +1,6 @@
 # 备份管理合同（删除、批量删除与保留规则）
 
-> 来源任务：`.trellis/tasks/11-06-settings-page-and-user-menu`（`design.md` §1、§1b、§1c）。备份的生成、调度、校验与恢复见
+> 来源任务：`.trellis/tasks/archive/2026-11/11-06-settings-page-and-user-menu`（`design.md` §1、§1b、§1c）。备份的生成、调度、校验与恢复见
 > [Core 0 当前运行合同](./core0-runtime-contracts.md)“环境与资产”。
 
 ## 1. 范围与触发

@@ -1511,3 +1511,45 @@ F 线变基到含 P 线的 main（迁移改为 0023/0024），导出树全量全
 - 次日 3 点后确认生产定时备份；用户决定何时删除 .env.prod、旧镜像与 ~/roomusic-prod-old-*、.cutover-env.sh
 - 用户浏览器确认反代登录与 系统 › 备份 页显示版本 0.1.0
 - internal/app 集成测试包提速（艺人夹具重复准备）
+
+
+## Session 44: 设置页、侧边栏用户菜单与备份管理
+<!-- trellis-session: v=2 fp=4673cad5a403530c -->
+
+**Date**: 2026-11-06
+**Task**: 设置页、侧边栏用户菜单与备份管理
+**Branch**: `main`
+
+### Summary
+
+新增 /settings 设置页（账号、扫描目录、成员、操作记录、备份），侧栏底部改为 ChatGPT 式用户菜单；备份可单删、批量删，并可在网页设置保留天数 / 份数（存于备份目录规则文件，未确认不删）
+
+### Main Changes
+
+- 后端：DELETE /system/backups/{name}、POST /system/backups/deletions、PUT /system/backups/retention；Overview 加 retention；retention.go 清理算法
+- 前端：设置页布局与旧地址重定向、UserMenu + useMenu（向上弹出、对话框内渲染）、备份删除 / 批量删除 / 自动清理区段
+- 规格：新增 backup-management-contracts.md，更新组件与状态规范、DESIGN.md
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c93d004` | docs(task): 规划设置页、侧边栏用户菜单与备份管理 |
+| `a1db810` | feat(backup): 删除、批量删除备份与可设置的保留规则 |
+| `f35310b` | feat(web): 设置页、侧边栏用户菜单与备份删除、批量删除和自动清理 |
+| `0200cc2` | docs(spec): 备份管理合同、用户菜单与设置页约定 |
+| `8ca9f0a` | test(e2e): 真实服务用例迁到设置页地址与用户菜单 |
+| `9b63ef6` | docs(task): 记录设置页与备份管理的实施结果 |
+| `aa69a73` | chore(task): archive 11-06-settings-page-and-user-menu |
+
+### Testing
+
+- [OK] Go 单元与 System 集成（真实数据库恢复）0 失败 0 跳过；Vitest 975 通过；Playwright 347+12 通过；playback-e2e 55 通过；导出树复跑通过、构建产物一致
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 截图中账号页、窄屏用户区已返工；真实服务未覆盖备份删除冒烟（测试环境无 pg_dump）

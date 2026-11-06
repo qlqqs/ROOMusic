@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 43
+- **Total Sessions**: 44
 - **Last Active**: 2026-11-06
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1513 | Active |
+| `journal-1.md` | ~1555 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 44 | 2026-11-06 | 设置页、侧边栏用户菜单与备份管理 | `c93d004`, `a1db810`, `f35310b`, `0200cc2`, `8ca9f0a`, `9b63ef6`, `aa69a73` | `main` |
 | 43 | 2026-11-06 | 部署体验改进：内置备份、双向迁移、GHCR 发布与生产切换 | `45514a9`, `65fcbbb`, `0fcb31b`, `865e371`, `8721f28`, `0bff315`, `2791dd3`, `fd03ba1`, `006c4e4` | `main` |
 | 42 | 2026-11-05 | 部署上线：局域网与公网同时可用 | `4a53754`, `db4b4f3`, `d0f1a56`, `263d757`, `faf5e9f`, `06450d0`, `e6d9fb6`, `a931fb5`, `dafbc4c`, `420f0e7`, `d961792`, `9429275`, `6679da7`, `2d6f30b`, `988077c` | `main` |
 | 41 | 2026-11-05 | 账户与密码 | `552f875`, `da4297e`, `54b65e6`, `fea965d`, `811ba7c`, `ca0d1e7`, `41f8c21`, `eae3877`, `0ef1816`, `4d33243`, `276b382`, `8d8474b` | `main` |
