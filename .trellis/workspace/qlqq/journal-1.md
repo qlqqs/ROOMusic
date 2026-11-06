@@ -1461,3 +1461,53 @@ F 线变基到含 P 线的 main（迁移改为 0023/0024），导出树全量全
 - 用户在局域网初始化管理员后，把公网反代改指向 8090
 - internal/app 集成包串行接近 10 分钟默认超时，需拆包或分组
 - 未验证：重启自动恢复、备份恢复到临时库、/data 卷丢失后重扫补封面
+
+
+## Session 43: 部署体验改进：内置备份、双向迁移、GHCR 发布与生产切换
+<!-- trellis-session: v=2 fp=ce5a4bdb9a79484a -->
+
+**Date**: 2026-11-06
+**Task**: 部署体验改进：内置备份、双向迁移、GHCR 发布与生产切换
+**Branch**: `main`
+
+### Summary
+
+备份内置到 app；生产配置只需两项；版本号升降级与回退 SQL；发布 v0.1.0 到 GHCR 并把本机生产切到公开镜像
+
+### Main Changes
+
+- builtin-backup：定时/手动/迁移前备份、系统 › 备份页、roomusic backup|restore 子命令
+- versioned-release：版本注入、schema_migrations 存回退 SQL、旧版本启动自动倒序回退，不可回退时拒绝并给恢复命令；release.yml 构建 amd64+arm64
+- config-trim：compose 只需 DB 密码与音乐目录，子网/端口/备份目录可选；删除 backup/restore 脚本与 make prod
+- 发布 v0.1.0（ghcr.io/qlqqs/roomusic，包继承公开可见性）；标签发布不再重跑 CI（2791dd3）
+- roomusic-prod 切到 GHCR 0.1.0（~/roomusic-prod），停机约 7 秒，计数/网络/postgres 容器不变
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `45514a9` | feat(backup): 备份内置到应用，新增“系统 › 备份”页 |
+| `65fcbbb` | feat(release): 版本号注入、双向迁移与 GHCR 发布流程 |
+| `0fcb31b` | feat(deploy): 生产配置精简为两项必填，镜像改从 GHCR 拉取 |
+| `865e371` | fix(release): 降级被拒时日志给出完整恢复命令 |
+| `8721f28` | fix(frontend): 侧栏导航单独滚动，当前用户区固定在底部 |
+| `0bff315` | docs(spec): 更新部署、双向迁移与内置备份合同，记录各子任务实施结果 |
+| `2791dd3` | ci(release): 发布不再重跑测试，改为要求 main 上的 CI 已通过 |
+| `fd03ba1` | docs(task): 记录 v0.1.0 发布与本机生产切换结果 |
+| `006c4e4` | chore(task): 归档部署体验改进父任务与三个子任务 |
+
+### Testing
+
+- [OK] [OK] P5 导出树门禁：race、全量 Vitest 3751、Playwright 478、test-integration 556、playback-e2e 55/55
+- [OK] [OK] GitHub CI 与 release 运行 42206825283、42206859381、42208462081（首跑前端因 runner 慢超时，重跑通过）
+- [OK] [OK] 生产切换第 9 步核对：版本、计数、备份、网络创建时间、局域网与反代 200
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 次日 3 点后确认生产定时备份；用户决定何时删除 .env.prod、旧镜像与 ~/roomusic-prod-old-*、.cutover-env.sh
+- 用户浏览器确认反代登录与 系统 › 备份 页显示版本 0.1.0
+- internal/app 集成测试包提速（艺人夹具重复准备）
