@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端检查清单"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "备份接口合同核对"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端检查清单"}
+{"file": ".trellis/spec/frontend/quality-verification-layers.md", "reason": "Vitest / Playwright / 真实服务分层"}

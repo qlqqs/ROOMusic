@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "备份接口、文件名与目录安全约定"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "错误码与 WriteError 约定"}
+{"file": ".trellis/spec/backend/identity-origin-contracts.md", "reason": "写接口的同源校验与管理员鉴权"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "删除备份的 slog 事件"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "共享组件、菜单与确认框用法"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "路由与 feature 目录划分"}
+{"file": ".trellis/spec/frontend/session-lifecycle.md", "reason": "退出登录与当前用户区行为"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "查询失效与 mutation 约定"}
