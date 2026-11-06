@@ -1,0 +1,11 @@
+项目	备份	当前数据库
+schema_migrations.max	30	30
+schema_migrations.count	30	30
+users	0	0
+sessions	0	0
+library_roots	0	0
+releases	0	0
+tracks	0	0
+release_artworks	0	0
+sh: locale: not found
+2026-11-06 04:51:12.953 UTC [13] WARNING:  no usable system locales were found

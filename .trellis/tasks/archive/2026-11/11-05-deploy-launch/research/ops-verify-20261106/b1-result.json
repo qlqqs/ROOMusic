@@ -1,0 +1,6 @@
+{
+  "rc": 0,
+  "seconds": 2.844,
+  "backup": "roomusic-20261106-005718-manual.dump",
+  "output": "项目\t备份\t当前数据库\nschema_migrations.max\t30\t30\nschema_migrations.count\t30\t30\nusers\t0\t0\nsessions\t0\t0\nlibrary_roots\t0\t0\nreleases\t0\t0\ntracks\t0\t0\nrelease_artworks\t0\t0\n"
+}

@@ -1,0 +1,501 @@
+2026-11-06T04:49:35.668169+00:00 docker inspect -f '{{.State.Status}} {{.State.StartedAt}}' roomusic-postgres-1
+2026-11-06T04:49:35.687041+00:00 docker volume inspect -f '{{.CreatedAt}}' roomusic_postgres-data
+2026-11-06T04:49:35.705643+00:00 docker exec roomusic-postgres-1 sh -c 'exec psql -X -qAt -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c '"'"'BEGIN TRANSACTION READ ONLY; select max(version) from schema_migrations; select count(*) from users; select count(*) from releases; COMMIT;'"'"''
+2026-11-06T04:49:35.781834+00:00 sha256sum /home/qlqq/roomusic-backups/.last-success
+2026-11-06T04:49:35.784469+00:00 sha256sum /home/qlqq/roomusic-backups/roomusic-20261106-005546-manual.dump
+2026-11-06T04:49:35.787761+00:00 sha256sum /home/qlqq/roomusic-backups/roomusic-20261106-005716-manual.dump
+2026-11-06T04:49:35.790732+00:00 sha256sum /home/qlqq/roomusic-backups/roomusic-20261106-005718-manual.dump
+2026-11-06T04:49:35.794326+00:00 docker inspect -f '{{json .State}}' roomusic-prod-app-1
+2026-11-06T04:49:35.813767+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-app-1
+2026-11-06T04:49:35.832512+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-app-1
+2026-11-06T04:49:35.851258+00:00 docker inspect -f '{{json .State}}' roomusic-prod-postgres-1
+2026-11-06T04:49:35.870054+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-postgres-1
+2026-11-06T04:49:35.889537+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-postgres-1
+2026-11-06T04:49:35.908361+00:00 docker inspect -f '{{json .State}}' roomusic-prod-backup-1
+2026-11-06T04:49:35.927350+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-backup-1
+2026-11-06T04:49:35.946895+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-backup-1
+2026-11-06T04:49:35.965769+00:00 docker volume ls -q --filter label=com.docker.compose.project=roomusic-prod
+2026-11-06T04:49:35.984489+00:00 docker volume inspect -f '{{json .}}' roomusic-prod_app-data
+2026-11-06T04:49:36.002394+00:00 docker volume inspect -f '{{json .}}' roomusic-prod_postgres-data
+2026-11-06T04:49:36.021064+00:00 docker inspect -f '{{json .Mounts}}' roomusic-prod-app-1
+2026-11-06T04:49:36.040398+00:00 docker inspect -f '{{json .Mounts}}' roomusic-prod-postgres-1
+2026-11-06T04:49:36.058780+00:00 docker inspect -f '{{json .Mounts}}' roomusic-prod-backup-1
+2026-11-06T04:49:36.154002+00:00 git rev-parse HEAD
+2026-11-06T04:49:36.156853+00:00 git status --porcelain
+2026-11-06T04:50:01.790730+00:00 docker volume inspect -f '{{.CreatedAt}}' 77766f5059666fd22367e47d2813af4c273b5a406b6cf708cc067d607f2a8189
+2026-11-06T04:50:01.810708+00:00 docker volume inspect -f '{{.CreatedAt}}' roomusic-prod_app-data
+2026-11-06T04:50:01.829765+00:00 docker volume inspect -f '{{.CreatedAt}}' roomusic-prod_postgres-data
+2026-11-06T04:50:01.848807+00:00 docker compose -p roomusic-prod -f deploy/production/compose.yaml --env-file .env.prod restart
+2026-11-06T04:50:08.439372+00:00 docker inspect -f '{{json .State}}' roomusic-prod-app-1
+2026-11-06T04:50:08.461712+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-app-1
+2026-11-06T04:50:08.482475+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-app-1
+2026-11-06T04:50:08.502554+00:00 docker inspect -f '{{json .State}}' roomusic-prod-postgres-1
+2026-11-06T04:50:08.523447+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-postgres-1
+2026-11-06T04:50:08.543733+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-postgres-1
+2026-11-06T04:50:08.566785+00:00 docker inspect -f '{{json .State}}' roomusic-prod-backup-1
+2026-11-06T04:50:08.586020+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-backup-1
+2026-11-06T04:50:08.605407+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-backup-1
+2026-11-06T04:50:10.625223+00:00 docker inspect -f '{{json .State}}' roomusic-prod-app-1
+2026-11-06T04:50:10.645182+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-app-1
+2026-11-06T04:50:10.665804+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-app-1
+2026-11-06T04:50:10.691675+00:00 docker inspect -f '{{json .State}}' roomusic-prod-postgres-1
+2026-11-06T04:50:10.712380+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-postgres-1
+2026-11-06T04:50:10.732634+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-postgres-1
+2026-11-06T04:50:10.751484+00:00 docker inspect -f '{{json .State}}' roomusic-prod-backup-1
+2026-11-06T04:50:10.770478+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-backup-1
+2026-11-06T04:50:10.790275+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-backup-1
+2026-11-06T04:50:12.809570+00:00 docker inspect -f '{{json .State}}' roomusic-prod-app-1
+2026-11-06T04:50:12.829803+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-app-1
+2026-11-06T04:50:12.849274+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-app-1
+2026-11-06T04:50:12.868361+00:00 docker inspect -f '{{json .State}}' roomusic-prod-postgres-1
+2026-11-06T04:50:12.888114+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-postgres-1
+2026-11-06T04:50:12.908907+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-postgres-1
+2026-11-06T04:50:12.928083+00:00 docker inspect -f '{{json .State}}' roomusic-prod-backup-1
+2026-11-06T04:50:12.946872+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-backup-1
+2026-11-06T04:50:12.965083+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-backup-1
+2026-11-06T04:50:14.984702+00:00 docker inspect -f '{{json .State}}' roomusic-prod-app-1
+2026-11-06T04:50:15.004019+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-app-1
+2026-11-06T04:50:15.022842+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-app-1
+2026-11-06T04:50:15.040825+00:00 docker inspect -f '{{json .State}}' roomusic-prod-postgres-1
+2026-11-06T04:50:15.059652+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-postgres-1
+2026-11-06T04:50:15.078514+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-postgres-1
+2026-11-06T04:50:15.096953+00:00 docker inspect -f '{{json .State}}' roomusic-prod-backup-1
+2026-11-06T04:50:15.116439+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-backup-1
+2026-11-06T04:50:15.134699+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-backup-1
+2026-11-06T04:50:15.230278+00:00 docker volume inspect -f '{{.CreatedAt}}' 77766f5059666fd22367e47d2813af4c273b5a406b6cf708cc067d607f2a8189
+2026-11-06T04:50:15.248723+00:00 docker volume inspect -f '{{.CreatedAt}}' roomusic-prod_app-data
+2026-11-06T04:50:15.266737+00:00 docker volume inspect -f '{{.CreatedAt}}' roomusic-prod_postgres-data
+2026-11-06T04:50:15.286418+00:00 docker inspect -f '{{json .State}}' roomusic-prod-app-1
+2026-11-06T04:50:15.306158+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-app-1
+2026-11-06T04:50:15.324911+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-app-1
+2026-11-06T04:50:15.344813+00:00 docker inspect -f '{{json .State}}' roomusic-prod-postgres-1
+2026-11-06T04:50:15.364057+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-postgres-1
+2026-11-06T04:50:15.389218+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-postgres-1
+2026-11-06T04:50:15.408029+00:00 docker inspect -f '{{json .State}}' roomusic-prod-backup-1
+2026-11-06T04:50:15.428286+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-backup-1
+2026-11-06T04:50:15.447448+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-backup-1
+2026-11-06T04:50:15.467097+00:00 kill -KILL 2862416
+2026-11-06T04:50:15.470042+00:00 docker inspect -f '{{json .State}}' roomusic-prod-app-1
+2026-11-06T04:50:15.667262+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-app-1
+2026-11-06T04:50:15.889823+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-app-1
+2026-11-06T04:50:15.911230+00:00 docker inspect -f '{{json .State}}' roomusic-prod-postgres-1
+2026-11-06T04:50:15.932965+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-postgres-1
+2026-11-06T04:50:15.953391+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-postgres-1
+2026-11-06T04:50:15.973213+00:00 docker inspect -f '{{json .State}}' roomusic-prod-backup-1
+2026-11-06T04:50:15.993027+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-backup-1
+2026-11-06T04:50:16.012411+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-backup-1
+2026-11-06T04:50:17.033389+00:00 docker inspect -f '{{json .State}}' roomusic-prod-app-1
+2026-11-06T04:50:17.052220+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-app-1
+2026-11-06T04:50:17.071654+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-app-1
+2026-11-06T04:50:17.090157+00:00 docker inspect -f '{{json .State}}' roomusic-prod-postgres-1
+2026-11-06T04:50:17.109751+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-postgres-1
+2026-11-06T04:50:17.129046+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-postgres-1
+2026-11-06T04:50:17.147435+00:00 docker inspect -f '{{json .State}}' roomusic-prod-backup-1
+2026-11-06T04:50:17.165934+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-backup-1
+2026-11-06T04:50:17.185291+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-backup-1
+2026-11-06T04:50:18.205012+00:00 docker inspect -f '{{json .State}}' roomusic-prod-app-1
+2026-11-06T04:50:18.223750+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-app-1
+2026-11-06T04:50:18.242722+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-app-1
+2026-11-06T04:50:18.261127+00:00 docker inspect -f '{{json .State}}' roomusic-prod-postgres-1
+2026-11-06T04:50:18.279662+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-postgres-1
+2026-11-06T04:50:18.297996+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-postgres-1
+2026-11-06T04:50:18.316710+00:00 docker inspect -f '{{json .State}}' roomusic-prod-backup-1
+2026-11-06T04:50:18.335691+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-backup-1
+2026-11-06T04:50:18.355324+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-backup-1
+2026-11-06T04:50:19.374361+00:00 docker inspect -f '{{json .State}}' roomusic-prod-app-1
+2026-11-06T04:50:19.394313+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-app-1
+2026-11-06T04:50:19.415148+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-app-1
+2026-11-06T04:50:19.434573+00:00 docker inspect -f '{{json .State}}' roomusic-prod-postgres-1
+2026-11-06T04:50:19.454065+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-postgres-1
+2026-11-06T04:50:19.473564+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-postgres-1
+2026-11-06T04:50:19.493159+00:00 docker inspect -f '{{json .State}}' roomusic-prod-backup-1
+2026-11-06T04:50:19.512026+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-backup-1
+2026-11-06T04:50:19.531592+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-backup-1
+2026-11-06T04:50:20.550651+00:00 docker inspect -f '{{json .State}}' roomusic-prod-app-1
+2026-11-06T04:50:20.569909+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-app-1
+2026-11-06T04:50:20.588407+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-app-1
+2026-11-06T04:50:20.607962+00:00 docker inspect -f '{{json .State}}' roomusic-prod-postgres-1
+2026-11-06T04:50:20.628379+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-postgres-1
+2026-11-06T04:50:20.648224+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-postgres-1
+2026-11-06T04:50:20.668357+00:00 docker inspect -f '{{json .State}}' roomusic-prod-backup-1
+2026-11-06T04:50:20.687750+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-backup-1
+2026-11-06T04:50:20.707751+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-backup-1
+2026-11-06T04:50:21.727089+00:00 docker inspect -f '{{json .State}}' roomusic-prod-app-1
+2026-11-06T04:50:21.746479+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-app-1
+2026-11-06T04:50:21.766409+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-app-1
+2026-11-06T04:50:21.785713+00:00 docker inspect -f '{{json .State}}' roomusic-prod-postgres-1
+2026-11-06T04:50:21.804771+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-postgres-1
+2026-11-06T04:50:21.823428+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-postgres-1
+2026-11-06T04:50:21.842787+00:00 docker inspect -f '{{json .State}}' roomusic-prod-backup-1
+2026-11-06T04:50:21.861727+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-backup-1
+2026-11-06T04:50:21.880555+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-backup-1
+2026-11-06T04:50:21.973856+00:00 docker events --since 1793940615 --until 1793940622 --filter container=roomusic-prod-app-1 --format '{{.Time}} {{.Action}} exit={{index .Actor.Attributes "exitCode"}} signal={{index .Actor.Attributes "signal"}}'
+2026-11-06T04:50:22.003138+00:00 systemctl is-enabled docker
+2026-11-06T04:50:22.008960+00:00 docker inspect -f '{{json .State}}' roomusic-prod-app-1
+2026-11-06T04:50:22.028205+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-app-1
+2026-11-06T04:50:22.047595+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-app-1
+2026-11-06T04:50:22.067046+00:00 docker inspect -f '{{json .State}}' roomusic-prod-postgres-1
+2026-11-06T04:50:22.087114+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-postgres-1
+2026-11-06T04:50:22.106621+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-postgres-1
+2026-11-06T04:50:22.125927+00:00 docker inspect -f '{{json .State}}' roomusic-prod-backup-1
+2026-11-06T04:50:22.145051+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-backup-1
+2026-11-06T04:50:22.164049+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-backup-1
+2026-11-06T04:51:11.946108+00:00 deploy/production/restore.sh check /home/qlqq/roomusic-backups/roomusic-20261106-005718-manual.dump
+2026-11-06T04:51:14.790234+00:00 docker ps -aq --filter label=com.docker.compose.project=roomusic-drill
+2026-11-06T04:51:14.808964+00:00 docker volume ls -q --filter label=com.docker.compose.project=roomusic-drill
+2026-11-06T04:51:14.828386+00:00 docker network ls -q
+2026-11-06T04:51:14.850138+00:00 docker network inspect -f '{{json .IPAM.Config}}' f5820e2fd704
+2026-11-06T04:51:14.870384+00:00 docker network inspect -f '{{json .IPAM.Config}}' bb073a0ec62e
+2026-11-06T04:51:14.890532+00:00 docker network inspect -f '{{json .IPAM.Config}}' bd057dec9f1d
+2026-11-06T04:51:14.911662+00:00 docker network inspect -f '{{json .IPAM.Config}}' 1b032702af17
+2026-11-06T04:51:14.931060+00:00 docker network inspect -f '{{json .IPAM.Config}}' 5db075a02a80
+2026-11-06T04:51:14.950549+00:00 docker network inspect -f '{{json .IPAM.Config}}' 1da7a3074c11
+2026-11-06T04:51:14.971315+00:00 docker network inspect -f '{{json .IPAM.Config}}' fc89aecfd8bc
+2026-11-06T04:51:14.991925+00:00 docker network inspect -f '{{json .IPAM.Config}}' aeacd21cbd89
+2026-11-06T04:51:15.012716+00:00 docker network inspect -f '{{json .IPAM.Config}}' 6354f0bec438
+2026-11-06T04:51:15.032160+00:00 docker network inspect -f '{{json .IPAM.Config}}' ef9a5080ba85
+2026-11-06T04:51:15.051147+00:00 docker network inspect -f '{{json .IPAM.Config}}' a843a1c4b69f
+2026-11-06T04:51:15.071423+00:00 docker network inspect -f '{{json .IPAM.Config}}' 8a1a7c1c67e9
+2026-11-06T04:51:15.090985+00:00 docker network inspect -f '{{json .IPAM.Config}}' 44684855eba1
+2026-11-06T04:51:15.110359+00:00 docker network inspect -f '{{json .IPAM.Config}}' fe026ef11ae9
+2026-11-06T04:51:15.129565+00:00 docker network inspect -f '{{json .IPAM.Config}}' 5af753914f1d
+2026-11-06T04:51:15.149283+00:00 docker network inspect -f '{{json .IPAM.Config}}' ef18d0716ae7
+2026-11-06T04:51:15.168737+00:00 docker network inspect -f '{{json .IPAM.Config}}' 22e6929f1c27
+2026-11-06T04:51:15.188323+00:00 docker network inspect -f '{{json .IPAM.Config}}' 1d73da421131
+2026-11-06T04:51:15.207091+00:00 docker network inspect -f '{{json .IPAM.Config}}' f1c09b7fb964
+2026-11-06T04:51:15.226151+00:00 docker network inspect -f '{{json .IPAM.Config}}' d918795ce2e9
+2026-11-06T04:51:15.245313+00:00 docker network inspect -f '{{json .IPAM.Config}}' b23f5d56bbfd
+2026-11-06T04:51:15.264604+00:00 docker network inspect -f '{{json .IPAM.Config}}' 6d9840af5f1b
+2026-11-06T04:51:15.285138+00:00 docker image ls --no-trunc --format '{{.Repository}}:{{.Tag}} {{.ID}}' --filter 'reference=roomusic-prod-*'
+2026-11-06T04:51:15.339209+00:00 docker compose -p roomusic-drill -f deploy/production/compose.yaml --env-file /tmp/roomusic-drill/drill.env config --quiet
+2026-11-06T04:51:15.436156+00:00 docker compose -p roomusic-drill -f deploy/production/compose.yaml --env-file /tmp/roomusic-drill/drill.env up -d --wait --wait-timeout 300
+2026-11-06T04:51:32.459811+00:00 docker inspect -f '{{json .State}}' roomusic-drill-app-1
+2026-11-06T04:51:32.478956+00:00 docker inspect -f '{{.RestartCount}}' roomusic-drill-app-1
+2026-11-06T04:51:32.497701+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-drill-app-1
+2026-11-06T04:51:32.516952+00:00 docker inspect -f '{{json .State}}' roomusic-drill-postgres-1
+2026-11-06T04:51:32.535719+00:00 docker inspect -f '{{.RestartCount}}' roomusic-drill-postgres-1
+2026-11-06T04:51:32.561579+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-drill-postgres-1
+2026-11-06T04:51:32.581318+00:00 docker inspect -f '{{json .State}}' roomusic-drill-backup-1
+2026-11-06T04:51:32.600591+00:00 docker inspect -f '{{.RestartCount}}' roomusic-drill-backup-1
+2026-11-06T04:51:32.619820+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-drill-backup-1
+2026-11-06T04:51:32.639243+00:00 docker inspect -f '{{json .Mounts}}' roomusic-drill-app-1
+2026-11-06T04:51:32.658591+00:00 docker network inspect -f '{{json .IPAM.Config}}' roomusic-drill_roomusic
+2026-11-06T04:51:32.677153+00:00 docker port roomusic-drill-app-1
+2026-11-06T04:51:32.696100+00:00 docker inspect -f '{{.Config.Image}}' roomusic-drill-app-1
+2026-11-06T04:51:32.715699+00:00 docker inspect -f '{{.Config.Image}}' roomusic-drill-backup-1
+2026-11-06T04:52:15.925Z HTTP GET http://127.0.0.1:18090/api/v1/setup/status [请求体和凭据不记录]
+2026-11-06T04:52:15.944Z HTTP POST http://127.0.0.1:18090/api/v1/setup/admin [请求体和凭据不记录]
+2026-11-06T04:52:16.014Z HTTP GET http://127.0.0.1:18090/api/v1/auth/me [请求体和凭据不记录]
+2026-11-06T04:52:44.853Z HTTP GET http://127.0.0.1:18090/api/v1/setup/status [请求体和凭据不记录]
+2026-11-06T04:52:44.868Z HTTP POST http://127.0.0.1:18090/api/v1/auth/login [请求体和凭据不记录]
+2026-11-06T04:52:44.933Z HTTP GET http://127.0.0.1:18090/api/v1/auth/me [请求体和凭据不记录]
+2026-11-06T04:52:44.938Z HTTP POST http://127.0.0.1:18090/api/v1/library-roots [请求体和凭据不记录]
+2026-11-06T04:52:44.949Z HTTP POST http://127.0.0.1:18090/api/v1/scans [请求体和凭据不记录]
+2026-11-06T04:52:44.972Z HTTP GET http://127.0.0.1:18090/api/v1/scans/32703d7e-6f3b-4060-8991-88144d7ed456 [请求体和凭据不记录]
+2026-11-06T04:52:45.980Z HTTP GET http://127.0.0.1:18090/api/v1/scans/32703d7e-6f3b-4060-8991-88144d7ed456 [请求体和凭据不记录]
+2026-11-06T04:52:46.986Z HTTP GET http://127.0.0.1:18090/api/v1/scans/32703d7e-6f3b-4060-8991-88144d7ed456 [请求体和凭据不记录]
+2026-11-06T04:52:47.991Z HTTP GET http://127.0.0.1:18090/api/v1/scans/32703d7e-6f3b-4060-8991-88144d7ed456 [请求体和凭据不记录]
+2026-11-06T04:52:48.998Z HTTP GET http://127.0.0.1:18090/api/v1/scans/32703d7e-6f3b-4060-8991-88144d7ed456 [请求体和凭据不记录]
+2026-11-06T04:52:50.005Z HTTP GET http://127.0.0.1:18090/api/v1/scans/32703d7e-6f3b-4060-8991-88144d7ed456 [请求体和凭据不记录]
+2026-11-06T04:52:51.014Z HTTP GET http://127.0.0.1:18090/api/v1/scans/32703d7e-6f3b-4060-8991-88144d7ed456 [请求体和凭据不记录]
+2026-11-06T04:52:52.019Z HTTP GET http://127.0.0.1:18090/api/v1/scans/32703d7e-6f3b-4060-8991-88144d7ed456 [请求体和凭据不记录]
+2026-11-06T04:52:53.036Z HTTP GET http://127.0.0.1:18090/api/v1/scans/32703d7e-6f3b-4060-8991-88144d7ed456 [请求体和凭据不记录]
+2026-11-06T04:52:54.041Z HTTP GET http://127.0.0.1:18090/api/v1/scans/32703d7e-6f3b-4060-8991-88144d7ed456 [请求体和凭据不记录]
+2026-11-06T04:52:55.048Z HTTP GET http://127.0.0.1:18090/api/v1/scans/32703d7e-6f3b-4060-8991-88144d7ed456 [请求体和凭据不记录]
+2026-11-06T04:52:56.054Z HTTP GET http://127.0.0.1:18090/api/v1/scans/32703d7e-6f3b-4060-8991-88144d7ed456 [请求体和凭据不记录]
+2026-11-06T04:52:57.059Z HTTP GET http://127.0.0.1:18090/api/v1/scans/32703d7e-6f3b-4060-8991-88144d7ed456 [请求体和凭据不记录]
+2026-11-06T04:52:58.064Z HTTP GET http://127.0.0.1:18090/api/v1/scans/32703d7e-6f3b-4060-8991-88144d7ed456 [请求体和凭据不记录]
+2026-11-06T04:52:59.069Z HTTP GET http://127.0.0.1:18090/api/v1/scans/32703d7e-6f3b-4060-8991-88144d7ed456 [请求体和凭据不记录]
+2026-11-06T04:53:00.073Z HTTP GET http://127.0.0.1:18090/api/v1/scans/32703d7e-6f3b-4060-8991-88144d7ed456 [请求体和凭据不记录]
+2026-11-06T04:53:01.076Z HTTP GET http://127.0.0.1:18090/api/v1/scans/32703d7e-6f3b-4060-8991-88144d7ed456 [请求体和凭据不记录]
+2026-11-06T04:53:02.083Z HTTP GET http://127.0.0.1:18090/api/v1/scans/32703d7e-6f3b-4060-8991-88144d7ed456 [请求体和凭据不记录]
+2026-11-06T04:53:03.088Z HTTP GET http://127.0.0.1:18090/api/v1/scans/32703d7e-6f3b-4060-8991-88144d7ed456 [请求体和凭据不记录]
+2026-11-06T04:53:04.092Z HTTP GET http://127.0.0.1:18090/api/v1/scans/32703d7e-6f3b-4060-8991-88144d7ed456 [请求体和凭据不记录]
+2026-11-06T04:53:04.098Z HTTP GET http://127.0.0.1:18090/api/v1/release-groups?page_size=100 [请求体和凭据不记录]
+2026-11-06T04:53:04.127Z HTTP GET http://127.0.0.1:18090/api/v1/releases?page_size=100 [请求体和凭据不记录]
+2026-11-06T04:53:04.148Z HTTP PUT http://127.0.0.1:18090/api/v1/me/favorites/albums/e25bd6ea-0fab-42d9-a0cd-f33276b7d413 [请求体和凭据不记录]
+2026-11-06T04:53:04.166Z HTTP PUT http://127.0.0.1:18090/api/v1/me/favorites/albums/6cea4924-de70-4740-b078-27899ebee3f9 [请求体和凭据不记录]
+2026-11-06T04:53:04.179Z HTTP GET http://127.0.0.1:18090/api/v1/releases/8adb85d2-0eb0-4b71-9e79-bc4cdd490b2f [请求体和凭据不记录]
+2026-11-06T04:53:04.202Z HTTP GET http://127.0.0.1:18090/api/v1/releases/994d2500-161e-4faa-ab2c-88fa4c3d7a19 [请求体和凭据不记录]
+2026-11-06T04:53:04.217Z HTTP GET http://127.0.0.1:18090/api/v1/releases/5a87238a-b348-4d91-97f0-e2b0c107f97d [请求体和凭据不记录]
+2026-11-06T04:53:04.231Z HTTP GET http://127.0.0.1:18090/api/v1/releases/d4c960fe-9158-4f83-988d-47b1473a0bf7 [请求体和凭据不记录]
+2026-11-06T04:53:04.246Z HTTP GET http://127.0.0.1:18090/api/v1/releases/72e3c3eb-a7c1-4d5d-a8c3-f5a017350bb0 [请求体和凭据不记录]
+2026-11-06T04:53:04.259Z HTTP GET http://127.0.0.1:18090/api/v1/releases/854f9410-c5e4-4991-83a3-3ca4503d6d3e [请求体和凭据不记录]
+2026-11-06T04:53:04.275Z HTTP GET http://127.0.0.1:18090/api/v1/releases/e9a36d7b-a7ba-4f55-832c-996962118dbc [请求体和凭据不记录]
+2026-11-06T04:53:04.282Z HTTP GET http://127.0.0.1:18090/api/v1/releases/5b1a01c8-00c8-4fd9-a046-f17eeca21c41 [请求体和凭据不记录]
+2026-11-06T04:53:04.289Z HTTP GET http://127.0.0.1:18090/api/v1/releases/6d5d645f-dbf2-4dd1-b7a1-564193f9569d [请求体和凭据不记录]
+2026-11-06T04:53:04.297Z HTTP GET http://127.0.0.1:18090/api/v1/releases/8300785c-d01e-4a53-a9ef-c461b2addc48 [请求体和凭据不记录]
+2026-11-06T04:53:04.310Z HTTP GET http://127.0.0.1:18090/api/v1/releases/c6eca9ae-2073-4a78-819d-6121cd9ec324 [请求体和凭据不记录]
+2026-11-06T04:53:04.318Z HTTP GET http://127.0.0.1:18090/api/v1/releases/a161c60e-4451-451f-af35-e52fcfe5cc47 [请求体和凭据不记录]
+2026-11-06T04:53:04.327Z HTTP GET http://127.0.0.1:18090/api/v1/releases/676aa62a-0c0f-4e2c-8c4c-12ca169121b2 [请求体和凭据不记录]
+2026-11-06T04:53:04.334Z HTTP GET http://127.0.0.1:18090/api/v1/releases/83a9ee1a-feb0-4b39-9003-d6d0ac458bcc [请求体和凭据不记录]
+2026-11-06T04:53:04.342Z HTTP GET http://127.0.0.1:18090/api/v1/releases/a1ca6aad-7a87-4ac5-984c-5e9da7c1ea79 [请求体和凭据不记录]
+2026-11-06T04:53:04.350Z HTTP GET http://127.0.0.1:18090/api/v1/releases/f30e3abb-529a-4a54-a5b7-a2a8f2e04e74 [请求体和凭据不记录]
+2026-11-06T04:53:04.357Z HTTP GET http://127.0.0.1:18090/api/v1/releases/c27a4157-1700-4d58-9ff1-1f9e60c3aec8 [请求体和凭据不记录]
+2026-11-06T04:53:04.364Z HTTP GET http://127.0.0.1:18090/api/v1/releases/051e19f0-8c2d-481c-8de0-47e14a68dc26 [请求体和凭据不记录]
+2026-11-06T04:53:04.370Z HTTP GET http://127.0.0.1:18090/api/v1/releases/29a4aa5e-1442-47db-8620-311136b1ee4d [请求体和凭据不记录]
+2026-11-06T04:53:04.377Z HTTP GET http://127.0.0.1:18090/api/v1/releases/a0fbb4f7-8229-4c79-a4d2-d8c9e0817a1a [请求体和凭据不记录]
+2026-11-06T04:53:04.384Z HTTP GET http://127.0.0.1:18090/api/v1/releases/a492d161-48d8-4908-9264-34878526bae8 [请求体和凭据不记录]
+2026-11-06T04:53:04.391Z HTTP GET http://127.0.0.1:18090/api/v1/releases/495a5860-0598-4b9d-8298-a17876afcab5 [请求体和凭据不记录]
+2026-11-06T04:53:04.398Z HTTP GET http://127.0.0.1:18090/api/v1/releases/27527b55-163f-449b-b8da-e47dea62e405 [请求体和凭据不记录]
+2026-11-06T04:53:04.404Z HTTP GET http://127.0.0.1:18090/api/v1/releases/91a2a2ab-293b-4f06-a32a-60183eee0d7a [请求体和凭据不记录]
+2026-11-06T04:53:04.411Z HTTP GET http://127.0.0.1:18090/api/v1/releases/03218b63-6087-433e-9086-6ec18531ccf9 [请求体和凭据不记录]
+2026-11-06T04:53:04.418Z HTTP GET http://127.0.0.1:18090/api/v1/releases/59ddd21f-54e1-4b56-929b-49a47dc8c760 [请求体和凭据不记录]
+2026-11-06T04:53:04.424Z HTTP GET http://127.0.0.1:18090/api/v1/releases/f7ca7974-02a9-456c-a794-ec24d127a780 [请求体和凭据不记录]
+2026-11-06T04:53:04.431Z HTTP GET http://127.0.0.1:18090/api/v1/releases/19ec2026-0f3a-487a-b285-28d2a34e2f19 [请求体和凭据不记录]
+2026-11-06T04:53:04.440Z HTTP GET http://127.0.0.1:18090/api/v1/releases/8fe9f50b-3965-4c23-b689-e33aaefb903b [请求体和凭据不记录]
+2026-11-06T04:53:04.447Z HTTP GET http://127.0.0.1:18090/api/v1/releases/e0e0448a-d8bc-444c-ab63-85b543b5eaa9 [请求体和凭据不记录]
+2026-11-06T04:53:04.454Z HTTP GET http://127.0.0.1:18090/api/v1/releases/4ec1c6f7-c103-46ed-a29f-7dcc12b2cddd [请求体和凭据不记录]
+2026-11-06T04:53:04.460Z HTTP GET http://127.0.0.1:18090/api/v1/releases/bf430fb6-8f75-45f8-acb4-8e74baaf1cd1 [请求体和凭据不记录]
+2026-11-06T04:53:04.470Z HTTP GET http://127.0.0.1:18090/api/v1/releases/129b6413-79ec-4661-9cd3-691343b9a61f [请求体和凭据不记录]
+2026-11-06T04:53:04.479Z HTTP GET http://127.0.0.1:18090/api/v1/releases/a37c4aec-6524-4b32-ae93-12f8e4e6e3b8 [请求体和凭据不记录]
+2026-11-06T04:53:04.487Z HTTP GET http://127.0.0.1:18090/api/v1/releases/135352b1-5fb7-45a7-95fb-a5a86d3552ac [请求体和凭据不记录]
+2026-11-06T04:53:04.495Z HTTP GET http://127.0.0.1:18090/api/v1/releases/5d7a966a-4a16-4c25-b54a-623b00118d7c [请求体和凭据不记录]
+2026-11-06T04:53:04.503Z HTTP GET http://127.0.0.1:18090/api/v1/releases/c2f11c51-7a73-4822-a127-e687a9a9c5ec [请求体和凭据不记录]
+2026-11-06T04:53:04.511Z HTTP GET http://127.0.0.1:18090/api/v1/releases/b806f83b-8ea0-43b0-b3c1-b0168e669c62 [请求体和凭据不记录]
+2026-11-06T04:53:04.519Z HTTP GET http://127.0.0.1:18090/api/v1/releases/ef729e09-9935-46a7-8f7a-02d00f2daf6c [请求体和凭据不记录]
+2026-11-06T04:53:04.528Z HTTP GET http://127.0.0.1:18090/api/v1/releases/464f2cd5-1564-43a0-9392-3577b6a37812 [请求体和凭据不记录]
+2026-11-06T04:53:04.537Z HTTP GET http://127.0.0.1:18090/api/v1/releases/a04d3fdb-c4a2-4159-a569-4bcc5c2323a8 [请求体和凭据不记录]
+2026-11-06T04:53:04.544Z HTTP GET http://127.0.0.1:18090/api/v1/releases/2e5070cf-0973-4e79-b67b-fd25da2aeb32 [请求体和凭据不记录]
+2026-11-06T04:53:04.552Z HTTP GET http://127.0.0.1:18090/api/v1/releases/54dfa67f-c3c6-45ad-a416-e0b106785eba [请求体和凭据不记录]
+2026-11-06T04:53:04.559Z HTTP GET http://127.0.0.1:18090/api/v1/releases/784edd1b-ea8c-444c-80c6-fd29710afb81 [请求体和凭据不记录]
+2026-11-06T04:53:04.565Z HTTP GET http://127.0.0.1:18090/api/v1/releases/63822473-617c-41da-9a8a-1df00d51eb5c [请求体和凭据不记录]
+2026-11-06T04:53:04.570Z HTTP GET http://127.0.0.1:18090/api/v1/releases/cf592bd2-0e0d-4d3c-b9ce-230a580ad0cd [请求体和凭据不记录]
+2026-11-06T04:53:04.576Z HTTP GET http://127.0.0.1:18090/api/v1/releases/ebba8b9e-df78-44ae-84e4-f28360ae57ed [请求体和凭据不记录]
+2026-11-06T04:53:04.582Z HTTP GET http://127.0.0.1:18090/api/v1/releases/84073b76-71b3-496e-b60a-ec8b02356510 [请求体和凭据不记录]
+2026-11-06T04:53:04.590Z HTTP GET http://127.0.0.1:18090/api/v1/releases/abfc5148-41f8-418a-a9ce-e72294d556a3 [请求体和凭据不记录]
+2026-11-06T04:53:04.596Z HTTP GET http://127.0.0.1:18090/api/v1/releases/17c985d5-3e43-4f03-975b-eb916b9af168 [请求体和凭据不记录]
+2026-11-06T04:53:04.603Z HTTP GET http://127.0.0.1:18090/api/v1/releases/73a895a5-c304-4d6c-92de-01c62895371e [请求体和凭据不记录]
+2026-11-06T04:53:04.608Z HTTP GET http://127.0.0.1:18090/api/v1/releases/ac1c4523-e914-4650-8bf4-57778ba1d330 [请求体和凭据不记录]
+2026-11-06T04:53:04.614Z HTTP GET http://127.0.0.1:18090/api/v1/releases/b2433133-3fee-4a30-8713-d141b0790a64 [请求体和凭据不记录]
+2026-11-06T04:53:04.620Z HTTP GET http://127.0.0.1:18090/api/v1/releases/705cb3fb-bd38-4406-83dd-2945b60dc852 [请求体和凭据不记录]
+2026-11-06T04:53:04.626Z HTTP GET http://127.0.0.1:18090/api/v1/releases/f4a0df6e-75d8-432e-a1af-09e0d2eabc3d [请求体和凭据不记录]
+2026-11-06T04:53:04.632Z HTTP GET http://127.0.0.1:18090/api/v1/releases/92adc553-6e03-4f16-bfec-f716b3d9d83a [请求体和凭据不记录]
+2026-11-06T04:53:04.639Z HTTP GET http://127.0.0.1:18090/api/v1/releases/5aaa3e19-6001-4589-8927-18d66632cdd4 [请求体和凭据不记录]
+2026-11-06T04:53:04.645Z HTTP GET http://127.0.0.1:18090/api/v1/releases/a4a79ca4-9713-40a2-ac8c-248ce4832d25 [请求体和凭据不记录]
+2026-11-06T04:53:04.652Z HTTP GET http://127.0.0.1:18090/api/v1/releases/8df022aa-7969-4a7d-847c-1436fa27054c [请求体和凭据不记录]
+2026-11-06T04:53:04.658Z HTTP GET http://127.0.0.1:18090/api/v1/releases/cc82a7dc-d011-4a99-b4a7-bbeb37b0365f [请求体和凭据不记录]
+2026-11-06T04:53:04.664Z HTTP GET http://127.0.0.1:18090/api/v1/releases/a9cedd52-3ed2-437e-bdb6-444e85862443 [请求体和凭据不记录]
+2026-11-06T04:53:04.670Z HTTP GET http://127.0.0.1:18090/api/v1/releases/119f2d14-5977-4cd1-bf38-77a6c89eee09 [请求体和凭据不记录]
+2026-11-06T04:53:04.675Z HTTP GET http://127.0.0.1:18090/api/v1/releases/fe13a91d-3ac6-44d5-b9b9-eced72870547 [请求体和凭据不记录]
+2026-11-06T04:53:04.681Z HTTP GET http://127.0.0.1:18090/api/v1/releases/22140ebc-c212-4f5a-8073-15c5879c4e11 [请求体和凭据不记录]
+2026-11-06T04:53:04.689Z HTTP GET http://127.0.0.1:18090/api/v1/releases/06c861e4-eb91-47ed-81f3-7d0d7093f838 [请求体和凭据不记录]
+2026-11-06T04:53:04.696Z HTTP GET http://127.0.0.1:18090/api/v1/releases/7acf92f5-44b0-4537-8520-ec965c4764fd [请求体和凭据不记录]
+2026-11-06T04:53:04.702Z HTTP GET http://127.0.0.1:18090/api/v1/releases/379ceaca-1734-4798-a73c-798e21b0f1d0 [请求体和凭据不记录]
+2026-11-06T04:53:04.709Z HTTP GET http://127.0.0.1:18090/api/v1/releases/ea5bc00f-e42c-433b-841a-84dc560d7007 [请求体和凭据不记录]
+2026-11-06T04:53:04.716Z HTTP POST http://127.0.0.1:18090/api/v1/me/playlists [请求体和凭据不记录]
+2026-11-06T04:53:04.732Z HTTP GET http://127.0.0.1:18090/api/v1/me/favorites/albums [请求体和凭据不记录]
+2026-11-06T04:53:04.743Z HTTP GET http://127.0.0.1:18090/api/v1/me/playlists [请求体和凭据不记录]
+2026-11-06T04:53:30.916928+00:00 docker compose -p roomusic-drill -f deploy/production/compose.yaml --env-file /tmp/roomusic-drill/drill.env exec -T postgres psql -X -qAt -U roomusic -d roomusic -v ON_ERROR_STOP=1 [stdin未记录]
+2026-11-06T04:53:31.074753+00:00 docker compose -p roomusic-drill -f deploy/production/compose.yaml --env-file /tmp/roomusic-drill/drill.env exec -T backup /bin/sh /opt/roomusic/backup.sh now
+恢复选择器：COMPOSE_PROJECT_NAME=roomusic-drill COMPOSE_ENV_FILES=/tmp/roomusic-drill/drill.env
+2026-11-06T04:53:31.461834+00:00 deploy/production/restore.sh check /tmp/roomusic-drill/backups/roomusic-20261106-125331-manual.dump
+2026-11-06T04:54:08.836Z HTTP DELETE http://127.0.0.1:18090/api/v1/me/playlists/9ebcf5a7-c015-4b05-8627-335d0aa50f38 [请求体和凭据不记录]
+2026-11-06T04:54:08.861Z HTTP DELETE http://127.0.0.1:18090/api/v1/me/favorites/albums/e25bd6ea-0fab-42d9-a0cd-f33276b7d413 [请求体和凭据不记录]
+2026-11-06T04:54:08.870Z HTTP GET http://127.0.0.1:18090/api/v1/me/playlists [请求体和凭据不记录]
+2026-11-06T04:54:08.874Z HTTP GET http://127.0.0.1:18090/api/v1/me/favorites/albums [请求体和凭据不记录]
+2026-11-06T04:54:08.967485+00:00 docker compose -p roomusic-drill -f deploy/production/compose.yaml --env-file /tmp/roomusic-drill/drill.env exec -T postgres psql -X -qAt -U roomusic -d roomusic -v ON_ERROR_STOP=1 [stdin未记录]
+恢复选择器：COMPOSE_PROJECT_NAME=roomusic-drill COMPOSE_ENV_FILES=/tmp/roomusic-drill/drill.env；确认输入 roomusic-drill
+2026-11-06T04:54:09.128862+00:00 deploy/production/restore.sh production /tmp/roomusic-drill/backups/roomusic-20261106-125331-manual.dump [stdin未记录]
+2026-11-06T04:54:20.126381+00:00 docker inspect -f '{{json .State}}' roomusic-drill-app-1
+2026-11-06T04:54:20.145737+00:00 docker inspect -f '{{.RestartCount}}' roomusic-drill-app-1
+2026-11-06T04:54:20.164540+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-drill-app-1
+2026-11-06T04:54:20.183877+00:00 docker inspect -f '{{json .State}}' roomusic-drill-postgres-1
+2026-11-06T04:54:20.203541+00:00 docker inspect -f '{{.RestartCount}}' roomusic-drill-postgres-1
+2026-11-06T04:54:20.222578+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-drill-postgres-1
+2026-11-06T04:54:20.242105+00:00 docker inspect -f '{{json .State}}' roomusic-drill-backup-1
+2026-11-06T04:54:20.261006+00:00 docker inspect -f '{{.RestartCount}}' roomusic-drill-backup-1
+2026-11-06T04:54:20.280659+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-drill-backup-1
+2026-11-06T04:54:20.299211+00:00 docker compose -p roomusic-drill -f deploy/production/compose.yaml --env-file /tmp/roomusic-drill/drill.env exec -T postgres psql -X -qAt -U roomusic -d roomusic -v ON_ERROR_STOP=1 [stdin未记录]
+2026-11-06T04:54:20.454165+00:00 deploy/production/restore.sh check /tmp/roomusic-drill/backups/roomusic-20261106-125409-manual.dump
+2026-11-06T04:54:56.343Z HTTP POST http://127.0.0.1:18090/api/v1/auth/login [请求体和凭据不记录]
+2026-11-06T04:54:56.425Z HTTP GET http://127.0.0.1:18090/api/v1/auth/me [请求体和凭据不记录]
+2026-11-06T04:54:56.432Z HTTP GET http://127.0.0.1:18090/api/v1/me/playlists/9ebcf5a7-c015-4b05-8627-335d0aa50f38 [请求体和凭据不记录]
+2026-11-06T04:54:56.467Z HTTP GET http://127.0.0.1:18090/api/v1/me/playlists/9ebcf5a7-c015-4b05-8627-335d0aa50f38/items [请求体和凭据不记录]
+2026-11-06T04:54:56.563573+00:00 docker inspect -f '{{json .State}}' roomusic-drill-app-1
+2026-11-06T04:54:56.582759+00:00 docker inspect -f '{{.RestartCount}}' roomusic-drill-app-1
+2026-11-06T04:54:56.601722+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-drill-app-1
+2026-11-06T04:54:56.622036+00:00 docker inspect -f '{{json .State}}' roomusic-drill-postgres-1
+2026-11-06T04:54:56.642144+00:00 docker inspect -f '{{.RestartCount}}' roomusic-drill-postgres-1
+2026-11-06T04:54:56.661224+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-drill-postgres-1
+2026-11-06T04:54:56.680095+00:00 docker inspect -f '{{json .State}}' roomusic-drill-backup-1
+2026-11-06T04:54:56.699205+00:00 docker inspect -f '{{.RestartCount}}' roomusic-drill-backup-1
+2026-11-06T04:54:56.718038+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-drill-backup-1
+2026-11-06T04:54:56.737181+00:00 docker compose -p roomusic-drill -f deploy/production/compose.yaml --env-file /tmp/roomusic-drill/drill.env exec -T postgres psql -X -qAt -U roomusic -d roomusic -v ON_ERROR_STOP=1 [stdin未记录]
+2026-11-06T04:55:10.805Z HTTP GET http://127.0.0.1:18090/api/v1/me/playlists/9ebcf5a7-c015-4b05-8627-335d0aa50f38 [请求体和凭据不记录]
+2026-11-06T04:55:10.829Z HTTP GET http://127.0.0.1:18090/api/v1/me/playlists/9ebcf5a7-c015-4b05-8627-335d0aa50f38/items [请求体和凭据不记录]
+2026-11-06T04:55:10.842Z HTTP POST http://127.0.0.1:18090/api/v1/me/favorites/lookup [请求体和凭据不记录]
+2026-11-06T04:55:20.215Z HTTP GET http://127.0.0.1:18090/api/v1/me/playlists/9ebcf5a7-c015-4b05-8627-335d0aa50f38/items [请求体和凭据不记录]
+2026-11-06T04:55:30.152Z HTTP POST http://127.0.0.1:18090/api/v1/auth/login [请求体和凭据不记录]
+2026-11-06T04:55:30.232Z HTTP GET http://127.0.0.1:18090/api/v1/auth/me [请求体和凭据不记录]
+2026-11-06T04:55:30.238Z HTTP GET http://127.0.0.1:18090/api/v1/me/playlists/9ebcf5a7-c015-4b05-8627-335d0aa50f38 [请求体和凭据不记录]
+2026-11-06T04:55:30.251Z HTTP GET http://127.0.0.1:18090/api/v1/me/playlists/9ebcf5a7-c015-4b05-8627-335d0aa50f38/items [请求体和凭据不记录]
+2026-11-06T04:55:30.265Z HTTP POST http://127.0.0.1:18090/api/v1/me/favorites/lookup [请求体和凭据不记录]
+2026-11-06T04:56:20.892Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/b6b315fecc50519938152904350dc4f2b282dcd48712773597579c16f1df86af.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:56:20.910Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/4665f658c2515f364844ae4cf41feff134896508c5b43eb1aade40d14dc756a7.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:56:20.915Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/9070b8bee4d4c51e41691da03f3d834ff51cba56e36e14402d007ef12b759348.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:56:20.921Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/814fb64fb7b7094883f661b952b434b81fdbbdb0ce51c99341c38391a9d4bc3b.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:56:20.939Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/2ba4811238832da072086c26d4bee22448bee16d1c600b7d70e2cfd0cc26d1be.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:56:20.944Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/0656476dc9b32ad7929dbcce413a61eca90e3bec8a51213e729ef345474a46b2.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:56:20.952Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/fe688351d97c1b4230c46dcd7d757debff7847e21a4a5c90ff06346caf4cef93.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:56:20.955Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/2b27c13f5eea461d2c82419ddd80a199a88df0b539e46703583011b90737c341.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:56:20.961Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/52a30144208ddacab0461f522b05cc764a94883f14b75d9f58e87af15d0dc41e.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:56:20.974Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/6d4dfc82bdf0065af0c55473d78346781b3e4725fb2ceca2624696e04eefc1f6.png [带Cookie，不记录值；无条件请求]
+2026-11-06T04:56:20.988Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/5576c3863334dbf2d61c56bb7775258cbc5d2ae10585f0d54005ac7663468342.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:56:20.994Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/0297b039bfecda73924876f804e70c9e8f646b35b791e85b13c93014709388c7.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:56:20.997Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/9682d4f5bc0477e59f37709376ec6c63da2c6076b620296e86182b25d6a789e5.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:56:21.007Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/3f511dc707aa6f6914a97a55d24fb4a73ee537f17e1ccd1a98b3779f6750f9a1.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:56:21.010Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/62491b64649a27833ed33187ee14dcf593e2d6158a16e3ddb63baeb51cd325c9.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:56:21.088604+00:00 docker compose -p roomusic-drill -f deploy/production/compose.yaml --env-file /tmp/roomusic-drill/drill.env exec -T app /bin/sh -c 'if [ -d /data/media-cache ]; then find /data/media-cache -type f -name '"'"'*.flac'"'"' -exec stat -c '"'"'%s'"'"' '"'"'{}'"'"' '"'"';'"'"' | awk '"'"'{n++;s+=$1} END {printf "{\"flac_files\":%d,\"flac_bytes\":%d}\n",n,s}'"'"'; else echo '"'"'{"flac_files":0,"flac_bytes":0}'"'"'; fi'
+2026-11-06T04:56:21.887Z Chromium：打开同一 ALAC 专辑页，点击真实播放按钮，观察原生媒体时间后暂停（before）
+2026-11-06T04:56:39.777616+00:00 docker compose -p roomusic-drill -f deploy/production/compose.yaml --env-file /tmp/roomusic-drill/drill.env exec -T postgres psql -X -qAt -U roomusic -d roomusic -v ON_ERROR_STOP=1 [stdin未记录]
+2026-11-06T04:57:04.305953+00:00 docker compose -p roomusic-drill -f deploy/production/compose.yaml --env-file /tmp/roomusic-drill/drill.env exec -T app /bin/sh -c 'if [ -d /data/media-cache ]; then find /data/media-cache -type f -name '"'"'*.flac'"'"' -exec stat -c '"'"'%s'"'"' '"'"'{}'"'"' '"'"';'"'"' | awk '"'"'{n++;s+=$1} END {printf "{\"flac_files\":%d,\"flac_bytes\":%d}\n",n,s}'"'"'; else echo '"'"'{"flac_files":0,"flac_bytes":0}'"'"'; fi'
+2026-11-06T04:57:04.533543+00:00 docker volume inspect -f '{{json .}}' roomusic-drill_app-data
+2026-11-06T04:57:04.555652+00:00 docker inspect -f '{{json .State}}' roomusic-drill-app-1
+2026-11-06T04:57:04.576078+00:00 docker inspect -f '{{.RestartCount}}' roomusic-drill-app-1
+2026-11-06T04:57:04.596226+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-drill-app-1
+2026-11-06T04:57:04.617541+00:00 docker inspect -f '{{json .State}}' roomusic-drill-postgres-1
+2026-11-06T04:57:04.637324+00:00 docker inspect -f '{{.RestartCount}}' roomusic-drill-postgres-1
+2026-11-06T04:57:04.657809+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-drill-postgres-1
+2026-11-06T04:57:04.679363+00:00 docker inspect -f '{{json .State}}' roomusic-drill-backup-1
+2026-11-06T04:57:04.699186+00:00 docker inspect -f '{{.RestartCount}}' roomusic-drill-backup-1
+2026-11-06T04:57:04.718763+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-drill-backup-1
+2026-11-06T04:57:04.741391+00:00 docker volume inspect -f '{{.CreatedAt}}' roomusic-drill_postgres-data
+2026-11-06T04:57:04.760745+00:00 docker compose -p roomusic-drill -f deploy/production/compose.yaml --env-file /tmp/roomusic-drill/drill.env exec -T postgres psql -X -qAt -U roomusic -d roomusic -v ON_ERROR_STOP=1 [stdin未记录]
+2026-11-06T04:57:04.921437+00:00 docker compose -p roomusic-drill -f deploy/production/compose.yaml --env-file /tmp/roomusic-drill/drill.env stop app
+2026-11-06T04:57:05.279032+00:00 docker compose -p roomusic-drill -f deploy/production/compose.yaml --env-file /tmp/roomusic-drill/drill.env rm -f app
+2026-11-06T04:57:05.457691+00:00 docker ps -aq --filter volume=roomusic-drill_app-data
+2026-11-06T04:57:05.476845+00:00 docker volume inspect -f '{{json .}}' roomusic-drill_app-data
+2026-11-06T04:57:05.494791+00:00 docker volume rm roomusic-drill_app-data
+2026-11-06T04:57:05.530814+00:00 docker compose -p roomusic-drill -f deploy/production/compose.yaml --env-file /tmp/roomusic-drill/drill.env up -d --no-deps --wait --wait-timeout 300 app
+2026-11-06T04:57:11.546110+00:00 docker volume inspect -f '{{json .}}' roomusic-drill_app-data
+2026-11-06T04:57:11.564411+00:00 docker inspect -f '{{json .State}}' roomusic-drill-app-1
+2026-11-06T04:57:11.583847+00:00 docker inspect -f '{{.RestartCount}}' roomusic-drill-app-1
+2026-11-06T04:57:11.603296+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-drill-app-1
+2026-11-06T04:57:11.622701+00:00 docker inspect -f '{{json .State}}' roomusic-drill-postgres-1
+2026-11-06T04:57:11.642563+00:00 docker inspect -f '{{.RestartCount}}' roomusic-drill-postgres-1
+2026-11-06T04:57:11.662015+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-drill-postgres-1
+2026-11-06T04:57:11.680963+00:00 docker inspect -f '{{json .State}}' roomusic-drill-backup-1
+2026-11-06T04:57:11.700601+00:00 docker inspect -f '{{.RestartCount}}' roomusic-drill-backup-1
+2026-11-06T04:57:11.720098+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-drill-backup-1
+2026-11-06T04:57:11.739854+00:00 docker volume inspect -f '{{.CreatedAt}}' roomusic-drill_postgres-data
+2026-11-06T04:57:11.758260+00:00 docker compose -p roomusic-drill -f deploy/production/compose.yaml --env-file /tmp/roomusic-drill/drill.env exec -T postgres psql -X -qAt -U roomusic -d roomusic -v ON_ERROR_STOP=1 [stdin未记录]
+2026-11-06T04:57:11.921822+00:00 docker inspect -f '{{json .State}}' roomusic-drill-app-1
+2026-11-06T04:57:11.941687+00:00 docker inspect -f '{{.RestartCount}}' roomusic-drill-app-1
+2026-11-06T04:57:11.961426+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-drill-app-1
+2026-11-06T04:57:11.981539+00:00 docker inspect -f '{{json .State}}' roomusic-drill-postgres-1
+2026-11-06T04:57:12.001762+00:00 docker inspect -f '{{.RestartCount}}' roomusic-drill-postgres-1
+2026-11-06T04:57:12.021865+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-drill-postgres-1
+2026-11-06T04:57:12.041727+00:00 docker inspect -f '{{json .State}}' roomusic-drill-backup-1
+2026-11-06T04:57:12.062823+00:00 docker inspect -f '{{.RestartCount}}' roomusic-drill-backup-1
+2026-11-06T04:57:12.085152+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-drill-backup-1
+2026-11-06T04:57:12.155299+00:00 docker compose -p roomusic-drill -f deploy/production/compose.yaml --env-file /tmp/roomusic-drill/drill.env exec -T postgres psql -X -qAt -U roomusic -d roomusic -v ON_ERROR_STOP=1 [stdin未记录]
+2026-11-06T04:57:43.684Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/b6b315fecc50519938152904350dc4f2b282dcd48712773597579c16f1df86af.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:57:43.704Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/4665f658c2515f364844ae4cf41feff134896508c5b43eb1aade40d14dc756a7.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:57:43.708Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/9070b8bee4d4c51e41691da03f3d834ff51cba56e36e14402d007ef12b759348.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:57:43.711Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/814fb64fb7b7094883f661b952b434b81fdbbdb0ce51c99341c38391a9d4bc3b.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:57:43.714Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/2ba4811238832da072086c26d4bee22448bee16d1c600b7d70e2cfd0cc26d1be.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:57:43.717Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/0656476dc9b32ad7929dbcce413a61eca90e3bec8a51213e729ef345474a46b2.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:57:43.719Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/fe688351d97c1b4230c46dcd7d757debff7847e21a4a5c90ff06346caf4cef93.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:57:43.722Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/2b27c13f5eea461d2c82419ddd80a199a88df0b539e46703583011b90737c341.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:57:43.724Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/52a30144208ddacab0461f522b05cc764a94883f14b75d9f58e87af15d0dc41e.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:57:43.727Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/6d4dfc82bdf0065af0c55473d78346781b3e4725fb2ceca2624696e04eefc1f6.png [带Cookie，不记录值；无条件请求]
+2026-11-06T04:57:43.730Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/5576c3863334dbf2d61c56bb7775258cbc5d2ae10585f0d54005ac7663468342.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:57:43.732Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/0297b039bfecda73924876f804e70c9e8f646b35b791e85b13c93014709388c7.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:57:43.735Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/9682d4f5bc0477e59f37709376ec6c63da2c6076b620296e86182b25d6a789e5.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:57:43.737Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/3f511dc707aa6f6914a97a55d24fb4a73ee537f17e1ccd1a98b3779f6750f9a1.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:57:43.739Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/62491b64649a27833ed33187ee14dcf593e2d6158a16e3ddb63baeb51cd325c9.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:57:43.816000+00:00 docker compose -p roomusic-drill -f deploy/production/compose.yaml --env-file /tmp/roomusic-drill/drill.env exec -T app /bin/sh -c 'if [ -d /data/media-cache ]; then find /data/media-cache -type f -name '"'"'*.flac'"'"' -exec stat -c '"'"'%s'"'"' '"'"'{}'"'"' '"'"';'"'"' | awk '"'"'{n++;s+=$1} END {printf "{\"flac_files\":%d,\"flac_bytes\":%d}\n",n,s}'"'"'; else echo '"'"'{"flac_files":0,"flac_bytes":0}'"'"'; fi'
+2026-11-06T04:57:44.561Z Chromium：观察 embedded 专辑详情页封面状态与页面异常计数（lost；不保存音乐内容）
+2026-11-06T04:57:44.931Z Chromium：观察 folder 专辑详情页封面状态与页面异常计数（lost；不保存音乐内容）
+2026-11-06T04:57:45.120Z Chromium：观察 multi_disc 专辑详情页封面状态与页面异常计数（lost；不保存音乐内容）
+2026-11-06T04:57:45.890Z HTTP POST http://127.0.0.1:18090/api/v1/scans [请求体和凭据不记录]
+2026-11-06T04:57:45.916Z HTTP GET http://127.0.0.1:18090/api/v1/scans/24b77d6d-2ce0-4342-95b0-3cbc8216d2c0 [请求体和凭据不记录]
+2026-11-06T04:57:46.922Z HTTP GET http://127.0.0.1:18090/api/v1/scans/24b77d6d-2ce0-4342-95b0-3cbc8216d2c0 [请求体和凭据不记录]
+2026-11-06T04:57:47.928Z HTTP GET http://127.0.0.1:18090/api/v1/scans/24b77d6d-2ce0-4342-95b0-3cbc8216d2c0 [请求体和凭据不记录]
+2026-11-06T04:57:48.934Z HTTP GET http://127.0.0.1:18090/api/v1/scans/24b77d6d-2ce0-4342-95b0-3cbc8216d2c0 [请求体和凭据不记录]
+2026-11-06T04:57:49.941Z HTTP GET http://127.0.0.1:18090/api/v1/scans/24b77d6d-2ce0-4342-95b0-3cbc8216d2c0 [请求体和凭据不记录]
+2026-11-06T04:57:50.946Z HTTP GET http://127.0.0.1:18090/api/v1/scans/24b77d6d-2ce0-4342-95b0-3cbc8216d2c0 [请求体和凭据不记录]
+2026-11-06T04:57:51.952Z HTTP GET http://127.0.0.1:18090/api/v1/scans/24b77d6d-2ce0-4342-95b0-3cbc8216d2c0 [请求体和凭据不记录]
+2026-11-06T04:57:52.958Z HTTP GET http://127.0.0.1:18090/api/v1/scans/24b77d6d-2ce0-4342-95b0-3cbc8216d2c0 [请求体和凭据不记录]
+2026-11-06T04:57:53.963Z HTTP GET http://127.0.0.1:18090/api/v1/scans/24b77d6d-2ce0-4342-95b0-3cbc8216d2c0 [请求体和凭据不记录]
+2026-11-06T04:57:54.968Z HTTP GET http://127.0.0.1:18090/api/v1/scans/24b77d6d-2ce0-4342-95b0-3cbc8216d2c0 [请求体和凭据不记录]
+2026-11-06T04:57:55.974Z HTTP GET http://127.0.0.1:18090/api/v1/scans/24b77d6d-2ce0-4342-95b0-3cbc8216d2c0 [请求体和凭据不记录]
+2026-11-06T04:57:56.979Z HTTP GET http://127.0.0.1:18090/api/v1/scans/24b77d6d-2ce0-4342-95b0-3cbc8216d2c0 [请求体和凭据不记录]
+2026-11-06T04:57:57.983Z HTTP GET http://127.0.0.1:18090/api/v1/scans/24b77d6d-2ce0-4342-95b0-3cbc8216d2c0 [请求体和凭据不记录]
+2026-11-06T04:57:58.988Z HTTP GET http://127.0.0.1:18090/api/v1/scans/24b77d6d-2ce0-4342-95b0-3cbc8216d2c0 [请求体和凭据不记录]
+2026-11-06T04:57:59.992Z HTTP GET http://127.0.0.1:18090/api/v1/scans/24b77d6d-2ce0-4342-95b0-3cbc8216d2c0 [请求体和凭据不记录]
+2026-11-06T04:58:19.356786+00:00 docker compose -p roomusic-drill -f deploy/production/compose.yaml --env-file /tmp/roomusic-drill/drill.env exec -T postgres psql -X -qAt -U roomusic -d roomusic -v ON_ERROR_STOP=1 [stdin未记录]
+2026-11-06T04:58:19.528737+00:00 docker compose -p roomusic-drill -f deploy/production/compose.yaml --env-file /tmp/roomusic-drill/drill.env exec -T postgres psql -X -qAt -U roomusic -d roomusic -v ON_ERROR_STOP=1 [stdin未记录]
+2026-11-06T04:58:20.189Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/b6b315fecc50519938152904350dc4f2b282dcd48712773597579c16f1df86af.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:58:20.206Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/4665f658c2515f364844ae4cf41feff134896508c5b43eb1aade40d14dc756a7.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:58:20.211Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/9070b8bee4d4c51e41691da03f3d834ff51cba56e36e14402d007ef12b759348.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:58:20.218Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/814fb64fb7b7094883f661b952b434b81fdbbdb0ce51c99341c38391a9d4bc3b.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:58:20.239Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/2ba4811238832da072086c26d4bee22448bee16d1c600b7d70e2cfd0cc26d1be.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:58:20.244Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/0656476dc9b32ad7929dbcce413a61eca90e3bec8a51213e729ef345474a46b2.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:58:20.254Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/fe688351d97c1b4230c46dcd7d757debff7847e21a4a5c90ff06346caf4cef93.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:58:20.259Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/2b27c13f5eea461d2c82419ddd80a199a88df0b539e46703583011b90737c341.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:58:20.265Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/52a30144208ddacab0461f522b05cc764a94883f14b75d9f58e87af15d0dc41e.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:58:20.285Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/6d4dfc82bdf0065af0c55473d78346781b3e4725fb2ceca2624696e04eefc1f6.png [带Cookie，不记录值；无条件请求]
+2026-11-06T04:58:20.291Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/5576c3863334dbf2d61c56bb7775258cbc5d2ae10585f0d54005ac7663468342.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:58:20.295Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/0297b039bfecda73924876f804e70c9e8f646b35b791e85b13c93014709388c7.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:58:20.299Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/9682d4f5bc0477e59f37709376ec6c63da2c6076b620296e86182b25d6a789e5.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:58:20.309Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/3f511dc707aa6f6914a97a55d24fb4a73ee537f17e1ccd1a98b3779f6750f9a1.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:58:20.312Z HTTP GET http://127.0.0.1:18090/api/v1/artworks/62491b64649a27833ed33187ee14dcf593e2d6158a16e3ddb63baeb51cd325c9.jpeg [带Cookie，不记录值；无条件请求]
+2026-11-06T04:58:20.930Z Chromium：观察 embedded 专辑详情页封面状态与页面异常计数（after；不保存音乐内容）
+2026-11-06T04:58:21.310Z Chromium：观察 folder 专辑详情页封面状态与页面异常计数（after；不保存音乐内容）
+2026-11-06T04:58:21.500Z Chromium：观察 multi_disc 专辑详情页封面状态与页面异常计数（after；不保存音乐内容）
+2026-11-06T04:58:22.435Z Chromium：打开同一 ALAC 专辑页，点击真实播放按钮，观察原生媒体时间后暂停（after）
+2026-11-06T04:58:25.947137+00:00 docker compose -p roomusic-drill -f deploy/production/compose.yaml --env-file /tmp/roomusic-drill/drill.env exec -T app /bin/sh -c 'if [ -d /data/media-cache ]; then find /data/media-cache -type f -name '"'"'*.flac'"'"' -exec stat -c '"'"'%s'"'"' '"'"'{}'"'"' '"'"';'"'"' | awk '"'"'{n++;s+=$1} END {printf "{\"flac_files\":%d,\"flac_bytes\":%d}\n",n,s}'"'"'; else echo '"'"'{"flac_files":0,"flac_bytes":0}'"'"'; fi'
+2026-11-06T04:59:27.574004+00:00 docker ps -aq --filter label=com.docker.compose.project=roomusic-drill
+2026-11-06T04:59:27.611945+00:00 docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' 0840f400e602
+2026-11-06T04:59:27.631328+00:00 docker inspect -f '{{.Name}}' 0840f400e602
+2026-11-06T04:59:27.651011+00:00 docker inspect -f '{{json .Mounts}}' 0840f400e602
+2026-11-06T04:59:27.670419+00:00 docker volume inspect -f '{{.CreatedAt}}' roomusic-drill_app-data
+2026-11-06T04:59:27.688724+00:00 docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' dda23e04bd67
+2026-11-06T04:59:27.707489+00:00 docker inspect -f '{{.Name}}' dda23e04bd67
+2026-11-06T04:59:27.726847+00:00 docker inspect -f '{{json .Mounts}}' dda23e04bd67
+2026-11-06T04:59:27.746736+00:00 docker volume inspect -f '{{.CreatedAt}}' 3df18ef7cf6e855741eff9cef6111dc1db9ff35ada43ca5fa51dffead5aa291e
+2026-11-06T04:59:27.764622+00:00 docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' 45f11507a6e8
+2026-11-06T04:59:27.784307+00:00 docker inspect -f '{{.Name}}' 45f11507a6e8
+2026-11-06T04:59:27.806103+00:00 docker inspect -f '{{json .Mounts}}' 45f11507a6e8
+2026-11-06T04:59:27.825854+00:00 docker volume inspect -f '{{.CreatedAt}}' roomusic-drill_postgres-data
+2026-11-06T04:59:27.844718+00:00 docker network inspect -f '{{index .Labels "com.docker.compose.project"}}' roomusic-drill_roomusic
+2026-11-06T04:59:27.863846+00:00 docker compose -p roomusic-drill -f deploy/production/compose.yaml --env-file /tmp/roomusic-drill/drill.env down --volumes --remove-orphans
+2026-11-06T04:59:28.869393+00:00 docker ps -aq --filter label=com.docker.compose.project=roomusic-drill
+2026-11-06T04:59:28.888715+00:00 docker network ls -q --filter label=com.docker.compose.project=roomusic-drill
+2026-11-06T04:59:28.907430+00:00 docker volume ls -q --filter label=com.docker.compose.project=roomusic-drill
+2026-11-06T04:59:28.926725+00:00 docker volume inspect -f '{{.Name}}' roomusic-drill_app-data
+2026-11-06T04:59:28.944520+00:00 docker volume inspect -f '{{.Name}}' 3df18ef7cf6e855741eff9cef6111dc1db9ff35ada43ca5fa51dffead5aa291e
+2026-11-06T04:59:28.963372+00:00 docker volume inspect -f '{{.Name}}' roomusic-drill_postgres-data
+Python shutil.rmtree("/tmp/roomusic-drill")（仅本次演练临时目录，凭据不归档）
+2026-11-06T04:59:28.983294+00:00 docker inspect -f '{{.State.Status}} {{.State.StartedAt}}' roomusic-postgres-1
+2026-11-06T04:59:29.003450+00:00 docker volume inspect -f '{{.CreatedAt}}' roomusic_postgres-data
+2026-11-06T04:59:29.022740+00:00 docker exec roomusic-postgres-1 sh -c 'exec psql -X -qAt -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c '"'"'BEGIN TRANSACTION READ ONLY; select max(version) from schema_migrations; select count(*) from users; select count(*) from releases; COMMIT;'"'"''
+2026-11-06T04:59:29.102323+00:00 sha256sum /home/qlqq/roomusic-backups/.last-success
+2026-11-06T04:59:29.105072+00:00 sha256sum /home/qlqq/roomusic-backups/roomusic-20261106-005546-manual.dump
+2026-11-06T04:59:29.108023+00:00 sha256sum /home/qlqq/roomusic-backups/roomusic-20261106-005716-manual.dump
+2026-11-06T04:59:29.110792+00:00 sha256sum /home/qlqq/roomusic-backups/roomusic-20261106-005718-manual.dump
+2026-11-06T04:59:29.113700+00:00 docker inspect -f '{{json .State}}' roomusic-prod-app-1
+2026-11-06T04:59:29.132968+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-app-1
+2026-11-06T04:59:29.152404+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-app-1
+2026-11-06T04:59:29.175675+00:00 docker inspect -f '{{json .State}}' roomusic-prod-postgres-1
+2026-11-06T04:59:29.196743+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-postgres-1
+2026-11-06T04:59:29.216831+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-postgres-1
+2026-11-06T04:59:29.237004+00:00 docker inspect -f '{{json .State}}' roomusic-prod-backup-1
+2026-11-06T04:59:29.256827+00:00 docker inspect -f '{{.RestartCount}}' roomusic-prod-backup-1
+2026-11-06T04:59:29.276485+00:00 docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' roomusic-prod-backup-1
+2026-11-06T04:59:29.295238+00:00 docker volume ls -q --filter label=com.docker.compose.project=roomusic-prod
+2026-11-06T04:59:29.314121+00:00 docker volume inspect -f '{{json .}}' roomusic-prod_app-data
+2026-11-06T04:59:29.332945+00:00 docker volume inspect -f '{{json .}}' roomusic-prod_postgres-data
+2026-11-06T04:59:29.351978+00:00 docker inspect -f '{{json .Mounts}}' roomusic-prod-app-1
+2026-11-06T04:59:29.373210+00:00 docker inspect -f '{{json .Mounts}}' roomusic-prod-postgres-1
+2026-11-06T04:59:29.396505+00:00 docker inspect -f '{{json .Mounts}}' roomusic-prod-backup-1
+2026-11-06T04:59:29.503838+00:00 git rev-parse HEAD
+2026-11-06T04:59:29.506918+00:00 git status --porcelain
+2026-11-06T04:59:29.519380+00:00 docker volume inspect -f '{{.CreatedAt}}' 77766f5059666fd22367e47d2813af4c273b5a406b6cf708cc067d607f2a8189
+2026-11-06T04:59:29.540615+00:00 docker volume inspect -f '{{.CreatedAt}}' roomusic-prod_app-data
+2026-11-06T04:59:29.560513+00:00 docker volume inspect -f '{{.CreatedAt}}' roomusic-prod_postgres-data
+2026-11-06T04:59:29.581102+00:00 docker image ls --no-trunc --format '{{.Repository}}:{{.Tag}} {{.ID}}' --filter 'reference=roomusic-prod-*'
+2026-11-06T05:00:04.856237+00:00 git status --short
+2026-11-06T05:00:04.868089+00:00 git diff --stat -- .gitignore README.md

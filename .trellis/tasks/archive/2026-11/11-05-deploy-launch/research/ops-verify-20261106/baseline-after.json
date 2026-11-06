@@ -1,0 +1,182 @@
+{
+  "utc": "2026-11-06T04:59:29.113617+00:00",
+  "dev": {
+    "state": "running 2026-10-26T03:13:45.497579973Z",
+    "volume_created": "2026-09-01T09:54:51Z",
+    "counts": [
+      "12",
+      "1",
+      "68"
+    ]
+  },
+  "prod_state": {
+    "app": {
+      "status": "running",
+      "started": "2026-11-06T04:50:15.698080453Z",
+      "pid": 2863626,
+      "health": "healthy",
+      "restart_count": 1,
+      "policy": "unless-stopped"
+    },
+    "postgres": {
+      "status": "running",
+      "started": "2026-11-06T04:50:02.271147274Z",
+      "pid": 2861810,
+      "health": "healthy",
+      "restart_count": 0,
+      "policy": "unless-stopped"
+    },
+    "backup": {
+      "status": "running",
+      "started": "2026-11-06T04:50:02.207576535Z",
+      "pid": 2861733,
+      "health": "healthy",
+      "restart_count": 0,
+      "policy": "unless-stopped"
+    }
+  },
+  "prod_volumes": {
+    "roomusic-prod_app-data": {
+      "CreatedAt": "2026-11-05T16:55:47Z",
+      "Driver": "local",
+      "Labels": {
+        "com.docker.compose.config-hash": "a1a416c2993e3b2afddcfee91920fc89a350b0b9f65c51127121f34c9aaf1c39",
+        "com.docker.compose.project": "roomusic-prod",
+        "com.docker.compose.version": "2.40.3",
+        "com.docker.compose.volume": "app-data"
+      },
+      "Mountpoint": "/var/lib/docker/volumes/roomusic-prod_app-data/_data",
+      "Name": "roomusic-prod_app-data",
+      "Options": null,
+      "Scope": "local"
+    },
+    "roomusic-prod_postgres-data": {
+      "CreatedAt": "2026-11-05T16:55:40Z",
+      "Driver": "local",
+      "Labels": {
+        "com.docker.compose.config-hash": "3150297f2b0a5c81344f754e12ab78e7d9a4262e3eac045543c45177cfc9fdda",
+        "com.docker.compose.project": "roomusic-prod",
+        "com.docker.compose.version": "2.40.3",
+        "com.docker.compose.volume": "postgres-data"
+      },
+      "Mountpoint": "/var/lib/docker/volumes/roomusic-prod_postgres-data/_data",
+      "Name": "roomusic-prod_postgres-data",
+      "Options": null,
+      "Scope": "local"
+    }
+  },
+  "prod_mounts": {
+    "app": [
+      {
+        "Type": "bind",
+        "Source": "/home/qlqq/workspace/ROOMusic/music",
+        "Destination": "/music",
+        "Mode": "",
+        "RW": false,
+        "Propagation": "rprivate"
+      },
+      {
+        "Type": "volume",
+        "Name": "roomusic-prod_app-data",
+        "Source": "/var/lib/docker/volumes/roomusic-prod_app-data/_data",
+        "Destination": "/data",
+        "Driver": "local",
+        "Mode": "rw",
+        "RW": true,
+        "Propagation": ""
+      }
+    ],
+    "postgres": [
+      {
+        "Type": "volume",
+        "Name": "roomusic-prod_postgres-data",
+        "Source": "/var/lib/docker/volumes/roomusic-prod_postgres-data/_data",
+        "Destination": "/var/lib/postgresql",
+        "Driver": "local",
+        "Mode": "rw",
+        "RW": true,
+        "Propagation": ""
+      }
+    ],
+    "backup": [
+      {
+        "Type": "bind",
+        "Source": "/home/qlqq/roomusic-backups",
+        "Destination": "/backups",
+        "Mode": "",
+        "RW": true,
+        "Propagation": "rprivate"
+      },
+      {
+        "Type": "volume",
+        "Name": "77766f5059666fd22367e47d2813af4c273b5a406b6cf708cc067d607f2a8189",
+        "Source": "/var/lib/docker/volumes/77766f5059666fd22367e47d2813af4c273b5a406b6cf708cc067d607f2a8189/_data",
+        "Destination": "/var/lib/postgresql",
+        "Driver": "local",
+        "Mode": "",
+        "RW": true,
+        "Propagation": ""
+      }
+    ]
+  },
+  "prod_endpoints": {
+    "/healthz": {
+      "status": 200,
+      "body": {
+        "status": "ok"
+      }
+    },
+    "/readyz": {
+      "status": 200,
+      "body": {
+        "status": "ready"
+      }
+    },
+    "/api/v1/setup/status": {
+      "status": 200,
+      "body": {
+        "setup_required": true
+      }
+    }
+  },
+  "prod_backup_files": [
+    {
+      "name": ".last-success",
+      "size": 0,
+      "mtime_ns": 1793897838296014391,
+      "mode": "0o600",
+      "uid": 1000,
+      "gid": 1000,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "roomusic-20261106-005546-manual.dump",
+      "size": 839,
+      "mtime_ns": 1793897746863000053,
+      "mode": "0o600",
+      "uid": 1000,
+      "gid": 1000,
+      "sha256": "5e429cb5e32359dea2b7fbc8c0486acfdf505f8b5682da90ce401832e0934473"
+    },
+    {
+      "name": "roomusic-20261106-005716-manual.dump",
+      "size": 169997,
+      "mtime_ns": 1793897836453014062,
+      "mode": "0o600",
+      "uid": 1000,
+      "gid": 1000,
+      "sha256": "16ef541da7412b30359f5bbbf603ee1e01207d188f87ada323bc3b683b5ba939"
+    },
+    {
+      "name": "roomusic-20261106-005718-manual.dump",
+      "size": 169997,
+      "mtime_ns": 1793897838277014387,
+      "mode": "0o600",
+      "uid": 1000,
+      "gid": 1000,
+      "sha256": "18e71556eeba64fbca119e97b31f5434022661d4e4f3b88d096c0c7a61f2e44e"
+    }
+  ],
+  "git_head": "ca21446a6e20c72ec3671606d4ce056986c8638c",
+  "git_status": "M .gitignore\n M README.md"
+}

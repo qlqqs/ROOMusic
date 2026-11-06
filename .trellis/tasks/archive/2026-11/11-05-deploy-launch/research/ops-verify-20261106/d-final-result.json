@@ -1,0 +1,20 @@
+{
+  "drill_containers_network_volumes_removed": true,
+  "drill_anonymous_volumes_removed": true,
+  "temporary_credentials_removed": true,
+  "development_baseline_equal": true,
+  "prod_three_volume_creation_equal": true,
+  "prod_backup_inventory_metadata_sha256_equal": true,
+  "prod_all_healthy": true,
+  "prod_setup_required": true,
+  "prod_images_unchanged": true,
+  "prod_mounts_equal": false,
+  "git_head_unchanged": true,
+  "git_clean": false,
+  "new_image_tags_created": false,
+  "drill_port_18090_free": true,
+  "prod_mounts_equal_after_order_normalization": true,
+  "git_status_observed": "M .gitignore\n M README.md",
+  "repository_files_written_by_this_executor": false,
+  "resource_checks_passed": true
+}

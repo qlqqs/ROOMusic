@@ -1,0 +1,14 @@
+{
+  "status": "succeeded",
+  "seconds": 14.081,
+  "report_status": "ready",
+  "diagnostics": {
+    "total": 100,
+    "counts": [
+      {
+        "kind": "cue_reference",
+        "count": 100
+      }
+    ]
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "containers": [
+    {
+      "id": "0840f400e602",
+      "name": "/roomusic-drill-app-1",
+      "mounts": [
+        {
+          "Type": "bind",
+          "Source": "/home/qlqq/workspace/ROOMusic/music",
+          "Destination": "/music",
+          "Mode": "",
+          "RW": false,
+          "Propagation": "rprivate"
+        },
+        {
+          "Type": "volume",
+          "Name": "roomusic-drill_app-data",
+          "Source": "/var/lib/docker/volumes/roomusic-drill_app-data/_data",
+          "Destination": "/data",
+          "Driver": "local",
+          "Mode": "rw",
+          "RW": true,
+          "Propagation": ""
+        }
+      ]
+    },
+    {
+      "id": "dda23e04bd67",
+      "name": "/roomusic-drill-backup-1",
+      "mounts": [
+        {
+          "Type": "bind",
+          "Source": "/tmp/roomusic-drill/backups",
+          "Destination": "/backups",
+          "Mode": "",
+          "RW": true,
+          "Propagation": "rprivate"
+        },
+        {
+          "Type": "volume",
+          "Name": "3df18ef7cf6e855741eff9cef6111dc1db9ff35ada43ca5fa51dffead5aa291e",
+          "Source": "/var/lib/docker/volumes/3df18ef7cf6e855741eff9cef6111dc1db9ff35ada43ca5fa51dffead5aa291e/_data",
+          "Destination": "/var/lib/postgresql",
+          "Driver": "local",
+          "Mode": "",
+          "RW": true,
+          "Propagation": ""
+        }
+      ]
+    },
+    {
+      "id": "45f11507a6e8",
+      "name": "/roomusic-drill-postgres-1",
+      "mounts": [
+        {
+          "Type": "volume",
+          "Name": "roomusic-drill_postgres-data",
+          "Source": "/var/lib/docker/volumes/roomusic-drill_postgres-data/_data",
+          "Destination": "/var/lib/postgresql",
+          "Driver": "local",
+          "Mode": "rw",
+          "RW": true,
+          "Propagation": ""
+        }
+      ]
+    }
+  ],
+  "volumes": {
+    "roomusic-drill_app-data": "2026-11-06T04:57:05Z",
+    "3df18ef7cf6e855741eff9cef6111dc1db9ff35ada43ca5fa51dffead5aa291e": "2026-11-06T04:51:15Z",
+    "roomusic-drill_postgres-data": "2026-11-06T04:51:15Z"
+  },
+  "network": "roomusic-drill"
+}

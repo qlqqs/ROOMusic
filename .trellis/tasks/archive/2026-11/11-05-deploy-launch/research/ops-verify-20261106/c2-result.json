@@ -1,0 +1,45 @@
+{
+  "seconds": 7.0,
+  "old_volume_created": "2026-11-06T04:51:15Z",
+  "new_volume_created": "2026-11-06T04:57:05Z",
+  "volume_recreated": true,
+  "database_unchanged": true,
+  "state": {
+    "app": {
+      "status": "running",
+      "started": "2026-11-06T04:57:05.851020634Z",
+      "pid": 2892801,
+      "health": "healthy",
+      "restart_count": 0,
+      "policy": "unless-stopped"
+    },
+    "postgres": {
+      "status": "running",
+      "started": "2026-11-06T04:51:16.003828447Z",
+      "pid": 2868310,
+      "health": "healthy",
+      "restart_count": 0,
+      "policy": "unless-stopped"
+    },
+    "backup": {
+      "status": "running",
+      "started": "2026-11-06T04:54:13.184978194Z",
+      "pid": 2879820,
+      "health": "healthy",
+      "restart_count": 0,
+      "policy": "unless-stopped"
+    }
+  },
+  "healthz": {
+    "status": 200,
+    "body": {
+      "status": "ok"
+    }
+  },
+  "readyz": {
+    "status": 200,
+    "body": {
+      "status": "ready"
+    }
+  }
+}

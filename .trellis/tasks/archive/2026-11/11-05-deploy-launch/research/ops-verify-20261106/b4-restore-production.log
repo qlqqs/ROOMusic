@@ -1,0 +1,23 @@
+备份文件：/tmp/roomusic-drill/backups/roomusic-20261106-125331-manual.dump
+修改时间：2026-11-06 04:53:31.433878565 +0000；大小：551708 字节
+将覆盖 roomusic-drill 的数据库。请输入项目名确认：{"level":"INFO","event":"backup.completed","file":"roomusic-20261106-125409-manual.dump","bytes":551376}
+schema_migrations.max|30
+schema_migrations.count|30
+users|1
+sessions|2
+library_roots|1
+releases|68
+tracks|284
+release_artworks|15
+ Container roomusic-drill-backup-1  Stopping
+ Container roomusic-drill-app-1  Stopping
+ Container roomusic-drill-backup-1  Stopped
+ Container roomusic-drill-app-1  Stopped
+ Container roomusic-drill-postgres-1  Waiting
+ Container roomusic-drill-postgres-1  Waiting
+ Container roomusic-drill-postgres-1  Healthy
+ Container roomusic-drill-app-1  Starting
+ Container roomusic-drill-postgres-1  Healthy
+ Container roomusic-drill-backup-1  Starting
+ Container roomusic-drill-backup-1  Started
+ Container roomusic-drill-app-1  Started

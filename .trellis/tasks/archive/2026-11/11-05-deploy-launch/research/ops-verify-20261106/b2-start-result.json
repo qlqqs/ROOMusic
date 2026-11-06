@@ -1,0 +1,30 @@
+{
+  "rc": 0,
+  "seconds": 17.024,
+  "state": {
+    "app": {
+      "status": "running",
+      "started": "2026-11-06T04:51:21.727039369Z",
+      "pid": 2868790,
+      "health": "healthy",
+      "restart_count": 0,
+      "policy": "unless-stopped"
+    },
+    "postgres": {
+      "status": "running",
+      "started": "2026-11-06T04:51:16.003828447Z",
+      "pid": 2868310,
+      "health": "healthy",
+      "restart_count": 0,
+      "policy": "unless-stopped"
+    },
+    "backup": {
+      "status": "running",
+      "started": "2026-11-06T04:51:21.7215992Z",
+      "pid": 2868783,
+      "health": "healthy",
+      "restart_count": 0,
+      "policy": "unless-stopped"
+    }
+  }
+}

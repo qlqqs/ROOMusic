@@ -1,0 +1,13 @@
+{
+  "rc": 0,
+  "seconds": 2.786,
+  "backup": "roomusic-20261106-125331-manual.dump",
+  "size": 551708,
+  "rows_all_equal": true,
+  "comparison": "项目\t备份\t当前数据库\nschema_migrations.max\t30\t30\nschema_migrations.count\t30\t30\nusers\t1\t1\nsessions\t2\t2\nlibrary_roots\t1\t1\nreleases\t68\t68\ntracks\t284\t284\nrelease_artworks\t15\t15\n",
+  "personal_counts": {
+    "favorite_albums": "2",
+    "personal_playlists": "1",
+    "personal_playlist_items": "3"
+  }
+}

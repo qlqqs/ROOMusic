@@ -1,0 +1,31 @@
+{
+  "classification": "仅配置核对，未重启机器或 Docker",
+  "docker_enabled": "enabled",
+  "rc": 0,
+  "containers": {
+    "app": {
+      "status": "running",
+      "started": "2026-11-06T04:50:15.698080453Z",
+      "pid": 2863626,
+      "health": "healthy",
+      "restart_count": 1,
+      "policy": "unless-stopped"
+    },
+    "postgres": {
+      "status": "running",
+      "started": "2026-11-06T04:50:02.271147274Z",
+      "pid": 2861810,
+      "health": "healthy",
+      "restart_count": 0,
+      "policy": "unless-stopped"
+    },
+    "backup": {
+      "status": "running",
+      "started": "2026-11-06T04:50:02.207576535Z",
+      "pid": 2861733,
+      "health": "healthy",
+      "restart_count": 0,
+      "policy": "unless-stopped"
+    }
+  }
+}

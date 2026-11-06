@@ -1,0 +1,23 @@
+{
+  "phase": "before",
+  "same_track": true,
+  "codec": "alac",
+  "before_seconds": 0,
+  "after_seconds": 2.801631,
+  "wall_seconds": 2.903,
+  "error": null,
+  "preflights": [
+    {
+      "status": 200,
+      "kind": "derived"
+    }
+  ],
+  "audio": [
+    {
+      "status": 206,
+      "type": "audio/flac"
+    }
+  ],
+  "page_errors": 0,
+  "paused_after": true
+}

@@ -1,0 +1,30 @@
+{
+  "phase": "after",
+  "page_errors": 0,
+  "pages": [
+    {
+      "category": "embedded",
+      "page_status": 200,
+      "cover_state": "loaded",
+      "failure_caption_visible": false,
+      "retry_visible": false,
+      "track_rows": 29
+    },
+    {
+      "category": "folder",
+      "page_status": 200,
+      "cover_state": "loaded",
+      "failure_caption_visible": false,
+      "retry_visible": false,
+      "track_rows": 4
+    },
+    {
+      "category": "multi_disc",
+      "page_status": 200,
+      "cover_state": "loaded",
+      "failure_caption_visible": false,
+      "retry_visible": false,
+      "track_rows": 62
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "seconds": 6.714,
+  "state": {
+    "app": {
+      "status": "running",
+      "started": "2026-11-06T04:50:08.246643516Z",
+      "pid": 2862416,
+      "health": "healthy",
+      "restart_count": 0,
+      "policy": "unless-stopped"
+    },
+    "postgres": {
+      "status": "running",
+      "started": "2026-11-06T04:50:02.271147274Z",
+      "pid": 2861810,
+      "health": "healthy",
+      "restart_count": 0,
+      "policy": "unless-stopped"
+    },
+    "backup": {
+      "status": "running",
+      "started": "2026-11-06T04:50:02.207576535Z",
+      "pid": 2861733,
+      "health": "healthy",
+      "restart_count": 0,
+      "policy": "unless-stopped"
+    }
+  },
+  "total_seconds": 13.305,
+  "endpoints": {
+    "/healthz": {
+      "status": 200,
+      "body": {
+        "status": "ok"
+      }
+    },
+    "/readyz": {
+      "status": 200,
+      "body": {
+        "status": "ready"
+      }
+    },
+    "/api/v1/setup/status": {
+      "status": 200,
+      "body": {
+        "setup_required": true
+      }
+    }
+  },
+  "volumes_unchanged": true
+}

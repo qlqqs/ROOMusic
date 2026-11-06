@@ -1,0 +1,14 @@
+{
+  "CreatedAt": "2026-11-06T04:51:15Z",
+  "Driver": "local",
+  "Labels": {
+    "com.docker.compose.config-hash": "df944501facc86461e09aa7a6988cceb3b45bd202a7c63eb9a94904812a0c883",
+    "com.docker.compose.project": "roomusic-drill",
+    "com.docker.compose.version": "2.40.3",
+    "com.docker.compose.volume": "app-data"
+  },
+  "Mountpoint": "/var/lib/docker/volumes/roomusic-drill_app-data/_data",
+  "Name": "roomusic-drill_app-data",
+  "Options": null,
+  "Scope": "local"
+}

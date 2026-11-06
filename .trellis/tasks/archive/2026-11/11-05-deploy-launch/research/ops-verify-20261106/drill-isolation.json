@@ -1,0 +1,36 @@
+{
+  "app_mounts": [
+    {
+      "Type": "volume",
+      "Name": "roomusic-drill_app-data",
+      "Source": "/var/lib/docker/volumes/roomusic-drill_app-data/_data",
+      "Destination": "/data",
+      "Driver": "local",
+      "Mode": "rw",
+      "RW": true,
+      "Propagation": ""
+    },
+    {
+      "Type": "bind",
+      "Source": "/home/qlqq/workspace/ROOMusic/music",
+      "Destination": "/music",
+      "Mode": "",
+      "RW": false,
+      "Propagation": "rprivate"
+    }
+  ],
+  "network": [
+    {
+      "Subnet": "10.203.51.0/24",
+      "IPRange": "",
+      "Gateway": "10.203.51.1"
+    }
+  ],
+  "ports": "8080/tcp -> 0.0.0.0:18090",
+  "env_mode": "0o600",
+  "backup_uid": 1000,
+  "images": {
+    "app": "roomusic-prod-app:06450d0ce2d7",
+    "backup": "roomusic-prod-tools:06450d0ce2d7"
+  }
+}

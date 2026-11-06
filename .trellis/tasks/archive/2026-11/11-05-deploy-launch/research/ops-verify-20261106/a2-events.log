@@ -1,0 +1,6 @@
+1793940615 die exit=137 signal=
+1793940615 start exit= signal=
+1793940620 exec_create: /bin/sh -c wget -q -O /dev/null http://127.0.0.1:8080/readyz || exit 1 exit= signal=
+1793940620 exec_start: /bin/sh -c wget -q -O /dev/null http://127.0.0.1:8080/readyz || exit 1 exit= signal=
+1793940620 exec_die exit=0 signal=
+1793940620 health_status: healthy exit= signal=

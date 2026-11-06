@@ -1,0 +1,46 @@
+{
+  "rc": 0,
+  "seconds": 10.998,
+  "safety_backup_files": [
+    "roomusic-20261106-125409-manual.dump"
+  ],
+  "state": {
+    "app": {
+      "status": "running",
+      "started": "2026-11-06T04:54:13.190097106Z",
+      "pid": 2879828,
+      "health": "healthy",
+      "restart_count": 0,
+      "policy": "unless-stopped"
+    },
+    "postgres": {
+      "status": "running",
+      "started": "2026-11-06T04:51:16.003828447Z",
+      "pid": 2868310,
+      "health": "healthy",
+      "restart_count": 0,
+      "policy": "unless-stopped"
+    },
+    "backup": {
+      "status": "running",
+      "started": "2026-11-06T04:54:13.184978194Z",
+      "pid": 2879820,
+      "health": "starting",
+      "restart_count": 0,
+      "policy": "unless-stopped"
+    }
+  },
+  "counts_after": {
+    "schema_migrations.max": "30",
+    "schema_migrations": "30",
+    "users": "1",
+    "sessions": "2",
+    "library_roots": "1",
+    "releases": "68",
+    "tracks": "284",
+    "release_artworks": "15",
+    "favorite_albums": "2",
+    "personal_playlists": "1",
+    "personal_playlist_items": "3"
+  }
+}

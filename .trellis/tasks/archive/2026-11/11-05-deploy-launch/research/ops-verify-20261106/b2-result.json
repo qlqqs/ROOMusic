@@ -1,0 +1,11 @@
+{
+  "admin_created": true,
+  "auth_me_status": 200,
+  "root": "/music",
+  "releases": 68,
+  "groups": 68,
+  "album_favorites": 2,
+  "playlists": 1,
+  "playlist_tracks": 3,
+  "alac_selected": true
+}

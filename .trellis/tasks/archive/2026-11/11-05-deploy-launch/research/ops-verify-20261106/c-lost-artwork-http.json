@@ -1,0 +1,29 @@
+{
+  "phase": "lost",
+  "checked": 15,
+  "status_counts": {
+    "404": 15
+  },
+  "categories": {
+    "embedded": {
+      "total": 7,
+      "http200": 0,
+      "http404": 7
+    },
+    "folder": {
+      "total": 8,
+      "http200": 0,
+      "http404": 8
+    },
+    "cue": {
+      "total": 0,
+      "http200": 0,
+      "http404": 0
+    },
+    "multi_disc": {
+      "total": 1,
+      "http200": 0,
+      "http404": 1
+    }
+  }
+}

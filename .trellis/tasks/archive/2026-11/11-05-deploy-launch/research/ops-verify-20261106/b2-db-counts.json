@@ -1,0 +1,13 @@
+{
+  "schema_migrations.max": "30",
+  "schema_migrations": "30",
+  "users": "1",
+  "sessions": "2",
+  "library_roots": "1",
+  "releases": "68",
+  "tracks": "284",
+  "release_artworks": "15",
+  "favorite_albums": "2",
+  "personal_playlists": "1",
+  "personal_playlist_items": "3"
+}
