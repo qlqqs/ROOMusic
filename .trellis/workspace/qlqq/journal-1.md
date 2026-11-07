@@ -1602,3 +1602,36 @@ F 线变基到含 P 线的 main（迁移改为 0023/0024），导出树全量全
 
 - 八号机升级部署后核对重复艺人提示与多流派（随下次发布）
 - 11-07-app-logo 任务未动
+
+
+## Session 46: 应用 Logo：标签页图标、侧栏与登录页品牌标志
+<!-- trellis-session: v=2 fp=1bbd672c282034a9 -->
+
+**Date**: 2026-11-07
+**Task**: 应用 Logo：标签页图标、侧栏与登录页品牌标志
+**Branch**: `main`
+
+### Summary
+
+按用户生图底稿重画 SVG 图标，接入浏览器标签、侧栏/窄屏顶栏、登录/初始化/启动页；在独立工作区完成后合回 main
+
+### Main Changes
+
+- 新增 frontend/src/app/brand/：BrandMark（界面用 logo-small.svg）与带深色模式的 favicon.svg；大图原稿 docs/brand/logo.svg
+- 验收打回一次：主图标缩到约 25px 线条偏细、纹路发糊，界面改用小图标图形；媒体查询只放 favicon，避免系统深色时浅色唱片出现在浅色界面上
+- 合并时内嵌产物 index.html 冲突，重新构建解决
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `94245b1` | feat(ui): 应用 Logo——标签页图标、侧栏与登录页品牌标志 |
+| `376b7f7` | Merge branch 'feat/app-logo' |
+
+### Testing
+
+- [OK] npm run typecheck、npm run lint、npx vitest run src/app/app.test.tsx（27 项通过）、npm run build；合并后再次 npm run build
+
+### Status
+
+[OK] **Completed**
