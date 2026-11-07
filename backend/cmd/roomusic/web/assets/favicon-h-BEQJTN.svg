@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <style>
+    .disc { fill: #201f1d; }
+    .label { fill: #fff; }
+    @media (prefers-color-scheme: dark) {
+      .disc { fill: #f3f2f2; }
+      .label { fill: #201f1d; }
+    }
+  </style>
+  <path d="M2 13.91L16 2.17L30 13.91M28 12.24V27.83A2 2 0 0 1 26 29.83H6A2 2 0 0 1 4 27.83V12.24" fill="none" stroke="#b68235" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle class="disc" cx="16" cy="17.83" r="7.25"/>
+  <circle class="label" cx="16" cy="17.83" r="2.25"/>
+</svg>

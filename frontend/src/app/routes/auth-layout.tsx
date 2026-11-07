@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { BrandMark } from "../brand/brand-mark";
 import { usePageTitle } from "../../shared/lib/use-page-title";
 import styles from "./auth-layout.module.css";
 
@@ -15,7 +16,7 @@ export function AuthLayout({ title, description, children }: AuthLayoutProps) {
   return (
     <main className={styles.page}>
       <div className={styles.sheet}>
-        <p className={styles.brand}>ROOMusic</p>
+        <p className={styles.brand}><BrandMark /></p>
         <header className={styles.header}>
           <h1>{title}</h1>
           {description === undefined ? null : <p className={styles.description}>{description}</p>}
