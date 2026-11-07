@@ -157,7 +157,7 @@ AND NOT EXISTS (SELECT 1 FROM artist_effective_credits a
 2. `artistgraph/refresh_review_integration_test.go` 的 `…RawEvidenceAndCandidates`：多个 ARTIST 标签现在断言不产生信号；新增一段跨专辑用例：A 专辑写“杨璐（羊鹿鹿）”，B 专辑写“羊鹿鹿”，只刷新 B → 生成一条 `alias_part='inner'` 信号；B 的曲目标成缺失再刷新 B → 信号消失。
 3. `governance/artist_integration_test.go`：
    - 现在靠两个 ARTIST 标签造候选的用例（`CandidateIgnoreRescanAndRestore` 等）改成用括号别名造；703 行直接插 `same_track_role` 的改成 `album_track_one_to_one`；
-   - 新增 `TestPostgreSQLArtistCandidatesExcludeSameRoleCoCredit`：同一首曲目的曲目艺人写“杨璐（羊鹿鹿）”和“羊鹿鹿” → 没有候选；把其中一人改到作曲 → 有候选；对应用户的例子（A1）。
+   - 新增 `TestPostgreSQLArtistCandidatesExcludeSameRoleCoCredit`：同一首曲目的曲目艺人写“杨璐（羊鹿鹿）”“羊鹿鹿”“夏小夏” → 没有候选（“杨璐（羊鹿鹿）”和“夏小夏”就是用户的例子 A1，八号机实测这对提示来自 `same_track_role`）；把“羊鹿鹿”改到作曲 → 只剩括号别名这一条候选。
 4. 迁移往返：`rollbackFixtures[31]`，跑 `TestPostgreSQLMigrationRollbackRoundTrip`。
 5. 接口样本：`app/artist_samples_integration_test.go` 的候选曲目从两个 ARTIST 标签改成“Alpha Singer (Beta Singer)” + 另一首 “Beta Singer”，“新名字对”那段改成换括号内容；用 `ROOMUSIC_UPDATE_API_SAMPLES=1` 只重写 `TestPostgreSQLArtistAPIResponseSamples` 的样本。
 

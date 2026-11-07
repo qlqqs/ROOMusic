@@ -10,24 +10,33 @@ import (
 
 // 候选的归属必须按证据作用域解析；不能把名字键的全局归属当作曲目的归属。
 const artistCandidateResolvedSQL = `WITH resolved AS (
- SELECT s.id,s.left_key_id,s.right_key_id,s.kind,s.release_id,s.track_id,s.role,s.left_name,s.right_name,
+ SELECT s.id,s.left_key_id,s.right_key_id,s.kind,s.release_id,s.alias_release_id,s.track_id,s.role,s.left_name,s.right_name,s.bracket_key_id,s.alias_part,
  COALESCE(lo.redirect_artist_id,lt.artist_id,lr.artist_id,lb.artist_id,lk.initial_artist_id) AS left_artist_id,
  COALESCE(ro.redirect_artist_id,rt.artist_id,rr.artist_id,rb.artist_id,rk.initial_artist_id) AS right_artist_id
- FROM artist_candidate_signals s
+ FROM (
+ SELECT id,left_key_id,right_key_id,kind,release_id,NULL::uuid AS alias_release_id,track_id,role,left_name,right_name,
+ NULL::uuid AS bracket_key_id,NULL::text AS alias_part FROM artist_candidate_signals
+ UNION ALL
+ SELECT id,left_key_id,right_key_id,'bracket_alias',release_id,alias_release_id,NULL::uuid,NULL::text,left_name,right_name,
+ bracket_key_id,alias_part FROM artist_alias_signals
+ ) s
  JOIN artist_name_keys lk ON lk.id=s.left_key_id JOIN artist_name_keys rk ON rk.id=s.right_key_id
  LEFT JOIN artist_name_bindings lb ON lb.key_id=lk.id LEFT JOIN artist_name_bindings rb ON rb.key_id=rk.id
  LEFT JOIN artist_assignment_overrides lt ON lt.track_id=s.track_id AND lt.key_id=lk.id
  LEFT JOIN artist_assignment_overrides rt ON rt.track_id=s.track_id AND rt.key_id=rk.id
- LEFT JOIN artist_assignment_overrides lr ON lr.release_id=s.release_id AND lr.key_id=lk.id
- LEFT JOIN artist_assignment_overrides rr ON rr.release_id=s.release_id AND rr.key_id=rk.id
+ LEFT JOIN artist_assignment_overrides lr ON lr.release_id=ANY(ARRAY[s.release_id,COALESCE(s.alias_release_id,s.release_id)]) AND lr.key_id=lk.id
+ LEFT JOIN artist_assignment_overrides rr ON rr.release_id=ANY(ARRAY[s.release_id,COALESCE(s.alias_release_id,s.release_id)]) AND rr.key_id=rk.id
  LEFT JOIN artist_overrides lo ON lo.artist_id=COALESCE(lt.artist_id,lr.artist_id,lb.artist_id,lk.initial_artist_id)
  LEFT JOIN artist_overrides ro ON ro.artist_id=COALESCE(rt.artist_id,rr.artist_id,rb.artist_id,rk.initial_artist_id)
  WHERE (s.track_id IS NULL OR EXISTS(SELECT 1 FROM tracks t WHERE t.id=s.track_id AND t.source_status='present'))
- AND EXISTS(SELECT 1 FROM tracks t JOIN media m ON m.id=t.medium_id WHERE m.release_id=s.release_id AND t.source_status='present')
+ AND NOT EXISTS (
+ SELECT 1 FROM unnest(ARRAY[s.release_id,COALESCE(s.alias_release_id,s.release_id)]) AS required(release_id)
+ WHERE NOT EXISTS (SELECT 1 FROM tracks t JOIN media m ON m.id=t.medium_id
+ WHERE m.release_id=required.release_id AND t.source_status='present'))
  AND lt.id IS NULL AND rt.id IS NULL AND lr.id IS NULL AND rr.id IS NULL
  AND (s.track_id IS NOT NULL OR NOT EXISTS (
  SELECT 1 FROM artist_assignment_overrides scoped JOIN tracks st ON st.id=scoped.track_id
- JOIN media sm ON sm.id=st.medium_id WHERE sm.release_id=s.release_id AND st.source_status='present'
+ JOIN media sm ON sm.id=st.medium_id WHERE sm.release_id=ANY(ARRAY[s.release_id,COALESCE(s.alias_release_id,s.release_id)]) AND st.source_status='present'
  AND scoped.key_id IN (s.left_key_id,s.right_key_id)))
 )`
 

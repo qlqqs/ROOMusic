@@ -44,6 +44,7 @@ type artistFixture struct {
 func newArtistFixture(t *testing.T) *artistFixture {
 	t.Helper()
 	f := &artistFixture{effectiveFixture: newEffectiveFixture(t), port: &artistResolutionTestPort{}}
+	f.exec(`UPDATE catalog_projection_state SET search_projection_version=$1 WHERE capability='artists'`, artistgraph.Version)
 	f.governor = NewArtistGovernance(f.port)
 	f.first = f.release("第一张")
 	f.second = f.release("第二张")
@@ -448,14 +449,82 @@ func TestPostgreSQLArtistOperationTargetsUnionAndDescribeCorruption(t *testing.T
 	}
 }
 
-func TestPostgreSQLArtistCandidateIgnoreRescanAndRestore(t *testing.T) {
+func TestPostgreSQLArtistCandidatesExcludeSameRoleCoCredit(t *testing.T) {
 	f := newArtistFixture(t)
+	f.exec(`UPDATE releases SET artist='',album_artist='' WHERE id=$1::uuid`, f.first.releaseID)
 	f.exec(`INSERT INTO artist_tag_evidence(track_id,role,tag_key,occurrence_index,raw_value,source_kind)
- VALUES($1::uuid,'track_artist','ARTIST',0,'Alpha','tag'),($1::uuid,'track_artist','ARTIST',1,'Beta','tag')`, f.trackA)
+ VALUES($1::uuid,'track_artist','ARTIST',0,'杨璐（羊鹿鹿）','tag'),
+ ($1::uuid,'track_artist','ARTIST',1,'羊鹿鹿','tag'),($1::uuid,'track_artist','ARTIST',2,'夏小夏','tag')`, f.trackA)
 	f.refresh(f.first.releaseID)
+	ctx := context.Background()
+	assertEmpty := func() {
+		t.Helper()
+		for name, list := range map[string]func(context.Context, *sql.DB, int, int) (catalog.ArtistPage[ArtistCandidate], error){
+			"待处理": ListArtistCandidates, "已忽略": ListIgnoredArtistCandidates,
+		} {
+			page, err := list(ctx, f.database, 1, 50)
+			if err != nil || page.Pagination.Total != 0 || len(page.Items) != 0 {
+				t.Fatalf("同曲同身份共同署名仍在%s提示：%+v，错误：%v", name, page, err)
+			}
+		}
+	}
+	var signals int
+	if err := f.database.QueryRow(`SELECT count(*) FROM artist_alias_signals`).Scan(&signals); err != nil || signals != 1 {
+		t.Fatalf("应存在被读取层排除的括号别名信号：%d，错误：%v", signals, err)
+	}
+	assertEmpty()
+	f.exec(`UPDATE artist_tag_evidence SET role='composer',tag_key='COMPOSER' WHERE track_id=$1::uuid AND raw_value='羊鹿鹿'`, f.trackA)
+	// 作曲等身份的扫描事实来自 track_credits，必须与标签证据同步。
+	f.exec(`INSERT INTO track_credits(track_id,role,name,position) VALUES($1::uuid,'composer','羊鹿鹿',1)`, f.trackA)
+	f.refresh(f.first.releaseID)
+	pending, err := ListArtistCandidates(ctx, f.database, 1, 50)
+	if err != nil || pending.Pagination.Total != 1 || len(pending.Items) != 1 {
+		t.Fatalf("不同身份的括号别名应提示：%+v，错误：%v", pending, err)
+	}
+	candidate := pending.Items[0]
+	if candidate.EvidenceCount != 1 || len(candidate.Reasons) != 1 {
+		t.Fatalf("括号别名依据数不正确：%+v", candidate)
+	}
+	reason := candidate.Reasons[0]
+	if reason.Kind != "bracket_alias" || reason.ReleaseID != f.first.releaseID || reason.AliasPart == nil || *reason.AliasPart != "inner" || reason.BracketSide == nil {
+		t.Fatalf("括号别名理由字段不完整：%+v", reason)
+	}
+	side, leftName, rightName := "left", "杨璐（羊鹿鹿）", "羊鹿鹿"
+	if candidate.Left.Name == "羊鹿鹿" {
+		side, leftName, rightName = "right", rightName, leftName
+	}
+	if *reason.BracketSide != side || reason.LeftName != leftName || reason.RightName != rightName {
+		t.Fatalf("括号别名左右名字或括号侧不一致：%+v", candidate)
+	}
+	f.setCandidateIgnored(candidate, true)
+	hidden, err := ListIgnoredArtistCandidates(ctx, f.database, 1, 50)
+	if err != nil || hidden.Pagination.Total != 1 || len(hidden.Items) != 1 {
+		t.Fatalf("不同身份的已忽略候选丢失：%+v，错误：%v", hidden, err)
+	}
+	f.exec(`UPDATE artist_tag_evidence SET role='track_artist',tag_key='ARTIST' WHERE track_id=$1::uuid AND raw_value='羊鹿鹿'`, f.trackA)
+	f.exec(`DELETE FROM track_credits WHERE track_id=$1::uuid AND role='composer' AND name='羊鹿鹿'`, f.trackA)
+	f.refresh(f.first.releaseID)
+	assertEmpty()
+	// 被共同署名排除的名字对仍可恢复，不应被判为范围已变化。
+	f.setCandidateIgnored(candidate, false)
+	assertEmpty()
+}
+
+func TestPostgreSQLArtistCandidateIgnoreRescanAndRestore(t *testing.T) {
+	f := newArtistIgnoredCandidatesFixture(t)
 	listed, err := ListArtistCandidates(context.Background(), f.database, 1, 50)
-	if err != nil || len(listed.Items) != 1 || len(listed.Items[0].KeyPairs) != 1 || listed.Items[0].Reasons[0].Kind != "same_track_role" {
+	if err != nil || len(listed.Items) != 1 || len(listed.Items[0].KeyPairs) != 1 || listed.Items[0].Reasons[0].Kind != "bracket_alias" {
 		t.Fatalf("candidates %+v %v", listed, err)
+	}
+	reason := listed.Items[0].Reasons[0]
+	side, leftName, rightName := "left", "杨璐（羊鹿鹿）", "羊鹿鹿"
+	if listed.Items[0].Left.ID != f.alpha {
+		side, leftName, rightName = "right", rightName, leftName
+	}
+	if listed.Items[0].EvidenceCount != 1 || len(listed.Items[0].Reasons) != 1 || reason.ReleaseID != f.first.releaseID ||
+		reason.BracketSide == nil || *reason.BracketSide != side || reason.AliasPart == nil || *reason.AliasPart != "inner" ||
+		reason.LeftName != leftName || reason.RightName != rightName {
+		t.Fatalf("跨专辑括号别名理由不正确：%+v", listed.Items[0])
 	}
 	ignored := true
 	r := ArtistCandidateIgnoreRequest{ArtistID: f.alpha, ExpectedRevision: 1, OtherArtistID: f.beta, OtherExpectedRevision: 1, KeyPairs: listed.Items[0].KeyPairs, Ignored: &ignored}
@@ -493,8 +562,8 @@ func TestPostgreSQLArtistCandidateIgnoreRescanAndRestore(t *testing.T) {
 	if err != nil || len(listed.Items) != 1 {
 		t.Fatal("unignore did not restore hint", err)
 	}
-	// 显式专辑拆分的同一证据即使仍有两个名字也不再提示合并。
-	scope := ArtistSplitScope{Mode: "albums", NameKeyIDs: []string{f.keyBeta}, GroupIDs: []string{f.first.groupID}}
+	// 单独写法所在专辑显式拆分后，不再用跨专辑证据提示合并。
+	scope := ArtistSplitScope{Mode: "albums", NameKeyIDs: []string{f.keyBeta}, GroupIDs: []string{f.second.groupID}}
 	p, err := PreviewArtistSplit(context.Background(), f.database, f.beta, scope)
 	if err != nil {
 		t.Fatal(err)
@@ -513,9 +582,17 @@ func TestPostgreSQLArtistCandidateIgnoreRescanAndRestore(t *testing.T) {
 func newArtistIgnoredCandidatesFixture(t *testing.T) *artistFixture {
 	t.Helper()
 	f := newArtistFixture(t)
-	f.exec(`INSERT INTO artist_tag_evidence(track_id,role,tag_key,occurrence_index,raw_value,source_kind)
- VALUES($1::uuid,'track_artist','ARTIST',0,'Alpha','tag'),($1::uuid,'track_artist','ARTIST',1,'Beta','tag')`, f.trackA)
-	f.refresh(f.first.releaseID)
+	f.exec(`UPDATE releases SET artist='杨璐（羊鹿鹿）',album_artist='杨璐（羊鹿鹿）' WHERE id=$1::uuid`, f.first.releaseID)
+	f.exec(`UPDATE tracks SET artist='杨璐（羊鹿鹿）' WHERE id=$1::uuid`, f.trackA)
+	f.exec(`UPDATE releases SET artist='羊鹿鹿',album_artist='羊鹿鹿' WHERE id=$1::uuid`, f.second.releaseID)
+	f.exec(`UPDATE tracks SET artist='羊鹿鹿' WHERE id=$1::uuid`, f.trackB)
+	f.refresh(f.first.releaseID, f.second.releaseID)
+	if err := f.database.QueryRow(`SELECT initial_artist_id::text,id::text FROM artist_name_keys WHERE normalized_key='杨璐(羊鹿鹿)'`).Scan(&f.alpha, &f.keyAlpha); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.database.QueryRow(`SELECT initial_artist_id::text,id::text FROM artist_name_keys WHERE normalized_key='羊鹿鹿'`).Scan(&f.beta, &f.keyBeta); err != nil {
+		t.Fatal(err)
+	}
 	return f
 }
 
@@ -618,13 +695,15 @@ func TestPostgreSQLArtistIgnoredCandidatesExcludeMergedPairs(t *testing.T) {
 func TestPostgreSQLArtistIgnoredCandidatesOrderAndPaging(t *testing.T) {
 	f := newArtistIgnoredCandidatesFixture(t)
 	// 较早忽略的一对有更多依据，确保忽略时间优先于原有的依据数排序。
-	f.exec(`INSERT INTO artist_tag_evidence(track_id,role,tag_key,occurrence_index,raw_value,source_kind)
- VALUES($1::uuid,'track_artist','ARTIST',0,'Alpha','tag'),($1::uuid,'track_artist','ARTIST',1,'Beta','tag')`, f.trackB)
+	extra := f.release("括号写法再版")
+	extraTrack := f.track(extra, "再版曲目", "present", 100.0)
+	f.exec(`UPDATE releases SET artist='杨璐（羊鹿鹿）',album_artist='杨璐（羊鹿鹿）' WHERE id=$1::uuid`, extra.releaseID)
+	f.exec(`UPDATE tracks SET artist='杨璐（羊鹿鹿）' WHERE id=$1::uuid`, extraTrack)
 	third := f.release("第三张")
 	track := f.track(third, "丙轨", "present", 100.0)
 	f.exec(`UPDATE releases SET artist='Gamma',album_artist='Delta' WHERE id=$1::uuid`, third.releaseID)
 	f.exec(`UPDATE tracks SET artist='Gamma' WHERE id=$1::uuid`, track)
-	f.refresh(f.first.releaseID, f.second.releaseID, third.releaseID)
+	f.refresh(f.first.releaseID, f.second.releaseID, third.releaseID, extra.releaseID)
 	ctx := context.Background()
 	pending, err := ListArtistCandidates(ctx, f.database, 1, 50)
 	if err != nil || pending.Pagination.Total != 2 || len(pending.Items) != 2 || pending.Items[0].EvidenceCount <= pending.Items[1].EvidenceCount {
@@ -700,8 +779,8 @@ func TestPostgreSQLArtistCandidatePairPaginationDoesNotIgnoreUnseenPairs(t *test
 		hash := sha256.Sum256([]byte(key))
 		f.exec(`INSERT INTO artist_name_keys(id,normalization_version,normalized_key,key_hash,initial_artist_id) VALUES($1::uuid,1,$2,$3,$4::uuid)`, keyID, key, hash[:], f.alpha)
 		f.exec(`INSERT INTO artist_candidate_signals(left_key_id,right_key_id,kind,release_id,track_id,role,left_name,right_name)
-   VALUES(least($1::uuid,$2::uuid),greatest($1::uuid,$2::uuid),'same_track_role',$3::uuid,$4::uuid,'track_artist',
-   CASE WHEN $1::uuid<$2::uuid THEN $5 ELSE 'Beta' END,CASE WHEN $1::uuid<$2::uuid THEN 'Beta' ELSE $5 END)`, keyID, f.keyBeta, f.first.releaseID, f.trackA, key)
+   VALUES(least($1::uuid,$2::uuid),greatest($1::uuid,$2::uuid),'album_track_one_to_one',$3::uuid,NULL,NULL,
+   CASE WHEN $1::uuid<$2::uuid THEN $4 ELSE 'Beta' END,CASE WHEN $1::uuid<$2::uuid THEN 'Beta' ELSE $4 END)`, keyID, f.keyBeta, f.first.releaseID, key)
 	}
 	page, err := ListArtistCandidates(context.Background(), f.database, 1, 1)
 	if err != nil || page.Pagination.Total != 2 || len(page.Items) != 1 || len(page.Items[0].KeyPairs) != 100 || len(page.Items[0].Reasons) != 3 || page.Items[0].EvidenceCount != 100 {

@@ -7,7 +7,7 @@ import { pageCountOf } from "../../../shared/lib/pagination";
 import { useClampedPage } from "../../../shared/lib/use-clamped-page";
 import { Button, FailureNotice, Pagination, Panel, QueryContent, Skeleton } from "../../../shared/ui";
 import { useViewerScope } from "../../auth";
-import { artistMetaText, artistRoleLabels, type ArtistSummaryDTO } from "../../catalog";
+import { artistMetaText, type ArtistSummaryDTO } from "../../catalog";
 import { artistsKeys, fetchArtist } from "../../artists";
 import type { ArtistCandidateDTO } from "../api/decoders";
 import type { ArtistCommand, ArtistCommandResult, ArtistCommands } from "../hooks/use-artist-commands";
@@ -16,11 +16,15 @@ import { ArtistCommandNotice } from "./artist-command-notice";
 import { MergeCandidateDialog } from "./merge-artist-dialog";
 import styles from "./artist-candidates-view.module.css";
 
-/** 一条理由：说清楚看到了什么，不下“就是同一个人”的结论。 */
+/** 一条理由：说清楚看到了什么，不下“就是同一个人”的结论。不认识的 kind 返回空串，不显示。 */
 function reasonText(reason: ArtistCandidateDTO["reasons"][number]): string {
-  const role = reason.role === undefined || reason.role === null ? "" : artistRoleLabels[reason.role];
-  if (reason.kind === "same_track_role") return `同一首曲目的${role === "" ? "署名" : role}写了“${reason.left_name}”和“${reason.right_name}”`;
-  return `同一张专辑的专辑艺人写“${reason.left_name}”，曲目艺人写“${reason.right_name}”`;
+  if (reason.kind === "album_track_one_to_one") return `同一张专辑的专辑艺人写“${reason.left_name}”，曲目艺人写“${reason.right_name}”`;
+  if (reason.kind !== "bracket_alias" || reason.bracket_side === undefined) return "";
+  // bracketed 是带括号的写法，other 是另一个名字（等于括号里面或外面的部分）。
+  const [bracketed, other] = reason.bracket_side === "left" ? [reason.left_name, reason.right_name] : [reason.right_name, reason.left_name];
+  if (reason.alias_part === "inner") return `“${bracketed}”括号里写着“${other}”`;
+  if (reason.alias_part === "outer") return `“${bracketed}”去掉括号就是“${other}”`;
+  return "";
 }
 
 function ArtistLink({ artist }: { artist: ArtistSummaryDTO }) {
@@ -58,6 +62,7 @@ type CandidateItemProps = {
 
 function CandidateItem({ candidate, status, busy, onMerge, onIgnore, onRestore }: CandidateItemProps) {
   const label = `“${candidate.left.name}”和“${candidate.right.name}”`;
+  const reasons = candidate.reasons.map(reasonText).filter((text) => text !== "");
   return (
     <li className={styles.item}>
       <p className={styles.pair}>
@@ -65,12 +70,14 @@ function CandidateItem({ candidate, status, busy, onMerge, onIgnore, onRestore }
         <span className={styles.and}>和</span>
         <ArtistLink artist={candidate.right} />
       </p>
-      <ul className={styles.reasons}>
-        {candidate.reasons.map((reason, index) => (
-          <li key={index}>{reasonText(reason)}</li>
-        ))}
-      </ul>
-      {candidate.evidence_count > candidate.reasons.length ? <p className={styles.meta}>共 {formatCount(candidate.evidence_count)} 处</p> : null}
+      {reasons.length === 0 ? null : (
+        <ul className={styles.reasons}>
+          {reasons.map((text, index) => (
+            <li key={index}>{text}</li>
+          ))}
+        </ul>
+      )}
+      {candidate.evidence_count > reasons.length ? <p className={styles.meta}>共 {formatCount(candidate.evidence_count)} 处</p> : null}
       <div className={styles.actions}>
         {status === "ignored" ? (
           <Button busy={busy} onClick={onRestore} aria-label={`恢复${label}的提示`}>

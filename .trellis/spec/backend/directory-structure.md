@@ -41,7 +41,7 @@ backend/
 │   └── catalog/                    # Release 图与有效值读取投影、版本对比、修正字段词表与修正意图读取
 │       ├── governance/             # 修正、人工归组、默认版本、问题核对与认领的执行器、逆执行器及治理读取 Store
 │       ├── ingest/                 # 观察合同、扫描暂存表、身份规划、organizer、来源身份与 Release 图写入（不导入 catalog 核心）
-│       ├── internal/releasesql/    # 仅 catalog 子树可导入的共享 SQL 片段与纯格式化函数（无内部依赖）
+│       ├── internal/releasesql/    # 仅 catalog 子树可导入的共享 SQL 片段与纯格式化函数（依赖 artistgraph 与 textnorm 的当前版本）
 │       ├── metadata/               # 署名、空白规范化、有界文本、艺人名规则（叶子包）
 │       ├── artwork/                # 受管封面：校验、落盘、关联、读取
 │       └── httpapi/                # Release 列表/详情/证据、按组读取与版本对比、封面读取、修正、人工归组、默认版本、问题列表与核对、认领的预览与写入、待认领的读取
@@ -55,6 +55,8 @@ backend/
 C2 的 B3 已将治理实现移到 `catalog/governance`，其 `Store` 经 `NewStore(catalog.Queryer)` 构造；
 `catalog/httpapi` 分别持有核心与治理 Store，治理调用不再经过核心 Store。核心 `fields.go` 保留修正字段词表、
 修正意图类型与读取函数；共享 SQL 片段与纯格式化函数位于 `catalog/internal/releasesql`。
+艺人引用门禁从 `artistgraph.Version` 和 `textnorm.Version` 生成版本条件，不另设版本常量。
+`releasesql` 可以依赖这两个包；`searchindex` 当前未导入 `releasesql`，后续不得引入反向路径形成循环。
 摘要扫描辅助类型与哨兵错误仍在核心，治理继续使用核心错误而不重复定义；
 `catalog.SafeRelativeSourceRef` 保留公开入口并委托给共享实现。
 
@@ -145,7 +147,7 @@ C2 的 B3 拆包后，核心 `catalog` 只允许导入内部包 `catalog/interna
 `catalog/governance` 允许导入 `catalog`、`catalog/internal/releasesql`、`catalog/metadata`、`operations` 与 `platform/uuid`；
 `catalog/httpapi` 与 `app` 增加对治理包的依赖，五种操作的撤销与展示实现由 `app` 从治理包注册。
 `catalog/ingest` 只允许导入内部包 `catalog/metadata` 与 `platform/uuid`，`library` 经它写入扫描结果。
-`catalog/internal/releasesql` 不允许导入其他内部包。核心、治理、ingest 与 releasesql 均不允许使用 `net/http`。
+`catalog/internal/releasesql` 仅允许导入 `catalog/internal/artistgraph` 与 `catalog/textnorm`，用于读取统一版本常量。核心、治理、ingest 与 releasesql 均不允许使用 `net/http`。
 
 ## File And Package Naming
 
@@ -188,7 +190,7 @@ current [Core 0 PRD](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/p
 
 ## M5 ④搜索包增量
 
-`catalog/textnorm` 是纯叶子；`catalog/internal/writegate` 只提供事务 gate；`catalog/internal/searchindex` 只依赖 textnorm 与 releasesql；`catalog/maintenance` 只依赖 textnorm、searchindex、writegate。catalog 核心增加 textnorm/searchindex，ingest 与 governance 增加 searchindex/writegate；app 增加 maintenance。逐包 allowlist 由依赖测试维护，不允许通配放开 catalog 子树，core 仍不得导入 metadata/ingest/governance。完整在线协议见[搜索合同](./search-contracts.md)。
+`catalog/textnorm` 是纯叶子；`catalog/internal/writegate` 只提供事务 gate；`catalog/internal/searchindex` 的历史 allowlist 允许 textnorm 与 releasesql（当前实际依赖 textnorm/metadata，不导入 releasesql）；`catalog/maintenance` 只依赖 textnorm、searchindex、writegate。catalog 核心增加 textnorm/searchindex，ingest 与 governance 增加 searchindex/writegate；app 增加 maintenance。逐包 allowlist 由依赖测试维护，不允许通配放开 catalog 子树，core 仍不得导入 metadata/ingest/governance。完整在线协议见[搜索合同](./search-contracts.md)。
 
 ## M5 ⑤艺人包增量
 

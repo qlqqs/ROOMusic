@@ -74,7 +74,7 @@ func (s *Store) LoadTrackFacts(ctx context.Context, trackIDs []string) (map[stri
 // 只对请求组的可见成员排名，且只为代表计算完整摘要；空组也保留在同一语句快照中。
 // DISTINCT ON 保留完整窗口计数，也避免 member_rank=1 的低估导致重复扫描整个发行视图。
 // LEFT JOIN 的空摘要仅用内部零值接收，release_count=0 时绝不构造或返回代表对象。
-const loadPersonalReleaseGroupSummariesSQL = `WITH selected_groups AS MATERIALIZED (
+var loadPersonalReleaseGroupSummariesSQL = `WITH selected_groups AS MATERIALIZED (
  SELECT id FROM release_groups WHERE id=ANY($1::text[]::uuid[])
 ), representatives AS MATERIALIZED (
  SELECT DISTINCT ON (releases.group_id) releases.id, releases.group_id,

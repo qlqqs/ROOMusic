@@ -144,7 +144,7 @@ func (s *Store) LoadReleaseGroup(ctx context.Context, groupID string) (ReleaseGr
 }
 
 // releaseGroupSummaryProjection 是代表版本摘要，追加组 ID、可见成员数、attention 之和与最早可见加入时间。
-const releaseGroupSummaryProjection = releasesql.ReleaseSummaryProjection + `,
+var releaseGroupSummaryProjection = releasesql.ReleaseSummaryProjection + `,
 		ranked.group_id::text,
 		ranked.release_count,
 		` + releaseGroupAttentionExpression + `, ranked.added_at`

@@ -23,7 +23,7 @@
 
 有效present署名每个subject/name一票，跨角色去重；并列原文C排序及name ID。无票取当前归属名字稳定首项，最后initial_name。人工display_name始终优先。改名不抢名字键，纯人工旧主名不自动成为永久别名；合并保留source主名覆盖，搜索投影可经 `source_artist_id` 读取被重定向身份的主名，不把该名字路由抢到target。
 
-原始重复标签保存在 `artist_tag_evidence`，每轨最多100项、每项4096字节，超限失败诊断，不截掉末项伪造完整集合。只有新版原始证据能生成同轨同角色候选，明确多人分隔不是该信号。另一信号要求发行全部present轨真实单一同键Artist与有效单一AlbumArtist一一对应；不跨发行补齐。
+原始重复标签保存在 `artist_tag_evidence`，每轨最多100项、每项4096字节，超限失败诊断，不截掉末项伪造完整集合；扫描继续写入，但不再据此产生同轨同角色候选。投影版本2仅保留发行全部present轨真实单一同键Artist与有效单一AlbumArtist的一一对应信号，新增跨发行括号别名信号；读取按艺人排除同曲同身份共同署名，细则见§9。
 
 ### 在线构建
 
@@ -55,7 +55,7 @@
 - `/tracks`：track_artist/composer/conductor/performer/producer必填角色，含missing；发行标题、发行ID、碟/轨序、轨ID稳定排序。
 - `/queue`：order=album/random，random要求UUID seed；所有角色轨并集去重，present优先筛选，随机 `md5(seed||':'||track_id)` 全体排序后LIMIT10000，不能先限再随机。完整摘要同快照每1000一批，精确total/missing_total/returned、limit/truncated，格式支持由前端判断。
 
-`ArtistRef={artist_id,name,display_name}`，name为原署名、display_name为有效主名。ReleaseSummary加artist_refs/album_artist_refs，ReleaseTrack/TrackSummary及每条credit加artist_refs，数组必传、最多100。所有共享摘要须在同一SQL/只读快照里判断ready并读取refs；未就绪返回[]，不读半图。catalog延迟敏感只读入口复用readWithLocalJITOff，事务后恢复的集成测试不可省。
+`ArtistRef={artist_id,name,display_name}`，name为原署名、display_name为有效主名。ReleaseSummary加artist_refs/album_artist_refs，ReleaseTrack/TrackSummary及每条credit加artist_refs，数组必传、最多100。所有共享摘要须在同一SQL/只读快照里判断ready并读取refs；未就绪返回[]，不读半图。`releasesql.ArtistRefsReady`的目标/已发布规范化版本须取`textnorm.Version`，目标/已发布投影版本须取`artistgraph.Version`，不得硬编码协议版本。catalog延迟敏感只读入口复用readWithLocalJITOff，事务后恢复的集成测试不可省。
 
 - `GET /artist-candidates`（管理员）：不带`ignored`或`ignored=false`时是待处理候选，SQL与排序不变。`ignored=true`（2026-11-05）列出已忽略的名字对，同样按艺人对分组、每100对一块，`ArtistPage[ArtistCandidate]`形态不变；按忽略操作的`operations.created_at`取组内最大值降序，再按evidence_count降序。两位艺人已合并（解析到同一位）的不在任何一个列表里；同一对艺人部分名字对被忽略时两个列表各出现一次。其他值或参数重复为`400 invalid_filter`。恢复沿用`POST /artists/{id}/candidate-ignore`传`ignored:false`，执行器不变。
 
@@ -109,3 +109,50 @@
 必需断言：真实merge→chain→restore→remerge历史选择及空键；普通成员不能读取恢复来源；any专辑组跨角色去重、q仅专辑名且字面转义、默认响应不新增roles；album_artist角色筛选并集与release_artist精确；1000/1001、重复UUID/顺序/unknown/missing、same-origin、整理期refs；真实handler样本的独立`artists/adjudication`所有权，不能被旧recorder删除。
 
 反例：前端按操作记录文本猜可恢复者、把q命中曲目当专辑名、先LIMIT再去重、逐发行读队列摘要。正确：后端明确恢复来源、同快照按组筛选/计数/分页、单批安全摘要与首次输入顺序。
+
+
+## 9. 重复艺人规则（投影版本2，0031）
+
+### 1. 范围与触发
+
+修改候选生成、读取、忽略或迁移时适用。`artistgraph`拥有括号解析与刷新，`governance`拥有候选读取；删除`same_track_role`，保留`album_track_one_to_one`。
+
+### 2. 签名与存储
+
+- `bracketAliases(normalizedKey string) []alias`返回`text/part`，`part=outer|inner`；`refreshAliasSignals(ctx,tx,ids)`在现有CATP事务内运行。
+- 0031新建`artist_alias_signals`，以`left_key_id,right_key_id,release_id,alias_release_id`唯一；键对按UUID升序，`bracket_key_id`必须是其中一端。两发行外键均`ON DELETE CASCADE`，各有索引；名字键有`normalized_key LIKE '%)'`部分索引。
+- 旧表CHECK名为`artist_candidate_signals_kind_check`，已在隔离测试库应用0001–0030后用`\d artist_candidate_signals`确认。
+
+### 3. 合同
+
+规范化键须以`)`结尾、仅一对括号且不在开头；内外去空白后非空且不同。排除词集中在`bracket.go`：合作前缀含`cv`，拉丁版本词按整词、中文版本词按包含匹配；纯数字/标点/空白与解析后不是单一名字的内容不产生别名。别名再经`textnorm.Text`，哈希定位后核对完整键。
+
+刷新删除任一端发行在本批内的别名信号，再按有效署名的名字键/发行汇总最小原写法，重建至少一端在本批内的发行组合。曲目署名须present，发行署名须该发行有present曲目；不依赖扫描先后。
+
+两个候选列表均UNION两张信号表。两端发行都须有present曲目，且两键在任一端存在发行级或present轨级人工覆盖时保守隐藏。按解析后的艺人排除任何present曲目上同身份共同署名；不同身份或仅发行级共同署名不排除。忽略执行器的`resolved`不加共同署名排除，仍可恢复已隐藏的忽略记录。
+
+`ArtistCandidateReason`新增可选`bracket_side=left|right`、`alias_part=inner|outer`，仅`bracket_alias`出现，无`track_id/role`。左右名字跟候选艺人对齐；`release_id`指带括号写法所在发行，`evidence_count`按两端发行组合计数。
+
+### 4. 校验与错误矩阵
+
+| 条件 | 结果 |
+| --- | --- |
+| 括号内容不符合规则或库中无独立别名键 | 不生成信号 |
+| 哈希命中但全文不等 | 返回错误，调用方回滚 |
+| 艺人投影版本不一致 | 现有维护入口重新整理，艺人读取暂503；播放不受影响 |
+
+0031先删除旧信号再收窄CHECK，仅允许`album_track_one_to_one`，不改忽略表。回退删新索引/表、放宽CHECK；旧信号由旧版发现版本不一致后重建，不在回退SQL里复原。
+
+### 5. 正确、基准与错误案例
+
+正确：`杨璐（羊鹿鹿）`和另一发行的`羊鹿鹿`配对。基准：专辑与曲目单一艺人的一一对应仍可提示。错误：`甲 (cv. 乙)`、`甲 (Live)`或同曲同身份共同署名的两位艺人被提示。
+
+### 6. 必需测试
+
+`TestBracketAliases`覆盖设计的有效/无效输入与词表；DB验证须覆盖任一端刷新和missing后清理、同曲同身份排除/不同身份保留、忽略保持与恢复、`rollbackFixtures[31]`往返及真实handler样本。实施与测试分工时，不把未运行DB验证当作通过。
+
+### 7. 错误与正确
+
+错误：只刷新带括号端，或只检查两发行中任意一个有present曲目。正确：刷新与有效性判断都覆盖两端，缺失任一端时不保留候选。
+
+返工根因是版本变更传播遗漏：图版本升到2，共享refs门禁仍认1，静态编译无法发现SQL中的数字失配。所有引用门禁必须使用共享版本权威；`TestArtistRefsReadyUsesCurrentVersions`逐项验证四个版本条件，`TestPackageDependencyDirections`约束无循环的包依赖。历史迁移保留原版本，不能为修复运行时门禁而篡改迁移。

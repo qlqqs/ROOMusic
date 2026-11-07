@@ -46,6 +46,44 @@ function expectSelected(status: "pending" | "ignored") {
   expect(nav.getByRole("link", { name: status === "ignored" ? "待处理" : "已忽略" }).getAttribute("aria-current")).toBeNull();
 }
 
+describe("重复艺人的理由文案", () => {
+  it.each([
+    {
+      name: "bracket_alias inner，带括号的名字在左侧",
+      reason: { kind: "bracket_alias", left_name: "杨璐（羊鹿鹿）", right_name: "羊鹿鹿", bracket_side: "left", alias_part: "inner" },
+      expected: "“杨璐（羊鹿鹿）”括号里写着“羊鹿鹿”",
+    },
+    {
+      name: "bracket_alias outer，带括号的名字在右侧",
+      reason: { kind: "bracket_alias", left_name: "杨璐", right_name: "杨璐（羊鹿鹿）", bracket_side: "right", alias_part: "outer" },
+      expected: "“杨璐（羊鹿鹿）”去掉括号就是“杨璐”",
+    },
+    {
+      name: "album_track_one_to_one 保留专辑与曲目艺人的文案",
+      reason: { kind: "album_track_one_to_one", left_name: "Jay Chou", right_name: "周杰伦" },
+      expected: "同一张专辑的专辑艺人写“Jay Chou”，曲目艺人写“周杰伦”",
+    },
+  ] as const)("$name", async ({ reason, expected }) => {
+    const context = setup();
+    context.original.reasons = [{ ...reason, release_id: artistTestId(30_000) }];
+    renderApp({ path: "/artist-candidates" });
+    expect((await screen.findByText(expected, { exact: true })).textContent).toBe(expected);
+  });
+
+  it("未知 kind 保留候选，但不渲染理由子列表", async () => {
+    const context = setup();
+    const pair = context.original;
+    pair.reasons = [{ kind: "unknown_reason", release_id: artistTestId(30_000), left_name: pair.left.name, right_name: pair.right.name }];
+    renderApp({ path: "/artist-candidates" });
+    const button = await screen.findByRole("button", { name: `忽略“${pair.left.name}”和“${pair.right.name}”` });
+    const candidate = button.closest("li");
+    if (candidate === null) throw new Error("缺少候选条目");
+    expect(within(candidate).getByRole("link", { name: pair.left.name })).toBeTruthy();
+    expect(within(candidate).getByRole("link", { name: pair.right.name })).toBeTruthy();
+    expect(within(candidate).queryByRole("list")).toBeNull();
+  });
+});
+
 describe("V4/V5：候选已忽略列表与恢复", () => {
   it.each([
     ["/artist-candidates", false, 1],

@@ -11,12 +11,14 @@ import (
 )
 
 type ArtistCandidateReason struct {
-	Kind      string  `json:"kind"`
-	TrackID   *string `json:"track_id,omitempty"`
-	ReleaseID string  `json:"release_id"`
-	Role      *string `json:"role,omitempty"`
-	LeftName  string  `json:"left_name"`
-	RightName string  `json:"right_name"`
+	Kind        string  `json:"kind"`
+	TrackID     *string `json:"track_id,omitempty"`
+	ReleaseID   string  `json:"release_id"`
+	Role        *string `json:"role,omitempty"`
+	LeftName    string  `json:"left_name"`
+	RightName   string  `json:"right_name"`
+	BracketSide *string `json:"bracket_side,omitempty"`
+	AliasPart   *string `json:"alias_part,omitempty"`
 }
 type ArtistCandidate struct {
 	Left          catalog.ArtistSummary   `json:"left"`
@@ -26,10 +28,17 @@ type ArtistCandidate struct {
 	EvidenceCount int64                   `json:"evidence_count"`
 }
 
+// 同一在库曲目上以同一身份共同署名的两位艺人，不在待处理或已忽略列表里提示。
+const artistCandidateCoCreditExclusionSQL = ` AND NOT EXISTS (
+ SELECT 1 FROM artist_effective_credits a
+ JOIN artist_effective_credits b ON b.track_id=a.track_id AND b.role=a.role
+ JOIN tracks t ON t.id=a.track_id AND t.source_status='present'
+ WHERE a.artist_id=r.left_artist_id AND b.artist_id=r.right_artist_id)`
+
 const artistCandidatesGroupedSQL = artistCandidateResolvedSQL + `, visible AS MATERIALIZED (
  SELECT r.*,LEAST(left_artist_id,right_artist_id) AS first_artist,GREATEST(left_artist_id,right_artist_id) AS second_artist
  FROM resolved r WHERE left_artist_id<>right_artist_id AND NOT EXISTS (
- SELECT 1 FROM artist_candidate_ignores i WHERE i.left_key_id=r.left_key_id AND i.right_key_id=r.right_key_id)
+ SELECT 1 FROM artist_candidate_ignores i WHERE i.left_key_id=r.left_key_id AND i.right_key_id=r.right_key_id)` + artistCandidateCoCreditExclusionSQL + `
 ), pairs AS (
  SELECT first_artist,second_artist,left_key_id,right_key_id,count(*) AS evidence_count FROM visible
  GROUP BY first_artist,second_artist,left_key_id,right_key_id
@@ -47,7 +56,7 @@ const ignoredArtistCandidatesGroupedSQL = artistCandidateResolvedSQL + `, visibl
  (SELECT o.created_at FROM artist_candidate_ignores i JOIN operations o ON o.id=i.operation_id
  WHERE i.left_key_id=r.left_key_id AND i.right_key_id=r.right_key_id) AS ignored_at
  FROM resolved r WHERE left_artist_id<>right_artist_id AND EXISTS (
- SELECT 1 FROM artist_candidate_ignores i WHERE i.left_key_id=r.left_key_id AND i.right_key_id=r.right_key_id)
+ SELECT 1 FROM artist_candidate_ignores i WHERE i.left_key_id=r.left_key_id AND i.right_key_id=r.right_key_id)` + artistCandidateCoCreditExclusionSQL + `
 ), pairs AS (
  SELECT first_artist,second_artist,left_key_id,right_key_id,count(*) AS evidence_count,max(ignored_at) AS ignored_at FROM visible
  GROUP BY first_artist,second_artist,left_key_id,right_key_id
@@ -99,7 +108,10 @@ func listArtistCandidates(ctx context.Context, db *sql.DB, page, size int, ignor
  COALESCE((SELECT jsonb_agg(reason ORDER BY id) FROM (
  SELECT v.id,jsonb_strip_nulls(jsonb_build_object('kind',v.kind,'track_id',v.track_id,'release_id',v.release_id,'role',v.role,
  'left_name',CASE WHEN v.left_artist_id=v.first_artist THEN v.left_name ELSE v.right_name END,
- 'right_name',CASE WHEN v.left_artist_id=v.first_artist THEN v.right_name ELSE v.left_name END)) AS reason
+ 'right_name',CASE WHEN v.left_artist_id=v.first_artist THEN v.right_name ELSE v.left_name END,
+ 'bracket_side',CASE WHEN v.kind='bracket_alias' THEN
+ CASE WHEN (v.bracket_key_id=v.left_key_id)=(v.left_artist_id=v.first_artist) THEN 'left' ELSE 'right' END END,
+ 'alias_part',v.alias_part)) AS reason
  FROM visible v JOIN ranked r ON r.first_artist=v.first_artist AND r.second_artist=v.second_artist
  AND r.left_key_id=v.left_key_id AND r.right_key_id=v.right_key_id
  WHERE r.first_artist=g.first_artist AND r.second_artist=g.second_artist AND r.chunk=g.chunk ORDER BY v.id LIMIT 3) samples),'[]'::jsonb)

@@ -50,6 +50,9 @@ func newGraphReviewFixture(t *testing.T, tracers ...pgx.QueryTracer) *graphRevie
 	if err := writegate.Lock(ctx, tx); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := tx.ExecContext(ctx, `UPDATE catalog_projection_state SET search_projection_version=$1 WHERE capability='artists'`, artistgraph.Version); err != nil {
+		t.Fatal(err)
+	}
 	f := &graphReviewFixture{t: t, ctx: ctx, db: db, tx: tx, root: uuid.New(), release: uuid.New(), medium: uuid.New(), operation: uuid.New(), scan: uuid.New()}
 	group, actor := uuid.New(), uuid.New()
 	f.exec(`INSERT INTO scan_runs(id,status,started_at) VALUES($1::uuid,'running',NOW())`, f.scan)
@@ -169,14 +172,50 @@ func TestPostgreSQLArtistGraphReviewRawEvidenceAndCandidates(t *testing.T) {
 	if n := f.count(`SELECT count(*) FROM artist_name_keys WHERE normalized_key='未知艺术家'`); n != 1 {
 		t.Fatal("真实同名标签被当作占位")
 	}
-	if n := f.count(`SELECT count(*) FROM artist_candidate_signals WHERE kind='same_track_role'`); n != 3 {
-		t.Fatalf("重复标签名字键对不完整：%d", n)
+	if n := f.count(`SELECT count(*) FROM artist_candidate_signals`); n != 0 {
+		t.Fatalf("同曲同身份共同署名仍产生候选信号：%d", n)
 	}
 	f.exec(`DELETE FROM artist_tag_evidence WHERE track_id=$1::uuid`, track)
 	f.exec(`INSERT INTO artist_tag_evidence(track_id,role,tag_key,occurrence_index,raw_value,source_kind) VALUES($1::uuid,'track_artist','ARTIST',0,'Jay Chou / 另一人','flac')`, track)
 	f.refresh()
 	if n := f.count(`SELECT count(*) FROM artist_candidate_signals WHERE kind='same_track_role'`); n != 0 {
 		t.Fatal("明确多人列表被当作重复标签")
+	}
+}
+
+func TestPostgreSQLArtistGraphReviewRawEvidenceCrossAlbumBracketAlias(t *testing.T) {
+	f := newGraphReviewFixture(t)
+	f.track("杨璐（羊鹿鹿）", "present")
+	f.refresh()
+	if n := f.count(`SELECT count(*) FROM artist_alias_signals`); n != 0 {
+		t.Fatalf("没有单独写法时产生别名信号：%d", n)
+	}
+	group, release, medium, track := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	f.exec(`INSERT INTO release_groups(id) VALUES($1::uuid)`, group)
+	f.exec(`INSERT INTO releases(id,group_id,title,artist,album_artist,source_root_id,candidate_kind,candidate_anchor)
+ VALUES($1::uuid,$2::uuid,'别名专辑','','',$3::uuid,'ordinary_directory',$1::text)`, release, group, f.root)
+	f.exec(`INSERT INTO media(id,release_id,position) VALUES($1::uuid,$2::uuid,1)`, medium, release)
+	f.exec(`INSERT INTO tracks(id,medium_id,position,title,artist,source_root_id,relative_path,source_status,observed_at)
+ VALUES($1::uuid,$2::uuid,1,'别名曲目','羊鹿鹿',$3::uuid,$1::text||'.flac','present',NOW())`, track, medium, f.root)
+	// 只刷新后扫描到的单独写法端，也必须补出跨发行的信号。
+	if err := artistgraph.Refresh(f.ctx, f.tx, []string{release}); err != nil {
+		t.Fatal(err)
+	}
+	if n := f.count(`SELECT count(*) FROM artist_alias_signals s JOIN artist_name_keys k ON k.id=s.bracket_key_id
+ WHERE s.release_id=$1::uuid AND s.alias_release_id=$2::uuid AND s.alias_part='inner'
+ AND k.normalized_key='杨璐(羊鹿鹿)' AND (s.left_name,s.right_name) IN (('杨璐（羊鹿鹿）','羊鹿鹿'),('羊鹿鹿','杨璐（羊鹿鹿）'))`, f.release, release); n != 1 {
+		t.Fatalf("单独写法端刷新未生成正确的跨专辑括号别名信号：%d", n)
+	}
+	f.refresh()
+	if n := f.count(`SELECT count(*) FROM artist_alias_signals`); n != 1 {
+		t.Fatalf("括号端刷新重复或丢失信号：%d", n)
+	}
+	f.exec(`UPDATE tracks SET source_status='missing' WHERE id=$1::uuid`, track)
+	if err := artistgraph.Refresh(f.ctx, f.tx, []string{release}); err != nil {
+		t.Fatal(err)
+	}
+	if n := f.count(`SELECT count(*) FROM artist_alias_signals`); n != 0 {
+		t.Fatalf("单独写法端缺失后仍保留信号：%d", n)
 	}
 }
 

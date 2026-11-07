@@ -37,7 +37,7 @@ type TrackSummary struct {
 }
 
 // 曲目、去重发行及批量计数保持同一语句快照，每发行只计算一次摘要；不扩大目录列表或详情的可见性。
-const loadTrackSummariesSQL = `WITH selected_tracks AS MATERIALIZED (
+var loadTrackSummariesSQL = `WITH selected_tracks AS MATERIALIZED (
  SELECT t.id, t.title, t.artist, t.source_status, t.duration_seconds,
  t.source_kind, NULLIF(BTRIM(t.codec), '') AS codec, t.bit_depth, t.sample_rate, t.channels, t.bitrate, m.release_id
  FROM tracks t JOIN media m ON m.id=t.medium_id

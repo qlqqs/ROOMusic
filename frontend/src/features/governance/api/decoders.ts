@@ -498,14 +498,14 @@ const ignoreResultDecoder = d.object({
 });
 
 // “可能是同一位”的候选：两位艺人、实际看到的名字键对（忽略时原样提交）、最多 3 个理由样例与证据数。只是提示，不是同一人的结论。
-// 理由的 kind 按字符串解码（显示时给已知的中文说明，未知的原样不显示细节）；同一曲目同一角色的理由带曲目与角色。
+// 理由的 kind 按字符串解码（显示时只给已知的 kind 写中文说明，未知的不显示）；括号别名的理由带哪一边是带括号的写法、另一边等于括号里面还是外面。
 const candidateReasonDecoder = d.object({
   kind: d.string({ min: 1, max: 64 }),
   release_id: d.uuid(),
-  track_id: d.optional(d.nullable(d.uuid())),
-  role: d.optional(d.nullable(d.oneOf(artistRoles))),
   left_name: d.string(),
   right_name: d.string(),
+  bracket_side: d.optional(d.oneOf(["left", "right"])),
+  alias_part: d.optional(d.oneOf(["inner", "outer"])),
 });
 const artistCandidateDecoder = d.object({
   left: artistSummaryDecoder,

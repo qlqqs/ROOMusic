@@ -148,7 +148,7 @@ test("艺人稳定性：候选只提示、纯键盘忽略与恢复提示", async
   const mock = await backend.start({ signedInAs: "curator" });
   seedArtistsE2E(mock);
   await page.goto("/artist-candidates");
-  await expect(page.getByText(/同一首曲目的.*写了/)).toBeVisible();
+  await expect(page.getByText(/括号里写着/)).toBeVisible();
   await artistKeyActivate(page, page.getByRole("button", { name: /^忽略“/ }).first());
   await expect(page.getByText("现在没有需要确认的候选。", { exact: true })).toBeVisible();
   expect(mock.callsTo("POST", /\/candidate-ignore$/)[0]?.body).toMatchObject({ ignored: true, key_pairs: expect.any(Array) });

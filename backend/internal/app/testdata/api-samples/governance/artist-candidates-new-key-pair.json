@@ -14,31 +14,31 @@
           "available": true,
           "id": "00000000-0000-4000-8000-000000000003",
           "initial_group": "A",
-          "name": "Alpha Singer",
+          "name": "Alpha Singer (Gamma Singer)",
           "roles": [
             "release_artist",
+            "album_artist",
             "track_artist"
           ],
-          "track_count": 1
+          "track_count": 2
         },
         "reasons": [
           {
-            "kind": "same_track_role",
-            "left_name": "Alpha Singer",
+            "alias_part": "inner",
+            "bracket_side": "left",
+            "kind": "bracket_alias",
+            "left_name": "Alpha Singer (Gamma Singer)",
             "release_id": "00000000-0000-4000-8000-000000000004",
-            "right_name": "Gamma Singer",
-            "role": "track_artist",
-            "track_id": "00000000-0000-4000-8000-000000000005"
+            "right_name": "Gamma Singer"
           }
         ],
         "right": {
           "album_count": 1,
           "available": true,
-          "id": "00000000-0000-4000-8000-000000000006",
+          "id": "00000000-0000-4000-8000-000000000005",
           "initial_group": "G",
           "name": "Gamma Singer",
           "roles": [
-            "release_artist",
             "track_artist"
           ],
           "track_count": 1

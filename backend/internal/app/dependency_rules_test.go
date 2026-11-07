@@ -31,7 +31,7 @@ var packageRules = map[string]packageRule{
 	"platform/httpserver":            {http: true},
 	"platform/postgres":              {},
 	"platform/postgres/postgrestest": {imports: []string{"platform/uuid"}},
-	"catalog/internal/releasesql":    {},
+	"catalog/internal/releasesql":    {imports: []string{"catalog/internal/artistgraph", "catalog/textnorm"}},
 	"catalog/metadata":               {},
 	"catalog/textnorm":               {},
 	"catalog/internal/artistgraph":   {imports: []string{"catalog/textnorm", "catalog/metadata", "catalog/internal/searchindex", "platform/uuid"}},

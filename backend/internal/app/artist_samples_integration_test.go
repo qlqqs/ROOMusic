@@ -600,7 +600,7 @@ func recordArtistCandidateSamples(t *testing.T, s *apiSampleRecorder) {
 	s.forbid(f.admin.token)
 	s.forbid(app.allowedRoot)
 	s.forbid(app.dataDirectory)
-	for i, name := range []string{"Alpha Singer", "Beta Singer", "Gamma Singer"} {
+	for i, name := range []string{"Alpha Singer (Beta Singer)", "Beta Singer", "Alpha Singer (Gamma Singer)", "Gamma Singer"} {
 		f.identity(i+20, name)
 	}
 	directory := filepath.Join(app.allowedRoot, "candidate-album")
@@ -608,9 +608,13 @@ func recordArtistCandidateSamples(t *testing.T, s *apiSampleRecorder) {
 		t.Fatal(err)
 	}
 	write := func(second string) {
-		raw := parsertest.FLACWithAudio(t, [16]byte{9, 1, 3}, []byte{9, 1, 3, 4}, "TITLE=合成候选曲", "ALBUM=候选专辑", "ARTIST=Alpha Singer", "ARTIST="+second, "TRACKNUMBER=1")
-		if err := os.WriteFile(filepath.Join(directory, "01.flac"), raw, 0644); err != nil {
-			t.Fatal(err)
+		for i, name := range []string{"Alpha Singer (" + second + ")", second} {
+			raw := parsertest.FLACWithAudio(t, [16]byte{9, 1, byte(i + 3)}, []byte{9, 1, byte(i + 3), 4},
+				fmt.Sprintf("TITLE=合成候选曲%d", i+1), "ALBUM=候选专辑", "ALBUMARTIST=Alpha Singer ("+second+")",
+				"ARTIST="+name, fmt.Sprintf("TRACKNUMBER=%d", i+1))
+			if err := os.WriteFile(filepath.Join(directory, fmt.Sprintf("%02d.flac", i+1)), raw, 0644); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	write("Beta Singer")
@@ -635,8 +639,16 @@ func recordArtistCandidateSamples(t *testing.T, s *apiSampleRecorder) {
 	candidate := items[0].(map[string]any)
 	left := candidate["left"].(map[string]any)["id"].(string)
 	right := candidate["right"].(map[string]any)["id"].(string)
-	if candidate["evidence_count"].(float64) < 1 {
-		t.Fatal("候选缺少真实证据")
+	if candidate["evidence_count"].(float64) != 1 {
+		t.Fatal("候选应恰有一条真实括号别名证据")
+	}
+	reasons := candidate["reasons"].([]any)
+	if len(reasons) != 1 {
+		t.Fatalf("候选括号别名理由数量：%v", reasons)
+	}
+	reason := reasons[0].(map[string]any)
+	if reason["kind"] != "bracket_alias" || reason["bracket_side"] != "left" || reason["alias_part"] != "inner" {
+		t.Fatalf("候选括号别名理由：%v", reason)
 	}
 	ignore := func(name string, value bool) {
 		body := map[string]any{"expected_revision": f.revision(left), "other_artist_id": right, "other_expected_revision": f.revision(right), "key_pairs": candidate["key_pairs"], "ignored": value}

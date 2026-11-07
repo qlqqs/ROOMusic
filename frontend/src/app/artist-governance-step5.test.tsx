@@ -1,6 +1,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { artistMetaText } from "../features/catalog";
 import { decodeArtistSplitPreview, decodeOperationPage } from "../features/governance/api/decoders";
 import { artistDataOf, artistError, artistTestId, primaryArtistId, respondToArtists, seedArtist, seedArtistCandidates, seedArtistIntegration } from "../test/artist-data";
 import { sampleBody } from "../test/api-samples";
@@ -337,9 +338,9 @@ describe("候选和操作记录", () => {
     renderApp({ path: "/artist-candidates" });
     await context.user.click(await screen.findByRole("button", { name: `合并“${pair.left.name}”和“${pair.right.name}”…` }));
     const dialog = within(await screen.findByRole("dialog", { name: "合并为同一位艺人" }));
-    expect(checked(dialog.getByRole("radio", { name: new RegExp(pair.right.name) }))).toBe(true);
+    expect(checked(dialog.getByRole("radio", { name: `${pair.right.name}${artistMetaText(pair.right)}` }))).toBe(true);
     expect(dialog.getByRole("status").textContent).toContain("合并不能撤销，需要时可以再拆开。");
-    await context.user.click(dialog.getByRole("radio", { name: new RegExp(pair.left.name) }));
+    await context.user.click(dialog.getByRole("radio", { name: `${pair.left.name}${artistMetaText(pair.left)}` }));
     await waitFor(() => expect(dialog.getByRole<HTMLButtonElement>("button", { name: "合并" }).disabled).toBe(false));
     await context.user.click(dialog.getByRole("button", { name: "合并" }));
     await screen.findByText(`已把“${pair.right.name}”并入“${pair.left.name}”。`);
@@ -353,7 +354,7 @@ describe("候选和操作记录", () => {
     renderApp({ path: "/artist-candidates" });
     const ignoreName = `忽略“${pair.left.name}”和“${pair.right.name}”`;
     const ignore = await screen.findByRole("button", { name: ignoreName });
-    expect(screen.getAllByText(/同一首曲目的.+写了|同一张专辑的专辑艺人写/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/括号里写着|去掉括号就是|同一张专辑的专辑艺人写/).length).toBeGreaterThan(0);
     await context.user.click(ignore);
     const restore = await screen.findByRole("button", { name: "恢复提示" });
     expect(screen.queryByRole("button", { name: ignoreName })).toBeNull();

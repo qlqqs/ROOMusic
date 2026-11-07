@@ -12,8 +12,13 @@ import (
 	"github.com/qlqq/roomusic/backend/migrations"
 )
 
-// 新迁移若放宽旧约束或枚举，必须提供新取值数据，证明回退清理了这些数据。
-var rollbackFixtures = map[int64]string{}
+// 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
+var rollbackFixtures = map[int64]string{
+	31: `INSERT INTO artist_alias_signals(left_key_id,right_key_id,bracket_key_id,alias_part,release_id,alias_release_id,left_name,right_name)
+ VALUES('a1000000-0000-4000-8000-000000000001','a1000000-0000-4000-8000-000000000002',
+ 'a1000000-0000-4000-8000-000000000001','inner','c0000000-0000-4000-8000-000000000001',
+ 'c0000000-0000-4000-8000-000000000001','测试（别名）','别名');`,
+}
 
 func migrationPrefix(available []migration, last int64) fstest.MapFS {
 	source := fstest.MapFS{}
@@ -72,6 +77,12 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			db := openMigrationTestDatabase(t)
 			// 每个候选独立建 schema，之前即使有不可回退迁移也不会妨碍后续测试。
 			rollbackApply(t, db, migrationPrefix(available, m.Version-1))
+			if m.Version == 31 {
+				// 新信号引用升级前已有的发行，保证回退只需删除新版信号表。
+				rollbackExec(t, db, `INSERT INTO release_groups(id) VALUES('c1000000-0000-4000-8000-000000000001');
+ INSERT INTO releases(id,group_id,title,artist) VALUES('c0000000-0000-4000-8000-000000000001',
+ 'c1000000-0000-4000-8000-000000000001','迁移测试发行','测试艺人');`)
+			}
 			s0 := rollbackSnapshot(t, db)
 			rollbackApply(t, db, migrationPrefix(available, m.Version))
 			s1 := rollbackSnapshot(t, db)

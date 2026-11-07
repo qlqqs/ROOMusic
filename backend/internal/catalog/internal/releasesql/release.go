@@ -29,8 +29,9 @@ const (
 		release_artwork.mime_type,
 		release_artwork.width,
 		release_artwork.height`
+)
 
-	ReleaseSummaryProjection = releaseSummaryIdentityProjection + `,
+var ReleaseSummaryProjection = releaseSummaryIdentityProjection + `,
 		(SELECT COUNT(DISTINCT present_medium.id)
 		 FROM media present_medium
 		 JOIN tracks present_track ON present_track.medium_id = present_medium.id
@@ -43,6 +44,7 @@ const (
 		   AND present_track.source_status = 'present'),
 		` + ReleaseAttentionExpression + `,` + releaseSummaryArtworkProjection + `,` + releaseSummaryArtistRefsProjection
 
+const (
 	ReleaseSummaryArtworkJoin = ` LEFT JOIN release_artworks release_artwork
 		ON release_artwork.release_id = releases.id`
 
