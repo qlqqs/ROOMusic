@@ -51,10 +51,16 @@
 
 ## 验收
 
-- [ ] A1 从允许目录开始逐级进入，选择一个子文件夹，添加成功。
-- [ ] A2 越界路径（如 `/etc`、带 `..` 的路径）被接口拒绝；普通成员调用返回 403。
-- [ ] A3 符号链接目录不出现在列表里，和 `ValidatePath` 一致。
-- [ ] A4 受影响的 Go 测试和前端测试通过；截图里浏览器在 1440 和 375 宽度下都可用。
+- [x] A1 从允许目录开始逐级进入，选择一个子文件夹，添加成功。
+- [x] A2 越界路径（如 `/etc`、带 `..` 的路径）被接口拒绝；普通成员调用返回 403。
+- [x] A3 符号链接目录不出现在列表里，和 `ValidatePath` 一致。
+- [x] A4 受影响的 Go 测试和前端测试通过；截图里浏览器在 1440 和 375 宽度下都可用。
+
+## 实施结果（2026-11-07）
+
+- 提交 `a2556b3`：新增管理员专用 `GET /api/v1/library-folders`（`library.ListFolders`，不跟随符号链接，与 `ValidatePath` 同一套范围判断），列表标出已添加的目录；前端目录路径框可打开“选择文件夹”，逐级进入、返回上一级、选择后填入路径；合同见 `.trellis/spec/backend/library-folder-contracts.md`。
+- A2、A3：`folders_test.go` 覆盖越界路径、`..`、符号链接、自然排序与截断；接口样本集成测试录了起点、子文件夹、`/etc` 被拒三份样本，并断言普通成员调用返回 403。
+- A4：`npm run typecheck`；library-roots、decoders、api-contract 三个 Vitest 文件 577 项通过、1 项跳过；`e2e/library.spec.ts -g "浏览"` 通过（含 axe）。1440 / 375 截图 `1440-settings-library-browser.png`、`375-settings-library-browser.png` 可用，无横向溢出。
 
 ## 不做
 
