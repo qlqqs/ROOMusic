@@ -161,7 +161,7 @@ function MergeForm({ titleId, headingRef, target, commands, onClose }: Omit<Merg
 type CandidatePair = { left: ArtistSummaryDTO; right: ArtistSummaryDTO };
 
 /**
- * 从“可能是同一位”合并：先选留下哪一位（默认是参与更多的那位，它的主名保留），另一位并入它。两边的版本号从详情读。
+ * 从“重复艺人”合并：先选留下哪一位（默认是参与更多的那位，它的主名保留），另一位并入它。两边的版本号从详情读。
  */
 export function MergeCandidateDialog({ pair, commands, onClose }: { pair: CandidatePair | null; commands: ArtistCommands; onClose: () => void }) {
   const titleId = useId();

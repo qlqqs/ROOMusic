@@ -1,8 +1,8 @@
-import { ArrowRightLeft, ClipboardCheck, Combine, Disc3, Library, MicVocal, Music2, LayoutDashboard, type LucideIcon } from "lucide-react";
+import { ArrowRightLeft, ClipboardCheck, Combine, Disc3, Heart, History, LayoutDashboard, ListMusic, MicVocal, Music2, Star, type LucideIcon } from "lucide-react";
 import type { UserRole } from "../../features/auth";
 
 export type NavItem = {
-  to: "/" | "/albums" | "/artists" | "/me" | "/now-playing" | "/issues" | "/claims" | "/artist-candidates";
+  to: "/" | "/albums" | "/artists" | "/now-playing" | "/me/liked" | "/me/favorites" | "/me/history" | "/me/playlists" | "/issues" | "/claims" | "/artist-candidates";
   label: string;
   icon: LucideIcon;
   /** 只有管理员看到；后端仍然独立鉴权，这里只决定显示。 */
@@ -11,6 +11,8 @@ export type NavItem = {
   group: string | null;
   /** 艺人功能（M5 ⑤）的入口：只在后端有艺人能力（整理中或已就绪）时出现。 */
   artists?: true;
+  /** “我的歌单”：旁边有展开收起按钮，展开后列出歌单。 */
+  playlists?: true;
 };
 
 // 只列真实可用的页面；Steward 留待对应阶段。扫描目录、成员、操作记录与备份在设置页里（入口是侧栏底部的用户菜单）。
@@ -18,12 +20,14 @@ const navItems: readonly NavItem[] = [
   { to: "/", label: "概览", icon: LayoutDashboard, adminOnly: false, group: "聆听" },
   { to: "/albums", label: "专辑", icon: Disc3, adminOnly: false, group: "聆听" },
   { to: "/artists", label: "艺人", icon: MicVocal, adminOnly: false, group: "聆听", artists: true },
-  // “我的音乐”有收藏、歌单与历史三个页签（/me 转到 /me/favorites）。
-  { to: "/me", label: "我的音乐", icon: Library, adminOnly: false, group: "聆听" },
   { to: "/now-playing", label: "正在播放", icon: Music2, adminOnly: false, group: "聆听" },
-  { to: "/issues", label: "元数据问题", icon: ClipboardCheck, adminOnly: true, group: "资料库" },
+  { to: "/me/liked", label: "我喜欢的音乐", icon: Heart, adminOnly: false, group: "我的音乐" },
+  { to: "/me/favorites", label: "我的收藏", icon: Star, adminOnly: false, group: "我的音乐" },
+  { to: "/me/history", label: "播放历史", icon: History, adminOnly: false, group: "我的音乐" },
+  { to: "/me/playlists", label: "我的歌单", icon: ListMusic, adminOnly: false, group: "我的音乐", playlists: true },
+  { to: "/issues", label: "元数据", icon: ClipboardCheck, adminOnly: true, group: "资料库" },
   { to: "/claims", label: "待认领", icon: ArrowRightLeft, adminOnly: true, group: "资料库" },
-  { to: "/artist-candidates", label: "可能是同一位", icon: Combine, adminOnly: true, group: "资料库", artists: true },
+  { to: "/artist-candidates", label: "重复艺人", icon: Combine, adminOnly: true, group: "资料库", artists: true },
 ];
 
 export type NavGroup = { label: string | null; items: readonly NavItem[] };

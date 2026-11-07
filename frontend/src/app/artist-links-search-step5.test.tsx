@@ -95,7 +95,7 @@ describe("艺人名字链接与回退", () => {
 });
 
 describe("I5 艺人入口能力状态", () => {
-  it.each(["ready", "preparing", "unavailable", "unknown", "failed"] as const)("%s 下侧栏与收藏分类同时显示或隐藏", async (state) => {
+  it.each(["ready", "preparing", "unavailable", "unknown", "failed"] as const)("%s 下侧栏艺人入口与收藏的艺人一栏同时显示或隐藏", async (state) => {
     const { api, data } = setup();
     if (state === "unknown") {
       const pending = deferred<Response>();
@@ -105,16 +105,17 @@ describe("I5 艺人入口能力状态", () => {
     const { runtime } = renderApp({ path: "/me/favorites" });
     runtime.queryClient.setDefaultOptions({ queries: { retry: false } });
     const nav = await screen.findByRole("navigation", { name: "主导航" });
-    const categories = await screen.findByRole("navigation", { name: "收藏分类" });
     if (state === "ready" || state === "preparing") {
       expect(await within(nav).findByRole("link", { name: "艺人" })).toBeTruthy();
-      expect(within(nav).getByRole("link", { name: "可能是同一位" })).toBeTruthy();
+      expect(within(nav).getByRole("link", { name: "重复艺人" })).toBeTruthy();
+      const categories = await screen.findByRole("navigation", { name: "收藏分类" });
       expect(within(categories).getByRole("link", { name: "艺人" })).toBeTruthy();
     } else {
+      // 只剩专辑一栏时不显示切换。
       await screen.findByText("还没有收藏的专辑。");
       expect(within(nav).queryByRole("link", { name: "艺人" })).toBeNull();
-      expect(within(nav).queryByRole("link", { name: "可能是同一位" })).toBeNull();
-      expect(within(categories).queryByRole("link", { name: "艺人" })).toBeNull();
+      expect(within(nav).queryByRole("link", { name: "重复艺人" })).toBeNull();
+      expect(screen.queryByRole("navigation", { name: "收藏分类" })).toBeNull();
     }
   });
 });

@@ -106,6 +106,67 @@ async function remove(title: string) {
   await waitFor(() => expect(screen.queryByText(title, { exact: true })).toBeNull());
 }
 
+describe("侧栏的歌单导航", () => {
+  const expandedKey = "roomusic.nav.playlists-expanded";
+  const nav = () => within(screen.getByRole("navigation", { name: "主导航" }));
+
+  beforeEach(() => localStorage.removeItem(expandedKey));
+  afterEach(() => localStorage.removeItem(expandedKey));
+
+  it("歌单导航默认展开，收起和再次展开后重新挂载仍保持", async () => {
+    setup(0);
+    const firstMount = renderApp({ path: "/me/playlists" });
+    await screen.findByRole("navigation", { name: "主导航" });
+    await nav().findByRole("link", { name: base.name });
+    expect(nav().getByRole("button", { name: "歌单列表" }).getAttribute("aria-expanded")).toBe("true");
+    await userEvent.click(nav().getByRole("button", { name: "歌单列表" }));
+    expect(nav().getByRole("button", { name: "歌单列表" }).getAttribute("aria-expanded")).toBe("false");
+    expect(nav().queryByRole("link", { name: base.name })).toBeNull();
+
+    firstMount.view.unmount();
+    firstMount.runtime.dispose();
+    const secondMount = renderApp({ path: "/me/playlists" });
+    await screen.findByRole("navigation", { name: "主导航" });
+    const collapsed = await nav().findByRole("button", { name: "歌单列表" });
+    expect(collapsed.getAttribute("aria-expanded")).toBe("false");
+    expect(nav().queryByRole("link", { name: base.name })).toBeNull();
+    await userEvent.click(collapsed);
+    await nav().findByRole("link", { name: base.name });
+    expect(nav().getByRole("button", { name: "歌单列表" }).getAttribute("aria-expanded")).toBe("true");
+
+    secondMount.view.unmount();
+    secondMount.runtime.dispose();
+    renderApp({ path: "/me/playlists" });
+    await screen.findByRole("navigation", { name: "主导航" });
+    await nav().findByRole("link", { name: base.name });
+    expect(nav().getByRole("button", { name: "歌单列表" }).getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("新建歌单成功后侧栏立即出现新歌单，无需刷新或重新展开", async () => {
+    const { api, state, playlist } = setup(0);
+    const name = "刚建的歌单";
+    state.deleted = true;
+    api.on("POST", playlistsPath, (request) => {
+      expect(request.body).toEqual({ name });
+      state.name = name;
+      state.deleted = false;
+      return jsonResponse(201, { playlist: playlist(), added_count: 0, existing_count: 0, duplicate_count: 0 });
+    });
+    const { history } = renderApp({ path: "/me/playlists" });
+    await screen.findByText("还没有歌单。");
+    expect(nav().getByRole("button", { name: "歌单列表" }).getAttribute("aria-expanded")).toBe("true");
+    expect(nav().queryByRole("link", { name })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "新建歌单" }));
+    const dialog = await screen.findByRole("dialog", { name: "新建歌单" });
+    await userEvent.type(within(dialog).getByRole("textbox", { name: "名字" }), name);
+    await userEvent.click(within(dialog).getByRole("button", { name: "新建" }));
+
+    expect((await nav().findByRole("link", { name })).getAttribute("href")).toBe(pagePath);
+    await screen.findByRole("heading", { name });
+    expect(history.location.pathname).toBe(pagePath);
+  });
+});
+
 describe("歌单详情的顺序、冲突与稳定重试", () => {
   it("四个菜单移动在整个歌单的首尾禁用，中间行均可用", async () => {
     setup();

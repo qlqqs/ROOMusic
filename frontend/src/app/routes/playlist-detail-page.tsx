@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { PlaylistDetailView, type PlaylistItemDTO, type PlaylistSummaryDTO } from "../../features/personal";
-import type { MenuAction } from "../../shared/ui";
+import { Page, type MenuAction } from "../../shared/ui";
 import { PersonalPlayAll } from "./personal-playback";
 import { TrackActions } from "./track-actions";
 import { playerTrackOfSummary } from "./track-playback";
@@ -18,5 +18,9 @@ function PlaylistTrackActions({ item, actions }: { item: PlaylistItemDTO; action
 export function PlaylistDetailPage({ playlistId, page }: { playlistId: string; page: number }) {
   const renderPlayAll = useCallback((playlist: PlaylistSummaryDTO) => <PersonalPlayAll source={{ kind: "playlist", playlistId: playlist.id }} />, []);
   const renderTrackActions = useCallback((item: PlaylistItemDTO, actions: readonly MenuAction[]) => <PlaylistTrackActions item={item} actions={actions} />, []);
-  return <PlaylistDetailView playlistId={playlistId} page={page} renderPlayAll={renderPlayAll} renderTrackActions={renderTrackActions} />;
+  return (
+    <Page title="我的歌单">
+      <PlaylistDetailView playlistId={playlistId} page={page} renderPlayAll={renderPlayAll} renderTrackActions={renderTrackActions} />
+    </Page>
+  );
 }

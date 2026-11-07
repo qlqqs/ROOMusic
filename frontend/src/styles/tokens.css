@@ -97,7 +97,7 @@
   --layout-page-inset-x: 32px;
   --layout-page-inset-y: 24px;
   --layout-topbar-height: 52px;
-  /* 元数据问题页的列表栏（两栏时）；详情最宽 860px，容器窄于约 900px 时改为顺序导航。 */
+  /* 元数据页的列表栏（两栏时）；详情最宽 860px，容器窄于约 900px 时改为顺序导航。 */
   --layout-issue-list-width: 380px;
   /* 设置页的左侧分栏（视口 ≥1024px 时）。 */
   --layout-settings-nav-width: 176px;

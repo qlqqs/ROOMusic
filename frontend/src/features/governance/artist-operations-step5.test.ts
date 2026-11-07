@@ -19,7 +19,7 @@ describe("艺人操作记录摘要", () => {
     ["artist_merge", "合并艺人", "需要时可以拆开"],
     ["artist_split", "拆开艺人", "需要时可以再合并"],
     ["artist_rename", "修改艺人主名", "需要时可以再改名"],
-    ["artist_candidate_ignore", "忽略“可能是同一位”的提示", "不能撤销"],
+    ["artist_candidate_ignore", "忽略重复艺人提示", "不能撤销"],
   ] as const)("%s 明确自己的类型与反向办法，不假称专辑不可见或发生后续修改", (type, label, reason) => {
     // 真实 operations/artists 样本没有忽略记录；按公开 DTO 显式登记该类型，不声称后端样本覆盖。
     const item: OperationItemDTO = type === "artist_candidate_ignore"
@@ -58,8 +58,8 @@ describe("艺人操作记录摘要", () => {
 
   it("恢复提示是独立类型文案，不称撤销；损坏摘要仍保留艺人类型", () => {
     const changes: OperationItemDTO["changes"] = { kind: "artist_candidate_ignore", other_artist: { id, name: "另一位" }, ignored: false };
-    expect(operationTypeLabel({ type: "artist_candidate_ignore", changes })).toBe("恢复“可能是同一位”的提示");
-    expect(changeLines({ changes })).toEqual(["恢复与“另一位”可能是同一位的提示"]);
+    expect(operationTypeLabel({ type: "artist_candidate_ignore", changes })).toBe("恢复重复艺人提示");
+    expect(changeLines({ changes })).toEqual(["恢复与“另一位”重复的提示"]);
     expect(operationTypeLabel({ type: "artist_merge", changes: null })).toBe("合并艺人");
     expect(changeLines({ changes: null })).toEqual(["无法显示改动内容"]);
   });

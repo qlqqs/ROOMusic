@@ -122,6 +122,8 @@ operation payloads in the URL.
 - 设置页（`/settings/*`）：`settings-layout.tsx` 只放分栏与 `<Outlet />`，不另加 h1（各栏内容组件自带 `Page`）；视口 ≥1024px 左侧分栏，更窄时内容上方一行横向链接。
   管理员栏照旧由路由层 `AdminGate` 把关，分栏只决定显示哪些项。旧地址（`/library`、`/members`、`/operations`、`/system/backups`）在根路由下、登录守卫之前重定向，
   `path` 是 `string`，不进类型化路由树，所以旧 `<Link to>` 会被 tsc 拦下；查询参数值等价保留（`%20` 可能变 `+`，重复键不保证）。
+- 我的音乐（2026-11-07 起）：`/me` 转到 `/me/liked`；`/me/favorites?tab=tracks` 由 `/me/favorites` 路由的 `beforeLoad` 读校验后的 `tab` 转到 `/me/liked`，
+  只带 `page`（2 及以上）；都替换历史项。`/me/favorites` 的 `tab` 只认 `artists`，其他值当作默认的专辑。
 
 ## Local And Global State
 
@@ -212,7 +214,7 @@ the backend journal.
 
 ## 播放与个人状态的阶段边界
 
-M2a 播放生命周期与恢复、阶段 P 播放上报与最近播放、M5 ① 历史页签与 M5 ④ 全局搜索的查询键、URL 与目录状态见[播放与个人状态](./playback-and-personal-state.md)。
+M2a 播放生命周期与恢复、阶段 P 播放上报与最近播放、M5 ① 播放历史与 M5 ④ 全局搜索的查询键、URL 与目录状态见[播放与个人状态](./playback-and-personal-state.md)。
 
 See [Hook Guidelines](./hook-guidelines.md),
 [Cross-Layer Thinking](../guides/cross-layer-thinking-guide.md), and the

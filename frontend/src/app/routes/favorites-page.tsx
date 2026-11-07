@@ -1,5 +1,6 @@
 import { useCallback } from "react";
-import { FavoritesView, type FavoriteTrackDTO, type FavoritesTab } from "../../features/personal";
+import { FavoritesView, LikedTracksView, type FavoriteTrackDTO, type FavoritesTab } from "../../features/personal";
+import { Page } from "../../shared/ui";
 import { PersonalPlayAll } from "./personal-playback";
 import { TrackActions } from "./track-actions";
 import { playerTrackOfSummary } from "./track-playback";
@@ -13,12 +14,25 @@ function FavoriteTrackActions({ item }: { item: FavoriteTrackDTO }) {
 }
 
 /**
- * “我的音乐”的收藏页签：personal 给出两栏、翻页与保留行；曲目栏的“播放全部”与每行的播放、心形、“更多”由这里经插槽组合。
- * tab 与 page 来自地址。
+ * 我喜欢的音乐：personal 给出收藏的曲目、翻页与保留行；“播放全部”与每行的播放、心形、“更多”由这里经插槽组合。
+ * page 来自地址。
  */
-export function FavoritesPage({ tab, page }: { tab: FavoritesTab; page: number }) {
+export function LikedPage({ page }: { page: number }) {
   // 插槽保持同一个函数引用，表格的列定义才不会每次重建。
   const renderPlayAll = useCallback(() => <PersonalPlayAll source={favoritesSource} />, []);
   const renderTrackActions = useCallback((item: FavoriteTrackDTO) => <FavoriteTrackActions item={item} />, []);
-  return <FavoritesView tab={tab} page={page} renderPlayAll={renderPlayAll} renderTrackActions={renderTrackActions} />;
+  return (
+    <Page title="我喜欢的音乐">
+      <LikedTracksView page={page} renderPlayAll={renderPlayAll} renderTrackActions={renderTrackActions} />
+    </Page>
+  );
+}
+
+/** 我的收藏：收藏的专辑与艺人两栏；tab 与 page 来自地址。 */
+export function FavoritesPage({ tab, page }: { tab: FavoritesTab; page: number }) {
+  return (
+    <Page title="我的收藏">
+      <FavoritesView tab={tab} page={page} />
+    </Page>
+  );
 }

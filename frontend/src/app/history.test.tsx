@@ -117,7 +117,7 @@ describe("我的音乐历史页", () => {
     await userEvent.click(screen.getByRole("link", { name: "上一页" }));
     await waitFor(() => expect(new URLSearchParams(history.location.search).has("page")).toBe(false));
     expect(await screen.findByText("历史曲目 1", { exact: true })).toBeTruthy();
-    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "播放历史" }));
+    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "听过的曲目" }));
     await userEvent.click(screen.getByRole("link", { name: "下一页" }));
     await waitFor(() => expect(new URLSearchParams(history.location.search).get("page")).toBe("2"));
   });
@@ -176,7 +176,7 @@ describe("我的音乐历史页", () => {
     expect(screen.queryByRole("row", { name: new RegExp(first.title) })).toBeNull();
     expect(row(second.title)).toBeTruthy();
     expect(screen.getByText(`已从历史中移除《${first.title}》。`)).toBeTruthy();
-    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "播放历史" }));
+    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "听过的曲目" }));
     for (const key of caches.mine) expect(runtime.queryClient.getQueryState(key)?.isInvalidated).toBe(true);
     for (const key of caches.other) expect(runtime.queryClient.getQueryState(key)?.isInvalidated).toBe(false);
     expect(api.requestsTo("DELETE", `${tracks}/${first.track_id}`)).toHaveLength(1);
@@ -234,20 +234,20 @@ describe("我的音乐历史页", () => {
     refetch.resolve(jsonResponse(200, historyPage([])));
   });
 
-  it("/me 替换到收藏页，页签顺序为收藏、歌单、历史，历史仍可达", async () => {
+  it("/me 替换到我喜欢的音乐，侧栏“我的音乐”一组依次是四页，播放历史仍可达", async () => {
     setup();
     const { history } = renderApp({ path: "/me" });
-    await waitFor(() => expect(history.location.pathname).toBe("/me/favorites"));
+    await waitFor(() => expect(history.location.pathname).toBe("/me/liked"));
     expect(history.length).toBe(1);
-    expect(screen.getByRole("link", { name: "我的音乐" }).getAttribute("href")).toBe("/me");
-    const tabs = within(screen.getByRole("navigation", { name: "我的音乐" }));
-    expect(tabs.getAllByRole("link").map((link) => link.textContent)).toEqual(["收藏", "歌单", "历史"]);
-    expect(tabs.getByRole("link", { name: "收藏" }).getAttribute("aria-current")).toBe("page");
-    expect(tabs.getByRole("link", { name: "历史" }).getAttribute("aria-current")).toBeNull();
-    await userEvent.click(tabs.getByRole("link", { name: "历史" }));
+    const nav = within(screen.getByRole("navigation", { name: "主导航" }));
+    for (const [name, href] of [["我喜欢的音乐", "/me/liked"], ["我的收藏", "/me/favorites"], ["播放历史", "/me/history"], ["我的歌单", "/me/playlists"]] as const) {
+      expect(nav.getByRole("link", { name }).getAttribute("href")).toBe(href);
+    }
+    expect(nav.getByRole("link", { name: "我喜欢的音乐" }).getAttribute("aria-current")).toBe("page");
+    await userEvent.click(nav.getByRole("link", { name: "播放历史" }));
     await screen.findByRole("table", { name: "播放历史" });
     expect(history.location.pathname).toBe("/me/history");
-    expect(tabs.getByRole("link", { name: "历史" }).getAttribute("aria-current")).toBe("page");
+    expect(nav.getByRole("link", { name: "播放历史" }).getAttribute("aria-current")).toBe("page");
   });
 
   it("旧用户在途读取被取消，迟到历史不渲染到新会话", async () => {

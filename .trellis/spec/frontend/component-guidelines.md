@@ -98,7 +98,7 @@ hook 里，展示在组件里。按 [Classical 设计依据](../../../frontend/D
 
 ## 已实现的受治理操作组件（M3，`features/governance`）
 
-管理员的受治理写操作、元数据问题页与待认领页（M4 第三项）的组件约定已移到 [governance-components.md](./governance-components.md)（本文件接近 24 KB 的上限；内容原样搬移，之后的增补写在那里）。
+管理员的受治理写操作、元数据页与待认领页（M4 第三项）的组件约定已移到 [governance-components.md](./governance-components.md)（本文件接近 24 KB 的上限；内容原样搬移，之后的增补写在那里）。
 
 ## 已实现的收藏与歌单组件（M5 ② ③，`features/personal`）
 

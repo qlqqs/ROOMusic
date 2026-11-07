@@ -119,17 +119,14 @@ for (const width of widths) {
   });
 }
 
-test("纯键盘：侧栏进入我的音乐，行内播放，更多→移除→确认，清除全部→确认", async ({ page, backend }) => {
+test("纯键盘：侧栏进入播放历史，行内播放，更多→移除→确认，清除全部→确认", async ({ page, backend }) => {
   await backend.start({ signedInAs: "listener" });
   const first = historyItem(1);
   const second = historyItem(2);
   const state = await mockHistory(page, [first, second]);
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1, name: "概览" })).toBeVisible();
-  await keyboardActivate(page, page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: "我的音乐" }));
-  await expect(page).toHaveURL(/\/me\/favorites$/);
-  await expect(page.getByRole("navigation", { name: "我的音乐", exact: true }).getByRole("link", { name: "收藏", exact: true })).toHaveAttribute("aria-current", "page");
-  await keyboardActivate(page, page.getByRole("navigation", { name: "我的音乐", exact: true }).getByRole("link", { name: "历史", exact: true }));
+  await keyboardActivate(page, page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: "播放历史", exact: true }));
   await expect(page).toHaveURL(/\/me\/history$/);
   await expect(table(page)).toBeVisible();
   const play = row(page, first.title).getByRole("button", { name: `播放 ${first.title}`, exact: true });
@@ -150,7 +147,7 @@ test("纯键盘：侧栏进入我的音乐，行内播放，更多→移除→�
   await page.keyboard.press("Enter");
   await expect(row(page, first.title)).toHaveCount(0);
   expect(state.deletes).toEqual([`${plays}/tracks/${first.track_id}`]);
-  await expect(page.getByRole("heading", { name: "播放历史", exact: true })).toBeFocused();
+  await expect(page.getByRole("heading", { name: "听过的曲目", exact: true })).toBeFocused();
   await keyboardActivate(page, page.getByRole("button", { name: "清除全部历史" }));
   dialog = page.getByRole("dialog", { name: "清除播放历史？" });
   await expect(dialog.getByRole("button", { name: "取消" })).toBeFocused();
@@ -173,10 +170,10 @@ test("概览全部历史链接直达历史页，/me 直接访问重定向，地�
   await expect(page).toHaveURL(/\/me\/history$/);
   await expect(table(page)).toBeVisible();
   await page.goto("/me");
-  await expect(page).toHaveURL(/\/me\/favorites$/);
-  const tabs = page.getByRole("navigation", { name: "我的音乐", exact: true });
-  await expect(tabs.getByRole("link")).toHaveText(["收藏", "歌单", "历史"]);
-  await expect(tabs.getByRole("link", { name: "收藏", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page).toHaveURL(/\/me\/liked$/);
+  const nav = page.getByRole("navigation", { name: "主导航", exact: true });
+  await expect(nav.getByRole("link", { name: "我喜欢的音乐", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("navigation", { name: "我的音乐", exact: true })).toHaveCount(0);
   await page.goto("/me/history?page=2");
   await expect(row(page, "历史曲目 51")).toBeVisible();
   await expect(row(page, "历史曲目 1")).toHaveCount(0);

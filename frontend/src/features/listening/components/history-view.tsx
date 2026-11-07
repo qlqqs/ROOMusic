@@ -152,7 +152,7 @@ export function HistoryView({ page, renderPlayAll, renderTrackActions, renderRow
   return (
     <>
       <Panel
-        title="播放历史"
+        title="听过的曲目"
         headingRef={headingRef}
         action={
           hasHistory ? (

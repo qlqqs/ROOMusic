@@ -31,7 +31,7 @@ export type ArtistIntent =
     }
   | { kind: "rename"; artist: ArtistTarget; revision: number; name: { mode: "set"; name: string } | { mode: "auto" } }
   | {
-      /** 忽略（或恢复）一条“可能是同一位”的提示。 */
+      /** 忽略（或恢复）一条“重复艺人”的提示。 */
       kind: "ignore";
       artist: ArtistTarget;
       revision: number;

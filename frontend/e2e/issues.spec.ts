@@ -8,7 +8,7 @@ import { expect, test } from "./support/fixtures";
 import { tabTo } from "./support/keyboard";
 import { heading, mainNav, uuidPattern } from "./support/locators";
 
-// 元数据问题（M4 第二项）：管理员的问题页按版本列出问题，核对、取消核对、撤销与编辑发行信息。受控后端与 Vitest 共用
+// 元数据（M4 第二项）：管理员的问题页按版本列出问题，核对、取消核对、撤销与编辑发行信息。受控后端与 Vitest 共用
 // src/test/governance-data.ts 的问题与核对行为（依据令牌、过期、各种 409），所以页面能走完整的流程；宽度、axe 与键盘路径在真实浏览器里检查。
 
 const suites = () => albumGroup(1, { title: "Bach: Cello Suites", artist: "Pierre Fournier", year: 1961 });
@@ -47,13 +47,13 @@ const detail = (page: Page, title: string) => page.getByRole("article").filter({
 const section = (page: Page, name: string) => page.locator("section").filter({ has: page.getByRole("heading", { level: 3, name }) });
 const issueList = (page: Page) => page.locator("section").filter({ has: page.getByRole("heading", { level: 2, name: "有问题的版本" }) });
 
-test.describe("元数据问题：主流程", () => {
+test.describe("元数据：主流程", () => {
   test("从导航进入，选中版本；核对归组冲突后数字与列表一起变化，提示里的“撤销”恢复；取消核对与它的撤销也成立", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
     start(mock);
     await page.goto("/");
-    await mainNav(page).getByRole("link", { name: "元数据问题" }).click();
-    await expect(heading(page, "元数据问题")).toBeVisible();
+    await mainNav(page).getByRole("link", { name: "元数据", exact: true }).click();
+    await expect(heading(page, "元数据")).toBeVisible();
     await page.setViewportSize({ width: 1440, height: 900 });
     await issueList(page).getByRole("link", { name: /^Bach: Cello Suites Remastered/ }).click();
     await expect(page).toHaveURL(new RegExp(`release=${releaseOf(suites())}`));
@@ -125,7 +125,7 @@ test.describe("元数据问题：主流程", () => {
     const mock = await backend.start({ signedInAs: "listener" });
     start(mock);
     await page.goto("/");
-    await expect(mainNav(page).getByRole("link", { name: "元数据问题" })).toHaveCount(0);
+    await expect(mainNav(page).getByRole("link", { name: "元数据", exact: true })).toHaveCount(0);
     await page.goto(issuesPath());
     await expect(heading(page, "需要管理员权限")).toBeVisible();
     expect(mock.callsTo("GET", "/api/v1/release-issues")).toHaveLength(0);
@@ -135,7 +135,7 @@ test.describe("元数据问题：主流程", () => {
   });
 });
 
-test.describe("元数据问题：布局与可访问性", () => {
+test.describe("元数据：布局与可访问性", () => {
   test("五种宽度（长内容）：宽屏两栏、窄屏先列表后详情，没有横向溢出，字号不小于 12px，通过 axe", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
     startLong(mock);

@@ -593,7 +593,7 @@ export function respondToRevert(data: GovernanceData, operationId: string, key: 
   });
 }
 
-// ---- 元数据问题与核对 ----
+// ---- 元数据与核对 ----
 
 /** 依据令牌：问题内容的稳定摘要（64 位十六进制，形状与后端相同）。内容不变令牌不变。 */
 function tokenOf(content: unknown): string {

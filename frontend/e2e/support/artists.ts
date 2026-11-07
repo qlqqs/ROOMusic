@@ -54,7 +54,7 @@ export async function openArtistScene(page: Page, data: ArtistSceneData, scene: 
   }
   if (scene === "candidates") {
     await page.goto("/artist-candidates");
-    await expect(page.getByRole("heading", { name: "可能是同一位", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "重复艺人", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: /^忽略“/ }).first()).toBeVisible();
     return;
   }

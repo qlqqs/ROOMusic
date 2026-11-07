@@ -53,7 +53,7 @@ Cookie、凭据、服务器路径和治理操作结果不得写进浏览器持�
 “最近播放”是服务器状态（键 `viewerQueryKey(generation, "listening", "recent-releases")`）；清除是写操作：成功后 `setQueryData` 置空并失效，不等重新读取，
 失败时保留旧数据、对话框里显示错误，DELETE 幂等所以可以直接重试。
 
-## M5 ① 历史页签的查询键与失效
+## M5 ① 播放历史页的查询键与失效
 
 - 键都在 `viewerQueryKey(generation, "listening", …)` 之下，会话切换（代次变化）自然隔离：`listeningKeys.all` 是前缀；`recentReleases`；`tracks`（历史页全部分页的前缀）与
   `trackPage(generation, { page, pageSize })`（一页，页大小固定 50，显式传给后端）；`queue`（“播放全部”的候选，最近最多 1,000 首）。
@@ -61,7 +61,7 @@ Cookie、凭据、服务器路径和治理操作结果不得写进浏览器持�
   `useReleaseDataRefresh`（app）同样失效这个前缀（标题、归组会改变历史里显示的专辑）。移除成功先用 `setQueriesData` 从已缓存的各页去掉这一行，
   清除成功先把“最近播放”与各页置空，都不等重新读取；失败时保留旧数据、对话框里显示错误，DELETE 幂等可直接重试。
 - “播放全部”每次按下都经 `queryClient.fetchQuery(queue, staleTime: 0)` 读最新候选，不沿用旧缓存；结果只在发起时的会话仍是当前会话时交给调用方。
-- URL：`/me/history?page=N`，`page` 经 `parsePageParam` 解析，只在 2 及以上写进地址；`/me` 用替换历史项的方式转到第一个页签 `/me/favorites`（M5 ② ③ 起；页签顺序收藏、歌单、历史）。
+- URL：`/me/history?page=N`，`page` 经 `parsePageParam` 解析，只在 2 及以上写进地址；“我的音乐”没有共同的页签布局（2026-11-07 起，四页在侧栏各有入口，见[收藏与歌单的前端约定](./personal-guidelines.md)），`/me` 用替换历史项的方式转到 `/me/liked`。
   与专辑、扫描记录不同，**页码超出末页时不规范化地址**（不使用 `useClampedPage`）：显示“这一页没有记录。”与“回到第一页”的链接（产品裁决，2026-11-04）。
   点页码链接时把结果区标题滚到视野顶部并聚焦（与专辑列表相同）。
 

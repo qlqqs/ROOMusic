@@ -93,7 +93,7 @@ features/governance/
 │                                   # use-issues（问题列表与版本的问题）、use-claims（待认领列表、详情、预览与提示）、use-container-wide（问题页与待认领页的两栏与顺序导航）
 └── components/                     # edit-release-dialog、join-album-dialog、detach-album-dialog、release-admin-actions、release-command-notice、
                                     # operation-list、revert-operation-dialog、operations-view（操作记录页内容）、release-history（专辑详情的“修改记录”）、
-                                    # issues-view、issue-list、release-issues-detail、issue-actions（元数据问题页，M4）、
+                                    # issues-view、issue-list、release-issues-detail、issue-actions（元数据页，M4）、
                                     # claims-view、claim-list、claim-detail、claim-target-picker、claim-preview（待认领页，M4 第三项）
 ```
 
@@ -119,7 +119,7 @@ features/governance/
   （`personal-playback.tsx`）以及播放器栏、队列上的心形与“存为歌单”（`app/player-personal-actions.tsx`，经 player 的中立插槽）都在 app。
   细节见[收藏与歌单的前端约定](./personal-guidelines.md)。
 - `governance`（M3）拥有管理员对发行的受治理写操作的界面与命令状态：编辑发行信息、调整归组、撤销、操作记录页与专辑详情的“修改记录”；
-  M4 起还有专辑的默认版本（设定、改回自动选择与撤销）与“元数据问题”页（`/issues`：问题列表与详情、核对、取消核对与撤销，专辑详情的“查看问题”经现有插槽）与“待认领”页（`/claims`：把已不可见的旧版本上的修改认领给新版本，专辑详情的“可能接替了……”提示经同一个插槽）。
+  M4 起还有专辑的默认版本（设定、改回自动选择与撤销）与“元数据”页（`/issues`：问题列表与详情、核对、取消核对与撤销，专辑详情的“查看问题”经现有插槽）与“待认领”页（`/claims`：把已不可见的旧版本上的修改认领给新版本，专辑详情的“可能接替了……”提示经同一个插槽）。
   只读的默认版本标签与版本对比（所有成员可见）在 catalog；问题页用的证据字段与原因码的中文名由 catalog 公开。
   它导入 catalog 的公开合同（封面、专辑艺人的显示规则、专辑搜索与专辑详情的读取），**catalog 从不导入 governance**：专辑详情里的管理员区块由 app 经插槽
   （`renderAdminActions`、`renderAdminSections`）传给 catalog 的详情视图；写操作之后刷新什么缓存、版本换了专辑组之后导航到哪里，由 app 提供给命令 hook，

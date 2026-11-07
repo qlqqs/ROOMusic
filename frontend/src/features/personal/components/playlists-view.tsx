@@ -25,7 +25,7 @@ function PlaylistCard({ playlist }: { playlist: PlaylistSummaryDTO }) {
 }
 
 /**
- * “我的音乐”的歌单页签：本人的歌单，按最近修改倒序，卡片显示封面、名字、曲目数与总时长。
+ * 我的歌单：本人的歌单，按最近修改倒序，卡片显示封面、名字、曲目数与总时长。
  * “新建歌单”只要名字，建好后直接进入这个歌单。
  */
 export function PlaylistsView({ page }: { page: number }) {
@@ -50,7 +50,7 @@ export function PlaylistsView({ page }: { page: number }) {
   return (
     <>
       <Panel
-        title="歌单"
+        title="全部歌单"
         headingRef={headingRef}
         action={
           <Button icon={<Plus size={16} />} onClick={() => setCreating(true)}>

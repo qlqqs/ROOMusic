@@ -4,7 +4,7 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
 import { decodeIssuePage, decodeOperationPage, decodeReleaseIssues } from "../../src/features/governance/api/decoders";
 import { body, catalog, decodeID, fixtureRoot, login, origin, post, prepareLibrary, scan, syntheticWav } from "./support";
 
-// M4 元数据问题的真实服务用例：隔离服务、隔离 PostgreSQL、真实 Chromium。素材是本用例自己生成的合成 WAV，放在 library/issues/split 下：
+// M4 元数据页的真实服务用例：隔离服务、隔离 PostgreSQL、真实 Chromium。素材是本用例自己生成的合成 WAV，放在 library/issues/split 下：
 // 同一个目录里三种专辑标签（A 三首、B 两首、C 两首，没有一种过半数，扫描按标签拆成三个版本，各有一个“同一目录的归组冲突”），
 // 删掉 A 的一首再完整扫描，造出缺失曲目（A 剩两首、仍没有过半数；A 原有的三首里两首还在，仍是同一个发行）。
 // 用例结束后删除并重新扫描，不留下痕迹。
@@ -174,7 +174,7 @@ test("问题列表接口：各类数目之和等于“需要关注”；普通�
   decodeID(await body(await post(request, "/api/v1/users", member)));
   await login(page.request, member);
   await page.goto("/");
-  await expect(page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: "元数据问题" })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: "元数据" })).toHaveCount(0);
   await page.goto(`/albums/${splitB.groupId}`);
   await expect(page.getByRole("heading", { level: 1, name: albumB })).toBeVisible();
   await expect(page.getByRole("link", { name: "查看问题" })).toHaveCount(0);

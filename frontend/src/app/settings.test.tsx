@@ -53,7 +53,7 @@ describe("设置页与权限", () => {
     const nav = within(screen.getByRole("navigation", { name: "主导航" }));
     for (const name of ["扫描目录", "成员", "操作记录", "备份"]) expect(nav.queryByRole("link", { name })).toBeNull();
     expect(nav.queryByText("系统")).toBeNull();
-    for (const name of ["元数据问题", "待认领", "可能是同一位"]) expect(await nav.findByRole("link", { name })).toBeTruthy();
+    for (const name of ["元数据", "待认领", "重复艺人"]) expect(await nav.findByRole("link", { name })).toBeTruthy();
   });
 
   it("成员只看到账号栏，仍能修改自己的密码，不请求管理接口", async () => {

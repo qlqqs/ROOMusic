@@ -375,7 +375,7 @@ describe("候选和操作记录", () => {
     await screen.findByRole("heading", { name: context.detail.artist.name, level: 1 });
     for (const name of ["合并艺人…", "拆开…", "修改主名…"]) expect(screen.queryByRole("button", { name })).toBeNull();
     expect(screen.queryByRole("link", { name: "操作记录" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "可能是同一位" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "重复艺人" })).toBeNull();
     expect(context.api.requestsTo("GET", endpoint("merged-sources"))).toHaveLength(0);
   });
 

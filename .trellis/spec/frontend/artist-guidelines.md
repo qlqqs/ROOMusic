@@ -16,7 +16,7 @@
   用在：专辑页标题下的专辑艺人、曲目行的曲目艺人与每条署名、“制作人员”、播放器栏与正在播放、历史、收藏、歌单、搜索结果与艺人页的曲目行。
 - `features/artists` 拥有艺人列表与艺人页的 API、解码器、查询键、URL 校验（`artist-search.ts`）与视图；只导入 catalog 的公开合同，
   **不导入 player、personal、governance、search**。艺人页的播放、心形、管理员操作与曲目行动作都经插槽由 app 组合（`app/routes/artist-detail-page.tsx`）。
-- governance 拥有艺人的治理（`use-artist-commands.ts`、合并/拆开/改名对话框、“可能是同一位”的候选页）；它可以导入 artists 的公开入口（找人、读详情取版本号），
+- governance 拥有艺人的治理（`use-artist-commands.ts`、合并/拆开/改名对话框、“重复艺人”的候选页）；它可以导入 artists 的公开入口（找人、读详情取版本号），
   artists 不导入 governance。
 - `PlayerTrack` 增加可选的 `artistRefs`：两个构造入口（`playerTrackOf`、`playerTrackOfSummary`）都给出；缺省等于空数组，只用于显示，不进入刷新恢复的记录。
 - 队列里已有曲目的显示元数据（I4）：引擎只提供 `updateTrackMetadata(patches)`（纯函数 `patchTrackMetadata`，按曲目 ID 只换标题、艺人与 `artistRefs`、专辑名与专辑艺人、封面；
@@ -30,10 +30,10 @@
   role 是七个角色之一；按名字排序是默认、不写；任何筛选改变都回到第 1 页；越界页码替换成末页。按名字排序时按首字母分组显示，按专辑数排序时不分组。
 - `/artists/{id}?albums_page=&track_role=&tracks_page=&names_page=`：专辑、曲目、名字各自翻页；曲目栏按角色分栏（只列有曲目的角色），换角色时曲目回到第 1 页。
   路径不是 UUID 时不发请求、显示“艺人不存在”；详情给出 `redirect_artist_id` 时用替换历史的方式带到现在的艺人页。
-- `/me/favorites?tab=artists`：收藏的第三栏；`/search?artists_page=`：搜索结果的艺人栏页码；`/operations?artist=`：这位艺人的操作记录（与 release、group 取并集）；
-  `/artist-candidates?status=&page=`（管理员）：“可能是同一位”。`status` 只接受 `ignored`，不传就是待处理；切换时不带页码，回到第一页；
+- `/me/favorites?tab=artists`：“我的收藏”的艺人一栏；`/search?artists_page=`：搜索结果的艺人栏页码；`/operations?artist=`：这位艺人的操作记录（与 release、group 取并集）；
+  `/artist-candidates?status=&page=`（管理员）：“重复艺人”。`status` 只接受 `ignored`，不传就是待处理；切换时不带页码，回到第一页；
   两个状态链接用 `activeOptions={{ explicitUndefined: true }}`，只有当前那个是 `aria-current`。
-- 侧栏“艺人”与“可能是同一位”、收藏页“艺人”一栏只在 `artists_state` 是 `preparing` 或 `ready` 时出现；`unavailable`、状态还没读到或读取失败时不出现（I5）。
+- 侧栏“艺人”与“重复艺人”、“我的收藏”的“艺人”一栏只在 `artists_state` 是 `preparing` 或 `ready` 时出现；`unavailable`、状态还没读到或读取失败时不出现（I5）。
 - 键在 `viewerQueryKey(g, "artists", …)` 之下，列表、详情、名字、专辑、曲目都带目录 epoch（`{ e }`）：艺人数据发布或重新整理后 epoch 变大，页面自动按新键重读；
   目录状态还没读到时不发请求，读取失败时 e 为 -1。“播放全部/随机播放”的候选每次按下用 `fetchQuery(staleTime: 0, gcTime: 0)` 读，随机每次换一个 seed。
 - 艺人的收藏状态与曲目、专辑**分开请求**（`personalKeys.favoriteArtistLookup`，同在 lookup 前缀下，心形切换一起修补）：整理中带艺人的 lookup 整体 503，
@@ -63,4 +63,4 @@
   - 先预览（版本数、曲目数、已分给别人而不动的处数），再确认；预览过时（409 `artist_scope_changed`）自动重新预览。
 - 改名：写一个主名；已经改过时也可以改回最常见的写法。
 - 候选：只是提示，理由写看到了什么（“同一首曲目的作曲写了‘甲’和‘乙’”），不写结论；可以合并或忽略，忽略后的提示里可以马上“恢复提示”（反向操作），之后也能在“已忽略”里逐条恢复，最近忽略的在前。
-- 操作记录：目标是艺人的记录在“对象”列链接到艺人页（已合并的会被带到现在的艺人）；类型名“合并艺人”“拆开艺人”“修改艺人主名”“忽略/恢复‘可能是同一位’的提示”。
+- 操作记录：目标是艺人的记录在“对象”列链接到艺人页（已合并的会被带到现在的艺人）；类型名“合并艺人”“拆开艺人”“修改艺人主名”“忽略重复艺人提示”“恢复重复艺人提示”。

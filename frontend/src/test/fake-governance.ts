@@ -23,7 +23,7 @@ import {
 const idFrom = (path: string, pattern: RegExp): string => pattern.exec(path.split("?")[0] ?? path)?.[1] ?? "";
 
 /**
- * 受治理操作接口的替身：修正状态、字段修正、归组、默认版本、元数据问题与核对、操作记录与撤销。行为见 governance-data.ts（预期版本、幂等重放、各种 409），
+ * 受治理操作接口的替身：修正状态、字段修正、归组、默认版本、元数据与核对、操作记录与撤销。行为见 governance-data.ts（预期版本、幂等重放、各种 409），
  * 修改会反映到共用的专辑替身（列表、组详情、版本详情）。需要特殊响应（网络失败、503、特定错误码）的测试用 api.on 覆盖对应路由。
  */
 export function installGovernanceApi(api: FakeApi, catalog: FakeCatalog): GovernanceData {

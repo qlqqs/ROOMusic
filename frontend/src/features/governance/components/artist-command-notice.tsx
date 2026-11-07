@@ -26,7 +26,7 @@ function successText(command: ArtistCommand, result: ArtistCommandResult): strin
       return result.result.name_source === "auto" ? `主名改回了最常见的写法：“${result.result.display_name}”。` : `主名已改为“${result.result.display_name}”。`;
     case "ignore":
       if (command.kind !== "ignore") return "已更新。";
-      return result.result.ignored ? `以后不再提示“${command.artist.name}”和“${command.other.name}”可能是同一位。` : `已恢复“${command.artist.name}”和“${command.other.name}”的提示。`;
+      return result.result.ignored ? `以后不再提示“${command.artist.name}”和“${command.other.name}”重复。` : `已恢复“${command.artist.name}”和“${command.other.name}”的提示。`;
   }
 }
 

@@ -125,7 +125,7 @@ describe("V4/V5：候选已忽略列表与恢复", () => {
     const ignoreName = `忽略“${pair.left.name}”和“${pair.right.name}”`;
     const restoreName = `恢复“${pair.left.name}”和“${pair.right.name}”的提示`;
     await context.user.click(await screen.findByRole("button", { name: ignoreName }));
-    await screen.findByText(`以后不再提示“${pair.left.name}”和“${pair.right.name}”可能是同一位。`);
+    await screen.findByText(`以后不再提示“${pair.left.name}”和“${pair.right.name}”重复。`);
     await context.user.click(statusNav().getByRole("link", { name: "已忽略" }));
     await screen.findByRole("button", { name: restoreName });
     expectSelected("ignored");

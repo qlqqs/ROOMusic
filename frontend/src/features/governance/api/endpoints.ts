@@ -286,7 +286,7 @@ export function renameArtist(
   );
 }
 
-/** 忽略（ignored=true）或恢复（false）一条“可能是同一位”的提示：按看到的名字键对记住。 */
+/** 忽略（ignored=true）或恢复（false）一条“重复艺人”的提示：按看到的名字键对记住。 */
 export function ignoreArtistCandidate(
   artistId: string,
   body: { expectedRevision: number; otherId: string; otherExpectedRevision: number; keyPairs: readonly { left_key_id: string; right_key_id: string }[]; ignored: boolean },
@@ -304,7 +304,7 @@ export function ignoreArtistCandidate(
 }
 
 /**
- * “可能是同一位”的候选，一页（管理员）。待处理的按证据数降序；ignored 为 true 时是已忽略的，最近忽略的在前。
+ * “重复艺人”的候选，一页（管理员）。待处理的按证据数降序；ignored 为 true 时是已忽略的，最近忽略的在前。
  * 艺人数据还在整理时返回 503 artist_catalog_preparing。
  */
 export function fetchArtistCandidates(params: { page: number; pageSize: number; ignored: boolean; signal?: AbortSignal | undefined }): Promise<ApiResponse<ArtistCandidatePageDTO>> {

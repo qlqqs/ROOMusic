@@ -3,7 +3,7 @@ import { useViewerScope } from "../../auth";
 import { fetchArtistCandidates } from "../api/endpoints";
 import { governanceKeys } from "../query-keys";
 
-/** “可能是同一位”每页的条数（后端默认 50，上限 100）。 */
+/** “重复艺人”每页的条数（后端默认 50，上限 100）。 */
 export const ARTIST_CANDIDATE_PAGE_SIZE = 20;
 
 /**

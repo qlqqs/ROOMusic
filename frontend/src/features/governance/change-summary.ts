@@ -21,7 +21,7 @@ export function operationTypeLabel(item: Pick<OperationItemDTO, "type" | "change
     case "artist_rename":
       return "修改艺人主名";
     case "artist_candidate_ignore":
-      return item.changes?.kind === "artist_candidate_ignore" && !item.changes.ignored ? "恢复“可能是同一位”的提示" : "忽略“可能是同一位”的提示";
+      return item.changes?.kind === "artist_candidate_ignore" && !item.changes.ignored ? "恢复重复艺人提示" : "忽略重复艺人提示";
     case "revert":
       if (item.changes?.kind === "release_correction") return "撤销修改";
       if (item.changes?.kind === "release_group_change") return "撤销归组调整";
@@ -85,7 +85,7 @@ function linesOf(changes: OperationChangesDTO | null, reverse: boolean): string[
     return [`主名：${changes.from.name} → ${changes.to.name}${note}`];
   }
   if (changes.kind === "artist_candidate_ignore") {
-    return [changes.ignored ? `不再提示与“${changes.other_artist.name}”可能是同一位` : `恢复与“${changes.other_artist.name}”可能是同一位的提示`];
+    return [changes.ignored ? `不再提示与“${changes.other_artist.name}”重复` : `恢复与“${changes.other_artist.name}”重复的提示`];
   }
   if (changes.kind === "release_group_change") {
     return reverse ? [`从《${changes.to.group_title}》移回《${changes.from.group_title}》`] : [`从《${changes.from.group_title}》移到《${changes.to.group_title}》`];

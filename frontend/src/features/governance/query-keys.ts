@@ -26,7 +26,7 @@ export const governanceKeys = {
   claim: (generation: number, releaseId: string) => viewerQueryKey(generation, "governance", "claim", releaseId),
   /** 认领的预览：新版本与旧版本都在键里；在 all 前缀下，认领、撤销与别的修改之后随 governance 一起失效，页面重新读到最新的预览与令牌。 */
   claimPreview: (generation: number, releaseId: string, sourceId: string) => viewerQueryKey(generation, "governance", "claim-preview", releaseId, sourceId),
-  /** “可能是同一位”的候选（待处理与已忽略）的全部页：合并、忽略、恢复之后前缀失效（在 all 前缀下）。 */
+  /** “重复艺人”的候选（待处理与已忽略）的全部页：合并、忽略、恢复之后前缀失效（在 all 前缀下）。 */
   artistCandidates: (generation: number) => viewerQueryKey(generation, "governance", "artist-candidates"),
   artistCandidatePage: (generation: number, filter: { page: number; pageSize: number; ignored: boolean }) => viewerQueryKey(generation, "governance", "artist-candidates", filter),
   /** 之前并入这位艺人的旧身份（拆开对话框的“拆回”）。在 all 前缀下，任何治理之后随之失效。 */

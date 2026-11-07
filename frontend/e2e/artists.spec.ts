@@ -51,7 +51,7 @@ test("普通成员没有艺人管理入口，候选页不请求管理接口", as
   await page.goto(`/artists/${seed.artist.id}`);
   await expect(page.getByRole("heading", { name: seed.artist.name, exact: true, level: 1 })).toBeVisible();
   for (const name of ["合并艺人…", "拆开…", "修改主名…"]) await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
-  await expect(page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: "可能是同一位", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: "重复艺人", exact: true })).toHaveCount(0);
   await page.goto("/artist-candidates");
   await expect(page.getByRole("heading", { name: "需要管理员权限", exact: true })).toBeVisible();
   expect(mock.callsTo("GET", "/api/v1/artist-candidates")).toHaveLength(0);

@@ -12,13 +12,12 @@ import { AdminGate } from "./routes/admin-gate";
 import { AlbumDetailPage } from "./routes/album-detail-page";
 import { AlbumsPage } from "./routes/albums-page";
 import { BackupsPage } from "./routes/backups-page";
-import { FavoritesPage } from "./routes/favorites-page";
+import { FavoritesPage, LikedPage } from "./routes/favorites-page";
 import { HistoryPage } from "./routes/history-page";
 import { ClaimsPage } from "./routes/claims-page";
 import { IssuesPage } from "./routes/issues-page";
 import { LibraryPage } from "./routes/library-page";
 import { LoginPage } from "./routes/login-page";
-import { MeLayout } from "./routes/me-layout";
 import { MembersPage } from "./routes/members-page";
 import { NotFoundPage } from "./routes/not-found-page";
 import { OperationsPage } from "./routes/operations-page";
@@ -171,15 +170,29 @@ const artistDetailRoute = createRoute({
   component: ArtistDetailRoute,
 });
 
-// “我的音乐”：只属于当前用户的数据，所有登录用户都能用。/me 本身没有内容，转到第一个页签（替换历史项，返回键不会回到 /me）。
-const meRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/me", component: MeLayout });
+// “我的音乐”：只属于当前用户的数据，所有登录用户都能用。各页在侧栏里各有入口，没有共同的外层布局。
+// /me 本身没有内容，转到“我喜欢的音乐”（替换历史项，返回键不会回到 /me）。
+const meRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/me" });
 
 const meIndexRoute = createRoute({
   getParentRoute: () => meRoute,
   path: "/",
   beforeLoad: () => {
-    throw redirect({ to: "/me/favorites", replace: true });
+    throw redirect({ to: "/me/liked", replace: true });
   },
+});
+
+// 我喜欢的音乐（收藏的曲目）：page 只在 2 及以上时出现；超出末页时，页面在读到真实的总数之后替换成末页。
+function LikedRoute() {
+  const { page } = likedRoute.useSearch();
+  return <LikedPage page={page ?? 1} />;
+}
+
+const likedRoute = createRoute({
+  getParentRoute: () => meRoute,
+  path: "/liked",
+  validateSearch: (search: Record<string, unknown>): { page?: number | undefined } => ({ page: parsePageParam(search["page"]) }),
+  component: LikedRoute,
 });
 
 // page 是历史的页码，只在 2 及以上时出现；不合法的值显式写成 undefined。超出末页时页面显示空页，不改写地址。
@@ -195,11 +208,11 @@ const historyRoute = createRoute({
   component: HistoryRoute,
 });
 
-// tab 只在看“曲目”或“艺人”时出现（专辑是默认），page 只在 2 及以上时出现；三栏各自翻页。不合法的值显式写成 undefined。
-// 超出末页时，页面在读到真实的总数之后替换成末页。
+// 我的收藏：tab 只在看“艺人”时出现（专辑是默认），page 只在 2 及以上时出现；两栏各自翻页。不合法的值显式写成 undefined。
+// 超出末页时，页面在读到真实的总数之后替换成末页。收藏的曲目搬到了“我喜欢的音乐”：旧地址 tab=tracks 转到 /me/liked，页码跟着转。
 function FavoritesRoute() {
   const { tab, page } = favoritesRoute.useSearch();
-  return <FavoritesPage tab={tab ?? "albums"} page={page ?? 1} />;
+  return <FavoritesPage tab={tab === "artists" ? "artists" : "albums"} page={page ?? 1} />;
 }
 
 const favoritesRoute = createRoute({
@@ -209,6 +222,9 @@ const favoritesRoute = createRoute({
     tab: search["tab"] === "tracks" ? "tracks" : search["tab"] === "artists" ? "artists" : undefined,
     page: parsePageParam(search["page"]),
   }),
+  beforeLoad: ({ search }) => {
+    if (search.tab === "tracks") throw redirect({ to: "/me/liked", search: { page: search.page }, replace: true });
+  },
   component: FavoritesRoute,
 });
 
@@ -238,7 +254,7 @@ const playlistDetailRoute = createRoute({
   component: PlaylistDetailRoute,
 });
 
-// “可能是同一位”的候选（M5 ⑤，管理员）：status 只在看“已忽略”时出现，page 是页码（2 及以上）；不合法的值显式写成 undefined。
+// “重复艺人”的候选（M5 ⑤，管理员）：status 只在看“已忽略”时出现，page 是页码（2 及以上）；不合法的值显式写成 undefined。
 function ArtistCandidatesRoute() {
   const { page, status } = artistCandidatesRoute.useSearch();
   return (
@@ -391,7 +407,7 @@ const routeTree = rootRoute.addChildren([
     searchRoute,
     artistsRoute,
     artistDetailRoute,
-    meRoute.addChildren([meIndexRoute, historyRoute, favoritesRoute, playlistsRoute, playlistDetailRoute]),
+    meRoute.addChildren([meIndexRoute, likedRoute, historyRoute, favoritesRoute, playlistsRoute, playlistDetailRoute]),
     issuesRoute,
     claimsRoute,
     artistCandidatesRoute,

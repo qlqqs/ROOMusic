@@ -54,16 +54,16 @@ function narrowContainer(width: number) {
   } as unknown as typeof ResizeObserver;
 }
 
-describe("元数据问题页：入口与权限", () => {
-  it("管理员在“资料库”下看到“元数据问题”，点进去是问题页，不显示数量", async () => {
+describe("元数据页：入口与权限", () => {
+  it("管理员在“资料库”下看到“元数据”，点进去是元数据页，不显示数量", async () => {
     setup();
     const user = userEvent.setup();
     const { history } = renderApp({ path: "/" });
     const nav = await screen.findByRole("navigation", { name: "主导航" });
-    const link = within(nav).getByRole("link", { name: "元数据问题" });
-    expect(link.textContent).toBe("元数据问题");
+    const link = within(nav).getByRole("link", { name: "元数据" });
+    expect(link.textContent).toBe("元数据");
     await user.click(link);
-    expect(await heading("元数据问题")).toBeTruthy();
+    expect(await heading("元数据")).toBeTruthy();
     expect(history.location.pathname).toBe("/issues");
   });
 
@@ -71,12 +71,12 @@ describe("元数据问题页：入口与权限", () => {
     const { api } = setup({ role: "user" });
     renderApp({ path: "/issues" });
     expect(await heading("需要管理员权限")).toBeTruthy();
-    expect(within(screen.getByRole("navigation", { name: "主导航" })).queryByRole("link", { name: "元数据问题" })).toBeNull();
+    expect(within(screen.getByRole("navigation", { name: "主导航" })).queryByRole("link", { name: "元数据" })).toBeNull();
     expect(api.requestsTo("GET", "/api/v1/release-issues")).toHaveLength(0);
   });
 });
 
-describe("元数据问题页：列表与筛选", () => {
+describe("元数据页：列表与筛选", () => {
   it("按专辑名列出有待处理问题的版本，每行写类别数目；筛选项带数字；没有问题的版本不列出", async () => {
     const { api } = setup();
     renderApp({ path: "/issues" });
@@ -137,7 +137,7 @@ describe("元数据问题页：列表与筛选", () => {
   });
 });
 
-describe("元数据问题页：详情", () => {
+describe("元数据页：详情", () => {
   it("选中的版本写进地址并带 aria-current；详情逐条列出字段、归组冲突（文件与同一目录的其他版本）与缺失曲目", async () => {
     setup();
     const user = userEvent.setup();
@@ -212,7 +212,7 @@ const reviewPath = (releaseId: string) => `/api/v1/releases/${releaseId}/issue-r
 const detailOf = async (title: string) => (await heading(title, 2)).closest("article") as HTMLElement;
 const sectionOf = (detail: HTMLElement, name: string) => within(detail).getByRole("heading", { level: 3, name }).closest("section") as HTMLElement;
 
-describe("元数据问题页：核对、取消核对与撤销", () => {
+describe("元数据页：核对、取消核对与撤销", () => {
   it("核对归组冲突：请求带版本号、问题与依据令牌，不弹确认；之后显示“已核对 · 用户名 · 时间”，列表与数字一起变少", async () => {
     const { api, catalog } = setup();
     const user = userEvent.setup();

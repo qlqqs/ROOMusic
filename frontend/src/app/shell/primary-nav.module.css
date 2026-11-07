@@ -45,3 +45,53 @@
   color: var(--text-accent);
   font-weight: 600;
 }
+
+/* “我的歌单”一行：链接占满，展开收起按钮在右侧。 */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.row .link {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 展开后的歌单：与上面的文字对齐，单行显示，过长省略。 */
+.sublist {
+  display: grid;
+  gap: 2px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sublist:empty {
+  display: none;
+}
+
+.sublink {
+  display: block;
+  min-height: var(--control-height);
+  padding: 0 var(--space-3) 0 40px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: var(--control-height);
+}
+
+.sublink:hover {
+  background: var(--color-hover);
+  color: var(--text-primary);
+}
+
+.sublink[aria-current="page"] {
+  background: var(--color-selected);
+  color: var(--text-accent);
+  font-weight: 600;
+}

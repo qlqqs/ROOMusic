@@ -28,6 +28,8 @@ const second = playlistOf(2);
 
 beforeEach(() => {
   sessionStorage.clear();
+  // 侧栏的“我的歌单”收起：这些用例只数“添加到歌单…”对话框自己的歌单请求。
+  localStorage.setItem("roomusic.nav.playlists-expanded", "0");
   vi.stubGlobal("Audio", class { constructor() { return new FakeAudio(); } });
   vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue("probably");
 });

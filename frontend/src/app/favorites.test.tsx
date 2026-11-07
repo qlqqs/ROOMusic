@@ -95,6 +95,23 @@ function visibleTitles() {
   return within(screen.getByRole("table", { name: "收藏的曲目" })).getAllByRole("rowheader").map((cell) => cell.textContent);
 }
 
+describe("收藏曲目旧地址迁移", () => {
+  it("/me/favorites?tab=tracks&page=2 转到 /me/liked?page=2 并替换历史项", async () => {
+    setup(Array.from({ length: 50 }, (_, index) => track(index + 1)));
+    const { history } = renderApp({ path: "/me/favorites" });
+    await screen.findByText("还没有收藏的专辑。", { exact: false });
+    await act(async () => { history.push("/me/favorites?tab=tracks&page=2"); });
+
+    await screen.findByText("收藏曲目 49", { exact: true });
+    await waitFor(() => expect(history.location.href).toBe("/me/liked?page=2"));
+    expect(history.length).toBe(2);
+    expect(screen.queryByText(first.track.title, { exact: true })).toBeNull();
+    await act(async () => { history.back(); });
+    await screen.findByText("还没有收藏的专辑。", { exact: false });
+    expect(history.location.href).toBe("/me/favorites");
+  });
+});
+
 describe("收藏页的保留行与服务端列表", () => {
   it("取消后后台重读与窗口聚焦都保留原槽，缓存仍只含真实收藏，并可点回", async () => {
     const { api } = setup();
@@ -176,33 +193,31 @@ describe("收藏页的保留行与服务端列表", () => {
     expect(screen.queryByText("列表有更新。", { exact: false })).toBeNull();
   });
 
-  it("换栏再回曲目丢弃已取消行", async () => {
+  it("换到我的收藏再回我喜欢的音乐，丢弃已取消行", async () => {
     setup();
-    const { history } = renderApp({ path: "/me/favorites?tab=tracks" });
+    renderApp({ path: "/me/liked" });
     await screen.findByRole("table", { name: "收藏的曲目" });
     await cancel(first.track.title);
     await screen.findByText("共 1 首曲目");
-    const tabs = within(screen.getByRole("navigation", { name: "收藏分类" }));
-    await userEvent.click(tabs.getByRole("link", { name: "专辑" }));
+    const nav = within(screen.getByRole("navigation", { name: "主导航" }));
+    await userEvent.click(nav.getByRole("link", { name: "我的收藏" }));
     await screen.findByText("还没有收藏的专辑。", { exact: false });
-    expect(new URLSearchParams(history.location.search).has("tab")).toBe(false);
-    await userEvent.click(tabs.getByRole("link", { name: "曲目" }));
+    await userEvent.click(nav.getByRole("link", { name: "我喜欢的音乐" }));
     expect(await screen.findByText(second.track.title, { exact: true })).toBeTruthy();
     expect(screen.queryByText(first.track.title, { exact: true })).toBeNull();
   });
 
-  it("离开收藏页签再回来时丢弃保留行，不把展示快照跨页面复用", async () => {
+  it("离开我喜欢的音乐再回来时丢弃保留行，不把展示快照跨页面复用", async () => {
     const { api } = setup();
     api.on("GET", "/api/v1/me/playlists", () => jsonResponse(200, { items: [], pagination: { page: 1, page_size: 20, total: 0 } }));
-    renderApp({ path: "/me/favorites?tab=tracks" });
+    renderApp({ path: "/me/liked" });
     await screen.findByRole("table", { name: "收藏的曲目" });
     await cancel(first.track.title);
     await screen.findByText("共 1 首曲目");
-    await userEvent.click(within(screen.getByRole("navigation", { name: "我的音乐" })).getByRole("link", { name: "歌单" }));
+    const nav = within(screen.getByRole("navigation", { name: "主导航" }));
+    await userEvent.click(nav.getByRole("link", { name: "我的歌单" }));
     await screen.findByText("还没有歌单。");
-    await userEvent.click(within(screen.getByRole("navigation", { name: "我的音乐" })).getByRole("link", { name: "收藏" }));
-    await screen.findByText("还没有收藏的专辑。", { exact: false });
-    await userEvent.click(within(screen.getByRole("navigation", { name: "收藏分类" })).getByRole("link", { name: "曲目" }));
+    await userEvent.click(nav.getByRole("link", { name: "我喜欢的音乐" }));
     await screen.findByText(second.track.title, { exact: true });
     expect(screen.queryByText(first.track.title, { exact: true })).toBeNull();
   });

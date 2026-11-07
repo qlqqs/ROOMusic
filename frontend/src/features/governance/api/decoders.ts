@@ -431,7 +431,7 @@ const claimResultDecoder = d.object({
 
 // ---- 艺人的治理（M5 ⑤，管理员）----
 
-/** “可能是同一位”每页的上限、每条候选给出的理由样例与名字键对的上限。 */
+/** “重复艺人”每页的上限、每条候选给出的理由样例与名字键对的上限。 */
 const MAX_CANDIDATE_PAGE_ITEMS = 100;
 const MAX_CANDIDATE_REASONS = 3;
 const MAX_CANDIDATE_KEY_PAIRS = 100;
@@ -497,7 +497,7 @@ const ignoreResultDecoder = d.object({
   ignored: d.boolean(),
 });
 
-// “可能是同一位”的候选：两位艺人、实际看到的名字键对（忽略时原样提交）、最多 3 个理由样例与证据数。只是提示，不是同一人的结论。
+// “重复艺人”的候选：两位艺人、实际看到的名字键对（忽略时原样提交）、最多 3 个理由样例与证据数。只是提示，不是同一人的结论。
 // 理由的 kind 按字符串解码（显示时只给已知的 kind 写中文说明，未知的不显示）；括号别名的理由带哪一边是带括号的写法、另一边等于括号里面还是外面。
 const candidateReasonDecoder = d.object({
   kind: d.string({ min: 1, max: 64 }),

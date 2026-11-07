@@ -100,7 +100,7 @@ for (const width of [375, 1440]) {
     const firstTrack = tracks[0];
     if (firstTrack === undefined) throw new Error("合成曲目不存在");
     await page.setViewportSize({ width, height: 900 });
-    await page.goto("/me/favorites?tab=tracks");
+    await page.goto("/me/liked");
     const row = trackTable(page).getByRole("row").filter({ has: page.getByText("第一乐章", { exact: true }) });
     const heart = row.getByRole("button", { name: "收藏《第一乐章》", exact: true });
     await expect(heart).toHaveAttribute("aria-pressed", "true");
@@ -163,7 +163,7 @@ for (const width of widths) {
     const mock = await backend.start({ signedInAs: "listener" });
     seed(mock, true);
     await page.setViewportSize({ width, height: 900 });
-    await page.goto("/me/favorites?tab=tracks");
+    await page.goto("/me/liked");
     const table = trackTable(page);
     await expect(table).toBeVisible();
     const row = table.getByRole("row").filter({ has: page.getByText("缺失的第三乐章", { exact: true }) });
@@ -192,7 +192,7 @@ for (const width of widths) {
     seed(mock);
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/me/playlists");
-    const link = page.getByRole("link", { name: new RegExp(`^${longName}`) });
+    const link = page.getByRole("main").getByRole("link", { name: new RegExp(`^${longName}`) });
     await expect(link).toBeVisible();
     const name = link.getByText(longName, { exact: true });
     expect(await visibleLines(name)).toBeLessThanOrEqual(3);
@@ -245,7 +245,7 @@ for (const width of widths) {
     seed(mock);
     await audio(page);
     await page.setViewportSize({ width, height: 900 });
-    await page.goto("/me/favorites?tab=tracks");
+    await page.goto("/me/liked");
     const first = trackTable(page).getByRole("row").filter({ has: page.getByText("第一乐章", { exact: true }) });
     await first.getByRole("button", { name: "播放 第一乐章", exact: true }).click();
     const player = page.getByRole("region", { name: "播放器", exact: true });
@@ -308,7 +308,7 @@ test("纯键盘：收藏与取消、新建并加入、四种菜单移动、键�
   const mock = await backend.start({ signedInAs: "listener" });
   seed(mock);
   await audio(page);
-  await page.goto("/me/favorites?tab=tracks");
+  await page.goto("/me/liked");
   const first = trackTable(page).getByRole("row").filter({ has: page.getByText("第一乐章", { exact: true }) });
   const heart = first.getByRole("button", { name: "收藏《第一乐章》", exact: true });
   await keyboardTarget(page, heart);
@@ -328,8 +328,8 @@ test("纯键盘：收藏与取消、新建并加入、四种菜单移动、键�
   dialog = page.getByRole("dialog", { name: "添加到歌单", exact: true });
   await keyboardTarget(page, dialog.getByRole("button", { name: /^键盘歌单/ }));
   await expect(dialog).toBeHidden();
-  await keyboardTarget(page, page.getByRole("navigation", { name: "我的音乐", exact: true }).getByRole("link", { name: "歌单", exact: true }));
-  await keyboardTarget(page, page.getByRole("link", { name: /^键盘歌单/ }));
+  await keyboardTarget(page, page.getByRole("navigation", { name: "主导航", exact: true }).getByRole("link", { name: "我的歌单", exact: true }));
+  await keyboardTarget(page, page.getByRole("main").getByRole("link", { name: /^键盘歌单/ }));
   await expect(page.getByRole("heading", { name: "键盘歌单", exact: true })).toBeVisible();
   const firstRow = playlistRow(page, "第一乐章");
   for (const action of ["下移", "上移", "移到最后", "移到最前"]) {

@@ -49,7 +49,7 @@ test("真实服务：收藏一首刷新仍在，取消时保留行、刷新后�
   await expect(heart).toHaveAttribute("aria-pressed", "false");
   await heart.click();
   await expect(heart).toHaveAttribute("aria-pressed", "true");
-  await page.goto("/me/favorites?tab=tracks");
+  await page.goto("/me/liked");
   const table = page.getByRole("table", { name: "收藏的曲目" });
   await expect(table.getByText(titles[0], { exact: true })).toBeVisible();
   await page.reload();
