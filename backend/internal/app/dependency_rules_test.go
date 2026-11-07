@@ -37,6 +37,7 @@ var packageRules = map[string]packageRule{
 	"catalog/internal/artistgraph":   {imports: []string{"catalog/textnorm", "catalog/metadata", "catalog/internal/searchindex", "platform/uuid"}},
 	"catalog/internal/writegate":     {},
 	"catalog/internal/searchindex":   {imports: []string{"catalog/textnorm", "catalog/metadata", "catalog/internal/releasesql"}},
+	"catalog/testsupport":            {imports: []string{"catalog/internal/artistgraph", "catalog/textnorm"}},
 	"catalog/maintenance":            {imports: []string{"catalog/internal/artistgraph", "catalog/textnorm", "catalog/internal/searchindex", "catalog/internal/writegate"}},
 	"catalog/artwork":                {},
 	"catalog/ingest":                 {imports: []string{"catalog/internal/artistgraph", "catalog/metadata", "platform/uuid", "catalog/internal/searchindex", "catalog/internal/writegate"}},

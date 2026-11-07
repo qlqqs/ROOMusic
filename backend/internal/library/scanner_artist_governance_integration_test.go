@@ -146,10 +146,11 @@ func TestPostgreSQLScannerArtistGovernanceSurvivesRealRescans(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.writeAlpha("Alpha 原标题")
+	// 现行候选规则只保留跨发行的括号别名信号；同曲多值 ARTIST 不再产生候选。
 	writeScanFixtureFile(t, f.root, "Beta/01.flac", parsertest.FLACWithAudio(t, [16]byte{2}, []byte{4, 5, 6},
-		"TITLE=Beta", "ALBUM=Beta Album", "ALBUMARTIST=Scan Beta", "ARTIST=Scan Beta", "TRACKNUMBER=1"))
+		"TITLE=Beta", "ALBUM=Beta Album", "ALBUMARTIST=Candidate Two", "ARTIST=Scan Beta", "TRACKNUMBER=1"))
 	writeScanFixtureFile(t, f.root, "Candidates/01.flac", parsertest.FLACWithAudio(t, [16]byte{3}, []byte{7, 8, 9},
-		"TITLE=Candidates", "ALBUM=Candidate Album", "ALBUMARTIST=Candidate Album", "ARTIST=Candidate One", "ARTIST=Candidate Two", "TRACKNUMBER=1"))
+		"TITLE=Candidates", "ALBUM=Candidate Album", "ALBUMARTIST=Candidate One (Candidate Two)", "ARTIST=Candidate One (Candidate Two)", "TRACKNUMBER=1"))
 	f.scan("succeeded")
 	if err := maintenance.Run(ctx, fixture.database, slog.New(slog.NewTextHandler(io.Discard, nil)), maintenance.RunOptions{RefreshArtistResolutions: personal.RefreshArtistResolution}); err != nil {
 		t.Fatal(err)
@@ -206,19 +207,19 @@ func TestPostgreSQLScannerArtistGovernanceSurvivesRealRescans(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	candidateOne := f.text(`SELECT initial_artist_id::text FROM artist_name_keys WHERE normalized_key='candidate one'`)
+	candidateBracket := f.text(`SELECT initial_artist_id::text FROM artist_name_keys WHERE normalized_key='candidate one (candidate two)'`)
 	candidateTwo := f.text(`SELECT initial_artist_id::text FROM artist_name_keys WHERE normalized_key='candidate two'`)
 	var pairs []governance.ArtistKeyPair
 	for _, candidate := range candidates.Items {
-		if candidate.Left.ID == candidateOne && candidate.Right.ID == candidateTwo || candidate.Left.ID == candidateTwo && candidate.Right.ID == candidateOne {
+		if candidate.Left.ID == candidateBracket && candidate.Right.ID == candidateTwo || candidate.Left.ID == candidateTwo && candidate.Right.ID == candidateBracket {
 			pairs = candidate.KeyPairs
 		}
 	}
 	if len(pairs) == 0 {
-		t.Fatal("原始重复标签未产生可忽略候选")
+		t.Fatal("括号别名未产生可忽略候选")
 	}
 	ignored := true
-	ignore := governance.ArtistCandidateIgnoreRequest{ArtistID: candidateOne, ExpectedRevision: f.revision(candidateOne), OtherArtistID: candidateTwo, OtherExpectedRevision: f.revision(candidateTwo), KeyPairs: pairs, Ignored: &ignored}
+	ignore := governance.ArtistCandidateIgnoreRequest{ArtistID: candidateBracket, ExpectedRevision: f.revision(candidateBracket), OtherArtistID: candidateTwo, OtherExpectedRevision: f.revision(candidateTwo), KeyPairs: pairs, Ignored: &ignored}
 	f.run(operations.TypeArtistCandidateIgnore, ignore.Fingerprint(), governor.CandidateIgnoreExecutor(ignore))
 	f.unchangedRescan()
 	candidates, err = governance.ListArtistCandidates(ctx, fixture.database, 1, 100)
@@ -226,7 +227,7 @@ func TestPostgreSQLScannerArtistGovernanceSurvivesRealRescans(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, candidate := range candidates.Items {
-		if candidate.Left.ID == candidateOne && candidate.Right.ID == candidateTwo || candidate.Left.ID == candidateTwo && candidate.Right.ID == candidateOne {
+		if candidate.Left.ID == candidateBracket && candidate.Right.ID == candidateTwo || candidate.Left.ID == candidateTwo && candidate.Right.ID == candidateBracket {
 			t.Fatal("真实重扫重新提示已忽略的名字对")
 		}
 	}
