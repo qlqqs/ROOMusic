@@ -176,7 +176,7 @@ function FavoriteTracksSection({ page, renderPlayAll, renderTrackActions }: Omit
           </div>
         ),
       },
-      { id: "actions", header: "操作", hideLabelWhenStacked: true, cell: (item) => renderTrackActions(item) },
+      { id: "actions", header: "操作", hideLabelWhenStacked: true, besideRowHeader: true, cell: (item) => renderTrackActions(item) },
     ],
     [renderTrackActions],
   );

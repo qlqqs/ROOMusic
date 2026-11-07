@@ -37,13 +37,20 @@ async function openMembers(options: Parameters<typeof setup>[0] = {}) {
   return { ...context, ...rendered };
 }
 
+/** 新建成员在对话框里：没打开就点页面上的“新建成员”打开。 */
+async function openForm() {
+  if (screen.queryByRole("dialog", { name: "新建成员" }) === null) await userEvent.click(screen.getByRole("button", { name: "新建成员" }));
+  return screen.getByRole("dialog", { name: "新建成员" });
+}
+
 async function fillForm(username: string, secret = password, confirmation = secret) {
+  await openForm();
   await userEvent.type(screen.getByLabelText("用户名"), username);
   await userEvent.type(screen.getByLabelText("密码"), secret);
   await userEvent.type(screen.getByLabelText("确认密码"), confirmation);
 }
 
-const create = () => userEvent.click(screen.getByRole("button", { name: "创建成员" }));
+const create = async () => userEvent.click(within(await openForm()).getByRole("button", { name: "创建" }));
 
 function memberId(members: FakeMembers, username: string): string {
   const user = members.users.find((candidate) => candidate.username === username);
@@ -60,7 +67,7 @@ describe("成员页：访问与列表", () => {
   it("管理员看到成员列表：角色、状态、标出自己，操作按状态给出", async () => {
     await openMembers();
     expect(document.title).toBe("成员 · ROOMusic");
-    expect(screen.getByRole("heading", { level: 2, name: "新建成员" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "新建成员" })).toBeTruthy();
     expect(screen.getByRole("heading", { level: 2, name: "成员列表" })).toBeTruthy();
 
     const names = within(screen.getByRole("table", { name: "成员列表" })).getAllByRole("rowheader").map((header) => header.textContent);
@@ -122,7 +129,7 @@ describe("成员页：访问与列表", () => {
 
   it("新建表单只能创建“成员”角色：没有选择角色的控件", async () => {
     await openMembers();
-    const form = screen.getByRole("button", { name: "创建成员" }).closest("form") as HTMLElement;
+    const form = await openForm();
     expect(within(form).queryByRole("radio")).toBeNull();
     expect(within(form).queryByRole("combobox")).toBeNull();
   });
@@ -149,7 +156,21 @@ describe("成员页：访问与列表", () => {
 });
 
 describe("新建成员", () => {
-  it("成功：用户名去空白后提交，请求没有幂等键，列表出现新成员并清空表单，提示里不回显密码", async () => {
+  it.each(["Esc", "取消"] as const)("填写后按%s关闭弹窗，不发送创建请求", async (action) => {
+    const { api } = await openMembers();
+    await fillForm("cancelled-user");
+    const dialog = screen.getByRole("dialog", { name: "新建成员" });
+    if (action === "Esc") {
+      // jsdom 不实现原生 Esc 关闭行为，触发浏览器对应的 cancel 事件。
+      fireEvent(dialog, new Event("cancel", { cancelable: true }));
+    } else {
+      await userEvent.click(within(dialog).getByRole("button", { name: "取消" }));
+    }
+    expect(screen.queryByRole("dialog", { name: "新建成员" })).toBeNull();
+    expect(api.requestsTo("POST", usersPath)).toHaveLength(0);
+  });
+
+  it("成功：用户名去空白后提交，请求没有幂等键，对话框关闭，列表出现新成员，提示里不回显密码", async () => {
     const { api } = await openMembers();
     await fillForm("  newbie  ");
     await create();
@@ -162,12 +183,13 @@ describe("新建成员", () => {
     const row = await waitFor(() => rowOf("newbie"));
     expect(within(row).getByText("成员")).toBeTruthy();
     expect(within(row).getByText("启用")).toBeTruthy();
-    for (const label of ["用户名", "密码", "确认密码"]) expect((screen.getByLabelText(label) as HTMLInputElement).value).toBe("");
+    expect(screen.queryByRole("dialog", { name: "新建成员" })).toBeNull();
     expect(document.body.textContent).not.toContain(password);
   });
 
   it("账号字段不让浏览器自动填入当前管理员的凭据", async () => {
     await openMembers();
+    await openForm();
     expect(screen.getByLabelText("用户名").getAttribute("autocomplete")).toBe("off");
     expect(screen.getByLabelText("密码").getAttribute("autocomplete")).toBe("new-password");
     expect(screen.getByLabelText("确认密码").getAttribute("autocomplete")).toBe("new-password");

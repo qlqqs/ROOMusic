@@ -137,6 +137,7 @@ export function HistoryView({ page, renderPlayAll, renderTrackActions, renderRow
         id: "actions",
         header: "操作",
         hideLabelWhenStacked: true,
+        besideRowHeader: true,
         cell: (item) => renderTrackActions(item, () => setRemoving(item)),
       },
     ],

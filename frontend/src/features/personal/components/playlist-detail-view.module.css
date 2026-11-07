@@ -130,12 +130,10 @@
   min-width: 0;
 }
 
+/* 窄容器里图标与时长仍留在同一行，标题换行。 */
 @container (max-width: 640px) {
   .row {
-    grid-template-columns: auto 2.5em minmax(0, 1fr) auto;
-  }
-
-  .actions {
-    grid-column: 3 / -1;
+    grid-template-columns: auto 1.6em minmax(0, 1fr) auto auto;
+    column-gap: var(--space-1);
   }
 }

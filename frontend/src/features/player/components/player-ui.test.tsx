@@ -203,13 +203,20 @@ describe("播放界面", () => {
     expect(screen.getByRole("status")).toBe(region);
     expect(region.textContent).toBe("浏览器阻止了自动播放，请按播放。");
   });
-  it("完整控制支持模式菜单、静音、音量与下一首", async () => {
+  it("播放模式按顺序循环四次回到原模式且读屏名同步，静音、音量与下一首仍可用", async () => {
     const user = userEvent.setup();
     engine.enqueue([playerTrack("1"), playerTrack("2")]);
     view(<PlayerControls />);
-    await user.click(screen.getByRole("button", { name: "播放模式：顺序" }));
-    await user.click(screen.getByRole("menuitem", { name: "随机" }));
-    expect(engine.getSnapshot().queue.mode).toBe("shuffle");
+    for (const [current, next, mode] of [
+      ["顺序", "列表循环", "repeat_all"],
+      ["列表循环", "单曲循环", "repeat_one"],
+      ["单曲循环", "随机", "shuffle"],
+      ["随机", "顺序", "sequential"],
+    ]) {
+      await user.click(screen.getByRole("button", { name: `播放模式：${current}` }));
+      expect(engine.getSnapshot().queue.mode).toBe(mode);
+      expect(screen.getByRole("button", { name: `播放模式：${next}` })).toBeTruthy();
+    }
     await user.click(screen.getByRole("button", { name: "静音" }));
     expect(engine.getSnapshot().muted).toBe(true);
     fireEvent.change(screen.getByRole("slider", { name: "播放器音量" }), { target: { value: "0.4" } });

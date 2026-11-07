@@ -73,7 +73,7 @@ async function ready() {
 }
 
 async function selectAction(name: string) {
-  await userEvent.click(screen.getByRole("button", { name: "更多" }));
+  await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
   await userEvent.click(screen.getByRole("menuitem", { name }));
 }
 
@@ -105,7 +105,7 @@ describe("统一曲目行动作", () => {
     const description = screen.getByText(reason);
     expect(play.getAttribute("aria-describedby")).toBe(description.id);
     expect(description.hidden).toBe(false);
-    const more = screen.getByRole("button", { name: "更多" });
+    const more = screen.getByRole("button", { name: "更多操作" });
     expect(more.hasAttribute("disabled")).toBe(false);
     await userEvent.click(more);
     for (const name of ["下一首播放", "加入队列"]) expect(screen.getByRole("menuitem", { name }).hasAttribute("disabled")).toBe(true);

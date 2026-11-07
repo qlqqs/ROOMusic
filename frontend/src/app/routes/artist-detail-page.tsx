@@ -15,7 +15,7 @@ import styles from "./artist-detail-page.module.css";
 /** 艺人页一行的动作：与历史、收藏、歌单、搜索结果同一套（播放、心形、“更多”）。缺失的曲目不能播放，仍可收藏、加入歌单。 */
 function ArtistTrackActions({ item }: { item: TrackSummaryDTO }) {
   const track = playerTrackOfSummary(item);
-  return <TrackActions track={track} present={item.present} playName={`播放 ${track.title}`} retryHint="请在“播放全部”旁重试。" />;
+  return <TrackActions track={track} present={item.present} playLabel={`播放 ${track.title}`} retryHint="请在“播放全部”旁重试。" />;
 }
 
 /** 头部：播放全部、随机播放与收藏这位艺人（艺人的收藏状态单独一次读取）。 */

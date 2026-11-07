@@ -329,7 +329,7 @@ test("播放过半后历史页出现这首且次数为 1，从历史移除后页
   await expect(row).toBeVisible();
   await expect(row.getByRole("cell", { name: "1", exact: true })).toBeVisible();
   await expect(row.getByRole("link", { name: item.release.title, exact: true })).toHaveAttribute("href", `/albums/${item.groupId}?release=${item.release.id}`);
-  await row.getByRole("button", { name: "更多" }).click();
+  await row.getByRole("button", { name: "更多操作" }).click();
   await page.getByRole("menuitem", { name: "从历史中移除" }).click();
   const dialog = page.getByRole("dialog", { name: "从历史中移除这首曲目？" });
   await expect(dialog).toContainText("的播放记录会被移除，不能恢复。");

@@ -34,15 +34,15 @@
   align-self: start;
   justify-self: start;
   padding: 0 var(--space-2);
-  border: 1px solid var(--color-control-border);
   border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
   font-weight: 600;
   white-space: nowrap;
 }
 
 .item[data-action="move"] .action {
-  border-color: var(--color-accent-700);
   background: var(--color-selected);
+  color: var(--text-accent);
 }
 
 .text {

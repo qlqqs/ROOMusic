@@ -1,30 +1,24 @@
-/* 曲目行的动作：按钮一行不换行（表格按内容分配列宽，标题很长时也不把“播放”“更多”挤成逐字换行），说明与提示在下面，空的提示不占位。 */
+/* 曲目行的动作：三个图标一行不换行，说明与提示在下面、右对齐；提示不撑宽所在的列，空的提示不占位。 */
 .row {
   display: grid;
-  gap: var(--space-2);
+  justify-items: end;
+  gap: var(--space-1);
   min-width: 0;
-  font-size: var(--fs-13);
+  font-size: var(--fs-12);
 }
 
 .actions {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: var(--space-2);
-  min-width: max-content;
-}
-
-.actions[data-wrap] {
-  flex-wrap: wrap;
-  min-width: 0;
-}
-
-.actions > * {
-  white-space: nowrap;
+  gap: 2px;
 }
 
 .row p {
+  contain: inline-size;
+  width: 100%;
   color: var(--text-secondary);
+  text-align: end;
   overflow-wrap: anywhere;
 }
 

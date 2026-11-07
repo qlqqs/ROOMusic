@@ -47,7 +47,7 @@ async function setup() {
 
 const queueIds = (engine: PlayerEngine) => engine.getSnapshot().queue.entries.map((entry) => entry.track.trackId);
 async function menu(name: string) {
-  await userEvent.click(screen.getByRole("button", { name: "更多" }));
+  await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
   await userEvent.click(screen.getByRole("menuitem", { name }));
 }
 async function ready(name: string) {

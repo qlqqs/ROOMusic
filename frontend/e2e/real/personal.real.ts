@@ -91,7 +91,7 @@ test("真实服务：新建歌单、整张加入两首、菜单交换顺序，�
   const firstTitle = before.items[0]?.track.title;
   if (firstTitle === undefined) throw new Error("歌单第一首不存在");
   const row = page.getByRole("listitem").filter({ has: page.getByRole("button", { name: `拖动《${firstTitle}》调整顺序`, exact: true }) });
-  await row.getByRole("button", { name: "更多", exact: true }).click();
+  await row.getByRole("button", { name: "更多操作", exact: true }).click();
   await page.getByRole("menuitem", { name: "下移", exact: true }).click();
   await expect.poll(async () => decodePlaylistItemsPage(await body(await page.request.get(itemsPath))).items.map((item) => item.track.track_id)).toEqual([...trackIds].reverse());
   const expectedTitles = before.items.map((item) => item.track.title).reverse();

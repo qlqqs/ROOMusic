@@ -44,7 +44,7 @@ export function FavoriteButton({ target, message = "visible" }: FavoriteButtonPr
   const button = (
     <Button
       variant="icon"
-      icon={<Heart size={18} fill={pressed === true ? "currentColor" : "none"} />}
+      icon={<Heart size={16} fill={pressed === true ? "currentColor" : "none"} />}
       label={`收藏${subject}`}
       aria-pressed={pressed ?? false}
       title={hint}

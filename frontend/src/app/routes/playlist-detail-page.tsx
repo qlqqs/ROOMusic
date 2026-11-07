@@ -8,7 +8,7 @@ import { playerTrackOfSummary } from "./track-playback";
 /** 歌单的一行：与各页相同的播放、心形与“更多”，歌单自己的移动与移除接在菜单后面。 */
 function PlaylistTrackActions({ item, actions }: { item: PlaylistItemDTO; actions: readonly MenuAction[] }) {
   const track = playerTrackOfSummary(item.track);
-  return <TrackActions track={track} present={item.track.present} playName={`播放 ${track.title}`} retryHint="请在“播放全部”旁重试。" extraActions={actions} wrap />;
+  return <TrackActions track={track} present={item.track.present} playLabel={`播放 ${track.title}`} retryHint="请在“播放全部”旁重试。" extraActions={actions} />;
 }
 
 /**

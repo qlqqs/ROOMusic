@@ -1,17 +1,48 @@
-import { UserPlus } from "lucide-react";
-import { useRef, useState, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent, type RefObject } from "react";
 import { isHttpFailure } from "../../../shared/api";
-import { Button, TextField } from "../../../shared/ui";
+import { Button, ModalDialog, TextField } from "../../../shared/ui";
 import { passwordHint, validateNewAccount, type NewAccountErrors } from "../../auth";
 import type { MemberCommands } from "../hooks/use-member-commands";
 import styles from "./create-member-form.module.css";
+import { MemberCommandNotice } from "./member-command-notice";
 import { memberFailureMessages } from "./member-messages";
 
+type CreateMemberDialogProps = {
+  open: boolean;
+  commands: MemberCommands;
+  onClose: () => void;
+};
+
 /**
- * 新建成员：用户名与密码（规则与初始化管理员相同，密码按 UTF-8 字节计，需要 12 到 72 字节）。
- * 只能创建“成员”角色。失败时保留输入，成功后清空；用户名重复显示在用户名输入框旁。
+ * 新建成员的对话框：用户名与密码（规则与初始化管理员相同，密码按 UTF-8 字节计，需要 12 到 72 字节），只能创建“成员”角色。
+ * 成功后关闭，结果显示在列表上方；失败时错误留在对话框里、保留输入，用户名重复显示在用户名输入框旁。
+ * Esc 与“取消”直接关闭（提交中暂时无效），关闭即丢弃输入。
  */
-export function CreateMemberForm({ commands }: { commands: MemberCommands }) {
+export function CreateMemberDialog({ open, commands, onClose }: CreateMemberDialogProps) {
+  const titleId = useId();
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const pending = commands.state.status === "pending";
+  const cancel = () => {
+    if (pending) return;
+    commands.dismiss();
+    onClose();
+  };
+  return (
+    <ModalDialog open={open} titleId={titleId} initialFocus={headingRef} className={styles.dialog} onRequestClose={cancel}>
+      <CreateMemberForm titleId={titleId} headingRef={headingRef} commands={commands} onCreated={onClose} onCancel={cancel} />
+    </ModalDialog>
+  );
+}
+
+type CreateMemberFormProps = {
+  titleId: string;
+  headingRef: RefObject<HTMLHeadingElement | null>;
+  commands: MemberCommands;
+  onCreated: () => void;
+  onCancel: () => void;
+};
+
+function CreateMemberForm({ titleId, headingRef, commands, onCreated, onCancel }: CreateMemberFormProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -39,19 +70,16 @@ export function CreateMemberForm({ commands }: { commands: MemberCommands }) {
     if (next.confirmation !== undefined) return confirmationRef.current?.focus();
     commands.submit(
       { kind: "create", username: trimmed, password },
-      {
-        onSucceeded: () => {
-          setUsername("");
-          setPassword("");
-          setConfirmation("");
-        },
-      },
+      { onSucceeded: onCreated },
     );
   }
 
   const busy = state.status === "pending";
   return (
-    <form className={styles.form} onSubmit={submit} noValidate aria-label="新建成员">
+    <form className={styles.content} onSubmit={submit} noValidate>
+      <h2 id={titleId} ref={headingRef} tabIndex={-1} className={styles.title}>
+        新建成员
+      </h2>
       <div className={styles.fields}>
         <TextField
           ref={usernameRef}
@@ -91,9 +119,13 @@ export function CreateMemberForm({ commands }: { commands: MemberCommands }) {
           }}
         />
       </div>
-      <div>
-        <Button type="submit" variant="primary" icon={<UserPlus size={16} />} busy={busy}>
-          {busy && state.command.kind === "create" ? "正在创建…" : "创建成员"}
+      <MemberCommandNotice state={state} scope="create" onDismiss={commands.dismiss} />
+      <div className={styles.actions}>
+        <Button onClick={onCancel} disabled={busy}>
+          取消
+        </Button>
+        <Button type="submit" variant="primary" busy={busy}>
+          {busy ? "正在创建…" : "创建"}
         </Button>
       </div>
     </form>

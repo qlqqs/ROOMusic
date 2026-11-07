@@ -5,7 +5,7 @@ import { memberFailureMessages, resetPasswordFailureMessages } from "./member-me
 
 type MemberCommandNoticeProps = {
   state: MemberCommandState;
-  /** 新建成员的结果显示在表单旁，其他操作的结果显示在列表上方。 */
+  /** 新建成员失败显示在新建对话框里；成功和其他操作的结果显示在列表上方。 */
   scope: "create" | "list";
   onDismiss: () => void;
 };
@@ -32,7 +32,8 @@ function successText(command: MemberCommand): string {
  */
 export function MemberCommandNotice({ state, scope, onDismiss }: MemberCommandNoticeProps) {
   if (state.status !== "succeeded" && state.status !== "failed") return null;
-  if ((state.command.kind === "create") !== (scope === "create")) return null;
+  const inDialog = state.status === "failed" && state.command.kind === "create";
+  if (inDialog !== (scope === "create")) return null;
   const dismiss = (
     <Button onClick={onDismiss}>
       关闭

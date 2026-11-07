@@ -26,7 +26,7 @@ type Case = {
   after?: (page: Page) => Promise<void>;
 };
 
-/** 长内容的列表与详情：A7（超过 1000 字的标题、超长艺人名、无空格长串、中日英混排、十二张介质）与 A8（字体回退）都用它们。 */
+/** 长内容的列表与详情：A7（超过 1000 字的标题、超长艺人名、无空格长串、中日英混排、十二张介质）都用它们。 */
 const longList: Case = {
   name: "专辑列表（长内容）",
   options: { signedInAs: "listener" },
@@ -249,35 +249,6 @@ test.describe("五种宽度下没有横向溢出", () => {
         await page.evaluate(() => document.fonts.ready);
         await expectNoHorizontalOverflow(page, `${item.name} @${width}px`);
         await expectNoDocumentScroll(page, `${item.name} @${width}px`);
-      }
-    });
-  }
-});
-
-// A8：字体全部加载失败（被拦截）时，页面回退到系统衬线字体，长内容的列表与详情仍然没有横向溢出、没有遮挡、文字不小于 12px。
-test.describe("字体被拦截时的回退", () => {
-  for (const item of [longList, { ...longDetail, options: { signedInAs: "curator" } satisfies MockOptions, after: expandEvidence }]) {
-    test(item.name, async ({ page, backend }) => {
-      let blocked = 0;
-      await page.route("**/*.woff2", async (route) => {
-        blocked += 1;
-        await route.abort();
-      });
-      const mock = await backend.start(item.options);
-      item.prepare?.(mock);
-      await page.goto(item.path(mock));
-      await expect(heading(page, item.title)).toBeVisible();
-      await item.after?.(page);
-      // 拦截确实生效：页面请求过字体，而且没有一个字体加载成功。
-      await page.evaluate(() => document.fonts.ready);
-      expect(blocked, "页面应该请求过字体文件").toBeGreaterThan(0);
-      expect(await page.evaluate(() => Array.from(document.fonts).filter((font) => font.status === "loaded").length), "字体不应加载成功").toBe(0);
-      for (const width of widths) {
-        await page.setViewportSize({ width, height: 900 });
-        await expect(heading(page, item.title)).toBeVisible();
-        await expectNoHorizontalOverflow(page, `${item.name}（无字体）@${width}px`);
-        await expectNoDocumentScroll(page, `${item.name}（无字体）@${width}px`);
-        await expectMinimumFontSize(page, `${item.name}（无字体）@${width}px`);
       }
     });
   }

@@ -55,7 +55,7 @@ function setup(items: HistoryItemDTO[] = [first, second]) {
 }
 
 async function openRemove(title = first.title) {
-  await userEvent.click(within(row(title)).getByRole("button", { name: "更多" }));
+  await userEvent.click(within(row(title)).getByRole("button", { name: "更多操作" }));
   await userEvent.click(screen.getByRole("menuitem", { name: "从历史中移除" }));
   return screen.findByRole("dialog", { name: "从历史中移除这首曲目？" });
 }
@@ -147,7 +147,7 @@ describe("我的音乐历史页", () => {
     expect(within(row(first.title)).getByRole("button", { name: `播放 ${first.title}` }).hasAttribute("disabled")).toBe(true);
     expect(within(row(first.title)).queryByRole("link")).toBeNull();
     expect(within(row(first.title)).getByText(first.release.title)).toBeTruthy();
-    await userEvent.click(within(row(first.title)).getByRole("button", { name: "更多" }));
+    await userEvent.click(within(row(first.title)).getByRole("button", { name: "更多操作" }));
     for (const name of ["下一首播放", "加入队列"]) expect(screen.getByRole("menuitem", { name }).hasAttribute("disabled")).toBe(true);
     expect(screen.getByRole("menuitem", { name: "从历史中移除" }).hasAttribute("disabled")).toBe(false);
     await userEvent.keyboard("{Escape}");

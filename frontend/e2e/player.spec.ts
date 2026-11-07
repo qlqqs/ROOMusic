@@ -336,7 +336,7 @@ test("不可播放曲目的心形与更多仍可用，仅播放、下一首播�
   await expect(play).toHaveAccessibleDescription(reason);
   await expect(track.getByText(reason, { exact: true })).toBeVisible();
   await expect(track.getByRole("button", { name: "收藏《待切分的 CUE 曲目》", exact: true })).toBeEnabled();
-  const more = track.getByRole("button", { name: "更多", exact: true });
+  const more = track.getByRole("button", { name: "更多操作", exact: true });
   await expect(more).toBeEnabled();
   await more.click();
   await expect(page.getByRole("menuitem", { name: "下一首播放", exact: true })).toBeDisabled();
@@ -365,7 +365,7 @@ test("纯键盘：播放、下一首播放、不打断当前、切歌、队列�
   await keyboardActivate(page, bar(page).getByRole("button", { name: "暂停", exact: true }));
   await expect.poll(async () => (await media(page))?.paused).toBe(true);
   const firstSrc = (await media(page))?.src;
-  await keyboardActivate(page, page.locator("#main ol > li").nth(2).getByRole("button", { name: "更多", exact: true }));
+  await keyboardActivate(page, page.locator("#main ol > li").nth(2).getByRole("button", { name: "更多操作", exact: true }));
   await page.getByRole("menuitem", { name: "下一首播放", exact: true }).press("Enter");
   await expect(bar(page).getByRole("link", { name: "队列（19）", exact: true })).toBeVisible();
   expect(await media(page)).toMatchObject({ src: firstSrc, paused: true });

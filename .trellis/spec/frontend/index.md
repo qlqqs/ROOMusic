@@ -4,7 +4,7 @@
 
 2026-10-01：M1a 已实现并验证——应用外壳、初始化与会话、目录与扫描管理、成员管理、简版概览。`frontend/src/`
 按本层规范重建：React 19 与严格 TypeScript、TanStack Router（代码定义路由，不用 loader）与 TanStack Query
-（服务器状态的唯一缓存）、CSS Modules 加集中的 Classical 全局变量、Fontsource 自托管可变字体；直接依赖全部精确固定。
+（服务器状态的唯一缓存）、CSS Modules 加集中的全局设计变量、系统无衬线字体栈（2026-11-07 起不再自托管字体，见 `frontend/DESIGN.md` 3.2）；直接依赖全部精确固定。
 生产页面由 Go 同源提供，构建产物（`backend/cmd/roomusic/web`）随源码提交，CI 检查漂移。
 2026-10-03：M1b 在这个外壳上增加了专辑浏览：`/albums`（搜索、需要关注筛选、分页、封面卡片）与 `/albums/$groupId`（头部、版本导航、介质与曲目、发行信息、
 折叠的来源与证据，管理员可按需读完整证据），详见[状态](./state-management.md)、[组件](./component-guidelines.md)与[质量](./quality-guidelines.md)规范。

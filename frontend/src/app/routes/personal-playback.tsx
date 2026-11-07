@@ -37,11 +37,14 @@ export function PersonalPlayAll({ source, label = "播放全部" }: { source: Pe
   const capability = usePlaybackCapabilities();
   const queue = usePersonalQueue(source);
   const [notice, setNotice] = useState("");
+  // 只是“已选择 N 首”、没有跳过或省略时，结果只给读屏播报，不显示。
+  const [quiet, setQuiet] = useState(false);
   const disabledReason = capability.isError ? "无法检查播放能力，请重试。" : capability.data === undefined ? "正在检查播放能力…" : null;
   function start() {
     const table = capability.data;
     if (table === undefined) return;
     setNotice("");
+    setQuiet(false);
     queue.load({
       onLoaded: (data) => {
         const { tracks, unsupported } = playableOf(data, table);
@@ -54,6 +57,7 @@ export function PersonalPlayAll({ source, label = "播放全部" }: { source: Pe
           return;
         }
         setNotice(personalQueueNotice(tracks.length, data, unsupported));
+        setQuiet(unsupported === 0 && data.missing_count === 0 && data.omitted_count === 0);
       },
     });
   }
@@ -67,7 +71,7 @@ export function PersonalPlayAll({ source, label = "播放全部" }: { source: Pe
       {disabledReason === null ? null : <p>{disabledReason}</p>}
       {capability.isError ? <FailureNotice error={capability.error} action={<Button onClick={() => void capability.refetch()}>重试检查</Button>} /> : null}
       {queue.error === null ? null : <FailureNotice error={queue.error} title="没能读取曲目" action={<Button onClick={start}>重试</Button>} />}
-      <p role="status">{notice}</p>
+      <p role="status" className={quiet ? styles.quiet : undefined}>{notice}</p>
     </div>
   );
 }

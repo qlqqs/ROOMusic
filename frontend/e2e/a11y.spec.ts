@@ -394,10 +394,11 @@ const states: State[] = [
     options: { signedInAs: "curator" },
     reach: async (page) => {
       await page.goto("/settings/members");
+      await page.getByRole("button", { name: "新建成员", exact: true }).click();
       await page.getByLabel("用户名").fill("listener");
       await page.getByLabel("密码", { exact: true }).fill("correct horse battery");
       await page.getByLabel("确认密码").fill("correct horse battery");
-      await page.getByRole("button", { name: "创建成员" }).click();
+      await page.getByRole("button", { name: "创建", exact: true }).click();
       await expect(page.getByText("用户名已存在，请换一个。")).toBeVisible();
     },
   },

@@ -180,7 +180,7 @@ test("定位：已有非空队列时选择曲目建议，不替换队列或触�
   const fixture = seedSearchStep4(mock);
   await page.goto("/search?q=爱");
   const result = page.getByRole("table", { name: "曲目结果" }).getByRole("row").filter({ has: page.getByText(fixture.target.title, { exact: true }) });
-  await keyboardMenuStep4(page, result.getByRole("button", { name: "更多", exact: true }), "加入队列");
+  await keyboardMenuStep4(page, result.getByRole("button", { name: "更多操作", exact: true }), "加入队列");
   await expect(result.getByRole("status")).toHaveText("已加入队列。");
   const before = await queueSnapshotStep4(page);
   expect(Object.keys(before), "必须真的已有队列，不能拿两个空对象声称保护了已有队列").toHaveLength(1);
@@ -315,7 +315,7 @@ for (const width of [375, 1440]) {
     await expect(heart).toHaveAttribute("aria-pressed", "true");
     await expect(heart).not.toHaveAttribute("aria-busy", "true");
     expect(personalUserOf(mock.personal, PERSONAL_LISTENER_ID).tracks.has(fixture.target.id)).toBe(true);
-    await keyboardMenuStep4(page, row.getByRole("button", { name: "更多", exact: true }), "添加到歌单…");
+    await keyboardMenuStep4(page, row.getByRole("button", { name: "更多操作", exact: true }), "添加到歌单…");
     const dialog = page.getByRole("dialog", { name: "添加到歌单", exact: true });
     await expect(dialog).toContainText(`《${fixture.target.title}》`);
     await expectAxeClean(page, "搜索行添加歌单对话框");

@@ -49,7 +49,7 @@
   gap: var(--space-1);
   min-height: var(--control-height);
   padding: 0 var(--space-3);
-  border: 1px solid var(--color-control-border);
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
   color: inherit;
   font-size: var(--fs-13);
@@ -60,7 +60,7 @@
   background: var(--color-hover);
 }
 
-/* 当前筛选：加粗的边框与轻底，不只靠颜色。 */
+/* 未选中的筛选没有边框；当前筛选用加粗的边框与轻底，不只靠颜色。 */
 .filter[aria-current="page"] {
   border-color: var(--color-accent-700);
   background: var(--color-selected);

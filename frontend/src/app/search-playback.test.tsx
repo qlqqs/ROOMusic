@@ -55,7 +55,7 @@ async function playable() {
   await waitFor(() => expect(screen.getByRole("button", { name: /^播放 / }).hasAttribute("disabled")).toBe(false));
 }
 async function menu(name: string) {
-  await userEvent.click(screen.getByRole("button", { name: "更多" }));
+  await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
   await userEvent.click(screen.getByRole("menuitem", { name }));
 }
 async function start(engine: PlayerEngine, audio: FakeAudio, count = 2) {
@@ -134,7 +134,7 @@ describe("搜索曲目播放动作", () => {
     const button = screen.getByRole("button", { name: /^播放 / });
     expect(button.hasAttribute("disabled")).toBe(true);
     expect(document.getElementById(button.getAttribute("aria-describedby") ?? "")?.textContent).toBe(reason);
-    await userEvent.click(screen.getByRole("button", { name: "更多" }));
+    await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
     for (const action of ["下一首播放", "加入队列"]) expect(screen.getByRole("menuitem", { name: action }).hasAttribute("disabled")).toBe(true);
     expect(engine.getSnapshot().queue.entries).toHaveLength(0);
   });

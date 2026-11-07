@@ -1,3 +1,4 @@
 .container { display: grid; gap: var(--space-2); min-width: 0; margin-bottom: var(--space-3); font-size: var(--fs-13); overflow-wrap: anywhere; }
 .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); min-width: 0; }
 .container p:empty { display: none; }
+.quiet { composes: hidden from "../../../shared/ui/visually-hidden.module.css"; }

@@ -165,7 +165,13 @@ test.describe("键盘", () => {
   test("成员页：键盘完成新建（Tab 顺序与 Enter 提交）与对话框确认", async ({ page, backend }) => {
     await backend.start({ signedInAs: "curator" });
     await page.goto("/settings/members");
-    await page.getByLabel("用户名").focus();
+    const createTrigger = page.getByRole("button", { name: "新建成员", exact: true });
+    await createTrigger.focus();
+    await page.keyboard.press("Enter");
+    const createDialog = page.getByRole("dialog", { name: "新建成员", exact: true });
+    await expect(createDialog.getByRole("heading", { name: "新建成员", exact: true })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(createDialog.getByLabel("用户名")).toBeFocused();
     await page.keyboard.type("keyboard-user");
     await page.keyboard.press("Tab");
     await page.keyboard.type("correct horse battery");

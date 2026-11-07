@@ -66,11 +66,16 @@
   list-style: none;
 }
 
+/*
+ * 一行两层：第一层是曲目号、标题、动作图标与时长，第二层是艺人与署名（从标题列铺到行尾）。
+ * 标题、曲目号与时长至少和图标一样高并垂直居中，单行标题与图标对齐；标题换行时图标留在第一行。
+ */
 .track {
   display: grid;
-  grid-template-columns: 3.2em minmax(0, 1fr) auto;
-  gap: var(--space-3);
-  padding: var(--space-2) 0;
+  grid-template-columns: 2.4em minmax(0, 1fr) auto auto;
+  align-items: start;
+  gap: 0 var(--space-3);
+  padding: var(--space-1) 0;
   border-top: 1px solid var(--color-divider);
 }
 
@@ -80,7 +85,7 @@
  * - 底色铺满行，细线是向左偏移 3px 的阴影（画在行外），右边再用向右偏移 6px 的阴影把底色延伸出去；
  *   只往水平方向，不压到上下相邻的行。时长与高亮右边缘之间因此留有 6px，曲目号右对齐在 3.2em 的列里，离细线更远。
  * - 焦点环向外偏移 4px，与时长之间留 4px，不再压在文字上。
- * 6px 正好在介质分段为 paint 包含留出的 6px 余量之内，不会被裁掉；上下方向伸出的焦点环落在相邻行 9.2px 的内边距里，不碰文字。
+ * 6px 正好在介质分段为 paint 包含留出的 6px 余量之内，不会被裁掉；上下方向伸出的焦点环落在相邻行的内边距与标题上方的留白里，不碰文字。
  */
 .track:focus-visible {
   outline: var(--focus-ring);
@@ -117,38 +122,51 @@
   }
 }
 
-.number {
-  color: var(--text-secondary);
-  font-size: var(--fs-13);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-
-.body {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.title {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-1) var(--space-2);
-  font-size: var(--fs-14);
-}
-
-.secondary {
-  color: var(--text-secondary);
-  font-size: var(--fs-13);
-}
-
+.number,
 .duration {
+  display: flex;
+  align-items: center;
+  min-height: var(--control-height);
   color: var(--text-secondary);
   font-size: var(--fs-13);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.actions { grid-column: 2 / -1; min-width: 0; }
+.number {
+  justify-content: flex-end;
+}
+
+.title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  align-content: center;
+  gap: var(--space-1) var(--space-2);
+  min-width: 0;
+  min-height: var(--control-height);
+  font-size: var(--fs-14);
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  display: grid;
+  grid-column: 2 / -1;
+  gap: 2px;
+  min-width: 0;
+  padding-bottom: var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  min-width: 0;
+}
+
+@media (max-width: 767px) {
+  .track {
+    grid-template-columns: 1.8em minmax(0, 1fr) auto auto;
+    column-gap: var(--space-2);
+  }
+}

@@ -418,6 +418,7 @@ function PlaylistRow({ item, disabled, actions }: { item: PlaylistItemDTO; disab
           </span>
         )}
       </div>
+      <div className={styles.actions}>{actions}</div>
       <span className={styles.duration}>
         {track.duration_seconds === null ? (
           <>
@@ -428,7 +429,6 @@ function PlaylistRow({ item, disabled, actions }: { item: PlaylistItemDTO; disab
           formatDuration(track.duration_seconds)
         )}
       </span>
-      <div className={styles.actions}>{actions}</div>
     </li>
   );
 }

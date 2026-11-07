@@ -20,3 +20,8 @@
 .playAll p:empty {
   display: none;
 }
+
+/* 只是“已选择 N 首”这类没有新信息的结果：只给读屏播报，不显示。 */
+.quiet {
+  composes: hidden from "../../shared/ui/visually-hidden.module.css";
+}

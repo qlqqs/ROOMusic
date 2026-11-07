@@ -16,24 +16,27 @@ test.describe("成员管理", () => {
     const mock = await backend.start({ signedInAs: "curator" });
     await page.goto("/settings/members");
     await expect(heading(page, "成员")).toBeVisible();
+    await page.getByRole("button", { name: "新建成员", exact: true }).click();
 
-    await page.getByRole("button", { name: "创建成员" }).click();
+    await page.getByRole("button", { name: "创建", exact: true }).click();
     await expect(page.getByText("请输入用户名。")).toBeVisible();
     await expect(page.getByLabel("用户名")).toBeFocused();
     expect(mock.callsTo("POST", "/api/v1/users")).toHaveLength(0);
 
     await fillForm(page, "newbie", "correct horse battery");
-    await page.getByRole("button", { name: "创建成员" }).click();
+    await page.getByRole("button", { name: "创建", exact: true }).click();
     await expect(page.getByText(/已创建成员“newbie”/)).toBeVisible();
     await expect(membersTable(page).getByRole("row", { name: /newbie/ })).toContainText("成员");
-    await expect(page.getByLabel("用户名")).toHaveValue("");
+    await expect(page.getByRole("dialog", { name: "新建成员" })).toBeHidden();
     await expect(page.locator("main")).not.toContainText("correct horse battery");
     const [created] = mock.callsTo("POST", "/api/v1/users");
     expect(created?.body).toEqual({ username: "newbie", password: "correct horse battery" });
     expect(created?.idempotencyKey).toBeNull();
 
+    await page.getByRole("button", { name: "新建成员", exact: true }).click();
+    await expect(page.getByLabel("用户名")).toHaveValue("");
     await fillForm(page, "listener", "correct horse battery");
-    await page.getByRole("button", { name: "创建成员" }).click();
+    await page.getByRole("button", { name: "创建", exact: true }).click();
     await expect(page.getByText("用户名已存在，请换一个。")).toBeVisible();
     await expect(page.getByLabel("用户名")).toHaveValue("listener");
   });

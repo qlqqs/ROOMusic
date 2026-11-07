@@ -32,12 +32,15 @@ export function ArtistPlayActions({ artistId }: { artistId: string }) {
   const capability = usePlaybackCapabilities();
   const queue = useArtistQueue(artistId);
   const [notice, setNotice] = useState("");
+  // 只是“已选择 N 首”、没有跳过或省略时，结果只给读屏播报，不显示。
+  const [quiet, setQuiet] = useState(false);
   const [lastOrder, setLastOrder] = useState<ArtistQueueOrder["kind"]>("album");
   const disabledReason = capability.isError ? "无法检查播放能力，请重试。" : capability.data === undefined ? "正在检查播放能力…" : null;
   function start(kind: ArtistQueueOrder["kind"]) {
     const table = capability.data;
     if (table === undefined) return;
     setNotice("");
+    setQuiet(false);
     setLastOrder(kind);
     // 随机播放每次换一个 seed：同一个 seed 在数据不变时得到同一个顺序（重试结果一致），换一次按钮就是新的随机。
     const order: ArtistQueueOrder = kind === "random" ? { kind, seed: newIdempotencyKey() } : { kind };
@@ -53,6 +56,7 @@ export function ArtistPlayActions({ artistId }: { artistId: string }) {
         return;
       }
       setNotice(artistQueueNotice(tracks.length, data, unsupported));
+      setQuiet(unsupported === 0 && data.missing_total === 0 && !data.truncated);
     });
   }
   return (
@@ -68,7 +72,7 @@ export function ArtistPlayActions({ artistId }: { artistId: string }) {
       {disabledReason === null ? null : <p>{disabledReason}</p>}
       {capability.isError ? <FailureNotice error={capability.error} action={<Button onClick={() => void capability.refetch()}>重试检查</Button>} /> : null}
       {queue.error === null ? null : <FailureNotice error={queue.error} title="没能读取曲目" action={<Button onClick={() => start(lastOrder)}>重试</Button>} />}
-      <p role="status">{notice}</p>
+      <p role="status" className={quiet ? styles.quiet : undefined}>{notice}</p>
     </div>
   );
 }

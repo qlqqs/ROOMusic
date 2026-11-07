@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { DataTable, type Column } from "./data-table";
+import styles from "./data-table.module.css";
 
 type Row = { id: string; name: string; count: number };
 const rows: Row[] = [
@@ -14,6 +15,14 @@ const columns: Column<Row>[] = [
 ];
 
 describe("DataTable", () => {
+  it("besideRowHeader 只给动作列添加同行布局标记，保留行标题语义", () => {
+    const besideColumns = columns.map((column) => column.id === "action" ? { ...column, besideRowHeader: true } : column);
+    render(<DataTable caption="目录列表" columns={besideColumns} rows={rows} rowKey={(row) => row.id} />);
+    const action = screen.getByRole("button", { name: "处理 classical-a" }).closest("td");
+    expect(action?.className.split(" ")).toContain(styles.beside);
+    expect(screen.getByRole("rowheader", { name: "classical-a" }).getAttribute("scope")).toBe("row");
+  });
+
   it("用 caption 作为表格名称，列标题与行标题有对应语义", () => {
     render(<DataTable caption="目录列表" columns={columns} rows={rows} rowKey={(row) => row.id} />);
     const table = screen.getByRole("table", { name: "目录列表" });

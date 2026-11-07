@@ -13,7 +13,7 @@ import { playerTrackOfSummary } from "./track-playback";
  */
 export function SearchTrackActions({ item }: { item: SearchTrackItemDTO }) {
   const track = playerTrackOfSummary(item);
-  return <TrackActions track={track} present={item.present} playName={`播放 ${track.title}`} retryHint="请在曲目列表上方重试。" />;
+  return <TrackActions track={track} present={item.present} playLabel={`播放 ${track.title}`} retryHint="请在曲目列表上方重试。" />;
 }
 
 /** 曲目栏上方：无法检查播放能力时给一次重试（不在每一行重复）；能检查时不渲染。 */

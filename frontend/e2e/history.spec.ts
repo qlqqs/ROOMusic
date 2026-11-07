@@ -94,7 +94,7 @@ for (const width of widths) {
     await expectMinimumFontSize(page, "历史页");
     await axe(page, "历史页");
 
-    const more = row(page, missing.title).getByRole("button", { name: "更多" });
+    const more = row(page, missing.title).getByRole("button", { name: "更多操作" });
     // 长表格先滚到操作区，等浏览器交付滚动事件后再点击，避免自动定位的旧 scroll 事件关闭刚打开的菜单。
     await more.evaluate((element) => element.scrollIntoView({ block: "center" }));
     await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
@@ -138,7 +138,7 @@ test("纯键盘：侧栏进入我的音乐，行内播放，更多→移除→�
   const bar = page.getByRole("region", { name: "播放器", exact: true });
   await expect(bar.getByText("正在播放", { exact: true })).toBeVisible();
   await expect(bar).toContainText(first.title);
-  await keyboardActivate(page, row(page, first.title).getByRole("button", { name: "更多" }));
+  await keyboardActivate(page, row(page, first.title).getByRole("button", { name: "更多操作" }));
   await expect(page.getByRole("menuitem", { name: "添加到歌单…" })).toBeEnabled();
   await page.keyboard.press("End");
   await expect(page.getByRole("menuitem", { name: "从历史中移除" })).toBeFocused();

@@ -9,7 +9,7 @@ const favoritesSource = { kind: "favorites" } as const;
 /** 收藏的一首曲目的行内动作：与历史页同样的播放、心形与“更多”。 */
 function FavoriteTrackActions({ item }: { item: FavoriteTrackDTO }) {
   const track = playerTrackOfSummary(item.track);
-  return <TrackActions track={track} present={item.track.present} playName={`播放 ${track.title}`} retryHint="请在“播放全部”旁重试。" />;
+  return <TrackActions track={track} present={item.track.present} playLabel={`播放 ${track.title}`} retryHint="请在“播放全部”旁重试。" />;
 }
 
 /**

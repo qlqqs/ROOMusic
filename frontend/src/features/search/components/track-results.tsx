@@ -57,16 +57,17 @@ export function TrackResults({ items, renderTrackActions }: TrackResultsProps) {
           ),
       },
       {
+        id: "actions",
+        header: "操作",
+        hideLabelWhenStacked: true,
+        besideRowHeader: true,
+        cell: (item) => renderTrackActions(item),
+      },
+      {
         id: "duration",
         header: "时长",
         numeric: true,
         cell: (item) => <span className={styles.duration}>{formatDuration(item.duration_seconds)}</span>,
-      },
-      {
-        id: "actions",
-        header: "操作",
-        hideLabelWhenStacked: true,
-        cell: (item) => renderTrackActions(item),
       },
     ],
     [renderTrackActions],

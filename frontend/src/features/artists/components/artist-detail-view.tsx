@@ -96,12 +96,12 @@ export function ArtistDetailView({ artistId, search, onRedirect, renderHeaderAct
     );
   }
   const { artist } = data;
-  const hasDescription = artist.album_count > 0 || artist.track_count > 0 || artist.roles.length > 0;
+  const hasDescription = artist.album_count > 0 || artist.track_count > 0;
   return (
     <Page
       title={artist.name}
       compactTitle={artist.name.length > 80}
-      {...(hasDescription ? { description: <ArtistMeta artist={artist} withRoles /> } : {})}
+      {...(hasDescription ? { description: <ArtistMeta artist={artist} /> } : {})}
       actions={<div className={styles.headerActions}>{renderHeaderActions(data)}</div>}
     >
       {renderAdminActions === undefined ? null : renderAdminActions(data)}
@@ -266,8 +266,8 @@ function RoleTracks({ detail, roles, role, search, renderTrackActions, renderTra
             <span className={styles.missing}>{item.release.title}</span>
           ),
       },
+      { id: "actions", header: "操作", hideLabelWhenStacked: true, besideRowHeader: true, cell: (item) => renderTrackActions(item) },
       { id: "duration", header: "时长", numeric: true, cell: (item) => <span className={styles.duration}>{formatDuration(item.duration_seconds)}</span> },
-      { id: "actions", header: "操作", hideLabelWhenStacked: true, cell: (item) => renderTrackActions(item) },
     ],
     [renderTrackActions],
   );

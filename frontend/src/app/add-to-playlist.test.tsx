@@ -57,7 +57,7 @@ async function openSingle() {
   await screen.findByText(singleTitle, { exact: true });
   const row = screen.getByText(singleTitle, { exact: true }).closest("li");
   if (row === null) throw new Error("专辑曲目行不存在");
-  await userEvent.click(within(row).getByRole("button", { name: "更多" }));
+  await userEvent.click(within(row).getByRole("button", { name: "更多操作" }));
   await userEvent.click(screen.getByRole("menuitem", { name: "添加到歌单…" }));
   return screen.findByRole("dialog", { name: "添加到歌单" });
 }

@@ -21,7 +21,7 @@ export function HistoryTrackActions({ item, onRemove }: { item: HistoryItemDTO; 
     <TrackActions
       track={track}
       present={item.present}
-      playName={`播放 ${track.title}`}
+      playLabel={`播放 ${track.title}`}
       retryHint="请在“播放全部”旁重试。"
       extraActions={[{ id: "remove", label: "从历史中移除", onSelect: onRemove }]}
     />
@@ -38,11 +38,14 @@ export function HistoryPlayAll() {
   const capability = usePlaybackCapabilities();
   const queue = useHistoryQueue();
   const [notice, setNotice] = useState("");
+  // 只是“已选择 N 首”、没有跳过或省略时，结果只给读屏播报，不显示。
+  const [quiet, setQuiet] = useState(false);
   const disabledReason = capability.isError ? "无法检查播放能力，请重试。" : capability.data === undefined ? "正在检查播放能力…" : null;
   function start() {
     const table = capability.data;
     if (table === undefined) return;
     setNotice("");
+    setQuiet(false);
     queue.load({
       onLoaded: (data) => {
         const tracks = data.items.filter((item) => unplayableReason(playerTrackOfSummary(item), item.present, table) === null).map(playerTrackOfSummary);
@@ -56,7 +59,9 @@ export function HistoryPlayAll() {
           setNotice(QUEUE_FULL_TEXT);
           return;
         }
-        setNotice(`已选择 ${formatCount(tracks.length)} 首${skipped === 0 ? "。" : `，跳过 ${formatCount(skipped)} 首不可播放的曲目。`}${scope}`);
+        const text = `已选择 ${formatCount(tracks.length)} 首${skipped === 0 ? "。" : `，跳过 ${formatCount(skipped)} 首不可播放的曲目。`}${scope}`;
+        setNotice(text);
+        setQuiet(skipped === 0 && scope === "");
       },
     });
   }
@@ -70,7 +75,7 @@ export function HistoryPlayAll() {
       {disabledReason === null ? null : <p>{disabledReason}</p>}
       {capability.isError ? <FailureNotice error={capability.error} action={<Button onClick={() => void capability.refetch()}>重试检查</Button>} /> : null}
       {queue.error === null ? null : <FailureNotice error={queue.error} title="无法读取历史" action={<Button onClick={start}>重试</Button>} />}
-      <p role="status">{notice}</p>
+      <p role="status" className={quiet ? styles.quiet : undefined}>{notice}</p>
     </div>
   );
 }

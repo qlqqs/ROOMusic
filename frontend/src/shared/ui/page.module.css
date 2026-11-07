@@ -15,6 +15,12 @@
   border-bottom: 1px solid var(--color-divider);
 }
 
+/* 紧跟页头的第一个区块不再画上边线：页头的下边线已经把它和标题分开，两条线挨着显得重复。 */
+.header + [data-panel] {
+  padding-top: 0;
+  border-top: 0;
+}
+
 .heading {
   display: grid;
   gap: var(--space-1);

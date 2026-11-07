@@ -246,7 +246,7 @@ describe("收藏页的保留行与服务端列表", () => {
     expect(within(missingRow).getByRole("button", { name: `播放 ${first.track.title}` }).hasAttribute("disabled")).toBe(true);
     // jsdom 不测最终颜色；这里守住灰态样式挂点，实际颜色由浏览器验收负责。
     expect(within(missingRow).getByText(first.track.title, { exact: true }).parentElement?.className).toContain("missing");
-    await userEvent.click(within(missingRow).getByRole("button", { name: "更多" }));
+    await userEvent.click(within(missingRow).getByRole("button", { name: "更多操作" }));
     for (const name of ["下一首播放", "加入队列"]) expect(screen.getByRole("menuitem", { name }).hasAttribute("disabled")).toBe(true);
     expect(screen.getByRole("menuitem", { name: "添加到歌单…" }).hasAttribute("disabled")).toBe(false);
     await userEvent.keyboard("{Escape}");

@@ -18,7 +18,7 @@ type PanelProps = {
 export function Panel({ title, action, headingRef, children }: PanelProps) {
   const headingId = useId();
   return (
-    <section className={styles.panel} aria-labelledby={headingId}>
+    <section className={styles.panel} aria-labelledby={headingId} data-panel="">
       <div className={styles.header}>
         <h2 id={headingId} ref={headingRef} tabIndex={headingRef === undefined ? undefined : -1}>
           {title}

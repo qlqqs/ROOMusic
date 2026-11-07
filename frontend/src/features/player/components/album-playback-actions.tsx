@@ -20,20 +20,21 @@ function reasonOf(track: PlayerTrack, table: ReturnType<typeof usePlaybackCapabi
 export function AlbumPlaybackActions({ release, groupId }: { release: ReleaseDetailDTO; groupId: string }) {
   const engine = usePlayerEngine();
   const capability = usePlaybackCapabilities();
-  const [notice, setNotice] = useState("");
+  // quiet：只是“已选择 N 首”这类没有新信息的结果，只给读屏播报，不显示。
+  const [notice, setNotice] = useState({ text: "", quiet: false });
   const tracks = playerTracksOf(release, groupId);
   const playable = capability.data === undefined ? [] : tracks.filter((track) => reasonOf(track, capability.data) === null);
   const skipped = tracks.length - playable.length;
   const disabledReason = capability.isError ? "无法检查播放能力，请重试。" : capability.data === undefined ? "正在检查播放能力…" : playable.length === 0 ? "这个版本没有能播放的曲目。" : null;
   function perform(kind: "play" | "enqueue") {
     const result = kind === "play" ? engine.playTracks(playable) : engine.enqueue(playable);
-    if (result === "queue_full") { setNotice("队列已满，请先移除一些条目。"); return; }
-    setNotice(`${kind === "play" ? "已选择" : "已加入队列"} ${playable.length} 首${skipped === 0 ? "。" : `，跳过 ${skipped} 首不可播放的曲目。`}`);
+    if (result === "queue_full") { setNotice({ text: "队列已满，请先移除一些条目。", quiet: false }); return; }
+    setNotice({ text: `${kind === "play" ? "已选择" : "已加入队列"} ${playable.length} 首${skipped === 0 ? "。" : `，跳过 ${skipped} 首不可播放的曲目。`}`, quiet: kind === "play" && skipped === 0 });
   }
   return <div className={styles.container}>
     <div className={styles.actions}><Button variant="primary" icon={<Play size={16} />} disabled={playable.length === 0} onClick={() => perform("play")}>播放整张专辑</Button><Button disabled={playable.length === 0} onClick={() => perform("enqueue")}>加入队列</Button></div>
     {disabledReason === null ? skipped > 0 ? <p>播放或加入队列时会跳过 {skipped} 首不可播放的曲目。</p> : null : <p>{disabledReason}</p>}
     {capability.isError ? <FailureNotice error={capability.error} action={<Button onClick={() => void capability.refetch()}>重试检查</Button>} /> : null}
-    <p role="status">{notice}</p>
+    <p role="status" className={notice.quiet ? styles.quiet : undefined}>{notice.text}</p>
   </div>;
 }

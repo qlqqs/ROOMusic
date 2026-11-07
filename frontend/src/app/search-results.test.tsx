@@ -87,7 +87,7 @@ describe("搜索结果页", () => {
     await waitFor(() => expect(within(row).getByRole("button", { name: /^播放 / }).hasAttribute("disabled")).toBe(false));
     // 两个相同曲目的不同队列条目：不能仅比较曲目 ID 集合掩盖队列替换或去重。
     for (let index = 0; index < 2; index += 1) {
-      await userEvent.click(within(row).getByRole("button", { name: "更多" }));
+      await userEvent.click(within(row).getByRole("button", { name: "更多操作" }));
       await userEvent.click(screen.getByRole("menuitem", { name: "加入队列" }));
     }
     const userId = "00000000-0000-4000-8000-000000000003";
@@ -171,7 +171,7 @@ describe("搜索结果页", () => {
     await waitFor(() => expect(within(row).getByRole("button", { name: `收藏《${item.title}》` }).getAttribute("aria-pressed")).toBe("true"));
     expect(api.requestsTo("PUT", `/api/v1/me/favorites/tracks/${item.track_id}`)).toHaveLength(1);
     if (kind !== "正常") expect(within(row).getByRole("button", { name: /^播放 / }).hasAttribute("disabled")).toBe(true);
-    await userEvent.click(within(row).getByRole("button", { name: "更多" }));
+    await userEvent.click(within(row).getByRole("button", { name: "更多操作" }));
     if (kind !== "正常") {
       for (const name of ["下一首播放", "加入队列"]) {
         const action = screen.getByRole("menuitem", { name });

@@ -119,7 +119,7 @@ for (const width of [375, 1440]) {
     await screenshot(page, info, width, "favorite-reread-failed");
     const rowBox = await row.boundingBox();
     if (rowBox === null) throw new Error("失败态曲目行不可见");
-    for (const element of [notice, retry, heart, row.getByRole("button", { name: "更多", exact: true })]) {
+    for (const element of [notice, retry, heart, row.getByRole("button", { name: "更多操作", exact: true })]) {
       const box = await element.boundingBox();
       if (box === null) throw new Error("失败态内容不可见");
       expect.soft(box.x, "提示和按钮不能超出行左边界").toBeGreaterThanOrEqual(rowBox.x - 1);
@@ -173,12 +173,13 @@ for (const width of widths) {
     await expect(row.getByRole("button", { name: "收藏《缺失的第三乐章》", exact: true })).toBeEnabled();
     const play = row.getByRole("button", { name: "播放 缺失的第三乐章", exact: true });
     const heart = row.getByRole("button", { name: "收藏《缺失的第三乐章》", exact: true });
-    const more = row.getByRole("button", { name: "更多", exact: true });
+    const more = row.getByRole("button", { name: "更多操作", exact: true });
     const boxes = await Promise.all([play, heart, more].map((item) => item.boundingBox()));
     expect(boxes.every((box) => box !== null)).toBe(true);
     expect((boxes[1]?.x ?? 0) - (boxes[0]?.x ?? 0)).toBeGreaterThan(0);
     expect((boxes[2]?.x ?? 0) - (boxes[1]?.x ?? 0)).toBeGreaterThan(0);
-    expect(await visibleLines(more)).toBe(1);
+    await expect(more).toHaveText("");
+    expect(boxes[2]?.y).toBe(boxes[0]?.y);
     const missingColor = await row.getByText("缺失的第三乐章", { exact: true }).evaluate((element) => getComputedStyle(element).color);
     const presentColor = await table.getByRole("rowheader").getByText(LONG_TITLE, { exact: true }).evaluate((element) => getComputedStyle(element).color);
     expect(missingColor).not.toBe(presentColor);
@@ -217,9 +218,10 @@ for (const width of widths) {
     const b = await title.boundingBox();
     const c = await play.boundingBox();
     expect(b?.x ?? 0).toBeGreaterThan((a?.x ?? 0) + (a?.width ?? 0));
-    const rowWidth = (await first.boundingBox())?.width ?? 0;
-    if (rowWidth <= 640) expect(c?.y ?? 0).toBeGreaterThan((b?.y ?? 0) + (b?.height ?? 0));
-    else expect(c?.x ?? 0).toBeGreaterThan(b?.x ?? 0);
+    // 各宽度下动作都在标题右侧、与标题同行，不再在窄屏另起一行。
+    expect(c?.x ?? 0).toBeGreaterThan((b?.x ?? 0) + (b?.width ?? 0));
+    expect(c?.y ?? 0).toBeLessThan((b?.y ?? 0) + (b?.height ?? 0));
+    expect((c?.y ?? 0) + (c?.height ?? 0)).toBeGreaterThan(b?.y ?? 0);
     expect(await visibleLines(page.getByRole("button", { name: "删除歌单", exact: true }))).toBe(1);
     await screenshot(page, info, width, "playlist-detail");
     await layout(page, "歌单详情");
@@ -258,7 +260,7 @@ for (const width of widths) {
     expect(await visibleLines(player.getByRole("link", { name: "第一乐章", exact: true }))).toBeLessThanOrEqual(width < 768 ? 2 : 1);
     await screenshot(page, info, width, "player-heart");
     await layout(page, "播放器心形");
-    await openMenu(page, first.getByRole("button", { name: "更多", exact: true }));
+    await openMenu(page, first.getByRole("button", { name: "更多操作", exact: true }));
     await page.getByRole("menuitem", { name: "添加到歌单…", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "添加到歌单", exact: true });
     await expect(dialog).toBeVisible();
@@ -314,7 +316,7 @@ test("纯键盘：收藏与取消、新建并加入、四种菜单移动、键�
   await expect(heart).not.toHaveAttribute("aria-busy", "true");
   await page.keyboard.press("Enter");
   await expect(heart).toHaveAttribute("aria-pressed", "true");
-  await keyboardMenu(page, first.getByRole("button", { name: "更多", exact: true }), "添加到歌单…");
+  await keyboardMenu(page, first.getByRole("button", { name: "更多操作", exact: true }), "添加到歌单…");
   let dialog = page.getByRole("dialog", { name: "添加到歌单", exact: true });
   await keyboardTarget(page, dialog.getByRole("button", { name: "新建歌单", exact: true }));
   await keyboardTarget(page, dialog.getByRole("textbox", { name: "名字", exact: true }), false);
@@ -322,7 +324,7 @@ test("纯键盘：收藏与取消、新建并加入、四种菜单移动、键�
   await keyboardTarget(page, dialog.getByRole("button", { name: "新建并加入", exact: true }));
   await expect(dialog).toBeHidden();
   const second = trackTable(page).getByRole("row").filter({ has: page.getByText("第二乐章", { exact: true }) });
-  await keyboardMenu(page, second.getByRole("button", { name: "更多", exact: true }), "添加到歌单…");
+  await keyboardMenu(page, second.getByRole("button", { name: "更多操作", exact: true }), "添加到歌单…");
   dialog = page.getByRole("dialog", { name: "添加到歌单", exact: true });
   await keyboardTarget(page, dialog.getByRole("button", { name: /^键盘歌单/ }));
   await expect(dialog).toBeHidden();
@@ -331,7 +333,7 @@ test("纯键盘：收藏与取消、新建并加入、四种菜单移动、键�
   await expect(page.getByRole("heading", { name: "键盘歌单", exact: true })).toBeVisible();
   const firstRow = playlistRow(page, "第一乐章");
   for (const action of ["下移", "上移", "移到最后", "移到最前"]) {
-    await keyboardMenu(page, firstRow.getByRole("button", { name: "更多", exact: true }), action);
+    await keyboardMenu(page, firstRow.getByRole("button", { name: "更多操作", exact: true }), action);
     await expect(page.getByText(new RegExp(`《第一乐章》已移到第 ${action === "下移" || action === "移到最后" ? 2 : 1} 首`))).toBeVisible();
   }
   const handle = firstRow.getByRole("button", { name: "拖动《第一乐章》调整顺序", exact: true });
@@ -342,7 +344,7 @@ test("纯键盘：收藏与取消、新建并加入、四种菜单移动、键�
   await expect(page.getByText("《第一乐章》移到第 2 首。", { exact: true })).toHaveCount(1);
   await page.keyboard.press("Space");
   await expect(page.getByRole("button", { name: /^拖动《/ }).first()).toHaveAttribute("aria-label", "拖动《第二乐章》调整顺序");
-  await keyboardMenu(page, firstRow.getByRole("button", { name: "更多", exact: true }), "从歌单移除");
+  await keyboardMenu(page, firstRow.getByRole("button", { name: "更多操作", exact: true }), "从歌单移除");
   await expect(firstRow).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "键盘歌单", exact: true })).toBeFocused();
   await keyboardTarget(page, page.getByRole("button", { name: "撤销", exact: true }));

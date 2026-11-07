@@ -58,7 +58,6 @@ function AlbumTrackActions({ release, track, groupId }: { release: ReleaseDetail
       present
       playLabel="从这首开始播放"
       retryHint="请在专辑头部重试。"
-      wrap
       onPlay={({ engine, table }) => {
         const playable = playerTracksOf(release, groupId).filter((entry) => unplayableReason(entry, true, table) === null);
         if (engine.playTracks(playable, playable.findIndex((entry) => entry.trackId === track.id)) === "queue_full") return QUEUE_FULL_TEXT;

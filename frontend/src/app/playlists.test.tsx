@@ -97,7 +97,7 @@ function titles() {
 }
 async function openActions(title: string) {
   await screen.findByText(title, { exact: true });
-  await userEvent.click(rowOf(title).getByRole("button", { name: "更多" }));
+  await userEvent.click(rowOf(title).getByRole("button", { name: "更多操作" }));
 }
 async function remove(title: string) {
   await openActions(title);

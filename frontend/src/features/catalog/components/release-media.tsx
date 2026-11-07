@@ -47,6 +47,7 @@ const TrackRow = memo(function TrackRow({
 }: Pick<ReleaseMediaProps, "albumArtist" | "renderTrackActions"> & { track: ReleaseTrackDTO; marker: string | undefined; focusToken: string | undefined; highlighted: boolean }) {
   const title = track.title.trim() === "" ? "（无标题）" : track.title;
   const artist = track.artist.trim();
+  const showArtist = artist !== "" && artist !== albumArtist;
   const credits = track.credits;
   const isCue = track.source_kind === "cue_virtual" || track.cue !== null;
   const rowRef = useRef<HTMLLIElement>(null);
@@ -66,23 +67,12 @@ const TrackRow = memo(function TrackRow({
     // 定位到的行可以被程序聚焦（不进 Tab 顺序），读屏随之读出这一行，键盘从这里继续。高亮结束后仍保留，焦点不会因此丢失。
     <li ref={rowRef} className={styles.track} tabIndex={focusToken === undefined ? undefined : -1} data-located={highlighted ? "" : undefined}>
       <span className={styles.number}>{track.position >= 1 ? track.position : "—"}</span>
-      <div className={styles.body}>
-        <p className={styles.title}>
-          <span>{title}</span>
-          {marker === undefined ? null : <StatusTag icon={<AudioLines size={12} />}>{marker}</StatusTag>}
-          {isCue ? <StatusTag>CUE 分轨</StatusTag> : null}
-        </p>
-        {artist === "" || artist === albumArtist ? null : (
-          <p className={styles.secondary}>
-            <ArtistNames text={artist} refs={track.artist_refs} />
-          </p>
-        )}
-        {credits.length === 0 ? null : (
-          <p className={styles.secondary}>
-            <CreditsLine credits={credits} />
-          </p>
-        )}
-      </div>
+      <p className={styles.title}>
+        <span>{title}</span>
+        {marker === undefined ? null : <StatusTag icon={<AudioLines size={12} />}>{marker}</StatusTag>}
+        {isCue ? <StatusTag>CUE 分轨</StatusTag> : null}
+      </p>
+      {renderTrackActions === undefined ? null : <div className={styles.actions}>{renderTrackActions(track)}</div>}
       <span className={styles.duration}>
         {track.duration_seconds === null ? (
           <>
@@ -93,7 +83,20 @@ const TrackRow = memo(function TrackRow({
           formatDuration(track.duration_seconds)
         )}
       </span>
-      {renderTrackActions === undefined ? null : <div className={styles.actions}>{renderTrackActions(track)}</div>}
+      {showArtist || credits.length > 0 ? (
+        <div className={styles.meta}>
+          {showArtist ? (
+            <p>
+              <ArtistNames text={artist} refs={track.artist_refs} />
+            </p>
+          ) : null}
+          {credits.length === 0 ? null : (
+            <p>
+              <CreditsLine credits={credits} />
+            </p>
+          )}
+        </div>
+      ) : null}
     </li>
   );
 });

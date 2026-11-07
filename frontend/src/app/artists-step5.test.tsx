@@ -52,16 +52,14 @@ describe("艺人浏览与详情（⑤）", () => {
     expect(screen.queryByRole("region", { name: "D" })).toBeNull();
   });
 
-  it("I6：双专辑级角色摘要去重，角色下拉只有一个专辑艺人且提交 album_artist", async () => {
+  it("I6：列表概况只有数量不写身份，角色下拉只有一个专辑艺人且提交 album_artist", async () => {
     const { api, data } = setup();
     getDetail(data).artist.roles = ["release_artist", "album_artist", "composer"];
     const { history } = renderApp({ path: "/artists" });
     const artistLink = await screen.findByRole("link", { name: "邓丽君" });
     const item = artistLink.closest("li");
     if (item === null) throw new Error("缺少艺人列表项");
-    const summary = within(item).getByText(/专辑艺人/);
-    expect(summary.textContent?.match(/专辑艺人/g)).toHaveLength(1);
-    expect(summary.textContent).toMatch(/专辑艺人、作曲$/);
+    expect(within(item).queryByText(/专辑艺人|作曲/)).toBeNull();
     const roles = screen.getByRole("combobox", { name: "角色" });
     const options = within(roles).getAllByRole("option", { name: "专辑艺人" });
     expect(options).toHaveLength(1);

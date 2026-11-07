@@ -1,9 +1,4 @@
-/* 数量各自不在段内换行；身份名之间只在“、”后断开（中文默认在任意两个字之间都能断，keep-all 不允许），只在“·”与“、”处换行。 */
+/* 数量各自不在段内换行，只在“·”处换行。 */
 .part {
   white-space: nowrap;
-}
-
-.roles {
-  word-break: keep-all;
-  overflow-wrap: normal;
 }

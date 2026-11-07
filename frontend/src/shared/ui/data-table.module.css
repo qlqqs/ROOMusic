@@ -78,9 +78,27 @@
     clip-path: inset(50%);
   }
 
+  /* 每行一列；行标题与 besideRowHeader 的单元格共用第一行，其余单元格各占一整行。 */
   .table tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: var(--space-2);
     padding: var(--space-3) 0;
     border-bottom: 1px solid var(--color-divider);
+  }
+
+  .table tr > * {
+    grid-column: 1 / -1;
+  }
+
+  .table tr > .rowHeader {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .table tr > .beside {
+    grid-column: 2;
+    grid-row: 1;
   }
 
   .table th,

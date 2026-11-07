@@ -13,6 +13,8 @@ export type Column<Row> = {
   numeric?: boolean;
   /** 窄屏堆叠时不显示标签（例如只有按钮的操作列）。 */
   hideLabelWhenStacked?: boolean;
+  /** 窄屏堆叠时放在行标题同一行的右侧（曲目行的动作图标），不单独占一行。 */
+  besideRowHeader?: boolean;
 };
 
 type DataTableProps<Row> = {
@@ -60,7 +62,7 @@ export function DataTable<Row>({ caption, columns, rows, rowKey }: DataTableProp
                     key={column.id}
                     role="cell"
                     data-label={column.hideLabelWhenStacked ? undefined : column.header}
-                    className={cx(column.numeric && styles.numeric, column.hideLabelWhenStacked && styles.unlabeled)}
+                    className={cx(column.numeric && styles.numeric, column.hideLabelWhenStacked && styles.unlabeled, column.besideRowHeader && styles.beside)}
                   >
                     {content}
                   </td>

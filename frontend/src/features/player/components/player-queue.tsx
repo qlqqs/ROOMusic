@@ -1,3 +1,4 @@
+import { ArrowDown, ArrowUp, Play, X } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import { formatDuration } from "../../../shared/lib/duration";
 import { Button, ConfirmDialog } from "../../../shared/ui";
@@ -48,13 +49,13 @@ export function PlayerQueue({ renderQueueActions }: PlayerQueueProps = {}) {
             {current ? <p className={styles.secondary}>当前项 · {statusLabels[snapshot.status]}</p> : null}
             {failure === undefined ? null : <p>{failureLabels[failure]}</p>}
           </div>
-          <span className={styles.duration}>{formatDuration(entry.track.durationSeconds)}</span>
           <div className={styles.actions} role="group" aria-label={`第 ${index + 1} 项操作：${entry.track.title}`}>
-            <Button onClick={() => engine.playEntry(entry.entryId)}>播放此项</Button>
-            <Button disabled={index === 0} onClick={() => move(entry.entryId, -1)}>上移</Button>
-            <Button disabled={index === snapshot.queue.entries.length - 1} onClick={() => move(entry.entryId, 1)}>下移</Button>
-            <Button data-remove onClick={() => remove(entry.entryId, index)}>移除</Button>
+            <Button variant="icon" icon={<Play size={16} />} label="播放此项" onClick={() => engine.playEntry(entry.entryId)} />
+            <Button variant="icon" icon={<ArrowUp size={16} />} label="上移" disabled={index === 0} onClick={() => move(entry.entryId, -1)} />
+            <Button variant="icon" icon={<ArrowDown size={16} />} label="下移" disabled={index === snapshot.queue.entries.length - 1} onClick={() => move(entry.entryId, 1)} />
+            <Button variant="icon" icon={<X size={16} />} label="移除" data-remove onClick={() => remove(entry.entryId, index)} />
           </div>
+          <span className={styles.duration}>{formatDuration(entry.track.durationSeconds)}</span>
         </li>;
       })}
     </ol>

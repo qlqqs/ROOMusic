@@ -16,7 +16,7 @@ export function ArtistResults({ items }: { items: readonly SearchArtistItemDTO[]
             <Link to="/artists/$artistId" params={{ artistId: artist.id }} className={styles.name}>
               {artist.name}
             </Link>
-            <ArtistMeta artist={artist} withRoles className={styles.meta} />
+            <ArtistMeta artist={artist} className={styles.meta} />
             {note === null ? null : <span className={styles.note}>{note}</span>}
           </li>
         );
