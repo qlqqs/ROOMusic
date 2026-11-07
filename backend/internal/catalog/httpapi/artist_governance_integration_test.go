@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog/testsupport"
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
@@ -27,6 +28,9 @@ func TestPostgreSQLArtistGovernanceHTTPGuards(t *testing.T) {
 	db, err := postgres.Open(context.Background(), url)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if err := testsupport.SetArtistProjectionVersionCurrent(context.Background(), db); err != nil {
+		t.Fatalf("set current artist projection version: %v", err)
 	}
 	defer db.Close()
 	exec := func(statement string, args ...any) {

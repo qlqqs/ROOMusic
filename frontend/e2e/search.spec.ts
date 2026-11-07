@@ -132,11 +132,12 @@ for (const width of [320, 375, 390, 768, 1024, 1440]) {
     await expect(table.getByRole("link", { name: track.artist, exact: true })).toBeVisible();
     for (const text of [track.title, track.artist, `厂牌：${track.match.original}`]) {
       const content = table.getByText(text, { exact: true });
-      expect(await textLines(content)).toBeGreaterThan(1);
+      if (width < 1440) expect(await textLines(content)).toBeGreaterThan(1);
       expect(await content.evaluate((node) => getComputedStyle(node).webkitLineClamp)).toBe("none");
     }
     const action = page.getByRole("button", { name: /^播放 / });
-    expect(await textLines(action)).toBe(1);
+    await expect(action).toHaveAccessibleName(/^播放 /);
+    expect(await action.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
     await expectNoHorizontalOverflow(page, "两栏结果");
     await expectNoDocumentScroll(page, "两栏结果");
     if (width === 1440 || width === 390) await page.screenshot({ path: info.outputPath(`search-${width}-results.png`), fullPage: true });

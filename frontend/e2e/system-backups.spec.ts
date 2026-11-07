@@ -249,7 +249,7 @@ for (const width of [1440, 375]) {
     await expect(days).toBeDisabled();
     await expectBackupControlsLayout(page, width);
     await panel.getByRole("button", { name: "保存", exact: true }).click();
-    await expect(panel.getByRole("status")).toHaveText("已保存。");
+    await expect(panel.locator('p[role="status"]')).toHaveText("已保存。");
     await expect(retentionDialog(page)).toBeHidden();
     expect(mock.system.retention).toEqual({ keep_days: null, keep_count: null });
     expect(mock.callsTo("PUT", "/api/v1/system/backups/retention").map(({ body }) => body)).toEqual([{ keep_days: null, keep_count: null, confirm: false }]);
@@ -364,7 +364,7 @@ test("自动清理：越界不请求，损坏规则可覆盖，保存失败留�
   await expect(retentionDialog(page)).toBeHidden();
   mock.system.retentionNotWritable = false;
   await panel.getByRole("button", { name: "保存", exact: true }).click();
-  await expect(panel.getByRole("status")).toHaveText("已保存。");
+  await expect(panel.locator('p[role="status"]')).toHaveText("已保存。");
   await expect(panel.getByText("没能读取当前设置。", { exact: true })).toHaveCount(0);
   expect(mock.system.retention).toEqual({ keep_days: 3650, keep_count: 1000 });
 
@@ -381,7 +381,7 @@ test("自动清理：越界不请求，损坏规则可覆盖，保存失败留�
   mock.system.retentionNotWritable = false;
   await dialog.getByRole("button", { name: "保存并删除", exact: true }).click();
   await expect(dialog).toBeHidden();
-  await expect(panel.getByRole("status").filter({ hasText: /^已保存/ })).toHaveText("已保存，删除了 2 份旧备份。");
+  await expect(panel.locator('p[role="status"]')).toHaveText("已保存，删除了 2 份旧备份。");
   await expect(panel.getByText("有 1 份旧备份没能删除。", { exact: true })).toBeVisible();
   await expect(backupRows(page)).toHaveCount(2);
 });

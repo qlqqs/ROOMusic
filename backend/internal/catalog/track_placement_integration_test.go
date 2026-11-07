@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog/testsupport"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
@@ -38,6 +39,9 @@ func newPlacementFixture(t *testing.T) *placementFixture {
 			t.Errorf("close isolated catalog database: %v", err)
 		}
 	})
+	if err := testsupport.SetArtistProjectionVersionCurrent(ctx, database); err != nil {
+		t.Fatalf("set current artist projection version: %v", err)
+	}
 	fixture := &placementFixture{t: t, database: database, store: NewStore(database), rootID: uuid.New()}
 	fixture.exec(`INSERT INTO library_roots(id,path,status,revision) VALUES($1::uuid,'/library','active',1)`, fixture.rootID)
 	return fixture

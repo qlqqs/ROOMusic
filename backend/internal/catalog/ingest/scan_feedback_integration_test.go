@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
+	"github.com/qlqq/roomusic/backend/internal/catalog/testsupport"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
@@ -16,9 +17,13 @@ import (
 
 func feedbackDB(t *testing.T) *sql.DB {
 	t.Helper()
-	db, err := postgres.Open(context.Background(), postgrestest.NewSchema(t, "feedback_"))
+	ctx := context.Background()
+	db, err := postgres.Open(ctx, postgrestest.NewSchema(t, "feedback_"))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if err := testsupport.SetArtistProjectionVersionCurrent(ctx, db); err != nil {
+		t.Fatalf("set current artist projection version: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
 	return db

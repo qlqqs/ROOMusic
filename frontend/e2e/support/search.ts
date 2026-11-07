@@ -14,7 +14,7 @@ export function seedSearch(mock: ApiMock, long = false) {
   track.group_id = "00000000-0000-4000-8000-000000000091";
   track.release.id = "00000000-0000-4000-8000-000000000092";
   if (long) {
-    album.group.representative.title = "爱之交响曲・Concert " + "繁简全半角長標題".repeat(8);
+    album.group.representative.title = "爱之交响曲・Concert " + "繁简全半角長標題".repeat(12);
     album.group.representative.artist = "演奏者 " + "LongUnbrokenArtist".repeat(8);
     track.title = "爱之乐章 " + "LongUnbrokenTrack".repeat(8);
     track.artist = "音乐家 ".repeat(20);

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/testsupport"
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
@@ -21,6 +22,9 @@ func TestPostgreSQLTrackSummariesHTTPContract(t *testing.T) {
 	db, err := postgres.Open(context.Background(), postgrestest.NewSchema(t, "roomusic_track_summaries_http_"))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if err := testsupport.SetArtistProjectionVersionCurrent(context.Background(), db); err != nil {
+		t.Fatalf("set current artist projection version: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
 	exec := func(query string, args ...any) {

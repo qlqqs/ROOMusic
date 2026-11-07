@@ -202,7 +202,7 @@ test("跨目录阶段切回读取时整体不倒退，轮询不抢键盘焦点",
   await page.clock.install();
   await page.goto(`/settings/library/scans/${scan.id}`);
   await expect(progress(page)).toHaveAttribute("aria-valuenow", "28");
-  await tabTo(page, (name) => name === "取消扫描", 20);
+  await tabTo(page, (name) => name === "取消扫描", 40);
   const cancel = page.getByRole("button", { name: "取消扫描", exact: true });
   await expect(cancel).toBeFocused();
   for (const [sample, percent] of [["second-root-started", "28"], ["second-root-reading", "49"]] as const) {

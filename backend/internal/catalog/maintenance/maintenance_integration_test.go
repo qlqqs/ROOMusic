@@ -16,6 +16,7 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/searchindex"
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/writegate"
+	"github.com/qlqq/roomusic/backend/internal/catalog/testsupport"
 	"github.com/qlqq/roomusic/backend/internal/library"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
@@ -38,6 +39,9 @@ func newFixture(t *testing.T, tracks int) *fixture {
 	db, err := postgres.Open(ctx, scoped)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if err := testsupport.SetArtistProjectionVersionCurrent(ctx, db); err != nil {
+		t.Fatalf("set current artist projection version: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
 	f := &fixture{t: t, db: db, root: uuid.New(), release: uuid.New(), medium: uuid.New(), ctx: ctx}

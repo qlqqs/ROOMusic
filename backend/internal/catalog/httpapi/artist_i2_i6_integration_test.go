@@ -12,6 +12,7 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/artistgraph"
+	"github.com/qlqq/roomusic/backend/internal/catalog/testsupport"
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
@@ -43,6 +44,9 @@ func TestPostgreSQLArtistI2I6HTTP(t *testing.T) {
 	db, err := postgres.Open(ctx, postgrestest.NewSchema(t, "roomusic_artist_i2_i6_"))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if err := testsupport.SetArtistProjectionVersionCurrent(ctx, db); err != nil {
+		t.Fatalf("set current artist projection version: %v", err)
 	}
 	defer db.Close()
 	exec := func(statement string, args ...any) {

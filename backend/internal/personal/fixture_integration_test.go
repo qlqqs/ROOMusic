@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/catalog/testsupport"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
@@ -32,6 +33,9 @@ func newPersonalFixture(t *testing.T) *personalFixture {
 	database, err := postgres.Open(ctx, scopedURL)
 	if err != nil {
 		t.Fatalf("open isolated listening database: %v", err)
+	}
+	if err := testsupport.SetArtistProjectionVersionCurrent(ctx, database); err != nil {
+		t.Fatalf("set current artist projection version: %v", err)
 	}
 	t.Cleanup(func() {
 		if err := database.Close(); err != nil {

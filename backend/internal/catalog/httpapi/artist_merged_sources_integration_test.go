@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
+	"github.com/qlqq/roomusic/backend/internal/catalog/testsupport"
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/operations"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
@@ -21,6 +22,9 @@ func TestPostgreSQLArtistMergedSourcesHTTP(t *testing.T) {
 	db, err := postgres.Open(ctx, postgrestest.NewSchema(t, "roomusic_merged_sources_http_"))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if err := testsupport.SetArtistProjectionVersionCurrent(context.Background(), db); err != nil {
+		t.Fatalf("set current artist projection version: %v", err)
 	}
 	defer db.Close()
 	exec := func(statement string, args ...any) {
