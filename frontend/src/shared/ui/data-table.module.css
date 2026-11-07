@@ -55,6 +55,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 曲目行的动作列：图标靠右（紧挨时长），表头跟着靠右对齐。 */
+.table .beside {
+  text-align: end;
+}
+
 .value {
   min-width: 0;
 }

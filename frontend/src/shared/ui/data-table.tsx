@@ -39,7 +39,7 @@ export function DataTable<Row>({ caption, columns, rows, rowKey }: DataTableProp
         <thead role="rowgroup">
           <tr role="row">
             {columns.map((column) => (
-              <th key={column.id} scope="col" role="columnheader" className={cx(column.numeric && styles.numeric)}>
+              <th key={column.id} scope="col" role="columnheader" className={cx(column.numeric && styles.numeric, column.besideRowHeader && styles.beside)}>
                 {column.header}
               </th>
             ))}
