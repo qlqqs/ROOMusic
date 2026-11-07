@@ -28,10 +28,10 @@ hook 里，展示在组件里。按 [Classical 设计依据](../../../frontend/D
 
 | 组件 | 约定 |
 | --- | --- |
-| `Page`、`Panel`、`StatList` | `Page` 渲染唯一的 `h1`（并设置“页面名 · ROOMusic”标题），标题很长时 `compactTitle` 降一级字号（M1b：专辑名超过 80 个字符），完整显示并换行；`Panel` 是带标题的区段，给 `headingRef` 时标题可以被程序聚焦（`tabIndex=-1`，不进 Tab 顺序）；`StatList` 显示数值，数据值用 `lining-nums tabular-nums` |
+| `Page`、`Panel`、`StatList` | `Page` 渲染唯一的 `h1`（并设置“页面名 · ROOMusic”标题），标题很长时 `compactTitle` 降一级字号（M1b：专辑名超过 80 个字符），完整显示并换行；`Panel` 是带标题的区段，给 `headingRef` 时标题可以被程序聚焦（`tabIndex=-1`，不进 Tab 顺序）；`StatList` 显示数值，数据值用 `tabular-nums` |
 | `QueryContent` | 数据区块的首次加载（保留结构的 `Skeleton`，不画成空库）、失败（带请求 ID 的 `FailureNotice` 与重试）、成功，以及“刷新失败但还有旧数据”（旧数据继续显示，错误在其上方）；它只依赖最小的查询形状，不依赖查询库 |
 | `Notice`、`FailureNotice` | 行内状态或错误，由图标与文字表达，不靠颜色；错误 `role="alert"`，其余 `role="status"`；可附请求 ID 与下一步操作；**不使用全局 toast**，结果就近显示在操作区 |
-| `Button`、`TextField` | `Button` 有主要 / 次要 / 文字三种形态；忙碌态不设 `disabled`（焦点留在按钮上），点击被忽略并设置 `aria-busy`，文案由调用方改成“正在…”；`TextField` 的 label、说明与错误经 `aria-describedby` 关联，错误同时设置 `aria-invalid` |
+| `Button`、`TextField` | `Button` 有主要 / 次要 / 只有图标三种外观（`primary | secondary | icon`），只有图标时必须给 `label`，同时用作 `aria-label` 与悬停提示 `title`；忙碌态不设 `disabled`（焦点留在按钮上），点击被忽略并设置 `aria-busy`，文案由调用方改成“正在…”；`TextField` 的 label、说明与错误经 `aria-describedby` 关联，错误同时设置 `aria-invalid` |
 | `StatusTag` | 文字加图标，不只靠颜色 |
 | `ModalDialog`、`ConfirmDialog` | 原生 `<dialog>` 的模态：有可访问名称，打开时焦点进入（确认对话框初始焦点在“取消”，避免回车直接确认），Esc 与取消可关闭，关闭后焦点回到触发按钮；提交中确认忙碌、取消与 Esc 暂时无效；阻塞性错误留在对话框内。子内容只在打开时渲染，关闭即丢弃其中的私有状态 |
 | `DataTable` | 真正的 `<table>`（有 caption、`rowHeader`）；以**容器宽度**（CSS 容器查询，小于 640px）而不是视口宽度决定是否堆叠成“标签：值”，因为带侧栏时 768px 视口里内容区只有约 500px；不产生任何横向滚动（局部滚动区需要可聚焦，会引入额外的无障碍负担） |

@@ -14,7 +14,7 @@ frontend/
 ├── e2e/                            # Playwright 冒烟；受控后端在 e2e/support/api-mock.ts，响应取自后端样本，专辑的长内容与多版本数据在 e2e/support/albums-data.ts
 ├── playwright.config.ts            # 路由模拟
 ├── playwright.real.config.ts       # 隔离真实Go服务与原生音频；脚本启动
-├── public/licenses/                # 三套字体的 OFL 文本，构建时复制到产物根目录
+├── public/licenses/                # 只有 README.txt（2026-11-07 起不再打包网页字体）
 └── src/
     ├── main.tsx
     ├── app/
@@ -29,7 +29,7 @@ frontend/
     │   ├── members/                # 成员列表与管理（管理其他账号，生命周期与 auth 不同）
     │   ├── library/                # 目录、目录操作记录、扫描记录、扫描详情与诊断
     │   ├── player/                 # 播放器：api、engine（含计次跟踪器、歌词分组与定位）、provider、能力查询、底栏、歌词面板与正在播放页
-    │   ├── listening/              # 播放历史：播放上报器（带幂等键、有限重试、会话结束作废）、概览的“最近播放”区块与“我的音乐”的历史页签（M5 ①）
+    │   ├── listening/              # 播放历史：播放上报器（带幂等键、有限重试、会话结束作废）、概览的“最近播放”区块与“播放历史”页（`/me/history`，M5 ①）
     │   ├── personal/               # 收藏与歌单（M5 ② ③）：心形与批量收藏状态、收藏页、歌单列表与详情（拖动与菜单排序、撤销）、“添加到歌单…”与新建对话框、跨标签页刷新
     │   ├── search/                 # 全局搜索（M5 ④）：侧栏搜索框与建议、结果页的艺人（M5 ⑤）、专辑、曲目各栏与分页、匹配说明
     │   ├── artists/                # 艺人（M5 ⑤）：艺人列表（首字母、两种排序、角色筛选）与艺人页（名字、专辑、按角色的曲目），播放与管理经插槽由 app 组合
@@ -107,12 +107,12 @@ features/governance/
 - `catalog` 拥有 Release/ReleaseGroup 的列表与详情、Medium/Track 展示、来源与封面展示（M1b 实现），以及概览里的专辑数。
 - `player` 拥有单一媒体生命周期、队列/模式/恢复、浏览器能力与播放界面；只经 catalog 公开合同读发行，
   不反向导入 app，也不把播放器全局状态放到 shared。进度与离散快照分开订阅。
-- `listening` 拥有播放上报（幂等键、有限重试、会话结束作废）、概览的“最近播放”区块（读取、卡片、“全部历史”链接、清除确认）与“我的音乐”的历史页签内容
+- `listening` 拥有播放上报（幂等键、有限重试、会话结束作废）、概览的“最近播放”区块（读取、卡片、“全部历史”链接、清除确认）与“播放历史”页（`/me/history`）的内容
   （M5 ①，`HistoryView`：按曲目汇总的列表、分页、缺失行、移除与清除确认，以及“播放全部”候选的读取 `useHistoryQueue`）；经 catalog 公开合同取封面与专辑艺人的显示规则，
   不导入 player：`player` 导入它的上报器，概览页（app 层）组合区块。历史页的播放动作由 app 组合：`HistoryView` 经插槽 `renderPlayAll` 与
   `renderTrackActions(item, requestRemove)` 接收 `app/routes/history-playback.tsx` 里的“播放全部”与行内播放/“更多”菜单，菜单里的“从历史中移除”调用插槽给的
   `requestRemove`（确认对话框仍归 listening）。`HistoryItem → PlayerTrack` 的映射（`playerTrackOfHistoryItem`）也在 app：player 只经 catalog 公开合同读发行，不认识历史条目。
-  “我的音乐”的布局与页签（`app/routes/me-layout.tsx`）在 app，页签顺序是收藏、歌单、历史，三个页签共用；`/me` 默认打开收藏。
+  “我的音乐”没有共用的页签布局（2026-11-07 起）：侧栏有我喜欢的音乐（`/me/liked`）、我的收藏（`/me/favorites`，专辑 / 艺人）、播放历史、我的歌单四个入口，每页用自己的 `Page` 标题；`/me` 与 `/me/favorites?tab=tracks` 转到 `/me/liked`。
 - `personal`（M5 ② ③）拥有收藏与歌单：API 与解码器、查询键、心形与批量收藏状态范围、收藏页与歌单页的内容、“添加到歌单…”与新建/改名对话框、
   “播放全部”候选的读取与跨标签页刷新；只导入 catalog 的公开合同（封面、卡片网格、曲目安全摘要），不导入 player、listening。
   曲目行的统一动作（`app/routes/track-actions.tsx`：播放、心形、“更多”）、曲目安全摘要到队列曲目的映射（`track-playback.ts`）、收藏与歌单的“播放全部”

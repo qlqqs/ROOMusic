@@ -54,7 +54,7 @@ Before writing or reviewing frontend code:
 | [Hook Guidelines](./hook-guidelines.md) | Stateful coordination, REST access, cancellation, and polling |
 | [State Management](./state-management.md) | Server, URL, session, and local state ownership |
 | [会话生命周期](./session-lifecycle.md) | 会话控制器的状态与代次、清理顺序、401 与 403、跨标签页核对、退出、回跳与初始化 |
-| [播放与个人状态](./playback-and-personal-state.md) | M2a 播放生命周期与恢复、阶段 P 播放上报与最近播放、M5 ① 历史页签与 M5 ④ 全局搜索的查询键、URL 与目录状态 |
+| [播放与个人状态](./playback-and-personal-state.md) | M2a 播放生命周期与恢复、阶段 P 播放上报与最近播放、M5 ① 历史页与 M5 ④ 全局搜索的查询键、URL 与目录状态 |
 | [Type Safety](./type-safety.md) | Strict TypeScript, DTO decoding, and exhaustive domain states |
 | [Quality Guidelines](./quality-guidelines.md) | Tests, accessibility, gates, and forbidden shortcuts |
 | [前端验证分层](./quality-verification-layers.md) | 各阶段（M2a 播放、M3、M4 三项）的测试分层：最小 Vitest 命令、共用接口行为、页面级、浏览器冒烟、真实服务用例 |

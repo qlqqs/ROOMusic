@@ -25,6 +25,7 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 | 身份与成员 | [identity-contracts.md](./identity-contracts.md) | 密码规则、初始化与成员接口、用户停用事务、写入失败映射 |
 | 来源与会话 Cookie | [identity-origin-contracts.md](./identity-origin-contracts.md) | 三模式配置、Host 规范化、Cookie Secure 与来源拒绝日志 |
 | 目录与扫描流程 | [library-scan-contracts.md](./library-scan-contracts.md) | 目录新增与操作幂等、扫描完整性、暂存与身份规划、曲目与 Release 身份、CUE、抓轨日志、艺人与 AlbumArtist、封面 |
+| 目录浏览 | [library-folder-contracts.md](./library-folder-contracts.md) | 管理员专用 `GET /api/v1/library-folders`：逐级列出子文件夹、登记标记、错误与截断 |
 | 扫描协调 | [scan-coordination-contracts.md](./scan-coordination-contracts.md) | 扫描状态与记录、持久化取消、跨进程协调锁 |
 | 真实库 Smoke | [real-library-smoke-contracts.md](./real-library-smoke-contracts.md) | 真实音乐只读验收、V0 对照 |
 | 发行 REST | [catalog-rest-contracts.md](./catalog-rest-contracts.md) | 发行列表、详情、evidence、封面摘要与按组只读接口 |
@@ -45,7 +46,7 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 - 开发启动：`./scripts/dev.sh`，默认读取 `.env.dev`，Go 运行在 `backend/`，
   Vite 通过开发配置代理 `/api` 到 `:8080`。
 - HTTP：`POST /api/v1/users`、`PATCH /api/v1/users/{id}`、
-  `POST /api/v1/library-roots`、`POST /api/v1/scans`、管理员专用的 `GET /api/v1/scans`、
+  `POST /api/v1/library-roots`、管理员专用的 `GET /api/v1/library-folders`、`POST /api/v1/scans`、管理员专用的 `GET /api/v1/scans`、
   `GET /api/v1/scans/active`、`GET /api/v1/scans/{id}`、
   `POST /api/v1/scans/{id}/cancel`、`GET /api/v1/scans/{id}/diagnostics`、
   `GET /api/v1/releases`、`GET /api/v1/releases/{id}`、管理员专用
