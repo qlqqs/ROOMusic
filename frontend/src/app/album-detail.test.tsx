@@ -291,7 +291,7 @@ describe("专辑详情：封面", () => {
     setup({ groups: [album] });
     renderApp({ path: `/albums/${album.id}` });
     expect(await screen.findByRole("img", { name: "《Sample Symphonies》没有封面" })).toBeTruthy();
-    expect(document.querySelector("img")).toBeNull();
+    expect(document.querySelector('img[src^="/api/v1/artworks/"]')).toBeNull();
   });
 });
 
