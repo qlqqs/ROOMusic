@@ -72,7 +72,7 @@ describe("对比表的行", () => {
   });
 
   it("所有版本都没有值的行不出现，个别版本没有值的格 lines 为空", () => {
-    const empty = { edition: null, label: null, catalog_number: null, barcode: null, genre: null, source_type: null, media_type: null };
+    const empty = { edition: null, label: null, catalog_number: null, barcode: null, genres: [], source_type: null, media_type: null };
     const rows = comparisonRows([version(1, { ...empty, year: 2000 }), version(2, { ...empty, year: null }), version(3, { ...empty, year: 2000 })]);
     expect(rows.map((row) => row.key)).toEqual(["year", "content", "duration", "formats"]);
     expect(rowOf(rows, "year")?.cells.map((cell) => cell.lines)).toEqual([["2000"], [], ["2000"]]);
@@ -82,10 +82,14 @@ describe("对比表的行", () => {
     expect(rowOf(reversed, "year")?.cells.map((cell) => cell.differs)).toEqual([false, true]);
   });
 
-  it("只有空白的文字当作没有值", () => {
-    const rows = comparisonRows([version(1, { label: "   ", genre: "Classical" }), version(2, { label: null, genre: "Classical" })]);
+  it("只有空白的文字当作没有值；流派列表同序相同、顺序不同为不同", () => {
+    const rows = comparisonRows([
+      version(1, { label: "   ", genres: ["Classical", "Baroque"] }),
+      version(2, { label: null, genres: ["Classical", "Baroque"] }),
+      version(3, { label: null, genres: ["Baroque", "Classical"] }),
+    ]);
     expect(rowOf(rows, "label")).toBeUndefined();
-    expect(rowOf(rows, "genre")?.cells.map((cell) => cell.differs)).toEqual([false, false]);
+    expect(rowOf(rows, "genre")?.cells.map((cell) => cell.differs)).toEqual([false, false, true]);
   });
 
   it("标题与专辑艺人相同时不出现；有一个不同就出现，专辑艺人没有时用艺人", () => {

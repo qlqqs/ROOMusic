@@ -3,6 +3,7 @@ package catalog
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -73,12 +74,13 @@ type ReleasePage struct {
 	Total int64
 }
 
-// ReleaseHeader 是详情里不属于摘要的 Release 字段；空白值以 nil 表示。
+// ReleaseHeader 是详情里不属于摘要的 Release 字段；流派为空列表，其余空白文本以 nil 表示。
 type ReleaseHeader struct {
-	CandidateKind                                 string
-	Genre, CatalogNumber, Edition, Label, Barcode *string
-	Revision                                      int64
-	CorrectedFields                               []string
+	CandidateKind                          string
+	Genres                                 []string
+	CatalogNumber, Edition, Label, Barcode *string
+	Revision                               int64
+	CorrectedFields                        []string
 }
 
 // listReleasesLegacy 保留旧匹配与浏览顺序；非空 q 的调用方已开启同一读取快照。
@@ -122,18 +124,23 @@ func (s *Store) listReleasesLegacy(ctx context.Context, params ListParams) (Rele
 
 // LoadReleaseHeader 读取详情里摘要以外的 Release 字段。
 func (s *Store) LoadReleaseHeader(ctx context.Context, releaseID string) (ReleaseHeader, error) {
-	var candidateKind, genre, catalogNumber, edition, label, barcode sql.NullString
+	var candidateKind, catalogNumber, edition, label, barcode sql.NullString
+	var genresJSON string
+	genres := []string{}
 	var revision int64
 	err := s.database.QueryRowContext(ctx, `SELECT
 		candidate_kind,
-		NULLIF(BTRIM(genre),''),
+		to_jsonb(genres)::text,
 		NULLIF(BTRIM(catalog_number),''),
 		NULLIF(BTRIM(edition),''),
 		NULLIF(BTRIM(label),''),
 		NULLIF(BTRIM(barcode),''),
 		edit_revision
-		FROM release_effective WHERE id=$1::uuid`, releaseID).Scan(&candidateKind, &genre, &catalogNumber, &edition, &label, &barcode, &revision)
+		FROM release_effective WHERE id=$1::uuid`, releaseID).Scan(&candidateKind, &genresJSON, &catalogNumber, &edition, &label, &barcode, &revision)
 	if err != nil {
+		return ReleaseHeader{}, err
+	}
+	if err := json.Unmarshal([]byte(genresJSON), &genres); err != nil {
 		return ReleaseHeader{}, err
 	}
 	corrected, err := loadCorrectedFieldNames(ctx, s.database, releaseID)
@@ -142,7 +149,7 @@ func (s *Store) LoadReleaseHeader(ctx context.Context, releaseID string) (Releas
 	}
 	return ReleaseHeader{
 		CandidateKind:   normalizeCandidateKind(candidateKind.String),
-		Genre:           releasesql.StringPointerFromNull(genre),
+		Genres:          genres,
 		CatalogNumber:   releasesql.StringPointerFromNull(catalogNumber),
 		Edition:         releasesql.StringPointerFromNull(edition),
 		Label:           releasesql.StringPointerFromNull(label),

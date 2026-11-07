@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/qlqq/roomusic/backend/internal/library/parser/parsertest"
@@ -96,4 +97,44 @@ func createMP3Fixture(t *testing.T, frames map[string]string) []byte {
 	tagLength := tagData.Len()
 	header := []byte{'I', 'D', '3', 4, 0, 0, byte(tagLength >> 21), byte(tagLength >> 14), byte(tagLength >> 7), byte(tagLength)}
 	return append(header, tagData.Bytes()...)
+}
+
+func TestAudioTagGenresAppendRepeatedValues(t *testing.T) {
+	observation := AudioObservation{}
+	for _, value := range []string{"国语流行乐; Pop", "台语流行乐；ＰＯＰ、R&B/Soul"} {
+		if err := setAudioTag(&observation, "GENRE", value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := []string{"国语流行乐", "Pop", "台语流行乐", "R&B/Soul"}
+	if !reflect.DeepEqual(observation.Genres, want) {
+		t.Fatalf("重复 GENRE 被覆盖或未拆分：%#v，期望 %#v", observation.Genres, want)
+	}
+}
+
+func TestID3GenresReadNullSeparatedTCONValues(t *testing.T) {
+	observation := AudioObservation{}
+	for _, value := range []string{"Pop\x00Rock; R&B/Soul\x00", "ＰＯＰ；Jazz"} {
+		frame := repairMP3BinaryFrame("TCON", append([]byte{3}, []byte(value)...))
+		if err := parseID3Frames(frame[10:], &observation, 4, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := []string{"Pop", "Rock", "R&B/Soul", "Jazz"}
+	if !reflect.DeepEqual(observation.Genres, want) {
+		t.Fatalf("TCON 多值丢失：%#v，期望 %#v", observation.Genres, want)
+	}
+}
+
+func TestM4AGenresSplitAndAppendTextAtoms(t *testing.T) {
+	observation := AudioObservation{}
+	for _, value := range []string{"Rock；Pop", "ＰＯＰ、Folk, World, & Country"} {
+		if err := parseM4AItemValue("\xa9gen", []byte(value), []byte{0, 0, 0, 1}, &observation); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := []string{"Rock", "Pop", "Folk, World, & Country"}
+	if !reflect.DeepEqual(observation.Genres, want) {
+		t.Fatalf("M4A 流派列表 = %#v，期望 %#v", observation.Genres, want)
+	}
 }

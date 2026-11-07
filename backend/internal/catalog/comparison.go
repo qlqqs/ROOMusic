@@ -3,6 +3,7 @@ package catalog
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -40,7 +41,7 @@ type ComparedRelease struct {
 	Label           *string       `json:"label"`
 	CatalogNumber   *string       `json:"catalog_number"`
 	Barcode         *string       `json:"barcode"`
-	Genre           *string       `json:"genre"`
+	Genres          []string      `json:"genres"`
 	SourceType      *string       `json:"source_type"`
 	MediaType       *string       `json:"media_type"`
 	MediumCount     int64         `json:"medium_count"`
@@ -64,7 +65,7 @@ type ReleaseComparison struct {
 const comparedReleaseQuery = `SELECT releases.id::text, releases.title, releases.artist,
 		NULLIF(BTRIM(releases.album_artist), ''), NULLIF(releases.year, 0),
 		NULLIF(BTRIM(releases.edition), ''), NULLIF(BTRIM(releases.label), ''), NULLIF(BTRIM(releases.catalog_number), ''),
-		NULLIF(BTRIM(releases.barcode), ''), NULLIF(BTRIM(releases.genre), ''),
+		NULLIF(BTRIM(releases.barcode), ''), to_jsonb(releases.genres)::text,
 		NULLIF(BTRIM(releases.source_type), ''), NULLIF(BTRIM(releases.media_type), ''),
 		present.medium_count, present.track_count, present.duration_seconds,
 		COUNT(*) OVER (),
@@ -96,16 +97,20 @@ func (s *Store) LoadReleaseComparison(ctx context.Context, groupID string) (Rele
 	var stored sql.NullString
 	for rows.Next() {
 		var release ComparedRelease
-		var albumArtist, edition, label, catalogNumber, barcode, genre, sourceType, mediaType sql.NullString
+		var albumArtist, edition, label, catalogNumber, barcode, sourceType, mediaType sql.NullString
+		var genresJSON string
 		var year sql.NullInt64
 		var duration sql.NullFloat64
-		if err := rows.Scan(&release.ID, &release.Title, &release.Artist, &albumArtist, &year, &edition, &label, &catalogNumber, &barcode, &genre,
+		if err := rows.Scan(&release.ID, &release.Title, &release.Artist, &albumArtist, &year, &edition, &label, &catalogNumber, &barcode, &genresJSON,
 			&sourceType, &mediaType, &release.MediumCount, &release.TrackCount, &duration, &comparison.ReleaseCount, &stored); err != nil {
 			return ReleaseComparison{}, err
 		}
 		release.AlbumArtist, release.Year = releasesql.StringPointerFromNull(albumArtist), releasesql.IntPointerFromNull(year)
 		release.Edition, release.Label, release.CatalogNumber = releasesql.StringPointerFromNull(edition), releasesql.StringPointerFromNull(label), releasesql.StringPointerFromNull(catalogNumber)
-		release.Barcode, release.Genre = releasesql.StringPointerFromNull(barcode), releasesql.StringPointerFromNull(genre)
+		release.Barcode = releasesql.StringPointerFromNull(barcode)
+		if err := json.Unmarshal([]byte(genresJSON), &release.Genres); err != nil {
+			return ReleaseComparison{}, err
+		}
 		release.SourceType, release.MediaType = releasesql.StringPointerFromNull(sourceType), releasesql.StringPointerFromNull(mediaType)
 		release.DurationSeconds = floatPointerFromNull(duration)
 		release.Formats, release.CorrectedFields = []AudioFormat{}, []string{}

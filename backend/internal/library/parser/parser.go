@@ -26,7 +26,7 @@ type AudioObservation struct {
 	Channels                int
 	Bitrate                 int
 	Year                    int
-	Genre                   string
+	Genres                  []string
 	Catalog                 string
 	ISRC                    string
 	SourceType              string

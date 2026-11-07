@@ -14,6 +14,8 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	// 0032 的非空列表转换由专门的数据迁移用例覆盖；结构往返不另加会截断的数据。
+	32: "",
 	31: `INSERT INTO artist_alias_signals(left_key_id,right_key_id,bracket_key_id,alias_part,release_id,alias_release_id,left_name,right_name)
  VALUES('a1000000-0000-4000-8000-000000000001','a1000000-0000-4000-8000-000000000002',
  'a1000000-0000-4000-8000-000000000001','inner','c0000000-0000-4000-8000-000000000001',

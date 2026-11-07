@@ -142,7 +142,7 @@ func TestPostgreSQLIssueReviewsExcludeReviewedIssuesFromAttention(t *testing.T) 
 	fixture.groupingConflict(release.releaseID, `["dir/01.flac","dir/02.flac"]`)
 	returned := fixture.track(release, "会回来的曲目", "missing", 10.0)
 	again := fixture.track(release, "回来后又缺失的曲目", "missing", 10.0)
-	fixture.uncertainField(sibling.releaseID, "genre", "古典", []string{"古典", "巴洛克"})
+	fixture.uncertainField(sibling.releaseID, "label", "原厂牌", []string{"原厂牌", "另一厂牌"})
 
 	check := func(label string, want issueCounts, wantGroup int64) {
 		t.Helper()
@@ -198,7 +198,7 @@ func TestPostgreSQLIssueReviewsExcludeReviewedIssuesFromAttention(t *testing.T) 
 	if err != nil || groups.Total != 1 || groups.Items[0].ID != release.groupID || groups.Items[0].AttentionCount != 1 {
 		t.Fatalf("group attention filter = %+v, %v; want the group with the other version's issue", groups, err)
 	}
-	fixture.correct(sibling.releaseID, "genre", "古典")
+	fixture.correct(sibling.releaseID, "label", "原厂牌")
 	if groups, err := store.ListReleaseGroups(ctx, ListParams{AttentionRequired: true, Page: 1, PageSize: 10}); err != nil || groups.Total != 0 {
 		t.Fatalf("group attention filter after the last issue was handled = %+v, %v; want none", groups, err)
 	}

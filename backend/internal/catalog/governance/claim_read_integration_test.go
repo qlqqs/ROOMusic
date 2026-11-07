@@ -44,7 +44,7 @@ func TestPostgreSQLListClaims(t *testing.T) {
 
 	// 三个旧版本：最久没见的、较新的、最新的。
 	oldest, _ := fixture.issueRelease("最久没见的")
-	fixture.mustCorrect(oldest.releaseID, 1, map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionSet, Text: "古典"}})
+	fixture.mustCorrect(oldest.releaseID, 1, map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionSet, Genres: []string{"古典"}}})
 	middle, _ := fixture.issueRelease("中间的")
 	fixture.mustCorrect(middle.releaseID, 1, map[string]CorrectionChange{"label": {Mode: catalog.CorrectionSet, Text: "厂牌"}, "title": {Mode: catalog.CorrectionSet, Text: "我改过的标题"}})
 	fixture.mustReview(middle.releaseID, IssueGrouping, IssueReview)
@@ -164,7 +164,7 @@ func TestPostgreSQLListClaimsLocationNeverLeaksAbsolutePaths(t *testing.T) {
 		want      string
 	}{{"album/disc 1", "album/disc 1"}, {"../outside", ""}, {"/etc", ""}, {"C:/x", ""}, {"", ""}} {
 		release, _ := fixture.issueRelease("旧版本")
-		fixture.mustCorrect(release.releaseID, 1, map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionSet, Text: "古典"}})
+		fixture.mustCorrect(release.releaseID, 1, map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionSet, Genres: []string{"古典"}}})
 		fixture.exec(`UPDATE tracks SET source_status='missing' WHERE medium_id=$1::uuid`, release.mediumID)
 		fixture.exec(`UPDATE releases SET relative_directory=$2 WHERE id=$1::uuid`, release.releaseID, testCase.directory)
 		var location ClaimLocation
@@ -192,7 +192,8 @@ func TestPostgreSQLLoadClaim(t *testing.T) {
 		t.Errorf("detail = %+v", detail.ClaimEntry)
 	}
 	if len(detail.Corrections) != 2 || detail.Corrections[0].Field != "title" || detail.Corrections[0].Correction.Value != "我改过的标题" ||
-		detail.Corrections[0].ScanValue != "旧版本" || detail.Corrections[1].Field != "genre" {
+		detail.Corrections[0].ScanValue != "旧版本" || detail.Corrections[1].Field != "genre" ||
+		!reflect.DeepEqual(detail.Corrections[1].Correction.Value, []string{"古典"}) {
 		t.Errorf("corrections = %+v", detail.Corrections)
 	}
 	if len(detail.Siblings) != 1 || detail.Siblings[0].ID != scenario.sibling.releaseID || !detail.Siblings[0].Visible {

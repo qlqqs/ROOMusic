@@ -34,7 +34,7 @@ func newArtistCorrectionProjection(t *testing.T, f *correctionFixture, releases 
 	for _, r := range releases {
 		f.exec(`UPDATE releases SET artist=$2,album_artist=$2 WHERE id=$1::uuid`, r.releaseID, artistProjectionScan)
 		f.exec(`UPDATE tracks SET artist=$2 WHERE medium_id=$1::uuid`, r.mediumID, artistProjectionTrack)
-		f.mustCorrect(r.releaseID, f.revisionOf(r.releaseID), map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionSet, Text: "图回归初始化"}})
+		f.mustCorrect(r.releaseID, f.revisionOf(r.releaseID), map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionSet, Genres: []string{"图回归初始化"}}})
 	}
 	first := releases[0]
 	p.correct(first, catalog.CorrectionSet)

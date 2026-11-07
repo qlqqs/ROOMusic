@@ -47,7 +47,7 @@ func newCorrectionsEnvironment(t *testing.T) *correctionsEnvironment {
 	mustExec(t, application, `INSERT INTO library_roots(id,path,status,revision) VALUES($1::uuid,$2,'active',1)`, environment.rootID, application.allowedRoot)
 	environment.releaseID, environment.groupID = insertGroupedRelease(t, application, environment.rootID, groupedRelease{title: "原始标题", artist: "原始艺人", year: 1998, tracks: []string{"present"}})
 	environment.hiddenID, _ = insertGroupedRelease(t, application, environment.rootID, groupedRelease{title: "没有可见曲目", artist: "艺人", tracks: []string{"missing"}})
-	mustExec(t, application, `UPDATE releases SET genre='古典', label='原始厂牌' WHERE id=$1::uuid`, environment.releaseID)
+	mustExec(t, application, `UPDATE releases SET genres=ARRAY['古典']::text[], label='原始厂牌' WHERE id=$1::uuid`, environment.releaseID)
 	return environment
 }
 
@@ -79,7 +79,7 @@ func (environment *correctionsEnvironment) counts(t *testing.T) (operations, cor
 func TestPostgreSQLCorrectionsAPIRejectsUnauthorizedAndInvalidRequestsWithoutSideEffects(t *testing.T) {
 	environment := newCorrectionsEnvironment(t)
 	application := environment.application
-	valid := correctionBody(1, map[string]any{"genre": setChange("爵士")})
+	valid := correctionBody(1, map[string]any{"genre": setChange([]string{"爵士"})})
 
 	for _, testCase := range []struct {
 		name    string
@@ -100,19 +100,19 @@ func TestPostgreSQLCorrectionsAPIRejectsUnauthorizedAndInvalidRequestsWithoutSid
 		{name: "missing idempotency key", user: &environment.admin, release: environment.releaseID, body: valid, status: 400, code: "invalid_input"},
 		{name: "idempotency key that is not a UUID", user: &environment.admin, release: environment.releaseID, key: "not-a-uuid", body: valid, status: 400, code: "invalid_input"},
 		{name: "body that is not an object", user: &environment.admin, release: environment.releaseID, key: uuid.New(), body: "not an object", status: 400, code: "invalid_json"},
-		{name: "expected revision zero", user: &environment.admin, release: environment.releaseID, key: uuid.New(), body: correctionBody(0, map[string]any{"genre": setChange("爵士")}), status: 400, code: "invalid_input"},
+		{name: "expected revision zero", user: &environment.admin, release: environment.releaseID, key: uuid.New(), body: correctionBody(0, map[string]any{"genre": setChange([]string{"爵士"})}), status: 400, code: "invalid_input"},
 		{name: "unknown field", user: &environment.admin, release: environment.releaseID, key: uuid.New(), body: correctionBody(1, map[string]any{"source_type": setChange("CD")}), status: 400, code: "invalid_correction"},
 		{name: "title set to empty", user: &environment.admin, release: environment.releaseID, key: uuid.New(), body: correctionBody(1, map[string]any{"title": nullChange}), status: 400, code: "invalid_correction"},
 		{name: "album artist set to empty", user: &environment.admin, release: environment.releaseID, key: uuid.New(), body: correctionBody(1, map[string]any{"album_artist": nullChange}), status: 400, code: "invalid_correction"},
-		{name: "blank text", user: &environment.admin, release: environment.releaseID, key: uuid.New(), body: correctionBody(1, map[string]any{"genre": setChange("   ")}), status: 400, code: "invalid_correction"},
+		{name: "blank text", user: &environment.admin, release: environment.releaseID, key: uuid.New(), body: correctionBody(1, map[string]any{"genre": setChange([]string{"   "})}), status: 400, code: "invalid_correction"},
 		{name: "year zero", user: &environment.admin, release: environment.releaseID, key: uuid.New(), body: correctionBody(1, map[string]any{"year": setChange(0)}), status: 400, code: "invalid_correction"},
 		{name: "year as text", user: &environment.admin, release: environment.releaseID, key: uuid.New(), body: correctionBody(1, map[string]any{"year": setChange("1990")}), status: 400, code: "invalid_correction"},
-		{name: "one invalid change among valid ones", user: &environment.admin, release: environment.releaseID, key: uuid.New(), body: correctionBody(1, map[string]any{"genre": setChange("爵士"), "year": setChange(10000)}), status: 400, code: "invalid_correction"},
+		{name: "one invalid change among valid ones", user: &environment.admin, release: environment.releaseID, key: uuid.New(), body: correctionBody(1, map[string]any{"genre": setChange([]string{"爵士"}), "year": setChange(10000)}), status: 400, code: "invalid_correction"},
 		{name: "no changes at all", user: &environment.admin, release: environment.releaseID, key: uuid.New(), body: correctionBody(1, map[string]any{}), status: 400, code: "no_changes"},
 		{name: "clear without a correction", user: &environment.admin, release: environment.releaseID, key: uuid.New(), body: correctionBody(1, map[string]any{"genre": clearChange}), status: 400, code: "no_changes"},
 		{name: "release without visible tracks", user: &environment.admin, release: environment.hiddenID, key: uuid.New(), body: valid, status: 404, code: "not_found"},
 		{name: "unknown release", user: &environment.admin, release: uuid.New(), key: uuid.New(), body: valid, status: 404, code: "not_found"},
-		{name: "stale revision", user: &environment.admin, release: environment.releaseID, key: uuid.New(), body: correctionBody(7, map[string]any{"genre": setChange("爵士")}), status: 409, code: "revision_conflict"},
+		{name: "stale revision", user: &environment.admin, release: environment.releaseID, key: uuid.New(), body: correctionBody(7, map[string]any{"genre": setChange([]string{"爵士"})}), status: 409, code: "revision_conflict"},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			response := environment.patch(t, testCase.user, testCase.release, testCase.key, testCase.body, testCase.headers)
@@ -180,7 +180,7 @@ func TestPostgreSQLCorrectionsAPIStateAndSuccess(t *testing.T) {
 		t.Fatalf("decode correction result: %v", err)
 	}
 	if state.Revision != 2 || state.OperationID == "" || state.Fields[0].EffectiveValue != "修正后的标题" || state.Fields[0].Correction["mode"] != "set" ||
-		state.Fields[2].EffectiveValue != float64(1975) || state.Fields[3].EffectiveValue != nil || state.Fields[3].Correction["mode"] != "null" || state.Fields[3].ScanValue != "古典" {
+		state.Fields[2].EffectiveValue != float64(1975) || state.Fields[3].EffectiveValue != nil || state.Fields[3].Correction["mode"] != "null" || !reflect.DeepEqual(state.Fields[3].ScanValue, []any{"古典"}) {
 		t.Fatalf("correction result = %s", response.Body.String())
 	}
 	var recordedActor, recordedType, recordedTarget string
@@ -200,9 +200,9 @@ func TestPostgreSQLCorrectionsAPIStateAndSuccess(t *testing.T) {
 			t.Fatalf("%s detail: HTTP %d: %s", name, detail.Code, detail.Body.String())
 		}
 		decoded := decodeJSONMap(t, detail)
-		if decoded["title"] != "修正后的标题" || decoded["year"] != float64(1975) || decoded["genre"] != nil || decoded["label"] != "原始厂牌" || decoded["revision"] != float64(2) ||
+		if decoded["title"] != "修正后的标题" || decoded["year"] != float64(1975) || !reflect.DeepEqual(decoded["genres"], []any{}) || decoded["label"] != "原始厂牌" || decoded["revision"] != float64(2) ||
 			!reflect.DeepEqual(decoded["corrected_fields"], []any{"title", "year", "genre"}) {
-			t.Errorf("%s detail = title %v year %v genre %v label %v revision %v corrected %v", name, decoded["title"], decoded["year"], decoded["genre"], decoded["label"], decoded["revision"], decoded["corrected_fields"])
+			t.Errorf("%s detail = title %v year %v genres %v label %v revision %v corrected %v", name, decoded["title"], decoded["year"], decoded["genres"], decoded["label"], decoded["revision"], decoded["corrected_fields"])
 		}
 		for key := range decoded {
 			if strings.Contains(key, "operation") || strings.Contains(key, "actor") {
@@ -442,9 +442,9 @@ func TestPostgreSQLCorrectionsSurviveARealRescanAndShowEverywhere(t *testing.T) 
 		t.Fatalf("release groups = %+v", groups)
 	}
 	detail := detailOf()
-	if detail["title"] != "Alpha Album (corrected)" || detail["year"] != nil || detail["genre"] != nil || detail["label"] != "Zulu Label" ||
+	if detail["title"] != "Alpha Album (corrected)" || detail["year"] != nil || !reflect.DeepEqual(detail["genres"], []any{}) || detail["label"] != "Zulu Label" ||
 		!reflect.DeepEqual(detail["corrected_fields"], []any{"title", "album_artist", "year", "genre"}) {
-		t.Fatalf("detail = title %v year %v genre %v label %v corrected %v", detail["title"], detail["year"], detail["genre"], detail["label"], detail["corrected_fields"])
+		t.Fatalf("detail = title %v year %v genres %v label %v corrected %v", detail["title"], detail["year"], detail["genres"], detail["label"], detail["corrected_fields"])
 	}
 	if credits, _ := detail["credits"].([]any); len(credits) != 1 || credits[0].(map[string]any)["name"] != "Corrected Pianist" {
 		t.Fatalf("credits = %v; want the corrected album artist", detail["credits"])
@@ -463,10 +463,10 @@ func TestPostgreSQLCorrectionsSurviveARealRescanAndShowEverywhere(t *testing.T) 
 		t.Fatalf("the rescanned release has ID %s, want the same release %s", rescannedID, zuluID)
 	}
 	detail = detailOf()
-	if detail["title"] != "Alpha Album (corrected)" || detail["album_artist"] != "Corrected Pianist" || detail["year"] != nil || detail["genre"] != nil ||
+	if detail["title"] != "Alpha Album (corrected)" || detail["album_artist"] != "Corrected Pianist" || detail["year"] != nil || !reflect.DeepEqual(detail["genres"], []any{}) ||
 		detail["label"] != "New Zulu Label" || detail["revision"] != float64(revisionBeforeRescan) {
-		t.Fatalf("after the rescan: title %v, album artist %v, year %v, genre %v, label %v, revision %v; want the corrections intact, the label rescanned and the revision untouched",
-			detail["title"], detail["album_artist"], detail["year"], detail["genre"], detail["label"], detail["revision"])
+		t.Fatalf("after the rescan: title %v, album artist %v, year %v, genres %v, label %v, revision %v; want the corrections intact, the label rescanned and the revision untouched",
+			detail["title"], detail["album_artist"], detail["year"], detail["genres"], detail["label"], detail["revision"])
 	}
 	var evidence struct {
 		Fields []struct {
@@ -518,8 +518,8 @@ func TestPostgreSQLCorrectionsSurviveARealRescanAndShowEverywhere(t *testing.T) 
 	// 清除修正：显示最新的扫描值（重扫之后的值）。
 	patch(map[string]any{"title": clearChange, "album_artist": clearChange, "year": clearChange, "genre": clearChange})
 	detail = detailOf()
-	if detail["title"] != "Zulu Album Remastered" || detail["album_artist"] != "Zulu Pianist Revised" || detail["year"] != float64(2010) || detail["genre"] != "Baroque" ||
+	if detail["title"] != "Zulu Album Remastered" || detail["album_artist"] != "Zulu Pianist Revised" || detail["year"] != float64(2010) || !reflect.DeepEqual(detail["genres"], []any{"Baroque"}) ||
 		!reflect.DeepEqual(detail["corrected_fields"], []any{}) {
-		t.Fatalf("after clearing: title %v, album artist %v, year %v, genre %v, corrected %v; want the latest scanned values", detail["title"], detail["album_artist"], detail["year"], detail["genre"], detail["corrected_fields"])
+		t.Fatalf("after clearing: title %v, album artist %v, year %v, genres %v, corrected %v; want the latest scanned values", detail["title"], detail["album_artist"], detail["year"], detail["genres"], detail["corrected_fields"])
 	}
 }

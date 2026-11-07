@@ -64,12 +64,13 @@
       {
         "action": "auto_apply",
         "candidates": [
-          "Classical"
+          "Classical",
+          "Baroque"
         ],
         "confidence": "high",
         "field": "genre",
         "reason_code": null,
-        "rule_id": "majority_v1",
+        "rule_id": "genre_union_v1",
         "source": "tag",
         "value": "Classical"
       },

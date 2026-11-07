@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -23,8 +24,11 @@ import (
 // 明确设为空（null）；没有这一行就是“没有修正”，字段显示当前的扫描值。写入只经 operations.Run 的共同流程（鉴权、
 // 幂等、预期版本与操作记录由它和传输层负责），这里提供它的执行器与读取投影。
 
-// maxCorrectionTextBytes 与表约束 release_corrections_value_ck 一致。
-const maxCorrectionTextBytes = 4096
+// 修正文本与列表的上限；列表形状也受 release_corrections_value_ck 约束。
+const (
+	maxCorrectionTextBytes = 4096
+	maxCorrectionGenres    = 20
+)
 
 func correctableFieldNamed(name string) (catalog.CorrectableField, bool) {
 	for _, field := range catalog.CorrectableFields {
@@ -36,17 +40,18 @@ func correctableFieldNamed(name string) (catalog.CorrectableField, bool) {
 }
 
 // RawCorrectionChange 是请求体里对一个字段的修改：Mode 是 set、null 或 clear，Value 只有 set 时有值
-// （年份是整数，其余是字符串）。
+// （年份是整数，流派是文本列表，其余是字符串）。
 type RawCorrectionChange struct {
 	Mode  string          `json:"mode"`
 	Value json.RawMessage `json:"value"`
 }
 
-// CorrectionChange 是校验并规范化之后的修改：set 时年份字段用 Year，其余用 Text（已去掉首尾空白、折叠内部空白）。
+// CorrectionChange 是校验并规范化之后的修改：set 时年份用 Year，流派用 Genres，其余用 Text。
 type CorrectionChange struct {
-	Mode string
-	Text string
-	Year int
+	Mode   string
+	Text   string
+	Year   int
+	Genres []string
 }
 
 func invalidCorrection(format string, arguments ...any) *operations.Failure {
@@ -80,6 +85,9 @@ func ParseCorrectionChanges(raw map[string]RawCorrectionChange) (map[string]Corr
 			changes[name] = CorrectionChange{Mode: catalog.CorrectionNull}
 		case catalog.CorrectionSet:
 			if !hasValue {
+				if field.Name == "genre" {
+					return nil, invalidCorrection("流派必须是文本列表")
+				}
 				return nil, invalidCorrection("%s需要一个值；要清空请选择留空", field.Label)
 			}
 			change, err := parseCorrectionValue(field, item.Value)
@@ -102,20 +110,66 @@ func parseCorrectionValue(field catalog.CorrectableField, raw json.RawMessage) (
 		}
 		return CorrectionChange{Mode: catalog.CorrectionSet, Year: year}, nil
 	}
+	if field.Name == "genre" {
+		return parseGenreCorrection(field, raw)
+	}
 	var text string
 	if err := json.Unmarshal(raw, &text); err != nil {
 		return CorrectionChange{}, invalidCorrection("%s必须是文本", field.Label)
 	}
-	text = metadata.NormalizeValue(text)
-	switch {
-	case text == "":
+	text, err := normalizeCorrectionText(field, text)
+	if err != nil {
+		return CorrectionChange{}, err
+	}
+	if text == "" {
 		return CorrectionChange{}, invalidCorrection("%s不能为空；要清空请选择留空", field.Label)
-	case !utf8.ValidString(text) || strings.IndexFunc(text, unicode.IsControl) >= 0:
-		return CorrectionChange{}, invalidCorrection("%s含有不允许的字符", field.Label)
-	case len(text) > maxCorrectionTextBytes:
-		return CorrectionChange{}, invalidCorrection("%s超过 %d 字节", field.Label, maxCorrectionTextBytes)
 	}
 	return CorrectionChange{Mode: catalog.CorrectionSet, Text: text}, nil
+}
+
+func normalizeCorrectionText(field catalog.CorrectableField, text string) (string, error) {
+	text = metadata.NormalizeValue(text)
+	switch {
+	case !utf8.ValidString(text) || strings.IndexFunc(text, unicode.IsControl) >= 0:
+		return "", invalidCorrection("%s含有不允许的字符", field.Label)
+	case len(text) > maxCorrectionTextBytes:
+		return "", invalidCorrection("%s超过 %d 字节", field.Label, maxCorrectionTextBytes)
+	}
+	return text, nil
+}
+
+func parseGenreCorrection(field catalog.CorrectableField, raw json.RawMessage) (CorrectionChange, error) {
+	var values []any
+	if err := json.Unmarshal(raw, &values); err != nil || values == nil {
+		return CorrectionChange{}, invalidCorrection("流派必须是文本列表")
+	}
+	genres := []string{}
+	seen := map[string]bool{}
+	for _, value := range values {
+		text, ok := value.(string)
+		if !ok {
+			return CorrectionChange{}, invalidCorrection("流派必须是文本列表")
+		}
+		text, err := normalizeCorrectionText(field, text)
+		if err != nil {
+			return CorrectionChange{}, err
+		}
+		if text == "" {
+			continue
+		}
+		key := metadata.GenreKey(text)
+		if !seen[key] {
+			seen[key] = true
+			genres = append(genres, text)
+		}
+	}
+	if len(genres) == 0 {
+		return CorrectionChange{}, invalidCorrection("流派至少填一个；要清空请选择留空")
+	}
+	if len(genres) > maxCorrectionGenres {
+		return CorrectionChange{}, invalidCorrection("流派最多 20 个")
+	}
+	return CorrectionChange{Mode: catalog.CorrectionSet, Genres: genres}, nil
 }
 
 // CorrectionRequest 是一次已校验的字段修正：目标发行、预期版本与规范化的修改。
@@ -134,6 +188,8 @@ func (request CorrectionRequest) Fingerprint() string {
 		if change.Mode == catalog.CorrectionSet {
 			if field, _ := correctableFieldNamed(name); field.IsYear {
 				entry["value"] = change.Year
+			} else if name == "genre" {
+				entry["value"] = change.Genres
 			} else {
 				entry["value"] = change.Text
 			}
@@ -147,7 +203,7 @@ func (request CorrectionRequest) Fingerprint() string {
 }
 
 // CorrectionField 是编辑发行信息时一个字段的状态：扫描值、当前的修正意图（没有时为 null）、有效值，
-// 以及扫描对这个字段的处理是否不确定。年份的值是整数，其余是字符串；没有值时是 null。
+// 以及扫描对这个字段的处理是否不确定。年份的值是整数，流派是文本列表，其余是字符串；没有值时是 null。
 type CorrectionField struct {
 	Field          string                    `json:"field"`
 	ScanValue      any                       `json:"scan_value"`
@@ -174,16 +230,17 @@ type CorrectionResult struct {
 const correctionValueProjection = `releases.title,
 		COALESCE(NULLIF(BTRIM(releases.album_artist), ''), releases.artist),
 		NULLIF(releases.year, 0),
-		NULLIF(BTRIM(releases.genre), ''), NULLIF(BTRIM(releases.label), ''), NULLIF(BTRIM(releases.catalog_number), ''),
+		to_jsonb(releases.genres)::text, NULLIF(BTRIM(releases.label), ''), NULLIF(BTRIM(releases.catalog_number), ''),
 		NULLIF(BTRIM(releases.edition), ''), NULLIF(BTRIM(releases.barcode), '')`
 
-// loadFieldValues 读取八个字段的值（字符串、整数或 nil）；source 是 releases（扫描值）或 releasesql.ReleaseSource（有效值）。
+// loadFieldValues 读取八个字段的值（字符串、整数、非空流派列表或 nil）；source 是 releases（扫描值）或 releasesql.ReleaseSource（有效值）。
 func loadFieldValues(ctx context.Context, database catalog.Queryer, source, releaseID string) ([]any, error) {
 	var title, albumArtist string
 	var year sql.NullInt64
-	var genre, label, catalogNumber, edition, barcode sql.NullString
+	var label, catalogNumber, edition, barcode sql.NullString
+	var genresJSON string
 	if err := database.QueryRowContext(ctx, "SELECT "+correctionValueProjection+" FROM "+source+" WHERE releases.id=$1::uuid", releaseID).
-		Scan(&title, &albumArtist, &year, &genre, &label, &catalogNumber, &edition, &barcode); err != nil {
+		Scan(&title, &albumArtist, &year, &genresJSON, &label, &catalogNumber, &edition, &barcode); err != nil {
 		return nil, err
 	}
 	text := func(value sql.NullString) any {
@@ -196,7 +253,15 @@ func loadFieldValues(ctx context.Context, database catalog.Queryer, source, rele
 	if year.Valid {
 		yearValue = int(year.Int64)
 	}
-	return []any{title, albumArtist, yearValue, text(genre), text(label), text(catalogNumber), text(edition), text(barcode)}, nil
+	var genres []string
+	if err := json.Unmarshal([]byte(genresJSON), &genres); err != nil {
+		return nil, err
+	}
+	var genreValue any
+	if len(genres) > 0 {
+		genreValue = genres
+	}
+	return []any{title, albumArtist, yearValue, genreValue, text(label), text(catalogNumber), text(edition), text(barcode)}, nil
 }
 
 // loadCorrectionState 读取发行的修正状态；发行不存在或没有可见曲目时返回 ErrReleaseNotFound。第一条查询先读版本号：
@@ -231,7 +296,7 @@ func loadCorrectionState(ctx context.Context, database catalog.Queryer, releaseI
 	for index, field := range catalog.CorrectableFields {
 		item := CorrectionField{Field: field.Name, ScanValue: scanned[index], EffectiveValue: effective[index],
 			// 展示艺人的不确定由专辑艺人的修正覆盖，所以两个字段的不确定都算作专辑艺人的。
-			Uncertain: uncertain[field.Name] || (field.Name == "album_artist" && uncertain["artist"])}
+			Uncertain: field.Name != "genre" && (uncertain[field.Name] || (field.Name == "album_artist" && uncertain["artist"]))}
 		if intent, corrected := intents[field.Name]; corrected {
 			item.Correction = &intent
 		}
@@ -333,7 +398,7 @@ func CorrectionExecutor(request CorrectionRequest) operations.Executor {
 			}
 			next := nextIntent(field, change)
 			previous, hadPrevious := current[field.Name]
-			if sameIntent(previous, hadPrevious, next) {
+			if sameIntent(field, previous, hadPrevious, next) {
 				continue
 			}
 			changedFields = append(changedFields, field.Name)
@@ -382,6 +447,9 @@ func nextIntent(field catalog.CorrectableField, change CorrectionChange) *catalo
 		if field.IsYear {
 			return &catalog.CorrectionIntent{Mode: catalog.CorrectionSet, Value: change.Year}
 		}
+		if field.Name == "genre" {
+			return &catalog.CorrectionIntent{Mode: catalog.CorrectionSet, Value: change.Genres}
+		}
 		return &catalog.CorrectionIntent{Mode: catalog.CorrectionSet, Value: change.Text}
 	case catalog.CorrectionNull:
 		return &catalog.CorrectionIntent{Mode: catalog.CorrectionNull}
@@ -390,11 +458,17 @@ func nextIntent(field catalog.CorrectableField, change CorrectionChange) *catalo
 	}
 }
 
-func sameIntent(previous catalog.CorrectionIntent, hadPrevious bool, next *catalog.CorrectionIntent) bool {
+func sameIntent(field catalog.CorrectableField, previous catalog.CorrectionIntent, hadPrevious bool, next *catalog.CorrectionIntent) bool {
 	if next == nil || !hadPrevious {
 		return next == nil && !hadPrevious
 	}
-	return previous.Mode == next.Mode && previous.Value == next.Value
+	if previous.Mode != next.Mode {
+		return false
+	}
+	if field.Name == "genre" && next.Mode == catalog.CorrectionSet {
+		return slices.Equal(previous.Value.([]string), next.Value.([]string))
+	}
+	return previous.Value == next.Value
 }
 
 // writeIntent 写下字段的新意图：next 为 nil 删除修正行，否则插入或替换（operation_id 记下设下它的操作）。
@@ -405,17 +479,20 @@ func writeIntent(ctx context.Context, tx *sql.Tx, releaseID string, field catalo
 	}
 	var text sql.NullString
 	var year sql.NullInt64
+	var genres []string
 	if next.Mode == catalog.CorrectionSet {
-		if value, isYear := next.Value.(int); isYear {
+		if field.Name == "genre" {
+			genres = next.Value.([]string)
+		} else if value, isYear := next.Value.(int); isYear {
 			year = sql.NullInt64{Int64: int64(value), Valid: true}
 		} else {
 			text = sql.NullString{String: next.Value.(string), Valid: true}
 		}
 	}
-	_, err := tx.ExecContext(ctx, `INSERT INTO release_corrections(release_id, field, mode, text_value, year_value, operation_id)
-		VALUES($1::uuid, $2, $3, $4, $5, $6::uuid)
+	_, err := tx.ExecContext(ctx, `INSERT INTO release_corrections(release_id, field, mode, text_value, year_value, list_value, operation_id)
+		VALUES($1::uuid, $2, $3, $4, $5, $6::text[], $7::uuid)
 		ON CONFLICT (release_id, field) DO UPDATE
-		SET mode = EXCLUDED.mode, text_value = EXCLUDED.text_value, year_value = EXCLUDED.year_value, operation_id = EXCLUDED.operation_id`,
-		releaseID, field.Name, next.Mode, text, year, operationID)
+		SET mode = EXCLUDED.mode, text_value = EXCLUDED.text_value, year_value = EXCLUDED.year_value, list_value = EXCLUDED.list_value, operation_id = EXCLUDED.operation_id`,
+		releaseID, field.Name, next.Mode, text, year, genres, operationID)
 	return err
 }

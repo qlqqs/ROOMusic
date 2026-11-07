@@ -133,6 +133,38 @@ describe("编辑发行信息：保存", () => {
     expect(screen.getAllByText("1975").length).toBeGreaterThan(0);
   });
 
+  it("流派标签支持回车、分隔粘贴、去重、退格和删除，保存有序列表", async () => {
+    const { api } = setup();
+    const user = userEvent.setup();
+    renderApp({ path: `/albums/${groupId}` });
+    const dialog = await openEditor(user);
+    await within(dialog).findByRole("group", { name: prefixed("流派") });
+    const genres = field(dialog, "流派");
+    await user.click(genres.getByRole("radio", { name: "自定义" }));
+    const input = genres.getByRole("textbox", { name: "流派（自定义）" });
+    await user.type(input, "Jazz{Enter}");
+    expect(genres.getByRole("button", { name: "删除 Jazz" })).toBeTruthy();
+    await user.paste("Jazz; Funk");
+    expect(genres.getByRole("button", { name: "删除 Funk" })).toBeTruthy();
+    expect(genres.getAllByRole("button", { name: /^删除 / })).toHaveLength(4);
+
+    await user.type(input, "jazz{Enter}");
+    expect(genres.getAllByRole("button", { name: /^删除 / })).toHaveLength(4);
+    expect(genres.queryByRole("button", { name: "删除 jazz" })).toBeNull();
+    await user.keyboard("{Backspace}");
+    expect(genres.queryByRole("button", { name: "删除 Funk" })).toBeNull();
+    await user.click(genres.getByRole("button", { name: "删除 Classical" }));
+    expect(genres.queryByRole("button", { name: "删除 Classical" })).toBeNull();
+
+    await user.click(saveButton(dialog));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "编辑发行信息" })).toBeNull());
+    expect(patchRequests(api)).toHaveLength(1);
+    expect(patchRequests(api)[0]?.body).toEqual({
+      expected_revision: 1,
+      changes: { genre: { mode: "set", value: ["Baroque", "Jazz"] } },
+    });
+  });
+
   it("输入有问题时不能保存：年份必须是整数，自定义不能为空，标题不能留空（没有这个选项）", async () => {
     const { api } = setup();
     const user = userEvent.setup();
@@ -163,7 +195,7 @@ describe("编辑发行信息：保存", () => {
 
   it("“确认扫描值”：把当前扫描值存为修正，提交的是 set；已有修正的字段不再提供它", async () => {
     const { api, governance } = setup();
-    markUncertain(governance, releaseId, ["title", "genre"]);
+    markUncertain(governance, releaseId, ["title", "label"]);
     const user = userEvent.setup();
     renderApp({ path: `/albums/${groupId}` });
     let dialog = await openEditor(user);
@@ -177,13 +209,13 @@ describe("编辑发行信息：保存", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "编辑发行信息" })).toBeNull());
     expect(patchRequests(api)[0]?.body).toEqual({ expected_revision: 1, changes: { title: { mode: "set", value: "Sample Symphonies" } } });
 
-    // 再次打开：标题已有修正（“人工修正”），不再提供“确认”；流派仍不确定。
+    // 再次打开：标题已有修正（“人工修正”），不再提供“确认”；厂牌仍不确定。
     await user.click(screen.getByRole("button", { name: "编辑发行信息" }));
     dialog = await screen.findByRole("dialog", { name: "编辑发行信息" });
     await within(dialog).findByRole("group", { name: prefixed("标题") });
     expect(field(dialog, "标题").getByText("人工修正")).toBeTruthy();
     expect(field(dialog, "标题").queryByRole("button", { name: "确认扫描值" })).toBeNull();
-    expect(field(dialog, "流派").getByRole("button", { name: "确认扫描值" })).toBeTruthy();
+    expect(field(dialog, "厂牌").getByRole("button", { name: "确认扫描值" })).toBeTruthy();
   });
 
   it("取消不提交；再次打开时从最新的状态开始", async () => {
@@ -218,7 +250,7 @@ describe("编辑发行信息：冲突与结果不确定", () => {
     await user.type(title, "我的标题");
 
     // 这时另一位管理员把流派设成了“Jazz”：版本号变成 2。
-    expect(respondToCorrect(governance, releaseId, "00000000-0000-4000-8000-0000000000c1", { expected_revision: 1, changes: { genre: { mode: "set", value: "Jazz" } } }).status).toBe(200);
+    expect(respondToCorrect(governance, releaseId, "00000000-0000-4000-8000-0000000000c1", { expected_revision: 1, changes: { genre: { mode: "set", value: ["Jazz"] } } }).status).toBe(200);
     await user.click(saveButton(dialog));
 
     expect(await within(dialog).findByText("这张专辑刚被修改过")).toBeTruthy();
@@ -226,7 +258,7 @@ describe("编辑发行信息：冲突与结果不确定", () => {
     expect((title as HTMLInputElement).value).toBe("我的标题");
     // 没有动过的流派显示最新的状态（别人刚设的 Jazz），而不是我打开时的样子。
     await waitFor(() => expect((field(dialog, "流派").getByRole("radio", { name: "自定义" }) as HTMLInputElement).checked).toBe(true));
-    expect(field(dialog, "流派").getByRole("textbox", { name: "流派（自定义）" })).toHaveProperty("value", "Jazz");
+    expect(field(dialog, "流派").getByRole("button", { name: "删除 Jazz" })).toBeTruthy();
 
     await user.click(saveButton(dialog));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "编辑发行信息" })).toBeNull());
@@ -330,7 +362,7 @@ describe("撤销与人工修正的标记", () => {
     const { catalog, governance } = setup({ role: "user" });
     respondToCorrect(governance, releaseId, "00000000-0000-4000-8000-0000000000c3", {
       expected_revision: 1,
-      changes: { genre: { mode: "set", value: "Romantic" }, label: { mode: "set", value: "Corrected Label" }, year: { mode: "set", value: 1975 }, title: { mode: "set", value: "Sample Symphonies (corrected)" } },
+      changes: { genre: { mode: "set", value: ["Romantic"] }, label: { mode: "set", value: "Corrected Label" }, year: { mode: "set", value: 1975 }, title: { mode: "set", value: "Sample Symphonies (corrected)" } },
     });
     expect(catalog.releases.get(releaseId)?.corrected_fields).toEqual(["title", "year", "genre", "label"]);
     const user = userEvent.setup();

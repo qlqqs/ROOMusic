@@ -57,7 +57,7 @@ func mustIntents(fixture *correctionFixture, releaseID string) map[string]catalo
 	return intents
 }
 
-// 撤销把字段恢复成之前的意图——没有修正、设值或设空——文本与年份都一样，并且撤销之后版本号加一、撤销本身也有一条记录。
+// 撤销把字段恢复成之前的意图——没有修正、设值或设空——列表与年份都一样，并且撤销之后版本号加一、撤销本身也有一条记录。
 func TestPostgreSQLRevertRestoresEveryPreviousCorrectionIntent(t *testing.T) {
 	fixture := newCorrectionFixture(t)
 	kind := CorrectionOperations()
@@ -69,7 +69,7 @@ func TestPostgreSQLRevertRestoresEveryPreviousCorrectionIntent(t *testing.T) {
 		name    string
 		intents []intent
 	}{
-		{"genre", []intent{{"none", CorrectionChange{Mode: catalog.CorrectionClear}}, {"set:古典", CorrectionChange{Mode: catalog.CorrectionSet, Text: "古典"}}, {"set:爵士", CorrectionChange{Mode: catalog.CorrectionSet, Text: "爵士"}}, {"null", CorrectionChange{Mode: catalog.CorrectionNull}}}},
+		{"genre", []intent{{"none", CorrectionChange{Mode: catalog.CorrectionClear}}, {"set:[古典]", CorrectionChange{Mode: catalog.CorrectionSet, Genres: []string{"古典"}}}, {"set:[爵士]", CorrectionChange{Mode: catalog.CorrectionSet, Genres: []string{"爵士"}}}, {"null", CorrectionChange{Mode: catalog.CorrectionNull}}}},
 		{"year", []intent{{"none", CorrectionChange{Mode: catalog.CorrectionClear}}, {"set:1975", CorrectionChange{Mode: catalog.CorrectionSet, Year: 1975}}, {"set:1999", CorrectionChange{Mode: catalog.CorrectionSet, Year: 1999}}, {"null", CorrectionChange{Mode: catalog.CorrectionNull}}}},
 	} {
 		for _, from := range field.intents {
@@ -79,7 +79,7 @@ func TestPostgreSQLRevertRestoresEveryPreviousCorrectionIntent(t *testing.T) {
 				}
 				t.Run(field.name+" "+from.name+" to "+to.name, func(t *testing.T) {
 					release := fixture.visibleRelease(field.name + from.name + to.name)
-					fixture.exec(`UPDATE releases SET genre='扫描流派', year=2001 WHERE id=$1::uuid`, release.releaseID)
+					fixture.exec(`UPDATE releases SET genres=ARRAY['扫描流派'], year=2001 WHERE id=$1::uuid`, release.releaseID)
 					revision := int64(1)
 					if from.change.Mode != catalog.CorrectionClear {
 						revision = fixture.mustCorrect(release.releaseID, revision, map[string]CorrectionChange{field.name: from.change}).Revision
@@ -116,7 +116,7 @@ func TestPostgreSQLRevertOnlyTouchesTheFieldsTheOperationChanged(t *testing.T) {
 	ctx := context.Background()
 	kind := CorrectionOperations()
 	release := fixture.visibleRelease("原标题")
-	fixture.exec(`UPDATE releases SET genre='扫描流派', year=2001 WHERE id=$1::uuid`, release.releaseID)
+	fixture.exec(`UPDATE releases SET genres=ARRAY['扫描流派'], year=2001 WHERE id=$1::uuid`, release.releaseID)
 
 	first := fixture.mustCorrect(release.releaseID, 1, map[string]CorrectionChange{"title": {Mode: catalog.CorrectionSet, Text: "新标题"}, "year": {Mode: catalog.CorrectionSet, Year: 1975}})
 	second := fixture.mustCorrect(release.releaseID, first.Revision, map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionNull}})
@@ -153,7 +153,7 @@ func TestPostgreSQLRevertOnlyTouchesTheFieldsTheOperationChanged(t *testing.T) {
 		t.Fatalf("decode after: %v", err)
 	}
 	if len(before.Fields) != 1 || before.Fields["genre"] == nil || before.Fields["genre"].Mode != "null" || before.Effective["genre"] != nil ||
-		len(after.Fields) != 1 || after.Fields["genre"] != nil || after.Effective["genre"] != "扫描流派" {
+		len(after.Fields) != 1 || after.Fields["genre"] != nil || !reflect.DeepEqual(after.Effective["genre"], []any{"扫描流派"}) {
 		t.Fatalf("revert states = before %+v, after %+v; want genre from empty back to the scanned value", before, after)
 	}
 }
@@ -176,7 +176,7 @@ func TestPostgreSQLRevertIsRefusedAfterLaterEditsOrWhenTheTargetIsHidden(t *test
 	alpha, beta := fixture.versionOf("Alpha", 2000), fixture.versionOf("Beta", 2005)
 
 	// 字段修正与归组共用版本号：归组之后不能撤销之前的修正；修正之后不能撤销之前的归组。
-	corrected := fixture.mustCorrect(alpha.releaseID, 1, map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionSet, Text: "古典"}})
+	corrected := fixture.mustCorrect(alpha.releaseID, 1, map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionSet, Genres: []string{"古典"}}})
 	_, joined := fixture.mustChangeGroup(alpha.releaseID, corrected.Revision, GroupJoin, beta.groupID)
 	if _, err := fixture.revert(correction, corrected.OperationID); err == nil {
 		t.Fatal("a correction was reverted after a later group change")

@@ -349,7 +349,7 @@ func recordAlbumDetailSamples(t *testing.T, application *integrationTestApplicat
 	}
 	// 每个文件的音频 MD5 不同，内容指纹互不相同。
 	shared := []string{
-		"ALBUM=Sample Symphonies", "ALBUMARTIST=Sample Orchestra", "DATE=1998", "GENRE=Classical",
+		"ALBUM=Sample Symphonies", "ALBUMARTIST=Sample Orchestra", "DATE=1998",
 		"LABEL=Sample Label", "CATALOGNUMBER=SL-0001", "BARCODE=0123456789012", "EDITION=Remastered",
 		"COMPOSER=Sample Composer", "CONDUCTOR=Sample Conductor", "PERFORMER=Sample Soloist",
 	}
@@ -359,9 +359,9 @@ func recordAlbumDetailSamples(t *testing.T, application *integrationTestApplicat
 		comments []string
 	}{
 		// 前两首带内嵌歌词（同步与纯文本），第三首没有：歌词接口的三种响应来自真实扫描。
-		{"d1-01.flac", 11, []string{"TITLE=Allegro", "ARTIST=Sample Orchestra", "DISCNUMBER=1/2", "TRACKNUMBER=1", "LYRICS=" + sampleSyncedLyrics}},
-		{"d1-02.flac", 12, []string{"TITLE=Andante", "ARTIST=Sample Soloist", "DISCNUMBER=1/2", "TRACKNUMBER=2", "UNSYNCEDLYRICS=" + samplePlainLyrics}},
-		{"d2-01.flac", 13, []string{"TITLE=Finale", "ARTIST=Sample Orchestra", "DISCNUMBER=2/2", "TRACKNUMBER=1"}},
+		{"d1-01.flac", 11, []string{"GENRE=Classical", "TITLE=Allegro", "ARTIST=Sample Orchestra", "DISCNUMBER=1/2", "TRACKNUMBER=1", "LYRICS=" + sampleSyncedLyrics}},
+		{"d1-02.flac", 12, []string{"GENRE=Baroque", "TITLE=Andante", "ARTIST=Sample Soloist", "DISCNUMBER=1/2", "TRACKNUMBER=2", "UNSYNCEDLYRICS=" + samplePlainLyrics}},
+		{"d2-01.flac", 13, []string{"GENRE=Classical", "TITLE=Finale", "ARTIST=Sample Orchestra", "DISCNUMBER=2/2", "TRACKNUMBER=1"}},
 	} {
 		content := parsertest.FLACWithAudio(t, [16]byte{track.md5}, bytes.Repeat([]byte{track.md5}, 64), append(append([]string{}, shared...), track.comments...)...)
 		if err := os.WriteFile(filepath.Join(albumDirectory, track.file), content, 0o644); err != nil {
@@ -467,6 +467,7 @@ func recordCorrectionSamples(t *testing.T, application *integrationTestApplicati
 		"title": map[string]any{"mode": "set", "value": "Sample Symphonies (corrected)"},
 		"year":  map[string]any{"mode": "null"},
 		"label": map[string]any{"mode": "set", "value": "Corrected Label"},
+		"genre": map[string]any{"mode": "set", "value": []string{"Romantic", "Classical"}},
 	}}, admin, key("0101")), http.StatusOK)
 	samples.record("corrections/get-corrected", call(http.MethodGet, path, nil, admin), http.StatusOK)
 	samples.record("releases/get-corrected", call(http.MethodGet, "/api/v1/releases/"+releaseID, nil, admin), http.StatusOK)
@@ -474,10 +475,10 @@ func recordCorrectionSamples(t *testing.T, application *integrationTestApplicati
 		"title": map[string]any{"mode": "null"},
 	}}, admin, key("0102")), http.StatusBadRequest)
 	samples.record("errors/no-changes", call(http.MethodPatch, path, map[string]any{"expected_revision": 2, "changes": map[string]any{
-		"genre": map[string]any{"mode": "clear"},
+		"barcode": map[string]any{"mode": "clear"},
 	}}, admin, key("0103")), http.StatusBadRequest)
 	samples.record("errors/revision-conflict-release", call(http.MethodPatch, path, map[string]any{"expected_revision": 1, "changes": map[string]any{
-		"genre": map[string]any{"mode": "set", "value": "Romantic"},
+		"genre": map[string]any{"mode": "set", "value": []string{"Romantic", "Classical"}},
 	}}, admin, key("0104")), http.StatusConflict)
 }
 

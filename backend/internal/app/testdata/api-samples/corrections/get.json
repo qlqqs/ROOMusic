@@ -24,9 +24,15 @@
       },
       {
         "correction": null,
-        "effective_value": "Classical",
+        "effective_value": [
+          "Classical",
+          "Baroque"
+        ],
         "field": "genre",
-        "scan_value": "Classical",
+        "scan_value": [
+          "Classical",
+          "Baroque"
+        ],
         "uncertain": false
       },
       {

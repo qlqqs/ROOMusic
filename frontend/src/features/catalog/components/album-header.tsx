@@ -4,7 +4,7 @@ import { formatCount } from "../../../shared/lib/number";
 import { StatusTag } from "../../../shared/ui";
 import type { ReleaseDetailDTO, ReleaseSummaryDTO } from "../api/decoders";
 import { formatDuration } from "../../../shared/lib/duration";
-import { isFieldCorrected, totalDuration } from "../format";
+import { formatGenres, isFieldCorrected, totalDuration } from "../format";
 import styles from "./album-header.module.css";
 import { Cover } from "./cover";
 import { ManualCorrectionTag } from "./manual-correction-tag";
@@ -23,7 +23,7 @@ type AlbumHeaderProps = {
 type Fact = { label: string; value: string; field?: string };
 
 function factsOf(release: ReleaseSummaryDTO, detail: ReleaseDetailDTO | undefined): Fact[] {
-  const genre = detail?.genre?.trim() ?? "";
+  const genre = detail === undefined ? "" : formatGenres(detail.genres);
   // 有一首曲目的时长未知就不写总时长：不拿已知的部分冒充总数。
   const duration = detail === undefined ? null : totalDuration(detail.media);
   return [

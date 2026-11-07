@@ -124,8 +124,8 @@ func TestPostgreSQLReleaseIssuesDetail(t *testing.T) {
 	fixture := newCorrectionFixture(t)
 	release, missing := fixture.issueRelease("有问题的版本")
 	fixture.uncertainField(release.releaseID, "title", "标题", []string{"标题", "另一个标题"})
-	fixture.uncertainField(release.releaseID, "genre", "古典", []string{"古典", "巴洛克"})
-	fixture.correct(release.releaseID, "genre", "古典")
+	fixture.uncertainField(release.releaseID, "label", "厂牌 A", []string{"厂牌 A", "厂牌 B"})
+	fixture.correct(release.releaseID, "label", "厂牌 A")
 	// 同一目录的另一个可见版本，与一个不可见的。
 	sibling := fixture.visibleRelease("同一目录的另一个版本")
 	invisible := fixture.release("同一目录但不可见")
@@ -138,12 +138,12 @@ func TestPostgreSQLReleaseIssuesDetail(t *testing.T) {
 		issues.Release.ID != release.releaseID || issues.Release.Title != "有问题的版本" || issues.Release.AttentionCount != 6 || issues.Edition != nil {
 		t.Fatalf("header = %+v (release %+v)", issues, issues.Release)
 	}
-	// 字段：修正过的流派不列出；只有来源类型与介质类型可以核对、带依据令牌。
+	// 字段：修正过的厂牌不列出；只有来源类型与介质类型可以核对、带依据令牌。
 	byField := map[string]FieldIssue{}
 	for _, field := range issues.Fields {
 		byField[field.Field] = field
 	}
-	if len(issues.Fields) != 3 || byField["genre"].Field != "" {
+	if len(issues.Fields) != 3 || byField["label"].Field != "" {
 		t.Fatalf("fields = %+v, want title, source_type and media_type", issues.Fields)
 	}
 	title, media := byField["title"], byField["media_type"]

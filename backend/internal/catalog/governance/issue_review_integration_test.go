@@ -287,7 +287,7 @@ func TestPostgreSQLRevertIssueReview(t *testing.T) {
 	_, err = fixture.revert(kind, fixture.operationLatest(operations.TypeRevert))
 	requireProblem(t, err, 409, "not_revertible")
 	review = fixture.mustReview(release.releaseID, IssueSourceType, IssueReview)
-	fixture.mustCorrect(release.releaseID, fixture.revisionOf(release.releaseID), map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionSet, Text: "古典"}})
+	fixture.mustCorrect(release.releaseID, fixture.revisionOf(release.releaseID), map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionSet, Genres: []string{"古典"}}})
 	_, err = fixture.revert(kind, review.OperationID)
 	requireProblem(t, err, 409, "revert_conflict")
 
@@ -460,7 +460,7 @@ func TestPostgreSQLIssueReviewsAndOtherChangesNeverDeadlock(t *testing.T) {
 					}
 					_, err = fixture.revertQuiet(IssueReviewOperations(), id)
 				case 3:
-					request := CorrectionRequest{ReleaseID: release.releaseID, ExpectedRevision: revision(release.releaseID), Changes: map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionSet, Text: "古典" + string(rune('A'+random.Intn(3)))}}}
+					request := CorrectionRequest{ReleaseID: release.releaseID, ExpectedRevision: revision(release.releaseID), Changes: map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionSet, Genres: []string{"古典" + string(rune('A'+random.Intn(3)))}}}}
 					_, err = operations.Run(context.Background(), fixture.database, operations.Spec{
 						ActorID: fixture.actorID, Type: operations.TypeReleaseCorrection, Key: uuid.New(), Fingerprint: request.Fingerprint(), RequestID: "test",
 					}, CorrectionExecutor(request))

@@ -176,7 +176,7 @@ func TestParseExistingTagParsersRetainAlbumArtist(t *testing.T) {
 	if flac.AlbumArtist != "Various Artists" || mp3.AlbumArtist != "Various Artists" || flac.Codec != "flac" || mp3.Codec != "mp3" {
 		t.Fatalf("album artist was lost: flac=%+v mp3=%+v", flac, mp3)
 	}
-	if flac.Genre != "Rock" || flac.Year != 2024 || flac.Catalog != "CAT-001" || flac.ISRC != "USAAA2400001" || mp3.Genre != "Rock" || mp3.Year != 2024 || mp3.ISRC != "USAAA2400001" {
+	if !reflect.DeepEqual(flac.Genres, []string{"Rock"}) || flac.Year != 2024 || flac.Catalog != "CAT-001" || flac.ISRC != "USAAA2400001" || !reflect.DeepEqual(mp3.Genres, []string{"Rock"}) || mp3.Year != 2024 || mp3.ISRC != "USAAA2400001" {
 		t.Fatalf("explicit tag facts were lost: flac=%+v mp3=%+v", flac, mp3)
 	}
 	if flac.SourceType != "CD" || flac.MediaType != "Compact Disc" || mp3.SourceType != "" || mp3.MediaType != "" {

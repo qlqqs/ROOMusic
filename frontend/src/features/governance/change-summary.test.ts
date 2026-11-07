@@ -29,6 +29,7 @@ describe("changeLines", () => {
     expect(changeLines(itemOf("release_correction"))).toEqual([
       "标题：Sample Symphonies → Sample Symphonies (corrected)",
       "年份：1998 → （空）（留空）",
+      "流派：Classical · Baroque → Romantic · Classical",
       "厂牌：Sample Label → Corrected Label",
     ]);
     const restored: Pick<OperationItemDTO, "changes"> = {
@@ -56,6 +57,7 @@ describe("revertLines", () => {
     expect(revertLines(itemOf("release_correction"))).toEqual([
       "标题：Sample Symphonies (corrected) → Sample Symphonies（恢复为扫描值）",
       "年份：（空） → 1998（恢复为扫描值）",
+      "流派：Romantic · Classical → Classical · Baroque（恢复为扫描值）",
       "厂牌：Corrected Label → Sample Label（恢复为扫描值）",
     ]);
     const cleared: Pick<OperationItemDTO, "changes"> = {

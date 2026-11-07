@@ -111,6 +111,12 @@ func parseID3Frames(data []byte, observation *AudioObservation, major, tagFlags 
 			}
 			continue
 		}
+		if frameID == "TCON" {
+			if payload, ok := id3FramePayload(frame, major, formatFlags); ok {
+				observation.Genres = metadata.SplitGenres(append(observation.Genres, decodeID3ArtistValues(payload)...)...)
+			}
+			continue
+		}
 		value := decodeID3Text(frame)
 		switch frameID {
 		case "TIT2":
@@ -121,8 +127,6 @@ func parseID3Frames(data []byte, observation *AudioObservation, major, tagFlags 
 			observation.TrackNumber = parseNumber(value)
 		case "TPOS":
 			observation.DiscNumber = parseNumber(value)
-		case "TCON":
-			observation.Genre = value
 		case "TDRC", "TYER":
 			observation.Year = ParseYear(value)
 		case "TSRC":

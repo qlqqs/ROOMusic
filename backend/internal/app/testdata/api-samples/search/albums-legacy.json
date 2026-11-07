@@ -2,7 +2,7 @@
   "body": {
     "catalog_state": {
       "artists_state": "preparing",
-      "epoch": 2,
+      "epoch": 3,
       "search_mode": "legacy"
     },
     "items": [

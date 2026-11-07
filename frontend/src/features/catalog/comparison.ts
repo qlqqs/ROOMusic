@@ -1,7 +1,7 @@
 import { formatDuration } from "../../shared/lib/duration";
 import { formatCount } from "../../shared/lib/number";
 import type { AudioFormatDTO, ComparedReleaseDTO } from "./api/decoders";
-import { albumArtistOf, isFieldCorrected } from "./format";
+import { albumArtistOf, formatGenres, isFieldCorrected } from "./format";
 import { codecLabel } from "./labels";
 
 // 版本对比表的数据模型：把接口给的各版本字段整理成“字段 × 版本”的行。只做显示规则（哪些行出现、哪些格与基准不同、
@@ -70,7 +70,7 @@ const ROWS: readonly RowSpec[] = [
   { key: "label", label: "厂牌", field: "label", lines: (release) => text(release.label) },
   { key: "catalog_number", label: "编号", field: "catalog_number", lines: (release) => text(release.catalog_number) },
   { key: "barcode", label: "条码", field: "barcode", lines: (release) => text(release.barcode) },
-  { key: "genre", label: "流派", field: "genre", lines: (release) => text(release.genre) },
+  { key: "genre", label: "流派", field: "genre", lines: (release) => text(formatGenres(release.genres)) },
   { key: "source_type", label: "来源类型", lines: (release) => text(release.source_type) },
   { key: "media_type", label: "介质类型", lines: (release) => text(release.media_type) },
   {

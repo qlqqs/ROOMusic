@@ -38,9 +38,8 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
   缺少 `INDEX 01` 的 CUE track，只写有界 `cue_reference` 诊断并跳过不可用虚拟 Track，
   不单独阻断其它确定输入完成扫描；不得为其伪造父来源或零偏移 Track。非音频附件
   （例如 `.jpg`、`.png`、`.txt`）不产生 unsupported 音频诊断。
-- `0011_scan_staging_and_identity.sql` 增加有界 scan staging、稳定 candidate anchor、
-  物理/CUE source identity、音频/CUE 列、current field/grouping evidence、Release credits
-  和 source/media/genre/catalog 字段。0010 时期的旧来源身份不再兼容（见下方身份规则，开发阶段裁决）。
+- `0011_scan_staging_and_identity.sql` 增加有界暂存、候选锚点、物理/CUE 身份、音频/CUE 列、字段/归组证据、署名及元数据。
+  0010 旧来源身份不兼容（见下方规则）；0032 的列表整理见[多流派合同](./genre-contracts.md)。
 - `0012_track_credits_and_release_metadata.sql` 增加 Release `edition`/`label`/`barcode`
   以及 `track_credits(track_id,role,name,position)`。逐轨角色由数据库 CHECK allowlist
   约束，`track_id + role + name` 唯一；重扫先替换该 Track 的 current credits，不能按扫描

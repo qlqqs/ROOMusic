@@ -98,22 +98,22 @@ describe("署名", () => {
 });
 
 describe("releaseFacts", () => {
-  const empty = { label: null, catalog_number: null, barcode: null, edition: null, genre: null, source_type: null, media_type: null };
+  const empty = { label: null, catalog_number: null, barcode: null, edition: null, genres: [], source_type: null, media_type: null };
 
   it("没有值（或只有空白）的条目不列出", () => {
     expect(releaseFacts(empty)).toEqual([]);
-    expect(releaseFacts({ ...empty, label: "  ", genre: "" })).toEqual([]);
+    expect(releaseFacts({ ...empty, label: "  ", genres: [] })).toEqual([]);
   });
 
-  it("按固定顺序列出有值的条目", () => {
+  it("按固定顺序列出有值的条目，多流派用间隔号连接", () => {
     expect(
-      releaseFacts({ label: "L", catalog_number: "C-1", barcode: "012", edition: "Remastered", genre: "Classical", source_type: "CD", media_type: "CD" }),
+      releaseFacts({ label: "L", catalog_number: "C-1", barcode: "012", edition: "Remastered", genres: ["国语流行乐", "台语流行乐"], source_type: "CD", media_type: "CD" }),
     ).toEqual([
       { label: "厂牌", value: "L", field: "label" },
       { label: "编号", value: "C-1", field: "catalog_number" },
       { label: "条码", value: "012", field: "barcode" },
       { label: "版本说明", value: "Remastered", field: "edition" },
-      { label: "流派", value: "Classical", field: "genre" },
+      { label: "流派", value: "国语流行乐 · 台语流行乐", field: "genre" },
       { label: "来源类型", value: "CD", field: "source_type" },
       { label: "介质类型", value: "CD", field: "media_type" },
     ]);

@@ -53,7 +53,8 @@ type OrganizedCandidate struct {
 	Attention                  []string
 	GroupingRefs               []string
 	SourceType, MediaType      string
-	Genre, CatalogNumber       string
+	Genres                     []string
+	CatalogNumber              string
 	Edition, Label, Barcode    string
 }
 
@@ -141,6 +142,66 @@ func chooseValue(obs []SourceObservation, field string, get func(SourceObservati
 	return FieldDecision{Field: field, Value: selected, Source: source, Confidence: confidence, Action: action, RuleID: "majority_v1", Reason: reason, Candidates: values}
 }
 
+// chooseGenres 按包含流派的曲目数合并列表，同票时按展示名称排序；多流派不产生字段问题。
+func chooseGenres(observations []SourceObservation) FieldDecision {
+	type genreVotes struct {
+		tracks    int
+		spellings map[string]int
+	}
+	votes := make(map[string]*genreVotes)
+	for _, observation := range observations {
+		for _, genre := range metadata.SplitGenres(observation.Genres...) {
+			key := metadata.GenreKey(genre)
+			if votes[key] == nil {
+				votes[key] = &genreVotes{spellings: make(map[string]int)}
+			}
+			votes[key].tracks++
+			votes[key].spellings[genre]++
+		}
+	}
+	decision := FieldDecision{Field: "genre", Source: "tag", Confidence: "high", Action: "auto_apply", RuleID: "genre_union_v1", Candidates: []string{}}
+	counts := make(map[string]int, len(votes))
+	for _, vote := range votes {
+		display, most := "", 0
+		for spelling, count := range vote.spellings {
+			if count > most || count == most && spelling < display {
+				display, most = spelling, count
+			}
+		}
+		counts[display] = vote.tracks
+		decision.Candidates = append(decision.Candidates, display)
+	}
+	sort.Slice(decision.Candidates, func(i, j int) bool {
+		a, b := decision.Candidates[i], decision.Candidates[j]
+		if counts[a] != counts[b] {
+			return counts[a] > counts[b]
+		}
+		return a < b
+	})
+	if len(decision.Candidates) == 0 {
+		return decision
+	}
+	if len(decision.Candidates) > maxDecisionCandidates {
+		decision.Candidates = decision.Candidates[:maxDecisionCandidates]
+	}
+	decision.Value = decision.Candidates[0]
+source:
+	for _, observation := range observations {
+		if observation.InferredFields["genre"] {
+			continue
+		}
+		for _, genre := range metadata.SplitGenres(observation.Genres...) {
+			if genre == decision.Value {
+				if source := observation.FieldSources["genre"]; source != "" {
+					decision.Source = source
+				}
+				break source
+			}
+		}
+	}
+	return decision
+}
+
 func allInferred(obs []SourceObservation, field string) bool {
 	if len(obs) == 0 {
 		return true
@@ -183,8 +244,6 @@ func fieldValue(o SourceObservation, field string) string {
 		if o.Year > 0 {
 			return strconv.Itoa(o.Year)
 		}
-	case "genre":
-		return o.Genre
 	case "catalog_number":
 		return o.CatalogNumber
 	case "edition":
@@ -563,7 +622,7 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 		yearDecision := chooseValue(decisionObservations, "year", func(o SourceObservation) string { return fieldValue(o, "year") })
 		sourceDecision := chooseValue(decisionObservations, "source_type", func(o SourceObservation) string { return o.SourceType })
 		mediaDecision := chooseValue(decisionObservations, "media_type", func(o SourceObservation) string { return o.MediaType })
-		genreDecision := chooseValue(decisionObservations, "genre", func(o SourceObservation) string { return o.Genre })
+		genreDecision := chooseGenres(decisionObservations)
 		catalogDecision := chooseValue(decisionObservations, "catalog_number", func(o SourceObservation) string { return o.CatalogNumber })
 		editionDecision := chooseValue(decisionObservations, "edition", func(o SourceObservation) string { return o.Edition })
 		labelDecision := chooseValue(decisionObservations, "label", func(o SourceObservation) string { return o.Label })
@@ -582,7 +641,7 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 		c.AlbumArtist = albumArtistDecision.Value
 		c.SourceType = sourceDecision.Value
 		c.MediaType = mediaDecision.Value
-		c.Genre = genreDecision.Value
+		c.Genres = genreDecision.Candidates
 		c.CatalogNumber = catalogDecision.Value
 		c.Edition = editionDecision.Value
 		c.Label = labelDecision.Value
@@ -871,7 +930,14 @@ func mergeSingleCueEvidence(physical SourceObservation, cues []SourceObservation
 	artistAdopted := mergeText("artist", &physical.Artist, cue.Artist)
 	mergeText("album", &physical.Album, cue.Album)
 	albumArtistAdopted := mergeText("album_artist", &physical.AlbumArtist, cue.AlbumArtist)
-	mergeText("genre", &physical.Genre, cue.Genre)
+	if len(cue.Genres) > 0 {
+		physical.Genres = append([]string(nil), cue.Genres...)
+		delete(physical.InferredFields, "genre")
+		physical.FieldSources["genre"] = cue.FieldSources["genre"]
+		if physical.FieldSources["genre"] == "" {
+			physical.FieldSources["genre"] = "cue_sheet"
+		}
+	}
 	mergeText("catalog_number", &physical.CatalogNumber, cue.CatalogNumber)
 	if artistAdopted || albumArtistAdopted {
 		adoptedSources := map[string]string{}

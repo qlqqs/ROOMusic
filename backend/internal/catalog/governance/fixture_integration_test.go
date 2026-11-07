@@ -3,12 +3,14 @@ package governance
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
+	"github.com/qlqq/roomusic/backend/internal/catalog/maintenance"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
@@ -38,6 +40,10 @@ func newPlacementFixture(t *testing.T) *placementFixture {
 			t.Errorf("close isolated catalog database: %v", err)
 		}
 	})
+	// 直接打开数据库的夹具也须执行启动登记，不能沿用迁移里的旧艺人投影版本。
+	if err := maintenance.Initialize(ctx, database); err != nil {
+		t.Fatalf("initialize catalog projections: %v", err)
+	}
 	fixture := &placementFixture{t: t, database: database, store: catalog.NewStore(database), governance: NewStore(database), rootID: uuid.New()}
 	fixture.exec(`INSERT INTO library_roots(id,path,status,revision) VALUES($1::uuid,'/library','active',1)`, fixture.rootID)
 	return fixture
@@ -96,7 +102,7 @@ func (fixture *effectiveFixture) visibleRelease(title string) placementRelease {
 	return release
 }
 
-// correct 设下一条修正意图（替换该字段已有的意图）：value 是 nil 表示明确设为空，int 是年份，string 是文本值。
+// correct 设下一条修正意图（替换该字段已有的意图）：value 是 nil 表示明确设为空，int 是年份，[]string 是流派列表，string 是文本值。
 func (fixture *effectiveFixture) correct(releaseID, field string, value any) {
 	fixture.t.Helper()
 	transaction, err := fixture.database.Begin()
@@ -117,6 +123,8 @@ func (fixture *effectiveFixture) correct(releaseID, field string, value any) {
 	switch value.(type) {
 	case nil:
 		statement, arguments = `INSERT INTO release_corrections(release_id,field,mode,operation_id) VALUES($1::uuid,$2,'null',$3::uuid)`, []any{releaseID, field, operationID}
+	case []string:
+		statement = `INSERT INTO release_corrections(release_id,field,mode,list_value,operation_id) VALUES($1::uuid,$2,'set',$3::text[],$4::uuid)`
 	case int:
 		statement = `INSERT INTO release_corrections(release_id,field,mode,year_value,operation_id) VALUES($1::uuid,$2,'set',$3,$4::uuid)`
 	default:
@@ -139,11 +147,16 @@ func (fixture *effectiveFixture) clearCorrection(releaseID, field string) {
 func (fixture *effectiveFixture) effectiveColumns(releaseID string) map[string]any {
 	fixture.t.Helper()
 	var title, artist string
-	var albumArtist, genre, catalogNumber, edition, label, barcode sql.NullString
+	var albumArtist, catalogNumber, edition, label, barcode sql.NullString
+	var genresJSON string
 	var year sql.NullInt64
-	if err := fixture.database.QueryRow(`SELECT title,artist,album_artist,year,genre,catalog_number,edition,label,barcode FROM release_effective WHERE id=$1::uuid`, releaseID).
-		Scan(&title, &artist, &albumArtist, &year, &genre, &catalogNumber, &edition, &label, &barcode); err != nil {
+	if err := fixture.database.QueryRow(`SELECT title,artist,album_artist,year,to_jsonb(genres)::text,catalog_number,edition,label,barcode FROM release_effective WHERE id=$1::uuid`, releaseID).
+		Scan(&title, &artist, &albumArtist, &year, &genresJSON, &catalogNumber, &edition, &label, &barcode); err != nil {
 		fixture.t.Fatalf("read effective columns: %v", err)
+	}
+	var genres []string
+	if err := json.Unmarshal([]byte(genresJSON), &genres); err != nil {
+		fixture.t.Fatalf("decode effective genres: %v", err)
 	}
 	nullable := func(value sql.NullString) any {
 		if !value.Valid {
@@ -151,7 +164,7 @@ func (fixture *effectiveFixture) effectiveColumns(releaseID string) map[string]a
 		}
 		return value.String
 	}
-	columns := map[string]any{"title": title, "artist": artist, "album_artist": nullable(albumArtist), "genre": nullable(genre),
+	columns := map[string]any{"title": title, "artist": artist, "album_artist": nullable(albumArtist), "genre": genres,
 		"catalog_number": nullable(catalogNumber), "edition": nullable(edition), "label": nullable(label), "barcode": nullable(barcode), "year": nil}
 	if year.Valid {
 		columns["year"] = int(year.Int64)

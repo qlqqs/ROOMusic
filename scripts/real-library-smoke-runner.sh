@@ -588,7 +588,7 @@ read_schema_version() {
 export_current_rows() {
   local scan_id="$1" prefix="$2"
   compose_psql current-postgres "$current_pg_password" \
-    "SELECT jsonb_build_object('id',r.id::text,'title',r.title,'artist',r.artist,'album_artist',r.album_artist,'year',r.year,'source_type',r.source_type,'media_type',r.media_type,'edition',r.edition,'label',r.label,'barcode',r.barcode,'catalog',r.catalog_number,'genre',r.genre,'candidate_kind',r.candidate_kind,'candidate_anchor',r.candidate_anchor,'source_root_id',r.source_root_id::text,'relative_directory',r.relative_directory)::text FROM releases r ORDER BY r.id;" \
+    "SELECT jsonb_build_object('id',r.id::text,'title',r.title,'artist',r.artist,'album_artist',r.album_artist,'year',r.year,'source_type',r.source_type,'media_type',r.media_type,'edition',r.edition,'label',r.label,'barcode',r.barcode,'catalog',r.catalog_number,'genre',array_to_string(r.genres,' / '),'candidate_kind',r.candidate_kind,'candidate_anchor',r.candidate_anchor,'source_root_id',r.source_root_id::text,'relative_directory',r.relative_directory)::text FROM releases r ORDER BY r.id;" \
     > "$raw_dir/${prefix}-releases.ndjson" || die "当前 releases 导出失败"
   compose_psql current-postgres "$current_pg_password" \
     "SELECT jsonb_build_object('id',m.id::text,'release_id',m.release_id::text,'position',m.position,'title',m.title,'format','')::text FROM media m ORDER BY m.release_id,m.position,m.id;" \

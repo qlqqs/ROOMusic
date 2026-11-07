@@ -36,7 +36,8 @@ describe("decodeCorrectionState", () => {
     expect(byName["title"]).toMatchObject({ scan_value: "Sample Symphonies", effective_value: "Sample Symphonies (corrected)", correction: { mode: "set", value: "Sample Symphonies (corrected)" } });
     expect(byName["year"]).toMatchObject({ scan_value: 1998, effective_value: null, correction: { mode: "null" } });
     expect(byName["year"]?.correction).not.toHaveProperty("value");
-    expect(byName["genre"]?.correction).toBeNull();
+    expect(byName["genre"]).toMatchObject({ scan_value: ["Classical", "Baroque"], effective_value: ["Romantic", "Classical"], correction: { mode: "set", value: ["Romantic", "Classical"] } });
+    expect(byName["album_artist"]?.correction).toBeNull();
   });
 
   it.each([
@@ -68,7 +69,7 @@ describe("decodeCorrectionResult", () => {
     const result = decodeCorrectionResult(patched);
     expect(result.revision).toBe(2);
     expect(result.operation_id).toMatch(/^[0-9a-f-]{36}$/);
-    expect(result.fields.filter((field) => field.correction !== null).map((field) => field.field)).toEqual(["title", "year", "label"]);
+    expect(result.fields.filter((field) => field.correction !== null).map((field) => field.field)).toEqual(["title", "year", "genre", "label"]);
   });
 
   it.each([
@@ -241,7 +242,7 @@ describe("decodeOperationPage", () => {
     expect(revert?.actor.username).toBe("curator");
     expect(correction?.release).toMatchObject({ title: "Sample Symphonies (corrected)", visible: true });
     if (correction?.changes?.kind !== "release_correction") throw new Error("应是字段修正的记录");
-    expect(correction.changes.fields.map((field) => field.field)).toEqual(["title", "year", "label"]);
+    expect(correction.changes.fields.map((field) => field.field)).toEqual(["title", "year", "genre", "label"]);
     expect(correction.changes.fields[1]).toMatchObject({ before: { correction: null, effective: 1998 }, after: { correction: { mode: "null" }, effective: null } });
   });
 

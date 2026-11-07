@@ -64,7 +64,7 @@ func TestPostgreSQLClaimablePredicate(t *testing.T) {
 	visibleCorrected := fixture.visibleRelease("可见且有修正")
 	fixture.correct(visibleCorrected.releaseID, "title", "改过")
 	trackless := fixture.release("没有曲目")
-	fixture.correct(trackless.releaseID, "genre", "古典")
+	fixture.correct(trackless.releaseID, "genre", []string{"古典"})
 
 	for name, testCase := range map[string]struct {
 		release string

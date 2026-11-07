@@ -50,7 +50,7 @@ func newVisibleClaimScenario(t *testing.T) *claimScenario {
 	scenario := &claimScenario{fixture: fixture, source: source, sibling: sibling, target: target}
 
 	fixture.mustCorrect(source.releaseID, 1, map[string]CorrectionChange{
-		"title": {Mode: catalog.CorrectionSet, Text: "我改过的标题"}, "genre": {Mode: catalog.CorrectionSet, Text: "古典"}})
+		"title": {Mode: catalog.CorrectionSet, Text: "我改过的标题"}, "genre": {Mode: catalog.CorrectionSet, Genres: []string{"古典"}}})
 	fixture.mustReview(source.releaseID, IssueSourceType, IssueReview)
 	fixture.mustReview(source.releaseID, IssueGrouping, IssueReview)
 	scenario.album = sibling.groupID
@@ -200,7 +200,7 @@ func TestPostgreSQLClaimMovesAllFourKinds(t *testing.T) {
 		t.Errorf("target corrections = %v", got)
 	}
 	effective := fixture.effectiveColumns(scenario.target.releaseID)
-	if effective["title"] != "我改过的标题" || effective["genre"] != "古典" {
+	if effective["title"] != "我改过的标题" || !reflect.DeepEqual(effective["genre"], []string{"古典"}) {
 		t.Errorf("target effective title/genre = %v / %v", effective["title"], effective["genre"])
 	}
 	if fixture.groupOf(scenario.target.releaseID) != scenario.album {
@@ -381,7 +381,7 @@ func TestPostgreSQLClaimSkipsMissingTrackReviewsAndEverythingCanBeSkipped(t *tes
 	fixture.uncertainField(scenario.target.releaseID, "source_type", "CD", []string{"CD", "SACD"})
 	fixture.groupingConflict(scenario.target.releaseID, `["x/01.flac","x/02.flac"]`)
 	fixture.mustCorrect(scenario.target.releaseID, fixture.revisionOf(scenario.target.releaseID), map[string]CorrectionChange{
-		"title": {Mode: catalog.CorrectionSet, Text: "新标题"}, "genre": {Mode: catalog.CorrectionSet, Text: "新流派"}})
+		"title": {Mode: catalog.CorrectionSet, Text: "新标题"}, "genre": {Mode: catalog.CorrectionSet, Genres: []string{"新流派"}}})
 	fixture.mustReview(scenario.target.releaseID, IssueSourceType, IssueReview)
 	fixture.mustReview(scenario.target.releaseID, IssueGrouping, IssueReview)
 	fixture.exec(`UPDATE release_groups SET default_release_id=NULL WHERE id=$1::uuid`, scenario.album)
@@ -555,7 +555,7 @@ func TestPostgreSQLClaimDetectsChangesAfterThePreview(t *testing.T) {
 		target := fixture.versionOf("新版本", 2020)
 		makeSource := func(title string) placementRelease {
 			source, _ := fixture.issueRelease(title)
-			fixture.mustCorrect(source.releaseID, 1, map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionSet, Text: "古典"}})
+			fixture.mustCorrect(source.releaseID, 1, map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionSet, Genres: []string{"古典"}}})
 			fixture.exec(`UPDATE tracks SET source_status='missing' WHERE medium_id=$1::uuid`, source.mediumID)
 			return source
 		}
@@ -729,7 +729,7 @@ func TestPostgreSQLClaimsAndOtherChangesNeverDeadlock(t *testing.T) {
 	album := fixture.versionOf("共同的专辑", 2000)
 	for index := 0; index < 3; index++ {
 		source, _ := fixture.issueRelease("旧版本")
-		fixture.mustCorrect(source.releaseID, 1, map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionSet, Text: "古典"}})
+		fixture.mustCorrect(source.releaseID, 1, map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionSet, Genres: []string{"古典"}}})
 		fixture.mustReview(source.releaseID, IssueGrouping, IssueReview)
 		fixture.mustChangeGroup(source.releaseID, fixture.revisionOf(source.releaseID), GroupJoin, album.groupID)
 		sources = append(sources, source)
@@ -782,7 +782,7 @@ func TestPostgreSQLClaimsAndOtherChangesNeverDeadlock(t *testing.T) {
 					request := ClaimRequest{ReleaseID: target.releaseID, ExpectedRevision: preview.Revision, SourceID: source.releaseID, SourceRevision: preview.SourceRevision, Preview: preview.Token}
 					err = run(operations.TypeReleaseClaim, request, ClaimExecutor(request))
 				case 3:
-					request := CorrectionRequest{ReleaseID: target.releaseID, ExpectedRevision: revisionOf(target.releaseID), Changes: map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionSet, Text: "流派" + string(rune('A'+random.Intn(3)))}}}
+					request := CorrectionRequest{ReleaseID: target.releaseID, ExpectedRevision: revisionOf(target.releaseID), Changes: map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionSet, Genres: []string{"流派" + string(rune('A'+random.Intn(3)))}}}}
 					err = run(operations.TypeReleaseCorrection, request, CorrectionExecutor(request))
 				case 4:
 					request := GroupChangeRequest{ReleaseID: target.releaseID, ExpectedRevision: revisionOf(target.releaseID), Action: GroupJoin, GroupID: album.groupID}

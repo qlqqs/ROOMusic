@@ -77,7 +77,7 @@ type ReleaseEvidenceSummary struct {
 type ReleaseDetail struct {
 	ReleaseSummary
 	CandidateKind string                   `json:"candidate_kind"`
-	Genre         *string                  `json:"genre"`
+	Genres        []string                 `json:"genres"`
 	CatalogNumber *string                  `json:"catalog_number"`
 	Edition       *string                  `json:"edition"`
 	Label         *string                  `json:"label"`

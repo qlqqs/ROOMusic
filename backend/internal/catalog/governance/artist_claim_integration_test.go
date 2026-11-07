@@ -15,7 +15,7 @@ func TestPostgreSQLArtistClaimRefreshesBothGraphsAndRevert(t *testing.T) {
 	scenario := &claimScenario{fixture: f, source: source, target: target, album: source.groupID}
 	scenario.hide()
 	// missing 由旧夹具模拟；通过目标的真实修正刷新主名票数，不手调图刷新器。
-	f.mustCorrect(target.releaseID, f.revisionOf(target.releaseID), map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionSet, Text: "来源已缺失"}})
+	f.mustCorrect(target.releaseID, f.revisionOf(target.releaseID), map[string]CorrectionChange{"genre": {Mode: catalog.CorrectionSet, Genres: []string{"来源已缺失"}}})
 	p.assertRelease(source, artistProjectionCorrection, "correction", false)
 	p.assertRelease(target, artistProjectionScan, "scan", true)
 	p.assertProfile(artistProjectionScan)

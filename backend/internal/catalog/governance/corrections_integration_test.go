@@ -48,24 +48,24 @@ func TestParseCorrectionChanges(t *testing.T) {
 	for name, raw := range map[string]map[string]RawCorrectionChange{
 		"unknown field":                  {"source_type": rawChange("set", `"CD"`)},
 		"track-level field":              {"track_title": rawChange("set", `"x"`)},
-		"unknown mode":                   {"genre": rawChange("replace", `"x"`)},
-		"missing mode":                   {"genre": rawChange("", `"x"`)},
+		"unknown mode":                   {"genre": rawChange("replace", `["x"]`)},
+		"missing mode":                   {"genre": rawChange("", `["x"]`)},
 		"title set to empty":             {"title": rawChange("null", "")},
 		"album artist set to empty":      {"album_artist": rawChange("null", "")},
 		"set without a value":            {"genre": rawChange("set", "")},
 		"set with a null value":          {"genre": rawChange("set", "null")},
-		"blank text":                     {"genre": rawChange("set", `"   \t "`)},
-		"control character":              {"genre": rawChange("set", `"a\u0007b"`)},
-		"text over the byte limit":       {"genre": rawChange("set", `"`+strings.Repeat("x", maxCorrectionTextBytes+1)+`"`)},
+		"blank text":                     {"genre": rawChange("set", `["   \t "]`)},
+		"control character":              {"genre": rawChange("set", `["a\u0007b"]`)},
+		"text over the byte limit":       {"genre": rawChange("set", `["`+strings.Repeat("x", maxCorrectionTextBytes+1)+`"]`)},
 		"year zero":                      {"year": rawChange("set", `0`)},
 		"year too large":                 {"year": rawChange("set", `10000`)},
 		"year with a fraction":           {"year": rawChange("set", `1975.5`)},
 		"year as text":                   {"year": rawChange("set", `"1975"`)},
 		"text field given a number":      {"genre": rawChange("set", `1975`)},
 		"text field given an object":     {"genre": rawChange("set", `{"a":1}`)},
-		"clear with a value":             {"genre": rawChange("clear", `"x"`)},
-		"null with a value":              {"genre": rawChange("null", `"x"`)},
-		"one invalid among valid items":  {"genre": rawChange("set", `"古典"`), "year": rawChange("set", `0`)},
+		"clear with a value":             {"genre": rawChange("clear", `["x"]`)},
+		"null with a value":              {"genre": rawChange("null", `["x"]`)},
+		"one invalid among valid items":  {"genre": rawChange("set", `["古典"]`), "year": rawChange("set", `0`)},
 		"a valid item cannot hide a bad": {"label": rawChange("set", `"厂牌"`), "nope": rawChange("clear", "")},
 	} {
 		_, err := ParseCorrectionChanges(raw)
@@ -73,9 +73,18 @@ func TestParseCorrectionChanges(t *testing.T) {
 		if !errors.As(err, &failure) || failure.Code != "invalid_correction" || failure.Class != operations.ClassInvalid || failure.Message == "" {
 			t.Errorf("%s: error = %v, want an invalid_correction failure", name, err)
 		}
+		if failure != nil {
+			wantMessage := map[string]string{
+				"control character":        "流派含有不允许的字符",
+				"text over the byte limit": "流派超过 4096 字节",
+			}[name]
+			if wantMessage != "" && failure.Message != wantMessage {
+				t.Errorf("%s: message = %q, want %q", name, failure.Message, wantMessage)
+			}
+		}
 	}
 	// 恰好 4096 字节的文本可以接受。
-	if _, err := ParseCorrectionChanges(map[string]RawCorrectionChange{"genre": rawChange("set", `"`+strings.Repeat("x", maxCorrectionTextBytes)+`"`)}); err != nil {
+	if _, err := ParseCorrectionChanges(map[string]RawCorrectionChange{"genre": rawChange("set", `["`+strings.Repeat("x", maxCorrectionTextBytes)+`"]`)}); err != nil {
 		t.Errorf("text of exactly %d bytes was rejected: %v", maxCorrectionTextBytes, err)
 	}
 }
@@ -101,11 +110,13 @@ func TestCorrectionFingerprintCoversTheCompleteSemantics(t *testing.T) {
 		return request.Fingerprint()
 	}
 	for name, mutate := range map[string]func(*CorrectionRequest){
-		"another release":       func(r *CorrectionRequest) { r.ReleaseID = "11111111-89ab-cdef-0123-456789abcdef" },
-		"another revision":      func(r *CorrectionRequest) { r.ExpectedRevision = 2 },
-		"another text":          func(r *CorrectionRequest) { r.Changes["title"] = CorrectionChange{Mode: "set", Text: "别的标题"} },
-		"another year":          func(r *CorrectionRequest) { r.Changes["year"] = CorrectionChange{Mode: "set", Year: 1991} },
-		"set instead of null":   func(r *CorrectionRequest) { r.Changes["genre"] = CorrectionChange{Mode: "set", Text: "古典"} },
+		"another release":  func(r *CorrectionRequest) { r.ReleaseID = "11111111-89ab-cdef-0123-456789abcdef" },
+		"another revision": func(r *CorrectionRequest) { r.ExpectedRevision = 2 },
+		"another text":     func(r *CorrectionRequest) { r.Changes["title"] = CorrectionChange{Mode: "set", Text: "别的标题"} },
+		"another year":     func(r *CorrectionRequest) { r.Changes["year"] = CorrectionChange{Mode: "set", Year: 1991} },
+		"set instead of null": func(r *CorrectionRequest) {
+			r.Changes["genre"] = CorrectionChange{Mode: "set", Genres: []string{"古典"}}
+		},
 		"null instead of set":   func(r *CorrectionRequest) { r.Changes["title"] = CorrectionChange{Mode: "null"} },
 		"clear instead of set":  func(r *CorrectionRequest) { r.Changes["year"] = CorrectionChange{Mode: "clear"} },
 		"set instead of clear":  func(r *CorrectionRequest) { r.Changes["label"] = CorrectionChange{Mode: "set", Text: "厂牌"} },
@@ -195,7 +206,7 @@ func TestPostgreSQLCorrectionStateTransitions(t *testing.T) {
 	fixture := newCorrectionFixture(t)
 	ctx := context.Background()
 	release := fixture.visibleRelease("原标题")
-	fixture.exec(`UPDATE releases SET artist='扫描艺人', album_artist=NULL, year=0, genre='扫描流派', label=NULL WHERE id=$1::uuid`, release.releaseID)
+	fixture.exec(`UPDATE releases SET artist='扫描艺人', album_artist=NULL, year=0, genres=ARRAY['扫描流派'], label=NULL WHERE id=$1::uuid`, release.releaseID)
 
 	// 初始状态：没有修正；没有专辑艺人时扫描值是展示艺人；年份 0 与缺失的文本是 null。
 	state, err := fixture.governance.LoadCorrectionState(ctx, release.releaseID)
@@ -213,7 +224,7 @@ func TestPostgreSQLCorrectionStateTransitions(t *testing.T) {
 	if got := fieldOf(t, state, "year"); got.ScanValue != nil || got.EffectiveValue != nil {
 		t.Errorf("year 0 = %+v, want null", got)
 	}
-	if got := fieldOf(t, state, "genre"); got.ScanValue != "扫描流派" || got.EffectiveValue != "扫描流派" {
+	if got := fieldOf(t, state, "genre"); !reflect.DeepEqual(got.ScanValue, []string{"扫描流派"}) || !reflect.DeepEqual(got.EffectiveValue, []string{"扫描流派"}) {
 		t.Errorf("genre = %+v", got)
 	}
 
@@ -230,7 +241,7 @@ func TestPostgreSQLCorrectionStateTransitions(t *testing.T) {
 	if got := fieldOf(t, state, "year"); got.ScanValue != nil || got.EffectiveValue != 1975 || got.Correction == nil || got.Correction.Value != 1975 {
 		t.Errorf("year = %+v", got)
 	}
-	if got := fieldOf(t, state, "genre"); got.ScanValue != "扫描流派" || got.EffectiveValue != nil || got.Correction == nil || got.Correction.Mode != "null" || got.Correction.Value != nil {
+	if got := fieldOf(t, state, "genre"); !reflect.DeepEqual(got.ScanValue, []string{"扫描流派"}) || got.EffectiveValue != nil || got.Correction == nil || got.Correction.Mode != "null" || got.Correction.Value != nil {
 		t.Errorf("genre set to empty = %+v", got)
 	}
 	if got := fieldOf(t, state, "label"); got.ScanValue != nil || got.EffectiveValue != "新厂牌" {
@@ -292,14 +303,14 @@ func TestPostgreSQLCorrectionStateTransitions(t *testing.T) {
 	if err := fixture.database.QueryRow(`SELECT operation_id::text FROM release_corrections WHERE release_id=$1::uuid AND field='title'`, release.releaseID).Scan(&titleOperation); err != nil || titleOperation != replaced.OperationID {
 		t.Errorf("the replaced title correction references %q (%v), want the operation that replaced it, %s", titleOperation, err, replaced.OperationID)
 	}
-	fixture.exec(`UPDATE releases SET title='重扫后的标题', genre='重扫流派', year=2001 WHERE id=$1::uuid`, release.releaseID) // 模拟重扫
+	fixture.exec(`UPDATE releases SET title='重扫后的标题', genres=ARRAY['重扫流派'], year=2001 WHERE id=$1::uuid`, release.releaseID) // 模拟重扫
 	state = fixture.mustCorrect(release.releaseID, 4, map[string]CorrectionChange{
 		"title": {Mode: "clear"}, "genre": {Mode: "clear"}, "year": {Mode: "clear"},
 	}).CorrectionState
 	if got := fieldOf(t, state, "title"); got.EffectiveValue != "重扫后的标题" || got.Correction != nil {
 		t.Errorf("title after clearing = %+v, want the rescanned value", got)
 	}
-	if got := fieldOf(t, state, "genre"); got.EffectiveValue != "重扫流派" || got.Correction != nil {
+	if got := fieldOf(t, state, "genre"); !reflect.DeepEqual(got.EffectiveValue, []string{"重扫流派"}) || got.Correction != nil {
 		t.Errorf("genre after clearing = %+v, want the rescanned value", got)
 	}
 	if got := fieldOf(t, state, "year"); got.EffectiveValue != 2001 || got.Correction != nil {
@@ -316,6 +327,31 @@ func TestPostgreSQLCorrectionStateTransitions(t *testing.T) {
 	if err := fixture.database.QueryRow(`SELECT operation_id::text FROM release_corrections WHERE release_id=$1::uuid AND field='barcode'`, release.releaseID).Scan(&referencing); err != nil || referencing != result.OperationID {
 		t.Errorf("the barcode correction references %q (%v), want the operation that set it, %s", referencing, err, result.OperationID)
 	}
+
+	records = fixture.operationCount()
+	// 流派设两项，再留空，撤销留空后恢复完整列表及原顺序。
+	genres := []string{"国语流行乐", "台语流行乐"}
+	state = fixture.mustCorrect(release.releaseID, state.Revision, map[string]CorrectionChange{
+		"genre": {Mode: catalog.CorrectionSet, Genres: genres},
+	}).CorrectionState
+	if got := fieldOf(t, state, "genre"); !reflect.DeepEqual(got.EffectiveValue, genres) || got.Correction == nil ||
+		got.Correction.Mode != catalog.CorrectionSet || !reflect.DeepEqual(got.Correction.Value, genres) || got.Uncertain {
+		t.Fatalf("流派设两项后的状态 = %+v", got)
+	}
+	emptied := fixture.mustCorrect(release.releaseID, state.Revision, map[string]CorrectionChange{
+		"genre": {Mode: catalog.CorrectionNull},
+	})
+	if got := fieldOf(t, emptied.CorrectionState, "genre"); got.EffectiveValue != nil || got.Correction == nil ||
+		got.Correction.Mode != catalog.CorrectionNull || got.Correction.Value != nil {
+		t.Fatalf("流派留空后的状态 = %+v", got)
+	}
+	fixture.mustRevert(CorrectionOperations(), emptied.OperationID)
+	state = mustState(t, fixture, release.releaseID)
+	if got := fieldOf(t, state, "genre"); !reflect.DeepEqual(got.ScanValue, []string{"重扫流派"}) || !reflect.DeepEqual(got.EffectiveValue, genres) ||
+		got.Correction == nil || got.Correction.Mode != catalog.CorrectionSet || !reflect.DeepEqual(got.Correction.Value, genres) ||
+		state.Revision != emptied.Revision+1 || fixture.operationCount() != records+3 {
+		t.Fatalf("撤销流派留空后的状态 = %+v，版本 %d，记录数 %d", got, state.Revision, fixture.operationCount())
+	}
 }
 
 func TestPostgreSQLCorrectionRejectsStaleInvisibleAndUnknownReleases(t *testing.T) {
@@ -323,16 +359,16 @@ func TestPostgreSQLCorrectionRejectsStaleInvisibleAndUnknownReleases(t *testing.
 	release := fixture.visibleRelease("专辑")
 	hidden := fixture.release("只有缺失曲目")
 	fixture.track(hidden, "缺失", "missing", 10.0)
-	changes := map[string]CorrectionChange{"genre": {Mode: "set", Text: "古典"}}
+	changes := map[string]CorrectionChange{"genre": {Mode: "set", Genres: []string{"古典"}}}
 
 	fixture.mustCorrect(release.releaseID, 1, changes)
 	// 过期版本：没有任何变化，不写记录。
 	records := fixture.operationCount()
-	_, err := fixture.correctRelease(release.releaseID, 1, map[string]CorrectionChange{"genre": {Mode: "set", Text: "爵士"}})
+	_, err := fixture.correctRelease(release.releaseID, 1, map[string]CorrectionChange{"genre": {Mode: "set", Genres: []string{"爵士"}}})
 	if status, code, _ := operations.Problem(err); status != 409 || code != "revision_conflict" {
 		t.Fatalf("stale revision: error = %v (status %d, code %q), want 409 revision_conflict", err, status, code)
 	}
-	if got := fieldOf(t, mustState(t, fixture, release.releaseID), "genre"); got.EffectiveValue != "古典" || fixture.operationCount() != records {
+	if got := fieldOf(t, mustState(t, fixture, release.releaseID), "genre"); !reflect.DeepEqual(got.EffectiveValue, []string{"古典"}) || fixture.operationCount() != records {
 		t.Fatalf("a stale request changed the value to %v or recorded an operation", got.EffectiveValue)
 	}
 	// 版本号超前同样冲突。

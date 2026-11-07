@@ -44,6 +44,10 @@ func setAudioTag(observation *AudioObservation, key, value string) error {
 	if err := captureArtistTag(observation, key, value); err != nil {
 		return err
 	}
+	if strings.EqualFold(key, "GENRE") {
+		observation.Genres = metadata.SplitGenres(append(observation.Genres, value)...)
+		return nil
+	}
 	value = metadata.BoundedText(value)
 	switch strings.ToUpper(key) {
 	case "TITLE", "TRACKTITLE":
@@ -56,8 +60,6 @@ func setAudioTag(observation *AudioObservation, key, value string) error {
 		observation.TrackNumber = parseNumber(value)
 	case "DISCNUMBER":
 		observation.DiscNumber = parseNumber(value)
-	case "GENRE":
-		observation.Genre = value
 	case "DATE", "YEAR":
 		observation.Year = ParseYear(value)
 	case "CATALOG", "CATALOGNUMBER", "CATALOGNO":

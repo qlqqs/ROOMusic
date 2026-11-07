@@ -55,7 +55,7 @@ describe("专辑详情：单版本", () => {
     await screen.findByText("Track 1-01");
 
     expect(headerFact("年份")).toBe("1998");
-    expect(headerFact("流派")).toBe("Classical");
+    expect(headerFact("流派")).toBe("Classical · Baroque");
     expect(headerFact("介质")).toBe("2 张");
     expect(headerFact("曲目")).toBe("3 首");
     expect(headerFact("总时长")).toBe("5:44");
@@ -105,7 +105,7 @@ describe("专辑详情：单版本", () => {
     const { catalog } = setup({ groups: [album] });
     catalog.releases.set(
       album.representative.id,
-      releaseDetailOf(album.representative, { genre: null, catalog_number: null, edition: null, label: null, barcode: null, credits: [] }),
+      releaseDetailOf(album.representative, { genres: [], catalog_number: null, edition: null, label: null, barcode: null, credits: [] }),
     );
     renderApp({ path: `/albums/${album.id}` });
     await screen.findByText("Track 1-01");

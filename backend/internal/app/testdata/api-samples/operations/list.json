@@ -134,6 +134,29 @@
               "after": {
                 "correction": {
                   "mode": "set",
+                  "value": [
+                    "Romantic",
+                    "Classical"
+                  ]
+                },
+                "effective": [
+                  "Romantic",
+                  "Classical"
+                ]
+              },
+              "before": {
+                "correction": null,
+                "effective": [
+                  "Classical",
+                  "Baroque"
+                ]
+              },
+              "field": "genre"
+            },
+            {
+              "after": {
+                "correction": {
+                  "mode": "set",
                   "value": "Corrected Label"
                 },
                 "effective": "Corrected Label"

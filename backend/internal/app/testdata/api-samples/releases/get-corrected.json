@@ -17,6 +17,7 @@
     "corrected_fields": [
       "title",
       "year",
+      "genre",
       "label"
     ],
     "credits": [
@@ -67,7 +68,7 @@
         "action": "auto_apply",
         "confidence": "high",
         "field": "genre",
-        "rule_id": "majority_v1",
+        "rule_id": "genre_union_v1",
         "source": "tag"
       },
       {
@@ -92,7 +93,10 @@
         "source": "tag"
       }
     ],
-    "genre": "Classical",
+    "genres": [
+      "Romantic",
+      "Classical"
+    ],
     "id": "00000000-0000-4000-8000-000000000001",
     "label": "Corrected Label",
     "media": [

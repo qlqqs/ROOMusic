@@ -3,6 +3,7 @@ package catalog
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 )
 
 // 修正的三种修改方式：set 与 null 是存下来的意图，clear 删除意图（回到当前的扫描值）。
@@ -16,7 +17,7 @@ const (
 type CorrectableField struct {
 	Name     string
 	Label    string // 用于错误说明的中文名
-	IsYear   bool   // 年份是整数，其余是文本
+	IsYear   bool   // 年份是整数，流派是文本列表，其余是文本
 	Required bool   // 不能设为空：标题与专辑艺人
 }
 
@@ -49,7 +50,7 @@ type CorrectionIntent struct {
 
 // LoadCorrectionIntents 读取发行当前的修正意图，键是字段名。
 func LoadCorrectionIntents(ctx context.Context, database Queryer, releaseID string) (map[string]CorrectionIntent, error) {
-	rows, err := database.QueryContext(ctx, `SELECT field, mode, text_value, year_value FROM release_corrections WHERE release_id=$1::uuid`, releaseID)
+	rows, err := database.QueryContext(ctx, `SELECT field, mode, text_value, year_value, to_jsonb(list_value)::text FROM release_corrections WHERE release_id=$1::uuid`, releaseID)
 	if err != nil {
 		return nil, err
 	}
@@ -57,14 +58,20 @@ func LoadCorrectionIntents(ctx context.Context, database Queryer, releaseID stri
 	intents := map[string]CorrectionIntent{}
 	for rows.Next() {
 		var name, mode string
-		var text sql.NullString
+		var text, listJSON sql.NullString
 		var year sql.NullInt64
-		if err := rows.Scan(&name, &mode, &text, &year); err != nil {
+		if err := rows.Scan(&name, &mode, &text, &year, &listJSON); err != nil {
 			return nil, err
 		}
 		intent := CorrectionIntent{Mode: mode}
 		switch {
 		case mode != CorrectionSet:
+		case name == "genre":
+			var genres []string
+			if err := json.Unmarshal([]byte(listJSON.String), &genres); err != nil {
+				return nil, err
+			}
+			intent.Value = genres
 		case year.Valid:
 			intent.Value = int(year.Int64)
 		default:

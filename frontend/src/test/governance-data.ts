@@ -26,8 +26,9 @@ import { failure, groupDetailFor, releaseDetailFor, releaseSummaryFor, type ApiR
 // 修改会反映到共用的专辑数据（列表、组详情、版本详情），所以页面在写操作之后读到的是新的有效值。
 // 与 catalog-data.ts 一样只依赖解码器与样本读取，不依赖 vitest 或应用代码：Vitest 的替身（fake-governance.ts）与 Playwright 的受控后端共用。
 
-type Intent = { mode: "set"; value: string | number } | { mode: "null" } | null;
-type Scalar = string | number | null;
+// 流派的值是列表（扫描没有流派时是 null）。
+type Intent = { mode: "set"; value: string | number | string[] } | { mode: "null" } | null;
+type Scalar = string | number | string[] | null;
 
 type ReleaseState = {
   /** 扫描值（专辑艺人是页面显示的值：没有专辑艺人时是艺人）。 */
@@ -124,7 +125,7 @@ function stateOf(data: GovernanceData, releaseId: string): ReleaseState | undefi
       title: detail.title,
       album_artist: detail.album_artist ?? detail.artist,
       year: detail.year,
-      genre: detail.genre,
+      genre: detail.genres.length === 0 ? null : detail.genres,
       label: detail.label,
       catalog_number: detail.catalog_number,
       edition: detail.edition,
@@ -270,7 +271,10 @@ function syncRelease(data: GovernanceData, releaseId: string): void {
   data.catalog.releases.set(releaseId, {
     ...detail,
     ...summaryPatch,
-    genre: text("genre"),
+    genres: (() => {
+      const value = effectiveOf(state, "genre");
+      return Array.isArray(value) ? value : [];
+    })(),
     label: text("label"),
     catalog_number: text("catalog_number"),
     edition: text("edition"),
@@ -327,10 +331,12 @@ function intentOf(change: RawChange): Intent | "invalid" {
   if (change.mode === "clear") return null;
   if (change.mode === "null") return { mode: "null" };
   if (change.mode === "set" && (typeof change.value === "string" || typeof change.value === "number")) return { mode: "set", value: change.value };
+  if (change.mode === "set" && Array.isArray(change.value) && change.value.length > 0 && change.value.every((item) => typeof item === "string")) return { mode: "set", value: change.value as string[] };
   return "invalid";
 }
 
-const sameIntent = (a: Intent, b: Intent) => (a === null || b === null ? a === b : a.mode === b.mode && (a.mode === "null" || (b.mode === "set" && a.value === b.value)));
+const sameIntent = (a: Intent, b: Intent) =>
+  a === null || b === null ? a === b : a.mode === b.mode && (a.mode === "null" || (b.mode === "set" && JSON.stringify(a.value) === JSON.stringify(b.value)));
 
 export function respondToCorrect(data: GovernanceData, releaseId: string, key: string | null, body: unknown): ApiResult {
   const { expected_revision: expectedRevision, changes = {} } = (body ?? {}) as RawCorrectionBody;
@@ -910,7 +916,7 @@ export function respondToClaimHints(data: GovernanceData, releaseId: string): Ap
 const CLAIM_REVIEW_ORDER: readonly ReviewableIssue[] = ["source_type", "media_type", "grouping", "missing_tracks"];
 
 /** 目标现在的修正意图（与旧版本的 correction 同形状）。 */
-function intentDTO(intent: Intent): { mode: "set"; value: string | number } | { mode: "null" } | undefined {
+function intentDTO(intent: Intent): { mode: "set"; value: string | number | string[] } | { mode: "null" } | undefined {
   if (intent === null) return undefined;
   return intent.mode === "null" ? { mode: "null" } : { mode: "set", value: intent.value };
 }

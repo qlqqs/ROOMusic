@@ -36,7 +36,7 @@ export function suggestionOf(group: ReleaseGroupSummaryDTO, reasons: readonly st
 export function claimDetail(index: number, overrides: ClaimOverrides = {}): ClaimDetailDTO {
   const corrections = overrides.corrections ?? [
     { field: "title", correction: { mode: "set", value: `Old Edition ${index} (corrected)` }, scan_value: `Old Edition ${index}` },
-    { field: "genre", correction: { mode: "set", value: "Baroque" }, scan_value: null },
+    { field: "genre", correction: { mode: "set", value: ["Baroque"] }, scan_value: null },
   ];
   const album = overrides.album === undefined ? null : overrides.album;
   const reviews = overrides.reviews ?? [];

@@ -278,8 +278,8 @@ func createCatalogReleaseFixture(t *testing.T, application *integrationTestAppli
 		t.Fatalf("insert release group fixture: %v", err)
 	}
 	if _, err := application.database.Exec(`INSERT INTO releases(
-		id,group_id,title,artist,album_artist,year,source_type,media_type,genre,catalog_number,edition,label,barcode,source_root_id,relative_directory,candidate_anchor,candidate_kind
-	) VALUES($1::uuid,$2::uuid,$3,$4,$4,2026,NULL,'CD','Jazz','CAT-001','初回限定版','示例唱片公司','0123456789012',$5::uuid,$6,$7,'ordinary_directory')`, releaseID, groupID, title, artist, rootID, anchorSuffix, rootID+":v2:"+anchorSuffix); err != nil {
+		id,group_id,title,artist,album_artist,year,source_type,media_type,genres,catalog_number,edition,label,barcode,source_root_id,relative_directory,candidate_anchor,candidate_kind
+	) VALUES($1::uuid,$2::uuid,$3,$4,$4,2026,NULL,'CD',ARRAY['Jazz']::text[],'CAT-001','初回限定版','示例唱片公司','0123456789012',$5::uuid,$6,$7,'ordinary_directory')`, releaseID, groupID, title, artist, rootID, anchorSuffix, rootID+":v2:"+anchorSuffix); err != nil {
 		t.Fatalf("insert release fixture: %v", err)
 	}
 	if _, err := application.database.Exec(`INSERT INTO media(id,release_id,position,title) VALUES($1::uuid,$2::uuid,1,'Medium')`, mediumID, releaseID); err != nil {

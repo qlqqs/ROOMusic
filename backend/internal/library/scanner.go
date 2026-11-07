@@ -537,7 +537,7 @@ func cueTrackCanBeStaged(track parser.CueTrack) bool {
 }
 
 func buildPhysicalSourceObservation(observation parser.AudioObservation, relativePath string) ingest.SourceObservation {
-	return ingest.SourceObservation{RelativePath: relativePath, Directory: ingest.DirectoryOf(relativePath), Title: observation.Title, Album: observation.Album, AlbumArtist: observation.AlbumArtist, Artist: observation.Artist, SourceType: observation.SourceType, MediaType: observation.MediaType, Genre: observation.Genre, CatalogNumber: observation.Catalog, Edition: observation.Edition, Label: observation.Label, Barcode: observation.Barcode, Year: observation.Year, TrackNumber: observation.TrackNumber, DiscNumber: observation.DiscNumber, SourceKind: observation.SourceKind, InferredFields: observation.InferredFields, FieldSources: observationFieldSources(observation), DurationSeconds: observation.DurationSeconds, Codec: observation.Codec, BitDepth: observation.BitDepth, SampleRate: observation.SampleRate, Channels: observation.Channels, Bitrate: observation.Bitrate, Artwork: observation.Artwork, ArtworkMIME: observation.ArtworkMIME, Credits: append([]metadata.Credit(nil), observation.Credits...), ArtistTagEvidence: append([]metadata.ArtistTagEvidence(nil), observation.ArtistTagEvidence...), Lyrics: observation.Lyrics, LyricsSource: observation.LyricsSource, ContentFingerprint: observation.ContentFingerprint}
+	return ingest.SourceObservation{RelativePath: relativePath, Directory: ingest.DirectoryOf(relativePath), Title: observation.Title, Album: observation.Album, AlbumArtist: observation.AlbumArtist, Artist: observation.Artist, SourceType: observation.SourceType, MediaType: observation.MediaType, Genres: append([]string(nil), observation.Genres...), CatalogNumber: observation.Catalog, Edition: observation.Edition, Label: observation.Label, Barcode: observation.Barcode, Year: observation.Year, TrackNumber: observation.TrackNumber, DiscNumber: observation.DiscNumber, SourceKind: observation.SourceKind, InferredFields: observation.InferredFields, FieldSources: observationFieldSources(observation), DurationSeconds: observation.DurationSeconds, Codec: observation.Codec, BitDepth: observation.BitDepth, SampleRate: observation.SampleRate, Channels: observation.Channels, Bitrate: observation.Bitrate, Artwork: observation.Artwork, ArtworkMIME: observation.ArtworkMIME, Credits: append([]metadata.Credit(nil), observation.Credits...), ArtistTagEvidence: append([]metadata.ArtistTagEvidence(nil), observation.ArtistTagEvidence...), Lyrics: observation.Lyrics, LyricsSource: observation.LyricsSource, ContentFingerprint: observation.ContentFingerprint}
 }
 
 func buildCueVirtualObservation(parent parser.AudioObservation, document parser.CueDocument, cue parser.CueTrack, sheetRelativePath string) ingest.SourceObservation {
@@ -555,12 +555,16 @@ func buildCueVirtualObservation(parent parser.AudioObservation, document parser.
 		observation.AlbumArtist = sheetArtist
 		fieldSources["album_artist"] = "cue_sheet"
 	}
-	observation.Genre = firstNonEmpty(cue.Genre, document.Genre, observation.Genre)
-	observation.Catalog = firstNonEmpty(cue.Catalog, document.Catalog, observation.Catalog)
-	observation.ISRC = cue.ISRC
-	if firstNonEmpty(cue.Genre, document.Genre) != "" {
+	genres := metadata.SplitGenres(cue.Genre)
+	if len(genres) == 0 {
+		genres = metadata.SplitGenres(document.Genre)
+	}
+	if len(genres) > 0 {
+		observation.Genres = genres
 		fieldSources["genre"] = "cue_sheet"
 	}
+	observation.Catalog = firstNonEmpty(cue.Catalog, document.Catalog, observation.Catalog)
+	observation.ISRC = cue.ISRC
 	if firstNonEmpty(cue.Catalog, document.Catalog) != "" {
 		fieldSources["catalog_number"] = "cue_sheet"
 	}
@@ -602,7 +606,7 @@ func buildCueVirtualObservation(parent parser.AudioObservation, document parser.
 		Artist:                observation.Artist,
 		SourceType:            observation.SourceType,
 		MediaType:             observation.MediaType,
-		Genre:                 observation.Genre,
+		Genres:                append([]string(nil), observation.Genres...),
 		CatalogNumber:         observation.Catalog,
 		Edition:               observation.Edition,
 		Label:                 observation.Label,

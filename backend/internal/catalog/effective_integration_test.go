@@ -3,6 +3,7 @@ package catalog
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -32,7 +33,7 @@ func (fixture *effectiveFixture) visibleRelease(title string) placementRelease {
 	return release
 }
 
-// correct 设下一条修正意图（替换该字段已有的意图）：value 是 nil 表示明确设为空，int 是年份，string 是文本值。
+// correct 设下一条修正意图（替换该字段已有的意图）：value 是 nil 表示明确设为空，int 是年份，[]string 是流派列表，string 是文本值。
 func (fixture *effectiveFixture) correct(releaseID, field string, value any) {
 	fixture.t.Helper()
 	transaction, err := fixture.database.Begin()
@@ -53,6 +54,8 @@ func (fixture *effectiveFixture) correct(releaseID, field string, value any) {
 	switch value.(type) {
 	case nil:
 		statement, arguments = `INSERT INTO release_corrections(release_id,field,mode,operation_id) VALUES($1::uuid,$2,'null',$3::uuid)`, []any{releaseID, field, operationID}
+	case []string:
+		statement = `INSERT INTO release_corrections(release_id,field,mode,list_value,operation_id) VALUES($1::uuid,$2,'set',$3,$4::uuid)`
 	case int:
 		statement = `INSERT INTO release_corrections(release_id,field,mode,year_value,operation_id) VALUES($1::uuid,$2,'set',$3,$4::uuid)`
 	default:
@@ -71,15 +74,20 @@ func (fixture *effectiveFixture) clearCorrection(releaseID, field string) {
 	fixture.exec(`DELETE FROM release_corrections WHERE release_id=$1::uuid AND field=$2`, releaseID, field)
 }
 
-// effectiveColumns 读取视图里所有可修正的列（NULL 读成 nil）。
+// effectiveColumns 读取视图里所有可修正的列（NULL 读成 nil，流派读成列表）。
 func (fixture *effectiveFixture) effectiveColumns(releaseID string) map[string]any {
 	fixture.t.Helper()
 	var title, artist string
-	var albumArtist, genre, catalogNumber, edition, label, barcode sql.NullString
+	var albumArtist, catalogNumber, edition, label, barcode sql.NullString
+	var genresJSON string
+	var genres []string
 	var year sql.NullInt64
-	if err := fixture.database.QueryRow(`SELECT title,artist,album_artist,year,genre,catalog_number,edition,label,barcode FROM release_effective WHERE id=$1::uuid`, releaseID).
-		Scan(&title, &artist, &albumArtist, &year, &genre, &catalogNumber, &edition, &label, &barcode); err != nil {
+	if err := fixture.database.QueryRow(`SELECT title,artist,album_artist,year,to_jsonb(genres)::text,catalog_number,edition,label,barcode FROM release_effective WHERE id=$1::uuid`, releaseID).
+		Scan(&title, &artist, &albumArtist, &year, &genresJSON, &catalogNumber, &edition, &label, &barcode); err != nil {
 		fixture.t.Fatalf("read effective columns: %v", err)
+	}
+	if err := json.Unmarshal([]byte(genresJSON), &genres); err != nil {
+		fixture.t.Fatalf("decode effective genres: %v", err)
 	}
 	nullable := func(value sql.NullString) any {
 		if !value.Valid {
@@ -87,7 +95,7 @@ func (fixture *effectiveFixture) effectiveColumns(releaseID string) map[string]a
 		}
 		return value.String
 	}
-	columns := map[string]any{"title": title, "artist": artist, "album_artist": nullable(albumArtist), "genre": nullable(genre),
+	columns := map[string]any{"title": title, "artist": artist, "album_artist": nullable(albumArtist), "genres": genres,
 		"catalog_number": nullable(catalogNumber), "edition": nullable(edition), "label": nullable(label), "barcode": nullable(barcode), "year": nil}
 	if year.Valid {
 		columns["year"] = int(year.Int64)
@@ -107,18 +115,18 @@ func TestPostgreSQLEffectiveViewEqualsTheTableWithoutCorrections(t *testing.T) {
 	plain := fixture.visibleRelease("普通")
 	quirky := fixture.visibleRelease("扫描值怪异")
 	sparse := fixture.visibleRelease("稀疏")
-	fixture.exec(`UPDATE releases SET album_artist='', year=0, genre=NULL, label='厂牌', catalog_number='  ', edition='再版', source_type='CD' WHERE id=$1::uuid`, quirky.releaseID)
-	fixture.exec(`UPDATE releases SET album_artist=NULL, year=NULL, genre='古典', barcode='4988000000000', media_type='FLAC' WHERE id=$1::uuid`, sparse.releaseID)
+	fixture.exec(`UPDATE releases SET album_artist='', year=0, genres='{}', label='厂牌', catalog_number='  ', edition='再版', source_type='CD' WHERE id=$1::uuid`, quirky.releaseID)
+	fixture.exec(`UPDATE releases SET album_artist=NULL, year=NULL, genres=ARRAY['古典','巴洛克'], barcode='4988000000000', media_type='FLAC' WHERE id=$1::uuid`, sparse.releaseID)
 	_ = plain
 
 	var total, effective, different int
 	if err := fixture.database.QueryRow(`SELECT (SELECT COUNT(*) FROM releases), (SELECT COUNT(*) FROM release_effective),
 		(SELECT COUNT(*) FROM releases r JOIN release_effective e ON e.id = r.id WHERE
 			(r.group_id, r.title, r.artist, r.created_at, r.source_root_id, r.relative_directory, r.candidate_anchor, r.candidate_kind, r.album_artist,
-			 r.year, r.source_type, r.media_type, r.genre, r.catalog_number, r.edition, r.label, r.barcode, r.edit_revision)
+			 r.year, r.source_type, r.media_type, r.genres, r.catalog_number, r.edition, r.label, r.barcode, r.edit_revision)
 			IS DISTINCT FROM
 			(e.group_id, e.title, e.artist, e.created_at, e.source_root_id, e.relative_directory, e.candidate_anchor, e.candidate_kind, e.album_artist,
-			 e.year, e.source_type, e.media_type, e.genre, e.catalog_number, e.edition, e.label, e.barcode, e.edit_revision))`).
+			 e.year, e.source_type, e.media_type, e.genres, e.catalog_number, e.edition, e.label, e.barcode, e.edit_revision))`).
 		Scan(&total, &effective, &different); err != nil {
 		t.Fatalf("compare the view with the table: %v", err)
 	}
@@ -130,8 +138,8 @@ func TestPostgreSQLEffectiveViewEqualsTheTableWithoutCorrections(t *testing.T) {
 func TestPostgreSQLEffectiveViewAppliesAndRemovesCorrectionsPerField(t *testing.T) {
 	fixture := newEffectiveFixture(t)
 	release := fixture.visibleRelease("原标题")
-	fixture.exec(`UPDATE releases SET artist='扫描艺人', album_artist='扫描专辑艺人', year=1998, genre='扫描流派', catalog_number='SC-1', edition='扫描版本', label='扫描厂牌', barcode='111' WHERE id=$1::uuid`, release.releaseID)
-	scanned := map[string]any{"title": "原标题", "artist": "扫描艺人", "album_artist": "扫描专辑艺人", "year": 1998, "genre": "扫描流派",
+	fixture.exec(`UPDATE releases SET artist='扫描艺人', album_artist='扫描专辑艺人', year=1998, genres=ARRAY['扫描流派','次流派'], catalog_number='SC-1', edition='扫描版本', label='扫描厂牌', barcode='111' WHERE id=$1::uuid`, release.releaseID)
+	scanned := map[string]any{"title": "原标题", "artist": "扫描艺人", "album_artist": "扫描专辑艺人", "year": 1998, "genres": []string{"扫描流派", "次流派"},
 		"catalog_number": "SC-1", "edition": "扫描版本", "label": "扫描厂牌", "barcode": "111"}
 	if got := fixture.effectiveColumns(release.releaseID); !reflect.DeepEqual(got, scanned) {
 		t.Fatalf("effective columns without corrections = %v, want the scanned values %v", got, scanned)
@@ -156,7 +164,11 @@ func TestPostgreSQLEffectiveViewAppliesAndRemovesCorrectionsPerField(t *testing.
 	expect("title set", map[string]any{"title": "新标题"})
 	fixture.correct(release.releaseID, "year", 1975)
 	expect("year set", map[string]any{"title": "新标题", "year": 1975})
-	for field, value := range map[string]string{"genre": "新流派", "catalog_number": "NEW-9", "edition": "新版本", "label": "新厂牌", "barcode": "999"} {
+	fixture.correct(release.releaseID, "genre", []string{"新流派", "另一流派"})
+	expect("genres set", map[string]any{"title": "新标题", "year": 1975, "genres": []string{"新流派", "另一流派"}})
+	fixture.clearCorrection(release.releaseID, "genre")
+	expect("genres cleared", map[string]any{"title": "新标题", "year": 1975})
+	for field, value := range map[string]string{"catalog_number": "NEW-9", "edition": "新版本", "label": "新厂牌", "barcode": "999"} {
 		fixture.correct(release.releaseID, field, value)
 		scanned2 := map[string]any{"title": "新标题", "year": 1975, field: value}
 		expect("text field "+field, scanned2)
@@ -167,18 +179,18 @@ func TestPostgreSQLEffectiveViewAppliesAndRemovesCorrectionsPerField(t *testing.
 	for _, field := range []string{"year", "genre", "catalog_number", "edition", "label", "barcode"} {
 		fixture.correct(release.releaseID, field, nil)
 	}
-	expect("nullable fields set to empty", map[string]any{"title": "新标题", "year": nil, "genre": nil, "catalog_number": nil, "edition": nil, "label": nil, "barcode": nil})
+	expect("nullable fields set to empty", map[string]any{"title": "新标题", "year": nil, "genres": []string{}, "catalog_number": nil, "edition": nil, "label": nil, "barcode": nil})
 
 	// 专辑艺人修正同时改变展示艺人。
 	fixture.correct(release.releaseID, "album_artist", "新专辑艺人")
-	expect("album artist set", map[string]any{"title": "新标题", "year": nil, "genre": nil, "catalog_number": nil, "edition": nil, "label": nil, "barcode": nil,
+	expect("album artist set", map[string]any{"title": "新标题", "year": nil, "genres": []string{}, "catalog_number": nil, "edition": nil, "label": nil, "barcode": nil,
 		"album_artist": "新专辑艺人", "artist": "新专辑艺人"})
 
 	// 重扫：扫描只更新 releases 本表，修正继续生效，没有修正的字段读到新的扫描值。
-	fixture.exec(`UPDATE releases SET title='重扫后的标题', artist='重扫艺人', album_artist='重扫专辑艺人', year=2020, genre='重扫流派', label='重扫厂牌', source_type='LP' WHERE id=$1::uuid`, release.releaseID)
+	fixture.exec(`UPDATE releases SET title='重扫后的标题', artist='重扫艺人', album_artist='重扫专辑艺人', year=2020, genres=ARRAY['重扫流派','重扫次流派'], label='重扫厂牌', source_type='LP' WHERE id=$1::uuid`, release.releaseID)
 	rescanned := fixture.effectiveColumns(release.releaseID)
 	if rescanned["title"] != "新标题" || rescanned["album_artist"] != "新专辑艺人" || rescanned["artist"] != "新专辑艺人" ||
-		rescanned["year"] != nil || rescanned["genre"] != nil || rescanned["label"] != nil {
+		rescanned["year"] != nil || !reflect.DeepEqual(rescanned["genres"], []string{}) || rescanned["label"] != nil {
 		t.Fatalf("corrections must survive a rescan, got %v", rescanned)
 	}
 
@@ -187,7 +199,7 @@ func TestPostgreSQLEffectiveViewAppliesAndRemovesCorrectionsPerField(t *testing.
 		fixture.clearCorrection(release.releaseID, field)
 	}
 	if got, want := fixture.effectiveColumns(release.releaseID), (map[string]any{"title": "重扫后的标题", "artist": "重扫艺人", "album_artist": "重扫专辑艺人", "year": 2020,
-		"genre": "重扫流派", "catalog_number": "SC-1", "edition": "扫描版本", "label": "重扫厂牌", "barcode": "111"}); !reflect.DeepEqual(got, want) {
+		"genres": []string{"重扫流派", "重扫次流派"}, "catalog_number": "SC-1", "edition": "扫描版本", "label": "重扫厂牌", "barcode": "111"}); !reflect.DeepEqual(got, want) {
 		t.Fatalf("after clearing every correction: %v, want the current scanned values %v", got, want)
 	}
 }
@@ -202,21 +214,27 @@ func TestPostgreSQLCorrectionRowsRejectInvalidStates(t *testing.T) {
 		"title cannot be set to empty":        `INSERT INTO release_corrections(release_id,field,mode,operation_id) VALUES($1::uuid,'title','null',$2::uuid)`,
 		"album artist cannot be set to empty": `INSERT INTO release_corrections(release_id,field,mode,operation_id) VALUES($1::uuid,'album_artist','null',$2::uuid)`,
 		"unknown field":                       `INSERT INTO release_corrections(release_id,field,mode,text_value,operation_id) VALUES($1::uuid,'source_type','set','CD',$2::uuid)`,
-		"blank text":                          `INSERT INTO release_corrections(release_id,field,mode,text_value,operation_id) VALUES($1::uuid,'genre','set','   ',$2::uuid)`,
-		"text over the byte limit":            `INSERT INTO release_corrections(release_id,field,mode,text_value,operation_id) VALUES($1::uuid,'genre','set',repeat('x',4097),$2::uuid)`,
+		"blank text":                          `INSERT INTO release_corrections(release_id,field,mode,text_value,operation_id) VALUES($1::uuid,'label','set','   ',$2::uuid)`,
+		"text over the byte limit":            `INSERT INTO release_corrections(release_id,field,mode,text_value,operation_id) VALUES($1::uuid,'label','set',repeat('x',4097),$2::uuid)`,
 		"year with text":                      `INSERT INTO release_corrections(release_id,field,mode,text_value,operation_id) VALUES($1::uuid,'year','set','1990',$2::uuid)`,
 		"year out of range":                   `INSERT INTO release_corrections(release_id,field,mode,year_value,operation_id) VALUES($1::uuid,'year','set',10000,$2::uuid)`,
-		"text field with a year value":        `INSERT INTO release_corrections(release_id,field,mode,year_value,operation_id) VALUES($1::uuid,'genre','set',1990,$2::uuid)`,
-		"empty with a leftover value":         `INSERT INTO release_corrections(release_id,field,mode,text_value,operation_id) VALUES($1::uuid,'genre','null','x',$2::uuid)`,
-		"unknown mode":                        `INSERT INTO release_corrections(release_id,field,mode,text_value,operation_id) VALUES($1::uuid,'genre','clear','x',$2::uuid)`,
+		"text field with a year value":        `INSERT INTO release_corrections(release_id,field,mode,year_value,operation_id) VALUES($1::uuid,'label','set',1990,$2::uuid)`,
+		"empty with a leftover value":         `INSERT INTO release_corrections(release_id,field,mode,text_value,operation_id) VALUES($1::uuid,'label','null','x',$2::uuid)`,
+		"unknown mode":                        `INSERT INTO release_corrections(release_id,field,mode,text_value,operation_id) VALUES($1::uuid,'label','clear','x',$2::uuid)`,
+		"genre stored as text":                `INSERT INTO release_corrections(release_id,field,mode,text_value,operation_id) VALUES($1::uuid,'genre','set','古典',$2::uuid)`,
+		"genre without a list":                `INSERT INTO release_corrections(release_id,field,mode,operation_id) VALUES($1::uuid,'genre','set',$2::uuid)`,
+		"empty genre list":                    `INSERT INTO release_corrections(release_id,field,mode,list_value,operation_id) VALUES($1::uuid,'genre','set','{}'::text[],$2::uuid)`,
+		"genre list over the item limit":      `INSERT INTO release_corrections(release_id,field,mode,list_value,operation_id) VALUES($1::uuid,'genre','set',array_fill('古典'::text,ARRAY[21]),$2::uuid)`,
+		"genre list with a null item":         `INSERT INTO release_corrections(release_id,field,mode,list_value,operation_id) VALUES($1::uuid,'genre','set',ARRAY['古典',NULL],$2::uuid)`,
+		"empty genre with a leftover list":    `INSERT INTO release_corrections(release_id,field,mode,list_value,operation_id) VALUES($1::uuid,'genre','null',ARRAY['古典'],$2::uuid)`,
 	} {
 		if _, err := fixture.database.Exec(statement, release.releaseID, operationID); err == nil {
 			t.Errorf("%s: the insert was accepted", name)
 		}
 	}
 	// 同一字段至多一行；没有对应操作记录的修正在提交时被拒绝。
-	fixture.correct(release.releaseID, "genre", "古典")
-	if _, err := fixture.database.Exec(`INSERT INTO release_corrections(release_id,field,mode,text_value,operation_id) VALUES($1::uuid,'genre','set','爵士',$2::uuid)`, release.releaseID, operationID); err == nil {
+	fixture.correct(release.releaseID, "genre", []string{"古典", "巴洛克"})
+	if _, err := fixture.database.Exec(`INSERT INTO release_corrections(release_id,field,mode,list_value,operation_id) VALUES($1::uuid,'genre','set',ARRAY['爵士','蓝调'],$2::uuid)`, release.releaseID, operationID); err == nil {
 		t.Error("a second correction row for the same field was accepted")
 	}
 	if _, err := fixture.database.Exec(`INSERT INTO release_corrections(release_id,field,mode,text_value,operation_id) VALUES($1::uuid,'label','set','厂牌',$2::uuid)`, release.releaseID, uuid.New()); err == nil {
@@ -231,9 +249,13 @@ func TestPostgreSQLReadsReturnEffectiveValues(t *testing.T) {
 	// 扫描标题的顺序是 Beta、Zulu，修正之后有效标题的顺序是 Alpha (corrected)、Beta：只有读取有效值才能通过排序断言。
 	release := fixture.visibleRelease("Zulu")
 	other := fixture.visibleRelease("Beta")
-	fixture.exec(`UPDATE releases SET artist='Artist Z', album_artist='Album Artist Z', year=2000, genre='Classical', label='Label Z', edition='First', catalog_number='A-1', barcode='1' WHERE id=$1::uuid`, release.releaseID)
+	fixture.exec(`UPDATE releases SET artist='Artist Z', album_artist='Album Artist Z', year=2000, genres=ARRAY['Classical','Baroque'], label='Label Z', edition='First', catalog_number='A-1', barcode='1' WHERE id=$1::uuid`, release.releaseID)
 	fixture.exec(`UPDATE releases SET artist='Artist B', album_artist='Album Artist B', year=2001 WHERE id=$1::uuid`, other.releaseID)
 	fixture.artwork(release, "cover-"+strings.Repeat("b", 64)+".jpg")
+
+	if header, err := store.LoadReleaseHeader(ctx, release.releaseID); err != nil || !reflect.DeepEqual(header.Genres, []string{"Classical", "Baroque"}) {
+		t.Fatalf("LoadReleaseHeader without corrections = %+v, %v; want both scanned genres", header, err)
+	}
 
 	fixture.correct(release.releaseID, "title", "Alpha (corrected)")
 	fixture.correct(release.releaseID, "album_artist", "Corrected Artist")
@@ -248,9 +270,13 @@ func TestPostgreSQLReadsReturnEffectiveValues(t *testing.T) {
 		t.Fatalf("LoadReleaseSummary = %+v, %v; want the corrected title, album artist and year with the unchanged artwork and counts", summary, err)
 	}
 	header, err := store.LoadReleaseHeader(ctx, release.releaseID)
-	if err != nil || header.Genre != nil || header.Label == nil || *header.Label != "Corrected Label" || header.Edition == nil || *header.Edition != "First" ||
+	if err != nil || !reflect.DeepEqual(header.Genres, []string{}) || header.Label == nil || *header.Label != "Corrected Label" || header.Edition == nil || *header.Edition != "First" ||
 		header.CatalogNumber == nil || *header.CatalogNumber != "A-1" {
-		t.Fatalf("LoadReleaseHeader = %+v, %v; want genre empty, the corrected label and the scanned edition and catalog number", header, err)
+		t.Fatalf("LoadReleaseHeader = %+v, %v; want genres empty, the corrected label and the scanned edition and catalog number", header, err)
+	}
+	fixture.correct(release.releaseID, "genre", []string{"Jazz", "Blues"})
+	if header, err := store.LoadReleaseHeader(ctx, release.releaseID); err != nil || !reflect.DeepEqual(header.Genres, []string{"Jazz", "Blues"}) {
+		t.Fatalf("LoadReleaseHeader with corrected genres = %+v, %v; want both corrected genres in order", header, err)
 	}
 	// 设空的年份读成“没有年份”。
 	fixture.correct(other.releaseID, "year", nil)
@@ -348,7 +374,7 @@ func TestPostgreSQLAttentionIgnoresCorrectedFields(t *testing.T) {
 	store := fixture.store
 	release := fixture.visibleRelease("待确认的专辑")
 	untouched := fixture.visibleRelease("没有修正的专辑")
-	for _, field := range []string{"title", "artist", "genre", "source_type"} {
+	for _, field := range []string{"title", "artist", "label", "source_type"} {
 		fixture.decision(release.releaseID, field, "uncertain_apply")
 	}
 	fixture.decision(release.releaseID, "year", "auto_apply") // 高置信度的字段从来不计入
@@ -384,11 +410,11 @@ func TestPostgreSQLAttentionIgnoresCorrectedFields(t *testing.T) {
 	if got := attention(release.releaseID); got != 5 {
 		t.Fatalf("attention after correcting the title = %d, want 5", got)
 	}
-	// 展示艺人的不确定由专辑艺人的修正覆盖；设空的流派同样不再计入。来源类型没有修正入口，仍然计入。
+	// 展示艺人的不确定由专辑艺人的修正覆盖；设空的厂牌同样不再计入。来源类型没有修正入口，仍然计入。
 	fixture.correct(release.releaseID, "album_artist", "确认过的专辑艺人")
-	fixture.correct(release.releaseID, "genre", nil)
+	fixture.correct(release.releaseID, "label", nil)
 	if got := attention(release.releaseID); got != 3 {
-		t.Fatalf("attention after correcting album artist and genre = %d, want 3 (source_type, the grouping reason and the missing track)", got)
+		t.Fatalf("attention after correcting album artist and label = %d, want 3 (source_type, the grouping reason and the missing track)", got)
 	}
 	if got := groupAttention(); got != 3 {
 		t.Fatalf("group attention after the corrections = %d, want 3", got)
@@ -396,7 +422,7 @@ func TestPostgreSQLAttentionIgnoresCorrectedFields(t *testing.T) {
 	// 清除修正后，扫描的不确定重新计入。
 	fixture.clearCorrection(release.releaseID, "title")
 	fixture.clearCorrection(release.releaseID, "album_artist")
-	fixture.clearCorrection(release.releaseID, "genre")
+	fixture.clearCorrection(release.releaseID, "label")
 	if got := attention(release.releaseID); got != 6 {
 		t.Fatalf("attention after clearing the corrections = %d, want 6 again", got)
 	}

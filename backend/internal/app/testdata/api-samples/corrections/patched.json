@@ -28,10 +28,22 @@
         "uncertain": false
       },
       {
-        "correction": null,
-        "effective_value": "Classical",
+        "correction": {
+          "mode": "set",
+          "value": [
+            "Romantic",
+            "Classical"
+          ]
+        },
+        "effective_value": [
+          "Romantic",
+          "Classical"
+        ],
         "field": "genre",
-        "scan_value": "Classical",
+        "scan_value": [
+          "Classical",
+          "Baroque"
+        ],
         "uncertain": false
       },
       {

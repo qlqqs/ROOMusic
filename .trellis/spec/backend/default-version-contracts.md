@@ -76,7 +76,8 @@ M4 的第一项（2026-10）让管理员为多版本专辑指定**默认版本**
 
 - **响应**：`{group_id, default_release_id, release_count, releases: [...]}`。成员是可见版本，顺序与上限和组详情一致（代表版本规则，最多 100 个），
   `release_count` 是完整数量，`default_release_id` 的判定与组详情相同。每个成员：`id, title, artist, album_artist, year, edition, label, catalog_number,
-  barcode, genre, source_type, media_type, medium_count, track_count, duration_seconds, formats, corrected_fields`。
+  barcode, genres, source_type, media_type, medium_count, track_count, duration_seconds, formats, corrected_fields`。
+  - `genres` 是完整有序列表（无值为 `[]`），顺序或内容不同均算不同，见[多流派合同](./genre-contracts.md)。
   - 文本字段是有效值（经 `release_effective`），空白规范为 `null`；`corrected_fields` 与发行详情相同（固定顺序，没有时是空数组）。
   - `medium_count`、`track_count`、`duration_seconds` 只计 `present` 曲目。`duration_seconds` 是总时长：**只要有一首曲目的时长未知**（零、负数与非有限值都算未知）
     **就是 `null`**，不拿已知的部分冒充总数，与专辑详情头部的规则一致（部分之和会让两个版本的差异看起来是真的）。

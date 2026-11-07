@@ -124,7 +124,8 @@ describe("decodeReleaseComparison", () => {
     expect(decoded.releases[0]).toMatchObject({
       year: null,
       label: "Corrected Label",
-      corrected_fields: ["title", "year", "label"],
+      genres: ["Romantic", "Classical"],
+      corrected_fields: ["title", "year", "genre", "label"],
       medium_count: 2,
       track_count: 3,
       duration_seconds: 720,
@@ -190,7 +191,7 @@ describe("decodeReleaseDetail", () => {
       title: "Sample Symphonies",
       album_artist: "Sample Orchestra",
       year: 1998,
-      genre: "Classical",
+      genres: ["Classical", "Baroque"],
       label: "Sample Label",
       catalog_number: "SL-0001",
       barcode: "0123456789012",
@@ -214,8 +215,9 @@ describe("decodeReleaseDetail", () => {
       title: "Sample Symphonies (corrected)",
       year: null,
       label: "Corrected Label",
+      genres: ["Romantic", "Classical"],
       revision: 2,
-      corrected_fields: ["title", "year", "label"],
+      corrected_fields: ["title", "year", "genre", "label"],
     });
   });
 
@@ -226,7 +228,7 @@ describe("decodeReleaseDetail", () => {
 
   it("解码单曲专辑：大多数版本字段为空，封面存在", () => {
     const release = decodeReleaseDetail(single);
-    expect(release).toMatchObject({ genre: null, catalog_number: null, edition: null, label: null, barcode: null, media_type: null });
+    expect(release).toMatchObject({ genres: [], catalog_number: null, edition: null, label: null, barcode: null, media_type: null });
     expect(release.artwork).toEqual({ resource_id: "sample-cover.webp", mime: "image/webp", width: 640, height: 480 });
     expect(release.media[0]?.tracks[0]?.credits).toEqual([]);
   });

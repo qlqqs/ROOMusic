@@ -184,7 +184,7 @@ func (handlers *Handlers) releaseDetail(responseWriter http.ResponseWriter, requ
 	httpserver.WriteJSON(responseWriter, http.StatusOK, catalog.ReleaseDetail{
 		ReleaseSummary:  summary,
 		CandidateKind:   header.CandidateKind,
-		Genre:           header.Genre,
+		Genres:          header.Genres,
 		CatalogNumber:   header.CatalogNumber,
 		Edition:         header.Edition,
 		Label:           header.Label,

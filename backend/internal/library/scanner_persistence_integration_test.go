@@ -3,17 +3,20 @@ package library
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/ingest"
+	"github.com/qlqq/roomusic/backend/internal/catalog/maintenance"
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 	"github.com/qlqq/roomusic/backend/internal/library/parser/parsertest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
@@ -243,6 +246,9 @@ func TestPostgreSQLScanPersistsExplicitRipLogCDSemantics(t *testing.T) {
 
 func TestPostgreSQLScanRootPersistsCueSheetMetadata(t *testing.T) {
 	fixture := newLibraryFixture(t)
+	if err := maintenance.Initialize(context.Background(), fixture.database); err != nil {
+		t.Fatalf("initialize catalog projections: %v", err)
+	}
 	root := insertScannerRoot(t, fixture, "cue-sheet-metadata")
 	application := scannerTestApplication(fixture)
 	scanID := insertRunningScan(t, fixture)
@@ -257,7 +263,7 @@ func TestPostgreSQLScanRootPersistsCueSheetMetadata(t *testing.T) {
 		`TITLE "Cue Release"`,
 		`PERFORMER "Cue Album Artist"`,
 		`REM DATE 2024`,
-		`REM GENRE "Ambient"`,
+		`REM GENRE "Ambient; Electronic"`,
 		`CATALOG 0123456789012`,
 		`FILE "image.flac" FLAC`,
 		`  TRACK 01 AUDIO`,
@@ -278,13 +284,17 @@ func TestPostgreSQLScanRootPersistsCueSheetMetadata(t *testing.T) {
 	if err := application.scanRoot(context.Background(), fixture.database, scanID, root); err != nil {
 		t.Fatalf("scan CUE root: %v", err)
 	}
-	var releaseID, title, albumArtist, genre, catalogNumber string
+	var releaseID, title, albumArtist, genresJSON, catalogNumber string
+	var genres []string
 	var year int
-	if err := fixture.database.QueryRow(`SELECT id::text,title,album_artist,year,genre,catalog_number FROM releases WHERE source_root_id=$1::uuid`, root.ID).Scan(&releaseID, &title, &albumArtist, &year, &genre, &catalogNumber); err != nil {
+	if err := fixture.database.QueryRow(`SELECT id::text,title,album_artist,year,to_jsonb(genres)::text,catalog_number FROM releases WHERE source_root_id=$1::uuid`, root.ID).Scan(&releaseID, &title, &albumArtist, &year, &genresJSON, &catalogNumber); err != nil {
 		t.Fatalf("read CUE release metadata: %v", err)
 	}
-	if title != "Cue Release" || albumArtist != "Cue Album Artist" || year != 2024 || genre != "Ambient" || catalogNumber != "0123456789012" {
-		t.Fatalf("unexpected CUE release metadata: title=%q album_artist=%q year=%d genre=%q catalog=%q", title, albumArtist, year, genre, catalogNumber)
+	if err := json.Unmarshal([]byte(genresJSON), &genres); err != nil {
+		t.Fatalf("decode CUE release genres: %v", err)
+	}
+	if title != "Cue Release" || albumArtist != "Cue Album Artist" || year != 2024 || !slices.Equal(genres, []string{"Ambient", "Electronic"}) || catalogNumber != "0123456789012" {
+		t.Fatalf("unexpected CUE release metadata: title=%q album_artist=%q year=%d genres=%q catalog=%q", title, albumArtist, year, genres, catalogNumber)
 	}
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM release_credits WHERE release_id=$1::uuid AND role='album_artist' AND name='Cue Album Artist'`, 1, releaseID)
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE source_root_id=$1::uuid AND source_kind='cue_virtual'`, 2, root.ID)
@@ -303,6 +313,7 @@ func TestPostgreSQLScanRootPersistsCueSheetMetadata(t *testing.T) {
 	} {
 		assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM track_observations observations JOIN tracks ON tracks.id=observations.track_id WHERE tracks.source_root_id=$1::uuid AND observations.field_name=$2 AND observations.source_kind=$3 AND NOT observations.inferred`, field.count, root.ID, field.name, field.source)
 	}
+	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM track_observations observations JOIN tracks ON tracks.id=observations.track_id WHERE tracks.source_root_id=$1::uuid AND observations.field_name='genre' AND observations.value='Ambient; Electronic'`, 2, root.ID)
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM scan_observations WHERE scan_run_id=$1::uuid`, 0, scanID)
 }
 

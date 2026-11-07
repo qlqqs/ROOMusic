@@ -74,17 +74,22 @@ export function isFieldCorrected(correctedFields: readonly string[], field: stri
   return correctedFields.includes(field) || (field === "artist" && correctedFields.includes("album_artist"));
 }
 
+/** 专辑的流派：“国语流行乐 · 台语流行乐”；没有流派时是空字符串。 */
+export function formatGenres(genres: readonly string[]): string {
+  return genres.join(" · ");
+}
+
 /**
  * 侧栏“此版本”的条目：厂牌、编号、条码、版本说明、流派、来源类型与介质类型。没有值的条目不列出，
  * 不写“未知”：很多资料库的文件根本没有这些标签，满屏的“未知”只是噪声。
  */
-export function releaseFacts(release: Pick<ReleaseDetailDTO, "label" | "catalog_number" | "barcode" | "edition" | "genre" | "source_type" | "media_type">): ReleaseFact[] {
+export function releaseFacts(release: Pick<ReleaseDetailDTO, "label" | "catalog_number" | "barcode" | "edition" | "genres" | "source_type" | "media_type">): ReleaseFact[] {
   const candidates: [string, string, string | null][] = [
     ["厂牌", "label", release.label],
     ["编号", "catalog_number", release.catalog_number],
     ["条码", "barcode", release.barcode],
     ["版本说明", "edition", release.edition],
-    ["流派", "genre", release.genre],
+    ["流派", "genre", formatGenres(release.genres)],
     ["来源类型", "source_type", release.source_type],
     ["介质类型", "media_type", release.media_type],
   ];

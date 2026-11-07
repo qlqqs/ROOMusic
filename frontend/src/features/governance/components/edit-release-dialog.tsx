@@ -8,6 +8,7 @@ import { useReleaseCorrections } from "../hooks/use-release-corrections";
 import type { ReleaseCommands, ReleaseTarget } from "../hooks/use-release-commands";
 import { canBeEmpty, correctionFieldLabels, displayValue } from "../labels";
 import styles from "./edit-release-dialog.module.css";
+import { GenreTagsInput } from "./genre-tags-input";
 import { governanceFailureMessages } from "./governance-messages";
 
 type EditReleaseDialogProps = {
@@ -34,7 +35,7 @@ function FieldEditor({ field, draft, error, disabled, onChange }: FieldEditorPro
   const modes: FieldMode[] = canBeEmpty(field.field) ? ["scan", "custom", "empty"] : ["scan", "custom"];
   // 已经有修正时不需要“确认”：扫描结论已经被人工结果取代。
   const canConfirm = field.uncertain && field.correction === null && draft.mode === "scan";
-  const select = (mode: FieldMode) => onChange({ mode, text: draft.text });
+  const select = (mode: FieldMode) => onChange({ mode, text: draft.text, list: draft.list });
 
   return (
     <fieldset className={styles.field} disabled={disabled}>
@@ -71,14 +72,16 @@ function FieldEditor({ field, draft, error, disabled, onChange }: FieldEditorPro
           </label>
         ))}
       </div>
-      {draft.mode === "custom" ? (
+      {draft.mode === "custom" && field.field === "genre" ? (
+        <GenreTagsInput label={`${label}（自定义）`} list={draft.list} text={draft.text} error={error} onChange={(list, text) => onChange({ mode: "custom", text, list })} />
+      ) : draft.mode === "custom" ? (
         <TextField
           label={`${label}（自定义）`}
           value={draft.text}
           error={error}
           autoComplete="off"
           {...(field.field === "year" ? { inputMode: "numeric" as const } : {})}
-          onChange={(event) => onChange({ mode: "custom", text: event.target.value })}
+          onChange={(event) => onChange({ mode: "custom", text: event.target.value, list: draft.list })}
         />
       ) : error === null ? null : (
         <p role="alert">{error}</p>

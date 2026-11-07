@@ -1,4 +1,6 @@
-import type { CorrectableField, ReviewableIssue } from "./api/decoders";
+// 直接取 catalog 的格式化模块：这个文件也被 Playwright（Node）里的受控后端间接导入，公开入口连带组件与 CSS 加载不了。
+import { formatGenres } from "../catalog/format";
+import type { CorrectableField, FieldValue, ReviewableIssue } from "./api/decoders";
 
 /** 可修正字段的中文名；与发行详情、证据里的同名字段一一对应。 */
 export const correctionFieldLabels: Readonly<Record<CorrectableField, string>> = {
@@ -25,7 +27,8 @@ export function canBeEmpty(field: CorrectableField): boolean {
   return field !== "title" && field !== "album_artist";
 }
 
-/** 扫描值、修正值或有效值的显示：没有值写“（空）”，年份显示为数字。 */
-export function displayValue(value: string | number | null): string {
-  return value === null || value === "" ? "（空）" : String(value);
+/** 扫描值、修正值或有效值的显示：没有值写“（空）”，年份显示为数字，流派列表写成“国语流行乐 · 台语流行乐”。 */
+export function displayValue(value: FieldValue | null): string {
+  const text = Array.isArray(value) ? formatGenres(value) : value === null ? "" : String(value);
+  return text === "" ? "（空）" : text;
 }

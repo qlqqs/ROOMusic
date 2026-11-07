@@ -59,7 +59,7 @@ describe("搜索进入专辑后的曲目定位", () => {
     act(() => search.focus());
     const session = runtime.session.getSnapshot();
     if (session.status !== "authenticated") throw new Error("会话未就绪");
-    catalog.releases.set(release.id, { ...structuredClone(release), genre: "刷新后的流派" });
+    catalog.releases.set(release.id, { ...structuredClone(release), genres: ["刷新后的流派"] });
     await act(async () => { await runtime.queryClient.invalidateQueries({ queryKey: catalogKeys.all(session.generation) }); });
     expect(await screen.findAllByText("刷新后的流派")).toHaveLength(2);
     await frames();

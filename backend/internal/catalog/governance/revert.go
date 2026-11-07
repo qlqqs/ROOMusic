@@ -32,7 +32,28 @@ type correctionKind struct{}
 
 func (correctionKind) Type() string { return operations.TypeReleaseCorrection }
 
-// restoredIntent 校验记录里存下的前态意图并还原成写入需要的类型：JSON 里的数字是 float64，年份要还原成整数。
+// genreListFrom 兼容升级前记录里的单个流派；新记录里的列表保持原顺序与写法。
+func genreListFrom(value any) ([]string, bool) {
+	switch value := value.(type) {
+	case string:
+		if value != "" {
+			return []string{value}, true
+		}
+	case []any:
+		genres := make([]string, 0, len(value))
+		for _, item := range value {
+			genre, ok := item.(string)
+			if !ok || genre == "" {
+				return nil, false
+			}
+			genres = append(genres, genre)
+		}
+		return genres, len(genres) > 0
+	}
+	return nil, false
+}
+
+// restoredIntent 校验记录里的前态意图：年份从 JSON 数字还原为整数，旧流派字符串还原为列表。
 func restoredIntent(field catalog.CorrectableField, intent *catalog.CorrectionIntent) (*catalog.CorrectionIntent, error) {
 	if intent == nil {
 		return nil, nil
@@ -41,6 +62,10 @@ func restoredIntent(field catalog.CorrectableField, intent *catalog.CorrectionIn
 	case intent.Mode == catalog.CorrectionNull && intent.Value == nil:
 		return &catalog.CorrectionIntent{Mode: catalog.CorrectionNull}, nil
 	case intent.Mode != catalog.CorrectionSet:
+	case field.Name == "genre":
+		if genres, valid := genreListFrom(intent.Value); valid {
+			return &catalog.CorrectionIntent{Mode: catalog.CorrectionSet, Value: genres}, nil
+		}
 	case field.IsYear:
 		if year, isNumber := intent.Value.(float64); isNumber && year == float64(int(year)) && year >= 1 && year <= 9999 {
 			return &catalog.CorrectionIntent{Mode: catalog.CorrectionSet, Value: int(year)}, nil
@@ -131,6 +156,25 @@ type correctionFieldState struct {
 	Effective  any                       `json:"effective"`
 }
 
+// normalizeGenres 只转换历史流派的展示形状，不改写操作记录；无效记录沿用 changes 为 null 的合同。
+func (state correctionRecordState) normalizeGenres() bool {
+	if intent := state.Fields["genre"]; intent != nil && intent.Mode == catalog.CorrectionSet {
+		genres, valid := genreListFrom(intent.Value)
+		if !valid {
+			return false
+		}
+		intent.Value = genres
+	}
+	if value := state.Effective["genre"]; value != nil {
+		genres, valid := genreListFrom(value)
+		if !valid {
+			return false
+		}
+		state.Effective["genre"] = genres
+	}
+	return true
+}
+
 func (correctionKind) Describe(ctx context.Context, database operations.Queryer, records []operations.Record) (map[string]operations.Description, error) {
 	infos, err := loadReleaseInfos(ctx, database, records)
 	if err != nil {
@@ -140,7 +184,7 @@ func (correctionKind) Describe(ctx context.Context, database operations.Queryer,
 	for _, record := range records {
 		description := infos.describe(record)
 		var before, after correctionRecordState
-		if json.Unmarshal(record.Before, &before) == nil && json.Unmarshal(record.After, &after) == nil {
+		if json.Unmarshal(record.Before, &before) == nil && json.Unmarshal(record.After, &after) == nil && before.normalizeGenres() && after.normalizeGenres() {
 			fields := []correctionFieldChange{}
 			for _, field := range catalog.CorrectableFields {
 				if _, changed := after.Fields[field.Name]; changed {

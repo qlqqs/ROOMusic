@@ -122,7 +122,7 @@ const comparedReleaseDecoder = d.object({
   label: d.nullable(d.string()),
   catalog_number: d.nullable(d.string()),
   barcode: d.nullable(d.string()),
-  genre: d.nullable(d.string()),
+  genres: d.array(d.string({ min: 1 }), { max: 20 }),
   source_type: d.nullable(d.string()),
   media_type: d.nullable(d.string()),
   medium_count: d.integer({ min: 0 }),
@@ -225,7 +225,7 @@ const evidenceSummaryDecoder = d.object(evidenceSummaryShape);
 const releaseDetailDecoder = d.object({
   ...releaseSummaryShape,
   candidate_kind: d.string({ min: 1 }),
-  genre: d.nullable(d.string()),
+  genres: d.array(d.string({ min: 1 }), { max: 20 }),
   catalog_number: d.nullable(d.string()),
   edition: d.nullable(d.string()),
   label: d.nullable(d.string()),

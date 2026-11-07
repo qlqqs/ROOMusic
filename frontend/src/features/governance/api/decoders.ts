@@ -10,9 +10,16 @@ export type CorrectableField = (typeof CORRECTABLE_FIELDS)[number];
 
 const MAX_FIELD_TEXT = 4096; // 修正值的字节上限（后端 maxCorrectionTextBytes）；扫描值同样有界
 
-// 年份是 1 到 9999 的整数，其余字段是字符串；按值的运行时类型选择解码器，字段与类型的对应由后端保证。
-const fieldValueDecoder: d.Decoder<string | number> = (input, path) =>
-  typeof input === "number" ? d.integer({ min: 1, max: 9999 })(input, path) : d.string({ max: MAX_FIELD_TEXT })(input, path);
+export const MAX_GENRES = 20; // 每张专辑最多的流派数（后端同样的上限）
+
+// 年份是 1 到 9999 的整数，流派是字符串列表，其余字段是字符串；按值的运行时类型选择解码器，字段与类型的对应由后端保证。
+export type FieldValue = string | number | string[];
+const fieldValueDecoder: d.Decoder<FieldValue> = (input, path) =>
+  typeof input === "number"
+    ? d.integer({ min: 1, max: 9999 })(input, path)
+    : Array.isArray(input)
+      ? d.array(d.string({ min: 1, max: MAX_FIELD_TEXT }), { min: 1, max: MAX_GENRES })(input, path)
+      : d.string({ max: MAX_FIELD_TEXT })(input, path);
 
 // 当前的修正意图：set 带值，null 表示明确设为空（没有 value）。没有修正时整个 correction 为 null。
 const correctionDecoder = d.object({

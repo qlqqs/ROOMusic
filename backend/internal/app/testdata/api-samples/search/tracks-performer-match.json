@@ -2,7 +2,7 @@
   "body": {
     "catalog_state": {
       "artists_state": "ready",
-      "epoch": 4,
+      "epoch": 5,
       "search_mode": "normalized"
     },
     "items": [

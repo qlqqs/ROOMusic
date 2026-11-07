@@ -12,6 +12,7 @@
         "corrected_fields": [
           "title",
           "year",
+          "genre",
           "label"
         ],
         "duration_seconds": 720,
@@ -24,7 +25,10 @@
             "track_count": 3
           }
         ],
-        "genre": "Classical",
+        "genres": [
+          "Romantic",
+          "Classical"
+        ],
         "id": "00000000-0000-4000-8000-000000000001",
         "label": "Corrected Label",
         "media_type": null,
@@ -50,7 +54,7 @@
             "track_count": 1
           }
         ],
-        "genre": null,
+        "genres": [],
         "id": "00000000-0000-4000-8000-000000000003",
         "label": null,
         "media_type": null,
@@ -76,7 +80,7 @@
             "track_count": 2
           }
         ],
-        "genre": null,
+        "genres": [],
         "id": "00000000-0000-4000-8000-000000000004",
         "label": null,
         "media_type": null,

@@ -763,7 +763,7 @@ func (profile comparisonProfile) isV0GenreMemberMapping(entity, key, field, expe
 	if !wantExists || !gotExists || expected != want.Genre || actual != got.Genre {
 		return false
 	}
-	// V0 adapter 将多个 genre 用固定分隔符压成一个字符串；current 模型只保存单值。
+	// V0 adapter 将多个 genre 用固定分隔符压成一个字符串；current 保存列表，导出时也用固定分隔符连接。
 	return joinedValueContainsExactMember(want.Genre, got.Genre)
 }
 

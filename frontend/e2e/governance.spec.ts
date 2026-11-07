@@ -137,11 +137,11 @@ test.describe("编辑发行信息", () => {
     const title = dialog.getByRole("group", { name: "标题" });
     await title.getByRole("radio", { name: "自定义" }).check();
     await dialog.getByRole("textbox", { name: "标题（自定义）" }).fill("我的标题");
-    respondToCorrect(mock.governance, releaseId(), "00000000-0000-4000-8000-0000000000c1", { expected_revision: 1, changes: { genre: { mode: "set", value: "Jazz" } } });
+    respondToCorrect(mock.governance, releaseId(), "00000000-0000-4000-8000-0000000000c1", { expected_revision: 1, changes: { genre: { mode: "set", value: ["Jazz"] } } });
     await dialog.getByRole("button", { name: "保存修改" }).click();
     await expect(dialog.getByText("这张专辑刚被修改过")).toBeVisible();
     await expect(dialog.getByRole("textbox", { name: "标题（自定义）" })).toHaveValue("我的标题");
-    await expect(dialog.getByRole("textbox", { name: "流派（自定义）" })).toHaveValue("Jazz");
+    await expect(dialog.getByRole("button", { name: "删除 Jazz", exact: true })).toBeVisible();
     await dialog.getByRole("button", { name: "保存修改" }).click();
     await expect(dialog).toBeHidden();
     await expect(heading(page, "我的标题")).toBeVisible();

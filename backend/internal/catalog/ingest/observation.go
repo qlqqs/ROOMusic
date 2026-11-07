@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
@@ -19,7 +20,7 @@ type SourceObservation struct {
 	Artist          string            `json:"artist,omitempty"`
 	SourceType      string            `json:"source_type,omitempty"`
 	MediaType       string            `json:"media_type,omitempty"`
-	Genre           string            `json:"genre,omitempty"`
+	Genres          []string          `json:"genres,omitempty"`
 	CatalogNumber   string            `json:"catalog_number,omitempty"`
 	Edition         string            `json:"edition,omitempty"`
 	Label           string            `json:"label,omitempty"`
@@ -76,7 +77,7 @@ func (o SourceObservation) fieldObservations() []fieldObservation {
 	if o.Year > 0 {
 		fields = append(fields, fieldObservation{Name: "year", Value: strconv.Itoa(o.Year)})
 	}
-	for _, optional := range []fieldObservation{{Name: "source_type", Value: o.SourceType}, {Name: "media_type", Value: o.MediaType}, {Name: "genre", Value: o.Genre}, {Name: "catalog_number", Value: o.CatalogNumber}, {Name: "edition", Value: o.Edition}, {Name: "label", Value: o.Label}, {Name: "barcode", Value: o.Barcode}, {Name: "isrc", Value: o.CueISRC}} {
+	for _, optional := range []fieldObservation{{Name: "source_type", Value: o.SourceType}, {Name: "media_type", Value: o.MediaType}, {Name: "genre", Value: strings.Join(o.Genres, "; ")}, {Name: "catalog_number", Value: o.CatalogNumber}, {Name: "edition", Value: o.Edition}, {Name: "label", Value: o.Label}, {Name: "barcode", Value: o.Barcode}, {Name: "isrc", Value: o.CueISRC}} {
 		if optional.Value != "" {
 			fields = append(fields, optional)
 		}

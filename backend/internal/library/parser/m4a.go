@@ -584,7 +584,7 @@ func parseM4AItemValue(itemType string, value, typeCode []byte, observation *Aud
 	case "\xa9alb":
 		observation.Album = text
 	case "\xa9gen":
-		observation.Genre = text
+		observation.Genres = metadata.SplitGenres(append(observation.Genres, decodeM4ARawText(value, binary.BigEndian.Uint32(typeCode)))...)
 	case "\xa9day":
 		observation.Year = ParseYear(text)
 	case "\xa9wrt":

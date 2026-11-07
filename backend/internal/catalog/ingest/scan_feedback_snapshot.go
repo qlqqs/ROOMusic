@@ -73,7 +73,7 @@ func snapshotFeedbackGraph(ctx context.Context, tx *sql.Tx, after bool) error {
    JOIN media m ON m.id=t.medium_id JOIN releases r ON r.id=m.release_id`,
 		`INSERT INTO ` + table + `(kind,id,present,metadata,location,release_id,group_id,artwork)
   SELECT 'release',r.id,EXISTS(SELECT 1 FROM media m JOIN tracks t ON t.medium_id=m.id WHERE m.release_id=r.id AND t.source_status='present'),
-   md5(jsonb_build_array(r.title,r.artist,COALESCE(r.album_artist,''),COALESCE(r.year,0),COALESCE(r.source_type,''),COALESCE(r.media_type,''),COALESCE(r.genre,''),COALESCE(r.catalog_number,''),COALESCE(r.edition,''),COALESCE(r.label,''),COALESCE(r.barcode,''),
+   md5(jsonb_build_array(r.title,r.artist,COALESCE(r.album_artist,''),COALESCE(r.year,0),COALESCE(r.source_type,''),COALESCE(r.media_type,''),to_jsonb(r.genres),COALESCE(r.catalog_number,''),COALESCE(r.edition,''),COALESCE(r.label,''),COALESCE(r.barcode,''),
    COALESCE((SELECT jsonb_agg(jsonb_build_array(c.role,c.name) ORDER BY c.role,c.name) FROM release_credits c WHERE c.release_id=r.id),'[]'::jsonb))::text),
    md5(jsonb_build_array(r.source_root_id,r.relative_directory,r.candidate_kind)::text),r.id,r.group_id,
    COALESCE((SELECT storage_key FROM release_artworks a WHERE a.release_id=r.id),'')

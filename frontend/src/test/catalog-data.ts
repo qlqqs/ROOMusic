@@ -197,7 +197,7 @@ export function releaseDetailOf(summary: ReleaseSummaryDTO, overrides: ReleaseDe
   return {
     ...summary,
     candidate_kind: sampleRelease.candidate_kind,
-    genre: sampleRelease.genre,
+    genres: sampleRelease.genres,
     catalog_number: sampleRelease.catalog_number,
     edition: sampleRelease.edition,
     label: sampleRelease.label,
@@ -335,7 +335,7 @@ function comparedReleaseOf(detail: ReleaseDetailDTO): ComparedReleaseDTO {
     label: detail.label,
     catalog_number: detail.catalog_number,
     barcode: detail.barcode,
-    genre: detail.genre,
+    genres: detail.genres,
     source_type: detail.source_type,
     media_type: detail.media_type,
     medium_count: detail.medium_count,

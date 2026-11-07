@@ -420,3 +420,105 @@ func TestRipLogEvidenceFillsOnlyMissingReleaseSemantics(t *testing.T) {
 		}
 	}
 }
+
+func TestOrganizeGenresUnionDoesNotFlagDifferentTrackGenres(t *testing.T) {
+	observations := []SourceObservation{
+		{RelativePath: "album/01.flac", Directory: "album", Album: "专辑", Artist: "艺人", Genres: []string{"国语流行乐", "Pop"}, Label: "厂牌 A"},
+		{RelativePath: "album/02.flac", Directory: "album", Album: "专辑", Artist: "艺人", Genres: []string{"国语流行乐", "ＰＯＰ"}, Label: "厂牌 A"},
+		{RelativePath: "album/03.flac", Directory: "album", Album: "专辑", Artist: "艺人", Genres: []string{"台语流行乐", "Pop"}, Label: "厂牌 B"},
+	}
+	candidates := OrganizeObservations(observations)
+	if len(candidates) != 1 {
+		t.Fatalf("候选数量 = %d，期望 1", len(candidates))
+	}
+	want := []string{"Pop", "国语流行乐", "台语流行乐"}
+	if !reflect.DeepEqual(candidates[0].Genres, want) {
+		t.Fatalf("专辑流派 = %#v，期望 %#v", candidates[0].Genres, want)
+	}
+	var genre, label FieldDecision
+	for _, decision := range candidates[0].Decisions {
+		switch decision.Field {
+		case "genre":
+			genre = decision
+		case "label":
+			label = decision
+		}
+	}
+	if genre.Value != "Pop" || !reflect.DeepEqual(genre.Candidates, want) || genre.Confidence != "high" || genre.Action != "auto_apply" || genre.RuleID != "genre_union_v1" || genre.Reason != "" || genre.Source != "tag" {
+		t.Fatalf("流派决定不应产生不一致问题：%+v", genre)
+	}
+	if label.Action != "uncertain_apply" || label.Reason != "inconsistent_candidates" {
+		t.Fatalf("厂牌不一致仍应产生问题：%+v", label)
+	}
+}
+
+func TestChooseGenresCountsTracksAndUsesStableSpelling(t *testing.T) {
+	observations := []SourceObservation{
+		{Genres: []string{"ＰＯＰ", "pop", "Pop", "Rock"}},
+		{Genres: []string{"Pop", "Rock"}, FieldSources: map[string]string{"genre": "cue_sheet"}},
+	}
+	got := chooseGenres(observations)
+	want := []string{"Pop", "Rock"}
+	if !reflect.DeepEqual(got.Candidates, want) || got.Source != "cue_sheet" {
+		t.Fatalf("每轨应只计一票，同票写法按名称选择并保留来源：%+v", got)
+	}
+	if reversed := chooseGenres([]SourceObservation{observations[1], observations[0]}); !reflect.DeepEqual(got, reversed) {
+		t.Fatalf("流派决定受遍历顺序影响：%+v / %+v", got, reversed)
+	}
+	observations[0].Genres = append(observations[0].Genres, "Jazz")
+	observations[1].Genres = []string{"Rock"}
+	if got = chooseGenres(observations); !reflect.DeepEqual(got.Candidates, []string{"Rock", "Jazz", "ＰＯＰ"}) {
+		t.Fatalf("同轨重复写法不应增加票数：%+v", got)
+	}
+}
+
+func TestChooseGenresBoundsAndMissingValues(t *testing.T) {
+	genres := make([]string, maxDecisionCandidates+2)
+	for i := range genres {
+		genres[i] = fmt.Sprintf("Genre %02d", len(genres)-1-i)
+	}
+	got := chooseGenres([]SourceObservation{{Genres: genres}})
+	if len(got.Candidates) != maxDecisionCandidates || got.Value != "Genre 00" || got.Candidates[maxDecisionCandidates-1] != "Genre 19" {
+		t.Fatalf("流派列表应先排序再限制为 20 项：%+v", got)
+	}
+	candidates := OrganizeObservations([]SourceObservation{{RelativePath: "album/01.flac", Directory: "album", Album: "专辑"}})
+	if len(candidates) != 1 || len(candidates[0].Genres) != 0 {
+		t.Fatalf("无流派的候选不应生成流派值：%#v", candidates)
+	}
+	for _, decision := range candidates[0].Decisions {
+		if decision.Field == "genre" {
+			t.Fatalf("无流派时不应写入字段决定：%+v", decision)
+		}
+	}
+}
+
+func TestSingleCueGenresReplaceEmbeddedListWhenPresent(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		genres []string
+		want   []string
+		source string
+	}{
+		{"非空列表整体覆盖", []string{"国语流行乐", "台语流行乐"}, []string{"国语流行乐", "台语流行乐"}, "cue_sheet"},
+		{"空列表保留内嵌", nil, []string{"内嵌旧流派"}, "tag"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			physical := SourceObservation{
+				RelativePath: "album/01.flac", Directory: "album", Album: "专辑", SourceKind: "flac",
+				Genres: []string{"内嵌旧流派"}, FieldSources: map[string]string{"genre": "tag"},
+			}
+			cue := SourceObservation{
+				RelativePath: "album/disc.cue#track-1", Directory: "album", Album: "专辑", SourceKind: "cue_virtual",
+				CueSheetPath: "album/disc.cue", CueParentRelativePath: physical.RelativePath,
+				Genres: tc.genres, FieldSources: map[string]string{"genre": "cue_sheet"},
+			}
+			got := resolveCueCandidateGroups([]SourceObservation{physical, cue})
+			if len(got) != 1 || got[0].RelativePath != physical.RelativePath || isCueObservation(got[0]) {
+				t.Fatalf("单轨 CUE 共存应保留物理身份：%#v", got)
+			}
+			if !reflect.DeepEqual(got[0].Genres, tc.want) || got[0].FieldSources["genre"] != tc.source {
+				t.Fatalf("流派列表及来源 = %#v / %q，期望 %#v / %q", got[0].Genres, got[0].FieldSources["genre"], tc.want, tc.source)
+			}
+		})
+	}
+}

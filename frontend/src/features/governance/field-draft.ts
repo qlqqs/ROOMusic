@@ -1,4 +1,4 @@
-import type { CorrectableField, CorrectionFieldDTO, CorrectionStateDTO } from "./api/decoders";
+import { MAX_GENRES, type CorrectableField, type CorrectionFieldDTO, type CorrectionStateDTO, type FieldValue } from "./api/decoders";
 import type { CorrectionChangeBody, CorrectionChanges } from "./api/endpoints";
 import { canBeEmpty, correctionFieldLabels } from "./labels";
 
@@ -7,7 +7,8 @@ import { canBeEmpty, correctionFieldLabels } from "./labels";
 // 提交不会把我没碰过的字段静默改回去；动过的字段保留我的输入，并与最新的基线比较。
 
 export type FieldMode = "scan" | "custom" | "empty";
-export type FieldDraft = { mode: FieldMode; text: string };
+/** text 是输入框里的内容；list 只有流派用：已经加成标签的流派（text 是还没加成标签的那一项）。 */
+export type FieldDraft = { mode: FieldMode; text: string; list: string[] };
 export type DraftEdits = Partial<Record<CorrectableField, FieldDraft>>;
 
 /** 与后端 corrections.go 一致的文本上限（字节）。 */
@@ -27,16 +28,48 @@ export function normalizeText(text: string): string {
   return text.split(/\s+/).filter((part) => part !== "").join(" ");
 }
 
-function textOf(value: string | number | null): string {
-  return value === null ? "" : String(value);
+/** 值对应的输入：流派是标签列表，其余字段是输入框里的文字。 */
+function inputOf(value: FieldValue | null): Pick<FieldDraft, "text" | "list"> {
+  if (Array.isArray(value)) return { text: "", list: [...value] };
+  return { text: value === null ? "" : String(value), list: [] };
 }
 
-/** 字段现在的状态对应的草稿：没有修正是“使用扫描值”，设值是“自定义”，设空是“留空”。text 预填扫描值，切到“自定义”时可以直接修改。 */
+/** 流派之间的分隔符：分号（半角、全角）与顿号；斜杠和逗号常是流派名的一部分（“R&B/Soul”），不拆。 */
+const GENRE_SEPARATORS = /[;；、]/;
+
+export function hasGenreSeparator(text: string): boolean {
+  return GENRE_SEPARATORS.test(text);
+}
+
+/** 两个流派是不是同一个：不分大小写与全半角（与后端的合并键一致）。 */
+function genreKey(genre: string): string {
+  return genre.normalize("NFKC").toLowerCase();
+}
+
+/** 把 text 按分隔符拆开、去掉空项，接到 list 后面；重复的不再添加。 */
+export function addGenres(list: readonly string[], text: string): string[] {
+  const next = [...list];
+  const keys = new Set(next.map(genreKey));
+  for (const part of text.split(GENRE_SEPARATORS)) {
+    const genre = normalizeText(part);
+    if (genre === "" || keys.has(genreKey(genre))) continue;
+    keys.add(genreKey(genre));
+    next.push(genre);
+  }
+  return next;
+}
+
+/** 流派草稿要提交的列表：输入框里还没加成标签的内容也算。 */
+function genresOf(draft: FieldDraft): string[] {
+  return addGenres(draft.list, draft.text);
+}
+
+/** 字段现在的状态对应的草稿：没有修正是“使用扫描值”，设值是“自定义”，设空是“留空”。输入预填扫描值，切到“自定义”时可以直接修改。 */
 export function baselineDraft(field: CorrectionFieldDTO): FieldDraft {
   const correction = field.correction;
-  if (correction === null) return { mode: "scan", text: textOf(field.scan_value) };
-  if (correction.mode === "null") return { mode: "empty", text: textOf(field.scan_value) };
-  return { mode: "custom", text: textOf(correction.value ?? null) };
+  if (correction === null) return { mode: "scan", ...inputOf(field.scan_value) };
+  if (correction.mode === "null") return { mode: "empty", ...inputOf(field.scan_value) };
+  return { mode: "custom", ...inputOf(correction.value ?? null) };
 }
 
 /** 显示用的草稿：动过的字段取用户的输入，没动过的取最新的基线。 */
@@ -49,6 +82,14 @@ export function fieldError(field: CorrectableField, draft: FieldDraft): string |
   const label = correctionFieldLabels[field];
   if (draft.mode === "scan") return null;
   if (draft.mode === "empty") return canBeEmpty(field) ? null : `${label}不能留空。`;
+  if (field === "genre") {
+    // 一个都没有时按“留空”提交，不算错误。
+    const genres = genresOf(draft);
+    if (genres.length > MAX_GENRES) return `最多 ${MAX_GENRES} 个。`;
+    if (genres.some(hasControlCharacter)) return "含有不允许的字符。";
+    if (genres.some((genre) => new TextEncoder().encode(genre).length > MAX_TEXT_BYTES)) return "内容太长了。";
+    return null;
+  }
   const text = normalizeText(draft.text);
   if (text === "") return canBeEmpty(field) ? "请输入内容；要清空这个字段，请选择“留空”。" : `${label}不能为空。`;
   if (field === "year") {
@@ -68,6 +109,13 @@ function changeOf(field: CorrectionFieldDTO, draft: FieldDraft): CorrectionChang
     case "empty":
       return baseline?.mode === "null" ? null : { mode: "null" };
     case "custom": {
+      if (field.field === "genre") {
+        const genres = genresOf(draft);
+        if (genres.length === 0) return baseline?.mode === "null" ? null : { mode: "null" };
+        const current = baseline?.mode === "set" && Array.isArray(baseline.value) ? baseline.value : null;
+        // 按整个列表比较：顺序不同也是修改（管理员可以把主流派放在第一个）。
+        return current !== null && current.length === genres.length && current.every((genre, index) => genre === genres[index]) ? null : { mode: "set", value: genres };
+      }
       const text = normalizeText(draft.text);
       const value = field.field === "year" ? Number(text) : text;
       return baseline?.mode === "set" && baseline.value === value ? null : { mode: "set", value };
@@ -104,7 +152,7 @@ export function planChanges(state: CorrectionStateDTO, edits: DraftEdits): Plann
   return planned;
 }
 
-/** “确认扫描值”：把当前扫描值存为修正（钉住它，该字段不再计入需要关注）；扫描值为空时确认的是“空”。 */
+/** “确认扫描值”：把当前扫描值存为修正（钉住它，该字段不再计入需要关注）；扫描值为空时确认的是“空”。流派的扫描值是列表，确认的就是这个列表。 */
 export function confirmScanDraft(field: CorrectionFieldDTO): FieldDraft {
-  return field.scan_value === null ? { mode: "empty", text: "" } : { mode: "custom", text: String(field.scan_value) };
+  return field.scan_value === null ? { mode: "empty", text: "", list: [] } : { mode: "custom", ...inputOf(field.scan_value) };
 }

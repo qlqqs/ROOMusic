@@ -137,7 +137,7 @@ func TestPostgreSQLOperationsAPIListsRecordsForAdministratorsOnly(t *testing.T) 
 
 	correction, revision := environment.correct(t, environment.a, 1, map[string]any{"title": setChange("Album A (corrected)"), "year": nullChange})
 	joinOperation, _ := environment.join(t, environment.b, 1, environment.groupA)
-	genreOperation, _ := environment.correct(t, environment.a, revision, map[string]any{"genre": setChange("古典")})
+	genreOperation, _ := environment.correct(t, environment.a, revision, map[string]any{"genre": setChange([]string{"古典"})})
 
 	listed, raw := environment.list(t, "")
 	if listed.Pagination.Total != 3 || listed.Pagination.Page != 1 || listed.Pagination.PageSize != 50 || len(listed.Items) != 3 {
@@ -230,8 +230,8 @@ func TestPostgreSQLRevertAPIRejectsUnauthorizedAndInvalidRequestsWithoutSideEffe
 
 	// A：第一条修正之后又被修改过（revert_conflict）。B：归组之后被撤销（already_reverted，以及撤销记录 not_revertible）。
 	// C：修正之后曲目都缺失了，不再可见（404）。
-	superseded, revision := environment.correct(t, environment.a, 1, map[string]any{"genre": setChange("古典")})
-	environment.correct(t, environment.a, revision, map[string]any{"genre": setChange("爵士")})
+	superseded, revision := environment.correct(t, environment.a, 1, map[string]any{"genre": setChange([]string{"古典"})})
+	environment.correct(t, environment.a, revision, map[string]any{"genre": setChange([]string{"爵士"})})
 	joinOperation, _ := environment.join(t, environment.b, 1, environment.groupA)
 	reverted := environment.revert(t, &environment.admin, joinOperation, uuid.New())
 	if reverted.Code != http.StatusOK {
@@ -312,7 +312,7 @@ func TestPostgreSQLRevertAPIUndoesCorrectionsAndGroupChangesAndReplays(t *testin
 	if replay.Code != http.StatusOK || !jsonResponsesEqual(t, replay, reverted) {
 		t.Fatalf("replay: HTTP %d: %s; want %s", replay.Code, replay.Body.String(), reverted.Body.String())
 	}
-	other, _ := environment.correct(t, environment.b, 1, map[string]any{"genre": setChange("古典")})
+	other, _ := environment.correct(t, environment.b, 1, map[string]any{"genre": setChange([]string{"古典"})})
 	requireAPIError(t, environment.revert(t, &environment.admin, other, key), 409, "idempotency_conflict")
 	requireAPIError(t, environment.revert(t, &environment.admin, correction, uuid.New()), 409, "already_reverted")
 	if got := countRows(t, application, `SELECT COUNT(*) FROM operations WHERE operation_type='revert'`); got != 1 {
@@ -338,7 +338,7 @@ func TestPostgreSQLRevertAPIUndoesCorrectionsAndGroupChangesAndReplays(t *testin
 	}
 
 	// 撤销之后用旧的版本号写入被拒绝（撤销也递增了版本号）。
-	requireAPIError(t, application.request(t, http.MethodPatch, "/api/v1/releases/"+environment.a+"/corrections", correctionBody(revision+1, map[string]any{"genre": setChange("爵士")}), &environment.admin, idempotencyHeader(uuid.New())), 409, "revision_conflict")
+	requireAPIError(t, application.request(t, http.MethodPatch, "/api/v1/releases/"+environment.a+"/corrections", correctionBody(revision+1, map[string]any{"genre": setChange([]string{"爵士"})}), &environment.admin, idempotencyHeader(uuid.New())), 409, "revision_conflict")
 }
 
 // 对同一条记录的并发撤销：同键只执行一次；不同的键恰好一个成功，其余是 already_reverted。
@@ -378,7 +378,7 @@ func TestPostgreSQLRevertAPIConcurrentRequests(t *testing.T) {
 		return results
 	}
 
-	first, _ := environment.correct(t, environment.a, 1, map[string]any{"genre": setChange("古典")})
+	first, _ := environment.correct(t, environment.a, 1, map[string]any{"genre": setChange([]string{"古典"})})
 	key := uuid.New()
 	same := overlap(first, overlappingRootRequests, func(int) *httptest.ResponseRecorder {
 		return environment.revert(t, &environment.admin, first, key)
@@ -394,7 +394,7 @@ func TestPostgreSQLRevertAPIConcurrentRequests(t *testing.T) {
 		t.Fatalf("same-key overlap: %d distinct operations, %d revert records; want exactly one", len(operationIDs), reverts)
 	}
 
-	second, _ := environment.correct(t, environment.b, 1, map[string]any{"genre": setChange("爵士")})
+	second, _ := environment.correct(t, environment.b, 1, map[string]any{"genre": setChange([]string{"爵士"})})
 	different := overlap(second, 4, func(int) *httptest.ResponseRecorder {
 		return environment.revert(t, &environment.admin, second, uuid.New())
 	})

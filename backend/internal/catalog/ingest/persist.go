@@ -173,16 +173,20 @@ func PersistCandidateWithFeedback(ctx context.Context, database TxBeginner, scan
 // 否则新建 Release 与一个新的 ReleaseGroup（每个新 Release 一个组）。
 func persistRelease(ctx context.Context, tx *sql.Tx, rootID string, candidate OrganizedCandidate, plannedReleaseID string) (string, error) {
 	anchor := CandidateIdentity(rootID, candidate.Anchor)
+	genres := candidate.Genres
+	if genres == nil {
+		genres = []string{}
+	}
 	if plannedReleaseID == "" {
 		groupID, releaseID := uuid.New(), uuid.New()
 		if _, err := tx.ExecContext(ctx, "INSERT INTO release_groups(id) VALUES($1::uuid)", groupID); err != nil {
 			return "", err
 		}
-		_, err := tx.ExecContext(ctx, `INSERT INTO releases(id,group_id,title,artist,source_root_id,relative_directory,candidate_anchor,candidate_kind,album_artist,year,source_type,media_type,genre,catalog_number,edition,label,barcode)
-			VALUES($1::uuid,$2::uuid,$3,$4,$5::uuid,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`, releaseID, groupID, candidate.Title, candidate.Artist, rootID, candidate.Anchor.Scope, anchor, string(candidate.Anchor.Kind), candidate.AlbumArtist, releaseYear(candidate), nullableString(candidate.SourceType), nullableString(candidate.MediaType), nullableString(candidate.Genre), nullableString(candidate.CatalogNumber), nullableString(candidate.Edition), nullableString(candidate.Label), nullableString(candidate.Barcode))
+		_, err := tx.ExecContext(ctx, `INSERT INTO releases(id,group_id,title,artist,source_root_id,relative_directory,candidate_anchor,candidate_kind,album_artist,year,source_type,media_type,genres,catalog_number,edition,label,barcode)
+			VALUES($1::uuid,$2::uuid,$3,$4,$5::uuid,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`, releaseID, groupID, candidate.Title, candidate.Artist, rootID, candidate.Anchor.Scope, anchor, string(candidate.Anchor.Kind), candidate.AlbumArtist, releaseYear(candidate), nullableString(candidate.SourceType), nullableString(candidate.MediaType), genres, nullableString(candidate.CatalogNumber), nullableString(candidate.Edition), nullableString(candidate.Label), nullableString(candidate.Barcode))
 		return releaseID, err
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE releases SET title=$1,artist=$2,relative_directory=$3,candidate_anchor=$4,candidate_kind=$5,album_artist=$6,year=$7,source_type=$8,media_type=$9,genre=$10,catalog_number=$11,edition=$12,label=$13,barcode=$14 WHERE id=$15::uuid`, candidate.Title, candidate.Artist, candidate.Anchor.Scope, anchor, string(candidate.Anchor.Kind), candidate.AlbumArtist, releaseYear(candidate), nullableString(candidate.SourceType), nullableString(candidate.MediaType), nullableString(candidate.Genre), nullableString(candidate.CatalogNumber), nullableString(candidate.Edition), nullableString(candidate.Label), nullableString(candidate.Barcode), plannedReleaseID)
+	result, err := tx.ExecContext(ctx, `UPDATE releases SET title=$1,artist=$2,relative_directory=$3,candidate_anchor=$4,candidate_kind=$5,album_artist=$6,year=$7,source_type=$8,media_type=$9,genres=$10,catalog_number=$11,edition=$12,label=$13,barcode=$14 WHERE id=$15::uuid`, candidate.Title, candidate.Artist, candidate.Anchor.Scope, anchor, string(candidate.Anchor.Kind), candidate.AlbumArtist, releaseYear(candidate), nullableString(candidate.SourceType), nullableString(candidate.MediaType), genres, nullableString(candidate.CatalogNumber), nullableString(candidate.Edition), nullableString(candidate.Label), nullableString(candidate.Barcode), plannedReleaseID)
 	if err != nil {
 		return "", err
 	}

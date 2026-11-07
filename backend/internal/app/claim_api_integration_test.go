@@ -379,7 +379,7 @@ func TestPostgreSQLClaimRevertAPIRefusesAfterLaterChanges(t *testing.T) {
 	revision, sourceRevision, token := environment.previewToken(t)
 	claimID := decodeJSONMap(t, environment.claim(t, &environment.admin, environment.b, uuid.New(), claimBody(revision, sourceRevision, environment.a, token)))["operation_id"].(string)
 	response := environment.application.request(t, http.MethodPatch, "/api/v1/releases/"+environment.b+"/corrections",
-		correctionBody(int(revision)+1, map[string]any{"genre": setChange("后来改的")}), &environment.admin, idempotencyHeader(uuid.New()))
+		correctionBody(int(revision)+1, map[string]any{"genre": setChange([]string{"后来改的"})}), &environment.admin, idempotencyHeader(uuid.New()))
 	if response.Code != http.StatusOK {
 		t.Fatalf("a later correction: HTTP %d: %s", response.Code, response.Body.String())
 	}

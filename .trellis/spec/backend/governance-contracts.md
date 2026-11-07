@@ -26,10 +26,10 @@ M4 的第三项（2026-10）增加“认领”：把不可见旧发行上的修�
   `operations_actor_key_uq`（`(actor_id, idempotency_key)`）、`operations_reverts_uq`（一条操作至多被撤销一次）。
 - **`releases.edit_revision`**（`BIGINT NOT NULL DEFAULT 1`，`> 0`）：发行的人工修改版本号。**只有受控操作（修正、归组、核对、撤销）递增，扫描从不改它。**
   字段修正、归组与核对共用同一个号，所以撤销规则只有一句话：只能撤销这个发行**最近一次**修改。
-- **`release_corrections`**：当前的修正意图，`PRIMARY KEY (release_id, field)`，没有行就是“没有修正”。`mode` 为 `set`（改成某个值，
-  等于扫描值也是有效修正）或 `null`（明确设为空）；标题与专辑艺人不能是 `null`；`set` 的值非空、不超过 4096 字节，年份是 1–9999 的整数。
-  `operation_id` 指向设下这个意图的操作，外键 `DEFERRABLE INITIALLY DEFERRED`（记录在执行器之后才插入）。
-- **`release_effective`**（视图）：列与 `releases` 同名，可修正字段换成有效值：`title`、`album_artist`、`year`、`genre`、`label`、`catalog_number`、
+- **`release_corrections`**：当前意图，主键 `(release_id, field)`；无行即无修正。`set` 钉住值（即使等于扫描值），`null` 设空（标题、专辑艺人不可）。
+  年份 1–9999，其余文本非空且 ≤4096 字节；0032 起流派用 `list_value TEXT[]`，见[多流派合同](./genre-contracts.md)。
+  `operation_id` 引用设下意图的操作，外键 `DEFERRABLE INITIALLY DEFERRED`（执行器后插入记录）。
+- **`release_effective`**（视图）：列与 `releases` 同名，可修正字段换成有效值：`title`、`album_artist`、`year`、`genres`、`label`、`catalog_number`、
   `edition`、`barcode` 取修正值（`null` 为空，没有修正取扫描值）；展示艺人 `artist` 跟随专辑艺人的修正；另带 `edit_revision`；其余列原样。
   每个字段一次主键上的 `LEFT JOIN`，不被引用的列对应的连接会被优化器去掉。
 - 可修正字段固定为八个，顺序固定：`title`、`album_artist`、`year`、`genre`、`label`、`catalog_number`、`edition`、`barcode`
@@ -72,7 +72,7 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
 ### 4.1 修正
 
 - `GET /api/v1/releases/{id}/corrections`：`{release_id, revision, fields:[{field, scan_value, correction, effective_value, uncertain}]}`，八个字段固定顺序；
-  `correction` 为 `null`、`{mode:"set", value}` 或 `{mode:"null"}`；年份的值是整数，其余是字符串。`uncertain` 表示扫描对该字段的处理是
+  `correction` 为 `null`、`{mode:"set", value}` 或 `{mode:"null"}`；年份为整数，流派为非空数组或 null，其余为字符串。流派 `uncertain` 恒为 false；其他字段表示扫描处理是
   `uncertain_apply`（专辑艺人还看 `artist` 字段）。专辑艺人的 `scan_value` 是扫描的专辑艺人，没有时是扫描的展示艺人（即页面显示的值）。
   发行不存在或没有可见曲目 `404 not_found`。
 - `PATCH /api/v1/releases/{id}/corrections`：`{expected_revision, changes:{<field>:{mode:"set",value}|{mode:"null"}|{mode:"clear"}}}`。

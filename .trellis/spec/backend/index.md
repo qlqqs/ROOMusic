@@ -57,6 +57,7 @@ Before writing or reviewing backend code:
 | [艺人身份与浏览合同](./artist-contracts.md) | M5 ⑤：名字键、署名与治理、整理期、引用、队列及收藏端口 |
 | [目录批量摘要合同](./catalog-summary-contracts.md) | 历史/个人数据安全摘要、批量上限和缺失语义 |
 | [Catalog REST 合同](./catalog-rest-contracts.md) | Release 列表/详情/evidence、按组接口、封面摘要、可见性和错误合同 |
+| [专辑多流派合同](./genre-contracts.md) | 0032：多值标签、流派合集、读取数组、修正与历史撤销兼容、双向迁移 |
 | [Catalog REST 验证与示例](./catalog-rest-verification.md) | Catalog REST 的正确/基准/错误案例、必需测试与断言点（含 M5 统计与个人数据批量读取、EXPLAIN 诊断）、错误与正确示例 |
 | [播放直出合同](./playback-contracts.md) | M2a 格式表、预检、音频 Range、安全打开与停机中止；M2b 的 `delivery`、202 与派生错误码 |
 | [无损派生合同](./playback-derivation-contracts.md) | M2b ALAC → FLAC 无损派生：配置与启动、缓存、转换与核对、上限与取消、测试 |

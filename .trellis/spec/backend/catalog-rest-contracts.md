@@ -37,6 +37,7 @@ M5 ④新增规范化搜索与在线投影：完整规则见[搜索合同](./sea
   两个接口都只读；人工归组由治理合同的 `POST /releases/{id}/group` 提供，默认版本由 `POST /release-groups/{id}/default` 提供。
 - Release 详情在摘要之外加 `revision`（发行的人工修改版本号，写操作用它做预期版本）与 `corrected_fields`（有人工修正的字段名，固定顺序，
   没有时是空数组）；所有登录成员可见，不含修正值的来源与操作者。
+- Release 详情与版本对比的 `genres` 为有序文本数组，无流派为 `[]`；不再返回单值 `genre`。修正字段键仍为 `genre`，见[多流派合同](./genre-contracts.md)。
 - Release 详情的 `edition`、`label`、`barcode` 为 nullable string；每条 Track 的
   `credits` 项为 `{role,name,artist_refs}`，`role` 只允许
   `composer | conductor | performer | producer`。每轨最多 100 条、单个 Release 最多

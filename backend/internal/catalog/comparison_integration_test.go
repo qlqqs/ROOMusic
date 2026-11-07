@@ -74,7 +74,7 @@ func TestPostgreSQLReleaseComparisonReportsEffectiveValuesAndContent(t *testing.
 
 	// A：两个介质，四首 present（FLAC 16/44.1k，时长都已知）和一首 missing（不计入）；有版本说明、厂牌等字段。
 	a := fixture.versionOf("Alpha", 1998)
-	fixture.exec(`UPDATE releases SET edition='Remastered', label='Label A', catalog_number='CAT-A', barcode='111', genre='Classical', source_type='physical', media_type='cd' WHERE id=$1::uuid`, a.releaseID)
+	fixture.exec(`UPDATE releases SET edition='Remastered', label='Label A', catalog_number='CAT-A', barcode='111', genres=ARRAY['Classical','Baroque'], source_type='physical', media_type='cd' WHERE id=$1::uuid`, a.releaseID)
 	first := fixture.track(a, "A1", "present", 100.5)
 	second := fixture.track(a, "A2", "present", 200.0)
 	secondMedium := fixture.secondMedium(a)
@@ -112,9 +112,10 @@ func TestPostgreSQLReleaseComparisonReportsEffectiveValuesAndContent(t *testing.
 	for _, release := range []placementRelease{b, c, d} {
 		fixture.intoGroup(release, group)
 	}
-	// 人工修正：A 的标题改了、年份设为空；B 的厂牌改成别的值。
+	// 人工修正：A 的标题改了、年份设为空；B 的流派列表和厂牌改成别的值。
 	fixture.correct(a.releaseID, "title", "Alpha (corrected)")
 	fixture.correct(a.releaseID, "year", nil)
+	fixture.correct(b.releaseID, "genre", []string{"Jazz", "Blues"})
 	fixture.correct(b.releaseID, "label", "Corrected Label")
 
 	comparison := fixture.comparison(group)
@@ -133,7 +134,7 @@ func TestPostgreSQLReleaseComparisonReportsEffectiveValuesAndContent(t *testing.
 
 	wantA := ComparedRelease{
 		ID: a.releaseID, Title: "Alpha (corrected)", Artist: "艺术家", AlbumArtist: ptr("专辑艺术家"), Year: nil,
-		Edition: ptr("Remastered"), Label: ptr("Label A"), CatalogNumber: ptr("CAT-A"), Barcode: ptr("111"), Genre: ptr("Classical"),
+		Edition: ptr("Remastered"), Label: ptr("Label A"), CatalogNumber: ptr("CAT-A"), Barcode: ptr("111"), Genres: []string{"Classical", "Baroque"},
 		SourceType: ptr("physical"), MediaType: ptr("cd"), MediumCount: 2, TrackCount: 4, DurationSeconds: ptr(100.0 + 100.5 + 200.0 + 50.0),
 		Formats:         []AudioFormat{{Codec: ptr("flac"), BitDepth: ptr(16), SampleRate: ptr(44100), TrackCount: 4}},
 		CorrectedFields: []string{"title", "year"},
@@ -142,7 +143,7 @@ func TestPostgreSQLReleaseComparisonReportsEffectiveValuesAndContent(t *testing.
 		t.Errorf("version A = %s\nwant      %s", asJSON(got), asJSON(wantA))
 	}
 	wantB := ComparedRelease{
-		ID: b.releaseID, Title: "Beta", Artist: "艺术家", AlbumArtist: ptr("专辑艺术家"), Year: ptr(2005),
+		ID: b.releaseID, Title: "Beta", Artist: "艺术家", AlbumArtist: ptr("专辑艺术家"), Year: ptr(2005), Genres: []string{"Jazz", "Blues"},
 		MediumCount: 1, TrackCount: 5, DurationSeconds: nil,
 		Formats: []AudioFormat{
 			{Codec: ptr("alac"), BitDepth: ptr(24), SampleRate: ptr(96000), TrackCount: 3},
@@ -151,13 +152,13 @@ func TestPostgreSQLReleaseComparisonReportsEffectiveValuesAndContent(t *testing.
 		},
 		CorrectedFields: []string{},
 	}
-	// B 的厂牌被修正了，所以有效值与 corrected_fields 都带上它；其余字段没有值（null）。
-	wantB.Label, wantB.CorrectedFields = ptr("Corrected Label"), []string{"label"}
+	// B 的流派与厂牌被修正了，所以有效值与 corrected_fields 都带上它们；其余文本字段没有值（null）。
+	wantB.Label, wantB.CorrectedFields = ptr("Corrected Label"), []string{"genre", "label"}
 	if got := byID[b.releaseID]; !reflect.DeepEqual(got, wantB) {
 		t.Errorf("version B = %s\nwant      %s", asJSON(got), asJSON(wantB))
 	}
 	wantC := ComparedRelease{
-		ID: c.releaseID, Title: "Gamma", Artist: "艺术家", AlbumArtist: ptr("专辑艺术家"), Year: nil,
+		ID: c.releaseID, Title: "Gamma", Artist: "艺术家", AlbumArtist: ptr("专辑艺术家"), Year: nil, Genres: []string{},
 		MediumCount: 1, TrackCount: 5, DurationSeconds: nil,
 		Formats:         []AudioFormat{{Codec: nil, BitDepth: nil, SampleRate: nil, TrackCount: 5}},
 		CorrectedFields: []string{},
@@ -179,6 +180,12 @@ func TestPostgreSQLReleaseComparisonReportsEffectiveValuesAndContent(t *testing.
 	third3 := releases[slices.Index(order, c.releaseID)].(map[string]any)
 	if third3["duration_seconds"] != nil || third3["year"] != nil || third3["edition"] != nil {
 		t.Errorf("unknown values are not null: %v", third3)
+	}
+	if !reflect.DeepEqual(third3["genres"], []any{}) {
+		t.Errorf("genres without a value are not an empty array: %v", third3)
+	}
+	if _, present := third3["genre"]; present {
+		t.Errorf("the old genre field is still present: %v", third3)
 	}
 	if len(shape) != 4 {
 		t.Errorf("comparison has %d top-level fields, want group_id, default_release_id, release_count and releases", len(shape))

@@ -1,7 +1,7 @@
 {
   "body": {
     "artists_state": "ready",
-    "epoch": 4,
+    "epoch": 5,
     "search_mode": "normalized"
   },
   "status": 200

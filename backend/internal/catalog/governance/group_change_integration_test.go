@@ -59,8 +59,8 @@ func TestPostgreSQLJoinMovesAVersionIntoAnotherAlbum(t *testing.T) {
 	fixture := newCorrectionFixture(t)
 	ctx := context.Background()
 	moved, target := fixture.versionOf("Moved", 2000), fixture.versionOf("Target", 2005)
-	fixture.decision(moved.releaseID, "genre", "uncertain_apply")
-	fixture.decision(target.releaseID, "genre", "uncertain_apply")
+	fixture.decision(moved.releaseID, "year", "uncertain_apply")
+	fixture.decision(target.releaseID, "year", "uncertain_apply")
 	fixture.decision(target.releaseID, "label", "uncertain_apply")
 
 	result, operation := fixture.mustChangeGroup(moved.releaseID, 1, GroupJoin, target.groupID)
@@ -196,7 +196,7 @@ func TestPostgreSQLGroupChangeRejectsInvalidRequestsWithoutSideEffects(t *testin
 	}
 
 	// 字段修正与归组共用同一个版本号：修正之后用旧版本号归组被拒绝，用新版本号成功。
-	fixture.mustCorrect(alpha.releaseID, 1, map[string]CorrectionChange{"genre": {Mode: "set", Text: "古典"}})
+	fixture.mustCorrect(alpha.releaseID, 1, map[string]CorrectionChange{"genre": {Mode: "set", Genres: []string{"古典"}}})
 	if _, err := fixture.changeGroup(alpha.releaseID, 1, GroupJoin, beta.groupID); err == nil {
 		t.Fatal("a group change with the revision from before a correction was accepted")
 	}

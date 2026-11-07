@@ -31,7 +31,7 @@ func (scenario *claimScenario) trace(extraGroups ...string) claimTrace {
 	groups := append([]string{scenario.album, scenario.target.groupID, scenario.source.groupID}, extraGroups...)
 	for name, releaseID := range map[string]string{"source": scenario.source.releaseID, "target": scenario.target.releaseID} {
 		trace.Corrections[name], trace.Reviews[name] = map[string]string{}, map[string]string{}
-		rows, err := database.Query(`SELECT field, mode, COALESCE(text_value, year_value::text, ''), operation_id::text FROM release_corrections WHERE release_id=$1::uuid`, releaseID)
+		rows, err := database.Query(`SELECT field, mode, COALESCE(text_value, year_value::text, to_jsonb(list_value)::text, ''), operation_id::text FROM release_corrections WHERE release_id=$1::uuid`, releaseID)
 		if err != nil {
 			scenario.fixture.t.Fatalf("trace corrections: %v", err)
 		}

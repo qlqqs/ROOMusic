@@ -51,7 +51,7 @@ import {
  * 对一个字段的修改：set 是改成某个值（等于扫描值也是有效修正，用来确认扫描值），null 是明确设为空，
  * clear 是删除修正、回到当前的扫描值。年份的值是整数，其余是字符串。
  */
-export type CorrectionChangeBody = { mode: "set"; value: string | number } | { mode: "null" } | { mode: "clear" };
+export type CorrectionChangeBody = { mode: "set"; value: string | number | string[] } | { mode: "null" } | { mode: "clear" };
 
 export type CorrectionChanges = Partial<Record<CorrectableField, CorrectionChangeBody>>;
 

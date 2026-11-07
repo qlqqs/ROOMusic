@@ -222,21 +222,27 @@ func loadClaimSide(ctx context.Context, database operations.Queryer, releaseID s
 		Scan(&side.Title, &side.GroupID, &side.Revision); err != nil {
 		return claimSide{}, err
 	}
-	rows, err := database.QueryContext(ctx, `SELECT field, mode, text_value, year_value, operation_id::text FROM release_corrections WHERE release_id=$1::uuid`, releaseID)
+	rows, err := database.QueryContext(ctx, `SELECT field, mode, text_value, year_value, to_jsonb(list_value)::text, operation_id::text FROM release_corrections WHERE release_id=$1::uuid`, releaseID)
 	if err != nil {
 		return claimSide{}, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var name, mode, operationID string
-		var text sql.NullString
+		var text, listJSON sql.NullString
 		var year sql.NullInt64
-		if err := rows.Scan(&name, &mode, &text, &year, &operationID); err != nil {
+		if err := rows.Scan(&name, &mode, &text, &year, &listJSON, &operationID); err != nil {
 			return claimSide{}, err
 		}
 		intent := catalog.CorrectionIntent{Mode: mode}
 		switch {
 		case mode != catalog.CorrectionSet:
+		case name == "genre":
+			var genres []string
+			if err := json.Unmarshal([]byte(listJSON.String), &genres); err != nil {
+				return claimSide{}, err
+			}
+			intent.Value = genres
 		case year.Valid:
 			intent.Value = int(year.Int64)
 		default:

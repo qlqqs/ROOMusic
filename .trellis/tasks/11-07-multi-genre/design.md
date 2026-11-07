@@ -98,6 +98,8 @@ Go：`Genres []string \`json:"genres"\``，读取时 `to_jsonb(releases.genres):
 
 0031 留给重复艺人子任务，本迁移编号 0032。原则：`releases.genre` **改名加换类型**而不是删列重建，列位置不变，回退能逐项还原结构快照（快照比较列序号，见 `postgrestest/snapshot.go:33`）。
 
+补充裁决（2026-11-07）：`track_observations` 每轨仍只写一条 `genre` 观察，多值用 `"; "` 连接，读取流派观察时统一经 `SplitGenres` 拆回，不改唯一索引或回退结构；这替代本文其他位置的“每个流派一行”。回退后旧版本把连接值当作一个字符串流派，接受此行为。
+
 ### 3.1 升级 `0032_release_genres.sql`
 
 ```sql
