@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端检查清单"}
+{"file": ".trellis/spec/frontend/quality-verification-layers.md", "reason": "Vitest / Playwright / 真实服务分层"}

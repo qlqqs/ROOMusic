@@ -1,0 +1,32 @@
+{
+  "id": "ui-minimal-and-catalog-fixes",
+  "name": "ui-minimal-and-catalog-fixes",
+  "title": "界面极简与资料整理改进",
+  "description": "11 项用户反馈：界面极简（字体、图标按钮、曲目行、播放条、成员弹窗）、侧栏与我的音乐重组、多流派、重复艺人规则、目录浏览器",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "qlqq",
+  "assignee": "qlqq",
+  "createdAt": "2026-11-07",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "11-07-ui-minimal",
+    "11-07-sidebar-my-music",
+    "11-07-multi-genre",
+    "11-07-duplicate-artist-rules",
+    "11-07-library-dir-browser"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

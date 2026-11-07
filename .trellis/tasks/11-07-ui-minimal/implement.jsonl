@@ -1,0 +1,5 @@
+{"file": "frontend/DESIGN.md", "reason": "设计变量、字体与字号（第 3 节）要改成无衬线与新字阶"}
+{"file": "frontend/DESIGN-components.md", "reason": "按钮、标签、播放条与曲目行的组件状态规则"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "共享组件、图标按钮读屏名、对话框用法"}
+{"file": ".trellis/spec/frontend/player-design-guidelines.md", "reason": "播放条控件与播放模式的既有约定"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端测试、无障碍与禁止的捷径"}

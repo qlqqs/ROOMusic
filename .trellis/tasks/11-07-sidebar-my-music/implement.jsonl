@@ -1,0 +1,5 @@
+{"file": "frontend/DESIGN.md", "reason": "第 4 节应用布局与导航"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "地址状态、旧地址跳转与查询参数规范化"}
+{"file": ".trellis/spec/frontend/personal-guidelines.md", "reason": "收藏、歌单页面与查询键"}
+{"file": ".trellis/spec/frontend/playback-and-personal-state.md", "reason": "历史页签与个人数据的地址约定"}
+{"file": ".trellis/spec/frontend/artist-guidelines.md", "reason": "艺人入口可见性与候选页名字"}

@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/artist-contracts.md", "reason": "候选规则合同核对"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "迁移回退核对"}
+{"file": ".trellis/spec/frontend/quality-verification-layers.md", "reason": "前端测试分层"}

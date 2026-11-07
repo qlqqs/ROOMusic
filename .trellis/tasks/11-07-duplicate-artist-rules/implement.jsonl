@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/artist-contracts.md", "reason": "名字键、署名、候选信号与治理"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移与回退 SQL 规则"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "迁移执行器与双向回退合同"}
+{"file": ".trellis/spec/frontend/artist-guidelines.md", "reason": "候选页与理由文案"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "理由 kind 枚举的解码"}

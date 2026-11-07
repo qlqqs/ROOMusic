@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移、事务与回退 SQL 规则"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "迁移执行器与双向回退合同"}
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "扫描整理与字段决定"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "Release 详情与按组接口字段"}
+{"file": ".trellis/spec/backend/governance-contracts.md", "reason": "修正覆盖层、操作记录与撤销"}
+{"file": ".trellis/spec/backend/issue-review-contracts.md", "reason": "元数据问题的来源与核对依据"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "DTO 解码"}
+{"file": ".trellis/spec/frontend/governance-components.md", "reason": "编辑发行信息对话框"}

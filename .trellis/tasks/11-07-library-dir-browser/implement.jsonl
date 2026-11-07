@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "目录登记、路径校验与允许目录"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "错误码与 WriteError 约定"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "REST 通则与管理员接口"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "弹出面板、键盘与读屏"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "REST 读取、取消与查询键"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "DTO 解码"}
