@@ -1,3 +1,4 @@
+import { BrandMark } from "../brand/brand-mark";
 import { VisuallyHidden } from "../../shared/ui";
 import styles from "./splash.module.css";
 
@@ -5,7 +6,7 @@ import styles from "./splash.module.css";
 export function Splash() {
   return (
     <div className={styles.splash} role="status">
-      <p className={styles.brand}>ROOMusic</p>
+      <p className={styles.brand}><BrandMark /></p>
       <VisuallyHidden>正在加载</VisuallyHidden>
     </div>
   );

@@ -1,0 +1,11 @@
+.mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.icon {
+  flex: none;
+  width: 1.4em;
+  height: 1.4em;
+}

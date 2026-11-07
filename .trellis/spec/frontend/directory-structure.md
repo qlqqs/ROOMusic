@@ -21,6 +21,7 @@ frontend/
     │   ├── providers.tsx           # QueryClient、会话、Router 的装配
     │   ├── runtime.ts              # createAppRuntime：缓存、会话控制器、路由与清理的唯一接线
     │   ├── router.tsx              # 路由树与守卫
+    │   ├── brand/                  # 品牌标志 BrandMark（界面用 logo-small.svg）与标签页图标 favicon.svg（带深色模式）；大图原稿在 docs/brand/
     │   ├── shell/                  # 外壳、侧栏、窄屏导航、身份区、导航项
     │   ├── routes/                 # 页面组合与整页状态（登录、无权限、不存在、服务不可用）；跨 feature 的组合（如历史页的播放动作 history-playback.tsx）
     │   └── *.test.tsx              # 页面级测试：经应用运行时与替身后端验证整页行为
