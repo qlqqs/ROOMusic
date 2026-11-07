@@ -3,6 +3,7 @@ import { apiRequest } from "../../../shared/api";
 import {
   decodeActiveScan,
   decodeDiagnosticsPage,
+  decodeFolderListing,
   decodeRootChanged,
   decodeRootCreated,
   decodeRootList,
@@ -11,6 +12,7 @@ import {
   decodeScanPage,
   decodeScanReport,
   type DiagnosticsPageDTO,
+  type FolderListingDTO,
   type RootChangedDTO,
   type RootCreatedDTO,
   type RootDTO,
@@ -26,6 +28,12 @@ export function fetchRoots(signal?: AbortSignal): Promise<ApiResponse<{ items: R
 
 export function fetchRootOperations(signal?: AbortSignal): Promise<ApiResponse<{ items: RootOperationDTO[] }>> {
   return apiRequest({ method: "GET", path: "/api/v1/library-root-operations", signal }, decodeRootOperationList);
+}
+
+/** 服务器上的文件夹（管理员）：path 为 null 时从允许的音乐目录开始；只回传接口给出的路径。 */
+export function fetchFolders(path: string | null, signal?: AbortSignal): Promise<ApiResponse<FolderListingDTO>> {
+  const query = path === null ? "" : `?${new URLSearchParams({ path }).toString()}`;
+  return apiRequest({ method: "GET", path: `/api/v1/library-folders${query}`, signal }, decodeFolderListing);
 }
 
 // 目录的新增、停用与恢复都要求幂等键：同一个键、同一个请求体重放会得到第一次的响应，不会重复执行。

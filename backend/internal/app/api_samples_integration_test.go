@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -126,6 +127,7 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	listener := login(call(http.MethodPost, "/api/v1/auth/login", credentials("listener", sampleListenerPassword), nil))
 	samples.record("auth/me-user", call(http.MethodGet, "/api/v1/auth/me", nil, listener), http.StatusOK)
 	samples.record("errors/forbidden", call(http.MethodGet, "/api/v1/users", nil, listener), http.StatusForbidden)
+	requireAPIError(t, call(http.MethodGet, "/api/v1/library-folders", nil, listener), http.StatusForbidden, "forbidden")
 	samples.record("errors/last-admin", call(http.MethodPatch, "/api/v1/users/"+ids["curator"], map[string]bool{"disabled": true}, admin), http.StatusConflict)
 	samples.record("users/disable", call(http.MethodPatch, "/api/v1/users/"+ids["archivist"], map[string]bool{"disabled": true}, admin), http.StatusOK)
 	samples.record("users/list", call(http.MethodGet, "/api/v1/users", nil, admin), http.StatusOK)
@@ -180,6 +182,40 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 		t.Fatalf("create second root: HTTP %d: %s", createdB.Code, createdB.Body.String())
 	}
 	rootB := decodeJSONMap(t, createdB)["id"].(string)
+
+	// 浏览只复用已登记目录；仅这两个成功样本把临时允许路径替换成公开的 /music。
+	realAllowedRoot, err := filepath.EvalSymlinks(application.allowedRoot)
+	if err != nil {
+		t.Fatalf("resolve allowed root for folder samples: %v", err)
+	}
+	folderPaths := strings.NewReplacer(realAllowedRoot, "/music", application.allowedRoot, "/music")
+	recordFolderSample := func(name, path string) map[string]any {
+		t.Helper()
+		response := call(http.MethodGet, path, nil, admin)
+		body := folderPaths.Replace(response.Body.String())
+		response.Body.Reset()
+		response.Body.WriteString(body)
+		samples.record(name, response, http.StatusOK)
+		return decodeJSONMap(t, response)
+	}
+	startListing := recordFolderSample("library-folders/start", "/api/v1/library-folders")
+	registeredA := false
+	for _, value := range startListing["items"].([]any) {
+		item := value.(map[string]any)
+		if item["path"] == "/music/classical-a" && item["registered"] == true {
+			registeredA = true
+		}
+	}
+	if !registeredA {
+		t.Fatalf("folder start must include the registered classical-a directory: %v", startListing)
+	}
+	childListing := recordFolderSample("library-folders/child", "/api/v1/library-folders?path="+url.QueryEscape(libraryA))
+	if childListing["path"] != "/music/classical-a" || childListing["parent"] != "/music" || childListing["can_go_up"] != true || childListing["registered"] != true {
+		t.Fatalf("folder child must be registered and allow returning to its parent: %v", childListing)
+	}
+	invalidFolder := call(http.MethodGet, "/api/v1/library-folders?path=/etc", nil, admin)
+	requireAPIError(t, invalidFolder, http.StatusBadRequest, "invalid_library_path")
+	samples.record("errors/invalid-library-folder", invalidFolder, http.StatusBadRequest)
 
 	// 第一次扫描：测试事务先独占 library_roots，worker 读不到目录而停在第一步，
 	// 因此“新建（202）”“进行中”“已有扫描（200）”的响应都发生在 running 状态，不依赖时序。

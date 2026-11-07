@@ -365,6 +365,13 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
         return guarded(method, path, false, () => respondToRecentlyAdded(mock.recentlyAdded));
       case "GET /api/v1/release-groups":
         return guarded(method, path, false, () => respondToGroupList(mock.groups, search));
+      case "GET /api/v1/library-folders":
+        return guarded(method, path, true, () => {
+          const requested = search.get("path");
+          if (requested === null || requested === "/music") return sample("library-folders/start");
+          if (requested === "/music/classical-a") return sample("library-folders/child");
+          return sample("errors/invalid-library-folder");
+        });
       case "GET /api/v1/library-roots":
         return guarded(method, path, true, () => json({ items: mock.roots }));
       case "GET /api/v1/library-root-operations":

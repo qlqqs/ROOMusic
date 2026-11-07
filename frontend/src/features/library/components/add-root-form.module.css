@@ -3,3 +3,10 @@
   gap: var(--space-3);
   max-width: 44rem;
 }
+
+/* 路径框与紧贴在下面的文件夹浏览器。 */
+.area {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}

@@ -71,6 +71,7 @@ export function useRootCommands() {
       Promise.all([
         queryClient.invalidateQueries({ queryKey: libraryKeys.roots(generation) }),
         queryClient.invalidateQueries({ queryKey: libraryKeys.rootOperations(generation) }),
+        queryClient.invalidateQueries({ queryKey: libraryKeys.folderListings(generation) }),
       ]),
   });
 

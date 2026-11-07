@@ -247,3 +247,16 @@ export const decodeScanReport = d.defineDecoder(scanReportDecoder);
 export type ScanReportDTO = d.Infer<typeof scanReportDecoder>;
 export type AddedAlbumDTO = d.Infer<typeof addedAlbumDecoder>;
 export type ChangeCountsDTO = d.Infer<typeof changeCountsDecoder>;
+
+// 添加目录时的文件夹浏览（GET /library-folders）：path 为 null 是“允许目录列表”这一层（配置了多个允许目录时）；
+// parent 为 null 而 can_go_up 为真表示上一级是这个列表层。registered 含停用的目录。最多 2000 条，多了 truncated 为真。
+const folderListingDecoder = d.object({
+  path: d.nullable(d.string({ min: 1 })),
+  parent: d.nullable(d.string({ min: 1 })),
+  can_go_up: d.boolean(),
+  registered: d.boolean(),
+  truncated: d.boolean(),
+  items: d.array(d.object({ name: d.string({ min: 1 }), path: d.string({ min: 1 }), registered: d.boolean() }), { max: 2000 }),
+});
+export const decodeFolderListing = d.defineDecoder(folderListingDecoder);
+export type FolderListingDTO = d.Infer<typeof folderListingDecoder>;

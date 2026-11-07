@@ -86,6 +86,12 @@ export function installLibraryApi(api: FakeApi, overrides: Partial<FakeLibrary> 
     operationRecords.set(`${kind}:${request.headers.get("Idempotency-Key") ?? ""}`, { fingerprint: JSON.stringify(fingerprint), status, body });
   };
 
+  api.on("GET", "/api/v1/library-folders", (request) => {
+    const path = new URL(request.path, "http://localhost").searchParams.get("path");
+    if (path === null || path === "/music") return sampleResponse("library-folders/start");
+    if (path === "/music/classical-a") return sampleResponse("library-folders/child");
+    return sampleResponse("errors/invalid-library-folder");
+  });
   api.on("GET", "/api/v1/library-roots", () => jsonResponse(200, { items: library.roots }));
   api.on("GET", "/api/v1/library-root-operations", () => jsonResponse(200, { items: library.operations }));
 

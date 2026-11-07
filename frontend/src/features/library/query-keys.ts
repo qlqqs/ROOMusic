@@ -3,6 +3,9 @@ import { viewerQueryKey } from "../auth";
 export const libraryKeys = {
   roots: (generation: number) => viewerQueryKey(generation, "library", "roots"),
   rootOperations: (generation: number) => viewerQueryKey(generation, "library", "root-operations"),
+  /** 添加目录时浏览的文件夹（前缀）：新增目录之后失效，“已添加”跟着更新。 */
+  folderListings: (generation: number) => viewerQueryKey(generation, "library", "folders"),
+  folders: (generation: number, path: string | null) => viewerQueryKey(generation, "library", "folders", path),
   activeScan: (generation: number) => viewerQueryKey(generation, "library", "scans", "active"),
   /** 扫描记录的全部页：启动扫描或扫描结束时整体失效。 */
   scanHistory: (generation: number) => viewerQueryKey(generation, "library", "scans", "history"),

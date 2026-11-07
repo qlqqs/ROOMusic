@@ -1,0 +1,17 @@
+{
+  "body": {
+    "can_go_up": true,
+    "items": [
+      {
+        "name": "album",
+        "path": "/music/classical-a/album",
+        "registered": false
+      }
+    ],
+    "parent": "/music",
+    "path": "/music/classical-a",
+    "registered": true,
+    "truncated": false
+  },
+  "status": 200
+}

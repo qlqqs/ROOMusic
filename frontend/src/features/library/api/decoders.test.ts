@@ -5,6 +5,7 @@ import { withValue, without } from "../../../test/mutate";
 import {
   decodeActiveScan,
   decodeDiagnosticsPage,
+  decodeFolderListing,
   decodeRootChanged,
   decodeRootCreated,
   decodeRootList,
@@ -60,6 +61,27 @@ describe("目录", () => {
     ["变更 revision 为 0", () => decodeRootChanged(withValue(sampleBody("library-roots/disable"), ["revision"], 0))],
   ])("拒绝：%s", (_name, run) => {
     expect(run).toThrow(d.DecodeError);
+  });
+});
+
+describe("文件夹浏览列表", () => {
+  it("解码多个允许目录的起点列表，当前路径和上级均可为空", () => {
+    const listing = {
+      path: null,
+      parent: null,
+      can_go_up: false,
+      registered: false,
+      truncated: false,
+      items: [
+        { name: "/music", path: "/music", registered: true },
+        { name: "/srv/audio", path: "/srv/audio", registered: false },
+      ],
+    };
+    expect(decodeFolderListing(listing)).toEqual(listing);
+  });
+
+  it("拒绝缺少子文件夹路径的列表", () => {
+    expect(() => decodeFolderListing(without(sampleBody("library-folders/start"), ["items", 0, "path"]))).toThrow(d.DecodeError);
   });
 });
 

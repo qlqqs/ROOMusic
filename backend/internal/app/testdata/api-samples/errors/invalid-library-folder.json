@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_library_path",
+      "message": "打不开这个文件夹"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

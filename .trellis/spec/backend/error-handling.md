@@ -34,6 +34,9 @@ are safe validation failures with stable codes, but responses must not disclose
 the allowed host paths. Unsupported audio files encountered during scanning are
 persisted scan diagnostics, not reasons to fail the entire REST request.
 
+管理员[目录浏览](./library-folder-contracts.md)的路径类失败统一为 `400 invalid_library_path` / “打不开这个文件夹”；
+成功响应才允许向管理员返回允许范围内的绝对路径。
+
 For future Music Steward operations, approval and execution failures remain
 distinct. `approval_required` means Assistant mode still needs the current
 user's explicit decision. `review_required` means Steward has no valid review

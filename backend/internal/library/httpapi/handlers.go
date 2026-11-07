@@ -31,6 +31,7 @@ func New(database *sql.DB, guard *identity.Guard, service *library.Service, allo
 // Register 在 mux 上注册目录与扫描路由。
 func (handlers *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/library-roots", handlers.listRoots)
+	mux.HandleFunc("GET /api/v1/library-folders", handlers.listFolders)
 	mux.HandleFunc("POST /api/v1/library-roots", handlers.addRoot)
 	mux.HandleFunc("PATCH /api/v1/library-roots/{id}", handlers.updateRoot)
 	mux.HandleFunc("POST /api/v1/library-roots/{id}/restore", handlers.restoreRoot)

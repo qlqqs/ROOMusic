@@ -1,0 +1,95 @@
+/* 紧贴路径框下方的面板：顶部是当前位置，下面的列表单独滚动。 */
+.browser {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  max-height: 320px;
+  min-width: 0;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.location {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-1) 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  overflow-wrap: anywhere;
+}
+
+.location:focus-visible {
+  outline-offset: 0;
+}
+
+.body {
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-1);
+}
+
+.list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  border-radius: var(--radius-md);
+}
+
+.row:hover {
+  background: var(--color-hover);
+}
+
+/* 文件夹名是进入下一级的按钮：占满剩下的宽度，没有边框。 */
+.folder {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  min-height: var(--control-height);
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--fs-13);
+  text-align: start;
+  cursor: pointer;
+}
+
+.folder svg {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.message {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+}

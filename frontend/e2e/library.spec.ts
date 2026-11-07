@@ -1,6 +1,7 @@
 import { sampleBody } from "../src/test/api-samples";
 import type { DiagnosticsPageDTO } from "../src/features/library/api/decoders";
 import { expect, test } from "./support/fixtures";
+import { expectNoSeriousViolations } from "./support/checks";
 import { heading, uuidPattern } from "./support/locators";
 import type { Page } from "@playwright/test";
 
@@ -8,6 +9,29 @@ const rootsTable = (page: Page) => page.getByRole("table", { name: "音乐目录
 const phaseTag = (page: Page) => page.getByRole("region", { name: "状态" }).getByRole("status");
 
 test.describe("目录", () => {
+  test("浏览并选择后添加", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "curator" });
+    await page.goto("/settings/library");
+    const input = page.getByRole("combobox", { name: "目录路径" });
+    await input.click();
+    const browser = page.getByRole("dialog", { name: "选择文件夹" });
+    await expect(browser).toBeVisible();
+    await browser.getByRole("button", { name: "classical-a", exact: true }).click();
+    await expect(browser.getByRole("button", { name: "上一级" })).toBeVisible();
+    await expect(browser.getByRole("button", { name: "选择 album", exact: true })).toBeVisible();
+    await expectNoSeriousViolations(page, "打开文件夹浏览器");
+    await browser.getByRole("button", { name: "选择 album", exact: true }).click();
+
+    await expect(browser).toBeHidden();
+    await expect(input).toHaveValue("/music/classical-a/album");
+    await expect(input).toBeFocused();
+    await expect(input).toHaveAttribute("aria-expanded", "false");
+    await page.getByRole("button", { name: "添加目录" }).click();
+    await expect(page.getByText(/已添加目录“album”/)).toBeVisible();
+    await expect(rootsTable(page).getByRole("rowheader", { name: "album", exact: true })).toBeVisible();
+    expect(mock.callsTo("POST", "/api/v1/library-roots").map((call) => call.body)).toEqual([{ path: "/music/classical-a/album" }]);
+  });
+
   test("添加目录：路径被拒绝显示在字段旁，添加成功出现在列表与操作记录，写请求带幂等键", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
     await page.goto("/settings/library");
