@@ -135,7 +135,6 @@ export function BackupFilesSection() {
             <VisuallyHidden> {formatDateTime(file.created_at)} 的备份</VisuallyHidden>
           </a>
           <Button
-            variant="text"
             icon={<Trash2 size={16} />}
             onClick={() => {
               remove.reset();

@@ -17,7 +17,7 @@
 .brand {
   color: var(--text-secondary);
   font-family: var(--font-heading);
-  font-size: var(--fs-20);
+  font-size: var(--fs-16);
   font-weight: var(--font-heading-weight);
 }
 
@@ -28,7 +28,7 @@
 
 .description {
   color: var(--text-secondary);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 @media (max-width: 767px) {

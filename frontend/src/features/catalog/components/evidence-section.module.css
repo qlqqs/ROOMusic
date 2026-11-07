@@ -1,7 +1,7 @@
 .note {
   max-width: 70ch;
   color: var(--text-secondary);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 .full {
@@ -19,7 +19,7 @@
 }
 
 .subheading {
-  font-size: var(--fs-17);
+  font-size: var(--fs-15);
 }
 
 .facts {
@@ -27,7 +27,7 @@
   grid-template-columns: max-content minmax(0, 1fr);
   gap: var(--space-1) var(--space-4);
   margin: 0;
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 .facts dt {

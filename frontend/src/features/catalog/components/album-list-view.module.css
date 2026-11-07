@@ -1,6 +1,6 @@
 .count {
   color: var(--text-secondary);
-  font-variant-numeric: lining-nums tabular-nums;
+  font-variant-numeric: tabular-nums;
 }
 
 .results {

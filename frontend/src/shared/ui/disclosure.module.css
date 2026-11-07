@@ -29,14 +29,14 @@
 
 .title {
   font-family: var(--font-heading);
-  font-size: var(--fs-20);
+  font-size: var(--fs-16);
   font-weight: var(--font-heading-weight);
 }
 
 .detail {
   color: var(--text-secondary);
-  font-size: var(--fs-14);
-  font-variant-numeric: lining-nums tabular-nums;
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
 }
 
 .body {

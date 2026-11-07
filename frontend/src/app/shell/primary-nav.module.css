@@ -31,7 +31,7 @@
   padding: 0 var(--space-3);
   border-radius: var(--radius-md);
   color: var(--text-primary);
-  font-size: var(--fs-15);
+  font-size: var(--fs-14);
   text-decoration: none;
   transition: background-color 0.12s ease;
 }

@@ -44,7 +44,7 @@
   background: transparent;
   color: var(--text-primary);
   font: inherit;
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 .sort select:hover {

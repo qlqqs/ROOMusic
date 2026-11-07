@@ -10,7 +10,7 @@
   margin: 0;
   padding: 0;
   list-style: none;
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 /* 链接与不可用文字有相同的最小高度：触屏与窄屏上命中区域不低于控件高度。 */
@@ -28,5 +28,5 @@
 }
 
 .current {
-  font-variant-numeric: lining-nums tabular-nums;
+  font-variant-numeric: tabular-nums;
 }

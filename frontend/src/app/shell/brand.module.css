@@ -1,7 +1,7 @@
 .brand {
   color: var(--text-primary);
   font-family: var(--font-heading);
-  font-size: var(--fs-25);
+  font-size: var(--fs-18);
   font-weight: var(--font-heading-weight);
   line-height: 1.1;
   text-decoration: none;

@@ -130,7 +130,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div ref={drawerContentRef} className={styles.drawerContent}>
           <div className={styles.drawerHeader}>
             <h2 id={menuTitleId}>菜单</h2>
-            <Button variant="text" icon={<X size={18} />} onClick={() => setMenuOpen(false)}>
+            <Button icon={<X size={18} />} onClick={() => setMenuOpen(false)}>
               关闭
             </Button>
           </div>

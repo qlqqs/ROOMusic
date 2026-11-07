@@ -110,10 +110,11 @@ export function useMenu({ label, actions, placement = "below", matchTriggerWidth
   return { triggerProps, menu: content, open: position !== null };
 }
 
-export function MenuButton({ label, icon, actions, disabled = false, placement }: { label: string; icon?: ReactNode; actions: readonly MenuAction[]; disabled?: boolean; placement?: "below" | "above" }) {
+/** iconOnly 时触发器只显示图标（必须给 icon），label 作为读屏名和悬停提示。 */
+export function MenuButton({ label, icon, iconOnly = false, actions, disabled = false, placement }: { label: string; icon?: ReactNode; iconOnly?: boolean; actions: readonly MenuAction[]; disabled?: boolean; placement?: "below" | "above" }) {
   const menu = useMenu({ label, actions, ...(placement === undefined ? {} : { placement }) });
   return <>
-    <Button {...menu.triggerProps} icon={icon} disabled={disabled}>{label}</Button>
+    {iconOnly ? <Button {...menu.triggerProps} variant="icon" icon={icon} label={label} disabled={disabled} /> : <Button {...menu.triggerProps} icon={icon} disabled={disabled}>{label}</Button>}
     {menu.menu}
   </>;
 }

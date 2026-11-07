@@ -12,7 +12,7 @@
 }
 
 .heading {
-  font-size: var(--fs-17);
+  font-size: var(--fs-15);
 }
 
 .list {
@@ -56,10 +56,8 @@
 
 .name {
   font-family: var(--font-heading);
-  font-size: var(--fs-17);
+  font-size: var(--fs-15);
   font-weight: var(--font-heading-weight);
-  /* “版本 2”是界面标签不是作品标题：Cormorant 默认的旧式数字（“2”像小写字母）换成等高数字。 */
-  font-variant-numeric: lining-nums;
 }
 
 .title {
@@ -70,17 +68,17 @@
   overflow: hidden;
   overflow-wrap: anywhere;
   max-width: 36ch;
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 .detail {
   overflow-wrap: anywhere;
   color: var(--text-secondary);
-  font-size: var(--fs-14);
-  font-variant-numeric: lining-nums tabular-nums;
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
 }
 
 .note {
   color: var(--text-secondary);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }

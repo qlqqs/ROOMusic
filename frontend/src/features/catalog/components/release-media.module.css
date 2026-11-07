@@ -14,7 +14,7 @@
   align-items: baseline;
   gap: var(--space-2) var(--space-4);
   color: var(--text-secondary);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 .jumpList {
@@ -47,18 +47,16 @@
 }
 
 .heading {
-  font-size: var(--fs-17);
+  font-size: var(--fs-15);
   overflow-wrap: anywhere;
-  /* “第 2 张”是界面标签不是作品标题：用等高数字，不用 Cormorant 默认的旧式数字。 */
-  font-variant-numeric: lining-nums;
 }
 
 .count {
   color: var(--text-secondary);
   font-family: var(--font-body);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
   font-weight: 400;
-  font-variant-numeric: lining-nums tabular-nums;
+  font-variant-numeric: tabular-nums;
 }
 
 .tracks {
@@ -121,8 +119,8 @@
 
 .number {
   color: var(--text-secondary);
-  font-size: var(--fs-14);
-  font-variant-numeric: lining-nums tabular-nums;
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
@@ -138,18 +136,18 @@
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--space-1) var(--space-2);
-  font-size: var(--fs-15);
+  font-size: var(--fs-14);
 }
 
 .secondary {
   color: var(--text-secondary);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 .duration {
   color: var(--text-secondary);
-  font-size: var(--fs-14);
-  font-variant-numeric: lining-nums tabular-nums;
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 

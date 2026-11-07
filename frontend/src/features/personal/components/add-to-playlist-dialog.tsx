@@ -141,7 +141,7 @@ function PlaylistChoices({ trackIds, onAdded, onClose, onCreate, onPendingChange
       )}
       {picker.hasNextPage ? (
         <span className={styles.more}>
-          <Button variant="text" busy={picker.isFetchingNextPage} onClick={() => void picker.fetchNextPage()}>
+          <Button busy={picker.isFetchingNextPage} onClick={() => void picker.fetchNextPage()}>
             {picker.isFetchingNextPage ? "正在读取…" : "显示更多歌单"}
           </Button>
         </span>

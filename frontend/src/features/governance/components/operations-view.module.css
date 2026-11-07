@@ -1,12 +1,12 @@
 .note {
   color: var(--text-secondary);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 .filter {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1) var(--space-3);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
   overflow-wrap: anywhere;
 }

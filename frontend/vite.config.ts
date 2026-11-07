@@ -1,7 +1,7 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
-// 只认领第三方的脚本模块：@fontsource 等引入的 CSS 留在入口样式表里，样式的拆分与顺序保持原样。
+// 只认领第三方的脚本模块：第三方引入的 CSS 留在入口样式表里，样式的拆分与顺序保持原样。
 function thirdPartyScript(pattern: RegExp) {
   return (moduleId: string) => pattern.test(moduleId) && !/\.css(\?|$)/.test(moduleId);
 }

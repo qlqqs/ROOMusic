@@ -8,7 +8,7 @@
 
 .notice {
   color: var(--text-secondary);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
   overflow-wrap: anywhere;
 }
 

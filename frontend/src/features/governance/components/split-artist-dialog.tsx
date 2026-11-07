@@ -331,13 +331,13 @@ function AlbumChoices({ artistId, selected, disabled, onToggle }: { artistId: st
           </ul>
           {pageCount > 1 ? (
             <div className={styles.pager}>
-              <Button variant="text" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+              <Button disabled={page <= 1} onClick={() => setPage(page - 1)}>
                 上一页
               </Button>
               <span className={styles.optionMeta}>
                 第 {page} / {pageCount} 页
               </span>
-              <Button variant="text" disabled={page >= pageCount} onClick={() => setPage(page + 1)}>
+              <Button disabled={page >= pageCount} onClick={() => setPage(page + 1)}>
                 下一页
               </Button>
             </div>

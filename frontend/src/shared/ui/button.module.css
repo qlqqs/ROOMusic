@@ -4,37 +4,44 @@
   justify-content: center;
   gap: 6px;
   min-height: var(--control-height);
-  padding: 0 calc(var(--space-3) * 1.2);
+  padding: 0 var(--space-2);
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-primary);
-  font-family: var(--font-heading);
-  font-size: var(--fs-14);
-  font-weight: var(--font-heading-weight);
+  font-family: var(--font-body);
+  font-size: var(--fs-13);
+  font-weight: 500;
   line-height: 1.2;
   text-decoration: none;
   cursor: pointer;
   transition:
     background-color 0.12s ease,
-    border-color 0.12s ease;
+    color 0.12s ease;
 }
 
-.icon {
+.glyph {
   display: inline-flex;
 }
 
-.secondary {
-  border-color: var(--color-control-border);
-}
-
 .primary {
+  padding-inline: var(--space-3);
   border-color: var(--color-accent);
   color: var(--text-accent);
 }
 
-.text {
-  padding-inline: var(--space-2);
+/* 只有图标：方形命中区，图标平时用次要色，悬停与按下变深；按下态（aria-pressed）用强调色。 */
+.icon {
+  min-width: var(--control-height);
+  padding: 0;
+  color: var(--text-secondary);
+}
+
+.icon:enabled:not([aria-disabled="true"]):hover {
+  color: var(--text-primary);
+}
+
+.icon[aria-pressed="true"] {
   color: var(--text-accent);
 }
 
@@ -46,13 +53,11 @@
   background: var(--color-pressed);
 }
 
-.primary:enabled:not([aria-disabled="true"]):hover,
-.text:enabled:not([aria-disabled="true"]):hover {
+.primary:enabled:not([aria-disabled="true"]):hover {
   background: color-mix(in srgb, var(--color-accent) 12%, transparent);
 }
 
-.primary:enabled:not([aria-disabled="true"]):active,
-.text:enabled:not([aria-disabled="true"]):active {
+.primary:enabled:not([aria-disabled="true"]):active {
   background: color-mix(in srgb, var(--color-accent) 22%, transparent);
 }
 

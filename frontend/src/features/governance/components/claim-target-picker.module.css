@@ -17,7 +17,7 @@
   padding: 0;
   margin-bottom: var(--space-1);
   color: var(--text-secondary);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 .list {
@@ -69,15 +69,15 @@
 .optionTitle {
   overflow-wrap: anywhere;
   font-family: var(--font-heading);
-  font-size: var(--fs-17);
+  font-size: var(--fs-15);
 }
 
 .optionMeta,
 .hint {
   overflow-wrap: anywhere;
   color: var(--text-secondary);
-  font-size: var(--fs-14);
-  font-variant-numeric: lining-nums tabular-nums;
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
 }
 
 .search {

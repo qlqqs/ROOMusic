@@ -81,7 +81,7 @@ function CandidateItem({ candidate, status, busy, onMerge, onIgnore, onRestore }
             <Button onClick={onMerge} aria-label={`合并${label}…`}>
               合并…
             </Button>
-            <Button variant="text" busy={busy} onClick={onIgnore} aria-label={`忽略${label}`}>
+            <Button busy={busy} onClick={onIgnore} aria-label={`忽略${label}`}>
               忽略
             </Button>
           </>

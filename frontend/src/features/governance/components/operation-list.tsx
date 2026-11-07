@@ -102,7 +102,7 @@ export function OperationList({ caption, items, showRelease, onRevert }: Operati
           if (reason !== null) return <span className={styles.reason}>{reason}</span>;
           return (
             <span className={styles.revert}>
-              <Button variant="text" onClick={() => onRevert(item)}>
+              <Button onClick={() => onRevert(item)}>
                 撤销
                 <VisuallyHidden>
                   （{formatDateTime(item.created_at)} 的{operationTypeLabel(item)}）

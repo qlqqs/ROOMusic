@@ -7,7 +7,7 @@
 .table {
   width: 100%;
   border-collapse: collapse;
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
   line-height: 1.5;
 }
 
@@ -42,27 +42,26 @@
 .rowHeader {
   width: 7.5em;
   color: var(--text-secondary);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
   font-weight: 400;
 }
 
 .versionName {
   font-family: var(--font-heading);
-  font-size: var(--fs-17);
+  font-size: var(--fs-15);
   font-weight: var(--font-heading-weight);
   /* “版本 2”是界面标签不是作品标题：旧式数字换成等高数字。 */
-  font-variant-numeric: lining-nums;
 }
 
 .viewLink {
   display: block;
   margin-top: 2px;
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 .value {
   min-width: 0;
-  font-variant-numeric: lining-nums tabular-nums;
+  font-variant-numeric: tabular-nums;
 }
 
 .lines {
@@ -128,7 +127,7 @@
     width: auto;
     color: var(--text-primary);
     font-family: var(--font-heading);
-    font-size: var(--fs-15);
+    font-size: var(--fs-14);
     font-weight: var(--font-heading-weight);
   }
 
@@ -144,6 +143,5 @@
     color: var(--text-secondary);
     font-size: var(--fs-12);
     line-height: 1.9;
-    font-variant-numeric: lining-nums;
   }
 }

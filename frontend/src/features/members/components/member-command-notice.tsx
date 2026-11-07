@@ -34,7 +34,7 @@ export function MemberCommandNotice({ state, scope, onDismiss }: MemberCommandNo
   if (state.status !== "succeeded" && state.status !== "failed") return null;
   if ((state.command.kind === "create") !== (scope === "create")) return null;
   const dismiss = (
-    <Button variant="text" onClick={onDismiss}>
+    <Button onClick={onDismiss}>
       关闭
     </Button>
   );

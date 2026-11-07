@@ -9,13 +9,13 @@
 }
 
 .title {
-  font-size: var(--fs-20);
+  font-size: var(--fs-16);
 }
 
 .body {
   display: grid;
   gap: var(--space-2);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
   overflow-wrap: anywhere;
 }
 

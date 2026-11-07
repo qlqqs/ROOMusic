@@ -3,7 +3,7 @@
   grid-template-columns: max-content minmax(0, 1fr);
   gap: var(--space-1) var(--space-4);
   margin: 0;
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 .facts dt {
@@ -13,5 +13,5 @@
 .facts dd {
   margin: 0;
   overflow-wrap: anywhere;
-  font-variant-numeric: lining-nums tabular-nums;
+  font-variant-numeric: tabular-nums;
 }

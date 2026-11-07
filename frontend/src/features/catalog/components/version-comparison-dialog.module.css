@@ -23,7 +23,7 @@
 
 .title {
   min-width: 0;
-  font-size: var(--fs-20);
+  font-size: var(--fs-16);
 }
 
 .body {
@@ -35,12 +35,12 @@
 
 .lead {
   color: var(--text-secondary);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
 
 .note {
   color: var(--text-secondary);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }

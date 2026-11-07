@@ -96,7 +96,7 @@
     border-bottom: 0;
     border-radius: var(--radius-md);
     color: var(--text-primary);
-    font-size: var(--fs-15);
+    font-size: var(--fs-14);
     transition: background-color 0.12s ease;
   }
 

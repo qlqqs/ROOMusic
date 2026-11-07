@@ -7,7 +7,7 @@
 .note {
   display: block;
   font-family: var(--font-body);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
   font-weight: 400;
   overflow-wrap: anywhere;
 }
@@ -36,5 +36,5 @@
 /* 时长始终一行：标题很长时表格会压缩其他列，“3:04”不能被折成两行；这一列按内容取宽度。 */
 .duration {
   white-space: nowrap;
-  font-variant-numeric: lining-nums tabular-nums;
+  font-variant-numeric: tabular-nums;
 }

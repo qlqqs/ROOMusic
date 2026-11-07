@@ -23,7 +23,7 @@
 }
 
 .listTitle {
-  font-size: var(--fs-17);
+  font-size: var(--fs-15);
 }
 
 .listBody {
@@ -44,7 +44,7 @@
   align-items: center;
   gap: var(--space-1);
   justify-self: start;
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 .placeholder,
@@ -54,5 +54,5 @@
 
 .note {
   color: var(--text-secondary);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }

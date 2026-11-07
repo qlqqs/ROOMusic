@@ -97,7 +97,7 @@ function AddedAlbums({ report, isUpdating, onPage }: { report: ScanReportDTO; is
             page={pagination.page}
             pageCount={pageCountOf(pagination.total, pagination.page_size)}
             renderLink={(target, props) => (
-              <Button variant="text" onClick={() => goTo(target)}>
+              <Button onClick={() => goTo(target)}>
                 {props.children}
               </Button>
             )}

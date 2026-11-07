@@ -104,7 +104,7 @@ function UpdatedHint({ onRefresh }: { onRefresh: () => void }) {
   return (
     <p className={styles.updated}>
       列表有更新。{" "}
-      <Button variant="text" onClick={onRefresh}>
+      <Button onClick={onRefresh}>
         刷新
       </Button>
     </p>

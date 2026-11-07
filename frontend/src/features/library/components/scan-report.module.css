@@ -8,7 +8,7 @@
   grid-template-columns: max-content minmax(0, 1fr);
   gap: var(--space-1) var(--space-4);
   margin: 0;
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 .facts dt {
@@ -17,7 +17,7 @@
 
 .facts dd {
   margin: 0;
-  font-variant-numeric: lining-nums tabular-nums;
+  font-variant-numeric: tabular-nums;
 }
 
 .added {
@@ -26,7 +26,7 @@
 }
 
 .subheading {
-  font-size: var(--fs-17);
+  font-size: var(--fs-15);
 }
 
 .albums {
@@ -60,7 +60,7 @@
 .artist {
   min-width: 0;
   color: var(--text-secondary);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
   overflow-wrap: anywhere;
 }
 
@@ -71,7 +71,7 @@
   margin: 0;
   padding: 0;
   list-style: none;
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 .hint {

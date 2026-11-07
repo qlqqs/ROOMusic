@@ -1,6 +1,6 @@
 .panel {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-3);
   align-content: start;
   min-width: 0;
   padding-top: var(--space-3);
@@ -23,7 +23,7 @@
 }
 
 .action {
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 .body {

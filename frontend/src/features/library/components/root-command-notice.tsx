@@ -32,7 +32,7 @@ function successText(result: RootCommandResult): { tone: "success" | "info" | "w
  */
 export function RootCommandNotice({ state, onRetry, onDismiss }: RootCommandNoticeProps) {
   const dismiss = (
-    <Button variant="text" onClick={onDismiss}>
+    <Button onClick={onDismiss}>
       关闭
     </Button>
   );

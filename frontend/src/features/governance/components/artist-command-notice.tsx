@@ -45,7 +45,7 @@ export function ArtistCommandNotice({ state, artistId, hideFailure, onUnignore, 
   if (state.status === "idle" || state.status === "pending") return null;
   if (artistId !== null && !involves(state.command, artistId)) return null;
   const dismiss = (
-    <Button variant="text" onClick={onDismiss}>
+    <Button onClick={onDismiss}>
       关闭
     </Button>
   );
@@ -62,7 +62,7 @@ export function ArtistCommandNotice({ state, artistId, hideFailure, onUnignore, 
               </Link>
             ) : null}
             {result.kind === "ignore" && result.result.ignored && onUnignore !== undefined ? (
-              <Button variant="text" onClick={() => onUnignore(command, result)}>
+              <Button onClick={() => onUnignore(command, result)}>
                 恢复提示
               </Button>
             ) : null}

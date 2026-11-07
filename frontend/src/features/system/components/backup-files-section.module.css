@@ -1,6 +1,6 @@
 .note {
   color: var(--text-secondary);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 /* 表格上方一行：“全选”与“删除所选（n）”。窄屏也放得下一行。 */
@@ -46,5 +46,5 @@ td .check {
 .failedList {
   margin: 0;
   padding-inline-start: 1.2em;
-  font-variant-numeric: lining-nums tabular-nums;
+  font-variant-numeric: tabular-nums;
 }

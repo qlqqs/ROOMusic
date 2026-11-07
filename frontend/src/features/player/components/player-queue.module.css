@@ -6,7 +6,7 @@
 .row[aria-current] { background: var(--color-selected); }
 .description { min-width: 0; overflow-wrap: anywhere; }
 .title, .metadata { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
-.secondary { font-size: var(--fs-14); color: var(--text-secondary); }
-.number, .duration { font-variant-numeric: lining-nums tabular-nums; }
-.duration { white-space: nowrap; font-size: var(--fs-14); }
+.secondary { font-size: var(--fs-13); color: var(--text-secondary); }
+.number, .duration { font-variant-numeric: tabular-nums; }
+.duration { white-space: nowrap; font-size: var(--fs-13); }
 .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); grid-column: 1 / -1; }

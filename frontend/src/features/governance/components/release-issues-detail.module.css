@@ -14,7 +14,7 @@
 
 .title {
   overflow-wrap: anywhere;
-  font-size: var(--fs-25);
+  font-size: var(--fs-18);
   /* 被滚动到视野顶部时（例如窄屏从列表进入详情）不被窄屏的吸顶栏盖住。 */
   scroll-margin-top: calc(var(--layout-topbar-height) + var(--space-3));
 }
@@ -22,8 +22,8 @@
 .meta {
   overflow-wrap: anywhere;
   color: var(--text-secondary);
-  font-size: var(--fs-14);
-  font-variant-numeric: lining-nums tabular-nums;
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
 }
 
 .section {
@@ -36,7 +36,7 @@
 
 .explain {
   max-width: 64ch;
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 .review {
@@ -45,8 +45,8 @@
   align-items: center;
   gap: var(--space-1) var(--space-2);
   min-width: 0;
-  font-size: var(--fs-14);
-  font-variant-numeric: lining-nums tabular-nums;
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
 }
 
 .stale {
@@ -63,7 +63,7 @@
 }
 
 .facts h4 {
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 .paths,
@@ -72,7 +72,7 @@
   gap: var(--space-1);
   margin: 0;
   padding-inline-start: var(--space-4);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
   overflow-wrap: anywhere;
 }
 
@@ -88,7 +88,7 @@
 
 .note {
   color: var(--text-secondary);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 /* 字段名（“介质类型”）不在字中间折行：窄表格里宁可让其他列多折几行。 */

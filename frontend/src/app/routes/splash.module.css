@@ -7,6 +7,6 @@
 .brand {
   color: var(--text-secondary);
   font-family: var(--font-heading);
-  font-size: var(--fs-25);
+  font-size: var(--fs-18);
   font-weight: var(--font-heading-weight);
 }

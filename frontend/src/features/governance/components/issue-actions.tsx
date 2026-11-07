@@ -47,7 +47,7 @@ export function ReviewAction({ subject, release, commands }: { subject: ReviewSu
         </Button>
       ) : null}
       {subject.review === null ? null : (
-        <Button variant="text" icon={<Undo2 size={16} />} busy={pendingAction === "unreview"} aria-label={`${unreviewText}：${label}`} onClick={() => submit("unreview")}>
+        <Button icon={<Undo2 size={16} />} busy={pendingAction === "unreview"} aria-label={`${unreviewText}：${label}`} onClick={() => submit("unreview")}>
           {unreviewText}
         </Button>
       )}

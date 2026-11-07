@@ -5,7 +5,7 @@
 
 .label {
   color: var(--text-secondary);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 .input {
@@ -16,7 +16,7 @@
   border-radius: var(--radius-md);
   background: transparent;
   caret-color: var(--color-accent-700);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 .input::placeholder {
@@ -45,7 +45,7 @@
 
 .description,
 .error {
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
   line-height: 1.5;
 }
 

@@ -55,7 +55,7 @@
   overflow: hidden;
   overflow-wrap: anywhere;
   font-family: var(--font-heading);
-  font-size: var(--fs-17);
+  font-size: var(--fs-15);
   font-weight: var(--font-heading-weight);
   line-height: 1.3;
 }
@@ -67,8 +67,8 @@
 
 .cardMeta {
   color: var(--text-secondary);
-  font-size: var(--fs-14);
-  font-variant-numeric: lining-nums tabular-nums;
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
 }
 
 .cardTags {
@@ -105,8 +105,8 @@
 .roleCount,
 .single {
   color: var(--text-secondary);
-  font-size: var(--fs-14);
-  font-variant-numeric: lining-nums tabular-nums;
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
 }
 
 /* 与历史页的曲目列同一套外观。 */
@@ -118,7 +118,7 @@
   display: block;
   color: var(--text-secondary);
   font-family: var(--font-body);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
   font-weight: 400;
   overflow-wrap: anywhere;
 }
@@ -136,5 +136,5 @@
 
 .duration {
   white-space: nowrap;
-  font-variant-numeric: lining-nums tabular-nums;
+  font-variant-numeric: tabular-nums;
 }

@@ -122,7 +122,7 @@ function SyncedLyrics({ lines }: { lines: readonly SyncedLyricsLine[] }) {
     </div>
     <div className={styles.footer}>
       <p className={styles.note}>{seekable ? "内嵌歌词 · 逐行同步 · 点任一行跳到该处" : "内嵌歌词 · 逐行同步"}</p>
-      {following || target < 0 ? null : <Button variant="text" onClick={() => setFollowing(true)}>回到当前行</Button>}
+      {following || target < 0 ? null : <Button onClick={() => setFollowing(true)}>回到当前行</Button>}
     </div>
   </>;
 }

@@ -23,7 +23,7 @@
 }
 
 .listTitle {
-  font-size: var(--fs-17);
+  font-size: var(--fs-15);
 }
 
 .listBody {
@@ -52,7 +52,7 @@
   border: 1px solid var(--color-control-border);
   border-radius: var(--radius-md);
   color: inherit;
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
   text-decoration: none;
 }
 
@@ -69,7 +69,7 @@
 
 .count {
   color: var(--text-secondary);
-  font-variant-numeric: lining-nums tabular-nums;
+  font-variant-numeric: tabular-nums;
 }
 
 .detailColumn {
@@ -84,7 +84,7 @@
   align-items: center;
   gap: var(--space-1);
   justify-self: start;
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 .placeholder,
@@ -94,5 +94,5 @@
 
 .note {
   color: var(--text-secondary);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }

@@ -30,14 +30,14 @@
 }
 
 .percent {
-  font-variant-numeric: lining-nums tabular-nums;
+  font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
 
 .meta {
   color: var(--text-secondary);
-  font-size: var(--fs-14);
-  font-variant-numeric: lining-nums tabular-nums;
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
 

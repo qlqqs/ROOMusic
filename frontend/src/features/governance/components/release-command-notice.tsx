@@ -76,7 +76,7 @@ function OpenClaimedAlbum({ command, result }: { command: ReleaseCommand; result
 export function ReleaseCommandNotice({ state, releaseId, hideFailure, onUndo, onRetry, onDismiss, successFocusRef }: ReleaseCommandNoticeProps) {
   if (state.status === "idle" || (releaseId !== null && state.command.release.id !== releaseId)) return null;
   const dismiss = (
-    <Button variant="text" onClick={onDismiss}>
+    <Button onClick={onDismiss}>
       关闭
     </Button>
   );
@@ -94,7 +94,7 @@ export function ReleaseCommandNotice({ state, releaseId, hideFailure, onUndo, on
           <>
             {result.kind === "claim" ? <OpenClaimedAlbum command={command} result={result.result} /> : null}
             {result.kind === "revert" || onUndo === undefined ? null : (
-              <Button variant="text" onClick={() => onUndo(command, result)}>
+              <Button onClick={() => onUndo(command, result)}>
                 撤销
               </Button>
             )}

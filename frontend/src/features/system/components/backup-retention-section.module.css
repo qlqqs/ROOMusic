@@ -26,7 +26,7 @@
   margin-bottom: 6px;
   padding: 0;
   color: var(--text-secondary);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 .row {
@@ -44,8 +44,8 @@
   border-radius: var(--radius-md);
   background: transparent;
   caret-color: var(--color-accent-700);
-  font-size: var(--fs-14);
-  font-variant-numeric: lining-nums tabular-nums;
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
 }
 
 .input:hover:enabled {
@@ -69,7 +69,7 @@
 
 .unit {
   color: var(--text-secondary);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 .check {
@@ -95,7 +95,7 @@
   align-items: flex-start;
   gap: 6px;
   max-width: 100%;
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
   line-height: 1.5;
 }
 
@@ -118,5 +118,5 @@
 }
 
 .saved {
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }

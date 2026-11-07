@@ -43,9 +43,9 @@ export function FavoriteButton({ target, message = "visible" }: FavoriteButtonPr
   }, [uncertainText]);
   const button = (
     <Button
-      variant="text"
+      variant="icon"
       icon={<Heart size={18} fill={pressed === true ? "currentColor" : "none"} />}
-      aria-label={`收藏${subject}`}
+      label={`收藏${subject}`}
       aria-pressed={pressed ?? false}
       title={hint}
       disabled={pressed === undefined}
@@ -58,7 +58,7 @@ export function FavoriteButton({ target, message = "visible" }: FavoriteButtonPr
     />
   );
   const retry = waiting ? (
-    <Button variant="text" aria-label={`重新读取${subject}的收藏状态`} onClick={status.reread}>
+    <Button aria-label={`重新读取${subject}的收藏状态`} onClick={status.reread}>
       重新读取
     </Button>
   ) : null;

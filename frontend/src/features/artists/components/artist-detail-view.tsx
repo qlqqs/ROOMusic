@@ -136,7 +136,7 @@ function NamesSection({ detail, search }: { detail: ArtistDetailDTO; search: Art
       </ul>
       {!paged && total > detail.names.length ? (
         <p>
-          <Button variant="text" onClick={() => setExpanded(true)}>
+          <Button onClick={() => setExpanded(true)}>
             显示全部 {formatCount(total)} 个名字
           </Button>
         </p>

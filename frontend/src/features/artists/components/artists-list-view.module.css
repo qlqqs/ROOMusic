@@ -16,7 +16,6 @@
   margin: 0;
   padding: 0;
   list-style: none;
-  font-variant-numeric: lining-nums;
 }
 
 @container (min-width: 470px) {
@@ -47,7 +46,7 @@
   min-height: var(--control-height);
   padding: 0 2px;
   border-radius: var(--radius-sm);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
   white-space: nowrap;
 }
 
@@ -79,8 +78,7 @@
 }
 
 .groupHeading {
-  font-size: var(--fs-17);
-  font-variant-numeric: lining-nums;
+  font-size: var(--fs-15);
 }
 
 .list {
@@ -101,12 +99,12 @@
 
 .name {
   overflow-wrap: anywhere;
-  font-size: var(--fs-15);
+  font-size: var(--fs-14);
 }
 
 .meta {
   color: var(--text-secondary);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
   overflow-wrap: anywhere;
-  font-variant-numeric: lining-nums tabular-nums;
+  font-variant-numeric: tabular-nums;
 }

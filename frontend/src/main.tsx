@@ -2,7 +2,6 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { AppRoot } from "./app/providers";
 import { createAppRuntime } from "./app/runtime";
-import "./styles/fonts";
 import "./styles/tokens.css";
 import "./styles/base.css";
 

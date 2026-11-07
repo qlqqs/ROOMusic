@@ -16,15 +16,15 @@
 
 .name {
   overflow-wrap: anywhere;
-  font-size: var(--fs-15);
+  font-size: var(--fs-14);
 }
 
 .meta,
 .note {
   overflow-wrap: anywhere;
   color: var(--text-secondary);
-  font-size: var(--fs-14);
-  font-variant-numeric: lining-nums tabular-nums;
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
 }
 
 /* 匹配说明最多两行，超出用省略号；完整文字仍在 DOM 里。 */

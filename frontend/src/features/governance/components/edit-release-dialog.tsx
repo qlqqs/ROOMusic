@@ -85,7 +85,7 @@ function FieldEditor({ field, draft, error, disabled, onChange }: FieldEditorPro
       )}
       {canConfirm ? (
         <div className={styles.confirm}>
-          <Button variant="text" onClick={() => onChange(confirmScanDraft(field))}>
+          <Button onClick={() => onChange(confirmScanDraft(field))}>
             {field.scan_value === null ? "确认为空" : "确认扫描值"}
           </Button>
         </div>

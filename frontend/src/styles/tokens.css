@@ -1,7 +1,7 @@
 /*
- * Classical 设计变量。
- * 色板、色阶、间距、圆角与阴影取自设计稿 frontend-desgin/_ds/.../styles.css 的 :root，数值保持原样；
- * 语义文字色、控件边界、焦点环、布局与字阶是 M1a 的落地定义（见 frontend/DESIGN.md 第 3 节）。
+ * 设计变量。
+ * 色板、色阶、圆角与阴影取自设计稿 frontend-desgin/_ds/.../styles.css 的 :root，数值保持原样；
+ * 字体、字阶、间距、语义文字色、控件边界、焦点环与布局是落地定义（见 frontend/DESIGN.md 第 3 节）。
  * 组件只引用这些变量，不各自复制近似值。
  */
 :root {
@@ -12,7 +12,7 @@
   --color-text: #201f1d;
   --color-accent: #b68235;
   --color-accent-2: #ac803e;
-  --color-divider: color-mix(in srgb, #201f1d 16%, transparent);
+  --color-divider: color-mix(in srgb, #201f1d 10%, transparent);
 
   --color-neutral-100: #f8f4f4;
   --color-neutral-200: #eae7e7;
@@ -58,33 +58,31 @@
   --focus-ring: 2px solid var(--color-accent-700);
   --focus-offset: 2px;
 
-  /* 中文衬线回退依次为 Noto Serif CJK、思源宋体、macOS/iOS 宋体与华文宋体；字体未加载时仍是衬线。 */
-  --font-heading:
-    "Cormorant Garamond Variable", "Noto Serif SC Variable", "Noto Serif CJK SC", "Source Han Serif SC",
-    "Songti SC", "STSong", serif;
+  /* 系统无衬线字体栈：苹方、微软雅黑、思源黑体，再回退到系统 UI 字体；不加载网络字体。标题与正文同一字族，靠字号与字重区分。 */
   --font-body:
-    "Lora Variable", "Noto Serif SC Variable", "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC",
-    "STSong", serif;
+    system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC",
+    "Source Han Sans SC", "Noto Sans SC", sans-serif;
+  --font-heading: var(--font-body);
   --font-heading-weight: 600;
-  --font-display-weight: 400;
+  --font-display-weight: 600;
   --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 
-  /* 字阶：最小 12px；正文 15px，控件与表格 14px。 */
+  /* 字阶：最小 12px；正文 14px，控件、表格与次要文字 13px，页面标题 24px。 */
   --fs-12: 12px;
+  --fs-13: 13px;
   --fs-14: 14px;
   --fs-15: 15px;
-  --fs-17: 17px;
+  --fs-16: 16px;
+  --fs-18: 18px;
   --fs-20: 20px;
-  --fs-25: 25px;
-  --fs-36: 36px;
-  --fs-48: 48px;
+  --fs-24: 24px;
 
-  --space-1: 4.6px;
-  --space-2: 9.2px;
-  --space-3: 13.8px;
-  --space-4: 18.4px;
-  --space-6: 27.6px;
-  --space-8: 36.8px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
 
   --radius-sm: 2px;
   --radius-md: 4px;
@@ -96,29 +94,29 @@
 
   --layout-sidebar-width: 216px;
   --layout-content-max: 1240px;
-  --layout-page-inset-x: 44px;
-  --layout-page-inset-y: 34px;
-  --layout-topbar-height: 56px;
+  --layout-page-inset-x: 32px;
+  --layout-page-inset-y: 24px;
+  --layout-topbar-height: 52px;
   /* 元数据问题页的列表栏（两栏时）；详情最宽 860px，容器窄于约 900px 时改为顺序导航。 */
   --layout-issue-list-width: 380px;
   /* 设置页的左侧分栏（视口 ≥1024px 时）。 */
   --layout-settings-nav-width: 176px;
 
-  /* 控件最小高度：桌面 36px，触屏与窄屏 44px（见下方媒体查询）。 */
-  --control-height: 36px;
+  /* 控件最小高度：桌面 32px，触屏与窄屏 44px（见下方媒体查询）。 */
+  --control-height: 32px;
 }
 
 @media (max-width: 1199px) {
   :root {
-    --layout-page-inset-x: 28px;
-    --layout-page-inset-y: 28px;
+    --layout-page-inset-x: 24px;
+    --layout-page-inset-y: 20px;
   }
 }
 
 @media (max-width: 767px) {
   :root {
     --layout-page-inset-x: 16px;
-    --layout-page-inset-y: 20px;
+    --layout-page-inset-y: 16px;
     --control-height: 44px;
   }
 }

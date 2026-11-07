@@ -9,12 +9,12 @@
 }
 
 .title {
-  font-size: var(--fs-20);
+  font-size: var(--fs-16);
 }
 
 .lead {
   color: var(--text-secondary);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
@@ -62,7 +62,7 @@
   padding: 0;
   margin-bottom: var(--space-1);
   color: var(--text-secondary);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 .list {
@@ -109,14 +109,14 @@
   display: grid;
   gap: 2px;
   min-width: 0;
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
   line-height: 1.4;
 }
 
 .optionTitle {
   overflow-wrap: anywhere;
   font-family: var(--font-heading);
-  font-size: var(--fs-15);
+  font-size: var(--fs-14);
   font-weight: var(--font-heading-weight);
 }
 
@@ -133,14 +133,14 @@
   padding: var(--space-3);
   border: 1px solid var(--color-accent);
   border-radius: var(--radius-md);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
 
 .hint {
   color: var(--text-secondary);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
   line-height: 1.5;
 }
 

@@ -70,7 +70,7 @@
   background: var(--color-accent-100);
   color: var(--color-accent-800);
   font-family: var(--font-heading);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
   font-weight: var(--font-heading-weight);
   line-height: 1;
 }
@@ -84,7 +84,7 @@
 
 .name {
   overflow: hidden;
-  font-size: var(--fs-15);
+  font-size: var(--fs-14);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

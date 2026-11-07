@@ -50,7 +50,7 @@ export function ScanDiagnostics({ scanId, finished }: { scanId: string; finished
     <Panel
       title="诊断"
       action={
-        <Button variant="text" icon={<RefreshCw size={14} />} busy={diagnostics.isFetching} onClick={() => void diagnostics.refetch()}>
+        <Button icon={<RefreshCw size={14} />} busy={diagnostics.isFetching} onClick={() => void diagnostics.refetch()}>
           {diagnostics.isFetching ? "正在刷新…" : "刷新诊断"}
         </Button>
       }

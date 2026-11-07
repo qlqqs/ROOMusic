@@ -20,12 +20,12 @@
 }
 
 .title {
-  font-size: var(--fs-20);
+  font-size: var(--fs-16);
 }
 
 .subject {
   color: var(--text-secondary);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
   overflow-wrap: anywhere;
 }
 
@@ -86,8 +86,8 @@
 
 .optionMeta {
   color: var(--text-secondary);
-  font-size: var(--fs-14);
-  font-variant-numeric: lining-nums tabular-nums;
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
 }
 
 .more {

@@ -40,17 +40,17 @@
 
 .name {
   overflow-wrap: anywhere;
-  font-size: var(--fs-15);
+  font-size: var(--fs-14);
 }
 
 .and,
 .meta {
   color: var(--text-secondary);
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
 }
 
 .meta {
-  font-variant-numeric: lining-nums tabular-nums;
+  font-variant-numeric: tabular-nums;
 }
 
 .reasons {
@@ -58,7 +58,7 @@
   gap: 2px;
   margin: 0;
   padding-left: 1.2em;
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
   overflow-wrap: anywhere;
 }
 
@@ -83,7 +83,7 @@
   border: 1px solid var(--color-control-border);
   border-radius: var(--radius-md);
   color: inherit;
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
   text-decoration: none;
 }
 
