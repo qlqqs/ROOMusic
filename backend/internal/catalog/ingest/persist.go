@@ -73,10 +73,16 @@ func PersistCandidateWithFeedback(ctx context.Context, database TxBeginner, scan
 	sort.Ints(discs)
 	for _, disc := range discs {
 		var mediumID string
+		title := candidate.MediumTitles[disc]
+		if title == "" {
+			title = "Medium"
+		}
 		err = tx.QueryRowContext(ctx, "SELECT id::text FROM media WHERE release_id=$1::uuid AND position=$2", releaseID, disc).Scan(&mediumID)
 		if errors.Is(err, sql.ErrNoRows) {
 			mediumID = uuid.New()
-			_, err = tx.ExecContext(ctx, "INSERT INTO media(id,release_id,position) VALUES($1::uuid,$2::uuid,$3)", mediumID, releaseID, disc)
+			_, err = tx.ExecContext(ctx, "INSERT INTO media(id,release_id,position,title) VALUES($1::uuid,$2::uuid,$3,$4)", mediumID, releaseID, disc, title)
+		} else if err == nil {
+			_, err = tx.ExecContext(ctx, "UPDATE media SET title=$1 WHERE id=$2::uuid AND title IS DISTINCT FROM $1", title, mediumID)
 		}
 		if err != nil {
 			return "", err
@@ -178,9 +184,12 @@ func persistRelease(ctx context.Context, tx *sql.Tx, rootID string, candidate Or
 		genres = []string{}
 	}
 	if plannedReleaseID == "" {
-		groupID, releaseID := uuid.New(), uuid.New()
-		if _, err := tx.ExecContext(ctx, "INSERT INTO release_groups(id) VALUES($1::uuid)", groupID); err != nil {
-			return "", err
+		groupID, releaseID := candidate.JoinGroupID, uuid.New()
+		if groupID == "" {
+			groupID = uuid.New()
+			if _, err := tx.ExecContext(ctx, "INSERT INTO release_groups(id) VALUES($1::uuid)", groupID); err != nil {
+				return "", err
+			}
 		}
 		_, err := tx.ExecContext(ctx, `INSERT INTO releases(id,group_id,title,artist,source_root_id,relative_directory,candidate_anchor,candidate_kind,album_artist,year,source_type,media_type,genres,catalog_number,edition,label,barcode)
 			VALUES($1::uuid,$2::uuid,$3,$4,$5::uuid,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`, releaseID, groupID, candidate.Title, candidate.Artist, rootID, candidate.Anchor.Scope, anchor, string(candidate.Anchor.Kind), candidate.AlbumArtist, releaseYear(candidate), nullableString(candidate.SourceType), nullableString(candidate.MediaType), genres, nullableString(candidate.CatalogNumber), nullableString(candidate.Edition), nullableString(candidate.Label), nullableString(candidate.Barcode))

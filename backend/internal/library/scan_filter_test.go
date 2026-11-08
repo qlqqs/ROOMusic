@@ -71,7 +71,8 @@ func TestScanFilterCountingSkipsSubtreesButNotRegisteredRoot(t *testing.T) {
 			rootPath := filepath.Join(t.TempDir(), rootName)
 			for _, relative := range []string{
 				".hidden/deep/song.flac", "@EADIR/deep/song.flac", "Artist/Bootlegs/deep/song.flac",
-				"._x.flac", "cover.jpg", "visible.flac", "sheet.CUE", "unsupported.ape",
+				"._x.flac", "cover.jpg", "visible.flac", "sheet.CUE", "unsupported.tak",
+				"supported.APE", "supported.WV", "supported.AIF", "supported.AIFF",
 				"Artist/Bootlegs Deluxe/song.flac", "Other/Bootlegs/song.flac", "my.recycle/song.flac",
 			} {
 				path := filepath.Join(rootPath, filepath.FromSlash(relative))
@@ -90,7 +91,7 @@ func TestScanFilterCountingSkipsSubtreesButNotRegisteredRoot(t *testing.T) {
 			if !service.countScanRoots(context.Background(), executor, "scan", roots, feedback) {
 				t.Fatal("过滤导致根计数不完整")
 			}
-			if !feedback.progress.CountComplete || feedback.progress.FilesTotal == nil || *feedback.progress.FilesTotal != 6 || feedback.counts[0].files != 6 {
+			if !feedback.progress.CountComplete || feedback.progress.FilesTotal == nil || *feedback.progress.FilesTotal != 10 || feedback.counts[0].files != 10 {
 				t.Fatalf("预计数未跳过过滤子树或误过滤登记根：progress=%+v counts=%+v", feedback.progress, feedback.counts)
 			}
 		})

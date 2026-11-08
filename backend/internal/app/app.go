@@ -102,6 +102,8 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	}
 	guard.WithLogger(logger)
 	libraryService := library.NewService(lifecycle, database, settings.DataDirectory, logger).WithScanConcurrency(settings.ScanWorkers)
+	personalService := personal.NewService(database)
+	libraryService.SetAlbumFavoriteMover(personalService.MoveAlbumFavorites)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", httpserver.HealthHandler)
@@ -131,7 +133,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		AnalysisProgress: progress,
 	}).Register(mux)
 	listeningapi.New(guard, listening.NewService(database)).Register(mux)
-	personalapi.New(guard, personal.NewService(database)).Register(mux)
+	personalapi.New(guard, personalService).Register(mux)
 	if assembly.backups != nil {
 		backupapi.New(assembly.backups, database, guard, lifecycle).Register(mux)
 	}

@@ -66,11 +66,13 @@ func (s *Store) LoadTrackSource(ctx context.Context, trackID string) (TrackSourc
 	return source, nil
 }
 
-// LoadTrackDuration 读取 present 曲目扫描得到的时长（秒）；扫描没有取得时长（或值不合理）时为 0。
+// LoadTrackDuration 读取 present 曲目校正后的显示时长（秒）；未知或值不合理时为 0。
 // 曲目不存在或已缺失时返回 ErrTrackNotFound。它只读数据库；trackID 必须是 UUID 文本，由调用方在传输层校验。
 func (s *Store) LoadTrackDuration(ctx context.Context, trackID string) (float64, error) {
 	var duration sql.NullFloat64
-	err := s.database.QueryRowContext(ctx, `SELECT duration_seconds FROM tracks WHERE id=$1::uuid AND source_status='present'`, trackID).Scan(&duration)
+	err := s.database.QueryRowContext(ctx, `SELECT dd.duration_seconds FROM tracks t
+ LEFT JOIN track_display_durations dd ON dd.track_id=t.id
+ WHERE t.id=$1::uuid AND t.source_status='present'`, trackID).Scan(&duration)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, ErrTrackNotFound
 	}

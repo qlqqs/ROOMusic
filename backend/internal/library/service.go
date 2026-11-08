@@ -20,6 +20,8 @@ type Service struct {
 	scanConcurrency int
 	scanMutex       sync.Mutex
 	runningScan     string
+	// albumFavoriteMover 由 app 在扫描启动前注入。
+	albumFavoriteMover AlbumFavoriteMover
 	// fingerprinter 为 root 提供指纹计算；nil 时使用 root 内的文件实现。仅供测试注入可计数或会失败的实现。
 	fingerprinter func(registeredRoot) ingest.Fingerprinter
 }

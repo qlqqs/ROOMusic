@@ -40,26 +40,28 @@ type SourceObservation struct {
 	CueSheetPath          string                       `json:"cue_sheet_path,omitempty"`
 	Directory             string                       `json:"directory"`
 	DiscNumber            int                          `json:"disc_number,omitempty"`
-	DurationSeconds       float64                      `json:"duration_seconds,omitempty"`
-	Edition               string                       `json:"edition,omitempty"`
-	FieldSources          map[string]string            `json:"field_sources,omitempty"`
-	Genres                []string                     `json:"genres,omitempty"`
-	InferredFields        map[string]bool              `json:"inferred_fields,omitempty"`
-	Label                 string                       `json:"label,omitempty"`
-	Lyrics                string                       `json:"lyrics,omitempty"`
-	LyricsSource          string                       `json:"lyrics_source,omitempty"`
-	MediaType             string                       `json:"media_type,omitempty"`
-	ParserVersion         string                       `json:"parser_version,omitempty"`
-	RelatedSourceRefs     []string                     `json:"related_source_refs,omitempty"`
-	RelativePath          string                       `json:"relative_path"`
-	SampleRate            int                          `json:"sample_rate,omitempty"`
-	SourceKind            string                       `json:"source_kind"`
-	SourceModifiedAt      time.Time                    `json:"-"`
-	SourceSize            int64                        `json:"-"`
-	SourceType            string                       `json:"source_type,omitempty"`
-	Title                 string                       `json:"title,omitempty"`
-	TrackNumber           int                          `json:"track_number,omitempty"`
-	Year                  int                          `json:"year,omitempty"`
+	// DiscParentExclusive 由暂存层在 CUE scope 对齐之后标记。
+	DiscParentExclusive bool              `json:"disc_parent_exclusive,omitempty"`
+	DurationSeconds     float64           `json:"duration_seconds,omitempty"`
+	Edition             string            `json:"edition,omitempty"`
+	FieldSources        map[string]string `json:"field_sources,omitempty"`
+	Genres              []string          `json:"genres,omitempty"`
+	InferredFields      map[string]bool   `json:"inferred_fields,omitempty"`
+	Label               string            `json:"label,omitempty"`
+	Lyrics              string            `json:"lyrics,omitempty"`
+	LyricsSource        string            `json:"lyrics_source,omitempty"`
+	MediaType           string            `json:"media_type,omitempty"`
+	ParserVersion       string            `json:"parser_version,omitempty"`
+	RelatedSourceRefs   []string          `json:"related_source_refs,omitempty"`
+	RelativePath        string            `json:"relative_path"`
+	SampleRate          int               `json:"sample_rate,omitempty"`
+	SourceKind          string            `json:"source_kind"`
+	SourceModifiedAt    time.Time         `json:"-"`
+	SourceSize          int64             `json:"-"`
+	SourceType          string            `json:"source_type,omitempty"`
+	Title               string            `json:"title,omitempty"`
+	TrackNumber         int               `json:"track_number,omitempty"`
+	Year                int               `json:"year,omitempty"`
 }
 
 func (o SourceObservation) fieldObservations() []fieldObservation {

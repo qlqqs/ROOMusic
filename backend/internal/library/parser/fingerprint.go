@@ -20,12 +20,16 @@ import (
 // 内容指纹只取决于音频负载：改标签、封面或文件名不改变它，音频改变才会改变。格式为
 // "<种类>-v<版本>:<值>"，种类与版本随值保存，比较时自然要求两者都一致；改变某个种类的算法必须升版本号。
 const (
-	fingerprintFLACMD5    = "flac-md5-v1"
-	fingerprintFLACFrames = "flac-frames-v1"
-	fingerprintM4AMedia   = "m4a-mdat-v1"
-	fingerprintMP3Frames  = "mp3-frames-v1"
-	fingerprintOggAudio   = "ogg-audio-v1"
-	fingerprintWAVData    = "wav-data-v1"
+	fingerprintFLACMD5       = "flac-md5-v1"
+	fingerprintFLACFrames    = "flac-frames-v1"
+	fingerprintM4AMedia      = "m4a-mdat-v1"
+	fingerprintMP3Frames     = "mp3-frames-v1"
+	fingerprintOggAudio      = "ogg-audio-v1"
+	fingerprintWAVData       = "wav-data-v1"
+	fingerprintAPEMD5        = "ape-md5-v1"
+	fingerprintAPEFrames     = "ape-frames-v1"
+	fingerprintWavPackBlocks = "wavpack-blocks-v1"
+	fingerprintAIFFSound     = "aiff-ssnd-v1"
 
 	// fingerprintReadChunk 是流式哈希每次读取的字节数，也是检查 context 的粒度。
 	fingerprintReadChunk = 1 << 20
@@ -82,6 +86,12 @@ func fingerprintFunc(extension string) func(context.Context, io.ReaderAt, int64)
 		return oggFingerprint
 	case ".wav":
 		return wavFingerprint
+	case ".ape":
+		return apeFingerprint
+	case ".wv":
+		return wavpackFingerprint
+	case ".aif", ".aiff":
+		return aiffFingerprint
 	}
 	return nil
 }

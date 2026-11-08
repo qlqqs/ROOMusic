@@ -21,6 +21,7 @@ describe("词表标签", () => {
     ["处理方式", evidenceActionLabel, "uncertain_apply", "不确定，已暂时采用"],
     ["原因码", reasonCodeLabel, "inconsistent_candidates", "候选值互相不一致"],
     ["归组方式", candidateKindLabel, "box_leaf", "套装里的子目录"],
+    ["归组方式", candidateKindLabel, "format_split", "同一目录按格式分开"],
     ["音频编码", codecLabel, "alac", "ALAC"],
   ] as const;
 
@@ -28,6 +29,22 @@ describe("词表标签", () => {
     expect(label(known)).toBe(expected);
     expect(label("some_future_value")).toBe("some_future_value");
     expect(label("")).toBe("");
+  });
+
+  it.each([
+    ["ape", "APE"],
+    ["wavpack", "WavPack"],
+    ["wavpack_hybrid", "WavPack（有损）"],
+    ["wavpack_float", "WavPack（浮点）"],
+    ["wavpack_dsd", "WavPack（DSD）"],
+    ["aiff", "AIFF"],
+    ["aiff_float", "AIFF（浮点）"],
+  ])("新增编码 %s 显示为 %s，不附加派生标记", (codec, expected) => {
+    expect(codecLabel(codec)).toBe(expected);
+  });
+
+  it("未列出的 AIFF-C 压缩编码保持原值", () => {
+    expect(codecLabel("aifc_ima4")).toBe("aifc_ima4");
   });
 
   it("后端样本里出现过的取值都有中文名（样本之外新增的取值会原样显示）", () => {

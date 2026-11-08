@@ -12,7 +12,7 @@
 | `B/playback/analysis` | ebur128 改为同时取采样峰值；解析 LRA 与采样峰值；`Version` 1 → 2 |
 | `B/catalog/track_analysis.go` | 保存两个新列；“可用结果”与“当前版本结果”分开（R3）；候选排序让没有结果的曲目先做；接口多两个字段 |
 | `B/catalog` 读取（`read.go`、`track_summary.go`、`personal_reads.go`、`comparison.go`、`track_collection_stats.go`、`track_source.go`） | 时长改读视图 `track_display_durations`（R1b） |
-| 迁移 `0034_track_analysis_loudness_range`（合入时由主会话重新编号） | 两个新列与时长视图 |
+| 迁移 `0036_track_analysis_loudness_range`（合入 S1 后由 0034 重编号为 0036） | 两个新列与时长视图 |
 | `F/features/player/components/signal-path.tsx` | 新增“响度”一行（R4） |
 | `F/features/player/api/decoders.ts` | 分析 DTO 两个新字段 |
 
@@ -79,7 +79,7 @@
 
 ### 3.3 迁移
 
-`0034_track_analysis_loudness_range.sql`：
+`0036_track_analysis_loudness_range.sql`：
 
 ```sql
 ALTER TABLE track_analyses

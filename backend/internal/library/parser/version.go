@@ -10,6 +10,10 @@ const CommonVersion = 1
 
 // 只改变某一格式的读取规则时递增对应版本；新增格式从 1 开始。
 var formatVersions = map[string]int{
+	".ape":  1,
+	".wv":   1,
+	".aif":  1,
+	".aiff": 1,
 	".flac": 1,
 	".mp3":  1,
 	".ogg":  1,

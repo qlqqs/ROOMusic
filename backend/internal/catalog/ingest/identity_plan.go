@@ -119,6 +119,12 @@ func PlanStagedRoot(ctx context.Context, database StagingDB, scanID, rootID stri
 	if err := allocateReleases(ctx, database, scanID, rootID); err != nil {
 		return plan, err
 	}
+	// 候选写入前保存沿用曲目的原发行，供本根保存完成后计算被腾空组的收藏接收方。
+	if _, err := database.ExecContext(ctx, `UPDATE scan_observations o SET previous_release_id=m.release_id
+		FROM tracks t JOIN media m ON m.id=t.medium_id
+		WHERE o.scan_run_id=$1::uuid AND o.root_id=$2::uuid AND NOT o.withheld AND o.planned_track_id=t.id`, scanID, rootID); err != nil {
+		return plan, err
+	}
 	if err := summarizePlan(ctx, database, scanID, rootID, &plan); err != nil {
 		return plan, err
 	}

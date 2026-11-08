@@ -47,7 +47,7 @@ finalize：同现在（被 touch 的曲目 observed_at 已更新，不会被标 
 ```go
 // parser/version.go
 const CommonVersion = 1 // AudioObservation 的结构或共用规则（tags.go 的兜底、分隔、歌词规范化等）变化时加一
-var formatVersions = map[string]int{".flac": 1, ".mp3": 1, ".ogg": 1, ".opus": 1, ".wav": 1, ".m4a": 1}
+var formatVersions = map[string]int{".flac": 1, ".mp3": 1, ".ogg": 1, ".opus": 1, ".wav": 1, ".m4a": 1, ".ape": 1, ".wv": 1, ".aif": 1, ".aiff": 1}
 // CacheVersion 返回扩展名对应的缓存版本，如 "c1.f1"；不在表里的扩展名返回 ""（不缓存）。
 func CacheVersion(extension string) string
 ```
@@ -162,7 +162,7 @@ candidateSourceDirectories() 的每个目录中 .log 普通文件（按名字排
 
 每个根结束记一条 INFO `library.scan.incremental_summary`：`scan_run_id`、`library_root_id`、`mode`、`files_parsed`、`parse_cache_hits`、`parse_cache_writes`、`candidates_written`、`candidates_skipped`、`artwork_deferred_loads`，只含计数。真实库 smoke 以它统计“第二次扫描解析次数为 0”。
 
-### 3.9 迁移（`0036_incremental_scan.sql` + `.down.sql`，合入时重新编号）
+### 3.9 迁移（`0038_incremental_scan.sql` + `.down.sql`，线内连续编号；若 T 线先合入 main，由主会话统一改号）
 
 ```sql
 CREATE TABLE library_parse_cache (
@@ -250,7 +250,7 @@ ALTER TABLE scan_runs ADD COLUMN scan_mode TEXT NOT NULL DEFAULT 'incremental'
 | R-4 | 借用指纹配错（同名同大小同时间但内容不同） | 概率可忽略；配对仍需指纹唯一；完整重扫不借用 |
 | R-5 | 缓存表变大 | 只存去封面的 JSON，超 1 MiB 不缓存；按 seen_scan_id 清理 |
 
-回滚：代码回滚后两张表无人读写，扫描回到每次全量；`0036` 下行迁移删除两表与 `scan_mode`。
+回滚：代码回滚后两张表无人读写，扫描回到每次全量；`0038` 下行迁移删除两表与 `scan_mode`。
 
 ## 8. 线间关系与版本号约定
 

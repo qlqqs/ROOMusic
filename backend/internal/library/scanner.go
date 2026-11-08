@@ -468,6 +468,13 @@ func (service *Service) scanRootWithOptions(ctx context.Context, executor scanEx
 				captureProcessingError(diagnosticError)
 			}
 		}
+		if markErr := ingest.MarkDiscParentScopes(ctx, executor, scanID, root.ID); markErr != nil {
+			complete = false
+			captureProcessingError(markErr)
+			if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, "", "staging_write_failure", "无法标记碟父目录独占范围"); diagnosticError != nil {
+				captureProcessingError(diagnosticError)
+			}
+		}
 		// 先规划曲目身份（遍历已经结束，complete 即遍历证据是否完整）；规划失败时暂存行没有完整的规划，不能写入。
 		planned, planProblem := service.planRootIdentities(ctx, executor, scanID, root, complete, options.Mode)
 		if planProblem != nil {
@@ -509,6 +516,11 @@ func (service *Service) scanRootWithOptions(ctx context.Context, executor scanEx
 					complete = false
 					captureProcessingError(err)
 					captureProcessingError(service.recordDiagnosticWith(ctx, executor, scanID, "", "catalog_write_failure", "无法更新保住来源的观察时间"))
+				}
+			}
+			if ctx.Err() == nil {
+				if transferErr := service.transferEmptiedAlbumFavorites(ctx, executor, scanID, root.ID); transferErr != nil && service.logger != nil {
+					service.logger.Warn("扫描专辑收藏转移失败", "event", "library.scan.favorite_transfer_failed", "module", "library", "scan_run_id", scanID)
 				}
 			}
 		}
@@ -731,7 +743,29 @@ func (service *Service) persistStagedCandidates(ctx context.Context, executor sc
 				feedback.scopeDone(ctx)
 				continue
 			}
-			for _, candidate := range ingest.OrganizeObservations(observations) {
+			candidates := ingest.OrganizeObservations(observations)
+			versionBatches := map[string][]ingest.OrganizedCandidate{}
+			for _, candidate := range candidates {
+				if candidate.VersionGroup != "" {
+					versionBatches[candidate.VersionGroup] = append(versionBatches[candidate.VersionGroup], candidate)
+				}
+			}
+			groupIDs := map[string]string{}
+			groupErrors := map[string]error{}
+			for _, candidate := range candidates {
+				versionGroup := candidate.VersionGroup
+				if versionGroup != "" {
+					if _, planned := groupIDs[versionGroup]; !planned && groupErrors[versionGroup] == nil {
+						groupIDs[versionGroup], groupErrors[versionGroup] = ingest.PlannedVersionGroup(ctx, executor, scanID, root.ID, versionBatches[versionGroup])
+					}
+					if groupErr := groupErrors[versionGroup]; groupErr != nil {
+						if firstErr == nil {
+							firstErr = groupErr
+						}
+						continue
+					}
+					candidate.JoinGroupID = groupIDs[versionGroup]
+				}
 				ripLogRefs, diagnostics := discoverCandidateRipLogEvidence(root, candidate)
 				ingest.ApplyRipLogEvidence(&candidate, ripLogRefs)
 				for _, diagnostic := range diagnostics {
@@ -739,8 +773,16 @@ func (service *Service) persistStagedCandidates(ctx context.Context, executor sc
 						firstErr = diagnosticErr
 					}
 				}
-				if persistErr := service.persistOneCandidate(ctx, executor, scanID, root, candidate, stats, feedback); persistErr != nil && firstErr == nil {
+				releaseID, persistErr := service.persistOneCandidate(ctx, executor, scanID, root, candidate, stats, feedback)
+				if persistErr != nil && firstErr == nil {
 					firstErr = persistErr
+				}
+				// 封面失败不撤销已提交的发行，后续版本仍须加入它的组。
+				if versionGroup != "" && groupIDs[versionGroup] == "" && releaseID != "" {
+					groupIDs[versionGroup], groupErrors[versionGroup] = ingest.ReleaseGroupOf(ctx, executor, releaseID)
+					if groupErr := groupErrors[versionGroup]; groupErr != nil && firstErr == nil {
+						firstErr = groupErr
+					}
 				}
 			}
 			feedback.scopeDone(ctx)
@@ -890,7 +932,7 @@ func observationFieldSources(observation parser.AudioObservation) map[string]str
 
 // persistOneCandidate 用 catalog 的独立短事务写入一个候选；封面在事务提交后为该 Release 绑定，
 // 封面失败以 errArtworkBinding 包装返回。曲目沿用还是新建由规划决定，见 planRootIdentities。
-func (service *Service) persistOneCandidate(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, candidate ingest.OrganizedCandidate, stats *incrementalStats, feedbacks ...*scanFeedback) error {
+func (service *Service) persistOneCandidate(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, candidate ingest.OrganizedCandidate, stats *incrementalStats, feedbacks ...*scanFeedback) (string, error) {
 	feedback := feedbackArg(feedbacks)
 	var changes *ingest.ScanFeedback
 	if feedback != nil {
@@ -898,16 +940,16 @@ func (service *Service) persistOneCandidate(ctx context.Context, executor scanEx
 	}
 	releaseID, err := ingest.PersistCandidateWithFeedback(ctx, executor, scanID, root.ID, candidate, changes)
 	if err != nil {
-		return err
+		return "", err
 	}
 	stats.candidatesWritten++
 	if observation, ok := candidate.EmbeddedArtwork(); ok && observation.ArtworkDeferred {
 		stats.artworkDeferredLoads++
 	}
 	if artworkErr := service.saveArtworkForRelease(ctx, executor, scanID, releaseID, root, candidate, changes); artworkErr != nil {
-		return fmt.Errorf("%w: %v", errArtworkBinding, artworkErr)
+		return releaseID, fmt.Errorf("%w: %v", errArtworkBinding, artworkErr)
 	}
-	return nil
+	return releaseID, nil
 }
 
 func safeRelativePath(root, path string) string {
@@ -945,7 +987,7 @@ func (service *Service) saveArtworkForRelease(ctx context.Context, executor scan
 	if len(data) == 0 {
 		sourceType = "folder"
 		var discoveryErr error
-		data, mimeType, discoveryErr = discoverFolderArtwork(root.Path, candidate.ArtworkDirectories())
+		data, mimeType, discoveryErr = discoverFolderArtwork(root.Path, candidate.ArtworkDirectories(), root.filter)
 		if errors.Is(discoveryErr, errArtworkSource) {
 			return service.recordDiagnosticWith(ctx, executor, scanID, candidate.Anchor.Scope, "artwork_unreadable", "封面文件读不了")
 		}
@@ -993,39 +1035,106 @@ func readDeferredArtwork(root registeredRoot, relativePath string) ([]byte, stri
 // folderArtworkNames 是文件夹封面的文件名及优先顺序（小写）；实际文件名按小写后匹配。
 var folderArtworkNames = []string{"cover.jpg", "cover.jpeg", "cover.png", "cover.webp", "folder.jpg", "folder.jpeg", "folder.png", "front.jpg", "front.jpeg", "front.png"}
 
-func discoverFolderArtwork(rootPath string, directories []string) ([]byte, string, error) {
-	return discoverFolderArtworkWithReader(rootPath, directories, os.ReadFile)
+// folderArtworkSubdirectoryNames 只匹配直接附属子目录，不递归、不跟随目录符号链接。
+var folderArtworkSubdirectoryNames = map[string]bool{"scans": true, "artwork": true, "art": true, "covers": true}
+
+func discoverFolderArtwork(rootPath string, directories []string, filter scanFilter) ([]byte, string, error) {
+	return discoverFolderArtworkWithReader(rootPath, directories, os.ReadFile, filter)
 }
 
-// discoverFolderArtworkWithReader 按顺序在 directories（相对 rootPath，空串表示根）里找封面，第一个通过检查的文件
-// 即为结果。无效的命名封面（符号链接、非普通文件、超限、读取失败、格式不支持）记下第一个错误后继续找；
-// 全部找完仍没有结果时才返回该错误。目录不存在不算错误，其他读目录错误按同样方式记录。
-func discoverFolderArtworkWithReader(rootPath string, directories []string, readFile func(string) ([]byte, error)) ([]byte, string, error) {
+// discoverFolderArtworkWithReader 依次查原目录精确名、原目录 front、附属子目录精确名、附属子目录 front。
+// 每轮命中即返回；无效封面记下第一个错误，四轮全部找完仍没有可用封面才报错。
+func discoverFolderArtworkWithReader(rootPath string, directories []string, readFile func(string) ([]byte, error), filter scanFilter) ([]byte, string, error) {
+	type artworkDirectory struct {
+		path         string
+		relativePath string
+		entries      []os.DirEntry
+	}
 	var firstErr error
 	remember := func(err error) {
 		if firstErr == nil {
 			firstErr = err
 		}
 	}
-	for _, directory := range directories {
-		directoryPath := filepath.Join(rootPath, filepath.FromSlash(directory))
+	readDirectory := func(relativePath string) (artworkDirectory, bool) {
+		directoryPath := filepath.Join(rootPath, filepath.FromSlash(relativePath))
 		entries, err := os.ReadDir(directoryPath)
-		if errors.Is(err, fs.ErrNotExist) {
-			continue
-		}
 		if err != nil {
-			remember(err)
+			if !errors.Is(err, fs.ErrNotExist) {
+				remember(err)
+			}
+			return artworkDirectory{}, false
+		}
+		return artworkDirectory{path: directoryPath, relativePath: relativePath, entries: entries}, true
+	}
+	search := func(directory artworkDirectory, exact bool) ([]byte, string) {
+		var names []string
+		if exact {
+			for _, name := range folderArtworkNames {
+				names = append(names, folderArtworkCandidates(directory.entries, name)...)
+			}
+		} else {
+			for _, entry := range directory.entries {
+				name := strings.ToLower(entry.Name())
+				ext := filepath.Ext(name)
+				if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".webp") && strings.Contains(strings.TrimSuffix(name, ext), "front") {
+					names = append(names, entry.Name())
+				}
+			}
+		}
+		for _, name := range names {
+			if filter.skipFile(name) {
+				continue
+			}
+			data, mimeType, err := readFolderArtworkFile(filepath.Join(directory.path, name), name, readFile)
+			if err != nil {
+				remember(err)
+				continue
+			}
+			return data, mimeType
+		}
+		return nil, ""
+	}
+	// 第一轮保持原目录与命名优先级；缓存目录项供第二轮和附属目录发现复用。
+	var originals []artworkDirectory
+	for _, directory := range directories {
+		loaded, ok := readDirectory(directory)
+		if !ok {
 			continue
 		}
-		for _, name := range folderArtworkNames {
-			for _, entryName := range folderArtworkCandidates(entries, name) {
-				data, mimeType, err := readFolderArtworkFile(filepath.Join(directoryPath, entryName), name, readFile)
-				if err != nil {
-					remember(err)
-					continue
-				}
+		originals = append(originals, loaded)
+		if data, mimeType := search(loaded, true); len(data) > 0 {
+			return data, mimeType, nil
+		}
+	}
+	for _, directory := range originals {
+		if data, mimeType := search(directory, false); len(data) > 0 {
+			return data, mimeType, nil
+		}
+	}
+	var subsidiaries []artworkDirectory
+	for _, directory := range originals {
+		for _, entry := range directory.entries {
+			if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || !folderArtworkSubdirectoryNames[strings.ToLower(entry.Name())] {
+				continue
+			}
+			relativePath := pathpkg.Join(directory.relativePath, entry.Name())
+			if filter.skipDir(relativePath, entry.Name()) {
+				continue
+			}
+			loaded, ok := readDirectory(relativePath)
+			if !ok {
+				continue
+			}
+			subsidiaries = append(subsidiaries, loaded)
+			if data, mimeType := search(loaded, true); len(data) > 0 {
 				return data, mimeType, nil
 			}
+		}
+	}
+	for _, directory := range subsidiaries {
+		if data, mimeType := search(directory, false); len(data) > 0 {
+			return data, mimeType, nil
 		}
 	}
 	if firstErr != nil {

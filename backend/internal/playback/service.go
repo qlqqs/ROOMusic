@@ -16,7 +16,7 @@ var (
 	// ErrRootDisabled 表示曲目所在的登记根目录已停用；拒绝新的播放请求，不切断已建立传输，专辑仍可浏览。
 	ErrRootDisabled = errors.New("playback root disabled")
 	// ErrNotDirectlyPlayable 表示曲目不能交付：CUE 虚拟轨（需要切分），或（来源类别、编码）不在当前格式表中
-	// （包括派生不可用时的 ALAC）。
+	// （包括派生不可用时的 ALAC），或派生源位深不受支持。
 	ErrNotDirectlyPlayable = errors.New("playback track is not directly playable")
 	// ErrDatabase 表示核对所需的数据库读取失败；调用方应报告服务暂不可用，不能当作曲目或来源的问题。
 	ErrDatabase = errors.New("playback database unavailable")
@@ -83,6 +83,9 @@ func (service *Service) resolve(ctx context.Context, trackID string) (resolved, 
 	}
 	format, ok := service.findFormat(source.SourceKind, source.Codec)
 	if !ok {
+		return resolved{}, ErrNotDirectlyPlayable
+	}
+	if format.Delivery == DeliveryDerived && source.BitDepth != 0 && source.BitDepth != 16 && source.BitDepth != 24 {
 		return resolved{}, ErrNotDirectlyPlayable
 	}
 	// 登记时验证过的目录在播放时必须仍是配置允许范围内的真实目录；ValidatePath 返回的规范路径必须与登记路径一致，

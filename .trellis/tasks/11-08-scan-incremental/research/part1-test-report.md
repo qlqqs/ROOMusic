@@ -15,7 +15,7 @@
 - `backend/internal/library/scan_borrow_full_integration_test.go`：目录改名保留 UUID/Release，借用指纹且无整段读取；旧侧、新侧、两侧同名/同大小/同时间歧义都不借用；完整重扫解析全部，移动文件不借用，同来源文件仍复用已存指纹，能读出保留 size/mtime 的标签变化。
 - `backend/internal/app/scan_mode_integration_test.go`：完整模式持久化及启动/活动/详情/列表/取消 DTO；已有扫描不被另一模式覆盖；空请求体与显式 incremental 均命中缓存；非法请求返回 400 且不创建扫描。
 - `identity_rebinding_integration_test.go`：只把 `canceled while planning` 子用例改为 `scanRootWithOptions(..., StartOptions{Mode: ScanModeFull})`，终态与身份断言原样保留。
-- `migrations_rollback_integration_test.go`：0036 往返增加实际解析缓存及 full 扫描夹具，保留升级前业务数据，验证升级→回退→再升级。
+- `migrations_rollback_integration_test.go`：增量迁移（现编号 0038）往返增加实际解析缓存及 full 扫描夹具，保留升级前业务数据，验证升级→回退→再升级。
 - API 样本：真实 handler 重生主样本 212 个、扫描反馈样本 59 个，其中 39 个 JSON 文件实际变化，均仅增加 `mode`。样本测试及共享 `runScan` / `startScanFeedback` 夹具的启动请求从 `{}` 改为空请求体，符合已实现的严格 mode 合同。
 - 前端 `api/decoders.test.ts`、`api/endpoints.test.ts`、`api/scan-filter-decoders.test.ts`、`components/scan-section.test.tsx`：mode 合法/缺失/非法；手写对象补 mode；两按钮的实际请求体及 Content-Type；202/200；失败后按原模式重试；记录和详情标签。
 
@@ -62,7 +62,7 @@ npm run typecheck
 
 ## 结果与问题
 
-- CacheVersion 单测、真实版本升级 PostgreSQL 测试、模式 API PostgreSQL 测试、迁移 0031–0036 往返、包依赖方向、go vet 已 PASS，不是 SKIP。
+- CacheVersion 单测、真实版本升级 PostgreSQL 测试、模式 API PostgreSQL 测试、迁移 0031–0035 及增量迁移（现编号 0038）改号前的往返、包依赖方向、go vet 已 PASS，不是 SKIP。
 - 扫描联合验证最初 39 个顶层测试 PASS、5 个 FAIL、0 SKIP。3 个新增用例失败来自夹具/监控环境，修正后定向重跑全部 PASS，详见下文；两个原回归失败未改断言、未改实现。因此全部新增测试已 PASS，既有回归不能宣称全绿。
 
 ### 1. 三文件轮换的身份回归
@@ -118,3 +118,7 @@ docker compose --env-file /dev/null -f "$WT/compose.test.yaml" -p roomusic-test-
 
 - 主会话验收认为 inotify/strace 监控过重，已删除 `scan_incremental_open_linux_test.go` 与 `scan_incremental_open_other_test.go`。三个用例改为首扫后把不应读取的音频设为不可读（`Chmod(0)`，以 root 运行时跳过），增量扫描仍须成功、零诊断、零跳过且身份不变；三例 PostgreSQL 重跑 PASS，0 SKIP。上文关于 strace 的描述以此为准。
 - `three_files_rotate` 首扫前给三个文件设不同修改时间；`TestPostgreSQLCrossRootMoveGetsNewIdentity` 在来源目录多留一首不动的音频。两例重跑 PASS。
+
+## 2026-11-08 合并改号说明
+
+增量迁移使用线内连续编号 `0038_incremental_scan{,.down}.sql`；若 T 线先合入 main，由主会话统一改号。此前跨号方案触发迁移连续性校验，已撤销该方案；不补空迁移、不改加载器或回退执行器。以上数据库 PASS 是原编号时的历史验收，不代表当前合并树已通过数据库验证。本轮不启动数据库，实际改号验证见 [合并记录](./merge-main-integration.md)。

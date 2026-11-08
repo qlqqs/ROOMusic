@@ -7,7 +7,7 @@ import (
 )
 
 func TestCacheVersionKnownExtensions(t *testing.T) {
-	for _, extension := range []string{".flac", ".mp3", ".ogg", ".opus", ".wav", ".m4a"} {
+	for _, extension := range []string{".flac", ".mp3", ".ogg", ".opus", ".wav", ".m4a", ".ape", ".wv", ".aif", ".aiff"} {
 		t.Run(extension, func(t *testing.T) {
 			version, ok := formatVersions[extension]
 			if !ok || version < 1 {
@@ -32,7 +32,7 @@ func TestCacheVersionUnknownExtensions(t *testing.T) {
 }
 
 func TestCacheVersionCaseInsensitive(t *testing.T) {
-	for _, extension := range []string{".flac", ".mp3", ".ogg", ".opus", ".wav", ".m4a"} {
+	for _, extension := range []string{".flac", ".mp3", ".ogg", ".opus", ".wav", ".m4a", ".ape", ".wv", ".aif", ".aiff"} {
 		for _, variant := range []string{strings.ToUpper(extension), strings.ToUpper(extension[:2]) + extension[2:]} {
 			t.Run(variant, func(t *testing.T) {
 				if got, want := CacheVersion(variant), CacheVersion(extension); got == "" || got != want {

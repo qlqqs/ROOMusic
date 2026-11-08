@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog/ingest"
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/artistgraph"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
@@ -326,5 +327,81 @@ func TestPostgreSQLArtistListCountsAndSearchDeepPages(t *testing.T) {
 	ordered, err := f.store.ListArtists(ctx, ArtistListParams{Query: "Solo", Sort: "album_count", Page: 1, PageSize: 50})
 	if err != nil || ordered.Pagination.Total != 1002 || ordered.Items[0].ID != id {
 		t.Fatalf("album count ordering: %+v %v", ordered, err)
+	}
+}
+
+// filenameArtistFingerprinter 用于纯合成观察：没有物理文件，内容指纹保持未知。
+type filenameArtistFingerprinter struct{}
+
+func (filenameArtistFingerprinter) Fingerprint(context.Context, string) (string, error) {
+	return "", nil
+}
+
+func TestPostgreSQLArtistReadFilenameInferredArtist(t *testing.T) {
+	f := newPlacementFixture(t)
+	ctx := context.Background()
+	scanID := uuid.New()
+	f.exec(`INSERT INTO scan_runs(id,status,started_at) VALUES($1::uuid,'running',NOW())`, scanID)
+	// 模拟无标签解析结果；艺人必须由 organizer 从文件名拆出，不能直接塞进艺人事实表。
+	observation := ingest.SourceObservation{
+		RelativePath: "Filename/示例艺人 - 示例曲.flac", Directory: "Filename",
+		Title: "示例艺人 - 示例曲", Album: "Filename", Artist: "未知艺术家",
+		TrackNumber: 1, DiscNumber: 1, SourceKind: "flac_vorbis_comment", Codec: "flac",
+		InferredFields: map[string]bool{"title": true, "album": true, "artist": true, "track_number": true, "disc_number": true},
+		FieldSources: map[string]string{
+			"title": "filename_fallback", "album": "folder_fallback", "artist": "display_fallback",
+			"track_number": "default_fallback", "disc_number": "default_fallback",
+		},
+	}
+	if err := ingest.StageObservation(ctx, f.database, scanID, f.rootID, observation); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := ingest.PlanStagedRoot(ctx, f.database, scanID, f.rootID, ingest.PlanOptions{WalkComplete: true, Fingerprinter: filenameArtistFingerprinter{}})
+	if err != nil || plan.ScopeFailures != 0 || plan.FingerprintFailures != 0 || plan.DeferredScopes != 0 {
+		t.Fatalf("文件名观察规划失败: %+v %v", plan, err)
+	}
+	candidates := ingest.OrganizeObservations([]ingest.SourceObservation{observation})
+	if len(candidates) != 1 {
+		t.Fatalf("文件名观察应只有一个候选: %+v", candidates)
+	}
+	releaseID, err := ingest.PersistCandidate(ctx, f.database, scanID, f.rootID, candidates[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ingest.ClearStagedObservations(ctx, f.database, scanID, f.rootID); err != nil {
+		t.Fatal(err)
+	}
+	var trackID, title, artist, source string
+	var inferred bool
+	if err := f.database.QueryRow(`SELECT t.id::text,t.title,t.artist,o.source_kind,o.inferred
+ FROM tracks t JOIN media m ON m.id=t.medium_id JOIN track_observations o ON o.track_id=t.id AND o.field_name='artist'
+ WHERE m.release_id=$1::uuid`, releaseID).Scan(&trackID, &title, &artist, &source, &inferred); err != nil {
+		t.Fatal(err)
+	}
+	if title != "示例曲" || artist != "示例艺人" || source != "filename_fallback" || !inferred {
+		t.Fatalf("文件名艺人及其推断证据未写入: 标题=%q 艺人=%q 来源=%q inferred=%t", title, artist, source, inferred)
+	}
+	// 复用现有发布流程，在 CATP 内真实刷新艺人图后再读公开摘要。
+	publishArtistReadFixture(t, f)
+	id := findArtistReadFixture(t, f, "示例艺人")
+	detail, err := f.store.LoadArtist(ctx, id)
+	if err != nil || detail.Artist.ID != id || detail.Artist.Name != "示例艺人" || !detail.Artist.Available || detail.Artist.TrackCount != 1 || detail.Artist.AlbumCount != 1 {
+		t.Fatalf("文件名艺人未成为可读取的实体: %+v %v", detail, err)
+	}
+	summaries, err := f.store.LoadTrackSummaries(ctx, []string{trackID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary, ok := summaries[trackID]
+	if !ok || !summary.Present || summary.Title != "示例曲" || summary.Artist != "示例艺人" {
+		t.Fatalf("文件名曲目不可读取: %+v", summaries)
+	}
+	assertArtistRefs(t, summary.ArtistRefs, "track_artist", "示例艺人", "示例艺人", id)
+	var placeholders int
+	if err := f.database.QueryRow(`SELECT COUNT(*) FROM artist_name_keys WHERE normalized_key='未知艺术家'`).Scan(&placeholders); err != nil {
+		t.Fatal(err)
+	}
+	if placeholders != 0 {
+		t.Fatal("无标签占位艺人不应被建成实体")
 	}
 }
