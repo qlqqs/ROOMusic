@@ -86,7 +86,7 @@ test("真实分析完成后播放波形与均衡增益和分析 API 一致", asy
   const hasAlbumContext = selectedIndex >= 0 && selectedIndex < tracks.length - 1;
   const gain = hasAlbumContext ? selectedAnalysis.album?.gainDb ?? selectedAnalysis.analysis?.trackGainDb : selectedAnalysis.analysis?.trackGainDb;
   const expectedGain = gain === null || gain === undefined ? "−5.0" : gain === 0 ? "0.0" : `${gain > 0 ? "+" : "−"}${Math.abs(gain).toFixed(1)}`;
-  await expect(signal.getByRole("listitem").nth(2)).toContainText(`音量均衡 ${expectedGain} dB`);
+  await expect(signal.getByRole("listitem").filter({ has: page.getByText("浏览器", { exact: true }) })).toContainText(`音量均衡 ${expectedGain} dB`);
 });
 
 test("FLAC 真实 seek，自然切到下一首；切页不断播，刷新暂停恢复位置", async ({ page }) => {
@@ -202,7 +202,13 @@ for (const { source, sourceLine, serverLine } of [
     const full = page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "收起全屏播放器", exact: true }) });
     await full.getByRole("button", { name: "信号路径：无损", exact: true }).click();
     const signal = page.getByRole("dialog", { name: "信号路径：无损", exact: true });
-    await expect(signal.getByRole("listitem")).toHaveText([sourceLine, serverLine, /浏览器解码(?: · 音量均衡 [−+0-9.]+ dB)?/, "系统输出系统默认输出"]);
+    const layers = signal.getByRole("listitem");
+    await expect(layers).toHaveCount(5);
+    await expect(layers.filter({ has: page.getByText("数据源", { exact: true }) })).toHaveText(sourceLine);
+    await expect(layers.filter({ has: page.getByText("响度", { exact: true }) })).toContainText("LUFS");
+    await expect(layers.filter({ has: page.getByText("服务端", { exact: true }) })).toHaveText(serverLine);
+    await expect(layers.filter({ has: page.getByText("浏览器", { exact: true }) })).toHaveText(/浏览器解码(?: · 音量均衡 [−+0-9.]+ dB)?/);
+    await expect(layers.filter({ has: page.getByText("系统输出", { exact: true }) })).toHaveText("系统输出系统默认输出");
     for (const removedText of ["ALAC 转成 FLAC，位深、采样率与声道不变。", "原样发送，不转码。", "由浏览器解码，可能按输出设备重新采样。", "网页看不到声卡的实际格式。"]) await expect(signal).not.toContainText(removedText);
     await page.keyboard.press("Escape");
     await expect(signal).not.toBeVisible();
