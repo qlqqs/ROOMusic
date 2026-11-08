@@ -11,7 +11,7 @@
 | `catalog/internal/searchindex` | 每个搜索值多存一个去标点键（只在与规范键不同时存） |
 | `catalog/internal/artistgraph`（搜索名字） | `artist_search_names` 同样多存去标点键 |
 | `catalog` 搜索 SQL | 匹配增加去标点分支，排名增加“去标点命中”的半级 |
-| 迁移（本线草号 0036） | 两张搜索表加列与部分索引 |
+| 迁移（合入编号 0040） | 两张搜索表加列与部分索引 |
 | 前端 | 无改动（REST 形状不变） |
 
 ### 为什么不改 `Text`、不升 `textnorm.Version`
@@ -67,7 +67,7 @@ func Loose(key string) string
 - 艺人搜索（主名、别名）同样三分支、六层。
 - **REST 不变**：`match.kind` 仍是 `exact|prefix|contains`（取该命中的等级，不区分是否去标点），`original` 仍是命中值的原文。
 
-### 3.4 迁移（本线草号 0036，合入时重新编号）
+### 3.4 迁移（合入编号 0040）
 
 ```sql
 ALTER TABLE catalog_search_values
@@ -87,7 +87,7 @@ CREATE INDEX catalog_search_values_loose_exact_idx ON catalog_search_values(md5(
 | 版本 | 变化 |
 | --- | --- |
 | `searchindex.ProjectionVersion` | 计入 T 线的 1→2 |
-| `artistgraph.Version` | 计入 T 线的 2→3（搜索名字属于艺人投影） |
+| `artistgraph.Version` | O/T 整合后 3→4（搜索名字属于艺人投影） |
 | `textnorm.Version` | 不变 |
 | `parser.CommonVersion`、`ingest.GroupingVersion`（④ 定稿的常量） | 本项不需要（不改扫描结果，自带回填）；T 线因 ⑥⑦⑧ 合计各 +1，与本项无关 |
 
@@ -155,3 +155,7 @@ PRD R4：版本升级后 `maintenance.Initialize` 关闭新投影读取，旧路
 ## 8. 裁决
 
 已裁决（2026-11-08，见 prd.md）：R2 的“统一撇号”放进去标点键里做，不改名字键算法（`textnorm.Version` 不变）；两种撇号互相能搜到，写法不同的排在写法完全相同的之后。
+
+## 2026-11-08 合入 main 对齐
+
+O 线与 T 线各自已将 `artistgraph.Version` 提升到 3；整合后统一为 4，避免已有版本 3 的投影漏回填。`searchindex.ProjectionVersion=2`、`textnorm.Version=1` 保持不变。下述线内升级/回滚说明是原实施背景，合并后的回滚须连同 O 线规则判断，不能只回退版本常量。

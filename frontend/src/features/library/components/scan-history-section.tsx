@@ -6,13 +6,29 @@ import { formatDateTime, UNKNOWN_TIME } from "../../../shared/lib/time";
 import { DataTable, Pagination, Panel, QueryContent, Skeleton, VisuallyHidden, type Column } from "../../../shared/ui";
 import type { ScanDTO } from "../api/decoders";
 import { useScanHistory } from "../hooks/use-scan-history";
-import { scanPhase } from "../scan-status";
+import { scanPhase, skippedFileCount, skippedFilesText } from "../scan-status";
 import { ScanPhaseTag } from "./scan-phase-tag";
 import styles from "./scan-history-section.module.css";
 
+/** 状态标签；成功但跳过了文件时，旁边的“跳过 N 个文件”进入这次扫描的详情看诊断。 */
+function ScanStatusCell({ scan }: { scan: ScanDTO }) {
+  const skipped = skippedFileCount(scan);
+  return (
+    <span className={styles.status}>
+      <ScanPhaseTag phase={scanPhase(scan)} />
+      {skipped === null ? null : (
+        <Link to="/settings/library/scans/$scanId" params={{ scanId: scan.id }}>
+          {skippedFilesText(skipped)}
+          <VisuallyHidden>（{formatDateTime(scan.started_at)} 开始的扫描）</VisuallyHidden>
+        </Link>
+      )}
+    </span>
+  );
+}
+
 const columns: Column<ScanDTO>[] = [
   { id: "started", header: "开始时间", rowHeader: true, cell: (scan) => formatDateTime(scan.started_at) },
-  { id: "status", header: "状态", cell: (scan) => <ScanPhaseTag phase={scanPhase(scan)} /> },
+  { id: "status", header: "状态", cell: (scan) => <ScanStatusCell scan={scan} /> },
   {
     id: "finished",
     header: "结束时间",

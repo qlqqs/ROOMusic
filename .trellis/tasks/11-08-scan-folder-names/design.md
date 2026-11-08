@@ -13,7 +13,7 @@
 | 碟父目录独占标记 | `catalog/ingest/staging.go`（新函数 `MarkDiscParentScopes`）、`catalog/ingest/observation.go`（新字段 `DiscParentExclusive`）、`library/scanner.go`（调用一行） | 在 CUE 对齐之后 |
 | 介质标题写入 | `catalog/ingest/persist.go` | `media.title` 列已存在（0002），不加迁移 |
 | 封面子目录与 `front` 规则 | `catalog/ingest/persist.go`（`ArtworkDirectories` 拆两组）、`library/scanner.go`（`discoverFolderArtwork`） | |
-| 落选专辑的收藏转移 | 计算在 `catalog/ingest`（新文件 `group_moves.go`），执行在 `personal`（新方法），由 `library` 在根写入完成后调用，`app` 注入 | 迁移 0034 |
+| 落选专辑的收藏转移 | 计算在 `catalog/ingest`（新文件 `group_moves.go`），执行在 `personal`（新方法），由 `library` 在根写入完成后调用，`app` 注入 | 迁移 0037 |
 | 合同 | `library-scan-contracts.md`、`personal-contracts.md`、`database-guidelines.md` | |
 
 **不改** `library/parser/`（包括 `tags.go`）。专辑名碟号剥离放在 organizer 的比较键里，不改暂存的观察值，所以本线与 T 线在 `parser/` 没有冲突。
@@ -247,7 +247,7 @@ type OrganizedCandidate struct {
 
 ### 7.2 实现
 
-- **迁移 0034**（`0034_scan_observation_previous_release.sql` / `.down.sql`）：
+- **迁移 0037**（`0037_scan_observation_previous_release.sql` / `.down.sql`）：
 
   ```sql
   ALTER TABLE scan_observations ADD COLUMN previous_release_id UUID;
@@ -255,7 +255,7 @@ type OrganizedCandidate struct {
   ALTER TABLE scan_observations DROP COLUMN IF EXISTS previous_release_id;
   ```
 
-  暂存表，不加外键、不加索引（按 `scan_run_id, root_id` 已有索引过滤）。合入时由主会话重新编号。
+  暂存表，不加外键、不加索引（按 `scan_run_id, root_id` 已有索引过滤）。合入 main 时已改为 0037，避开文件过滤、改路径与响度范围迁移。
 - `StageObservation` 的 `ON CONFLICT DO UPDATE` 增加 `previous_release_id=NULL`。
 - `PlanStagedRoot` 在 `allocateReleases` 之后增加一条：
 
@@ -304,7 +304,7 @@ type OrganizedCandidate struct {
 
 | 项 | 变化 |
 | --- | --- |
-| 迁移 | 暂定 0034：`scan_observations.previous_release_id UUID`（含 down）。S 线 ①⑫④⑪ 也暂定从 0034 起，合入时由主会话按合入顺序重新编号 |
+| 迁移 | 0037：`scan_observations.previous_release_id UUID`（含 down），合入 main 时文件名、回退夹具与文档同步改号 |
 | REST 读取 | 形状不变。发行详情 `media[].title` 会出现真实碟名（`夏`、`Bonus`），没有碟名仍是 `"Medium"`；接口样本不受影响（合成素材没有碟名目录） |
 | 候选种类 | 不新增；更多情形落到 `strict_multidisc` |
 | 收藏 | 扫描可能改变用户的专辑收藏集合并递增其 `revision`；客户端持旧 revision 分页会得到既有的 `409 favorites_changed` |
@@ -412,7 +412,7 @@ type OrganizedCandidate struct {
 | 收藏转移写错用户数据 | 只按事实（组被腾空）触发；一条 SQL 计算 + 一个短事务；集成测试覆盖转移、已收藏不重复、未腾空不转 |
 | `extras` 不在附属名单 | 真实库没有这种目录；以后出现再加一个名字 |
 
-回滚：代码按提交回退即可恢复旧归组；下一次扫描按旧规则重新归组（同样按严格过半沿用）。已经转移的收藏不回退（转移后的组有曲目，回退后旧组也可能再次有曲目，用户可手动调整）；迁移 0034 只加暂存列，down 迁移删列，无数据损失。
+回滚：代码按提交回退即可恢复旧归组；下一次扫描按旧规则重新归组（同样按严格过半沿用）。已经转移的收藏不回退（转移后的组有曲目，回退后旧组也可能再次有曲目，用户可手动调整）；迁移 0037 只加暂存列，down 迁移删列，无数据损失。
 
 ## 14. 已定稿的技术选择
 

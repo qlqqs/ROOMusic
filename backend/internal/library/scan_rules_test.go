@@ -141,19 +141,19 @@ func TestMissingReconciliationRequiresSuccessfulTerminalState(t *testing.T) {
 }
 
 func TestScannerOnlyDiagnosesKnownUnsupportedAudioExtensions(t *testing.T) {
-	for _, extension := range []string{".flac", ".mp3", ".ogg", ".opus", ".wav"} {
+	for _, extension := range []string{".flac", ".mp3", ".ogg", ".opus", ".wav", ".m4a", ".ape", ".wv", ".aif", ".aiff"} {
 		if !isSupportedAudioExtension(extension) {
 			t.Fatalf("supported extension %s was not recognized", extension)
 		}
 	}
-	for _, extension := range []string{".aac", ".m4a", ".ape", ".dsf"} {
-		if !isAudioCandidateExtension(extension) {
-			t.Fatalf("unsupported audio extension %s was not recognized", extension)
+	for _, extension := range []string{".aac", ".dsf", ".dff", ".wma", ".mka", ".tak"} {
+		if !isAudioCandidateExtension(extension) || isSupportedAudioExtension(extension) {
+			t.Fatalf("不支持的音频扩展名 %s 没有仅进入诊断候选", extension)
 		}
 	}
-	for _, extension := range []string{".jpg", ".png", ".txt", ".nfo"} {
+	for _, extension := range []string{".jpg", ".png", ".txt", ".nfo", ".ape", ".wv", ".aif", ".aiff"} {
 		if isAudioCandidateExtension(extension) {
-			t.Fatalf("non-audio extension %s was treated as an unsupported audio file", extension)
+			t.Fatalf("扩展名 %s 不应进入不支持格式诊断", extension)
 		}
 	}
 }

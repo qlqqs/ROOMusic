@@ -86,6 +86,12 @@ func ParseAudioFile(path string) (AudioObservation, error) {
 		return parseWAV(path)
 	case ".m4a":
 		return parseM4A(path)
+	case ".ape":
+		return parseAPE(path)
+	case ".wv":
+		return parseWavPack(path)
+	case ".aif", ".aiff":
+		return parseAIFF(path)
 	default:
 		return AudioObservation{}, fmt.Errorf("unsupported format")
 	}

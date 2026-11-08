@@ -99,7 +99,7 @@ func refreshFacts(ctx context.Context, tx *sql.Tx, ids []string) ([]string, erro
 			}
 		}
 	}
-	rows, err = tx.QueryContext(ctx, `SELECT t.id::text,t.artist,o.value,o.inferred,
+	rows, err = tx.QueryContext(ctx, `SELECT t.id::text,t.artist,o.value,(o.inferred AND o.source_kind <> 'filename_fallback'),
  COALESCE((SELECT jsonb_agg(e.raw_value ORDER BY e.occurrence_index,e.tag_key) FROM artist_tag_evidence e WHERE e.track_id=t.id AND e.role='track_artist'),'[]'::jsonb),
  COALESCE((SELECT jsonb_agg(jsonb_build_object('role',c.role,'name',c.name) ORDER BY c.role,c.position,c.id) FROM track_credits c WHERE c.track_id=t.id),'[]'::jsonb)
  FROM tracks t JOIN media m ON m.id=t.medium_id LEFT JOIN track_observations o ON o.track_id=t.id AND o.field_name='artist'

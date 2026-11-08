@@ -43,6 +43,7 @@ Before writing or reviewing backend code:
 | Guide | Contract |
 | --- | --- |
 | [Directory Structure](./directory-structure.md) | Capability ownership, package layout, and dependency direction |
+| [数据库验证](./database-verification.md) | 隔离库、执行器与迁移回退往返验证 |
 | [Database Guidelines](./database-guidelines.md) | PostgreSQL ownership, transactions, migrations, revisions, and idempotency |
 | [Error Handling](./error-handling.md) | Classified application errors and stable REST responses |
 | [Logging Guidelines](./logging-guidelines.md) | Structured JSON events, correlation, and redaction |

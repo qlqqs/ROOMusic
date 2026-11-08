@@ -1,0 +1,11 @@
+{
+  "body": {
+    "excluded_paths": [],
+    "id": "00000000-0000-4000-8000-000000000001",
+    "name": "classical-relocated",
+    "path": "classical-relocated",
+    "revision": 6,
+    "status": "active"
+  },
+  "status": 200
+}

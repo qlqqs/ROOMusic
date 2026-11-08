@@ -20,7 +20,7 @@
    - `parser.go`：`AudioObservation.Compilation bool`；各格式解析结束统一做“专辑艺人分级决定 + 原始年份回退”（放在新函数 `finalizeTags`，在 `applyFilenameFallback` 之前调用，避免与 O 线 ③ 改 `applyFilenameFallback` 冲突）。
 4. `catalog/ingest/observation.go`：`SourceObservation.Compilation bool`（JSON `compilation,omitempty`）。`library/scanner.go:559` 的转换补这一字段（与 S 线共享文件，只加一个字段）。④ 也在 `observation.go` 加字段，合并时按字母序排。
 5. `catalog/ingest/compilation.go`（新文件）：`applyCompilation`；`organizer.go` 在 `albumArtistDecision` 之后加一行调用。
-6. `catalog/internal/artistgraph/facts.go`：发行级 scan 与 correction 事实遇占位词跳过；`state.go` `Version=3`。
+6. `catalog/internal/artistgraph/facts.go`：发行级 scan 与 correction 事实遇占位词跳过；`state.go` `Version=4`。
 7. `catalog/internal/searchindex/state.go`：`ProjectionVersion=2`（T 线只升一次；若 ⑦⑧⑬ 已在线分支升过则不再升）。
 8. 版本（design §3.5）：T 线一起合入时合计只升一次。④ 先合入 main → T 线 rebase 后 `parser.CommonVersion` +1、`ingest.GroupingVersion` +1；T 线先合入 → 不升，由 ④ 以合入后的规则为基线。
 9. 合同：`library-scan-contracts.md` 署名拆分段与错误矩阵、`artist-contracts.md`（合辑占位不建发行级事实、版本 3）、`catalog-rest-contracts.md` 一句话说明合辑发行的 `artist="群星"`。
@@ -65,3 +65,7 @@ cd ../frontend && npx vitest run src/features/catalog && npm run typecheck
 - [ ] 没有升 `textnorm.Version`。
 - [ ] 真实库 smoke：在本机隔离实例上对 `music/` 扫描，改动前后艺人名字集合相同（design §6.3），合辑数为 0。
 - [ ] 版本按 design §3.5 的合入顺序处理（④ 先合入则 rebase 后升 `CommonVersion`、`GroupingVersion`）。
+
+## 2026-11-08 合入 main 对齐
+
+O 线与 T 线各自已将 `artistgraph.Version` 提升到 3；整合后统一为 4，避免已有版本 3 的投影漏回填。`searchindex.ProjectionVersion=2`、`textnorm.Version=1` 保持不变。下述线内升级/回滚说明是原实施背景，合并后的回滚须连同 O 线规则判断，不能只回退版本常量。

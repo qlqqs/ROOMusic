@@ -26,6 +26,7 @@ const (
 
 	digestOutputLimit  = 128
 	versionOutputLimit = 4096
+	decoderOutputLimit = 128 << 10
 	versionLineLimit   = 256
 	stderrTailLimit    = 4096
 )
@@ -44,9 +45,16 @@ type Expect struct {
 	Channels   int
 }
 
+// Input 是格式表指定的输入封装与解码器；Decoder 为空时由封装选择解码器。
+type Input struct {
+	Demuxer string
+	Decoder string
+}
+
 // ConvertJob 是一次转换：Source 是已核对的只读源句柄，Output 是尚不存在的输出文件的绝对路径，
 // Limit 是输出大小的硬上限（达到即视为超限）。
 type ConvertJob struct {
+	Input  Input
 	Source *os.File
 	Output string
 	Limit  int64
@@ -59,17 +67,21 @@ type ConvertJob struct {
 type Converter interface {
 	// Version 是转换器的版本串，参与缓存键：升级转换器后旧条目不再命中。
 	Version() string
+	// HasDecoder 报告启动时确认可用的解码器。
+	HasDecoder(name string) bool
 	Convert(ctx context.Context, job ConvertJob) error
 }
 
 // FFmpeg 是 ffmpeg 适配器。可执行文件由部署者安装；本包只按固定的参数数组启动它，不经 shell。
 type FFmpeg struct {
-	path    string
-	version string
+	path                string
+	version             string
+	decoders            map[string]bool
+	decodersUnavailable bool
 }
 
 // ProbeFFmpeg 定位 ffmpeg（configuredPath 为空时在 PATH 中查找）、读取版本串，并用内置素材跑一遍完整的派生与核对。
-// 任一步失败返回 *UnavailableError；workDir 是自检写临时文件的目录（缓存的 tmp/）。
+// 定位、版本或自检失败返回 *UnavailableError；解码器清单失败只保留已自检的 ALAC。workDir 是自检写临时文件的目录（缓存的 tmp/）。
 func ProbeFFmpeg(ctx context.Context, configuredPath, workDir string) (*FFmpeg, error) {
 	if !platformSupported {
 		return nil, &UnavailableError{Reason: ReasonUnsupportedHost}
@@ -98,8 +110,35 @@ func ProbeFFmpeg(ctx context.Context, configuredPath, workDir string) (*FFmpeg, 
 	if err := ffmpeg.selfTest(selfTestCtx, workDir); err != nil {
 		return nil, &UnavailableError{Reason: ReasonSelfTestFailed, Err: err}
 	}
+	decoderCtx, cancelDecoders := context.WithTimeout(ctx, versionTimeout)
+	defer cancelDecoders()
+	output, err = runFFmpeg(decoderCtx, path, workDir, nil, decoderOutputLimit, "-hide_banner", "-decoders")
+	if err == nil {
+		ffmpeg.decoders = parseDecoders(output)
+	}
+	ffmpeg.decodersUnavailable = len(ffmpeg.decoders) == 0
+	if ffmpeg.decoders == nil {
+		ffmpeg.decoders = make(map[string]bool)
+	}
+	// 自检已证明 ALAC 可用；清单探测失败不撤销这项能力。
+	ffmpeg.decoders["alac"] = true
 	return ffmpeg, nil
 }
+
+// parseDecoders 只读取音频解码器行，跳过标题与标志说明。
+func parseDecoders(output string) map[string]bool {
+	decoders := make(map[string]bool)
+	for _, line := range strings.Split(output, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 2 && len(fields[0]) == 6 && fields[0][0] == 'A' && fields[1] != "=" {
+			decoders[fields[1]] = true
+		}
+	}
+	return decoders
+}
+
+// HasDecoder 报告启动自检或解码器清单确认可用的解码器。
+func (f *FFmpeg) HasDecoder(name string) bool { return f.decoders[name] }
 
 func locateFFmpeg(configuredPath string) (string, error) {
 	if configuredPath != "" {
@@ -127,6 +166,7 @@ func (f *FFmpeg) selfTest(ctx context.Context, workDir string) error {
 	}
 	defer source.Close()
 	return f.Convert(ctx, ConvertJob{
+		Input:  Input{Demuxer: "mov", Decoder: "alac"},
 		Source: source,
 		Output: outputPath,
 		Limit:  selfTestLimit,
@@ -138,14 +178,14 @@ func (f *FFmpeg) selfTest(ctx context.Context, workDir string) error {
 func (f *FFmpeg) Version() string { return f.version }
 
 // Convert 做两遍转换与核对：
-//  1. 一次 ffmpeg 同时输出 FLAC 与“源解码后 PCM（32 位整数）的 MD5”；输入强制用 ALAC 解码器，不是 ALAC 就失败；
+//  1. 一次 ffmpeg 同时输出 FLAC 与“源解码后 PCM（32 位整数）的 MD5”；输入按格式表指定封装与可选解码器；
 //  2. 核对输出未触及大小上限、STREAMINFO 的位深/采样率/声道与扫描记录一致；
 //  3. 再解码输出文件取同一种 MD5，两个摘要必须相同。
 //
 // 摘要取 32 位整数，使 16 位与 24 位的比较都在完整精度上进行。源句柄经 fd 3 传给 ffmpeg 并以 /dev/fd/3 读取：
 // 即使路径在检查之后被替换，读到的仍是已核对的那个 inode。
 func (f *FFmpeg) Convert(ctx context.Context, job ConvertJob) error {
-	if job.Source == nil || job.Output == "" || job.Limit <= 0 {
+	if job.Source == nil || job.Output == "" || job.Limit <= 0 || job.Input.Demuxer == "" {
 		return &FailedError{Category: FailureIO, Err: errors.New("invalid conversion job")}
 	}
 	directory := filepath.Dir(job.Output)
@@ -199,14 +239,20 @@ func verifyStreamInfo(path string, expect Expect) error {
 // convertArguments 是第一遍的固定参数数组：只允许 file 协议；丢弃元数据与章节，只取第一路音频；
 // 输出一侧 bitexact 使同一输入得到相同字节；-n 保证不覆盖已有文件；第二个输出把解码后的 PCM 摘要写到标准输出。
 func convertArguments(job ConvertJob) []string {
-	return []string{
+	arguments := []string{
 		"-nostdin", "-hide_banner", "-loglevel", "error", "-xerror", "-n", "-threads", "1",
-		"-protocol_whitelist", "file", "-c:a", "alac", "-f", "mov", "-i", "file:/dev/fd/3",
+		"-protocol_whitelist", "file",
+	}
+	if job.Input.Decoder != "" {
+		arguments = append(arguments, "-c:a", job.Input.Decoder)
+	}
+	return append(arguments,
+		"-f", job.Input.Demuxer, "-i", "file:/dev/fd/3",
 		"-map", "0:a:0", "-map_metadata", "-1", "-map_chapters", "-1",
 		"-fflags", "+bitexact", "-flags:a", "+bitexact",
-		"-c:a", "flac", "-compression_level", "5", "-fs", strconv.FormatInt(job.Limit, 10), "-f", "flac", "file:" + job.Output,
+		"-c:a", "flac", "-compression_level", "5", "-fs", strconv.FormatInt(job.Limit, 10), "-f", "flac", "file:"+job.Output,
 		"-map", "0:a:0", "-c:a", "pcm_s32le", "-f", "md5", "pipe:1",
-	}
+	)
 }
 
 // verifyArguments 是第二遍的固定参数数组：解码输出文件并输出同一种摘要。

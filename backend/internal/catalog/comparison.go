@@ -74,10 +74,11 @@ const comparedReleaseQuery = `SELECT releases.id::text, releases.title, releases
 	CROSS JOIN LATERAL (
 		SELECT COUNT(DISTINCT present_medium.id) AS medium_count,
 		       COUNT(*) AS track_count,
-		       CASE WHEN COUNT(*) FILTER (WHERE present_track.duration_seconds > 0 AND present_track.duration_seconds < 'Infinity'::float8) = COUNT(*)
-		            THEN SUM(present_track.duration_seconds)::float8 END AS duration_seconds
+		       CASE WHEN COUNT(*) FILTER (WHERE dd.duration_seconds > 0 AND dd.duration_seconds < 'Infinity'::float8) = COUNT(*)
+		            THEN SUM(dd.duration_seconds)::float8 END AS duration_seconds
 		FROM media present_medium
 		JOIN tracks present_track ON present_track.medium_id = present_medium.id
+		LEFT JOIN track_display_durations dd ON dd.track_id = present_track.id
 		WHERE present_medium.release_id = releases.id AND present_track.source_status = 'present'
 	) present
 	WHERE releases.group_id = $1::uuid AND ` + releasesql.ReleaseVisiblePredicate + `

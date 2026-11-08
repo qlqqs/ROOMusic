@@ -1,4 +1,4 @@
-// Package httpapi 是目录与扫描能力的 REST 传输层：允许根的登记、停用、恢复与操作历史，
+// Package httpapi 是目录与扫描能力的 REST 传输层：允许根的登记、停用、恢复、改路径与操作历史，
 // 以及扫描的启动、查询、取消和诊断。
 //
 // 扫描 handler 只做解析、鉴权和响应映射，用例在 library.Service。目录与目录操作的 handler
@@ -33,8 +33,11 @@ func (handlers *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/library-roots", handlers.listRoots)
 	mux.HandleFunc("GET /api/v1/library-folders", handlers.listFolders)
 	mux.HandleFunc("POST /api/v1/library-roots", handlers.addRoot)
+	mux.HandleFunc("POST /api/v1/library-roots/{id}/exclusions", handlers.addExclusion)
+	mux.HandleFunc("DELETE /api/v1/library-roots/{id}/exclusions", handlers.removeExclusion)
 	mux.HandleFunc("PATCH /api/v1/library-roots/{id}", handlers.updateRoot)
 	mux.HandleFunc("POST /api/v1/library-roots/{id}/restore", handlers.restoreRoot)
+	mux.HandleFunc("POST /api/v1/library-roots/{id}/relocate", handlers.relocateRoot)
 	mux.HandleFunc("GET /api/v1/library-root-operations", handlers.rootOperations)
 	mux.HandleFunc("GET /api/v1/scans", handlers.listScans)
 	mux.HandleFunc("POST /api/v1/scans", handlers.startScan)

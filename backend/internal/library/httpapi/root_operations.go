@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/qlqq/roomusic/backend/internal/library"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
@@ -55,7 +56,7 @@ func rootOperationLockKey(actorID, operationType, key string) int32 {
 	return int32(hash.Sum32())
 }
 
-// beginRootOperation 是目录新增、停用、恢复共用的幂等入口。它开启事务，取得该幂等键的事务级锁，
+// beginRootOperation 是目录新增、停用、恢复、改路径及排除项增删共用的幂等入口。它开启事务，取得该幂等键的事务级锁，
 // 再在事务内查询已有记录，因此同键请求串行执行：
 //   - 没有记录：返回事务，由调用方继续执行业务并写入记录，提交时释放锁；
 //   - 记录的指纹一致：回放已存响应，不重复执行；
@@ -98,6 +99,7 @@ func (handlers *Handlers) beginRootOperation(w http.ResponseWriter, r *http.Requ
 		code = http.StatusCreated
 	}
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(code)
 	_, _ = w.Write(response)
 	return nil
@@ -260,9 +262,9 @@ func (handlers *Handlers) restoreRoot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var beforeStatus string
-	var beforeRevision int64
-	err = tx.QueryRowContext(r.Context(), `SELECT before_state->>'status',(before_state->>'revision')::bigint FROM library_root_operations WHERE root_id=$1::uuid AND operation_type='disable' AND status='succeeded' AND result_revision=$2 ORDER BY created_at DESC LIMIT 1`, id, rev).Scan(&beforeStatus, &beforeRevision)
-	if err != nil || beforeStatus != "active" || beforeRevision != rev-1 {
+	// 停用期间允许改路径，因此恢复依据不要求与当前 revision 紧邻。
+	err = tx.QueryRowContext(r.Context(), `SELECT before_state->>'status' FROM library_root_operations WHERE root_id=$1::uuid AND operation_type='disable' AND status='succeeded' ORDER BY created_at DESC LIMIT 1`, id).Scan(&beforeStatus)
+	if err != nil || beforeStatus != "active" {
 		httpserver.WriteError(w, r, 409, "revision_conflict", "找不到可恢复的目录状态")
 		return
 	}
@@ -274,6 +276,119 @@ func (handlers *Handlers) restoreRoot(w http.ResponseWriter, r *http.Request) {
 	result := map[string]any{"id": id, "path": filepathBase(path), "status": "active", "revision": newRev}
 	body, _ := json.Marshal(result)
 	_, err = tx.ExecContext(r.Context(), `INSERT INTO library_root_operations(id,root_id,actor_id,operation_type,status,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id) VALUES($1,$2::uuid,$3::uuid,'restore','succeeded',$4,$5,$6,$7,jsonb_build_object('status','disabled','revision',$6::bigint),jsonb_build_object('status',$8::text,'revision',$7::bigint),$9::jsonb,$10)`, uuid.New(), id, actor.ID, key, fp, rev, newRev, beforeStatus, string(body), r.Header.Get("X-Request-ID"))
+	if err != nil {
+		handlers.writeRootOperationPersistenceError(w, r, err)
+		return
+	}
+	if err = tx.Commit(); err != nil {
+		httpserver.WriteError(w, r, 503, "database_unavailable", "服务暂不可用")
+		return
+	}
+	httpserver.WriteJSON(w, 200, result)
+}
+
+func (handlers *Handlers) relocateRoot(w http.ResponseWriter, r *http.Request) {
+	if !handlers.guard.RequireSameOrigin(w, r) {
+		return
+	}
+	actor, ok := handlers.guard.RequireAdmin(w, r)
+	if !ok {
+		return
+	}
+	id, ok := rootIDFromPath(w, r)
+	if !ok {
+		return
+	}
+	key := operationKey(r)
+	if key == "" {
+		httpserver.WriteError(w, r, 400, "invalid_input", "请求需要 Idempotency-Key")
+		return
+	}
+	var in struct {
+		Path             string `json:"path"`
+		ExpectedRevision int64  `json:"expected_revision"`
+	}
+	if !httpserver.DecodeJSON(w, r, &in) {
+		return
+	}
+	if in.Path == "" || in.ExpectedRevision < 1 {
+		httpserver.WriteError(w, r, 400, "invalid_input", "路径或 revision 无效")
+		return
+	}
+	safePath, err := library.ValidatePath(in.Path, handlers.allowedRoots)
+	if err != nil {
+		httpserver.WriteError(w, r, 400, "invalid_library_path", "目录不在允许的音乐根目录内")
+		return
+	}
+	fp := operationFingerprint(map[string]any{"root_id": id, "path": safePath, "expected_revision": in.ExpectedRevision})
+	tx := handlers.beginRootOperation(w, r, actor.ID, "relocate", key, fp)
+	if tx == nil {
+		return
+	}
+	defer tx.Rollback()
+
+	acquired, err := library.TryLockScanCoordination(r.Context(), tx)
+	if err != nil {
+		httpserver.WriteError(w, r, 503, "database_unavailable", "服务暂不可用")
+		return
+	}
+	if !acquired {
+		httpserver.WriteError(w, r, 409, "scan_running", "正在扫描，稍后再试")
+		return
+	}
+	var path string
+	var rev int64
+	err = tx.QueryRowContext(r.Context(), "SELECT path,revision FROM library_roots WHERE id=$1::uuid FOR UPDATE", id).Scan(&path, &rev)
+	if err == sql.ErrNoRows {
+		httpserver.WriteError(w, r, 404, "not_found", "目录不存在")
+		return
+	}
+	if err != nil {
+		httpserver.WriteError(w, r, 503, "database_unavailable", "服务暂不可用")
+		return
+	}
+	if rev != in.ExpectedRevision {
+		httpserver.WriteError(w, r, 409, "revision_conflict", "目录版本已变化")
+		return
+	}
+	var registered bool
+	err = tx.QueryRowContext(r.Context(), "SELECT EXISTS(SELECT 1 FROM library_roots WHERE path=$1 AND id<>$2::uuid)", safePath, id).Scan(&registered)
+	if err != nil {
+		httpserver.WriteError(w, r, 503, "database_unavailable", "服务暂不可用")
+		return
+	}
+	if registered {
+		httpserver.WriteError(w, r, 409, "path_already_registered", "这个文件夹已经添加过了")
+		return
+	}
+	newRev := rev
+	if safePath != path {
+		newRev++
+		_, err = tx.ExecContext(r.Context(), "UPDATE library_roots SET path=$2,revision=$3,updated_at=NOW() WHERE id=$1::uuid", id, safePath, newRev)
+		if err != nil {
+			// 新增目录不持扫描锁；预查后发生的并发登记仍由路径唯一约束裁决。
+			var postgresError *pgconn.PgError
+			if errors.As(err, &postgresError) && postgresError.Code == "23505" && postgresError.ConstraintName == "library_roots_path_key" {
+				httpserver.WriteError(w, r, 409, "path_already_registered", "这个文件夹已经添加过了")
+				return
+			}
+			httpserver.WriteError(w, r, 503, "database_unavailable", "服务暂不可用")
+			return
+		}
+	}
+	// 在目录行锁之后独立读取排除项，沿用安全 basename 与有序相对路径投影。
+	root, err := scanRootResponse(tx.QueryRowContext(r.Context(), rootResponseQuery+" WHERE r.id=$1::uuid GROUP BY r.id", id))
+	if err != nil {
+		httpserver.WriteError(w, r, 503, "database_unavailable", "服务暂不可用")
+		return
+	}
+	result := map[string]any{"id": root.ID, "name": root.Name, "path": root.Path, "status": root.Status, "revision": root.Revision, "excluded_paths": root.ExcludedPaths}
+	body, _ := json.Marshal(result)
+	_, err = tx.ExecContext(r.Context(), `INSERT INTO library_root_operations
+		(id,root_id,actor_id,operation_type,status,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id)
+		VALUES($1,$2::uuid,$3::uuid,'relocate','succeeded',$4,$5,$6,$7,
+		jsonb_build_object('path',$8::text,'revision',$6::bigint),jsonb_build_object('path',$9::text,'revision',$7::bigint),$10::jsonb,$11)`,
+		uuid.New(), id, actor.ID, key, fp, rev, newRev, path, safePath, string(body), r.Header.Get("X-Request-ID"))
 	if err != nil {
 		handlers.writeRootOperationPersistenceError(w, r, err)
 		return

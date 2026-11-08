@@ -8,6 +8,7 @@ import (
 
 func sampleVersion() SourceVersion {
 	return SourceVersion{
+		Policy:             policyALACFLAC,
 		ContentFingerprint: "m4a-mdat-v1:abc", Size: 1234, ModifiedAt: testTime.Add(123456 * time.Microsecond),
 		SourceKind: "m4a", Codec: "alac", BitDepth: 24, SampleRate: 48000, Channels: 2,
 	}
@@ -27,6 +28,7 @@ func TestDeriveKeyIsStableAndHexEncoded(t *testing.T) {
 func TestDeriveKeyChangesWithEveryIdentifyingInput(t *testing.T) {
 	base := deriveKey("ffmpeg version 7.1.1", sampleVersion())
 	for name, changed := range map[string]string{
+		"policy":            deriveKey("ffmpeg version 7.1.1", withVersion(func(v *SourceVersion) { v.Policy = "alac-flac-lossless-v2" })),
 		"converter version": deriveKey("ffmpeg version 7.1.2", sampleVersion()),
 		"fingerprint":       deriveKey("ffmpeg version 7.1.1", withVersion(func(v *SourceVersion) { v.ContentFingerprint = "m4a-mdat-v1:abd" })),
 		"size":              deriveKey("ffmpeg version 7.1.1", withVersion(func(v *SourceVersion) { v.Size++ })),
@@ -71,4 +73,12 @@ func withVersion(change func(*SourceVersion)) SourceVersion {
 	version := sampleVersion()
 	change(&version)
 	return version
+}
+
+// 旧键由 git show HEAD:backend/internal/playback/derivation/key.go 的固定 ALAC 策略与长度前缀推算，不能用当前实现生成期望值。
+func TestDeriveKeyPreservesTheKnownALACCacheKey(t *testing.T) {
+	const want = "f89f5c3f5f2ca5843932ac0fcfe5d631c4f5d564b454575b1d87625e204634c4"
+	if got := deriveKey("ffmpeg version 7.1.1", sampleVersion()); got != want {
+		t.Fatalf("ALAC cache key = %s, want the existing %s", got, want)
+	}
 }

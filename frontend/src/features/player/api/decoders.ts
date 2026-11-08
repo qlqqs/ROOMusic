@@ -1,12 +1,12 @@
 import { decode as d } from "../../../shared/api";
 
-// 格式表是后端的静态表（目前最多 7 项）；上限只是防止异常响应被整体接受。
+// 格式表是后端的静态表（目前最多 11 项）；上限只是防止异常响应被整体接受。
 const MAX_FORMATS = 32;
 
 const mimeDecoder = d.string({ max: 100, pattern: /^audio\/[a-z0-9.+-]+$/i });
 const codecsDecoder = d.nullable(d.string({ min: 1, max: 100, pattern: /^[a-z0-9., -]+$/i }));
 
-/** 交付方式：original 直出原文件；derived 由服务端无损转换（ALAC → FLAC）后交付，mime_type 与 codecs 描述转换后的表示。 */
+/** 交付方式：original 直出原文件；derived 由服务端无损转换成 FLAC（ALAC、APE、WavPack、AIFF）后交付，mime_type 与 codecs 描述转换后的表示。 */
 const deliveryDecoder = d.oneOf(["original", "derived"] as const);
 
 const formatDecoder = d.object({
@@ -136,7 +136,9 @@ const rawTrackAnalysisDecoder = d.object({
   analysis: d.nullable(d.object({
     // 近乎静音或全静音时这几项为 null：响度未知，均衡按 −5 dB 处理；首尾点退回媒体时长。
     integrated_lufs: d.nullable(d.number({ min: -200, max: 50 })),
+    loudness_range_lu: d.nullable(d.number({ min: 0, max: 200 })),
     true_peak_dbtp: d.nullable(d.number({ min: -200, max: 50 })),
+    sample_peak_dbfs: d.nullable(d.number({ min: -200, max: 50 })),
     track_gain_db: d.nullable(d.number({ min: -100, max: 100 })),
     duration_ms: d.integer({ min: 0, max: MAX_DURATION_MS }),
     leading_silence_ms: d.nullable(d.integer({ min: 0, max: MAX_DURATION_MS })),
@@ -150,6 +152,11 @@ export type TrackAnalysisDTO = {
   trackId: string;
   status: "done" | "pending" | "failed";
   analysis: {
+    integratedLufs: number | null;
+    /** 旧版本分析没有响度范围与采样峰值，重算前是 null。 */
+    loudnessRangeLu: number | null;
+    truePeakDbtp: number | null;
+    samplePeakDbfs: number | null;
     trackGainDb: number | null;
     durationMs: number;
     leadingSilenceMs: number | null;
@@ -181,7 +188,10 @@ export const decodeTrackAnalysis = d.defineDecoder((input, path): TrackAnalysisD
   if (analysis !== null) {
     const peaks = decodeBase64(analysis.waveform.peaks, `${path}.analysis.waveform.peaks`);
     if (peaks.length !== analysis.waveform.points) throw new d.DecodeError(`${path}.analysis.waveform.peaks`, "峰值个数与 points 不符");
-    decoded = { trackGainDb: analysis.track_gain_db, durationMs: analysis.duration_ms, leadingSilenceMs: analysis.leading_silence_ms, trailingSilenceMs: analysis.trailing_silence_ms, peaks };
+    decoded = {
+      integratedLufs: analysis.integrated_lufs, loudnessRangeLu: analysis.loudness_range_lu, truePeakDbtp: analysis.true_peak_dbtp, samplePeakDbfs: analysis.sample_peak_dbfs,
+      trackGainDb: analysis.track_gain_db, durationMs: analysis.duration_ms, leadingSilenceMs: analysis.leading_silence_ms, trailingSilenceMs: analysis.trailing_silence_ms, peaks,
+    };
   }
   return { trackId: result.track_id, status: result.status, analysis: decoded, album: result.album === null ? null : { releaseId: result.album.release_id, gainDb: result.album.gain_db } };
 });

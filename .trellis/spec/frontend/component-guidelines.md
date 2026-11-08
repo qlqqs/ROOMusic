@@ -149,7 +149,8 @@ permission loss, and failure without losing the user's context.
 扫描视图区分后端的 `running | succeeded | failed | canceled | incomplete`；提交中的
 `pending` 如需展示，只是本地请求状态，不是新增远端扫描枚举。诊断计数不是百分比进度，也不能用来推算进度。
 不把不完整扫描标为成功，也不暗示失败扫描做了全部目录的缺失对账；停下之前已经保存的变化（包括确认被新文件替换的旧曲目）会保留，
-所以非成功终态说“没扫到的曲目保持原样”，不说“已有的曲目不受影响”。
+所以失败与取消说“没扫到的曲目保持原样”，不完整说“有目录没扫完，那里的曲目保持原样。”，不说“已有的曲目不受影响”。
+S ① 起单个文件或文件夹读不了不再让扫描不完整：成功且 `skipped_files>0` 时状态旁只写“跳过 N 个文件”（扫描详情把焦点带到诊断，扫描记录里进入详情），不解释原因。
 
 Use stable entity IDs as React keys. Track numbers, titles, array indexes, and
 file names are not stable identities.

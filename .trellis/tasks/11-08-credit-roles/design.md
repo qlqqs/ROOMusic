@@ -9,7 +9,7 @@
 | --- | --- |
 | `catalog/metadata` | `Credit` 增加 `Detail`、`Source`；新文件 `credit_roles.go`：规范角色、角色映射表、乐器与工种表、表版本；`CanonicalCredits` 按固定角色序排序并按角色+名字+细分去重 |
 | `library/parser` | 新键读取（Vorbis/freeform/TXXX、ID3 `TEXT`/`TIPL`/`IPLS`/`TMCL`）；`名字 (乐器)` 拆分；新文件 `lyrics_credits.go` 读歌词开头署名 |
-| 迁移（本线草号 0034） | `track_credits` 角色白名单、`detail`、`source`、唯一键；`artist_credits`、`artist_tag_evidence`、`catalog_search_values` 的角色 CHECK |
+| 迁移（合入编号 0038） | `track_credits` 角色白名单、`detail`、`source`、唯一键；`artist_credits`、`artist_tag_evidence`、`catalog_search_values` 的角色 CHECK |
 | `catalog/ingest` | `track_credits` 写入 `detail`、`source` |
 | `catalog/internal/artistgraph` | 新角色进事实；同一曲目同人同角色去重；括号别名排除乐器词；`Version` 计入 T 线的一次升级 |
 | `catalog/internal/searchindex`、`catalog` 读取与 HTTP | 角色白名单与排序扩展；`ReleaseCredit.detail` |
@@ -145,7 +145,7 @@ REST ReleaseTrack.credits[] = {role, name, detail, artist_refs}
 6. 值按 ⑥ 的拆分规则拆名字；每个名字去掉从 `@` 起到结尾的所属团体或工作室后缀（`怪兽@五月天` → `怪兽`、`时兵@Push Studio` → `时兵`），去掉后为空则保留原文。`Source="lyrics"`。
 7. 观察里某角色已有 `Source="tag"` 的署名时，歌词来源的该角色全部丢弃。
 
-### 3.5 迁移（本线草号 0034，合入时由主会话重新编号）
+### 3.5 迁移（合入编号 0038）
 
 ```sql
 ALTER TABLE track_credits DROP CONSTRAINT track_credits_role_check;
@@ -267,7 +267,7 @@ ALTER TABLE track_credits ADD CONSTRAINT track_credits_track_role_name_detail_ke
 | --- | --- |
 | `parser.CommonVersion` | 计入 T 线的 +1：新键、TIPL/TMCL/TEXT、`名字 (乐器)`、歌词署名都是共用规则或跨格式改动；不单独改 `formatVersions` |
 | `ingest.GroupingVersion` | 本项不需要（署名随观察进入写入，观察变化已让候选重写）；T 线因 ⑥⑧ 合计 +1，一并覆盖 |
-| `artistgraph.Version` | 计入 T 线的 2→3（新角色、去重、括号排除词） |
+| `artistgraph.Version` | O/T 整合后 3→4（新角色、去重、括号排除词） |
 | `searchindex.ProjectionVersion` | 计入 T 线的 1→2（credit 角色） |
 | `textnorm.Version` | 不变 |
 | `CreditRoleTableVersion` | 新常量 1；以后改表时升它，并同时升 `parser.CommonVersion` |
@@ -296,3 +296,7 @@ ALTER TABLE track_credits ADD CONSTRAINT track_credits_track_role_name_detail_ke
 ## 10. 生产库统计
 
 已执行，见 [m8-production-stats.md](../11-08-scan-reference-port/research/m8-production-stats.md)。与本项相关：`track_credits` 只有 composer 190；带括号的演奏者 0；人工意图 0；带歌词的 present 曲目 134（作词行开头 38、含编曲行 38、含制作人或监制行 23）。
+
+## 2026-11-08 合入 main 对齐
+
+O 线与 T 线各自已将 `artistgraph.Version` 提升到 3；整合后统一为 4，避免已有版本 3 的投影漏回填。`searchindex.ProjectionVersion=2`、`textnorm.Version=1` 保持不变。下述线内升级/回滚说明是原实施背景，合并后的回滚须连同 O 线规则判断，不能只回退版本常量。

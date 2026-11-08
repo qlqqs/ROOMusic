@@ -3,7 +3,7 @@
   "name": "root-path-change",
   "title": "⑫ 目录改路径保留 ID",
   "description": "已登记音乐目录可改路径，目录与曲目 ID 不变",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

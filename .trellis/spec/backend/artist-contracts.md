@@ -19,7 +19,7 @@
 
 ### 解析与主名
 
-事实按稳定release/track UUID和名字存储；不绑定重扫替换的旧credit行。0034按轨/角色/姓名去重，忽略detail。解析顺序：track+key → release+key → 全局binding → initial_artist，再解析redirect。M3专辑艺人修正同时覆盖发行的release_artist/album_artist；清除恢复scan层，其它角色不受影响。
+事实按稳定release/track UUID和名字存储；不绑定重扫替换的旧credit行。0038按轨/角色/姓名去重，忽略detail。解析顺序：track+key → release+key → 全局binding → initial_artist，再解析redirect。M3专辑艺人修正同时覆盖发行的release_artist/album_artist；清除恢复scan层，其它角色不受影响。
 
 有效present署名每个subject/name一票，跨角色去重；并列原文C排序及name ID。无票取当前归属名字稳定首项，最后initial_name。人工display_name始终优先。改名不抢名字键，纯人工旧主名不自动成为永久别名；合并保留source主名覆盖，搜索投影可经 `source_artist_id` 读取被重定向身份的主名，不把该名字路由抢到target。
 
@@ -29,7 +29,7 @@
 
 `metadata.IsCompilationPlaceholder` 整串比较内置占位词，全角 ASCII/空格折叠、小写、压连续空白；不包含 `unknown/unknown artist/misc/sampler/karaoke`。
 scan 层发行 `release_artist/album_artist` 与专辑艺人 correction 层为占位词时均不建事实；曲目艺人与其它角色照常，真实“未知艺术家”仍保留。
-`artistgraph.Version=3`，`searchindex.ProjectionVersion=2`（T线只升一次），`textnorm.Version` 不变。后台重拆已存原文；解析时已拆好的 credits 与新标签规则在下次扫描生效。
+`artistgraph.Version=4`，`searchindex.ProjectionVersion=2`（T线只升一次；O/T 两线艺人投影同为3，合并后再升至4），`textnorm.Version` 不变。后台重拆已存原文；解析时已拆好的 credits 与新标签规则在下次扫描生效。
 仍命中的名字键保留人工意图；消失的旧键、身份与意图不删除、不迁给新名字，无 present 参与后从列表消失。必需验证：发行与 correction 占位无 refs，曲目同名仍有 refs。
 
 ### 在线构建

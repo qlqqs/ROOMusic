@@ -42,6 +42,9 @@ type SourceObservation struct {
 	Channels        int               `json:"channels,omitempty"`
 	Bitrate         int               `json:"bitrate,omitempty"`
 
+	// DiscParentExclusive 由暂存层在 CUE scope 对齐之后标记。
+	DiscParentExclusive bool `json:"disc_parent_exclusive,omitempty"`
+
 	// CUE 事实只保存安全的相对引用；虚拟轨身份包含 sheet、父来源、轨号与 INDEX 01。
 	CueSheetPath          string                       `json:"cue_sheet_path,omitempty"`
 	CueParentRelativePath string                       `json:"cue_parent_relative_path,omitempty"`

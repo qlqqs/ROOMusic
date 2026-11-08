@@ -211,9 +211,10 @@ func TestProbeFFmpegReportsWhyItIsUnavailable(t *testing.T) {
 func TestConvertRejectsAnInvalidJob(t *testing.T) {
 	ffmpeg := &FFmpeg{path: "/nonexistent", version: "ffmpeg version fake"}
 	for name, job := range map[string]ConvertJob{
-		"no source": {Output: "/tmp/x", Limit: 1},
-		"no output": {Source: os.Stdin, Limit: 1},
-		"no limit":  {Source: os.Stdin, Output: "/tmp/x"},
+		"no source":  {Input: Input{Demuxer: "mov", Decoder: "alac"}, Output: "/tmp/x", Limit: 1},
+		"no output":  {Input: Input{Demuxer: "mov", Decoder: "alac"}, Source: os.Stdin, Limit: 1},
+		"no limit":   {Input: Input{Demuxer: "mov", Decoder: "alac"}, Source: os.Stdin, Output: "/tmp/x"},
+		"no demuxer": {Input: Input{Decoder: "alac"}, Source: os.Stdin, Output: "/tmp/x", Limit: 1},
 	} {
 		var failed *FailedError
 		if err := ffmpeg.Convert(context.Background(), job); !errors.As(err, &failed) || failed.Category != FailureIO {

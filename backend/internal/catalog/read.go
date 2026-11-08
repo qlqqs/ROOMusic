@@ -182,11 +182,12 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 	rows, err := s.database.QueryContext(ctx, `SELECT
 		m.id::text,m.position,m.title,
 		t.id::text,t.title,t.artist,t.position,t.relative_path,t.source_kind,
-		NULLIF(t.duration_seconds,0),NULLIF(BTRIM(t.codec),''),NULLIF(t.bit_depth,0),NULLIF(t.sample_rate,0),NULLIF(t.channels,0),NULLIF(t.bitrate,0),
+		NULLIF(dd.duration_seconds,0),NULLIF(BTRIM(t.codec),''),NULLIF(t.bit_depth,0),NULLIF(t.sample_rate,0),NULLIF(t.channels,0),NULLIF(t.bitrate,0),
 		t.cue_index_frames,t.cue_end_frames,NULLIF(BTRIM(t.cue_isrc),''),`+releasesql.TrackArtistRefsProjection+`,
 		t.work_index,t.work_title,t.movement_title
 		FROM media m
 		JOIN tracks t ON t.medium_id=m.id AND t.source_status='present'
+		LEFT JOIN track_display_durations dd ON dd.track_id=t.id
 		WHERE m.release_id=$1::uuid
 		ORDER BY m.position,m.id,t.position,t.id
 		LIMIT $2`, releaseID, maxReleaseTrackRows+1)
@@ -566,7 +567,7 @@ func SafeRelativeSourceRef(value string) (string, bool) {
 
 func normalizeCandidateKind(value string) string {
 	switch value {
-	case "ordinary_directory", "strict_multidisc", "box_leaf", "same_dir_split", "loose_album", "loose_unknown":
+	case "ordinary_directory", "strict_multidisc", "box_leaf", "same_dir_split", "format_split", "loose_album", "loose_unknown":
 		return value
 	default:
 		return legacyCandidateKind

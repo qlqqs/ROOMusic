@@ -2,3 +2,10 @@
   color: var(--text-secondary);
   font-size: var(--fs-13);
 }
+
+.status {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+}

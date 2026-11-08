@@ -26,13 +26,13 @@
 
 迁移 `0025_catalog_search.sql` 建空投影和状态/清单/进度表，启用 `public.pg_trgm`，一般文本 trigram GIN、短一/二 scalar `short_grams` GIN；不执行存量转换。角色、字段、原文 4096 字节、规范键 64 KiB、subject 二择一均由约束或写入边界校验；不截词。扩展在 database 级 public schema，不装进测试的临时 schema。
 
-迁移 `0036_search_punctuation.sql`（T 线草号）给两张搜索表加 `loose_value TEXT`、`loose_grams TEXT[]`，及 trigram/short-gram GIN、md5 exact 部分索引。非 NULL 键限 1–65536 字节，两列空值须配对；仅保存非空且不同于原键的 `Loose(normalized_value)` 与 `ShortGrams`。全部写入入口（含作品字段）共用规则。迁移不回算；`.down.sql` 删除新增结构。
+迁移 `0040_search_punctuation.sql`（合入编号）给两张搜索表加 `loose_value TEXT`、`loose_grams TEXT[]`，及 trigram/short-gram GIN、md5 exact 部分索引。非 NULL 键限 1–65536 字节，两列空值须配对；仅保存非空且不同于原键的 `Loose(normalized_value)` 与 `ShortGrams`。全部写入入口（含作品字段）共用规则。迁移不回算；`.down.sql` 删除新增结构。
 
-⑬沿用 T 线版本 2/3/1（搜索/艺人/规范化），与⑥⑦⑧同批回填；发布前搜索沿用 legacy、艺人栏返回整理期 503。
+O/T 合并后版本为 2/4/1（搜索/艺人/规范化）；两线原艺人投影版本均为 3，合并再升到 4，与⑥⑦⑧同批回填；发布前搜索沿用 legacy、艺人栏返回整理期 503。
 
 搜索值逐字段保存实际有效原文、规范键、normalization_version、projection_generation，不复制 group ID 或封面。subject 完成标记额外保存同事务更新的 `search_title`（空标题也有行），用于窄表排序，不能脱离完成代次单独更新。搜索常量/原文保留，不改标签或显示写法。发行字段从 `release_effective` 读取；曲目角色来自六类 credits。
 
-曲目 credit 角色及顺序为 `lyricist → composer → arranger → conductor → performer → producer`（0034 放宽角色 CHECK）。
+曲目 credit 角色及顺序为 `lyricist → composer → arranger → conductor → performer → producer`（0038 放宽角色 CHECK）。
 搜索只匹配姓名，不按细分 detail 或 source 匹配；`match.role` 增加 lyricist/arranger，完整角色序在这六项前保留 release_artist/album_artist/track_artist。
 `ProjectionVersion=2` 已由⑥提升，本项不再升；`textnorm.Version=1` 不变。新角色值随重扫写入，仍遵守同事务投影合同。
 
@@ -46,7 +46,7 @@
 
 ### 古典作品字段（⑧）
 
-0035 的曲目字段 CHECK 增加 `work_title` 与 `work_catalog`；单轨写入、批量刷新和后台回填使用同一造值规则。原文分别取作品名、作品编号片段；作品名走 `textnorm.Text`，作品编号走 `textnorm.CatalogNumber`。全部 exact/prefix/contains、稀疏/密集、最佳命中说明的编号分支使用 `field IN ('catalog_number','work_catalog')`，普通分支排除这两项。
+0039 的曲目字段 CHECK 增加 `work_title` 与 `work_catalog`；单轨写入、批量刷新和后台回填使用同一造值规则。原文分别取作品名、作品编号片段；作品名走 `textnorm.Text`，作品编号走 `textnorm.CatalogNumber`。全部 exact/prefix/contains、稀疏/密集、最佳命中说明的编号分支使用 `field IN ('catalog_number','work_catalog')`，普通分支排除这两项。
 
 present 子轨的两个作品字段与 track_title 一样传播到发行，再按可见成员归组；只命中某轨作品不能使其兄弟轨命中。`match.field` 增加 `work_title|work_catalog`，其它 match 形状与角色空值语义不变，界面说明为“作品”“作品编号”。单轨标签作品即使 work_index 为空也进入投影；没有作品则不造值，重扫清空会删除旧值。
 
@@ -115,7 +115,7 @@ q 去首尾空白后最多 200 UTF-8 字节；新接口拒绝非法 UTF-8 与非
 
 规范化逐类正反例、真实表哈希/幂等/并发 race；回填重启与扫描交错；扫描与修正/撤销/claim 同事务；401/参数/空查询/短词/通配符/分页 1000 与 1001/非代表成员/missing/安全 DTO/真实 handler 样本。隔离十万 present 曲目库记录真实生产 SQL 的 EXPLAIN ANALYZE BUFFERS、回填耗时和首屏 p95；不得用强制索引、最短长度或截候选规避性能目标。
 
-⑬必需验证：去标点键生成表（含 U+02BC）、NULL/非 NULL 投影、N/L1/L2 与六层排序、艺人名字传播、回填发布与名字键不变、0036 往返。正确：`acdc` 依次命中 `ACDC`、`AC/DC`、`ACDC Tribute`、`AC/DC Live`；`夜曲` 同时命中原值与 `《夜曲》`；`c#`、`!!!` 只走 N。错误：改身份键、先排去标点包含或只计 N。无数据库测试通过不代替集成与 I10 证据。
+⑬必需验证：去标点键生成表（含 U+02BC）、NULL/非 NULL 投影、N/L1/L2 与六层排序、艺人名字传播、回填发布与名字键不变、0040 往返。正确：`acdc` 依次命中 `ACDC`、`AC/DC`、`ACDC Tribute`、`AC/DC Live`；`夜曲` 同时命中原值与 `《夜曲》`；`c#`、`!!!` 只走 N。错误：改身份键、先排去标点包含或只计 N。无数据库测试通过不代替集成与 I10 证据。
 
 并发回归不能假定所有业务请求同时等待发行行锁：CATP 之前串行化后，后续请求可能等 advisory 锁。测试以测试持锁连接 PID 的 `pg_blocking_pids` 递归阻塞链证明重叠，不误数其他 schema 的请求；失败时先释放测试锁并等待事务完成，再清理 schema。
 

@@ -52,7 +52,7 @@
 - 署名角色：映射键唯一、目标合法、固定角色/细分/名字排序与三元组去重；Vorbis/TXXX/M4A新键、ID3 TEXT、TIPL/IPLS/TMCL成对及落单项；
   演奏括号的乐器、角色、未知拉丁细分与中文别名整串保留；歌词前30行、LRC标签、空行、全角空白、双语/多子标签、词曲双产出、
   工种原写法、名字去@后缀、首个未知行截断和同角色标签优先；歌词内容不变。
-- 署名集成：同曲同人两种乐器仅一条 performer 艺人事实，重扫替换 detail/source，只有 detail 变化也须记扫描更新（派生 position 不计）；0034 的 rollbackFixtures 覆盖新角色、细分重复与级联删除，
+- 署名集成：同曲同人两种乐器仅一条 performer 艺人事实，重扫替换 detail/source，只有 detail 变化也须记扫描更新（派生 position 不计）；0038 的 rollbackFixtures 覆盖新角色、细分重复与级联删除，
   升级→回退→再升级结构与数据往返；真实 handler 样本必须含 detail（发行级为null）和新角色，由测试 agent 在隔离库验证。
 - PostgreSQL 集成（配置 `ROOMUSIC_TEST_DATABASE_URL` 时）：用户禁用与 session
   原子性、最后管理员/并发保护、未知用户 404、目录幂等与真实状态、扫描 incomplete
@@ -67,7 +67,7 @@
 
 - classical：design §5 编号表、参考22.7.3段切分表、22.7.9样例与22.12第1–14条；参考 C′ 的非相邻重复分裂与任务相邻语义冲突，按任务设计，不加可配置白名单的测试专用接口。
 - parser：Vorbis、ID3、M4A 的作品/乐章读取、各级空值与标签顺序、TIT1保护、n/m及16位整数；scanner验证物理/CUE观察传递，ingest覆盖标签优先、古典白名单、连续无标签段、乐章号回退断组、相邻重复与Promenade、稳定排序及单曲不分组。
-- 隔离 PostgreSQL：0035往返（rollbackFixtures含作品轨与work_title值）、重扫替换与清空、无作品列的历史曲目、WORK与编号搜索传播、API样本的work对象/null。由测试agent补齐；未启动数据库时不得宣称集成通过。
+- 隔离 PostgreSQL：0039往返（rollbackFixtures含作品轨与work_title值）、重扫替换与清空、无作品列的历史曲目、WORK与编号搜索传播、API样本的work对象/null。由测试agent补齐；未启动数据库时不得宣称集成通过。
 
 ## 7. 错误与正确示例
 

@@ -75,7 +75,7 @@ func StageObservation(ctx context.Context, database StagingDB, scanID, rootID st
 			source_identity=EXCLUDED.source_identity,fingerprint_path=EXCLUDED.fingerprint_path,source_size=EXCLUDED.source_size,
 			source_modified_at=EXCLUDED.source_modified_at,content_fingerprint=EXCLUDED.content_fingerprint,
 			cue_index_frames=EXCLUDED.cue_index_frames,cue_end_frames=EXCLUDED.cue_end_frames,
-			candidate_key=NULL,matched_track_id=NULL,planned_track_id=NULL,planned_release_id=NULL,content_changed=FALSE,withheld=FALSE,planned=FALSE,observed_at=NOW()`,
+			candidate_key=NULL,matched_track_id=NULL,planned_track_id=NULL,planned_release_id=NULL,previous_release_id=NULL,content_changed=FALSE,withheld=FALSE,planned=FALSE,observed_at=NOW()`,
 		scanID, rootID, scope, observation.RelativePath, payload,
 		SourceIdentityForObservation(rootID, observation), nullableString(fingerprintPath), size, modifiedAt,
 		nullableString(observation.ContentFingerprint), nullableCueFrame(observation.CueIndexFrames, observation.CueIndexPresent), nullableCueFrame(observation.CueEndFrames, observation.CueEndPresent))
@@ -167,6 +167,9 @@ func ClearScansStaging(ctx context.Context, database Execer, scanIDs []string) e
 		if _, err := database.ExecContext(ctx, `DELETE FROM scan_observations WHERE scan_run_id=ANY($1::uuid[])`, scanIDs[start:min(start+256, len(scanIDs))]); err != nil {
 			return err
 		}
+		if _, err := database.ExecContext(ctx, `DELETE FROM scan_held_sources WHERE scan_run_id=ANY($1::uuid[])`, scanIDs[start:min(start+256, len(scanIDs))]); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -174,14 +177,20 @@ func ClearScansStaging(ctx context.Context, database Execer, scanIDs []string) e
 // ClearStagedObservations 删除 rootID 在本次扫描中的全部暂存行。
 func ClearStagedObservations(ctx context.Context, database Execer, scanID, rootID string) error {
 	_, err := database.ExecContext(ctx, "DELETE FROM scan_observations WHERE scan_run_id=$1::uuid AND root_id=$2::uuid", scanID, rootID)
+	if err != nil {
+		return err
+	}
+	_, err = database.ExecContext(ctx, "DELETE FROM scan_held_sources WHERE scan_run_id=$1::uuid AND root_id=$2::uuid", scanID, rootID)
 	return err
 }
 
 // AlignCueStagingScopes 把 CUE 虚拟轨的显式父来源对齐到虚拟轨所在的 scope，使 organizer 能在同一 scope 内
-// 按明确的父子关系消除虚拟/物理重复。
+// 按明确的父子关系消除虚拟/物理重复；原 scope 仅保存在暂存 JSON 中，供独占判断辨别原生碟目录。
 func AlignCueStagingScopes(ctx context.Context, database Execer, scanID, rootID string) error {
 	_, err := database.ExecContext(ctx, `UPDATE scan_observations parent
-		SET organization_scope=cue.organization_scope
+		SET organization_scope=cue.organization_scope,
+			observation=parent.observation || jsonb_build_object('original_organization_scope',
+				COALESCE(parent.observation->>'original_organization_scope', parent.organization_scope))
 		FROM (
 			SELECT observation->>'cue_parent_relative_path' AS parent_path, MIN(organization_scope) AS organization_scope
 			FROM scan_observations
@@ -190,5 +199,35 @@ func AlignCueStagingScopes(ctx context.Context, database Execer, scanID, rootID 
 		) cue
 		WHERE parent.scan_run_id=$1::uuid AND parent.root_id=$2::uuid
 		  AND parent.relative_path=cue.parent_path`, scanID, rootID)
+	return err
+}
+
+// MarkDiscParentScopes 标记父目录子树中没有其它音频 scope 或保住范围的碟目录观察；必须在 CUE scope 对齐后调用。
+// 保住来源仅在原 scope 与当前 scope 一致的碟目录本身内豁免，不包括更深层目录或 CUE 对齐带入的其它目录。
+func MarkDiscParentScopes(ctx context.Context, database Execer, scanID, rootID string) error {
+	_, err := database.ExecContext(ctx, `WITH parents AS (
+		SELECT DISTINCT organization_scope AS scope, substring(organization_scope FROM 13) AS parent
+		FROM scan_observations
+		WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND organization_scope LIKE 'disc-parent:_%'
+	), exclusive AS (
+		SELECT p.scope FROM parents p
+		WHERE NOT EXISTS (
+			SELECT 1 FROM scan_observations x
+			WHERE x.scan_run_id=$1::uuid AND x.root_id=$2::uuid AND x.organization_scope<>p.scope
+			  AND left(x.relative_path, length(p.parent)+1)=p.parent || '/')
+		AND NOT EXISTS (
+			SELECT 1 FROM scan_held_sources h
+			WHERE h.scan_run_id=$1::uuid AND h.root_id=$2::uuid
+			  AND (h.relative_path=p.parent OR left(h.relative_path,length(p.parent)+1)=p.parent || '/')
+			  AND NOT EXISTS (
+				SELECT 1 FROM scan_observations d
+				WHERE d.scan_run_id=$1::uuid AND d.root_id=$2::uuid AND d.organization_scope=p.scope
+				  AND d.observation->>'directory'=CASE WHEN h.kind='directory' THEN h.relative_path
+					ELSE regexp_replace(h.relative_path, '/[^/]+$', '') END
+				  AND COALESCE(d.observation->>'original_organization_scope', d.organization_scope)=p.scope))
+	)
+	UPDATE scan_observations o SET observation=o.observation || '{"disc_parent_exclusive":true}'::jsonb
+	FROM exclusive e
+	WHERE o.scan_run_id=$1::uuid AND o.root_id=$2::uuid AND o.organization_scope=e.scope`, scanID, rootID)
 	return err
 }

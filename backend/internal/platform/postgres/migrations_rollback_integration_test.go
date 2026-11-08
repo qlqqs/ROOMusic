@@ -14,12 +14,12 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
-	36: "", // 仅新增可空搜索派生列与索引，往返不需要新版取值。
-	35: `UPDATE tracks SET work_title='Cello Suite, BWV 1007',work_catalog='BWV 1007',work_index=1,
+	40: "", // 仅新增可空搜索派生列与索引，往返不需要新版取值。
+	39: `UPDATE tracks SET work_title='Cello Suite, BWV 1007',work_catalog='BWV 1007',work_index=1,
  movement_number=1,movement_title='Prelude',work_source='tag' WHERE id='c3000000-0000-4000-8000-000000000035';
  INSERT INTO catalog_search_values(id,track_id,field,position,original_value,normalized_value,normalization_version,projection_generation,short_grams) VALUES
  ('c5000000-0000-4000-8000-000000000035','c3000000-0000-4000-8000-000000000035','work_title',1,'Cello Suite, BWV 1007','cello suite, bwv 1007',1,1,ARRAY['ce']);`,
-	34: `INSERT INTO track_credits(track_id,role,name,detail,source,position) VALUES
+	38: `INSERT INTO track_credits(track_id,role,name,detail,source,position) VALUES
  ('c3000000-0000-4000-8000-000000000034','lyricist','测试署名','libretto','lyrics',1),
  ('c3000000-0000-4000-8000-000000000034','arranger','测试署名',NULL,'tag',2),
  ('c3000000-0000-4000-8000-000000000034','performer','测试演奏者','violin','tag',4),
@@ -36,6 +36,26 @@ var rollbackFixtures = map[int64]string{
  INSERT INTO catalog_search_values(id,track_id,field,role,position,original_value,normalized_value,normalization_version,projection_generation,short_grams) VALUES
  ('c5000000-0000-4000-8000-000000000034','c3000000-0000-4000-8000-000000000034','credit','lyricist',1,'测试署名','测试署名',1,1,ARRAY['测试']),
  ('c5000000-0000-4000-8000-000000000035','c3000000-0000-4000-8000-000000000034','credit','arranger',2,'测试署名','测试署名',1,1,ARRAY['测试']);`,
+	37: "",
+	36: "",
+	35: `UPDATE library_roots SET path='/rollback-relocated',revision=2
+ WHERE id='f1000000-0000-4000-8000-000000000001';
+ INSERT INTO library_root_operations(id,root_id,actor_id,operation_type,status,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id)
+ VALUES('f3000000-0000-4000-8000-000000000004','f1000000-0000-4000-8000-000000000001',
+ 'f0000000-0000-4000-8000-000000000001','relocate','succeeded','回滚改路径','relocate-fixture',1,2,
+ '{"path":"/rollback-filter","revision":1}','{"path":"/rollback-relocated","revision":2}','{}','rollback-relocate');`,
+	34: `INSERT INTO library_root_exclusions(root_id,relative_path)
+ VALUES('f1000000-0000-4000-8000-000000000001','测试子目录');
+ INSERT INTO scan_held_sources(scan_run_id,root_id,kind,relative_path)
+ VALUES('f2000000-0000-4000-8000-000000000001','f1000000-0000-4000-8000-000000000001','file','损坏.flac');
+ UPDATE scan_runs SET skipped_files=1 WHERE id='f2000000-0000-4000-8000-000000000001';
+ INSERT INTO library_root_operations(id,root_id,actor_id,operation_type,status,idempotency_key,fingerprint,result_revision,after_state,response,request_id)
+ VALUES('f3000000-0000-4000-8000-000000000001','f1000000-0000-4000-8000-000000000001',
+ 'f0000000-0000-4000-8000-000000000001','exclude','succeeded','回滚排除','exclude-fixture',1,
+ '{"relative_path":"测试子目录"}','{}','rollback-exclude'),
+ ('f3000000-0000-4000-8000-000000000002','f1000000-0000-4000-8000-000000000001',
+ 'f0000000-0000-4000-8000-000000000001','unexclude','succeeded','回滚恢复','unexclude-fixture',1,
+ '{"relative_path":"已移除子目录"}','{}','rollback-unexclude');`,
 	33: "",
 	// 0032 的非空列表转换由专门的数据迁移用例覆盖；结构往返不另加会截断的数据。
 	32: "",
@@ -108,7 +128,7 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
  INSERT INTO releases(id,group_id,title,artist) VALUES('c0000000-0000-4000-8000-000000000001',
  'c1000000-0000-4000-8000-000000000001','迁移测试发行','测试艺人');`)
 			}
-			if m.Version == 34 {
+			if m.Version == 38 {
 				// 先存旧版依赖与无细分署名，回退须保留它们并删除新版重复细分。
 				rollbackExec(t, db, `INSERT INTO library_roots(id,path) VALUES('c6000000-0000-4000-8000-000000000034','/synthetic/credit-rollback');
  INSERT INTO release_groups(id) VALUES('c1000000-0000-4000-8000-000000000034');
@@ -121,7 +141,7 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
  INSERT INTO track_credits(id,track_id,role,name,position) VALUES
  ('c7000000-0000-4000-8000-000000000034','c3000000-0000-4000-8000-000000000034','performer','测试演奏者',3);`)
 			}
-			if m.Version == 35 {
+			if m.Version == 39 {
 				// 作品附着于旧曲目；回退应只删作品字段与搜索值，不删除曲目本身。
 				rollbackExec(t, db, `INSERT INTO library_roots(id,path) VALUES('c6000000-0000-4000-8000-000000000035','/synthetic/work-rollback');
  INSERT INTO release_groups(id) VALUES('c1000000-0000-4000-8000-000000000035');
@@ -131,6 +151,17 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
  INSERT INTO tracks(id,medium_id,position,title,artist,source_root_id,relative_path,observed_at) VALUES
  ('c3000000-0000-4000-8000-000000000035','c2000000-0000-4000-8000-000000000035',1,'作品迁移测试曲目','测试艺人',
  'c6000000-0000-4000-8000-000000000035','synthetic-work.flac',NOW());`)
+			}
+			if m.Version == 34 || m.Version == 35 {
+				// 升级前保留旧类型收据；回退只能移除新类型，不能误删原目录、扫描或操作记录。
+				rollbackExec(t, db, `INSERT INTO users(id,username,password_hash,role)
+ VALUES('f0000000-0000-4000-8000-000000000001','rollback-filter-admin','test-only','admin');
+ INSERT INTO library_roots(id,path) VALUES('f1000000-0000-4000-8000-000000000001','/rollback-filter');
+ INSERT INTO scan_runs(id,status,started_at,finished_at)
+ VALUES('f2000000-0000-4000-8000-000000000001','succeeded',NOW(),NOW());
+ INSERT INTO library_root_operations(id,root_id,actor_id,operation_type,status,idempotency_key,fingerprint,result_revision,request_id)
+ VALUES('f3000000-0000-4000-8000-000000000003','f1000000-0000-4000-8000-000000000001',
+ 'f0000000-0000-4000-8000-000000000001','create','succeeded','旧目录收据','create-fixture',1,'rollback-create');`)
 			}
 			s0 := rollbackSnapshot(t, db)
 			rollbackApply(t, db, migrationPrefix(available, m.Version))
@@ -142,8 +173,21 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			if fixture != "" {
 				rollbackExec(t, db, fixture)
 			}
+			if m.Version == 35 {
+				// 改路径是已提交业务状态，下行只删除新类型收据，不恢复旧路径或版本。
+				// 以回退前的完整目录数据作期望，仍检查下行没有误改任何目录列。
+				s0.Data["library_roots"] = rollbackSnapshot(t, db).Data["library_roots"]
+			}
 			rollbackApply(t, db, migrationPrefix(available, m.Version-1))
 			s2 := rollbackSnapshot(t, db)
+			if m.Version == 35 {
+				var path string
+				var revision int64
+				err := db.QueryRow(`SELECT path,revision FROM library_roots WHERE id='f1000000-0000-4000-8000-000000000001'`).Scan(&path, &revision)
+				if err != nil || path != "/rollback-relocated" || revision != 2 {
+					t.Fatalf("0035 下行不应撤销已改路径或版本：path=%q revision=%d err=%v", path, revision, err)
+				}
+			}
 			if diff := postgrestest.Diff(s0, s2); len(diff) > 0 {
 				t.Fatalf("升级→回退不一致：\n%s", strings.Join(diff, "\n"))
 			}

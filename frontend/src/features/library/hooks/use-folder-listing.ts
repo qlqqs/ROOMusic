@@ -11,12 +11,12 @@ function sorted(listing: FolderListingDTO): FolderListingDTO {
   return { ...listing, items: [...listing.items].sort((a, b) => collator.compare(a.name, b.name)) };
 }
 
-/** 一个文件夹的子文件夹（管理员）；path 为 null 是起点。 */
-export function useFolderListing(path: string | null) {
+/** 一个文件夹的子文件夹（管理员）；path 为 null 是起点。给了 rootId 时只在这个目录之内浏览。 */
+export function useFolderListing(path: string | null, rootId: string | null = null) {
   const { generation } = useViewerScope();
   return useQuery({
-    queryKey: libraryKeys.folders(generation, path),
-    queryFn: ({ signal }) => fetchFolders(path, signal),
+    queryKey: libraryKeys.folders(generation, path, rootId),
+    queryFn: ({ signal }) => fetchFolders(path, rootId, signal),
     select: (response) => sorted(response.data),
   });
 }
