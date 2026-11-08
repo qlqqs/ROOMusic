@@ -1740,3 +1740,101 @@ F 线变基到含 P 线的 main（迁移改为 0023/0024），导出树全量全
 ### Next Steps
 
 - 安卓锁屏后台播放与交叉渐变未真机演练；交叉渐变未实际试听
+
+
+## Session 49: 扫描子系统对标：13 项四线并行完成并归档
+<!-- trellis-session: v=2 fp=07af0d39d6afbbbf -->
+
+**Date**: 2026-11-08
+**Task**: 扫描子系统对标：13 项四线并行完成并归档
+**Branch**: `main`
+
+### Summary
+
+按参考设计复刻扫描架构与文件/文件夹规则：①文件过滤与失败处理 ②碟目录与附属封面 ③文件名规则与同目录归组 ④增量扫描 ⑤并行解析 ⑥标签多值与合辑 ⑦署名角色（含歌词署名、补齐参考稿标签） ⑧古典作品与乐章 ⑨MP3 时长与响度范围 ⑩APE/WavPack/AIFF ⑪定时扫描 ⑫目录改路径保留 ID ⑬搜索忽略标点；S/O/T/M 四线并行，按 S1→M→O→T→S2 合入，迁移 0034–0042
+
+### Main Changes
+
+- 四线合并提交 c08c15e、6ee547b、e042f2c、65eb019、94623b5；合入后 d0ecf9e（署名标签补齐，CommonVersion 2）、74a3ceb（发起扫描接受 {}）、68115b9（折行小修）
+- 扫描合同拆成七份、组件规范拆出组件目录，收尾修正 5 处合同矛盾
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `451fad5` | docs(task): 规划扫描子系统对标父任务与 13 个子任务 |
+| `974133a` | chore(task): 批准并启动扫描对标四条线的首项 |
+| `f5cad9e` | chore(task): 记录扫描对标四条实现线的分支 |
+| `a7ea895` | docs(task): ⑩ 真实库 smoke 改为在本机 music/ 上跑 |
+| `faceabb` | feat(scan): 标签多值按换行与 NUL 拆分，合辑占位不建艺人 |
+| `679ea7f` | feat(scan): 识别碟目录与专辑名碟号，附属目录封面与收藏随合并转移 |
+| `7a672a5` | feat(playback): 支持 APE、WavPack、AIFF 入库与无损转 FLAC 播放 |
+| `c4a4514` | feat(scan): 默认过滤系统目录，单文件失败不再让整次扫描不完整 |
+| `f3d3d04` | feat(library): 目录可改路径并保留曲目与专辑 ID |
+| `098be1c` | feat(analysis): MP3 时长从源头修正，分析补响度范围与采样峰值 |
+| `9fd2b3e` | feat(scan): 署名新增作词、编曲角色，乐器与工种细分 |
+| `f29aa77` | test(e2e): 不完整扫描说明的断言改读新文案 |
+| `c08c15e` | merge: 扫描对标 S1（① 文件过滤与失败处理、⑫ 目录改路径） |
+| `c4b7d28` | merge: M 线同步 main 的 S1（⑨ 迁移改号为 0036，⑩ 扩展名并入 scan_filter） |
+| `c069d5f` | feat(scan): 文件名推断碟号轨号，同目录按格式分开归组 |
+| `7494953` | test(e2e): 信号路径断言按层名定位，派生曲目为五层 |
+| `6ee547b` | merge: 扫描对标 M 线（⑩ APE、WavPack、AIFF，⑨ MP3 时长与响度范围） |
+| `d5b1b0c` | merge: O 线同步 main 的 S1 与 M 线（② 迁移改号为 0037） |
+| `30e86f8` | feat(catalog): 古典作品与乐章，专辑页按作品分组 |
+| `9cc8a66` | chore(task): 开始 ⑬ 搜索忽略标点 |
+| `a665fea` | feat(scan): 增量扫描与完整重扫（第一部分） |
+| `ab46693` | chore(task): 开始 ⑤ 并发解析（④ 第 6 步待 O 线合入后补） |
+| `19427e6` | fix(scan): 封面查找按扫描过滤走，碟目录旁有读取失败时不上提 |
+| `ee7c616` | feat(search): 搜索忽略标点 |
+| `b695a05` | test(scan): 封面过滤与碟目录独占的回归用例 |
+| `e042f2c` | merge: 扫描对标 O 线（② 碟目录与附属封面、③ 文件名规则与同目录归组） |
+| `9893f85` | feat(scan): 扫描并发解析 |
+| `86c3aa5` | build: 重建前端内嵌产物（O 线 ③ 归组方式名称） |
+| `f6847ca` | merge: S 线同步 main 的 M 线与 O 线（④ 迁移暂编 0038），重建前端产物 |
+| `f18a69d` | merge: T 线同步 main（迁移改号 0038–0040，artistgraph 升到 4，新格式接入标签收尾），重建前端产物 |
+| `973d9ed` | feat(scan): 增量扫描跳过没有变化的专辑 |
+| `52fdeea` | chore(task): 开始 ⑪ 定时扫描 |
+| `a4004d4` | feat(scan): 每天定时增量扫描（⑪） |
+| `dda4262` | fix(scan): 歌词署名块前跳过“曲名 - 艺人”题头（⑦）；补合入后回归用例 |
+| `65eb019` | merge: 扫描对标 T 线（⑥ 多值标签与合辑、⑦ 署名角色、⑧ 古典作品、⑬ 搜索标点） |
+| `944b854` | merge: S 线同步 main 的 M/O/T 三线（④⑪ 迁移改号 0041/0042），重建前端产物 |
+| `cce4374` | fix(scan): 候选跳过要求成员曲目持久化事实齐全；同步合入后过期的测试前提 |
+| `94623b5` | merge: 扫描对标 S2（④ 增量扫描、⑤ 并行流水线、⑪ 定时扫描），扫描对标四线全部合入 |
+| `d387b43` | docs(task): 记录扫描对标 12 个子任务的实施结果 |
+| `bee676d` | docs(spec): 组件规范拆出已实现组件目录（component-catalog.md），同步引用 |
+| `d0ecf9e` | feat(scan): 署名标签读取补齐到参考稿（⑦ 补充） |
+| `20a596b` | Merge branch 'main' into scan-t-tags |
+| `3e990fb` | docs(spec): 扫描合同按主题拆成七份（每份 ≤20 KB），合并重复的错误与正确示例，同步引用 |
+| `45bc6ec` | docs(spec): 扫描合同自洽修正（不支持格式与 CUE 引用不令根不完整、署名迁移 0038、Ogg 注释可跨页、封面修复限定完整重扫或候选重写） |
+| `74a3ceb` | fix(scan): 发起扫描接受空对象 {}，按增量处理 |
+| `02f113a` | Merge branch 'main' into scan-s-pipeline |
+| `68115b9` | fix(ui): 信号路径响度各段不在值与单位之间断行；无封面占位标题均衡折行，重建前端产物 |
+| `b2c88af` | docs(task): 记录 ⑦ 署名角色的实施结果 |
+| `d1f173c` | docs(task): 记录扫描对标父任务的跨项验收与实施结果 |
+| `5f16451` | chore(task): archive 11-08-scan-file-filter |
+| `0a23e68` | chore(task): archive 11-08-scan-folder-names |
+| `64bc78b` | chore(task): archive 11-08-scan-file-names |
+| `fe577fd` | chore(task): archive 11-08-scan-incremental |
+| `a666aaa` | chore(task): archive 11-08-scan-concurrency |
+| `8939583` | chore(task): archive 11-08-tag-multivalue-compilation |
+| `04ed685` | chore(task): archive 11-08-credit-roles |
+| `a322e46` | chore(task): archive 11-08-classical-works |
+| `a8f3a6a` | chore(task): archive 11-08-analysis-loudness-range |
+| `16a32a7` | chore(task): archive 11-08-lossless-formats |
+| `c9e69d5` | chore(task): archive 11-08-scheduled-scan |
+| `7deacf9` | chore(task): archive 11-08-root-path-change |
+| `3c1028d` | chore(task): archive 11-08-search-punctuation |
+| `55372f9` | chore(task): archive 11-08-scan-reference-port |
+
+### Testing
+
+- [OK] 收尾跨项验收：v0.3.2 同库升级到收尾 main，曲目 284/284、发行 68/68 ID 保留，第二次扫描解析 0、写入 0；前后变化全部归因到 ⑦⑨
+- [OK] 真实服务 e2e 57 通过；workpool -race 通过；内嵌产物无漂移；36 张 1440/375 截图复核
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 部署八号机需另行征求用户确认（升级后首扫会完整重新解析一次）

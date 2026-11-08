@@ -104,7 +104,7 @@ $F -hide_banner -demuxers | grep -E ' (ape|wv|aiff) '
 
 ## 真实库 smoke（只读）
 
-按 [真实库 Smoke 合同](../../spec/backend/real-library-smoke-contracts.md) 在本机隔离实例上对 `music/` 跑改动前后各一次（八号机真实库与 `music/` 的文件清单完全相同，不另在八号机跑）：比较 `unsupported_format` 与 `parse_failure` 诊断数、发行数、曲目数；
+按 [真实库 Smoke 合同](../../../../spec/backend/real-library-smoke-contracts.md) 在本机隔离实例上对 `music/` 跑改动前后各一次（八号机真实库与 `music/` 的文件清单完全相同，不另在八号机跑）：比较 `unsupported_format` 与 `parse_failure` 诊断数、发行数、曲目数；
 八号机真实库与本机 `music/` 都没有 APE、WavPack、AIFF（2026-11-08 统计），smoke 只确认已有格式的发行数、曲目数与诊断分布不变；新格式的真实解码由提交的 APE 素材与运行时生成的 WV/AIFF 样本覆盖。
 
 ## 共享文件与冲突点
