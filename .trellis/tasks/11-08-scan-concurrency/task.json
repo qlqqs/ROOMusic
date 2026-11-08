@@ -3,7 +3,7 @@
   "name": "scan-concurrency",
   "title": "⑤ 并发解析",
   "description": "解析与内容指纹 4 路并发，单写入者",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
