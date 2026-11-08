@@ -435,11 +435,18 @@ func parseID3TXXX(frame []byte) (string, []string) {
 		return "", nil
 	}
 	description := strings.ToUpper(strings.TrimSpace(parts[0]))
+	if kind := personnelTagKind(description); kind == "PERSONNEL" || kind == "INVOLVEDPEOPLE" {
+		if kind == "PERSONNEL" {
+			return "TXXX:" + description, parts[1:]
+		}
+		// 参与人员表中的 NUL 是工种/名字配对边界，不可当独立值逐项处理。
+		return "TXXX:" + description, []string{strings.Join(parts[1:], "\x00")}
+	}
 	if len(creditTagRoles(description)) > 0 {
 		return "TXXX:" + description, parts[1:]
 	}
 	switch description {
-	case "ALBUMARTIST", "ALBUM_ARTIST", "ALBUM ARTIST", "COMPILATION", "ORIGINALDATE", "ORIGINALYEAR", "WORK", "MOVEMENTNAME", "MOVEMENT", "MOVEMENTNUMBER", "MOVEMENTTOTAL":
+	case "ALBUMARTIST", "ALBUM_ARTIST", "ALBUM ARTIST", "ALBUMPERFORMER", "FEATURING", "COMPILATION", "ORIGINALDATE", "ORIGINALYEAR", "WORK", "MOVEMENTNAME", "MOVEMENT", "MOVEMENTNUMBER", "MOVEMENTTOTAL":
 		return "TXXX:" + description, parts[1:]
 	default:
 		return "", nil

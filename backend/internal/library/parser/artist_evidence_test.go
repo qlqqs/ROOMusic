@@ -227,6 +227,11 @@ func TestVorbisAlbumArtistFallbackLevelsAndNewlineValues(t *testing.T) {
 		{"第三级", [][2]string{{"ALBUM ARTIST", " X "}, {"ALBUM ARTIST", "Y"}}, "X / Y"},
 		{"第二级压过第三级", [][2]string{{"ALBUM_ARTIST", "A"}, {"ALBUM ARTIST", "B"}}, "A"},
 		{"第一级空值回退", [][2]string{{"ALBUMARTIST", " \n "}, {"ALBUM_ARTIST", "A\nB"}, {"ALBUM ARTIST", "C"}}, "A / B"},
+		{"第四级同级多值合并", [][2]string{{"ALBUMPERFORMER", "First"}, {"ALBUMPERFORMER", " Second "}}, "First / Second"},
+		{"前三档全空才采用第四级", [][2]string{{"ALBUMARTIST", " "}, {"ALBUM_ARTIST", "\n"}, {"ALBUM ARTIST", " "}, {"ALBUMPERFORMER", "Fallback"}}, "Fallback"},
+		{"ALBUMARTIST不被第四级覆盖", [][2]string{{"ALBUMPERFORMER", "Before"}, {"ALBUMARTIST", "Primary"}, {"ALBUMPERFORMER", "After"}}, "Primary"},
+		{"第二级不被第四级覆盖", [][2]string{{"ALBUMPERFORMER", "Before"}, {"ALBUM_ARTIST", "Secondary"}, {"ALBUMPERFORMER", "After"}}, "Secondary"},
+		{"第三级不被第四级覆盖", [][2]string{{"ALBUMPERFORMER", "Before"}, {"ALBUM ARTIST", "Tertiary"}, {"ALBUMPERFORMER", "After"}}, "Tertiary"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			observation := AudioObservation{SourceKind: "flac_vorbis_comment"}
@@ -375,6 +380,90 @@ func TestID3OriginalYearFallback(t *testing.T) {
 			finalizeTags(&observation)
 			if observation.Year != tc.want {
 				t.Fatalf("ID3 年份 = %d，期望 %d", observation.Year, tc.want)
+			}
+		})
+	}
+}
+
+func TestAlbumPerformerArtistPrefixedFallback(t *testing.T) {
+	for _, tc := range []struct {
+		format, prefix, source string
+	}{
+		{"m4a", "----:", "m4a"},
+		{"mp3", "TXXX:", "mp3_id3v2"},
+	} {
+		t.Run(tc.format, func(t *testing.T) {
+			var content []byte
+			if tc.format == "m4a" {
+				items := repairM4AFreeform("ALBUMPERFORMER", "First")
+				items = append(items, repairM4AFreeform("ALBUMPERFORMER", "Second")...)
+				content = lyricsM4A("mp4a", items)
+			} else {
+				content = id3Tag(4, 0,
+					id3Frame(4, "TXXX", [2]byte{}, []byte("\x03ALBUMPERFORMER\x00First")),
+					id3Frame(4, "TXXX", [2]byte{}, []byte("\x03ALBUMPERFORMER\x00Second")),
+				)
+			}
+			observation := parseLyricsFixture(t, "artists."+tc.format, content)
+			if observation.AlbumArtist != "First / Second" {
+				t.Fatalf("专辑演奏者回退未合并同级值：%q", observation.AlbumArtist)
+			}
+			requireCredits(t, observation.Credits, nil)
+			var evidence []metadata.ArtistTagEvidence
+			for _, entry := range observation.ArtistTagEvidence {
+				if entry.TagKey == tc.prefix+"ALBUMPERFORMER" {
+					evidence = append(evidence, entry)
+				}
+			}
+			want := []metadata.ArtistTagEvidence{
+				{Role: "album_artist", TagKey: tc.prefix + "ALBUMPERFORMER", RawValue: "First", SourceKind: tc.source},
+				{Role: "album_artist", TagKey: tc.prefix + "ALBUMPERFORMER", RawValue: "Second", SourceKind: tc.source, OccurrenceIndex: 1},
+			}
+			if !reflect.DeepEqual(evidence, want) {
+				t.Fatalf("专辑演奏者原文证据 = %+v，期望 %+v", evidence, want)
+			}
+		})
+	}
+}
+
+func TestFeaturingTrackArtistMatchesFeatCredits(t *testing.T) {
+	baseline := parseLyricsFixture(t, "feat.flac", repairFLACComments("ARTIST=Artist feat. Guest / Other"))
+	const wantArtist = "Artist / Guest / Other"
+	if baseline.Artist != wantArtist {
+		t.Fatalf("feat. 曲目艺人 = %q，期望 %q", baseline.Artist, wantArtist)
+	}
+	for _, tc := range []struct {
+		format, artistKey, prefix, source string
+	}{
+		{"flac", "ARTIST", "", "flac_vorbis_comment"},
+		{"m4a", "©ART", "----:", "m4a"},
+		{"mp3", "TPE1", "TXXX:", "mp3_id3v2"},
+	} {
+		t.Run(tc.format, func(t *testing.T) {
+			const raw = "Guest / Other"
+			var content []byte
+			switch tc.format {
+			case "flac":
+				content = repairFLACComments("ARTIST=Artist", "FEATURING="+raw)
+			case "m4a":
+				content = lyricsM4A("mp4a", repairM4AFreeform("FEATURING", raw))
+			case "mp3":
+				content = id3Tag(4, 0,
+					id3Frame(4, "TPE1", [2]byte{}, []byte("\x03Artist")),
+					id3Frame(4, "TXXX", [2]byte{}, append([]byte("\x03FEATURING\x00"), []byte(raw)...)),
+				)
+			}
+			observation := parseLyricsFixture(t, "featuring."+tc.format, content)
+			if observation.Artist != wantArtist || observation.Artist != baseline.Artist {
+				t.Fatalf("FEATURING 曲目艺人 = %q，期望与 feat. 同为 %q", observation.Artist, wantArtist)
+			}
+			requireCredits(t, observation.Credits, nil)
+			want := []metadata.ArtistTagEvidence{
+				{Role: "track_artist", TagKey: tc.artistKey, RawValue: "Artist", SourceKind: tc.source},
+				{Role: "track_artist", TagKey: tc.prefix + "FEATURING", RawValue: raw, SourceKind: tc.source},
+			}
+			if !reflect.DeepEqual(observation.ArtistTagEvidence, want) {
+				t.Fatalf("客演应进入曲目艺人原文证据：实际 %+v，期望 %+v", observation.ArtistTagEvidence, want)
 			}
 		})
 	}

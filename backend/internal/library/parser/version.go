@@ -6,7 +6,7 @@ import (
 )
 
 // CommonVersion 在观察结构或共用解析规则改变时递增，使所有格式的缓存失效。
-const CommonVersion = 1
+const CommonVersion = 2
 
 // 只改变某一格式的读取规则时递增对应版本；新增格式从 1 开始。
 var formatVersions = map[string]int{

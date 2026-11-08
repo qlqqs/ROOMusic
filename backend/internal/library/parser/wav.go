@@ -145,6 +145,8 @@ func parseWAVInfo(chunk []byte, observation *AudioObservation) error {
 			observation.Title = value
 		case "IPRD":
 			observation.Album = value
+		case "IPRO", "IWRI":
+			addTagCredits(observation, key, raw)
 		}
 	}
 	return nil

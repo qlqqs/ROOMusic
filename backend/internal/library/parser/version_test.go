@@ -42,3 +42,9 @@ func TestCacheVersionCaseInsensitive(t *testing.T) {
 		}
 	}
 }
+
+func TestCreditRoleCommonVersion(t *testing.T) {
+	if CommonVersion != 2 {
+		t.Fatalf("署名读取规则变更后 CommonVersion = %d，期望 2 以失效旧解析缓存", CommonVersion)
+	}
+}

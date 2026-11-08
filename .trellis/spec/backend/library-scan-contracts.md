@@ -190,7 +190,8 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 - `metadata.JoinArtistValues(values ...string) string` 只展开换行/NUL，逐值 `BoundedText`、丢空、原写法去重并保留首次顺序，以 ` / ` 拼接。
   专辑艺人在 `finalizeTags` 中按级取首个非空级的全部值，之后才调用 `applyFilenameFallback`：
   Vorbis 为 `ALBUMARTIST → ALBUM_ARTIST → ALBUM ARTIST`；ID3 为 `TPE2 → TXXX:ALBUMARTIST → TXXX:ALBUM_ARTIST/TXXX:ALBUM ARTIST`；
-  M4A 为 `aART → ----:ALBUMARTIST → ----:ALBUM_ARTIST/----:ALBUM ARTIST`。同级合并，全部键记入 `album_artist` 原文证据。
+  M4A 为 `aART → ----:ALBUMARTIST → ----:ALBUM_ARTIST/----:ALBUM ARTIST`；三种入口最后均回退到 `ALBUMPERFORMER`（ID3/M4A 保留 `TXXX:`/`----:` 前缀）。同级合并，全部键记入 `album_artist` 原文证据，`ALBUMPERFORMER` 不当署名。
+  `FEATURING` 在三种入口记为 `track_artist`，与 `feat.` 拆出的艺人共用姓名拆分、去重及曲目艺人路径，不归 performer。
   ID3 文本帧保留全部 NUL 值；TXXX 按编码解出描述与值，描述去空白转大写后交给通用标签入口。
 - **署名角色表**：`metadata.Credit{Role,Name,Detail,Source}` 的 `detail/source` 随暂存 JSON 保存（空 source 等于 tag）。
   `MapCreditRole` 与 `MapInstrument` 的表版本为 `CreditRoleTableVersion=1`；匹配先去首尾空白、小写、压连续空白，再去结尾 ` by`，不做相似度匹配。
@@ -199,12 +200,14 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
   detail 分别为 `mix/mastering/recording/remix/dj_mix/programming`；剧本为 `libretto`，声乐/和声及乐器归 performer。
   乐器写法和别名只取 `metadata/credit_roles.go` 的小表，不搬外部大表、不展开方括号修饰。
 - **署名来源**：Vorbis、M4A `com.apple.iTunes` freeform、ID3 TXXX 支持
-  `COMPOSER/LYRICIST/WRITER/ARRANGER/CONDUCTOR/PRODUCER/MIXER/ENGINEER/REMIXER/MIXARTIST/DJMIXER/PERFORMER/PERFORMERS/SOLOIST/SOLOISTS/ENSEMBLE/ORCHESTRA/LIBRETTIST`；
-  `ENSEMBLE/ORCHESTRA` 为 performer + orchestra，未知键忽略。ID3 `TCOM/TEXT/TPE3` 分别为作曲/作词/指挥，M4A `©wrt` 为作曲。
-  `TIPL/IPLS` 按 NUL 成对读取工种、人名；`TMCL` 按 NUL 成对读取乐器、人名，落单尾值丢弃。
-  未知 TIPL/IPLS 工种归 producer，未知 TMCL 乐器归 performer，detail 保留去首尾空白后的原写法（≤256字节）。
-  署名键原文照常记艺人证据，多角色取第一个；成对入口的 tag_key 为 `TIPL:<工种>`、`IPLS:<工种>`、`TMCL:<乐器>`（≤128字节），歌词不写标签证据。
-- **演奏括号**：`PERFORMER(S)/SOLOIST(S)` 先用 `metadata.SplitExplicitArtistValues` 按换行/NUL及⑥明确分隔符列表切段（与 `artist.go` 共用来源），再逐段解析末尾中英文圆括号，最后对拆出的名字执行完整姓名拆分。第1步按中英文圆括号 `()`/`（）` 的深度只切括号外的明确分隔符，括号内内容完整交给第2步按逗号、顿号、` & `、` and ` 拆乐器或角色；不使用占位符、不扩展多段括号语法，TMCL 成对入口不变。括号内按原乐器规则切段，
+  `COMPOSER/LYRICIST/WRITER/ARRANGER/CONDUCTOR/PRODUCER/MIXER/ENGINEER/REMIXER/MIXARTIST/DJMIXER/PERFORMER/PERFORMERS/SOLOIST/SOLOISTS/ENSEMBLE/ORCHESTRA/LIBRETTIST/LIBRETTO/VOCALS/VOCALIST/REMIXED BY/AUTHOR`；
+  `ENSEMBLE/ORCHESTRA` 为 performer + orchestra，`LIBRETTO` 为 lyricist + libretto，`VOCALS/VOCALIST` 为 performer + vocals，`REMIXED BY` 为 producer + remix，`AUTHOR` 在键入口归为 lyricist；未知键忽略。
+  ID3 `TCOM/TEXT/TPE3` 分别为作曲/作词/指挥；M4A `©wrt/©con/©prf` 分别为作曲/指挥/演奏；WAV RIFF INFO `IPRO/IWRI` 分别为制作人/作词。
+  `PERSONNEL`（Vorbis/freeform/TXXX）每值逐行依次找制表符、两个空格、` - `，前段人名、后段工种/乐器去首尾空白且均非空才保留；工种先查角色表、再查乐器表，都不中归 performer + 原写法，不按逗号拆工种。
+  `INVOLVEDPEOPLE`（Vorbis/freeform/TXXX）与 ID3 `TIPL/IPLS/TMCL` 保留 NUL 成对读取（工种/乐器在前、人名在后，落单尾值丢弃）。非 NUL 值逐行依次尝试：`名字(工种)` 取首个匹配并保持顺序；字面串 `0x00` 分隔且段数为偶数；分号分段且每段含冒号（首个冒号前工种、后人名）；分号分段且段数为偶数（工种、人名成对）。不展开方括号语义。
+  TIPL/IPLS/INVOLVEDPEOPLE 走角色表，TMCL 走乐器表；未知前者归 producer，未知后者归 performer，detail 保留原写法（≤256字节）。
+  署名键原文照常记艺人证据，多角色取第一个；人员表的 tag_key 为 `<来源键>:<工种/乐器>`（保留 `TXXX:`/`----:` 前缀，≤128字节），歌词不写标签证据。
+- **演奏括号**：`PERFORMER(S)/SOLOIST(S)` 先用 `metadata.SplitExplicitArtistValues` 按换行/NUL及⑥明确分隔符列表切段（与 `artist.go` 共用来源），再逐段解析末尾中英文圆括号，最后对拆出的名字执行完整姓名拆分。第1步按中英文圆括号 `()`/`（）` 的深度只切括号外的明确分隔符，括号内内容完整交给第2步按逗号、顿号、` & `、` and ` 拆乐器或角色；不使用占位符、不扩展多段括号语法，TMCL 的 NUL 成对规则保留，文本形态见上条。括号内按原乐器规则切段，
   先查乐器表，再查角色表；未知且只含拉丁字母、空格、连字符时保留为 performer 的原写法细分。
   任一段未知且含其他文字则整串保留为姓名（如 `测试艺人（测试别名）`）；成功拆出的人名再按共用姓名规则拆分。
 - **歌词开头署名**：全部标签读完、歌词规范化后在 `finalizeTags` 读取最多前30行，不改变歌词原文或显示。
@@ -382,10 +385,10 @@ APEv2、ID3、`NAME`/`AUTH` 标签的变化不改变指纹；帧数据或关键�
 
 #### 版本号与升版本规则
 
-- `parser.CommonVersion=1`；`formatVersions` 的 `.flac/.mp3/.ogg/.opus/.wav/.m4a/.ape/.wv/.aif/.aiff` 均从 1 起。`CacheVersion(extension)` 返回如 `c1.f1`，未知扩展名返回空串。本次整合前④尚未进入 main，不追补 M/O/T 规则版本；`artistgraph.Version=4`、`searchindex.ProjectionVersion=2` 由各自维护流程回填，不参与解析缓存命中判定。已有试验 S 分支的版本 1 缓存不能代表合并后基线，验证时应使用新隔离库或完整重扫。
+- `parser.CommonVersion=2`：⑦ 署名标签补齐是 ④ 合入 `94623b5` 后首次共用解析规则变更，从 1 升到 2，使已有缓存重新解析；`formatVersions` 的 `.flac/.mp3/.ogg/.opus/.wav/.m4a/.ape/.wv/.aif/.aiff` 均保持 1。`CacheVersion(extension)` 返回如 `c2.f1`，未知扩展名返回空串。`artistgraph.Version=4`、`searchindex.ProjectionVersion=2` 不变，不参与解析缓存命中判定。
 - `AudioObservation` 字段、类型、含义或共用解析规则（兜底、分隔、多值、歌词、日期以及 parser 内编号推断）改变，升 `CommonVersion`，使所有格式重新解析；只改某格式读取，升该格式版本；新增格式只加版本 1，不使其他格式失效。
 - `ingest.GroupingVersion=1`，覆盖同样观察所产生的 Release 图：organizer、folder_metadata、抓轨证据、字段决定、归组证据、署名/艺人、流派、作品、搜索投影字段与封面选择。只改这些规则而不改 parser，不升解析器版本，只升归组版本；升归组版本使所有候选重写而不使解析缓存失效。
-- ④ 合入之后的合入核对：O ②/③ 升 `GroupingVersion`（同批合入合计加一）；T ⑥ 升 `CommonVersion` 与 `GroupingVersion`；T ⑦/⑧ 按格式或共用解析改动升解析器版本，并升归组版本；T ⑬ 搜索独立回填不升；M ⑩ 新格式加 1，共用解析变化另升 `CommonVersion`，CUE 回退扩展名表无须另升；M ⑨ MP3 时长规则升 `.mp3` 版本，分析器自有版本另行维护。④ 之前已合入的规则不追补版本。
+- ④ 合入之后的合入核对：O ②/③ 升 `GroupingVersion`（同批合入合计加一）；T ⑥ 升 `CommonVersion` 与 `GroupingVersion`；T ⑦/⑧ 按格式或共用解析改动升解析器版本，并升归组版本；T ⑬ 搜索独立回填不升；M ⑩ 新格式加 1，共用解析变化另升 `CommonVersion`，CUE 回退扩展名表无须另升；M ⑨ MP3 时长规则升 `.mp3` 版本，分析器自有版本另行维护。④ 之前已合入的规则不追补版本。本次⑦仅补 parser 入口与人员表文本形态，未改同样观察的写入规则，`GroupingVersion` 保持 1；候选元数据摘要已包含 Credits（含 detail/source）、艺人证据，成员签名也包含 `ParserVersion`，无需再升候选签名或分组版本。
 
 #### 借用指纹与完整重扫
 
@@ -446,8 +449,8 @@ APEv2、ID3、`NAME`/`AUTH` 标签的变化不改变指纹；帧数据或关键�
 | 标签作品只有一轨 | 保存作品供搜索，work_index 为 NULL，REST work 为 null |
 | 乐章号非正数或超出 INTEGER | 不保存序号，不使合法作品名失效 |
 | 作品列违反非空、长度、正数或关联 CHECK | 候选事务回滚，按既有 catalog_write_failure 记录；不吞错 |
-| TIPL/IPLS/TMCL 奇数个值 | 只丢最后落单项，已成对的署名保留 |
-| 未知工种或乐器 | TIPL/IPLS 归制作人、TMCL 归演奏并保留细分；未知普通标签键忽略 |
+| TIPL/IPLS/TMCL/INVOLVEDPEOPLE 的 NUL 奇数个值 | 只丢最后落单项，已成对的署名保留 |
+| 未知工种或乐器 | TIPL/IPLS/INVOLVEDPEOPLE 归制作人、TMCL/PERSONNEL 归演奏并保留细分；未知普通标签键忽略 |
 | 演奏括号含未知非拉丁文字 | 整个原文作为姓名，不把别名猜成乐器 |
 | 歌词头部首个非署名行 | 停止提取，之后的署名形状行不读取；歌词原文不变 |
 | 同角色同时有标签与歌词署名 | 全部采用标签来源，不合并该角色的歌词署名 |

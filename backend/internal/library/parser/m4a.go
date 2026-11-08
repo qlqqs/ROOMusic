@@ -601,8 +601,8 @@ func parseM4AItemValue(itemType string, value, typeCode []byte, observation *Aud
 		observation.Genres = metadata.SplitGenres(append(observation.Genres, decodeM4ARawText(value, binary.BigEndian.Uint32(typeCode)))...)
 	case "\xa9day":
 		observation.Year = ParseYear(text)
-	case "\xa9wrt":
-		addObservationCredits(observation, "composer", decodeM4ARawText(value, binary.BigEndian.Uint32(typeCode)))
+	case "\xa9wrt", "\xa9con", "\xa9prf":
+		addTagCredits(observation, key, decodeM4ARawText(value, binary.BigEndian.Uint32(typeCode)))
 	case "\xa9cmt":
 		// 评论仅作为 RawAtoms 证据保留，不映射到当前观察合同未拥有的业务字段。
 	}
@@ -615,6 +615,9 @@ func parseM4AFreeformValue(mean, name string, value, typeCode []byte, observatio
 	}
 	key := "----:" + name
 	name = strings.ToUpper(strings.TrimSpace(name))
+	if kind := personnelTagKind(name); kind == "PERSONNEL" || kind == "INVOLVEDPEOPLE" {
+		return setAudioTag(observation, key, decodeM4ARawText(value, binary.BigEndian.Uint32(typeCode)))
+	}
 	if role := artistTagRole(name); role != "" {
 		raw := decodeM4ARawText(value, binary.BigEndian.Uint32(typeCode))
 		if err := captureArtistTagRole(observation, role, key, raw); err != nil {

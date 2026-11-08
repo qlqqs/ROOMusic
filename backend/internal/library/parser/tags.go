@@ -38,6 +38,9 @@ func parseNumber(value string) int {
 }
 
 func setAudioTag(observation *AudioObservation, key, value string) error {
+	if kind := personnelTagKind(key); kind == "PERSONNEL" || kind == "INVOLVEDPEOPLE" {
+		return addPersonnelCredits(observation, key, value)
+	}
 	if collectWorkTag(observation, key, value) {
 		return nil
 	}

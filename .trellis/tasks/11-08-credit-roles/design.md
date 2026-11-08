@@ -113,8 +113,8 @@ REST ReleaseTrack.credits[] = {role, name, detail, artist_refs}
 
 映射不到时（参考 23.5 兜底二“保留原始串”）：
 
-- `TIPL`/`IPLS` 的未知工种 → `producer`，`detail` = 原写法（去空白，≤256 字节）。TIPL 是“参与人员表”，多为制作侧工种。
-- `TMCL` 的未知乐器、`PERFORMER` 括号里的未知内容（拉丁写法）→ `performer`，`detail` = 原写法。TMCL 是“乐手表”。
+- `TIPL`/`IPLS`/`INVOLVEDPEOPLE` 的未知工种 → `producer`，`detail` = 原写法（去空白，≤256 字节）。TIPL 是“参与人员表”，多为制作侧工种。
+- `TMCL` 的未知乐器、`PERSONNEL` 的未知工种/乐器、`PERFORMER` 括号里的未知内容（拉丁写法）→ `performer`，`detail` = 原写法。TMCL 是“乐手表”。
 - 键名映射不到的 Vorbis/freeform/TXXX 键：不读（不是署名键）。
 
 `detail` 合同：`null`，或已知细分键（小写 ASCII 与下划线），或原写法文本。前端对已知键显示中文名，其余原样显示（与现有词表“未知值原样显示”一致）。
@@ -123,13 +123,27 @@ REST ReleaseTrack.credits[] = {role, name, detail, artist_refs}
 
 | 容器 | 键 → 角色 |
 | --- | --- |
-| Vorbis、M4A freeform（`com.apple.iTunes`）、ID3 `TXXX`（⑥ 的统一入口） | `COMPOSER`、`LYRICIST`、`WRITER`、`ARRANGER`、`CONDUCTOR`、`PRODUCER`、`MIXER`、`ENGINEER`、`REMIXER`、`MIXARTIST`、`DJMIXER`、`PERFORMER`、`PERFORMERS`、`SOLOIST`、`SOLOISTS`、`ENSEMBLE`、`ORCHESTRA`、`LIBRETTIST`：键名本身经角色表映射；`ENSEMBLE`/`ORCHESTRA` 为 performer + `orchestra` |
-| ID3 | `TCOM` composer；`TEXT` lyricist；`TPE3` conductor；`TIPL`（v2.4）与 `IPLS`（v2.3）按 NUL 成对 `(工种, 人名)` 走角色表；`TMCL` 成对 `(乐器, 人名)` 走乐器表。奇数个值时丢掉最后一个落单值 |
-| M4A | `©wrt` composer；其余走 freeform |
+| Vorbis、M4A freeform（`com.apple.iTunes`）、ID3 `TXXX`（⑥ 的统一入口） | `COMPOSER`、`LYRICIST`、`WRITER`、`ARRANGER`、`CONDUCTOR`、`PRODUCER`、`MIXER`、`ENGINEER`、`REMIXER`、`MIXARTIST`、`DJMIXER`、`PERFORMER`、`PERFORMERS`、`SOLOIST`、`SOLOISTS`、`ENSEMBLE`、`ORCHESTRA`、`LIBRETTIST`、`LIBRETTO`、`VOCALS`、`VOCALIST`、`REMIXED BY`、`AUTHOR`；`LIBRETTO` 为 lyricist + `libretto`，`VOCALS`/`VOCALIST` 为 performer + `vocals`，`REMIXED BY` 为 producer + `remix`，`AUTHOR` 在键入口归为 lyricist；其余键名经角色表映射，`ENSEMBLE`/`ORCHESTRA` 为 performer + `orchestra` |
+| Vorbis、M4A freeform、ID3 `TXXX` 的人员表 | `PERSONNEL` 按下述三级分隔读取；`INVOLVEDPEOPLE` 按下述 NUL 成对与四种文本形态读取 |
+| Vorbis、M4A freeform、ID3 `TXXX` 的艺人别名键（不当署名） | `ALBUMPERFORMER` 走 ⑥ 专辑艺人读取，优先级低于现有全部三级来源，同级值合并；`FEATURING` 作为 `track_artist` 原文证据，复用与 `feat.` 相同的姓名拆分与曲目艺人路径 |
+| ID3 | `TCOM` composer；`TEXT` lyricist；`TPE3` conductor；`TIPL`（v2.4）与 `IPLS`（v2.3）按 `(工种, 人名)` 走角色表；`TMCL` 按 `(乐器, 人名)` 走乐器表。支持 NUL 成对与下述四种文本形态，NUL 奇数个值时丢掉最后一个落单值 |
+| M4A | `©wrt` composer；`©con` conductor；`©prf` performer；其余走 freeform |
+| WAV RIFF INFO | `IPRO` producer；`IWRI` lyricist |
+
+`PERSONNEL`：每值按换行拆记录，每条依次找制表符、两个空格、` - `，取第一个命中的分隔位置；前段是人名、后段是工种/乐器，去首尾空白后两者都非空才保留。后段先查角色表，再查乐器表，都不中则 performer + 原写法；不按逗号拆工种/乐器。人名仍走 ⑥ 姓名拆分。
+
+`INVOLVEDPEOPLE`、`TIPL`、`IPLS`、`TMCL`：保留真实 NUL 成对读取（角色在前、名字在后，奇数尾丢弃）；非 NUL 值逐行依次尝试以下形态，命中后不再尝试后续形态：
+
+1. 括号形态 `名字(工种)`，按参考正则 `([^(]+)\(([^)]+)\)` 取首个匹配，保持名字、工种的顺序；不额外展开方括号语义。
+2. 按字面串 `0x00` 切分且段数为偶数：两两按工种、名字读取。
+3. 按 `;` 切分且每段含 `:`：每段按首个冒号读取工种、名字。
+4. 按 `;` 切分且段数为偶数：两两按工种、名字读取。
+
+`INVOLVEDPEOPLE` 与 `TIPL`/`IPLS` 共用角色表及未知 producer 兜底；`TMCL` 沿用乐器表及未知 performer 兜底。各形态不改变 §3.2 的映射表，不扩展歌词识别。
 
 `名字 (乐器)`：只对 performer 角色的值（`PERFORMER`、`PERFORMERS`、`SOLOIST(S)`）做，正则 `^(.+?)\s*[(（]([^()（）]+)[)）]\s*$`。括号内按 `,`、`、`、` & `、` and ` 切开，每段先查乐器表（命中 → performer + 该细分），再查角色表（命中 → 该角色，如 `conductor`），都未命中且该段只含拉丁字母、空格、`-` → performer + 原写法；任一段未命中且含其它文字（如 `杨璐（羊鹿鹿）`）→ **整串不拆**，当名字。人名部分再走 ⑥ 的拆分规则。
 
-艺人原文证据：新键照 `artistTagRole` 记入 `artist_tag_evidence`，角色取映射后的规范角色（多角色时取第一个）；`TIPL`/`TMCL` 的 `tag_key` 写 `TIPL:<工种原写法>`、`TMCL:<乐器原写法>`（截到 128 字节）。歌词来源不写证据。
+艺人原文证据：新键照 `artistTagRole` 记入 `artist_tag_evidence`，角色取映射后的规范角色（多角色时取第一个）；人员表的 `tag_key` 写 `<来源键>:<工种/乐器原写法>`（保留 `TXXX:`/`----:` 前缀，截到 128 字节），如 `TIPL:<工种原写法>`、`TMCL:<乐器原写法>`、`PERSONNEL:<工种原写法>`、`TXXX:INVOLVEDPEOPLE:<工种原写法>`。歌词来源不写证据。
 
 ### 3.4 歌词开头署名（`parser/lyrics_credits.go`）
 
@@ -202,9 +216,9 @@ ALTER TABLE track_credits ADD CONSTRAINT track_credits_track_role_name_detail_ke
 | --- | --- | --- |
 | 21.5 角色列表映射：同字段多键全部累积、值不存在才加入（2301） | 照搬 | 多键累积，按 `role+name+detail` 去重 |
 | 21.5 键表：COMPOSER/TCOM、CONDUCTOR/TPE3、PRODUCER、LYRICIST、ARRANGER、MIXER、ENGINEER、REMIXER、DJMIXER、SOLOIST、ENSEMBLE、ORCHESTRA、LIBRETTIST（2303–2323） | 照搬（映射到 6 个规范角色） | 用户裁决只新增作词、编曲；其余并入最接近的角色并保留细分 |
-| 21.5 `©CON`、`IPRO`、`IWRI`、`AUTHOR`、`FEATURING`、`VOCALS` 键（2309–2323） | 不采用 | 样本库与常见写入器（Picard、foobar2000、iTunes）不写；`FEATURING` 已由曲目艺人 `feat.` 处理 |
-| 21.5 `PERSONNEL` 三级分隔（2327–2338） | 不采用 | 非标准键，原文自认逗号无效 |
-| 21.5 TIPL/TMCL 四种形态（2340–2347） | 改写 | 只实现 ID3 规范的 NUL 成对形态；括号形态只用于 PERFORMER 值；分号/冒号形态不采用（不是规范写法） |
+| 21.5 `LIBRETTO`、`VOCALS`/`VOCALIST`、`REMIXED BY`、`AUTHOR`、`ALBUMPERFORMER`、`FEATURING`、`©CON`/`©PRF`、`IPRO`/`IWRI` 键（2305–2323） | 照搬 | 署名映射到既有规范角色与细分；`ALBUMPERFORMER` 为最低优先级专辑艺人，`FEATURING` 并入曲目艺人路径 |
+| 21.5 `PERSONNEL` 三级分隔（2327–2338） | 照搬 | 按换行、制表符 → 两个空格 → ` - ` 读取，逗号不拆工种/乐器 |
+| 21.5 `INVOLVEDPEOPLE`/`TIPL`/`IPLS`/`TMCL` 四种形态（2340–2347） | 照搬 | 保留 NUL 成对，补齐逐行括号、字面 `0x00`、分号冒号、偶数分号形态；括号保持名字、工种顺序，其余交换为名字、工种；不扩展方括号语义 |
 | 23.1 角色表结构：闭集登记 + 改写规则，键空间互斥，加载期硬校验（3619–3656） | 改写 | 表放 Go 代码，单元测试保证键唯一、目标都在规范角色内；不搬 6496/2312 条数据 |
 | 23.2 命名空间路径与修饰级（3658–3707） | 不采用 | 来自外部数据源的写法，本地标签不出现 |
 | 23.3 方括号修饰三类语义逐条枚举（3709–3730） | 不采用 | PRD 不做；本地标签少见 |
@@ -267,14 +281,14 @@ ALTER TABLE track_credits ADD CONSTRAINT track_credits_track_role_name_detail_ke
 
 | 版本 | 本项变化 |
 | --- | --- |
-| `parser.CommonVersion` | 计入 T 线的 +1：新键、TIPL/TMCL/TEXT、`名字 (乐器)`、歌词署名都是共用规则或跨格式改动；不单独改 `formatVersions` |
-| `ingest.GroupingVersion` | 本项不需要（署名随观察进入写入，观察变化已让候选重写）；T 线因 ⑥⑧ 合计 +1，一并覆盖 |
+| `parser.CommonVersion` | 本次补齐在 ④ 合入 `94623b5` 后实施，**1→2**；所有格式缓存版本从 `c1.f1` 变为 `c2.f1`，不单独改 `formatVersions` |
+| `ingest.GroupingVersion` | 本次补齐保持 **1**：同样观察的归组/写入规则未改；`CandidateMetadataSignature` 已覆盖 Credits（含 detail/source）和艺人证据，候选签名也包含成员 `ParserVersion`，重解析后会重写，无须另升候选签名或分组版本 |
 | `artistgraph.Version` | O/T 整合后 3→4（新角色、去重、括号排除词） |
 | `searchindex.ProjectionVersion` | 计入 T 线的 1→2（credit 角色） |
 | `textnorm.Version` | 不变 |
-| `CreditRoleTableVersion` | 新常量 1；以后改表时升它，并同时升 `parser.CommonVersion` |
+| `CreditRoleTableVersion` | 保持 **1**：本次只补标签入口和人员表形态，不修改角色/乐器映射表；以后改表时升它，并同时升 `parser.CommonVersion` |
 
-合入顺序：④ 先合入 main → T 线 rebase 后在 main 当时的值上 `CommonVersion` +1、`GroupingVersion` +1（T 线合计一次）；T 线先合入 → 不升，由 ④ 以合入后的规则为基线。`artistgraph.Version`、`ProjectionVersion` 与顺序无关。
+原 T 线合入顺序（不用于本次补齐）：④ 先合入 main → T 线 rebase 后在 main 当时的值上 `CommonVersion` +1、`GroupingVersion` +1（T 线合计一次）；T 线先合入 → 不升，由 ④ 以合入后的规则为基线。`artistgraph.Version`、`ProjectionVersion` 与顺序无关。
 
 ## 8. 风险与回滚
 
@@ -294,6 +308,8 @@ ALTER TABLE track_credits ADD CONSTRAINT track_credits_track_role_name_detail_ke
 
 - 映射不到的原始工种按来源归——TIPL（参与人员表）归制作人，TMCL 与演奏括号归演奏，曲目行显示原写法（§3.2）。
 - 歌词开头的其他署名行一起读：按映射表认得的工种都读，制作人、监制归制作人，混音、录音、母带等归到最接近的角色，细分存原写法，曲目行显示原写法（§3.4）。
+
+本次补齐裁决（2026-11-08）：标签读取不弱于参考稿，范围仅限 §3.3 新键、人员表形态与解析缓存失效；不新增测试、不改前端、不起数据库、不连接生产、不提交。`FEATURING` 可等价进入曲目艺人路径，无须降级为 performer；新增细分均已有前端中文名。
 
 ## 10. 生产库统计
 

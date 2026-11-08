@@ -11,7 +11,7 @@ func finalizeTags(observation *AudioObservation) {
 	finalizeWorkTags(observation)
 	addLyricsCredits(observation)
 	observation.Credits = metadata.CanonicalCredits(observation.Credits)
-	var albumArtists [3][]string
+	var albumArtists [4][]string
 	for _, entry := range observation.ArtistTagEvidence {
 		if entry.Role != "album_artist" {
 			continue
@@ -44,6 +44,8 @@ func albumArtistTagPriority(key string) int {
 		return 2
 	case "ALBUM ARTIST", "TXXX:ALBUM_ARTIST", "TXXX:ALBUM ARTIST", "----:ALBUM_ARTIST", "----:ALBUM ARTIST":
 		return 3
+	case "ALBUMPERFORMER", "TXXX:ALBUMPERFORMER", "----:ALBUMPERFORMER":
+		return 4
 	}
 	return 0
 }

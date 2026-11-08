@@ -1,7 +1,10 @@
 package parser
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
@@ -32,6 +35,11 @@ func TestVorbisCreditRolesAndPerformerInstruments(t *testing.T) {
 		{"MIXARTIST", "重混者", []metadata.Credit{{Role: "producer", Name: "重混者", Detail: "remix", Source: "tag"}}},
 		{"DJMIXER", "DJ", []metadata.Credit{{Role: "producer", Name: "DJ", Detail: "dj_mix", Source: "tag"}}},
 		{"LIBRETTIST", "剧作者", []metadata.Credit{{Role: "lyricist", Name: "剧作者", Detail: "libretto", Source: "tag"}}},
+		{"LIBRETTO", "剧作者", []metadata.Credit{{Role: "lyricist", Name: "剧作者", Detail: "libretto", Source: "tag"}}},
+		{"VOCALS", "演唱者", []metadata.Credit{{Role: "performer", Name: "演唱者", Detail: "vocals", Source: "tag"}}},
+		{"VOCALIST", "主唱", []metadata.Credit{{Role: "performer", Name: "主唱", Detail: "vocals", Source: "tag"}}},
+		{"REMIXED BY", "重混者", []metadata.Credit{{Role: "producer", Name: "重混者", Detail: "remix", Source: "tag"}}},
+		{"AUTHOR", "作者", []metadata.Credit{{Role: "lyricist", Name: "作者", Source: "tag"}}},
 		{"WRITER", "某某", []metadata.Credit{{Role: "lyricist", Name: "某某", Source: "tag"}, {Role: "composer", Name: "某某", Source: "tag"}}},
 		{"PERFORMER", "Hilary Hahn (violin)", []metadata.Credit{{Role: "performer", Name: "Hilary Hahn", Detail: "violin", Source: "tag"}}},
 		{"PERFORMER", "Yo-Yo Ma (cello, conductor)", []metadata.Credit{{Role: "conductor", Name: "Yo-Yo Ma", Source: "tag"}, {Role: "performer", Name: "Yo-Yo Ma", Detail: "cello", Source: "tag"}}},
@@ -172,5 +180,184 @@ func TestM4AFreeformAndID3TXXXCreditRoleEntrances(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestContainerCreditAliasEntrances(t *testing.T) {
+	for _, tc := range []struct {
+		format, key, role, source string
+	}{
+		{"m4a", "©con", "conductor", "m4a"},
+		{"m4a", "©prf", "performer", "m4a"},
+		{"wav", "IPRO", "producer", "wav_info"},
+		{"wav", "IWRI", "lyricist", "wav_info"},
+		{"mp3", "AUTHOR", "lyricist", "mp3_id3v2"},
+	} {
+		t.Run(tc.format+"/"+tc.key, func(t *testing.T) {
+			const raw = "测试署名者"
+			var content []byte
+			key := tc.key
+			switch tc.format {
+			case "m4a":
+				atom := strings.ReplaceAll(key, "©", "\xa9")
+				content = lyricsM4A("mp4a", repairM4AAtom(atom, repairM4AData(1, []byte(raw))))
+			case "wav":
+				info := append([]byte("INFO"), testWAVChunk(key, append([]byte(raw), 0))...)
+				body := bytes.Join([][]byte{[]byte("WAVE"), testWAVChunk("fmt ", testWAVFormat()), testWAVChunk("LIST", info), testWAVChunk("data", []byte{0, 0, 0, 0})}, nil)
+				content = append(binary.LittleEndian.AppendUint32([]byte("RIFF"), uint32(len(body))), body...)
+			case "mp3":
+				content = id3Tag(4, 0, id3Frame(4, "TXXX", [2]byte{}, append([]byte{3}, []byte(key+"\x00"+raw)...)))
+				key = "TXXX:" + key
+			}
+			observation := parseLyricsFixture(t, "credits."+tc.format, content)
+			requireCredits(t, observation.Credits, []metadata.Credit{{Role: tc.role, Name: raw, Source: "tag"}})
+			var evidence []metadata.ArtistTagEvidence
+			for _, entry := range observation.ArtistTagEvidence {
+				if entry.TagKey == key {
+					evidence = append(evidence, entry)
+				}
+			}
+			want := metadata.ArtistTagEvidence{Role: tc.role, TagKey: key, RawValue: raw, SourceKind: tc.source}
+			if len(evidence) != 1 || evidence[0] != want {
+				t.Fatalf("容器署名证据 = %+v，期望 %+v", evidence, want)
+			}
+		})
+	}
+}
+
+func parsePersonnelCreditFixture(t *testing.T, format, key, raw string) AudioObservation {
+	t.Helper()
+	var content []byte
+	switch format {
+	case "flac":
+		content = repairFLACComments(key + "=" + raw)
+	case "m4a":
+		content = lyricsM4A("mp4a", repairM4AFreeform(key, raw))
+	case "mp3":
+		frame, text := key, raw
+		if key == "PERSONNEL" || key == "INVOLVEDPEOPLE" {
+			frame, text = "TXXX", key+"\x00"+raw
+		}
+		content = id3Tag(4, 0, id3Frame(4, frame, [2]byte{}, append([]byte{3}, []byte(text)...)))
+	default:
+		t.Fatalf("人员表测试不支持格式 %q", format)
+	}
+	return parseLyricsFixture(t, "personnel."+format, content)
+}
+
+func TestPersonnelCreditSeparatorsAndJobMapping(t *testing.T) {
+	for _, tc := range []struct {
+		name, format, raw, prefix, source string
+		want                              []metadata.Credit
+		evidence                          []metadata.ArtistTagEvidence
+	}{
+		{"制表符与角色", "flac", " Alice\tmix ", "", "flac_vorbis_comment",
+			[]metadata.Credit{{Role: "producer", Name: "Alice", Detail: "mix", Source: "tag"}},
+			[]metadata.ArtistTagEvidence{{Role: "producer", TagKey: "PERSONNEL:mix", RawValue: "Alice"}}},
+		{"两个空格与乐器", "m4a", " Bob  violin ", "----:", "m4a",
+			[]metadata.Credit{{Role: "performer", Name: "Bob", Detail: "violin", Source: "tag"}},
+			[]metadata.ArtistTagEvidence{{Role: "performer", TagKey: "PERSONNEL:violin", RawValue: "Bob"}}},
+		{"连字符与未知工种保留原写法", "mp3", " Carol - Art Direction ", "TXXX:", "mp3_id3v2",
+			[]metadata.Credit{{Role: "performer", Name: "Carol", Detail: "Art Direction", Source: "tag"}},
+			[]metadata.ArtistTagEvidence{{Role: "performer", TagKey: "PERSONNEL:Art Direction", RawValue: "Carol"}}},
+		{"逗号不拆工种", "flac", "David\tviolin, cello", "", "flac_vorbis_comment",
+			[]metadata.Credit{{Role: "performer", Name: "David", Detail: "violin, cello", Source: "tag"}},
+			[]metadata.ArtistTagEvidence{{Role: "performer", TagKey: "PERSONNEL:violin, cello", RawValue: "David"}}},
+		{"换行拆记录与姓名拆分", "flac", "Alice; Bob\tproducer\nCarol  piano", "", "flac_vorbis_comment",
+			[]metadata.Credit{{Role: "performer", Name: "Carol", Detail: "piano", Source: "tag"}, {Role: "producer", Name: "Alice", Source: "tag"}, {Role: "producer", Name: "Bob", Source: "tag"}},
+			[]metadata.ArtistTagEvidence{{Role: "producer", TagKey: "PERSONNEL:producer", RawValue: "Alice; Bob"}, {Role: "performer", TagKey: "PERSONNEL:piano", RawValue: "Carol"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			observation := parsePersonnelCreditFixture(t, tc.format, "PERSONNEL", tc.raw)
+			requireCredits(t, observation.Credits, tc.want)
+			var evidence []metadata.ArtistTagEvidence
+			for _, entry := range observation.ArtistTagEvidence {
+				if strings.HasPrefix(entry.TagKey, tc.prefix+"PERSONNEL:") {
+					evidence = append(evidence, entry)
+				}
+			}
+			if len(evidence) != len(tc.evidence) {
+				t.Fatalf("人员表证据数量不符：%+v", evidence)
+			}
+			for i, want := range tc.evidence {
+				want.TagKey = tc.prefix + want.TagKey
+				want.SourceKind = tc.source
+				if evidence[i] != want {
+					t.Errorf("人员表证据[%d] = %+v，期望 %+v", i, evidence[i], want)
+				}
+			}
+		})
+	}
+}
+
+func TestInvolvedPeopleTIPLTMCLTextCreditForms(t *testing.T) {
+	roleCredits := []metadata.Credit{
+		{Role: "producer", Name: "Bob", Detail: "Art Direction", Source: "tag"},
+		{Role: "producer", Name: "Alice", Detail: "mix", Source: "tag"},
+	}
+	instrumentCredits := []metadata.Credit{
+		{Role: "performer", Name: "Bob", Detail: "Theremin", Source: "tag"},
+		{Role: "performer", Name: "Alice", Detail: "violin", Source: "tag"},
+	}
+	for _, form := range []struct {
+		name, roles, instruments string
+	}{
+		{"括号保持名字在前", "Alice(mix)\nBob(Art Direction)", "Alice(violin)\nBob(Theremin)"},
+		{"字面0x00成对", " mix 0x00 Alice 0x00 Art Direction 0x00 Bob ", " violin 0x00 Alice 0x00 Theremin 0x00 Bob "},
+		{"分号冒号", "mix:Alice;Art Direction:Bob", "violin:Alice;Theremin:Bob"},
+		{"分号偶数段", "mix;Alice;Art Direction;Bob", "violin;Alice;Theremin;Bob"},
+	} {
+		for _, entrance := range []struct {
+			format, key, source string
+		}{
+			{"flac", "INVOLVEDPEOPLE", "flac_vorbis_comment"},
+			{"mp3", "TIPL", "mp3_id3v2"},
+			{"mp3", "TMCL", "mp3_id3v2"},
+		} {
+			t.Run(entrance.key+"/"+form.name, func(t *testing.T) {
+				raw, want := form.roles, roleCredits
+				role, jobs := "producer", []string{"mix", "Art Direction"}
+				if entrance.key == "TMCL" {
+					raw, want = form.instruments, instrumentCredits
+					role, jobs = "performer", []string{"violin", "Theremin"}
+				}
+				observation := parsePersonnelCreditFixture(t, entrance.format, entrance.key, raw)
+				requireCredits(t, observation.Credits, want)
+				if len(observation.ArtistTagEvidence) != 2 {
+					t.Fatalf("人员表成对证据数量不符：%+v", observation.ArtistTagEvidence)
+				}
+				for i, name := range []string{"Alice", "Bob"} {
+					want := metadata.ArtistTagEvidence{Role: role, TagKey: entrance.key + ":" + jobs[i], RawValue: name, SourceKind: entrance.source}
+					if got := observation.ArtistTagEvidence[i]; got != want {
+						t.Errorf("人员表成对证据[%d] = %+v，期望 %+v", i, got, want)
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestInvolvedPeoplePrefixedCreditEntrances(t *testing.T) {
+	for _, tc := range []struct {
+		name, format, raw, prefix, source string
+	}{
+		{"freeform文本", "m4a", "mix:Alice", "----:", "m4a"},
+		{"TXXX文本", "mp3", "Alice(mix)", "TXXX:", "mp3_id3v2"},
+		{"TXXX真实NUL成对与落单项", "mp3", "mix\x00Alice\x00producer", "TXXX:", "mp3_id3v2"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			observation := parsePersonnelCreditFixture(t, tc.format, "INVOLVEDPEOPLE", tc.raw)
+			requireCredits(t, observation.Credits, []metadata.Credit{{Role: "producer", Name: "Alice", Detail: "mix", Source: "tag"}})
+			var evidence []metadata.ArtistTagEvidence
+			for _, entry := range observation.ArtistTagEvidence {
+				if strings.HasPrefix(entry.TagKey, tc.prefix+"INVOLVEDPEOPLE:") {
+					evidence = append(evidence, entry)
+				}
+			}
+			want := metadata.ArtistTagEvidence{Role: "producer", TagKey: tc.prefix + "INVOLVEDPEOPLE:mix", RawValue: "Alice", SourceKind: tc.source}
+			if len(evidence) != 1 || evidence[0] != want {
+				t.Fatalf("人员表入口证据 = %+v，期望 %+v", evidence, want)
+			}
+		})
 	}
 }

@@ -11,9 +11,9 @@ import (
 func artistTagRole(key string) string {
 	key = strings.TrimPrefix(strings.TrimPrefix(strings.ToUpper(key), "TXXX:"), "----:")
 	switch key {
-	case "ARTIST", "TPE1", "IART", "©ART":
+	case "ARTIST", "TPE1", "IART", "©ART", "FEATURING":
 		return "track_artist"
-	case "ALBUMARTIST", "ALBUM_ARTIST", "ALBUM ARTIST", "TPE2", "AART":
+	case "ALBUMARTIST", "ALBUM_ARTIST", "ALBUM ARTIST", "TPE2", "AART", "ALBUMPERFORMER":
 		return "album_artist"
 	}
 	if assignments := creditTagRoles(key); len(assignments) > 0 {
