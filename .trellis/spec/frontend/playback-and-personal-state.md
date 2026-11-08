@@ -10,10 +10,10 @@
 
 `features/player` 的公开入口导出 `PlayerProvider({ userId, children })`、`usePlayer()`、
 `usePlayerProgress()`、`usePlayerProgressSelector()`、`usePlayerEngine()`、`usePlayerSelector()`、`useCurrentTrackMarker()`、`usePlaybackCapabilities()`。
-provider 放在已登录会话代次子树内，只装配一个分离的 `Audio()` 与不依赖 React 的 `PlayerEngine`；切页不重建。
+provider 放在已登录会话代次子树内，装配一个分离的 `Audio()` 与不依赖 React 的 `PlayerEngine`（另给 `createAudio` 供交叉渐变的备用元素与中断退回新建元素）；切页不重建。
 离散快照通过 `useSyncExternalStore` 订阅，进度独立订阅，避免每次 `timeupdate` 重绘整队列。
 大量重复的组件（专辑页每行动作）只用 `usePlayerEngine()` 发命令；只关心某个值的组件用 `usePlayerSelector()` 选出基本值
-（外壳只看队列是否为空，专辑页只看当前曲目与状态），音量、队列变化不重绘整张曲目表；曲目行 `memo`，插槽函数保持引用稳定。
+（外壳只看队列是否为空或有可重试故障，专辑页只看当前曲目与状态），音量、队列变化不重绘整张曲目表；曲目行 `memo`，插槽函数保持引用稳定。
 `useReleaseLoader` 经 catalog 公开入口复用会话范围的 Query 缓存，格式表 Query 在会话内保持有效。
 歌词是服务器状态：`useTrackLyrics(trackId)`（键 `viewerQueryKey(generation, "player", "lyrics", trackId)`，`staleTime: Infinity`，会话结束随代次清空）；
 面板的跟随与暂停跟随是组件内局部状态，不进入引擎快照，也不持久化。
@@ -38,12 +38,50 @@ currentEntryId、mode、positionSeconds 与有限的随机“上一首”历史�
 网络/503 等暂时失败保留原恢复记录并提供重试，不能把临时故障当作不存在删除。恢复后保持暂停，首播重新预检后定位。
 普通队列动作、暂停、切歌与 pagehide 保存，播放中每 5 秒保存；写失败不声称已保存。
 开始位置在元数据与可定位范围到达后才生效，此前保存或出错重试用待定位的位置，不写成 0；在队首按“上一首”从头重播时作废该位置；队列未变时复用已序列化的条目。
-音量/静音是设备偏好，存 `localStorage["roomusic:player-volume:v1"]`，不随账号清除。
+音量/静音是设备偏好，存 `localStorage["roomusic:player-volume:v1"]`，不随账号清除；播放设置同类，见下文“音量均衡、交叉渐变与分析数据”。
 
 收藏与歌单由服务端按用户保存（M5 ② ③，查询键与失效见[收藏与歌单的前端约定](./personal-guidelines.md)），播放历史同样由服务端保存（阶段 P），队列恢复不构成浏览器个人库权威。以后新增的缓存或偏好持久化同样要带版本与边界校验，
 含账号数据的按账号命名（不含私有数据的设备偏好如音量除外）；损坏、未知版本、禁用存储都应可恢复，写失败不能声称“已保存”。
 Cookie、凭据、服务器路径和治理操作结果不得写进浏览器持久层。
 具体交互与错误矩阵见[播放器规范](./player-design-guidelines.md)；API 见[播放合同](../backend/playback-contracts.md)。
+
+## 音量均衡、交叉渐变与分析数据（2026-11-08）
+
+后端合同见[音频分析合同](../backend/audio-analysis-contracts.md)；界面（波形、信号路径、全屏）见[播放器规范](./player-design-guidelines.md)。
+
+**查询键与缓存**
+- 曲目分析：`trackAnalysisQuery(generation, trackId)`，键 `playerKeys.analysis(g, trackId)` = `viewerQueryKey(g, "player", "analysis", trackId)`；`status=done` 时 `staleTime: Infinity`，
+  `pending/failed` 5 分钟；`retry: false`，读取失败一律按“没有分析结果”处理、不提示。波形组件（`useTrackAnalysis`）与引擎（provider 的 `loadAnalysis` 用 `queryClient.fetchQuery`）共用这份缓存；
+  引擎另把 `done` 的结果记在内存里，之后同步可用。
+- 资料库统计：`catalogKeys.stats(g)` = `viewerQueryKey(g, "catalog", "stats")`，在 `catalog` 前缀下，随 catalog 整体失效刷新，不自己轮询。
+- 分析进度：`libraryKeys.analysisProgress(g)` = `viewerQueryKey(g, "audio-analysis", "progress")`；`state` 为 `running`/`waiting_for_scan` 时每 60 秒轮询（页面隐藏时暂停），其他状态停止。
+
+**播放设置**：`localStorage["roomusic:playback-settings:v1"]` = `{ version: 1, leveling: "off"|"auto"|"track"|"album", crossfade: boolean, crossfadeSeconds: 3|5|8|12 }`，
+默认 `auto`、`false`、`5`。设备偏好（与音量同类，不随账号清除），模块 `engine/playback-settings.ts` 边界解码，损坏或未知版本用默认值，时长不在可选值里退回 5。
+引擎持有并保存（快照 `settings`，命令 `setPlaybackSettings(patch)`）；改动立即平滑作用于当前曲目的增益，并作废进行中的渐变计划。页面是“设置 › 播放”（`/settings/playback`，所有成员），
+分段选择“音量均衡”（关 / 自动 / 按曲目 / 按专辑）、开关“交叉渐变”、分段选择“渐变时长”（渐变关时禁用），不写说明句；网页音量只读的设备上全部禁用，只写“这台设备不能调节网页音量，这两项不会生效。”
+
+**Web Audio 按需接入**（`engine/audio-graph.ts`）：`<audio>` → `MediaElementAudioSourceNode` → `levelGain`（均衡）→ `fadeGain`（渐变）→ 共用的 `masterGain`（用户音量 / 静音）→ `destination`。
+- 均衡为“关”且渐变关：不创建 AudioContext，元素不接入，管线与没有这两项时完全一致。
+- 网页音量只读（构造时把 `volume` 写 0.5 再读回不变，即 iPhone / iPad）或没有 `AudioContext`、没有 `createAudio`：永不接入（快照 `volumeControllable`）。
+- 需要接入时，AudioContext 只在用户手势命令（播放、切歌、播放此项、立即播放、重试等）开头同步创建并 `resume()`；真正接入只在加载一首曲目、设置 `src` 之前，且要求此刻 `state === "running"`，否则这一首不接入、原样播放，下一次手势再试。
+- 播放已接入的元素前若不在 running：先 `resume()` 最多等 1 秒，仍不行就“中断退回”。运行中 `statechange` 变为非 running 且正在出声时同样中断退回：停止聆听累计，丢掉已接入的元素，
+  用 `createAudio()` 新建不接入的元素从原位置继续（`play()` 被拒走“请按播放”）；本页之后不再接入，均衡与渐变失效（快照 `audioRoute: "fallback"`）。所以不会出现元素在播却无声、聆听照算。
+- 运行中把两项都关掉：保持接入（接入后拆不出来），增益归 1，到重新加载页面才完全退出；打开后从下一次手势命令起接入。
+- 用户音量：接入后元素固定 `volume = 1`、不静音，用户音量写 `masterGain`（静音写 0）；没接入时照旧写元素。`volumechange` 回读已删除，`setVolume`/`setMuted` 直接更新快照并保存，音量滑块只反映用户音量。
+- 快照新增 `settings`、`leveling: { gainDb, basis: "track"|"album"|"unknown" } | null`（只在活动元素已接入时非空）、`audioRoute: "direct"|"web_audio"|"fallback"`、`volumeControllable`。
+
+**增益选择（按 Roon，`engine/leveling.ts`）**：目标 −14 LUFS 与真峰值限幅都由后端算好，前端只挑用哪个增益并原样施加（可为正，不截断、不压限）。
+响度未知（没有结果、未完成或失败、读取失败、等不到、或 `track_gain_db` 为 null）固定 −5 dB。按曲目：曲目增益，未知 −5；按专辑：`album.gain_db`，专辑没分析完（`album` 为 null）退回曲目增益，再未知 −5；
+自动：不是随机模式且队列列表里当前项的前一项或后一项是同一发行（`releaseId`）时按专辑，否则按曲目；关：不施加。加载时与预检并行读取分析，预检就绪后最多再等 1 秒；
+增益在 `play()` 前设好，播放中不因分析迟到而跳变。
+
+**交叉渐变**（设置开启且当前元素已接入时；否则照旧“播完再加载下一首”，仓库没有无缝播放）
+- 只在自然播放接近结尾时规划；手动下一首、上一首、播放此项、移除当前项都不渐变；单曲循环不渐变；下一项（按自然前进算出，暂不接受）不存在、是当前项、已失败或与当前同一发行时不渐变；曲长 < 3 × 渐变时长不渐变。
+- `fadeStart = (trailing_silence_ms ?? 媒体时长) − F`；提前 15 秒为下一首发预检与读取分析。到 `fadeStart` 预检仍未就绪就放弃本次渐变。队列、模式、设置变化与暂停、拖动等命令作废计划。
+- 开始：备用元素接入、设下一首增益、`fadeGain` 为 0，元数据到达后跳过开头静音（≤ 10 秒才跳）再 `play()`；收到它的 `playing` 才切换：接受队列步、活动元素对调、`listen.begin(新条目)`（重叠部分只算新曲目）、
+  公告与媒体会话换成新曲目，两个 `fadeGain` 用 `setValueCurveAtTime` 做等功率曲线（旧 cos、新 sin，64 点），由音频线程执行。F 秒后或旧元素先结束时卸载旧元素。
+- 备用元素 `play()` 被拒或出错：丢掉备用元素，旧曲目照常播完。渐变中暂停、拖动、切歌：新元素增益直接到 1，立即卸载旧元素。
 
 ## 阶段 P 播放上报与最近播放
 

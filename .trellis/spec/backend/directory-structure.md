@@ -31,7 +31,8 @@ backend/
 │   │   └── httpapi/                # 目录、目录操作、扫描
 │   ├── playback/                   # 鉴权交付核心：来源核对、安全打开、格式表、停机中止与派生编排
 │   │   ├── derivation/             # 无损派生：受管缓存、转换任务、ffmpeg 适配与输出核对（不含 HTTP，不依赖任何内部包）
-│   │   └── httpapi/                # 格式表、曲目预检（含派生等待）与音频
+│   │   ├── analysis/               # 后台音频分析：ffmpeg 探测与自检、一首的响度/真峰值/波形/首尾静音（叶子包，不读数据库，不依赖任何内部包）
+│   │   └── httpapi/                # 格式表、曲目预检（含派生等待）与音频、音频分析进度
 │   ├── listening/                  # 播放历史：每用户的真实播放记录、计次门槛校验、最近播放的发行与清除（发行归属只经 catalog 公开函数换算）
 │   │   └── httpapi/                # 记录一次播放、最近播放、清除
 │   ├── personal/                   # 本人收藏、歌单、排序、幂等收据与适应撤销；目录事实只经 catalog 公开读取
@@ -96,6 +97,10 @@ C2 的 B3 已将治理实现移到 `catalog/governance`，其 `Store` 经 `NewSt
   HTTP 层经 identity 鉴权。具体错误、Range 与资源关闭规则见[播放合同](./playback-contracts.md)。
   `playback/derivation` 拥有缓存目录、转换任务与 ffmpeg 适配，不知道曲目与权限，由 `playback` 提供源文件版本与“安全打开并核对”的回调，
   由 `app.OpenDerivation` 在启动时装配（含缓存目录与音乐根互不包含的检查），见[无损派生合同](./playback-derivation-contracts.md)。
+  `playback/analysis_worker.go` 拥有后台音频分析的单线程调度（扫描让路、低优先级、失败不阻塞）、源文件安全打开与进度提供者，经 catalog 公开函数读写分析结果、
+  经 library 公开合同核对目录；`playback/analysis` 是只管 ffmpeg 与 PCM 计算的叶子包，由 `app.OpenAnalysis` 探测并装配，见[后台音频分析合同](./audio-analysis-contracts.md)。
+- `catalog` 核心的 `track_analysis.go` 拥有表 `track_analyses`（2026-11-08，迁移 0033）：待分析候选、分析结果写入、按曲目读取（含按 Roon 的曲目与专辑增益）与进度计数；
+  `catalog/httpapi` 的分析接口不导入 `playback/analysis`，分析器版本由 `app` 经 `WithAnalysisVersion` 注入。
 - `listening` 拥有播放历史（`play_history` 表）：计次门槛的服务端校验、按用户隔离的记录、最近播放的发行与清除；曲目时长与所在发行只经
   `catalog.LoadTrackDuration`、`catalog.LoadTrackPlacements` 读取，HTTP 层经 identity 鉴权，所有 SQL 都带 `user_id`，路径与请求体里没有用户 ID。
   见[播放历史合同](./listening-contracts.md)。
