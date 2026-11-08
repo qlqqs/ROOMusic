@@ -65,6 +65,7 @@ type Config struct {
 // Source 描述要转换的源文件：它的版本事实，以及“它仍是扫描时的那个文件”的核对办法。回调由调用方提供，
 // 因为哪个文件才是扫描时的那个、目录是否仍被允许属于调用方（playback）的策略；本包只在转换前后调用它们。
 type Source struct {
+	Input   Input
 	Version SourceVersion
 	// Open 安全地只读打开源文件并完成与扫描记录的核对（普通文件、大小与修改时间、容器）；调用方负责关闭返回的文件。
 	// 任务自己重新打开，不借用第一个请求的句柄，所以不受该请求生命周期的影响。
@@ -159,7 +160,11 @@ func Open(ctx context.Context, config Config) (*Manager, error) {
 		_ = cache.close()
 		return nil, err
 	}
-	return newManager(cache, ffmpeg, config.Logger, defaultLimits(), realClock{}, freeSpace), nil
+	manager := newManager(cache, ffmpeg, config.Logger, defaultLimits(), realClock{}, freeSpace)
+	if ffmpeg.decodersUnavailable {
+		manager.logger.Warn("playback derivation decoders unavailable", "event", "playback.derivation.decoders_unavailable")
+	}
+	return manager, nil
 }
 
 func newManager(cache *Cache, converter Converter, logger *slog.Logger, limits limits, clk clock, space func(string) (uint64, error)) *Manager {
@@ -176,6 +181,9 @@ func newManager(cache *Cache, converter Converter, logger *slog.Logger, limits l
 
 // Version 返回转换器的版本串。
 func (m *Manager) Version() string { return m.converter.Version() }
+
+// Supports 报告指定解码器是否已在启动时确认可用。
+func (m *Manager) Supports(decoder string) bool { return m.converter.HasDecoder(decoder) }
 
 // Key 返回源文件版本对应的缓存键（含转换器版本与转换策略版本）。
 func (m *Manager) Key(version SourceVersion) string {
@@ -423,6 +431,7 @@ func (m *Manager) execute(ctx context.Context, running *job) (Entry, error) {
 	}()
 	version := source.Version
 	err = m.converter.Convert(ctx, ConvertJob{
+		Input:  source.Input,
 		Source: file,
 		Output: tempPath,
 		Limit:  min(running.reserve, m.cache.max),

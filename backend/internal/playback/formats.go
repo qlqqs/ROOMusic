@@ -4,6 +4,8 @@
 // 它不含 HTTP；传输层在 playback/httpapi。播放从不写音乐目录，也不转成有损格式。
 package playback
 
+import "github.com/qlqq/roomusic/backend/internal/playback/derivation"
+
 // container 是格式表中的组合期望的文件容器，只用于核对文件头。
 type container int
 
@@ -13,6 +15,9 @@ const (
 	containerMP3
 	containerWAV
 	containerOgg
+	containerAPE
+	containerWavPack
+	containerAIFF
 )
 
 // Delivery 是格式交给浏览器的方式。
@@ -21,7 +26,7 @@ type Delivery string
 const (
 	// DeliveryOriginal 直出原文件。
 	DeliveryOriginal Delivery = "original"
-	// DeliveryDerived 交付服务端无损转换并核对过的派生文件：来源是 ALAC，浏览器拿到的是 FLAC。
+	// DeliveryDerived 交付服务端无损转换并核对过的派生文件：浏览器拿到的是 FLAC。
 	DeliveryDerived Delivery = "derived"
 )
 
@@ -36,6 +41,9 @@ type Format struct {
 	Codecs     string
 	// container 是源文件期望的容器，只用于核对文件头。
 	container container
+	input     derivation.Input
+	policy    string
+	decoder   string
 }
 
 // formatTable 是直出格式表，只保留拿到验证证据的组合（见 M2a 设计的格式表）：表中格式都经真实 Chromium 自动化用合成样本验证。
@@ -54,14 +62,27 @@ var formatTable = []Format{
 // ALAC 浏览器大多不能解码（只有 Safari 能），但它是无损的：转换成 FLAC 时位深、采样率与声道不变，
 // 发布前核对两者解码后的 PCM 完全相同，所以交付的 FLAC 在音频上与源等价。
 var derivedFormatTable = []Format{
-	{SourceKind: "m4a", Codec: "alac", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerMP4},
+	{SourceKind: "m4a", Codec: "alac", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerMP4,
+		input: derivation.Input{Demuxer: "mov", Decoder: "alac"}, policy: "alac-flac-lossless-v1", decoder: "alac"},
+	{SourceKind: "ape_apev2", Codec: "ape", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerAPE,
+		input: derivation.Input{Demuxer: "ape", Decoder: "ape"}, policy: "ape-flac-lossless-v1", decoder: "ape"},
+	{SourceKind: "wavpack_apev2", Codec: "wavpack", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerWavPack,
+		input: derivation.Input{Demuxer: "wv", Decoder: "wavpack"}, policy: "wavpack-flac-lossless-v1", decoder: "wavpack"},
+	{SourceKind: "wavpack_apev2", Codec: "wavpack_hybrid", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerWavPack,
+		input: derivation.Input{Demuxer: "wv", Decoder: "wavpack"}, policy: "wavpack-flac-lossless-v1", decoder: "wavpack"},
+	{SourceKind: "aiff_id3", Codec: "aiff", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerAIFF,
+		input: derivation.Input{Demuxer: "aiff"}, policy: "aiff-flac-lossless-v1", decoder: "pcm_s16be"},
 }
 
 // Formats 返回当前可交付的格式表（副本，顺序固定）：先是直出格式，派生可用时再加上派生格式。
 func (service *Service) Formats() []Format {
 	table := append([]Format(nil), formatTable...)
 	if service.derivation != nil {
-		table = append(table, derivedFormatTable...)
+		for _, format := range derivedFormatTable {
+			if service.derivation.Supports(format.decoder) {
+				table = append(table, format)
+			}
+		}
 	}
 	return table
 }

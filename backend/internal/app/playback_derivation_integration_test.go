@@ -47,6 +47,15 @@ func newFakeDerivation(t *testing.T) *fakeDerivation {
 	return &fakeDerivation{directory: t.TempDir(), files: map[string][]byte{}}
 }
 
+func (fake *fakeDerivation) Supports(decoder string) bool {
+	switch decoder {
+	case "alac", "ape", "wavpack", "pcm_s16be":
+		return true
+	default:
+		return false
+	}
+}
+
 func (fake *fakeDerivation) Key(version derivation.SourceVersion) string {
 	return "fake-" + version.ContentFingerprint
 }
@@ -199,8 +208,8 @@ func TestPostgreSQLPlaybackFormatsAddTheDerivedFormatWhenDerivationIsEnabled(t *
 	if err := json.Unmarshal(response.Body.Bytes(), &decoded); err != nil {
 		t.Fatalf("decode formats: %v", err)
 	}
-	if len(decoded.Items) != 7 {
-		t.Fatalf("formats = %s, want the six original formats plus one derived", response.Body.String())
+	if len(decoded.Items) != 11 {
+		t.Fatalf("formats = %s, want the six original formats plus five derived", response.Body.String())
 	}
 	for _, item := range decoded.Items[:6] {
 		if item.Delivery != "original" {

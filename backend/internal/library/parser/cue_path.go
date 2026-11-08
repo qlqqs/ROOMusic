@@ -22,7 +22,7 @@ func normalizeCueReference(reference string) string {
 	return filepath.ToSlash(filepath.Clean(filepath.FromSlash(reference)))
 }
 
-var cueAudioExtensions = []string{".flac", ".mp3", ".ogg", ".opus", ".wav", ".m4a"}
+var cueAudioExtensions = []string{".flac", ".mp3", ".ogg", ".opus", ".wav", ".m4a", ".ape", ".wv", ".aif", ".aiff"}
 
 func matchingAudioFile(target string) string {
 	dir := filepath.Dir(target)

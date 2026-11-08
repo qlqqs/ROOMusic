@@ -82,10 +82,60 @@ type failingReaderAt struct{}
 
 func (failingReaderAt) ReadAt([]byte, int64) (int, error) { return 0, errors.New("input/output error") }
 
-func TestMatchesContainerReportsReadFailuresInsteadOfAMismatch(t *testing.T) {
-	for _, kind := range []container{containerFLAC, containerMP4, containerMP3, containerWAV, containerOgg} {
+func TestContainerReportsReadFailuresInsteadOfAMismatch(t *testing.T) {
+	for _, kind := range []container{containerFLAC, containerMP4, containerMP3, containerWAV, containerOgg, containerAPE, containerWavPack, containerAIFF} {
 		if _, err := matchesContainer(failingReaderAt{}, 100, kind); err == nil {
 			t.Errorf("container %d: a failing read was reported as a plain mismatch", kind)
 		}
+	}
+}
+
+func TestContainerRecognizesLosslessInputs(t *testing.T) {
+	id3 := func(body []byte, footer bool, magic string) []byte {
+		header := []byte{'I', 'D', '3', 4, 0, 0, 0, 0, 0, byte(len(body))}
+		if footer {
+			header[5] = 0x10
+		}
+		content := append(header, body...)
+		if footer {
+			content = append(content, make([]byte, 10)...)
+		}
+		return append(content, magic...)
+	}
+	for _, tc := range []struct {
+		name    string
+		kind    container
+		content []byte
+		want    bool
+	}{
+		{"APE", containerAPE, []byte("MAC "), true},
+		{"APE after ID3v2", containerAPE, id3([]byte("tag"), false, "MAC "), true},
+		{"APE after ID3v2 footer", containerAPE, id3([]byte("tag"), true, "MAC "), true},
+		{"APE truncated ID3 header", containerAPE, []byte("ID3\x04"), false},
+		{"APE truncated ID3 body", containerAPE, []byte("ID3\x04\x00\x00\x00\x00\x00\x20MAC "), false},
+		{"APE invalid syncsafe length", containerAPE, []byte("ID3\x04\x00\x00\x80\x00\x00\x00MAC "), false},
+		{"APE oversized prefix", containerAPE, []byte("ID3\x04\x00\x00\x08\x00\x00\x00MAC "), false},
+		{"APE wrong content after ID3", containerAPE, id3(nil, false, "fLaC"), false},
+		{"APE wrong magic", containerAPE, []byte("fLaC"), false},
+		{"APE truncated magic", containerAPE, []byte("MAC"), false},
+		{"WavPack", containerWavPack, []byte("wvpk"), true},
+		{"WavPack truncated magic", containerWavPack, []byte("wvp"), false},
+		{"WavPack wrong magic", containerWavPack, []byte("MAC "), false},
+		{"WavPack prefixed magic", containerWavPack, append([]byte("ID3"), []byte("wvpk")...), false},
+		{"AIFF", containerAIFF, []byte("FORM\x00\x00\x00\x04AIFF"), true},
+		{"AIFF-C", containerAIFF, []byte("FORM\x00\x00\x00\x04AIFC"), true},
+		{"AIFF wrong FORM type", containerAIFF, []byte("FORM\x00\x00\x00\x04WAVE"), false},
+		{"AIFF missing FORM", containerAIFF, []byte("RIFF\x00\x00\x00\x04AIFF"), false},
+		{"AIFF truncated FORM", containerAIFF, []byte("FORM\x00\x00\x00\x04AIF"), false},
+		{"empty APE", containerAPE, nil, false},
+		{"empty WavPack", containerWavPack, nil, false},
+		{"empty AIFF", containerAIFF, nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := matchesContainer(bytes.NewReader(tc.content), int64(len(tc.content)), tc.kind)
+			if err != nil || got != tc.want {
+				t.Fatalf("matchesContainer = %v, %v; want %v", got, err, tc.want)
+			}
+		})
 	}
 }

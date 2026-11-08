@@ -30,6 +30,22 @@ describe("词表标签", () => {
     expect(label("")).toBe("");
   });
 
+  it.each([
+    ["ape", "APE"],
+    ["wavpack", "WavPack"],
+    ["wavpack_hybrid", "WavPack（有损）"],
+    ["wavpack_float", "WavPack（浮点）"],
+    ["wavpack_dsd", "WavPack（DSD）"],
+    ["aiff", "AIFF"],
+    ["aiff_float", "AIFF（浮点）"],
+  ])("新增编码 %s 显示为 %s，不附加派生标记", (codec, expected) => {
+    expect(codecLabel(codec)).toBe(expected);
+  });
+
+  it("未列出的 AIFF-C 压缩编码保持原值", () => {
+    expect(codecLabel("aifc_ima4")).toBe("aifc_ima4");
+  });
+
   it("后端样本里出现过的取值都有中文名（样本之外新增的取值会原样显示）", () => {
     const names = listApiSampleNames().filter((name) => name.startsWith("releases/get") || name === "releases/evidence");
     expect(names.length).toBeGreaterThan(0);

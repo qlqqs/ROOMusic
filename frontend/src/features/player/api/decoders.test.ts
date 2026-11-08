@@ -25,6 +25,26 @@ describe("播放 API decoder", () => {
   });
 
   it.each([
+    ["ape_apev2", "ape"],
+    ["wavpack_apev2", "wavpack"],
+    ["wavpack_apev2", "wavpack_hybrid"],
+    ["aiff_id3", "aiff"],
+  ])("后端格式表包含 %s / %s，交付的是派生 FLAC", (sourceKind, codec) => {
+    expect(decodePlaybackFormats(formats).items).toContainEqual({
+      source_kind: sourceKind,
+      codec,
+      delivery: "derived",
+      mime_type: "audio/flac",
+      codecs: null,
+    });
+  });
+
+  it("来源类别与编码按字符串解码，新增取值不受前端枚举限制", () => {
+    const input = withValue(withValue(formats, ["items", 0, "source_kind"], "future_source"), ["items", 0, "codec"], "future_codec");
+    expect(decodePlaybackFormats(input)).toEqual(input);
+  });
+
+  it.each([
     without(formats, ["items"]),
     without(formats, ["items", 0, "delivery"]),
     withValue(formats, ["items", 0, "delivery"], "transcoded"),

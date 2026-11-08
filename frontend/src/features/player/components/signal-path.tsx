@@ -8,8 +8,21 @@ import styles from "./signal-path.module.css";
 
 type Quality = "lossless" | "lossy" | "unknown";
 
-const losslessCodecs = new Set(["flac", "alac", "pcm"]);
-const lossyCodecs = new Set(["mp3", "aac", "vorbis", "opus"]);
+const losslessCodecs = new Set(["flac", "alac", "pcm", "ape", "wavpack", "aiff"]);
+// WavPack 混合模式没有 .wvc 时只有有损部分。
+const lossyCodecs = new Set(["mp3", "aac", "vorbis", "opus", "wavpack_hybrid"]);
+
+const codecNames = new Map([
+  ["ape", "APE"],
+  ["wavpack", "WavPack"],
+  ["wavpack_hybrid", "WavPack"],
+  ["aiff", "AIFF"],
+]);
+
+/** 数据源与服务端两行的编码名：表里有的用短名，其他写成大写。 */
+function codecName(codec: string): string {
+  return codecNames.get(codec.toLowerCase()) ?? codec.toUpperCase();
+}
 
 /** 整体质量只看源编码。 */
 function qualityOf(source: SourceFacts | undefined): Quality {
@@ -24,7 +37,7 @@ const titles: Record<Quality, string> = { lossless: "信号路径：无损", los
 /** 数据源一行：无损写“编码 采样率 位深 声道”，有损写“编码 码率 采样率 声道”；缺的项省略。 */
 function sourceLine(source: SourceFacts | undefined, quality: Quality): string {
   if (source === undefined) return "未知格式";
-  const codec = source.codec === null ? null : source.codec.toUpperCase();
+  const codec = source.codec === null ? null : codecName(source.codec);
   const rate = source.sampleRate === null ? null : `${source.sampleRate / 1000}kHz`;
   const depth = source.bitDepth === null ? null : `${source.bitDepth}bit`;
   const bitrate = source.bitrate === null ? null : `${source.bitrate}kbps`;
@@ -87,7 +100,7 @@ function SignalPathDialog({ anchor, onClose }: { anchor: DOMRect | null; onClose
   const table = capabilities.data;
   // 格式表还没取到时不替 ALAC 曲目说“原文件直出”。
   const delivery = source !== undefined && table === undefined && capabilities.isPending ? "pending" : source === undefined || table === undefined ? "original" : (table.deliveryOf({ sourceKind: source.sourceKind, codec: source.codec }) ?? "original");
-  const server = delivery === "pending" ? "读取中" : delivery === "derived" ? `${source?.codec?.toUpperCase() ?? "ALAC"} → FLAC` : "原文件直出";
+  const server = delivery === "pending" ? "读取中" : delivery === "derived" ? `${source === undefined || source.codec === null ? "ALAC" : codecName(source.codec)} → FLAC` : "原文件直出";
   const browser = useBrowserLine();
   const values = [sourceLine(source, quality), server, browser, "系统默认输出"];
   const position = anchor === null ? undefined : ({ "--anchor-x": `${anchor.left + anchor.width / 2}px`, "--anchor-top": `${anchor.top}px` } as CSSProperties);

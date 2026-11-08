@@ -19,7 +19,7 @@ test.beforeAll(async ({ request }) => {
   root = decodeRoot(await body(await post(request, "/api/v1/library-roots", { path: fixtureRoot })));
   await scan(request);
   albums = await catalog(request);
-  expect(albums.flatMap((album) => album.release.media.flatMap((medium) => medium.tracks))).toHaveLength(13);
+  expect(albums.flatMap((album) => album.release.media.flatMap((medium) => medium.tracks))).toHaveLength(14);
 });
 
 test.beforeEach(async ({ page }) => {
@@ -121,7 +121,7 @@ test("FLAC 真实 seek，自然切到下一首；切页不断播，刷新暂停�
   await expect.poll(() => page.evaluate((id) => window.playbackTestEvents.some((event) => event.type === "playing" && event.src.includes(id)), second.track.id)).toBe(true);
 });
 
-// ALAC 由服务端用固定版本 ffmpeg 无损转换成 FLAC 后交付（playback-e2e.sh 提供 ROOMUSIC_FFMPEG_PATH）。
+// ALAC 与 WavPack 由服务端用固定版本 ffmpeg 无损转换成 FLAC 后交付（playback-e2e.sh 提供 ROOMUSIC_FFMPEG_PATH）。
 // 音频请求从不启动转换，转换之前是 409；之后必须先预检（预检是唯一启动或加入转换的入口）。
 // 播放 formats 专辑里的曲目会预取下一首派生曲目（别的用例可能已经转换过 ALAC），所以这里用一个专用的探针文件：
 // 放在独立目录（独立专辑，不进入任何其他用例的队列），修改时间也与原素材不同，没有任何预取或缓存命中会先于本用例转换它。
@@ -167,8 +167,11 @@ test("ALAC 音频请求不会启动转换：转换前 409，预检完成后才�
   }
 });
 
-for (const source of ["alac-16-44100.m4a", "alac-24-48000.m4a"]) {
-  const sourceLine = source === "alac-16-44100.m4a" ? "数据源ALAC 44.1kHz 16bit 2ch" : "数据源ALAC 48kHz 24bit 2ch";
+for (const { source, sourceLine, serverLine } of [
+  { source: "alac-16-44100.m4a", sourceLine: "数据源ALAC 44.1kHz 16bit 2ch", serverLine: "服务端ALAC → FLAC" },
+  { source: "alac-24-48000.m4a", sourceLine: "数据源ALAC 48kHz 24bit 2ch", serverLine: "服务端ALAC → FLAC" },
+  { source: "wavpack-24-48000.wv", sourceLine: "数据源WavPack 48kHz 24bit 2ch", serverLine: "服务端WavPack → FLAC" },
+]) {
   test(`${source} 经服务端无损转换：Chromium 真实解码 FLAC，真实拖动，自然结束，信号路径写明无损转换`, async ({ page }) => {
     const item = findTrack(albums, source);
     const preflights: { status: number; kind: string }[] = [];
@@ -199,7 +202,7 @@ for (const source of ["alac-16-44100.m4a", "alac-24-48000.m4a"]) {
     const full = page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "收起全屏播放器", exact: true }) });
     await full.getByRole("button", { name: "信号路径：无损", exact: true }).click();
     const signal = page.getByRole("dialog", { name: "信号路径：无损", exact: true });
-    await expect(signal.getByRole("listitem")).toHaveText([sourceLine, "服务端ALAC → FLAC", /浏览器解码(?: · 音量均衡 [−+0-9.]+ dB)?/, "系统输出系统默认输出"]);
+    await expect(signal.getByRole("listitem")).toHaveText([sourceLine, serverLine, /浏览器解码(?: · 音量均衡 [−+0-9.]+ dB)?/, "系统输出系统默认输出"]);
     for (const removedText of ["ALAC 转成 FLAC，位深、采样率与声道不变。", "原样发送，不转码。", "由浏览器解码，可能按输出设备重新采样。", "网页看不到声卡的实际格式。"]) await expect(signal).not.toContainText(removedText);
     await page.keyboard.press("Escape");
     await expect(signal).not.toBeVisible();

@@ -17,6 +17,8 @@ const (
 // SourceVersion 是源文件在扫描时的版本事实。缓存键由它与转换器版本决定；
 // BitDepth、SampleRate 与 Channels 只用于核对转换结果（0 表示扫描没有取得，不核对），不参与缓存键。
 type SourceVersion struct {
+	// Policy 是格式表指定的转换策略版本；ALAC 沿用 alac-flac-lossless-v1。
+	Policy             string
 	ContentFingerprint string
 	Size               int64
 	ModifiedAt         time.Time
@@ -34,7 +36,7 @@ func deriveKey(converterVersion string, version SourceVersion) string {
 	hash := sha256.New()
 	for _, field := range []string{
 		keyDomain,
-		policyALACFLAC,
+		version.Policy,
 		converterVersion,
 		version.ContentFingerprint,
 		strconv.FormatInt(version.Size, 10),

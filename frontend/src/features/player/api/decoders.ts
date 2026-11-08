@@ -1,12 +1,12 @@
 import { decode as d } from "../../../shared/api";
 
-// 格式表是后端的静态表（目前最多 7 项）；上限只是防止异常响应被整体接受。
+// 格式表是后端的静态表（目前最多 11 项）；上限只是防止异常响应被整体接受。
 const MAX_FORMATS = 32;
 
 const mimeDecoder = d.string({ max: 100, pattern: /^audio\/[a-z0-9.+-]+$/i });
 const codecsDecoder = d.nullable(d.string({ min: 1, max: 100, pattern: /^[a-z0-9., -]+$/i }));
 
-/** 交付方式：original 直出原文件；derived 由服务端无损转换（ALAC → FLAC）后交付，mime_type 与 codecs 描述转换后的表示。 */
+/** 交付方式：original 直出原文件；derived 由服务端无损转换成 FLAC（ALAC、APE、WavPack、AIFF）后交付，mime_type 与 codecs 描述转换后的表示。 */
 const deliveryDecoder = d.oneOf(["original", "derived"] as const);
 
 const formatDecoder = d.object({

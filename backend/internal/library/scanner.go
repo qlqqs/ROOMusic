@@ -926,7 +926,7 @@ func (service *Service) persistOneCandidate(ctx context.Context, executor scanEx
 
 func isSupportedAudioExtension(extension string) bool {
 	switch extension {
-	case ".flac", ".mp3", ".ogg", ".opus", ".wav", ".m4a":
+	case ".flac", ".mp3", ".ogg", ".opus", ".wav", ".m4a", ".ape", ".wv", ".aif", ".aiff":
 		return true
 	default:
 		return false
@@ -935,7 +935,7 @@ func isSupportedAudioExtension(extension string) bool {
 
 func isAudioCandidateExtension(extension string) bool {
 	switch extension {
-	case ".aac", ".aif", ".aiff", ".ape", ".dff", ".dsf", ".m4a", ".mka", ".wma":
+	case ".aac", ".dff", ".dsf", ".m4a", ".mka", ".wma", ".tak":
 		return true
 	default:
 		return false

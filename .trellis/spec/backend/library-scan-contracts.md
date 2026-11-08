@@ -32,6 +32,17 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 
 ### 扫描完整性、暂存、身份、CUE 与封面
 
+- 支持扩展名为 `.flac .mp3 .ogg .opus .wav .m4a .ape .wv .aif .aiff`；扩展名只决定尝试，解析器仍核对魔数与结构。
+  APE 为 `ape_apev2/ape`；WavPack 为 `wavpack_apev2`，编码区分 `wavpack`、`wavpack_hybrid`、`wavpack_float`、`wavpack_dsd`；
+  AIFF/AIFF-C 为 `aiff_id3`，整数 PCM 为 `aiff`，浮点为 `aiff_float`，其他压缩为 `aifc_<压缩类型小写去空白>`。
+  扫描保留这些音频参数和标签，不在此拒绝浮点、DSD 或特殊位深；播放白名单与位深关卡另行决定能否交付。
+  `wavpack_dsd` 的位深记 1，采样率记原生 DSD 采样率（基础率 × `0x0e` 子块的倍率 × 8），时长为头部总样本数（每个计数打包 8 个 DSD 位）× 8 ÷ 原生采样率；仍只入库、浏览，不播放。
+  WavPack 总样本数已知时只读取取得参数所需的首个声道组，有声道信息子块则首块即可停止；未知时才遍历全部块头累计样本数。
+- `.aac .dsf .dff .wma .mka .tak` 只进入不支持格式诊断，不解析、不入库；TAK 不再静默忽略。
+  本项只调整扩展名表，unsupported 对扫描完整性的语义由子任务 ① 合入时同步，当前分支仍沿用下述旧规则。
+- APE/WavPack 共用 APEv2 页脚标签（可位于 ID3v1 之前），文本多值逐个交给 `setAudioTag`，`TRACK`/`DISC` 映射到位置键；
+  前封面只接收 JPEG/PNG，畸形标签整段忽略。AIFF 读取 ID3 块，`NAME`/`AUTH` 只补缺失值；缺标签统一使用文件名兜底。
+
 - 扫描只读取 `active` roots。unsupported 音频候选、CUE 语法/编码错误、
   `unsafe`/`unchecked` 引用、权限和遍历错误将 root 标记为不完整；只有全局
   `succeeded` 才允许 `missing` 对账。已经安全解析但目标不存在的 CUE 引用，以及
@@ -39,7 +50,7 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
   不单独阻断其它确定输入完成扫描；不得为其伪造父来源或零偏移 Track。非音频附件
   （例如 `.jpg`、`.png`、`.txt`）不产生 unsupported 音频诊断。
 - CUE `FILE` 目标不存在时，先在同目录按同名 stem 依次查找 `.flac`、`.mp3`、`.ogg`、
-  `.opus`、`.wav`、`.m4a`（扩展名不区分大小写），命中即视为 `present`，
+  `.opus`、`.wav`、`.m4a`、`.ape`、`.wv`、`.aif`、`.aiff`（扩展名不区分大小写，原有顺序不变），命中即视为 `present`，
   `CueFileReference.Path` / `CueTrack.ReferencedFile` 改为实际文件并照常执行包含根与
   symlink 检查；都找不到才按“目标不存在”处理。用于抓轨 CUE 写 `.wav`、实际已转为 FLAC 的情况。
 - `0011_scan_staging_and_identity.sql` 增加有界暂存、候选锚点、物理/CUE 身份、音频/CUE 列、字段/归组证据、署名及元数据。
@@ -129,6 +140,23 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
     无效的命名文件记下第一个错误后继续找；全部目录找完仍没有可用封面时才返回该错误（`artwork_failure`）。
     目录不存在不算错误，其他读目录错误按同样方式记录。
   - 没有迁移：重扫会对每个候选重新发现封面，下一次扫描即绑定或移除。
+
+### 新格式内容指纹
+
+`parser/fingerprint.go` 按扩展名选择种类；旧格式种类和版本不变。新增：
+
+| 种类 | 输入 |
+| --- | --- |
+| `ape-md5-v1` | 非零描述块 MD5，加总块数、采样率、声道和位深 |
+| `ape-frames-v1` | 上述参数与帧数据的 SHA-256；旧头或描述块 MD5 全零时使用 |
+| `wavpack-blocks-v1` | 从第一个 `wvpk` 起连续的完整块字节的 SHA-256 |
+| `aiff-ssnd-v1` | `COMM` 的声道、帧数、位深、80 位采样率、压缩类型，与 `SSND` 声音数据的 SHA-256 |
+
+APE 新头按帧起点与声明帧长度取负载；旧头从 seek 表首项加 ID3v2 前缀偏移起，到尾部标签之前结束。
+WavPack 在首个非 `wvpk` 位置结束。AIFF 的 `SSND` 跳过 offset/blockSize 八字节及 offset 指定的填充。
+读取使用 `hashSection` 的分段取消检查，不整读音频。无音频负载返回空指纹，不与其他文件比较。
+APEv2、ID3、`NAME`/`AUTH` 标签的变化不改变指纹；帧数据或关键参数变化会改变指纹，APE 原生 MD5 路径信任描述块的摘要。
+播放转换前通过同一 `ContentFingerprintOf` 分派重算，不另建播放专用身份算法。
 
 ## 4. 校验与错误矩阵
 

@@ -30,6 +30,8 @@ var (
 
 // Derivation 是派生缓存与转换任务的窄端口；生产实现是 *derivation.Manager，测试可以用假实现。
 type Derivation interface {
+	// Supports 报告对应输入解码器是否可用。
+	Supports(decoder string) bool
 	// Key 返回源文件版本对应的缓存键。
 	Key(derivation.SourceVersion) string
 	// Await 确保派生文件存在：命中立即返回；否则启动或加入转换，并把调用方登记为等待者，直到完成或 ctx 结束。
@@ -121,6 +123,7 @@ func (r resolved) checkDerivableSource() error {
 // derivationVersion 是缓存键与输出核对使用的源文件版本事实。调用前源文件已通过 openSource，所以大小与修改时间必有。
 func (r resolved) derivationVersion() derivation.SourceVersion {
 	return derivation.SourceVersion{
+		Policy:             r.format.policy,
 		ContentFingerprint: r.source.ContentFingerprint,
 		Size:               *r.source.Size,
 		ModifiedAt:         *r.source.ModifiedAt,
@@ -136,6 +139,7 @@ func (r resolved) derivationVersion() derivation.SourceVersion {
 // 回调只捕获本次请求核对过的扫描记录，不借用请求的 context 或句柄，所以不受请求生命周期影响。
 func (r resolved) derivationSource() derivation.Source {
 	return derivation.Source{
+		Input:   r.format.input,
 		Version: r.derivationVersion(),
 		Open: func(context.Context) (*os.File, error) {
 			opened, err := r.openSource()
