@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import type { Locator, Page, Route } from "@playwright/test";
 import { albumGroup, mediaOf, releaseDetailOf } from "../src/test/catalog-data";
+import { sampleBody } from "../src/test/api-samples";
 import { LONG_ARTIST, LONG_TITLE, LONG_TOKEN } from "./support/albums-data";
 import { expectNoDocumentScroll, expectNoHorizontalOverflow, expectNoSeriousViolations, expectVisibleFocusRing, widths } from "./support/checks";
 import { expect, test } from "./support/fixtures";
@@ -273,7 +274,7 @@ test("ALAC 曲目经服务端转换后播放：先显示“正在准备”，转
   await expect.poll(() => polls.get(second.id)).toBe(1);
   await bar(page).getByRole("button", { name: "信号路径：无损", exact: true }).click();
   const signal = page.getByRole("dialog", { name: "信号路径：无损", exact: true });
-  await expect(signal.getByRole("listitem")).toHaveText(["数据源ALAC 44.1kHz 16bit 2ch", "服务端ALAC → FLAC", "浏览器解码", "系统输出系统默认输出"]);
+  await expect(signal.getByRole("listitem")).toHaveText(["数据源ALAC 44.1kHz 16bit 2ch", "服务端ALAC → FLAC", "浏览器解码 · 音量均衡 −5.0 dB", "系统输出系统默认输出"]);
   await expect(signal).not.toContainText("ALAC 转成 FLAC");
   await expect(signal).not.toContainText("原样发送，不转码。");
   await expect(signal).not.toContainText("由浏览器解码，可能按输出设备重新采样。");
@@ -629,3 +630,32 @@ test("歌词读取失败：显示带重试的错误，重试后显示歌词；�
   await expect(lyrics.getByRole("listitem")).toHaveCount(LYRIC_LINES);
   await expect(lyrics.getByRole("alert")).toHaveCount(0);
 });
+
+test("已分析曲目显示波形，进度条仍可键盘定位", async ({ page, backend }) => {
+  const mock = await backend.start({ signedInAs: "listener" });
+  const { group } = await installPlayback(page, mock);
+  await page.route("**/api/v1/tracks/*/analysis", async (route) => {
+    const trackId = new URL(route.request().url()).pathname.split("/").at(-2) ?? "";
+    const body = sampleBody("tracks/analysis-done") as Record<string, unknown>;
+    await route.fulfill({ json: { ...body, track_id: trackId } });
+  });
+  await startAndPause(page);
+  await expect(bar(page).locator("canvas")).toBeVisible();
+  const seek = bar(page).getByRole("slider", { name: "播放进度", exact: true });
+  await expect(seek).toBeEnabled();
+  await seek.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(async () => (await media(page))?.time ?? 0).toBeGreaterThan(0);
+  await expect(page).toHaveURL(new RegExp(`/albums/${group.id}`));
+});
+
+for (const width of [375, 1440]) {
+  test(`${width}px：播放设置页无横向溢出且无严重 axe 问题`, async ({ page, backend }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await backend.start({ signedInAs: "listener" });
+    await page.goto("/settings/playback");
+    await expect(page.getByRole("heading", { level: 1, name: "播放", exact: true })).toBeVisible();
+    await expectNoHorizontalOverflow(page, "播放设置");
+    await expectNoSeriousViolations(page, "播放设置");
+  });
+}

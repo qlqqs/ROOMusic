@@ -18,9 +18,14 @@ import { PlayerBar } from "./player-bar";
 import { PlayerQueue } from "./player-queue";
 import { PlayerAnnouncement } from "./player-feedback";
 import { SignalPathButton } from "./signal-path";
+import { WaveformSeek } from "./waveform-seek";
+import { PlaybackSettingsForm } from "./playback-settings-form";
+import { decodeTrackAnalysis } from "../api/decoders";
+import { sampleBody } from "../../../test/api-samples";
 import { queueStorageKey, saveQueue } from "../engine/persistence";
 
 const fullscreenState = vi.hoisted(() => ({ open: false, listeners: new Set<() => void>() }));
+const analysisState = vi.hoisted(() => ({ value: null as unknown }));
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ to, children, hash, title }: { to: string; children: ReactNode; hash?: string; title?: string }) => <a href={`${to}${hash === undefined ? "" : `#${hash}`}`} title={title}>{children}</a>,
@@ -41,6 +46,12 @@ vi.mock("../hooks/use-fullscreen-player", async () => {
     }),
   };
 });
+vi.mock("../hooks/use-track-analysis", () => ({
+  useTrackAnalysis: () => analysisState.value,
+}));
+vi.mock("../hooks/use-track-analysis", () => ({
+  useTrackAnalysis: () => analysisState.value,
+}));
 vi.mock("../hooks/use-track-lyrics", () => ({
   useTrackLyrics: function useTestLyrics() { return { status: "success", data: null, error: null, refetch: () => undefined }; },
 }));
@@ -73,6 +84,7 @@ function createEngine(overrides: Partial<EngineDeps> = {}) {
 async function settle(): Promise<void> { for (let turn = 0; turn < 8; turn += 1) await Promise.resolve(); }
 beforeEach(() => {
   fullscreenState.open = false;
+  analysisState.value = null;
   fullscreenState.listeners.clear();
   capabilitiesPending = false;
   audio = new FakeAudio();
@@ -104,6 +116,46 @@ describe("播放栏、全屏、队列与信号路径", () => {
     dialog = await screen.findByRole("dialog", { name: "曲目 1" });
     await user.click(screen.getByRole("button", { name: "收起全屏播放器" }));
     await waitFor(() => expect(dialog.hasAttribute("open")).toBe(false));
+  });
+
+  it("分析波形保留可键盘调整且可访问名称不变；无分析时用普通进度条", async () => {
+    engine.enqueue([playerTrack("1")]);
+    await act(async () => { engine.playTracks([playerTrack("1")]); await settle(); });
+    await waitFor(() => expect(audio.sources.length).toBeGreaterThan(0));
+    audio.loadMetadata(100);
+    audio.beginPlaying();
+    analysisState.value = decodeTrackAnalysis(sampleBody("tracks/analysis-done")).analysis;
+    const rendered = view(<WaveformSeek />);
+    expect(document.querySelector("canvas")).toBeTruthy();
+    const range = screen.getByRole("slider", { name: "播放进度" });
+    expect(range).toBeTruthy();
+    expect((range as HTMLInputElement).disabled).toBe(false);
+    fireEvent.change(range, { target: { value: "1" } });
+    expect(audio.currentTime).toBe(1);
+    rendered.unmount();
+    analysisState.value = null;
+    view(<WaveformSeek />);
+    expect(document.querySelector("canvas")).toBeNull();
+    expect(screen.getAllByRole("slider", { name: "播放进度" }).length).toBeGreaterThan(0);
+  });
+
+  it("播放设置分段选择保存；网页音量不可控时禁用并解释", async () => {
+    const user = userEvent.setup();
+    view(<PlaybackSettingsForm />);
+    await user.click(screen.getByRole("radio", { name: "按专辑" }));
+    expect(engine.getSnapshot().settings.leveling).toBe("album");
+  });
+
+  it("网页音量不可控时禁用播放效果设置并显示说明", () => {
+    engine.endSession();
+    const lockedAudio = new FakeAudio();
+    Object.defineProperty(lockedAudio, "volume", { configurable: true, get: () => 1, set: () => undefined });
+    engine = createEngine({ audio: lockedAudio });
+    engine.attach();
+    view(<PlaybackSettingsForm />);
+    expect(screen.getByText("这台设备不能调节网页音量，这两项不会生效。")).toBeTruthy();
+    expect((screen.getByRole("radio", { name: "自动" }).closest("fieldset") as HTMLFieldSetElement | null)?.disabled).toBe(true);
+    expect((screen.getByRole("switch", { name: "交叉渐变" }) as HTMLInputElement).disabled).toBe(true);
   });
 
   it("队列抽屉关闭后焦点返回队列图标", async () => {

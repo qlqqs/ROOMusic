@@ -1,4 +1,5 @@
 import { ListOrdered, Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume2, VolumeX, type LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import { formatDuration } from "../../../shared/lib/duration";
 import { Button } from "../../../shared/ui";
 import { isPlaybackActive } from "../engine/player-engine";
@@ -19,14 +20,18 @@ export function TransportControls({ size = "default" }: { size?: "compact" | "de
     <Button variant="icon" label="下一首" icon={<SkipForward size={18} />} disabled={!snapshot.hasNext} onClick={() => engine.next()} />
   </div>;
 }
-/** 播放进度：inline 是“进度条 + 位置 / 时长”，ends 是两端各一个时间（全屏）。 */
-export function SeekControl({ layout = "inline" }: { layout?: "inline" | "ends" }) {
+/**
+ * 播放进度：inline 是“进度条 + 位置 / 时长”，ends 是两端各一个时间（全屏）。给了 wave（波形画布）时，原生 range 透明地盖在波形上，
+ * 点击、拖动、键盘与可访问名称都仍由它提供。
+ */
+export function SeekControl({ layout = "inline", wave }: { layout?: "inline" | "ends"; wave?: ReactNode }) {
   const engine = usePlayerEngine();
   const progress = usePlayerProgress();
   const position = formatDuration(progress.positionSeconds);
   const duration = progress.durationSeconds === null ? "—:—" : formatDuration(progress.durationSeconds);
   const text = `${position} / ${duration}`;
-  const input = <input type="range" aria-label="播放进度" aria-valuetext={text} min={0} max={progress.durationSeconds ?? 0} step={0.1} value={progress.positionSeconds} disabled={!progress.seekable || progress.durationSeconds === null} onChange={(event) => engine.seek(Number(event.target.value))} />;
+  const range = <input type="range" className={wave === undefined ? undefined : styles.overlay} aria-label="播放进度" aria-valuetext={text} min={0} max={progress.durationSeconds ?? 0} step={0.1} value={progress.positionSeconds} disabled={!progress.seekable || progress.durationSeconds === null} onChange={(event) => engine.seek(Number(event.target.value))} />;
+  const input = wave === undefined ? range : <div className={styles.wave}>{wave}{range}</div>;
   if (layout === "ends") return <div className={styles.seek}><span aria-hidden="true">{position}</span>{input}<span aria-hidden="true">{duration}</span></div>;
   return <div className={styles.seek}>{input}<span>{text}</span></div>;
 }

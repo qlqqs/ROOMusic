@@ -1,7 +1,7 @@
 import { decode as d } from "../../../shared/api";
 import type { ApiResponse } from "../../../shared/api";
 import { apiRequest } from "../../../shared/api";
-import { decodePlaybackFormats, decodeTrackLyrics, decodeTrackPlayback, decodeTrackPreparing, type PlaybackFormatsDTO, type TrackLyricsDTO, type TrackPlaybackDTO } from "./decoders";
+import { decodePlaybackFormats, decodeTrackAnalysis, decodeTrackLyrics, decodeTrackPlayback, decodeTrackPreparing, type PlaybackFormatsDTO, type TrackAnalysisDTO, type TrackLyricsDTO, type TrackPlaybackDTO } from "./decoders";
 
 /** 后端批准交付的（来源类别、编码）组合、它们的交付方式（直出或无损转换）与交给浏览器的媒体类型。 */
 export function fetchPlaybackFormats(signal?: AbortSignal): Promise<ApiResponse<PlaybackFormatsDTO>> {
@@ -41,5 +41,15 @@ export function fetchTrackLyrics(trackId: string, signal?: AbortSignal): Promise
     const lyrics = decodeTrackLyrics(input);
     if (lyrics.track_id.toLowerCase() !== id.toLowerCase()) throw new d.DecodeError("$.track_id", "歌词响应不是所请求的曲目");
     return lyrics;
+  });
+}
+
+/** 曲目的音频分析结果（所有登录成员可读，trackId 必须是 UUID）：响度、增益、首尾静音与波形；还没分析或分析失败时只有状态。 */
+export function fetchTrackAnalysis(trackId: string, signal?: AbortSignal): Promise<ApiResponse<TrackAnalysisDTO>> {
+  const id = d.defineDecoder(d.uuid())(trackId);
+  return apiRequest({ method: "GET", path: `/api/v1/tracks/${id}/analysis`, signal }, (input): TrackAnalysisDTO => {
+    const analysis = decodeTrackAnalysis(input);
+    if (analysis.trackId.toLowerCase() !== id.toLowerCase()) throw new d.DecodeError("$.track_id", "分析响应不是所请求的曲目");
+    return analysis;
   });
 }

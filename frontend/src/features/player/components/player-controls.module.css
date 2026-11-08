@@ -10,6 +10,12 @@
 .seek { display: flex; gap: var(--space-2); align-items: center; min-width: 0; font-size: var(--fs-12); font-variant-numeric: tabular-nums; }
 .seek input { flex: 1; min-width: 0; width: 100%; }
 .seek span { white-space: nowrap; }
+/* 波形：画布在下，透明的原生 range 盖满整块；焦点环画在外层。 */
+.wave { position: relative; flex: 1; min-width: 0; height: var(--wave-height, 28px); --wave-played: var(--color-accent); --wave-rest: var(--color-neutral-400); }
+.wave canvas { display: block; width: 100%; height: 100%; }
+.wave .overlay { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; opacity: 0; cursor: pointer; }
+.wave .overlay:disabled { cursor: default; }
+.wave:has(.overlay:focus-visible) { outline: var(--focus-ring); outline-offset: var(--focus-offset); border-radius: var(--radius-sm); }
 .volume { display: flex; gap: var(--space-1); align-items: center; min-width: 0; }
 .volume input { width: 90px; min-width: 0; }
 input[type="range"] { accent-color: var(--text-accent); min-height: 24px; }

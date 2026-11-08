@@ -5,11 +5,12 @@ import type { PlayerTrack } from "../engine/queue";
 import { useFullscreenPlayer } from "../hooks/use-fullscreen-player";
 import { usePlayer } from "../player-provider";
 import { PlayerArtwork } from "./player-artwork";
-import { ModeControl, SeekControl, TransportControls, VolumeControl } from "./player-controls";
+import { ModeControl, TransportControls, VolumeControl } from "./player-controls";
 import { PlayerFaultInline } from "./player-feedback";
 import { sourceFormat, statusLabels } from "./player-labels";
 import { QueueButton } from "./queue-drawer";
 import { SignalPathButton } from "./signal-path";
+import { WaveformSeek } from "./waveform-seek";
 import styles from "./player-bar.module.css";
 
 type PlayerBarProps = {
@@ -40,7 +41,7 @@ export function PlayerBar({ renderCurrentTrackActions, renderQueueActions }: Pla
         <p className={styles.subtitle}><ArtistNames text={track.artist} refs={track.artistRefs ?? noRefs} /> — <Link to="/albums/$groupId" params={{ groupId: track.groupId }} search={{ release: track.releaseId }}>{track.albumTitle}</Link></p>
       </div>{renderCurrentTrackActions === undefined ? null : <div className={styles.trackActions}>{renderCurrentTrackActions(track)}</div>}</>}
     </div>
-    <div className={styles.center}><TransportControls size="compact" /><div className={styles.desktop}><SeekControl /></div></div>
+    <div className={styles.center}><TransportControls size="compact" /><div className={styles.desktop}><WaveformSeek /></div></div>
     <div className={styles.end}>
       <div className={`${styles.desktop} ${styles.format}`}>{track === undefined ? null : <SignalPathButton />}<span className={styles.formatText}><span>{track === undefined ? "未知格式" : sourceFormat(track)}</span><span className={styles.state}>{statusLabels[snapshot.status]}</span></span></div>
       <div className={styles.desktop}><ModeControl /></div>

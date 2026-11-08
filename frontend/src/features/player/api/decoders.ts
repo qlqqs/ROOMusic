@@ -124,3 +124,64 @@ export const decodeTrackLyrics = d.defineDecoder((input, path): TrackLyricsDTO =
   });
   return { track_id: result.track_id, lyrics: { kind: "synced", source: lyrics.source, lines } };
 });
+
+// ---- 音频分析 ----
+
+const MAX_WAVEFORM_POINTS = 1000;
+const MAX_DURATION_MS = 24 * 60 * 60 * 1000;
+
+const rawTrackAnalysisDecoder = d.object({
+  track_id: d.uuid(),
+  status: d.oneOf(["done", "pending", "failed"] as const),
+  analysis: d.nullable(d.object({
+    // 近乎静音或全静音时这几项为 null：响度未知，均衡按 −5 dB 处理；首尾点退回媒体时长。
+    integrated_lufs: d.nullable(d.number({ min: -200, max: 50 })),
+    true_peak_dbtp: d.nullable(d.number({ min: -200, max: 50 })),
+    track_gain_db: d.nullable(d.number({ min: -100, max: 100 })),
+    duration_ms: d.integer({ min: 0, max: MAX_DURATION_MS }),
+    leading_silence_ms: d.nullable(d.integer({ min: 0, max: MAX_DURATION_MS })),
+    trailing_silence_ms: d.nullable(d.integer({ min: 0, max: MAX_DURATION_MS })),
+    waveform: d.object({ points: d.integer({ min: 1, max: MAX_WAVEFORM_POINTS }), peaks: d.string({ min: 1, max: 4 * MAX_WAVEFORM_POINTS }) }),
+  })),
+  album: d.nullable(d.object({ release_id: d.uuid(), gain_db: d.number({ min: -100, max: 100 }), peak_dbtp: d.number({ min: -200, max: 50 }) })),
+});
+
+export type TrackAnalysisDTO = {
+  trackId: string;
+  status: "done" | "pending" | "failed";
+  analysis: {
+    trackGainDb: number | null;
+    durationMs: number;
+    leadingSilenceMs: number | null;
+    trailingSilenceMs: number | null;
+    /** 波形峰值，每个字节 0–255，长度等于 points。 */
+    peaks: Uint8Array;
+  } | null;
+  /** 整张发行都分析完时的专辑增益；还有曲目没分析完时是 null。 */
+  album: { releaseId: string; gainDb: number } | null;
+};
+
+function decodeBase64(text: string, path: string): Uint8Array {
+  let binary: string;
+  try {
+    binary = atob(text);
+  } catch {
+    throw new d.DecodeError(path, "不是合法的 base64");
+  }
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+/** 分析结果：done 时 analysis 必有，否则两者都是 null；peaks 解出的字节数必须等于 points。 */
+export const decodeTrackAnalysis = d.defineDecoder((input, path): TrackAnalysisDTO => {
+  const result = rawTrackAnalysisDecoder(input, path);
+  if (result.status !== "done" && (result.analysis !== null || result.album !== null)) throw new d.DecodeError(`${path}.analysis`, "未完成的分析不应带结果");
+  if (result.status === "done" && result.analysis === null) throw new d.DecodeError(`${path}.analysis`, "完成的分析缺少结果");
+  const analysis = result.analysis;
+  let decoded: TrackAnalysisDTO["analysis"] = null;
+  if (analysis !== null) {
+    const peaks = decodeBase64(analysis.waveform.peaks, `${path}.analysis.waveform.peaks`);
+    if (peaks.length !== analysis.waveform.points) throw new d.DecodeError(`${path}.analysis.waveform.peaks`, "峰值个数与 points 不符");
+    decoded = { trackGainDb: analysis.track_gain_db, durationMs: analysis.duration_ms, leadingSilenceMs: analysis.leading_silence_ms, trailingSilenceMs: analysis.trailing_silence_ms, peaks };
+  }
+  return { trackId: result.track_id, status: result.status, analysis: decoded, album: result.album === null ? null : { releaseId: result.album.release_id, gainDb: result.album.gain_db } };
+});

@@ -41,7 +41,7 @@
   - 测试：`player-ui.test.tsx`、`nav-items.test.ts`、`change-summary.test.ts`、`player-personal-actions.test.tsx`、`artist-player-metadata-step5.test.tsx` 中受影响的断言；E2E `player.spec.ts`、`auth.spec.ts`、`search-step4.spec.ts`（1440 与 375，含 axe）。
 - [x] **F1 概览改版**（design 5）：依赖 B1/B2 的样本文件已提交（先用 design 3 的 JSON 写解码器，样本到位后对齐）。`LibraryStats`、`AnalysisSummary`、`AttentionSummary`、版面；删除 `LibrarySummary`。
   - 测试：`decodeCatalogStats`、`decodeAnalysisProgress` 读样本；概览组件（四卡、空库、侧栏管理员项、分析各状态文案）；`api-mock.ts` 增加新接口桩；E2E 中概览相关断言（如有）。
-- [ ] **F3 波形、播放设置、均衡与交叉渐变**（design 4.6–4.8）：依赖 F2 与 B2 样本。`WaveformSeek`、`playback-settings.ts`、`/settings/playback`（均衡四种模式）、引擎按需接入 Web Audio（接入/退出/中断退回规则）、两路渐变增益、信号路径浏览器层取值。
+- [x] **F3 波形、播放设置、均衡与交叉渐变**（design 4.6–4.8）：依赖 F2 与 B2 样本。`WaveformSeek`、`playback-settings.ts`、`/settings/playback`（均衡四种模式）、引擎按需接入 Web Audio（接入/退出/中断退回规则）、两路渐变增益、信号路径浏览器层取值。
   - 测试：设置解码；假 AudioContext 下的接入与退出规则（两项都关不创建上下文、非 running 本首不接入、中断退回）；增益选择表（四种模式、正增益、未知 −5 dB）、`setVolume` 不再依赖回读、渐变计划与切换（跨专辑渐变、同专辑/单曲循环/手动切歌不渐变、备用元素被拒退回、切换后聆听只算新曲目）；`WaveformSeek` 有/无分析与键盘；设置页。命令见 design 8.2。
   - 回滚点：引擎改动单独一个提交，出问题可只回退这一提交（两项设置都关时不走新代码）。
 
@@ -49,7 +49,7 @@
 
 - [ ] **J1 真实后端联调**（一次）：B2、F3 都合入分支后，`scripts/playback-e2e.sh`（`ROOMUSIC_TEST_COMPOSE_PROJECT=roomusic-test-poa`，flock）跑更新后的 `frontend/e2e/real/playback.real.ts`：全屏打开、信号路径 `ALAC → FLAC`、全屏歌词点行定位；另确认后台分析在测试资料库上跑完、波形出现、均衡增益写进信号路径。
 - [ ] **J2 截图审阅**（A10）：临时 Playwright spec（不提交）用 mock 后端截 1440 与 375：全屏播放器（播放 / 暂停、歌词）、队列抽屉、信号路径弹层、播放设置、概览（管理员、成员、空库）。主会话先自审（文字行数、元素位置、横向溢出、多余说明），有问题打回修复并补回归断言；截图附在结果里给用户看。
-- [ ] **J3 规范更新**（Phase 3.3）：`player-design-guidelines.md`、`playback-and-personal-state.md`、`frontend/DESIGN.md` 第 4 节、`frontend/DESIGN-components.md` 第 6、7 节，新增 `.trellis/spec/backend/audio-analysis-contracts.md` 并登记到后端索引。
+- [x] **J3 规范更新**（Phase 3.3）：`player-design-guidelines.md`、`playback-and-personal-state.md`、`frontend/DESIGN.md` 第 4 节、`frontend/DESIGN-components.md` 第 6、7 节，新增 `.trellis/spec/backend/audio-analysis-contracts.md` 并登记到后端索引。
 - [ ] **J4 合并回 `main`**：等 `main` 上的并行任务状态明确后合并（`--no-ff`）。冲突处理：`backend/cmd/roomusic/web` 不手工解，合并后 `npm run build` 重建再提交；迁移号若被占用，本分支重编号（文件名、embed 列表与迁移版本测试一起改）。合并后在 `main` 上只跑受冲突影响部分的测试。
 - [ ] **J5 归档**：PRD 写实施结果与 A1–A10 证据 → `task.py archive 11-08-player-overview-analysis --skip-branch-validation` → 链接修正与 journal 同一提交。
 

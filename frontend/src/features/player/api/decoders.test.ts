@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { decode as d } from "../../../shared/api";
 import { sampleBody } from "../../../test/api-samples";
 import { withValue, without } from "../../../test/mutate";
-import { decodePlaybackFormats, decodeTrackLyrics, decodeTrackPlayback, decodeTrackPreparing } from "./decoders";
+import { decodePlaybackFormats, decodeTrackAnalysis, decodeTrackLyrics, decodeTrackPlayback, decodeTrackPreparing } from "./decoders";
 
 const formats = sampleBody("playback/formats");
 const playback = sampleBody("tracks/playback");
@@ -129,5 +129,21 @@ describe("歌词 API decoder", () => {
     expect(() => decodeTrackLyrics(lyrics("synced", [line(0, ""), line(1000, "a"), line(1000, "b")]))).not.toThrow();
     expect(() => decodeTrackLyrics(lyrics("synced", Array.from({ length: 2000 }, (_, index) => line(index * 1000))))).not.toThrow();
     expect(() => decodeTrackLyrics(lyrics("plain", [line(null, "a"), line(null, ""), line(null, "b")]))).not.toThrow();
+  });
+});
+
+
+describe("曲目分析 API decoder", () => {
+  it.each(["done", "pending", "failed"] as const)("完整解码 %s 样本", (status) => {
+    const sample = sampleBody(`tracks/analysis-${status}`);
+    const decoded = decodeTrackAnalysis(sample);
+    expect(decoded.status).toBe(status);
+    if (status === "done") {
+      expect(decoded.analysis?.peaks.length).toBeGreaterThan(0);
+      expect(decoded.analysis?.peaks.length).toBe((sample as { analysis: { waveform: { points: number } } }).analysis.waveform.points);
+    } else {
+      expect(decoded.analysis).toBeNull();
+      expect(decoded.album).toBeNull();
+    }
   });
 });

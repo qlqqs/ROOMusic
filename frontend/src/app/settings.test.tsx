@@ -35,13 +35,13 @@ function expectAddress(actual: string, expected: string) {
 }
 
 describe("设置页与权限", () => {
-  it("管理员有账号、扫描目录、成员、操作记录、备份五栏，账号展示用户名、角色与修改密码", async () => {
+  it("管理员有账号、播放、扫描目录、成员、操作记录、备份六栏，账号展示用户名、角色与修改密码", async () => {
     setup();
     renderApp({ path: "/settings/account" });
     await accountHeading();
     const links = within(screen.getByRole("navigation", { name: "设置" })).getAllByRole("link");
     expect(links.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
-      ["账号", "/settings/account"], ["扫描目录", "/settings/library"], ["成员", "/settings/members"], ["操作记录", "/settings/operations"], ["备份", "/settings/backups"],
+      ["账号", "/settings/account"], ["播放", "/settings/playback"], ["扫描目录", "/settings/library"], ["成员", "/settings/members"], ["操作记录", "/settings/operations"], ["备份", "/settings/backups"],
     ]);
     expect(links[0]?.getAttribute("aria-current")).toBe("page");
     const main = within(screen.getByRole("main"));
@@ -56,12 +56,12 @@ describe("设置页与权限", () => {
     for (const name of ["元数据", "待认领", "重复艺人"]) expect(await nav.findByRole("link", { name })).toBeTruthy();
   });
 
-  it("成员只看到账号栏，仍能修改自己的密码，不请求管理接口", async () => {
+  it("成员只看到账号与播放栏，仍能修改自己的密码，不请求管理接口", async () => {
     const api = setup("listener");
     renderApp({ path: "/settings/account" });
     await accountHeading();
     const nav = within(screen.getByRole("navigation", { name: "设置" }));
-    expect(nav.getAllByRole("link").map((link) => link.textContent)).toEqual(["账号"]);
+    expect(nav.getAllByRole("link").map((link) => link.textContent)).toEqual(["账号", "播放"]);
     expect(within(screen.getByRole("main")).getByText("listener")).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "修改密码" }));
     expect(await screen.findByRole("dialog", { name: "修改密码" })).toBeTruthy();
@@ -72,7 +72,7 @@ describe("设置页与权限", () => {
     const api = setup("listener");
     renderApp({ path });
     expect(await screen.findByRole("heading", { level: 1, name: "需要管理员权限" })).toBeTruthy();
-    expect(within(screen.getByRole("navigation", { name: "设置" })).getAllByRole("link").map((link) => link.textContent)).toEqual(["账号"]);
+    expect(within(screen.getByRole("navigation", { name: "设置" })).getAllByRole("link").map((link) => link.textContent)).toEqual(["账号", "播放"]);
     for (const apiPath of managementApis) expect(api.requestsTo("GET", apiPath)).toHaveLength(0);
   });
 

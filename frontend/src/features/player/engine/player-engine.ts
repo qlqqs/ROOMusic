@@ -8,14 +8,22 @@
 //
 // 计一次播放（阶段 P）：ListenTracker 按媒体事件累计真正出声的时间，达到规则时引擎把它经 playRecorder 交出去，一次访问最多一次；
 // 引擎不发请求、不等结果，也不知道接口长什么样。
+//
+// 音量均衡与交叉渐变（按 Roon）：需要时按需接入 Web Audio（audio-graph.ts）。均衡与渐变都关、设备的网页音量只读（iPhone / iPad）、
+// 或上下文没能进入 running 时不接入，管线与没有这两项时完全一致。已接入的元素在上下文被挂起时没有声音：运行中被挂起就“中断退回”，
+// 换一个不接入的新元素从原位置继续，本页不再接入。交叉渐变只在自然播放到结尾、下一首是另一张发行时进行，两个元素交替。
 import { failureOf } from "../../../shared/api";
 import type { ReleaseDetailDTO } from "../../catalog";
+import type { TrackAnalysisDTO } from "../api/decoders";
 import type { TrackPlaybackResult } from "../api/endpoints";
+import { AudioGraph, type AudioContextLike } from "./audio-graph";
 import { requesting, stopped, unreachable, type Lifecycle, type MediaPipeline, type Pipeline, type RestorePhase } from "./engine-state";
 import { ListenTracker, type ListenRecord, type ListenTrack } from "./listen-tracker";
 import type { MediaSessionPort } from "./media-session";
 import { MediaSessionBinding } from "./media-session-binding";
 import { clearSavedQueue, loadSavedQueue, loadVolume, savedEntriesOf, saveQueue, saveVolume, type StorageLike } from "./persistence";
+import { chooseLeveling, inAlbumContext, linearGain, type Leveling } from "./leveling";
+import { loadPlaybackSettings, savePlaybackSettings, type PlaybackSettings } from "./playback-settings";
 import { errorName, failureReasonOf, isDerivationBusy, MEDIA_ERR_ABORTED, MEDIA_ERR_NETWORK, type PlaybackFailureReason } from "./playback-failure";
 import { Prefetcher } from "./prefetcher";
 import {
@@ -93,7 +101,16 @@ export type EngineDeps = {
   random: () => number;
   now: () => number;
   playRecorder: PlayRecorder;
+  /** 曲目的音频分析（与波形组件共用查询缓存）；读取失败返回 null。没有时不做均衡与渐变。 */
+  loadAnalysis?: (trackId: string) => Promise<TrackAnalysisDTO | null>;
+  /** 新建一个音频元素：交叉渐变的备用元素与中断退回用。 */
+  createAudio?: () => AudioLike;
+  /** 新建 AudioContext；没有（或没有 createAudio）时永不接入 Web Audio。 */
+  createAudioContext?: (() => AudioContextLike) | null;
 };
+
+/** 音频走哪条路：direct 是元素直接出声；web_audio 是已接入音频图；fallback 是本页中断退回后的直出，不再接入。 */
+export type AudioRoute = "direct" | "web_audio" | "fallback";
 
 /** preparing：服务端正在把曲目无损转换成浏览器能解码的格式（预检收到 202），转换完成后才开始加载音频。 */
 export type PlayerStatus = "idle" | "loading" | "preparing" | "playing" | "paused" | "buffering";
@@ -135,6 +152,13 @@ export type PlayerSnapshot = {
   muted: boolean;
   /** 刷新后正在恢复队列。 */
   restoring: boolean;
+  /** 播放设置（音量均衡与交叉渐变），设备偏好。 */
+  settings: PlaybackSettings;
+  /** 当前曲目实际施加的均衡；没有接入或均衡关时是 null。 */
+  leveling: Leveling | null;
+  audioRoute: AudioRoute;
+  /** 网页能否调节音量（iPhone / iPad 上只读）：不能时均衡与渐变不生效。 */
+  volumeControllable: boolean;
 };
 
 export type PlayerProgress = {
@@ -158,6 +182,28 @@ const PREPARING_LIMIT_MS = 11 * 60_000;
  */
 const MIN_PREPARING_POLL_MS = 1_000;
 
+/** 预检就绪后最多再等分析结果多久；等不到这一首按响度未知处理。 */
+const ANALYSIS_WAIT_MS = 1_000;
+/** 播放已接入的元素前恢复上下文最多等多久（仍在同一次手势的激活期内）。 */
+const RESUME_WAIT_MS = 1_000;
+/** 交叉渐变提前多久规划（为下一首发预检与读取分析）。 */
+const CROSSFADE_PLAN_AHEAD_SECONDS = 15;
+/** 下一首开头静音超过这个长度视为异常，不跳过。 */
+const MAX_LEADING_SKIP_MS = 10_000;
+
+/**
+ * 交叉渐变的计划：planned 是已为下一首发出预检与分析读取（暂不接受队列步）；starting 是备用元素已设来源、等它出声后切换；
+ * skipped 是这一次访问不渐变（条件不满足或预检没就绪），队列或设置变化时重新判断。
+ */
+type CrossfadePlan =
+  | { phase: "planned"; entryId: string; next: QueueEntry; state: QueueState; fadeStart: number; seconds: number; controller: AbortController; url: string | null; analysis: TrackAnalysisDTO | null }
+  | { phase: "starting"; entryId: string; next: QueueEntry; state: QueueState; seconds: number; controller: AbortController; url: string; spare: AudioLike; level: Leveling | null; detach: () => void }
+  | { phase: "skipped"; entryId: string };
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function finiteOr(value: number, fallback: number): number {
   return Number.isFinite(value) ? value : fallback;
 }
@@ -169,7 +215,26 @@ function listenTrackOf(entry: QueueEntry): ListenTrack {
 
 export class PlayerEngine {
   private readonly deps: EngineDeps;
-  private readonly audio: AudioLike;
+  /** 活动的音频元素：交叉渐变切换与中断退回时会换成另一个。 */
+  private audio: AudioLike;
+  /** 每个音频元素各自的媒体事件处理函数；只处理活动元素的事件。 */
+  private readonly elementListeners = new Map<AudioLike, [string, () => void][]>();
+  /** 交叉渐变的备用元素（第一次渐变时创建，之后与活动元素轮换）。 */
+  private spare: AudioLike | null = null;
+  private settings: PlaybackSettings;
+  private readonly volumeControllable: boolean;
+  /** Web Audio 音频图；设备不支持或没有提供上下文时是 null。 */
+  private readonly graph: AudioGraph | null;
+  /** 本页已中断退回：不再接入。 */
+  private fellBack = false;
+  private leveling: Leveling | null = null;
+  /** 已完成的分析结果（按曲目 ID）；没完成的每次重新读取（查询缓存决定是否真的发请求）。 */
+  private readonly analyses = new Map<string, TrackAnalysisDTO>();
+  /** 正在加载的曲目的分析读取：预检就绪后最多再等它 1 秒。 */
+  private analysisWait: { entryId: string; promise: Promise<unknown>; result: TrackAnalysisDTO | null | undefined } | null = null;
+  private crossfadePlan: CrossfadePlan | null = null;
+  /** 切换之后还在淡出的旧元素：渐变结束（或旧元素先播完）时卸载。 */
+  private fading: { old: AudioLike; timer: ReturnType<typeof setTimeout>; onEnded: () => void } | null = null;
   private readonly env: QueueEnv;
   /** 计一次播放：只在状态为 playing 时累计，见 listen-tracker.ts。 */
   private readonly listen: ListenTracker;
@@ -215,9 +280,17 @@ export class PlayerEngine {
     const saved = loadVolume(deps.localStorage);
     this.volume = saved.volume;
     this.muted = saved.muted;
+    this.settings = loadPlaybackSettings(deps.localStorage);
+    // iPhone / iPad 上网页音量只读：写进去读回来不变。
+    const before = this.audio.volume;
+    this.audio.volume = 0.5;
+    this.volumeControllable = this.audio.volume === 0.5;
+    this.audio.volume = before;
+    const createContext = deps.createAudioContext ?? null;
+    this.graph = this.volumeControllable && createContext !== null && deps.createAudio !== undefined ? new AudioGraph(createContext, this.onContextStateChange) : null;
     this.audio.preload = "metadata";
-    this.audio.volume = this.volume;
-    this.audio.muted = this.muted;
+    this.bindElement(this.audio);
+    this.applyUserVolume();
     this.snapshot = this.buildSnapshot();
   }
 
@@ -247,7 +320,7 @@ export class PlayerEngine {
     const previous = this.lifecycle;
     if (previous === "attached" || previous === "ended") return;
     this.lifecycle = "attached";
-    for (const [type, handler] of this.mediaEvents()) this.audio.addEventListener(type, handler);
+    for (const [element, listeners] of this.elementListeners) for (const [type, handler] of listeners) element.addEventListener(type, handler);
     window.addEventListener("pagehide", this.onPageHide);
     this.registerMediaSession();
     if (previous === "fresh") void this.restore();
@@ -257,7 +330,7 @@ export class PlayerEngine {
   detach(): void {
     if (this.lifecycle !== "attached") return;
     this.lifecycle = "detached";
-    for (const [type, handler] of this.mediaEvents()) this.audio.removeEventListener(type, handler);
+    for (const [element, listeners] of this.elementListeners) for (const [type, handler] of listeners) element.removeEventListener(type, handler);
     window.removeEventListener("pagehide", this.onPageHide);
     this.resumePosition = this.currentPosition();
     this.persist();
@@ -281,6 +354,8 @@ export class PlayerEngine {
     // 即使尚未 attach，也必须中止命令发起的预检与媒体。
     this.stopPlayback();
     this.lifecycle = "ended";
+    this.analyses.clear();
+    this.analysisWait = null;
     clearSavedQueue(this.deps.sessionStorage, this.deps.userId);
     this.queue = emptyQueue;
     this.playedVisitEntryId = null;
@@ -299,6 +374,7 @@ export class PlayerEngine {
   /** 立即播放：用 tracks 替换队列并从 startIndex 开始播放。 */
   playTracks(tracks: readonly PlayerTrack[], startIndex = 0): AddResult {
     if (this.ended || tracks.length > MAX_QUEUE_ENTRIES) return "queue_full";
+    this.gesture();
     this.touch();
     this.queue = replaceQueue(this.queue, tracks, startIndex, this.env);
     this.playedVisitEntryId = null;
@@ -339,6 +415,7 @@ export class PlayerEngine {
   /** 播放队列里的某一项（“播放此项”）。当前项正在播放时不动；当前项已暂停就继续；已标记失败的当前项重新尝试。 */
   playEntry(entryId: string): void {
     if (this.ended || this.entryById(entryId) === undefined) return;
+    this.gesture();
     this.touch();
     if (entryId === this.queue.currentEntryId && this.failures[entryId] === undefined) {
       this.play();
@@ -414,6 +491,7 @@ export class PlayerEngine {
 
   play(): void {
     if (this.ended) return;
+    this.gesture();
     // 队列里有条目但没有当前项（移除了末项的当前条目之后）：从第一项开始。
     const current = currentEntry(this.queue) ?? this.queue.entries[0];
     if (current === undefined) return;
@@ -441,6 +519,7 @@ export class PlayerEngine {
       return;
     }
     if (this.isActive()) {
+      this.finishFade();
       // 同一媒体的 play() 拒绝可能晚于暂停到达，不能再覆盖新的用户意图。
       this.attempt += 1;
       this.audio.pause();
@@ -469,6 +548,7 @@ export class PlayerEngine {
 
   next(): void {
     if (this.ended) return;
+    this.gesture();
     this.touch();
     const step = advance(this.queue, this.env, { reason: "manual", isSkipped: this.isFailed });
     if (step.entryId === null) return;
@@ -478,6 +558,7 @@ export class PlayerEngine {
 
   previous(): void {
     if (this.ended) return;
+    this.gesture();
     this.touch();
     const step = retreat(this.queue, this.isFailed);
     if (step.entryId === null) return;
@@ -500,19 +581,36 @@ export class PlayerEngine {
   seek(seconds: number): void {
     if (this.ended || !this.isCurrentMedia() || !this.progress.seekable || this.progress.durationSeconds === null) return;
     if (!Number.isFinite(seconds)) return;
+    this.finishFade();
     this.audio.currentTime = Math.min(Math.max(0, seconds), this.progress.durationSeconds);
   }
 
   setVolume(volume: number): void {
     if (this.ended || !Number.isFinite(volume)) return;
-    this.audio.volume = Math.min(1, Math.max(0, volume));
-    this.syncVolume();
+    this.volume = Math.min(1, Math.max(0, volume));
+    this.afterVolumeChange();
   }
 
   setMuted(muted: boolean): void {
     if (this.ended) return;
-    this.audio.muted = muted;
-    this.syncVolume();
+    this.muted = muted;
+    this.afterVolumeChange();
+  }
+
+  /**
+   * 改播放设置（音量均衡、交叉渐变）：保存为设备偏好，立即作用于当前曲目的增益（平滑过去），作废进行中的渐变计划。
+   * 两项都关后元素仍保持接入（接入后拆不出来），增益归 1，到重新加载页面才完全退出；打开后从下一次手势命令起接入。
+   */
+  setPlaybackSettings(patch: Partial<PlaybackSettings>): void {
+    if (this.ended) return;
+    const next = { ...this.settings, ...patch };
+    if (next.leveling === this.settings.leveling && next.crossfade === this.settings.crossfade && next.crossfadeSeconds === this.settings.crossfadeSeconds) return;
+    this.settings = next;
+    savePlaybackSettings(this.deps.localStorage, next);
+    this.cancelCrossfade();
+    const current = currentEntry(this.queue);
+    if (current !== null) this.applyLeveling(current, this.analyses.get(current.track.trackId) ?? null, true);
+    this.commit();
   }
 
   /** 暂时性故障（网络、服务暂不可用、服务器忙于转换）之后重试：从停下的位置继续。 */
@@ -526,6 +624,7 @@ export class PlayerEngine {
     }
     const current = currentEntry(this.queue);
     if (current === null) return;
+    this.gesture();
     this.touch();
     this.load(current.entryId, this.resumePosition, "continue");
   }
@@ -558,6 +657,7 @@ export class PlayerEngine {
     }
     this.raise({ kind: "track_started", entryId });
     this.afterQueueChange();
+    this.requestAnalysis(entry);
     this.sendPreflight(attempt, entry, seekTo, null, controller);
   }
 
@@ -590,9 +690,17 @@ export class PlayerEngine {
       this.syncMediaSessionState();
       this.commit();
     }
-    this.pipeline = { kind: "media", status: "loading", entryId: entry.entryId, src: playback.representation.url, pendingSeek: seekTo > 0 ? seekTo : null };
-    this.audio.src = playback.representation.url;
-    this.requestPlay(attempt, entry);
+    const src = playback.representation.url;
+    const begin = () => {
+      if (attempt !== this.attempt) return;
+      this.routeElement(entry);
+      this.pipeline = { kind: "media", status: "loading", entryId: entry.entryId, src, pendingSeek: seekTo > 0 ? seekTo : null };
+      this.audio.src = src;
+      this.requestPlay(attempt, entry);
+    };
+    const wait = this.analysisWait;
+    if (wait === null || wait.entryId !== entry.entryId || wait.result !== undefined) begin();
+    else void Promise.race([wait.promise, delay(ANALYSIS_WAIT_MS)]).then(begin);
   }
 
   /**
@@ -626,7 +734,21 @@ export class PlayerEngine {
     this.pipeline = { kind: "requesting", status: "preparing", sentAt: pipeline.sentAt, wait: { kind: "timer", handle } };
   }
 
+  /** 开始出声。已接入的元素要求上下文在 running：先恢复（最多 1 秒），仍不行就中断退回、换直出元素从原位置继续。 */
   private requestPlay(attempt: number, entry: QueueEntry): void {
+    const graph = this.graph;
+    if (graph !== null && graph.isConnected(this.audio) && !graph.running) {
+      void graph.resumeWithin(RESUME_WAIT_MS).then((running) => {
+        if (attempt !== this.attempt) return;
+        if (running) this.playElement(attempt, entry);
+        else this.fallBack(true);
+      });
+      return;
+    }
+    this.playElement(attempt, entry);
+  }
+
+  private playElement(attempt: number, entry: QueueEntry): void {
     try {
       const started = this.audio.play();
       if (started === undefined) return;
@@ -792,8 +914,33 @@ export class PlayerEngine {
       ["waiting", this.onWaiting],
       ["ended", this.onEnded],
       ["error", this.onError],
-      ["volumechange", this.syncVolume],
     ];
+  }
+
+  /** 为一个音频元素建好媒体事件处理函数（只处理活动元素的事件）；已挂载时立即开始监听。 */
+  private bindElement(element: AudioLike): void {
+    const listeners = this.mediaEvents().map(([type, handler]): [string, () => void] => [type, () => {
+      if (element === this.audio) handler();
+    }]);
+    this.elementListeners.set(element, listeners);
+    if (this.attached) for (const [type, handler] of listeners) element.addEventListener(type, handler);
+  }
+
+  /** 不再使用的元素：停止监听并卸载来源。 */
+  private discardElement(element: AudioLike): void {
+    for (const [type, handler] of this.elementListeners.get(element) ?? []) element.removeEventListener(type, handler);
+    this.elementListeners.delete(element);
+    element.pause();
+    element.removeAttribute("src");
+    element.load();
+  }
+
+  private newElement(): AudioLike | null {
+    const element = this.deps.createAudio?.() ?? null;
+    if (element === null) return null;
+    element.preload = "metadata";
+    this.bindElement(element);
+    return element;
   }
 
   /** 事件是否来自当前加载的媒体：切歌之后迟到的旧事件一律忽略。 */
@@ -847,6 +994,7 @@ export class PlayerEngine {
   private readonly onPause = (): void => {
     if (!this.isCurrentMedia() || this.audio.ended) return;
     if (!isPlaybackActive(this.status)) return;
+    this.cancelCrossfade();
     this.setMediaStatus("paused");
     this.listen.suspend();
     this.stopTimers();
@@ -868,11 +1016,13 @@ export class PlayerEngine {
     if (this.status !== "playing" || !this.isCurrentMedia()) return;
     const record = this.listen.sample(finiteOr(this.audio.currentTime, Number.NaN));
     if (record !== null) this.recordPlay(record);
+    this.checkCrossfade();
   };
 
   /** 开始拖动：拖动跨过的距离不算出声。 */
   private readonly onSeeking = (): void => {
     if (!this.isCurrentMedia()) return;
+    this.cancelCrossfade();
     this.listen.seeking();
   };
 
@@ -883,6 +1033,7 @@ export class PlayerEngine {
 
   private readonly onEnded = (): void => {
     if (!this.isCurrentMedia() || !this.audio.ended) return;
+    this.cancelCrossfade();
     this.advanceAfterEnd();
   };
 
@@ -992,6 +1143,8 @@ export class PlayerEngine {
    * 在暂停媒体之前换上（暂停会同步触发 pause 事件）；调用方已经中止了在途的预检。
    */
   private unloadAudio(next: Pipeline): void {
+    this.cancelCrossfade();
+    this.finishFade();
     this.stopTimers();
     this.listen.suspend();
     this.pipeline = next;
@@ -1037,6 +1190,10 @@ export class PlayerEngine {
       volume: this.volume,
       muted: this.muted,
       restoring: this.restorePhase.kind === "running",
+      settings: this.settings,
+      leveling: this.graph?.isConnected(this.audio) === true ? this.leveling : null,
+      audioRoute: this.fellBack ? "fallback" : this.graph?.isConnected(this.audio) === true ? "web_audio" : "direct",
+      volumeControllable: this.volumeControllable,
     };
   }
 
@@ -1057,20 +1214,295 @@ export class PlayerEngine {
   /** 队列或当前项变化之后：同步系统媒体信息、保存队列、通知界面。 */
   private afterQueueChange(): void {
     this.cancelPrefetch();
+    this.cancelCrossfade();
     this.syncMediaSession();
     this.commit();
     this.persist();
   }
 
-  private syncVolume = (): void => {
-    const volume = finiteOr(this.audio.volume, this.volume);
-    const muted = this.audio.muted;
-    if (volume === this.volume && muted === this.muted) return;
-    this.volume = volume;
-    this.muted = muted;
-    saveVolume(this.deps.localStorage, { volume, muted });
+  /** 用户音量与静音：接入后写总音量节点（元素固定为 1、不静音），没接入时照旧写元素。音量滑块只反映用户音量。 */
+  private applyUserVolume(): void {
+    if (this.graph?.isConnected(this.audio) === true) {
+      this.audio.volume = 1;
+      this.audio.muted = false;
+      this.graph.setMaster(this.muted ? 0 : this.volume);
+      return;
+    }
+    this.audio.volume = this.volume;
+    this.audio.muted = this.muted;
+  }
+
+  private afterVolumeChange(): void {
+    this.applyUserVolume();
+    saveVolume(this.deps.localStorage, { volume: this.volume, muted: this.muted });
     this.commit();
+  }
+
+  // ---- 音量均衡与 Web Audio ----
+
+  /** 均衡或渐变开着（需要接入），且设备支持、本页没有退回过。 */
+  private wantsGraph(): boolean {
+    return this.graph !== null && !this.fellBack && (this.settings.leveling !== "off" || this.settings.crossfade);
+  }
+
+  /** 用户手势命令的开头：需要接入时创建并恢复上下文（AudioContext 只能在手势里启动）。 */
+  private gesture(): void {
+    if (this.wantsGraph()) this.graph?.ensure();
+  }
+
+  /** 读取分析结果：完成的记在本地，之后同步可用；读取失败按没有结果处理。 */
+  private fetchAnalysis(trackId: string): Promise<TrackAnalysisDTO | null> {
+    const cached = this.analyses.get(trackId);
+    if (cached !== undefined) return Promise.resolve(cached);
+    const load = this.deps.loadAnalysis;
+    if (load === undefined) return Promise.resolve(null);
+    return load(trackId).then((result) => {
+      if (result?.status === "done" && !this.ended) this.analyses.set(trackId, result);
+      return result;
+    });
+  }
+
+  /** 加载一首曲目时，若会接入音频图，同时读取它的分析结果（预检就绪后最多再等 1 秒）。 */
+  private requestAnalysis(entry: QueueEntry): void {
+    this.analysisWait = null;
+    if (!this.wantsGraph() || this.graph?.created !== true || this.analyses.has(entry.track.trackId)) return;
+    const wait: NonNullable<PlayerEngine["analysisWait"]> = { entryId: entry.entryId, promise: Promise.resolve(), result: undefined };
+    wait.promise = this.fetchAnalysis(entry.track.trackId).then((result) => {
+      wait.result = result;
+    });
+    this.analysisWait = wait;
+  }
+
+  /** 设置来源之前：上下文在 running 就接入活动元素，按设置施加均衡与用户音量；不在 running 时这一首原样播放。 */
+  private routeElement(entry: QueueEntry): void {
+    if (this.wantsGraph() && this.graph?.running === true) this.graph.connect(this.audio);
+    this.applyUserVolume();
+    const wait = this.analysisWait;
+    const analysis = this.analyses.get(entry.track.trackId) ?? (wait?.entryId === entry.entryId ? wait.result ?? null : null);
+    this.applyLeveling(entry, analysis, false);
+    this.graph?.setFade(this.audio, 1);
+  }
+
+  /** 按设置选增益并写到活动元素的均衡节点；没接入时不施加。 */
+  private applyLeveling(entry: QueueEntry, analysis: TrackAnalysisDTO | null, smooth: boolean): void {
+    if (this.graph?.isConnected(this.audio) !== true) {
+      this.leveling = null;
+      return;
+    }
+    const level = chooseLeveling(this.settings.leveling, analysis, inAlbumContext(this.queue, entry.entryId));
+    this.graph.setLevel(this.audio, level === null ? 1 : linearGain(level.gainDb), smooth);
+    this.leveling = level;
+  }
+
+  /** 上下文状态变化：已接入的元素正在出声时被挂起（不是 running），立即中断退回。 */
+  private readonly onContextStateChange = (): void => {
+    const graph = this.graph;
+    if (graph === null || this.fellBack || graph.running || !graph.isConnected(this.audio)) return;
+    if (this.pipeline.kind !== "media" || !this.isActive()) return;
+    this.fallBack(true);
   };
+
+  /**
+   * 中断退回：停止计数，丢掉已接入的元素，换一个不接入的新元素；resume 时从原位置继续（play() 被拒走“请按播放”）。
+   * 本页之后不再接入，均衡与渐变失效。
+   */
+  private fallBack(resume: boolean): void {
+    const replacement = this.deps.createAudio?.();
+    if (replacement === undefined || this.ended) return;
+    const entry = currentEntry(this.queue);
+    const position = this.currentPosition();
+    this.listen.suspend();
+    this.cancelCrossfade();
+    this.finishFade();
+    this.fellBack = true;
+    this.graph?.abandon();
+    const old = this.audio;
+    replacement.preload = "metadata";
+    this.audio = replacement;
+    this.bindElement(replacement);
+    this.discardElement(old);
+    if (this.spare !== null) this.discardElement(this.spare);
+    this.spare = null;
+    this.leveling = null;
+    this.applyUserVolume();
+    if (resume && entry !== null) {
+      this.load(entry.entryId, position, "continue");
+      return;
+    }
+    this.attempt += 1;
+    this.pipeline = stopped(this.queue.currentEntryId);
+    this.resumePosition = position;
+    this.setProgress({ positionSeconds: position, durationSeconds: null, seekable: false });
+    this.syncMediaSessionState();
+    this.commit();
+  }
+
+  // ---- 交叉渐变 ----
+
+  /** 出声期间每次进度事件调用：接近渐变点时规划，到渐变点时开始。 */
+  private checkCrossfade(): void {
+    const graph = this.graph;
+    const media = this.currentMedia();
+    if (!this.settings.crossfade || this.fellBack || graph === null || media === null || this.status !== "playing" || !graph.isConnected(this.audio) || this.fading !== null) return;
+    const plan = this.crossfadePlan;
+    if (plan !== null && plan.entryId !== media.entryId) this.cancelCrossfade();
+    const position = finiteOr(this.audio.currentTime, 0);
+    if (this.crossfadePlan === null) {
+      this.planCrossfade(media.entryId, position);
+      return;
+    }
+    const current = this.crossfadePlan;
+    if (current.phase !== "planned" || position < current.fadeStart) return;
+    // 预检还没就绪：放弃本次渐变，照常播完再切。
+    if (current.url === null) this.skipCrossfade(current);
+    else this.startCrossfade({ ...current, url: current.url });
+  }
+
+  /** 到渐变点前 15 秒：判定条件，满足就为下一首发预检与读取分析（暂不接受队列步）。 */
+  private planCrossfade(entryId: string, position: number): void {
+    const duration = this.progress.durationSeconds;
+    const entry = this.entryById(entryId);
+    if (duration === null || entry === undefined) return;
+    const seconds = this.settings.crossfadeSeconds;
+    const trailing = this.analyses.get(entry.track.trackId)?.analysis?.trailingSilenceMs ?? null;
+    const fadeStart = (trailing === null ? duration : trailing / 1000) - seconds;
+    if (position < fadeStart - CROSSFADE_PLAN_AHEAD_SECONDS) return;
+    const skipped: CrossfadePlan = { phase: "skipped", entryId };
+    if (this.queue.mode === "repeat_one" || duration < 3 * seconds || position >= fadeStart) {
+      this.crossfadePlan = skipped;
+      return;
+    }
+    const step = advance(this.queue, this.env, { reason: "natural", isSkipped: this.isFailed });
+    const next = step.entryId === null ? undefined : step.state.entries.find((candidate) => candidate.entryId === step.entryId);
+    if (next === undefined || next.entryId === entryId || this.isFailed(next.entryId) || next.track.releaseId === entry.track.releaseId) {
+      this.crossfadePlan = skipped;
+      return;
+    }
+    const controller = new AbortController();
+    const plan: Extract<CrossfadePlan, { phase: "planned" }> = { phase: "planned", entryId, next, state: step.state, fadeStart, seconds, controller, url: null, analysis: null };
+    this.crossfadePlan = plan;
+    this.deps.loadPlayback(next.track.trackId, controller.signal).then(
+      (result) => {
+        if (this.crossfadePlan !== plan) return;
+        if (result.state === "ready") plan.url = result.playback.representation.url;
+        else this.crossfadePlan = skipped;
+      },
+      () => {
+        if (this.crossfadePlan === plan) this.crossfadePlan = skipped;
+      },
+    );
+    void this.fetchAnalysis(next.track.trackId).then((analysis) => {
+      if (this.crossfadePlan === plan) plan.analysis = analysis;
+    });
+  }
+
+  /** 到渐变点：备用元素接入、设来源、跳过开头静音后开始播放（渐变增益为 0），收到它的 playing 才切换。 */
+  private startCrossfade(plan: Extract<CrossfadePlan, { phase: "planned" }> & { url: string }): void {
+    const graph = this.graph;
+    const spare = this.spare ?? this.newElement();
+    if (graph === null || spare === null || !graph.connect(spare)) {
+      this.skipCrossfade(plan);
+      return;
+    }
+    this.spare = spare;
+    spare.volume = 1;
+    spare.muted = false;
+    const level = chooseLeveling(this.settings.leveling, plan.analysis, inAlbumContext(plan.state, plan.next.entryId));
+    graph.setLevel(spare, level === null ? 1 : linearGain(level.gainDb));
+    graph.setFade(spare, 0);
+    const leading = plan.analysis?.analysis?.leadingSilenceMs ?? null;
+    const offset = leading !== null && leading > 0 && leading <= MAX_LEADING_SKIP_MS ? leading / 1000 : 0;
+    const fail = () => {
+      if (this.crossfadePlan === starting) this.skipCrossfade(starting);
+    };
+    const onMetadata = () => {
+      if (this.crossfadePlan !== starting) return;
+      if (offset > 0 && spare.seekable.length > 0) spare.currentTime = offset;
+      try {
+        spare.play()?.catch(fail);
+      } catch {
+        fail();
+      }
+    };
+    const onPlaying = () => {
+      if (this.crossfadePlan === starting) this.switchToSpare(starting);
+    };
+    const detach = () => {
+      spare.removeEventListener("loadedmetadata", onMetadata);
+      spare.removeEventListener("playing", onPlaying);
+      spare.removeEventListener("error", fail);
+    };
+    const starting: Extract<CrossfadePlan, { phase: "starting" }> = { phase: "starting", entryId: plan.entryId, next: plan.next, state: plan.state, seconds: plan.seconds, controller: plan.controller, url: plan.url, spare, level, detach };
+    this.crossfadePlan = starting;
+    spare.addEventListener("loadedmetadata", onMetadata);
+    spare.addEventListener("playing", onPlaying);
+    spare.addEventListener("error", fail);
+    spare.src = plan.url;
+  }
+
+  /**
+   * 切换：接受计划的队列步，活动元素换成备用元素，新曲目开始新的访问（重叠部分只算新曲目），两个渐变增益按等功率曲线交叉。
+   * 旧元素在渐变结束（或它先播完）时卸载。
+   */
+  private switchToSpare(plan: Extract<CrossfadePlan, { phase: "starting" }>): void {
+    plan.detach();
+    this.crossfadePlan = null;
+    const old = this.audio;
+    const next = plan.spare;
+    this.attempt += 1;
+    this.audio = next;
+    this.spare = old;
+    this.acceptTransition(plan.state);
+    this.pipeline = { kind: "media", status: "playing", entryId: plan.next.entryId, src: plan.url, pendingSeek: null };
+    this.playedVisitEntryId = plan.next.entryId;
+    this.resumePosition = 0;
+    this.fault = null;
+    this.leveling = plan.level;
+    this.listen.begin(listenTrackOf(plan.next));
+    this.listen.resume(finiteOr(next.currentTime, Number.NaN));
+    this.graph?.crossfade(old, next, plan.seconds);
+    const onEnded = () => this.finishFade();
+    old.addEventListener("ended", onEnded);
+    this.fading = { old, timer: setTimeout(() => this.finishFade(), plan.seconds * 1000), onEnded };
+    this.raise({ kind: "track_started", entryId: plan.next.entryId });
+    this.syncProgress();
+    this.afterQueueChange();
+    this.prefetchNext();
+  }
+
+  /** 这一次访问不渐变：丢掉计划（备用元素已设来源的一并卸载），照常播完再切。 */
+  private skipCrossfade(plan: CrossfadePlan): void {
+    this.cancelCrossfade();
+    this.crossfadePlan = { phase: "skipped", entryId: plan.entryId };
+  }
+
+  /** 作废渐变计划：中止为下一首发出的预检，备用元素已设来源的卸载。 */
+  private cancelCrossfade(): void {
+    const plan = this.crossfadePlan;
+    this.crossfadePlan = null;
+    if (plan === null || plan.phase === "skipped") return;
+    plan.controller.abort();
+    if (plan.phase === "starting") {
+      plan.detach();
+      plan.spare.pause();
+      plan.spare.removeAttribute("src");
+      plan.spare.load();
+    }
+  }
+
+  /** 结束淡出：新元素的渐变增益直接到 1，卸载旧元素。用户在渐变中暂停、拖动、切歌时也立即结束。 */
+  private finishFade(): void {
+    const fading = this.fading;
+    if (fading === null) return;
+    this.fading = null;
+    clearTimeout(fading.timer);
+    fading.old.removeEventListener("ended", fading.onEnded);
+    this.graph?.setFade(this.audio, 1);
+    fading.old.pause();
+    fading.old.removeAttribute("src");
+    fading.old.load();
+    this.graph?.setFade(fading.old, 1);
+  }
 
   // ---- 保存与恢复 ----
 

@@ -34,6 +34,23 @@ function sourceLine(source: SourceFacts | undefined, quality: Quality): string {
   return line === "" ? "未知格式" : line;
 }
 
+/** 增益：一位小数，总带正负号（负号用 −），0 写 0.0 dB。 */
+function formatGain(db: number): string {
+  const rounded = Math.round(db * 10) / 10;
+  if (rounded === 0) return "0.0 dB";
+  return `${rounded > 0 ? "+" : "−"}${Math.abs(rounded).toFixed(1)} dB`;
+}
+
+/** 浏览器一行：解码；接入了音频图时加上实际施加的均衡增益，交叉渐变开着时加上时长。 */
+function useBrowserLine(): string {
+  const leveling = usePlayerSelector((snapshot) => snapshot.leveling);
+  const crossfade = usePlayerSelector((snapshot) => (snapshot.settings.crossfade && snapshot.audioRoute === "web_audio" ? snapshot.settings.crossfadeSeconds : null));
+  const parts = ["解码"];
+  if (leveling !== null) parts.push(`音量均衡 ${formatGain(leveling.gainDb)}`);
+  if (crossfade !== null) parts.push(`交叉渐变 ${crossfade} 秒`);
+  return parts.join(" · ");
+}
+
 /** 当前曲目的质量，播放栏与全屏底栏的圆点共用。 */
 function useCurrentSource(): SourceFacts | undefined {
   return usePlayerSelector((snapshot) => snapshot.current?.track.source);
@@ -69,7 +86,8 @@ function SignalPathDialog({ anchor, onClose }: { anchor: DOMRect | null; onClose
   // 格式表还没取到时不替 ALAC 曲目说“原文件直出”。
   const delivery = source !== undefined && table === undefined && capabilities.isPending ? "pending" : source === undefined || table === undefined ? "original" : (table.deliveryOf({ sourceKind: source.sourceKind, codec: source.codec }) ?? "original");
   const server = delivery === "pending" ? "读取中" : delivery === "derived" ? `${source?.codec?.toUpperCase() ?? "ALAC"} → FLAC` : "原文件直出";
-  const values = [sourceLine(source, quality), server, "解码", "系统默认输出"];
+  const browser = useBrowserLine();
+  const values = [sourceLine(source, quality), server, browser, "系统默认输出"];
   const position = anchor === null ? undefined : ({ "--anchor-x": `${anchor.left + anchor.width / 2}px`, "--anchor-top": `${anchor.top}px` } as CSSProperties);
   return <ModalDialog open={anchor !== null} titleId={titleId} onRequestClose={onClose} closeOnBackdrop className={styles.dialog}>
     <div className={styles.content} style={position}>

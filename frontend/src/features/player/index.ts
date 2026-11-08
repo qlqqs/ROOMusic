@@ -10,3 +10,4 @@ export { AlbumPlaybackActions } from "./components/album-playback-actions";
 export { PlayerBar } from "./components/player-bar";
 export { FullscreenPlayer } from "./components/fullscreen-player";
 export { PlayerAnnouncement } from "./components/player-feedback";
+export { PlaybackSettingsForm } from "./components/playback-settings-form";

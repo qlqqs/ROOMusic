@@ -9,10 +9,11 @@ import { fullscreenOrigin, useFullscreenPlayer } from "../hooks/use-fullscreen-p
 import { usePlayerSelector } from "../player-provider";
 import { LyricsPanel } from "./lyrics-panel";
 import { PlayerArtwork } from "./player-artwork";
-import { ModeControl, SeekControl, TransportControls, VolumeControl } from "./player-controls";
+import { ModeControl, TransportControls, VolumeControl } from "./player-controls";
 import { PlayerFaultInline } from "./player-feedback";
 import { QueueButton } from "./queue-drawer";
 import { SignalPathButton } from "./signal-path";
+import { WaveformSeek } from "./waveform-seek";
 import styles from "./fullscreen-player.module.css";
 
 type FullscreenPlayerProps = {
@@ -89,7 +90,7 @@ export function FullscreenPlayer({ renderCurrentTrackActions, renderQueueActions
           <div className={styles.dock}>
             <div className={styles.signal}><SignalPathButton /></div>
             <div className={styles.transport}><TransportControls size="large" /></div>
-            <div className={styles.seek}><SeekControl layout="ends" /></div>
+            <div className={styles.seek}><WaveformSeek layout="ends" /></div>
             <div className={styles.options}><ModeControl /><QueueButton renderQueueActions={renderQueueActions} /><div className={styles.volume}><VolumeControl /></div></div>
           </div>
         </div>

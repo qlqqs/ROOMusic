@@ -15,6 +15,7 @@ dialog.dialog::backdrop { background: transparent; }
   --color-pressed: rgb(255 255 255 / 14%);
   --color-selected: color-mix(in srgb, var(--color-accent) 14%, transparent);
   --focus-ring: 2px solid var(--color-accent-300);
+  --wave-height: 40px;
   position: relative;
   height: 100%;
   overflow: hidden;
@@ -46,6 +47,7 @@ dialog.dialog::backdrop { background: transparent; }
 .signal { grid-area: signal; }
 .transport { grid-area: transport; }
 .seek { grid-area: seek; min-width: 0; }
+.seek > div > div { --wave-rest: rgb(255 255 255 / 28%); }
 .options { grid-area: options; display: flex; align-items: center; gap: var(--space-1); }
 
 /* 黑胶：盘面纹路、中心封面；唱臂绕右上方的支点转动。 */

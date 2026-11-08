@@ -5,10 +5,12 @@ import { useSessionController, useViewerScope } from "../auth";
 import { artworkPath, useReleaseLoader } from "../catalog";
 import { createViewerPlayReporter } from "../listening";
 import { fetchTrackPlayback } from "./api/endpoints";
+import type { AudioContextLike } from "./engine/audio-graph";
 import type { CapabilityTable } from "./engine/capability";
 import { browserMediaSession } from "./engine/media-session";
 import { PlayerEngine, type PlayerProgress, type PlayerSnapshot } from "./engine/player-engine";
 import type { StorageLike } from "./engine/persistence";
+import { trackAnalysisQuery } from "./hooks/use-track-analysis";
 import { playerKeys } from "./query-keys";
 
 const PlayerContext = createContext<PlayerEngine | null>(null);
@@ -21,6 +23,10 @@ function browserStorage(kind: "sessionStorage" | "localStorage"): StorageLike | 
     return null;
   }
 }
+
+/** 浏览器的 AudioContext；没有 Web Audio 的环境（jsdom、很旧的浏览器）是 null，引擎不接入。 */
+const browserAudioContext: (() => AudioContextLike) | null =
+  typeof AudioContext === "undefined" ? null : () => new AudioContext({ latencyHint: "playback" }) as unknown as AudioContextLike;
 
 /** 放在按会话代次挂载的已登录子树内。普通卸载保留刷新恢复，会话结束同步销毁用户范围状态。 */
 export function PlayerProvider({ userId, children, engine: suppliedEngine }: { userId: string; children: ReactNode; engine?: PlayerEngine }) {
@@ -47,6 +53,10 @@ export function PlayerProvider({ userId, children, engine: suppliedEngine }: { u
       random: Math.random,
       now: Date.now,
       playRecorder: { record: reporter.report, discard: reporter.dispose },
+      // 与波形组件共用分析查询的缓存；读取失败按没有分析结果处理。
+      loadAnalysis: (trackId) => queryClient.fetchQuery(trackAnalysisQuery(generation, trackId)).catch(() => null),
+      createAudio: () => new Audio(),
+      createAudioContext: browserAudioContext,
     });
   }, [suppliedEngine, userId, loadRelease, queryClient, generation]);
   useEffect(() => {

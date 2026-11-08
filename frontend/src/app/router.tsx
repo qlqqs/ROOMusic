@@ -8,6 +8,7 @@ import { parseArtistDetailSearch, parseArtistsSearch, type ArtistDetailSearch, t
 import { parsePageParam } from "../shared/lib/pagination";
 import { AuthenticatedLayout } from "./shell/authenticated-layout";
 import { AccountPage } from "./routes/account-page";
+import { PlaybackSettingsPage } from "./routes/playback-settings-page";
 import { AdminGate } from "./routes/admin-gate";
 import { AlbumDetailPage } from "./routes/album-detail-page";
 import { AlbumsPage } from "./routes/albums-page";
@@ -326,6 +327,9 @@ const settingsIndexRoute = createRoute({
 
 const accountRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/account", component: AccountPage });
 
+// 播放设置（音量均衡、交叉渐变）：所有登录用户都能用，存在这台设备上。
+const playbackSettingsRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/playback", component: PlaybackSettingsPage });
+
 function LibraryRoute() {
   const { scan_page: scanPage } = libraryRoute.useSearch();
   return (
@@ -416,7 +420,7 @@ const routeTree = rootRoute.addChildren([
     issuesRoute,
     claimsRoute,
     artistCandidatesRoute,
-    settingsRoute.addChildren([settingsIndexRoute, accountRoute, libraryRoute, scanDetailRoute, membersRoute, operationsRoute, backupsRoute]),
+    settingsRoute.addChildren([settingsIndexRoute, accountRoute, playbackSettingsRoute, libraryRoute, scanDetailRoute, membersRoute, operationsRoute, backupsRoute]),
     notFoundRoute,
   ]),
 ]);
