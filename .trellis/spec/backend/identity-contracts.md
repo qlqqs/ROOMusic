@@ -12,7 +12,8 @@
 - 查看者：初始化管理员（`POST /setup/admin`，201）、登录（`POST /auth/login`）与当前用户（`GET /auth/me`）三处响应同形，
   `{ "id": UUID, "username": string, "role": "admin" | "user" }`。前端用 `id` 与 `role` 判断是否同一查看者、成员表里哪一行是“你”，
   用户名只用于显示。
-- 自助改密码（2026-11-05）：`POST /auth/password`，请求 `{ "current_password": string, "new_password": string }`，
+- 自助改密码：`POST /auth/password`，请求 `{ "current_password"?: string, "new_password": string }`，
+  管理员的 `current_password` 可省略，若提供则忽略；成员仍需提供，省略按空串处理并得到 `403 current_password_incorrect`。
   响应 `200 { "password_changed": true }`，不重新设置 Cookie。“再输入一次”只在前端比较。
 - 管理员重置密码（2026-11-05）：`POST /users/{id}/password`，请求 `{ "password": string }`，响应 `200 { "password_reset": true }`。
   用独立端点，不扩展 `PATCH /users/{id}`（那里只接受 `disabled`）。
@@ -87,7 +88,9 @@ func (t *LoginThrottle) Begin(username, source string, fingerprint [8]byte) (*At
 
 ### 改密码与重置密码（2026-11-05）
 
-- 业务都在 `identity/passwords.go`：`ChangeOwnPassword`、`ResetPassword`、`ResetPasswordByUsername` 共用 `setPasswordTx`；
+- 业务都在 `identity/passwords.go`：`ChangeOwnPassword`、`ChangeAdminOwnPassword`、`ResetPassword`、`ResetPasswordByUsername` 共用 `setPasswordTx`；
+  `ChangeOwnPassword` 与 `ChangeAdminOwnPassword` 共用锁定当前会话行的 `lockOwnSessionTx`。
+  管理员自助改密不读取旧哈希、不调用 `LoginThrottle`、不核对当前密码；仍保留当前会话并撤销本人其他会话。
   handler（`identity/httpapi/passwords.go`）里没有 SQL。新密码沿用 `ValidPassword`，不合规时不调用 bcrypt、不访问数据库；
   bcrypt 都在事务外完成，不在持有行锁时做慢计算。
 - 自助改密码：当前会话保留（令牌与到期时间不变），本人其他会话全部撤销。事务内先锁用户行、再锁当前会话行，
@@ -95,11 +98,11 @@ func (t *LoginThrottle) Begin(username, source string, fingerprint [8]byte) (*At
 - `ChangeOwnPassword` 增加 db 后的 `throttle *LoginThrottle` 参数：校验新密码、读哈希后，用 `BeginPassword(userID, fingerprint)`
   先计数再核对。键为独立命名空间的 `"password:"+用户 ID`，不分来源、无来源额度，其余规则同登录。
   第 5 次错仍 403，随后 429 `too_many_attempts` + Retry-After，文案“当前密码输错次数太多，请过几分钟再试”。
-  核对正确后退出用例时清除（含后续数据库失败），原事务复核不变。
+  核对正确后退出用例时清除（含后续数据库失败），原事务复核不变。此当前密码核对限速只用于成员。
 - 当前密码错误返回 `403 current_password_incorrect`，不用 401：前端请求层把 `401 unauthorized` 当作会话结束，
   而输错当前密码不代表掉线（见[会话生命周期规范](../frontend/session-lifecycle.md)）。
 - 管理员重置：撤销该成员的全部会话；停用的成员也可以重置，`disabled_at` 不动；不锁管理员集合（不改变启用管理员数量）。
-  对自己调用返回 `403 self_password_reset`：改自己的密码必须验证当前密码，被盗用的管理员会话不能把管理员锁在门外。
+  对自己调用返回 `403 self_password_reset`：管理员改自己的密码走 `/auth/password`（不需要当前密码），重置端点只管其他成员；被锁在门外时用 `roomusic reset-password` 恢复。
   比较用 `strings.EqualFold`，路由里的 UUID 可能是大写。
 - 两个接口同成员写操作一样不带 `Idempotency-Key`、不写操作记录（R4）。前端对结果不明的改密码与重置不自动重试。
 
@@ -127,7 +130,7 @@ func (t *LoginThrottle) Begin(username, source string, fingerprint [8]byte) (*At
 | 清单模式下来源解析失败或不在清单 | `403 origin_forbidden`，不写库、不写 Cookie |
 | 主机一致模式下来源解析失败、Host 缺失或不一致 | `403 origin_forbidden`，不写库、不写 Cookie |
 | 写请求缺少来源（三种模式） | `403 origin_required`，不写库、不写 Cookie |
-| 登录/当前密码核对限速 | `429 too_many_attempts` + `Retry-After`，不核对、不计数 |
+| 登录/当前密码核对限速（当前密码核对仅成员） | `429 too_many_attempts` + `Retry-After`，不核对、不计数 |
 | 登录查用户错误（非 `sql.ErrNoRows`） | `503 database_unavailable`，不计数 |
 | 登录不存在/停用/密码错误 | `401 invalid_credentials`，同提示、计数及 bcrypt 成本 |
 | 用户目标不存在 | `404 not_found`，事务回滚 |
@@ -142,7 +145,8 @@ func (t *LoginThrottle) Begin(username, source string, fingerprint [8]byte) (*At
 | 撤销未知用户的会话 | `404 not_found`，不是 200 |
 | `GET /users` 读某一行或遍历失败 | `503 database_unavailable`，不返回少了人的列表 |
 | 改密码或重置时新密码不合规 | `400 invalid_input`“新密码需要 12 到 72 位英文字母、数字或符号”；先于核对当前密码，不调用 bcrypt，不写库 |
-| 自助改密码：当前密码错误，或并发中已被别处改过 | `403 current_password_incorrect`，不写库，会话全部保留 |
+| 自助改密码（成员）：当前密码错误，或并发中已被别处改过 | `403 current_password_incorrect`，不写库，会话全部保留 |
+| 自助改密码（管理员） | 不核对当前密码，带或不带 `current_password` 都按新密码规则处理 |
 | 自助改密码：没有会话、会话失效、用户停用（含事务进行中被撤销或停用） | `401 unauthorized`，回滚 |
 | 重置：普通成员 / 目标是自己 | `403 forbidden` / `403 self_password_reset`，不写库 |
 | 重置：路由 ID 不是 UUID / 用户不存在 | `400 invalid_id`，不访问数据库 / `404 not_found`，回滚 |
@@ -182,7 +186,7 @@ func (t *LoginThrottle) Begin(username, source string, fingerprint [8]byte) (*At
   `23505`，必须得到 503 且没有部分写入）；密码 11/12/72/73 位 ASCII 的边界；非 UUID 与未知用户 ID；`listUsers` 遇到读不了的行
   返回 503；401 文案与角色无关；非法 JSON 只写一个信封。`identity/password_test.go` 另测中文、全角、emoji 与控制字符（含制表符、换行）拒绝，
   空格与各种符号接受，以及 72 位 ASCII 与 bcrypt 的上限一致。
-- 改密码与重置（2026-11-05，同一文件）：当前会话保留、其他会话撤销、旧密码失效；当前密码错误是 403 且不改任何东西；
+- 改密码与重置（2026-11-05，同一文件）：成员当前会话保留、其他会话撤销、旧密码失效；当前密码错误是 403 且不改任何东西；管理员不带 / 带错 `current_password` 都返回 200，当前会话保留、其他会话撤销；
   11/73 位与中文新密码不写库；原子性与并发只成功一次；重置撤销全部会话、普通成员 403、非 UUID 400、未知用户 404、对自己 403、
   停用成员重置后仍停用。接口样本 `auth/password-changed`、`users/password-reset` 与三个错误样本在 `api_samples_integration_test.go`。
 - 命令行（`cmd/roomusic/reset_password_test.go`）：依赖注入覆盖退出码 0/1/2/130 与固定文案；隔离库上重置后旧会话失效、新密码能登录；

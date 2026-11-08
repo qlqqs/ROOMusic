@@ -493,6 +493,23 @@ func TestPostgreSQLChangeOwnPasswordKeepsCurrentSessionAndRevokesOthers(t *testi
 	}
 }
 
+func TestPostgreSQLAdminChangeOwnPasswordIgnoresCurrentPassword(t *testing.T) {
+	e := newPasswordEnvironment(t)
+	a := e.application
+	second := loginPasswordUser(t, a, "curator", identityTestPassword, "admin")
+
+	withoutCurrent := a.request(t, http.MethodPost, "/api/v1/auth/password", map[string]string{"new_password": "admin-new-password-1"}, &e.admin, nil)
+	requirePasswordSuccess(t, withoutCurrent, "password_changed")
+	requirePasswordSession(t, a, &e.admin, 200)
+	requirePasswordSession(t, a, &second, 401)
+
+	withWrongCurrent := a.request(t, http.MethodPost, "/api/v1/auth/password", ownPasswordBody("wrong-current-password", "admin-new-password-2"), &e.admin, nil)
+	requirePasswordSuccess(t, withWrongCurrent, "password_changed")
+	requirePasswordSession(t, a, &e.admin, 200)
+	requireAPIError(t, a.request(t, http.MethodPost, "/api/v1/auth/login", accountBody("curator", identityTestPassword), nil, nil), 401, "invalid_credentials")
+	loginPasswordUser(t, a, "curator", "admin-new-password-2", "admin")
+}
+
 func TestPostgreSQLChangeOwnPasswordRejectsWrongCurrentPassword(t *testing.T) {
 	e := newPasswordEnvironment(t)
 	before := passwordDatabaseState(t, e.application)

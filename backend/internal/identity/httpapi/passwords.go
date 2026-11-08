@@ -26,7 +26,13 @@ func (handlers *Handlers) changePassword(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	cookie, _ := r.Cookie(identity.SessionCookieName)
-	if err := identity.ChangeOwnPassword(r.Context(), handlers.database, handlers.throttle, user.ID, identity.HashSessionToken(cookie.Value), input.CurrentPassword, input.NewPassword); err != nil {
+	sessionTokenHash := identity.HashSessionToken(cookie.Value)
+	if user.Role == "admin" {
+		err = identity.ChangeAdminOwnPassword(r.Context(), handlers.database, user.ID, sessionTokenHash, input.NewPassword)
+	} else {
+		err = identity.ChangeOwnPassword(r.Context(), handlers.database, handlers.throttle, user.ID, sessionTokenHash, input.CurrentPassword, input.NewPassword)
+	}
+	if err != nil {
 		handlers.writePasswordError(w, r, err, "无法修改密码")
 		return
 	}

@@ -251,7 +251,9 @@ func TestPostgreSQLLoginThrottleResetPasswordImmediatelyUnlocks(t *testing.T) {
 
 func TestPostgreSQLPasswordThrottleAcrossSourcesKeepsSession(t *testing.T) {
 	a, clock, _ := newLoginThrottleApplication(t)
-	user := loginPasswordUser(t, a, "curator", identityTestPassword, "admin")
+	admin := loginPasswordUser(t, a, "curator", identityTestPassword, "admin")
+	requireIdentityBody(t, a.request(t, http.MethodPost, "/api/v1/users", accountBody("listener", identityTestPassword), &admin, nil), 201, "listener", "user")
+	user := loginPasswordUser(t, a, "listener", identityTestPassword, "user")
 	before := passwordDatabaseState(t, a)
 	for i := 0; i < 5; i++ {
 		requireAPIError(t, throttleRequest(t, a, "/api/v1/auth/password", ownPasswordBody("wrong-password", identityTestPassword), &user, "192.0.2.10:1", nil), 403, "current_password_incorrect")
@@ -264,7 +266,7 @@ func TestPostgreSQLPasswordThrottleAcrossSourcesKeepsSession(t *testing.T) {
 	requirePasswordStateUnchanged(t, a, before)
 	requirePasswordSession(t, a, &user, 200)
 	// 登录与改密码的命名空间独立。
-	requireIdentityBody(t, throttleLogin(t, a, "curator", identityTestPassword, "192.0.2.10:1"), 200, "curator", "admin")
+	requireIdentityBody(t, throttleLogin(t, a, "listener", identityTestPassword, "192.0.2.10:1"), 200, "listener", "user")
 	clock.advance(time.Minute)
 	requirePasswordSuccess(t, throttleRequest(t, a, "/api/v1/auth/password", ownPasswordBody(identityTestPassword, identityTestPassword), &user, "192.0.2.11:1", nil), "password_changed")
 	requirePasswordSession(t, a, &user, 200)
@@ -272,7 +274,9 @@ func TestPostgreSQLPasswordThrottleAcrossSourcesKeepsSession(t *testing.T) {
 
 func TestPostgreSQLPasswordThrottleSuccessClearsFailures(t *testing.T) {
 	a, _, _ := newLoginThrottleApplication(t)
-	user := loginPasswordUser(t, a, "curator", identityTestPassword, "admin")
+	admin := loginPasswordUser(t, a, "curator", identityTestPassword, "admin")
+	requireIdentityBody(t, a.request(t, http.MethodPost, "/api/v1/users", accountBody("listener", identityTestPassword), &admin, nil), 201, "listener", "user")
+	user := loginPasswordUser(t, a, "listener", identityTestPassword, "user")
 	for cycle := 0; cycle < 2; cycle++ {
 		for i := 0; i < 4; i++ {
 			requireAPIError(t, a.request(t, http.MethodPost, "/api/v1/auth/password", ownPasswordBody("wrong-password", identityTestPassword), &user, nil), 403, "current_password_incorrect")

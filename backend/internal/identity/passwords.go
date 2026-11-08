@@ -66,13 +66,8 @@ func ChangeOwnPassword(ctx context.Context, db *sql.DB, throttle *LoginThrottle,
 	if err != nil {
 		return fmt.Errorf("lock password user: %w", err)
 	}
-	var active int
-	err = tx.QueryRowContext(ctx, `SELECT 1 FROM sessions WHERE user_id=$1::uuid AND token_hash=$2 AND revoked_at IS NULL AND expires_at>NOW() FOR UPDATE`, userID, sessionTokenHash).Scan(&active)
-	if errors.Is(err, sql.ErrNoRows) {
-		return ErrSessionEnded
-	}
-	if err != nil {
-		return fmt.Errorf("lock password session: %w", err)
+	if err := lockOwnSessionTx(ctx, tx, userID, sessionTokenHash); err != nil {
+		return err
 	}
 	if lockedHash != previousHash {
 		return ErrWrongCurrentPassword
@@ -82,6 +77,52 @@ func ChangeOwnPassword(ctx context.Context, db *sql.DB, throttle *LoginThrottle,
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit password change: %w", err)
+	}
+	return nil
+}
+
+// ChangeAdminOwnPassword 修改管理员自己的密码，不核对旧密码并保留当前会话。
+func ChangeAdminOwnPassword(ctx context.Context, db *sql.DB, userID string, sessionTokenHash []byte, next string) error {
+	if !ValidPassword(next) {
+		return ErrInvalidPassword
+	}
+	hash, err := HashPassword(next)
+	if err != nil {
+		return &PasswordHashError{Err: err}
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin password change: %w", err)
+	}
+	defer tx.Rollback()
+	var active int
+	err = tx.QueryRowContext(ctx, `SELECT 1 FROM users WHERE id=$1::uuid AND disabled_at IS NULL FOR UPDATE`, userID).Scan(&active)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrSessionEnded
+	}
+	if err != nil {
+		return fmt.Errorf("lock password user: %w", err)
+	}
+	if err := lockOwnSessionTx(ctx, tx, userID, sessionTokenHash); err != nil {
+		return err
+	}
+	if err := setPasswordTx(ctx, tx, userID, hash, sessionTokenHash); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit password change: %w", err)
+	}
+	return nil
+}
+
+func lockOwnSessionTx(ctx context.Context, tx *sql.Tx, userID string, sessionTokenHash []byte) error {
+	var active int
+	err := tx.QueryRowContext(ctx, `SELECT 1 FROM sessions WHERE user_id=$1::uuid AND token_hash=$2 AND revoked_at IS NULL AND expires_at>NOW() FOR UPDATE`, userID, sessionTokenHash).Scan(&active)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrSessionEnded
+	}
+	if err != nil {
+		return fmt.Errorf("lock password session: %w", err)
 	}
 	return nil
 }
