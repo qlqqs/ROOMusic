@@ -3,10 +3,8 @@ package parser
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"strings"
 	"unicode/utf16"
@@ -26,7 +24,6 @@ func parseMP3(path string) (AudioObservation, error) {
 	if _, err = io.ReadFull(file, header); err != nil {
 		return observation, fmt.Errorf("invalid MP3 stream")
 	}
-	audioStart := int64(0)
 	if string(header[:3]) == "ID3" {
 		size := 10 + int(header[6]&0x7f)<<21 + int(header[7]&0x7f)<<14 + int(header[8]&0x7f)<<7 + int(header[9]&0x7f)
 		if size > 16<<20 {
@@ -39,15 +36,11 @@ func parseMP3(path string) (AudioObservation, error) {
 		if err := parseID3Frames(data, &observation, header[3], header[5]); err != nil {
 			return observation, err
 		}
-		audioStart = int64(size)
-		if header[5]&0x10 != 0 {
-			audioStart += 10
-		}
 	} else if header[0] != 0xff || header[1]&0xe0 != 0xe0 {
 		return observation, fmt.Errorf("invalid MP3 stream")
 	}
 	if info, statErr := file.Stat(); statErr == nil {
-		applyMP3AudioFacts(file, info.Size(), audioStart, &observation)
+		applyMP3StreamFacts(file, info.Size(), &observation)
 	}
 	return applyFilenameFallback(path, observation), nil
 }
@@ -225,40 +218,6 @@ var (
 	mp3MPEG2Layer3Bitrates = [16]int{0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0}
 	mp3MPEG1SampleRates    = [4]int{44100, 48000, 32000, 0}
 )
-
-// applyMP3AudioFacts 只在 ID3 后的有界窗口中寻找 MPEG Layer III 首帧，
-// 不把整首音频读入内存。找不到有效帧时保留已解析标签，不伪造音频事实。
-func applyMP3AudioFacts(reader io.ReaderAt, fileSize, audioStart int64, observation *AudioObservation) {
-	if reader == nil || observation == nil || fileSize <= audioStart || audioStart < 0 {
-		return
-	}
-	searchSize := fileSize - audioStart
-	if searchSize > maxMP3FrameSearchBytes {
-		searchSize = maxMP3FrameSearchBytes
-	}
-	data := make([]byte, int(searchSize))
-	read, err := reader.ReadAt(data, audioStart)
-	if err != nil && !errors.Is(err, io.EOF) {
-		return
-	}
-	data = data[:read]
-	for offset := 0; offset+4 <= len(data); offset++ {
-		bitrate, sampleRate, channels, valid := decodeMP3FrameHeader(data[offset : offset+4])
-		if !valid {
-			continue
-		}
-		observation.Bitrate = bitrate
-		observation.SampleRate = sampleRate
-		observation.Channels = channels
-		if fileSize <= math.MaxInt64/8 {
-			seconds := fileSize * 8 / int64(bitrate*1000)
-			if seconds > 0 {
-				observation.DurationSeconds = float64(seconds)
-			}
-		}
-		return
-	}
-}
 
 func decodeMP3FrameHeader(header []byte) (bitrate, sampleRate, channels int, valid bool) {
 	if len(header) < 4 || header[0] != 0xff || header[1]&0xe0 != 0xe0 {

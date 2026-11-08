@@ -24,7 +24,7 @@ func normalizeCueReference(reference string) string {
 	return filepath.ToSlash(filepath.Clean(filepath.FromSlash(reference)))
 }
 
-var cueAudioExtensions = []string{".flac", ".mp3", ".ogg", ".opus", ".wav", ".m4a"}
+var cueAudioExtensions = []string{".flac", ".mp3", ".ogg", ".opus", ".wav", ".m4a", ".ape", ".wv", ".aif", ".aiff"}
 
 func cueNameEqual(a, b string) bool {
 	return strings.EqualFold(norm.NFC.String(a), norm.NFC.String(b))

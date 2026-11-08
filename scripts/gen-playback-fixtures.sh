@@ -4,11 +4,11 @@
 #   cd backend && go test ./internal/library/parser/ -run Fixture
 # 核对素材与直出格式表没有脱节。
 #
-# 素材由按摘要固定的镜像里的 FFmpeg 生成：容器没有网络，只挂载输出目录（绝不挂载 music/）。镜像引用只在
+# 直出素材由按摘要固定的镜像里的 FFmpeg 生成：容器没有网络，只挂载输出目录（绝不挂载 music/）。镜像引用只在
 # scripts/ffmpeg-pinned.sh 里定义一处，测试与 CI 用它取出同一个构建；运行时的 ffmpeg 由部署者安装，不由本脚本提供。
 # 输出一侧的 -fflags +bitexact 去掉编码器版本、时间戳与随机流序号，同一镜像下重复运行得到相同字节。
 #
-# 除 backend/testdata/playback 的素材外，还会生成派生核心的启动自检素材 backend/internal/playback/derivation/selftest.m4a（go:embed）。
+# 除直出与启动自检素材外，还生成派生测试的 APE：固定摘要容器内运行 Monkey's Audio；只更新 APE 可传 --ape-only。
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -18,6 +18,45 @@ SELFTEST_DIR="${ROOMUSIC_SELFTEST_FIXTURE_DIR:-$ROOT_DIR/backend/internal/playba
 FFMPEG_IMAGE="$("$ROOT_DIR/scripts/ffmpeg-pinned.sh" --image)"
 MAX_TOTAL_BYTES=1000000
 MAX_SELFTEST_BYTES=32768
+APE_DIR="${ROOMUSIC_APE_FIXTURE_DIR:-$ROOT_DIR/backend/internal/playback/derivation/testdata}"
+MAX_APE_BYTES=16384
+# Debian bookworm 容器与 Monkey's Audio 10.16 包固定；Alpine 仓库没有 monkeys-audio 包。
+MONKEYS_AUDIO_IMAGE="python@sha256:6a0e06f5ba0b373d051aabd3fffb9b873f27f9a2a3a14bcbe37dee6f0e3bbc70"
+
+# 下载遵循当前 shell 的 HTTP(S)_PROXY，不打印代理配置；容器不访问软件仓库、不创建网络。
+generate_ape_fixture() (
+  mkdir -p "$APE_DIR"
+  local work ffmpeg size
+  work="$(mktemp -d "$APE_DIR/.ape-fixture.XXXXXXXX")"
+  trap 'rm -rf -- "$work"' EXIT
+  local package_base="https://www.deb-multimedia.org/pool/main/m/monkeys-audio-dmo"
+  curl --fail --silent --show-error --location "$package_base/libmac10_10.16-dmo1_amd64.deb" -o "$work/libmac.deb"
+  curl --fail --silent --show-error --location "$package_base/monkeys-audio_10.16-dmo1_amd64.deb" -o "$work/monkeys-audio.deb"
+  (cd "$work" && printf '%s  %s\n' \
+    7712b9cddd8501a71ecb9756509ee80b748daea19fcf32398cee6d909333f4cc libmac.deb \
+    9386860f52a122c210c662008af0c786800adefd39147c6212f4ec5dca33f86a monkeys-audio.deb | sha256sum --check)
+  ffmpeg="$("$ROOT_DIR/scripts/ffmpeg-pinned.sh")"
+  "$ffmpeg" -hide_banner -loglevel error -f lavfi \
+    -i sine=frequency=440:sample_rate=44100:duration=0.25 -ac 2 \
+    -fflags +bitexact -flags:a +bitexact -c:a pcm_s16le -map_metadata -1 "$work/input.wav"
+  # 默认 bridge；不传 --network，不挂载真实音乐目录。只在容器中安装固定包。
+  docker run --rm -v "$work:/work" "$MONKEYS_AUDIO_IMAGE" sh -ec \
+    'dpkg -i /work/libmac.deb /work/monkeys-audio.deb >/dev/null
+     mac /work/input.wav /work/output.ape -c2000
+     chown "$1:$2" /work/output.ape' sh "$(id -u)" "$(id -g)"
+  size="$(stat -c %s "$work/output.ape")"
+  if [[ "$size" -gt "$MAX_APE_BYTES" ]]; then
+    echo "APE 素材 ${size} 字节，超过 ${MAX_APE_BYTES}；请缩短时长后重新生成" >&2
+    exit 1
+  fi
+  cp "$work/output.ape" "$APE_DIR/ape-16-44100.ape"
+  printf '%8d  %s\n' "$size" "ape-16-44100.ape（Monkey's Audio 真实派生素材）"
+)
+
+if [[ "${1:-}" == --ape-only ]]; then
+  generate_ape_fixture
+  exit 0
+fi
 
 mkdir -p "$OUT_DIR" "$SELFTEST_DIR"
 
@@ -87,3 +126,5 @@ if [ "$total" -gt "$MAX_TOTAL_BYTES" ]; then
   echo "素材合计 ${total} 字节，超过 ${MAX_TOTAL_BYTES}；请缩短时长后重新生成" >&2
   exit 1
 fi
+
+generate_ape_fixture

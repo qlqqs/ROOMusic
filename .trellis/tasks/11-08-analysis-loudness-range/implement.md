@@ -12,8 +12,8 @@
 
 1. **MP3 时长** 新文件 `B/library/parser/mp3_vbr.go`：`applyMP3StreamFacts`（design 3.1：`mp3AudioRange` 取音频区间、第一帧、Xing/Info 与 VBRI、每帧样本数、CBR 浮点估算）。
    `B/library/parser/mp3.go` 只改 `parseMP3` 里的一处调用，并删除不再使用的 `applyMP3AudioFacts`（连续一段，不碰 ID3 帧解析）。
-2. **迁移** `backend/migrations/0034_track_analysis_loudness_range.sql` 与 `.down.sql`（design 3.3）；编号是 M 线基线上的下一个空号，合入时由主会话重新编号。
-   若 `B/platform/postgres/migrations_rollback_integration_test.go` 逐个列出迁移，把 0034 加进去。
+2. **迁移** `backend/migrations/0036_track_analysis_loudness_range.sql` 与 `.down.sql`（design 3.3）；M 线原编号为 0034，合入 S1 后重新编号为 0036。
+   若 `B/platform/postgres/migrations_rollback_integration_test.go` 逐个列出迁移，把 0036 加进去。
 3. **分析器** `B/playback/analysis/analysis.go`：滤镜 `peak=sample+true`；两个新正则；`Result` 两个新字段；LRA 在积分响度为 NULL 时置 NULL；自检要求 LRA 可解析；`Version = 2`。
 4. **存取** `B/catalog/track_analysis.go`：`TrackAnalysisResult`/`TrackAnalysisData` 加 `LoudnessRangeLU`、`SamplePeakDBFS`（JSON `loudness_range_lu`、`sample_peak_dbfs`）；
    `SaveTrackAnalysis` 写两列；`loadTrackAnalysis` 与 `albumAnalysis` 改用“可用结果”（快照相同的 `done`，任意版本；旧版本 `failed` 视为 `pending`）；
@@ -60,7 +60,7 @@ $F -hide_banner -loglevel error "${SRC[@]}" -write_xing 0 vbr-noxing.mp3
 | `B/app` `TestPostgreSQLAnalysis…` | 旧版本 `done` 行返回 `done` 且新字段为 null；旧版本 `failed` 返回 `pending`；候选先排没有结果的曲目；时长视图四种情况（相差在阈值内用扫描时长、超过阈值用解码时长、扫描时长为空用解码时长、快照不符用扫描时长）；`LoadTrackDuration` 返回校正值 |
 | `B/app` `TestPostgreSQLAnalysis…`（真实 ffmpeg） | `vbr-noxing.mp3` 扫描入库、分析完成后，发行详情接口的 `duration_seconds` 是解码时长（约 10 秒） |
 | `B/app` `TestPostgreSQLAPIResponseSamples` | 分析样本 |
-| 迁移 | 现有上下行回滚用例覆盖 0034 |
+| 迁移 | 现有上下行回滚用例覆盖 0036 |
 | 前端 Vitest | 信号路径响度一行（有值、部分缺失、没有结果时不显示）；分析 DTO 解码 |
 
 不做浏览器验证：播放器没有改动，响度一行由组件测试覆盖。
@@ -91,7 +91,7 @@ cd ../frontend && npx vitest run src/features/player/components/signal-path src/
 | `B/library/parser/fingerprint.go` | 不改，只复用 `mp3AudioRange` | ⑩（同线，已在前） |
 | `B/catalog/read.go` | 曲目时长改读视图 | T ⑧（作品与乐章可能加到发行详情）、O ②（落选 Release 处理可能动读取） |
 | `B/catalog/track_summary.go`、`personal_reads.go`、`comparison.go`、`track_collection_stats.go`、`track_source.go` | 时长来源 | 冲突可能性低 |
-| `backend/migrations/` | 0034 | 各线都会加迁移，合入时由主会话按顺序重新编号 |
+| `backend/migrations/` | 0036 | 合入 S1 后由 0034 重编号为 0036 |
 | `F/features/player/components/signal-path.tsx` | 响度一行 | ⑩（同线，已在前） |
 | `.trellis/spec/backend/library-scan-contracts.md` | MP3 时长规则 | ① ② ③ ④ ⑤ ⑫ ⑩ 都会改 |
 | `.trellis/spec/backend/catalog-rest-contracts.md` | 时长说明一句 | T 线可能改发行详情合同 |
@@ -101,7 +101,7 @@ cd ../frontend && npx vitest run src/features/player/components/signal-path src/
 - 风险最高：`mp3_vbr.go`（Xing 偏移与第一帧搜索）、`track_analysis.go`（可用结果与当前版本的口径）。
 - 回滚点 1：只回退 MP3 时长（恢复 `mp3.go` 调用与旧函数、删新文件）；若 ④ 已在 main，MP3 版本再加 1。
 - 回滚点 2：只回退前端响度一行。
-- 回滚点 3：回退分析部分：先跑 0034 down，再回退代码。
+- 回滚点 3：回退分析部分：先跑 0036 down，再回退代码。
 
 ## 合入前核对
 

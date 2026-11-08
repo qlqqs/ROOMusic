@@ -1,6 +1,6 @@
 {"file": ".trellis/spec/backend/audio-analysis-contracts.md", "reason": "核对命令只改 peak 参数、版本 2、可用结果与当前版本结果的口径、候选排序、接口字段已写进合同"}
 {"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "核对 MP3 时长规则已同步进合同，mp3.go 只改一处调用、指纹未动"}
-{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "核对 0034 上下行可逆、只加可空列与视图"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "核对 0036 上下行可逆、只加可空列与视图"}
 {"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "核对读取接口 JSON 形状不变、时长取自视图"}
 {"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "核对测试只覆盖改动行为、没有多余兜底"}
 {"file": ".trellis/spec/frontend/player-design-guidelines.md", "reason": "核对响度一行没有解释文字、没有结果时不显示"}

@@ -553,6 +553,7 @@ func recordAudioAnalysisSamples(t *testing.T, application *integrationTestApplic
 			t.Fatalf("analyze sample track: %v", analyzeErr)
 		}
 		saved := catalog.TrackAnalysisResult{Status: "done", IntegratedLUFS: result.IntegratedLUFS, TruePeakDBTP: result.TruePeakDBTP,
+			LoudnessRangeLU: result.LoudnessRangeLU, SamplePeakDBFS: result.SamplePeakDBFS,
 			DurationMS: result.DurationMS, LeadingSilenceMS: result.LeadingSilenceMS, TrailingSilenceMS: result.TrailingSilenceMS, Waveform: result.Waveform}
 		if err := store.SaveTrackAnalysis(context.Background(), candidate, analysis.Version, saved); err != nil {
 			t.Fatalf("save done analysis sample: %v", err)

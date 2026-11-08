@@ -34,8 +34,9 @@ type PersonalReleaseGroupSummary struct {
 }
 
 const loadTrackFactsSQL = `SELECT t.id::text, m.release_id::text, r.group_id::text,
- t.source_status='present', t.duration_seconds
+ t.source_status='present', dd.duration_seconds
  FROM tracks t JOIN media m ON m.id=t.medium_id JOIN releases r ON r.id=m.release_id
+ LEFT JOIN track_display_durations dd ON dd.track_id=t.id
  WHERE t.id=ANY($1::text[]::uuid[])`
 
 // LoadTrackFacts 批量读取至多 10,000 个不同有效 UUID，包含 missing；不存在者无键。

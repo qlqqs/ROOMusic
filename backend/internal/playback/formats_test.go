@@ -11,6 +11,8 @@ import (
 // stubDerivation 让格式表测试启用派生，不需要真正的转换器。
 type stubDerivation struct{}
 
+func (stubDerivation) Supports(string) bool { return true }
+
 func (stubDerivation) Key(derivation.SourceVersion) string { return "" }
 
 func (stubDerivation) Await(context.Context, derivation.Request) (derivation.Entry, error) {
@@ -39,8 +41,14 @@ func TestFormatTableContainsOnlyTheApprovedCombinations(t *testing.T) {
 		{"ogg_vorbis_comment", "vorbis", DeliveryOriginal, "audio/ogg", "vorbis"},
 		{"opus_tags", "opus", DeliveryOriginal, "audio/ogg", "opus"},
 	}
-	// 派生可用时才多出 ALAC：交付的是转换后的 FLAC，媒体类型描述浏览器拿到的表示而不是源文件。
-	derived := append(append([]combination(nil), direct...), combination{"m4a", "alac", DeliveryDerived, "audio/flac", ""})
+	// 派生可用时才追加格式：媒体类型描述转换后的 FLAC，而不是源文件。
+	derived := append(append([]combination(nil), direct...),
+		combination{"m4a", "alac", DeliveryDerived, "audio/flac", ""},
+		combination{"ape_apev2", "ape", DeliveryDerived, "audio/flac", ""},
+		combination{"wavpack_apev2", "wavpack", DeliveryDerived, "audio/flac", ""},
+		combination{"wavpack_apev2", "wavpack_hybrid", DeliveryDerived, "audio/flac", ""},
+		combination{"aiff_id3", "aiff", DeliveryDerived, "audio/flac", ""},
+	)
 	for name, testCase := range map[string]struct {
 		service *Service
 		want    []combination
@@ -76,6 +84,14 @@ func TestFindFormatRejectsEverythingOutsideTheTable(t *testing.T) {
 		// ALAC 浏览器大多不能解码：只有派生可用时才在表中。
 		{"m4a", "alac", false, true},
 		{"m4a", "aac", true, true},
+		{"ape_apev2", "ape", false, true},
+		{"wavpack_apev2", "wavpack", false, true},
+		{"wavpack_apev2", "wavpack_hybrid", false, true},
+		{"wavpack_apev2", "wavpack_float", false, false},
+		{"wavpack_apev2", "wavpack_dsd", false, false},
+		{"aiff_id3", "aiff", false, true},
+		{"aiff_id3", "aiff_float", false, false},
+		{"aiff_id3", "aifc_ulaw", false, false},
 		{"wav_info", "pcm", true, true},
 		{"cue_virtual", "flac", false, false},
 		{"cue_virtual", "", false, false},
@@ -115,5 +131,57 @@ func TestFormatsReturnsACopy(t *testing.T) {
 	second := service.Formats()
 	if len(second) != len(formatTable)+len(derivedFormatTable) || second[0].MIMEType != "audio/flac" {
 		t.Fatalf("mutating the returned slice changed the table: %+v", second[0])
+	}
+}
+
+type decoderLimitedDerivation struct {
+	stubDerivation
+	decoders map[string]bool
+}
+
+func (d decoderLimitedDerivation) Supports(decoder string) bool { return d.decoders[decoder] }
+
+func TestFormatsFilterDerivedFormatsByDecoder(t *testing.T) {
+	for _, tc := range []struct {
+		decoder string
+		want    []string
+	}{
+		{"", nil},
+		{"alac", []string{"alac"}},
+		{"ape", []string{"ape"}},
+		{"wavpack", []string{"wavpack", "wavpack_hybrid"}},
+		{"pcm_s16be", []string{"aiff"}},
+	} {
+		t.Run(tc.decoder, func(t *testing.T) {
+			service := &Service{derivation: decoderLimitedDerivation{decoders: map[string]bool{tc.decoder: true}}}
+			formats := service.Formats()
+			if len(formats) != 6+len(tc.want) {
+				t.Fatalf("Formats = %+v, want six direct and %v derived", formats, tc.want)
+			}
+			for i, format := range formats[:6] {
+				if format != formatTable[i] {
+					t.Errorf("decoder selection changed direct format %d: %+v", i, format)
+				}
+			}
+			for i, codec := range tc.want {
+				if format := formats[6+i]; format.Codec != codec || format.Delivery != DeliveryDerived || format.MIMEType != "audio/flac" || format.Codecs != "" {
+					t.Errorf("derived format %d = %+v, want %s as FLAC", i, format, codec)
+				}
+			}
+			for _, format := range derivedFormatTable {
+				_, ok := service.findFormat(format.SourceKind, format.Codec)
+				if ok != (format.decoder == tc.decoder) {
+					t.Errorf("findFormat(%s/%s) = %v", format.SourceKind, format.Codec, ok)
+				}
+			}
+			for _, unsupported := range []struct{ kind, codec string }{
+				{"wavpack_apev2", "wavpack_float"}, {"wavpack_apev2", "wavpack_dsd"},
+				{"aiff_id3", "aiff_float"}, {"aiff_id3", "aifc_ulaw"},
+			} {
+				if _, ok := service.findFormat(unsupported.kind, unsupported.codec); ok {
+					t.Errorf("unsupported source %s/%s entered the format table", unsupported.kind, unsupported.codec)
+				}
+			}
+		})
 	}
 }

@@ -100,6 +100,8 @@ func newFakeConverter() *fakeConverter {
 	return &fakeConverter{version: "fake-1", size: 100, entered: make(chan struct{}, 1000)}
 }
 
+func (f *fakeConverter) HasDecoder(string) bool { return true }
+
 func (f *fakeConverter) Version() string { return f.version }
 
 func (f *fakeConverter) Convert(ctx context.Context, job ConvertJob) error {
@@ -213,7 +215,9 @@ func (h *harness) source(n int, hooks *sourceHooks) Source {
 		hooks = &sourceHooks{}
 	}
 	return Source{
+		Input: Input{Demuxer: "mov", Decoder: "alac"},
 		Version: SourceVersion{
+			Policy:             policyALACFLAC,
 			ContentFingerprint: fmt.Sprintf("m4a-mdat-v1:%d", n), Size: 1000, ModifiedAt: testTime,
 			SourceKind: "m4a", Codec: "alac", BitDepth: 16, SampleRate: 44100, Channels: 2,
 		},

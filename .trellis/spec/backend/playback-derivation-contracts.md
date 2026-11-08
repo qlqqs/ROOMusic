@@ -1,8 +1,8 @@
-# M2b 无损派生与 ALAC 播放合同
+# 无损派生与格式扩展播放合同
 
 ## 1. 范围与触发
 
-M2b 让浏览器不能直接解码的 ALAC 曲目也能播放：服务端用 ffmpeg 把 ALAC 无损转换成 FLAC，核对解码后的 PCM 与源相同才发布，
+M2b 及格式扩展让浏览器不能直接解码的 ALAC、APE、WavPack、AIFF 曲目也能播放：服务端用 ffmpeg 转换成 FLAC，核对解码后的 PCM 与源相同才发布，
 缓存在受管目录里，之后按与直出相同的新请求鉴权、来源核对、Range 与停机中止规则交付。不做有损转码、码率档位、实时流式转码、
 扫描后预生成与多实例共享缓存；CUE 精确分轨延后。项目不分发 ffmpeg，由部署者安装。
 
@@ -32,8 +32,10 @@ M2b 让浏览器不能直接解码的 ALAC 曲目也能播放：服务端用 ffm
    `moov` 在文件末尾）跑一遍完整的派生与核对（30 秒）。任一步失败返回 `*UnavailableError{Reason}`，`Reason` 为
    `not_found|version_failed|selftest_failed|unsupported_platform`；`OpenDerivation` 记录一条 `playback.derivation.unavailable`
    （只含 `reason`，不含路径与 stderr）并返回 `(nil, nil)`，应用照常启动，ALAC 保持 `not_directly_playable`。
-4. 可用时记录 `playback.derivation.ready`：`ffmpeg_version`、`max_bytes`、`entries`、`bytes`。
-5. `app.WithDerivation(manager)` 装配；`main` 在 HTTP 停止、扫描结束之后调用 `Close(5s)`：取消排队与运行中的任务，终止 ffmpeg 进程组，
+4. 自检后用 5 秒超时运行 `ffmpeg -hide_banner -decoders`，解析音频解码器名集合，输出有界；`FFmpeg.HasDecoder` 与 `Manager.Supports` 供格式表筛选。
+   清单失败只保留自检证明的 ALAC，不令应用启动失败；管理器记录一条 `playback.derivation.decoders_unavailable`，不含路径、stderr。
+5. 可用时记录 `playback.derivation.ready`：`ffmpeg_version`、`max_bytes`、`entries`、`bytes`。
+6. `app.WithDerivation(manager)` 装配；`main` 在 HTTP 停止、扫描结束之后调用 `Close(5s)`：取消排队与运行中的任务，终止 ffmpeg 进程组，
    删除临时文件。传给 `WithDerivation` 的接口值不得持有 nil 指针（`OpenDerivation` 返回 nil 就不要装配）。
 
 推荐的安装方式：`scripts/ffmpeg-pinned.sh` 从按摘要固定的镜像（`mwader/static-ffmpeg` 7.1.1）取出静态 ffmpeg 到
@@ -44,13 +46,21 @@ M2b 让浏览器不能直接解码的 ALAC 曲目也能播放：服务端用 ffm
 
 ### 3.1 格式表
 
-`GET /api/v1/playback/formats` 每项增加 `delivery`：`original`（直出原文件）或 `derived`（服务端无损转换）。派生项只在派生可用时出现：
-`{ "source_kind": "m4a", "codec": "alac", "delivery": "derived", "mime_type": "audio/flac", "codecs": null }`；
-`mime_type` 与 `codecs` 描述交给浏览器的表示（FLAC），不是源文件。直出六项不变，`delivery` 为 `original`。
+`GET /api/v1/playback/formats` 每项的 `delivery` 为 `original`（直出）或 `derived`（派生）。直出六项不变；
+派生只发布下表中管理器确认解码器可用的项，全部为 `mime_type: "audio/flac"`、`codecs: null`，描述交付表示而非源文件。
+
+| 来源类别 / 编码 | 输入参数 | 策略串 | 筛选解码器 |
+| --- | --- | --- | --- |
+| `m4a/alac` | `-c:a alac -f mov` | `alac-flac-lossless-v1` | `alac` |
+| `ape_apev2/ape` | `-c:a ape -f ape` | `ape-flac-lossless-v1` | `ape` |
+| `wavpack_apev2/wavpack`、`wavpack_apev2/wavpack_hybrid` | `-c:a wavpack -f wv` | `wavpack-flac-lossless-v1` | `wavpack` |
+| `aiff_id3/aiff` | `-f aiff`（不强制解码器） | `aiff-flac-lossless-v1` | `pcm_s16be` |
+
+`wavpack_hybrid` 仍属有损来源；逐位核对的是源解码后的 PCM，不是恢复已损失信息。浮点、DSD 与其他 AIFC 压缩不获准派生。
 
 ### 3.2 预检（唯一启动或加入转换的入口）
 
-`GET /api/v1/tracks/{id}/playback` 的检查顺序与直出相同。直出格式立即返回 200（`kind: "original"`）。派生格式通过源文件核对后：
+`GET /api/v1/tracks/{id}/playback` 的检查顺序与直出相同。直出格式立即返回 200（`kind: "original"`）。派生格式命中后先检查扫描位深：只接受 0（未知）、16、24；其他值立即返回 409 `not_directly_playable`，不启动任务、不写失败记忆。此检查在路径与源文件核对之前。通过源文件核对后：
 
 | 情况 | 响应 |
 | --- | --- |
@@ -79,7 +89,7 @@ M2b 让浏览器不能直接解码的 ALAC 曲目也能播放：服务端用 ffm
 | 音频请求时派生文件未就绪 | 409 `derivation_not_ready` | 转换尚未完成 |
 | ffmpeg 失败、核对不一致、超时、输出超限 | 409 `derivation_failed` | 无损转换失败，无法播放这首曲目 |
 | 并发、排队或单成员上限、剩余空间不足、关停 | 503 `derivation_busy`，`Retry-After: 2` | 服务器正忙于转换，请稍后重试 |
-| 派生不可用时请求 ALAC | 409 `not_directly_playable` | 这首曲目不能直接播放 |
+| 派生或对应解码器不可用，或派生位深不是 0、16、24 | 409 `not_directly_playable` | 这首曲目不能直接播放 |
 
 转换前的内容指纹不符、转换期间源文件被改写归入 `source_changed`/`source_unavailable`，不计入失败记忆。文案固定，不含路径、stderr 或类别。
 `derivation_failed` 的类别（`ffmpeg_exit|verify_mismatch|timeout|output_limit|io`）只进日志。
@@ -88,8 +98,9 @@ M2b 让浏览器不能直接解码的 ALAC 曲目也能播放：服务端用 ffm
 
 - 布局：`media-cache/v1/<key>.flac`（完成品）、`media-cache/tmp/<随机>.partial`（生成中）。完成品只经 `rename` 出现，所以任何可命中的文件都完整且已核对；
   所有文件操作限定在缓存目录之内（`os.Root`），只删除 `v1/` 下命名合法的条目与 `tmp/` 内的文件。
-- 键：`SHA-256` 覆盖带长度前缀的 `roomusic-derivation-v1`、转换策略 `alac-flac-lossless-v1`、ffmpeg 版本串、内容指纹、源大小、
+- 键：`SHA-256` 覆盖带长度前缀的 `roomusic-derivation-v1`、`SourceVersion.Policy` 指定的转换策略（见格式表）、ffmpeg 版本串、内容指纹、源大小、
   修改时间（微秒，UTC）、来源类别与编码。不含曲目 ID：内容相同的两首曲目共用派生文件，每次请求仍各自鉴权与核对来源。改变键的组成或转换策略必须升版本号。
+- ALAC 显式传原策略 `alac-flac-lossless-v1`，长度前缀、字段顺序和键域完全不变，旧缓存继续命中；新格式使用各自策略。
 - 位深、采样率、声道只用于核对输出，不参与键。
 - 索引在内存里，启动时由目录重建；最近使用时间持久化为文件修改时间（同一条目每小时最多写一次）。发布新条目后总量超过上限，
   按最近使用从旧到新淘汰（不删刚发布的条目）。正在传输的文件被淘汰时，已打开的句柄仍可读完，下次请求重新生成，所以不需要读者引用计数。
@@ -103,7 +114,7 @@ M2b 让浏览器不能直接解码的 ALAC 曲目也能播放：服务端用 ffm
 1. 对句柄用 `library.ContentFingerprintOf` 重算内容指纹，与扫描记录不同则失败（`source_changed`，不记失败记忆）。
 2. 预留配额 = 源大小 × 2 + 16 MiB；缓存目录所在文件系统剩余空间须 ≥ 预留量 + 1 GiB，否则 `derivation_busy`。
 3. 第一遍：一次 ffmpeg 同时输出 FLAC 与“源解码后 PCM（`pcm_s32le`）的 MD5”。固定参数数组，不经 shell：只允许 `file` 协议，
-   输入强制用 ALAC 解码器（不是 ALAC 即失败），只取第一路音频，丢弃元数据与章节，`-n` 不覆盖已有文件，`-fs` 限制输出，
+   `Source.Input` 传到 `ConvertJob.Input`（`Input{Demuxer, Decoder string}`），输入固定为可选的 `-c:a <Decoder>` 加 `-f <Demuxer>`，只取第一路音频，丢弃元数据与章节，`-n` 不覆盖已有文件，`-fs` 限制输出，
    两侧 bitexact，`-threads 1`；源句柄作为 fd 3 传入并读 `file:/dev/fd/3`，所以路径在检查后被替换也读不到别的文件。
 4. 核对输出：达到 `-fs` 上限即视为截断（`output_limit`）；`STREAMINFO` 的位深（只接受 16 或 24）、采样率、声道与扫描记录一致
    （记录缺失的项不比较），总样本数大于 0。
@@ -136,6 +147,11 @@ M2b 让浏览器不能直接解码的 ALAC 曲目也能播放：服务端用 ffm
 
 - 单元（不需要 ffmpeg）：`go test -race ./internal/playback/... ./internal/platform/config/ ./internal/app/ -run 'Test(Classify|Derived|Verify|Format|Key|Manager|Cache|Queued|OpenDerivation|Resolve|IsWithin|Load|PackageDependency)'`
   覆盖键、索引重建、淘汰、同键合并（假转换器与假时钟）、宽限期取消、上限、失败记忆、`STREAMINFO`、进程组回收（挂起的假 ffmpeg 脚本）、配置校验、缓存目录与音乐根的重叠检查。
+- 格式扩展最小集（在 `backend/`）：`go test ./internal/library/parser/ -run 'Test(APE|WavPack|AIFF|APEv2|Fingerprint)' -count=1`；
+  `go test -race ./internal/playback/... -run 'Test(Format|Derived|Key|DeriveKey|Convert|Decoder|Sniff|Container|BitDepth)' -count=1`。
+  核对 ALAC 固定旧键、各输入参数、按解码器筛选、清单失败降级、位深 0/16/24 放行与其他位深拒绝、三种容器。
+- 新格式真实解码：`ROOMUSIC_TEST_FFMPEG="$(../scripts/ffmpeg-pinned.sh)" go test ./internal/library/parser/ ./internal/playback/derivation/ ./internal/playback/analysis/ -run 'TestFFmpeg' -count=1`。
+  WavPack/AIFF 运行时生成，APE 由测试任务提供 ≤16 KiB 固定素材；不依赖真实音乐库。
 - `TestFFmpeg…`（`ROOMUSIC_TEST_FFMPEG` 指向固定版本，未设置时跳过）：真实转换与 PCM 核对、自检、损坏输入、`-fs` 超限、不覆盖已有输出。
 - `TestPostgreSQLPlayback…`（需要隔离数据库；真实 ffmpeg 用例同时需要 `ROOMUSIC_TEST_FFMPEG`）：格式表含派生项、202/200、状态码与检查顺序（转换之前不启动）、
   稳定错误码与 `Retry-After`、关停时长轮询结束、目录停用后新预检与音频请求被拒绝、已建立派生流在停机时中止、真实 ffmpeg 下 ALAC 两组参数的 STREAMINFO 与 PCM 逐位相同、

@@ -77,8 +77,9 @@ export const candidateKindLabel = labeller({
 });
 
 /**
- * 音频编码的显示名。清单按扫描器写入的取值核对（internal/library/parser/parser.go 的 Codec；WAV 按格式标签区分 pcm、ieee_float 与 wav_extensible）。
- * 接口按字符串返回，未知取值原样显示。
+ * 音频编码的显示名。清单按扫描器写入的取值核对（internal/library/parser/parser.go 的 Codec；WAV 按格式标签区分 pcm、ieee_float 与 wav_extensible；
+ * WavPack 按块头标志区分整数、混合、浮点与 DSD；AIFF 按 AIFC 压缩类型区分整数与浮点）。
+ * 接口按字符串返回，未知取值原样显示（如其他压缩类型的 aifc_*）。
  */
 export const codecLabel = labeller({
   flac: "FLAC",
@@ -91,4 +92,11 @@ export const codecLabel = labeller({
   pcm: "WAV（PCM）",
   ieee_float: "WAV（浮点）",
   wav_extensible: "WAV（扩展格式）",
+  ape: "APE",
+  wavpack: "WavPack",
+  wavpack_hybrid: "WavPack（有损）",
+  wavpack_float: "WavPack（浮点）",
+  wavpack_dsd: "WavPack（DSD）",
+  aiff: "AIFF",
+  aiff_float: "AIFF（浮点）",
 });

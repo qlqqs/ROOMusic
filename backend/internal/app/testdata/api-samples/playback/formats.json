@@ -49,6 +49,34 @@
         "delivery": "derived",
         "mime_type": "audio/flac",
         "source_kind": "m4a"
+      },
+      {
+        "codec": "ape",
+        "codecs": null,
+        "delivery": "derived",
+        "mime_type": "audio/flac",
+        "source_kind": "ape_apev2"
+      },
+      {
+        "codec": "wavpack",
+        "codecs": null,
+        "delivery": "derived",
+        "mime_type": "audio/flac",
+        "source_kind": "wavpack_apev2"
+      },
+      {
+        "codec": "wavpack_hybrid",
+        "codecs": null,
+        "delivery": "derived",
+        "mime_type": "audio/flac",
+        "source_kind": "wavpack_apev2"
+      },
+      {
+        "codec": "aiff",
+        "codecs": null,
+        "delivery": "derived",
+        "mime_type": "audio/flac",
+        "source_kind": "aiff_id3"
       }
     ]
   },

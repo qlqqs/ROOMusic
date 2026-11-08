@@ -15,6 +15,9 @@ const maxLeadingMP4Atoms = 8
 // （FLAC 与 Ogg 以魔数开头，MP3 以 ID3 或帧同步开头，WAV 是 RIFF/WAVE，MP4 在顶层有 ftyp），
 // 所以扫描时解析成功的文件不会在这里被误判。读取失败（不是文件太短）返回错误。
 func matchesContainer(source io.ReaderAt, size int64, kind container) (bool, error) {
+	if kind == containerAPE {
+		return hasAPEHeader(source, size)
+	}
 	if kind == containerMP4 {
 		return hasMP4FileType(source, size)
 	}
@@ -25,6 +28,11 @@ func matchesContainer(source io.ReaderAt, size int64, kind container) (bool, err
 	}
 	head := header[:read]
 	switch kind {
+	case containerWavPack:
+		return bytes.HasPrefix(head, []byte("wvpk")), nil
+	case containerAIFF:
+		return len(head) == len(header) && bytes.Equal(head[:4], []byte("FORM")) &&
+			(bytes.Equal(head[8:12], []byte("AIFF")) || bytes.Equal(head[8:12], []byte("AIFC"))), nil
 	case containerFLAC:
 		return bytes.HasPrefix(head, []byte("fLaC")), nil
 	case containerOgg:
@@ -76,4 +84,44 @@ func hasMP4FileType(source io.ReaderAt, size int64) (bool, error) {
 		offset += atomSize
 	}
 	return false, nil
+}
+
+// hasAPEHeader 与解析器一致，允许最多 16 MiB 的 ID3v2 前缀及可选页脚。
+func hasAPEHeader(source io.ReaderAt, size int64) (bool, error) {
+	var header [10]byte
+	read, err := source.ReadAt(header[:], 0)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return false, err
+	}
+	if !bytes.HasPrefix(header[:read], []byte("ID3")) {
+		return bytes.HasPrefix(header[:read], []byte("MAC ")), nil
+	}
+	if read < len(header) {
+		return false, nil
+	}
+	length := int64(0)
+	for _, value := range header[6:10] {
+		if value&0x80 != 0 {
+			return false, nil
+		}
+		length = length<<7 | int64(value)
+	}
+	offset := int64(len(header)) + length
+	if offset > 16<<20 {
+		return false, nil
+	}
+	if header[5]&0x10 != 0 {
+		offset += 10
+	}
+	if offset+4 > size {
+		return false, nil
+	}
+	_, err = source.ReadAt(header[:4], offset)
+	if errors.Is(err, io.EOF) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return bytes.Equal(header[:4], []byte("MAC ")), nil
 }

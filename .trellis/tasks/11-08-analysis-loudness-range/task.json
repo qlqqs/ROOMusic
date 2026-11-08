@@ -3,7 +3,7 @@
   "name": "analysis-loudness-range",
   "title": "⑨ 音频分析补充",
   "description": "同一次 ffmpeg 多取响度范围与采样峰值，交叉校验解码时长",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
