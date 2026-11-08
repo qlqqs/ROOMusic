@@ -46,6 +46,7 @@
   line-clamp: 6;
   overflow: hidden;
   overflow-wrap: anywhere;
+  text-wrap: balance;
   font-size: var(--fs-14);
   line-height: 1.3;
 }

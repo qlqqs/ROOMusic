@@ -1,5 +1,5 @@
 import { AppWindow, AudioLines, FileAudio, Server, Speaker, X, type LucideIcon } from "lucide-react";
-import { useId, useState, type CSSProperties } from "react";
+import { Fragment, useId, useState, type CSSProperties, type ReactNode } from "react";
 import { Button, ModalDialog, useTooltip } from "../../../shared/ui";
 import type { SourceFacts } from "../engine/queue";
 import { usePlaybackCapabilities } from "../hooks/use-playback-capabilities";
@@ -62,8 +62,8 @@ function formatLevel(value: number): string {
   return `${rounded < 0 ? "−" : ""}${Math.abs(rounded).toFixed(1)}`;
 }
 
-/** 响度一行：积分响度、响度范围、真峰值，缺的项省略；没有分析结果或三项都缺时是 null，整行不显示。 */
-function useLoudnessLine(): string | null {
+/** 响度一行：积分响度、响度范围、真峰值，缺的项省略；没有分析结果或三项都缺时是 null，整行不显示。每项连同后面的“·”不断行，只在项与项之间换行。 */
+function useLoudnessLine(): ReactNode[] | null {
   const trackId = usePlayerSelector((snapshot) => snapshot.current?.track.trackId ?? null);
   const analysis = useTrackAnalysis(trackId);
   if (analysis === null) return null;
@@ -72,7 +72,8 @@ function useLoudnessLine(): string | null {
     analysis.loudnessRangeLu === null ? null : `范围 ${formatLevel(analysis.loudnessRangeLu)} LU`,
     analysis.truePeakDbtp === null ? null : `峰值 ${formatLevel(analysis.truePeakDbtp)} dBTP`,
   ].filter((part) => part !== null);
-  return parts.length === 0 ? null : parts.join(" · ");
+  if (parts.length === 0) return null;
+  return parts.map((part, index) => <Fragment key={part}>{index > 0 && " "}<span className={styles.nowrap}>{part}{index < parts.length - 1 && " ·"}</span></Fragment>);
 }
 
 /** 浏览器一行：解码；接入了音频图时加上实际施加的均衡增益，交叉渐变开着时加上时长。 */
@@ -105,7 +106,7 @@ export function SignalPathButton() {
   </>;
 }
 
-type Layer = { name: string; icon: LucideIcon; value: string };
+type Layer = { name: string; icon: LucideIcon; value: ReactNode };
 
 /** 信号路径弹层：标题写出整体质量，各层一个图标、名称和一行取值；响度一层只在有分析结果时出现。桌面在圆点上方，窄屏从底部弹出。 */
 function SignalPathDialog({ anchor, onClose }: { anchor: DOMRect | null; onClose: () => void }) {
