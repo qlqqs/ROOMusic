@@ -19,9 +19,9 @@ export async function openPasswordDialog(page: Page): Promise<Locator> {
   return dialog;
 }
 
-export async function fillPasswordChange(page: Page, current = "curator-password", password = changedPassword, confirmation = password): Promise<void> {
+export async function fillPasswordChange(page: Page, current: string | null = null, password = changedPassword, confirmation = password): Promise<void> {
   const dialog = passwordDialog(page);
-  await dialog.getByLabel("当前密码", { exact: true }).fill(current);
+  if (current !== null) await dialog.getByLabel("当前密码", { exact: true }).fill(current);
   await dialog.getByLabel("新密码", { exact: true }).fill(password);
   await dialog.getByLabel("确认新密码", { exact: true }).fill(confirmation);
 }
@@ -72,6 +72,7 @@ export async function openAccountScene(page: Page, mock: ApiMock, scene: Account
     else await expect(page.getByRole("alert")).toContainText("成员已不存在，列表已刷新。");
     return;
   }
+  mock.session = scene === "当前密码错误" ? "listener" : "curator";
   await page.goto("/settings/account");
   await expect(heading(page, "账号")).toBeVisible();
   if (scene === "账号栏") {
@@ -81,7 +82,7 @@ export async function openAccountScene(page: Page, mock: ApiMock, scene: Account
   }
   const dialog = await openPasswordDialog(page);
   if (scene === "修改密码对话框") return;
-  await fillPasswordChange(page, scene === "当前密码错误" ? "wrong-current-password" : "curator-password", scene === "新密码字段错误" ? "short" : changedPassword);
+  await fillPasswordChange(page, scene === "当前密码错误" ? "wrong-current-password" : null, scene === "新密码字段错误" ? "short" : changedPassword);
   if (scene === "改密码结果未确认") {
     const sample = loadApiSample("errors/database-unavailable");
     await page.route("**/api/v1/auth/password", (route) => route.fulfill({ status: sample.status, json: sample.body }));

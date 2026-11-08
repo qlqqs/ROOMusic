@@ -20,14 +20,14 @@ function failureOfSample(name: string) {
 describe("V1/V2/V5：密码替身使用真实响应样本", () => {
   it("自助修改：先校验新密码，再核对当前密码；拒绝时密码和当前会话不变", async () => {
     const api = installFakeApi();
-    const session = installFakeSession(api, { current: "curator" });
+    const session = installFakeSession(api, { current: "listener" });
     await expect(changeOwnPassword({ currentPassword: "wrong", newPassword: "short" })).rejects.toMatchObject({ failure: failureOfSample("errors/invalid-input-password") });
     await expect(changeOwnPassword({ currentPassword: "wrong", newPassword: next })).rejects.toMatchObject({ failure: failureOfSample("errors/current-password-incorrect") });
-    expect(session.accounts.curator?.password).toBe("curator-password");
-    expect(session.current).toBe("curator");
-    await expect(changeOwnPassword({ currentPassword: "curator-password", newPassword: next })).resolves.toEqual({ status: 200, data: loadApiSample("auth/password-changed").body });
-    expect(session.accounts.curator?.password).toBe(next);
-    expect(session.current).toBe("curator");
+    expect(session.accounts.listener?.password).toBe("listener-password");
+    expect(session.current).toBe("listener");
+    await expect(changeOwnPassword({ currentPassword: "listener-password", newPassword: next })).resolves.toEqual({ status: 200, data: loadApiSample("auth/password-changed").body });
+    expect(session.accounts.listener?.password).toBe(next);
+    expect(session.current).toBe("listener");
   });
 
   it("重置：自己和非法新密码使用真实错误样本，不改任何账号", async () => {

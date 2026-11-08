@@ -25,7 +25,13 @@ export function ChangePasswordButton() {
       >
         修改密码
       </Button>
-      <ChangePasswordDialog open={open} username={viewer.username} mutation={mutation} onClose={() => setOpen(false)} />
+      <ChangePasswordDialog
+        open={open}
+        username={viewer.username}
+        requiresCurrent={viewer.role !== "admin"}
+        mutation={mutation}
+        onClose={() => setOpen(false)}
+      />
     </>
   );
 }
@@ -34,6 +40,8 @@ type ChangePasswordDialogProps = {
   open: boolean;
   /** 当前账号的用户名：放进隐藏的 username 字段，让密码管理器把新密码记到这个账号下。 */
   username: string;
+  /** 管理员改自己的密码不需要当前密码，不显示这个字段。 */
+  requiresCurrent: boolean;
   mutation: PasswordChangeMutation;
   onClose: () => void;
 };
@@ -42,12 +50,19 @@ type ChangePasswordDialogProps = {
  * 修改密码的对话框：提交中 Esc 与“取消”暂时无效；当前密码不对、新密码不合规显示在字段旁，其余失败留在对话框里。
  * 成功后对话框不关，表单换成结果和“完成”，点“完成”或按 Esc 关闭。
  */
-export function ChangePasswordDialog({ open, username, mutation, onClose }: ChangePasswordDialogProps) {
+export function ChangePasswordDialog({ open, username, requiresCurrent, mutation, onClose }: ChangePasswordDialogProps) {
   const titleId = useId();
   const headingRef = useRef<HTMLHeadingElement>(null);
   return (
     <ModalDialog open={open} titleId={titleId} initialFocus={headingRef} className={styles.dialog} onRequestClose={() => (mutation.pending ? undefined : onClose())}>
-      <ChangePasswordContent titleId={titleId} headingRef={headingRef} username={username} mutation={mutation} onClose={onClose} />
+      <ChangePasswordContent
+        titleId={titleId}
+        headingRef={headingRef}
+        username={username}
+        requiresCurrent={requiresCurrent}
+        mutation={mutation}
+        onClose={onClose}
+      />
     </ModalDialog>
   );
 }
@@ -93,6 +108,7 @@ function ChangePasswordForm({
   titleId,
   headingRef,
   username,
+  requiresCurrent,
   mutation,
   onClose,
   onSucceeded,
@@ -115,14 +131,15 @@ function ChangePasswordForm({
   function submit(event: FormEvent) {
     event.preventDefault();
     if (pending) return;
-    const next = validatePasswordChange({ current, password, confirmation });
+    const currentPassword = requiresCurrent ? current : null;
+    const next = validatePasswordChange({ current: currentPassword, password, confirmation });
     setErrors(next);
     if (next.current !== undefined) return currentRef.current?.focus();
     if (next.password !== undefined) return passwordRef.current?.focus();
     if (next.confirmation !== undefined) return confirmationRef.current?.focus();
     setFailure(null);
     mutation.submit(
-      { currentPassword: current, newPassword: password },
+      { currentPassword, newPassword: password },
       {
         onSucceeded,
         onFailed: (error) => {
@@ -151,15 +168,17 @@ function ChangePasswordForm({
       <p className={styles.lead}>改好后，其他设备需要重新登录。</p>
       <input type="text" name="username" autoComplete="username" value={username} readOnly hidden />
       <div className={styles.fields}>
-        <TextField
-          ref={currentRef}
-          label="当前密码"
-          type="password"
-          autoComplete="current-password"
-          value={current}
-          error={errors.current ?? null}
-          onChange={edited(setCurrent)}
-        />
+        {requiresCurrent ? (
+          <TextField
+            ref={currentRef}
+            label="当前密码"
+            type="password"
+            autoComplete="current-password"
+            value={current}
+            error={errors.current ?? null}
+            onChange={edited(setCurrent)}
+          />
+        ) : null}
         <TextField
           ref={passwordRef}
           label="新密码"

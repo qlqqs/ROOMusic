@@ -333,12 +333,12 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
         mock.session = null;
         return sample("auth/logout");
       case "POST /api/v1/auth/password": {
-        // 先校验新密码，再核对当前密码；当前密码不对是 403，会话不变。只有一个会话，成功后保留。
+        // 先校验新密码；成员再核对当前密码，管理员跳过。当前会话成功后保留。
         const account = mock.session === null ? undefined : mock.accounts.get(mock.session);
         if (account === undefined) return sample("errors/unauthorized");
-        const { current_password: current, new_password: next } = body as { current_password: string; new_password: string };
+        const { current_password: current, new_password: next } = body as { current_password?: string; new_password: string };
         if (!/^[\x20-\x7E]{12,72}$/.test(next)) return sample("errors/invalid-input-password");
-        if (account.password !== current) return sample("errors/current-password-incorrect");
+        if (account.role !== "admin" && account.password !== current) return sample("errors/current-password-incorrect");
         account.password = next;
         return sample("auth/password-changed");
       }

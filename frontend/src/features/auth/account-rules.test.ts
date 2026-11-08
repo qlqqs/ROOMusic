@@ -95,6 +95,10 @@ describe("validateNewPassword：改密码与重置共用的完整边界", () => 
 describe("validatePasswordChange", () => {
   const next = { password: "abcdefghijkl", confirmation: "abcdefghijkl" };
 
+  it("管理员不需要当前密码", () => {
+    expect(validatePasswordChange({ current: null, ...next })).toEqual({});
+  });
+
   it("空当前密码需要提示，并保留新密码与确认错误", () => {
     expect(validatePasswordChange({ current: "", ...next })).toEqual({ current: "请输入当前密码。" });
     expect(validatePasswordChange({ current: "", password: "short", confirmation: "other" })).toEqual({

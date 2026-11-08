@@ -102,14 +102,14 @@ export function installFakeSession(api: FakeApi, initial: Partial<FakeSession> =
     session.current = null;
     return sampleResponse("auth/logout");
   });
-  // 修改自己的密码：先校验新密码（400 invalid_input），再核对当前密码（403 current_password_incorrect，会话不变）。
+  // 修改自己的密码：先校验新密码；成员再核对当前密码，管理员跳过核对。
   // 替身只有一个会话，成功后当前会话保留；其他会话被撤销由后端测试覆盖。
   api.on("POST", "/api/v1/auth/password", (request) => {
     const account = session.current === null ? undefined : session.accounts[session.current];
     if (account === undefined) return sampleResponse("errors/unauthorized");
-    const { current_password: current, new_password: next } = request.body as { current_password: string; new_password: string };
+    const { current_password: current, new_password: next } = request.body as { current_password?: string; new_password: string };
     if (!/^[\x20-\x7E]{12,72}$/.test(next)) return sampleResponse("errors/invalid-input-password");
-    if (account.password !== current) return sampleResponse("errors/current-password-incorrect");
+    if (account.role !== "admin" && account.password !== current) return sampleResponse("errors/current-password-incorrect");
     account.password = next;
     return sampleResponse("auth/password-changed");
   });

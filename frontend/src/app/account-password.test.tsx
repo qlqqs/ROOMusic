@@ -11,12 +11,12 @@ import { FakeAudio } from "../test/fake-audio";
 beforeEach(() => { vi.stubGlobal("Audio", class { constructor() { return new FakeAudio(); } }); });
 
 const passwordPath = "/api/v1/auth/password";
-const oldPassword = "curator-password";
+const oldPassword = "listener-password";
 const newPassword = "new account password";
 
-async function openPasswordChange() {
+async function openPasswordChange(current: "listener" | "curator" = "listener") {
   const api = installFakeApi();
-  const session = installFakeSession(api, { current: "curator" });
+  const session = installFakeSession(api, { current });
   installOverviewApi(api);
   const channel = { notifyChanged: vi.fn(), onChanged: () => () => undefined, close: vi.fn() };
   const rendered = renderApp({ path: "/settings/account", channel });
@@ -29,8 +29,13 @@ async function openPasswordChange() {
 
 type Context = Awaited<ReturnType<typeof openPasswordChange>>;
 
-async function fill(context: Context, current = oldPassword, password = newPassword, confirmation = password) {
-  for (const [label, value] of [["当前密码", current], ["新密码", password], ["确认新密码", confirmation]] as const) {
+async function fill(context: Context, current: string | null = oldPassword, password = newPassword, confirmation = password) {
+  if (current !== null) {
+    const input = context.dialog.getByLabelText<HTMLInputElement>("当前密码");
+    await userEvent.clear(input);
+    if (current) await userEvent.type(input, current);
+  }
+  for (const [label, value] of [["新密码", password], ["确认新密码", confirmation]] as const) {
     const input = context.dialog.getByLabelText<HTMLInputElement>(label);
     await userEvent.clear(input);
     if (value) await userEvent.type(input, value);
@@ -101,8 +106,8 @@ describe("V1/V5：设置账号栏修改密码", () => {
     expect(screen.getByRole("heading", { level: 1, name: "账号" })).toBeTruthy();
     expect(runtime.session.currentGeneration()).toBe(generation);
     expect(runtime.session.getSnapshot()).toBe(sessionState);
-    expect(session.current).toBe("curator");
-    expect(session.accounts.curator?.password).toBe(newPassword);
+    expect(session.current).toBe("listener");
+    expect(session.accounts.listener?.password).toBe(newPassword);
     expect(api.requests.filter((request) => request.method === "GET").map((request) => request.path)).toEqual(reads);
     for (const { query, data } of cache) {
       expect(runtime.queryClient.getQueryCache().get(query.queryHash)).toBe(query);
@@ -133,6 +138,15 @@ describe("V1/V5：设置账号栏修改密码", () => {
     expect(api.requestsTo("POST", passwordPath)).toHaveLength(1);
   });
 
+  it("管理员没有当前密码字段，请求只带新密码并成功", async () => {
+    const context = await openPasswordChange("curator");
+    expect(context.dialog.queryByLabelText("当前密码")).toBeNull();
+    await fill(context, null);
+    await submit(context);
+    await expectPasswordChanged(context);
+    expect(context.api.requestsTo("POST", passwordPath)[0]?.body).toEqual({ new_password: newPassword });
+  });
+
   it("403 当前密码错误关联字段、聚焦且保留输入，不退出登录；改对后可再次提交", async () => {
     const context = await openPasswordChange();
     const generation = context.runtime.session.currentGeneration();
@@ -146,8 +160,8 @@ describe("V1/V5：设置账号栏修改密码", () => {
     expect(context.dialog.queryByRole("alert")).toBeNull();
     expect(context.history.location.pathname).toBe("/settings/account");
     expect(context.runtime.session.currentGeneration()).toBe(generation);
-    expect(context.session.current).toBe("curator");
-    expect(context.session.accounts.curator?.password).toBe(oldPassword);
+    expect(context.session.current).toBe("listener");
+    expect(context.session.accounts.listener?.password).toBe(oldPassword);
     await userEvent.clear(context.dialog.getByLabelText("当前密码"));
     await userEvent.type(context.dialog.getByLabelText("当前密码"), oldPassword);
     expect(context.dialog.queryByText("当前密码不对。")).toBeNull();
@@ -294,7 +308,7 @@ describe("V1/V5：设置账号栏修改密码", () => {
     expect(context.dialog.getByLabelText("当前密码").getAttribute("autocomplete")).toBe("current-password");
     for (const label of ["新密码", "确认新密码"]) expect(context.dialog.getByLabelText(label).getAttribute("autocomplete")).toBe("new-password");
     const username = context.dialogElement.querySelector<HTMLInputElement>('input[autocomplete="username"]');
-    expect(username?.value).toBe("curator");
+    expect(username?.value).toBe("listener");
     expect(username?.hidden).toBe(true);
     expect(username?.readOnly).toBe(true);
     await fill(context);

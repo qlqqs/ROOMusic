@@ -34,7 +34,8 @@ export function postLogout(): Promise<ApiResponse<{ logged_out: true }>> {
   return apiRequest({ method: "POST", path: "/api/v1/auth/logout", body: {}, session: "none" }, decodeLoggedOut);
 }
 
-export type PasswordChange = { currentPassword: string; newPassword: string };
+/** 管理员改自己的密码不需要当前密码：currentPassword 为 null，请求体里不带 current_password。 */
+export type PasswordChange = { currentPassword: string | null; newPassword: string };
 
 /**
  * 修改自己的密码。保持默认的 session: "required"：真正的 401 unauthorized 照常结束会话；
@@ -42,7 +43,11 @@ export type PasswordChange = { currentPassword: string; newPassword: string };
  */
 export function changeOwnPassword(input: PasswordChange): Promise<ApiResponse<{ password_changed: true }>> {
   return apiRequest(
-    { method: "POST", path: "/api/v1/auth/password", body: { current_password: input.currentPassword, new_password: input.newPassword } },
+    {
+      method: "POST",
+      path: "/api/v1/auth/password",
+      body: input.currentPassword === null ? { new_password: input.newPassword } : { current_password: input.currentPassword, new_password: input.newPassword },
+    },
     decodePasswordChanged,
   );
 }

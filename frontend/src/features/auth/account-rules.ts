@@ -42,10 +42,11 @@ export function validateNewAccount(input: NewAccountInput): NewAccountErrors {
   return errors;
 }
 
-export type PasswordChangeInput = { current: string; password: string; confirmation: string };
+/** current 为 null 表示不需要当前密码（管理员）。 */
+export type PasswordChangeInput = { current: string | null; password: string; confirmation: string };
 export type PasswordChangeErrors = NewPasswordErrors & { current?: string };
 
-/** 自助改密码：当前密码只检查非空（对不对由后端判断），新密码沿用新账号的规则。 */
+/** 自助改密码：需要当前密码时只检查非空（对不对由后端判断），新密码沿用新账号的规则。 */
 export function validatePasswordChange(input: PasswordChangeInput): PasswordChangeErrors {
   const errors: PasswordChangeErrors = validateNewPassword(input.password, input.confirmation);
   if (input.current === "") errors.current = "请输入当前密码。";
