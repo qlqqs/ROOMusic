@@ -3,7 +3,7 @@
   "name": "scan-incremental",
   "title": "④ 增量扫描",
   "description": "未变文件跳过解析，解析器与归组算法版本号",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

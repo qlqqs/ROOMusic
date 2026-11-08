@@ -1,4 +1,4 @@
-import { decodeRootList, decodeRootOperationList, type RootDTO, type RootOperationDTO, type ScanDTO } from "../features/library/api/decoders";
+import { decodeRootList, decodeRootOperationList, type RootDTO, type RootOperationDTO, type ScanDTO, type ScanScheduleDTO } from "../features/library/api/decoders";
 import type { FakeApi } from "./fake-api";
 import { sampleBody } from "./api-samples";
 import { jsonResponse, sampleResponse, type RecordedRequest } from "./http";
@@ -14,6 +14,8 @@ export type FakeLibrary = {
   /** 当前运行中的扫描 ID；POST /scans 在它存在时返回 200 与它。 */
   activeScanId: string | null;
   diagnostics: Map<string, DiagnosticsBody>;
+  /** 每天自动扫描的设置：GET /scan-schedule 读它，PUT 整份替换它。 */
+  scanSchedule: ScanScheduleDTO;
   /** 设置后，POST /scans 总是返回它（例如 scan_coordination_unavailable 的 503）。 */
   startScanFailure: Response | null;
   /** 允许登记的路径前缀；不在其内的路径返回 400 invalid_library_path。 */
@@ -43,6 +45,7 @@ export function installLibraryApi(api: FakeApi, overrides: Partial<FakeLibrary> 
     operations: decodeRootOperationList(sampleBody("library-root-operations/list")).items,
     scans: new Map(),
     activeScanId: null,
+    scanSchedule: { enabled: true, hour: 4 },
     diagnostics: new Map(),
     startScanFailure: null,
     allowedPrefix: "/music/",
@@ -147,6 +150,13 @@ export function installLibraryApi(api: FakeApi, overrides: Partial<FakeLibrary> 
     return unreliable(() => change("restore", request, id, expectedRevision));
   });
 
+  api.on("GET", "/api/v1/scan-schedule", () => jsonResponse(200, library.scanSchedule));
+  api.on("PUT", "/api/v1/scan-schedule", (request) => {
+    const { enabled, hour } = request.body as ScanScheduleDTO;
+    library.scanSchedule = { enabled, hour };
+    return jsonResponse(200, library.scanSchedule);
+  });
+
   const activeScan = () => (library.activeScanId === null ? null : (library.scans.get(library.activeScanId) ?? null));
   api.on("GET", "/api/v1/scans/active", () => jsonResponse(200, { scan: activeScan() }));
   // 扫描记录：开始时间倒序，同一时间按 ID 倒序；page 默认 1、page_size 默认 20 且最大 100，非法值 400 invalid_pagination。
@@ -165,7 +175,7 @@ export function installLibraryApi(api: FakeApi, overrides: Partial<FakeLibrary> 
       pagination: { page, page_size: pageSize, total: ordered.length },
     });
   });
-  api.on("POST", "/api/v1/scans", () => {
+  api.on("POST", "/api/v1/scans", (request) => {
     if (library.startScanFailure !== null) return library.startScanFailure.clone();
     const existing = activeScan();
     if (existing !== null) return jsonResponse(200, existing);
@@ -173,6 +183,8 @@ export function installLibraryApi(api: FakeApi, overrides: Partial<FakeLibrary> 
       id: uuidOf("c", nextScan),
       scan_run_id: uuidOf("c", nextScan),
       status: "running",
+      mode: (request.body as { mode?: ScanDTO["mode"] } | undefined)?.mode ?? "incremental",
+      trigger: "manual",
       started_at: now(),
       finished_at: null,
       cancel_requested_at: null,
@@ -214,6 +226,8 @@ export function seedScan(library: FakeLibrary, overrides: Partial<ScanDTO> = {},
     id: uuidOf("d", index),
     scan_run_id: uuidOf("d", index),
     status: "running",
+    mode: "incremental",
+    trigger: "manual",
     started_at: "2026-01-02T00:00:00Z",
     finished_at: null,
     cancel_requested_at: null,

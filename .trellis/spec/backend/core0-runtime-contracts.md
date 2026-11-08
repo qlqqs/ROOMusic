@@ -163,12 +163,15 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
   端口默认 8090（只发布 IPv4），备份目录不填时为命名卷 `backups`、填绝对路径时为绑定挂载。子网默认由 Docker 分配，
   需要固定时在部署目录放 `compose.override.yaml`；本机生产固定 `10.203.50.0/24`（演练 `10.203.51.0/24`），本机不得创建未固定子网的网络。
   入口等数据库接受连接后启动，`/readyz` 用于镜像健康检查。生产的 `ROOMUSIC_ALLOWED_ORIGINS` 可选，不配时按主机一致模式，反代须保留 Host（含端口）与 Origin；格式与冲突由后端校验。
+- `ROOMUSIC_TIMEZONE`（默认 `Asia/Shanghai`）同时用于备份与定时扫描；启动时校验为有效时区，经 `config.Server.Backup.Location` 传入调度器。定时扫描默认每天 4 点、备份默认 3 点；扫描开关与整点由数据库设置接口管理，详见[扫描协调合同](./scan-coordination-contracts.md)第 9 节。
 - 备份内置在应用（`backend/internal/backup`）：镜像含与数据库同主版本的 `postgresql18-client`；按 `ROOMUSIC_TIMEZONE` 每天
   `ROOMUSIC_BACKUP_HOUR` 点后 `pg_dump -Fc`，成功后按保留规则清理（天数与份数两个上限，最新一份不删；规则存于备份目录，
   从未在网页保存时用 `ROOMUSIC_BACKUP_KEEP_DAYS` 天，见[备份管理](./backup-management-contracts.md)），另有手动、迁移前与恢复前备份；
   写临时文件经 `pg_restore --list` 校验后原子发布，advisory lock `ROOMBACK` 串行；不备份 `/data` 或音乐文件。
   停止只用 `stop`、不删卷，密码恢复用 `docker compose exec app /app/roomusic reset-password <用户名>`。
   运维与恢复步骤见[部署说明](../../../deploy/production/README.md)。
+
+- `ROOMUSIC_SCAN_WORKERS`：空值默认 4，整数 1–16；非整数或越界启动失败，固定错误 `ROOMUSIC_SCAN_WORKERS must be an integer between 1 and 16`。`config.Server.ScanWorkers` 经 app 的 `library.NewService(...).WithScanConcurrency(...)` 传给解析池与指纹规划；设为 1 串行读盘，数据库始终单写入者。生产 compose 使用 `${ROOMUSIC_SCAN_WORKERS:-4}`，`.env.prod.example` 提供注释示例，不要求配置者额外填写。
 
 ### CI 质量门禁
 
@@ -226,6 +229,7 @@ Authorization/session token、密码、数据库 URL、完整 NAS 路径或音�
 
 | 条件 | 行为 |
 | --- | --- |
+| `ROOMUSIC_SCAN_WORKERS` 为 0、17 或非整数 | 启动失败，返回上述固定错误；空值为 4，1 与 16 合法 |
 | 生产 `.env` 缺必填项 | `docker compose config` 退出 1，报出该项的中文提示 |
 | 迁移前备份失败 | 不迁移，app 不进入就绪 |
 | 降级遇到不可回退 / 不连续 / 回退失败 | 整体回滚不改库，app 不就绪；日志给出要恢复的备份与 stop → restore → up 三步命令 |

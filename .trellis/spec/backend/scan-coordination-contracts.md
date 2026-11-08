@@ -14,7 +14,10 @@ mutex 只保护本进程的 worker 引用。
 
 - 扫描状态枚举：`running | succeeded | failed | canceled | incomplete`。
 - `POST /api/v1/scans`：管理员启动扫描；新建时返回 `202`，已有本进程或其他进程的
-  活动扫描时返回该活动 DTO 和 `200`。
+  活动扫描时返回该活动 DTO 和 `200`，不改变原扫描模式。
+  空请求体（无请求体或 `Content-Length: 0`）等价于 `{"mode":"incremental"}`；有体严格解码单字段对象 `{"mode":"incremental"}` 或 `{"mode":"full"}`，未知字段、缺少 mode、其他值或无效 JSON 返回 `400 invalid_input`。
+- `Service.StartScan(ctx, options ...StartOptions)` 接受零个或一个 `StartOptions{Mode string, Trigger string}`，省略时默认手动增量，空 `Trigger` 默认为 `manual`；HTTP 固定 `manual` 并传显式模式，再传至 worker、root 与 `ingest.PlanOptions`。`scanRoot` 保留默认增量入口，转调 `scanRootWithOptions`，避免其他线调用处的无谓变更；full 与 incremental 共用协调锁，不另开 HTTP 入口。
+- `0041` 增加 `scan_runs.scan_mode TEXT NOT NULL DEFAULT 'incremental' CHECK (scan_mode IN ('incremental','full'))`；历史记录默认增量，下行删除列。
 - `GET /api/v1/scans`：管理员查询扫描记录（F3），`page`（默认 1）、`page_size`（默认 20，最大 100），按
   `started_at DESC, id DESC` 排序；响应 `{ "items": [ScanDTO], "pagination": { "page", "page_size", "total" } }`。
 - `GET /api/v1/scans/active`：已登录用户查询活动扫描，返回
@@ -39,13 +42,15 @@ mutex 只保护本进程的 worker 引用。
 
 ## 3. 请求、响应与生命周期合同
 
-`ScanDTO` 的原有七个 JSON 字段为（M5 增量字段见下文）：
+`ScanDTO` 的基础 JSON 字段如下（M5 进度/报告字段见下文）：
 
 ```json
 {
   "id": "uuid",
   "scan_run_id": "uuid",
   "status": "running | succeeded | failed | canceled | incomplete",
+  "mode": "incremental | full",
+  "trigger": "manual | scheduled",
   "started_at": "RFC 3339 timestamp",
   "finished_at": "RFC 3339 timestamp | null",
   "cancel_requested_at": "RFC 3339 timestamp | null",
@@ -54,6 +59,8 @@ mutex 只保护本进程的 worker 引用。
 }
 ```
 
+- `mode` 是所有入口、所有角色的必需字段，只接受 `incremental` 或 `full`；列表、详情、活动、启动、取消响应使用同一 presenter，历史记录为 `incremental`。完整重扫绕过解析缓存读取和指纹借用，仍写缓存；其余语义见[目录与扫描流程合同](./library-scan-contracts.md)。
+- `trigger` 是所有入口、所有角色的必需字段，只接受 `manual` 或 `scheduled`；迁移前的历史扫描为 `manual`，定时扫描为 `scheduled`。
 - `skipped_files` 是所有角色共用 presenter 的必需字段：非负 JS 安全整数或 null；历史扫描为 null，新扫描从 0 起，按文件/目录/CUE 保住登记计数，不受诊断上限影响。随进度及终态写入，大于零不改变 succeeded 与 missing 收口规则。
 - `diagnostics` 是必需摘要，`total` 为诊断条目数，`counts` 为 `{ "kind": string, "count": integer }`
   数组；示例为零诊断状态。它不表示已扫描文件数或完成百分比。
@@ -78,7 +85,7 @@ mutex 只保护本进程的 worker 引用。
   终态更新。`canceled`、`failed`、`incomplete` 与协调故障均禁止负向对账。
 - 改路径在幂等回放检查之后、锁目录行之前探测协调锁；禁止用 `scan_runs.status='running'` 查询或进程内 mutex 代替，避免检查与更新之间新扫描读到旧路径。
   改路径事务持锁期间 `StartScan` 仍沿用未获锁分支：可确认活动扫描则 `200` 返回该 DTO，否则 `503 scan_coordination_unavailable`，不得创建扫描。
-  前端在改路径提交后才发起扫描；定时扫描若撞上这个短窗口，按本次跳过、下一次检查重试处理，不把锁竞争视为已启动。
+  前端在改路径提交后才发起扫描；定时扫描若撞上这个短窗口，按本次跳过、下一计划时刻再触发处理（当天不重试），不把锁竞争视为已启动。
 - session advisory lock 没有 TTL，不能据本地时间推断锁已失效；发布或回滚时不得让
   不认识该锁的旧扫描器与新扫描器同时运行。
 - `canceled` 是已落地的 wire 终态；取消意图持久化在
@@ -94,6 +101,7 @@ mutex 只保护本进程的 worker 引用。
 | 普通用户读取扫描记录列表 | `403 forbidden`；未登录为 `401` |
 | 扫描记录的 `page`/`page_size` 非法（非整数、小于 1、`page_size` 超过 100、偏移溢出） | `400 invalid_pagination` |
 | 扫描记录读取失败（计数、分页、诊断汇总任一步） | `503 database_unavailable`，不回显 SQL |
+| 有请求体但 mode 缺失/非法、未知字段或 JSON 非法 | `400 invalid_input`，不启动扫描 |
 | 启动获得锁且无活动任务 | 插入一个 `running`，返回 `202` 和新 DTO |
 | 本进程已有活动任务 | 返回同一 DTO 和 `200`，不创建第二行 |
 | 未获锁但可读取其他实例的活动任务 | 返回该 DTO 和 `200`，不等待、不接管 |
@@ -141,7 +149,8 @@ mutex 只保护本进程的 worker 引用。
   旧来源 `present`；成功扫描的所有 root 对账与 `succeeded` 更新一起提交或回滚。
 - 后端并发与生命周期：取消轮询、停机等待、holder 释放和本进程 worker 引用通过
   适用的 `go test -race`；数据库/holder 故障不得继续 stale write。
-- 前端 decoder/UI：上述七个 DTO 字段必需，严格校验时间、状态与诊断摘要；活动空值、取消请求中、
+- 完整重扫 HTTP：空请求体与显式 incremental 等价；full 写入并在全部 DTO 入口返回；非法请求 400；已有活动扫描不因所请求模式不同而创建新行或改模式。
+- 前端 decoder/UI：上述 DTO 字段必需（含 `mode`、`trigger`），严格校验时间、状态与诊断摘要；活动空值、取消请求中、
   `canceled`/`failed`/`incomplete` 文案以及取消失败后的重试入口均有覆盖。
 - 扫描记录（F3，`internal/app/scan_history_integration_test.go`、`internal/platform/httpserver/pagination_test.go`）：401/403、
   分页参数的各种非法值、排序与翻页覆盖全部扫描、条目与 `GET /scans/{id}` 逐项相同、超出末页、读取失败（改名表）返回 503；
@@ -181,3 +190,61 @@ go app.runScan(scanID, execution) // worker 由应用生命周期和持久化取
 终态事务先锁scan_runs，取消意图优先；仅succeeded做一次全根missing。missing的catalog锁序为全部既有发行升序FOR UPDATE→独立锁后重读→组升序FOR SHARE，不能持组再加发行锁；扫描不取治理操作锁。报告savepoint失败不得回滚核心missing。
 
 RecoverInterruptedScans与StartScan遗留恢复在取得协调锁后同一事务分批读取至多256个running ID、改incomplete/unavailable并经ingest.ClearScansStaging清对应暂存。不得清理其他活扫描，也不重算进度或missing。若取消正在执行的SQL使holder断连，worker退出且连接/锁释放后由此恢复路径收口，而不是借另一个连接继续stale write。
+
+
+## 9. 定时扫描
+
+### 9.1 范围、存储与入口
+
+- `library` 拥有设置与调度；`0042_scheduled_scan.sql` 新建 `scan_schedule` 单行表：`id SMALLINT PRIMARY KEY CHECK(id=1)`、`enabled BOOLEAN NOT NULL`、`hour SMALLINT NOT NULL CHECK(hour BETWEEN 0 AND 23)`、`updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP`。初始 `{enabled:true,hour:4}`；设置随数据库备份恢复。
+- 同迁移新增 `scan_runs.trigger_kind TEXT NOT NULL DEFAULT 'manual' CHECK(trigger_kind IN ('manual','scheduled'))`；同名 `.down.sql` 删除列与设置表。0042 为合入编号，接增量扫描迁移 0041。
+- 服务签名：`LoadScanSchedule(ctx) (ScanSchedule,error)`、`SaveScanSchedule(ctx, ScanSchedule) (ScanSchedule,error)`；`ScanSchedule{Enabled bool, Hour int, UpdatedAt time.Time}`。`UpdatedAt` 不进入 JSON；只在值实际改变时写 `NOW()`，重复保存相同值保留原时间。
+- 调度只调用现有 `StartScan(ctx, StartOptions{Mode:ScanModeIncremental, Trigger:ScanTriggerScheduled})`，共用扫描协调锁；没有另一套扫描执行路径、排队或失败重试。内部 `scheduledSlot` 随选项传入，取得锁后再读该时刻之后的扫描；若其他实例已快速完成，返回原扫描且 `Started=false`，关闭快照到获取锁之间的重复触发窗口。HTTP 不接收 trigger 或时刻字段。
+
+### 9.2 触发规则与生命周期
+
+纯函数 `PlanScheduledScan(ScheduledScanPlanInput) ScheduledScanPlan`：输入 `Now/Location/Settings/LastStartedAt/LastHandledSlot`，返回 `Due/Slot/Next`。
+`Slot` 是配置时区内不晚于 now 的最近一个 `hour:00`，`Next` 是严格晚于 now 的下一整点；用 `time.Date` 按日历跨日，夏令时缺失或重复钟点由 Go 规范化。
+`Due` 当且仅当：开启、`Slot >= UpdatedAt`、任何发起方的最近扫描开始时间 `< Slot`、本进程尚未处理该 Slot。没有历史扫描时 `LastStartedAt` 为零值。
+
+| 场景 | 行为 |
+| --- | --- |
+| 每天 4 点，持续运行 | 4:00 发起一次增量扫描 |
+| 到点有扫描在跑，或改路径占用协调锁 | 标记该 Slot 已处理，本次跳过、不排队 |
+| 4 点之前手动扫描过 | 4:00 仍触发 |
+| 9 点启动，最近 Slot 后没有任何扫描 | 补一次；升级当天迁移的更新时间晚于 Slot 则不补 |
+| 最近 Slot 后已有手动或自动扫描 | 不补 |
+| 15 点开启且仍设为 4 点 | 当前 Slot 早于保存时间，等明天 4:00 |
+| 3:59 改成 4 点 | 4:00 触发 |
+| 关闭 | 不触发 |
+| 无 active 目录 | 消费本次 Slot，不创建空扫描 |
+| 触发失败 | 消费本次 Slot，等下一计划时刻，不退避、不重试 |
+
+`app.New` 以应用生命周期 context 启动 `Service.RunScanScheduler(ctx, settings.Backup.Location)`，不使用 HTTP 请求 context；未提供数据库的路由测试不启动调度器。
+设置保存与本进程的“读取快照到启动”共用短临界区，保存成功后不会再按旧快照发起；跨进程仍以最长 10 分钟重读为界。每轮合并旧唤醒、读取设置及 `MAX(scan_runs.started_at)` 的同一数据库快照、计算计划、消费到点时刻并尝试启动；等待 `min(Next-now,10分钟)`，设置保存成功通过容量 1 的 channel 唤醒本进程，其他进程最迟 10 分钟重读。读设置失败只记 WARN 并等 10 分钟。
+停机取消 context，等待 `App.WaitForScanScheduler(ctx)` 后再 `WaitForScans(ctx)`，最后关闭数据库。分析 worker 原有“扫描期间等待”的规则不变。
+
+测试注入：`Service.WithScanSchedulerClock(clock)` 或 `app.WithScanSchedulerClock(clock)`，必须在启动前设置；`ScanSchedulerClock` 提供 `Now() time.Time`、`NewTimer(time.Duration) ScanSchedulerTimer`，后者提供 `C() <-chan time.Time` 和 `Stop() bool`，允许无真实等待地驱动完整循环。
+
+日志不含路径、SQL 或数据库错误原文：INFO `library.scan.scheduled_started`（`scan_run_id/slot`）、`library.scan.scheduled_skipped`（`slot/reason`：`scan_running|coordination_unavailable|no_active_roots`）；WARN `library.scan.schedule_read_failed`；触发阶段数据库失败 WARN `library.scan.scheduled_failed`（`slot/reason=database_unavailable`），不重试。锁内发现 Slot 已有扫描时也使用 `scan_running` 跳过原因。
+
+### 9.3 设置接口及错误矩阵
+
+`GET /api/v1/scan-schedule` 仅管理员，200 返回 `{"enabled":true,"hour":4}`。
+`PUT /api/v1/scan-schedule` 先同源再管理员校验，严格接收 `{"enabled":false,"hour":5}`，200 返回同形保存值；整份替换，不要求 `Idempotency-Key` 或 revision。
+
+| 条件 | 响应 |
+| --- | --- |
+| 未登录 / 非管理员 | `401 unauthorized` / `403 forbidden` |
+| PUT 来源缺失 / 跨源 | 既有来源守卫的 `403 origin_required` / `403 origin_forbidden`，先于登录校验 |
+| 非对象、缺字段、未知或重复字段、null、非布尔 enabled、非 0–23 整数 hour、非法/尾随 JSON | `400 invalid_input` / “定时扫描设置无效” |
+| 设置读取或保存失败 | `503 database_unavailable`，不回退默认值 |
+
+### 9.4 案例与必需验证
+
+- 基准：迁移后默认每天 4 点，历史 `trigger=manual`，新自动记录 `trigger=scheduled,mode=incremental`。
+- 正确：值未变的 PUT 保持 `updated_at`，不取消本来应该补扫的 Slot；修改后唤醒调度器重读。
+- 错误：忙时把 Slot 留到 10 分钟后重试，或 HTTP 保存请求直接启动后台循环。正确做法：先记录本次 Slot 已处理，统一调用生命周期调度入口。
+- 单测：上述触发规则、跨日及时区换算、关闭不触发；注入计时器验证唤醒与取消退出。
+- 隔离数据库集成：GET 默认值与权限；PUT 严格校验、来源及错误矩阵；相同值更新时间不变；并发关闭返回后不按旧快照启动；调度新增记录的 mode/trigger；已有扫描/协调锁竞争不新建；两个旧快照实例依次取得锁仍只创建一次。
+- 迁移回退：`rollbackFixtures[42]` 覆盖 scheduled 历史及修改后的设置，上下行往返；所有扫描 API 样本与前端 decoder 同步必需 `trigger`。

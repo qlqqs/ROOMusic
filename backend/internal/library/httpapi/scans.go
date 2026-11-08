@@ -1,7 +1,10 @@
 package httpapi
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 
 	"github.com/qlqq/roomusic/backend/internal/library"
@@ -16,8 +19,16 @@ func (handlers *Handlers) startScan(responseWriter http.ResponseWriter, request 
 	if _, ok := handlers.guard.RequireAdmin(responseWriter, request); !ok {
 		return
 	}
-	result, err := handlers.service.StartScan(request.Context())
+	options, err := decodeStartScanOptions(responseWriter, request)
+	if err != nil {
+		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_input", "扫描模式无效")
+		return
+	}
+	result, err := handlers.service.StartScan(request.Context(), options)
 	switch {
+	case errors.Is(err, library.ErrInvalidScanMode):
+		httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "invalid_input", "扫描模式无效")
+		return
 	case errors.Is(err, library.ErrCoordinationUnavailable):
 		httpserver.WriteError(responseWriter, request, 503, "scan_coordination_unavailable", "无法协调扫描任务")
 		return
@@ -33,6 +44,42 @@ func (handlers *Handlers) startScan(responseWriter http.ResponseWriter, request 
 		status = http.StatusAccepted
 	}
 	httpserver.WriteJSON(responseWriter, status, presentScan(result.Scan, true))
+}
+
+// decodeStartScanOptions 允许无请求体；非空时只接受单个 mode 字段，拒绝重复键和尾随 JSON。
+func decodeStartScanOptions(w http.ResponseWriter, r *http.Request) (library.StartOptions, error) {
+	options := library.StartOptions{Mode: library.ScanModeIncremental, Trigger: library.ScanTriggerManual}
+	if r.Body == nil || r.Body == http.NoBody {
+		return options, nil
+	}
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
+	if err != nil {
+		return options, library.ErrInvalidScanMode
+	}
+	if len(body) == 0 {
+		return options, nil
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	token, err := decoder.Token()
+	if err != nil || token != json.Delim('{') || !decoder.More() {
+		return options, library.ErrInvalidScanMode
+	}
+	key, err := decoder.Token()
+	if err != nil || key != "mode" {
+		return options, library.ErrInvalidScanMode
+	}
+	var mode string
+	if err := decoder.Decode(&mode); err != nil || (mode != library.ScanModeIncremental && mode != library.ScanModeFull) || decoder.More() {
+		return options, library.ErrInvalidScanMode
+	}
+	if token, err := decoder.Token(); err != nil || token != json.Delim('}') {
+		return options, library.ErrInvalidScanMode
+	}
+	if _, err := decoder.Token(); err != io.EOF {
+		return options, library.ErrInvalidScanMode
+	}
+	options.Mode = mode
+	return options, nil
 }
 
 // 扫描记录列表的页大小：默认 20、上限 100。

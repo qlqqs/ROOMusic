@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useViewerScope } from "../../auth";
+import type { ScanMode } from "../api/decoders";
 import { cancelScan, startScan } from "../api/endpoints";
 import { libraryKeys } from "../query-keys";
 
@@ -13,7 +14,7 @@ export function useStartScan() {
   const queryClient = useQueryClient();
   const { generation } = useViewerScope();
   return useMutation({
-    mutationFn: () => startScan(),
+    mutationFn: (mode: ScanMode) => startScan(mode),
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: libraryKeys.scanHistory(generation) });
       return queryClient.invalidateQueries({ queryKey: libraryKeys.activeScan(generation) });
@@ -23,14 +24,14 @@ export function useStartScan() {
 
 /**
  * 开始扫描并进入它：新建的扫描（202）直接打开详情页；已有扫描在运行（200）时不新建，留在本页由调用方提示。
- * 扫描区段的“开始扫描”与改完目录路径后的自动扫描共用。
+ * 扫描区段的“开始扫描”“完整重扫”与改完目录路径后的自动扫描共用；不给模式就是增量扫描。
  */
 export function useBeginScan() {
   const scope = useViewerScope();
   const navigate = useNavigate();
   const start = useStartScan();
-  const begin = () =>
-    start.mutate(undefined, {
+  const begin = (mode: ScanMode = "incremental") =>
+    start.mutate(mode, {
       onSuccess: (response) => {
         if (!scope.isCurrent() || response.status !== 202) return;
         void navigate({ to: "/settings/library/scans/$scanId", params: { scanId: response.data.id } });

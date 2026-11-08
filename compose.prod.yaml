@@ -18,6 +18,7 @@ services:
       ROOMUSIC_DATABASE_URL: "postgres://roomusic:${ROOMUSIC_DB_PASSWORD:?请在 .env 里填写 ROOMUSIC_DB_PASSWORD（数据库密码）}@postgres:5432/roomusic?sslmode=disable"
       ROOMUSIC_ALLOWED_ORIGINS: "${ROOMUSIC_ALLOWED_ORIGINS:-}"
       ROOMUSIC_ALLOWED_LIBRARY_ROOTS: /music
+      ROOMUSIC_SCAN_WORKERS: "${ROOMUSIC_SCAN_WORKERS:-4}"
       ROOMUSIC_DATA_DIR: /data
       ROOMUSIC_BACKUP_DIR: /backups
       ROOMUSIC_FFMPEG_PATH: /usr/local/bin/ffmpeg

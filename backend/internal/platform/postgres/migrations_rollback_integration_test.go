@@ -14,6 +14,13 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	42: `UPDATE scan_runs SET trigger_kind='scheduled' WHERE id='f2000000-0000-4000-8000-000000000001';
+ UPDATE scan_schedule SET enabled=FALSE,hour=5 WHERE id=1;`,
+	41: `INSERT INTO library_parse_cache(root_id,relative_path,directory,source_size,source_modified_at,parser_version,observation,seen_scan_id)
+ VALUES('f1000000-0000-4000-8000-000000000001','album/01.flac','album',128,NOW(),'c1.f1','{}','f2000000-0000-4000-8000-000000000001');
+ INSERT INTO scan_candidate_states(root_id,candidate_key,release_id,signature)
+ VALUES('f1000000-0000-4000-8000-000000000001','rollback-candidate','f4000000-0000-4000-8000-000000000001',repeat('a',64));
+ UPDATE scan_runs SET scan_mode='full' WHERE id='f2000000-0000-4000-8000-000000000001';`,
 	40: "", // 仅新增可空搜索派生列与索引，往返不需要新版取值。
 	39: `UPDATE tracks SET work_title='Cello Suite, BWV 1007',work_catalog='BWV 1007',work_index=1,
  movement_number=1,movement_title='Prelude',work_source='tag' WHERE id='c3000000-0000-4000-8000-000000000035';
@@ -152,7 +159,7 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
  ('c3000000-0000-4000-8000-000000000035','c2000000-0000-4000-8000-000000000035',1,'作品迁移测试曲目','测试艺人',
  'c6000000-0000-4000-8000-000000000035','synthetic-work.flac',NOW());`)
 			}
-			if m.Version == 34 || m.Version == 35 {
+			if m.Version == 34 || m.Version == 35 || m.Version == 41 || m.Version == 42 {
 				// 升级前保留旧类型收据；回退只能移除新类型，不能误删原目录、扫描或操作记录。
 				rollbackExec(t, db, `INSERT INTO users(id,username,password_hash,role)
  VALUES('f0000000-0000-4000-8000-000000000001','rollback-filter-admin','test-only','admin');
@@ -172,6 +179,23 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			}
 			if fixture != "" {
 				rollbackExec(t, db, fixture)
+			}
+			if m.Version == 42 {
+				var trigger string
+				var enabled bool
+				var hour int
+				if err := db.QueryRow(`SELECT trigger_kind FROM scan_runs WHERE id='f2000000-0000-4000-8000-000000000001'`).Scan(&trigger); err != nil || trigger != "scheduled" {
+					t.Fatalf("0042 定时扫描夹具：trigger=%q err=%v", trigger, err)
+				}
+				if err := db.QueryRow(`SELECT enabled,hour FROM scan_schedule WHERE id=1`).Scan(&enabled, &hour); err != nil || enabled || hour != 5 {
+					t.Fatalf("0042 设置夹具：enabled=%v hour=%d err=%v", enabled, hour, err)
+				}
+			}
+			if m.Version == 41 {
+				var mode string
+				if err := db.QueryRow(`SELECT scan_mode FROM scan_runs WHERE id='f2000000-0000-4000-8000-000000000001'`).Scan(&mode); err != nil || mode != "full" {
+					t.Fatalf("0041 新扫描模式夹具：mode=%q err=%v", mode, err)
+				}
 			}
 			if m.Version == 35 {
 				// 改路径是已提交业务状态，下行只删除新类型收据，不恢复旧路径或版本。

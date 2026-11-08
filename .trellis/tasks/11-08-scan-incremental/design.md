@@ -47,7 +47,7 @@ finalize：同现在（被 touch 的曲目 observed_at 已更新，不会被标 
 ```go
 // parser/version.go
 const CommonVersion = 1 // AudioObservation 的结构或共用规则（tags.go 的兜底、分隔、歌词规范化等）变化时加一
-var formatVersions = map[string]int{".flac": 1, ".mp3": 1, ".ogg": 1, ".opus": 1, ".wav": 1, ".m4a": 1}
+var formatVersions = map[string]int{".flac": 1, ".mp3": 1, ".ogg": 1, ".opus": 1, ".wav": 1, ".m4a": 1, ".ape": 1, ".wv": 1, ".aif": 1, ".aiff": 1}
 // CacheVersion 返回扩展名对应的缓存版本，如 "c1.f1"；不在表里的扩展名返回 ""（不缓存）。
 func CacheVersion(extension string) string
 ```
@@ -101,6 +101,7 @@ const GroupingVersion = 1
 ```
 "g" GroupingVersion
 "k" candidate_key
+"d" ingest.CandidateMetadataSignature(candidate) —— 候选写入元数据的确定性 JSON 摘要
 每个成员观察（按 relative_path 字节序）: "m" relative_path \0 source_size \0 mtime(µs, UTC) \0 parser_version
 每个成员引用的 CUE sheet（去重排序）:   "s" sheet 相对路径 \0 size \0 mtime(µs)   —— 持久化阶段现 Lstat
 listFolderArtworkCandidates(candidate) 返回的每个文件（按函数给出的顺序）:
@@ -109,6 +110,7 @@ candidateSourceDirectories() 的每个目录中 .log 普通文件（按名字排
                                           "l" 目录 \0 文件名 \0 size \0 mtime(µs)
 ```
 
+- 2026-11-08 最终同步 main：元数据摘要覆盖全部候选与成员观察（含 T 线多值艺人原文证据、合辑标志、署名 role/name/detail/source、作品/乐章、原始年份回退后的 Year、歌词及其来源），以及作品归组依赖的候选流派、标题与碟轨顺序。JSON 排序 map 键、保留切片顺序；在副本上清掉 `Artwork`、`ArtworkDeferred`、仅新建发行使用的 `JoinGroupID`，避免封面立即/延迟加载和首次选组造成误失效。文件状态与身份仍由下述原合同覆盖。
 - 成员的 `parser_version` 由 library 在暂存时写入新字段 `SourceObservation.ParserVersion`（物理轨取本文件扩展名，CUE 虚拟轨取父文件扩展名）。这样升解析器版本后，即使重新解析出的观察相同，签名也会变化、候选会重写一次。
 - **封面输入 = 文件夹封面查找会考虑的全部候选文件**。`library` 提供一个“列出封面候选文件”的函数 `listFolderArtworkCandidates`：按查找规则列出所有可能被选为文件夹封面的文件（不做安全检查与读取，只列名字），`discoverFolderArtwork` 在它的结果上按顺序做安全检查、读取与识别格式，签名对它的结果逐个 `Lstat` 取大小与修改时间。两处只有这一个函数，查找规则以后再改，签名自动跟随。
   - 现状规则下它列出 `ArtworkDirectories()` 各目录里命中现有封面名单的文件。
@@ -162,7 +164,7 @@ candidateSourceDirectories() 的每个目录中 .log 普通文件（按名字排
 
 每个根结束记一条 INFO `library.scan.incremental_summary`：`scan_run_id`、`library_root_id`、`mode`、`files_parsed`、`parse_cache_hits`、`parse_cache_writes`、`candidates_written`、`candidates_skipped`、`artwork_deferred_loads`，只含计数。真实库 smoke 以它统计“第二次扫描解析次数为 0”。
 
-### 3.9 迁移（`0036_incremental_scan.sql` + `.down.sql`，合入时重新编号）
+### 3.9 迁移（`0041_incremental_scan.sql` + `.down.sql`，合入编号，接 main 的 0040）
 
 ```sql
 CREATE TABLE library_parse_cache (
@@ -250,7 +252,7 @@ ALTER TABLE scan_runs ADD COLUMN scan_mode TEXT NOT NULL DEFAULT 'incremental'
 | R-4 | 借用指纹配错（同名同大小同时间但内容不同） | 概率可忽略；配对仍需指纹唯一；完整重扫不借用 |
 | R-5 | 缓存表变大 | 只存去封面的 JSON，超 1 MiB 不缓存；按 seen_scan_id 清理 |
 
-回滚：代码回滚后两张表无人读写，扫描回到每次全量；`0036` 下行迁移删除两表与 `scan_mode`。
+回滚：代码回滚后两张表无人读写，扫描回到每次全量；`0041` 下行迁移删除两表与 `scan_mode`。
 
 ## 8. 线间关系与版本号约定
 

@@ -26,7 +26,7 @@ func writeSyntheticTrack(t *testing.T, path string, md5 byte, comments ...string
 // runScan 启动一次扫描并等它成功结束。
 func runScan(t *testing.T, application *integrationTestApplication, admin *integrationTestUser) {
 	t.Helper()
-	started := application.request(t, http.MethodPost, "/api/v1/scans", map[string]any{}, admin, nil)
+	started := application.request(t, http.MethodPost, "/api/v1/scans", nil, admin, nil)
 	if started.Code != http.StatusAccepted {
 		t.Fatalf("start scan: HTTP %d: %s", started.Code, started.Body.String())
 	}

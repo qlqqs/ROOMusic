@@ -10,7 +10,7 @@
 
 ## 后端（GPT-6-Astra，high）
 
-1. 迁移 `backend/migrations/0037_scheduled_scan.sql` 与 `.down.sql`（design 3.4）。
+1. 迁移 `backend/migrations/0042_scheduled_scan.sql` 与 `.down.sql`（design 3.4）。
 2. `library/scan_schedule.go`：`PlanScheduledScan` 纯函数（design 3.1）；设置读写（`LoadScanSchedule`、`SaveScanSchedule`，值不变时不更新 `updated_at`）。
 3. `library/scans.go`：`StartOptions.Trigger`，写 `scan_runs.trigger_kind`；`Scan`、`scanRow`、presenter 增加 `trigger`。
 4. `library/scan_scheduler.go`：调度循环（最长 10 分钟醒一次、设置保存唤醒、`lastHandledSlot`、无 active 目录跳过、日志）；`app` 启动时以应用生命周期 context 启动，传入 `ROOMUSIC_TIMEZONE` 的 location，停机时随 context 退出。

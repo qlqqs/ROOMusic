@@ -1,6 +1,6 @@
 import type { Request, Route } from "@playwright/test";
 import { decodeCatalogState, type CatalogStateDTO, type ReleaseGroupSummaryWithAddedAtDTO } from "../../src/features/catalog/api/decoders";
-import type { DiagnosticsPageDTO, RootDTO, RootOperationDTO, ScanDTO, ScanReportDTO } from "../../src/features/library/api/decoders";
+import type { DiagnosticsPageDTO, RootDTO, RootOperationDTO, ScanDTO, ScanReportDTO, ScanScheduleDTO } from "../../src/features/library/api/decoders";
 import type { RecentReleaseDTO } from "../../src/features/listening/api/decoders";
 import type { MemberDTO } from "../../src/features/members/api/decoders";
 import { loadApiSample, sampleBody } from "../../src/test/api-samples";
@@ -84,6 +84,7 @@ export type ApiMock = CatalogData & {
   users: MemberDTO[];
   scans: Map<string, ScanDTO>;
   activeScanId: string | null;
+  scanSchedule: ScanScheduleDTO;
   /** 报告保留完整新增列表，接口按请求分页；只有管理员可读。 */
   scanReports: Map<string, ScanReportDTO>;
   /** 最近新增的可见组，接口按加入时间排序并限制八项。 */
@@ -154,6 +155,7 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
     users: (sampleBody("users/list") as { items: MemberDTO[] }).items,
     scans: new Map(),
     activeScanId: null,
+    scanSchedule: { enabled: true, hour: 4 },
     scanReports: new Map(),
     recentlyAdded: [],
     diagnostics: new Map(),
@@ -178,6 +180,8 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
         id: uuidOf("d", index),
         scan_run_id: uuidOf("d", index),
         status: "running",
+        mode: "incremental",
+        trigger: "manual",
         started_at: "2026-01-02T00:00:00Z",
         finished_at: null,
         cancel_requested_at: null,
@@ -421,7 +425,16 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
         return guarded(method, path, true, () => {
           const existing = mock.activeScanId === null ? undefined : mock.scans.get(mock.activeScanId);
           if (existing !== undefined) return json(existing, 200);
-          return json(mock.seedScan({ started_at: now() }, true), 202);
+          const mode = (body as { mode?: ScanDTO["mode"] } | undefined)?.mode ?? "incremental";
+          return json(mock.seedScan({ started_at: now(), mode }, true), 202);
+        });
+      case "GET /api/v1/scan-schedule":
+        return guarded(method, path, true, () => json(mock.scanSchedule));
+      case "PUT /api/v1/scan-schedule":
+        return guarded(method, path, true, () => {
+          const { enabled, hour } = body as ScanScheduleDTO;
+          mock.scanSchedule = { enabled, hour };
+          return json(mock.scanSchedule);
         });
       case "GET /api/v1/users":
         return guarded(method, path, true, () => json({ items: mock.users }));

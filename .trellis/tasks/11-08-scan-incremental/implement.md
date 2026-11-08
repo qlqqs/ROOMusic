@@ -10,7 +10,7 @@
 
 ## 后端（GPT-6-Astra，high）
 
-1. 迁移 `backend/migrations/0036_incremental_scan.sql` 与 `.down.sql`（design 3.9）。
+1. 迁移 `backend/migrations/0041_incremental_scan.sql` 与 `.down.sql`（design 3.9）。
 2. 版本号：`parser/version.go`（`CommonVersion`、`formatVersions`、`CacheVersion`）；`catalog/ingest/version.go`（`GroupingVersion`）。
 3. 观察字段：`ingest.SourceObservation` 增加 `ParserVersion`、`ArtworkDeferred`；`StageObservation` 的封面去重把 deferred 算作封面；`EmbeddedArtwork` 同步（design 3.4）。
 4. 解析缓存：`library/parse_cache.go`（按目录预取、命中判断、upsert、seen 批量标记、根结束清理）；`scanner.go` 物理文件与 CUE 父音频走缓存；`full` 模式不读缓存。

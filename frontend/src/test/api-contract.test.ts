@@ -38,6 +38,7 @@ import {
   decodeScan,
   decodeScanPage,
   decodeScanReport,
+  decodeScanSchedule,
 } from "../features/library/api/decoders";
 import {
   decodeCreatedMember,
@@ -197,6 +198,7 @@ const successContracts: Record<string, Contract> = {
   "search/suggestions-artists": { status: 200, decode: decodeSearchSuggestions },
   "search/tracks-alias-match": { status: 200, decode: decodeTrackResults },
   "audio-analysis/progress": { status: 200, decode: decodeAnalysisProgress },
+  "scan-schedule/get": { status: 200, decode: decodeScanSchedule },
   "scan-feedback/active-member": { status: 200, decode: decodeActiveScan },
   "scan-feedback/active-none": { status: 200, decode: decodeActiveScan },
   "scan-feedback/cancel-requested": { status: 202, decode: decodeScan },

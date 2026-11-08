@@ -8,7 +8,7 @@ library 拥有进度、报告收口与权限呈现；catalog/ingest 拥有扫描
 
 ## 2. 接口与数据
 
-- `ScanDTO` 原七字段不变，新增 `progress`、`root_progress`、`report_status` 和 `skipped_files`。历史前三者为 `null/null/legacy`，跳过数为 `null`；新扫描跳过数从 0 起，为非负 JS 安全整数，所有成员可见。
+- `ScanDTO` 原七字段不变，新增 `progress`、`root_progress`、`report_status`、`skipped_files` 和必需的 `mode: "incremental" | "full"`（历史为 incremental）。历史前三者为 `null/null/legacy`，跳过数为 `null`；新扫描跳过数从 0 起，为非负 JS 安全整数，所有成员可见。
 - `progress`：`version=1`，四阶段 `counting/reading_tags/organizing/saving`；`percent_bp`、`completed/total/unit`、`files_counted/files_total/files_processed`、`count_complete/files_changed`、`updated_at`。
 - `root_progress`：所有成员可见 `index/total`，管理员另有 `id/name`；无当前根时 index 为空，管理员两个身份字段也为空，普通成员省略这两个键。不返回绝对路径。
 - `GET /api/v1/scans/{id}/report?page=1&page_size=20`：管理员；页大小最多100。返回冻结的文件/专辑/曲目/诊断计数、`missing_reconciled` 和分页 `added_albums`。
@@ -23,6 +23,8 @@ library 拥有进度、报告收口与权限呈现；catalog/ingest 拥有扫描
 
 先固定 active roots，按 `path,id` 全根预遍历目录项（不读文件、不逐项 Stat）；候选为 CUE、支持音频与不支持音频候选扩展名的并集，经与正式遍历同一个 `scanFilter` 路径过滤。附件不计；候选文件符号链接计入，正式处理仍做安全校验；CUE 虚拟轨不重复推进文件数。
 之后逐根读取、整理、保存并清理暂存；根进入各阶段都复核路径安全。计数阶段子目录列举失败只令 `count_complete=false`，正式遍历按目录保住，不单独禁止成功或 missing；根不可用、根本身读不了或核心数据库错误仍阻断完整成功。根列表读取失败不得伪装已确认空库。
+
+“读取标签”的 `files_processed` 在有序槽位的应用阶段按遍历顺序对每个候选文件推进一次，worker 不写 feedback；并发 1/4 的计数与百分比语义一致、保持单调，取消后未应用结果不计入。命中解析缓存的文件同样计入已处理；缓存命中不改变百分比、文件/专辑/曲目计数或变化分类。候选跳过接入后只 touch 观察时间，报告仍为零变化。
 
 计数后总数固定，真实完成尝试数可以超过总数；少遇到文件只在该根遍历结束判断，取消不补数。`files_changed` 一旦为真不回退。
 计数阶段占500基点；后续按根预计数加权分配9400基点，根内读取/整理/保存比例60/20/20。仅最终有理数取整，中间使用溢出安全运算。

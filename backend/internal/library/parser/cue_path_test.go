@@ -72,7 +72,7 @@ func TestCueReferenceLooseMatchingRequiresUniqueFile(t *testing.T) {
 			if err := os.WriteFile(cuePath, []byte(content), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			document, err := ParseCueDocument(cuePath)
+			document, err := ParseCueDocument(cuePath, AudioDuration)
 			if err != nil {
 				t.Fatal(err)
 			}

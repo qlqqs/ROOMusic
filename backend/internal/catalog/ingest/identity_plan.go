@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"github.com/qlqq/roomusic/backend/internal/platform/workpool"
 )
 
 // 曲目身份规划：把 root 的暂存观察与在库曲目对上，决定每条保留下来的观察沿用哪条曲目、还是新建。
@@ -17,7 +19,7 @@ import (
 // 规划只做 SQL 与读文件，不持有长事务；结果写在暂存行上，由 PersistCandidate 按行写入。
 
 // Fingerprinter 返回 root 内某个来源文件与标签无关的内容指纹。空串表示该文件没有可识别的内容，
-// 不参与配对与换内容判断；返回错误表示文件内容无法完整读取。
+// 不参与配对与换内容判断；返回错误表示文件内容无法完整读取。并发规划时实现必须允许并发调用。
 type Fingerprinter interface {
 	Fingerprint(ctx context.Context, relativePath string) (string, error)
 }
@@ -46,6 +48,10 @@ type PlanDiagnostic struct {
 
 // PlanOptions 是一个 root 的规划输入。
 type PlanOptions struct {
+	// Mode 为 full 时不借用消失来源的指纹；同来源的状态复用不受影响。
+	Mode string
+	// Concurrency 是指纹读取的并发度；小于等于零时串行计算。
+	Concurrency int
 	// WalkComplete 表示该 root 的遍历完整且没有被取消。只有它为真、且规划中没有指纹失败时才允许配对重绑定。
 	WalkComplete bool
 	// Fingerprinter 用来计算没有免费指纹、也不能复用已存指纹的来源文件；不能为空。
@@ -59,6 +65,7 @@ type RootPlan struct {
 	AmbiguousKeys        int // 内容相同的多个来源导致没有重绑定的指纹键数
 	ContentReplaced      int // 同一路径换了内容、按新曲目写入的观察数
 	DeferredScopes       int // 遍历不完整时暂缓写入的 scope 数（不含因失败暂缓的）
+	FingerprintsBorrowed int // 按文件名、大小、微秒修改时间两侧唯一借用指纹的文件数
 	FingerprintsComputed int // 经 Fingerprinter 计算的文件数
 	FingerprintsReused   int // 复用已存指纹的观察数
 	FingerprintFailures  int // 指纹计算失败的文件数
@@ -83,7 +90,12 @@ func PlanStagedRoot(ctx context.Context, database StagingDB, scanID, rootID stri
 		  AND t.source_identity=o.source_identity`, scanID, rootID); err != nil {
 		return plan, err
 	}
-	if err := resolveFingerprints(ctx, database, scanID, rootID, options.Fingerprinter, &plan); err != nil {
+	if options.WalkComplete && options.Mode == "incremental" && plan.ScopeFailures == 0 {
+		if err := borrowFingerprints(ctx, database, scanID, rootID, &plan); err != nil {
+			return plan, err
+		}
+	}
+	if err := resolveFingerprints(ctx, database, scanID, rootID, options, &plan); err != nil {
 		return plan, err
 	}
 	if _, err := database.ExecContext(ctx, `UPDATE scan_observations o SET
@@ -167,10 +179,45 @@ func assignCandidateKeys(ctx context.Context, database StagingDB, scanID, rootID
 	}
 }
 
+// borrowFingerprints 只比较本根内两侧唯一的文件名、大小与微秒修改时间。
+// CUE 同一父文件可对应多轨，因此唯一性和计数均按文件路径，而不是曲目数。
+func borrowFingerprints(ctx context.Context, database StagingDB, scanID, rootID string, plan *RootPlan) error {
+	return database.QueryRowContext(ctx, `WITH old_files AS (
+        SELECT COALESCE(t.cue_parent_relative_path,t.relative_path) AS path,
+               t.source_size,t.source_modified_at,t.content_fingerprint
+        FROM tracks t
+        WHERE t.source_root_id=$2::uuid AND t.source_status='present'
+          AND t.content_fingerprint IS NOT NULL AND t.source_size IS NOT NULL AND t.source_modified_at IS NOT NULL
+          AND NOT `+heldSourceMatches+`
+          AND NOT EXISTS (SELECT 1 FROM scan_observations used
+              WHERE used.scan_run_id=$1::uuid AND used.root_id=$2::uuid AND used.matched_track_id=t.id)
+    ), old_keys AS (
+        SELECT regexp_replace(path,'^.*/','') AS name,source_size,source_modified_at,MIN(content_fingerprint) AS fingerprint
+        FROM old_files GROUP BY regexp_replace(path,'^.*/',''),source_size,source_modified_at
+        HAVING COUNT(DISTINCT path)=1 AND COUNT(DISTINCT content_fingerprint)=1
+    ), new_keys AS (
+        SELECT regexp_replace(fingerprint_path,'^.*/','') AS name,source_size,source_modified_at,MIN(fingerprint_path) AS path
+        FROM scan_observations
+        WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND candidate_key IS NOT NULL AND NOT withheld
+          AND matched_track_id IS NULL AND content_fingerprint IS NULL AND fingerprint_path IS NOT NULL AND fingerprint_path<>''
+          AND source_size IS NOT NULL AND source_modified_at IS NOT NULL
+        GROUP BY regexp_replace(fingerprint_path,'^.*/',''),source_size,source_modified_at
+        HAVING COUNT(DISTINCT fingerprint_path)=1
+    ), borrowed AS (
+        UPDATE scan_observations o SET content_fingerprint=old.fingerprint
+        FROM new_keys n JOIN old_keys old ON old.name=n.name AND old.source_size=n.source_size
+            AND old.source_modified_at=n.source_modified_at
+        WHERE o.scan_run_id=$1::uuid AND o.root_id=$2::uuid AND o.candidate_key IS NOT NULL AND NOT o.withheld
+          AND o.matched_track_id IS NULL AND o.content_fingerprint IS NULL AND o.fingerprint_path=n.path
+          AND o.source_size=n.source_size AND o.source_modified_at=n.source_modified_at
+        RETURNING o.fingerprint_path
+    ) SELECT COUNT(DISTINCT fingerprint_path) FROM borrowed`, scanID, rootID).Scan(&plan.FingerprintsBorrowed)
+}
+
 // resolveFingerprints 为保留下来、还没有指纹的观察补齐指纹：文件大小与修改时间都没变的匹配观察复用已存指纹，
 // 其余（新出现的文件、文件已变化的、迁移后尚未保存指纹的）经 Fingerprinter 计算，同一文件只算一次。
 // 计算失败的文件所在的 scope 暂缓写入。
-func resolveFingerprints(ctx context.Context, database StagingDB, scanID, rootID string, fingerprinter Fingerprinter, plan *RootPlan) error {
+func resolveFingerprints(ctx context.Context, database StagingDB, scanID, rootID string, options PlanOptions, plan *RootPlan) error {
 	reused, err := database.ExecContext(ctx, `UPDATE scan_observations o SET content_fingerprint=t.content_fingerprint
 		FROM tracks t
 		WHERE o.scan_run_id=$1::uuid AND o.root_id=$2::uuid AND o.candidate_key IS NOT NULL AND NOT o.withheld
@@ -209,8 +256,15 @@ func resolveFingerprints(ctx context.Context, database StagingDB, scanID, rootID
 		if len(paths) == 0 {
 			return nil
 		}
-		for _, path := range paths {
-			if err := computeFingerprint(ctx, database, scanID, rootID, fingerprinter, path, plan); err != nil {
+		results, err := workpool.Map(ctx, max(options.Concurrency, 1), paths, func(ctx context.Context, path string) fingerprintResult {
+			value, err := options.Fingerprinter.Fingerprint(ctx, path)
+			return fingerprintResult{value: value, err: err}
+		})
+		if err != nil {
+			return err
+		}
+		for index, path := range paths {
+			if err := applyFingerprint(ctx, database, scanID, rootID, path, results[index], plan); err != nil {
 				return err
 			}
 		}
@@ -218,12 +272,17 @@ func resolveFingerprints(ctx context.Context, database StagingDB, scanID, rootID
 	}
 }
 
-func computeFingerprint(ctx context.Context, database StagingDB, scanID, rootID string, fingerprinter Fingerprinter, path string, plan *RootPlan) error {
-	fingerprint, err := fingerprinter.Fingerprint(ctx, path)
+type fingerprintResult struct {
+	value string
+	err   error
+}
+
+// applyFingerprint 只在规划调用方按路径顺序写入，工作者不接触数据库或诊断状态。
+func applyFingerprint(ctx context.Context, database StagingDB, scanID, rootID, path string, result fingerprintResult, plan *RootPlan) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	if err != nil {
+	if result.err != nil {
 		plan.FingerprintFailures++
 		plan.addDiagnostic(PlanDiagnosticFingerprintFailure, path, "无法读取音频内容以计算指纹")
 		_, err := database.ExecContext(ctx, `UPDATE scan_observations SET withheld=TRUE
@@ -233,12 +292,12 @@ func computeFingerprint(ctx context.Context, database StagingDB, scanID, rootID 
 		return err
 	}
 	plan.FingerprintsComputed++
-	if fingerprint == "" {
+	if result.value == "" {
 		return nil
 	}
-	_, err = database.ExecContext(ctx, `UPDATE scan_observations SET content_fingerprint=$3
+	_, err := database.ExecContext(ctx, `UPDATE scan_observations SET content_fingerprint=$3
 		WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND candidate_key IS NOT NULL AND NOT withheld
-		  AND content_fingerprint IS NULL AND fingerprint_path=$4`, scanID, rootID, fingerprint, path)
+		  AND content_fingerprint IS NULL AND fingerprint_path=$4`, scanID, rootID, result.value, path)
 	return err
 }
 

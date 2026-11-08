@@ -22,6 +22,8 @@ or alternative business-policy engines.
   没有 `retry`。`onSettled` 返回刷新相关查询的 Promise，命令在刷新完成后才结束；回调先经 `scope.isCurrent()` 检查发起时的会话
   代次，旧会话的迟到结果不更新界面、不导航。开始与取消扫描（`useStartScan`、`useCancelScan`）是更简单的 mutation：开始扫描
   重复发送只会得到同一个扫描，不需要幂等键；取消被接受不等于已取消，结束前先刷新扫描状态，按钮保持忙碌。
+  `useStartScan` 的变量是扫描模式（S ④）：`incremental` 不发请求体，`full`（“完整重扫”）发 `{"mode":"full"}`；`useBeginScan().begin(mode?)` 缺省为增量，
+  `StartScanFeedback` 的“重试”用 `start.variables` 沿用失败那次的模式。
 - **受治理命令 hook**（M3，`useReleaseCommands`）：同一个命令状态机承载 M3 的四种意图（修正、归入、移出、撤销；M4 增加第五、第六、第七种，见本条末尾），每个新意图在发起时生成幂等键，
   结果不确定时 `retry` 沿用同一个命令与键；`refresh` 与 `onMoved` 由 app 传入（governance 不知道别的 feature 的查询键，也不依赖路由）。
   版本换了专辑组之后**先导航再刷新**：`onMoved` 在 mutation 的 `onSuccess` 里同步调用，刷新放在 `onSettled`——否则刷新读到“原来的专辑已没有这个版本”，

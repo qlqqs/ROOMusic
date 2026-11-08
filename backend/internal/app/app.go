@@ -34,11 +34,12 @@ import (
 
 // App 是装配完成的应用：请求 handler 加上需要在停机时等待的后台工作。
 type App struct {
-	mux          *http.ServeMux
-	handler      http.Handler
-	library      *library.Service
-	catalogDone  <-chan struct{}
-	analysisDone <-chan struct{}
+	mux               *http.ServeMux
+	handler           http.Handler
+	library           *library.Service
+	catalogDone       <-chan struct{}
+	analysisDone      <-chan struct{}
+	scanSchedulerDone <-chan struct{}
 }
 
 // Option 调整装配。生产路径不传任何选项；选项只用于测试把时间常量缩短到可以快速验证。
@@ -50,8 +51,14 @@ type options struct {
 	playbackPreflightWait time.Duration
 	derivation            playback.Derivation
 	analysis              *analysis.Analyzer
+	scanSchedulerClock    library.ScanSchedulerClock
 	// 测试直接插入旧目录夹具时暂停后台，搜索测试再显式回填。
 	pauseCatalogMaintenance bool
+}
+
+// WithScanSchedulerClock 为调度集成测试注入可控时钟与计时器。
+func WithScanSchedulerClock(clock library.ScanSchedulerClock) Option {
+	return func(settings *options) { settings.scanSchedulerClock = clock }
 }
 
 // WithLoginThrottle 为测试注入带可控时钟的限速器；默认每个应用使用独立实例。
@@ -101,9 +108,19 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		panic("app: invalid origin mode")
 	}
 	guard.WithLogger(logger)
-	libraryService := library.NewService(lifecycle, database, settings.DataDirectory, logger)
+	libraryService := library.NewService(lifecycle, database, settings.DataDirectory, logger).WithScanConcurrency(settings.ScanWorkers)
 	personalService := personal.NewService(database)
 	libraryService.SetAlbumFavoriteMover(personalService.MoveAlbumFavorites)
+	libraryService.WithScanSchedulerClock(assembly.scanSchedulerClock)
+	scanSchedulerDone := make(chan struct{})
+	if database != nil {
+		go func() {
+			defer close(scanSchedulerDone)
+			libraryService.RunScanScheduler(lifecycle, settings.Backup.Location)
+		}()
+	} else {
+		close(scanSchedulerDone)
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", httpserver.HealthHandler)
@@ -150,7 +167,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	} else {
 		close(catalogDone)
 	}
-	return &App{mux: mux, handler: httpserver.Middleware(logger, mux), library: libraryService, catalogDone: catalogDone, analysisDone: analysisDone}
+	return &App{mux: mux, handler: httpserver.Middleware(logger, mux), library: libraryService, catalogDone: catalogDone, analysisDone: analysisDone, scanSchedulerDone: scanSchedulerDone}
 }
 
 // InitializeCatalog 在允许扫描与治理写入前短事务登记目标版本，不发现对象或等待回填。
@@ -176,6 +193,16 @@ func (application *App) Handler() http.Handler { return application.handler }
 func (application *App) WaitForAnalysis(ctx context.Context) error {
 	select {
 	case <-application.analysisDone:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// WaitForScanScheduler 在生命周期取消后等待调度器退出，再等待扫描 worker，避免停机期间新增 worker。
+func (application *App) WaitForScanScheduler(ctx context.Context) error {
+	select {
+	case <-application.scanSchedulerDone:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()

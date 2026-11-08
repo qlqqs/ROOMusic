@@ -36,7 +36,7 @@ func persistTestObservations(ctx context.Context, service *Service, fixture *lib
 	if _, err := ingest.PlanStagedRoot(ctx, fixture.database, scanID, root.ID, ingest.PlanOptions{WalkComplete: true, Fingerprinter: unknownFingerprints{}}); err != nil {
 		return err
 	}
-	persistErr := service.persistStagedCandidates(ctx, fixture.database, scanID, root)
+	persistErr := service.persistStagedCandidates(ctx, fixture.database, scanID, root, &incrementalStats{})
 	return errors.Join(persistErr, ingest.ClearStagedObservations(ctx, fixture.database, scanID, root.ID))
 }
 

@@ -82,7 +82,7 @@ func Map[I, O any](ctx context.Context, workers int, items []I, fn func(context.
 
 - **OGG/Opus**：`parseOggStream` 从 `os.ReadFile` 改为 `bufio.Reader` 逐页读取：页头 27 字节 + 段表 + 段数据；跨页拼包沿用现有 16 MiB 单包上限；头部包之后的音频包边读边喂给指纹哈希；时长取最后一页的 granule position。单个文件的内存占用 = 一页 + 一个包（≤16 MiB），不随文件大小增长。解析结果（标签、指纹、时长、错误类别）与改动前逐字节一致。
 - **其他解析器**：实现时逐个核对 `flac.go`、`mp3.go`、`m4a.go`、`wav.go`、`fingerprint.go` 没有按文件大小整体读入（现状均用 `os.Open` 加有界读取；M4A 元数据单原子 16 MiB、总计 32 MiB，`parser.go:50-51`）；内嵌封面均有 16 MiB 上限。发现整体读入的同样改为流式。
-- **并发后的总量**：在途结果 ≤ 窗口（默认 8）个，每个最多一张 16 MiB 封面加标签，最坏约 130 MiB；worker 自身的读取缓冲是常数。
+- **并发后的总量（常见输入估算）**：在途结果 ≤ 窗口（默认 8）个；普通音频每槽位最多一张 16 MiB 封面加标签，约 130 MiB 是这一情形的估算，不是全局硬上限。常见 CUE 只有少量 FILE，但一槽位仍保留该 sheet 的所有父音频事实，须按实际 FILE 数追加封面与标签占用；worker 的流式读取缓冲有界。
 
 ### 3.6 进度（R4）
 
@@ -124,8 +124,16 @@ func Map[I, O any](ctx context.Context, workers int, items []I, fn func(context.
 | 取消后 goroutine 泄漏 | `Close()` 等待 worker 退出；测试在取消后断言在途 worker 数归零（不引入新依赖） |
 | OGG 流式改写引入解析差异 | 用现有 OGG/Opus 测试样本对比改动前后的观察与指纹逐字段相同 |
 | NAS 上并发读反而更慢 | 环境变量调低；默认值按 smoke 结果再定 |
+| OGG 反复注释包累积元数据，或 CUE 含成百上千个 FILE，内存超出常见输入估算 | **已知局限，接受**（2026-11-08 用户裁决）：保留旧接受范围，不加累计预算、不截断、不改 CUE 聚合方式；不列为未完成项 |
 
 回滚：设 `ROOMUSIC_SCAN_WORKERS=1` 立即回到串行；代码回滚无数据影响。
+
+### 实施核对（2026-11-08）
+
+- 为同一父音频的缓存依赖补充 `Ordered.Flush() error`：只排空当前队列，不关闭 worker。后续物理/CUE 条目命中在途路径时先排空再查询，避免并发度影响缓存命中。
+- CUE 同步入口保留；新增 `ParseCueSheet` / `ResolveCueDurations` 两阶段供扫描器使用，sheet 与区间/诊断在遍历 goroutine，worker 只读未命中父音频。
+- 3.5 对旧代码的两处判断不准确：`oggFingerprint` 原来也整体读入，实际与 `parseOggStream` 一起改为流式；旧解析器没有设置 `DurationSeconds`，实际保留零值，不新增 granule 时长，保证本次不改变既有观察。
+- 流式读取保持静态完整输入的字段与指纹算法；前段格式错误与后段 I/O 错误并存或动态短读时，底层错误优先级及失败时的部分观察可能不同，但仍返回失败。不会为了复制预读错误顺序恢复整文件读取。
 
 ## 7. 线间关系
 

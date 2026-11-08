@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -8,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"os"
 	"path/filepath"
@@ -36,7 +38,7 @@ const (
 )
 
 // ContentFingerprint 计算 path 指向的音频文件与标签无关的内容指纹。读取按块检查 context，不把整个
-// 文件读入内存（OGG 例外：解析器本来就整体读入该格式）。文件无法完整读取时返回错误；没有任何音频负载
+// 文件读入内存。文件无法完整读取时返回错误；没有任何音频负载
 // （例如没有帧的 FLAC、没有 mdat 的 M4A）的退化文件没有可识别的内容，返回空串，不与其他文件比较。
 func ContentFingerprint(ctx context.Context, path string) (string, error) {
 	compute := fingerprintFunc(filepath.Ext(path))
@@ -374,70 +376,105 @@ func wavFingerprint(ctx context.Context, reader io.ReaderAt, size int64) (string
 	return formatFingerprint(fingerprintWAVData, hash.Sum(nil)), nil
 }
 
-// oggFingerprint 整体读入文件（与解析器一致）后计算音频包哈希。
+// oggFingerprint 按页流式读取，保留按块检查 context 的取消语义，不拼接音频包。
 func oggFingerprint(ctx context.Context, reader io.ReaderAt, size int64) (string, error) {
-	data := make([]byte, size)
-	if _, err := io.ReadFull(contextReader{ctx: ctx, reader: io.NewSectionReader(reader, 0, size)}, data); err != nil {
+	source := &io.LimitedReader{
+		R: contextReader{ctx: ctx, reader: io.NewSectionReader(reader, 0, size)},
+		N: size,
+	}
+	fingerprint, err := readOggAudioFingerprint(source)
+	if err != nil {
 		return "", err
 	}
-	return oggAudioFingerprint(data)
+	// 文件在读取中被截断时，不能把恰好落在页边界的短读当成完整音频。
+	if source.N != 0 {
+		return "", io.ErrUnexpectedEOF
+	}
+	return fingerprint, nil
 }
 
-// oggAudioFingerprint 哈希头部包（Vorbis 三个、Opus 两个）之后全部音频包的字节。按包而不是按页计算：
-// 注释包变长只改变头部分页与之后各页的序号和校验和，音频包本身不变，页头也不参与哈希，所以改标签不会改变指纹。
+// oggAudioFingerprint 与文件入口共用流式算法；传入的字节只作为只读数据源。
 func oggAudioFingerprint(data []byte) (string, error) {
-	if len(data) < 27 || string(data[:4]) != "OggS" {
-		return "", fmt.Errorf("invalid OGG stream")
-	}
-	firstPayload := 27 + int(data[26])
-	if firstPayload > len(data) {
-		return "", fmt.Errorf("truncated OGG page")
-	}
-	firstPacket := data[firstPayload:]
-	headerPackets := 0
-	switch {
-	case bytes.HasPrefix(firstPacket, []byte("\x01vorbis")):
-		headerPackets = 3
-	case bytes.HasPrefix(firstPacket, []byte("OpusHead")):
-		headerPackets = 2
-	default:
-		return "", fmt.Errorf("unsupported OGG codec")
-	}
-	hash := sha256.New()
-	var audioBytes int
-	completed := 0
-	pos := 0
-	for pos+27 <= len(data) {
-		if string(data[pos:pos+4]) != "OggS" {
-			return "", fmt.Errorf("invalid OGG page")
+	return readOggAudioFingerprint(bytes.NewReader(data))
+}
+
+func readOggAudioFingerprint(source io.Reader) (string, error) {
+	reader := newOggPageReader(source)
+	var fingerprint *oggAudioHasher
+	for {
+		firstPage := !reader.started
+		segments, err := reader.nextPage()
+		if err == io.EOF {
+			break
 		}
-		table := pos + 27
-		cursor := table + int(data[pos+26])
-		if cursor > len(data) {
-			return "", fmt.Errorf("truncated OGG page")
+		if err != nil {
+			return "", err
 		}
-		for _, segmentLength := range data[table : table+int(data[pos+26])] {
-			end := cursor + int(segmentLength)
-			if end > len(data) {
-				return "", fmt.Errorf("truncated OGG packet")
+		if firstPage {
+			fingerprint, err = newOggAudioHasher(reader.reader)
+			if err != nil {
+				return "", err
 			}
-			if completed >= headerPackets {
-				_, _ = hash.Write(data[cursor:end])
-				audioBytes += end - cursor
-			}
-			cursor = end
-			// 小于 255 的段结束当前包；255 表示包在下一段（可能在下一页）继续。
-			if segmentLength < 255 {
-				completed++
+			if fingerprint == nil {
+				return "", fmt.Errorf("unsupported OGG codec")
 			}
 		}
-		pos = cursor
+		for _, segmentLength := range segments {
+			segment, err := reader.readSegment(segmentLength)
+			if err != nil {
+				return "", err
+			}
+			fingerprint.writeSegment(segment)
+		}
 	}
-	if pos != len(data) {
+	if reader.trailing {
 		return "", fmt.Errorf("invalid OGG trailing data")
 	}
-	if audioBytes == 0 {
-		return "", nil
+	// 独立指纹入口沿用原算法：不校验最后一个包是否结束，也不设置单包大小限制。
+	return fingerprint.fingerprint(), nil
+}
+
+// oggAudioHasher 跳过 Vorbis 三个、Opus 两个头部包，只哈希后续段负载。
+// 包边界只由小于 255 的段长确定，页头、段表和分页方式均不参与哈希。
+type oggAudioHasher struct {
+	hash             hash.Hash
+	headersRemaining int
+	hasAudio         bool
+}
+
+// newOggAudioHasher 在无法识别编码时返回 nil；读取失败仍返回原错误。
+func newOggAudioHasher(reader *bufio.Reader) (*oggAudioHasher, error) {
+	// 原算法在首页段表之后按原始字节识别前缀，不要求这些字节组成完整包。
+	// Peek 保留这一规则；短于八字节时仍可能匹配七字节的 Vorbis 前缀。
+	prefix, err := reader.Peek(8)
+	if err != nil && err != io.EOF {
+		return nil, err
 	}
-	return formatFingerprint(fingerprintOggAudio, hash.Sum(nil)), nil
+	headers := 0
+	switch {
+	case bytes.HasPrefix(prefix, []byte("\x01vorbis")):
+		headers = 3
+	case bytes.HasPrefix(prefix, []byte("OpusHead")):
+		headers = 2
+	default:
+		return nil, nil
+	}
+	return &oggAudioHasher{hash: sha256.New(), headersRemaining: headers}, nil
+}
+
+func (h *oggAudioHasher) writeSegment(segment []byte) {
+	if h.headersRemaining == 0 && len(segment) > 0 {
+		_, _ = h.hash.Write(segment)
+		h.hasAudio = true
+	}
+	if len(segment) < 255 && h.headersRemaining > 0 {
+		h.headersRemaining--
+	}
+}
+
+func (h *oggAudioHasher) fingerprint() string {
+	if !h.hasAudio {
+		return ""
+	}
+	return formatFingerprint(fingerprintOggAudio, h.hash.Sum(nil))
 }

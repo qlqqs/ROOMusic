@@ -9,6 +9,8 @@ export const libraryKeys = {
   folderListings: (generation: number) => viewerQueryKey(generation, "library", "folders"),
   /** rootId 不为 null 时是某个目录之内的浏览（选不扫描的子文件夹）。 */
   folders: (generation: number, path: string | null, rootId: string | null) => viewerQueryKey(generation, "library", "folders", rootId, path),
+  /** 每天自动扫描的设置。 */
+  scanSchedule: (generation: number) => viewerQueryKey(generation, "library", "scan-schedule"),
   activeScan: (generation: number) => viewerQueryKey(generation, "library", "scans", "active"),
   /** 扫描记录的全部页：启动扫描或扫描结束时整体失效。 */
   scanHistory: (generation: number) => viewerQueryKey(generation, "library", "scans", "history"),

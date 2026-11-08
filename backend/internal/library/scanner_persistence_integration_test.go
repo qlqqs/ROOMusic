@@ -379,7 +379,7 @@ func TestPostgreSQLCueStagingAlignsParentAndPersistsVirtualIdentity(t *testing.T
 	}
 	assertDatabaseCount(t, fixture, `SELECT COUNT(DISTINCT organization_scope) FROM scan_observations WHERE scan_run_id=$1::uuid`, 1, scanID)
 	planStagedObservations(t, fixture, scanID, root)
-	if err := application.persistStagedCandidates(context.Background(), fixture.database, scanID, root); err != nil {
+	if err := application.persistStagedCandidates(context.Background(), fixture.database, scanID, root, &incrementalStats{}); err != nil {
 		t.Fatalf("persist CUE candidate: %v", err)
 	}
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE source_root_id=$1::uuid`, 2, root.ID)

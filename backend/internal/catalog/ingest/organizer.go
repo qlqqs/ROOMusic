@@ -1090,11 +1090,13 @@ func resolveCueCandidateGroups(observations []SourceObservation) []SourceObserva
 				survivors[index] = mergeSingleCueEvidence(survivors[index], group.cues)
 			}
 		}
-		if len(survivors) > 0 && len(survivors[0].Artwork) == 0 {
+		if len(survivors) > 0 && len(survivors[0].Artwork) == 0 && !survivors[0].ArtworkDeferred {
 			for _, member := range members {
-				if len(member.Artwork) > 0 {
+				if len(member.Artwork) > 0 || member.ArtworkDeferred {
 					survivors[0].Artwork = append([]byte(nil), member.Artwork...)
 					survivors[0].ArtworkMIME = member.ArtworkMIME
+					survivors[0].ArtworkDeferred = member.ArtworkDeferred
+					survivors[0].ArtworkRelativePath = member.ArtworkRelativePath
 					break
 				}
 			}

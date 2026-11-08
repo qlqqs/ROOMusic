@@ -257,6 +257,10 @@ func TestPostgreSQLSwappedFilesFollowContent(t *testing.T) {
 		service := scannerTestApplication(fixture)
 		for index, name := range []string{"a", "b", "c"} {
 			writeAudio(t, root, "Album/"+name+".flac", audioFile{seed: byte(index + 1), title: strings.ToUpper(name), album: "Album", track: index + 1})
+			modifiedAt := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC).Add(time.Duration(index) * 2 * time.Second)
+			if err := os.Chtimes(filepath.Join(root.Path, "Album", name+".flac"), modifiedAt, modifiedAt); err != nil {
+				t.Fatalf("设置轮换夹具修改时间：%v", err)
+			}
 		}
 		requireScanStatus(t, runTestScan(t, fixture, service, root), "succeeded")
 		before := presentTrackIDs(t, fixture, root.ID)
@@ -430,7 +434,7 @@ func TestPostgreSQLCanceledScanDoesNotRebind(t *testing.T) {
 			t.Fatalf("open scan connection: %v", err)
 		}
 		defer connection.Close()
-		scanErr := service.scanRoot(ctx, connection, scanID, root)
+		scanErr := service.scanRootWithOptions(ctx, connection, scanID, root, StartOptions{Mode: ScanModeFull})
 		verifyUnchanged(t, fixture, root, service, scanID, before, scanErr)
 		assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE source_root_id=$1::uuid AND relative_path LIKE 'Renamed/%'`, 0, root.ID)
 	})
@@ -456,6 +460,7 @@ func TestPostgreSQLCrossRootMoveGetsNewIdentity(t *testing.T) {
 	rootB := insertScannerRoot(t, fixture, "cross-root-b")
 	service := scannerTestApplication(fixture)
 	writeAudio(t, rootA, "Album/01.flac", audioFile{seed: 1, title: "Mover", album: "Album", track: 1})
+	writeAudio(t, rootA, "Album/02.flac", audioFile{seed: 3, title: "Stays", album: "Album", track: 2})
 	writeAudio(t, rootB, "Other/01.flac", audioFile{seed: 2, title: "Stays", album: "Other", track: 1})
 	requireScanStatus(t, runTestScan(t, fixture, service, rootA, rootB), "succeeded")
 	oldID := presentTrackIDs(t, fixture, rootA.ID)["Album/01.flac"]
@@ -795,7 +800,7 @@ func TestPostgreSQLPersistRejectsObservationsWithoutPlan(t *testing.T) {
 	}
 
 	// 没有规划就写入：不猜测身份，候选回滚，不产生曲目、Release 或组。
-	err := service.persistStagedCandidates(context.Background(), fixture.database, scanID, root)
+	err := service.persistStagedCandidates(context.Background(), fixture.database, scanID, root, &incrementalStats{})
 	if err == nil || !strings.Contains(err.Error(), "no identity plan") {
 		t.Fatalf("没有规划的观察被写入：%v", err)
 	}
@@ -823,7 +828,7 @@ func TestPostgreSQLPersistRollsBackWhenPlannedTrackDisappears(t *testing.T) {
 	if _, err := fixture.database.Exec(`DELETE FROM tracks WHERE id=$1::uuid`, trackID); err != nil {
 		t.Fatalf("delete planned track: %v", err)
 	}
-	err := service.persistStagedCandidates(context.Background(), fixture.database, scanID, root)
+	err := service.persistStagedCandidates(context.Background(), fixture.database, scanID, root, &incrementalStats{})
 	if err == nil || !strings.Contains(err.Error(), "planned track no longer exists") {
 		t.Fatalf("指定沿用的曲目已不存在却写入成功：%v", err)
 	}

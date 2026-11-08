@@ -13,6 +13,7 @@ import {
   decodeScan,
   decodeScanPage,
   decodeScanReport,
+  decodeScanSchedule,
   type AnalysisProgressDTO,
   type DiagnosticsPageDTO,
   type FolderListingDTO,
@@ -22,8 +23,10 @@ import {
   type RootDTO,
   type RootOperationDTO,
   type ScanDTO,
+  type ScanMode,
   type ScanPageDTO,
   type ScanReportDTO,
+  type ScanScheduleDTO,
 } from "./decoders";
 
 export function fetchRoots(signal?: AbortSignal): Promise<ApiResponse<{ items: RootDTO[] }>> {
@@ -99,9 +102,12 @@ export function fetchActiveScan(signal?: AbortSignal): Promise<ApiResponse<{ sca
   return apiRequest({ method: "GET", path: "/api/v1/scans/active", signal }, decodeActiveScan);
 }
 
-/** 开始扫描：202 表示新建，200 表示已有扫描在运行（返回的是那一个）。没有请求体与幂等键，重复开始是安全的。 */
-export function startScan(): Promise<ApiResponse<ScanDTO>> {
-  return apiRequest({ method: "POST", path: "/api/v1/scans" }, decodeScan);
+/**
+ * 开始扫描：202 表示新建，200 表示已有扫描在运行（返回的是那一个，不论请求的模式）。没有幂等键，重复开始是安全的。
+ * 增量扫描不发请求体；完整重扫发 {"mode":"full"}。
+ */
+export function startScan(mode: ScanMode = "incremental"): Promise<ApiResponse<ScanDTO>> {
+  return apiRequest({ method: "POST", path: "/api/v1/scans", body: mode === "incremental" ? undefined : { mode } }, decodeScan);
 }
 
 /** 扫描记录（仅管理员）：按开始时间倒序分页，page 从 1 起。 */
@@ -130,6 +136,16 @@ export function fetchScanDiagnostics(scanId: string, signal?: AbortSignal): Prom
 export function fetchScanReport(scanId: string, page: number, pageSize: number, signal?: AbortSignal): Promise<ApiResponse<ScanReportDTO>> {
   const query = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
   return apiRequest({ method: "GET", path: `/api/v1/scans/${scanId}/report?${query}`, signal }, decodeScanReport);
+}
+
+/** 每天自动扫描的设置（管理员）。 */
+export function fetchScanSchedule(signal?: AbortSignal): Promise<ApiResponse<ScanScheduleDTO>> {
+  return apiRequest({ method: "GET", path: "/api/v1/scan-schedule", signal }, decodeScanSchedule);
+}
+
+/** 保存每天自动扫描的设置：整份替换，重复保存同样的值是安全的，不需要幂等键；响应是保存后的设置。 */
+export function saveScanSchedule(schedule: ScanScheduleDTO): Promise<ApiResponse<ScanScheduleDTO>> {
+  return apiRequest({ method: "PUT", path: "/api/v1/scan-schedule", body: { enabled: schedule.enabled, hour: schedule.hour } }, decodeScanSchedule);
 }
 
 /** 后台音频分析的进度（所有登录用户）。 */

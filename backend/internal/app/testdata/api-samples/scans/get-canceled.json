@@ -7,13 +7,15 @@
     },
     "finished_at": "2026-01-01T00:00:02Z",
     "id": "00000000-0000-4000-8000-000000000001",
+    "mode": "incremental",
     "progress": null,
     "report_status": "legacy",
     "root_progress": null,
     "scan_run_id": "00000000-0000-4000-8000-000000000001",
     "skipped_files": null,
     "started_at": "2026-01-01T00:00:00Z",
-    "status": "canceled"
+    "status": "canceled",
+    "trigger": "manual"
   },
   "status": 200
 }

@@ -82,6 +82,9 @@ func newIntegrationTestApplicationWithLogger(t *testing.T, logger *slog.Logger, 
 		cancelScans()
 		waitContext, cancelWait := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancelWait()
+		if err := application.WaitForScanScheduler(waitContext); err != nil {
+			t.Errorf("等待定时扫描调度器退出：%v", err)
+		}
 		if err := application.WaitForScans(waitContext); err != nil {
 			t.Errorf("wait for scan workers: %v", err)
 		}

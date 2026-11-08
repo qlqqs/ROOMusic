@@ -5,7 +5,7 @@ import { scanFailureMessages } from "./root-messages";
 
 type StartScanFeedbackProps = Pick<ReturnType<typeof useBeginScan>, "start" | "begin">;
 
-/** “开始扫描”的结果：失败时可以重试；已有扫描在运行（200）时提示并链接到那一个。新建的扫描已经直接打开，这里不显示。 */
+/** “开始扫描”与“完整重扫”的结果：失败时按原来的模式重试；已有扫描在运行（200）时提示并链接到那一个。新建的扫描已经直接打开，这里不显示。 */
 export function StartScanFeedback({ start, begin }: StartScanFeedbackProps) {
   return (
     <>
@@ -14,7 +14,7 @@ export function StartScanFeedback({ start, begin }: StartScanFeedbackProps) {
           error={start.error}
           context="write"
           messages={scanFailureMessages}
-          action={<Button onClick={begin}>重试</Button>}
+          action={<Button onClick={() => begin(start.variables)}>重试</Button>}
         />
       ) : null}
       {start.isSuccess && start.data.status === 200 ? (

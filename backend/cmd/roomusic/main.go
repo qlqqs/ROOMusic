@@ -105,6 +105,9 @@ func main() {
 		logger.Error("roomusic HTTP shutdown failed", "event", "platform.http.shutdown_failed", "error", err)
 	}
 	if application != nil {
+		if err := application.WaitForScanScheduler(shutdownContext); err != nil {
+			logger.Error("定时扫描调度器未能及时退出", "event", "library.scan.scheduler_shutdown_timeout", "module", "library")
+		}
 		if err := application.WaitForScans(shutdownContext); err != nil {
 			logger.Error("roomusic scan shutdown timed out", "event", "library.scan.shutdown_timeout", "error", err)
 		}

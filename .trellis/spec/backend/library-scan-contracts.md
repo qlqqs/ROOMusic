@@ -153,7 +153,7 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
   没有配对到别处时置为 `missing`，记 `content_replaced`；(2) 只有该 root 遍历完整（未取消，没有根不可用、暂存、指纹或 scope 失败）时，没有匹配到身份的观察才与本 root 中本轮消失（present、有指纹、未被计划沿用且未被保住）的曲目
   按指纹键配对，两侧都恰好一条才沿用 UUID 并更新路径与来源身份，否则不重绑定，歧义键记 `identity_ambiguous`；
   (3) 遍历不完整时不配对，含疑似移动或换内容观察的 scope 整体暂缓写入并记 `identity_deferred`，留给下一次完整遍历，
-  其余 scope 照常写入；(4) 跨 root 从不重绑定；相似度、标题、时长从不用于推断身份。写入前先腾出被别的曲目持有的
+  其余 scope 照常写入；完整增量遍历还可在计算前按文件名/大小/mtime 两侧唯一借用旧指纹（详见“增量扫描”），不改变配对条件；(4) 跨 root 从不重绑定；相似度、标题、时长从不用于推断身份。写入前先腾出被别的曲目持有的
   来源身份（互换、轮换与处理顺序无关）。重绑定按候选逐个短事务提交，依据的是完整的遍历证据；取消后已提交的保留，没写到
   的候选保持原状。每次候选写入替换 current decisions、grouping evidence、credits 和 track observations，不按重扫次数追加。
 - **Release 身份**（阶段 I）：候选已规划沿用的曲目中严格过半当前属于同一个既有 Release 时沿用它；多个候选争同一个
@@ -162,7 +162,7 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
   移动、增删少量文件、最小来源变化都不换 Release ID；新增文件多于原有（如 2 轨加 3 轨）或整体被替换时新建 Release。
 - 身份规划的诊断写入 `scan_diagnostics`（沿用每次扫描最多 100 条的上限，安全相对路径，无绝对路径）：
   `identity_ambiguous`、`content_replaced`、`identity_deferred`、`fingerprint_failure`；每个 root 规划结束记一条聚合
-  INFO 日志 `library.scan.identity_resolved`，只含计数。
+  INFO 日志 `library.scan.identity_resolved`，只含计数（含增量扫描的 `FingerprintsBorrowed`）。
 - CUE 引用可以位于 sheet 的父目录或兄弟目录，只要仍在显式注册根 containment 内；
   staging 必须先按规范化 `cue_parent_relative_path` 与物理 observation 对齐 scope，
   organizer 再仅在同一 candidate 和明确父子关系内消除虚拟/物理重复。不得仅按 sheet
@@ -213,7 +213,7 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
   标签按 `/、&` 拆子标签，先整体查角色/乐器表，未命中再按连续中文段、拉丁段查表；至少一项命中才是署名行，首次非署名行结束整个块。
   所有命中项均产出；没有细分的角色 detail 为空，带细分的工种与乐器保留命中子标签原文（如“混音工程师”“Guitar”），不改成标签来源的规范键。
   名字按共用规则拆分并去掉 `@` 起的团体/工作室后缀（去后为空则保留原文），`Source="lyrics"`；某角色已有 tag 署名时，该角色全部歌词署名丢弃。
-  现分支尚无④增量扫描，下一次扫描重新解析；不新增 CommonVersion，沿用整合后的艺人图/搜索投影版本4/2，不改 textnorm.Version。
+  ④ 首次合入以全部 M/O/T 规则为版本 1 基线；从尚无解析缓存的 main 升级后首扫重新解析。艺人图/搜索投影版本为4/2，不改 textnorm.Version。
 - `AudioObservation.Compilation bool` 经 scanner 原样传给 `SourceObservation.Compilation`（JSON `compilation,omitempty`）。
   Vorbis 的 `COMPILATION/ITUNESCOMPILATION`、ID3 的 `TCMP/TXXX:COMPILATION`、M4A 的 `----:COMPILATION` 去空白、小写后任一为
   `1/yes/true/compilation` 即为真；M4A `cpil` 为单字节非零整数时为真，0为假。
@@ -267,7 +267,7 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 - 合成条件：正碟 1..max 连续且 max≥2，或一个正碟加附加碟，或整个父目录只有一碟；缺号时要求每个碟目录至少一条权威 album 且 partition 唯一。正碟保留目录号；附加碟按规范化 Suffix（空则 Prefix）、编号、路径排序，从正碟最大号后顺排。
 - 合成候选仍为 `strict_multidisc`，Scope 为父目录，Partition 为空；无权威 album 时用唯一 Prefix 或父目录名兜底（`multidisc_parent_fallback_v1`）。字段证据仍取首个物理碟目录，不取父目录；独占合成、严格多碟和 `box_leaf` 的碟目录证据统一只解析 `parseDiscMarker` 的 Prefix，Prefix 为空不产生目录证据，非碟目录不变。`OrganizedCandidate.MediumTitles map[int]string`：标题取 Suffix，附加碟空时取 Prefix；去包裹整名的括号；`PersistCandidate` 新增或更新 `media.title`，无碟名恢复 `Medium`。REST 形状不变，候选键仍 `v2`、归组证据仍 `organizer_v2`。
 
-- 归组版本：当前尚无 `GroupingVersion`，不新增常量；④ 先合入时由整合会话提升归组版本，②③一起只加一次，并确保候选签名覆盖四轮封面范围；parser 版本不变。
+- 归组版本：④ 尚未进入 main，本次整合②③后 `GroupingVersion` 仍从 1 起；后续已发布规则变化按下方升版本合同执行。候选签名与封面发现共用四轮候选列举。
 
 ### 文件名推断与同目录归组（③）
 
@@ -324,7 +324,7 @@ Xing/Info 位于首帧 + 4 + 边信息长度：MPEG-1 双/单声道为 32/17，M
 没有 Xing/Info 时读首帧 + 36 的 VBRI。帧数大于 0 时，时长 = 帧数 × 每帧样本数 ÷ 采样率；MPEG-1 为 1152，MPEG-2/2.5 为 576。
 码率按头部正字节数（缺失时取首帧至音频区间结尾）× 8 ÷ 时长 ÷ 1000，四舍五入为 kbps；没有帧数时以同一音频字节数除以首帧码率作 CBR 浮点估算，不截整秒。
 不解析 TOC、不逐帧计数、不扣 LAME 编码延迟与补齐；没有头的 VBR 残余偏差由[分析时长视图](./audio-analysis-contracts.md)校正。
-标签、`mp3-frames-v1` 指纹、曲目身份均不变。④ 尚未合入时下次全量扫描即修正；若④先合入则合并时递增 MP3 解析器版本。
+标签、`mp3-frames-v1` 指纹、曲目身份均不变。本次④尚未进入 main，MP3 格式版本仍从 1 起；缓存发布后再改时长规则须递增 MP3 格式版本。
 验证覆盖 Xing/Info/VBRI、版本与声道偏移、缺字节数和 CBR 标签扣除；真实 Xing VBR 扫描与解码时长差小于 0.1 秒。
 错误：用含封面的整个文件大小除以码率并截整秒；正确：先限定音频区间，有帧数优先用帧数，无帧数保留浮点精度。
 
@@ -344,6 +344,74 @@ WavPack 在首个非 `wvpk` 位置结束。AIFF 的 `SSND` 跳过 offset/blockSi
 读取使用 `hashSection` 的分段取消检查，不整读音频。无音频负载返回空指纹，不与其他文件比较。
 APEv2、ID3、`NAME`/`AUTH` 标签的变化不改变指纹；帧数据或关键参数变化会改变指纹，APE 原生 MD5 路径信任描述块的摘要。
 播放转换前通过同一 `ContentFingerprintOf` 分派重算，不另建播放专用身份算法。
+
+### 并发解析（⑤）
+
+- `library/scan_pipeline.go` 将候选、过滤和失败条目放入有序槽位；缓存命中直接就绪，只有未命中音频进入 `platform/workpool.Ordered`。窗口为 `2 × workers`（默认 8），窗口满时等待头部；结果只能在遍历 goroutine 按 WalkDir 次序应用。构造观察、缓存写入、暂存、诊断、HoldSource、跳过与 processed 计数都不在 worker 中执行；诊断 100 条截断及暂存顺序与并发 1 一致。
+- `NewOrdered[T](ctx, workers, window, apply)` 要求正数并发与窗口；`Submit(func(context.Context) T)` / `Ready(T)` 排队并应用已就绪头部；`Flush()` 应用当前队列但保留 worker，`Drain()` 应用后关闭，`Close()` 取消并等待、不应用。调用端串行使用；apply 首错停止流水线，取消丢弃未应用结果，等待已启动解析返回，不捕获 panic、不重试。解析器不接收 context，关闭等待当前文件读取结束；单文件内存有界不等于读取耗时有界。
+- 缓存查询仍在持锁的遍历 goroutine；后续条目引用尚在途的同一规范父音频路径时，先 `Flush()` 应用早先的缓存写入再查缓存，不能以 worker 完成快慢决定命中。缓存成功、失败与 full 模式沿用④，不引入根级结果缓存。
+- `parser.ParseCueSheet(path, containmentRoot ...string) (CueDocument,error)` 只读 sheet、校验引用；每张 sheet 的唯一父音频先查缓存，未命中项在一个任务内读取。应用阶段调用 `ResolveCueDurations(document CueDocument, duration CueDurationReader) (CueDocument,error)` 一次，按原 FILE 标识完成区间、诊断和元数据；既有同步 `ParseCueDocument` 依次调用这两阶段，返回值不保留临时 FILE 标识。CUE 父事实仍受单 sheet 的 FILE 上限约束，不能把每槽位理解为固定只有一张封面。
+- `PlanOptions.Concurrency int` 小于等于零按 1；`resolveFingerprints` 每页最多 100 个路径，用 `workpool.Map(ctx, workers, items, fn)` 并行只读，再按输入路径顺序写回与记 `fingerprint_failure`。Fingerprinter（包括测试桩）必须允许并发调用。SQL 仍用同一 holder、原 `WithoutCancel` 合同；不增加写入者或并行根。
+- OGG/Opus 标签入口逐页逐段读取，只保留固定页头/段缓冲和当前最多 16 MiB 的包，音频包即时入哈希；独立 `oggFingerprint` 同样流式，不能按文件大小分配。标签、音频字节哈希、静态输入格式错误顺序保持；原 `DurationSeconds=0` 保持，不新增 granule 时长语义。流式读取不保证复现“前段格式错误与后段 I/O 错误并存”时整文件预读的底层错误优先级，读取失败仍失败。
+- 内存估算只针对普通音频和少量 FILE 的常见 CUE，不是全局硬上限。重复 OGG 注释包仍可累积元数据，极多 FILE 的 CUE 仍聚合父事实；2026-11-08 用户裁决为“已知局限，接受”，保留旧接受范围，不新增累计预算、不截断、不改变 CUE 聚合。
+- 配置与 app 装配见运行合同：正式服务默认 4；直接构造的零值 Service 与零值 PlanOptions 仍串行。设为 1 只改变读盘并发，不改变来源、缓存或反馈语义。未增加迁移、REST 字段或解析器版本变化。
+
+### 增量扫描（④）
+
+解析缓存省去未变文件的解析；候选签名与状态判定省去未变候选的写入、封面读取和抓轨日志内容读取。两者分别判断，不依赖彼此命中；完整重扫绕过两种跳过但仍更新缓存与候选状态。不增加开关。
+
+#### 存储与观察
+
+- `0041_incremental_scan.sql`（合入编号，接 main 的 0040）增加 `library_parse_cache`、`scan_candidate_states` 和 `scan_runs.scan_mode`；下行删除两表与列。均不回填缓存，不迁移曲目或 Release 身份，不增加环境变量。
+- `library` 拥有 `library_parse_cache`：主键 `(root_id, relative_path)`，路径使用 `ingest.NormalizedPath`；列为 `directory/source_size/source_modified_at/parser_version/observation/seen_scan_id/updated_at`，目录索引 `(root_id,directory)`；根外键级联删除。
+- `catalog/ingest` 拥有 `scan_candidate_states`：主键 `(root_id,candidate_key)`，列 `release_id/signature/updated_at`，签名约束为 64 位小写十六进制。`release_id` **不加外键**，避免 KEY SHARE 与发行/组锁顺序交叉。
+- `SourceObservation.ArtworkRelativePath string`（`artwork_relative_path,omitempty`）记录根内真实封面来源文件：物理/CUE 观察构建时填写，organizer 向 survivor 迁移内嵌封面时与 `ArtworkDeferred` 一起复制，延迟读取使用该路径而非 survivor 自身路径；仅属内部观察合同、不进入 REST，字段按字母序排列（2026-11-08 用户批准补充）。
+- `SourceObservation` 增加 `ArtworkDeferred bool`（`artwork_deferred,omitempty`）和 `ParserVersion string`（`parser_version,omitempty`），与现有字段按字母序排列。物理轨记录本文件解析器版本，CUE 虚拟轨记录父音频版本；CUE 虚拟轨本身不进入解析缓存。
+
+#### 缓存与延迟封面
+
+- 缓存值为 `parser.AudioObservation` 去掉 `Artwork` 字节后的 JSON，保留 `ArtworkMIME`；超过 1 MiB 不缓存。缓存只保存解析器原始输出，不能把 organizer 或 CUE 覆盖后的观察写回缓存。
+- 增量命中必须同时满足 root/规范相对路径、文件大小、mtime 截到微秒、`parser.CacheVersion(ext)` 相等；未知格式版本为空，不缓存。不做整秒降精度、Unicode 身份合并或内存目录树缓存。
+- `ParseCueDocument(path, duration CueDurationReader, containmentRoot ...string)` 的父音频时长由调用方注入（`CueDurationReader func(string) (float64,error)`，直接解析实现为 `parser.AudioDuration`）：scanner 使用同一解析缓存，未命中才解析、计入 `files_parsed` 并写缓存；parser 其他调用方显式传入直接解析的默认实现，不保留旧签名包装，CUE sheet 每轮解析和末轨区间语义不变（2026-11-08 用户批准补充）。
+- 物理文件通过过滤、安全校验和 Stat 后才查缓存；CUE sheet 每次重新解析以保留诊断，父音频复用同一缓存。进入目录查询 `LIMIT 2001`，内存至多保留 2000 条；溢出部分及跨目录 CUE 父文件逐条查询。
+- 缓存只保存 parser 原始观察，不保存 organizer 推断结果；命中后仍经槽位按序构造并暂存观察，排空后执行 CUE 对齐、碟父目录标记和 organizer。文件名轨号、碟号、艺人每轮重新推断，不因解析缓存冻结；附属目录封面候选在保存阶段按当前过滤规则列举，只有候选需要重写时才读取封面。
+- 解析成功在槽位按序应用时于扫描 holder 上 upsert，写 `seen_scan_id=本次`；不等待候选提交，因为缓存只取决于源文件与解析器版本。失败不缓存；命中项应用时登记 seen，按有界批次更新，目录切换及根排空后刷新。
+- 遍历结束、未取消且无 `walk_error` 时清理本根 `seen_scan_id IS DISTINCT FROM 本次` 的缓存项，涵盖过滤、排除、删除和读失败来源；取消或目录读失败不清理。缓存读写/清理失败只记 WARN `library.scan.parse_cache_failed`，按未命中处理，不改变扫描完整性，不额外重试或引入替代存储。
+- 缓存命中且 MIME 非空时，观察置 `ArtworkDeferred=true`；`StageObservation` 的 scope 内封面去重把 `artwork` 或 `artwork_deferred` 都算封面，后来者同时清除字节、MIME 与 deferred。`EmbeddedArtwork()` 保持原碟序/曲序，接受有字节或 deferred 的观察。
+- 保存候选封面时，deferred 观察经路径安全校验后现读音频取封面；读取失败记 `artwork_unreadable`，或已无封面时，继续原文件夹封面查找。受管封面存储/绑定/清理失败仍阻断完整成功。候选被跳过时不触发 deferred 读取。
+
+#### 版本号与升版本规则
+
+- `parser.CommonVersion=1`；`formatVersions` 的 `.flac/.mp3/.ogg/.opus/.wav/.m4a/.ape/.wv/.aif/.aiff` 均从 1 起。`CacheVersion(extension)` 返回如 `c1.f1`，未知扩展名返回空串。本次整合前④尚未进入 main，不追补 M/O/T 规则版本；`artistgraph.Version=4`、`searchindex.ProjectionVersion=2` 由各自维护流程回填，不参与解析缓存命中判定。已有试验 S 分支的版本 1 缓存不能代表合并后基线，验证时应使用新隔离库或完整重扫。
+- `AudioObservation` 字段、类型、含义或共用解析规则（兜底、分隔、多值、歌词、日期以及 parser 内编号推断）改变，升 `CommonVersion`，使所有格式重新解析；只改某格式读取，升该格式版本；新增格式只加版本 1，不使其他格式失效。
+- `ingest.GroupingVersion=1`，覆盖同样观察所产生的 Release 图：organizer、folder_metadata、抓轨证据、字段决定、归组证据、署名/艺人、流派、作品、搜索投影字段与封面选择。只改这些规则而不改 parser，不升解析器版本，只升归组版本；升归组版本使所有候选重写而不使解析缓存失效。
+- ④ 合入之后的合入核对：O ②/③ 升 `GroupingVersion`（同批合入合计加一）；T ⑥ 升 `CommonVersion` 与 `GroupingVersion`；T ⑦/⑧ 按格式或共用解析改动升解析器版本，并升归组版本；T ⑬ 搜索独立回填不升；M ⑩ 新格式加 1，共用解析变化另升 `CommonVersion`，CUE 回退扩展名表无须另升；M ⑨ MP3 时长规则升 `.mp3` 版本，分析器自有版本另行维护。④ 之前已合入的规则不追补版本。
+
+#### 借用指纹与完整重扫
+
+- `PlanOptions.Mode` 传入模式；仅 `WalkComplete` 且增量模式，才在 `resolveFingerprints` 计算前借用指纹。旧侧为本根 present、已知指纹/大小/mtime、未被任何本轮暂存 `matched_track_id` 引用且未被保住的文件；CUE 取 `COALESCE(cue_parent_relative_path,relative_path)`。
+- 新侧为保留、未暂缓、未匹配且无指纹、`fingerprint_path` 非空的暂存观察；按文件名、大小、mtime 配对，两侧各恰好一个不同文件路径才借用。CUE 多轨按父文件去重计数，并将借得指纹用于该父文件的暂存行。文件名改变或任一侧有多个路径，照常计算；不使用目录名或标签推测身份。
+- 借用不代替曲目配对：后续仍要求指纹与 CUE 区间两侧唯一，沿用原 UUID 与 Release 严格过半规则。`RootPlan.FingerprintsBorrowed` 汇入 `library.scan.identity_resolved` 的计数，不记录路径。
+- `full` 绕过解析缓存读取、候选跳过和指纹借用，仍将成功解析写缓存；保留既有的“同来源身份且 size/mtime 未变则复用已存指纹”。扫描仍走同一协调锁、身份规划、反馈与 missing 流程。HTTP 可选请求体与所有角色 `ScanDTO.mode` 见[扫描协调合同](./scan-coordination-contracts.md)。
+- 每根结束 INFO `library.scan.incremental_summary`：`scan_run_id/library_root_id/mode/files_parsed/parse_cache_hits/parse_cache_writes/candidates_written/candidates_skipped/artwork_deferred_loads`。只记标识、模式与计数；`candidates_skipped` 只在未变判定命中且 touch 成功后加一，解析缓存命中本身不算候选跳过。
+
+#### 候选签名与跳过
+
+- `library.candidateSignature(root, candidate) (string,error)` 计算 SHA-256 小写十六进制。行类型为 `g/k/d/m/s/a/l`，同一行字段以 NUL 分隔；输入固定为：
+  1. `ingest.GroupingVersion` 与 `CandidateIdentity(root.ID,candidate.Anchor)`；
+  2. 按相对路径字节序排列的成员：路径、大小、微秒 UTC mtime、`ParserVersion`；`LoadStagedScope` 从暂存专用列还原大小与时间，不能从不含这两项的 JSON 得到零值；
+  3. 成员引用的 CUE sheet 去重排序后的相对路径、Lstat 大小与微秒 UTC mtime；
+  4. 共用 `listFolderArtworkCandidates` 顺序列出的全部封面候选相对路径、Lstat 大小与微秒 UTC mtime；
+  5. `candidateSourceDirectories()` 各目录内按名字字节序排列的普通 `.log`：目录、名字、Lstat 大小与微秒 UTC mtime；扩展名不区分大小写，不读日志内容，不含符号链接或其它非普通文件。
+- `d` 行为 `ingest.CandidateMetadataSignature(candidate) (string,error)`：对候选及其全部成员观察 JSON 作 SHA-256，map 键固定排序、切片保留次序。覆盖 `Artist/AlbumArtist/ArtistTagEvidence`、`Compilation`、`Credits{Role,Name,Detail,Source}`、`Work/MovementName/MovementNumber`、`Year/Lyrics/LyricsSource` 以及全部其他公开观察、字段决定、流派与碟轨位置。仅移除封面字节、`ArtworkDeferred` 和只用于新发行的 `JoinGroupID`；封面来源大小/mtime 仍由文件系统签名覆盖，内容指纹与身份由规划及 `CandidateUnchanged` 校验。摘要失败不跳过；复制成员后归一，不修改原候选。
+- `AssignWorks` 仅在候选写入时运行；签名覆盖其作品标签、标题、流派、碟轨顺序输入。未变跳过只 touch，保留已存作品列；任一输入变化就重写作品列，不额外在跳过路径调用作品写入。
+- `listFolderArtworkCandidates(rootPath,directories,filter) iter.Seq2[string,error]` 是封面名字规则的唯一入口；不做文件安全检查或内容读取。依次列原目录精确名 → 原目录 front → 附属子目录精确名 → 附属子目录 front，保留原目录次序、精确名单次序、大小写优先级与 `scanFilter`。签名消费全部条目，包括 `Scans/box - front.png`；`discoverFolderArtworkWithReader` 惰性消费到首张可用图片即停，仍逐项安全检查/读取/识别，全部失败才返回首错，后续有效图可消解前错。不能复制另一套名单或提前合并错误而改变首错顺序。
+- 列举目录失败（不存在除外）、sheet/封面/日志 Lstat 失败时不跳过，也不记录不完整签名；照常走候选写入与原诊断流程。
+- `ingest.CandidateUnchanged(ctx,db,scanID,rootID,candidateKey,signature) (trackIDs []string,ok bool,err error)` 只在以下全部成立时命中：状态签名相同；候选非空且全部已规划、未暂缓的暂存行 `planned_track_id=matched_track_id`、两者非空、`NOT content_changed`、`planned_release_id=state.release_id`；所有曲目当前都是 present 且其 Medium 仍属于状态 Release；曲目已存 `source_size/source_modified_at` 均非 NULL，且本轮已规划观察的 `content_fingerprint` 非 NULL 时，曲目已存指纹也必须非 NULL（`o.content_fingerprint IS NULL OR t.content_fingerprint IS NOT NULL`）。物理轨和 `cue_virtual` 均适用，后者使用父文件事实；无音频负载的退化文件允许指纹为 NULL，不能按 `source_kind` 整类豁免。任何一项不符都重写，不把部分成员当作整个候选命中；治理或其他候选改变曲目归属后必须重写。缺失事实走正常写入回填，不要求标签重新解析：解析缓存只比对自身保存的文件状态与版本，不依赖 `tracks` 的上述字段。
+- 保存入口先做版本组规划，再在增量模式下判断跳过。跳过仅 `TouchTracks(ctx,db,trackIDs)` 更新 present 曲目的 `observed_at`，不改 `source_size/source_modified_at`、决定、证据、署名、搜索投影或封面，不读抓轨日志内容；反馈零变化、保存阶段进度照常推进，不触发音频分析失效。touch 失败按候选写入失败处理，禁止完整成功与 missing。
+- O 线配合：`PlannedVersionGroup` 从整批暂存规划（包含被跳过候选）读取已有组 ID，供其它新版本加入；`ReleaseGroupOf` 仍在新发行提交后为后续版本补组 ID，不搬动已有发行。跳过不进入候选写入与反馈记账，不改曲目归属；根结束沿用 `EmptiedGroupMoves` 的真实归属差异与旧组腾空判据，不因跳过触发收藏转移。
+- `RecordCandidateState(ctx,db,rootID,candidateKey,releaseID,signature)` 只在候选及封面成功后 upsert（`artwork_unreadable` 不视为失败）；完整重扫也记录但不判断跳过。状态读取失败只 WARN 后正常写入，记录失败只 WARN、留待下轮；均不重试。安全事件 `library.scan.candidate_state_failed` 只含扫描/root ID 与 `operation=read/record/cleanup`，不输出来源路径或 SQL。
+- `CleanupCandidateStates(ctx,db,scanID,rootID)` 用 `NOT EXISTS scan_observations` 删除本次暂存中未见的候选键；调用方在规划完成、根遍历完整且未取消时执行，再清暂存。取消、`walk_error`、空根保护或规划失败不清；清理失败只 WARN，不改变曲目对账。清理不要求本次所有候选写入成功，仍见到的失败候选保留旧状态。
 
 ## 4. 校验与错误矩阵
 
@@ -407,6 +475,11 @@ APEv2、ID3、`NAME`/`AUTH` 标签的变化不改变指纹；帧数据或关键�
 | 候选已规划沿用的曲目严格过半属于同一 Release | 沿用该 Release UUID；不过半（如 2 轨加 3 轨、1 轨加 1 轨）则新建 Release；格式版本可加入已有组，其他情况新建 ReleaseGroup |
 | 扫描成功且所有 root 完整 | 允许负向 `missing` 对账 |
 | 非音频附件 | 忽略，不改变扫描完整性 |
+| 并发流水线 apply 失败或取消 | 停止提交；取消丢弃未应用结果并等待 worker 退出，root 不完整，不做 missing |
+| 缓存表读写失败、缓存内容不能解码 | WARN，按未命中解析，不改变 root 完整性 |
+| 大小、微秒 mtime 或解析器版本变化 | 重新解析；完整模式即使相同也重新解析 |
+| 延迟内嵌封面读取失败 | `artwork_unreadable`，继续原文件夹封面查找 |
+| 同名/同大小/同时间的移动来源任一侧不唯一，或 full 模式 | 不借用指纹，照常计算或按原来源规则复用 |
 
 ## 5. 案例
 
@@ -439,6 +512,14 @@ T 线标签、署名与作品的补充验证见[目录与扫描流程验证与�
 
 ## 6. 必需测试
 
+- ⑤ 单元：Ordered 混排/窗口/Flush 复用/首错/取消退出与 Map 输入顺序，race；配置默认 4、边界 1/16、非法 0/17/abc；OGG/Opus 新旧观察逐字段和指纹一致，大文件内存不随大小增长，截断仍失败。
+- ⑤ PostgreSQL：并发 1/4 对比缓存命中与解析计数、暂存顺序、诊断（含 100 条截断）、HoldSource 和反馈；覆盖 CUE 在物理父文件前后、多个 sheet 共父与跨目录父音频、缓存冷热/full、取消丢弃在途结果且 worker 退出。测试另由测试 agent 实施，不把无数据库时的 SKIP 当作通过。
+
+- ④ 单元：当前支持格式/未知扩展名的缓存版本、deferred 封面选取与暂存去重；HTTP 空请求体默认增量、两种合法模式、未知字段/缺 mode/非法 mode 拒绝，所有角色/入口包含 `mode`。
+- ④ PostgreSQL：连续扫描未变文件命中、mtime/size/格式版本变化重新解析、full 绕过读取但仍写缓存；CUE sheet 每轮读取且父音频共用缓存；超 2000 条目录的逐条查询、seen 批量刷新、删除/过滤清理与取消/walk_error 不清理；缓存故障不改变完整性。
+  deferred 候选重写仍取内嵌封面；目录改名借用且 Track UUID 不变，任一侧多文件歧义不借用、保住范围不被借用，full 不借用。0041 升级/下行/再升级覆盖两表一列及历史模式默认值。
+- ④ 候选跳过：成员、版本、CUE、封面四轮候选与抓轨日志每类输入使签名失效，无关文件不影响；未变候选零写入/零反馈变化/零 deferred 读取，治理改归属后重写，升归组版本全部重写，touch 不改变音频分析输入快照。另验封面共享列举保持命中即停/首错顺序/过滤；被跳过版本仍为新增同组版本提供组 ID，重复扫描不误触发 group moves/收藏转移；完整遍历才清候选状态，取消与 walk_error 不清，touch 失败阻断 missing，状态表故障只降级。
+
 - 改路径 PostgreSQL/HTTP：成功保持 root ID/status/excluded_paths、revision 仅在路径变化时加一；成功响应及回放严格六字段，响应/操作记录列表不含绝对路径，前后态仅库内可见。
   覆盖同键回放、同键异义（含目标/规范路径/版本变化）、同键并发只执行一次、相同路径不增版本仍写收据、revision 冲突、未知/非法 ID、缺参数/键与鉴权无副作用。
   已登记新路径（含 disabled）、越界/不存在/非目录/符号链接应返回对应安全错误；独立连接持有扫描锁时拒绝且不写记录，释放后同键可重试。
@@ -464,6 +545,22 @@ T 线标签、署名与作品的补充验证见[目录与扫描流程验证与�
   Box 叶子不取父目录、内嵌优先）。
 
 ## 7. 错误与正确示例
+
+### 并发缓存的错误与正确示例
+
+错误：worker 直接写缓存或暂存；CUE 的后续物理条目在早先父音频仍在途时直接查缓存，导致命中数取决于调度。
+
+正确：worker 只返回解析结果，主 goroutine 按序应用；同路径在途依赖先 Flush 再查缓存，无依赖的文件继续使用有界窗口并行。
+
+### 增量扫描的错误与正确示例
+
+基准：空缓存的第一次扫描解析并写缓存与候选状态；第二次读取同路径同大小同微秒 mtime 同版本的文件时命中解析缓存，候选签名与当前归属也符合时仅 touch，报告零变化。只命中解析缓存而附属文件变化时仍须重写候选。
+
+正确：标签编辑保留 mtime 时，管理员发送 `{"mode":"full"}` 强制重新解析；缓存照常更新，同来源的音频指纹仍可按旧规则复用。
+
+错误：缓存 SQL 失败令 root 不完整；把无封面字节的缓存观察当成从来没有内嵌封面；full 模式借用改名来源指纹。
+
+正确：缓存失败 WARN 后解析，MIME 标记传递为 `ArtworkDeferred` 并在保存封面时现读，只有完整增量遍历才借用指纹。
 
 ### 改路径与恢复的错误与正确示例
 

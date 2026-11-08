@@ -163,6 +163,28 @@ describe("扫描", () => {
   });
 });
 
+const scanModeDecoders = [
+  ["详情", decodeScan],
+  ["活动扫描", (input: unknown) => decodeActiveScan({ scan: input }).scan],
+  ["扫描记录", (input: unknown) => decodeScanPage({ items: [input], pagination: { page: 1, page_size: 20, total: 1 } }).items[0]],
+] as const;
+
+describe.each(scanModeDecoders)("%s 的扫描模式", (_name, decode) => {
+  const scan = sampleBody("scans/get-succeeded");
+
+  it.each(["incremental", "full"] as const)("保留合法模式 %s", (mode) => {
+    expect(decode(withValue(scan, ["mode"], mode))?.mode).toBe(mode);
+  });
+
+  it("mode 不可缺失，不把旧响应默认成增量扫描", () => {
+    expect(() => decode(without(scan, ["mode"]))).toThrow(d.DecodeError);
+  });
+
+  it.each(["", "unknown", "FULL", null, 1, true, {}])("拒绝非法模式 %j", (mode) => {
+    expect(() => decode(withValue(scan, ["mode"], mode))).toThrow(d.DecodeError);
+  });
+});
+
 describe("扫描记录", () => {
   const list = sampleBody("scans/list");
 
@@ -235,6 +257,6 @@ describe("诊断", () => {
 
 describe("decodeAnalysisProgress", () => {
   it("解码音频分析进度样本", () => {
-    expect(decodeAnalysisProgress(sampleBody("audio-analysis/progress"))).toEqual({ total: 10, analyzed: 1, failed: 1, state: "unavailable" });
+    expect(decodeAnalysisProgress(sampleBody("audio-analysis/progress"))).toEqual({ total: 12, analyzed: 1, failed: 1, state: "unavailable" });
   });
 });
