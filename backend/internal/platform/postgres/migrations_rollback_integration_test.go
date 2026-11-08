@@ -14,6 +14,7 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	36: "", // 仅新增可空搜索派生列与索引，往返不需要新版取值。
 	35: `UPDATE tracks SET work_title='Cello Suite, BWV 1007',work_catalog='BWV 1007',work_index=1,
  movement_number=1,movement_title='Prelude',work_source='tag' WHERE id='c3000000-0000-4000-8000-000000000035';
  INSERT INTO catalog_search_values(id,track_id,field,position,original_value,normalized_value,normalization_version,projection_generation,short_grams) VALUES

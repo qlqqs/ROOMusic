@@ -46,6 +46,11 @@ func normalizeValues(values []value) (string, error) {
 			sortTitle = v.Normalized
 		}
 		v.Grams = ShortGrams(v.Normalized)
+		v.Loose, v.LooseGrams = "", nil
+		if loose := textnorm.Loose(v.Normalized); loose != "" && loose != v.Normalized {
+			v.Loose = loose
+			v.LooseGrams = ShortGrams(loose)
+		}
 	}
 	return sortTitle, nil
 }

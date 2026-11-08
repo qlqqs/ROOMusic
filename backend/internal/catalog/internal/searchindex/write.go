@@ -88,9 +88,9 @@ func Apply(ctx context.Context, tx *sql.Tx, s State, kind, id string) (written b
 		if encodeErr != nil {
 			return false, encodeErr
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO catalog_search_values(id,`+column+`,field,role,position,original_value,normalized_value,short_grams,normalization_version,projection_generation)
-   SELECT gen_random_uuid(),$1::uuid,v.field,NULLIF(v.role,''),v.position,v.original,v.normalized,v.grams,$3,$4
-   FROM jsonb_to_recordset($2::jsonb) AS v(field text,role text,position integer,original text,normalized text,grams text[])
+		_, err = tx.ExecContext(ctx, `INSERT INTO catalog_search_values(id,`+column+`,field,role,position,original_value,normalized_value,short_grams,loose_value,loose_grams,normalization_version,projection_generation)
+   SELECT gen_random_uuid(),$1::uuid,v.field,NULLIF(v.role,''),v.position,v.original,v.normalized,v.grams,NULLIF(v.loose,''),v.loose_grams,$3,$4
+   FROM jsonb_to_recordset($2::jsonb) AS v(field text,role text,position integer,original text,normalized text,grams text[],loose text,loose_grams text[])
    WHERE v.normalized<>''`, id, string(data), s.TextnormVersion, s.TargetGeneration)
 		if err != nil {
 			return false, err
@@ -108,6 +108,8 @@ type value struct {
 	Original   string   `json:"original"`
 	Normalized string   `json:"normalized"`
 	Grams      []string `json:"grams"`
+	Loose      string   `json:"loose"`
+	LooseGrams []string `json:"loose_grams"`
 }
 
 func loadValues(ctx context.Context, tx *sql.Tx, kind, id string) ([]value, error) {

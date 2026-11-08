@@ -122,9 +122,9 @@ func writeTrackChunk(ctx context.Context, tx *sql.Tx, s State, ids []string, mar
 		if err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO catalog_search_values(id,track_id,field,role,position,original_value,normalized_value,short_grams,normalization_version,projection_generation)
- SELECT gen_random_uuid(),v.track_id,v.field,NULLIF(v.role,''),v.position,v.original,v.normalized,v.grams,$2,$3
- FROM jsonb_to_recordset($1::jsonb) AS v(track_id uuid,field text,role text,position integer,original text,normalized text,grams text[])
+		_, err = tx.ExecContext(ctx, `INSERT INTO catalog_search_values(id,track_id,field,role,position,original_value,normalized_value,short_grams,loose_value,loose_grams,normalization_version,projection_generation)
+ SELECT gen_random_uuid(),v.track_id,v.field,NULLIF(v.role,''),v.position,v.original,v.normalized,v.grams,NULLIF(v.loose,''),v.loose_grams,$2,$3
+ FROM jsonb_to_recordset($1::jsonb) AS v(track_id uuid,field text,role text,position integer,original text,normalized text,grams text[],loose text,loose_grams text[])
  WHERE v.normalized<>''`, string(data), s.TextnormVersion, s.TargetGeneration)
 		if err != nil {
 			return err

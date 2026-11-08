@@ -6,24 +6,12 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/releasesql"
 )
 
-// 两种键共享一次值表访问；编号键为空时禁止编号分支。$1 的非空条件同时绑定计数参数类型。
-const normalizedSearchMatch = `$1::text<>'' AND v.projection_generation=$7 AND (
- (v.field NOT IN ('catalog_number','work_catalog') AND v.short_grams @> ARRAY[$3]::text[]
-  AND v.normalized_value LIKE '%' || $2 || '%' ESCAPE '~')
- OR (v.field IN ('catalog_number','work_catalog') AND $4<>'' AND v.short_grams @> ARRAY[$6]::text[]
-  AND v.normalized_value LIKE '%' || $5 || '%' ESCAPE '~'))`
-
-const normalizedSearchRank = `CASE
- WHEN v.normalized_value=CASE WHEN v.field IN ('catalog_number','work_catalog') THEN $4 ELSE $1 END THEN 0
- WHEN v.normalized_value LIKE (CASE WHEN v.field IN ('catalog_number','work_catalog') THEN $5 ELSE $2 END) || '%' ESCAPE '~' THEN 1
- ELSE 2 END`
-
 // normalizedPageSQL 按等级逐层取精确 top(offset+limit)，上层已足够时不展开较低等级。
 // 每层先按全体匹配实体排序，绝无任意候选上限；低层只排除前面完整层已返回的实体。
 // 说明的优先级不参与实体间排序，因此选页后才补原文不改变成员、顺序或match。
 func (p searchPlan) normalizedPageSQL(attention bool) string {
-	stages := make([]string, 0, 3)
-	for rank := 0; rank < 3; rank++ {
+	stages := make([]string, 0, 6)
+	for rank := 0; rank < 6; rank++ {
 		stages = append(stages, p.rankedStageSQL(rank, attention))
 	}
 	subjectKind := "release"
@@ -34,8 +22,8 @@ func (p searchPlan) normalizedPageSQL(attention bool) string {
  SELECT subject_id,search_title FROM catalog_projection_subject_state
  WHERE subject_kind='` + subjectKind + `' AND search_applied_generation=$7
  ), ` + strings.Join(stages, ", ") + `, page AS MATERIALIZED (
-  SELECT * FROM (SELECT * FROM tier0_page UNION ALL SELECT * FROM tier1_page UNION ALL SELECT * FROM tier2_page) all_tiers
-  ORDER BY match_rank,sort_title COLLATE "C",entity_id LIMIT $8 OFFSET $9
+  SELECT * FROM (SELECT * FROM tier0_page UNION ALL SELECT * FROM tier1_page UNION ALL SELECT * FROM tier2_page UNION ALL SELECT * FROM tier3_page UNION ALL SELECT * FROM tier4_page UNION ALL SELECT * FROM tier5_page) all_tiers
+  ORDER BY match_rank,sort_title COLLATE "C",entity_id LIMIT $14 OFFSET $15
  ), page_sources AS MATERIALIZED (`
 
 	if p.kind == "tracks" {
@@ -58,7 +46,7 @@ func (p searchPlan) normalizedPageSQL(attention bool) string {
 	if p.kind != "tracks" {
 		releaseGuard = " AND ps.track_id IS NULL"
 	}
-	columns := "id,track_id,field,role,original_value,normalized_value,projection_generation,short_grams"
+	columns := "id,track_id,field,role,original_value,normalized_value,projection_generation,short_grams,loose_value,loose_grams"
 	if p.artistAliases {
 		columns += ",artist_id,alias"
 	}
