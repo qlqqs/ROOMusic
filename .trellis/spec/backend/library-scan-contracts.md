@@ -81,7 +81,7 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
   的候选保持原状。每次候选写入替换 current decisions、grouping evidence、credits 和 track observations，不按重扫次数追加。
 - **Release 身份**（阶段 I）：候选已规划沿用的曲目中严格过半当前属于同一个既有 Release 时沿用它；多个候选争同一个
   Release 时重叠多者得，平局时候选键等于该 Release 当前锚点者（留在原位置的一方）优先，再按候选键升序；落选或无倾向的
-  候选写入时新建 Release 与 ReleaseGroup。`candidate_anchor` 只记录最近一次的位置，不参与查找、不要求唯一。因此改名、
+  候选写入时新建 Release；普通候选另建 ReleaseGroup，`format_split` 新版本按下述同组规则选组。`candidate_anchor` 只记录最近一次的位置，不参与查找、不要求唯一。因此改名、
   移动、增删少量文件、最小来源变化都不换 Release ID；新增文件多于原有（如 2 轨加 3 轨）或整体被替换时新建 Release。
 - 身份规划的诊断写入 `scan_diagnostics`（沿用每次扫描最多 100 条的上限，安全相对路径，无绝对路径）：
   `identity_ambiguous`、`content_replaced`、`identity_deferred`、`fingerprint_failure`；每个 root 规划结束记一条聚合
@@ -92,10 +92,11 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
   所在目录、标题或时长模糊去重。扫描前使用解析 symlink 后的 `Stat` 验证媒体节点为
   regular file，FIFO、设备和逃逸链接不得传给 parser。
 - parser 默认的 track/disc `1` 必须带 inferred 标记；非合成候选的碟号依次取标签、CUE、`album_title`、
-  `folder_structure`、默认 1；合成多碟的介质位置一律按目录，显式标签原证据不覆盖。轨号仍只对缺失或 inferred
-  位置应用稳定路径补位。CUE sheet 与
+  `folder_structure`、`filename_fallback`、默认 1；合成多碟的介质位置一律按目录，显式标签原证据不覆盖。轨号优先取标签（含 CUE），
+  再取经同介质冲突保护的 `filename_fallback`，最后以自然序补最小未占用号（`path_order_fallback`）。CUE sheet 与
   track PERFORMER 的 provenance 分别为 `cue_sheet` 和 `cue_track`，构造每条虚拟 Track
-  时复制 `InferredFields`/`FieldSources` map。
+  时复制 `InferredFields`/`FieldSources` map。单轨 CUE 合并到物理观察时，仅 `cue.TrackNumber > 0` 且不是 inferred、
+  同时物理轨号缺失或 inferred，才覆盖为 CUE 轨号、清除该字段 inferred 并记来源 `cue_track`；物理显式标签优先，虚拟 CUE 不变。
 - Track artist 与 composer/conductor/performer/producer 使用同一组保守拆分规则：明确的
   `; `、`；`、` / `、`feat.`、`ft.`、`with`、`、` 可拆分；紧凑 `/`、`,`、`&`
   只按已固化规则处理，`Simon & Garfunkel`、`Earth, Wind & Fire`、`AC/DC` 等固定组合
@@ -145,6 +146,27 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 
 - 归组版本：当前尚无 `GroupingVersion`，不新增常量；④ 先合入时由整合会话提升归组版本，②③一起只加一次，并确保候选签名覆盖四轮封面范围；parser 版本不变。
 
+### 文件名推断与同目录归组（③）
+
+- 规则由 `catalog/ingest` 拥有，不改 parser 或 `SourceObservation` 结构。`OrganizeObservations` 在 CUE 分组解析、专辑名碟号预处理之后，按同一 scope 内的物理 `Directory` 推断文件名；CUE 虚拟轨不参与文件名预处理或目录多数计数。推断证据保留供连续性检验，主字段仅填 inferred 的缺失值。
+- 文件名去扩展名后的 stem 按以下五级依次尝试，只有得到正轨号才命中，零值视为没有：
+  1. 去首尾空白后为 1–2 位纯数字，直接作轨号。
+  2. `^\s*(?:(\d{1,2})[\s_\-\.]+)?(\d{1,2})(?:\D.*)?$`：可选第 1 组为碟、第 2 组为轨；也允许只有前导轨号。
+  3. 跳过前导空白，连续数字恰好 3 位拆为 1 位碟 + 2 位轨；恰好 4 位且首位为 `0` 才拆为 2 位碟 + 2 位轨。`1999`、`2046` 这类年份不拆。
+  4. 去尾部空白后末尾独立的 1–2 位数字，前一个字符不能是数字，不把更长数字截成两位。
+  5. 不区分大小写的 `(?:^|[^a-z])track[\s_.\-]*(\d{1,2})(?:\D|$)`，允许 `Track 07`。
+- 第 2 级带碟号、第 3 级的三位与四位分别计为三种写法；至少 2 个文件、且超过目录物理文件的一半使用同一种写法才采信。不满足时，第 2 级降为第 1 组作轨号，第 3 级作废并继续尝试第 4、5 级；不按碟目录数量限制编号。
+- 推断成功的轨号、碟号与艺人沿用来源 `filename_fallback`，仍标 inferred；文件名碟号不能覆盖 `album_title`。最终非合成候选碟号优先级为标签 → CUE → 专辑名 → 碟目录 → 文件名 → 1。一个介质内文件名轨号彼此重复，或与标签轨号重复时，该介质**全部**文件名轨号作废后补位，标签不动。
+- `naturalLess` 比较连续数字段和非数字段：数字去前导零后先比长度、再比字面，不转整数；数值相同则前导零少者在前；非数字按字节比较。补位按 `RelativePath` 自然序，相等再按 `observationSortKey`，保留显式轨位与有效文件名轨位。
+- 标题仅在 inferred 且来源为 `filename_fallback` 时清洗：去采信编号前缀及紧随的空白、点、下划线、短横线，再去首尾空白，结果空则保留 stem。纯数字前缀为整个 stem；第 2、3 级取到编号末尾；第 5 级只在匹配从开头开始时去前缀；第 4 级不去末尾数字。
+- 在上述文件名标题中，仅当艺人 inferred 且来源为 `display_fallback`，并恰好含一个 ` - `、两边非空且左边不全为数字时，拆为艺人与标题。两者仍 inferred；写入展示复用 `metadata.CanonicalTrackArtist`，不复制艺人拆分规则。已有标题/艺人标签不被覆盖。`artistgraph` 接受来源为 `filename_fallback` 的 inferred 曲目艺人，其他 inferred 曲目艺人仍跳过，文件名艺人可以进入艺人页与收藏。判定使用 `track_observations` 中 `field_name='artist'` 那行的 `source_kind`：预处理写 `FieldSources["artist"]`，经 `fieldObservations()` 取为 `field.SourceKind`，由 `PersistCandidate` 写入该列；不是 `tracks.source_kind` 的物理/CUE 来源；本分支 `artistgraph.Version` 从 2 升到 3，T 线合入时由整合会话再次协调版本。
+- `continuousAlbum(pairs []discTrack) bool`：至少 2 首，轨号均正；碟号小于 1 按 1，每碟轨号恰好 1..n，无缺无重，必须有第 1 碟，允许缺中间碟号。两种取数任一通过即可：混合模式按上述碟号优先级、轨号标签优先再文件名（冲突保护前）；文件名模式只取文件名轨号、碟号取文件名再碟目录再 1。不用自然序补位结果作归组证据。
+- 仅 `ordinary_directory`、`box_leaf` 做同目录新判定，不含注册根散曲或已合成多碟。先检查格式切分；不切分时保留现有多数决；仅原规则会按 partition 拆成 `same_dir_split` 时用整目录连续性合并，包括缺少专辑标签的观察。字段仍按 `chooseValue` 多数决并保留 `inconsistent_candidates`。
+- 格式键为小写 `Codec`，空则取相对路径扩展名小写并去前导点（如 `.flac` 归为 `flac`，与已有编码键一致）。至少两种格式、每个格式子集连续（同上两种取数，但允许 1 首）、整组存在重复碟轨，三者同时成立才切分。候选种类 `CandidateFormatSplit = "format_split"`，`Anchor.Scope = 目录`、`Anchor.Partition = "format:<格式键>"`；`stableAnchorPartition` 保留格式 partition，`VersionGroup = "format:" + 目录`。REST 的 `candidate_kind` 白名单接受 `format_split`，响应形状不变。格式版本按切分前的候选种类选择标题兜底：原 `box_leaf` 继承 Box 叶子的 Prefix 兜底及 `disc_dir_prefix_fallback_v1`，原普通目录仍走普通目录规则。
+- `OrganizedCandidate.VersionGroup string` 标识本次整理的版本批；`JoinGroupID string` 由 scanner 填，不由 organizer 生成。`PlannedVersionGroup(ctx context.Context, database queryer, scanID, rootID string, candidates []OrganizedCandidate) (string,error)` 返回已规划沿用 Release 的候选中候选键最小者所在的组，全部新建则为空；`ReleaseGroupOf(ctx context.Context, database queryer, releaseID string) (string,error)` 返回发行的组。查询错误向上传递，不伪造空组。
+- scanner 对 scope 内每个 `VersionGroup` 先定目标组，逐候选填 `JoinGroupID`、独立短事务写入；目标为空时从第一个成功写入发行取组，供后续新建版本使用。`persistOneCandidate` 返回 Release ID；仅 `plannedReleaseID == "" && JoinGroupID != ""` 时新建 Release 引用已有组而不新建组。沿用 Release 的组永不移动，即使管理员已把两个版本分到不同组。目标组读取或候选保存失败按 `catalog_write_failure` 令根不完整，已提交候选保留。
+- 新建版本引用已有组只取外键共享锁，不改组的 `default_release_id` / `edit_revision`，不额外调整代表版本或搬移人工修正；既有发行锁与反馈锁顺序仍按[扫描反馈合同](./scan-feedback-contracts.md)。没有新增迁移；② 的腾空旧组收藏转移照常生效。
+
 ### 根保存后的专辑收藏转移
 
 - 暂定迁移 `0034_scan_observation_previous_release.sql` 增加暂存列 `previous_release_id UUID`，无外键/索引，down 删除列；合入重编号并同步回退测试表。`StageObservation` 冲突更新清空该列，身份规划在 `allocateReleases` 后按沿用曲目保存原发行。
@@ -185,7 +207,7 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 | 遍历不完整或被取消时出现疑似移动或换内容的来源 | 不重绑定、不因此新建身份、不置 `missing`；所在 scope 暂缓写入并记 `identity_deferred`，其余 scope 照常写入 |
 | 来源文件无法完整读取以计算指纹 | 记 `fingerprint_failure`，该 scope 暂缓写入，root 不完整，本轮不配对 |
 | 规划失败，或候选的观察没有规划 | 记 `catalog_write_failure`，root 不完整；不写入、不猜测身份 |
-| 候选已规划沿用的曲目严格过半属于同一 Release | 沿用该 Release UUID；不过半（如 2 轨加 3 轨、1 轨加 1 轨）则新建 Release 与 ReleaseGroup |
+| 候选已规划沿用的曲目严格过半属于同一 Release | 沿用该 Release UUID；不过半（如 2 轨加 3 轨、1 轨加 1 轨）则新建 Release；格式版本可加入已有组，其他情况新建 ReleaseGroup |
 | 扫描成功且所有 root 完整 | 允许负向 `missing` 对账 |
 | 非音频附件 | 忽略，不改变扫描完整性 |
 
@@ -294,3 +316,11 @@ if decision.Source == "folder" {
 - 错误：未对齐 CUE 就算独占，或按旧 Release 而非旧组是否腾空来转收藏；正确：最终 scope 判断独占、整组无任何曲目才转移。
 
 以上是必需断言，不表示已执行；本项实现会话不新增测试，数据库验证由专门测试会话执行。
+
+## ③ 文件名与同目录归组验证
+
+- 单元断言：五级编号、零值、三/四位目录多数与降级、年份保护、标题清洗及艺人拆分；标签/CUE不变；自然序数字段、前导零与长数字；同介质文件名冲突整批补位及碟号优先级。
+- 归组断言：连续、缺轨、重轨、无第 1 碟、允许缺碟、单曲；仅在原本会拆时连续性合并；两格式各连续且重复才切、单曲双格式可切、不完整子集不切，锚点与 `VersionGroup` 稳定。
+- 隔离 PostgreSQL 断言：首扫双格式同组、旧混合发行一个沿用一个新建同组、重复扫描稳定；两个已有版本被人工分组后扫描不搬组、不改默认版本或组 revision；文件名 inferred 艺人进入图，普通占位艺人不进入。数据库验证由测试会话执行，本实现会话不启动数据库。
+- 正确：无标签合成文件名 `01 - 示例艺人 - 示例曲.flac` 得轨 1、艺人与干净标题；同目录 flac 与 mp3 各自 1..2 得两个同组版本；单一格式原有正确归组保持不变。
+- 错误：把 `2046` 拆为碟轨、用自然序补出的 1..n 证明不同专辑能合并、把沿用发行移进新选组；正确：四位先验首位与目录多数、连续性只用标签/文件名证据、只为新建发行选组。

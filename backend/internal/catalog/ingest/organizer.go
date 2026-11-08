@@ -18,6 +18,7 @@ const (
 	CandidateMultiDisc    CandidateKind = "strict_multidisc"
 	CandidateBoxLeaf      CandidateKind = "box_leaf"
 	CandidateSameDirSplit CandidateKind = "same_dir_split"
+	CandidateFormatSplit  CandidateKind = "format_split"
 	CandidateLooseAlbum   CandidateKind = "loose_album"
 	CandidateLooseUnknown CandidateKind = "loose_unknown"
 )
@@ -56,6 +57,11 @@ type OrganizedCandidate struct {
 	Genres                     []string
 	CatalogNumber              string
 	Edition, Label, Barcode    string
+
+	// VersionGroup 相同的候选是同一专辑的格式版本，写入时供调用方选择目标组。
+	VersionGroup string
+	// JoinGroupID 仅用于新建发行；已有发行的组保持不变。
+	JoinGroupID string
 
 	// MediumTitles 只保存有碟名的介质位置。
 	MediumTitles map[int]string
@@ -635,6 +641,7 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 			o.FieldSources["disc_number"] = "album_title"
 		}
 	}
+	filenameEvidence := prepareFilenameEvidence(items)
 	locations := make([]observationLocation, len(items))
 	parentDirectories := map[string]map[string]*discDirectory{}
 	for i, o := range items {
@@ -658,18 +665,20 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 	}
 
 	type bucket struct {
-		kind      CandidateKind
-		scope     string
-		partition string
-		obs       []SourceObservation
+		originalKind CandidateKind
+		kind         CandidateKind
+		scope        string
+		partition    string
+		obs          []SourceObservation
 	}
 	buckets := map[string]*bucket{}
-	addBucket := func(kind CandidateKind, scope, partition string, observations ...SourceObservation) {
+	addBucket := func(kind CandidateKind, scope, partition string, observations ...SourceObservation) *bucket {
 		key := string(kind) + "\x00" + scope + "\x00" + partition
 		if buckets[key] == nil {
-			buckets[key] = &bucket{kind: kind, scope: scope, partition: partition}
+			buckets[key] = &bucket{originalKind: kind, kind: kind, scope: scope, partition: partition}
 		}
 		buckets[key].obs = append(buckets[key].obs, observations...)
+		return buckets[key]
 	}
 
 	// 先建立目录与 Box 边界，再在边界内应用 album 多数决；严格多碟父目录是唯一允许的
@@ -730,6 +739,13 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 			}
 			continue
 		}
+		if formats := splitContinuousFormats(group, filenameEvidence); len(formats) > 0 {
+			for format, observations := range formats {
+				b := addBucket(CandidateFormatSplit, meta.scope, "format:"+format, observations...)
+				b.originalKind = meta.kind
+			}
+			continue
+		}
 		// 同目录 album 冲突仅在严格多数（>50%）时使用稳定多数决；平票或无明显多数时
 		// 按 album 事实拆分。
 		partCounts := map[string]int{}
@@ -746,7 +762,7 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 				winner, winnerCount = part, count
 			}
 		}
-		if len(partCounts) <= 1 || (winner != "" && winnerCount*2 > authoritativeCount) {
+		if len(partCounts) <= 1 || (winner != "" && winnerCount*2 > authoritativeCount) || continuousObservations(group, filenameEvidence) {
 			addBucket(meta.kind, meta.scope, "", group...)
 			continue
 		}
@@ -779,6 +795,9 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 		obs := b.obs
 		sort.Slice(obs, func(i, j int) bool { return observationSortKey(obs[i]) < observationSortKey(obs[j]) })
 		c := OrganizedCandidate{Anchor: CandidateAnchor{Kind: b.kind, Scope: b.scope, Partition: stableAnchorPartition(b.kind, b.partition, obs)}, ReleaseGroupKey: key, Mediums: map[int][]OrganizedTrack{}, MediumTitles: map[int]string{}}
+		if b.kind == CandidateFormatSplit {
+			c.VersionGroup = "format:" + b.scope
+		}
 		folderDecisionScope := b.scope
 		if b.kind == CandidateMultiDisc && len(obs) > 0 {
 			// V0 的严格多碟候选使用首个物理碟目录的 folder evidence，父目录只负责
@@ -795,7 +814,7 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 					fallback = metadata.NormalizeValue(filepath.Base(filepath.FromSlash(b.scope)))
 				}
 				rule = "multidisc_parent_fallback_v1"
-			} else if b.kind == CandidateBoxLeaf && len(obs) > 0 {
+			} else if b.originalKind == CandidateBoxLeaf && len(obs) > 0 {
 				loc := locateObservation(obs[0])
 				if len(parentDirectories[loc.parent]) == 1 {
 					fallback = loc.marker.Prefix
@@ -843,7 +862,7 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 		c.GroupingRefs = observationRefs(obs)
 		for _, o := range resolveCuePhysicalCoexistence(obs) {
 			loc := locateObservation(o)
-			disc := o.DiscNumber
+			disc := observationDiscNumber(o)
 			folderDisc := 0
 			if b.kind == CandidateMultiDisc {
 				plan := parentPlans[b.scope]
@@ -865,12 +884,13 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 				disc = 1
 			}
 			position := o.TrackNumber
-			if position < 1 || o.InferredFields["track_number"] {
+			if position < 1 || o.InferredFields["track_number"] && o.FieldSources["track_number"] != "filename_fallback" {
 				position = 0
 			}
 			c.Mediums[disc] = append(c.Mediums[disc], OrganizedTrack{Observation: o, Position: position, Disc: disc})
 		}
 		for disc := range c.Mediums {
+			discardConflictingFilenamePositions(c.Mediums[disc])
 			assignFallbackTrackPositions(c.Mediums[disc])
 			sort.SliceStable(c.Mediums[disc], func(i, j int) bool {
 				if c.Mediums[disc][i].Position != c.Mediums[disc][j].Position {
@@ -898,7 +918,11 @@ func assignFallbackTrackPositions(tracks []OrganizedTrack) {
 		}
 	}
 	sort.Slice(indices, func(i, j int) bool {
-		return observationSortKey(tracks[indices[i]].Observation) < observationSortKey(tracks[indices[j]].Observation)
+		left, right := tracks[indices[i]].Observation, tracks[indices[j]].Observation
+		if left.RelativePath != right.RelativePath {
+			return naturalLess(left.RelativePath, right.RelativePath)
+		}
+		return observationSortKey(left) < observationSortKey(right)
 	})
 	next := 1
 	for _, index := range indices {
@@ -1125,6 +1149,11 @@ func mergeSingleCueEvidence(physical SourceObservation, cues []SourceObservation
 	mergeText("title", &physical.Title, cue.Title)
 	artistAdopted := mergeText("artist", &physical.Artist, cue.Artist)
 	mergeText("album", &physical.Album, cue.Album)
+	if cue.TrackNumber > 0 && !cue.InferredFields["track_number"] && (physical.TrackNumber < 1 || physical.InferredFields["track_number"]) {
+		physical.TrackNumber = cue.TrackNumber
+		delete(physical.InferredFields, "track_number")
+		physical.FieldSources["track_number"] = "cue_track"
+	}
 	if cue.DiscNumber > 0 && !cue.InferredFields["disc_number"] && (physical.DiscNumber < 1 || physical.InferredFields["disc_number"]) {
 		physical.DiscNumber = cue.DiscNumber
 		delete(physical.InferredFields, "disc_number")
@@ -1214,6 +1243,9 @@ func splitByPartition(obs []SourceObservation, knownArtists map[string]map[strin
 }
 
 func stableAnchorPartition(kind CandidateKind, groupingPartition string, obs []SourceObservation) string {
+	if kind == CandidateFormatSplit {
+		return groupingPartition
+	}
 	if kind == CandidateOrdinary || kind == CandidateMultiDisc || kind == CandidateBoxLeaf {
 		return ""
 	}

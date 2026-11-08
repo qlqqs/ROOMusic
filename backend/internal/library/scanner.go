@@ -761,7 +761,29 @@ func (service *Service) persistStagedCandidates(ctx context.Context, executor sc
 				feedback.scopeDone(ctx)
 				continue
 			}
-			for _, candidate := range ingest.OrganizeObservations(observations) {
+			candidates := ingest.OrganizeObservations(observations)
+			versionBatches := map[string][]ingest.OrganizedCandidate{}
+			for _, candidate := range candidates {
+				if candidate.VersionGroup != "" {
+					versionBatches[candidate.VersionGroup] = append(versionBatches[candidate.VersionGroup], candidate)
+				}
+			}
+			groupIDs := map[string]string{}
+			groupErrors := map[string]error{}
+			for _, candidate := range candidates {
+				versionGroup := candidate.VersionGroup
+				if versionGroup != "" {
+					if _, planned := groupIDs[versionGroup]; !planned && groupErrors[versionGroup] == nil {
+						groupIDs[versionGroup], groupErrors[versionGroup] = ingest.PlannedVersionGroup(ctx, executor, scanID, root.ID, versionBatches[versionGroup])
+					}
+					if groupErr := groupErrors[versionGroup]; groupErr != nil {
+						if firstErr == nil {
+							firstErr = groupErr
+						}
+						continue
+					}
+					candidate.JoinGroupID = groupIDs[versionGroup]
+				}
 				ripLogRefs, diagnostics := discoverCandidateRipLogEvidence(root, candidate)
 				ingest.ApplyRipLogEvidence(&candidate, ripLogRefs)
 				for _, diagnostic := range diagnostics {
@@ -769,8 +791,16 @@ func (service *Service) persistStagedCandidates(ctx context.Context, executor sc
 						firstErr = diagnosticErr
 					}
 				}
-				if persistErr := service.persistOneCandidate(ctx, executor, scanID, root, candidate, feedback); persistErr != nil && firstErr == nil {
+				releaseID, persistErr := service.persistOneCandidate(ctx, executor, scanID, root, candidate, feedback)
+				if persistErr != nil && firstErr == nil {
 					firstErr = persistErr
+				}
+				// 封面失败不撤销已提交的发行，后续版本仍须加入它的组。
+				if versionGroup != "" && groupIDs[versionGroup] == "" && releaseID != "" {
+					groupIDs[versionGroup], groupErrors[versionGroup] = ingest.ReleaseGroupOf(ctx, executor, releaseID)
+					if groupErr := groupErrors[versionGroup]; groupErr != nil && firstErr == nil {
+						firstErr = groupErr
+					}
 				}
 			}
 			feedback.scopeDone(ctx)
@@ -920,7 +950,7 @@ func observationFieldSources(observation parser.AudioObservation) map[string]str
 
 // persistOneCandidate 用 catalog 的独立短事务写入一个候选；封面在事务提交后为该 Release 绑定，
 // 封面失败以 errArtworkBinding 包装返回。曲目沿用还是新建由规划决定，见 planRootIdentities。
-func (service *Service) persistOneCandidate(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, candidate ingest.OrganizedCandidate, feedbacks ...*scanFeedback) error {
+func (service *Service) persistOneCandidate(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, candidate ingest.OrganizedCandidate, feedbacks ...*scanFeedback) (string, error) {
 	feedback := feedbackArg(feedbacks)
 	var changes *ingest.ScanFeedback
 	if feedback != nil {
@@ -928,12 +958,12 @@ func (service *Service) persistOneCandidate(ctx context.Context, executor scanEx
 	}
 	releaseID, err := ingest.PersistCandidateWithFeedback(ctx, executor, scanID, root.ID, candidate, changes)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if artworkErr := service.saveArtworkForRelease(ctx, executor, releaseID, root, candidate, changes); artworkErr != nil {
-		return fmt.Errorf("%w: %v", errArtworkBinding, artworkErr)
+		return releaseID, fmt.Errorf("%w: %v", errArtworkBinding, artworkErr)
 	}
-	return nil
+	return releaseID, nil
 }
 
 func isSupportedAudioExtension(extension string) bool {

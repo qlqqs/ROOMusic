@@ -184,9 +184,12 @@ func persistRelease(ctx context.Context, tx *sql.Tx, rootID string, candidate Or
 		genres = []string{}
 	}
 	if plannedReleaseID == "" {
-		groupID, releaseID := uuid.New(), uuid.New()
-		if _, err := tx.ExecContext(ctx, "INSERT INTO release_groups(id) VALUES($1::uuid)", groupID); err != nil {
-			return "", err
+		groupID, releaseID := candidate.JoinGroupID, uuid.New()
+		if groupID == "" {
+			groupID = uuid.New()
+			if _, err := tx.ExecContext(ctx, "INSERT INTO release_groups(id) VALUES($1::uuid)", groupID); err != nil {
+				return "", err
+			}
 		}
 		_, err := tx.ExecContext(ctx, `INSERT INTO releases(id,group_id,title,artist,source_root_id,relative_directory,candidate_anchor,candidate_kind,album_artist,year,source_type,media_type,genres,catalog_number,edition,label,barcode)
 			VALUES($1::uuid,$2::uuid,$3,$4,$5::uuid,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`, releaseID, groupID, candidate.Title, candidate.Artist, rootID, candidate.Anchor.Scope, anchor, string(candidate.Anchor.Kind), candidate.AlbumArtist, releaseYear(candidate), nullableString(candidate.SourceType), nullableString(candidate.MediaType), genres, nullableString(candidate.CatalogNumber), nullableString(candidate.Edition), nullableString(candidate.Label), nullableString(candidate.Barcode))
