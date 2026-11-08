@@ -46,3 +46,15 @@ APE、WavPack、AIFF 文件能入库、显示标签、播放，不再被当成�
 ## 依赖
 
 M 线第 1 项，依赖 ① 对不支持格式的新处理（合入时协调 `scanner.go` 扩展名表）。与 ③ ⑥ ⑦ ⑧ 都改 `parser/`，合入时协调。⑨ 在本项之后。
+
+## 实施结果（2026-11-08）
+
+提交：`7a672a5`（APE〔含 APEv2 标签〕、WavPack、AIFF/AIFF-C 解析与指纹；派生按格式指定输入，缓存键带策略、ALAC 键不变；按 ffmpeg 解码器筛选格式表；TAK 只记诊断；提交 3468 字节的 APE 测试素材）、`a7ea895`（真实库 smoke 改在本机 music/ 上跑）。随 M 线合并 `6ee547b` 入 main，无迁移；扩展名并入 ① 的 `scan_filter`（`c4b7d28`），T 线同步 main 时新格式入口接入多值、署名与作品标签（`f18a69d`）。
+
+裁决与偏离：实现验收时定下版本对比只显示新格式名称、不加“→ FLAC”（见上文“已裁决”），其余没有新增。
+
+验收：
+
+- 单测：满足。参数与标签 `TestAPEHeaders`、`TestAPEID3Prefix`、`TestWavPackParameters`、`TestAIFFCodecMapping`、`TestAPEv2Tags`、`TestAIFFTagsPreferID3ToTextChunks`；指纹 `TestFingerprintLosslessTagsAndAudio`（改标签不变、改音频变）；损坏文件 `TestAPERejectsDamagedFiles`、`TestWavPackRejectsDamagedFiles`、`TestAIFFRejectsDamagedFiles`。
+- 派生与播放：满足。`TestFFmpegDerivesAndCachesWavPackAIFFAndAPE`（WV 16/24、AIFF 24、APE 真实转换，源与 FLAC 的 PCM MD5 一致，缓存命中）；真实服务播放 57/57（含 WavPack 24 位浏览器解码、拖动、自然播完）；APE 与 WavPack 混合模式的信号路径 1440/375 截图目检。
+- 真实库只读 smoke：无正例。本机 music/ 没有 APE、WavPack、AIFF 文件，`c08c15e`→`c4b7d28` 前后都没有 `unsupported_format` 诊断，68 发行/284 曲目与 `cue_reference` 94 条不变，只证明无回归；“诊断数下降、对应专辑入库”没有真实数据可验证。

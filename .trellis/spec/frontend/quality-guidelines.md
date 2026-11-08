@@ -75,7 +75,7 @@ the UI sends the contract and handles results correctly.
 浏览器测试的约定：用 `page.clock.install()` 加 `fastForward` 推进轮询，不真实等待、不用固定睡眠；
 自检用的页面要写 `<!doctype html>`：没有它浏览器进入怪异模式，`document.documentElement.scrollHeight` 等度量与真实页面不同，检查会“通过”却没有生效；
 检查加进去之后用故意去掉修正的变更确认新用例确实会失败（M1b 的 `min-width: 0` 与外壳 `position: relative` 都这样验证过）；夹具回调参数不要命名为 `use`
-（react-hooks 的 lint 规则会把它当成 Hook，本项目叫 `provide`）；原生 `<dialog>` 的焦点断言见[组件规范](./component-guidelines.md)。
+（react-hooks 的 lint 规则会把它当成 Hook，本项目叫 `provide`）；原生 `<dialog>` 的焦点断言见[组件目录](./component-catalog.md)。
 Playwright 在 CI 里重试一次，失败时上传 HTML 报告与 trace（保留 7 天）；本机复用已在运行的预览服务，CI 不复用。
 
 ## Accessibility And Responsive Gate

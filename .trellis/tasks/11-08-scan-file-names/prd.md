@@ -51,3 +51,14 @@
 ## 依赖
 
 O 线第 2 项，依赖 ② 的碟号解析器。T 线的 ⑥ ⑦ ⑧ 也改 `parser/`，合入时协调。
+
+## 实施结果（2026-11-08）
+
+提交：`c069d5f`（五级文件名规则推断碟号与轨号、冲突时自然序补位、连续性与缺碟检查、标题清洗与拆艺人、同目录多种格式切成同组的不同版本、文件名艺人建成艺人实体）。随 O 线合并 `e042f2c` 入 main，无迁移；归组方式名称的前端内嵌产物由 T 线 `86c3aa5` 重建带入。艺人整理版本：O 线把 `artistgraph.Version` 升到 3，T 线同步 main 时统一升到 4（`f18a69d`）。
+
+裁决与偏离：实现验收时把文件名末尾数字规则（12.2 ④）收窄为只认末尾独立的 1–2 位数字，不跳过 `(Live)` 这类括号后缀（见上文“已裁决”）。
+
+验收：
+
+- 单测：满足。R1 `TestFilenameNumbersFiveLevelRules`、`TestFilenameDirectoryAcceptanceAndDowngrade`、`TestOrganizeFilenameDiscNumberEvidencePriority`；R2 `TestNaturalOrder`、`TestNaturalFallbackTrackPositions`；R3 `TestFilenameTitleAndArtistCleaningTable`、`TestFilenameTitleCleaningDoesNotReplaceTaggedArtist`；R4 `TestContinuityAlbum`、`TestContinuityUsesMixedOrFilenameOnlyEvidence`；R5 `TestOrganizeFormatSplitStableAnchorsAndVersionGroup`、`TestPostgreSQLScanFormatSplitVersionGroup`（两种格式两个版本同组、重扫不变）；文件名艺人进艺人页 `TestPostgreSQLArtistReadFilenameInferredArtist`。真实服务 `issues.real.ts`、`claims.real.ts` 11 项通过。
+- 样本库与真实库只读 smoke：满足，变化清单为空。music/ 上 `6ee547b`→`19427e6` 排序、标题、艺人、分组变化都是 0；轨号来源为标签 283、自然序补位 1、文件名推断 0，文件名规则在本库没有正例，由合成用例证明。

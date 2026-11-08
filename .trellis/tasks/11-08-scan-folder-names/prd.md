@@ -59,3 +59,15 @@
 ## 依赖
 
 O 线第 1 项，无前置。③ 依赖本项的碟号解析器。
+
+## 实施结果（2026-11-08）
+
+提交：`679ea7f`（碟号解析与专辑名剥离碟号、碟目录合成、四轮封面查找含附属子目录、被腾空的旧专辑收藏转给接收组）、`19427e6`（封面查找按扫描过滤走；碟目录父级有读取失败的来源时不上提）、`b695a05`（这两条的回归用例）。随 O 线合并 `e042f2c` 入 main，迁移 `0037_scan_observation_previous_release`（O 线同步 main 时在 `d5b1b0c` 改号）。
+
+裁决与偏离：上文“已裁决”中实现验收一条（碟目录只解析碟号前的部分取目录元数据）在 `679ea7f` 落实；合入 main 时两条（附属目录与包含式封面查找走 ① 的扫描过滤；独占判断把本次保住的来源算作别的目录）在 `19427e6` 落实、`b695a05` 补用例。
+
+验收：
+
+- 单测：满足。R1 `TestParseDiscMarker`、`TestParseDiscMarkerRejectsNonDiscNames`、`TestStripAlbumDiscMarker`（含纯数字、`Disc 1 of 2`、`CD1 Bonus`）；R2、R3 `TestOrganizeDiscDirectoryDecisionTable`、`TestOrganizeDiscNumberEvidencePriority`；R4 `TestFolderArtworkFourRoundDecisionTable`、`TestFolderArtworkRecognizesAllSubsidiaryNames`、`TestFolderArtworkHonorsScanFilter`；集成 `TestPostgreSQLDiscParentScopesAndMediumTitle`、`TestPostgreSQLDiscParentHeldSiblingPreventsPromotion`、`TestPostgreSQLDiscFavoriteTransfer`、`TestPostgreSQLMoveAlbumFavorites`。O 线合入前 ingest 215 项、library 48 项（含子测试）通过，0 SKIP。
+- 样本库 music/ 前后对比：部分满足。`6ee547b`→`19427e6` 两版本均 68 发行/69 介质/284 曲目，碟目录合并、拆分与其他归组变化都是 0，原有多碟专辑仍是一张；封面两边都是 15 张（内嵌 7、目录 8），来源类型与内容哈希不变。本库没有因附属目录新增封面的专辑，“原来没封面的专辑用上附属目录封面”只由合成用例证明。
+- 真实库只读 smoke：满足，合并或拆开的清单为空，无需逐条确认。本轮只在本机 music/ 上对比，两版本各自首扫→重扫 ID 全保留。

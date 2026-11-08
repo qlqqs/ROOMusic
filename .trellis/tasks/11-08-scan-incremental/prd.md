@@ -44,3 +44,21 @@
 ## 依赖
 
 S 线第 3 项，在 ① 与 ⑫ 之后。④ 合入后，O、T、M 线任何解析或归组规则变化都要升对应版本号（各线合入时由主会话核对）。⑤ 在本项之后。
+
+## 实施结果（2026-11-08）
+
+提交：`a665fea`（文件大小、修改时间与解析版本都没变时复用解析缓存；版本常量；扫描可选增量或完整重扫，设置页“完整重扫”）、`973d9ed`（候选签名，没变的专辑只记录见到、不重写）、`cce4374`（候选跳过要求成员曲目持久化事实齐全）。S 线同步 main 时（`944b854`）候选签名加入整份候选元数据摘要；随 S2 合并 `94623b5` 入 main，迁移 `0041_incremental_scan`。
+
+裁决与偏离：
+
+- `CommonVersion`、各格式版本、`CacheVersion`、`GroupingVersion` 都保持 1：④ 最后合入，首次上 main 已含其他各线的解析与归组改动，不再按每线合入加 1。
+- 候选签名由逐个列文件状态与版本，改为再加整份候选元数据摘要，覆盖 T 线的合辑、署名角色与来源、作品字段（`944b854`，单测 `TestCandidateMetadataSignatureCreditsAndArtwork`）。
+- 候选跳过另要求成员曲目来源大小、修改时间和应有指纹齐全，缺了照常重写回填（`cce4374`，修复 S2 首轮验收中 `TestPostgreSQLScanAfterMigrationBackfillsFingerprintsWithoutChangingIdentity` 的失败）。
+
+验收：
+
+- 单测与集成：满足。未变文件不解析 `TestPostgreSQLIncrementalParseCacheSecondScanPreservesIdentityAndReport`；改标签重解析 `TestPostgreSQLIncrementalParseCacheTagMtimeChangeOnlyReparsesChangedFile`；升解析器版本 `TestPostgreSQLParseCacheFormatVersionUpgrade`；升归组版本全量重写 `TestPostgreSQLParseCacheGroupingVersionUpgrade`；候选跳过 `TestCandidateSignature*`、`TestPostgreSQLIncrementalCandidateStateFormatSplitSkipKeepsVersionGroupAndFavorites`；改名移动复用指纹且 UUID 不变 `TestPostgreSQLBorrowFingerprintsAfterDirectoryRename`；对不上照常计算 `TestPostgreSQLBorrowFingerprintsRejectsAmbiguousFileStats`；完整重扫 `TestPostgreSQLFullRescanParsesAllWithoutBorrowing`。S2 最终验收后端目标范围顶层 784 项通过。
+- 真实库只读 smoke：满足。music/ 上（`65eb019`→S2 候选）68 发行/284 曲目，ID 全保留；首扫 18.4 秒、`files_parsed=284`，第二次 3.2 秒、`files_parsed=0`、`candidates_written=0`（跳过 68）。v0.3.2 同库升级（迁移 0033→0042）后首扫与第二扫发行、曲目 ID 全保留，第二扫同样不解析、不重写。
+- 前端：扫描区段“完整重扫”与记录上的标签在 1440/375 截图目检。
+
+已知局限：大小与修改时间都相同而内容互换的文件，增量扫描认不出，需要完整重扫（实现验收裁决接受）。

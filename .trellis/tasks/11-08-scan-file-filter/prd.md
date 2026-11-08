@@ -51,3 +51,18 @@
 ## 依赖
 
 S 线第 1 项，无前置。⑩ 格式扩展依赖本项对不支持格式的新处理；④ 增量扫描在本项之后。
+
+## 实施结果（2026-11-08）
+
+提交：`c4a4514`（默认过滤与按目录排除、单文件失败只记诊断并保住原曲目、空根保护、坏封面只记诊断、CUE 宽松匹配、扫描详情显示跳过数）、`f29aa77`（浏览器用例改读新的不完整说明）。随 S1 合并 `c08c15e` 入 main，迁移 `0034_scan_file_filter`。
+
+裁决与偏离：实施中没有新增，均按上文“已裁决”实现。
+
+验收：
+
+- 单测与集成：满足。`TestScanFilter*`（隐藏项、内置名单整段相等且不分大小写、用户排除按相对路径、预计数跳过整棵子树）；`TestPostgreSQLScanLifecycleHeld*`（读不了的目录只保住该子树、不安全 CUE 保住虚拟轨）、`TestPostgreSQLHeldTrackCannotLoseUUIDToNewMatchingFingerprint`；`TestPostgreSQLEmptyRootProtection`；`TestCueNameEqualNormalizesUnicodeAndCase`、`TestCueReferenceLooseMatchingRequiresUniqueFile`；坏封面 `TestPostgreSQLArtworkIntegrationUnreadableCoverKeepsExistingBinding`；排除项接口 `TestPostgreSQLExclusionAPI*`。PostgreSQL 用例 0 SKIP。
+- 混合扫描：满足。`TestPostgreSQLScanLifecycleHeldFilesStillReconcilesDeletedSources`：`._x.flac` 被过滤（不计数、不记诊断），不支持格式与损坏 FLAC 各记一条诊断、跳过 2、原曲目 UUID 保留，真正删除的文件标 missing。⑩ 支持 APE 后，夹具里的不支持格式改为 `.wma`（`973d9ed`）。
+- 真实库只读 smoke：满足。本机 music/ 上 `a7ea895`→`f3d3d04` 两个新库各首扫、重扫，均 succeeded，68 发行/284 曲目，missing 0，诊断都是 `cue_reference` 94 条且逐项一致，新增字段 `skipped_files=0`，重扫 ID 全保留。本库没有触发 R1、R3–R8 的异常路径，只证明无回归。
+- 前端：排除项、跳过文件数与新的不完整说明在 1440/375 截图经主会话目检；S1 浏览器四套件 160 通过、1 失败，失败为旧文案断言，已由 `f29aa77` 同步。
+
+已知局限：内置名单按整段名字相等匹配，专辑目录恰好与名单同名时会被跳过（design R-4，可接受）。

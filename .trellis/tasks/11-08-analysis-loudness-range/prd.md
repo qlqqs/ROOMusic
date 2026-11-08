@@ -44,3 +44,17 @@
 ## 依赖
 
 M 线第 2 项，在 ⑩ 之后（新格式也要能被分析）。R1 的新代码放新文件（如 `parser/mp3_vbr.go`），`mp3.go` 只改 `applyMP3AudioFacts` 的调用处，避开 T 线对 ID3 帧解析的改动；MP3 解析器版本按 ④ 的版本机制加 1，合入时由主会话核对。
+
+## 实施结果（2026-11-08）
+
+提交：`098be1c`（MP3 时长读 Xing/Info、VBRI 帧数，CBR 估算扣除首尾标签字节；分析同一次 ffmpeg 调用产出 LRA 与采样峰值，`analysis.Version` 2；曲目时长改读显示时长视图；信号路径加“响度”一行）、`7494953`（真实服务信号路径断言按层名定位）。随 M 线合并 `6ee547b` 入 main，迁移 `0036_track_analysis_loudness_range`（M 线同步 S1 时在 `c4b7d28` 改号）。
+
+裁决与偏离：实施中没有新增，均按上文“已裁决”实现。
+
+验收：
+
+- 单测：满足。`TestMP3StreamFactsUsesVBRFrameCounts`、`TestMP3CBRDurationExcludesLargeArtworkAndTrailingTags`、`TestEbur128SummaryParser`、`TestPostgreSQLAnalysisDisplayDurationsRespectThresholdAndSnapshot`（时长校正阈值）、`TestFFmpegAnalysisMeasuresLoudnessSilenceAndCUEInterval`（CUE 片段）。
+- 运行时样本：满足。`TestFFmpegMP3XingDurationMatchesDecodedSamples`（带 Xing 头）；`TestPostgreSQLAnalysisCorrectsVBRWithoutXingDurationInReleaseHTTP`（没有 Xing 头，分析完成后发行详情给出解码时长）；旧结果重算前继续可用 `TestPostgreSQLAnalysisUpgradeKeepsDoneResultsAndPrioritizesUnanalyzedTracks`。
+- 最小测试集：满足。M 线合入前只跑 `TestFFmpeg*`、分析与接口样本、迁移往返和前端接口合同；music/ 对比中唯一一首 MP3 扫描时长 290 → 261.12 秒，其余 283 首音频事实不变。
+
+已知局限：没有 Xing 头的 VBR MP3 在播放器里仍按浏览器估算的时长显示，可能与列表不一致（R1b 已裁决接受）。

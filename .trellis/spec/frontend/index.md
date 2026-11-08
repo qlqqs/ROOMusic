@@ -7,7 +7,7 @@
 （服务器状态的唯一缓存）、CSS Modules 加集中的全局设计变量、系统无衬线字体栈（2026-11-07 起不再自托管字体，见 `frontend/DESIGN.md` 3.2）；直接依赖全部精确固定。
 生产页面由 Go 同源提供，构建产物（`backend/cmd/roomusic/web`）随源码提交，CI 检查漂移。
 2026-10-03：M1b 在这个外壳上增加了专辑浏览：`/albums`（搜索、需要关注筛选、分页、封面卡片）与 `/albums/$groupId`（头部、版本导航、介质与曲目、发行信息、
-折叠的来源与证据，管理员可按需读完整证据），详见[状态](./state-management.md)、[组件](./component-guidelines.md)与[质量](./quality-guidelines.md)规范。
+折叠的来源与证据，管理员可按需读完整证据），详见[状态](./state-management.md)、[组件](./component-catalog.md)与[质量](./quality-guidelines.md)规范。
 
 M2a 的播放器入口与生命周期见[播放与个人状态](./playback-and-personal-state.md)、[播放器规范](./player-design-guidelines.md)及
 [后端播放合同](../backend/playback-contracts.md)。直出仅传原字节；M2b 增加 ALAC 的服务端无损派生与内嵌歌词（见[歌词合同](../backend/lyrics-contracts.md)），阶段 P 增加按用户隔离的服务端播放历史与概览的“最近播放”（见[播放历史合同](../backend/listening-contracts.md)）；
@@ -51,6 +51,7 @@ Before writing or reviewing frontend code:
 | [Core 1 路线](../../../docs/architecture/core-1-roadmap.md) | 当前能力、已批准阶段与依赖、ADR 裁决状态、旧任务承接与实施门禁 |
 | [Directory Structure](./directory-structure.md) | App composition, feature ownership, public boundaries, and shared code |
 | [Component Guidelines](./component-guidelines.md) | Presentational contracts, workflow states, accessibility, and composition |
+| [已实现的组件目录](./component-catalog.md) | 已实现的共用组件（M1a）、专辑组件（M1b）、受治理操作、收藏与歌单、歌词组件的逐项约定 |
 | [Hook Guidelines](./hook-guidelines.md) | Stateful coordination, REST access, cancellation, and polling |
 | [State Management](./state-management.md) | Server, URL, session, and local state ownership |
 | [会话生命周期](./session-lifecycle.md) | 会话控制器的状态与代次、清理顺序、401 与 403、跨标签页核对、退出、回跳与初始化 |
