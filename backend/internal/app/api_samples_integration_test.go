@@ -547,7 +547,7 @@ func recordAudioAnalysisSamples(t *testing.T, application *integrationTestApplic
 // apiSampleCall 是样本测试里发请求的闭包：带固定的请求 ID，把响应交给记录器。
 type apiSampleCall func(method, path string, body any, user *integrationTestUser, extraHeaders ...map[string]string) *httptest.ResponseRecorder
 
-// recordAlbumDetailSamples 记录专辑浏览用到的详情接口：一张合成的双碟专辑（厂牌、编号、条码、作曲/指挥/演奏署名），
+// recordAlbumDetailSamples 记录专辑浏览用到的详情接口：一张合成的双碟专辑（厂牌、编号、条码、作词/作曲/编曲/指挥/小提琴署名），
 // 既有的单曲专辑，一张 CUE 专辑，管理员的完整证据，把两个版本放进同一个组后的多版本组详情，以及两个 404。
 // 素材全部是临时目录里的合成 FLAC，不读取真实音乐。
 func recordAlbumDetailSamples(t *testing.T, application *integrationTestApplication, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser, libraryA, libraryB string) {
@@ -576,7 +576,8 @@ func recordAlbumDetailSamples(t *testing.T, application *integrationTestApplicat
 	shared := []string{
 		"ALBUM=Sample Symphonies", "ALBUMARTIST=Sample Orchestra", "DATE=1998",
 		"LABEL=Sample Label", "CATALOGNUMBER=SL-0001", "BARCODE=0123456789012", "EDITION=Remastered",
-		"COMPOSER=Sample Composer", "CONDUCTOR=Sample Conductor", "PERFORMER=Sample Soloist",
+		"LYRICIST=Sample Lyricist", "COMPOSER=Sample Composer", "ARRANGER=Sample Arranger",
+		"CONDUCTOR=Sample Conductor", "PERFORMER=Sample Soloist (violin)",
 	}
 	for _, track := range []struct {
 		file     string

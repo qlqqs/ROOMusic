@@ -22,7 +22,7 @@ func appendValue(values []value, field, role, raw string, position int) []value 
 }
 func appendCredit(values []value, role, name string, position int) ([]value, error) {
 	switch role {
-	case "composer", "conductor", "performer", "producer":
+	case "lyricist", "composer", "arranger", "conductor", "performer", "producer":
 	default:
 		return nil, errors.New("unsupported search credit role")
 	}

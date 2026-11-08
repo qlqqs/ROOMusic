@@ -143,7 +143,7 @@ func TestArtistEvidenceAllRolesAndAlbumArtistSelection(t *testing.T) {
 	if len(observation.ArtistTagEvidence) != 8 || observation.ArtistTagEvidence[3].TagKey != "Composer" || observation.ArtistTagEvidence[4].OccurrenceIndex != 1 {
 		t.Fatalf("标签键或次序丢失：%+v", observation.ArtistTagEvidence)
 	}
-	if !reflect.DeepEqual(observation.Credits[:2], []metadata.Credit{{Role: "composer", Name: "Jay Chou"}, {Role: "composer", Name: "周杰倫"}}) {
+	if !reflect.DeepEqual(observation.Credits[:2], []metadata.Credit{{Role: "composer", Name: "Jay Chou", Source: "tag"}, {Role: "composer", Name: "周杰倫", Source: "tag"}}) {
 		t.Fatalf("署名被套用别名：%+v", observation.Credits)
 	}
 }
@@ -341,9 +341,9 @@ func TestNewlineArtistCreditsRemainSeparatedAcrossTagEntrances(t *testing.T) {
 	parseM4AAtoms(repairM4AAtom("ilst", items), &observation)
 	finalizeTags(&observation)
 	want := []metadata.Credit{
-		{Role: "composer", Name: "一"}, {Role: "composer", Name: "二"}, {Role: "composer", Name: "三"},
-		{Role: "composer", Name: "四"}, {Role: "composer", Name: "五"}, {Role: "composer", Name: "六"}, {Role: "composer", Name: "七"},
-		{Role: "composer", Name: "八"}, {Role: "composer", Name: "九"},
+		{Role: "composer", Name: "一", Source: "tag"}, {Role: "composer", Name: "七", Source: "tag"}, {Role: "composer", Name: "三", Source: "tag"},
+		{Role: "composer", Name: "九", Source: "tag"}, {Role: "composer", Name: "二", Source: "tag"}, {Role: "composer", Name: "五", Source: "tag"},
+		{Role: "composer", Name: "八", Source: "tag"}, {Role: "composer", Name: "六", Source: "tag"}, {Role: "composer", Name: "四", Source: "tag"},
 	}
 	if !reflect.DeepEqual(observation.Credits, want) {
 		t.Fatalf("换行署名粘连或丢失：%+v", observation.Credits)

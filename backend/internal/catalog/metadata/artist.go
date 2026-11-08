@@ -18,6 +18,50 @@ var knownFixedArtistGroups = map[string]bool{
 	"ac/dc":              true,
 }
 
+// SplitExplicitArtistValues 只在半角或全角括号外按换行、NUL 与明确分隔符切段。
+// 括号深度仅决定切段位置，不解释括号语义，也不处理紧凑分隔符或姓名保护。
+func SplitExplicitArtistValues(raw string) []string {
+	result := make([]string, 0)
+	start, depth := 0, 0
+	for offset, character := range raw {
+		if offset < start {
+			continue
+		}
+		switch character {
+		case '(', '（':
+			depth++
+		case ')', '）':
+			if depth > 0 {
+				depth--
+			}
+		}
+		if depth > 0 {
+			continue
+		}
+		separatorLength := 0
+		if character == '\r' || character == '\n' || character == '\x00' {
+			separatorLength = 1
+		} else {
+			for _, separator := range artistSeparatorRules {
+				if strings.HasPrefix(raw[offset:], separator) {
+					separatorLength = len(separator)
+					break
+				}
+			}
+		}
+		if separatorLength > 0 {
+			if part := strings.TrimSpace(raw[start:offset]); part != "" {
+				result = append(result, part)
+			}
+			start = offset + separatorLength
+		}
+	}
+	if part := strings.TrimSpace(raw[start:]); part != "" {
+		result = append(result, part)
+	}
+	return result
+}
+
 func splitArtistNames(raw string) []string {
 	// 换行和 NUL 先分隔多值，再逐段完整拆分，避免清理控制字符时粘连姓名。
 	if strings.ContainsAny(raw, "\r\n\x00") {

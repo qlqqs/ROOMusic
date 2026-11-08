@@ -25,6 +25,8 @@ type creditFact struct {
 func refreshFacts(ctx context.Context, tx *sql.Tx, ids []string) ([]string, error) {
 	resolver := nameResolver{tx: tx, names: map[string]string{}}
 	facts := []creditFact{}
+	// 同一曲目同人同角色的多种细分只建一条事实，避免同批 upsert 重复命中。
+	seenTrackCredits := make(map[[3]string]bool)
 	add := func(releaseID, trackID, role, raw, layer string) error {
 		if !nonempty(raw) {
 			return nil
@@ -34,6 +36,13 @@ func refreshFacts(ctx context.Context, tx *sql.Tx, ids []string) ([]string, erro
 			return fmt.Errorf("artist subject exceeds name budget")
 		}
 		for i, name := range names {
+			if trackID != "" {
+				key := [3]string{trackID, role, name}
+				if seenTrackCredits[key] {
+					continue
+				}
+				seenTrackCredits[key] = true
+			}
 			f := creditFact{Role: role, Name: name, Position: i + 1, Layer: layer}
 			if trackID != "" {
 				v := trackID

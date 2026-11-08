@@ -105,7 +105,7 @@ func PersistCandidateWithFeedback(ctx context.Context, database TxBeginner, scan
 				return "", err
 			}
 			for position, credit := range metadata.CanonicalCredits(observation.Credits) {
-				if _, err = tx.ExecContext(ctx, "INSERT INTO track_credits(track_id,role,name,position) VALUES($1::uuid,$2,$3,$4)", trackID, credit.Role, credit.Name, position+1); err != nil {
+				if _, err = tx.ExecContext(ctx, "INSERT INTO track_credits(track_id,role,name,detail,source,position) VALUES($1::uuid,$2,$3,NULLIF($4,''),$5,$6)", trackID, credit.Role, credit.Name, credit.Detail, credit.Source, position+1); err != nil {
 					return "", err
 				}
 			}

@@ -15,14 +15,9 @@ func artistTagRole(key string) string {
 		return "track_artist"
 	case "ALBUMARTIST", "ALBUM_ARTIST", "ALBUM ARTIST", "TPE2", "AART":
 		return "album_artist"
-	case "COMPOSER", "TCOM", "©WRT":
-		return "composer"
-	case "CONDUCTOR", "TPE3":
-		return "conductor"
-	case "PERFORMER", "PERFORMERS":
-		return "performer"
-	case "PRODUCER":
-		return "producer"
+	}
+	if assignments := creditTagRoles(key); len(assignments) > 0 {
+		return assignments[0].Role
 	}
 	return ""
 }

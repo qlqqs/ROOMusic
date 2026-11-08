@@ -139,7 +139,7 @@ func (p searchPlan) fieldPriority() string {
 	 WHEN 'credit' THEN 5 WHEN 'label' THEN 6 WHEN 'catalog_number' THEN 7 ELSE 8 END`
 }
 
-const searchRoleOrder = `CASE role WHEN 'composer' THEN 0 WHEN 'conductor' THEN 1 WHEN 'performer' THEN 2 WHEN 'producer' THEN 3 ELSE 4 END`
+const searchRoleOrder = `CASE role WHEN 'lyricist' THEN 0 WHEN 'composer' THEN 1 WHEN 'arranger' THEN 2 WHEN 'conductor' THEN 3 WHEN 'performer' THEN 4 WHEN 'producer' THEN 5 ELSE 6 END`
 
 func (p searchPlan) pageSQL(attention bool) string {
 	if p.mode == "normalized" {

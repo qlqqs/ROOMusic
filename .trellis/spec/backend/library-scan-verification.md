@@ -24,6 +24,12 @@
   Box 父目录里的封面不会绑给它；封面后来才放进目录，下一次扫描即绑定。
 - 错误：把 root 原始路径放入列表 JSON；unsupported 文件仍让扫描 succeeded 并执行 missing；把 FIFO 交给 parser；按标题删除 CUE 轨。
 
+- 正确：`PERFORMER=测试演奏者 (violin)` 变成 performer / 测试演奏者 / violin，`WRITER=测试作者` 同时产出作词与作曲。
+- 正确：`PERFORMER=A (violin); B (cello)` 先按明确分隔符切段，再逐段拆乐器和名字，得到 A / violin、B / cello；` / `、换行等同理。`Simon & Garfunkel (guitar)` 保留一个组合名，`Bach, Johann (piano)` 保留一个姓名；括号内 `cello, conductor` 仍按原规则解析。`甲 (violin、指挥)` 与 `甲（violin、指挥）` 都得到 conductor / 甲 和 performer / 甲 / violin，不能在第1步按顿号切坏。
+- 基准：旧署名迁移后 detail=NULL、source=tag；同一演奏者多种乐器保留多条曲目署名，但艺人事实只保留一个同轨同角色姓名。
+- 正确：歌词 `编曲/混音：测试作者` 同时产出 arranger 与 producer（detail=混音）；`吉他：测试演奏者@测试组合` 的名字只取测试演奏者。
+- 错误：跳过歌词头部的未知“协力”行后继续读后续署名，或把 `测试艺人（测试别名）` 拆成乐器。
+
 ## 6. 必需测试
 
 - 后端单元：终态映射、unsupported 音频候选识别、来源身份规范化和路径 containment。
@@ -37,6 +43,11 @@
   文件夹封面发现（大小写变体、全小写优先、名字优先级不受大小写影响、多目录顺序、前一个目录无效时用后一个、目录不存在跳过、
   读目录失败报告、符号链接/无效/读取失败），以及各格式音频内容指纹（同音频不同标签
   相同、音频变化不同、FLAC MD5 为零的回退、MP3 首尾标签、OGG 注释包分页、读取中取消）。
+- 署名角色：映射键唯一、目标合法、固定角色/细分/名字排序与三元组去重；Vorbis/TXXX/M4A新键、ID3 TEXT、TIPL/IPLS/TMCL成对及落单项；
+  演奏括号的乐器、角色、未知拉丁细分与中文别名整串保留；歌词前30行、LRC标签、空行、全角空白、双语/多子标签、词曲双产出、
+  工种原写法、名字去@后缀、首个未知行截断和同角色标签优先；歌词内容不变。
+- 署名集成：同曲同人两种乐器仅一条 performer 艺人事实，重扫替换 detail/source，只有 detail 变化也须记扫描更新（派生 position 不计）；0034 的 rollbackFixtures 覆盖新角色、细分重复与级联删除，
+  升级→回退→再升级结构与数据往返；真实 handler 样本必须含 detail（发行级为null）和新角色，由测试 agent 在隔离库验证。
 - PostgreSQL 集成（配置 `ROOMUSIC_TEST_DATABASE_URL` 时）：用户禁用与 session
   原子性、最后管理员/并发保护、未知用户 404、目录幂等与真实状态、扫描 incomplete
   禁止 missing、多 Medium 与 Track 身份稳定；另需覆盖 staging 清理、候选短事务
@@ -90,3 +101,11 @@ if decision.Source == "folder" {
 	replaceDecision("source_type", ripLogDecision)
 }
 ```
+
+### 署名细分错误与正确示例
+
+错误：用 `role+name` 去重曲目署名会丢乐器；直接把每个细分写成艺人事实会让一次 INSERT 的 ON CONFLICT 重复命中。
+
+正确：曲目署名按 `role+name+detail` 保留，进入艺人图时按 `track+role+name` 去重；歌词署名按整个角色服从标签来源，不只去掉同名项。
+
+署名拆分回归须同时覆盖括号外多人、括号内多角色、固定组合与“姓, 名”：同一分隔符在姓名列表与乐器列表中属于不同层级，不能把全串切分或全串套括号正则当成等价操作。

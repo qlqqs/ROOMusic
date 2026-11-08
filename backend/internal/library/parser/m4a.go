@@ -612,7 +612,7 @@ func parseM4AFreeformValue(mean, name string, value, typeCode []byte, observatio
 			return err
 		}
 		if role != "track_artist" && role != "album_artist" {
-			addObservationCredits(observation, role, raw)
+			addTagCredits(observation, name, raw)
 		}
 		return nil
 	}

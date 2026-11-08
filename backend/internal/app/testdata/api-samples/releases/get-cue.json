@@ -13,6 +13,7 @@
     "credits": [
       {
         "artist_refs": [],
+        "detail": null,
         "name": "Sample Cue Artist",
         "role": "album_artist"
       }

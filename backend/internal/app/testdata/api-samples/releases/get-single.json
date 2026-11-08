@@ -18,6 +18,7 @@
     "credits": [
       {
         "artist_refs": [],
+        "detail": null,
         "name": "Sample Pianist",
         "role": "album_artist"
       }

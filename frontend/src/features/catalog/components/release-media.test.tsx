@@ -76,3 +76,22 @@ describe("曲目定位", () => {
     expect(row()?.hasAttribute("data-located")).toBe(true);
   });
 });
+
+describe("曲目署名", () => {
+  it("按细分分组，显示小提琴与作词，歌词里的混音工程师保留原写法", () => {
+    const release = albumGroup(2, { track_count: 1 }).representative;
+    const creditedMedia = mediaOf(release, () => ({
+      credits: [
+        { role: "lyricist", name: "方文山", detail: null },
+        { role: "performer", name: "Hilary Hahn", detail: "violin" },
+        { role: "performer", name: "Anne-Sophie Mutter", detail: "violin" },
+        { role: "producer", name: "某某", detail: "mix" },
+        { role: "producer", name: "欧姆", detail: "混音工程师" },
+      ],
+    }));
+    render(<ReleaseMedia media={creditedMedia} albumArtist={release.artist} />);
+    expect(screen.getByText("方文山").closest("p")?.textContent).toBe(
+      "作词：方文山；小提琴：Hilary Hahn、Anne-Sophie Mutter；混音：某某；混音工程师：欧姆",
+    );
+  });
+});

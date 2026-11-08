@@ -24,15 +24,19 @@
 
 迁移 `0025_catalog_search.sql` 建空投影和状态/清单/进度表，启用 `public.pg_trgm`，一般文本 trigram GIN、短一/二 scalar `short_grams` GIN；不执行存量转换。角色、字段、原文 4096 字节、规范键 64 KiB、subject 二择一均由约束或写入边界校验；不截词。扩展在 database 级 public schema，不装进测试的临时 schema。
 
-搜索值逐字段保存实际有效原文、规范键、normalization_version、projection_generation，不复制 group ID 或封面。subject 完成标记额外保存同事务更新的 `search_title`（空标题也有行），用于窄表排序，不能脱离完成代次单独更新。搜索常量/原文保留，不改标签或显示写法。发行字段从 `release_effective` 读取；曲目角色来自四类 credits。
+搜索值逐字段保存实际有效原文、规范键、normalization_version、projection_generation，不复制 group ID 或封面。subject 完成标记额外保存同事务更新的 `search_title`（空标题也有行），用于窄表排序，不能脱离完成代次单独更新。搜索常量/原文保留，不改标签或显示写法。发行字段从 `release_effective` 读取；曲目角色来自六类 credits。
+
+曲目 credit 角色及顺序为 `lyricist → composer → arranger → conductor → performer → producer`（0034 放宽角色 CHECK）。
+搜索只匹配姓名，不按细分 detail 或 source 匹配；`match.role` 增加 lyricist/arranger，完整角色序在这六项前保留 release_artist/album_artist/track_artist。
+`ProjectionVersion=2` 已由⑥提升，本项不再升；`textnorm.Version=1` 不变。新角色值随重扫写入，仍遵守同事务投影合同。
 
 扫描候选、M3 修正/清除/撤销、claim 双方/撤销，在业务行锁之前取得 CATP，事实/有效值变化、input_revision、目标代次投影及完成标记同事务提交。失败回滚业务，禁止提交后 best-effort。missing 保留索引值并实时 join 状态排除，不为搜索引入额外负向对账。归组不复制到投影，代表/默认版本在读取时按既有规则确定。
 
 ### 同事务有界批量曲目刷新
 
-`searchindex.RefreshTracks(ctx, tx, ids)`只接收本事务已实际改变事实的曲目ID集合，调用者已持CATP。先规范ID大小写/去重/排序，一次读取目标state，再按128项处理全部chunk；每个ID只Touch一次input_revision，完整读取当前轨/四角色credit，复用单轨Apply的原造值、规范化与预算校验，同事务删除/写入搜索值、search_title、完成代次/revision及live_updated。空集合无操作，非法ID仍由参数`::uuid[]`拒绝，不能新增包依赖或放宽allowlist。所有chunk共用外部事务，后段错误/取消必须回滚前段及上层事实更新；不能把128当对象总上限。
+`searchindex.RefreshTracks(ctx, tx, ids)`只接收本事务已实际改变事实的曲目ID集合，调用者已持CATP。先规范ID大小写/去重/排序，一次读取目标state，再按128项处理全部chunk；每个ID只Touch一次input_revision，完整读取当前轨/六角色credit，复用单轨Apply的原造值、规范化与预算校验，同事务删除/写入搜索值、search_title、完成代次/revision及live_updated。空集合无操作，非法ID仍由参数`::uuid[]`拒绝，不能新增包依赖或放宽allowlist。所有chunk共用外部事务，后段错误/取消必须回滚前段及上层事实更新；不能把128当对象总上限。
 
-艺人可信原文恢复只收集display实际改变的轨，按相同有界块更新tracks.artist，再调用此端口；未变更轨不Touch。单轨RefreshTrack/Apply合同不变，不用批接口复制另一套造值规则。必需测试：260项跨chunk与逐轨结果等价、重复ID只递增一次、四credit/多名顺序、missing/空/未知UUID/旧revision、封闭清单live_updated、后段失败与取消全事务回滚、graph130轨恢复而未变化轨revision不变。批量化减少往返不代表串行热计划或完整回填自动达标。
+艺人可信原文恢复只收集display实际改变的轨，按相同有界块更新tracks.artist，再调用此端口；未变更轨不Touch。单轨RefreshTrack/Apply合同不变，不用批接口复制另一套造值规则。必需测试：260项跨chunk与逐轨结果等价、重复ID只递增一次、六credit/多名顺序、missing/空/未知UUID/旧revision、封闭清单live_updated、后段失败与取消全事务回滚、graph130轨恢复而未变化轨revision不变。批量化减少往返不代表串行热计划或完整回填自动达标。
 
 ## 在线回填与发布
 
@@ -64,7 +68,7 @@ q 去首尾空白后最多 200 UTF-8 字节；新接口拒绝非法 UTF-8 与非
 
 字面完整字段包含，不分词、不用 similarity。先规范化再转义 `% _ ~`；普通/编号两条分支各自规范化。每个非空键带安全连续一/二 scalar 预筛并 LIKE 残差，不猜 PostgreSQL 是否能产生 trigram。
 
-完全相同 → 开头相同 → 包含；同等级按规范化标题 COLLATE C、稳定 ID。说明同等级按自身标题、署名、厂牌、编号与固定角色序打平。发行命中来自有效发行字段或 present 子轨标题/艺人/四类 credit；曲目命中来自自身字段或所属发行字段，某轨 credit 不传播到兄弟轨。专辑按可见成员命中后按 group 去重；代表仍是既有默认/年份规则，matched_release_id 另给实际命中成员。
+完全相同 → 开头相同 → 包含；同等级按规范化标题 COLLATE C、稳定 ID。说明同等级按自身标题、署名、厂牌、编号与固定角色序打平。发行命中来自有效发行字段或 present 子轨标题/艺人/六类 credit；曲目命中来自自身字段或所属发行字段，某轨 credit 不传播到兄弟轨。专辑按可见成员命中后按 group 去重；代表仍是既有默认/年份规则，matched_release_id 另给实际命中成员。
 
 状态、路径选择、计数、分页及补全使用同一只读 RR 快照；对这类速度敏感的查询按[统一数据库规范](./database-guidelines.md)在事务内局部关闭 JIT（`SET LOCAL jit = off`），不改变数据库全局设置。legacy 下旧两路由匹配/排序不变；新专辑栏复用旧发行谓词，曲目栏只查原表标题/艺人及有效发行标题/艺人/专辑艺人。新投影发布后旧两路由有 q 时默认按相关性排序；组列表显式 `sort=added_at_desc` 保留 F 线的加入时间顺序，仍按完整规范化匹配过滤。无 q 保留原序及精确总数。搜索组摘要同时保留全部可见成员最早的 `added_at`，不能误用代表版本时间。
 
@@ -80,7 +84,7 @@ q 去首尾空白后最多 200 UTF-8 字节；新接口拒绝非法 UTF-8 与非
 - 搜索与最近新增/加入时间排序共用 catalog 的 `readWithLocalJITOff`，只在只读 RR 事务内 `SET LOCAL jit = off`；没有全局 JIT、`enable_*`、`plan_cache_mode` 或最短查询长度开关。语句复用后的热测同样纳入验收，不能只用新连接的单次 EXPLAIN 声称达标。
 - 密集专辑候选沿发行规范标题索引流，只保留各组按既有默认/年份/创建时间/ID规则选出的当前可见代表；完整匹配仍检查全组成员。最后同标题按 **group ID** 打平，不误用发行 ID。`releases(group_id,id)` 支持局部成员查找；可见性 EXISTS 按发行早停，避免首屏之前聚合十万轨。
 - top-k 的 OFFSET 加 `limit+1` 采用先判断剩余额度的 bigint 安全加法；极大但合法的页码仍返回空页与正确总数，不能变成 503，不能收紧旧分页合同。
-- 仅对已选页补最佳命中说明与安全摘要。专辑说明分别读取发行值和 present 曲目值，避免对每首兄弟轨重复读取发行值；四类 credit 不传播到兄弟轨。
+- 仅对已选页补最佳命中说明与安全摘要。专辑说明分别读取发行值和 present 曲目值，避免对每首兄弟轨重复读取发行值；六类 credit 不传播到兄弟轨。
 - I10热门艺人说明按track与release两条来源分支分别定位后UNION ALL，保持专辑发行值只在发行来源行读取、轨级署名不传播兄弟轨；来源先取齐字段再匹配，不限制候选。0030为有效署名新增身份＋track/release覆盖索引，避免每个页内来源重扫热门身份全部署名。原值归属仍须唯一artist且名字原文一致。旧列表精确计数从完整命中来源传播再按实体去重，不做1001截断；新接口仍保留有界计数与原策略探测。
 
 ## 验证

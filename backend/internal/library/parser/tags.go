@@ -83,14 +83,6 @@ func setAudioTag(observation *AudioObservation, key, value string) error {
 		if observation.Edition == "" {
 			observation.Edition = value
 		}
-	case "COMPOSER", "TCOM":
-		addObservationCredits(observation, "composer", raw)
-	case "CONDUCTOR", "TPE3":
-		addObservationCredits(observation, "conductor", raw)
-	case "PERFORMER", "PERFORMERS":
-		addObservationCredits(observation, "performer", raw)
-	case "PRODUCER":
-		addObservationCredits(observation, "producer", raw)
 	case "ISRC":
 		observation.ISRC = value
 	case "SOURCE", "SOURCETYPE":
@@ -98,6 +90,7 @@ func setAudioTag(observation *AudioObservation, key, value string) error {
 	case "MEDIA", "MEDIATYPE":
 		observation.MediaType = value
 	}
+	addTagCredits(observation, key, raw)
 	return nil
 }
 
@@ -109,19 +102,7 @@ func addObservationCredits(observation *AudioObservation, role, value string) {
 	if role == "" {
 		return
 	}
-	for _, name := range splitCreditNames(value) {
-		credit := metadata.Credit{Role: role, Name: name}
-		duplicate := false
-		for _, existing := range observation.Credits {
-			if existing == credit {
-				duplicate = true
-				break
-			}
-		}
-		if !duplicate {
-			observation.Credits = append(observation.Credits, credit)
-		}
-	}
+	addAssignedCredits(observation, metadata.RoleAssignment{Role: role}, value, "tag")
 }
 
 func splitCreditNames(value string) []string {

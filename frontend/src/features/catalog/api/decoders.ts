@@ -141,9 +141,11 @@ const releaseComparisonDecoder = d.object({
 });
 
 // 署名的角色与证据里的各种词表都按字符串解码：后端新增取值不会让页面解码失败，显示时由 labels 给已知值中文标签。
+// detail 是署名的细分（乐器或工种）：已知细分键或原写法，发行级署名恒为 null。
 const creditDecoder = d.object({
   role: d.string({ min: 1, max: 64 }),
   name: d.string(),
+  detail: d.nullable(d.string({ min: 1, max: 256 })),
   artist_refs: artistRefsDecoder,
 });
 

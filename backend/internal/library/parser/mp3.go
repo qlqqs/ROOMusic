@@ -87,10 +87,18 @@ func parseID3Frames(data []byte, observation *AudioObservation, major, tagFlags 
 			}
 			continue
 		}
-		if frameID != "TIT2" && frameID != "TPE1" && frameID != "TPE2" && frameID != "TPE3" && frameID != "TALB" && frameID != "TRCK" && frameID != "TPOS" && frameID != "TCON" && frameID != "TDRC" && frameID != "TYER" && frameID != "TSRC" && frameID != "TCOM" && frameID != "TPUB" && frameID != "TXXX" && frameID != "TCMP" && frameID != "TDOR" && frameID != "TORY" {
+		if frameID != "TIT2" && frameID != "TPE1" && frameID != "TPE2" && frameID != "TPE3" && frameID != "TALB" && frameID != "TRCK" && frameID != "TPOS" && frameID != "TCON" && frameID != "TDRC" && frameID != "TYER" && frameID != "TSRC" && frameID != "TCOM" && frameID != "TPUB" && frameID != "TXXX" && frameID != "TCMP" && frameID != "TDOR" && frameID != "TORY" && frameID != "TEXT" && frameID != "TIPL" && frameID != "IPLS" && frameID != "TMCL" {
 			continue
 		}
 		if len(frame) < 2 {
+			continue
+		}
+		if frameID == "TIPL" || frameID == "IPLS" || frameID == "TMCL" {
+			if payload, ok := id3FramePayload(frame, major, formatFlags); ok {
+				if err := addID3PairedCredits(observation, frameID, payload); err != nil {
+					return err
+				}
+			}
 			continue
 		}
 		if frameID == "TXXX" || frameID == "TCMP" || frameID == "TDOR" || frameID == "TORY" {
@@ -122,7 +130,7 @@ func parseID3Frames(data []byte, observation *AudioObservation, major, tagFlags 
 					return err
 				}
 				if role != "track_artist" && role != "album_artist" {
-					addObservationCredits(observation, role, raw)
+					addTagCredits(observation, frameID, raw)
 				}
 			}
 			continue
@@ -468,6 +476,9 @@ func parseID3TXXX(frame []byte) (string, []string) {
 		return "", nil
 	}
 	description := strings.ToUpper(strings.TrimSpace(parts[0]))
+	if len(creditTagRoles(description)) > 0 {
+		return "TXXX:" + description, parts[1:]
+	}
 	switch description {
 	case "ALBUMARTIST", "ALBUM_ARTIST", "ALBUM ARTIST", "COMPILATION", "ORIGINALDATE", "ORIGINALYEAR":
 		return "TXXX:" + description, parts[1:]

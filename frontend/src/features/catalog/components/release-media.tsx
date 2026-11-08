@@ -5,7 +5,7 @@ import { StatusTag, VisuallyHidden } from "../../../shared/ui";
 import type { ReleaseCreditDTO, ReleaseMediumDTO, ReleaseTrackDTO } from "../api/decoders";
 import { formatDuration } from "../../../shared/lib/duration";
 import { mediumHeading } from "../format";
-import { creditRoleLabel } from "../labels";
+import { creditDetailLabel, creditRoleLabel } from "../labels";
 import { ArtistNames } from "./artist-names";
 import styles from "./release-media.module.css";
 
@@ -101,20 +101,24 @@ const TrackRow = memo(function TrackRow({
   );
 });
 
-/** 曲目行里的署名：“作曲：甲、乙；指挥：丙”，角色与姓名都保持接口给出的顺序；艺人就绪时每个名字是链接。 */
+/**
+ * 曲目行里的署名：“作词：甲；作曲：乙、丙；小提琴：丁”。有细分（乐器或工种）的按细分成组，否则按角色；
+ * 组与姓名都保持接口给出的顺序；艺人就绪时每个名字是链接。
+ */
 function CreditsLine({ credits }: { credits: readonly ReleaseCreditDTO[] }) {
-  const groups = new Map<string, ReleaseCreditDTO[]>();
+  const groups = new Map<string, { label: string; entries: ReleaseCreditDTO[] }>();
   for (const credit of credits) {
-    const list = groups.get(credit.role);
-    if (list === undefined) groups.set(credit.role, [credit]);
-    else list.push(credit);
+    const key = credit.detail === null ? `role:${credit.role}` : `detail:${credit.detail}`;
+    const group = groups.get(key);
+    if (group === undefined) groups.set(key, { label: credit.detail === null ? creditRoleLabel(credit.role) : creditDetailLabel(credit.detail), entries: [credit] });
+    else group.entries.push(credit);
   }
   return (
     <>
-      {Array.from(groups, ([role, entries], groupIndex) => (
-        <span key={role}>
+      {Array.from(groups, ([key, { label, entries }], groupIndex) => (
+        <span key={key}>
           {groupIndex === 0 ? null : "；"}
-          {creditRoleLabel(role)}：
+          {label}：
           {entries.map((credit, index) => (
             <span key={`${credit.name}:${index}`}>
               {index === 0 ? null : "、"}

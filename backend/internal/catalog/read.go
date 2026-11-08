@@ -271,7 +271,7 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 		return nil, err
 	}
 	creditRows, err := s.database.QueryContext(ctx, `SELECT
-		t.id::text,c.role,c.name,`+releasesql.TrackCreditArtistRefsProjection+`
+		t.id::text,c.role,c.name,c.detail,`+releasesql.TrackCreditArtistRefsProjection+`
 		FROM track_credits c
 		JOIN tracks t ON t.id=c.track_id AND t.source_status='present'
 		JOIN media m ON m.id=t.medium_id
@@ -291,7 +291,7 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 		var trackID string
 		var credit ReleaseCredit
 		var refs []byte
-		if err := creditRows.Scan(&trackID, &credit.Role, &credit.Name, &refs); err != nil {
+		if err := creditRows.Scan(&trackID, &credit.Role, &credit.Name, &credit.Detail, &refs); err != nil {
 			return nil, err
 		}
 		credit.ArtistRefs, err = decodeArtistRefs(refs)
@@ -321,7 +321,7 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 // LoadReleaseCredits 读取专辑级署名。专辑艺人有人工修正时，扫描写入的 album_artist 署名被修正值取代，
 // 与头部显示的有效专辑艺人一致；其余署名原样。
 func (s *Store) LoadReleaseCredits(ctx context.Context, releaseID string) ([]ReleaseCredit, error) {
-	rows, err := s.database.QueryContext(ctx, `SELECT role,name,`+releasesql.ReleaseCreditArtistRefsProjection+` FROM (
+	rows, err := s.database.QueryContext(ctx, `SELECT role,name,NULL::text,`+releasesql.ReleaseCreditArtistRefsProjection+` FROM (
 			SELECT credit.role,credit.name,credit.position
 			FROM release_credits credit
 			WHERE credit.release_id=$1::uuid
@@ -344,7 +344,7 @@ func (s *Store) LoadReleaseCredits(ctx context.Context, releaseID string) ([]Rel
 		}
 		var credit ReleaseCredit
 		var refs []byte
-		if err := rows.Scan(&credit.Role, &credit.Name, &refs); err != nil {
+		if err := rows.Scan(&credit.Role, &credit.Name, &credit.Detail, &refs); err != nil {
 			return nil, err
 		}
 		credit.ArtistRefs, err = decodeArtistRefs(refs)

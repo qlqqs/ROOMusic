@@ -10,10 +10,53 @@ function labeller(names: Readonly<Record<string, string>>): (value: string) => s
 /** 署名角色（专辑级与曲目级共用）。 */
 export const creditRoleLabel = labeller({
   album_artist: "专辑艺人",
+  lyricist: "作词",
   composer: "作曲",
+  arranger: "编曲",
   conductor: "指挥",
   performer: "演奏",
   producer: "制作人",
+});
+
+/** 署名的细分：乐器与工种的规范键（后端 metadata/credit_roles.go）；其余是标签或歌词里的原写法，原样显示。 */
+export const creditDetailLabel = labeller({
+  violin: "小提琴",
+  viola: "中提琴",
+  cello: "大提琴",
+  double_bass: "低音提琴",
+  bass: "贝斯",
+  guitar: "吉他",
+  piano: "钢琴",
+  keyboards: "键盘",
+  organ: "管风琴",
+  harpsichord: "羽管键琴",
+  synthesizer: "合成器",
+  drums: "鼓",
+  percussion: "打击乐",
+  flute: "长笛",
+  clarinet: "单簧管",
+  oboe: "双簧管",
+  bassoon: "巴松管",
+  saxophone: "萨克斯",
+  trumpet: "小号",
+  trombone: "长号",
+  horn: "圆号",
+  harp: "竖琴",
+  erhu: "二胡",
+  pipa: "琵琶",
+  guzheng: "古筝",
+  dizi: "笛子",
+  vocals: "演唱",
+  backing_vocals: "和声",
+  choir: "合唱",
+  orchestra: "乐团",
+  mix: "混音",
+  mastering: "母带",
+  recording: "录音",
+  remix: "重混",
+  dj_mix: "DJ 混音",
+  programming: "编程",
+  libretto: "剧本",
 });
 
 /** 证据所说明的字段：与发行版本详情里的同名字段一一对应。 */

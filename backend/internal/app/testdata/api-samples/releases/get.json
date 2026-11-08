@@ -13,6 +13,7 @@
     "credits": [
       {
         "artist_refs": [],
+        "detail": null,
         "name": "Sample Orchestra",
         "role": "album_artist"
       }
@@ -105,16 +106,31 @@
             "credits": [
               {
                 "artist_refs": [],
+                "detail": null,
+                "name": "Sample Lyricist",
+                "role": "lyricist"
+              },
+              {
+                "artist_refs": [],
+                "detail": null,
                 "name": "Sample Composer",
                 "role": "composer"
               },
               {
                 "artist_refs": [],
+                "detail": null,
+                "name": "Sample Arranger",
+                "role": "arranger"
+              },
+              {
+                "artist_refs": [],
+                "detail": null,
                 "name": "Sample Conductor",
                 "role": "conductor"
               },
               {
                 "artist_refs": [],
+                "detail": "violin",
                 "name": "Sample Soloist",
                 "role": "performer"
               }
@@ -138,16 +154,31 @@
             "credits": [
               {
                 "artist_refs": [],
+                "detail": null,
+                "name": "Sample Lyricist",
+                "role": "lyricist"
+              },
+              {
+                "artist_refs": [],
+                "detail": null,
                 "name": "Sample Composer",
                 "role": "composer"
               },
               {
                 "artist_refs": [],
+                "detail": null,
+                "name": "Sample Arranger",
+                "role": "arranger"
+              },
+              {
+                "artist_refs": [],
+                "detail": null,
                 "name": "Sample Conductor",
                 "role": "conductor"
               },
               {
                 "artist_refs": [],
+                "detail": "violin",
                 "name": "Sample Soloist",
                 "role": "performer"
               }
@@ -178,16 +209,31 @@
             "credits": [
               {
                 "artist_refs": [],
+                "detail": null,
+                "name": "Sample Lyricist",
+                "role": "lyricist"
+              },
+              {
+                "artist_refs": [],
+                "detail": null,
                 "name": "Sample Composer",
                 "role": "composer"
               },
               {
                 "artist_refs": [],
+                "detail": null,
+                "name": "Sample Arranger",
+                "role": "arranger"
+              },
+              {
+                "artist_refs": [],
+                "detail": null,
                 "name": "Sample Conductor",
                 "role": "conductor"
               },
               {
                 "artist_refs": [],
+                "detail": "violin",
                 "name": "Sample Soloist",
                 "role": "performer"
               }

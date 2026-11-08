@@ -3,7 +3,7 @@
   "name": "credit-roles",
   "title": "⑦ 署名角色扩充",
   "description": "作词编曲混音等角色，解析 TIPL/TMCL 与名字(乐器)，角色映射表",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

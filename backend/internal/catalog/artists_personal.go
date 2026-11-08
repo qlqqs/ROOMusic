@@ -81,7 +81,7 @@ const artistParticipationCTE = `artist_participation AS MATERIALIZED (
  WHERE e.artist_id=ANY($1::uuid[])
 )`
 
-const artistRoleOrder = `CASE role WHEN 'release_artist' THEN 0 WHEN 'album_artist' THEN 1 WHEN 'track_artist' THEN 2 WHEN 'composer' THEN 3 WHEN 'conductor' THEN 4 WHEN 'performer' THEN 5 WHEN 'producer' THEN 6 ELSE 7 END`
+const artistRoleOrder = `CASE role WHEN 'release_artist' THEN 0 WHEN 'album_artist' THEN 1 WHEN 'track_artist' THEN 2 WHEN 'lyricist' THEN 3 WHEN 'composer' THEN 4 WHEN 'arranger' THEN 5 WHEN 'conductor' THEN 6 WHEN 'performer' THEN 7 WHEN 'producer' THEN 8 ELSE 9 END`
 
 // LoadArtistSummaries 返回按 canonical ID 索引的摘要，包含不可用身份；不开放私有表。
 func (s *Store) LoadArtistSummaries(ctx context.Context, input []string) (map[string]ArtistSummary, error) {

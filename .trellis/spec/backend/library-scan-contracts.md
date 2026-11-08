@@ -45,9 +45,11 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 - `0011_scan_staging_and_identity.sql` 增加有界暂存、候选锚点、物理/CUE 身份、音频/CUE 列、字段/归组证据、署名及元数据。
   0010 旧来源身份不兼容（见下方规则）；0032 的列表整理见[多流派合同](./genre-contracts.md)。
 - `0012_track_credits_and_release_metadata.sql` 增加 Release `edition`/`label`/`barcode`
-  以及 `track_credits(track_id,role,name,position)`。逐轨角色由数据库 CHECK allowlist
-  约束，`track_id + role + name` 唯一；重扫先替换该 Track 的 current credits，不能按扫描
-  次数累计。
+  以及 `track_credits`。0034 扩为 `(track_id,role,name,detail,source,position)`，逐轨角色固定为
+  `lyricist → composer → arranger → conductor → performer → producer`。`detail` 为 NULL 或非空且≤256字节的文本，
+  `source` 为 `tag|lyrics`（默认 `tag`）；`UNIQUE NULLS NOT DISTINCT(track_id,role,name,detail)`。
+  `CanonicalCredits` 按角色序、细分（空在前）、名字排序，按角色+名字+细分去重；重扫整体替换，不按扫描次数累计。
+  down 删除新增角色（含艺人事实、原文证据和搜索值），同轨同角色同名保留 position 最小的一条后删新列并恢复旧约束；有效署名级联删除。
 - `0013_track_content_fingerprints.sql` 为 `tracks` 增加 `content_fingerprint`（种类与版本随值保存，≤256 字节）、
   `source_size`、`source_modified_at`，并把 `(source_root_id, relative_path)` 唯一性改为只约束仍持有
   `source_identity` 的行（部分唯一索引），使内容被替换、失去来源身份的旧曲目可与同一路径上的新曲目并存；
@@ -95,7 +97,7 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
   位置应用 Disc/CD/Disk 目录与稳定路径 fallback，显式标签永远优先。CUE sheet 与
   track PERFORMER 的 provenance 分别为 `cue_sheet` 和 `cue_track`，构造每条虚拟 Track
   时复制 `InferredFields`/`FieldSources` map。
-- 曲目艺人、专辑艺人及 composer/conductor/performer/producer 共用 `metadata.CanonicalArtistNames`：
+- 曲目艺人、专辑艺人及六类曲目署名共用 `metadata.CanonicalArtistNames`：
   先按 `\r\n`、`\n`、`\r`、NUL 切段，各段完整重走规则，再删其余控制字符与首尾空白。明确分隔符
   `; `、`；`、` / `、` feat. `、` ft. `、` with `、`、` 区分大小写；` & ` 两侧各含空格时先拆。
   随后保护固定组合 `Simon & Garfunkel`、`Earth, Wind & Fire`、`AC/DC` 与拉丁“姓, 名”，最后依次拆紧凑 `/`、`,`、`&`；嵌套段也遵守姓名保护。
@@ -109,6 +111,27 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
   Vorbis 为 `ALBUMARTIST → ALBUM_ARTIST → ALBUM ARTIST`；ID3 为 `TPE2 → TXXX:ALBUMARTIST → TXXX:ALBUM_ARTIST/TXXX:ALBUM ARTIST`；
   M4A 为 `aART → ----:ALBUMARTIST → ----:ALBUM_ARTIST/----:ALBUM ARTIST`。同级合并，全部键记入 `album_artist` 原文证据。
   ID3 文本帧保留全部 NUL 值；TXXX 按编码解出描述与值，描述去空白转大写后交给通用标签入口。
+- **署名角色表**：`metadata.Credit{Role,Name,Detail,Source}` 的 `detail/source` 随暂存 JSON 保存（空 source 等于 tag）。
+  `MapCreditRole` 与 `MapInstrument` 的表版本为 `CreditRoleTableVersion=1`；匹配先去首尾空白、小写、压连续空白，再去结尾 ` by`，不做相似度匹配。
+  作词/剧本归 lyricist，作曲归 composer，编曲/配器归 arranger，指挥归 conductor，制作人/监制归 producer；
+  `词曲/songwriter/writer` 等一人双产出 lyricist 与 composer。混音、母带、录音、重混、DJ混音、编程归 producer，
+  detail 分别为 `mix/mastering/recording/remix/dj_mix/programming`；剧本为 `libretto`，声乐/和声及乐器归 performer。
+  乐器写法和别名只取 `metadata/credit_roles.go` 的小表，不搬外部大表、不展开方括号修饰。
+- **署名来源**：Vorbis、M4A `com.apple.iTunes` freeform、ID3 TXXX 支持
+  `COMPOSER/LYRICIST/WRITER/ARRANGER/CONDUCTOR/PRODUCER/MIXER/ENGINEER/REMIXER/MIXARTIST/DJMIXER/PERFORMER/PERFORMERS/SOLOIST/SOLOISTS/ENSEMBLE/ORCHESTRA/LIBRETTIST`；
+  `ENSEMBLE/ORCHESTRA` 为 performer + orchestra，未知键忽略。ID3 `TCOM/TEXT/TPE3` 分别为作曲/作词/指挥，M4A `©wrt` 为作曲。
+  `TIPL/IPLS` 按 NUL 成对读取工种、人名；`TMCL` 按 NUL 成对读取乐器、人名，落单尾值丢弃。
+  未知 TIPL/IPLS 工种归 producer，未知 TMCL 乐器归 performer，detail 保留去首尾空白后的原写法（≤256字节）。
+  署名键原文照常记艺人证据，多角色取第一个；成对入口的 tag_key 为 `TIPL:<工种>`、`IPLS:<工种>`、`TMCL:<乐器>`（≤128字节），歌词不写标签证据。
+- **演奏括号**：`PERFORMER(S)/SOLOIST(S)` 先用 `metadata.SplitExplicitArtistValues` 按换行/NUL及⑥明确分隔符列表切段（与 `artist.go` 共用来源），再逐段解析末尾中英文圆括号，最后对拆出的名字执行完整姓名拆分。第1步按中英文圆括号 `()`/`（）` 的深度只切括号外的明确分隔符，括号内内容完整交给第2步按逗号、顿号、` & `、` and ` 拆乐器或角色；不使用占位符、不扩展多段括号语法，TMCL 成对入口不变。括号内按原乐器规则切段，
+  先查乐器表，再查角色表；未知且只含拉丁字母、空格、连字符时保留为 performer 的原写法细分。
+  任一段未知且含其他文字则整串保留为姓名（如 `测试艺人（测试别名）`）；成功拆出的人名再按共用姓名规则拆分。
+- **歌词开头署名**：全部标签读完、歌词规范化后在 `finalizeTags` 读取最多前30行，不改变歌词原文或显示。
+  每行去行首连续 LRC 方括号标签及首尾空白，空行/纯标签行跳过；其余须为1–16字符标签加中英文冒号和值。
+  标签按 `/、&` 拆子标签，先整体查角色/乐器表，未命中再按连续中文段、拉丁段查表；至少一项命中才是署名行，首次非署名行结束整个块。
+  所有命中项均产出；没有细分的角色 detail 为空，带细分的工种与乐器保留命中子标签原文（如“混音工程师”“Guitar”），不改成标签来源的规范键。
+  名字按共用规则拆分并去掉 `@` 起的团体/工作室后缀（去后为空则保留原文），`Source="lyrics"`；某角色已有 tag 署名时，该角色全部歌词署名丢弃。
+  现分支尚无④增量扫描，下一次扫描重新解析；不新增 CommonVersion，不再提升⑥已升到3/2的艺人图/搜索投影版本，不改 textnorm.Version。
 - `AudioObservation.Compilation bool` 经 scanner 原样传给 `SourceObservation.Compilation`（JSON `compilation,omitempty`）。
   Vorbis 的 `COMPILATION/ITUNESCOMPILATION`、ID3 的 `TCMP/TXXX:COMPILATION`、M4A 的 `----:COMPILATION` 去空白、小写后任一为
   `1/yes/true/compilation` 即为真；M4A `cpil` 为单字节非零整数时为真，0为假。
@@ -163,6 +186,11 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 | 明确 rip log 与 `folder` 补充值并存 | 选定 CD 并把 decision provenance 提升为 `rip_log`；不得保留重复字段决定 |
 | 明确 rip log 与 tag/CUE/音频规格决定冲突 | 保留明确来源，不允许抓轨日志覆盖 |
 | 艺人/credit 含换行或 NUL | 先切段再清理，不能把两个名字粘连；固定组合与拉丁姓名保护按第3节执行 |
+| TIPL/IPLS/TMCL 奇数个值 | 只丢最后落单项，已成对的署名保留 |
+| 未知工种或乐器 | TIPL/IPLS 归制作人、TMCL 归演奏并保留细分；未知普通标签键忽略 |
+| 演奏括号含未知非拉丁文字 | 整个原文作为姓名，不把别名猜成乐器 |
+| 歌词头部首个非署名行 | 停止提取，之后的署名形状行不读取；歌词原文不变 |
+| 同角色同时有标签与歌词署名 | 全部采用标签来源，不合并该角色的歌词署名 |
 | 专辑艺人高优先级为空或多值 | 回退到首个非空级，展开该级全部值，不采用最后写入值 |
 | TXXX 描述/值编码无效、缺终止符，或帧压缩/加密 | 跳过该帧，不使整个文件解析失败；证据超预算仍按既有规则失败 |
 | 无真实专辑艺人，合辑标志恰好半数 | 不因标志判合辑；必须严格过半，目录观察不计票 |

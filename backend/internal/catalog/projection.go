@@ -61,6 +61,7 @@ type ReleaseArtwork struct {
 }
 
 type ReleaseCredit struct {
+	Detail     *string     `json:"detail"`
 	Role       string      `json:"role"`
 	Name       string      `json:"name"`
 	ArtistRefs []ArtistRef `json:"artist_refs"`
