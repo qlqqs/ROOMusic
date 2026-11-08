@@ -188,7 +188,11 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve allowed root for folder samples: %v", err)
 	}
-	folderPaths := strings.NewReplacer(realAllowedRoot, "/music", application.allowedRoot, "/music")
+	folderPaths := strings.NewReplacer(
+		realAllowedRoot, "/music",
+		application.allowedRoot, "/music",
+		`"`+filepath.Dir(realAllowedRoot)+`"`, `"/"`,
+	)
 	recordFolderSample := func(name, path string) map[string]any {
 		t.Helper()
 		response := call(http.MethodGet, path, nil, admin)
@@ -198,16 +202,37 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 		samples.record(name, response, http.StatusOK)
 		return decodeJSONMap(t, response)
 	}
-	startListing := recordFolderSample("library-folders/start", "/api/v1/library-folders")
+	rootListing := recordFolderSample("library-folders/root", "/api/v1/library-folders?path="+url.QueryEscape(application.allowedRoot))
+	if rootListing["path"] != "/music" || rootListing["parent"] != "/" || rootListing["can_go_up"] != true || rootListing["selectable"] != true {
+		t.Fatalf("folder root sample must represent the selectable allowed root: %v", rootListing)
+	}
 	registeredA := false
-	for _, value := range startListing["items"].([]any) {
+	for _, value := range rootListing["items"].([]any) {
 		item := value.(map[string]any)
-		if item["path"] == "/music/classical-a" && item["registered"] == true {
+		if item["path"] == "/music/classical-a" && item["registered"] == true && item["selectable"] == true {
 			registeredA = true
 		}
 	}
 	if !registeredA {
-		t.Fatalf("folder start must include the registered classical-a directory: %v", startListing)
+		t.Fatalf("folder root must include the registered selectable classical-a directory: %v", rootListing)
+	}
+
+	startListing := decodeJSONMap(t, call(http.MethodGet, "/api/v1/library-folders", nil, admin))
+	if startListing["path"] != "/" || startListing["parent"] != nil || startListing["selectable"] != false {
+		t.Fatalf("folder start must be the non-selectable filesystem root: %v", startListing)
+	}
+	startItems, ok := startListing["items"].([]any)
+	if !ok || len(startItems) != 1 {
+		t.Fatalf("folder start must contain exactly one route to the allowed root: %v", startListing)
+	}
+	realAllowedRoot, err = filepath.EvalSymlinks(application.allowedRoot)
+	if err != nil {
+		t.Fatalf("resolve allowed root for folder start assertion: %v", err)
+	}
+	firstSegment := strings.Split(strings.TrimPrefix(realAllowedRoot, string(filepath.Separator)), string(filepath.Separator))[0]
+	startItem, ok := startItems[0].(map[string]any)
+	if !ok || startItem["path"] != "/"+firstSegment || startItem["selectable"] != false {
+		t.Fatalf("folder start must list only the first path segment toward the allowed root: %v", startListing)
 	}
 	childListing := recordFolderSample("library-folders/child", "/api/v1/library-folders?path="+url.QueryEscape(libraryA))
 	if childListing["path"] != "/music/classical-a" || childListing["parent"] != "/music" || childListing["can_go_up"] != true || childListing["registered"] != true {

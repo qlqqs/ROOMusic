@@ -18,9 +18,7 @@ func (handlers *Handlers) listFolders(responseWriter http.ResponseWriter, reques
 	}
 
 	paths := make([]string, 0, len(listing.Items)+1)
-	if listing.Path != nil {
-		paths = append(paths, *listing.Path)
-	}
+	paths = append(paths, listing.Path)
 	for _, item := range listing.Items {
 		paths = append(paths, item.Path)
 	}
@@ -43,9 +41,7 @@ func (handlers *Handlers) listFolders(responseWriter http.ResponseWriter, reques
 		httpserver.WriteError(responseWriter, request, 503, "database_error", "无法读取目录")
 		return
 	}
-	if listing.Path != nil {
-		listing.Registered = registered[*listing.Path]
-	}
+	listing.Registered = registered[listing.Path]
 	for index := range listing.Items {
 		listing.Items[index].Registered = registered[listing.Items[index].Path]
 	}

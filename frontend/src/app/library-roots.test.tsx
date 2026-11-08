@@ -86,20 +86,25 @@ describe("浏览文件夹", () => {
   it("进入子文件夹后自然排序，选择后填写路径并还焦点，提交添加", async () => {
     const { api } = await openLibrary();
     const child = decodeFolderListing(sampleBody("library-folders/child"));
+    const musicQuery = new URLSearchParams({ path: "/music" });
     const childQuery = new URLSearchParams({ path: "/music/classical-a" });
     api.on("GET", `/api/v1/library-folders?${childQuery}`, () => jsonResponse(200, {
       ...child,
       items: [
         ...child.items,
-        { name: "Disc 10", path: "/music/classical-a/Disc 10", registered: false },
-        { name: "Disc 2", path: "/music/classical-a/Disc 2", registered: false },
+        { name: "Disc 10", path: "/music/classical-a/Disc 10", registered: false, selectable: true },
+        { name: "Disc 2", path: "/music/classical-a/Disc 2", registered: false, selectable: true },
       ],
     }));
 
     const input = screen.getByRole("combobox", { name: "目录路径" });
     await userEvent.click(input);
     const browser = await screen.findByRole("dialog", { name: "选择文件夹" });
-    await userEvent.click(await within(browser).findByRole("button", { name: "classical-a" }));
+    expect(within(browser).queryByRole("button", { name: "选择 /" })).toBeNull();
+    expect(await within(browser).findByRole("button", { name: "选择 music" })).toBeTruthy();
+    await userEvent.click(within(browser).getByRole("button", { name: /^music$/ }));
+    await within(browser).findByRole("button", { name: /^classical-a$/ });
+    await userEvent.click(within(browser).getByRole("button", { name: /^classical-a$/ }));
     await within(browser).findByRole("button", { name: "album" });
     expect(within(browser).getAllByRole("button", { name: /^Disc / }).map((button) => button.textContent)).toEqual(["Disc 2", "Disc 10"]);
     await userEvent.click(within(browser).getByRole("button", { name: "选择 album" }));
@@ -110,6 +115,7 @@ describe("浏览文件夹", () => {
     expect(input.getAttribute("aria-expanded")).toBe("false");
     expect(api.requestsTo("GET", "/api/v1/library-folders").map((request) => request.path)).toEqual([
       "/api/v1/library-folders",
+      `/api/v1/library-folders?${musicQuery}`,
       `/api/v1/library-folders?${childQuery}`,
     ]);
 
@@ -121,16 +127,16 @@ describe("浏览文件夹", () => {
 
   it("子文件夹打不开时显示错误，可以回到开头继续浏览", async () => {
     const { api } = await openLibrary();
-    const childQuery = new URLSearchParams({ path: "/music/classical-a" });
-    api.on("GET", `/api/v1/library-folders?${childQuery}`, () => sampleResponse("errors/invalid-library-folder"));
+    const musicQuery = new URLSearchParams({ path: "/music" });
+    api.on("GET", `/api/v1/library-folders?${musicQuery}`, () => sampleResponse("errors/invalid-library-folder"));
     await userEvent.click(screen.getByRole("combobox", { name: "目录路径" }));
     const browser = await screen.findByRole("dialog", { name: "选择文件夹" });
-    await userEvent.click(await within(browser).findByRole("button", { name: "classical-a" }));
+    await userEvent.click(await within(browser).findByRole("button", { name: /^music$/ }));
     expect(await within(browser).findByText("打不开这个文件夹。")).toBeTruthy();
     await userEvent.click(within(browser).getByRole("button", { name: "回到开头" }));
 
-    expect(await within(browser).findByRole("button", { name: "classical-a" })).toBeTruthy();
-    expect(within(browser).getByText("/music")).toBeTruthy();
+    expect(await within(browser).findByRole("button", { name: /^music$/ })).toBeTruthy();
+    expect(within(browser).getByText("/")).toBeTruthy();
     expect(within(browser).queryByText("打不开这个文件夹。")).toBeNull();
     expect(within(browser).queryByRole("button", { name: "回到开头" })).toBeNull();
     expect(api.requestsTo("POST", rootsPath)).toHaveLength(0);

@@ -11,7 +11,7 @@ type FolderBrowserProps = {
 };
 
 /**
- * 添加目录时的文件夹浏览器：从允许的音乐目录开始，点文件夹进入下一级，点“选择”选中。
+ * 添加目录时的文件夹浏览器：从 `/` 开始，点文件夹进入下一级，点“选择”选中；允许目录的上层路径只能进入，没有“选择”。
  * 行内都是普通按钮（不是 listbox），Tab 顺序自然；进入新文件夹后焦点移到顶部的当前路径，读屏读出新位置。
  */
 export function FolderBrowser({ id, onSelect }: FolderBrowserProps) {
@@ -34,11 +34,11 @@ export function FolderBrowser({ id, onSelect }: FolderBrowserProps) {
       <div className={styles.header}>
         {data?.can_go_up === true ? <Button variant="icon" icon={<ArrowUp size={16} />} label="上一级" onClick={() => go(data.parent)} /> : null}
         <p ref={locationRef} tabIndex={-1} className={styles.location}>
-          {data === undefined ? (current ?? "") : (data.path ?? "音乐目录")}
+          {data === undefined ? (current ?? "") : data.path}
         </p>
-        {data?.path != null && data.registered ? <StatusTag>已添加</StatusTag> : null}
-        {data?.path != null ? (
-          <Button aria-label={`选择 ${data.path}`} onClick={() => onSelect(data.path ?? "")}>
+        {data?.registered ? <StatusTag>已添加</StatusTag> : null}
+        {data?.selectable === true ? (
+          <Button aria-label={`选择 ${data.path}`} onClick={() => onSelect(data.path)}>
             选择
           </Button>
         ) : null}
@@ -63,9 +63,11 @@ export function FolderBrowser({ id, onSelect }: FolderBrowserProps) {
                     <span className={styles.name}>{item.name}</span>
                   </button>
                   {item.registered ? <StatusTag>已添加</StatusTag> : null}
-                  <Button aria-label={`选择 ${item.name}`} onClick={() => onSelect(item.path)}>
-                    选择
-                  </Button>
+                  {item.selectable ? (
+                    <Button aria-label={`选择 ${item.name}`} onClick={() => onSelect(item.path)}>
+                      选择
+                    </Button>
+                  ) : null}
                 </li>
               ))}
             </ul>

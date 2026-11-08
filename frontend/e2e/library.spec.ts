@@ -16,6 +16,7 @@ test.describe("目录", () => {
     await input.click();
     const browser = page.getByRole("dialog", { name: "选择文件夹" });
     await expect(browser).toBeVisible();
+    await browser.getByRole("button", { name: "music", exact: true }).click();
     await browser.getByRole("button", { name: "classical-a", exact: true }).click();
     await expect(browser.getByRole("button", { name: "上一级" })).toBeVisible();
     await expect(browser.getByRole("button", { name: "选择 album", exact: true })).toBeVisible();

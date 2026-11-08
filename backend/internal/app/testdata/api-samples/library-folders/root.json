@@ -1,21 +1,24 @@
 {
   "body": {
-    "can_go_up": false,
+    "can_go_up": true,
     "items": [
       {
         "name": "classical-a",
         "path": "/music/classical-a",
-        "registered": true
+        "registered": true,
+        "selectable": true
       },
       {
         "name": "classical-b",
         "path": "/music/classical-b",
-        "registered": true
+        "registered": true,
+        "selectable": true
       }
     ],
-    "parent": null,
+    "parent": "/",
     "path": "/music",
     "registered": false,
+    "selectable": true,
     "truncated": false
   },
   "status": 200

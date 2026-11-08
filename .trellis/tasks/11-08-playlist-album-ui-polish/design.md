@@ -383,3 +383,135 @@ A6 的 1440 与 375 截图由测试 agent 用上述用例或一次性截图脚�
 5. 提示 `aria-hidden`，读屏只读 `aria-label`，接受。
 6. 中等宽度（640–900px 容器）先不加断点；收尾截图若拥挤，再决定是否隐藏“发行”列。
 7. 安全取舍（被盗用的管理员会话可直接改管理员密码，恢复靠 `roomusic reset-password`）随最终规划摘要请用户确认。
+
+---
+
+## 9. R6 文件夹浏览从根目录开始（接口合同）
+
+范围：只改 `GET /api/v1/library-folders` 的起点、可浏览范围与响应字段，以及前端浏览框的“选择”显示条件。浮层样式已完成（只动了 CSS），不在本节。
+不改配置（允许根不能配成 `/`：`internal/app/derivation.go` 的 `checkCacheDirectoryIsolated` 要求缓存目录与每个允许根互不包含，`/` 包含一切），不改 `ValidatePath`，不需要迁移。
+
+### 9.1 响应形状
+
+```json
+{"path":"/","parent":null,"can_go_up":false,"registered":false,"selectable":false,"truncated":false,
+ "items":[{"name":"music","path":"/music","registered":false,"selectable":true}]}
+```
+
+| 字段 | 变化 | 规则 |
+| --- | --- | --- |
+| `path` | 由“字符串或 null”改为**必为字符串** | 当前目录的规范绝对路径；起点为 `"/"`。Go 侧 `FolderListing.Path` 由 `*string` 改为 `string`，handler 里 `listing.Path != nil` 的分支随之简化。 |
+| `parent` | 不变（字符串或 null） | 仅当 `path == "/"` 时为 null，其余一律为 `filepath.Dir(path)`。 |
+| `can_go_up` | 不变 | `parent != null`。 |
+| `selectable` | **新增**，当前目录一个、每个 item 一个，必传布尔 | 允许根本身及其内部为 true；允许根的上层路径（含 `/`）为 false。 |
+| `registered` | 原义不变 | 已登记为扫描目录（含停用）；仍由 handler 一条参数化 SQL 为当前路径与全部条目补齐。 |
+| `truncated` | 不变 | 只可能在允许根内的层出现。 |
+| `items[].name` | 列表层（name 为完整路径）取消 | 一律是单个路径段。 |
+
+### 9.2 起点与列表层的去留
+
+- 缺省或空 `path` 等价于 `path="/"`：返回 `/` 这一层（上表样例）。显式传 `path=/` 也合法（`"/" == filepath.Clean("/")`）。
+- **删除“多个允许根返回列表层”**：从 `/` 往下逐级走，所有允许根都能到达，列表层没有用处了。`ListFolders` 里 `len(roots) > 1` 的分支和“允许根本身 parent=null、多根时 can_go_up=true”的特判一并删除。
+- `folderRoots` 保留：每次请求把配置的允许根 EvalSymlinks 成真实路径、跳过解析失败或不是目录的、去重。一个有效根都没有时，仍返回错误（400 `invalid_library_path`，与现状相同）。
+
+### 9.3 可浏览范围与非空 path 的校验
+
+记 `roots` 为 `folderRoots` 的结果（真实路径）。输入先过原有的形状检查：`filepath.IsAbs(input) && input == filepath.Clean(input)`，不通过就拒绝。然后按顺序判断：
+
+1. **允许根内**（含允许根本身）：`ValidatePath(input, allowedRoots)` 成功 → 与现在一样单次 `os.ReadDir`，过滤规则不变（只保留 `entry.Type().IsDir()`、名字不以 `.` 开头、名字是合法 UTF-8），按字节序取前 `limit` 项，有多余的合格目录就标 `truncated`。当前目录和所有 item 的 `selectable=true`。
+2. **允许根的上层路径**：只有当 `input` 恰好是某个 `root` 的**真上层路径**（按路径段划分）时成立：
+   `prefix := strings.TrimSuffix(input, "/") + "/"`，存在 root 满足 `root != input && strings.HasPrefix(root, prefix)`。
+   - 用 `TrimSuffix` 避开边界问题：`input == "/"` 时，`input + "/"` 会变成 `//`，所有根都匹配不上；`TrimSuffix` 后 prefix 是 `/`。其他输入经过 Clean，不带尾斜杠，prefix 就是 `input + "/"`。`/mu` 不会匹配 `/music`，因为 prefix 是 `/mu/`。
+   - 这里只比较字符串，**不读文件系统**：root 是 EvalSymlinks 的结果，它的每个前缀都是真实存在、不含符号链接的目录。经过符号链接的写法、任何不在这条链上的路径，都不会和字符串相等，所以会落到第 3 步被拒绝。因此上层路径不需要 `os.ReadDir`，也不要求服务进程对 `/home/qlqq` 这类目录有列目录权限。
+   - items：对每个满足条件的 root，取 `strings.TrimPrefix(root, prefix)` 的第一段作为 `name`，`path = prefix + name`，按 `path` 去重后**按 name 字节序排序**（与 ReadDir 的顺序约定一致）。item 的 `selectable` 看它的 `path` 是否等于某个 root：等于为 true（例如容器里 `/` 下的 `music`），不等于就是又一层上层路径，为 false（例如开发机 `/` 下的 `home`）。当前目录 `selectable=false`，`truncated=false`。
+   - 上层路径的条目**不套隐藏目录和 UTF-8 过滤**：这些名字来自管理员的配置，允许根在 `/home/x/.local/music` 下时 `.local` 必须列出来，否则走不到。条目数不超过允许根个数，不套 `limit`。
+   - 判断顺序是先第 1 步、后第 2 步：一个目录既在某个根内、又是另一个根的上层路径（根有嵌套）时，按“根内”处理，列出全部子目录。
+3. 两者都不满足 → 与现在相同的错误（400 `invalid_library_path` / “打不开这个文件夹”），不泄露原因。
+
+举例：配置 `/music` 时，`/` 下只有 `music`（selectable=true）。开发机配置 `/home/qlqq/workspace/ROOMusic/music` 时，`/` 下只有 `home`、`/home` 下只有 `qlqq`……直到 `ROOMusic` 下只有 `music`（selectable=true）。进入 `music` 之后，照旧列出全部合格子目录。
+
+### 9.4 parent / can_go_up / selectable 一览
+
+| 当前目录 | parent | can_go_up | selectable（当前） | items 的 selectable |
+| --- | --- | --- | --- | --- |
+| `/` | null | false | false | 是允许根的为 true，其余 false |
+| 其他上层路径，如 `/home` | `"/"`（即 Dir） | true | false | 同上 |
+| 允许根本身，如 `/music` | `"/"`（即 Dir，指向上层路径） | true | true | 全为 true |
+| 根内子目录，如 `/music/a` | `"/music"` | true | true | 全为 true |
+
+### 9.5 不变的部分
+
+- `ValidatePath` 及 `POST /library-roots` 的新增校验：只接受允许根内的真实目录。上层路径能浏览不等于能登记，后端不把浏览结果当授权。
+- `checkCacheDirectoryIsolated` 和 `ROOMUSIC_ALLOWED_LIBRARY_ROOTS` 配置不变。
+- 允许根内的规则不变：2000 上限（HTTP 固定传入）、隐藏目录与非 UTF-8 过滤、符号链接不返回、ReadDir 字节序、前端用 Intl.Collator 重排。
+- 先 `RequireAdmin`，再 `ListFolders`，再用一条 `SELECT path FROM library_roots WHERE path = ANY($1::text[])` 补登记标记。
+- 错误矩阵与错误码（401 / 403 forbidden / 400 invalid_library_path / 503）和 `WriteJSON` / `no-store` 不变。
+
+### 9.6 文档、样本与前端解码器
+
+**`library-folder-contracts.md` 要改的条目**
+- §2：接口样例换成 9.1 的形状，补上 `selectable` 的含义。
+- §3 第 1 条（起点）：改为 9.2 的写法，删除列表层的描述。
+- §3 第 2 条：在“非空输入”的规则里加入 9.3 的上层路径判断（按段前缀、`TrimSuffix` 的边界、不读文件系统、只列通往允许根的那一段）。
+- §3 第 3 条：改为 9.4 的表。
+- §3 第 4、5 条：注明它们只适用于允许根内。
+- §5：基准案例改为“`/` 下只看到通往允许根的那一段；允许根 parent 为 `/`”。错误案例补一条：把 `input + "/"` 直接拿来做前缀，导致 `/` 匹配不上；或者对上层路径调用 ReadDir，把系统目录列了出来。
+- §6：按 9.7 更新。
+
+**接口样本**
+- `library-folders/start`：改名为 **`library-folders/root`**，改为请求 `?path=<允许根>` 录制，即允许根这一层（`path:"/music"`、`parent:"/"`、`can_go_up:true`、`selectable:true`，条目 `classical-a`、`classical-b` 都是 selectable=true）。
+  原因：起点 `/` 这一层的条目是临时目录路径的第一段（如 `tmp`），录制器的禁止清单里有 `os.TempDir()`，而且这一段在不同机器上不一样，无法录成稳定的样本。
+- 录制时的替换：原来用 `strings.NewReplacer(realAllowedRoot, "/music", application.allowedRoot, "/music")`，现在要在**后面**追加 `"\"" + filepath.Dir(realAllowedRoot) + "\""` → `"\"/\""`，把允许根的 parent 换成 `/`。带上引号，只替换完整的 JSON 字符串值；`NewReplacer` 在同一位置按参数顺序先匹配长的根路径，不会误伤。
+- `library-folders/child`：重录，内容只多了 `selectable:true`（当前目录和条目），parent 仍是 `/music`。
+- `errors/invalid-library-folder`：不变（`/etc` 既不在允许根内，也不是允许根的上层路径），不重录。
+- 集成测试里对起点只加断言、不录样本：不带 path 时返回 200、`path=="/"`、`parent==null`、`selectable==false`，并且 items 恰好一项，`path` 等于 `realAllowedRoot` 的第一段。
+
+**前端**
+- 解码器 `decoders.ts` 的 `folderListingDecoder`：`path` 改为 `d.string({ min: 1 })`；顶层和 item 都加 `selectable: d.boolean()`；注释删掉“列表层”的说法，改为“parent 只在 `/` 为 null；selectable 为假的是上层路径，只能进入”。
+- `endpoints.ts`、`use-folder-listing.ts`、`query-keys.ts` 不变。起点仍是 `path=null`，不带查询参数。从上层回到 `/` 时会请求 `?path=%2F`，和起点是两份缓存，可以接受。
+- `folder-browser.tsx`：
+  - 顶部“选择”的显示条件 `data?.path != null` 改为 `data?.selectable === true`。
+  - 行内“选择”只在 `item.selectable` 为真时渲染。
+  - 当前位置直接显示 `data.path`，删除“音乐目录”回退。
+  - 顶部“已添加”标记的条件改为 `data?.registered`。
+  - 不加任何说明文字。上层路径的行只是少一个“选择”。
+
+### 9.7 最小测试集
+
+**后端单元测试（`backend/internal/library/folders_test.go`，非 DB，`t.TempDir`）**
+
+TempDir 先 EvalSymlinks；期望里的上层路径从这个真实路径推算，不写死 `/tmp`。
+- `TestListFoldersFiltersAndSorts`、`TestListFoldersTruncatesAfterFiltering`：只更新期望。允许根这一层改为 `Parent=&Dir(root)`、`CanGoUp=true`、`Selectable=true`，条目都是 `Selectable:true`。
+- `TestListFoldersRejectsInvalidPaths`：补一条“上层路径旁边的目录”。在 base 下建允许根 `base/root` 和兄弟目录 `base/other`，请求 `base/other` 要被拒绝。原来的各条不变。
+- `TestListFoldersStartsAtAllowedRoots`：重写为“上层路径”用例，删除列表层的各条：
+  1. `ListFolders("")` 返回 `Path:"/"`、`Parent:nil`、`CanGoUp:false`、`Selectable:false`，items 恰好一项，是真实 base 的第一段，`Selectable:false`。
+  2. 在 base 下配两个根 `base/z-root`、`base/a-root`（其中一个用符号链接配置），再建一个兄弟目录 `base/other`。请求 `base`，返回两项，按字节序先 `a-root` 后 `z-root`，都是 `Selectable:true`；`other` 不出现；当前 `Selectable:false`，`Parent` 为 `Dir(base)`。这一条同时覆盖了符号链接配置根解析成真实路径，以及按 path 去重。
+
+**集成测试（`backend/internal/app/api_samples_integration_test.go`）**
+- 按 9.6 改名、录制并替换 `library-folders/root`，重录 `child`，补上起点的断言。其他样本不动。
+
+**前端 Vitest**
+| 文件 | 改动 |
+| --- | --- |
+| `src/test/fake-library.ts` | `path` 为 null 或 `"/"` 时返回手写的 `/` 层（9.1 样例：`music`，selectable=true）；`"/music"` 返回 `library-folders/root`；`"/music/classical-a"` 返回 `child` |
+| `src/test/api-contract.test.ts` | 样本键 `library-folders/start` 改为 `library-folders/root` |
+| `src/features/library/api/decoders.test.ts` | 删除“多个允许目录的起点列表”这一条；“拒绝缺少子文件夹路径”改用 `library-folders/root` |
+| `src/app/library-roots.test.tsx` | “进入子文件夹……”：先在 `/` 层断言没有“选择 /”按钮、有“选择 music”，再点 `music` → `classical-a`；请求序列多一个 `?path=%2Fmusic`。“子文件夹打不开……”：路径从 `classical-a` 改为 `/music`（在 `/` 层点 `music` 出错，回到开头后看到 `music` 和当前位置 `/`） |
+
+**E2E**
+- `frontend/e2e/support/api-mock.ts`：`library-folders` 的替身改法与 fake-library 相同（null 或 `"/"` 返回手写的 `/` 层，`"/music"` 返回 root 样本）。
+- `frontend/e2e/library.spec.ts` 的“浏览并选择后添加”：在点 `classical-a` 之前先点 `music`。其余断言不变。
+
+**命令**
+- 后端：`cd backend && go test ./internal/library -run TestListFolders`，以及按项目现有脚本、带隔离测试库运行 `./internal/app -run <样本测试名>`。
+- 前端：`npx vitest run src/app/library-roots.test.tsx src/features/library/api/decoders.test.ts src/test/api-contract.test.ts`。
+- E2E：只跑 `library.spec.ts` 里的这一条。
+
+### 9.8 待主会话裁决
+
+1. 样本 `library-folders/start` 改名为 `library-folders/root` 并改为录制允许根这一层；起点 `/` 不录样本，前端两处替身手写这一层（原因是禁止清单里有 `os.TempDir()`，路径段也随机器变化）。备选方案：保留 `start` 这个名字但含义改为允许根，可以少改一个键名，但名字会误导。
+2. `path` 收紧为非空（Go 改成 `string`，解码器改成非空）。这是对外形状变化，但唯一的调用方是本前端，样本会同步重录。
+3. 上层路径的条目不套隐藏目录过滤（允许根在隐藏目录下时，否则走不到）。
+4. 一个有效允许根都没有时，起点仍返回 400（不改成“空的 `/` 层”）。
+
+**主会话裁决（2026-11-08）**：四条全部按本节方案执行——样本改名为 `library-folders/root`（删除 `start.json`），起点 `/` 只在集成测试断言、前端替身手写；`path` 收紧为非空；上层路径条目不过滤隐藏目录；没有有效允许根时仍返回 400。实现顺序：后端（Sol）与前端（Opus）并行，测试 agent 在两边完成后统一补测试并运行 9.7 的最小测试集。

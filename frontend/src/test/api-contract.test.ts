@@ -296,7 +296,7 @@ const successContracts: Record<string, Contract> = {
   "users/enable": { status: 200, decode: decodeMemberDisabledState },
   "users/password-reset": { status: 200, decode: decodePasswordReset },
   "users/revoke-sessions": { status: 200, decode: decodeSessionsRevoked },
-  "library-folders/start": { status: 200, decode: decodeFolderListing },
+  "library-folders/root": { status: 200, decode: decodeFolderListing },
   "library-folders/child": { status: 200, decode: decodeFolderListing },
   "library-roots/list-empty": { status: 200, decode: decodeRootList },
   "library-roots/list": { status: 200, decode: decodeRootList },

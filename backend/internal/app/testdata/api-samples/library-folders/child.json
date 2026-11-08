@@ -5,12 +5,14 @@
       {
         "name": "album",
         "path": "/music/classical-a/album",
-        "registered": false
+        "registered": false,
+        "selectable": true
       }
     ],
     "parent": "/music",
     "path": "/music/classical-a",
     "registered": true,
+    "selectable": true,
     "truncated": false
   },
   "status": 200

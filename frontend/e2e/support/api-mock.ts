@@ -368,7 +368,11 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
       case "GET /api/v1/library-folders":
         return guarded(method, path, true, () => {
           const requested = search.get("path");
-          if (requested === null || requested === "/music") return sample("library-folders/start");
+          if (requested === null || requested === "/") return json({
+            path: "/", parent: null, can_go_up: false, registered: false, selectable: false, truncated: false,
+            items: [{ name: "music", path: "/music", registered: false, selectable: true }],
+          });
+          if (requested === "/music") return sample("library-folders/root");
           if (requested === "/music/classical-a") return sample("library-folders/child");
           return sample("errors/invalid-library-folder");
         });

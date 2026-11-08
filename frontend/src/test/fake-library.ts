@@ -88,7 +88,11 @@ export function installLibraryApi(api: FakeApi, overrides: Partial<FakeLibrary> 
 
   api.on("GET", "/api/v1/library-folders", (request) => {
     const path = new URL(request.path, "http://localhost").searchParams.get("path");
-    if (path === null || path === "/music") return sampleResponse("library-folders/start");
+    if (path === null || path === "/") return jsonResponse(200, {
+      path: "/", parent: null, can_go_up: false, registered: false, selectable: false, truncated: false,
+      items: [{ name: "music", path: "/music", registered: false, selectable: true }],
+    });
+    if (path === "/music") return sampleResponse("library-folders/root");
     if (path === "/music/classical-a") return sampleResponse("library-folders/child");
     return sampleResponse("errors/invalid-library-folder");
   });
