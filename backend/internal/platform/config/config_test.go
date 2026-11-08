@@ -16,6 +16,7 @@ func setRequired(t *testing.T) {
 	t.Setenv("ROOMUSIC_SECURE_COOKIES", "")
 	t.Setenv("ROOMUSIC_PUBLIC_URL", "")
 	t.Setenv("ROOMUSIC_FFMPEG_PATH", "")
+	t.Setenv("ROOMUSIC_AUDIO_ANALYSIS", "")
 	t.Setenv("ROOMUSIC_MEDIA_CACHE_MAX_MIB", "")
 }
 

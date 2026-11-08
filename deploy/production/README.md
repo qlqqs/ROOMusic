@@ -166,3 +166,5 @@ networks:
   ALAC 第一次播放时转成 FLAC，缓存在应用数据卷里。
 - **登录或收藏报 403**：多半是反向代理改写了 Host，看日志里 `identity.origin.rejected` 的 `origin` 和 `host`，按第 5 节处理。
 - **升级后应用一直不就绪**：看日志里的数据库迁移提示，按第 3、4 节处理。
+
+`ROOMUSIC_AUDIO_ANALYSIS=off` 可关闭后台音频分析（默认 `on`）；ffmpeg 路径沿用 `ROOMUSIC_FFMPEG_PATH`。

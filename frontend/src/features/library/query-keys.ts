@@ -1,6 +1,8 @@
 import { viewerQueryKey } from "../auth";
 
 export const libraryKeys = {
+  /** 后台音频分析的进度：不在 library 前缀下，和扫描、目录的缓存互不牵连。 */
+  analysisProgress: (generation: number) => viewerQueryKey(generation, "audio-analysis", "progress"),
   roots: (generation: number) => viewerQueryKey(generation, "library", "roots"),
   rootOperations: (generation: number) => viewerQueryKey(generation, "library", "root-operations"),
   /** 添加目录时浏览的文件夹（前缀）：新增目录之后失效，“已添加”跟着更新。 */

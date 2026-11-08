@@ -10,6 +10,9 @@ import type { TrackPlaybackResult } from "../api/endpoints";
 import type { MediaSessionActionName, MediaSessionMetadata, MediaSessionPort } from "./media-session";
 import { isPlaybackActive, PlayerEngine, type EngineDeps, type PlayerEvent } from "./player-engine";
 import { loadSavedQueue, queueStorageKey, saveQueue, VOLUME_STORAGE_KEY } from "./persistence";
+import { PLAYBACK_SETTINGS_STORAGE_KEY } from "./playback-settings";
+import type { AudioContextLike, GainNodeLike } from "./audio-graph";
+import { decodeTrackAnalysis } from "../api/decoders";
 import type { PlayerTrack } from "./queue";
 
 const userId = "00000000-0000-4000-8000-000000000002";
@@ -930,7 +933,7 @@ describe("音量", () => {
     expect(JSON.parse(localStorage.data.get(VOLUME_STORAGE_KEY) ?? "null")).toEqual({ version: 1, volume: 0.8, muted: false });
   });
 
-  it("音量限制在 0 到 1，忽略非有限的值；媒体元素自己改变音量时同步状态", () => {
+  it("音量限制在 0 到 1，忽略非有限的值；命令直接同步快照与存储", () => {
     const h = createHarness();
     h.engine.setVolume(7);
     expect(h.audio.volume).toBe(1);
@@ -938,9 +941,13 @@ describe("音量", () => {
     expect(h.audio.volume).toBe(0);
     h.engine.setVolume(Number.NaN);
     expect(h.audio.volume).toBe(0);
-    h.audio.volume = 0.5;
-    h.audio.emit("volumechange");
+    expect(state(h).volume).toBe(0);
+    h.engine.setVolume(0.5);
     expect(state(h).volume).toBe(0.5);
+    expect(JSON.parse(h.localStorage.data.get(VOLUME_STORAGE_KEY) ?? "null")).toEqual({ version: 1, volume: 0.5, muted: false });
+    h.engine.setMuted(true);
+    expect(state(h).muted).toBe(true);
+    expect(JSON.parse(h.localStorage.data.get(VOLUME_STORAGE_KEY) ?? "null")).toEqual({ version: 1, volume: 0.5, muted: true });
   });
 
   it("音量偏好不随会话结束清除", () => {
@@ -2416,4 +2423,186 @@ describe("characterization (C2)", () => {
     expect(events.map((event) => event.kind)).toEqual(["track_started", "track_started"]);
     expect(statuses).toEqual(["loading", "loading", "loading"]);
   });
+});
+
+
+describe("Web Audio 播放路由", () => {
+  function graphFixture(state = "running", resumeToRunning = true) {
+    const calls: { set: number[]; target: number[]; curves: Float32Array[] }[] = [];
+    const listeners = new Set<() => void>();
+    let contextState = state;
+    const createGain = () => {
+      const record = { set: [] as number[], target: [] as number[], curves: [] as Float32Array[] };
+      calls.push(record);
+      const gain = { value: 1, setValueAtTime: (value: number) => { record.set.push(value); }, setTargetAtTime: (value: number) => { record.target.push(value); }, setValueCurveAtTime: (value: Float32Array) => { record.curves.push(value); }, cancelScheduledValues: () => undefined };
+      return { gain, connect: () => undefined } as unknown as GainNodeLike;
+    };
+    const ctx: AudioContextLike = { get state() { return contextState; }, currentTime: 1, destination: {}, resume: async () => { if (resumeToRunning) contextState = "running"; }, createGain, createMediaElementSource: () => ({ connect: () => undefined }), addEventListener: (_type, listener) => { listeners.add(listener); }, removeEventListener: (_type, listener) => { listeners.delete(listener); } };
+    return { calls, ctx, setState: (next: string) => { contextState = next; listeners.forEach((listener) => listener()); } };
+  }
+
+  it("两项关闭时直出且不创建上下文", async () => {
+    const storage = memoryStorage();
+    storage.setItem(PLAYBACK_SETTINGS_STORAGE_KEY, JSON.stringify({ version: 1, leveling: "off", crossfade: false, crossfadeSeconds: 5 }));
+    const graph = graphFixture();
+    const createAudio = vi.fn(() => new FakeAudio());
+    const createAudioContext = vi.fn(() => graph.ctx);
+    const h = createHarness({ localStorage: storage, createAudio, createAudioContext });
+    h.engine.playTracks([track("1")]);
+    await settle();
+    expect(createAudioContext).not.toHaveBeenCalled();
+    expect(state(h).audioRoute).toBe("direct");
+  });
+
+  it("跨发行自然前进时备用元素开始播放后切换，并对两支增益执行渐变曲线", async () => {
+    const storage = memoryStorage();
+    storage.setItem(PLAYBACK_SETTINGS_STORAGE_KEY, JSON.stringify({ version: 1, leveling: "off", crossfade: true, crossfadeSeconds: 5 }));
+    const graph = graphFixture();
+    const spares: FakeAudio[] = [];
+    const h = createHarness({ localStorage: storage, createAudioContext: () => graph.ctx, createAudio: () => { const audio = new FakeAudio(); spares.push(audio); return audio; }, loadAnalysis: async () => null });
+    const first = track("1", { releaseId: "release-a" });
+    const second = track("2", { releaseId: "release-b" });
+    await playAndStart(h, [first, second], 0, 100);
+    h.audio.tick(80);
+    await settle();
+    h.audio.tick(95);
+    await settle();
+    const spare = spares[0];
+    expect(spare?.src).toBe("/api/v1/tracks/track-2/audio");
+    spare?.loadMetadata(100);
+    spare?.beginPlaying();
+    expect(state(h).current?.track.trackId).toBe("track-2");
+    expect(graph.calls[2]?.curves).toHaveLength(1);
+    expect(graph.calls[4]?.curves).toHaveLength(1);
+  });
+
+  it("均衡正增益写入 levelGain，且上下文离开 running 后退回直出", async () => {
+    const graph = graphFixture();
+    const replacements: FakeAudio[] = [];
+    const analysis = decodeTrackAnalysis(sampleBody("tracks/analysis-done"));
+    const h = createHarness({ createAudioContext: () => graph.ctx, createAudio: () => { const next = new FakeAudio(); replacements.push(next); return next; }, loadAnalysis: async () => ({ ...analysis, analysis: analysis.analysis === null ? null : { ...analysis.analysis, trackGainDb: 7.8 } }) });
+    h.engine.playTracks([track("1")]);
+    await settle();
+    h.audio.loadMetadata(100);
+    h.audio.beginPlaying();
+    await settle();
+    expect(graph.calls[1]?.set.at(-1)).toBeCloseTo(10 ** (7.8 / 20));
+    expect(state(h).leveling).toMatchObject({ gainDb: 7.8 });
+    expect(state(h).audioRoute).toBe("web_audio");
+    h.engine.setVolume(0.4);
+    expect(graph.calls[0]?.set.at(-1)).toBe(0.4);
+    expect(h.audio.volume).toBe(1);
+    graph.setState("suspended");
+    expect(state(h).audioRoute).toBe("fallback");
+    expect(replacements).toHaveLength(1);
+    expect(replacements[0]?.currentTime).toBe(h.audio.currentTime);
+  });
+
+  it.each([
+    { reason: "下一首同一发行", sameRelease: true, repeatOne: false, manual: false, endTrack: "track-2" },
+    { reason: "单曲循环", sameRelease: false, repeatOne: true, manual: false, endTrack: "track-1" },
+    { reason: "fadeStart 前手动 next", sameRelease: false, repeatOne: false, manual: true, endTrack: "track-2" },
+  ])("不渐变：$reason", async ({ sameRelease, repeatOne, manual, endTrack }) => {
+    const storage = memoryStorage();
+    storage.setItem(PLAYBACK_SETTINGS_STORAGE_KEY, JSON.stringify({ version: 1, leveling: "off", crossfade: true, crossfadeSeconds: 5 }));
+    const graph = graphFixture();
+    const spares: FakeAudio[] = [];
+    const h = createHarness({ localStorage: storage, createAudioContext: () => graph.ctx, createAudio: () => { const audio = new FakeAudio(); spares.push(audio); return audio; }, loadAnalysis: async () => null });
+    const first = track("1", { releaseId: "release-a" });
+    const second = track("2", { releaseId: sameRelease ? "release-a" : "release-b" });
+    await playAndStart(h, [first, second], 0, 100);
+    if (repeatOne) h.engine.setMode("repeat_one");
+    if (manual) {
+      h.audio.tick(10);
+      h.engine.next();
+      await settle();
+    } else {
+      h.audio.tick(80);
+      await settle();
+      h.audio.tick(95);
+      await settle();
+      h.audio.finish();
+      await settle();
+    }
+    expect(spares.every((spare) => spare.src === "")).toBe(true);
+    expect(graph.calls.flatMap((call) => call.curves)).toHaveLength(0);
+    expect(state(h).current?.track.trackId).toBe(endTrack);
+  });
+
+  it("备用元素 play() 被拒时退回普通切歌", async () => {
+    const storage = memoryStorage();
+    storage.setItem(PLAYBACK_SETTINGS_STORAGE_KEY, JSON.stringify({ version: 1, leveling: "off", crossfade: true, crossfadeSeconds: 5 }));
+    const graph = graphFixture();
+    const spares: FakeAudio[] = [];
+    const h = createHarness({ localStorage: storage, createAudioContext: () => graph.ctx, createAudio: () => { const audio = new FakeAudio(); spares.push(audio); return audio; }, loadAnalysis: async () => null });
+    await playAndStart(h, [track("1", { releaseId: "release-a" }), track("2", { releaseId: "release-b" })], 0, 100);
+    h.audio.tick(80);
+    await settle();
+    h.audio.tick(95);
+    await settle();
+    const spare = spares[0];
+    expect(spare?.src).toBe("/api/v1/tracks/track-2/audio");
+    if (spare === undefined) throw new Error("缺少渐变备用元素");
+    spare.playBehavior = "not-allowed";
+    spare.loadMetadata(100);
+    await settle();
+    expect(state(h).current?.track.trackId).toBe("track-1");
+    expect(graph.calls.flatMap((call) => call.curves)).toHaveLength(0);
+    h.audio.finish();
+    await settle();
+    expect(state(h).current?.track.trackId).toBe("track-2");
+    expect(h.audio.sources).toContain("/api/v1/tracks/track-2/audio");
+  });
+
+  it("渐变切换后聆听计数归新曲，旧曲的渐变前出声未达门槛", async () => {
+    const storage = memoryStorage();
+    storage.setItem(PLAYBACK_SETTINGS_STORAGE_KEY, JSON.stringify({ version: 1, leveling: "off", crossfade: true, crossfadeSeconds: 5 }));
+    const graph = graphFixture();
+    const spares: FakeAudio[] = [];
+    const analysis = decodeTrackAnalysis(sampleBody("tracks/analysis-done"));
+    const h = createHarness({ localStorage: storage, createAudioContext: () => graph.ctx, createAudio: () => { const audio = new FakeAudio(); spares.push(audio); return audio; }, loadAnalysis: async () => ({ ...analysis, analysis: analysis.analysis === null ? null : { ...analysis.analysis, trailingSilenceMs: 20_000 } }) });
+    await playAndStart(h, [track("1", { releaseId: "release-a", durationSeconds: 100 }), track("2", { releaseId: "release-b", durationSeconds: 60 })], 0, 100);
+    for (let second = 0; second <= 15; second += 1) {
+      h.clock.now += 1_000;
+      h.audio.tick(second);
+      await settle();
+    }
+    const spare = spares[0];
+    expect(spare).toBeDefined();
+    spare?.loadMetadata(60);
+    spare?.beginPlaying();
+    expect(h.played).toEqual([]);
+    for (let second = 1; second <= 30; second += 1) {
+      h.clock.now += 1_000;
+      spare?.tick(second);
+    }
+    expect(h.played).toEqual([{ trackId: "track-2", playedSeconds: 30 }]);
+  });
+
+  it("上下文无法恢复为 running 时本首保持 direct 并照常播放", async () => {
+    const graph = graphFixture("suspended", false);
+    const h = createHarness({ createAudioContext: () => graph.ctx, createAudio: () => new FakeAudio() });
+    h.engine.playTracks([track("1")]);
+    await settle();
+    await vi.waitFor(() => expect(h.audio.sources.length).toBeGreaterThan(0));
+    h.audio.loadMetadata(60);
+    h.audio.beginPlaying();
+    expect(h.audio.playCalls).toBeGreaterThan(0);
+    expect(state(h).status).toBe("playing");
+    expect(state(h).audioRoute).toBe("direct");
+  });
+
+  it("volumeControllable 为 false 时自动均衡也不创建 AudioContext", async () => {
+    const locked = new FakeAudio();
+    Object.defineProperty(locked, "volume", { configurable: true, get: () => 1, set: () => undefined });
+    const graph = graphFixture();
+    const createAudioContext = vi.fn(() => graph.ctx);
+    const h = createHarness({ audio: locked, createAudioContext, createAudio: () => new FakeAudio() });
+    expect(state(h).volumeControllable).toBe(false);
+    h.engine.playTracks([track("1")]);
+    await settle();
+    expect(createAudioContext).not.toHaveBeenCalled();
+    expect(state(h).audioRoute).toBe("direct");
+  });
+
 });

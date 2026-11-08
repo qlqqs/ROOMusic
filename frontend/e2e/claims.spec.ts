@@ -314,10 +314,10 @@ test.describe("待认领：布局与可访问性", () => {
     for (const width of [1024, 1280]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto("/settings/operations");
-      const reason = page.getByRole("cell", { name: "撤销不能再撤销" });
+      const reason = page.getByRole("cell", { name: "已完成" });
       await expect(reason).toBeVisible();
       await page.evaluate(() => document.fonts.ready);
-      expect(await firstTextLines(reason), `“撤销不能再撤销”的行数 @${width}px`).toBe(1);
+      expect(await firstTextLines(reason), `“已完成”的行数 @${width}px`).toBe(1);
       expect(await firstTextLines(page.getByRole("cell", { name: "已撤销" })), `“已撤销”的行数 @${width}px`).toBe(1);
       // 操作列不再被挤窄之后，被挤的是别的列：时间的日期（2026-01-03）不能在中间断开，最多在日期与时间之间换行。
       for (const row of [1, 2]) {

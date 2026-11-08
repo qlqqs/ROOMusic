@@ -195,7 +195,8 @@ function AlbumDetailContent({ groupId, release: requested, track, list, isAdmin,
 
   // 定位曲目：每来到一条历史记录（打开、刷新、后退、前进，以及上面规范地址的替换）只定位一次，用历史记录的 key 区分；
   // 之后的重新渲染、轮询刷新不再滚动或抢焦点。地址还要规范化时先不定位，免得替换之后再定位一次。
-  const arrival = useRouterState({ select: (state) => state.location.state.__TSR_key ?? state.location.state.key ?? state.location.href });
+  // 打开全屏播放器压入的记录带着原记录的 key（playerFrom），不算新的到达。
+  const arrival = useRouterState({ select: (state) => state.location.state.playerFrom ?? state.location.state.__TSR_key ?? state.location.state.key ?? state.location.href });
   const [handled, setHandled] = useState<string | null>(null);
   const locate = useMemo(
     (): TrackLocate | undefined => (track === undefined || needsNormalizing || handled === arrival ? undefined : { trackId: track, token: arrival }),

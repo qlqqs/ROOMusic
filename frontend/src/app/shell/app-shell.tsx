@@ -2,16 +2,19 @@ import { useRouterState } from "@tanstack/react-router";
 import { Menu, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { useViewerScope } from "../../features/auth";
-import { usePlayerSelector, PlayerBar, PlayerAnnouncement } from "../../features/player";
+import { usePlayerSelector, FullscreenPlayer, PlayerBar, PlayerAnnouncement } from "../../features/player";
 import { GLOBAL_SEARCH_INPUT_SELECTOR, GlobalSearchBox } from "../../features/search";
 import { ArtistLinksScope } from "../../features/catalog";
 import { Button, ModalDialog } from "../../shared/ui";
-import { CurrentTrackFavorite } from "../player-personal-actions";
+import { CurrentTrackFavorite, SaveQueueAsPlaylist } from "../player-personal-actions";
 import type { PlayerTrack } from "../../features/player";
 import styles from "./app-shell.module.css";
 
-// 播放器栏当前曲目旁的心形：放不下提示文字，失败的那句只给读屏。模块级函数，引用保持不变。
+// 播放器的插槽（模块级函数，引用保持不变）：播放栏的心形放不下提示文字，失败的那句只给读屏；全屏里完整显示。
+// 队列抽屉标题旁是“存为歌单”。
 const renderBarTrackActions = (track: PlayerTrack) => <CurrentTrackFavorite track={track} message="screen-reader" />;
+const renderFullscreenTrackActions = (track: PlayerTrack) => <CurrentTrackFavorite track={track} />;
+const renderQueueActions = (tracks: readonly PlayerTrack[]) => <SaveQueueAsPlaylist tracks={tracks} />;
 import { Brand } from "./brand";
 import { PrimaryNav } from "./primary-nav";
 import { useCatalogEpochSync } from "./use-catalog-epoch-sync";
@@ -29,9 +32,11 @@ function isEditableTarget(target: EventTarget | null): boolean {
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const { viewer } = useViewerScope();
-  // 只订阅“队列是否为空”：外壳不随播放状态、音量等每次变化重绘。
-  const hasPlayer = usePlayerSelector((snapshot) => snapshot.queue.entries.length > 0);
+  // 只订阅“播放栏要不要显示”：外壳不随播放状态、音量等每次变化重绘。队列为空但有可重试的故障（例如恢复队列时暂时读取失败）时，
+  // 播放栏仍然显示，重试入口不会消失。
+  const hasPlayer = usePlayerSelector((snapshot) => snapshot.queue.entries.length > 0 || snapshot.fault?.kind === "transient" || snapshot.fault?.kind === "busy");
   const frameRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!hasPlayer) return;
@@ -44,9 +49,14 @@ export function AppShell({ children }: { children: ReactNode }) {
     observer.observe(region);
     return () => observer.disconnect();
   }, [hasPlayer]);
+  // 播放栏消失（例如在队列抽屉里清空了队列）时焦点随之消失，放回主内容区。
+  const hadPlayer = useRef(hasPlayer);
+  useEffect(() => {
+    if (hadPlayer.current && !hasPlayer && (document.activeElement === null || document.activeElement === document.body)) mainRef.current?.focus({ preventScroll: true });
+    hadPlayer.current = hasPlayer;
+  }, [hasPlayer]);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuTitleId = useId();
-  const mainRef = useRef<HTMLElement>(null);
 
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   // 在结果页时，搜索框显示地址里的查询词；别的页面（包括专辑页自己的搜索）不带过来。
@@ -125,7 +135,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       <main id="main" ref={mainRef} tabIndex={-1} className={styles.main}>
         {children}
       </main>
-      {hasPlayer ? <div ref={playerRef} className={styles.player}><PlayerBar renderCurrentTrackActions={renderBarTrackActions} /></div> : null}
+      {hasPlayer ? <div ref={playerRef} className={styles.player}><PlayerBar renderCurrentTrackActions={renderBarTrackActions} renderQueueActions={renderQueueActions} /></div> : null}
+      <FullscreenPlayer renderCurrentTrackActions={renderFullscreenTrackActions} renderQueueActions={renderQueueActions} />
       <ModalDialog open={menuOpen} titleId={menuTitleId} className={styles.drawer} onRequestClose={() => setMenuOpen(false)}>
         <div ref={drawerContentRef} className={styles.drawerContent}>
           <div className={styles.drawerHeader}>

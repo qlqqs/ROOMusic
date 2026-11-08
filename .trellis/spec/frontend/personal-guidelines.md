@@ -19,7 +19,7 @@
   - `app/routes/track-playback.ts` 是曲目安全摘要（历史条目同形）→ `PlayerTrack` 的唯一映射与“为什么不能播放”的判断。
   - `app/routes/personal-playback.tsx` 的 `PersonalPlayAll` 是收藏与歌单的“播放全部”。
   - `app/player-personal-actions.tsx` 把心形与“存为歌单”放进 player 的中立插槽；player 不导入 personal。
-- 中立插槽：`PlayerBar.renderCurrentTrackActions(track)`、`PlayerQueue.renderQueueActions(tracks)`、`NowPlayingPage` 的同名两个插槽；
+- 中立插槽：`PlayerBar.renderCurrentTrackActions(track)`、`PlayerQueue.renderQueueActions(tracks)`、`FullscreenPlayer` 的同名两个插槽（队列抽屉经 `QueueButton` 转交）；
   `AlbumDetailView.renderReleaseScope({ groupId, release }, children)` 包住选中版本的头部与曲目区；`HistoryView.renderRowsScope(items, children)` 包住历史表格。
   插槽函数保持引用稳定（`useCallback` 或模块级函数），曲目行才能跳过没有变化的重绘。
 

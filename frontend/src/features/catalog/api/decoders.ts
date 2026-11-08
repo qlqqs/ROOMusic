@@ -283,6 +283,14 @@ export const catalogStateDecoder = d.object({
   artists_state: d.oneOf(["unavailable", "preparing", "ready"]),
 });
 
+// 资料库统计（概览顶部的四个数）：口径与各列表页的总数一致；艺人数据还在整理或不可用时艺术家与作曲家为 null。
+const catalogStatsDecoder = d.object({
+  albums: d.integer({ min: 0 }),
+  tracks: d.integer({ min: 0 }),
+  artists: d.nullable(d.integer({ min: 0 })),
+  composers: d.nullable(d.integer({ min: 0 })),
+});
+
 export const decodeReleaseGroupPage = d.defineDecoder(releaseGroupPageDecoder);
 export const decodeReleaseGroupAddedPage = d.defineDecoder(releaseGroupAddedPageDecoder);
 export const decodeRecentlyAdded = d.defineDecoder(recentlyAddedDecoder);
@@ -291,6 +299,7 @@ export const decodeReleaseDetail = d.defineDecoder(releaseDetailDecoder);
 export const decodeReleaseComparison = d.defineDecoder(releaseComparisonDecoder);
 export const decodeReleaseEvidence = d.defineDecoder(releaseEvidenceDecoder);
 export const decodeCatalogState = d.defineDecoder(catalogStateDecoder);
+export const decodeCatalogStats = d.defineDecoder(catalogStatsDecoder);
 
 export type ArtworkDTO = d.Infer<typeof artworkDecoder>;
 export type ArtistRefDTO = d.Infer<typeof artistRefDecoder>;
@@ -299,6 +308,7 @@ export type ReleaseGroupSummaryDTO = d.Infer<typeof releaseGroupSummaryDecoder>;
 export type ReleaseGroupPageDTO = d.Infer<typeof releaseGroupPageDecoder>;
 export type ReleaseGroupSummaryWithAddedAtDTO = d.Infer<typeof releaseGroupSummaryWithAddedAtDecoder>;
 export type RecentlyAddedDTO = d.Infer<typeof recentlyAddedDecoder>;
+export type CatalogStatsDTO = d.Infer<typeof catalogStatsDecoder>;
 export type ReleaseGroupDetailDTO = d.Infer<typeof releaseGroupDetailDecoder>;
 export type ReleaseDetailDTO = d.Infer<typeof releaseDetailDecoder>;
 export type ReleaseComparisonDTO = d.Infer<typeof releaseComparisonDecoder>;

@@ -131,7 +131,7 @@ export function revertLines(item: Pick<OperationItemDTO, "changes">): string[] {
 /** 这条记录现在为什么不能撤销（可以撤销时是 null）：列表在“撤销”按钮的位置写出原因，不让用户猜。 */
 export function notRevertibleReason(item: Pick<OperationItemDTO, "type" | "revertible" | "reverted_by" | "release" | "album">): string | null {
   if (item.revertible) return null;
-  if (item.type === "revert") return "撤销不能再撤销";
+  if (item.type === "revert") return "已完成";
   // 艺人的治理没有撤销：用相反的操作恢复（合并后拆开、拆开后合并、改名后再改名）。
   if (item.type === "artist_merge") return "需要时可以拆开";
   if (item.type === "artist_split") return "需要时可以再合并";

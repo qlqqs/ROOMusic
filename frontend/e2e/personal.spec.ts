@@ -261,7 +261,7 @@ for (const width of widths) {
     expect((heartBox?.x ?? 0) + (heartBox?.width ?? 0)).toBeLessThanOrEqual((playerBox?.x ?? 0) + (playerBox?.width ?? 0));
     expect(heartBox?.y ?? -1).toBeGreaterThanOrEqual(playerBox?.y ?? 0);
     expect((heartBox?.y ?? 0) + (heartBox?.height ?? 0)).toBeLessThanOrEqual((playerBox?.y ?? 0) + (playerBox?.height ?? 0));
-    expect(await visibleLines(player.getByRole("link", { name: "第一乐章", exact: true }))).toBeLessThanOrEqual(width < 768 ? 2 : 1);
+    expect(await visibleLines(player.getByText("第一乐章", { exact: true }))).toBeLessThanOrEqual(width < 768 ? 2 : 1);
     await screenshot(page, info, width, "player-heart");
     await layout(page, "播放器心形");
     await openMenu(page, first.getByRole("button", { name: "更多操作", exact: true }));
@@ -355,7 +355,7 @@ test("纯键盘：收藏与取消、新建并加入、四种菜单移动、键�
   await expect(firstRow).toBeVisible();
   await expect(page.getByText("已放回《第一乐章》，在第 2 首。", { exact: true })).toBeVisible();
   await keyboardTarget(page, firstRow.getByRole("button", { name: "播放 第一乐章", exact: true }));
-  await expect(page.getByRole("region", { name: "播放器", exact: true }).getByRole("link", { name: "第一乐章", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "播放器", exact: true }).getByText("第一乐章", { exact: true })).toBeVisible();
 });
 
 test("触屏把手拖动后顺序持久化，刷新不恢复旧顺序", async ({ browser }) => {

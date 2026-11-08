@@ -3,22 +3,27 @@
 .play { display: inline-flex; align-items: center; justify-content: center; width: var(--control-height); height: var(--control-height); }
 /* 播放键是播放条的主要操作：墨色实心圆。 */
 .play button { width: 32px; min-width: 32px; min-height: 32px; height: 32px; border-radius: 50%; background: var(--color-text); color: var(--color-bg); }
-.play button:enabled:not([aria-disabled="true"]):hover { background: var(--color-neutral-800); color: var(--color-bg); }
-.play button:enabled:not([aria-disabled="true"]):active { background: var(--color-neutral-700); }
+.play button:enabled:not([aria-disabled="true"]):hover { background: color-mix(in srgb, var(--color-text) 85%, var(--color-bg)); color: var(--color-bg); }
+.play button:enabled:not([aria-disabled="true"]):active { background: color-mix(in srgb, var(--color-text) 75%, var(--color-bg)); }
 /* 不是“顺序”时用强调色，一眼看出开了循环或随机。 */
 .mode:not([data-mode="sequential"]) button { color: var(--text-accent); }
 .seek { display: flex; gap: var(--space-2); align-items: center; min-width: 0; font-size: var(--fs-12); font-variant-numeric: tabular-nums; }
 .seek input { flex: 1; min-width: 0; width: 100%; }
 .seek span { white-space: nowrap; }
+/* 波形：画布在下，透明的原生 range 盖满整块；焦点环画在外层。 */
+.wave { position: relative; flex: 1; min-width: 0; height: var(--wave-height, 28px); --wave-played: var(--color-accent); --wave-rest: var(--color-neutral-400); }
+.wave canvas { display: block; width: 100%; height: 100%; }
+.wave .overlay { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; opacity: 0; cursor: pointer; }
+.wave .overlay:disabled { cursor: default; }
+.wave:has(.overlay:focus-visible) { outline: var(--focus-ring); outline-offset: var(--focus-offset); border-radius: var(--radius-sm); }
 .volume { display: flex; gap: var(--space-1); align-items: center; min-width: 0; }
 .volume input { width: 90px; min-width: 0; }
-.full { display: grid; gap: var(--space-3); min-width: 0; }
-.options { display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: center; justify-content: space-between; }
 input[type="range"] { accent-color: var(--text-accent); min-height: 24px; }
 @media (max-width: 767px) { .desktop { display: none; } .play button { width: 44px; min-width: 44px; height: 44px; min-height: 44px; } .seek input { min-height: 44px; } .volume input { min-height: 44px; } }
 @media (pointer: coarse) { .play button { width: 44px; min-width: 44px; height: 44px; min-height: 44px; } }
 
 @media (min-width: 768px) and (pointer: fine) { .compact { height: 32px; } .compact .play { height: 32px; } .compact button { min-height: 32px; height: 32px; } }
 
-.full .play { width: 56px; height: 56px; }
-.full .play button { width: 56px; min-width: 56px; min-height: 56px; height: 56px; }
+.large { gap: var(--space-2); }
+.large .play { width: 48px; height: 48px; }
+.large .play button { width: 48px; min-width: 48px; min-height: 48px; height: 48px; }

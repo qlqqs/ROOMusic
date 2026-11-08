@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端检查清单与测试约定"}
+{"file": ".trellis/spec/backend/playback-derivation-contracts.md", "reason": "核对分析工作者的 ffmpeg 调用、优先级与取消"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "核对迁移与 SQL"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端检查清单"}
+{"file": ".trellis/spec/frontend/quality-verification-layers.md", "reason": "Vitest、Playwright mock 与真实播放三层验证的分工"}
+{"file": ".trellis/spec/frontend/player-design-guidelines.md", "reason": "核对播放器行为合同"}
+{"file": "frontend/DESIGN-acceptance.md", "reason": "界面验收清单：1440/375、焦点、溢出"}

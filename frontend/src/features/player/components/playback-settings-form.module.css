@@ -1,0 +1,26 @@
+.form { display: grid; gap: var(--space-6); justify-items: start; max-width: 480px; }
+.note { font-size: var(--fs-13); color: var(--text-secondary); }
+.field { display: grid; gap: var(--space-2); min-width: 0; margin: 0; padding: 0; border: 0; }
+.field:disabled { opacity: 0.45; }
+.legend { padding: 0; font-size: var(--fs-13); font-weight: 600; }
+
+/* 分段选择：相连的几段，选中的一段用浅金底与强调色文字。 */
+.segments { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--color-control-border); border-radius: var(--radius-md); overflow: hidden; }
+.segment { position: relative; display: inline-flex; }
+.segment + .segment { border-left: 1px solid var(--color-divider); }
+.segment input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.field:disabled .segment input { cursor: not-allowed; }
+.segment span { display: inline-flex; align-items: center; min-height: var(--control-height); padding: 0 var(--space-3); font-size: var(--fs-13); cursor: pointer; }
+.segment:hover span { background: var(--color-hover); }
+.segment input:checked + span { background: var(--color-selected); color: var(--text-accent); font-weight: 600; }
+.segment:has(input:focus-visible) { outline: var(--focus-ring); outline-offset: -2px; }
+.field:disabled .segment span { cursor: not-allowed; }
+
+/* 开关：带 role="switch" 的复选框。 */
+.switchRow { display: flex; align-items: center; gap: var(--space-4); min-height: var(--control-height); cursor: pointer; }
+.switch { appearance: none; position: relative; width: 36px; height: 20px; margin: 0; border-radius: 10px; background: var(--color-neutral-400); cursor: pointer; transition: background-color 0.15s ease; }
+.switch::before { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--color-bg); transition: transform 0.15s ease; }
+.switch:checked { background: var(--color-accent); }
+.switch:checked::before { transform: translateX(16px); }
+.switch:disabled { opacity: 0.45; cursor: not-allowed; }
+@media (prefers-reduced-motion: reduce) { .switch, .switch::before { transition: none; } }

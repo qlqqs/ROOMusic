@@ -1,0 +1,3 @@
+.inline { display: flex; align-items: center; gap: var(--space-1); min-width: 0; font-size: var(--fs-12); color: var(--text-secondary); }
+.text { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.inline button { flex: 0 0 auto; min-height: 24px; height: 24px; min-width: 24px; }

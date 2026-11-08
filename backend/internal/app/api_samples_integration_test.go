@@ -20,10 +20,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/library/parser/parsertest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
+	"github.com/qlqq/roomusic/backend/internal/playback/analysis"
 	"github.com/qlqq/roomusic/backend/internal/playback/derivation"
 )
 
@@ -376,8 +378,170 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	// 核对问题（M4 第二项）：新建一张有问题的合成专辑，放在最后，已有样本不受影响。
 	recordIssueReviewSamples(t, application, samples, call, admin)
 	recordClaimSamples(t, application, samples, call, admin)
+	recordAudioAnalysisSamples(t, application, samples, call, admin)
 
 	samples.finish()
+}
+
+// recordAudioAnalysisSamples 通过固定 ffmpeg 与合成曲目生成真实 done 样本；pending/failed 来自同一张表的实际读取判定。
+func recordAudioAnalysisSamples(t *testing.T, application *integrationTestApplication, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser) {
+	t.Helper()
+	idempotency := func(key string) map[string]string { return map[string]string{"Idempotency-Key": key} }
+	store := catalog.NewStore(application.database)
+	var activeRoots []struct {
+		ID       string
+		Revision int64
+	}
+	rows, err := application.database.Query(`SELECT id::text,revision FROM library_roots WHERE status='active' ORDER BY id`)
+	if err != nil {
+		t.Fatalf("list active roots for isolated analysis sample: %v", err)
+	}
+	for rows.Next() {
+		var root struct {
+			ID       string
+			Revision int64
+		}
+		if err := rows.Scan(&root.ID, &root.Revision); err != nil {
+			rows.Close()
+			t.Fatal(err)
+		}
+		activeRoots = append(activeRoots, root)
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for index, root := range activeRoots {
+		response := call(http.MethodPatch, "/api/v1/library-roots/"+root.ID, map[string]any{"status": "disabled", "expected_revision": root.Revision}, admin, idempotency(fmt.Sprintf("analysis-disable-%04d", index)))
+		if response.Code != http.StatusOK {
+			t.Fatalf("disable root for isolated analysis sample: HTTP %d: %s", response.Code, response.Body.String())
+		}
+	}
+	analysisRoot := createLibraryDirectory(t, application, "analysis-samples")
+	created := call(http.MethodPost, "/api/v1/library-roots", map[string]string{"path": analysisRoot}, admin, idempotency("analysis-create-root"))
+	if created.Code != http.StatusCreated {
+		t.Fatalf("register analysis sample root: HTTP %d: %s", created.Code, created.Body.String())
+	}
+	rootID := decodeJSONMap(t, created)["id"].(string)
+	playableFixture, err := os.ReadFile("../../testdata/playback/flac-16-44100.flac")
+	if err != nil {
+		t.Fatalf("read playable analysis fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(analysisRoot, "01.flac"), playableFixture, 0o644); err != nil {
+		t.Fatalf("write playable analysis fixture: %v", err)
+	}
+	started := call(http.MethodPost, "/api/v1/scans", map[string]any{}, admin)
+	if started.Code != http.StatusAccepted {
+		t.Fatalf("start analysis fixture scan: HTTP %d: %s", started.Code, started.Body.String())
+	}
+	if status := waitForScanToFinish(t, application, decodeJSONMap(t, started)["id"].(string)); status != "succeeded" {
+		t.Fatalf("analysis fixture scan should succeed, got %s", status)
+	}
+	for index, root := range activeRoots {
+		response := call(http.MethodPost, "/api/v1/library-roots/"+root.ID+"/restore", map[string]any{"expected_revision": root.Revision + 1}, admin, idempotency(fmt.Sprintf("analysis-restore-%04d", index)))
+		if response.Code != http.StatusOK {
+			t.Fatalf("restore root after isolated analysis scan: HTTP %d: %s", response.Code, response.Body.String())
+		}
+	}
+	candidates, err := store.ListAnalysisCandidates(context.Background(), analysis.Version, 1000)
+	if err != nil {
+		t.Fatalf("list audio-analysis sample candidates: %v", err)
+	}
+	byRelease := make(map[string][]catalog.TrackAnalysisCandidate)
+	for _, candidate := range candidates {
+		byRelease[candidate.ReleaseID] = append(byRelease[candidate.ReleaseID], candidate)
+	}
+	releaseIDs := sortedKeys(byRelease)
+	var doneCandidate *catalog.TrackAnalysisCandidate
+	for _, candidate := range candidates {
+		if candidate.RootID == rootID && candidate.RelativePath == "01.flac" && candidate.SourceKind != "cue_virtual" {
+			if _, err := os.Stat(filepath.Join(candidate.RootPath, candidate.RelativePath)); err == nil {
+				copy := candidate
+				doneCandidate = &copy
+				break
+			}
+		}
+	}
+	if doneCandidate == nil {
+		t.Fatal("audio-analysis samples have no readable analysis fixture")
+	}
+	doneRelease := doneCandidate.ReleaseID
+	var failedCandidate, pendingCandidate *catalog.TrackAnalysisCandidate
+	for _, releaseID := range releaseIDs {
+		items := byRelease[releaseID]
+		if releaseID == doneRelease {
+			continue
+		}
+		for i := range items {
+			candidate := items[i]
+			if failedCandidate == nil {
+				failedCandidate = &candidate
+			} else if pendingCandidate == nil {
+				pendingCandidate = &candidate
+				break
+			}
+		}
+		if pendingCandidate != nil {
+			break
+		}
+	}
+	if failedCandidate == nil || pendingCandidate == nil {
+		t.Fatal("audio-analysis sample fixtures need three release candidates")
+	}
+	ffmpegPath := os.Getenv("ROOMUSIC_TEST_FFMPEG")
+	analyzer, err := analysis.Open(context.Background(), ffmpegPath)
+	if err != nil {
+		t.Fatalf("open fixed ffmpeg for analysis samples: %v", err)
+	}
+	var doneID string
+	for _, candidate := range byRelease[doneRelease] {
+		if candidate.TrackID != doneCandidate.TrackID {
+			continue
+		}
+		file, err := os.Open(filepath.Join(candidate.RootPath, candidate.RelativePath))
+		if err != nil {
+			continue
+		}
+		result, analyzeErr := analyzer.Analyze(context.Background(), file, nil, nil)
+		_ = file.Close()
+		if analyzeErr != nil {
+			t.Fatalf("analyze sample track: %v", analyzeErr)
+		}
+		saved := catalog.TrackAnalysisResult{Status: "done", IntegratedLUFS: result.IntegratedLUFS, TruePeakDBTP: result.TruePeakDBTP,
+			DurationMS: result.DurationMS, LeadingSilenceMS: result.LeadingSilenceMS, TrailingSilenceMS: result.TrailingSilenceMS, Waveform: result.Waveform}
+		if err := store.SaveTrackAnalysis(context.Background(), candidate, analysis.Version, saved); err != nil {
+			t.Fatalf("save done analysis sample: %v", err)
+		}
+		if doneID == "" {
+			doneID = candidate.TrackID
+		}
+	}
+	if doneID == "" {
+		t.Fatal("could not analyze any sample track")
+	}
+	invalid, err := os.CreateTemp(t.TempDir(), "invalid-audio-*.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := invalid.Write([]byte("not an audio stream")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := invalid.Seek(0, 0); err != nil {
+		t.Fatal(err)
+	}
+	_, analyzeErr := analyzer.Analyze(context.Background(), invalid, nil, nil)
+	_ = invalid.Close()
+	var failure *analysis.Failure
+	if !errors.As(analyzeErr, &failure) {
+		t.Fatalf("invalid fixture analysis error = %v, want ffmpeg failure", analyzeErr)
+	}
+	failed := catalog.TrackAnalysisResult{Status: "failed", FailureCategory: failure.Category}
+	if err := store.SaveTrackAnalysis(context.Background(), *failedCandidate, analysis.Version, failed); err != nil {
+		t.Fatalf("save failed analysis sample: %v", err)
+	}
+	samples.record("tracks/analysis-done", call(http.MethodGet, "/api/v1/tracks/"+doneID+"/analysis", nil, admin), http.StatusOK)
+	samples.record("tracks/analysis-pending", call(http.MethodGet, "/api/v1/tracks/"+pendingCandidate.TrackID+"/analysis", nil, admin), http.StatusOK)
+	samples.record("tracks/analysis-failed", call(http.MethodGet, "/api/v1/tracks/"+failedCandidate.TrackID+"/analysis", nil, admin), http.StatusOK)
+	samples.record("audio-analysis/progress", call(http.MethodGet, "/api/v1/audio-analysis/progress", nil, admin), http.StatusOK)
 }
 
 // apiSampleCall 是样本测试里发请求的闭包：带固定的请求 ID，把响应交给记录器。

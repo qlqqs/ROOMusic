@@ -134,6 +134,11 @@ export function installOverviewApi(api: FakeApi, options: { albums?: number; att
   api.on("GET", "/api/v1/release-groups", (request) =>
     jsonResponse(200, withValue(groups, ["pagination", "total"], request.path.includes("attention=required") ? attention : albums)),
   );
+  api.on("GET", "/api/v1/catalog/stats", () => {
+    const stats = sampleBody("catalog/stats") as { albums: number };
+    return jsonResponse(200, { ...stats, albums });
+  });
+  api.on("GET", "/api/v1/audio-analysis/progress", () => sampleResponse("audio-analysis/progress"));
   api.on("GET", "/api/v1/scans/active", () => sampleResponse("scans/active-none"));
   api.on("GET", "/api/v1/library-roots", () => sampleResponse("library-roots/list"));
   api.on("GET", "/api/v1/users", () => sampleResponse("users/list"));

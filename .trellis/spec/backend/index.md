@@ -56,13 +56,14 @@ Before writing or reviewing backend code:
 | [真实库 Smoke 合同](./real-library-smoke-contracts.md) | 真实音乐只读验收与 V0 对照 |
 | [搜索规范化与在线投影合同](./search-contracts.md) | M5 ④字符规范化、内置 OpenCC、后台回填、事务双写、两栏搜索和有界计数 |
 | [艺人身份与浏览合同](./artist-contracts.md) | M5 ⑤：名字键、署名与治理、整理期、引用、队列及收藏端口 |
-| [目录批量摘要合同](./catalog-summary-contracts.md) | 历史/个人数据安全摘要、批量上限和缺失语义 |
+| [目录批量摘要合同](./catalog-summary-contracts.md) | 历史/个人数据安全摘要、批量上限和缺失语义；资料库统计接口 `catalog/stats` |
 | [Catalog REST 合同](./catalog-rest-contracts.md) | Release 列表/详情/evidence、按组接口、封面摘要、可见性和错误合同 |
 | [专辑多流派合同](./genre-contracts.md) | 0032：多值标签、流派合集、读取数组、修正与历史撤销兼容、双向迁移 |
 | [Catalog REST 验证与示例](./catalog-rest-verification.md) | Catalog REST 的正确/基准/错误案例、必需测试与断言点（含 M5 统计与个人数据批量读取、EXPLAIN 诊断）、错误与正确示例 |
 | [播放直出合同](./playback-contracts.md) | M2a 格式表、预检、音频 Range、安全打开与停机中止；M2b 的 `delivery`、202 与派生错误码 |
 | [无损派生合同](./playback-derivation-contracts.md) | M2b ALAC → FLAC 无损派生：配置与启动、缓存、转换与核对、上限与取消、测试 |
 | [内嵌歌词合同](./lyrics-contracts.md) | M2b 歌词：标签提取与规范化、`tracks.lyrics` 与约束、歌词接口、LRC 解析规则、测试 |
+| [后台音频分析合同](./audio-analysis-contracts.md) | 0033：`track_analyses` 与待分析判定、单线程低优先级工作者、ffmpeg 命令与自检、`ROOMUSIC_AUDIO_ANALYSIS`、按 Roon 的增益公式、分析结果与进度接口、测试 |
 | [播放历史合同](./listening-contracts.md) | 阶段 P：`play_history`、计次规则与服务端校验、三个接口、最近播放读取规则、前端计次与上报、测试 |
 | [本人收藏与歌单合同](./personal-contracts.md) | M5 P 线：typed 收藏、歌单间隔键/revision、稳定收据、适应撤销、队列限量与精确统计 |
 | [受治理操作合同](./governance-contracts.md) | 阶段 M3：操作记录与共同写入流程 `operations.Run`、发行字段修正与有效值视图、人工归组、撤销、操作记录接口、错误码、测试与真实服务用例 |

@@ -1,21 +1,21 @@
 .bar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-3); height: 68px; min-width: 0; padding: 6px 22px; border-top: 1px solid var(--color-divider); background: var(--color-bg); }
 .identity { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
-.cover { width: 44px; height: 44px; flex: 0 0 44px; }
+.cover { width: 44px; height: 44px; flex: 0 0 44px; padding: 0; border: 0; background: none; cursor: zoom-in; }
 .text { min-width: 0; }
 .trackActions { flex: 0 0 auto; }
 .title, .subtitle { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.title { font-size: var(--fs-13); color: var(--text-primary); text-decoration: none; }
+.title { font-size: var(--fs-13); color: var(--text-primary); }
 .subtitle { font-size: var(--fs-12); color: var(--text-secondary); }
-.center { display: grid; gap: 2px; min-width: 0; }
+/* 播放栏只有 68px 高：波形 22px，与传输控制一起放得下。 */
+.center { display: grid; gap: 2px; min-width: 0; --wave-height: 22px; }
 .end { display: flex; align-items: center; gap: var(--space-2); min-width: 0; font-size: var(--fs-12); }
+.format { display: flex; align-items: center; gap: 2px; }
+.formatText { display: grid; white-space: nowrap; }
 .state { display: block; color: var(--text-secondary); }
-.queue { white-space: nowrap; }
 @media (min-width: 1200px) { .bar { grid-template-columns: minmax(0, 300px) minmax(150px, 1fr) auto; gap: 24px; } .center { width: 100%; max-width: 540px; justify-self: center; } }
 @media (min-width: 768px) and (max-width: 1199px) { .volume { display: none; } .end { gap: var(--space-1); } .end button { font-size: var(--fs-12); padding: var(--space-1); } .center { width: 210px; } }
 @media (min-width: 768px) and (max-width: 899px) { .end > .desktop { display: none; } .center { width: 190px; } }
-@media (max-width: 767px) { .bar { grid-template-columns: minmax(0, 1fr) auto auto; height: auto; min-height: 68px; gap: var(--space-1); padding: 8px var(--space-2); } .desktop, .volume, .subtitle { display: none; } .queue { display: flex; align-items: center; min-height: 44px; font-size: var(--fs-12); } .title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; } }
-
-.fault { font-size: var(--fs-12); color: var(--text-secondary); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+@media (max-width: 767px) { .bar { grid-template-columns: minmax(0, 1fr) auto auto; height: auto; min-height: 68px; gap: var(--space-1); padding: 8px var(--space-2); } .desktop, .volume, .subtitle { display: none; } .title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; } }
 
 @media (min-width: 768px) { .center input { min-height: 16px; height: 16px; } }
 @media (min-width: 768px) and (pointer: coarse) {

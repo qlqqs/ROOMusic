@@ -28,15 +28,17 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/config"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"github.com/qlqq/roomusic/backend/internal/playback"
+	"github.com/qlqq/roomusic/backend/internal/playback/analysis"
 	playbackapi "github.com/qlqq/roomusic/backend/internal/playback/httpapi"
 )
 
 // App 是装配完成的应用：请求 handler 加上需要在停机时等待的后台工作。
 type App struct {
-	mux         *http.ServeMux
-	handler     http.Handler
-	library     *library.Service
-	catalogDone <-chan struct{}
+	mux          *http.ServeMux
+	handler      http.Handler
+	library      *library.Service
+	catalogDone  <-chan struct{}
+	analysisDone <-chan struct{}
 }
 
 // Option 调整装配。生产路径不传任何选项；选项只用于测试把时间常量缩短到可以快速验证。
@@ -47,6 +49,7 @@ type options struct {
 	loginThrottle         *identity.LoginThrottle
 	playbackPreflightWait time.Duration
 	derivation            playback.Derivation
+	analysis              *analysis.Analyzer
 	// 测试直接插入旧目录夹具时暂停后台，搜索测试再显式回填。
 	pauseCatalogMaintenance bool
 }
@@ -59,6 +62,11 @@ func WithLoginThrottle(throttle *identity.LoginThrottle) Option {
 // WithPlaybackPreflightWait 设置预检等待派生完成的最长时间（默认 playback.DefaultPreflightWait）。
 func WithPlaybackPreflightWait(wait time.Duration) Option {
 	return func(settings *options) { settings.playbackPreflightWait = wait }
+}
+
+// WithAnalysis 启用已经由 OpenAnalysis 探测通过的后台音频分析器。
+func WithAnalysis(analyzer *analysis.Analyzer) Option {
+	return func(settings *options) { settings.analysis = analyzer }
 }
 
 // WithDerivation 启用 ALAC 的无损派生：派生格式进入格式表，预检在缓存未命中时启动转换。不传时 ALAC 保持“不能直接播放”。
@@ -100,14 +108,27 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	mux.HandleFunc("GET /readyz", httpserver.ReadyHandler(func() bool { return database != nil }))
 	identityapi.New(database, guard, assembly.loginThrottle, logger).Register(mux)
 	libraryapi.New(database, guard, libraryService, settings.AllowedLibraryRoots, logger).Register(mux)
-	catalogapi.New(database, guard, settings.DataDirectory, logger).Register(mux)
+	catalogapi.New(database, guard, settings.DataDirectory, logger, catalogapi.WithAnalysisVersion(analysis.Version)).Register(mux)
 	catalogapi.NewArtistGovernance(database, guard, logger, artistResolutionAdapter{}).Register(mux)
 	// 受治理操作的撤销与展示：每种操作类型的能力由拥有对应业务表的包提供，operations/httpapi 不导入业务包。
 	operationsapi.New(database, guard, logger, governance.CorrectionOperations(), governance.GroupChangeOperations(), governance.GroupDefaultOperations(),
 		governance.IssueReviewOperations(), governance.ClaimOperations(), governance.ArtistMergeKind{}, governance.ArtistSplitKind{}, governance.ArtistRenameKind{}, governance.ArtistCandidateIgnoreKind{}).Register(mux)
 	playbackService := playback.NewService(database, settings.AllowedLibraryRoots, playback.WithDerivation(assembly.derivation))
+	var analysisWorker *playback.AnalysisWorker
+	analysisDone := make(chan struct{})
+	if database != nil && assembly.analysis != nil {
+		analysisWorker = playback.NewAnalysisWorker(database, settings.AllowedLibraryRoots, assembly.analysis, func(ctx context.Context) (bool, error) {
+			scan, err := libraryService.ActiveScan(ctx)
+			return scan != nil, err
+		}, logger)
+		go func() { defer close(analysisDone); analysisWorker.Run(lifecycle) }()
+	} else {
+		close(analysisDone)
+	}
+	progress := playback.NewAnalysisProgressProvider(database, analysis.Version, analysisWorker)
 	playbackapi.New(guard, playbackService, lifecycle, logger, playbackapi.Options{
-		PreflightWait: assembly.playbackPreflightWait,
+		PreflightWait:    assembly.playbackPreflightWait,
+		AnalysisProgress: progress,
 	}).Register(mux)
 	listeningapi.New(guard, listening.NewService(database)).Register(mux)
 	personalapi.New(guard, personal.NewService(database)).Register(mux)
@@ -127,7 +148,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	} else {
 		close(catalogDone)
 	}
-	return &App{mux: mux, handler: httpserver.Middleware(logger, mux), library: libraryService, catalogDone: catalogDone}
+	return &App{mux: mux, handler: httpserver.Middleware(logger, mux), library: libraryService, catalogDone: catalogDone, analysisDone: analysisDone}
 }
 
 // InitializeCatalog 在允许扫描与治理写入前短事务登记目标版本，不发现对象或等待回填。
@@ -148,6 +169,16 @@ func (application *App) WaitForCatalogMaintenance(ctx context.Context) error {
 
 // Handler 返回带请求 ID 与完成日志的完整请求 handler。
 func (application *App) Handler() http.Handler { return application.handler }
+
+// WaitForAnalysis 等待分析工作者退出；生命周期取消会中止正在运行的 ffmpeg 进程组。
+func (application *App) WaitForAnalysis(ctx context.Context) error {
+	select {
+	case <-application.analysisDone:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
 
 // WaitForScans 等待所有扫描 worker 退出，或在 ctx 结束时返回其错误。
 func (application *App) WaitForScans(ctx context.Context) error {

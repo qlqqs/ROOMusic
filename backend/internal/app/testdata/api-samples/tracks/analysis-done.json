@@ -1,0 +1,24 @@
+{
+  "body": {
+    "album": {
+      "gain_db": 7.8,
+      "peak_dbtp": -21.1,
+      "release_id": "00000000-0000-4000-8000-000000000001"
+    },
+    "analysis": {
+      "duration_ms": 3000,
+      "integrated_lufs": -21.8,
+      "leading_silence_ms": 0,
+      "track_gain_db": 7.8,
+      "trailing_silence_ms": 3000,
+      "true_peak_dbtp": -21.1,
+      "waveform": {
+        "peaks": "FxcWFxcXFxYXFxcXFhcXFxcWFxcXFxYXFxcXFhcXFxcWFxcXFxYXFxcXFhcXFxcWFxcXFxYXFxcXFhcXFxcWFxcXFxYXFxcXFhcXFxcWFxcXFxYXFxcXFhcXFxcWFxcXFxYXFxcXFhcXFxcWFxcXFxYXFxcXFhcXFxcWFxcXFxYXFxcXFhcXFxcWFxcXFxYXFxcXFhcXFxcWFxcXFxYXFxcXFhcXFxcWFxcXFxYXFxcXFhcXFxcWFxcXFxYXFxcXFhcXFxcWFxcXFxYXFxcXFhcXFxcWFxcXFxYXFxcXFhcXFxcWFxcXFxYXFxcXFhcXFxcWFxcXFxYXFxcXFhcXFxcWFxcXFxYXFxcXFhcXFxcWFxcXFxYXFxcXFhcXFxcWFxcXFxYXFxcXFhcX",
+        "points": 300
+      }
+    },
+    "status": "done",
+    "track_id": "00000000-0000-4000-8000-000000000002"
+  },
+  "status": 200
+}

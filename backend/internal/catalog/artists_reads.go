@@ -129,23 +129,36 @@ const artistVisiblePredicate = `EXISTS (
  EXISTS (SELECT 1 FROM tracks t WHERE t.id=e.track_id AND t.source_status='present') OR
  EXISTS (SELECT 1 FROM media m JOIN tracks t ON t.medium_id=m.id WHERE m.release_id=e.release_id AND t.source_status='present')))`
 
-func (s *Store) ListArtists(ctx context.Context, params ArtistListParams) (ArtistPage[ArtistSummary], error) {
-	return artistSnapshot(ctx, s, func(snapshot *Store) (ArtistPage[ArtistSummary], error) {
-		result := ArtistPage[ArtistSummary]{Items: []ArtistSummary{}, Pagination: ArtistPagination{Page: params.Page, PageSize: params.PageSize}}
-		if err := textnorm.LoadEmbedded(); err != nil {
-			return result, err
-		}
-		key := textnorm.Text(params.Query)
-		args := []any{searchindex.EscapeLike(key), params.Initial, params.Role}
-		prefix := `WITH selected AS (
+func selectedArtistsCTE() string {
+	return `WITH selected AS (
  SELECT a.id,p.sort_key,p.initial_group FROM artists a JOIN artist_profiles p ON p.artist_id=a.id
  LEFT JOIN artist_overrides o ON o.artist_id=a.id WHERE o.redirect_artist_id IS NULL AND ` + artistVisiblePredicate + `
  AND ($1='' OR p.sort_key LIKE '%'||$1||'%' ESCAPE '~' OR EXISTS (SELECT 1 FROM artist_search_names n WHERE n.artist_id=a.id AND n.normalized_value LIKE '%'||$1||'%' ESCAPE '~'))
  AND ($2='' OR p.initial_group=$2) AND ($3='' OR EXISTS (SELECT 1 FROM artist_effective_credits e WHERE e.artist_id=a.id AND (e.role=$3 OR ($3='album_artist' AND e.role='release_artist' AND e.release_id IS NOT NULL)) AND (
  EXISTS(SELECT 1 FROM tracks t WHERE t.id=e.track_id AND t.source_status='present') OR EXISTS(SELECT 1 FROM media m JOIN tracks t ON t.medium_id=m.id WHERE m.release_id=e.release_id AND t.source_status='present')))))`
-		if err := snapshot.database.QueryRowContext(ctx, prefix+` SELECT count(*) FROM selected`, args...).Scan(&result.Pagination.Total); err != nil {
+}
+
+func (s *Store) artistListCount(ctx context.Context, query, initial, role string) (int64, error) {
+	if err := textnorm.LoadEmbedded(); err != nil {
+		return 0, err
+	}
+	args := []any{searchindex.EscapeLike(textnorm.Text(query)), initial, role}
+	var count int64
+	err := s.database.QueryRowContext(ctx, selectedArtistsCTE()+` SELECT count(*) FROM selected`, args...).Scan(&count)
+	return count, err
+}
+
+func (s *Store) ListArtists(ctx context.Context, params ArtistListParams) (ArtistPage[ArtistSummary], error) {
+	return artistSnapshot(ctx, s, func(snapshot *Store) (ArtistPage[ArtistSummary], error) {
+		result := ArtistPage[ArtistSummary]{Items: []ArtistSummary{}, Pagination: ArtistPagination{Page: params.Page, PageSize: params.PageSize}}
+		prefix := selectedArtistsCTE()
+		total, err := snapshot.artistListCount(ctx, params.Query, params.Initial, params.Role)
+		if err != nil {
 			return result, err
 		}
+		result.Pagination.Total = total
+		key := textnorm.Text(params.Query)
+		args := []any{searchindex.EscapeLike(key), params.Initial, params.Role}
 		order := `CASE WHEN initial_group='kana' THEN 'ZZ' WHEN initial_group='#' THEN 'ZZZ' ELSE initial_group END COLLATE "C",sort_key COLLATE "C",id`
 		if params.Sort == "album_count" {
 			prefix += `, album_counts AS (SELECT s.id,count(DISTINCT r.group_id) AS album_count FROM selected s

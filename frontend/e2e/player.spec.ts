@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import type { Locator, Page, Route } from "@playwright/test";
 import { albumGroup, mediaOf, releaseDetailOf } from "../src/test/catalog-data";
+import { sampleBody } from "../src/test/api-samples";
 import { LONG_ARTIST, LONG_TITLE, LONG_TOKEN } from "./support/albums-data";
 import { expectNoDocumentScroll, expectNoHorizontalOverflow, expectNoSeriousViolations, expectVisibleFocusRing, widths } from "./support/checks";
 import { expect, test } from "./support/fixtures";
@@ -10,7 +11,9 @@ import type { ApiMock } from "./support/api-mock";
 // 本组验证界面/键盘/布局，不替代 real/ 的鉴权、撤销、格式矩阵与真实服务实播验收。
 const flac = readFileSync(new URL("../../backend/testdata/playback/flac-16-44100.flac", import.meta.url));
 const bar = (page: Page) => page.getByRole("region", { name: "播放器", exact: true });
-const queue = (page: Page) => page.locator("#queue > ol > li");
+const queueDialog = (page: Page) => page.getByRole("dialog", { name: /队列（\d+）/ });
+const queue = (page: Page) => queueDialog(page).getByRole("list").getByRole("listitem");
+const fullscreenDialog = (page: Page) => page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "收起全屏播放器", exact: true }) });
 
 /** 按 Range 提供合成 FLAC（直出与派生的音频地址共用）。 */
 async function fulfillFlac(route: Route, audio = flac) {
@@ -97,6 +100,18 @@ async function keyboardActivate(page: Page, target: Locator) {
   throw new Error("键盘无法抵达目标控件");
 }
 
+async function expectLastItemUncovered(page: Page, last: Locator, label: string) {
+  await last.evaluate((element) => element.scrollIntoView({ block: "end" }));
+  await page.locator("#main").evaluate((main) => main.scrollTo(0, main.scrollHeight));
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const item = await last.boundingBox();
+  const player = await bar(page).boundingBox();
+  expect(item, `${label}：最后项已渲染`).not.toBeNull();
+  expect(player, `${label}：底栏已渲染`).not.toBeNull();
+  expect((item?.y ?? 0) + (item?.height ?? 0)).toBeGreaterThan(0);
+  expect((item?.y ?? 0) + (item?.height ?? 0), `${label}：底栏不能遮住最后项`).toBeLessThanOrEqual((player?.y ?? 0) + 1);
+}
+
 async function startAndPause(page: Page) {
   await page.getByRole("button", { name: "播放整张专辑", exact: true }).click();
   await expect.poll(async () => (await media(page))?.paused).toBe(false);
@@ -106,19 +121,6 @@ async function startAndPause(page: Page) {
   expect((await media(page))?.error).toBeNull();
 }
 
-async function expectLastItemUncovered(page: Page, last: Locator, label: string) {
-  await last.evaluate((element) => element.scrollIntoView({ block: "end" }));
-  // 固定底栏不会影响scrollIntoView的可见区；必须滚到容器末尾，才能核对实际预留空间。
-  await page.locator("#main").evaluate((main) => main.scrollTo(0, main.scrollHeight));
-  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-  const item = await last.boundingBox();
-  const player = await bar(page).boundingBox();
-  expect(item, `${label}：最后项已渲染`).not.toBeNull();
-  expect(player, `${label}：底栏已渲染`).not.toBeNull();
-  // 长标题单项可高于视口；验证它的尾部与操作仍能滚到播放栏上方，而不是强求整项同时可见。
-  expect((item?.y ?? 0) + (item?.height ?? 0)).toBeGreaterThan(0);
-  expect((item?.y ?? 0) + (item?.height ?? 0), `${label}：底栏不能遮住最后项`).toBeLessThanOrEqual((player?.y ?? 0) + 1);
-}
 
 test("空队列隐藏底栏且不遗留占位或伪造曲目信息", async ({ page, backend }) => {
   const mock = await backend.start({ signedInAs: "listener" });
@@ -128,12 +130,13 @@ test("空队列隐藏底栏且不遗留占位或伪造曲目信息", async ({ pa
   expect(await page.locator("#main").evaluate((main) => getComputedStyle(main).paddingBottom)).toBe("0px");
   expect(await media(page)).toMatchObject({ paused: true, src: "" });
   await page.goto("/now-playing");
-  await expect(page.getByText("队列是空的。去专辑选择一张唱片，开始聆听。")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "概览", exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/$/);
   await expectNoSeriousViolations(page, "空播放器");
 });
 
 for (const width of widths) {
-  test(`${width}px：空/有队列、长标题专辑与正在播放不溢出，底栏不遮最后项`, async ({ page, backend }) => {
+  test(`${width}px：全屏播放器、长标题与队列抽屉不溢出，axe 无严重问题`, async ({ page, backend }) => {
     await page.setViewportSize({ width, height: 900 });
     const mock = await backend.start({ signedInAs: "listener" });
     await installPlayback(page, mock, true);
@@ -147,44 +150,60 @@ for (const width of widths) {
     await expect(tracks.last()).toBeInViewport();
     await startAndPause(page);
     await expect(bar(page)).toContainText(LONG_TITLE);
-    await expectNoHorizontalOverflow(page, "长标题专辑播放器");
-    await expectNoDocumentScroll(page, "专辑播放器");
+    await expectNoHorizontalOverflow(page, "专辑播放栏");
+    await expectNoDocumentScroll(page, "专辑播放栏");
     await expectLastItemUncovered(page, tracks.last(), "有队列专辑");
     await expectNoSeriousViolations(page, "专辑播放动作");
-    await bar(page).getByRole("link", { name: "队列（18）", exact: true }).click();
-    await expect(queue(page)).toHaveCount(18);
-    await page.locator("#main").evaluate((main) => main.scrollTo(0, 0));
-    await page.evaluate(() => window.scrollTo(0, 0));
-    const heroTitle = page.getByRole("heading", { level: 2, name: `1 ${LONG_TITLE}`, exact: true });
-    const artist = page.locator("#main").getByText(LONG_ARTIST, { exact: true });
-    const album = page.locator("#main").getByRole("link", { name: LONG_TITLE, exact: true });
-    await expect(heroTitle).toHaveAttribute("title", `1 ${LONG_TITLE}`);
-    await expect(artist).toHaveAttribute("title", LONG_ARTIST);
-    await expect(album).toHaveAttribute("title", LONG_TITLE);
-    expect(await heroTitle.evaluate((element) => getComputedStyle(element).webkitLineClamp)).toBe("4");
-    expect(await artist.evaluate((element) => getComputedStyle(element).webkitLineClamp)).toBe("2");
-    expect(await album.evaluate((element) => element.parentElement === null ? "" : getComputedStyle(element.parentElement).webkitLineClamp)).toBe("3");
-    const info = heroTitle.locator("..");
-    expect((await info.boundingBox())?.height).toBeLessThanOrEqual(650);
-    if (width >= 768) {
-      // 首屏是“封面 | 歌词”，标题与控制在两栏下方：长标题时它们可能在首屏之外，但必须能滚动到达；底栏的播放按钮始终在首屏内。
-      await expect(bar(page).getByRole("button", { name: /^(播放|暂停)$/ })).toBeInViewport();
-      await info.getByRole("button", { name: "播放", exact: true }).scrollIntoViewIfNeeded();
-      await expect(info.getByRole("button", { name: "播放", exact: true })).toBeInViewport();
-    }
-    expect((await queue(page).last().boundingBox())?.height).toBeLessThanOrEqual(300);
 
-    await expectNoHorizontalOverflow(page, "正在播放长标题");
-    await expectNoDocumentScroll(page, "正在播放");
-    await expectLastItemUncovered(page, queue(page).last(), "正在播放队列");
-    await expectNoSeriousViolations(page, "正在播放与队列动作");
+    await bar(page).getByRole("button", { name: "打开全屏播放器", exact: true }).click();
+    const full = fullscreenDialog(page);
+    await expect(full).toBeVisible();
+    await expect(full.getByRole("heading", { level: 2, name: `1 ${LONG_TITLE}`, exact: true })).toHaveAttribute("title", `1 ${LONG_TITLE}`);
+    await expect(full).toContainText(LONG_ARTIST);
+    const album = full.getByRole("link", { name: LONG_TITLE, exact: true });
+    await expect(album).toHaveAttribute("title", LONG_TITLE);
+    await expectNoHorizontalOverflow(page, "全屏长标题");
+    await expectNoDocumentScroll(page, "全屏长标题");
+    await expectNoSeriousViolations(page, "全屏播放器");
+
+    const queueButton = full.getByRole("button", { name: "队列（18）", exact: true });
+    await queueButton.click();
+    await expect(queue(page)).toHaveCount(18);
+    await expectNoHorizontalOverflow(page, "队列抽屉");
+    await expectNoSeriousViolations(page, "队列抽屉");
+    await page.keyboard.press("Escape");
+    await expect(queueDialog(page)).not.toBeVisible();
+    await expect(queueButton).toBeFocused();
     if (process.env["ROOMUSIC_PLAYER_SCREENSHOTS"] === "1" && (width === 375 || width === 1280)) {
-      await page.locator("#main").evaluate((main) => main.scrollTo(0, 0));
-      await page.evaluate(() => window.scrollTo(0, 0));
       await page.screenshot({ path: `/tmp/roomusic-player-${width}.png` });
     }
   });
 }
+
+test("全屏播放器：Esc、收起按钮与浏览器返回都关闭，关闭后焦点返回封面", async ({ page, backend }) => {
+  const mock = await backend.start({ signedInAs: "listener" });
+  await installPlayback(page, mock);
+  await startAndPause(page);
+  const cover = bar(page).getByRole("button", { name: "打开全屏播放器", exact: true });
+  await cover.click();
+  await expect(fullscreenDialog(page)).toBeVisible();
+  await expect(fullscreenDialog(page).getByRole("button", { name: "收起全屏播放器" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(fullscreenDialog(page)).not.toBeVisible();
+  await expect(cover).toBeFocused();
+
+  await cover.click();
+  await expect(fullscreenDialog(page)).toBeVisible();
+  await fullscreenDialog(page).getByRole("button", { name: "收起全屏播放器" }).click();
+  await expect(fullscreenDialog(page)).not.toBeVisible();
+  await expect(cover).toBeFocused();
+
+  await cover.click();
+  await expect(fullscreenDialog(page)).toBeVisible();
+  await page.goBack();
+  await expect(fullscreenDialog(page)).not.toBeVisible();
+  await expect(page).toHaveURL(/\/albums\//);
+});
 
 type DerivedOptions = {
   /** 前几次预检返回 202（每次挂起 holdMs，像真实服务端的长轮询）；之后返回派生表示。Infinity 表示一直转换。 */
@@ -253,13 +272,14 @@ test("ALAC 曲目经服务端转换后播放：先显示“正在准备”，转
   expect(polls.get(first.id)).toBe(3);
   // 第一首出声之后，为下一首派生曲目预检一次（它收到 202，由第二首自己的预检继续等待）。
   await expect.poll(() => polls.get(second.id)).toBe(1);
-  await bar(page).getByRole("link", { name: "队列（2）", exact: true }).click();
-  const server = page.getByRole("heading", { name: "服务端", exact: true }).locator("..");
-  await expect(server).toContainText("无损转换");
-  await expect(server).toContainText("ALAC 转成 FLAC，位深、采样率与声道不变。");
-  await expect(server).not.toContainText("PCM");
-  await expect(server).not.toContainText("原文件直出");
-  await expectNoSeriousViolations(page, "ALAC 正在播放与信号路径");
+  await bar(page).getByRole("button", { name: "信号路径：无损", exact: true }).click();
+  const signal = page.getByRole("dialog", { name: "信号路径：无损", exact: true });
+  await expect(signal.getByRole("listitem")).toHaveText(["数据源ALAC 44.1kHz 16bit 2ch", "服务端ALAC → FLAC", "浏览器解码 · 音量均衡 −5.0 dB", "系统输出系统默认输出"]);
+  await expect(signal).not.toContainText("ALAC 转成 FLAC");
+  await expect(signal).not.toContainText("原样发送，不转码。");
+  await expect(signal).not.toContainText("由浏览器解码，可能按输出设备重新采样。");
+  await expect(signal).not.toContainText("网页看不到声卡的实际格式。");
+  await expectNoSeriousViolations(page, "ALAC 信号路径");
 });
 
 test("等待转换时暂停：放弃等待并不再发出预检", async ({ page, backend }) => {
@@ -284,18 +304,18 @@ test("服务器忙于转换：提示可重试，重试后正常播放；转换�
   const [first, second] = tracks;
   if (first === undefined || second === undefined) throw new Error("专项素材缺少两首曲目");
   await page.getByRole("button", { name: "播放整张专辑", exact: true }).click();
-  await expect(bar(page).getByText("服务器正忙于转换，进入正在播放页重试", { exact: true })).toBeVisible();
-  await bar(page).getByRole("link", { name: "ALAC 曲目 1", exact: true }).click();
-  await expect(page.getByText("服务器正忙于转换，请稍后重试。", { exact: true })).toBeVisible();
+  await expect(bar(page).getByText("服务器正忙", { exact: true })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "服务器正忙于转换，已暂停，可以重试。" }).first()).toBeVisible();
   await expectNoSeriousViolations(page, "服务器忙");
   delete behaviour.failing;
-  await page.getByRole("button", { name: "重试播放", exact: true }).click();
+  await bar(page).getByRole("button", { name: "重试播放", exact: true }).click();
   await expect.poll(async () => (await media(page))?.paused, { timeout: 15_000 }).toBe(false);
   expect((await media(page))?.src).toContain(first.id);
   await expect(page.getByRole("button", { name: "重试播放", exact: true })).toHaveCount(0);
 
   behaviour.failing = { index: 1, status: 409, code: "derivation_failed" };
   await page.getByRole("button", { name: "下一首", exact: true }).first().click();
+  await bar(page).getByRole("button", { name: "队列（2）", exact: true }).click();
   await expect(queue(page).nth(1)).toContainText("无损转换失败，无法播放这首曲目");
   await expectNoSeriousViolations(page, "转换失败");
   expect(second.id).not.toBe(first.id);
@@ -310,13 +330,19 @@ for (const width of widths) {
     await expect(bar(page).getByRole("button", { name: "暂停", exact: true })).toBeVisible();
     await expectNoHorizontalOverflow(page, "正在准备的专辑页");
     await expectNoSeriousViolations(page, "正在准备的专辑页");
-    await bar(page).getByRole("link", { name: "队列（2）", exact: true }).click();
-    await expect(page.getByText(/^正在准备 · 第 1 首 \/ 共 2 首$/)).toBeVisible();
-    const server = page.getByRole("heading", { name: "服务端", exact: true }).locator("..");
-    await expect(server).toContainText("无损转换");
-    await expectNoHorizontalOverflow(page, "正在准备的正在播放页");
-    await expectNoDocumentScroll(page, "正在准备的正在播放页");
-    await expectNoSeriousViolations(page, "正在准备的正在播放页");
+    await bar(page).getByRole("button", { name: "打开全屏播放器", exact: true }).click();
+    const full = fullscreenDialog(page);
+    await expect(full).toBeVisible();
+    await full.getByRole("button", { name: "队列（2）", exact: true }).click();
+    await expect(queueDialog(page).getByText("当前项 · 正在准备", { exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(queueDialog(page)).not.toBeVisible();
+    await full.getByRole("button", { name: "信号路径：无损", exact: true }).click();
+    const signal = page.getByRole("dialog", { name: "信号路径：无损", exact: true });
+    await expect(signal.getByRole("listitem").nth(1)).toContainText("ALAC → FLAC");
+    await expectNoHorizontalOverflow(page, "正在准备的全屏播放器");
+    await expectNoDocumentScroll(page, "正在准备的全屏播放器");
+    await expectNoSeriousViolations(page, "正在准备的全屏播放器");
   });
 }
 
@@ -367,14 +393,14 @@ test("纯键盘：播放、下一首播放、不打断当前、切歌、队列�
   const firstSrc = (await media(page))?.src;
   await keyboardActivate(page, page.locator("#main ol > li").nth(2).getByRole("button", { name: "更多操作", exact: true }));
   await page.getByRole("menuitem", { name: "下一首播放", exact: true }).press("Enter");
-  await expect(bar(page).getByRole("link", { name: "队列（19）", exact: true })).toBeVisible();
+  await expect(bar(page).getByRole("button", { name: "队列（19）", exact: true })).toBeVisible();
   expect(await media(page)).toMatchObject({ src: firstSrc, paused: true });
   await keyboardActivate(page, bar(page).getByRole("button", { name: "下一首", exact: true }));
   await expect.poll(async () => (await media(page))?.src).toContain(third.id);
   await expect.poll(async () => (await media(page))?.paused).toBe(false);
   await keyboardActivate(page, bar(page).getByRole("button", { name: "暂停", exact: true }));
   await expect.poll(async () => (await media(page))?.paused).toBe(true);
-  await keyboardActivate(page, bar(page).getByRole("link", { name: "队列（19）", exact: true }));
+  await keyboardActivate(page, bar(page).getByRole("button", { name: "队列（19）", exact: true }));
   await expect(queue(page)).toHaveCount(19);
   await expect(queue(page).nth(1)).toContainText(third.title);
   await keyboardActivate(page, queue(page).nth(1).getByRole("button", { name: "上移", exact: true }));
@@ -395,7 +421,6 @@ test("纯键盘：播放、下一首播放、不打断当前、切歌、队列�
   await expect(bar(page)).toHaveCount(0);
   await expect(page.locator("[data-player]")).toHaveCount(0);
   expect(await page.locator("#main").evaluate((main) => getComputedStyle(main).paddingBottom)).toBe("0px");
-  await expect(page.getByText("队列是空的。去专辑选择一张唱片，开始聆听。")).toBeVisible();
   await expect.poll(() => media(page)).toMatchObject({ paused: true, sourceAttribute: null });
 });
 
@@ -418,14 +443,14 @@ const lyricsReplies = {
   none: (trackId: string): LyricsReply => ({ status: 200, body: { track_id: trackId, lyrics: null } }),
 };
 
-/** 移到正在播放页：专辑页开始播放、暂停，再从底栏进入正在播放。 */
-async function openNowPlaying(page: Page) {
+/** 专辑页开始播放后打开全屏；歌词由全屏播放器展示。 */
+async function openFullscreen(page: Page) {
   await startAndPause(page);
-  await bar(page).getByRole("link", { name: "队列（18）", exact: true }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "正在播放", exact: true })).toBeVisible();
+  await bar(page).getByRole("button", { name: "打开全屏播放器", exact: true }).click();
+  await expect(fullscreenDialog(page)).toBeVisible();
 }
 
-const lyricsPanel = (page: Page) => page.locator("#main").getByRole("region", { name: "歌词", exact: true });
+const lyricsPanel = (page: Page) => fullscreenDialog(page).getByRole("region", { name: "歌词", exact: true });
 
 async function setMediaTime(page: Page, seconds: number) {
   await page.evaluate((time) => {
@@ -435,39 +460,41 @@ async function setMediaTime(page: Page, seconds: number) {
   }, seconds);
 }
 
-/** 容器宽于 760px 是“封面 | 歌词”两栏、标题与控制在两栏下方；窄于 760px 是封面、标题与控制、歌词依次排列。 */
+/** 768px 以上是“唱片 | 歌词”两栏；窄屏切换到歌词时，标题位于歌词下方。 */
 async function expectLyricsLayout(page: Page, label: string) {
-  const main = page.locator("#main");
+  const full = fullscreenDialog(page);
   const lyrics = lyricsPanel(page);
-  const cover = main.getByLabel("没有可用封面").locator("..");
-  const title = main.getByRole("heading", { level: 2, name: "合成曲目 1", exact: true });
-  const [lyricsBox, coverBox, titleBox, container] = await Promise.all([lyrics.boundingBox(), cover.boundingBox(), title.boundingBox(), page.locator("#queue").evaluate((element) => element.clientWidth)]);
-  if (lyricsBox === null || coverBox === null || titleBox === null) throw new Error(`${label}：缺少布局元素`);
+  const title = full.getByRole("heading", { level: 2, name: "合成曲目 1", exact: true });
+  const [lyricsBox, titleBox] = await Promise.all([lyrics.boundingBox(), title.boundingBox()]);
+  if (lyricsBox === null || titleBox === null) throw new Error(`${label}：缺少布局元素`);
   const viewport = page.viewportSize();
-  if (container >= 760) {
-    expect(lyricsBox.x, `${label}：歌词在封面右侧`).toBeGreaterThanOrEqual(coverBox.x + coverBox.width - 1);
-    expect(titleBox.y, `${label}：标题与控制在两栏下方`).toBeGreaterThanOrEqual(Math.max(lyricsBox.y + lyricsBox.height, coverBox.y + coverBox.height) - 1);
-    expect(Math.abs(lyricsBox.height - Math.max(coverBox.height, 280)), `${label}：歌词与封面同高`).toBeLessThanOrEqual(2);
+  if ((viewport?.width ?? 0) >= 768) {
+    const coverBox = await full.getByLabel("没有可用封面").locator("xpath=../../..").boundingBox();
+    if (coverBox === null) throw new Error(`${label}：缺少唱片`);
+    expect(lyricsBox.x, `${label}：歌词在唱片右侧`).toBeGreaterThanOrEqual(coverBox.x + coverBox.width - 1);
+    expect(titleBox.x, `${label}：标题在右侧信息栏`).toBeGreaterThanOrEqual(coverBox.x + coverBox.width - 1);
+    expect(titleBox.y, `${label}：标题在歌词上方`).toBeLessThanOrEqual(lyricsBox.y + 1);
+    expect(lyricsBox.height, `${label}：歌词与唱片共用上方两栏`).toBeGreaterThanOrEqual(280);
   } else {
-    expect(titleBox.y, `${label}：标题与控制在封面下方`).toBeGreaterThanOrEqual(coverBox.y + coverBox.height - 1);
-    expect(lyricsBox.y, `${label}：歌词在标题与控制之后`).toBeGreaterThanOrEqual(titleBox.y + titleBox.height - 1);
-    expect(coverBox.width, `${label}：单栏封面最大 280px`).toBeLessThanOrEqual(281);
-    expect(lyricsBox.height, `${label}：歌词最高 60vh`).toBeLessThanOrEqual((viewport?.height ?? 900) * 0.6 + 1);
+    expect(lyricsBox.y, `${label}：歌词位于标题上方`).toBeLessThanOrEqual(titleBox.y + 1);
   }
 }
 
 for (const width of widths) {
   for (const kind of ["synced", "plain", "none"] as const) {
-    test(`${width}px：${{ synced: "同步", plain: "纯文本", none: "没有" }[kind]}歌词的正在播放页布局不溢出，axe 无严重问题`, async ({ page, backend }) => {
+    test(`${width}px：${{ synced: "同步", plain: "纯文本", none: "没有" }[kind]}歌词的全屏布局不溢出，axe 无严重问题`, async ({ page, backend }) => {
       await page.setViewportSize({ width, height: 900 });
       const mock = await backend.start({ signedInAs: "listener" });
       await installPlayback(page, mock);
       await mockLyrics(page, lyricsReplies[kind]);
-      await openNowPlaying(page);
+      await openFullscreen(page);
       const lyrics = lyricsPanel(page);
+      if (width < 768) {
+        await fullscreenDialog(page).getByRole("button", { name: "显示歌词", exact: true }).click();
+      }
       await expect(lyrics).toBeVisible();
       if (kind === "synced") await expect(lyrics.getByRole("listitem")).toHaveCount(LYRIC_LINES);
-      if (kind === "plain") await expect(lyrics.getByText("内嵌歌词 · 纯文本", { exact: true })).toBeVisible();
+      for (const removedText of ["内嵌歌词 · 逐行同步 · 点任一行跳到该处", "内嵌歌词 · 逐行同步", "内嵌歌词 · 纯文本"]) await expect(lyrics).not.toContainText(removedText);
       if (kind === "none") await expect(lyrics.getByText("这首曲目没有内嵌歌词", { exact: true })).toBeVisible();
       await expectLyricsLayout(page, `${width}px ${kind}`);
       await expectNoHorizontalOverflow(page, `${kind}歌词`);
@@ -482,8 +509,6 @@ for (const width of widths) {
           await page.waitForTimeout(800);
         }
         for (const [name, target] of [["top", null], ["lyrics", lyrics]] as const) {
-          await page.locator("#main").evaluate((main) => main.scrollTo(0, 0));
-          await page.evaluate(() => window.scrollTo(0, 0));
           if (target !== null) await target.evaluate((element) => element.scrollIntoView({ block: "center" }));
           await page.screenshot({ path: `/tmp/roomusic-lyrics-${kind}-${width}-${name}.png` });
         }
@@ -497,15 +522,15 @@ test("同步歌词：当前行随播放位置变化并保持在中部，点击�
   const mock = await backend.start({ signedInAs: "listener" });
   await installPlayback(page, mock);
   await mockLyrics(page, lyricsReplies.synced);
-  await openNowPlaying(page);
+  await openFullscreen(page);
   const lyrics = lyricsPanel(page);
   const scroller = lyrics.getByRole("group", { name: "逐行歌词", exact: true });
   const items = lyrics.getByRole("listitem");
   const current = lyrics.locator("[aria-current='true']");
   await expect(items).toHaveCount(LYRIC_LINES);
-  // openNowPlaying 在真实播放后才暂停，位置可能已越过第 1 行的窗口（100 ms 减 40 ms 提前容差），先归零再断言。
+  // 全屏打开前真实播放后暂停，位置可能越过第 1 行窗口，先归零再断言。
   await setMediaTime(page, 0);
-  await expect(lyrics.getByText("内嵌歌词 · 逐行同步 · 点任一行跳到该处", { exact: true })).toBeVisible();
+  for (const removedText of ["内嵌歌词 · 逐行同步 · 点任一行跳到该处", "内嵌歌词 · 逐行同步", "内嵌歌词 · 纯文本"]) await expect(lyrics).not.toContainText(removedText);
   await expect(current).toContainText("第 1 行歌词");
 
   // 平滑滚动需要时间：用轮询等它到位（轮询函数里不能放会抛错的断言）。
@@ -553,7 +578,7 @@ test("同步歌词：手动滚动后暂停跟随并出现“回到当前行”�
   const mock = await backend.start({ signedInAs: "listener" });
   await installPlayback(page, mock);
   await mockLyrics(page, lyricsReplies.synced);
-  await openNowPlaying(page);
+  await openFullscreen(page);
   const lyrics = lyricsPanel(page);
   const scroller = lyrics.getByRole("group", { name: "逐行歌词", exact: true });
   const current = lyrics.locator("[aria-current='true']");
@@ -594,7 +619,7 @@ test("歌词读取失败：显示带重试的错误，重试后显示歌词；�
   await mockLyrics(page, (trackId) => failing
     ? { status: 503, body: { error: { code: "database_unavailable", message: "后端文案" }, request_id: "mock" } }
     : lyricsReplies.synced(trackId));
-  await openNowPlaying(page);
+  await openFullscreen(page);
   const lyrics = lyricsPanel(page);
   // 查询对 503 自动重试两次，之后才显示错误。
   await expect(lyrics.getByRole("alert")).toContainText("服务暂时不可用", { timeout: 20_000 });
@@ -605,3 +630,32 @@ test("歌词读取失败：显示带重试的错误，重试后显示歌词；�
   await expect(lyrics.getByRole("listitem")).toHaveCount(LYRIC_LINES);
   await expect(lyrics.getByRole("alert")).toHaveCount(0);
 });
+
+test("已分析曲目显示波形，进度条仍可键盘定位", async ({ page, backend }) => {
+  const mock = await backend.start({ signedInAs: "listener" });
+  const { group } = await installPlayback(page, mock);
+  await page.route("**/api/v1/tracks/*/analysis", async (route) => {
+    const trackId = new URL(route.request().url()).pathname.split("/").at(-2) ?? "";
+    const body = sampleBody("tracks/analysis-done") as Record<string, unknown>;
+    await route.fulfill({ json: { ...body, track_id: trackId } });
+  });
+  await startAndPause(page);
+  await expect(bar(page).locator("canvas")).toBeVisible();
+  const seek = bar(page).getByRole("slider", { name: "播放进度", exact: true });
+  await expect(seek).toBeEnabled();
+  await seek.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(async () => (await media(page))?.time ?? 0).toBeGreaterThan(0);
+  await expect(page).toHaveURL(new RegExp(`/albums/${group.id}`));
+});
+
+for (const width of [375, 1440]) {
+  test(`${width}px：播放设置页无横向溢出且无严重 axe 问题`, async ({ page, backend }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await backend.start({ signedInAs: "listener" });
+    await page.goto("/settings/playback");
+    await expect(page.getByRole("heading", { level: 1, name: "播放", exact: true })).toBeVisible();
+    await expectNoHorizontalOverflow(page, "播放设置");
+    await expectNoSeriousViolations(page, "播放设置");
+  });
+}

@@ -347,6 +347,10 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
         return guarded(method, path, false, () => respondToSearch(mock.search, path, search));
       case "GET /api/v1/catalog/status":
         return guarded(method, path, false, () => json(mock.artists === null ? mock.catalogState : artistCatalogState(mock.artists)));
+      case "GET /api/v1/catalog/stats":
+        return guarded(method, path, false, () => sample("catalog/stats"));
+      case "GET /api/v1/audio-analysis/progress":
+        return guarded(method, path, false, () => sample("audio-analysis/progress"));
       case "GET /api/v1/playback/formats":
         return guarded(method, path, false, () => sample("playback/formats"));
       case "GET /api/v1/me/plays/recent-releases":
@@ -491,6 +495,14 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
       return guarded(method, path, evidence !== undefined, () => {
         if (kind === "release-groups") return respondToGroupDetail(mock, id);
         return evidence === undefined ? respondToReleaseDetail(mock, id) : respondToReleaseEvidence(mock, id);
+      });
+    }
+
+    const trackAnalysis = /^\/api\/v1\/tracks\/([^/]+)\/analysis$/.exec(path);
+    if (trackAnalysis !== null && method === "GET") {
+      return guarded(method, path, false, () => {
+        const pending = sampleBody("tracks/analysis-pending") as Record<string, unknown>;
+        return json({ ...pending, track_id: trackAnalysis[1] ?? "" });
       });
     }
 

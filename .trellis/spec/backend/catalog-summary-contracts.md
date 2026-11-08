@@ -41,3 +41,18 @@
 `POST /api/v1/tracks/summaries`：同源校验沿POST读接口，已登录成员可调用（不要求管理员）。请求必须为`{track_ids:[UUID...]}`，逐项拒绝非法UUID；小写去重后1–1000个，空/null/超限/错误形状为400 `invalid_input`，JSON语法错误为400 `invalid_json`。响应`{items:[TrackSummary]}`保持首次输入顺序，未知ID省略，missing保留并标记`present=false`；不暴露路径、root、指纹等私有事实。HTTP只校验和重排，直接复用`LoadTrackSummaries`，不复制SQL或逐发行读详情。artist_refs在未ready时仍为空数组，不把艺人整理误报为摘要不可用；真正查询失败为503 `database_unavailable`。
 
 回归覆盖同源/跨源/缺Origin、401、普通成员成功、0/1000/1001个去重ID、重复大小写及顺序、未知/missing、refs、坏投影安全失败。样本由真实app handler生成到`testdata/api-samples/artists/adjudication/`，不是手写DTO。
+
+## 资料库统计接口（2026-11-08）
+
+`GET /api/v1/catalog/stats`，注册在 `catalog/httpapi`，所有登录用户只读：401 `unauthorized` → 503 `database_unavailable` → 200；`Cache-Control: no-store`。
+实现 `catalog.ReadCatalogStats` 在一个只读可重复读事务里读完四个数，口径与各列表页一致：
+
+| 字段 | 口径 |
+| --- | --- |
+| `albums` | 与 `GET /release-groups` 不带筛选的 `pagination.total` 相同：`WITH releaseGroupRankedCTE(false) SELECT COUNT(*) FROM ranked WHERE member_rank = 1` |
+| `tracks` | `count(*) FROM tracks WHERE source_status = 'present'`：跨版本不去重，CUE 虚拟轨也算（present 曲目所在发行必然可见） |
+| `artists` | 与 `GET /artists` 不带筛选的 `total` 相同：`ListArtists` 与本接口共用 `Store.artistListCount(ctx, query, initial, role)`，此处传空参数 |
+| `composers` | 同上，`role = 'composer'`，等于 `/artists?role=composer` 的总数 |
+
+艺人数据未就绪（`ErrArtistCatalogPreparing`）时 `artists`、`composers` 为 null，不报错。样本 `internal/app/testdata/api-samples/catalog/stats.json` 与 `stats-artists-preparing.json`；
+测试 `go test ./internal/app/ -run 'TestPostgreSQL(CatalogStats|APIResponseSamples)' -count=1`（四个数与对应列表总数相等、艺人未就绪为 null）。

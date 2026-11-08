@@ -1,39 +1,57 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { useTooltip } from "../../../shared/ui";
 import { ArtistNames } from "../../catalog";
 import type { PlayerTrack } from "../engine/queue";
+import { useFullscreenPlayer } from "../hooks/use-fullscreen-player";
 import { usePlayer } from "../player-provider";
 import { PlayerArtwork } from "./player-artwork";
-import { ModeControl, SeekControl, TransportControls, VolumeControl } from "./player-controls";
-import { failureLabels, sourceFormat, statusLabels } from "./player-labels";
+import { ModeControl, TransportControls, VolumeControl } from "./player-controls";
+import { PlayerFaultInline } from "./player-feedback";
+import { sourceFormat, statusLabels } from "./player-labels";
+import { QueueButton } from "./queue-drawer";
+import { SignalPathButton } from "./signal-path";
+import { WaveformSeek } from "./waveform-seek";
 import styles from "./player-bar.module.css";
 
 type PlayerBarProps = {
   /** 当前曲目旁的动作（例如收藏的心形）：由 app 组合，player 不认识这些功能；没有当前曲目时不调用。 */
   renderCurrentTrackActions?: ((track: PlayerTrack) => ReactNode) | undefined;
+  /** 队列标题旁的动作（例如“存为歌单”），原样交给队列抽屉。 */
+  renderQueueActions?: ((tracks: readonly PlayerTrack[]) => ReactNode) | undefined;
 };
 
 const noRefs: readonly never[] = [];
 
-export function PlayerBar({ renderCurrentTrackActions }: PlayerBarProps = {}) {
+/** 封面按钮：放大成全屏播放器，全屏从封面的位置展开。 */
+function ExpandArtworkButton({ track }: { track: PlayerTrack }) {
+  const { openPlayer } = useFullscreenPlayer();
+  const tip = useTooltip("打开全屏播放器");
+  return <>
+    <button type="button" className={styles.cover} aria-label="打开全屏播放器" {...tip.triggerProps} onClick={(event) => openPlayer(event.currentTarget)}>
+      <PlayerArtwork track={track} />
+    </button>
+    {tip.tooltip}
+  </>;
+}
+
+export function PlayerBar({ renderCurrentTrackActions, renderQueueActions }: PlayerBarProps = {}) {
   const { snapshot } = usePlayer();
   const track = snapshot.current?.track;
-  const currentFailure = snapshot.current === null ? undefined : snapshot.failures[snapshot.current.entryId];
-  const faultText = snapshot.fault?.kind === "transient" ? "读取失败，进入正在播放页重试" : snapshot.fault?.kind === "busy" ? "服务器正忙于转换，进入正在播放页重试" : snapshot.fault?.kind === "autoplay_blocked" ? "请按播放" : currentFailure === undefined ? null : failureLabels[currentFailure];
   return <section aria-label="播放器" className={styles.bar}>
     <div className={styles.identity}>
-      {track === undefined ? null : <><div className={styles.cover}><PlayerArtwork track={track} /></div><div className={styles.text}>
-        <Link to="/now-playing" className={styles.title}>{track.title}</Link>
-        {faultText === null ? null : <p className={styles.fault}>{faultText}</p>}
+      {track === undefined ? <PlayerFaultInline /> : <><ExpandArtworkButton track={track} /><div className={styles.text}>
+        <p className={styles.title} title={track.title}>{track.title}</p>
+        <PlayerFaultInline />
         <p className={styles.subtitle}><ArtistNames text={track.artist} refs={track.artistRefs ?? noRefs} /> — <Link to="/albums/$groupId" params={{ groupId: track.groupId }} search={{ release: track.releaseId }}>{track.albumTitle}</Link></p>
       </div>{renderCurrentTrackActions === undefined ? null : <div className={styles.trackActions}>{renderCurrentTrackActions(track)}</div>}</>}
     </div>
-    <div className={styles.center}><TransportControls compact /><div className={styles.desktop}><SeekControl /></div></div>
+    <div className={styles.center}><TransportControls size="compact" /><div className={styles.desktop}><WaveformSeek /></div></div>
     <div className={styles.end}>
-      <div className={styles.desktop}><Link to="/now-playing" hash="signal-path">{track === undefined ? "未知格式" : sourceFormat(track)}</Link><span className={styles.state}>{statusLabels[snapshot.status]}</span></div>
+      <div className={`${styles.desktop} ${styles.format}`}>{track === undefined ? null : <SignalPathButton />}<span className={styles.formatText}><span>{track === undefined ? "未知格式" : sourceFormat(track)}</span><span className={styles.state}>{statusLabels[snapshot.status]}</span></span></div>
       <div className={styles.desktop}><ModeControl /></div>
       <div className={styles.volume}><VolumeControl /></div>
-      <Link to="/now-playing" hash="queue" className={styles.queue}>队列（{snapshot.queue.entries.length}）</Link>
+      <QueueButton renderQueueActions={renderQueueActions} />
     </div>
   </section>;
 }

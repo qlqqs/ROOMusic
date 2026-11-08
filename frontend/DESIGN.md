@@ -174,12 +174,12 @@ M1 的核心动作是登录、浏览/搜索、查看 Release 与证据，以及�
 ### 桌面落地规范
 
 - 原型外壳是左侧导航与右侧主内容，M2 播放栏横跨底部；不是旧月刊的刊头加 hash 页签。
-- M1 不为无媒体能力的播放器预留永久空行。M2a 在队列非空时接入真实底栏与 `/now-playing`，清空后不留占位；不显示演示曲目。
-- 左侧按“聆听 / 我的音乐 / 资料库”组织入口（2026-11-07 起：聆听是概览、专辑、艺人、正在播放；我的音乐是我喜欢的音乐、我的收藏、播放历史、我的歌单，“我的歌单”旁边的图标按钮展开收起歌单列表；资料库是元数据、待认领、重复艺人，只有管理员看到），底部为用户菜单（设置 / 退出登录）；扫描目录、成员、操作记录、备份在“设置”里（`/settings/*`），侧栏资料库分组只留待办类页面；只有真实可用的页面进入主导航。管理员管理功能与普通浏览分层，不复制示例用户或角色。
+- M1 不为无媒体能力的播放器预留永久空行。M2a 在队列非空时接入真实底栏，清空后不留占位（有可重试的故障时底栏仍在）；不显示演示曲目。2026-11-08 起没有正在播放页：点底栏封面打开全屏播放器（开合记在历史 state，返回键收起），队列是右侧抽屉，信号路径是圆点弹层；`/now-playing` 跳到概览。
+- 左侧按“聆听 / 我的音乐 / 资料库”组织入口（2026-11-07 起：聆听是概览、专辑、艺人（2026-11-08 删去“正在播放”）；我的音乐是我喜欢的音乐、我的收藏、播放历史、我的歌单，“我的歌单”旁边的图标按钮展开收起歌单列表；资料库是元数据、待认领、重复艺人，只有管理员看到），底部为用户菜单（设置 / 退出登录）；账号、播放（所有成员；2026-11-08 增加，音量均衡与交叉渐变）与扫描目录、成员、操作记录、备份（管理员）在“设置”里（`/settings/*`），侧栏资料库分组只留待办类页面；只有真实可用的页面进入主导航。管理员管理功能与普通浏览分层，不复制示例用户或角色。
 - 桌面导航与主内容各自占满可用高度、独立滚动；可收缩容器显式允许收缩，隔离滚动链。播放栏、主区和抽屉不能相互盖住最后一行。
 - 专辑信息顺序为对象标题与来源 → 当前发行版本属性 → Medium → Track → 署名/证据；M1b 以阶段 I 的 ReleaseGroup 为对象，没有人工归组时一组只有一个版本（M3 起管理员可以把版本归到一起），不能暗示多个版本已被自动聚合。
 - 当前浏览的 Release、当前播放曲目和队列上下文是不同状态。打开另一张专辑不能隐式打断播放；点击明确的播放动作才改变播放上下文。
-- 搜索、筛选、分页与可分享的详情选择应可刷新、前进后退；瞬时抽屉、焦点、未提交表单保持局部状态。路由与服务器状态采用 TanStack Router 与 TanStack Query（ADR 0001）；M1a 的 URL 形状是 `/`、`/setup`、`/login?redirect=`、`/library`、`/library/scans/$scanId`、`/members`（2026-11 起迁到 `/settings/library`、`/settings/library/scans/$scanId`、`/settings/members`，旧地址重定向；另有 `/settings/account`、`/settings/operations`、`/settings/backups`），不复制原型 `setState({view})` 充当路由。**M1b 实现**：专辑列表 `/albums?q=&attention=required&page=`（第 1 页不写页码），
+- 搜索、筛选、分页与可分享的详情选择应可刷新、前进后退；瞬时抽屉、焦点、未提交表单保持局部状态。路由与服务器状态采用 TanStack Router 与 TanStack Query（ADR 0001）；M1a 的 URL 形状是 `/`、`/setup`、`/login?redirect=`、`/library`、`/library/scans/$scanId`、`/members`（2026-11 起迁到 `/settings/library`、`/settings/library/scans/$scanId`、`/settings/members`，旧地址重定向；另有 `/settings/account`、`/settings/playback`、`/settings/operations`、`/settings/backups`），不复制原型 `setState({view})` 充当路由。**M1b 实现**：专辑列表 `/albums?q=&attention=required&page=`（第 1 页不写页码），
 专辑详情 `/albums/$groupId?release=`（`release` 只在选中非代表版本时出现）；从列表进入详情时把列表参数放进路由的 history state，详情页的“返回专辑列表”据此恢复筛选与页码，
 直接打开详情时回到 `/albums`（见[前端状态规范](../.trellis/spec/frontend/state-management.md)）。
 
