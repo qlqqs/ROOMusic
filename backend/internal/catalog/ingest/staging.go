@@ -137,7 +137,7 @@ func loadStagedScope(ctx context.Context, database queryer, scanID, rootID, scop
 	if !withArtwork {
 		column = "observation - 'artwork'"
 	}
-	rows, err := database.QueryContext(ctx, `SELECT `+column+` FROM scan_observations
+	rows, err := database.QueryContext(ctx, `SELECT `+column+`,source_size,source_modified_at FROM scan_observations
 		WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND organization_scope=$3
 		ORDER BY relative_path LIMIT $4`, scanID, rootID, scope, maxStagedObservationsPerScope+1)
 	if err != nil {
@@ -147,12 +147,20 @@ func loadStagedScope(ctx context.Context, database queryer, scanID, rootID, scop
 	observations := make([]SourceObservation, 0, 64)
 	for rows.Next() {
 		var raw []byte
-		if err := rows.Scan(&raw); err != nil {
+		var sourceSize sql.NullInt64
+		var sourceModifiedAt sql.NullTime
+		if err := rows.Scan(&raw, &sourceSize, &sourceModifiedAt); err != nil {
 			return nil, err
 		}
 		var observation SourceObservation
 		if err := json.Unmarshal(raw, &observation); err != nil {
 			return nil, fmt.Errorf("decode staged observation: %w", err)
+		}
+		if sourceSize.Valid {
+			observation.SourceSize = sourceSize.Int64
+		}
+		if sourceModifiedAt.Valid {
+			observation.SourceModifiedAt = sourceModifiedAt.Time
 		}
 		observations = append(observations, observation)
 		if len(observations) > maxStagedObservationsPerScope {

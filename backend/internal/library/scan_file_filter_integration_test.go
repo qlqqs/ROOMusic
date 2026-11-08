@@ -55,7 +55,7 @@ func TestPostgreSQLScanLifecycleHeldFilesStillReconcilesDeletedSources(t *testin
 	requireFilterScan(t, runFilterLifecycleScan(t, service), "succeeded", 0)
 	before := presentTrackIDs(t, fixture, root.ID)
 	writeFixtureFile(t, root, "Album/._x.flac", []byte("ignored"))
-	writeFixtureFile(t, root, "Album/unsupported.ape", []byte("unsupported"))
+	writeFixtureFile(t, root, "Album/unsupported.wma", []byte("unsupported"))
 	writeFixtureFile(t, root, "Album/damaged.flac", []byte("damaged"))
 	removeFilterFixture(t, root, "Album/deleted.flac")
 

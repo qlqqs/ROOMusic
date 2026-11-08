@@ -40,9 +40,13 @@ func testParseCacheVersionUpgrade(t *testing.T, format bool) {
 	root := insertScannerRoot(t, fixture, "version-upgrade")
 	service := scannerTestApplication(fixture)
 	writeAudio(t, root, "Album/01.flac", audioFile{seed: 61, title: "One", album: "Album", track: 1})
-	writeLyricsMP3(t, root, "Album/02.mp3", "Two", "")
+	writeLyricsMP3(t, root, "Other/02.mp3", "Two", "")
 	requireScanStatus(t, runTestScan(t, fixture, service, root), "succeeded")
 	before := presentTrackIDs(t, fixture, root.ID)
+	statesBefore := readIncrementalTestCandidateStates(t, fixture, root)
+	if len(statesBefore) != 2 {
+		t.Fatalf("版本升级夹具应有两个候选：%+v", statesBefore)
+	}
 	releases := releaseIDsByTitle(t, fixture, root.ID)
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM library_parse_cache WHERE root_id=$1`, 2, root.ID)
 
@@ -107,6 +111,24 @@ func testParseCacheVersionUpgrade(t *testing.T, format bool) {
 		t.Fatalf("升版本后的扫描失败：%v\n%s", err, output)
 	}
 	t.Logf("真实升版本子进程：\n%s", output)
+	statesAfter := readIncrementalTestCandidateStates(t, fixture, root)
+	if format {
+		var flacRelease string
+		if err := fixture.database.QueryRow(`SELECT m.release_id::text FROM tracks t JOIN media m ON m.id=t.medium_id WHERE t.id=$1::uuid`, before["Album/01.flac"]).Scan(&flacRelease); err != nil {
+			t.Fatal(err)
+		}
+		assertIncrementalTestCandidateRewrites(t, statesBefore, statesAfter, flacRelease)
+	} else {
+		if len(statesAfter) != len(statesBefore) {
+			t.Fatalf("归组升版丢失候选状态：%+v", statesAfter)
+		}
+		for key, old := range statesBefore {
+			current, ok := statesAfter[key]
+			if !ok || current.ReleaseID != old.ReleaseID || current.Signature == old.Signature || !current.UpdatedAt.After(old.UpdatedAt) {
+				t.Fatalf("归组升版未重写全部候选：%s 前=%+v 后=%+v", key, old, current)
+			}
+		}
+	}
 	for path, id := range before {
 		requireTrackAt(t, presentTrackIDs(t, fixture, root.ID), path, id)
 	}
@@ -128,12 +150,14 @@ func runVersionUpgradedScan(t *testing.T, format bool) {
 	}
 	wantVersion := os.Getenv("ROOMUSIC_TEST_SCAN_VERSION_EXPECTED")
 	wantParsed, wantHits := 0, 2
+	wantWritten, wantSkipped := int64(2), int64(0)
 	if format {
 		want := "c" + strconv.Itoa(parser.CommonVersion) + ".f" + wantVersion
 		if parser.CacheVersion(".flac") != want {
 			t.Fatalf("FLAC 版本未真实升级：%s，期望 %s", parser.CacheVersion(".flac"), want)
 		}
 		wantParsed, wantHits = 1, 1
+		wantWritten, wantSkipped = 1, 1
 	} else if strconv.Itoa(ingest.GroupingVersion) != wantVersion {
 		t.Fatalf("归组版本未真实升级：%d，期望 %s", ingest.GroupingVersion, wantVersion)
 	}
@@ -145,9 +169,11 @@ func runVersionUpgradedScan(t *testing.T, format bool) {
 	found := false
 	for _, line := range strings.Split(strings.TrimSpace(logs.String()), "\n") {
 		var summary struct {
-			Event  string `json:"event"`
-			Parsed int    `json:"files_parsed"`
-			Hits   int    `json:"parse_cache_hits"`
+			Event   string `json:"event"`
+			Parsed  int    `json:"files_parsed"`
+			Hits    int    `json:"parse_cache_hits"`
+			Written int64  `json:"candidates_written"`
+			Skipped int64  `json:"candidates_skipped"`
 		}
 		if err := json.Unmarshal([]byte(line), &summary); err != nil {
 			t.Fatal(err)
@@ -156,8 +182,8 @@ func runVersionUpgradedScan(t *testing.T, format bool) {
 			continue
 		}
 		found = true
-		if summary.Parsed != wantParsed || summary.Hits != wantHits {
-			t.Fatalf("升版本后 parsed=%d hits=%d，期望 %d/%d", summary.Parsed, summary.Hits, wantParsed, wantHits)
+		if summary.Parsed != wantParsed || summary.Hits != wantHits || summary.Written != wantWritten || summary.Skipped != wantSkipped {
+			t.Fatalf("升版本后统计=%+v，期望 parsed/hits=%d/%d written/skipped=%d/%d", summary, wantParsed, wantHits, wantWritten, wantSkipped)
 		}
 		t.Logf("升版本后 files_parsed=%d parse_cache_hits=%d", summary.Parsed, summary.Hits)
 	}

@@ -3,6 +3,7 @@ package library
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -15,6 +16,8 @@ import (
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/library/parser"
+	"github.com/qlqq/roomusic/backend/internal/personal"
+	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
 type incrementalTestSummary struct {
@@ -26,6 +29,7 @@ type incrementalTestSummary struct {
 	ParseCacheHits       int64  `json:"parse_cache_hits"`
 	ParseCacheWrites     int64  `json:"parse_cache_writes"`
 	CandidatesWritten    int64  `json:"candidates_written"`
+	CandidatesSkipped    int64  `json:"candidates_skipped"`
 	ArtworkDeferredLoads int64  `json:"artwork_deferred_loads"`
 }
 
@@ -184,6 +188,60 @@ func incrementalTestReport(t *testing.T, service *Service, scanID string) ScanRe
 	return report
 }
 
+type incrementalTestCandidateState struct {
+	ReleaseID, Signature string
+	UpdatedAt            time.Time
+}
+
+func readIncrementalTestCandidateStates(t *testing.T, fixture *libraryFixture, root registeredRoot) map[string]incrementalTestCandidateState {
+	t.Helper()
+	rows, err := fixture.database.Query(`SELECT candidate_key,release_id::text,signature,updated_at
+		FROM scan_candidate_states WHERE root_id=$1::uuid`, root.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	states := map[string]incrementalTestCandidateState{}
+	for rows.Next() {
+		var key string
+		var state incrementalTestCandidateState
+		if err := rows.Scan(&key, &state.ReleaseID, &state.Signature, &state.UpdatedAt); err != nil {
+			t.Fatal(err)
+		}
+		states[key] = state
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return states
+}
+
+// 结合摘要与逐候选状态，区分“确实跳过”与“重写但业务结果相同”。
+func assertIncrementalTestCandidateRewrites(t *testing.T, before, after map[string]incrementalTestCandidateState, rewrittenRelease string) {
+	t.Helper()
+	if len(before) == 0 || len(after) != len(before) {
+		t.Fatalf("候选状态数变化：前=%+v 后=%+v", before, after)
+	}
+	found := false
+	for key, old := range before {
+		current, ok := after[key]
+		if !ok || current.ReleaseID != old.ReleaseID {
+			t.Fatalf("候选身份变化：%s 前=%+v 后=%+v", key, old, current)
+		}
+		if old.ReleaseID == rewrittenRelease {
+			found = true
+			if current.Signature == old.Signature || !current.UpdatedAt.After(old.UpdatedAt) {
+				t.Fatalf("变化候选未重写状态：%s 前=%+v 后=%+v", key, old, current)
+			}
+		} else if current != old {
+			t.Fatalf("未变候选不应重写：%s 前=%+v 后=%+v", key, old, current)
+		}
+	}
+	if !found {
+		t.Fatalf("未找到应重写的发行：%s", rewrittenRelease)
+	}
+}
+
 func TestPostgreSQLIncrementalParseCacheSecondScanPreservesIdentityAndReport(t *testing.T) {
 	fixture := newLibraryFixture(t)
 	root := insertScannerRoot(t, fixture, "incremental-second-scan")
@@ -191,7 +249,11 @@ func TestPostgreSQLIncrementalParseCacheSecondScanPreservesIdentityAndReport(t *
 	writeAudio(t, root, "Album/01.flac", audioFile{seed: 1, title: "First", album: "Album", track: 1})
 	writeAudio(t, root, "Album/02.flac", audioFile{seed: 2, title: "Second", album: "Album", track: 2})
 	writeAudio(t, root, "Other/01.flac", audioFile{seed: 3, title: "Other", album: "Other", track: 1})
+	writeScanFixtureFile(t, root, "Album/cover.jpg", jpegArtworkOfWidth(3))
 	_, first := runIncrementalTestScan(t, service, logs, root)
+	if first.CandidatesWritten != 2 || first.CandidatesSkipped != 0 {
+		t.Fatalf("首扫应写入两个候选：%+v", first)
+	}
 	if first.FilesParsed != 3 || first.ParseCacheWrites != 3 {
 		t.Fatalf("首扫未解析并缓存所有音频：%+v", first)
 	}
@@ -200,13 +262,20 @@ func TestPostgreSQLIncrementalParseCacheSecondScanPreservesIdentityAndReport(t *
 		t.Fatalf("首扫得到 %d 轨，期望 3", len(before))
 	}
 	cacheBefore := readIncrementalTestCache(t, fixture, root)
+	statesBefore := readIncrementalTestCandidateStates(t, fixture, root)
+	if len(statesBefore) != 2 {
+		t.Fatalf("首扫候选状态不全：%+v", statesBefore)
+	}
 
 	scan, second := runIncrementalTestScan(t, service, logs, root)
-	if second.FilesParsed != 0 || second.ParseCacheHits != 3 || second.ParseCacheWrites != 0 {
+	if second.FilesParsed != 0 || second.ParseCacheHits != 3 || second.ParseCacheWrites != 0 || second.CandidatesWritten != 0 || second.CandidatesSkipped != 2 {
 		t.Fatalf("未变音频不应重新解析或覆盖缓存：%+v", second)
 	}
 	if after := readIncrementalTestTracks(t, fixture, root); !reflect.DeepEqual(before, after) {
 		t.Fatalf("重扫改变了曲目/Release 身份或音频来源事实：前=%+v 后=%+v", before, after)
+	}
+	if statesAfter := readIncrementalTestCandidateStates(t, fixture, root); !reflect.DeepEqual(statesBefore, statesAfter) {
+		t.Fatalf("跳过候选不应改状态：前=%+v 后=%+v", statesBefore, statesAfter)
 	}
 	cacheAfter := readIncrementalTestCache(t, fixture, root)
 	if len(cacheAfter) != 3 {
@@ -222,6 +291,42 @@ func TestPostgreSQLIncrementalParseCacheSecondScanPreservesIdentityAndReport(t *
 	if report.Albums != (ScanReportCounts{}) || report.Tracks != (ScanReportCounts{}) || report.Files.Processed != 3 || report.Files.Counted != 3 {
 		t.Fatalf("缓存命中应保持处理计数且报告零变化：%+v", report)
 	}
+
+	for _, mutation := range []struct {
+		name   string
+		apply  func()
+		verify func()
+	}{
+		{"替换封面", func() {
+			old, err := os.Stat(filepath.Join(root.Path, "Album/cover.jpg"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			writeScanFixtureFile(t, root, "Album/cover.jpg", jpegArtworkOfWidth(7))
+			setBorrowFullFileTime(t, root, "Album/cover.jpg", old.ModTime().Add(2*time.Second))
+		}, func() { assertArtworks(t, fixture, root, "folder:image/jpeg:7") }},
+		{"新增EAC日志", func() {
+			writeScanFixtureFile(t, root, "Album/rip.log", []byte("Exact Audio Copy V1.6\nEAC extraction logfile"))
+		}, func() {
+			assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM releases WHERE id=$1::uuid AND source_type='CD' AND media_type='CD'`, 1, before["Album/01.flac"].ReleaseID)
+			assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM release_grouping_evidence WHERE release_id=$1::uuid AND source_refs::text LIKE '%Album/rip.log%'`, 1, before["Album/01.flac"].ReleaseID)
+		}},
+	} {
+		t.Run(mutation.name, func(t *testing.T) {
+			statesBefore := readIncrementalTestCandidateStates(t, fixture, root)
+			mutation.apply()
+			_, summary := runIncrementalTestScan(t, service, logs, root)
+			if summary.FilesParsed != 0 || summary.ParseCacheHits != 3 || summary.CandidatesWritten != 1 || summary.CandidatesSkipped != 1 {
+				t.Fatalf("附属文件变化应只重写所在候选，不重新解析：%+v", summary)
+			}
+			assertIncrementalTestCandidateRewrites(t, statesBefore, readIncrementalTestCandidateStates(t, fixture, root), before["Album/01.flac"].ReleaseID)
+			if after := readIncrementalTestTracks(t, fixture, root); !reflect.DeepEqual(before, after) {
+				t.Fatalf("附属文件变化改变曲目身份或来源事实：前=%+v 后=%+v", before, after)
+			}
+			mutation.verify()
+			requireNoMissingTracks(t, fixture, root.ID)
+		})
+	}
 }
 
 func TestPostgreSQLIncrementalParseCacheTagMtimeChangeOnlyReparsesChangedFile(t *testing.T) {
@@ -231,12 +336,14 @@ func TestPostgreSQLIncrementalParseCacheTagMtimeChangeOnlyReparsesChangedFile(t 
 	fixture := newLibraryFixture(t)
 	root := insertScannerRoot(t, fixture, "incremental-tag-change")
 	service, logs := newIncrementalTestService(t, fixture)
-	for track := 1; track <= 3; track++ {
+	for track := 1; track <= 2; track++ {
 		writeAudio(t, root, fmt.Sprintf("Album/%02d.flac", track), audioFile{seed: byte(track), title: fmt.Sprintf("Track %d", track), album: "Album", track: track})
 	}
+	writeAudio(t, root, "Other/01.flac", audioFile{seed: 3, title: "Track 3", album: "Other", track: 1})
 	runIncrementalTestScan(t, service, logs, root)
 	before := readIncrementalTestTracks(t, fixture, root)
 	cacheBefore := readIncrementalTestCache(t, fixture, root)
+	statesBefore := readIncrementalTestCandidateStates(t, fixture, root)
 	const changed = "Album/02.flac"
 	// 等长标签保持大小和码率不变，显式拉开 mtime，不依赖宿主文件系统的写入时间粒度。
 	writeAudio(t, root, changed, audioFile{seed: 2, title: "Fresh 2", album: "Album", track: 2})
@@ -244,7 +351,7 @@ func TestPostgreSQLIncrementalParseCacheTagMtimeChangeOnlyReparsesChangedFile(t 
 	if err := os.Chtimes(filepath.Join(root.Path, filepath.FromSlash(changed)), modifiedAt, modifiedAt); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{filepath.Join(root.Path, "Album/01.flac"), filepath.Join(root.Path, "Album/03.flac")} {
+	for _, path := range []string{filepath.Join(root.Path, "Album/01.flac"), filepath.Join(root.Path, "Other/01.flac")} {
 		if err := os.Chmod(path, 0); err != nil {
 			t.Fatalf("禁止音频读取失败：%v", err)
 		}
@@ -258,9 +365,10 @@ func TestPostgreSQLIncrementalParseCacheTagMtimeChangeOnlyReparsesChangedFile(t 
 	if scan.SkippedFiles == nil || *scan.SkippedFiles != 0 {
 		t.Fatalf("缓存命中不应跳过不可读的音频：%+v", scan)
 	}
-	if summary.FilesParsed != 1 || summary.ParseCacheHits != 2 || summary.ParseCacheWrites != 1 {
+	if summary.FilesParsed != 1 || summary.ParseCacheHits != 2 || summary.ParseCacheWrites != 1 || summary.CandidatesWritten != 1 || summary.CandidatesSkipped != 1 {
 		t.Fatalf("只应重解析改标签的音频：%+v", summary)
 	}
+	assertIncrementalTestCandidateRewrites(t, statesBefore, readIncrementalTestCandidateStates(t, fixture, root), before[changed].ReleaseID)
 	after := readIncrementalTestTracks(t, fixture, root)
 	if len(after) != 3 {
 		t.Fatalf("改标签改变曲目数：%+v", after)
@@ -405,6 +513,14 @@ func TestPostgreSQLIncrementalParseCacheCueSecondParentKeepsEmbeddedArtwork(t *t
 	if len(cache) != 2 || cache["Album/a-first.mp3"].Observation.ArtworkMIME != "" || cache["Album/b-second.mp3"].Observation.ArtworkMIME != "image/png" || len(cache["Album/b-second.mp3"].Observation.Artwork) != 0 {
 		t.Fatalf("应只有第二父音频的无字节封面标记：%+v", cache)
 	}
+	statesBefore := readIncrementalTestCandidateStates(t, fixture, root)
+	sheetPath := filepath.Join(root.Path, "Album/00-album.cue")
+	sheet, err := os.ReadFile(sheetPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 父音频未变，仅给 sheet 增加 REM：签名必须失效，保留原 deferred 封面断言。
+	writeScanFixtureFile(t, root, "Album/00-album.cue", append(sheet, []byte("REM COMMENT \"signature changed\"\n")...))
 	for _, path := range []string{filepath.Join(root.Path, "Album/a-first.mp3")} {
 		if err := os.Chmod(path, 0); err != nil {
 			t.Fatalf("禁止音频读取失败：%v", err)
@@ -419,9 +535,10 @@ func TestPostgreSQLIncrementalParseCacheCueSecondParentKeepsEmbeddedArtwork(t *t
 	if scan.SkippedFiles == nil || *scan.SkippedFiles != 0 {
 		t.Fatalf("缓存命中不应跳过不可读的音频：%+v", scan)
 	}
-	if summary.FilesParsed != 0 || summary.ParseCacheWrites != 0 || summary.ArtworkDeferredLoads != 1 {
+	if summary.FilesParsed != 0 || summary.ParseCacheWrites != 0 || summary.ArtworkDeferredLoads != 1 || summary.CandidatesWritten != 1 || summary.CandidatesSkipped != 0 {
 		t.Fatalf("多父 CUE 命中缓存后只应延迟读取第二父封面：%+v", summary)
 	}
+	assertIncrementalTestCandidateRewrites(t, statesBefore, readIncrementalTestCandidateStates(t, fixture, root), releaseID)
 	if current := assertIncrementalTestManagedArtwork(t, fixture, service, root, artwork); current != releaseID {
 		t.Fatalf("缓存重扫替换了 CUE Release：前=%s 后=%s", releaseID, current)
 	}
@@ -482,19 +599,32 @@ func TestPostgreSQLIncrementalParseCacheCompleteTraversalCleansDeletedFile(t *te
 	root := insertScannerRoot(t, fixture, "incremental-cache-cleanup")
 	service, logs := newIncrementalTestService(t, fixture)
 	writeAudio(t, root, "Album/01.flac", audioFile{seed: 1, title: "Keep", album: "Album", track: 1})
-	writeAudio(t, root, "Album/02.flac", audioFile{seed: 2, title: "Delete", album: "Album", track: 2})
+	writeAudio(t, root, "Other/02.flac", audioFile{seed: 2, title: "Delete", album: "Other", track: 2})
 	runIncrementalTestScan(t, service, logs, root)
 	before := readIncrementalTestTracks(t, fixture, root)
 	if cache := readIncrementalTestCache(t, fixture, root); len(cache) != 2 {
 		t.Fatalf("首扫缓存未写入：%+v", cache)
 	}
+	statesBefore := readIncrementalTestCandidateStates(t, fixture, root)
+	if len(statesBefore) != 2 {
+		t.Fatalf("首扫候选状态不全：%+v", statesBefore)
+	}
 	// 保留一轨，删除路径不会触发空根保护，必须实际走完整遍历和 missing 对账。
-	if err := os.Remove(filepath.Join(root.Path, "Album/02.flac")); err != nil {
+	if err := os.Remove(filepath.Join(root.Path, "Other/02.flac")); err != nil {
 		t.Fatal(err)
 	}
 	scan, summary := runIncrementalTestScan(t, service, logs, root)
 	if summary.FilesParsed != 0 || summary.ParseCacheHits != 1 || summary.ParseCacheWrites != 0 {
 		t.Fatalf("删除来源后只应命中幸存文件：%+v", summary)
+	}
+	statesAfter := readIncrementalTestCandidateStates(t, fixture, root)
+	if len(statesAfter) != 1 {
+		t.Fatalf("消失候选状态未清理：%+v", statesAfter)
+	}
+	for key, state := range statesAfter {
+		if state.ReleaseID != before["Album/01.flac"].ReleaseID || state != statesBefore[key] {
+			t.Fatalf("幸存候选状态变化：%+v", state)
+		}
 	}
 	cache := readIncrementalTestCache(t, fixture, root)
 	if len(cache) != 1 || cache["Album/01.flac"].SeenScanID != scan.ID {
@@ -504,9 +634,84 @@ func TestPostgreSQLIncrementalParseCacheCompleteTraversalCleansDeletedFile(t *te
 	if len(after) != 1 || after["Album/01.flac"] != before["Album/01.flac"] {
 		t.Fatalf("删除其它轨改变幸存轨身份或来源事实：%+v", after)
 	}
-	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE id=$1::uuid AND source_status='missing'`, 1, before["Album/02.flac"].ID)
+	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE id=$1::uuid AND source_status='missing'`, 1, before["Other/02.flac"].ID)
 	report := incrementalTestReport(t, service, scan.ID)
 	if report.Tracks != (ScanReportCounts{Missing: 1}) || report.Files.Processed != 1 {
 		t.Fatalf("删除文件的报告不符：%+v", report)
+	}
+}
+
+func TestPostgreSQLIncrementalCandidateStateFormatSplitSkipKeepsVersionGroupAndFavorites(t *testing.T) {
+	fixture := newLibraryFixture(t)
+	root := insertScannerRoot(t, fixture, "incremental-format-split")
+	service, logs := newIncrementalTestService(t, fixture)
+	paths := map[string]int{}
+	for position := 1; position <= 2; position++ {
+		flacPath, mp3Path := fmt.Sprintf("Album/%02d.flac", position), fmt.Sprintf("Album/%02d.mp3", position)
+		writeAudio(t, root, flacPath, audioFile{seed: byte(position), title: fmt.Sprintf("Track %d", position), album: "Album", track: position})
+		writeScanFixtureFile(t, root, mp3Path, formatSplitMP3(position))
+		paths[flacPath], paths[mp3Path] = position, position
+	}
+	_, first := runIncrementalTestScan(t, service, logs, root)
+	if first.CandidatesWritten != 2 || first.CandidatesSkipped != 0 {
+		t.Fatalf("首扫应写入两个格式候选：%+v", first)
+	}
+	before := readFormatSplitPlacements(t, fixture, root.ID, paths)
+	flac, mp3 := before["Album/01.flac"], before["Album/01.mp3"]
+	if flac.ReleaseID == mp3.ReleaseID || flac.GroupID != mp3.GroupID {
+		t.Fatalf("夹具未得到同组两个格式版本：%+v", before)
+	}
+	statesBefore := readIncrementalTestCandidateStates(t, fixture, root)
+	userID := uuid.New()
+	if _, err := fixture.database.Exec(`INSERT INTO users(id,username,password_hash,role) VALUES($1::uuid,'incremental-favorite','test-only','user')`, userID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.database.Exec(`INSERT INTO personal_favorite_state(user_id,revision) VALUES($1::uuid,10)`, userID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.database.Exec(`INSERT INTO favorite_albums(user_id,group_id,saved_title,saved_artist,created_at)
+		VALUES($1::uuid,$2::uuid,'保存专辑','保存艺人','2026-01-01T00:00:00Z')`, userID, flac.GroupID); err != nil {
+		t.Fatal(err)
+	}
+	favoriteMoves := 0
+	mover := personal.NewService(fixture.database)
+	service.SetAlbumFavoriteMover(func(ctx context.Context, tx *sql.Tx, moves map[string]string) (int, error) {
+		favoriteMoves++
+		return mover.MoveAlbumFavorites(ctx, tx, moves)
+	})
+
+	// flac 的候选键先于 mp3：先让它跳过，再给后写的 mp3 版本补上一轨。
+	writeScanFixtureFile(t, root, "Album/03.mp3", formatSplitMP3(3))
+	scan, summary := runIncrementalTestScan(t, service, logs, root)
+	if summary.FilesParsed != 1 || summary.ParseCacheHits != 4 || summary.CandidatesWritten != 1 || summary.CandidatesSkipped != 1 {
+		t.Fatalf("应跳过 flac，只重写新增文件所在的 mp3 候选：%+v", summary)
+	}
+	assertIncrementalTestCandidateRewrites(t, statesBefore, readIncrementalTestCandidateStates(t, fixture, root), mp3.ReleaseID)
+	after := readIncrementalTestTracks(t, fixture, root)
+	for path, placement := range before {
+		current := after[path]
+		if current.ID != placement.TrackID || current.ReleaseID != placement.ReleaseID {
+			t.Fatalf("格式候选混合跳过/重写改变旧身份：%s 前=%+v 后=%+v", path, placement, current)
+		}
+	}
+	added := after["Album/03.mp3"]
+	if len(after) != 5 || added.ReleaseID != mp3.ReleaseID || added.ID == "" {
+		t.Fatalf("新曲目未加入原 mp3 版本：%+v", after)
+	}
+	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM releases WHERE id IN ($1::uuid,$2::uuid) AND group_id=$3::uuid`, 2, flac.ReleaseID, mp3.ReleaseID, flac.GroupID)
+	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE id=$1::uuid AND position=3 AND codec='mp3'`, 1, added.ID)
+	if favoriteMoves != 0 {
+		t.Fatalf("同组格式版本补轨不应调用收藏转移：%d", favoriteMoves)
+	}
+	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM release_groups`, 1)
+	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM releases WHERE source_root_id=$1::uuid`, 2, root.ID)
+	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM favorite_albums WHERE user_id=$1::uuid`, 1, userID)
+	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM favorite_albums WHERE user_id=$1::uuid AND group_id=$2::uuid
+		AND saved_title='保存专辑' AND saved_artist='保存艺人' AND created_at='2026-01-01T00:00:00Z'`, 1, userID, flac.GroupID)
+	assertDatabaseCount(t, fixture, `SELECT revision FROM personal_favorite_state WHERE user_id=$1::uuid`, 10, userID)
+	requireNoMissingTracks(t, fixture, root.ID)
+	report := incrementalTestReport(t, service, scan.ID)
+	if report.Tracks != (ScanReportCounts{Added: 1}) || report.Albums != (ScanReportCounts{Updated: 1}) {
+		t.Fatalf("格式版本补轨不应新建组或报告旧轨变化：%+v", report)
 	}
 }

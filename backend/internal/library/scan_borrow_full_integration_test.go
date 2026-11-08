@@ -170,6 +170,8 @@ func TestPostgreSQLFullRescanParsesAllWithoutBorrowing(t *testing.T) {
 	requireBorrowFullCount(t, summary, "files_parsed", 3)
 	requireBorrowFullCount(t, summary, "parse_cache_hits", 0)
 	requireBorrowFullCount(t, summary, "parse_cache_writes", 3)
+	requireBorrowFullCount(t, summary, "candidates_written", 2)
+	requireBorrowFullCount(t, summary, "candidates_skipped", 0)
 	plan := borrowFullScanEvent(t, &logs, "library.scan.identity_resolved", scan.ID, root.ID)
 	requireBorrowFullCount(t, plan, "fingerprints_borrowed", 0)
 	requireBorrowFullCount(t, plan, "fingerprints_computed", 1)

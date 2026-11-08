@@ -16,6 +16,8 @@ import (
 var rollbackFixtures = map[int64]string{
 	38: `INSERT INTO library_parse_cache(root_id,relative_path,directory,source_size,source_modified_at,parser_version,observation,seen_scan_id)
  VALUES('f1000000-0000-4000-8000-000000000001','album/01.flac','album',128,NOW(),'c1.f1','{}','f2000000-0000-4000-8000-000000000001');
+ INSERT INTO scan_candidate_states(root_id,candidate_key,release_id,signature)
+ VALUES('f1000000-0000-4000-8000-000000000001','rollback-candidate','f4000000-0000-4000-8000-000000000001',repeat('a',64));
  UPDATE scan_runs SET scan_mode='full' WHERE id='f2000000-0000-4000-8000-000000000001';`,
 	37: "",
 	36: "",

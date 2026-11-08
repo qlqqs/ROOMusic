@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"iter"
 	"os"
 	pathpkg "path"
 	"path/filepath"
@@ -503,12 +504,17 @@ func (service *Service) scanRootWithOptions(ctx context.Context, executor scanEx
 					feedback.phase(ctx, "saving", total)
 				}
 			}
-			if evidenceErr := service.persistStagedCandidates(ctx, executor, scanID, root, stats, feedback); evidenceErr != nil {
+			if evidenceErr := service.persistStagedCandidatesWithOptions(ctx, executor, scanID, root, options, stats, feedback); evidenceErr != nil {
 				complete = false
 				captureProcessingError(evidenceErr)
 				kind, message := candidatePersistenceDiagnostic(evidenceErr)
 				if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, "", kind, message); diagnosticError != nil {
 					captureProcessingError(diagnosticError)
+				}
+			}
+			if !pipeline.walkErrorSeen && ctx.Err() == nil {
+				if err := ingest.CleanupCandidateStates(ctx, executor, scanID, root.ID); err != nil {
+					service.warnCandidateState(scanID, root.ID, "cleanup")
 				}
 			}
 			if ctx.Err() == nil {
@@ -716,6 +722,10 @@ func stageObservation(ctx context.Context, executor scanExecutor, scanID, rootID
 }
 
 func (service *Service) persistStagedCandidates(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, stats *incrementalStats, feedbacks ...*scanFeedback) error {
+	return service.persistStagedCandidatesWithOptions(ctx, executor, scanID, root, StartOptions{Mode: ScanModeIncremental}, stats, feedbacks...)
+}
+
+func (service *Service) persistStagedCandidatesWithOptions(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, options StartOptions, stats *incrementalStats, feedbacks ...*scanFeedback) error {
 	feedback := feedbackArg(feedbacks)
 	var firstErr error
 	lastScope := ""
@@ -766,6 +776,24 @@ func (service *Service) persistStagedCandidates(ctx context.Context, executor sc
 					}
 					candidate.JoinGroupID = groupIDs[versionGroup]
 				}
+				signature, signatureErr := candidateSignature(root, candidate)
+				candidateKey := ingest.CandidateIdentity(root.ID, candidate.Anchor)
+				if signatureErr == nil && options.Mode == ScanModeIncremental {
+					trackIDs, unchanged, stateErr := ingest.CandidateUnchanged(ctx, executor, scanID, root.ID, candidateKey, signature)
+					if stateErr != nil {
+						service.warnCandidateState(scanID, root.ID, "read")
+					} else if unchanged {
+						if touchErr := ingest.TouchTracks(ctx, executor, trackIDs); touchErr != nil {
+							if firstErr == nil {
+								firstErr = touchErr
+							}
+						} else {
+							stats.candidatesSkipped++
+						}
+						// 沿用候选的组已由 PlannedVersionGroup 提供；不进入写入与收藏转移记账。
+						continue
+					}
+				}
 				ripLogRefs, diagnostics := discoverCandidateRipLogEvidence(root, candidate)
 				ingest.ApplyRipLogEvidence(&candidate, ripLogRefs)
 				for _, diagnostic := range diagnostics {
@@ -776,6 +804,11 @@ func (service *Service) persistStagedCandidates(ctx context.Context, executor sc
 				releaseID, persistErr := service.persistOneCandidate(ctx, executor, scanID, root, candidate, stats, feedback)
 				if persistErr != nil && firstErr == nil {
 					firstErr = persistErr
+				}
+				if persistErr == nil && signatureErr == nil {
+					if err := ingest.RecordCandidateState(ctx, executor, root.ID, candidateKey, releaseID, signature); err != nil {
+						service.warnCandidateState(scanID, root.ID, "record")
+					}
 				}
 				// 封面失败不撤销已提交的发行，后续版本仍须加入它的组。
 				if versionGroup != "" && groupIDs[versionGroup] == "" && releaseID != "" {
@@ -790,6 +823,13 @@ func (service *Service) persistStagedCandidates(ctx context.Context, executor sc
 		lastScope = scopes[len(scopes)-1]
 	}
 	return firstErr
+}
+
+func (service *Service) warnCandidateState(scanID, rootID, operation string) {
+	if service.logger != nil {
+		service.logger.Warn("候选状态不可用", "event", "library.scan.candidate_state_failed", "module", "library",
+			"scan_run_id", scanID, "library_root_id", rootID, "operation", operation)
+	}
 }
 
 type ripLogDiagnostic struct {
@@ -1045,102 +1085,108 @@ func discoverFolderArtwork(rootPath string, directories []string, filter scanFil
 // discoverFolderArtworkWithReader 依次查原目录精确名、原目录 front、附属子目录精确名、附属子目录 front。
 // 每轮命中即返回；无效封面记下第一个错误，四轮全部找完仍没有可用封面才报错。
 func discoverFolderArtworkWithReader(rootPath string, directories []string, readFile func(string) ([]byte, error), filter scanFilter) ([]byte, string, error) {
-	type artworkDirectory struct {
-		path         string
-		relativePath string
-		entries      []os.DirEntry
-	}
 	var firstErr error
-	remember := func(err error) {
-		if firstErr == nil {
-			firstErr = err
-		}
-	}
-	readDirectory := func(relativePath string) (artworkDirectory, bool) {
-		directoryPath := filepath.Join(rootPath, filepath.FromSlash(relativePath))
-		entries, err := os.ReadDir(directoryPath)
-		if err != nil {
-			if !errors.Is(err, fs.ErrNotExist) {
-				remember(err)
-			}
-			return artworkDirectory{}, false
-		}
-		return artworkDirectory{path: directoryPath, relativePath: relativePath, entries: entries}, true
-	}
-	search := func(directory artworkDirectory, exact bool) ([]byte, string) {
-		var names []string
-		if exact {
-			for _, name := range folderArtworkNames {
-				names = append(names, folderArtworkCandidates(directory.entries, name)...)
-			}
-		} else {
-			for _, entry := range directory.entries {
-				name := strings.ToLower(entry.Name())
-				ext := filepath.Ext(name)
-				if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".webp") && strings.Contains(strings.TrimSuffix(name, ext), "front") {
-					names = append(names, entry.Name())
-				}
-			}
-		}
-		for _, name := range names {
-			if filter.skipFile(name) {
-				continue
-			}
-			data, mimeType, err := readFolderArtworkFile(filepath.Join(directory.path, name), name, readFile)
-			if err != nil {
-				remember(err)
-				continue
-			}
-			return data, mimeType
-		}
-		return nil, ""
-	}
-	// 第一轮保持原目录与命名优先级；缓存目录项供第二轮和附属目录发现复用。
-	var originals []artworkDirectory
-	for _, directory := range directories {
-		loaded, ok := readDirectory(directory)
-		if !ok {
-			continue
-		}
-		originals = append(originals, loaded)
-		if data, mimeType := search(loaded, true); len(data) > 0 {
-			return data, mimeType, nil
-		}
-	}
-	for _, directory := range originals {
-		if data, mimeType := search(directory, false); len(data) > 0 {
-			return data, mimeType, nil
-		}
-	}
-	var subsidiaries []artworkDirectory
-	for _, directory := range originals {
-		for _, entry := range directory.entries {
-			if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || !folderArtworkSubdirectoryNames[strings.ToLower(entry.Name())] {
-				continue
-			}
-			relativePath := pathpkg.Join(directory.relativePath, entry.Name())
-			if filter.skipDir(relativePath, entry.Name()) {
-				continue
-			}
-			loaded, ok := readDirectory(relativePath)
-			if !ok {
-				continue
-			}
-			subsidiaries = append(subsidiaries, loaded)
-			if data, mimeType := search(loaded, true); len(data) > 0 {
+	for relativePath, err := range listFolderArtworkCandidates(rootPath, directories, filter) {
+		if err == nil {
+			var data []byte
+			var mimeType string
+			data, mimeType, err = readFolderArtworkFile(filepath.Join(rootPath, filepath.FromSlash(relativePath)), filepath.Base(relativePath), readFile)
+			if err == nil {
 				return data, mimeType, nil
 			}
 		}
-	}
-	for _, directory := range subsidiaries {
-		if data, mimeType := search(directory, false); len(data) > 0 {
-			return data, mimeType, nil
+		if firstErr == nil {
+			firstErr = err
 		}
 	}
 	if firstErr != nil {
 		return nil, "", fmt.Errorf("%w: %w", errArtworkSource, firstErr)
 	}
 	return nil, "", nil
+}
+
+// listFolderArtworkCandidates 按四轮查找顺序列出相对路径，不读取或校验封面文件。
+// 惰性列举保留命中即停和首错顺序；签名消费全部条目，查找只消费到第一张可用封面。
+func listFolderArtworkCandidates(rootPath string, directories []string, filter scanFilter) iter.Seq2[string, error] {
+	return func(yield func(string, error) bool) {
+		type artworkDirectory struct {
+			relativePath string
+			entries      []os.DirEntry
+		}
+		readDirectory := func(relativePath string) (artworkDirectory, error) {
+			entries, err := os.ReadDir(filepath.Join(rootPath, filepath.FromSlash(relativePath)))
+			return artworkDirectory{relativePath: relativePath, entries: entries}, err
+		}
+		list := func(directory artworkDirectory, exact bool) bool {
+			var names []string
+			if exact {
+				for _, name := range folderArtworkNames {
+					names = append(names, folderArtworkCandidates(directory.entries, name)...)
+				}
+			} else {
+				for _, entry := range directory.entries {
+					name := strings.ToLower(entry.Name())
+					ext := filepath.Ext(name)
+					if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".webp") && strings.Contains(strings.TrimSuffix(name, ext), "front") {
+						names = append(names, entry.Name())
+					}
+				}
+			}
+			for _, name := range names {
+				if !filter.skipFile(name) && !yield(pathpkg.Join(directory.relativePath, name), nil) {
+					return false
+				}
+			}
+			return true
+		}
+		var originals []artworkDirectory
+		for _, directory := range directories {
+			loaded, err := readDirectory(directory)
+			if err != nil {
+				if !errors.Is(err, fs.ErrNotExist) && !yield("", err) {
+					return
+				}
+				continue
+			}
+			originals = append(originals, loaded)
+			if !list(loaded, true) {
+				return
+			}
+		}
+		for _, directory := range originals {
+			if !list(directory, false) {
+				return
+			}
+		}
+		var subsidiaries []artworkDirectory
+		for _, directory := range originals {
+			for _, entry := range directory.entries {
+				if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || !folderArtworkSubdirectoryNames[strings.ToLower(entry.Name())] {
+					continue
+				}
+				relativePath := pathpkg.Join(directory.relativePath, entry.Name())
+				if filter.skipDir(relativePath, entry.Name()) {
+					continue
+				}
+				loaded, err := readDirectory(relativePath)
+				if err != nil {
+					if !errors.Is(err, fs.ErrNotExist) && !yield("", err) {
+						return
+					}
+					continue
+				}
+				subsidiaries = append(subsidiaries, loaded)
+				if !list(loaded, true) {
+					return
+				}
+			}
+		}
+		for _, directory := range subsidiaries {
+			if !list(directory, false) {
+				return
+			}
+		}
+	}
 }
 
 // folderArtworkCandidates 返回目录中小写后等于 name 的文件名：全小写的在前，其余按字节序（ReadDir 已按名字排序）。

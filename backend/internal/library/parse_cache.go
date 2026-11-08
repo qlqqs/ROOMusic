@@ -19,8 +19,8 @@ const (
 )
 
 type incrementalStats struct {
-	filesParsed, parseCacheHits, parseCacheWrites int64
-	candidatesWritten, artworkDeferredLoads       int64
+	filesParsed, parseCacheHits, parseCacheWrites              int64
+	candidatesWritten, candidatesSkipped, artworkDeferredLoads int64
 }
 
 func (service *Service) logIncrementalSummary(scanID, rootID, mode string, stats *incrementalStats) {
@@ -29,7 +29,7 @@ func (service *Service) logIncrementalSummary(scanID, rootID, mode string, stats
 			"scan_run_id", scanID, "library_root_id", rootID, "mode", mode,
 			"files_parsed", stats.filesParsed, "parse_cache_hits", stats.parseCacheHits,
 			"parse_cache_writes", stats.parseCacheWrites, "candidates_written", stats.candidatesWritten,
-			"candidates_skipped", 0, "artwork_deferred_loads", stats.artworkDeferredLoads)
+			"candidates_skipped", stats.candidatesSkipped, "artwork_deferred_loads", stats.artworkDeferredLoads)
 	}
 }
 
