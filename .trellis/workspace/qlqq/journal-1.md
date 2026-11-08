@@ -1684,3 +1684,59 @@ F 线变基到含 P 线的 main（迁移改为 0023/0024），导出树全量全
 ### Status
 
 [OK] **Completed**
+
+
+## Session 48: 全屏播放器、后台音频分析与概览改版
+<!-- trellis-session: v=2 fp=d275be2e688e453b -->
+
+**Date**: 2026-11-08
+**Task**: 全屏播放器、后台音频分析与概览改版
+**Branch**: `main`
+
+### Summary
+
+正在播放页改为网易云式全屏播放器（黑胶、唱臂、歌词）与 Roon 式底栏；队列抽屉、信号路径弹层；后台 ffmpeg 慢速音频分析驱动波形进度条、按 Roon 的音量均衡与跨专辑交叉渐变；概览顶部四项统计与右侧窄栏；撤销记录显示“已完成”。在临时分支实施后合入 main。
+
+### Main Changes
+
+- B1 资料库统计接口 GET /api/v1/catalog/stats（专辑、曲目、艺术家、作曲家），与艺人列表共用 artistListCount
+- B2 迁移 0033 track_analyses；单线程低优先级分析工作者（nice 19、空闲 IO、扫描让路、失败 3 次 24 小时冷却、空闲 1 分钟再查），EBU R128 响度与真峰值、波形、首尾静音；曲目分析与进度接口；ROOMUSIC_AUDIO_ANALYSIS 开关
+- F2 全屏播放器（历史项开合、Esc/返回收起、窄屏唱片与歌词切换）、队列右侧抽屉、信号路径圆点弹层（删去三句说明）；/now-playing 跳到概览；撤销记录写“已完成”
+- F1 概览四张统计卡与右侧窄栏（扫描、音频分析、需要关注、目录、成员）
+- F3 波形进度条；设置 → 播放：音量均衡（关/自动/按曲目/按专辑，−14 LUFS，可提升到真峰值 −0.5 dB，未分析 −5 dB）与交叉渐变；Web Audio 按需接入，iOS 不接入
+- J4 合并：main 的 Button 改用 useTooltip，分支图标控件随之对齐；main 上三个旧概况用例单独修正
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2f80c3a` | docs(task): 规划全屏播放器、后台音频分析与概览改版 |
+| `4790f4d` | docs(task): 音量均衡按 Roon 修订（−14 LUFS、可提升、Web Audio 按需接入） |
+| `85eb0b2` | chore(task): 开始全屏播放器、后台音频分析与概览改版 |
+| `37a871b` | feat(catalog): 新增资料库统计接口 |
+| `e90beec` | feat(player): 正在播放页改为全屏播放器，队列改为抽屉，信号路径改为弹层 |
+| `0d4d3bc` | feat(playback): 新增后台音频分析与分析结果接口 |
+| `aab1e09` | feat(overview): 概览顶部显示资料库四项统计，右侧加局部侧栏 |
+| `c44ba31` | fix(playback): 专辑增益只统计分析工作集内的曲目 |
+| `ff83dda` | docs(spec): 全屏播放器、音量均衡、交叉渐变与后台音频分析写入规范 |
+| `890cf53` | feat(player): 波形进度条、播放设置、按 Roon 的音量均衡与交叉渐变 |
+| `3ea63b4` | fix(playback): 分析空闲等待改为 1 分钟，真实联调覆盖波形与均衡增益 |
+| `3eece9c` | merge: 全屏播放器、后台音频分析与概览改版合入 main |
+| `a4ef27b` | test(catalog): 专辑概况改为一行小字后同步三个旧用例 |
+| `225874e` | docs(task): 记录全屏播放器、后台音频分析与概览改版的实施结果 |
+| `402b680` | chore(task): archive 11-08-player-overview-analysis |
+
+### Testing
+
+- [OK] [OK] 后端：go vet/build、依赖规则、隔离库 CatalogStats / APIResponseSamples / Analysis* / 迁移回滚（PASS 非 SKIP），固定 ffmpeg 合成素材测试
+- [OK] [OK] 前端 Vitest：各步相关文件（89/313/282/168 项等）；合并后 player 与 app 等 66 个文件通过（2 个 main 旧断言单独修正）
+- [OK] [OK] Playwright mock：各步 player/auth/search/claims；合并后交汇处 382 项，失败 8 项修正后定向重跑通过
+- [OK] [OK] 真实服务 scripts/playback-e2e.sh 56 项通过，分析 13/13 完成；1440/375 截图 20 张已审
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 安卓锁屏后台播放与交叉渐变未真机演练；交叉渐变未实际试听

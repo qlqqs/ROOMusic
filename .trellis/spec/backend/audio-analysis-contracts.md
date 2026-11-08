@@ -1,7 +1,7 @@
 # 后台音频分析合同
 
 2026-11-08 起（迁移 0033）。后端用 ffmpeg 在后台逐首慢速分析资料库里的曲目，得到 EBU R128 积分响度、真峰值、波形与首尾静音点，
-供前端的音量均衡（按 Roon）、交叉渐变与波形进度条使用。设计与取舍见[任务设计](../../tasks/11-08-player-overview-analysis/design.md)，
+供前端的音量均衡（按 Roon）、交叉渐变与波形进度条使用。设计与取舍见[任务设计](../../tasks/archive/2026-11/11-08-player-overview-analysis/design.md)，
 前端用法见[播放与个人状态](../frontend/playback-and-personal-state.md)。
 
 ## 1. 包与依赖方向
