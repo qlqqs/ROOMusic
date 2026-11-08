@@ -139,7 +139,7 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
   没有配对到别处时置为 `missing`，记 `content_replaced`；(2) 只有该 root 遍历完整（未取消，没有根不可用、暂存、指纹或 scope 失败）时，没有匹配到身份的观察才与本 root 中本轮消失（present、有指纹、未被计划沿用且未被保住）的曲目
   按指纹键配对，两侧都恰好一条才沿用 UUID 并更新路径与来源身份，否则不重绑定，歧义键记 `identity_ambiguous`；
   (3) 遍历不完整时不配对，含疑似移动或换内容观察的 scope 整体暂缓写入并记 `identity_deferred`，留给下一次完整遍历，
-  其余 scope 照常写入；(4) 跨 root 从不重绑定；相似度、标题、时长从不用于推断身份。写入前先腾出被别的曲目持有的
+  其余 scope 照常写入；完整增量遍历还可在计算前按文件名/大小/mtime 两侧唯一借用旧指纹（详见“增量扫描”），不改变配对条件；(4) 跨 root 从不重绑定；相似度、标题、时长从不用于推断身份。写入前先腾出被别的曲目持有的
   来源身份（互换、轮换与处理顺序无关）。重绑定按候选逐个短事务提交，依据的是完整的遍历证据；取消后已提交的保留，没写到
   的候选保持原状。每次候选写入替换 current decisions、grouping evidence、credits 和 track observations，不按重扫次数追加。
 - **Release 身份**（阶段 I）：候选已规划沿用的曲目中严格过半当前属于同一个既有 Release 时沿用它；多个候选争同一个
@@ -148,7 +148,7 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
   移动、增删少量文件、最小来源变化都不换 Release ID；新增文件多于原有（如 2 轨加 3 轨）或整体被替换时新建 Release。
 - 身份规划的诊断写入 `scan_diagnostics`（沿用每次扫描最多 100 条的上限，安全相对路径，无绝对路径）：
   `identity_ambiguous`、`content_replaced`、`identity_deferred`、`fingerprint_failure`；每个 root 规划结束记一条聚合
-  INFO 日志 `library.scan.identity_resolved`，只含计数。
+  INFO 日志 `library.scan.identity_resolved`，只含计数（含增量扫描的 `FingerprintsBorrowed`）。
 - CUE 引用可以位于 sheet 的父目录或兄弟目录，只要仍在显式注册根 containment 内；
   staging 必须先按规范化 `cue_parent_relative_path` 与物理 observation 对齐 scope，
   organizer 再仅在同一 candidate 和明确父子关系内消除虚拟/物理重复。不得仅按 sheet
@@ -192,6 +192,51 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
     无效的命名文件记下第一个错误后继续找；全部目录找完仍没有可用封面时才返回 `errArtworkSource` 包装的错误（扫描诊断 `artwork_unreadable`）。
     目录不存在不算错误，其他读目录错误按同样方式记录。
   - 没有迁移：重扫会对每个候选重新发现封面，下一次扫描即绑定或移除。
+
+### 增量扫描（④，分阶段接入）
+
+本轮实现解析缓存、延迟内嵌封面、指纹借用和完整重扫；**候选签名与跳过（实施第 6 步）尚未接入**，所有候选仍按原流程写入和发现封面。待 O 线 ② 合入并 rebase 后，再复用其 `listFolderArtworkCandidates`；本轮不修改 `discoverFolderArtwork` 查找规则。
+
+#### 存储与观察
+
+- `0036_incremental_scan.sql`（暂定编号，紧接 0034、0035）增加 `library_parse_cache`、预留 `scan_candidate_states` 和 `scan_runs.scan_mode`；下行删除两表与列。均不回填缓存，不迁移曲目或 Release 身份，不增加环境变量。
+- `library` 拥有 `library_parse_cache`：主键 `(root_id, relative_path)`，路径使用 `ingest.NormalizedPath`；列为 `directory/source_size/source_modified_at/parser_version/observation/seen_scan_id/updated_at`，目录索引 `(root_id,directory)`；根外键级联删除。
+- `catalog/ingest` 拥有预留的 `scan_candidate_states`：主键 `(root_id,candidate_key)`，列 `release_id/signature/updated_at`，签名约束为 64 位小写十六进制。`release_id` **不加外键**，避免 KEY SHARE 与发行/组锁顺序交叉；本轮尚不读写该表。
+- `SourceObservation.ArtworkRelativePath string`（`artwork_relative_path,omitempty`）记录根内真实封面来源文件：物理/CUE 观察构建时填写，organizer 向 survivor 迁移内嵌封面时与 `ArtworkDeferred` 一起复制，延迟读取使用该路径而非 survivor 自身路径；仅属内部观察合同、不进入 REST，字段按字母序排列（2026-11-08 用户批准补充）。
+- `SourceObservation` 增加 `ArtworkDeferred bool`（`artwork_deferred,omitempty`）和 `ParserVersion string`（`parser_version,omitempty`），与现有字段按字母序排列。物理轨记录本文件解析器版本，CUE 虚拟轨记录父音频版本；CUE 虚拟轨本身不进入解析缓存。
+
+#### 缓存与延迟封面
+
+- 缓存值为 `parser.AudioObservation` 去掉 `Artwork` 字节后的 JSON，保留 `ArtworkMIME`；超过 1 MiB 不缓存。缓存只保存解析器原始输出，不能把 organizer 或 CUE 覆盖后的观察写回缓存。
+- 增量命中必须同时满足 root/规范相对路径、文件大小、mtime 截到微秒、`parser.CacheVersion(ext)` 相等；未知格式版本为空，不缓存。不做整秒降精度、Unicode 身份合并或内存目录树缓存。
+- `ParseCueDocument(path, duration CueDurationReader, containmentRoot ...string)` 的父音频时长由调用方注入（`CueDurationReader func(string) (float64,error)`，直接解析实现为 `parser.AudioDuration`）：scanner 使用同一解析缓存，未命中才解析、计入 `files_parsed` 并写缓存；parser 其他调用方显式传入直接解析的默认实现，不保留旧签名包装，CUE sheet 每轮解析和末轨区间语义不变（2026-11-08 用户批准补充）。
+- 物理文件通过过滤、安全校验和 Stat 后才查缓存；CUE sheet 每次重新解析以保留诊断，父音频复用同一缓存。进入目录查询 `LIMIT 2001`，内存至多保留 2000 条；溢出部分及跨目录 CUE 父文件逐条查询。
+- 解析成功立即在扫描 holder 上 upsert，写 `seen_scan_id=本次`；不等待候选提交，因为缓存只取决于源文件与解析器版本。失败不缓存；命中项按目录批量更新 seen，离开目录及根结束时刷新。
+- 遍历结束、未取消且无 `walk_error` 时清理本根 `seen_scan_id IS DISTINCT FROM 本次` 的缓存项，涵盖过滤、排除、删除和读失败来源；取消或目录读失败不清理。缓存读写/清理失败只记 WARN `library.scan.parse_cache_failed`，按未命中处理，不改变扫描完整性，不额外重试或引入替代存储。
+- 缓存命中且 MIME 非空时，观察置 `ArtworkDeferred=true`；`StageObservation` 的 scope 内封面去重把 `artwork` 或 `artwork_deferred` 都算封面，后来者同时清除字节、MIME 与 deferred。`EmbeddedArtwork()` 保持原碟序/曲序，接受有字节或 deferred 的观察。
+- 保存候选封面时，deferred 观察经路径安全校验后现读音频取封面；读取失败记 `artwork_unreadable`，或已无封面时，继续原文件夹封面查找。受管封面存储/绑定/清理失败仍阻断完整成功。本轮因未接候选跳过，命中缓存的带封面候选仍会触发这次读取。
+
+#### 版本号与升版本规则
+
+- `parser.CommonVersion=1`；`formatVersions` 的 `.flac/.mp3/.ogg/.opus/.wav/.m4a` 均从 1 起。`CacheVersion(extension)` 返回如 `c1.f1`，未知扩展名返回空串。M 线 ⑩ 合入时由主会话补 `.ape/.wv/.aif/.aiff`，起始 1。
+- `AudioObservation` 字段、类型、含义或共用解析规则（兜底、分隔、多值、歌词、日期以及 parser 内编号推断）改变，升 `CommonVersion`，使所有格式重新解析；只改某格式读取，升该格式版本；新增格式只加版本 1，不使其他格式失效。
+- `ingest.GroupingVersion=1`，覆盖同样观察所产生的 Release 图：organizer、folder_metadata、抓轨证据、字段决定、归组证据、署名/艺人、流派、作品、搜索投影字段与封面选择。只改这些规则而不改 parser，不升解析器版本，只升归组版本；第 6 步接入后，升归组版本使所有候选重写而不使解析缓存失效。
+- ④ 合入之后的合入核对：O ②/③ 升 `GroupingVersion`（同批合入合计加一）；T ⑥ 升 `CommonVersion` 与 `GroupingVersion`；T ⑦/⑧ 按格式或共用解析改动升解析器版本，并升归组版本；T ⑬ 搜索独立回填不升；M ⑩ 新格式加 1，共用解析变化另升 `CommonVersion`，CUE 回退扩展名表无须另升；M ⑨ MP3 时长规则升 `.mp3` 版本，分析器自有版本另行维护。④ 之前已合入的规则不追补版本。
+
+#### 借用指纹与完整重扫
+
+- `PlanOptions.Mode` 传入模式；仅 `WalkComplete` 且增量模式，才在 `resolveFingerprints` 计算前借用指纹。旧侧为本根 present、已知指纹/大小/mtime、未被任何本轮暂存 `matched_track_id` 引用且未被保住的文件；CUE 取 `COALESCE(cue_parent_relative_path,relative_path)`。
+- 新侧为保留、未暂缓、未匹配且无指纹、`fingerprint_path` 非空的暂存观察；按文件名、大小、mtime 配对，两侧各恰好一个不同文件路径才借用。CUE 多轨按父文件去重计数，并将借得指纹用于该父文件的暂存行。文件名改变或任一侧有多个路径，照常计算；不使用目录名或标签推测身份。
+- 借用不代替曲目配对：后续仍要求指纹与 CUE 区间两侧唯一，沿用原 UUID 与 Release 严格过半规则。`RootPlan.FingerprintsBorrowed` 汇入 `library.scan.identity_resolved` 的计数，不记录路径。
+- `full` 绕过解析缓存读取和指纹借用，仍将成功解析写缓存；保留既有的“同来源身份且 size/mtime 未变则复用已存指纹”。扫描仍走同一协调锁、身份规划、反馈与 missing 流程。HTTP 可选请求体与所有角色 `ScanDTO.mode` 见[扫描协调合同](./scan-coordination-contracts.md)。
+- 每根结束 INFO `library.scan.incremental_summary`：`scan_run_id/library_root_id/mode/files_parsed/parse_cache_hits/parse_cache_writes/candidates_written/candidates_skipped/artwork_deferred_loads`。只记标识、模式与计数；第 6 步接入前 `candidates_skipped=0`，不能据缓存命中宣称已跳过候选写入。
+
+#### 候选签名与跳过：已定合同，待第 6 步实现
+
+- library 计算 SHA-256：归组版本、候选键、按相对路径字节序排列的成员（路径/size/微秒 UTC mtime/parser_version）；引用 CUE sheet 去重排序后的路径/size/mtime；共用 `listFolderArtworkCandidates` 顺序列出的全部封面候选路径/size/mtime；来源目录内按名排序的普通 `.log` 的目录/名字/size/mtime。不能单独复制封面名单；② 合入后必须覆盖全部四轮，包括附属目录中的 `front` 文件。
+- 列举目录失败（不存在除外）、sheet Lstat 失败时不跳过。`ingest.CandidateUnchanged` 只在签名相同、全部有效暂存行沿用原曲目且无换内容、计划 Release 等于状态 Release、当前曲目都 present 且仍属该 Release 时命中；治理或其他候选改变归属后必须重写。
+- 跳过仅 `TouchTracks` 更新 present 曲目的 `observed_at`，不改 `source_size/source_modified_at`、决定、证据、署名、搜索投影或封面，不读抓轨日志内容；反馈零变化、保存阶段进度照常推进，不触发音频分析失效。
+- 候选及封面成功后 `RecordCandidateState`（`artwork_unreadable` 不视为失败）；完整重扫也记录但不判断跳过。状态写失败 WARN，下轮重写；根遍历完整、未取消时，按本轮暂存候选键清理状态，再清暂存。
 
 ## 4. 校验与错误矩阵
 
@@ -240,6 +285,10 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 | 候选已规划沿用的曲目严格过半属于同一 Release | 沿用该 Release UUID；不过半（如 2 轨加 3 轨、1 轨加 1 轨）则新建 Release 与 ReleaseGroup |
 | 扫描成功且所有 root 完整 | 允许负向 `missing` 对账 |
 | 非音频附件 | 忽略，不改变扫描完整性 |
+| 缓存表读写失败、缓存内容不能解码 | WARN，按未命中解析，不改变 root 完整性 |
+| 大小、微秒 mtime 或解析器版本变化 | 重新解析；完整模式即使相同也重新解析 |
+| 延迟内嵌封面读取失败 | `artwork_unreadable`，继续原文件夹封面查找 |
+| 同名/同大小/同时间的移动来源任一侧不唯一，或 full 模式 | 不借用指纹，照常计算或按原来源规则复用 |
 
 ## 5. 正确、基准与错误案例
 
@@ -270,6 +319,11 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 
 ## 6. 必需测试
 
+- ④ 单元：当前支持格式/未知扩展名的缓存版本、deferred 封面选取与暂存去重；HTTP 空请求体默认增量、两种合法模式、未知字段/缺 mode/非法 mode 拒绝，所有角色/入口包含 `mode`。
+- ④ PostgreSQL：连续扫描未变文件命中、mtime/size/格式版本变化重新解析、full 绕过读取但仍写缓存；CUE sheet 每轮读取且父音频共用缓存；超 2000 条目录的逐条查询、seen 批量刷新、删除/过滤清理与取消/walk_error 不清理；缓存故障不改变完整性。
+  deferred 候选重写仍取内嵌封面；目录改名借用且 Track UUID 不变，任一侧多文件歧义不借用、保住范围不被借用，full 不借用。0036 升级/下行/再升级覆盖两表一列及历史模式默认值。
+- 第 6 步接入后另验：成员、版本、CUE、封面四轮候选与抓轨日志每类输入使签名失效，无关文件不影响；未变候选零写入/零反馈变化/零 deferred 读取，治理改归属后重写，升归组版本全部重写，touch 不改变音频分析输入快照。
+
 - 改路径 PostgreSQL/HTTP：成功保持 root ID/status/excluded_paths、revision 仅在路径变化时加一；成功响应及回放严格六字段，响应/操作记录列表不含绝对路径，前后态仅库内可见。
   覆盖同键回放、同键异义（含目标/规范路径/版本变化）、同键并发只执行一次、相同路径不增版本仍写收据、revision 冲突、未知/非法 ID、缺参数/键与鉴权无副作用。
   已登记新路径（含 disabled）、越界/不存在/非目录/符号链接应返回对应安全错误；独立连接持有扫描锁时拒绝且不写记录，释放后同键可重试。
@@ -295,6 +349,16 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
   Box 叶子不取父目录、内嵌优先）。
 
 ## 7. 错误与正确示例
+
+### 增量扫描的错误与正确示例
+
+基准：空缓存的第一次扫描解析并写缓存，第二次读取同路径同大小同微秒 mtime 同版本的文件时命中。第 6 步尚未接入时，第二次候选仍重写，不能宣称已完成候选跳过。
+
+正确：标签编辑保留 mtime 时，管理员发送 `{"mode":"full"}` 强制重新解析；缓存照常更新，同来源的音频指纹仍可按旧规则复用。
+
+错误：缓存 SQL 失败令 root 不完整；把无封面字节的缓存观察当成从来没有内嵌封面；full 模式借用改名来源指纹。
+
+正确：缓存失败 WARN 后解析，MIME 标记传递为 `ArtworkDeferred` 并在保存封面时现读，只有完整增量遍历才借用指纹。
 
 ### 改路径与恢复的错误与正确示例
 

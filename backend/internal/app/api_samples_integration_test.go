@@ -255,13 +255,13 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	if _, err := holder.Exec(`LOCK TABLE library_roots IN ACCESS EXCLUSIVE MODE`); err != nil {
 		t.Fatalf("lock library_roots: %v", err)
 	}
-	started := call(http.MethodPost, "/api/v1/scans", map[string]any{}, admin)
+	started := call(http.MethodPost, "/api/v1/scans", nil, admin)
 	samples.record("scans/start-created", started, http.StatusAccepted)
 	firstScan := decodeJSONMap(t, started)["id"].(string)
 	waitForLockWaiters(t, application.database, 1)
 	samples.record("scans/active-running", call(http.MethodGet, "/api/v1/scans/active", nil, admin), http.StatusOK)
 	samples.record("scans/get-running", call(http.MethodGet, "/api/v1/scans/"+firstScan, nil, admin), http.StatusOK)
-	samples.record("scans/start-existing", call(http.MethodPost, "/api/v1/scans", map[string]any{}, admin), http.StatusOK)
+	samples.record("scans/start-existing", call(http.MethodPost, "/api/v1/scans", nil, admin), http.StatusOK)
 	unavailableA := libraryA + "-unavailable"
 	if err := os.Rename(libraryA, unavailableA); err != nil {
 		t.Fatalf("暂时移走登记根：%v", err)
@@ -285,7 +285,7 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	samples.record("library-roots/list", call(http.MethodGet, "/api/v1/library-roots", nil, admin), http.StatusOK)
 
 	// 第二次扫描只覆盖启用的目录，成功结束；此后才有发行组。
-	second := call(http.MethodPost, "/api/v1/scans", map[string]any{}, admin)
+	second := call(http.MethodPost, "/api/v1/scans", nil, admin)
 	if second.Code != http.StatusAccepted {
 		t.Fatalf("start second scan: HTTP %d: %s", second.Code, second.Body.String())
 	}
@@ -475,7 +475,7 @@ func recordAudioAnalysisSamples(t *testing.T, application *integrationTestApplic
 	if err := os.WriteFile(filepath.Join(analysisRoot, "01.flac"), playableFixture, 0o644); err != nil {
 		t.Fatalf("write playable analysis fixture: %v", err)
 	}
-	started := call(http.MethodPost, "/api/v1/scans", map[string]any{}, admin)
+	started := call(http.MethodPost, "/api/v1/scans", nil, admin)
 	if started.Code != http.StatusAccepted {
 		t.Fatalf("start analysis fixture scan: HTTP %d: %s", started.Code, started.Body.String())
 	}
@@ -666,7 +666,7 @@ func recordAlbumDetailSamples(t *testing.T, application *integrationTestApplicat
 	if err := os.WriteFile(filepath.Join(cueDirectory, "album.cue"), []byte(cueSheet), 0o644); err != nil {
 		t.Fatalf("write CUE sheet fixture: %v", err)
 	}
-	started := call(http.MethodPost, "/api/v1/scans", map[string]any{}, admin)
+	started := call(http.MethodPost, "/api/v1/scans", nil, admin)
 	if started.Code != http.StatusAccepted {
 		t.Fatalf("start album scan: HTTP %d: %s", started.Code, started.Body.String())
 	}

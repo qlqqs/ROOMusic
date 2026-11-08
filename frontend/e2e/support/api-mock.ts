@@ -178,6 +178,7 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
         id: uuidOf("d", index),
         scan_run_id: uuidOf("d", index),
         status: "running",
+        mode: "incremental",
         started_at: "2026-01-02T00:00:00Z",
         finished_at: null,
         cancel_requested_at: null,
@@ -421,7 +422,8 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
         return guarded(method, path, true, () => {
           const existing = mock.activeScanId === null ? undefined : mock.scans.get(mock.activeScanId);
           if (existing !== undefined) return json(existing, 200);
-          return json(mock.seedScan({ started_at: now() }, true), 202);
+          const mode = (body as { mode?: ScanDTO["mode"] } | undefined)?.mode ?? "incremental";
+          return json(mock.seedScan({ started_at: now(), mode }, true), 202);
         });
       case "GET /api/v1/users":
         return guarded(method, path, true, () => json({ items: mock.users }));

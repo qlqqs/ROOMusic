@@ -19,7 +19,7 @@ import (
 
 func startScanFeedback(t *testing.T, app *integrationTestApplication, admin *integrationTestUser) string {
 	t.Helper()
-	response := app.request(t, http.MethodPost, "/api/v1/scans", map[string]any{}, admin, nil)
+	response := app.request(t, http.MethodPost, "/api/v1/scans", nil, admin, nil)
 	if response.Code != 202 {
 		t.Fatalf("start scan: HTTP %d: %s", response.Code, response.Body.String())
 	}

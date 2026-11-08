@@ -7,15 +7,17 @@ import { DataTable, Pagination, Panel, QueryContent, Skeleton, VisuallyHidden, t
 import type { ScanDTO } from "../api/decoders";
 import { useScanHistory } from "../hooks/use-scan-history";
 import { scanPhase, skippedFileCount, skippedFilesText } from "../scan-status";
+import { ScanModeTag } from "./scan-mode-tag";
 import { ScanPhaseTag } from "./scan-phase-tag";
 import styles from "./scan-history-section.module.css";
 
-/** 状态标签；成功但跳过了文件时，旁边的“跳过 N 个文件”进入这次扫描的详情看诊断。 */
+/** 状态标签，完整重扫另有标签；成功但跳过了文件时，旁边的“跳过 N 个文件”进入这次扫描的详情看诊断。 */
 function ScanStatusCell({ scan }: { scan: ScanDTO }) {
   const skipped = skippedFileCount(scan);
   return (
     <span className={styles.status}>
       <ScanPhaseTag phase={scanPhase(scan)} />
+      <ScanModeTag mode={scan.mode} />
       {skipped === null ? null : (
         <Link to="/settings/library/scans/$scanId" params={{ scanId: scan.id }}>
           {skippedFilesText(skipped)}

@@ -7,6 +7,10 @@ export type RootStatus = (typeof rootStatuses)[number];
 export const scanStatuses = ["running", "succeeded", "failed", "canceled", "incomplete"] as const;
 export type ScanStatus = (typeof scanStatuses)[number];
 
+/** 扫描模式：incremental 跳过没变的文件与专辑；full 是完整重扫，每个文件重新读取。 */
+export const scanModes = ["incremental", "full"] as const;
+export type ScanMode = (typeof scanModes)[number];
+
 export const rootOperationKinds = ["create", "disable", "restore", "exclude", "unexclude", "relocate"] as const;
 export const rootOperationStatuses = ["succeeded", "failed"] as const;
 
@@ -166,10 +170,12 @@ export type ScanReportStatus = (typeof scanReportStatuses)[number];
 // progress、root_progress 与 report_status 是后来加的字段：旧服务没有它们，按“缺失 = 没有进度与报告”处理，不伪造进度。
 // 本功能上线前的扫描 progress 与 root_progress 为 null、report_status 为 legacy。
 // skipped_files 是这次扫描跳过的文件数（读不了的文件、文件夹与 CUE 各计 1），之前的扫描为 null。
+// mode 必有：增量扫描上线前的扫描为 incremental。
 const scanDecoder = d.object({
   id: d.uuid(),
   scan_run_id: d.uuid(),
   status: d.oneOf(scanStatuses),
+  mode: d.oneOf(scanModes),
   started_at: d.timestamp(),
   finished_at: d.nullable(d.timestamp()),
   cancel_requested_at: d.nullable(d.timestamp()),

@@ -13,6 +13,7 @@ import { isScanFinished, scanPhase, scanPhaseNotes, skippedFileCount, skippedFil
 import { scanFailureMessages } from "./root-messages";
 import styles from "./scan-detail.module.css";
 import { ScanDiagnostics } from "./scan-diagnostics";
+import { ScanModeTag } from "./scan-mode-tag";
 import { ScanPhaseTag } from "./scan-phase-tag";
 import { ScanProgress } from "./scan-progress";
 import { ScanReport } from "./scan-report";
@@ -74,6 +75,7 @@ function ScanStatusPanel({ scan, onShowDiagnostics }: { scan: ScanDTO; onShowDia
         <p role="status">
           <ScanPhaseTag phase={phase} />
         </p>
+        <ScanModeTag mode={scan.mode} />
         {skipped === null ? null : <Button onClick={onShowDiagnostics}>{skippedFilesText(skipped)}</Button>}
       </div>
       <ScanProgress scan={scan} showRoot />

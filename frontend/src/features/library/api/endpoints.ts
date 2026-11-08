@@ -22,6 +22,7 @@ import {
   type RootDTO,
   type RootOperationDTO,
   type ScanDTO,
+  type ScanMode,
   type ScanPageDTO,
   type ScanReportDTO,
 } from "./decoders";
@@ -99,9 +100,12 @@ export function fetchActiveScan(signal?: AbortSignal): Promise<ApiResponse<{ sca
   return apiRequest({ method: "GET", path: "/api/v1/scans/active", signal }, decodeActiveScan);
 }
 
-/** 开始扫描：202 表示新建，200 表示已有扫描在运行（返回的是那一个）。没有请求体与幂等键，重复开始是安全的。 */
-export function startScan(): Promise<ApiResponse<ScanDTO>> {
-  return apiRequest({ method: "POST", path: "/api/v1/scans" }, decodeScan);
+/**
+ * 开始扫描：202 表示新建，200 表示已有扫描在运行（返回的是那一个，不论请求的模式）。没有幂等键，重复开始是安全的。
+ * 增量扫描不发请求体；完整重扫发 {"mode":"full"}。
+ */
+export function startScan(mode: ScanMode = "incremental"): Promise<ApiResponse<ScanDTO>> {
+  return apiRequest({ method: "POST", path: "/api/v1/scans", body: mode === "incremental" ? undefined : { mode } }, decodeScan);
 }
 
 /** 扫描记录（仅管理员）：按开始时间倒序分页，page 从 1 起。 */

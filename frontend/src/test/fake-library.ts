@@ -165,7 +165,7 @@ export function installLibraryApi(api: FakeApi, overrides: Partial<FakeLibrary> 
       pagination: { page, page_size: pageSize, total: ordered.length },
     });
   });
-  api.on("POST", "/api/v1/scans", () => {
+  api.on("POST", "/api/v1/scans", (request) => {
     if (library.startScanFailure !== null) return library.startScanFailure.clone();
     const existing = activeScan();
     if (existing !== null) return jsonResponse(200, existing);
@@ -173,6 +173,7 @@ export function installLibraryApi(api: FakeApi, overrides: Partial<FakeLibrary> 
       id: uuidOf("c", nextScan),
       scan_run_id: uuidOf("c", nextScan),
       status: "running",
+      mode: (request.body as { mode?: ScanDTO["mode"] } | undefined)?.mode ?? "incremental",
       started_at: now(),
       finished_at: null,
       cancel_requested_at: null,
@@ -214,6 +215,7 @@ export function seedScan(library: FakeLibrary, overrides: Partial<ScanDTO> = {},
     id: uuidOf("d", index),
     scan_run_id: uuidOf("d", index),
     status: "running",
+    mode: "incremental",
     started_at: "2026-01-02T00:00:00Z",
     finished_at: null,
     cancel_requested_at: null,

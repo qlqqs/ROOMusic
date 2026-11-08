@@ -24,7 +24,7 @@ FILE "image.wav" WAVE
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	document, err := ParseCueDocument(path)
+	document, err := ParseCueDocument(path, AudioDuration)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestCueArtistEvidenceRejectsOversizedAndCombinedValues(t *testing.T) {
 			if err := os.WriteFile(path, []byte(cue.String()), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			_, err := ParseCueDocument(path)
+			_, err := ParseCueDocument(path, AudioDuration)
 			if (err == nil) != tc.valid {
 				t.Fatalf("valid=%t，err=%v", tc.valid, err)
 			}

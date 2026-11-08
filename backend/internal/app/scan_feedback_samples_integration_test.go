@@ -99,11 +99,11 @@ func TestPostgreSQLScanFeedbackAPIResponseSamples(t *testing.T) {
 	if _, err = holder.Exec(`LOCK TABLE library_roots IN ACCESS EXCLUSIVE MODE`); err != nil {
 		t.Fatal(err)
 	}
-	started := call(http.MethodPost, "/api/v1/scans", map[string]any{}, &admin)
+	started := call(http.MethodPost, "/api/v1/scans", nil, &admin)
 	samples.record("scan-feedback/start-created", started, 202)
 	scanID := decodeJSONMap(t, started)["id"].(string)
 	waitForLockWaiters(t, app.database, 1)
-	samples.record("scan-feedback/start-existing", call(http.MethodPost, "/api/v1/scans", map[string]any{}, &admin), 200)
+	samples.record("scan-feedback/start-existing", call(http.MethodPost, "/api/v1/scans", nil, &admin), 200)
 	samples.record("scan-feedback/cancel-requested", call(http.MethodPost, "/api/v1/scans/"+scanID+"/cancel", nil, &admin), 202)
 	if err = holder.Rollback(); err != nil {
 		t.Fatal(err)

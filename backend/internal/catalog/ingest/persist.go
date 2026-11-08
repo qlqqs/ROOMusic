@@ -217,7 +217,7 @@ func (candidate OrganizedCandidate) orderedTracks() []OrganizedTrack {
 // EmbeddedArtwork 返回按碟序、曲序第一首带内嵌封面的曲目观察；没有则 ok 为 false。
 func (candidate OrganizedCandidate) EmbeddedArtwork() (SourceObservation, bool) {
 	for _, track := range candidate.orderedTracks() {
-		if len(track.Observation.Artwork) > 0 {
+		if len(track.Observation.Artwork) > 0 || track.Observation.ArtworkDeferred {
 			return track.Observation, true
 		}
 	}

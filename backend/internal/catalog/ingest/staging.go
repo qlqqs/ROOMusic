@@ -38,16 +38,18 @@ func StageObservation(ctx context.Context, database StagingDB, scanID, rootID st
 	scope := OrganizationScope(observation)
 	// 每个逻辑 scope 只暂存一份确定性的 embedded artwork；folder artwork 要等到
 	// Release id 确定后再发现和绑定。
-	if len(observation.Artwork) > 0 {
+	if len(observation.Artwork) > 0 || observation.ArtworkDeferred {
 		var alreadyStaged bool
 		if err := database.QueryRowContext(ctx, `SELECT EXISTS (
 			SELECT 1 FROM scan_observations WHERE scan_run_id=$1::uuid AND root_id=$2::uuid
-			AND organization_scope=$3 AND observation ? 'artwork')`, scanID, rootID, scope).Scan(&alreadyStaged); err != nil {
+			AND organization_scope=$3 AND (observation ? 'artwork' OR observation ? 'artwork_deferred'))`, scanID, rootID, scope).Scan(&alreadyStaged); err != nil {
 			return err
 		}
 		if alreadyStaged {
 			observation.Artwork = nil
 			observation.ArtworkMIME = ""
+			observation.ArtworkDeferred = false
+			observation.ArtworkRelativePath = ""
 		}
 	}
 	payload, err := json.Marshal(observation)

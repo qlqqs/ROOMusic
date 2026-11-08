@@ -14,7 +14,10 @@ mutex 只保护本进程的 worker 引用。
 
 - 扫描状态枚举：`running | succeeded | failed | canceled | incomplete`。
 - `POST /api/v1/scans`：管理员启动扫描；新建时返回 `202`，已有本进程或其他进程的
-  活动扫描时返回该活动 DTO 和 `200`。
+  活动扫描时返回该活动 DTO 和 `200`，不改变原扫描模式。
+  空请求体（无请求体或 `Content-Length: 0`）等价于 `{"mode":"incremental"}`；有体严格解码单字段对象 `{"mode":"incremental"}` 或 `{"mode":"full"}`，未知字段、缺少 mode、其他值或无效 JSON 返回 `400 invalid_input`。
+- `Service.StartScan(ctx, options ...StartOptions)` 接受零个或一个 `StartOptions{Mode string}`，省略时默认增量；HTTP 总是传显式模式，再传至 worker、root 与 `ingest.PlanOptions`。`scanRoot` 保留默认增量入口，转调 `scanRootWithOptions`，避免其他线调用处的无谓变更；full 与 incremental 共用协调锁，不另开 HTTP 入口。
+- `0036` 增加 `scan_runs.scan_mode TEXT NOT NULL DEFAULT 'incremental' CHECK (scan_mode IN ('incremental','full'))`；历史记录默认增量，下行删除列。
 - `GET /api/v1/scans`：管理员查询扫描记录（F3），`page`（默认 1）、`page_size`（默认 20，最大 100），按
   `started_at DESC, id DESC` 排序；响应 `{ "items": [ScanDTO], "pagination": { "page", "page_size", "total" } }`。
 - `GET /api/v1/scans/active`：已登录用户查询活动扫描，返回
@@ -39,13 +42,14 @@ mutex 只保护本进程的 worker 引用。
 
 ## 3. 请求、响应与生命周期合同
 
-`ScanDTO` 的原有七个 JSON 字段为（M5 增量字段见下文）：
+`ScanDTO` 的基础 JSON 字段如下（M5 进度/报告字段见下文）：
 
 ```json
 {
   "id": "uuid",
   "scan_run_id": "uuid",
   "status": "running | succeeded | failed | canceled | incomplete",
+  "mode": "incremental | full",
   "started_at": "RFC 3339 timestamp",
   "finished_at": "RFC 3339 timestamp | null",
   "cancel_requested_at": "RFC 3339 timestamp | null",
@@ -54,6 +58,7 @@ mutex 只保护本进程的 worker 引用。
 }
 ```
 
+- `mode` 是所有入口、所有角色的必需字段，只接受 `incremental` 或 `full`；列表、详情、活动、启动、取消响应使用同一 presenter，历史记录为 `incremental`。完整重扫绕过解析缓存读取和指纹借用，仍写缓存；其余语义见[目录与扫描流程合同](./library-scan-contracts.md)。
 - `skipped_files` 是所有角色共用 presenter 的必需字段：非负 JS 安全整数或 null；历史扫描为 null，新扫描从 0 起，按文件/目录/CUE 保住登记计数，不受诊断上限影响。随进度及终态写入，大于零不改变 succeeded 与 missing 收口规则。
 - `diagnostics` 是必需摘要，`total` 为诊断条目数，`counts` 为 `{ "kind": string, "count": integer }`
   数组；示例为零诊断状态。它不表示已扫描文件数或完成百分比。
@@ -94,6 +99,7 @@ mutex 只保护本进程的 worker 引用。
 | 普通用户读取扫描记录列表 | `403 forbidden`；未登录为 `401` |
 | 扫描记录的 `page`/`page_size` 非法（非整数、小于 1、`page_size` 超过 100、偏移溢出） | `400 invalid_pagination` |
 | 扫描记录读取失败（计数、分页、诊断汇总任一步） | `503 database_unavailable`，不回显 SQL |
+| 有请求体但 mode 缺失/非法、未知字段或 JSON 非法 | `400 invalid_input`，不启动扫描 |
 | 启动获得锁且无活动任务 | 插入一个 `running`，返回 `202` 和新 DTO |
 | 本进程已有活动任务 | 返回同一 DTO 和 `200`，不创建第二行 |
 | 未获锁但可读取其他实例的活动任务 | 返回该 DTO 和 `200`，不等待、不接管 |
@@ -141,7 +147,8 @@ mutex 只保护本进程的 worker 引用。
   旧来源 `present`；成功扫描的所有 root 对账与 `succeeded` 更新一起提交或回滚。
 - 后端并发与生命周期：取消轮询、停机等待、holder 释放和本进程 worker 引用通过
   适用的 `go test -race`；数据库/holder 故障不得继续 stale write。
-- 前端 decoder/UI：上述七个 DTO 字段必需，严格校验时间、状态与诊断摘要；活动空值、取消请求中、
+- 完整重扫 HTTP：空请求体与显式 incremental 等价；full 写入并在全部 DTO 入口返回；非法请求 400；已有活动扫描不因所请求模式不同而创建新行或改模式。
+- 前端 decoder/UI：上述 DTO 字段必需（含 `mode`），严格校验时间、状态与诊断摘要；活动空值、取消请求中、
   `canceled`/`failed`/`incomplete` 文案以及取消失败后的重试入口均有覆盖。
 - 扫描记录（F3，`internal/app/scan_history_integration_test.go`、`internal/platform/httpserver/pagination_test.go`）：401/403、
   分页参数的各种非法值、排序与翻页覆盖全部扫描、条目与 `GET /scans/{id}` 逐项相同、超出末页、读取失败（改名表）返回 503；

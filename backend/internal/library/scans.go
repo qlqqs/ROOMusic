@@ -16,6 +16,8 @@ import (
 var (
 	// ErrScanNotFound 表示指定的扫描不存在。
 	ErrScanNotFound = errors.New("scan not found")
+	// ErrInvalidScanMode 表示扫描模式不受支持。
+	ErrInvalidScanMode = errors.New("invalid scan mode")
 	// ErrCoordinationUnavailable 表示无法取得或确认扫描互斥，因此没有创建扫描。
 	ErrCoordinationUnavailable = errors.New("scan coordination unavailable")
 	// ErrStartFailed 表示已取得扫描互斥，但创建扫描记录失败。
@@ -87,6 +89,7 @@ type Scan struct {
 	ID                string             `json:"id"`
 	ScanRunID         string             `json:"scan_run_id"`
 	Status            string             `json:"status"`
+	Mode              string             `json:"mode"`
 	StartedAt         time.Time          `json:"started_at"`
 	FinishedAt        *time.Time         `json:"finished_at"`
 	CancelRequestedAt *time.Time         `json:"cancel_requested_at"`
@@ -119,7 +122,7 @@ func scanRow(row interface{ Scan(...any) error }) (Scan, error) {
 	var finishedAt, cancelRequestedAt sql.NullTime
 	var skippedFiles sql.NullInt64
 	var feedback feedbackRow
-	destinations := append([]any{&result.ID, &result.Status, &result.StartedAt, &finishedAt, &cancelRequestedAt, &skippedFiles}, feedback.destinations()...)
+	destinations := append([]any{&result.ID, &result.Status, &result.Mode, &result.StartedAt, &finishedAt, &cancelRequestedAt, &skippedFiles}, feedback.destinations()...)
 	err := row.Scan(destinations...)
 	result.ScanRunID = result.ID
 	if finishedAt.Valid {
@@ -138,7 +141,7 @@ func scanRow(row interface{ Scan(...any) error }) (Scan, error) {
 	return result, err
 }
 
-const scanSelectColumns = "id::text,status,started_at,finished_at,cancel_requested_at,skipped_files" + scanFeedbackColumns
+const scanSelectColumns = "id::text,status,scan_mode,started_at,finished_at,cancel_requested_at,skipped_files" + scanFeedbackColumns
 
 // GetScan 读取一次扫描及其诊断汇总；不存在时返回 ErrScanNotFound。
 func (service *Service) GetScan(ctx context.Context, id string) (Scan, error) {
@@ -315,6 +318,16 @@ func safeDiagnosticMessage(kind, _ string) string {
 	}
 }
 
+const (
+	ScanModeIncremental = "incremental"
+	ScanModeFull        = "full"
+)
+
+// StartOptions 选择扫描模式；省略选项时按增量扫描处理。
+type StartOptions struct {
+	Mode string
+}
+
 // StartResult 是 StartScan 的结果：Started 为 true 表示新建了扫描；false 表示已有扫描在运行。
 type StartResult struct {
 	Scan    Scan
@@ -324,7 +337,17 @@ type StartResult struct {
 // StartScan 启动一次扫描；已有扫描在运行（本进程或其他进程）时返回该扫描而不新建。
 // 整个调用持有 scanMutex，所以同一进程内的并发启动请求只会创建一个扫描。
 // 错误带 ErrCoordinationUnavailable（无法协调）或 ErrStartFailed（创建记录失败）；其余为读取扫描状态失败。
-func (service *Service) StartScan(ctx context.Context) (StartResult, error) {
+func (service *Service) StartScan(ctx context.Context, options ...StartOptions) (StartResult, error) {
+	mode := ScanModeIncremental
+	if len(options) > 1 {
+		return StartResult{}, ErrInvalidScanMode
+	}
+	if len(options) == 1 {
+		mode = options[0].Mode
+	}
+	if mode != ScanModeIncremental && mode != ScanModeFull {
+		return StartResult{}, ErrInvalidScanMode
+	}
 	service.scanMutex.Lock()
 	defer service.scanMutex.Unlock()
 	if service.runningScan != "" {
@@ -357,7 +380,7 @@ func (service *Service) StartScan(ctx context.Context) (StartResult, error) {
 		return StartResult{}, fmt.Errorf("%w: %v", ErrStartFailed, err)
 	}
 	scanID := uuid.New()
-	if _, err := transaction.ExecContext(ctx, `INSERT INTO scan_runs(id,status,started_at,feedback_version,phase,progress_bp,phase_completed,phase_total,progress_updated_at,progress_seq,files_counted,files_processed,count_complete,files_changed,roots_total,report_state,skipped_files) VALUES($1::uuid,'running',NOW(),1,'counting',0,0,0,NOW(),0,0,0,false,false,0,'pending',0)`, scanID); err != nil {
+	if _, err := transaction.ExecContext(ctx, `INSERT INTO scan_runs(id,status,started_at,feedback_version,phase,progress_bp,phase_completed,phase_total,progress_updated_at,progress_seq,files_counted,files_processed,count_complete,files_changed,roots_total,report_state,skipped_files,scan_mode) VALUES($1::uuid,'running',NOW(),1,'counting',0,0,0,NOW(),0,0,0,false,false,0,'pending',0,$2)`, scanID, mode); err != nil {
 		_ = transaction.Rollback()
 		_ = execution.close(context.Background())
 		return StartResult{}, fmt.Errorf("%w: %v", ErrStartFailed, err)
@@ -371,7 +394,7 @@ func (service *Service) StartScan(ctx context.Context) (StartResult, error) {
 	service.scanWorkers.Add(1)
 	go func() {
 		defer service.scanWorkers.Done()
-		service.runScan(scanID, execution)
+		service.runScan(scanID, execution, mode)
 	}()
 	scan, err := service.GetScan(ctx, scanID)
 	if err != nil {

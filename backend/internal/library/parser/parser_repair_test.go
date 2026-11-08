@@ -435,7 +435,7 @@ func TestParseCueDocumentSupportsMultiFileMetadataAndIndexRanges(t *testing.T) {
 		t.Fatalf("write CUE fixture: %v", err)
 	}
 
-	document, err := ParseCueDocument(path)
+	document, err := ParseCueDocument(path, AudioDuration)
 	if err != nil {
 		t.Fatalf("parse multi-file CUE: %v", err)
 	}
@@ -488,7 +488,7 @@ func TestParseCueDocumentDecodesSupportedEncodingsAndReportsUnsafeReference(t *t
 			if err := os.WriteFile(path, encodingCase.data, 0o644); err != nil {
 				t.Fatalf("write encoded CUE: %v", err)
 			}
-			document, err := ParseCueDocument(path)
+			document, err := ParseCueDocument(path, AudioDuration)
 			if err != nil {
 				t.Fatalf("parse %s CUE: %v", encodingCase.name, err)
 			}
@@ -503,7 +503,7 @@ func TestParseCueDocumentDecodesSupportedEncodingsAndReportsUnsafeReference(t *t
 	if err := os.WriteFile(unsafePath, []byte(unsafe), 0o644); err != nil {
 		t.Fatalf("write unsafe CUE: %v", err)
 	}
-	document, err := ParseCueDocument(unsafePath)
+	document, err := ParseCueDocument(unsafePath, AudioDuration)
 	if err != nil {
 		t.Fatalf("unsafe FILE should be a diagnostic, not syntax failure: %v", err)
 	}
@@ -536,7 +536,7 @@ func TestParseCueDecoderSupportsGBKShiftJISAndBig5(t *testing.T) {
 			if err := os.WriteFile(path, data, 0o644); err != nil {
 				t.Fatalf("write %s CUE: %v", testCase.name, err)
 			}
-			document, err := ParseCueDocument(path)
+			document, err := ParseCueDocument(path, AudioDuration)
 			if err != nil {
 				t.Fatalf("parse %s CUE: %v", testCase.name, err)
 			}
@@ -561,7 +561,7 @@ func TestParseCueDocumentBoundsInputAndSymlinkContainment(t *testing.T) {
 	if err := oversized.Close(); err != nil {
 		t.Fatalf("close oversized CUE: %v", err)
 	}
-	if _, err := ParseCueDocument(oversizedPath); err == nil {
+	if _, err := ParseCueDocument(oversizedPath, AudioDuration); err == nil {
 		t.Fatal("oversized CUE was accepted")
 	}
 	if _, _, err := decodeCueText([]byte{0xff, 0xfe, 0x00, 0xd8}); err == nil {
@@ -594,7 +594,7 @@ func TestParseCueDocumentBoundsInputAndSymlinkContainment(t *testing.T) {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write path CUE: %v", err)
 	}
-	document, err := ParseCueDocument(path)
+	document, err := ParseCueDocument(path, AudioDuration)
 	if err != nil {
 		t.Fatalf("parse path CUE: %v", err)
 	}
@@ -620,10 +620,10 @@ func TestParseCueDocumentAllowsParentReferenceWithinExplicitRoot(t *testing.T) {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write parent-reference CUE: %v", err)
 	}
-	if document, err := ParseCueDocument(path, libraryRoot); err != nil || document.Files[0].Status != "present" {
+	if document, err := ParseCueDocument(path, AudioDuration, libraryRoot); err != nil || document.Files[0].Status != "present" {
 		t.Fatalf("contained parent reference was rejected: doc=%+v err=%v", document, err)
 	}
-	if document, err := ParseCueDocument(path); err != nil || document.Files[0].Status != "unsafe" {
+	if document, err := ParseCueDocument(path, AudioDuration); err != nil || document.Files[0].Status != "unsafe" {
 		t.Fatalf("default CUE-directory boundary was not conservative: doc=%+v err=%v", document, err)
 	}
 }
@@ -640,7 +640,7 @@ func TestParseCueDocumentRejectsNonRegularReference(t *testing.T) {
 		t.Fatalf("write FIFO-reference CUE: %v", err)
 	}
 
-	document, err := ParseCueDocument(path)
+	document, err := ParseCueDocument(path, AudioDuration)
 	if err != nil {
 		t.Fatalf("non-regular reference should be diagnosed, not fail syntax parsing: %v", err)
 	}
@@ -663,7 +663,7 @@ func TestParseCueDocumentClassifiesMalformedIndexSequences(t *testing.T) {
 	if err := os.WriteFile(duplicatePath, []byte(duplicate), 0o644); err != nil {
 		t.Fatalf("write duplicate-index CUE: %v", err)
 	}
-	if _, err := ParseCueDocument(duplicatePath); err == nil {
+	if _, err := ParseCueDocument(duplicatePath, AudioDuration); err == nil {
 		t.Fatal("duplicate INDEX number was accepted")
 	}
 
@@ -672,7 +672,7 @@ func TestParseCueDocumentClassifiesMalformedIndexSequences(t *testing.T) {
 	if err := os.WriteFile(nonMonotonicPath, []byte(nonMonotonic), 0o644); err != nil {
 		t.Fatalf("write non-monotonic CUE: %v", err)
 	}
-	document, err := ParseCueDocument(nonMonotonicPath)
+	document, err := ParseCueDocument(nonMonotonicPath, AudioDuration)
 	if err != nil {
 		t.Fatalf("non-monotonic INDEX should produce a diagnostic: %v", err)
 	}
@@ -685,7 +685,7 @@ func TestParseCueDocumentClassifiesMalformedIndexSequences(t *testing.T) {
 	if err := os.WriteFile(missingPath, []byte(missing), 0o644); err != nil {
 		t.Fatalf("write missing-index CUE: %v", err)
 	}
-	if document, err := ParseCueDocument(missingPath); err != nil || len(document.Diagnostics) == 0 {
+	if document, err := ParseCueDocument(missingPath, AudioDuration); err != nil || len(document.Diagnostics) == 0 {
 		t.Fatalf("document parser did not retain missing-index diagnostic: doc=%+v err=%v", document, err)
 	}
 	if _, _, err := parseCue(missingPath); err == nil {
@@ -881,7 +881,7 @@ func TestParseCueDocumentFallsBackToSameStemAudioFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	document, err := ParseCueDocument(path)
+	document, err := ParseCueDocument(path, AudioDuration)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -50,7 +50,7 @@ type CueDocument struct {
 }
 
 func parseCue(path string) ([]CueTrack, string, error) {
-	document, err := ParseCueDocument(path)
+	document, err := ParseCueDocument(path, AudioDuration)
 	if err != nil {
 		return nil, "", err
 	}
@@ -65,9 +65,21 @@ func parseCue(path string) ([]CueTrack, string, error) {
 	return document.Tracks, document.Files[0].Path, nil
 }
 
-// ParseCueDocument 保留全部 FILE、sheet 元数据和有界逐引用诊断。可选根目录用于
-// 扫描级 containment，省略时保守限定在 CUE 目录；缺失或不安全的引用仍携带状态。
-func ParseCueDocument(path string, containmentRoot ...string) (CueDocument, error) {
+// CueDurationReader 为已校验的父音频提供时长；扫描器可从解析缓存取得，错误表示时长未知。
+type CueDurationReader func(path string) (float64, error)
+
+// AudioDuration 直接解析音频取得时长，供不使用扫描缓存的调用方显式传入。
+func AudioDuration(path string) (float64, error) {
+	observation, err := ParseAudioFile(path)
+	return observation.DurationSeconds, err
+}
+
+// ParseCueDocument 保留全部 FILE、sheet 元数据和有界逐引用诊断。父音频时长由调用方提供。
+// 可选根目录用于扫描级 containment，省略时保守限定在 CUE 目录；缺失或不安全的引用仍携带状态。
+func ParseCueDocument(path string, duration CueDurationReader, containmentRoot ...string) (CueDocument, error) {
+	if duration == nil {
+		return CueDocument{}, errors.New("CUE duration reader is required")
+	}
 	file, err := os.Open(path)
 	if err != nil {
 		return CueDocument{}, err
@@ -256,7 +268,7 @@ func ParseCueDocument(path string, containmentRoot ...string) (CueDocument, erro
 	}
 	for fileIndex := range document.Files {
 		fileRef := &document.Files[fileIndex]
-		if setCueTrackRanges(document.Tracks, trackFileIDs, fileIndex+1, cueDurationFrames(fileRef)) {
+		if setCueTrackRanges(document.Tracks, trackFileIDs, fileIndex+1, cueDurationFrames(fileRef, duration)) {
 			appendCueDiagnostic(&document, "non-monotonic INDEX 01 in FILE reference: "+fileRef.Path)
 		}
 	}
@@ -339,18 +351,18 @@ func appendCueDiagnostic(document *CueDocument, diagnostic string) {
 	document.Diagnostics = append(document.Diagnostics, diagnostic)
 }
 
-func cueDurationFrames(fileRef *CueFileReference) int {
+func cueDurationFrames(fileRef *CueFileReference, readDuration CueDurationReader) int {
 	if fileRef == nil || fileRef.Status != "present" || fileRef.ResolvedPath == "" {
 		return 0
 	}
-	observation, err := ParseAudioFile(fileRef.ResolvedPath)
-	if err != nil || observation.DurationSeconds <= 0 {
+	duration, err := readDuration(fileRef.ResolvedPath)
+	if err != nil || duration <= 0 {
 		return 0
 	}
-	if observation.DurationSeconds > float64(math.MaxInt32)/75 {
+	if duration > float64(math.MaxInt32)/75 {
 		return 0
 	}
-	return int(math.Round(observation.DurationSeconds * 75))
+	return int(math.Round(duration * 75))
 }
 
 func setCueTrackRanges(tracks []CueTrack, trackFileIDs []int, fileID, parentDuration int) bool {

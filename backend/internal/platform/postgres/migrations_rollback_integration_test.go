@@ -14,6 +14,9 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	36: `INSERT INTO library_parse_cache(root_id,relative_path,directory,source_size,source_modified_at,parser_version,observation,seen_scan_id)
+ VALUES('f1000000-0000-4000-8000-000000000001','album/01.flac','album',128,NOW(),'c1.f1','{}','f2000000-0000-4000-8000-000000000001');
+ UPDATE scan_runs SET scan_mode='full' WHERE id='f2000000-0000-4000-8000-000000000001';`,
 	35: `UPDATE library_roots SET path='/rollback-relocated',revision=2
  WHERE id='f1000000-0000-4000-8000-000000000001';
  INSERT INTO library_root_operations(id,root_id,actor_id,operation_type,status,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id)
@@ -104,7 +107,7 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
  INSERT INTO releases(id,group_id,title,artist) VALUES('c0000000-0000-4000-8000-000000000001',
  'c1000000-0000-4000-8000-000000000001','迁移测试发行','测试艺人');`)
 			}
-			if m.Version == 34 || m.Version == 35 {
+			if m.Version == 34 || m.Version == 35 || m.Version == 36 {
 				// 升级前保留旧类型收据；回退只能移除新类型，不能误删原目录、扫描或操作记录。
 				rollbackExec(t, db, `INSERT INTO users(id,username,password_hash,role)
  VALUES('f0000000-0000-4000-8000-000000000001','rollback-filter-admin','test-only','admin');
@@ -124,6 +127,12 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			}
 			if fixture != "" {
 				rollbackExec(t, db, fixture)
+			}
+			if m.Version == 36 {
+				var mode string
+				if err := db.QueryRow(`SELECT scan_mode FROM scan_runs WHERE id='f2000000-0000-4000-8000-000000000001'`).Scan(&mode); err != nil || mode != "full" {
+					t.Fatalf("0036 新扫描模式夹具：mode=%q err=%v", mode, err)
+				}
 			}
 			if m.Version == 35 {
 				// 改路径是已提交业务状态，下行只删除新类型收据，不恢复旧路径或版本。
