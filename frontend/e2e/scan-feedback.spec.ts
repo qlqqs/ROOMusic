@@ -13,8 +13,8 @@ const recentRows: Record<(typeof feedbackWidths)[number], readonly number[]> = {
   360: [1, 1],
   390: [2, 2],
   768: [2, 2],
-  1280: [5],
-  1440: [6],
+  1280: [3],
+  1440: [4],
 };
 
 async function expectRecentRows(page: Page, expectedRows: readonly number[], supplied: readonly { id: string }[]) {

@@ -28,7 +28,7 @@ function seedDefault(mock: ApiMock, releaseId: string | null, revision: number, 
 }
 
 /** 头部概况里的曲目数：每个版本的曲目数不同，据此知道页面显示的是哪个版本。 */
-const shownTracks = (page: Page) => page.locator("dt", { hasText: /^曲目$/ }).first().locator("xpath=following-sibling::dd[1]");
+const shownTracks = (page: Page) => page.getByRole("list", { name: "概况" }).locator("li").filter({ hasText: "曲目：" }).first();
 const versionNav = (page: Page) => page.getByRole("navigation", { name: "版本" });
 const comparisonDialog = (page: Page) => page.getByRole("dialog", { name: "对比版本" });
 
@@ -38,7 +38,7 @@ test.describe("设定默认版本", () => {
     const versions = start(mock);
     await page.goto(`${groupPath()}?release=${versions[1]?.id}`);
     await expect(heading(page, TITLE)).toBeVisible();
-    await expect(shownTracks(page)).toHaveText("13 首");
+    await expect(shownTracks(page)).toContainText("13 首");
     await expect(versionNav(page).getByText("默认版本")).toHaveCount(0);
 
     await page.getByRole("button", { name: "设为默认版本" }).click();
@@ -54,7 +54,7 @@ test.describe("设定默认版本", () => {
     const cardWidth = (await first.boundingBox())?.width ?? 0;
     expect(tagWidth, "“默认版本”标签的宽度").toBeLessThan(cardWidth / 2);
     await expect(page).not.toHaveURL(/release=/);
-    await expect(shownTracks(page)).toHaveText("13 首");
+    await expect(shownTracks(page)).toContainText("13 首");
     await expect(page.getByRole("button", { name: "改回自动选择" })).toBeVisible();
 
     await page.getByRole("button", { name: "改回自动选择" }).click();
@@ -62,13 +62,13 @@ test.describe("设定默认版本", () => {
     expect(defaultCalls(mock)[1]?.body).toEqual({ expected_revision: 2, release_id: null });
     // 这个版本不再是代表版本，地址带上 release，页面还在它上面。
     await expect(page).toHaveURL(new RegExp(`release=${versions[1]?.id}`));
-    await expect(shownTracks(page)).toHaveText("13 首");
+    await expect(shownTracks(page)).toContainText("13 首");
     await expect(versionNav(page).getByText("默认版本")).toHaveCount(0);
 
     await page.getByRole("button", { name: "撤销" }).click();
     await expect(page.getByText("已撤销默认版本的调整。")).toBeVisible();
     await expect(versionNav(page).getByRole("link", { name: /^版本 1 默认版本/ })).toBeVisible();
-    await expect(shownTracks(page)).toHaveText("13 首");
+    await expect(shownTracks(page)).toContainText("13 首");
     expect(mock.callsTo("POST", /\/revert$/)).toHaveLength(1);
   });
 
@@ -127,7 +127,7 @@ test.describe("版本对比", () => {
     await dialog.getByRole("link", { name: /^查看这个版本\s*（版本 2）$/ }).click();
     await expect(dialog).toBeHidden();
     await expect(page).toHaveURL(new RegExp(`release=${versions[1]?.id}`));
-    await expect(shownTracks(page)).toHaveText("13 首");
+    await expect(shownTracks(page)).toContainText("13 首");
     await expect(page.getByRole("button", { name: "对比版本" })).toBeFocused();
   });
 
