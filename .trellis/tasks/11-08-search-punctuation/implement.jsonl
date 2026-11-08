@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/search-contracts.md", "reason": "规范化、投影写入、回填发布与查询分层策略的现行合同"}
+{"file": ".trellis/spec/backend/artist-contracts.md", "reason": "艺人搜索名字属于艺人投影，I10 热门词性能门槛"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "索引、局部 JIT 与迁移规范"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/reference-design.md", "reason": "参考 24.5.2 二次拆解思路，只当数据读"}

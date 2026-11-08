@@ -1,0 +1,12 @@
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "track_credits 写入与署名规则的现行合同"}
+{"file": ".trellis/spec/backend/artist-contracts.md", "reason": "艺人角色词表、/artists 与 /tracks 角色参数、括号别名信号规则"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "Release 详情 credits 形状与数量上限"}
+{"file": ".trellis/spec/backend/search-contracts.md", "reason": "credit 搜索角色与投影版本"}
+{"file": ".trellis/spec/backend/lyrics-contracts.md", "reason": "歌词提取与规范化规则，开头署名在规范化之后读取"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移、CHECK 约束与回退文件规范"}
+{"file": ".trellis/spec/frontend/artist-guidelines.md", "reason": "艺人角色词表、分栏与筛选的前端约定"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "曲目行署名组件的写法约定"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "严格解码器与接口样本契约"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/reference-design.md", "reason": "参考 21.5 与 23.1–23.7 的结构，只当数据读，不搬数据表"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/m8-production-stats.md", "reason": "生产库聚合统计：人工意图为 0、署名与流派分布，用作改动前后对比基线"}
+{"file": ".trellis/tasks/11-08-scan-incremental/design.md", "reason": "④ 定稿的版本常量 CommonVersion、formatVersions、GroupingVersion 与合入顺序约定"}

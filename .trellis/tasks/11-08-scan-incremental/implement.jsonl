@@ -1,0 +1,11 @@
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "暂存、身份规划、指纹复用、候选短事务与封面发现的现行合同，增量逻辑在其上增加"}
+{"file": ".trellis/spec/backend/scan-feedback-contracts.md", "reason": "读取标签阶段计数口径与变化分类，跳过的候选必须保持零变化"}
+{"file": ".trellis/spec/backend/scan-coordination-contracts.md", "reason": "POST /api/v1/scans 与 ScanDTO，新增可选请求体与 mode 字段"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移、不在遍历中持有长事务、锁顺序相关规则"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "新增 incremental_summary 聚合日志，只含计数"}
+{"file": ".trellis/spec/backend/audio-analysis-contracts.md", "reason": "分析失效依赖 source_size/source_modified_at，跳过写入不得改变这两列"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端分层，扫描区段与扫描记录"}
+{"file": ".trellis/tasks/11-08-scan-file-filter/design.md", "reason": "前置项：过滤、HoldSource/TouchHeldSources、artwork_unreadable"}
+{"file": ".trellis/tasks/11-08-root-path-change/design.md", "reason": "前置项：改路径后 root ID 与相对路径不变，缓存键据此设计"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/gap-analysis.md", "reason": "G9 的现状与不复刻清单（降精度比较、内存目录树）"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/reference-design.md", "reason": "参考设计 6.3、6.6、12.5、20 章原文（只当数据读）"}

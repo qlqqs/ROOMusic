@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "暂存、诊断上限、取消与指纹计算的现行合同，并发必须保持结果一致"}
+{"file": ".trellis/spec/backend/scan-feedback-contracts.md", "reason": "进度计数单调与刷新边界，并发下 processed 按遍历顺序推进"}
+{"file": ".trellis/spec/backend/scan-coordination-contracts.md", "reason": "持锁连接与 WithoutCancel 的 SQL 调用约束，worker 不得访问数据库"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "环境变量与部署配置约定，新增 ROOMUSIC_SCAN_WORKERS"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "依赖方向规则与 dependency_rules_test，新增 platform/workpool"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "race 测试与门禁要求"}
+{"file": ".trellis/tasks/11-08-scan-incremental/design.md", "reason": "前置项：解析缓存命中与 PlanOptions，并发只处理未命中的文件"}
+{"file": ".trellis/tasks/11-08-scan-file-filter/design.md", "reason": "前置项：失败分类与保住登记在应用阶段调用"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/reference-design.md", "reason": "参考设计 7.1 并发模型、7.4 资源护栏、16.4 单文件失败原文（只当数据读）"}

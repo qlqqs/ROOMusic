@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "核对碟目录合成、专辑名剥离、介质标题、封面四轮查找与收藏转移是否已写进合同且与实现一致"}
+{"file": ".trellis/spec/backend/personal-contracts.md", "reason": "核对收藏转移保留时间与保存标题、已收藏不重复、受影响用户 revision 加一、锁序"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "核对迁移 0034 与 down 文件、回退测试版本表"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "核对只跑了最小相关集、集成测试用隔离库"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/gap-analysis.md", "reason": "核对 G4、G5 的复刻点都已覆盖"}
+{"file": ".trellis/tasks/11-08-scan-folder-names/research/m8-name-stats.md", "reason": "核对解析对照表含 [CD]、{…, CD}、BACD-0001 三行不认，且没有中文规则"}

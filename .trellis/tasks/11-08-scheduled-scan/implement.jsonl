@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/scan-coordination-contracts.md", "reason": "StartScan、协调锁、ScanDTO 与生命周期 context 规则，定时扫描必须走同一入口"}
+{"file": ".trellis/spec/backend/backup-management-contracts.md", "reason": "备份的每日调度与设置保存方式，作为定时扫描调度与 PUT 设置的先例"}
+{"file": ".trellis/spec/backend/audio-analysis-contracts.md", "reason": "分析 worker 在扫描期间让路的规则，定时扫描不改它"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "ROOMUSIC_TIMEZONE 与启动装配约定"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移与单行设置表的约束写法"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "scheduled_started/skipped 日志事件"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端分层，扫描区段的开关与下拉"}
+{"file": ".trellis/tasks/11-08-scan-incremental/design.md", "reason": "前置项：StartOptions 与增量模式，定时扫描固定增量"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/reference-design.md", "reason": "参考设计 4.3–4.4 触发职责与 26.6 文件监听原文（只当数据读）"}

@@ -1,0 +1,10 @@
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "署名拆分规则、暂存观察与候选写入的现行合同，本项要同步改拆分段"}
+{"file": ".trellis/spec/backend/artist-contracts.md", "reason": "艺人事实刷新、名字键、人工意图与版本门禁；合辑占位不建发行级事实"}
+{"file": ".trellis/spec/backend/search-contracts.md", "reason": "搜索投影版本与回填协议，多名值按新拆分重建"}
+{"file": ".trellis/spec/backend/genre-contracts.md", "reason": "流派拆分另有裁决，本项不得顺手改 SplitGenres"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "事务、锁顺序与查询规范"}
+{"file": ".trellis/spec/guides/real-music-assets.md", "reason": "样本库只读与测试隔离边界"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/gap-analysis.md", "reason": "参考设计与现状对照、章节行号索引"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/reference-design.md", "reason": "参考规则原文（21.3、21.4、21.7、22.10），只当数据读"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/m8-production-stats.md", "reason": "生产库聚合统计：人工意图为 0、署名与流派分布，用作改动前后对比基线"}
+{"file": ".trellis/tasks/11-08-scan-incremental/design.md", "reason": "④ 定稿的版本常量 CommonVersion、formatVersions、GroupingVersion 与合入顺序约定"}

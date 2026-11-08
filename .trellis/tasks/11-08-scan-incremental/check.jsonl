@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "核对增量一节、版本号与升版本规则、借用指纹条件已写入"}
+{"file": ".trellis/spec/backend/scan-feedback-contracts.md", "reason": "核对跳过候选与命中缓存不改变计数与报告"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量门禁"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质量门禁"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/gap-analysis.md", "reason": "核对复刻表的不采用项与 gap-analysis §4 一致"}

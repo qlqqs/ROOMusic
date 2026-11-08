@@ -1,0 +1,4 @@
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/gap-analysis.md", "reason": "参考设计与 ROOMusic 的差距对照、采纳与不复刻清单，各子项的总依据"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/m8-production-stats.md", "reason": "生产库只读统计：没有人工意图与收藏，决定了 smoke 只在本机 music/ 上跑"}
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "扫描合同，S/O/T/M 四线都会改，合入时核对不互相矛盾"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移重新编号与上下行规则"}

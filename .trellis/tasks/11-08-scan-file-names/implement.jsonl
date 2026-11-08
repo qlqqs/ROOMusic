@@ -1,0 +1,10 @@
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "位置 fallback、inferred 标记、同目录分组与 same_dir_split 的现行合同，本项要改并同步"}
+{"file": ".trellis/spec/backend/default-version-contracts.md", "reason": "按格式切分的版本加入同一组时，扫描不碰组的两列、代表版本规则不变"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "candidate_kind 读取白名单与发行详情字段，新种类 format_split"}
+{"file": ".trellis/spec/backend/artist-contracts.md", "reason": "inferred 曲目艺人与 Release 艺人的整理规则，第 9 节待裁决涉及 facts.go"}
+{"file": ".trellis/spec/backend/scan-feedback-contracts.md", "reason": "候选写入锁顺序，新 Release 加入已有组只取组共享锁"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "前端标签表与文案约定（只加一个归组方式名称）"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "隔离 PostgreSQL 集成测试入口"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/gap-analysis.md", "reason": "G6、G7 的现状 file:line 与取舍"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/reference-design.md", "reason": "复刻对照表引用的 12.2、12.3、21.12、22.9 原文（只当数据读）"}
+{"file": ".trellis/tasks/11-08-scan-file-names/research/m8-filename-stats.md", "reason": "八号机文件名形状统计与定稿结论：3/4 位分支保留，按格式切分靠单测覆盖"}

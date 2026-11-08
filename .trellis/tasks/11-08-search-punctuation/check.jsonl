@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/search-contracts.md", "reason": "核对三分支、六层排名与计数探测语义一致"}
+{"file": ".trellis/spec/backend/artist-contracts.md", "reason": "核对名字键未变、I10 复测结果"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "代码质量与测试范围要求"}

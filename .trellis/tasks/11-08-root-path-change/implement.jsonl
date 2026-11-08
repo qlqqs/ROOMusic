@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "目录新增、停用、恢复的幂等与指纹规则，改路径沿用同一流程"}
+{"file": ".trellis/spec/backend/scan-coordination-contracts.md", "reason": "扫描协调锁的键与持有方式，改路径事务要探测同一把锁"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "revision 比较更新、幂等键作用域与 READ COMMITTED 事务规则"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "新增 409 scan_running、path_already_registered，路径错误不泄露允许根"}
+{"file": ".trellis/spec/backend/library-folder-contracts.md", "reason": "前端选新位置复用目录浏览接口"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端分层，目录表行操作与对话框"}
+{"file": ".trellis/tasks/11-08-scan-file-filter/design.md", "reason": "前置项：排除项为相对路径、目录 DTO 含 excluded_paths、操作类型约束已放宽"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/reference-design.md", "reason": "参考设计 11.2 相对路径标识、26.4.3 卷标识原文（只当数据读）"}

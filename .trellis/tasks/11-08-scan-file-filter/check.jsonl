@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "核对完整性矩阵与保住语义已同步，仍不完整的情况未被放宽"}
+{"file": ".trellis/spec/backend/scan-feedback-contracts.md", "reason": "核对预计数与遍历同一过滤、skipped_files 口径"}
+{"file": ".trellis/spec/backend/library-folder-contracts.md", "reason": "核对目录内浏览模式的鉴权顺序与错误矩阵"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量门禁与测试要求"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质量门禁"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/gap-analysis.md", "reason": "对照复刻表与 G1/G2/G3/G8 的取舍是否一致"}

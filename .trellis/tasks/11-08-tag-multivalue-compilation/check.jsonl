@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "核对拆分规则与错误矩阵已同步、固定组合与 AlbumArtist 优先级未破坏"}
+{"file": ".trellis/spec/backend/artist-contracts.md", "reason": "核对扫描不写人工意图、ArtistRefsReady 用共享版本常量"}
+{"file": ".trellis/spec/backend/search-contracts.md", "reason": "核对 textnorm.Version 未变、投影版本只升一次"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "代码质量与测试范围要求"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/gap-analysis.md", "reason": "对照复刻表引用的参考章节是否准确"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/m8-production-stats.md", "reason": "核对 smoke 预期与生产库统计一致"}

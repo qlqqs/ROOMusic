@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/scan-coordination-contracts.md", "reason": "核对定时扫描一节、trigger 字段与设置接口错误矩阵已写入"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量门禁"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质量门禁"}
+{"file": ".trellis/spec/backend/backup-management-contracts.md", "reason": "核对与备份调度的错开与装配方式一致"}

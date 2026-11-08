@@ -1,0 +1,10 @@
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "扫描完整性、校验矩阵、CUE 回退与封面发现的现行合同，本项要改写其中的完整性定义"}
+{"file": ".trellis/spec/backend/scan-feedback-contracts.md", "reason": "预计数口径与进度刷新，跳过计数随进度写入，预计数需与遍历共用过滤函数"}
+{"file": ".trellis/spec/backend/scan-coordination-contracts.md", "reason": "ScanDTO 字段与终态事务，新增 skipped_files 字段"}
+{"file": ".trellis/spec/backend/library-folder-contracts.md", "reason": "目录浏览接口，新增 root_id 目录内模式"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移、目录操作幂等与事务规则"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "新增 409 exclusion_limit 与路径错误的安全响应"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "扫描日志事件命名与不记录绝对路径"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端分层与质量要求，排除子文件夹界面与诊断类别名"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/gap-analysis.md", "reason": "G1/G2/G3/G8 的现状 file:line 与取舍理由"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/reference-design.md", "reason": "参考设计 8.3、14、16、26.7.3 章原文（只当数据读）"}

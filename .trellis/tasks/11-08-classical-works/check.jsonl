@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/search-contracts.md", "reason": "核对 work_title/work_catalog 的传播不泄漏兄弟轨署名"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "核对 work 字段写入合同且只在分组时非空"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端测试范围与截图复核要求"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/reference-design.md", "reason": "逐条核对 22.12 第 1–14 条不变式与 22.7.9 样例"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/m8-production-stats.md", "reason": "核对 smoke 预期与生产库统计一致"}

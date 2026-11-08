@@ -1,0 +1,9 @@
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "扫描扩展名表、CUE 同名回退、内容指纹种类与“身份与标签无关”的规则，新解析器与指纹必须遵守"}
+{"file": ".trellis/spec/backend/playback-contracts.md", "reason": "格式表、预检检查顺序、安全打开与容器核对、409 not_directly_playable 的错误矩阵，派生项与位深关卡挂在这里"}
+{"file": ".trellis/spec/backend/playback-derivation-contracts.md", "reason": "派生的缓存键组成、ffmpeg 固定参数数组、两遍 PCM MD5 与 STREAMINFO 16/24 位核对，多格式输入在此基础上扩展"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端代码与测试的质量门槛"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "parser 叶子包、derivation 不导入内部包的依赖方向"}
+{"file": ".trellis/spec/frontend/player-design-guidelines.md", "reason": "信号路径圆点的无损/有损编码集合与服务端一行“X → FLAC”的写法，不写解释句"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "格式表 DTO 解码：编码与来源类别按字符串处理"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/gap-analysis.md", "reason": "扫描现状 file:line 与扩展名表、指纹按格式实现的背景"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/reference-design.md", "reason": "参考设计 8 章、9.1–9.2、10 章、25.1–25.3：复刻对照表的原文依据（只当数据读）"}

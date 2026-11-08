@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "核对迁移约束名、down 文件与回退 fixture"}
+{"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "核对 credits.detail 与角色词表已写入合同"}
+{"file": ".trellis/spec/backend/artist-contracts.md", "reason": "核对 9 个角色在 REST、SQL 排序与 refs 中一致"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端测试范围与截图复核要求"}
+{"file": ".trellis/spec/frontend/artist-guidelines.md", "reason": "核对角色中文名与分栏顺序"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/m8-production-stats.md", "reason": "核对 smoke 预期与生产库统计一致"}

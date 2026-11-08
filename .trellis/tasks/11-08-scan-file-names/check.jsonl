@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "核对位置优先级、文件名五级与同目录采信、标题清洗、连续性合并、按格式切分是否写进合同且与实现一致"}
+{"file": ".trellis/spec/backend/default-version-contracts.md", "reason": "核对第 7 节已写明扫描新建发行可加入已有组、仍不移动已有发行"}
+{"file": ".trellis/spec/backend/artist-contracts.md", "reason": "核对文件名艺人按裁决进或不进艺人页"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "核对前端只改标签表与对应测试，没有多余说明"}
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/gap-analysis.md", "reason": "核对 G6、G7 的复刻点都已覆盖"}
+{"file": ".trellis/tasks/11-08-scan-file-names/research/m8-filename-stats.md", "reason": "核对 smoke 列出了实际被拆艺人的文件，3/4 位分支仍在"}

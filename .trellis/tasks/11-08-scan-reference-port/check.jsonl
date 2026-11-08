@@ -1,0 +1,4 @@
+{"file": ".trellis/tasks/11-08-scan-reference-port/research/gap-analysis.md", "reason": "收尾时核对各子项是否覆盖 G1–G10 且没有引入“不复刻”清单里的做法"}
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "收尾复查扫描合同的各段描述一致"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "收尾核对测试只覆盖改动行为、没有多余兜底"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "收尾截图复核与前端文案规则"}
