@@ -28,11 +28,13 @@ hook 里，展示在组件里。按 [Classical 设计依据](../../../frontend/D
 
 | 组件 | 约定 |
 | --- | --- |
-| `Page`、`Panel`、`StatList` | `Page` 渲染唯一的 `h1`（并设置“页面名 · ROOMusic”标题），标题很长时 `compactTitle` 降一级字号（M1b：专辑名超过 80 个字符），完整显示并换行；`Panel` 是带标题的区段，给 `headingRef` 时标题可以被程序聚焦（`tabIndex=-1`，不进 Tab 顺序）；`StatList` 显示数值，数据值用 `tabular-nums` |
+| `Page`、`Panel`、`StatList` | `Page` 渲染唯一的 `h1`（并设置“页面名 · ROOMusic”标题），标题很长时 `compactTitle` 降一级字号（M1b：专辑名超过 80 个字符），完整显示并换行；给 `header` 时它替换默认页头（标题、说明与操作），由它渲染唯一的 `h1`，文字与 `title` 相同（歌单与我喜欢的音乐的封面页头，2026-11-08）；`Panel` 是带标题的区段，给 `headingRef` 时标题可以被程序聚焦（`tabIndex=-1`，不进 Tab 顺序）；`StatList` 显示数值，数据值用 `tabular-nums` |
 | `QueryContent` | 数据区块的首次加载（保留结构的 `Skeleton`，不画成空库）、失败（带请求 ID 的 `FailureNotice` 与重试）、成功，以及“刷新失败但还有旧数据”（旧数据继续显示，错误在其上方）；它只依赖最小的查询形状，不依赖查询库 |
 | `Notice`、`FailureNotice` | 行内状态或错误，由图标与文字表达，不靠颜色；错误 `role="alert"`，其余 `role="status"`；可附请求 ID 与下一步操作；**不使用全局 toast**，结果就近显示在操作区 |
-| `Button`、`TextField` | `Button` 有主要 / 次要 / 只有图标三种外观（`primary | secondary | icon`），只有图标时必须给 `label`，同时用作 `aria-label` 与悬停提示 `title`；忙碌态不设 `disabled`（焦点留在按钮上），点击被忽略并设置 `aria-busy`，文案由调用方改成“正在…”；`TextField` 的 label、说明与错误经 `aria-describedby` 关联，错误同时设置 `aria-invalid` |
+| `Button`、`TextField` | `Button` 有主要 / 次要 / 只有图标三种外观（`primary | secondary | icon`），只有图标时必须给 `label`，用作 `aria-label`，也是悬停提示的文字（`tooltip` 可另给提示文字，如心形状态未读到时的说明）；不用原生 `title`（2026-11-08 起）；忙碌态不设 `disabled`（焦点留在按钮上），点击被忽略并设置 `aria-busy`，文案由调用方改成“正在…”；`TextField` 的 label、说明与错误经 `aria-describedby` 关联，错误同时设置 `aria-invalid` |
 | `StatusTag` | 文字加图标，不只靠颜色 |
+| `useTooltip`（2026-11-08） | 图标按钮与图标链接的悬停提示：返回 `triggerProps`（放到触发元素上）与 `tooltip`（渲染在触发元素旁）。只响应鼠标，停留 300ms 显示，移开、按下、Esc、滚动或窗口缩放立即消失，按下后要移出再移入才会再出现；键盘焦点不弹，提示 `aria-hidden`（读屏靠 `aria-label`）。浮层 fixed 定位，渲染到 `trigger.closest("dialog") ?? document.body`，不被表格、播放器栏裁掉，默认在上方、放不下翻到下方。`Button variant="icon"`（含 `MenuButton iconOnly`）、心形、侧栏展开按钮都用它；新加的图标控件也用它，不写 `title` |
+| `Avatar`（2026-11-08） | 圆形头像，内容是用户名的第一个字素（拉丁字母大写）；装饰性（`aria-hidden`），旁边总要写出用户名。用户菜单与歌单页头共用 |
 | `ModalDialog`、`ConfirmDialog` | 原生 `<dialog>` 的模态：有可访问名称，打开时焦点进入（确认对话框初始焦点在“取消”，避免回车直接确认），Esc 与取消可关闭，关闭后焦点回到触发按钮；提交中确认忙碌、取消与 Esc 暂时无效；阻塞性错误留在对话框内。子内容只在打开时渲染，关闭即丢弃其中的私有状态 |
 | `DataTable` | 真正的 `<table>`（有 caption、`rowHeader`）；以**容器宽度**（CSS 容器查询，小于 640px）而不是视口宽度决定是否堆叠成“标签：值”，因为带侧栏时 768px 视口里内容区只有约 500px；不产生任何横向滚动（局部滚动区需要可聚焦，会引入额外的无障碍负担） |
 | `Disclosure`（M3） | 页面底部折叠的区块（“来源与证据”“修改记录”）：原生 `<details>` 的展开状态由 React 持有，**折叠时不渲染内容**（没有可聚焦的隐藏控件，内容里的请求也在展开后才发出），展开时挂载；标题行是原生 `summary`（Enter 与空格展开），可经 `summaryRef` 取到，区块外的操作结束后可把焦点带回；换对象时用 `key` 回到折叠 |
@@ -43,7 +45,7 @@ hook 里，展示在组件里。按 [Classical 设计依据](../../../frontend/D
 - 外壳有“跳到主要内容”链接、`nav` 与 `main` 地标；导航用链接，当前页有 `aria-current`；窄屏的“菜单”按钮打开原生 `<dialog>` 模态导航，
   打开时焦点进入，Esc 关闭并把焦点还给“菜单”按钮，选择链接后关闭。
 - 设置页布局与旧地址重定向见[状态规范](./state-management.md)“URL State”。
-- 外壳底部是用户菜单（`app/shell/user-menu.tsx`）：一整行按钮（首字头像、用户名、角色），可访问名称显式写 `aria-label="用户名 角色"`（`.who` 是 grid，空白文本节点不可靠）；
+- 外壳底部是用户菜单（`app/shell/user-menu.tsx`）：一整行按钮（`Avatar` 首字头像、用户名、角色），可访问名称显式写 `aria-label="用户名 角色"`（`.who` 是 grid，空白文本节点不可靠）；
   菜单向上弹出“设置 / 退出登录”；在 `/settings/*` 时这一行有当前样式（`data-current`，不加 `aria-current`）；退出失败的提示在按钮上方同一 section 内。
   窄屏对话框里用户区贴底（内容区纵向 flex + `margin-top: auto`），选“设置”先关菜单再关对话框。
 - 菜单用 `useMenu`（`shared/ui/menu-button.tsx`）：`placement: "above" | "below"`、`matchTriggerWidth`、菜单项 `icon`（不进可访问名称）；
@@ -90,7 +92,7 @@ hook 里，展示在组件里。按 [Classical 设计依据](../../../frontend/D
 | `AlbumCard`、`AlbumGrid` | 整张卡片是一个 `Link`（里面没有按钮），可访问名称含标题与艺人，标题最多 3 行（`line-clamp`，完整文字仍在 DOM 里）；网格 `repeat(auto-fill, minmax(160px, 1fr))`；“N 个版本”只在 `release_count > 1` 时出现，单版本组没有版本字样 |
 | `AlbumFilters`、`AlbumListView` | `<form role="search">`：搜索词显式提交，清除后焦点回到输入框，字节超限在字段旁说明现状；“只看需要关注”立即生效。结果数用 `aria-live="polite"`，“正在更新…”只给看得见的人；翻页时旧结果保持可见并标 `aria-busy`；点页码链接时滚到结果标题并聚焦 |
 | `AlbumDetailView` | 页面标题与 h1 取决于选中的版本，所以详情自己渲染 `Page`（路由组件不包 `Page`）；头部用组详情里的摘要先渲染，曲目区单独显示加载态；选中的版本读详情得到 404 时就地提示并给出办法，不影响页面其余部分 |
-| `AlbumHeader`、`VersionNav` | 头部是封面加概况（年份未知写“未知”，流派与总时长有才写，有一首曲目时长未知就不写总时长）；版本导航是 `<nav aria-label="版本">` 里的链接，不是 ARIA 标签页，各版本标题不同时才附标题；生效中的默认版本带 `DefaultVersionTag`（M4，所有成员可见，自动选择时没有），标题旁的“对比版本”打开对比对话框 |
+| `AlbumHeader`、`VersionNav` | 头部是封面加概况：一行灰色小字、细竖线分隔、只写值（`ul[aria-label="概况"]`，每项带只给读屏的“年份：”等标签；年份未知不写，介质多于 1 张才写“N 张碟”，流派与总时长有才写，有一首曲目时长未知就不写总时长，总时长用 `formatSpokenDuration` 口语写法；窄屏换行时分隔线不出现在行首，2026-11-08 起）；版本导航是 `<nav aria-label="版本">` 里的链接，不是 ARIA 标签页，各版本标题不同时才附标题；生效中的默认版本带 `DefaultVersionTag`（M4，所有成员可见，自动选择时没有），标题旁的“对比版本”打开对比对话框 |
 | `VersionComparisonDialog`、`ComparisonTable`（M4） | `ModalDialog`，`min(980px, 100vw - 边距)`、最高 90vh，标题行 sticky、内容在对话框内部滚动，初始焦点在标题上；内容只在打开时挂载（打开后才请求）。“字段 × 版本”的真表格（显式 ARIA 角色），以第一列为基准：不同的格加金色下划线并带读屏文字“（与版本 1 不同）”，没有值写“—”加读屏的“没有记录”，有人工修正带 `ManualCorrectionTag`；行的取舍与文字在纯函数 `comparison.ts`（全空的行不出现，标题与专辑艺人只在不同时出现，音频格式写参数不写“最高音质”）；容器窄于 640px 时每个字段堆叠成“版本 N：值”；列头的“查看这个版本”关闭对话框并切换版本 |
 | `ReleaseMedia` | 一张介质时直接是 `<ol role="list">`，多于一张时每张一个 `<section aria-labelledby>` 加“跳到第 N 张”链接（点击把焦点放到分段标题上并滚到视野，不改地址）；分段用 `content-visibility: auto`，占位高度只写块方向的 `contain-intrinsic-block-size`（简写 `contain-intrinsic-size` 带一个值会同时给宽度，窄屏上被跳过的分段有 480px 的固有宽度，整页横向溢出） |
 | `ReleaseFacts`、`EvidenceSection` | 发行信息里没有值的条目不列出；“来源与证据”是 `Disclosure`（折叠时不渲染内容，换版本用 `key` 回到折叠），有人工修正的字段在证据表里标 `ManualCorrectionTag`（“人工修正”，文字加图标）；管理员的“查看完整证据”按钮在展开后才出现，点击后才请求，按钮留在原处（加载中忙碌、之后可重新加载）使焦点不丢 |
