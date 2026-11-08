@@ -1045,7 +1045,7 @@ func (service *Service) saveArtworkForRelease(ctx context.Context, executor scan
 	} else {
 		sourceType = "folder"
 		var discoveryErr error
-		data, mimeType, discoveryErr = discoverFolderArtwork(root.Path, candidate.ArtworkDirectories())
+		data, mimeType, discoveryErr = discoverFolderArtwork(root.Path, candidate.ArtworkDirectories(), root.filter)
 		if errors.Is(discoveryErr, errArtworkSource) {
 			return service.recordDiagnosticWith(ctx, executor, scanID, candidate.Anchor.Scope, "artwork_unreadable", "封面文件读不了")
 		}
@@ -1072,16 +1072,17 @@ var folderArtworkNames = []string{"cover.jpg", "cover.jpeg", "cover.png", "cover
 // folderArtworkSubdirectoryNames 只匹配直接附属子目录，不递归、不跟随目录符号链接。
 var folderArtworkSubdirectoryNames = map[string]bool{"scans": true, "artwork": true, "art": true, "covers": true}
 
-func discoverFolderArtwork(rootPath string, directories []string) ([]byte, string, error) {
-	return discoverFolderArtworkWithReader(rootPath, directories, os.ReadFile)
+func discoverFolderArtwork(rootPath string, directories []string, filter scanFilter) ([]byte, string, error) {
+	return discoverFolderArtworkWithReader(rootPath, directories, os.ReadFile, filter)
 }
 
 // discoverFolderArtworkWithReader 依次查原目录精确名、原目录 front、附属子目录精确名、附属子目录 front。
 // 每轮命中即返回；无效封面记下第一个错误，四轮全部找完仍没有可用封面才报错。
-func discoverFolderArtworkWithReader(rootPath string, directories []string, readFile func(string) ([]byte, error)) ([]byte, string, error) {
+func discoverFolderArtworkWithReader(rootPath string, directories []string, readFile func(string) ([]byte, error), filter scanFilter) ([]byte, string, error) {
 	type artworkDirectory struct {
-		path    string
-		entries []os.DirEntry
+		path         string
+		relativePath string
+		entries      []os.DirEntry
 	}
 	var firstErr error
 	remember := func(err error) {
@@ -1089,7 +1090,8 @@ func discoverFolderArtworkWithReader(rootPath string, directories []string, read
 			firstErr = err
 		}
 	}
-	readDirectory := func(directoryPath string) (artworkDirectory, bool) {
+	readDirectory := func(relativePath string) (artworkDirectory, bool) {
+		directoryPath := filepath.Join(rootPath, filepath.FromSlash(relativePath))
 		entries, err := os.ReadDir(directoryPath)
 		if err != nil {
 			if !errors.Is(err, fs.ErrNotExist) {
@@ -1097,7 +1099,7 @@ func discoverFolderArtworkWithReader(rootPath string, directories []string, read
 			}
 			return artworkDirectory{}, false
 		}
-		return artworkDirectory{path: directoryPath, entries: entries}, true
+		return artworkDirectory{path: directoryPath, relativePath: relativePath, entries: entries}, true
 	}
 	search := func(directory artworkDirectory, exact bool) ([]byte, string) {
 		var names []string
@@ -1115,6 +1117,9 @@ func discoverFolderArtworkWithReader(rootPath string, directories []string, read
 			}
 		}
 		for _, name := range names {
+			if filter.skipFile(name) {
+				continue
+			}
 			data, mimeType, err := readFolderArtworkFile(filepath.Join(directory.path, name), name, readFile)
 			if err != nil {
 				remember(err)
@@ -1127,7 +1132,7 @@ func discoverFolderArtworkWithReader(rootPath string, directories []string, read
 	// 第一轮保持原目录与命名优先级；缓存目录项供第二轮和附属目录发现复用。
 	var originals []artworkDirectory
 	for _, directory := range directories {
-		loaded, ok := readDirectory(filepath.Join(rootPath, filepath.FromSlash(directory)))
+		loaded, ok := readDirectory(directory)
 		if !ok {
 			continue
 		}
@@ -1147,7 +1152,11 @@ func discoverFolderArtworkWithReader(rootPath string, directories []string, read
 			if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || !folderArtworkSubdirectoryNames[strings.ToLower(entry.Name())] {
 				continue
 			}
-			loaded, ok := readDirectory(filepath.Join(directory.path, entry.Name()))
+			relativePath := pathpkg.Join(directory.relativePath, entry.Name())
+			if filter.skipDir(relativePath, entry.Name()) {
+				continue
+			}
+			loaded, ok := readDirectory(relativePath)
 			if !ok {
 				continue
 			}

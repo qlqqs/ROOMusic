@@ -51,7 +51,7 @@ func TestFolderArtworkDoesNotFollowSymlink(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(root, "cover.png")); err != nil {
 		t.Fatalf("create artwork symlink: %v", err)
 	}
-	if data, _, err := discoverFolderArtwork(root, []string{""}); err == nil || len(data) != 0 {
+	if data, _, err := discoverFolderArtwork(root, []string{""}, scanFilter{}); err == nil || len(data) != 0 {
 		t.Fatal("folder artwork symlink was not rejected")
 	}
 }
@@ -61,7 +61,7 @@ func TestFolderArtworkRejectsInvalidNamedCandidate(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "cover.png"), []byte("not an image"), 0o644); err != nil {
 		t.Fatalf("write invalid artwork: %v", err)
 	}
-	if data, _, err := discoverFolderArtwork(root, []string{""}); err == nil || len(data) != 0 {
+	if data, _, err := discoverFolderArtwork(root, []string{""}, scanFilter{}); err == nil || len(data) != 0 {
 		t.Fatal("invalid named artwork was treated as absent")
 	}
 }
@@ -73,7 +73,7 @@ func TestFolderArtworkReadFailureIsReported(t *testing.T) {
 	}
 	_, _, err := discoverFolderArtworkWithReader(root, []string{""}, func(string) ([]byte, error) {
 		return nil, fmt.Errorf("read denied")
-	})
+	}, scanFilter{})
 	if err == nil {
 		t.Fatal("folder artwork read failure was treated as missing artwork")
 	}
@@ -83,7 +83,7 @@ func TestFolderArtworkMatchesNamesCaseInsensitively(t *testing.T) {
 	for _, name := range []string{"Cover.JPG", "FOLDER.Png", "Front.jpeg"} {
 		root := t.TempDir()
 		writeArtworkFile(t, root, name, minimalJPEGArtwork(t))
-		data, mimeType, err := discoverFolderArtwork(root, []string{""})
+		data, mimeType, err := discoverFolderArtwork(root, []string{""}, scanFilter{})
 		if err != nil || len(data) == 0 || mimeType != "image/jpeg" {
 			t.Fatalf("%s was not found: mime=%q err=%v", name, mimeType, err)
 		}
@@ -94,14 +94,14 @@ func TestFolderArtworkCaseOnlyVariantsPreferLowercaseThenByteOrder(t *testing.T)
 	root := t.TempDir()
 	writeArtworkFile(t, root, "cover.png", minimalPNGArtwork())
 	writeArtworkFile(t, root, "Cover.PNG", minimalJPEGArtwork(t))
-	if _, mimeType, err := discoverFolderArtwork(root, []string{""}); err != nil || mimeType != "image/png" {
+	if _, mimeType, err := discoverFolderArtwork(root, []string{""}, scanFilter{}); err != nil || mimeType != "image/png" {
 		t.Fatalf("lowercase variant did not win: mime=%q err=%v", mimeType, err)
 	}
 
 	variants := t.TempDir()
 	writeArtworkFile(t, variants, "Cover.jpg", minimalPNGArtwork())
 	writeArtworkFile(t, variants, "COVER.jpg", minimalJPEGArtwork(t))
-	if _, mimeType, err := discoverFolderArtwork(variants, []string{""}); err != nil || mimeType != "image/jpeg" {
+	if _, mimeType, err := discoverFolderArtwork(variants, []string{""}, scanFilter{}); err != nil || mimeType != "image/jpeg" {
 		t.Fatalf("byte order did not pick COVER.jpg: mime=%q err=%v", mimeType, err)
 	}
 }
@@ -111,7 +111,7 @@ func TestFolderArtworkNamePriorityIgnoresCase(t *testing.T) {
 	writeArtworkFile(t, root, "FRONT.jpg", minimalJPEGArtwork(t))
 	writeArtworkFile(t, root, "Folder.jpg", minimalJPEGArtwork(t))
 	writeArtworkFile(t, root, "COVER.PNG", minimalPNGArtwork())
-	if _, mimeType, err := discoverFolderArtwork(root, []string{""}); err != nil || mimeType != "image/png" {
+	if _, mimeType, err := discoverFolderArtwork(root, []string{""}, scanFilter{}); err != nil || mimeType != "image/png" {
 		t.Fatalf("cover did not outrank folder and front: mime=%q err=%v", mimeType, err)
 	}
 	if err := os.Remove(filepath.Join(root, "COVER.PNG")); err != nil {
@@ -119,7 +119,7 @@ func TestFolderArtworkNamePriorityIgnoresCase(t *testing.T) {
 	}
 	// 同名前缀内按扩展名顺序：folder.jpg 排在 folder.png 与 front.jpg 之前。
 	writeArtworkFile(t, root, "Folder.png", minimalPNGArtwork())
-	if _, mimeType, err := discoverFolderArtwork(root, []string{""}); err != nil || mimeType != "image/jpeg" {
+	if _, mimeType, err := discoverFolderArtwork(root, []string{""}, scanFilter{}); err != nil || mimeType != "image/jpeg" {
 		t.Fatalf("folder.jpg did not outrank folder.png and front: mime=%q err=%v", mimeType, err)
 	}
 }
@@ -128,10 +128,10 @@ func TestFolderArtworkSearchesDirectoriesInOrder(t *testing.T) {
 	root := t.TempDir()
 	writeArtworkFile(t, filepath.Join(root, "Album"), "cover.png", minimalPNGArtwork())
 	writeArtworkFile(t, filepath.Join(root, "Album", "CD1"), "cover.jpg", minimalJPEGArtwork(t))
-	if _, mimeType, err := discoverFolderArtwork(root, []string{"Album", "Album/CD1"}); err != nil || mimeType != "image/png" {
+	if _, mimeType, err := discoverFolderArtwork(root, []string{"Album", "Album/CD1"}, scanFilter{}); err != nil || mimeType != "image/png" {
 		t.Fatalf("earlier directory did not win: mime=%q err=%v", mimeType, err)
 	}
-	if _, mimeType, err := discoverFolderArtwork(root, []string{"Album/CD1", "Album"}); err != nil || mimeType != "image/jpeg" {
+	if _, mimeType, err := discoverFolderArtwork(root, []string{"Album/CD1", "Album"}, scanFilter{}); err != nil || mimeType != "image/jpeg" {
 		t.Fatalf("directory order was ignored: mime=%q err=%v", mimeType, err)
 	}
 }
@@ -140,22 +140,22 @@ func TestFolderArtworkSkipsInvalidFileInEarlierDirectory(t *testing.T) {
 	root := t.TempDir()
 	writeArtworkFile(t, filepath.Join(root, "A"), "cover.png", []byte("not an image"))
 	writeArtworkFile(t, filepath.Join(root, "B"), "cover.png", minimalPNGArtwork())
-	data, mimeType, err := discoverFolderArtwork(root, []string{"A", "B"})
+	data, mimeType, err := discoverFolderArtwork(root, []string{"A", "B"}, scanFilter{})
 	if err != nil || len(data) == 0 || mimeType != "image/png" {
 		t.Fatalf("valid artwork in a later directory was not used: mime=%q err=%v", mimeType, err)
 	}
-	if data, _, err := discoverFolderArtwork(root, []string{"A"}); err == nil || len(data) != 0 {
+	if data, _, err := discoverFolderArtwork(root, []string{"A"}, scanFilter{}); err == nil || len(data) != 0 {
 		t.Fatal("invalid artwork alone was treated as absent")
 	}
 }
 
 func TestFolderArtworkMissingDirectoryIsSkipped(t *testing.T) {
 	root := t.TempDir()
-	if data, mimeType, err := discoverFolderArtwork(root, []string{"missing"}); err != nil || len(data) != 0 || mimeType != "" {
+	if data, mimeType, err := discoverFolderArtwork(root, []string{"missing"}, scanFilter{}); err != nil || len(data) != 0 || mimeType != "" {
 		t.Fatalf("missing directory was not treated as absent: err=%v", err)
 	}
 	writeArtworkFile(t, root, "cover.png", minimalPNGArtwork())
-	if _, mimeType, err := discoverFolderArtwork(root, []string{"missing", ""}); err != nil || mimeType != "image/png" {
+	if _, mimeType, err := discoverFolderArtwork(root, []string{"missing", ""}, scanFilter{}); err != nil || mimeType != "image/png" {
 		t.Fatalf("search stopped at a missing directory: mime=%q err=%v", mimeType, err)
 	}
 }
@@ -164,11 +164,11 @@ func TestFolderArtworkDirectoryReadFailureIsReported(t *testing.T) {
 	root := t.TempDir()
 	// 把“目录”换成普通文件，ReadDir 返回的是 ENOTDIR 而不是“不存在”。
 	writeArtworkFile(t, root, "NotADirectory", []byte("x"))
-	if data, _, err := discoverFolderArtwork(root, []string{"NotADirectory"}); err == nil || len(data) != 0 {
+	if data, _, err := discoverFolderArtwork(root, []string{"NotADirectory"}, scanFilter{}); err == nil || len(data) != 0 {
 		t.Fatal("directory read failure was treated as missing artwork")
 	}
 	writeArtworkFile(t, filepath.Join(root, "Album"), "cover.png", minimalPNGArtwork())
-	if _, mimeType, err := discoverFolderArtwork(root, []string{"NotADirectory", "Album"}); err != nil || mimeType != "image/png" {
+	if _, mimeType, err := discoverFolderArtwork(root, []string{"NotADirectory", "Album"}, scanFilter{}); err != nil || mimeType != "image/png" {
 		t.Fatalf("directory read failure hid a usable cover: mime=%q err=%v", mimeType, err)
 	}
 }
@@ -295,7 +295,7 @@ func TestFolderArtworkFourRoundDecisionTable(t *testing.T) {
 					}
 				}
 				return os.ReadFile(path)
-			})
+			}, scanFilter{})
 			if err != nil {
 				t.Fatalf("discover folder artwork: %v", err)
 			}
@@ -318,7 +318,7 @@ func TestFolderArtworkRecognizesAllSubsidiaryNames(t *testing.T) {
 		t.Run(directory, func(t *testing.T) {
 			root := t.TempDir()
 			writeArtworkFile(t, filepath.Join(root, "A", directory), "Cover (Front).png", minimalPNGArtwork())
-			data, mimeType, err := discoverFolderArtwork(root, []string{"A"})
+			data, mimeType, err := discoverFolderArtwork(root, []string{"A"}, scanFilter{})
 			if err != nil || !bytes.Equal(data, minimalPNGArtwork()) || mimeType != "image/png" {
 				t.Fatalf("subsidiary %q cover: data=%x MIME=%q err=%v", directory, data, mimeType, err)
 			}
@@ -335,7 +335,7 @@ func TestFolderArtworkSkipsSubsidiarySymlink(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(root, "A", "Scans")); err != nil {
 		t.Fatal(err)
 	}
-	data, mimeType, err := discoverFolderArtwork(root, []string{"A"})
+	data, mimeType, err := discoverFolderArtwork(root, []string{"A"}, scanFilter{})
 	if err != nil || len(data) != 0 || mimeType != "" {
 		t.Fatalf("symlink subsidiary was searched: data=%x MIME=%q err=%v", data, mimeType, err)
 	}
