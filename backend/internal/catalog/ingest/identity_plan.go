@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"github.com/qlqq/roomusic/backend/internal/platform/workpool"
 )
 
 // 曲目身份规划：把 root 的暂存观察与在库曲目对上，决定每条保留下来的观察沿用哪条曲目、还是新建。
@@ -17,7 +19,7 @@ import (
 // 规划只做 SQL 与读文件，不持有长事务；结果写在暂存行上，由 PersistCandidate 按行写入。
 
 // Fingerprinter 返回 root 内某个来源文件与标签无关的内容指纹。空串表示该文件没有可识别的内容，
-// 不参与配对与换内容判断；返回错误表示文件内容无法完整读取。
+// 不参与配对与换内容判断；返回错误表示文件内容无法完整读取。并发规划时实现必须允许并发调用。
 type Fingerprinter interface {
 	Fingerprint(ctx context.Context, relativePath string) (string, error)
 }
@@ -48,6 +50,8 @@ type PlanDiagnostic struct {
 type PlanOptions struct {
 	// Mode 为 full 时不借用消失来源的指纹；同来源的状态复用不受影响。
 	Mode string
+	// Concurrency 是指纹读取的并发度；小于等于零时串行计算。
+	Concurrency int
 	// WalkComplete 表示该 root 的遍历完整且没有被取消。只有它为真、且规划中没有指纹失败时才允许配对重绑定。
 	WalkComplete bool
 	// Fingerprinter 用来计算没有免费指纹、也不能复用已存指纹的来源文件；不能为空。
@@ -91,7 +95,7 @@ func PlanStagedRoot(ctx context.Context, database StagingDB, scanID, rootID stri
 			return plan, err
 		}
 	}
-	if err := resolveFingerprints(ctx, database, scanID, rootID, options.Fingerprinter, &plan); err != nil {
+	if err := resolveFingerprints(ctx, database, scanID, rootID, options, &plan); err != nil {
 		return plan, err
 	}
 	if _, err := database.ExecContext(ctx, `UPDATE scan_observations o SET
@@ -207,7 +211,7 @@ func borrowFingerprints(ctx context.Context, database StagingDB, scanID, rootID 
 // resolveFingerprints 为保留下来、还没有指纹的观察补齐指纹：文件大小与修改时间都没变的匹配观察复用已存指纹，
 // 其余（新出现的文件、文件已变化的、迁移后尚未保存指纹的）经 Fingerprinter 计算，同一文件只算一次。
 // 计算失败的文件所在的 scope 暂缓写入。
-func resolveFingerprints(ctx context.Context, database StagingDB, scanID, rootID string, fingerprinter Fingerprinter, plan *RootPlan) error {
+func resolveFingerprints(ctx context.Context, database StagingDB, scanID, rootID string, options PlanOptions, plan *RootPlan) error {
 	reused, err := database.ExecContext(ctx, `UPDATE scan_observations o SET content_fingerprint=t.content_fingerprint
 		FROM tracks t
 		WHERE o.scan_run_id=$1::uuid AND o.root_id=$2::uuid AND o.candidate_key IS NOT NULL AND NOT o.withheld
@@ -246,8 +250,15 @@ func resolveFingerprints(ctx context.Context, database StagingDB, scanID, rootID
 		if len(paths) == 0 {
 			return nil
 		}
-		for _, path := range paths {
-			if err := computeFingerprint(ctx, database, scanID, rootID, fingerprinter, path, plan); err != nil {
+		results, err := workpool.Map(ctx, max(options.Concurrency, 1), paths, func(ctx context.Context, path string) fingerprintResult {
+			value, err := options.Fingerprinter.Fingerprint(ctx, path)
+			return fingerprintResult{value: value, err: err}
+		})
+		if err != nil {
+			return err
+		}
+		for index, path := range paths {
+			if err := applyFingerprint(ctx, database, scanID, rootID, path, results[index], plan); err != nil {
 				return err
 			}
 		}
@@ -255,12 +266,17 @@ func resolveFingerprints(ctx context.Context, database StagingDB, scanID, rootID
 	}
 }
 
-func computeFingerprint(ctx context.Context, database StagingDB, scanID, rootID string, fingerprinter Fingerprinter, path string, plan *RootPlan) error {
-	fingerprint, err := fingerprinter.Fingerprint(ctx, path)
+type fingerprintResult struct {
+	value string
+	err   error
+}
+
+// applyFingerprint 只在规划调用方按路径顺序写入，工作者不接触数据库或诊断状态。
+func applyFingerprint(ctx context.Context, database StagingDB, scanID, rootID, path string, result fingerprintResult, plan *RootPlan) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	if err != nil {
+	if result.err != nil {
 		plan.FingerprintFailures++
 		plan.addDiagnostic(PlanDiagnosticFingerprintFailure, path, "无法读取音频内容以计算指纹")
 		_, err := database.ExecContext(ctx, `UPDATE scan_observations SET withheld=TRUE
@@ -270,12 +286,12 @@ func computeFingerprint(ctx context.Context, database StagingDB, scanID, rootID 
 		return err
 	}
 	plan.FingerprintsComputed++
-	if fingerprint == "" {
+	if result.value == "" {
 		return nil
 	}
-	_, err = database.ExecContext(ctx, `UPDATE scan_observations SET content_fingerprint=$3
+	_, err := database.ExecContext(ctx, `UPDATE scan_observations SET content_fingerprint=$3
 		WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND candidate_key IS NOT NULL AND NOT withheld
-		  AND content_fingerprint IS NULL AND fingerprint_path=$4`, scanID, rootID, fingerprint, path)
+		  AND content_fingerprint IS NULL AND fingerprint_path=$4`, scanID, rootID, result.value, path)
 	return err
 }
 

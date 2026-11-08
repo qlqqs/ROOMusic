@@ -47,6 +47,7 @@ type Server struct {
 	// MediaCacheMaxBytes 是派生缓存的上限（字节），缓存目录是 <DataDirectory>/media-cache。
 	MediaCacheMaxBytes int64
 	AudioAnalysis      bool
+	ScanWorkers        int
 }
 
 // Load 从环境变量读取并校验配置；缺少必需项或生产环境不安全时返回错误。
@@ -82,7 +83,11 @@ func Load() (Server, error) {
 	if err != nil {
 		return Server{}, err
 	}
-	config := Server{AudioAnalysis: audioAnalysis, Backup: backup, Address: configuredAddress(), Environment: configuredEnvironment(), DatabaseURL: databaseURL, SecureCookies: os.Getenv("ROOMUSIC_SECURE_COOKIES") == "true", DataDirectory: dataDirectory, PublicURL: publicURL, FFmpegPath: ffmpegPath, MediaCacheMaxBytes: mediaCacheMaxBytes}
+	scanWorkers, err := configuredScanWorkers()
+	if err != nil {
+		return Server{}, err
+	}
+	config := Server{ScanWorkers: scanWorkers, AudioAnalysis: audioAnalysis, Backup: backup, Address: configuredAddress(), Environment: configuredEnvironment(), DatabaseURL: databaseURL, SecureCookies: os.Getenv("ROOMUSIC_SECURE_COOKIES") == "true", DataDirectory: dataDirectory, PublicURL: publicURL, FFmpegPath: ffmpegPath, MediaCacheMaxBytes: mediaCacheMaxBytes}
 	for _, configuredRoot := range strings.Split(os.Getenv("ROOMUSIC_ALLOWED_LIBRARY_ROOTS"), ",") {
 		if root := strings.TrimSpace(configuredRoot); root != "" {
 			config.AllowedLibraryRoots = append(config.AllowedLibraryRoots, root)
@@ -191,4 +196,17 @@ func configuredAudioAnalysis() (bool, error) {
 	default:
 		return false, fmt.Errorf("ROOMUSIC_AUDIO_ANALYSIS must be on or off")
 	}
+}
+
+// configuredScanWorkers 解析扫描读盘并发度；未配置时使用四个工作者。
+func configuredScanWorkers() (int, error) {
+	value := strings.TrimSpace(os.Getenv("ROOMUSIC_SCAN_WORKERS"))
+	if value == "" {
+		return 4, nil
+	}
+	workers, err := strconv.Atoi(value)
+	if err != nil || workers < 1 || workers > 16 {
+		return 0, fmt.Errorf("ROOMUSIC_SCAN_WORKERS must be an integer between 1 and 16")
+	}
+	return workers, nil
 }

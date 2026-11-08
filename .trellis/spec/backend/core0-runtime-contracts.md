@@ -170,6 +170,8 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
   停止只用 `stop`、不删卷，密码恢复用 `docker compose exec app /app/roomusic reset-password <用户名>`。
   运维与恢复步骤见[部署说明](../../../deploy/production/README.md)。
 
+- `ROOMUSIC_SCAN_WORKERS`：空值默认 4，整数 1–16；非整数或越界启动失败，固定错误 `ROOMUSIC_SCAN_WORKERS must be an integer between 1 and 16`。`config.Server.ScanWorkers` 经 app 的 `library.NewService(...).WithScanConcurrency(...)` 传给解析池与指纹规划；设为 1 串行读盘，数据库始终单写入者。生产 compose 使用 `${ROOMUSIC_SCAN_WORKERS:-4}`，`.env.prod.example` 提供注释示例，不要求配置者额外填写。
+
 ### CI 质量门禁
 
 - `.github/workflows/ci.yml` 在 Pull Request、推送到 `main` 和手动触发时运行，权限
@@ -226,6 +228,7 @@ Authorization/session token、密码、数据库 URL、完整 NAS 路径或音�
 
 | 条件 | 行为 |
 | --- | --- |
+| `ROOMUSIC_SCAN_WORKERS` 为 0、17 或非整数 | 启动失败，返回上述固定错误；空值为 4，1 与 16 合法 |
 | 生产 `.env` 缺必填项 | `docker compose config` 退出 1，报出该项的中文提示 |
 | 迁移前备份失败 | 不迁移，app 不进入就绪 |
 | 降级遇到不可回退 / 不连续 / 回退失败 | 整体回滚不改库，app 不就绪；日志给出要恢复的备份与 stop → restore → up 三步命令 |

@@ -101,7 +101,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		panic("app: invalid origin mode")
 	}
 	guard.WithLogger(logger)
-	libraryService := library.NewService(lifecycle, database, settings.DataDirectory, logger)
+	libraryService := library.NewService(lifecycle, database, settings.DataDirectory, logger).WithScanConcurrency(settings.ScanWorkers)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", httpserver.HealthHandler)

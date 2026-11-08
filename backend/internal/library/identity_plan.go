@@ -45,7 +45,7 @@ func (service *Service) fingerprinterFor(root registeredRoot) ingest.Fingerprint
 // 遍历证据是否完整。planned 为假表示规划本身失败，暂存行没有完整的规划，调用方不得写入；problem 非空表示
 // root 应记为不完整（规划失败、有文件或 scope 无法处理，或诊断写入失败）。
 func (service *Service) planRootIdentities(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, walkComplete bool, mode string) (planned bool, problem error) {
-	plan, planErr := ingest.PlanStagedRoot(ctx, executor, scanID, root.ID, ingest.PlanOptions{Mode: mode, WalkComplete: walkComplete, Fingerprinter: service.fingerprinterFor(root)})
+	plan, planErr := ingest.PlanStagedRoot(ctx, executor, scanID, root.ID, ingest.PlanOptions{Concurrency: service.scanWorkerCount(), Mode: mode, WalkComplete: walkComplete, Fingerprinter: service.fingerprinterFor(root)})
 	var problems []error
 	record := func(kind, relativePath, message string) {
 		if err := service.recordDiagnosticWith(ctx, executor, scanID, relativePath, kind, message); err != nil {

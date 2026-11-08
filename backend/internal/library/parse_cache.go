@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -115,7 +114,8 @@ func (cache *parseCache) lookup(ctx context.Context, relative string) (parseCach
 	return entry, err == nil
 }
 
-func (cache *parseCache) parse(ctx context.Context, path, relative string, info fs.FileInfo) (parser.AudioObservation, bool, error) {
+// lookupObservation 只查询缓存；命中计数与 seen 在槽位按序应用时推进。
+func (cache *parseCache) lookupObservation(ctx context.Context, path, relative string, info fs.FileInfo) (parser.AudioObservation, bool) {
 	relative = ingest.NormalizedPath(relative)
 	version := parser.CacheVersion(filepath.Ext(path))
 	modifiedAt := info.ModTime().UTC().Truncate(time.Microsecond)
@@ -124,22 +124,30 @@ func (cache *parseCache) parse(ctx context.Context, path, relative string, info 
 			var observation parser.AudioObservation
 			if len(entry.observation) <= maxParseCacheBytes && json.Unmarshal(entry.observation, &observation) == nil {
 				observation.Artwork = nil
-				cache.stats.parseCacheHits++
-				cache.seen = append(cache.seen, relative)
-				if len(cache.seen) == parseCacheDirectoryLimit {
-					cache.flushSeen(ctx)
-				}
-				return observation, observation.ArtworkMIME != "", nil
+				return observation, true
 			}
 			cache.warn("decode")
 		}
 	}
-	cache.stats.filesParsed++
-	observation, err := parser.ParseAudioFile(path)
-	if err == nil && version != "" {
-		cache.write(ctx, relative, info.Size(), modifiedAt, version, observation)
+	return parser.AudioObservation{}, false
+}
+
+func (cache *parseCache) applyAudio(ctx context.Context, audio scanAudio) {
+	if !audio.prepared {
+		return
 	}
-	return observation, false, err
+	if audio.cached {
+		cache.stats.parseCacheHits++
+		cache.seen = append(cache.seen, audio.relative)
+		if len(cache.seen) == parseCacheDirectoryLimit {
+			cache.flushSeen(ctx)
+		}
+		return
+	}
+	cache.stats.filesParsed++
+	if version := parser.CacheVersion(filepath.Ext(audio.path)); audio.err == nil && version != "" {
+		cache.write(ctx, audio.relative, audio.info.Size(), audio.info.ModTime().UTC().Truncate(time.Microsecond), version, audio.observation)
+	}
 }
 
 func (cache *parseCache) write(ctx context.Context, relative string, size int64, modifiedAt time.Time, version string, observation parser.AudioObservation) {
@@ -189,30 +197,4 @@ func (cache *parseCache) cleanup(ctx context.Context) {
         AND seen_scan_id IS DISTINCT FROM $2::uuid`, cache.rootID, cache.scanID); err != nil {
 		cache.warn("cleanup")
 	}
-}
-
-// cueParentAudio 在一张 CUE 内共用取时长时读出的事实，完整重扫也无需为暂存再读一次。
-// 数量受解析器的 FILE 声明上限约束，退出当前 sheet 后释放。
-type cueParentAudio struct {
-	observation                       parser.AudioObservation
-	info                              fs.FileInfo
-	deferred                          bool
-	err                               error
-	diagnosticKind, diagnosticMessage string
-}
-
-func (cache *parseCache) readCueParent(ctx context.Context, root registeredRoot, path string) cueParentAudio {
-	if path == "" || !isWithin(root.Path, path) {
-		return cueParentAudio{err: errors.New("unsafe CUE parent"), diagnosticKind: "cue_reference", diagnosticMessage: "CUE 引用无法安全读取"}
-	}
-	info, err := os.Stat(path)
-	if err != nil {
-		return cueParentAudio{err: err, diagnosticKind: "permission_error", diagnosticMessage: "无法读取 CUE 引用音频"}
-	}
-	if !info.Mode().IsRegular() {
-		return cueParentAudio{err: errors.New("non-regular CUE parent"), diagnosticKind: "cue_reference", diagnosticMessage: "CUE 引用不是普通文件"}
-	}
-	observation, deferred, err := cache.parse(ctx, path, safeRelativePath(root.Path, path), info)
-	return cueParentAudio{observation: observation, info: info, deferred: deferred, err: err,
-		diagnosticKind: "parse_failure", diagnosticMessage: "CUE 引用音频解析失败"}
 }

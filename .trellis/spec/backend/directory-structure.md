@@ -22,6 +22,7 @@ backend/
 │   │   │                           # 前端静态资源、健康检查
 │   │   ├── postgres/               # 连接与迁移执行器：Connect 只连接与 ping，Open = Connect + 迁移
 │   │   │   └── postgrestest/       # 仅测试使用：隔离 schema 的测试库
+│   │   ├── workpool/               # 固定并发、有界有序流水线与按输入顺序返回的 Map（只依赖标准库）
 │   │   └── uuid/                   # UUID 生成与格式校验
 │   ├── identity/                   # 会话、密码、Guard（同源、登录、管理员校验）
 │   │   └── httpapi/                # setup、登录登出、成员管理
@@ -145,13 +146,15 @@ clearly named application service, not a circular callback chain.
 每个包在 `packageRules` 中声明允许依赖的内部包，以及是否可以使用 `net/http`（能力核心 `catalog`、
 `library`、`parser` 不可以）。新增包必须先声明规则，测试才会通过；CI 的 `go test ./...` 会运行它。
 
+`platform/workpool` 是只依赖标准库的机制包；`library` 与 `catalog/ingest` 可导入，不能把解析、诊断或 SQL 放入池实现。
+
 `platform/weborigin` 是只依赖标准库的平台叶子包；`identity` 与 `platform/config` 允许导入它，共用来源解析与规范化。
 
 C2 的 B3 拆包后，核心 `catalog` 只允许导入内部包 `catalog/internal/releasesql` 与 `platform/uuid`，
 不导入 `operations`、`catalog/metadata`、`catalog/ingest` 或 `catalog/governance`。
 `catalog/governance` 允许导入 `catalog`、`catalog/internal/releasesql`、`catalog/metadata`、`operations` 与 `platform/uuid`；
 `catalog/httpapi` 与 `app` 增加对治理包的依赖，五种操作的撤销与展示实现由 `app` 从治理包注册。
-`catalog/ingest` 只允许导入内部包 `catalog/metadata` 与 `platform/uuid`，`library` 经它写入扫描结果。
+`catalog/ingest` 的基础允许依赖为内部包 `catalog/metadata`、`platform/uuid` 与 `platform/workpool`（其余增量见下文），`library` 经它写入扫描结果。
 `catalog/internal/releasesql` 仅允许导入 `catalog/internal/artistgraph` 与 `catalog/textnorm`，用于读取统一版本常量。核心、治理、ingest 与 releasesql 均不允许使用 `net/http`。
 
 ## File And Package Naming

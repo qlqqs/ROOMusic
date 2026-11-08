@@ -193,6 +193,17 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
     目录不存在不算错误，其他读目录错误按同样方式记录。
   - 没有迁移：重扫会对每个候选重新发现封面，下一次扫描即绑定或移除。
 
+### 并发解析（⑤）
+
+- `library/scan_pipeline.go` 将候选、过滤和失败条目放入有序槽位；缓存命中直接就绪，只有未命中音频进入 `platform/workpool.Ordered`。窗口为 `2 × workers`（默认 8），窗口满时等待头部；结果只能在遍历 goroutine 按 WalkDir 次序应用。构造观察、缓存写入、暂存、诊断、HoldSource、跳过与 processed 计数都不在 worker 中执行；诊断 100 条截断及暂存顺序与并发 1 一致。
+- `NewOrdered[T](ctx, workers, window, apply)` 要求正数并发与窗口；`Submit(func(context.Context) T)` / `Ready(T)` 排队并应用已就绪头部；`Flush()` 应用当前队列但保留 worker，`Drain()` 应用后关闭，`Close()` 取消并等待、不应用。调用端串行使用；apply 首错停止流水线，取消丢弃未应用结果，等待已启动解析返回，不捕获 panic、不重试。解析器不接收 context，关闭等待当前文件读取结束；单文件内存有界不等于读取耗时有界。
+- 缓存查询仍在持锁的遍历 goroutine；后续条目引用尚在途的同一规范父音频路径时，先 `Flush()` 应用早先的缓存写入再查缓存，不能以 worker 完成快慢决定命中。缓存成功、失败与 full 模式沿用④，不引入根级结果缓存。
+- `parser.ParseCueSheet(path, containmentRoot ...string) (CueDocument,error)` 只读 sheet、校验引用；每张 sheet 的唯一父音频先查缓存，未命中项在一个任务内读取。应用阶段调用 `ResolveCueDurations(document CueDocument, duration CueDurationReader) (CueDocument,error)` 一次，按原 FILE 标识完成区间、诊断和元数据；既有同步 `ParseCueDocument` 依次调用这两阶段，返回值不保留临时 FILE 标识。CUE 父事实仍受单 sheet 的 FILE 上限约束，不能把每槽位理解为固定只有一张封面。
+- `PlanOptions.Concurrency int` 小于等于零按 1；`resolveFingerprints` 每页最多 100 个路径，用 `workpool.Map(ctx, workers, items, fn)` 并行只读，再按输入路径顺序写回与记 `fingerprint_failure`。Fingerprinter（包括测试桩）必须允许并发调用。SQL 仍用同一 holder、原 `WithoutCancel` 合同；不增加写入者或并行根。
+- OGG/Opus 标签入口逐页逐段读取，只保留固定页头/段缓冲和当前最多 16 MiB 的包，音频包即时入哈希；独立 `oggFingerprint` 同样流式，不能按文件大小分配。标签、音频字节哈希、静态输入格式错误顺序保持；原 `DurationSeconds=0` 保持，不新增 granule 时长语义。流式读取不保证复现“前段格式错误与后段 I/O 错误并存”时整文件预读的底层错误优先级，读取失败仍失败。
+- 内存估算只针对普通音频和少量 FILE 的常见 CUE，不是全局硬上限。重复 OGG 注释包仍可累积元数据，极多 FILE 的 CUE 仍聚合父事实；2026-11-08 用户裁决为“已知局限，接受”，保留旧接受范围，不新增累计预算、不截断、不改变 CUE 聚合。
+- 配置与 app 装配见运行合同：正式服务默认 4；直接构造的零值 Service 与零值 PlanOptions 仍串行。设为 1 只改变读盘并发，不改变来源、缓存或反馈语义。未增加迁移、REST 字段或解析器版本变化。
+
 ### 增量扫描（④，分阶段接入）
 
 本轮实现解析缓存、延迟内嵌封面、指纹借用和完整重扫；**候选签名与跳过（实施第 6 步）尚未接入**，所有候选仍按原流程写入和发现封面。待 O 线 ② 合入并 rebase 后，再复用其 `listFolderArtworkCandidates`；本轮不修改 `discoverFolderArtwork` 查找规则。
@@ -211,7 +222,7 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 - 增量命中必须同时满足 root/规范相对路径、文件大小、mtime 截到微秒、`parser.CacheVersion(ext)` 相等；未知格式版本为空，不缓存。不做整秒降精度、Unicode 身份合并或内存目录树缓存。
 - `ParseCueDocument(path, duration CueDurationReader, containmentRoot ...string)` 的父音频时长由调用方注入（`CueDurationReader func(string) (float64,error)`，直接解析实现为 `parser.AudioDuration`）：scanner 使用同一解析缓存，未命中才解析、计入 `files_parsed` 并写缓存；parser 其他调用方显式传入直接解析的默认实现，不保留旧签名包装，CUE sheet 每轮解析和末轨区间语义不变（2026-11-08 用户批准补充）。
 - 物理文件通过过滤、安全校验和 Stat 后才查缓存；CUE sheet 每次重新解析以保留诊断，父音频复用同一缓存。进入目录查询 `LIMIT 2001`，内存至多保留 2000 条；溢出部分及跨目录 CUE 父文件逐条查询。
-- 解析成功立即在扫描 holder 上 upsert，写 `seen_scan_id=本次`；不等待候选提交，因为缓存只取决于源文件与解析器版本。失败不缓存；命中项按目录批量更新 seen，离开目录及根结束时刷新。
+- 解析成功在槽位按序应用时于扫描 holder 上 upsert，写 `seen_scan_id=本次`；不等待候选提交，因为缓存只取决于源文件与解析器版本。失败不缓存；命中项应用时登记 seen，按有界批次更新，目录切换及根排空后刷新。
 - 遍历结束、未取消且无 `walk_error` 时清理本根 `seen_scan_id IS DISTINCT FROM 本次` 的缓存项，涵盖过滤、排除、删除和读失败来源；取消或目录读失败不清理。缓存读写/清理失败只记 WARN `library.scan.parse_cache_failed`，按未命中处理，不改变扫描完整性，不额外重试或引入替代存储。
 - 缓存命中且 MIME 非空时，观察置 `ArtworkDeferred=true`；`StageObservation` 的 scope 内封面去重把 `artwork` 或 `artwork_deferred` 都算封面，后来者同时清除字节、MIME 与 deferred。`EmbeddedArtwork()` 保持原碟序/曲序，接受有字节或 deferred 的观察。
 - 保存候选封面时，deferred 观察经路径安全校验后现读音频取封面；读取失败记 `artwork_unreadable`，或已无封面时，继续原文件夹封面查找。受管封面存储/绑定/清理失败仍阻断完整成功。本轮因未接候选跳过，命中缓存的带封面候选仍会触发这次读取。
@@ -285,6 +296,7 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 | 候选已规划沿用的曲目严格过半属于同一 Release | 沿用该 Release UUID；不过半（如 2 轨加 3 轨、1 轨加 1 轨）则新建 Release 与 ReleaseGroup |
 | 扫描成功且所有 root 完整 | 允许负向 `missing` 对账 |
 | 非音频附件 | 忽略，不改变扫描完整性 |
+| 并发流水线 apply 失败或取消 | 停止提交；取消丢弃未应用结果并等待 worker 退出，root 不完整，不做 missing |
 | 缓存表读写失败、缓存内容不能解码 | WARN，按未命中解析，不改变 root 完整性 |
 | 大小、微秒 mtime 或解析器版本变化 | 重新解析；完整模式即使相同也重新解析 |
 | 延迟内嵌封面读取失败 | `artwork_unreadable`，继续原文件夹封面查找 |
@@ -319,6 +331,9 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 
 ## 6. 必需测试
 
+- ⑤ 单元：Ordered 混排/窗口/Flush 复用/首错/取消退出与 Map 输入顺序，race；配置默认 4、边界 1/16、非法 0/17/abc；OGG/Opus 新旧观察逐字段和指纹一致，大文件内存不随大小增长，截断仍失败。
+- ⑤ PostgreSQL：并发 1/4 对比缓存命中与解析计数、暂存顺序、诊断（含 100 条截断）、HoldSource 和反馈；覆盖 CUE 在物理父文件前后、多个 sheet 共父与跨目录父音频、缓存冷热/full、取消丢弃在途结果且 worker 退出。测试另由测试 agent 实施，不把无数据库时的 SKIP 当作通过。
+
 - ④ 单元：当前支持格式/未知扩展名的缓存版本、deferred 封面选取与暂存去重；HTTP 空请求体默认增量、两种合法模式、未知字段/缺 mode/非法 mode 拒绝，所有角色/入口包含 `mode`。
 - ④ PostgreSQL：连续扫描未变文件命中、mtime/size/格式版本变化重新解析、full 绕过读取但仍写缓存；CUE sheet 每轮读取且父音频共用缓存；超 2000 条目录的逐条查询、seen 批量刷新、删除/过滤清理与取消/walk_error 不清理；缓存故障不改变完整性。
   deferred 候选重写仍取内嵌封面；目录改名借用且 Track UUID 不变，任一侧多文件歧义不借用、保住范围不被借用，full 不借用。0036 升级/下行/再升级覆盖两表一列及历史模式默认值。
@@ -349,6 +364,12 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
   Box 叶子不取父目录、内嵌优先）。
 
 ## 7. 错误与正确示例
+
+### 并发缓存的错误与正确示例
+
+错误：worker 直接写缓存或暂存；CUE 的后续物理条目在早先父音频仍在途时直接查缓存，导致命中数取决于调度。
+
+正确：worker 只返回解析结果，主 goroutine 按序应用；同路径在途依赖先 Flush 再查缓存，无依赖的文件继续使用有界窗口并行。
 
 ### 增量扫描的错误与正确示例
 

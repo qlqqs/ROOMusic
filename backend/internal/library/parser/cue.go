@@ -37,6 +37,7 @@ type CueTrack struct {
 }
 
 type CueDocument struct {
+	trackFileIDs      []int
 	ArtistTagEvidence []metadata.ArtistTagEvidence
 	Tracks            []CueTrack
 	Files             []CueFileReference
@@ -80,6 +81,16 @@ func ParseCueDocument(path string, duration CueDurationReader, containmentRoot .
 	if duration == nil {
 		return CueDocument{}, errors.New("CUE duration reader is required")
 	}
+	document, err := ParseCueSheet(path, containmentRoot...)
+	if err != nil {
+		return CueDocument{}, err
+	}
+	return ResolveCueDurations(document, duration)
+}
+
+// ParseCueSheet 只读取 sheet 与校验引用；调用方取得父音频事实后必须调用 ResolveCueDurations。
+// 分开的两阶段允许扫描器在不让解析 worker 访问缓存或数据库的前提下并发读取父音频。
+func ParseCueSheet(path string, containmentRoot ...string) (CueDocument, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return CueDocument{}, err
@@ -266,9 +277,18 @@ func ParseCueDocument(path string, duration CueDurationReader, containmentRoot .
 	if len(document.Files) == 0 || len(document.Tracks) == 0 {
 		return CueDocument{}, fmt.Errorf("incomplete CUE")
 	}
+	document.trackFileIDs = trackFileIDs
+	return document, nil
+}
+
+// ResolveCueDurations 用已取得的父音频时长完成区间、诊断与 sheet 元数据；只调用一次。
+func ResolveCueDurations(document CueDocument, duration CueDurationReader) (CueDocument, error) {
+	if duration == nil {
+		return CueDocument{}, errors.New("CUE duration reader is required")
+	}
 	for fileIndex := range document.Files {
 		fileRef := &document.Files[fileIndex]
-		if setCueTrackRanges(document.Tracks, trackFileIDs, fileIndex+1, cueDurationFrames(fileRef, duration)) {
+		if setCueTrackRanges(document.Tracks, document.trackFileIDs, fileIndex+1, cueDurationFrames(fileRef, duration)) {
 			appendCueDiagnostic(&document, "non-monotonic INDEX 01 in FILE reference: "+fileRef.Path)
 		}
 	}
@@ -288,6 +308,7 @@ func ParseCueDocument(path string, duration CueDurationReader, containmentRoot .
 			appendCueDiagnostic(&document, fmt.Sprintf("missing INDEX 01 for track %d", document.Tracks[index].Number))
 		}
 	}
+	document.trackFileIDs = nil
 	return document, nil
 }
 

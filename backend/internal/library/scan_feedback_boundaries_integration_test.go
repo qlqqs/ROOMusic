@@ -83,6 +83,12 @@ func TestPostgreSQLScanFeedbackBoundariesFileDrift(t *testing.T) {
 			service := scannerTestApplication(fixture)
 			root := insertScannerRoot(t, fixture, "drift")
 			boundaryAudio(t, root, "a.flac")
+			wantTotal := int64(1)
+			if direction == "removed" {
+				// 保留独立专辑的音频，避免文件漂移用例触发空根保护。
+				writeAudio(t, root, "Keep/stays.flac", audioFile{seed: 2, title: "常驻曲目", album: "常驻专辑", track: 1})
+				wantTotal++
+			}
 			boundaryCompletedScan(t, service)
 			ctx := context.Background()
 			id := feedbackFixtureScan(t, fixture)
@@ -95,21 +101,21 @@ func TestPostgreSQLScanFeedbackBoundariesFileDrift(t *testing.T) {
 			if direction == "added" {
 				boundaryAudio(t, root, "b.flac")
 			} else {
-				wantProcessed = 0
+				wantProcessed = 1
 				if err := os.Remove(filepath.Join(root.Path, "a.flac")); err != nil {
 					t.Fatal(err)
 				}
 			}
 			f.selectRoot(0, root)
-			f.weight = 1
-			f.phase(ctx, "reading_tags", 1)
+			f.weight = wantTotal
+			f.phase(ctx, "reading_tags", wantTotal)
 			if f.progress.FilesChanged {
 				t.Fatal("尚未读取不能推断文件减少")
 			}
 			if err := service.scanRoot(ctx, holder, id, root, f); err != nil {
 				t.Fatal(err)
 			}
-			if f.progress.FilesTotal == nil || *f.progress.FilesTotal != 1 || f.progress.FilesProcessed != wantProcessed || !f.progress.FilesChanged {
+			if f.progress.FilesTotal == nil || *f.progress.FilesTotal != wantTotal || f.progress.FilesProcessed != wantProcessed || !f.progress.FilesChanged {
 				t.Fatalf("文件漂移快照错误: %+v", f.progress)
 			}
 			status, err := service.finalizeScan(ctx, holder, id, []string{root.ID}, scanOutcome{Complete: true}, f)
@@ -120,7 +126,7 @@ func TestPostgreSQLScanFeedbackBoundariesFileDrift(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if report.Files.Total == nil || *report.Files.Total != 1 || report.Files.Processed != wantProcessed || !report.Files.Changed {
+			if report.Files.Total == nil || *report.Files.Total != wantTotal || report.Files.Processed != wantProcessed || !report.Files.Changed {
 				t.Fatalf("漂移报告错误: %+v", report)
 			}
 			if direction == "removed" && (report.Tracks.Missing != 1 || report.Albums.Missing != 1) {

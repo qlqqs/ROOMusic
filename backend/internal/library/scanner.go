@@ -339,49 +339,34 @@ func (service *Service) scanRootWithOptions(ctx context.Context, executor scanEx
 	if filter.exclusions == nil {
 		filter = newScanFilter(root.Exclusions)
 	}
-	hold := func(kind, relative string) error {
-		// 物理曲目入库使用规范化相对路径；sheet 路径仍按原始值匹配。
-		if kind == ingest.HeldFile {
-			relative = ingest.NormalizedPath(relative)
-		}
-		if err := ingest.HoldSource(ctx, executor, scanID, root.ID, kind, relative); err != nil {
-			return errors.Join(err, service.recordDiagnosticWith(ctx, executor, scanID, relative, "staging_write_failure", "无法登记保住的来源"))
-		}
-		if feedback != nil {
-			feedback.skip(ctx)
-		}
-		return nil
-	}
-	diagnoseHeld := func(relative, kind, message, heldKind string) error {
-		if err := service.recordDiagnosticWith(ctx, executor, scanID, relative, kind, message); err != nil {
-			return err
-		}
-		return hold(heldKind, relative)
-	}
-	var seen int64
-	var walkErrorSeen, excludedHit bool
+	pipeline := newScanPipeline(ctx, service, executor, scanID, root, cache, feedback, func(err error) {
+		complete = false
+		captureProcessingError(err)
+	})
+	defer pipeline.pool.Close()
 	err := filepath.WalkDir(root.Path, func(path string, entry fs.DirEntry, walkError error) error {
 		if err := ctx.Err(); err != nil {
 			complete = false
 			return err
 		}
 		relative := safeRelativePath(root.Path, path)
+		slot := scanSlot{relative: relative}
+		held := func(kind, message, heldKind string) error {
+			slot.diagnostics = []scanDiagnostic{{kind, message}}
+			slot.heldKind = heldKind
+			return pipeline.submit(slot)
+		}
 		if walkError != nil {
 			if path == root.Path {
-				complete = false
-				return errors.Join(errors.New("root unavailable during traversal"), service.recordDiagnosticWith(ctx, executor, scanID, "", "root_unavailable", "注册目录当前不可用"))
+				slot.diagnostics = []scanDiagnostic{{"root_unavailable", "注册目录当前不可用"}}
+				slot.terminalError = errors.New("root unavailable during traversal")
+				return pipeline.submit(slot)
 			}
-			walkErrorSeen = true
+			slot.walkError = true
 			if entry != nil && entry.IsDir() {
-				if err := diagnoseHeld(relative, "walk_error", "文件夹读不了", ingest.HeldDirectory); err != nil {
-					return err
-				}
-				return nil
+				return held("walk_error", "文件夹读不了", ingest.HeldDirectory)
 			}
-			if err := diagnoseHeld(relative, "permission_error", "无法读取文件", ingest.HeldFile); err != nil {
-				return err
-			}
-			return nil
+			return held("permission_error", "无法读取文件", ingest.HeldFile)
 		}
 		if entry.IsDir() {
 			// 注册根自身不参与过滤。
@@ -390,8 +375,9 @@ func (service *Service) scanRootWithOptions(ctx context.Context, executor scanEx
 				return nil
 			}
 			if filter.skipDir(relative, entry.Name()) {
-				if _, excluded := filter.exclusions[relative]; excluded {
-					excludedHit = true
+				_, slot.excluded = filter.exclusions[relative]
+				if err := pipeline.submit(slot); err != nil {
+					return err
 				}
 				return fs.SkipDir
 			}
@@ -405,9 +391,8 @@ func (service *Service) scanRootWithOptions(ctx context.Context, executor scanEx
 		if extension != ".cue" && !isSupportedAudioExtension(extension) && !isAudioCandidateExtension(extension) {
 			return nil
 		}
-		seen++
+		slot.seen, slot.processed = true, true
 		cache.enterDirectory(ctx, ingest.DirectoryOf(relative))
-		defer feedback.processed(ctx)
 		heldKind := ingest.HeldFile
 		if extension == ".cue" {
 			heldKind = ingest.HeldCueSheet
@@ -415,103 +400,38 @@ func (service *Service) scanRootWithOptions(ctx context.Context, executor scanEx
 		if entry.Type()&os.ModeSymlink != 0 {
 			target, targetError := filepath.EvalSymlinks(path)
 			if targetError != nil || !isWithin(root.Path, target) {
-				return diagnoseHeld(relative, "broken_or_escaped_link", "文件链接目标不可安全读取", heldKind)
+				return held("broken_or_escaped_link", "文件链接目标不可安全读取", heldKind)
 			}
 		}
 		fileInfo, statError := os.Stat(path)
 		if statError != nil {
-			return diagnoseHeld(relative, "permission_error", "无法读取文件", heldKind)
+			return held("permission_error", "无法读取文件", heldKind)
 		}
 		if !fileInfo.Mode().IsRegular() {
-			return diagnoseHeld(relative, "non_regular_file", "音频来源不是普通文件", heldKind)
+			return held("non_regular_file", "音频来源不是普通文件", heldKind)
 		}
 		if extension == ".cue" {
-			parentAudio := make(map[string]cueParentAudio)
-			readDuration := func(parentPath string) (float64, error) {
-				audio, ok := parentAudio[parentPath]
-				if !ok {
-					audio = cache.readCueParent(ctx, root, parentPath)
-					parentAudio[parentPath] = audio
-				}
-				return audio.observation.DurationSeconds, audio.err
+			slot, err := pipeline.prepareCue(slot, path)
+			if err != nil {
+				return err
 			}
-			document, cueErr := parser.ParseCueDocument(path, readDuration, root.Path)
-			if cueErr != nil {
-				return diagnoseHeld(relative, "unsupported_cue", "CUE 文件无法解析", ingest.HeldCueSheet)
-			}
-			for _, diagnostic := range document.Diagnostics {
-				if err := service.recordDiagnosticWith(ctx, executor, scanID, relative, "cue_reference", diagnostic); err != nil {
-					return err
-				}
-			}
-			parentFacts := make(map[string]cueParentAudio, len(document.Files))
-			cueFailed := false
-			for _, reference := range document.Files {
-				if cueReferenceNeedsHold(reference.Status) {
-					cueFailed = true
-				}
-				if reference.Status != "present" {
-					continue
-				}
-				audio := parentAudio[reference.ResolvedPath]
-				if audio.err != nil {
-					cueFailed = true
-					if err := service.recordDiagnosticWith(ctx, executor, scanID, relative, audio.diagnosticKind, audio.diagnosticMessage); err != nil {
-						return err
-					}
-					continue
-				}
-				parentFacts[reference.Path] = audio
-			}
-			if cueFailed {
-				return hold(ingest.HeldCueSheet, relative)
-			}
-			for _, cue := range document.Tracks {
-				if err := ctx.Err(); err != nil {
-					return err
-				}
-				if !cueTrackCanBeStaged(cue) {
-					continue
-				}
-				audio, ok := parentFacts[cue.ReferencedFile]
-				if !ok {
-					continue
-				}
-				virtualObservation := buildCueVirtualObservation(audio.observation, document, cue, relative)
-				virtualObservation.ArtworkDeferred = audio.deferred
-				virtualObservation.SourceSize, virtualObservation.SourceModifiedAt = audio.info.Size(), audio.info.ModTime()
-				if err := stageObservation(ctx, executor, scanID, root.ID, virtualObservation); err != nil {
-					complete = false
-					captureProcessingError(err)
-					if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, relative, "staging_write_failure", "无法暂存 CUE 观察"); diagnosticError != nil {
-						return diagnosticError
-					}
-				}
-			}
-			return nil
+			return pipeline.submit(slot)
 		}
 		if !isSupportedAudioExtension(extension) {
-			return diagnoseHeld(relative, "unsupported_format", "不支持的音频格式", ingest.HeldFile)
+			return held("unsupported_format", "不支持的音频格式", ingest.HeldFile)
 		}
-		observation, deferred, parseError := cache.parse(ctx, path, relative, fileInfo)
-		if parseError != nil {
-			return diagnoseHeld(relative, "parse_failure", "音频文件解析失败", ingest.HeldFile)
+		audio, err := pipeline.prepareAudio(path, relative, fileInfo)
+		if err != nil {
+			return err
 		}
-		physicalObservation := buildPhysicalSourceObservation(observation, relative)
-		physicalObservation.ArtworkDeferred = deferred
-		physicalObservation.SourceSize, physicalObservation.SourceModifiedAt = fileInfo.Size(), fileInfo.ModTime()
-		if physicalObservation.Directory == "" && physicalObservation.InferredFields["album"] {
-			physicalObservation.Album = ""
-		}
-		if err := stageObservation(ctx, executor, scanID, root.ID, physicalObservation); err != nil {
-			complete = false
-			captureProcessingError(err)
-			if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, relative, "staging_write_failure", "无法暂存音频观察"); diagnosticError != nil {
-				return diagnosticError
-			}
-		}
-		return ctx.Err()
+		slot.audio = []scanAudio{audio}
+		return pipeline.submit(slot)
 	})
+	if err == nil {
+		err = pipeline.pool.Drain()
+	} else {
+		pipeline.pool.Close()
+	}
 	if ctx.Err() == nil {
 		cache.flushSeen(ctx)
 	}
@@ -529,7 +449,7 @@ func (service *Service) scanRootWithOptions(ctx context.Context, executor scanEx
 		if !registeredRootAvailable(root.Path) {
 			return errors.Join(errors.New("root unavailable before organizing"), service.recordDiagnosticWith(ctx, executor, scanID, "", "root_unavailable", "注册目录当前不可用"))
 		}
-		if seen == 0 && !walkErrorSeen && !excludedHit {
+		if pipeline.seen == 0 && !pipeline.walkErrorSeen && !pipeline.excludedHit {
 			present, err := ingest.RootHasPresentTracks(ctx, executor, root.ID)
 			if err != nil {
 				return errors.Join(err, service.recordDiagnosticWith(ctx, executor, scanID, "", "database_error", "无法读取目录来源"))
@@ -538,7 +458,7 @@ func (service *Service) scanRootWithOptions(ctx context.Context, executor scanEx
 				return errors.Join(errors.New("empty root"), service.recordDiagnosticWith(ctx, executor, scanID, "", "root_empty", "目录是空的，可能还没挂载"))
 			}
 		}
-		if !walkErrorSeen {
+		if !pipeline.walkErrorSeen {
 			cache.cleanup(ctx)
 		}
 		if alignErr := ingest.AlignCueStagingScopes(ctx, executor, scanID, root.ID); alignErr != nil {
