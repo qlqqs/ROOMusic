@@ -29,7 +29,7 @@
 
 ### 后端线
 
-- [ ] **B1 资料库统计接口**（design 3.3）：`artistListCount` 抽取、`GET /api/v1/catalog/stats`、样本 `catalog/stats.json`、`catalog/stats-artists-preparing.json`、注册。
+- [x] **B1 资料库统计接口**（design 3.3）：`artistListCount` 抽取、`GET /api/v1/catalog/stats`、样本 `catalog/stats.json`、`catalog/stats-artists-preparing.json`、注册。
   - 测试：四个数与对应列表总数相等，艺人未就绪时为 null；样本测试。`go test -race ./internal/app/ -run 'TestPostgreSQL(CatalogStats|APIResponseSamples)' -count=1`
 - [ ] **B2 后台音频分析**（design 1、2、3.1、3.2）：迁移 0033（含 down）、`catalog/track_analysis.go`、`playback/analysis`（ffmpeg 与 PCM 计算）、`playback/analysis_worker.go`、`app.OpenAnalysis` 与装配、`ROOMUSIC_AUDIO_ANALYSIS` 开关、两个接口与样本、依赖规则、`deploy/production/README.md` 补一行开关说明。
   - 测试：单元（窗口峰值→波形/首尾点、ebur128 摘要解析、专辑增益公式、工作者循环：扫描让路、失败不阻塞、取消退出）；固定 ffmpeg 的合成素材测试（响度 ±0.5 LU、开头静音、CUE 区间）；PostgreSQL（待分析判定四种情况、两个接口与样本、迁移上下行）；依赖规则。命令见 design 8.2。

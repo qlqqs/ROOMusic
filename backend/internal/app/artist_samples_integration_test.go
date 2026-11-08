@@ -64,7 +64,7 @@ func isArtistAPISample(name string) bool {
 		}
 	}
 	switch name {
-	case "catalog/status-search-ready", "search/suggestions-artists", "search/artists", "search/artists-alias-match", "search/albums-alias-match", "search/tracks-alias-match", "search/same-name-split-results", "search/artists-preparing", "catalog/status-artists-preparing", "catalog/status-all-ready":
+	case "catalog/stats", "catalog/stats-artists-preparing", "catalog/status-search-ready", "search/suggestions-artists", "search/artists", "search/artists-alias-match", "search/albums-alias-match", "search/tracks-alias-match", "search/same-name-split-results", "search/artists-preparing", "catalog/status-artists-preparing", "catalog/status-all-ready":
 		return true
 	}
 	return false
@@ -199,6 +199,7 @@ func recordArtistPreparingSamples(f *artistSamples) {
 		f.error("artists/"+tc.name+"-preparing", "GET", tc.path, nil, 503, "artist_catalog_preparing")
 	}
 	f.error("search/artists-preparing", "GET", searchURL("artists", "邓丽君"), nil, 503, "artist_catalog_preparing")
+	f.get("catalog/stats-artists-preparing", "/api/v1/catalog/stats")
 	state := f.get("catalog/status-artists-preparing", "/api/v1/catalog/status")
 	if state["artists_state"] != "preparing" {
 		f.t.Fatal("整理中返回ready")
@@ -329,6 +330,7 @@ func recordArtistReadSamples(f *artistSamples) {
 	if state["artists_state"] != "ready" || state["search_mode"] != "normalized" {
 		f.t.Fatal("公开目录状态未完整发布")
 	}
+	f.get("catalog/stats", "/api/v1/catalog/stats")
 	for _, tc := range []struct {
 		name, path string
 		count      int

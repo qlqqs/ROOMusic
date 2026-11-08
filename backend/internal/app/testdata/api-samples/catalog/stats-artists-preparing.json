@@ -1,0 +1,9 @@
+{
+  "body": {
+    "albums": 4,
+    "artists": null,
+    "composers": null,
+    "tracks": 5
+  },
+  "status": 200
+}

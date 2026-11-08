@@ -40,6 +40,7 @@ func New(database *sql.DB, guard *identity.Guard, dataDirectory string, logger *
 // Register 在 mux 上注册目录路由。
 func (handlers *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/artists", handlers.listArtists)
+	mux.HandleFunc("GET /api/v1/catalog/stats", handlers.catalogStats)
 	mux.HandleFunc("GET /api/v1/artists/{id}", handlers.artistDetail)
 	mux.HandleFunc("GET /api/v1/artists/{id}/names", handlers.artistNames)
 	mux.HandleFunc("GET /api/v1/artists/{id}/merged-sources", handlers.artistMergedSources)
