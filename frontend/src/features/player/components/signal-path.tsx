@@ -1,15 +1,29 @@
-import { AppWindow, FileAudio, Server, Speaker, X, type LucideIcon } from "lucide-react";
+import { AppWindow, AudioLines, FileAudio, Server, Speaker, X, type LucideIcon } from "lucide-react";
 import { useId, useState, type CSSProperties } from "react";
 import { Button, ModalDialog, useTooltip } from "../../../shared/ui";
 import type { SourceFacts } from "../engine/queue";
 import { usePlaybackCapabilities } from "../hooks/use-playback-capabilities";
+import { useTrackAnalysis } from "../hooks/use-track-analysis";
 import { usePlayerSelector } from "../player-provider";
 import styles from "./signal-path.module.css";
 
 type Quality = "lossless" | "lossy" | "unknown";
 
-const losslessCodecs = new Set(["flac", "alac", "pcm"]);
-const lossyCodecs = new Set(["mp3", "aac", "vorbis", "opus"]);
+const losslessCodecs = new Set(["flac", "alac", "pcm", "ape", "wavpack", "aiff"]);
+// WavPack 混合模式没有 .wvc 时只有有损部分。
+const lossyCodecs = new Set(["mp3", "aac", "vorbis", "opus", "wavpack_hybrid"]);
+
+const codecNames = new Map([
+  ["ape", "APE"],
+  ["wavpack", "WavPack"],
+  ["wavpack_hybrid", "WavPack"],
+  ["aiff", "AIFF"],
+]);
+
+/** 数据源与服务端两行的编码名：表里有的用短名，其他写成大写。 */
+function codecName(codec: string): string {
+  return codecNames.get(codec.toLowerCase()) ?? codec.toUpperCase();
+}
 
 /** 整体质量只看源编码。 */
 function qualityOf(source: SourceFacts | undefined): Quality {
@@ -24,7 +38,7 @@ const titles: Record<Quality, string> = { lossless: "信号路径：无损", los
 /** 数据源一行：无损写“编码 采样率 位深 声道”，有损写“编码 码率 采样率 声道”；缺的项省略。 */
 function sourceLine(source: SourceFacts | undefined, quality: Quality): string {
   if (source === undefined) return "未知格式";
-  const codec = source.codec === null ? null : source.codec.toUpperCase();
+  const codec = source.codec === null ? null : codecName(source.codec);
   const rate = source.sampleRate === null ? null : `${source.sampleRate / 1000}kHz`;
   const depth = source.bitDepth === null ? null : `${source.bitDepth}bit`;
   const bitrate = source.bitrate === null ? null : `${source.bitrate}kbps`;
@@ -39,6 +53,26 @@ function formatGain(db: number): string {
   const rounded = Math.round(db * 10) / 10;
   if (rounded === 0) return "0.0 dB";
   return `${rounded > 0 ? "+" : "−"}${Math.abs(rounded).toFixed(1)} dB`;
+}
+
+/** 响度数值：一位小数，负号用 −，0 写 0.0。 */
+function formatLevel(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  if (rounded === 0) return "0.0";
+  return `${rounded < 0 ? "−" : ""}${Math.abs(rounded).toFixed(1)}`;
+}
+
+/** 响度一行：积分响度、响度范围、真峰值，缺的项省略；没有分析结果或三项都缺时是 null，整行不显示。 */
+function useLoudnessLine(): string | null {
+  const trackId = usePlayerSelector((snapshot) => snapshot.current?.track.trackId ?? null);
+  const analysis = useTrackAnalysis(trackId);
+  if (analysis === null) return null;
+  const parts = [
+    analysis.integratedLufs === null ? null : `${formatLevel(analysis.integratedLufs)} LUFS`,
+    analysis.loudnessRangeLu === null ? null : `范围 ${formatLevel(analysis.loudnessRangeLu)} LU`,
+    analysis.truePeakDbtp === null ? null : `峰值 ${formatLevel(analysis.truePeakDbtp)} dBTP`,
+  ].filter((part) => part !== null);
+  return parts.length === 0 ? null : parts.join(" · ");
 }
 
 /** 浏览器一行：解码；接入了音频图时加上实际施加的均衡增益，交叉渐变开着时加上时长。 */
@@ -71,14 +105,9 @@ export function SignalPathButton() {
   </>;
 }
 
-const layers: readonly { name: string; icon: LucideIcon }[] = [
-  { name: "数据源", icon: FileAudio },
-  { name: "服务端", icon: Server },
-  { name: "浏览器", icon: AppWindow },
-  { name: "系统输出", icon: Speaker },
-];
+type Layer = { name: string; icon: LucideIcon; value: string };
 
-/** 信号路径弹层：标题写出整体质量，各层一个图标、名称和一行取值。桌面在圆点上方，窄屏从底部弹出。 */
+/** 信号路径弹层：标题写出整体质量，各层一个图标、名称和一行取值；响度一层只在有分析结果时出现。桌面在圆点上方，窄屏从底部弹出。 */
 function SignalPathDialog({ anchor, onClose }: { anchor: DOMRect | null; onClose: () => void }) {
   const titleId = useId();
   const source = useCurrentSource();
@@ -87,9 +116,16 @@ function SignalPathDialog({ anchor, onClose }: { anchor: DOMRect | null; onClose
   const table = capabilities.data;
   // 格式表还没取到时不替 ALAC 曲目说“原文件直出”。
   const delivery = source !== undefined && table === undefined && capabilities.isPending ? "pending" : source === undefined || table === undefined ? "original" : (table.deliveryOf({ sourceKind: source.sourceKind, codec: source.codec }) ?? "original");
-  const server = delivery === "pending" ? "读取中" : delivery === "derived" ? `${source?.codec?.toUpperCase() ?? "ALAC"} → FLAC` : "原文件直出";
+  const server = delivery === "pending" ? "读取中" : delivery === "derived" ? `${source === undefined || source.codec === null ? "ALAC" : codecName(source.codec)} → FLAC` : "原文件直出";
+  const loudness = useLoudnessLine();
   const browser = useBrowserLine();
-  const values = [sourceLine(source, quality), server, browser, "系统默认输出"];
+  const layers: Layer[] = [
+    { name: "数据源", icon: FileAudio, value: sourceLine(source, quality) },
+    ...(loudness === null ? [] : [{ name: "响度", icon: AudioLines, value: loudness }]),
+    { name: "服务端", icon: Server, value: server },
+    { name: "浏览器", icon: AppWindow, value: browser },
+    { name: "系统输出", icon: Speaker, value: "系统默认输出" },
+  ];
   const position = anchor === null ? undefined : ({ "--anchor-x": `${anchor.left + anchor.width / 2}px`, "--anchor-top": `${anchor.top}px` } as CSSProperties);
   return <ModalDialog open={anchor !== null} titleId={titleId} onRequestClose={onClose} closeOnBackdrop className={styles.dialog}>
     <div className={styles.content} style={position}>
@@ -98,9 +134,9 @@ function SignalPathDialog({ anchor, onClose }: { anchor: DOMRect | null; onClose
         <Button variant="icon" icon={<X size={16} />} label="关闭" onClick={onClose} />
       </div>
       <ol role="list" className={styles.layers}>
-        {layers.map(({ name, icon: Icon }, index) => <li key={name}>
+        {layers.map(({ name, icon: Icon, value }) => <li key={name}>
           <Icon size={18} aria-hidden="true" className={styles.icon} />
-          <div className={styles.layerText}><p className={styles.name}>{name}</p><p className={styles.value}>{values[index]}</p></div>
+          <div className={styles.layerText}><p className={styles.name}>{name}</p><p className={styles.value}>{value}</p></div>
         </li>)}
       </ol>
     </div>

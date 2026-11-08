@@ -7,8 +7,14 @@ export type RootStatus = (typeof rootStatuses)[number];
 export const scanStatuses = ["running", "succeeded", "failed", "canceled", "incomplete"] as const;
 export type ScanStatus = (typeof scanStatuses)[number];
 
-export const rootOperationKinds = ["create", "disable", "restore"] as const;
+export const rootOperationKinds = ["create", "disable", "restore", "exclude", "unexclude", "relocate"] as const;
 export const rootOperationStatuses = ["succeeded", "failed"] as const;
+
+/** 每个目录最多 100 个不扫描的子文件夹。 */
+export const MAX_ROOT_EXCLUSIONS = 100;
+
+// 不扫描的子文件夹：相对该目录的路径（`/` 分隔），按字节升序，没有时为空数组。
+const excludedPathsDecoder = d.array(d.string({ min: 1 }), { max: MAX_ROOT_EXCLUSIONS });
 
 // 目录只返回目录名（路径的最后一段），不返回服务器上的绝对路径。
 const rootDecoder = d.object({
@@ -19,6 +25,7 @@ const rootDecoder = d.object({
   revision: d.integer({ min: 1 }),
   created_at: d.timestamp(),
   updated_at: d.timestamp(),
+  excluded_paths: excludedPathsDecoder,
 });
 
 // 后端不给目录列表设上限（后端缺口），所以不限条数，只限字段长度。
@@ -38,7 +45,7 @@ const rootCreatedDecoder = d.object({
 export const decodeRootCreated = d.defineDecoder(rootCreatedDecoder);
 export type RootCreatedDTO = d.Infer<typeof rootCreatedDecoder>;
 
-/** 停用与恢复的结果。 */
+/** 停用、恢复与改路径的结果。 */
 const rootChangedDecoder = d.object({
   id: d.uuid(),
   path: d.string({ min: 1 }),
@@ -48,6 +55,19 @@ const rootChangedDecoder = d.object({
 
 export const decodeRootChanged = d.defineDecoder(rootChangedDecoder);
 export type RootChangedDTO = d.Infer<typeof rootChangedDecoder>;
+
+/** 添加与移除不扫描的子文件夹的结果：目录的当前状态与全部排除项（不改变 revision）。 */
+const rootExclusionsDecoder = d.object({
+  id: d.uuid(),
+  name: d.string({ min: 1 }),
+  path: d.string({ min: 1 }),
+  status: d.oneOf(rootStatuses),
+  revision: d.integer({ min: 1 }),
+  excluded_paths: excludedPathsDecoder,
+});
+
+export const decodeRootExclusions = d.defineDecoder(rootExclusionsDecoder);
+export type RootExclusionsDTO = d.Infer<typeof rootExclusionsDecoder>;
 
 // root_id、revision 与 error_code 在记录没有对应值时被省略（目录被删除、失败操作等）。
 const rootOperationDecoder = d.object({
@@ -145,6 +165,7 @@ export type ScanReportStatus = (typeof scanReportStatuses)[number];
 
 // progress、root_progress 与 report_status 是后来加的字段：旧服务没有它们，按“缺失 = 没有进度与报告”处理，不伪造进度。
 // 本功能上线前的扫描 progress 与 root_progress 为 null、report_status 为 legacy。
+// skipped_files 是这次扫描跳过的文件数（读不了的文件、文件夹与 CUE 各计 1），之前的扫描为 null。
 const scanDecoder = d.object({
   id: d.uuid(),
   scan_run_id: d.uuid(),
@@ -156,6 +177,7 @@ const scanDecoder = d.object({
   progress: d.optional(d.nullable(scanProgressDecoder)),
   root_progress: d.optional(d.nullable(rootProgressDecoder)),
   report_status: d.optional(d.oneOf(scanReportStatuses)),
+  skipped_files: d.nullable(count()),
 });
 
 export const decodeScan = d.defineDecoder(scanDecoder);
@@ -250,6 +272,7 @@ export type ChangeCountsDTO = d.Infer<typeof changeCountsDecoder>;
 
 // 添加目录时的文件夹浏览（GET /library-folders）：从 `/` 开始，parent 只在 `/` 为 null。
 // selectable 为假的是允许目录的上层路径，只能进入；registered 含停用的目录。最多 2000 条，多了 truncated 为真。
+// 带 root_id 时只在该目录之内浏览：从目录本身开始，那里 parent 为 null、can_go_up 为假，目录本身不可选。
 const folderListingDecoder = d.object({
   path: d.string({ min: 1 }),
   parent: d.nullable(d.string({ min: 1 })),

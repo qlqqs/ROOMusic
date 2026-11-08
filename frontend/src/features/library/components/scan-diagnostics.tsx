@@ -1,4 +1,5 @@
 import { RefreshCw } from "lucide-react";
+import type { Ref } from "react";
 import { formatCount } from "../../../shared/lib/number";
 import { Button, DataTable, Panel, QueryContent, Skeleton, type Column } from "../../../shared/ui";
 import type { DiagnosticDTO, DiagnosticsPageDTO } from "../api/decoders";
@@ -42,13 +43,14 @@ function DiagnosticsBody({ page, finished }: { page: DiagnosticsPageDTO; finishe
 
 /**
  * 扫描的诊断：按类别汇总加最多 100 条明细（类别、安全说明、可选的相对路径）。不轮询：
- * 运行中可以手动刷新，扫描结束时自动刷新一次。
+ * 运行中可以手动刷新，扫描结束时自动刷新一次。headingRef 让状态区的“跳过 N 个文件”把焦点带到这里。
  */
-export function ScanDiagnostics({ scanId, finished }: { scanId: string; finished: boolean }) {
+export function ScanDiagnostics({ scanId, finished, headingRef }: { scanId: string; finished: boolean; headingRef: Ref<HTMLHeadingElement> }) {
   const diagnostics = useScanDiagnostics(scanId, finished);
   return (
     <Panel
       title="诊断"
+      headingRef={headingRef}
       action={
         <Button icon={<RefreshCw size={14} />} busy={diagnostics.isFetching} onClick={() => void diagnostics.refetch()}>
           {diagnostics.isFetching ? "正在刷新…" : "刷新诊断"}

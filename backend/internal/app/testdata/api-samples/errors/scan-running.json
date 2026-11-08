@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "scan_running",
+      "message": "正在扫描，稍后再试"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

@@ -18,6 +18,12 @@
   box-shadow: var(--shadow-md);
 }
 
+/* 放在对话框里：占据正常位置，不需要阴影。 */
+.inline {
+  position: static;
+  box-shadow: none;
+}
+
 .header {
   display: flex;
   align-items: center;

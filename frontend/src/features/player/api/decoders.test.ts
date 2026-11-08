@@ -25,6 +25,26 @@ describe("播放 API decoder", () => {
   });
 
   it.each([
+    ["ape_apev2", "ape"],
+    ["wavpack_apev2", "wavpack"],
+    ["wavpack_apev2", "wavpack_hybrid"],
+    ["aiff_id3", "aiff"],
+  ])("后端格式表包含 %s / %s，交付的是派生 FLAC", (sourceKind, codec) => {
+    expect(decodePlaybackFormats(formats).items).toContainEqual({
+      source_kind: sourceKind,
+      codec,
+      delivery: "derived",
+      mime_type: "audio/flac",
+      codecs: null,
+    });
+  });
+
+  it("来源类别与编码按字符串解码，新增取值不受前端枚举限制", () => {
+    const input = withValue(withValue(formats, ["items", 0, "source_kind"], "future_source"), ["items", 0, "codec"], "future_codec");
+    expect(decodePlaybackFormats(input)).toEqual(input);
+  });
+
+  it.each([
     without(formats, ["items"]),
     without(formats, ["items", 0, "delivery"]),
     withValue(formats, ["items", 0, "delivery"], "transcoded"),
@@ -144,6 +164,27 @@ describe("曲目分析 API decoder", () => {
     } else {
       expect(decoded.analysis).toBeNull();
       expect(decoded.album).toBeNull();
+    }
+  });
+});
+
+
+describe("曲目分析响度范围与采样峰值 decoder", () => {
+  const done = sampleBody("tracks/analysis-done");
+
+  it.each([
+    [6.3, -1.2],
+    [0, 0],
+    [null, null],
+  ] as const)("保留响度范围 %s 与采样峰值 %s", (loudnessRangeLu, samplePeakDbfs) => {
+    const input = withValue(withValue(done, ["analysis", "loudness_range_lu"], loudnessRangeLu), ["analysis", "sample_peak_dbfs"], samplePeakDbfs);
+    expect(decodeTrackAnalysis(input).analysis).toMatchObject({ loudnessRangeLu, samplePeakDbfs });
+  });
+
+  it.each(["loudness_range_lu", "sample_peak_dbfs"] as const)("%s 必须存在，且不接受字符串或布尔值", (field) => {
+    expect(() => decodeTrackAnalysis(without(done, ["analysis", field]))).toThrow(d.DecodeError);
+    for (const value of ["6.3", false]) {
+      expect(() => decodeTrackAnalysis(withValue(done, ["analysis", field], value))).toThrow(d.DecodeError);
     }
   });
 });

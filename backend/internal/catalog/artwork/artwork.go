@@ -117,22 +117,35 @@ type preparedArtwork struct {
 	wroteManagedFile          bool
 }
 
-// describe 只校验字节并确定内容寻址资源，不接触文件或数据库。
-func (s *Store) describe(data []byte, mimeType string) (preparedArtwork, error) {
+// ValidateImage 校验封面源的大小、文件头与尺寸，不访问文件系统或数据库。
+func ValidateImage(data []byte) (string, error) {
 	if len(data) > 16<<20 {
-		return preparedArtwork{}, fmt.Errorf("artwork too large")
+		return "", fmt.Errorf("artwork too large")
 	}
-	detectedMIME := SniffMIME(data)
+	mimeType := SniffMIME(data)
 	if mimeType == "" {
-		mimeType = detectedMIME
-	}
-	if detectedMIME == "" || mimeType != detectedMIME {
-		return preparedArtwork{}, fmt.Errorf("unsupported artwork")
+		return "", fmt.Errorf("unsupported artwork")
 	}
 	width, height := dimensions(data, mimeType)
 	if width <= 0 || height <= 0 {
-		return preparedArtwork{}, fmt.Errorf("invalid artwork")
+		return "", fmt.Errorf("invalid artwork")
 	}
+	return mimeType, nil
+}
+
+// describe 只校验字节并确定内容寻址资源，不接触文件或数据库。
+func (s *Store) describe(data []byte, mimeType string) (preparedArtwork, error) {
+	detectedMIME, err := ValidateImage(data)
+	if err != nil {
+		return preparedArtwork{}, err
+	}
+	if mimeType == "" {
+		mimeType = detectedMIME
+	}
+	if mimeType != detectedMIME {
+		return preparedArtwork{}, fmt.Errorf("unsupported artwork")
+	}
+	width, height := dimensions(data, mimeType)
 	hash := fmt.Sprintf("%x", sha256.Sum256(data))
 	key := hash + "." + strings.TrimPrefix(strings.TrimPrefix(mimeType, "image/"), "x-")
 	return preparedArtwork{hash: hash, key: key, mimeType: mimeType, path: filepath.Join(s.directory, key), width: width, height: height}, nil

@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	Version           int16 = 1
+	Version           int16 = 2
 	TargetLUFS              = -14.0
 	PeakMarginDB            = 0.5
 	probeTimeout            = 5 * time.Second
@@ -29,6 +29,7 @@ const (
 )
 
 type Result struct {
+	LoudnessRangeLU, SamplePeakDBFS                 *float64
 	IntegratedLUFS, TruePeakDBTP                    *float64
 	DurationMS, LeadingSilenceMS, TrailingSilenceMS *int32
 	Waveform                                        []byte
@@ -53,8 +54,10 @@ func (e *Failure) Error() string { return e.Category + ": " + e.Err.Error() }
 func (e *Failure) Unwrap() error { return e.Err }
 
 var (
-	integratedPattern = regexp.MustCompile(`(?m)Integrated loudness:\s*I:\s*([-+]?inf|[-+]?[0-9]+(?:\.[0-9]+)?)\s*LUFS`)
-	peakPattern       = regexp.MustCompile(`(?m)True peak:\s*Peak:\s*([-+]?inf|[-+]?[0-9]+(?:\.[0-9]+)?)\s*dBFS`)
+	integratedPattern    = regexp.MustCompile(`(?m)Integrated loudness:\s*I:\s*([-+]?inf|[-+]?[0-9]+(?:\.[0-9]+)?)\s*LUFS`)
+	peakPattern          = regexp.MustCompile(`(?m)True peak:\s*Peak:\s*([-+]?inf|[-+]?[0-9]+(?:\.[0-9]+)?)\s*dBFS`)
+	loudnessRangePattern = regexp.MustCompile(`(?m)Loudness range:\s*LRA:\s*([-+]?[0-9]+(?:\.[0-9]+)?)\s*LU`)
+	samplePeakPattern    = regexp.MustCompile(`(?m)Sample peak:\s*Peak:\s*([-+]?inf|[-+]?[0-9]+(?:\.[0-9]+)?)\s*dBFS`)
 )
 
 // Open 定位 ffmpeg、读取版本并以规定的静音+正弦 WAV 自检分析链路。
@@ -92,7 +95,7 @@ func Open(ctx context.Context, configuredPath string) (*Analyzer, error) {
 	if err != nil {
 		return nil, &UnavailableError{Reason: "selftest_failed", Err: err}
 	}
-	if result.IntegratedLUFS == nil || math.Abs(*result.IntegratedLUFS-(-23.3)) > 1.5 || result.LeadingSilenceMS == nil || abs32(*result.LeadingSilenceMS-500) > 30 {
+	if result.LoudnessRangeLU == nil || result.IntegratedLUFS == nil || math.Abs(*result.IntegratedLUFS-(-23.3)) > 1.5 || result.LeadingSilenceMS == nil || abs32(*result.LeadingSilenceMS-500) > 30 {
 		return nil, &UnavailableError{Reason: "selftest_failed", Err: errors.New("self-test measurements are outside tolerance")}
 	}
 	return analyzer, nil
@@ -120,7 +123,7 @@ func (a *Analyzer) analyzeInput(ctx context.Context, source *os.File, stdin []by
 	if stdin != nil {
 		input = "pipe:0"
 	}
-	args = append(args, "-i", input, "-filter_complex", "[0:a:0]asplit=2[l][w];[l]ebur128=peak=true:framelog=quiet,anullsink;[w]aresample=8000,aformat=sample_fmts=s16:channel_layouts=mono[pcm]", "-map", "[pcm]", "-f", "s16le", "pipe:1")
+	args = append(args, "-i", input, "-filter_complex", "[0:a:0]asplit=2[l][w];[l]ebur128=peak=sample+true:framelog=quiet,anullsink;[w]aresample=8000,aformat=sample_fmts=s16:channel_layouts=mono[pcm]", "-map", "[pcm]", "-f", "s16le", "pipe:1")
 	ctx, cancel := context.WithTimeout(ctx, trackTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, a.path, args...)
@@ -160,29 +163,32 @@ func (a *Analyzer) analyzeInput(ctx context.Context, source *os.File, stdin []by
 	if waitErr != nil {
 		return Result{}, &Failure{Category: "ffmpeg_exit", Err: fmt.Errorf("ffmpeg exited: %w: %s", waitErr, stderr.String())}
 	}
-	integrated, peak, err := parseSummary(stderr.String())
+	integrated, peak, loudnessRange, samplePeak, err := parseSummary(stderr.String())
 	if err != nil {
 		return Result{}, &Failure{Category: "parse", Err: err}
 	}
 	if len(peaks) == 0 {
 		return Result{}, &Failure{Category: "parse", Err: errors.New("ffmpeg produced no PCM samples")}
 	}
-	return measure(peaks, integrated, peak), nil
+	result := measure(peaks, integrated, peak)
+	result.LoudnessRangeLU = loudnessRange
+	result.SamplePeakDBFS = samplePeak
+	return result, nil
 }
 
-func parseSummary(stderr string) (*float64, *float64, error) {
+func parseSummary(stderr string) (integrated, peak, loudnessRange, samplePeak *float64, err error) {
 	integratedMatch := integratedPattern.FindStringSubmatch(stderr)
 	peakMatch := peakPattern.FindStringSubmatch(stderr)
 	if len(integratedMatch) != 2 || len(peakMatch) != 2 {
-		return nil, nil, errors.New("ebur128 summary is missing")
+		return nil, nil, nil, nil, errors.New("ebur128 summary is missing")
 	}
-	integrated, err := parseDB(integratedMatch[1])
+	integrated, err = parseDB(integratedMatch[1])
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, nil, err
 	}
-	peak, err := parseDB(peakMatch[1])
+	peak, err = parseDB(peakMatch[1])
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	if math.IsInf(*integrated, -1) || *integrated <= -70 {
 		integrated = nil
@@ -190,7 +196,22 @@ func parseSummary(stderr string) (*float64, *float64, error) {
 	if math.IsInf(*peak, -1) {
 		peak = nil
 	}
-	return integrated, peak, nil
+	if match := loudnessRangePattern.FindStringSubmatch(stderr); len(match) == 2 && integrated != nil {
+		loudnessRange, err = parseDB(match[1])
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+	}
+	if match := samplePeakPattern.FindStringSubmatch(stderr); len(match) == 2 {
+		samplePeak, err = parseDB(match[1])
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+		if math.IsInf(*samplePeak, -1) {
+			samplePeak = nil
+		}
+	}
+	return integrated, peak, loudnessRange, samplePeak, nil
 }
 
 func parseDB(value string) (*float64, error) {

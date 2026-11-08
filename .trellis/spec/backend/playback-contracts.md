@@ -8,7 +8,7 @@ M2a 在既有同源会话与只读音乐源之上新增播放格式表、预检�
 设计与验证边界见 [M2a 任务](../../tasks/archive/2026-10/10-03-classical-m2a-direct-playback/prd.md)及
 [ADR 0004](../../../docs/architecture/adr/0004-media-delivery.md)。三组手工实播未完成前不能宣称整个 M2a 已验收。
 
-M2b 增加 ALAC 的无损派生交付：格式项带 `delivery`，预检可返回 202，音频接口可交付已完成的派生文件，新增三个错误码。
+M2b 增加 ALAC 的无损派生交付；格式扩展增加 APE、WavPack 和 AIFF：格式项带 `delivery`，预检可返回 202，音频接口可交付已完成的派生文件，新增三个错误码。
 配置、缓存、转换流程、上限与测试见 [M2b 无损派生合同](./playback-derivation-contracts.md)；本文的检查顺序、安全打开、Range 与停机中止规则对两种交付一致。
 
 ## 2. 签名
@@ -18,7 +18,7 @@ M2b 增加 ALAC 的无损派生交付：格式项带 `delivery`，预检可返�
 - `GET|HEAD /api/v1/tracks/{id}/audio`：直出原字节，或交付已完成的派生文件，支持单范围；从不启动转换。
 - `catalog.Store.LoadTrackSource(ctx, trackID)`：公开曲目来源合同；非 `present` 与不存在统一为 `catalog.ErrTrackNotFound`。
 - `library.LoadRootLocation(ctx, querier, rootID)`：返回登记根目录与启用状态。
-- `playback.NewService(database, allowedRoots, options...)`：`WithDerivation(...)` 启用派生，不传则 ALAC 保持不能直接播放。
+- `playback.NewService(database, allowedRoots, options...)`：`WithDerivation(...)` 启用派生，不传则所有派生格式保持不能直接播放。
 - `playback.Service.Prepare(ctx, trackID)`：返回 `Prepared{TrackID, Format, File, Size, ETag}`，调用方负责关闭文件；
   派生格式返回缓存中的派生文件，未就绪为 `ErrDerivationNotReady`，从不启动转换。
 - `playback.Service.Preflight(ctx, trackID, userID, wait)`：返回 `Representation`；唯一会启动或加入转换的入口。
@@ -38,15 +38,19 @@ M2b 增加 ALAC 的无损派生交付：格式项带 `delivery`，预检可返�
 直出格式表：FLAC、MP3、16 bit PCM WAV、AAC-LC/MP4、Ogg Vorbis、Ogg Opus，都经真实 Chromium 解码验证，不以解析器能识别代替；
 `cue_virtual`、`wav_extensible`、浮点 WAV 与未知组合拒绝。`m4a/alac` 不直出（浏览器大多不能解码，只有 Safari 能）：
 派生可用时经 ffmpeg 无损转换成 FLAC 交付（`delivery: derived`，M2b），派生不可用时仍是不能直接播放（M2a 收尾时 2026-10-06 移出直出，见 ADR 0004 决策记录）。
+新增派生组合为 `ape_apev2/ape`、`wavpack_apev2/wavpack`、`wavpack_apev2/wavpack_hybrid`、`aiff_id3/aiff`。
+它们与 ALAC 均交付 `audio/flac`，`codecs: null`；格式项只在派生管理器确认对应解码器可用时出现，AIFF 用 `pcm_s16be` 代表 PCM 能力。
+WavPack 混合模式的来源仍为有损，FLAC 只保证与其解码后的 PCM 相同；浮点、DSD WavPack、浮点 AIFF 与其他 AIFC 压缩不进格式表。
 浏览器能力探测不能保证某个具体文件可播，运行时仍可报解码失败。
 
 安全打开顺序：
 
-1. 曲目可见且来源 `present`；读取登记 root，先检查启用状态与格式白名单。
+1. 曲目可见且来源 `present`；读取登记 root，先检查启用状态与格式白名单；派生格式的扫描位深只接受 0（未知）、16、24，其他值在路径核对和转换前拒绝。
 2. `library.ValidatePath` 核对登记目录仍被配置允许且规范路径未变。
 3. `os.OpenRoot` 后以 `O_RDONLY|O_NONBLOCK` 打开相对路径；对已打开的句柄 `Stat`，必须是普通文件。
 4. 大小与修改时间（截到微秒）严格等于扫描记录，任一记录缺失也拒绝；再用 `ReadAt` 核对容器头。
-   MP4 允许 `ftyp` 前有其他顶层 atom（最多检查 8 个）；不凭扩展名判断类型。
+   MP4 允许 `ftyp` 前有其他顶层 atom（最多检查 8 个）；APE 是可选 ID3v2 前缀后的 `MAC `（标签头与标签体合计最多 16 MiB，含页脚标志时再跳过 10 字节），
+   WavPack 偏移 0 为 `wvpk`，AIFF 为 `FORM` 加 `AIFF`/`AIFC`；不凭扩展名判断类型。
 5. 原文件始终只读，句柄响应结束关闭。严格核对不是防止保留大小/mtime 的恶意原地改写的完整内容快照证明。
 
 音频成功响应：`Cache-Control: private, no-store`、`X-Content-Type-Options: nosniff`、已验证的
@@ -71,7 +75,7 @@ Range 仅接受单个 `bytes=N-M`、`bytes=N-` 或 `bytes=-N`；畸形、多范�
 
 ## 4. 验证与错误矩阵
 
-检查优先级：鉴权 → UUID → 曲目可见 → root → 格式 → 文件核对 → Range。
+检查优先级：鉴权 → UUID → 曲目可见 → root → 格式（含派生位深关卡）→ 文件核对 → Range。
 错误信封与 `no-store` 沿用 [平台运行合同](./core0-runtime-contracts.md)。
 
 | 情况 | 状态与错误码 | 用户结果 |
@@ -80,7 +84,8 @@ Range 仅接受单个 `bytes=N-M`、`bytes=N-` 或 `bytes=-N`；畸形、多范�
 | 非 UUID | 400 `invalid_id` | 曲目标识无效 |
 | 不存在或非 present | 404 `not_found` | 曲目不存在 |
 | root disabled | 409 `root_disabled` | 目录已停用 |
-| CUE 虚拟轨或非白名单（含派生不可用时的 ALAC） | 409 `not_directly_playable` | 不能直接播放 |
+| CUE 虚拟轨或非白名单（含派生或对应解码器不可用） | 409 `not_directly_playable` | 不能直接播放 |
+| 派生源位深不是 0、16 或 24（含 20/32 位 ALAC） | 409 `not_directly_playable` | 不启动转换，不写失败记忆 |
 | 根/文件缺失、链接逃逸、FIFO、非普通文件、根不被允许 | 409 `source_unavailable` | 文件无法读取，不泄露路径 |
 | 大小/mtime/容器变化或缺少扫描版本 | 409 `source_changed` | 提示重新扫描 |
 | Range 无效/多范围/越界 | 416 `range_not_satisfiable` | JSON 错误，不生成 multipart |

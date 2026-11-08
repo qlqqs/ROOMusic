@@ -1,0 +1,50 @@
+/* 与确认对话框同一种版面，宽一些放得下文件夹浏览器。 */
+.dialog {
+  width: min(520px, calc(100vw - 2 * var(--space-4)));
+}
+
+.content {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-4);
+}
+
+.title {
+  font-size: var(--fs-16);
+  overflow-wrap: anywhere;
+}
+
+.list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding-left: var(--space-2);
+  border-radius: var(--radius-md);
+}
+
+.row:hover {
+  background: var(--color-hover);
+}
+
+.path {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-13);
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2);
+}

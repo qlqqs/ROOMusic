@@ -167,6 +167,9 @@ func ClearScansStaging(ctx context.Context, database Execer, scanIDs []string) e
 		if _, err := database.ExecContext(ctx, `DELETE FROM scan_observations WHERE scan_run_id=ANY($1::uuid[])`, scanIDs[start:min(start+256, len(scanIDs))]); err != nil {
 			return err
 		}
+		if _, err := database.ExecContext(ctx, `DELETE FROM scan_held_sources WHERE scan_run_id=ANY($1::uuid[])`, scanIDs[start:min(start+256, len(scanIDs))]); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -174,6 +177,10 @@ func ClearScansStaging(ctx context.Context, database Execer, scanIDs []string) e
 // ClearStagedObservations 删除 rootID 在本次扫描中的全部暂存行。
 func ClearStagedObservations(ctx context.Context, database Execer, scanID, rootID string) error {
 	_, err := database.ExecContext(ctx, "DELETE FROM scan_observations WHERE scan_run_id=$1::uuid AND root_id=$2::uuid", scanID, rootID)
+	if err != nil {
+		return err
+	}
+	_, err = database.ExecContext(ctx, "DELETE FROM scan_held_sources WHERE scan_run_id=$1::uuid AND root_id=$2::uuid", scanID, rootID)
 	return err
 }
 

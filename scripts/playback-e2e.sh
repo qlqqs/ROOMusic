@@ -76,6 +76,13 @@ mkdir -p "$TEMP_DIR/library" "$TEMP_DIR/backend"
 if [[ "$SCAN_FEEDBACK_ONLY" == false ]]; then
 mkdir -p "$TEMP_DIR/library/formats" "$TEMP_DIR/library/cue" "$TEMP_DIR/library/slow"
 cp "$ROOT_DIR"/backend/testdata/playback/*.{flac,m4a,mp3,wav,ogg,opus} "$TEMP_DIR/library/formats/"
+# 新格式只生成到本轮临时媒体，不扩充提交的直出素材。
+"$FFMPEG_PATH" -hide_banner -loglevel error -f lavfi \
+  -i sine=frequency=440:sample_rate=48000:duration=2 -ac 2 \
+  -fflags +bitexact -flags:a +bitexact -c:a wavpack -sample_fmt s32p -bits_per_raw_sample 24 \
+  -map_metadata -1 -metadata album="Playback Fixtures" -metadata artist="Fixture Artist" \
+  -metadata album_artist="Fixture Artist" -metadata title="WavPack 24-48" -metadata track=11 \
+  "$TEMP_DIR/library/formats/wavpack-24-48000.wv"
 cp "$ROOT_DIR/backend/testdata/playback/flac-16-44100.flac" "$TEMP_DIR/library/cue/image.flac"
 cat > "$TEMP_DIR/library/cue/image.cue" <<'CUE'
 PERFORMER "Fixture Artist"

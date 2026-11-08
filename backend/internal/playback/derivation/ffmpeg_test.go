@@ -76,7 +76,7 @@ func convertFixture(t *testing.T, ffmpeg *FFmpeg, fixture string, limit int64, e
 	output = filepath.Join(t.TempDir(), "output.partial")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	return output, ffmpeg.Convert(ctx, ConvertJob{Source: source, Output: output, Limit: limit, Expect: expect})
+	return output, ffmpeg.Convert(ctx, ConvertJob{Input: Input{Demuxer: "mov", Decoder: "alac"}, Source: source, Output: output, Limit: limit, Expect: expect})
 }
 
 func TestFFmpegProbeRunsTheSelfTestAndReportsTheVersion(t *testing.T) {
@@ -153,7 +153,7 @@ func TestFFmpegReadsTheOpenedHandleEvenIfThePathIsReplaced(t *testing.T) {
 	}
 
 	output := filepath.Join(directory, "output.partial")
-	err = ffmpeg.Convert(context.Background(), ConvertJob{Source: source, Output: output, Limit: 8 << 20, Expect: Expect{BitDepth: 16, SampleRate: 44100, Channels: 2}})
+	err = ffmpeg.Convert(context.Background(), ConvertJob{Input: Input{Demuxer: "mov", Decoder: "alac"}, Source: source, Output: output, Limit: 8 << 20, Expect: Expect{BitDepth: 16, SampleRate: 44100, Channels: 2}})
 	if err != nil {
 		t.Fatalf("Convert: %v", err)
 	}
@@ -197,7 +197,7 @@ func TestFFmpegRejectsDamagedInput(t *testing.T) {
 				t.Fatalf("open: %v", err)
 			}
 			defer source.Close()
-			err = ffmpeg.Convert(context.Background(), ConvertJob{Source: source, Output: filepath.Join(t.TempDir(), "out.partial"), Limit: 8 << 20})
+			err = ffmpeg.Convert(context.Background(), ConvertJob{Input: Input{Demuxer: "mov", Decoder: "alac"}, Source: source, Output: filepath.Join(t.TempDir(), "out.partial"), Limit: 8 << 20})
 			var failed *FailedError
 			if !errors.As(err, &failed) || failed.Category != FailureFFmpegExit {
 				t.Fatalf("Convert error = %v, want an ffmpeg_exit failure", err)
@@ -244,7 +244,7 @@ func TestFFmpegNeverOverwritesAnExistingOutput(t *testing.T) {
 	if err := os.WriteFile(output, []byte("precious"), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	err = ffmpeg.Convert(context.Background(), ConvertJob{Source: source, Output: output, Limit: 8 << 20})
+	err = ffmpeg.Convert(context.Background(), ConvertJob{Input: Input{Demuxer: "mov", Decoder: "alac"}, Source: source, Output: output, Limit: 8 << 20})
 	var failed *FailedError
 	if !errors.As(err, &failed) || failed.Category != FailureFFmpegExit {
 		t.Fatalf("Convert error = %v, want an ffmpeg_exit failure", err)
@@ -269,10 +269,12 @@ func TestFFmpegManagerDerivesCachesAndServesALAC(t *testing.T) {
 		t.Fatalf("stat fixture: %v", err)
 	}
 	version := SourceVersion{
+		Policy:             policyALACFLAC,
 		ContentFingerprint: "m4a-mdat-v1:test", Size: info.Size(), ModifiedAt: info.ModTime(),
 		SourceKind: "m4a", Codec: "alac", BitDepth: 24, SampleRate: 48000, Channels: 2,
 	}
 	request := Request{User: "user-a", TrackID: "track-1", Source: Source{
+		Input:   Input{Demuxer: "mov", Decoder: "alac"},
 		Version: version,
 		Open:    func(context.Context) (*os.File, error) { return os.Open(fixture) },
 		Verify: func(_ context.Context, file *os.File, _ bool) error {
