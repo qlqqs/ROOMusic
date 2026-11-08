@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it } from "vitest";
@@ -33,6 +33,11 @@ async function setup() {
   return { api, data, view, favorite };
 }
 const heart = (title: string) => screen.getByRole("button", { name: `收藏“${title}”` });
+const hover = (element: HTMLElement) => {
+  const event = createEvent.pointerOver(element);
+  Object.defineProperty(event, "pointerType", { value: "mouse" });
+  fireEvent(element, event);
+};
 
 describe("艺人收藏独立lookup", () => {
   it("I7：艺人收藏名称用引号，曲目和专辑收藏名称保留书名号", async () => {
@@ -53,7 +58,8 @@ describe("艺人收藏独立lookup", () => {
     data.state = "preparing";
     view(<FavoriteStatusScope trackIds={[trackId]} artistIds={[id]}><FavoriteButton target={{ kind: "track", id: trackId, title: "曲目" }} /><FavoriteButton target={{ kind: "artist", id, title: "艺人" }} /></FavoriteStatusScope>);
     await waitFor(() => expect(screen.getByRole("button", { name: "收藏《曲目》" }).hasAttribute("disabled")).toBe(false));
-    await waitFor(() => expect(heart("艺人").title).toBe("暂时读不到收藏状态"));
+    hover(heart("艺人"));
+    await waitFor(() => expect(screen.getByText("暂时读不到收藏状态").getAttribute("aria-hidden")).toBe("true"));
     expect(heart("艺人").hasAttribute("disabled")).toBe(true);
     const bodies = api.requestsTo("POST", "/api/v1/me/favorites/lookup").map((request) => request.body);
     expect(bodies).toContainEqual({ track_ids: [trackId], group_ids: [] });

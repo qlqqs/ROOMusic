@@ -12,12 +12,13 @@ import {
 import { decodeFavoriteArtistsPage } from "../features/personal/api/decoders";
 import { decodeArtistResults } from "../features/search/api/decoders";
 import { describe, expect, it } from "vitest";
-import { decodePlaybackFormats, decodeTrackLyrics, decodeTrackPlayback, decodeTrackPreparing } from "../features/player/api/decoders";
+import { decodePlaybackFormats, decodeTrackAnalysis, decodeTrackLyrics, decodeTrackPlayback, decodeTrackPreparing } from "../features/player/api/decoders";
 import { decodeLoggedOut, decodePasswordChanged, decodeSetupStatus, decodeViewer } from "../features/auth/api/decoders";
 import {
   decodeRecentlyAdded,
   decodeReleaseGroupAddedPage,
   decodeCatalogState,
+  decodeCatalogStats,
   releaseSummaryDecoder,
   decodeReleaseComparison,
   decodeReleaseDetail,
@@ -27,6 +28,7 @@ import {
 } from "../features/catalog/api/decoders";
 import {
   decodeActiveScan,
+  decodeAnalysisProgress,
   decodeDiagnosticsPage,
   decodeFolderListing,
   decodeRootChanged,
@@ -87,7 +89,7 @@ import { listApiSampleNames, loadApiSample } from "./api-samples";
 
 // 契约测试：后端的每个真实响应样本都必须有一个 decoder 能解码，并且 decoder 保留了样本里的全部字段
 // （往返后与样本相同）。后端新增字段时，样本测试先失败；在这里补上 decoder 才算确认前端已经知道这个字段。
-type Contract = { status: number; decode: (input: unknown) => unknown };
+type Contract = { status: number; decode: (input: unknown) => unknown; preservesWireShape?: boolean };
 
 // 旧 /releases 列表未被界面消费，合同测试复用生产摘要 decoder 验证兼容形状。
 const decodeLegacyReleasePage = d.defineDecoder(d.object({
@@ -147,6 +149,8 @@ const successContracts: Record<string, Contract> = {
   "catalog/status-all-ready": { status: 200, decode: decodeCatalogState },
   "catalog/status-artists-preparing": { status: 200, decode: decodeCatalogState },
   "catalog/status-search-ready": { status: 200, decode: decodeCatalogState },
+  "catalog/stats": { status: 200, decode: decodeCatalogStats },
+  "catalog/stats-artists-preparing": { status: 200, decode: decodeCatalogStats },
   "favorites/artist-added": { status: 200, decode: decodeFavoriteToggle },
   "favorites/artist-lookup": { status: 200, decode: decodeFavoriteLookup },
   "favorites/artist-removed": { status: 200, decode: decodeFavoriteToggle },
@@ -192,6 +196,7 @@ const successContracts: Record<string, Contract> = {
   "search/same-name-split-results": { status: 200, decode: decodeArtistResults },
   "search/suggestions-artists": { status: 200, decode: decodeSearchSuggestions },
   "search/tracks-alias-match": { status: 200, decode: decodeTrackResults },
+  "audio-analysis/progress": { status: 200, decode: decodeAnalysisProgress },
   "scan-feedback/active-member": { status: 200, decode: decodeActiveScan },
   "scan-feedback/active-none": { status: 200, decode: decodeActiveScan },
   "scan-feedback/cancel-requested": { status: 202, decode: decodeScan },
@@ -279,6 +284,10 @@ const successContracts: Record<string, Contract> = {
   "tracks/playback": { status: 200, decode: decodeTrackPlayback },
   "tracks/playback-derived": { status: 200, decode: decodeTrackPlayback },
   "tracks/playback-preparing": { status: 202, decode: decodeTrackPreparing },
+  // 曲目分析 decoder 是播放器 DTO 投影（字段名转换、base64 转 Uint8Array），不保留 wire 形状；这里仍调用生产 decoder 验证样本可解码。
+  "tracks/analysis-done": { status: 200, decode: decodeTrackAnalysis, preservesWireShape: false },
+  "tracks/analysis-failed": { status: 200, decode: decodeTrackAnalysis, preservesWireShape: false },
+  "tracks/analysis-pending": { status: 200, decode: decodeTrackAnalysis, preservesWireShape: false },
   "tracks/lyrics-synced": { status: 200, decode: decodeTrackLyrics },
   "tracks/lyrics-plain": { status: 200, decode: decodeTrackLyrics },
   "tracks/lyrics-none": { status: 200, decode: decodeTrackLyrics },
@@ -603,7 +612,8 @@ describe("API 样本契约", () => {
     if (contract === undefined) throw new Error(`缺少契约：${name}`);
     const sample = loadApiSample(name);
     expect(sample.status).toBe(contract.status);
-    expect(contract.decode(sample.body)).toEqual(sample.body);
+    const decoded = contract.decode(sample.body);
+    if (contract.preservesWireShape !== false) expect(decoded).toEqual(sample.body);
   });
 
   it.each(sampleNames.filter((name) => name in errorContracts))("错误样本 %s 被错误信封 decoder 解码", (name) => {
