@@ -14,6 +14,18 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	34: `INSERT INTO library_root_exclusions(root_id,relative_path)
+ VALUES('f1000000-0000-4000-8000-000000000001','测试子目录');
+ INSERT INTO scan_held_sources(scan_run_id,root_id,kind,relative_path)
+ VALUES('f2000000-0000-4000-8000-000000000001','f1000000-0000-4000-8000-000000000001','file','损坏.flac');
+ UPDATE scan_runs SET skipped_files=1 WHERE id='f2000000-0000-4000-8000-000000000001';
+ INSERT INTO library_root_operations(id,root_id,actor_id,operation_type,status,idempotency_key,fingerprint,result_revision,after_state,response,request_id)
+ VALUES('f3000000-0000-4000-8000-000000000001','f1000000-0000-4000-8000-000000000001',
+ 'f0000000-0000-4000-8000-000000000001','exclude','succeeded','回滚排除','exclude-fixture',1,
+ '{"relative_path":"测试子目录"}','{}','rollback-exclude'),
+ ('f3000000-0000-4000-8000-000000000002','f1000000-0000-4000-8000-000000000001',
+ 'f0000000-0000-4000-8000-000000000001','unexclude','succeeded','回滚恢复','unexclude-fixture',1,
+ '{"relative_path":"已移除子目录"}','{}','rollback-unexclude');`,
 	33: "",
 	// 0032 的非空列表转换由专门的数据迁移用例覆盖；结构往返不另加会截断的数据。
 	32: "",
@@ -85,6 +97,17 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 				rollbackExec(t, db, `INSERT INTO release_groups(id) VALUES('c1000000-0000-4000-8000-000000000001');
  INSERT INTO releases(id,group_id,title,artist) VALUES('c0000000-0000-4000-8000-000000000001',
  'c1000000-0000-4000-8000-000000000001','迁移测试发行','测试艺人');`)
+			}
+			if m.Version == 34 {
+				// 升级前保留旧类型收据；回退只能移除新类型，不能误删原目录、扫描或操作记录。
+				rollbackExec(t, db, `INSERT INTO users(id,username,password_hash,role)
+ VALUES('f0000000-0000-4000-8000-000000000001','rollback-filter-admin','test-only','admin');
+ INSERT INTO library_roots(id,path) VALUES('f1000000-0000-4000-8000-000000000001','/rollback-filter');
+ INSERT INTO scan_runs(id,status,started_at,finished_at)
+ VALUES('f2000000-0000-4000-8000-000000000001','succeeded',NOW(),NOW());
+ INSERT INTO library_root_operations(id,root_id,actor_id,operation_type,status,idempotency_key,fingerprint,result_revision,request_id)
+ VALUES('f3000000-0000-4000-8000-000000000003','f1000000-0000-4000-8000-000000000001',
+ 'f0000000-0000-4000-8000-000000000001','create','succeeded','旧目录收据','create-fixture',1,'rollback-create');`)
 			}
 			s0 := rollbackSnapshot(t, db)
 			rollbackApply(t, db, migrationPrefix(available, m.Version))

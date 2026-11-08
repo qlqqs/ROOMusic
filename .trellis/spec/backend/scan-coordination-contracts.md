@@ -44,10 +44,12 @@ mutex 只保护本进程的 worker 引用。
   "started_at": "RFC 3339 timestamp",
   "finished_at": "RFC 3339 timestamp | null",
   "cancel_requested_at": "RFC 3339 timestamp | null",
-  "diagnostics": { "total": 0, "counts": [] }
+  "diagnostics": { "total": 0, "counts": [] },
+  "skipped_files": 0
 }
 ```
 
+- `skipped_files` 是所有角色共用 presenter 的必需字段：非负 JS 安全整数或 null；历史扫描为 null，新扫描从 0 起，按文件/目录/CUE 保住登记计数，不受诊断上限影响。随进度及终态写入，大于零不改变 succeeded 与 missing 收口规则。
 - `diagnostics` 是必需摘要，`total` 为诊断条目数，`counts` 为 `{ "kind": string, "count": integer }`
   数组；示例为零诊断状态。它不表示已扫描文件数或完成百分比。
 - `id` 与 `scan_run_id` 当前必须相同；新增字段和状态必须同时更新后端 presenter、前端

@@ -23,7 +23,7 @@ codes may refine these classes without changing their HTTP meaning.
 | `approval_required`, `review_required`, `capability_denied` | 403 | The selected mode has not satisfied its approval or tool policy |
 | `not_found` | 404 | Authorized resource is absent |
 | `method_not_allowed` | 405 | 已注册的 `/api/` 路径不支持该方法；响应带 `Allow` 头列出支持的方法 |
-| `revision_conflict`, `idempotency_conflict`, `setup_closed`, `issue_changed`, `claim_changed`, `not_claimable` | 409 | Current state conflicts with the command（`issue_changed`：核对时问题已不是页面看到的样子，见[核对合同](./issue-review-contracts.md)；`claim_changed`、`not_claimable`：认领的预览已过期、旧版本不需要认领，见[认领合同](./claim-contracts.md)） |
+| `revision_conflict`, `idempotency_conflict`, `exclusion_limit`, `setup_closed`, `issue_changed`, `claim_changed`, `not_claimable` | 409 | Current state conflicts with the command（`issue_changed`：核对时问题已不是页面看到的样子，见[核对合同](./issue-review-contracts.md)；`claim_changed`、`not_claimable`：认领的预览已过期、旧版本不需要认领，见[认领合同](./claim-contracts.md)） |
 | `precondition_failed` | 412 | Explicit request precondition no longer holds |
 | `too_many_attempts` | 429 | 同一账号或来源的尝试过多，稍后再试；带 `Retry-After`，不表示会话失效 |
 | `unavailable`, `review_unavailable` | 503 | A required dependency or Steward reviewer is temporarily unavailable |
@@ -33,6 +33,8 @@ Path traversal, an out-of-root resolved target, and forbidden symlink behavior
 are safe validation failures with stable codes, but responses must not disclose
 the allowed host paths. Unsupported audio files encountered during scanning are
 persisted scan diagnostics, not reasons to fail the entire REST request.
+
+`exclusion_limit` 表示每个登记根已有 100 条排除项，返回 `409` / “不扫描的文件夹太多了”；重复添加已有项仍返回 200，不占新名额。
 
 管理员[目录浏览](./library-folder-contracts.md)的路径类失败统一为 `400 invalid_library_path` / “打不开这个文件夹”；
 成功响应才允许向管理员返回允许范围内的绝对路径。

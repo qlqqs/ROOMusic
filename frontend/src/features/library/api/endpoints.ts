@@ -7,6 +7,7 @@ import {
   decodeFolderListing,
   decodeRootChanged,
   decodeRootCreated,
+  decodeRootExclusions,
   decodeRootList,
   decodeRootOperationList,
   decodeScan,
@@ -17,6 +18,7 @@ import {
   type FolderListingDTO,
   type RootChangedDTO,
   type RootCreatedDTO,
+  type RootExclusionsDTO,
   type RootDTO,
   type RootOperationDTO,
   type ScanDTO,
@@ -32,10 +34,16 @@ export function fetchRootOperations(signal?: AbortSignal): Promise<ApiResponse<{
   return apiRequest({ method: "GET", path: "/api/v1/library-root-operations", signal }, decodeRootOperationList);
 }
 
-/** 服务器上的文件夹（管理员）：path 为 null 时从允许的音乐目录开始；只回传接口给出的路径。 */
-export function fetchFolders(path: string | null, signal?: AbortSignal): Promise<ApiResponse<FolderListingDTO>> {
-  const query = path === null ? "" : `?${new URLSearchParams({ path }).toString()}`;
-  return apiRequest({ method: "GET", path: `/api/v1/library-folders${query}`, signal }, decodeFolderListing);
+/**
+ * 服务器上的文件夹（管理员）：path 为 null 时从允许的音乐目录开始；只回传接口给出的路径。
+ * 给了 rootId 时只在这个目录之内浏览，path 为 null 时从目录本身开始。
+ */
+export function fetchFolders(path: string | null, rootId: string | null, signal?: AbortSignal): Promise<ApiResponse<FolderListingDTO>> {
+  const params = new URLSearchParams();
+  if (rootId !== null) params.set("root_id", rootId);
+  if (path !== null) params.set("path", path);
+  const query = params.toString();
+  return apiRequest({ method: "GET", path: `/api/v1/library-folders${query === "" ? "" : `?${query}`}`, signal }, decodeFolderListing);
 }
 
 // 目录的新增、停用与恢复都要求幂等键：同一个键、同一个请求体重放会得到第一次的响应，不会重复执行。
@@ -63,6 +71,17 @@ export function restoreRoot(id: string, expectedRevision: number, idempotencyKey
     { method: "POST", path: `/api/v1/library-roots/${id}/restore`, body: { expected_revision: expectedRevision }, idempotencyKey },
     decodeRootChanged,
   );
+}
+
+/** 添加不扫描的子文件夹：path 是目录浏览器给出的绝对路径，必须在该目录之内；已排除的再加一次返回当前状态。 */
+export function addRootExclusion(id: string, path: string, idempotencyKey: string): Promise<ApiResponse<RootExclusionsDTO>> {
+  return apiRequest({ method: "POST", path: `/api/v1/library-roots/${id}/exclusions`, body: { path }, idempotencyKey }, decodeRootExclusions);
+}
+
+/** 移除不扫描的子文件夹：relativePath 取自目录的 excluded_paths；本来就没有的移除一次返回当前状态。 */
+export function removeRootExclusion(id: string, relativePath: string, idempotencyKey: string): Promise<ApiResponse<RootExclusionsDTO>> {
+  const query = new URLSearchParams({ path: relativePath });
+  return apiRequest({ method: "DELETE", path: `/api/v1/library-roots/${id}/exclusions?${query}`, idempotencyKey }, decodeRootExclusions);
 }
 
 export function fetchActiveScan(signal?: AbortSignal): Promise<ApiResponse<{ scan: ScanDTO | null }>> {

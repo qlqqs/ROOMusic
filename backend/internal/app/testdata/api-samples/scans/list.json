@@ -13,6 +13,7 @@
         "report_status": "legacy",
         "root_progress": null,
         "scan_run_id": "00000000-0000-4000-8000-000000000001",
+        "skipped_files": null,
         "started_at": "2026-01-01T00:00:07Z",
         "status": "running"
       },
@@ -46,6 +47,7 @@
           "total": 1
         },
         "scan_run_id": "00000000-0000-4000-8000-000000000002",
+        "skipped_files": 0,
         "started_at": "2026-01-01T00:00:05Z",
         "status": "succeeded"
       },
@@ -56,19 +58,23 @@
             {
               "count": 1,
               "kind": "parse_failure"
+            },
+            {
+              "count": 2,
+              "kind": "root_unavailable"
             }
           ],
-          "total": 1
+          "total": 3
         },
         "finished_at": "2026-01-01T00:00:04Z",
         "id": "00000000-0000-4000-8000-000000000003",
         "progress": {
           "completed": 0,
-          "count_complete": true,
+          "count_complete": false,
           "files_changed": false,
-          "files_counted": 2,
-          "files_processed": 2,
-          "files_total": 2,
+          "files_counted": 1,
+          "files_processed": 1,
+          "files_total": 1,
           "percent_bp": 9900,
           "phase": "saving",
           "total": 0,
@@ -84,6 +90,7 @@
           "total": 2
         },
         "scan_run_id": "00000000-0000-4000-8000-000000000003",
+        "skipped_files": 1,
         "started_at": "2026-01-01T00:00:02Z",
         "status": "incomplete"
       },
@@ -116,6 +123,7 @@
         "report_status": "legacy",
         "root_progress": null,
         "scan_run_id": "00000000-0000-4000-8000-000000000005",
+        "skipped_files": null,
         "started_at": "2026-01-01T00:00:00Z",
         "status": "failed"
       }

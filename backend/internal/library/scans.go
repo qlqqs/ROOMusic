@@ -83,6 +83,7 @@ type Scan struct {
 	FinishedAt        *time.Time         `json:"finished_at"`
 	CancelRequestedAt *time.Time         `json:"cancel_requested_at"`
 	Diagnostics       DiagnosticsSummary `json:"diagnostics"`
+	SkippedFiles      *int64             `json:"skipped_files"`
 	Progress          *ScanProgress      `json:"progress"`
 	RootProgress      *RootProgress      `json:"-"`
 	ReportStatus      string             `json:"report_status"`
@@ -108,8 +109,9 @@ type Diagnostic struct {
 func scanRow(row interface{ Scan(...any) error }) (Scan, error) {
 	result := Scan{Diagnostics: DiagnosticsSummary{Counts: []DiagnosticCount{}}}
 	var finishedAt, cancelRequestedAt sql.NullTime
+	var skippedFiles sql.NullInt64
 	var feedback feedbackRow
-	destinations := append([]any{&result.ID, &result.Status, &result.StartedAt, &finishedAt, &cancelRequestedAt}, feedback.destinations()...)
+	destinations := append([]any{&result.ID, &result.Status, &result.StartedAt, &finishedAt, &cancelRequestedAt, &skippedFiles}, feedback.destinations()...)
 	err := row.Scan(destinations...)
 	result.ScanRunID = result.ID
 	if finishedAt.Valid {
@@ -120,11 +122,15 @@ func scanRow(row interface{ Scan(...any) error }) (Scan, error) {
 		value := cancelRequestedAt.Time
 		result.CancelRequestedAt = &value
 	}
+	if skippedFiles.Valid {
+		value := skippedFiles.Int64
+		result.SkippedFiles = &value
+	}
 	feedback.apply(&result)
 	return result, err
 }
 
-const scanSelectColumns = "id::text,status,started_at,finished_at,cancel_requested_at" + scanFeedbackColumns
+const scanSelectColumns = "id::text,status,started_at,finished_at,cancel_requested_at,skipped_files" + scanFeedbackColumns
 
 // GetScan 读取一次扫描及其诊断汇总；不存在时返回 ErrScanNotFound。
 func (service *Service) GetScan(ctx context.Context, id string) (Scan, error) {
@@ -268,10 +274,14 @@ func safeDiagnosticKind(kind string) string {
 
 func safeDiagnosticMessage(kind, _ string) string {
 	switch kind {
+	case "root_empty":
+		return "目录是空的，可能还没挂载"
+	case "artwork_unreadable":
+		return "封面文件读不了"
 	case "root_unavailable":
 		return "注册目录当前不可用"
 	case "walk_error":
-		return "目录中的部分内容无法读取"
+		return "文件夹读不了"
 	case "broken_or_escaped_link":
 		return "文件链接目标不可安全读取"
 	case "unsupported_cue":
@@ -339,7 +349,7 @@ func (service *Service) StartScan(ctx context.Context) (StartResult, error) {
 		return StartResult{}, fmt.Errorf("%w: %v", ErrStartFailed, err)
 	}
 	scanID := uuid.New()
-	if _, err := transaction.ExecContext(ctx, `INSERT INTO scan_runs(id,status,started_at,feedback_version,phase,progress_bp,phase_completed,phase_total,progress_updated_at,progress_seq,files_counted,files_processed,count_complete,files_changed,roots_total,report_state) VALUES($1::uuid,'running',NOW(),1,'counting',0,0,0,NOW(),0,0,0,false,false,0,'pending')`, scanID); err != nil {
+	if _, err := transaction.ExecContext(ctx, `INSERT INTO scan_runs(id,status,started_at,feedback_version,phase,progress_bp,phase_completed,phase_total,progress_updated_at,progress_seq,files_counted,files_processed,count_complete,files_changed,roots_total,report_state,skipped_files) VALUES($1::uuid,'running',NOW(),1,'counting',0,0,0,NOW(),0,0,0,false,false,0,'pending',0)`, scanID); err != nil {
 		_ = transaction.Rollback()
 		_ = execution.close(context.Background())
 		return StartResult{}, fmt.Errorf("%w: %v", ErrStartFailed, err)

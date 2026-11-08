@@ -10,7 +10,8 @@ type RootCommandNoticeProps = {
   onDismiss: () => void;
 };
 
-function successText(result: RootCommandResult): { tone: "success" | "info" | "warning"; text: string } {
+/** 不扫描的子文件夹的增删在对话框里完成，列表本身就是结果，页面上不再提示。 */
+function successText(result: RootCommandResult): { tone: "success" | "info" | "warning"; text: string } | null {
   switch (result.kind) {
     case "create":
       if (result.root.status === "disabled") {
@@ -23,6 +24,9 @@ function successText(result: RootCommandResult): { tone: "success" | "info" | "w
       return { tone: "success", text: `已停用目录“${result.name}”，里面的曲目暂时不能播放，恢复后就能再播。` };
     case "restore":
       return { tone: "success", text: `已恢复目录“${result.name}”，里面的曲目可以播放了。` };
+    case "exclude":
+    case "unexclude":
+      return null;
   }
 }
 
@@ -38,10 +42,10 @@ export function RootCommandNotice({ state, onRetry, onDismiss }: RootCommandNoti
   );
 
   if (state.status === "succeeded") {
-    const { tone, text } = successText(state.result);
-    return (
-      <Notice tone={tone} action={dismiss}>
-        {text}
+    const success = successText(state.result);
+    return success === null ? null : (
+      <Notice tone={success.tone} action={dismiss}>
+        {success.text}
       </Notice>
     );
   }

@@ -1,11 +1,13 @@
-// 诊断类别的中文名。清单按 2026-10-01 后端写入 scan_diagnostics 的位置逐一核对：
-// internal/library/scanner.go（扫描与 CUE、抓轨日志）、internal/catalog/identity_plan.go（曲目身份规划）、
-// internal/library/scans.go 的 safeDiagnosticMessage（还保留了 walk_error 与 staging_read_failure 的旧类别）。
+// 诊断类别的中文名。清单按 2026-11-08 后端写入 scan_diagnostics 的位置逐一核对：
+// internal/library/scanner.go（扫描与 CUE、读不了的子文件夹 walk_error、空根保护 root_empty、抓轨日志）、
+// internal/library 的封面发现（artwork_unreadable）、internal/catalog/identity_plan.go（曲目身份规划）、
+// internal/library/scans.go 的 safeDiagnosticMessage（还保留了 staging_read_failure 的旧类别）。
 // 后端把不合法或超长的类别归一为 "unknown"。新增类别不会让界面出错：未知类别原样显示。
 const diagnosticKindNames: ReadonlyMap<string, string> = new Map(
   Object.entries({
     root_unavailable: "目录不可用",
-    walk_error: "目录部分内容无法读取",
+    root_empty: "目录是空的",
+    walk_error: "文件夹读不了",
     permission_error: "没有读取权限",
     broken_or_escaped_link: "链接目标不可读取",
     non_regular_file: "不是普通文件",
@@ -22,6 +24,7 @@ const diagnosticKindNames: ReadonlyMap<string, string> = new Map(
     staging_read_failure: "扫描暂存读取失败",
     catalog_write_failure: "资料库保存失败",
     artwork_failure: "封面处理失败",
+    artwork_unreadable: "封面文件读不了",
     database_error: "数据库操作失败",
     unknown: "未知类别",
   }),

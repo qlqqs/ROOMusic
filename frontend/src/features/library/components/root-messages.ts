@@ -7,6 +7,13 @@ export const rootFailureMessages = {
   not_found: "目录已不存在，列表已刷新。",
 } as const;
 
+/** 不扫描的子文件夹的增删：路径被拒绝时说文件夹打不开（目录浏览器只给出目录之内的文件夹）。 */
+export const exclusionFailureMessages = {
+  ...rootFailureMessages,
+  invalid_library_path: "打不开这个文件夹。",
+  exclusion_limit: "不扫描的文件夹太多了。",
+} as const;
+
 export const scanFailureMessages = {
   scan_coordination_unavailable: "暂时无法协调扫描任务，请稍后重试。",
   not_found: "扫描不存在。",

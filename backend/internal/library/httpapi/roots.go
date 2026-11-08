@@ -11,29 +11,59 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
+type rootResponse struct {
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	Path          string    `json:"path"`
+	Status        string    `json:"status"`
+	Revision      int64     `json:"revision"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+	ExcludedPaths []string  `json:"excluded_paths"`
+}
+
+// 数组先转 JSON 再解码，避免 database/sql 把 PostgreSQL text[] 当作原生切片扫描。
+const rootResponseQuery = `SELECT r.id::text,r.path,r.status,r.revision,r.created_at,r.updated_at,
+	COALESCE(to_json(array_agg(e.relative_path ORDER BY e.relative_path COLLATE "C")
+		FILTER (WHERE e.relative_path IS NOT NULL)), '[]'::json)
+	FROM library_roots r LEFT JOIN library_root_exclusions e ON e.root_id=r.id`
+
+func scanRootResponse(row interface{ Scan(...any) error }) (rootResponse, error) {
+	var root rootResponse
+	var path string
+	var exclusions []byte
+	if err := row.Scan(&root.ID, &path, &root.Status, &root.Revision, &root.CreatedAt, &root.UpdatedAt, &exclusions); err != nil {
+		return rootResponse{}, err
+	}
+	if err := json.Unmarshal(exclusions, &root.ExcludedPaths); err != nil {
+		return rootResponse{}, err
+	}
+	root.Path = filepath.Base(path)
+	root.Name = root.Path
+	return root, nil
+}
+
 func (handlers *Handlers) listRoots(responseWriter http.ResponseWriter, request *http.Request) {
 	if _, ok := handlers.guard.RequireAdmin(responseWriter, request); !ok {
 		return
 	}
-	rows, err := handlers.database.QueryContext(request.Context(), "SELECT id::text,path,status,revision,created_at,updated_at FROM library_roots ORDER BY path")
+	rows, err := handlers.database.QueryContext(request.Context(), rootResponseQuery+" GROUP BY r.id ORDER BY r.path")
 	if err != nil {
 		httpserver.WriteError(responseWriter, request, 503, "database_unavailable", "服务暂不可用")
 		return
 	}
 	defer rows.Close()
-	roots := []map[string]any{}
+	roots := []rootResponse{}
 	for rows.Next() {
-		var id, path, status string
-		var revision int64
-		var created, updated time.Time
-		if scanErr := rows.Scan(&id, &path, &status, &revision, &created, &updated); scanErr != nil {
-			httpserver.WriteError(responseWriter, request, 503, "database_error", "无法读取目录")
+		root, scanErr := scanRootResponse(rows)
+		if scanErr != nil {
+			httpserver.WriteError(responseWriter, request, 503, "database_unavailable", "服务暂不可用")
 			return
 		}
-		roots = append(roots, map[string]any{"id": id, "path": filepath.Base(path), "name": filepath.Base(path), "status": status, "revision": revision, "created_at": created, "updated_at": updated})
+		roots = append(roots, root)
 	}
 	if rowsErr := rows.Err(); rowsErr != nil {
-		httpserver.WriteError(responseWriter, request, 503, "database_error", "无法读取目录")
+		httpserver.WriteError(responseWriter, request, 503, "database_unavailable", "服务暂不可用")
 		return
 	}
 	httpserver.WriteJSON(responseWriter, 200, map[string]any{"items": roots})

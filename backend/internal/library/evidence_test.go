@@ -1,7 +1,10 @@
 package library
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	"image/jpeg"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -20,8 +23,13 @@ func TestObservationFieldSourcesDistinguishFallbacks(t *testing.T) {
 	}
 }
 
-func minimalJPEGArtwork() []byte {
-	return []byte{0xff, 0xd8, 0xff, 0xe0, 0, 16, 'J', 'F', 'I', 'F', 0}
+func minimalJPEGArtwork(t *testing.T) []byte {
+	t.Helper()
+	var buffer bytes.Buffer
+	if err := jpeg.Encode(&buffer, image.NewRGBA(image.Rect(0, 0, 1, 1)), nil); err != nil {
+		t.Fatalf("生成 JPEG 夹具：%v", err)
+	}
+	return buffer.Bytes()
 }
 
 func writeArtworkFile(t *testing.T, directory, name string, data []byte) {
@@ -74,7 +82,7 @@ func TestFolderArtworkReadFailureIsReported(t *testing.T) {
 func TestFolderArtworkMatchesNamesCaseInsensitively(t *testing.T) {
 	for _, name := range []string{"Cover.JPG", "FOLDER.Png", "Front.jpeg"} {
 		root := t.TempDir()
-		writeArtworkFile(t, root, name, minimalJPEGArtwork())
+		writeArtworkFile(t, root, name, minimalJPEGArtwork(t))
 		data, mimeType, err := discoverFolderArtwork(root, []string{""})
 		if err != nil || len(data) == 0 || mimeType != "image/jpeg" {
 			t.Fatalf("%s was not found: mime=%q err=%v", name, mimeType, err)
@@ -85,14 +93,14 @@ func TestFolderArtworkMatchesNamesCaseInsensitively(t *testing.T) {
 func TestFolderArtworkCaseOnlyVariantsPreferLowercaseThenByteOrder(t *testing.T) {
 	root := t.TempDir()
 	writeArtworkFile(t, root, "cover.png", minimalPNGArtwork())
-	writeArtworkFile(t, root, "Cover.PNG", minimalJPEGArtwork())
+	writeArtworkFile(t, root, "Cover.PNG", minimalJPEGArtwork(t))
 	if _, mimeType, err := discoverFolderArtwork(root, []string{""}); err != nil || mimeType != "image/png" {
 		t.Fatalf("lowercase variant did not win: mime=%q err=%v", mimeType, err)
 	}
 
 	variants := t.TempDir()
 	writeArtworkFile(t, variants, "Cover.jpg", minimalPNGArtwork())
-	writeArtworkFile(t, variants, "COVER.jpg", minimalJPEGArtwork())
+	writeArtworkFile(t, variants, "COVER.jpg", minimalJPEGArtwork(t))
 	if _, mimeType, err := discoverFolderArtwork(variants, []string{""}); err != nil || mimeType != "image/jpeg" {
 		t.Fatalf("byte order did not pick COVER.jpg: mime=%q err=%v", mimeType, err)
 	}
@@ -100,8 +108,8 @@ func TestFolderArtworkCaseOnlyVariantsPreferLowercaseThenByteOrder(t *testing.T)
 
 func TestFolderArtworkNamePriorityIgnoresCase(t *testing.T) {
 	root := t.TempDir()
-	writeArtworkFile(t, root, "FRONT.jpg", minimalJPEGArtwork())
-	writeArtworkFile(t, root, "Folder.jpg", minimalJPEGArtwork())
+	writeArtworkFile(t, root, "FRONT.jpg", minimalJPEGArtwork(t))
+	writeArtworkFile(t, root, "Folder.jpg", minimalJPEGArtwork(t))
 	writeArtworkFile(t, root, "COVER.PNG", minimalPNGArtwork())
 	if _, mimeType, err := discoverFolderArtwork(root, []string{""}); err != nil || mimeType != "image/png" {
 		t.Fatalf("cover did not outrank folder and front: mime=%q err=%v", mimeType, err)
@@ -119,7 +127,7 @@ func TestFolderArtworkNamePriorityIgnoresCase(t *testing.T) {
 func TestFolderArtworkSearchesDirectoriesInOrder(t *testing.T) {
 	root := t.TempDir()
 	writeArtworkFile(t, filepath.Join(root, "Album"), "cover.png", minimalPNGArtwork())
-	writeArtworkFile(t, filepath.Join(root, "Album", "CD1"), "cover.jpg", minimalJPEGArtwork())
+	writeArtworkFile(t, filepath.Join(root, "Album", "CD1"), "cover.jpg", minimalJPEGArtwork(t))
 	if _, mimeType, err := discoverFolderArtwork(root, []string{"Album", "Album/CD1"}); err != nil || mimeType != "image/png" {
 		t.Fatalf("earlier directory did not win: mime=%q err=%v", mimeType, err)
 	}

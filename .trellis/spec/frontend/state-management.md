@@ -155,6 +155,9 @@ deterministic and the server result/revision replaces the optimistic value.
 - 目录写操作（新增、停用、恢复）每个新意图生成新的幂等键。结果不确定（网络失败、无效响应、5xx，见 `isOutcomeUncertain`）时，
   “重试”沿用同一个键，后端按键重放已记录的结果；4xx 是明确的拒绝，不重试。409 `revision_conflict` 刷新列表并说明目录已变化，
   409 `idempotency_conflict` 提示重新操作。停用与恢复携带读取时的 `expected_revision`。
+- 不扫描的子文件夹（S ①，`exclude` / `unexclude`）是同一个 `useRootCommands` 的两种意图：带幂等键、不带 revision（排除项是集合，重复增删返回当前状态，
+  也不改变目录的 revision）。对话框只记目录 ID，排除项取自目录列表缓存，成功后随列表刷新；成功不提示，失败与重试留在对话框里，关闭时 `dismiss()`。
+  目录内浏览用 `libraryKeys.folders(generation, path, rootId)`，与添加目录的浏览同在 `folderListings` 前缀下。
 - 成员写操作后端没有幂等保证：界面没有“重试”，结果不确定时刷新列表并说明“列表已刷新，请看一下成员现在的状态再操作。”。
   对自己停用或撤销会话成功后，后端已撤销当前会话，随后的列表刷新得到 401，由会话边界回到登录页。
 - 写操作 hook 在提交时记录会话代次，成功或失败回调先检查代次再更新界面或导航：旧身份的迟到响应不渲染、不导航。

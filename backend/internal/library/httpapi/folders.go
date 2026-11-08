@@ -1,17 +1,41 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/library"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
+	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 )
 
 func (handlers *Handlers) listFolders(responseWriter http.ResponseWriter, request *http.Request) {
 	if _, ok := handlers.guard.RequireAdmin(responseWriter, request); !ok {
 		return
 	}
-	listing, err := library.ListFolders(request.URL.Query().Get("path"), handlers.allowedRoots, 2000)
+	query := request.URL.Query()
+	var listing library.FolderListing
+	var err error
+	if query.Has("root_id") {
+		rootID := query.Get("root_id")
+		if !uuid.Valid(rootID) {
+			httpserver.WriteError(responseWriter, request, 400, "invalid_id", "目录标识无效")
+			return
+		}
+		root, loadErr := library.LoadRootLocation(request.Context(), handlers.database, strings.ToLower(rootID))
+		if errors.Is(loadErr, library.ErrRootNotFound) {
+			httpserver.WriteError(responseWriter, request, 404, "not_found", "目录不存在")
+			return
+		}
+		if loadErr != nil {
+			httpserver.WriteError(responseWriter, request, 503, "database_unavailable", "服务暂不可用")
+			return
+		}
+		listing, err = library.ListFoldersWithin(query.Get("path"), root.Path, handlers.allowedRoots, 2000)
+	} else {
+		listing, err = library.ListFolders(query.Get("path"), handlers.allowedRoots, 2000)
+	}
 	if err != nil {
 		httpserver.WriteError(responseWriter, request, 400, "invalid_library_path", "打不开这个文件夹")
 		return

@@ -149,8 +149,12 @@ func reportAttempt(ctx context.Context, tx *sql.Tx, work func() error) error {
 }
 
 func finalizeScanFeedback(ctx context.Context, tx *sql.Tx, scanID, status string, errorMessage any, f *scanFeedback) error {
+	var skipped any
+	if f != nil {
+		skipped = f.skipped
+	}
 	core := func() error {
-		_, err := tx.ExecContext(ctx, "UPDATE scan_runs SET status=$1,finished_at=NOW(),error_message=$2 WHERE id=$3::uuid AND status='running'", status, errorMessage, scanID)
+		_, err := tx.ExecContext(ctx, "UPDATE scan_runs SET status=$1,finished_at=NOW(),error_message=$2,skipped_files=COALESCE($4::bigint,skipped_files) WHERE id=$3::uuid AND status='running'", status, errorMessage, scanID, skipped)
 		return err
 	}
 	if f == nil {
@@ -184,14 +188,14 @@ func finalizeScanFeedback(ctx context.Context, tx *sql.Tx, scanID, status string
 		}
 	}
 	err := reportAttempt(ctx, tx, func() error {
-		_, err := tx.ExecContext(ctx, `UPDATE scan_runs SET status=$1,finished_at=NOW(),error_message=$2,report_state=$4,
+		_, err := tx.ExecContext(ctx, `UPDATE scan_runs SET status=$1,finished_at=NOW(),error_message=$2,skipped_files=$5,report_state=$4,
  progress_bp=CASE WHEN $1='succeeded' THEN 10000 ELSE progress_bp END,
  phase=CASE WHEN $1='succeeded' THEN 'saving' ELSE phase END,
  progress_updated_at=CASE WHEN $1='succeeded' THEN NOW() ELSE progress_updated_at END,
  current_root_index=CASE WHEN $1='succeeded' THEN NULL ELSE current_root_index END,
  current_root_id=CASE WHEN $1='succeeded' THEN NULL ELSE current_root_id END,
  current_root_name=CASE WHEN $1='succeeded' THEN NULL ELSE current_root_name END
- WHERE id=$3::uuid AND status='running'`, status, errorMessage, scanID, state)
+ WHERE id=$3::uuid AND status='running'`, status, errorMessage, scanID, state, f.skipped)
 		return err
 	})
 	if err != nil {

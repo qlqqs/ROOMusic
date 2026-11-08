@@ -137,7 +137,7 @@ func TestPostgreSQLCandidateTransactionRollsBackOnEvidenceFailure(t *testing.T) 
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE source_root_id=$1::uuid`, 0, root.ID)
 }
 
-func TestPostgreSQLIncompleteRootPersistsValidCandidatesAndCleansStaging(t *testing.T) {
+func TestPostgreSQLScanLifecycleParseFailurePersistsValidCandidatesAndCleansStaging(t *testing.T) {
 	fixture := newLibraryFixture(t)
 	root := insertScannerRoot(t, fixture, "partial-root")
 	application := scannerTestApplication(fixture)
@@ -152,8 +152,8 @@ func TestPostgreSQLIncompleteRootPersistsValidCandidatesAndCleansStaging(t *test
 	if err := os.WriteFile(filepath.Join(albumDirectory, "bad.mp3"), []byte("not-an-mp3"), 0o644); err != nil {
 		t.Fatalf("write invalid fixture: %v", err)
 	}
-	if err := application.scanRoot(context.Background(), fixture.database, scanID, root); err == nil {
-		t.Fatal("partial root was reported complete")
+	if err := application.scanRoot(context.Background(), fixture.database, scanID, root); err != nil {
+		t.Fatalf("单文件解析失败不应阻断有效候选或令根目录不完整：%v", err)
 	}
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE source_root_id=$1::uuid AND source_status='present'`, 1, root.ID)
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM scan_observations WHERE scan_run_id=$1::uuid`, 0, scanID)
@@ -201,8 +201,8 @@ func TestPostgreSQLScanRootRejectsNonRegularAudioSource(t *testing.T) {
 		t.Fatalf("create audio-named FIFO: %v", err)
 	}
 
-	if err := application.scanRoot(context.Background(), fixture.database, scanID, root); err == nil {
-		t.Fatal("non-regular audio source was reported as a complete root")
+	if err := application.scanRoot(context.Background(), fixture.database, scanID, root); err != nil {
+		t.Fatalf("非普通音频来源应被跳过，不应令根目录不完整：%v", err)
 	}
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE source_root_id=$1::uuid`, 0, root.ID)
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM scan_diagnostics WHERE scan_run_id=$1::uuid AND kind='non_regular_file'`, 1, scanID)
@@ -441,7 +441,7 @@ func TestPostgreSQLManagedArtworkIsRevalidatedAndCleanupErrorsPropagate(t *testi
 	if err := os.WriteFile(originalPath, []byte("corrupt"), 0o640); err != nil {
 		t.Fatalf("corrupt managed artwork: %v", err)
 	}
-	if err := application.saveArtworkForRelease(context.Background(), fixture.database, releaseID, root, singleTrackCandidate(observation)); err != nil {
+	if err := application.saveArtworkForRelease(context.Background(), fixture.database, scanID, releaseID, root, singleTrackCandidate(observation)); err != nil {
 		t.Fatalf("repair managed artwork: %v", err)
 	}
 	repaired, err := os.ReadFile(originalPath)
@@ -460,7 +460,7 @@ func TestPostgreSQLManagedArtworkIsRevalidatedAndCleanupErrorsPropagate(t *testi
 	}
 	replacement := append(append([]byte(nil), artwork...), 0)
 	observation.Artwork = replacement
-	if err := application.saveArtworkForRelease(context.Background(), fixture.database, releaseID, root, singleTrackCandidate(observation)); err == nil || !strings.Contains(err.Error(), "remove replaced artwork") {
+	if err := application.saveArtworkForRelease(context.Background(), fixture.database, scanID, releaseID, root, singleTrackCandidate(observation)); err == nil || !strings.Contains(err.Error(), "remove replaced artwork") {
 		t.Fatalf("old artwork cleanup error was discarded: %v", err)
 	}
 }

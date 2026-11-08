@@ -55,7 +55,7 @@ func rootOperationLockKey(actorID, operationType, key string) int32 {
 	return int32(hash.Sum32())
 }
 
-// beginRootOperation 是目录新增、停用、恢复共用的幂等入口。它开启事务，取得该幂等键的事务级锁，
+// beginRootOperation 是目录新增、停用、恢复及排除项增删共用的幂等入口。它开启事务，取得该幂等键的事务级锁，
 // 再在事务内查询已有记录，因此同键请求串行执行：
 //   - 没有记录：返回事务，由调用方继续执行业务并写入记录，提交时释放锁；
 //   - 记录的指纹一致：回放已存响应，不重复执行；
@@ -98,6 +98,7 @@ func (handlers *Handlers) beginRootOperation(w http.ResponseWriter, r *http.Requ
 		code = http.StatusCreated
 	}
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(code)
 	_, _ = w.Write(response)
 	return nil
