@@ -39,8 +39,12 @@ const revertPath = (operationId: string) => `/api/v1/operations/${operationId}/r
 const searchOf = (history: { location: { search: string } }) => new URLSearchParams(history.location.search);
 const historySummary = () => screen.getByText("修改记录", { selector: "summary span" });
 
-/** 头部概况里的“曲目”（dt 的下一个兄弟 dd）：每个版本的曲目数不同，据此知道页面显示的是哪个版本。 */
-const shownTracks = () => screen.getAllByText("曲目", { selector: "dt" })[0]?.nextElementSibling?.textContent ?? null;
+/** 头部概况里的曲目数：每个版本的数量不同，据此知道页面显示的是哪个版本。 */
+const shownTracks = () => {
+  const overview = screen.getByRole("list", { name: "概况" });
+  const trackFact = Array.from(overview.querySelectorAll("li")).find((item) => item.textContent?.includes("曲目："));
+  return trackFact?.textContent?.match(/曲目：\s*(\d+ 首)/)?.[1] ?? null;
+};
 const onVersion = (tracks: string) => waitFor(() => expect(shownTracks()).toBe(tracks));
 const navLinks = () => within(screen.getByRole("navigation", { name: "版本" })).getAllByRole("link").map((link) => link.textContent);
 

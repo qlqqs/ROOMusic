@@ -68,7 +68,7 @@ test.describe("编辑发行信息", () => {
     expect(call?.body).toEqual({ expected_revision: 1, changes: { title: { mode: "set", value: "Sample Symphonies (corrected)" }, year: { mode: "set", value: 1975 } } });
     expect(call?.idempotencyKey).toMatch(uuidPattern);
     // 年份的修正显示在头部，带“人工修正”标记。
-    await expect(page.getByText("年份", { exact: true }).locator("..").getByText("1975")).toBeVisible();
+    await expect(page.getByRole("list", { name: "概况" })).toContainText("1975");
     await expect(page.getByText("人工修正").first()).toBeVisible();
 
     await page.getByRole("button", { name: "撤销" }).click();

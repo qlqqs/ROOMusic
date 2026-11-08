@@ -130,7 +130,7 @@ describe("编辑发行信息：保存", () => {
     expect(screen.getByText("已保存修改：标题、年份、流派。")).toBeTruthy();
     expect(screen.getByRole("button", { name: "撤销" })).toBeTruthy();
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "编辑发行信息" }));
-    expect(screen.getAllByText("1975").length).toBeGreaterThan(0);
+    expect(screen.getByRole("list", { name: "概况" }).textContent).toContain("1975");
   });
 
   it("流派标签支持回车、分隔粘贴、去重、退格和删除，保存有序列表", async () => {
@@ -375,9 +375,9 @@ describe("撤销与人工修正的标记", () => {
     expect(facts.getByText("厂牌").nextElementSibling?.textContent).toContain("人工修正");
     expect(facts.getByText("流派").nextElementSibling?.textContent).toContain("人工修正");
     expect(facts.getByText("条码").nextElementSibling?.textContent).not.toContain("人工修正");
-    const yearFact = screen.getByText("年份", { selector: "dt" }).parentElement;
-    expect(yearFact?.textContent).toContain("1975");
-    expect(yearFact?.textContent).toContain("人工修正");
+    const overview = screen.getByRole("list", { name: "概况" });
+    expect(overview.textContent).toContain("1975");
+    expect(overview.textContent).toContain("人工修正");
 
     await user.click(screen.getByText("来源与证据"));
     const evidence = await screen.findByRole("table", { name: "证据摘要" });
