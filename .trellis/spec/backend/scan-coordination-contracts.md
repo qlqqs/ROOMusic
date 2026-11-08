@@ -61,8 +61,9 @@ mutex 只保护本进程的 worker 引用。
 - worker 的父 context 属于应用生命周期，不得使用 HTTP 请求 context。取消端点只提交
   意图；worker 每 500 ms 轮询一次，并在 root、目录遍历和文件处理边界协作式停止。
 - session advisory lock 必须由贯穿扫描生命周期的专用连接持有；扫描读取、观察、诊断
-  和终态写入使用该 holder。连接池 `MaxOpenConns=1` 无法同时容纳 holder 与控制查询，
-  必须拒绝启动而不是进入死锁。
+  和终态写入使用该 holder。holder 上的 SQL 使用不随扫描取消而取消的调用上下文，避免
+  driver 因查询中取消而关闭持锁连接；文件遍历与标签读取仍响应扫描取消，短 SQL 随后收口。
+  连接池 `MaxOpenConns=1` 无法同时容纳 holder 与控制查询，必须拒绝启动而不是进入死锁。
 - 只有持有同一协调锁的恢复路径可以把遗留 `running` 改为 `incomplete`；锁竞争时必须
   保持活动行不变。正常停机先取消 worker、有限等待，再关闭数据库。
 - `finalizeScan` 先 `SELECT ... FOR UPDATE` 锁定扫描行。持久化取消优先收敛为

@@ -33,6 +33,24 @@ type scanExecutor interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 
+type uncancelableScanExecutor struct{ scanExecutor }
+
+func (executor uncancelableScanExecutor) BeginTx(ctx context.Context, options *sql.TxOptions) (*sql.Tx, error) {
+	return executor.scanExecutor.BeginTx(context.WithoutCancel(ctx), options)
+}
+
+func (executor uncancelableScanExecutor) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	return executor.scanExecutor.ExecContext(context.WithoutCancel(ctx), query, args...)
+}
+
+func (executor uncancelableScanExecutor) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	return executor.scanExecutor.QueryContext(context.WithoutCancel(ctx), query, args...)
+}
+
+func (executor uncancelableScanExecutor) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
+	return executor.scanExecutor.QueryRowContext(context.WithoutCancel(ctx), query, args...)
+}
+
 type trackSourceIdentity struct {
 	RootID       string
 	RelativePath string
@@ -90,13 +108,14 @@ func (service *Service) runScan(scanID string, execution *scanExecution) {
 		}
 		service.scanMutex.Unlock()
 	}()
-	roots, loadError := service.loadRegisteredRoots(scanContext, execution.connection)
+	executor := uncancelableScanExecutor{scanExecutor: execution.connection}
+	roots, loadError := service.loadRegisteredRoots(scanContext, executor)
 	outcome := scanOutcome{Complete: loadError == nil, Failed: loadError != nil}
 	if loadError != nil {
 		roots = nil
 	}
-	feedback := newScanFeedback(service, execution.connection, scanID, roots)
-	if loadError == nil && !service.countScanRoots(scanContext, execution.connection, scanID, roots, feedback) {
+	feedback := newScanFeedback(service, executor, scanID, roots)
+	if loadError == nil && !service.countScanRoots(scanContext, executor, scanID, roots, feedback) {
 		outcome.Complete = false
 	}
 	rootIDs := make([]string, 0, len(roots))
@@ -112,7 +131,7 @@ func (service *Service) runScan(scanID string, execution *scanExecution) {
 			feedback.weight = 1
 		}
 		feedback.phase(scanContext, "reading_tags", feedback.counts[index].files)
-		if rootError := service.scanRoot(scanContext, execution.connection, scanID, root, feedback); rootError != nil {
+		if rootError := service.scanRoot(scanContext, executor, scanID, root, feedback); rootError != nil {
 			outcome.Complete = false
 			service.logger.Error("scan root incomplete", "event", "library.scan.root_incomplete", "scan_run_id", scanID, "root_id", root.ID, "error", rootError)
 			if errors.Is(rootError, errStagingCleanup) {
