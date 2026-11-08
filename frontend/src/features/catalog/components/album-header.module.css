@@ -20,38 +20,51 @@
   min-width: 0;
 }
 
+/*
+ * 概况是一行灰色小字，项之间一条细竖线。竖线贴在每项左缘；整行向左推出一个间距再裁掉，
+ * 每一行第一项的竖线落在被裁掉的那一段里，换行后行首不会出现竖线。
+ */
+.factsClip {
+  overflow: clip;
+}
+
 .facts {
+  --sep-gap: 12px;
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3) var(--space-6);
+  row-gap: 2px;
   margin: 0;
-}
-
-.fact {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.fact dt {
+  margin-inline-start: calc(-1 * var(--sep-gap));
+  padding: 0;
+  list-style: none;
   color: var(--text-secondary);
+  font-family: var(--font-body);
   font-size: var(--fs-13);
-}
-
-.fact dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-  font-family: var(--font-heading);
-  font-size: var(--fs-16);
-  line-height: 1.25;
+  line-height: 1.5;
   font-variant-numeric: tabular-nums;
 }
 
+.facts li {
+  position: relative;
+  min-width: 0;
+  margin-inline-end: calc(var(--sep-gap) - 1px);
+  padding-inline: var(--sep-gap) 0;
+  overflow-wrap: anywhere;
+}
+
+.facts li::before {
+  content: "";
+  position: absolute;
+  inset-block: 0.3em;
+  inset-inline-start: 0;
+  width: 1px;
+  background: var(--color-neutral-300);
+}
+
 .factTag {
-  /* 标签是 dd 里的小标记，不沿用事实数值的大字号。 */
-  font-family: var(--font-body);
-  font-size: var(--fs-12);
-  line-height: 1.4;
+  display: inline-flex;
+  margin-inline-start: 4px;
+  vertical-align: middle;
 }
 
 .attention {

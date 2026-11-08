@@ -37,10 +37,11 @@ function rowFacts(row: Element | undefined): string | null | undefined {
 }
 const searchOf = (history: { location: { search: string } }) => new URLSearchParams(history.location.search);
 
-/** 头部概况里的一项（dt 的下一个兄弟 dd）；流派在头部与侧栏各有一份，所以取第一个（头部）。 */
+/** 头部概况里的一项（读屏标签 + 值）；概况列表只显示值。 */
 function headerFact(label: string): string | null {
-  const term = screen.getAllByText(label, { selector: "dt" })[0];
-  return term?.nextElementSibling?.textContent ?? null;
+  const list = screen.getByRole("list", { name: "概况" });
+  const item = Array.from(list.querySelectorAll("li")).find((li) => li.textContent?.startsWith(`${label}：`));
+  return item?.textContent?.slice(`${label}：`.length) ?? null;
 }
 
 describe("专辑详情：单版本", () => {
@@ -56,9 +57,9 @@ describe("专辑详情：单版本", () => {
 
     expect(headerFact("年份")).toBe("1998");
     expect(headerFact("流派")).toBe("Classical · Baroque");
-    expect(headerFact("介质")).toBe("2 张");
+    expect(headerFact("介质")).toBe("2 张碟");
     expect(headerFact("曲目")).toBe("3 首");
-    expect(headerFact("总时长")).toBe("5:44");
+    expect(headerFact("总时长")).toBe("6 分钟");
 
     const aside = screen.getByRole("complementary", { name: "发行信息" });
     // 单版本的组：区块叫“发行信息”，页面上没有“此版本”之类的版本字样。
@@ -115,12 +116,12 @@ describe("专辑详情：单版本", () => {
     expect(screen.queryByText("未知")).toBeNull();
   });
 
-  it("年份未知写“未知”，不伪造", async () => {
+  it("年份未知时不显示年份项", async () => {
     const album = symphonies({ year: null });
     setup({ groups: [album] });
     renderApp({ path: `/albums/${album.id}` });
     await screen.findByText("Track 1-01");
-    expect(headerFact("年份")).toBe("未知");
+    expect(headerFact("年份")).toBeNull();
   });
 
   it("标题超过 80 个字符：完整显示并降一级字号；短标题不降", async () => {
@@ -198,6 +199,7 @@ describe("专辑详情：介质与曲目", () => {
     expect(trackRows()).toHaveLength(3);
     expect(screen.queryByRole("navigation", { name: "介质" })).toBeNull();
     expect(screen.queryByRole("heading", { level: 3 })).toBeNull();
+    expect(headerFact("介质")).toBeNull();
   });
 
   it("曲目艺人与专辑艺人不同时才显示；没有署名的曲目不留空行；未知时长写“—”并给读屏“时长未知”", async () => {
@@ -234,7 +236,7 @@ describe("专辑详情：介质与曲目", () => {
     expect(screen.getByText("Cue Two")).toBeTruthy();
     expect(screen.getAllByText("CUE 分轨")).toHaveLength(2);
     expect(trackRows().map((row) => rowFacts(row))).toEqual(["1Cue OneCUE 分轨2:00", "2Cue TwoCUE 分轨2:00"]);
-    expect(headerFact("总时长")).toBe("4:00");
+    expect(headerFact("总时长")).toBe("4 分钟");
   });
 
   it("一千首曲目的版本可以渲染，计数带千位分隔符", async () => {

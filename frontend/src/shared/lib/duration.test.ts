@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDuration, UNKNOWN_DURATION } from "./duration";
+import { formatDuration, formatSpokenDuration, UNKNOWN_DURATION } from "./duration";
 
 describe("formatDuration", () => {
   it("不足一小时写 m:ss，一小时以上写 h:mm:ss", () => {
@@ -19,5 +19,21 @@ describe("formatDuration", () => {
 
   it("未知时长写占位，不写 0:00", () => {
     expect(formatDuration(null)).toBe(UNKNOWN_DURATION);
+  });
+});
+
+describe("formatSpokenDuration", () => {
+  it("使用口语分钟与小时单位", () => {
+    expect(formatSpokenDuration(45 * 60)).toBe("45 分钟");
+    expect(formatSpokenDuration(3600)).toBe("1 小时");
+    expect(formatSpokenDuration(3600 + 14 * 60)).toBe("1 小时 14 分钟");
+  });
+
+  it("不足一分钟写秒数", () => {
+    expect(formatSpokenDuration(42)).toBe("42 秒");
+  });
+
+  it("floor 模式向下取整", () => {
+    expect(formatSpokenDuration(4859.9, { floor: true })).toBe("1 小时 20 分钟");
   });
 });

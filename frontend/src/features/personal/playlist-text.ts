@@ -1,3 +1,4 @@
+import { formatSpokenDuration } from "../../shared/lib/duration";
 import { formatCount } from "../../shared/lib/number";
 import { PERSONAL_TRACK_LIMIT } from "./api/decoders";
 
@@ -24,25 +25,22 @@ export function overLimitText(overLimitCount: number): string {
   return `歌单比上限多 ${formatCount(overLimitCount)} 首，先移除一些才能再添加。`;
 }
 
-/** 总时长的口语写法：“1 小时 20 分”“45 分”，不足 1 分写秒数。floor 为 true 时向下取整（“以上”只能是下限）。 */
-function spokenDuration(seconds: number, floor: boolean): string {
-  const total = floor ? Math.floor(seconds) : Math.round(seconds);
-  if (total < 60) return `${total} 秒`;
-  const minutes = floor ? Math.floor(total / 60) : Math.round(total / 60);
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  if (hours === 0) return `${rest} 分`;
-  return rest === 0 ? `${formatCount(hours)} 小时` : `${formatCount(hours)} 小时 ${rest} 分`;
-}
+type PlaylistLength = { track_count: number; duration_seconds: number; unknown_duration_count: number };
 
 /**
- * 歌单的曲目数与总时长，如“12 首 · 1 小时 20 分”。有时长未知的曲目时，已知的时长只是下限，写成“1 小时 20 分以上”；
- * 全都不知道时长（或已知的加起来是 0）就只写曲目数。
+ * 歌单的总时长，如“1 小时 20 分钟”。有时长未知的曲目时，已知的时长只是下限，写成“1 小时 20 分钟以上”；
+ * 空歌单、全都不知道时长（或已知的加起来是 0）时是空串。
  */
-export function playlistMetaText(playlist: { track_count: number; duration_seconds: number; unknown_duration_count: number }): string {
+export function playlistDurationText(playlist: PlaylistLength): string {
+  if (playlist.track_count === 0) return "";
+  if (playlist.unknown_duration_count === 0) return formatSpokenDuration(playlist.duration_seconds);
+  if (playlist.unknown_duration_count >= playlist.track_count || playlist.duration_seconds <= 0) return "";
+  return `${formatSpokenDuration(playlist.duration_seconds, { floor: true })}以上`;
+}
+
+/** 歌单卡片上的曲目数与总时长，如“12 首 · 1 小时 20 分钟”；没有总时长时只写曲目数。 */
+export function playlistMetaText(playlist: PlaylistLength): string {
   const count = `${formatCount(playlist.track_count)} 首`;
-  if (playlist.track_count === 0) return count;
-  if (playlist.unknown_duration_count === 0) return `${count} · ${spokenDuration(playlist.duration_seconds, false)}`;
-  if (playlist.unknown_duration_count >= playlist.track_count || playlist.duration_seconds <= 0) return count;
-  return `${count} · ${spokenDuration(playlist.duration_seconds, true)}以上`;
+  const duration = playlistDurationText(playlist);
+  return duration === "" ? count : `${count} · ${duration}`;
 }

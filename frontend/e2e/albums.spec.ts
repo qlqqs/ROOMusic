@@ -172,7 +172,7 @@ test.describe("专辑详情", () => {
     await expect(page.getByRole("region", { name: /^第 2 张/ }).getByRole("listitem")).toHaveCount(1);
     await expect(trackRows(page)).toHaveCount(3);
     await expect(page.getByRole("region", { name: "发行信息" }).getByText("Sample Label")).toBeVisible();
-    await expect(page.getByText("总时长")).toBeVisible();
+    await expect(page.getByRole("list", { name: "概况" }).getByText("6 分钟")).toBeVisible();
     await expect(page.getByRole("navigation", { name: "版本" })).toHaveCount(0);
     await expect(page.getByText(/个版本/)).toHaveCount(0);
     // 管理员接口只对管理员开放，成员的页面从不请求。
@@ -189,13 +189,13 @@ test.describe("专辑详情", () => {
     const nav = page.getByRole("navigation", { name: "版本" });
     await expect(nav.getByRole("link")).toHaveCount(3);
     await expect(nav.getByRole("link", { name: /^版本 1 / })).toHaveAttribute("aria-current", "page");
-    await expect(page.getByText("12 首", { exact: true })).toBeVisible();
+    await expect(page.getByRole("list", { name: "概况" })).toContainText("曲目：12 首");
 
     await nav.getByRole("link", { name: /^版本 2 / }).click();
     await expect(page).toHaveURL(new RegExp(`/albums/${group.id}\\?release=${versions[1]?.id}$`));
     await expect(nav.getByRole("link", { name: /^版本 2 / })).toHaveAttribute("aria-current", "page");
     await expect(nav.getByRole("link", { name: /^版本 1 / })).not.toHaveAttribute("aria-current", "page");
-    await expect(page.getByText("13 首", { exact: true })).toBeVisible();
+    await expect(page.getByRole("list", { name: "概况" })).toContainText("曲目：13 首");
     await expect(trackRows(page)).toHaveCount(13);
     // 焦点留在被点击的链接上：只改查询参数的导航不把焦点抢回主内容区。
     await expect(nav.getByRole("link", { name: /^版本 2 / })).toBeFocused();
