@@ -10,10 +10,12 @@
 | 失效键 | 行里保存分析时的输入快照：`content_fingerprint`、`source_size`、`source_modified_at`、`cue_index_frames`、`cue_end_frames`、`analyzer_version`；任一项与 `tracks` 当前值不同即视为待分析，读取接口同样按此判定，重新扫描后旧结果立即失效 |
 | 工作者 | `playback` 里的单 goroutine，一次一首，ffmpeg 一次解码同时得到响度、真峰值与 8 kHz 单声道 PCM（Go 侧算波形与首尾静音）；nice 19 + 空闲 IO 类；两首间隔 `max(2s, 上一首耗时)`；扫描运行时让路；随应用生命周期取消；ffmpeg 不可用或 `ROOMUSIC_AUDIO_ANALYSIS=off` 时不运行 |
 | 三个接口 | `GET /api/v1/tracks/{id}/analysis`、`GET /api/v1/audio-analysis/progress`、`GET /api/v1/catalog/stats`；所有登录用户只读，JSON `no-store`，不加 ETag，由前端 Query 缓存 |
-| Web Audio 与否 | **不用 Web Audio，只用 `element.volume`**：均衡只衰减不提升（目标 −18 LUFS），交叉渐变用两个 `<audio>` 交替加定时音量曲线。理由：不改音频管线，iOS/锁屏后台播放、自动播放策略、媒体会话、失败处理与聆听计数全部保持现状；代价是偏安静的曲目不会被抬高（第 4.6 节、第 9 节 Q1） |
+| 音量均衡 | **按 Roon**（用户 2026-11-08 定）：EBU R128，目标 −14 LUFS（固定）；可以提升，按真峰值限幅到不削波（留 0.5 dB 余量）；不用压限器；模式 关 / 自动 / 按曲目 / 按专辑；响度未知的曲目固定 −5 dB；实际增益写在信号路径里 |
+| Web Audio 与否 | **用 Web Audio**：`<audio>` → `MediaElementAudioSourceNode` → 均衡 `GainNode` → 渐变 `GainNode` → 用户音量 `GainNode` → `destination`；渐变用 `setValueCurveAtTime` 精确调度。均衡与渐变都关、iPhone/iPad、或 AudioContext 没能进入 running 时**不接入**，管线与现在完全一致（第 4.6 节） |
 | 全屏开合状态 | 放在浏览器历史条目的 state 里（`router.history.push(当前地址, {...state, roomusicPlayer: 本次页面加载 ID})`），返回键自然收起，不碰各路由的 search 校验 |
 | `/now-playing` | 改为根路由下的跳转：`redirect({ to: "/", replace: true })`；侧栏“正在播放”入口删除 |
-| 播放设置 | `localStorage["roomusic:playback-settings:v1"]`，设备偏好（与音量同类），默认均衡开、渐变关、5 秒，可选 3/5/8/12 秒；设置新增“播放”栏目，所有成员可见 |
+| 播放设置 | `localStorage["roomusic:playback-settings:v1"]`，设备偏好（与音量同类），默认均衡“自动”、渐变关、5 秒，可选 3/5/8/12 秒；设置新增“播放”栏目，所有成员可见 |
+| Android 后台 | 判断为可以继续出声（播放中的 AudioContext 不因切后台或锁屏被挂起），但没有实机确证；万一被中断，当页自动换回不接入的音频元素从原位置继续（第 4.6 节“中断退回”） |
 | 实施拆分 | 合同（本文第 3 节）定稿后：后端 B1（统计接口）、B2（分析）与前端 F1（R1/R4 文案 + 概览）、F2（全屏 / 抽屉 / 弹层）可并行；F3（波形 + 引擎均衡与渐变 + 播放设置）在 F2 之后 |
 
 ## 1. 后端：数据模型与迁移 0033
@@ -138,14 +140,16 @@ for 生命周期未结束:
 | 24/96 或 ALAC | 约 2 倍，4–8 s |
 | 2,500 首（平均 4 分钟），含两首间隔 | (3 s + 3 s) × 2,500 ≈ **4 小时**；8 号机这类低功耗 NAS CPU 约慢 2–3 倍 → **8–12 小时**，扫描期间暂停另计 |
 
-### 2.5 专辑增益
+### 2.5 曲目增益与专辑增益（按 Roon）
 
-- 目标响度常量 `analysis.TargetLUFS = −18`（不在界面暴露）。
-- 曲目增益：`track_gain = min(−18 − I, −1.0 − TP)`，保留 1 dB 余量防削波；I 为 NULL 时增益为 NULL。
-- 专辑增益：对同一**发行**（`release_id`）的全部 present 曲目，**没有任何一首处于待分析**时才计算（失败的曲目跳过）：
-  `L_album = 10·log10( Σ dᵢ·10^(Iᵢ/10) / Σ dᵢ )`（dᵢ = `duration_ms`，按能量与时长加权，近似整张连播的积分响度），`peak_album = max(TPᵢ)`，`album_gain = min(−18 − L_album, −1.0 − peak_album)`。
-- 有曲目还没分析完时 `album = null`，前端用曲目增益（第 4.6 节）。
-- 数值保留一位小数；在读取时计算，不落库（发行成员变化、单曲重新分析都自然生效）。
+- 目标响度常量 `analysis.TargetLUFS = −14`（EBU R128 积分响度，不在界面暴露）；余量常量 `analysis.PeakMarginDB = 0.5`。
+- 曲目增益：`track_gain = min(−14 − I, −0.5 − TP)`。可以为正（提升安静曲目）；若提升会使真峰值超过 −0.5 dBTP，就把增益减到正好不超过为止。不用压限器或软削波。I 为 NULL（近乎静音）时增益为 NULL，前端按“响度未知”处理。
+- 留 0.5 dB 余量的理由：ebur128 的真峰值是 4 倍过采样估计，按 ITU-R BS.1770 附录 2，对接近奈奎斯特频率的内容最多会低估约 0.5–0.7 dB；有损格式解码、浏览器按输出设备重采样也会让样本间峰值略高于测量值。0.5 dB 的响度差几乎听不出，却能避开这类边缘削波。
+- 专辑增益：对同一**发行**（`release_id`）的全部 present 曲目，**没有任何一首处于待分析**时才计算（失败或近乎静音的曲目跳过）：
+  `L_album = 10·log10( Σ dᵢ·10^(Iᵢ/10) / Σ dᵢ )`（dᵢ = `duration_ms`，按能量与时长加权，近似整张连播的积分响度），`peak_album = max(TPᵢ)`，`album_gain = min(−14 − L_album, −0.5 − peak_album)`。
+- 例：流行曲 I = −9.8、TP = −0.3 → `min(−4.2, −0.2) = −4.2 dB`；古典曲 I = −22.4、TP = −6.1 → `min(+8.4, +5.6) = +5.6 dB`（被真峰值限住）。
+- 有曲目还没分析完时 `album = null`，前端按第 4.6 节的规则退回。
+- 数值保留一位小数；在读取时计算，不落库（发行成员变化、单曲重新分析、目标常量调整都自然生效，不需要升分析器版本）。
 
 ## 3. 接口合同
 
@@ -162,13 +166,13 @@ for 生命周期未结束:
   "analysis": {
     "integrated_lufs": -9.8,
     "true_peak_dbtp": -0.3,
-    "track_gain_db": -8.2,
+    "track_gain_db": -4.2,
     "duration_ms": 314020,
     "leading_silence_ms": 120,
     "trailing_silence_ms": 312400,
     "waveform": { "points": 1000, "peaks": "AAECAwQF…（base64，points 个字节）" }
   },
-  "album": { "release_id": "0e1f2a3b-4c5d-4e6f-8a9b-0c1d2e3f4a5b", "gain_db": -7.1, "peak_dbtp": -0.2 }
+  "album": { "release_id": "0e1f2a3b-4c5d-4e6f-8a9b-0c1d2e3f4a5b", "gain_db": -3.1, "peak_dbtp": -0.2 }
 }
 ```
 
@@ -216,7 +220,7 @@ for 生命周期未结束:
 | 进度 | `features/library/api`：`decodeAnalysisProgress` | `viewerQueryKey(g, "audio-analysis", "progress")` | `running`/`waiting_for_scan` 时每 60 秒轮询（页面隐藏暂停），其他状态停止 |
 | 统计 | `features/catalog/api`：`decodeCatalogStats` | `catalogKeys.stats(g)`（在 `catalog` 前缀下，修改专辑数据后的 `useReleaseDataRefresh` 一并失效） | 默认 |
 
-分析读取失败（网络、404、旧后端）一律按“没有分析结果”处理：进度条退回普通样式、不均衡、不渐变，不提示用户。
+分析读取失败（网络、404、旧后端）一律按“没有分析结果”处理：进度条退回普通样式；均衡按“响度未知”施加 −5 dB；渐变仍可进行（首尾点退回媒体时长、不跳开头静音）；不提示用户。
 
 ## 4. 前端播放（R3–R6）
 
@@ -295,48 +299,71 @@ AppShell（app/shell）
 | --- | --- | --- |
 | 数据源 | `FileAudio` | 无损：`编码 采样率 位深 声道`，如 `FLAC 44.1kHz 16bit 2ch`；有损：`编码 码率 采样率 声道`，如 `MP3 320kbps 44.1kHz 2ch`；采样率去掉多余的 `.0`（`48kHz`）；缺的项省略，全缺写“未知格式” |
 | 服务端 | `Server` | `原文件直出`；派生写 `ALAC → FLAC`；格式表未取到写 `读取中` |
-| 浏览器 | `AppWindow` | 以“ · ”连接：`解码`；均衡实际生效时加 `音量均衡 −3.2 dB`（引擎快照里的实际增益，含 0 dB）；渐变对当前切换生效时加 `交叉渐变 5 秒` |
+| 浏览器 | `AppWindow` | 以“ · ”连接：`解码`；均衡实际施加时加 `音量均衡 +2.1 dB` / `音量均衡 −4.2 dB`（快照 `leveling.gainDb`，一位小数，总带正负号，0 写 `0.0 dB`；响度未知时写实际施加的 `音量均衡 −5.0 dB`）；渐变开着且当前已接入时加 `交叉渐变 5 秒`。没接入（均衡关、设备不支持、未能接入或已中断退回）时不写这两项 |
 | 系统输出 | `Speaker` | `系统默认输出` |
 
-### 4.6 引擎改造：均衡与交叉渐变
+### 4.6 引擎改造：均衡（按 Roon）与交叉渐变
 
-**结论：不用 Web Audio，只用 `element.volume`。**
+**结论：用 Web Audio，按需接入。** 用户 2026-11-08 定“按照 Roon 的来”：安静曲目要能提升，`element.volume` 最大只有 1，做不到，所以均衡与渐变都放在 `GainNode` 上。
 
-| 维度 | Web Audio（MediaElementSource + Gain） | 只用 `element.volume`（选定） |
-| --- | --- | --- |
-| 提升安静曲目 | 能（增益 > 1，用真峰值限幅） | 不能，只衰减 |
-| 渐变曲线 | 采样级精确 | 50 ms 一步的定时曲线，5 秒渐变听不出台阶 |
-| iOS / iPadOS | 增益有效，但经 Web Audio 的音频在锁屏、切后台时会被系统中断（AudioContext 进入 interrupted / suspended），后台连播不可靠 | `volume` 只读（恒为 1）：均衡与渐变不生效，但后台连播与现在完全一样 |
-| 自动播放策略 | AudioContext 须在手势里 `resume()`；没 resume 时元素“在播”却无声，聆听计数会把无声时间算进去 | 不变 |
-| 媒体会话 / 锁屏控件 | 元素仍驱动，基本不变；但上下文被挂起时控件显示播放而无声 | 不变 |
-| 失败处理与预取 | 元素一旦接入上下文无法拆出，所有出声都依赖上下文健康，多一类故障 | 不变 |
-| 关闭两项功能时 | 管线已经变了 | 与现在逐字节一致（R6 末条） |
+**音频图**（每个 `<audio>` 一条支路，两条支路共用总音量节点）：
 
-选择后者的理由：私人库的主要价值是“任何设备上稳定地放下去”，手机锁屏连播比给安静曲目加几 dB 更重要；R6 要求关闭时行为不变，`element.volume` 方案在关闭时根本不走新代码。代价（安静曲目不提升、iOS 上两项无效）列入第 9 节 Q1、Q2。
+```text
+<audio> → MediaElementAudioSourceNode → levelGain（均衡）→ fadeGain（渐变）→ masterGain（用户音量 / 静音，共用）→ destination
+```
+
+- 用户音量：接入后元素的 `volume` 固定为 1、`muted` 为假，用户音量写 `masterGain.gain`（静音写 0）；没接入时照旧写 `element.volume` / `element.muted`。一个 `applyUserVolume()` 按是否接入分两支，音量滑块只反映用户音量（R6）。
+- **删除 `volumechange` → `syncVolume` 回读**（接入后元素音量恒为 1，回读会把用户音量改坏）：`setVolume`/`setMuted` 直接更新快照并保存。
+
+**接入与退出规则**
+
+| 情况 | 行为 |
+| --- | --- |
+| 均衡为“关”且渐变关（页面加载时） | 不创建 AudioContext，元素不接入，管线与现在完全一致（R6 末条） |
+| 设备不支持（`element.volume` 只读，即 iPhone / iPadOS；或没有 `AudioContext`） | 永不接入；两项不可用，设置页禁用并写 D7 那一句。iOS 上经 Web Audio 的声音在锁屏、切后台时会被系统中断，不能冒这个险 |
+| 需要接入（均衡不是“关”或渐变开，且设备支持） | 在用户手势命令（`play`、`togglePlayback` 的播放分支、`playTracks`、`playEntry`、`next`、`previous`、`retry`）开头同步调用 `ensureAudioGraph()`：没有就 `new AudioContext({ latencyHint: "playback" })`，并调用 `ctx.resume()`。真正接入（`createMediaElementSource`）只在**加载一首曲目、设置 `src` 之前**进行，且要求此刻 `ctx.state === "running"`（预检耗时足够 resume 完成）；不是 running 就**这一首不接入、原样播放**（快照 `leveling` 为 null），下一次手势命令再试 |
+| 播放已接入的元素前 ctx 不是 running（例如暂停期间被系统挂起） | 先 `await ctx.resume()`（最多 1 秒，仍在同一次手势的激活期内）；还不是 running → 走“中断退回” |
+| 运行中把两项都关掉 | 保持接入，`levelGain`、`fadeGain` 归 1，作废渐变计划；到重新加载页面才完全退出（元素一旦接入无法拆出） |
+| 运行中打开 | 下一次手势命令创建并 resume 上下文，从下一首加载起接入 |
+| **中断退回** | 已接入且引擎在出声时，`ctx` 的 `statechange` 变为非 running：立即 `listen.suspend()`；本页标记 `audioRoute = "fallback"`，丢弃已接入的元素，用 `createAudio()` 新建一个不接入的元素，按现有 `load(当前条目, 当前位置, "continue")` 从原处继续（`play()` 若被拒，走现有 `autoplay_blocked`“请按播放”）。之后本页不再接入，均衡与渐变在本页失效，信号路径不再写增益 |
+
+由此保证不会出现“元素在播却无声、聆听照算”：接入的元素只在 ctx 为 running 时才 `play()`；运行中被挂起会立刻暂停计数并换回直出元素。
+
+**Android 锁屏 / 后台的判断与风险**
+- 判断：Chrome for Android 上**会继续出声**。依据：Chrome 只在自动播放策略下让未经手势的 AudioContext 停在 suspended，不会因页面隐藏而挂起正在运行、正在出声的上下文；音频元素本身仍在播放，Chrome 的媒体通知、锁屏控件与媒体会话照常由它驱动，后台渲染进程按“有声音的媒体”保活。
+- 风险：没有实机确证；厂商省电策略或其他浏览器（Firefox、三星浏览器）可能在后台挂起上下文。
+- 应对：只用上面的“中断退回”，不再加别的防御。不安排专门的实机演练（主会话 2026-11-08 定，Q9）：用户日常在 Android 上使用时留意，若出现锁屏中断再讨论是否在 Android 上默认不接入。
 
 **均衡**
-- `EngineDeps` 增加 `loadAnalysis(trackId, signal): Promise<TrackAnalysis | null>`（provider 用 `queryClient.fetchQuery` 实现，与波形组件共用缓存；失败返回 null）与 `createAudio(): AudioLike`（渐变用的第二个元素，懒创建）。
-- `load()` 在发预检的同时请求分析（只在均衡或渐变开着时）；预检就绪后若分析还没回来，最多再等 1 秒，仍没有就按“未分析”原样播放这一首（不中途跳变音量）。当前曲目第一次出声时顺带预取下一首的分析。
-- 增益选择（自动模式，D3）：播放模式不是随机，且队列列表顺序里当前项的前一项或后一项与它 `releaseId` 相同，且 `album` 非空 → 用 `album.gain_db`；否则用 `track_gain_db`；都没有 → 0 dB（原样）。实际施加 `min(gain, 0)`。
-- 音量统一由引擎写：`element.volume = 用户音量 × 10^(施加dB/20) × 渐变系数`；静音写到两个元素的 `muted`。**删除 `volumechange` → `syncVolume` 回读**（元素音量不再等于用户音量），`setVolume`/`setMuted` 直接更新快照并保存；音量滑块位置只反映用户音量（R6）。
-- 快照新增 `leveling: { gainDb: number; basis: "track" | "album" } | null`（未生效为 null，信号路径据此显示）与 `volumeControllable: boolean`（构造时把 `volume` 设为 0.5 再读回判断，随即恢复）。
-- 不削波：只衰减不会削波；后端增益本身已按真峰值限幅，留给以后需要提升时使用。
+- `EngineDeps` 增加：`loadAnalysis(trackId, signal): Promise<TrackAnalysis | null>`（provider 用 `queryClient.fetchQuery` 实现，与波形组件共用缓存；失败返回 null）、`createAudio(): AudioLike`（渐变与中断退回用的新元素）、`createAudioContext: (() => AudioContextLike) | null`（生产给 `() => new AudioContext(...)`，测试给假实现或 null）。
+- `load()` 在发预检的同时请求分析（只在会接入时）；预检就绪后若分析还没回来，最多再等 1 秒，仍没有就按“响度未知”处理这一首。增益在 `play()` 之前用 `levelGain.gain.setValueAtTime(线性值, ctx.currentTime)` 设好，播放中不因分析迟到而跳变。当前曲目第一次出声时顺带预取下一首的分析。
+- 增益选择（“响度未知”= 没有分析结果、分析未完成或失败、读取失败、1 秒内没回来，或 `track_gain_db` 为 null）：
 
-**交叉渐变**（只在设置开启且 `volumeControllable` 时）
-- 判定点与条件（全部满足才渐变，否则走现有的“播完再加载下一首”）：只在自然播放接近结尾时触发（手动下一首、上一首、播放此项、移除当前项都不经过这里）；模式不是单曲循环；按自然前进算出的下一项存在、不是当前项、未标记失败；**下一项的 `releaseId` 与当前不同**；当前曲目时长 ≥ 3 × 渐变时长。
+| 模式 | 施加的增益 |
+| --- | --- |
+| 关 | 0 dB（因渐变而接入时 `levelGain` 为 1） |
+| 按曲目 | `track_gain_db`；未知 → −5 dB |
+| 按专辑 | `album.gain_db`；专辑没分析完（`album` 为 null）→ `track_gain_db`；曲目也未知 → −5 dB |
+| 自动（默认） | 播放模式不是随机，且队列列表顺序里当前项的前一项或后一项与它 `releaseId` 相同 → 按“按专辑”；否则按“按曲目” |
+
+- 增益可正可负，原样施加（后端已按真峰值限幅，见第 2.5 节），前端不再截断、不加压限。线性值 `10^(dB/20)`。
+- 运行中切换模式或开关：对当前曲目用 `setTargetAtTime(新值, now, 0.05)` 平滑过去。
+- 快照新增：`leveling: { gainDb: number; basis: "track" | "album" | "unknown" } | null`（实际施加时非空，信号路径据此显示）、`audioRoute: "direct" | "web_audio" | "fallback"`、`volumeControllable: boolean`（构造时把 `volume` 设为 0.5 再读回判断，随即恢复）。
+
+**交叉渐变**（只在设置开启且当前曲目已接入时；否则走现有的“播完再加载下一首”）
+- 判定点与条件（全部满足才渐变）：只在自然播放接近结尾时触发（手动下一首、上一首、播放此项、移除当前项都不经过这里）；模式不是单曲循环；按自然前进算出的下一项存在、不是当前项、未标记失败；**下一项的 `releaseId` 与当前不同**；当前曲目时长 ≥ 3 × 渐变时长。
 - 时间点：`fadeStart = (当前 trailing_silence_ms ?? 媒体时长) − F`。到 `fadeStart − 15 s` 时生成“计划”：调用 `advance(queue, env, { reason: "natural" })` 得到下一步但**暂不接受**，为下一项发预检与分析（独立 AbortController）。队列、模式、设置变化，暂停或拖动当前曲目时作废计划。
-- 到 `fadeStart`：预检已就绪才开始，否则放弃本次渐变。备用元素设 `src`，等可定位后定位到下一首的 `leading_silence_ms`（> 10 s 视为异常，不跳），音量 0，`play()`；收到它的 `playing` 后才**切换**：接受计划的队列步、活动元素对调、管线变为新条目的 media、`listen.begin(新条目)`、`raise(track_started)`、`afterQueueChange()`（媒体会话换成新曲目）。之后 F 秒内旧元素按 `cos(t·π/2)`、新元素按 `sin(t·π/2)` 改音量（50 ms 定时器，时钟用 `deps.now`），结束或旧元素先 `ended` 时卸载旧元素（`pause` + 去掉 `src` + `load()`）。
-- 中途：备用元素 `play()` 被拒（含自动播放策略）或出错 → 丢掉备用元素，旧曲目照常播完，走现有路径；切换后新曲目出错 → 立即卸载旧元素，按现有失败分类处理。切换后用户暂停、拖动、切歌 → 立即卸载旧元素再执行命令。
+- 到 `fadeStart`：预检已就绪才开始，否则放弃本次渐变。备用元素（`createAudio()`，第一次用时接入同一个上下文）设 `src`，等可定位后定位到下一首的 `leading_silence_ms`（> 10 s 视为异常，不跳），它的 `levelGain` 设为下一首的增益、`fadeGain` 设为 0，`play()`；收到它的 `playing` 后才**切换**：接受计划的队列步、活动元素对调、管线变为新条目的 media、`listen.begin(新条目)`、`raise(track_started)`、`afterQueueChange()`（媒体会话换成新曲目）。
+- 曲线：切换时刻 `t0 = ctx.currentTime`，先对两个 `fadeGain` 调 `cancelScheduledValues(t0)`，再分别 `setValueCurveAtTime(cos 曲线, t0, F)`（旧）与 `setValueCurveAtTime(sin 曲线, t0, F)`（新），等功率，各 64 个采样点；由音频线程按采样精度执行，不用定时器改音量。`F` 秒后（或旧元素先 `ended`）卸载旧元素（`pause` + 去掉 `src` + `load()`，`fadeGain` 复位为 1 备用）；这个清理用一个普通定时器即可，迟到也只是多留一个已静音的元素。
+- 中途：备用元素 `play()` 被拒或出错 → 丢掉备用元素，旧曲目照常播完，走现有路径；切换后新曲目出错 → 立即卸载旧元素，按现有失败分类处理。切换后用户暂停、拖动、切歌 → 取消调度（新元素 `fadeGain` 设为 1）、立即卸载旧元素，再执行命令。
 - 旧元素的事件在切换后一律忽略（每个元素绑定自己的处理函数，先判断是不是活动元素）；`isCurrentMedia()` 改为比较活动元素。
 - 聆听计数：切换那一刻旧曲目的访问结束，重叠部分只算新曲目。旧曲目此时已播放 `D − F − 尾部静音` 以上，因“D ≥ 3F”而必然超过门槛 `min(D/2, 240)`，不会少记。
-- 自动播放：Chrome / Firefox 在页面有过用户操作后允许第二个元素出声；桌面 Safari 若拒绝则按上一条退回普通切换。之后的普通切换仍复用活动元素，不受影响。
-- 后台标签页：正在出声的标签页不受浏览器定时器节流，渐变照常。
 - 现有行为说明：仓库里**没有无缝（gapless）播放**，`prefetcher.ts` 只为下一首派生曲目提前发预检；同专辑相邻曲目仍是现在的“播完再加载”，本任务不改。
 
 **会变的现有测试与合同**
-- `player-engine.test.ts`：依赖 `volumechange` 回读音量的用例改为断言 `setVolume` 直接更新快照与存储；新增均衡与渐变用例（见第 8 节）。`AudioLike` 不变，新增 deps 在测试里给假实现，未开启渐变时用例行为不变。
+- `player-engine.test.ts`：依赖 `volumechange` 回读音量的用例改为断言 `setVolume` 直接更新快照与存储；新增接入、均衡与渐变用例（见第 8 节）。`AudioLike` 不变，`createAudioContext` 在现有用例里给 null（等同不接入），这些用例行为不变。
 - `player-ui.test.tsx`、`player-provider.test.tsx`：队列、信号路径、正在播放页相关断言改为抽屉、弹层、全屏。
-- 规范：`player-design-guidelines.md` 的信号路径条目与“正在播放页”描述、`playback-and-personal-state.md`（新存储键、分析查询键、两路音频）在收尾时更新。
+- 规范：`player-design-guidelines.md` 的信号路径条目与“正在播放页”描述、`playback-and-personal-state.md`（新存储键、分析查询键、两路音频与 Web Audio 接入规则）在收尾时更新。
 
 ### 4.7 波形进度条 `WaveformSeek`
 
@@ -349,12 +376,12 @@ AppShell（app/shell）
 
 | 项 | 取值 |
 | --- | --- |
-| 存储 | `localStorage["roomusic:playback-settings:v1"]` = `{ "version": 1, "leveling": true, "crossfade": false, "crossfadeSeconds": 5 }`；模块 `features/player/engine/playback-settings.ts`（load / save，边界解码，损坏或未知版本用默认值，存储不可用安全降级） |
-| 默认 | 均衡开、渐变关、5 秒 |
+| 存储 | `localStorage["roomusic:playback-settings:v1"]` = `{ "version": 1, "leveling": "auto", "crossfade": false, "crossfadeSeconds": 5 }`，`leveling` 取 `"off" \| "auto" \| "track" \| "album"`；还没上线，直接用这个结构，不迁移旧值。模块 `features/player/engine/playback-settings.ts`（load / save，边界解码，损坏或未知版本用默认值，存储不可用安全降级） |
+| 默认 | 均衡“自动”、渐变关、5 秒 |
 | 可选时长 | 3、5、8、12 秒 |
-| 归属 | 与音量相同：引擎持有并写入存储，快照带 `settings`，命令 `engine.setPlaybackSettings(patch)`；改动立即作用于当前曲目的音量，渐变关闭时作废进行中的计划 |
+| 归属 | 与音量相同：引擎持有并写入存储，快照带 `settings`，命令 `engine.setPlaybackSettings(patch)`；改动立即作用于当前曲目的增益，渐变关闭时作废进行中的计划；接入规则见第 4.6 节 |
 | 页面 | 路由 `/settings/playback`（`settingsSections` 增加 `{ label: "播放", icon: AudioLines, adminOnly: false }`，排在“账号”之后）；`app/routes/playback-settings-page.tsx` 组合 `features/player` 的 `PlaybackSettingsForm` |
-| 表单 | 两个开关（`role="switch"` 的复选框）：“音量均衡”“交叉渐变”；“渐变时长”是 3/5/8/12 秒的单选组，渐变关闭时禁用。不写说明句。`volumeControllable` 为假时两个开关禁用，只加一句：“这台设备不能调节网页音量，这两项不会生效。” |
+| 表单 | “音量均衡”：分段选择（单选组）关 / 自动 / 按曲目 / 按专辑；“交叉渐变”：开关（`role="switch"` 的复选框）；“渐变时长”：3 / 5 / 8 / 12 秒的分段选择，渐变关闭时禁用。不写说明句。`volumeControllable` 为假时三组控件都禁用，只加一句：“这台设备不能调节网页音量，这两项不会生效。”（D7） |
 
 ## 5. 概览（R7）
 
@@ -387,8 +414,9 @@ AppShell（app/shell）
 | 项 | 做法 |
 | --- | --- |
 | 迁移 | 0033 只新增表，down 只删表；回滚代码后旧版本不认识该表也无影响 |
-| 关闭后台分析 | `ROOMUSIC_AUDIO_ANALYSIS=off` 重启即可；接口照常（进度 `unavailable`，结果 `pending`），前端自动退回普通进度条、不均衡不渐变 |
-| 关闭均衡 / 渐变 | 设置 → 播放的开关；两者都关时引擎不走新代码路径 |
+| 关闭后台分析 | `ROOMUSIC_AUDIO_ANALYSIS=off` 重启即可；接口照常（进度 `unavailable`，结果 `pending`），前端退回普通进度条；均衡若开着，所有曲目按“响度未知”统一 −5 dB（音量一致，只是整体略低） |
+| 关闭均衡 / 渐变 | 设置 → 播放：均衡选“关”且渐变关后**重新加载页面**，不再创建 AudioContext，管线与现在完全一致；不重新加载时保持接入、增益归 1（第 4.6 节） |
+| Web Audio 出问题 | 页内自动“中断退回”到不接入的元素；用户侧的兜底就是上一行 |
 | 前端回滚 | 代码回退即可；`/now-playing` 旧书签在回滚前后都可用（回滚后又是页面） |
 | 嵌入产物 | `backend/cmd/roomusic/web` 会与 `main` 上“歌单与专辑页面”任务冲突：合并时不手工解冲突，重新 `npm run build` 生成 |
 | 迁移号 | `main` 上并行任务也可能占用 0033：合并时按先合入者保留，本任务重编号为下一个空号（文件名、`embed` 列表与迁移版本测试一起改） |
@@ -418,9 +446,9 @@ AppShell（app/shell）
 | B2 | 单元：窗口峰值 → 波形 / 首尾点、ebur128 摘要解析、专辑增益公式、工作者循环（假分析器：扫描让路、失败不阻塞、取消退出）；`TestFFmpegAnalysis…`（固定 ffmpeg，合成素材：响度误差 ±0.5 LU、开头静音、CUE 区间）；`TestPostgreSQL…`：待分析判定（新曲目 / 快照变化 / 版本变化 / 失败冷却）、两个接口与样本、迁移上下行；依赖规则 | `go test -race ./internal/playback/... ./internal/catalog/ -run 'Test(Analysis|Waveform|Ebur128|AlbumGain)'`；`ROOMUSIC_TEST_FFMPEG=… go test ./internal/playback/analysis -run TestFFmpeg`；`go test ./internal/app/ -run 'Test(PostgreSQLAnalysis|PostgreSQLAPIResponseSamples|PackageDependencyDirections|MigrationVersion)' -count=1` |
 | F1 | `change-summary.test.ts`；`decodeCatalogStats`/`decodeAnalysisProgress` 读样本；概览组件测试（四卡、空库、侧栏管理员项） | `npx vitest run src/features/governance/change-summary.test.ts src/app/<概览相关>.test.tsx …` |
 | F2 | `player-ui.test.tsx` 改写：封面打开全屏、Esc / 收起 / 返回关闭、抽屉焦点回到队列图标、弹层四层取值且无解释句；`nav-items.test.ts`；`/now-playing` 跳转；E2E 与 axe（1440、375） | `npx vitest run src/features/player/components src/app/shell/nav-items.test.ts …`；`npm run test:e2e -- player.spec.ts auth.spec.ts search-step4.spec.ts` |
-| F3 | `playback-settings` 解码；引擎：增益选择（专辑 / 曲目 / 随机 / 未分析）、`setVolume` 不再依赖回读、渐变计划与切换（同专辑不渐变、单曲循环不渐变、手动切歌不渐变、备用元素被拒退回、切换后计数只算新曲目）；`WaveformSeek`（有 / 无分析、键盘仍可用）；设置页 | `npx vitest run src/features/player/engine/player-engine.test.ts src/features/player/engine/playback-settings.test.ts src/features/player/components/waveform-seek.test.tsx …` |
+| F3 | `playback-settings` 解码（四种 `leveling`）；引擎（假 `AudioContextLike`，可控 `state` 与 `statechange`）：两项都关时不创建上下文、元素不接入；需要时上下文在手势命令里创建并 resume，非 running 时本首不接入原样播放；运行中 `statechange` 变为非 running → 暂停计数并换新元素从原位置继续；增益选择表（关 / 按曲目 / 按专辑含退回 / 自动含随机，未知 −5 dB，正增益原样施加到 `levelGain`）；接入后用户音量写 `masterGain`、`setVolume` 不再依赖回读；渐变（同专辑、单曲循环、手动切歌不渐变；切换时两个 `fadeGain` 收到 `setValueCurveAtTime`；备用元素被拒退回；切换后计数只算新曲目）；`WaveformSeek`（有 / 无分析、键盘仍可用）；设置页（分段选择、iOS 禁用）。后端 B2 的增益公式单元测试覆盖正增益被真峰值限住 | `npx vitest run src/features/player/engine/player-engine.test.ts src/features/player/engine/playback-settings.test.ts src/features/player/components/waveform-seek.test.tsx …` |
 
-不做：全量 Go / Vitest / E2E；为 iOS 行为写模拟测试；为不可能的组合（例如同时 `done` 又无波形）写测试；重复的演练与预演。
+不做：全量 Go / Vitest / E2E；为 iOS 或 Android 后台行为写模拟测试（Android 锁屏连播只在收尾时实机听一次）；为不可能的组合（例如同时 `done` 又无波形）写测试；重复的演练与预演。
 
 ### 8.3 需要同步更新的 E2E 与测试位置（grep 结果）
 
@@ -435,20 +463,21 @@ AppShell（app/shell）
 | `frontend/e2e/support/api-mock.ts` | 接口分发 | 增加三个新接口的桩（读样本）；未登记曲目的分析返回 `pending` 样本 |
 | 单元测试 | `features/player/components/player-ui.test.tsx`、`app/shell/nav-items.test.ts`、`app/player-personal-actions.test.tsx`、`app/artist-player-metadata-step5.test.tsx`、`features/player/engine/player-engine.test.ts`、`features/player/player-provider.test.tsx`、`features/governance/change-summary.test.ts` | 随对应步骤更新 |
 
-收尾时需要更新的规范（Phase 3）：`player-design-guidelines.md`（信号路径、全屏、抽屉）、`playback-and-personal-state.md`（播放设置键、分析查询键、两路音频）、`frontend/DESIGN-components.md`（概览行与“正在播放”描述）、`frontend/DESIGN.md` 4 节导航列表、新增 `backend/audio-analysis-contracts.md` 并登记到后端索引。
+收尾时需要更新的规范（Phase 3）：`player-design-guidelines.md`（信号路径、全屏、抽屉）、`playback-and-personal-state.md`（播放设置键、分析查询键、两路音频与 Web Audio 接入规则）、`frontend/DESIGN-components.md`（概览行与“正在播放”描述）、`frontend/DESIGN.md` 4 节导航列表、新增 `backend/audio-analysis-contracts.md` 并登记到后端索引。
 
 ## 9. 需主会话裁决
 
 | # | 问题 | 推荐 | 理由 |
 | --- | --- | --- | --- |
-| Q1 | 均衡只衰减不提升（不用 Web Audio）：比 −18 LUFS 更安静的曲目（多见于古典、老录音）不会被抬高，A8 的“音量接近”只在较响的一首高于目标时成立 | 接受只衰减 | 手机锁屏、后台连播与现在一样可靠；关闭时零风险。若以后确实需要提升，可只在桌面浏览器另开 Web Audio 路径，后端增益已按真峰值限幅备用 |
-| Q2 | iPhone / iPad 的网页音量只读：均衡与渐变在这些设备上不生效（现有音量滑块同样无效） | 设置页禁用两个开关并加一句“这台设备不能调节网页音量，这两项不会生效。” | 让用户知道为什么开关没用，比静默失效顺手；一句日常话，不讲实现 |
-| Q3 | “曲目”数口径：没有曲目列表页可对齐；同一专辑的多个版本里的曲目是否去重 | 不去重：全部 present 曲目（= 资料库里实际能放的文件数） | 去重需要跨版本认定“同一首”，没有可靠依据；文件数与用户对“我有多少首”的直觉一致 |
-| Q4 | CUE 虚拟轨目前不能播放（`not_directly_playable`），分析结果暂时用不上，但 R2 要求按区间分析 | 照做，但排在最后分析，并计入进度总数 | 符合 R2；排最后不耽误可播曲目；将来 CUE 能播时结果已就绪 |
-| Q5 | 专辑还没分析完时的均衡：专辑增益为空 | 先用曲目增益，整张分析完后自动改用专辑增益 | D3 说未分析的原样播放；已分析的曲目先均衡总比不均衡顺耳；按发行成组分析，这段时间很短 |
-| Q6 | 在全屏里点专辑 / 艺人后按返回 | 回到全屏播放器（普通 push 导航） | 符合“返回刚才的位置”的直觉，也不需要改 `ArtistNames` 等通用链接 |
-| Q7 | 信号路径圆点颜色：设计规范不允许擅自引入红绿状态色 | 无损用金色实心、有损用灰色实心、未知空心；名称与标题写明，不只靠颜色 | 不扩展调色板，仍一眼可辨 |
-| Q8 | 音频分析在概览侧栏对所有成员可见；不可用时只写“未运行”不说原因 | 照此 | 遵守“不写实现细节”；管理员可从日志 `playback.analysis.unavailable` 查原因 |
+| Q1 | ~~均衡只衰减不提升~~ | **已定（用户 2026-11-08）：按 Roon** | −14 LUFS、可提升、按真峰值限幅、四种模式、未知 −5 dB，用 Web Audio 按需接入（第 2.5、4.6 节） |
+| Q2 | ~~iPhone / iPad 上两项不可用~~ | **已定（D7）** | 以 `element.volume` 只读判定，不接入 Web Audio；设置页禁用并只写那一句 |
+| Q9 | Android 锁屏 / 后台下 Web Audio 是否持续出声没有实机确证 | **已定（主会话）**按第 4.6 节判断默认接入，靠“中断退回”兜底；收尾时实机听一次，若被中断再改为 Android 默认不接入 | 不为未证实的问题提前放弃 Android 上的均衡；退回路径已足以避免无声计数 |
+| Q3 | “曲目”数口径：没有曲目列表页可对齐；同一专辑的多个版本里的曲目是否去重 | **已定（D8）**不去重：全部 present 曲目（= 资料库里实际能放的文件数） | 去重需要跨版本认定“同一首”，没有可靠依据；文件数与用户对“我有多少首”的直觉一致 |
+| Q4 | CUE 虚拟轨目前不能播放（`not_directly_playable`），分析结果暂时用不上，但 R2 要求按区间分析 | **已定（D9）**照做，但排在最后分析，并计入进度总数 | 符合 R2；排最后不耽误可播曲目；将来 CUE 能播时结果已就绪 |
+| Q5 | ~~专辑没分析完时的均衡~~ | **已定（D10，按 Roon 细化）** | 退回曲目增益，曲目也未知用 −5 dB；整张分析完后从下一首起用专辑增益 |
+| Q6 | 在全屏里点专辑 / 艺人后按返回 | **已定（D11）**回到全屏播放器（普通 push 导航） | 符合“返回刚才的位置”的直觉，也不需要改 `ArtistNames` 等通用链接 |
+| Q7 | 信号路径圆点颜色：设计规范不允许擅自引入红绿状态色 | **已定（D12）**无损用金色实心、有损用灰色实心、未知空心；名称与标题写明，不只靠颜色 | 不扩展调色板，仍一眼可辨 |
+| Q8 | 音频分析在概览侧栏对所有成员可见；不可用时只写“未运行”不说原因 | **已定（D12）**照此 | 遵守“不写实现细节”；管理员可从日志 `playback.analysis.unavailable` 查原因 |
 
 ## 10. 读过但与 PRD 冲突或需要修订的现有文档
 
@@ -456,4 +485,5 @@ AppShell（app/shell）
 - `.trellis/spec/frontend/player-design-guidelines.md`“视觉与布局”要求服务端环节写“原样发送，不转码。”与“ALAC 转成 FLAC，位深、采样率与声道不变。”，“M2b 歌词面板”按正在播放页描述布局——与 R3、R4 冲突，收尾时改为全屏与弹层。
 - R6 末条“现有播放行为（无缝预取……）”：代码里没有无缝播放，`prefetcher.ts` 只为下一首派生曲目提前预检。本文按“保持现有预检预取不变”理解，不新增无缝播放。
 - `frontend/DESIGN.md` 第 4 节导航列表含“正在播放”、`DESIGN-components.md` 第 6 节写“正在播放页提供完整控制、信号路径与按条目 ID 操作的队列”——随 R3 修订。
+- PRD D3“还没分析到的曲目原样播放”与“按 Roon”的“响度未知固定 −5 dB”冲突；D6（只衰减、不用 Web Audio）已被用户推翻。本文按 Roon 写，PRD 由主会话改。
 - PRD“现状”说“播放栏有三处链到 `/now-playing`”，另有侧栏导航 `nav-items.ts` 的“正在播放”入口未列出；按“取消正在播放页”一并删除。
