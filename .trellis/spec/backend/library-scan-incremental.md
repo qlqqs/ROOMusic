@@ -38,7 +38,7 @@
 - `PlanOptions.Mode` 传入模式；仅 `WalkComplete` 且增量模式，才在 `resolveFingerprints` 计算前借用指纹。旧侧为本根 present、已知指纹/大小/mtime、未被任何本轮暂存 `matched_track_id` 引用且未被保住的文件；CUE 取 `COALESCE(cue_parent_relative_path,relative_path)`。
 - 新侧为保留、未暂缓、未匹配且无指纹、`fingerprint_path` 非空的暂存观察；按文件名、大小、mtime 配对，两侧各恰好一个不同文件路径才借用。CUE 多轨按父文件去重计数，并将借得指纹用于该父文件的暂存行。文件名改变或任一侧有多个路径，照常计算；不使用目录名或标签推测身份。
 - 借用不代替曲目配对：后续仍要求指纹与 CUE 区间两侧唯一，沿用原 UUID 与 Release 严格过半规则。`RootPlan.FingerprintsBorrowed` 汇入 `library.scan.identity_resolved` 的计数，不记录路径。
-- `full` 绕过解析缓存读取、候选跳过和指纹借用，仍将成功解析写缓存；保留既有的“同来源身份且 size/mtime 未变则复用已存指纹”。扫描仍走同一协调锁、身份规划、反馈与 missing 流程。HTTP 可选请求体与所有角色 `ScanDTO.mode` 见[扫描协调合同](./scan-coordination-contracts.md)。
+- `full` 绕过解析缓存读取、候选跳过和指纹借用，仍将成功解析写缓存；保留既有的“同来源身份且 size/mtime 未变则复用已存指纹”。扫描仍走同一协调锁、身份规划、反馈与 missing 流程。HTTP 空请求体或空对象 `{}` 默认增量；可选请求体的严格校验与所有角色 `ScanDTO.mode` 见[扫描协调合同](./scan-coordination-contracts.md)。
 - 每根结束 INFO `library.scan.incremental_summary`：`scan_run_id/library_root_id/mode/files_parsed/parse_cache_hits/parse_cache_writes/candidates_written/candidates_skipped/artwork_deferred_loads`。只记标识、模式与计数；`candidates_skipped` 只在未变判定命中且 touch 成功后加一，解析缓存命中本身不算候选跳过。
 
 #### 候选签名与跳过

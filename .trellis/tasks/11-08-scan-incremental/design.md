@@ -151,7 +151,8 @@ candidateSourceDirectories() 的每个目录中 .log 普通文件（按名字排
 **请求**：`POST /api/v1/scans`
 
 - 空请求体（`Content-Length: 0` 或无请求体）等价于 `{"mode":"incremental"}`，保持现有调用方兼容。
-- 有请求体时严格解码 `{ "mode": "incremental" | "full" }`，未知字段或其他值 → `400 invalid_input`。
+- 非空对象严格解码 `{ "mode": "incremental" | "full" }`，未知或重复字段、mode 非法值、非对象、无效或尾随 JSON → `400 invalid_input`。
+- 2026-11-08 收尾时放宽：空对象 `{}` 等价于无请求体，默认增量；保留其余严格解码规则，兼容既有调用方。
 - 已有扫描在跑：返回该扫描与 `200`，不论请求的模式（与现有行为一致）。
 
 **响应**：`ScanDTO` 增加 `mode: "incremental" | "full"`（所有入口、所有角色）。迁移前的历史扫描为 `incremental`（列默认值）。

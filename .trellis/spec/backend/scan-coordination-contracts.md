@@ -15,7 +15,7 @@ mutex 只保护本进程的 worker 引用。
 - 扫描状态枚举：`running | succeeded | failed | canceled | incomplete`。
 - `POST /api/v1/scans`：管理员启动扫描；新建时返回 `202`，已有本进程或其他进程的
   活动扫描时返回该活动 DTO 和 `200`，不改变原扫描模式。
-  空请求体（无请求体或 `Content-Length: 0`）等价于 `{"mode":"incremental"}`；有体严格解码单字段对象 `{"mode":"incremental"}` 或 `{"mode":"full"}`，未知字段、缺少 mode、其他值或无效 JSON 返回 `400 invalid_input`。
+  空请求体（无请求体或 `Content-Length: 0`）和空对象 `{}` 均等价于 `{"mode":"incremental"}`；非空对象严格解码单字段对象 `{"mode":"incremental"}` 或 `{"mode":"full"}`，未知或重复字段、mode 非法值、非对象、无效或尾随 JSON 返回 `400 invalid_input`。
 - `Service.StartScan(ctx, options ...StartOptions)` 接受零个或一个 `StartOptions{Mode string, Trigger string}`，省略时默认手动增量，空 `Trigger` 默认为 `manual`；HTTP 固定 `manual` 并传显式模式，再传至 worker、root 与 `ingest.PlanOptions`。`scanRoot` 保留默认增量入口，转调 `scanRootWithOptions`，避免其他线调用处的无谓变更；full 与 incremental 共用协调锁，不另开 HTTP 入口。
 - `0041` 增加 `scan_runs.scan_mode TEXT NOT NULL DEFAULT 'incremental' CHECK (scan_mode IN ('incremental','full'))`；历史记录默认增量，下行删除列。
 - `GET /api/v1/scans`：管理员查询扫描记录（F3），`page`（默认 1）、`page_size`（默认 20，最大 100），按
@@ -101,7 +101,7 @@ mutex 只保护本进程的 worker 引用。
 | 普通用户读取扫描记录列表 | `403 forbidden`；未登录为 `401` |
 | 扫描记录的 `page`/`page_size` 非法（非整数、小于 1、`page_size` 超过 100、偏移溢出） | `400 invalid_pagination` |
 | 扫描记录读取失败（计数、分页、诊断汇总任一步） | `503 database_unavailable`，不回显 SQL |
-| 有请求体但 mode 缺失/非法、未知字段或 JSON 非法 | `400 invalid_input`，不启动扫描 |
+| mode 非法、未知或重复字段、非对象、无效或尾随 JSON（空对象 `{}` 合法） | `400 invalid_input`，不启动扫描 |
 | 启动获得锁且无活动任务 | 插入一个 `running`，返回 `202` 和新 DTO |
 | 本进程已有活动任务 | 返回同一 DTO 和 `200`，不创建第二行 |
 | 未获锁但可读取其他实例的活动任务 | 返回该 DTO 和 `200`，不等待、不接管 |
@@ -149,7 +149,7 @@ mutex 只保护本进程的 worker 引用。
   旧来源 `present`；成功扫描的所有 root 对账与 `succeeded` 更新一起提交或回滚。
 - 后端并发与生命周期：取消轮询、停机等待、holder 释放和本进程 worker 引用通过
   适用的 `go test -race`；数据库/holder 故障不得继续 stale write。
-- 完整重扫 HTTP：空请求体与显式 incremental 等价；full 写入并在全部 DTO 入口返回；非法请求 400；已有活动扫描不因所请求模式不同而创建新行或改模式。
+- 完整重扫 HTTP：空请求体、空对象 `{}` 与显式 incremental 等价；full 写入并在全部 DTO 入口返回；非法请求 400；已有活动扫描不因所请求模式不同而创建新行或改模式。
 - 前端 decoder/UI：上述 DTO 字段必需（含 `mode`、`trigger`），严格校验时间、状态与诊断摘要；活动空值、取消请求中、
   `canceled`/`failed`/`incomplete` 文案以及取消失败后的重试入口均有覆盖。
 - 扫描记录（F3，`internal/app/scan_history_integration_test.go`、`internal/platform/httpserver/pagination_test.go`）：401/403、

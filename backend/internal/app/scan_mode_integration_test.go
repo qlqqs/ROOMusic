@@ -88,7 +88,7 @@ func TestPostgreSQLScanModeEmptyBodyMatchesIncremental(t *testing.T) {
 	writeSyntheticTrack(t, filepath.Join(root, "Album", "01.flac"), 1, "TITLE=合成曲目", "ARTIST=合成艺人", "ALBUM=合成专辑", "TRACKNUMBER=1")
 	rootID := createRoot(t, application, admin, root, "create-incremental-mode")
 
-	// 先用完整扫描建立解析缓存，再比较两种请求的真实增量行为。
+	// 先用完整扫描建立解析缓存，再比较各类请求的真实增量行为。
 	initial := application.request(t, http.MethodPost, "/api/v1/scans", map[string]string{"mode": "full"}, &admin, nil)
 	if initial.Code != http.StatusAccepted {
 		t.Fatalf("首次扫描：HTTP %d：%s", initial.Code, initial.Body.String())
@@ -106,6 +106,7 @@ func TestPostgreSQLScanModeEmptyBodyMatchesIncremental(t *testing.T) {
 		body any
 	}{
 		{name: "空请求体", body: nil},
+		{name: "空对象", body: map[string]any{}},
 		{name: "显式增量模式", body: map[string]string{"mode": "incremental"}},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -130,7 +131,7 @@ func TestPostgreSQLScanModeEmptyBodyMatchesIncremental(t *testing.T) {
 				}
 			}
 			if summary == nil || summary["mode"] != "incremental" || summary["files_parsed"] != float64(0) || summary["parse_cache_hits"] != float64(1) {
-				t.Fatalf("空请求体和显式 incremental 都应命中缓存而不解析：%v", summary)
+				t.Fatalf("空请求体、空对象和显式 incremental 都应命中缓存而不解析：%v", summary)
 			}
 			var storedMode string
 			if err := application.database.QueryRow(`SELECT scan_mode FROM scan_runs WHERE id=$1::uuid`, scanID).Scan(&storedMode); err != nil {
@@ -160,7 +161,6 @@ func TestPostgreSQLScanModeRejectsInvalidInput(t *testing.T) {
 		{name: "未知模式", body: map[string]string{"mode": "fast"}},
 		{name: "大小写不符", body: map[string]string{"mode": "FULL"}},
 		{name: "空模式", body: map[string]string{"mode": ""}},
-		{name: "缺少模式", body: map[string]any{}},
 		{name: "模式为 null", body: map[string]any{"mode": nil}},
 		{name: "模式类型错误", body: map[string]int{"mode": 1}},
 		{name: "未知字段", body: map[string]any{"mode": "full", "force": true}},

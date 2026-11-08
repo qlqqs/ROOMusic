@@ -46,7 +46,7 @@ func (handlers *Handlers) startScan(responseWriter http.ResponseWriter, request 
 	httpserver.WriteJSON(responseWriter, status, presentScan(result.Scan, true))
 }
 
-// decodeStartScanOptions 允许无请求体；非空时只接受单个 mode 字段，拒绝重复键和尾随 JSON。
+// decodeStartScanOptions 允许无请求体或空对象；对象内只接受单个 mode 字段，拒绝重复键和尾随 JSON。
 func decodeStartScanOptions(w http.ResponseWriter, r *http.Request) (library.StartOptions, error) {
 	options := library.StartOptions{Mode: library.ScanModeIncremental, Trigger: library.ScanTriggerManual}
 	if r.Body == nil || r.Body == http.NoBody {
@@ -61,16 +61,20 @@ func decodeStartScanOptions(w http.ResponseWriter, r *http.Request) (library.Sta
 	}
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	token, err := decoder.Token()
-	if err != nil || token != json.Delim('{') || !decoder.More() {
+	if err != nil || token != json.Delim('{') {
 		return options, library.ErrInvalidScanMode
 	}
-	key, err := decoder.Token()
-	if err != nil || key != "mode" {
-		return options, library.ErrInvalidScanMode
-	}
-	var mode string
-	if err := decoder.Decode(&mode); err != nil || (mode != library.ScanModeIncremental && mode != library.ScanModeFull) || decoder.More() {
-		return options, library.ErrInvalidScanMode
+	mode := options.Mode
+	if decoder.More() {
+		key, err := decoder.Token()
+		if err != nil || key != "mode" {
+			return options, library.ErrInvalidScanMode
+		}
+		var requestedMode string
+		if err := decoder.Decode(&requestedMode); err != nil || (requestedMode != library.ScanModeIncremental && requestedMode != library.ScanModeFull) || decoder.More() {
+			return options, library.ErrInvalidScanMode
+		}
+		mode = requestedMode
 	}
 	if token, err := decoder.Token(); err != nil || token != json.Delim('}') {
 		return options, library.ErrInvalidScanMode
