@@ -340,3 +340,23 @@ func TestFolderArtworkSkipsSubsidiarySymlink(t *testing.T) {
 		t.Fatalf("symlink subsidiary was searched: data=%x MIME=%q err=%v", data, mimeType, err)
 	}
 }
+
+func TestFolderArtworkHonorsScanFilter(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		file       string
+		exclusions []string
+	}{
+		{name: "排除附属目录", file: "Album/scans/cover.jpg", exclusions: []string{"Album/scans"}},
+		{name: "隐藏的 front 图片", file: "Album/.front.jpg"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			writeArtworkFile(t, filepath.Join(root, filepath.FromSlash(filepath.Dir(tc.file))), filepath.Base(tc.file), minimalJPEGArtwork(t))
+			data, mimeType, err := discoverFolderArtwork(root, []string{"Album"}, newScanFilter(tc.exclusions))
+			if err != nil || len(data) != 0 || mimeType != "" {
+				t.Fatalf("过滤项不应被用作封面：文件=%q 字节数=%d MIME=%q err=%v", tc.file, len(data), mimeType, err)
+			}
+		})
+	}
+}

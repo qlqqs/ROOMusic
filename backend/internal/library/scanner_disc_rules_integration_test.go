@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -193,4 +195,58 @@ func TestPostgreSQLDiscParentScopesAndMediumTitle(t *testing.T) {
 		t.Fatalf("去掉碟名未恢复默认值: %q", got)
 	}
 	assertDatabaseCount(t, f, `SELECT COUNT(*) FROM scan_observations WHERE root_id=$1::uuid`, 0, root.ID)
+}
+
+func TestPostgreSQLDiscParentHeldSiblingPreventsPromotion(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("权限用例必须由非 root 用户运行")
+	}
+	f := newLibraryFixture(t)
+	root := insertScannerRoot(t, f, "disc-parent-held-sibling")
+	service := scannerTestApplication(f)
+	const oldPath = "Album/Blocked/01.flac"
+	const discPath = "Album/CD1/01.flac"
+	writeAudio(t, root, oldPath, audioFile{seed: 1, title: "Old", album: "Old Album", track: 1})
+	requireFilterScan(t, runFilterLifecycleScan(t, service), "succeeded", 0)
+	before := presentTrackIDs(t, f, root.ID)
+	if len(before) != 1 || before[oldPath] == "" {
+		t.Fatalf("首次扫描必须保存兄弟目录的旧来源：%v", before)
+	}
+
+	// 新增碟目录时，兄弟目录读不了；旧来源被保住，父目录仍不独占。
+	writeScanFixtureFile(t, root, discPath, parsertest.FLACWithAudio(t, [16]byte{2}, []byte{2}, "TITLE=New"))
+	blocked := filepath.Join(root.Path, "Album", "Blocked")
+	if err := os.Chmod(blocked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chmod(blocked, 0o755); err != nil {
+			t.Errorf("恢复合成目录权限：%v", err)
+		}
+	})
+	if _, err := os.ReadDir(blocked); !os.IsPermission(err) {
+		t.Fatalf("chmod 000 未造成真实权限拒绝：%v", err)
+	}
+
+	scan := runFilterLifecycleScan(t, service)
+	requireFilterScan(t, scan, "succeeded", 1)
+	requireDiagnosticCount(t, f, scan.ID, "walk_error", 1)
+	after := presentTrackIDs(t, f, root.ID)
+	requireTrackAt(t, after, oldPath, before[oldPath])
+	if len(after) != 2 || after[discPath] == "" {
+		t.Fatalf("必须保住旧来源并写入新碟目录曲目：%v", after)
+	}
+	assertDatabaseCount(t, f, `SELECT COUNT(*) FROM tracks WHERE id=$1::uuid AND source_status='present'
+		AND source_identity IS NOT NULL AND observed_at >= (SELECT started_at FROM scan_runs WHERE id=$2::uuid)`, 1, before[oldPath], scan.ID)
+
+	var kind, directory, title, anchor string
+	if err := f.database.QueryRow(`SELECT r.candidate_kind,r.relative_directory,r.title,r.candidate_anchor
+		FROM tracks t JOIN media m ON m.id=t.medium_id JOIN releases r ON r.id=m.release_id
+		WHERE t.id=$1::uuid`, after[discPath]).Scan(&kind, &directory, &title, &anchor); err != nil {
+		t.Fatal(err)
+	}
+	wantAnchor := ingest.CandidateIdentity(root.ID, ingest.CandidateAnchor{Kind: ingest.CandidateBoxLeaf, Scope: "Album/CD1"})
+	if kind != string(ingest.CandidateBoxLeaf) || directory != "Album/CD1" || title != "CD1" || anchor != wantAnchor {
+		t.Fatalf("兄弟目录被保住时不能上提：种类=%q 目录=%q 标题=%q 锚点=%q，期望 box_leaf/Album/CD1/CD1/%s", kind, directory, title, anchor, wantAnchor)
+	}
 }
