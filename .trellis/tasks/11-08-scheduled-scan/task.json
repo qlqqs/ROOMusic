@@ -3,7 +3,7 @@
   "name": "scheduled-scan",
   "title": "⑪ 定时扫描",
   "description": "每天固定时间自动扫描，设置里可开关与改时间",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
