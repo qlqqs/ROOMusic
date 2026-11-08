@@ -1,4 +1,5 @@
-{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "核对扩展名表、指纹种类与 CUE 回退扩展名已同步进合同，且新指纹改标签不变"}
+{"file": ".trellis/spec/backend/library-scan-pipeline.md", "reason": "核对扩展名表与 CUE 回退扩展名已同步进合同"}
+{"file": ".trellis/spec/backend/library-scan-grouping.md", "reason": "核对指纹种类已同步进合同，且新指纹改标签不变"}
 {"file": ".trellis/spec/backend/playback-derivation-contracts.md", "reason": "核对 ALAC 缓存键不变、新格式策略串入键、参数数组固定不经 shell、两遍 MD5 与 16/24 位核对未被绕过"}
 {"file": ".trellis/spec/backend/playback-contracts.md", "reason": "核对格式表派生项、位深关卡返回 not_directly_playable、检查顺序不变"}
 {"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "核对测试只覆盖改动行为、没有多余兜底"}

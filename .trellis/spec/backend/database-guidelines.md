@@ -95,7 +95,7 @@ M3 起，发行字段修正、人工归组与撤销（M4 起还有默认版本�
 
 **迁移 0021/0022（M5 P 线，本分支编号）**：独立typed收藏与歌单能力，不借用 `operations.Run`。收藏共用本人集合版本；歌单使用PKEY/PQUO事务锁、间隔键、同事务成功收据与适应撤销。成功收据不随歌单删除，撤销可暂时超过普通10,000首配额；强owner复合外键与引用RESTRICT规则见[本人收藏与歌单合同](./personal-contracts.md)。新增表属于additive迁移，fresh/rerun仍由现有执行器校验，不改既有迁移。
 
-**迁移 0037（②）**：`0037_scan_observation_previous_release.sql` 给 `scan_observations` 增加可空 `previous_release_id UUID`，不加外键或索引；同名 `.down.sql` 删除该暂存列，回退测试版本表含 37。规划保存沿用曲目的原发行，根保存后用于计算被腾空组的专辑收藏转移；已转移收藏不随 down 撤销。合入 main 时已避开 0034 文件过滤、0035 改路径与 0036 响度范围迁移。规则见[扫描合同](./library-scan-contracts.md)。
+**迁移 0037（②）**：`0037_scan_observation_previous_release.sql` 给 `scan_observations` 增加可空 `previous_release_id UUID`，不加外键或索引；同名 `.down.sql` 删除该暂存列，回退测试版本表含 37。规划保存沿用曲目的原发行，根保存后用于计算被腾空组的专辑收藏转移；已转移收藏不随 down 撤销。合入 main 时已避开 0034 文件过滤、0035 改路径与 0036 响度范围迁移。规则见[扫描流程](./library-scan-pipeline.md)。
 
 Do not hold a database transaction open while walking a library tree or reading
 audio tags. Persist scan progress in bounded batches and finalize the scan with
@@ -118,7 +118,7 @@ complete and successful.
 - 曲目 UUID 在同一 root 内随音频内容延续，不随路径改变（阶段 I）：曲目先按当前来源身份（root + 规范化相对路径，
   CUE 另含 sheet、父来源、轨号与起点）匹配；同一来源身份下音频内容指纹变化视为换了内容，新建曲目。改名、移动只在该 root
   遍历完整时，才按指纹（含 CUE 区间）把没有匹配到身份的观察与本轮消失的曲目唯一 1:1 配对、沿用 UUID；歧义、跨 root、
-  相似度都不重绑定，遍历不完整或被取消时不重绑定。规则与测试见 [目录与扫描流程合同](./library-scan-contracts.md)。
+  相似度都不重绑定，遍历不完整或被取消时不重绑定。规则见 [扫描流程](./library-scan-pipeline.md)，测试见[校验矩阵与测试](./library-scan-checks.md)。
 - Release UUID 按候选中已有曲目的成员关系延续（严格过半沿用）；`releases.candidate_anchor` 只记录最近一次的位置，
   不参与查找，也不要求唯一。
 - Preserve missing sources and derived entities for diagnosis. Core 0 performs

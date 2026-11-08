@@ -19,7 +19,7 @@
   - ~~`httpserver.Frontend` 不设缓存头；`/assets/`、`/licenses/` 这类目录路径会返回目录列表；封面缓存头 `private, max-age=86400`~~：
     F3 已修复，见 [Core 0 运行合同](./core0-runtime-contracts.md) 的“HTTP 缓存”。
 - ~~M1b 真实接口冒烟（2026-10-03，见任务 `09-28-classical-m1b-album-browsing` 的 `research/real-api-smoke.md`）发现的封面发现缺口~~：
-  2026-10-03 由 F4（任务 `10-03-classical-f4-artwork-discovery`）修复，规则见 [目录与扫描流程合同](./library-scan-contracts.md)的“封面来源与文件夹封面发现”：
+  2026-10-03 由 F4（任务 `10-03-classical-f4-artwork-discovery`）修复，规则见 [归组与发行](./library-scan-grouping.md)的“封面来源与文件夹封面发现”：
   - ~~CUE 专辑拿不到文件夹封面~~：虚拟路径推不出真实目录；现在用观察的 `Directory`（sheet 所在目录）。
   - ~~多碟专辑只在第一张碟的文件夹里找封面~~：现在先查发行目录（各碟的父目录），再按碟序查各碟目录。
   - ~~封面文件名只认全小写~~（F4 规划时的只读统计发现）：Linux 区分大小写，`Cover.JPG` 等找不到；现在不区分大小写。

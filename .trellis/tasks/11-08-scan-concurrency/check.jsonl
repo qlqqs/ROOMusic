@@ -1,4 +1,4 @@
-{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "核对并发一段与 OGG 内存约束已写入，诊断顺序与串行一致"}
+{"file": ".trellis/spec/backend/library-scan-pipeline.md", "reason": "核对并发一段与 OGG 内存约束已写入，诊断顺序与串行一致"}
 {"file": ".trellis/spec/backend/directory-structure.md", "reason": "核对新包规则与 ingest 允许依赖已同步"}
 {"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量门禁与 race 覆盖"}
 {"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "核对环境变量说明与 compose 一致"}

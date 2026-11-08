@@ -1,4 +1,6 @@
-{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "扫描完整性、校验矩阵、CUE 回退与封面发现的现行合同，本项要改写其中的完整性定义"}
+{"file": ".trellis/spec/backend/library-scan-pipeline.md", "reason": "扫描完整性与 CUE 回退的现行合同，本项要改写其中的完整性定义"}
+{"file": ".trellis/spec/backend/library-scan-checks.md", "reason": "校验矩阵的现行合同"}
+{"file": ".trellis/spec/backend/library-scan-grouping.md", "reason": "封面发现的现行合同"}
 {"file": ".trellis/spec/backend/scan-feedback-contracts.md", "reason": "预计数口径与进度刷新，跳过计数随进度写入，预计数需与遍历共用过滤函数"}
 {"file": ".trellis/spec/backend/scan-coordination-contracts.md", "reason": "ScanDTO 字段与终态事务，新增 skipped_files 字段"}
 {"file": ".trellis/spec/backend/library-folder-contracts.md", "reason": "目录浏览接口，新增 root_id 目录内模式"}

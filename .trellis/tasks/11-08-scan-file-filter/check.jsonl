@@ -1,4 +1,5 @@
-{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "核对完整性矩阵与保住语义已同步，仍不完整的情况未被放宽"}
+{"file": ".trellis/spec/backend/library-scan-pipeline.md", "reason": "核对完整性矩阵已同步，仍不完整的情况未被放宽"}
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "核对保住语义已同步"}
 {"file": ".trellis/spec/backend/scan-feedback-contracts.md", "reason": "核对预计数与遍历同一过滤、skipped_files 口径"}
 {"file": ".trellis/spec/backend/library-folder-contracts.md", "reason": "核对目录内浏览模式的鉴权顺序与错误矩阵"}
 {"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量门禁与测试要求"}

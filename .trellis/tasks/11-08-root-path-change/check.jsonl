@@ -1,4 +1,5 @@
-{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "核对改路径的幂等、错误矩阵与恢复版本链规则已写入合同"}
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "核对改路径的幂等与恢复版本链规则已写入合同"}
+{"file": ".trellis/spec/backend/library-scan-checks.md", "reason": "核对改路径的错误矩阵已写入合同"}
 {"file": ".trellis/spec/backend/scan-coordination-contracts.md", "reason": "核对扫描锁键复用、扫描中拒绝无竞争窗口"}
 {"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量门禁"}
 {"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质量门禁"}

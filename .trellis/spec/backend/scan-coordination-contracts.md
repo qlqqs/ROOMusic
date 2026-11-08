@@ -59,7 +59,7 @@ mutex 只保护本进程的 worker 引用。
 }
 ```
 
-- `mode` 是所有入口、所有角色的必需字段，只接受 `incremental` 或 `full`；列表、详情、活动、启动、取消响应使用同一 presenter，历史记录为 `incremental`。完整重扫绕过解析缓存读取和指纹借用，仍写缓存；其余语义见[目录与扫描流程合同](./library-scan-contracts.md)。
+- `mode` 是所有入口、所有角色的必需字段，只接受 `incremental` 或 `full`；列表、详情、活动、启动、取消响应使用同一 presenter，历史记录为 `incremental`。完整重扫绕过解析缓存读取和指纹借用，仍写缓存；其余语义见[增量扫描](./library-scan-incremental.md)。
 - `trigger` 是所有入口、所有角色的必需字段，只接受 `manual` 或 `scheduled`；迁移前的历史扫描为 `manual`，定时扫描为 `scheduled`。
 - `skipped_files` 是所有角色共用 presenter 的必需字段：非负 JS 安全整数或 null；历史扫描为 null，新扫描从 0 起，按文件/目录/CUE 保住登记计数，不受诊断上限影响。随进度及终态写入，大于零不改变 succeeded 与 missing 收口规则。
 - `diagnostics` 是必需摘要，`total` 为诊断条目数，`counts` 为 `{ "kind": string, "count": integer }`

@@ -51,8 +51,13 @@ Before writing or reviewing backend code:
 | [身份与成员合同](./identity-contracts.md) | 密码规则、初始化与成员接口、用户停用事务、写入失败映射 |
 | [来源与会话 Cookie 合同](./identity-origin-contracts.md) | 三模式配置、Host 规范化、守卫装配、Cookie Secure 与来源拒绝日志 |
 | [音乐目录浏览合同](./library-folder-contracts.md) | 管理员逐级浏览允许范围内的子文件夹、登记标记、错误与截断 |
-| [目录与扫描流程合同](./library-scan-contracts.md) | 目录幂等、扫描完整性、暂存与身份规划、CUE、抓轨日志、封面发现 |
-| [目录与扫描流程验证与示例](./library-scan-verification.md) | 扫描合同第5–7节：案例、必需测试与错误示例 |
+| [目录与扫描流程合同](./library-scan-contracts.md) | 范围、接口签名、目录幂等、路径过滤、排除子文件夹、保住登记；拆分文件目录 |
+| [扫描流程](./library-scan-pipeline.md) | 扫描完整性、暂存、身份、CUE 与封面，根保存后的收藏转移，并发解析（⑤），搜索投影挂接 |
+| [增量扫描](./library-scan-incremental.md) | 增量扫描（④）：解析缓存、延迟封面、版本号与升版本、借用指纹、候选签名与跳过 |
+| [归组与发行](./library-scan-grouping.md) | 发行候选、抓轨与封面，碟号与独占合成，文件名推断与同目录归组（③），MP3 时长，新格式指纹 |
+| [标签与古典作品](./library-scan-tags.md) | 标签多值、署名与合辑（⑥⑦），古典作品与乐章（⑧） |
+| [扫描校验矩阵与测试](./library-scan-checks.md) | 扫描合同第4–6节：校验与错误矩阵、案例、必需测试 |
+| [目录与扫描流程验证与示例](./library-scan-verification.md) | 扫描合同第5–7节的补充案例、测试与错误示例，②③验证 |
 | [扫描反馈合同](./scan-feedback-contracts.md) | M5：全根计数、逐根加权进度、报告、最近新增、反馈降级与治理锁顺序 |
 | [扫描协调合同](./scan-coordination-contracts.md) | 扫描状态与记录、持久化取消、跨进程协调锁 |
 | [真实库 Smoke 合同](./real-library-smoke-contracts.md) | 真实音乐只读验收与 V0 对照 |

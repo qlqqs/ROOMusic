@@ -1,4 +1,4 @@
-{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "位置 fallback、inferred 标记、同目录分组与 same_dir_split 的现行合同，本项要改并同步"}
+{"file": ".trellis/spec/backend/library-scan-grouping.md", "reason": "位置 fallback、inferred 标记、同目录分组与 same_dir_split 的现行合同，本项要改并同步"}
 {"file": ".trellis/spec/backend/default-version-contracts.md", "reason": "按格式切分的版本加入同一组时，扫描不碰组的两列、代表版本规则不变"}
 {"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "candidate_kind 读取白名单与发行详情字段，新种类 format_split"}
 {"file": ".trellis/spec/backend/artist-contracts.md", "reason": "inferred 曲目艺人与 Release 艺人的整理规则，第 9 节待裁决涉及 facts.go"}

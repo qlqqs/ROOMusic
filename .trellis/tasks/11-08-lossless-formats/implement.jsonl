@@ -1,4 +1,5 @@
-{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "扫描扩展名表、CUE 同名回退、内容指纹种类与“身份与标签无关”的规则，新解析器与指纹必须遵守"}
+{"file": ".trellis/spec/backend/library-scan-pipeline.md", "reason": "扫描扩展名表、CUE 同名回退与“身份与标签无关”的规则，新解析器必须遵守"}
+{"file": ".trellis/spec/backend/library-scan-grouping.md", "reason": "内容指纹种类的规则，新指纹必须遵守"}
 {"file": ".trellis/spec/backend/playback-contracts.md", "reason": "格式表、预检检查顺序、安全打开与容器核对、409 not_directly_playable 的错误矩阵，派生项与位深关卡挂在这里"}
 {"file": ".trellis/spec/backend/playback-derivation-contracts.md", "reason": "派生的缓存键组成、ffmpeg 固定参数数组、两遍 PCM MD5 与 STREAMINFO 16/24 位核对，多格式输入在此基础上扩展"}
 {"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端代码与测试的质量门槛"}

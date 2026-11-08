@@ -36,7 +36,7 @@ persisted scan diagnostics, not reasons to fail the entire REST request.
 
 `exclusion_limit` 表示每个登记根已有 100 条排除项，返回 `409` / “不扫描的文件夹太多了”；重复添加已有项仍返回 200，不占新名额。
 
-目录改路径 `POST /api/v1/library-roots/{id}/relocate` 的完整校验矩阵、幂等及恢复规则见[目录与扫描流程合同](./library-scan-contracts.md)。新增错误：
+目录改路径 `POST /api/v1/library-roots/{id}/relocate` 的完整校验矩阵见[校验矩阵与测试](./library-scan-checks.md)，幂等及恢复规则见[目录与扫描流程合同](./library-scan-contracts.md)。新增错误：
 
 - `scan_running`：`409` / “正在扫描，稍后再试”，表示改路径事务未取得扫描协调锁；不写操作记录、不占用幂等键。
 - `path_already_registered`：`409` / “这个文件夹已经添加过了”，包括其他停用根占用新路径；不回显冲突路径。当前根的同路径请求不属于该错误。

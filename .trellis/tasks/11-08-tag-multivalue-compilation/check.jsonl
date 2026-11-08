@@ -1,4 +1,5 @@
-{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "核对拆分规则与错误矩阵已同步、固定组合与 AlbumArtist 优先级未破坏"}
+{"file": ".trellis/spec/backend/library-scan-tags.md", "reason": "核对拆分规则已同步、固定组合与 AlbumArtist 优先级未破坏"}
+{"file": ".trellis/spec/backend/library-scan-checks.md", "reason": "核对错误矩阵已同步"}
 {"file": ".trellis/spec/backend/artist-contracts.md", "reason": "核对扫描不写人工意图、ArtistRefsReady 用共享版本常量"}
 {"file": ".trellis/spec/backend/search-contracts.md", "reason": "核对 textnorm.Version 未变、投影版本只升一次"}
 {"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "代码质量与测试范围要求"}

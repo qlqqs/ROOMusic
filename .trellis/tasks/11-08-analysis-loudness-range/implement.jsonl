@@ -1,5 +1,5 @@
 {"file": ".trellis/spec/backend/audio-analysis-contracts.md", "reason": "track_analyses 表、当前有效判定、候选与进度口径、ffmpeg 命令与自检、增益公式、分析接口：本项在其上加两列、版本 2 与“可用结果”口径"}
-{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "MP3 扫描时长规则（Xing/Info、VBRI、CBR 只计音频字节）写进扫描合同；内容指纹与曲目身份不受时长改动影响"}
+{"file": ".trellis/spec/backend/library-scan-grouping.md", "reason": "MP3 扫描时长规则（Xing/Info、VBRI、CBR 只计音频字节）写进扫描合同；内容指纹与曲目身份不受时长改动影响"}
 {"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移编写、上下行、视图与只加可空列的规则"}
 {"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "各读取接口的 duration_seconds 字段与可见性规则，改为读时长视图"}
 {"file": ".trellis/spec/backend/listening-contracts.md", "reason": "播放上报门槛使用 LoadTrackDuration 与前端 PlayerTrack.durationSeconds，两端须同用校正后的时长"}

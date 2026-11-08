@@ -1,4 +1,5 @@
-{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "track_credits 写入与署名规则的现行合同"}
+{"file": ".trellis/spec/backend/library-scan-pipeline.md", "reason": "track_credits 写入的现行合同"}
+{"file": ".trellis/spec/backend/library-scan-tags.md", "reason": "署名规则的现行合同"}
 {"file": ".trellis/spec/backend/artist-contracts.md", "reason": "艺人角色词表、/artists 与 /tracks 角色参数、括号别名信号规则"}
 {"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "Release 详情 credits 形状与数量上限"}
 {"file": ".trellis/spec/backend/search-contracts.md", "reason": "credit 搜索角色与投影版本"}

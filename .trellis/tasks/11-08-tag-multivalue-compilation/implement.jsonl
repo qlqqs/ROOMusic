@@ -1,4 +1,5 @@
-{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "署名拆分规则、暂存观察与候选写入的现行合同，本项要同步改拆分段"}
+{"file": ".trellis/spec/backend/library-scan-tags.md", "reason": "署名拆分规则的现行合同，本项要同步改拆分段"}
+{"file": ".trellis/spec/backend/library-scan-pipeline.md", "reason": "暂存观察与候选写入的现行合同"}
 {"file": ".trellis/spec/backend/artist-contracts.md", "reason": "艺人事实刷新、名字键、人工意图与版本门禁；合辑占位不建发行级事实"}
 {"file": ".trellis/spec/backend/search-contracts.md", "reason": "搜索投影版本与回填协议，多名值按新拆分重建"}
 {"file": ".trellis/spec/backend/genre-contracts.md", "reason": "流派拆分另有裁决，本项不得顺手改 SplitGenres"}
