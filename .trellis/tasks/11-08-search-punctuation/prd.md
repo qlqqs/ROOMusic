@@ -37,3 +37,14 @@
 ## 依赖
 
 T 线第 4 项，在 ⑧ 之后（⑧ 往搜索投影里加作品字段，本项随后统一升版本回填一次）。
+
+## 实施结果（2026-11-08）
+
+提交：`ee7c616`（搜索值多存一份去标点键，艺人名字同样写入；查询同时按原键与去标点键匹配，原键匹配排前；作品名与编号同样支持；`textnorm.Version` 不变）。随 T 线合并 `65eb019` 入 main，迁移 `0040_search_punctuation`（T 线内为 0036，`f18a69d` 改号）。
+
+裁决与偏离：实施中没有新增，撇号统一按上文“已裁决”放在去标点键里。
+
+验收：
+
+- 单测：满足。键生成 `TestLooseSearchKeys`、`TestNormalizeValuesLoose`；命中与排名 `TestPostgreSQLSearchPunctuationRanking`、`TestPostgreSQLArtistSearchPunctuation`。
+- 回填：满足。`TestPostgreSQLSearchLooseBackfill`；T 线合入前迁移往返 0034–0040 通过。

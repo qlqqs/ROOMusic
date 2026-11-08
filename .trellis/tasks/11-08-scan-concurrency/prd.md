@@ -37,3 +37,18 @@
 ## 依赖
 
 S 线第 4 项，在 ④ 之后（两者都改遍历回调；④ 先减少需要解析的文件，⑤ 再并发剩下的）。
+
+## 实施结果（2026-11-08）
+
+提交：`9893f85`（新包 `platform/workpool`；未命中解析缓存的文件交给 worker 并发解析，暂存、诊断与进度仍按遍历顺序应用；指纹按页并行；OGG/Opus 逐页流式读取；`ROOMUSIC_SCAN_WORKERS` 1–16、默认 4）。随 S2 合并 `94623b5` 入 main，无迁移。
+
+裁决与偏离（见 [backend-report.md](./backend-report.md)）：新增 `Ordered.Flush` 与 CUE 两段式接口，保证缓存命中不随并发时机变化；OGG 指纹入口原来也不是流式，一并改；OGG 不按最后 granule 新增时长，保持旧结果。
+
+验收：
+
+- 并发与串行等价、取消：满足。`TestPostgreSQLConcurrentScanMatchesSerialStagingDiagnosticsAndCache`（workers 1/4 的暂存、诊断与缓存计数一致，S2 最终验收通过）、`TestPostgreSQLScanPipelineCancelDiscardsInflightAndJoinsWorkers`；工作池 `TestOrdered*`、`TestMap*`（顺序、窗口、首个错误、取消后等 worker 退出）。
+- `go test -race`：部分有证据。实施时 `go test -race ./internal/platform/workpool/ ./internal/library/... ./internal/platform/config/` 通过，但当时 workpool 还没有测试文件；补测后的 workpool `-race` 记录未找到。
+- 大 OGG 内存：满足。`TestOggStreamingMemoryDoesNotGrowWithFileSize`；`TestOggOpusObservationsMatchHEADBaseline` 对照旧实现的字段与指纹。
+- 首扫耗时：满足。music/ 首扫 `65eb019` 26.4 秒 → S2 候选 18.4 秒（与升级验收并行时的观测值，不作严格基准）。
+
+已知局限：OGG 反复出现注释包时元数据累积、CUE 含极多 FILE 时的内存占用，保持旧接受范围（design，用户裁决接受）。

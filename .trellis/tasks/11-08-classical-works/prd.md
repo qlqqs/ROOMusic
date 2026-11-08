@@ -43,3 +43,15 @@
 ## 依赖
 
 T 线第 3 项，在 ⑦ 之后。有前后端接口依赖，先由设计 agent 起草接口合同。
+
+## 实施结果（2026-11-08）
+
+提交：`30e86f8`（读取作品、乐章名与乐章号标签；没有作品标签时只在古典流派专辑里从曲名拆；新包 `catalog/classical` 解析作品编号与排序键；作品名与编号可搜索并传播到专辑；专辑页按作品显示小标题与组时长）。随 T 线合并 `65eb019` 入 main，迁移 `0039_classical_works`（T 线内为 0035，`f18a69d` 改号）。
+
+裁决与偏离：实现验收时定下作品编号原文按原样保存、超长触发约束（见上文“已裁决”），其余没有新增。
+
+验收：
+
+- 单测：满足。R1 `TestAudioParsersReadWorkAndMovementTags`、`TestID3GroupingWithoutMovementOrCatalogIsNotWork`；R2 `TestSplitWorksReferenceExamples`、`TestSegmentsReferenceTable`、`TestSplitWorksSegmentExtractionAndCommonPrefix`、`TestSplitWorksAdjacentDuplicateMovement`、`TestAssignWorksTaggedGroups`、`TestAssignWorksNonClassicalDoesNotInfer`；R3 `TestParseCatalogsDesignTable`、`TestCatalogSortKey` 等；搜索 `TestPostgreSQLWorkSearchCatalogPropagatesToAlbum`。
+- 前端：满足。合成夹具的古典专辑（作品小标题 + 乐章行）与普通专辑对照，1440/375 共 4 张截图目检通过。
+- 真实库只读 smoke：满足，清单为空。music/ 上 `work_source` 非空 0→0，S2 对比中 284 轨作品字段全空，没有误拆流行专辑；本库没有古典正例。

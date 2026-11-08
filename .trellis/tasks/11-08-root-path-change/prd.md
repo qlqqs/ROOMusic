@@ -40,3 +40,14 @@ NAS 挂载点或音乐目录换了位置时，管理员可以直接改已登记�
 ## 依赖
 
 S 线第 2 项，在 ① 之后、④ 之前（④ 的观察缓存以来源身份为键，本项保证改路径后来源身份不变）。
+
+## 实施结果（2026-11-08）
+
+提交：`f3d3d04`（`POST /library-roots/{id}/relocate`：幂等、revision 校验，扫描在跑或新路径已登记时拒绝，停用的目录也能改；恢复取最近一条成功的停用记录；目录表“改路径”图标按钮与对话框，改完自动开始扫描）。随 S1 合并 `c08c15e` 入 main，迁移 `0035_root_relocate`。
+
+裁决与偏离：实施中没有新增，均按上文“已裁决”实现。
+
+验收：
+
+- 单测与集成：满足。`TestPostgreSQLRelocateRootOperationTransactionsAndReplay`（幂等回放、同键不同请求冲突）、`TestPostgreSQLRelocateRootRejectsInvalidRequestsWithoutChanges`（revision 冲突、新路径已登记、越界、目录链接与祖先链接）、`TestPostgreSQLRelocateRootScanLockRejects`、`TestPostgreSQLRelocateDisabledRootThenRestoreKeepsNewPath`、`TestPostgreSQLRelocateThenScanPreservesTrackAndReleaseUUIDs`（改路径后扫描曲目与专辑 UUID 不变）；前端 `library-roots.test.tsx` 覆盖改完自动扫描的 202 与 200 两种返回。
+- 前端截图：满足。改路径对话框选中新位置后的 1440/375 截图经主会话目检。

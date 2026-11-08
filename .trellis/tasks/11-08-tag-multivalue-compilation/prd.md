@@ -51,3 +51,16 @@
 ## 依赖
 
 T 线第 1 项。与 ③（O 线）都改 `parser/tags.go`，合入时协调。⑦ 在本项之后。
+
+## 实施结果（2026-11-08）
+
+提交：`faceabb`（先按换行与 NUL 拆多值，拉丁“姓, 名”单逗号整体保留；专辑艺人按键分级回退并读全部值；补读 TXXX、TCMP、cpil 与原始年份；合辑占位词或多数合辑标志时专辑艺人统一为“群星”，不产生发行级艺人事实）。随 T 线合并 `65eb019` 入 main，无迁移；最终 `artistgraph.Version` 4、`searchindex.ProjectionVersion` 2。T 线同步 main 时 APE/WavPack/AIFF 入口接入同一套多值与合辑处理（`f18a69d`，用例 `TestLosslessParsersFinalizeMergedTags`）。
+
+裁决与偏离：实施中没有新增，均按上文“已裁决”实现。
+
+验收：
+
+- 单测：满足。`TestSplitArtistNamesHandlesMultivalueAndSurnameRules`（换行与 NUL 多值、`Bach, Johann Sebastian` 整体保留、未登记的 `Tom & Jerry` 照拆）、`TestJoinArtistValues`、`TestIsCompilationPlaceholder`、`TestApplyCompilation`；专辑艺人回退 `TestVorbisAlbumArtistFallbackLevelsAndNewlineValues`、`TestID3TXXXAlbumArtistFallback`、`TestM4AAlbumArtistFreeformFallback`；合辑标志与原始年份 `TestCompilationTagsAndOriginalYearFallback`、`TestID3OriginalYearFallback`；集成 `TestPostgreSQLArtistGraphCompilationSkipsReleasePlaceholders`。
+- 真实库只读 smoke：满足。music/ 上 `86c3aa5`→`f18a69d`：发行、专辑、曲目三种艺人角色的名字集合（56/48/62）与关联数都不变，没有拆分变化需要确认；合辑 0→0，本库没有合辑正例，“群星”规则由合成用例证明。名字总数 69→181 来自 ⑦ 新增的署名，与本项无关。
+
+已知局限：多位拉丁“姓, 名”用逗号连写（不用换行分隔）时照逗号拆开（design 对照表）。
