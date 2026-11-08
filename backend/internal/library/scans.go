@@ -29,6 +29,14 @@ var (
 // scanAdvisoryLockClass 是扫描锁的固定类别（ASCII 的 SCAN）；第二个键限定当前 schema。
 const scanAdvisoryLockClass int32 = 0x5343414e
 
+// TryLockScanCoordination 尝试在事务内取得同一 schema 的扫描协调锁，提交或回滚时自动释放。
+// 返回 false 表示已有持锁者，调用方不得修改扫描根路径。
+func TryLockScanCoordination(ctx context.Context, tx *sql.Tx) (bool, error) {
+	var acquired bool
+	err := tx.QueryRowContext(ctx, `SELECT pg_try_advisory_xact_lock($1::int, hashtext(current_schema()))`, scanAdvisoryLockClass).Scan(&acquired)
+	return acquired, err
+}
+
 type scanExecution struct {
 	connection *sql.Conn
 	lockClass  int32

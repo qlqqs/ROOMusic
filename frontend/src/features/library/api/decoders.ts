@@ -7,7 +7,7 @@ export type RootStatus = (typeof rootStatuses)[number];
 export const scanStatuses = ["running", "succeeded", "failed", "canceled", "incomplete"] as const;
 export type ScanStatus = (typeof scanStatuses)[number];
 
-export const rootOperationKinds = ["create", "disable", "restore", "exclude", "unexclude"] as const;
+export const rootOperationKinds = ["create", "disable", "restore", "exclude", "unexclude", "relocate"] as const;
 export const rootOperationStatuses = ["succeeded", "failed"] as const;
 
 /** 每个目录最多 100 个不扫描的子文件夹。 */
@@ -45,7 +45,7 @@ const rootCreatedDecoder = d.object({
 export const decodeRootCreated = d.defineDecoder(rootCreatedDecoder);
 export type RootCreatedDTO = d.Infer<typeof rootCreatedDecoder>;
 
-/** 停用与恢复的结果。 */
+/** 停用、恢复与改路径的结果。 */
 const rootChangedDecoder = d.object({
   id: d.uuid(),
   path: d.string({ min: 1 }),

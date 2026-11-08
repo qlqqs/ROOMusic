@@ -23,7 +23,7 @@ codes may refine these classes without changing their HTTP meaning.
 | `approval_required`, `review_required`, `capability_denied` | 403 | The selected mode has not satisfied its approval or tool policy |
 | `not_found` | 404 | Authorized resource is absent |
 | `method_not_allowed` | 405 | 已注册的 `/api/` 路径不支持该方法；响应带 `Allow` 头列出支持的方法 |
-| `revision_conflict`, `idempotency_conflict`, `exclusion_limit`, `setup_closed`, `issue_changed`, `claim_changed`, `not_claimable` | 409 | Current state conflicts with the command（`issue_changed`：核对时问题已不是页面看到的样子，见[核对合同](./issue-review-contracts.md)；`claim_changed`、`not_claimable`：认领的预览已过期、旧版本不需要认领，见[认领合同](./claim-contracts.md)） |
+| `revision_conflict`, `idempotency_conflict`, `exclusion_limit`, `scan_running`, `path_already_registered`, `setup_closed`, `issue_changed`, `claim_changed`, `not_claimable` | 409 | 当前状态与命令冲突（`issue_changed`：核对时问题已不是页面看到的样子，见[核对合同](./issue-review-contracts.md)；`claim_changed`、`not_claimable`：认领的预览已过期、旧版本不需要认领，见[认领合同](./claim-contracts.md)） |
 | `precondition_failed` | 412 | Explicit request precondition no longer holds |
 | `too_many_attempts` | 429 | 同一账号或来源的尝试过多，稍后再试；带 `Retry-After`，不表示会话失效 |
 | `unavailable`, `review_unavailable` | 503 | A required dependency or Steward reviewer is temporarily unavailable |
@@ -35,6 +35,15 @@ the allowed host paths. Unsupported audio files encountered during scanning are
 persisted scan diagnostics, not reasons to fail the entire REST request.
 
 `exclusion_limit` 表示每个登记根已有 100 条排除项，返回 `409` / “不扫描的文件夹太多了”；重复添加已有项仍返回 200，不占新名额。
+
+目录改路径 `POST /api/v1/library-roots/{id}/relocate` 的完整校验矩阵、幂等及恢复规则见[目录与扫描流程合同](./library-scan-contracts.md)。新增错误：
+
+- `scan_running`：`409` / “正在扫描，稍后再试”，表示改路径事务未取得扫描协调锁；不写操作记录、不占用幂等键。
+- `path_already_registered`：`409` / “这个文件夹已经添加过了”，包括其他停用根占用新路径；不回显冲突路径。当前根的同路径请求不属于该错误。
+- 改路径 `ValidatePath` 失败统一为 `400 invalid_library_path` / “目录不在允许的音乐根目录内”，与新增目录一致；不进入幂等流程，不回显允许根或操作系统错误。
+- 并发 `StartScan` 因改路径持锁而无法取得锁且读不到活动扫描时，仍为 `503 scan_coordination_unavailable`，不能与改路径入口的 `409 scan_running` 混用。
+
+改路径操作记录的绝对路径仅保存在库内 `before_state` / `after_state`，成功响应、回放响应、操作记录列表及错误均不得返回；下文目录浏览的管理员成功响应例外不扩展到改路径接口。
 
 管理员[目录浏览](./library-folder-contracts.md)的路径类失败统一为 `400 invalid_library_path` / “打不开这个文件夹”；
 成功响应才允许向管理员返回允许范围内的绝对路径。

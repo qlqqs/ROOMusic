@@ -24,6 +24,8 @@ function successText(result: RootCommandResult): { tone: "success" | "info" | "w
       return { tone: "success", text: `已停用目录“${result.name}”，里面的曲目暂时不能播放，恢复后就能再播。` };
     case "restore":
       return { tone: "success", text: `已恢复目录“${result.name}”，里面的曲目可以播放了。` };
+    case "relocate":
+      return { tone: "success", text: `已修改目录“${result.name}”的路径。` };
     case "exclude":
     case "unexclude":
       return null;

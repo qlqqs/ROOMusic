@@ -1,4 +1,4 @@
-import { CircleCheck, CirclePause, FolderMinus } from "lucide-react";
+import { CircleCheck, CirclePause, FolderMinus, FolderPen } from "lucide-react";
 import { formatDateTime } from "../../../shared/lib/time";
 import { Button, DataTable, StatusTag, type Column } from "../../../shared/ui";
 import type { RootDTO } from "../api/decoders";
@@ -11,6 +11,7 @@ type RootTableProps = {
   onDisable: (root: RootDTO) => void;
   onRestore: (root: RootDTO) => void;
   onEditExclusions: (root: RootDTO) => void;
+  onRelocate: (root: RootDTO) => void;
 };
 
 function RootStatusTag({ status }: { status: RootDTO["status"] }) {
@@ -25,8 +26,8 @@ function RootStatusTag({ status }: { status: RootDTO["status"] }) {
   );
 }
 
-/** 目录列表：目录名（不显示服务器路径）、状态、更新时间与可用操作。停用要确认，恢复直接执行；不扫描的文件夹在对话框里设置。 */
-export function RootTable({ roots, busy, onDisable, onRestore, onEditExclusions }: RootTableProps) {
+/** 目录列表：目录名（不显示服务器路径）、状态、更新时间与可用操作。停用要确认，恢复直接执行；改路径与不扫描的文件夹在对话框里设置。 */
+export function RootTable({ roots, busy, onDisable, onRestore, onEditExclusions, onRelocate }: RootTableProps) {
   const columns: Column<RootDTO>[] = [
     { id: "name", header: "目录", cell: (root) => root.name, rowHeader: true },
     { id: "status", header: "状态", cell: (root) => <RootStatusTag status={root.status} /> },
@@ -43,6 +44,14 @@ export function RootTable({ roots, busy, onDisable, onRestore, onEditExclusions 
             label={`目录 ${root.name} 里不扫描的文件夹`}
             tooltip="不扫描的文件夹"
             onClick={() => onEditExclusions(root)}
+          />
+          <Button
+            variant="icon"
+            icon={<FolderPen size={16} />}
+            label={`改路径 ${root.name}`}
+            tooltip="改路径"
+            busy={busy}
+            onClick={() => onRelocate(root)}
           />
           {root.status === "active" ? (
             <Button busy={busy} aria-label={`停用目录 ${root.name}`} onClick={() => onDisable(root)}>

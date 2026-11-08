@@ -5,7 +5,7 @@ import { decodeFolderListing } from "../features/library/api/decoders";
 import { sampleBody } from "../test/api-samples";
 import { deferred } from "../test/deferred";
 import { installFakeApi, installFakeSession, installOverviewApi } from "../test/fake-api";
-import { installLibraryApi, type FakeLibrary } from "../test/fake-library";
+import { installLibraryApi, seedScan, type FakeLibrary } from "../test/fake-library";
 import { jsonResponse, sampleResponse } from "../test/http";
 import { renderApp } from "../test/render-app";
 
@@ -423,6 +423,97 @@ describe("恢复目录", () => {
     expect(restoreKey).not.toBe(disableKey);
     // 停用请求带的是恢复之后的新 revision。
     expect(api.requestsTo("PATCH", rootPath)[0]?.body).toEqual({ status: "disabled", expected_revision: 3 });
+  });
+});
+
+describe("修改目录路径", () => {
+  const relocatePath = `${rootsPath}/${classicalA}/relocate`;
+  const selectedPath = "/music/classical-a/album";
+
+  async function selectNewLocation(name = "classical-a") {
+    await userEvent.click(within(rowOf(name)).getByRole("button", { name: `改路径 ${name}` }));
+    const dialog = await screen.findByRole("dialog", { name: `修改“${name}”的路径` });
+    const browser = within(dialog).getByRole("group", { name: "选择文件夹" });
+    await userEvent.click(await within(browser).findByRole("button", { name: /^music$/ }));
+    await userEvent.click(await within(browser).findByRole("button", { name: /^classical-a$/ }));
+    await userEvent.click(await within(browser).findByRole("button", { name: "选择 album" }));
+    expect(within(dialog).getByText(selectedPath)).toBeTruthy();
+    return dialog;
+  }
+
+  // 页面替身只模拟成功后的目录状态；真实响应与端点 decoder 的兼容性由 API 样本测试验证。
+  function relocatedResponse(library: FakeLibrary): Response {
+    const root = library.roots[0];
+    if (root === undefined) throw new Error("没有种子目录");
+    const updated = { ...root, name: "album", path: "album", revision: root.revision + 1 };
+    library.roots[0] = updated;
+    return jsonResponse(200, {
+      id: updated.id, name: updated.name, path: updated.path, status: updated.status,
+      revision: updated.revision, excluded_paths: updated.excluded_paths,
+    });
+  }
+
+  it("确认改路径成功后才自动 POST 扫描，202 时关闭对话框并进入扫描详情", async () => {
+    const { api, library, history } = await openLibrary();
+    const pending = deferred<Response>();
+    api.on("POST", relocatePath, () => pending.promise);
+    const dialog = await selectNewLocation();
+    await userEvent.click(within(dialog).getByRole("button", { name: "确定" }));
+
+    await waitFor(() => expect(api.requestsTo("POST", relocatePath)).toHaveLength(1));
+    const [request] = api.requestsTo("POST", relocatePath);
+    expect(request?.body).toEqual({ path: selectedPath, expected_revision: 1 });
+    expect(request?.headers.get("Idempotency-Key")).toMatch(uuidPattern);
+    expect(api.requestsTo("POST", "/api/v1/scans")).toHaveLength(0);
+
+    pending.resolve(relocatedResponse(library));
+    expect(await heading("扫描详情")).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(history.location.pathname).toBe(`/settings/library/scans/${library.activeScanId}`);
+    const [scanRequest] = api.requestsTo("POST", "/api/v1/scans");
+    expect(api.requestsTo("POST", "/api/v1/scans")).toHaveLength(1);
+    expect(scanRequest?.body).toBeUndefined();
+    expect(library.roots[0]).toMatchObject({ id: classicalA, name: "album", revision: 2 });
+  });
+
+  it("改路径后的扫描返回 200：留在本页提示已有扫描，目录列表已刷新", async () => {
+    const { api, library, history } = await openLibrary();
+    api.on("POST", relocatePath, () => {
+      const response = relocatedResponse(library);
+      // 改路径提交后、前端开始扫描前，另一个请求已经启动了扫描。
+      seedScan(library, {}, true);
+      return response;
+    });
+    const dialog = await selectNewLocation();
+    await userEvent.click(within(dialog).getByRole("button", { name: "确定" }));
+
+    expect(await screen.findByText(/已经有扫描在运行。/)).toBeTruthy();
+    expect(history.location.pathname).toBe("/settings/library");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("rowheader", { name: "album" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "查看这个扫描" }).getAttribute("href")).toBe(`/settings/library/scans/${library.activeScanId}`);
+    expect(api.requestsTo("POST", "/api/v1/scans")).toHaveLength(1);
+    expect(library.scans.size).toBe(1);
+  });
+
+  it.each([
+    ["scan_running", "正在扫描，稍后再试。"],
+    ["path_already_registered", "这个文件夹已经添加过了。"],
+    ["revision_conflict", "目录刚被改过，请再试一次。"],
+  ])("%s 显示对应文案，保留所选路径且不发起扫描", async (code, message) => {
+    const { api } = await openLibrary();
+    api.on("POST", relocatePath, () => jsonResponse(409, {
+      error: { code, message: "由错误码选择文案，不展示这段后端消息" }, request_id: "sample-request",
+    }));
+    const dialog = await selectNewLocation();
+    await userEvent.click(within(dialog).getByRole("button", { name: "确定" }));
+
+    const alert = await within(dialog).findByRole("alert");
+    expect(within(alert).getByText(message)).toBeTruthy();
+    expect(within(alert).queryByText("由错误码选择文案，不展示这段后端消息")).toBeNull();
+    expect(within(dialog).getByText(selectedPath)).toBeTruthy();
+    expect(api.requestsTo("POST", "/api/v1/scans")).toHaveLength(0);
+    expect(screen.getByRole("rowheader", { name: "classical-a" })).toBeTruthy();
   });
 });
 

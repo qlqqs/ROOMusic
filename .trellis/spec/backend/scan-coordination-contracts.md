@@ -5,7 +5,7 @@
 
 ## 1. 范围与触发
 
-当代码创建、恢复、查询、取消或结束全库扫描时，必须遵守本场景。其目标是在同一 schema 的多个
+当代码创建、恢复、查询、取消或结束全库扫描，或改路径事务需要与扫描互斥时，必须遵守本场景。其目标是在同一 schema 的多个
 ROOMusic 进程之间只允许一个扫描执行器，并保证取消、停机、数据库故障或执行权丢失
 不会触发错误的 `missing` 对账。PostgreSQL 同时是扫描状态和执行资格的权威；进程内
 mutex 只保护本进程的 worker 引用。
@@ -28,6 +28,11 @@ mutex 只保护本进程的 worker 引用。
   `database/sql.Conn` 调用 `pg_try_advisory_lock(0x5343414e::int, hashtext(current_schema()))`
   获取 PostgreSQL session advisory lock；作用域为当前 schema，与受保护的 `scan_runs`
   一致，不同 schema 的扫描互不阻塞。生产只有一个 schema 时，扫描互斥行为不变。
+- `library.TryLockScanCoordination(ctx context.Context, tx *sql.Tx) (bool, error)` 位于 `library/scans.go`，供改路径事务调用：
+  `SELECT pg_try_advisory_xact_lock($1::int, hashtext(current_schema()))`，参数复用该文件的 `scanAdvisoryLockClass`。
+  与扫描执行器使用完全相同的两键和 schema 作用域，handler 不得复制常量或另建键；session 锁与事务锁在此互斥。
+  返回 false 时改路径入口返回 `409 scan_running`（“正在扫描，稍后再试”），不写操作记录；SQL 失败按 `503 database_unavailable` 回滚。
+  返回 true 时由同一改路径事务持有到提交或回滚，不在更新根路径之前释放；这是短写事务用途，不能据此把扫描执行器的 session holder 改成事务锁。
 - 取得锁时将实际的两个键值保存在 `scanExecution` 中；worker 或恢复路径结束时，按保存的
   键调用 `pg_advisory_unlock(int, int)`，再关闭专用连接。解锁不得重新计算
   `current_schema()`，即使 holder 的 `search_path` 改变，也必须释放原先取得的锁。
@@ -71,6 +76,9 @@ mutex 只保护本进程的 worker 引用。
 - `finalizeScan` 先 `SELECT ... FOR UPDATE` 锁定扫描行。持久化取消优先收敛为
   `canceled`；只有完整 `succeeded` 才能在同一事务执行所有 root 的 `missing` 对账和
   终态更新。`canceled`、`failed`、`incomplete` 与协调故障均禁止负向对账。
+- 改路径在幂等回放检查之后、锁目录行之前探测协调锁；禁止用 `scan_runs.status='running'` 查询或进程内 mutex 代替，避免检查与更新之间新扫描读到旧路径。
+  改路径事务持锁期间 `StartScan` 仍沿用未获锁分支：可确认活动扫描则 `200` 返回该 DTO，否则 `503 scan_coordination_unavailable`，不得创建扫描。
+  前端在改路径提交后才发起扫描；定时扫描若撞上这个短窗口，按本次跳过、下一次检查重试处理，不把锁竞争视为已启动。
 - session advisory lock 没有 TTL，不能据本地时间推断锁已失效；发布或回滚时不得让
   不认识该锁的旧扫描器与新扫描器同时运行。
 - `canceled` 是已落地的 wire 终态；取消意图持久化在
@@ -90,6 +98,9 @@ mutex 只保护本进程的 worker 引用。
 | 本进程已有活动任务 | 返回同一 DTO 和 `200`，不创建第二行 |
 | 未获锁但可读取其他实例的活动任务 | 返回该 DTO 和 `200`，不等待、不接管 |
 | 未获锁且无法确认活动任务 | `503 scan_coordination_unavailable`，不创建扫描 |
+| 改路径探测扫描锁失败（任意进程持锁） | `409 scan_running`，不改路径、不递增版本、不写操作记录 |
+| 改路径取得事务级扫描锁 | 持有至提交/回滚；期间扫描启动未获锁且无活动记录时 `503 scan_coordination_unavailable` |
+| 改路径锁 SQL 失败 | `503 database_unavailable`，回滚目录操作事务 |
 | holder 会耗尽唯一连接池槽位 | `503 scan_coordination_unavailable`，不启动 worker |
 | 查询未知扫描 | `404 not_found`；其他数据库错误为 `503 database_unavailable` |
 | 首次或重复取消 `running` | `202`；时间戳非空且重复请求保持不变 |
@@ -106,6 +117,7 @@ mutex 只保护本进程的 worker 引用。
   不依赖旧页面内存；没有活动任务时返回 `{ "scan": null }`。
 - 正确：第二实例未取得 advisory lock，读取并返回第一实例的 `scan_run_id`，不插入
   排队行，也不启动替代 worker。
+- 正确：扫描专用连接持锁时改路径返回 `409 scan_running`；无扫描时改路径短事务持同键锁，提交后新扫描读取新路径。
 - 错误：启动时无条件把所有 `running` 改为 `incomplete`；用事务级 advisory lock、
   本地 mutex 或 HTTP context 代替 session holder；先逐 root 提交 `missing` 再更新终态。
 
@@ -117,6 +129,8 @@ mutex 只保护本进程的 worker 引用。
   `(0x5343414e::int, hashtext(current_schema()))` 时只有一个成功；失败实例的 `StartScan`
   复用活动扫描 ID，不创建替代扫描；unlock/close 后另一独立连接可重新获取；
   `MaxOpenConns=1` 快速失败而非等待超时或阻塞，且不启动 worker 或创建扫描行。
+- PostgreSQL 改路径互斥：独立连接持有扫描 session 锁时改路径返回 `409 scan_running` 且无收据/状态变更；反向由改路径事务取得同键锁时，扫描不能取得执行权，无活动行则 `503 scan_coordination_unavailable`。
+  提交或回滚释放事务锁后可重新启动扫描；已成功操作的有效同键回放先于锁探测，不重复改路径。
 - PostgreSQL schema 隔离：用两次 `postgrestest.NewSchema` 创建不同 schema，两边可以
   同时取得并持有各自的扫描锁，作用域与各自的 `scan_runs` 一致。
 - PostgreSQL 解锁键：验证 holder 保存实际的两个 `int4` 键；改变 holder 的 `search_path`

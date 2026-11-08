@@ -2,7 +2,7 @@
 
 ## 1. 范围与触发
 
-目录生命周期、幂等及扫描（遍历、暂存、身份规划、Release Graph、CUE、抓轨、署名与封面）遵守本合同。扫描状态、持久化取消与跨进程协调见
+目录生命周期（含改路径保留 ID）、幂等及扫描（遍历、暂存、身份规划、Release Graph、CUE、抓轨、署名与封面）遵守本合同。扫描状态、持久化取消与跨进程协调见
 [扫描协调合同](./scan-coordination-contracts.md)；发行读取接口见 [Catalog REST 合同](./catalog-rest-contracts.md)；内嵌歌词的提取与保存见[歌词合同](./lyrics-contracts.md)；
 通用请求与响应、迁移执行器与 CI 见 [Core 0 当前运行合同](./core0-runtime-contracts.md)。
 
@@ -13,6 +13,13 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 - 目录新增响应：`{ "id": string, "name": string, "status": "active" | "disabled", "revision": integer }`。
 - 目录列表项目：`id`、安全 basename `path`/`name`、`status`、`revision`、时间戳与必需的 `excluded_paths: string[]`（无排除时 `[]`，相对路径按字节升序）；
   不返回原始绝对路径。
+- `POST /api/v1/library-roots/{id}/relocate`：同源、管理员、必需 `Idempotency-Key`；请求为
+  `{"path":"/music/nas-new/Music","expected_revision":4}`，成功返回 `200`。
+  响应严格为以下六字段，不附带目录列表的时间戳；`name`/`path` 都是安全 basename，`excluded_paths` 为原样保留的相对路径数组（无排除时 `[]`）：
+
+```json
+{"id":"uuid","name":"Music","path":"Music","status":"active","revision":5,"excluded_paths":[]}
+```
 
 ## 3. 合同
 
@@ -20,15 +27,36 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 
 - 目录新增对已存在路径执行幂等 upsert，但不隐式恢复 disabled 状态；响应和
   Operation Journal 使用数据库真实 `status`/`revision`。
-- 目录新增、停用、恢复及排除项增删必须带 `Idempotency-Key`，缺失返回 `400 invalid_input`。键的作用域是
+- 目录新增、停用、恢复、改路径及排除项增删必须带 `Idempotency-Key`，缺失返回 `400 invalid_input`。键的作用域是
   actor 加操作类型；请求指纹包含目标身份：新增为规范化路径，停用/恢复为小写路由 root ID 加
-  请求参数（`expected_revision` 等）。这些入口共用 `beginRootOperation`：先开启 READ COMMITTED
+  请求参数（`expected_revision` 等），改路径为 `{"root_id":<小写 ID>,"path":<ValidatePath 后的路径>,"expected_revision":n}`。这些入口共用 `beginRootOperation`：先开启 READ COMMITTED
   事务并取得该键的事务级 advisory lock，再在事务内查记录，因此同键请求串行执行。
   指纹一致时返回首次的状态码和响应（新增 `201`，其余 `200`），不重复执行；指纹不一致时返回
   `409 idempotency_conflict` 且无副作用；同键并发只执行一次，其余请求回放首次记录。
   路由 root ID 格式错误返回 `400 invalid_id`，不进入幂等流程。只有成功的操作写记录，失败的
   尝试不占用幂等键。2026-09-29 起指纹含目标；此前记录的停用/恢复键不做兼容，升级后重试
   返回 `409 idempotency_conflict`（开发阶段裁决，见 F2 任务）。
+- 改路径操作类型为 `relocate`，复用 `library.ValidatePath`（Abs + Clean、真实目录、允许根内、任一层不得为符号链接）。处理顺序固定为：
+  同源 → 管理员 → 路由 ID → 幂等键 → 解码/参数校验 → `ValidatePath` → `beginRootOperation`（键锁及回放检查）
+  → `library.TryLockScanCoordination(ctx, tx)` → `SELECT … FOR UPDATE` 锁目录行 → revision 校验 → 新路径冲突检查 → 更新与记录 → 提交。
+  回放先于扫描锁探测，不因后来开始的扫描改报 `scan_running`；入口参数与路径校验仍先执行。
+- 改路径允许 `active` 和 `disabled`，保持当前状态；新路径已被其他根登记（包括 disabled）时拒绝，不额外限制不同根之间的路径嵌套。
+  路径实际变化时只更新根路径、revision 加一及更新时间，不改 root ID；规范化后等于当前路径时仍校验 revision、取得扫描锁，返回当前 DTO、revision 不变，照常写成功记录。
+- 扫描互斥使用与执行器同键的事务级 advisory lock，未取得时 `409 scan_running`，不写记录、不占用幂等键；取得后持有至提交或回滚。
+  禁止只查活动扫描行或进程内状态，避免检查后扫描读到旧路径；helper 与常量归属见[扫描协调合同](./scan-coordination-contracts.md)。
+- 改路径成功收据与路径更新在同一事务；`expected_revision` 为请求版本，`result_revision` 为结果版本。
+  `before_state` / `after_state` 分别存 `{"path":<旧/新绝对路径>,"revision":n}`，仅留在数据库内，不由任何接口返回。
+  回放 `response` 只存上述安全六字段；目录响应、操作记录列表及错误不得返回绝对路径或前后态。
+- 恢复仍先校验当前目录为 `disabled` 且 `expected_revision` 相符；按目录取最近一条成功的 `disable` 记录，并要求其 `before_state.status='active'`。
+  不再要求 `result_revision = 当前 revision` 或 `before_state.revision = 当前 revision - 1`，所以“停用 → 改路径 → 恢复”合法。
+  恢复只将状态改回 `active`、当前 revision 加一，保留新路径和排除项，不恢复旧路径或旧版本；没有有效停用前态仍为 `409 revision_conflict`。
+- 改路径不迁移来源身份、曲目、Release、收藏、历史、歌单或修正；根 ID 与相对路径不变时来源身份不变。
+  新位置内容相同，下一次扫描沿用曲目 UUID 与 Release UUID；内容不同沿用现有换内容、移动配对及 missing 规则。相对排除项不改写。
+  前端在改路径提交成功后另行调用 `POST /api/v1/scans`，新扫描返回 `202`、已有扫描返回 `200`；改路径事务本身不启动扫描。
+- `0035_root_relocate.sql`（合入时重新核对编号）只放宽 `library_root_operations_operation_type_check`，允许
+  `create / disable / restore / exclude / unexclude / relocate`，不回填或迁移业务身份数据。
+  `0035_root_relocate.down.sql` 先删除 `operation_type='relocate'` 的记录，再恢复不含 `relocate` 的原五类约束。
+  下行会丢弃改路径收据，但不会把 `library_roots.path` 改回旧值，也不回退 revision；不提供操作记录撤销入口，改回位置须再次调用改路径接口。
 
 ### 路径过滤
 
@@ -170,9 +198,18 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 | 条件 | 行为 |
 | --- | --- |
 | 同一幂等键用于另一个目录，或同一目录的不同请求参数 | `409 idempotency_conflict`；不执行、不写记录，也不返回前一个请求的结果 |
-| 同一幂等键的并发请求（新增、停用、恢复） | 串行处理，只执行一次，其余请求回放首次记录的状态码和响应 |
-| 停用/恢复的路由目录 ID 不是 UUID 形式 | `400 invalid_id`，不进入幂等流程，不写操作记录 |
+| 同一幂等键的并发请求（新增、停用、恢复、改路径及排除项增删） | 串行处理，只执行一次，其余请求回放首次记录的状态码和响应 |
+| 停用/恢复/改路径的路由目录 ID 不是 UUID 形式 | `400 invalid_id`，不进入幂等流程，不写操作记录 |
 | 重复注册 disabled root | 返回 `status=disabled` 与真实 revision，不隐式恢复 |
+| 改路径未登录 / 非管理员 / 来源不符 | `401` / `403` / 来源拒绝；无副作用，鉴权先于资源读取 |
+| 改路径缺幂等键、缺 path 或 `expected_revision < 1` | `400 invalid_input`；不写记录 |
+| 改路径越界、不存在、非目录或任一层为符号链接 | `400 invalid_library_path` / “目录不在允许的音乐根目录内”；不进入幂等流程，不泄露允许根或系统错误 |
+| 改路径时本进程或其他进程持有扫描锁 | `409 scan_running` / “正在扫描，稍后再试”；不修改、不写记录 |
+| 改路径目录不存在 / revision 不符 | `404 not_found` / `409 revision_conflict`；不修改、不写记录 |
+| 新路径已被其他根登记（含停用根），或并发新增触发 `23505` 且约束为 `library_roots_path_key` | `409 path_already_registered` / “这个文件夹已经添加过了”；回滚，不把其他唯一约束错误误判为路径冲突 |
+| 改路径为当前规范路径，且 revision 相符、取得扫描锁 | `200` 安全六字段 DTO，revision 不变，写成功记录 |
+| 改路径数据库失败 / 操作记录写入失败 | `503 database_unavailable` / `500 operation_failed`；整个事务回滚 |
+| 停用后改路径导致版本不再紧邻停用记录 | 恢复取最近成功 disable 的 active 前态；仍校验当前 disabled 与请求版本，保留新路径 |
 | unsupported、音频解析失败、CUE 失败、子目录读不了 | 见完整性矩阵；诊断并保住失败来源，其余来源正常对账 |
 | 隐藏项、内置名单和用户排除 | 不诊断、不保住；成功后按消失处理 |
 | 候选为零且已有 present 来源，无目录读取失败或排除命中 | `root_empty`，不规划不写入、不做 missing |
@@ -207,6 +244,10 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 ## 5. 正确、基准与错误案例
 
 - 基准：重复 POST 已停用目录返回 disabled；管理员随后使用 restore 端点显式恢复。
+- 正确：NAS 新位置包含同样的相对路径与音频，改路径后 root ID 不变，下一次成功扫描沿用 Track/Release UUID，个人数据与修正不迁移。
+- 基准：用新幂等键提交当前路径且 revision 相符，返回 `200`、revision 不变，收据仍可回放。
+- 正确：revision 4 的目录停用到 5、改路径到 6，再按 `expected_revision=6` 恢复到 7；使用最近成功停用的 active 前态，路径保持新位置。
+- 错误：把停用根的已登记路径视为空闲，或让扫描锁冲突的失败请求占用幂等键。
 - 正确：多碟来源按 `disc_number=1/2` 形成两个 Medium，重扫保持 Track ID。
 - 正确：`sheets/album.cue` 引用 `../media/image.flac` 时，只要两者仍在同一注册根内，
   虚拟轨会与显式父来源对齐；每轨 provenance 独立，track PERFORMER 不污染相邻轨。
@@ -229,6 +270,11 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 
 ## 6. 必需测试
 
+- 改路径 PostgreSQL/HTTP：成功保持 root ID/status/excluded_paths、revision 仅在路径变化时加一；成功响应及回放严格六字段，响应/操作记录列表不含绝对路径，前后态仅库内可见。
+  覆盖同键回放、同键异义（含目标/规范路径/版本变化）、同键并发只执行一次、相同路径不增版本仍写收据、revision 冲突、未知/非法 ID、缺参数/键与鉴权无副作用。
+  已登记新路径（含 disabled）、越界/不存在/非目录/符号链接应返回对应安全错误；独立连接持有扫描锁时拒绝且不写记录，释放后同键可重试。
+  “停用 → 改路径 → 恢复”成功并保留新路径；复制同内容到新位置后改路径重扫，曲目/Release UUID 不变、missing 为零。
+- 0035 迁移往返：含真实 `relocate` 成功记录的夹具执行升级 → 下行 → 再升级，确认下行删除新类型收据并恢复五类约束，根路径与 revision 保持改后值；不把结构回退当作目录改路径撤销。
 - 后端单元：终态映射、同一过滤覆盖预计数与遍历、系统名大小写整段匹配且不检查注册根自身、用户排除子树、unsupported 候选识别、来源身份与 containment；CUE NFC/NFD/大小写唯一匹配和歧义停止回退。
 - parser/organizer 单元：M4A/WAV 容器有效性、CUE 多 FILE 与跨目录 containment、
   missing reference/missing `INDEX 01` 非阻断跳过、`unsafe`/`unchecked` 引用保住 sheet、
@@ -249,6 +295,12 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
   Box 叶子不取父目录、内嵌优先）。
 
 ## 7. 错误与正确示例
+
+### 改路径与恢复的错误与正确示例
+
+错误：查到 `scan_runs` 没有 running 就直接更新路径；恢复查询限定停用记录的 `result_revision` 必须等于当前 revision；把前后态直接当作响应。
+
+正确：先幂等回放检查，再持同键扫描锁修改路径并写安全收据；恢复按最近成功 disable 验证 active 前态，不限定版本紧邻。
 
 ### CUE 诊断错误与正确示例
 

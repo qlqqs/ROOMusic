@@ -13,12 +13,13 @@ const operationLabels: Record<RootOperationDTO["operation"], string> = {
   restore: "恢复",
   exclude: "不扫描文件夹",
   unexclude: "恢复扫描文件夹",
+  relocate: "改路径",
 };
 
 /** 后端最多返回最近 100 条；达到上限时提示这不是全部历史。 */
 const OPERATION_LIMIT = 100;
 
-/** 扫描目录页的“目录操作记录”区段：目录的新增、停用、恢复与不扫描的子文件夹的增删，最新的在前。这是目录管理记录，不是通用审批或回滚点。 */
+/** 扫描目录页的“目录操作记录”区段：目录的新增、停用、恢复、改路径与不扫描的子文件夹的增删，最新的在前。这是目录管理记录，不是通用审批或回滚点。 */
 export function RootOperationsSection() {
   const operations = useRootOperations();
   // 与“音乐目录”区段共用同一个缓存条目，不会多一次请求。

@@ -3,21 +3,22 @@ import { failureOf, isOutcomeUncertain, type ApiFailure } from "../../../shared/
 import { newIdempotencyKey } from "../../../shared/lib/ids";
 import { useViewerScope } from "../../auth";
 import type { RootChangedDTO, RootCreatedDTO, RootDTO, RootExclusionsDTO } from "../api/decoders";
-import { addRootExclusion, createRoot, disableRoot, removeRootExclusion, restoreRoot } from "../api/endpoints";
+import { addRootExclusion, createRoot, disableRoot, relocateRoot, removeRootExclusion, restoreRoot } from "../api/endpoints";
 import { libraryKeys } from "../query-keys";
 import { rootsQueryOptions } from "./use-roots";
 
-/** 界面上看到的目录：停用与恢复必须带这里的 revision，目录在此期间变化时后端返回 409。 */
+/** 界面上看到的目录：停用、恢复与改路径必须带这里的 revision，目录在此期间变化时后端返回 409。 */
 export type RootTarget = Pick<RootDTO, "id" | "name" | "revision">;
 
 /**
- * exclude 的 path 是目录浏览器给出的绝对路径，unexclude 的 relativePath 取自目录的 excluded_paths。
+ * relocate 与 exclude 的 path 是目录浏览器给出的绝对路径，unexclude 的 relativePath 取自目录的 excluded_paths。
  * 两者不看 revision：排除项是集合，重复添加或移除都返回当前状态。
  */
 export type RootIntent =
   | { kind: "create"; path: string }
   | { kind: "disable"; root: RootTarget }
   | { kind: "restore"; root: RootTarget }
+  | { kind: "relocate"; root: RootTarget; path: string }
   | { kind: "exclude"; root: RootTarget; path: string }
   | { kind: "unexclude"; root: RootTarget; relativePath: string };
 
@@ -29,7 +30,7 @@ export type RootCommand = RootIntent & { key: string };
 
 export type RootCommandResult =
   | { kind: "create"; root: RootCreatedDTO; alreadyListed: boolean }
-  | { kind: "disable" | "restore"; name: string; root: RootChangedDTO }
+  | { kind: "disable" | "restore" | "relocate"; name: string; root: RootChangedDTO }
   | { kind: "exclude" | "unexclude"; root: RootExclusionsDTO };
 
 export type RootCommandState =
@@ -45,7 +46,7 @@ export type RootCommandCallbacks = {
 };
 
 /**
- * 目录的新增、停用、恢复与不扫描的子文件夹的增删。悲观更新：只在后端确认并刷新列表之后才算完成，不做乐观修改；
+ * 目录的新增、停用、恢复、改路径与不扫描的子文件夹的增删。悲观更新：只在后端确认并刷新列表之后才算完成，不做乐观修改；
  * 无论成败（包括 409 冲突与结果不确定）都刷新目录列表与操作记录，让界面显示的是服务器当前的状态。
  * 同一时刻只有一个命令；写操作从不自动重试，重试由用户显式触发。
  */
@@ -70,6 +71,10 @@ export function useRootCommands() {
         case "restore": {
           const { data } = await restoreRoot(command.root.id, command.root.revision, command.key);
           return { kind: "restore", name: command.root.name, root: data };
+        }
+        case "relocate": {
+          const { data } = await relocateRoot(command.root.id, command.path, command.root.revision, command.key);
+          return { kind: "relocate", name: command.root.name, root: data };
         }
         case "exclude": {
           const { data } = await addRootExclusion(command.root.id, command.path, command.key);

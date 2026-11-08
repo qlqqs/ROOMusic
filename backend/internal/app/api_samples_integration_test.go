@@ -387,8 +387,46 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	recordIssueReviewSamples(t, application, samples, call, admin)
 	recordClaimSamples(t, application, samples, call, admin)
 	recordAudioAnalysisSamples(t, application, samples, call, admin)
+	// 改路径样本放在最后，不改变之前的目录、操作记录与扫描样本。
+	recordRootRelocateSamples(t, application, samples, call, admin, rootB)
 
 	samples.finish()
+}
+
+// recordRootRelocateSamples 用独立连接持有扫描锁产生冲突，再释放锁录制成功响应。
+func recordRootRelocateSamples(t *testing.T, application *integrationTestApplication, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser, rootID string) {
+	t.Helper()
+	newPath := createLibraryDirectory(t, application, "classical-relocated")
+	var revision int64
+	if err := application.database.QueryRow(`SELECT revision FROM library_roots WHERE id=$1::uuid`, rootID).Scan(&revision); err != nil {
+		t.Fatalf("读取改路径样本的目录版本：%v", err)
+	}
+	body := map[string]any{"path": newPath, "expected_revision": revision}
+	holder, err := application.database.Conn(context.Background())
+	if err != nil {
+		t.Fatalf("取得扫描锁独立连接：%v", err)
+	}
+	defer holder.Close()
+	var locked bool
+	if err := holder.QueryRowContext(context.Background(), `SELECT pg_try_advisory_lock(1396916558, hashtext(current_schema()))`).Scan(&locked); err != nil || !locked {
+		t.Fatalf("持有样本扫描锁：locked=%v，error=%v", locked, err)
+	}
+	defer func() {
+		if locked {
+			if _, err := holder.ExecContext(context.Background(), `SELECT pg_advisory_unlock(1396916558, hashtext(current_schema()))`); err != nil {
+				t.Errorf("清理样本扫描锁：%v", err)
+			}
+		}
+	}()
+	response := call(http.MethodPost, "/api/v1/library-roots/"+rootID+"/relocate", body, admin, map[string]string{"Idempotency-Key": "sample-relocate-root"})
+	requireAPIError(t, response, http.StatusConflict, "scan_running")
+	samples.record("errors/scan-running", response, http.StatusConflict)
+	var unlocked bool
+	if err := holder.QueryRowContext(context.Background(), `SELECT pg_advisory_unlock(1396916558, hashtext(current_schema()))`).Scan(&unlocked); err != nil || !unlocked {
+		t.Fatalf("释放样本扫描锁：unlocked=%v，error=%v", unlocked, err)
+	}
+	locked = false
+	samples.record("library-roots/relocate", call(http.MethodPost, "/api/v1/library-roots/"+rootID+"/relocate", body, admin, map[string]string{"Idempotency-Key": "sample-relocate-root"}), http.StatusOK)
 }
 
 // recordAudioAnalysisSamples 通过固定 ffmpeg 与合成曲目生成真实 done 样本；pending/failed 来自同一张表的实际读取判定。

@@ -73,6 +73,17 @@ export function restoreRoot(id: string, expectedRevision: number, idempotencyKey
   );
 }
 
+/**
+ * 改目录路径：path 是目录浏览器给出的绝对路径，必须带界面上看到的 revision。
+ * 有扫描在运行时返回 409 scan_running，新路径已被别的目录登记时返回 409 path_already_registered。
+ */
+export function relocateRoot(id: string, path: string, expectedRevision: number, idempotencyKey: string): Promise<ApiResponse<RootChangedDTO>> {
+  return apiRequest(
+    { method: "POST", path: `/api/v1/library-roots/${id}/relocate`, body: { path, expected_revision: expectedRevision }, idempotencyKey },
+    decodeRootChanged,
+  );
+}
+
 /** 添加不扫描的子文件夹：path 是目录浏览器给出的绝对路径，必须在该目录之内；已排除的再加一次返回当前状态。 */
 export function addRootExclusion(id: string, path: string, idempotencyKey: string): Promise<ApiResponse<RootExclusionsDTO>> {
   return apiRequest({ method: "POST", path: `/api/v1/library-roots/${id}/exclusions`, body: { path }, idempotencyKey }, decodeRootExclusions);
