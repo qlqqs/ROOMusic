@@ -76,13 +76,15 @@ func (f *scannerArtistGovernanceFixture) writeAlpha(title string) {
 // scan 同时执行 scanRoot 与正式终态处理；取消分支模拟完整遍历后、missing 对账前收到持久化取消。
 func (f *scannerArtistGovernanceFixture) scan(want string) string {
 	f.t.Helper()
+	// 完整重扫确保实际写入并触发故障注入，不依赖未变候选重写。
 	scanID := insertRunningScan(f.t, f.fixture)
+	f.exec(`UPDATE scan_runs SET scan_mode=$2 WHERE id=$1::uuid`, scanID, ScanModeFull)
 	holder, acquired, err := acquireScanExecution(f.ctx, f.fixture.database)
 	if err != nil || !acquired {
 		f.t.Fatalf("取得扫描执行权：acquired=%t err=%v", acquired, err)
 	}
 	defer holder.close(f.ctx)
-	scanErr := f.service.scanRoot(f.ctx, holder.connection, scanID, f.root)
+	scanErr := f.service.scanRootWithOptions(f.ctx, holder.connection, scanID, f.root, StartOptions{Mode: ScanModeFull})
 	if want == "incomplete" {
 		if scanErr == nil {
 			f.t.Fatal("注入的候选失败未传播到扫描")

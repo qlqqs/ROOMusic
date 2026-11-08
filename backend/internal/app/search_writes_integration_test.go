@@ -135,15 +135,17 @@ func TestPostgreSQLSearchRealScanRefreshesPublishedFieldsAndMissing(t *testing.T
 	library := createLibraryDirectory(t, app, "search-synthetic")
 	path := filepath.Join(library, "album", "01.flac")
 	writeSyntheticTrack(t, path, 41, "TITLE=扫描曲目", "ARTIST=曲目藝人", "ALBUM=扫描專輯", "ALBUMARTIST=专辑艺人", "COMPOSER=初始作曲者", "LABEL=初始厂牌", "CATALOGNUMBER=SCAN-1234")
+	// 保留独立来源，使删除目标曲目后仍能完整扫描并执行 missing 对账，而非触发空根保护。
+	writeSyntheticTrack(t, filepath.Join(library, "keeper", "01.flac"), 42, "TITLE=保留音轨", "ARTIST=独立保留者", "ALBUM=保留唱片", "ALBUMARTIST=独立保留者")
 	response := app.request(t, http.MethodPost, "/api/v1/library-roots", map[string]string{"path": library}, &admin, idempotencyHeader(uuid.New()))
 	if response.Code != 201 {
 		t.Fatalf("注册合成库：%d %s", response.Code, response.Body.String())
 	}
 	// 先发布空库，再扫描：新增 UUID 不在初始工作清单内，必须由实时写者维护。
 	publishSearch(t, app)
-	assertScanFeedbackCounts(t, scanFeedbackReport(t, app, &admin, startScanFeedback(t, app, &admin)), [3]int{1, 0, 0}, [3]int{1, 0, 0})
+	assertScanFeedbackCounts(t, scanFeedbackReport(t, app, &admin, startScanFeedback(t, app, &admin)), [3]int{2, 0, 0}, [3]int{2, 0, 0})
 	var trackID, releaseID, groupID string
-	if err := app.database.QueryRow(`SELECT t.id::text,r.id::text,r.group_id::text FROM tracks t JOIN media m ON m.id=t.medium_id JOIN releases r ON r.id=m.release_id WHERE t.source_status='present'`).Scan(&trackID, &releaseID, &groupID); err != nil {
+	if err := app.database.QueryRow(`SELECT t.id::text,r.id::text,r.group_id::text FROM tracks t JOIN media m ON m.id=t.medium_id JOIN releases r ON r.id=m.release_id WHERE t.source_status='present' AND t.relative_path='album/01.flac'`).Scan(&trackID, &releaseID, &groupID); err != nil {
 		t.Fatal(err)
 	}
 	requireSearchAlbums(t, app, &user, "扫描专辑", groupID)

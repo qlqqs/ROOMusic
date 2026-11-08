@@ -145,9 +145,9 @@ func TestPostgreSQLStrictMultiDiscFallsBackToDiscFolderArtwork(t *testing.T) {
 func TestPostgreSQLBoxLeafDoesNotUseBoxParentArtwork(t *testing.T) {
 	fixture := newLibraryFixture(t)
 	root := insertScannerRoot(t, fixture, "box-leaf-artwork")
-	// 碟号不连续，所以每张碟是独立的 Box 叶子；Box 目录里的封面不属于任何一张碟。
+	// 专辑标签冲突使两碟保持独立的 Box 叶子，不按带缺口碟号合并；Box 目录里的封面不属于任何一张碟。
 	writeScanFixtureFile(t, root, "Box/Disc 1/01.flac", taggedTrack(t, 1, 1, "Set"))
-	writeScanFixtureFile(t, root, "Box/Disc 3/01.flac", taggedTrack(t, 3, 3, "Set"))
+	writeScanFixtureFile(t, root, "Box/Disc 3/01.flac", taggedTrack(t, 3, 3, "Other Set"))
 	writeScanFixtureFile(t, root, "Box/cover.png", pngArtworkOfWidth(7))
 	writeScanFixtureFile(t, root, "Box/Disc 1/cover.png", pngArtworkOfWidth(8))
 

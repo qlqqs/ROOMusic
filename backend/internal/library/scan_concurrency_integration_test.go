@@ -118,7 +118,7 @@ func concurrentSnapshot(t *testing.T, fixture *libraryFixture, service *Service,
 	for index, d := range result.DiagnosticOrder {
 		extension, kind := "flac", "parse_failure"
 		if index%2 == 1 {
-			extension, kind = "ape", "unsupported_format"
+			extension, kind = "wma", "unsupported_format"
 		}
 		if d.Path != fmt.Sprintf("Errors/%03d.%s", index, extension) || d.Kind != kind {
 			t.Fatalf("截断保留了错误的诊断，第 %d 条：%+v", index, d)
@@ -145,7 +145,7 @@ func TestPostgreSQLConcurrentScanMatchesSerialStagingDiagnosticsAndCache(t *test
 	for index := 0; index < 105; index++ {
 		extension := "flac"
 		if index%2 == 1 {
-			extension = "ape"
+			extension = "wma"
 		}
 		writeFixtureFile(t, common, fmt.Sprintf("Errors/%03d.%s", index, extension), []byte("损坏音频"))
 	}

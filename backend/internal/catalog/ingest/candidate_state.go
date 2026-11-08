@@ -33,13 +33,16 @@ func CandidateMetadataSignature(candidate OrganizedCandidate) (string, error) {
 
 // CandidateUnchanged 仅在签名相同且全部已规划、未暂缓成员仍沿用原曲目与发行时返回可跳过。
 // 空候选或任一成员不满足条件时，整个候选都不可跳过。
+// 应有的持久化事实必须完整；无音频负载导致规划后指纹仍为空的来源允许不存指纹。
 func CandidateUnchanged(ctx context.Context, database queryer, scanID, rootID, candidateKey, signature string) (trackIDs []string, ok bool, err error) {
 	rows, err := database.QueryContext(ctx, `WITH members AS (
 		SELECT o.planned_track_id,
 			(o.planned_track_id IS NOT NULL AND o.matched_track_id IS NOT NULL
 			 AND o.planned_track_id=o.matched_track_id AND NOT o.content_changed
 			 AND o.planned_release_id=s.release_id
-			 AND t.source_status='present' AND m.release_id=s.release_id) IS TRUE AS unchanged
+			 AND t.source_status='present' AND m.release_id=s.release_id
+			 AND t.source_size IS NOT NULL AND t.source_modified_at IS NOT NULL
+			 AND (o.content_fingerprint IS NULL OR t.content_fingerprint IS NOT NULL)) IS TRUE AS unchanged
 		FROM scan_observations o
 		JOIN scan_candidate_states s ON s.root_id=o.root_id AND s.candidate_key=o.candidate_key
 		LEFT JOIN tracks t ON t.id=o.planned_track_id

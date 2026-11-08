@@ -257,6 +257,6 @@ describe("诊断", () => {
 
 describe("decodeAnalysisProgress", () => {
   it("解码音频分析进度样本", () => {
-    expect(decodeAnalysisProgress(sampleBody("audio-analysis/progress"))).toEqual({ total: 10, analyzed: 1, failed: 1, state: "unavailable" });
+    expect(decodeAnalysisProgress(sampleBody("audio-analysis/progress"))).toEqual({ total: 12, analyzed: 1, failed: 1, state: "unavailable" });
   });
 });

@@ -14,7 +14,7 @@
           "available": true,
           "id": "00000000-0000-4000-8000-000000000003",
           "initial_group": "A",
-          "name": "Alpha Singer (Beta Singer)",
+          "name": "Alpha Example (Beta Example)",
           "roles": [
             "release_artist",
             "album_artist",
@@ -27,9 +27,9 @@
             "alias_part": "inner",
             "bracket_side": "left",
             "kind": "bracket_alias",
-            "left_name": "Alpha Singer (Beta Singer)",
+            "left_name": "Alpha Example (Beta Example)",
             "release_id": "00000000-0000-4000-8000-000000000004",
-            "right_name": "Beta Singer"
+            "right_name": "Beta Example"
           }
         ],
         "right": {
@@ -37,7 +37,7 @@
           "available": true,
           "id": "00000000-0000-4000-8000-000000000005",
           "initial_group": "B",
-          "name": "Beta Singer",
+          "name": "Beta Example",
           "roles": [
             "track_artist"
           ],

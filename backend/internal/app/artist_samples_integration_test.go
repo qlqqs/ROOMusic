@@ -83,6 +83,8 @@ type artistSamples struct {
 func newArtistSamples(t *testing.T) *artistSamples {
 	t.Helper()
 	app := newIntegrationTestApplication(t)
+	// 仅固定样本计数起点，不改变投影版本、代次或状态；发布仍由真实维护事务递增。
+	mustExec(t, app, `UPDATE catalog_projection_state SET catalog_epoch=1 WHERE capability='search'`)
 	f := &artistSamples{t: t, app: app, admin: app.createUser(t, "admin"), member: app.createUser(t, "user")}
 	f.samples = newAPISampleRecorder(t, app)
 	f.samples.scope = "artist-increment"
@@ -262,6 +264,8 @@ func recordArtistSearchReadyPublication(f *artistSamples) {
 func recordArtistCorrectionSearchSamples(t *testing.T, samples *apiSampleRecorder) {
 	t.Helper()
 	app := newIntegrationTestApplication(t)
+	// 仅固定样本计数起点，不改变投影版本、代次或状态；发布仍由真实维护事务递增。
+	mustExec(t, app, `UPDATE catalog_projection_state SET catalog_epoch=1 WHERE capability='search'`)
 	f := &artistSamples{t: t, app: app, samples: samples, admin: app.createUser(t, "admin")}
 	samples.forbid(f.admin.token)
 	samples.forbid(app.allowedRoot)
@@ -602,7 +606,8 @@ func recordArtistCandidateSamples(t *testing.T, s *apiSampleRecorder) {
 	s.forbid(f.admin.token)
 	s.forbid(app.allowedRoot)
 	s.forbid(app.dataDirectory)
-	for i, name := range []string{"Alpha Singer (Beta Singer)", "Beta Singer", "Alpha Singer (Gamma Singer)", "Gamma Singer"} {
+	// 合成姓名避开演唱与乐器词表，保持括号内容为人名别名的前提。
+	for i, name := range []string{"Alpha Example (Beta Example)", "Beta Example", "Alpha Example (Gamma Example)", "Gamma Example"} {
 		f.identity(i+20, name)
 	}
 	directory := filepath.Join(app.allowedRoot, "candidate-album")
@@ -610,22 +615,22 @@ func recordArtistCandidateSamples(t *testing.T, s *apiSampleRecorder) {
 		t.Fatal(err)
 	}
 	write := func(second string) {
-		for i, name := range []string{"Alpha Singer (" + second + ")", second} {
+		for i, name := range []string{"Alpha Example (" + second + ")", second} {
 			raw := parsertest.FLACWithAudio(t, [16]byte{9, 1, byte(i + 3)}, []byte{9, 1, byte(i + 3), 4},
-				fmt.Sprintf("TITLE=合成候选曲%d", i+1), "ALBUM=候选专辑", "ALBUMARTIST=Alpha Singer ("+second+")",
+				fmt.Sprintf("TITLE=合成候选曲%d", i+1), "ALBUM=候选专辑", "ALBUMARTIST=Alpha Example ("+second+")",
 				"ARTIST="+name, fmt.Sprintf("TRACKNUMBER=%d", i+1))
 			if err := os.WriteFile(filepath.Join(directory, fmt.Sprintf("%02d.flac", i+1)), raw, 0644); err != nil {
 				t.Fatal(err)
 			}
 		}
 	}
-	write("Beta Singer")
+	write("Beta Example")
 	root := f.call("POST", "/api/v1/library-roots", map[string]any{"path": app.allowedRoot}, &f.admin)
 	if root.Code != 201 {
 		t.Fatalf("登记候选目录：%d %s", root.Code, root.Body.String())
 	}
 	scan := func() {
-		r := f.call("POST", "/api/v1/scans", map[string]any{}, &f.admin)
+		r := f.call("POST", "/api/v1/scans", nil, &f.admin)
 		if r.Code != 202 {
 			t.Fatal(r.Body.String())
 		}
@@ -701,10 +706,10 @@ func recordArtistCandidateSamples(t *testing.T, s *apiSampleRecorder) {
 	if r := f.call("POST", "/api/v1/artists/"+left+"/candidate-ignore", body, &f.admin); r.Code != 200 {
 		t.Fatal(r.Body.String())
 	}
-	write("Gamma Singer")
+	write("Gamma Example")
 	scan()
 	fresh := artistSampleItems(t, f.get("governance/artist-candidates-new-key-pair", "/api/v1/artist-candidates"), 1)
-	if !strings.Contains(fmt.Sprint(fresh), "Gamma Singer") {
+	if !strings.Contains(fmt.Sprint(fresh), "Gamma Example") {
 		t.Fatal("新键对仍被旧忽略吞掉")
 	}
 }
