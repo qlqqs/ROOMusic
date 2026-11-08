@@ -82,16 +82,16 @@
 
 ## 验收标准
 
-- [ ] A1 操作记录中撤销类记录的操作列显示“已完成”（R1）。
-- [ ] A2 对测试资料库启动应用后，后台分析逐首完成，结果可从接口读到；ffmpeg 不可用时应用正常、分析不运行；分析失败的曲目不阻塞后续曲目（R2）。
-- [ ] A3 点播放栏封面打开全屏播放器，黑胶随播放/暂停转动与停止、唱臂落下与抬起；向下箭头、Esc、浏览器返回都能收起；访问 `/now-playing` 跳到概览（R3）。
-- [ ] A4 全屏显示标题、专辑、歌手、心形与歌词，歌词逐行同步与点行定位照常可用；375 宽时唱片与歌词可切换，没有横向溢出（R3）。
-- [ ] A5 队列图标在播放栏和全屏底栏都能打开右侧队列抽屉，队列操作与“存为歌单”可用，关闭后焦点回到队列图标（R3/D2）。
-- [ ] A6 点信号路径圆点出现弹层，各层一行取值；页面与弹层中找不到“目标”第 4 条的三句话；均衡生效时浏览器层写出增益（R4）。
-- [ ] A7 已分析曲目的进度条是波形，可点击/拖动/键盘定位；未分析曲目是普通进度条（R5）。
-- [ ] A8 设置 → 播放可选音量均衡模式、开关交叉渐变；均衡开启时响的曲目被压低、安静且有峰值余量的曲目被提升，都不削波，未分析曲目 −5 dB，信号路径写出实际增益；自动模式下同一专辑连续播放时用专辑增益；渐变开启时跨专辑的相邻曲目重叠渐变、同专辑相邻曲目不渐变（R6）。
-- [ ] A9 概览顶部显示专辑、曲目、艺术家、作曲家四个数字，与各列表页口径一致；右侧栏有扫描、分析进度、需要关注、目录与成员（后两者仅管理员）；375 宽时侧栏在主栏下方，无横向溢出（R7）。
-- [ ] A10 收尾时 1440 / 375 截图（全屏播放器、队列抽屉、信号路径弹层、概览）经主会话审阅无布局问题，界面没有多余说明句。
+- [x] A1 操作记录中撤销类记录的操作列显示“已完成”（R1）。
+- [x] A2 对测试资料库启动应用后，后台分析逐首完成，结果可从接口读到；ffmpeg 不可用时应用正常、分析不运行；分析失败的曲目不阻塞后续曲目（R2）。
+- [x] A3 点播放栏封面打开全屏播放器，黑胶随播放/暂停转动与停止、唱臂落下与抬起；向下箭头、Esc、浏览器返回都能收起；访问 `/now-playing` 跳到概览（R3）。
+- [x] A4 全屏显示标题、专辑、歌手、心形与歌词，歌词逐行同步与点行定位照常可用；375 宽时唱片与歌词可切换，没有横向溢出（R3）。
+- [x] A5 队列图标在播放栏和全屏底栏都能打开右侧队列抽屉，队列操作与“存为歌单”可用，关闭后焦点回到队列图标（R3/D2）。
+- [x] A6 点信号路径圆点出现弹层，各层一行取值；页面与弹层中找不到“目标”第 4 条的三句话；均衡生效时浏览器层写出增益（R4）。
+- [x] A7 已分析曲目的进度条是波形，可点击/拖动/键盘定位；未分析曲目是普通进度条（R5）。
+- [x] A8 设置 → 播放可选音量均衡模式、开关交叉渐变；均衡开启时响的曲目被压低、安静且有峰值余量的曲目被提升，都不削波，未分析曲目 −5 dB，信号路径写出实际增益；自动模式下同一专辑连续播放时用专辑增益；渐变开启时跨专辑的相邻曲目重叠渐变、同专辑相邻曲目不渐变（R6）。
+- [x] A9 概览顶部显示专辑、曲目、艺术家、作曲家四个数字，与各列表页口径一致；右侧栏有扫描、分析进度、需要关注、目录与成员（后两者仅管理员）；375 宽时侧栏在主栏下方，无横向溢出（R7）。
+- [x] A10 收尾时 1440 / 375 截图（全屏播放器、队列抽屉、信号路径弹层、概览）经主会话审阅无布局问题，界面没有多余说明句。
 
 ## 不做
 
@@ -104,3 +104,65 @@
 
 - 路线：(a) 用户审阅最终规划摘要后批准。D1–D3 由用户逐项选定；技术设计由 Opus 子 agent 起草（design.md），主会话审阅后定 D4、D5、D7–D13，D6 原为“只衰减”的推荐，用户审阅时改为“按照 Roon 的来”，design 4.6 随之改为 Web Audio。
 - 批准：用户 2026-11-08 审阅修订后的规划摘要（含 D6 按 Roon 的均衡与 Web Audio 按需接入、安卓锁屏不做专门演练），选“按这份规划开工”。
+
+## 实施结果（2026-11-08）
+
+在临时分支 `player-overview-analysis`（Paseo worktree）上实施，`main` 上的“歌单与专辑页面”任务归档后以 `--no-ff` 合并回 `main`。
+
+| 提交 | 内容 |
+| --- | --- |
+| `37a871b` | B1：`GET /api/v1/catalog/stats`（专辑、曲目、艺术家、作曲家；艺人整理中后两项为 null），抽出 `artistListCount` 与艺人列表共用 |
+| `e90beec` | F2 + R1 + R4 删句：全屏播放器（黑胶、唱臂、歌词、心形）、队列抽屉、信号路径弹层；`/now-playing` 跳到概览，侧栏去掉“正在播放”；撤销记录显示“已完成” |
+| `0d4d3bc` | B2：迁移 0033 `track_analyses`、ffmpeg 慢速后台分析工作者、`GET /api/v1/tracks/{id}/analysis` 与 `GET /api/v1/audio-analysis/progress`、`ROOMUSIC_AUDIO_ANALYSIS` 开关 |
+| `aab1e09` | F1：概览顶部四张统计卡，右侧窄栏放扫描、音频分析、需要关注、目录与成员 |
+| `c44ba31` | 专辑增益只统计分析工作集内的曲目（停用目录或缺大小、修改时间的曲目不再让专辑增益一直为空） |
+| `ff83dda` | J3：播放器、播放状态、DESIGN 与后台音频分析合同写入规范 |
+| `890cf53` | F3：波形进度条、设置 → 播放、按 Roon 的音量均衡（−14 LUFS，可提升到真峰值 −0.5 dB，未分析 −5 dB）、跨专辑交叉渐变 |
+| `3ea63b4` | J1：分析空闲等待由 5 分钟改为 1 分钟；`playback.real.ts` 覆盖分析完成后的波形与均衡增益 |
+| `3eece9c` | J4：合入 `main`（合并提交）；分支的图标控件改用 `main` 新的 `useTooltip` 悬停提示（队列按钮、播放栏封面、信号路径圆点、窄屏唱片），全屏里的提示反成浅底；重建嵌入产物；交汇处测试 `auth.spec` 补“播放”栏目、`personal.spec` 播放栏曲名按文字定位 |
+| `a4ef27b` | J4 发现 `main` 上已失败的三个旧用例（`19c990b` 去掉概况 dt 标签后未同步）：`default-version.test.tsx`、`release-corrections.test.tsx`、`governance.spec.ts` 改从“概况”列表读取 |
+
+与执行计划的偏差：
+
+- F2 中播放栏在队列为空但有可重试故障时仍显示；`PlayerFeedback` 与 `PlayerControls` 删除，故障提示与重试按钮放进播放栏和全屏；信号路径圆点在 900px 以下的播放栏里隐藏（全屏底栏仍有）。
+- F1 中“需要关注”为 0 时不加链接；分析进度在“已分析 + 失败 ≥ 总数”时写“已完成”；空资料库仍显示“需要关注”。
+- F3 中播放栏波形高 22px；随机播放在自动模式下用曲目增益；负增益用 U+2212 减号。
+- J1 发现分析工作者空闲等待 5 分钟太长（新资料库扫描后要等满 5 分钟才开始），改为 1 分钟，design.md 与 `audio-analysis-contracts.md` 同步。
+- J4 发现 `.trellis/spec/frontend/personal-guidelines.md` 仍写着已删除的 `NowPlayingPage` 插槽，随合并改为 `FullscreenPlayer`。
+
+验收中打回并修正：
+
+- B1：`ListArtists` 先算 `textnorm.Text` 再取总数，顺序错误，改为先取总数。
+- B2：失败曲目阻塞专辑增益；LUFS / 真峰值带 float32 噪声（改为一位小数）；`catalog/httpapi` 依赖了 `playback/analysis`（改为由 `app` 注入版本）。
+- F2：测试 agent 删掉了 `player-ui.test.tsx` 中仍然有效的用例并去掉了 `expectLastItemUncovered`，已恢复。
+- F3：引擎测试过薄，补了同专辑 / 单曲循环 / 手动切歌不渐变、备用元素被拒退回普通切歌、切换后聆听只算新曲目、上下文非 running 走直连、音量只读不建 AudioContext；安静曲目波形几乎看不见，改为按本曲最大峰值归一化。
+
+验收对照：
+
+| 验收 | 证据 |
+| --- | --- |
+| A1 | `change-summary.ts` 撤销类返回“已完成”；`change-summary.test.ts` 与 F2 Vitest 通过 |
+| A2 | B2 单元与固定 ffmpeg 合成素材测试（响度、开头静音、CUE 区间）、`TestPostgreSQLAnalysis*`（待分析判定、失败不阻塞、专辑增益）均 PASS 非 SKIP；失败不阻塞后续曲目（`TestAnalysisWorkerPersistsFailureAndContinuesToNextCandidate`）；ffmpeg 不可用或 `ROOMUSIC_AUDIO_ANALYSIS=off` 时 `OpenAnalysis` 只记日志、不装配工作者，应用照常启动，进度接口报 `unavailable`（`TestPostgreSQLAnalysisEndpointsExposeProtectedReadiness`）；J1 真实服务上 13/13 首分析完成 |
+| A3 | `player-ui.test.tsx`、`player.spec.ts`：封面打开全屏，收起按钮、Esc、浏览器返回关闭，`/now-playing` 跳到概览；截图中播放时唱臂落下、暂停时抬起 |
+| A4 | `player.spec.ts` 1440 / 375（含 axe）；J1 真实服务全屏歌词点行定位通过；375 截图唱片与歌词可切换、无横向溢出 |
+| A5 | `player-ui.test.tsx` 抽屉打开、关闭后焦点回到队列图标；`player.spec.ts` 播放栏与全屏底栏都能打开抽屉；截图 |
+| A6 | `playback.real.ts` 断言四层取值且三句说明不存在；均衡生效时浏览器层写“解码 · 音量均衡 +7.8 dB”（截图）；J1 真实服务增益与分析接口一致 |
+| A7 | `WaveformSeek` 有 / 无分析与键盘用例；J1 真实服务分析完成后播放栏出现波形 canvas |
+| A8 | `leveling.test.ts` 四种模式、正增益受真峰值限制、未知 −5 dB；`player-engine.test.ts` 跨专辑渐变、同专辑 / 单曲循环 / 手动切歌不渐变；`playback-settings` 解码与设置页用例；J1 真实服务信号路径增益与接口一致 |
+| A9 | `TestPostgreSQLCatalogStats` 四个数与各列表总数相等、艺人未就绪为 null（PASS 非 SKIP）；`overview-page.test.tsx`；1440 / 375 截图 |
+| A10 | 1440 / 375 截图 20 张（全屏播放 / 暂停 / 歌词、队列抽屉、信号路径、播放栏波形、设置 → 播放、概览管理员 / 成员 / 空库），主会话审阅无溢出、错位与多余说明 |
+
+验证（均由测试 agent 执行）：
+
+- 后端：`go vet ./...`、`go build ./...`；`TestPackageDependencyDirections`；隔离库（`roomusic-test-poa` / `roomusic-test-poa-b2`）上 `TestPostgreSQL(APIResponseSamples|ArtistAPIResponseSamples|CatalogStats|ArtistListCountsAndSearchDeepPages)`、`TestPostgreSQLAnalysis*`、`TestPostgreSQLMigrationRollbackRoundTrip`（含 0033 上下行），均 PASS 非 SKIP；`ROOMUSIC_TEST_FFMPEG=… go test -race ./internal/playback/... -run 'Test(Analysis|Waveform|Ebur128|FFmpegAnalysis)'` PASS。
+- 前端 Vitest：F2 7 个文件 89 通过、`player-ui.test.tsx` 20 通过；F1 8 个文件 313 通过；F3 8 个文件 282 通过、`player-engine.test.ts` 168 通过；`npx tsc --noEmit`、`npx eslint src e2e`、`npm run build` 通过。
+- Playwright（mock）：F2 `player.spec.ts`、`auth.spec.ts`、`search-step4.spec.ts`、`claims.spec.ts` 87 通过；F1 `auth.spec.ts` 22 通过；F3 `player.spec.ts` 38 通过。
+- 真实服务：`ROOMUSIC_TEST_COMPOSE_PROJECT=roomusic-test-poa scripts/playback-e2e.sh` 第一次 52 通过、4 失败（分析空闲等待 5 分钟，另三项是测试写法），修正后 56 通过，分析 `{"total":13,"analyzed":13,"failed":0}`。
+- J4 合并后（`main`）：eslint 5 个整合文件；`npx vitest run src/features/player src/app src/shared/ui/tooltip.test.tsx src/features/library/api/decoders.test.ts` 66 个文件，1342 通过、12 失败（全是 `main` 上已有的旧断言，`a4ef27b` 修正后两个文件 34 通过）；Playwright `player/auth/a11y/responsive/personal/albums/governance/library` 382 通过、8 失败（设置分栏缺“播放”、播放栏曲名不再是链接、概况 dt 标签），修正后定向重跑 8 项通过；`go build ./...`、`go vet ./...`、`go test ./internal/library/... ./internal/playback/...`、`TestPackageDependencyDirections` 通过；`TestPostgreSQLCatalogStats` 与（经 `scripts/test-integration.sh`）`TestPostgreSQLAPIResponseSamples` PASS 非 SKIP。
+- 没有跑全量测试：各步改动都能用对应的测试文件和场景局部覆盖。
+
+未验证：
+
+- 安卓锁屏下的后台播放与交叉渐变没有真机演练（规划时用户同意不做专门演练）。
+- iPhone / iPad 上均衡与渐变不接入 Web Audio，按计划没有写模拟测试。
+- 交叉渐变没有在浏览器里实际听过：mock 曲目只有 3 秒，达不到“曲目 ≥ 3 × 渐变时长”，由假 AudioContext 的引擎测试覆盖。
