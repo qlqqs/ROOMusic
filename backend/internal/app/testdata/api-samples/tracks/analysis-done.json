@@ -9,6 +9,8 @@
       "duration_ms": 3000,
       "integrated_lufs": -21.8,
       "leading_silence_ms": 0,
+      "loudness_range_lu": 20,
+      "sample_peak_dbfs": -21.1,
       "track_gain_db": 7.8,
       "trailing_silence_ms": 3000,
       "true_peak_dbtp": -21.1,

@@ -184,6 +184,7 @@ func (w *AnalysisWorker) analyze(ctx context.Context, candidate catalog.TrackAna
 		return catalog.TrackAnalysisResult{Status: "failed", FailureCategory: category}, nil
 	}
 	return catalog.TrackAnalysisResult{Status: "done", IntegratedLUFS: result.IntegratedLUFS, TruePeakDBTP: result.TruePeakDBTP,
+		LoudnessRangeLU: result.LoudnessRangeLU, SamplePeakDBFS: result.SamplePeakDBFS,
 		DurationMS: result.DurationMS, LeadingSilenceMS: result.LeadingSilenceMS, TrailingSilenceMS: result.TrailingSilenceMS, Waveform: result.Waveform}, nil
 }
 

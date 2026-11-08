@@ -6,7 +6,7 @@ import { sampleBody } from "../../../test/api-samples";
 import { FakeAudio } from "../../../test/fake-audio";
 import { silentPlayRecorder } from "../../../test/play-recorder";
 import { playerTrack } from "../../../test/player-data";
-import { decodePlaybackFormats } from "../api/decoders";
+import { decodePlaybackFormats, decodeTrackAnalysis, type TrackAnalysisDTO } from "../api/decoders";
 import { buildCapabilityTable, type CapabilityTable } from "../engine/capability";
 import { PlayerEngine, type PlayerSnapshot } from "../engine/player-engine";
 import type { SourceFacts } from "../engine/queue";
@@ -20,12 +20,15 @@ vi.mock("../player-provider", () => ({
 vi.mock("../hooks/use-playback-capabilities", () => ({
   usePlaybackCapabilities: () => ({ data: capabilitiesPending ? undefined : table, isPending: capabilitiesPending }),
 }));
+vi.mock("../hooks/use-track-analysis", () => ({ useTrackAnalysis: () => analysis }));
 
 let engine: PlayerEngine;
 let table: CapabilityTable;
 let capabilitiesPending = false;
+let analysis: TrackAnalysisDTO["analysis"] = null;
 
 beforeEach(async () => {
+  analysis = null;
   capabilitiesPending = false;
   // 交付方式取自后端样本，仅将浏览器能力探针设为支持。
   table = await buildCapabilityTable(decodePlaybackFormats(sampleBody("playback/formats")).items, { canPlayType: () => "probably" });
@@ -105,5 +108,54 @@ describe("信号路径编码与质量", () => {
     const dialog = screen.getByRole("dialog", { name: "信号路径：无损" });
     expect(within(dialog).getByText("读取中")).toBeTruthy();
     expect(within(dialog).queryByText("原文件直出")).toBeNull();
+  });
+});
+
+function loudnessAnalysis(overrides: Partial<NonNullable<TrackAnalysisDTO["analysis"]>> = {}): NonNullable<TrackAnalysisDTO["analysis"]> {
+  const sample = decodeTrackAnalysis(sampleBody("tracks/analysis-done")).analysis;
+  if (sample === null) throw new Error("完成的分析样本缺少结果");
+  return { ...sample, integratedLufs: -14.24, loudnessRangeLu: 6.26, truePeakDbtp: -0.84, samplePeakDbfs: -3.7, ...overrides };
+}
+
+describe("信号路径响度", () => {
+  it("在数据源与服务端之间显示一位小数的响度、范围与真峰值，不显示采样峰值", async () => {
+    const user = userEvent.setup();
+    analysis = loudnessAnalysis();
+    viewSource("flac", "flac_vorbis_comment");
+    await user.click(screen.getByRole("button", { name: "信号路径：无损" }));
+    const dialog = screen.getByRole("dialog", { name: "信号路径：无损" });
+    expect(within(dialog).getAllByRole("listitem").map((row) => row.textContent)).toEqual([
+      "数据源FLAC 48kHz 24bit 2ch",
+      "响度−14.2 LUFS · 范围 6.3 LU · 峰值 −0.8 dBTP",
+      "服务端原文件直出",
+      "浏览器解码",
+      "系统输出系统默认输出",
+    ]);
+    expect(within(dialog).queryByText(/dBFS|−3\.7/)).toBeNull();
+  });
+
+  it.each([
+    [{ integratedLufs: null }, "范围 6.3 LU · 峰值 −0.8 dBTP"],
+    [{ loudnessRangeLu: null }, "−14.2 LUFS · 峰值 −0.8 dBTP"],
+    [{ truePeakDbtp: null }, "−14.2 LUFS · 范围 6.3 LU"],
+    [{ integratedLufs: null, loudnessRangeLu: 0, truePeakDbtp: null }, "范围 0.0 LU"],
+  ] as const)("缺项时省略对应数值与分隔符 %#", async (overrides, expected) => {
+    const user = userEvent.setup();
+    analysis = loudnessAnalysis(overrides);
+    viewSource("flac", "flac_vorbis_comment");
+    await user.click(screen.getByRole("button", { name: "信号路径：无损" }));
+    const dialog = screen.getByRole("dialog", { name: "信号路径：无损" });
+    expect(within(dialog).getAllByRole("listitem").map((row) => row.textContent)).toContain(`响度${expected}`);
+  });
+
+  it.each(["没有结果", "三项全为 null"] as const)("%s 时整行不存在，即使有采样峰值", async (state) => {
+    const user = userEvent.setup();
+    analysis = state === "没有结果" ? null : loudnessAnalysis({ integratedLufs: null, loudnessRangeLu: null, truePeakDbtp: null });
+    viewSource("flac", "flac_vorbis_comment");
+    await user.click(screen.getByRole("button", { name: "信号路径：无损" }));
+    const dialog = screen.getByRole("dialog", { name: "信号路径：无损" });
+    expect(within(dialog).queryByText("响度")).toBeNull();
+    expect(within(dialog).getAllByRole("listitem")).toHaveLength(4);
+    expect(within(dialog).queryByText(/LUFS|dBTP|dBFS/)).toBeNull();
   });
 });

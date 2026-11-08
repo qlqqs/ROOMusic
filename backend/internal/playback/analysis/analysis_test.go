@@ -59,31 +59,64 @@ func TestWaveformDoesNotExceedLimitAndSilenceIsNull(t *testing.T) {
 
 func TestEbur128SummaryParser(t *testing.T) {
 	for _, tc := range []struct {
-		name          string
-		text          string
-		wantI, wantTP *float64
-		wantErr       bool
+		name                           string
+		text                           string
+		wantI, wantTP, wantLRA, wantSP *float64
+		wantErr                        bool
 	}{
-		{name: "normal", text: "[Parsed_ebur128] Summary:\nIntegrated loudness: I: -22.4 LUFS\nTrue peak: Peak: -6.1 dBFS\n", wantI: floatPointer(-22.4), wantTP: floatPointer(-6.1)},
-		{name: "negative infinity", text: "Integrated loudness: I: -inf LUFS\nTrue peak: Peak: -inf dBFS\n", wantErr: false},
-		{name: "missing summary", text: "Integrated loudness: I: -22.4 LUFS\n", wantErr: true},
+		{
+			name:  "完整摘要且两种峰值不同",
+			text:  "[Parsed_ebur128] Summary:\nIntegrated loudness:\n  I: -22.4 LUFS\nLoudness range:\n  LRA: 6.3 LU\n  LRA low: -28.0 LUFS\n  LRA high: -21.7 LUFS\nSample peak:\n  Peak: -6.7 dBFS\nTrue peak:\n  Peak: -6.1 dBFS\n",
+			wantI: floatPointer(-22.4), wantTP: floatPointer(-6.1), wantLRA: floatPointer(6.3), wantSP: floatPointer(-6.7),
+		},
+		{
+			name:  "缺少两个可选段仍成功",
+			text:  "Integrated loudness: I: -22.4 LUFS\nTrue peak: Peak: -6.1 dBFS\n",
+			wantI: floatPointer(-22.4), wantTP: floatPointer(-6.1),
+		},
+		{
+			name:  "采样峰值负无穷不影响其他值",
+			text:  "Integrated loudness: I: -22.4 LUFS\nLoudness range: LRA: 0.0 LU\nSample peak: Peak: -inf dBFS\nTrue peak: Peak: -6.1 dBFS\n",
+			wantI: floatPointer(-22.4), wantTP: floatPointer(-6.1), wantLRA: floatPointer(0),
+		},
+		{
+			name: "全静音负无穷清空响度范围",
+			text: "Integrated loudness: I: -inf LUFS\nLoudness range: LRA: 0.0 LU\nSample peak: Peak: -inf dBFS\nTrue peak: Peak: -inf dBFS\n",
+		},
+		{
+			name:   "响度等于静音阈值清空范围但保留峰值",
+			text:   "Integrated loudness: I: -70.0 LUFS\nLoudness range: LRA: 1.2 LU\nSample peak: Peak: -68.0 dBFS\nTrue peak: Peak: -67.9 dBFS\n",
+			wantTP: floatPointer(-67.9), wantSP: floatPointer(-68),
+		},
+		{
+			name:   "响度低于静音阈值清空范围",
+			text:   "Integrated loudness: I: -71.0 LUFS\nLoudness range: LRA: 1.2 LU\nTrue peak: Peak: -68.9 dBFS\n",
+			wantTP: floatPointer(-68.9),
+		},
+		{name: "缺少必需真峰值摘要", text: "Integrated loudness: I: -22.4 LUFS\n", wantErr: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			gotI, gotTP, err := parseSummary(tc.text)
+			gotI, gotTP, gotLRA, gotSP, err := parseSummary(tc.text)
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("parseSummary error = %v, wantErr %v", err, tc.wantErr)
 			}
 			if tc.wantErr {
 				return
 			}
-			if tc.name == "negative infinity" {
-				if gotI != nil || gotTP != nil {
-					t.Fatalf("-inf values = (%v, %v), want nulls", gotI, gotTP)
+			for _, measurement := range []struct {
+				name      string
+				got, want *float64
+			}{
+				{"积分响度", gotI, tc.wantI},
+				{"真峰值", gotTP, tc.wantTP},
+				{"响度范围", gotLRA, tc.wantLRA},
+				{"采样峰值", gotSP, tc.wantSP},
+			} {
+				if (measurement.got == nil) != (measurement.want == nil) {
+					t.Errorf("%s 的空值状态有误：实际 %v，期望 %v", measurement.name, measurement.got, measurement.want)
+				} else if measurement.got != nil && *measurement.got != *measurement.want {
+					t.Errorf("%s = %v，期望 %v", measurement.name, *measurement.got, *measurement.want)
 				}
-				return
-			}
-			if gotI == nil || *gotI != *tc.wantI || gotTP == nil || *gotTP != *tc.wantTP {
-				t.Fatalf("parsed values = (%v, %v), want (%v, %v)", gotI, gotTP, *tc.wantI, *tc.wantTP)
 			}
 		})
 	}
@@ -92,7 +125,7 @@ func TestEbur128SummaryParser(t *testing.T) {
 func floatPointer(v float64) *float64 { return &v }
 
 func TestEbur128SummaryMissingMeasurementsIsParseError(t *testing.T) {
-	_, _, err := parseSummary(strings.TrimSpace("summary omitted"))
+	_, _, _, _, err := parseSummary(strings.TrimSpace("summary omitted"))
 	if err == nil {
 		t.Fatal("parseSummary accepted missing ebur128 summary")
 	}

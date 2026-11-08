@@ -141,6 +141,18 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
     目录不存在不算错误，其他读目录错误按同样方式记录。
   - 没有迁移：重扫会对每个候选重新发现封面，下一次扫描即绑定或移除。
 
+### MP3 扫描时长
+
+`parseMP3` 调用 `applyMP3StreamFacts(reader io.ReaderAt, fileSize int64, observation *AudioObservation)`（`parser/mp3_vbr.go`）。
+复用 `mp3AudioRange` 去掉叠加 ID3v2 和末尾 ID3v1/`TAG+`、APEv2、Lyrics3v2，在音频区间前 64 KiB 找首个有效 Layer III 帧；读取失败不填音频参数。
+Xing/Info 位于首帧 + 4 + 边信息长度：MPEG-1 双/单声道为 32/17，MPEG-2/2.5 为 17/9；按大端标志依次取帧数和字节数。
+没有 Xing/Info 时读首帧 + 36 的 VBRI。帧数大于 0 时，时长 = 帧数 × 每帧样本数 ÷ 采样率；MPEG-1 为 1152，MPEG-2/2.5 为 576。
+码率按头部正字节数（缺失时取首帧至音频区间结尾）× 8 ÷ 时长 ÷ 1000，四舍五入为 kbps；没有帧数时以同一音频字节数除以首帧码率作 CBR 浮点估算，不截整秒。
+不解析 TOC、不逐帧计数、不扣 LAME 编码延迟与补齐；没有头的 VBR 残余偏差由[分析时长视图](./audio-analysis-contracts.md)校正。
+标签、`mp3-frames-v1` 指纹、曲目身份均不变。④ 尚未合入时下次全量扫描即修正；若④先合入则合并时递增 MP3 解析器版本。
+验证覆盖 Xing/Info/VBRI、版本与声道偏移、缺字节数和 CBR 标签扣除；真实 Xing VBR 扫描与解码时长差小于 0.1 秒。
+错误：用含封面的整个文件大小除以码率并截整秒；正确：先限定音频区间，有帧数优先用帧数，无帧数保留浮点精度。
+
 ### 新格式内容指纹
 
 `parser/fingerprint.go` 按扩展名选择种类；旧格式种类和版本不变。新增：

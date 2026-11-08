@@ -90,11 +90,12 @@ Esc、关闭图标或点外面（`ModalDialog` 的 `closeOnBackdrop`）关闭，
 - 圆点颜色只看源编码：`flac/alac/pcm/ape/wavpack/aiff` 无损（金色实心），`mp3/aac/vorbis/opus/wavpack_hybrid` 有损（灰色实心；WavPack 混合模式没有 `.wvc` 时只有有损部分），
   其他未知（空心，如 `wavpack_float`、`wavpack_dsd`、`aiff_float`、`aifc_*`）；名称与悬停提示是“信号路径：无损/有损”或“信号路径”，不只靠颜色。
 - 数据源与服务端两行的编码名用短名表：`ape` → `APE`，`wavpack`/`wavpack_hybrid` → `WavPack`，`aiff` → `AIFF`，其他取值写成大写（`FLAC`、`ALAC`、`PCM`……）。
-- 点圆点打开 `ModalDialog`（`closeOnBackdrop`），宽屏在圆点上方，窄屏从底部弹出。标题写整体质量（同上），四层各一个图标、名称与一行取值，没有任何解释句：
+- 点圆点打开 `ModalDialog`（`closeOnBackdrop`），宽屏在圆点上方，窄屏从底部弹出。标题写整体质量（同上），各层一个图标、名称与一行取值，没有任何解释句；响度一层只在有分析结果时出现：
 
 | 层 | 取值 |
 | --- | --- |
 | 数据源 | 无损“编码 采样率 位深 声道”（如 `FLAC 44.1kHz 16bit 2ch`），有损“编码 码率 采样率 声道”；缺的项省略，全缺写“未知格式” |
+| 响度 | 当前曲目分析结果（`useTrackAnalysis`，与波形共用缓存）里的积分响度、响度范围、真峰值，以“ · ”连接，如 `−14.2 LUFS · 范围 6.3 LU · 峰值 −0.8 dBTP`；一位小数，负号用 `−`；缺的项省略。分析不是 `done` 或三项全缺时整行不出现；采样峰值不显示 |
 | 服务端 | `原文件直出`；派生写“源编码短名 → FLAC”（`ALAC → FLAC`、`APE → FLAC`、`WavPack → FLAC`、`AIFF → FLAC`）；格式表还没取到写“读取中”（不替派生曲目说“原文件直出”） |
 | 浏览器 | `解码`，以“ · ”接上：接入 Web Audio 且均衡生效时 `音量均衡 +2.1 dB`（实际施加的增益，一位小数，总带正负号，0 写 `0.0 dB`，响度未知写 `−5.0 dB`）；渐变开着且已接入时 `交叉渐变 5 秒` |
 | 系统输出 | `系统默认输出` |

@@ -167,3 +167,24 @@ describe("曲目分析 API decoder", () => {
     }
   });
 });
+
+
+describe("曲目分析响度范围与采样峰值 decoder", () => {
+  const done = sampleBody("tracks/analysis-done");
+
+  it.each([
+    [6.3, -1.2],
+    [0, 0],
+    [null, null],
+  ] as const)("保留响度范围 %s 与采样峰值 %s", (loudnessRangeLu, samplePeakDbfs) => {
+    const input = withValue(withValue(done, ["analysis", "loudness_range_lu"], loudnessRangeLu), ["analysis", "sample_peak_dbfs"], samplePeakDbfs);
+    expect(decodeTrackAnalysis(input).analysis).toMatchObject({ loudnessRangeLu, samplePeakDbfs });
+  });
+
+  it.each(["loudness_range_lu", "sample_peak_dbfs"] as const)("%s 必须存在，且不接受字符串或布尔值", (field) => {
+    expect(() => decodeTrackAnalysis(without(done, ["analysis", field]))).toThrow(d.DecodeError);
+    for (const value of ["6.3", false]) {
+      expect(() => decodeTrackAnalysis(withValue(done, ["analysis", field], value))).toThrow(d.DecodeError);
+    }
+  });
+});

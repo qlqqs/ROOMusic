@@ -136,7 +136,9 @@ const rawTrackAnalysisDecoder = d.object({
   analysis: d.nullable(d.object({
     // 近乎静音或全静音时这几项为 null：响度未知，均衡按 −5 dB 处理；首尾点退回媒体时长。
     integrated_lufs: d.nullable(d.number({ min: -200, max: 50 })),
+    loudness_range_lu: d.nullable(d.number({ min: 0, max: 200 })),
     true_peak_dbtp: d.nullable(d.number({ min: -200, max: 50 })),
+    sample_peak_dbfs: d.nullable(d.number({ min: -200, max: 50 })),
     track_gain_db: d.nullable(d.number({ min: -100, max: 100 })),
     duration_ms: d.integer({ min: 0, max: MAX_DURATION_MS }),
     leading_silence_ms: d.nullable(d.integer({ min: 0, max: MAX_DURATION_MS })),
@@ -150,6 +152,11 @@ export type TrackAnalysisDTO = {
   trackId: string;
   status: "done" | "pending" | "failed";
   analysis: {
+    integratedLufs: number | null;
+    /** 旧版本分析没有响度范围与采样峰值，重算前是 null。 */
+    loudnessRangeLu: number | null;
+    truePeakDbtp: number | null;
+    samplePeakDbfs: number | null;
     trackGainDb: number | null;
     durationMs: number;
     leadingSilenceMs: number | null;
@@ -181,7 +188,10 @@ export const decodeTrackAnalysis = d.defineDecoder((input, path): TrackAnalysisD
   if (analysis !== null) {
     const peaks = decodeBase64(analysis.waveform.peaks, `${path}.analysis.waveform.peaks`);
     if (peaks.length !== analysis.waveform.points) throw new d.DecodeError(`${path}.analysis.waveform.peaks`, "峰值个数与 points 不符");
-    decoded = { trackGainDb: analysis.track_gain_db, durationMs: analysis.duration_ms, leadingSilenceMs: analysis.leading_silence_ms, trailingSilenceMs: analysis.trailing_silence_ms, peaks };
+    decoded = {
+      integratedLufs: analysis.integrated_lufs, loudnessRangeLu: analysis.loudness_range_lu, truePeakDbtp: analysis.true_peak_dbtp, samplePeakDbfs: analysis.sample_peak_dbfs,
+      trackGainDb: analysis.track_gain_db, durationMs: analysis.duration_ms, leadingSilenceMs: analysis.leading_silence_ms, trailingSilenceMs: analysis.trailing_silence_ms, peaks,
+    };
   }
   return { trackId: result.track_id, status: result.status, analysis: decoded, album: result.album === null ? null : { releaseId: result.album.release_id, gainDb: result.album.gain_db } };
 });

@@ -14,7 +14,7 @@ M5 增加按曲目汇总的历史页、播放全部候选与按曲目移除。�
 ## 2. 签名
 
 - 表 `play_history`、索引 `play_history_user_track_idx`（迁移 `0016_play_history.sql`），列与约束见第 3 节。
-- `catalog.Store.LoadTrackDuration(ctx, trackID) (float64, error)`：present 曲目的扫描时长，未知（NULL、≤ 0、NaN、无穷）为 0；
+- `catalog.Store.LoadTrackDuration(ctx, trackID) (float64, error)`：present 曲目经 `track_display_durations` 校正后的显示时长，未知（NULL、≤ 0、NaN、无穷）为 0；
   曲目不存在或不是 `present` 为 `catalog.ErrTrackNotFound`。
 - `catalog.Store.LoadTrackPlacements(ctx, trackIDs) (map[string]TrackPlacement, error)`：每首 present 曲目的标题、组 ID 与所在发行的摘要
   （与发行列表同一个投影，含封面）；不是 UUID 的输入被跳过，键是小写 UUID，去重后最多 1,000 个，超出为错误；缺失与不存在的曲目没有条目。
@@ -47,8 +47,8 @@ M5 增加按曲目汇总的历史页、播放全部候选与按曲目移除。�
 
 不存 IP、User-Agent、设备或会话信息。没有自动过期，只有本人可以清除或按曲目移除。M5 不改变表、计次规则与迁移 0016；不保存播放时的发行/组快照。
 
-**门槛** `T = min(D / 2, 240 秒)`，`D` 是扫描得到的曲目时长（`tracks.duration_seconds`，前端是 `PlayerTrack.durationSeconds`）：
-前后端用同一个 `D` 与同一个公式。`D` 未知（不是正的有限数）时 `T = 240`。服务端：`played_seconds` 必须是 `(0, 86400]` 内的有限数；
+**门槛** `T = min(D / 2, 240 秒)`，`D` 是校正后的显示时长（服务端经 `LoadTrackDuration` 读 `track_display_durations`，前端是同一批目录接口给出的 `PlayerTrack.durationSeconds`）：
+前后端用同一个 `D` 与同一个公式。校正规则只在[分析时长视图](./audio-analysis-contracts.md#显示时长视图0034)定义，CUE 用片段时长；不把浏览器 `audio.duration` 当作上报门槛来源。`D` 未知（不是正的有限数）时 `T = 240`。服务端：`played_seconds` 必须是 `(0, 86400]` 内的有限数；
 `D` 已知时再要求 `played_seconds ≥ T − 1`（1 秒容差吸收浮点与事件粒度），否则 `400 play_too_short`；`D` 未知时没有可依据的门槛，只校验数值范围。
 服务端无法证明用户真的听了，它保证的是规则一致与数值合理；客户端可以伪造自己的记录，影响只限于自己的历史，P 不防这一点、不设速率限制。
 

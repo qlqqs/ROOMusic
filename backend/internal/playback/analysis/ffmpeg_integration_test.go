@@ -42,6 +42,9 @@ func TestFFmpegAnalysisMeasuresLoudnessSilenceAndCUEInterval(t *testing.T) {
 	if result.IntegratedLUFS == nil || math.Abs(*result.IntegratedLUFS-(-21.1)) > .5 {
 		t.Fatalf("integrated loudness = %v LUFS, want -21.1 ± 0.5", result.IntegratedLUFS)
 	}
+	if result.LoudnessRangeLU == nil || result.SamplePeakDBFS == nil {
+		t.Fatalf("分析缺少响度范围或采样峰值：%+v", result)
+	}
 	if result.LeadingSilenceMS == nil || abs32(*result.LeadingSilenceMS-1000) > 20 {
 		t.Fatalf("leading silence = %v ms, want approximately 1000", result.LeadingSilenceMS)
 	}
@@ -54,6 +57,9 @@ func TestFFmpegAnalysisMeasuresLoudnessSilenceAndCUEInterval(t *testing.T) {
 	_ = file.Close()
 	if err != nil {
 		t.Fatalf("analyze CUE interval: %v", err)
+	}
+	if cueResult.LoudnessRangeLU == nil || cueResult.SamplePeakDBFS == nil {
+		t.Fatalf("CUE 分析缺少响度范围或采样峰值：%+v", cueResult)
 	}
 	if cueResult.DurationMS == nil || abs32(*cueResult.DurationMS-1000) > 20 {
 		t.Fatalf("CUE duration = %v ms, want approximately 1000", cueResult.DurationMS)
@@ -99,8 +105,8 @@ func TestFFmpegAnalysisDetectsWavPackAndAIFFInputs(t *testing.T) {
 			if result.DurationMS == nil || abs32(*result.DurationMS-3000) > 20 {
 				t.Fatalf("duration = %v, want approximately 3000 ms", result.DurationMS)
 			}
-			if result.IntegratedLUFS == nil || math.IsNaN(*result.IntegratedLUFS) || math.IsInf(*result.IntegratedLUFS, 0) || result.TruePeakDBTP == nil || len(result.Waveform) == 0 {
-				t.Fatalf("analysis lacks loudness, peak or waveform: %+v", result)
+			if result.IntegratedLUFS == nil || math.IsNaN(*result.IntegratedLUFS) || math.IsInf(*result.IntegratedLUFS, 0) || result.TruePeakDBTP == nil || result.LoudnessRangeLU == nil || result.SamplePeakDBFS == nil || len(result.Waveform) == 0 {
+				t.Fatalf("分析缺少积分响度、响度范围、峰值或波形：%+v", result)
 			}
 		})
 	}
