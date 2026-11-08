@@ -13,6 +13,7 @@ import {
   decodeScan,
   decodeScanPage,
   decodeScanReport,
+  decodeScanSchedule,
   type AnalysisProgressDTO,
   type DiagnosticsPageDTO,
   type FolderListingDTO,
@@ -25,6 +26,7 @@ import {
   type ScanMode,
   type ScanPageDTO,
   type ScanReportDTO,
+  type ScanScheduleDTO,
 } from "./decoders";
 
 export function fetchRoots(signal?: AbortSignal): Promise<ApiResponse<{ items: RootDTO[] }>> {
@@ -134,6 +136,16 @@ export function fetchScanDiagnostics(scanId: string, signal?: AbortSignal): Prom
 export function fetchScanReport(scanId: string, page: number, pageSize: number, signal?: AbortSignal): Promise<ApiResponse<ScanReportDTO>> {
   const query = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
   return apiRequest({ method: "GET", path: `/api/v1/scans/${scanId}/report?${query}`, signal }, decodeScanReport);
+}
+
+/** 每天自动扫描的设置（管理员）。 */
+export function fetchScanSchedule(signal?: AbortSignal): Promise<ApiResponse<ScanScheduleDTO>> {
+  return apiRequest({ method: "GET", path: "/api/v1/scan-schedule", signal }, decodeScanSchedule);
+}
+
+/** 保存每天自动扫描的设置：整份替换，重复保存同样的值是安全的，不需要幂等键；响应是保存后的设置。 */
+export function saveScanSchedule(schedule: ScanScheduleDTO): Promise<ApiResponse<ScanScheduleDTO>> {
+  return apiRequest({ method: "PUT", path: "/api/v1/scan-schedule", body: { enabled: schedule.enabled, hour: schedule.hour } }, decodeScanSchedule);
 }
 
 /** 后台音频分析的进度（所有登录用户）。 */

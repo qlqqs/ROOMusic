@@ -32,7 +32,8 @@
     "scan_run_id": "00000000-0000-4000-8000-000000000001",
     "skipped_files": null,
     "started_at": "2026-01-01T00:00:00Z",
-    "status": "running"
+    "status": "running",
+    "trigger": "manual"
   },
   "status": 200
 }

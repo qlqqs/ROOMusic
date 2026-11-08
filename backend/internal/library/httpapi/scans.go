@@ -48,7 +48,7 @@ func (handlers *Handlers) startScan(responseWriter http.ResponseWriter, request 
 
 // decodeStartScanOptions 允许无请求体；非空时只接受单个 mode 字段，拒绝重复键和尾随 JSON。
 func decodeStartScanOptions(w http.ResponseWriter, r *http.Request) (library.StartOptions, error) {
-	options := library.StartOptions{Mode: library.ScanModeIncremental}
+	options := library.StartOptions{Mode: library.ScanModeIncremental, Trigger: library.ScanTriggerManual}
 	if r.Body == nil || r.Body == http.NoBody {
 		return options, nil
 	}

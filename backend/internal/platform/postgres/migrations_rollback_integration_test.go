@@ -14,6 +14,8 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	39: `UPDATE scan_runs SET trigger_kind='scheduled' WHERE id='f2000000-0000-4000-8000-000000000001';
+ UPDATE scan_schedule SET enabled=FALSE,hour=5 WHERE id=1;`,
 	38: `INSERT INTO library_parse_cache(root_id,relative_path,directory,source_size,source_modified_at,parser_version,observation,seen_scan_id)
  VALUES('f1000000-0000-4000-8000-000000000001','album/01.flac','album',128,NOW(),'c1.f1','{}','f2000000-0000-4000-8000-000000000001');
  INSERT INTO scan_candidate_states(root_id,candidate_key,release_id,signature)
@@ -111,7 +113,7 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
  INSERT INTO releases(id,group_id,title,artist) VALUES('c0000000-0000-4000-8000-000000000001',
  'c1000000-0000-4000-8000-000000000001','迁移测试发行','测试艺人');`)
 			}
-			if m.Version == 34 || m.Version == 35 || m.Version == 38 {
+			if m.Version == 34 || m.Version == 35 || m.Version == 38 || m.Version == 39 {
 				// 升级前保留旧类型收据；回退只能移除新类型，不能误删原目录、扫描或操作记录。
 				rollbackExec(t, db, `INSERT INTO users(id,username,password_hash,role)
  VALUES('f0000000-0000-4000-8000-000000000001','rollback-filter-admin','test-only','admin');
@@ -131,6 +133,17 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			}
 			if fixture != "" {
 				rollbackExec(t, db, fixture)
+			}
+			if m.Version == 39 {
+				var trigger string
+				var enabled bool
+				var hour int
+				if err := db.QueryRow(`SELECT trigger_kind FROM scan_runs WHERE id='f2000000-0000-4000-8000-000000000001'`).Scan(&trigger); err != nil || trigger != "scheduled" {
+					t.Fatalf("0039 定时扫描夹具：trigger=%q err=%v", trigger, err)
+				}
+				if err := db.QueryRow(`SELECT enabled,hour FROM scan_schedule WHERE id=1`).Scan(&enabled, &hour); err != nil || enabled || hour != 5 {
+					t.Fatalf("0039 设置夹具：enabled=%v hour=%d err=%v", enabled, hour, err)
+				}
 			}
 			if m.Version == 38 {
 				var mode string

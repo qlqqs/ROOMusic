@@ -26,6 +26,7 @@ const scan = {
   scan_run_id: "00000000-0000-4000-8000-000000000002",
   status: "succeeded",
   mode: "incremental",
+  trigger: "manual",
   started_at: "2026-11-08T00:00:00Z",
   finished_at: "2026-11-08T00:01:00Z",
   cancel_requested_at: null,

@@ -18,9 +18,11 @@ var (
 	ErrScanNotFound = errors.New("scan not found")
 	// ErrInvalidScanMode 表示扫描模式不受支持。
 	ErrInvalidScanMode = errors.New("invalid scan mode")
+	// ErrInvalidScanTrigger 表示扫描发起方不受支持。
+	ErrInvalidScanTrigger = errors.New("invalid scan trigger")
 	// ErrCoordinationUnavailable 表示无法取得或确认扫描互斥，因此没有创建扫描。
 	ErrCoordinationUnavailable = errors.New("scan coordination unavailable")
-	// ErrStartFailed 表示已取得扫描互斥，但创建扫描记录失败。
+	// ErrStartFailed 表示已取得扫描互斥，但定时时段查询或创建扫描记录失败。
 	ErrStartFailed = errors.New("scan start failed")
 	// ErrDiagnosticsUnavailable 表示无法读取扫描的诊断汇总。
 	ErrDiagnosticsUnavailable = errors.New("scan diagnostics unavailable")
@@ -90,6 +92,7 @@ type Scan struct {
 	ScanRunID         string             `json:"scan_run_id"`
 	Status            string             `json:"status"`
 	Mode              string             `json:"mode"`
+	Trigger           string             `json:"trigger"`
 	StartedAt         time.Time          `json:"started_at"`
 	FinishedAt        *time.Time         `json:"finished_at"`
 	CancelRequestedAt *time.Time         `json:"cancel_requested_at"`
@@ -122,7 +125,7 @@ func scanRow(row interface{ Scan(...any) error }) (Scan, error) {
 	var finishedAt, cancelRequestedAt sql.NullTime
 	var skippedFiles sql.NullInt64
 	var feedback feedbackRow
-	destinations := append([]any{&result.ID, &result.Status, &result.Mode, &result.StartedAt, &finishedAt, &cancelRequestedAt, &skippedFiles}, feedback.destinations()...)
+	destinations := append([]any{&result.ID, &result.Status, &result.Mode, &result.Trigger, &result.StartedAt, &finishedAt, &cancelRequestedAt, &skippedFiles}, feedback.destinations()...)
 	err := row.Scan(destinations...)
 	result.ScanRunID = result.ID
 	if finishedAt.Valid {
@@ -141,7 +144,7 @@ func scanRow(row interface{ Scan(...any) error }) (Scan, error) {
 	return result, err
 }
 
-const scanSelectColumns = "id::text,status,scan_mode,started_at,finished_at,cancel_requested_at,skipped_files" + scanFeedbackColumns
+const scanSelectColumns = "id::text,status,scan_mode,trigger_kind,started_at,finished_at,cancel_requested_at,skipped_files" + scanFeedbackColumns
 
 // GetScan 读取一次扫描及其诊断汇总；不存在时返回 ErrScanNotFound。
 func (service *Service) GetScan(ctx context.Context, id string) (Scan, error) {
@@ -319,16 +322,20 @@ func safeDiagnosticMessage(kind, _ string) string {
 }
 
 const (
-	ScanModeIncremental = "incremental"
-	ScanModeFull        = "full"
+	ScanModeIncremental  = "incremental"
+	ScanModeFull         = "full"
+	ScanTriggerManual    = "manual"
+	ScanTriggerScheduled = "scheduled"
 )
 
-// StartOptions 选择扫描模式；省略选项时按增量扫描处理。
+// StartOptions 选择扫描模式与发起方；省略选项时按手动增量扫描处理，空发起方默认为手动。
 type StartOptions struct {
-	Mode string
+	Mode          string
+	Trigger       string
+	scheduledSlot time.Time
 }
 
-// StartResult 是 StartScan 的结果：Started 为 true 表示新建了扫描；false 表示已有扫描在运行。
+// StartResult 是 StartScan 的结果：Started 为 true 表示新建了扫描；false 表示已有扫描在运行或定时时段已扫描。
 type StartResult struct {
 	Scan    Scan
 	Started bool
@@ -336,17 +343,26 @@ type StartResult struct {
 
 // StartScan 启动一次扫描；已有扫描在运行（本进程或其他进程）时返回该扫描而不新建。
 // 整个调用持有 scanMutex，所以同一进程内的并发启动请求只会创建一个扫描。
-// 错误带 ErrCoordinationUnavailable（无法协调）或 ErrStartFailed（创建记录失败）；其余为读取扫描状态失败。
+// 参数无效返回对应校验错误；协调失败带 ErrCoordinationUnavailable，锁内查询或创建记录失败带 ErrStartFailed。
 func (service *Service) StartScan(ctx context.Context, options ...StartOptions) (StartResult, error) {
 	mode := ScanModeIncremental
+	trigger := ScanTriggerManual
+	var scheduledSlot time.Time
 	if len(options) > 1 {
 		return StartResult{}, ErrInvalidScanMode
 	}
 	if len(options) == 1 {
 		mode = options[0].Mode
+		scheduledSlot = options[0].scheduledSlot
+		if options[0].Trigger != "" {
+			trigger = options[0].Trigger
+		}
 	}
 	if mode != ScanModeIncremental && mode != ScanModeFull {
 		return StartResult{}, ErrInvalidScanMode
+	}
+	if trigger != ScanTriggerManual && trigger != ScanTriggerScheduled {
+		return StartResult{}, ErrInvalidScanTrigger
 	}
 	service.scanMutex.Lock()
 	defer service.scanMutex.Unlock()
@@ -368,6 +384,21 @@ func (service *Service) StartScan(ctx context.Context, options ...StartOptions) 
 		}
 		return StartResult{}, fmt.Errorf("%w: %v", ErrCoordinationUnavailable, queryErr)
 	}
+	// 取得锁后再次检查，关闭调度快照到获取锁之间其他实例已完成扫描的窗口。
+	if trigger == ScanTriggerScheduled && !scheduledSlot.IsZero() {
+		scan, queryErr := scanRow(execution.connection.QueryRowContext(ctx,
+			"SELECT "+scanSelectColumns+" FROM scan_runs WHERE started_at >= $1 ORDER BY started_at DESC,id DESC LIMIT 1", scheduledSlot))
+		if !errors.Is(queryErr, sql.ErrNoRows) {
+			if queryErr == nil {
+				scan.Diagnostics, queryErr = loadScanDiagnosticsSummary(ctx, execution.connection, scan.ID)
+			}
+			_ = execution.close(context.Background())
+			if queryErr != nil {
+				return StartResult{}, fmt.Errorf("%w: %v", ErrStartFailed, queryErr)
+			}
+			return StartResult{Scan: scan}, nil
+		}
+	}
 	transaction, err := execution.connection.BeginTx(ctx, nil)
 	if err != nil {
 		_ = execution.close(context.Background())
@@ -380,7 +411,7 @@ func (service *Service) StartScan(ctx context.Context, options ...StartOptions) 
 		return StartResult{}, fmt.Errorf("%w: %v", ErrStartFailed, err)
 	}
 	scanID := uuid.New()
-	if _, err := transaction.ExecContext(ctx, `INSERT INTO scan_runs(id,status,started_at,feedback_version,phase,progress_bp,phase_completed,phase_total,progress_updated_at,progress_seq,files_counted,files_processed,count_complete,files_changed,roots_total,report_state,skipped_files,scan_mode) VALUES($1::uuid,'running',NOW(),1,'counting',0,0,0,NOW(),0,0,0,false,false,0,'pending',0,$2)`, scanID, mode); err != nil {
+	if _, err := transaction.ExecContext(ctx, `INSERT INTO scan_runs(id,status,started_at,feedback_version,phase,progress_bp,phase_completed,phase_total,progress_updated_at,progress_seq,files_counted,files_processed,count_complete,files_changed,roots_total,report_state,skipped_files,scan_mode,trigger_kind) VALUES($1::uuid,'running',NOW(),1,'counting',0,0,0,NOW(),0,0,0,false,false,0,'pending',0,$2,$3)`, scanID, mode, trigger); err != nil {
 		_ = transaction.Rollback()
 		_ = execution.close(context.Background())
 		return StartResult{}, fmt.Errorf("%w: %v", ErrStartFailed, err)

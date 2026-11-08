@@ -16,7 +16,8 @@
         "scan_run_id": "00000000-0000-4000-8000-000000000001",
         "skipped_files": null,
         "started_at": "2026-01-01T00:00:07Z",
-        "status": "running"
+        "status": "running",
+        "trigger": "manual"
       },
       {
         "cancel_requested_at": null,
@@ -51,7 +52,8 @@
         "scan_run_id": "00000000-0000-4000-8000-000000000002",
         "skipped_files": 0,
         "started_at": "2026-01-01T00:00:05Z",
-        "status": "succeeded"
+        "status": "succeeded",
+        "trigger": "manual"
       },
       {
         "cancel_requested_at": null,
@@ -95,7 +97,8 @@
         "scan_run_id": "00000000-0000-4000-8000-000000000003",
         "skipped_files": 1,
         "started_at": "2026-01-01T00:00:02Z",
-        "status": "incomplete"
+        "status": "incomplete",
+        "trigger": "manual"
       },
       {
         "cancel_requested_at": null,
@@ -129,7 +132,8 @@
         "scan_run_id": "00000000-0000-4000-8000-000000000005",
         "skipped_files": null,
         "started_at": "2026-01-01T00:00:00Z",
-        "status": "failed"
+        "status": "failed",
+        "trigger": "manual"
       }
     ],
     "pagination": {

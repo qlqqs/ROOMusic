@@ -94,6 +94,7 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	samples.record("auth/me-admin", call(http.MethodGet, "/api/v1/auth/me", nil, admin), http.StatusOK)
 
 	// 空库状态：没有扫描、没有发行组、没有目录。
+	samples.record("scan-schedule/get", call(http.MethodGet, "/api/v1/scan-schedule", nil, admin), http.StatusOK)
 	samples.record("scans/active-none", call(http.MethodGet, "/api/v1/scans/active", nil, admin), http.StatusOK)
 	samples.record("scans/list-empty", call(http.MethodGet, "/api/v1/scans", nil, admin), http.StatusOK)
 	samples.record("errors/invalid-pagination", call(http.MethodGet, "/api/v1/scans?page=0", nil, admin), http.StatusBadRequest)
@@ -606,8 +607,7 @@ func recordAlbumDetailSamples(t *testing.T, application *integrationTestApplicat
 		}
 		return releaseID, groupID
 	}
-	// 既有的单曲专辑：大多数字段为空，前面直接写库给它绑定了一张封面。重新扫描时没有对应的来源文件，封面关联会被清掉，
-	// 所以在下面的扫描之前记录。
+	// 既有的单曲专辑：大多数字段为空，封面由夹具直接写库绑定；专辑没变时，增量重扫不会改动这张封面。
 	singleID, singleGroup := releaseIDByTitle("Sample Preludes")
 	samples.record("releases/get-single", call(http.MethodGet, "/api/v1/releases/"+singleID, nil, admin), http.StatusOK)
 

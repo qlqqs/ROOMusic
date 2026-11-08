@@ -39,6 +39,8 @@ func (handlers *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/library-roots/{id}/restore", handlers.restoreRoot)
 	mux.HandleFunc("POST /api/v1/library-roots/{id}/relocate", handlers.relocateRoot)
 	mux.HandleFunc("GET /api/v1/library-root-operations", handlers.rootOperations)
+	mux.HandleFunc("GET /api/v1/scan-schedule", handlers.loadScanSchedule)
+	mux.HandleFunc("PUT /api/v1/scan-schedule", handlers.saveScanSchedule)
 	mux.HandleFunc("GET /api/v1/scans", handlers.listScans)
 	mux.HandleFunc("POST /api/v1/scans", handlers.startScan)
 	mux.HandleFunc("GET /api/v1/scans/active", handlers.activeScan)

@@ -146,6 +146,29 @@ test.describe("扫描记录", () => {
 });
 
 test.describe("扫描", () => {
+  test("每天自动扫描：显示开关，改整点后保存整份设置", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "curator" });
+    mock.seedScan({ trigger: "scheduled", status: "succeeded", finished_at: "2026-01-02T00:01:00Z" });
+    await page.goto("/settings/library");
+    await expect(page.getByRole("switch", { name: "每天自动扫描" })).toBeChecked();
+    const hour = page.getByRole("combobox", { name: "自动扫描时间" });
+    await hour.selectOption("6");
+    await expect.poll(() => mock.callsTo("PUT", "/api/v1/scan-schedule").map((call) => call.body)).toEqual([{ enabled: true, hour: 6 }]);
+    await expect(hour).toHaveValue("6");
+
+    if (process.env["ROOMUSIC_S11_SCREENSHOTS"] === "1") {
+      for (const width of [1440, 375]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await page.evaluate(() => document.fonts.ready);
+        const scan = page.getByRole("region", { name: "扫描", exact: true });
+        await scan.screenshot({ path: `/tmp/roomusic-s11-shots/scan-section-${width}.png` });
+        const history = page.getByRole("region", { name: "扫描记录", exact: true });
+        await expect(history.getByText("自动", { exact: true })).toBeVisible();
+        await history.screenshot({ path: `/tmp/roomusic-s11-shots/scan-history-${width}.png` });
+      }
+    }
+  });
+
   test("开始扫描 → 详情页轮询 → 终态后停止（成功）", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
     await page.clock.install();

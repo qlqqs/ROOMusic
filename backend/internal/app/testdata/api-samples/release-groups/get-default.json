@@ -31,7 +31,12 @@
         "album_artist_refs": [],
         "artist": "Sample Pianist",
         "artist_refs": [],
-        "artwork": null,
+        "artwork": {
+          "height": 480,
+          "mime": "image/webp",
+          "resource_id": "sample-cover.webp",
+          "width": 640
+        },
         "attention_count": 0,
         "id": "00000000-0000-4000-8000-000000000003",
         "media_type": null,

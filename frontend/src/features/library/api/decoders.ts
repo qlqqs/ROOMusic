@@ -11,6 +11,10 @@ export type ScanStatus = (typeof scanStatuses)[number];
 export const scanModes = ["incremental", "full"] as const;
 export type ScanMode = (typeof scanModes)[number];
 
+/** 扫描的发起方：manual 是管理员手动开始（含改目录路径后的扫描），scheduled 是每天的自动扫描。 */
+export const scanTriggers = ["manual", "scheduled"] as const;
+export type ScanTrigger = (typeof scanTriggers)[number];
+
 export const rootOperationKinds = ["create", "disable", "restore", "exclude", "unexclude", "relocate"] as const;
 export const rootOperationStatuses = ["succeeded", "failed"] as const;
 
@@ -170,12 +174,13 @@ export type ScanReportStatus = (typeof scanReportStatuses)[number];
 // progress、root_progress 与 report_status 是后来加的字段：旧服务没有它们，按“缺失 = 没有进度与报告”处理，不伪造进度。
 // 本功能上线前的扫描 progress 与 root_progress 为 null、report_status 为 legacy。
 // skipped_files 是这次扫描跳过的文件数（读不了的文件、文件夹与 CUE 各计 1），之前的扫描为 null。
-// mode 必有：增量扫描上线前的扫描为 incremental。
+// mode 必有：增量扫描上线前的扫描为 incremental。trigger 必有：定时扫描上线前的扫描为 manual。
 const scanDecoder = d.object({
   id: d.uuid(),
   scan_run_id: d.uuid(),
   status: d.oneOf(scanStatuses),
   mode: d.oneOf(scanModes),
+  trigger: d.oneOf(scanTriggers),
   started_at: d.timestamp(),
   finished_at: d.nullable(d.timestamp()),
   cancel_requested_at: d.nullable(d.timestamp()),
@@ -305,3 +310,11 @@ const analysisProgressDecoder = d.object({
 });
 export const decodeAnalysisProgress = d.defineDecoder(analysisProgressDecoder);
 export type AnalysisProgressDTO = d.Infer<typeof analysisProgressDecoder>;
+
+// 每天自动扫描的设置（管理员）：hour 是整点（0–23），时区由服务器配置决定，界面不显示。
+const scanScheduleDecoder = d.object({
+  enabled: d.boolean(),
+  hour: d.integer({ min: 0, max: 23 }),
+});
+export const decodeScanSchedule = d.defineDecoder(scanScheduleDecoder);
+export type ScanScheduleDTO = d.Infer<typeof scanScheduleDecoder>;
