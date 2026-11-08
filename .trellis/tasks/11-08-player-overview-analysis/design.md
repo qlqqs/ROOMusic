@@ -105,7 +105,7 @@ ffmpeg -nostdin -hide_banner -nostats -loglevel info -threads 1 -protocol_whitel
 for 生命周期未结束:
     if 扫描在运行: state = waiting_for_scan; 等 30 秒; continue
     batch = catalog.ListAnalysisCandidates(version, 20)
-    if batch 为空: state = idle; 等 5 分钟; continue      # 新扫描的曲目最迟 5 分钟后开始
+    if batch 为空: state = idle; 等 1 分钟; continue      # 新扫描的曲目最迟 1 分钟后开始
     state = running
     for c in batch:
         if 生命周期结束: return

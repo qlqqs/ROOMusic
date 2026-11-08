@@ -47,8 +47,8 @@
 
 ### 联调与收尾
 
-- [ ] **J1 真实后端联调**（一次）：B2、F3 都合入分支后，`scripts/playback-e2e.sh`（`ROOMUSIC_TEST_COMPOSE_PROJECT=roomusic-test-poa`，flock）跑更新后的 `frontend/e2e/real/playback.real.ts`：全屏打开、信号路径 `ALAC → FLAC`、全屏歌词点行定位；另确认后台分析在测试资料库上跑完、波形出现、均衡增益写进信号路径。
-- [ ] **J2 截图审阅**（A10）：临时 Playwright spec（不提交）用 mock 后端截 1440 与 375：全屏播放器（播放 / 暂停、歌词）、队列抽屉、信号路径弹层、播放设置、概览（管理员、成员、空库）。主会话先自审（文字行数、元素位置、横向溢出、多余说明），有问题打回修复并补回归断言；截图附在结果里给用户看。
+- [x] **J1 真实后端联调**（一次）：B2、F3 都合入分支后，`scripts/playback-e2e.sh`（`ROOMUSIC_TEST_COMPOSE_PROJECT=roomusic-test-poa`，flock）跑更新后的 `frontend/e2e/real/playback.real.ts`：全屏打开、信号路径 `ALAC → FLAC`、全屏歌词点行定位；另确认后台分析在测试资料库上跑完、波形出现、均衡增益写进信号路径。
+- [x] **J2 截图审阅**（A10）：临时 Playwright spec（不提交）用 mock 后端截 1440 与 375：全屏播放器（播放 / 暂停、歌词）、队列抽屉、信号路径弹层、播放设置、概览（管理员、成员、空库）。主会话先自审（文字行数、元素位置、横向溢出、多余说明），有问题打回修复并补回归断言；截图附在结果里给用户看。
 - [x] **J3 规范更新**（Phase 3.3）：`player-design-guidelines.md`、`playback-and-personal-state.md`、`frontend/DESIGN.md` 第 4 节、`frontend/DESIGN-components.md` 第 6、7 节，新增 `.trellis/spec/backend/audio-analysis-contracts.md` 并登记到后端索引。
 - [ ] **J4 合并回 `main`**：等 `main` 上的并行任务状态明确后合并（`--no-ff`）。冲突处理：`backend/cmd/roomusic/web` 不手工解，合并后 `npm run build` 重建再提交；迁移号若被占用，本分支重编号（文件名、embed 列表与迁移版本测试一起改）。合并后在 `main` 上只跑受冲突影响部分的测试。
 - [ ] **J5 归档**：PRD 写实施结果与 A1–A10 证据 → `task.py archive 11-08-player-overview-analysis --skip-branch-validation` → 链接修正与 journal 同一提交。

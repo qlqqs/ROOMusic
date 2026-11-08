@@ -18,7 +18,7 @@ import (
 
 const (
 	analysisBatchSize = 20
-	analysisIdleDelay = 5 * time.Minute
+	analysisIdleDelay = time.Minute
 	analysisScanDelay = 30 * time.Second
 	analysisDBDelay   = time.Minute
 )

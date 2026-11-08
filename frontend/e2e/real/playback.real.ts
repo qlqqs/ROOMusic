@@ -2,7 +2,8 @@ import { appendFile, copyFile, mkdir, rm, utimes } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { decode as d } from "../../src/shared/api";
-import { decodeTrackLyrics, decodeTrackPlayback, decodeTrackPreparing } from "../../src/features/player/api/decoders";
+import { decodeTrackAnalysis, decodeTrackLyrics, decodeTrackPlayback, decodeTrackPreparing } from "../../src/features/player/api/decoders";
+import { decodeAnalysisProgress } from "../../src/features/library/api/decoders";
 import { admin, body, catalog, clearPlayHistory, decodeError, decodeID, decodeRoot, decodeSetup, findTrack, fixtureRoot, login, mediaState, observeMedia, origin, playsPath, playTrack, post, recentReleases, scan, type Albums } from "./support";
 
 let albums: Albums;
@@ -46,6 +47,47 @@ for (const source of ["flac-16-44100.flac", "flac-24-48000.flac", "mp3-44100.mp3
     expect(await page.evaluate((id) => window.playbackTestEvents.filter((event) => event.src.includes(id) && event.type === "error"), item.track.id)).toEqual([]);
   });
 }
+
+test("真实分析完成后播放波形与均衡增益和分析 API 一致", async ({ page }) => {
+  test.setTimeout(210_000);
+  let finalProgress: ReturnType<typeof decodeAnalysisProgress> | undefined;
+  await expect.poll(async () => {
+    finalProgress = decodeAnalysisProgress(await body(await page.request.get("/api/v1/audio-analysis/progress")));
+    return finalProgress.analyzed + finalProgress.failed === finalProgress.total;
+  }, { timeout: 180_000, intervals: [1_000, 2_000, 3_000] }).toBe(true);
+  console.info("J1 audio analysis progress:", JSON.stringify(finalProgress));
+
+  const candidates = ["flac-16-44100.flac", "flac-24-48000.flac", "wav-16-44100.wav", "mp3-44100.mp3", "aac-44100.m4a", "vorbis-44100.ogg", "opus-48000.opus"];
+  let selected: ReturnType<typeof findTrack> | undefined;
+  let selectedAnalysis: ReturnType<typeof decodeTrackAnalysis> | undefined;
+  for (const source of candidates) {
+    const candidate = findTrack(albums, source);
+    const response = await page.request.get(`/api/v1/tracks/${candidate.track.id}/analysis`);
+    const analysis = decodeTrackAnalysis(await body(response));
+    if (analysis.status === "done") {
+      selected = candidate;
+      selectedAnalysis = analysis;
+      break;
+    }
+  }
+  expect(selected, "至少有一首可播放曲目分析完成").toBeDefined();
+  expect(selectedAnalysis).toBeDefined();
+  if (selected === undefined || selectedAnalysis === undefined) throw new Error("没有已分析的可播放曲目");
+
+  await playTrack(page, selected);
+  const bar = page.getByRole("region", { name: "播放器", exact: true });
+  await expect(bar.locator("canvas")).toBeVisible();
+  await bar.getByRole("button", { name: "暂停", exact: true }).click();
+  await bar.getByRole("button", { name: /^信号路径/ }).click();
+  const signal = page.getByRole("dialog", { name: /^信号路径/ });
+  const tracks = selected.release.media.flatMap((medium) => medium.tracks);
+  const selectedIndex = tracks.findIndex((track) => track.id === selected.track.id);
+  // 专辑页的“从这首开始播放”将当前曲目之后的可播曲目一并入队，因此仅后继相邻曲目能建立自动均衡的专辑上下文。
+  const hasAlbumContext = selectedIndex >= 0 && selectedIndex < tracks.length - 1;
+  const gain = hasAlbumContext ? selectedAnalysis.album?.gainDb ?? selectedAnalysis.analysis?.trackGainDb : selectedAnalysis.analysis?.trackGainDb;
+  const expectedGain = gain === null || gain === undefined ? "−5.0" : gain === 0 ? "0.0" : `${gain > 0 ? "+" : "−"}${Math.abs(gain).toFixed(1)}`;
+  await expect(signal.getByRole("listitem").nth(2)).toContainText(`音量均衡 ${expectedGain} dB`);
+});
 
 test("FLAC 真实 seek，自然切到下一首；切页不断播，刷新暂停恢复位置", async ({ page }) => {
   const first = findTrack(albums, "flac-16-44100.flac");
@@ -126,6 +168,7 @@ test("ALAC 音频请求不会启动转换：转换前 409，预检完成后才�
 });
 
 for (const source of ["alac-16-44100.m4a", "alac-24-48000.m4a"]) {
+  const sourceLine = source === "alac-16-44100.m4a" ? "数据源ALAC 44.1kHz 16bit 2ch" : "数据源ALAC 48kHz 24bit 2ch";
   test(`${source} 经服务端无损转换：Chromium 真实解码 FLAC，真实拖动，自然结束，信号路径写明无损转换`, async ({ page }) => {
     const item = findTrack(albums, source);
     const preflights: { status: number; kind: string }[] = [];
@@ -148,17 +191,21 @@ for (const source of ["alac-16-44100.m4a", "alac-24-48000.m4a"]) {
       expect(response.type).toBe("audio/flac");
       expect(response.etag).toMatch(/^"[0-9a-f]{32}"$/);
     }
-    // 信号路径的服务端一栏：无损转换，不再是原文件直出（趁这首还是当前曲目：自然结束后队列会前进到别的格式）。
+    // 暂停避免短素材在弹层打开前结束并切歌。
+    const playerBar = page.getByRole("region", { name: "播放器", exact: true });
+    await playerBar.getByRole("button", { name: "暂停", exact: true }).click();
+    // 信号路径的服务端一栏：无损转换，不再是原文件直出。
     await page.getByRole("button", { name: "打开全屏播放器", exact: true }).click();
     const full = page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "收起全屏播放器", exact: true }) });
     await full.getByRole("button", { name: "信号路径：无损", exact: true }).click();
     const signal = page.getByRole("dialog", { name: "信号路径：无损", exact: true });
-    await expect(signal.getByRole("listitem")).toHaveText(["数据源ALAC 44.1kHz 16bit 2ch", "服务端ALAC → FLAC", "浏览器解码", "系统输出系统默认输出"]);
+    await expect(signal.getByRole("listitem")).toHaveText([sourceLine, "服务端ALAC → FLAC", /浏览器解码(?: · 音量均衡 [−+0-9.]+ dB)?/, "系统输出系统默认输出"]);
     for (const removedText of ["ALAC 转成 FLAC，位深、采样率与声道不变。", "原样发送，不转码。", "由浏览器解码，可能按输出设备重新采样。", "网页看不到声卡的实际格式。"]) await expect(signal).not.toContainText(removedText);
+    await page.keyboard.press("Escape");
+    await expect(signal).not.toBeVisible();
+    await expect(full).toBeVisible();
     // 真实鼠标拖动原生 slider：暂停后拖到中间，媒体在派生文件上真实 seek。播放栏在每个页面都有，限定在它里面避免与全屏控件重名。
-    const bar = page.getByRole("region", { name: "播放器", exact: true });
-    await bar.getByRole("button", { name: "暂停", exact: true }).click();
-    const seek = bar.getByRole("slider", { name: "播放进度", exact: true });
+    const seek = full.getByRole("slider", { name: "播放进度", exact: true });
     await expect(seek).toBeEnabled();
     const bounds = await seek.boundingBox();
     if (!bounds) throw new Error("播放进度没有可操作区域");
@@ -167,7 +214,7 @@ for (const source of ["alac-16-44100.m4a", "alac-24-48000.m4a"]) {
     await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2, { steps: 6 });
     await page.mouse.up();
     await expect.poll(() => page.evaluate((id) => window.playbackTestEvents.some((event) => event.type === "seeked" && event.src.includes(id) && event.time > 0.2), item.track.id)).toBe(true);
-    await bar.getByRole("button", { name: "播放", exact: true }).click();
+    await full.getByRole("button", { name: "播放", exact: true }).click();
     await expect.poll(() => page.evaluate((id) => window.playbackTestEvents.some((event) => event.type === "ended" && event.src.includes(id)), item.track.id)).toBe(true);
     expect(await page.evaluate((id) => window.playbackTestEvents.filter((event) => event.src.includes(id) && event.type === "error"), item.track.id)).toEqual([]);
   });
@@ -246,7 +293,7 @@ for (const source of ["flac-16-44100.flac", "alac-16-44100.m4a"]) {
       record();
       new MutationObserver(record).observe(region, { subtree: true, childList: true, attributes: true, attributeFilter: ["aria-current"] });
     });
-    await bar.getByRole("button", { name: "播放", exact: true }).click();
+    await full.getByRole("button", { name: "播放", exact: true }).click();
     await expect.poll(() => page.evaluate(() => Reflect.get(window, "lyricsCurrentSeen") as string[]), { timeout: 10_000 }).toEqual(["Fixture line two夹具第二行", "Fixture line three"]);
   });
 }
@@ -457,6 +504,9 @@ test("合成源文件扫描后改动：预检拒绝且界面提示需要重新�
   await page.goto(`/albums/${item.groupId}`);
   const row = page.locator("ol > li").filter({ has: page.getByText(item.track.title, { exact: true }) });
   await row.getByRole("button", { name: "从这首开始播放", exact: true }).click();
-  await page.getByRole("button", { name: "打开全屏播放器", exact: true }).click();
-  await expect(page.getByText(/重新扫描/).first()).toBeVisible();
+  const bar = page.getByRole("region", { name: "播放器", exact: true });
+  const queueButton = bar.getByRole("button", { name: /^队列（\d+）$/ });
+  await queueButton.click();
+  const queue = page.getByRole("dialog", { name: /^队列（\d+）$/ });
+  await expect(queue.getByText("音频文件已变化，请重新扫描", { exact: true })).toBeVisible();
 });
