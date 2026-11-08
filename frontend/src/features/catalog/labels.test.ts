@@ -21,6 +21,7 @@ describe("词表标签", () => {
     ["处理方式", evidenceActionLabel, "uncertain_apply", "不确定，已暂时采用"],
     ["原因码", reasonCodeLabel, "inconsistent_candidates", "候选值互相不一致"],
     ["归组方式", candidateKindLabel, "box_leaf", "套装里的子目录"],
+    ["归组方式", candidateKindLabel, "format_split", "同一目录按格式分开"],
     ["音频编码", codecLabel, "alac", "ALAC"],
   ] as const;
 

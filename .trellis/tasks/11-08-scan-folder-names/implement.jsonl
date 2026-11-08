@@ -1,6 +1,6 @@
 {"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "碟目录、严格多碟、CUE scope 对齐、封面发现顺序与安全检查的现行合同，本项要改并同步"}
 {"file": ".trellis/spec/backend/personal-contracts.md", "reason": "专辑收藏表、收藏版本 revision 与锁序 CATP→本人 state，MoveAlbumFavorites 必须遵守"}
-{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移命名、≥31 必须带 down、迁移执行器约束，迁移 0034 用"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移命名、≥31 必须带 down、迁移执行器约束，迁移 0037 用"}
 {"file": ".trellis/spec/backend/catalog-rest-contracts.md", "reason": "发行详情 media/title 读取形状与可见性规则，确认介质标题变化不改接口"}
 {"file": ".trellis/spec/backend/default-version-contracts.md", "reason": "扫描不碰组行、组从不删除、默认版本不随落选 Release 搬移"}
 {"file": ".trellis/spec/backend/scan-feedback-contracts.md", "reason": "候选写入的锁顺序（既有发行升序锁→组共享锁），收藏转移事务不能破坏"}

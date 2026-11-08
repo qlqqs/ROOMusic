@@ -558,7 +558,7 @@ func SafeRelativeSourceRef(value string) (string, bool) {
 
 func normalizeCandidateKind(value string) string {
 	switch value {
-	case "ordinary_directory", "strict_multidisc", "box_leaf", "same_dir_split", "loose_album", "loose_unknown":
+	case "ordinary_directory", "strict_multidisc", "box_leaf", "same_dir_split", "format_split", "loose_album", "loose_unknown":
 		return value
 	default:
 		return legacyCandidateKind

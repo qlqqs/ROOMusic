@@ -233,7 +233,7 @@ func ReleaseGroupOf(ctx context.Context, database queryer, releaseID string) (st
 | 无任何标签，文件名 `1.flac`、`2.flac`、`10.flac` | 一张，顺序 1、10、2 | 一张，轨号来自文件名 1、2、10 |
 | 无任何标签，文件名 `a.flac`、`b10.flac`、`b2.flac` | 一张，`b10` 排在 `b2` 前 | 一张，轨号来自文件名（④ 末尾数字）：`b2` 2、`b10` 10，`a` 自然序补到 1 |
 | `Symphony No. 5.flac`、`Symphony No. 9.flac`，标签轨号 5、9 已有 | 照标签 | 照标签（标签优先） |
-| 无标签 `Symphony No. 5.flac`、`Symphony No. 5 (Live).flac` | 补位 1、2 | ④ 都取 5 → 同介质重复 → 文件名轨号作废，自然序补位 1、2 |
+| 无标签 `Symphony No. 5.flac`、`Symphony No. 5 (Live).flac` | 补位 1、2 | ④ 只认末尾独立数字：`Symphony No. 5` 取 5（`filename_fallback`），`(Live)` 结尾的不匹配，按自然序补最小空号 1（2026-11-08 实现验收改定：不为括号后缀扩展 ④） |
 
 ## 12. 兼容与已有数据
 

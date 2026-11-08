@@ -8,7 +8,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/catalog/textnorm"
 )
 
-const Version = 2
+const Version = 3
 
 var ErrVersion = errors.New("artist projection version mismatch")
 

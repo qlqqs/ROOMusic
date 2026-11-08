@@ -14,6 +14,7 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	37: "",
 	36: "",
 	35: `UPDATE library_roots SET path='/rollback-relocated',revision=2
  WHERE id='f1000000-0000-4000-8000-000000000001';

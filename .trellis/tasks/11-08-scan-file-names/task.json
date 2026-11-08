@@ -3,7 +3,7 @@
   "name": "scan-file-names",
   "title": "③ 文件名规则与同目录归组",
   "description": "文件名五级推断碟号轨号、自然序补位、轨号连续性与同目录按格式切分",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

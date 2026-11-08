@@ -72,6 +72,7 @@ export const candidateKindLabel = labeller({
   strict_multidisc: "多碟目录结构",
   box_leaf: "套装里的子目录",
   same_dir_split: "同一目录里拆分",
+  format_split: "同一目录按格式分开",
   loose_album: "散放的专辑",
   loose_unknown: "散放的未知文件",
 });

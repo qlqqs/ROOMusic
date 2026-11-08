@@ -66,6 +66,14 @@ PUT/DELETE 不需幂等键。READ COMMITTED 事务先确保本人 state，再锁
 
 两栏 `created_at DESC, UUID ASC`，同一只读 REPEATABLE READ 快照读 revision、total、关系、目录摘要；携带旧 revision 为 409 favorites_changed。空/越界页 200，保留 total。lookup 原数组最多10,000轨/1,000组，省略为 []、显式 null 拒绝；去重保留首次顺序，合法未知 ID 为 false；只读个人主键关系，不补目录摘要。
 
+### 扫描触发的专辑收藏转移
+
+- 应用端口：`func (s *Service) MoveAlbumFavorites(ctx context.Context, tx *sql.Tx, moves map[string]string) (int,error)`。映射为被腾空组 → 非空接收组，由 catalog/ingest 计算、library 传入；本方法只访问个人收藏表，不读 catalog 私表、不自行提交。返回转移或合并的来源收藏行数。
+- 调用方先持 CATP，本方法发现来源组收藏用户并按 user UUID 升序锁 `personal_favorite_state`，锁后用新语句读当前收藏，写入仅限已锁用户。普通专辑收藏切换仍只锁本人 state；并发取消后不凭旧快照增加 revision。
+- 插入目标关系保留 `created_at/saved_title/saved_artist`；用户已收藏目标时 `ON CONFLICT DO NOTHING`，保留目标原时间/名称，再删来源关系。多个来源合到同一目标时，按原收藏时间、来源 UUID 升序保留首份快照。实际删除来源关系的用户 revision 各加一（一次调用只加一次），无来源关系不增加；安全整数上限由既有约束保证，失败由调用方回滚。
+- 正确：旧组两份收藏合到已有目标只留目标一份，版本加一；基准：空映射/没有来源收藏返回 0；错误：转移失败留下部分关系或让扫描变 incomplete。library 回滚后仅 Warn，扫描结果不变；列表持旧 revision 翻页仍返回 `409 favorites_changed`。
+- 必需集成验证：转移/目标去重、保存时间与标题、多个用户隔离、每用户仅一次递增、无实际变更不递增及失败原子回滚。不要把逐映射调用当作一次批次，否则同一用户会反复加版本。
+
 ### 3.3 歌单
 
 | 方法和路径 | 请求 | 成功 |

@@ -20,7 +20,7 @@
 6. **介质标题写入**：`persist.go` 新建介质带 `title`，已有介质按需更新；没有标题写 `'Medium'`。
 7. **封面**：`library/scanner.go` 的 `discoverFolderArtworkWithReader` 改为四轮查找（design.md 第 6 节）；附属子目录名单放在 `ingest`（与 `ArtworkDirectories` 同处）或 scanner 的封面常量旁，二选一，跟随现有常量位置。
 8. **收藏转移**：
-   - 迁移 `backend/migrations/0034_scan_observation_previous_release.sql` 与 `.down.sql`；`internal/platform/postgres/migrations_rollback_integration_test.go` 的版本表补 34。**0034 是暂定号**：S 线 ①⑫④⑪ 的迁移也暂定从 0034 起，合入时由主会话按合入顺序重新编号（文件名、down 文件、回退测试版本表一起改）。
+   - 迁移 `backend/migrations/0037_scan_observation_previous_release.sql` 与 `.down.sql`；`internal/platform/postgres/migrations_rollback_integration_test.go` 的版本表补 37。合入 main 时已统一改为 0037（文件名、down 文件、回退测试版本表同步），保留 main 的 0034 文件过滤、0035 改路径和 0036 响度范围。
    - `staging.go`：`StageObservation` 冲突更新清空 `previous_release_id`。
    - `identity_plan.go`：`allocateReleases` 之后写 `previous_release_id`。
    - `catalog/ingest/group_moves.go`（新）：`EmptiedGroupMoves`。
@@ -28,9 +28,9 @@
    - `library`：`AlbumFavoriteMover`、`SetAlbumFavoriteMover`、`transferEmptiedAlbumFavorites`（在 `scanRoot` 的 `persistStagedCandidates` 之后调用；失败只记 Warn）。
    - `app/app.go`：取出 `personalService` 变量并注入。
 9. **合同同步**：
-   - `.trellis/spec/backend/library-scan-contracts.md`：碟目录识别与合成规则（含父目录独占条件）、专辑名碟号剥离与 `album_title` 来源、介质标题、封面四轮查找与附属子目录、碟父目录独占标记、收藏转移步骤与失败语义、迁移 0034；把第 3 节“parser 默认的 track/disc…Disc/CD/Disk 目录”一句与第 4 节“发行目录与曲目目录都有封面”一行同步。
+   - `.trellis/spec/backend/library-scan-contracts.md`：碟目录识别与合成规则（含父目录独占条件）、专辑名碟号剥离与 `album_title` 来源、介质标题、封面四轮查找与附属子目录、碟父目录独占标记、收藏转移步骤与失败语义、迁移 0037；把第 3 节“parser 默认的 track/disc…Disc/CD/Disk 目录”一句与第 4 节“发行目录与曲目目录都有封面”一行同步。
    - `.trellis/spec/backend/personal-contracts.md`：新增“扫描触发的专辑收藏转移”（`MoveAlbumFavorites` 签名、锁序 CATP → 收藏版本行、保留时间与保存标题、已收藏不重复、revision 加一）。
-   - `.trellis/spec/backend/database-guidelines.md`：迁移 0034 一条。
+   - `.trellis/spec/backend/database-guidelines.md`：迁移 0037 一条。
 
 ## 2. 前端
 
@@ -52,7 +52,7 @@ PostgreSQL 集成（隔离库，见第 4 节）：
 
 - `internal/library`：一个合成素材扫描用例覆盖“两个 `box_leaf` 合成一张 → 新建 Release、旧组收藏转到新组、已收藏新组的用户不重复、收藏 revision 加一”与“组内还有别的版本有曲目时不转移”；再扫一次不再转移。另一个用例覆盖 `MarkDiscParentScopes`（`A/CD1` + `A/Scans` 归父；`艺人/某精选 CD1` 旁边有 `艺人/另一张` 时锚在碟目录、封面不取 `艺人/`；`A/CD1/附录` 含音频时不独占）与介质标题写入、去掉碟名后恢复 `Medium`。
 - `internal/personal`：`MoveAlbumFavorites` 一个用例（转移、合并、保留 `created_at`/`saved_title`、只增受影响用户的 revision）。
-- `internal/platform/postgres`：迁移版本表补 34 后跑 `-run 'Migration'` 中与回退相关的用例。
+- `internal/platform/postgres`：迁移版本表补 37 后跑 `-run 'Migration'` 中与回退相关的用例。
 
 不新增：真实服务端到端用例、前端用例、性能测试。
 
@@ -86,7 +86,7 @@ go test -count=1 ./internal/app -run 'TestPackageDependencyDirections'
 | `catalog/ingest/discmarker.go` | 误识别专辑名 | 与步骤 2–3 同一提交 |
 | `catalog/ingest/staging.go`、`observation.go`、`library/scanner.go`（标记一行） | 标记放在 CUE 对齐之前会看到未定的 scope | 步骤 4 单独提交 |
 | `library/scanner.go`（封面） | 封面结果变化 | 步骤 7 单独提交 |
-| `personal/favorite_moves.go`、`library` 转移调用、迁移 0034 | 写用户数据 | 步骤 8 单独提交；回退代码即停止转移，down 迁移删暂存列 |
+| `personal/favorite_moves.go`、`library` 转移调用、迁移 0037 | 写用户数据 | 步骤 8 单独提交；回退代码即停止转移，down 迁移删暂存列 |
 
 建议提交顺序：1–3 → 4–6 → 7 → 8 → 9（合同可随各步提交）。
 
@@ -103,7 +103,7 @@ go test -count=1 ./internal/app -run 'TestPackageDependencyDirections'
   | `catalog/ingest/identity_plan.go` | 写 `previous_release_id` | S ④ |
   | `catalog/ingest/persist.go` | 介质标题、`ArtworkDirectories` 不变 | S ④（`EmbeddedArtwork`） |
   | `app/app.go` | 注入收藏转移 | S（⑪ 调度等） |
-  | `backend/migrations/` | 暂定 0034 | S ①⑫④⑪（同样暂定 0034 起） |
+  | `backend/migrations/` | 已改为 0037 | main 已占用 0034–0036 |
   | `personal/` | 新文件 `favorite_moves.go` | 无 |
 
 - [ ] 迁移已按合入顺序重新编号，回退测试版本表同步。
