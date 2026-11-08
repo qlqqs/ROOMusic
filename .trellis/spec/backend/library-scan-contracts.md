@@ -91,8 +91,9 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
   organizer 再仅在同一 candidate 和明确父子关系内消除虚拟/物理重复。不得仅按 sheet
   所在目录、标题或时长模糊去重。扫描前使用解析 symlink 后的 `Stat` 验证媒体节点为
   regular file，FIFO、设备和逃逸链接不得传给 parser。
-- parser 默认的 track/disc `1` 必须带 inferred 标记；organizer 只对缺失或 inferred
-  位置应用 Disc/CD/Disk 目录与稳定路径 fallback，显式标签永远优先。CUE sheet 与
+- parser 默认的 track/disc `1` 必须带 inferred 标记；非合成候选的碟号依次取标签、CUE、`album_title`、
+  `folder_structure`、默认 1；合成多碟的介质位置一律按目录，显式标签原证据不覆盖。轨号仍只对缺失或 inferred
+  位置应用稳定路径补位。CUE sheet 与
   track PERFORMER 的 provenance 分别为 `cue_sheet` 和 `cue_track`，构造每条虚拟 Track
   时复制 `InferredFields`/`FieldSources` map。
 - Track artist 与 composer/conductor/performer/producer 使用同一组保守拆分规则：明确的
@@ -123,12 +124,33 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
     `sheet.cue#track-N@parent#index-M` 用 `filepath.Dir` 推出。严格多碟专辑的发行目录是各碟的父目录，所以顺序是
     `A` → `A/CD1` → `A/CD2`；Box 叶子只查自己的目录，不查 Box 父目录；CUE 的发行目录是 sheet 目录，不查跨目录的音频目录。
     查找不会越出发行自己的目录，避免把盒装或公共目录里的封面绑给每张专辑。
-  - 每个目录读一次（`os.ReadDir`），文件名不区分大小写：名字表与优先级不变（`cover.{jpg,jpeg,png,webp}`、`folder.{jpg,jpeg,png}`、
-    `front.{jpg,jpeg,png}`），大小写不同的同名文件里全小写的优先，其余按字节序。
+  - 查找分四轮，前一轮命中即返回：①原目录精确名单；②原目录中基名包含 `front` 的图片；③附属子目录精确名单；④附属子目录中基名包含 `front` 的图片。
+    原目录顺序不变；每目录只读一次。精确名单仍为 `cover.{jpg,jpeg,png,webp}`、`folder.{jpg,jpeg,png}`、`front.{jpg,jpeg,png}`，
+    不区分大小写，同名变体全小写优先，其余字节序。包含规则只认 `jpg/jpeg/png/webp`，按文件名字节序。
+    附属目录仅限直接子目录 `scans/artwork/art/covers`（不区分大小写），按原目录顺序、子目录名字节序，不递归、不跟随目录符号链接，不含 `extras` 或中文名。
   - 每个命名文件仍要通过安全检查：不是符号链接、是普通文件、大小 1 字节到 16 MiB、读取成功、`artwork.SniffMIME` 识别格式。
     无效的命名文件记下第一个错误后继续找；全部目录找完仍没有可用封面时才返回该错误（`artwork_failure`）。
     目录不存在不算错误，其他读目录错误按同样方式记录。
   - 没有迁移：重扫会对每个候选重新发现封面，下一次扫描即绑定或移除。
+
+### 碟号、独占合成与介质标题
+
+- `ingest.parseDiscMarker(name) (discMarker,bool)` 输出 `Number/Prefix/Suffix/AtStart`：从左向右取首个有效 `disc/disk/cd`（忽略大小写），支持括号、`CD(1)`、`of N`/`/N`；非 ASCII 单词边界，编号限 1–99，认整数、英文 one–twenty、规范罗马数字。无效编号继续向右找；纯数字目录、中文碟号、`[CD]`、`{…, CD}`、`BACD-0001` 不认。
+- Prefix/Suffix 去空白、分隔符与落单括号，保留配对括号。`stripAlbumDiscMarker` 在标记开头时取 Suffix，否则取 Prefix（截断尾部）；结果空则不剥。只改 `albumPartition` 和 Release 标题比较值，不改 observation 的原始 album。物理观察缺少权威碟号时补剥出的编号，来源 `album_title`，仍 inferred；不改 parser。
+- 碟目录仍进 `disc-parent:<父>` scope。顺序必须是 `AlignCueStagingScopes` → `MarkDiscParentScopes(ctx,db,scanID,rootID)` → `PlanStagedRoot` → 保存。标记把 `disc_parent_exclusive:true` 写入 JSON（`SourceObservation.DiscParentExclusive`）：非空父目录整棵子树没有其它 scope 的音频观察才独占，包含父目录直接音频和碟目录更深层音频；只有图片不影响。比较路径用 `left`，不用需转义的 LIKE。失败记 `staging_write_failure`，根不完整。
+- 不独占或父为注册根时，仅 Prefix/Suffix 均空的目录走原严格多碟：≥2 个不同编号、每号一个目录、1..max 连续、兼容权威 partition ≤1。其它各自 `box_leaf`，不查父目录封面；仅一个碟目录且无权威 album 时可用 Prefix 兜底（`disc_dir_prefix_fallback_v1`）。
+- 独占时，权威 partition 冲突或非附加碟 Prefix（小写、压空白）不止一种，全部 `box_leaf`。附加碟按 Prefix/Suffix 中 Bonus/Extra/Special 或特典等判定；全是附加碟则全部当正碟。正碟重号时仅在无 Suffix 的正碟非空且无重号时把其它碟改作附加碟，否则不合成。
+- 合成条件：正碟 1..max 连续且 max≥2，或一个正碟加附加碟，或整个父目录只有一碟；缺号时要求每个碟目录至少一条权威 album 且 partition 唯一。正碟保留目录号；附加碟按规范化 Suffix（空则 Prefix）、编号、路径排序，从正碟最大号后顺排。
+- 合成候选仍为 `strict_multidisc`，Scope 为父目录，Partition 为空；无权威 album 时用唯一 Prefix 或父目录名兜底（`multidisc_parent_fallback_v1`）。字段证据仍取首个物理碟目录，不取父目录；独占合成、严格多碟和 `box_leaf` 的碟目录证据统一只解析 `parseDiscMarker` 的 Prefix，Prefix 为空不产生目录证据，非碟目录不变。`OrganizedCandidate.MediumTitles map[int]string`：标题取 Suffix，附加碟空时取 Prefix；去包裹整名的括号；`PersistCandidate` 新增或更新 `media.title`，无碟名恢复 `Medium`。REST 形状不变，候选键仍 `v2`、归组证据仍 `organizer_v2`。
+
+- 归组版本：当前尚无 `GroupingVersion`，不新增常量；④ 先合入时由整合会话提升归组版本，②③一起只加一次，并确保候选签名覆盖四轮封面范围；parser 版本不变。
+
+### 根保存后的专辑收藏转移
+
+- 暂定迁移 `0034_scan_observation_previous_release.sql` 增加暂存列 `previous_release_id UUID`，无外键/索引，down 删除列；合入重编号并同步回退测试表。`StageObservation` 冲突更新清空该列，身份规划在 `allocateReleases` 后按沿用曲目保存原发行。
+- 本根保存后、已规划且未取消时用原连接开短事务：`ingest.LockProjectionWrites`（CATP）→ `ingest.EmptiedGroupMoves(ctx,db,scanID,rootID)` → 注入的 `AlbumFavoriteMover` → 提交；nil mover 不执行，空映射直接提交。
+- 按实际移动计算：原组所有发行均无任何曲目（包括 missing）才转移；按原组汇总各接收 Release 的移入数，最多者胜，平局按接收发行 created_at、ID 升序。仅转专辑收藏，不搬修正/认领/默认/歌单/历史，不删旧组/发行。
+- `SetAlbumFavoriteMover` 由 app 注入 `personalService.MoveAlbumFavorites`；收藏去重、保留时间与名称、revision 规则见[个人合同](./personal-contracts.md)。失败回滚转移事务，只记 Warn `library.scan.favorite_transfer_failed`（仅扫描 ID），不影响扫描完整性或已保存候选。写完根后、转移前取消不补偿，下次扫描也不会重放已经消失的移动证据。
 
 ## 4. 校验与错误矩阵
 
@@ -152,7 +174,7 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 | 前一个目录里的命名封面无效，后一个目录里有可用封面 | 用后一个目录的封面，不报错 |
 | 查找目录不存在 | 跳过该目录，不报错 |
 | 读查找目录失败（非“不存在”，如权限） | 记为错误并继续找下一个目录；全部找完仍没有可用封面才 `artwork_failure` |
-| 发行目录与曲目目录都有封面（如严格多碟的父目录与 `CD1/`） | 先找到的发行目录（父目录）胜出 |
+| 发行目录与曲目目录都有封面 | 先按四轮优先级，再按目录顺序；两者均命中精确名单时发行目录胜出，曲目目录精确名优先于发行目录附属子目录封面 |
 | 候选带内嵌封面，目录里也有文件夹封面 | 内嵌封面，`source_type=embedded` |
 | 文件名只是大小写不同（`Cover.JPG`、`FOLDER.png`） | 与全小写名同样被发现；优先级不受大小写影响 |
 | content-addressed 受管文件与其 hash 内容不符 | 写临时文件并原子替换，随后才确认数据库关系 |
@@ -260,3 +282,15 @@ if decision.Source == "folder" {
 ## M5 ④搜索投影挂接
 
 扫描候选及修正/清除/撤销/claim 双方在同事务刷新目标代次搜索投影；CATP 先于业务行锁，失败回滚，后台持锁重读避免覆盖新值。扫描不写治理表，missing 可见性读取实时过滤。详见[搜索合同](./search-contracts.md)。
+
+## ② 文件夹名规则验证
+
+- 解析单元：覆盖数字、英文数词、规范罗马数字、括号与总碟数、首个无效标记后继续查找；纯数字、中文碟号、介质标签与唱片编号不得误认。专辑名从非开头标记处截断，剥空不改，观察原文不丢失。
+- 归组单元：独占/不独占、父为注册根、单碟归父、Prefix 冲突、标签冲突、无标签连续多碟、缺号仅全目录有标签可合、附加碟及重复编号；断言候选种类/锚点、碟号/碟名、标题兜底及非合成候选的标签→CUE→专辑名→目录优先级。
+- 封面单元：原目录精确名单必须优先于原目录 front 和附属子目录；附属目录大小写、名字字节序、拒绝符号链接；坏图后仍可用其它目录的有效封面，全部失败才报第一个错误。
+- 隔离 PostgreSQL：CUE 对齐后独占标记看到最终 scope，父目录直接音频、旁边专辑和碟目录内更深层音频均阻止独占；保存/去掉碟名后介质标题恢复 `Medium`。
+- 收藏集成：两个旧叶子合成新发行后曲目 UUID 保持，旧组腾空才转移；其它版本仍有曲目（含 missing）时不转；按接收发行计数，平局按创建时间/ID。覆盖目标已收藏、多来源合流、保留时间/保存名称、仅受影响用户 revision 加一、重复扫描不再转移、回调失败仅 Warn 且事务回滚。
+- 正确：独占 `A/CD1` 锚在 `A`，旁边另有专辑时锚回碟目录；`CD1/CD2/CD1 (Live)` 的介质为 1、2、3，第三碟名为 `Live`。
+- 错误：未对齐 CUE 就算独占，或按旧 Release 而非旧组是否腾空来转收藏；正确：最终 scope 判断独占、整组无任何曲目才转移。
+
+以上是必需断言，不表示已执行；本项实现会话不新增测试，数据库验证由专门测试会话执行。

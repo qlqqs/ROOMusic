@@ -1,6 +1,7 @@
 package library
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -203,5 +204,132 @@ func TestDiscoverCandidateRipLogEvidenceRequiresExplicitSignatureAndSkipsSymlink
 	references, diagnostics := discoverCandidateRipLogEvidence(registeredRoot{ID: "root", Path: rootPath}, candidate)
 	if !reflect.DeepEqual(references, []string{"Album/eac.LOG", "Album/xld.log"}) || len(diagnostics) != 0 {
 		t.Fatalf("unexpected rip-log evidence: refs=%v diagnostics=%v", references, diagnostics)
+	}
+}
+
+func TestFolderArtworkFourRoundDecisionTable(t *testing.T) {
+	cases := []struct {
+		name      string
+		files     []string
+		invalid   string
+		want      string
+		forbidden []string
+	}{
+		{
+			name:  "original exact cover precedes subsidiary exact cover",
+			files: []string{"A/cover.jpg", "A/Scans/front.jpg"}, want: "A/cover.jpg",
+			forbidden: []string{"A/Scans/front.jpg"},
+		},
+		{
+			name:  "track directory exact cover precedes album subsidiary",
+			files: []string{"A/CD1/folder.png", "A/Scans/cover.jpg"}, want: "A/CD1/folder.png",
+			forbidden: []string{"A/Scans/cover.jpg"},
+		},
+		{name: "original front substring", files: []string{"A/00-front.jpg"}, want: "A/00-front.jpg"},
+		{name: "subsidiary case insensitive exact name", files: []string{"A/Scans/Cover.JPG"}, want: "A/Scans/Cover.JPG"},
+		{
+			name:  "subsidiary front substring byte order",
+			files: []string{"A/Artwork/Inlay - Front.png", "A/Artwork/Box - Front.png"}, want: "A/Artwork/Box - Front.png",
+		},
+		{name: "back image is not a cover", files: []string{"A/Scans/back.jpg"}},
+		{
+			name:  "invalid subsidiary cover does not hide later usable cover",
+			files: []string{"A/Scans/front.jpg", "A/CD1/Scans/cover.jpg"}, invalid: "A/Scans/front.jpg", want: "A/CD1/Scans/cover.jpg",
+		},
+		{
+			name:  "original front round precedes subsidiary exact round",
+			files: []string{"A/00-front.jpg", "A/Scans/cover.jpg"}, want: "A/00-front.jpg",
+			forbidden: []string{"A/Scans/cover.jpg"},
+		},
+		{
+			name:  "later subsidiary exact round precedes earlier subsidiary front round",
+			files: []string{"A/Artwork/00-front.png", "A/Scans/cover.jpg"}, want: "A/Scans/cover.jpg",
+			forbidden: []string{"A/Artwork/00-front.png"},
+		},
+		{
+			name:  "original front matches use byte order",
+			files: []string{"A/Inlay - Front.png", "A/Box - Front.png"}, want: "A/Box - Front.png",
+		},
+		{
+			name:  "subsidiaries use original directory order before child name order",
+			files: []string{"A/Scans/cover.jpg", "A/CD1/Artwork/cover.jpg"}, want: "A/Scans/cover.jpg",
+		},
+		{
+			name:  "subsidiary names use byte order",
+			files: []string{"A/Scans/cover.jpg", "A/Artwork/cover.jpg"}, want: "A/Artwork/cover.jpg",
+		},
+		{name: "nested subsidiaries are not searched", files: []string{"A/Scans/Artwork/front.jpg"}},
+		{name: "unlisted subsidiary is not searched", files: []string{"A/extras/front.jpg", "A/封面/front.jpg"}},
+		{name: "front substring requires supported extension", files: []string{"A/00-front.gif", "A/Scans/front.txt"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			var wantData []byte
+			for i, name := range tc.files {
+				// 每张合成图片带不同尾字节，避免只比较 MIME 而漏掉选错文件。
+				data := append(append([]byte(nil), minimalPNGArtwork()...), byte(i))
+				if name == tc.invalid {
+					data = []byte("not an image")
+				}
+				writeArtworkFile(t, filepath.Join(root, filepath.FromSlash(filepath.Dir(name))), filepath.Base(name), data)
+				if name == tc.want {
+					wantData = data
+				}
+			}
+			data, mimeType, err := discoverFolderArtworkWithReader(root, []string{"A", "A/CD1"}, func(path string) ([]byte, error) {
+				relative, err := filepath.Rel(root, path)
+				if err != nil {
+					return nil, err
+				}
+				for _, forbidden := range tc.forbidden {
+					if filepath.ToSlash(relative) == forbidden {
+						t.Errorf("read lower-priority cover %q after an earlier round could satisfy the request", forbidden)
+					}
+				}
+				return os.ReadFile(path)
+			})
+			if err != nil {
+				t.Fatalf("discover folder artwork: %v", err)
+			}
+			if !bytes.Equal(data, wantData) {
+				t.Fatalf("selected data=%x, want cover %q data=%x", data, tc.want, wantData)
+			}
+			wantMIME := ""
+			if tc.want != "" {
+				wantMIME = "image/png"
+			}
+			if mimeType != wantMIME {
+				t.Errorf("MIME=%q, want %q", mimeType, wantMIME)
+			}
+		})
+	}
+}
+
+func TestFolderArtworkRecognizesAllSubsidiaryNames(t *testing.T) {
+	for _, directory := range []string{"sCaNs", "ArTwOrK", "ART", "CoVeRs"} {
+		t.Run(directory, func(t *testing.T) {
+			root := t.TempDir()
+			writeArtworkFile(t, filepath.Join(root, "A", directory), "Cover (Front).png", minimalPNGArtwork())
+			data, mimeType, err := discoverFolderArtwork(root, []string{"A"})
+			if err != nil || !bytes.Equal(data, minimalPNGArtwork()) || mimeType != "image/png" {
+				t.Fatalf("subsidiary %q cover: data=%x MIME=%q err=%v", directory, data, mimeType, err)
+			}
+		})
+	}
+}
+
+func TestFolderArtworkSkipsSubsidiarySymlink(t *testing.T) {
+	root, outside := t.TempDir(), t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "A"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeArtworkFile(t, outside, "front.jpg", minimalJPEGArtwork())
+	if err := os.Symlink(outside, filepath.Join(root, "A", "Scans")); err != nil {
+		t.Fatal(err)
+	}
+	data, mimeType, err := discoverFolderArtwork(root, []string{"A"})
+	if err != nil || len(data) != 0 || mimeType != "" {
+		t.Fatalf("symlink subsidiary was searched: data=%x MIME=%q err=%v", data, mimeType, err)
 	}
 }

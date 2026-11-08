@@ -500,6 +500,13 @@ func (service *Service) scanRoot(ctx context.Context, executor scanExecutor, sca
 				captureProcessingError(diagnosticError)
 			}
 		}
+		if markErr := ingest.MarkDiscParentScopes(ctx, executor, scanID, root.ID); markErr != nil {
+			complete = false
+			captureProcessingError(markErr)
+			if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, "", "staging_write_failure", "无法标记碟父目录独占范围"); diagnosticError != nil {
+				captureProcessingError(diagnosticError)
+			}
+		}
 		// 先规划曲目身份（遍历已经结束，complete 即遍历证据是否完整）；规划失败时暂存行没有完整的规划，不能写入。
 		planned, planProblem := service.planRootIdentities(ctx, executor, scanID, root, complete)
 		if planProblem != nil {
@@ -535,6 +542,11 @@ func (service *Service) scanRoot(ctx context.Context, executor scanExecutor, sca
 				kind, message := candidatePersistenceDiagnostic(evidenceErr)
 				if diagnosticError := service.recordDiagnosticWith(ctx, executor, scanID, "", kind, message); diagnosticError != nil {
 					captureProcessingError(diagnosticError)
+				}
+			}
+			if ctx.Err() == nil {
+				if transferErr := service.transferEmptiedAlbumFavorites(ctx, executor, scanID, root.ID); transferErr != nil && service.logger != nil {
+					service.logger.Warn("扫描专辑收藏转移失败", "event", "library.scan.favorite_transfer_failed", "module", "library", "scan_run_id", scanID)
 				}
 			}
 		}
@@ -988,39 +1000,97 @@ func (service *Service) saveArtworkForRelease(ctx context.Context, executor scan
 // folderArtworkNames 是文件夹封面的文件名及优先顺序（小写）；实际文件名按小写后匹配。
 var folderArtworkNames = []string{"cover.jpg", "cover.jpeg", "cover.png", "cover.webp", "folder.jpg", "folder.jpeg", "folder.png", "front.jpg", "front.jpeg", "front.png"}
 
+// folderArtworkSubdirectoryNames 只匹配直接附属子目录，不递归、不跟随目录符号链接。
+var folderArtworkSubdirectoryNames = map[string]bool{"scans": true, "artwork": true, "art": true, "covers": true}
+
 func discoverFolderArtwork(rootPath string, directories []string) ([]byte, string, error) {
 	return discoverFolderArtworkWithReader(rootPath, directories, os.ReadFile)
 }
 
-// discoverFolderArtworkWithReader 按顺序在 directories（相对 rootPath，空串表示根）里找封面，第一个通过检查的文件
-// 即为结果。无效的命名封面（符号链接、非普通文件、超限、读取失败、格式不支持）记下第一个错误后继续找；
-// 全部找完仍没有结果时才返回该错误。目录不存在不算错误，其他读目录错误按同样方式记录。
+// discoverFolderArtworkWithReader 依次查原目录精确名、原目录 front、附属子目录精确名、附属子目录 front。
+// 每轮命中即返回；无效封面记下第一个错误，四轮全部找完仍没有可用封面才报错。
 func discoverFolderArtworkWithReader(rootPath string, directories []string, readFile func(string) ([]byte, error)) ([]byte, string, error) {
+	type artworkDirectory struct {
+		path    string
+		entries []os.DirEntry
+	}
 	var firstErr error
 	remember := func(err error) {
 		if firstErr == nil {
 			firstErr = err
 		}
 	}
-	for _, directory := range directories {
-		directoryPath := filepath.Join(rootPath, filepath.FromSlash(directory))
+	readDirectory := func(directoryPath string) (artworkDirectory, bool) {
 		entries, err := os.ReadDir(directoryPath)
-		if errors.Is(err, fs.ErrNotExist) {
-			continue
-		}
 		if err != nil {
-			remember(err)
+			if !errors.Is(err, fs.ErrNotExist) {
+				remember(err)
+			}
+			return artworkDirectory{}, false
+		}
+		return artworkDirectory{path: directoryPath, entries: entries}, true
+	}
+	search := func(directory artworkDirectory, exact bool) ([]byte, string) {
+		var names []string
+		if exact {
+			for _, name := range folderArtworkNames {
+				names = append(names, folderArtworkCandidates(directory.entries, name)...)
+			}
+		} else {
+			for _, entry := range directory.entries {
+				name := strings.ToLower(entry.Name())
+				ext := filepath.Ext(name)
+				if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".webp") && strings.Contains(strings.TrimSuffix(name, ext), "front") {
+					names = append(names, entry.Name())
+				}
+			}
+		}
+		for _, name := range names {
+			data, mimeType, err := readFolderArtworkFile(filepath.Join(directory.path, name), name, readFile)
+			if err != nil {
+				remember(err)
+				continue
+			}
+			return data, mimeType
+		}
+		return nil, ""
+	}
+	// 第一轮保持原目录与命名优先级；缓存目录项供第二轮和附属目录发现复用。
+	var originals []artworkDirectory
+	for _, directory := range directories {
+		loaded, ok := readDirectory(filepath.Join(rootPath, filepath.FromSlash(directory)))
+		if !ok {
 			continue
 		}
-		for _, name := range folderArtworkNames {
-			for _, entryName := range folderArtworkCandidates(entries, name) {
-				data, mimeType, err := readFolderArtworkFile(filepath.Join(directoryPath, entryName), name, readFile)
-				if err != nil {
-					remember(err)
-					continue
-				}
+		originals = append(originals, loaded)
+		if data, mimeType := search(loaded, true); len(data) > 0 {
+			return data, mimeType, nil
+		}
+	}
+	for _, directory := range originals {
+		if data, mimeType := search(directory, false); len(data) > 0 {
+			return data, mimeType, nil
+		}
+	}
+	var subsidiaries []artworkDirectory
+	for _, directory := range originals {
+		for _, entry := range directory.entries {
+			if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || !folderArtworkSubdirectoryNames[strings.ToLower(entry.Name())] {
+				continue
+			}
+			loaded, ok := readDirectory(filepath.Join(directory.path, entry.Name()))
+			if !ok {
+				continue
+			}
+			subsidiaries = append(subsidiaries, loaded)
+			if data, mimeType := search(loaded, true); len(data) > 0 {
 				return data, mimeType, nil
 			}
+		}
+	}
+	for _, directory := range subsidiaries {
+		if data, mimeType := search(directory, false); len(data) > 0 {
+			return data, mimeType, nil
 		}
 	}
 	return nil, "", firstErr

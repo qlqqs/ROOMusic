@@ -73,10 +73,16 @@ func PersistCandidateWithFeedback(ctx context.Context, database TxBeginner, scan
 	sort.Ints(discs)
 	for _, disc := range discs {
 		var mediumID string
+		title := candidate.MediumTitles[disc]
+		if title == "" {
+			title = "Medium"
+		}
 		err = tx.QueryRowContext(ctx, "SELECT id::text FROM media WHERE release_id=$1::uuid AND position=$2", releaseID, disc).Scan(&mediumID)
 		if errors.Is(err, sql.ErrNoRows) {
 			mediumID = uuid.New()
-			_, err = tx.ExecContext(ctx, "INSERT INTO media(id,release_id,position) VALUES($1::uuid,$2::uuid,$3)", mediumID, releaseID, disc)
+			_, err = tx.ExecContext(ctx, "INSERT INTO media(id,release_id,position,title) VALUES($1::uuid,$2::uuid,$3,$4)", mediumID, releaseID, disc, title)
+		} else if err == nil {
+			_, err = tx.ExecContext(ctx, "UPDATE media SET title=$1 WHERE id=$2::uuid AND title IS DISTINCT FROM $1", title, mediumID)
 		}
 		if err != nil {
 			return "", err

@@ -75,7 +75,7 @@ func StageObservation(ctx context.Context, database StagingDB, scanID, rootID st
 			source_identity=EXCLUDED.source_identity,fingerprint_path=EXCLUDED.fingerprint_path,source_size=EXCLUDED.source_size,
 			source_modified_at=EXCLUDED.source_modified_at,content_fingerprint=EXCLUDED.content_fingerprint,
 			cue_index_frames=EXCLUDED.cue_index_frames,cue_end_frames=EXCLUDED.cue_end_frames,
-			candidate_key=NULL,matched_track_id=NULL,planned_track_id=NULL,planned_release_id=NULL,content_changed=FALSE,withheld=FALSE,planned=FALSE,observed_at=NOW()`,
+			candidate_key=NULL,matched_track_id=NULL,planned_track_id=NULL,planned_release_id=NULL,previous_release_id=NULL,content_changed=FALSE,withheld=FALSE,planned=FALSE,observed_at=NOW()`,
 		scanID, rootID, scope, observation.RelativePath, payload,
 		SourceIdentityForObservation(rootID, observation), nullableString(fingerprintPath), size, modifiedAt,
 		nullableString(observation.ContentFingerprint), nullableCueFrame(observation.CueIndexFrames, observation.CueIndexPresent), nullableCueFrame(observation.CueEndFrames, observation.CueEndPresent))
@@ -190,5 +190,24 @@ func AlignCueStagingScopes(ctx context.Context, database Execer, scanID, rootID 
 		) cue
 		WHERE parent.scan_run_id=$1::uuid AND parent.root_id=$2::uuid
 		  AND parent.relative_path=cue.parent_path`, scanID, rootID)
+	return err
+}
+
+// MarkDiscParentScopes 标记父目录子树中没有其它音频 scope 的碟目录观察；必须在 CUE scope 对齐后调用。
+func MarkDiscParentScopes(ctx context.Context, database Execer, scanID, rootID string) error {
+	_, err := database.ExecContext(ctx, `WITH parents AS (
+		SELECT DISTINCT organization_scope AS scope, substring(organization_scope FROM 13) AS parent
+		FROM scan_observations
+		WHERE scan_run_id=$1::uuid AND root_id=$2::uuid AND organization_scope LIKE 'disc-parent:_%'
+	), exclusive AS (
+		SELECT p.scope FROM parents p
+		WHERE NOT EXISTS (
+			SELECT 1 FROM scan_observations x
+			WHERE x.scan_run_id=$1::uuid AND x.root_id=$2::uuid AND x.organization_scope<>p.scope
+			  AND left(x.relative_path, length(p.parent)+1)=p.parent || '/')
+	)
+	UPDATE scan_observations o SET observation=o.observation || '{"disc_parent_exclusive":true}'::jsonb
+	FROM exclusive e
+	WHERE o.scan_run_id=$1::uuid AND o.root_id=$2::uuid AND o.organization_scope=e.scope`, scanID, rootID)
 	return err
 }
