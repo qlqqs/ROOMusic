@@ -481,12 +481,14 @@ describe("导航与概览", () => {
   });
 
   it("概览的两个数字分别链接到全部专辑与只看需要关注的专辑", async () => {
-    setup({ groups: albumGroups(30, (index) => ({ attention_count: index <= 4 ? 1 : 0 })) });
+    const { api } = setup({ groups: albumGroups(30, (index) => ({ attention_count: index <= 4 ? 1 : 0 })) });
+    api.on("GET", "/api/v1/catalog/stats", () => jsonResponse(200, { albums: 30, tracks: 5, artists: 7, composers: 1 }));
     const { history } = renderApp({ path: "/" });
-    const summary = await screen.findByRole("region", { name: "资料库" });
-    const all = await within(summary).findByRole("link", { name: "30，查看全部专辑" });
-    const attention = within(summary).getByRole("link", { name: "4，查看需要关注的专辑" });
+    const stats = await screen.findByRole("region", { name: "资料库" });
+    const all = await within(stats).findByRole("link", { name: /专辑/ });
+    const attention = await within(await screen.findByRole("region", { name: "需要关注" })).findByRole("link", { name: "4 张专辑需要关注" });
     expect(all.getAttribute("href")).toBe("/albums");
+    expect(within(stats).getByText("5").closest("a")).toBeNull();
     expect(attention.getAttribute("href")).toBe("/albums?attention=required");
 
     await userEvent.click(attention);

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { decode as d } from "../../../shared/api";
 import { sampleBody } from "../../../test/api-samples";
 import { withValue, without } from "../../../test/mutate";
-import { decodeReleaseComparison, decodeReleaseDetail, decodeReleaseEvidence, decodeReleaseGroupDetail, decodeReleaseGroupPage } from "./decoders";
+import { decodeCatalogStats, decodeReleaseComparison, decodeReleaseDetail, decodeReleaseEvidence, decodeReleaseGroupDetail, decodeReleaseGroupPage } from "./decoders";
 
 describe("decodeReleaseGroupPage", () => {
   const page = sampleBody("release-groups/list-one-with-artwork");
@@ -388,5 +388,12 @@ describe("decodeReleaseEvidence", () => {
     ["分组缺少规则", without(evidence, ["grouping", "rule_id"])],
   ])("拒绝：%s", (_name, input) => {
     expect(() => decodeReleaseEvidence(input)).toThrow(d.DecodeError);
+  });
+});
+
+describe("decodeCatalogStats", () => {
+  it("解码统计与艺人目录整理中的统计样本", () => {
+    expect(decodeCatalogStats(sampleBody("catalog/stats"))).toEqual({ albums: 4, tracks: 5, artists: 7, composers: 1 });
+    expect(decodeCatalogStats(sampleBody("catalog/stats-artists-preparing"))).toEqual({ albums: 4, tracks: 5, artists: null, composers: null });
   });
 });

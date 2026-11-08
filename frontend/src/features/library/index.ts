@@ -1,4 +1,5 @@
-// library 的公开入口：概览用的扫描与目录区块，扫描目录页、扫描详情页的内容，以及扫描报告的缓存前缀（专辑写操作之后由 app 让它失效）。
+// library 的公开入口：概览用的扫描、音频分析与目录区块，扫描目录页、扫描详情页的内容，以及扫描报告的缓存前缀（专辑写操作之后由 app 让它失效）。
+export { AnalysisSummary } from "./components/analysis-summary";
 export { RootOperationsSection } from "./components/root-operations-section";
 export { RootSection } from "./components/root-section";
 export { RootSummary } from "./components/root-summary";

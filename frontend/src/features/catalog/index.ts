@@ -1,9 +1,10 @@
-// catalog 的公开入口：概览用的资料库区块、专辑列表与详情，路由校验用的搜索参数，以及其他功能需要的已发布合同
+// catalog 的公开入口：概览用的资料库统计与“需要关注”、专辑列表与详情，路由校验用的搜索参数，以及其他功能需要的已发布合同
 // （发行详情与摘要的 DTO 类型与解码器、曲目安全摘要的解码器与显示规则、艺人引用与艺人摘要（M5 ⑤）、可点的艺人名、目录状态（搜索与艺人数据的代次）、封面组件与地址、卡片网格的布局、专辑艺人的显示规则、证据字段与原因码的中文名、按需读取发行详情）。
 export { AlbumDetailView } from "./components/album-detail-view";
 export { AlbumListView } from "./components/album-list-view";
 export { Cover } from "./components/cover";
-export { LibrarySummary } from "./components/library-summary";
+export { AttentionSummary } from "./components/attention-summary";
+export { LibraryStats } from "./components/library-stats";
 export { RecentlyAddedPanel } from "./components/recently-added-panel";
 export { albumArtistOf, albumMeta, formatGenres } from "./format";
 export { evidenceFieldLabel, reasonCodeLabel } from "./labels";

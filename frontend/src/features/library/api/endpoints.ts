@@ -2,6 +2,7 @@ import type { ApiResponse } from "../../../shared/api";
 import { apiRequest } from "../../../shared/api";
 import {
   decodeActiveScan,
+  decodeAnalysisProgress,
   decodeDiagnosticsPage,
   decodeFolderListing,
   decodeRootChanged,
@@ -11,6 +12,7 @@ import {
   decodeScan,
   decodeScanPage,
   decodeScanReport,
+  type AnalysisProgressDTO,
   type DiagnosticsPageDTO,
   type FolderListingDTO,
   type RootChangedDTO,
@@ -98,4 +100,9 @@ export function fetchScanDiagnostics(scanId: string, signal?: AbortSignal): Prom
 export function fetchScanReport(scanId: string, page: number, pageSize: number, signal?: AbortSignal): Promise<ApiResponse<ScanReportDTO>> {
   const query = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
   return apiRequest({ method: "GET", path: `/api/v1/scans/${scanId}/report?${query}`, signal }, decodeScanReport);
+}
+
+/** 后台音频分析的进度（所有登录用户）。 */
+export function fetchAnalysisProgress(signal?: AbortSignal): Promise<ApiResponse<AnalysisProgressDTO>> {
+  return apiRequest({ method: "GET", path: "/api/v1/audio-analysis/progress", signal }, decodeAnalysisProgress);
 }

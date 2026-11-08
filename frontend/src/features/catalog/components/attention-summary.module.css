@@ -1,0 +1,5 @@
+.value { font-size: var(--fs-20); font-weight: 600; line-height: 1.15; font-variant-numeric: lining-nums tabular-nums; }
+
+/* 数字是链接：颜色沿用数字本身，用细的金色下划线表明可以点击。 */
+.link { color: inherit; text-decoration: underline; text-decoration-color: var(--color-accent); text-decoration-thickness: 1px; text-underline-offset: 6px; }
+.link:hover { text-decoration-thickness: 2px; }

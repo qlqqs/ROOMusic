@@ -1,0 +1,11 @@
+/* 四张卡：容器宽于 640px 一行四张，否则两列两行。宽度按概览主内容的容器算，不按视口。 */
+.section { container: library-stats / inline-size; min-width: 0; }
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+@container library-stats (min-width: 640px) { .cards { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.cards li { display: grid; min-width: 0; }
+.card { display: grid; justify-items: start; gap: var(--space-1); align-content: start; min-width: 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-lg); background: var(--color-surface); color: var(--text-primary); text-decoration: none; }
+a.card { transition: background-color 0.12s ease; }
+a.card:hover { background: color-mix(in srgb, var(--color-surface), var(--color-text) 6%); }
+.icon { margin-bottom: var(--space-1); color: var(--text-accent); }
+.value { overflow-wrap: anywhere; font-size: var(--fs-24); font-weight: 600; line-height: 1.15; font-variant-numeric: lining-nums tabular-nums; }
+.label { font-size: var(--fs-13); color: var(--text-secondary); }

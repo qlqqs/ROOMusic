@@ -260,3 +260,15 @@ const folderListingDecoder = d.object({
 });
 export const decodeFolderListing = d.defineDecoder(folderListingDecoder);
 export type FolderListingDTO = d.Infer<typeof folderListingDecoder>;
+
+// 后台音频分析的进度（所有登录用户）：analyzed、failed 都是 total 口径里当前有效的计数。
+// unavailable 是分析没有运行（ffmpeg 不可用或开关关闭），计数照常返回。
+export const analysisStates = ["running", "waiting_for_scan", "idle", "unavailable"] as const;
+const analysisProgressDecoder = d.object({
+  total: d.integer({ min: 0 }),
+  analyzed: d.integer({ min: 0 }),
+  failed: d.integer({ min: 0 }),
+  state: d.oneOf(analysisStates),
+});
+export const decodeAnalysisProgress = d.defineDecoder(analysisProgressDecoder);
+export type AnalysisProgressDTO = d.Infer<typeof analysisProgressDecoder>;

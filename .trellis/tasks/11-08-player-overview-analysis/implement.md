@@ -39,7 +39,7 @@
 
 - [x] **F2 全屏播放器、播放栏、队列抽屉、信号路径弹层**（design 4.1–4.5，信号路径浏览器层先只写“解码”）：同时完成 R1（`change-summary.ts:134` → “已完成”）与 R4 删句；`ModalDialog.closeOnBackdrop`；`/now-playing` 跳转；侧栏删“正在播放”；专辑页 `playerFrom` 修正；故障提示与重试按钮；删除正在播放页。
   - 测试：`player-ui.test.tsx`、`nav-items.test.ts`、`change-summary.test.ts`、`player-personal-actions.test.tsx`、`artist-player-metadata-step5.test.tsx` 中受影响的断言；E2E `player.spec.ts`、`auth.spec.ts`、`search-step4.spec.ts`（1440 与 375，含 axe）。
-- [ ] **F1 概览改版**（design 5）：依赖 B1/B2 的样本文件已提交（先用 design 3 的 JSON 写解码器，样本到位后对齐）。`LibraryStats`、`AnalysisSummary`、`AttentionSummary`、版面；删除 `LibrarySummary`。
+- [x] **F1 概览改版**（design 5）：依赖 B1/B2 的样本文件已提交（先用 design 3 的 JSON 写解码器，样本到位后对齐）。`LibraryStats`、`AnalysisSummary`、`AttentionSummary`、版面；删除 `LibrarySummary`。
   - 测试：`decodeCatalogStats`、`decodeAnalysisProgress` 读样本；概览组件（四卡、空库、侧栏管理员项、分析各状态文案）；`api-mock.ts` 增加新接口桩；E2E 中概览相关断言（如有）。
 - [ ] **F3 波形、播放设置、均衡与交叉渐变**（design 4.6–4.8）：依赖 F2 与 B2 样本。`WaveformSeek`、`playback-settings.ts`、`/settings/playback`（均衡四种模式）、引擎按需接入 Web Audio（接入/退出/中断退回规则）、两路渐变增益、信号路径浏览器层取值。
   - 测试：设置解码；假 AudioContext 下的接入与退出规则（两项都关不创建上下文、非 running 本首不接入、中断退回）；增益选择表（四种模式、正增益、未知 −5 dB）、`setVolume` 不再依赖回读、渐变计划与切换（跨专辑渐变、同专辑/单曲循环/手动切歌不渐变、备用元素被拒退回、切换后聆听只算新曲目）；`WaveformSeek` 有/无分析与键盘；设置页。命令见 design 8.2。

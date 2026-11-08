@@ -3,6 +3,7 @@ import { decodeTrackSummaries, type TrackSummaryDTO } from "./track-summary";
 import { apiRequest } from "../../../shared/api";
 import {
   decodeCatalogState,
+  decodeCatalogStats,
   decodeReleaseComparison,
   decodeReleaseDetail,
   decodeRecentlyAdded,
@@ -11,6 +12,7 @@ import {
   decodeReleaseGroupDetail,
   decodeReleaseGroupPage,
   type CatalogStateDTO,
+  type CatalogStatsDTO,
   type RecentlyAddedDTO,
   type ReleaseComparisonDTO,
   type ReleaseDetailDTO,
@@ -46,6 +48,11 @@ export function fetchReleaseGroupPage(params: ReleaseGroupListParams): Promise<A
 /** 最近新增的专辑（所有登录用户）：按加入时间倒序，固定最多 8 张；接口不接受分页或数量参数。 */
 export function fetchRecentlyAdded(signal?: AbortSignal): Promise<ApiResponse<RecentlyAddedDTO>> {
   return apiRequest({ method: "GET", path: "/api/v1/release-groups/recently-added", signal }, decodeRecentlyAdded);
+}
+
+/** 资料库统计（所有登录用户）：专辑、曲目、艺术家与作曲家的数量。 */
+export function fetchCatalogStats(signal?: AbortSignal): Promise<ApiResponse<CatalogStatsDTO>> {
+  return apiRequest({ method: "GET", path: "/api/v1/catalog/stats", signal }, decodeCatalogStats);
 }
 
 // 下面几个接口的 ID 由调用方先用 isUuid 校验，不是 UUID 的值不会发请求。

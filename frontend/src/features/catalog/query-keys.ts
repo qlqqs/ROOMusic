@@ -4,6 +4,8 @@ import type { AlbumSearch } from "./album-search";
 export const catalogKeys = {
   /** catalog 的全部查询：写操作改变了专辑数据（修正、归组、撤销）之后整体失效。 */
   all: (generation: number) => viewerQueryKey(generation, "catalog"),
+  /** 概览顶部的资料库统计；在 all 前缀下，扫描与修改专辑数据之后随目录一起失效。 */
+  stats: (generation: number) => viewerQueryKey(generation, "catalog", "stats"),
   /** 概览用的专辑数与需要关注的专辑数。 */
   totals: (generation: number) => viewerQueryKey(generation, "catalog", "release-group-totals"),
   /** 专辑列表的一页：搜索词、筛选、排序与页码都在键里，每种组合各有缓存条目；省略排序与按标题排序是同一个条目。 */

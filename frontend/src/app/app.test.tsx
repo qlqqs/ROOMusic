@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { channelPair } from "../test/channel";
 import { deferred } from "../test/deferred";
+import { sampleBody } from "../test/api-samples";
 import { installFakeApi, installFakeSession, installOverviewApi, type FakeApi, type FakeSession } from "../test/fake-api";
 import { jsonResponse, sampleResponse } from "../test/http";
 import { renderApp } from "../test/render-app";
@@ -232,14 +233,14 @@ describe("切换用户时的数据隔离", () => {
     renderApp();
     await heading("登录");
 
-    // 管理员的第一次“专辑数”请求停在进行中，退出并换成成员登录后才释放。
+    // 管理员的统计请求停在进行中，退出并换成成员登录后才释放；新用户应看到自己的统计。
     const gate = deferred<Response>();
-    let albumRequests = 0;
-    api.on("GET", "/api/v1/release-groups", async (request) => {
-      albumRequests += 1;
-      if (albumRequests <= 2) return gate.promise; // 管理员的两个并行请求（全部 / 需要关注）
-      const total = request.path.includes("attention=required") ? 1 : 7;
-      return jsonResponse(200, { items: [], pagination: { page: 1, page_size: 1, total } });
+    let statsRequests = 0;
+    const stats = sampleBody("catalog/stats") as { albums: number; tracks: number; artists: number | null; composers: number | null };
+    api.on("GET", "/api/v1/catalog/stats", async () => {
+      statsRequests += 1;
+      if (statsRequests === 1) return gate.promise;
+      return jsonResponse(200, { ...stats, albums: 7 });
     });
 
     await signIn("curator", "curator-password");
@@ -250,13 +251,13 @@ describe("切换用户时的数据隔离", () => {
     await signIn("listener", "listener-password");
     await heading("概览");
     const library = await screen.findByRole("region", { name: "资料库" });
-    await within(library).findByText("7");
+    const currentCount = await within(library).findByRole("link", { name: /专辑/ });
 
     // 旧请求现在才回来，带着 99。
-    gate.resolve(jsonResponse(200, { items: [], pagination: { page: 1, page_size: 1, total: 99 } }));
+    gate.resolve(jsonResponse(200, { ...stats, albums: 99 }));
     await new Promise((resolve) => setTimeout(resolve, 30));
-    expect(screen.queryByText("99")).toBeNull();
-    expect(within(library).getByText("7")).toBeTruthy();
+    expect(within(library).queryByRole("link", { name: /99/ })).toBeNull();
+    expect(currentCount.isConnected).toBe(true);
     expect(within(screen.getByRole("region", { name: "当前用户" })).getByText("listener")).toBeTruthy();
   });
 

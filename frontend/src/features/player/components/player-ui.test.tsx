@@ -222,7 +222,9 @@ describe("播放栏、全屏、队列与信号路径", () => {
     engine.attach();
     engine.enqueue([playerTrack("1")]);
     view(<PlayerQueue headingId="queue-heading" onClose={() => undefined} />);
-    await act(async () => { engine.playEntry(engine.getSnapshot().queue.entries[0]!.entryId); await settle(); });
+    const entry = engine.getSnapshot().queue.entries[0];
+    if (entry === undefined) throw new Error("队列缺少待播放曲目");
+    await act(async () => { engine.playEntry(entry.entryId); await settle(); });
     expect(screen.getByText("无损转换失败，无法播放这首曲目")).toBeTruthy();
   });
 
