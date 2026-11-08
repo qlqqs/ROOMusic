@@ -1,4 +1,5 @@
 // shared/ui 的公开入口：无策略的表现组件，不发请求、不判断角色。
+export { Avatar } from "./avatar";
 export { Button } from "./button";
 export { ConfirmDialog } from "./confirm-dialog";
 export { DataTable, type Column } from "./data-table";

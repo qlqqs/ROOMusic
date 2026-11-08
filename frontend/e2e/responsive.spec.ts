@@ -4,7 +4,8 @@ import { resolve } from "node:path";
 import { accountLayoutScenes, expectLogoutInViewport, openAccountScene } from "./support/account-password";
 import type { Page } from "@playwright/test";
 import { sampleBody } from "../src/test/api-samples";
-import { albumGroups } from "../src/test/catalog-data";
+import { albumGroup, albumGroups } from "../src/test/catalog-data";
+import { personalTracksOf, PERSONAL_LISTENER_ID, seedFavoriteTracks, seedPersonalTracks, seedPlaylist } from "../src/test/personal-data";
 import { respondToCorrect } from "../src/test/governance-data";
 import type { DiagnosticsPageDTO } from "../src/features/library/api/decoders";
 import { LONG_TITLE, longContentGroup, multiVersionGroup, seedLongContent, seedVersions, singleVersionGroup } from "./support/albums-data";
@@ -182,6 +183,32 @@ const recentPlaysCases: Case[] = [
 ];
 
 const cases: Case[] = [
+  {
+    name: "我喜欢的音乐",
+    options: { signedInAs: "listener" },
+    prepare: (mock) => {
+      const group = albumGroup(90, { title: "个人页测试专辑", artwork: true, track_count: 2 });
+      mock.groups = [group];
+      const tracks = personalTracksOf(mock.personal.catalog).slice(0, 2);
+      seedPersonalTracks(mock.personal, tracks);
+      seedFavoriteTracks(mock.personal, PERSONAL_LISTENER_ID, tracks);
+    },
+    path: () => "/me/liked",
+    title: "我喜欢的音乐",
+  },
+  {
+    name: "歌单详情",
+    options: { signedInAs: "listener" },
+    prepare: (mock) => {
+      const group = albumGroup(91, { title: "个人页测试专辑", artwork: true, track_count: 2 });
+      mock.groups = [group];
+      const tracks = personalTracksOf(mock.personal.catalog).slice(0, 2);
+      seedPersonalTracks(mock.personal, tracks);
+      seedPlaylist(mock.personal, PERSONAL_LISTENER_ID, { id: "00000000-0000-4000-8000-000000000091", name: "个人页测试歌单", trackIds: tracks.map((track) => track.track_id) });
+    },
+    path: () => "/me/playlists/00000000-0000-4000-8000-000000000091",
+    title: "个人页测试歌单",
+  },
   { name: "登录", options: {}, path: () => "/login", title: "登录" },
   { name: "初始化", options: { setupRequired: true }, path: () => "/setup", title: "创建管理员" },
   { name: "概览（管理员）", options: { signedInAs: "curator" }, path: () => "/", title: "概览" },

@@ -88,7 +88,7 @@ function setup(count = 3) {
 }
 
 function rowOf(title: string) {
-  const row = screen.getByText(title, { exact: true }).closest("li");
+  const row = screen.getByText(title, { exact: true }).closest<HTMLElement>('[role="row"]');
   if (row === null) throw new Error(`缺少曲目行：${title}`);
   return within(row);
 }
@@ -168,6 +168,15 @@ describe("侧栏的歌单导航", () => {
 });
 
 describe("歌单详情的顺序、冲突与稳定重试", () => {
+  it("曲目表头按统一列顺序显示，歌单多出调整顺序列", async () => {
+    setup();
+    renderApp({ path: pagePath });
+    const table = await screen.findByRole("table", { name: "歌单曲目" });
+    expect(Array.from(table.querySelectorAll('[role="columnheader"]')).map((cell) => cell.textContent)).toEqual([
+      "调整顺序", "#序号", "标题", "专辑艺人", "专辑", "发行", "操作", "时长",
+    ]);
+  });
+
   it("四个菜单移动在整个歌单的首尾禁用，中间行均可用", async () => {
     setup();
     renderApp({ path: pagePath });
@@ -278,7 +287,7 @@ describe("歌单移除与服务端撤销位置", () => {
     renderApp({ path: pagePath });
     await remove(second.track.title);
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(document.activeElement).toBe(screen.getByRole("heading", { name: base.name }));
+    expect(document.activeElement).toBe(screen.getByRole("heading", { level: 2, name: /歌曲\s*2/ }));
     expect(api.requestsTo("DELETE", `${itemsPath}/${second.id}`)).toHaveLength(1);
     await userEvent.click(screen.getByRole("button", { name: "撤销" }));
     await screen.findByText(`已放回《${second.track.title}》，在第 2 首。`);
@@ -370,17 +379,30 @@ describe("歌单的容量、删除与表单", () => {
     for (const name of ["上移", "下移", "移到最前", "移到最后", "从歌单移除"]) expect(screen.getByRole("menuitem", { name }).hasAttribute("disabled")).toBe(false);
   });
 
+  it("标题旁的改名图标打开改名对话框", async () => {
+    const { api } = setup();
+    renderApp({ path: pagePath });
+    await screen.findByRole("heading", { level: 1, name: base.name });
+    await userEvent.click(screen.getByRole("button", { name: "改名" }));
+    const dialog = await screen.findByRole("dialog", { name: "改名" });
+    expect((within(dialog).getByRole("textbox", { name: "名字" }) as HTMLInputElement).value).toBe(base.name);
+    await userEvent.click(within(dialog).getByRole("button", { name: "取消" }));
+    expect(api.requestsTo("PATCH", playlistPath)).toHaveLength(0);
+  });
+
   it("删除使用准确不可恢复文案，取消不发请求，确认后返回歌单空态", async () => {
     const { api } = setup();
     const { history } = renderApp({ path: pagePath });
     await screen.findByText(first.track.title, { exact: true });
-    await userEvent.click(screen.getByRole("button", { name: "删除歌单" }));
+    await userEvent.click(screen.getByRole("button", { name: "歌单操作" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "删除歌单" }));
     let dialog = await screen.findByRole("dialog", { name: "删除歌单？" });
     expect(within(dialog).getByText(`歌单《${base.name}》会被删除，不能恢复。`)).toBeTruthy();
     expect(api.requestsTo("DELETE", playlistPath)).toHaveLength(0);
     await userEvent.click(within(dialog).getByRole("button", { name: "取消" }));
     expect(api.requestsTo("DELETE", playlistPath)).toHaveLength(0);
-    await userEvent.click(screen.getByRole("button", { name: "删除歌单" }));
+    await userEvent.click(screen.getByRole("button", { name: "歌单操作" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "删除歌单" }));
     dialog = await screen.findByRole("dialog", { name: "删除歌单？" });
     await userEvent.click(within(dialog).getByRole("button", { name: "删除歌单" }));
     await screen.findByText("还没有歌单。");
@@ -395,7 +417,7 @@ describe("歌单的容量、删除与表单", () => {
     renderApp({ path: pagePath });
     await screen.findByText("文件缺失");
     expect(rowOf(second.track.title).queryByRole("link")).toBeNull();
-    expect(screen.getByText(second.track.title, { exact: true }).closest("li")?.hasAttribute("data-missing")).toBe(true);
+    expect(screen.getByText(second.track.title, { exact: true }).closest('[role="row"]')?.hasAttribute("data-missing")).toBe(true);
     expect(rowOf(second.track.title).getByRole("button", { name: `播放 ${second.track.title}` }).hasAttribute("disabled")).toBe(true);
     await openActions(second.track.title);
     for (const name of ["上移", "下移", "从歌单移除"]) expect(screen.getByRole("menuitem", { name }).hasAttribute("disabled")).toBe(false);

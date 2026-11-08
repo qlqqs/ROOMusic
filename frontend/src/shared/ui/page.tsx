@@ -11,21 +11,25 @@ type PageProps = {
   description?: ReactNode;
   /** 页头右侧的主要操作。 */
   actions?: ReactNode;
+  /** 自定义页头（如歌单的封面头部），替换默认的标题、说明与操作；由它渲染唯一的 h1，文字与 title 相同。 */
+  header?: ReactNode;
   children: ReactNode;
 };
 
 /** 已登录页面的统一结构：一个 h1、可选说明与操作，然后是各区块。 */
-export function Page({ title, compactTitle = false, description, actions, children }: PageProps) {
+export function Page({ title, compactTitle = false, description, actions, header, children }: PageProps) {
   usePageTitle(title);
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <div className={styles.heading} data-compact={compactTitle ? "" : undefined}>
-          <h1>{title}</h1>
-          {description === undefined ? null : <p className={styles.description}>{description}</p>}
-        </div>
-        {actions === undefined ? null : <div className={styles.actions}>{actions}</div>}
-      </header>
+      {header ?? (
+        <header className={styles.header}>
+          <div className={styles.heading} data-compact={compactTitle ? "" : undefined}>
+            <h1>{title}</h1>
+            {description === undefined ? null : <p className={styles.description}>{description}</p>}
+          </div>
+          {actions === undefined ? null : <div className={styles.actions}>{actions}</div>}
+        </header>
+      )}
       {children}
     </div>
   );

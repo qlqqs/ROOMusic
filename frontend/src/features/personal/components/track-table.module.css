@@ -1,0 +1,229 @@
+/* 按容器宽度折叠：带侧栏的中等视口里内容区可能很窄。 */
+.container {
+  container-type: inline-size;
+  min-width: 0;
+}
+
+/* 列轨道定义在表上；表体与每一行用 subgrid，auto 列（操作）按全表最宽者对齐。 */
+.table {
+  display: grid;
+  grid-template-columns: 3em minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1.2fr) 4em auto 4.5em;
+  column-gap: var(--space-3);
+  min-width: 0;
+  font-size: var(--fs-14);
+}
+
+.sortable {
+  grid-template-columns: 28px 3em minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1.2fr) 4em auto 4.5em;
+}
+
+.group,
+.row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+}
+
+.row {
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--color-divider);
+  background: var(--color-bg);
+}
+
+.head {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+}
+
+.row:not(.head, [data-dragging]):hover {
+  border-radius: var(--radius-md);
+  background: var(--color-hover);
+}
+
+/* 拖动中的行浮在其他行之上：阴影与表面色表达“拿起来了”，原位置由其他行让开。 */
+.row[data-dragging] {
+  position: relative;
+  z-index: 1;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.number,
+.duration {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.title {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 500;
+}
+
+.name {
+  overflow-wrap: anywhere;
+}
+
+.artist {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  font-weight: 400;
+}
+
+.tag {
+  font-weight: 400;
+}
+
+/* 文件缺失的行灰色；“文件缺失”标签用文字表达同一件事。 */
+.row[data-missing] .name {
+  color: var(--text-secondary);
+}
+
+.meta {
+  display: contents;
+}
+
+.meta > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+}
+
+.year {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 行里的次要链接（艺人、专辑）用次要文字色，悬停加下划线。 */
+.artist a,
+.meta a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.artist a:hover,
+.meta a:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+
+.actions {
+  min-width: 0;
+}
+
+/* 把手：按住拖动（禁止浏览器把这个手势当成滚动），键盘按空格拿起。 */
+.handle button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-height: var(--control-height);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: grab;
+  touch-action: none;
+}
+
+.row[data-dragging] .handle button {
+  cursor: grabbing;
+}
+
+.handle button:hover {
+  background: var(--color-hover);
+  color: var(--text-primary);
+}
+
+/* 能悬停时把手平时透明，悬停、聚焦或拖动这一行时出现；用 opacity，键盘仍能 Tab 到。触屏上一直显示。 */
+@media (hover: hover) {
+  .handle {
+    opacity: 0;
+  }
+
+  .row:hover .handle,
+  .row:focus-within .handle,
+  .row[data-dragging] .handle {
+    opacity: 1;
+  }
+}
+
+/*
+ * 窄容器：去掉表头，列只剩 [把手] 序号、标题、操作、时长；专辑艺人、专辑与发行成为标题下的单行次要信息，用“ · ”隔开。
+ * 列位置从右往左数，有没有把手列都一样。
+ */
+@container (max-width: 639px) {
+  .table {
+    grid-template-columns: 2.5em minmax(0, 1fr) auto auto;
+    column-gap: var(--space-2);
+  }
+
+  .sortable {
+    grid-template-columns: 28px 2.5em minmax(0, 1fr) auto auto;
+  }
+
+  .head {
+    display: none;
+  }
+
+  .row {
+    row-gap: 2px;
+  }
+
+  .handle {
+    grid-column: -6 / -5;
+    grid-row: 1 / 3;
+  }
+
+  .row > .number {
+    grid-column: -5 / -4;
+    grid-row: 1 / 3;
+  }
+
+  .title {
+    grid-column: -4 / -3;
+    grid-row: 1;
+  }
+
+  /* 次要信息只占一行，放不下时末尾省略。 */
+  .meta {
+    display: block;
+    grid-column: -4 / -3;
+    grid-row: 2;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .meta > * {
+    display: inline;
+  }
+
+  .meta > * + *::before {
+    content: "·";
+    margin-inline: var(--space-1);
+  }
+
+  .meta > :empty {
+    display: none;
+  }
+
+  .actions {
+    grid-column: -3 / -2;
+    grid-row: 1 / 3;
+  }
+
+  .row > .duration {
+    grid-column: -2 / -1;
+    grid-row: 1 / 3;
+  }
+}

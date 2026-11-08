@@ -3,7 +3,8 @@ import AxeBuilder from "@axe-core/playwright";
 import { accountAxeScenes, openAccountScene } from "./support/account-password";
 import type { Page } from "@playwright/test";
 import { sampleBody } from "../src/test/api-samples";
-import { albumGroups } from "../src/test/catalog-data";
+import { albumGroup, albumGroups } from "../src/test/catalog-data";
+import { personalTracksOf, PERSONAL_LISTENER_ID, seedFavoriteTracks, seedPersonalTracks, seedPlaylist } from "../src/test/personal-data";
 import { LONG_TITLE, longContentGroup, multiVersionGroup, seedLongContent, seedVersions, singleVersionGroup } from "./support/albums-data";
 import type { DiagnosticsPageDTO } from "../src/features/library/api/decoders";
 import type { ApiMock, MockOptions } from "./support/api-mock";
@@ -29,6 +30,32 @@ const failedScan = (mock: ApiMock) => {
 };
 
 const states: State[] = [
+  {
+    name: "我喜欢的音乐",
+    options: { signedInAs: "listener" },
+    reach: async (page, mock) => {
+      const group = albumGroup(90, { title: "个人页测试专辑", artwork: true, track_count: 2 });
+      mock.groups = [group];
+      const tracks = personalTracksOf(mock.personal.catalog).slice(0, 2);
+      seedPersonalTracks(mock.personal, tracks);
+      seedFavoriteTracks(mock.personal, PERSONAL_LISTENER_ID, tracks);
+      await page.goto("/me/liked");
+      await expect(page.getByRole("table", { name: "收藏的曲目" })).toBeVisible();
+    },
+  },
+  {
+    name: "歌单详情",
+    options: { signedInAs: "listener" },
+    reach: async (page, mock) => {
+      const group = albumGroup(91, { title: "个人页测试专辑", artwork: true, track_count: 2 });
+      mock.groups = [group];
+      const tracks = personalTracksOf(mock.personal.catalog).slice(0, 2);
+      seedPersonalTracks(mock.personal, tracks);
+      seedPlaylist(mock.personal, PERSONAL_LISTENER_ID, { id: "00000000-0000-4000-8000-000000000091", name: "个人页测试歌单", trackIds: tracks.map((track) => track.track_id) });
+      await page.goto("/me/playlists/00000000-0000-4000-8000-000000000091");
+      await expect(page.getByRole("table", { name: "歌单曲目" })).toBeVisible();
+    },
+  },
   {
     name: "登录",
     options: {},

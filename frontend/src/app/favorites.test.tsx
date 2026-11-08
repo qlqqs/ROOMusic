@@ -113,13 +113,23 @@ describe("收藏曲目旧地址迁移", () => {
 });
 
 describe("收藏页的保留行与服务端列表", () => {
+  it("曲目表头按统一列顺序显示且不含收藏时间", async () => {
+    setup();
+    renderApp({ path: "/me/liked" });
+    const table = await screen.findByRole("table", { name: "收藏的曲目" });
+    expect(Array.from(table.querySelectorAll('[role="columnheader"]')).map((cell) => cell.textContent)).toEqual([
+      "#序号", "标题", "专辑艺人", "专辑", "发行", "操作", "时长",
+    ]);
+    expect(within(table).queryByText("收藏时间")).toBeNull();
+  });
+
   it("取消后后台重读与窗口聚焦都保留原槽，缓存仍只含真实收藏，并可点回", async () => {
     const { api } = setup();
     const { runtime } = renderApp({ path: "/me/favorites?tab=tracks" });
     await screen.findByRole("table", { name: "收藏的曲目" });
     const originalOrder = visibleTitles();
     await cancel(first.track.title);
-    await screen.findByText("共 1 首曲目");
+    await screen.findByRole("heading", { level: 2, name: /歌曲\s*1/ });
     const generation = runtime.session.currentGeneration();
     await act(async () => { await runtime.queryClient.invalidateQueries({ queryKey: personalKeys.favorites(generation) }); });
     expect(visibleTitles()).toEqual(originalOrder);
@@ -132,7 +142,7 @@ describe("收藏页的保留行与服务端列表", () => {
     expect(visibleTitles()).toEqual(originalOrder);
     expect(heart(first.track.title).getAttribute("aria-pressed")).toBe("false");
     await userEvent.click(heart(first.track.title));
-    await screen.findByText("共 2 首曲目");
+    await screen.findByRole("heading", { level: 2, name: /歌曲\s*2/ });
     expect(visibleTitles()).toEqual(originalOrder);
     expect(heart(first.track.title).getAttribute("aria-pressed")).toBe("true");
   });
@@ -160,7 +170,7 @@ describe("收藏页的保留行与服务端列表", () => {
     const { runtime, view } = renderApp({ path: "/me/favorites?tab=tracks" });
     await screen.findByRole("table", { name: "收藏的曲目" });
     await cancel(first.track.title);
-    await screen.findByText("共 1 首曲目");
+    await screen.findByRole("heading", { level: 2, name: /歌曲\s*1/ });
     await waitFor(() => expect(runtime.queryClient.isFetching()).toBe(0));
     expect(row(first.track.title)).toBeTruthy();
     expect(heart(first.track.title).getAttribute("aria-pressed")).toBe("false");
@@ -179,7 +189,7 @@ describe("收藏页的保留行与服务端列表", () => {
     const { runtime } = renderApp({ path: "/me/favorites?tab=tracks" });
     await screen.findByRole("table", { name: "收藏的曲目" });
     await cancel(first.track.title);
-    await screen.findByText("共 1 首曲目");
+    await screen.findByRole("heading", { level: 2, name: /歌曲\s*1/ });
     state.tracks.unshift(track(3));
     state.revision += 1;
     await act(async () => { await runtime.queryClient.invalidateQueries({ queryKey: personalKeys.favorites(runtime.session.currentGeneration()) }); });
@@ -198,7 +208,7 @@ describe("收藏页的保留行与服务端列表", () => {
     renderApp({ path: "/me/liked" });
     await screen.findByRole("table", { name: "收藏的曲目" });
     await cancel(first.track.title);
-    await screen.findByText("共 1 首曲目");
+    await screen.findByRole("heading", { level: 2, name: /歌曲\s*1/ });
     const nav = within(screen.getByRole("navigation", { name: "主导航" }));
     await userEvent.click(nav.getByRole("link", { name: "我的收藏" }));
     await screen.findByText("还没有收藏的专辑。", { exact: false });
@@ -213,7 +223,7 @@ describe("收藏页的保留行与服务端列表", () => {
     renderApp({ path: "/me/liked" });
     await screen.findByRole("table", { name: "收藏的曲目" });
     await cancel(first.track.title);
-    await screen.findByText("共 1 首曲目");
+    await screen.findByRole("heading", { level: 2, name: /歌曲\s*1/ });
     const nav = within(screen.getByRole("navigation", { name: "主导航" }));
     await userEvent.click(nav.getByRole("link", { name: "我的歌单" }));
     await screen.findByText("还没有歌单。");
@@ -227,11 +237,11 @@ describe("收藏页的保留行与服务端列表", () => {
     const { history } = renderApp({ path: "/me/favorites?tab=tracks" });
     await screen.findByRole("table", { name: "收藏的曲目" });
     await cancel(first.track.title);
-    await screen.findByText("共 49 首曲目");
+    await screen.findByRole("heading", { level: 2, name: /歌曲\s*49/ });
     await userEvent.click(screen.getByRole("link", { name: "下一页" }));
     await screen.findByText("收藏曲目 50", { exact: true });
     expect(new URLSearchParams(history.location.search).get("page")).toBe("2");
-    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "收藏的曲目" }));
+    expect(document.activeElement).toBe(screen.getByRole("heading", { level: 2, name: /歌曲\s*49/ }));
     expect(api.requestsTo("GET", tracksPath).some((request) => request.path === `${tracksPath}?page=2&page_size=48&revision=8`)).toBe(true);
     await userEvent.click(screen.getByRole("link", { name: "上一页" }));
     await screen.findByText(second.track.title, { exact: true });
@@ -260,15 +270,15 @@ describe("收藏页的保留行与服务端列表", () => {
     expect(within(missingRow).queryByRole("link")).toBeNull();
     expect(within(missingRow).getByRole("button", { name: `播放 ${first.track.title}` }).hasAttribute("disabled")).toBe(true);
     // jsdom 不测最终颜色；这里守住灰态样式挂点，实际颜色由浏览器验收负责。
-    expect(within(missingRow).getByText(first.track.title, { exact: true }).parentElement?.className).toContain("missing");
+    expect(missingRow.getAttribute("data-missing")).toBe("");
     await userEvent.click(within(missingRow).getByRole("button", { name: "更多操作" }));
     for (const name of ["下一首播放", "加入队列"]) expect(screen.getByRole("menuitem", { name }).hasAttribute("disabled")).toBe(true);
     expect(screen.getByRole("menuitem", { name: "添加到歌单…" }).hasAttribute("disabled")).toBe(false);
     await userEvent.keyboard("{Escape}");
     await cancel(first.track.title);
-    await screen.findByText("共 0 首曲目");
+    await screen.findByRole("heading", { level: 2, name: /歌曲\s*0/ });
     await userEvent.click(heart(first.track.title));
-    await screen.findByText("共 1 首曲目");
+    await screen.findByRole("heading", { level: 2, name: /歌曲\s*1/ });
     expect(heart(first.track.title).getAttribute("aria-pressed")).toBe("true");
   });
 

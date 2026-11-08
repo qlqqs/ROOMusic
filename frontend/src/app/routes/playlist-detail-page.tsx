@@ -1,6 +1,6 @@
-import { useCallback } from "react";
+import { useCallback, type ReactNode } from "react";
 import { PlaylistDetailView, type PlaylistItemDTO, type PlaylistSummaryDTO } from "../../features/personal";
-import { Page, type MenuAction } from "../../shared/ui";
+import type { MenuAction } from "../../shared/ui";
 import { PersonalPlayAll } from "./personal-playback";
 import { TrackActions } from "./track-actions";
 import { playerTrackOfSummary } from "./track-playback";
@@ -12,15 +12,14 @@ function PlaylistTrackActions({ item, actions }: { item: PlaylistItemDTO; action
 }
 
 /**
- * 歌单详情：personal 给出歌单的内容、排序、移除与撤销、改名与删除；“播放全部”与每行的播放、心形、“更多”由这里经插槽组合。
+ * 歌单详情：personal 给出整页（页头、内容、排序、移除与撤销、改名与删除）；“播放全部”与每行的播放、心形、“更多”由这里经插槽组合。
  * playlistId 与 page 来自地址。
  */
 export function PlaylistDetailPage({ playlistId, page }: { playlistId: string; page: number }) {
-  const renderPlayAll = useCallback((playlist: PlaylistSummaryDTO) => <PersonalPlayAll source={{ kind: "playlist", playlistId: playlist.id }} />, []);
-  const renderTrackActions = useCallback((item: PlaylistItemDTO, actions: readonly MenuAction[]) => <PlaylistTrackActions item={item} actions={actions} />, []);
-  return (
-    <Page title="我的歌单">
-      <PlaylistDetailView playlistId={playlistId} page={page} renderPlayAll={renderPlayAll} renderTrackActions={renderTrackActions} />
-    </Page>
+  const renderPlayAll = useCallback(
+    (playlist: PlaylistSummaryDTO, trailing: ReactNode) => <PersonalPlayAll source={{ kind: "playlist", playlistId: playlist.id }} trailing={trailing} />,
+    [],
   );
+  const renderTrackActions = useCallback((item: PlaylistItemDTO, actions: readonly MenuAction[]) => <PlaylistTrackActions item={item} actions={actions} />, []);
+  return <PlaylistDetailView playlistId={playlistId} page={page} renderPlayAll={renderPlayAll} renderTrackActions={renderTrackActions} />;
 }

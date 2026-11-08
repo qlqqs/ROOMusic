@@ -6,8 +6,20 @@ export const UNKNOWN_TIME = "—";
  * timeZone 只用于测试或需要固定时区的场合。
  */
 export function formatDateTime(value: string, timeZone?: string): string {
+  const part = partsOf(value, timeZone);
+  return part === null ? UNKNOWN_TIME : `${part("year")}-${part("month")}-${part("day")} ${part("hour")}:${part("minute")}`;
+}
+
+/** 把 RFC 3339 时间格式化为 `YYYY-MM-DD`，时区规则与 formatDateTime 相同。 */
+export function formatDate(value: string, timeZone?: string): string {
+  const part = partsOf(value, timeZone);
+  return part === null ? UNKNOWN_TIME : `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+/** 按时区拆出年月日时分；无法解析时是 null。 */
+function partsOf(value: string, timeZone: string | undefined) {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return UNKNOWN_TIME;
+  if (Number.isNaN(date.getTime())) return null;
   const parts = new Intl.DateTimeFormat("zh-CN", {
     timeZone,
     year: "numeric",
@@ -17,6 +29,5 @@ export function formatDateTime(value: string, timeZone?: string): string {
     minute: "2-digit",
     hourCycle: "h23",
   }).formatToParts(date);
-  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((candidate) => candidate.type === type)?.value ?? "";
-  return `${part("year")}-${part("month")}-${part("day")} ${part("hour")}:${part("minute")}`;
+  return (type: Intl.DateTimeFormatPartTypes) => parts.find((candidate) => candidate.type === type)?.value ?? "";
 }

@@ -1,0 +1,117 @@
+/* 按容器宽度决定封面大小：带侧栏的中等视口里内容区可能很窄。 */
+.container {
+  container-type: inline-size;
+  min-width: 0;
+}
+
+/* 背景从封面主色的淡色（固定在高亮度、低饱和度）渐变到页面底色，正文与次要文字对比度不下降。 */
+.hero {
+  --hero-tint: var(--color-neutral-200);
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, var(--hero-tint) 0%, var(--color-bg) 100%);
+}
+
+.cover {
+  min-width: 0;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+}
+
+.info {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* 铅笔跟在标题的最后一行后面：标题换行时不单独占一行。 */
+.titleRow {
+  min-width: 0;
+}
+
+.titleRow h1 {
+  display: inline;
+  margin-inline-end: var(--space-1);
+  font-size: var(--fs-20);
+  overflow-wrap: anywhere;
+}
+
+.titleRow button {
+  vertical-align: middle;
+}
+
+.owner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
+}
+
+.name {
+  min-width: 0;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  min-width: 0;
+}
+
+.liked {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 1;
+  background: linear-gradient(135deg, var(--color-accent-100), var(--color-accent-200));
+  color: var(--color-accent-600);
+}
+
+.liked svg {
+  width: 40%;
+  height: 40%;
+}
+
+@container (min-width: 560px) {
+  .hero {
+    grid-template-columns: 200px minmax(0, 1fr);
+    gap: var(--space-6);
+    padding: var(--space-6);
+  }
+
+  .titleRow h1 {
+    font-size: var(--fs-24);
+  }
+}
+
+/* “歌曲 N”：金色下划线随文字宽度；歌单的总时长在旁边灰色小字。 */
+.songs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  min-width: 0;
+}
+
+.songsTitle {
+  padding-bottom: var(--space-1);
+  border-bottom: 2px solid var(--color-accent);
+  font-size: var(--fs-15);
+}
+
+.count {
+  font-variant-numeric: tabular-nums;
+}
+
+.songsDetail {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
+}

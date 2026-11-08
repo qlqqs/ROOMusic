@@ -2,31 +2,34 @@ import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, us
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { GripVertical } from "lucide-react";
+import { GripVertical, MoreHorizontal } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { failureOf, isHttpFailure } from "../../../shared/api";
-import { formatDuration } from "../../../shared/lib/duration";
 import { isUuid } from "../../../shared/lib/ids";
 import { formatCount } from "../../../shared/lib/number";
 import { pageCountOf } from "../../../shared/lib/pagination";
 import { useClampedPage } from "../../../shared/lib/use-clamped-page";
-import { Button, ConfirmDialog, FailureNotice, Notice, Pagination, Panel, Skeleton, StatusTag, VisuallyHidden, type MenuAction } from "../../../shared/ui";
-import { ArtistNames, trackArtistOf, trackArtistRefsOf, trackTitleOf } from "../../catalog";
+import { Button, ConfirmDialog, FailureNotice, MenuButton, Notice, Page, Pagination, Skeleton, type MenuAction } from "../../../shared/ui";
+import { useViewerScope } from "../../auth";
+import { trackTitleOf, useArtworkTint } from "../../catalog";
 import type { ItemMovedDTO, ItemRemovedDTO, ItemRestoredDTO, PlaylistItemDTO, PlaylistItemsPageDTO, PlaylistSummaryDTO } from "../api/decoders";
 import type { PlaylistMove } from "../api/playlists";
 import type { CommandCallbacks } from "../hooks/use-idempotent-command";
 import { PLAYLIST_ITEMS_PAGE_SIZE, usePlaylistCommands, usePlaylistDetail, usePlaylistItems } from "../hooks/use-playlists";
-import { overLimitText, playlistMessages, playlistMetaText } from "../playlist-text";
+import { overLimitText, playlistDurationText, playlistMessages } from "../playlist-text";
+import { CollectionHero, SongsHeading } from "./collection-hero";
 import { FavoriteStatusScope } from "./favorite-status-scope";
+import { PlaylistCover } from "./playlist-cover";
 import { RenamePlaylistDialog } from "./rename-playlist-dialog";
+import { TrackTable, TrackTableRow } from "./track-table";
 import styles from "./playlist-detail-view.module.css";
 
 type PlaylistDetailViewProps = {
   playlistId: string;
   /** URL 里的页码，从 1 起。 */
   page: number;
-  /** 顶部的“播放全部”：由 app 组合播放器动作。 */
-  renderPlayAll: (playlist: PlaylistSummaryDTO) => ReactNode;
+  /** 页头的“播放全部”：由 app 组合播放器动作；trailing（“···”）放在同一行按钮后面。 */
+  renderPlayAll: (playlist: PlaylistSummaryDTO, trailing: ReactNode) => ReactNode;
   /** 一行的播放、心形与“更多”：由 app 组合；actions 是这个歌单的移动与移除，放进同一个“更多”菜单。 */
   renderTrackActions: (item: PlaylistItemDTO, actions: readonly MenuAction[]) => ReactNode;
 };
@@ -39,11 +42,11 @@ type Outcome =
 
 function NotFound() {
   return (
-    <Panel title="歌单不存在">
+    <Page title="歌单不存在">
       <p>
         它可能已被删除。 <Link to="/me/playlists">回到歌单</Link>
       </p>
-    </Panel>
+    </Page>
   );
 }
 
@@ -67,7 +70,7 @@ function useCarriedRevision(page: number) {
 }
 
 /**
- * 歌单详情：名字、曲目数与总时长、“播放全部”、改名与删除；条目按歌单顺序，每行有拖动把手、播放、心形与“更多”
+ * 歌单详情：页头（封面、名字与改名、头像与创建日期、“播放全部”与“···”里的删除），“歌曲 N”与总时长；条目按歌单顺序，每行有拖动把手、播放、心形与“更多”
  * （下一首播放、加入队列、添加到歌单…、上移、下移、移到最前、移到最后、从歌单移除）。拖动只在这一页之内，菜单的移动按整个歌单。
  * 同一时间只有一条修改在进行；歌单在别处改过时重新读取并说一句，不静默覆盖。移除后给一个“撤销”。
  */
@@ -78,6 +81,9 @@ function PlaylistDetailContent({ playlistId, page, renderPlayAll, renderTrackAct
   const items = usePlaylistItems(playlistId, page, carried.revision);
   const changed = carried.dropIfChanged(items.error);
   const commands = usePlaylistCommands(playlistId);
+  const { viewer } = useViewerScope();
+  // 拼图左上那张（单封面时就是显示的那张）的主色。
+  const tint = useArtworkTint(detail.data?.cover_groups[0]?.artwork ?? null);
   const [outcome, setOutcome] = useState<Outcome>(null);
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -198,92 +204,106 @@ function PlaylistDetailContent({ playlistId, page, renderPlayAll, renderTrackAct
   const commandFailure = lastCommand === null ? null : commands[lastCommand].state;
   const retryLast = () => retryRef.current?.();
 
+  const trackCount = state?.track_count ?? summary?.track_count;
+  // 摘要到达之前用 Page 的默认页头（标题“歌单”）。
+  const header =
+    summary === undefined ? undefined : (
+      <CollectionHero
+        title={name}
+        cover={<PlaylistCover playlist={{ name, cover_groups: summary.cover_groups }} />}
+        tint={tint}
+        onRename={state === undefined ? undefined : () => setRenaming(true)}
+        renameBusy={commands.rename.state.status === "pending"}
+        owner={viewer.username}
+        createdAt={summary.created_at}
+        actions={renderPlayAll(
+          summary,
+          <MenuButton
+            iconOnly
+            icon={<MoreHorizontal size={16} />}
+            label="歌单操作"
+            actions={[{ id: "delete", label: "删除歌单", disabled: state === undefined, onSelect: () => setDeleting(true) }]}
+          />,
+        )}
+      />
+    );
+
   return (
     <>
-      <Panel title={name} headingRef={headingRef} action={<Link to="/me/playlists">全部歌单</Link>}>
-        {summary === undefined ? (
-          detail.isError ? <FailureNotice error={detail.error} action={<Button onClick={() => void detail.refetch()}>重试</Button>} /> : null
-        ) : (
-          <div className={styles.header}>
-            <p className={styles.meta}>{playlistMetaText({ ...summary, track_count: state?.track_count ?? summary.track_count })}</p>
-            <div className={styles.headerActions}>
-              {renderPlayAll(summary)}
-              <div className={styles.manage}>
-                <Button disabled={state === undefined} busy={commands.rename.state.status === "pending"} onClick={() => setRenaming(true)}>
-                  改名
-                </Button>
-                <Button disabled={state === undefined} onClick={() => setDeleting(true)}>
-                  删除歌单
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-        {state !== undefined && state.over_limit_count > 0 ? <Notice tone="warning">{overLimitText(state.over_limit_count)}</Notice> : null}
-        {outcome?.kind === "removed" ? (
-          <Notice
-            tone="success"
-            action={
-              <Button busy={commands.restore.state.status === "pending"} onClick={() => restore(outcome.token, outcome.title)}>
-                {commands.restore.state.status === "pending" ? "正在撤销…" : "撤销"}
-              </Button>
-            }
-          >
-            已移除《{outcome.title}》
-          </Notice>
-        ) : null}
-        {outcome?.kind === "message" ? <Notice tone="success">{outcome.text}</Notice> : null}
-        {changed ? <p role="status" className={styles.note}>歌单有变化，正在重新读取。</p> : null}
-        {commandFailure?.status === "failed" ? (
-          <FailureNotice
-            error={commandFailure.error}
-            context="write"
-            messages={playlistMessages}
-            action={commandFailure.uncertain ? <Button onClick={retryLast}>重试</Button> : undefined}
+      <Page title={name} header={header}>
+        <div className={styles.body}>
+          {summary === undefined && detail.isError ? <FailureNotice error={detail.error} action={<Button onClick={() => void detail.refetch()}>重试</Button>} /> : null}
+          <SongsHeading
+            headingRef={headingRef}
+            count={trackCount ?? null}
+            detail={summary === undefined ? "" : playlistDurationText({ ...summary, track_count: trackCount ?? summary.track_count })}
           />
-        ) : null}
-        {items.isError && !changed ? <FailureNotice error={items.error} action={<Button onClick={() => void items.refetch()}>重试</Button>} /> : null}
-        {data === undefined || outOfRange ? (
-          items.isError ? null : <Skeleton label="正在加载歌单" lines={6} />
-        ) : total === 0 ? (
-          <p>歌单里还没有曲目。</p>
-        ) : data.items.length === 0 ? (
-          <p>
-            这一页没有曲目。{" "}
-            <Link to="/me/playlists/$playlistId" params={{ playlistId }} search={{}}>
-              回到第一页
-            </Link>
-          </p>
-        ) : (
-          <div className={styles.results} aria-busy={items.isPlaceholderData || changed}>
-            <PlaylistItems
-              data={data}
-              order={dropped !== null && dropped.base === data.items ? dropped.order : null}
-              busy={busy}
-              renderTrackActions={renderTrackActions}
-              actionsOf={actionsOf}
-              onDrop={(item, order, beforeItemId) => move(item, { action: "before", beforeItemId }, order)}
+          {state !== undefined && state.over_limit_count > 0 ? <Notice tone="warning">{overLimitText(state.over_limit_count)}</Notice> : null}
+          {outcome?.kind === "removed" ? (
+            <Notice
+              tone="success"
+              action={
+                <Button busy={commands.restore.state.status === "pending"} onClick={() => restore(outcome.token, outcome.title)}>
+                  {commands.restore.state.status === "pending" ? "正在撤销…" : "撤销"}
+                </Button>
+              }
+            >
+              已移除《{outcome.title}》
+            </Notice>
+          ) : null}
+          {outcome?.kind === "message" ? <Notice tone="success">{outcome.text}</Notice> : null}
+          {changed ? <p role="status" className={styles.note}>歌单有变化，正在重新读取。</p> : null}
+          {commandFailure?.status === "failed" ? (
+            <FailureNotice
+              error={commandFailure.error}
+              context="write"
+              messages={playlistMessages}
+              action={commandFailure.uncertain ? <Button onClick={retryLast}>重试</Button> : undefined}
             />
-            <Pagination
-              label="歌单分页"
-              page={page}
-              pageCount={pageCount}
-              renderLink={(target, linkProps) => (
-                <Link
-                  to="/me/playlists/$playlistId"
-                  params={{ playlistId }}
-                  search={{ page: target > 1 ? target : undefined }}
-                  onClick={() => {
-                    carried.carry(target, data.playlist.revision);
-                    showTop();
-                  }}
-                  {...linkProps}
-                />
-              )}
-            />
-          </div>
-        )}
-      </Panel>
+          ) : null}
+          {items.isError && !changed ? <FailureNotice error={items.error} action={<Button onClick={() => void items.refetch()}>重试</Button>} /> : null}
+          {data === undefined || outOfRange ? (
+            items.isError ? null : <Skeleton label="正在加载歌单" lines={6} />
+          ) : total === 0 ? (
+            <p>歌单里还没有曲目。</p>
+          ) : data.items.length === 0 ? (
+            <p>
+              这一页没有曲目。{" "}
+              <Link to="/me/playlists/$playlistId" params={{ playlistId }} search={{}}>
+                回到第一页
+              </Link>
+            </p>
+          ) : (
+            <div className={styles.results} aria-busy={items.isPlaceholderData || changed}>
+              <PlaylistItems
+                data={data}
+                order={dropped !== null && dropped.base === data.items ? dropped.order : null}
+                busy={busy}
+                renderTrackActions={renderTrackActions}
+                actionsOf={actionsOf}
+                onDrop={(item, order, beforeItemId) => move(item, { action: "before", beforeItemId }, order)}
+              />
+              <Pagination
+                label="歌单分页"
+                page={page}
+                pageCount={pageCount}
+                renderLink={(target, linkProps) => (
+                  <Link
+                    to="/me/playlists/$playlistId"
+                    params={{ playlistId }}
+                    search={{ page: target > 1 ? target : undefined }}
+                    onClick={() => {
+                      carried.carry(target, data.playlist.revision);
+                      showTop();
+                    }}
+                    {...linkProps}
+                  />
+                )}
+              />
+            </div>
+          )}
+        </div>
+      </Page>
       {state === undefined ? null : (
         <RenamePlaylistDialog
           open={renaming}
@@ -370,19 +390,20 @@ function PlaylistItems({ data, order, busy, renderTrackActions, actionsOf, onDro
   }
   return (
     <FavoriteStatusScope trackIds={trackIds}>
+      {/* DndContext 在表格外面：它在自己的位置渲染读屏说明与播报区，放进表体会让 rowgroup 里出现不是 row 的元素。 */}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragEnd={dragEnd}
         accessibility={{ announcements, screenReaderInstructions: { draggable: "按空格键拿起，用上下方向键移动，再按空格键放下；按 Esc 取消。" } }}
       >
-        <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-          <ol className={styles.list} role="list">
+        <TrackTable label="歌单曲目" sortable>
+          <SortableContext items={ids} strategy={verticalListSortingStrategy}>
             {rows.map((item) => (
               <PlaylistRow key={item.id} item={item} disabled={busy} actions={renderTrackActions(item, actionsOf(item))} />
             ))}
-          </ol>
-        </SortableContext>
+          </SortableContext>
+        </TrackTable>
       </DndContext>
     </FavoriteStatusScope>
   );
@@ -390,45 +411,20 @@ function PlaylistItems({ data, order, busy, renderTrackActions, actionsOf, onDro
 
 function PlaylistRow({ item, disabled, actions }: { item: PlaylistItemDTO; disabled: boolean; actions: ReactNode }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: item.id, disabled });
-  const { track } = item;
-  const title = trackTitleOf(track);
   return (
-    <li ref={setNodeRef} className={styles.row} data-dragging={isDragging ? "" : undefined} data-missing={track.present ? undefined : ""} style={{ transform: CSS.Translate.toString(transform), transition }}>
-      {/* 修改进行中不能开始新的拖动，但把手不设 disabled：键盘放下后焦点留在把手上，不丢到页面开头。 */}
-      <button ref={setActivatorNodeRef} type="button" className={styles.handle} aria-label={`拖动《${title}》调整顺序`} {...attributes} {...listeners}>
-        <GripVertical size={18} aria-hidden="true" />
-      </button>
-      <span className={styles.position}>{formatCount(item.position)}</span>
-      <div className={styles.body}>
-        <p className={styles.title}>{title}</p>
-        <p className={styles.secondary}>
-          <ArtistNames text={trackArtistOf(track)} refs={trackArtistRefsOf(track)} />
-          {" — "}
-          {track.present ? (
-            <Link to="/albums/$groupId" params={{ groupId: track.group_id }} search={{ release: track.release.id }}>
-              {track.release.title}
-            </Link>
-          ) : (
-            track.release.title
-          )}
-        </p>
-        {track.present ? null : (
-          <span className={styles.tag}>
-            <StatusTag tone="outline">文件缺失</StatusTag>
-          </span>
-        )}
-      </div>
-      <div className={styles.actions}>{actions}</div>
-      <span className={styles.duration}>
-        {track.duration_seconds === null ? (
-          <>
-            <span aria-hidden="true">{formatDuration(null)}</span>
-            <VisuallyHidden>时长未知</VisuallyHidden>
-          </>
-        ) : (
-          formatDuration(track.duration_seconds)
-        )}
-      </span>
-    </li>
+    <TrackTableRow
+      ref={setNodeRef}
+      track={item.track}
+      number={item.position}
+      actions={actions}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+      dragging={isDragging}
+      handle={
+        // 修改进行中不能开始新的拖动，但把手不设 disabled：键盘放下后焦点留在把手上，不丢到页面开头。
+        <button ref={setActivatorNodeRef} type="button" aria-label={`拖动《${trackTitleOf(item.track)}》调整顺序`} {...attributes} {...listeners}>
+          <GripVertical size={18} aria-hidden="true" />
+        </button>
+      }
+    />
   );
 }

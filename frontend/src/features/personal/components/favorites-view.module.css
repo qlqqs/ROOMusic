@@ -41,35 +41,6 @@
   min-width: 0;
 }
 
-.title {
-  display: block;
-}
-
-/* 艺人在标题下一行，字号与颜色降一级；表格的行标题用标题字体，这里换回正文字体。 */
-.artist {
-  display: block;
-  color: var(--text-secondary);
-  font-family: var(--font-body);
-  font-size: var(--fs-13);
-  font-weight: 400;
-}
-
-.tag {
-  display: block;
-  margin-top: var(--space-1);
-  font-family: var(--font-body);
-  font-weight: 400;
-}
-
-/* 文件缺失的行灰色（次级文字色，仍满足对比度）；不能播放由“文件缺失”标签与操作区的说明表达，不只靠颜色。 */
-.missing {
-  color: var(--text-secondary);
-}
-
-.time {
-  white-space: nowrap;
-}
-
 .note,
 .updated {
   color: var(--text-secondary);

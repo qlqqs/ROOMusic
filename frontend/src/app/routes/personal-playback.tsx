@@ -1,5 +1,5 @@
 import { Play } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { formatCount } from "../../shared/lib/number";
 import { Button, FailureNotice } from "../../shared/ui";
 import { PERSONAL_TRACK_LIMIT, usePersonalQueue, type PersonalQueueDTO, type PersonalQueueSource } from "../../features/personal";
@@ -32,7 +32,7 @@ function playableOf(queue: PersonalQueueDTO, table: CapabilityTable) {
  * 收藏的曲目、或一个歌单的“播放全部”：每次按下都向服务端读一次（先去掉文件缺失的，再按顺序取前 10,000 首），
  * 去掉这个浏览器放不了的，替换当前队列开始播放；原来的队列满了也不影响。一首都不能播放、读取失败或身份变了时，当前队列不变。
  */
-export function PersonalPlayAll({ source, label = "播放全部" }: { source: PersonalQueueSource; label?: string }) {
+export function PersonalPlayAll({ source, label = "播放全部", trailing }: { source: PersonalQueueSource; label?: string; /** 跟在按钮后面的操作（歌单的“···”）。 */ trailing?: ReactNode }) {
   const engine = usePlayerEngine();
   const capability = usePlaybackCapabilities();
   const queue = usePersonalQueue(source);
@@ -67,6 +67,7 @@ export function PersonalPlayAll({ source, label = "播放全部" }: { source: Pe
         <Button variant="primary" icon={<Play size={16} />} disabled={disabledReason !== null} busy={queue.pending} onClick={start}>
           {queue.pending ? "正在读取…" : label}
         </Button>
+        {trailing}
       </div>
       {disabledReason === null ? null : <p>{disabledReason}</p>}
       {capability.isError ? <FailureNotice error={capability.error} action={<Button onClick={() => void capability.refetch()}>重试检查</Button>} /> : null}

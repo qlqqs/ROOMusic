@@ -82,7 +82,7 @@ async function screenshot(page: Page, info: TestInfo, width: number, name: strin
   if (width === 375 || width === 1440) await page.screenshot({ path: info.outputPath(`${width}-${name}.png`), fullPage: true });
 }
 
-const playlistRow = (page: Page, title: string) => page.getByRole("listitem").filter({ has: page.getByRole("button", { name: `拖动《${title}》调整顺序`, exact: true }) });
+const playlistRow = (page: Page, title: string) => page.getByRole("row").filter({ has: page.getByRole("button", { name: `拖动《${title}》调整顺序`, exact: true }) });
 const trackTable = (page: Page) => page.getByRole("table", { name: "收藏的曲目" });
 
 async function openMenu(page: Page, trigger: Locator) {
@@ -222,7 +222,11 @@ for (const width of widths) {
     expect(c?.x ?? 0).toBeGreaterThan((b?.x ?? 0) + (b?.width ?? 0));
     expect(c?.y ?? 0).toBeLessThan((b?.y ?? 0) + (b?.height ?? 0));
     expect((c?.y ?? 0) + (c?.height ?? 0)).toBeGreaterThan(b?.y ?? 0);
-    expect(await visibleLines(page.getByRole("button", { name: "删除歌单", exact: true }))).toBe(1);
+    const playAll = await page.getByRole("button", { name: /播放全部/ }).boundingBox();
+    const playlistActions = await page.getByRole("button", { name: "歌单操作", exact: true }).boundingBox();
+    expect(playAll).not.toBeNull();
+    expect(playlistActions).not.toBeNull();
+    expect(Math.abs((playAll?.y ?? 0) - (playlistActions?.y ?? 0))).toBeLessThanOrEqual(1);
     await screenshot(page, info, width, "playlist-detail");
     await layout(page, "歌单详情");
     const secondHandle = playlistRow(page, "第二乐章").getByRole("button", { name: "拖动《第二乐章》调整顺序", exact: true });
@@ -346,7 +350,7 @@ test("纯键盘：收藏与取消、新建并加入、四种菜单移动、键�
   await expect(page.getByRole("button", { name: /^拖动《/ }).first()).toHaveAttribute("aria-label", "拖动《第二乐章》调整顺序");
   await keyboardMenu(page, firstRow.getByRole("button", { name: "更多操作", exact: true }), "从歌单移除");
   await expect(firstRow).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "键盘歌单", exact: true })).toBeFocused();
+  await expect(page.getByRole("heading", { level: 2, name: "歌曲 1", exact: true })).toBeFocused();
   await keyboardTarget(page, page.getByRole("button", { name: "撤销", exact: true }));
   await expect(firstRow).toBeVisible();
   await expect(page.getByText("已放回《第一乐章》，在第 2 首。", { exact: true })).toBeVisible();

@@ -1,16 +1,8 @@
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { ChevronsUpDown, LogOut, Settings } from "lucide-react";
 import { roleLabels, useLogout, useViewerScope } from "../../features/auth";
-import { Button, FailureNotice, useMenu } from "../../shared/ui";
+import { Avatar, Button, FailureNotice, useMenu } from "../../shared/ui";
 import styles from "./user-menu.module.css";
-
-const segmenter = typeof Intl.Segmenter === "function" ? new Intl.Segmenter(undefined, { granularity: "grapheme" }) : null;
-
-/** 头像里的字：用户名的第一个字（按字素取，带组合符号的字不会被拆开），拉丁字母转大写。 */
-function initialOf(username: string): string {
-  const first = segmenter?.segment(username)[Symbol.iterator]().next().value?.segment ?? Array.from(username)[0] ?? "";
-  return first.toLocaleUpperCase();
-}
 
 /**
  * 侧栏底部的当前用户：一整行是按钮，点开在上方弹出“设置 / 退出登录”。在设置页时这一行显示为当前项。
@@ -47,9 +39,7 @@ export function UserMenu({ onNavigate }: { onNavigate?: () => void }) {
       <button type="button" className={styles.trigger} data-current={inSettings ? "" : undefined} aria-busy={logout.isPending || undefined}
         // 用户名与角色是网格里的两行，文字之间没有空白，读屏会连读；可访问名称显式写成“用户名 角色”，与看到的文字一致。
         aria-label={`${viewer.username} ${roleText}`} {...menu.triggerProps}>
-        <span className={styles.avatar} aria-hidden="true">
-          {initialOf(viewer.username)}
-        </span>
+        <Avatar name={viewer.username} />
         <span className={styles.who}>
           <span className={styles.name}>{viewer.username}</span>
           <span className={styles.role}>{roleText}</span>
