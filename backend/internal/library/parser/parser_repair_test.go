@@ -867,3 +867,31 @@ func TestSplitCreditNamesUsesArtistRules(t *testing.T) {
 		t.Fatalf("credit 拆分结果 = %#v，期望 %#v", got, want)
 	}
 }
+
+func TestParseCueDocumentFallsBackToSameStemAudioFile(t *testing.T) {
+	directory := t.TempDir()
+	if err := os.WriteFile(filepath.Join(directory, "1.01 - 酸欠少女.flac"), parsertest.FLACStream(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(directory, "album.cue")
+	content := `FILE "1.01 - 酸欠少女.wav" WAVE
+ TRACK 01 AUDIO
+  INDEX 01 00:00:00
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	document, err := ParseCueDocument(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(document.Files) != 1 || document.Files[0].Status != "present" || document.Files[0].Path != "1.01 - 酸欠少女.flac" {
+		t.Fatalf("unexpected FILE reference: %+v", document.Files)
+	}
+	if len(document.Diagnostics) != 0 {
+		t.Fatalf("unexpected diagnostics: %+v", document.Diagnostics)
+	}
+	if len(document.Tracks) != 1 || document.Tracks[0].ReferencedFile != "1.01 - 酸欠少女.flac" {
+		t.Fatalf("unexpected CUE track reference: %+v", document.Tracks)
+	}
+}

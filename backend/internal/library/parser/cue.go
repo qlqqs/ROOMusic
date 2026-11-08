@@ -157,7 +157,15 @@ func ParseCueDocument(path string, containmentRoot ...string) (CueDocument, erro
 			currentFileID = nextFileID
 			ref := strings.TrimSpace(tokens[1])
 			status, resolved, diagnostic := validateCueReference(path, boundary, ref)
-			currentFile = &CueFileReference{Path: normalizeCueReference(ref), Type: strings.ToUpper(tokens[2]), ResolvedPath: resolved, Status: status}
+			referencePath := normalizeCueReference(ref)
+			if status == "present" {
+				if cueDir, dirErr := filepath.Abs(filepath.Dir(path)); dirErr == nil {
+					if relative, relErr := filepath.Rel(cueDir, resolved); relErr == nil {
+						referencePath = filepath.ToSlash(filepath.Clean(relative))
+					}
+				}
+			}
+			currentFile = &CueFileReference{Path: referencePath, Type: strings.ToUpper(tokens[2]), ResolvedPath: resolved, Status: status}
 			if diagnostic != "" {
 				appendCueDiagnostic(&document, diagnostic)
 			}

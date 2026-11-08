@@ -38,6 +38,10 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
   缺少 `INDEX 01` 的 CUE track，只写有界 `cue_reference` 诊断并跳过不可用虚拟 Track，
   不单独阻断其它确定输入完成扫描；不得为其伪造父来源或零偏移 Track。非音频附件
   （例如 `.jpg`、`.png`、`.txt`）不产生 unsupported 音频诊断。
+- CUE `FILE` 目标不存在时，先在同目录按同名 stem 依次查找 `.flac`、`.mp3`、`.ogg`、
+  `.opus`、`.wav`、`.m4a`（扩展名不区分大小写），命中即视为 `present`，
+  `CueFileReference.Path` / `CueTrack.ReferencedFile` 改为实际文件并照常执行包含根与
+  symlink 检查；都找不到才按“目标不存在”处理。用于抓轨 CUE 写 `.wav`、实际已转为 FLAC 的情况。
 - `0011_scan_staging_and_identity.sql` 增加有界暂存、候选锚点、物理/CUE 身份、音频/CUE 列、字段/归组证据、署名及元数据。
   0010 旧来源身份不兼容（见下方规则）；0032 的列表整理见[多流派合同](./genre-contracts.md)。
 - `0012_track_credits_and_release_metadata.sql` 增加 Release `edition`/`label`/`barcode`
