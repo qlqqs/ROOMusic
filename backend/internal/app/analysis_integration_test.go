@@ -207,6 +207,11 @@ func TestPostgreSQLAnalysisTrackAndAlbumGainWaitForPendingTracks(t *testing.T) {
 	if err := store.SaveTrackAnalysis(ctx, byID[tracks[2].id], analysis.Version, catalog.TrackAnalysisResult{Status: "failed", FailureCategory: "ffmpeg_exit"}); err != nil {
 		t.Fatal(err)
 	}
+	// Present 曲目若缺少扫描所需的 source_size，不属于专辑增益工作集。
+	outOfAnalysisSet := insertAnalysisTrack(t, application, rootID, releaseID, groupID, "unscanned.flac")
+	if _, err := application.database.Exec(`UPDATE tracks SET source_size=NULL WHERE id=$1::uuid`, outOfAnalysisSet.id); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := application.database.Exec(`UPDATE track_analyses SET attempts=3 WHERE track_id=$1::uuid`, tracks[2].id); err != nil {
 		t.Fatal(err)
 	}

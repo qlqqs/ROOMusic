@@ -276,8 +276,10 @@ func (s *Store) albumAnalysis(ctx context.Context, releaseID string, version int
 	rows, err := s.database.QueryContext(ctx, `SELECT t.content_fingerprint,t.source_size,t.source_modified_at,t.cue_index_frames,t.cue_end_frames,
  a.analyzer_version,a.content_fingerprint,a.source_size,a.source_modified_at,a.cue_index_frames,a.cue_end_frames,a.status,
  a.attempts,a.analyzed_at,NOW(),a.integrated_lufs,a.true_peak_dbtp,a.duration_ms
- FROM tracks t JOIN media m ON m.id=t.medium_id LEFT JOIN track_analyses a ON a.track_id=t.id
- WHERE m.release_id=$1::uuid AND t.source_status='present'`, releaseID)
+ FROM tracks t JOIN media m ON m.id=t.medium_id JOIN library_roots lr ON lr.id=t.source_root_id
+ LEFT JOIN track_analyses a ON a.track_id=t.id
+ WHERE m.release_id=$1::uuid AND t.source_status='present' AND lr.status='active'
+ AND t.source_size IS NOT NULL AND t.source_modified_at IS NOT NULL`, releaseID)
 	if err != nil {
 		return nil, fmt.Errorf("load album analysis: %w", err)
 	}
