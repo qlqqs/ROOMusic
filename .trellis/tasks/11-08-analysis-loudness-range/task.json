@@ -12,7 +12,7 @@
   "assignee": "qlqq",
   "createdAt": "2026-11-08",
   "completedAt": null,
-  "branch": null,
+  "branch": "scan-m-formats",
   "base_branch": "main",
   "worktree_path": null,
   "commit": null,
