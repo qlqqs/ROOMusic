@@ -52,6 +52,7 @@ func parseFLAC(path string) (AudioObservation, error) {
 			}
 		}
 	}
+	finalizeTags(&observation)
 	return applyFilenameFallback(path, observation), nil
 }
 

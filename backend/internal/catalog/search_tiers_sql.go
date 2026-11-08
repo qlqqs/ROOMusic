@@ -9,21 +9,7 @@ import (
 
 // normalizedTierMatch 的哈希只是有界索引定位，仍比较完整键；长标签不放进B-tree键。
 func (p searchPlan) normalizedTierMatch(rank int) string {
-	if rank == 0 {
-		if p.args[0] == p.args[3] {
-			return `$1::text<>'' AND $4::text IS NOT NULL AND $5::text IS NOT NULL AND $6::text IS NOT NULL
- AND v.projection_generation=$7 AND md5(v.normalized_value)=md5($1)
- AND v.normalized_value COLLATE "C"=$1 COLLATE "C" AND v.short_grams @> ARRAY[$3]::text[]`
-		}
-		return `$1::text<>'' AND v.projection_generation=$7 AND (
- (v.field<>'catalog_number' AND md5(v.normalized_value)=md5($1) AND v.normalized_value COLLATE "C"=$1 COLLATE "C" AND v.short_grams @> ARRAY[$3]::text[])
- OR (v.field='catalog_number' AND $4<>'' AND md5(v.normalized_value)=md5($4) AND v.normalized_value COLLATE "C"=$4 COLLATE "C" AND v.short_grams @> ARRAY[$6]::text[]))`
-	}
-	prefix := `v.normalized_value LIKE (CASE WHEN v.field='catalog_number' THEN $5 ELSE $2 END)||'%' ESCAPE '~'`
-	if rank == 1 {
-		return p.matchPredicate + ` AND ` + prefix + ` AND v.normalized_value<>CASE WHEN v.field='catalog_number' THEN $4 ELSE $1 END`
-	}
-	return p.matchPredicate + ` AND NOT (` + prefix + `)`
+	return p.normalizedMatch(rank)
 }
 
 func (p searchPlan) rankedStageSQL(rank int, attention bool) string {
@@ -34,8 +20,8 @@ func (p searchPlan) rankedStageSQL(rank int, attention bool) string {
 	}
 	// 合法OFFSET也可能接近bigint上限；top-k额外取一行不能让极大页码变成数据库错误。
 	// 饱和的是整型表示范围，不是业务候选上限；实际页仍使用调用方完整OFFSET。
-	remaining, exclude := `(CASE WHEN $9::bigint>9223372036854775807-$8::bigint
- THEN 9223372036854775807 ELSE $8::bigint+$9::bigint END)`, "TRUE"
+	remaining, exclude := `(CASE WHEN $15::bigint>9223372036854775807-$14::bigint
+ THEN 9223372036854775807 ELSE $14::bigint+$15::bigint END)`, "TRUE"
 	if rank > 0 {
 		prior := strings.Join(priorPages, " UNION ALL ")
 		remaining += `-(SELECT count(*) FROM (` + prior + `) preceding)`

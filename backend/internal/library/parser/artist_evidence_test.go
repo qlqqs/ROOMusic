@@ -131,18 +131,19 @@ func TestArtistDisplayPreservesAggregateBeyondSingleValueBudget(t *testing.T) {
 
 func TestArtistEvidenceAllRolesAndAlbumArtistSelection(t *testing.T) {
 	observation := AudioObservation{SourceKind: "flac_vorbis_comment"}
-	for _, tag := range [][2]string{{"ALBUMARTIST", "First"}, {"ALBUM ARTIST", "Last"}, {"Composer", "Jay Chou"}, {"Composer", "周杰倫"}, {"CONDUCTOR", "Conductor"}, {"PERFORMER", "One / Two"}, {"PRODUCER", "Producer"}} {
+	for _, tag := range [][2]string{{"ALBUMARTIST", "First"}, {"ALBUMARTIST", " Second "}, {"ALBUM ARTIST", "Last"}, {"Composer", "Jay Chou"}, {"Composer", "周杰倫"}, {"CONDUCTOR", "Conductor"}, {"PERFORMER", "One / Two"}, {"PRODUCER", "Producer"}} {
 		if err := setAudioTag(&observation, tag[0], tag[1]); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if observation.AlbumArtist != "Last" {
-		t.Fatalf("改变了专辑艺人选择：%q", observation.AlbumArtist)
+	finalizeTags(&observation)
+	if observation.AlbumArtist != "First / Second" {
+		t.Fatalf("专辑艺人未按优先级合并同级多值：%q", observation.AlbumArtist)
 	}
-	if len(observation.ArtistTagEvidence) != 7 || observation.ArtistTagEvidence[2].TagKey != "Composer" || observation.ArtistTagEvidence[3].OccurrenceIndex != 1 {
+	if len(observation.ArtistTagEvidence) != 8 || observation.ArtistTagEvidence[3].TagKey != "Composer" || observation.ArtistTagEvidence[4].OccurrenceIndex != 1 {
 		t.Fatalf("标签键或次序丢失：%+v", observation.ArtistTagEvidence)
 	}
-	if !reflect.DeepEqual(observation.Credits[:2], []metadata.Credit{{Role: "composer", Name: "Jay Chou"}, {Role: "composer", Name: "周杰倫"}}) {
+	if !reflect.DeepEqual(observation.Credits[:2], []metadata.Credit{{Role: "composer", Name: "Jay Chou", Source: "tag"}, {Role: "composer", Name: "周杰倫", Source: "tag"}}) {
 		t.Fatalf("署名被套用别名：%+v", observation.Credits)
 	}
 }
@@ -170,7 +171,8 @@ func TestID3NullSeparatedArtistValuesPreserveEncodingAndAlbumSelection(t *testin
 			if err := parseID3Frames(frame[10:], &observation, 3, 0); err != nil {
 				t.Fatal(err)
 			}
-			if observation.AlbumArtist != "First" || len(observation.ArtistTagEvidence) != 4 {
+			finalizeTags(&observation)
+			if observation.AlbumArtist != "First / Second" || len(observation.ArtistTagEvidence) != 4 {
 				t.Fatalf("专辑选择或原文丢失：%+v", observation)
 			}
 		})
@@ -207,11 +209,173 @@ func TestArtistEvidenceDistinguishesFallbackFromLiteralUnknownName(t *testing.T)
 	}
 }
 
-func TestM4AAlbumArtistEvidenceDoesNotChangeExistingSelection(t *testing.T) {
+func TestM4AAlbumArtistFallbackLosesToPrimarySelection(t *testing.T) {
 	items := repairM4AAtom("aART", append(repairM4AData(1, []byte("First")), repairM4AData(1, []byte("Last"))...))
 	items = append(items, repairM4AFreeform("ALBUMARTIST", "Evidence Only")...)
 	observation := parseLyricsFixture(t, "track.m4a", lyricsM4A("mp4a", items))
-	if observation.AlbumArtist != "Last" || len(observation.ArtistTagEvidence) != 4 {
-		t.Fatalf("专辑艺人选择受证据覆盖：%+v", observation)
+	if observation.AlbumArtist != "First / Last" || len(observation.ArtistTagEvidence) != 4 {
+		t.Fatalf("主级多值或回退优先级错误：%+v", observation)
+	}
+}
+
+func TestVorbisAlbumArtistFallbackLevelsAndNewlineValues(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		tags [][2]string
+		want string
+	}{
+		{"第三级", [][2]string{{"ALBUM ARTIST", " X "}, {"ALBUM ARTIST", "Y"}}, "X / Y"},
+		{"第二级压过第三级", [][2]string{{"ALBUM_ARTIST", "A"}, {"ALBUM ARTIST", "B"}}, "A"},
+		{"第一级空值回退", [][2]string{{"ALBUMARTIST", " \n "}, {"ALBUM_ARTIST", "A\nB"}, {"ALBUM ARTIST", "C"}}, "A / B"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			observation := AudioObservation{SourceKind: "flac_vorbis_comment"}
+			for _, tag := range tc.tags {
+				if err := setAudioTag(&observation, tag[0], tag[1]); err != nil {
+					t.Fatal(err)
+				}
+			}
+			finalizeTags(&observation)
+			if observation.AlbumArtist != tc.want {
+				t.Fatalf("AlbumArtist=%q，期望 %q", observation.AlbumArtist, tc.want)
+			}
+		})
+	}
+}
+
+func TestID3TXXXAlbumArtistFallback(t *testing.T) {
+	for _, encoding := range []byte{0, 1, 2, 3} {
+		t.Run(fmt.Sprint(encoding), func(t *testing.T) {
+			text := "albumartist\x00A\x00B"
+			payload := []byte(text)
+			if encoding == 1 {
+				payload = repairUTF16(text, true)
+			}
+			if encoding == 2 {
+				payload = repairUTF16(text, false)[2:]
+			}
+			frame := repairMP3BinaryFrame("TXXX", append([]byte{encoding}, payload...))
+			observation := AudioObservation{SourceKind: "mp3_id3v2"}
+			if err := parseID3Frames(frame[10:], &observation, 3, 0); err != nil {
+				t.Fatal(err)
+			}
+			finalizeTags(&observation)
+			if observation.AlbumArtist != "A / B" || len(observation.ArtistTagEvidence) != 2 || observation.ArtistTagEvidence[0].TagKey != "TXXX:ALBUMARTIST" {
+				t.Fatalf("TXXX 专辑艺人回退错误：%+v", observation)
+			}
+		})
+	}
+}
+
+func TestCompilationTagsAndOriginalYearFallback(t *testing.T) {
+	for _, tc := range []struct {
+		key, value string
+		want       bool
+	}{
+		{"COMPILATION", " YES ", true}, {"COMPILATION", "0", false}, {"ITUNESCOMPILATION", "no", false},
+	} {
+		observation := AudioObservation{}
+		if err := setAudioTag(&observation, tc.key, tc.value); err != nil {
+			t.Fatal(err)
+		}
+		finalizeTags(&observation)
+		if observation.Compilation != tc.want {
+			t.Errorf("%s=%q Compilation=%t，期望 %t", tc.key, tc.value, observation.Compilation, tc.want)
+		}
+	}
+	for _, tc := range []struct {
+		name    string
+		current int
+		want    int
+	}{
+		{"缺失时回退", 0, 1999}, {"本版年份优先", 2020, 2020},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			observation := AudioObservation{Year: tc.current}
+			if err := setAudioTag(&observation, "ORIGINALDATE", "1999-04-03"); err != nil {
+				t.Fatal(err)
+			}
+			finalizeTags(&observation)
+			if observation.Year != tc.want {
+				t.Fatalf("Year=%d，期望 %d", observation.Year, tc.want)
+			}
+		})
+	}
+	for _, value := range []string{"1", "0"} {
+		frame := repairMP3BinaryFrame("TCMP", append([]byte{3}, []byte(value)...))
+		observation := AudioObservation{SourceKind: "mp3_id3v2"}
+		if err := parseID3Frames(frame[10:], &observation, 3, 0); err != nil {
+			t.Fatal(err)
+		}
+		finalizeTags(&observation)
+		if got, want := observation.Compilation, value == "1"; got != want {
+			t.Errorf("ID3 TCMP=%s Compilation=%t，期望 %t", value, got, want)
+		}
+	}
+	for _, tc := range []struct {
+		value byte
+		want  bool
+	}{{0, false}, {1, true}} {
+		observation := AudioObservation{}
+		if err := parseM4AItemValue("cpil", []byte{tc.value}, []byte{0, 0, 0, 21}, &observation); err != nil {
+			t.Fatal(err)
+		}
+		finalizeTags(&observation)
+		if observation.Compilation != tc.want {
+			t.Errorf("cpil=%d Compilation=%t，期望 %t", tc.value, observation.Compilation, tc.want)
+		}
+	}
+}
+
+func TestNewlineArtistCreditsRemainSeparatedAcrossTagEntrances(t *testing.T) {
+	observation := AudioObservation{}
+	if err := setAudioTag(&observation, "COMPOSER", "一\n二\r\n三"); err != nil {
+		t.Fatal(err)
+	}
+	frame := repairMP3BinaryFrame("TCOM", append([]byte{3}, []byte("四\n五")...))
+	if err := parseID3Frames(frame[10:], &observation, 3, 0); err != nil {
+		t.Fatal(err)
+	}
+	items := repairM4AAtom(string([]byte{0xa9, 'w', 'r', 't'}), repairM4AData(1, []byte("六\r\n七")))
+	items = append(items, repairM4AFreeform("COMPOSER", "八\n九")...)
+	parseM4AAtoms(repairM4AAtom("ilst", items), &observation)
+	finalizeTags(&observation)
+	want := []metadata.Credit{
+		{Role: "composer", Name: "一", Source: "tag"}, {Role: "composer", Name: "七", Source: "tag"}, {Role: "composer", Name: "三", Source: "tag"},
+		{Role: "composer", Name: "九", Source: "tag"}, {Role: "composer", Name: "二", Source: "tag"}, {Role: "composer", Name: "五", Source: "tag"},
+		{Role: "composer", Name: "八", Source: "tag"}, {Role: "composer", Name: "六", Source: "tag"}, {Role: "composer", Name: "四", Source: "tag"},
+	}
+	if !reflect.DeepEqual(observation.Credits, want) {
+		t.Fatalf("换行署名粘连或丢失：%+v", observation.Credits)
+	}
+}
+
+func TestM4AAlbumArtistFreeformFallback(t *testing.T) {
+	items := repairM4AFreeform("ALBUMARTIST", "A")
+	observation := parseLyricsFixture(t, "track.m4a", lyricsM4A("mp4a", items))
+	if observation.AlbumArtist != "A" {
+		t.Fatalf("缺少 aART 时未采用 freeform 专辑艺人：%q", observation.AlbumArtist)
+	}
+}
+
+func TestID3OriginalYearFallback(t *testing.T) {
+	for _, tc := range []struct {
+		name, current string
+		want          int
+	}{{"缺本版年份", "", 1999}, {"本版年份存在", "2020", 2020}} {
+		t.Run(tc.name, func(t *testing.T) {
+			frames := repairMP3BinaryFrame("TDOR", append([]byte{3}, []byte("1999-04-03")...))[10:]
+			if tc.current != "" {
+				frames = append(frames, repairMP3BinaryFrame("TDRC", append([]byte{3}, []byte(tc.current)...))[10:]...)
+			}
+			observation := AudioObservation{SourceKind: "mp3_id3v2"}
+			if err := parseID3Frames(frames, &observation, 3, 0); err != nil {
+				t.Fatal(err)
+			}
+			finalizeTags(&observation)
+			if observation.Year != tc.want {
+				t.Fatalf("ID3 年份 = %d，期望 %d", observation.Year, tc.want)
+			}
+		})
 	}
 }

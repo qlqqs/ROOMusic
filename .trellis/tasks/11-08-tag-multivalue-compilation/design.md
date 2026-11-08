@@ -10,7 +10,7 @@
 | `catalog/metadata`（叶子包，只依赖标准库） | 拆分规则：换行/NUL 先拆；拉丁“姓, 名”整体保留；合辑占位词表与判定；多值拼接助手 | `SplitGenres`（流派合同另有裁决） |
 | `library/parser` | 专辑艺人回退键与多值拼接；ID3 `TXXX` 按规范解析；读合辑标志（`COMPILATION`/`TCMP`/`cpil`）；原始年份回退键；署名改用原文拆分（不先删换行） | 其它字段的读取、指纹、歌词 |
 | `catalog/ingest` | `SourceObservation.Compilation`；新文件 `compilation.go` 的合辑判定，organizer 只加一行调用 | 分组、partition、scope、Release 沿用规则 |
-| `catalog/internal/artistgraph` | 合辑占位的发行级署名不建事实；`Version` 2→3 触发后台按新拆分重新整理 | 名字键、人工意图表、治理执行器 |
+| `catalog/internal/artistgraph` | 合辑占位的发行级署名不建事实；`Version` 3→4 触发后台按新拆分重新整理 | 名字键、人工意图表、治理执行器 |
 | `catalog/internal/searchindex` | 不改代码；`ProjectionVersion` 1→2（多名值按新拆分重建，与 ⑦⑧⑬ 共用一次升级） | 匹配与排序 |
 | 前端 | `evidenceSourceLabel` 增加 `compilation: "合辑"` 一项 | 其余无改动（见 §3.4） |
 
@@ -36,7 +36,7 @@ artistgraph.Refresh：发行级原文是合辑占位 → 不建 release_artist/a
                      曲目艺人照常（§8，已裁决）
 ```
 
-已有数据：`artistgraph.Version` 升到 3 后，后台按清单对全部发行重跑 `Refresh`，从已存原文（`releases.artist`、`releases.album_artist`、
+已有数据：`artistgraph.Version` 升到 4 后，后台按清单对全部发行重跑 `Refresh`，从已存原文（`releases.artist`、`releases.album_artist`、
 `artist_tag_evidence`、`track_credits`）按新规则重拆；`track_credits` 里已经按旧规则拆开的名字（如作曲 `Bach` + `Johann Sebastian`）要等下一次扫描重新解析才改过来（§6）。
 
 ## 3. 接口合同
@@ -127,7 +127,7 @@ organizer.go 只在 `albumArtistDecision := ...` 之后加一行 `applyCompilati
 ### 3.4 artistgraph 与读取
 
 - `refreshFacts`：`release_artist` 的 scan 事实在原有 `inferred` 条件之外，`metadata.IsCompilationPlaceholder(r.artist)` 时也跳过；`album_artist` 的 scan 事实在 `IsCompilationPlaceholder(r.album)` 时跳过；correction 层值是占位词时同样跳过（管理员把专辑艺人改成“群星”即手动标为合辑）。曲目艺人与各署名角色不受影响。
-- `artistgraph.Version` 2→3（`state.go`）。`releasesql.ArtistRefsReady` 已取共享常量，不得硬编码。
+- `artistgraph.Version` 3→4（`state.go`）。`releasesql.ArtistRefsReady` 已取共享常量，不得硬编码。
 - 读取侧不改：合辑发行 `artist="群星"`、`album_artist=null`、`artist_refs=[]`、`album_artist_refs=[]`；前端 `albumArtistOf` 得到“群星”，`ArtistNames` 在 refs 为空时显示纯文字，不能点进艺人页。
 - 字段证据新出现 `source="compilation"`、`rule_id="compilation_v1"`；前端 `evidenceSourceLabel` 增加 `compilation: "合辑"`。REST 形状不变（来源与规则是开放字符串）。
 
@@ -139,11 +139,11 @@ organizer.go 只在 `albumArtistDecision := ...` 之后加一行 `applyCompilati
 | --- | --- | --- |
 | `parser.CommonVersion` | 计入 T 线的 +1 | 多值拆分、专辑艺人回退、TXXX、合辑标志、原始年份都是共用规则或跨格式改动；不单独改 `formatVersions` |
 | `ingest.GroupingVersion` | 计入 T 线的 +1 | organizer 加了 `applyCompilation`，同样的观察会写出不同的字段决定 |
-| `artistgraph.Version` | 2 → 3 | 已存原文要按新拆分与占位规则重新整理 |
+| `artistgraph.Version` | 3 → 4 | 已存原文要按新拆分与占位规则重新整理 |
 | `searchindex.ProjectionVersion` | 1 → 2 | 多名搜索值按新拆分重建 |
 | `textnorm.Version` | 不变 | 见 ⑬ 设计：升它会让全部艺人名字键换新 |
 
-T 线四项一起合入 main，各版本合计只升一次：`CommonVersion` +1（⑥ 多值与合辑标志、⑦ 新键、⑧ 作品标签）、`GroupingVersion` +1（⑥ organizer 的一行、⑧ 写入路径的 `AssignWorks`）、`artistgraph.Version` 2→3、`ProjectionVersion` 1→2。
+T 线四项一起合入 main，各版本合计只升一次：`CommonVersion` +1（⑥ 多值与合辑标志、⑦ 新键、⑧ 作品标签）、`GroupingVersion` +1（⑥ organizer 的一行、⑧ 写入路径的 `AssignWorks`）、`artistgraph.Version` 3→4、`ProjectionVersion` 1→2。
 
 两种合入顺序：
 
@@ -231,7 +231,7 @@ T 线四项一起合入 main，各版本合计只升一次：`CommonVersion` +1�
 
 ### 6.1 生效路径
 
-- 部署（`artistgraph.Version=3`）后后台整理重跑全部发行：发行级与曲目艺人按新规则从已存原文重拆；合辑占位的发行级署名消失。整理期间艺人页 503 `artist_catalog_preparing`、艺人名是纯文字（现有协议）。
+- 部署（`artistgraph.Version=4`）后后台整理重跑全部发行：发行级与曲目艺人按新规则从已存原文重拆；合辑占位的发行级署名消失。整理期间艺人页 503 `artist_catalog_preparing`、艺人名是纯文字（现有协议）。
 - `track_credits` 的名字是解析时拆好的，旧拆分（`Bach` + `Johann Sebastian`）要等下一次扫描（④ 已在 main 时靠 `CommonVersion` +1 触发重新解析，见 §3.5）。
 - `releases.artist` 显示“群星”、新合辑判定、TPE2 多值、TXXX 回退都在下一次扫描后生效。
 
@@ -277,3 +277,7 @@ T 线四项一起合入 main，各版本合计只升一次：`CommonVersion` +1�
 ## 9. 生产库统计
 
 已执行，见 [m8-production-stats.md](../11-08-scan-reference-port/research/m8-production-stats.md)。与本项相关：艺人 67、名字键 68、有效署名 646（前后对比基线）；人工意图与艺人收藏都是 0；含逗号的原文只有日文/中文名单 6 种，没有拉丁“姓, 名”；合辑占位 0。
+
+## 2026-11-08 合入 main 对齐
+
+O 线与 T 线各自已将 `artistgraph.Version` 提升到 3；整合后统一为 4，避免已有版本 3 的投影漏回填。`searchindex.ProjectionVersion=2`、`textnorm.Version=1` 保持不变。下述线内升级/回滚说明是原实施背景，合并后的回滚须连同 O 线规则判断，不能只回退版本常量。

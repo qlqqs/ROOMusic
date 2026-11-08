@@ -16,6 +16,8 @@
 
 `CatalogNumber(raw string) string` 在此基础上移除空白、Unicode Pd 和 U+2212；姓名与标题不移除连字符。普通键为空时空结果；编号键为空时关闭编号分支，不能用空 LIKE 匹配全库。
 
+`Loose(key string) string` 输入为 Text/CatalogNumber 输出，删除 P*/S*（不补空格）后折叠空白；不读字表、不 panic。额外删除 Lm 类的 U+02BC `ʼ`，使 `'`、`’`、`‘`、`ʼ`、NFKC 后的 `＇` 共用去标点键；其它字母、数字、组合附加符、`ー`、`々` 保留。原规范化及身份键不变；规则变更只升搜索/艺人投影版本，避免身份与人工意图失联。
+
 固定 OpenCC `ver.1.1.9`、提交 `556ed22496d650bd0b13b6c163be9814637970ae`；原始 ST/TS 文件、Apache-2.0 LICENSE 及中文来源/哈希说明随 `textnorm/data/opencc` 内置。TS 第一候选为目标，ST 仅补 TS 未覆盖且收敛后无歧义的逆映射；不做无向闭包，不合并“炼”和“链”。解析验证 UTF-8、单 scalar、重复键、坏行和非自环循环，最终函数幂等。
 
 `Version=1`，`LoadEmbedded() error` 使用 `sync.Once` 保存结果和错误。所有生产入口先成功预检才调用 Text/CatalogNumber；误用此前置条件属于编程错误，可 panic，不能返回半规则字符串。无 init panic。加载失败禁发投影、保留旧目录与搜索，结构或数据库失败仍按真正故障处理。
@@ -24,15 +26,33 @@
 
 迁移 `0025_catalog_search.sql` 建空投影和状态/清单/进度表，启用 `public.pg_trgm`，一般文本 trigram GIN、短一/二 scalar `short_grams` GIN；不执行存量转换。角色、字段、原文 4096 字节、规范键 64 KiB、subject 二择一均由约束或写入边界校验；不截词。扩展在 database 级 public schema，不装进测试的临时 schema。
 
-搜索值逐字段保存实际有效原文、规范键、normalization_version、projection_generation，不复制 group ID 或封面。subject 完成标记额外保存同事务更新的 `search_title`（空标题也有行），用于窄表排序，不能脱离完成代次单独更新。搜索常量/原文保留，不改标签或显示写法。发行字段从 `release_effective` 读取；曲目角色来自四类 credits。
+迁移 `0040_search_punctuation.sql`（合入编号）给两张搜索表加 `loose_value TEXT`、`loose_grams TEXT[]`，及 trigram/short-gram GIN、md5 exact 部分索引。非 NULL 键限 1–65536 字节，两列空值须配对；仅保存非空且不同于原键的 `Loose(normalized_value)` 与 `ShortGrams`。全部写入入口（含作品字段）共用规则。迁移不回算；`.down.sql` 删除新增结构。
+
+O/T 合并后版本为 2/4/1（搜索/艺人/规范化）；两线原艺人投影版本均为 3，合并再升到 4，与⑥⑦⑧同批回填；发布前搜索沿用 legacy、艺人栏返回整理期 503。
+
+搜索值逐字段保存实际有效原文、规范键、normalization_version、projection_generation，不复制 group ID 或封面。subject 完成标记额外保存同事务更新的 `search_title`（空标题也有行），用于窄表排序，不能脱离完成代次单独更新。搜索常量/原文保留，不改标签或显示写法。发行字段从 `release_effective` 读取；曲目角色来自六类 credits。
+
+曲目 credit 角色及顺序为 `lyricist → composer → arranger → conductor → performer → producer`（0038 放宽角色 CHECK）。
+搜索只匹配姓名，不按细分 detail 或 source 匹配；`match.role` 增加 lyricist/arranger，完整角色序在这六项前保留 release_artist/album_artist/track_artist。
+`ProjectionVersion=2` 已由⑥提升，本项不再升；`textnorm.Version=1` 不变。新角色值随重扫写入，仍遵守同事务投影合同。
 
 扫描候选、M3 修正/清除/撤销、claim 双方/撤销，在业务行锁之前取得 CATP，事实/有效值变化、input_revision、目标代次投影及完成标记同事务提交。失败回滚业务，禁止提交后 best-effort。missing 保留索引值并实时 join 状态排除，不为搜索引入额外负向对账。归组不复制到投影，代表/默认版本在读取时按既有规则确定。
 
 ### 同事务有界批量曲目刷新
 
-`searchindex.RefreshTracks(ctx, tx, ids)`只接收本事务已实际改变事实的曲目ID集合，调用者已持CATP。先规范ID大小写/去重/排序，一次读取目标state，再按128项处理全部chunk；每个ID只Touch一次input_revision，完整读取当前轨/四角色credit，复用单轨Apply的原造值、规范化与预算校验，同事务删除/写入搜索值、search_title、完成代次/revision及live_updated。空集合无操作，非法ID仍由参数`::uuid[]`拒绝，不能新增包依赖或放宽allowlist。所有chunk共用外部事务，后段错误/取消必须回滚前段及上层事实更新；不能把128当对象总上限。
+`searchindex.RefreshTracks(ctx, tx, ids)`只接收本事务已实际改变事实的曲目ID集合，调用者已持CATP。先规范ID大小写/去重/排序，一次读取目标state，再按128项处理全部chunk；每个ID只Touch一次input_revision，完整读取当前轨/六角色credit，复用单轨Apply的原造值、规范化与预算校验，同事务删除/写入搜索值、search_title、完成代次/revision及live_updated。空集合无操作，非法ID仍由参数`::uuid[]`拒绝，不能新增包依赖或放宽allowlist。所有chunk共用外部事务，后段错误/取消必须回滚前段及上层事实更新；不能把128当对象总上限。
 
-艺人可信原文恢复只收集display实际改变的轨，按相同有界块更新tracks.artist，再调用此端口；未变更轨不Touch。单轨RefreshTrack/Apply合同不变，不用批接口复制另一套造值规则。必需测试：260项跨chunk与逐轨结果等价、重复ID只递增一次、四credit/多名顺序、missing/空/未知UUID/旧revision、封闭清单live_updated、后段失败与取消全事务回滚、graph130轨恢复而未变化轨revision不变。批量化减少往返不代表串行热计划或完整回填自动达标。
+艺人可信原文恢复只收集display实际改变的轨，按相同有界块更新tracks.artist，再调用此端口；未变更轨不Touch。单轨RefreshTrack/Apply合同不变，不用批接口复制另一套造值规则。必需测试：260项跨chunk与逐轨结果等价、重复ID只递增一次、六credit/多名顺序、missing/空/未知UUID/旧revision、封闭清单live_updated、后段失败与取消全事务回滚、graph130轨恢复而未变化轨revision不变。批量化减少往返不代表串行热计划或完整回填自动达标。
+
+### 古典作品字段（⑧）
+
+0039 的曲目字段 CHECK 增加 `work_title` 与 `work_catalog`；单轨写入、批量刷新和后台回填使用同一造值规则。原文分别取作品名、作品编号片段；作品名走 `textnorm.Text`，作品编号走 `textnorm.CatalogNumber`。全部 exact/prefix/contains、稀疏/密集、最佳命中说明的编号分支使用 `field IN ('catalog_number','work_catalog')`，普通分支排除这两项。
+
+present 子轨的两个作品字段与 track_title 一样传播到发行，再按可见成员归组；只命中某轨作品不能使其兄弟轨命中。`match.field` 增加 `work_title|work_catalog`，其它 match 形状与角色空值语义不变，界面说明为“作品”“作品编号”。单轨标签作品即使 work_index 为空也进入投影；没有作品则不造值，重扫清空会删除旧值。
+
+`BWV 1007/bwv1007`、`Op. 67/op.67` 可按现有编号键匹配；`op67` 自⑬起通过编号去标点键匹配 `Op. 67`，不升 `textnorm.Version` 或已为2的 `ProjectionVersion`。down 删除两个新字段值并恢复旧 CHECK，不留下旧代码不认识的字段。
+
+验证须覆盖：编号原文与规范键、单轨与批量投影一致、present 传播专辑而不传播兄弟轨、missing 不出现、重扫替换，以及严格 API 样本中的两个新枚举；SQL 行为须用隔离 PostgreSQL 验证，编译与跳过数据库的测试不替代集成证据。
 
 ## 在线回填与发布
 
@@ -62,9 +82,17 @@ q 去首尾空白后最多 200 UTF-8 字节；新接口拒绝非法 UTF-8 与非
 
 ## 查询语义
 
-字面完整字段包含，不分词、不用 similarity。先规范化再转义 `% _ ~`；普通/编号两条分支各自规范化。每个非空键带安全连续一/二 scalar 预筛并 LIKE 残差，不猜 PostgreSQL 是否能产生 trigram。
+字面完整字段包含，不分词、不用 similarity。普通字段用 `n=Text(q)`、`ln=Loose(n)`；`catalog_number|work_catalog` 用 `c=CatalogNumber(q)`、`lc=Loose(c)`。先规范化再转义 `% _ ~`，用户参数全部绑定。
 
-完全相同 → 开头相同 → 包含；同等级按规范化标题 COLLATE C、稳定 ID。说明同等级按自身标题、署名、厂牌、编号与固定角色序打平。发行命中来自有效发行字段或 present 子轨标题/艺人/四类 credit；曲目命中来自自身字段或所属发行字段，某轨 credit 不传播到兄弟轨。专辑按可见成员命中后按 group 去重；代表仍是既有默认/年份规则，matched_release_id 另给实际命中成员。
+每种键独立判断去标点分支：去标点键非空，且与原键相同或去空格后至少 2 个 Unicode scalar，才启用。完整匹配为：
+
+- N：`short_grams` 预筛，`normalized_value` 对原键作字面包含。
+- L1：`loose_value IS NOT NULL`，用 `loose_grams` 预筛及去标点键包含匹配；`acdc` 可命中 `AC/DC`。
+- L2：仅查询去标点后改变时，用 `short_grams` 预筛及原值对去标点键的包含匹配；`ac/dc` 可命中 `ACDC`。
+
+三分支各保留一/二 scalar 预筛及 LIKE 残差；艺人主名/别名及传播共用此规则。空普通键返回空结果，空编号键关闭编号分支；空或变化后仅 1 字的去标点键只关闭 L1/L2，不新增错误码。
+
+各分支取 exact/prefix/contains 等级 0/1/2，`rank=等级×2+偏移`（N=0，L=1），值及实体取最小 rank。六层顺序为原值完全相同 → 去标点完全相同 → 原值开头相同 → 去标点开头相同 → 原值包含 → 去标点包含；`match.kind` 仍按 `rank/2` 返回 `exact|prefix|contains`，`original` 保留实际命中原文。legacy 仍使用原三等级。六层同层按规范化标题 COLLATE C、稳定 ID。说明同等级按自身标题、署名、厂牌、编号与固定角色序打平。发行命中来自有效发行字段或 present 子轨标题/艺人/六类 credit；曲目命中来自自身字段或所属发行字段，某轨 credit 不传播到兄弟轨。专辑按可见成员命中后按 group 去重；代表仍是既有默认/年份规则，matched_release_id 另给实际命中成员。
 
 状态、路径选择、计数、分页及补全使用同一只读 RR 快照；对这类速度敏感的查询按[统一数据库规范](./database-guidelines.md)在事务内局部关闭 JIT（`SET LOCAL jit = off`），不改变数据库全局设置。legacy 下旧两路由匹配/排序不变；新专辑栏复用旧发行谓词，曲目栏只查原表标题/艺人及有效发行标题/艺人/专辑艺人。新投影发布后旧两路由有 q 时默认按相关性排序；组列表显式 `sort=added_at_desc` 保留 F 线的加入时间顺序，仍按完整规范化匹配过滤。无 q 保留原序及精确总数。搜索组摘要同时保留全部可见成员最早的 `added_at`，不能误用代表版本时间。
 
@@ -72,20 +100,22 @@ q 去首尾空白后最多 200 UTF-8 字节；新接口拒绝非法 UTF-8 与非
 
 - 保留 trigram/short-gram GIN，另用 `md5(normalized_value)` 定长索引定位完全相同层，之后仍比较完整规范键；哈希不是身份判定或安全校验，碰撞不能形成误命中。避免把可达 64 KiB 的键放进 B-tree。
 - `catalog_projection_subject_state.search_title` 与值表/完成标记同事务生成；`catalog_projection_title_order_idx` 用前 128 scalar 作增量排序前缀，SQL 后续仍比较完整标题和 UUID，不截词。组排序标题仍来自当前代表发行，归组/默认版本不复制到该列。
-- 依 exact、prefix、contains 三层依次求完整排序的 top(offset+limit+1)。更高层填满所需窗口时不展开低层；未填满说明该层已完整耗尽，低层仅排除这些已命中的实体。这是精确分页等价变换，不是固定候选上限。深页仍可遍历全部匹配。
-- 每层最多读取 4,097 条原始搜索值来**选择稀疏/密集 SQL 路径**；不是结果候选、实体总数或页数上限。稀疏路径从 GIN 命中出发；密集路径按完整实体标题序做参数化 EXISTS，并在完整语义下取得该页。建议没有 1,001 实体总数探测，但允许这一内部执行策略判定。重复命中超过 4,096、跨三个等级/深页及超长同前缀标题有专门集成反例。
+- 依上述六层依次求完整排序的 top(offset+limit+1)。更高层填满所需窗口时不展开低层；未填满说明该层已完整耗尽，低层仅排除这些已命中的实体。这是精确分页等价变换，不是固定候选上限。深页仍可遍历全部匹配。
+- 逐层探测覆盖该层完整匹配；1,001 实体及 4,097 原始值探测覆盖 N∪L1∪L2。每层最多读取 4,097 条原始搜索值来**选择稀疏/密集 SQL 路径**；不是结果候选、实体总数或页数上限。稀疏路径从 GIN 命中出发；密集路径按完整实体标题序做参数化 EXISTS，并在完整语义下取得该页。建议没有 1,001 实体总数探测，但允许这一内部执行策略判定。重复命中超过 4,096、跨各等级/深页及超长同前缀标题有专门集成反例。
 - 新结果总数仍从唯一实体基表经完整 EXISTS/IN 半连接取前 1,001 实体，没有先物化/聚合全体实体。稀疏路径只在同一快照探测确认原始命中≤4,096后物化**完整原始命中**，不 LIMIT 该集合，不物化传播后的全体实体；这样避免关系索引让 planner 反向逐轨扫描值表。原始策略探测不参与 `total`/`has_more`。旧两路由仍精确 count。
-- PostgreSQL 在当前 locale 中用 `[[:alnum:]]{3}` 判断一般键和编号键是否具备连续三个字母/数字（可提取 trigram 的保守充分条件）。不足时使用 short-gram GIN，并把完整 LIKE 保留为残差；不在 Go 中仅凭 rune 数猜词法。这样避免复用的通用计划对不可提取 trigram 的短词做整棵 trigram 索引扫描。普通/编号键相同时合并重复分支；参数仍绑定。
+- PostgreSQL 在当前 locale 中用 `[[:alnum:]]{3}` 分别判断一般键、编号键及两者去标点键是否具备连续三个字母/数字（可提取 trigram 的保守充分条件）。不足时使用 short-gram GIN，并把完整 LIKE 保留为残差；不在 Go 中仅凭 rune 数猜词法。这样避免复用的通用计划对不可提取 trigram 的短词做整棵 trigram 索引扫描。普通/编号键相同时合并重复分支，未启用的 L1/L2 不展开；参数仍绑定。
 - 密集路径的关联 EXISTS 先按 track_id/release_id 读取当前来源的全部字段（子查询 `OFFSET 0` 保留边界），再应用完整匹配残差。不能让通用计划把全局热门词 GIN 命中重复执行数千次；语句复用后的 HTTP 热测及来源边界单测同时覆盖。
 - 搜索与最近新增/加入时间排序共用 catalog 的 `readWithLocalJITOff`，只在只读 RR 事务内 `SET LOCAL jit = off`；没有全局 JIT、`enable_*`、`plan_cache_mode` 或最短查询长度开关。语句复用后的热测同样纳入验收，不能只用新连接的单次 EXPLAIN 声称达标。
 - 密集专辑候选沿发行规范标题索引流，只保留各组按既有默认/年份/创建时间/ID规则选出的当前可见代表；完整匹配仍检查全组成员。最后同标题按 **group ID** 打平，不误用发行 ID。`releases(group_id,id)` 支持局部成员查找；可见性 EXISTS 按发行早停，避免首屏之前聚合十万轨。
 - top-k 的 OFFSET 加 `limit+1` 采用先判断剩余额度的 bigint 安全加法；极大但合法的页码仍返回空页与正确总数，不能变成 503，不能收紧旧分页合同。
-- 仅对已选页补最佳命中说明与安全摘要。专辑说明分别读取发行值和 present 曲目值，避免对每首兄弟轨重复读取发行值；四类 credit 不传播到兄弟轨。
+- 仅对已选页补最佳命中说明与安全摘要。专辑说明分别读取发行值和 present 曲目值，避免对每首兄弟轨重复读取发行值；六类 credit 不传播到兄弟轨。
 - I10热门艺人说明按track与release两条来源分支分别定位后UNION ALL，保持专辑发行值只在发行来源行读取、轨级署名不传播兄弟轨；来源先取齐字段再匹配，不限制候选。0030为有效署名新增身份＋track/release覆盖索引，避免每个页内来源重扫热门身份全部署名。原值归属仍须唯一artist且名字原文一致。旧列表精确计数从完整命中来源传播再按实体去重，不做1001截断；新接口仍保留有界计数与原策略探测。
 
 ## 验证
 
 规范化逐类正反例、真实表哈希/幂等/并发 race；回填重启与扫描交错；扫描与修正/撤销/claim 同事务；401/参数/空查询/短词/通配符/分页 1000 与 1001/非代表成员/missing/安全 DTO/真实 handler 样本。隔离十万 present 曲目库记录真实生产 SQL 的 EXPLAIN ANALYZE BUFFERS、回填耗时和首屏 p95；不得用强制索引、最短长度或截候选规避性能目标。
+
+⑬必需验证：去标点键生成表（含 U+02BC）、NULL/非 NULL 投影、N/L1/L2 与六层排序、艺人名字传播、回填发布与名字键不变、0040 往返。正确：`acdc` 依次命中 `ACDC`、`AC/DC`、`ACDC Tribute`、`AC/DC Live`；`夜曲` 同时命中原值与 `《夜曲》`；`c#`、`!!!` 只走 N。错误：改身份键、先排去标点包含或只计 N。无数据库测试通过不代替集成与 I10 证据。
 
 并发回归不能假定所有业务请求同时等待发行行锁：CATP 之前串行化后，后续请求可能等 advisory 锁。测试以测试持锁连接 PID 的 `pg_blocking_pids` 递归阻塞链证明重叠，不误数其他 schema 的请求；失败时先释放测试锁并等待事务完成，再清理 schema。
 

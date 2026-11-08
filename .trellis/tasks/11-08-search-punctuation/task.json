@@ -3,7 +3,7 @@
   "name": "search-punctuation",
   "title": "⑬ 搜索忽略标点",
   "description": "搜索规范化增加去标点匹配键并回填搜索投影",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

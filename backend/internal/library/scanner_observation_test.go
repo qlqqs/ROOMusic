@@ -194,9 +194,9 @@ func TestCanonicalCreditObservationsAreStableAndDeduplicated(t *testing.T) {
 		{Role: "", Name: "ignored"},
 	})
 	want := []metadata.Credit{
-		{Role: "composer", Name: "Composer One"},
-		{Role: "composer", Name: "Composer Two"},
-		{Role: "producer", Name: "Producer One"},
+		{Role: "composer", Name: "Composer One", Source: "tag"},
+		{Role: "composer", Name: "Composer Two", Source: "tag"},
+		{Role: "producer", Name: "Producer One", Source: "tag"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("canonical credits = %+v，期望 %+v", got, want)

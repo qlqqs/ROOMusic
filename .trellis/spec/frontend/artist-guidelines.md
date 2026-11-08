@@ -8,7 +8,7 @@
 ## 归属与依赖
 
 - **catalog 的纯数据模块**拥有各处共用的艺人合同：`ArtistRef`（`artist_id, name, display_name`，`api/decoders.ts`）、`ArtistSummary`、
-  七个角色与首字母分组的词表及中文名（`api/artist-summary.ts`），以及曲目摘要上的回退规则 `trackArtistRefsOf`、`albumArtistRefsOf`（与
+  九个角色（发行艺人、专辑艺人、曲目艺人、作词、作曲、编曲、指挥、演奏、制作人，固定此序）与首字母分组的词表及中文名（`api/artist-summary.ts`），以及曲目摘要上的回退规则 `trackArtistRefsOf`、`albumArtistRefsOf`（与
   `trackArtistOf`、`albumArtistOf` 同一个回退，名字与链接不会错配）。search、personal、governance、artists 都从这里取，互不导入解码器。
 - **catalog 的 `ArtistNames`**（`components/artist-names.tsx`）是唯一把署名渲染成艺人链接的组件：只有艺人数据就绪（`artists_state=ready`）且有引用时，
   每位艺人一个 `/artists/{artist_id}` 链接（文字用这处署名的原写法，多位之间“ / ”），否则原样文字，**不加“正在整理”之类的说明**。
@@ -27,8 +27,8 @@
 ## 地址与查询键
 
 - `/artists?q=&initial=&role=&sort=album_count&page=`：q 与专辑列表同一个校验；initial 是 A–Z、`kana`、`#`，只在按名字排序时保留；
-  role 是七个角色之一；按名字排序是默认、不写；任何筛选改变都回到第 1 页；越界页码替换成末页。按名字排序时按首字母分组显示，按专辑数排序时不分组。
-- `/artists/{id}?albums_page=&track_role=&tracks_page=&names_page=`：专辑、曲目、名字各自翻页；曲目栏按角色分栏（只列有曲目的角色），换角色时曲目回到第 1 页。
+  role 是九个角色之一；按名字排序是默认、不写；任何筛选改变都回到第 1 页；越界页码替换成末页。按名字排序时按首字母分组显示，按专辑数排序时不分组。
+- `/artists/{id}?albums_page=&track_role=&tracks_page=&names_page=`：专辑、曲目、名字各自翻页；曲目栏按七个曲目级角色分栏（`artistTrackRoles`，只列有曲目的角色，没有数据的角色不显示），换角色时曲目回到第 1 页。
   路径不是 UUID 时不发请求、显示“艺人不存在”；详情给出 `redirect_artist_id` 时用替换历史的方式带到现在的艺人页。
 - `/me/favorites?tab=artists`：“我的收藏”的艺人一栏；`/search?artists_page=`：搜索结果的艺人栏页码；`/operations?artist=`：这位艺人的操作记录（与 release、group 取并集）；
   `/artist-candidates?status=&page=`（管理员）：“重复艺人”。`status` 只接受 `ignored`，不传就是待处理；切换时不带页码，回到第一页；

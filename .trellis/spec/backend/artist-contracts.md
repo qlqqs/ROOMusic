@@ -2,7 +2,7 @@
 
 ## 1. 范围与权威
 
-触及人物署名、名字归一、别名、主显示名、拆分作用域、艺人引用或队列时读取。产品裁决为 S 线设计 §5–8、§10–11、§13–15；本任务仍须按其测试与性能门禁验收，本文不是通过声明。
+触及人物署名、名字归一、别名、主显示名、拆分作用域、艺人引用或队列时读取。产品裁决为 S 线设计 §5–8、§10–11、§13–15；验收仍以任务门禁为准。
 
 `catalog/internal/artistgraph` 拥有事实解析与派生，`catalog/governance` 拥有四张人工意图表，`personal` 拥有收藏。前端只消费明确ID，不按同名猜人；后端仅按版本化 `textnorm.Text` 同键默认归一，作用域人工拆分优先，不使用相似度。
 
@@ -19,11 +19,18 @@
 
 ### 解析与主名
 
-事实按稳定release/track UUID和名字记录存储；不把人工覆盖绑到重扫会替换的旧credit行。解析顺序：track+key → release+key → 全局binding → initial_artist，再解析redirect。M3专辑艺人修正同时覆盖发行的release_artist/album_artist；清除恢复scan层，其它角色不受影响。
+事实按稳定release/track UUID和名字存储；不绑定重扫替换的旧credit行。0038按轨/角色/姓名去重，忽略detail。解析顺序：track+key → release+key → 全局binding → initial_artist，再解析redirect。M3专辑艺人修正同时覆盖发行的release_artist/album_artist；清除恢复scan层，其它角色不受影响。
 
 有效present署名每个subject/name一票，跨角色去重；并列原文C排序及name ID。无票取当前归属名字稳定首项，最后initial_name。人工display_name始终优先。改名不抢名字键，纯人工旧主名不自动成为永久别名；合并保留source主名覆盖，搜索投影可经 `source_artist_id` 读取被重定向身份的主名，不把该名字路由抢到target。
 
 原始重复标签保存在 `artist_tag_evidence`，每轨最多100项、每项4096字节，超限失败诊断，不截掉末项伪造完整集合；扫描继续写入，但不再据此产生同轨同角色候选。投影版本2仅保留发行全部present轨真实单一同键Artist与有效单一AlbumArtist的一一对应信号，新增跨发行括号别名信号；读取按艺人排除同曲同身份共同署名，细则见§9。
+
+### 合辑占位与版本3
+
+`metadata.IsCompilationPlaceholder` 整串比较内置占位词，全角 ASCII/空格折叠、小写、压连续空白；不包含 `unknown/unknown artist/misc/sampler/karaoke`。
+scan 层发行 `release_artist/album_artist` 与专辑艺人 correction 层为占位词时均不建事实；曲目艺人与其它角色照常，真实“未知艺术家”仍保留。
+`artistgraph.Version=4`，`searchindex.ProjectionVersion=2`（T线只升一次；O/T 两线艺人投影同为3，合并后再升至4），`textnorm.Version` 不变。后台重拆已存原文；解析时已拆好的 credits 与新标签规则在下次扫描生效。
+仍命中的名字键保留人工意图；消失的旧键、身份与意图不删除、不迁给新名字，无 present 参与后从列表消失。必需验证：发行与 correction 占位无 refs，曲目同名仍有 refs。
 
 ### 在线构建
 
@@ -45,14 +52,14 @@
 
 ### REST
 
-所有GET先鉴权与参数校验。`GET /artists`：q≤200字节，initial=A–Z/kana/#，role七项白名单，sort=name/album_count，分页1/50、最大100。只列有present参与且未重定向的身份。`role=album_artist`匹配发行级release_artist或album_artist任一；`role=release_artist`仍只匹配本身，DTO七项roles词表不变。名字按首字母分组/C规范化键/ID；专辑数排序不分组。首字母采用固定Unicode17 Unihan kMandarin首音表，不扩为拼音搜索。
+所有GET先鉴权与参数校验。`GET /artists`：q≤200字节，initial=A–Z/kana/#，role九项白名单（release_artist、album_artist及下列七种曲目角色），sort=name/album_count，分页1/50、最大100。只列有present参与且未重定向的身份。`role=album_artist`匹配发行级release_artist或album_artist任一；`role=release_artist`仍只匹配本身，DTO同词表。名字按首字母分组/C规范化键/ID；专辑数排序不分组。首字母采用固定Unicode17 Unihan kMandarin首音表，不扩为拼音搜索。
 
-`ArtistSummary={id,name,initial_group,album_count,track_count,roles,available}`，数字为全角色去重可见group/present轨数，role筛选只筛身份。发行级署名的曲目参与取其全部轨。摘要读取先按身份/来源去重，再将发行级展开的present轨与轨级present轨取完整并集，按当前归组计数；七项角色分别做present存在性判断，避免先物化“角色×曲目”再重复去重。不能由去重轨集合丢弃角色，也不缓存可能过期的参与数；详情含missing参与明细仍用原完整参与关系。
+`ArtistSummary={id,name,initial_group,album_count,track_count,roles,available}`，数字为全角色去重可见group/present轨数，role筛选只筛身份。发行级署名的曲目参与取其全部轨。摘要读取先按身份/来源去重，再将发行级展开的present轨与轨级present轨取完整并集，按当前归组计数；九项角色分别做present存在性判断，避免先物化“角色×曲目”再重复去重。不能由去重轨集合丢弃角色，也不缓存可能过期的参与数；详情含missing参与明细仍用原完整参与关系。
 
 - `GET /artists/{id}`：artist/revision/name_source/names/names_pagination/role_counts/redirect_artist_id；首批20名字；旧重定向ID仍200，保留安全摘要，子路由解析canonical；空身份available=false而不是404。
 - `/names`：`{id,key_id,name,is_display_name,origin}` 分页，按key拆分不可只拆繁体写法。
-- `/albums`：默认只有有效album_artist关系，按group去重，保留credited_release_id，代表仍按全组规则。`participation=any`改为所有角色的present参与组，追加非空七项词表`roles`（默认省略）；`q`在两种模式下都按任一可见成员的有效专辑标题作ILIKE字面包含，转义%/_/~，不改变代表/credited版本及排序。分页仍默认50、最大100。空/未知/重复participation为400 `invalid_artist_participation`，非法/重复q为400 `invalid_query`。
-- `/tracks`：track_artist/composer/conductor/performer/producer必填角色，含missing；发行标题、发行ID、碟/轨序、轨ID稳定排序。
+- `/albums`：默认只有有效album_artist关系，按group去重，保留credited_release_id，代表仍按全组规则。`participation=any`改为所有角色的present参与组，追加非空九项词表`roles`（默认省略）；`q`在两种模式下都按任一可见成员的有效专辑标题作ILIKE字面包含，转义%/_/~，不改变代表/credited版本及排序。分页仍默认50、最大100。空/未知/重复participation为400 `invalid_artist_participation`，非法/重复q为400 `invalid_query`。
+- `/tracks`：track_artist/lyricist/composer/arranger/conductor/performer/producer必填角色，含missing；发行标题、发行ID、碟/轨序、轨ID稳定排序。
 - `/queue`：order=album/random，random要求UUID seed；所有角色轨并集去重，present优先筛选，随机 `md5(seed||':'||track_id)` 全体排序后LIMIT10000，不能先限再随机。完整摘要同快照每1000一批，精确total/missing_total/returned、limit/truncated，格式支持由前端判断。
 
 `ArtistRef={artist_id,name,display_name}`，name为原署名、display_name为有效主名。ReleaseSummary加artist_refs/album_artist_refs，ReleaseTrack/TrackSummary及每条credit加artist_refs，数组必传、最多100。所有共享摘要须在同一SQL/只读快照里判断ready并读取refs；未就绪返回[]，不读半图。`releasesql.ArtistRefsReady`的目标/已发布规范化版本须取`textnorm.Version`，目标/已发布投影版本须取`artistgraph.Version`，不得硬编码协议版本。catalog延迟敏感只读入口复用readWithLocalJITOff，事务后恢复的集成测试不可省。
@@ -125,7 +132,7 @@
 
 ### 3. 合同
 
-规范化键须以`)`结尾、仅一对括号且不在开头；内外去空白后非空且不同。排除词集中在`bracket.go`：合作前缀含`cv`，拉丁版本词按整词、中文版本词按包含匹配；纯数字/标点/空白与解析后不是单一名字的内容不产生别名。别名再经`textnorm.Text`，哈希定位后核对完整键。
+规范化键须以`)`结尾、仅一对括号且不在开头；内外去空白后非空且不同。排除词集中在`bracket.go`，并复用乐器表排除中英文乐器写法：合作前缀含`cv`，拉丁版本词按整词、中文版本词按包含匹配；纯数字/标点/空白与解析后不是单一名字的内容不产生别名。别名再经`textnorm.Text`，哈希定位后核对完整键。
 
 刷新删除任一端发行在本批内的别名信号，再按有效署名的名字键/发行汇总最小原写法，重建至少一端在本批内的发行组合。曲目署名须present，发行署名须该发行有present曲目；不依赖扫描先后。
 

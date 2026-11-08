@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"strconv"
 	"strings"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -83,6 +84,7 @@ func parseM4A(path string) (AudioObservation, error) {
 		// 这里只提供容器级粗略估算，不据此推断发行或来源语义。
 		o.Bitrate = estimatedBitrateKbps(info.Size(), o.DurationSeconds)
 	}
+	finalizeTags(&o)
 	return applyFilenameFallback(path, o), nil
 }
 
@@ -543,6 +545,18 @@ func parseM4AItemValue(itemType string, value, typeCode []byte, observation *Aud
 		}
 		return nil
 	}
+	if itemType == "\xa9mvi" || itemType == "\xa9mvc" {
+		if itemType == "\xa9mvi" && len(value) == 2 {
+			collectWorkTag(observation, "©mvi", strconv.Itoa(int(binary.BigEndian.Uint16(value))))
+		}
+		return nil
+	}
+	if itemType == "cpil" {
+		if len(value) == 1 && value[0] != 0 {
+			observation.Compilation = true
+		}
+		return nil
+	}
 	if itemType == "covr" {
 		if len(value) > 0 && len(value) <= int(maxM4AMetadataAtom) {
 			observation.Artwork = append([]byte(nil), value...)
@@ -577,10 +591,10 @@ func parseM4AItemValue(itemType string, value, typeCode []byte, observation *Aud
 		observation.RawAtoms[itemType] = text
 	}
 	switch itemType {
+	case "\xa9wrk", "\xa9mvn":
+		collectWorkTag(observation, key, text)
 	case "\xa9nam":
 		observation.Title = text
-	case "aART":
-		observation.AlbumArtist = text
 	case "\xa9alb":
 		observation.Album = text
 	case "\xa9gen":
@@ -588,7 +602,7 @@ func parseM4AItemValue(itemType string, value, typeCode []byte, observation *Aud
 	case "\xa9day":
 		observation.Year = ParseYear(text)
 	case "\xa9wrt":
-		addObservationCredits(observation, "composer", text)
+		addObservationCredits(observation, "composer", decodeM4ARawText(value, binary.BigEndian.Uint32(typeCode)))
 	case "\xa9cmt":
 		// 评论仅作为 RawAtoms 证据保留，不映射到当前观察合同未拥有的业务字段。
 	}
@@ -606,12 +620,16 @@ func parseM4AFreeformValue(mean, name string, value, typeCode []byte, observatio
 		if err := captureArtistTagRole(observation, role, key, raw); err != nil {
 			return err
 		}
-		text := metadata.BoundedText(raw)
-		// freeform 专辑艺人此前不参与选择；只留原文证据，不覆盖 aART 的既有选择。
 		if role != "track_artist" && role != "album_artist" {
-			addObservationCredits(observation, role, text)
+			addTagCredits(observation, name, raw)
 		}
 		return nil
+	}
+	if collectWorkTag(observation, name, decodeM4AText(value, binary.BigEndian.Uint32(typeCode))) {
+		return nil
+	}
+	if name == "COMPILATION" || name == "ORIGINALDATE" || name == "ORIGINALYEAR" {
+		return setAudioTag(observation, key, decodeM4ARawText(value, binary.BigEndian.Uint32(typeCode)))
 	}
 	text := decodeM4AText(value, binary.BigEndian.Uint32(typeCode))
 	if text == "" {

@@ -22,7 +22,7 @@ func appendValue(values []value, field, role, raw string, position int) []value 
 }
 func appendCredit(values []value, role, name string, position int) ([]value, error) {
 	switch role {
-	case "composer", "conductor", "performer", "producer":
+	case "lyricist", "composer", "arranger", "conductor", "performer", "producer":
 	default:
 		return nil, errors.New("unsupported search credit role")
 	}
@@ -36,7 +36,7 @@ func normalizeValues(values []value) (string, error) {
 			return "", errors.New("search source text exceeds budget or is invalid")
 		}
 		v.Normalized = textnorm.Text(v.Original)
-		if v.Field == "catalog_number" {
+		if v.Field == "catalog_number" || v.Field == "work_catalog" {
 			v.Normalized = textnorm.CatalogNumber(v.Original)
 		}
 		if len(v.Normalized) > 65536 {
@@ -46,6 +46,11 @@ func normalizeValues(values []value) (string, error) {
 			sortTitle = v.Normalized
 		}
 		v.Grams = ShortGrams(v.Normalized)
+		v.Loose, v.LooseGrams = "", nil
+		if loose := textnorm.Loose(v.Normalized); loose != "" && loose != v.Normalized {
+			v.Loose = loose
+			v.LooseGrams = ShortGrams(loose)
+		}
 	}
 	return sortTitle, nil
 }

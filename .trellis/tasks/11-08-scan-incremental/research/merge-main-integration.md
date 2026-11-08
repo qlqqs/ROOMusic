@@ -2,7 +2,13 @@
 
 日期：2026-11-08。合并前备份：`scan-s-pipeline-pre-merge-main`。
 
-## 范围与状态
+## 当前迁移编号（2026-11-08 再次同步 main）
+
+本次 main 已含 0038 署名角色、0039 古典作品与 0040 搜索忽略标点；增量扫描改为 0041，定时扫描改为 0042（均含 `.down.sql`），迁移从 0001 连续到 0042。回退测试保留 main 的 38/39/40 夹具及旧数据种子，并把 S 的增量、定时夹具与对应分支/断言改为 41/42。SQL 内容不变，未新增测试、未启动数据库，历史 PASS 不代表此次合并已通过集成验证。
+
+以下为此前同步 M/O 线的历史记录；其中线内编号 0038、缺号失败和验证结果均指当时集合，不作为当前编号或验收结论。文件路径已指向现编号。
+
+## 范围与状态（此前同步）
 
 只整合 S 的④第一部分、⑤与 main 的 M/O 已有规则，不实施④第 6 步候选跳过，不改变产品规则。保留当前 merge，不提交、不 abort/reset、不切换任务指针、不动其他 worktree。数据库验收留给后续 agent。
 
@@ -19,8 +25,8 @@
 
 ## 迁移改号与版本
 
-- 原编号 0036 的上行迁移 → `backend/migrations/0038_incremental_scan.sql`。
-- 原编号 0036 的下行迁移 → `backend/migrations/0038_incremental_scan.down.sql`。
+- 原编号 0036 的上行迁移，经线内 0038，现为 `backend/migrations/0041_incremental_scan.sql`。
+- 原编号 0036 的下行迁移，经线内 0038，现为 `backend/migrations/0041_incremental_scan.down.sql`。
 - 上下行 SQL 只改文件名，已与 HEAD 逐字节核对一致。
 - 引用同步：上述回滚测试、`library-scan-contracts.md`、`scan-coordination-contracts.md`、本任务 `design.md`、`implement.md`、`research/part1-test-report.md`；历史 PASS 明确是改号前结果，不冒充当前验证。
 - 使用线内连续编号 0038；若 T 线先合入 main，由主会话统一改号。未补空迁移，未改迁移加载器或回退执行器。

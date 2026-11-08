@@ -827,6 +827,7 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 		}
 		artistDecision := chooseReleaseArtist(decisionObservations)
 		albumArtistDecision := chooseValue(decisionObservations, "album_artist", func(o SourceObservation) string { return o.AlbumArtist })
+		applyCompilation(decisionObservations, &artistDecision, &albumArtistDecision)
 		yearDecision := chooseValue(decisionObservations, "year", func(o SourceObservation) string { return fieldValue(o, "year") })
 		sourceDecision := chooseValue(decisionObservations, "source_type", func(o SourceObservation) string { return o.SourceType })
 		mediaDecision := chooseValue(decisionObservations, "media_type", func(o SourceObservation) string { return o.MediaType })

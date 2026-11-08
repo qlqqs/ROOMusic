@@ -4,7 +4,17 @@ import { decode as d } from "../../../shared/api";
 // 纯类型与解码器，不连带组件与样式：接口样本测试与真实服务用例可以直接导入这个模块。
 
 /** 署名角色（艺人参与的方式），与后端的白名单一致。 */
-export const artistRoles = ["release_artist", "album_artist", "track_artist", "composer", "conductor", "performer", "producer"] as const;
+export const artistRoles = [
+  "release_artist",
+  "album_artist",
+  "track_artist",
+  "lyricist",
+  "composer",
+  "arranger",
+  "conductor",
+  "performer",
+  "producer",
+] as const;
 export type ArtistRole = (typeof artistRoles)[number];
 
 /** 首字母分组：A–Z、假名、其他（#）。 */
@@ -19,7 +29,9 @@ export const artistRoleLabels: Readonly<Record<ArtistRole, string>> = {
   release_artist: "专辑艺人",
   album_artist: "专辑艺人",
   track_artist: "曲目艺人",
+  lyricist: "作词",
   composer: "作曲",
+  arranger: "编曲",
   conductor: "指挥",
   performer: "演奏",
   producer: "制作人",

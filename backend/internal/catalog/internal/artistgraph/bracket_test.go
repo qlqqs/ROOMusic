@@ -83,6 +83,16 @@ func TestBracketAliases(t *testing.T) {
 		{"甲 (纯音乐)", nil},
 		{"甲 (混音)", nil},
 		{"甲 (演奏)", nil},
+		{"Hilary Hahn (violin)", nil},
+		{"Hilary Hahn (VIOLINS)", nil},
+		{"Yo-Yo Ma (cello)", nil},
+		{"甲 (piano)", nil},
+		{"乙（钢琴）", nil},
+		{"甲（小提琴）", nil},
+		{"甲 (double bass)", nil},
+		{"甲 (electric guitar)", nil},
+		{"甲 (backing vocals)", nil},
+		{"甲 (orchestra)", nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

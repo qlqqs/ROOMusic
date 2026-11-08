@@ -18,6 +18,7 @@
     "credits": [
       {
         "artist_refs": [],
+        "detail": null,
         "name": "Sample Pianist",
         "role": "album_artist"
       }
@@ -77,7 +78,8 @@
             "sample_rate": 44100,
             "source": "01.flac",
             "source_kind": "flac_vorbis_comment",
-            "title": "Prelude No. 1"
+            "title": "Prelude No. 1",
+            "work": null
           }
         ]
       }

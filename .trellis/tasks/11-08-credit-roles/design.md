@@ -9,7 +9,7 @@
 | --- | --- |
 | `catalog/metadata` | `Credit` 增加 `Detail`、`Source`；新文件 `credit_roles.go`：规范角色、角色映射表、乐器与工种表、表版本；`CanonicalCredits` 按固定角色序排序并按角色+名字+细分去重 |
 | `library/parser` | 新键读取（Vorbis/freeform/TXXX、ID3 `TEXT`/`TIPL`/`IPLS`/`TMCL`）；`名字 (乐器)` 拆分；新文件 `lyrics_credits.go` 读歌词开头署名 |
-| 迁移（本线草号 0034） | `track_credits` 角色白名单、`detail`、`source`、唯一键；`artist_credits`、`artist_tag_evidence`、`catalog_search_values` 的角色 CHECK |
+| 迁移（合入编号 0038） | `track_credits` 角色白名单、`detail`、`source`、唯一键；`artist_credits`、`artist_tag_evidence`、`catalog_search_values` 的角色 CHECK |
 | `catalog/ingest` | `track_credits` 写入 `detail`、`source` |
 | `catalog/internal/artistgraph` | 新角色进事实；同一曲目同人同角色去重；括号别名排除乐器词；`Version` 计入 T 线的一次升级 |
 | `catalog/internal/searchindex`、`catalog` 读取与 HTTP | 角色白名单与排序扩展；`ReleaseCredit.detail` |
@@ -137,15 +137,16 @@ REST ReleaseTrack.credits[] = {role, name, detail, artist_refs}
 
 1. 按 `\n` 切行，最多看前 30 行。每行先去掉开头连续的 LRC 方括号标签（`[mm:ss.xx]`、`[ti:..]` 等），再去首尾空白（含全角空白 U+3000）。
 2. 空行、只有方括号标签的行跳过，不打断。
-3. 其余行匹配 `^(标签)\s*[:：]\s*(值)$`，标签 1–16 个字符且不含 `:`/`：`。标签解析：按 `/`、`、`、`&` 切成多个子标签，每个去空白小写后先整体查表；查不到时取其中连续的中文字符段查表，再取连续的拉丁段查表。“表”= §3.2 的角色表加乐器表。
-4. 只要有一个子标签命中，该行算署名行；第一个**不是**署名行的行出现即结束。没命中的子标签忽略（`吉他间奏/录音/制作人` 读录音与制作人）。
-5. 命中的子标签**全部读成署名**（PRD R2b，用户已裁决）：
+3. 尚未读到任何署名行时，最多跳过一行媒体题头，视为与 `[ti:]`/`[ar:]` 相同的元信息：按第1步处理后，该行等于解析出的曲目 `Title`，或以 `Title + 空白 + - + 空白` 开头（也接受 `–`、`—`，标题比较忽略大小写）；`Title` 为空则不跳过，不使用文件名补位，不改变 `finalizeTags` 时序。其它非署名行仍结束署名块。
+4. 其余行匹配 `^(标签)\s*[:：]\s*(值)$`，标签 1–16 个字符且不含 `:`/`：`。标签解析：按 `/`、`、`、`&` 切成多个子标签，每个去空白小写后先整体查表；查不到时取其中连续的中文字符段查表，再取连续的拉丁段查表。“表”= §3.2 的角色表加乐器表。
+5. 只要有一个子标签命中，该行算署名行；第一个**不是**署名行的行出现即结束。没命中的子标签忽略（`吉他间奏/录音/制作人` 读录音与制作人）。
+6. 命中的子标签**全部读成署名**（PRD R2b，用户已裁决）：
    - 表里没有细分的角色（作词、作曲、编曲、指挥、制作人、监制、`词曲` 双产出）→ 该角色，`detail` 为 null；
    - 表里带细分的（混音、母带、录音、重混、编程、演唱、和声）和乐器表命中的（吉他、鼓、贝斯、Guitar、Cello 等）→ 映射到的角色（制作人或演奏），`detail` 存**歌词里的原写法**（命中的那段子标签原文，如 `混音`、`混音工程师`、`Guitar`），曲目行显示原写法（“混音：某某”“Guitar：赵米”）。标签来源的细分仍存规范键（如 `MIXER` → `mix`，显示“混音”）。
-6. 值按 ⑥ 的拆分规则拆名字；每个名字去掉从 `@` 起到结尾的所属团体或工作室后缀（`怪兽@五月天` → `怪兽`、`时兵@Push Studio` → `时兵`），去掉后为空则保留原文。`Source="lyrics"`。
-7. 观察里某角色已有 `Source="tag"` 的署名时，歌词来源的该角色全部丢弃。
+7. 值按 ⑥ 的拆分规则拆名字；每个名字去掉从 `@` 起到结尾的所属团体或工作室后缀（`怪兽@五月天` → `怪兽`、`时兵@Push Studio` → `时兵`），去掉后为空则保留原文。`Source="lyrics"`。
+8. 观察里某角色已有 `Source="tag"` 的署名时，歌词来源的该角色全部丢弃。
 
-### 3.5 迁移（本线草号 0034，合入时由主会话重新编号）
+### 3.5 迁移（合入编号 0038）
 
 ```sql
 ALTER TABLE track_credits DROP CONSTRAINT track_credits_role_check;
@@ -247,6 +248,7 @@ ALTER TABLE track_credits ADD CONSTRAINT track_credits_track_role_name_detail_ke
 | 歌词 `吉他间奏/录音/制作人：周成` | producer / 周成 / 录音；producer / 周成（吉他间奏不在表里，忽略） |
 | 歌词署名块中出现 `协力 : 李汪哲` | 该行不在表里，署名块到此结束，后面的行不读 |
 | 歌词有 `制作人：甲`，标签有 `PRODUCER=乙` | 只保留标签的 producer / 乙；歌词其它角色照读 |
+| `Title=晴天`，歌词题头 `晴天 - 周杰伦` 后接 `作词：周杰伦` | lyricist / 周杰伦 / – / lyrics |
 | 歌词第一行就是正文 `我们的爱…`，后面才有 `作词：…` | 不读（署名块在第一行已结束） |
 | 歌词 `[ti:晴天]\n[ar:周杰伦]\n[00:00.00]作词：周杰伦` | lyricist / 周杰伦（元信息标签行跳过） |
 | 歌词正文中间的 `合：爱怎么做 怎么错` | 不读（不在开头署名块；且“合”不在表里） |
@@ -267,7 +269,7 @@ ALTER TABLE track_credits ADD CONSTRAINT track_credits_track_role_name_detail_ke
 | --- | --- |
 | `parser.CommonVersion` | 计入 T 线的 +1：新键、TIPL/TMCL/TEXT、`名字 (乐器)`、歌词署名都是共用规则或跨格式改动；不单独改 `formatVersions` |
 | `ingest.GroupingVersion` | 本项不需要（署名随观察进入写入，观察变化已让候选重写）；T 线因 ⑥⑧ 合计 +1，一并覆盖 |
-| `artistgraph.Version` | 计入 T 线的 2→3（新角色、去重、括号排除词） |
+| `artistgraph.Version` | O/T 整合后 3→4（新角色、去重、括号排除词） |
 | `searchindex.ProjectionVersion` | 计入 T 线的 1→2（credit 角色） |
 | `textnorm.Version` | 不变 |
 | `CreditRoleTableVersion` | 新常量 1；以后改表时升它，并同时升 `parser.CommonVersion` |
@@ -296,3 +298,7 @@ ALTER TABLE track_credits ADD CONSTRAINT track_credits_track_role_name_detail_ke
 ## 10. 生产库统计
 
 已执行，见 [m8-production-stats.md](../11-08-scan-reference-port/research/m8-production-stats.md)。与本项相关：`track_credits` 只有 composer 190；带括号的演奏者 0；人工意图 0；带歌词的 present 曲目 134（作词行开头 38、含编曲行 38、含制作人或监制行 23）。
+
+## 2026-11-08 合入 main 对齐
+
+O 线与 T 线各自已将 `artistgraph.Version` 提升到 3；整合后统一为 4，避免已有版本 3 的投影漏回填。`searchindex.ProjectionVersion=2`、`textnorm.Version=1` 保持不变。下述线内升级/回滚说明是原实施背景，合并后的回滚须连同 O 线规则判断，不能只回退版本常量。

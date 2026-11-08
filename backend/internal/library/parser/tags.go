@@ -38,6 +38,9 @@ func parseNumber(value string) int {
 }
 
 func setAudioTag(observation *AudioObservation, key, value string) error {
+	if collectWorkTag(observation, key, value) {
+		return nil
+	}
 	if setAudioLyrics(observation, key, value) {
 		return nil
 	}
@@ -48,12 +51,19 @@ func setAudioTag(observation *AudioObservation, key, value string) error {
 		observation.Genres = metadata.SplitGenres(append(observation.Genres, value)...)
 		return nil
 	}
+	raw := value
+	key = strings.ToUpper(key)
+	collectOriginalYear(observation, key, value)
+	key = strings.TrimPrefix(strings.TrimPrefix(key, "TXXX:"), "----:")
 	value = metadata.BoundedText(value)
-	switch strings.ToUpper(key) {
+	switch key {
 	case "TITLE", "TRACKTITLE":
 		observation.Title = value
-	case "ALBUMARTIST", "ALBUM ARTIST":
-		observation.AlbumArtist = value
+	case "COMPILATION", "ITUNESCOMPILATION", "TCMP":
+		switch strings.ToLower(strings.TrimSpace(raw)) {
+		case "1", "yes", "true", "compilation":
+			observation.Compilation = true
+		}
 	case "ALBUM", "ALBUMTITLE":
 		observation.Album = value
 	case "TRACKNUMBER":
@@ -76,14 +86,6 @@ func setAudioTag(observation *AudioObservation, key, value string) error {
 		if observation.Edition == "" {
 			observation.Edition = value
 		}
-	case "COMPOSER", "TCOM":
-		addObservationCredits(observation, "composer", value)
-	case "CONDUCTOR", "TPE3":
-		addObservationCredits(observation, "conductor", value)
-	case "PERFORMER", "PERFORMERS":
-		addObservationCredits(observation, "performer", value)
-	case "PRODUCER":
-		addObservationCredits(observation, "producer", value)
 	case "ISRC":
 		observation.ISRC = value
 	case "SOURCE", "SOURCETYPE":
@@ -91,6 +93,7 @@ func setAudioTag(observation *AudioObservation, key, value string) error {
 	case "MEDIA", "MEDIATYPE":
 		observation.MediaType = value
 	}
+	addTagCredits(observation, key, raw)
 	return nil
 }
 
@@ -102,19 +105,7 @@ func addObservationCredits(observation *AudioObservation, role, value string) {
 	if role == "" {
 		return
 	}
-	for _, name := range splitCreditNames(value) {
-		credit := metadata.Credit{Role: role, Name: name}
-		duplicate := false
-		for _, existing := range observation.Credits {
-			if existing == credit {
-				duplicate = true
-				break
-			}
-		}
-		if !duplicate {
-			observation.Credits = append(observation.Credits, credit)
-		}
-	}
+	addAssignedCredits(observation, metadata.RoleAssignment{Role: role}, value, "tag")
 }
 
 func splitCreditNames(value string) []string {

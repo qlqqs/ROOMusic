@@ -141,9 +141,11 @@ const releaseComparisonDecoder = d.object({
 });
 
 // 署名的角色与证据里的各种词表都按字符串解码：后端新增取值不会让页面解码失败，显示时由 labels 给已知值中文标签。
+// detail 是署名的细分（乐器或工种）：已知细分键或原写法，发行级署名恒为 null。
 const creditDecoder = d.object({
   role: d.string({ min: 1, max: 64 }),
   name: d.string(),
+  detail: d.nullable(d.string({ min: 1, max: 256 })),
   artist_refs: artistRefsDecoder,
 });
 
@@ -154,6 +156,12 @@ const cueDecoder = d.object({
   start_seconds: d.nullable(d.number({ min: 0 })),
   end_seconds: d.nullable(d.number({ min: 0 })),
   isrc: d.nullable(d.string()),
+});
+
+const workDecoder = d.object({
+  index: d.integer({ min: 1 }),
+  title: d.string({ min: 1 }),
+  movement: d.nullable(d.string()),
 });
 
 const trackDecoder = d.object({
@@ -173,6 +181,8 @@ const trackDecoder = d.object({
   bitrate: d.nullable(d.integer({ min: 0 })),
   cue: d.nullable(cueDecoder),
   credits: d.array(creditDecoder, { max: MAX_TRACK_CREDITS }),
+  // 古典作品：同一发行里相邻且 index 相同的曲目属于同一作品；movement 为 null 时行内显示曲目标题。
+  work: d.nullable(workDecoder),
 });
 
 const mediumDecoder = d.object({
@@ -317,6 +327,7 @@ export type AudioFormatDTO = d.Infer<typeof audioFormatDecoder>;
 export type ReleaseMediumDTO = d.Infer<typeof mediumDecoder>;
 export type ReleaseTrackDTO = d.Infer<typeof trackDecoder>;
 export type ReleaseCreditDTO = d.Infer<typeof creditDecoder>;
+export type ReleaseTrackWorkDTO = d.Infer<typeof workDecoder>;
 export type ReleaseCueDTO = d.Infer<typeof cueDecoder>;
 export type ReleaseEvidenceSummaryDTO = d.Infer<typeof evidenceSummaryDecoder>;
 export type ReleaseEvidenceDTO = d.Infer<typeof releaseEvidenceDecoder>;

@@ -39,9 +39,19 @@ M5 ④新增规范化搜索与在线投影：完整规则见[搜索合同](./sea
   没有时是空数组）；所有登录成员可见，不含修正值的来源与操作者。
 - Release 详情与版本对比的 `genres` 为有序文本数组，无流派为 `[]`；不再返回单值 `genre`。修正字段键仍为 `genre`，见[多流派合同](./genre-contracts.md)。
 - Release 详情的 `edition`、`label`、`barcode` 为 nullable string；每条 Track 的
-  `credits` 项为 `{role,name,artist_refs}`，`role` 只允许
-  `composer | conductor | performer | producer`。每轨最多 100 条、单个 Release 最多
+  `credits` 项为 `{role,name,detail,artist_refs}`，`role` 按固定顺序允许
+  `lyricist | composer | arranger | conductor | performer | producer`。
+  `detail` 必传，为 null 或非空且≤256字节的文本；已知细分键为小写ASCII/下划线，未知工种或歌词细分保留原写法。
+  同角色按 detail（空在前）再按名字排序；发行级 `ReleaseDetail.credits[]` 同样必传 detail 且恒为null，发行级角色仍按原合同。
+  `source` 只用于后端存储，不加到 REST credits。每轨最多 100 条、单个 Release 最多
   10,000 条 Track credits，超限后端 fail closed，前端 decoder 同样拒绝。
+
+- `ReleaseTrack.work` 必传，为 `null` 或 `{index,title,movement}`：仅 `work_index` 非空时返回对象；`index` 为正整数，`title` 非空且≤4096字节，`movement` 为 null 或非空且≤4096字节的文本。`ReleaseTrackWork` 不返回作品编号、乐章号或来源；其它 `TrackSummary` 不增加 work。
+- 同一发行内相邻同 index 表示同一作品；前端仅在同一介质内分组，乐章名为 null 时仍用曲目标题。单轨标签作品虽可搜索，未形成组时也返回 `work:null`；迁移前的曲目在重扫前全部为 null。
+
+前后端须同批发布：艺人/曲目筛选及搜索解码器严格枚举需同步增加 lyricist、arranger，credits 的 detail 不允许省略；作品 work 同样不可省略，搜索 match.field 同批增加 work_title/work_catalog。
+
+扫描判为合辑的发行返回 `artist="群星"`、`album_artist=null`、`artist_refs=[]`、`album_artist_refs=[]`，发行艺人显示纯文字，曲目艺人照常。
 
 ## 3. 请求与响应合同
 

@@ -1,6 +1,35 @@
 package ingest
 
-import "context"
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+)
+
+// CandidateMetadataSignature 覆盖候选的写入输入，包括署名证据、角色细分、作品标签和碟轨顺序。
+// 封面字节与延迟加载状态不属于元数据变化；其来源文件状态由 library 的签名覆盖。
+// 内容指纹由身份规划校验，来源大小和修改时间由 library 另行签名（这些字段不进入观察 JSON）。
+func CandidateMetadataSignature(candidate OrganizedCandidate) (string, error) {
+	// JoinGroupID 仅用于新建发行，不应让首次写入与沿用发行时的签名不同。
+	candidate.JoinGroupID = ""
+	mediums := make(map[int][]OrganizedTrack, len(candidate.Mediums))
+	for disc, tracks := range candidate.Mediums {
+		mediums[disc] = append([]OrganizedTrack(nil), tracks...)
+		for index := range mediums[disc] {
+			observation := &mediums[disc][index].Observation
+			observation.Artwork = nil
+			observation.ArtworkDeferred = false
+		}
+	}
+	candidate.Mediums = mediums
+	// JSON 固定结构字段顺序并排序 map 键；保留切片顺序，因为署名证据和曲目位置有序。
+	hash := sha256.New()
+	if err := json.NewEncoder(hash).Encode(candidate); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
 
 // CandidateUnchanged 仅在签名相同且全部已规划、未暂缓成员仍沿用原曲目与发行时返回可跳过。
 // 空候选或任一成员不满足条件时，整个候选都不可跳过。

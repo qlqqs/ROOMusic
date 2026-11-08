@@ -595,7 +595,7 @@ func recordAudioAnalysisSamples(t *testing.T, application *integrationTestApplic
 // apiSampleCall 是样本测试里发请求的闭包：带固定的请求 ID，把响应交给记录器。
 type apiSampleCall func(method, path string, body any, user *integrationTestUser, extraHeaders ...map[string]string) *httptest.ResponseRecorder
 
-// recordAlbumDetailSamples 记录专辑浏览用到的详情接口：一张合成的双碟专辑（厂牌、编号、条码、作曲/指挥/演奏署名），
+// recordAlbumDetailSamples 记录专辑浏览用到的详情接口：一张合成的双碟专辑（厂牌、编号、条码、作词/作曲/编曲/指挥/小提琴署名），
 // 既有的单曲专辑，一张 CUE 专辑，管理员的完整证据，把两个版本放进同一个组后的多版本组详情，以及两个 404。
 // 素材全部是临时目录里的合成 FLAC，不读取真实音乐。
 func recordAlbumDetailSamples(t *testing.T, application *integrationTestApplication, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser, libraryA, libraryB string) {
@@ -623,7 +623,8 @@ func recordAlbumDetailSamples(t *testing.T, application *integrationTestApplicat
 	shared := []string{
 		"ALBUM=Sample Symphonies", "ALBUMARTIST=Sample Orchestra", "DATE=1998",
 		"LABEL=Sample Label", "CATALOGNUMBER=SL-0001", "BARCODE=0123456789012", "EDITION=Remastered",
-		"COMPOSER=Sample Composer", "CONDUCTOR=Sample Conductor", "PERFORMER=Sample Soloist",
+		"LYRICIST=Sample Lyricist", "COMPOSER=Sample Composer", "ARRANGER=Sample Arranger",
+		"CONDUCTOR=Sample Conductor", "PERFORMER=Sample Soloist (violin)",
 	}
 	for _, track := range []struct {
 		file     string
@@ -640,6 +641,16 @@ func recordAlbumDetailSamples(t *testing.T, application *integrationTestApplicat
 			t.Fatalf("write %s: %v", track.file, err)
 		}
 	}
+	// 标签作品专辑：两轨共用作品标签，曲目标题保留完整写法，界面须改显示乐章名。
+	workDirectory := filepath.Join(libraryA, "work-album")
+	for i, movement := range []string{"I. Prelude", "II. Allemande"} {
+		writeSyntheticTrack(t, filepath.Join(workDirectory, fmt.Sprintf("%02d.flac", i+1)), byte(31+i),
+			"ALBUM=Sample Cello Suites", "ARTIST=Sample Cellist", "ALBUMARTIST=Sample Cellist",
+			"WORK=Cello Suite No. 1 in G major, BWV 1007", "MOVEMENTNAME="+movement,
+			fmt.Sprintf("MOVEMENTNUMBER=%d", i+1), fmt.Sprintf("TRACKNUMBER=%d", i+1),
+			"TITLE=Cello Suite No. 1 in G major, BWV 1007: "+movement)
+	}
+
 	// 一张 CUE 专辑：一个整轨 FLAC 加一份 CUE，虚拟曲目的 cue 字段有值（起止帧、秒与 ISRC）。
 	cueDirectory := filepath.Join(libraryA, "cue-album")
 	if err := os.MkdirAll(cueDirectory, 0o755); err != nil {
@@ -682,6 +693,22 @@ func recordAlbumDetailSamples(t *testing.T, application *integrationTestApplicat
 	samples.record("releases/evidence", call(http.MethodGet, "/api/v1/releases/"+doubleID+"/evidence", nil, admin), http.StatusOK)
 	cueID, _ := releaseIDByTitle("Sample Cue Album")
 	samples.record("releases/get-cue", call(http.MethodGet, "/api/v1/releases/"+cueID, nil, admin), http.StatusOK)
+
+	workID, _ := releaseIDByTitle("Sample Cello Suites")
+	workResponse := call(http.MethodGet, "/api/v1/releases/"+workID, nil, admin)
+	var workDetail catalog.ReleaseDetail
+	if err := json.Unmarshal(workResponse.Body.Bytes(), &workDetail); err != nil {
+		t.Fatalf("读取作品专辑样本：%v", err)
+	}
+	if len(workDetail.Media) != 1 || len(workDetail.Media[0].Tracks) != 2 {
+		t.Fatalf("作品专辑样本必须有两轨：%+v", workDetail)
+	}
+	for i, track := range workDetail.Media[0].Tracks {
+		if track.Work == nil || track.Work.Index != 1 || track.Work.Title != "Cello Suite No. 1 in G major, BWV 1007" || track.Work.Movement == nil || *track.Work.Movement != []string{"I. Prelude", "II. Allemande"}[i] {
+			t.Fatalf("作品专辑样本缺少分组或乐章：%+v", track)
+		}
+	}
+	samples.record("releases/get-work", workResponse, http.StatusOK)
 
 	// M3 之前没有人工归组，多版本的组只能直接写库构造：把双碟专辑并入单曲专辑所在的组。
 	if _, err := application.database.Exec(`UPDATE releases SET group_id=$1::uuid WHERE id=$2::uuid`, singleGroup, doubleID); err != nil {

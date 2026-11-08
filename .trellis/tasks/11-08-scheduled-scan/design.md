@@ -88,7 +88,7 @@ PUT /api/v1/scan-schedule → 写表 → 唤醒本进程调度器（其他进程
 - `StartOptions` 增加 `Trigger`；HTTP 入口固定 `manual`，调度器传 `scheduled`；定时扫描固定 `Mode: incremental`。
 - ⑫ 改路径后前端发起的扫描是 `manual`。
 
-### 3.4 迁移（`0037_scheduled_scan.sql` + `.down.sql`，合入时重新编号）
+### 3.4 迁移（`0042_scheduled_scan.sql` + `.down.sql`，合入编号，接增量扫描迁移 0041）
 
 ```sql
 CREATE TABLE scan_schedule (
@@ -151,7 +151,7 @@ ALTER TABLE scan_runs ADD COLUMN trigger_kind TEXT NOT NULL DEFAULT 'manual'
 | 时区配置错误导致在白天扫描 | `ROOMUSIC_TIMEZONE` 启动时已校验（备份共用）；界面可改时间 |
 | 启动补扫在频繁重启时重复 | 只在“当天的整点之后没有任何扫描开始过”时补，重启多次也最多补一次 |
 
-回滚：在界面关闭开关即停止；代码回滚后表与列无人读写；`0037` 下行迁移删除。
+回滚：在界面关闭开关即停止；代码回滚后表与列无人读写；`0042` 下行迁移删除。
 
 ## 8. 线间关系
 

@@ -40,6 +40,20 @@ func CatalogNumber(raw string) string {
 	return normalizeText(compact, table)
 }
 
+// Loose 删除规范键中的 Unicode 标点与符号，再折叠空白并去除首尾空白。
+// 输入须为 Text 或 CatalogNumber 的输出；不读取字表，不改变身份规范化规则。
+// 规则变化需升级搜索与艺人投影版本，不升级 Version。
+func Loose(key string) string {
+	compact := strings.Map(func(r rune) rune {
+		// U+02BC 属于修饰字母（Lm），仍按撇号删除，统一不同撇号的搜索键。
+		if unicode.IsPunct(r) || unicode.IsSymbol(r) || r == '\u02bc' {
+			return -1
+		}
+		return r
+	}, key)
+	return strings.Join(strings.Fields(compact), " ")
+}
+
 func normalizeText(raw string, table characterTable) string {
 	text := cases.Fold().String(norm.NFKC.String(raw))
 	text = stripLatinDiacritics(text)

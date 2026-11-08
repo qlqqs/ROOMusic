@@ -28,6 +28,7 @@ type SourceObservation struct {
 	CatalogNumber         string                       `json:"catalog_number,omitempty"`
 	Channels              int                          `json:"channels,omitempty"`
 	Codec                 string                       `json:"codec,omitempty"`
+	Compilation           bool                         `json:"compilation,omitempty"`
 	ContentFingerprint    string                       `json:"-"`
 	Credits               []metadata.Credit            `json:"credits,omitempty"`
 	CueEndFrames          int                          `json:"cue_end_frames,omitempty"`
@@ -51,6 +52,8 @@ type SourceObservation struct {
 	Lyrics              string            `json:"lyrics,omitempty"`
 	LyricsSource        string            `json:"lyrics_source,omitempty"`
 	MediaType           string            `json:"media_type,omitempty"`
+	MovementName        string            `json:"movement_name,omitempty"`
+	MovementNumber      int               `json:"movement_number,omitempty"`
 	ParserVersion       string            `json:"parser_version,omitempty"`
 	RelatedSourceRefs   []string          `json:"related_source_refs,omitempty"`
 	RelativePath        string            `json:"relative_path"`
@@ -61,6 +64,7 @@ type SourceObservation struct {
 	SourceType          string            `json:"source_type,omitempty"`
 	Title               string            `json:"title,omitempty"`
 	TrackNumber         int               `json:"track_number,omitempty"`
+	Work                string            `json:"work,omitempty"`
 	Year                int               `json:"year,omitempty"`
 }
 

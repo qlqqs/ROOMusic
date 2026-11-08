@@ -17,7 +17,7 @@ func rawHitProbeSQL(predicate string) string {
 // subjectMatchSQL 先按来源主键读该对象的完整字段，再检查搜索谓词。
 // OFFSET 0 保留这一关联边界，避免通用计划为每个对象重扫热门词的全局GIN命中。
 func subjectMatchSQL(relation, predicate string) string {
-	return `EXISTS (SELECT 1 FROM (SELECT field,normalized_value,projection_generation,short_grams FROM catalog_search_values WHERE ` + relation + ` OFFSET 0) v
+	return `EXISTS (SELECT 1 FROM (SELECT field,normalized_value,projection_generation,short_grams,loose_value,loose_grams FROM catalog_search_values WHERE ` + relation + ` OFFSET 0) v
  WHERE ` + predicate + ` OFFSET 0)`
 }
 

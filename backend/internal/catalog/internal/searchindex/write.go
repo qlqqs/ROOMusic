@@ -88,9 +88,9 @@ func Apply(ctx context.Context, tx *sql.Tx, s State, kind, id string) (written b
 		if encodeErr != nil {
 			return false, encodeErr
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO catalog_search_values(id,`+column+`,field,role,position,original_value,normalized_value,short_grams,normalization_version,projection_generation)
-   SELECT gen_random_uuid(),$1::uuid,v.field,NULLIF(v.role,''),v.position,v.original,v.normalized,v.grams,$3,$4
-   FROM jsonb_to_recordset($2::jsonb) AS v(field text,role text,position integer,original text,normalized text,grams text[])
+		_, err = tx.ExecContext(ctx, `INSERT INTO catalog_search_values(id,`+column+`,field,role,position,original_value,normalized_value,short_grams,loose_value,loose_grams,normalization_version,projection_generation)
+   SELECT gen_random_uuid(),$1::uuid,v.field,NULLIF(v.role,''),v.position,v.original,v.normalized,v.grams,NULLIF(v.loose,''),v.loose_grams,$3,$4
+   FROM jsonb_to_recordset($2::jsonb) AS v(field text,role text,position integer,original text,normalized text,grams text[],loose text,loose_grams text[])
    WHERE v.normalized<>''`, id, string(data), s.TextnormVersion, s.TargetGeneration)
 		if err != nil {
 			return false, err
@@ -108,6 +108,8 @@ type value struct {
 	Original   string   `json:"original"`
 	Normalized string   `json:"normalized"`
 	Grams      []string `json:"grams"`
+	Loose      string   `json:"loose"`
+	LooseGrams []string `json:"loose_grams"`
 }
 
 func loadValues(ctx context.Context, tx *sql.Tx, kind, id string) ([]value, error) {
@@ -132,8 +134,9 @@ func loadValues(ctx context.Context, tx *sql.Tx, kind, id string) ([]value, erro
 		add("catalog_number", "", number, 1)
 		return values, nil
 	}
-	var title, artist string
-	err := tx.QueryRowContext(ctx, `SELECT title,artist FROM tracks WHERE id=$1::uuid`, id).Scan(&title, &artist)
+	var title, artist, workTitle, workCatalog string
+	err := tx.QueryRowContext(ctx, `SELECT title,artist,COALESCE(work_title,''),COALESCE(work_catalog,'')
+   FROM tracks WHERE id=$1::uuid`, id).Scan(&title, &artist, &workTitle, &workCatalog)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -142,6 +145,8 @@ func loadValues(ctx context.Context, tx *sql.Tx, kind, id string) ([]value, erro
 	}
 	add("track_title", "", title, 1)
 	add("track_artist", "", artist, 1)
+	add("work_title", "", workTitle, 1)
+	add("work_catalog", "", workCatalog, 1)
 	rows, err := tx.QueryContext(ctx, `SELECT role,name,position FROM track_credits WHERE track_id=$1::uuid ORDER BY role,position,id`, id)
 	if err != nil {
 		return nil, err

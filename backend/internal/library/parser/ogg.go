@@ -78,6 +78,7 @@ func parseOggStream(path string, requireOpus bool) (AudioObservation, error) {
 	if fingerprint != nil {
 		o.ContentFingerprint = fingerprint.fingerprint()
 	}
+	finalizeTags(&o)
 	return applyFilenameFallback(path, o), nil
 }
 

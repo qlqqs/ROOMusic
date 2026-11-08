@@ -38,6 +38,7 @@ func parseAPE(path string) (AudioObservation, error) {
 	if err := readAPEv2(file, info.Size(), &observation); err != nil {
 		return AudioObservation{}, err
 	}
+	finalizeTags(&observation)
 	return applyFilenameFallback(path, observation), nil
 }
 

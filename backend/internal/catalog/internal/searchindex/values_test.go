@@ -1,6 +1,7 @@
 package searchindex
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -33,5 +34,35 @@ func TestSharedSearchValuesPreserveSourcesAndBudgets(t *testing.T) {
 	}
 	if _, err := appendCredit(nil, "unsupported", "姓名", 1); err == nil {
 		t.Fatal("放宽了credit角色")
+	}
+}
+
+func TestNormalizeValuesLoose(t *testing.T) {
+	if err := textnorm.LoadEmbedded(); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ raw, normalized, loose string }{
+		{"周杰伦", "周杰伦", ""},
+		{"AC/DC", "ac/dc", "acdc"},
+	} {
+		t.Run(tc.raw, func(t *testing.T) {
+			values := []value{{Field: "track_title", Original: tc.raw}}
+			title, err := normalizeValues(values)
+			if err != nil {
+				t.Fatal(err)
+			}
+			v := values[0]
+			if title != tc.normalized || v.Normalized != tc.normalized || v.Loose != tc.loose {
+				t.Fatalf("规范键/去标点键不符：title=%q value=%+v", title, v)
+			}
+			if tc.loose == "" {
+				// 写入层将空 Loose 转为 NULL；两个派生列必须一起留空。
+				if v.LooseGrams != nil {
+					t.Fatalf("NULL 去标点键仍带 grams：%v", v.LooseGrams)
+				}
+			} else if !reflect.DeepEqual(v.LooseGrams, ShortGrams(tc.loose)) {
+				t.Fatalf("去标点 grams 不符：%v", v.LooseGrams)
+			}
+		})
 	}
 }

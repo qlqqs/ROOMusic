@@ -4,13 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/qlqq/roomusic/backend/internal/catalog/internal/searchindex"
 	"github.com/qlqq/roomusic/backend/internal/catalog/textnorm"
 )
-
-const artistSearchPredicate = `n.projection_generation=(SELECT published_generation FROM catalog_projection_state WHERE capability='artists')
- AND n.short_grams @> ARRAY[$3]::text[] AND n.normalized_value LIKE '%'||$2||'%' ESCAPE '~'`
-const artistSearchRank = `CASE WHEN n.normalized_value=$1 THEN 0 WHEN n.normalized_value LIKE $2||'%' ESCAPE '~' THEN 1 ELSE 2 END`
 
 func (s *Store) searchArtists(ctx context.Context, query string, page, size int, count bool) ([]SearchArtistItem, SearchPagination, error) {
 	items := []SearchArtistItem{}
@@ -22,26 +17,33 @@ func (s *Store) searchArtists(ctx context.Context, query string, page, size int,
 	if key == "" {
 		return items, pagination, nil
 	}
-	args := []any{key, searchindex.EscapeLike(key), searchindex.QueryGram(key)}
+	loose := textnorm.Loose(key)
+	args := append(searchKeyArgs(key), searchKeyArgs(loose)...)
+	var textTrigram, looseTrigram bool
+	if err := s.database.QueryRowContext(ctx, `SELECT $1::text ~ '[[:alnum:]]{3}',$2::text ~ '[[:alnum:]]{3}'`, key, loose).Scan(&textTrigram, &looseTrigram); err != nil {
+		return nil, pagination, err
+	}
+	branches := artistSearchBranches(key, loose, [2]bool{textTrigram, looseTrigram})
+	predicate, rankSQL := artistNamePredicate(branches), searchBranchesRank(branches)
 	// 每个艺人先按自身名字判断，再有界计数；不把命中的名字数量当成艺人数。
 	if count {
 		var total int64
 		err := s.database.QueryRowContext(ctx, `SELECT count(*) FROM (SELECT a.id FROM artists a
  LEFT JOIN artist_overrides o ON o.artist_id=a.id WHERE o.redirect_artist_id IS NULL AND `+artistVisiblePredicate+`
- AND $1::text<>'' AND EXISTS (SELECT 1 FROM artist_search_names n WHERE n.artist_id=a.id AND `+artistSearchPredicate+`) LIMIT 1001) counted`, args...).Scan(&total)
+ AND $1::text<>'' AND EXISTS (SELECT 1 FROM artist_search_names n WHERE n.artist_id=a.id AND `+predicate+`) LIMIT 1001) counted`, args...).Scan(&total)
 		if err != nil {
 			return nil, pagination, err
 		}
 		pagination.Total, pagination.TotalRelation = boundedSearchTotal(total)
 	}
 	rows, err := s.database.QueryContext(ctx, `WITH matches AS (
- SELECT DISTINCT ON(n.artist_id) n.artist_id,n.original_value,n.name_id,`+artistSearchRank+` AS rank
+ SELECT DISTINCT ON(n.artist_id) n.artist_id,n.original_value,n.name_id,`+rankSQL+` AS rank
  FROM artist_search_names n JOIN artists a ON a.id=n.artist_id LEFT JOIN artist_overrides o ON o.artist_id=a.id
- WHERE o.redirect_artist_id IS NULL AND `+artistSearchPredicate+` AND `+artistVisiblePredicate+`
+ WHERE o.redirect_artist_id IS NULL AND `+predicate+` AND `+artistVisiblePredicate+`
  ORDER BY n.artist_id,rank,(n.name_id IS NULL) DESC,n.original_value COLLATE "C",n.id
  ) SELECT m.artist_id::text,m.original_value,m.rank,m.original_value=p.effective_display_name
  FROM matches m JOIN artist_profiles p ON p.artist_id=m.artist_id
- ORDER BY m.rank,p.sort_key COLLATE "C",m.artist_id LIMIT $4 OFFSET $5`, append(args, size+1, (page-1)*size)...)
+ ORDER BY m.rank,p.sort_key COLLATE "C",m.artist_id LIMIT $7 OFFSET $8`, append(args, size+1, (page-1)*size)...)
 	if err != nil {
 		return nil, pagination, err
 	}
@@ -59,11 +61,11 @@ func (s *Store) searchArtists(ctx context.Context, query string, page, size int,
 			rows.Close()
 			return nil, pagination, err
 		}
-		if rank < 0 || rank > 2 || len(original) > 4096 {
+		if rank < 0 || rank > 5 || len(original) > 4096 {
 			rows.Close()
 			return nil, pagination, fmt.Errorf("%w: invalid artist search match", ErrQuery)
 		}
-		match := SearchMatch{Kind: [...]string{"exact", "prefix", "contains"}[rank], Field: "artist_name", Original: original, ArtistID: &id}
+		match := SearchMatch{Kind: [...]string{"exact", "prefix", "contains"}[rank/2], Field: "artist_name", Original: original, ArtistID: &id}
 		if !primary {
 			match.Field = "artist_alias"
 			match.Alias = &original

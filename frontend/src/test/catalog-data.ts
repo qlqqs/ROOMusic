@@ -145,8 +145,9 @@ function splitTracks(trackCount: number, mediumCount: number): number[] {
 
 /** 曲目的个别字段；参数是介质与曲目在介质内的序号，都从 1 起。 */
 /** 合成数据里的署名：艺人引用（M5 ⑤）可以省略，省略时是空数组（艺人数据还在整理时接口给的就是空数组）。 */
-type CreditInput = Omit<ReleaseCreditDTO, "artist_refs"> & Partial<Pick<ReleaseCreditDTO, "artist_refs">>;
-const withRefs = (credits: readonly CreditInput[]): ReleaseCreditDTO[] => credits.map((credit) => ({ ...credit, artist_refs: credit.artist_refs ?? [] }));
+type CreditInput = Omit<ReleaseCreditDTO, "artist_refs" | "detail"> & Partial<Pick<ReleaseCreditDTO, "artist_refs" | "detail">>;
+const withRefs = (credits: readonly CreditInput[]): ReleaseCreditDTO[] =>
+  credits.map((credit) => ({ ...credit, detail: credit.detail ?? null, artist_refs: credit.artist_refs ?? [] }));
 
 export type TrackOverrides = (medium: number, track: number) => Partial<Omit<ReleaseTrackDTO, "credits">> & { credits?: readonly CreditInput[] };
 
@@ -175,6 +176,7 @@ export function mediaOf(release: Pick<ReleaseSummaryDTO, "id" | "artist" | "medi
           position: track,
           source: `d${medium}-${label}.flac`,
           duration_seconds: 100 + track * 10 + medium,
+          work: null,
           ...trackOverrides(medium, track),
           credits: withRefs(
             trackOverrides(medium, track).credits ?? [

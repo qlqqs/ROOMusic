@@ -1,7 +1,7 @@
 {
   "body": {
     "artists_state": "preparing",
-    "epoch": 3,
+    "epoch": 4,
     "search_mode": "legacy"
   },
   "status": 200

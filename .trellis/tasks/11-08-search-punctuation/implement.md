@@ -10,12 +10,12 @@
 ## 后端（GPT-6-Astra，high）
 
 1. `catalog/textnorm/textnorm.go`：`Loose`（design §3.1）。
-2. 迁移（线内草号 0036，含 `.down.sql`）：design §3.4；需要时在 `rollbackFixtures` 加空条目。
+2. 迁移（合入编号 0040，含 `.down.sql`）：design §3.4；需要时在 `rollbackFixtures` 加空条目。
 3. `catalog/internal/searchindex`：`normalizeValues` 计算 `Loose` 与 `loose_grams`；单对象与批量写入 SQL 写两列。
 4. `catalog/internal/artistgraph/profiles.go`：搜索名字同样写两列。
 5. 搜索 SQL（`catalog/search_ranked_sql.go`、`search_tiers_sql.go`、`search_probe_sql.go`、`search_sql.go`、`search_artists.go`、`search_aliases.go`、`search_complete.go` 中涉及匹配与等级的部分）：L1、L2 分支、启用条件、六层排名（design §3.3）。参数仍全部绑定，不拼接用户输入。
 6. 版本：T 线已升过 `ProjectionVersion`、`artistgraph.Version` 则不再升；单独合入时各 +1。
-7. 合同：`search-contracts.md`（规范化一节加去标点键、查询语义一节加三分支与六层、迁移一节加 0036）。
+7. 合同：`search-contracts.md`（规范化一节加去标点键、查询语义一节加三分支与六层、迁移一节加 0040）。
 
 1、2 可并行；3、4 依赖 1、2；5 依赖 3。
 
@@ -47,3 +47,7 @@ ROOMUSIC_TEST_RUN='^(TestPostgreSQLMigrationRollbackRoundTrip|TestPostgreSQL.*Pu
 - [ ] design §5 两张表全部有测试且通过。
 - [ ] I10 热门词 p95 ≤ 1 秒（一次正式测量）。
 - [ ] `textnorm.Version` 未变，艺人名字键数量在回填前后不变（集成测试里断言）。
+
+## 2026-11-08 合入 main 对齐
+
+O 线与 T 线各自已将 `artistgraph.Version` 提升到 3；整合后统一为 4，避免已有版本 3 的投影漏回填。`searchindex.ProjectionVersion=2`、`textnorm.Version=1` 保持不变。下述线内升级/回滚说明是原实施背景，合并后的回滚须连同 O 线规则判断，不能只回退版本常量。

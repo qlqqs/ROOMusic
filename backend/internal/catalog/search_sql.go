@@ -19,19 +19,23 @@ type searchPlan struct {
 	args             []any
 	empty            bool
 	artistAliases    bool
+	trigrams         [4]bool
 }
 
 func newSearchPlan(query, kind, mode string, generation int64) searchPlan {
-	plan := searchPlan{kind: kind, mode: mode, empty: query == "", matchPredicate: normalizedSearchMatch}
+	plan := searchPlan{kind: kind, mode: mode, empty: query == "", trigrams: [4]bool{true, true, true, true}}
 	if mode == "normalized" {
 		key, number := textnorm.Text(query), textnorm.CatalogNumber(query)
 		plan.empty = key == ""
 		plan.args = []any{key, searchindex.EscapeLike(key), searchindex.QueryGram(key),
 			number, searchindex.EscapeLike(number), searchindex.QueryGram(number), generation}
+		plan.args = append(plan.args, looseQueryArgs(key)...)
+		plan.args = append(plan.args, looseQueryArgs(number)...)
+		plan.matchPredicate = plan.normalizedMatch(-1)
 		plan.hits = `hits AS NOT MATERIALIZED (
 		 SELECT v.id AS value_id,v.release_id,v.track_id,v.field,v.role,v.original_value,
 		 ` + normalizedSearchRank + ` AS match_rank
-		 FROM catalog_search_values v WHERE ` + normalizedSearchMatch + `)`
+		 FROM catalog_search_values v WHERE ` + plan.matchPredicate + `)`
 	} else {
 		plan.args = []any{escapeLikePattern(query)}
 		trackFields := `('track_title',t.title)`
@@ -139,7 +143,7 @@ func (p searchPlan) fieldPriority() string {
 	 WHEN 'credit' THEN 5 WHEN 'label' THEN 6 WHEN 'catalog_number' THEN 7 ELSE 8 END`
 }
 
-const searchRoleOrder = `CASE role WHEN 'composer' THEN 0 WHEN 'conductor' THEN 1 WHEN 'performer' THEN 2 WHEN 'producer' THEN 3 ELSE 4 END`
+const searchRoleOrder = `CASE role WHEN 'lyricist' THEN 0 WHEN 'composer' THEN 1 WHEN 'arranger' THEN 2 WHEN 'conductor' THEN 3 WHEN 'performer' THEN 4 WHEN 'producer' THEN 5 ELSE 6 END`
 
 func (p searchPlan) pageSQL(attention bool) string {
 	if p.mode == "normalized" {
@@ -239,8 +243,15 @@ func (s *Store) searchPageFiltered(ctx context.Context, plan searchPlan, limit, 
 		if trackID.Valid {
 			hit.Match.TrackID = &trackID.String
 		}
-		if rank < 0 || rank > 2 || len(hit.Match.Original) > 4096 {
+		maxRank := 2
+		if plan.mode == "normalized" {
+			maxRank = 5
+		}
+		if rank < 0 || rank > maxRank || len(hit.Match.Original) > 4096 {
 			return nil, false, fmt.Errorf("invalid search match projection")
+		}
+		if plan.mode == "normalized" {
+			rank /= 2
 		}
 		hit.Match.Kind = [...]string{"exact", "prefix", "contains"}[rank]
 		hit.Match.ReleaseID = &hit.MatchedReleaseID
@@ -258,30 +269,20 @@ func (s *Store) prepareSearchPlan(ctx context.Context, plan searchPlan) (searchP
 	if plan.mode != "normalized" || plan.empty {
 		return plan, nil
 	}
+	var textTrigram, numberTrigram, looseTextTrigram, looseNumberTrigram bool
+	if err := s.database.QueryRowContext(ctx, `SELECT $1::text ~ '[[:alnum:]]{3}',$2::text ~ '[[:alnum:]]{3}',
+ $3::text ~ '[[:alnum:]]{3}',$4::text ~ '[[:alnum:]]{3}'`, plan.args[0], plan.args[3], plan.args[7], plan.args[10]).Scan(&textTrigram, &numberTrigram, &looseTextTrigram, &looseNumberTrigram); err != nil {
+		return plan, err
+	}
+	plan.trigrams = [4]bool{textTrigram, numberTrigram, looseTextTrigram, looseNumberTrigram}
 	if plan.artistAliases {
-		if err := s.database.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM artist_search_names n
-   WHERE n.projection_generation=(SELECT published_generation FROM catalog_projection_state WHERE capability='artists')
-   AND n.short_grams @> ARRAY[$1]::text[] AND (n.normalized_value||'') LIKE '%'||$2||'%' ESCAPE '~')`, plan.args[2], plan.args[1]).Scan(&plan.artistAliases); err != nil {
+		branches := artistSearchBranches(plan.args[0].(string), plan.args[7].(string), [2]bool{textTrigram, looseTextTrigram})
+		args := append(append([]any{}, plan.args[:3]...), plan.args[7:10]...)
+		if err := s.database.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM artist_search_names n WHERE `+artistNamePredicate(branches)+`)`, args...).Scan(&plan.artistAliases); err != nil {
 			return plan, err
 		}
 	}
-	var textTrigram, numberTrigram bool
-	if err := s.database.QueryRowContext(ctx, `SELECT $1::text ~ '[[:alnum:]]{3}',$2::text ~ '[[:alnum:]]{3}'`, plan.args[0], plan.args[3]).Scan(&textTrigram, &numberTrigram); err != nil {
-		return plan, err
-	}
-	match := plan.matchPredicate
-	if plan.args[0] == plan.args[3] {
-		// 两种规范键相同，不重复扫描同一个GIN分支；仍显式绑定所有参数类型。
-		match = `$1::text<>'' AND $4::text IS NOT NULL AND $5::text IS NOT NULL AND $6::text IS NOT NULL
- AND v.projection_generation=$7 AND v.short_grams @> ARRAY[$3]::text[]
- AND v.normalized_value LIKE '%' || $2 || '%' ESCAPE '~'`
-	}
-	if !textTrigram {
-		match = strings.ReplaceAll(match, `v.normalized_value LIKE '%' || $2`, `(v.normalized_value || '') LIKE '%' || $2`)
-	}
-	if !numberTrigram {
-		match = strings.ReplaceAll(match, `v.normalized_value LIKE '%' || $5`, `(v.normalized_value || '') LIKE '%' || $5`)
-	}
+	match := plan.normalizedMatch(-1)
 	plan.hits = strings.ReplaceAll(plan.hits, plan.matchPredicate, match)
 	plan.matchPredicate = match
 	return plan, nil

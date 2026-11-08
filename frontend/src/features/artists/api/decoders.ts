@@ -14,7 +14,7 @@ export const ARTIST_DETAIL_NAMES = 20;
 export const ARTIST_QUEUE_LIMIT = 10_000;
 
 /** 只有曲目级角色可以按角色列出曲目；发行艺人与专辑艺人的参与看“专辑”。 */
-export const artistTrackRoles = ["track_artist", "composer", "conductor", "performer", "producer"] as const;
+export const artistTrackRoles = ["track_artist", "lyricist", "composer", "arranger", "conductor", "performer", "producer"] as const;
 export type ArtistTrackRole = (typeof artistTrackRoles)[number];
 
 const count = () => d.integer({ min: 0 });

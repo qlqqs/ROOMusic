@@ -17,7 +17,7 @@ mutex 只保护本进程的 worker 引用。
   活动扫描时返回该活动 DTO 和 `200`，不改变原扫描模式。
   空请求体（无请求体或 `Content-Length: 0`）等价于 `{"mode":"incremental"}`；有体严格解码单字段对象 `{"mode":"incremental"}` 或 `{"mode":"full"}`，未知字段、缺少 mode、其他值或无效 JSON 返回 `400 invalid_input`。
 - `Service.StartScan(ctx, options ...StartOptions)` 接受零个或一个 `StartOptions{Mode string, Trigger string}`，省略时默认手动增量，空 `Trigger` 默认为 `manual`；HTTP 固定 `manual` 并传显式模式，再传至 worker、root 与 `ingest.PlanOptions`。`scanRoot` 保留默认增量入口，转调 `scanRootWithOptions`，避免其他线调用处的无谓变更；full 与 incremental 共用协调锁，不另开 HTTP 入口。
-- `0038` 增加 `scan_runs.scan_mode TEXT NOT NULL DEFAULT 'incremental' CHECK (scan_mode IN ('incremental','full'))`；历史记录默认增量，下行删除列。
+- `0041` 增加 `scan_runs.scan_mode TEXT NOT NULL DEFAULT 'incremental' CHECK (scan_mode IN ('incremental','full'))`；历史记录默认增量，下行删除列。
 - `GET /api/v1/scans`：管理员查询扫描记录（F3），`page`（默认 1）、`page_size`（默认 20，最大 100），按
   `started_at DESC, id DESC` 排序；响应 `{ "items": [ScanDTO], "pagination": { "page", "page_size", "total" } }`。
 - `GET /api/v1/scans/active`：已登录用户查询活动扫描，返回
@@ -196,8 +196,8 @@ RecoverInterruptedScans与StartScan遗留恢复在取得协调锁后同一事务
 
 ### 9.1 范围、存储与入口
 
-- `library` 拥有设置与调度；`0039_scheduled_scan.sql` 新建 `scan_schedule` 单行表：`id SMALLINT PRIMARY KEY CHECK(id=1)`、`enabled BOOLEAN NOT NULL`、`hour SMALLINT NOT NULL CHECK(hour BETWEEN 0 AND 23)`、`updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP`。初始 `{enabled:true,hour:4}`；设置随数据库备份恢复。
-- 同迁移新增 `scan_runs.trigger_kind TEXT NOT NULL DEFAULT 'manual' CHECK(trigger_kind IN ('manual','scheduled'))`；同名 `.down.sql` 删除列与设置表。0039 是 S 线连续编号，合入 main 时由主会话统一协调。
+- `library` 拥有设置与调度；`0042_scheduled_scan.sql` 新建 `scan_schedule` 单行表：`id SMALLINT PRIMARY KEY CHECK(id=1)`、`enabled BOOLEAN NOT NULL`、`hour SMALLINT NOT NULL CHECK(hour BETWEEN 0 AND 23)`、`updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP`。初始 `{enabled:true,hour:4}`；设置随数据库备份恢复。
+- 同迁移新增 `scan_runs.trigger_kind TEXT NOT NULL DEFAULT 'manual' CHECK(trigger_kind IN ('manual','scheduled'))`；同名 `.down.sql` 删除列与设置表。0042 为合入编号，接增量扫描迁移 0041。
 - 服务签名：`LoadScanSchedule(ctx) (ScanSchedule,error)`、`SaveScanSchedule(ctx, ScanSchedule) (ScanSchedule,error)`；`ScanSchedule{Enabled bool, Hour int, UpdatedAt time.Time}`。`UpdatedAt` 不进入 JSON；只在值实际改变时写 `NOW()`，重复保存相同值保留原时间。
 - 调度只调用现有 `StartScan(ctx, StartOptions{Mode:ScanModeIncremental, Trigger:ScanTriggerScheduled})`，共用扫描协调锁；没有另一套扫描执行路径、排队或失败重试。内部 `scheduledSlot` 随选项传入，取得锁后再读该时刻之后的扫描；若其他实例已快速完成，返回原扫描且 `Started=false`，关闭快照到获取锁之间的重复触发窗口。HTTP 不接收 trigger 或时刻字段。
 
@@ -247,4 +247,4 @@ RecoverInterruptedScans与StartScan遗留恢复在取得协调锁后同一事务
 - 错误：忙时把 Slot 留到 10 分钟后重试，或 HTTP 保存请求直接启动后台循环。正确做法：先记录本次 Slot 已处理，统一调用生命周期调度入口。
 - 单测：上述触发规则、跨日及时区换算、关闭不触发；注入计时器验证唤醒与取消退出。
 - 隔离数据库集成：GET 默认值与权限；PUT 严格校验、来源及错误矩阵；相同值更新时间不变；并发关闭返回后不按旧快照启动；调度新增记录的 mode/trigger；已有扫描/协调锁竞争不新建；两个旧快照实例依次取得锁仍只创建一次。
-- 迁移回退：`rollbackFixtures[39]` 覆盖 scheduled 历史及修改后的设置，上下行往返；所有扫描 API 样本与前端 decoder 同步必需 `trigger`。
+- 迁移回退：`rollbackFixtures[42]` 覆盖 scheduled 历史及修改后的设置，上下行往返；所有扫描 API 样本与前端 decoder 同步必需 `trigger`。

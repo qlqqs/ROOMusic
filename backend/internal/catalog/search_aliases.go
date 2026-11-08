@@ -10,12 +10,11 @@ func (p searchPlan) withArtistAliases(query string) string {
 	}
 	query = strings.ReplaceAll(query, "catalog_search_values", "search_values_with_artists")
 	prefix := `matching_artist_names AS MATERIALIZED (
- SELECT n.id,n.artist_id,n.original_value,n.normalized_value,n.short_grams
+ SELECT n.id,n.artist_id,n.original_value,n.normalized_value,n.short_grams,n.loose_value,n.loose_grams
  FROM artist_search_names n
- WHERE n.projection_generation=(SELECT published_generation FROM catalog_projection_state WHERE capability='artists')
- AND n.short_grams @> ARRAY[$3]::text[] AND (n.normalized_value||'') LIKE '%'||$2||'%' ESCAPE '~'
+ WHERE ` + p.artistAliasPredicate() + `
  ), search_values_with_artists AS NOT MATERIALIZED (
- SELECT v.id,v.release_id,v.track_id,v.field,v.role,v.original_value,v.normalized_value,v.short_grams,v.projection_generation,
+ SELECT v.id,v.release_id,v.track_id,v.field,v.role,v.original_value,v.normalized_value,v.short_grams,v.loose_value,v.loose_grams,v.projection_generation,
  (SELECT min(credit.artist_id::text)::uuid FROM (
  SELECT e.artist_id FROM artist_effective_credits e JOIN artist_names cn ON cn.id=e.name_id
  WHERE e.track_id=v.track_id
@@ -29,8 +28,14 @@ func (p searchPlan) withArtistAliases(query string) string {
  ) credit HAVING count(DISTINCT credit.artist_id)=1) AS artist_id,
  NULL::text AS alias FROM catalog_search_values v
  UNION ALL
- SELECT n.id,e.release_id,e.track_id,'artist_alias',e.role,n.original_value,n.normalized_value,n.short_grams,$7::bigint,n.artist_id,n.original_value
+ SELECT n.id,e.release_id,e.track_id,'artist_alias',e.role,n.original_value,n.normalized_value,n.short_grams,n.loose_value,n.loose_grams,$7::bigint,n.artist_id,n.original_value
  FROM matching_artist_names n JOIN artist_effective_credits e ON e.artist_id=n.artist_id
  )`
 	return strings.Replace(query, "WITH ", "WITH "+prefix+", ", 1)
+}
+
+// 别名传播共用艺人栏的完整三分支，仅把去标点参数换成目录查询中的位置。
+func (p searchPlan) artistAliasPredicate() string {
+	branches := artistSearchBranches(p.args[0].(string), p.args[7].(string), [2]bool{p.trigrams[0], p.trigrams[2]})
+	return strings.NewReplacer("$4", "$8", "$5", "$9", "$6", "$10").Replace(artistNamePredicate(branches))
 }

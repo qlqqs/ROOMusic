@@ -18,8 +18,60 @@ var knownFixedArtistGroups = map[string]bool{
 	"ac/dc":              true,
 }
 
+// SplitExplicitArtistValues 只在半角或全角括号外按换行、NUL 与明确分隔符切段。
+// 括号深度仅决定切段位置，不解释括号语义，也不处理紧凑分隔符或姓名保护。
+func SplitExplicitArtistValues(raw string) []string {
+	result := make([]string, 0)
+	start, depth := 0, 0
+	for offset, character := range raw {
+		if offset < start {
+			continue
+		}
+		switch character {
+		case '(', '（':
+			depth++
+		case ')', '）':
+			if depth > 0 {
+				depth--
+			}
+		}
+		if depth > 0 {
+			continue
+		}
+		separatorLength := 0
+		if character == '\r' || character == '\n' || character == '\x00' {
+			separatorLength = 1
+		} else {
+			for _, separator := range artistSeparatorRules {
+				if strings.HasPrefix(raw[offset:], separator) {
+					separatorLength = len(separator)
+					break
+				}
+			}
+		}
+		if separatorLength > 0 {
+			if part := strings.TrimSpace(raw[start:offset]); part != "" {
+				result = append(result, part)
+			}
+			start = offset + separatorLength
+		}
+	}
+	if part := strings.TrimSpace(raw[start:]); part != "" {
+		result = append(result, part)
+	}
+	return result
+}
+
 func splitArtistNames(raw string) []string {
-	// 清除控制字符的旧规则保持不变，但多值聚合串不能套单值截断预算。
+	// 换行和 NUL 先分隔多值，再逐段完整拆分，避免清理控制字符时粘连姓名。
+	if strings.ContainsAny(raw, "\r\n\x00") {
+		var names []string
+		for _, value := range splitArtistValues(raw) {
+			names = append(names, splitArtistNames(value)...)
+		}
+		return names
+	}
+	// 清除其余控制字符，但多值聚合串不能套单值截断预算。
 	raw = strings.TrimSpace(strings.Map(func(character rune) rune {
 		if unicode.IsControl(character) {
 			return -1
@@ -42,7 +94,7 @@ func splitArtistNames(raw string) []string {
 			return flattenArtistNames([]string{left, right})
 		}
 	}
-	if isKnownFixedArtistGroup(raw) {
+	if isKnownFixedArtistGroup(raw) || isLatinSurnameFirstArtist(raw) {
 		return []string{raw}
 	}
 	for _, separator := range []string{"/", ",", "&"} {
@@ -74,6 +126,29 @@ func CanonicalArtistNames(raw string) []string {
 		result = append(result, name)
 	}
 	return result
+}
+
+// JoinArtistValues 展开换行和 NUL 多值，逐值清理、按原写法去重，保留首次顺序。
+func JoinArtistValues(values ...string) string {
+	var result []string
+	seen := make(map[string]bool)
+	for _, value := range values {
+		for _, part := range splitArtistValues(value) {
+			name := BoundedText(part)
+			if name == "" || seen[name] {
+				continue
+			}
+			seen[name] = true
+			result = append(result, name)
+		}
+	}
+	return strings.Join(result, " / ")
+}
+
+func splitArtistValues(raw string) []string {
+	return strings.FieldsFunc(raw, func(character rune) bool {
+		return character == '\r' || character == '\n' || character == '\x00'
+	})
 }
 
 func CanonicalTrackArtist(raw string) string {
@@ -115,6 +190,9 @@ func splitNestedArtistName(raw string) []string {
 			return parts
 		}
 	}
+	if isLatinSurnameFirstArtist(raw) {
+		return []string{raw}
+	}
 	for _, separator := range []string{"/", ",", "&"} {
 		parts := splitArtistBySeparator(raw, separator)
 		if len(parts) <= 1 {
@@ -126,6 +204,48 @@ func splitNestedArtistName(raw string) []string {
 		return parts
 	}
 	return []string{raw}
+}
+
+// isLatinSurnameFirstArtist 只保护满足字母、词数和非团体词条件的单逗号姓名。
+func isLatinSurnameFirstArtist(raw string) bool {
+	if strings.Count(raw, ",") != 1 {
+		return false
+	}
+	left, right, _ := strings.Cut(raw, ",")
+	return isLatinArtistNamePart(strings.TrimSpace(left), 3) && isLatinArtistNamePart(strings.TrimSpace(right), 4)
+}
+
+func isLatinArtistNamePart(raw string, maxWords int) bool {
+	words := strings.Fields(raw)
+	if len(words) == 0 || len(words) > maxWords {
+		return false
+	}
+	hasLatinLetter := false
+	for _, character := range raw {
+		switch {
+		case unicode.Is(unicode.Latin, character):
+			hasLatinLetter = true
+		case unicode.Is(unicode.Mn, character), unicode.IsSpace(character):
+		case character == '.', character == '-', character == '\'', character == '’':
+		default:
+			return false
+		}
+	}
+	if !hasLatinLetter {
+		return false
+	}
+	for _, word := range words {
+		word = strings.ToLower(word)
+		for _, prefix := range []string{
+			"orchest", "philharm", "symphon", "sinfon", "ensemble", "quartet", "quatuor",
+			"trio", "choir", "chorus", "chor", "consort", "singers", "players", "band",
+		} {
+			if strings.HasPrefix(word, prefix) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func splitArtistBySeparator(raw, separator string) []string {
