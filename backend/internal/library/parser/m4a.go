@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"strconv"
 	"strings"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -544,6 +545,12 @@ func parseM4AItemValue(itemType string, value, typeCode []byte, observation *Aud
 		}
 		return nil
 	}
+	if itemType == "\xa9mvi" || itemType == "\xa9mvc" {
+		if itemType == "\xa9mvi" && len(value) == 2 {
+			collectWorkTag(observation, "©mvi", strconv.Itoa(int(binary.BigEndian.Uint16(value))))
+		}
+		return nil
+	}
 	if itemType == "cpil" {
 		if len(value) == 1 && value[0] != 0 {
 			observation.Compilation = true
@@ -584,6 +591,8 @@ func parseM4AItemValue(itemType string, value, typeCode []byte, observation *Aud
 		observation.RawAtoms[itemType] = text
 	}
 	switch itemType {
+	case "\xa9wrk", "\xa9mvn":
+		collectWorkTag(observation, key, text)
 	case "\xa9nam":
 		observation.Title = text
 	case "\xa9alb":
@@ -614,6 +623,9 @@ func parseM4AFreeformValue(mean, name string, value, typeCode []byte, observatio
 		if role != "track_artist" && role != "album_artist" {
 			addTagCredits(observation, name, raw)
 		}
+		return nil
+	}
+	if collectWorkTag(observation, name, decodeM4AText(value, binary.BigEndian.Uint32(typeCode))) {
 		return nil
 	}
 	if name == "COMPILATION" || name == "ORIGINALDATE" || name == "ORIGINALYEAR" {

@@ -38,6 +38,16 @@
 
 艺人可信原文恢复只收集display实际改变的轨，按相同有界块更新tracks.artist，再调用此端口；未变更轨不Touch。单轨RefreshTrack/Apply合同不变，不用批接口复制另一套造值规则。必需测试：260项跨chunk与逐轨结果等价、重复ID只递增一次、六credit/多名顺序、missing/空/未知UUID/旧revision、封闭清单live_updated、后段失败与取消全事务回滚、graph130轨恢复而未变化轨revision不变。批量化减少往返不代表串行热计划或完整回填自动达标。
 
+### 古典作品字段（⑧）
+
+0035 的曲目字段 CHECK 增加 `work_title` 与 `work_catalog`；单轨写入、批量刷新和后台回填使用同一造值规则。原文分别取作品名、作品编号片段；作品名走 `textnorm.Text`，作品编号走 `textnorm.CatalogNumber`。全部 exact/prefix/contains、稀疏/密集、最佳命中说明的编号分支使用 `field IN ('catalog_number','work_catalog')`，普通分支排除这两项。
+
+present 子轨的两个作品字段与 track_title 一样传播到发行，再按可见成员归组；只命中某轨作品不能使其兄弟轨命中。`match.field` 增加 `work_title|work_catalog`，其它 match 形状与角色空值语义不变，界面说明为“作品”“作品编号”。单轨标签作品即使 work_index 为空也进入投影；没有作品则不造值，重扫清空会删除旧值。
+
+`BWV 1007/bwv1007`、`Op. 67/op.67` 可按现有编号键匹配；`op67` 匹配 `Op. 67` 留给⑬去标点规则，本项不升 `textnorm.Version` 或已为2的 `ProjectionVersion`。down 删除两个新字段值并恢复旧 CHECK，不留下旧代码不认识的字段。
+
+验证须覆盖：编号原文与规范键、单轨与批量投影一致、present 传播专辑而不传播兄弟轨、missing 不出现、重扫替换，以及严格 API 样本中的两个新枚举；SQL 行为须用隔离 PostgreSQL 验证，编译与跳过数据库的测试不替代集成证据。
+
 ## 在线回填与发布
 
 `Initialize` 只登记版本/代次、关闭不匹配的读能力；不发现对象、不等待回填。服务 ready 不依赖投影完成。`Run` 使用专用连接维护 advisory lock 选主，各批事务在同一连接上；该选主锁不排斥扫描/M3，CATP 只保护短批。

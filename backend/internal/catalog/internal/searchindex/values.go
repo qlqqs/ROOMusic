@@ -36,7 +36,7 @@ func normalizeValues(values []value) (string, error) {
 			return "", errors.New("search source text exceeds budget or is invalid")
 		}
 		v.Normalized = textnorm.Text(v.Original)
-		if v.Field == "catalog_number" {
+		if v.Field == "catalog_number" || v.Field == "work_catalog" {
 			v.Normalized = textnorm.CatalogNumber(v.Original)
 		}
 		if len(v.Normalized) > 65536 {

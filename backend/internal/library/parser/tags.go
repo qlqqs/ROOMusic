@@ -38,6 +38,9 @@ func parseNumber(value string) int {
 }
 
 func setAudioTag(observation *AudioObservation, key, value string) error {
+	if collectWorkTag(observation, key, value) {
+		return nil
+	}
 	if setAudioLyrics(observation, key, value) {
 		return nil
 	}

@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { albumGroup, mediaOf } from "../../../test/catalog-data";
 import { ReleaseMedia } from "./release-media";
@@ -93,5 +93,33 @@ describe("曲目署名", () => {
     expect(screen.getByText("方文山").closest("p")?.textContent).toBe(
       "作词：方文山；小提琴：Hilary Hahn、Anne-Sophie Mutter；混音：某某；混音工程师：欧姆",
     );
+  });
+});
+
+describe("作品分组", () => {
+  it("用作品小标题和组总时长归组，行内只显示乐章名并保留序号与时长", () => {
+    const release = albumGroup(3, { medium_count: 1, track_count: 2 }).representative;
+    const workTitle = "第五交响曲，Op. 67";
+    const firstMovement = "I. Allegro con brio";
+    const secondMovement = "II. Andante con moto";
+    const workMedia = mediaOf(release, (_medium, position) => ({
+      title: `${workTitle}: ${position === 1 ? firstMovement : secondMovement}`,
+      duration_seconds: position === 1 ? 180 : 240,
+      work: { index: 1, title: workTitle, movement: position === 1 ? firstMovement : secondMovement },
+    }));
+    render(<ReleaseMedia media={workMedia} albumArtist={release.artist} />);
+
+    expect(screen.getAllByText(workTitle)).toHaveLength(1);
+    expect(screen.getByText(workTitle).closest("p")?.textContent).toContain("7:00");
+    const movements = screen.getByRole("list", { name: workTitle });
+    const rows = within(movements).getAllByRole("listitem");
+    expect(rows).toHaveLength(2);
+    for (const [index, row] of rows.entries()) {
+      expect(within(row).getByText(index === 0 ? firstMovement : secondMovement).textContent).toBe(index === 0 ? firstMovement : secondMovement);
+      expect(within(row).getByText(String(index + 1)).textContent).toBe(String(index + 1));
+      expect(within(row).getByText(index === 0 ? "3:00" : "4:00").textContent).toBe(index === 0 ? "3:00" : "4:00");
+    }
+    expect(screen.queryByText(`${workTitle}: ${firstMovement}`)).toBeNull();
+    expect(screen.queryByText(`${workTitle}: ${secondMovement}`)).toBeNull();
   });
 });

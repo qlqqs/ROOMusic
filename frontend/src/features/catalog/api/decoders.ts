@@ -158,6 +158,12 @@ const cueDecoder = d.object({
   isrc: d.nullable(d.string()),
 });
 
+const workDecoder = d.object({
+  index: d.integer({ min: 1 }),
+  title: d.string({ min: 1 }),
+  movement: d.nullable(d.string()),
+});
+
 const trackDecoder = d.object({
   id: d.uuid(),
   title: d.string(),
@@ -175,6 +181,8 @@ const trackDecoder = d.object({
   bitrate: d.nullable(d.integer({ min: 0 })),
   cue: d.nullable(cueDecoder),
   credits: d.array(creditDecoder, { max: MAX_TRACK_CREDITS }),
+  // 古典作品：同一发行里相邻且 index 相同的曲目属于同一作品；movement 为 null 时行内显示曲目标题。
+  work: d.nullable(workDecoder),
 });
 
 const mediumDecoder = d.object({
@@ -319,6 +327,7 @@ export type AudioFormatDTO = d.Infer<typeof audioFormatDecoder>;
 export type ReleaseMediumDTO = d.Infer<typeof mediumDecoder>;
 export type ReleaseTrackDTO = d.Infer<typeof trackDecoder>;
 export type ReleaseCreditDTO = d.Infer<typeof creditDecoder>;
+export type ReleaseTrackWorkDTO = d.Infer<typeof workDecoder>;
 export type ReleaseCueDTO = d.Infer<typeof cueDecoder>;
 export type ReleaseEvidenceSummaryDTO = d.Infer<typeof evidenceSummaryDecoder>;
 export type ReleaseEvidenceDTO = d.Infer<typeof releaseEvidenceDecoder>;

@@ -25,6 +25,8 @@ const fieldNames: Readonly<Record<MatchField, string>> = {
   credit: "署名",
   label: "厂牌",
   catalog_number: "编号",
+  work_title: "作品",
+  work_catalog: "作品编号",
   artist_name: "艺人",
   artist_alias: "别名",
 };

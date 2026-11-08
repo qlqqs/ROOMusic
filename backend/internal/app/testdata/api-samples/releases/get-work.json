@@ -1,0 +1,110 @@
+{
+  "body": {
+    "album_artist": "Sample Cellist",
+    "album_artist_refs": [],
+    "artist": "Sample Cellist",
+    "artist_refs": [],
+    "artwork": null,
+    "attention_count": 0,
+    "barcode": null,
+    "candidate_kind": "ordinary_directory",
+    "catalog_number": null,
+    "corrected_fields": [],
+    "credits": [
+      {
+        "artist_refs": [],
+        "detail": null,
+        "name": "Sample Cellist",
+        "role": "album_artist"
+      }
+    ],
+    "edition": null,
+    "evidence": [
+      {
+        "action": "auto_apply",
+        "confidence": "high",
+        "field": "album_artist",
+        "rule_id": "majority_v1",
+        "source": "tag"
+      },
+      {
+        "action": "auto_apply",
+        "confidence": "high",
+        "field": "artist",
+        "rule_id": "majority_v1",
+        "source": "tag"
+      },
+      {
+        "action": "auto_apply",
+        "confidence": "high",
+        "field": "title",
+        "rule_id": "majority_v1",
+        "source": "tag"
+      }
+    ],
+    "genres": [],
+    "id": "00000000-0000-4000-8000-000000000001",
+    "label": null,
+    "media": [
+      {
+        "id": "00000000-0000-4000-8000-000000000002",
+        "position": 1,
+        "title": "Medium",
+        "tracks": [
+          {
+            "artist": "Sample Cellist",
+            "artist_refs": [],
+            "bit_depth": 16,
+            "bitrate": null,
+            "channels": 2,
+            "codec": "flac",
+            "credits": [],
+            "cue": null,
+            "duration_seconds": 240,
+            "id": "00000000-0000-4000-8000-000000000003",
+            "position": 1,
+            "sample_rate": 44100,
+            "source": "01.flac",
+            "source_kind": "flac_vorbis_comment",
+            "title": "Cello Suite No. 1 in G major, BWV 1007: I. Prelude",
+            "work": {
+              "index": 1,
+              "movement": "I. Prelude",
+              "title": "Cello Suite No. 1 in G major, BWV 1007"
+            }
+          },
+          {
+            "artist": "Sample Cellist",
+            "artist_refs": [],
+            "bit_depth": 16,
+            "bitrate": null,
+            "channels": 2,
+            "codec": "flac",
+            "credits": [],
+            "cue": null,
+            "duration_seconds": 240,
+            "id": "00000000-0000-4000-8000-000000000004",
+            "position": 2,
+            "sample_rate": 44100,
+            "source": "02.flac",
+            "source_kind": "flac_vorbis_comment",
+            "title": "Cello Suite No. 1 in G major, BWV 1007: II. Allemande",
+            "work": {
+              "index": 1,
+              "movement": "II. Allemande",
+              "title": "Cello Suite No. 1 in G major, BWV 1007"
+            }
+          }
+        ]
+      }
+    ],
+    "media_type": null,
+    "medium_count": 1,
+    "revision": 1,
+    "source_type": null,
+    "title": "Sample Cello Suites",
+    "track_count": 2,
+    "year": null
+  },
+  "status": 200
+}

@@ -16,12 +16,12 @@ func (p searchPlan) normalizedTierMatch(rank int) string {
  AND v.normalized_value COLLATE "C"=$1 COLLATE "C" AND v.short_grams @> ARRAY[$3]::text[]`
 		}
 		return `$1::text<>'' AND v.projection_generation=$7 AND (
- (v.field<>'catalog_number' AND md5(v.normalized_value)=md5($1) AND v.normalized_value COLLATE "C"=$1 COLLATE "C" AND v.short_grams @> ARRAY[$3]::text[])
- OR (v.field='catalog_number' AND $4<>'' AND md5(v.normalized_value)=md5($4) AND v.normalized_value COLLATE "C"=$4 COLLATE "C" AND v.short_grams @> ARRAY[$6]::text[]))`
+ (v.field NOT IN ('catalog_number','work_catalog') AND md5(v.normalized_value)=md5($1) AND v.normalized_value COLLATE "C"=$1 COLLATE "C" AND v.short_grams @> ARRAY[$3]::text[])
+ OR (v.field IN ('catalog_number','work_catalog') AND $4<>'' AND md5(v.normalized_value)=md5($4) AND v.normalized_value COLLATE "C"=$4 COLLATE "C" AND v.short_grams @> ARRAY[$6]::text[]))`
 	}
-	prefix := `v.normalized_value LIKE (CASE WHEN v.field='catalog_number' THEN $5 ELSE $2 END)||'%' ESCAPE '~'`
+	prefix := `v.normalized_value LIKE (CASE WHEN v.field IN ('catalog_number','work_catalog') THEN $5 ELSE $2 END)||'%' ESCAPE '~'`
 	if rank == 1 {
-		return p.matchPredicate + ` AND ` + prefix + ` AND v.normalized_value<>CASE WHEN v.field='catalog_number' THEN $4 ELSE $1 END`
+		return p.matchPredicate + ` AND ` + prefix + ` AND v.normalized_value<>CASE WHEN v.field IN ('catalog_number','work_catalog') THEN $4 ELSE $1 END`
 	}
 	return p.matchPredicate + ` AND NOT (` + prefix + `)`
 }

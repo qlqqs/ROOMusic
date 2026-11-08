@@ -183,7 +183,8 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 		m.id::text,m.position,m.title,
 		t.id::text,t.title,t.artist,t.position,t.relative_path,t.source_kind,
 		NULLIF(t.duration_seconds,0),NULLIF(BTRIM(t.codec),''),NULLIF(t.bit_depth,0),NULLIF(t.sample_rate,0),NULLIF(t.channels,0),NULLIF(t.bitrate,0),
-		t.cue_index_frames,t.cue_end_frames,NULLIF(BTRIM(t.cue_isrc),''),`+releasesql.TrackArtistRefsProjection+`
+		t.cue_index_frames,t.cue_end_frames,NULLIF(BTRIM(t.cue_isrc),''),`+releasesql.TrackArtistRefsProjection+`,
+		t.work_index,t.work_title,t.movement_title
 		FROM media m
 		JOIN tracks t ON t.medium_id=m.id AND t.source_status='present'
 		WHERE m.release_id=$1::uuid
@@ -210,13 +211,14 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 		var mediumPosition, trackPosition int
 		var artistRefs []byte
 		var duration sql.NullFloat64
-		var codec, isrc sql.NullString
-		var bitDepth, sampleRate, channels, bitrate, cueIndex, cueEnd sql.NullInt64
+		var codec, isrc, workTitle, movementTitle sql.NullString
+		var bitDepth, sampleRate, channels, bitrate, cueIndex, cueEnd, workIndex sql.NullInt64
 		if err := rows.Scan(
 			&mediumID, &mediumPosition, &mediumTitle,
 			&trackID, &trackTitle, &trackArtist, &trackPosition, &sourcePath, &sourceKind,
 			&duration, &codec, &bitDepth, &sampleRate, &channels, &bitrate,
 			&cueIndex, &cueEnd, &isrc, &artistRefs,
+			&workIndex, &workTitle, &movementTitle,
 		); err != nil {
 			return nil, err
 		}
@@ -243,6 +245,13 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 			Channels:        releasesql.IntPointerFromNull(channels),
 			Bitrate:         releasesql.IntPointerFromNull(bitrate),
 			Credits:         []ReleaseCredit{},
+		}
+		if workIndex.Valid {
+			track.Work = &ReleaseTrackWork{
+				Index:    int(workIndex.Int64),
+				Title:    workTitle.String,
+				Movement: releasesql.StringPointerFromNull(movementTitle),
+			}
 		}
 		track.ArtistRefs, err = decodeArtistRefs(artistRefs)
 		if err != nil {

@@ -169,6 +169,25 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
     目录不存在不算错误，其他读目录错误按同样方式记录。
   - 没有迁移：重扫会对每个候选重新发现封面，下一次扫描即绑定或移除。
 
+### 古典作品与乐章（⑧，迁移草号 0035）
+
+- `catalog/classical` 只依赖标准库；`ParseCatalogs` 返回 `CatalogEntry{System,Number,Partial,Start,Length}`，位置按 rune；`CatalogSortKey` 只替换 `:/-` 为空格并折叠连续空格，不裁首尾。内置 Op/Opus/作品、WoO、H/Hob、BWV、KV/K、D、RV、HWV；无数字不解析，串首不匹配，每体系只留首条，共享抹白数组。编号与左边界只认 ASCII 字母数字，避免吞中文“号”；卷号保留 `I:94` 形式。
+- `AudioObservation` 与暂存 `SourceObservation` 新增 `Work/MovementName/MovementNumber`，JSON 为 `work/movement_name/movement_number,omitempty`。文本经 `BoundedText`，同级取首个非空值，读完全部标签后按优先级选取，不受文件内键顺序影响。
+
+| 容器 | 作品 | 乐章名 | 乐章号 |
+| --- | --- | --- | --- |
+| Vorbis、通用扩展标签 | WORK | MOVEMENTNAME，其次非数字 MOVEMENT | MOVEMENTNUMBER，其次数字或 n/m 的 MOVEMENT |
+| ID3 | TIT1，其次 TXXX:WORK | MVNM | MVIN（n/m 取 n） |
+| M4A | ©wrk，其次 ----:WORK | ©mvn | ©mvi（16 位整数） |
+
+- TXXX 与 `com.apple.iTunes` freeform 复用通用键入口；原生键优先。TIT1 只有同文件存在非空 MVNM/MVIN，或能解析出作品编号时才作作品，否则用 WORK 回退。MOVEMENTTOTAL、©mvc、分母不保存；非正数或超出 INTEGER 的乐章号不保存。
+- `AssignWorks(OrganizedCandidate) map[string]WorkAssignment` 在 `PersistCandidateWithFeedback` 开头计算一次，按碟号、轨位排序；键为规范化相对路径。`WorkAssignment{Title,Catalog,Index,MovementNumber,MovementTitle,Source}` 交给 `persistTrack`，规划阶段不计算，不改变发行/曲目身份或 organizer。
+- 有 WORK 总按标签写 `Source="tag"`，不受流派限制；乐章名缺失时只剥曲目标题开头的“作品名 + `: `、`：`、` - `、`, `、`，`”。其余连续无 WORK 段，仅扫描候选流派经 `GenreKey` 等于 `classical/classic/classique/klassik/clásica/clasica/classica/クラシック/클래식` 或包含“古典”时调用 `SplitWorks`，来源为 `title`；人工修正流派不触发重算，Classical Crossover、Neo-Classical 不在名单。
+- `SplitWorks` 返回 `WorkSplit{Work,Movement,Group}`。括号归一化只用于判定，切分取原文；保留空格闸门、调性/缩写/时间戳例外，补全角分隔符闸门及罗马、阿拉伯、“第N乐章”的反向定位。`Concerto: 1. Allegro / 2. Adagio` 由已确认的原文前导定位作品，不放宽公开 `Segments` 的闸门。单曲推断组不产出任何字段。
+- 相邻作品名去首尾空白、小写相同且来源相同才可成组；标签乐章号都有值时须递增，相邻非空乐章名重复则断组，`promenade` 除外；无名不算同名。标题来源以 `SplitWorks.Group` 为准。只给至少两轨的组分配发行内从 1 递增的 Index；单轨标签仍保存作品供搜索。CUE 虚拟轨按 CUE TITLE 参与。重复规则按相邻语义，不采用参考伪码仅首曲更新 lastPart 的错误。
+- Catalog 取 `ParseCatalogs(Title)` 第一项的原文片段并裁首尾空白。六列 `work_title/work_catalog/work_index/movement_number/movement_title/work_source` 重扫整体替换，无作品全部 NULL；两个标题非空且≤4096字节，编号非空且≤256字节，序号正数，来源 `tag|title`。作品名与来源同空同有，无作品名不得有其他作品列；违反 CHECK 走既有候选写入失败路径。
+- down 先删 `work_title/work_catalog` 搜索值、恢复字段 CHECK，再删作品约束与六列。④尚未合入，不新增或提升解析/归组版本；⑥已提升的 `ProjectionVersion=2` 不再升，`textnorm.Version=1` 不变。读取形状见[REST合同](./catalog-rest-contracts.md)，搜索见[搜索合同](./search-contracts.md)，验证内容见[扫描验证](./library-scan-verification.md)。
+
 ## 4. 校验与错误矩阵
 
 | 条件 | 行为 |
@@ -186,6 +205,11 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 | 明确 rip log 与 `folder` 补充值并存 | 选定 CD 并把 decision provenance 提升为 `rip_log`；不得保留重复字段决定 |
 | 明确 rip log 与 tag/CUE/音频规格决定冲突 | 保留明确来源，不允许抓轨日志覆盖 |
 | 艺人/credit 含换行或 NUL | 先切段再清理，不能把两个名字粘连；固定组合与拉丁姓名保护按第3节执行 |
+| TIT1 没有乐章标签且解析不出作品编号 | 忽略分组值，仍可回退到 WORK |
+| 非古典扫描流派且没有 WORK | 不从标题推断作品；有 WORK 不受流派限制 |
+| 标签作品只有一轨 | 保存作品供搜索，work_index 为 NULL，REST work 为 null |
+| 乐章号非正数或超出 INTEGER | 不保存序号，不使合法作品名失效 |
+| 作品列违反非空、长度、正数或关联 CHECK | 候选事务回滚，按既有 catalog_write_failure 记录；不吞错 |
 | TIPL/IPLS/TMCL 奇数个值 | 只丢最后落单项，已成对的署名保留 |
 | 未知工种或乐器 | TIPL/IPLS 归制作人、TMCL 归演奏并保留细分；未知普通标签键忽略 |
 | 演奏括号含未知非拉丁文字 | 整个原文作为姓名，不把别名猜成乐器 |

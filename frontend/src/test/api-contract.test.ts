@@ -341,6 +341,7 @@ const successContracts: Record<string, Contract> = {
   "release-groups/comparison": { status: 200, decode: decodeReleaseComparison },
   "releases/get": { status: 200, decode: decodeReleaseDetail },
   "releases/get-single": { status: 200, decode: decodeReleaseDetail },
+  "releases/get-work": { status: 200, decode: decodeReleaseDetail },
   "releases/get-cue": { status: 200, decode: decodeReleaseDetail },
   "releases/get-corrected": { status: 200, decode: decodeReleaseDetail },
   "releases/evidence": { status: 200, decode: decodeReleaseEvidence },

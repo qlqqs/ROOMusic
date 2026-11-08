@@ -20,7 +20,7 @@ export function albumArtistOf(release: Pick<ReleaseSummaryDTO, "album_artist" | 
 }
 
 /** 整张发行版本的总时长：只要有一首曲目的时长未知，或者没有曲目，就是未知（null），不拿已知部分冒充总数。 */
-export function totalDuration(media: readonly ReleaseMediumDTO[]): number | null {
+export function totalDuration(media: readonly Pick<ReleaseMediumDTO, "tracks">[]): number | null {
   let total = 0;
   let tracks = 0;
   for (const medium of media) {

@@ -40,7 +40,8 @@
             "sample_rate": null,
             "source": "0.flac",
             "source_kind": "physical",
-            "title": "Sample Replaced Album (new rip) track 1"
+            "title": "Sample Replaced Album (new rip) track 1",
+            "work": null
           },
           {
             "artist": "Sample Trio",
@@ -57,7 +58,8 @@
             "sample_rate": null,
             "source": "1.flac",
             "source_kind": "physical",
-            "title": "Sample Replaced Album (new rip) track 2"
+            "title": "Sample Replaced Album (new rip) track 2",
+            "work": null
           }
         ]
       }

@@ -87,7 +87,7 @@ func parseID3Frames(data []byte, observation *AudioObservation, major, tagFlags 
 			}
 			continue
 		}
-		if frameID != "TIT2" && frameID != "TPE1" && frameID != "TPE2" && frameID != "TPE3" && frameID != "TALB" && frameID != "TRCK" && frameID != "TPOS" && frameID != "TCON" && frameID != "TDRC" && frameID != "TYER" && frameID != "TSRC" && frameID != "TCOM" && frameID != "TPUB" && frameID != "TXXX" && frameID != "TCMP" && frameID != "TDOR" && frameID != "TORY" && frameID != "TEXT" && frameID != "TIPL" && frameID != "IPLS" && frameID != "TMCL" {
+		if frameID != "TIT1" && frameID != "MVNM" && frameID != "MVIN" && frameID != "TIT2" && frameID != "TPE1" && frameID != "TPE2" && frameID != "TPE3" && frameID != "TALB" && frameID != "TRCK" && frameID != "TPOS" && frameID != "TCON" && frameID != "TDRC" && frameID != "TYER" && frameID != "TSRC" && frameID != "TCOM" && frameID != "TPUB" && frameID != "TXXX" && frameID != "TCMP" && frameID != "TDOR" && frameID != "TORY" && frameID != "TEXT" && frameID != "TIPL" && frameID != "IPLS" && frameID != "TMCL" {
 			continue
 		}
 		if len(frame) < 2 {
@@ -101,7 +101,7 @@ func parseID3Frames(data []byte, observation *AudioObservation, major, tagFlags 
 			}
 			continue
 		}
-		if frameID == "TXXX" || frameID == "TCMP" || frameID == "TDOR" || frameID == "TORY" {
+		if frameID == "TIT1" || frameID == "MVNM" || frameID == "MVIN" || frameID == "TXXX" || frameID == "TCMP" || frameID == "TDOR" || frameID == "TORY" {
 			payload, ok := id3FramePayload(frame, major, formatFlags)
 			if !ok {
 				continue
@@ -480,7 +480,7 @@ func parseID3TXXX(frame []byte) (string, []string) {
 		return "TXXX:" + description, parts[1:]
 	}
 	switch description {
-	case "ALBUMARTIST", "ALBUM_ARTIST", "ALBUM ARTIST", "COMPILATION", "ORIGINALDATE", "ORIGINALYEAR":
+	case "ALBUMARTIST", "ALBUM_ARTIST", "ALBUM ARTIST", "COMPILATION", "ORIGINALDATE", "ORIGINALYEAR", "WORK", "MOVEMENTNAME", "MOVEMENT", "MOVEMENTNUMBER", "MOVEMENTTOTAL":
 		return "TXXX:" + description, parts[1:]
 	default:
 		return "", nil

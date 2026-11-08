@@ -46,7 +46,10 @@ M5 ④新增规范化搜索与在线投影：完整规则见[搜索合同](./sea
   `source` 只用于后端存储，不加到 REST credits。每轨最多 100 条、单个 Release 最多
   10,000 条 Track credits，超限后端 fail closed，前端 decoder 同样拒绝。
 
-前后端须同批发布：艺人/曲目筛选及搜索解码器严格枚举需同步增加 lyricist、arranger，credits 的 detail 不允许省略。
+- `ReleaseTrack.work` 必传，为 `null` 或 `{index,title,movement}`：仅 `work_index` 非空时返回对象；`index` 为正整数，`title` 非空且≤4096字节，`movement` 为 null 或非空且≤4096字节的文本。`ReleaseTrackWork` 不返回作品编号、乐章号或来源；其它 `TrackSummary` 不增加 work。
+- 同一发行内相邻同 index 表示同一作品；前端仅在同一介质内分组，乐章名为 null 时仍用曲目标题。单轨标签作品虽可搜索，未形成组时也返回 `work:null`；迁移前的曲目在重扫前全部为 null。
+
+前后端须同批发布：艺人/曲目筛选及搜索解码器严格枚举需同步增加 lyricist、arranger，credits 的 detail 不允许省略；作品 work 同样不可省略，搜索 match.field 同批增加 work_title/work_catalog。
 
 扫描判为合辑的发行返回 `artist="群星"`、`album_artist=null`、`artist_refs=[]`、`album_artist_refs=[]`，发行艺人显示纯文字，曲目艺人照常。
 

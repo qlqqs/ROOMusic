@@ -40,6 +40,8 @@ export const matchFields = [
   "credit",
   "label",
   "catalog_number",
+  "work_title",
+  "work_catalog",
   "artist_name",
   "artist_alias",
 ] as const;

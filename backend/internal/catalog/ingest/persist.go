@@ -35,6 +35,7 @@ func PersistCandidate(ctx context.Context, database TxBeginner, scanID, rootID s
 
 // PersistCandidateWithFeedback 在同一候选事务中记录扫描变更；反馈故障不改变核心写入。
 func PersistCandidateWithFeedback(ctx context.Context, database TxBeginner, scanID, rootID string, candidate OrganizedCandidate, feedback *ScanFeedback) (releaseID string, err error) {
+	works := AssignWorks(candidate)
 	tx, err := database.BeginTx(ctx, nil)
 	if err != nil {
 		return "", err
@@ -89,7 +90,7 @@ func PersistCandidateWithFeedback(ctx context.Context, database TxBeginner, scan
 				return "", errUnplannedObservation
 			}
 			var trackID string
-			if trackID, err = persistTrack(ctx, tx, scanID, rootID, mediumID, disc, placedTrack, observation, plan); err != nil {
+			if trackID, err = persistTrack(ctx, tx, scanID, rootID, mediumID, disc, placedTrack, observation, plan, works[observation.RelativePath]); err != nil {
 				return "", err
 			}
 			trackIDs = append(trackIDs, trackID)

@@ -176,6 +176,7 @@ export function mediaOf(release: Pick<ReleaseSummaryDTO, "id" | "artist" | "medi
           position: track,
           source: `d${medium}-${label}.flac`,
           duration_seconds: 100 + track * 10 + medium,
+          work: null,
           ...trackOverrides(medium, track),
           credits: withRefs(
             trackOverrides(medium, track).credits ?? [

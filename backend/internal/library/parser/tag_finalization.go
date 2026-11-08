@@ -6,8 +6,9 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
 )
 
-// finalizeTags 在文件名补位前合并歌词署名、决定专辑艺人，仅在本版年份缺失时采用原始年份。
+// finalizeTags 在文件名补位前合并歌词署名、决定专辑艺人，决定作品与乐章字段，仅在本版年份缺失时采用原始年份。
 func finalizeTags(observation *AudioObservation) {
+	finalizeWorkTags(observation)
 	addLyricsCredits(observation)
 	observation.Credits = metadata.CanonicalCredits(observation.Credits)
 	var albumArtists [3][]string

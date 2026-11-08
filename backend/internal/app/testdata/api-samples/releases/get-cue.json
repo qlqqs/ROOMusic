@@ -79,7 +79,8 @@
             "sample_rate": 44100,
             "source": "image.flac#index-0",
             "source_kind": "cue_virtual",
-            "title": "Cue One"
+            "title": "Cue One",
+            "work": null
           },
           {
             "artist": "Sample Cue Artist",
@@ -102,7 +103,8 @@
             "sample_rate": 44100,
             "source": "image.flac#index-9000",
             "source_kind": "cue_virtual",
-            "title": "Cue Two"
+            "title": "Cue Two",
+            "work": null
           }
         ]
       }

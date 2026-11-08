@@ -21,6 +21,9 @@ type SourceObservation struct {
 	SourceType      string            `json:"source_type,omitempty"`
 	MediaType       string            `json:"media_type,omitempty"`
 	Genres          []string          `json:"genres,omitempty"`
+	Work            string            `json:"work,omitempty"`
+	MovementName    string            `json:"movement_name,omitempty"`
+	MovementNumber  int               `json:"movement_number,omitempty"`
 	CatalogNumber   string            `json:"catalog_number,omitempty"`
 	Edition         string            `json:"edition,omitempty"`
 	Label           string            `json:"label,omitempty"`

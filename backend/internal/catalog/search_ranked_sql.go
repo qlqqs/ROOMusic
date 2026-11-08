@@ -8,14 +8,14 @@ import (
 
 // 两种键共享一次值表访问；编号键为空时禁止编号分支。$1 的非空条件同时绑定计数参数类型。
 const normalizedSearchMatch = `$1::text<>'' AND v.projection_generation=$7 AND (
- (v.field<>'catalog_number' AND v.short_grams @> ARRAY[$3]::text[]
+ (v.field NOT IN ('catalog_number','work_catalog') AND v.short_grams @> ARRAY[$3]::text[]
   AND v.normalized_value LIKE '%' || $2 || '%' ESCAPE '~')
- OR (v.field='catalog_number' AND $4<>'' AND v.short_grams @> ARRAY[$6]::text[]
+ OR (v.field IN ('catalog_number','work_catalog') AND $4<>'' AND v.short_grams @> ARRAY[$6]::text[]
   AND v.normalized_value LIKE '%' || $5 || '%' ESCAPE '~'))`
 
 const normalizedSearchRank = `CASE
- WHEN v.normalized_value=CASE WHEN v.field='catalog_number' THEN $4 ELSE $1 END THEN 0
- WHEN v.normalized_value LIKE (CASE WHEN v.field='catalog_number' THEN $5 ELSE $2 END) || '%' ESCAPE '~' THEN 1
+ WHEN v.normalized_value=CASE WHEN v.field IN ('catalog_number','work_catalog') THEN $4 ELSE $1 END THEN 0
+ WHEN v.normalized_value LIKE (CASE WHEN v.field IN ('catalog_number','work_catalog') THEN $5 ELSE $2 END) || '%' ESCAPE '~' THEN 1
  ELSE 2 END`
 
 // normalizedPageSQL 按等级逐层取精确 top(offset+limit)，上层已足够时不展开较低等级。

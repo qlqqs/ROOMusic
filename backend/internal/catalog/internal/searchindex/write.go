@@ -132,8 +132,9 @@ func loadValues(ctx context.Context, tx *sql.Tx, kind, id string) ([]value, erro
 		add("catalog_number", "", number, 1)
 		return values, nil
 	}
-	var title, artist string
-	err := tx.QueryRowContext(ctx, `SELECT title,artist FROM tracks WHERE id=$1::uuid`, id).Scan(&title, &artist)
+	var title, artist, workTitle, workCatalog string
+	err := tx.QueryRowContext(ctx, `SELECT title,artist,COALESCE(work_title,''),COALESCE(work_catalog,'')
+   FROM tracks WHERE id=$1::uuid`, id).Scan(&title, &artist, &workTitle, &workCatalog)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -142,6 +143,8 @@ func loadValues(ctx context.Context, tx *sql.Tx, kind, id string) ([]value, erro
 	}
 	add("track_title", "", title, 1)
 	add("track_artist", "", artist, 1)
+	add("work_title", "", workTitle, 1)
+	add("work_catalog", "", workCatalog, 1)
 	rows, err := tx.QueryContext(ctx, `SELECT role,name,position FROM track_credits WHERE track_id=$1::uuid ORDER BY role,position,id`, id)
 	if err != nil {
 		return nil, err

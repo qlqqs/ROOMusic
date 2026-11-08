@@ -4,7 +4,7 @@ import { formatCount } from "../../../shared/lib/number";
 import { StatusTag, VisuallyHidden } from "../../../shared/ui";
 import type { ReleaseCreditDTO, ReleaseMediumDTO, ReleaseTrackDTO } from "../api/decoders";
 import { formatDuration } from "../../../shared/lib/duration";
-import { mediumHeading } from "../format";
+import { mediumHeading, totalDuration } from "../format";
 import { creditDetailLabel, creditRoleLabel } from "../labels";
 import { ArtistNames } from "./artist-names";
 import styles from "./release-media.module.css";
@@ -45,7 +45,9 @@ const TrackRow = memo(function TrackRow({
   focusToken,
   highlighted,
 }: Pick<ReleaseMediaProps, "albumArtist" | "renderTrackActions"> & { track: ReleaseTrackDTO; marker: string | undefined; focusToken: string | undefined; highlighted: boolean }) {
-  const title = track.title.trim() === "" ? "（无标题）" : track.title;
+  // 作品里的曲目在作品小标题下面，行内只写乐章名。
+  const shownTitle = track.work?.movement ?? track.title;
+  const title = shownTitle.trim() === "" ? "（无标题）" : shownTitle;
   const artist = track.artist.trim();
   const showArtist = artist !== "" && artist !== albumArtist;
   const credits = track.credits;
@@ -73,16 +75,7 @@ const TrackRow = memo(function TrackRow({
         {isCue ? <StatusTag>CUE 分轨</StatusTag> : null}
       </p>
       {renderTrackActions === undefined ? null : <div className={styles.actions}>{renderTrackActions(track)}</div>}
-      <span className={styles.duration}>
-        {track.duration_seconds === null ? (
-          <>
-            <span aria-hidden="true">{formatDuration(null)}</span>
-            <VisuallyHidden>时长未知</VisuallyHidden>
-          </>
-        ) : (
-          formatDuration(track.duration_seconds)
-        )}
-      </span>
+      <Duration seconds={track.duration_seconds} />
       {showArtist || credits.length > 0 ? (
         <div className={styles.meta}>
           {showArtist ? (
@@ -100,6 +93,21 @@ const TrackRow = memo(function TrackRow({
     </li>
   );
 });
+
+function Duration({ seconds }: { seconds: number | null }) {
+  return (
+    <span className={styles.duration}>
+      {seconds === null ? (
+        <>
+          <span aria-hidden="true">{formatDuration(null)}</span>
+          <VisuallyHidden>时长未知</VisuallyHidden>
+        </>
+      ) : (
+        formatDuration(seconds)
+      )}
+    </span>
+  );
+}
 
 /**
  * 曲目行里的署名：“作词：甲；作曲：乙、丙；小提琴：丁”。有细分（乐器或工种）的按细分成组，否则按角色；
@@ -140,22 +148,56 @@ function jumpTo(event: MouseEvent<HTMLAnchorElement>, headingId: string) {
   heading.focus({ preventScroll: true });
 }
 
+/** 一张介质里的曲目按作品分组后的条目：不属于作品的曲目单独一项，相邻且作品序号相同的曲目合成一项。 */
+export type TrackListItem =
+  | { kind: "track"; track: ReleaseTrackDTO }
+  | { kind: "work"; index: number; title: string; tracks: ReleaseTrackDTO[] };
+
+export function groupTracksByWork(tracks: readonly ReleaseTrackDTO[]): TrackListItem[] {
+  const items: TrackListItem[] = [];
+  for (const track of tracks) {
+    const last = items.at(-1);
+    if (track.work === null) items.push({ kind: "track", track });
+    else if (last?.kind === "work" && last.index === track.work.index) last.tracks.push(track);
+    else items.push({ kind: "work", index: track.work.index, title: track.work.title, tracks: [track] });
+  }
+  return items;
+}
+
 function TrackList({ tracks, albumArtist, renderTrackActions, currentTrackId, currentTrackLabel, located }: TrackListProps & { tracks: readonly ReleaseTrackDTO[] }) {
+  const idPrefix = useId();
   if (tracks.length === 0) return <p>这一张里没有可显示的曲目。</p>;
+  const rowOf = (track: ReleaseTrackDTO) => (
+    <TrackRow
+      key={track.id}
+      track={track}
+      albumArtist={albumArtist}
+      renderTrackActions={renderTrackActions}
+      marker={track.id === currentTrackId ? (currentTrackLabel ?? "当前曲目") : undefined}
+      focusToken={located?.trackId === track.id ? located.token : undefined}
+      highlighted={located?.trackId === track.id && located.highlighted}
+    />
+  );
   // 去掉了列表样式的 ol 在 Safari 里会失去列表语义，所以显式写出 role。
   return (
     <ol className={styles.tracks} role="list">
-      {tracks.map((track) => (
-        <TrackRow
-          key={track.id}
-          track={track}
-          albumArtist={albumArtist}
-          renderTrackActions={renderTrackActions}
-          marker={track.id === currentTrackId ? (currentTrackLabel ?? "当前曲目") : undefined}
-          focusToken={located?.trackId === track.id ? located.token : undefined}
-          highlighted={located?.trackId === track.id && located.highlighted}
-        />
-      ))}
+      {groupTracksByWork(tracks).map((item) => {
+        if (item.kind === "track") return rowOf(item.track);
+        const titleId = `${idPrefix}-work-${item.index}`;
+        return (
+          <li key={`work:${item.index}`} className={styles.work}>
+            <p className={styles.workHeading}>
+              <span id={titleId} className={styles.workTitle}>
+                {item.title}
+              </span>
+              <Duration seconds={totalDuration([item])} />
+            </p>
+            <ol className={styles.tracks} role="list" aria-labelledby={titleId}>
+              {item.tracks.map(rowOf)}
+            </ol>
+          </li>
+        );
+      })}
     </ol>
   );
 }

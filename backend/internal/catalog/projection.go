@@ -28,22 +28,29 @@ type ReleaseCue struct {
 	ISRC         *string  `json:"isrc"`
 }
 
+type ReleaseTrackWork struct {
+	Index    int     `json:"index"`
+	Title    string  `json:"title"`
+	Movement *string `json:"movement"`
+}
+
 type ReleaseTrack struct {
-	ID              string          `json:"id"`
-	Title           string          `json:"title"`
-	Artist          string          `json:"artist"`
-	ArtistRefs      []ArtistRef     `json:"artist_refs"`
-	Position        int             `json:"position"`
-	Source          string          `json:"source"`
-	SourceKind      string          `json:"source_kind"`
-	DurationSeconds *float64        `json:"duration_seconds"`
-	Codec           *string         `json:"codec"`
-	BitDepth        *int            `json:"bit_depth"`
-	SampleRate      *int            `json:"sample_rate"`
-	Channels        *int            `json:"channels"`
-	Bitrate         *int            `json:"bitrate"`
-	Cue             *ReleaseCue     `json:"cue"`
-	Credits         []ReleaseCredit `json:"credits"`
+	ID              string            `json:"id"`
+	Title           string            `json:"title"`
+	Artist          string            `json:"artist"`
+	ArtistRefs      []ArtistRef       `json:"artist_refs"`
+	Position        int               `json:"position"`
+	Source          string            `json:"source"`
+	SourceKind      string            `json:"source_kind"`
+	DurationSeconds *float64          `json:"duration_seconds"`
+	Codec           *string           `json:"codec"`
+	BitDepth        *int              `json:"bit_depth"`
+	SampleRate      *int              `json:"sample_rate"`
+	Channels        *int              `json:"channels"`
+	Bitrate         *int              `json:"bitrate"`
+	Cue             *ReleaseCue       `json:"cue"`
+	Work            *ReleaseTrackWork `json:"work"`
+	Credits         []ReleaseCredit   `json:"credits"`
 }
 
 type ReleaseMedium struct {
