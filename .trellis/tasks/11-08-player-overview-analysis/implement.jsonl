@@ -1,0 +1,12 @@
+{"file": ".trellis/spec/guides/engineering-principles.md", "reason": "通用工程原则：最小改动、不过度兜底"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "分析结果、统计接口跨后端与前端，合同对齐"}
+{"file": ".trellis/spec/backend/playback-contracts.md", "reason": "播放接口与鉴权约定，分析接口沿用"}
+{"file": ".trellis/spec/backend/playback-derivation-contracts.md", "reason": "ffmpeg 调用、自检、优先级与取消的现有做法，分析工作者复用"}
+{"file": ".trellis/spec/backend/scan-coordination-contracts.md", "reason": "扫描协调与 advisory lock，分析工作者在扫描时让路"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移 0033、SQL 与集成测试约定"}
+{"file": ".trellis/spec/backend/catalog-summary-contracts.md", "reason": "资料库统计接口的计数口径"}
+{"file": ".trellis/spec/frontend/player-design-guidelines.md", "reason": "播放器界面与行为规范，全屏播放器、队列、信号路径"}
+{"file": ".trellis/spec/frontend/playback-and-personal-state.md", "reason": "播放引擎状态、持久化与个人状态插槽"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "组件、可访问性与样式约定"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Query key、本机设置存储与路由状态"}
+{"file": "frontend/DESIGN.md", "reason": "视觉设计锚：字体、颜色、间距（2026-11-07 起无衬线）"}
