@@ -46,6 +46,7 @@ type Server struct {
 	FFmpegPath string
 	// MediaCacheMaxBytes 是派生缓存的上限（字节），缓存目录是 <DataDirectory>/media-cache。
 	MediaCacheMaxBytes int64
+	AudioAnalysis      bool
 }
 
 // Load 从环境变量读取并校验配置；缺少必需项或生产环境不安全时返回错误。
@@ -77,7 +78,11 @@ func Load() (Server, error) {
 	if err != nil {
 		return Server{}, err
 	}
-	config := Server{Backup: backup, Address: configuredAddress(), Environment: configuredEnvironment(), DatabaseURL: databaseURL, SecureCookies: os.Getenv("ROOMUSIC_SECURE_COOKIES") == "true", DataDirectory: dataDirectory, PublicURL: publicURL, FFmpegPath: ffmpegPath, MediaCacheMaxBytes: mediaCacheMaxBytes}
+	audioAnalysis, err := configuredAudioAnalysis()
+	if err != nil {
+		return Server{}, err
+	}
+	config := Server{AudioAnalysis: audioAnalysis, Backup: backup, Address: configuredAddress(), Environment: configuredEnvironment(), DatabaseURL: databaseURL, SecureCookies: os.Getenv("ROOMUSIC_SECURE_COOKIES") == "true", DataDirectory: dataDirectory, PublicURL: publicURL, FFmpegPath: ffmpegPath, MediaCacheMaxBytes: mediaCacheMaxBytes}
 	for _, configuredRoot := range strings.Split(os.Getenv("ROOMUSIC_ALLOWED_LIBRARY_ROOTS"), ",") {
 		if root := strings.TrimSpace(configuredRoot); root != "" {
 			config.AllowedLibraryRoots = append(config.AllowedLibraryRoots, root)
@@ -174,4 +179,16 @@ func DatabaseURL() (string, error) {
 		return "", fmt.Errorf("ROOMUSIC_DATABASE_URL is required")
 	}
 	return value, nil
+}
+
+// configuredAudioAnalysis 解析后台分析开关；默认开启。
+func configuredAudioAnalysis() (bool, error) {
+	switch value := strings.TrimSpace(os.Getenv("ROOMUSIC_AUDIO_ANALYSIS")); value {
+	case "", "on":
+		return true, nil
+	case "off":
+		return false, nil
+	default:
+		return false, fmt.Errorf("ROOMUSIC_AUDIO_ANALYSIS must be on or off")
+	}
 }

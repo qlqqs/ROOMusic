@@ -24,12 +24,14 @@ type Handlers struct {
 	lifecycle     context.Context
 	logger        *slog.Logger
 	preflightWait time.Duration
+	progress      playback.AnalysisProgressProvider
 }
 
 // Options 调整 handler 的时间参数；零值取生产默认值，只有测试需要缩短它们。
 type Options struct {
 	// PreflightWait 是预检等待派生完成的最长时间，0 表示 playback.DefaultPreflightWait。
-	PreflightWait time.Duration
+	PreflightWait    time.Duration
+	AnalysisProgress playback.AnalysisProgressProvider
 }
 
 // New 返回播放 handler。lifecycle 是应用的生命周期上下文：它结束（进程关停）时所有已建立的音频传输都会中止，
@@ -40,13 +42,14 @@ func New(guard *identity.Guard, service *playback.Service, lifecycle context.Con
 	}
 	return &Handlers{
 		guard: guard, service: service, lifecycle: lifecycle, logger: logger,
-		preflightWait: options.PreflightWait,
+		preflightWait: options.PreflightWait, progress: options.AnalysisProgress,
 	}
 }
 
 // Register 在 mux 上注册播放路由。GET 路由同时匹配 HEAD。
 func (handlers *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/playback/formats", handlers.formats)
+	mux.HandleFunc("GET /api/v1/audio-analysis/progress", handlers.analysisProgress)
 	mux.HandleFunc("GET /api/v1/tracks/{id}/playback", handlers.preflight)
 	mux.HandleFunc("GET /api/v1/tracks/{id}/audio", handlers.audio)
 }

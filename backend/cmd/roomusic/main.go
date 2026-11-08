@@ -22,6 +22,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/buildinfo"
 	"github.com/qlqq/roomusic/backend/internal/platform/config"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
+	"github.com/qlqq/roomusic/backend/internal/playback/analysis"
 	"github.com/qlqq/roomusic/backend/internal/playback/derivation"
 )
 
@@ -58,6 +59,7 @@ func main() {
 	requestHandler := app.Degraded(frontend, logger)
 	var application *app.App
 	var derivations *derivation.Manager
+	var analyzer *analysis.Analyzer
 	if database != nil {
 		var appOptions []app.Option
 		var derivationErr error
@@ -70,6 +72,10 @@ func main() {
 		}
 		if derivations != nil {
 			appOptions = append(appOptions, app.WithDerivation(derivations))
+		}
+		analyzer, _ = app.OpenAnalysis(applicationContext, settings, logger)
+		if analyzer != nil {
+			appOptions = append(appOptions, app.WithAnalysis(analyzer))
 		}
 		backups.Start(applicationContext, database)
 		appOptions = append(appOptions, app.WithBackups(backups))
@@ -101,6 +107,11 @@ func main() {
 	if application != nil {
 		if err := application.WaitForScans(shutdownContext); err != nil {
 			logger.Error("roomusic scan shutdown timed out", "event", "library.scan.shutdown_timeout", "error", err)
+		}
+	}
+	if application != nil {
+		if err := application.WaitForAnalysis(shutdownContext); err != nil {
+			logger.Error("音频分析工作者退出超时", "event", "playback.analysis.shutdown_timeout", "error", err)
 		}
 	}
 	if application != nil {
