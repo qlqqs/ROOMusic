@@ -18,11 +18,11 @@
   别名不再改写事实显示名，固定组合名不会因包含 `/`、`,` 或 `&` 被误拆。
 - 正确：一张专辑只有一轨提供 `AlbumArtist`、其余轨只提供各自 Artist 时仍形成一个
   candidate，Release artist 与 credit 使用明确 `AlbumArtist`；缺失轨不伪造自己的 tag。
-- 正确：已存在的 content-addressed 封面文件被破坏后，重扫按期望字节修复；旧 key
+- 正确：已存在的 content-addressed 封面文件被破坏后，完整重扫或候选重写时按期望字节修复；旧 key
   清理失败返回 `artwork_failure`，不报告成功。
 - 正确：CUE 专辑目录里的 `cover.png` 被绑定；严格多碟专辑父目录里的 `Cover.JPG` 被绑定；Box 叶子目录没有封面时，
   Box 父目录里的封面不会绑给它；封面后来才放进目录，下一次扫描即绑定。
-- 错误：把 root 原始路径放入列表 JSON；unsupported 文件仍让扫描 succeeded 并执行 missing；把 FIFO 交给 parser；按标题删除 CUE 轨。
+- 错误：把 root 原始路径放入列表 JSON；unsupported 文件令根不完整，或把它已有的曲目置 missing；把 FIFO 交给 parser；按标题删除 CUE 轨。
 
 - 正确：`PERFORMER=测试演奏者 (violin)` 变成 performer / 测试演奏者 / violin，`WRITER=测试作者` 同时产出作词与作曲。
 - 正确：`PERFORMER=A (violin); B (cello)` 先按明确分隔符切段，再逐段拆乐器和名字，得到 A / violin、B / cello；` / `、换行等同理。`Simon & Garfunkel (guitar)` 保留一个组合名，`Bach, Johann (piano)` 保留一个姓名；括号内 `cello, conductor` 仍按原规则解析。`甲 (violin、指挥)` 与 `甲（violin、指挥）` 都得到 conductor / 甲 和 performer / 甲 / violin，不能在第1步按顿号切坏。
@@ -40,7 +40,7 @@
 
 - 后端单元：终态映射、unsupported 音频候选识别、来源身份规范化和路径 containment。
 - parser/organizer 单元：M4A/WAV 容器有效性、CUE 多 FILE 与跨目录 containment、
-  missing reference/missing `INDEX 01` 非阻断跳过、`unsafe`/`unchecked` 引用阻断、
+  missing reference/missing `INDEX 01` 非阻断跳过、`unsafe`/`unchecked` 引用保住 sheet、
   sheet/track performer provenance、逐轨 map 隔离、inferred track/disc fallback、
   明确标签优先、缺失 AlbumArtist 兼容与 AlbumArtist 决策优先级、艺人/credit 多分隔符、换行/NUL、拉丁姓名与团体词、
   专辑艺人分级多值、TXXX 编码、合辑真假及严格过半、真实专辑艺人优先、原始年份回退、
