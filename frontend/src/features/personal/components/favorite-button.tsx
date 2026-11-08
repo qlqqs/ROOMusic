@@ -47,7 +47,7 @@ export function FavoriteButton({ target, message = "visible" }: FavoriteButtonPr
       icon={<Heart size={16} fill={pressed === true ? "currentColor" : "none"} />}
       label={`收藏${subject}`}
       aria-pressed={pressed ?? false}
-      title={hint}
+      tooltip={hint}
       disabled={pressed === undefined}
       busy={busy}
       onClick={() => {

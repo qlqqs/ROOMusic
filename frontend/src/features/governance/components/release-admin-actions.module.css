@@ -11,13 +11,36 @@
   gap: var(--space-2);
 }
 
-/* “查看问题”是导航（链接），不是命令：用链接的样子，与按钮对齐。 */
-.link {
+/* “查看问题”是导航（链接），外观与旁边的图标按钮一致：方形、无边框，悬停有浅底。 */
+.iconLink {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
-  min-height: var(--control-height);
-  padding: 0 var(--space-2);
+  justify-content: center;
+  width: var(--control-height);
+  height: var(--control-height);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.iconLink:hover {
+  background: var(--color-hover);
+  color: var(--text-primary);
+}
+
+/* 保存默认版本时的转圈；减少动态时静止。 */
+@media (prefers-reduced-motion: no-preference) {
+  .spinner {
+    animation: spin 1s linear infinite;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* “可能接替了已不可见的……”是线索：低调的一行文字加一个链接，不是警告。 */

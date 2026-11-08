@@ -62,7 +62,7 @@ function PlaylistsNavItem({ item, onNavigate }: { item: NavItem; onNavigate: (()
           variant="icon"
           icon={expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           label="歌单列表"
-          title={expanded ? "收起" : "展开"}
+          tooltip={expanded ? "收起" : "展开"}
           aria-expanded={expanded}
           aria-controls={expanded ? listId : undefined}
           onClick={toggle}

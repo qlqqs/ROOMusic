@@ -1,0 +1,29 @@
+/* 位置由 useTooltip 量好后写入 top/left；高于菜单浮层（z-index: 30）。 */
+.tooltip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 40;
+  max-width: 240px;
+  padding: 4px 8px;
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-900);
+  color: var(--color-neutral-100);
+  font-family: var(--font-body);
+  font-size: var(--fs-12);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tooltip {
+    animation: appear 0.1s ease-out;
+  }
+}
+
+@keyframes appear {
+  from {
+    opacity: 0;
+  }
+}

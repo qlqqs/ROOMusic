@@ -110,7 +110,7 @@ describe("心形的真实交互与请求时序", () => {
     view(<FavoriteArea targets={[trackA, trackB, album]} />);
     for (const target of [trackA, trackB, album]) {
       expect(heart(target).hasAttribute("disabled")).toBe(true);
-      expect(heart(target).getAttribute("title")).toBe("正在读取收藏状态");
+      expect(heart(target).hasAttribute("title")).toBe(false);
       await user.click(heart(target));
     }
     expect(api.requestsTo("POST", lookupPath)).toHaveLength(1);

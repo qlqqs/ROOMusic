@@ -9,6 +9,7 @@ export { Notice } from "./notice";
 export { Skeleton } from "./skeleton";
 export { StatusTag } from "./status-tag";
 export { TextField } from "./text-field";
+export { useTooltip } from "./tooltip";
 export { VisuallyHidden } from "./visually-hidden";
 export { Page } from "./page";
 export { Pagination, type PaginationLinkProps } from "./pagination";

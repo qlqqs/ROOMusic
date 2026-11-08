@@ -30,6 +30,21 @@ function seedLabelCorrections(mock: ApiMock, count: number, label = (index: numb
 }
 
 test.describe("编辑发行信息", () => {
+  test("管理按钮悬停显示快速提示、移开消失且不使用原生 title", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "curator" });
+    mock.groups = [symphonies()];
+    await page.goto(detailPath());
+    const edit = page.getByRole("button", { name: "编辑发行信息" });
+    await expect(edit).toBeVisible();
+    await expect(page.locator("button[title]")).toHaveCount(0);
+
+    await edit.hover();
+    const tooltip = page.getByText("编辑发行信息", { exact: true });
+    await expect(tooltip).toBeVisible();
+    await page.mouse.move(0, 0);
+    await expect(tooltip).toHaveCount(0);
+  });
+
   test("修改标题与年份并保存：请求带版本号与幂等键，页面显示新的有效值，提示里的撤销恢复原样", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
     mock.groups = [symphonies()];
