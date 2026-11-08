@@ -1,0 +1,10 @@
+/* 右侧贴边、满高；内容铺满抽屉，点在内容空白处不算点外面。 */
+dialog.drawer { width: min(420px, 100vw); height: 100dvh; max-width: 100vw; max-height: 100dvh; margin: 0 0 0 auto; border-width: 0 0 0 1px; border-radius: 0; }
+.content { min-height: 100%; padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+@media (prefers-reduced-motion: no-preference) {
+  dialog.drawer[open] { animation: slide-in 200ms ease-out; }
+  dialog.drawer[open]::backdrop { animation: fade-in 200ms ease-out; }
+}
+@keyframes slide-in { from { transform: translateX(100%); } }
+@keyframes fade-in { from { opacity: 0; } }

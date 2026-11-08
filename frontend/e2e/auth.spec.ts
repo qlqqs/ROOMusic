@@ -119,7 +119,7 @@ test.describe("权限", () => {
     await page.goto("/settings/library");
     await expect(heading(page, "需要管理员权限")).toBeVisible();
     // 艺人信息就绪时也显示艺人入口；普通成员仍没有扫描目录与成员等管理入口。
-    await expect(page.getByRole("navigation", { name: "主导航" }).getByRole("link")).toHaveText(["概览", "专辑", "艺人", "正在播放", "我喜欢的音乐", "我的收藏", "播放历史", "我的歌单"]);
+    await expect(page.getByRole("navigation", { name: "主导航" }).getByRole("link")).toHaveText(["概览", "专辑", "艺人", "我喜欢的音乐", "我的收藏", "播放历史", "我的歌单"]);
     expect(mock.callsTo("GET", "/api/v1/library-roots")).toHaveLength(0);
     expect(mock.callsTo("GET", "/api/v1/library-root-operations")).toHaveLength(0);
   });

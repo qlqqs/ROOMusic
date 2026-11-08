@@ -105,7 +105,7 @@ describe("操作记录页：列表", () => {
     expect(within(genre).getByRole("button", { name: /^撤销/ })).toBeTruthy();
 
     expect(within(revert).getByText("撤销归组调整")).toBeTruthy();
-    expect(within(revert).getByText("撤销不能再撤销")).toBeTruthy();
+    expect(within(revert).getByText("已完成")).toBeTruthy();
     expect(within(joined).getByText("调整归组")).toBeTruthy();
     expect(within(joined).getByText("已撤销")).toBeTruthy();
     expect(within(joined).getByText("从《Sample Symphonies (corrected)》移到《Beta Quartets》")).toBeTruthy();
@@ -241,7 +241,7 @@ describe("操作记录页：撤销", () => {
     expect(within(table).getByText("撤销修改")).toBeTruthy();
     expect(within(table).getAllByText("已撤销")).toHaveLength(2);
     expect(within(table).queryByRole("button", { name: /^撤销/ })).toBeNull();
-    // 成功提示里没有“撤销”（撤销不能再撤销）。
+    // 成功提示里没有“撤销”（已完成）。
     const notice = screen.getByText("已撤销这次修改，相关字段恢复到修改之前的状态。").closest<HTMLElement>('[role="status"]');
     expect(notice).not.toBeNull();
     expect(within(notice as HTMLElement).queryByRole("button", { name: "撤销" })).toBeNull();

@@ -22,7 +22,6 @@ import { MembersPage } from "./routes/members-page";
 import { NotFoundPage } from "./routes/not-found-page";
 import { OperationsPage } from "./routes/operations-page";
 import { OverviewPage } from "./routes/overview-page";
-import { NowPlayingRoute } from "./routes/now-playing-route";
 import { PlaylistDetailPage } from "./routes/playlist-detail-page";
 import { PlaylistsPage } from "./routes/playlists-page";
 import { SearchPage } from "./routes/search-page";
@@ -99,9 +98,16 @@ const legacyRoutes = [
   legacyRedirectRoute("/members", "/members", "/settings/members"),
   legacyRedirectRoute("/operations", "/operations", "/settings/operations"),
   legacyRedirectRoute("/system/backups", "/system/backups", "/settings/backups"),
+  // 正在播放页改成了全屏播放器：旧地址回到概览，不带路径后缀与 #queue。
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/now-playing",
+    beforeLoad: () => {
+      throw redirect({ to: "/", replace: true });
+    },
+  }),
 ];
 
-const nowPlayingRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/now-playing", component: NowPlayingRoute });
 
 const overviewRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/", component: OverviewPage });
 
@@ -401,7 +407,6 @@ const routeTree = rootRoute.addChildren([
   ...legacyRoutes,
   authenticatedRoute.addChildren([
     overviewRoute,
-    nowPlayingRoute,
     albumsRoute,
     albumDetailRoute,
     searchRoute,
@@ -432,5 +437,9 @@ declare module "@tanstack/history" {
   interface HistoryState {
     /** 从专辑列表进入详情时带上的筛选与页码，“返回专辑列表”据此恢复；直接打开详情时没有。 */
     albumList?: AlbumSearch;
+    /** 全屏播放器打开时的标记（本次页面加载的 ID），见 features/player 的 useFullscreenPlayer。 */
+    roomusicPlayer?: string;
+    /** 打开全屏前那条历史记录的 key：专辑页据此判断不是新的到达，不重新定位曲目。 */
+    playerFrom?: string;
   }
 }

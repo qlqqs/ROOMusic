@@ -9,7 +9,7 @@ import styles from "./player-personal-actions.module.css";
 // 播放器上的收藏与歌单入口：player 只提供中立的插槽（当前曲目、队列里的曲目），这里把 personal 的组件放进去。
 // player 不导入 personal，也不从引擎调用个人数据接口。
 
-/** 当前曲目的心形（播放器栏、正在播放页）：切曲只换目标，状态按曲目身份读取。 */
+/** 当前曲目的心形（播放器栏、全屏播放器）：切曲只换目标，状态按曲目身份读取。 */
 export function CurrentTrackFavorite({ track, message = "visible" }: { track: PlayerTrack; message?: "visible" | "screen-reader" }) {
   const trackIds = useMemo(() => [track.trackId], [track.trackId]);
   return (
@@ -31,14 +31,14 @@ export function SaveQueueAsPlaylist({ tracks }: { tracks: readonly PlayerTrack[]
   return (
     <span className={styles.save}>
       <Button
+        variant="icon"
         icon={<ListPlus size={16} />}
+        label="存为歌单"
         onClick={() => {
           setNotice("");
           setSnapshot({ trackIds: distinctTrackIds(tracks), name: queuePlaylistName() });
         }}
-      >
-        存为歌单
-      </Button>
+      />
       <span role="status" className={styles.notice}>
         {notice}
       </span>

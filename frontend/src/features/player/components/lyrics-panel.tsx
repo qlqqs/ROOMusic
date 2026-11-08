@@ -7,7 +7,7 @@ import { usePlayerEngine, usePlayerProgressSelector } from "../player-provider";
 import styles from "./lyrics-panel.module.css";
 
 /**
- * 正在播放页的歌词面板：数据是扫描时从音频标签提取、由后端解析的真实歌词，没有就如实说明，不生成占位文字。
+ * 全屏播放器的歌词面板：数据是扫描时从音频标签提取、由后端解析的真实歌词，没有就如实说明，不生成占位文字。
  * 同步歌词随播放位置高亮当前组并跟随滚动，纯文本歌词静态显示；当前行变化不做读屏播报（没有 aria-live）。
  */
 export function LyricsPanel({ trackId }: { trackId: string }) {
@@ -47,7 +47,6 @@ function PlainLyrics({ lines }: { lines: readonly PlainLyricsLine[] }) {
         {paragraphs.map((paragraph, index) => <p key={index} className={styles.paragraph}>{paragraph.map((text, lineIndex) => <span key={lineIndex} className={styles.plainLine}>{text}</span>)}</p>)}
       </div>
     </div>
-    <div className={styles.footer}><p className={styles.note}>内嵌歌词 · 纯文本</p></div>
   </>;
 }
 
@@ -121,7 +120,6 @@ function SyncedLyrics({ lines }: { lines: readonly SyncedLyricsLine[] }) {
       </ol>
     </div>
     <div className={styles.footer}>
-      <p className={styles.note}>{seekable ? "内嵌歌词 · 逐行同步 · 点任一行跳到该处" : "内嵌歌词 · 逐行同步"}</p>
       {following || target < 0 ? null : <Button onClick={() => setFollowing(true)}>回到当前行</Button>}
     </div>
   </>;

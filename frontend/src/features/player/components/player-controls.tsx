@@ -7,24 +7,28 @@ import { usePlayer, usePlayerEngine, usePlayerProgress } from "../player-provide
 import { modeLabels } from "./player-labels";
 import styles from "./player-controls.module.css";
 
-export function TransportControls({ compact = false }: { compact?: boolean }) {
+/** 上一首、播放暂停、下一首。compact 是播放栏（窄屏不显示上一首），large 是全屏底栏（播放键更大）。 */
+export function TransportControls({ size = "default" }: { size?: "compact" | "default" | "large" }) {
+  const compact = size === "compact";
   const { engine, snapshot } = usePlayer();
   // 与 togglePlayback 用同一判定：加载中按下去是暂停（放弃这次加载），按钮就写“暂停”。
   const active = isPlaybackActive(snapshot.status);
-  return <div className={`${styles.transport} ${compact ? styles.compact : ""}`}>
+  return <div className={`${styles.transport} ${compact ? styles.compact : ""} ${size === "large" ? styles.large : ""}`}>
     <span className={compact ? styles.desktop : undefined}><Button variant="icon" label="上一首" icon={<SkipBack size={18} />} disabled={snapshot.current === null} onClick={() => engine.previous()} /></span>
     <span className={styles.play}><Button variant="icon" label={active ? "暂停" : "播放"} icon={active ? <Pause size={18} /> : <Play size={18} />} disabled={snapshot.current === null} onClick={() => engine.togglePlayback()} /></span>
     <Button variant="icon" label="下一首" icon={<SkipForward size={18} />} disabled={!snapshot.hasNext} onClick={() => engine.next()} />
   </div>;
 }
-export function SeekControl() {
+/** 播放进度：inline 是“进度条 + 位置 / 时长”，ends 是两端各一个时间（全屏）。 */
+export function SeekControl({ layout = "inline" }: { layout?: "inline" | "ends" }) {
   const engine = usePlayerEngine();
   const progress = usePlayerProgress();
-  const text = `${formatDuration(progress.positionSeconds)} / ${(progress.durationSeconds === null ? "—:—" : formatDuration(progress.durationSeconds))}`;
-  return <div className={styles.seek}>
-    <input type="range" aria-label="播放进度" aria-valuetext={text} min={0} max={progress.durationSeconds ?? 0} step={0.1} value={progress.positionSeconds} disabled={!progress.seekable || progress.durationSeconds === null} onChange={(event) => engine.seek(Number(event.target.value))} />
-    <span>{text}</span>
-  </div>;
+  const position = formatDuration(progress.positionSeconds);
+  const duration = progress.durationSeconds === null ? "—:—" : formatDuration(progress.durationSeconds);
+  const text = `${position} / ${duration}`;
+  const input = <input type="range" aria-label="播放进度" aria-valuetext={text} min={0} max={progress.durationSeconds ?? 0} step={0.1} value={progress.positionSeconds} disabled={!progress.seekable || progress.durationSeconds === null} onChange={(event) => engine.seek(Number(event.target.value))} />;
+  if (layout === "ends") return <div className={styles.seek}><span aria-hidden="true">{position}</span>{input}<span aria-hidden="true">{duration}</span></div>;
+  return <div className={styles.seek}>{input}<span>{text}</span></div>;
 }
 const modeIcons: Record<PlayMode, LucideIcon> = { sequential: ListOrdered, repeat_all: Repeat, repeat_one: Repeat1, shuffle: Shuffle };
 
@@ -42,7 +46,4 @@ export function VolumeControl() {
     <Button variant="icon" label={snapshot.muted ? "取消静音" : "静音"} aria-pressed={snapshot.muted} icon={snapshot.muted ? <VolumeX size={16} /> : <Volume2 size={16} />} onClick={() => engine.setMuted(!snapshot.muted)} />
     <input type="range" aria-label="播放器音量" aria-valuetext={`${Math.round(snapshot.volume * 100)}%`} min={0} max={1} step={0.01} value={snapshot.volume} onChange={(event) => engine.setVolume(Number(event.target.value))} />
   </div>;
-}
-export function PlayerControls() {
-  return <div className={styles.full}><TransportControls /><SeekControl /><div className={styles.options}><ModeControl /><VolumeControl /></div></div>;
 }

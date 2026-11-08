@@ -385,7 +385,7 @@ describe("撤销之间的串行", () => {
     renderApp({ path: "/settings/operations" });
     const table = await screen.findByRole("table", { name: "操作记录" });
     expect(within(table).queryByRole("button", { name: /^撤销/ })).toBeNull();
-    expect(within(table).getByText("撤销不能再撤销")).toBeTruthy();
+    expect(within(table).getByText("已完成")).toBeTruthy();
     expect(within(table).getByText("已撤销")).toBeTruthy();
   });
 });

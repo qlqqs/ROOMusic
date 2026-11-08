@@ -6,7 +6,7 @@ export { PlayerEngine, type AddResult, type EngineDeps, type PlayerEvent, type P
 export { playModes, upNext, MAX_QUEUE_ENTRIES, type PlayMode, type PlayerTrack, type QueueEntry, type QueueState, type SourceFacts, type TrackDisplayMetadata } from "./engine/queue";
 export { playerTrackOf, playerTracksOf } from "./engine/tracks";
 export { unplayableText, type CapabilityTable, type TrackVerdict } from "./engine/capability";
-export { NowPlayingPage } from "./pages/now-playing-page";
 export { AlbumPlaybackActions } from "./components/album-playback-actions";
 export { PlayerBar } from "./components/player-bar";
+export { FullscreenPlayer } from "./components/fullscreen-player";
 export { PlayerAnnouncement } from "./components/player-feedback";

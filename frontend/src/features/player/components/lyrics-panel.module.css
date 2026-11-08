@@ -1,4 +1,4 @@
-/* 面板绝对铺满所在格：歌词再长也不撑高“封面 | 歌词”那一行，高度由封面决定（再有一个下限）。 */
+/* 面板绝对铺满所在格：歌词再长也不撑高所在的格子，在面板内滚动（再有一个下限）。 */
 .panel { position: relative; min-width: 0; min-height: 280px; }
 .heading { margin: 0; }
 .frame { position: absolute; inset: 0; display: flex; flex-direction: column; gap: var(--space-2); min-height: 0; }
@@ -20,17 +20,9 @@ button.line:hover { color: var(--text-accent); }
 .secondary { display: block; font-family: var(--font-body); font-size: var(--fs-14); }
 .gap { height: var(--space-3); }
 
-.footer { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; min-height: var(--space-6); padding-inline: var(--space-2); }
-.note { margin: 0; font-size: var(--fs-12); color: var(--text-secondary); }
+/* 只放“回到当前行”；常驻占位，按钮出现时歌词不跳动。 */
+.footer { display: flex; align-items: center; justify-content: flex-end; min-height: var(--space-6); padding-inline: var(--space-2); }
 
 @media (prefers-reduced-motion: no-preference) {
   .group { transition: color 0.2s ease, border-left-color 0.2s ease; }
-}
-
-/* 单栏（容器窄于 760px）：歌词放在标题与控制之后，随内容增高，最高 60vh，再长则在面板内滚动。 */
-@container now-playing (max-width: 759px) {
-  .panel { min-height: 0; }
-  .frame { position: static; max-height: 60vh; }
-  .scroller { flex: 0 1 auto; }
-  .state { flex: 0 0 auto; padding-block: var(--space-6); }
 }

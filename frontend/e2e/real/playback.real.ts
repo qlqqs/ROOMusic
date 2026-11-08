@@ -73,7 +73,7 @@ test("FLAC 真实 seek，自然切到下一首；切页不断播，刷新暂停�
   expect(await page.evaluate(() => window.playbackTestMedia.length)).toBe(0);
   await page.getByRole("button", { name: "播放", exact: true }).last().click();
   await expect.poll(async () => (await mediaState(page))?.time ?? 0).toBeGreaterThanOrEqual(position - 0.2);
-  await page.getByRole("link", { name: "正在播放", exact: true }).click();
+  await page.getByRole("button", { name: "打开全屏播放器", exact: true }).click();
   await expect.poll(async () => (await mediaState(page))?.paused).toBe(false);
   await expect.poll(() => page.evaluate((id) => window.playbackTestEvents.some((event) => event.type === "ended" && event.src.includes(id)), first.track.id)).toBe(true);
   await expect.poll(() => page.evaluate((id) => window.playbackTestEvents.some((event) => event.type === "playing" && event.src.includes(id)), second.track.id)).toBe(true);
@@ -149,13 +149,13 @@ for (const source of ["alac-16-44100.m4a", "alac-24-48000.m4a"]) {
       expect(response.etag).toMatch(/^"[0-9a-f]{32}"$/);
     }
     // 信号路径的服务端一栏：无损转换，不再是原文件直出（趁这首还是当前曲目：自然结束后队列会前进到别的格式）。
-    await page.getByRole("link", { name: "正在播放", exact: true }).click();
-    const server = page.getByRole("heading", { name: "服务端", exact: true }).locator("..");
-    await expect(server).toContainText("无损转换");
-    await expect(server.getByText("ALAC 转成 FLAC，位深、采样率与声道不变。", { exact: true })).toBeVisible();
-    await expect(server).not.toContainText("PCM 一致");
-    await expect(server).not.toContainText("原文件直出");
-    // 真实鼠标拖动原生 slider：暂停后拖到中间，媒体在派生文件上真实 seek。播放栏在每个页面都有，限定在它里面以免与正在播放页的控件重名。
+    await page.getByRole("button", { name: "打开全屏播放器", exact: true }).click();
+    const full = page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "收起全屏播放器", exact: true }) });
+    await full.getByRole("button", { name: "信号路径：无损", exact: true }).click();
+    const signal = page.getByRole("dialog", { name: "信号路径：无损", exact: true });
+    await expect(signal.getByRole("listitem")).toHaveText(["数据源ALAC 44.1kHz 16bit 2ch", "服务端ALAC → FLAC", "浏览器解码", "系统输出系统默认输出"]);
+    for (const removedText of ["ALAC 转成 FLAC，位深、采样率与声道不变。", "原样发送，不转码。", "由浏览器解码，可能按输出设备重新采样。", "网页看不到声卡的实际格式。"]) await expect(signal).not.toContainText(removedText);
+    // 真实鼠标拖动原生 slider：暂停后拖到中间，媒体在派生文件上真实 seek。播放栏在每个页面都有，限定在它里面避免与全屏控件重名。
     const bar = page.getByRole("region", { name: "播放器", exact: true });
     await bar.getByRole("button", { name: "暂停", exact: true }).click();
     const seek = bar.getByRole("slider", { name: "播放进度", exact: true });
@@ -211,18 +211,19 @@ test("没有内嵌歌词的素材返回 null；CUE 虚拟轨没有歌词，即�
 });
 
 for (const source of ["flac-16-44100.flac", "alac-16-44100.m4a"]) {
-  test(`${source}：正在播放页显示歌词，点击一行后真实播放位置跳到该行，继续播放时当前行前进`, async ({ page }) => {
+  test(`${source}：全屏显示歌词，点击一行后真实播放位置跳到该行，继续播放时当前行前进`, async ({ page }) => {
     const item = findTrack(albums, source);
     await playTrack(page, item);
     const bar = page.getByRole("region", { name: "播放器", exact: true });
     await bar.getByRole("button", { name: "暂停", exact: true }).click();
     await expect.poll(async () => (await mediaState(page))?.paused).toBe(true);
-    await page.getByRole("link", { name: "正在播放", exact: true }).click();
-    const lyrics = page.locator("#main").getByRole("region", { name: "歌词", exact: true });
+    await page.getByRole("button", { name: "打开全屏播放器", exact: true }).click();
+    const full = page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "收起全屏播放器", exact: true }) });
+    const lyrics = full.getByRole("region", { name: "歌词", exact: true });
     const current = lyrics.locator("[aria-current='true']");
     // 元标签不显示；同一时间点的两行是一组。
     await expect(lyrics.getByRole("listitem")).toHaveText(["Fixture line one", "Fixture line two夹具第二行", "Fixture line three"]);
-    await expect(lyrics.getByText("内嵌歌词 · 逐行同步 · 点任一行跳到该处", { exact: true })).toBeVisible();
+    for (const removedText of ["内嵌歌词 · 逐行同步 · 点任一行跳到该处", "内嵌歌词 · 逐行同步", "内嵌歌词 · 纯文本"]) await expect(lyrics).not.toContainText(removedText);
 
     // 真实点击：媒体元素真实 seek，播放位置不早于该行的时间。
     await lyrics.getByRole("button", { name: /^Fixture line three/ }).click();
@@ -456,6 +457,6 @@ test("合成源文件扫描后改动：预检拒绝且界面提示需要重新�
   await page.goto(`/albums/${item.groupId}`);
   const row = page.locator("ol > li").filter({ has: page.getByText(item.track.title, { exact: true }) });
   await row.getByRole("button", { name: "从这首开始播放", exact: true }).click();
-  await page.getByRole("link", { name: "正在播放", exact: true }).click();
+  await page.getByRole("button", { name: "打开全屏播放器", exact: true }).click();
   await expect(page.getByText(/重新扫描/).first()).toBeVisible();
 });

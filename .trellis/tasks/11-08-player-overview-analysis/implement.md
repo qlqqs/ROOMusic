@@ -37,7 +37,7 @@
 
 ### 前端线
 
-- [ ] **F2 全屏播放器、播放栏、队列抽屉、信号路径弹层**（design 4.1–4.5，信号路径浏览器层先只写“解码”）：同时完成 R1（`change-summary.ts:134` → “已完成”）与 R4 删句；`ModalDialog.closeOnBackdrop`；`/now-playing` 跳转；侧栏删“正在播放”；专辑页 `playerFrom` 修正；故障提示与重试按钮；删除正在播放页。
+- [x] **F2 全屏播放器、播放栏、队列抽屉、信号路径弹层**（design 4.1–4.5，信号路径浏览器层先只写“解码”）：同时完成 R1（`change-summary.ts:134` → “已完成”）与 R4 删句；`ModalDialog.closeOnBackdrop`；`/now-playing` 跳转；侧栏删“正在播放”；专辑页 `playerFrom` 修正；故障提示与重试按钮；删除正在播放页。
   - 测试：`player-ui.test.tsx`、`nav-items.test.ts`、`change-summary.test.ts`、`player-personal-actions.test.tsx`、`artist-player-metadata-step5.test.tsx` 中受影响的断言；E2E `player.spec.ts`、`auth.spec.ts`、`search-step4.spec.ts`（1440 与 375，含 axe）。
 - [ ] **F1 概览改版**（design 5）：依赖 B1/B2 的样本文件已提交（先用 design 3 的 JSON 写解码器，样本到位后对齐）。`LibraryStats`、`AnalysisSummary`、`AttentionSummary`、版面；删除 `LibrarySummary`。
   - 测试：`decodeCatalogStats`、`decodeAnalysisProgress` 读样本；概览组件（四卡、空库、侧栏管理员项、分析各状态文案）；`api-mock.ts` 增加新接口桩；E2E 中概览相关断言（如有）。

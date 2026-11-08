@@ -125,11 +125,9 @@ describe("歌词面板", () => {
     await lyricsList();
     await startPlayback(mounted, { seekable: false });
     expect(screen.queryAllByRole("button")).toHaveLength(0);
-    expect(screen.getByText("内嵌歌词 · 逐行同步")).toBeTruthy();
     expect(screen.getByRole("group", { name: "逐行歌词" }).getAttribute("tabindex")).toBe("0");
 
     act(() => { mounted.audio.loadMetadata(100); });
-    expect(screen.getByText("内嵌歌词 · 逐行同步 · 点任一行跳到该处")).toBeTruthy();
     expect(screen.getByRole("group", { name: "逐行歌词" }).hasAttribute("tabindex")).toBe(false);
     const buttons = screen.getAllByRole("button");
     expect(buttons.map((button) => button.textContent)).toEqual(["First line of the sample", "Second line of the sample样本的第二行", "Chorus line", "Chorus line"]);
@@ -326,7 +324,6 @@ describe("歌词面板", () => {
       ["First verse, line one", "First verse, line two"],
       ["Second verse, line one"],
     ]);
-    expect(screen.getByText("内嵌歌词 · 纯文本")).toBeTruthy();
     expect(screen.queryAllByRole("button")).toHaveLength(0);
     expect(document.querySelector("[aria-current]")).toBeNull();
     expect(screen.getByRole("group", { name: "歌词文本" }).getAttribute("tabindex")).toBe("0");

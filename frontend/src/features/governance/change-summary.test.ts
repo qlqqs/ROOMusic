@@ -89,7 +89,7 @@ describe("notRevertibleReason", () => {
 
   it("撤销记录、已撤销、专辑已不可见与之后又有修改各有原因", () => {
     const [revert, detach, join] = [itemOf("revert"), itemOf("release_group_change", 0), itemOf("release_group_change", 1)];
-    expect(notRevertibleReason(revert)).toBe("撤销不能再撤销");
+    expect(notRevertibleReason(revert)).toBe("已完成");
     expect(notRevertibleReason(detach)).toBe("已撤销");
     expect(notRevertibleReason(join)).toBe("之后又有修改");
     expect(notRevertibleReason({ ...join, release: null })).toBe("专辑已不可见");
@@ -165,8 +165,8 @@ describe("核对问题记录", () => {
     expect(changeLines({ changes: { ...changes, issue: "source_type" } })).toEqual(["来源类型：标记为已核对"]);
   });
 
-  it("“之后又有修改”与“撤销不能再撤销”的原因与其他记录相同", () => {
+  it("“之后又有修改”与“已完成”的原因与其他记录相同", () => {
     expect(notRevertibleReason(issueRecord(2))).toBe("之后又有修改");
-    expect(notRevertibleReason(issueRecord(0))).toBe("撤销不能再撤销");
+    expect(notRevertibleReason(issueRecord(0))).toBe("已完成");
   });
 });

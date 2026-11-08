@@ -1,0 +1,91 @@
+/* 全屏是唯一的深色面：在这里局部改写颜色变量，歌词、控件与里面打开的抽屉、弹层都沿用变量。 */
+dialog.dialog { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; overflow: hidden; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+dialog.dialog::backdrop { background: transparent; }
+
+.root {
+  --color-bg: #1f1d1c;
+  --color-surface: var(--color-neutral-900);
+  --color-text: var(--color-neutral-100);
+  --text-primary: var(--color-neutral-100);
+  --text-secondary: var(--color-neutral-300);
+  --text-accent: var(--color-accent-300);
+  --color-divider: rgb(255 255 255 / 16%);
+  --color-control-border: var(--color-neutral-500);
+  --color-hover: rgb(255 255 255 / 8%);
+  --color-pressed: rgb(255 255 255 / 14%);
+  --color-selected: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  --focus-ring: 2px solid var(--color-accent-300);
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-neutral-900);
+  color: var(--text-primary);
+  transform-origin: var(--origin-x, 50%) var(--origin-y, 100%);
+}
+.root a { color: inherit; }
+
+/* 背景：封面放大 1.2 倍、模糊、压暗，再叠一层黑。 */
+.backdrop { position: absolute; inset: 0; overflow: hidden; }
+.backdrop img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.2); filter: blur(64px) saturate(1.2) brightness(0.45); }
+.backdrop::after { content: ""; position: absolute; inset: 0; background: rgb(0 0 0 / 35%); }
+
+/* 宽屏：上方两栏（唱片 | 标题与歌词），下方一行底栏，收起在底栏最左。 */
+.layout { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; grid-template-areas: "stage stage" "collapse dock"; gap: var(--space-6) var(--space-2); height: 100%; padding: var(--space-8) var(--space-8) var(--space-4); }
+.collapse { grid-area: collapse; align-self: center; }
+.stage { grid-area: stage; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "deck info" "deck lyrics"; gap: var(--space-4) 64px; width: 100%; max-width: 1200px; min-height: 0; margin-inline: auto; }
+.deckCell { grid-area: deck; align-self: center; }
+.info { grid-area: info; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "title actions" "meta actions" "status status"; gap: var(--space-1) var(--space-3); align-items: start; min-width: 0; padding-top: var(--space-4); }
+.title { grid-area: title; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: var(--fs-24); font-weight: 600; line-height: 1.3; }
+.meta { grid-area: meta; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: var(--fs-14); color: var(--text-secondary); }
+.status { grid-area: status; }
+.trackActions { grid-area: actions; display: flex; align-items: center; min-width: 0; }
+.lyrics { grid-area: lyrics; display: grid; min-width: 0; min-height: 0; }
+
+/* 底栏：信号路径、传输控制、进度（两端时间）、播放模式 / 队列 / 音量。 */
+.dock { grid-area: dock; display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; grid-template-areas: "signal transport seek options"; align-items: center; gap: var(--space-4); min-width: 0; }
+.signal { grid-area: signal; }
+.transport { grid-area: transport; }
+.seek { grid-area: seek; min-width: 0; }
+.options { grid-area: options; display: flex; align-items: center; gap: var(--space-1); }
+
+/* 黑胶：盘面纹路、中心封面；唱臂绕右上方的支点转动。 */
+.deck { position: relative; width: min(44vh, 38vw, 440px); aspect-ratio: 1; margin-right: 6%; }
+.disc { position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle, transparent 0 31%, rgb(255 255 255 / 6%) 31.5% 32%, transparent 32.5%), repeating-radial-gradient(circle, #141313 0 2px, #1d1c1b 2px 3px); box-shadow: 0 0 0 8px rgb(0 0 0 / 22%), 0 18px 48px rgb(0 0 0 / 45%); }
+.label { position: absolute; inset: 19%; overflow: hidden; border-radius: 50%; }
+.label > div { padding: 0; border: 0; }
+.label img { object-fit: cover; }
+.arm { position: absolute; top: -4%; right: -6%; width: 34%; height: 68%; overflow: visible; transform-origin: 75% 9%; transform: rotate(-24deg); }
+.deck[data-active] .arm { transform: rotate(0deg); }
+.armBase { fill: var(--color-neutral-300); }
+.armPivot { fill: var(--color-neutral-600); }
+.armRod { fill: none; stroke: var(--color-neutral-300); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.armHead { stroke: var(--color-neutral-200); stroke-width: 11; stroke-linecap: round; }
+
+.deckButton { display: grid; place-items: center; width: 100%; height: 100%; padding: 0; border: 0; border-radius: var(--radius-lg); background: none; cursor: pointer; }
+.view { position: relative; display: grid; min-height: 0; }
+.showDeck { position: absolute; top: 0; right: 0; }
+
+@media (prefers-reduced-motion: no-preference) {
+  dialog.dialog[open] .root { animation: grow 220ms ease-out; }
+  dialog.dialog[open] .root[data-closing] { animation: shrink 180ms ease-in forwards; }
+  .disc { animation: spin 24s linear infinite; animation-play-state: paused; }
+  .deck[data-playing] .disc { animation-play-state: running; }
+  .arm { transition: transform 400ms ease; }
+}
+@keyframes grow { from { opacity: 0; transform: scale(0.08); } }
+@keyframes shrink { to { opacity: 0; transform: scale(0.08); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 窄屏：单栏、一个滚动区。收起在顶部；唱片与歌词占同一块；底栏两行半：进度、传输控制、信号路径与模式 / 队列。不显示音量滑块。 */
+@media (max-width: 767px) {
+  .layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; grid-template-areas: "collapse" "stage" "dock"; gap: var(--space-3); padding: var(--space-2) var(--space-4) calc(var(--space-3) + env(safe-area-inset-bottom, 0px)); overflow-y: auto; }
+  .collapse { justify-self: start; }
+  .stage { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(260px, 1fr) auto; grid-template-areas: "view" "info"; gap: var(--space-4); }
+  .view { grid-area: view; }
+  .view > .lyrics { grid-area: auto; padding-top: var(--space-8); }
+  .deck { width: min(72vw, 44vh, 320px); margin-right: 0; }
+  .info { padding-top: 0; }
+  .title { font-size: var(--fs-20); }
+  .dock { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "seek seek seek" "transport transport transport" "signal . options"; gap: var(--space-1) var(--space-2); }
+  .volume { display: none; }
+}

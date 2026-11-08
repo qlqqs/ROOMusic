@@ -189,7 +189,7 @@ test("定位：已有非空队列时选择曲目建议，不替换队列或触�
   await expectLocated(page, fixture);
   expect(await queueSnapshotStep4(page)).toEqual(before);
   expect(mock.callsTo("GET", /\/playback$/)).toHaveLength(0);
-  await expect(page.getByRole("region", { name: "播放器", exact: true }).getByRole("link", { name: "队列（1）", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "播放器", exact: true }).getByRole("button", { name: "队列（1）", exact: true })).toBeVisible();
 });
 
 test("定位：后退、前进与 reload 都重新聚焦并滚到目标曲目", async ({ page, backend }) => {

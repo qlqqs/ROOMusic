@@ -1,8 +1,11 @@
-.section { display: grid; gap: var(--space-3); min-width: 0; scroll-margin-top: var(--layout-topbar-height); }
-.header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
-.headerActions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
+.section { display: grid; align-content: start; gap: var(--space-3); min-width: 0; }
+.header { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-3) var(--space-2) var(--space-3) var(--space-4); border-bottom: 1px solid var(--color-divider); background: var(--color-surface); }
+.heading { font-size: var(--fs-15); }
+.headerActions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 2px; min-width: 0; }
+.note { padding-inline: var(--space-4); font-size: var(--fs-13); color: var(--text-secondary); }
 .list { margin: 0; padding: 0; list-style: none; }
-.row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: start; gap: var(--space-1) var(--space-3); padding: var(--space-2) var(--space-3); border-top: 1px solid var(--color-divider); min-width: 0; }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: start; gap: var(--space-1) var(--space-3); padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4); border-top: 1px solid var(--color-divider); min-width: 0; }
+.row:first-child { border-top: 0; }
 .row[aria-current] { background: var(--color-selected); }
 .description { min-width: 0; overflow-wrap: anywhere; }
 .title, .metadata { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
@@ -10,7 +13,7 @@
 .number, .duration { font-variant-numeric: tabular-nums; }
 .duration { display: flex; align-items: center; min-height: var(--control-height); white-space: nowrap; font-size: var(--fs-13); color: var(--text-secondary); }
 .actions { display: flex; flex-wrap: nowrap; gap: 2px; }
-/* 窄屏放不下四个图标和标题：图标移到下一行右对齐，时长仍在标题右侧。 */
+/* 窄屏放不下四个（触屏尺寸的）图标和标题：图标移到下一行右对齐，时长仍在标题右侧。 */
 @media (max-width: 767px) {
   .row { grid-template-columns: minmax(0, 1fr) auto; }
   .actions { grid-column: 1 / -1; grid-row: 2; justify-content: flex-end; }

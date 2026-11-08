@@ -15,7 +15,7 @@ beforeEach(() => {
   sessionStorage.clear();
 });
 
-it("I4 合并成功经真实失效链刷新播放器与正在播放的艺人链接，不重新加载音频", async () => {
+it("I4 合并成功经真实失效链刷新播放器与全屏里的艺人链接，不重新加载音频", async () => {
   const api = installFakeApi();
   const session = installFakeSession(api, { current: "curator" });
   const data = installArtistsApi(api, artistDataOf(), session);
@@ -41,7 +41,7 @@ it("I4 合并成功经真实失效链刷新播放器与正在播放的艺人链�
   // I4 暂无真实外层样本，按主会话裁决返回现有安全 TrackSummary，保留原署名而更新身份链接。
   api.on("POST", "/api/v1/tracks/summaries", () => jsonResponse(200, { items: [track] }));
   const user = userEvent.setup();
-  const { runtime } = renderApp({ path: `/artists/${primary}` });
+  renderApp({ path: `/artists/${primary}` });
   const play = await screen.findByRole<HTMLButtonElement>("button", { name: `播放 ${track.title}` });
   await waitFor(() => expect(play.disabled).toBe(false));
   await user.click(play);
@@ -60,9 +60,9 @@ it("I4 合并成功经真实失效链刷新播放器与正在播放的艺人链�
   await waitFor(() => expect(bar.getByRole("link", { name: source.artist.name }).getAttribute("href")).toBe(`/artists/${primary}`));
   expect(api.requestsTo("POST", "/api/v1/tracks/summaries")).toHaveLength(1);
   expect(api.requestsTo("POST", "/api/v1/tracks/summaries")[0]?.body).toEqual({ track_ids: [track.track_id] });
-  await act(async () => runtime.router.navigate({ to: "/now-playing" }));
-  const main = within(screen.getByRole("main"));
-  expect(main.getByRole("link", { name: source.artist.name }).getAttribute("href")).toBe(`/artists/${primary}`);
+  await user.click(screen.getByRole("button", { name: "打开全屏播放器" }));
+  const fullscreen = within(await screen.findByRole("dialog", { name: track.title }));
+  expect(fullscreen.getByRole("link", { name: source.artist.name }).getAttribute("href")).toBe(`/artists/${primary}`);
   expect(audio.currentTime).toBe(37); expect(audio.paused).toBe(false);
   expect({ sources: audio.sources, load: audio.loadCalls, play: audio.playCalls, pause: audio.pauseCalls }).toEqual(before);
 });

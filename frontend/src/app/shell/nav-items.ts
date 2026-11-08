@@ -1,8 +1,8 @@
-import { ArrowRightLeft, ClipboardCheck, Combine, Disc3, Heart, History, LayoutDashboard, ListMusic, MicVocal, Music2, Star, type LucideIcon } from "lucide-react";
+import { ArrowRightLeft, ClipboardCheck, Combine, Disc3, Heart, History, LayoutDashboard, ListMusic, MicVocal, Star, type LucideIcon } from "lucide-react";
 import type { UserRole } from "../../features/auth";
 
 export type NavItem = {
-  to: "/" | "/albums" | "/artists" | "/now-playing" | "/me/liked" | "/me/favorites" | "/me/history" | "/me/playlists" | "/issues" | "/claims" | "/artist-candidates";
+  to: "/" | "/albums" | "/artists" | "/me/liked" | "/me/favorites" | "/me/history" | "/me/playlists" | "/issues" | "/claims" | "/artist-candidates";
   label: string;
   icon: LucideIcon;
   /** 只有管理员看到；后端仍然独立鉴权，这里只决定显示。 */
@@ -20,7 +20,6 @@ const navItems: readonly NavItem[] = [
   { to: "/", label: "概览", icon: LayoutDashboard, adminOnly: false, group: "聆听" },
   { to: "/albums", label: "专辑", icon: Disc3, adminOnly: false, group: "聆听" },
   { to: "/artists", label: "艺人", icon: MicVocal, adminOnly: false, group: "聆听", artists: true },
-  { to: "/now-playing", label: "正在播放", icon: Music2, adminOnly: false, group: "聆听" },
   { to: "/me/liked", label: "我喜欢的音乐", icon: Heart, adminOnly: false, group: "我的音乐" },
   { to: "/me/favorites", label: "我的收藏", icon: Star, adminOnly: false, group: "我的音乐" },
   { to: "/me/history", label: "播放历史", icon: History, adminOnly: false, group: "我的音乐" },
