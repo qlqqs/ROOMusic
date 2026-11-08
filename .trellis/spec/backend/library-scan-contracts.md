@@ -65,7 +65,7 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 - 改路径不迁移来源身份、曲目、Release、收藏、历史、歌单或修正；根 ID 与相对路径不变时来源身份不变。
   新位置内容相同，下一次扫描沿用曲目 UUID 与 Release UUID；内容不同沿用现有换内容、移动配对及 missing 规则。相对排除项不改写。
   前端在改路径提交成功后另行调用 `POST /api/v1/scans`，新扫描返回 `202`、已有扫描返回 `200`；改路径事务本身不启动扫描。
-- `0035_root_relocate.sql`（合入时重新核对编号）只放宽 `library_root_operations_operation_type_check`，允许
+- `0035_root_relocate.sql`只放宽 `library_root_operations_operation_type_check`，允许
   `create / disable / restore / exclude / unexclude / relocate`，不回填或迁移业务身份数据。
   `0035_root_relocate.down.sql` 先删除 `operation_type='relocate'` 的记录，再恢复不含 `relocate` 的原五类约束。
   下行会丢弃改路径收据，但不会把 `library_roots.path` 改回旧值，也不回退 revision；不提供操作记录撤销入口，改回位置须再次调用改路径接口。
@@ -91,4 +91,4 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 - `scan_held_sources` 以 scan/root/kind/path 唯一登记失败范围：`file` 使用现有入库的 `ingest.NormalizedPath` 规范后精确匹配 `tracks.relative_path`（不做 Unicode 或大小写合并）；`directory` 用 `left(t.relative_path,length(h.relative_path)+1)=h.relative_path||'/'` 匹配子树（含 CUE 虚拟路径）；`cue_sheet` 精确匹配 `tracks.cue_sheet_path`。三类共用 SQL 谓词，同时用于 `vanishedTracksCTE` 排除与 touch，保住曲目不被其它同指纹文件抢走 UUID。
 - 候选保存之后、暂存清理之前且未取消时，touch 只把命中的 present 曲目的 `observed_at` 更新为 NOW()，不改事实、状态、指纹或搜索投影，不恢复原本 missing 的曲目；观察时间不算报告更新。来源读取失败不缓存，下轮自然重读。
 - Hold 写失败为 `staging_write_failure`；touch 失败为 `catalog_write_failure`，root 不完整。`ClearStagedObservations` 与 `ClearScansStaging` 同时清理 observation 和 held；取消与恢复继续沿用原协调合同。
-- 迁移暂定 `0034_scan_file_filter.sql` / `.down.sql`：增加 `library_root_exclusions`、`scan_held_sources`、可空 `scan_runs.skipped_files` 和操作类型；历史不回填。下行先删除新操作类型的记录，再收回约束并删除两表一列，合入时统一编号。
+- 迁移 `0034_scan_file_filter.sql` / `.down.sql`：增加 `library_root_exclusions`、`scan_held_sources`、可空 `scan_runs.skipped_files` 和操作类型；历史不回填。下行先删除新操作类型的记录，再收回约束并删除两表一列。

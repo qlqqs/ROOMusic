@@ -92,7 +92,7 @@ T 线标签、署名与作品的补充验证见[目录与扫描流程验证与�
   别名不再改写事实显示名，固定组合名不会因包含 `/`、`,` 或 `&` 被误拆。
 - 正确：一张专辑只有一轨提供 `AlbumArtist`、其余轨只提供各自 Artist 时仍形成一个
   candidate，Release artist 与 credit 使用明确 `AlbumArtist`；缺失轨不伪造自己的 tag。
-- 正确：已存在的 content-addressed 封面文件被破坏后，重扫按期望字节修复；旧 key
+- 正确：已存在的 content-addressed 封面文件被破坏后，完整重扫或候选重写时按期望字节修复；旧 key
   清理失败返回 `artwork_failure`，不报告成功。
 - 正确：CUE 专辑目录里的 `cover.png` 被绑定；严格多碟专辑父目录里的 `Cover.JPG` 被绑定；Box 叶子目录没有封面时，
   Box 父目录里的封面不会绑给它；封面后来才放进目录，下一次扫描即绑定。

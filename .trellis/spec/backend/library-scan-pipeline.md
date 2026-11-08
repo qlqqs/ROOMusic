@@ -42,7 +42,7 @@
 - `0011_scan_staging_and_identity.sql` 增加有界暂存、候选锚点、物理/CUE 身份、音频/CUE 列、字段/归组证据、署名及元数据。
   0010 旧来源身份不兼容（见下方规则）；0032 的列表整理见[多流派合同](./genre-contracts.md)。
 - `0012_track_credits_and_release_metadata.sql` 增加 Release `edition`/`label`/`barcode`
-  以及 `track_credits`。0034 扩为 `(track_id,role,name,detail,source,position)`，逐轨角色固定为
+  以及 `track_credits`。`0038_credit_roles` 扩为 `(track_id,role,name,detail,source,position)`，逐轨角色固定为
   `lyricist → composer → arranger → conductor → performer → producer`。`detail` 为 NULL 或非空且≤256字节的文本，
   `source` 为 `tag|lyrics`（默认 `tag`）；`UNIQUE NULLS NOT DISTINCT(track_id,role,name,detail)`。
   `CanonicalCredits` 按角色序、细分（空在前）、名字排序，按角色+名字+细分去重；重扫整体替换，不按扫描次数累计。
