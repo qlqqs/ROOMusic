@@ -17,6 +17,7 @@ describe("词表标签", () => {
     ["署名角色", creditRoleLabel, "composer", "作曲"],
     ["证据字段", evidenceFieldLabel, "catalog_number", "编号"],
     ["证据来源", evidenceSourceLabel, "filename_fallback", "文件名（推断）"],
+    ["证据来源", evidenceSourceLabel, "compilation", "合辑"],
     ["可信度", confidenceLabel, "medium", "中"],
     ["处理方式", evidenceActionLabel, "uncertain_apply", "不确定，已暂时采用"],
     ["原因码", reasonCodeLabel, "inconsistent_candidates", "候选值互相不一致"],

@@ -39,6 +39,7 @@ export const evidenceSourceLabel = labeller({
   cue_sheet: "CUE 文件（专辑）",
   cue_track: "CUE 文件（分轨）",
   rip_log: "抓轨日志",
+  compilation: "合辑",
   folder_fallback: "目录名（推断）",
   filename_fallback: "文件名（推断）",
   path_order_fallback: "路径顺序（推断）",

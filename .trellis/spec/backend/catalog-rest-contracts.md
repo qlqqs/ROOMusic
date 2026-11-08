@@ -43,6 +43,8 @@ M5 ④新增规范化搜索与在线投影：完整规则见[搜索合同](./sea
   `composer | conductor | performer | producer`。每轨最多 100 条、单个 Release 最多
   10,000 条 Track credits，超限后端 fail closed，前端 decoder 同样拒绝。
 
+扫描判为合辑的发行返回 `artist="群星"`、`album_artist=null`、`artist_refs=[]`、`album_artist_refs=[]`，发行艺人显示纯文字，曲目艺人照常。
+
 ## 3. 请求与响应合同
 
 - 列表只返回至少含一个 `present` Track 的 Release；默认 `page=1`、`page_size=50`，

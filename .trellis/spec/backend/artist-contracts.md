@@ -25,6 +25,13 @@
 
 原始重复标签保存在 `artist_tag_evidence`，每轨最多100项、每项4096字节，超限失败诊断，不截掉末项伪造完整集合；扫描继续写入，但不再据此产生同轨同角色候选。投影版本2仅保留发行全部present轨真实单一同键Artist与有效单一AlbumArtist的一一对应信号，新增跨发行括号别名信号；读取按艺人排除同曲同身份共同署名，细则见§9。
 
+### 合辑占位与版本3
+
+`metadata.IsCompilationPlaceholder` 整串比较内置占位词，全角 ASCII/空格折叠、小写、压连续空白；不包含 `unknown/unknown artist/misc/sampler/karaoke`。
+scan 层发行 `release_artist/album_artist` 与专辑艺人 correction 层为占位词时均不建事实；曲目艺人与其它角色照常，真实“未知艺术家”仍保留。
+`artistgraph.Version=3`，`searchindex.ProjectionVersion=2`（T线只升一次），`textnorm.Version` 不变。后台重拆已存原文；解析时已拆好的 credits 与新标签规则在下次扫描生效。
+仍命中的名字键保留人工意图；消失的旧键、身份与意图不删除、不迁给新名字，无 present 参与后从列表消失。必需验证：发行与 correction 占位无 refs，曲目同名仍有 refs。
+
 ### 在线构建
 
 全库身份派生由独立artist_profiles清单阶段有界补齐（含孤立种子、空署名、旧代次），不得借在线扫描/M3或发布事务补全库。旧进行中build即使manifest已封闭仍补登记新阶段；当前代次已由在线写者完成的跳过，发布前只检查缺口，缺口另开修复清单。0028不改变算法内容，既有完整ready不因新增marker触发全量重建；下一轮构建按新目标代次补齐。

@@ -132,6 +132,7 @@ func TestParseM4AWriterAndAllowlistedFreeformMetadata(t *testing.T) {
 	items = append(items, repairM4AFreeform("PRIVATE_NOTE", "must stay unmapped")...)
 	observation := AudioObservation{InferredFields: map[string]bool{}, RawAtoms: map[string]string{}}
 	parseM4AAtoms(repairM4AAtom("ilst", items), &observation)
+	finalizeTags(&observation)
 
 	if observation.Label != "Example Label" || observation.Barcode != "012345678901" {
 		t.Fatalf("M4A freeform metadata 未映射：%+v", observation)
@@ -862,7 +863,7 @@ func repairUTF16(value string, littleEndian bool) []byte {
 
 func TestSplitCreditNamesUsesArtistRules(t *testing.T) {
 	got := splitCreditNames("Composer Alpha, Composer Beta & Composer Gamma")
-	want := []string{"Composer Alpha", "Composer Beta", "Composer Gamma"}
+	want := []string{"Composer Alpha, Composer Beta", "Composer Gamma"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("credit 拆分结果 = %#v，期望 %#v", got, want)
 	}

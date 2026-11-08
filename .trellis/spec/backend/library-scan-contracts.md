@@ -95,11 +95,27 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
   位置应用 Disc/CD/Disk 目录与稳定路径 fallback，显式标签永远优先。CUE sheet 与
   track PERFORMER 的 provenance 分别为 `cue_sheet` 和 `cue_track`，构造每条虚拟 Track
   时复制 `InferredFields`/`FieldSources` map。
-- Track artist 与 composer/conductor/performer/producer 使用同一组保守拆分规则：明确的
-  `; `、`；`、` / `、`feat.`、`ft.`、`with`、`、` 可拆分；紧凑 `/`、`,`、`&`
-  只按已固化规则处理，`Simon & Garfunkel`、`Earth, Wind & Fire`、`AC/DC` 等固定组合
-  保持整体。M5 ⑤移除硬编码别名，只按原写法精确去重、排序并以 ` / ` 连接；名字键与主显示名由artistgraph解析，禁止相似度猜人。
-  原始重复标签、种子、同事务解析及重扫不写人工意图的完整规则见[艺人合同](./artist-contracts.md)。
+- 曲目艺人、专辑艺人及 composer/conductor/performer/producer 共用 `metadata.CanonicalArtistNames`：
+  先按 `\r\n`、`\n`、`\r`、NUL 切段，各段完整重走规则，再删其余控制字符与首尾空白。明确分隔符
+  `; `、`；`、` / `、` feat. `、` ft. `、` with `、`、` 区分大小写；` & ` 两侧各含空格时先拆。
+  随后保护固定组合 `Simon & Garfunkel`、`Earth, Wind & Fire`、`AC/DC` 与拉丁“姓, 名”，最后依次拆紧凑 `/`、`,`、`&`；嵌套段也遵守姓名保护。
+  “姓, 名”须恰有一个逗号，两侧各有拉丁字母，仅含拉丁字母、组合附加符、空格及 `. - ' ’`，左侧至多3词、右侧至多4词；
+  各词小写后不得以前缀 `orchest/philharm/symphon/sinfon/ensemble/quartet/quatuor/trio/choir/chorus/chor/consort/singers/players/band` 开头。
+  其余逗号照拆，`Tom & Jerry` 照拆；`Queen, David Bowie` 整体保留是已接受局限。
+  按原写法精确去重，曲目展示排序后以 ` / ` 连接；不按别名改写事实、不猜人。
+  解析署名先拆原文、再逐名 `BoundedText`，不得先删除换行。原始证据与人工意图见[艺人合同](./artist-contracts.md)。
+- `metadata.JoinArtistValues(values ...string) string` 只展开换行/NUL，逐值 `BoundedText`、丢空、原写法去重并保留首次顺序，以 ` / ` 拼接。
+  专辑艺人在 `finalizeTags` 中按级取首个非空级的全部值，之后才调用 `applyFilenameFallback`：
+  Vorbis 为 `ALBUMARTIST → ALBUM_ARTIST → ALBUM ARTIST`；ID3 为 `TPE2 → TXXX:ALBUMARTIST → TXXX:ALBUM_ARTIST/TXXX:ALBUM ARTIST`；
+  M4A 为 `aART → ----:ALBUMARTIST → ----:ALBUM_ARTIST/----:ALBUM ARTIST`。同级合并，全部键记入 `album_artist` 原文证据。
+  ID3 文本帧保留全部 NUL 值；TXXX 按编码解出描述与值，描述去空白转大写后交给通用标签入口。
+- `AudioObservation.Compilation bool` 经 scanner 原样传给 `SourceObservation.Compilation`（JSON `compilation,omitempty`）。
+  Vorbis 的 `COMPILATION/ITUNESCOMPILATION`、ID3 的 `TCMP/TXXX:COMPILATION`、M4A 的 `----:COMPILATION` 去空白、小写后任一为
+  `1/yes/true/compilation` 即为真；M4A `cpil` 为单字节非零整数时为真，0为假。
+  organizer 保留真实专辑艺人；否则发行艺人是合辑占位词或非 `folder` 观察的标志严格过半时，决定 `artist="群星"`、清除专辑艺人决定，
+  保留原 artist 候选，写 `source=compilation`、`rule_id=compilation_v1`、`confidence=high`、`action=auto_apply`。不改变 partition/分组。
+- 本版 `Year==0` 时才按 `ORIGINALDATE → ORIGINALYEAR → TDOR → TORY → TXXX:ORIGINALDATE → TXXX:ORIGINALYEAR → ----:ORIGINALDATE → ----:ORIGINALYEAR`
+  取首个可解析年份；不另存原始年份字段。流派仍遵守[多流派合同](./genre-contracts.md)，不随艺人规则改变。
 - 缺失 `AlbumArtist` 表示未知，不是与唯一明确值冲突：相同权威 album 下只有一个明确
   `AlbumArtist` 时，缺失值与该 partition 兼容；出现多个明确值时仍按多数决或稳定拆分。
   生成 Release artist/credit 时，只要存在明确 `AlbumArtist`，就先在这些值之间决策，
@@ -146,7 +162,12 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 | rip log 无明确签名、签名晚于 64 KiB 或为 symlink | 不产生 CD 语义，不读取超出预算的内容 |
 | 明确 rip log 与 `folder` 补充值并存 | 选定 CD 并把 decision provenance 提升为 `rip_log`；不得保留重复字段决定 |
 | 明确 rip log 与 tag/CUE/音频规格决定冲突 | 保留明确来源，不允许抓轨日志覆盖 |
-| 多艺人/credit 含明确分隔符或明确别名 | 按保守规则拆分、原写法去重；身份同键归一由后端投影负责，固定组合名不得误拆 |
+| 艺人/credit 含换行或 NUL | 先切段再清理，不能把两个名字粘连；固定组合与拉丁姓名保护按第3节执行 |
+| 专辑艺人高优先级为空或多值 | 回退到首个非空级，展开该级全部值，不采用最后写入值 |
+| TXXX 描述/值编码无效、缺终止符，或帧压缩/加密 | 跳过该帧，不使整个文件解析失败；证据超预算仍按既有规则失败 |
+| 无真实专辑艺人，合辑标志恰好半数 | 不因标志判合辑；必须严格过半，目录观察不计票 |
+| 有真实专辑艺人且合辑标志为真 | 保留真实专辑艺人，不改发行决定 |
+| 本版年份存在且原始年份更早 | 保留本版年份，不覆盖 |
 | 相同 album 的部分 Track 缺少 AlbumArtist，且其它 Track 只有一个明确值 | 保持同一候选，明确 AlbumArtist 优先于 Track Artist |
 | 命名 folder artwork 非普通文件、为空、超限或格式损坏，且所有查找目录里没有别的可用封面 | `artwork_failure`，保留已有关系，不解释为封面删除 |
 | 前一个目录里的命名封面无效，后一个目录里有可用封面 | 用后一个目录的封面，不报错 |
@@ -167,93 +188,9 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 | 扫描成功且所有 root 完整 | 允许负向 `missing` 对账 |
 | 非音频附件 | 忽略，不改变扫描完整性 |
 
-## 5. 正确、基准与错误案例
+## 5–7. 案例、必需测试与示例
 
-- 基准：重复 POST 已停用目录返回 disabled；管理员随后使用 restore 端点显式恢复。
-- 正确：多碟来源按 `disc_number=1/2` 形成两个 Medium，重扫保持 Track ID。
-- 正确：`sheets/album.cue` 引用 `../media/image.flac` 时，只要两者仍在同一注册根内，
-  虚拟轨会与显式父来源对齐；每轨 provenance 独立，track PERFORMER 不污染相邻轨。
-- 基准：历史 CUE 指向已不存在的原始 WAV，或个别 Track 没有 `INDEX 01` 时，保留
-  `cue_reference` 诊断并跳过这些虚拟 Track；同目录其它有效物理来源仍可完成扫描。
-- 基准：只有 EAC/XLD 明确签名位于 `.log` 前 64 KiB 时补充缺失的 CD 语义；无签名
-  日志保持未知。
-- 正确：目录名先补了 WEB/CD 等来源值，但同 candidate 存在明确 EAC/XLD 日志时，
-  抓轨规则可以替换 `folder` 决定；tag 或 CUE 的明确来源仍保持不变。
-- 正确：`Artist Beta, Artist Alpha` 作为 Track artist 被拆分后以稳定顺序展示；已登记的
-  别名不再改写事实显示名，固定组合名不会因包含 `/`、`,` 或 `&` 被误拆。
-- 正确：一张专辑只有一轨提供 `AlbumArtist`、其余轨只提供各自 Artist 时仍形成一个
-  candidate，Release artist 与 credit 使用明确 `AlbumArtist`；缺失轨不伪造自己的 tag。
-- 正确：已存在的 content-addressed 封面文件被破坏后，重扫按期望字节修复；旧 key
-  清理失败返回 `artwork_failure`，不报告成功。
-- 正确：CUE 专辑目录里的 `cover.png` 被绑定；严格多碟专辑父目录里的 `Cover.JPG` 被绑定；Box 叶子目录没有封面时，
-  Box 父目录里的封面不会绑给它；封面后来才放进目录，下一次扫描即绑定。
-- 错误：把 root 原始路径放入列表 JSON；unsupported 文件仍让扫描 succeeded 并执行 missing；把 FIFO 交给 parser；按标题删除 CUE 轨。
-
-## 6. 必需测试
-
-- 后端单元：终态映射、unsupported 音频候选识别、来源身份规范化和路径 containment。
-- parser/organizer 单元：M4A/WAV 容器有效性、CUE 多 FILE 与跨目录 containment、
-  missing reference/missing `INDEX 01` 非阻断跳过、`unsafe`/`unchecked` 引用阻断、
-  sheet/track performer provenance、逐轨 map 隔离、inferred track/disc fallback、
-  明确标签优先、缺失 AlbumArtist 兼容与 AlbumArtist 决策优先级、艺人/credit 多分隔符、
-  官方别名/固定组合名，rip log 64 KiB 预算、签名和仅覆盖 `folder` 的优先级，封面目录顺序（`ArtworkDirectories`：普通、CUE、
-  CUE 跨目录、严格多碟含碟号 10、Box 叶子、根目录散曲、去重与按曲序）与内嵌封面选取（`EmbeddedArtwork`），
-  文件夹封面发现（大小写变体、全小写优先、名字优先级不受大小写影响、多目录顺序、前一个目录无效时用后一个、目录不存在跳过、
-  读目录失败报告、符号链接/无效/读取失败），以及各格式音频内容指纹（同音频不同标签
-  相同、音频变化不同、FLAC MD5 为零的回退、MP3 首尾标签、OGG 注释包分页、读取中取消）。
-- PostgreSQL 集成（配置 `ROOMUSIC_TEST_DATABASE_URL` 时）：用户禁用与 session
-  原子性、最后管理员/并发保护、未知用户 404、目录幂等与真实状态、扫描 incomplete
-  禁止 missing、多 Medium 与 Track 身份稳定；另需覆盖 staging 清理、候选短事务
-  回滚/部分提交、跨目录 CUE 父来源对齐、regular-file 拒绝、身份规划（改名/移动/互换/相同音频、不完整与取消、换内容、跨 root、CUE、
-  指纹复用与失败）与 Release 成员关系匹配、
-  current evidence/track credits 替换、Track artist canonical 展示、受管封面内容重校验、
-  旧 key 清理错误传播和绑定失败清理，封面发现（CUE 含重扫、严格多碟父目录、父目录与碟目录都有、回退到碟目录、
-  Box 叶子不取父目录、内嵌优先）。
-
-## 7. 错误与正确示例
-
-### CUE 诊断错误与正确示例
-
-错误：把所有 CUE diagnostic 都提升为 root incomplete；这会让缺失的历史 sidecar
-引用阻断同目录中已经确定的物理音频，也无法完成真实库重扫。
-
-```go
-for range document.Diagnostics {
-	complete = false
-}
-```
-
-正确：诊断始终保留；只有无法证明安全边界的引用阻断扫描。`missing` 是已确定的不存在，
-对应虚拟 Track 被跳过，后续成功终态可以让旧来源按正常规则进入 missing 对账。
-
-```go
-if cueReferenceMakesScanIncomplete(reference.Status) { // unsafe/unchecked/unknown
-	complete = false
-}
-if reference.Status != "present" {
-	continue
-}
-```
-
-### 抓轨证据优先级错误与正确示例
-
-错误：只看最终字符串是否为空，会把先到达的目录补充值误当作权威值。
-
-```go
-if candidate.SourceType != "" {
-	return
-}
-candidate.SourceType = "CD"
-```
-
-正确：检查选定 decision 的 provenance；仅替换 `folder`，tag/CUE 等其它来源不变。
-
-```go
-if decision.Source == "folder" {
-	candidate.SourceType = "CD"
-	replaceDecision("source_type", ripLogDecision)
-}
-```
+见[目录与扫描流程验证与示例](./library-scan-verification.md)，保留原第5–7节编号。
 
 停用目录拒绝新的播放请求，已建立传输不因此切断，专辑仍可浏览；具体语义见[播放合同](./playback-contracts.md)。
 

@@ -106,6 +106,7 @@ func TestAudioTagGenresAppendRepeatedValues(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	finalizeTags(&observation)
 	want := []string{"国语流行乐", "Pop", "台语流行乐", "R&B/Soul"}
 	if !reflect.DeepEqual(observation.Genres, want) {
 		t.Fatalf("重复 GENRE 被覆盖或未拆分：%#v，期望 %#v", observation.Genres, want)
@@ -121,6 +122,7 @@ func TestID3GenresReadNullSeparatedTCONValues(t *testing.T) {
 		}
 	}
 	want := []string{"Pop", "Rock", "R&B/Soul", "Jazz"}
+	finalizeTags(&observation)
 	if !reflect.DeepEqual(observation.Genres, want) {
 		t.Fatalf("TCON 多值丢失：%#v，期望 %#v", observation.Genres, want)
 	}
@@ -134,6 +136,7 @@ func TestM4AGenresSplitAndAppendTextAtoms(t *testing.T) {
 		}
 	}
 	want := []string{"Rock", "Pop", "Folk, World, & Country"}
+	finalizeTags(&observation)
 	if !reflect.DeepEqual(observation.Genres, want) {
 		t.Fatalf("M4A 流派列表 = %#v，期望 %#v", observation.Genres, want)
 	}

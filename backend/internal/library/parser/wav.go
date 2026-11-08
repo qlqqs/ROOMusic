@@ -91,6 +91,7 @@ func parseWAV(path string) (AudioObservation, error) {
 		o.DurationSeconds = float64(dataBytes) / float64(byteRate)
 		o.Bitrate = byteRate * 8 / 1000
 	}
+	finalizeTags(&o)
 	return applyFilenameFallback(path, o), nil
 }
 

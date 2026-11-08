@@ -13,6 +13,7 @@ import (
 type AudioObservation struct {
 	Title, Artist, Album    string
 	AlbumArtist             string
+	Compilation             bool
 	TrackNumber, DiscNumber int
 	SourceKind              string
 	Inferred                bool
@@ -44,6 +45,8 @@ type AudioObservation struct {
 	// 解析器只提取原文，不解析 LRC。
 	Lyrics       string
 	LyricsSource string
+
+	originalYears [8]int
 }
 
 const (

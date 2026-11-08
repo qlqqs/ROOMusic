@@ -48,12 +48,19 @@ func setAudioTag(observation *AudioObservation, key, value string) error {
 		observation.Genres = metadata.SplitGenres(append(observation.Genres, value)...)
 		return nil
 	}
+	raw := value
+	key = strings.ToUpper(key)
+	collectOriginalYear(observation, key, value)
+	key = strings.TrimPrefix(strings.TrimPrefix(key, "TXXX:"), "----:")
 	value = metadata.BoundedText(value)
-	switch strings.ToUpper(key) {
+	switch key {
 	case "TITLE", "TRACKTITLE":
 		observation.Title = value
-	case "ALBUMARTIST", "ALBUM ARTIST":
-		observation.AlbumArtist = value
+	case "COMPILATION", "ITUNESCOMPILATION", "TCMP":
+		switch strings.ToLower(strings.TrimSpace(raw)) {
+		case "1", "yes", "true", "compilation":
+			observation.Compilation = true
+		}
 	case "ALBUM", "ALBUMTITLE":
 		observation.Album = value
 	case "TRACKNUMBER":
@@ -77,13 +84,13 @@ func setAudioTag(observation *AudioObservation, key, value string) error {
 			observation.Edition = value
 		}
 	case "COMPOSER", "TCOM":
-		addObservationCredits(observation, "composer", value)
+		addObservationCredits(observation, "composer", raw)
 	case "CONDUCTOR", "TPE3":
-		addObservationCredits(observation, "conductor", value)
+		addObservationCredits(observation, "conductor", raw)
 	case "PERFORMER", "PERFORMERS":
-		addObservationCredits(observation, "performer", value)
+		addObservationCredits(observation, "performer", raw)
 	case "PRODUCER":
-		addObservationCredits(observation, "producer", value)
+		addObservationCredits(observation, "producer", raw)
 	case "ISRC":
 		observation.ISRC = value
 	case "SOURCE", "SOURCETYPE":

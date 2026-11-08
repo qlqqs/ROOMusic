@@ -33,6 +33,7 @@ type SourceObservation struct {
 	FieldSources    map[string]string `json:"field_sources,omitempty"`
 	DurationSeconds float64           `json:"duration_seconds,omitempty"`
 	Codec           string            `json:"codec,omitempty"`
+	Compilation     bool              `json:"compilation,omitempty"`
 	BitDepth        int               `json:"bit_depth,omitempty"`
 	SampleRate      int               `json:"sample_rate,omitempty"`
 	Channels        int               `json:"channels,omitempty"`

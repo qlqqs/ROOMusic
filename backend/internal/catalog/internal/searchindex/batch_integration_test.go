@@ -52,7 +52,7 @@ func newBatchFixture(t *testing.T, n int) *batchFixture {
 			f.exec(`INSERT INTO track_credits(track_id,role,name,position) VALUES($1::uuid,$2,$3,$4)`, id, role, "原文 "+role+" / 保留整条", j+1)
 		}
 	}
-	f.exec(`UPDATE catalog_projection_state SET target_generation=4,manifest_sealed=true WHERE capability='search'`)
+	f.exec(`UPDATE catalog_projection_state SET target_generation=4,manifest_sealed=true,search_projection_version=$1,published_search_projection_version=$1 WHERE capability='search'`, ProjectionVersion)
 	f.exec(`INSERT INTO catalog_projection_subject_state(subject_kind,subject_id,input_revision,search_applied_generation,search_applied_input_revision,search_title)
  SELECT 'track',id,5,1,5,'旧标题' FROM tracks`)
 	return f
