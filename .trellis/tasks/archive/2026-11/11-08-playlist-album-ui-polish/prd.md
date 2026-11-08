@@ -98,10 +98,11 @@
 
 | 提交 | 内容 |
 | --- | --- |
+| `4a87a73` | R6 第一部分：文件夹浏览框改为固定高度的浮层，列表在框内滚动，不推开下面的内容 |
 | `bbc2f34` | R1 后端：`ChangeAdminOwnPassword`，handler 按角色分派，两个限速用例改用成员，新增管理员免当前密码集成用例，`identity-contracts.md` |
 | `66056de` | R1 前端：管理员的改密对话框不显示“当前密码”，请求不带该字段；替身与 e2e 同步 |
 | `aaacc2a` | R3：`useTooltip` 快速悬停提示，全应用图标按钮去掉原生 `title`；专辑页管理操作只留图标 |
-| `dc161b4` | R6：文件夹浏览从 `/` 开始，只列允许目录及其上层路径，`selectable` 区分可选与只用于进入；浮层固定高度、不推开页面 |
+| `dc161b4` | R6 第二部分：文件夹浏览从 `/` 开始，只列允许目录及其上层路径，`selectable` 区分可选与只用于进入 |
 | `19c990b` | R5：专辑概况一行灰色小字、竖线分隔；`formatSpokenDuration` 移到 shared，全应用口语时长统一为“分钟” |
 | `83d6500` | R2 + R4：`TrackTable` 统一曲目表、`CollectionHero` 网易云式页头、`Page.header`、`Avatar`、`useArtworkTint` |
 

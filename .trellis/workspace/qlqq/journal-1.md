@@ -1635,3 +1635,52 @@ F 线变基到含 P 线的 main（迁移改为 0023/0024），导出树全量全
 ### Status
 
 [OK] **Completed**
+
+
+## Session 47: 歌单与专辑页面布局统一、图标化按钮与管理员改密
+<!-- trellis-session: v=2 fp=b3e7ee3b2b7f10f0 -->
+
+**Date**: 2026-11-08
+**Task**: 歌单与专辑页面布局统一、图标化按钮与管理员改密
+**Branch**: `main`
+
+### Summary
+
+管理员改密免当前密码；我喜欢的音乐与歌单详情统一曲目表和网易云式页头；图标按钮快速悬停提示；专辑概况单行；扫描目录文件夹浏览从根目录开始
+
+### Main Changes
+
+- R1 管理员改自己的密码不再核对当前密码（后端按角色分派，前端对话框按角色隐藏字段）；普通成员不变
+- R3 新增应用自己的快速悬停提示 useTooltip，全应用图标按钮去掉原生 title；专辑页管理操作只留图标
+- R6 扫描目录的文件夹浏览：固定高度浮层；从 / 开始只列允许目录与其上层路径，selectable 区分可选与只用于进入（不改允许根配置，避免破坏缓存隔离检查）
+- R5 专辑概况一行灰色小字、竖线分隔；口语时长统一为“N 小时 M 分钟”
+- R2+R4 共用 TrackTable（#/标题/专辑艺人/专辑/发行/操作/时长）与 CollectionHero 网易云式页头（封面取色渐变、Avatar、“歌曲 N”焦点目标）；两步共用测试文件，合成一个提交
+- 验收打回：管理员改密测试辅助误填当前密码；dnd-kit 读屏区落在表体里触发 axe aria-required-children（DndContext 移到表外）；375 下次要信息拆成三行（改单行省略）；键盘用例“歌曲 N”断言把表头行算进去了
+- 另一工作区占用 4173 的 vite preview，Playwright 改用空闲端口的临时配置，不改 playwright.config.ts
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `56fc972` | docs(task): 规划歌单与专辑页面布局统一、图标化按钮与管理员改密 |
+| `4a87a73` | fix(library): 扫描目录的文件夹浏览框改为固定高度的浮层 |
+| `bbc2f34` | feat(identity): 管理员修改自己的密码不再需要当前密码 |
+| `66056de` | feat(auth): 管理员的修改密码对话框不再要求当前密码 |
+| `aaacc2a` | feat(ui): 图标按钮改用快速悬停提示，专辑页管理操作只留图标 |
+| `dc161b4` | feat(library): 扫描目录的文件夹浏览从根目录开始 |
+| `19c990b` | feat(catalog): 专辑概况改为一行灰色小字 |
+| `83d6500` | feat(personal): 我喜欢的音乐与歌单详情改为统一曲目表与网易云式页头 |
+| `973145d` | docs(spec): 同步悬停提示、曲目表与封面页头的规范，记录实施结果 |
+| `d1951d9` | chore(task): archive 11-08-playlist-album-ui-polish |
+
+### Testing
+
+- [OK] 后端：go vet/go test ./internal/identity/...、go test ./internal/library -run TestListFolders；scripts/test-integration.sh 跑改密、限速与 API 样本用例（PASS，非 SKIP）
+- [OK] 前端 Vitest：各步相关文件（549/600/80/48 项通过）；npx tsc --noEmit 通过
+- [OK] Playwright（空闲端口临时配置）：auth 密码 12、R3/R6 场景 29、albums 19、personal 与 responsive/a11y 新场景 71 项（复跑失败的 8 项后全部通过）
+- [OK] 真实服务：scripts/playback-e2e.sh e2e/real/personal.real.ts 2 项通过；1440/375 截图已审
+
+### Status
+
+[OK] **Completed**
