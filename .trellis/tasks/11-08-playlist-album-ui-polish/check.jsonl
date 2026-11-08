@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质量检查项"}
+{"file": ".trellis/spec/frontend/quality-verification-layers.md", "reason": "Vitest / Playwright / 真实服务用例分层与截图"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端测试与隔离数据库约定"}
+{"file": ".trellis/spec/backend/identity-contracts.md", "reason": "核对改密合同实现"}

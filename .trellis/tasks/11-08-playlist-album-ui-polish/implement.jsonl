@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "共享组件、图标按钮与界面文案约定"}
+{"file": ".trellis/spec/frontend/personal-guidelines.md", "reason": "我喜欢的音乐、歌单页面的结构与插槽组合"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "feature 间依赖方向与新组件落点"}
+{"file": ".trellis/spec/frontend/governance-components.md", "reason": "专辑页管理操作区"}
+{"file": ".trellis/spec/backend/identity-contracts.md", "reason": "改密接口合同（管理员免当前密码）"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "改密前后端合同衔接"}
