@@ -56,7 +56,7 @@
     ],
     "catalog_state": {
       "artists_state": "ready",
-      "epoch": 5,
+      "epoch": 6,
       "search_mode": "normalized"
     },
     "query": "爱",

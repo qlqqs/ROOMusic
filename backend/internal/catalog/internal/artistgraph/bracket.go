@@ -12,7 +12,7 @@ type alias struct {
 	part string
 }
 
-// 括号里的合作、版本和演出标记不是别名；新增排除词只维护这份词表。
+// 括号里的合作、版本和演出标记不是别名；乐器写法复用 metadata 的映射表。
 var bracketAliasExclusions = struct {
 	prefixes   []string
 	words      []string
@@ -37,7 +37,7 @@ func bracketAliases(key string) []alias {
 	}
 	outer := strings.TrimSpace(key[:open])
 	inner := strings.TrimSpace(key[open+1 : len(key)-1])
-	if outer == "" || inner == "" || outer == inner {
+	if outer == "" || inner == "" || outer == inner || len(metadata.MapInstrument(inner)) > 0 {
 		return nil
 	}
 	for _, prefix := range bracketAliasExclusions.prefixes {
@@ -49,6 +49,9 @@ func bracketAliases(key string) []alias {
 		return !unicode.IsLetter(r) && !unicode.IsNumber(r) && r != '_'
 	})
 	for _, word := range words {
+		if len(metadata.MapInstrument(word)) > 0 {
+			return nil
+		}
 		for _, excluded := range bracketAliasExclusions.words {
 			if word == excluded {
 				return nil

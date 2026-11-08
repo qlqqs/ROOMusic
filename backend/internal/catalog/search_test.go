@@ -101,8 +101,11 @@ func TestSearchPlanBoundedCountAndLiteralPatterns(t *testing.T) {
 	}
 	for _, kind := range []string{"albums", "tracks", "releases"} {
 		page := newSearchPlan("hot", kind, "normalized", 1).pageSQL(false)
+		pagination := strings.Index(page, "LIMIT $14 OFFSET $15")
+		pageStart := strings.Index(page, ", page AS MATERIALIZED (")
+		sources := strings.Index(page, "page_sources AS MATERIALIZED")
 		if !strings.Contains(page, "title_values AS MATERIALIZED") || !strings.Contains(page, "page AS MATERIALIZED") ||
-			strings.Index(page, "LIMIT $8 OFFSET $9") > strings.Index(page, "page_sources AS MATERIALIZED") ||
+			pagination < 0 || pageStart < 0 || sources < 0 || pagination <= pageStart || pagination >= sources ||
 			!strings.Contains(page, "tier2_page AS MATERIALIZED") {
 			t.Fatalf("ranking must paginate complete entity ranks before retrieving descriptions: %s", page)
 		}
@@ -120,7 +123,7 @@ func TestSearchDenseSubjectPredicateBoundary(t *testing.T) {
 		plan := searchPlan{kind: kind}
 		query := plan.normalizedEntityMatchSQL("entity.id", "placement.release_id", "v.normalized_value LIKE $1")
 		for _, relation := range []string{"track_id=", "release_id="} {
-			if !strings.Contains(query, "SELECT field,normalized_value,projection_generation,short_grams FROM catalog_search_values WHERE "+relation) {
+			if !strings.Contains(query, "SELECT field,normalized_value,projection_generation,short_grams,loose_value,loose_grams FROM catalog_search_values WHERE "+relation) {
 				t.Fatalf("%s缺少来源访问边界：%s", kind, query)
 			}
 		}

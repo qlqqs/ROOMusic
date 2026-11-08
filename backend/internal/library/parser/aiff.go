@@ -86,6 +86,7 @@ func parseAIFF(path string) (AudioObservation, error) {
 		}
 	}
 	observation.Bitrate = estimatedBitrateKbps(info.Size(), observation.DurationSeconds)
+	finalizeTags(&observation)
 	return applyFilenameFallback(path, observation), nil
 }
 

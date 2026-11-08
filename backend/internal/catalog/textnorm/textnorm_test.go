@@ -222,3 +222,39 @@ func FuzzNormalizationIdempotent(f *testing.F) {
 		}
 	})
 }
+
+func TestLooseSearchKeys(t *testing.T) {
+	requireEmbedded(t)
+	t.Parallel()
+	for _, tc := range []struct {
+		raw, normalized, loose string
+		number                 bool
+	}{
+		{"AC/DC", "ac/dc", "acdc", false},
+		{"Guns N' Roses", "guns n' roses", "guns n roses", false},
+		{"Guns N’ Roses", "guns n’ roses", "guns n roses", false},
+		{"Guns N‘ Roses", "guns n‘ roses", "guns n roses", false},
+		{"Guns Nʼ Roses", "guns nʼ roses", "guns n roses", false},
+		{"Guns N＇ Roses", "guns n' roses", "guns n roses", false},
+		{"周杰伦·", "周杰伦·", "周杰伦", false},
+		{"《夜曲》", "《夜曲》", "夜曲", false},
+		{"S.H.E", "s.h.e", "she", false},
+		{"!!!", "!!!", "", false},
+		{"周杰伦", "周杰伦", "周杰伦", false},
+		{"Op. 67", "op.67", "op67", true},
+		{"SVWC-70594", "svwc70594", "svwc70594", true},
+	} {
+		t.Run(tc.raw, func(t *testing.T) {
+			key := Text(tc.raw)
+			if tc.number {
+				key = CatalogNumber(tc.raw)
+			}
+			if key != tc.normalized {
+				t.Fatalf("原规范键改变：got %q, want %q", key, tc.normalized)
+			}
+			if got := Loose(key); got != tc.loose {
+				t.Fatalf("Loose(%q)=%q, want %q", key, got, tc.loose)
+			}
+		})
+	}
+}

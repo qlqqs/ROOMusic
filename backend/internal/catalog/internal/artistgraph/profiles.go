@@ -145,6 +145,10 @@ func refreshProfiles(ctx context.Context, tx *sql.Tx, ids []string, gen int64) e
 			n.ArtistID = p.id
 			n.Normalized = textnorm.Text(n.Original)
 			n.Grams = searchindex.ShortGrams(n.Normalized)
+			if loose := textnorm.Loose(n.Normalized); loose != "" && loose != n.Normalized {
+				n.Loose = loose
+				n.LooseGrams = searchindex.ShortGrams(loose)
+			}
 			searchValues = append(searchValues, n)
 		}
 	}
@@ -170,6 +174,8 @@ type searchName struct {
 	Original       string   `json:"original"`
 	Normalized     string   `json:"normalized"`
 	Grams          []string `json:"grams"`
+	Loose          string   `json:"loose"`
+	LooseGrams     []string `json:"loose_grams"`
 }
 
 // 名字和主名共用同一份归属读取，避免对热门身份的全部署名再次展开。
@@ -181,9 +187,9 @@ func refreshSearchNames(ctx context.Context, tx *sql.Tx, ids []string, gen int64
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO artist_search_names(artist_id,name_id,source_artist_id,original_value,normalized_value,normalization_version,projection_generation,short_grams)
- SELECT v.artist_id,v.name_id,v.source_artist_id,v.original,v.normalized,$2,$3,v.grams FROM jsonb_to_recordset($1::jsonb)
- AS v(artist_id uuid,name_id uuid,source_artist_id uuid,original text,normalized text,grams text[]) WHERE v.normalized<>''`, string(data), textnorm.Version, gen)
+	_, err = tx.ExecContext(ctx, `INSERT INTO artist_search_names(artist_id,name_id,source_artist_id,original_value,normalized_value,normalization_version,projection_generation,short_grams,loose_value,loose_grams)
+ SELECT v.artist_id,v.name_id,v.source_artist_id,v.original,v.normalized,$2,$3,v.grams,NULLIF(v.loose,''),v.loose_grams FROM jsonb_to_recordset($1::jsonb)
+ AS v(artist_id uuid,name_id uuid,source_artist_id uuid,original text,normalized text,grams text[],loose text,loose_grams text[]) WHERE v.normalized<>''`, string(data), textnorm.Version, gen)
 	return err
 }
 

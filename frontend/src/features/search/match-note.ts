@@ -8,7 +8,9 @@ const roleNames: Readonly<Record<MatchRole, string>> = {
   release_artist: "专辑艺人",
   album_artist: "专辑艺人",
   track_artist: "曲目艺人",
+  lyricist: "作词",
   composer: "作曲",
+  arranger: "编曲",
   conductor: "指挥",
   performer: "演奏",
   producer: "制作人",
@@ -23,6 +25,8 @@ const fieldNames: Readonly<Record<MatchField, string>> = {
   credit: "署名",
   label: "厂牌",
   catalog_number: "编号",
+  work_title: "作品",
+  work_catalog: "作品编号",
   artist_name: "艺人",
   artist_alias: "别名",
 };

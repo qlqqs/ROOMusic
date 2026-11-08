@@ -45,6 +45,7 @@ function medium(durations: (number | null)[]): ReleaseMediumDTO {
       bitrate: null,
       cue: null,
       credits: [],
+      work: null,
     })),
   };
 }

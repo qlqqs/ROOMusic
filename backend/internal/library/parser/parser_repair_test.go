@@ -132,11 +132,12 @@ func TestParseM4AWriterAndAllowlistedFreeformMetadata(t *testing.T) {
 	items = append(items, repairM4AFreeform("PRIVATE_NOTE", "must stay unmapped")...)
 	observation := AudioObservation{InferredFields: map[string]bool{}, RawAtoms: map[string]string{}}
 	parseM4AAtoms(repairM4AAtom("ilst", items), &observation)
+	finalizeTags(&observation)
 
 	if observation.Label != "Example Label" || observation.Barcode != "012345678901" {
 		t.Fatalf("M4A freeform metadata 未映射：%+v", observation)
 	}
-	if len(observation.Credits) != 2 || observation.Credits[0] != (metadata.Credit{Role: "composer", Name: "Composer One"}) || observation.Credits[1] != (metadata.Credit{Role: "composer", Name: "Composer Two"}) {
+	if len(observation.Credits) != 2 || observation.Credits[0] != (metadata.Credit{Role: "composer", Name: "Composer One", Source: "tag"}) || observation.Credits[1] != (metadata.Credit{Role: "composer", Name: "Composer Two", Source: "tag"}) {
 		t.Fatalf("M4A composer 未拆分：%+v", observation.Credits)
 	}
 	if observation.RawAtoms["----:PRIVATE_NOTE"] != "" {
@@ -205,9 +206,9 @@ func TestParseFLACRetainsReleaseMetadataAndTrackCredits(t *testing.T) {
 		t.Fatalf("FLAC 发行字段丢失：%+v", observation)
 	}
 	wantCredits := []metadata.Credit{
-		{Role: "composer", Name: "Composer One"},
-		{Role: "composer", Name: "Composer Two"},
-		{Role: "composer", Name: "Composer Three"},
+		{Role: "composer", Name: "Composer One", Source: "tag"},
+		{Role: "composer", Name: "Composer Three", Source: "tag"},
+		{Role: "composer", Name: "Composer Two", Source: "tag"},
 	}
 	if len(observation.Credits) != len(wantCredits) {
 		t.Fatalf("FLAC credits 数量 = %d，期望 %d：%+v", len(observation.Credits), len(wantCredits), observation.Credits)
@@ -862,7 +863,7 @@ func repairUTF16(value string, littleEndian bool) []byte {
 
 func TestSplitCreditNamesUsesArtistRules(t *testing.T) {
 	got := splitCreditNames("Composer Alpha, Composer Beta & Composer Gamma")
-	want := []string{"Composer Alpha", "Composer Beta", "Composer Gamma"}
+	want := []string{"Composer Alpha, Composer Beta", "Composer Gamma"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("credit 拆分结果 = %#v，期望 %#v", got, want)
 	}

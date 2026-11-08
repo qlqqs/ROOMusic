@@ -40,12 +40,24 @@ export const matchFields = [
   "credit",
   "label",
   "catalog_number",
+  "work_title",
+  "work_catalog",
   "artist_name",
   "artist_alias",
 ] as const;
 export type MatchField = (typeof matchFields)[number];
 
-export const matchRoles = ["release_artist", "album_artist", "track_artist", "composer", "conductor", "performer", "producer"] as const;
+export const matchRoles = [
+  "release_artist",
+  "album_artist",
+  "track_artist",
+  "lyricist",
+  "composer",
+  "arranger",
+  "conductor",
+  "performer",
+  "producer",
+] as const;
 export type MatchRole = (typeof matchRoles)[number];
 
 // 一条结果为什么被找到：实际命中的字段与它的原文（不是查询词，也不是规范化后的内部值）。所有字段都必传，允许 null 的不省略。

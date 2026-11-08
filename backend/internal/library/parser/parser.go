@@ -1,5 +1,5 @@
 // Package parser 解析音频文件与 CUE 抄本，只产出安全、有界的事实观察，不读取音乐库之外的位置，
-// 也不写入任何文件。它是叶子包：只依赖标准库、字符集解码库与 catalog/metadata。
+// 也不写入任何文件。它是叶子包：只依赖标准库、字符集解码库、catalog/metadata 与 catalog/classical。
 package parser
 
 import (
@@ -13,6 +13,7 @@ import (
 type AudioObservation struct {
 	Title, Artist, Album    string
 	AlbumArtist             string
+	Compilation             bool
 	TrackNumber, DiscNumber int
 	SourceKind              string
 	Inferred                bool
@@ -27,6 +28,9 @@ type AudioObservation struct {
 	Bitrate                 int
 	Year                    int
 	Genres                  []string
+	Work                    string
+	MovementName            string
+	MovementNumber          int
 	Catalog                 string
 	ISRC                    string
 	SourceType              string
@@ -44,6 +48,9 @@ type AudioObservation struct {
 	// 解析器只提取原文，不解析 LRC。
 	Lyrics       string
 	LyricsSource string
+
+	originalYears [8]int
+	workTags      workTags
 }
 
 const (

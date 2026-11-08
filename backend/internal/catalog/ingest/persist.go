@@ -35,6 +35,7 @@ func PersistCandidate(ctx context.Context, database TxBeginner, scanID, rootID s
 
 // PersistCandidateWithFeedback 在同一候选事务中记录扫描变更；反馈故障不改变核心写入。
 func PersistCandidateWithFeedback(ctx context.Context, database TxBeginner, scanID, rootID string, candidate OrganizedCandidate, feedback *ScanFeedback) (releaseID string, err error) {
+	works := AssignWorks(candidate)
 	tx, err := database.BeginTx(ctx, nil)
 	if err != nil {
 		return "", err
@@ -95,7 +96,7 @@ func PersistCandidateWithFeedback(ctx context.Context, database TxBeginner, scan
 				return "", errUnplannedObservation
 			}
 			var trackID string
-			if trackID, err = persistTrack(ctx, tx, scanID, rootID, mediumID, disc, placedTrack, observation, plan); err != nil {
+			if trackID, err = persistTrack(ctx, tx, scanID, rootID, mediumID, disc, placedTrack, observation, plan, works[observation.RelativePath]); err != nil {
 				return "", err
 			}
 			trackIDs = append(trackIDs, trackID)
@@ -111,7 +112,7 @@ func PersistCandidateWithFeedback(ctx context.Context, database TxBeginner, scan
 				return "", err
 			}
 			for position, credit := range metadata.CanonicalCredits(observation.Credits) {
-				if _, err = tx.ExecContext(ctx, "INSERT INTO track_credits(track_id,role,name,position) VALUES($1::uuid,$2,$3,$4)", trackID, credit.Role, credit.Name, position+1); err != nil {
+				if _, err = tx.ExecContext(ctx, "INSERT INTO track_credits(track_id,role,name,detail,source,position) VALUES($1::uuid,$2,$3,NULLIF($4,''),$5,$6)", trackID, credit.Role, credit.Name, credit.Detail, credit.Source, position+1); err != nil {
 					return "", err
 				}
 			}

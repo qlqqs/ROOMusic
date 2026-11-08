@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/artistgraph"
+	"github.com/qlqq/roomusic/backend/internal/catalog/internal/searchindex"
 	"github.com/qlqq/roomusic/backend/internal/catalog/internal/writegate"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
@@ -51,6 +52,9 @@ func newGraphReviewFixture(t *testing.T, tracers ...pgx.QueryTracer) *graphRevie
 		t.Fatal(err)
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE catalog_projection_state SET search_projection_version=$1 WHERE capability='artists'`, artistgraph.Version); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE catalog_projection_state SET search_projection_version=$1 WHERE capability='search'`, searchindex.ProjectionVersion); err != nil {
 		t.Fatal(err)
 	}
 	f := &graphReviewFixture{t: t, ctx: ctx, db: db, tx: tx, root: uuid.New(), release: uuid.New(), medium: uuid.New(), operation: uuid.New(), scan: uuid.New()}

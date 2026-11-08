@@ -67,7 +67,7 @@ func parseArtistListParams(w http.ResponseWriter, r *http.Request) (catalog.Arti
 		httpserver.WriteError(w, r, 400, "invalid_query", "搜索条件无效")
 		return p, false
 	}
-	p.Role, err = artistReadEnum(r, "role", "", "release_artist", "album_artist", "track_artist", "composer", "conductor", "performer", "producer")
+	p.Role, err = artistReadEnum(r, "role", "", "release_artist", "album_artist", "track_artist", "lyricist", "composer", "arranger", "conductor", "performer", "producer")
 	if err != nil {
 		httpserver.WriteError(w, r, 400, "invalid_artist_role", "署名角色无效")
 		return p, false
@@ -193,7 +193,7 @@ func (h *Handlers) artistTracks(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	role, err := artistReadEnum(r, "role", "", "track_artist", "composer", "conductor", "performer", "producer")
+	role, err := artistReadEnum(r, "role", "", "track_artist", "lyricist", "composer", "arranger", "conductor", "performer", "producer")
 	if err != nil || role == "" {
 		httpserver.WriteError(w, r, 400, "invalid_artist_role", "署名角色无效")
 		return

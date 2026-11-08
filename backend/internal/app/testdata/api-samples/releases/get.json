@@ -13,6 +13,7 @@
     "credits": [
       {
         "artist_refs": [],
+        "detail": null,
         "name": "Sample Orchestra",
         "role": "album_artist"
       }
@@ -105,16 +106,31 @@
             "credits": [
               {
                 "artist_refs": [],
+                "detail": null,
+                "name": "Sample Lyricist",
+                "role": "lyricist"
+              },
+              {
+                "artist_refs": [],
+                "detail": null,
                 "name": "Sample Composer",
                 "role": "composer"
               },
               {
                 "artist_refs": [],
+                "detail": null,
+                "name": "Sample Arranger",
+                "role": "arranger"
+              },
+              {
+                "artist_refs": [],
+                "detail": null,
                 "name": "Sample Conductor",
                 "role": "conductor"
               },
               {
                 "artist_refs": [],
+                "detail": "violin",
                 "name": "Sample Soloist",
                 "role": "performer"
               }
@@ -126,7 +142,8 @@
             "sample_rate": 44100,
             "source": "d1-01.flac",
             "source_kind": "flac_vorbis_comment",
-            "title": "Allegro"
+            "title": "Allegro",
+            "work": null
           },
           {
             "artist": "Sample Soloist",
@@ -138,16 +155,31 @@
             "credits": [
               {
                 "artist_refs": [],
+                "detail": null,
+                "name": "Sample Lyricist",
+                "role": "lyricist"
+              },
+              {
+                "artist_refs": [],
+                "detail": null,
                 "name": "Sample Composer",
                 "role": "composer"
               },
               {
                 "artist_refs": [],
+                "detail": null,
+                "name": "Sample Arranger",
+                "role": "arranger"
+              },
+              {
+                "artist_refs": [],
+                "detail": null,
                 "name": "Sample Conductor",
                 "role": "conductor"
               },
               {
                 "artist_refs": [],
+                "detail": "violin",
                 "name": "Sample Soloist",
                 "role": "performer"
               }
@@ -159,7 +191,8 @@
             "sample_rate": 44100,
             "source": "d1-02.flac",
             "source_kind": "flac_vorbis_comment",
-            "title": "Andante"
+            "title": "Andante",
+            "work": null
           }
         ]
       },
@@ -178,16 +211,31 @@
             "credits": [
               {
                 "artist_refs": [],
+                "detail": null,
+                "name": "Sample Lyricist",
+                "role": "lyricist"
+              },
+              {
+                "artist_refs": [],
+                "detail": null,
                 "name": "Sample Composer",
                 "role": "composer"
               },
               {
                 "artist_refs": [],
+                "detail": null,
+                "name": "Sample Arranger",
+                "role": "arranger"
+              },
+              {
+                "artist_refs": [],
+                "detail": null,
                 "name": "Sample Conductor",
                 "role": "conductor"
               },
               {
                 "artist_refs": [],
+                "detail": "violin",
                 "name": "Sample Soloist",
                 "role": "performer"
               }
@@ -199,7 +247,8 @@
             "sample_rate": 44100,
             "source": "d2-01.flac",
             "source_kind": "flac_vorbis_comment",
-            "title": "Finale"
+            "title": "Finale",
+            "work": null
           }
         ]
       }

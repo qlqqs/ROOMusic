@@ -15,7 +15,7 @@ var ArtistRefsReady = `COALESCE((SELECT status='ready' AND manifest_sealed
  AND search_projection_version=` + strconv.Itoa(artistgraph.Version) + ` AND published_search_projection_version=` + strconv.Itoa(artistgraph.Version) + `
  FROM catalog_projection_state WHERE capability='artists'),FALSE)`
 
-// 角色仅用于查询选择，不进入 ArtistRef DTO：release_artist、album_artist、track_artist、composer、conductor、performer、producer。
+// 角色仅用于查询选择，不进入 ArtistRef DTO：release_artist、album_artist、track_artist、lyricist、composer、arranger、conductor、performer、producer。
 // 每个数组最多传出 101 项供 Go 检测超限，绝不静默截成 100 项。
 // 身份只来自 effective_credits；原文来自对应 name，不能按名字重新解析全局绑定而丢失作用域拆分。
 const artistRefsObject = `jsonb_build_object('artist_id',refs.artist_id::text,'name',refs.spelling,
@@ -71,7 +71,7 @@ var ReleaseCreditArtistRefsProjection = `CASE WHEN ` + ArtistRefsReady + ` THEN 
  SELECT e.artist_id,e.name_id,e.role FROM media m JOIN tracks t ON t.medium_id=m.id
  JOIN artist_effective_credits e ON e.track_id=t.id
  WHERE m.release_id=$1::uuid AND t.source_status='present' AND e.role=credits.role
- AND credits.role IN ('composer','conductor','performer','producer')
+ AND credits.role IN ('lyricist','composer','arranger','conductor','performer','producer')
  ) e JOIN artist_names n ON n.id=e.name_id LEFT JOIN artist_profiles p ON p.artist_id=e.artist_id
  WHERE n.spelling=credits.name OR (credits.role='album_artist' AND credits.name=(
  SELECT album_artist FROM release_effective WHERE id=$1::uuid))

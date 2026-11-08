@@ -14,6 +14,28 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	40: "", // 仅新增可空搜索派生列与索引，往返不需要新版取值。
+	39: `UPDATE tracks SET work_title='Cello Suite, BWV 1007',work_catalog='BWV 1007',work_index=1,
+ movement_number=1,movement_title='Prelude',work_source='tag' WHERE id='c3000000-0000-4000-8000-000000000035';
+ INSERT INTO catalog_search_values(id,track_id,field,position,original_value,normalized_value,normalization_version,projection_generation,short_grams) VALUES
+ ('c5000000-0000-4000-8000-000000000035','c3000000-0000-4000-8000-000000000035','work_title',1,'Cello Suite, BWV 1007','cello suite, bwv 1007',1,1,ARRAY['ce']);`,
+	38: `INSERT INTO track_credits(track_id,role,name,detail,source,position) VALUES
+ ('c3000000-0000-4000-8000-000000000034','lyricist','测试署名','libretto','lyrics',1),
+ ('c3000000-0000-4000-8000-000000000034','arranger','测试署名',NULL,'tag',2),
+ ('c3000000-0000-4000-8000-000000000034','performer','测试演奏者','violin','tag',4),
+ ('c3000000-0000-4000-8000-000000000034','performer','测试演奏者','cello','lyrics',5);
+ INSERT INTO artist_credits(id,track_id,role,name_id,position,layer) VALUES
+ ('c4000000-0000-4000-8000-000000000034','c3000000-0000-4000-8000-000000000034','lyricist','a2000000-0000-4000-8000-000000000001',1,'scan'),
+ ('c4000000-0000-4000-8000-000000000035','c3000000-0000-4000-8000-000000000034','arranger','a2000000-0000-4000-8000-000000000001',2,'scan');
+ INSERT INTO artist_effective_credits(credit_id,track_id,role,name_id,artist_id,position)
+ SELECT id,track_id,role,name_id,'a0000000-0000-4000-8000-000000000001',position
+ FROM artist_credits WHERE track_id='c3000000-0000-4000-8000-000000000034';
+ INSERT INTO artist_tag_evidence(track_id,role,tag_key,occurrence_index,raw_value,source_kind) VALUES
+ ('c3000000-0000-4000-8000-000000000034','lyricist','LYRICIST',0,'测试署名','vorbis'),
+ ('c3000000-0000-4000-8000-000000000034','arranger','ARRANGER',0,'测试署名','vorbis');
+ INSERT INTO catalog_search_values(id,track_id,field,role,position,original_value,normalized_value,normalization_version,projection_generation,short_grams) VALUES
+ ('c5000000-0000-4000-8000-000000000034','c3000000-0000-4000-8000-000000000034','credit','lyricist',1,'测试署名','测试署名',1,1,ARRAY['测试']),
+ ('c5000000-0000-4000-8000-000000000035','c3000000-0000-4000-8000-000000000034','credit','arranger',2,'测试署名','测试署名',1,1,ARRAY['测试']);`,
 	37: "",
 	36: "",
 	35: `UPDATE library_roots SET path='/rollback-relocated',revision=2
@@ -105,6 +127,30 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 				rollbackExec(t, db, `INSERT INTO release_groups(id) VALUES('c1000000-0000-4000-8000-000000000001');
  INSERT INTO releases(id,group_id,title,artist) VALUES('c0000000-0000-4000-8000-000000000001',
  'c1000000-0000-4000-8000-000000000001','迁移测试发行','测试艺人');`)
+			}
+			if m.Version == 38 {
+				// 先存旧版依赖与无细分署名，回退须保留它们并删除新版重复细分。
+				rollbackExec(t, db, `INSERT INTO library_roots(id,path) VALUES('c6000000-0000-4000-8000-000000000034','/synthetic/credit-rollback');
+ INSERT INTO release_groups(id) VALUES('c1000000-0000-4000-8000-000000000034');
+ INSERT INTO releases(id,group_id,title,artist) VALUES('c0000000-0000-4000-8000-000000000034',
+ 'c1000000-0000-4000-8000-000000000034','署名迁移测试发行','测试艺人');
+ INSERT INTO media(id,release_id,position) VALUES('c2000000-0000-4000-8000-000000000034','c0000000-0000-4000-8000-000000000034',1);
+ INSERT INTO tracks(id,medium_id,position,title,artist,source_root_id,relative_path,observed_at) VALUES
+ ('c3000000-0000-4000-8000-000000000034','c2000000-0000-4000-8000-000000000034',1,'署名迁移测试曲目','测试艺人',
+ 'c6000000-0000-4000-8000-000000000034','synthetic-credit.flac',NOW());
+ INSERT INTO track_credits(id,track_id,role,name,position) VALUES
+ ('c7000000-0000-4000-8000-000000000034','c3000000-0000-4000-8000-000000000034','performer','测试演奏者',3);`)
+			}
+			if m.Version == 39 {
+				// 作品附着于旧曲目；回退应只删作品字段与搜索值，不删除曲目本身。
+				rollbackExec(t, db, `INSERT INTO library_roots(id,path) VALUES('c6000000-0000-4000-8000-000000000035','/synthetic/work-rollback');
+ INSERT INTO release_groups(id) VALUES('c1000000-0000-4000-8000-000000000035');
+ INSERT INTO releases(id,group_id,title,artist) VALUES('c0000000-0000-4000-8000-000000000035',
+ 'c1000000-0000-4000-8000-000000000035','作品迁移测试发行','测试艺人');
+ INSERT INTO media(id,release_id,position) VALUES('c2000000-0000-4000-8000-000000000035','c0000000-0000-4000-8000-000000000035',1);
+ INSERT INTO tracks(id,medium_id,position,title,artist,source_root_id,relative_path,observed_at) VALUES
+ ('c3000000-0000-4000-8000-000000000035','c2000000-0000-4000-8000-000000000035',1,'作品迁移测试曲目','测试艺人',
+ 'c6000000-0000-4000-8000-000000000035','synthetic-work.flac',NOW());`)
 			}
 			if m.Version == 34 || m.Version == 35 {
 				// 升级前保留旧类型收据；回退只能移除新类型，不能误删原目录、扫描或操作记录。

@@ -93,6 +93,7 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
   扩展名表统一由 `library/scan_filter.go` 维护；不支持格式按下表诊断、计跳过并保住旧来源，不令 root 不完整。
 - APE/WavPack 共用 APEv2 页脚标签（可位于 ID3v1 之前），文本多值逐个交给 `setAudioTag`，`TRACK`/`DISC` 映射到位置键；
   前封面只接收 JPEG/PNG，畸形标签整段忽略。AIFF 读取 ID3 块，`NAME`/`AUTH` 只补缺失值；缺标签统一使用文件名兜底。
+  三种格式在全部标签读完后、文件名兜底之前统一调用 `finalizeTags`，与 FLAC/MP3 共用专辑艺人、作品/乐章、歌词头部署名和原始年份回退规则；APEv2 的同名作品与署名键直接复用 `setAudioTag`，不另建映射逻辑。
 
 - 扫描只读取 active roots；本地文件或子目录失败按下表诊断并登记保住，不再单独令 root 不完整。只有全根完整的 `succeeded` 才做 missing 对账；成功且 `skipped_files>0` 照常对账。
 
@@ -120,9 +121,11 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 - `0011_scan_staging_and_identity.sql` 增加有界暂存、候选锚点、物理/CUE 身份、音频/CUE 列、字段/归组证据、署名及元数据。
   0010 旧来源身份不兼容（见下方规则）；0032 的列表整理见[多流派合同](./genre-contracts.md)。
 - `0012_track_credits_and_release_metadata.sql` 增加 Release `edition`/`label`/`barcode`
-  以及 `track_credits(track_id,role,name,position)`。逐轨角色由数据库 CHECK allowlist
-  约束，`track_id + role + name` 唯一；重扫先替换该 Track 的 current credits，不能按扫描
-  次数累计。
+  以及 `track_credits`。0034 扩为 `(track_id,role,name,detail,source,position)`，逐轨角色固定为
+  `lyricist → composer → arranger → conductor → performer → producer`。`detail` 为 NULL 或非空且≤256字节的文本，
+  `source` 为 `tag|lyrics`（默认 `tag`）；`UNIQUE NULLS NOT DISTINCT(track_id,role,name,detail)`。
+  `CanonicalCredits` 按角色序、细分（空在前）、名字排序，按角色+名字+细分去重；重扫整体替换，不按扫描次数累计。
+  down 删除新增角色（含艺人事实、原文证据和搜索值），同轨同角色同名保留 position 最小的一条后删新列并恢复旧约束；有效署名级联删除。
 - `0013_track_content_fingerprints.sql` 为 `tracks` 增加 `content_fingerprint`（种类与版本随值保存，≤256 字节）、
   `source_size`、`source_modified_at`，并把 `(source_root_id, relative_path)` 唯一性改为只约束仍持有
   `source_identity` 的行（部分唯一索引），使内容被替换、失去来源身份的旧曲目可与同一路径上的新曲目并存；
@@ -171,11 +174,56 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
   track PERFORMER 的 provenance 分别为 `cue_sheet` 和 `cue_track`，构造每条虚拟 Track
   时复制 `InferredFields`/`FieldSources` map。单轨 CUE 合并到物理观察时，仅 `cue.TrackNumber > 0` 且不是 inferred、
   同时物理轨号缺失或 inferred，才覆盖为 CUE 轨号、清除该字段 inferred 并记来源 `cue_track`；物理显式标签优先，虚拟 CUE 不变。
-- Track artist 与 composer/conductor/performer/producer 使用同一组保守拆分规则：明确的
-  `; `、`；`、` / `、`feat.`、`ft.`、`with`、`、` 可拆分；紧凑 `/`、`,`、`&`
-  只按已固化规则处理，`Simon & Garfunkel`、`Earth, Wind & Fire`、`AC/DC` 等固定组合
-  保持整体。M5 ⑤移除硬编码别名，只按原写法精确去重、排序并以 ` / ` 连接；名字键与主显示名由artistgraph解析，禁止相似度猜人。
-  原始重复标签、种子、同事务解析及重扫不写人工意图的完整规则见[艺人合同](./artist-contracts.md)。
+- **已知边界**：CUE 虚拟轨不继承父音频的 `Credits` / `Compilation`；本次合并保留该既有行为，不改变继承规则。
+
+### 标签多值、署名与合辑（⑥⑦）
+
+- 曲目艺人、专辑艺人及六类曲目署名共用 `metadata.CanonicalArtistNames`：
+  先按 `\r\n`、`\n`、`\r`、NUL 切段，各段完整重走规则，再删其余控制字符与首尾空白。明确分隔符
+  `; `、`；`、` / `、` feat. `、` ft. `、` with `、`、` 区分大小写；` & ` 两侧各含空格时先拆。
+  随后保护固定组合 `Simon & Garfunkel`、`Earth, Wind & Fire`、`AC/DC` 与拉丁“姓, 名”，最后依次拆紧凑 `/`、`,`、`&`；嵌套段也遵守姓名保护。
+  “姓, 名”须恰有一个逗号，两侧各有拉丁字母，仅含拉丁字母、组合附加符、空格及 `. - ' ’`，左侧至多3词、右侧至多4词；
+  各词小写后不得以前缀 `orchest/philharm/symphon/sinfon/ensemble/quartet/quatuor/trio/choir/chorus/chor/consort/singers/players/band` 开头。
+  其余逗号照拆，`Tom & Jerry` 照拆；`Queen, David Bowie` 整体保留是已接受局限。
+  按原写法精确去重，曲目展示排序后以 ` / ` 连接；不按别名改写事实、不猜人。
+  解析署名先拆原文、再逐名 `BoundedText`，不得先删除换行。原始证据与人工意图见[艺人合同](./artist-contracts.md)。
+- `metadata.JoinArtistValues(values ...string) string` 只展开换行/NUL，逐值 `BoundedText`、丢空、原写法去重并保留首次顺序，以 ` / ` 拼接。
+  专辑艺人在 `finalizeTags` 中按级取首个非空级的全部值，之后才调用 `applyFilenameFallback`：
+  Vorbis 为 `ALBUMARTIST → ALBUM_ARTIST → ALBUM ARTIST`；ID3 为 `TPE2 → TXXX:ALBUMARTIST → TXXX:ALBUM_ARTIST/TXXX:ALBUM ARTIST`；
+  M4A 为 `aART → ----:ALBUMARTIST → ----:ALBUM_ARTIST/----:ALBUM ARTIST`。同级合并，全部键记入 `album_artist` 原文证据。
+  ID3 文本帧保留全部 NUL 值；TXXX 按编码解出描述与值，描述去空白转大写后交给通用标签入口。
+- **署名角色表**：`metadata.Credit{Role,Name,Detail,Source}` 的 `detail/source` 随暂存 JSON 保存（空 source 等于 tag）。
+  `MapCreditRole` 与 `MapInstrument` 的表版本为 `CreditRoleTableVersion=1`；匹配先去首尾空白、小写、压连续空白，再去结尾 ` by`，不做相似度匹配。
+  作词/剧本归 lyricist，作曲归 composer，编曲/配器归 arranger，指挥归 conductor，制作人/监制归 producer；
+  `词曲/songwriter/writer` 等一人双产出 lyricist 与 composer。混音、母带、录音、重混、DJ混音、编程归 producer，
+  detail 分别为 `mix/mastering/recording/remix/dj_mix/programming`；剧本为 `libretto`，声乐/和声及乐器归 performer。
+  乐器写法和别名只取 `metadata/credit_roles.go` 的小表，不搬外部大表、不展开方括号修饰。
+- **署名来源**：Vorbis、M4A `com.apple.iTunes` freeform、ID3 TXXX 支持
+  `COMPOSER/LYRICIST/WRITER/ARRANGER/CONDUCTOR/PRODUCER/MIXER/ENGINEER/REMIXER/MIXARTIST/DJMIXER/PERFORMER/PERFORMERS/SOLOIST/SOLOISTS/ENSEMBLE/ORCHESTRA/LIBRETTIST`；
+  `ENSEMBLE/ORCHESTRA` 为 performer + orchestra，未知键忽略。ID3 `TCOM/TEXT/TPE3` 分别为作曲/作词/指挥，M4A `©wrt` 为作曲。
+  `TIPL/IPLS` 按 NUL 成对读取工种、人名；`TMCL` 按 NUL 成对读取乐器、人名，落单尾值丢弃。
+  未知 TIPL/IPLS 工种归 producer，未知 TMCL 乐器归 performer，detail 保留去首尾空白后的原写法（≤256字节）。
+  署名键原文照常记艺人证据，多角色取第一个；成对入口的 tag_key 为 `TIPL:<工种>`、`IPLS:<工种>`、`TMCL:<乐器>`（≤128字节），歌词不写标签证据。
+- **演奏括号**：`PERFORMER(S)/SOLOIST(S)` 先用 `metadata.SplitExplicitArtistValues` 按换行/NUL及⑥明确分隔符列表切段（与 `artist.go` 共用来源），再逐段解析末尾中英文圆括号，最后对拆出的名字执行完整姓名拆分。第1步按中英文圆括号 `()`/`（）` 的深度只切括号外的明确分隔符，括号内内容完整交给第2步按逗号、顿号、` & `、` and ` 拆乐器或角色；不使用占位符、不扩展多段括号语法，TMCL 成对入口不变。括号内按原乐器规则切段，
+  先查乐器表，再查角色表；未知且只含拉丁字母、空格、连字符时保留为 performer 的原写法细分。
+  任一段未知且含其他文字则整串保留为姓名（如 `测试艺人（测试别名）`）；成功拆出的人名再按共用姓名规则拆分。
+- **歌词开头署名**：全部标签读完、歌词规范化后在 `finalizeTags` 读取最多前30行，不改变歌词原文或显示。
+  每行去行首连续 LRC 方括号标签及首尾空白，空行/纯标签行跳过；其余须为1–16字符标签加中英文冒号和值。
+  署名块开始前最多跳过一行媒体题头作为元信息：去标签及首尾空白后，行等于解析出的非空 `Title`，或以 `Title + 空白 + - + 空白` 开头（也接受 `–`、`—`，标题比较忽略大小写）；`Title` 为空不跳过，不使用文件名补位，已读到署名行后不再跳过题头，其它非署名行仍结束署名块。
+  标签按 `/、&` 拆子标签，先整体查角色/乐器表，未命中再按连续中文段、拉丁段查表；至少一项命中才是署名行，首次非署名行结束整个块。
+  所有命中项均产出；没有细分的角色 detail 为空，带细分的工种与乐器保留命中子标签原文（如“混音工程师”“Guitar”），不改成标签来源的规范键。
+  名字按共用规则拆分并去掉 `@` 起的团体/工作室后缀（去后为空则保留原文），`Source="lyrics"`；某角色已有 tag 署名时，该角色全部歌词署名丢弃。
+  现分支尚无④增量扫描，下一次扫描重新解析；不新增 CommonVersion，沿用整合后的艺人图/搜索投影版本4/2，不改 textnorm.Version。
+- `AudioObservation.Compilation bool` 经 scanner 原样传给 `SourceObservation.Compilation`（JSON `compilation,omitempty`）。
+  Vorbis 的 `COMPILATION/ITUNESCOMPILATION`、ID3 的 `TCMP/TXXX:COMPILATION`、M4A 的 `----:COMPILATION` 去空白、小写后任一为
+  `1/yes/true/compilation` 即为真；M4A `cpil` 为单字节非零整数时为真，0为假。
+  organizer 保留真实专辑艺人；否则发行艺人是合辑占位词或非 `folder` 观察的标志严格过半时，决定 `artist="群星"`、清除专辑艺人决定，
+  保留原 artist 候选，写 `source=compilation`、`rule_id=compilation_v1`、`confidence=high`、`action=auto_apply`。不改变 partition/分组。
+- 本版 `Year==0` 时才按 `ORIGINALDATE → ORIGINALYEAR → TDOR → TORY → TXXX:ORIGINALDATE → TXXX:ORIGINALYEAR → ----:ORIGINALDATE → ----:ORIGINALYEAR`
+  取首个可解析年份；不另存原始年份字段。流派仍遵守[多流派合同](./genre-contracts.md)，不随艺人规则改变。
+
+### 发行候选、抓轨与封面
+
 - 缺失 `AlbumArtist` 表示未知，不是与唯一明确值冲突：相同权威 album 下只有一个明确
   `AlbumArtist` 时，缺失值与该 partition 兼容；出现多个明确值时仍按多数决或稳定拆分。
   生成 Release artist/credit 时，只要存在明确 `AlbumArtist`，就先在这些值之间决策，
@@ -234,13 +282,32 @@ M5 新增全根预计数、逐根加权进度与事务内变更记账；候选/�
 - 推断成功的轨号、碟号与艺人沿用来源 `filename_fallback`，仍标 inferred；文件名碟号不能覆盖 `album_title`。最终非合成候选碟号优先级为标签 → CUE → 专辑名 → 碟目录 → 文件名 → 1。一个介质内文件名轨号彼此重复，或与标签轨号重复时，该介质**全部**文件名轨号作废后补位，标签不动。
 - `naturalLess` 比较连续数字段和非数字段：数字去前导零后先比长度、再比字面，不转整数；数值相同则前导零少者在前；非数字按字节比较。补位按 `RelativePath` 自然序，相等再按 `observationSortKey`，保留显式轨位与有效文件名轨位。
 - 标题仅在 inferred 且来源为 `filename_fallback` 时清洗：去采信编号前缀及紧随的空白、点、下划线、短横线，再去首尾空白，结果空则保留 stem。纯数字前缀为整个 stem；第 2、3 级取到编号末尾；第 5 级只在匹配从开头开始时去前缀；第 4 级不去末尾数字。
-- 在上述文件名标题中，仅当艺人 inferred 且来源为 `display_fallback`，并恰好含一个 ` - `、两边非空且左边不全为数字时，拆为艺人与标题。两者仍 inferred；写入展示复用 `metadata.CanonicalTrackArtist`，不复制艺人拆分规则。已有标题/艺人标签不被覆盖。`artistgraph` 接受来源为 `filename_fallback` 的 inferred 曲目艺人，其他 inferred 曲目艺人仍跳过，文件名艺人可以进入艺人页与收藏。判定使用 `track_observations` 中 `field_name='artist'` 那行的 `source_kind`：预处理写 `FieldSources["artist"]`，经 `fieldObservations()` 取为 `field.SourceKind`，由 `PersistCandidate` 写入该列；不是 `tracks.source_kind` 的物理/CUE 来源；本分支 `artistgraph.Version` 从 2 升到 3，T 线合入时由整合会话再次协调版本。
+- 在上述文件名标题中，仅当艺人 inferred 且来源为 `display_fallback`，并恰好含一个 ` - `、两边非空且左边不全为数字时，拆为艺人与标题。两者仍 inferred；写入展示复用 `metadata.CanonicalTrackArtist`，不复制艺人拆分规则。已有标题/艺人标签不被覆盖。`artistgraph` 接受来源为 `filename_fallback` 的 inferred 曲目艺人，其他 inferred 曲目艺人仍跳过，文件名艺人可以进入艺人页与收藏。判定使用 `track_observations` 中 `field_name='artist'` 那行的 `source_kind`：预处理写 `FieldSources["artist"]`，经 `fieldObservations()` 取为 `field.SourceKind`，由 `PersistCandidate` 写入该列；不是 `tracks.source_kind` 的物理/CUE 来源；O/T 两线分别从 2 升到 3，合并后统一 `artistgraph.Version=4`，确保两线的艺人投影变化均触发重整。
 - `continuousAlbum(pairs []discTrack) bool`：至少 2 首，轨号均正；碟号小于 1 按 1，每碟轨号恰好 1..n，无缺无重，必须有第 1 碟，允许缺中间碟号。两种取数任一通过即可：混合模式按上述碟号优先级、轨号标签优先再文件名（冲突保护前）；文件名模式只取文件名轨号、碟号取文件名再碟目录再 1。不用自然序补位结果作归组证据。
 - 仅 `ordinary_directory`、`box_leaf` 做同目录新判定，不含注册根散曲或已合成多碟。先检查格式切分；不切分时保留现有多数决；仅原规则会按 partition 拆成 `same_dir_split` 时用整目录连续性合并，包括缺少专辑标签的观察。字段仍按 `chooseValue` 多数决并保留 `inconsistent_candidates`。
 - 格式键为小写 `Codec`，空则取相对路径扩展名小写并去前导点（如 `.flac` 归为 `flac`，与已有编码键一致）。至少两种格式、每个格式子集连续（同上两种取数，但允许 1 首）、整组存在重复碟轨，三者同时成立才切分。候选种类 `CandidateFormatSplit = "format_split"`，`Anchor.Scope = 目录`、`Anchor.Partition = "format:<格式键>"`；`stableAnchorPartition` 保留格式 partition，`VersionGroup = "format:" + 目录`。REST 的 `candidate_kind` 白名单接受 `format_split`，响应形状不变。格式版本按切分前的候选种类选择标题兜底：原 `box_leaf` 继承 Box 叶子的 Prefix 兜底及 `disc_dir_prefix_fallback_v1`，原普通目录仍走普通目录规则。
 - `OrganizedCandidate.VersionGroup string` 标识本次整理的版本批；`JoinGroupID string` 由 scanner 填，不由 organizer 生成。`PlannedVersionGroup(ctx context.Context, database queryer, scanID, rootID string, candidates []OrganizedCandidate) (string,error)` 返回已规划沿用 Release 的候选中候选键最小者所在的组，全部新建则为空；`ReleaseGroupOf(ctx context.Context, database queryer, releaseID string) (string,error)` 返回发行的组。查询错误向上传递，不伪造空组。
 - scanner 对 scope 内每个 `VersionGroup` 先定目标组，逐候选填 `JoinGroupID`、独立短事务写入；目标为空时从第一个成功写入发行取组，供后续新建版本使用。`persistOneCandidate` 返回 Release ID；仅 `plannedReleaseID == "" && JoinGroupID != ""` 时新建 Release 引用已有组而不新建组。沿用 Release 的组永不移动，即使管理员已把两个版本分到不同组。目标组读取或候选保存失败按 `catalog_write_failure` 令根不完整，已提交候选保留。
 - 新建版本引用已有组只取外键共享锁，不改组的 `default_release_id` / `edit_revision`，不额外调整代表版本或搬移人工修正；既有发行锁与反馈锁顺序仍按[扫描反馈合同](./scan-feedback-contracts.md)。没有新增迁移；② 的腾空旧组收藏转移照常生效。
+
+### 古典作品与乐章（⑧，迁移 0039）
+
+- `catalog/classical` 只依赖标准库；`ParseCatalogs` 返回 `CatalogEntry{System,Number,Partial,Start,Length}`，位置按 rune；`CatalogSortKey` 只替换 `:/-` 为空格并折叠连续空格，不裁首尾。内置 Op/Opus/作品、WoO、H/Hob、BWV、KV/K、D、RV、HWV；无数字不解析，串首不匹配，每体系只留首条，共享抹白数组。编号与左边界只认 ASCII 字母数字，避免吞中文“号”；卷号保留 `I:94` 形式。
+- `AudioObservation` 与暂存 `SourceObservation` 新增 `Work/MovementName/MovementNumber`，JSON 为 `work/movement_name/movement_number,omitempty`。文本经 `BoundedText`，同级取首个非空值，读完全部标签后按优先级选取，不受文件内键顺序影响。
+
+| 容器 | 作品 | 乐章名 | 乐章号 |
+| --- | --- | --- | --- |
+| Vorbis、通用扩展标签 | WORK | MOVEMENTNAME，其次非数字 MOVEMENT | MOVEMENTNUMBER，其次数字或 n/m 的 MOVEMENT |
+| ID3 | TIT1，其次 TXXX:WORK | MVNM | MVIN（n/m 取 n） |
+| M4A | ©wrk，其次 ----:WORK | ©mvn | ©mvi（16 位整数） |
+
+- TXXX 与 `com.apple.iTunes` freeform 复用通用键入口；原生键优先。TIT1 只有同文件存在非空 MVNM/MVIN，或能解析出作品编号时才作作品，否则用 WORK 回退。MOVEMENTTOTAL、©mvc、分母不保存；非正数或超出 INTEGER 的乐章号不保存。
+- `AssignWorks(OrganizedCandidate) map[string]WorkAssignment` 在 `PersistCandidateWithFeedback` 开头计算一次，按碟号、轨位排序；键为规范化相对路径。`WorkAssignment{Title,Catalog,Index,MovementNumber,MovementTitle,Source}` 交给 `persistTrack`，规划阶段不计算，不改变发行/曲目身份或 organizer。
+- 有 WORK 总按标签写 `Source="tag"`，不受流派限制；乐章名缺失时只剥曲目标题开头的“作品名 + `: `、`：`、` - `、`, `、`，`”。其余连续无 WORK 段，仅扫描候选流派经 `GenreKey` 等于 `classical/classic/classique/klassik/clásica/clasica/classica/クラシック/클래식` 或包含“古典”时调用 `SplitWorks`，来源为 `title`；人工修正流派不触发重算，Classical Crossover、Neo-Classical 不在名单。
+- `SplitWorks` 返回 `WorkSplit{Work,Movement,Group}`。括号归一化只用于判定，切分取原文；保留空格闸门、调性/缩写/时间戳例外，补全角分隔符闸门及罗马、阿拉伯、“第N乐章”的反向定位。`Concerto: 1. Allegro / 2. Adagio` 由已确认的原文前导定位作品，不放宽公开 `Segments` 的闸门。单曲推断组不产出任何字段。
+- 相邻作品名去首尾空白、小写相同且来源相同才可成组；标签乐章号都有值时须递增，相邻非空乐章名重复则断组，`promenade` 除外；无名不算同名。标题来源以 `SplitWorks.Group` 为准。只给至少两轨的组分配发行内从 1 递增的 Index；单轨标签仍保存作品供搜索。CUE 虚拟轨按 CUE TITLE 参与。重复规则按相邻语义，不采用参考伪码仅首曲更新 lastPart 的错误。
+- Catalog 取 `ParseCatalogs(Title)` 第一项的原文片段并裁首尾空白。六列 `work_title/work_catalog/work_index/movement_number/movement_title/work_source` 重扫整体替换，无作品全部 NULL；两个标题非空且≤4096字节，编号非空且≤256字节，序号正数，来源 `tag|title`。作品名与来源同空同有，无作品名不得有其他作品列；违反 CHECK 走既有候选写入失败路径。
+- down 先删 `work_title/work_catalog` 搜索值、恢复字段 CHECK，再删作品约束与六列。④尚未合入，不新增或提升解析/归组版本；⑥已提升的 `ProjectionVersion=2` 不再升，`textnorm.Version=1` 不变。读取形状见[REST合同](./catalog-rest-contracts.md)，搜索见[搜索合同](./search-contracts.md)，验证内容见[扫描验证](./library-scan-verification.md)。
 
 ### 根保存后的专辑收藏转移
 
@@ -305,7 +372,22 @@ APEv2、ID3、`NAME`/`AUTH` 标签的变化不改变指纹；帧数据或关键�
 | rip log 无明确签名、签名晚于 64 KiB 或为 symlink | 不产生 CD 语义，不读取超出预算的内容 |
 | 明确 rip log 与 `folder` 补充值并存 | 选定 CD 并把 decision provenance 提升为 `rip_log`；不得保留重复字段决定 |
 | 明确 rip log 与 tag/CUE/音频规格决定冲突 | 保留明确来源，不允许抓轨日志覆盖 |
-| 多艺人/credit 含明确分隔符或明确别名 | 按保守规则拆分、原写法去重；身份同键归一由后端投影负责，固定组合名不得误拆 |
+| 艺人/credit 含换行或 NUL | 先切段再清理，不能把两个名字粘连；固定组合与拉丁姓名保护按第3节执行 |
+| TIT1 没有乐章标签且解析不出作品编号 | 忽略分组值，仍可回退到 WORK |
+| 非古典扫描流派且没有 WORK | 不从标题推断作品；有 WORK 不受流派限制 |
+| 标签作品只有一轨 | 保存作品供搜索，work_index 为 NULL，REST work 为 null |
+| 乐章号非正数或超出 INTEGER | 不保存序号，不使合法作品名失效 |
+| 作品列违反非空、长度、正数或关联 CHECK | 候选事务回滚，按既有 catalog_write_failure 记录；不吞错 |
+| TIPL/IPLS/TMCL 奇数个值 | 只丢最后落单项，已成对的署名保留 |
+| 未知工种或乐器 | TIPL/IPLS 归制作人、TMCL 归演奏并保留细分；未知普通标签键忽略 |
+| 演奏括号含未知非拉丁文字 | 整个原文作为姓名，不把别名猜成乐器 |
+| 歌词头部首个非署名行 | 停止提取，之后的署名形状行不读取；歌词原文不变 |
+| 同角色同时有标签与歌词署名 | 全部采用标签来源，不合并该角色的歌词署名 |
+| 专辑艺人高优先级为空或多值 | 回退到首个非空级，展开该级全部值，不采用最后写入值 |
+| TXXX 描述/值编码无效、缺终止符，或帧压缩/加密 | 跳过该帧，不使整个文件解析失败；证据超预算仍按既有规则失败 |
+| 无真实专辑艺人，合辑标志恰好半数 | 不因标志判合辑；必须严格过半，目录观察不计票 |
+| 有真实专辑艺人且合辑标志为真 | 保留真实专辑艺人，不改发行决定 |
+| 本版年份存在且原始年份更早 | 保留本版年份，不覆盖 |
 | 相同 album 的部分 Track 缺少 AlbumArtist，且其它 Track 只有一个明确值 | 保持同一候选，明确 AlbumArtist 优先于 Track Artist |
 | 命名 folder artwork 非普通文件、为空、超限或格式损坏，且所有查找目录里没有别的可用封面 | `artwork_unreadable`，root 仍完整，保留已有关系，不解释为封面删除 |
 | 前一个目录里的命名封面无效，后一个目录里有可用封面 | 用后一个目录的封面，不报错 |
@@ -326,7 +408,9 @@ APEv2、ID3、`NAME`/`AUTH` 标签的变化不改变指纹；帧数据或关键�
 | 扫描成功且所有 root 完整 | 允许负向 `missing` 对账 |
 | 非音频附件 | 忽略，不改变扫描完整性 |
 
-## 5. 正确、基准与错误案例
+## 5. 案例
+
+T 线标签、署名与作品的补充验证见[目录与扫描流程验证与示例](./library-scan-verification.md)。以下保留目录、文件与归组验证。
 
 - 基准：重复 POST 已停用目录返回 disabled；管理员随后使用 restore 端点显式恢复。
 - 正确：NAS 新位置包含同样的相对路径与音频，改路径后 root ID 不变，下一次成功扫描沿用 Track/Release UUID，个人数据与修正不迁移。
@@ -342,7 +426,7 @@ APEv2、ID3、`NAME`/`AUTH` 标签的变化不改变指纹；帧数据或关键�
   日志保持未知。
 - 正确：目录名先补了 WEB/CD 等来源值，但同 candidate 存在明确 EAC/XLD 日志时，
   抓轨规则可以替换 `folder` 决定；tag 或 CUE 的明确来源仍保持不变。
-- 正确：`Artist Beta, Artist Alpha` 作为 Track artist 被拆分后以稳定顺序展示；已登记的
+- 正确：`Artist Beta / Artist Alpha` 作为 Track artist 被拆分后以稳定顺序展示；已登记的
   别名不再改写事实显示名，固定组合名不会因包含 `/`、`,` 或 `&` 被误拆。
 - 正确：一张专辑只有一轨提供 `AlbumArtist`、其余轨只提供各自 Artist 时仍形成一个
   candidate，Release artist 与 credit 使用明确 `AlbumArtist`；缺失轨不伪造自己的 tag。

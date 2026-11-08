@@ -9,19 +9,15 @@ import (
 )
 
 func artistTagRole(key string) string {
-	switch strings.ToUpper(key) {
+	key = strings.TrimPrefix(strings.TrimPrefix(strings.ToUpper(key), "TXXX:"), "----:")
+	switch key {
 	case "ARTIST", "TPE1", "IART", "©ART":
 		return "track_artist"
-	case "ALBUMARTIST", "ALBUM ARTIST", "TPE2", "AART":
+	case "ALBUMARTIST", "ALBUM_ARTIST", "ALBUM ARTIST", "TPE2", "AART":
 		return "album_artist"
-	case "COMPOSER", "TCOM", "©WRT":
-		return "composer"
-	case "CONDUCTOR", "TPE3":
-		return "conductor"
-	case "PERFORMER", "PERFORMERS":
-		return "performer"
-	case "PRODUCER":
-		return "producer"
+	}
+	if assignments := creditTagRoles(key); len(assignments) > 0 {
+		return assignments[0].Role
 	}
 	return ""
 }
@@ -70,7 +66,7 @@ func artistEvidenceDisplay(evidence []metadata.ArtistTagEvidence, role string) s
 		if entry.Role != role {
 			continue
 		}
-		for _, name := range metadata.CanonicalArtistNames(metadata.BoundedText(entry.RawValue)) {
+		for _, name := range metadata.CanonicalArtistNames(entry.RawValue) {
 			names[name] = true
 		}
 	}

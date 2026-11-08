@@ -67,7 +67,7 @@ func snapshotFeedbackGraph(ctx context.Context, tx *sql.Tx, after bool) error {
   SELECT 'track',t.id,t.source_status='present',md5(jsonb_build_array(
    t.title,t.artist,t.position,t.disc_number,COALESCE(t.duration_seconds,0),COALESCE(t.codec,''),COALESCE(t.sample_rate,0),COALESCE(t.channels,0),COALESCE(t.bitrate,0),COALESCE(t.bit_depth,0),
    t.source_kind,t.cue_index_frames,t.cue_end_frames,COALESCE(t.cue_isrc,''),COALESCE(t.lyrics,''),COALESCE(t.lyrics_source,''),
-   COALESCE((SELECT jsonb_agg(jsonb_build_array(c.role,c.name) ORDER BY c.role,c.name) FROM track_credits c WHERE c.track_id=t.id),'[]'::jsonb))::text),
+   COALESCE((SELECT jsonb_agg(jsonb_build_array(c.role,c.name,c.detail) ORDER BY c.role,c.detail NULLS FIRST,c.name) FROM track_credits c WHERE c.track_id=t.id),'[]'::jsonb))::text),
    md5(jsonb_build_array(t.source_root_id,t.relative_path,t.cue_sheet_path,t.cue_parent_relative_path,t.cue_referenced_file)::text),
    m.release_id,r.group_id,'' FROM tracks t JOIN scan_feedback_tracks s ON s.id=t.id
    JOIN media m ON m.id=t.medium_id JOIN releases r ON r.id=m.release_id`,

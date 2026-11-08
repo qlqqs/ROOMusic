@@ -183,7 +183,8 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 		m.id::text,m.position,m.title,
 		t.id::text,t.title,t.artist,t.position,t.relative_path,t.source_kind,
 		NULLIF(dd.duration_seconds,0),NULLIF(BTRIM(t.codec),''),NULLIF(t.bit_depth,0),NULLIF(t.sample_rate,0),NULLIF(t.channels,0),NULLIF(t.bitrate,0),
-		t.cue_index_frames,t.cue_end_frames,NULLIF(BTRIM(t.cue_isrc),''),`+releasesql.TrackArtistRefsProjection+`
+		t.cue_index_frames,t.cue_end_frames,NULLIF(BTRIM(t.cue_isrc),''),`+releasesql.TrackArtistRefsProjection+`,
+		t.work_index,t.work_title,t.movement_title
 		FROM media m
 		JOIN tracks t ON t.medium_id=m.id AND t.source_status='present'
 		LEFT JOIN track_display_durations dd ON dd.track_id=t.id
@@ -211,13 +212,14 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 		var mediumPosition, trackPosition int
 		var artistRefs []byte
 		var duration sql.NullFloat64
-		var codec, isrc sql.NullString
-		var bitDepth, sampleRate, channels, bitrate, cueIndex, cueEnd sql.NullInt64
+		var codec, isrc, workTitle, movementTitle sql.NullString
+		var bitDepth, sampleRate, channels, bitrate, cueIndex, cueEnd, workIndex sql.NullInt64
 		if err := rows.Scan(
 			&mediumID, &mediumPosition, &mediumTitle,
 			&trackID, &trackTitle, &trackArtist, &trackPosition, &sourcePath, &sourceKind,
 			&duration, &codec, &bitDepth, &sampleRate, &channels, &bitrate,
 			&cueIndex, &cueEnd, &isrc, &artistRefs,
+			&workIndex, &workTitle, &movementTitle,
 		); err != nil {
 			return nil, err
 		}
@@ -244,6 +246,13 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 			Channels:        releasesql.IntPointerFromNull(channels),
 			Bitrate:         releasesql.IntPointerFromNull(bitrate),
 			Credits:         []ReleaseCredit{},
+		}
+		if workIndex.Valid {
+			track.Work = &ReleaseTrackWork{
+				Index:    int(workIndex.Int64),
+				Title:    workTitle.String,
+				Movement: releasesql.StringPointerFromNull(movementTitle),
+			}
 		}
 		track.ArtistRefs, err = decodeArtistRefs(artistRefs)
 		if err != nil {
@@ -272,7 +281,7 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 		return nil, err
 	}
 	creditRows, err := s.database.QueryContext(ctx, `SELECT
-		t.id::text,c.role,c.name,`+releasesql.TrackCreditArtistRefsProjection+`
+		t.id::text,c.role,c.name,c.detail,`+releasesql.TrackCreditArtistRefsProjection+`
 		FROM track_credits c
 		JOIN tracks t ON t.id=c.track_id AND t.source_status='present'
 		JOIN media m ON m.id=t.medium_id
@@ -292,7 +301,7 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 		var trackID string
 		var credit ReleaseCredit
 		var refs []byte
-		if err := creditRows.Scan(&trackID, &credit.Role, &credit.Name, &refs); err != nil {
+		if err := creditRows.Scan(&trackID, &credit.Role, &credit.Name, &credit.Detail, &refs); err != nil {
 			return nil, err
 		}
 		credit.ArtistRefs, err = decodeArtistRefs(refs)
@@ -322,7 +331,7 @@ func (s *Store) LoadReleaseMedia(ctx context.Context, releaseID string) ([]Relea
 // LoadReleaseCredits 读取专辑级署名。专辑艺人有人工修正时，扫描写入的 album_artist 署名被修正值取代，
 // 与头部显示的有效专辑艺人一致；其余署名原样。
 func (s *Store) LoadReleaseCredits(ctx context.Context, releaseID string) ([]ReleaseCredit, error) {
-	rows, err := s.database.QueryContext(ctx, `SELECT role,name,`+releasesql.ReleaseCreditArtistRefsProjection+` FROM (
+	rows, err := s.database.QueryContext(ctx, `SELECT role,name,NULL::text,`+releasesql.ReleaseCreditArtistRefsProjection+` FROM (
 			SELECT credit.role,credit.name,credit.position
 			FROM release_credits credit
 			WHERE credit.release_id=$1::uuid
@@ -345,7 +354,7 @@ func (s *Store) LoadReleaseCredits(ctx context.Context, releaseID string) ([]Rel
 		}
 		var credit ReleaseCredit
 		var refs []byte
-		if err := rows.Scan(&credit.Role, &credit.Name, &refs); err != nil {
+		if err := rows.Scan(&credit.Role, &credit.Name, &credit.Detail, &refs); err != nil {
 			return nil, err
 		}
 		credit.ArtistRefs, err = decodeArtistRefs(refs)

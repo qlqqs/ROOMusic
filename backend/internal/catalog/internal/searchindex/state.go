@@ -10,7 +10,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/catalog/textnorm"
 )
 
-const ProjectionVersion = 1
+const ProjectionVersion = 2
 
 var ErrVersionMismatch = errors.New("catalog search projection version mismatch")
 

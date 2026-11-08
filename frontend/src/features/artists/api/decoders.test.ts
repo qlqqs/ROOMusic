@@ -19,6 +19,7 @@ const contracts: readonly [string, Decoder][] = [
 const detail = decodeArtistDetail(sampleBody("artists/detail"));
 const queue = decodeArtistQueue(sampleBody("artists/queue"));
 const albumPage = decodeArtistAlbumsPage(sampleBody("artists/albums"));
+const roles = ["release_artist", "album_artist", "track_artist", "lyricist", "composer", "arranger", "conductor", "performer", "producer"];
 // participation=any 暂无真实样本：只在真实专辑摘要上补已裁决的角色，不能把它报告为真实响应往返。
 const participation = { ...albumPage, items: albumPage.items.map((item) => ({ ...item, roles: ["composer"] })) };
 
@@ -90,13 +91,17 @@ describe("艺人摘要、名字与详情边界", () => {
       for (const field of Object.keys(value)) expect(() => decodeArtistDetail(without(detail, [...prefix, field])), field).toThrow(d.DecodeError);
     }
   });
-  it("七种角色与合法首字母可接受，角色数组八项拒绝", () => {
-    const roles = ["release_artist", "album_artist", "track_artist", "composer", "conductor", "performer", "producer"];
+  it("九种角色与合法首字母可接受，角色数组十项拒绝", () => {
     for (const initial of [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ", "kana", "#"]) {
       expect(decodeArtistDetail({ ...detail, artist: { ...detail.artist, initial_group: initial, roles } }).artist.roles).toEqual(roles);
     }
+    const roleCounts = roles.map((role) => ({ ...first(detail.role_counts), role }));
+    for (const size of [8, 9]) {
+      const body = { ...detail, artist: { ...detail.artist, roles: roles.slice(0, size) }, role_counts: roleCounts.slice(0, size) };
+      expect(decodeArtistDetail(body)).toStrictEqual(body);
+    }
     expect(() => decodeArtistDetail({ ...detail, artist: { ...detail.artist, roles: [...roles, "composer"] } })).toThrow(d.DecodeError);
-    expect(() => decodeArtistDetail({ ...detail, role_counts: Array(8).fill(first(detail.role_counts)) })).toThrow(d.DecodeError);
+    expect(() => decodeArtistDetail({ ...detail, role_counts: [...roleCounts, first(roleCounts)] })).toThrow(d.DecodeError);
   });
   it("详情首批名字最多20条，总数不可少于已返回名字", () => {
     const names = Array.from({ length: 20 }, (_, index) => ({ ...first(detail.names), id: idOf(index) }));
@@ -138,8 +143,12 @@ describe("艺人分页边界", () => {
     expect(decodeArtistParticipationAlbumsPage(participation)).toStrictEqual(participation);
     expect(first(decodeArtistParticipationAlbumsPage(participation).items).credited_release_id).toBe(first(albumPage.items).credited_release_id);
     expect(() => decodeArtistParticipationAlbumsPage(without(participation, ["items", 0, "roles"]))).toThrow(d.DecodeError);
-    for (const roles of [null, [], ["singer"], Array(8).fill("composer")]) {
-      expect(() => decodeArtistParticipationAlbumsPage(withValue(participation, ["items", 0, "roles"], roles))).toThrow(d.DecodeError);
+    for (const size of [8, 9]) {
+      const body = withValue(participation, ["items", 0, "roles"], roles.slice(0, size));
+      expect(decodeArtistParticipationAlbumsPage(body)).toStrictEqual(body);
+    }
+    for (const invalidRoles of [null, [], ["singer"], [...roles, "composer"]]) {
+      expect(() => decodeArtistParticipationAlbumsPage(withValue(participation, ["items", 0, "roles"], invalidRoles))).toThrow(d.DecodeError);
     }
   });
 });

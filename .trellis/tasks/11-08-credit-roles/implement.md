@@ -18,7 +18,7 @@
    - `mp3.go`：帧白名单加 `TEXT`、`TIPL`、`IPLS`、`TMCL`；成对解析。
    - `m4a.go`：freeform 署名键走角色表。
    - `lyrics_credits.go`（新文件）：design §3.4（角色表与乐器表命中的子标签全部读；带细分的存歌词原写法；名字去 `@` 后缀；同角色已有标签署名时丢弃歌词来源）；在 ⑥ 的 `finalizeTags` 里调用。
-4. 迁移（线内草号 0034，含 `.down.sql`）：design §3.5；先在隔离库应用到 0033 后用 `\d` 核对约束名。`migrations_rollback_integration_test.go` 的 `rollbackFixtures` 补新角色与 detail 数据。
+4. 迁移（合入编号 0038，含 `.down.sql`）：design §3.5；先在隔离库应用到 0033 后用 `\d` 核对约束名。`migrations_rollback_integration_test.go` 的 `rollbackFixtures` 补新角色与 detail 数据。
 5. `catalog/ingest/persist.go`：`INSERT INTO track_credits` 增加 `detail`、`source`。
 6. `catalog/internal/artistgraph/facts.go`：credits 读取后按 `(track, role, name)` 去重再建事实（否则同一语句里 `ON CONFLICT` 二次命中报错）；`bracket.go` 排除词加乐器表写法。
 7. `catalog/internal/searchindex/values.go`：`appendCredit` 角色白名单加两项。
@@ -74,3 +74,7 @@ cd ../frontend && npx vitest run src/features/catalog src/features/artists src/f
 - [ ] 前后端同批合入（解码器严格枚举，后端单独上线会让旧前端整页解码失败）。
 - [ ] 真实库 smoke：在本机隔离实例上对 `music/` 扫描，作词、编曲署名数量与 design §6 预期一致，曲目艺人与专辑艺人数量不变。
 - [ ] 本机 smoke 中歌词来源的制作人或监制约 23 首、作词与编曲各约 38 首（design §6），曲目行原写法细分显示正确。
+
+## 2026-11-08 合入 main 对齐
+
+O 线与 T 线各自已将 `artistgraph.Version` 提升到 3；整合后统一为 4，避免已有版本 3 的投影漏回填。`searchindex.ProjectionVersion=2`、`textnorm.Version=1` 保持不变。下述线内升级/回滚说明是原实施背景，合并后的回滚须连同 O 线规则判断，不能只回退版本常量。

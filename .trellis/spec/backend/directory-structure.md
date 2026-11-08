@@ -202,3 +202,7 @@ current [Core 0 PRD](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/p
 `catalog/internal/artistgraph`仅依赖textnorm、metadata、searchindex、uuid，负责事实和派生，扫描读意图但不写意图。catalog核心、ingest、governance、maintenance可依赖它；searchindex新增metadata以拆多值署名。catalog核心增加writegate供personal窄公开入口，governance增加textnorm用于范围验证；app注入personal刷新函数，catalog/governance不反向导入personal。精确allowlist见依赖规则测试。
 
 maintenance的原始名字工作量估计经`artistgraph.ArtistInputNameCost`窄端口，不能直接导入metadata或复制拆分算法。调整批处理时先跑`TestPackageDependencyDirections`，不得为纯函数复用扩张allowlist。
+
+## ⑧古典作品叶子包
+
+`catalog/classical` 只依赖标准库，公开作品编号解析、排序键、标题段切分与作品拆分纯函数；不读流派、数据库或容器。仅 `library/parser`（TIT1保护）和 `catalog/ingest`（候选作品分配）获准导入，精确登记于 `app/dependency_rules_test.go`，不扩大核心或其它能力的依赖范围。parser不再仅依赖metadata，作品标签读取仍在parser，扫描写入仍在ingest。

@@ -164,6 +164,28 @@
   min-width: 0;
 }
 
+/* 作品：一行小标题（作品名与这个作品的总时长），下面是它的乐章；乐章行与普通曲目行相同。 */
+.work {
+  min-width: 0;
+}
+
+.workHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: var(--control-height);
+  padding: var(--space-1) 0;
+  border-top: 1px solid var(--color-divider);
+}
+
+.workTitle {
+  min-width: 0;
+  font-size: var(--fs-14);
+  font-weight: var(--font-heading-weight);
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 767px) {
   .track {
     grid-template-columns: 1.8em minmax(0, 1fr) auto auto;

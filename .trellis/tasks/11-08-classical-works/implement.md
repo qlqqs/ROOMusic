@@ -14,7 +14,7 @@
 2. `library/parser`：`AudioObservation` 加 `Work`、`MovementName`、`MovementNumber`；Vorbis/TXXX/freeform 键与 ID3 `TIT1`/`MVNM`/`MVIN`、M4A `©wrk`/`©mvn`/`©mvi`（design §3.5，含 `TIT1` 的保护条件）。
 3. `catalog/ingest/observation.go` 加三个字段（JSON omitempty）；`library/scanner.go:559` 转换补三个字段（S 线共享文件）。
 4. `catalog/ingest/works.go`（新文件）：`AssignWorks`；`persist.go` 在 `persistCandidate` 开头调用并传给 `persistTrack`；`persist_track.go` 的 INSERT/UPDATE 写 6 列（无作品时写 NULL）。
-5. 迁移（线内草号 0035，含 `.down.sql`）：design §3.6；`rollbackFixtures` 补数据。
+5. 迁移（合入编号 0039，含 `.down.sql`）：design §3.6；`rollbackFixtures` 补数据。
 6. `catalog`：`projection.go` 加 `ReleaseTrackWork`，`ReleaseTrack.Work *ReleaseTrackWork \`json:"work"\``；`read.go` 读三列（`work_index` 非空才填）。
 7. 搜索：`searchindex/values.go` 曲目值加 `work_title`、`work_catalog`（后者用 `textnorm.CatalogNumber`）；搜索 SQL 中编号分支改 `field IN ('catalog_number','work_catalog')`，专辑传播加这两个字段；`match.field` 新值。T 线已升过 `ProjectionVersion` 则不再升。
 8. 版本（design §7）：④ 先合入 main 时，T 线 rebase 后 `parser.CommonVersion` +1、`ingest.GroupingVersion` +1（与 ⑥⑦ 合计一次）；T 线先合入则不升。
@@ -60,3 +60,7 @@ cd ../frontend && npx vitest run src/features/catalog/components/release-media.t
 - [ ] 截图复核：古典专辑作品分组（1440 与 375 宽）、普通专辑不变；没有说明性文字。
 - [ ] 前后端同批合入（`work` 字段与 `match.field` 新值由严格解码器校验）。
 - [ ] 真实库 smoke：在本机隔离实例上对 `music/` 扫描，没有任何专辑出现作品分组（`work_source` 全为 NULL）。古典正例只靠单测。
+
+## 2026-11-08 合入 main 对齐
+
+O 线与 T 线各自已将 `artistgraph.Version` 提升到 3；整合后统一为 4，避免已有版本 3 的投影漏回填。`searchindex.ProjectionVersion=2`、`textnorm.Version=1` 保持不变。下述线内升级/回滚说明是原实施背景，合并后的回滚须连同 O 线规则判断，不能只回退版本常量。

@@ -42,6 +42,7 @@ func parseMP3(path string) (AudioObservation, error) {
 	if info, statErr := file.Stat(); statErr == nil {
 		applyMP3StreamFacts(file, info.Size(), &observation)
 	}
+	finalizeTags(&observation)
 	return applyFilenameFallback(path, observation), nil
 }
 
@@ -79,10 +80,37 @@ func parseID3Frames(data []byte, observation *AudioObservation, major, tagFlags 
 			}
 			continue
 		}
-		if frameID != "TIT2" && frameID != "TPE1" && frameID != "TPE2" && frameID != "TPE3" && frameID != "TALB" && frameID != "TRCK" && frameID != "TPOS" && frameID != "TCON" && frameID != "TDRC" && frameID != "TYER" && frameID != "TSRC" && frameID != "TCOM" && frameID != "TPUB" {
+		if frameID != "TIT1" && frameID != "MVNM" && frameID != "MVIN" && frameID != "TIT2" && frameID != "TPE1" && frameID != "TPE2" && frameID != "TPE3" && frameID != "TALB" && frameID != "TRCK" && frameID != "TPOS" && frameID != "TCON" && frameID != "TDRC" && frameID != "TYER" && frameID != "TSRC" && frameID != "TCOM" && frameID != "TPUB" && frameID != "TXXX" && frameID != "TCMP" && frameID != "TDOR" && frameID != "TORY" && frameID != "TEXT" && frameID != "TIPL" && frameID != "IPLS" && frameID != "TMCL" {
 			continue
 		}
 		if len(frame) < 2 {
+			continue
+		}
+		if frameID == "TIPL" || frameID == "IPLS" || frameID == "TMCL" {
+			if payload, ok := id3FramePayload(frame, major, formatFlags); ok {
+				if err := addID3PairedCredits(observation, frameID, payload); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		if frameID == "TIT1" || frameID == "MVNM" || frameID == "MVIN" || frameID == "TXXX" || frameID == "TCMP" || frameID == "TDOR" || frameID == "TORY" {
+			payload, ok := id3FramePayload(frame, major, formatFlags)
+			if !ok {
+				continue
+			}
+			key := frameID
+			var values []string
+			if frameID == "TXXX" {
+				key, values = parseID3TXXX(payload)
+			} else {
+				values = decodeID3ArtistValues(payload)
+			}
+			for _, raw := range values {
+				if err := setAudioTag(observation, key, raw); err != nil {
+					return err
+				}
+			}
 			continue
 		}
 		if role := artistTagRole(frameID); role != "" {
@@ -90,16 +118,12 @@ func parseID3Frames(data []byte, observation *AudioObservation, major, tagFlags 
 			if !ok {
 				continue
 			}
-			for index, raw := range decodeID3ArtistValues(payload) {
+			for _, raw := range decodeID3ArtistValues(payload) {
 				if err := captureArtistTag(observation, frameID, raw); err != nil {
 					return err
 				}
-				value := metadata.BoundedText(raw)
-				if role == "album_artist" && index == 0 {
-					observation.AlbumArtist = value
-				}
 				if role != "track_artist" && role != "album_artist" {
-					addObservationCredits(observation, role, value)
+					addTagCredits(observation, frameID, raw)
 				}
 			}
 			continue
@@ -348,7 +372,7 @@ func decodeID3UTF16(value []byte, littleEndian bool) string {
 	return metadata.BoundedText(string(utf16.Decode(units)))
 }
 
-// decodeID3ArtistValues 保留每个文本值的原文；NUL 是 ID3 多值边界，不是姓名分隔规则。
+// decodeID3ArtistValues 保留每个文本值的原文；按编码识别 NUL 多值边界。
 func decodeID3ArtistValues(frame []byte) []string {
 	if len(frame) < 2 {
 		return nil
@@ -402,4 +426,22 @@ func decodeID3ArtistValues(frame []byte) []string {
 		}
 	}
 	return values
+}
+
+// parseID3TXXX 按帧编码解码描述和全部值；解码器按 UTF-16 码元识别 NUL 并保留字节序。
+func parseID3TXXX(frame []byte) (string, []string) {
+	parts := decodeID3ArtistValues(frame)
+	if len(parts) < 2 {
+		return "", nil
+	}
+	description := strings.ToUpper(strings.TrimSpace(parts[0]))
+	if len(creditTagRoles(description)) > 0 {
+		return "TXXX:" + description, parts[1:]
+	}
+	switch description {
+	case "ALBUMARTIST", "ALBUM_ARTIST", "ALBUM ARTIST", "COMPILATION", "ORIGINALDATE", "ORIGINALYEAR", "WORK", "MOVEMENTNAME", "MOVEMENT", "MOVEMENTNUMBER", "MOVEMENTTOTAL":
+		return "TXXX:" + description, parts[1:]
+	default:
+		return "", nil
+	}
 }

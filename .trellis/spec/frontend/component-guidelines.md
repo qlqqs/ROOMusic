@@ -94,9 +94,10 @@ hook 里，展示在组件里。按 [Classical 设计依据](../../../frontend/D
 | `AlbumDetailView` | 页面标题与 h1 取决于选中的版本，所以详情自己渲染 `Page`（路由组件不包 `Page`）；头部用组详情里的摘要先渲染，曲目区单独显示加载态；选中的版本读详情得到 404 时就地提示并给出办法，不影响页面其余部分 |
 | `AlbumHeader`、`VersionNav` | 头部是封面加概况：一行灰色小字、细竖线分隔、只写值（`ul[aria-label="概况"]`，每项带只给读屏的“年份：”等标签；年份未知不写，介质多于 1 张才写“N 张碟”，流派与总时长有才写，有一首曲目时长未知就不写总时长，总时长用 `formatSpokenDuration` 口语写法；窄屏换行时分隔线不出现在行首，2026-11-08 起）；版本导航是 `<nav aria-label="版本">` 里的链接，不是 ARIA 标签页，各版本标题不同时才附标题；生效中的默认版本带 `DefaultVersionTag`（M4，所有成员可见，自动选择时没有），标题旁的“对比版本”打开对比对话框 |
 | `VersionComparisonDialog`、`ComparisonTable`（M4） | `ModalDialog`，`min(980px, 100vw - 边距)`、最高 90vh，标题行 sticky、内容在对话框内部滚动，初始焦点在标题上；内容只在打开时挂载（打开后才请求）。“字段 × 版本”的真表格（显式 ARIA 角色），以第一列为基准：不同的格加金色下划线并带读屏文字“（与版本 1 不同）”，没有值写“—”加读屏的“没有记录”，有人工修正带 `ManualCorrectionTag`；行的取舍与文字在纯函数 `comparison.ts`（全空的行不出现，标题与专辑艺人只在不同时出现，音频格式写参数不写“最高音质”）；容器窄于 640px 时每个字段堆叠成“版本 N：值”；列头的“查看这个版本”关闭对话框并切换版本 |
-| `ReleaseMedia` | 一张介质时直接是 `<ol role="list">`，多于一张时每张一个 `<section aria-labelledby>` 加“跳到第 N 张”链接（点击把焦点放到分段标题上并滚到视野，不改地址）；分段用 `content-visibility: auto`，占位高度只写块方向的 `contain-intrinsic-block-size`（简写 `contain-intrinsic-size` 带一个值会同时给宽度，窄屏上被跳过的分段有 480px 的固有宽度，整页横向溢出） |
+| `ReleaseMedia` | 一张介质时直接是 `<ol role="list">`，多于一张时每张一个 `<section aria-labelledby>` 加“跳到第 N 张”链接（点击把焦点放到分段标题上并滚到视野，不改地址）；分段用 `content-visibility: auto`，占位高度只写块方向的 `contain-intrinsic-block-size`（简写 `contain-intrinsic-size` 带一个值会同时给宽度，窄屏上被跳过的分段有 480px 的固有宽度，整页横向溢出）；古典作品（⑧）：同一张介质里相邻且 `work.index` 相同的曲目由纯函数 `groupTracksByWork` 归成一项，渲染为作品小标题（作品名，右侧是组内总时长，任一首未知即未知）加嵌套的 `ol`（`aria-labelledby` 指向作品名），组内行只写 `work.movement ?? title`，其余照常；`work` 全为 null 时结构不变 |
 | `ReleaseFacts`、`EvidenceSection` | 发行信息里没有值的条目不列出；“来源与证据”是 `Disclosure`（折叠时不渲染内容，换版本用 `key` 回到折叠），有人工修正的字段在证据表里标 `ManualCorrectionTag`（“人工修正”，文字加图标）；管理员的“查看完整证据”按钮在展开后才出现，点击后才请求，按钮留在原处（加载中忙碌、之后可重新加载）使焦点不丢 |
-| `labels.ts` | 署名角色、证据字段、来源、可信度、处理方式、原因码与归组方式的中文名；清单按后端当时的取值核对，**未知取值原样显示**，后端新增取值不会让页面出错（样本里出现过的取值都有中文名，由测试保证） |
+| `ReleaseMedia` 的 `CreditsLine` | 曲目行署名写成“组名：名字、名字；组名：名字”，不加解释；有 `detail`（乐器或工种）的按细分成组，组名用 `creditDetailLabel`（已知键中文名，歌词或标签原写法原样），否则按角色、组名用 `creditRoleLabel`；组与名字都按接口顺序（后端按作词→作曲→编曲→指挥→演奏→制作人排好） |
+| `labels.ts` | 署名角色、署名细分、证据字段、来源、可信度、处理方式、原因码与归组方式的中文名；清单按后端当时的取值核对，**未知取值原样显示**，后端新增取值不会让页面出错（样本里出现过的取值都有中文名，由测试保证） |
 
 ## 已实现的受治理操作组件（M3，`features/governance`）
 

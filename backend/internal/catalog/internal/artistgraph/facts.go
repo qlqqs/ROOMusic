@@ -25,6 +25,8 @@ type creditFact struct {
 func refreshFacts(ctx context.Context, tx *sql.Tx, ids []string) ([]string, error) {
 	resolver := nameResolver{tx: tx, names: map[string]string{}}
 	facts := []creditFact{}
+	// 同一曲目同人同角色的多种细分只建一条事实，避免同批 upsert 重复命中。
+	seenTrackCredits := make(map[[3]string]bool)
 	add := func(releaseID, trackID, role, raw, layer string) error {
 		if !nonempty(raw) {
 			return nil
@@ -34,6 +36,13 @@ func refreshFacts(ctx context.Context, tx *sql.Tx, ids []string) ([]string, erro
 			return fmt.Errorf("artist subject exceeds name budget")
 		}
 		for i, name := range names {
+			if trackID != "" {
+				key := [3]string{trackID, role, name}
+				if seenTrackCredits[key] {
+					continue
+				}
+				seenTrackCredits[key] = true
+			}
 			f := creditFact{Role: role, Name: name, Position: i + 1, Layer: layer}
 			if trackID != "" {
 				v := trackID
@@ -71,16 +80,18 @@ func refreshFacts(ctx context.Context, tx *sql.Tx, ids []string) ([]string, erro
 		return nil, err
 	}
 	for _, r := range releases {
-		if !r.inferred {
+		if !r.inferred && !metadata.IsCompilationPlaceholder(r.artist) {
 			if err = add(r.id, "", "release_artist", r.artist, "scan"); err != nil {
 				return nil, err
 			}
 		}
 		// 明确AlbumArtist恰好叫“未知艺术家”仍是真实名字。
-		if err = add(r.id, "", "album_artist", r.album, "scan"); err != nil {
-			return nil, err
+		if !metadata.IsCompilationPlaceholder(r.album) {
+			if err = add(r.id, "", "album_artist", r.album, "scan"); err != nil {
+				return nil, err
+			}
 		}
-		if r.correction != "" {
+		if r.correction != "" && !metadata.IsCompilationPlaceholder(r.correction) {
 			for _, role := range []string{"release_artist", "album_artist"} {
 				if err = add(r.id, "", role, r.correction, "correction"); err != nil {
 					return nil, err

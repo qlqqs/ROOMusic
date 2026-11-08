@@ -10,7 +10,7 @@
 | `catalog/classical`（新叶子包，只依赖标准库） | 作品编号解析（组合子 + 抹白）、排序规范化、标题段切分与作品/乐章拆分；全部纯函数 |
 | `library/parser` | 读作品、乐章名、乐章号标签 |
 | `catalog/ingest` | `SourceObservation` 增加三个字段；新文件 `works.go`：`AssignWorks` 在写入路径为候选的每首曲目算作品信息；`persist_track.go` 写列 |
-| 迁移（本线草号 0035） | `tracks` 增加作品与乐章列；`catalog_search_values` 字段 CHECK 增加两个曲目字段 |
+| 迁移（合入编号 0039） | `tracks` 增加作品与乐章列；`catalog_search_values` 字段 CHECK 增加两个曲目字段 |
 | `catalog` 读取、`searchindex`、搜索 SQL | `ReleaseTrack.work`；作品名与作品编号进搜索投影，并像曲目标题一样传播到专辑结果 |
 | 前端 | 专辑页曲目列表按作品分组；搜索命中说明增加两个字段名 |
 
@@ -112,7 +112,7 @@ func SplitWorks(titles []string) []WorkSplit   // 22.7.2–22.7.8，Group 从 1 
 
 注意 `TIT1` 在 iTunes 12.5 之前表示“分组”：只有当同一文件**同时**有 `MVNM` 或 `MVIN`，或者 `TIT1` 能解析出作品编号时才当作品读（§7 风险）。
 
-### 3.6 迁移（本线草号 0035，合入时重新编号）
+### 3.6 迁移（合入编号 0039）
 
 ```sql
 ALTER TABLE tracks
@@ -262,3 +262,7 @@ ALTER TABLE tracks
 ## 9. 生产库统计
 
 已执行，见 [m8-production-stats.md](../11-08-scan-reference-port/research/m8-production-stats.md)：发行流派只有国语流行乐、Pop、台语流行乐、Mandopop、世界音乐、民谣、Anime，没有古典。真实库上不应出现任何作品分组。
+
+## 2026-11-08 合入 main 对齐
+
+O 线与 T 线各自已将 `artistgraph.Version` 提升到 3；整合后统一为 4，避免已有版本 3 的投影漏回填。`searchindex.ProjectionVersion=2`、`textnorm.Version=1` 保持不变。下述线内升级/回滚说明是原实施背景，合并后的回滚须连同 O 线规则判断，不能只回退版本常量。
