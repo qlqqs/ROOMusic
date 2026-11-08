@@ -1,12 +1,21 @@
-/* 紧贴路径框下方的面板：顶部是当前位置，下面的列表单独滚动。 */
+/*
+ * 浮在路径框（连同它的错误提示）下方的固定高度面板，不推开后面的内容：顶部是当前位置，下面的列表单独滚动。
+ * 层级在页面内容之上，低于窄屏顶栏（10）、播放器（15）与菜单浮层（30），滚动时从它们下面经过。
+ */
 .browser {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  right: 0;
+  z-index: 5;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  max-height: 320px;
+  height: min(320px, 60vh);
   min-width: 0;
   border: 1px solid var(--color-divider);
   border-radius: var(--radius-md);
   background: var(--color-bg);
+  box-shadow: var(--shadow-md);
 }
 
 .header {

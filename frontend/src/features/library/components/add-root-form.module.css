@@ -4,9 +4,8 @@
   max-width: 44rem;
 }
 
-/* 路径框与紧贴在下面的文件夹浏览器。 */
+/* 路径框与浮在它下面的文件夹浏览器：浏览器以这里为定位基准。 */
 .area {
-  display: grid;
-  gap: var(--space-1);
+  position: relative;
   min-width: 0;
 }
