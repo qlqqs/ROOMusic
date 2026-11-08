@@ -44,31 +44,7 @@ func ListFolders(input string, allowedRoots []string, limit int) (FolderListing,
 	}
 	listing := FolderListing{Path: input, Items: []FolderItem{}}
 	if current, err := ValidatePath(input, allowedRoots); err == nil {
-		listing.Path = current
-		listing.Selectable = true
-		if current != "/" {
-			parent := filepath.Dir(current)
-			listing.Parent = &parent
-			listing.CanGoUp = true
-		}
-		entries, err := os.ReadDir(current)
-		if err != nil {
-			return FolderListing{}, err
-		}
-		for _, entry := range entries {
-			name := entry.Name()
-			if !entry.Type().IsDir() || strings.HasPrefix(name, ".") || !utf8.ValidString(name) {
-				continue
-			}
-			if len(listing.Items) >= limit {
-				listing.Truncated = true
-				break
-			}
-			listing.Items = append(listing.Items, FolderItem{
-				Name: name, Path: filepath.Join(current, name), Selectable: true,
-			})
-		}
-		return listing, nil
+		return listFoldersAt(current, limit)
 	}
 
 	prefix := strings.TrimSuffix(input, "/") + "/"
@@ -100,6 +76,64 @@ func ListFolders(input string, allowedRoots []string, limit int) (FolderListing,
 		item := itemByPath[path]
 		item.Selectable = rootSet[path]
 		listing.Items = append(listing.Items, item)
+	}
+	return listing, nil
+}
+
+// ListFoldersWithin 只浏览登记根本身及其子目录，不允许向根外导航或选择根本身。
+func ListFoldersWithin(input, rootPath string, allowedRoots []string, limit int) (FolderListing, error) {
+	root, err := ValidatePath(rootPath, allowedRoots)
+	if err != nil {
+		return FolderListing{}, err
+	}
+	if input == "" {
+		input = root
+	}
+	if !filepath.IsAbs(input) || input != filepath.Clean(input) {
+		return FolderListing{}, errors.New("打不开这个文件夹")
+	}
+	current, err := ValidatePath(input, allowedRoots)
+	if err != nil {
+		return FolderListing{}, err
+	}
+	if _, err := relativePathWithinRoot(root, current); err != nil {
+		return FolderListing{}, err
+	}
+	listing, err := listFoldersAt(current, limit)
+	if err != nil {
+		return FolderListing{}, err
+	}
+	if current == root {
+		listing.Parent = nil
+		listing.CanGoUp = false
+		listing.Selectable = false
+	}
+	return listing, nil
+}
+
+func listFoldersAt(current string, limit int) (FolderListing, error) {
+	listing := FolderListing{Path: current, Selectable: true, Items: []FolderItem{}}
+	if current != "/" {
+		parent := filepath.Dir(current)
+		listing.Parent = &parent
+		listing.CanGoUp = true
+	}
+	entries, err := os.ReadDir(current)
+	if err != nil {
+		return FolderListing{}, err
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if !entry.Type().IsDir() || strings.HasPrefix(name, ".") || !utf8.ValidString(name) {
+			continue
+		}
+		if len(listing.Items) >= limit {
+			listing.Truncated = true
+			break
+		}
+		listing.Items = append(listing.Items, FolderItem{
+			Name: name, Path: filepath.Join(current, name), Selectable: true,
+		})
 	}
 	return listing, nil
 }

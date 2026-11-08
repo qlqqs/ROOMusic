@@ -244,7 +244,8 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	requireAPIError(t, invalidFolder, http.StatusBadRequest, "invalid_library_path")
 	samples.record("errors/invalid-library-folder", invalidFolder, http.StatusBadRequest)
 
-	// 第一次扫描：测试事务先独占 library_roots，worker 读不到目录而停在第一步，
+	// 第一次扫描：暂时移走一个登记根，真实产生 incomplete；单个坏文件只记诊断。
+	// 测试事务先独占 library_roots，worker 读不到目录而停在第一步，
 	// 因此“新建（202）”“进行中”“已有扫描（200）”的响应都发生在 running 状态，不依赖时序。
 	holder, err := application.database.Begin()
 	if err != nil {
@@ -261,11 +262,18 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	samples.record("scans/active-running", call(http.MethodGet, "/api/v1/scans/active", nil, admin), http.StatusOK)
 	samples.record("scans/get-running", call(http.MethodGet, "/api/v1/scans/"+firstScan, nil, admin), http.StatusOK)
 	samples.record("scans/start-existing", call(http.MethodPost, "/api/v1/scans", map[string]any{}, admin), http.StatusOK)
+	unavailableA := libraryA + "-unavailable"
+	if err := os.Rename(libraryA, unavailableA); err != nil {
+		t.Fatalf("暂时移走登记根：%v", err)
+	}
 	if err := holder.Rollback(); err != nil {
 		t.Fatalf("release lock holder: %v", err)
 	}
 	if status := waitForScanToFinish(t, application, firstScan); status != "incomplete" {
-		t.Fatalf("first scan with a corrupt file should be incomplete, got %s", status)
+		t.Fatalf("根目录不可用时应为 incomplete，实际 %s", status)
+	}
+	if err := os.Rename(unavailableA, libraryA); err != nil {
+		t.Fatalf("恢复登记根：%v", err)
 	}
 	samples.record("scans/get-incomplete", call(http.MethodGet, "/api/v1/scans/"+firstScan, nil, admin), http.StatusOK)
 	samples.record("scans/diagnostics", call(http.MethodGet, "/api/v1/scans/"+firstScan+"/diagnostics", nil, admin), http.StatusOK)
@@ -379,8 +387,46 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	recordIssueReviewSamples(t, application, samples, call, admin)
 	recordClaimSamples(t, application, samples, call, admin)
 	recordAudioAnalysisSamples(t, application, samples, call, admin)
+	// 改路径样本放在最后，不改变之前的目录、操作记录与扫描样本。
+	recordRootRelocateSamples(t, application, samples, call, admin, rootB)
 
 	samples.finish()
+}
+
+// recordRootRelocateSamples 用独立连接持有扫描锁产生冲突，再释放锁录制成功响应。
+func recordRootRelocateSamples(t *testing.T, application *integrationTestApplication, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser, rootID string) {
+	t.Helper()
+	newPath := createLibraryDirectory(t, application, "classical-relocated")
+	var revision int64
+	if err := application.database.QueryRow(`SELECT revision FROM library_roots WHERE id=$1::uuid`, rootID).Scan(&revision); err != nil {
+		t.Fatalf("读取改路径样本的目录版本：%v", err)
+	}
+	body := map[string]any{"path": newPath, "expected_revision": revision}
+	holder, err := application.database.Conn(context.Background())
+	if err != nil {
+		t.Fatalf("取得扫描锁独立连接：%v", err)
+	}
+	defer holder.Close()
+	var locked bool
+	if err := holder.QueryRowContext(context.Background(), `SELECT pg_try_advisory_lock(1396916558, hashtext(current_schema()))`).Scan(&locked); err != nil || !locked {
+		t.Fatalf("持有样本扫描锁：locked=%v，error=%v", locked, err)
+	}
+	defer func() {
+		if locked {
+			if _, err := holder.ExecContext(context.Background(), `SELECT pg_advisory_unlock(1396916558, hashtext(current_schema()))`); err != nil {
+				t.Errorf("清理样本扫描锁：%v", err)
+			}
+		}
+	}()
+	response := call(http.MethodPost, "/api/v1/library-roots/"+rootID+"/relocate", body, admin, map[string]string{"Idempotency-Key": "sample-relocate-root"})
+	requireAPIError(t, response, http.StatusConflict, "scan_running")
+	samples.record("errors/scan-running", response, http.StatusConflict)
+	var unlocked bool
+	if err := holder.QueryRowContext(context.Background(), `SELECT pg_advisory_unlock(1396916558, hashtext(current_schema()))`).Scan(&unlocked); err != nil || !unlocked {
+		t.Fatalf("释放样本扫描锁：unlocked=%v，error=%v", unlocked, err)
+	}
+	locked = false
+	samples.record("library-roots/relocate", call(http.MethodPost, "/api/v1/library-roots/"+rootID+"/relocate", body, admin, map[string]string{"Idempotency-Key": "sample-relocate-root"}), http.StatusOK)
 }
 
 // recordAudioAnalysisSamples 通过固定 ffmpeg 与合成曲目生成真实 done 样本；pending/failed 来自同一张表的实际读取判定。
@@ -564,7 +610,7 @@ func recordAlbumDetailSamples(t *testing.T, application *integrationTestApplicat
 	singleID, singleGroup := releaseIDByTitle("Sample Preludes")
 	samples.record("releases/get-single", call(http.MethodGet, "/api/v1/releases/"+singleID, nil, admin), http.StatusOK)
 
-	// 第一次扫描用的损坏文件会让扫描不完整；去掉它，这次扫描完整成功，不再产生与专辑无关的诊断。
+	// 去掉第一次扫描中跳过的损坏文件，避免这次扫描产生与专辑无关的诊断。
 	if err := os.Remove(filepath.Join(libraryB, "broken.flac")); err != nil {
 		t.Fatalf("remove corrupt FLAC fixture: %v", err)
 	}

@@ -245,6 +245,7 @@ const (
 		       CASE WHEN t.source_kind='cue_virtual' THEN t.cue_end_frames END AS end_frames
 		FROM tracks t
 		WHERE t.source_root_id=$2::uuid AND t.source_status='present' AND t.content_fingerprint IS NOT NULL
+		  AND NOT ` + heldSourceMatches + `
 		  AND NOT EXISTS (SELECT 1 FROM scan_observations used
 		                  WHERE used.scan_run_id=$1::uuid AND used.root_id=$2::uuid AND used.planned_track_id=t.id)
 	)`

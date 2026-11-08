@@ -188,7 +188,7 @@ test.describe("扫描", () => {
       await expect(phaseTag(page)).toHaveText("不完整", { timeout: 500 });
     }).toPass({ timeout: 10_000 });
 
-    await expect(page.getByRole("region", { name: "状态" })).toContainText("没扫到的曲目保持原样");
+    await expect(page.getByRole("region", { name: "状态" })).toContainText("有目录没扫完，那里的曲目保持原样。");
     const summary = page.getByRole("list", { name: "按类别汇总" });
     await expect(summary).toContainText("音频解析失败");
     const table = page.getByRole("table", { name: "诊断明细" });

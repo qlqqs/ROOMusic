@@ -3,6 +3,7 @@
     "items": [
       {
         "created_at": "2026-01-01T00:00:00Z",
+        "excluded_paths": [],
         "id": "00000000-0000-4000-8000-000000000001",
         "name": "classical-a",
         "path": "classical-a",
@@ -12,6 +13,7 @@
       },
       {
         "created_at": "2026-01-01T00:00:01Z",
+        "excluded_paths": [],
         "id": "00000000-0000-4000-8000-000000000002",
         "name": "classical-b",
         "path": "classical-b",

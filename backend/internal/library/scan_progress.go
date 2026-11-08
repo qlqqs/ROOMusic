@@ -3,6 +3,7 @@ package library
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"io/fs"
 	"math/big"
 	"path/filepath"
@@ -53,6 +54,7 @@ type scanFeedback struct {
 	progressUnavailable       bool
 	invalid                   bool
 	changes                   *ingest.ScanFeedback
+	skipped                   int64
 	service                   *Service
 	executor                  scanExecutor
 	scanID                    string
@@ -126,6 +128,14 @@ func (f *scanFeedback) phase(ctx context.Context, phase string, total int64) {
 	}
 	f.flush(ctx, true)
 }
+func (f *scanFeedback) skip(ctx context.Context) {
+	if f == nil || ctx.Err() != nil {
+		return
+	}
+	f.add(&f.skipped)
+	f.flush(ctx, false)
+}
+
 func (f *scanFeedback) processed(ctx context.Context) {
 	if f == nil || ctx.Err() != nil {
 		return
@@ -177,11 +187,11 @@ func (f *scanFeedback) flush(ctx context.Context, force bool) {
 		if err == nil {
 			_, err = tx.ExecContext(ctx, `UPDATE scan_runs SET phase=$2,progress_bp=GREATEST(progress_bp,$3),
  phase_completed=$4,phase_total=$5,progress_updated_at=clock_timestamp(),progress_seq=$6,
- files_counted=GREATEST(files_counted,$7),files_total=$8,files_processed=GREATEST(files_processed,$9),count_complete=$10,files_changed=$11,
+ files_counted=GREATEST(files_counted,$7),files_total=$8,files_processed=GREATEST(files_processed,$9),count_complete=$10,files_changed=$11,skipped_files=GREATEST(COALESCE(skipped_files,0),$16),
  roots_total=$12,current_root_index=$13,current_root_id=$14::uuid,current_root_name=$15
  WHERE id=$1::uuid AND status='running' AND feedback_version=1 AND progress_seq<$6`,
 				f.scanID, f.progress.Phase, f.progress.PercentBP, f.progress.Completed, f.progress.Total, f.seq, f.progress.FilesCounted, f.progress.FilesTotal,
-				f.progress.FilesProcessed, f.progress.CountComplete, f.progress.FilesChanged, f.root.Total, f.root.Index, f.root.ID, f.root.Name)
+				f.progress.FilesProcessed, f.progress.CountComplete, f.progress.FilesChanged, f.root.Total, f.root.Index, f.root.ID, f.root.Name, f.skipped)
 		}
 		if err == nil {
 			err = tx.Commit()
@@ -202,6 +212,7 @@ func (service *Service) countScanRoots(ctx context.Context, executor scanExecuto
 		return false
 	}
 	complete := true
+	countComplete := true
 	for index, root := range roots {
 		if ctx.Err() != nil {
 			return false
@@ -209,6 +220,10 @@ func (service *Service) countScanRoots(ctx context.Context, executor scanExecuto
 		f.selectRoot(index, root)
 		f.flush(ctx, true)
 		count := rootCount{complete: true}
+		filter := root.filter
+		if filter.exclusions == nil {
+			filter = newScanFilter(root.Exclusions)
+		}
 		if !registeredRootAvailable(root.Path) {
 			count.complete = false
 			_ = service.recordDiagnosticWith(ctx, executor, scanID, "", "root_unavailable", "注册目录当前不可用")
@@ -218,16 +233,27 @@ func (service *Service) countScanRoots(ctx context.Context, executor scanExecuto
 					return err
 				}
 				if walkErr != nil {
-					count.complete = false
-					return service.recordDiagnosticWith(ctx, executor, scanID, safeRelativePath(root.Path, path), "permission_error", "无法读取文件")
+					countComplete = false
+					if path == root.Path {
+						return errors.New("root unavailable during counting")
+					}
+					return nil // 子目录失败由正式遍历登记保住，不让计数失败阻断对账。
 				}
-				if !entry.IsDir() && isScanCandidate(path) {
-					f.add(&count.files)
-					f.add(&f.progress.FilesCounted)
-					f.units++
-					f.flush(ctx, false)
+				if entry.IsDir() {
+					relative := safeRelativePath(root.Path, path)
+					if relative != "" && filter.skipDir(relative, entry.Name()) {
+						return fs.SkipDir
+					}
+					return nil
 				}
-				return ctx.Err()
+				if filter.skipFile(entry.Name()) || !isScanCandidate(path) {
+					return nil
+				}
+				f.add(&count.files)
+				f.add(&f.progress.FilesCounted)
+				f.units++
+				f.flush(ctx, false)
+				return nil
 			})
 			if err != nil {
 				count.complete = false
@@ -247,7 +273,7 @@ func (service *Service) countScanRoots(ctx context.Context, executor scanExecuto
 	}
 	total := f.progress.FilesCounted
 	f.progress.FilesTotal = &total
-	f.progress.CountComplete = complete
+	f.progress.CountComplete = complete && countComplete
 	f.denominator = total
 	if total == 0 {
 		f.denominator = int64(len(roots))

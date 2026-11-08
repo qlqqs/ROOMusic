@@ -141,12 +141,12 @@ func TestMissingReconciliationRequiresSuccessfulTerminalState(t *testing.T) {
 }
 
 func TestScannerOnlyDiagnosesKnownUnsupportedAudioExtensions(t *testing.T) {
-	for _, extension := range []string{".flac", ".mp3", ".ogg", ".opus", ".wav"} {
+	for _, extension := range []string{".flac", ".mp3", ".ogg", ".opus", ".wav", ".m4a"} {
 		if !isSupportedAudioExtension(extension) {
 			t.Fatalf("supported extension %s was not recognized", extension)
 		}
 	}
-	for _, extension := range []string{".aac", ".m4a", ".ape", ".dsf"} {
+	for _, extension := range []string{".aac", ".ape", ".dsf"} {
 		if !isAudioCandidateExtension(extension) {
 			t.Fatalf("unsupported audio extension %s was not recognized", extension)
 		}

@@ -1,0 +1,41 @@
+/* 与“不扫描的文件夹”对话框同一种版面，宽一些放得下文件夹浏览器。 */
+.dialog {
+  width: min(520px, calc(100vw - 2 * var(--space-4)));
+}
+
+.content {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-4);
+}
+
+.title {
+  font-size: var(--fs-16);
+  overflow-wrap: anywhere;
+}
+
+.selected {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: var(--fs-13);
+}
+
+.label {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.path {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}

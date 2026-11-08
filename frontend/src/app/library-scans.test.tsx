@@ -366,7 +366,7 @@ describe("扫描详情：状态", () => {
     { label: "成功", scan: { status: "succeeded", finished_at: finishedAt }, note: /这次没找到的文件已标为缺失/, reconciles: true },
     { label: "失败", scan: { status: "failed", finished_at: finishedAt }, note: /扫描失败，没扫到的曲目保持原样/, reconciles: false },
     { label: "已取消", scan: { status: "canceled", finished_at: finishedAt, cancel_requested_at: "2026-01-02T00:00:30Z" }, note: /扫描已取消，没扫到的曲目保持原样/, reconciles: false },
-    { label: "不完整", scan: { status: "incomplete", finished_at: finishedAt }, note: /没扫到的曲目保持原样.*看一下诊断/, reconciles: false },
+    { label: "不完整", scan: { status: "incomplete", finished_at: finishedAt }, note: /有目录没扫完，那里的曲目保持原样。/, reconciles: false },
   ];
 
   it.each(phases)("$label：旧扫描的阶段说明不混同，没有数据时不伪造百分比或剩余时间", async ({ label, scan: overrides, note }) => {

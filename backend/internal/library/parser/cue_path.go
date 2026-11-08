@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 // CueFileReference 保留每个 FILE 声明。兼容入口 parseCue 会把引用平铺到
@@ -24,27 +26,60 @@ func normalizeCueReference(reference string) string {
 
 var cueAudioExtensions = []string{".flac", ".mp3", ".ogg", ".opus", ".wav", ".m4a"}
 
-func matchingAudioFile(target string) string {
+func cueNameEqual(a, b string) bool {
+	return strings.EqualFold(norm.NFC.String(a), norm.NFC.String(b))
+}
+
+func matchingAudioFile(target string) (matched string, ambiguous bool, err error) {
 	dir := filepath.Dir(target)
-	stem := strings.TrimSuffix(filepath.Base(target), filepath.Ext(target))
+	base := filepath.Base(target)
+	stem := strings.TrimSuffix(base, filepath.Ext(base))
 	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return ""
+	if errors.Is(err, os.ErrNotExist) {
+		return "", false, nil
 	}
-	for _, extension := range cueAudioExtensions {
+	if err != nil {
+		return "", false, err
+	}
+	findMatch := func(matches func(string) bool) (string, bool, error) {
+		var matched string
 		for _, entry := range entries {
-			name := entry.Name()
-			if !strings.EqualFold(filepath.Ext(name), extension) || strings.TrimSuffix(name, filepath.Ext(name)) != stem {
+			if !matches(entry.Name()) {
 				continue
 			}
-			candidate := filepath.Join(dir, name)
+			candidate := filepath.Join(dir, entry.Name())
 			info, statErr := os.Stat(candidate)
-			if statErr == nil && info.Mode().IsRegular() {
-				return candidate
+			if errors.Is(statErr, os.ErrNotExist) {
+				continue
 			}
+			if statErr != nil {
+				return "", false, statErr
+			}
+			if !info.Mode().IsRegular() {
+				continue
+			}
+			if matched != "" {
+				return "", true, nil
+			}
+			matched = candidate
+		}
+		return matched, false, nil
+	}
+	matched, ambiguous, err = findMatch(func(name string) bool {
+		return cueNameEqual(name, base)
+	})
+	if matched != "" || ambiguous || err != nil {
+		return matched, ambiguous, err
+	}
+	for _, extension := range cueAudioExtensions {
+		matched, ambiguous, err = findMatch(func(name string) bool {
+			return cueNameEqual(filepath.Ext(name), extension) && cueNameEqual(strings.TrimSuffix(name, filepath.Ext(name)), stem)
+		})
+		if matched != "" || ambiguous || err != nil {
+			return matched, ambiguous, err
 		}
 	}
-	return ""
+	return "", false, nil
 }
 
 func validateCueReference(cuePath, containmentRoot, reference string) (status, resolved, diagnostic string) {
@@ -75,27 +110,33 @@ func validateCueReference(cuePath, containmentRoot, reference string) (status, r
 		return "unsafe", "", "unsafe FILE path traversal"
 	}
 	info, statErr := os.Stat(target)
+	if errors.Is(statErr, os.ErrNotExist) {
+		replacement, ambiguous, matchErr := matchingAudioFile(target)
+		if matchErr != nil {
+			return "unchecked", target, "unable to match FILE reference: " + normalized
+		}
+		if ambiguous {
+			return "missing", target, "ambiguous FILE reference: " + normalized
+		}
+		if replacement != "" {
+			target = replacement
+			relativeToCue, relErr := filepath.Rel(cueDir, target)
+			if relErr != nil {
+				return "unchecked", "", "unable to resolve FILE reference"
+			}
+			normalized = filepath.ToSlash(filepath.Clean(relativeToCue))
+			relative, err = filepath.Rel(boundary, target)
+			if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+				return "unsafe", "", "unsafe FILE path traversal"
+			}
+			info, statErr = os.Stat(target)
+		}
+	}
 	if statErr != nil {
 		if errors.Is(statErr, os.ErrNotExist) {
-			if replacement := matchingAudioFile(target); replacement != "" {
-				target = replacement
-				relativeToCue, relErr := filepath.Rel(cueDir, target)
-				if relErr != nil {
-					return "unchecked", "", "unable to resolve FILE reference"
-				}
-				normalized = filepath.ToSlash(filepath.Clean(relativeToCue))
-				relative, err = filepath.Rel(boundary, target)
-				if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-					return "unsafe", "", "unsafe FILE path traversal"
-				}
-				info, statErr = os.Stat(target)
-			}
-			if statErr != nil {
-				return "missing", filepath.Clean(filepath.Join(cueDir, filepath.FromSlash(normalized))), "missing FILE reference: " + filepath.ToSlash(filepath.Clean(filepath.FromSlash(normalized)))
-			}
-		} else {
-			return "missing", target, "unable to stat FILE reference: " + normalized
+			return "missing", target, "missing FILE reference: " + normalized
 		}
+		return "unchecked", target, "unable to stat FILE reference: " + normalized
 	}
 	resolved = target
 	if !info.Mode().IsRegular() {

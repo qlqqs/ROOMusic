@@ -3,6 +3,18 @@
     "items": [
       {
         "id": "1",
+        "kind": "root_unavailable",
+        "message": "注册目录当前不可用",
+        "path": null
+      },
+      {
+        "id": "2",
+        "kind": "root_unavailable",
+        "message": "注册目录当前不可用",
+        "path": null
+      },
+      {
+        "id": "3",
         "kind": "parse_failure",
         "message": "音频文件解析失败",
         "path": "broken.flac"
@@ -13,9 +25,13 @@
         {
           "count": 1,
           "kind": "parse_failure"
+        },
+        {
+          "count": 2,
+          "kind": "root_unavailable"
         }
       ],
-      "total": 1
+      "total": 3
     }
   },
   "status": 200
