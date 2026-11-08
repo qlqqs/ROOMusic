@@ -125,3 +125,31 @@ func TestLyricsCreditsReadAtMostThirtyLines(t *testing.T) {
 	observation := parseLyricsFixture(t, "credits.flac", repairFLACComments("LYRICS="+lyrics))
 	requireCredits(t, observation.Credits, []metadata.Credit{{Role: "lyricist", Name: "甲", Source: "lyrics"}})
 }
+
+func TestLyricsCreditsMediaTitleHeader(t *testing.T) {
+	const title = "Test Title"
+	for _, tc := range []struct {
+		name, lyrics string
+		want         []metadata.Credit
+	}{
+		{
+			name:   "署名前跳过忽略大小写的媒体题头",
+			lyrics: "[00:00.00]test title - 演唱甲\n作词：甲",
+			want:   []metadata.Credit{{Role: "lyricist", Name: "甲", Source: "lyrics"}},
+		},
+		{
+			name:   "署名后媒体题头结束署名块",
+			lyrics: "作曲：乙\n[00:00.00]test title - 演唱甲\n作词：甲",
+			want:   []metadata.Credit{{Role: "composer", Name: "乙", Source: "lyrics"}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			observation := parseLyricsFixture(t, "credits.flac", repairFLACComments("TITLE="+title, "LYRICS="+tc.lyrics))
+			if observation.Title != title {
+				t.Fatalf("标题 = %q，期望 %q", observation.Title, title)
+			}
+			requireCredits(t, observation.Credits, tc.want)
+			requireLyrics(t, observation, tc.lyrics, LyricsSourceVorbisLyrics)
+		})
+	}
+}

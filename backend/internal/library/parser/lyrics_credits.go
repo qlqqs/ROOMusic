@@ -19,6 +19,8 @@ func addLyricsCredits(observation *AudioObservation) {
 			tagRoles[credit.Role] = true
 		}
 	}
+	canSkipTitle := observation.Title != ""
+	titlePattern := regexp.MustCompile(`(?i)^` + regexp.QuoteMeta(observation.Title) + `(?:$|[\s\p{Z}\x{0085}\v]+[-–—][\s\p{Z}\x{0085}\v]+)`)
 	for index, line := range strings.Split(observation.Lyrics, "\n") {
 		if index >= 30 {
 			break
@@ -34,6 +36,10 @@ func addLyricsCredits(observation *AudioObservation) {
 		if line == "" {
 			continue
 		}
+		if canSkipTitle && titlePattern.MatchString(line) {
+			canSkipTitle = false
+			continue
+		}
 		colon := strings.IndexAny(line, ":：")
 		if colon < 0 || utf8.RuneCountInString(line[:colon]) < 1 || utf8.RuneCountInString(line[:colon]) > 16 {
 			break
@@ -47,6 +53,7 @@ func addLyricsCredits(observation *AudioObservation) {
 		if len(assignments) == 0 {
 			break
 		}
+		canSkipTitle = false
 		for _, name := range splitCreditNames(raw) {
 			if at := strings.IndexByte(name, '@'); at >= 0 {
 				if trimmed := strings.TrimSpace(name[:at]); trimmed != "" {
