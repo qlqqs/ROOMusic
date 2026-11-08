@@ -5,7 +5,7 @@
 {"file": ".trellis/spec/backend/lyrics-contracts.md", "reason": "歌词提取与规范化规则，开头署名在规范化之后读取"}
 {"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移、CHECK 约束与回退文件规范"}
 {"file": ".trellis/spec/frontend/artist-guidelines.md", "reason": "艺人角色词表、分栏与筛选的前端约定"}
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "曲目行署名组件的写法约定"}
+{"file": ".trellis/spec/frontend/component-catalog.md", "reason": "曲目行署名组件的写法约定"}
 {"file": ".trellis/spec/frontend/type-safety.md", "reason": "严格解码器与接口样本契约"}
 {"file": ".trellis/tasks/11-08-scan-reference-port/research/reference-design.md", "reason": "参考 21.5 与 23.1–23.7 的结构，只当数据读，不搬数据表"}
 {"file": ".trellis/tasks/11-08-scan-reference-port/research/m8-production-stats.md", "reason": "生产库聚合统计：人工意图为 0、署名与流派分布，用作改动前后对比基线"}

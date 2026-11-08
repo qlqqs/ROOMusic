@@ -3,7 +3,7 @@
 {"file": ".trellis/spec/backend/search-contracts.md", "reason": "搜索字段、编号分支与专辑传播规则"}
 {"file": ".trellis/spec/backend/genre-contracts.md", "reason": "候选流派列表与 GenreKey，古典判定依赖它"}
 {"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移、CHECK 约束与回退文件规范"}
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "专辑页曲目列表组件的写法约定"}
+{"file": ".trellis/spec/frontend/component-catalog.md", "reason": "专辑页曲目列表组件的写法约定"}
 {"file": ".trellis/spec/frontend/type-safety.md", "reason": "严格解码器与接口样本契约"}
 {"file": ".trellis/tasks/11-08-scan-reference-port/research/reference-design.md", "reason": "参考 21.4、22.1–22.7、22.12 原文，只当数据读"}
 {"file": ".trellis/tasks/11-08-scan-reference-port/research/m8-production-stats.md", "reason": "生产库聚合统计：人工意图为 0、署名与流派分布，用作改动前后对比基线"}
