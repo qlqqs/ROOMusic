@@ -313,6 +313,8 @@ const successContracts: Record<string, Contract> = {
   "library-roots/create-existing-disabled": { status: 201, decode: decodeRootCreated },
   "library-roots/disable": { status: 200, decode: decodeRootChanged },
   "library-roots/restore": { status: 200, decode: decodeRootChanged },
+  // 改路径返回的额外目录字段由成功后的列表刷新读取，命令只消费四字段收据。
+  "library-roots/relocate": { status: 200, decode: decodeRootChanged, preservesWireShape: false },
   "library-root-operations/list-empty": { status: 200, decode: decodeRootOperationList },
   "library-root-operations/list": { status: 200, decode: decodeRootOperationList },
   "scans/active-none": { status: 200, decode: decodeActiveScan },
@@ -552,6 +554,7 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "errors/invalid-library-folder": { status: 400, code: "invalid_library_path" },
   "errors/invalid-library-path": { status: 400, code: "invalid_library_path" },
   "errors/revision-conflict": { status: 409, code: "revision_conflict" },
+  "errors/scan-running": { status: 409, code: "scan_running" },
   "errors/revision-conflict-release": { status: 409, code: "revision_conflict" },
   "errors/revision-conflict-group": { status: 409, code: "revision_conflict" },
   "errors/revision-conflict-issue": { status: 409, code: "revision_conflict" },

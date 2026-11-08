@@ -185,6 +185,7 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
         progress: null,
         root_progress: null,
         report_status: "legacy",
+        skipped_files: null,
         ...overrides,
       };
       mock.scans.set(scan.id, scan);
@@ -392,7 +393,7 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
           const name = requested.split("/").filter(Boolean).pop() ?? requested;
           let root = mock.roots.find((candidate) => candidate.name === name);
           if (root === undefined) {
-            root = { id: uuidOf("a", counter++), path: name, name, status: "active", revision: 1, created_at: now(), updated_at: now() };
+            root = { id: uuidOf("a", counter++), path: name, name, status: "active", revision: 1, created_at: now(), updated_at: now(), excluded_paths: [] };
             mock.roots = [...mock.roots, root];
           }
           recordOperation({ operation: "create", status: "succeeded", root_id: root.id, revision: root.revision });

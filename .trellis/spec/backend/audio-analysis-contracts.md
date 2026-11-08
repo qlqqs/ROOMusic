@@ -21,7 +21,7 @@
 
 `track_analyses`：主键 `track_id`（外键 `tracks`，级联删除），每首一行，**不存 pending 行**。列：`analyzer_version`；输入快照
 `content_fingerprint`、`source_size`、`source_modified_at`、`cue_index_frames`、`cue_end_frames`；`status`（`done`/`failed`）；
-`integrated_lufs`、`true_peak_dbtp`（`REAL`，可空）；0034 增加 `loudness_range_lu`（`REAL`，可空，非负）与 `sample_peak_dbfs`（`REAL`，可空）；`duration_ms`、`leading_silence_ms`（开头静音结束点）、`trailing_silence_ms`（结尾静音开始点，自曲目开头计）；
+`integrated_lufs`、`true_peak_dbtp`（`REAL`，可空）；0036 增加 `loudness_range_lu`（`REAL`，可空，非负）与 `sample_peak_dbfs`（`REAL`，可空）；`duration_ms`、`leading_silence_ms`（开头静音结束点）、`trailing_silence_ms`（结尾静音开始点，自曲目开头计）；
 `waveform`（`BYTEA`，1–1000 字节）；`failure_category`（`source_unavailable|source_changed|ffmpeg_exit|parse|timeout`）；`attempts`；`analyzed_at`。
 约束：`done` 必有波形与时长、无失败类别；`failed` 必有失败类别、无波形。0033 的 down 迁移只删表。
 
@@ -35,7 +35,7 @@
   顺序 `ORDER BY 有可用结果, (source_kind='cue_virtual'), release_id, disc_number, position, id`：没有结果者先做，升级重算在后；同类中按发行成组，CUE 虚拟轨最后。
 - 写入是 UPSERT；同一快照与版本再次失败 `attempts + 1`，否则重置为 1。快照取自选中那一刻，分析期间曲目被改写则写入的行与当前值不符，下一轮自然重排，不加锁。
 
-### 显示时长视图（0034）
+### 显示时长视图（0036）
 
 `track_display_durations(track_id, duration_seconds)` 由 `tracks` 左联 `track_analyses`。扫描时长为 S，解码时长 D = `duration_ms / 1000.0`；
 只有可用结果且 `duration_ms > 0` 时，S 未知（NULL、≤ 0、NaN、无穷）或 `ABS(D-S) > max(1 秒, 1% × D)` 才取 D，否则保持 S。
@@ -44,7 +44,7 @@ CUE 的分析时长本来就是 `-ss/-t` 解码的片段时长，末轨解码到
 
 发行详情、批量曲目摘要、个人曲目事实、版本总时长、曲目集合统计和 `LoadTrackDuration` 均联此视图，只换时长来源，JSON 形状不变。
 播放器进度和拖动仍用浏览器 `audio.duration`；无 Xing 头的 VBR MP3 可能与列表不同，不做前端时间轴换算。
-0034 只加两个可空列和视图，不改写数据；down 先删视图再删两列，0033 的 down 才删整表。
+0036 只加两个可空列和视图，不改写数据；down 先删视图再删两列，0033 的 down 才删整表。
 
 ## 3. 工作者
 
@@ -121,7 +121,7 @@ ffmpeg -nostdin -hide_banner -nostats -loglevel info -threads 1 -protocol_whitel
   `go test ./internal/playback/ -run TestAnalysisWorker -count=1`（扫描让路、失败不阻塞、取消退出）；迁移上下行在 `internal/platform/postgres/migrations_rollback_integration_test.go`。
 
 - ⑨ 单元补充：LRA、采样峰值、缺段与静音空值；真实 ffmpeg 用例核对两个新字段。
-- ⑨ 隔离库补充：v1 成功仍为 done、新字段为 null；旧失败为 pending；无结果优先；阈值内、阈值边界、超阈值、未知时长及快照不符；CUE 片段与 `LoadTrackDuration` 同源；0034 上下行与 API 样本。
+- ⑨ 隔离库补充：v1 成功仍为 done、新字段为 null；旧失败为 pending；无结果优先；阈值内、阈值边界、超阈值、未知时长及快照不符；CUE 片段与 `LoadTrackDuration` 同源；0036 上下行与 API 样本。
 
 ## 8. 正确、基准与错误案例
 

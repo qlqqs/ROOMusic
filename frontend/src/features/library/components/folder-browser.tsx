@@ -1,22 +1,27 @@
 import { ArrowUp, Folder } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { cx } from "../../../shared/lib/class-names";
 import { Button, Skeleton, StatusTag } from "../../../shared/ui";
 import { useFolderListing } from "../hooks/use-folder-listing";
 import styles from "./folder-browser.module.css";
 
 type FolderBrowserProps = {
   id: string;
-  /** 选中一个文件夹：把它的路径填进路径框。 */
+  /** 选中一个文件夹，得到它的绝对路径。 */
   onSelect: (path: string) => void;
+  /** 只在这个目录之内浏览（选不扫描的子文件夹）：从目录本身开始，到目录本身就不能再往上，目录本身不能选。 */
+  rootId?: string;
+  /** 放在对话框里，占据正常的位置，不浮在其他内容上。 */
+  inline?: boolean;
 };
 
 /**
- * 添加目录时的文件夹浏览器：从 `/` 开始，点文件夹进入下一级，点“选择”选中；允许目录的上层路径只能进入，没有“选择”。
+ * 文件夹浏览器（添加目录、选不扫描的子文件夹）：添加目录时从 `/` 开始，点文件夹进入下一级，点“选择”选中；允许目录的上层路径只能进入，没有“选择”。
  * 行内都是普通按钮（不是 listbox），Tab 顺序自然；进入新文件夹后焦点移到顶部的当前路径，读屏读出新位置。
  */
-export function FolderBrowser({ id, onSelect }: FolderBrowserProps) {
+export function FolderBrowser({ id, onSelect, rootId, inline = false }: FolderBrowserProps) {
   const [current, setCurrent] = useState<string | null>(null);
-  const listing = useFolderListing(current);
+  const listing = useFolderListing(current, rootId ?? null);
   const data = listing.data;
   const locationRef = useRef<HTMLParagraphElement>(null);
   // 只在用户换了文件夹之后移动焦点；刚打开时焦点留在路径框里。
@@ -30,7 +35,7 @@ export function FolderBrowser({ id, onSelect }: FolderBrowserProps) {
   };
 
   return (
-    <div id={id} role="dialog" aria-label="选择文件夹" className={styles.browser}>
+    <div id={id} role={inline ? "group" : "dialog"} aria-label="选择文件夹" className={cx(styles.browser, inline && styles.inline)}>
       <div className={styles.header}>
         {data?.can_go_up === true ? <Button variant="icon" icon={<ArrowUp size={16} />} label="上一级" onClick={() => go(data.parent)} /> : null}
         <p ref={locationRef} tabIndex={-1} className={styles.location}>
@@ -71,7 +76,9 @@ export function FolderBrowser({ id, onSelect }: FolderBrowserProps) {
                 </li>
               ))}
             </ul>
-            {data.truncated ? <p className={styles.message}>文件夹太多，没有全部列出，可以直接输入路径。</p> : null}
+            {data.truncated ? (
+              <p className={styles.message}>{rootId === undefined ? "文件夹太多，没有全部列出，可以直接输入路径。" : "文件夹太多，没有全部列出。"}</p>
+            ) : null}
           </>
         )}
       </div>

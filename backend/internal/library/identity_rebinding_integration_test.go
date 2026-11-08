@@ -344,9 +344,9 @@ func TestPostgreSQLIdenticalAudioIsNotRebound(t *testing.T) {
 	requireDiagnosticCount(t, fixture, scan.ID, "identity_ambiguous", 1)
 }
 
-func TestPostgreSQLIncompleteScanDefersMovesUntilCompleteScan(t *testing.T) {
+func TestPostgreSQLIdentityRebindingContinuesAfterParseFailure(t *testing.T) {
 	fixture := newLibraryFixture(t)
-	root := insertScannerRoot(t, fixture, "incomplete-defers")
+	root := insertScannerRoot(t, fixture, "parse-failure-moves")
 	service := scannerTestApplication(fixture)
 	writeAudio(t, root, "Album/01.flac", audioFile{seed: 1, title: "One", album: "Album", track: 1})
 	writeAudio(t, root, "Album/02.flac", audioFile{seed: 2, title: "Two", album: "Album", track: 2})
@@ -354,32 +354,21 @@ func TestPostgreSQLIncompleteScanDefersMovesUntilCompleteScan(t *testing.T) {
 	requireScanStatus(t, runTestScan(t, fixture, service, root), "succeeded")
 	before := presentTrackIDs(t, fixture, root.ID)
 
-	// 目录改名的同时出现一个损坏文件，使这次遍历不完整；另一个目录里有真正的新文件。
+	// 单文件解析失败不再阻断其它目录的移动配对与新文件入库。
 	moveFixture(t, root, "Album", "Renamed")
 	writeFixtureFile(t, root, "Broken/bad.mp3", []byte("not-an-mp3"))
 	writeAudio(t, root, "Fresh/01.flac", audioFile{seed: 9, title: "Fresh", album: "Fresh", track: 1})
-	incomplete := runTestScan(t, fixture, service, root)
-	requireScanStatus(t, incomplete, "incomplete")
-	deferred := presentTrackIDs(t, fixture, root.ID)
-	for _, path := range []string{"Album/01.flac", "Album/02.flac", "Other/01.flac"} {
-		requireTrackAt(t, deferred, path, before[path])
-	}
-	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE source_root_id=$1::uuid AND relative_path LIKE 'Renamed/%'`, 0, root.ID)
-	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE source_root_id=$1::uuid AND relative_path='Fresh/01.flac' AND source_status='present'`, 1, root.ID)
-	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE source_root_id=$1::uuid`, 4, root.ID)
-	requireNoMissingTracks(t, fixture, root.ID)
-	requireDiagnosticCount(t, fixture, incomplete.ID, "identity_deferred", 1)
-
-	if err := os.RemoveAll(filepath.Join(root.Path, "Broken")); err != nil {
-		t.Fatalf("remove broken fixture: %v", err)
-	}
-	requireScanStatus(t, runTestScan(t, fixture, service, root), "succeeded")
+	scan := runTestScan(t, fixture, service, root)
+	requireScanStatus(t, scan, "succeeded")
 	after := presentTrackIDs(t, fixture, root.ID)
 	requireTrackAt(t, after, "Renamed/01.flac", before["Album/01.flac"])
 	requireTrackAt(t, after, "Renamed/02.flac", before["Album/02.flac"])
 	requireTrackAt(t, after, "Other/01.flac", before["Other/01.flac"])
+	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE source_root_id=$1::uuid AND relative_path='Fresh/01.flac' AND source_status='present'`, 1, root.ID)
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE source_root_id=$1::uuid`, 4, root.ID)
 	requireNoMissingTracks(t, fixture, root.ID)
+	requireDiagnosticCount(t, fixture, scan.ID, "parse_failure", 1)
+	requireDiagnosticCount(t, fixture, scan.ID, "identity_deferred", 0)
 }
 
 // cancelingFingerprinter 在第一次被调用时取消 context，模拟扫描在规划期间被取消。
@@ -730,9 +719,9 @@ func TestPostgreSQLScanAfterMigrationBackfillsFingerprintsWithoutChangingIdentit
 	requireNoMissingTracks(t, fixture, root.ID)
 }
 
-func TestPostgreSQLIncompleteScanDefersReplacedContent(t *testing.T) {
+func TestPostgreSQLIdentityRebindingReplacesContentAfterParseFailure(t *testing.T) {
 	fixture := newLibraryFixture(t)
-	root := insertScannerRoot(t, fixture, "incomplete-replaced")
+	root := insertScannerRoot(t, fixture, "parse-failure-replaced")
 	service := scannerTestApplication(fixture)
 	writeAudio(t, root, "Album/01.flac", audioFile{seed: 1, title: "Original", album: "Album", track: 1})
 	requireScanStatus(t, runTestScan(t, fixture, service, root), "succeeded")
@@ -740,23 +729,15 @@ func TestPostgreSQLIncompleteScanDefersReplacedContent(t *testing.T) {
 
 	writeAudio(t, root, "Album/01.flac", audioFile{seed: 2, title: "Replacement", album: "Album", track: 1})
 	writeFixtureFile(t, root, "Broken/bad.mp3", []byte("not-an-mp3"))
-	incomplete := runTestScan(t, fixture, service, root)
-	requireScanStatus(t, incomplete, "incomplete")
-	if ids := presentTrackIDs(t, fixture, root.ID); len(ids) != 1 || ids["Album/01.flac"] != oldID {
-		t.Fatalf("不完整遍历中换内容的 scope 应暂缓，旧曲目保持原状：%v", ids)
-	}
-	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE source_root_id=$1::uuid`, 1, root.ID)
-	requireDiagnosticCount(t, fixture, incomplete.ID, "identity_deferred", 1)
-
-	if err := os.RemoveAll(filepath.Join(root.Path, "Broken")); err != nil {
-		t.Fatalf("remove broken fixture: %v", err)
-	}
-	complete := runTestScan(t, fixture, service, root)
-	requireScanStatus(t, complete, "succeeded")
-	requireDiagnosticCount(t, fixture, complete.ID, "content_replaced", 1)
+	scan := runTestScan(t, fixture, service, root)
+	requireScanStatus(t, scan, "succeeded")
+	requireDiagnosticCount(t, fixture, scan.ID, "content_replaced", 1)
+	requireDiagnosticCount(t, fixture, scan.ID, "parse_failure", 1)
+	requireDiagnosticCount(t, fixture, scan.ID, "identity_deferred", 0)
 	if newID := presentTrackIDs(t, fixture, root.ID)["Album/01.flac"]; newID == "" || newID == oldID {
-		t.Fatalf("完整遍历后新内容应得到新曲目：%q（旧 %q）", newID, oldID)
+		t.Fatalf("单文件失败不阻断换内容的新曲目入库：%q（旧 %q）", newID, oldID)
 	}
+	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE id=$1::uuid AND source_status='missing' AND source_identity IS NULL`, 1, oldID)
 }
 
 func TestPostgreSQLTrackPathUniquenessOnlyConstrainsBoundRows(t *testing.T) {

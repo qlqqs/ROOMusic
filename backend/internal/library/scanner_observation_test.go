@@ -54,6 +54,9 @@ func (executor *cleanupFailureScanExecutor) ExecContext(_ context.Context, query
 		}
 		return nil, nil
 	}
+	if strings.HasPrefix(query, "DELETE FROM scan_held_sources") {
+		return nil, nil
+	}
 	if strings.HasPrefix(query, "INSERT INTO scan_diagnostics") {
 		if len(arguments) >= 3 {
 			if kind, ok := arguments[2].(string); ok {
@@ -156,24 +159,24 @@ func TestBuildCueVirtualObservationDistinguishesSheetAndTrackPerformer(t *testin
 
 func TestCueReferenceCompletionAndStagingPolicy(t *testing.T) {
 	testCases := []struct {
-		name       string
-		status     string
-		index      bool
-		incomplete bool
-		staged     bool
+		name   string
+		status string
+		index  bool
+		held   bool
+		staged bool
 	}{
 		{name: "present with index", status: "present", index: true, staged: true},
 		{name: "present without index", status: "present", index: false},
 		{name: "missing parent", status: "missing", index: true},
-		{name: "unsafe parent", status: "unsafe", index: true, incomplete: true},
-		{name: "unchecked parent", status: "unchecked", index: true, incomplete: true},
-		{name: "unknown status", status: "", index: true, incomplete: true},
+		{name: "unsafe parent", status: "unsafe", index: true, held: true},
+		{name: "unchecked parent", status: "unchecked", index: true, held: true},
+		{name: "unknown status", status: "", index: true, held: true},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			track := parser.CueTrack{ReferenceStatus: testCase.status, IndexPresent: testCase.index}
-			if got := cueReferenceMakesScanIncomplete(testCase.status); got != testCase.incomplete {
-				t.Fatalf("cueReferenceMakesScanIncomplete(%q) = %t, want %t", testCase.status, got, testCase.incomplete)
+			if got := cueReferenceNeedsHold(testCase.status); got != testCase.held {
+				t.Fatalf("cueReferenceNeedsHold(%q) = %t, want %t", testCase.status, got, testCase.held)
 			}
 			if got := cueTrackCanBeStaged(track); got != testCase.staged {
 				t.Fatalf("cueTrackCanBeStaged(%+v) = %t, want %t", track, got, testCase.staged)

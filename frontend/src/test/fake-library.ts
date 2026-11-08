@@ -109,7 +109,7 @@ export function installLibraryApi(api: FakeApi, overrides: Partial<FakeLibrary> 
       const name = path.split("/").filter(Boolean).pop() ?? path;
       let root = library.roots.find((candidate) => candidate.name === name);
       if (root === undefined) {
-        root = { id: uuidOf("a", nextRoot++), path: name, name, status: "active", revision: 1, created_at: now(), updated_at: now() };
+        root = { id: uuidOf("a", nextRoot++), path: name, name, status: "active", revision: 1, created_at: now(), updated_at: now(), excluded_paths: [] };
         library.roots.push(root);
       }
       const body = { id: root.id, name: root.name, status: root.status, revision: root.revision };
@@ -177,6 +177,7 @@ export function installLibraryApi(api: FakeApi, overrides: Partial<FakeLibrary> 
       finished_at: null,
       cancel_requested_at: null,
       diagnostics: { total: 0, counts: [] },
+      skipped_files: null,
     };
     nextScan += 1;
     library.scans.set(scan.id, scan);
@@ -217,6 +218,7 @@ export function seedScan(library: FakeLibrary, overrides: Partial<ScanDTO> = {},
     finished_at: null,
     cancel_requested_at: null,
     diagnostics: { total: 0, counts: [] },
+    skipped_files: null,
     ...overrides,
   };
   library.scans.set(scan.id, scan);
