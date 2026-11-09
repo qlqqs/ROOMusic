@@ -1,53 +1,62 @@
 # 实施计划：采样率转换（SRC）
 
-设计见 [design.md](./design.md)。测试遵循仓库 `AGENTS.md` 的测试范围约束与全局“测试只做必要的”：只测改动直接影响的行为，不跑全量，不加演练和兜底。
+设计：[design.md](./design.md)；共用接口：[骨架](../11-09-dsp-batch2-skeleton/design.md)；跨项合入门禁：[父 implement §5](../11-08-audio-dsp-reference-port/implement.md)。本文是待审规划，不等于授权启动实现。
 
-## 顺序
+后端实现与独立测试均用 `codex/gpt-6-astra`（high），由不同 agent 执行；前端由主会话直接写。工作树建议 `ROOMusic-dsp-src`，纯包分支 `dsp/src-pure`，接入分支 `dsp/src-integration`（SDM只需pure）；测试项目 `roomusic-test-src`。不改他人分支/测试库；参考稿只引章节号，本机数据只读。
 
-| 步 | 内容 | 执行 | 前置 |
-| --- | --- | --- | --- |
-| 1 | `backend/internal/dsp/internal/fft`：基 2 复数 FFT、实数输入打包、逆变换（不缩放） | 后端 GPT | 无 |
-| 2 | `scripts/dspgen/src2s.py`（design §2.3 的线性规划），生成并提交 `backend/internal/dsp/src/kernels2s_gen.go` | 后端 GPT | 无 |
-| 3 | `dsp/src` 核：Kaiser 窗 sinc（§2.2）、读入 2s 半核、倒谱最小相位（§2.4）、进程内缓存 | 后端 GPT | 1、2 |
-| 4 | 多相重采样器：单级、降采样复用原型、多级串联、`Latency`/`Reset`、`ResampleAll`（§1、§3） | 后端 GPT | 3 |
-| 5 | 规划器 `Choose`：五种策略、四步回退、分级表（§4） | 后端 GPT | 4 |
-| 6 | CI 测试（§8.1）与本机对照测试（§8.2，`refcompare` 标签） | 测试 GPT | 1–5 |
-| 7 | 本机跑一次对照，把每族最差余量贴进回报 | 测试 GPT | 6 |
-| 8 | 迁移 `sample_rate jsonb`（编号接在 Headroom 迁移之后，带 `.down.sql`）；`dspsettings` 的编解码；`zones` 的 `set_settings` 键；链 ② 节点；`sample_rate` 信号路径步骤；删除 §6.3 的 ffmpeg 参数 | 后端 GPT | 第一批合入 main |
-| 9 | 前端两项设置与 `sample_rate` 步骤显示 | 前端 Opus（新开一个 agent，做完即结束） | 8 的接口 |
-| 10 | 验收：主会话审 diff 与测试输出；本机放一首 44.1 kHz 曲目在 Opus 档和一首 192 kHz 曲目在 iOS 上，看信号路径 | 主会话 | 1–9 |
+## 1. 纯包（现在可开工）
 
-步骤 1–7 是纯包，与第一批并行；卷积与 DSD 子任务在步骤 5 合入后即可开工。
+1. SRC 线独占创建 `dsp/internal/fft`（逆变换不缩放）、登记包规则；把可复用小提交交卷积线，不让卷积重写 FFT。
+2. `scripts/dspgen/src2s.py` 用固定版本的离线数值工具生成自主 2s 核；核、生成器、来源方法说明一起保留，不提交参考 CSV/附录。
+3. dsp/src 的核生成/缓存、多相重采样、Latency/Reset、ResampleAll、Choose；按 design §1–§5。渲染 floor 长度与 IR ceil 长度分开。
+4. 独立测试 agent 写 design §8.1 的 FFT、核规格、块长不变性、策略表测；本机 refcompare 只报告余量。refdata 若未到位可等待该基础小提交，但不阻塞核心算法。
 
-## 派活要点
+## 2. 接入（骨架合入后，按顺序）
 
-- 后端 prompt：只实现 design 里的方法与参数，不试别的窗函数或设计法；2s 只能来自入库的生成结果，运行时不求解线性规划；不为假想输入写兜底分支。
-- 前端 prompt 写明全局文案约束：不写防御性说明、不写多余说明；两项设置都不配说明文字。
-- 测试 prompt：只写 §8.1 列出的测试；本机对照只在本机跑一次，结果写进回报，不提交数据、不进 CI；失败信息不打印参考系数。
+1. 在骨架已合入的 main 上更新分支；接入顺序第一项。登记 render→dsp/src 依赖，0045 增 sample_rate 文档。
+2. zones 按骨架统一清单加键、默认、不可变规范化、存取、完整对象白名单；无 dspsettings SRC 服务。刷本项 recorder 样本，不能让 *int 地址参与相等判断。
+3. renderPlan/Spec.Stages ② 装配，sourcePCM 恢复源采样率；decoder 只删变率，保留 -ac。Opus 固定48k、AAC不超48k，均在用户处理前变率；编码器不再暗中变率。
+4. 主会话写 React 两个设置控件，model/decoder/API/controller/fake 同步，signal kind=sample_rate。每次明确选择提交，不增加解释段落。
+5. 独立测试补 design §8 接入最小集；主会话核对有损192→48、无损DXD回退与无转换 MD5；父 implement §5 两组整套 e2e 门禁通过后合 main，交降混接入。
 
-## 验证命令
+## 3. 最小验证集与命令
+
+只验 design 指定的实际改动，不写假想场景或全量兜底。以下 go 命令从 backend 运行；真实渲染测试先在仓库根 `export ROOMUSIC_TEST_FFMPEG="$(scripts/ffmpeg-pinned.sh)"`。本机参考测试若跳过，须单列未完成对照，不能写“指标通过”。
 
 ```bash
-uv run --with numpy==2.5.4 --with scipy==1.18.1 scripts/dspgen/src2s.py   # 只在改 2s 方法时；输出要与入库文件一致
-cd backend
-go test ./internal/dsp/internal/fft/ ./internal/dsp/src/
-go test -tags refcompare -run TestReferenceKernels ./internal/dsp/src/   # 只在本机，数据目录不存在会跳过
-# 步骤 8 之后：只跑受影响包
-go test ./internal/dsp/chain/ ./internal/dspsettings/... ./internal/zones/... ./internal/playback/render/...
+go test ./internal/dsp/internal/fft ./internal/dsp/src -count=1
+go test -tags refcompare -run TestReferenceKernels ./internal/dsp/src -count=1
+# 接入后：
+go test ./internal/zones/... ./internal/playback/render -count=1
+go test ./internal/app -run '^TestPackageDependencyDirections$' -count=1
 ```
 
 ```bash
-cd frontend
-npx vitest run src/features/player/components/signal-path.test.tsx <设置表单的测试文件>
-npm run typecheck
+ROOMUSIC_TEST_COMPOSE_PROJECT=roomusic-test-src \
+  ROOMUSIC_TEST_RUN='TestPostgreSQLZones|TestPostgreSQL.*DSP|TestPostgreSQLMigrationRollbackRoundTrip' \
+  scripts/test-integration.sh
+# 有意合同改变后仅更新所属响应，再不带更新变量复跑：
+ROOMUSIC_UPDATE_API_SAMPLES=1 ROOMUSIC_TEST_COMPOSE_PROJECT=roomusic-test-src \
+  ROOMUSIC_TEST_RUN='^TestPostgreSQLZonesAPIResponseSamples$' scripts/test-integration.sh
 ```
 
-## 回滚点
+迁移号 **0045**，带 down；新增资源测试沿用 TestPostgreSQL...DSP/IR 命名以纳入范围，实际执行时列出匹配到的用例，不把零匹配/跳过当通过。独立 project 仍受脚本全局锁约束，本机数据库和 real e2e 串行。
 
-- 步骤 1–7 只新增纯包与脚本，回滚即删除。
-- 步骤 8 的迁移带 `.down.sql`；回退时同时恢复解码、编码命令里的 ffmpeg 转换参数（第一批的行为）。
-- 步骤 9 只增设置项，可单独回退。
+```bash
+(cd frontend && npx vitest run src/features/player/zones/decoders.test.ts src/features/player/components/signal-path.test.tsx)
+(cd frontend && npm run typecheck)
+```
 
-## 回报要求
+新增本项表单/管理/上传交互测试由测试 agent 命名并在交接时追加**精确文件路径**的 vitest 命令；上述既有两文件不能代替新增交互验收。前端主会话在本子项合入前构建一次，产物随本项提交以满足 CI 漂移检查，不由各并行后端分支分别重建。
 
-改动文件列表；执行的测试命令与结果；`kernels2s_gen.go` 注释里 6 组的阻带、通带、−6 dB 点；本机对照每族最差余量（阻带、通带、群延迟）；最大最小相位核（1280/147 precise）的 Go 生成耗时与峰值内存。
+合入前额外执行父 §5 的整组 real e2e 与 mock e2e，禁止只跑单个新用例代替；日常不跑全仓 go test ./...。运行 `git diff --check`。生成器只在方法/系数变动时运行，CI检查自主产物性质，不重算昂贵优化。
+
+## 4. 回滚点
+
+纯包无调用方时可单独回退；已被卷积/DSD 引用后不删共享 FFT。接入回退须同时恢复骨架阶段 decoder/encoder 的临时变率和旧协商，回退 0045；先备份再删设置列。只把策略改 none 并非完整回滚，兼容变率仍会使用 SRC。
+
+## 5. 交接回报
+
+文件与接口变化；真实执行命令/结果/跳过项；最小验收对应证据；迁移升级→回退→再升级结果（有迁移时）；信号路径/界面截图（有界面时）；尚未完成的本机对照与最终iPhone验收。不得把本计划命令列表当作执行记录。各子项实现收尾再更新所属 spec，本次只起草任务文档。
+
+SRC 另回报自主2s六组核的规格、每族本机最差余量、最大最小相位核的生成耗时与峰值内存；不输出参考核。

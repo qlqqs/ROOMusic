@@ -27,7 +27,8 @@
     "11-08-dsd-playback",
     "11-08-sample-rate-conversion",
     "11-08-dither",
-    "11-08-pcm-to-dsd"
+    "11-08-pcm-to-dsd",
+    "11-09-dsp-batch2-skeleton"
   ],
   "parent": null,
   "relatedFiles": [],

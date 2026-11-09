@@ -1,38 +1,40 @@
 # 实施计划：PCM→DSD 调制
 
-设计见 [design.md](./design.md)。测试遵循仓库 `AGENTS.md` 的测试范围约束与全局“测试只做必要的”。首版只做后端库与测试，不接输出（prd M5）。
+设计：[design.md](./design.md)；共用接口：[骨架](../11-09-dsp-batch2-skeleton/design.md)；跨项合入门禁：[父 implement §5](../11-08-audio-dsp-reference-port/implement.md)。本文是待审规划，不等于授权启动实现。
 
-## 顺序
+后端实现与独立测试均用 `codex/gpt-6.1-sol`（high），由不同 agent 执行；前端由主会话直接写。工作树建议 `ROOMusic-dsp-sdm`，纯包分支 `dsp/sdm-pure`，接入分支 `dsp/sdm-integration`（SDM只需pure）；测试项目 `roomusic-test-sdm`。不改他人分支/测试库；参考稿只引章节号，本机数据只读。
 
-| 步 | 内容 | 执行 | 前置 |
-| --- | --- | --- | --- |
-| 1 | 生成器 `backend/internal/dsp/sdm/internal/gen`：Legendre 根与 g、Butterworth 初值与 H∞ 二分、极点参数化的 Nelder–Mead（§2.3）、约束网格与稳定性选择（§2.4）、a 的 QR 最小二乘与线性核对（§2.5） | 后端 GPT | 无 |
-| 2 | 跑生成器，提交 `coeffs_gen.go`（16 组，带 §2.6 的注释）；生成结果与 design §3.6 的原型指标逐组比对，带内噪声相差超过 0.3 dB 的要说明原因 | 后端 GPT | 1 |
-| 3 | `sdm` 包：结构、钳位、量化、MSB 先打包、交错输出、校验字与 `0x69`、失稳复位（§1、§3） | 后端 GPT | 2 |
-| 4 | CI 测试（§6.1 的 1–5） | 测试 GPT | 3，DSD 子任务的 `dsd.Converter` |
-| 5 | 本机对照（§6.2），每组余量写进回报 | 测试 GPT | 3 |
-| 6 | 验收：主会话审 diff、生成注释里的指标与对照汇总 | 主会话 | 全部 |
+## 1. 纯包（现在可开工）
 
-步骤 1–3 不依赖其他子任务；步骤 4 的往返测试要等 `dsd.Converter` 合入。
+1. 生成器 dsp/sdm/internal/gen：按 design §2 的自主方法、16组系数与数值核验，输出 coeffs_gen.go；两级目录同时登记规则。
+2. dsp/sdm：结构、0.5缩放/钳位、MSB先、交错输出、完整性0x69与失稳复位。核心实现现在可开工，不等骨架或DSD渲染接入。
+3. 独立测试先做频谱/稳定性/校验/系数性质；本机对照通过refdata读取，缺失明确跳过，结果只写指标与余量，不写参考系数。
 
-## 派活要点
+## 2. 接入（骨架合入后，按顺序）
 
-- 后端 prompt：生成方法只用 design §2 列出的；生成器只用标准库；不在运行时生成系数；7 阶按 3 个谐振器实现（§5.2）。附录 G 与参考稿正文的系数不进代码、注释或测试数据。
-- 测试 prompt：只写 §6 的用例；本机对照用 `refdata.Dir(t)`，以附录各段标题为准，不用正文 §6.7 的两组；失败信息不打印参考系数。
+1. 本项**没有产品接入**：不改 render/zones/HTTP/UI、不启用SRC dsd策略、不加迁移。此段只管依赖汇合与合入，不能误解为必须往共享链插⑦。
+2. 往返验证等待DSD纯包（可先取小提交，不必等DSD播放器）；将SDM交错 []byte 拆成每声道 [][]byte 后交Converter，补偿/丢弃其启动瞬态再测频谱。
+3. 正式合入排序在DSD之后：基于最新main复核规则/生成物/测试，父 §5合入前real/mock整组门禁由主会话执行一次，不为纯库额外编写新e2e。完成后随其他子项进入v0.6.0，不另做输出开关。
 
-## 验证命令
+## 3. 最小验证集与命令
+
+只验 design 指定的实际改动，不写假想场景或全量兜底。以下 go 命令从 backend 运行；真实渲染测试先在仓库根 `export ROOMUSIC_TEST_FFMPEG="$(scripts/ffmpeg-pinned.sh)"`。本机参考测试若跳过，须单列未完成对照，不能写“指标通过”。
 
 ```bash
-cd backend
-go generate ./internal/dsp/sdm/        # 只在改生成方法时跑；结果要与入库文件一致
-go test ./internal/dsp/sdm/
-go test -tags refcompare -run TestReferenceSDM ./internal/dsp/sdm/   # 只在本机
+go generate ./internal/dsp/sdm # 仅修改生成方法时运行
+go test ./internal/dsp/sdm -count=1
+go test -tags refcompare -run TestReferenceSDM ./internal/dsp/sdm -count=1
+go test ./internal/app -run '^TestPackageDependencyDirections$' -count=1
 ```
 
-## 回滚点
+合入前额外执行父 §5 的整组 real e2e 与 mock e2e，禁止只跑单个新用例代替；日常不跑全仓 go test ./...。运行 `git diff --check`。生成器只在方法/系数变动时运行，CI检查自主产物性质，不重算昂贵优化。
 
-新包，没有调用方；删除即回滚。
+## 4. 回滚点
 
-## 回报要求
+没有生产调用方，整包与生成器可独立回退；不牵涉DB或前端。生成物回退须连同方法说明与实测指标，不能仅换系数。
 
-改动文件列表；`coeffs_gen.go` 里 16 组的指标（标准阶选中的 l 与 Clans 胜出的起点，H∞、‖h‖₁、带内 NTF、稳定上限）与生成耗时；测试命令与结果；本机对照每组的余量（带内噪声、SNR、稳定上限）。
+## 5. 交接回报
+
+文件与接口变化；真实执行命令/结果/跳过项；最小验收对应证据；迁移升级→回退→再升级结果（有迁移时）；信号路径/界面截图（有界面时）；尚未完成的本机对照与最终iPhone验收。不得把本计划命令列表当作执行记录。各子项实现收尾再更新所属 spec，本次只起草任务文档。
+
+SDM 另回报16组自主系数的指标、生成耗时及本机噪声/SNR/稳定上限余量；与design §3.6原型带内噪声差超过0.3 dB时说明原因。

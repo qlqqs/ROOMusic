@@ -1,13 +1,17 @@
+与第一批代码对齐：2026-11-09
+
 # 技术设计：参数均衡与耳机校正
 
 需求见 [prd.md](./prd.md)；父任务 [音频算法对标](../11-08-audio-dsp-reference-port/design.md)（下称“父设计”）。参考稿章节：§6.3、§6.9（OHD 耳机校正）、§6.1（第 ⑤ 步）。
 滤波器公式来自公开的 Audio-EQ-Cookbook 与双线性变换；OPRA 数据按 CC BY-SA 4.0 使用。
 
+接入以[公共骨架合同](../11-09-dsp-batch2-skeleton/design.md)为准；基线为 `main e29b65d`，新接口均为拟定。纯包与接入的启动条件见本任务 implement.md。前端由主会话写，不另派前端 agent。
+
 ## 0. 结论
 
 - 纯包 `backend/internal/dsp/peq`：双二阶系数设计（Cookbook；低通/高通用 `K = tan(πf/fs)` 预畸变形式）+ Butterworth 固定 Q 级联（1–6 阶，即 6–36 dB/倍频程）+ **一个**多通道 IIR 处理器。
-- 服务包 `backend/internal/dspsettings`（父设计 §1 已记）：PEQ 文档的校验与换算、成员预设、OPRA 目录、文本导入；HTTP 在 `dspsettings/httpapi`。
-- 播放区存一份完整的 PEQ 文档（`playback_zones.peq jsonb`，父设计 §7；复制而不是引用预设）；预设是成员自己的表。PEQ 在 ⑤ 里排在卷积之前还是之后由卷积子任务的 `convolution_before_peq` 决定（§9）。
+- 服务包 `backend/internal/dspsettings`（父设计 §1 已记）：成员预设、OPRA 目录、文本导入与曲线；播放区文档类型/规范化/纯校验归 zones，算法换算在 render 或服务调用点；HTTP 在 `dspsettings/httpapi`。
+- 播放区存一份完整的 PEQ 文档（`playback_zones.peq jsonb`，父设计 §7；复制而不是引用预设）；预设是成员自己的表。PEQ 在 ⑤ 里排在卷积之前还是之后由卷积子任务的 `convolution.before_peq` 决定（§9）。
 - OPRA 数据裁剪后 gzip 随仓库与镜像分发（约 1–2 MB），附来源与许可说明；更新用一个生成命令手动跑，运行时不联网。
 - 界面：PEQ 编辑器（段列表 + 频响曲线）、OPRA 选择、粘贴导入、预设；OPRA 署名按其要求显示，作者比 OPRA 标识更醒目。
 
@@ -83,9 +87,9 @@ func (f *IIR) Reset()
 
 - `type`：`peaking | low_shelf | high_shelf | low_pass | high_pass | band_pass | notch | all_pass`。
 - `channels`：`"all"` 或声道下标数组（0 = 左、1 = 右……）；下标超出当前流的声道数时那一段在该流上不生效。
-- 范围：段数 ≤ 32；`freq_hz` 10–40000；`gain_db` −30…+30；`q` 0.1–30；`slope_db` ∈ {6,12,18,24,30,36}；`preamp_db` −30…+30。超范围在保存时 400 拒绝（`peq_invalid`，带字段路径）。
+- 范围：段数 ≤ 32；`freq_hz` 10–40000；`gain_db` −30…+30；`q` 0.1–30；`slope_db` ∈ {6,12,18,24,30,36}；`preamp_db` −30…+30。超范围在保存时 `400 invalid_input` 拒绝，不带字段路径；与现有 zones 错误形状一致。
 - `source`：`opra`（套用 OPRA 配置）、`preset`（`{preset_id, name}`，套用时的快照，预设之后被改或被删不影响播放区）、`import`、或省略（手动）。用户在编辑器里改动任何一段后 `source` 保留，界面显示为“基于 …”。
-- 没有启用的段且 preamp 为 0 时，处理链不插节点。
+- 只有 `enabled=false` 才不插节点；enabled=true 即使当前没有生效段且 preamp=0，仍插入恒等 IIR 并算处理，符合骨架 K3。
 
 ## 5. OPRA 耳机校正（Q6）
 
@@ -94,8 +98,9 @@ func (f *IIR) Reset()
 - 上游：Roon Labs 维护的 OPRA 库（`github.com/opra-project/OPRA`），`database_v1.jsonl` 每行 `{"type": "vendor"|"product"|"eq", "id", "data"}`；EQ 的 `data` 有 `product_id, author, details, link, type, parameters{gain_db, bands[{type, frequency, gain_db, q, slope}]}`。按 OPRA 的说明，开源项目从 Roon Labs 的镜像 `opra.roonlabs.net` 取数据。
 - 裁剪：只留厂商 `{id, name}`、产品 `{id, vendor_id, name, subtype}`、EQ `{id, product_id, author, details, link, parameters}`，丢掉介绍文字、标识与线稿图路径；`type` 不是 `parametric_eq` 的 EQ 丢弃（§6.9）。按 id 排序后写成 JSONL 再 gzip，放 `backend/internal/dspsettings/opra/data/opra-v1.jsonl.gz`，同目录 `SOURCE.md` 记上游地址、抓取日期、上游文件 SHA-256、许可（CC BY-SA 4.0）与署名要求。
 - 体积：上游约 12 MB，裁剪并压缩后预计 1–2 MB，`go:embed` 进二进制，镜像不需要额外文件。
-- 更新：`go run ./internal/dspsettings/opra/cmd/opra-update`（下载、校验字段、裁剪、排序、压缩、改写 `SOURCE.md`），由维护者在发版前手动跑并提交；CI 不联网。
-- OPRA 标识图片：更新命令同时从 OPRA 仓库的 `images/` 取标识，存 `frontend/src/assets/opra/`。
+- 更新：`go run ./cmd/opra-update`（从 backend 运行；下载、校验字段、裁剪、排序、压缩、改写 `SOURCE.md`），由维护者在发版前手动跑并提交；CI 不联网。
+- OPRA 标识图片由主会话放入 `frontend/src/assets/opra/` 并维护来源；Go 工具只写 backend 数据目录，不跨层写 frontend。最终随 `npm run build` 进入 `backend/cmd/roomusic/web`，不是手改带哈希的构建产物。
+- 仿照 `backend/internal/catalog/textnorm/opencc.go` 与 `data/opencc/` 的嵌入方式，数据旁提交 `SOURCE.md` 和上游 `LICENSE`，许可证全文与来源说明一起 go:embed 随二进制分发；运行时不联网。1–2 MB 压缩量与 20–30 MB 常驻量是旧设计估算，实现时实测回报，不作为本次已验证数字。
 
 ### 5.2 加载与搜索
 
@@ -175,21 +180,23 @@ CREATE TABLE dsp_peq_presets (
 | `POST peq/response` | `{peq, sample_rate?}` → 每个声道组一条曲线 `{curves: [{channels, points: [[hz, db]]}]}`，20 Hz–20 kHz 对数 256 点，默认 48 kHz |
 | `GET/POST peq-presets`，`PATCH/DELETE peq-presets/{id}` | 预设的增删改查（改名、覆盖内容） |
 
-播放区里的 PEQ 经 `zones` 的 `set_settings` 写入（键 `peq`）；`zones` 调用 `dspsettings` 的校验函数（父设计 §1 的导入方向），超范围返回 400 `peq_invalid`。
+播放区里的 PEQ 经 zones 的 set_settings 写入（键 peq）；zones 自己规范化与校验，dspsettings 复用 zones 公开文档合同，不形成反向依赖。设置及预设文档非法均为 `400 invalid_input`，`peq_import_empty` 仅由新的 dspsettings/httpapi 显式映射；预设他人 ID 为 404 not_found。HTTP 注册接到 app，不能假设现有 zones handler 会识别这些新错误。
 
-## 9. 接入
+## 9. 接入（骨架 → SRC → 降混之后）
 
-- 迁移 `00NN_playback_zone_peq.sql`（编号接在 dsp-pipeline 的 Headroom 迁移之后、按第二批合入顺序顺延，带 `.down.sql`）：`ALTER TABLE playback_zones ADD COLUMN peq jsonb NOT NULL DEFAULT '{"enabled":false,"preamp_db":0,"bands":[]}'`。解码校验与 Headroom 相同：坏值按默认处理。
-- 位置：父设计 §5.2 的 ⑤ 用户处理项链。与卷积的先后由 `convolution_before_peq` 决定（卷积子任务 §7.1，默认 PEQ 在前）；卷积未合入时 ⑤ 只有 PEQ。
-- 构建：开流时按流的采样率与声道数（③ 降混之后）把文档换成 `[]Section`，`chain.Wrap(peq.NewIIR(…), f, f, step, true)`；会话内不变，改动由 zones 去抖重建（父设计 §5.3）。
-- 信号路径步骤（dsp-pipeline §9.1）：`kind: "peq"`，`params: {label, bands}`，`quality: "enhanced"`，`compat: false`。`label` 是 `source` 的显示名（OPRA 为“产品名 · 作者”、预设为预设名），手动编辑为“参数均衡”；`bands` 是生效的段数。
+- **0047_playback_zone_peq.sql/.down.sql** 一起增加 `playback_zones.peq jsonb NOT NULL DEFAULT '{"enabled":false,"preamp_db":0,"bands":[]}'` 和 §7 的 dsp_peq_presets。zones 文档封装与规范 JSON 等值比较/新切片解码依骨架 §7；不能直接给可比较 Settings 塞入 []Band 或共享预设切片。
+- 真正的组装在 `backend/internal/playback/render/session.go` 的链准备处：按 ③ 后格式将 zones 文档转 Section，`chain.Wrap(peq.NewIIR(...), f, f, step, true)` 插 `Spec.User`。卷积尚未接入时只有 PEQ；随后根据 convolution.before_peq 调整 User 顺序，chain 不导入 peq。
+- `render/negotiate.go` 的计划与 `signal.go` 共用骨架 hasProcessing。开了 PEQ 但增益为零仍属于处理；关掉时不修改 Exact、无损 MD5 不变。实际全部段因声道下标不匹配而不生效也按已启用节点处理。
+- `kind: peq`，params `{label,bands}`，`quality: enhanced, compat: false`；label 为来源快照显示名（OPRA：产品名 · 作者；预设：预设名；手动：参数均衡），bands 为当前生效段数。同步前端 model/decoder/stepIcons，否则新 kind 会被丢弃。
+- zones 的 `SettingsPatch`、共同编解码、SQL、默认、HTTP 白名单及金样按骨架固定清单接入。预设引用只是快照元信息，不给它增加运行期归属查询；IR 引用才需要资源服务核对。
 
-## 10. 界面（Opus 实现）
+## 10. 界面（主会话实现）
 
 在播放区设置里加“参数均衡”入口，打开编辑面板：
 
 - 顶部：总开关、前级增益输入、来源名（OPRA/预设/导入）。
-- 频响曲线：调用 `peq/response`（输入后 150 ms 去抖），多声道组时用不同颜色的线；不画网格以外的装饰。
+- 本地草稿与持久化分离：拖动时只更新草稿；沿用 `playback-settings-form.tsx` 的 GainSlider 约定，在指针松手、键盘结束、数值确认/失焦或“应用”时提交完整 peq，一次用户操作一次 set_settings；服务器已有 300 ms 去抖，每次提交都可能新建 seq，不能用 150 ms 持续自动保存。
+- 频响曲线：调用 `peq/response`（输入后 150 ms 去抖，只预览不写播放区），多声道组时用不同颜色的线；不画网格以外的装饰。
 - 段列表：每行类型下拉、频率、增益（低通/高通/带通/陷波/全通时隐藏）、Q（低通/高通显示斜率下拉）、声道（全部/左/右）、启用勾选、删除图标按钮；末尾“添加”图标按钮。
 - 工具栏图标按钮：“耳机校正”（OPRA 面板）、“粘贴导入”（文本框 + 预览曲线 + 应用；有无法识别的行时显示一句“有 N 行没有识别”）、“预设”（列表：套用、改名、删除；“存为预设”输入名称）。
 - OPRA 面板：搜索框、产品列表（厂商 + 型号）、点开后是配置列表（作者醒目、说明、来源链接、套用按钮）、底部署名（§5.4）。
@@ -200,21 +207,20 @@ CREATE TABLE dsp_peq_presets (
 后端（测试 GPT）：
 
 1. Cookbook 自检向量（§1，误差 ≤ 1e−8）与 `b1 == a1`。
-2. 每种类型一个频点表：峰值/架类在 f 处的增益等于 G（±0.01 dB）；低通/高通 1–6 阶在 f 处约 −3 dB（±0.1 dB，Q 取两位小数带来的偏差在内）、f = 100 Hz / 48 kHz 时低通在 10f 处约 −20n dB（±0.5 dB）；带通在 f 处 0 dB；陷波在 f 处 ≤ −100 dB；全通各频点 0 dB。频响用系数直接算，不跑信号。
+2. 每种类型一个频点表：峰值在 f 处为 G、架类在转折 f 处为 G/2 且通带端趋于 G（±0.01 dB）；低通/高通 1–6 阶在 f 处约 −3 dB（±0.1 dB，Q 取两位小数带来的偏差在内）、f = 100 Hz / 48 kHz 时低通在 10f 处约 −20n dB（±0.5 dB）；带通在 f 处 0 dB；陷波在 f 处 ≤ −100 dB；全通各频点 0 dB。频响用系数直接算，不跑信号。
 3. 固定 Q 表（§2 的 6 行）。
 4. IIR 处理器：冲激响应与按系数直接递推的结果一致；声道只作用于指定下标；分块大小不同结果相同。
 5. OPRA：用一份 3 行的小样本（厂商、产品、含 `peak_dip`/`low_pass` 的 EQ）测映射；嵌入的真数据只测“能解析、条数大于 0”。
 6. 导入：一段真实格式的 AutoEq `ParametricEQ.txt`（10 段 + Preamp）与一行无法识别的行。
-7. 预设接口：本人能增删改查、他人 ID 返回 404（一个用例）。
+7. 预设接口：本人能增删改查、他人 ID 返回 404（一个用例）；设置规范化后的同值提交不重建、DTO bands 不共享复用骨架表测。
 
-前端（测试 GPT）：编辑器加段、改类型后提交的文档正确；导入预览后应用；OPRA 配置套用后显示作者与链接。各一个用例。
+前端最小验收：编辑器加段、改类型后提交的文档正确，拖动期间不提交、松手只提交一次；导入预览后应用；OPRA 配置套用后显示作者与链接。各一个用例。
 
 ## 12. 分工与依赖
 
-- 后端（GPT）：`dsp/peq`、`dspsettings`（文档、预设、OPRA、导入、接口、迁移）、`set_settings` 键、⑤ 节点与信号路径步骤。
-- 前端（Opus）：§10 全部界面，一个 agent 一次做完。
-- 测试（GPT）：§11。
-- 依赖：`dsp/peq` 纯包与 OPRA、导入、预设可以先做；接入等第一批（处理链、Headroom 迁移、信号路径）合入 main。DSD 子任务的后置低通复用 `ButterworthLowPass`。
+后端实现、独立测试均 `codex/gpt-6-astra`（high）；前端主会话直接写。dsp/peq（包括给 DSD 的 ButterworthLowPass）现在可开工；OPRA 数据裁剪和导入纯解析可先准备，但 zones 设置合同、资源仓储/HTTP/迁移与渲染接入须在骨架 → SRC → 降混之后。
+
+PEQ 的 UI 阶数仍限 1–6；纯 ButterworthLowPass 供 DSD filter=3 调用时支持 8 阶，不能因为 UI 校验只到 6 就在纯函数拒绝 8。本次依赖登记含 dsp/peq、dspsettings、dspsettings/opra、dspsettings/httpapi 与 render/app 具体导入；离线工具在 backend/cmd/opra-update，不放 internal 的 cmd 子包。
 
 ## 13. 已裁决
 

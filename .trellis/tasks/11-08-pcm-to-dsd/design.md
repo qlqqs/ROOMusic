@@ -1,7 +1,11 @@
+与第一批代码对齐：2026-11-09
+
 # 技术设计：PCM→DSD 调制
 
 需求见 [prd.md](./prd.md)；父任务 [音频算法对标](../11-08-audio-dsp-reference-port/design.md)（下称“父设计”）。参考稿章节：§6.7（PCM → DSD）、§6.1（第 ⑦ 步）、附录 G（只在本机对照）。
 调制器结构、噪声传递函数（NTF）的零点优化与极点设计都是公开方法（Schreier & Temes《Understanding Delta-Sigma Data Converters》的 CIFF 结构与最优零点；Lee 准则；Kenney & Carley 的 CLANS 思路）。本文不出现任何参考系数数值。
+
+接入以[公共骨架合同](../11-09-dsp-batch2-skeleton/design.md)为准；基线为 `main e29b65d`，新接口均为拟定。纯包与接入的启动条件见本任务 implement.md。前端由主会话写，不另派前端 agent。
 
 ## 0. 结论
 
@@ -148,6 +152,8 @@ func (m *Modulator) Reset()
 
 ## 4. 接入（M5）
 
+本批不改 render、zones、HTTP、前端，不占迁移号。`app/dependency_rules_test.go` 必须同时登记 `dsp/sdm` 与 `dsp/sdm/internal/gen`；生产只用标准库，测试可用 dsd、fft、refdata，不得把 dsp/internal/refdata 从非 dsp 路径导入。骨架的 shared helper 由其基础小提交提供，fft 由 SRC 纯包提供，不各建一份。
+
 首版不接任何输出。以后出现支持 DSD 的输出端（原生客户端独占输出、服务端直连 DAC）时：
 
 - 链第 ⑦ 步接本包，前面由 ② 用 SRC 的 `dsd` 策略把 PCM 升到 DSD 率（44.1 族：先升到 352.8 kHz，再 2s 升剩下的倍数，见 SRC 设计 §4.4）；
@@ -171,7 +177,7 @@ func (m *Modulator) Reset()
 
 ### 6.1 CI（最小集，测试 GPT）
 
-1. **往返**：在 DSD64 采样率上直接生成 1 kHz、−6 dBFS 正弦（2¹⁸ 个样本，不经 SRC），四种算法分别调制，再用 DSD 子任务的 `dsd.Converter`（+6 dB）解成 352.8 kHz：峰值在 1 kHz（±1 个频点）；电平与输入相差 ≤ 0.1 dB；20 Hz–20 kHz 的 SNR ≥ 100 dB。
+1. **往返**：在 DSD64 采样率上直接生成 1 kHz、−6 dBFS 正弦（2¹⁸ 个样本，不经 SRC），四种算法分别调制，先把交错 `[]byte` 按声道拆成 `[][]byte`（保持各字节 MSB first），再用 DSD 子任务的 `dsd.Converter`（+6 dB）解成 352.8 kHz：峰值在 1 kHz（±1 个频点）；电平与输入相差 ≤ 0.1 dB；20 Hz–20 kHz 的 SNR ≥ 100 dB。
 2. **噪声整形与阶数**：直接对 ±1 比特流做 FFT（相干采样、Hann 窗）。四种算法 DSD64 的带内 SNR ≥ 110 dB；7 阶比同族 5 阶高至少 10 dB；带内噪声功率比 50–150 kHz 的噪声功率低至少 60 dB。
 3. **稳定性**：16 组系数各用 §2.4 的仿真跑幅度 0.55（标准阶 0.60）的 1 kHz 正弦，失稳复位计数为 0。
 4. **完整性**：白盒改掉对象里的校验字，`Process` 的输出全为 `0x69`、计数为 1。
@@ -194,10 +200,10 @@ func (m *Modulator) Reset()
 
 ## 7. 分工与依赖
 
-- 后端（GPT）：生成器、`coeffs_gen.go`、`sdm` 包。
-- 测试（GPT）：§6。
+- 后端实现：`codex/gpt-6.1-sol`（high），生成器、coeffs_gen.go、sdm 包。
+- 独立测试 agent：`codex/gpt-6.1-sol`（high），§6。
 - 前端：无（M5 首版不接输出，`dsd` 策略不显示）。
-- 依赖：DSD 子任务的 `dsd.Converter`（往返测试）。不依赖处理链。
+- 依赖：DSD 子任务的 `dsd.Converter`（往返测试），调制器核心/生成器可现在独立开工；不依赖处理链，不创建设置或迁移。完整往返验收及最终合入安排在 DSD 之后。
 
 ## 8. 待裁决
 

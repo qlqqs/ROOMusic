@@ -70,3 +70,79 @@ zones:  B1 ───────► B2（端口定稿）──► B3 ───�
 - 第一批合入 main 之后再开第二批，每项一条独立分支、独立合入 main（不再用集成分支）。
 - 建议顺序：采样率转换先做（替换第一批的 ffmpeg 兼容性转换，卷积与 DSD 都依赖它），降混、PEQ 与它并行；卷积在采样率转换之后；DSD 在采样率转换与扫描对标 ⑩ 之后；第三批 PCM→DSD 在 DSD 之后。
 - 每项沿用父 design.md §3.1 的处理器形状与 §9 的对照验证做法；处理设置的迁移各自加在 `playback_zones` 上。
+
+## 5. 第二、三批执行安排（2026-11-09）
+
+本节是第一批 `main e29b65d / v0.5.0` 之后的执行依据，取代 §4 及父 design 中“接入可任意并行”的旧安排；历史第一批清单不回写。用户裁决：纯包并行，**骨架先合入，再按 SRC → 降混 → PEQ → 卷积 → DSD 串行接入**；PCM→DSD 只做库，往返依赖 DSD。接口以[骨架 design](../11-09-dsp-batch2-skeleton/design.md)及修订后的子设计为准。
+
+### 5.1 子任务、工作树与资源
+
+| 子项 | 可并行的纯包/基础 | 接入前置 | 后端实现 / 独立测试 | 工作树；分支建议 | 测试项目 | 迁移 |
+| --- | --- | --- | --- | --- | --- | --- |
+| [公共骨架](../11-09-dsp-batch2-skeleton/implement.md) | refdata 基础小提交 | 第一批 main | gpt-6-astra / gpt-6-astra | ROOMusic-dsp-skeleton；dsp/batch2-skeleton | roomusic-test-dsp-skeleton | 无 |
+| [SRC](../11-08-sample-rate-conversion/implement.md) | fft、src、2s 生成器 | 骨架 | gpt-6-astra / gpt-6-astra | ROOMusic-dsp-src；dsp/src-pure → dsp/src-integration | roomusic-test-src | 0045 |
+| [降混](../11-08-downmix/implement.md) | downmix 矩阵/处理器 | SRC 接入合 main | gpt-6.1-sol / gpt-6.1-sol | ROOMusic-dsp-downmix；dsp/downmix-pure → dsp/downmix-integration | roomusic-test-downmix | 0046 |
+| [PEQ](../11-08-peq/implement.md) | peq；OPRA/导入纯解析准备 | 降混接入合 main | gpt-6-astra / gpt-6-astra | ROOMusic-dsp-peq；dsp/peq-pure → dsp/peq-integration | roomusic-test-peq | 0047（含预设表） |
+| [卷积](../11-08-convolution/implement.md) | convolution（等 fft）、cfg；IR 重采样等 src | PEQ 接入合 main | gpt-6-astra / gpt-6-astra | ROOMusic-dsp-convolution；dsp/convolution-pure → dsp/convolution-integration | roomusic-test-convolution | 0048 IR 表、0049 设置 |
+| [DSD](../11-08-dsd-playback/implement.md) | dsd/生成器；中性容器解析；组合等 src/peq | 卷积接入合 main；扫描⑩已满足 | gpt-6-astra / gpt-6-astra | ROOMusic-dsp-dsd；dsp/dsd-pure → dsp/dsd-integration | roomusic-test-dsd | 无 |
+| [PCM→DSD](../11-08-pcm-to-dsd/implement.md) | sdm/生成器；往返等 dsd | 无产品接入；最终合入在 DSD 后 | gpt-6.1-sol / gpt-6.1-sol | ROOMusic-dsp-sdm；dsp/sdm-pure | roomusic-test-sdm（纯包无需DB） | 无 |
+
+模型 provider 都是 `codex`、reasoning 都是 high；实现与测试是独立 agent。**所有前端由主会话写**，不沿用旧稿 Opus 前端派工。此处是分支/项目命名建议，不表示本起草会话已创建工作树或启动 agent。
+
+迁移名及内容见骨架 §8：0045_sample_rate、0046_downmix、0047_peq（表+列）、0048_dsp_ir_files、0049_convolution，实际完整文件名以该表为准。未合入分支不得自行重占编号；如 main 被其他任务占号，由主会话统一顺延未应用编号。
+
+### 5.2 依赖图与合入方式
+
+```text
+现在可并行准备（互不依赖第一批接入）
+  骨架基础 refdata ───────────────→ 各纯包本机对照测试
+  SRC：fft → src ─────────┬──────→ 卷积纯引擎/IR重采样
+  降混：downmix           │
+  PEQ：peq ───────────────┼──────→ DSD 来源组合
+  DSD：dsd ───────────────┼──────→ SDM 往返测试
+  SDM：sdm/生成器         │
+                         ↓（审阅共享纯包小提交，禁止各线重复实现）
+main：第一批 → 公共骨架 → SRC → 降混 → PEQ → 卷积 → DSD → PCM→DSD库
+           每个接入点：最小测试 + 主会话前端 + 独立检查 + 两组完整e2e → 合main
+                                                                       ↓
+                                                          v0.6.0 → 八号机 → iPhone
+```
+
+- “纯包现在可开工”不等于所有测试毫无依赖；卷积等 FFT、DSD 组合等 SRC/PEQ、SDM 往返等 Converter。纯包主功能各线先做，依赖提交审阅后定向取用，记提交号，后续合入避免重复 cherry-pick。
+- 后端工作树只改自己负责的纯包；共享 `render`、zones、migration、app 规则与 API 样本在接入轮次由当前子项拥有。纯包必要的 packageRules 增量由主会话整合，不能每线重写整张 map。
+- 每项接入前同步最新 main，不能拿第一批的 decoder.go 复盖已经接好的 SRC/降混。没有新的长期 integration 总分支；各项各自验收、各自合 main。
+- API 样本按骨架 §7 的 recorder 所有权最少刷新，不能全目录机械替换。`backend/cmd/roomusic/web` **每个含前端变化的子项合 main 前由主会话最终构建一次**；所谓“最后一次重建”是该子项收口时，不是拖到整个 v0.6.0 才做，否则中途 main 的 CI 漂移检查会失败。
+- 独立测试项目避免相互误删；现有 test-integration.sh 与 playback-e2e.sh 仍共用全局 flock，本机两类重测试串行调度，不删除他人的锁、不绕过它。纯 Go 算法测试可并行。
+
+### 5.3 每项合入 main 前检查
+
+1. 只改当前子项范围；主会话核对 K1–K7 接口、实际输入/输出格式、开启/关闭信号、Exact、输入提交污染、资源归属及取消（按本项涉及的检查，不强迫纯 SDM做无关存储测试）。
+2. 独立测试 agent 执行子 implement 的最小集；迁移用隔离库升级→回退→再升级；有对照数据的本机测试交指标与余量，缺数据跳过明确记录，不冒充达标。源码/文档/镜像无参考原文与参考系数。
+3. 前端主会话完成 model/decoder/controller/fake 与界面；仅受影响 Vitest、typecheck，构建产物同步。新信号 kind 能实际显示；PEQ 拖动不持续重建流。
+4. **吸取第一批教训：每项合入前，在整合完的分支按 CI 入口整组跑一次 real e2e 与 mock e2e，不能用新用例或 playback-zones 单项代替。** 此项来自第一批合入的教训（子任务各自的最小测试集漏掉了跨文件干扰和过时断言）；其余日常仍最小测试，不为它另造全套场景。
+
+从仓库根执行（project 替换为本项表中的名称；以下以 SRC 示例）：
+
+```bash
+test -f /home/qlqq/.local/share/playwright-deps/env.sh && source /home/qlqq/.local/share/playwright-deps/env.sh
+(cd frontend && npm ci && npm run typecheck && npm run build)
+# 将本次应有的构建产物纳入待合入变更，再按 CI 检查漂移；不得忽略未跟踪产物。
+# 干净的待合入提交上重建后执行：
+git diff --exit-code -- backend/cmd/roomusic/web
+test -z "$(git ls-files --others --exclude-standard -- backend/cmd/roomusic/web)"
+(cd frontend && npm run test:e2e)  # mock 整组；不用 grep/单文件过滤
+ROOMUSIC_TEST_COMPOSE_PROJECT=roomusic-test-src ./scripts/playback-e2e.sh  # real 整组；无路径参数
+git diff --check
+```
+
+浏览器使用本机已配置的 Chromium 依赖；环境缺失先按本机 AGENTS 排查，不能宣称已通过。失败保留实际报告路径/日志，定位到受影响行为后最小复跑，修复完再完整跑被失败影响的该组。PR 正常 CI 按 `.github/workflows/ci.yml` 执行自身门禁，不将 CI 全仓 go test 命令复制成每一步本地任务。
+
+5. 主会话审阅、按子项更新 spec 并提交/合入（此轮设计 agent 不做）；记录 merge SHA、最小集和两组 e2e 的实际结果。关所有新处理仍通过第一批逐位测试；每次 main 处于可运行状态。
+
+### 5.4 v0.6.0、部署与最后真机验收
+
+- [ ] 骨架及五个接入子项、PCM→DSD 纯库均验收合 main；不提前启用 DAC/DoP/PCM→DSD 输出。汇总版本说明、OPRA 来源/许可与数据版本、自生成系数指标。
+- [ ] 按现有发版流程与 `deploy/production/README.md` 做 v0.6.0 发布检查和镜像构建；确认迁移号连续、内嵌前端无漂移、发布 CI（包括完整 real/mock）通过。此计划不包含自动推 tag/生产操作授权。
+- [ ] 部署八号机前备份数据库（含 IR bytea、PEQ预设及设备选择），按生产部署文档升级、记录原镜像/新镜像摘要、schema 与健康结果；只在用户授权的部署窗口操作。失败按已留存镜像与迁移回退/备份流程处置，不能把原IR当缓存删除。
+- [ ] 部署后先做服务健康与桌面最小播放检查，再进行**最后一轮 iPhone 真机验收**：无损/有损、SRC/降混/PEQ/卷积的信号与设置、DSD64/128及CUE相邻分轨、定位/歌词/锁屏连续/计次；借真实使用路径合并核对，不给每个算法重复整套手机测试。
+- [ ] iPhone 结果由主会话/用户记录；本机Chromium不替代真机。若未完成，父任务不标全部验收完成。v0.6.0 同批部署及最终真机顺序按用户2026-11-09裁决执行。

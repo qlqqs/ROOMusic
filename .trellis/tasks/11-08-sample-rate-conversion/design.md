@@ -1,7 +1,11 @@
+与第一批代码对齐：2026-11-09
+
 # 技术设计：采样率转换（SRC）
 
 需求见 [prd.md](./prd.md)；父任务 [音频算法对标](../11-08-audio-dsp-reference-port/design.md)（下称“父设计”）。参考稿章节：§6.2、§6.1（第 ② 步）、附录 A（处理量子）。
 本文只记章节号、我们自己整理的规格参数和公开方法；参考核系数不进仓库、不在文档里出现。
+
+接入以[公共骨架合同](../11-09-dsp-batch2-skeleton/design.md)为准；基线为 `main e29b65d`，新接口均为拟定。纯包与接入的启动条件见本任务 implement.md。前端由主会话写，不另派前端 agent。
 
 ## 0. 结论
 
@@ -39,7 +43,7 @@ func (r *Resampler) Reset()
 func ResampleAll(x []float64, from, to int, phase Phase, q Quality) []float64
 ```
 
-没有 `Drain`、`Ratio`：流尾冲刷与增益区域的比率换算由适配器按输入输出格式完成（父设计 §3.2、§4）。
+没有 `Drain`、`Ratio`：流尾冲刷与来源精确性元数据由现有 `chain.Wrap` 管理；进入共享链前电平化已施加，Regions 为空。`ResampleAll` 给离线 IR 的 ceil 长度合同与流式 Wrap 的 floor 长度分开，不混用。
 
 ## 2. 核
 
@@ -188,60 +192,45 @@ func Choose(req Request) (Plan, error)
 
 `backend/internal/dsp/internal/fft`（父设计 §1 已记）：只支持 2 的幂长度，迭代基 2 复数 FFT + 实数输入打包成 N/2 点复数 FFT，约 250 行，零新依赖。双精度基 2 的误差 O(log N · ε)，满足 180 dB 指标。不用 gonum 的理由：只为两处 2 的幂用法引入整个模块及间接依赖不划算。本子任务实现，卷积复用。
 
-## 6. 接入
+## 6. 接入（骨架之后，第一个算法）
 
-### 6.1 链上 ② 节点
+### 6.1 格式与装配
 
-- 位置：父设计 §5.2 第 ②（初始采样率转换）。规划结果为空时不插节点。
-- 装配：`chain.Wrap(src.New(plan.Stages, ch), in, out, step, true)`；会话内不变（父设计 §5.3）。
+真实接点是 `backend/internal/playback/render/{negotiate,renderer,session,decoder,encode,signal}.go`，不是改归档设计当作实现。`renderPlan` 先求来源段原率，再 Choose 出链输出率；在骨架 `Spec.Stages` 装 ② `chain.Wrap(src.New(...), in, out, step, true)`，Headroom ① 仍在它之前。无变率不插节点；③/⑤ 接收 SRC 的 Out。事件、位置与输入提交按骨架合同，不另搬增益区域。
 
-### 6.2 DSD 来源段里的降采样
+### 6.2 有损档必须在链内先适配
 
-DSD128 以上解出后降到 352.8 kHz（DSD 子任务 §4）在每曲来源段里、电平化之前，同样用本包的 `Resampler`，由来源段的适配器补偿延迟并按流内绝对帧号搬运增益区域（父设计 §4）。滤波器固定 linear precise（不随用户设置），分级按 §4.4。
+- 无损：当前能力只有每种编码的 `max_sample_rate *int`，无离散集合。生产 `Supported` 表示编码合法率且不超上限；C2 换族分支保留在纯规划器表测，但不虚构客户端会报离散集合。352.8 kHz→192 kHz 上限仍选同族 176.4 kHz。
+- Opus：链 ② 的目标固定 48000；AAC/HLS-AAC：目标优先 48000，选择不超过 48000 且符合设备上限的编码合法率（上限不足时再选受支持率，无可用率则 no_stream_format）。不沿用旧设计的 96 kHz 上限；这样 192 kHz 有损来源在 ⑤ 卷积之前已经降到 48 kHz，而不是在卷积之后才交编码器变率。
+- 有损交付约束优先于用户策略；用户选择较高率也不能先升高再由编码器偷偷降频。记录 compatibility；设备能力与实际 codec 都满足才算支持。
+- 骨架阶段 sourcePCM 还是旧临时适配结果；本项改为原采样率，但声道仍沿用 ffmpeg 的临时降混，直到下一项降混接入。不要一次删掉尚无替代的 `-ac`。
 
-### 6.3 替换第一批的 ffmpeg 临时转换（父设计 §6）
+### 6.3 ffmpeg 替换范围
 
-| 第一批 | 第二批 |
+| 文件 | 修改 |
 | --- | --- |
-| 解码 ffmpeg 带 `-af aresample=resampler=soxr:precision=28` 与 `-ar <链采样率>`（源超过输出端上限时“同族减半”） | 解码命令去掉 `aresample` 与 `-ar`，按源采样率输出；规划器按 §4.3 选目标，② 节点转换 |
-| Opus 编码进程里 `aresample=48000` | 去掉；协商为 Opus 时 `Supported` 只接受 48000，② 把链转到 48 kHz，编码进程只编码 |
-| AAC 链采样率高于 96 kHz 时编码前 `aresample` | 去掉；`MaxRate` 取 96000，② 降到同族的 88.2/96 kHz |
-| 信号路径 `convert` 步骤（`by: "ffmpeg"`） | 不再产生，换成 `sample_rate` 步骤（§6.5） |
+| `render/decoder.go/openDecoder` | 删除变率 `resampleFilter` 分支；不再强制目标 `-ar`，按源率输出。保留 CUE 的 asettb/atrim/asetpts 及当前 `-ac` |
+| `render/encode.go/newEncoder` | 输入采样率/声道取 outputPCM；删 `pcm != f` 的 aresample；输出 `-ar` 若为编码必需只允许等于输入率，不能造成第二次变率。Opus/AAC 参数逐项核实 |
+| `render/negotiate.go/concreteFormat` | 取消旧同族减半/编码侧变率规划，改用 Choose 与本节的交付约束，格式发布后不再修改 |
+| `render/signal.go` | 删除旧解码与编码侧 rateStep 的生成，保留需要的临时 ffmpeg downmix；② 统一产生 sample_rate，包括 Opus 的 48k 转换 |
 
-dsp-pipeline 的解码命令、design-delivery 的编码命令随本子任务合入时同步改（只删上表这几项参数）；解码端换转换器后，两首高采样率曲目无缝相接处的边缘效应也随之消失（链跨曲目连续）。
+真实 `signal.go` 当前特意不为 Opus 编码侧变率单列 convert，因此不能假设所有路径原来都有两步 convert。改设置仍使用 zones 300 ms 去抖，新 seq 由原服务负责。
 
 ### 6.4 设置
 
-按父设计 §7 加在 `playback_zones` 上，用一列 jsonb（与 Headroom 同形）：
+迁移 **0045_playback_zone_sample_rate.sql/.down.sql**：增加 `sample_rate jsonb NOT NULL`，默认 `{"strategy":"none","custom_rate":null,"filter":"linear_precise"}`。四种可见策略与 `dsd` 保留值、四种滤波器按 §4；custom 缺值按 none 的既定语义规范化。dsd 首版不启用、不显示。
 
-```sql
--- 00NN_playback_zone_sample_rate.sql，编号接在 dsp-pipeline 的 Headroom 迁移之后、按第二批合入顺序顺延；带 .down.sql
-ALTER TABLE playback_zones
-  ADD COLUMN sample_rate jsonb NOT NULL
-  DEFAULT '{"strategy":"none","custom_rate":null,"filter":"linear_precise"}';
-```
+规范化、不可变值、默认、存储坏值回退由 **zones** 负责，不建 dspsettings 的 SRC 编解码器。请求键白名单、完整对象、`400 invalid_input`、RegisterDevice/set_settings、EqualSettings 与 API 金样按骨架 §7 同步。自定义率相同但指针地址不同不得触发重建。
 
-- 字段：`strategy` ∈ `none | max_sample_rate | power_of_2 | dsd | custom`；`custom_rate` 为标准集合里的值或 null；`filter` ∈ `linear_precise | minimum_precise | linear_smooth | minimum_smooth`。`dspsettings` 提供编解码与校验（坏值按默认处理，与 Headroom 一致），`zones` 的 `set_settings` 接受键 `sample_rate`，改动由 zones 去抖重建。
-- `custom` 而 `custom_rate` 为空按 `none`。兼容性转换也用 `filter`。
+### 6.5 信号与使用方
 
-### 6.5 信号路径步骤
+`sample_rate` 的 params 为 `{from_rate,to_rate,filter}`；用户主动转换 `quality: enhanced, compat: false`，设备/有损交付约束触发转换 `quality: high, compat: true`。真实前端 `zones/model.ts`、`decoders.ts`、`components/signal-path.tsx` 三处均添加，否则未知 kind 会被丢掉。
 
-按 dsp-pipeline §9.1 的 `SignalStep`：
-
-| 情况 | kind | params | 评级 |
-| --- | --- | --- | --- |
-| 用户策略要求的转换 | `sample_rate` | `{from_rate, to_rate, filter}` | `enhanced`，`compat: false` |
-| 兼容性回退或输出端只收某些采样率（含 Opus 48 kHz） | `sample_rate` | 同上 | `high`，`compat: true` |
-
-DSD 来源段里降到 352.8 kHz 的那一步并进 `dsd_to_pcm` 步骤（DSD 子任务 §4.3），不单独列。
-
-### 6.6 使用方（C5）
-
-卷积 IR 重采样调用 `ResampleAll(…, Linear, Precise)`；DSD 来源段的降采样（§6.2）；链上 ②；以后的 DAC 输出与 PCM→DSD。
+DSD 来源内降到 DXD 用固定 linear precise，发生于 `decoder.read` 电平化之前，归 `dsd_to_pcm` 一步；无需区域搬运。卷积用 ResampleAll，未来 PCM→DSD 的升频策略本批不接输出。
 
 ## 7. 界面
 
-在“设置 › 播放”的播放区设置里加一组（Opus 实现）：
+主会话在 React 的 `frontend/src/features/player/components/playback-settings-form.tsx` 增加：
 
 - “采样率转换”：下拉“不转换 / 设备最高采样率 / 2 倍升频 / 指定采样率”；选“指定采样率”时出现采样率下拉（44.1 kHz … 768 kHz）。
 - “转换滤波器”：下拉“精确 · 线性相位 / 精确 · 最小相位 / 平滑 · 线性相位 / 平滑 · 最小相位”。策略为“不转换”时仍显示（兼容性转换会用到）。
@@ -256,6 +245,7 @@ DSD 来源段里降到 352.8 kHz 的那一步并进 `dsd_to_pcm` 步骤（DSD �
 2. **核规格**（我们自己的指标，不依赖参考数据）：线性相位 38 组 + 最小相位的 2 倍、3/2、160/147 各档与 2s 的 2 倍（7 组）。Σh 与 1 相差 ≤ 1e−12；核长 = L·T+1；线性相位对称；−6 dB 点 smooth 1.0（147/20、147/40、147/80 为 0.9185、0.4593、0.2479）、precise 0.9524、2s 0.4758（±0.002）；precise x < 0.9 偏差 ≤ 0.003 dB、x ≥ 1.06 衰减 ≥ 180 dB；smooth x ≥ x_c + 0.6 衰减 ≥ 135.5 dB；2s x ≤ 0.113 偏差 ≤ 0.002 dB、x ≥ 0.99 衰减 ≥ 160 dB；2 倍 smooth 中心抽头 0.5、偶数偏移为 0。
 3. **重采样器**：44.1→48、48→44.1、2 倍升、DSD512 方向的 8 倍降（两级）各用 3 个带内频点的正弦：输出峰值频率正确，电平误差 ≤ 0.01 dB；直流稳态增益为 1；块长 1 与 9600 结果逐样本相同；`Latency` 等于 §3.3 的值。
 4. **规划器**：表驱动，覆盖五种策略、§4.3 四步回退（含 352.8→192 上限）与 `Compatibility`、§4.4 每一行。
+5. **接入最小集**：44.1→48 Opus 与 192→48 AAC 各一条，核实链在用户节点前已降率、编码器不再变率、事件时长正确；一条无变率 MD5 复用现有测试；规范 JSON 相同值不重建和坏值回退扩展骨架表测。
 
 ### 8.2 本机对照（C3a，不进 CI）
 
@@ -290,10 +280,9 @@ DSD 来源段里降到 352.8 kHz 的那一步并进 `dsd_to_pcm` 步骤（DSD �
 
 ## 9. 分工与依赖
 
-- 后端（GPT）：FFT、核生成与 2s 生成器、重采样器、规划器、迁移、设置编解码、② 节点与信号路径步骤、§6.3 的 ffmpeg 参数删除。
-- 前端（Opus）：§7。
-- 测试（GPT）：§8.1 与 §8.2。
-- 依赖：§1–§5 是纯包，可以先做；§6–§7 等第一批（处理链、Headroom 迁移、信号路径）合入 main。卷积（IR 重采样）与 DSD（降到 352.8 kHz）依赖本子任务的纯包部分。
+后端实现、独立测试均用 `codex/gpt-6-astra`（high）；前端由主会话写。§1–§5 纯包现在可开工，SRC 拥有 `dsp/internal/fft` 的实现，卷积不能再建一份。基础参考工具由骨架独立小提交提供，不阻塞 SRC 核心。
+
+接入等待公共骨架合入 main；SRC 是第一项，合入后降混接入。卷积的 FFT/ResampleAll、DSD 的 SRC 依赖仅纯包提交，可先共享这部分而不等待界面。按骨架 §8 登记实际存在目录的依赖规则，包括 src 对 fft 的导入。
 
 ## 10. 已裁决
 

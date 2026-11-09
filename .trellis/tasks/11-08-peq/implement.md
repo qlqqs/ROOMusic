@@ -1,52 +1,60 @@
 # 实施计划：参数均衡与耳机校正
 
-设计见 [design.md](./design.md)。测试遵循仓库 `AGENTS.md` 的测试范围约束与全局“测试只做必要的”。
+设计：[design.md](./design.md)；共用接口：[骨架](../11-09-dsp-batch2-skeleton/design.md)；跨项合入门禁：[父 implement §5](../11-08-audio-dsp-reference-port/implement.md)。本文是待审规划，不等于授权启动实现。
 
-## 顺序
+后端实现与独立测试均用 `codex/gpt-6-astra`（high），由不同 agent 执行；前端由主会话直接写。工作树建议 `ROOMusic-dsp-peq`，纯包分支 `dsp/peq-pure`，接入分支 `dsp/peq-integration`（SDM只需pure）；测试项目 `roomusic-test-peq`。不改他人分支/测试库；参考稿只引章节号，本机数据只读。
 
-| 步 | 内容 | 执行 | 前置 |
-| --- | --- | --- | --- |
-| 1 | `backend/internal/dsp/peq`：§1 系数设计、§2 固定 Q 级联、§3 多通道 IIR、`ButterworthLowPass` | 后端 GPT | 无 |
-| 2 | `dspsettings`：PEQ 文档类型与校验、换算成 `[]Section`、频响曲线计算 | 后端 GPT | 1 |
-| 3 | OPRA：`opra-update` 命令（下载、裁剪、压缩、`SOURCE.md`、标识图片），提交一次生成结果；内存加载与搜索；映射 | 后端 GPT | 2 |
-| 4 | 文本导入解析 | 后端 GPT | 2 |
-| 5 | 迁移：`dsp_peq_presets` 表、`playback_zones.peq` 列（编号接在 Headroom 迁移之后，带 `.down.sql`）；预设仓储与接口；§8 全部接口 | 后端 GPT | 2–4 |
-| 6 | 接入：`set_settings` 的 `peq` 键（`zones` 调 `dspsettings` 校验）；⑤ PEQ 节点（顺序看 `convolution_before_peq`）；信号路径 `peq` 步骤 | 后端 GPT | 第一批合入 main |
-| 7 | 后端测试（design §11 的 1–7） | 测试 GPT | 1–6 |
-| 8 | 前端：编辑面板、频响曲线、OPRA 面板与署名、粘贴导入、预设；信号路径 PEQ 节点名 | 前端 Opus（一个 agent 一次做完） | 5、6 的接口 |
-| 9 | 前端测试（design §11 末段的三个用例） | 测试 GPT | 8 |
-| 10 | 验收：主会话审 diff、测试输出与界面截图（按 `/home/qlqq/workspace/AGENTS.md` 的 Playwright 环境截图） | 主会话 | 全部 |
+## 1. 纯包（现在可开工）
 
-步骤 1–5 不依赖第一批，可以先做。
+1. dsp/peq：design §1–§3 的系数、固定 Q 级联、多通道 IIR、ButterworthLowPass；UI 只允1–6阶，供DSD调用的纯函数另支持8阶。
+2. 独立测试覆盖每类滤波器必要频点、冲激、声道选择、分块等价；架类转折点是 G/2，不沿用旧稿的 G 断言。
+3. OPRA 裁剪/导入纯解析可并行准备，但不先接 zones/HTTP/迁移。离线工具 `backend/cmd/opra-update` 只写 backend 数据，嵌入 SOURCE.md/LICENSE；标识由主会话放 frontend。
 
-## 派活要点
+## 2. 接入（骨架合入后，按顺序）
 
-- 后端 prompt：公式只用 design §1、§2 列出的；不加 design 之外的滤波器类型或导入格式；OPRA 更新命令只在本机手动跑一次，生成物提交，CI 不联网。
-- 前端 prompt 写进全局文案约束：不写防御性说明、不写多余说明；必要说明一句日常的话。OPRA 署名按 design §5.4，作者比 OPRA 标识醒目。图标按钮无边框、紧凑尺寸（用户的界面偏好）。
-- 测试 prompt：只写 design §11 列出的用例；不为假想输入补测试。
+1. 等骨架 → SRC → 降混合 main；0047 同时加 peq 文档和成员预设表。zones 拥有文档编解码，dspsettings 拥有资源，禁止 zones→dspsettings。
+2. 资源 API、OPRA/导入/曲线、预设鉴权与 app 装配；新目录逐个登记规则。设置错误统一 invalid_input，无字段路径；导入专用错误在自己的 httpapi 映射。
+3. render 按③后的格式构建 IIR，放 Spec.User；启用恒等设置也算处理。此时无卷积，后续由 convolution.before_peq 排序。
+4. 主会话写编辑/预览/OPRA/导入/预设界面；150ms 只去抖预览，松手/确认才 set_settings，一次动作一次提交。OPRA 必需署名保留，其他文案不加防御说明。
+5. 独立测试补小 OPRA 映射、真实嵌入可加载、导入、成员预设隔离、松手提交及信号显示。更新 recorder/fake，按父 §5 完整 real/mock 门禁后合 main。
 
-## 验证命令
+## 3. 最小验证集与命令
+
+只验 design 指定的实际改动，不写假想场景或全量兜底。以下 go 命令从 backend 运行；真实渲染测试先在仓库根 `export ROOMUSIC_TEST_FFMPEG="$(scripts/ffmpeg-pinned.sh)"`。本机参考测试若跳过，须单列未完成对照，不能写“指标通过”。
 
 ```bash
-cd backend
-go test ./internal/dsp/peq/ ./internal/dspsettings/...
-# 步骤 6 之后再加受影响的包，例如
-go test ./internal/dsp/chain/ ./internal/zones/... ./internal/playback/render/...
+go test ./internal/dsp/peq -count=1
+# 接入后：
+go test ./internal/dspsettings/... ./internal/zones/... ./internal/playback/render -count=1
+go test ./internal/app -run '^TestPackageDependencyDirections$' -count=1
 ```
 
 ```bash
-cd frontend
-npx vitest run <PEQ 编辑面板与 OPRA 面板的测试文件>
-npm run typecheck
+ROOMUSIC_TEST_COMPOSE_PROJECT=roomusic-test-peq \
+  ROOMUSIC_TEST_RUN='TestPostgreSQLZones|TestPostgreSQL.*DSP|TestPostgreSQLMigrationRollbackRoundTrip' \
+  scripts/test-integration.sh
+# 有意合同改变后仅更新所属响应，再不带更新变量复跑：
+ROOMUSIC_UPDATE_API_SAMPLES=1 ROOMUSIC_TEST_COMPOSE_PROJECT=roomusic-test-peq \
+  ROOMUSIC_TEST_RUN='^TestPostgreSQLZonesAPIResponseSamples$' scripts/test-integration.sh
 ```
 
-## 回滚点
+迁移号 **0047**，带 down；新增资源测试沿用 TestPostgreSQL...DSP/IR 命名以纳入范围，实际执行时列出匹配到的用例，不把零匹配/跳过当通过。独立 project 仍受脚本全局锁约束，本机数据库和 real e2e 串行。
 
-- 步骤 1–4 是新包，删除即回滚。
-- 步骤 5 迁移带 `.down.sql`（删表、删列）。
-- 步骤 6 的节点在 `peq.enabled = false`（默认）时不插入，关掉即回到无 PEQ 的链路。
-- OPRA 数据是单个嵌入文件，回退到上一版提交即可。
+```bash
+(cd frontend && npx vitest run src/features/player/zones/decoders.test.ts src/features/player/components/signal-path.test.tsx)
+(cd frontend && npm run typecheck)
+```
 
-## 回报要求
+新增本项表单/管理/上传交互测试由测试 agent 命名并在交接时追加**精确文件路径**的 vitest 命令；上述既有两文件不能代替新增交互验收。前端主会话在本子项合入前构建一次，产物随本项提交以满足 CI 漂移检查，不由各并行后端分支分别重建。
 
-改动文件列表与大小（含 OPRA 压缩包大小与条目数）；测试命令与结果；导入一段真实 AutoEq 文本、套用一条 OPRA 配置后的信号路径截图。
+合入前额外执行父 §5 的整组 real e2e 与 mock e2e，禁止只跑单个新用例代替；日常不跑全仓 go test ./...。运行 `git diff --check`。生成器只在方法/系数变动时运行，CI检查自主产物性质，不重算昂贵优化。
+
+## 4. 回滚点
+
+默认关闭可停用节点但不删除资源。回退需恢复设置/HTTP/UI并降0047（先备份，预设会被删）；OPRA 数据回退到上一个自主裁剪提交。已被DSD调用的 ButterworthLowPass 不得单独删除。
+
+## 5. 交接回报
+
+文件与接口变化；真实执行命令/结果/跳过项；最小验收对应证据；迁移升级→回退→再升级结果（有迁移时）；信号路径/界面截图（有界面时）；尚未完成的本机对照与最终iPhone验收。不得把本计划命令列表当作执行记录。各子项实现收尾再更新所属 spec，本次只起草任务文档。
+
+PEQ 另回报OPRA上游与裁剪文件摘要、压缩大小/条目数、嵌入许可证和首次加载常驻量；导入/套用截图含作者链接。
