@@ -63,6 +63,8 @@ var packageRules = map[string]packageRule{
 	"dsp/fade":                       {},
 	"dsp/dither":                     {},
 	"dsp/downmix":                    {},
+	"dsp/sdm":                        {},
+	"dsp/sdm/internal/gen":           {},
 	"dsp/dsd":                        {},
 	"dsp/dsd/internal/gen":           {},
 	"playback/dsdio":                 {},
