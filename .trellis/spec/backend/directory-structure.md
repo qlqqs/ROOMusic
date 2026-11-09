@@ -209,3 +209,8 @@ maintenance的原始名字工作量估计经`artistgraph.ArtistInputNameCost`窄
 ## ⑧古典作品叶子包
 
 `catalog/classical` 只依赖标准库，公开作品编号解析、排序键、标题段切分与作品拆分纯函数；不读流派、数据库或容器。仅 `library/parser`（TIT1保护）和 `catalog/ingest`（候选作品分配）获准导入，精确登记于 `app/dependency_rules_test.go`，不扩大核心或其它能力的依赖范围。parser不再仅依赖metadata，作品标签读取仍在parser，扫描写入仍在ingest。
+
+## 播放区 B1 增量
+
+`zones/queue` 是只依赖标准库的队列叶子包；`zones` 当前只有持久化，允许依赖 `catalog`、`platform/uuid`、`zones/queue`，不导入 listening 或 DSP。详见[播放区数据与队列合同](./zones-data-contracts.md)。
+`app` 允许装配 zones 子树的三个指定包；`zones/httpapi` 尚未创建，待 B2 创建时登记允许依赖 `identity`、`platform/httpserver`、`platform/uuid`、`zones`，不为依赖测试建立空包或放宽“规则对应真实包”的检查。
