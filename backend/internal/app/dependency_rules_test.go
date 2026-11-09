@@ -64,6 +64,8 @@ var packageRules = map[string]packageRule{
 	"dsp/dsd/internal/gen":           {},
 	"playback/dsdio":                 {},
 	"dsp/internal/refdata":           {},
+	"dsp/peq":                        {},
+	"dspsettings/opra":               {},
 	"playback/analysis":              {},
 	"playback/render/ffmpeg":         {},
 	"playback/render":                {imports: []string{"zones", "dsp/chain", "dsp/leveling", "dsp/fade", "dsp/dither", "playback/render/ffmpeg", "platform/uuid"}},
