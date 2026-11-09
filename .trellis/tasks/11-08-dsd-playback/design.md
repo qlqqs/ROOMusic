@@ -65,7 +65,7 @@ DSF、DSDIFF 是公开的容器规范；位切片查表的 DSD→PCM 抽取是�
 
 ### 2.1 中性包
 
-容器结构与安全句柄读取放 `backend/internal/playback/dsdio`，不放 render 内部。它只用标准库，提供 `Probe(io.ReaderAt,size)` 得到 `Layout{容器,负载起止,Rate,Channels,Mask,DSFBlockSize,BitOrder,有效DSD样本数}`，以及 `Reader.Read(dst [][]byte)`、`Seek(byteFrame)`；每声道每字节 8 个比特，统一输出 MSB 先。DSF 的块交错/位反转与 DFF 的字节交错在此处理；扫描 parser、播放安全打开、后台分析共用这份容器事实，标签仍由 parser 拥有。
+容器结构与安全句柄读取放 `backend/internal/playback/dsdio`，不放 render 内部。它只用标准库，提供 `Probe(io.ReaderAt,size)` 得到 `Layout{容器,负载起止,Rate,Channels,Mask,DSFBlockSize,BitOrder,有效DSD样本数}`，以及 `Reader.Read(dst [][]byte)`、`SeekByteFrame(byteFrame)`（不叫 `Seek`，避开 go vet 对 io.Seeker 签名的检查）；每声道每字节 8 个比特，统一输出 MSB 先。DSF 的块交错/位反转与 DFF 的字节交错在此处理；扫描 parser、播放安全打开、后台分析共用这份容器事实，标签仍由 parser 拥有。
 
 `playback/dsdpcm` 在此之上组合 Converter、后置低通、SRC 与延迟补偿，提供有界流式 PCM 读取；既不导入 render，也不导入 analysis/chain。读取器返回固定 352.8/384 kHz 的 f32le（与播放环相同），可复用到分析，生产文件由调用方安全打开，包内不自行按路径重开。
 
