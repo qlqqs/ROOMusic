@@ -54,4 +54,4 @@ trap 'exit 143' TERM
 printf '运行隔离 PostgreSQL 与 ffmpeg 集成测试：project=%s database=%s port=%s\n' "$COMPOSE_PROJECT" "$ROOMUSIC_TEST_PG_DATABASE" "$ROOMUSIC_TEST_PG_PORT" >&2
 # ROOMUSIC_TEST_RUN 可缩小测试集；未设置时保留原有 PostgreSQL/ffmpeg 范围。
 # app 包串行约 8 分钟，全包并行共用一个库时会更慢。
-(cd "$ROOT_DIR/backend" && go test -v ./... -run "${ROOMUSIC_TEST_RUN:-TestPostgreSQL|TestFFmpeg}" -count=1 -timeout 15m)
+(cd "$ROOT_DIR/backend" && go test -v ./... -run "${ROOMUSIC_TEST_RUN:-TestPostgreSQL|TestFFmpeg}" -count=1 -timeout 25m)
