@@ -3,6 +3,7 @@ package render
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"io"
 	"math"
 	"sync"
@@ -26,7 +27,7 @@ type session struct {
 	cancel                             context.CancelFunc
 	spec                               zones.RenderSpec
 	format                             zones.StreamFormat
-	pcm                                chain.Format
+	sourcePCM, outputPCM               chain.Format
 	chain                              *chain.Chain
 	player                             *player
 	encoder                            *encoder
@@ -37,8 +38,8 @@ type session struct {
 	readyOnce                          sync.Once
 	closeOnce                          sync.Once
 	closed                             atomic.Bool
-	changed                            atomic.Bool
-	changedTransition                  atomic.Bool
+	changeMu                           sync.Mutex
+	changed, changedTransition         bool
 	changeState                        atomic.Pointer[nextChangeState]
 	controlWake, eventWake, eventSpace chan struct{}
 	events, immediateEvents            chan zones.Event
@@ -48,7 +49,9 @@ type session struct {
 	haveSample                         bool
 	renderComplete                     bool
 	written, dispatched, nextTime      int64
+	inputSubmitted                     int64
 	pending                            []timedEvent
+	outputEvents                       int
 	segments                           []segment
 	failure                            error
 	encodedCheckpoints                 []encodedCheckpoint
@@ -56,25 +59,28 @@ type session struct {
 	encodedHead                        int64
 }
 
-func newSession(parent context.Context, owner *Renderer, spec zones.RenderSpec, format zones.StreamFormat, pcm chain.Format, track Track, prepareErr error, reservation *ffmpeg.Reservation) (*session, error) {
+func newSession(parent context.Context, owner *Renderer, spec zones.RenderSpec, format zones.StreamFormat, plan renderPlan, track Track, prepareErr error, reservation *ffmpeg.Reservation) (*session, error) {
 	var c *chain.Chain
 	if prepareErr == nil {
 		var err error
-		c, err = chain.Build(chain.Spec{Format: pcm, Headroom: chain.HeadroomSettings{Enabled: spec.Settings.Headroom.Enabled, DB: spec.Settings.Headroom.DB}, OutputBits: format.BitDepth, Seed: 1})
+		c, err = chain.Build(chain.Spec{Format: plan.sourcePCM, Stages: plan.stages, User: plan.user, Tail: plan.tail, Headroom: chain.HeadroomSettings{Enabled: spec.Settings.Headroom.Enabled, DB: spec.Settings.Headroom.DB}, OutputBits: format.BitDepth, Seed: 1})
 		if err != nil {
 			return nil, err
+		}
+		if c.OutputFormat() != plan.outputPCM {
+			return nil, errors.New("render: 处理链输出与计划不符")
 		}
 	}
 	ctx, cancel := context.WithCancel(parent)
 	reader, writer := io.Pipe()
-	s := &session{owner: owner, ctx: ctx, cancel: cancel, spec: spec, format: format, pcm: pcm, chain: c, reader: reader, writer: writer, ready: make(chan struct{}),
+	s := &session{owner: owner, ctx: ctx, cancel: cancel, spec: spec, format: format, sourcePCM: plan.sourcePCM, outputPCM: plan.outputPCM, chain: c, reader: reader, writer: writer, ready: make(chan struct{}),
 		controlWake: make(chan struct{}, 1), eventWake: make(chan struct{}, 1), eventSpace: make(chan struct{}, 1), events: make(chan zones.Event, 64), immediateEvents: make(chan zones.Event, 64), done: make(chan struct{})}
 	if format.Delivery == "hls" {
 		s.hls = newHLSMedia(ctx, func() float64 {
-			if s.pcm.SampleRate == 0 {
+			if s.outputPCM.SampleRate == 0 {
 				return 0
 			}
-			return float64(s.playhead()) / float64(s.pcm.SampleRate)
+			return float64(s.playhead()) / float64(s.outputPCM.SampleRate)
 		}, owner.options.NewTicker)
 		_ = writer.Close()
 	}
@@ -86,7 +92,7 @@ func newSession(parent context.Context, owner *Renderer, spec zones.RenderSpec, 
 		s.markReady()
 		return s, nil
 	}
-	enc, err := newEncoder(ctx, reservation, owner.options.FFmpeg, format, pcm, writer, s.hls, s.fail)
+	enc, err := newEncoder(ctx, reservation, owner.options.FFmpeg, format, plan.outputPCM, writer, s.hls, s.fail)
 	if err != nil {
 		cancel()
 		_ = reader.Close()
@@ -94,7 +100,7 @@ func newSession(parent context.Context, owner *Renderer, spec zones.RenderSpec, 
 		return nil, err
 	}
 	s.encoder = enc
-	d, err := openDecoder(ctx, reservation, owner.options.FFmpeg, track, spec.Start, pcm, spec.StartSeconds, spec.Settings.Leveling)
+	d, err := openDecoder(ctx, reservation, owner.options.FFmpeg, track, spec.Start, plan.sourcePCM, spec.StartSeconds, spec.Settings.Leveling)
 	if err != nil {
 		_ = track.File.Close()
 		p.firstErr = err
@@ -150,17 +156,25 @@ func (s *session) HLS() zones.HLSMedia {
 }
 func (s *session) Events() <-chan zones.Event { return s.events }
 func (s *session) NextChanged() {
-	// 锁存通知时已编码的换轨；处理标志前播放头跨过接缝也不能撤销重建。
-	// 只读不可变原子快照，不等待会话锁、Cursor 或解码进程。
-	if state := s.changeState.Load(); state != nil {
-		head := sampleFrame(state.sample, state.haveSample, state.written, s.pcm.SampleRate, s.owner.options.Clock())
-		if state.transition > head {
-			s.changedTransition.Store(true)
-		}
+	// 通知锁只串行快照发布与通知交接，不持会话锁，也不调用 Cursor 或音频处理。
+	s.changeMu.Lock()
+	if state := s.changeState.Load(); state != nil && state.unheard(s.outputPCM.SampleRate, s.owner.options.Clock()) {
+		s.changedTransition = true
 	}
-	s.changed.Store(true)
+	// 污染状态必须先锁存，再发布可消费的通知。
+	s.changed = true
+	s.changeMu.Unlock()
 	wake(s.controlWake)
 }
+
+func (s *session) takeNextChange() (changed, transition bool) {
+	s.changeMu.Lock()
+	defer s.changeMu.Unlock()
+	changed, transition = s.changed, s.changedTransition
+	s.changed, s.changedTransition = false, false
+	return
+}
+
 func (s *session) markReady() { s.readyOnce.Do(func() { close(s.ready) }) }
 
 // Close 不等待任何会话协程，尤其不能等待可能正在获取 zones 锁的 Cursor。
@@ -183,6 +197,7 @@ func (s *session) fail(err error) {
 		s.failure = err
 	}
 	s.pending = nil
+	s.outputEvents = 0
 	s.mu.Unlock()
 	if s.hls != nil {
 		s.hls.close()
@@ -316,9 +331,21 @@ func (s *session) run() {
 		if buffer.Frames == 0 {
 			break
 		}
+		// 先发布真实输入提交边界，零输出、Process 内等待和编码背压均不能隐藏污染。
+		s.mu.Lock()
+		s.inputSubmitted += int64(buffer.Frames)
+		s.publishChangeStateLocked()
+		s.mu.Unlock()
 		s.markReady()
 		begin := s.owner.options.Clock()
 		buffer = s.chain.Process(buffer)
+		if buffer.Frames == 0 {
+			cost += s.owner.options.Clock().Sub(begin)
+			if err := speed.add(s, 0, cost); err != nil {
+				return
+			}
+			continue
+		}
 		encoded, clipped = s.encodePCM(encoded[:0], buffer)
 		cost += s.owner.options.Clock().Sub(begin)
 		if err = s.encoder.write(encoded); err != nil {
@@ -335,6 +362,9 @@ func (s *session) run() {
 		}
 	}
 	for {
+		if err := s.waitForEventSpace(); err != nil {
+			return
+		}
 		begin := s.owner.options.Clock()
 		buffer := s.chain.Drain()
 		if buffer == nil {
@@ -366,8 +396,8 @@ func (s *session) run() {
 	// 进程读到 EOF 并完成 Wait 后才登记自然流尾；Body EOF 不等于 Close。
 	draining := true
 	for draining {
-		if s.changed.Swap(false) {
-			if err := s.player.nextChanged(true); err != nil {
+		if changed, transition := s.takeNextChange(); changed {
+			if err := s.player.nextChanged(true, transition); err != nil {
 				if s.ctx.Err() == nil {
 					s.fail(err)
 				}
@@ -401,8 +431,8 @@ func (s *session) run() {
 	s.mu.Unlock()
 	wake(s.eventWake)
 	for {
-		if s.changed.Swap(false) {
-			if err := s.player.nextChanged(true); err != nil {
+		if changed, transition := s.takeNextChange(); changed {
+			if err := s.player.nextChanged(true, transition); err != nil {
 				if s.ctx.Err() == nil {
 					s.fail(err)
 				}
@@ -423,8 +453,8 @@ func (s *session) waitToRender(ticker Ticker) (int, error) {
 		if err := s.ctx.Err(); err != nil {
 			return 0, err
 		}
-		if s.changed.Swap(false) {
-			if err := s.player.nextChanged(false); err != nil {
+		if changed, transition := s.takeNextChange(); changed {
+			if err := s.player.nextChanged(false, transition); err != nil {
 				return 0, err
 			}
 		}
@@ -432,21 +462,34 @@ func (s *session) waitToRender(ticker Ticker) (int, error) {
 		head := s.playheadLocked(s.owner.options.Clock())
 		s.sampleEncodedLocked()
 		s.pruneEncodedLocked(head)
-		available := int64(s.pcm.SampleRate)*20 + head - s.written
-		if available <= 0 && s.format.Delivery != "hls" && s.encodedTotal-s.encodedPlayed < streamUnplayedBytes {
-			available = int64(s.pcm.SampleRate / 5)
+		outputRate, sourceRate := int64(s.outputPCM.SampleRate), int64(s.sourcePCM.SampleRate)
+		ahead := head + int64(s.chain.Latency())
+		available := ahead/outputRate*sourceRate + ahead%outputRate*sourceRate/outputRate + sourceRate*20 - s.inputSubmitted
+		if available <= 0 && s.needsStreamBytesLocked() {
+			available = int64(s.sourcePCM.SampleRate / 5)
+		}
+		if s.eventBackpressureLocked() {
+			available = 0
 		}
 		s.mu.Unlock()
 		if available > 0 {
-			return int(min(int64(s.pcm.SampleRate/5), available)), nil
+			return int(min(int64(s.sourcePCM.SampleRate/5), available)), nil
 		}
 		select {
 		case <-s.ctx.Done():
 			return 0, s.ctx.Err()
 		case <-ticker.C():
 		case <-s.controlWake:
+		case <-s.eventSpace:
 		}
 	}
+}
+
+// needsStreamBytesLocked 统一长流的低字节例外，进料与事件背压使用同一阈值。
+// 直接取编码累计值，冲刷期间也能看到新增字节；已播放量仍沿用 PCM 检查点近似。
+func (s *session) needsStreamBytesLocked() bool {
+	return s.encoder != nil && s.format.Delivery != "hls" &&
+		s.encoder.encodedBytes.Load()-s.encodedPlayed < streamUnplayedBytes
 }
 
 // sampleEncodedLocked 只在 PCM 块提交之后（或 EOF）采样，不在写入中途采样。
@@ -491,7 +534,7 @@ func (s *session) encodePCM(dst []byte, b *chain.Buffer) ([]byte, int) {
 	if s.format.BitDepth != 0 {
 		return s.chain.Quantize(dst, b)
 	}
-	needed := b.Frames * s.pcm.Channels * 4
+	needed := b.Frames * s.outputPCM.Channels * 4
 	if cap(dst) < needed {
 		dst = make([]byte, needed)
 	} else {
@@ -499,12 +542,12 @@ func (s *session) encodePCM(dst []byte, b *chain.Buffer) ([]byte, int) {
 	}
 	clipped := 0
 	for frame := range b.Frames {
-		for channel := range s.pcm.Channels {
+		for channel := range s.outputPCM.Channels {
 			sample := b.Samples[channel][frame]
 			if s.spec.Settings.Headroom.ClipIndicator && math.Abs(sample) > 1 {
 				clipped++
 			}
-			binary.LittleEndian.PutUint32(dst[(frame*s.pcm.Channels+channel)*4:], math.Float32bits(float32(sample)))
+			binary.LittleEndian.PutUint32(dst[(frame*s.outputPCM.Channels+channel)*4:], math.Float32bits(float32(sample)))
 		}
 	}
 	return dst, clipped

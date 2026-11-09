@@ -35,7 +35,7 @@ func TestRenderCrossfadeConditions(t *testing.T) {
 				b.ReleaseID = a.ReleaseID
 			}
 			pcm := chain.Format{SampleRate: rate, Channels: 2}
-			p := &player{session: &session{spec: spec, pcm: pcm}, current: &decoder{track: a, format: pcm}}
+			p := &player{session: &session{spec: spec, sourcePCM: pcm, outputPCM: pcm}, current: &decoder{track: a, format: pcm}}
 			if got := p.planTransition(b); got.kind != tc.want {
 				t.Fatalf("换轨方式 = %q，期望 %q；计划 %+v", got.kind, tc.want, got)
 			}
@@ -55,7 +55,7 @@ func TestRenderCrossfadePCMAndTimeline(t *testing.T) {
 	b.ReleaseID, b.DurationSeconds, b.TrailingStart = "release-b", 10.5, nil
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	s := &session{owner: newTestRenderer(t, nil, nil), ctx: ctx, spec: spec, pcm: pcm, chain: chain.New(),
+	s := &session{owner: newTestRenderer(t, nil, nil), ctx: ctx, spec: spec, sourcePCM: pcm, outputPCM: pcm, chain: chain.New(),
 		format: zones.StreamFormat{Codec: "flac", SampleRate: rate, Channels: 2, BitDepth: 16}}
 	// 两声道使用不同符号和幅度，既能检查曲线，也能检查声道未被串换。
 	valuesA, valuesB := [2]float64{0.5, -0.25}, [2]float64{0.25, 0.125}
@@ -148,7 +148,7 @@ func TestRenderCrossfadePCMAndTimeline(t *testing.T) {
 		t.Fatalf("B分段错误：%+v", segmentB)
 	}
 	// 同步驱动真实派发逻辑，不启动渲染协程，也不依赖墙钟或子进程调度。
-	s.written, s.renderComplete = total, true
+	s.inputSubmitted, s.written, s.renderComplete = total, total, true
 	observe(s, float64(cut-1)/rate)
 	for event, ok := s.dueEvent(testNow); ok; event, ok = s.dueEvent(testNow) {
 		if event.Kind == "track_started" {

@@ -154,7 +154,7 @@ func (s *Service) user(ctx context.Context, userID string) (*userRuntime, error)
 	if s.db == nil {
 		return nil, ErrDatabaseUnavailable
 	}
-	state, err := LoadUser(ctx, s.db, userID)
+	state, err := loadUser(ctx, s.db, userID, s.options.Logger)
 	if err != nil {
 		return nil, databaseError(err)
 	}
@@ -208,12 +208,6 @@ func (s *Service) transact(ctx context.Context, f func(*Store) error) error {
 	return databaseError(tx.Commit())
 }
 func validID(id string) bool { return uuid.Valid(id) }
-func defaultSettings() PlaybackSettings {
-	return PlaybackSettings{Leveling: "auto", Gapless: true, CrossfadeSeconds: 5, Quality: "lossless", Headroom: defaultHeadroom()}
-}
-func settingsOf(p PlaybackSettings) ZoneSettings {
-	return ZoneSettings{Leveling: p.Leveling, Gapless: p.Gapless, Crossfade: p.Crossfade, CrossfadeSeconds: p.CrossfadeSeconds, Quality: p.Quality, Headroom: p.Headroom}
-}
 func defaultCapabilities() Capabilities {
 	return Capabilities{StreamFormats: []StreamFormatCapability{}, MaxChannels: 2, DSD: "none", Volume: "number"}
 }

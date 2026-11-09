@@ -50,6 +50,8 @@ func Wrap(p Processor, in, out Format, step SignalStep, modifies bool) *Adapter 
 	return a
 }
 
+func (a *Adapter) Latency() int { return a.processor.Latency() }
+
 func (a *Adapter) Step() SignalStep { return a.step }
 
 func (a *Adapter) Process(b *Buffer) *Buffer {

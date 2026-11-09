@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/qlqq/roomusic/backend/internal/dsp/chain"
 	"github.com/qlqq/roomusic/backend/internal/playback/render/ffmpeg"
 	"github.com/qlqq/roomusic/backend/internal/zones"
 )
@@ -107,9 +106,9 @@ func (r *Renderer) Open(ctx context.Context, spec zones.RenderSpec) (zones.Rende
 	if spec.Format.Delivery == "hls" {
 		format.Delivery, format.MimeType = spec.Format.Delivery, spec.Format.MimeType
 	}
-	var pcm chain.Format
+	var plan renderPlan
 	if prepareErr == nil {
-		format, pcm, err = concreteFormat(spec, source)
+		format, plan, err = concreteFormat(spec, source)
 		if err != nil {
 			if source.File != nil {
 				_ = source.File.Close()
@@ -117,7 +116,7 @@ func (r *Renderer) Open(ctx context.Context, spec zones.RenderSpec) (zones.Rende
 			return nil, err
 		}
 	}
-	s, err := newSession(ctx, r, spec, format, pcm, source, prepareErr, reservation)
+	s, err := newSession(ctx, r, spec, format, plan, source, prepareErr, reservation)
 	if err != nil {
 		if source.File != nil {
 			_ = source.File.Close()

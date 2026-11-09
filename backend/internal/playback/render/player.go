@@ -57,7 +57,7 @@ func (p *player) recordFailure(entry zones.Entry, err error) error {
 }
 func (p *player) flushFailures(frame int64) error {
 	for _, event := range p.failures {
-		if err := p.session.queueEvent(frame, event); err != nil {
+		if err := p.session.queueSourceEvent(frame, event); err != nil {
 			return err
 		}
 	}
@@ -81,12 +81,12 @@ func (p *player) startCurrent(frame int64) error {
 	if p.started {
 		return nil
 	}
-	segment := zones.Segment{EntryID: d.entry.EntryID, TrackID: d.entry.TrackID, StreamStartSeconds: float64(frame) / float64(p.session.pcm.SampleRate), TrackStartSeconds: d.startSeconds}
-	if err := p.session.addSegment(frame, segment, p.session.segmentSignal(d)); err != nil {
+	segment := zones.Segment{EntryID: d.entry.EntryID, TrackID: d.entry.TrackID, TrackStartSeconds: d.startSeconds}
+	if err := p.session.addSourceSegment(frame, segment, p.session.segmentSignal(d), p.currentTransition != ""); err != nil {
 		return err
 	}
 	if p.currentTransition != "" {
-		if err := p.session.queueEvent(frame, zones.Event{Kind: "track_started", EntryID: d.entry.EntryID, Transition: p.currentTransition}); err != nil {
+		if err := p.session.queueSourceEvent(frame, zones.Event{Kind: "track_started", EntryID: d.entry.EntryID, Transition: p.currentTransition}); err != nil {
 			return err
 		}
 	}
@@ -136,7 +136,7 @@ func (p *player) beginNext(result *chain.Buffer, frames int) (bool, error) {
 		}
 		if p.plan.kind == "gap" && !p.gapStarted {
 			p.gapStarted = true
-			p.gapRemaining = p.session.pcm.SampleRate / 2
+			p.gapRemaining = p.session.sourcePCM.SampleRate / 2
 		}
 		if p.gapRemaining > 0 {
 			n := min(frames-result.Frames, p.gapRemaining)
@@ -155,8 +155,8 @@ func (p *player) read(frames int) (*chain.Buffer, time.Duration, error) {
 	result := &p.buffer
 	result.Frames, result.Exact, result.SourceBits = 0, true, 0
 	result.Regions = result.Regions[:0]
-	if len(result.Samples) != p.session.pcm.Channels {
-		result.Samples = make([][]float64, p.session.pcm.Channels)
+	if len(result.Samples) != p.session.sourcePCM.Channels {
+		result.Samples = make([][]float64, p.session.sourcePCM.Channels)
 	}
 	for channel := range result.Samples {
 		result.Samples[channel] = result.Samples[channel][:0]
@@ -189,7 +189,7 @@ func (p *player) read(frames int) (*chain.Buffer, time.Duration, error) {
 			lookahead += float64(p.session.spec.Settings.CrossfadeSeconds)
 			end = effectiveEnd(d.track)
 		}
-		remaining := end - float64(d.position())/float64(p.session.pcm.SampleRate)
+		remaining := end - float64(d.position())/float64(p.session.sourcePCM.SampleRate)
 		if !p.selected && p.mix == nil && d.track.DurationSeconds > 0 && remaining <= lookahead {
 			if err := p.selectNext(p.session.ctx, d.entry); err != nil {
 				return nil, processing, err

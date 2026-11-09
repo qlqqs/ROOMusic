@@ -19,6 +19,7 @@ type RenderSource struct {
 	SampleRate, Channels, BitDepth int
 	DurationSeconds                float64
 	IsFloat                        bool
+	Layout                         uint32
 	CueStartFrame, CueEndFrame     *int64
 }
 
@@ -120,6 +121,7 @@ func (service *Service) verifyRenderWAV(source *RenderSource, size int64) error 
 	}
 	source.SampleRate, source.Channels = facts.sampleRate, facts.channels
 	source.BitDepth, source.IsFloat = facts.validBits, facts.isFloat
+	source.Layout = facts.layout
 	if facts.isFloat {
 		source.BitDepth = 0
 	}

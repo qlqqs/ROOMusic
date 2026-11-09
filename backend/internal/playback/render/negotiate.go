@@ -93,14 +93,14 @@ func integerSource(t Track) bool {
 }
 
 func sameSourceFormat(a, b Track) bool {
-	return a.SampleRate == b.SampleRate && a.Channels == b.Channels && a.BitDepth == b.BitDepth && integerSource(a) == integerSource(b) && a.IsFloat == b.IsFloat
+	return a.SampleRate == b.SampleRate && a.Channels == b.Channels && a.BitDepth == b.BitDepth && integerSource(a) == integerSource(b) && a.IsFloat == b.IsFloat && trackLayout(a) == trackLayout(b)
 }
 
-func concreteFormat(spec zones.RenderSpec, source Track) (zones.StreamFormat, chain.Format, error) {
+func concreteFormat(spec zones.RenderSpec, source Track) (zones.StreamFormat, renderPlan, error) {
 	f := spec.Format
 	selected, ok := codecInfo(f.Codec, f.MimeType)
 	if !ok {
-		return f, chain.Format{}, ErrNoStreamFormat
+		return f, renderPlan{}, ErrNoStreamFormat
 	}
 	f.Delivery = selected.delivery
 	lossless := selected.lossless
@@ -113,7 +113,7 @@ func concreteFormat(spec zones.RenderSpec, source Track) (zones.StreamFormat, ch
 		maxChannels = 2
 	}
 	if maxChannels < 1 || maxChannels > 32 {
-		return f, chain.Format{}, ErrNoStreamFormat
+		return f, renderPlan{}, ErrNoStreamFormat
 	}
 	channels := min(source.Channels, maxChannels)
 	// 第一批压缩编码使用最多八声道的标准布局；WAV 保留设备声明的声道数。
@@ -127,24 +127,32 @@ func concreteFormat(spec zones.RenderSpec, source Track) (zones.StreamFormat, ch
 		}
 	}
 	if rate < 5 || channels < 1 {
-		return f, chain.Format{}, ErrNoStreamFormat
+		return f, renderPlan{}, ErrNoStreamFormat
 	}
+	layout := trackLayout(source)
+	if channels != source.Channels {
+		layout = chain.DefaultLayout(channels)
+	}
+	pcm := chain.Format{SampleRate: rate, Channels: channels, Layout: layout}
+	plan := renderPlan{sourcePCM: pcm, outputPCM: pcm}
+	plan.facts = sourceProcessing(source, spec.Start, spec.Settings, pcm)
+	f.Layout = layout
 	f.SampleRate, f.Channels, f.BitDepth = rate, channels, 0
 	if lossless {
 		f.BitDepth = 24
-		if integerSource(source) && source.BitDepth > 0 && source.BitDepth <= 16 && spec.Settings.Leveling == "off" && !spec.Settings.Headroom.Enabled {
+		if integerSource(source) && source.BitDepth > 0 && source.BitDepth <= 16 && !hasProcessing(plan.facts) {
 			f.BitDepth = 16
 		}
 		if f.MaxBitDepth > 0 && f.MaxBitDepth < 24 {
 			f.BitDepth = 16
 		}
 		if f.MaxBitDepth > 0 && f.MaxBitDepth < 16 {
-			return f, chain.Format{}, ErrNoStreamFormat
+			return f, renderPlan{}, ErrNoStreamFormat
 		}
 	} else if f.Codec == "opus" {
 		f.SampleRate = 48000
 		if f.MaxSampleRate > 0 && f.MaxSampleRate < 48000 {
-			return f, chain.Format{}, ErrNoStreamFormat
+			return f, renderPlan{}, ErrNoStreamFormat
 		}
 	} else {
 		maximum := 96000
@@ -155,8 +163,8 @@ func concreteFormat(spec zones.RenderSpec, source Track) (zones.StreamFormat, ch
 			f.SampleRate /= 2
 		}
 		if f.SampleRate < 7350 {
-			return f, chain.Format{}, ErrNoStreamFormat
+			return f, renderPlan{}, ErrNoStreamFormat
 		}
 	}
-	return f, chain.Format{SampleRate: rate, Channels: channels}, nil
+	return f, plan, nil
 }

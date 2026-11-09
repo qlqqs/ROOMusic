@@ -48,7 +48,7 @@ func (p *player) planTransition(track Track) transitionPlan {
 	if end <= 3*seconds || track.DurationSeconds-start <= 3*seconds {
 		return plan
 	}
-	rate := float64(p.session.pcm.SampleRate)
+	rate := float64(p.session.sourcePCM.SampleRate)
 	frames := int(math.Round(seconds * rate))
 	cut := int64(fade.AlignDown8(int(math.Round(end*rate)) - frames))
 	// 除定位起点外，也不能在队列重选时回到已经渲染过的截断点。
@@ -84,7 +84,7 @@ func (p *player) prepareNext(ctx context.Context, entry zones.Entry, allowFade b
 		}
 		return false, p.recordFailure(entry, err)
 	}
-	if !p.anchorKnown || !sameSourceFormat(p.anchor, track) {
+	if !p.anchorKnown || !sameSourceFormat(p.anchor, track) || !p.session.acceptsSource(track, entry) {
 		_ = track.File.Close()
 		return true, p.announceBoundary(entry, "format")
 	}
@@ -100,7 +100,7 @@ func (p *player) prepareNext(ctx context.Context, entry zones.Entry, allowFade b
 		}
 		return true, p.announceBoundary(entry, "not_ready")
 	}
-	next, err := openDecoder(p.session.ctx, reservation, p.session.owner.options.FFmpeg, track, entry, p.session.pcm, plan.startSeconds, p.session.spec.Settings.Leveling)
+	next, err := openDecoder(p.session.ctx, reservation, p.session.owner.options.FFmpeg, track, entry, p.session.sourcePCM, plan.startSeconds, p.session.spec.Settings.Leveling)
 	_ = reservation.Close()
 	if err != nil {
 		_ = track.File.Close()
@@ -163,7 +163,7 @@ func (p *player) waitNext(ctx context.Context) (bool, error) {
 			p.next = nil
 			return false, err
 		}
-		ready, changed := r.readiness(p.session.pcm.Channels * 4)
+		ready, changed := r.readiness(p.session.sourcePCM.Channels * 4)
 		if ready {
 			return true, nil
 		}
@@ -178,7 +178,7 @@ func (p *player) waitNext(ctx context.Context) (bool, error) {
 func (p *player) rejectEmptyNext(ctx context.Context) (bool, error) {
 	d := p.next
 	d.ring.mu.Lock()
-	empty, terminal := d.ring.size < p.session.pcm.Channels*4, d.ring.terminal
+	empty, terminal := d.ring.size < p.session.sourcePCM.Channels*4, d.ring.terminal
 	d.ring.mu.Unlock()
 	if !empty || terminal == nil {
 		return false, nil
@@ -194,8 +194,8 @@ func (p *player) rejectEmptyNext(ctx context.Context) (bool, error) {
 	return true, p.selectNext(ctx, d.entry)
 }
 
-func (p *player) nextChanged(finalized bool) error {
-	if p.session.changedTransition.Swap(false) || p.session.hasUnheardTransition() {
+func (p *player) nextChanged(finalized, transition bool) error {
+	if transition || p.session.hasUnheardTransition() {
 		return p.session.immediate(zones.Event{Kind: "rebuild_needed"})
 	}
 	announced := p.boundary

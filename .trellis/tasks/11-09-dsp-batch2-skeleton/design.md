@@ -64,6 +64,7 @@ func (c *Chain) ModifiesSamples() bool
 - 在 player→session 边界新增 `queueSourceEvent(inputFrame, event)`、`addSourceSegment(inputFrame, ...)`，内部只映射一次 `chain.OutputFrame`；`track_failed`、`track_started`、分段起点（包括交叉淡化首帧）走它。`recordOutput`、`stream_ended` 已是输出帧，继续调用 `queueEvent`，避免二次换算。
 - 曲内时间 = `TrackStartSeconds + (输出播放头 - 段输出起点)/outputPCM.SampleRate`；流秒数 = 输出帧/outputPCM.SampleRate。舍入最多为边界映射误差，不因曲数或块数累积。编码器暂时变率只改变每秒编码样本数，不改变秒数语义。
 - `waitToRender` 的 20 s 领先额度以源域**已提交帧**限流：`sourceBudget = floor((head/outputRate + 20s + Latency/outputRate)*sourceRate) - inputSubmitted`；每次最多 `sourceRate/5`。延迟额度只容纳管线内部已补偿的前瞻；现有长流低于 64 KiB 的额外一量子规则保留。按输出 written 限流会让长延迟处理器无限吞输入。
+- 事件背压只对已有对应输出帧、可随播放头派发的事件保留 256 背压阈值；管线前瞻中的来源事件（包括当前已预留源域量子内、待本量子提交的事件）不计入该上限，由上述 sourceBudget 约束，输出产生后在继续进料或冲刷前执行背压，避免零输出时互等；所有事件背压入口同样沿用长流未播放编码字节不足 64 KiB 时继续进料／冲刷的既有例外，不新增阈值、不调大 256。
 - 骨架保留现有 `sameSourceFormat` 的整数性/位深限制并加入布局；DSD 接入负责引入有效来源格式比较，不提前把所有不同整数位深的 PCM 宣称可无缝。
 
 ## 4. K4：已送入链与已输出必须分开

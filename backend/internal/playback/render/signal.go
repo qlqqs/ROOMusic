@@ -46,11 +46,11 @@ func (s *session) segmentSignal(d *decoder) signalPath {
 		source.Quality, source.Lossy = "low", true
 	}
 	path.append(source)
-	if track.SampleRate != s.pcm.SampleRate {
-		path.append(rateStep(track.SampleRate, s.pcm.SampleRate))
+	if track.SampleRate != s.sourcePCM.SampleRate {
+		path.append(rateStep(track.SampleRate, s.sourcePCM.SampleRate))
 	}
-	if track.Channels != s.pcm.Channels {
-		path.append(chain.SignalStep{Kind: "downmix", Quality: "high", Compat: true, Params: map[string]any{"from_channels": track.Channels, "to_channels": s.pcm.Channels, "by": "ffmpeg"}})
+	if track.Channels != s.sourcePCM.Channels {
+		path.append(chain.SignalStep{Kind: "downmix", Quality: "high", Compat: true, Params: map[string]any{"from_channels": track.Channels, "to_channels": s.sourcePCM.Channels, "by": "ffmpeg"}})
 	}
 	gainDB, basis, enabled := leveling.Choose(leveling.Mode(s.spec.Settings.Leveling), track.TrackGainDB, track.AlbumGainDB, d.entry.AlbumContext)
 	if enabled {
@@ -63,8 +63,8 @@ func (s *session) segmentSignal(d *decoder) signalPath {
 		path.append(step)
 	}
 	// Opus 固定 48 kHz 属于有损编码本身；来源与编码采样率已给出转换两端。
-	if s.pcm.SampleRate != s.format.SampleRate && s.format.Codec != "opus" {
-		path.append(rateStep(s.pcm.SampleRate, s.format.SampleRate))
+	if s.outputPCM.SampleRate != s.format.SampleRate && s.format.Codec != "opus" {
+		path.append(rateStep(s.outputPCM.SampleRate, s.format.SampleRate))
 	}
 	encode := chain.SignalStep{Kind: "encode", Quality: "lossless", Params: map[string]any{"codec": s.format.Codec, "sample_rate": s.format.SampleRate}}
 	if s.format.BitDepth > 0 {
@@ -91,7 +91,9 @@ func (s *session) ditherStep(d *decoder) (chain.SignalStep, bool) {
 	if bits == 0 {
 		return chain.SignalStep{}, false
 	}
-	passthrough := d.exact && (!d.leveling || d.gain == 1) && !s.spec.Settings.Headroom.Enabled && d.sourceBits > 0 && d.sourceBits <= bits
+	facts := sourceProcessing(d.track, d.entry, s.spec.Settings, s.sourcePCM)
+	facts.stages = s.chain.ModifiesSamples()
+	passthrough := !hasProcessing(facts) && d.sourceBits > 0 && d.sourceBits <= bits
 	if passthrough {
 		return chain.SignalStep{}, false
 	}

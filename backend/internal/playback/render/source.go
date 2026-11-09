@@ -17,6 +17,7 @@ type Track struct {
 	SourceKind, Codec              string
 	SampleRate, Channels, BitDepth int
 	IsFloat                        bool
+	Layout                         uint32
 	DurationSeconds                float64
 	ReleaseID                      string
 	LeadingSilence, TrailingStart  *float64
