@@ -17,7 +17,7 @@ type Stream = {
 };
 const now = () => new Date().toISOString();
 
-/** 只模拟现有界面用到的单播放区合同；音频仍由原生 Audio 解码，不模拟浏览器媒体事件或计次。 */
+/** 只模拟现有界面用到的播放区合同（F3 可显式预置额外设备）；音频仍由原生 Audio 解码，不模拟浏览器媒体事件或计次。 */
 export function zonesMock(trackOf: (id: string) => TrackSummaryDTO | undefined) {
   let registered = false;
   let counter = 0;
@@ -37,7 +37,24 @@ export function zonesMock(trackOf: (id: string) => TrackSummaryDTO | undefined) 
     stream: null as Stream | null, next_stream: null, paused_at: null as string | null, signal: null,
     event: null as { seq: number; kind: "track_started"; entry_id: string } | null,
   };
-  const snapshot = () => ({ server_time: now(), protocol: 1, devices: registered ? [device] : [], zones: registered ? [zone] : [] });
+  const remotes = new Map<string, { device: typeof device; zone: typeof zone; entries: Entry[] }>();
+  const snapshot = () => ({ server_time: now(), protocol: 1,
+    devices: [...(registered ? [device] : []), ...[...remotes.values()].map((row) => row.device)],
+    zones: [...(registered ? [zone] : []), ...[...remotes.values()].map((row) => row.zone)],
+  });
+  const rowOf = (zoneId: string) => {
+    if (zoneId === MOCK_ZONE) return { device, zone, entries };
+    const row = remotes.get(zoneId);
+    if (!row) throw new Error(`播放区夹具没有登记 ${zoneId}`);
+    return row;
+  };
+  const replaceEntries = (row: ReturnType<typeof rowOf>, next: Entry[]) => {
+    if (row.zone.zone_id === MOCK_ZONE) entries = next;
+    else row.entries = next;
+    row.zone.queue_length = next.length;
+    row.zone.queue_revision += 1;
+    row.zone.revision += 1;
+  };
   const queue = () => ({ zone_id: MOCK_ZONE, queue_revision: zone.queue_revision, entries });
   const currentIndex = () => entries.findIndex((entry) => entry.entry_id === zone.current?.entry_id);
   const update = () => {
@@ -154,6 +171,31 @@ export function zonesMock(trackOf: (id: string) => TrackSummaryDTO | undefined) 
     return { server_time: now(), zone, queue_change: changed ? { kind: "replace", queue_revision: zone.queue_revision, entries } : null };
   };
   return {
+    /** 预置暂停的本机队列；只测控制界面，不依赖媒体播放完成。 */
+    seedLocal(track: TrackSummaryDTO) {
+      known.set(track.track_id, track);
+      entries = newEntries([track.track_id]);
+      setCurrent(entries[0] ?? null);
+      zone.status = "paused";
+      zone.paused_at = now();
+      zone.queue_revision += 1;
+      update();
+    },
+    /** F3 的远端设备；与本机使用同一份 DTO 形状，但各自保有队列、设置和音量。 */
+    addDevice(options: { name: string; online: boolean; fixed?: boolean; track: TrackSummaryDTO }) {
+      const suffix = String(remotes.size + 2).padStart(3, "0");
+      const deviceId = `00000000-0000-4000-8000-00000000d${suffix}`;
+      const zoneId = `00000000-0000-4000-8000-00000000e${suffix}`;
+      known.set(options.track.track_id, options.track);
+      const remoteEntries = newEntries([options.track.track_id]);
+      const remoteZone = { ...structuredClone(zone), zone_id: zoneId, device_id: deviceId,
+        current: remoteEntries[0] ?? null, queue_length: remoteEntries.length,
+        intent: "pause" as const, status: "paused" as const, paused_at: now(), stream: null };
+      remotes.set(zoneId, { device: { ...structuredClone(device), device_id: deviceId, zone_id: zoneId,
+        name: options.name, online: options.online,
+        capabilities: { ...device.capabilities, volume: options.fixed ? "fixed" : "number" } }, zone: remoteZone, entries: remoteEntries });
+      return { deviceId, zoneId };
+    },
     register(tracks: readonly TrackSummaryDTO[]) { for (const track of tracks) known.set(track.track_id, track); },
     queueSnapshot: () => structuredClone(queue()),
     currentTrack: () => zone.current?.track.track_id,
@@ -175,8 +217,49 @@ export function zonesMock(trackOf: (id: string) => TrackSummaryDTO | undefined) 
         return json({ server_time: now(), protocol: 1, session_id: SESSION, device, zone });
       }
       if (path.endsWith("/release")) return route.fulfill({ status: 204 });
-      if (path.endsWith("/queue")) return json(queue());
-      if (path.endsWith("/commands")) return json(command(input));
+      const deviceMatch = new RegExp(`^${BASE}/devices/([^/]+)$`).exec(path);
+      if (deviceMatch) {
+        const row = [rowOf(MOCK_ZONE), ...remotes.values()].find((item) => item.device.device_id === deviceMatch[1]);
+        if (!row) throw new Error("设备夹具不存在");
+        if (method === "PATCH") {
+          row.device.name = d.object({ name: d.string() })(input, "$" ).name;
+          return json({ server_time: now(), device: row.device });
+        }
+        if (method === "DELETE") {
+          if (row.device.online) return json({ error: { code: "device_online", message: "设备在线" } }, 409);
+          remotes.delete(row.zone.zone_id);
+          return route.fulfill({ status: 204 });
+        }
+      }
+      const zoneMatch = new RegExp(`^${BASE}/zones/([^/]+)/(queue|commands)$`).exec(path);
+      if (zoneMatch) {
+        const source = rowOf(zoneMatch[1] ?? "");
+        if (zoneMatch[2] === "queue") return json({ zone_id: source.zone.zone_id, queue_revision: source.zone.queue_revision, entries: source.entries });
+        const name = d.object({ command: d.string() })(input, "$" ).command;
+        if (name === "transfer") {
+          const target = rowOf(d.object({ target_zone_id: d.uuid() })(input, "$" ).target_zone_id);
+          if (!target.device.online) return json({ error: { code: "zone_offline", message: "设备离线" } }, 409);
+          // 模拟控制事务已完成、渲染器尚未交付流；不伪造浏览器音频事件。
+          Object.assign(target.zone, { current: source.zone.current, position: { ...source.zone.position, at: now() },
+            mode: source.zone.mode, intent: "play", status: "loading", paused_at: null, stream: null });
+          replaceEntries(target, source.entries);
+          replaceEntries(source, []);
+          Object.assign(source.zone, { current: null, stream: null, intent: "pause", status: "idle", paused_at: now() });
+          return json({ server_time: now(), zone: source.zone, target_zone: target.zone,
+            queue_change: { kind: "replace", queue_revision: source.zone.queue_revision, entries: [] } });
+        }
+        if (name === "set_settings") {
+          const { settings } = d.object({ settings: d.object({
+            leveling: d.optional(d.oneOf(["off", "auto", "track", "album"] as const)),
+            gapless: d.optional(d.boolean()), crossfade: d.optional(d.boolean()),
+            crossfade_seconds: d.optional(d.number()), quality: d.optional(d.oneOf(["lossless", "lossy"] as const)),
+          }) })(input, "$" );
+          for (const [key, value] of Object.entries(settings)) if (value !== undefined) Object.assign(source.zone.settings, { [key]: value });
+          source.zone.revision += 1;
+          return json({ server_time: now(), zone: source.zone, queue_change: null });
+        }
+        if (source.zone.zone_id === MOCK_ZONE) return json(command(input));
+      }
       if (path.endsWith("/reports")) {
         const body = d.object({ stream_seq: d.nullable(d.integer()), stream_seconds: d.number(), status: d.oneOf(["loading", "playing", "paused", "buffering"] as const) })(input, "$");
         if (body.stream_seq === zone.stream?.seq) {
