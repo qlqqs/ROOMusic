@@ -64,7 +64,7 @@ setVolume(device.volume, device.muted)
 - **流的格式**：`Renderer.Negotiate(capabilities, quality)` 选编码与档位（§3.9），采样率、位深、声道在 `Open` 确定首曲后由 `session.Format()` 给出，填进 `Stream.format`。同一条流内格式不变，格式变化只发生在流与流之间（接续流）。
 - **流从哪里开始**：每条流对应一次开流，带“起始条目 + 曲目内起始秒数”。开流的时机：起播、切曲、定位、改设置、切模式或改队列使已准备的下一首失效且必须重建、暂停超过 5 秒后恢复、断流后续流、转移、重启后接着放、接手。
 - **流在哪里结束**：队列自然放完（`stream_ended`）；下一首格式不同或超时没准备好（`format_boundary`，此时已开好接续流）；被新流取代（会话关闭，输出端已换走）。
-- **地址**：`GET /zones/{zone_id}/streams/{seq}`（合同 §4.4），只有该播放区当前输出会话的用户能取；`seq` 不是当前流或接续流时 `410 stream_gone`；一条流只能被取一次，第二个连接同样 `410`，输出端按 `stream_lost` 续流。流的编码、分块、iOS 上用长 FLAC/WAV 响应还是 ManagedMediaSource，由 dsp-pipeline 设计（§14）。
+- **地址**：`GET /zones/{zone_id}/streams/{seq}`（合同 §4.4），只有该播放区当前输出会话的用户能取；`seq` 不是当前流或接续流时 `410 stream_gone`；长流只能被取一次，第二个连接同样 `410`，输出端按 `stream_lost` 续流；HLS 的播放列表与分片在流有效期内可重复取（合同 §4.5）。iPhone/iPad 用 HLS，桌面用长流（dsp-pipeline design-delivery.md §5）。
 
 ### 3.3 输出端回报
 
@@ -121,12 +121,12 @@ setVolume(device.volume, device.muted)
 ### 3.6 锁屏后台不中断
 
 - 换曲在流内完成，媒体元素自己持续拉流，不需要页面脚本参与；回报由 `timeupdate` 驱动（后台的 `setInterval` 会被节流，播放中的媒体事件不会），服务端据此推进队列与计次。
-- 锁屏信息：输出端按 `segments` 与本地流内位置在曲目边界换 Media Session 的标题与时长，不等服务端的回报响应。
+- 锁屏信息：输出端按 `segments` 与本地流内位置在曲目边界换 Media Session 的标题、艺人、专辑、封面与时长（只给标题时 iOS 锁屏不显示），不等服务端的回报响应。
 - 流断开（换网络、服务端重启）：浏览器先放完已缓冲的部分，随后出 `error` 或长时间 `waiting`；输出端回报 `fault: stream_lost`，服务端从换算出的位置开新流，输出端在**同一个已解锁的元素**上换源 `play()`。
 - 回报发不出去（网络一直不通）：缓冲放完后停下；服务端 45 秒收不到回报判离线、暂停在最后的位置（R6）。网络恢复、页面被唤醒后重新认领。
 - 锁屏期间别的设备发的命令，最迟在下一次回报（≤10 秒）时以新流的形式生效。
-- **iOS 风险（须先做小验证，归 dsp-pipeline）**：Safari 能否在 `<audio>` 里播放没有长度的长 FLAC/WAV 响应、锁屏后能否连续播放跨过多首、后台换源能否不经手势 `play()`（含锁屏暂停超过 5 秒后从锁屏控件恢复、需要换新流的情形）、
-  流内 `currentTime` 是否单调且准确。任何一项不成立都会改变交付方式（例如改用 ManagedMediaSource，或按片段交付），协议形状不变。
+- **iOS**：已验证并裁决用 HLS（dsp-pipeline prd“已裁决” 2026-11-09），锁屏下页面照常运行、回报照常；锁屏暂停约 10 秒以上要解锁才能继续（iOS 限制，用户已接受）。
+  锁屏下 `ended` 后换上接续流仍在补测（dsp-pipeline design-delivery.md §5.10 H3a）。
 
 ### 3.7 在线、离线与“锁屏仍在播”
 

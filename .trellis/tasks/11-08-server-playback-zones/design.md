@@ -198,6 +198,7 @@ type Renderer interface {
 type StreamFormat struct {
 	Codec, MimeType, Quality       string
 	SampleRate, BitDepth, Channels int // Open 确定首曲后由 RenderSession.Format() 给出（对应合同 Stream.format）；有损档 BitDepth 为 0
+	Delivery                       string `json:"-"` // stream（长流）| hls；Negotiate 按 (codec, mime_type) 配对填写，zones 据此给 Stream.url
 }
 
 type RenderSpec struct {
@@ -237,13 +238,21 @@ type Cursor interface{ Next(afterEntryID string) (Entry, bool) }
 type RenderSession interface {
 	MimeType() string
 	Format() StreamFormat          // 具体格式，Open 返回后即可取
-	Body() io.Reader               // 只能被读一次；zones/httpapi 原样写给输出端；Close 后返回 EOF
+	Body() io.Reader               // 长流：只能被读一次；zones/httpapi 原样写给输出端；Close 后返回 EOF。HLS 会话立即 EOF
+	HLS() HLSMedia                 // Delivery 为 hls 时非 nil；长流为 nil
 	Observe(sample PlayheadSample) // 输出端回报的播放头：流内秒数、采样时刻、是否在放
 	NextChanged()                  // 已取走的下一条失效：还没进入已发出的字节就悄悄换掉，否则发 rebuild_needed
 	Events() <-chan Event          // 带缓冲；zones 持续读到通道关闭
 	Close()                        // 可重复调用；之后 Body 返回 EOF、Events 关闭
 }
 // Observe、NextChanged、Close 不阻塞，可以在播放区锁内调用。
+
+// HLSMedia 是 HLS 会话的播放列表与分片（合同 §4.5；格式与保留规则见 dsp-pipeline design-delivery.md §5），可重复读取。
+type HLSMedia interface {
+	Playlist(ctx context.Context) ([]byte, error) // 不足 3 片且流没结束时等待，最多 10 秒
+	Init() ([]byte, error)
+	Segment(n int64) ([]byte, error)              // 没产出或已删除：ErrSegmentMissing；会话已关闭或出错：ErrStreamGone
+}
 
 // Event.Kind 分两类（zones 不能假定所有事件都按播放头到达）：
 // 到达播放头才派发（参考稿 §7.4）——time（每 200 ms，带 EntryID 与曲目内秒数）、
@@ -256,14 +265,14 @@ type RenderSession interface {
 
 | 算法线的需要 | 落在本设计的哪里 |
 | --- | --- |
-| 只有渲染流一种交付，无损/有损两档 | 合同 §2.2 的 `stream`、`next_stream`、`Stream{seq,url,mime_type,quality,format,segments}`；§4.4 流端点；设置 `quality`（本线迁移建列） |
+| 只有渲染流一种交付，无损/有损两档 | 合同 §2.2 的 `stream`、`next_stream`、`Stream{seq,url,mime_type,quality,format,segments}`；§4.4 长流端点、§4.5 HLS 端点；设置 `quality`（本线迁移建列） |
 | 能力协商 | 合同 §2.6 `Capabilities.stream_formats` 等；`Renderer.Negotiate` 选编码，采样率、位深、声道由 `RenderSession.Format()` 在首曲确定后给出；协商失败报 `fault: no_stream_format` |
 | 位置换算、OnToNext、计次 | 会话按播放头派发 `time`、`track_started`、`track_failed`、`stream_ended`，`format_boundary` 与 `rebuild_needed` 立即发出；`zones` 应用 `track_started`（自然前进，不重建）、`time`（位置与计次）、`track_failed`（失败计数、跳过）、`format_boundary`（以最新一条替换接续流）（design-protocol.md §3.4） |
 | 不需要协议层前瞻 | 下一首经 `Cursor` 在服务端内部取，会话按参考稿 §7.3 预缓冲；协议里只有格式边界时的“接续流” |
 | 重建流 | 定位、改设置（300 ms 去抖）、切模式或改队列使已准备的下一首失效（`NextChanged` → 必要时 `rebuild_needed`）、暂停超过 5 秒后恢复；不要求样本级衔接，短暂换流可接受（同 Roon） |
 | 处理设置按播放区，IR 与 EQ 预设按成员 | `playback_zones` 已有电平化、交叉渐变、`gapless`（默认 true）、`quality`；`headroom` 的列由 dsp-pipeline 的迁移加（P7），第二批的处理项同样由算法线迁移加；预设与 IR 表带 `user_id`，`set_settings` 经算法线端口核对属于播放区主人（design-protocol.md §4） |
 | 开流失败与起始条目 | `Open` 返回错误只表示渲染器不可用或忙：记 `fault: transient`、意图暂停，`retry` 可重试；起始条目的 `track_started` 由 zones 开流时产生，打不开时会话发 `track_failed` 并自己跳到下一首 |
-| 流只能被取一次 | 同一条流的第二个连接得 `410 stream_gone`，输出端按 `stream_lost` 续流（合同 §4.4） |
+| 长流只能被取一次，HLS 可重复取 | 同一条长流的第二个连接得 `410 stream_gone`，输出端按 `stream_lost` 续流（合同 §4.4）；HLS 的播放列表与分片在流有效期内可重复取（合同 §4.5） |
 | 派生退役 | §8（实现归 dsp-pipeline P10） |
 | 信号路径 | 会话的 `signal` 事件原样放进播放区状态的 `signal` 字段；结构与界面归 dsp-pipeline P11 |
-| iOS 交付验证 | dsp-pipeline 的风险项，须先做；结论决定 `stream_formats` 的浏览器取值与流端点是否需要 Range，协议形状不变 |
+| iOS 交付 | 已定（2026-11-09）：iPhone/iPad 用 HLS（`HLS() HLSMedia`、合同 §4.5），桌面用长流；浏览器取值见 dsp-pipeline design-delivery.md §3、§5.7，协议形状不变 |
