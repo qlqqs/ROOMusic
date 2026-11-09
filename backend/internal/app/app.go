@@ -9,7 +9,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/backup"
 	backupapi "github.com/qlqq/roomusic/backend/internal/backup/httpapi"
@@ -50,13 +49,11 @@ type App struct {
 type Option func(*options)
 
 type options struct {
-	backups               *backup.Service
-	loginThrottle         *identity.LoginThrottle
-	playbackPreflightWait time.Duration
-	derivation            playback.Derivation
-	analysis              *analysis.Analyzer
-	renderer              *ffmpeg.Tool
-	scanSchedulerClock    library.ScanSchedulerClock
+	backups            *backup.Service
+	loginThrottle      *identity.LoginThrottle
+	analysis           *analysis.Analyzer
+	renderer           *ffmpeg.Tool
+	scanSchedulerClock library.ScanSchedulerClock
 	// 测试直接插入旧目录夹具时暂停后台，搜索测试再显式回填。
 	pauseCatalogMaintenance bool
 }
@@ -71,20 +68,9 @@ func WithLoginThrottle(throttle *identity.LoginThrottle) Option {
 	return func(settings *options) { settings.loginThrottle = throttle }
 }
 
-// WithPlaybackPreflightWait 设置预检等待派生完成的最长时间（默认 playback.DefaultPreflightWait）。
-func WithPlaybackPreflightWait(wait time.Duration) Option {
-	return func(settings *options) { settings.playbackPreflightWait = wait }
-}
-
 // WithAnalysis 启用已经由 OpenAnalysis 探测通过的后台音频分析器。
 func WithAnalysis(analyzer *analysis.Analyzer) Option {
 	return func(settings *options) { settings.analysis = analyzer }
-}
-
-// WithDerivation 启用 ALAC 的无损派生：派生格式进入格式表，预检在缓存未命中时启动转换。不传时 ALAC 保持“不能直接播放”。
-// 生产路径的实现来自 OpenDerivation；调用方不得传入持有 nil 指针的接口值（OpenDerivation 返回 nil 时就不要装配）。
-func WithDerivation(port playback.Derivation) Option {
-	return func(settings *options) { settings.derivation = port }
 }
 
 // WithBackups 注入备份能力；不提供时不注册系统接口。
@@ -164,7 +150,6 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	}
 	progress := playback.NewAnalysisProgressProvider(database, analysis.Version, analysisWorker)
 	playbackapi.New(guard, playbackService, lifecycle, logger, playbackapi.Options{
-		PreflightWait:    assembly.playbackPreflightWait,
 		AnalysisProgress: progress,
 	}).Register(mux)
 	listeningapi.New(guard, listeningService).Register(mux)

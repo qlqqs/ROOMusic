@@ -21,9 +21,9 @@ func TestFixturesFromARealEncoderMatchTheFormatTable(t *testing.T) {
 	}{
 		{"flac-16-44100.flac", "audio/flac", "", true},
 		{"flac-24-48000.flac", "audio/flac", "", true},
-		// ALAC 经派生交付：格式表里的媒体类型是转换后的 FLAC，源文件的容器仍是 MP4。
-		{"alac-16-44100.m4a", "audio/flac", "", true},
-		{"alac-24-48000.m4a", "audio/flac", "", true},
+		// ALAC 不在旧接口的直出表中。
+		{"alac-16-44100.m4a", "", "", false},
+		{"alac-24-48000.m4a", "", "", false},
 		{"mp3-44100.mp3", "audio/mpeg", "", true},
 		{"aac-44100.m4a", "audio/mp4", "mp4a.40.2", true},
 		{"wav-16-44100.wav", "audio/wav", "1", true},
@@ -38,7 +38,7 @@ func TestFixturesFromARealEncoderMatchTheFormatTable(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ParseAudioFile: %v", err)
 			}
-			format, found := serviceWithDerivation().findFormat(observation.SourceKind, observation.Codec)
+			format, found := (&Service{}).findFormat(observation.SourceKind, observation.Codec)
 			if found != expected.inTable {
 				t.Fatalf("findFormat(%s, %s) found = %v, want %v", observation.SourceKind, observation.Codec, found, expected.inTable)
 			}

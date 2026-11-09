@@ -1,83 +1,19 @@
 package app
 
 import (
-	"context"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
-
-	"github.com/qlqq/roomusic/backend/internal/platform/config"
 )
-
-func derivationSettings(t *testing.T, dataDirectory string, allowedRoots ...string) config.Server {
-	t.Helper()
-	return config.Server{
-		DataDirectory: dataDirectory, AllowedLibraryRoots: allowedRoots, MediaCacheMaxBytes: 1 << 30,
-		// 默认指向一个不存在的 ffmpeg：不依赖本机是否安装；需要真实 ffmpeg 的测试自己覆盖。
-		FFmpegPath: filepath.Join(t.TempDir(), "no-such-ffmpeg"),
-	}
-}
 
 func jsonLogger() (*slog.Logger, *lockedBuffer) {
 	logs := &lockedBuffer{}
 	return slog.New(slog.NewJSONHandler(logs, nil)), logs
 }
 
-func TestOpenDerivationReportsAnUnusableFFmpegAndKeepsTheApplicationRunning(t *testing.T) {
-	root, data := t.TempDir(), t.TempDir()
-	logger, logs := jsonLogger()
-	manager, err := OpenDerivation(context.Background(), derivationSettings(t, data, root), logger)
-	if err != nil || manager != nil {
-		t.Fatalf("OpenDerivation = %v, %v; want no manager and no error when ffmpeg is unusable", manager, err)
-	}
-	events := logEvents(t, logs, "playback.derivation.unavailable")
-	if len(events) != 1 || events[0]["reason"] != "not_found" || events[0]["level"] != "WARN" {
-		t.Fatalf("unavailable events = %v, want one not_found warning: %s", events, logs.String())
-	}
-	if strings.Contains(logs.String(), data) || strings.Contains(logs.String(), "no-such-ffmpeg") {
-		t.Fatalf("the unavailable event leaks a path: %s", logs.String())
-	}
-	if ready := logEvents(t, logs, "playback.derivation.ready"); len(ready) != 0 {
-		t.Fatalf("ready events = %v although ffmpeg is unusable", ready)
-	}
-	// 缓存目录建在数据目录之下，权限只给所有者。
-	info, err := os.Stat(filepath.Join(data, "media-cache"))
-	if err != nil || !info.IsDir() || info.Mode().Perm() != 0o700 {
-		t.Fatalf("media-cache directory: %v, %v", info, err)
-	}
-}
-
-func TestFFmpegOpenDerivationOpensTheCacheWithTheConfiguredBinary(t *testing.T) {
-	ffmpeg := requireTestFFmpeg(t)
-	root, data := t.TempDir(), t.TempDir()
-	settings := derivationSettings(t, data, root)
-	settings.FFmpegPath = ffmpeg
-	settings.MediaCacheMaxBytes = 512 << 20
-	logger, logs := jsonLogger()
-	manager, err := OpenDerivation(context.Background(), settings, logger)
-	if err != nil || manager == nil {
-		t.Fatalf("OpenDerivation = %v, %v; want a manager: %s", manager, err, logs.String())
-	}
-	t.Cleanup(func() { _ = manager.Close(5 * time.Second) })
-	ready := logEvents(t, logs, "playback.derivation.ready")
-	if len(ready) != 1 || ready[0]["max_bytes"] != float64(512<<20) || ready[0]["entries"] != float64(0) {
-		t.Fatalf("ready events = %v: %s", ready, logs.String())
-	}
-	if version, _ := ready[0]["ffmpeg_version"].(string); !strings.HasPrefix(version, "ffmpeg version") {
-		t.Fatalf("ready event has no ffmpeg version: %v", ready[0])
-	}
-	if unavailable := logEvents(t, logs, "playback.derivation.unavailable"); len(unavailable) != 0 {
-		t.Fatalf("unavailable events = %v", unavailable)
-	}
-	if strings.Contains(logs.String(), data) {
-		t.Fatalf("the ready event leaks the data directory: %s", logs.String())
-	}
-}
-
-func TestOpenDerivationRefusesACacheDirectoryThatOverlapsALibraryRoot(t *testing.T) {
+func TestCacheDirectoryIsolationRefusesOverlappingLibraryRoots(t *testing.T) {
 	base := t.TempDir()
 	music := filepath.Join(base, "music")
 	if err := os.MkdirAll(music, 0o755); err != nil {
@@ -110,16 +46,12 @@ func TestOpenDerivationRefusesACacheDirectoryThatOverlapsALibraryRoot(t *testing
 		"data directory that does not exist yet, in the music": {filepath.Join(music, "not-yet", "data"), []string{music}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			logger, logs := jsonLogger()
-			manager, err := OpenDerivation(context.Background(), derivationSettings(t, testCase.data, testCase.roots...), logger)
-			if err == nil || manager != nil {
-				t.Fatalf("OpenDerivation = %v, %v; want a configuration error", manager, err)
+			err := checkCacheDirectoryIsolated(filepath.Join(testCase.data, mediaCacheDirectoryName), testCase.roots)
+			if err == nil {
+				t.Fatal("重叠目录未被拒绝")
 			}
 			if !strings.Contains(err.Error(), "ROOMUSIC_DATA_DIR") {
 				t.Fatalf("the error does not tell the operator what to change: %v", err)
-			}
-			if logs.String() != "" {
-				t.Fatalf("a refused configuration logged: %s", logs.String())
 			}
 		})
 	}
@@ -138,7 +70,7 @@ func TestOpenDerivationRefusesACacheDirectoryThatOverlapsALibraryRoot(t *testing
 	}
 }
 
-func TestOpenDerivationAcceptsASiblingDirectoryWithTheSamePrefix(t *testing.T) {
+func TestCacheDirectoryIsolationAcceptsASiblingDirectoryWithTheSamePrefix(t *testing.T) {
 	base := t.TempDir()
 	music := filepath.Join(base, "music")
 	data := filepath.Join(base, "music-data")
@@ -147,10 +79,8 @@ func TestOpenDerivationAcceptsASiblingDirectoryWithTheSamePrefix(t *testing.T) {
 			t.Fatalf("create directory: %v", err)
 		}
 	}
-	logger, _ := jsonLogger()
-	manager, err := OpenDerivation(context.Background(), derivationSettings(t, data, music), logger)
-	if err != nil || manager != nil {
-		t.Fatalf("OpenDerivation = %v, %v; want no overlap error for music-data next to music (and no manager without ffmpeg)", manager, err)
+	if err := checkCacheDirectoryIsolated(filepath.Join(data, mediaCacheDirectoryName), []string{music}); err != nil {
+		t.Fatalf("兄弟目录不应被判为重叠：%v", err)
 	}
 }
 

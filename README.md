@@ -51,6 +51,8 @@ docker compose pull && docker compose up -d --wait
 
 要固定或降级版本，把 `.env` 里的 `ROOMUSIC_VERSION` 改成具体版本（如 `0.1.0`，不带 `v`），再执行同样的命令。
 
+升级后会自动删除旧的 ALAC 转码缓存。
+
 数据库结构变化前会先自动备份。最低可以降到 `0.1.0`；遇到无法自动回退的版本，应用不会启动，日志会给出恢复备份的命令。
 
 端口、备份目录、反向代理、备份恢复等更多内容见[部署说明](deploy/production/README.md)。

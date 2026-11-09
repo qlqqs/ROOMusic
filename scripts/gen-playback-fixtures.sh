@@ -8,17 +8,17 @@
 # scripts/ffmpeg-pinned.sh 里定义一处，测试与 CI 用它取出同一个构建；运行时的 ffmpeg 由部署者安装，不由本脚本提供。
 # 输出一侧的 -fflags +bitexact 去掉编码器版本、时间戳与随机流序号，同一镜像下重复运行得到相同字节。
 #
-# 除直出与启动自检素材外，还生成派生测试的 APE：固定摘要容器内运行 Monkey's Audio；只更新 APE 可传 --ape-only。
+# 除直出与启动自检素材外，还生成解析器测试的 APE：固定摘要容器内运行 Monkey's Audio；只更新 APE 可传 --ape-only。
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="${ROOMUSIC_PLAYBACK_FIXTURE_DIR:-$ROOT_DIR/backend/testdata/playback}"
-SELFTEST_DIR="${ROOMUSIC_SELFTEST_FIXTURE_DIR:-$ROOT_DIR/backend/internal/playback/derivation}"
+SELFTEST_DIR="${ROOMUSIC_SELFTEST_FIXTURE_DIR:-$ROOT_DIR/backend/internal/playback/render/ffmpeg/testdata}"
 # mwader/static-ffmpeg 7.1.1（静态构建，含 libmp3lame、libvorbis、libopus）。升级镜像须重新核对素材并更新 ffmpeg-pinned.sh 里的摘要。
 FFMPEG_IMAGE="$("$ROOT_DIR/scripts/ffmpeg-pinned.sh" --image)"
 MAX_TOTAL_BYTES=1000000
 MAX_SELFTEST_BYTES=32768
-APE_DIR="${ROOMUSIC_APE_FIXTURE_DIR:-$ROOT_DIR/backend/internal/playback/derivation/testdata}"
+APE_DIR="${ROOMUSIC_APE_FIXTURE_DIR:-$ROOT_DIR/backend/testdata/playback}"
 MAX_APE_BYTES=16384
 # Debian bookworm 容器与 Monkey's Audio 10.16 包固定；Alpine 仓库没有 monkeys-audio 包。
 MONKEYS_AUDIO_IMAGE="python@sha256:6a0e06f5ba0b373d051aabd3fffb9b873f27f9a2a3a14bcbe37dee6f0e3bbc70"
@@ -50,7 +50,7 @@ generate_ape_fixture() (
     exit 1
   fi
   cp "$work/output.ape" "$APE_DIR/ape-16-44100.ape"
-  printf '%8d  %s\n' "$size" "ape-16-44100.ape（Monkey's Audio 真实派生素材）"
+  printf '%8d  %s\n' "$size" "ape-16-44100.ape（Monkey's Audio 真实编码素材）"
 )
 
 if [[ "${1:-}" == --ape-only ]]; then
@@ -103,13 +103,13 @@ generate wav-24-48000.wav "WAV 24-48" 8 "$SINE_48000" 0.5 -c:a pcm_s24le
 generate vorbis-44100.ogg "Vorbis" 9 "$SINE_44100" 2 -c:a libvorbis -q:a 2
 generate opus-48000.opus "Opus" 10 "$SINE_48000" 2 -c:a libopus -b:a 64k
 
-# 派生核心的启动自检素材：0.25 秒 16 bit/44.1 kHz 立体声 ALAC，两个声道是不同频率的正弦（能暴露声道错位），
+# 渲染器的启动自检素材：0.25 秒 16 bit/44.1 kHz 立体声 ALAC，两个声道是不同频率的正弦（能暴露声道错位），
 # moov 在文件末尾（不加 faststart，证明 ffmpeg 能经文件描述符定位读取）。没有标签与封面。
 run_ffmpeg_in "$SELFTEST_DIR" \
   -filter_complex "sine=frequency=440:sample_rate=44100:duration=0.25[l];sine=frequency=660:sample_rate=44100:duration=0.25[r];[l][r]amerge=inputs=2[a]" \
   -map "[a]" -fflags +bitexact -flags:a +bitexact -c:a alac -sample_fmt s16p -map_metadata -1 /out/selftest.m4a
 selftest_size="$(stat -c %s "$SELFTEST_DIR/selftest.m4a")"
-printf '%8d  %s\n' "$selftest_size" "selftest.m4a（派生核心自检素材）"
+printf '%8d  %s\n' "$selftest_size" "selftest.m4a（渲染器自检素材）"
 if [ "$selftest_size" -gt "$MAX_SELFTEST_BYTES" ]; then
   echo "自检素材 ${selftest_size} 字节，超过 ${MAX_SELFTEST_BYTES}；请缩短时长后重新生成" >&2
   exit 1

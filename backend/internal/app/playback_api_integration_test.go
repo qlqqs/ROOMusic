@@ -381,7 +381,7 @@ func TestPostgreSQLPlaybackChecksRunInTheDocumentedOrder(t *testing.T) {
 		{"missing track", missing, http.StatusNotFound, "not_found"},
 		{"cue virtual track", cue, http.StatusConflict, "not_directly_playable"},
 		{"format outside the table", floatWAV, http.StatusConflict, "not_directly_playable"},
-		{"ALAC while derivation is unavailable", alac, http.StatusConflict, "not_directly_playable"},
+		{"ALAC is not directly playable", alac, http.StatusConflict, "not_directly_playable"},
 		{"file is gone", gone, http.StatusConflict, "source_unavailable"},
 		{"link leaves the root", escaped, http.StatusConflict, "source_unavailable"},
 		{"size differs from the scan", sizeChanged, http.StatusConflict, "source_changed"},
@@ -471,7 +471,7 @@ func TestPostgreSQLPlaybackPreflightDescribesTheOriginalRepresentation(t *testin
 	requireAPIError(t, application.request(t, http.MethodGet, "/api/v1/tracks/"+flac+"/playback", nil, &user, nil), http.StatusConflict, "source_unavailable")
 }
 
-func TestPostgreSQLPlaybackFormatsListTheDirectlyPlayableCombinationsWithoutDerivation(t *testing.T) {
+func TestPostgreSQLPlaybackFormatsAreEmptyWithoutRenderer(t *testing.T) {
 	application := newIntegrationTestApplication(t)
 	user := application.createUser(t, "user")
 	response := application.request(t, http.MethodGet, "/api/v1/playback/formats", nil, &user, nil)
@@ -498,15 +498,8 @@ func TestPostgreSQLPlaybackFormatsListTheDirectlyPlayableCombinationsWithoutDeri
 		}
 		got = append(got, item.SourceKind+"/"+item.Codec+" "+item.Delivery+" "+item.MIMEType+" "+codecs)
 	}
-	// 没有派生时只有直出格式；ALAC 不在其中（派生可用时才出现，见 playback_derivation_integration_test.go）。
-	want := []string{
-		"flac_vorbis_comment/flac original audio/flac null",
-		"mp3_id3v2/mp3 original audio/mpeg null",
-		"wav_info/pcm original audio/wav 1",
-		"m4a/aac original audio/mp4 mp4a.40.2",
-		"ogg_vorbis_comment/vorbis original audio/ogg vorbis",
-		"opus_tags/opus original audio/ogg opus",
-	}
+	// 未装配渲染器时不发布可渲染格式。
+	var want []string
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("formats =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
@@ -523,3 +516,5 @@ func TestPostgreSQLPlaybackRoutesRejectOtherMethods(t *testing.T) {
 		}
 	}
 }
+
+func preflightPath(trackID string) string { return "/api/v1/tracks/" + trackID + "/playback" }

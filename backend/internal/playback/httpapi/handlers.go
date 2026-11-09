@@ -1,5 +1,5 @@
-// Package httpapi 是曲目播放的 REST 传输层：格式表、播放前预检（含派生等待）与音频交付。
-// handler 只做鉴权、参数解析与响应映射；来源核对、安全打开与派生编排在 playback，已建立传输的停机中止由 playback 的读取器执行。
+// Package httpapi 是曲目播放的 REST 传输层：格式表、播放前预检与音频交付。
+// handler 只做鉴权、参数解析与响应映射；来源核对与安全打开在 playback，已建立传输的停机中止由 playback 的读取器执行。
 package httpapi
 
 import (
@@ -19,30 +19,23 @@ import (
 
 // Handlers 汇集播放相关的 HTTP handler。
 type Handlers struct {
-	guard         *identity.Guard
-	service       *playback.Service
-	lifecycle     context.Context
-	logger        *slog.Logger
-	preflightWait time.Duration
-	progress      playback.AnalysisProgressProvider
+	guard     *identity.Guard
+	service   *playback.Service
+	lifecycle context.Context
+	logger    *slog.Logger
+	progress  playback.AnalysisProgressProvider
 }
 
-// Options 调整 handler 的时间参数；零值取生产默认值，只有测试需要缩短它们。
+// Options 注入后台分析进度。
 type Options struct {
-	// PreflightWait 是预检等待派生完成的最长时间，0 表示 playback.DefaultPreflightWait。
-	PreflightWait    time.Duration
 	AnalysisProgress playback.AnalysisProgressProvider
 }
 
-// New 返回播放 handler。lifecycle 是应用的生命周期上下文：它结束（进程关停）时所有已建立的音频传输都会中止，
-// 预检中的派生等待也立即结束，不会让 Shutdown 等满超时。
+// New 返回播放 handler。lifecycle 结束（进程关停）时所有已建立的音频传输都会中止。
 func New(guard *identity.Guard, service *playback.Service, lifecycle context.Context, logger *slog.Logger, options Options) *Handlers {
-	if options.PreflightWait <= 0 {
-		options.PreflightWait = playback.DefaultPreflightWait
-	}
 	return &Handlers{
 		guard: guard, service: service, lifecycle: lifecycle, logger: logger,
-		preflightWait: options.PreflightWait, progress: options.AnalysisProgress,
+		progress: options.AnalysisProgress,
 	}
 }
 
@@ -57,7 +50,7 @@ func (handlers *Handlers) Register(mux *http.ServeMux) {
 type formatDTO struct {
 	SourceKind string `json:"source_kind"`
 	Codec      string `json:"codec"`
-	// Delivery 是交付方式：original 直出原文件，derived 经服务端无损转换；MIMEType 与 Codecs 描述交给浏览器的表示。
+	// Delivery 是交付方式：original 直出原文件，derived 经服务端处理；MIMEType 与 Codecs 描述交给浏览器的表示。
 	Delivery string  `json:"delivery"`
 	MIMEType string  `json:"mime_type"`
 	Codecs   *string `json:"codecs"`
@@ -78,12 +71,6 @@ type representationDTO struct {
 type preflightResponse struct {
 	TrackID        string            `json:"track_id"`
 	Representation representationDTO `json:"representation"`
-}
-
-// preparingResponse 是派生仍在进行时的 202 正文：客户端立即再次预检，服务端负责等待。
-type preparingResponse struct {
-	TrackID string `json:"track_id"`
-	Status  string `json:"status"`
 }
 
 // codecsValue 把空的 codecs 参数表示为 JSON null。
@@ -112,26 +99,12 @@ func (handlers *Handlers) formats(responseWriter http.ResponseWriter, request *h
 
 // preflight 执行与音频接口相同的检查（含打开文件、比对版本、识别容器），返回将要交付的表示。
 // 媒体元素读不到错误正文，所以前端先预检：出声之前就能得到确切原因，音频失败后也能再次预检来分类。
-// 派生格式的预检是唯一会启动或加入转换的入口：缓存命中立即返回，否则最多等待 PreflightWait，
-// 完成返回 200，仍在进行返回 202（任务继续运行，客户端立即再次预检）。
 func (handlers *Handlers) preflight(responseWriter http.ResponseWriter, request *http.Request) {
-	user, trackID, ok := handlers.authorize(responseWriter, request)
+	representation, ok := handlers.prepare(responseWriter, request)
 	if !ok {
 		return
 	}
-	// 等待派生的同时受应用生命周期约束：进程关停时立即结束长轮询，不让 Shutdown 等满等待时间。
-	ctx, cancel := context.WithCancel(request.Context())
-	defer cancel()
-	defer context.AfterFunc(handlers.lifecycle, cancel)()
-	representation, err := handlers.service.Preflight(ctx, trackID, user.ID, handlers.preflightWait)
-	if errors.Is(err, playback.ErrPreparing) {
-		httpserver.WriteJSON(responseWriter, http.StatusAccepted, preparingResponse{TrackID: trackID, Status: "preparing"})
-		return
-	}
-	if err != nil {
-		handlers.writePrepareError(responseWriter, request, err)
-		return
-	}
+	defer representation.File.Close()
 	httpserver.WriteJSON(responseWriter, http.StatusOK, preflightResponse{
 		TrackID: representation.TrackID,
 		Representation: representationDTO{
@@ -144,7 +117,7 @@ func (handlers *Handlers) preflight(responseWriter http.ResponseWriter, request 
 	})
 }
 
-// audio 交付曲目的音频：直出原文件，或已完成的派生文件（它从不启动转换，没有时 409 derivation_not_ready）。
+// audio 交付可直接播放的原文件。
 // 检查顺序固定：401 → 400 → 404 → 409 → Range（416）。
 func (handlers *Handlers) audio(responseWriter http.ResponseWriter, request *http.Request) {
 	prepared, ok := handlers.prepare(responseWriter, request)
@@ -209,7 +182,7 @@ func (handlers *Handlers) prepare(responseWriter http.ResponseWriter, request *h
 	return prepared, true
 }
 
-// writePrepareError 把 Prepare 与 Preflight 的错误映射为稳定的错误码与可展示的文案。文案固定，不含路径或底层错误。
+// writePrepareError 把 Prepare 的错误映射为稳定的错误码与可展示的文案。文案固定，不含路径或底层错误。
 func (handlers *Handlers) writePrepareError(responseWriter http.ResponseWriter, request *http.Request, err error) {
 	switch {
 	case errors.Is(err, playback.ErrTrackNotFound):
@@ -224,14 +197,6 @@ func (handlers *Handlers) writePrepareError(responseWriter http.ResponseWriter, 
 		httpserver.WriteError(responseWriter, request, http.StatusConflict, "source_changed", "音频文件在上次扫描后有变化，请重新扫描")
 	case errors.Is(err, playback.ErrDatabase):
 		httpserver.WriteError(responseWriter, request, http.StatusServiceUnavailable, "database_unavailable", "暂时无法读取曲目")
-	case errors.Is(err, playback.ErrDerivationNotReady):
-		httpserver.WriteError(responseWriter, request, http.StatusConflict, "derivation_not_ready", "转换尚未完成")
-	case errors.Is(err, playback.ErrDerivationFailed):
-		httpserver.WriteError(responseWriter, request, http.StatusConflict, "derivation_failed", "无损转换失败，无法播放这首曲目")
-	case errors.Is(err, playback.ErrDerivationBusy), errors.Is(err, context.Canceled):
-		// 取消只可能来自客户端已断开（没人读取响应）或进程正在关停：对仍连着的客户端按“忙”应答，让它稍后重试。
-		responseWriter.Header().Set("Retry-After", "2")
-		httpserver.WriteError(responseWriter, request, http.StatusServiceUnavailable, "derivation_busy", "服务器正忙于转换，请稍后重试")
 	default:
 		handlers.logger.Error("prepare playback failed", "event", "playback.prepare.failed", "request_id", request.Header.Get("X-Request-ID"), "error", err)
 		httpserver.WriteError(responseWriter, request, http.StatusInternalServerError, "internal", "服务内部错误")

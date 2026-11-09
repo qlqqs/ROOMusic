@@ -53,8 +53,8 @@ func TestFFmpegLosslessParserParameters(t *testing.T) {
 }
 
 func TestAPERealFixture(t *testing.T) {
-	// 固定素材由 Monkey's Audio 生成，与真实派生测试共用，不复制到解析器目录。
-	path := filepath.Join("..", "..", "playback", "derivation", "testdata", "ape-16-44100.ape")
+	// 固定素材由 Monkey's Audio 生成，保存在共享播放素材目录。
+	path := filepath.Join("..", "..", "..", "testdata", "playback", "ape-16-44100.ape")
 	info, err := os.Stat(path)
 	if err != nil {
 		t.Fatal(err)

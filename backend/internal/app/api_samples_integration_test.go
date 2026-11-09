@@ -26,7 +26,6 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/library/parser/parsertest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/playback/analysis"
-	"github.com/qlqq/roomusic/backend/internal/playback/derivation"
 )
 
 // API 响应样本：用真实 handler 产生响应，规范化 UUID 与时间后，与提交在 testdata/api-samples 的 JSON 逐字比较。
@@ -43,9 +42,7 @@ const (
 )
 
 func TestPostgreSQLAPIResponseSamples(t *testing.T) {
-	// 派生用不需要 ffmpeg 的假实现：样本在任何机器上都相同，格式表里带有派生项，并能产生 202 与派生相关的错误。
-	fake := newFakeDerivation(t)
-	application := newDerivationApplication(t, fake)
+	application := newIntegrationTestApplication(t)
 	samples := newAPISampleRecorder(t, application)
 	call := func(method, path string, body any, user *integrationTestUser, extraHeaders ...map[string]string) *httptest.ResponseRecorder {
 		t.Helper()
@@ -354,8 +351,6 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	// 专辑详情（M1b）：用合成 FLAC 扫描出一张双碟专辑，再记录组、发行版本与管理员证据的详情。放在扫描记录样本之后，
 	// 这样新增的扫描与专辑不会改变前面已记录的列表样本。
 	recordAlbumDetailSamples(t, application, samples, call, admin, libraryA, libraryB)
-	// 派生播放（M2b）：登记的 ALAC 曲目直接写入数据库，放在所有列表样本之后。
-	recordDerivationSamples(t, application, samples, call, admin, playbackLibrary{rootID: rootIDOf(t, application, libraryA), root: libraryA}, fake)
 
 	// 通用错误：扫描不存在、标识无效、未知接口、方法不符、数据库不可用的降级响应。
 	samples.record("errors/not-found-scan", call(http.MethodGet, "/api/v1/scans/"+uuid.New(), nil, admin), http.StatusNotFound)
@@ -990,7 +985,7 @@ func rootIDOf(t *testing.T, application *integrationTestApplication, path string
 	return rootID
 }
 
-// recordPlaybackSamples 记录播放接口：直出格式表、播放预检，以及各个 409 与 416。素材是上面扫描出的合成 FLAC，
+// recordPlaybackSamples 记录播放接口：可渲染格式表、播放预检，以及各个 409 与 416。素材是上面扫描出的合成 FLAC，
 // 预检的大小因此是确定的；每个故障都在记录之后立即复原（改回文件名与修改时间、重新启用目录），不影响其他样本。
 func recordPlaybackSamples(t *testing.T, application *integrationTestApplication, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser, library, rootID string) {
 	t.Helper()
@@ -1041,37 +1036,6 @@ func recordPlaybackSamples(t *testing.T, application *integrationTestApplication
 	if response := call(http.MethodGet, "/api/v1/tracks/"+playable+"/playback", nil, admin); response.Code != http.StatusOK {
 		t.Fatalf("the playable fixture did not recover: HTTP %d: %s", response.Code, response.Body.String())
 	}
-}
-
-// recordDerivationSamples 记录派生相关的响应：同一首 ALAC 曲目先因等待时间用完得到 202，音频请求得到“尚未完成”，放行后预检得到
-// derived 表示；另有转换失败与服务器忙。它放在最后：登记的曲目是直接写入数据库的，不属于前面扫描出的发行。
-func recordDerivationSamples(t *testing.T, application *integrationTestApplication, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser, library playbackLibrary, fake *fakeDerivation) {
-	t.Helper()
-	add := func(relative string) string {
-		return library.addTrack(t, application, alacSpec(relative, mp4Bytes(4096)))
-	}
-	release := make(chan struct{})
-	entered := fake.blockUntil(release)
-	preparing := add("derived/01 Preparing.m4a")
-	samples.record("tracks/playback-preparing", call(http.MethodGet, preflightPath(preparing), nil, admin), http.StatusAccepted)
-	select {
-	case <-entered:
-	default:
-		t.Fatal("the waiting preflight never reached the derivation")
-	}
-	samples.record("errors/derivation-not-ready", call(http.MethodGet, audioPath(preparing), nil, admin), http.StatusConflict)
-	close(release)
-	samples.record("tracks/playback-derived", call(http.MethodGet, preflightPath(preparing), nil, admin), http.StatusOK)
-
-	failed := add("derived/02 Failed.m4a")
-	fake.await = func(context.Context, derivation.Request) error {
-		return &derivation.FailedError{Category: derivation.FailureFFmpegExit, Err: errors.New("ffmpeg exited with status 1")}
-	}
-	samples.record("errors/derivation-failed", call(http.MethodGet, preflightPath(failed), nil, admin), http.StatusConflict)
-
-	busy := add("derived/03 Busy.m4a")
-	fake.await = func(context.Context, derivation.Request) error { return derivation.ErrBusy }
-	samples.record("errors/derivation-busy", call(http.MethodGet, preflightPath(busy), nil, admin), http.StatusServiceUnavailable)
 }
 
 // waitForScanToFinish 等扫描离开 running，再等 worker 退出：worker 在写入终态之后才释放扫描互斥并清除运行标记，
