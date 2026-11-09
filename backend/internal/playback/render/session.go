@@ -32,6 +32,8 @@ type session struct {
 	closeOnce                          sync.Once
 	closed                             atomic.Bool
 	changed                            atomic.Bool
+	changedTransition                  atomic.Bool
+	changeState                        atomic.Pointer[nextChangeState]
 	controlWake, eventWake, eventSpace chan struct{}
 	events, immediateEvents            chan zones.Event
 	done                               chan struct{}
@@ -138,8 +140,19 @@ func (s *session) HLS() zones.HLSMedia {
 	return s.hls
 }
 func (s *session) Events() <-chan zones.Event { return s.events }
-func (s *session) NextChanged()               { s.changed.Store(true); wake(s.controlWake) }
-func (s *session) markReady()                 { s.readyOnce.Do(func() { close(s.ready) }) }
+func (s *session) NextChanged() {
+	// 锁存通知时已编码的换轨；处理标志前播放头跨过接缝也不能撤销重建。
+	// 只读不可变原子快照，不等待会话锁、Cursor 或解码进程。
+	if state := s.changeState.Load(); state != nil {
+		head := sampleFrame(state.sample, state.haveSample, state.written, s.pcm.SampleRate, s.owner.options.Clock())
+		if state.transition > head {
+			s.changedTransition.Store(true)
+		}
+	}
+	s.changed.Store(true)
+	wake(s.controlWake)
+}
+func (s *session) markReady() { s.readyOnce.Do(func() { close(s.ready) }) }
 
 // Close 不等待任何会话协程，尤其不能等待可能正在获取 zones 锁的 Cursor。
 func (s *session) Close() {

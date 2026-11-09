@@ -17,6 +17,24 @@ type segment struct {
 	value zones.Segment
 }
 
+// nextChangeState 是给 NextChanged 的不可变快照，避免渲染协程处理通知时丢失现场。
+type nextChangeState struct {
+	sample              zones.PlayheadSample
+	haveSample          bool
+	written, transition int64
+}
+
+func (s *session) publishChangeStateLocked() {
+	state := &nextChangeState{sample: s.sample, haveSample: s.haveSample, written: s.written}
+	for i := len(s.segments) - 1; i >= 0; i-- {
+		if s.segments[i].frame < s.written {
+			state.transition = s.segments[i].frame
+			break
+		}
+	}
+	s.changeState.Store(state)
+}
+
 func wake(ch chan struct{}) {
 	select {
 	case ch <- struct{}{}:
@@ -35,6 +53,7 @@ func (s *session) Observe(sample zones.PlayheadSample) {
 	if !s.haveSample || !sample.At.Before(s.sample.At) {
 		s.sample = sample
 		s.haveSample = true
+		s.publishChangeStateLocked()
 	}
 	s.mu.Unlock()
 	if s.hls != nil {
@@ -45,16 +64,20 @@ func (s *session) Observe(sample zones.PlayheadSample) {
 }
 
 func (s *session) playheadLocked(now time.Time) int64 {
-	if !s.haveSample {
+	return sampleFrame(s.sample, s.haveSample, s.written, s.pcm.SampleRate, now)
+}
+
+func sampleFrame(sample zones.PlayheadSample, haveSample bool, written int64, rate int, now time.Time) int64 {
+	if !haveSample {
 		return 0
 	}
-	seconds := s.sample.StreamSeconds
-	if s.sample.Playing {
-		seconds += max(0, now.Sub(s.sample.At).Seconds())
+	seconds := sample.StreamSeconds
+	if sample.Playing {
+		seconds += max(0, now.Sub(sample.At).Seconds())
 	}
 	// 先钳秒数再转帧，避免异常远端位置的浮点转整数溢出。
-	seconds = min(seconds, float64(s.written)/float64(s.pcm.SampleRate))
-	return int64(math.Floor(seconds*float64(s.pcm.SampleRate) + 1e-7))
+	seconds = min(seconds, float64(written)/float64(rate))
+	return int64(math.Floor(seconds*float64(rate) + 1e-7))
 }
 func (s *session) playhead() int64 {
 	s.mu.Lock()
@@ -81,7 +104,7 @@ func (s *session) queueEvent(frame int64, event zones.Event) error {
 		s.mu.Lock()
 		if len(s.pending) < 256 {
 			event.StreamSeconds = float64(frame) / float64(s.pcm.SampleRate)
-			// 同帧维持登记顺序；未来 G-2 可以登记跨混音窗口的事件。
+			// 同帧维持登记顺序，混音窗口起点也按准确帧号登记。
 			index := sort.Search(len(s.pending), func(i int) bool { return s.pending[i].frame > frame })
 			s.pending = append(s.pending, timedEvent{})
 			copy(s.pending[index+1:], s.pending[index:])

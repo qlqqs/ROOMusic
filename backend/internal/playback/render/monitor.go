@@ -48,6 +48,7 @@ func (s *session) recordOutput(frames, clipped int) error {
 	// 先登记块内事件，再发布播放头可到达的新上限，防止较晚分段抢先派发。
 	s.mu.Lock()
 	s.written += int64(frames)
+	s.publishChangeStateLocked()
 	s.mu.Unlock()
 	wake(s.eventWake)
 	return nil

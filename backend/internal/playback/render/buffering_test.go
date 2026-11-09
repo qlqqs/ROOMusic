@@ -17,6 +17,12 @@ import (
 // 文件闸门在测试确认状态后放行，避免靠长时间 sleep 模拟预缓冲或超时。
 func gatedDecoder(t *testing.T, ff string, prefix, suffix []byte, hangAfter bool) (*ffmpeg.Tool, *timerControl, string, string) {
 	t.Helper()
+	return gatedTrackDecoder(t, ff, prefix, suffix, hangAfter, "")
+}
+
+// onlyPath 非空时只拦截指定来源，其余来源及编码仍由真实 ffmpeg 处理。
+func gatedTrackDecoder(t *testing.T, ff string, prefix, suffix []byte, hangAfter bool, onlyPath string) (*ffmpeg.Tool, *timerControl, string, string) {
+	t.Helper()
 	dir := t.TempDir()
 	marker, release, started := filepath.Join(dir, "enabled"), filepath.Join(dir, "release"), filepath.Join(dir, "started")
 	first, rest := filepath.Join(dir, "first.pcm"), filepath.Join(dir, "rest.pcm")
@@ -28,7 +34,7 @@ func gatedDecoder(t *testing.T, ff string, prefix, suffix []byte, hangAfter bool
 	script := fmt.Sprintf(`#!/bin/sh
 case " $* " in
  *" -i file:/dev/fd/3 "*)
-  if [ -e %s ]; then
+  if [ -e %s ] && { [ -z %s ] || [ "$(readlink /proc/$$/fd/3)" = %s ]; }; then
    : > %s
    cat %s
    while [ ! -e %s ]; do sleep 0.01; done
@@ -39,7 +45,7 @@ case " $* " in
  ;;
 esac
 exec %s "$@"
-`, shellQuote(marker), shellQuote(started), shellQuote(first), shellQuote(release), shellQuote(rest), map[bool]string{true: "while :; do sleep 1; done", false: ":"}[hangAfter], shellQuote(ff))
+`, shellQuote(marker), shellQuote(onlyPath), shellQuote(onlyPath), shellQuote(started), shellQuote(first), shellQuote(release), shellQuote(rest), map[bool]string{true: "while :; do sleep 1; done", false: ":"}[hangAfter], shellQuote(ff))
 	path := filepath.Join(dir, "ffmpeg")
 	if err := os.WriteFile(path, []byte(script), 0700); err != nil {
 		t.Fatal(err)
