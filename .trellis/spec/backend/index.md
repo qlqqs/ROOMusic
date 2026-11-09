@@ -17,7 +17,7 @@ Classical / Core 1 的能力路线与四类 ADR 位于
 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)（2026-09-28 已批准阶段顺序与范围）。M0 与路线修订仅更新文档，
 不改变本层现有 API、表结构或权限。B0（行为保持拆包）、阶段 I（身份稳定、按组只读接口）、M2a/M2b（播放与派生）、P（播放历史）与 M3
 （修正覆盖层与受治理操作，见[受治理操作合同](./governance-contracts.md)）已完成；M4 的第一项（默认版本与版本对比，见[默认版本合同](./default-version-contracts.md)）与第二项（问题处理，见[核对合同](./issue-review-contracts.md)）已实施；
-M4 的第三项（认领，见[认领合同](./claim-contracts.md)）同月实施；M4 的其余各项（扫描反馈、合并拆分）、通用审批、editor 角色和 Agent 的实施细节须经对应子任务与 ADR 项批准后再实施。Core 0 限制不是未来阶段的默认授权。
+M4 的第三项（认领，见[认领合同](./claim-contracts.md)）同月实施；播放区第一批（服务端播放区、渲染流、DSP 处理链，见[播放区协议](./playback-zone-contracts.md)）取代了浏览器本地播放与派生缓存；M4 的其余各项（扫描反馈、合并拆分）、通用审批、editor 角色和 Agent 的实施细节须经对应子任务与 ADR 项批准后再实施。Core 0 限制不是未来阶段的默认授权。
 
 ## Pre-Development Checklist
 
@@ -67,13 +67,13 @@ Before writing or reviewing backend code:
 | [Catalog REST 合同](./catalog-rest-contracts.md) | Release 列表/详情/evidence、按组接口、封面摘要、可见性和错误合同 |
 | [专辑多流派合同](./genre-contracts.md) | 0032：多值标签、流派合集、读取数组、修正与历史撤销兼容、双向迁移 |
 | [Catalog REST 验证与示例](./catalog-rest-verification.md) | Catalog REST 的正确/基准/错误案例、必需测试与断言点（含 M5 统计与个人数据批量读取、EXPLAIN 诊断）、错误与正确示例 |
-| [播放直出合同](./playback-contracts.md) | M2a 格式表、预检、音频 Range、安全打开与停机中止；M2b 的 `delivery`、202 与派生错误码 |
-| [服务端渲染合同](./playback-render-contracts.md) | P-c、G-2、D-2、P-e：安全来源、共享链、换轨与交叉淡化、抖动出口、Headroom 与信号监测 |
-| [无损派生合同](./playback-derivation-contracts.md) | M2b ALAC → FLAC 无损派生：配置与启动、缓存、转换与核对、上限与取消、测试 |
+| [播放格式表与旧直出接口合同](./playback-contracts.md) | 可渲染格式表（含 CUE）；旧直出接口与 `POST /me/plays` 只保留到下一版；派生退役与启动删除旧 `media-cache`；安全打开与停机中止 |
+| [服务端渲染合同](./playback-render-contracts.md) | P-c、G-2、D-2、P-e、P-g、P-d：ffmpeg 配置与自检、安全来源、共享链、换轨与交叉淡化、抖动出口、Headroom 与信号监测、CUE 截取、派生退役 |
 | [内嵌歌词合同](./lyrics-contracts.md) | M2b 歌词：标签提取与规范化、`tracks.lyrics` 与约束、歌词接口、LRC 解析规则、测试 |
 | [后台音频分析合同](./audio-analysis-contracts.md) | 0033：`track_analyses` 与待分析判定、单线程低优先级工作者、ffmpeg 命令与自检、`ROOMUSIC_AUDIO_ANALYSIS`、按 Roon 的增益公式、分析结果与进度接口、测试 |
 | [播放区数据与队列合同](./zones-data-contracts.md) | B1：0043 三表、纯队列语义、用户隔离读取与调用方事务写入 |
-| [播放区控制面合同](./playback-zone-contracts.md) | B2/B3：设备与命令、渲染端口、SSE、输出端租约、单次取流、事件应用与服务端计次 |
+| [播放区协议 v1](./playback-zone-contracts.md) | 客户端协议文档（原生客户端据此实现）：设备与播放区、命令、期望状态与回报、事件流、长流与 HLS、能力协商、信号路径与 Headroom、错误码 |
+| [播放区服务端实现合同](./playback-zone-service-contracts.md) | B2/B3：Service 签名与渲染端口、锁与事务、hub、输出端租约、会话事件应用与服务端计次、测试接点 |
 | [播放历史合同](./listening-contracts.md) | 阶段 P：`play_history`、计次规则与服务端校验、三个接口、最近播放读取规则、前端计次与上报、测试 |
 | [本人收藏与歌单合同](./personal-contracts.md) | M5 P 线：typed 收藏、歌单间隔键/revision、稳定收据、适应撤销、队列限量与精确统计 |
 | [受治理操作合同](./governance-contracts.md) | 阶段 M3：操作记录与共同写入流程 `operations.Run`、发行字段修正与有效值视图、人工归组、撤销、操作记录接口、错误码、测试与真实服务用例 |

@@ -181,8 +181,8 @@ networks:
 - **日志**：应用输出 JSON 日志，每个请求一条 `http.request.completed`，带请求 ID、路由、状态码和耗时；
   不记录查询参数、请求体、Cookie、密码和完整音乐路径。容器日志按 10 MB × 5 个文件轮转。
 - **健康检查**：`/readyz`。
-- **ALAC 无法播放**：启动时 ffmpeg 自检失败会记录 `playback.derivation.unavailable`，其他格式不受影响。
-  ALAC 第一次播放时转成 FLAC，缓存在应用数据卷里。
+- **什么都放不了**：多半是启动时 ffmpeg 自检失败，看日志里 `playback.render.unavailable` 的 `reason`。
+  所有播放都经服务器处理，渲染器不可用时任何格式都放不了，浏览和其他功能照常。
 - **登录或收藏报 403**：多半是反向代理改写了 Host，看日志里 `identity.origin.rejected` 的 `origin` 和 `host`，按第 5 节处理。
 - **升级后应用一直不就绪**：看日志里的数据库迁移提示，按第 3、4 节处理。
 

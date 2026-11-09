@@ -29,8 +29,9 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
 | 扫描协调 | [scan-coordination-contracts.md](./scan-coordination-contracts.md) | 扫描状态与记录、持久化取消、跨进程协调锁 |
 | 真实库 Smoke | [real-library-smoke-contracts.md](./real-library-smoke-contracts.md) | 真实音乐只读验收、V0 对照 |
 | 发行 REST | [catalog-rest-contracts.md](./catalog-rest-contracts.md) | 发行列表、详情、evidence、封面摘要与按组只读接口 |
-| 鉴权直出 | [playback-contracts.md](./playback-contracts.md) | M2a 格式表、预检、音频、Range、来源版本与撤销复核；M2b 的 `delivery`、202 与派生错误码 |
-| 无损派生 | [playback-derivation-contracts.md](./playback-derivation-contracts.md) | M2b ALAC → FLAC：ffmpeg 与缓存配置、启动自检、转换与核对、上限与取消、测试 |
+| 格式表与旧直出 | [playback-contracts.md](./playback-contracts.md) | 可渲染格式表（含 CUE）；旧预检、音频与 `POST /me/plays` 只保留到下一版；安全打开、Range 与停机中止 |
+| 播放区协议 | [playback-zone-contracts.md](./playback-zone-contracts.md) | 设备与播放区、命令、输出端回报、事件流、长流与 HLS、能力协商、信号路径、错误码 |
+| 服务端渲染 | [playback-render-contracts.md](./playback-render-contracts.md) | ffmpeg 配置与启动自检、解码与处理链、换轨与淡化、编码、HLS；派生退役与旧缓存清理 |
 | 内嵌歌词 | [lyrics-contracts.md](./lyrics-contracts.md) | M2b 歌词：标签提取、`tracks.lyrics`、歌词接口与 LRC 解析规则、测试 |
 | 播放历史 | [listening-contracts.md](./listening-contracts.md) | 阶段 P：`play_history`、计次规则、记录与最近播放与清除接口、按用户隔离、前端计次与上报、测试 |
 | 受治理操作 | [governance-contracts.md](./governance-contracts.md) | 阶段 M3：操作记录与 `operations.Run`、发行字段修正与有效值视图、人工归组、撤销、操作记录接口、测试 |
@@ -52,9 +53,8 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
   `GET /api/v1/releases`、`GET /api/v1/releases/{id}`、管理员专用
   `GET /api/v1/releases/{id}/evidence`、按组只读的 `GET /api/v1/release-groups` 与
   `GET /api/v1/release-groups/{id}`，以及已登录用户可读的 `GET /api/v1/artworks/{id}` 与 `GET /api/v1/tracks/{id}/lyrics`（见[内嵌歌词](./lyrics-contracts.md)）。
-- M2a：`GET /api/v1/playback/formats`、`GET /api/v1/tracks/{id}/playback` 与
-  `GET|HEAD /api/v1/tracks/{id}/audio`，具体合同见[鉴权直出](./playback-contracts.md)；M2b 在同样三个接口上增加派生交付
-  （预检可返回 202），见[无损派生](./playback-derivation-contracts.md)。
+- 播放：`GET /api/v1/playback/formats`（可渲染格式表）与 `/api/v1/me/playback/*`（播放区控制、事件流与渲染流，见[播放区协议](./playback-zone-contracts.md)）；
+  旧的 `GET /api/v1/tracks/{id}/playback` 与 `GET|HEAD /api/v1/tracks/{id}/audio` 只直出、保留到下一版，见[格式表与旧直出](./playback-contracts.md)。
 - P：`POST /api/v1/me/plays`、`GET /api/v1/me/plays/recent-releases` 与 `DELETE /api/v1/me/plays`，只作用于当前会话用户，见[播放历史](./listening-contracts.md)。
 - M3（管理员）：`GET|PATCH /api/v1/releases/{id}/corrections`、`POST /api/v1/releases/{id}/group`、`GET /api/v1/operations`、
   `POST /api/v1/operations/{id}/revert`，见[受治理操作](./governance-contracts.md)。
@@ -151,10 +151,10 @@ M1a 没有改变后端 API、数据库或运行边界，后端只新增了生成
   和 `ROOMUSIC_SECURE_COOKIES` 校验写请求；生产未配置清单时按主机一致校验，只比较规范化的 Origin 与请求 Host；
   配置清单后只按清单。主机一致与清单模式的 Cookie `Secure` 都跟随请求来源协议，任何模式都不读转发头。
 - `.env.dev`、`.env.prod`、`.env` 是本机配置，必须被 Git 忽略；仓库只跟踪不含真实值的
-  `.env.dev.example` 与 `.env.prod.example`。开发脚本默认读 `.env.dev`，不 source 根目录 `.env`；生产可在仓库根目录用 `.env.prod`（`docker compose -f compose.prod.yaml --env-file .env.prod up -d --wait`），或从 `main` 下载部署文件，在仓库外部署目录用 `.env` 与 `compose.yaml`。部署文件默认使用 `latest`。`backend/data/` 等运行期数据（含封面缓存与 `media-cache/` 派生缓存）同样不得提交。
-- ALAC 派生需要 ffmpeg：生产镜像构建时从固定摘要镜像复制，开发由部署者安装（项目不单独分发二进制）；`ROOMUSIC_FFMPEG_PATH`（绝对路径，空则在 `PATH` 中查找）与
-  `ROOMUSIC_MEDIA_CACHE_MAX_MIB`（默认 10240，最小 256）；找不到或自检失败时应用照常启动，ALAC 保持“不能直接播放”。
-  `scripts/ffmpeg-pinned.sh` 取出按摘要固定的 ffmpeg 7.1.1，测试、CI 与推荐部署共用。详见[无损派生合同](./playback-derivation-contracts.md)。
+  `.env.dev.example` 与 `.env.prod.example`。开发脚本默认读 `.env.dev`，不 source 根目录 `.env`；生产可在仓库根目录用 `.env.prod`（`docker compose -f compose.prod.yaml --env-file .env.prod up -d --wait`），或从 `main` 下载部署文件，在仓库外部署目录用 `.env` 与 `compose.yaml`。部署文件默认使用 `latest`。`backend/data/` 等运行期数据（含封面缓存；旧版本的 `media-cache/` 在启动时自动删除）同样不得提交。
+- 服务端渲染需要 ffmpeg：生产镜像构建时从固定摘要镜像复制，开发由部署者安装（项目不单独分发二进制）；`ROOMUSIC_FFMPEG_PATH`（绝对路径，空则在 `PATH` 中查找）。
+  找不到或自检失败时应用照常启动、记 `playback.render.unavailable`，格式表为空、起播得 `503 renderer_unavailable`。`ROOMUSIC_MEDIA_CACHE_MAX_MIB` 已不再读取。
+  `scripts/ffmpeg-pinned.sh` 取出按摘要固定的 ffmpeg 7.1.1，测试、CI 与推荐部署共用。详见[服务端渲染合同](./playback-render-contracts.md) §11。
 - `scripts/dev.sh` 默认只确保 PostgreSQL、Go 和 Vite；Redis/Meilisearch 是
   Compose/mise 可选服务。开发的 `mise run env-*` 显式使用 `--env-file .env.dev`。
 - 生产镜像固定 Go、Alpine、PostgreSQL 基础镜像版本与摘要，ffmpeg 与 `scripts/ffmpeg-pinned.sh` 同一摘要；

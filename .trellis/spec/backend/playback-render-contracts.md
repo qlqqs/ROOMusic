@@ -4,7 +4,7 @@
 
 `playback/render` 实现 `zones.Renderer`，通过消费方端口 `TrackSource` 获取已经安全打开的文件和分析结果；不导入 playback、catalog，不连接数据库。`render/ffmpeg` 是标准库叶子包。app 是唯一装配根。
 
-G-2 在同一 PCM 入口接入无缝、交叉淡化、就绪超时与静音间隔，长流与 HLS 共用；D-2 / P-e 提供抖动出口、Headroom、削波指示与完整信号路径。P-g 放行 CUE 虚拟分轨，来源与截取合同见 §10；派生退役（P-d）另行处理。
+G-2 在同一 PCM 入口接入无缝、交叉淡化、就绪超时与静音间隔，长流与 HLS 共用；D-2 / P-e 提供抖动出口、Headroom、削波指示与完整信号路径。P-g 放行 CUE 虚拟分轨，来源与截取合同见 §10。P-d 删除了 M2b 的派生缓存，配置、启动与旧缓存清理见 §11。
 
 ## 2. 签名
 
@@ -117,3 +117,15 @@ G-2 在同一 PCM 入口接入无缝、交叉淡化、就绪超时与静音间�
 | 改后：粗定位、绝对 PTS 截取 | 0.03145 / 0.03166 / 0.02941 | 0.03145 | 0.05665 |
 
 性能测量输出的 PCM 同时与原 WAV 核对；这组数字只代表本机与该合成 APE，不承诺所有容器或设备的延迟上限。新增 CUE 渲染回归见本节验收用例；以上性能测量不属于仓库自动化测试。
+
+## 11. 配置、启动与派生退役（P-d）
+
+- `ROOMUSIC_FFMPEG_PATH`：ffmpeg 的绝对路径，空时在 `PATH` 中查找，相对路径使配置加载失败。项目不分发 ffmpeg；推荐 `scripts/ffmpeg-pinned.sh` 取出按摘要固定的静态 ffmpeg 7.1.1
+  （缓存在 `${XDG_CACHE_HOME:-$HOME/.cache}/roomusic/ffmpeg-<摘要前 12 位>/ffmpeg` 并打印路径），测试（`ROOMUSIC_TEST_FFMPEG`）、CI 与推荐部署用同一个构建；升级须同步脚本里的摘要并重新核对素材与测试。
+- `app.OpenRenderer` 在 `app.New` 之前调用 `ffmpeg.Open`（§2）。失败记一条 `playback.render.unavailable{reason}`（`unsupported_host|not_found|version_failed|soxr_failed|selftest_failed`，不含路径与 stderr），
+  应用照常启动：格式表为空，起播类命令得 zones 的 `503 renderer_unavailable`。成功记 `playback.render.ready{ffmpeg_version, encoders, soxr}`。
+- 可渲染格式表（`playback.RenderFormats`）= 直出六项 + `m4a/alac`、`ape_apev2/ape`、`wavpack_apev2/wavpack`、`wavpack_apev2/wavpack_hybrid`、`aiff_id3/aiff`、浮点 WAV、`wav_extensible` + `cue_virtual` 的各父编码；
+  每项只在 ffmpeg 解码器清单里有对应解码器时发布。对外形状见[播放格式表与旧直出接口合同](./playback-contracts.md) §0。
+- 派生退役：`playback/derivation`、预检 202 与 `derivation_*` 错误码已删除；`ROOMUSIC_MEDIA_CACHE_MAX_MIB` 不再读取（仍设置时忽略）。
+  `app.RemoveLegacyMediaCache` 在启动早期删除 `<ROOMUSIC_DATA_DIR>/media-cache`：目录不存在不操作；删除前要求它在数据目录内且与所有允许的音乐根互不包含，否则记 `platform.config.invalid` 并退出；
+  删除后记 `playback.derivation.cache_removed{bytes}`（只计普通文件，不跟随符号链接）。

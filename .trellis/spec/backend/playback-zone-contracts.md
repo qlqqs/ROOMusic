@@ -1,196 +1,260 @@
-# 播放区控制面、实时与输出端合同（B2/B3）
+# 播放区协议 v1（客户端协议文档）
 
-## 1. 范围与所有权
+任何客户端（浏览器、以后的原生客户端）按本文实现控制端与输出端。服务端内部见[播放区服务端实现合同](./playback-zone-service-contracts.md)、
+[播放区数据合同](./zones-data-contracts.md)与[服务端渲染合同](./playback-render-contracts.md)。本文以已实现代码为准（`zones`、`zones/httpapi`、`playback/render`）。
 
-`zones.Service` 拥有设备与播放区的内存工作副本、命令、事务、渲染会话生命周期、内部 hub 与设备清理。
-`zones/httpapi` 只做来源校验、鉴权、解码和错误映射；`app.New` 是装配入口；进程在关闭数据库前经 `App.WaitForZones(ctx)` 等待生命周期回调完成。
-B3 增加 SSE、输出端认领/回报/释放、渲染流 HTTP、会话事件应用与服务端计次；第 8 节记录其接口和验证接点。
-运行时只支持**单进程**，不可让多个应用实例同时管理同一数据库中的播放区。
-存储与队列原语见[播放区数据合同](./zones-data-contracts.md)，协议定义见[父任务合同](../../tasks/11-08-server-playback-zones/design-contract.md)。
+## 0. 约定
 
-## 2. 入口与端口
+- 路径前缀 `/api/v1/me/playback`，下文省略。路径与请求体里没有用户 ID，一律作用于已鉴权的用户；管理员也只能访问自己的设备。
+- **版本**：v1 内只做增加（字段、事件类型、命令、枚举值），客户端必须忽略不认识的字段与事件类型；不兼容的改动换前缀 `/api/v2/…`。
+- **鉴权**：每个请求经 `Guard.Authenticate`，协议不规定凭据形式（现在只有同源 HttpOnly Cookie）。写请求先来源校验（403）再鉴权（401）。流地址由服务端给出，不含凭据。
+- **JSON**：请求体是单个对象、≤ 1 MiB，拒绝重复键与未知键；必填键不能缺也不能为 `null`，标 `?` 的键必须出现、可为 `null`。
+  响应 `Cache-Control: no-store`；错误信封 `{error: {code, message}, request_id}`（[平台运行合同](./core0-runtime-contracts.md)）。
+- UUID 小写；时间为 UTC RFC 3339、带毫秒。改变状态的响应带 `server_time`，客户端取最近一次算时钟偏移（`server_time` − 收到时的本地时间）。
+- **样本**：`backend/internal/app/testdata/api-samples/playback-zones/` 下由真实 handler 生成：`requests/<名>.json`（`{method, path, body}`）、
+  `responses/<名>.json`（`{status, body}`）、`events/<名>.json`（`{event, data}`），错误在 `errors/` 子目录；ID 与时间已归一化。HLS 没有样本（见 `zones/hls_http_integration_test.go`）。
+  下文“样本 x”指同名的请求与响应。
 
-```go
-func NewService(db *sql.DB, options Options) *Service
-func (s *Service) Close()
-func (s *Service) Snapshot(ctx context.Context, userID string) (Snapshot, error)
-func (s *Service) ReadQueue(ctx context.Context, userID, zoneID string) (QueueResult, error)
-func (s *Service) RegisterDevice(ctx context.Context, userID string, input RegisterDeviceInput) (RegisterDeviceResult, error)
-func (s *Service) RenameDevice(ctx context.Context, userID, deviceID, name string) (DeviceResult, error)
-func (s *Service) DeleteDevice(ctx context.Context, userID, deviceID string) error
-func (s *Service) SetVolume(ctx context.Context, userID, deviceID string, volume float64, muted bool) (DeviceResult, error)
-func (s *Service) Command(ctx context.Context, userID, zoneID string, command Command) (CommandResult, error)
+## 1. 设备与播放区
+
+一台设备对应一个播放区。设备由客户端登记、服务端生成 ID；播放区持有队列、模式、播放设置与传输状态。
+
+```text
+Device = {device_id, zone_id, name, kind: "browser"|"native", online, last_seen_at, volume: 0..1, muted,
+          capabilities: Capabilities, output_session_id: UUID?}
+Snapshot = {server_time, protocol: 1, devices: Device[], zones: Zone[]}          // 按设备创建时间升序
+QueueEntry = {entry_id: UUID, track: TrackSummary}   // 与 POST /tracks/summaries 同一投影，按曲目当前的发行与组给出
+Zone = {zone_id, device_id, revision, queue_revision, queue_length,
+        mode: "sequential"|"repeat_all"|"repeat_one"|"shuffle", settings: Settings,
+        current: QueueEntry?, has_next, intent: "play"|"pause",
+        status: "idle"|"loading"|"playing"|"paused"|"buffering",
+        fault: {kind: "transient"|"autoplay_blocked"|"no_stream_format"}?, failures: [{entry_id, reason}],
+        position: {seconds, at, duration_seconds?, seekable}, stream: Stream?, next_stream: Stream?,
+        paused_at: time?, signal: Signal?, event: ZoneEvent?}
+Settings = {leveling: "off"|"auto"|"track"|"album", gapless, crossfade, crossfade_seconds: 3|5|8|12,
+            quality: "lossless"|"lossy", headroom: {enabled, db, clip_indicator}}
 ```
 
-`Options` 注入结构化 `Logger`、`Renderer`、`PlayRecorder`、`Now func() time.Time`、`AfterFunc func(time.Duration, func()) Timer`、`Random func() float64`、`NewID func() string`；`Timer` 只需 `Stop() bool`。
-渲染端口的完整、权威签名位于 `backend/internal/zones/ports.go`，能力结构沿用 `store.go` 中的 `Capabilities`。
-`Renderer.Open` 接收应用生命周期上下文，不得使用会随 HTTP 响应结束而取消的请求上下文。
+- `revision` 每次状态变化加一，客户端按它丢弃旧状态；`queue_revision` 只在条目增删移动时加一。
+- `status` 来自输出端回报；开新流时服务端先置 `loading`，设备离线时为 `paused` 或 `idle`。`paused_at` 是意图变为暂停的时刻。
+- `position` 是曲目内位置；`status == "playing"` 时控制端按 `seconds + (服务端现在 − at)` 外推，不超过时长。输出端用流内位置自己算（§3.4）。
+- `failures` 只在内存，替换队列、清空、重启时清除；`reason` ∈ `not_found/root_disabled/unsupported_format/source_unavailable/source_changed/decode_failed`。
+- 默认设置：`auto`、无缝开、交叉渐变关、5 秒、`lossless`、Headroom `{enabled: false, db: -3, clip_indicator: false}`。
+- `ZoneEvent = {seq, kind, …}` 是一次性公告，`seq` 取当时的 `revision`，每个 `seq` 只公告一次；只带与 `kind` 有关的字段：
+  `track_started {entry_id}`、`track_failed {entry_id, reason}`（服务端已跳到下一首）、`all_failed`、`failures_stopped`（连续 5 首失败，已暂停）、
+  `transient_failure`（可 `retry`）、`autoplay_blocked`、`no_stream_format`、`queue_restored {restored, dropped}`、`play_recorded {track_id}`（据此刷新播放历史）。
 
-- `RenderSession.Observe`、`NextChanged`、`Close` 不阻塞，允许在播放区锁内调用；`Close` 幂等。
-- `Cursor.Next(afterEntryID)` 会取播放区锁，渲染器须在自己的协程中按渲染顺序预取，不可从 `Open` 同步回调它；同轮回查复用预选，循环前沿重新进入旧条目时开始新轮，不能跨轮重试陈旧 afterEntryID。
-- `Entry.AlbumContext` 只在非随机模式、列表相邻条目有同发行时为真，不按同组猜发行。
-- `Event` 的 `time/track_started/track_failed/stream_ended` 与带分段的 `signal` 到播放头才派发；`format_boundary/rebuild_needed` 与实时指标 `signal` 立即派发。起始条目的 `track_started` 由 Service 产生。
-- `PlayRecorder.Record(ctx, userID, idempotencyKey, trackID, playedSeconds) error` 由 app 的 `zonePlayRecorder` 适配 `listening.Service.Record`，不让 zones 导入 listening。幂等键由服务端生成，首次提交后的重试固定键、曲目与秒数。
+队列：`GET /zones/{zone_id}/queue` → `200 {zone_id, queue_revision, entries}`，按列表顺序、≤ 10,000 条（样本 queue、queue-empty）。增量：
 
-## 3. HTTP 与状态合同
-
-前缀 `/api/v1/me/playback`，以下七个控制路由来自 B2；B3 的五个路由见第 8 节：
-
-| 方法 | 路径 | 成功 |
-| --- | --- | --- |
-| GET | 空路径 | `200 Snapshot` |
-| GET | `/zones/{zone_id}/queue` | `200 {zone_id,queue_revision,entries}` |
-| POST | `/devices` | `201 {server_time,device,zone}` |
-| PATCH | `/devices/{device_id}` | `200 {server_time,device}` |
-| DELETE | `/devices/{device_id}` | `204` |
-| PUT | `/devices/{device_id}/volume` | `200 {server_time,device}` |
-| POST | `/zones/{zone_id}/commands` | `200 {server_time,zone,queue_change}`；转移增加 `target_zone`，导入增加 `imported` |
-
-DTO 字段与命令参数遵循父合同 §2–§3：空集合输出 `[]`，nullable 字段输出 `null`；时间统一 UTC、毫秒精度。
-JSON 只接受单个对象，完整请求不超过 1 MiB；HTTP 负责类型、必填/null 与未知键，Service 在加载用户和检查归属前校验字段取值。
-所有访问只用 Guard 给出的用户 ID，不允许管理员越权访问。
-
-- 同名登记追加“ 2”“ 3”；名称按字符计 1–64，追加后缀时截短基础名称以满足数据库约束。
-- 新建与重启加载的设备离线，播放区暂停或空闲。在线状态只在内存中，不能根据 `last_seen_at` 猜在线。
-- 队列显示信息由 `catalog.Store.LoadTrackSummaries` 每批至多 1,000 个不同曲目取得；不把显示元数据写入队列。
-- 每个播放区独立互斥，转移按 zone ID 升序锁两个区；条目与状态同事务写入，成功后才换内存与发布。
-- 转移保留源条目 ID、当前项、模式、位置、历史与随机袋；目标保留自己的播放设置与音量；源清空，目标直接播放。
-- 导入只在队列为空且从未导入时执行；旧字符串条目 ID 映射成服务端 UUID，丢掉查不到的曲目并核对当前项与历史；当前项丢失从其后保留项开始，位置清零；没有后继或原本 current 为 null 时保留无当前项，不回到队首。
-- `seek` 与正在放的会话上的 `set_settings` 共用 300 ms 去抖；暂停 5 秒后仍暂停才关闭会话；停止、清空、转移与切歌取消旧定时器。
-- 所有已接受控制命令撤销 `offlinePaused` 自动恢复标记；起播清故障与连续失败计数。重复暂停不延后既有五秒期限，无操作不广播。
-- 队列/模式变动通知 `NextChanged()`，是否需要重建由渲染会话发 `rebuild_needed` 决定，经同一 300 ms 定时器去抖。
-- Headroom 默认 `{enabled:false,db:-3,clip_indicator:false}`；登记与 `set_settings` 接受完整 `settings.headroom` 对象，`db` 须有限、在 −30…0 内且按 0.1 步进，否则 `400 invalid_input`。省略整项保留原值；提交后经 0044 的 JSONB 列持久化，DTO 与渲染设置返回实际值；改动复用既有 300 ms 去抖，无变化不重建。存储坏值的默认回退见播放区数据合同。
-- hub 按用户扇出，订阅缓冲 64 条；满则关闭该订阅，不阻塞命令。队列事件先于状态事件，B3 用订阅接口写 SSE。
-- 每小时清理超过 30 天未上线且当前离线的设备，删除前持锁重新核对；覆盖尚未加载到内存的用户。
-
-## 4. 校验与错误矩阵
-
-检查顺序：来源 → 会话 → 路径 UUID → JSON → 字段 → 归属 → 状态冲突 → 写入。
-
-| 情况 | HTTP/code |
-| --- | --- |
-| 写请求缺来源或来源不可信 | `403 origin_required/origin_forbidden` |
-| 未鉴权 | `401 unauthorized` |
-| 路径不是 UUID | `400 invalid_id` |
-| JSON 格式、类型、大小不符 | `400 invalid_json` |
-| 字段取值、必填、未知命令/设置键、转移给自己 | `400 invalid_input` |
-| 不存在或不属于本人 | `404 not_found` |
-| 加入命令包含不存在曲目 | `404 track_not_found`（整批拒绝） |
-| 队列加入超过 10,000 | `409 queue_full` |
-| 起播区或转移目标离线 | `409 zone_offline` |
-| 删除在线设备 | `409 device_online` |
-| 给 fixed 设备改音量 | `409 volume_fixed` |
-| 未装配 Renderer 的起播操作 | `503 renderer_unavailable`，不写入新播放状态 |
-| 数据库失败 | `503 database_unavailable`，保留内部错误链，不返回 SQL |
-
-已装配渲染器但 `Open` 失败不是数据库错误：接受命令后保留目标项，置 `fault:transient`、意图暂停，供 `retry` 重试；协商失败置 `no_stream_format`。
-
-## 5. 正常、基线与错误案例
-
-正常：暂停中的源区转移到在线目标，保留位置与条目身份，目标用自己的设置从该位置开流；两个队列修订号都增加。
-基线：不存在的条目操作、非 transient 的 retry、已导入后的 import 都不应制造新播放或再次导入。
-错误：先关闭旧流、改变当前项，再尝试写库；数据库失败后用户会看到不可恢复的部分状态。必须先提交计算出的状态。
-
-## 6. 验证与测试交接
-
-B2 实现阶段不新增测试、不启动数据库；只执行用户指定的 build、局部 vet 与局部测试筛选。
-独立测试 agent 应覆盖父任务 implement.md B2 第 6 步，另关注：
-
-- 失败事务不替换内存、不广播、不关闭原会话；转移两侧锁顺序与写入回滚。
-- 首次导入全部丢弃、旧字符串 ID 重映射、当前项丢弃选后继、历史筛选、第二次导入无变化。
-- 连续 seek/settings 只重建一次，暂停/恢复及旧定时器取消，时钟推进不依赖真实 sleep。
-- 上线状态只能经内存接点设定；能力 fixed、离线拒绝、其他用户 404，以及未装配渲染器 503。
-- 随机 Cursor 的预选稳定性与多曲预取；B3 用 `AdvanceTo` 消费预选，不能重新抽签。
-- 64 条订阅溢出关闭、隔离、队列先于状态；空 replace 的 entries 必须为数组。
-- 1,001/10,000 条摘要批读，艺人/发行元数据刷新，500 条内联与 reload 边界。
-- `zonestest.NewRenderer` 仅用于测试/开发：具体 WAV 格式、静音 Body、脚本 `Emit`、确定性 `Advance` 或 `Realtime` + `Observe`，以及幂等 Close。
-
-消息样本由 B3/独立测试 agent 经真实 handler 生成，不手写样本，不把当前静态检查当作数据库集成验收。
-
-## 7. 错误与正确做法
-
-错误：控制面直接导入 DSP/listening；生产装配静音假渲染器掩盖真实 Renderer 缺失；HTTP 取消时越权关闭渲染会话。
-正确：端口定义在消费方 zones，app 装配真实实现；未装配时明确 503，假渲染器隔离在 `zones/zonestest`；B3 复用现有锁、状态与发布接口。
-
-
-## 8. B3 输出端与实时接口
-
-### 8.1 签名与生命周期
-
-```go
-func (s *Service) ClaimOutput(ctx context.Context, userID, deviceID string, input ClaimOutputInput) (ClaimOutputResult, error)
-func (s *Service) ReportOutput(ctx context.Context, userID, sessionID string, input ReportOutputInput) (OutputResult, error)
-func (s *Service) ReleaseOutput(ctx context.Context, userID, sessionID string, input ReleaseOutputInput) error
-func (s *Service) TakeStream(ctx context.Context, userID, zoneID string, seq int64) (StreamBody, error)
-func (s *Service) SubscribeOutput(ctx context.Context, userID, sessionID string) (*Subscription, error)
-func (s *Service) Done() <-chan struct{}
-func (s *Service) Now() time.Time
-func (s *Service) AfterFunc(time.Duration, func()) Timer
+```text
+QueueChange = {queue_revision, kind, …}: replace {entries}（超过 500 条改发 reload）| reload | insert {index, entries}（插在第 index 位之前）
+              | remove {entry_id} | move {entry_id, delta: -1|1} | clear
 ```
 
-`StreamBody` 只包含 `Body io.Reader` 与 `MimeType string`，不把 `RenderSession.Close` 交给 HTTP。
-`SubscribeOutput` 的 `Events` 首条已原子入队 `snapshot`，handler 不再另取快照；`Close` 解除输出端在线关联。
-`Subscription.Done` 在取消或缓冲溢出时关闭，HTTP 不排空剩余旧事件。`Service.Done` 是所有长响应的应用生命周期边界。
+手里的 `queue_revision` 等于 `change.queue_revision − 1` 才应用，否则重新 GET。只有显示该队列的客户端需要保存队列。
 
-### 8.2 请求、响应与流合同
-
-以下路径均省略 `/api/v1/me/playback`，完整 DTO 的字段、nullable 及能力形状以父合同 §2、§4 为准：
-
-| 方法/路径 | 请求 | 成功 |
+| 方法与路径 | 请求 | 成功 |
 | --- | --- | --- |
-| `POST /devices/{device_id}/output` | `{protocol:1, capabilities, takeover:boolean, playing:{entry_id,position_seconds}?}` | `200 {server_time,protocol:1,session_id,device,zone}` |
-| `POST /outputs/{session_id}/reports` | `{kind,status,stream_seq:integer?,stream_seconds:number,fault:string?}` | `200 {server_time,device,zone}` |
-| `POST /outputs/{session_id}/release` | `{stream_seq:integer?,stream_seconds:number}` | `204`；未知会话也成功 |
-| `GET /zones/{zone_id}/streams/{seq}` | 无 | `200` 原始音频 |
-| `GET /events[?output_session=UUID]` | 无 | SSE，首条 `snapshot` |
+| `GET` 空路径 | — | `200 Snapshot`（样本 snapshot、snapshot-empty） |
+| `POST /devices` | `{name, kind, volume, muted, settings?}`，`settings` 是 `Settings` 的任意子集、可省略 | `201 {server_time, device, zone}`（register-device） |
+| `PATCH /devices/{id}` | `{name}` | `200 {server_time, device}`（rename-device） |
+| `DELETE /devices/{id}` | — | `204`；在线时 `409 device_online`（delete-device） |
+| `PUT /devices/{id}/volume` | `{volume, muted}` | `200 {server_time, device}`；`volume: fixed` 的设备 `409 volume_fixed`（volume） |
 
-- `kind` 为 `status/ended/fault`；状态为 `loading/playing/paused/buffering`；故障为 `autoplay_blocked/stream_lost`，非故障回报的 `fault` 为 null。
-- 两条长响应路由的 HEAD 在鉴权后返回 `405 method_not_allowed`、`Allow: GET`，不订阅、不取流；防止 Go 的 GET 隐式匹配 HEAD 消耗单次流。
-- Flush 由 `http.NewResponseController` 进入已有 `recordingResponseWriter.FlushError`；该方法继续委托底层 ResponseController，不能调用无返回值的 Flush 吞掉错误。
-- 首曲打不开时允许 `Open` 返回零值 Format、Body EOF 的会话；此流投影 `format: null`，不伪造零采样率格式。异步 `track_failed/format_boundary` 仍需消费，空流的 ended 不能提前关闭会话吞掉接续；前端 decoder 必须接受 null。`StreamFormat` 未来新增的内部设备上限字段不参与对外投影。
-- 流只允许当前/接续且各取一次，忽略 Range；原样读取 Body，每次最多 32 KiB，读到即写出并 Flush。
-  头为实际 MIME、`Accept-Ranges: none`、`Cache-Control: no-store`、`X-Content-Type-Options: nosniff`、`X-Accel-Buffering: no`，无 Content-Length。
-- 客户端取消使 handler 返回，不关闭会话；唯一 reader 如阻塞在 Read，等会话 Close 后 EOF 结束，不加额外回收定时器。
-- SSE 为 `event: 类型\ndata: 单行JSON\n\n`，不带 id；类型为 `snapshot/zone/queue/device/device_removed`。
-  每 15 秒 `: ping\n\n`，每 60 秒重新认证，失败结束流而不是往流里追加 JSON 错误信封。
-- 当前有效 `output_session` 的订阅维持在线；缺省、无效、其他用户的会话参数按普通控制流处理，不泄漏他人会话。
-- 订阅容量 64，满即断开；队列变化先于状态变化，重连靠全量快照而非重放。
+名称去掉首尾空白后 1–64 字符，同名时服务端追加“ 2”“ 3”。新登记的设备离线。30 天没上线且离线的设备每小时自动清理（推送 `device_removed`），
+认领得 `404 not_found` 时客户端重新登记。音量属于设备、只作用于输出端，不进渲染流。
 
-### 8.3 校验与错误
+## 2. 命令
 
-沿第 4 节检查顺序；新增错误：
+`POST /zones/{zone_id}/commands`，请求 `{command, …参数}`，成功 `200 {server_time, zone, queue_change: QueueChange?}`；`transfer` 另带 `target_zone`，`import` 另带 `imported`。
+命令在播放区内串行执行，不带期望版本号，不幂等，客户端不自动重试；条目已不存在时是无操作。样本与命令同名（下划线换连字符）。
 
-| 条件 | HTTP/code |
+“起播”：意图置 `play`，清故障与离线暂停标记；目标离线时 `409 zone_offline` 且不改状态。“开流”：关旧会话、从某条目某秒开新流，`next_stream` 置空、状态 `loading`。
+服务端没有渲染器时起播类命令 `503 renderer_unavailable`；渲染器忙或打不开时接受命令、置 `fault: transient` 并暂停。
+
+| `command` | 参数 | 语义 |
+| --- | --- | --- |
+| `play_tracks` | `track_ids: UUID[1..10000]`、`start_index`（越界取 0） | 替换队列并起播；有不存在的曲目整批 `404 track_not_found` |
+| `play_next` / `enqueue` | `track_ids: UUID[1..]` | 插到当前项后 / 追加到队尾，不打断；超过 10,000 条 `409 queue_full` |
+| `play_entry` / `remove_entry` | `entry_id` | 播放这一项 / 移除（移除正在放的当前项时接着放后继） |
+| `move_entry` | `entry_id`、`delta: -1\|1` | 上移或下移一位 |
+| `clear_queue`、`set_mode {mode}` | — | 清空并暂停；切换模式 |
+| `play`、`pause`、`stop` | — | 播放（没有当前项取第一项）；暂停；暂停并回到 0 |
+| `next`、`previous` | — | 手动下一首（跳过失败项）；上一首（结果是当前项时从头放） |
+| `seek` | `position_seconds ≥ 0` | 钳到 `[0, 时长]`，300 ms 去抖后从新位置开流 |
+| `set_settings` | `settings`：任意子集，给出的键非 `null`，`headroom` 须是完整对象 | 部分更新；正在放时 300 ms 去抖后重建流 |
+| `retry` | — | 只在 `fault: transient` 时起播并续流 |
+| `transfer` | `target_zone_id` | 队列、当前项、位置、模式与历史搬到目标并直接播放，源清空；给自己 `400 invalid_input` |
+| `import` | `entries: [{entry_id: string(1..64), track_id}]`（≤ 10,000，ID 不重复）、`current_entry_id: string?`、`mode`、`position_seconds`、`history: string[≤500]` | 只在播放区为空且从没导入过时生效（`imported: true`，公告 `queue_restored`），否则 `imported: false` |
+
+暂停 5 秒后服务端关闭渲染会话（`stream` 置空），之后 `play` 从保存的位置开新流。
+
+## 3. 输出端
+
+### 3.1 认领 `POST /devices/{device_id}/output`
+
+请求 `{protocol: 1, capabilities, takeover: bool, playing: {entry_id, position_seconds}?}`，响应 `200 {server_time, protocol: 1, session_id, device, zone}`。
+
+- 生成新会话，同设备旧会话立即失效（之后回报 `409 output_superseded`）；保存能力，设备在线。不支持的版本 `400 unsupported_protocol`。
+- `takeover: true`：原会话释放不超过 10 秒且播放区因释放而暂停时，从原位置恢复（浏览器多标签页接替；其他客户端发 `false`）。
+- `playing` 非空、条目仍在队列且播放区离线暂停时，从该位置恢复（重启或掉线后重新认领）。
+- 样本 claim、claim-takeover、claim-playing、claim-replacement、claim-fixed、claim-target。
+
+### 3.2 期望状态与对齐
+
+输出端只关心 `stream`、`next_stream`（接续流）、`intent` 与设备音量。协议没有曲目前瞻：换曲、电平化、无缝、交叉渐变都在流里完成；
+`next_stream` 只在下一首格式不同或超时没准备好时出现，可被替换。每次拿到状态（事件、命令响应、回报响应）都对齐，`revision` 旧的丢弃：
+
+```text
+stream == null                             → 停止并卸载（保留锁屏信息与暂停态）
+stream.seq 是正在放的或已预载的接续流      → 不动
+否则                                       → 在备用播放器打开 stream，出声后换上、卸载旧的
+next_stream 未预载                         → 在备用播放器预载（不播放）
+按 intent play/pause；按 volume/muted 设音量
+```
+
+当前流 `ended` 且接续流已预载时立即换上，并以接续流的 `stream_seq` 回报 `status: playing`，服务端据此把它晋升为当前流（样本 next-stream-playing）。
+漏掉、重复、乱序的消息不会让输出端做错事；重连后拿快照再对齐一次即可。
+
+### 3.3 回报 `POST /outputs/{session_id}/reports`
+
+请求 `{kind: "status"|"ended"|"fault", stream_seq: int?, stream_seconds: 0..1e7, status: "loading"|"playing"|"paused"|"buffering", fault: "autoplay_blocked"|"stream_lost"?}`，
+五个键都须出现，`fault` 只在 `kind == "fault"` 时非空；响应 `200 {server_time, device, zone}`。同一输出端串行发送：
+
+| 时机 | 回报 | 服务端 |
+| --- | --- | --- |
+| 状态变化立即；播放中每 10 秒；换上新流时 | `status` | 作为播放头推进曲目、位置与计次；续租 |
+| 当前流放完且没有接续流 | `ended` | 意图暂停 |
+| 系统拒绝自动播放 | `fault: autoplay_blocked` | 暂停并记故障，用户在那台设备上点播放时清除 |
+| 流断开或取不到（网络、410、5xx、长时间缓冲） | `fault: stream_lost` | 按分段换算断开处的曲目与位置、立即续流；连续 3 次失败才暂停为 `transient` |
+
+- `stream_seq` 不是当前流或接续流时只续租；响应里的新状态让输出端对齐。所以输出端**不连事件流也能收到远端命令**，最迟在下一次回报时生效。
+- 事件类回报失败时保留、随下一次重发（重复是无操作）；状态类失败直接丢弃，只保留最新一条。
+- `409 output_superseded`：停声。`404 output_unknown`（服务重启、已释放）：带 `playing` 重新认领。曲目级失败由服务端经 `track_failed` 带回，不经回报。
+- 样本 status-playing/paused/loading/buffering、ended、fault-stream-lost、fault-autoplay-blocked。
+
+### 3.4 位置与分段
+
+`Stream.segments = [{entry_id, track, stream_start_seconds, track_start_seconds}]` 是已渲染、尚未播完的分段。输出端取 `stream_start_seconds ≤ 流内位置` 的最后一段，
+曲目内位置 = `track_start_seconds + 流内位置 − stream_start_seconds`，在分段边界本地切换锁屏信息。服务端只以回报的播放头判断“正在放哪首”（渲染跑在缓冲前面）。
+
+### 3.5 释放、在线与计次
+
+- `POST /outputs/{session_id}/release`，请求 `{stream_seq: int?, stream_seconds}`，`204`（未知会话也 `204`）：立即离线、关闭渲染会话，意图为播放时改为离线暂停（样本 release*）。
+- 输出会话**在线**当且仅当带 `output_session` 的事件流连着，或距上次回报 ≤ 45 秒（每 5 秒扫描）。播放中每 10 秒回报，所以锁屏断开事件流也保持在线。
+- 判离线时意图为播放则暂停、保留位置、记离线暂停；原会话之后回报 `status: playing` 即恢复。任何控制命令清掉该标记。重启后全部离线，输出端按 `output_unknown` 重新认领接着放。
+- 计次在服务端：门槛 min(时长 / 2, 240 秒)（时长未知取 240 秒），只累计播放中的正向前进，超过墙钟流逝 + 1 秒视为跳变；一次访问最多一次，记下后公告 `play_recorded`。
+  起播类命令与自然换曲开始新访问；定位、改设置、续流、暂停后继续、接手、重启后续播延续原访问。离线期间的出声不计；访问状态不持久化，跨重启的同一次访问可能重计（已知缺口）。
+
+## 4. 事件流 `GET /events[?output_session=UUID]`
+
+- 标准 SSE：`text/event-stream`、`no-store`、`X-Accel-Buffering: no`；每条 `event: <类型>\ndata: <一行 JSON>\n\n`，不带 `id:`，写完即 flush。HEAD 得 `405 method_not_allowed`。
+- 首条总是 `snapshot`，重连不补发。每 15 秒 `: ping`；每 60 秒复核凭据，失效即结束流。订阅缓冲 64 条，满了结束流，客户端重连拿快照。
+- `output_session` 是本人有效的输出会话时，流连着即视为该输出端在线；无效或他人的会话按普通控制端处理，不报错。
+- 非 200（如 401）不立即重连；其余断开按 1、2、5、10 秒退避，之后每 10 秒。
+
+| `event` | `data` | 何时 |
+| --- | --- | --- |
+| `snapshot` | `Snapshot` | 连接建立 |
+| `zone` | `{zone}` | 命令、换曲、开流、回报（约每 10 秒）、在线变化、信号路径变化 |
+| `queue` | `{zone_id, change: QueueChange}` | 条目增删移动 |
+| `device` | `{device}` | 登记、改名、音量、在线变化、认领 |
+| `device_removed` | `{device_id, zone_id}` | 删除或自动清理 |
+
+样本在 `events/`（`zone-*` 覆盖各种公告与 `zone-signal`、`zone-next-stream`）。一次命令可能产生多条事件，同一播放区内队列事件先于状态事件。
+反代须对事件流与长流不缓冲、读超时 ≥ 60 秒、不压缩 `text/event-stream`（`deploy/production/README.md`）。
+
+## 5. 流
+
+`Stream = {seq, url, mime_type, quality: "lossless"|"lossy", format: {codec, sample_rate, bit_depth?, channels}?, segments}`。`seq` 单调递增（跨重启也是），`url` 由服务端给出。
+`format` 在首曲确定后给出；首曲就打不开的空流为 `null`（之后照常收到 `track_failed` 与接续流）；有损档 `bit_depth` 为 `null`。一条流内格式不变。
+只有该播放区当前输出会话的用户能取；`seq` 不是当前流或接续流 `410 stream_gone`；`seq` 不是非负整数 `400 invalid_input`。
+
+**长流** `GET /zones/{zone_id}/streams/{seq}`（样本 stream、stream-headers）：
+
+- 从开流位置起跨曲目连续的音频；头为 `Content-Type: <mime_type>`、`Accept-Ranges: none`、`Cache-Control: no-store`、`X-Content-Type-Options: nosniff`、`X-Accel-Buffering: no`，无长度。
+- 忽略 Range，总是 `200`；**只能取一次**，第二个连接 `410 stream_gone`（输出端按 `stream_lost` 续流）；HEAD `405`。客户端断开不关闭服务端会话。
+- 编码：`flac`（`audio/flac`，STREAMINFO 长度与 MD5 为 0）、`wav`（`audio/wav`，长度字段写 `0xFFFFFFFF`）、`opus`（`audio/ogg; codecs="opus"`，128 kbps、48 kHz）、`aac`（`audio/aac`，ADTS AAC-LC 256 kbps）。
+
+**HLS** `GET /zones/{zone_id}/streams/{seq}/{file}`（`mime_type` 为 `application/vnd.apple.mpegurl`，`url` 指向 `…/index.m3u8`）：
+
+- `file` 只认 `index.m3u8`、`init.mp4`、`<十进制片号>.m4s`，列表用相对地址。取用条件同长流但**可重复取**；片号未产出、已删除或文件名不认识得 `404 not_found`。
+- 增长型 EVENT 列表（`VERSION:7`、`TARGETDURATION:4`、`START:TIME-OFFSET=0,PRECISE=YES`），条目只增不删，流自然结束（放完或格式边界）时写 `ENDLIST`；
+  `stream_seconds` 即列表时间线上的位置。不足 3 片且未结束时列表请求最多等 10 秒；带 `Accept-Encoding: gzip` 时列表 gzip。
+- 初始化段与分片 `audio/mp4`，带长度、支持 Range。片长约 4 秒；结束时刻早于“播放头 − 30 秒”的分片被删除；会话关闭后之后的请求 410。
+- 分片里无损是 `alac`，有损是 AAC-LC 256 kbps（`aac`）。格式边界仍用接续流（新的播放列表）。
+
+## 6. 能力声明与协商
+
+```text
+Capabilities = {stream_formats: [{codec, mime_type, lossless, max_sample_rate: int?, max_bit_depth: int?}],   // 按偏好排序
+                max_channels: 1..64, dsd: "none"|"dop"|"native", exclusive: bool, volume: "number"|"fixed"}
+从没认领过 = {stream_formats: [], max_channels: 2, dsd: "none", exclusive: false, volume: "number"}
+```
+
+- 五个键必填；每项 `codec`、`mime_type` 非空，两个上限必须出现、非空时为正。`mime_type` 为 `application/vnd.apple.mpegurl` 表示 HLS，否则是长流。
+- `volume: fixed` 表示软件不能调音量（iPhone/iPad 网页）。`dsd`、`exclusive` 第一批只保存，不影响交付。
+- 服务端能产出的 `(codec, mime_type)`：长流 `flac`、`wav`、`opus`、`aac`（MIME 同 §5），HLS `alac`、`aac`；只发布 ffmpeg 有对应编码器的组合（WAV 总可用）。
+
+协商在每次开流时进行：按声明顺序过滤出能产出的项；`quality: lossless` 取第一个无损项，没有就取第一个有损项，`lossy` 反之；一个都没有则 `fault: no_stream_format`、暂停。
+具体格式按首曲定：声道 `min(源, max_channels)`（多了服务端降混）；采样率取源值，超过 `max_sample_rate` 时同族减半，Opus 固定 48 kHz，AAC ≤ 96 kHz；
+无损位深在处理链透明（整数源、电平化与 Headroom 都不施加）时取源位深（≤ 16 → 16，其余 24），否则 24，不超过 `max_bit_depth`。下一首源格式不同时以接续流交付。
+浏览器的声明见[播放与个人状态](../frontend/playback-and-personal-state.md)“播放区客户端”。
+
+## 7. 信号路径与 Headroom
+
+`Zone.signal` 是正在放的那首的信号路径（播放头到达分段起点时更新）；没有流时为 `null`。样本 events/zone-signal。
+
+```text
+Signal = {quality, steps: Step[], clipping?: bool, processing_speed?: number}   // 两个可选键不适用时省略（不是 null）
+Step = {kind, quality, lossy: bool, compat: bool, params}
+quality ∈ "lossless" > "enhanced" > "high" > "low"（从好到差；Signal.quality 取最差的一步）
+```
+
+| `kind` | `params` | 评级 |
+| --- | --- | --- |
+| `source` | `{codec, sample_rate, channels, bit_depth?}` | 无损源 `lossless`；`mp3/aac/vorbis/opus/wavpack_hybrid` 为 `low`、有损 |
+| `convert` | `{from_rate, to_rate, by: "ffmpeg"}` | `high`、兼容转换；源→处理链、处理链→编码各可出现一次 |
+| `downmix` | `{from_channels, to_channels, by: "ffmpeg"}` | `high`、兼容转换 |
+| `leveling` | `{gain_db, basis}` | `enhanced`；电平化不为“关”时出现 |
+| `headroom` | `{gain_db}` | `enhanced`；开启时出现 |
+| `dither` | `{bits, kind: "tpdf"}` | `enhanced`；降位深时 `high`、兼容转换；逐位直通时不出现 |
+| `encode` | 无损 `{codec, sample_rate, bit_depth}`；有损 `{codec, sample_rate, bitrate_kbps}` | 无损 `lossless`；有损 `low`、有损 |
+
+- 交叉渐变是瞬时的，不进信号路径；输出设备一步由客户端按设备名补上。
+- **Headroom**：`db` ∈ [−30, 0]、步进 0.1，否则 `400 invalid_input`。开启时在处理链开头乘 `10^(db/20)`，整条流不再逐位、量化时加抖动，无损档按 24 位输出。改动经 `set_settings`（样本 set-settings-headroom）。
+- **削波指示**：只在 `clip_indicator` 开时统计（无损档在量化钳位处，有损档在交给编码器前统计 |x| > 1）。有削波立即 `clipping: true`，最后一次削波约 450 ms 后变回 `false`。
+- **处理速度**：处理的音频时长 / 解码、处理链与量化花的墙钟时长，一位小数，变化且距上次 ≥ 1 秒才更新。
+
+## 8. 错误码
+
+检查顺序：来源 → 鉴权 → 路径 ID → JSON → 字段 → 归属（404）→ 状态冲突（409/410）→ 写入。样本在 `errors/`。
+
+| 状态与 `code` | 条件 |
 | --- | --- |
-| 协议版本不支持 | `400 unsupported_protocol` |
-| 输出会话已被本人同设备的新认领取代 | `409 output_superseded` |
-| 回报的输出会话不存在、已释放或服务重启丢失 | `404 output_unknown` |
-| 非本人的已知输出会话、设备或播放区 | `404 not_found` |
-| seq 已过期、非当前/接续或已取用 | `410 stream_gone` |
+| `400 invalid_json` | 不是 JSON、类型不符或超过 1 MiB |
+| `400 invalid_id` | 路径里的设备、播放区、会话 ID 不是 UUID |
+| `400 invalid_input` | 取值不合法、缺必填键、未知键/命令/设置键、重复键、转移给自己、流 `seq` 不是非负整数 |
+| `400 unsupported_protocol` | 认领时的协议版本不受支持 |
+| `401 unauthorized` | 未鉴权、凭据失效、成员停用 |
+| `403 origin_required` / `origin_forbidden` | Cookie 会话写请求的来源校验 |
+| `404 not_found` | 设备、播放区、流不存在或不属于本人；HLS 文件不存在 |
+| `404 track_not_found` / `output_unknown` | 命令里有不存在的曲目 / 输出会话不存在 |
+| `405 method_not_allowed` | 对事件流或长流发 HEAD |
+| `409 queue_full` / `zone_offline` | 超过 10,000 条 / 离线播放区上起播、转移目标离线 |
+| `409 device_online` / `volume_fixed` / `output_superseded` | 删除在线设备 / 设备不能调音量 / 会话已被新认领取代 |
+| `410 stream_gone` | 不是当前流或接续流、长流已被取过、HLS 会话已关闭 |
+| `503 renderer_unavailable` / `database_unavailable` | 没有可用的渲染器（起播类命令不改状态）/ 数据库失败 |
 
-报告旧 seq 只续租并返回最新状态，不反向覆盖当前流。释放旧会话不能停掉新会话。
+## 9. 常量
 
-### 8.4 在线、会话事件与计次
-
-- 在线租约 45 秒，每 5 秒扫描；释放立即离线。离线时保留位置、关闭会话，原意图播放则记 `offline_paused`。
-- 同会话 `playing` 回报可恢复离线暂停；释放后 10 秒内 `takeover` 可接手；重启首次加载标记离线暂停，认领 `playing` 在条目仍存在时续播。控制命令清掉自动恢复标记。
-- 事件消费者按会话身份/代次拒绝陈旧事件；`track_started` 用 `queue.AdvanceTo` 消费既有预选，不重新随机；起始条目公告仍由开流产生。
-- `time` 更新位置、计次和连续失败计数，位置最多每 10 秒写库，不逐条广播；`track_failed` 连续 5 次停止。
-- 当前流的 `format_boundary` 开接续流，重复事件替换旧接续流；预载 B 提前宣布 C 时仅保存最新后继目标，B 晋升后才开 C（协议只有当前/接续两槽，不能跳过 B）。预载的 `rebuild_needed` 立即安排该会话自身的 300 ms 重建，保持当前出声流；signal 存在所属会话，晋升时切换。`stream_ended` 在无接续时暂停并回到 0；`rebuild_needed` 经重建去抖；`signal` 按事件顺序原样覆盖，并同步 segments。
-- `stream_lost` 依 segments 将流内位置映射回曲内位置续流，延续访问；连续 3 次失败暂停为 transient。
-- 计次门槛为已知正时长的一半与 240 秒取较小值；未知时长沿原 ListenTracker 使用 240 秒。只累计播放中的正前进量，超过墙钟流逝 + 1 秒视为跳变；新访问最多记录一次，续流/重建重置采样基准而非累计值。
-- 记录失败在后续 time 重试，冻结首次提交秒数防止 listening 幂等冲突；成功公告 `play_recorded`。
-- 已知设计缺口：visit UUID、累计及 recorded 未持久化，重启后的续播只能重新建立基准，**不能保证跨重启的同次访问不重计**；现有表未定义这些列，本轮未擅自扩表。旧输出身份索引没有淘汰规则，保留到进程结束，以维持旧身份的 409/404 语义。
-
-### 8.5 案例、验证与禁止事项
-
-正常：输出端取流，回报播放头，事件自然推进曲目并计次；重复回报不重复计次。
-基线：过期 seq 回报只续租、第二个取流请求 410、未知 release 204、未关联输出的 SSE 不使设备在线。
-错误：HTTP 断开直接 Close session；SSE 溢出仍排空积压；seek 的位置跳变计入播放时长；重试同一幂等键却增大秒数。
-正确：生命周期由 zones 管理，HTTP 只退出；溢出用 Done 结束；访问重建重置基准；固定待记录载荷重试。
-
-第 9 步独立测试需覆盖：原子快照/增量/用户隔离/溢出与关停；45 秒租约、10 秒接手、5 秒暂停关闭；重启与取代；单次取流/32 KiB及时Flush/取消；全部会话事件与连续失败门槛；Visit 的暂停/seek/续流/循环/转移以及计次失败重试。
-时钟、定时器与 ID 用 `zones.Options.Now/AfterFunc/NewID` 注入；HTTP 心跳与复核复用该时钟，不真实等待。
-API 样本由独立测试经真实 handler 生成到 `backend/internal/app/testdata/api-samples/playback-zones/`，生成约定见 B3 `implementation-notes.md`；独立测试已新增 `TestPostgreSQLZonesAPIResponseSamples`，结果与本轮限定范围见 [B3 测试记录](../../tasks/11-09-zones-b3-realtime-output/test-notes.md)。
-
-测试接点注意：`zonestest.Session.Emit` 的确认可能晚于终结事件触发的 `Close`；仅终结事件允许 `zonestest.ErrClosed`，且仍须等待相应状态公告作为成功证据。不能把全部 Emit 错误统一忽略，也不能仅凭 Emit 返回成功认定事件已应用。
+| 项 | 值 |
+| --- | --- |
+| 队列 / 历史 / replace 内联上限 | 10,000 / 500 / 500 条 |
+| 回报间隔 / 在线租约 / 离线扫描 / 接手窗口 | 播放中 10 秒 / 45 秒 / 5 秒 / 10 秒 |
+| 重建去抖 / 暂停后关闭会话 | 300 ms / 5 秒 |
+| 连续失败停止 / 续流失败暂停 | 5 首 / 3 次 |
+| 事件流心跳 / 凭据复核 / 订阅缓冲 | 15 秒 / 60 秒 / 64 条 |
+| HLS 片长 / 首次等待 / 分片保留 | 约 4 秒 / ≤ 10 秒 / 播放头前 30 秒 |
+| 设备自动清理 | 30 天没上线，每小时扫一次 |
+| 控制目标回退（客户端） | 暂停超过 15 分钟或离线 |
