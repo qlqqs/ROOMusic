@@ -61,6 +61,8 @@ var packageRules = map[string]packageRule{
 	"dsp/fade":                       {},
 	"dsp/dither":                     {},
 	"dsp/downmix":                    {},
+	"dsp/peq":                        {},
+	"dspsettings/opra":               {},
 	"playback/analysis":              {},
 	"playback/render/ffmpeg":         {},
 	"playback/render":                {imports: []string{"zones", "dsp/chain", "dsp/leveling", "dsp/fade", "dsp/dither", "dsp/src", "dsp/downmix", "playback/render/ffmpeg", "platform/uuid"}},
