@@ -5,12 +5,13 @@ import "math"
 // PlaybackSettings 是持久化、DTO 与渲染共享的不可变设置值。
 // 文档字段只保存 SettingsDocument；临时切片或指针不存入此值。
 type PlaybackSettings struct {
-	Leveling         string   `json:"leveling"`
-	Gapless          bool     `json:"gapless"`
-	Crossfade        bool     `json:"crossfade"`
-	CrossfadeSeconds int      `json:"crossfade_seconds"`
-	Quality          string   `json:"quality"`
-	Headroom         Headroom `json:"headroom"`
+	Leveling         string           `json:"leveling"`
+	Gapless          bool             `json:"gapless"`
+	Crossfade        bool             `json:"crossfade"`
+	CrossfadeSeconds int              `json:"crossfade_seconds"`
+	Quality          string           `json:"quality"`
+	Headroom         Headroom         `json:"headroom"`
+	SampleRate       SettingsDocument `json:"sample_rate"`
 }
 
 type Headroom struct {
@@ -23,19 +24,20 @@ type Headroom struct {
 type ZoneSettings = PlaybackSettings
 
 type SettingsPatch struct {
-	Leveling         *string   `json:"leveling"`
-	Gapless          *bool     `json:"gapless"`
-	Crossfade        *bool     `json:"crossfade"`
-	CrossfadeSeconds *int      `json:"crossfade_seconds"`
-	Quality          *string   `json:"quality"`
-	Headroom         *Headroom `json:"headroom"`
+	Leveling         *string           `json:"leveling"`
+	Gapless          *bool             `json:"gapless"`
+	Crossfade        *bool             `json:"crossfade"`
+	CrossfadeSeconds *int              `json:"crossfade_seconds"`
+	Quality          *string           `json:"quality"`
+	Headroom         *Headroom         `json:"headroom"`
+	SampleRate       *SettingsDocument `json:"sample_rate"`
 }
 
 // EqualSettings 统一设置相等判定；文档比较使用其规范 JSON 值。
 func EqualSettings(a, b PlaybackSettings) bool { return a == b }
 
 func defaultSettings() PlaybackSettings {
-	return PlaybackSettings{Leveling: "auto", Gapless: true, CrossfadeSeconds: 5, Quality: "lossless", Headroom: defaultHeadroom()}
+	return PlaybackSettings{Leveling: "auto", Gapless: true, CrossfadeSeconds: 5, Quality: "lossless", Headroom: defaultHeadroom(), SampleRate: DefaultSampleRateDocument()}
 }
 
 func settingsOf(p PlaybackSettings) ZoneSettings { return p }
@@ -60,6 +62,11 @@ func ValidateSettingsPatch(p SettingsPatch) error {
 	if p.Headroom != nil && !validHeadroom(*p.Headroom) {
 		return ErrInvalidInput
 	}
+	if p.SampleRate != nil {
+		if _, err := ParseSampleRateDocument([]byte(p.SampleRate.canonical)); err != nil {
+			return ErrInvalidInput
+		}
+	}
 	return nil
 }
 func applySettings(p PlaybackSettings, patch SettingsPatch) PlaybackSettings {
@@ -80,6 +87,9 @@ func applySettings(p PlaybackSettings, patch SettingsPatch) PlaybackSettings {
 	}
 	if patch.Headroom != nil {
 		p.Headroom = normalizeHeadroom(*patch.Headroom)
+	}
+	if patch.SampleRate != nil {
+		p.SampleRate = *patch.SampleRate
 	}
 	return p
 }

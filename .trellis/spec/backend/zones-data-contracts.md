@@ -65,3 +65,35 @@ func (s *Store) UpdateZone(ctx context.Context, userID string, zone PersistedZon
 
 错误：队列纯包导入 catalog、持久化显示快照，或每个 Store 方法独立开关事务。
 正确：纯包只依赖标准库与注入函数；存储只保存身份，复用调用方事务，使队列与播放区更新原子提交。
+
+
+## 8. SRC 设置文档（0045）
+
+### 范围与入口
+
+迁移 `0045_playback_zone_sample_rate.sql/.down.sql` 增删 `playback_zones.sample_rate JSONB NOT NULL`。zones 拥有 `SampleRateSettings`、`DefaultSampleRateDocument()`、`NewSampleRateDocument(SampleRateSettings)` 与 `ParseSampleRateDocument([]byte)`；渲染使用 `DecodeSettingsDocument[SampleRateSettings]` 取独占临时配置，不反向引入 DSP 依赖。
+
+### 请求、默认与比较
+
+`settings.sample_rate` 总是完整对象：`{strategy,custom_rate,filter}`。默认 `{"strategy":"none","custom_rate":null,"filter":"linear_precise"}`。
+策略为 `none|max_sample_rate|power_of_2|custom|dsd`；滤波器为 `linear_precise|minimum_precise|linear_smooth|minimum_smooth`。
+`custom_rate` 为 null 或 44.1/48 kHz 两族 ×1/2/4/8/16；`custom + null` 规范化为 `none`，DSD 暂不启用输出。
+
+`SettingsPatch` 只替换给出的完整文档；RegisterDevice 和 set_settings 共用校验。共享设置保存 `SettingsDocument` 的规范 JSON 字符串，`EqualSettings` 逐值比较，不比较 `*int` 地址；对象键序、空白、等值数字拼写不触发重建。改值沿用 300 ms 去抖。
+
+### 校验与错误
+
+| 条件 | 行为 |
+| --- | --- |
+| 未知键、缺字段、非法策略/滤波器/自定义率，文档本身 null | `400 invalid_input`，不带字段路径 |
+| 存储文档形状或值损坏 | 仅 sample_rate 回退默认；每次加载记一条 `zones.settings.invalid`，只含 zone_id/key/reason，不写回库 |
+| 查询或队列损坏 | 保留既有错误，不冒充默认值 |
+| 回退 0045 | 删除新列及其中设置；再升级恢复默认 |
+
+### 案例与验证
+
+正常：提交 custom/96000/minimum_smooth，存取及 API 返回相同规范对象。基线：未给设置使用默认，两个不同指针指向 96000 不触发重建。错误：非标准自定义率不接受，坏持久值不阻断其它设置。
+
+最小验证复用文档表测、同值不重建和坏值回退集成用例；只刷新 `TestPostgreSQLZonesAPIResponseSamples` 所属金样，新增 `set-settings-sample-rate` 非默认请求/响应；迁移执行升级→回退→再升级并比较 schema。
+
+错误做法：在 DTO 留可变指针并用地址判断设置变化，或直接封装任意 RawMessage。正确做法：先按明确类型校验、规范化，再保存不可变文档，由 zones 单一拥有规则。

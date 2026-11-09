@@ -175,6 +175,24 @@ describe("播放栏、全屏、队列与信号路径", () => {
     ]);
   });
 
+  it("SampleRateSettingsSubmitCompleteDocuments", async () => {
+    const user = userEvent.setup();
+    await waitFor(() => expect(engine.getSnapshot().zone).not.toBeNull());
+    view(<PlaybackSettingsForm />);
+    await user.selectOptions(screen.getByRole("combobox", { name: "采样率转换" }), "指定采样率");
+    await waitFor(() => expect(engine.getSnapshot().settings.sampleRate).toEqual({ strategy: "custom", customRate: 96000, filter: "linear_precise" }));
+    expect(server.commands).toEqual([
+      { command: "set_settings", settings: { sample_rate: { strategy: "custom", custom_rate: 96000, filter: "linear_precise" } } },
+    ]);
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "转换滤波器" }), "精确 · 最小相位");
+    await waitFor(() => expect(engine.getSnapshot().settings.sampleRate.filter).toBe("minimum_precise"));
+    expect(server.commands).toEqual([
+      { command: "set_settings", settings: { sample_rate: { strategy: "custom", custom_rate: 96000, filter: "linear_precise" } } },
+      { command: "set_settings", settings: { sample_rate: { strategy: "custom", custom_rate: 96000, filter: "minimum_precise" } } },
+    ]);
+  });
+
   it("Headroom 拖动只预览一位小数，松手提交一次，紧接的失焦不重复提交", async () => {
     await waitFor(() => expect(engine.getSnapshot().zone).not.toBeNull());
     server.afterNext({ settings: { ...server.zone().settings, headroom: { enabled: true, db: -3, clipIndicator: true } } });

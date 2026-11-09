@@ -11,6 +11,18 @@ export type CrossfadeSeconds = (typeof crossfadeDurations)[number];
 export const streamQualities = ["lossless", "lossy"] as const;
 export type StreamQuality = (typeof streamQualities)[number];
 
+/** 采样率转换策略；服务端的保留值 dsd 不在界面出现，按 none 处理。 */
+export const sampleRateStrategies = ["none", "max_sample_rate", "power_of_2", "custom"] as const;
+export type SampleRateStrategy = (typeof sampleRateStrategies)[number];
+
+export const sampleRateFilters = ["linear_precise", "minimum_precise", "linear_smooth", "minimum_smooth"] as const;
+export type SampleRateFilter = (typeof sampleRateFilters)[number];
+
+/** 指定采样率可选的标准率：44.1 与 48 kHz 两族的 1、2、4、8、16 倍。 */
+export const customSampleRates = [44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000, 705600, 768000] as const;
+
+export type SampleRateSettings = { strategy: SampleRateStrategy; customRate: number | null; filter: SampleRateFilter };
+
 /** 播放区的播放设置（服务端持有，作用于渲染流）。 */
 export type PlaybackSettings = {
   leveling: LevelingMode;
@@ -19,6 +31,7 @@ export type PlaybackSettings = {
   crossfadeSeconds: CrossfadeSeconds;
   quality: StreamQuality;
   headroom: { enabled: boolean; db: number; clipIndicator: boolean };
+  sampleRate: SampleRateSettings;
 };
 
 /** 曲目不能播放的原因；界面按它选文案。服务端以后增加的原因按“音频文件无法读取”显示。 */
@@ -67,6 +80,7 @@ export type SignalQuality = (typeof signalQualities)[number];
 export type SignalStep = { quality: SignalQuality; lossy: boolean; compat: boolean } & (
   | { kind: "source"; params: { codec: string; sampleRate: number; bitDepth: number | null; channels: number } }
   | { kind: "convert"; params: { fromRate: number; toRate: number; by: string } }
+  | { kind: "sample_rate"; params: { fromRate: number; toRate: number; filter: SampleRateFilter } }
   | { kind: "downmix"; params: { fromChannels: number; toChannels: number; by: string } }
   | { kind: "leveling"; params: { gainDb: number; basis: string } }
   | { kind: "headroom"; params: { gainDb: number } }

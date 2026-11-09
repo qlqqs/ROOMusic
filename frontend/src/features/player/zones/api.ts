@@ -16,7 +16,7 @@ import {
   type ReportResult,
 } from "./decoders";
 import type { ZoneApi } from "./controller";
-import type { Capabilities, CrossfadeSeconds, LevelingMode, Snapshot, StreamQuality, ZoneQueue } from "./model";
+import type { Capabilities, CrossfadeSeconds, LevelingMode, SampleRateFilter, SampleRateStrategy, Snapshot, StreamQuality, ZoneQueue } from "./model";
 
 const BASE = "/api/v1/me/playback";
 
@@ -30,6 +30,7 @@ export type SettingsPatch = Partial<{
   crossfade_seconds: CrossfadeSeconds;
   quality: StreamQuality;
   headroom: { enabled: boolean; db: number; clip_indicator: boolean };
+  sample_rate: { strategy: SampleRateStrategy; custom_rate: number | null; filter: SampleRateFilter };
 }>;
 
 /** 合同 §3.3 的命令。 */

@@ -46,9 +46,6 @@ func (s *session) segmentSignal(d *decoder) signalPath {
 		source.Quality, source.Lossy = "low", true
 	}
 	path.append(source)
-	if track.SampleRate != s.sourcePCM.SampleRate {
-		path.append(rateStep(track.SampleRate, s.sourcePCM.SampleRate))
-	}
 	if track.Channels != s.sourcePCM.Channels {
 		path.append(chain.SignalStep{Kind: "downmix", Quality: "high", Compat: true, Params: map[string]any{"from_channels": track.Channels, "to_channels": s.sourcePCM.Channels, "by": "ffmpeg"}})
 	}
@@ -61,10 +58,6 @@ func (s *session) segmentSignal(d *decoder) signalPath {
 	}
 	if step, ok := s.ditherStep(d); ok {
 		path.append(step)
-	}
-	// Opus 固定 48 kHz 属于有损编码本身；来源与编码采样率已给出转换两端。
-	if s.outputPCM.SampleRate != s.format.SampleRate && s.format.Codec != "opus" {
-		path.append(rateStep(s.outputPCM.SampleRate, s.format.SampleRate))
 	}
 	encode := chain.SignalStep{Kind: "encode", Quality: "lossless", Params: map[string]any{"codec": s.format.Codec, "sample_rate": s.format.SampleRate}}
 	if s.format.BitDepth > 0 {
@@ -79,10 +72,6 @@ func (s *session) segmentSignal(d *decoder) signalPath {
 	}
 	path.append(encode)
 	return path
-}
-
-func rateStep(from, to int) chain.SignalStep {
-	return chain.SignalStep{Kind: "convert", Quality: "high", Compat: true, Params: map[string]any{"from_rate": from, "to_rate": to, "by": "ffmpeg"}}
 }
 
 // ditherStep 只描述整首已确定的量化处理，不展示瞬时交叉淡化。

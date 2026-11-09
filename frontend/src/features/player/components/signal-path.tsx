@@ -34,6 +34,7 @@ function formatLabel(codec: string, sampleRate: number, bitDepth: number | null)
 const stepIcons: Record<SignalStep["kind"], LucideIcon> = {
   source: FileAudio,
   convert: ArrowLeftRight,
+  sample_rate: ArrowLeftRight,
   downmix: Merge,
   leveling: SlidersHorizontal,
   headroom: ArrowDownToLine,
@@ -47,6 +48,8 @@ function stepText(step: SignalStep): string {
       return formatLabel(step.params.codec, step.params.sampleRate, step.params.bitDepth);
     case "convert":
       return `采样率 ${rateLabel(step.params.fromRate)} → ${rateLabel(step.params.toRate)}`;
+    case "sample_rate":
+      return `采样率转换 ${rateLabel(step.params.fromRate)} → ${rateLabel(step.params.toRate)}`;
     case "downmix":
       return `声道 ${step.params.fromChannels} → ${step.params.toChannels}`;
     case "leveling":

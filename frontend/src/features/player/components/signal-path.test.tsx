@@ -89,6 +89,22 @@ describe("服务端信号路径", () => {
     expect(within(dialog).queryByText(/LUFS|dBTP|dBFS/)).toBeNull();
   });
 
+  it("SampleRateStepShowsCompatibilityConversion", async () => {
+    const user = userEvent.setup();
+    viewSignal({
+      ...losslessSignal, quality: "high",
+      steps: [
+        { kind: "source", quality: "lossless", lossy: false, compat: false, params: { codec: "flac", sampleRate: 44100, bitDepth: 16, channels: 2 } },
+        { kind: "sample_rate", quality: "high", lossy: false, compat: true, params: { fromRate: 44100, toRate: 48000, filter: "linear_precise" } },
+        { kind: "encode", quality: "lossless", lossy: false, compat: false, params: { codec: "wav", sampleRate: 48000, bitDepth: 16, bitrateKbps: null } },
+      ],
+    });
+    await user.click(screen.getByRole("button", { name: "信号路径：高质量" }));
+    const dialog = screen.getByRole("dialog", { name: "信号路径：高质量" });
+    expect(within(dialog).getByText("采样率转换 44.1 kHz → 48 kHz")).toBeTruthy();
+    expect(within(dialog).getByText("兼容转换")).toBeTruthy();
+  });
+
   it("削波时按钮启用警示色选择器，可访问名称同时标出削波", () => {
     viewSignal({ ...losslessSignal, clipping: true });
     const trigger = screen.getByRole("button", { name: "信号路径：无损，削波" });
