@@ -253,3 +253,7 @@ Build 的采样率/声道非正、输出位深非 0/16/24、启用的 Headroom �
 ### 7. 错误与正确调用
 
 错误：循环复用未清空的 Regions，重复电平化；直接把 Exact 传给量化器而忽略降位深。正确：来源段先 Apply 清空区域，再进入共享链，使用 `Chain.Quantize` 判断逐位直通，流尾循环 Drain 并立即消费每块。
+
+## DSP 渲染骨架增量（P-c）
+
+`playback/render/ffmpeg` 是标准库叶子包；`playback/render` 只依赖 zones 端口、dsp 算法与 chain、ffmpeg 和 uuid，不反向导入 playback 或 catalog。app 通过 `OpenForRender` 与 catalog 的分析读取实现 TrackSource。生产装配使用真实 Renderer，测试假渲染器保留；关停先关闭 zones 再等待 Renderer 回收。旧派生仍保留至 P-d。详见[服务端渲染骨架合同](./playback-render-contracts.md)。

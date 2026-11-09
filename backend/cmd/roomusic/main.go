@@ -73,6 +73,13 @@ func main() {
 		if derivations != nil {
 			appOptions = append(appOptions, app.WithDerivation(derivations))
 		}
+		renderTool, renderErr := app.OpenRenderer(applicationContext, settings, logger)
+		if renderErr != nil {
+			logger.Warn("渲染器启动中止", "event", "playback.render.unavailable", "module", "playback", "reason", "startup_canceled")
+		}
+		if renderTool != nil {
+			appOptions = append(appOptions, app.WithRenderer(renderTool))
+		}
 		analyzer, _ = app.OpenAnalysis(applicationContext, settings, logger)
 		if analyzer != nil {
 			appOptions = append(appOptions, app.WithAnalysis(analyzer))

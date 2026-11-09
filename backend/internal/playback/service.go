@@ -25,10 +25,11 @@ var (
 // Service 是播放用例：把曲目 ID 解析成一个已核对的交付（直出原文件，或经核对的派生文件）。
 // 它只读取 catalog 与 library 的公开合同，不直接读它们的表。
 type Service struct {
-	sources      *catalog.Store
-	database     library.RootQuerier
-	allowedRoots []string
-	derivation   Derivation
+	sources        *catalog.Store
+	database       library.RootQuerier
+	allowedRoots   []string
+	derivation     Derivation
+	renderDecoders RenderDecoders
 }
 
 // ServiceOption 调整服务的装配。
@@ -70,6 +71,23 @@ type resolved struct {
 // resolve 按固定顺序核对：曲目存在且 present → 目录仍启用 → 在格式表中 → 目录仍在配置允许范围内。
 // 错误是 ErrTrackNotFound、ErrRootDisabled、ErrNotDirectlyPlayable、ErrSourceUnavailable 或 ErrDatabase 之一。
 func (service *Service) resolve(ctx context.Context, trackID string) (resolved, error) {
+	return service.resolveFormat(ctx, trackID, service.deliveryFormat)
+}
+
+// deliveryFormat 保留直出与派生入口的格式、位深限制，不受渲染能力装配影响。
+func (service *Service) deliveryFormat(source catalog.TrackSource) (Format, error) {
+	format, ok := service.findFormat(source.SourceKind, source.Codec)
+	if !ok {
+		return Format{}, ErrNotDirectlyPlayable
+	}
+	if format.Delivery == DeliveryDerived && source.BitDepth != 0 && source.BitDepth != 16 && source.BitDepth != 24 {
+		return Format{}, ErrNotDirectlyPlayable
+	}
+	return format, nil
+}
+
+// resolveFormat 共用来源、目录状态与允许根的检查顺序，由入口选择自己的格式策略。
+func (service *Service) resolveFormat(ctx context.Context, trackID string, selectFormat func(catalog.TrackSource) (Format, error)) (resolved, error) {
 	source, err := service.sources.LoadTrackSource(ctx, trackID)
 	if err != nil {
 		return resolved{}, classifyLookup(err)
@@ -81,12 +99,9 @@ func (service *Service) resolve(ctx context.Context, trackID string) (resolved, 
 	if !location.Active {
 		return resolved{}, ErrRootDisabled
 	}
-	format, ok := service.findFormat(source.SourceKind, source.Codec)
-	if !ok {
-		return resolved{}, ErrNotDirectlyPlayable
-	}
-	if format.Delivery == DeliveryDerived && source.BitDepth != 0 && source.BitDepth != 16 && source.BitDepth != 24 {
-		return resolved{}, ErrNotDirectlyPlayable
+	format, err := selectFormat(source)
+	if err != nil {
+		return resolved{}, err
 	}
 	// 登记时验证过的目录在播放时必须仍是配置允许范围内的真实目录；ValidatePath 返回的规范路径必须与登记路径一致，
 	// 否则目录已被换成符号链接或移出允许范围。

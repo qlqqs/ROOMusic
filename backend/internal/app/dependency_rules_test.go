@@ -58,6 +58,8 @@ var packageRules = map[string]packageRule{
 	"dsp/fade":                       {},
 	"dsp/dither":                     {},
 	"playback/analysis":              {},
+	"playback/render/ffmpeg":         {},
+	"playback/render":                {imports: []string{"zones", "dsp/chain", "dsp/leveling", "dsp/fade", "dsp/dither", "playback/render/ffmpeg", "platform/uuid"}},
 	"playback/derivation":            {},
 	"playback":                       {imports: []string{"catalog", "library", "playback/analysis", "playback/derivation"}},
 	"zones/queue":                    {},
@@ -76,7 +78,7 @@ var packageRules = map[string]packageRule{
 	"app": {imports: []string{
 		"backup", "backup/httpapi", "zones", "zones/queue", "zones/httpapi",
 		"catalog", "catalog/governance", "catalog/httpapi", "catalog/maintenance", "identity", "identity/httpapi", "library", "library/httpapi", "listening", "listening/httpapi",
-		"personal", "personal/httpapi", "operations/httpapi", "platform/config", "platform/httpserver", "playback", "playback/analysis", "playback/derivation", "playback/httpapi",
+		"personal", "personal/httpapi", "operations/httpapi", "platform/config", "platform/httpserver", "playback", "playback/analysis", "playback/derivation", "playback/httpapi", "playback/render", "playback/render/ffmpeg",
 	}, http: true},
 }
 

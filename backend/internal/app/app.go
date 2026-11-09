@@ -30,6 +30,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/playback"
 	"github.com/qlqq/roomusic/backend/internal/playback/analysis"
 	playbackapi "github.com/qlqq/roomusic/backend/internal/playback/httpapi"
+	"github.com/qlqq/roomusic/backend/internal/playback/render/ffmpeg"
 	"github.com/qlqq/roomusic/backend/internal/zones"
 	zonesapi "github.com/qlqq/roomusic/backend/internal/zones/httpapi"
 )
@@ -54,6 +55,7 @@ type options struct {
 	playbackPreflightWait time.Duration
 	derivation            playback.Derivation
 	analysis              *analysis.Analyzer
+	renderer              *ffmpeg.Tool
 	scanSchedulerClock    library.ScanSchedulerClock
 	// 测试直接插入旧目录夹具时暂停后台，搜索测试再显式回填。
 	pauseCatalogMaintenance bool
@@ -113,12 +115,14 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	guard.WithLogger(logger)
 	libraryService := library.NewService(lifecycle, database, settings.DataDirectory, logger).WithScanConcurrency(settings.ScanWorkers)
 	personalService := personal.NewService(database)
-	// 算法线尚未接入时不安装替代渲染器；起播由服务返回 renderer_unavailable。
-	zonesService := zones.NewService(database, zones.Options{Logger: logger})
+	playbackService := newPlaybackService(database, settings, assembly)
+	renderer, closeRenderer := assembleRenderer(database, playbackService, assembly.renderer, logger)
+	zonesService := zones.NewService(database, zones.Options{Logger: logger, Renderer: renderer})
 	zonesDone := make(chan struct{})
 	if lifecycle != nil {
 		context.AfterFunc(lifecycle, func() {
 			zonesService.Close()
+			closeRenderer()
 			close(zonesDone)
 		})
 	} else {
@@ -146,7 +150,6 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	// 受治理操作的撤销与展示：每种操作类型的能力由拥有对应业务表的包提供，operations/httpapi 不导入业务包。
 	operationsapi.New(database, guard, logger, governance.CorrectionOperations(), governance.GroupChangeOperations(), governance.GroupDefaultOperations(),
 		governance.IssueReviewOperations(), governance.ClaimOperations(), governance.ArtistMergeKind{}, governance.ArtistSplitKind{}, governance.ArtistRenameKind{}, governance.ArtistCandidateIgnoreKind{}).Register(mux)
-	playbackService := playback.NewService(database, settings.AllowedLibraryRoots, playback.WithDerivation(assembly.derivation))
 	var analysisWorker *playback.AnalysisWorker
 	analysisDone := make(chan struct{})
 	if database != nil && assembly.analysis != nil {
