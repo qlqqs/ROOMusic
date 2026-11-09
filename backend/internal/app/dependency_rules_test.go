@@ -56,6 +56,8 @@ var packageRules = map[string]packageRule{
 	"dspsettings/irload":             {},
 	"dsp/convolution":                {imports: []string{"dsp/internal/fft"}},
 	"dsp/internal/fft":               {},
+	"dsp/internal/refdata":           {},
+	"dsp/src":                        {imports: []string{"dsp/internal/fft"}},
 	"dsp/chain":                      {imports: []string{"dsp/leveling", "dsp/fade", "dsp/dither"}},
 	"dsp/leveling":                   {},
 	"dsp/fade":                       {},
