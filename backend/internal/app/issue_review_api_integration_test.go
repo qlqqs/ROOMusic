@@ -259,12 +259,13 @@ func TestPostgreSQLIssueReviewsSurviveARealRescan(t *testing.T) {
 	application := newIntegrationTestApplication(t)
 	admin := application.createUser(t, "admin")
 	library := createLibraryDirectory(t, application, "classical")
-	// 冲突目录：两种专辑标签各两首，没有过半数，扫描按标签拆成两个发行。
+	// 冲突目录：两种专辑标签各两首，没有过半数；两张专辑各从 1 编号，标签与文件名都重号，
+	// 不满足整目录连续性合并条件，扫描按标签拆成两个发行。
 	conflict := filepath.Join(library, "conflict")
 	writeSyntheticTrack(t, filepath.Join(conflict, "01.flac"), 1, "TITLE=One", "ARTIST=Pianist", "ALBUM=Album One", "TRACKNUMBER=1")
 	writeSyntheticTrack(t, filepath.Join(conflict, "02.flac"), 2, "TITLE=Two", "ARTIST=Pianist", "ALBUM=Album One", "TRACKNUMBER=2")
-	writeSyntheticTrack(t, filepath.Join(conflict, "03.flac"), 8, "TITLE=Three", "ARTIST=Pianist", "ALBUM=Album Two", "TRACKNUMBER=3")
-	writeSyntheticTrack(t, filepath.Join(conflict, "04.flac"), 9, "TITLE=Four", "ARTIST=Pianist", "ALBUM=Album Two", "TRACKNUMBER=4")
+	writeSyntheticTrack(t, filepath.Join(conflict, "01-album-two.flac"), 8, "TITLE=Three", "ARTIST=Pianist", "ALBUM=Album Two", "TRACKNUMBER=1")
+	writeSyntheticTrack(t, filepath.Join(conflict, "02-album-two.flac"), 9, "TITLE=Four", "ARTIST=Pianist", "ALBUM=Album Two", "TRACKNUMBER=2")
 	media := filepath.Join(library, "media")
 	writeSyntheticTrack(t, filepath.Join(media, "01.flac"), 3, "TITLE=First", "ARTIST=Cellist", "ALBUM=Suites", "MEDIA=CD", "TRACKNUMBER=1")
 	writeSyntheticTrack(t, filepath.Join(media, "02.flac"), 4, "TITLE=Second", "ARTIST=Cellist", "ALBUM=Suites", "MEDIA=Vinyl", "TRACKNUMBER=2")
@@ -306,8 +307,14 @@ func TestPostgreSQLIssueReviewsSurviveARealRescan(t *testing.T) {
 		token := ""
 		switch issue {
 		case "grouping":
+			if detail.Grouping == nil {
+				t.Fatalf("发行 %s 应存在归组冲突，实际问题详情：%+v", releaseID, detail)
+			}
 			token = detail.Grouping.Basis
 		case "missing_tracks":
+			if detail.MissingTracks == nil {
+				t.Fatalf("发行 %s 应存在缺失曲目，实际问题详情：%+v", releaseID, detail)
+			}
 			token = detail.MissingTracks.Basis
 		default:
 			for _, field := range detail.Fields {
@@ -323,7 +330,7 @@ func TestPostgreSQLIssueReviewsSurviveARealRescan(t *testing.T) {
 			t.Fatalf("review %s: HTTP %d: %s", issue, response.Code, response.Body.String())
 		}
 	}
-	// Album One：归组冲突（两种专辑标签各一首）。Suites：介质类型拿不准、一首缺失曲目。
+	// Album One：归组冲突（两种专辑标签各两首）。Suites：介质类型拿不准、一首缺失曲目。
 	beforeOne, beforeSuites := attentionOf(albumOne), attentionOf(suites)
 	review(albumOne, "grouping")
 	review(suites, "media_type")
@@ -343,10 +350,10 @@ func TestPostgreSQLIssueReviewsSurviveARealRescan(t *testing.T) {
 		t.Fatal("an unchanged rescan changed the reviews or the operation records")
 	}
 
-	// 改动之后重扫：冲突目录两种专辑标签各多了一首（仍然没有过半数，冲突还在；已有曲目仍占多数，发行延续），
+	// 改动之后重扫：冲突目录两种专辑标签各多了一首（仍然平票且标签与文件名都重号，冲突还在；已有曲目仍占多数，发行延续），
 	// 但 Album One 的来源文件变了；介质候选从 Vinyl 变成 SACD；缺失的曲目回来后再次缺失。
-	writeSyntheticTrack(t, filepath.Join(conflict, "05.flac"), 6, "TITLE=Five", "ARTIST=Pianist", "ALBUM=Album One", "TRACKNUMBER=5")
-	writeSyntheticTrack(t, filepath.Join(conflict, "06.flac"), 7, "TITLE=Six", "ARTIST=Pianist", "ALBUM=Album Two", "TRACKNUMBER=6")
+	writeSyntheticTrack(t, filepath.Join(conflict, "03.flac"), 6, "TITLE=Five", "ARTIST=Pianist", "ALBUM=Album One", "TRACKNUMBER=3")
+	writeSyntheticTrack(t, filepath.Join(conflict, "03-album-two.flac"), 7, "TITLE=Six", "ARTIST=Pianist", "ALBUM=Album Two", "TRACKNUMBER=3")
 	writeSyntheticTrack(t, filepath.Join(media, "02.flac"), 4, "TITLE=Second", "ARTIST=Cellist", "ALBUM=Suites", "MEDIA=SACD", "TRACKNUMBER=2")
 	writeSyntheticTrack(t, filepath.Join(media, "03.flac"), 5, "TITLE=Third", "ARTIST=Cellist", "ALBUM=Suites", "MEDIA=Vinyl", "TRACKNUMBER=3")
 	runScan(t, application, &admin)

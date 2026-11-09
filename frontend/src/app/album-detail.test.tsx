@@ -760,7 +760,11 @@ describe("专辑详情：来源与证据", () => {
           { field: "year", source: "cue_sheet", confidence: "medium", action: "uncertain_apply", rule_id: "majority_v1" },
           { field: "new_field", source: "new_source", confidence: "unsure", action: "new_action", rule_id: "new_rule_v9" },
         ],
-        credits: [{ role: "arranger", name: "Someone Else" }],
+        credits: [
+          { role: "unknown_role", name: "Someone Else" },
+          { role: "lyricist", name: "Sample Lyricist" },
+          { role: "arranger", name: "Sample Arranger" },
+        ],
       }),
     );
     renderApp({ path: `/albums/${album.id}` });
@@ -773,8 +777,11 @@ describe("专辑详情：来源与证据", () => {
       "年份CUE 文件（专辑）中不确定，已暂时采用majority_v1",
       "new_fieldnew_sourceunsurenew_actionnew_rule_v9",
     ]);
-    // 未知的署名角色同样原样显示。
-    expect(within(screen.getByRole("region", { name: "制作人员" })).getByText("arranger")).toBeTruthy();
+    // 未知角色原样显示；新增的已知角色显示中文名，并保留对应署名。
+    const credits = within(screen.getByRole("region", { name: "制作人员" }));
+    expect(credits.getByText("unknown_role").nextElementSibling?.textContent).toBe("Someone Else");
+    expect(credits.getByText("作词").nextElementSibling?.textContent).toBe("Sample Lyricist");
+    expect(credits.getByText("编曲").nextElementSibling?.textContent).toBe("Sample Arranger");
   });
 });
 
@@ -794,6 +801,6 @@ describe("样本数据", () => {
     const lines = (row: Element | undefined) => Array.from(row?.querySelectorAll("p") ?? []).map((line) => line.textContent);
     expect(lines(trackRows()[1])).toContain("Sample Soloist");
     expect(lines(trackRows()[0])).not.toContain("Sample Soloist");
-    expect(lines(trackRows()[0])).toContain("作曲：Sample Composer；指挥：Sample Conductor；演奏：Sample Soloist");
+    expect(lines(trackRows()[0])).toContain("作词：Sample Lyricist；作曲：Sample Composer；编曲：Sample Arranger；指挥：Sample Conductor；小提琴：Sample Soloist");
   });
 });

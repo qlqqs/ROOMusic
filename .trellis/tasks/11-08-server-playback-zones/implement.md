@@ -9,7 +9,7 @@
 - [x] 本父任务下建子任务 B1、B2、B3、F2、F3、E（`task.py create … --parent .trellis/tasks/11-08-server-playback-zones`）；每个子任务的 prd 写本文对应小节的范围与验收。
       E 是第一批（本线 + 算法线三项）的共同验收，在算法线父任务的 prd 里互相引用。
 - [ ] 分支：第一批用一条集成分支 `playback-baseline`（独立 worktree、独占测试库项目 `roomusic-test-zones`）。本线与算法线三项（dsp-pipeline、gapless-crossfade、dither）的子任务都合入它，E 通过后整体合入 main。
-- [ ] 分工（2026-11-09 用户改定）：后端实现 `codex/gpt-6-astra`（high），前端实现 Opus（high），测试由独立的 `codex/gpt-6.1-sol`（high）编写与执行；实现 agent 不写新测试、不启动数据库。
+- [ ] 分工（2026-11-09 用户改定）：后端实现 `codex/gpt-6-astra`（high），前端实现 Opus（high），测试由独立的 `codex/gpt-6-astra`（high）测试 agent 编写与执行；实现 agent 不写新测试、不启动数据库。
 - [ ] 派活 prompt 写明：测试只做必要的（只测改动直接影响的行为，不跑全量，不做演练和重复验证）；界面文案不写防御性说明和多余说明；参考稿只引章节号，不摘录原文。
 
 通用命令（在 worktree 根目录）：

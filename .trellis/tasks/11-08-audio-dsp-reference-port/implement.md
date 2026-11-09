@@ -10,7 +10,7 @@
 - [ ] iOS 交付小验证先做（dsp-pipeline 清单 P-a），结果写回 dsp-pipeline 的 prd 与 design-delivery.md §3；若命中“交主会话裁决”的几行，先裁决再开 render 骨架。
 - [ ] 分支：第一批全部合入 zones 的集成分支 `playback-baseline`。本线用一个独立 worktree（`ROOMusic-dsp`），每个子步骤一个分支，从 `playback-baseline` 切出、做完合回；纯包在 `playback-baseline` 建立之前可以先从 `main` 切出，合入时再并到 `playback-baseline`。
 - [ ] 测试库：渲染会话的测试不需要数据库；只有派生退役（P10）的启动核对可能用到隔离库，用独占项目名 `roomusic-test-dsp`（与 zones 的 `roomusic-test-zones` 分开）。
-- [ ] 分工（2026-11-09 用户改定）：后端实现 `codex/gpt-6-astra`（high）；前端实现 Opus（high）；测试由 `codex/gpt-6.1-sol`（high）测试 agent 编写与执行，实现 agent 不写新测试。
+- [ ] 分工（2026-11-09 用户改定）：后端实现 `codex/gpt-6-astra`（high）；前端实现 Opus（high）；测试由独立的 `codex/gpt-6-astra`（high）测试 agent 编写与执行，实现 agent 不写新测试。
 - [ ] 派活 prompt 写明：测试只做必要的；界面文案不写防御性说明和多余说明；参考稿只引章节号、不摘录、不写系数；纯包不导入项目内其他包。
 
 ## 1. 第一批的顺序与依赖
