@@ -14,6 +14,12 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/zones"
 )
 
+const streamUnplayedBytes = 64 * 1024
+
+type encodedCheckpoint struct {
+	frame, bytes int64
+}
+
 type session struct {
 	owner                              *Renderer
 	ctx                                context.Context
@@ -45,6 +51,9 @@ type session struct {
 	pending                            []timedEvent
 	segments                           []segment
 	failure                            error
+	encodedCheckpoints                 []encodedCheckpoint
+	encodedTotal, encodedPlayed        int64
+	encodedHead                        int64
 }
 
 func newSession(parent context.Context, owner *Renderer, spec zones.RenderSpec, format zones.StreamFormat, pcm chain.Format, track Track, prepareErr error, reservation *ffmpeg.Reservation) (*session, error) {
@@ -290,19 +299,14 @@ func (s *session) run() {
 	var encoded []byte
 	var clipped int
 	for {
-		if err := s.waitToRender(ticker); err != nil {
+		available, err := s.waitToRender(ticker)
+		if err != nil {
 			if s.ctx.Err() == nil {
 				s.fail(err)
 			}
 			return
 		}
-		s.mu.Lock()
-		available := int64(s.pcm.SampleRate)*20 + s.playheadLocked(s.owner.options.Clock()) - s.written
-		s.mu.Unlock()
-		if available <= 0 {
-			continue
-		}
-		buffer, cost, err := s.player.read(min(s.pcm.SampleRate/5, int(available)))
+		buffer, cost, err := s.player.read(available)
 		if err != nil {
 			if s.ctx.Err() == nil {
 				s.fail(err)
@@ -391,6 +395,9 @@ func (s *session) run() {
 	}
 	s.mu.Lock()
 	s.renderComplete = true
+	// EOF 前最后一批输出可能晚于最后一次 PCM 提交，必须补采样。
+	s.sampleEncodedLocked()
+	s.pruneEncodedLocked(s.playheadLocked(s.owner.options.Clock()))
 	s.mu.Unlock()
 	wake(s.eventWake)
 	for {
@@ -410,31 +417,76 @@ func (s *session) run() {
 	}
 }
 
-func (s *session) waitToRender(ticker Ticker) error {
+// waitToRender 是唯一的领先额度判定；HLS 及未播放编码字节足量的长流不越过 20 秒。
+func (s *session) waitToRender(ticker Ticker) (int, error) {
 	for {
 		if err := s.ctx.Err(); err != nil {
-			return err
+			return 0, err
 		}
 		if s.changed.Swap(false) {
 			if err := s.player.nextChanged(false); err != nil {
-				return err
+				return 0, err
 			}
 		}
 		s.mu.Lock()
-		written := s.written
 		head := s.playheadLocked(s.owner.options.Clock())
+		s.sampleEncodedLocked()
+		s.pruneEncodedLocked(head)
+		available := int64(s.pcm.SampleRate)*20 + head - s.written
+		if available <= 0 && s.format.Delivery != "hls" && s.encodedTotal-s.encodedPlayed < streamUnplayedBytes {
+			available = int64(s.pcm.SampleRate / 5)
+		}
 		s.mu.Unlock()
-		if written-head < int64(s.pcm.SampleRate)*20 {
-			return nil
+		if available > 0 {
+			return int(min(int64(s.pcm.SampleRate/5), available)), nil
 		}
 		select {
 		case <-s.ctx.Done():
-			return s.ctx.Err()
+			return 0, s.ctx.Err()
 		case <-ticker.C():
 		case <-s.controlWake:
 		}
 	}
 }
+
+// sampleEncodedLocked 只在 PCM 块提交之后（或 EOF）采样，不在写入中途采样。
+// 检查点把此时已取出的编码字节近似归到最新提交块的末帧，不解析编码帧。
+// 异步滞后的输出归到后续采样块，因而可能较晚扣除；同帧的新输出合并累计。
+func (s *session) sampleEncodedLocked() {
+	if s.encoder == nil || s.format.Delivery == "hls" {
+		return
+	}
+	total := s.encoder.encodedBytes.Load()
+	if total == s.encodedTotal {
+		return
+	}
+	s.encodedTotal = total
+	last := len(s.encodedCheckpoints) - 1
+	if last >= 0 && s.encodedCheckpoints[last].frame == s.written {
+		s.encodedCheckpoints[last].bytes = total
+	} else {
+		s.encodedCheckpoints = append(s.encodedCheckpoints, encodedCheckpoint{frame: s.written, bytes: total})
+	}
+}
+
+// pruneEncodedLocked 只按播放头扣除完整检查点，保留累计基线而不保留历史块。
+// 回退回报不能复活已扣除字节；零帧头部在播放真正前进前仍计入未播放量。
+func (s *session) pruneEncodedLocked(head int64) {
+	s.encodedHead = max(s.encodedHead, head)
+	if s.encodedHead == 0 {
+		return
+	}
+	count := 0
+	for count < len(s.encodedCheckpoints) && s.encodedCheckpoints[count].frame <= s.encodedHead {
+		s.encodedPlayed = s.encodedCheckpoints[count].bytes
+		count++
+	}
+	if count > 0 {
+		copy(s.encodedCheckpoints, s.encodedCheckpoints[count:])
+		s.encodedCheckpoints = s.encodedCheckpoints[:len(s.encodedCheckpoints)-count]
+	}
+}
+
 func (s *session) encodePCM(dst []byte, b *chain.Buffer) ([]byte, int) {
 	if s.format.BitDepth != 0 {
 		return s.chain.Quantize(dst, b)

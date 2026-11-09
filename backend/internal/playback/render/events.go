@@ -54,6 +54,7 @@ func (s *session) Observe(sample zones.PlayheadSample) {
 		s.sample = sample
 		s.haveSample = true
 		s.publishChangeStateLocked()
+		s.pruneEncodedLocked(s.playheadLocked(s.owner.options.Clock()))
 	}
 	s.mu.Unlock()
 	if s.hls != nil {
@@ -157,6 +158,8 @@ func (s *session) dueEvent(now time.Time) (zones.Event, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	head := max(s.dispatched, s.playheadLocked(now))
+	// 自然结束后仍由既有派发时钟修剪，不依赖渲染循环继续运行。
+	s.pruneEncodedLocked(head)
 	s.dispatched = head
 	nextFrame := s.nextTime
 	// 未完成时右端点仍可能是下一首的起点，不能抢在生产者登记换轨之前派发。

@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"io"
 	"strconv"
+	"sync/atomic"
 
 	"github.com/qlqq/roomusic/backend/internal/dsp/chain"
 	"github.com/qlqq/roomusic/backend/internal/playback/render/ffmpeg"
@@ -12,11 +13,12 @@ import (
 )
 
 type encoder struct {
-	process *ffmpeg.Process
-	output  *io.PipeWriter
-	format  zones.StreamFormat
-	header  bool
-	done    chan struct{}
+	process      *ffmpeg.Process
+	output       *io.PipeWriter
+	format       zones.StreamFormat
+	header       bool
+	done         chan struct{}
+	encodedBytes atomic.Int64
 }
 
 func newEncoder(ctx context.Context, reservation *ffmpeg.Reservation, tool *ffmpeg.Tool, f zones.StreamFormat, pcm chain.Format, output *io.PipeWriter, hls *hlsMedia, fail func(error)) (*encoder, error) {
@@ -69,7 +71,7 @@ func newEncoder(ctx context.Context, reservation *ffmpeg.Reservation, tool *ffmp
 		if hls != nil {
 			copyErr = hls.split(p.Stdout())
 		} else {
-			_, copyErr = io.Copy(output, p.Stdout())
+			_, copyErr = io.Copy(e, p.Stdout())
 		}
 		if copyErr != nil {
 			_ = p.Close()
@@ -88,17 +90,25 @@ func newEncoder(ctx context.Context, reservation *ffmpeg.Reservation, tool *ffmp
 	}()
 	return e, nil
 }
+
+// Write 用于所有非 HLS 长流输出：先计入编码字节（含 WAV 头部与 PCM），再传给客户端。
+// 管道可能阻塞，但这里不持会话锁；客户端读取不会扣减累计值。
+func (e *encoder) Write(data []byte) (int, error) {
+	e.encodedBytes.Add(int64(len(data)))
+	return e.output.Write(data)
+}
+
 func (e *encoder) write(data []byte) error {
 	if e.process != nil {
 		return writeAll(e.process, data)
 	}
 	if !e.header {
-		if err := writeAll(e.output, wavHeader(e.format)); err != nil {
+		if err := writeAll(e, wavHeader(e.format)); err != nil {
 			return err
 		}
 		e.header = true
 	}
-	return writeAll(e.output, data)
+	return writeAll(e, data)
 }
 func (e *encoder) finish() error {
 	if e.process != nil {
