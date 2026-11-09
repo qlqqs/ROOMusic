@@ -58,6 +58,14 @@ vi.mock("../player-provider", () => ({
   usePlayerProgress: function useTestProgress() { return useSyncExternalStore(engine.subscribeProgress, engine.getProgress); },
   usePlayerProgressSelector: function useTestProgressSelector<T>(select: (progress: PlayerProgress) => T) { return useSyncExternalStore(engine.subscribeProgress, () => select(engine.getProgress())); },
 }));
+vi.mock("../../auth", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../auth")>(),
+  useViewerScope: () => ({ generation: 1 }),
+}));
+vi.mock("../convolution/hooks", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../convolution/hooks")>(),
+  useIrFiles: () => ({ data: [] }),
+}));
 vi.mock("../hooks/use-playback-capabilities", () => ({
   usePlaybackCapabilities: function useTestCapabilities() {
     return useQuery({ queryKey: ["test-capabilities"], queryFn: () => Promise.resolve(table), initialData: table });
