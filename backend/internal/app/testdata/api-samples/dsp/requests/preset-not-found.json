@@ -1,0 +1,5 @@
+{
+  "body": null,
+  "method": "DELETE",
+  "path": "/api/v1/me/dsp/peq-presets/00000000-0000-4000-8000-000000000001"
+}

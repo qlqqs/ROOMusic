@@ -35,6 +35,11 @@
           "enabled": false
         },
         "leveling": "auto",
+        "peq": {
+          "bands": [],
+          "enabled": false,
+          "preamp_db": 0
+        },
         "quality": "lossless",
         "sample_rate": {
           "custom_rate": null,

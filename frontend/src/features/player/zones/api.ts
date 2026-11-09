@@ -1,4 +1,5 @@
 // 播放区端点（合同 §3–§5）。所有路径都在 /api/v1/me/playback 下，作用于已鉴权的用户；命令不幂等，调用方不自动重试。
+import type { PeqWire } from "../peq/document";
 import { apiRequest, apiStream, decode as d, type ApiResponse } from "../../../shared/api";
 import type { PlayMode } from "../engine/queue";
 import {
@@ -32,6 +33,7 @@ export type SettingsPatch = Partial<{
   headroom: { enabled: boolean; db: number; clip_indicator: boolean };
   sample_rate: { strategy: SampleRateStrategy; custom_rate: number | null; filter: SampleRateFilter };
   downmix: { enabled: boolean };
+  peq: PeqWire;
 }>;
 
 /** 合同 §3.3 的命令。 */

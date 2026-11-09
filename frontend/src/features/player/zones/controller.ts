@@ -2,6 +2,7 @@
 // 状态来自 zone store，组装成界面认识的 PlayerSnapshot / PlayerProgress。它还负责本标签页的启动顺序：
 // 读快照 → 确认或登记设备（Web Lock 串行）→ 读本机播放区的队列 → 连事件流 → 导入旧队列（R11）→ 排队拿输出锁，拿到的标签页才出声。
 // 正在控制的播放区默认是本机；选了别的设备时按 control-target.ts 的规则在它不再可用时回到本机（R4）。媒体键与系统暂停总是发给本机。
+import { defaultPeq, peqToWire } from "../peq/document";
 import { failureOf, isHttpFailure } from "../../../shared/api";
 import type { MediaSessionPort } from "../engine/media-session";
 import type { StorageLike } from "../engine/persistence";
@@ -102,7 +103,7 @@ const VOLUME_THROTTLE_MS = 125;
 const VOLUME_OPTIMISTIC_MS = 1_000;
 const TARGET_RECHECK_MS = 60_000;
 
-const defaultSettings: PlaybackSettings = { leveling: "auto", gapless: true, crossfade: false, crossfadeSeconds: 5, quality: "lossless", headroom: { enabled: false, db: -3, clipIndicator: false }, sampleRate: { strategy: "none", customRate: null, filter: "linear_precise" }, downmix: { enabled: true } };
+const defaultSettings: PlaybackSettings = { leveling: "auto", gapless: true, crossfade: false, crossfadeSeconds: 5, quality: "lossless", headroom: { enabled: false, db: -3, clipIndicator: false }, sampleRate: { strategy: "none", customRate: null, filter: "linear_precise" }, downmix: { enabled: true }, peq: defaultPeq };
 const idleProgress: PlayerProgress = { positionSeconds: 0, durationSeconds: null, seekable: false };
 
 function settingsPatchOf(patch: Partial<PlaybackSettings>): SettingsPatch {
@@ -115,6 +116,7 @@ function settingsPatchOf(patch: Partial<PlaybackSettings>): SettingsPatch {
   if (patch.headroom !== undefined) out.headroom = { enabled: patch.headroom.enabled, db: patch.headroom.db, clip_indicator: patch.headroom.clipIndicator };
   if (patch.sampleRate !== undefined) out.sample_rate = { strategy: patch.sampleRate.strategy, custom_rate: patch.sampleRate.customRate, filter: patch.sampleRate.filter };
   if (patch.downmix !== undefined) out.downmix = { enabled: patch.downmix.enabled };
+  if (patch.peq !== undefined) out.peq = peqToWire(patch.peq);
   return out;
 }
 

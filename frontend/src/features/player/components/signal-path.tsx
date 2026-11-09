@@ -1,4 +1,4 @@
-import { ArrowDownToLine, ArrowLeftRight, AudioLines, AudioWaveform, Binary, FileAudio, Gauge, Grip, Merge, MonitorSpeaker, SlidersHorizontal, X, type LucideIcon } from "lucide-react";
+import { ArrowDownToLine, ArrowLeftRight, AudioLines, AudioWaveform, Binary, FileAudio, Gauge, Grip, Merge, MonitorSpeaker, SlidersHorizontal, SlidersVertical, X, type LucideIcon } from "lucide-react";
 import { Fragment, useId, useState, type CSSProperties, type ReactNode } from "react";
 import { Button, ModalDialog, StatusTag, useTooltip } from "../../../shared/ui";
 import { useTrackAnalysis } from "../hooks/use-track-analysis";
@@ -36,6 +36,7 @@ const stepIcons: Record<SignalStep["kind"], LucideIcon> = {
   convert: ArrowLeftRight,
   sample_rate: ArrowLeftRight,
   downmix: Merge,
+  peq: SlidersVertical,
   leveling: SlidersHorizontal,
   headroom: ArrowDownToLine,
   dither: Grip,
@@ -52,6 +53,8 @@ function stepText(step: SignalStep): string {
       return `采样率转换 ${rateLabel(step.params.fromRate)} → ${rateLabel(step.params.toRate)}`;
     case "downmix":
       return `${step.params.mode === "select" ? "声道选择" : "降混"} ${step.params.fromLayout ?? step.params.fromChannels} → ${step.params.toLayout ?? step.params.toChannels}`;
+    case "peq":
+      return `${step.params.label} · ${step.params.bands} 段`;
     case "leveling":
       return `电平化 ${gainLabel(step.params.gainDb)}`;
     case "headroom":

@@ -1,0 +1,284 @@
+{
+  "body": {
+    "eqs": [
+      {
+        "author": "oratory1990",
+        "details": "Harman Target",
+        "eq_id": "sennheiser:hd650::oratory1990_harman_target",
+        "link": "https://www.dropbox.com/s/qs4hs92tvfbwr04/Sennheiser%20HD650.pdf?dl=0",
+        "peq": {
+          "bands": [
+            {
+              "channels": "all",
+              "enabled": true,
+              "freq_hz": 20,
+              "gain_db": 4,
+              "q": 1.1,
+              "type": "peaking"
+            },
+            {
+              "channels": "all",
+              "enabled": true,
+              "freq_hz": 97,
+              "gain_db": -2.5,
+              "q": 0.7,
+              "type": "peaking"
+            },
+            {
+              "channels": "all",
+              "enabled": true,
+              "freq_hz": 105,
+              "gain_db": 5.5,
+              "q": 0.71,
+              "type": "low_shelf"
+            },
+            {
+              "channels": "all",
+              "enabled": true,
+              "freq_hz": 215,
+              "gain_db": -1.7,
+              "q": 1.1,
+              "type": "peaking"
+            },
+            {
+              "channels": "all",
+              "enabled": true,
+              "freq_hz": 1300,
+              "gain_db": -1.5,
+              "q": 1.5,
+              "type": "peaking"
+            },
+            {
+              "channels": "all",
+              "enabled": true,
+              "freq_hz": 2000,
+              "gain_db": 3.5,
+              "q": 0.71,
+              "type": "high_shelf"
+            },
+            {
+              "channels": "all",
+              "enabled": true,
+              "freq_hz": 2700,
+              "gain_db": -1.4,
+              "q": 3,
+              "type": "peaking"
+            },
+            {
+              "channels": "all",
+              "enabled": true,
+              "freq_hz": 3300,
+              "gain_db": -3.7,
+              "q": 2.7,
+              "type": "peaking"
+            },
+            {
+              "channels": "all",
+              "enabled": true,
+              "freq_hz": 5350,
+              "gain_db": -3.4,
+              "q": 3,
+              "type": "peaking"
+            },
+            {
+              "channels": "all",
+              "enabled": true,
+              "freq_hz": 11000,
+              "gain_db": -2.5,
+              "q": 0.71,
+              "type": "high_shelf"
+            }
+          ],
+          "enabled": true,
+          "preamp_db": -9.3,
+          "source": {
+            "author": "oratory1990",
+            "details": "Harman Target",
+            "eq_id": "sennheiser:hd650::oratory1990_harman_target",
+            "kind": "opra",
+            "link": "https://www.dropbox.com/s/qs4hs92tvfbwr04/Sennheiser%20HD650.pdf?dl=0",
+            "product": "HD650",
+            "vendor": "Sennheiser"
+          }
+        }
+      },
+      {
+        "author": "oratory1990",
+        "details": "Harman Target • 10 band graphic EQ",
+        "eq_id": "sennheiser:hd650::oratory1990_harman_target_10_band_graphic_eq",
+        "link": "https://www.dropbox.com/s/gwxt4qup0o6udvz/Sennheiser%20HD650%20%2810%20Band%20Graphic%20EQ%29.pdf?dl=0",
+        "peq": {
+          "bands": [
+            {
+              "channels": "all",
+              "enabled": true,
+              "freq_hz": 31.5,
+              "gain_db": 7.9,
+              "q": 1.41,
+              "type": "peaking"
+            },
+            {
+              "channels": "all",
+              "enabled": true,
+              "freq_hz": 63,
+              "gain_db": 3.9,
+              "q": 1.41,
+              "type": "peaking"
+            },
+            {
+              "channels": "all",
+              "enabled": true,
+              "freq_hz": 125,
+              "gain_db": -0.8,
+              "q": 1.41,
+              "type": "peaking"
+            },
+            {
+              "channels": "all",
+              "enabled": true,
+              "freq_hz": 250,
+              "gain_db": -1.9,
+              "q": 1.41,
+              "type": "peaking"
+            },
+            {
+              "channels": "all",
+              "enabled": true,
+              "freq_hz": 500,
+              "gain_db": 0,
+              "q": 1.41,
+              "type": "peaking"
+            },
+            {
+              "channels": "all",
+              "enabled": true,
+              "freq_hz": 1000,
+              "gain_db": -0.4,
+              "q": 1.41,
+              "type": "peaking"
+            },
+            {
+              "channels": "all",
+              "enabled": true,
+              "freq_hz": 2000,
+              "gain_db": 1.6,
+              "q": 1.41,
+              "type": "peaking"
+            },
+            {
+              "channels": "all",
+              "enabled": true,
+              "freq_hz": 4000,
+              "gain_db": 2.6,
+              "q": 1.41,
+              "type": "peaking"
+            },
+            {
+              "channels": "all",
+              "enabled": true,
+              "freq_hz": 8000,
+              "gain_db": 2,
+              "q": 1.41,
+              "type": "peaking"
+            },
+            {
+              "channels": "all",
+              "enabled": true,
+              "freq_hz": 16000,
+              "gain_db": 0,
+              "q": 1.41,
+              "type": "peaking"
+            }
+          ],
+          "enabled": true,
+          "preamp_db": -8.6,
+          "source": {
+            "author": "oratory1990",
+            "details": "Harman Target • 10 band graphic EQ",
+            "eq_id": "sennheiser:hd650::oratory1990_harman_target_10_band_graphic_eq",
+            "kind": "opra",
+            "link": "https://www.dropbox.com/s/gwxt4qup0o6udvz/Sennheiser%20HD650%20%2810%20Band%20Graphic%20EQ%29.pdf?dl=0",
+            "product": "HD650",
+            "vendor": "Sennheiser"
+          }
+        }
+      },
+      {
+        "author": "oratory1990",
+        "details": "Harman Target • 6 Band EQ",
+        "eq_id": "sennheiser:hd650::oratory1990_harman_target_6_band_eq",
+        "link": "https://www.dropbox.com/s/p3hcne1z7n965sx/Sennheiser%20HD650%20%286%20Band%20EQ%29.pdf?dl=0",
+        "peq": {
+          "bands": [
+            {
+              "channels": "all",
+              "enabled": true,
+              "freq_hz": 65,
+              "gain_db": 8.5,
+              "q": 0.7,
+              "type": "low_shelf"
+            },
+            {
+              "channels": "all",
+              "enabled": true,
+              "freq_hz": 210,
+              "gain_db": -2.3,
+              "q": 1.1,
+              "type": "peaking"
+            },
+            {
+              "channels": "all",
+              "enabled": true,
+              "freq_hz": 2150,
+              "gain_db": 1.5,
+              "q": 2.2,
+              "type": "peaking"
+            },
+            {
+              "channels": "all",
+              "enabled": true,
+              "freq_hz": 3000,
+              "gain_db": -2.2,
+              "q": 3,
+              "type": "peaking"
+            },
+            {
+              "channels": "all",
+              "enabled": true,
+              "freq_hz": 16000,
+              "gain_db": -5,
+              "q": 1,
+              "type": "peaking"
+            },
+            {
+              "channels": "all",
+              "enabled": true,
+              "freq_hz": 3000,
+              "gain_db": 3,
+              "q": 0.7,
+              "type": "high_shelf"
+            }
+          ],
+          "enabled": true,
+          "preamp_db": -8.5,
+          "source": {
+            "author": "oratory1990",
+            "details": "Harman Target • 6 Band EQ",
+            "eq_id": "sennheiser:hd650::oratory1990_harman_target_6_band_eq",
+            "kind": "opra",
+            "link": "https://www.dropbox.com/s/p3hcne1z7n965sx/Sennheiser%20HD650%20%286%20Band%20EQ%29.pdf?dl=0",
+            "product": "HD650",
+            "vendor": "Sennheiser"
+          }
+        }
+      }
+    ],
+    "product": {
+      "name": "HD650",
+      "product_id": "sennheiser::hd650",
+      "subtype": "over_the_ear",
+      "vendor": "Sennheiser"
+    }
+  },
+  "status": 200
+}

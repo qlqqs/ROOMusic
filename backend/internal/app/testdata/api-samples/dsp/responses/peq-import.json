@@ -1,0 +1,25 @@
+{
+  "body": {
+    "peq": {
+      "bands": [
+        {
+          "channels": "all",
+          "enabled": true,
+          "freq_hz": 1000,
+          "gain_db": 6,
+          "q": 1,
+          "type": "peaking"
+        }
+      ],
+      "enabled": true,
+      "preamp_db": -3,
+      "source": {
+        "kind": "import"
+      }
+    },
+    "unrecognized_lines": [
+      3
+    ]
+  },
+  "status": 200
+}

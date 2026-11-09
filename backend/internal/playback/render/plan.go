@@ -16,6 +16,7 @@ type renderPlan struct {
 	facts                processingFacts
 	sampleRate           src.Plan
 	sampleRateFilter     string
+	peq                  zones.PEQSettings
 	stages, user, tail   []chain.Stage
 }
 
@@ -70,7 +71,20 @@ func (p renderPlan) buildChain(settings zones.ZoneSettings, bits int) (*chain.Ch
 			Node: chain.Wrap(src.New(p.sampleRate.Stages, p.sourcePCM.Channels), p.sourcePCM, out, step, true)}
 		stages = append([]chain.Stage{stage}, stages...)
 	}
-	c, err := chain.Build(chain.Spec{Format: p.sourcePCM, Stages: stages, User: p.user, Tail: p.tail,
+	user := p.user
+	if p.peq.Enabled {
+		// 用户处理接续 SRC 与矩阵的格式；Tail 的纯声道选择尚未发生。
+		format := p.sourcePCM
+		if len(stages) > 0 {
+			format = stages[len(stages)-1].Out
+		}
+		stage, err := buildPEQ(p.peq, format)
+		if err != nil {
+			return nil, err
+		}
+		user = append([]chain.Stage{stage}, user...)
+	}
+	c, err := chain.Build(chain.Spec{Format: p.sourcePCM, Stages: stages, User: user, Tail: p.tail,
 		Headroom: chain.HeadroomSettings{Enabled: settings.Headroom.Enabled, DB: settings.Headroom.DB}, OutputBits: bits, Seed: 1})
 	if err != nil {
 		return nil, err

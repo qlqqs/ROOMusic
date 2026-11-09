@@ -16,7 +16,7 @@
 2. 资源 API、OPRA/导入/曲线、预设鉴权与 app 装配；新目录逐个登记规则。设置错误统一 invalid_input，无字段路径；导入专用错误在自己的 httpapi 映射。
 3. render 按③后的格式构建 IIR，放 Spec.User；启用恒等设置也算处理。此时无卷积，后续由 convolution.before_peq 排序。
 4. 主会话写编辑/预览/OPRA/导入/预设界面；150ms 只去抖预览，松手/确认才 set_settings，一次动作一次提交。OPRA 必需署名保留，其他文案不加防御说明。
-5. 独立测试补小 OPRA 映射、真实嵌入可加载、导入、成员预设隔离、松手提交及信号显示。更新 recorder/fake，按父 §5 完整 real/mock 门禁后合 main。
+5. 独立测试补小 OPRA 映射、真实嵌入可加载、导入、成员预设隔离、松手提交及信号显示。更新 recorder/fake；按 2026-11-09 最新裁定，只执行本轮限定的局部验证，全套 e2e 留到发版前一次。
 
 ## 3. 最小验证集与命令
 
@@ -29,16 +29,14 @@ go test ./internal/dspsettings/... ./internal/zones/... ./internal/playback/rend
 go test ./internal/app -run '^TestPackageDependencyDirections$' -count=1
 ```
 
+在独立项目 `roomusic-test-peq` 的临时数据库中只执行以下定向命令（沿用集成脚本的全局锁、随机端口和退出清理，不运行其全包扫描）：
+
 ```bash
-ROOMUSIC_TEST_COMPOSE_PROJECT=roomusic-test-peq \
-  ROOMUSIC_TEST_RUN='TestPostgreSQLZones|TestPostgreSQL.*DSP|TestPostgreSQLMigrationRollbackRoundTrip' \
-  scripts/test-integration.sh
-# 有意合同改变后仅更新所属响应，再不带更新变量复跑：
-ROOMUSIC_UPDATE_API_SAMPLES=1 ROOMUSIC_TEST_COMPOSE_PROJECT=roomusic-test-peq \
-  ROOMUSIC_TEST_RUN='^TestPostgreSQLZonesAPIResponseSamples$' scripts/test-integration.sh
+go test ./internal/platform/postgres -run '^TestPostgreSQLMigrationRollbackRoundTrip$/^0047_playback_zone_peq.sql$' -count=1 -v
+ROOMUSIC_UPDATE_API_SAMPLES=1 go test ./internal/app -run '^TestPostgreSQL(Zones|DSP)APIResponseSamples$' -count=1 -v
 ```
 
-迁移号 **0047**，带 down；新增资源测试沿用 TestPostgreSQL...DSP/IR 命名以纳入范围，实际执行时列出匹配到的用例，不把零匹配/跳过当通过。独立 project 仍受脚本全局锁约束，本机数据库和 real e2e 串行。
+迁移号 **0047**，带 down；新行为测试由独立测试 agent 维护；本轮只增加用户明确要求的 recorder 采集入口，不另写单元/集成行为用例。实际执行时列出匹配到的用例，不把零匹配/跳过当通过。独立 project 仍受脚本全局锁约束，本机数据库和 real e2e 串行。
 
 ```bash
 (cd frontend && npx vitest run src/features/player/zones/decoders.test.ts src/features/player/components/signal-path.test.tsx)
@@ -47,7 +45,7 @@ ROOMUSIC_UPDATE_API_SAMPLES=1 ROOMUSIC_TEST_COMPOSE_PROJECT=roomusic-test-peq \
 
 新增本项表单/管理/上传交互测试由测试 agent 命名并在交接时追加**精确文件路径**的 vitest 命令；上述既有两文件不能代替新增交互验收。前端主会话在本子项合入前构建一次，产物随本项提交以满足 CI 漂移检查，不由各并行后端分支分别重建。
 
-合入前额外执行父 §5 的整组 real e2e 与 mock e2e，禁止只跑单个新用例代替；日常不跑全仓 go test ./...。运行 `git diff --check`。生成器只在方法/系数变动时运行，CI检查自主产物性质，不重算昂贵优化。
+2026-11-09 最新用户裁定覆盖父 §5 的旧合入门禁：全套 real/mock e2e 仅发版前跑一次，本次不执行；日常不跑全仓 go test ./...。运行 `git diff --check`。生成器只在方法/系数变动时运行，CI检查自主产物性质，不重算昂贵优化。
 
 ## 4. 回滚点
 

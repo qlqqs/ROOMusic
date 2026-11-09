@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "peq_preset_limit",
+      "message": "预设数量已达上限"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

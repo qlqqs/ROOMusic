@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "peq_import_empty",
+      "message": "没有可导入的滤波段"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

@@ -99,6 +99,14 @@ func (s *Store) UpdateZone(ctx context.Context, userID string, zone PersistedZon
 	if err != nil {
 		return fmt.Errorf("encode playback downmix: %w", err)
 	}
+	peqDocument, err := ParsePEQDocument([]byte(zone.Settings.PEQ.canonical))
+	if err != nil {
+		return fmt.Errorf("encode playback peq: %w", err)
+	}
+	peq, err := peqDocument.MarshalJSON()
+	if err != nil {
+		return fmt.Errorf("encode playback peq: %w", err)
+	}
 	result, err := s.tx.ExecContext(ctx, `
 UPDATE playback_zones SET
  mode=$3, current_entry_id=NULLIF($4, '')::uuid,
@@ -106,12 +114,12 @@ UPDATE playback_zones SET
  history=COALESCE($7::text[]::uuid[], '{}'::uuid[]),
  shuffle_bag=COALESCE($8::text[]::uuid[], '{}'::uuid[]),
  leveling=$9, crossfade=$10, crossfade_seconds=$11, gapless=$12, quality=$13,
- revision=$14, queue_revision=$15, imported_at=$16, headroom=$17::jsonb, sample_rate=$18::jsonb, downmix=$19::jsonb
+ revision=$14, queue_revision=$15, imported_at=$16, headroom=$17::jsonb, sample_rate=$18::jsonb, downmix=$19::jsonb, peq=$20::jsonb
 WHERE user_id=$1::uuid AND id=$2::uuid`,
 		userID, zone.ZoneID, zone.Queue.Mode, zone.Queue.CurrentEntryID,
 		zone.PositionSeconds, zone.PositionSavedAt, zone.Queue.History, zone.Queue.Bag,
 		zone.Settings.Leveling, zone.Settings.Crossfade, zone.Settings.CrossfadeSeconds,
-		zone.Settings.Gapless, zone.Settings.Quality, zone.Revision, zone.QueueRevision, zone.ImportedAt, headroom, sampleRate, downmix)
+		zone.Settings.Gapless, zone.Settings.Quality, zone.Revision, zone.QueueRevision, zone.ImportedAt, headroom, sampleRate, downmix, peq)
 	if err != nil {
 		return fmt.Errorf("update playback zone: %w", err)
 	}

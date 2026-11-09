@@ -225,3 +225,7 @@ PEQ 的 UI 阶数仍限 1–6；纯 ButterworthLowPass 供 DSD filter=3 调用�
 ## 13. 已裁决
 
 - **OPRA 列表不带产品图片**：只显示厂商与型号文字（2026-11-08 用户采纳推荐）。数据包保持在 1–2 MB；不需要耳机外形图辅助辨认。
+
+- **2026-11-09 接入合同补充**：预设响应固定为 `{preset_id,name,peq,created_at,updated_at}`；GET 列表用 `{items:[…]}`。`sample_rate` 省略时 48000，显式值只能是 8000–768000 的整数。
+- **字段完整性**：峰值/架类必须 gain_db 与 q；低通/高通必须 slope_db，仅 slope_db=12 可额外给 q；带通/陷波/全通必须 q；不接受不适用字段。source 不可 null；opra 固定包含 kind/eq_id/vendor/product/author/details/link（字符串可空），preset 包含 kind/preset_id/name，import 仅 kind。
+- **曲线分组**：始终保留 all 曲线，只含 all 段；显式声道叠加 all 段与自身段，按等效启用滤波集合合并声道，每条均计入前级。完整可执行合同见 [PEQ 后端规范](../../spec/backend/peq-contracts.md)。

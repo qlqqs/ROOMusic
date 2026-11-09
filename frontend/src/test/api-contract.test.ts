@@ -13,6 +13,7 @@ import { decodeFavoriteArtistsPage } from "../features/personal/api/decoders";
 import { decodeArtistResults } from "../features/search/api/decoders";
 import { describe, expect, it } from "vitest";
 import { decodePlaybackFormats, decodeTrackAnalysis, decodeTrackLyrics } from "../features/player/api/decoders";
+import { decodeCurves, decodeImport, decodePreset, decodePresets, decodeProduct, decodeSearch } from "../features/player/peq/api";
 import { decodeLoggedOut, decodePasswordChanged, decodeSetupStatus, decodeViewer } from "../features/auth/api/decoders";
 import {
   decodeRecentlyAdded,
@@ -349,6 +350,16 @@ const successContracts: Record<string, Contract> = {
   "search/tracks-producer-match": { status: 200, decode: decodeTrackResults },
   "search/tracks": { status: 200, decode: decodeTrackResults },
   // 格式表只取来源类别与编码（可播判定），交付方式与媒体类型不再使用。
+  "dsp/responses/opra-product": { status: 200, decode: decodeProduct, preservesWireShape: false },
+  "dsp/responses/opra-search": { status: 200, decode: decodeSearch, preservesWireShape: false },
+  "dsp/responses/opra-search-empty": { status: 200, decode: decodeSearch, preservesWireShape: false },
+  "dsp/responses/peq-import": { status: 200, decode: decodeImport, preservesWireShape: false },
+  "dsp/responses/peq-response": { status: 200, decode: decodeCurves, preservesWireShape: false },
+  "dsp/responses/preset-create": { status: 201, decode: decodePreset, preservesWireShape: false },
+  "dsp/responses/preset-update": { status: 200, decode: decodePreset, preservesWireShape: false },
+  "dsp/responses/presets-empty": { status: 200, decode: decodePresets, preservesWireShape: false },
+  "dsp/responses/presets-list": { status: 200, decode: decodePresets, preservesWireShape: false },
+  "playback-zones/responses/set-settings-peq": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
   "playback/formats": { status: 200, decode: decodePlaybackFormats, preservesWireShape: false },
   "tracks/playback": { status: 200, decode: retiredByZones },
   // 曲目分析 decoder 是播放器 DTO 投影（字段名转换、base64 转 Uint8Array），不保留 wire 形状；这里仍调用生产 decoder 验证样本可解码。
@@ -516,6 +527,15 @@ const successContracts: Record<string, Contract> = {
 
 // 错误样本都用统一信封；这里同时记录界面要处理的错误码与状态码。
 const errorContracts: Record<string, { status: number; code: string }> = {
+  "dsp/responses/opra-not-found": { status: 404, code: "not_found" },
+  "dsp/responses/peq-import-empty": { status: 400, code: "peq_import_empty" },
+  "dsp/responses/peq-response-invalid": { status: 400, code: "invalid_input" },
+  "dsp/responses/preset-invalid": { status: 400, code: "invalid_input" },
+  "dsp/responses/preset-limit": { status: 409, code: "peq_preset_limit" },
+  "dsp/responses/preset-name-taken": { status: 409, code: "peq_preset_name_taken" },
+  "dsp/responses/preset-not-found": { status: 404, code: "not_found" },
+  "dsp/responses/preset-other-member": { status: 404, code: "not_found" },
+  "dsp/responses/unauthorized": { status: 401, code: "unauthorized" },
   "playback-zones/responses/errors/database-unavailable": { status: 503, code: "database_unavailable" },
   "playback-zones/responses/errors/device-online": { status: 409, code: "device_online" },
   "playback-zones/responses/errors/invalid-id": { status: 400, code: "invalid_id" },
@@ -685,6 +705,7 @@ const errorContracts: Record<string, { status: number; code: string }> = {
 
 // 204 没有 JSON 响应体；生产 API 的空结果回调不承担解码。
 const emptyResponseContracts: Record<string, { status: number }> = {
+  "dsp/responses/preset-delete": { status: 204 },
   "playback-zones/responses/delete-device": { status: 204 },
   "playback-zones/responses/release-before-playing": { status: 204 },
   "playback-zones/responses/release-fixed": { status: 204 },
@@ -720,6 +741,26 @@ type RequestContract = { encode?: () => Promise<unknown> };
 // zones/api.ts 直接传协议 DTO，没有独立编码器的请求只登记；不将网络方法当编码器。
 // import 通过既有迁移入口生成请求体；import-unchanged 的空队列不会由前端发送，也只登记。
 const requestContracts: Record<string, RequestContract> = {
+  "dsp/requests/opra-not-found": {},
+  "dsp/requests/opra-product": {},
+  "dsp/requests/opra-search": {},
+  "dsp/requests/opra-search-empty": {},
+  "dsp/requests/peq-import": {},
+  "dsp/requests/peq-import-empty": {},
+  "dsp/requests/peq-response": {},
+  "dsp/requests/peq-response-invalid": {},
+  "dsp/requests/preset-create": {},
+  "dsp/requests/preset-delete": {},
+  "dsp/requests/preset-invalid": {},
+  "dsp/requests/preset-limit": {},
+  "dsp/requests/preset-name-taken": {},
+  "dsp/requests/preset-not-found": {},
+  "dsp/requests/preset-other-member": {},
+  "dsp/requests/preset-update": {},
+  "dsp/requests/presets-empty": {},
+  "dsp/requests/presets-list": {},
+  "dsp/requests/unauthorized": {},
+  "playback-zones/requests/set-settings-peq": {},
   "playback-zones/requests/claim-fixed": {},
   "playback-zones/requests/claim-playing": {},
   "playback-zones/requests/claim-replacement": {},

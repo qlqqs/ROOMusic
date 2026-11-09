@@ -15,6 +15,8 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	catalogapi "github.com/qlqq/roomusic/backend/internal/catalog/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/catalog/maintenance"
+	"github.com/qlqq/roomusic/backend/internal/dspsettings"
+	dspsettingsapi "github.com/qlqq/roomusic/backend/internal/dspsettings/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	identityapi "github.com/qlqq/roomusic/backend/internal/identity/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/library"
@@ -101,6 +103,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	guard.WithLogger(logger)
 	libraryService := library.NewService(lifecycle, database, settings.DataDirectory, logger).WithScanConcurrency(settings.ScanWorkers)
 	personalService := personal.NewService(database)
+	dspSettingsService := dspsettings.NewService(database)
 	listeningService := listening.NewService(database)
 	playbackService := newPlaybackService(database, settings, assembly)
 	renderer, closeRenderer := assembleRenderer(database, playbackService, assembly.renderer, logger)
@@ -155,6 +158,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	listeningapi.New(guard, listeningService).Register(mux)
 	personalapi.New(guard, personalService).Register(mux)
 	zonesapi.New(guard, zonesService).Register(mux)
+	dspsettingsapi.New(guard, dspSettingsService).Register(mux)
 	if assembly.backups != nil {
 		backupapi.New(assembly.backups, database, guard, lifecycle).Register(mux)
 	}

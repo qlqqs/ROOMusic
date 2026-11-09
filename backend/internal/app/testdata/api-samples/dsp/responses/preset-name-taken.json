@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "peq_preset_name_taken",
+      "message": "预设名称已存在"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

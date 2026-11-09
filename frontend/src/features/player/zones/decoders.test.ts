@@ -39,6 +39,7 @@ const settings: Zone["settings"] = {
   headroom: { enabled: false, db: -3, clipIndicator: false },
   sampleRate: { strategy: "none", customRate: null, filter: "linear_precise" },
   downmix: { enabled: true },
+  peq: { enabled: false, preampDb: 0, bands: [], source: null },
 };
 
 const registeredDevice: Device = {
