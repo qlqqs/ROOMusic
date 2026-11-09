@@ -190,18 +190,19 @@ test("不可播放曲目的心形与更多仍可用，仅播放、下一首播�
   const mock = await backend.start({ signedInAs: "listener" });
   const group = albumGroup(92, { title: "不可播放曲目专项", track_count: 1 });
   const release = releaseDetailOf(group.representative, {
-    media: mediaOf(group.representative, () => ({ title: "待切分的 CUE 曲目", source_kind: "cue_virtual", codec: "flac" })),
+    // 扫描器能识别 WavPack DSD，但服务端渲染格式表尚不支持；CUE 分轨已经可播放。
+    media: mediaOf(group.representative, () => ({ title: "WavPack DSD 曲目", source_kind: "wavpack_apev2", codec: "wavpack_dsd" })),
   });
   mock.groups = [group];
   mock.releases.set(release.id, release);
   await page.goto(`/albums/${group.id}`);
-  const track = page.locator("#main ol > li").filter({ has: page.getByText("待切分的 CUE 曲目", { exact: true }) });
-  const reason = "CUE 分轨曲目需要切分，目前不能播放";
+  const track = page.locator("#main ol > li").filter({ has: page.getByText("WavPack DSD 曲目", { exact: true }) });
+  const reason = "这种格式目前不能播放";
   const play = track.getByRole("button", { name: "从这首开始播放", exact: true });
   await expect(play).toBeDisabled();
   await expect(play).toHaveAccessibleDescription(reason);
   await expect(track.getByText(reason, { exact: true })).toBeVisible();
-  await expect(track.getByRole("button", { name: "收藏《待切分的 CUE 曲目》", exact: true })).toBeEnabled();
+  await expect(track.getByRole("button", { name: "收藏《WavPack DSD 曲目》", exact: true })).toBeEnabled();
   const more = track.getByRole("button", { name: "更多操作", exact: true });
   await expect(more).toBeEnabled();
   await more.click();
@@ -289,6 +290,8 @@ async function openFullscreen(page: Page) {
   await startAndPause(page);
   await bar(page).getByRole("button", { name: "打开全屏播放器", exact: true }).click();
   await expect(fullscreenDialog(page)).toBeVisible();
+  // 可见不代表 220ms 的 grow 已结束；缩放期间分次测量会混用不同帧的坐标。
+  await expect(fullscreenDialog(page).locator(":scope > div").first()).toHaveCSS("transform", "none");
 }
 
 const lyricsPanel = (page: Page) => fullscreenDialog(page).getByRole("region", { name: "歌词", exact: true });
@@ -335,11 +338,17 @@ for (const width of widths) {
       }
       await expect(lyrics).toBeVisible();
       if (kind === "synced") await expect(lyrics.getByRole("listitem")).toHaveCount(LYRIC_LINES);
+      if (kind === "plain") await expect(lyrics.getByRole("group", { name: "歌词文本", exact: true })).toBeVisible();
       for (const removedText of ["内嵌歌词 · 逐行同步 · 点任一行跳到该处", "内嵌歌词 · 逐行同步", "内嵌歌词 · 纯文本"]) await expect(lyrics).not.toContainText(removedText);
       if (kind === "none") await expect(lyrics.getByText("这首曲目没有内嵌歌词", { exact: true })).toBeVisible();
       await expectLyricsLayout(page, `${width}px ${kind}`);
       await expectNoHorizontalOverflow(page, `${kind}歌词`);
       await expectNoDocumentScroll(page, `${kind}歌词`);
+      // 明确检查悬停提示的最终状态，避免指针偶然停在控件上时 axe 采到 100ms 淡入的中间颜色。
+      await fullscreenDialog(page).getByRole("button", { name: "收起全屏播放器", exact: true }).hover();
+      const tooltip = fullscreenDialog(page).getByText("收起全屏播放器", { exact: true });
+      await expect(tooltip).toBeVisible();
+      await expect(tooltip).toHaveCSS("opacity", "1");
       await expectNoSeriousViolations(page, `${kind}歌词`);
       if (process.env["ROOMUSIC_LYRICS_SCREENSHOTS"] === "1" && (width === 375 || width === 768 || width === 1280)) {
         // 供人工确认布局（截图写到 /tmp，不入库）：同步歌词先把播放位置移到中段，让高亮停在列表中部；

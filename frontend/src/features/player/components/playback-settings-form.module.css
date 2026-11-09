@@ -29,7 +29,9 @@
 .deviceName { min-width: 0; overflow-wrap: anywhere; }
 
 /* Headroom 增益：滑块与数值同一行，数值等宽数字、固定宽度，拖动时不挤动滑块。 */
-.field[data-disabled] { opacity: 0.45; }
+/* 停用时只淡化滑块；标签和数值换成次要文字色，保持可读。 */
+.field[data-disabled] { color: var(--text-secondary); }
+.field[data-disabled] input { opacity: 0.45; }
 .slider { display: flex; align-items: center; gap: var(--space-3); }
 .slider input { width: 220px; max-width: 100%; min-height: 24px; accent-color: var(--text-accent); }
 .slider input:disabled { cursor: not-allowed; }
