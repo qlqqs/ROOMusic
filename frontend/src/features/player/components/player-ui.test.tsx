@@ -106,7 +106,7 @@ beforeEach(() => {
   fullscreenState.open = false;
   analysisState.value = null;
   fullscreenState.listeners.clear();
-  table = { verdictOf: ({ sourceKind, codec }) => sourceKind === "cue_virtual" ? { playable: false, reason: "cue_virtual" } : codec === "alac" ? { playable: false, reason: "format_unsupported" } : { playable: true } };
+  table = { verdictOf: ({ codec }) => codec === "alac" ? { playable: false, reason: "format_unsupported" } : { playable: true } };
   start();
 });
 afterEach(() => { engine.endSession(); vi.useRealTimers(); });
@@ -277,6 +277,17 @@ describe("播放栏、全屏、队列与信号路径", () => {
     expect(screen.queryByRole("button", { name: "重试播放" })).toBeNull();
   });
 
+  it("命令因设备离线被拒时说一句，下一条命令成功后消失", async () => {
+    await enqueue([playerTrack("1")]);
+    view(<><PlayerBar /><PlayerAnnouncement /></>);
+    server.failNext(409, "zone_offline");
+    act(() => { engine.play(); });
+    await waitFor(() => expect(screen.getAllByText("那台设备已离线。")).toHaveLength(2));
+    expect(screen.getByRole("status").textContent).toContain("那台设备已离线。");
+    act(() => { engine.pause(); });
+    await waitFor(() => expect(screen.queryAllByText("那台设备已离线。")).toHaveLength(0));
+  });
+
   it("自动播放被拒绝时保持暂停并给出恢复动作", async () => {
     await waitFor(() => expect(audios).toHaveLength(2));
     for (const audio of audios) audio.playBehavior = "not-allowed";
@@ -404,7 +415,7 @@ describe("专辑播放入口", () => {
     const medium = detail.media[0];
     if (medium === undefined || medium.tracks[0] === undefined) throw new Error("缺少测试曲目");
     const first = medium.tracks[0];
-    return { ...detail, media: [{ ...medium, tracks: [{ ...first, id: "track-1", codec: "flac", source_kind: "flac_vorbis_comment" }, { ...first, id: "track-2", codec: "alac", source_kind: "m4a" }, { ...first, id: "track-3", source_kind: "cue_virtual" }] }] };
+    return { ...detail, media: [{ ...medium, tracks: [{ ...first, id: "track-1", codec: "flac", source_kind: "flac_vorbis_comment" }, { ...first, id: "track-2", codec: "alac", source_kind: "m4a" }, { ...first, id: "track-3", codec: "flac", source_kind: "cue_virtual" }] }] };
   }
   it("整张立即播放处理队列容量拒绝，不谎报成功", async () => {
     vi.spyOn(engine, "playTracks").mockReturnValue("queue_full");
@@ -419,14 +430,14 @@ describe("专辑播放入口", () => {
     expect((screen.getByRole("button", { name: "播放整张专辑" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText(/这个版本没有能播放的曲目/)).toBeTruthy();
   });
-  it("整张播放跳过不可播放项，加入队列不打断当前项", async () => {
+  it("整张播放跳过不可播放项（CUE 分轨照常播放），加入队列不打断当前项", async () => {
     view(<AlbumPlaybackActions release={release()} groupId="group-1" />);
     await userEvent.click(screen.getByRole("button", { name: "播放整张专辑" }));
-    await waitFor(() => expect(engine.getSnapshot().queue.entries.map((entry) => entry.track.trackId)).toEqual(["track-1"]));
-    expect(screen.getByRole("status").textContent).toContain("跳过 2 首");
+    await waitFor(() => expect(engine.getSnapshot().queue.entries.map((entry) => entry.track.trackId)).toEqual(["track-1", "track-3"]));
+    expect(screen.getByRole("status").textContent).toContain("跳过 1 首");
     const currentId = engine.getSnapshot().current?.entryId;
     await userEvent.click(screen.getByRole("button", { name: "加入队列" }));
-    await waitFor(() => expect(engine.getSnapshot().queue.entries).toHaveLength(2));
+    await waitFor(() => expect(engine.getSnapshot().queue.entries).toHaveLength(4));
     expect(engine.getSnapshot().current?.entryId).toBe(currentId);
   });
 });

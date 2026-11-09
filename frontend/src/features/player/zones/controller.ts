@@ -2,7 +2,7 @@
 // 状态来自 zone store，组装成界面认识的 PlayerSnapshot / PlayerProgress。它还负责本标签页的启动顺序：
 // 读快照 → 确认或登记设备（Web Lock 串行）→ 读本机播放区的队列 → 连事件流 → 导入旧队列（R11）→ 排队拿输出锁，拿到的标签页才出声。
 // 正在控制的播放区默认是本机；选了别的设备时按 control-target.ts 的规则在它不再可用时回到本机（R4）。媒体键与系统暂停总是发给本机。
-import { failureOf } from "../../../shared/api";
+import { failureOf, isHttpFailure } from "../../../shared/api";
 import type { MediaSessionPort } from "../engine/media-session";
 import type { StorageLike } from "../engine/persistence";
 import { emptyQueue, MAX_QUEUE_ENTRIES, type PlayerTrack, type QueueState, type TrackDisplayMetadata } from "../engine/queue";
@@ -14,7 +14,7 @@ import type { ClaimResult, CommandResult, DeviceResult, RegisterResult, ReportRe
 import { deviceStorageKey, readDeviceId, registerBodyOf, withRegistrationLock, writeDeviceId, type LockManagerLike } from "./device";
 import { EventStream, type EventStreamDeps } from "./event-stream";
 import { importLegacyQueue } from "./legacy-import";
-import type { Device, PlaybackFailureReason, PlaybackSettings, PlayerEvent, PlayerFault, PlayerStatus, Snapshot, Zone, ZoneQueue } from "./model";
+import type { CommandRejection, Device, PlaybackFailureReason, PlaybackSettings, PlayerEvent, PlayerFault, PlayerStatus, Snapshot, Zone, ZoneQueue } from "./model";
 import { ZoneStore } from "./zone-store";
 
 export type AddResult = "added" | "queue_full";
@@ -42,6 +42,8 @@ export type PlayerSnapshot = {
   isLocal: boolean;
   /** 设备列表：本机在前，其余按登记顺序。 */
   devices: readonly PlaybackDeviceRow[];
+  /** 最近一条被拒的命令；之后有命令成功或改了控制目标时清掉。 */
+  rejection: CommandRejection | null;
 };
 
 /** 设备列表的一行：设备、它的播放区（还没读到时为 null）、是不是本机、是不是正在控制的。 */
@@ -153,6 +155,8 @@ export class PlayerController {
   private target: ControlTarget | null;
   private targetTimer: ReturnType<typeof setInterval> | null = null;
   private unsubscribeVisibility: (() => void) | null = null;
+  private rejection: CommandRejection | null = null;
+  private rejectionSeq = 0;
   private rowsCache: { devices: readonly Device[]; zones: ReadonlyMap<string, Zone>; localId: string | null; targetId: string | undefined; rows: readonly PlaybackDeviceRow[] } | null = null;
 
   constructor(deps: PlayerControllerDeps) {
@@ -595,7 +599,8 @@ export class PlayerController {
   async transfer(sourceZoneId: string, targetZoneId: string): Promise<void> {
     if (this.lifecycle === "ended") return;
     if (targetZoneId === this.localDevice()?.zoneId) this.output?.unlock();
-    await this.enqueueCommand(() => sourceZoneId, { command: "transfer", target_zone_id: targetZoneId });
+    // 转移失败由设备列表就近提示，不记成被拒的命令。
+    await this.enqueueCommand(() => sourceZoneId, { command: "transfer", target_zone_id: targetZoneId }, false);
     this.setControlTarget(targetZoneId);
   }
 
@@ -617,6 +622,7 @@ export class PlayerController {
 
   private setTarget(target: ControlTarget | null): void {
     this.target = target;
+    this.rejection = null;
     writeControlTarget(this.deps.localStorage, this.deps.userId, target);
     this.rebuild();
   }
@@ -675,12 +681,27 @@ export class PlayerController {
     return this.enqueueCommand(() => zoneId, command);
   }
 
-  private enqueueCommand(target: () => string | undefined, command: ZoneCommand): Promise<void> {
+  private enqueueCommand(target: () => string | undefined, command: ZoneCommand, noteRejection = true): Promise<void> {
     const run = this.chain.then(() => this.readyPromise).then(async () => {
       const zoneId = target();
       if (zoneId === undefined || this.lifecycle === "ended") return;
-      const result = await this.deps.api.sendZoneCommand(zoneId, command);
-      if (!this.isEnded()) this.store.applyCommandResult(zoneId, result);
+      let result: CommandResult;
+      try {
+        result = await this.deps.api.sendZoneCommand(zoneId, command);
+      } catch (error) {
+        if (noteRejection && !this.isEnded() && isHttpFailure(failureOf(error), 409, "zone_offline")) {
+          this.rejectionSeq += 1;
+          this.rejection = { seq: this.rejectionSeq, reason: "zone_offline" };
+          this.rebuild();
+        }
+        throw error;
+      }
+      if (this.isEnded()) return;
+      const cleared = this.rejection !== null;
+      this.rejection = null;
+      this.store.applyCommandResult(zoneId, result);
+      // 服务端状态可能已经从事件流到过、store 不再通知，提示要自己清掉。
+      if (cleared) this.rebuild();
     });
     // 命令失败不中断后面的命令；import 需要知道结果，所以返回的 promise 带着错误。
     this.chain = run.catch(() => undefined);
@@ -753,6 +774,7 @@ export class PlayerController {
       device,
       isLocal: zone !== null && zone.deviceId === this.deviceId,
       devices: this.deviceRows(zoneId),
+      rejection: this.rejection,
     };
   }
 

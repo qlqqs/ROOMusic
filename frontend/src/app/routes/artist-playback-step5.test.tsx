@@ -111,7 +111,7 @@ describe("艺人播放全部与随机播放", () => {
     const { data, engine, view } = await setup();
     const sample = data.tracks.get(`${artistId}:track_artist`)?.[0];
     if (!sample) throw new Error("缺少样本");
-    data.tracks.set(`${artistId}:track_artist`, Array.from({ length: 10_002 }, (_, index) => ({ ...sample, track_id: artistTestId(index + 1), present: index !== 10_001, source: index === 0 ? { ...sample.source, source_kind: "cue_virtual" } : sample.source })));
+    data.tracks.set(`${artistId}:track_artist`, Array.from({ length: 10_002 }, (_, index) => ({ ...sample, track_id: artistTestId(index + 1), present: index !== 10_001, source: index === 0 ? { ...sample.source, codec: "unknown" } : sample.source })));
     view(<ArtistPlayActions artistId={artistId} />);
     await ready();
     await userEvent.click(screen.getByRole("button", { name: "播放全部" }));
@@ -124,7 +124,7 @@ describe("艺人播放全部与随机播放", () => {
     const { api, data, player, view } = await setup();
     const sample = data.tracks.get(`${artistId}:track_artist`)?.[0];
     if (!sample) throw new Error("缺少样本");
-    data.tracks.set(`${artistId}:track_artist`, scenario === "empty" ? [] : [{ ...sample, present: scenario !== "missing", source: { ...sample.source, source_kind: "cue_virtual" } }]);
+    data.tracks.set(`${artistId}:track_artist`, scenario === "empty" ? [] : [{ ...sample, present: scenario !== "missing", source: { ...sample.source, codec: "unknown" } }]);
     if (scenario === "error") api.on("GET", path, () => sampleResponse("errors/database-unavailable"));
     view(<ArtistPlayActions artistId={artistId} />);
     await ready();

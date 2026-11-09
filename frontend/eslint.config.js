@@ -3,7 +3,7 @@ import typescriptPlugin from "@typescript-eslint/eslint-plugin";
 import reactHooks from "eslint-plugin-react-hooks";
 
 export default [
-  { ignores: ["dist/**", "node_modules/**", "playwright-report/**", "test-results/**"] },
+  { ignores: ["dist/**", "node_modules/**", "playwright-report/**", "test-results/**", "coverage/**"] },
   eslint.configs.recommended,
   ...typescriptPlugin.configs["flat/recommended"],
   reactHooks.configs.flat.recommended,

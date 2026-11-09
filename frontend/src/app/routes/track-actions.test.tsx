@@ -22,7 +22,7 @@ const tracks = [
 ];
 
 /** 保留原播放器测试的能力场景（服务端格式表里没有 ALAC）；真实队列与心形组件不替换成桩。 */
-const formats = { items: [{ source_kind: "flac_vorbis_comment", codec: "flac" }] };
+const formats = { items: [{ source_kind: "flac_vorbis_comment", codec: "flac" }, { source_kind: "cue_virtual", codec: "flac" }] };
 
 async function setup(items: readonly PlayerTrack[]) {
   const api = installFakeApi();
@@ -78,9 +78,16 @@ describe("统一曲目行动作", () => {
     expect(commits).toBe(0);
   });
 
+  it("CUE 分轨按服务端格式表判定，可以播放", async () => {
+    const track = tracks[2];
+    if (track === undefined) throw new Error("缺少测试曲目");
+    const { view } = await setup([track]);
+    view(actions(track));
+    await waitFor(() => expect(screen.getByRole("button", { name: "从这首开始播放" }).hasAttribute("disabled")).toBe(false));
+  });
+
   it.each([
     { index: 1, reason: "这种格式目前不能播放" },
-    { index: 2, reason: "CUE 分轨曲目需要切分，目前不能播放" },
   ])("$reason：原因可见且与播放按钮关联，更多和收藏可用，仅播放项禁用", async ({ index, reason }) => {
     const track = tracks[index];
     if (track === undefined) throw new Error("缺少测试曲目");

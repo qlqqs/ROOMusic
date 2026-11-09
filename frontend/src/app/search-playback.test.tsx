@@ -116,12 +116,10 @@ describe("搜索曲目播放动作", () => {
 
   it.each([
     { kind: "missing", reason: "文件缺失，不能播放" },
-    { kind: "cue", reason: "CUE 分轨曲目需要切分，目前不能播放" },
     { kind: "unknown", reason: "这种格式目前不能播放" },
   ])("$kind 不可播，原因与禁用播放按钮关联且两个入队动作也禁用", async ({ kind, reason }) => {
     const item = searchTrackItem();
     if (kind === "missing") item.present = false;
-    if (kind === "cue") item.source.source_kind = "cue_virtual";
     if (kind === "unknown") item.source.codec = "unknown";
     const { engine } = await setup(item);
     await screen.findByText(reason);

@@ -3,9 +3,10 @@ import { useId, useRef, useState, type CSSProperties, type FormEvent } from "rea
 import { Button, ConfirmDialog, FailureNotice, ModalDialog, StatusTag, TextField } from "../../../shared/ui";
 import { usePlayer, usePlayerSelector } from "../player-provider";
 import type { PlaybackDeviceRow } from "../zones/controller";
+import { rejectionLabels } from "./player-labels";
 import styles from "./device-picker.module.css";
 
-const failureMessages = { zone_offline: "那台设备已离线。", device_online: "这台设备在线，不能删除。" } as const;
+const failureMessages = { zone_offline: rejectionLabels.zone_offline, device_online: "这台设备在线，不能删除。" } as const;
 const MAX_NAME_LENGTH = 64;
 
 /** 一行的第二行：离线、没有曲目、正在放的曲名或“已暂停”。 */

@@ -31,6 +31,9 @@ export type PlayerStatus = "idle" | "loading" | "playing" | "paused" | "bufferin
 /** 停在暂停的几种故障：渲染器暂时不可用（可重试）、浏览器拒绝自动播放、这台设备放不了服务器给的格式。 */
 export type PlayerFault = { kind: "transient" } | { kind: "autoplay_blocked" } | { kind: "no_stream_format" };
 
+/** 被服务端拒绝、用户能自己处理的命令（目前只有目标设备已离线）。seq 每次拒绝递增，界面据此重新公告。 */
+export type CommandRejection = { seq: number; reason: "zone_offline" };
+
 /** 值得向读屏公告的播放区事件。seq 取产生事件时的 revision，界面据此只公告一次。 */
 export type PlayerEvent =
   | { seq: number; kind: "track_started"; entryId: string }

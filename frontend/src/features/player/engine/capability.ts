@@ -6,8 +6,8 @@ export type TrackVerdict =
   | { playable: true }
   | {
       playable: false;
-      /** cue_virtual：需要切分的 CUE 曲目；format_unsupported：（来源类别、编码）不在服务端的格式表里。 */
-      reason: "cue_virtual" | "format_unsupported";
+      /** format_unsupported：（来源类别、编码）不在服务端的格式表里。 */
+      reason: "format_unsupported";
     };
 
 /** 判定一首曲目所需的来源事实（来自曲目详情）。 */
@@ -20,18 +20,14 @@ const formatKey = (sourceKind: string, codec: string) => `${sourceKind}\u0000${c
 export function buildCapabilityTable(formats: readonly Pick<PlaybackFormatDTO, "source_kind" | "codec">[]): CapabilityTable {
   const supported = new Set(formats.map((format) => formatKey(format.source_kind, format.codec)));
   return {
-    verdictOf: ({ sourceKind, codec }) => {
-      if (sourceKind === "cue_virtual") return { playable: false, reason: "cue_virtual" };
-      return codec !== null && supported.has(formatKey(sourceKind, codec)) ? { playable: true } : { playable: false, reason: "format_unsupported" };
-    },
+    verdictOf: ({ sourceKind, codec }) =>
+      codec !== null && supported.has(formatKey(sourceKind, codec)) ? { playable: true } : { playable: false, reason: "format_unsupported" },
   };
 }
 
 /** 不能播放的原因（给曲目行、专辑头部与队列用）。 */
 export function unplayableText(verdict: Extract<TrackVerdict, { playable: false }>): string {
   switch (verdict.reason) {
-    case "cue_virtual":
-      return "CUE 分轨曲目需要切分，目前不能播放";
     case "format_unsupported":
       return "这种格式目前不能播放";
   }

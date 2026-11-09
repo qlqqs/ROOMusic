@@ -37,7 +37,7 @@ function track(index: number, unsupported = false): TrackSummaryDTO {
     ...base,
     track_id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
     title: `合成曲目 ${index}`,
-    source: unsupported ? { ...base.source, source_kind: "cue_virtual" } : { ...base.source },
+    source: unsupported ? { ...base.source, codec: "unknown" } : { ...base.source },
   };
 }
 

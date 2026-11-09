@@ -10,7 +10,6 @@ import { usePlayerEngine } from "../player-provider";
 import styles from "./album-playback-actions.module.css";
 
 function reasonOf(track: PlayerTrack, table: ReturnType<typeof usePlaybackCapabilities>["data"]): string | null {
-  if (track.source.sourceKind === "cue_virtual") return "CUE 分轨曲目需要切分，目前不能播放";
   if (table === undefined) return "正在检查播放能力";
   const verdict = table.verdictOf(track.source);
   if (verdict.playable) return null;

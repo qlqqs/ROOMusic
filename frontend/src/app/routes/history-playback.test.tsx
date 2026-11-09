@@ -115,7 +115,7 @@ describe("历史页播放动作", () => {
 
   it("播放全部按候选顺序过滤缺失与不可播项，提示准确加入/跳过数，每次读取最新候选", async () => {
     const { api, engine, view } = await setup();
-    const items = [historyItem(3), historyItem(2, { present: false }), historyItem(1), historyItem(4, { source: { ...historyItem(4).source, source_kind: "cue_virtual" } })];
+    const items = [historyItem(3), historyItem(2, { present: false }), historyItem(1), historyItem(4, { source: { ...historyItem(4).source, codec: "unknown" } })];
     api.on("GET", "/api/v1/me/plays/queue", () => jsonResponse(200, historyQueue(items)));
     view(<HistoryPlayAll />);
     await ready("播放全部");

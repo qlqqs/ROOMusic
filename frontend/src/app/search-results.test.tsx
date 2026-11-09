@@ -163,7 +163,7 @@ describe("搜索结果页", () => {
 
   it.each(["正常", "缺失", "不可播"])("%s曲目的心形与添加歌单可用，个人操作不触发播放", async (kind) => {
     const { api, personal } = setup();
-    const item = { ...firstTrack, present: kind !== "缺失", source: { ...firstTrack.source, ...(kind === "不可播" ? { source_kind: "cue_virtual" } : {}) } };
+    const item = { ...firstTrack, present: kind !== "缺失", source: { ...firstTrack.source, ...(kind === "不可播" ? { codec: "unknown" } : {}) } };
     seedPersonalTracks(personal, [item]);
     const playlist = seedPlaylist(personal, "00000000-0000-4000-8000-000000000003", { name: "搜索收藏歌单" });
     api.on("GET", path, (request) => jsonResponse(200, paramsOf(request.path).get("type") === "artists" ? searchArtistPage({ items: [] }) : paramsOf(request.path).get("type") === "tracks" ? searchTrackPage({ items: [item] }) : albums));
