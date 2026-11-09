@@ -1,5 +1,5 @@
 import { useId } from "react";
-import { crossfadeDurations, levelingModes, type CrossfadeSeconds, type LevelingMode } from "../engine/playback-settings";
+import { crossfadeDurations, levelingModes, type CrossfadeSeconds, type LevelingMode } from "../zones/model";
 import { usePlayerEngine, usePlayerSelector } from "../player-provider";
 import styles from "./playback-settings-form.module.css";
 
@@ -25,14 +25,13 @@ function Segmented<T extends string | number>({ legend, options, value, disabled
   );
 }
 
-/** 设置 › 播放：音量均衡与交叉渐变，存在这台设备上。网页音量只读的设备（iPhone / iPad）上两项不会生效，控件禁用。 */
+/** 设置 › 播放：音量均衡与交叉渐变，作用于正在控制的播放区（服务端渲染）；还没读到播放区时禁用。 */
 export function PlaybackSettingsForm() {
   const engine = usePlayerEngine();
   const settings = usePlayerSelector((snapshot) => snapshot.settings);
-  const disabled = !usePlayerSelector((snapshot) => snapshot.volumeControllable);
+  const disabled = usePlayerSelector((snapshot) => snapshot.zone === null);
   return (
     <div className={styles.form}>
-      {disabled ? <p className={styles.note}>这台设备不能调节网页音量，这两项不会生效。</p> : null}
       <Segmented
         legend="音量均衡"
         options={levelingModes.map((mode) => ({ value: mode, label: levelingLabels[mode] }))}

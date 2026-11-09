@@ -7,13 +7,12 @@ import { createSessionController, SessionProvider, ViewerScopeProvider } from ".
 import type { TrackSummaryDTO } from "../../features/catalog";
 import type { PersonalQueueSource } from "../../features/personal";
 import { decodeFavoriteQueue, decodePlaylistQueue, type FavoriteQueueDTO, type PlaylistQueueDTO } from "../../features/personal/api/decoders";
-import { MAX_QUEUE_ENTRIES, PlayerEngine, PlayerProvider } from "../../features/player";
+import { MAX_QUEUE_ENTRIES, PlayerProvider } from "../../features/player";
 import { sampleBody } from "../../test/api-samples";
 import { deferred } from "../../test/deferred";
 import { installFakeApi, installFakeSession } from "../../test/fake-api";
-import { FakeAudio } from "../../test/fake-audio";
+import { playerHarness } from "../../test/fake-zones";
 import { jsonResponse, sampleResponse } from "../../test/http";
-import { silentPlayRecorder } from "../../test/play-recorder";
 import { playerTrack } from "../../test/player-data";
 import { PersonalPlayAll } from "./personal-playback";
 
@@ -62,52 +61,49 @@ async function setup() {
   const state = controller.getSnapshot();
   if (state.status !== "authenticated") throw new Error("会话未就绪");
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const audio = new FakeAudio();
-  let nextId = 0;
-  const engine = new PlayerEngine({
-    userId: state.viewer.id, audio,
-    loadPlayback: async (trackId) => ({ state: "ready", playback: { track_id: trackId, representation: { kind: "original", url: `/api/v1/tracks/${trackId}/audio`, mime_type: "audio/flac", codecs: null, size_bytes: 100 } } }),
-    loadRelease: async () => { throw new Error("本测试没有持久化队列"); },
-    shouldPrefetch: () => false,
-    sessionStorage: null, localStorage: null, mediaSession: null,
-    artworkUrl: (value) => value, newId: () => `entry-${++nextId}`, random: () => 0, now: Date.now, playRecorder: silentPlayRecorder,
-  });
-  const canPlay = vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue("probably");
+  const player = playerHarness();
+  const { engine } = player;
   dispose.push(() => { engine.endSession(); controller.dispose(); client.clear(); });
   const view = (children: ReactNode) => render(children, {
     wrapper: ({ children: content }) => (
       <QueryClientProvider client={client}><SessionProvider controller={controller}>
         <ViewerScopeProvider viewer={state.viewer} generation={state.generation}>
-          <PlayerProvider userId={state.viewer.id} engine={engine}>{content}</PlayerProvider>
+          <PlayerProvider userId={state.viewer.id} controller={engine}>{content}</PlayerProvider>
         </ViewerScopeProvider>
       </SessionProvider></QueryClientProvider>
     ),
   });
-  return { api, session, controller, engine, audio, canPlay, view };
+  return { api, session, controller, engine, player, view };
 }
 
-const queueIds = (engine: PlayerEngine) => engine.getSnapshot().queue.entries.map((entry) => entry.track.trackId);
+type Harness = ReturnType<typeof playerHarness>;
+const queueIds = (engine: Harness["engine"]) => engine.getSnapshot().queue.entries.map((entry) => entry.track.trackId);
 async function ready() {
   await waitFor(() => expect(screen.getByRole("button", { name: "播放全部" }).hasAttribute("disabled")).toBe(false));
 }
-async function startOldPlayback(engine: PlayerEngine, audio: FakeAudio) {
-  await act(async () => { engine.playTracks([playerTrack("旧队列甲"), playerTrack("旧队列乙")]); });
-  act(() => { audio.loadMetadata(120); audio.beginPlaying(); audio.tick(17); });
-  return { queue: engine.getSnapshot().queue, current: engine.getSnapshot().current, plays: audio.playCalls, pauses: audio.pauseCalls };
+/** 旧队列在放、位置 17 秒；记下此刻的队列、当前项、流与已发出的命令数。 */
+async function startOldPlayback(player: Harness) {
+  act(() => { player.engine.playTracks([playerTrack("旧队列甲"), playerTrack("旧队列乙")]); });
+  const audio = await player.sounding(17);
+  const snapshot = player.engine.getSnapshot();
+  return { audio, queue: snapshot.queue, current: snapshot.current, stream: snapshot.zone?.stream, commands: player.server.commands.length };
 }
-function expectOldPlayback(engine: PlayerEngine, audio: FakeAudio, before: Awaited<ReturnType<typeof startOldPlayback>>) {
-  expect(engine.getSnapshot().queue).toBe(before.queue);
-  expect(engine.getSnapshot().current).toEqual(before.current);
-  expect(engine.getSnapshot().status).toBe("playing");
-  expect(audio.currentTime).toBe(17);
-  expect(audio.playCalls).toBe(before.plays);
-  expect(audio.pauseCalls).toBe(before.pauses);
+/** 旧的播放没有被动过：没有新命令，队列、当前项与流不变，元素还在原位置出声。 */
+function expectOldPlayback(player: Harness, before: Awaited<ReturnType<typeof startOldPlayback>>) {
+  const snapshot = player.engine.getSnapshot();
+  expect(player.server.commands).toHaveLength(before.commands);
+  expect(snapshot.queue).toBe(before.queue);
+  expect(snapshot.current).toEqual(before.current);
+  expect(snapshot.zone?.stream).toBe(before.stream);
+  expect(snapshot.status).toBe("playing");
+  expect(before.audio.currentTime).toBe(17);
+  expect(before.audio.paused).toBe(false);
 }
 
-// 经真实请求层、decoder、能力表与 PlayerEngine；只替换 HTTP 和音频设备边界。
+// 经真实请求层、decoder、能力表与播放器控制器；只替换 HTTP、播放区服务端与音频设备边界。
 describe.each(sources)("$name的播放全部", ({ source, path }) => {
-  it("不预取，点击时读取最新候选并按服务端顺序一次替换队列，只有媒体事件能进入播放中", async () => {
-    const { api, engine, audio, view } = await setup();
+  it("不预取，点击时读取最新候选并按服务端顺序一次替换队列，元素出声后才是播放中", async () => {
+    const { api, engine, player, view } = await setup();
     const items = [track(9), track(2), track(7)];
     api.on("GET", path, () => jsonResponse(200, queueResponse(source, items)));
     view(<PersonalPlayAll source={source} />);
@@ -117,28 +113,25 @@ describe.each(sources)("$name的播放全部", ({ source, path }) => {
     const replace = vi.spyOn(engine, "playTracks");
     await userEvent.click(screen.getByRole("button", { name: "播放全部" }));
     expect(await screen.findByText("已选择 3 首。")).toBeTruthy();
-    expect(queueIds(engine)).toEqual(items.map((item) => item.track_id));
+    await waitFor(() => expect(queueIds(engine)).toEqual(items.map((item) => item.track_id)));
     expect(replace).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(audio.playCalls).toBe(1));
-    expect(engine.getSnapshot().status).toBe("loading");
-    act(() => audio.beginPlaying());
-    expect(engine.getSnapshot().status).toBe("playing");
+    await waitFor(() => expect(engine.getSnapshot().status).toBe("loading"));
+    await player.sounding();
     expect(engine.getSnapshot().current?.track.trackId).toBe(items[0]?.track_id);
 
     const latest = [track(4)];
     api.on("GET", path, () => jsonResponse(200, queueResponse(source, latest)));
     await userEvent.click(screen.getByRole("button", { name: "播放全部" }));
     expect(await screen.findByText("已选择 1 首。")).toBeTruthy();
-    expect(queueIds(engine)).toEqual(latest.map((item) => item.track_id));
+    await waitFor(() => expect(queueIds(engine)).toEqual(latest.map((item) => item.track_id)));
     expect(api.requestsTo("GET", path)).toHaveLength(2);
     expect(replace).toHaveBeenCalledTimes(2);
     expect(api.requestsTo("GET", path).every((request) => request.path === path && request.body === undefined)).toBe(true);
   });
 
   it("文件缺失与窗口内不支持分别计数，不混作省略数", async () => {
-    const { api, engine, canPlay, view } = await setup();
-    // 同时覆盖 CUE、服务端不交付和浏览器不能解码三种能力拒绝。
-    canPlay.mockImplementation((mime) => mime.includes("mpeg") ? "" : "probably");
+    const { api, engine, view } = await setup();
+    // 同时覆盖 CUE 与服务端格式表里没有两种拒绝；可播与否与浏览器无关，MP3 照常放。
     const mp3 = track(3);
     mp3.source = { ...mp3.source, source_kind: "mp3_id3v2", codec: "mp3" };
     const unknown = track(4);
@@ -148,8 +141,8 @@ describe.each(sources)("$name的播放全部", ({ source, path }) => {
     view(<PersonalPlayAll source={source} />);
     await ready();
     await userEvent.click(screen.getByRole("button", { name: "播放全部" }));
-    expect(await screen.findByText("已选择 2 首。跳过了4 首文件缺失、3 首不能在这里播放。")).toBeTruthy();
-    expect(queueIds(engine)).toEqual([track(5).track_id, track(1).track_id]);
+    expect(await screen.findByText("已选择 3 首。跳过了4 首文件缺失、2 首不能在这里播放。")).toBeTruthy();
+    await waitFor(() => expect(queueIds(engine)).toEqual([track(5).track_id, mp3.track_id, track(1).track_id]));
     expect(screen.getByRole("status").textContent).not.toContain("超出");
   });
 
@@ -164,7 +157,7 @@ describe.each(sources)("$name的播放全部", ({ source, path }) => {
     await userEvent.click(screen.getByRole("button", { name: "播放全部" }));
     expect(await screen.findByText("已选择 10,000 首。")).toBeTruthy();
     expect(engine.getSnapshot().queue).not.toBe(before);
-    expect(queueIds(engine)).toEqual(items.map((item) => item.track_id));
+    await waitFor(() => expect(queueIds(engine)).toEqual(items.map((item) => item.track_id)));
     expect(engine.getSnapshot().queue.entries).toHaveLength(10_000);
     expect(screen.getByRole("status").textContent).not.toContain("队列已满");
   });
@@ -179,7 +172,7 @@ describe.each(sources)("$name的播放全部", ({ source, path }) => {
     const requestsBefore = api.requests.length;
     await userEvent.click(screen.getByRole("button", { name: "播放全部" }));
     expect(await screen.findByText("已选择 9,998 首。跳过了3 首文件缺失、2 首不能在这里播放。另有 7 首超出 10,000 首的上限，这次没有放进来。")).toBeTruthy();
-    expect(queueIds(engine)).toEqual(items.slice(1, -1).map((item) => item.track_id));
+    await waitFor(() => expect(queueIds(engine)).toEqual(items.slice(1, -1).map((item) => item.track_id)));
     expect(api.requests.slice(requestsBefore).map((request) => request.path)).toEqual([path]);
   });
 
@@ -189,31 +182,31 @@ describe.each(sources)("$name的播放全部", ({ source, path }) => {
     { name: "全部不支持", items: [track(1, true), track(2, true)], missing: 0, message: "没有能播放的曲目，队列没有变。跳过了2 首不能在这里播放。" },
     { name: "缺失加不支持", items: [track(1, true)], missing: 2, message: "没有能播放的曲目，队列没有变。跳过了2 首文件缺失、1 首不能在这里播放。" },
   ])("$name时提示准确且旧队列、当前项和真实播放进度不变", async ({ items, missing, message }) => {
-    const { api, engine, audio, view } = await setup();
+    const { api, player, view } = await setup();
     api.on("GET", path, () => jsonResponse(200, queueResponse(source, items, missing)));
     view(<PersonalPlayAll source={source} />);
-    const before = await startOldPlayback(engine, audio);
+    const before = await startOldPlayback(player);
     await ready();
     await userEvent.click(screen.getByRole("button", { name: "播放全部" }));
     expect(await screen.findByText(message)).toBeTruthy();
-    expectOldPlayback(engine, audio, before);
+    expectOldPlayback(player, before);
   });
 
   it("整个一万首窗口都不支持时不会拿省略的曲目补位，也不清空旧队列", async () => {
-    const { api, engine, audio, view } = await setup();
+    const { api, player, view } = await setup();
     const items = Array.from({ length: 10_000 }, (_, index) => track(index + 1, true));
     api.on("GET", path, () => jsonResponse(200, queueResponse(source, items, 2, 1)));
     view(<PersonalPlayAll source={source} />);
-    const before = await startOldPlayback(engine, audio);
+    const before = await startOldPlayback(player);
     await ready();
     await userEvent.click(screen.getByRole("button", { name: "播放全部" }));
     expect(await screen.findByText("没有能播放的曲目，队列没有变。跳过了2 首文件缺失、10,000 首不能在这里播放。另有 1 首超出 10,000 首的上限，这次没有放进来。")).toBeTruthy();
-    expectOldPlayback(engine, audio, before);
+    expectOldPlayback(player, before);
     expect(api.requestsTo("GET", path)).toHaveLength(1);
   });
 
   it.each(["服务端错误", "网络中断", "损坏响应", "超出窗口"])("%s不改变旧队列，可以重新读取后重试", async (failure) => {
-    const { api, engine, audio, view } = await setup();
+    const { api, engine, player, view } = await setup();
     api.on("GET", path, () => {
       if (failure === "网络中断") throw new TypeError("合成网络中断");
       if (failure === "服务端错误") return sampleResponse("errors/personal-database-unavailable");
@@ -221,34 +214,34 @@ describe.each(sources)("$name的播放全部", ({ source, path }) => {
       return jsonResponse(200, { ...queueResponse(source, [track(1)]), returned_count: 2 });
     });
     view(<PersonalPlayAll source={source} />);
-    const before = await startOldPlayback(engine, audio);
+    const before = await startOldPlayback(player);
     await ready();
     await userEvent.click(screen.getByRole("button", { name: "播放全部" }));
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(screen.getByText("没能读取曲目")).toBeTruthy();
-    expectOldPlayback(engine, audio, before);
+    expectOldPlayback(player, before);
     expect(api.requestsTo("GET", path)).toHaveLength(1);
     api.on("GET", path, () => jsonResponse(200, queueResponse(source, [track(8)])));
     await userEvent.click(screen.getByRole("button", { name: "重试" }));
     expect(await screen.findByText("已选择 1 首。")).toBeTruthy();
-    expect(queueIds(engine)).toEqual([track(8).track_id]);
+    await waitFor(() => expect(queueIds(engine)).toEqual([track(8).track_id]));
     expect(screen.queryByRole("alert")).toBeNull();
     expect(api.requestsTo("GET", path)).toHaveLength(2);
   });
 
   it("读取期间重复点击被忽略，旧播放不变，到达后只替换一次", async () => {
-    const { api, engine, audio, view } = await setup();
+    const { api, engine, player, view } = await setup();
     const pending = deferred<Response>();
     api.on("GET", path, () => pending.promise);
     view(<PersonalPlayAll source={source} />);
-    const before = await startOldPlayback(engine, audio);
+    const before = await startOldPlayback(player);
     const replace = vi.spyOn(engine, "playTracks");
     await ready();
     await userEvent.click(screen.getByRole("button", { name: "播放全部" }));
     const busy = await screen.findByRole("button", { name: "正在读取…" });
     await userEvent.click(busy);
     expect(api.requestsTo("GET", path)).toHaveLength(1);
-    expectOldPlayback(engine, audio, before);
+    expectOldPlayback(player, before);
     expect(replace).not.toHaveBeenCalled();
     await act(async () => pending.resolve(jsonResponse(200, queueResponse(source, [track(3)]))));
     expect(await screen.findByText("已选择 1 首。")).toBeTruthy();
@@ -256,12 +249,13 @@ describe.each(sources)("$name的播放全部", ({ source, path }) => {
   });
 
   it("能力表未就绪或失败时不读候选，重试能力检查后才允许播放", async () => {
-    const { api, engine, view } = await setup();
+    const { api, engine, player, view } = await setup();
     const formats = deferred<Response>();
     api.on("GET", "/api/v1/playback/formats", () => formats.promise);
     api.on("GET", path, () => jsonResponse(200, queueResponse(source, [track(1)])));
     view(<PersonalPlayAll source={source} />);
     act(() => { engine.enqueue([playerTrack("旧曲目")]); });
+    await player.queued(1);
     const before = engine.getSnapshot().queue;
     expect(screen.getByRole("button", { name: "播放全部" }).hasAttribute("disabled")).toBe(true);
     await userEvent.click(screen.getByRole("button", { name: "播放全部" }));
@@ -279,11 +273,12 @@ describe.each(sources)("$name的播放全部", ({ source, path }) => {
   });
 
   it.each(["换账号", "退出", "同账号重新登录"])("读取期间%s，迟到成功不能再次入队或公告成功", async (change) => {
-    const { api, session, controller, engine, view } = await setup();
+    const { api, session, controller, engine, player, view } = await setup();
     const pending = deferred<Response>();
     api.on("GET", path, () => pending.promise);
     view(<PersonalPlayAll source={source} />);
     act(() => { engine.enqueue([playerTrack("旧曲目")]); });
+    await player.queued(1);
     const replace = vi.spyOn(engine, "playTracks");
     await ready();
     await userEvent.click(screen.getByRole("button", { name: "播放全部" }));
@@ -307,11 +302,11 @@ describe.each(sources)("$name的播放全部", ({ source, path }) => {
   });
 
   it("离开当前页面后迟到候选不替换仍在播放的队列", async () => {
-    const { api, engine, audio, view } = await setup();
+    const { api, engine, player, view } = await setup();
     const pending = deferred<Response>();
     api.on("GET", path, () => pending.promise);
     const rendered = view(<PersonalPlayAll source={source} />);
-    const before = await startOldPlayback(engine, audio);
+    const before = await startOldPlayback(player);
     await ready();
     await userEvent.click(screen.getByRole("button", { name: "播放全部" }));
     // 只卸载页面按钮，保留外壳中的 PlayerProvider，模拟播放中离开收藏或歌单页。
@@ -320,7 +315,7 @@ describe.each(sources)("$name的播放全部", ({ source, path }) => {
     const replace = vi.spyOn(engine, "playTracks");
     await act(async () => pending.resolve(jsonResponse(200, queueResponse(source, [track(1)]))));
     expect(afterUnmount).toBe(before.queue);
-    expectOldPlayback(engine, audio, before);
+    expectOldPlayback(player, before);
     expect(replace).not.toHaveBeenCalled();
   });
 });

@@ -7,7 +7,7 @@ import { playerKeys } from "../query-keys";
 const UNFINISHED_STALE_MS = 5 * 60_000;
 
 /**
- * 一首曲目的音频分析查询：完成的结果会话内不过期，还没完成或失败的 5 分钟后再读。波形组件与引擎（均衡、交叉渐变）共用这份缓存。
+ * 一首曲目的音频分析查询：完成的结果会话内不过期，还没完成或失败的 5 分钟后再读。波形组件与信号路径共用这份缓存。
  * 读取失败不重试：一律按“没有分析结果”处理，不提示用户。
  */
 export function trackAnalysisQuery(generation: number, trackId: string) {

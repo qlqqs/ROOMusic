@@ -1,15 +1,15 @@
-// 系统媒体键与“正在播放”信息的绑定：把引擎的命令登记成媒体键的处理，把当前条目、播放状态与位置告诉系统。
-// 何时同步由引擎决定（只在挂载期间）；这里只负责翻译与位置上报的节流。
-import type { MediaSessionActionName, MediaSessionPort } from "./media-session";
-import type { PlayerStatus } from "./player-engine";
-import type { QueueEntry } from "./queue";
+// 系统媒体键与“正在播放”信息的绑定：把本机播放区的命令登记成媒体键的处理，把正在出声的曲目、播放状态与位置告诉系统。
+// 何时同步由输出端决定（按渲染流的分段在曲目边界换信息）；这里只负责翻译与位置上报的节流。
+import type { MediaSessionActionName, MediaSessionPort } from "../engine/media-session";
+import type { PlayerTrack } from "../engine/queue";
+import type { PlayerStatus } from "../zones/model";
 
 const POSITION_STATE_INTERVAL_MS = 1_000;
 const SEEK_STEP_SECONDS = 10;
 
 const mediaSessionActions: readonly MediaSessionActionName[] = ["play", "pause", "previoustrack", "nexttrack", "stop", "seekto", "seekbackward", "seekforward"];
 
-/** 媒体键对应的引擎命令；position 给快退、快进读取当前位置（秒）。 */
+/** 媒体键对应的本机播放区命令；position 给快退、快进读取曲目内的当前位置（秒）。 */
 export type MediaSessionCommands = {
   play: () => void;
   pause: () => void;
@@ -62,14 +62,13 @@ export class MediaSessionBinding {
     session.setPlaybackState("none");
   }
 
-  /** 当前条目变化之后：换掉系统里的曲目信息，并清掉旧曲目的位置。 */
-  showEntry(current: QueueEntry | null): void {
+  /** 正在出声的曲目变化之后：换掉系统里的曲目信息，并清掉旧曲目的位置。 */
+  showTrack(track: PlayerTrack | null): void {
     const session = this.session;
     if (session === null) return;
-    if (current === null) {
+    if (track === null) {
       session.setMetadata(null);
     } else {
-      const { track } = current;
       session.setMetadata({
         title: track.title,
         artist: track.artist,
@@ -96,7 +95,7 @@ export class MediaSessionBinding {
   }
 }
 
-/** 系统只区分没有、暂停与播放：缓冲仍算播放，加载与准备算暂停。 */
+/** 系统只区分没有、暂停与播放：缓冲仍算播放，加载算暂停。 */
 function playbackStateOf(status: PlayerStatus): "none" | "paused" | "playing" {
   switch (status) {
     case "idle":
@@ -105,7 +104,6 @@ function playbackStateOf(status: PlayerStatus): "none" | "paused" | "playing" {
     case "buffering":
       return "playing";
     case "loading":
-    case "preparing":
     case "paused":
       return "paused";
     default: {

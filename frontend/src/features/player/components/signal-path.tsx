@@ -2,9 +2,9 @@ import { AppWindow, AudioLines, FileAudio, Server, Speaker, X, type LucideIcon }
 import { Fragment, useId, useState, type CSSProperties, type ReactNode } from "react";
 import { Button, ModalDialog, useTooltip } from "../../../shared/ui";
 import type { SourceFacts } from "../engine/queue";
-import { usePlaybackCapabilities } from "../hooks/use-playback-capabilities";
 import { useTrackAnalysis } from "../hooks/use-track-analysis";
 import { usePlayerSelector } from "../player-provider";
+import type { ZoneStream } from "../zones/model";
 import styles from "./signal-path.module.css";
 
 type Quality = "lossless" | "lossy" | "unknown";
@@ -25,8 +25,9 @@ function codecName(codec: string): string {
   return codecNames.get(codec.toLowerCase()) ?? codec.toUpperCase();
 }
 
-/** 整体质量只看源编码。 */
-function qualityOf(source: SourceFacts | undefined): Quality {
+/** 整体质量：渲染流是省流量档时是有损，否则看源编码。 */
+function qualityOf(source: SourceFacts | undefined, stream: ZoneStream | null): Quality {
+  if (stream?.quality === "lossy") return "lossy";
   const codec = source?.codec?.toLowerCase();
   if (codec === undefined) return "unknown";
   if (losslessCodecs.has(codec)) return "lossless";
@@ -48,11 +49,13 @@ function sourceLine(source: SourceFacts | undefined, quality: Quality): string {
   return line === "" ? "未知格式" : line;
 }
 
-/** 增益：一位小数，总带正负号（负号用 −），0 写 0.0 dB。 */
-function formatGain(db: number): string {
-  const rounded = Math.round(db * 10) / 10;
-  if (rounded === 0) return "0.0 dB";
-  return `${rounded > 0 ? "+" : "−"}${Math.abs(rounded).toFixed(1)} dB`;
+/** 服务端一行：渲染流的“编码 采样率 位深 声道”；没有在放的流时写“未在播放”，还不知道格式时写“未知格式”。 */
+function streamLine(stream: ZoneStream | null): string {
+  if (stream === null) return "未在播放";
+  const { format } = stream;
+  if (format === null) return "未知格式";
+  const parts = [codecName(format.codec), format.sampleRate > 0 ? `${format.sampleRate / 1000}kHz` : null, format.bitDepth === null ? null : `${format.bitDepth}bit`, format.channels > 0 ? `${format.channels}ch` : null];
+  return parts.filter((part) => part !== null).join(" ");
 }
 
 /** 响度数值：一位小数，负号用 −，0 写 0.0。 */
@@ -76,25 +79,20 @@ function useLoudnessLine(): ReactNode[] | null {
   return parts.map((part, index) => <Fragment key={part}>{index > 0 && " "}<span className={styles.nowrap}>{part}{index < parts.length - 1 && " ·"}</span></Fragment>);
 }
 
-/** 浏览器一行：解码；接入了音频图时加上实际施加的均衡增益，交叉渐变开着时加上时长。 */
-function useBrowserLine(): string {
-  const leveling = usePlayerSelector((snapshot) => snapshot.leveling);
-  const crossfade = usePlayerSelector((snapshot) => (snapshot.settings.crossfade && snapshot.audioRoute === "web_audio" ? snapshot.settings.crossfadeSeconds : null));
-  const parts = ["解码"];
-  if (leveling !== null) parts.push(`音量均衡 ${formatGain(leveling.gainDb)}`);
-  if (crossfade !== null) parts.push(`交叉渐变 ${crossfade} 秒`);
-  return parts.join(" · ");
-}
-
-/** 当前曲目的质量，播放栏与全屏底栏的圆点共用。 */
+/** 当前曲目的来源事实，播放栏与全屏底栏的圆点共用。 */
 function useCurrentSource(): SourceFacts | undefined {
   return usePlayerSelector((snapshot) => snapshot.current?.track.source);
+}
+
+/** 正在控制的播放区的当前渲染流。 */
+function useCurrentStream(): ZoneStream | null {
+  return usePlayerSelector((snapshot) => snapshot.zone?.stream ?? null);
 }
 
 /** 信号路径圆点：无损金色实心、有损灰色实心、未知空心；名称里写明质量，不只靠颜色。点开是信号路径弹层。 */
 export function SignalPathButton() {
   const source = useCurrentSource();
-  const quality = qualityOf(source);
+  const quality = qualityOf(source, useCurrentStream());
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const tip = useTooltip(titles[quality]);
   return <>
@@ -112,19 +110,14 @@ type Layer = { name: string; icon: LucideIcon; value: ReactNode };
 function SignalPathDialog({ anchor, onClose }: { anchor: DOMRect | null; onClose: () => void }) {
   const titleId = useId();
   const source = useCurrentSource();
-  const capabilities = usePlaybackCapabilities();
-  const quality = qualityOf(source);
-  const table = capabilities.data;
-  // 格式表还没取到时不替 ALAC 曲目说“原文件直出”。
-  const delivery = source !== undefined && table === undefined && capabilities.isPending ? "pending" : source === undefined || table === undefined ? "original" : (table.deliveryOf({ sourceKind: source.sourceKind, codec: source.codec }) ?? "original");
-  const server = delivery === "pending" ? "读取中" : delivery === "derived" ? `${source === undefined || source.codec === null ? "ALAC" : codecName(source.codec)} → FLAC` : "原文件直出";
+  const stream = useCurrentStream();
+  const quality = qualityOf(source, stream);
   const loudness = useLoudnessLine();
-  const browser = useBrowserLine();
   const layers: Layer[] = [
     { name: "数据源", icon: FileAudio, value: sourceLine(source, quality) },
     ...(loudness === null ? [] : [{ name: "响度", icon: AudioLines, value: loudness }]),
-    { name: "服务端", icon: Server, value: server },
-    { name: "浏览器", icon: AppWindow, value: browser },
+    { name: "服务端", icon: Server, value: streamLine(stream) },
+    { name: "浏览器", icon: AppWindow, value: "解码" },
     { name: "系统输出", icon: Speaker, value: "系统默认输出" },
   ];
   const position = anchor === null ? undefined : ({ "--anchor-x": `${anchor.left + anchor.width / 2}px`, "--anchor-top": `${anchor.top}px` } as CSSProperties);

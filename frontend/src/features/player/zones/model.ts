@@ -1,0 +1,119 @@
+// 播放区协议 v1 在浏览器里的形状（合同 §2）：解码器把服务端的 JSON 换成这里的类型，界面与输出端只认这些类型。
+// 时间都换成本地可比较的毫秒数（服务端时钟，用时钟偏移换算）；队列曲目换成 PlayerTrack。
+import type { PlayMode, PlayerTrack, QueueEntry } from "../engine/queue";
+
+export const levelingModes = ["off", "auto", "track", "album"] as const;
+export type LevelingMode = (typeof levelingModes)[number];
+
+export const crossfadeDurations = [3, 5, 8, 12] as const;
+export type CrossfadeSeconds = (typeof crossfadeDurations)[number];
+
+export const streamQualities = ["lossless", "lossy"] as const;
+export type StreamQuality = (typeof streamQualities)[number];
+
+/** 播放区的播放设置（服务端持有，作用于渲染流）。 */
+export type PlaybackSettings = {
+  leveling: LevelingMode;
+  gapless: boolean;
+  crossfade: boolean;
+  crossfadeSeconds: CrossfadeSeconds;
+  quality: StreamQuality;
+  headroom: { enabled: boolean; db: number; clipIndicator: boolean };
+};
+
+/** 曲目不能播放的原因；界面按它选文案。服务端以后增加的原因按“音频文件无法读取”显示。 */
+export const playbackFailureReasons = ["not_found", "root_disabled", "unsupported_format", "source_unavailable", "source_changed", "decode_failed"] as const;
+export type PlaybackFailureReason = (typeof playbackFailureReasons)[number];
+
+/** 输出端回报的播放状态；服务端开新流时先置为 loading。 */
+export type PlayerStatus = "idle" | "loading" | "playing" | "paused" | "buffering";
+
+/** 停在暂停的几种故障：渲染器暂时不可用（可重试）、浏览器拒绝自动播放、这台设备放不了服务器给的格式。 */
+export type PlayerFault = { kind: "transient" } | { kind: "autoplay_blocked" } | { kind: "no_stream_format" };
+
+/** 值得向读屏公告的播放区事件。seq 取产生事件时的 revision，界面据此只公告一次。 */
+export type PlayerEvent =
+  | { seq: number; kind: "track_started"; entryId: string }
+  | { seq: number; kind: "track_failed"; entryId: string; reason: PlaybackFailureReason }
+  | { seq: number; kind: "all_failed" }
+  | { seq: number; kind: "failures_stopped" }
+  | { seq: number; kind: "transient_failure" }
+  | { seq: number; kind: "autoplay_blocked" }
+  | { seq: number; kind: "no_stream_format" }
+  | { seq: number; kind: "queue_restored"; restored: number; dropped: number }
+  | { seq: number; kind: "play_recorded"; trackId: string };
+
+/** 渲染流里的一段曲目：从流内 streamStartSeconds 起是这首的 trackStartSeconds 秒。 */
+export type StreamSegment = { entryId: string; track: PlayerTrack; streamStartSeconds: number; trackStartSeconds: number };
+
+export type ZoneStream = {
+  seq: number;
+  url: string;
+  mimeType: string;
+  quality: StreamQuality;
+  /** 渲染会话确定首曲后给出；起始条目打不开的空流是 null（还不知道格式）。 */
+  format: { codec: string; sampleRate: number; bitDepth: number | null; channels: number } | null;
+  segments: readonly StreamSegment[];
+};
+
+export type Zone = {
+  zoneId: string;
+  deviceId: string;
+  revision: number;
+  queueRevision: number;
+  queueLength: number;
+  mode: PlayMode;
+  settings: PlaybackSettings;
+  current: QueueEntry | null;
+  hasNext: boolean;
+  intent: "play" | "pause";
+  status: PlayerStatus;
+  fault: PlayerFault | null;
+  failures: Readonly<Record<string, PlaybackFailureReason>>;
+  /** 曲目内位置；at 是服务端时钟的毫秒数。 */
+  position: { seconds: number; at: number; durationSeconds: number | null; seekable: boolean };
+  stream: ZoneStream | null;
+  nextStream: ZoneStream | null;
+  /** 意图变为暂停的时刻（服务端时钟毫秒）；播放中为 null。 */
+  pausedAt: number | null;
+  /** 信号路径，结构归算法线（dsp-pipeline P11）。 */
+  signal: unknown;
+  event: PlayerEvent | null;
+};
+
+export type Device = {
+  deviceId: string;
+  zoneId: string;
+  name: string;
+  kind: string;
+  online: boolean;
+  lastSeenAt: number;
+  volume: number;
+  muted: boolean;
+  /** 能由软件调音量（能力 volume 不是 fixed）。 */
+  volumeControllable: boolean;
+  outputSessionId: string | null;
+};
+
+export type Snapshot = { serverTime: number; devices: readonly Device[]; zones: readonly Zone[] };
+
+/** 队列变化（合同 §2.4）；服务端以后增加的种类按 reload 处理。 */
+export type QueueChange = { queueRevision: number } & (
+  | { kind: "replace"; entries: readonly QueueEntry[] }
+  | { kind: "reload" }
+  | { kind: "insert"; index: number; entries: readonly QueueEntry[] }
+  | { kind: "remove"; entryId: string }
+  | { kind: "move"; entryId: string; delta: -1 | 1 }
+  | { kind: "clear" }
+);
+
+export type ZoneQueue = { zoneId: string; queueRevision: number; entries: readonly QueueEntry[] };
+
+/** 输出端认领时声明的能力（合同 §2.6）。 */
+export type Capabilities = {
+  stream_formats: { codec: string; mime_type: string; lossless: boolean; max_sample_rate: number | null; max_bit_depth: number | null }[];
+  max_channels: number;
+  dsd: "none" | "dop" | "native";
+  exclusive: boolean;
+  volume: "number" | "fixed";
+};

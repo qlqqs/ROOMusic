@@ -3,7 +3,7 @@ import { ChevronDown, Disc3 } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import { Button, ModalDialog, useTooltip } from "../../../shared/ui";
 import { ArtistNames, artworkPath } from "../../catalog";
-import { isPlaybackActive } from "../engine/player-engine";
+import { isPlaybackActive } from "../zones/controller";
 import type { PlayerTrack } from "../engine/queue";
 import { fullscreenOrigin, useFullscreenPlayer } from "../hooks/use-fullscreen-player";
 import { usePlayerSelector } from "../player-provider";

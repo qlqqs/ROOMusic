@@ -1,5 +1,4 @@
 .form { display: grid; gap: var(--space-6); justify-items: start; max-width: 480px; }
-.note { font-size: var(--fs-13); color: var(--text-secondary); }
 .field { display: grid; gap: var(--space-2); min-width: 0; margin: 0; padding: 0; border: 0; }
 .field:disabled { opacity: 0.45; }
 .legend { padding: 0; font-size: var(--fs-13); font-weight: 600; }

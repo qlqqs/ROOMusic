@@ -12,7 +12,7 @@ import {
 import { decodeFavoriteArtistsPage } from "../features/personal/api/decoders";
 import { decodeArtistResults } from "../features/search/api/decoders";
 import { describe, expect, it } from "vitest";
-import { decodePlaybackFormats, decodeTrackAnalysis, decodeTrackLyrics, decodeTrackPlayback, decodeTrackPreparing } from "../features/player/api/decoders";
+import { decodePlaybackFormats, decodeTrackAnalysis, decodeTrackLyrics } from "../features/player/api/decoders";
 import { decodeLoggedOut, decodePasswordChanged, decodeSetupStatus, decodeViewer } from "../features/auth/api/decoders";
 import {
   decodeRecentlyAdded,
@@ -97,6 +97,9 @@ const decodeLegacyReleasePage = d.defineDecoder(d.object({
   items: d.array(releaseSummaryDecoder, { max: 100 }),
   pagination: d.object({ page: d.integer({ min: 1 }), page_size: d.integer({ min: 1, max: 100 }), total: d.integer({ min: 0 }) }),
 }));
+
+// 浏览器直出时代的预检：升级时已打开的旧标签页还在用，新前端不再消费（design.md §8，下一个版本删除），样本原样放行。
+const retiredByZones = (input: unknown) => input;
 
 const successContracts: Record<string, Contract> = {
   // I1/I2/I4/I6：独立 adjudication recorder 的正式真实样本，不复用合成响应。
@@ -282,10 +285,11 @@ const successContracts: Record<string, Contract> = {
   "search/tracks-performer-match": { status: 200, decode: decodeTrackResults },
   "search/tracks-producer-match": { status: 200, decode: decodeTrackResults },
   "search/tracks": { status: 200, decode: decodeTrackResults },
-  "playback/formats": { status: 200, decode: decodePlaybackFormats },
-  "tracks/playback": { status: 200, decode: decodeTrackPlayback },
-  "tracks/playback-derived": { status: 200, decode: decodeTrackPlayback },
-  "tracks/playback-preparing": { status: 202, decode: decodeTrackPreparing },
+  // 格式表只取来源类别与编码（可播判定），交付方式与媒体类型不再使用。
+  "playback/formats": { status: 200, decode: decodePlaybackFormats, preservesWireShape: false },
+  "tracks/playback": { status: 200, decode: retiredByZones },
+  "tracks/playback-derived": { status: 200, decode: retiredByZones },
+  "tracks/playback-preparing": { status: 202, decode: retiredByZones },
   // 曲目分析 decoder 是播放器 DTO 投影（字段名转换、base64 转 Uint8Array），不保留 wire 形状；这里仍调用生产 decoder 验证样本可解码。
   "tracks/analysis-done": { status: 200, decode: decodeTrackAnalysis, preservesWireShape: false },
   "tracks/analysis-failed": { status: 200, decode: decodeTrackAnalysis, preservesWireShape: false },

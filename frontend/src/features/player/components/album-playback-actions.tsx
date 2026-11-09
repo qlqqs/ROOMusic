@@ -14,7 +14,7 @@ function reasonOf(track: PlayerTrack, table: ReturnType<typeof usePlaybackCapabi
   if (table === undefined) return "正在检查播放能力";
   const verdict = table.verdictOf(track.source);
   if (verdict.playable) return null;
-  return unplayableText(verdict, track.source.codec);
+  return unplayableText(verdict);
 }
 
 export function AlbumPlaybackActions({ release, groupId }: { release: ReleaseDetailDTO; groupId: string }) {

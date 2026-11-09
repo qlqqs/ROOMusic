@@ -1,54 +1,36 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useSyncExternalStore } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sampleBody } from "../../../test/api-samples";
-import { FakeAudio } from "../../../test/fake-audio";
-import { silentPlayRecorder } from "../../../test/play-recorder";
 import { playerTrack } from "../../../test/player-data";
-import { decodePlaybackFormats, decodeTrackAnalysis, type TrackAnalysisDTO } from "../api/decoders";
-import { buildCapabilityTable, type CapabilityTable } from "../engine/capability";
-import { PlayerEngine, type PlayerSnapshot } from "../engine/player-engine";
+import { decodeTrackAnalysis, type TrackAnalysisDTO } from "../api/decoders";
 import type { SourceFacts } from "../engine/queue";
+import type { PlayerSnapshot } from "../zones/controller";
+import type { ZoneStream } from "../zones/model";
 import { SignalPathButton } from "./signal-path";
 
 vi.mock("../player-provider", () => ({
   usePlayerSelector: function useTestPlayerSelector<T>(select: (snapshot: PlayerSnapshot) => T) {
-    return useSyncExternalStore(engine.subscribe, () => select(engine.getSnapshot()));
+    return select(snapshot);
   },
-}));
-vi.mock("../hooks/use-playback-capabilities", () => ({
-  usePlaybackCapabilities: () => ({ data: capabilitiesPending ? undefined : table, isPending: capabilitiesPending }),
 }));
 vi.mock("../hooks/use-track-analysis", () => ({ useTrackAnalysis: () => analysis }));
 
-let engine: PlayerEngine;
-let table: CapabilityTable;
-let capabilitiesPending = false;
+let snapshot: PlayerSnapshot;
 let analysis: TrackAnalysisDTO["analysis"] = null;
 
-beforeEach(async () => {
+beforeEach(() => {
   analysis = null;
-  capabilitiesPending = false;
-  // 交付方式取自后端样本，仅将浏览器能力探针设为支持。
-  table = await buildCapabilityTable(decodePlaybackFormats(sampleBody("playback/formats")).items, { canPlayType: () => "probably" });
-  engine = new PlayerEngine({
-    userId: "test-user", audio: new FakeAudio(),
-    loadPlayback: async () => { throw new Error("信号路径展示不应发起播放"); },
-    loadRelease: async () => { throw new Error("没有保存的队列"); },
-    shouldPrefetch: () => false,
-    sessionStorage: null, localStorage: null, mediaSession: null,
-    artworkUrl: (id) => id, newId: () => "entry-1", random: () => 0, now: () => 0,
-    playRecorder: silentPlayRecorder,
-  });
 });
-afterEach(() => engine.endSession());
 
-function viewSource(codec: string, sourceKind: string) {
+/** 只给信号路径用到的字段：当前曲目与正在控制的播放区的渲染流。 */
+function viewSource(codec: string, sourceKind: string, stream: ZoneStream | null = null) {
   const source: SourceFacts = { sourceKind, codec, bitDepth: 24, sampleRate: 48000, channels: 2, bitrate: 320 };
-  engine.enqueue([playerTrack("1", { source })]);
+  snapshot = { current: { entryId: "entry-1", track: playerTrack("1", { source }) }, zone: { stream } } as unknown as PlayerSnapshot;
   return render(<SignalPathButton />);
 }
+
+const flacStream: ZoneStream = { seq: 1, url: "/api/v1/me/playback/zones/z/streams/1", mimeType: "audio/flac", quality: "lossless", format: { codec: "flac", sampleRate: 48000, bitDepth: 24, channels: 2 }, segments: [] };
 
 describe("信号路径编码与质量", () => {
   it.each([
@@ -56,9 +38,9 @@ describe("信号路径编码与质量", () => {
     ["wavpack", "wavpack_apev2", "WavPack", "无损", "lossless", "WavPack 48kHz 24bit 2ch"],
     ["aiff", "aiff_id3", "AIFF", "无损", "lossless", "AIFF 48kHz 24bit 2ch"],
     ["wavpack_hybrid", "wavpack_apev2", "WavPack", "有损", "lossy", "WavPack 320kbps 48kHz 2ch"],
-  ])("%s 按源编码判定质量，两行使用短名且只在服务端标记派生", async (codec, sourceKind, name, quality, dotQuality, sourceLine) => {
+  ])("%s 按源编码判定质量，数据源用短名，服务端一行是渲染流的格式", async (codec, sourceKind, _name, quality, dotQuality, sourceLine) => {
     const user = userEvent.setup();
-    viewSource(codec, sourceKind);
+    viewSource(codec, sourceKind, flacStream);
     const title = `信号路径：${quality}`;
     const trigger = screen.getByRole("button", { name: title });
     expect(trigger.dataset.quality).toBe(dotQuality);
@@ -66,7 +48,7 @@ describe("信号路径编码与质量", () => {
     const dialog = screen.getByRole("dialog", { name: title });
     expect(within(dialog).getAllByRole("listitem").map((row) => row.textContent)).toEqual([
       `数据源${sourceLine}`,
-      `服务端${name} → FLAC`,
+      "服务端FLAC 48kHz 24bit 2ch",
       "浏览器解码",
       "系统输出系统默认输出",
     ]);
@@ -100,14 +82,15 @@ describe("信号路径编码与质量", () => {
     expect(within(dialog).getByText(`${codec.toUpperCase()} 48kHz 24bit 2ch`)).toBeTruthy();
   });
 
-  it("新格式在格式表尚未取得时显示读取中，不冒称原文件直出", async () => {
+  it("没有在放的流时服务端一行写未在播放；省流量档时整体是有损", async () => {
     const user = userEvent.setup();
-    capabilitiesPending = true;
-    viewSource("wavpack", "wavpack_apev2");
+    const view = viewSource("flac", "flac_vorbis_comment");
     await user.click(screen.getByRole("button", { name: "信号路径：无损" }));
-    const dialog = screen.getByRole("dialog", { name: "信号路径：无损" });
-    expect(within(dialog).getByText("读取中")).toBeTruthy();
-    expect(within(dialog).queryByText("原文件直出")).toBeNull();
+    expect(within(screen.getByRole("dialog", { name: "信号路径：无损" })).getByText("未在播放")).toBeTruthy();
+    view.unmount();
+    viewSource("flac", "flac_vorbis_comment", { ...flacStream, quality: "lossy", mimeType: 'audio/ogg; codecs="opus"', format: { codec: "opus", sampleRate: 48000, bitDepth: null, channels: 2 } });
+    await user.click(screen.getByRole("button", { name: "信号路径：有损" }));
+    expect(within(screen.getByRole("dialog", { name: "信号路径：有损" })).getByText("OPUS 48kHz 2ch")).toBeTruthy();
   });
 });
 
@@ -127,7 +110,7 @@ describe("信号路径响度", () => {
     expect(within(dialog).getAllByRole("listitem").map((row) => row.textContent)).toEqual([
       "数据源FLAC 48kHz 24bit 2ch",
       "响度−14.2 LUFS · 范围 6.3 LU · 峰值 −0.8 dBTP",
-      "服务端原文件直出",
+      "服务端未在播放",
       "浏览器解码",
       "系统输出系统默认输出",
     ]);

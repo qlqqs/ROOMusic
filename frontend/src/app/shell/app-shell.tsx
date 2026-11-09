@@ -32,9 +32,8 @@ function isEditableTarget(target: EventTarget | null): boolean {
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const { viewer } = useViewerScope();
-  // 只订阅“播放栏要不要显示”：外壳不随播放状态、音量等每次变化重绘。队列为空但有可重试的故障（例如恢复队列时暂时读取失败）时，
-  // 播放栏仍然显示，重试入口不会消失。
-  const hasPlayer = usePlayerSelector((snapshot) => snapshot.queue.entries.length > 0 || snapshot.fault?.kind === "transient" || snapshot.fault?.kind === "busy");
+  // 只订阅“播放栏要不要显示”：外壳不随播放状态、音量等每次变化重绘。队列为空但有可重试的故障时，播放栏仍然显示，重试入口不会消失。
+  const hasPlayer = usePlayerSelector((snapshot) => snapshot.queue.entries.length > 0 || snapshot.current !== null || snapshot.fault?.kind === "transient");
   const frameRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);

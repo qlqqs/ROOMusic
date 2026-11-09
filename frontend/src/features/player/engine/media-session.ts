@@ -1,5 +1,5 @@
-// 系统媒体键与锁屏/通知中心的“正在播放”信息（Media Session API）。浏览器不支持时没有端口，引擎跳过它。
-// 端口只做最薄的一层封装：引擎决定何时设置什么，这里负责吞掉浏览器对非法状态抛出的异常（例如位置大于时长）。
+// 系统媒体键与锁屏/通知中心的“正在播放”信息（Media Session API）。浏览器不支持时没有端口，输出端跳过它。
+// 端口只做最薄的一层封装：输出端决定何时设置什么，这里负责吞掉浏览器对非法状态抛出的异常（例如位置大于时长）。
 
 export type MediaSessionActionName = "play" | "pause" | "previoustrack" | "nexttrack" | "stop" | "seekto" | "seekbackward" | "seekforward";
 

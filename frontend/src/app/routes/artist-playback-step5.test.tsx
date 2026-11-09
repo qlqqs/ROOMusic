@@ -4,12 +4,11 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSessionController, SessionProvider, ViewerScopeProvider } from "../../features/auth";
-import { PlayerEngine, PlayerProvider } from "../../features/player";
+import { PlayerProvider } from "../../features/player";
 import { artistDataOf, artistTestId, primaryArtistId } from "../../test/artist-data";
 import { installArtistsApi, installFakeApi, installFakeSession } from "../../test/fake-api";
-import { FakeAudio } from "../../test/fake-audio";
+import { playerHarness } from "../../test/fake-zones";
 import { jsonResponse, sampleResponse } from "../../test/http";
-import { silentPlayRecorder } from "../../test/play-recorder";
 import { playerTrack } from "../../test/player-data";
 import { ArtistPlayActions } from "./artist-playback";
 
@@ -26,46 +25,43 @@ async function setup() {
   const state = controller.getSnapshot();
   if (state.status !== "authenticated") throw new Error("会话未就绪");
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const audio = new FakeAudio();
-  let nextId = 0;
-  const engine = new PlayerEngine({
-    userId: state.viewer.id, audio,
-    loadPlayback: async (trackId) => ({ state: "ready", playback: { track_id: trackId, representation: { kind: "original", url: `/api/v1/tracks/${trackId}/audio`, mime_type: "audio/flac", codecs: null, size_bytes: 100 } } }),
-    loadRelease: async () => { throw new Error("本测试没有持久化队列"); },
-    shouldPrefetch: () => false,
-    sessionStorage: null, localStorage: null, mediaSession: null,
-    artworkUrl: (value) => value, newId: () => `entry-${++nextId}`, random: () => 0, now: Date.now, playRecorder: silentPlayRecorder,
-  });
-  const canPlay = vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue("probably");
+  const player = playerHarness();
+  const { engine } = player;
   dispose.push(() => { engine.endSession(); controller.dispose(); client.clear(); });
   const view = (children: ReactNode) => render(children, {
     wrapper: ({ children: content }) => (
       <QueryClientProvider client={client}><SessionProvider controller={controller}>
         <ViewerScopeProvider viewer={state.viewer} generation={state.generation}>
-          <PlayerProvider userId={state.viewer.id} engine={engine}>{content}</PlayerProvider>
+          <PlayerProvider userId={state.viewer.id} controller={engine}>{content}</PlayerProvider>
         </ViewerScopeProvider>
       </SessionProvider></QueryClientProvider>
     ),
   });
-  return { api, data, session, controller, engine, audio, canPlay, view };
+  return { api, data, session, controller, engine, player, view };
 }
 
-const queueIds = (engine: PlayerEngine) => engine.getSnapshot().queue.entries.map((entry) => entry.track.trackId);
+type Harness = ReturnType<typeof playerHarness>;
+const queueIds = (engine: Harness["engine"]) => engine.getSnapshot().queue.entries.map((entry) => entry.track.trackId);
 async function ready() {
   await waitFor(() => expect(screen.getByRole("button", { name: "播放全部" }).hasAttribute("disabled")).toBe(false));
 }
-async function startOldPlayback(engine: PlayerEngine, audio: FakeAudio) {
-  await act(async () => { engine.playTracks([playerTrack("旧队列甲"), playerTrack("旧队列乙")]); });
-  act(() => { audio.loadMetadata(120); audio.beginPlaying(); audio.tick(17); });
-  return { queue: engine.getSnapshot().queue, current: engine.getSnapshot().current, plays: audio.playCalls, pauses: audio.pauseCalls };
+/** 旧队列在放、位置 17 秒；记下此刻的队列、当前项、流与已发出的命令数。 */
+async function startOldPlayback(player: Harness) {
+  act(() => { player.engine.playTracks([playerTrack("旧队列甲"), playerTrack("旧队列乙")]); });
+  const audio = await player.sounding(17);
+  const snapshot = player.engine.getSnapshot();
+  return { audio, queue: snapshot.queue, current: snapshot.current, stream: snapshot.zone?.stream, commands: player.server.commands.length };
 }
-function expectOldPlayback(engine: PlayerEngine, audio: FakeAudio, before: Awaited<ReturnType<typeof startOldPlayback>>) {
-  expect(engine.getSnapshot().queue).toBe(before.queue);
-  expect(engine.getSnapshot().current).toEqual(before.current);
-  expect(engine.getSnapshot().status).toBe("playing");
-  expect(audio.currentTime).toBe(17);
-  expect(audio.playCalls).toBe(before.plays);
-  expect(audio.pauseCalls).toBe(before.pauses);
+/** 旧的播放没有被动过：没有新命令，队列、当前项与流不变，元素还在原位置出声。 */
+function expectOldPlayback(player: Harness, before: Awaited<ReturnType<typeof startOldPlayback>>) {
+  const snapshot = player.engine.getSnapshot();
+  expect(player.server.commands).toHaveLength(before.commands);
+  expect(snapshot.queue).toBe(before.queue);
+  expect(snapshot.current).toEqual(before.current);
+  expect(snapshot.zone?.stream).toBe(before.stream);
+  expect(snapshot.status).toBe("playing");
+  expect(before.audio.currentTime).toBe(17);
+  expect(before.audio.paused).toBe(false);
 }
 
 
@@ -78,8 +74,8 @@ describe("艺人播放全部与随机播放", () => {
     act(() => { engine.playTracks([playerTrack("旧曲目")]); engine.setMode("shuffle"); });
     await userEvent.click(screen.getByRole("button", { name: "播放全部" }));
     expect(await screen.findByText("已选择 2 首。跳过了1 首文件缺失。")).toBeTruthy();
-    expect(queueIds(engine)).toEqual(data.tracks.get(`${artistId}:track_artist`)?.filter((item) => item.present).map((item) => item.track_id));
-    expect(engine.getSnapshot().queue.mode).toBe("shuffle");
+    await waitFor(() => expect(queueIds(engine)).toEqual(data.tracks.get(`${artistId}:track_artist`)?.filter((item) => item.present).map((item) => item.track_id)));
+    await waitFor(() => expect(engine.getSnapshot().queue.mode).toBe("shuffle"));
     await userEvent.click(screen.getByRole("button", { name: "播放全部" }));
     await waitFor(() => expect(api.requestsTo("GET", path)).toHaveLength(2));
     expect(api.requestsTo("GET", path).every((request) => request.path.endsWith("order=album"))).toBe(true);
@@ -102,13 +98,13 @@ describe("艺人播放全部与随机播放", () => {
     for (let i = 0; i < 2; i++) {
       await userEvent.click(screen.getByRole("button", { name: "随机播放" }));
       await screen.findByText("已选择 3 首。跳过了1 首文件缺失。");
-      expect(queueIds(engine)).toEqual(expectedIds);
+      await waitFor(() => expect(queueIds(engine)).toEqual(expectedIds));
     }
     const queries = api.requestsTo("GET", path).map((request) => new URL(request.path, "http://test").searchParams);
     expect(queries).toHaveLength(2);
     expect(queries.every((query) => query.get("order") === "random")).toBe(true);
     expect(new Set(queries.map((query) => query.get("seed"))).size).toBe(2);
-    expect(engine.getSnapshot().queue.mode).toBe("repeat_all");
+    await waitFor(() => expect(engine.getSnapshot().queue.mode).toBe("repeat_all"));
   });
 
   it("超过一万首候选只接收一万首并显示截断提示，缺失与浏览器不支持分别提示", async () => {
@@ -120,34 +116,34 @@ describe("艺人播放全部与随机播放", () => {
     await ready();
     await userEvent.click(screen.getByRole("button", { name: "播放全部" }));
     expect(await screen.findByText(/已选择 9,999 首。跳过了1 首文件缺失、1 首不能在这里播放。曲目较多，本次最多播放 10,000 首。/)).toBeTruthy();
-    expect(queueIds(engine)).toHaveLength(9999);
-    expect(queueIds(engine)).not.toContain(artistTestId(10_001));
+    await waitFor(() => expect(queueIds(engine)).toHaveLength(9999));
+    await waitFor(() => expect(queueIds(engine)).not.toContain(artistTestId(10_001)));
   });
 
   it.each(["empty", "missing", "unsupported", "error"])("%s 时保留当前队列、音频与进度", async (scenario) => {
-    const { api, data, engine, audio, view } = await setup();
+    const { api, data, player, view } = await setup();
     const sample = data.tracks.get(`${artistId}:track_artist`)?.[0];
     if (!sample) throw new Error("缺少样本");
     data.tracks.set(`${artistId}:track_artist`, scenario === "empty" ? [] : [{ ...sample, present: scenario !== "missing", source: { ...sample.source, source_kind: "cue_virtual" } }]);
     if (scenario === "error") api.on("GET", path, () => sampleResponse("errors/database-unavailable"));
     view(<ArtistPlayActions artistId={artistId} />);
     await ready();
-    const before = await startOldPlayback(engine, audio);
+    const before = await startOldPlayback(player);
     await userEvent.click(screen.getByRole("button", { name: "播放全部" }));
     if (scenario === "error") await screen.findByText("没能读取曲目");
     else await screen.findByText(/队列没有变/);
-    expectOldPlayback(engine, audio, before);
+    expectOldPlayback(player, before);
   });
 
   it("播放器拒绝queue_full时不清空原队列，显示可恢复提示", async () => {
-    const { engine, audio, view } = await setup();
+    const { engine, player, view } = await setup();
     view(<ArtistPlayActions artistId={artistId} />);
     await ready();
-    const before = await startOldPlayback(engine, audio);
+    const before = await startOldPlayback(player);
     // 返回值边界注入，不制造违反10000上限、无法通过decoder的响应。
     vi.spyOn(engine, "playTracks").mockReturnValue("queue_full");
     await userEvent.click(screen.getByRole("button", { name: "播放全部" }));
     await screen.findByText(/队列已满/);
-    expectOldPlayback(engine, audio, before);
+    expectOldPlayback(player, before);
   });
 });

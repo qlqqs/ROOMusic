@@ -1,9 +1,9 @@
-import type { AudioLike } from "../features/player/engine/player-engine";
+import type { AudioLike } from "../features/player/output/output";
 
 export type PlayBehavior = "resolve" | "not-allowed" | "not-supported" | "abort";
 
 /**
- * 音频元素的替身：只做播放器引擎用到的那部分，并且不自己推进时间——测试用 loadMetadata、beginPlaying、tick、finish、fail
+ * 音频元素的替身：只做输出端用到的那部分，并且不自己推进时间——测试用 loadMetadata、beginPlaying、tick、finish、fail
  * 这些方法按真实浏览器的事件顺序触发事件，所以引擎的状态仍然只来自媒体事件。
  */
 export class FakeAudio extends EventTarget implements AudioLike {
@@ -44,6 +44,11 @@ export class FakeAudio extends EventTarget implements AudioLike {
     this.seekableLength = 0;
     this.ended = false;
     this.error = null;
+  }
+
+  /** 能力探测：默认什么都能解；测试可以改写。 */
+  canPlayType(type: string): string {
+    return type === "" ? "" : "probably";
   }
 
   getAttribute(name: "src"): string | null {
