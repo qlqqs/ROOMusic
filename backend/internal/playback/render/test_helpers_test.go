@@ -103,7 +103,8 @@ func fixtureSource(fixtures map[string]audioFixture) testSource {
 	}
 }
 func renderSpec(codec string) zones.RenderSpec {
-	return zones.RenderSpec{Seq: 1, UserID: "user", Start: zones.Entry{EntryID: "entry-a", TrackID: "a"}, Settings: zones.ZoneSettings{Leveling: "off", Gapless: true, Quality: "lossless"}, Format: zones.StreamFormat{Codec: codec, MaxChannels: 2}}
+	mime := map[string]string{"flac": "audio/flac", "wav": "audio/wav", "opus": `audio/ogg; codecs="opus"`, "aac": "audio/aac", "alac": "application/vnd.apple.mpegurl"}[codec]
+	return zones.RenderSpec{Seq: 1, UserID: "user", Start: zones.Entry{EntryID: "entry-a", TrackID: "a"}, Settings: zones.ZoneSettings{Leveling: "off", Gapless: true, Quality: "lossless"}, Format: zones.StreamFormat{Codec: codec, MimeType: mime, MaxChannels: 2}}
 }
 func nextB(after string) (zones.Entry, bool) {
 	return zones.Entry{EntryID: "entry-b", TrackID: "b"}, after == "entry-a"
