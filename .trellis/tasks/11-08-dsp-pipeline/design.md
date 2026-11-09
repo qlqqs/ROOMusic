@@ -230,7 +230,7 @@ func Linear(db float64) float64 // 10^(db/20)
 ### 8.1 Headroom
 
 - 设置：`{enabled: false, db: −3.0, clip_indicator: false}`，`db` 取值 −30.0…0.0、步进 0.1（存一位小数的值，服务端按步进校验）。
-- 存储：本线迁移 `00NN_playback_zone_headroom.sql`（排在 zones 的 0037 之后，合入 main 时顺延）给 `playback_zones` 加 `headroom jsonb NOT NULL DEFAULT '{"enabled":false,"db":-3.0,"clip_indicator":false}'`，带 `.down.sql`。用 jsonb 是为了与第二批的复杂设置同形（它们也会各占一列 jsonb）；值在服务端解码校验，坏值按默认处理。
+- 存储：本线迁移 `00NN_playback_zone_headroom.sql`（排在 zones 的 0037 之后，合入 main 时顺延）给 `playback_zones` 加 `headroom jsonb NOT NULL DEFAULT '{"enabled":false,"db":-3.0,"clip_indicator":false}'`，带 `.down.sql`。用 jsonb 是为了与第二批的复杂设置同形（它们也会各占一列 jsonb）；写入前按范围与步进校验；列只由本程序写入，读取时直接解码，不另设回退。
 - 节点：链 ① 的 `chain.Headroom`，乘 `10^(db/20)`，清 `Exact`。启用后整条流都不是逐位（父任务“启用后强制浮点链”在这里的含义就是：样本被改过，量化时加抖动）。
 - 设置接口：`set_settings` 接受 `headroom` 键（zones 合同 §2.2 加键，父设计 §8 第 7 条）；改动由 zones 去抖重建。
 
