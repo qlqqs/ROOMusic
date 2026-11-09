@@ -26,14 +26,20 @@ export function PlayerQueue({ headingId, onClose, renderQueueActions }: PlayerQu
   useEffect(() => {
     list.current?.querySelector("[aria-current]")?.scrollIntoView({ block: "center" });
   }, []);
+  // 删除后的焦点落在相邻条目的同类按钮；列表空了则回到抽屉标题。移除要等服务端的响应，所以等这一项真的从列表里消失后再移焦点。
+  const removing = useRef<{ entryId: string; index: number } | null>(null);
+  const entries = snapshot.queue.entries;
+  useEffect(() => {
+    const pending = removing.current;
+    if (pending === null || entries.some((entry) => entry.entryId === pending.entryId)) return;
+    removing.current = null;
+    const rows = list.current?.querySelectorAll<HTMLLIElement>("li");
+    const target = rows?.[Math.min(pending.index, (rows?.length ?? 0) - 1)];
+    (target?.querySelector<HTMLButtonElement>("[data-remove]") ?? heading.current)?.focus();
+  }, [entries]);
   function remove(entryId: string, index: number) {
+    removing.current = { entryId, index };
     engine.removeEntry(entryId);
-    // 删除后的焦点落在相邻条目的同类按钮；列表空了则回到抽屉标题。
-    queueMicrotask(() => {
-      const rows = list.current?.querySelectorAll<HTMLLIElement>("li");
-      const target = rows?.[Math.min(index, (rows?.length ?? 0) - 1)];
-      (target?.querySelector<HTMLButtonElement>("[data-remove]") ?? heading.current)?.focus();
-    });
   }
   function move(entryId: string, delta: -1 | 1) {
     const at = snapshot.queue.entries.findIndex((entry) => entry.entryId === entryId);

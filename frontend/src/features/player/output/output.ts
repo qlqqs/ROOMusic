@@ -227,7 +227,7 @@ export class OutputEndpoint {
   }
 
   /**
-   * 活动流能让位给接续流：真正放完了，或者是起始条目打不开的空流（格式为 null）出错。
+   * 活动流能让位给接续流：真正放完了，或者是起始条目打不开的空流（格式为 null）出错（onError 把它当作放完）。
    * 其他出错是曲目中途断流，照旧回报 stream_lost 等服务端续流，不能换上接续流跳过这首剩下的部分。
    */
   private handsOff(): boolean {
@@ -315,15 +315,15 @@ export class OutputEndpoint {
     this.swap();
   }
 
-  /** 备用元素成为活动元素，旧的卸载；换上后回报一次。 */
-  private swap(): void {
+  /** 备用元素成为活动元素，旧的卸载；换上后回报一次（report 为假时不报，由调用方自己回报）。 */
+  private swap(report = true): void {
     const old = this.active;
     this.active = this.spare;
     this.spare = old;
     this.active.role = "active";
     this.unload(old);
     this.lastStatusAt = Number.NEGATIVE_INFINITY;
-    this.report({ kind: "status" }, this.active);
+    if (report) this.report({ kind: "status" }, this.active);
     this.syncMediaSession();
     this.deps.onTime();
   }
@@ -387,6 +387,13 @@ export class OutputEndpoint {
 
   private onError(slot: Slot): void {
     if (slot.role === "idle" || slot.stream === null) return;
+    // 空流（起始条目打不开，格式为 null）的响应体立即结束，浏览器多半报 error：当作放完。正在打开的先换上成为活动流，
+    // 再按 ended 处理（记入 endedSeqs 不再打开、回报 ended、接续流已在就换上，晚到的由对齐换上）。
+    if (slot.stream.format === null && (slot === this.active || slot.role === "switch")) {
+      if (slot.role === "switch") this.swap(false);
+      this.onEnded(slot);
+      return;
+    }
     // 流断开或取不到（网络、410、5xx）：服务端从断开处续一条新流，旧流（若还在放）放到那时为止。
     this.report({ kind: "fault", fault: "stream_lost" }, slot);
     if (slot === this.active) slot.done = true;
