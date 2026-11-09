@@ -177,8 +177,9 @@ for (const width of [1440, 390]) {
     await tabTo(page, play);
     await expectVisibleFocusRing(page, "搜索播放按钮");
     await page.keyboard.press("Enter");
-    await expect.poll(() => page.evaluate(() => window.playbackTestEvents.some((event) => event.type === "playing"))).toBe(true);
-    expect((await mediaState(page))?.src).toContain(track.track_id);
+    await expect.poll(() => page.evaluate(() => window.playbackTestEvents.some((event) => event.type === "playing" && event.src.includes("/streams/")))).toBe(true);
+    expect((await mediaState(page))?.src).toContain("/streams/");
+    expect(mock.zones.currentTrack()).toBe(track.track_id);
     await expect(page.getByRole("region", { name: "播放器", exact: true })).toContainText(track.title);
   });
 }
@@ -187,7 +188,7 @@ test("选择曲目建议只打开所在专辑，不直接播放", async ({ page,
   const mock = await backend.start({ signedInAs: "listener" });
   const { track } = seedSearch(mock);
   await page.goto("/albums");
-  const queueBefore = await queueSnapshotStep4(page);
+  const queueBefore = await queueSnapshotStep4(mock);
   await visibleSearch(page).fill("爱");
   const popup = page.getByRole("listbox", { name: "搜索建议", exact: true });
   await expect(popup.getByRole("option")).toHaveCount(3);
@@ -198,8 +199,8 @@ test("选择曲目建议只打开所在专辑，不直接播放", async ({ page,
   await expect(page.getByRole("heading", { name: track.release.title, exact: true, level: 1 })).toBeVisible();
   await expect(page.getByRole("button", { name: "播放整张专辑", exact: true })).toBeEnabled();
   await expect(page.getByRole("region", { name: "播放器", exact: true })).toHaveCount(0);
-  expect(mock.callsTo("GET", /\/playback$/)).toHaveLength(0);
-  expect(await queueSnapshotStep4(page)).toEqual(queueBefore);
+  expect(mock.callsTo("POST", /\/commands$/).filter((call) => typeof call.body === "object" && call.body !== null && "command" in call.body && ["play_tracks", "play", "play_entry", "next", "previous"].includes(String(call.body.command)))).toHaveLength(0);
+  expect(await queueSnapshotStep4(mock)).toEqual(queueBefore);
 });
 
 for (const width of [320, 375, 1024, 1440]) {

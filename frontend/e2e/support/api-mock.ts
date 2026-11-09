@@ -33,10 +33,11 @@ import {
   respondToRevert,
   type GovernanceData,
 } from "../../src/test/governance-data";
-import { personalDataOf, respondToPersonal, type PersonalData } from "../../src/test/personal-data";
+import { personalTracksOf, personalDataOf, respondToPersonal, type PersonalData } from "../../src/test/personal-data";
 import { respondToSearch, searchDataOf, type SearchData } from "../../src/test/search-data";
 import { backupFileAt, backupNotFound, respondToSystem, systemDataOf, type SystemData } from "../../src/test/system-data";
 import { artistCatalogState, artistSummaryOriginError, artistError, respondToArtistFavorites, respondToArtists, respondToArtistSummaries, type ArtistData } from "../../src/test/artist-data";
+import { zonesMock } from "./zones";
 import { gradientPng } from "./png";
 
 // 受控后端：用后端集成测试产出的真实响应样本回答 /api/v1/*，并保持必要的状态（会话、目录、扫描、成员），
@@ -63,6 +64,8 @@ export type RecordedCall = { method: string; path: string; search: string; body:
  * 接口只做筛选与分页）；没有专门登记的组、版本与证据按列表里的摘要合成，特别安排的（多版本、长内容、被重扫掉的版本）登记进对应的 Map。
  */
 export type ApiMock = CatalogData & {
+  /** 单播放区协议替身；界面用例显式登记非目录曲目。 */
+  zones: ReturnType<typeof zonesMock>;
   /** 管理员对发行与专辑的受治理操作（字段修正、归组、默认版本、撤销、操作记录）的状态与行为，与上面的专辑数据共用：修改会反映到列表与详情。 */
   governance: GovernanceData;
   /** 收藏与歌单按当前会话的用户 ID 隔离；seed helper 与 Vitest 共用。 */
@@ -137,6 +140,7 @@ type ApiMockContext = { route: (pattern: string, handler: (route: ApiMockRoute) 
 export async function installApiMock(context: ApiMockContext, options: MockOptions = {}): Promise<ApiMock> {
   const { setupRequired = false, signedInAs = null, failSetupStatusTimes = 0 } = options;
   const mock: ApiMock = {
+    zones: zonesMock((id) => mock.personal.tracks.get(id) ?? personalTracksOf(mock).find((track) => track.track_id === id)),
     search: searchDataOf(),
     artists: null,
     system: systemDataOf(),
@@ -360,9 +364,6 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
         return guarded(method, path, false, () => sample("playback/formats"));
       case "GET /api/v1/me/plays/recent-releases":
         return guarded(method, path, false, () => json({ items: mock.recentPlays, has_history: mock.hasPlayHistory }));
-      case "POST /api/v1/me/plays":
-        // 播放上报：只需要应答，记录在 mock.calls 里；最近播放由测试用 seedRecentPlays 预置，不随上报变化。
-        return guarded(method, path, false, () => sample("listening/play-recorded"));
       case "DELETE /api/v1/me/plays":
         return guarded(method, path, false, () => {
           const deleted = mock.recentPlays.length;
@@ -615,6 +616,15 @@ export async function installApiMock(context: ApiMockContext, options: MockOptio
       body = undefined;
     }
     mock.calls.push({ method: request.method(), path: url.pathname, search: url.search, body, idempotencyKey: request.headers()["idempotency-key"] ?? null });
+    if (/^\/api\/v1\/me\/playback(?:\/|$)/.test(url.pathname)) {
+      if (viewer() === null) {
+        const unauthorized = loadApiSample("errors/unauthorized");
+        await route.fulfill({ status: unauthorized.status, contentType: "application/json", body: JSON.stringify(unauthorized.body) });
+      } else {
+        await mock.zones.handle(route, url.pathname, request.method(), body);
+      }
+      return;
+    }
     // 封面是图片，不是 JSON：未登录 401，被标记的资源 404，其余返回合成的渐变图。
     const artwork = /^\/api\/v1\/artworks\/([^/]+)$/.exec(url.pathname);
     if (artwork !== null && request.method() === "GET") {

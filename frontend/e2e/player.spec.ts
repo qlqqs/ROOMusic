@@ -1,10 +1,11 @@
 import { readFileSync } from "node:fs";
-import type { Locator, Page, Route } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { albumGroup, mediaOf, releaseDetailOf } from "../src/test/catalog-data";
 import { sampleBody } from "../src/test/api-samples";
 import { LONG_ARTIST, LONG_TITLE, LONG_TOKEN } from "./support/albums-data";
 import { expectNoDocumentScroll, expectNoHorizontalOverflow, expectNoSeriousViolations, expectVisibleFocusRing, widths } from "./support/checks";
 import { expect, test } from "./support/fixtures";
+import { installZoneAudio } from "./support/zones";
 import type { ApiMock } from "./support/api-mock";
 
 // 仅路由模拟 API；音频取仓库内由编码器生成的合成立体声 FLAC，不替换生产 Audio、play 或媒体事件。
@@ -14,21 +15,6 @@ const bar = (page: Page) => page.getByRole("region", { name: "播放器", exact:
 const queueDialog = (page: Page) => page.getByRole("dialog", { name: /队列（\d+）/ });
 const queue = (page: Page) => queueDialog(page).getByRole("list").getByRole("listitem");
 const fullscreenDialog = (page: Page) => page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "收起全屏播放器", exact: true }) });
-
-/** 按 Range 提供合成 FLAC（直出与派生的音频地址共用）。 */
-async function fulfillFlac(route: Route, audio = flac) {
-  const range = /^bytes=(\d+)-(\d*)$/.exec(route.request().headers()["range"] ?? "");
-  const start = Number(range?.[1] ?? 0);
-  const end = Math.min(Number(range?.[2] || audio.length - 1), audio.length - 1);
-  if (start > end) {
-    await route.fulfill({ status: 416, headers: { "Content-Range": `bytes */${audio.length}` } });
-    return;
-  }
-  await route.fulfill({ status: range ? 206 : 200, contentType: "audio/flac", body: audio.subarray(start, end + 1), headers: {
-    "Accept-Ranges": "bytes", "Content-Length": String(end - start + 1),
-    ...(range ? { "Content-Range": `bytes ${start}-${end}/${audio.length}` } : {}),
-  } });
-}
 
 type LyricsReply = { status: number; body: unknown };
 
@@ -66,12 +52,7 @@ async function installPlayback(page: Page, mock: ApiMock, long = false, audio = 
   });
   mock.groups = [group];
   mock.releases.set(release.id, release);
-  await page.route("**/api/v1/playback/formats", (route) => route.fulfill({ json: { items: [{ source_kind: "flac_vorbis_comment", codec: "flac", delivery: "original", mime_type: "audio/flac", codecs: null }] } }));
-  await page.route("**/api/v1/tracks/*/playback", (route) => {
-    const id = new URL(route.request().url()).pathname.split("/").at(-2);
-    return route.fulfill({ json: { track_id: id, representation: { kind: "original", url: `/api/v1/tracks/${id}/audio`, mime_type: "audio/flac", codecs: null, size_bytes: audio.body.length } } });
-  });
-  await page.route("**/api/v1/tracks/*/audio", (route) => fulfillFlac(route, audio.body));
+  await installZoneAudio(page, audio.body);
   await mockLyrics(page);
   await observeAudio(page);
   await page.goto(`/albums/${group.id}`);
@@ -82,7 +63,7 @@ async function installPlayback(page: Page, mock: ApiMock, long = false, audio = 
 async function media(page: Page) {
   return page.evaluate(() => {
     const observed = Reflect.get(window, "playerMockObservedAudio") as HTMLAudioElement[];
-    const audio = observed.at(-1);
+    const audio = observed.find((item) => item.getAttribute("src")?.includes("/streams/")) ?? observed.at(-1);
     return audio ? { paused: audio.paused, time: audio.currentTime, src: audio.currentSrc, sourceAttribute: audio.getAttribute("src"), duration: audio.duration, error: audio.error?.code ?? null } : null;
   });
 }
@@ -205,147 +186,6 @@ test("全屏播放器：Esc、收起按钮与浏览器返回都关闭，关闭�
   await expect(page).toHaveURL(/\/albums\//);
 });
 
-type DerivedOptions = {
-  /** 前几次预检返回 202（每次挂起 holdMs，像真实服务端的长轮询）；之后返回派生表示。Infinity 表示一直转换。 */
-  preparingPolls: number;
-  holdMs: number;
-  /** 对指定曲目序号（从 0 起）的预检直接返回这个错误。 */
-  failing?: { index: number; status: number; code: string };
-};
-
-/** ALAC 专辑：格式表带派生项；预检按 DerivedOptions 返回 202、派生表示或错误；音频仍是合成 FLAC（与服务端转换后的 audio/flac 相同）。 */
-async function installDerivedPlayback(page: Page, mock: ApiMock, options: DerivedOptions) {
-  const group = albumGroup(92, { title: "无损转换专辑", artist: "合成艺术家", track_count: 2 });
-  const release = releaseDetailOf(group.representative, {
-    media: mediaOf(group.representative, (_medium, track) => ({
-      title: `ALAC 曲目 ${track}`, artist: "合成艺术家", source_kind: "m4a", codec: "alac",
-      duration_seconds: 3, bit_depth: 16, sample_rate: 44100, channels: 2, cue: null,
-    })),
-  });
-  mock.groups = [group];
-  mock.releases.set(release.id, release);
-  const tracks = release.media[0]?.tracks ?? [];
-  const polls = new Map<string, number>();
-  const behaviour = { ...options };
-  await page.route("**/api/v1/playback/formats", (route) => route.fulfill({ json: { items: [
-    { source_kind: "flac_vorbis_comment", codec: "flac", delivery: "original", mime_type: "audio/flac", codecs: null },
-    { source_kind: "m4a", codec: "alac", delivery: "derived", mime_type: "audio/flac", codecs: null },
-  ] } }));
-  await page.route("**/api/v1/tracks/*/playback", async (route) => {
-    const id = new URL(route.request().url()).pathname.split("/").at(-2) ?? "";
-    const count = (polls.get(id) ?? 0) + 1;
-    polls.set(id, count);
-    const failing = behaviour.failing;
-    if (failing !== undefined && tracks[failing.index]?.id === id) {
-      await route.fulfill({ status: failing.status, json: { error: { code: failing.code, message: "后端文案" }, request_id: "mock" } }).catch(() => undefined);
-      return;
-    }
-    if (count <= behaviour.preparingPolls) {
-      await new Promise((resolve) => setTimeout(resolve, behaviour.holdMs));
-      await route.fulfill({ status: 202, json: { track_id: id, status: "preparing" } }).catch(() => undefined);
-      return;
-    }
-    await route.fulfill({ json: { track_id: id, representation: { kind: "derived", url: `/api/v1/tracks/${id}/audio`, mime_type: "audio/flac", codecs: null, size_bytes: flac.length } } }).catch(() => undefined);
-  });
-  await page.route("**/api/v1/tracks/*/audio", (route) => fulfillFlac(route));
-  await mockLyrics(page);
-  await observeAudio(page);
-  await page.goto(`/albums/${group.id}`);
-  await expect(page.getByRole("button", { name: "播放整张专辑", exact: true })).toBeEnabled();
-  return { group, release, tracks, polls, behaviour };
-}
-
-test("ALAC 曲目经服务端转换后播放：先显示“正在准备”，转换完成自动出声，信号路径写明无损转换，并预取下一首", async ({ page, backend }) => {
-  const mock = await backend.start({ signedInAs: "listener" });
-  const { tracks, polls } = await installDerivedPlayback(page, mock, { preparingPolls: 2, holdMs: 600 });
-  const [first, second] = tracks;
-  if (first === undefined || second === undefined) throw new Error("专项素材缺少两首曲目");
-  await page.getByRole("button", { name: "播放整张专辑", exact: true }).click();
-  await expect(bar(page).getByText("正在准备", { exact: true })).toBeVisible();
-  // 准备中也是“要播放”的状态：按钮写“暂停”，音频元素还没有来源。
-  await expect(bar(page).getByRole("button", { name: "暂停", exact: true })).toBeVisible();
-  expect(await media(page)).toMatchObject({ paused: true, src: "" });
-  await expect.poll(async () => (await media(page))?.paused, { timeout: 15_000 }).toBe(false);
-  expect((await media(page))?.src).toContain(first.id);
-  expect((await media(page))?.error).toBeNull();
-  await expect(bar(page).getByText("正在播放", { exact: true })).toBeVisible();
-  expect(polls.get(first.id)).toBe(3);
-  // 第一首出声之后，为下一首派生曲目预检一次（它收到 202，由第二首自己的预检继续等待）。
-  await expect.poll(() => polls.get(second.id)).toBe(1);
-  await bar(page).getByRole("button", { name: "信号路径：无损", exact: true }).click();
-  const signal = page.getByRole("dialog", { name: "信号路径：无损", exact: true });
-  await expect(signal.getByRole("listitem")).toHaveText(["数据源ALAC 44.1kHz 16bit 2ch", "服务端ALAC → FLAC", "浏览器解码 · 音量均衡 −5.0 dB", "系统输出系统默认输出"]);
-  await expect(signal).not.toContainText("ALAC 转成 FLAC");
-  await expect(signal).not.toContainText("原样发送，不转码。");
-  await expect(signal).not.toContainText("由浏览器解码，可能按输出设备重新采样。");
-  await expect(signal).not.toContainText("网页看不到声卡的实际格式。");
-  await expectNoSeriousViolations(page, "ALAC 信号路径");
-});
-
-test("等待转换时暂停：放弃等待并不再发出预检", async ({ page, backend }) => {
-  const mock = await backend.start({ signedInAs: "listener" });
-  const { tracks, polls } = await installDerivedPlayback(page, mock, { preparingPolls: Number.POSITIVE_INFINITY, holdMs: 300 });
-  const first = tracks[0];
-  if (first === undefined) throw new Error("专项素材缺少曲目");
-  await page.getByRole("button", { name: "播放整张专辑", exact: true }).click();
-  await expect(bar(page).getByText("正在准备", { exact: true })).toBeVisible();
-  await bar(page).getByRole("button", { name: "暂停", exact: true }).click();
-  await expect(bar(page).getByText("已暂停", { exact: true })).toBeVisible();
-  await expect(bar(page).getByRole("button", { name: "播放", exact: true })).toBeVisible();
-  const afterPause = polls.get(first.id) ?? 0;
-  await page.waitForTimeout(1500);
-  expect(polls.get(first.id)).toBe(afterPause);
-  expect(await media(page)).toMatchObject({ paused: true, src: "" });
-});
-
-test("服务器忙于转换：提示可重试，重试后正常播放；转换失败的曲目写明原因并前进到下一首", async ({ page, backend }) => {
-  const mock = await backend.start({ signedInAs: "listener" });
-  const { tracks, behaviour } = await installDerivedPlayback(page, mock, { preparingPolls: 0, holdMs: 0, failing: { index: 0, status: 503, code: "derivation_busy" } });
-  const [first, second] = tracks;
-  if (first === undefined || second === undefined) throw new Error("专项素材缺少两首曲目");
-  await page.getByRole("button", { name: "播放整张专辑", exact: true }).click();
-  await expect(bar(page).getByText("服务器正忙", { exact: true })).toBeVisible();
-  await expect(page.getByRole("status").filter({ hasText: "服务器正忙于转换，已暂停，可以重试。" }).first()).toBeVisible();
-  await expectNoSeriousViolations(page, "服务器忙");
-  delete behaviour.failing;
-  await bar(page).getByRole("button", { name: "重试播放", exact: true }).click();
-  await expect.poll(async () => (await media(page))?.paused, { timeout: 15_000 }).toBe(false);
-  expect((await media(page))?.src).toContain(first.id);
-  await expect(page.getByRole("button", { name: "重试播放", exact: true })).toHaveCount(0);
-
-  behaviour.failing = { index: 1, status: 409, code: "derivation_failed" };
-  await page.getByRole("button", { name: "下一首", exact: true }).first().click();
-  await bar(page).getByRole("button", { name: "队列（2）", exact: true }).click();
-  await expect(queue(page).nth(1)).toContainText("无损转换失败，无法播放这首曲目");
-  await expectNoSeriousViolations(page, "转换失败");
-  expect(second.id).not.toBe(first.id);
-});
-
-for (const width of widths) {
-  test(`${width}px：ALAC 正在准备与无损转换的信号路径不溢出，axe 无严重问题`, async ({ page, backend }) => {
-    await page.setViewportSize({ width, height: 900 });
-    const mock = await backend.start({ signedInAs: "listener" });
-    await installDerivedPlayback(page, mock, { preparingPolls: Number.POSITIVE_INFINITY, holdMs: 500 });
-    await page.getByRole("button", { name: "播放整张专辑", exact: true }).click();
-    await expect(bar(page).getByRole("button", { name: "暂停", exact: true })).toBeVisible();
-    await expectNoHorizontalOverflow(page, "正在准备的专辑页");
-    await expectNoSeriousViolations(page, "正在准备的专辑页");
-    await bar(page).getByRole("button", { name: "打开全屏播放器", exact: true }).click();
-    const full = fullscreenDialog(page);
-    await expect(full).toBeVisible();
-    await full.getByRole("button", { name: "队列（2）", exact: true }).click();
-    await expect(queueDialog(page).getByText("当前项 · 正在准备", { exact: true })).toBeVisible();
-    await page.keyboard.press("Escape");
-    await expect(queueDialog(page)).not.toBeVisible();
-    await full.getByRole("button", { name: "信号路径：无损", exact: true }).click();
-    const signal = page.getByRole("dialog", { name: "信号路径：无损", exact: true });
-    await expect(signal.getByRole("listitem").nth(1)).toContainText("ALAC → FLAC");
-    await expectNoHorizontalOverflow(page, "正在准备的全屏播放器");
-    await expectNoDocumentScroll(page, "正在准备的全屏播放器");
-    await expectNoSeriousViolations(page, "正在准备的全屏播放器");
-  });
-}
-
 test("不可播放曲目的心形与更多仍可用，仅播放、下一首播放与加入队列禁用", async ({ page, backend }) => {
   const mock = await backend.start({ signedInAs: "listener" });
   const group = albumGroup(92, { title: "不可播放曲目专项", track_count: 1 });
@@ -396,7 +236,8 @@ test("纯键盘：播放、下一首播放、不打断当前、切歌、队列�
   await expect(bar(page).getByRole("button", { name: "队列（19）", exact: true })).toBeVisible();
   expect(await media(page)).toMatchObject({ src: firstSrc, paused: true });
   await keyboardActivate(page, bar(page).getByRole("button", { name: "下一首", exact: true }));
-  await expect.poll(async () => (await media(page))?.src).toContain(third.id);
+  await expect.poll(() => mock.zones.currentTrack()).toBe(third.id);
+  await expect.poll(async () => (await media(page))?.src).not.toBe(firstSrc);
   await expect.poll(async () => (await media(page))?.paused).toBe(false);
   await keyboardActivate(page, bar(page).getByRole("button", { name: "暂停", exact: true }));
   await expect.poll(async () => (await media(page))?.paused).toBe(true);
@@ -455,7 +296,7 @@ const lyricsPanel = (page: Page) => fullscreenDialog(page).getByRole("region", {
 async function setMediaTime(page: Page, seconds: number) {
   await page.evaluate((time) => {
     const observed = Reflect.get(window, "playerMockObservedAudio") as HTMLAudioElement[];
-    const audio = observed.at(-1);
+    const audio = observed.find((item) => item.getAttribute("src")?.includes("/streams/")) ?? observed.at(-1);
     if (audio) audio.currentTime = time;
   }, seconds);
 }
@@ -546,19 +387,20 @@ test("同步歌词：当前行随播放位置变化并保持在中部，点击�
   // 位置到 1.55 秒：当前行变为第 16 行（1.5 秒），并被滚到可视区内；高亮前后字号、字重、行高与整份歌词的高度都不变。
   const listHeight = async () => (await lyrics.getByRole("list").boundingBox())?.height;
   const heightBefore = await listHeight();
+  if (heightBefore === undefined) throw new Error("歌词列表没有可测量的高度");
   const plainMetrics = await metrics(items.nth(3));
   await setMediaTime(page, 1.55);
   await expect(current).toContainText("第 16 行歌词");
   await expect(current).toHaveCount(1);
   await expect.poll(() => inside(current), { message: "当前行被滚进歌词区域" }).toBe(true);
   expect(await metrics(current)).toEqual(plainMetrics);
-  expect(await listHeight()).toBe(heightBefore);
+  expect(await listHeight()).toBeCloseTo(heightBefore, 0);
   expect(await scroller.evaluate((element) => element.scrollTop), "已滚动到当前行附近").toBeGreaterThan(0);
 
-  // 点击第 25 行（2.4 秒）：播放位置不早于该行时间，当前行随之变化。
+  // 点击第 25 行（2.4 秒）：命令定位到曲目内位置；新流从 0 起，歌词按分段偏移显示该行。
   await lyrics.getByRole("button", { name: /^第 25 行歌词/ }).click();
   await expect(current).toContainText("第 25 行歌词");
-  expect((await media(page))?.time ?? 0).toBeGreaterThanOrEqual(2.39);
+  expect(mock.callsTo("POST", /\/commands$/).at(-1)?.body).toEqual({ command: "seek", position_seconds: 2.4 });
 
   // 键盘：焦点在当前行按钮上，方向键上移两行，Enter 跳转到第 23 行（2.2 秒）；焦点环可见。
   await lyrics.getByRole("button", { name: /^第 25 行歌词/ }).focus();
@@ -568,8 +410,7 @@ test("同步歌词：当前行随播放位置变化并保持在中部，点击�
   await expectVisibleFocusRing(page, "歌词行键盘操作");
   await page.keyboard.press("Enter");
   await expect(current).toContainText("第 23 行歌词");
-  expect((await media(page))?.time ?? 0).toBeGreaterThanOrEqual(2.19);
-  expect((await media(page))?.time ?? 0).toBeLessThan(2.3);
+  expect(mock.callsTo("POST", /\/commands$/).at(-1)?.body).toEqual({ command: "seek", position_seconds: 2.2 });
   await expectNoSeriousViolations(page, "同步歌词的当前行与焦点");
 });
 
@@ -645,7 +486,8 @@ test("已分析曲目显示波形，进度条仍可键盘定位", async ({ page,
   await expect(seek).toBeEnabled();
   await seek.focus();
   await page.keyboard.press("ArrowRight");
-  await expect.poll(async () => (await media(page))?.time ?? 0).toBeGreaterThan(0);
+  await expect.poll(() => mock.callsTo("POST", /\/commands$/).at(-1)?.body).toMatchObject({ command: "seek", position_seconds: expect.any(Number) });
+  await expect(seek).not.toHaveValue("0");
   await expect(page).toHaveURL(new RegExp(`/albums/${group.id}`));
 });
 

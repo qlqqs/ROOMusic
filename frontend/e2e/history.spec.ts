@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { installZoneAudio } from "./support/zones";
+import type { ApiMock } from "./support/api-mock";
 import AxeBuilder from "@axe-core/playwright";
 import type { Locator, Page } from "@playwright/test";
 import { historyItem, historyPage, historyQueue } from "../src/test/history-data";
@@ -8,12 +9,12 @@ import { expectMinimumFontSize, expectNoDocumentScroll, expectNoHorizontalOverfl
 import { expect, test } from "./support/fixtures";
 
 const plays = "/api/v1/me/plays";
-const flac = readFileSync(new URL("../../backend/testdata/playback/flac-16-44100.flac", import.meta.url));
 const table = (page: Page) => page.getByRole("table", { name: "播放历史" });
 const row = (page: Page, title: string) => table(page).getByRole("row").filter({ has: page.getByText(title, { exact: true }) });
 
 /** 后注册的页面路由只接管历史与音频；会话、外壳等继续使用已有受控后端。 */
-async function mockHistory(page: Page, items = [historyItem(1), historyItem(2, { present: false })]) {
+async function mockHistory(page: Page, mock: ApiMock, items = [historyItem(1), historyItem(2, { present: false })]) {
+  mock.zones.register(items);
   const state = { items: [...items], deletes: [] as string[] };
   await page.route("**/api/v1/me/plays**", async (route) => {
     const request = route.request();
@@ -34,20 +35,7 @@ async function mockHistory(page: Page, items = [historyItem(1), historyItem(2, {
       await route.fallback();
     }
   });
-  await page.route("**/api/v1/tracks/*/playback", (route) => {
-    const id = new URL(route.request().url()).pathname.split("/").at(-2);
-    return route.fulfill({ json: { track_id: id, representation: { kind: "original", url: `/api/v1/tracks/${id}/audio`, mime_type: "audio/flac", codecs: null, size_bytes: flac.length } } });
-  });
-  // 合成 FLAC 按 Range 提供原字节，不替换 Audio.play 或媒体事件。
-  await page.route("**/api/v1/tracks/*/audio", (route) => {
-    const range = /^bytes=(\d+)-(\d*)$/.exec(route.request().headers()["range"] ?? "");
-    const start = Number(range?.[1] ?? 0);
-    const end = Math.min(Number(range?.[2] || flac.length - 1), flac.length - 1);
-    if (start > end) return route.fulfill({ status: 416, headers: { "Content-Range": `bytes */${flac.length}` } });
-    return route.fulfill({ status: range ? 206 : 200, contentType: "audio/flac", body: flac.subarray(start, end + 1), headers: {
-      "Accept-Ranges": "bytes", "Content-Length": String(end - start + 1), ...(range ? { "Content-Range": `bytes ${start}-${end}/${flac.length}` } : {}),
-    } });
-  });
+  await installZoneAudio(page);
   return state;
 }
 
@@ -70,11 +58,11 @@ async function keyboardActivate(page: Page, target: Locator) {
 
 for (const width of widths) {
   test(`${width}px：历史长内容、缺失行、移除与清除对话框不溢出，axe 无违规`, async ({ page, backend }) => {
-    await backend.start({ signedInAs: "listener" });
+    const mock = await backend.start({ signedInAs: "listener" });
     const long = historyItem(1, { title: LONG_TITLE, artist: LONG_ARTIST });
     long.release = { ...long.release, title: LONG_TITLE };
     const missing = historyItem(2, { present: false });
-    await mockHistory(page, [long, missing]);
+    await mockHistory(page, mock, [long, missing]);
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/me/history");
     await expect(table(page)).toBeVisible();
@@ -120,10 +108,10 @@ for (const width of widths) {
 }
 
 test("纯键盘：侧栏进入播放历史，行内播放，更多→移除→确认，清除全部→确认", async ({ page, backend }) => {
-  await backend.start({ signedInAs: "listener" });
+  const mock = await backend.start({ signedInAs: "listener" });
   const first = historyItem(1);
   const second = historyItem(2);
-  const state = await mockHistory(page, [first, second]);
+  const state = await mockHistory(page, mock, [first, second]);
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1, name: "概览" })).toBeVisible();
   await keyboardActivate(page, page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: "播放历史", exact: true }));
@@ -160,9 +148,9 @@ test("纯键盘：侧栏进入播放历史，行内播放，更多→移除→�
 });
 
 test("概览全部历史链接直达历史页，/me 直接访问重定向，地址恢复分页", async ({ page, backend }) => {
-  await backend.start({ signedInAs: "listener" });
+  const mock = await backend.start({ signedInAs: "listener" });
   const items: HistoryItemDTO[] = Array.from({ length: 51 }, (_, index) => historyItem(index + 1));
-  await mockHistory(page, items);
+  await mockHistory(page, mock, items);
   await page.goto("/");
   const allHistory = page.getByRole("region", { name: "最近播放", exact: true }).getByRole("link", { name: "全部历史" });
   await expect(allHistory).toHaveAttribute("href", "/me/history");
