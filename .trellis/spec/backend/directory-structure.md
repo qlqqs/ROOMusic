@@ -219,3 +219,37 @@ maintenance的原始名字工作量估计经`artistgraph.ArtistInputNameCost`窄
 `zones` 增加控制 Service、渲染消费方端口、设备与命令、内部 hub；`zones/httpapi` 依赖 `identity`、`platform/httpserver`、`platform/uuid`、`zones`，只负责控制接口，不包含 B3 的 SSE/输出端/渲染流。
 `zones/zonestest` 只依赖 zones 与标准库，拥有静音 WAV 假渲染器；生产 `app` 不允许导入此测试辅助包。
 `app.New` 装配 Service 与路由，进程关停经 `WaitForZones` 等待 Service 关闭；真实 Renderer 未装配时不拿假渲染器顶替。完整合同见[播放区控制面合同](./playback-zone-contracts.md)。
+
+## DSP 第一批纯包合同
+
+### 1. 范围
+
+`dsp/leveling`、`dsp/fade`、`dsp/dither` 是只依赖标准库的算法叶子包；`dsp/chain` 只允许导入这些算法包，精确 allowlist 见依赖方向测试。不接数据库、播放区或前端。此处记录纯包接口，不代表渲染会话已接入。
+
+### 2. 签名
+
+- `chain.Build(Spec) (*Chain, error)` 装配 Headroom 与独立量化出口；`Chain.Process(*Buffer) *Buffer`、`Drain() *Buffer`、`Quantize([]byte, *Buffer) ([]byte, int)`、`Reset()`、`Steps() []SignalStep`。
+- `chain.Wrap(Processor, Format, Format, SignalStep, bool) *Adapter`；适配器实现 `Node`，另提供 `Drain() *Buffer`。
+- `leveling.Apply(samples [][]float64, regions *[]GainRegion, exact *bool)`；`GainRegion` 定义于 leveling，`chain.GainRegion` 是别名。调用方式为 `leveling.Apply(b.Samples, &b.Regions, &b.Exact)`，避免 leveling 反向导入 chain。
+
+### 3. 合同
+
+样本为 planar float64。适配器按流内绝对帧号映射区域，丢弃流头固有延迟，流尾喂零至总输出为 `floor(总输入 × 输出率 / 输入率)`；输入元数据保留至对应输出产生，不能以当前输入块的 `Exact` 冒充延迟输出的属性。`Drain` 分块返回，调用至 nil；返回缓冲只在下次调用前有效。容量增长后复用，不逐块分配。
+
+增益由分析阶段算好，Choose 只选择、不再限峰值。Apply 清空区域，只有增益不等于 1 时清 Exact。Headroom 启用即清 Exact。量化直通条件为 `Exact && 0 < SourceBits && SourceBits <= OutputBits`，直通不推进 LFSR。Steps 只含构造时的节点，逐曲目的电平化/抖动显示由后续渲染会话添加。
+
+### 4. 校验与错误
+
+Build 的采样率/声道非正、输出位深非 0/16/24、启用的 Headroom 超出 −30…0 dB 或不符合 0.1 dB 步进，返回错误。共享链收到未施加区域、冲刷后未经 Reset 又 Process，以及纯算法的非法装配参数，视为程序错误并 panic；不作为用户输入边界使用。
+
+### 5. 正常、基准与错误案例
+
+正常：延迟处理器的输出沿用对应来源的元数据，尾部补齐真实输入的帧数。基准：16 位精确源经关闭 Headroom 的链输出 16/24 位时逐位还原。错误：在链头仍携带电平化区域，或把补零当成新输入计入长度。
+
+### 6. 必需测试
+
+独立测试 agent 补充：固定延迟与攒块冲刷、变率绝对边界、跨块 Exact/SourceBits、区域入口 panic、选择表与 Apply、淡化分块公式、LFSR/TPDF/量化、稳态分配。具体向量见三个任务设计的测试节；本次实现自查不代替算法单测验收。
+
+### 7. 错误与正确调用
+
+错误：循环复用未清空的 Regions，重复电平化；直接把 Exact 传给量化器而忽略降位深。正确：来源段先 Apply 清空区域，再进入共享链，使用 `Chain.Quantize` 判断逐位直通，流尾循环 Drain 并立即消费每块。
