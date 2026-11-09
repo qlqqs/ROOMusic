@@ -3,7 +3,7 @@
   "name": "zones-b2-control",
   "title": "B2 控制面",
   "description": "设备、命令、转移、导入、清理、Renderer 端口与假渲染器（后端）",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
