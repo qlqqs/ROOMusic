@@ -3,7 +3,7 @@
   "name": "zones-b3-realtime-output",
   "title": "B3 实时与输出端",
   "description": "事件流、认领回报释放、租约离线、渲染流端点、会话事件应用、服务端计次（后端）",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
