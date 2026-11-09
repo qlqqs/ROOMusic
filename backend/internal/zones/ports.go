@@ -15,6 +15,7 @@ type Renderer interface {
 type StreamFormat struct {
 	Codec, MimeType, Quality       string
 	SampleRate, BitDepth, Channels int
+	Layout                         uint32 `json:"-"`
 	Delivery                       string `json:"-"` // stream（长流）或 hls。
 	// 协商时携带的设备上限，不属于对外 Stream.format；0 表示未声明。
 	MaxSampleRate, MaxBitDepth, MaxChannels int `json:"-"`
@@ -28,21 +29,6 @@ type RenderSpec struct {
 	Settings       ZoneSettings
 	Format         StreamFormat
 	Cursor         Cursor
-}
-
-type ZoneSettings struct {
-	Leveling         string   `json:"leveling"`
-	Gapless          bool     `json:"gapless"`
-	Crossfade        bool     `json:"crossfade"`
-	CrossfadeSeconds int      `json:"crossfade_seconds"`
-	Quality          string   `json:"quality"`
-	Headroom         Headroom `json:"headroom"`
-}
-
-type Headroom struct {
-	Enabled       bool    `json:"enabled"`
-	DB            float64 `json:"db"`
-	ClipIndicator bool    `json:"clip_indicator"`
 }
 
 type Entry struct {

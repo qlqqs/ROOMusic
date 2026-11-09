@@ -10,6 +10,7 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
+	"github.com/qlqq/roomusic/backend/internal/zones"
 )
 
 // inputObject 保留字段是否出现，避免将缺失或 null 当成合法零值。
@@ -120,23 +121,7 @@ func validSettings(fields inputObject, required bool) bool {
 	if !exists {
 		return !required
 	}
-	var settings inputObject
-	if json.Unmarshal(raw, &settings) != nil || settings == nil ||
-		!settings.only("leveling", "gapless", "crossfade", "crossfade_seconds", "quality", "headroom") {
-		return false
-	}
-	if raw, exists := settings["headroom"]; exists {
-		var headroom inputObject
-		if json.Unmarshal(raw, &headroom) != nil || !headroom.only("enabled", "db", "clip_indicator") || !headroom.required("enabled", "db", "clip_indicator") {
-			return false
-		}
-	}
-	for name := range settings {
-		if !settings.required(name) {
-			return false
-		}
-	}
-	return true
+	return zones.ValidateSettingsShape(raw) == nil
 }
 
 // validCommandFields 只检查传输字段；取值和归属顺序由 Service 的统一校验拥有。

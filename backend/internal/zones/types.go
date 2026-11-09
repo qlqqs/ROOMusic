@@ -30,15 +30,6 @@ func (t Timestamp) MarshalJSON() ([]byte, error) {
 }
 func timestamp(t time.Time) Timestamp { return Timestamp{t.UTC()} }
 
-type SettingsPatch struct {
-	Leveling         *string   `json:"leveling"`
-	Gapless          *bool     `json:"gapless"`
-	Crossfade        *bool     `json:"crossfade"`
-	CrossfadeSeconds *int      `json:"crossfade_seconds"`
-	Quality          *string   `json:"quality"`
-	Headroom         *Headroom `json:"headroom"`
-}
-
 type RegisterDeviceInput struct {
 	Name     string        `json:"name"`
 	Kind     string        `json:"kind"`

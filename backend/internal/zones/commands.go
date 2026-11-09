@@ -379,7 +379,7 @@ func (s *Service) plan(ctx context.Context, userID string, z *zoneRuntime, c Com
 		p.debounce = z.session != nil
 	case "set_settings":
 		p.persisted.Settings = applySettings(p.persisted.Settings, c.Settings)
-		if p.persisted.Settings == z.persisted.Settings {
+		if EqualSettings(p.persisted.Settings, z.persisted.Settings) {
 			p.noop = true
 			break
 		}

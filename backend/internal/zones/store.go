@@ -4,7 +4,6 @@ package zones
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -45,16 +44,6 @@ type PersistedDevice struct {
 	LastSeenAt   time.Time
 }
 
-// PlaybackSettings 保存播放区的持久化播放设置。
-type PlaybackSettings struct {
-	Leveling         string
-	Crossfade        bool
-	CrossfadeSeconds int
-	Gapless          bool
-	Quality          string
-	Headroom         Headroom
-}
-
 // PersistedZone 保存播放区的持久状态；空 CurrentEntryID 和 nil ImportedAt 表示未设置。
 type PersistedZone struct {
 	ZoneID          string
@@ -86,7 +75,11 @@ func NewStore(tx *sql.Tx) *Store { return &Store{tx: tx} }
 // Queue.Entries 不参与此操作；条目变更须在同一事务内调用对应原语。
 // 版本号及队列语义由调用者计算，本层不自行递增或验证当前项的归属。
 func (s *Store) UpdateZone(ctx context.Context, userID string, zone PersistedZone) error {
-	headroom, err := json.Marshal(zone.Settings.Headroom)
+	document, err := NewHeadroomDocument(zone.Settings.Headroom)
+	if err != nil {
+		return fmt.Errorf("encode playback headroom: %w", err)
+	}
+	headroom, err := document.MarshalJSON()
 	if err != nil {
 		return fmt.Errorf("encode playback headroom: %w", err)
 	}

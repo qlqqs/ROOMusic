@@ -15,6 +15,7 @@ type renderWAVFacts struct {
 	channels, sampleRate, bits, validBits int
 	blockAlign                            int
 	isFloat                               bool
+	layout                                uint32
 }
 
 // sniffRenderWAV 在既有容器嗅探之上核验 RIFF 边界、音频块与完整的 PCM 子类型。
@@ -116,6 +117,7 @@ func parseRenderWAVFormat(format [40]byte, length int64) (renderWAVFacts, bool) 
 			return facts, false
 		}
 		mask := binary.LittleEndian.Uint32(format[20:24])
+		facts.layout = mask
 		if mask != 0 && bits.OnesCount32(mask) != facts.channels {
 			return facts, false
 		}

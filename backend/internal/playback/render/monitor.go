@@ -16,7 +16,7 @@ type speedMonitor struct {
 }
 
 func (m *speedMonitor) add(s *session, frames int, cost time.Duration) error {
-	m.audio += float64(frames) / float64(s.pcm.SampleRate)
+	m.audio += float64(frames) / float64(s.outputPCM.SampleRate)
 	m.processing += max(0, cost)
 	now := s.owner.options.Clock()
 	if m.reported.IsZero() {

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"github.com/qlqq/roomusic/backend/internal/zones/queue"
 )
@@ -12,6 +13,10 @@ import (
 // LoadUser 在显式只读可重复读事务内加载本人的全部设备、播放区和条目。
 // 这是独立的读取边界；写命令通过 NewStore 共享调用者的事务。
 func LoadUser(ctx context.Context, database *sql.DB, userID string) (UserState, error) {
+	return loadUser(ctx, database, userID, slog.Default())
+}
+
+func loadUser(ctx context.Context, database *sql.DB, userID string, logger *slog.Logger) (UserState, error) {
 	tx, err := database.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if err != nil {
 		return UserState{}, fmt.Errorf("begin playback snapshot: %w", err)
@@ -22,7 +27,7 @@ func LoadUser(ctx context.Context, database *sql.DB, userID string) (UserState, 
 	if err := loadDevices(ctx, tx, userID, &state); err != nil {
 		return UserState{}, err
 	}
-	if err := loadZones(ctx, tx, userID, &state); err != nil {
+	if err := loadZones(ctx, tx, userID, &state, logger); err != nil {
 		return UserState{}, err
 	}
 	if err := loadEntries(ctx, tx, userID, &state); err != nil {
@@ -62,7 +67,7 @@ FROM playback_devices WHERE user_id=$1::uuid ORDER BY created_at, id`, userID)
 	return nil
 }
 
-func loadZones(ctx context.Context, tx *sql.Tx, userID string, state *UserState) error {
+func loadZones(ctx context.Context, tx *sql.Tx, userID string, state *UserState, logger *slog.Logger) error {
 	rows, err := tx.QueryContext(ctx, `
 SELECT z.id, z.device_id, z.mode, z.current_entry_id,
  z.position_seconds, z.position_saved_at, to_json(z.history), to_json(z.shuffle_bag),
@@ -76,7 +81,7 @@ WHERE z.user_id=$1::uuid ORDER BY d.created_at, d.id, z.id`, userID)
 	}
 	defer rows.Close()
 	for rows.Next() {
-		zone := PersistedZone{Queue: queue.State{Entries: []queue.Entry{}}}
+		zone := PersistedZone{Queue: queue.State{Entries: []queue.Entry{}}, Settings: defaultSettings()}
 		var current sql.NullString
 		var imported sql.NullTime
 		var history, bag, headroom []byte
@@ -87,9 +92,7 @@ WHERE z.user_id=$1::uuid ORDER BY d.created_at, d.id, z.id`, userID)
 			&zone.Revision, &zone.QueueRevision, &imported, &headroom); err != nil {
 			return fmt.Errorf("scan playback zone: %w", err)
 		}
-		if err := json.Unmarshal(headroom, &zone.Settings.Headroom); err != nil {
-			return fmt.Errorf("decode playback headroom: %w", err)
-		}
+		zone.Settings.Headroom = readHeadroom(ctx, logger, zone.ZoneID, headroom)
 		zone.Queue.CurrentEntryID = current.String
 		if imported.Valid {
 			zone.ImportedAt = &imported.Time
@@ -136,4 +139,20 @@ WHERE z.user_id=$1::uuid ORDER BY d.created_at, d.id, z.id, e.position, e.entry_
 		return fmt.Errorf("iterate playback queue entries: %w", err)
 	}
 	return nil
+}
+
+// readHeadroom 只降级当前键，不写库，不吞掉查询或队列损坏错误。
+func readHeadroom(ctx context.Context, logger *slog.Logger, zoneID string, raw []byte) Headroom {
+	document, err := ParseHeadroomDocument(raw)
+	if err == nil {
+		var headroom Headroom
+		headroom, err = DecodeSettingsDocument[Headroom](document)
+		if err == nil {
+			return headroom
+		}
+	}
+	logger.WarnContext(ctx, "播放区设置无效，使用默认值",
+		"event", "zones.settings.invalid", "module", "zones",
+		"zone_id", zoneID, "key", "headroom", "reason", "invalid_document")
+	return defaultHeadroom()
 }

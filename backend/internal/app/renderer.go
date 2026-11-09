@@ -100,7 +100,7 @@ func (s renderTrackSource) withAnalysis(ctx context.Context, trackID string, ope
 	}
 	track := render.Track{
 		File: opened.File, SourceKind: opened.SourceKind, Codec: opened.Codec,
-		SampleRate: opened.SampleRate, Channels: opened.Channels, BitDepth: opened.BitDepth, IsFloat: opened.IsFloat,
+		SampleRate: opened.SampleRate, Channels: opened.Channels, BitDepth: opened.BitDepth, IsFloat: opened.IsFloat, Layout: opened.Layout,
 		DurationSeconds: opened.DurationSeconds, ReleaseID: placement.Release.ID,
 		CueStartFrame: opened.CueStartFrame, CueEndFrame: opened.CueEndFrame,
 	}

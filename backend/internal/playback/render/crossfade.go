@@ -25,13 +25,21 @@ func (p *player) closeMix() {
 }
 
 func (p *player) beginCrossfade(frame int64) error {
-	ready, _ := p.next.ring.readiness(p.session.pcm.Channels * 4)
+	ready, _ := p.next.ring.readiness(p.session.sourcePCM.Channels * 4)
 	if !ready {
-		p.abandonCrossfade()
-		return nil
+		ctx, cancel := p.nextDeadline()
+		defer cancel()
+		ready, err := p.waitNextReady(ctx)
+		if err != nil {
+			return err
+		}
+		if !ready {
+			p.abandonCrossfade()
+			return nil
+		}
 	}
 	p.next.ring.mu.Lock()
-	hasAudio := p.next.ring.size >= p.session.pcm.Channels*4
+	hasAudio := p.next.ring.size >= p.session.sourcePCM.Channels*4
 	p.next.ring.mu.Unlock()
 	if !hasAudio {
 		p.abandonCrossfade()
@@ -75,7 +83,7 @@ func (p *player) mixPCM(b *chain.Buffer, frame int64) (time.Duration, error) {
 				if a != nil {
 					frames = a.Frames
 				}
-				if err := p.session.queueEvent(frame+int64(frames), zones.Event{Kind: "track_failed", EntryID: window.outgoing.entry.EntryID, Reason: failureReason(readErr)}); err != nil {
+				if err := p.session.queueSourceEvent(frame+int64(frames), zones.Event{Kind: "track_failed", EntryID: window.outgoing.entry.EntryID, Reason: failureReason(readErr)}); err != nil {
 					return cost, err
 				}
 			}
