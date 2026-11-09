@@ -3,7 +3,7 @@
   "name": "zones-f2-client",
   "title": "F2 播放区客户端",
   "description": "zones 客户端、output 模块、多标签页、旧队列导入、删除旧引擎（前端）",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
