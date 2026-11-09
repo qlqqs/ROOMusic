@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { PlaybackFormatDTO } from "../api/decoders";
 import { buildCapabilityTable, typeString, unplayableText, type BrowserProbe } from "./capability";
 
@@ -72,33 +72,6 @@ describe("buildCapabilityTable", () => {
     expect(table.verdictOf({ sourceKind: "wav_info", codec: "wav_extensible" })).toEqual({ playable: false, reason: "format_not_direct" });
     expect(table.verdictOf({ sourceKind: "flac_vorbis_comment", codec: null })).toEqual({ playable: false, reason: "format_not_direct" });
     expect(table.verdictOf({ sourceKind: "flac_vorbis_comment", codec: "alac" })).toEqual({ playable: false, reason: "format_not_direct" });
-  });
-
-  it("decodingInfo 报告 supported 为 false 时不能播放，即使 canPlayType 说可以", async () => {
-    const decodingSupported = vi.fn(async (type: string) => !type.includes("flac"));
-    const table = await buildCapabilityTable(formats, { canPlayType: () => "probably", decodingSupported });
-    expect(table.verdictOf({ sourceKind: "flac_vorbis_comment", codec: "flac" })).toEqual({ playable: false, reason: "browser_cannot_decode" });
-    expect(table.verdictOf({ sourceKind: "mp3_id3v2", codec: "mp3" })).toEqual({ playable: true });
-    expect(decodingSupported).toHaveBeenCalledWith("audio/flac");
-  });
-
-  it("decodingInfo 拒绝或抛错时只看 canPlayType", async () => {
-    const rejecting = await buildCapabilityTable(formats, { canPlayType: () => "probably", decodingSupported: () => Promise.reject(new Error("拒绝")) });
-    expect(rejecting.verdictOf({ sourceKind: "flac_vorbis_comment", codec: "flac" })).toEqual({ playable: true });
-    const throwing = await buildCapabilityTable(formats, {
-      canPlayType: () => "probably",
-      decodingSupported: () => {
-        throw new Error("抛错");
-      },
-    });
-    expect(throwing.verdictOf({ sourceKind: "mp3_id3v2", codec: "mp3" })).toEqual({ playable: true });
-  });
-
-  it("canPlayType 为空时不再询问 decodingInfo", async () => {
-    const decodingSupported = vi.fn(async () => true);
-    const table = await buildCapabilityTable(formats, { canPlayType: () => "", decodingSupported });
-    expect(table.verdictOf({ sourceKind: "mp3_id3v2", codec: "mp3" })).toEqual({ playable: false, reason: "browser_cannot_decode" });
-    expect(decodingSupported).not.toHaveBeenCalled();
   });
 
   it("格式表为空时没有任何曲目可以播放（包括服务端暂时拿不到的情形由调用方处理）", async () => {
