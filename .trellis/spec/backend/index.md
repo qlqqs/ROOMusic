@@ -68,6 +68,7 @@ Before writing or reviewing backend code:
 | [专辑多流派合同](./genre-contracts.md) | 0032：多值标签、流派合集、读取数组、修正与历史撤销兼容、双向迁移 |
 | [Catalog REST 验证与示例](./catalog-rest-verification.md) | Catalog REST 的正确/基准/错误案例、必需测试与断言点（含 M5 统计与个人数据批量读取、EXPLAIN 诊断）、错误与正确示例 |
 | [播放直出合同](./playback-contracts.md) | M2a 格式表、预检、音频 Range、安全打开与停机中止；M2b 的 `delivery`、202 与派生错误码 |
+| [服务端渲染骨架合同](./playback-render-contracts.md) | P-c：安全来源、ffmpeg 进程、预缓冲、共享链、编码协商、播放头事件与生产装配 |
 | [无损派生合同](./playback-derivation-contracts.md) | M2b ALAC → FLAC 无损派生：配置与启动、缓存、转换与核对、上限与取消、测试 |
 | [内嵌歌词合同](./lyrics-contracts.md) | M2b 歌词：标签提取与规范化、`tracks.lyrics` 与约束、歌词接口、LRC 解析规则、测试 |
 | [后台音频分析合同](./audio-analysis-contracts.md) | 0033：`track_analyses` 与待分析判定、单线程低优先级工作者、ffmpeg 命令与自检、`ROOMUSIC_AUDIO_ANALYSIS`、按 Roon 的增益公式、分析结果与进度接口、测试 |

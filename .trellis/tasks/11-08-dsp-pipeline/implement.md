@@ -35,12 +35,12 @@ export ROOMUSIC_TEST_FFMPEG="$(scripts/ffmpeg-pinned.sh)"
 
 ## P-c 渲染会话骨架（zones B2 端口定稿、P-a 结论之后）
 
-1. [ ] 后端 GPT：`playback/render/ffmpeg`：从 `playback/derivation/ffmpeg.go` 搬来定位、版本、解码器清单解析；加编码器清单（`-encoders`）、soxr 探测、进程组与 `WaitDelay`、全局进程信号量（`3 × GOMAXPROCS`，取名额最多等 5 秒）、带起始与停滞超时的读取。
-2. [ ] `playback/render`：`TrackSource` 端口与 `Track`；来源段（解码命令 design.md §4.2、预缓冲环 §5.1、电平化区域生成与施加 §7.2）；`player.read` 的最小实现（格式相同就短读拼接、不淡化、不超时，留出 gapless-crossfade 的挂点）；
+1. [x] 后端 GPT：`playback/render/ffmpeg`：从 `playback/derivation/ffmpeg.go` 搬来定位、版本、解码器清单解析；加编码器清单（`-encoders`）、soxr 探测、进程组与 `WaitDelay`、全局进程信号量（`3 × GOMAXPROCS`，取名额最多等 5 秒）、带起始与停滞超时的读取。
+2. [x] `playback/render`：`TrackSource` 端口与 `Track`；来源段（解码命令 design.md §4.2、预缓冲环 §5.1、电平化区域生成与施加 §7.2）；`player.read` 的最小实现（格式相同就短读拼接、不淡化、不超时，留出 gapless-crossfade 的挂点）；
        渲染循环（§5.2：量子、领先 20 秒、背压、处理速度计时）；事件队列与派发器（§6）；编码器（design-delivery.md §1.1–§1.2）；`Negotiate` 与具体格式（§2）；`Renderer`/`RenderSession` 的全部方法（design.md §3）。
        量化先用 `dsp/dither` 已有的接口（D 接入前若 `dsp/dither` 还没合入，用直通 + 四舍五入的临时实现，D 接入时删掉）。
-3. [ ] `playback`：`Service.OpenForRender`（复用 `resolve` 与 `openVerified`，按 design.md §4.1 映射错误）；可渲染格式表（design.md §10.1）。
-4. [ ] `app`：`OpenRenderer`（定位、清单、自检 §10.2）与装配：`TrackSource` 适配器（`playback.Service` + `catalog.Store.LoadTrackAnalysis`）、`render.New`、交给 `zones.NewService`；关停时 `Renderer.Close`。替换 zones B2 的假渲染器在生产装配里的位置（测试装配里假渲染器保留）。
+3. [x] `playback`：`Service.OpenForRender`（复用 `resolve` 与 `openVerified`，按 design.md §4.1 映射错误）；可渲染格式表（design.md §10.1）。
+4. [x] `app`：`OpenRenderer`（定位、清单、自检 §10.2）与装配：`TrackSource` 适配器（`playback.Service` + `catalog.Store.LoadTrackAnalysis`）、`render.New`、交给 `zones.NewService`；关停时 `Renderer.Close`。替换 zones B2 的假渲染器在生产装配里的位置（测试装配里假渲染器保留）。
 5. [ ] 测试 agent：design.md §11 的 `playback/render` 各条（逐位 MD5、事件队列、预缓冲、超时、定位）；`Negotiate` 的规则表一条表驱动测试（lossless/lossy × 有无对应格式 × 没有可用格式）。
 
 验证：`go test ./internal/playback/render/...`、`./internal/playback/...`（只本包）、依赖方向。联调信号：一首 FLAC 能在桌面 Chrome 里经 zones 放出来（主会话手工一次）。
