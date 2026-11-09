@@ -30,6 +30,8 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/playback"
 	"github.com/qlqq/roomusic/backend/internal/playback/analysis"
 	playbackapi "github.com/qlqq/roomusic/backend/internal/playback/httpapi"
+	"github.com/qlqq/roomusic/backend/internal/zones"
+	zonesapi "github.com/qlqq/roomusic/backend/internal/zones/httpapi"
 )
 
 // App 是装配完成的应用：请求 handler 加上需要在停机时等待的后台工作。
@@ -40,6 +42,7 @@ type App struct {
 	catalogDone       <-chan struct{}
 	analysisDone      <-chan struct{}
 	scanSchedulerDone <-chan struct{}
+	zonesDone         <-chan struct{}
 }
 
 // Option 调整装配。生产路径不传任何选项；选项只用于测试把时间常量缩短到可以快速验证。
@@ -85,7 +88,7 @@ func WithDerivation(port playback.Derivation) Option {
 // WithBackups 注入备份能力；不提供时不注册系统接口。
 func WithBackups(service *backup.Service) Option { return func(o *options) { o.backups = service } }
 
-// New 装配应用。lifecycle 是应用的生命周期上下文（进程停机时取消）：扫描 worker 与已建立的音频传输都以它为界；
+// New 装配应用。lifecycle 是应用的生命周期上下文（进程停机时取消）：扫描 worker、播放区会话与已建立的音频传输都以它为界；
 // 调用方先完成 InitializeCatalog；正常服务不等待后台投影完成。
 // frontend 是前端产物子树。database 为 nil 时路由表照常建立但 /readyz 报告未就绪，供不连接数据库的路由测试使用。
 func New(lifecycle context.Context, settings config.Server, database *sql.DB, frontend fs.FS, logger *slog.Logger, applied ...Option) *App {
@@ -110,6 +113,17 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	guard.WithLogger(logger)
 	libraryService := library.NewService(lifecycle, database, settings.DataDirectory, logger).WithScanConcurrency(settings.ScanWorkers)
 	personalService := personal.NewService(database)
+	// 算法线尚未接入时不安装替代渲染器；起播由服务返回 renderer_unavailable。
+	zonesService := zones.NewService(database, zones.Options{Logger: logger})
+	zonesDone := make(chan struct{})
+	if lifecycle != nil {
+		context.AfterFunc(lifecycle, func() {
+			zonesService.Close()
+			close(zonesDone)
+		})
+	} else {
+		close(zonesDone)
+	}
 	libraryService.SetAlbumFavoriteMover(personalService.MoveAlbumFavorites)
 	libraryService.WithScanSchedulerClock(assembly.scanSchedulerClock)
 	scanSchedulerDone := make(chan struct{})
@@ -151,6 +165,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	}).Register(mux)
 	listeningapi.New(guard, listening.NewService(database)).Register(mux)
 	personalapi.New(guard, personalService).Register(mux)
+	zonesapi.New(guard, zonesService).Register(mux)
 	if assembly.backups != nil {
 		backupapi.New(assembly.backups, database, guard, lifecycle).Register(mux)
 	}
@@ -167,13 +182,23 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	} else {
 		close(catalogDone)
 	}
-	return &App{mux: mux, handler: httpserver.Middleware(logger, mux), library: libraryService, catalogDone: catalogDone, analysisDone: analysisDone, scanSchedulerDone: scanSchedulerDone}
+	return &App{mux: mux, handler: httpserver.Middleware(logger, mux), library: libraryService, catalogDone: catalogDone, analysisDone: analysisDone, scanSchedulerDone: scanSchedulerDone, zonesDone: zonesDone}
 }
 
 // InitializeCatalog 在允许扫描与治理写入前短事务登记目标版本，不发现对象或等待回填。
 // 数据库或结构错误返回调用方；规范化预检失败只禁用新投影，保留旧服务。
 func InitializeCatalog(ctx context.Context, database *sql.DB) error {
 	return maintenance.Initialize(ctx, database)
+}
+
+// WaitForZones 在关闭数据库前等待播放区释放会话并停止定时任务。
+func (application *App) WaitForZones(ctx context.Context) error {
+	select {
+	case <-application.zonesDone:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // WaitForCatalogMaintenance 在关闭数据库前有界等待已取消的后台维护退出。

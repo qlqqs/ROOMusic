@@ -54,6 +54,8 @@ var packageRules = map[string]packageRule{
 	"playback/derivation":            {},
 	"playback":                       {imports: []string{"catalog", "library", "playback/analysis", "playback/derivation"}},
 	"zones/queue":                    {},
+	"zones/httpapi":                  {imports: []string{"identity", "platform/httpserver", "platform/uuid", "zones"}, http: true},
+	"zones/zonestest":                {imports: []string{"zones"}},
 	"zones":                          {imports: []string{"catalog", "platform/uuid", "zones/queue"}},
 	"listening":                      {imports: []string{"catalog"}},
 	"personal":                       {imports: []string{"catalog", "platform/uuid"}},

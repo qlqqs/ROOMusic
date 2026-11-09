@@ -212,5 +212,10 @@ maintenance的原始名字工作量估计经`artistgraph.ArtistInputNameCost`窄
 
 ## 播放区 B1 增量
 
-`zones/queue` 是只依赖标准库的队列叶子包；`zones` 当前只有持久化，允许依赖 `catalog`、`platform/uuid`、`zones/queue`，不导入 listening 或 DSP。详见[播放区数据与队列合同](./zones-data-contracts.md)。
-`app` 允许装配 zones 子树的三个指定包；`zones/httpapi` 尚未创建，待 B2 创建时登记允许依赖 `identity`、`platform/httpserver`、`platform/uuid`、`zones`，不为依赖测试建立空包或放宽“规则对应真实包”的检查。
+`zones/queue` 是只依赖标准库的队列叶子包；B1 在 `zones` 引入持久化，允许依赖 `catalog`、`platform/uuid`、`zones/queue`，不导入 listening 或 DSP。详见[播放区数据与队列合同](./zones-data-contracts.md)。
+
+## 播放区 B2 增量
+
+`zones` 增加控制 Service、渲染消费方端口、设备与命令、内部 hub；`zones/httpapi` 依赖 `identity`、`platform/httpserver`、`platform/uuid`、`zones`，只负责控制接口，不包含 B3 的 SSE/输出端/渲染流。
+`zones/zonestest` 只依赖 zones 与标准库，拥有静音 WAV 假渲染器；生产 `app` 不允许导入此测试辅助包。
+`app.New` 装配 Service 与路由，进程关停经 `WaitForZones` 等待 Service 关闭；真实 Renderer 未装配时不拿假渲染器顶替。完整合同见[播放区控制面合同](./playback-zone-contracts.md)。
