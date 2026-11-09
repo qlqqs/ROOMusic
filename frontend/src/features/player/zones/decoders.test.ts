@@ -3,6 +3,7 @@ import deviceEvent from "../../../../../backend/internal/app/testdata/api-sample
 import removedEvent from "../../../../../backend/internal/app/testdata/api-samples/playback-zones/events/device-removed.json";
 import queueEvent from "../../../../../backend/internal/app/testdata/api-samples/playback-zones/events/queue.json";
 import snapshotEvent from "../../../../../backend/internal/app/testdata/api-samples/playback-zones/events/snapshot.json";
+import signalEvent from "../../../../../backend/internal/app/testdata/api-samples/playback-zones/events/zone-signal.json";
 import nextStreamEvent from "../../../../../backend/internal/app/testdata/api-samples/playback-zones/events/zone-next-stream.json";
 import failedTrackEvent from "../../../../../backend/internal/app/testdata/api-samples/playback-zones/events/zone-track-failed.json";
 import { sampleBody } from "../../../test/api-samples";
@@ -167,6 +168,12 @@ const failedTrackZone = idleZone({
 });
 
 describe("播放区公开 DTO 的真实样本", () => {
+  it("非默认 Headroom 设置样本保留开关、小数增益与削波指示", () => {
+    expect(decodeCommandResult(response("set-settings-headroom")).zone.settings.headroom).toStrictEqual({
+      enabled: true, db: -3.1, clipIndicator: true,
+    });
+  });
+
   it("播放区逐字段映射失败条目、事件、空格式流与时间毫秒", () => {
     expect(zoneDecoder(failedTrackEvent.data.zone, "$")).toStrictEqual(failedTrackZone);
   });
@@ -276,6 +283,16 @@ describe("播放区公开 DTO 的真实样本", () => {
 });
 
 describe("五种 SSE 事件的真实样本", () => {
+  it("非空信号路径事件保留步骤、削波与处理速度", () => {
+    const decoded = decodeStreamEvent(signalEvent.event, JSON.stringify(signalEvent.data));
+    if (decoded?.type !== "zone") throw new Error("信号样本未解码为播放区事件");
+    expect(decoded.zone.signal).toStrictEqual(signalEvent.data.zone.signal);
+    expect(decoded.zone.signal).toMatchObject({
+      quality: "enhanced", clipping: true, processing_speed: 85.3,
+      steps: [{ kind: "source" }, { kind: "headroom" }, { kind: "dither" }, { kind: "encode" }],
+    });
+  });
+
   it("快照事件逐字段映射空列表与服务器时间毫秒", () => {
     expect(decodeStreamEvent(snapshotEvent.event, JSON.stringify(snapshotEvent.data))).toStrictEqual({
       type: "snapshot",

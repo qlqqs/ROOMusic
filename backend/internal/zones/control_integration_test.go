@@ -382,3 +382,49 @@ func TestPostgreSQLZonesControlCleanup(t *testing.T) {
 		t.Fatalf("设备清理未持久化：%+v", persisted)
 	}
 }
+
+func TestPostgreSQLZonesHeadroomSettings(t *testing.T) {
+	f := newControlFixture(t)
+	user := f.user(t, "user")
+	id := f.device(t, user, false).Zone.ZoneID
+	for _, tc := range []struct {
+		name  string
+		db    float64
+		valid bool
+	}{
+		{"minimum", -30, true},
+		{"zero", 0, true},
+		{"decimal", -3.1, true},
+		{"below_minimum", -30.1, false},
+		{"positive_half_step", 0.05, false},
+		{"above_zero", 0.1, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			before := f.snapshot(t, user).Zones[0]
+			want := zones.Headroom{Enabled: true, DB: tc.db, ClipIndicator: true}
+			body := map[string]any{"command": "set_settings", "settings": map[string]any{"headroom": want}}
+			if tc.valid {
+				result := f.command(t, user, id, body)
+				if result.Zone.Settings.Headroom != want {
+					t.Fatalf("Headroom 设置 = %+v，期望 %+v", result.Zone.Settings.Headroom, want)
+				}
+			} else {
+				controlError(t, f.request(t, user, "POST", "/zones/"+id+"/commands", body, controlOrigin), http.StatusBadRequest, "invalid_input")
+				if after := f.snapshot(t, user).Zones[0]; after.Settings != before.Settings || after.Revision != before.Revision {
+					t.Fatalf("拒绝的 Headroom 设置改变了设置或版本：%+v", after)
+				}
+				want = before.Settings.Headroom
+			}
+			// 新服务没有原服务的内存状态，必须从 PostgreSQL 重新读取。
+			restarted := zones.NewService(f.db, zones.Options{Now: f.clock.current, AfterFunc: f.clock.after})
+			defer restarted.Close()
+			snapshot, err := restarted.Snapshot(context.Background(), user.id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(snapshot.Zones) != 1 || snapshot.Zones[0].ZoneID != id || snapshot.Zones[0].Settings.Headroom != want {
+				t.Fatalf("新服务未恢复已保存的 Headroom：%+v，期望 %+v", snapshot.Zones, want)
+			}
+		})
+	}
+}

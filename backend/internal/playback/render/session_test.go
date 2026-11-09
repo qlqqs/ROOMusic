@@ -2,6 +2,7 @@ package render
 
 import (
 	"crypto/md5"
+	"encoding/json"
 	"fmt"
 	"io"
 	"reflect"
@@ -43,6 +44,27 @@ func TestRenderSession(t *testing.T) {
 			pcm := ffmpegOutput(t, ff, encoded, "-i", "pipe:0", "-map", "0:a:0", "-c:a", "pcm_s32le", "-f", "s32le", "pipe:1")
 			if got, want := md5.Sum(pcm), md5.Sum(tc.pcm); got != want {
 				t.Fatalf("PCM MD5 = %x, want %x（字节 %d/%d）", got, want, len(pcm), len(tc.pcm))
+			}
+			events := eventsThrough(t, s, "signal", 0)
+			path := events[len(events)-1].Signal.(signalPath)
+			if len(path.Steps) == 0 {
+				t.Fatal("信号路径为空")
+			}
+			for _, step := range path.Steps {
+				if step.Kind == "dither" {
+					t.Fatalf("未处理的整数源不应出现抖动：%+v", path)
+				}
+			}
+			data, err := json.Marshal(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var snapshot map[string]json.RawMessage
+			if err := json.Unmarshal(data, &snapshot); err != nil {
+				t.Fatal(err)
+			}
+			if _, exists := snapshot["clipping"]; exists {
+				t.Fatalf("未启用削波指示时不应包含 clipping：%s", data)
 			}
 		})
 	}
