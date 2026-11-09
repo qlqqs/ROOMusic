@@ -12,6 +12,7 @@ var (
 	ErrOutputSuperseded    = errors.New("output_superseded")
 	ErrOutputUnknown       = errors.New("output_unknown")
 	ErrStreamGone          = errors.New("stream_gone")
+	ErrSegmentMissing      = errors.New("segment_missing")
 )
 
 const (

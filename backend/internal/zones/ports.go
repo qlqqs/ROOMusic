@@ -15,6 +15,7 @@ type Renderer interface {
 type StreamFormat struct {
 	Codec, MimeType, Quality       string
 	SampleRate, BitDepth, Channels int
+	Delivery                       string `json:"-"` // stream（长流）或 hls。
 	// 协商时携带的设备上限，不属于对外 Stream.format；0 表示未声明。
 	MaxSampleRate, MaxBitDepth, MaxChannels int `json:"-"`
 }
@@ -60,11 +61,20 @@ type Cursor interface {
 type RenderSession interface {
 	MimeType() string
 	Format() StreamFormat // Open 返回后可取得首曲确定的具体格式。
-	Body() io.Reader      // 只能读取一次；Close 后读取返回 EOF。
+	Body() io.Reader      // 长流只能读取一次；HLS 或 Close 后读取返回 EOF。
+	HLS() HLSMedia        // HLS 会话非 nil；长流为 nil。
 	Observe(sample PlayheadSample)
 	NextChanged()         // 预选失效；未发出字节时重选，否则发 rebuild_needed。
 	Events() <-chan Event // 带缓冲；由 zones 持续读取直到通道关闭。
 	Close()               // 可重复调用，同时结束 Body 和 Events。
+}
+
+// HLSMedia 只提供可重复读取的媒体，不暴露会话的生命周期控制。
+// 会话关闭或出错后，各方法返回 ErrStreamGone。
+type HLSMedia interface {
+	Playlist(ctx context.Context) ([]byte, error) // 不足三片且流没结束时等待，最多十秒。
+	Init() ([]byte, error)
+	Segment(n int64) ([]byte, error) // 尚未产出或已删除时返回 ErrSegmentMissing。
 }
 
 // PlayheadSample 的 At 是服务端收到回报的时刻，不信任客户端墙钟。

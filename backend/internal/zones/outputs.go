@@ -463,27 +463,52 @@ func mapPosition(p *PersistedZone, stream *Stream, seconds float64, tracks map[s
 	return advanced
 }
 func (s *Service) TakeStream(ctx context.Context, userID, zoneID string, seq int64) (StreamBody, error) {
+	session, mimeType, err := s.accessStream(ctx, userID, zoneID, seq, true)
+	if err != nil {
+		return StreamBody{}, err
+	}
+	return StreamBody{session.Body(), mimeType}, nil
+}
+
+// GetHLSMedia 核对当前输出会话与流序号，但不消耗单次取流标记。
+func (s *Service) GetHLSMedia(ctx context.Context, userID, zoneID string, seq int64) (HLSMedia, error) {
+	session, _, err := s.accessStream(ctx, userID, zoneID, seq, false)
+	if err != nil {
+		return nil, err
+	}
+	return session.HLS(), nil
+}
+
+// 资格核对与长流的单次占用在同一把播放区锁内完成；等待媒体时不持锁。
+func (s *Service) accessStream(ctx context.Context, userID, zoneID string, seq int64, take bool) (RenderSession, string, error) {
 	if !validID(zoneID) || seq < 0 {
-		return StreamBody{}, ErrInvalidInput
+		return nil, "", ErrInvalidInput
 	}
 	u, err := s.user(ctx, userID)
 	if err != nil {
-		return StreamBody{}, err
+		return nil, "", err
 	}
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 	z := u.zones[strings.ToLower(zoneID)]
 	if z == nil {
-		return StreamBody{}, ErrNotFound
+		return nil, "", ErrNotFound
 	}
 	z.mu.Lock()
 	defer z.mu.Unlock()
 	h := z.handleFor(&seq)
-	if z.output == nil || outputError(z.output) != nil || h == nil || h.taken {
-		return StreamBody{}, ErrStreamGone
+	if z.output == nil || outputError(z.output) != nil || h == nil {
+		return nil, "", ErrStreamGone
 	}
-	h.taken = true
-	return StreamBody{h.session.Body(), h.stream.MimeType}, nil
+	if take {
+		if h.taken || h.session.HLS() != nil {
+			return nil, "", ErrStreamGone
+		}
+		h.taken = true
+	} else if h.session.HLS() == nil {
+		return nil, "", ErrStreamGone
+	}
+	return h.session, h.stream.MimeType, nil
 }
 
 // 把当前曲目锚点反算到流内；同曲循环时取最近仍保留的一段。

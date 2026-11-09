@@ -85,7 +85,11 @@ func (s *Service) createRender(userID string, z *zoneRuntime, entryID string, se
 	if mimeType == "" {
 		mimeType = format.MimeType
 	}
-	stream := &Stream{Seq: spec.Seq, URL: fmt.Sprintf("/api/v1/me/playback/zones/%s/streams/%d", spec.ZoneID, spec.Seq), MimeType: mimeType, Quality: quality, Format: projected, Segments: []StreamSegment{{EntryID: entryID, Track: z.cursorTracks[entry.TrackID], TrackStartSeconds: seconds}}}
+	url := fmt.Sprintf("/api/v1/me/playback/zones/%s/streams/%d", spec.ZoneID, spec.Seq)
+	if format.Delivery == "hls" {
+		url += "/index.m3u8"
+	}
+	stream := &Stream{Seq: spec.Seq, URL: url, MimeType: mimeType, Quality: quality, Format: projected, Segments: []StreamSegment{{EntryID: entryID, Track: z.cursorTracks[entry.TrackID], TrackStartSeconds: seconds}}}
 	return &renderHandle{session: session, stream: stream, generation: z.generation, entryID: entryID, startSeconds: seconds, wake: make(chan struct{}, 1), done: make(chan struct{})}, ""
 }
 func (s *Service) replaceNext(userID string, z *zoneRuntime, entryID string, seconds float64) string {

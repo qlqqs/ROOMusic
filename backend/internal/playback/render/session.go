@@ -24,6 +24,7 @@ type session struct {
 	chain                              *chain.Chain
 	player                             *player
 	encoder                            *encoder
+	hls                                *hlsMedia
 	reader                             *io.PipeReader
 	writer                             *io.PipeWriter
 	ready                              chan struct{}
@@ -57,6 +58,15 @@ func newSession(parent context.Context, owner *Renderer, spec zones.RenderSpec, 
 	reader, writer := io.Pipe()
 	s := &session{owner: owner, ctx: ctx, cancel: cancel, spec: spec, format: format, pcm: pcm, chain: c, reader: reader, writer: writer, ready: make(chan struct{}),
 		controlWake: make(chan struct{}, 1), eventWake: make(chan struct{}, 1), eventSpace: make(chan struct{}, 1), events: make(chan zones.Event, 64), immediateEvents: make(chan zones.Event, 64), done: make(chan struct{})}
+	if format.Delivery == "hls" {
+		s.hls = newHLSMedia(ctx, func() float64 {
+			if s.pcm.SampleRate == 0 {
+				return 0
+			}
+			return float64(s.playhead()) / float64(s.pcm.SampleRate)
+		}, owner.options.NewTicker)
+		_ = writer.Close()
+	}
 	p := &player{session: s, anchor: track, anchorKnown: prepareErr == nil, last: spec.Start, firstErr: prepareErr}
 	s.player = p
 	if prepareErr != nil {
@@ -65,7 +75,7 @@ func newSession(parent context.Context, owner *Renderer, spec zones.RenderSpec, 
 		s.markReady()
 		return s, nil
 	}
-	enc, err := newEncoder(ctx, reservation, owner.options.FFmpeg, format, pcm, writer, s.fail)
+	enc, err := newEncoder(ctx, reservation, owner.options.FFmpeg, format, pcm, writer, s.hls, s.fail)
 	if err != nil {
 		cancel()
 		_ = reader.Close()
@@ -87,11 +97,17 @@ func (s *session) start() {
 	if s.encoder == nil {
 		go func() {
 			defer close(s.done)
+			if s.hls != nil {
+				defer s.hls.close()
+			}
 			s.runFailure()
 		}()
 		return
 	}
 	stop := context.AfterFunc(s.ctx, func() {
+		if s.hls != nil {
+			s.hls.close()
+		}
 		s.mu.Lock()
 		err := s.failure
 		s.mu.Unlock()
@@ -102,12 +118,25 @@ func (s *session) start() {
 	workers.Add(2)
 	go func() { defer workers.Done(); s.dispatch() }()
 	go func() { defer workers.Done(); s.run() }()
-	go func() { workers.Wait(); stop(); close(s.done) }()
+	go func() {
+		workers.Wait()
+		stop()
+		if s.hls != nil {
+			s.hls.close()
+		}
+		close(s.done)
+	}()
 }
 
 func (s *session) MimeType() string           { return s.format.MimeType }
 func (s *session) Format() zones.StreamFormat { return s.format }
 func (s *session) Body() io.Reader            { return sessionBody{s} }
+func (s *session) HLS() zones.HLSMedia {
+	if s.hls == nil {
+		return nil
+	}
+	return s.hls
+}
 func (s *session) Events() <-chan zones.Event { return s.events }
 func (s *session) NextChanged()               { s.changed.Store(true); wake(s.controlWake) }
 func (s *session) markReady()                 { s.readyOnce.Do(func() { close(s.ready) }) }
@@ -116,6 +145,9 @@ func (s *session) markReady()                 { s.readyOnce.Do(func() { close(s.
 func (s *session) Close() {
 	s.closeOnce.Do(func() {
 		s.closed.Store(true)
+		if s.hls != nil {
+			s.hls.close()
+		}
 		s.cancel()
 		_ = s.writer.Close()
 		_ = s.reader.Close()
@@ -130,6 +162,9 @@ func (s *session) fail(err error) {
 	}
 	s.pending = nil
 	s.mu.Unlock()
+	if s.hls != nil {
+		s.hls.close()
+	}
 	_ = s.writer.CloseWithError(err)
 	s.markReady()
 	s.cancel()
@@ -141,6 +176,9 @@ func (body sessionBody) Read(data []byte) (int, error) {
 	s := body.s
 	if len(data) == 0 {
 		return 0, nil
+	}
+	if s.hls != nil {
+		return 0, io.EOF
 	}
 	select {
 	case <-s.ready:
@@ -209,6 +247,9 @@ func (s *session) runFailure() {
 			return
 		}
 		if err == nil {
+			if s.hls != nil {
+				s.hls.finish()
+			}
 			if send(zones.Event{Kind: "format_boundary", NextEntryID: entry.EntryID, Reason: "format"}) {
 				<-s.ctx.Done()
 			}
@@ -218,6 +259,9 @@ func (s *session) runFailure() {
 			s.fail(err)
 			return
 		}
+	}
+	if s.hls != nil {
+		s.hls.finish()
 	}
 	if send(zones.Event{Kind: "stream_ended"}) {
 		<-s.ctx.Done()

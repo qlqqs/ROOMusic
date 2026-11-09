@@ -19,14 +19,14 @@ type encoder struct {
 	done    chan struct{}
 }
 
-func newEncoder(ctx context.Context, reservation *ffmpeg.Reservation, tool *ffmpeg.Tool, f zones.StreamFormat, pcm chain.Format, output *io.PipeWriter, fail func(error)) (*encoder, error) {
+func newEncoder(ctx context.Context, reservation *ffmpeg.Reservation, tool *ffmpeg.Tool, f zones.StreamFormat, pcm chain.Format, output *io.PipeWriter, hls *hlsMedia, fail func(error)) (*encoder, error) {
 	e := &encoder{format: f, output: output, done: make(chan struct{})}
 	if f.Codec == "wav" {
 		close(e.done)
 		return e, nil
 	}
 	input := "f32le"
-	if f.Codec == "flac" {
+	if f.BitDepth != 0 {
 		input = "s" + strconv.Itoa(f.BitDepth) + "le"
 	}
 	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-f", input, "-ar", strconv.Itoa(pcm.SampleRate), "-ac", strconv.Itoa(pcm.Channels), "-i", "pipe:0", "-map_metadata", "-1", "-threads", "1"}
@@ -36,13 +36,25 @@ func newEncoder(ctx context.Context, reservation *ffmpeg.Reservation, tool *ffmp
 	switch f.Codec {
 	case "flac":
 		args = append(args, "-c:a", "flac", "-compression_level", "5", "-f", "flac")
+	case "alac":
+		sampleFormat := "s16p"
+		if f.BitDepth == 24 {
+			sampleFormat = "s32p"
+		}
+		args = append(args, "-c:a", "alac", "-sample_fmt", sampleFormat, "-bits_per_raw_sample", strconv.Itoa(f.BitDepth))
 	case "opus":
 		args = append(args, "-c:a", "libopus", "-b:a", "128k", "-application", "audio", "-ar", "48000", "-f", "ogg", "-page_duration", "100000")
 		if f.Channels > 2 {
 			args = append(args, "-mapping_family", "1")
 		}
 	case "aac":
-		args = append(args, "-c:a", "aac", "-profile:a", "aac_low", "-b:a", "256k", "-ar", strconv.Itoa(f.SampleRate), "-f", "adts")
+		args = append(args, "-c:a", "aac", "-profile:a", "aac_low", "-b:a", "256k", "-ar", strconv.Itoa(f.SampleRate))
+		if f.Delivery == "stream" {
+			args = append(args, "-f", "adts")
+		}
+	}
+	if f.Delivery == "hls" {
+		args = append(args, "-f", "mp4", "-movflags", "+empty_moov+default_base_moof+skip_trailer", "-frag_duration", "4000000")
 	}
 	args = append(args, "-flush_packets", "1", "pipe:1")
 	p, err := reservation.Start(ctx, ffmpeg.StartOptions{Args: args, Stdin: true})
@@ -53,7 +65,12 @@ func newEncoder(ctx context.Context, reservation *ffmpeg.Reservation, tool *ffmp
 	go func() {
 		defer close(e.done)
 		defer p.Close()
-		_, copyErr := io.Copy(output, p.Stdout())
+		var copyErr error
+		if hls != nil {
+			copyErr = hls.split(p.Stdout())
+		} else {
+			_, copyErr = io.Copy(output, p.Stdout())
+		}
 		if copyErr != nil {
 			_ = p.Close()
 		}
@@ -63,6 +80,9 @@ func newEncoder(ctx context.Context, reservation *ffmpeg.Reservation, tool *ffmp
 		}
 		if copyErr != nil && ctx.Err() == nil {
 			fail(copyErr)
+		}
+		if hls != nil && copyErr == nil && ctx.Err() == nil {
+			hls.finish()
 		}
 		_ = output.CloseWithError(copyErr)
 	}()

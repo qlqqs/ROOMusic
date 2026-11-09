@@ -14,34 +14,42 @@ var (
 	ErrBusy           = errors.New("render: 渲染进程繁忙")
 )
 
-func codecInfo(codec string) (mime string, lossless bool, encoder string) {
-	switch codec {
-	case "flac":
-		return "audio/flac", true, "flac"
-	case "wav":
-		return "audio/wav", true, ""
-	case "opus":
-		return `audio/ogg; codecs="opus"`, false, "libopus"
-	case "aac":
-		return "audio/aac", false, "aac"
-	default:
-		return "", false, ""
+type deliveryFormat struct {
+	codec, mime, delivery, encoder string
+	lossless                       bool
+}
+
+var deliveryFormats = [...]deliveryFormat{
+	{"flac", "audio/flac", "stream", "flac", true},
+	{"wav", "audio/wav", "stream", "", true},
+	{"opus", `audio/ogg; codecs="opus"`, "stream", "libopus", false},
+	{"aac", "audio/aac", "stream", "aac", false},
+	{"alac", "application/vnd.apple.mpegurl", "hls", "alac", true},
+	{"aac", "application/vnd.apple.mpegurl", "hls", "aac", false},
+}
+
+func codecInfo(codec, mime string) (deliveryFormat, bool) {
+	for _, format := range deliveryFormats {
+		if format.codec == codec && format.mime == mime {
+			return format, true
+		}
 	}
+	return deliveryFormat{}, false
 }
 
 func (r *Renderer) Negotiate(caps zones.Capabilities, quality string) (zones.StreamFormat, error) {
 	var fallback *zones.StreamFormat
 	for _, capability := range caps.StreamFormats {
-		mime, lossless, encoder := codecInfo(capability.Codec)
-		if mime == "" || encoder != "" && (r.options.FFmpeg == nil || !r.options.FFmpeg.HasEncoder(encoder)) {
+		info, ok := codecInfo(capability.Codec, capability.MIMEType)
+		if !ok || info.encoder != "" && (r.options.FFmpeg == nil || !r.options.FFmpeg.HasEncoder(info.encoder)) {
 			continue
 		}
 		// 不相信声明中的 lossless 标记能够改变编码器本身的性质。
-		if capability.Lossless != lossless {
+		if capability.Lossless != info.lossless {
 			continue
 		}
-		format := zones.StreamFormat{Codec: capability.Codec, MimeType: mime, Quality: "lossy", MaxChannels: caps.MaxChannels}
-		if lossless {
+		format := zones.StreamFormat{Codec: capability.Codec, MimeType: info.mime, Delivery: info.delivery, Quality: "lossy", MaxChannels: caps.MaxChannels}
+		if info.lossless {
 			format.Quality = "lossless"
 		}
 		if capability.MaxSampleRate != nil {
@@ -53,7 +61,7 @@ func (r *Renderer) Negotiate(caps zones.Capabilities, quality string) (zones.Str
 		if format.MaxChannels <= 0 || format.MaxChannels > 32 || format.MaxSampleRate < 0 || format.MaxBitDepth < 0 {
 			continue
 		}
-		if lossless && format.MaxBitDepth > 0 && format.MaxBitDepth < 16 {
+		if info.lossless && format.MaxBitDepth > 0 && format.MaxBitDepth < 16 {
 			continue
 		}
 		if capability.Codec == "opus" && format.MaxSampleRate > 0 && format.MaxSampleRate < 48000 {
@@ -90,11 +98,12 @@ func sameSourceFormat(a, b Track) bool {
 
 func concreteFormat(spec zones.RenderSpec, source Track) (zones.StreamFormat, chain.Format, error) {
 	f := spec.Format
-	mime, lossless, _ := codecInfo(f.Codec)
-	if mime == "" {
+	selected, ok := codecInfo(f.Codec, f.MimeType)
+	if !ok {
 		return f, chain.Format{}, ErrNoStreamFormat
 	}
-	f.MimeType = mime
+	f.Delivery = selected.delivery
+	lossless := selected.lossless
 	f.Quality = "lossy"
 	if lossless {
 		f.Quality = "lossless"

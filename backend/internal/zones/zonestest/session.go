@@ -58,6 +58,7 @@ func (s *Session) Spec() zones.RenderSpec     { return s.spec }
 func (s *Session) MimeType() string           { return s.format.MimeType }
 func (s *Session) Format() zones.StreamFormat { return s.format }
 func (s *Session) Body() io.Reader            { return s.body }
+func (s *Session) HLS() zones.HLSMedia        { return nil }
 func (s *Session) Events() <-chan zones.Event { return s.events }
 func (s *Session) Closed() bool {
 	select {

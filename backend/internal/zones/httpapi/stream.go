@@ -1,10 +1,16 @@
 package httpapi
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
+
+	"github.com/qlqq/roomusic/backend/internal/zones"
 )
 
 func (h *Handlers) stream(w http.ResponseWriter, r *http.Request, userID string) {
@@ -32,6 +38,107 @@ func (h *Handlers) stream(w http.ResponseWriter, r *http.Request, userID string)
 		return
 	}
 	copyStream(r.Context(), w, stream.Body)
+}
+
+func (h *Handlers) hlsMedia(w http.ResponseWriter, r *http.Request, userID string) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	zoneID, ok := pathID(w, r, "zone_id")
+	if !ok {
+		return
+	}
+	seq, err := strconv.ParseInt(r.PathValue("seq"), 10, 64)
+	if err != nil || seq < 0 {
+		invalidInput(w, r)
+		return
+	}
+	file := r.PathValue("file")
+	var segment int64
+	if file != "index.m3u8" && file != "init.mp4" {
+		var valid bool
+		segment, valid = hlsSegmentNumber(file)
+		if !valid {
+			writeError(w, r, zones.ErrSegmentMissing)
+			return
+		}
+	}
+	media, err := h.service.GetHLSMedia(r.Context(), userID, zoneID, seq)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	r, finish := h.responseLifetime(w, r, nil)
+	defer finish()
+	var body []byte
+	switch file {
+	case "index.m3u8":
+		body, err = media.Playlist(r.Context())
+	case "init.mp4":
+		body, err = media.Init()
+	default:
+		body, err = media.Segment(segment)
+	}
+	if r.Context().Err() != nil {
+		return
+	}
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if file == "index.m3u8" {
+		writeHLSPlaylist(w, r, body)
+		return
+	}
+	w.Header().Set("Content-Type", "audio/mp4")
+	http.ServeContent(hlsContentWriter{w}, r, file, time.Time{}, bytes.NewReader(body))
+}
+
+// ServeContent 的 Range 错误会清除缓存头，写出状态前恢复媒体的禁止缓存合同。
+type hlsContentWriter struct{ http.ResponseWriter }
+
+func (w hlsContentWriter) WriteHeader(status int) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.ResponseWriter.WriteHeader(status)
+}
+
+// 文件名只接受 ASCII 十进制片号，不接受符号、路径或 int64 溢出。
+func hlsSegmentNumber(file string) (int64, bool) {
+	number, ok := strings.CutSuffix(file, ".m4s")
+	if !ok || number == "" {
+		return 0, false
+	}
+	for i := range number {
+		if number[i] < '0' || number[i] > '9' {
+			return 0, false
+		}
+	}
+	n, err := strconv.ParseInt(number, 10, 64)
+	return n, err == nil
+}
+
+func writeHLSPlaylist(w http.ResponseWriter, r *http.Request, body []byte) {
+	w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+	w.Header().Add("Vary", "Accept-Encoding")
+	if acceptsGzip(r.Header.Values("Accept-Encoding")) {
+		w.Header().Set("Content-Encoding", "gzip")
+		if r.Method == http.MethodHead {
+			return
+		}
+		compressed := gzip.NewWriter(w)
+		if _, err := compressed.Write(body); err != nil {
+			return
+		}
+		_ = compressed.Close()
+		return
+	}
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+	if r.Method != http.MethodHead {
+		_, _ = w.Write(body)
+	}
+}
+
+func acceptsGzip(values []string) bool {
+	return strings.Contains(strings.ToLower(strings.Join(values, ",")), "gzip")
 }
 
 type streamRead struct {

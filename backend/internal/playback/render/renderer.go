@@ -104,6 +104,9 @@ func (r *Renderer) Open(ctx context.Context, spec zones.RenderSpec) (zones.Rende
 		return nil, prepareErr
 	}
 	var format zones.StreamFormat
+	if spec.Format.Delivery == "hls" {
+		format.Delivery, format.MimeType = spec.Format.Delivery, spec.Format.MimeType
+	}
 	var pcm chain.Format
 	if prepareErr == nil {
 		format, pcm, err = concreteFormat(spec, source)

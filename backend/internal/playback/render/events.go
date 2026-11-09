@@ -37,6 +37,9 @@ func (s *session) Observe(sample zones.PlayheadSample) {
 		s.haveSample = true
 	}
 	s.mu.Unlock()
+	if s.hls != nil {
+		s.hls.prune()
+	}
 	wake(s.eventWake)
 	wake(s.controlWake)
 }
@@ -183,6 +186,9 @@ func (s *session) dispatch() {
 		}
 	}
 	for {
+		if s.hls != nil {
+			s.hls.prune()
+		}
 		// 优先处理立即事件，不受未来队列与播放头影响。
 		select {
 		case event := <-s.immediateEvents:

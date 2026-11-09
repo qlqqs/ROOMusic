@@ -26,6 +26,7 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	h.route(mux, "HEAD /api/v1/me/playback/events", false, h.rejectStreamHead)
 	h.route(mux, "GET /api/v1/me/playback/zones/{zone_id}/streams/{seq}", false, h.stream)
 	h.route(mux, "HEAD /api/v1/me/playback/zones/{zone_id}/streams/{seq}", false, h.rejectStreamHead)
+	h.route(mux, "GET /api/v1/me/playback/zones/{zone_id}/streams/{seq}/{file}", false, h.hlsMedia)
 	h.route(mux, "POST /api/v1/me/playback/devices/{device_id}/output", true, h.claimOutput)
 	h.route(mux, "POST /api/v1/me/playback/outputs/{session_id}/reports", true, h.reportOutput)
 	h.route(mux, "POST /api/v1/me/playback/outputs/{session_id}/release", true, h.releaseOutput)
@@ -179,6 +180,8 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		status, code, message = http.StatusGone, "stream_gone", "音频流已失效"
 	case errors.Is(err, zones.ErrInvalidInput):
 		status, code, message = http.StatusBadRequest, "invalid_input", "请求参数无效"
+	case errors.Is(err, zones.ErrSegmentMissing):
+		status, code, message = http.StatusNotFound, "not_found", "音频分片不存在"
 	case errors.Is(err, zones.ErrNotFound):
 		status, code, message = http.StatusNotFound, "not_found", "播放区或设备不存在"
 	case errors.Is(err, zones.ErrTrackNotFound):
