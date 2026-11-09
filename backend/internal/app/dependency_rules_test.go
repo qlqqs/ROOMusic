@@ -53,6 +53,7 @@ var packageRules = map[string]packageRule{
 	"library/parser":                 {imports: []string{"catalog/metadata", "catalog/classical"}},
 	"library/parser/parsertest":      {},
 	"library":                        {imports: []string{"catalog", "catalog/governance", "catalog/artwork", "catalog/ingest", "catalog/metadata", "library/parser", "platform/uuid", "platform/workpool"}},
+	"dsp/internal/fft":               {},
 	"dsp/chain":                      {imports: []string{"dsp/leveling", "dsp/fade", "dsp/dither"}},
 	"dsp/leveling":                   {},
 	"dsp/fade":                       {},
