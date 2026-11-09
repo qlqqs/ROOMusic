@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "queue_full",
+      "message": "队列已满"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

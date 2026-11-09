@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "track_not_found",
+      "message": "曲目不存在"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 404
+}

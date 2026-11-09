@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -26,26 +27,43 @@ const controlOrigin = "http://roomusic.test"
 
 // 测试线程推进定时器；不启用假渲染器的实时时钟，也不依赖 sleep。
 type controlClock struct {
+	mu     sync.Mutex
 	now    time.Time
 	timers []*controlTimer
 }
 type controlTimer struct {
+	clock    *controlClock
 	at       time.Time
 	callback func()
 	stopped  bool
 }
 
 func (t *controlTimer) Stop() bool {
+	t.clock.mu.Lock()
+	defer t.clock.mu.Unlock()
 	active := !t.stopped
 	t.stopped = true
 	return active
 }
 func (c *controlClock) after(d time.Duration, callback func()) zones.Timer {
-	timer := &controlTimer{at: c.now.Add(d), callback: callback}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	timer := &controlTimer{clock: c, at: c.now.Add(d), callback: callback}
 	c.timers = append(c.timers, timer)
 	return timer
 }
+func (c *controlClock) current() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.now
+}
+func (c *controlClock) set(now time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.now = now
+}
 func (c *controlClock) advance(d time.Duration) {
+	c.mu.Lock()
 	until := c.now.Add(d)
 	for {
 		var next *controlTimer
@@ -59,9 +77,13 @@ func (c *controlClock) advance(d time.Duration) {
 		}
 		c.now = next.at
 		next.stopped = true
+		// 回调可以重入时钟或 Service，不能持时钟锁执行。
+		c.mu.Unlock()
 		next.callback()
+		c.mu.Lock()
 	}
 	c.now = until
+	c.mu.Unlock()
 }
 
 // 只给 retry 的前置条件注入一次开流失败，其余行为仍由已有假渲染器提供。
@@ -101,7 +123,7 @@ func newControlFixture(t *testing.T) *controlFixture {
 	})
 	clock := &controlClock{now: time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)}
 	renderer := &controlRenderer{Renderer: zonestest.NewRenderer(zonestest.Options{})}
-	service := zones.NewService(db, zones.Options{Renderer: renderer, Now: func() time.Time { return clock.now }, AfterFunc: clock.after})
+	service := zones.NewService(db, zones.Options{Renderer: renderer, Now: clock.current, AfterFunc: clock.after})
 	t.Cleanup(service.Close)
 	mux := http.NewServeMux()
 	httpapi.New(identity.NewGuard(db, false, controlOrigin), service).Register(mux)

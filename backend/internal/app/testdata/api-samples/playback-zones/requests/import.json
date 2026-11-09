@@ -1,0 +1,17 @@
+{
+  "body": {
+    "command": "import",
+    "current_entry_id": "legacy-1",
+    "entries": [
+      {
+        "entry_id": "legacy-1",
+        "track_id": "00000000-0000-4000-8000-000000000001"
+      }
+    ],
+    "history": [],
+    "mode": "sequential",
+    "position_seconds": 2
+  },
+  "method": "POST",
+  "path": "/api/v1/me/playback/zones/00000000-0000-4000-8000-000000000002/commands"
+}

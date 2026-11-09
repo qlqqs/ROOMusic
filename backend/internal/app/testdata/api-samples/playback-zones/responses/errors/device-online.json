@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "device_online",
+      "message": "播放设备仍在线"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

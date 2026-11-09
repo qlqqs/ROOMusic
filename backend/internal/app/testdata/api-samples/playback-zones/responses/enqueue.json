@@ -1,0 +1,157 @@
+{
+  "body": {
+    "queue_change": {
+      "entries": [
+        {
+          "entry_id": "00000000-0000-4000-8000-000000000001",
+          "track": {
+            "artist": "测试艺人",
+            "artist_refs": [],
+            "duration_seconds": 20,
+            "group_id": "00000000-0000-4000-8000-000000000002",
+            "present": true,
+            "release": {
+              "album_artist": null,
+              "album_artist_refs": [],
+              "artist": "测试艺人",
+              "artist_refs": [],
+              "artwork": null,
+              "attention_count": 0,
+              "id": "00000000-0000-4000-8000-000000000003",
+              "media_type": null,
+              "medium_count": 1,
+              "source_type": null,
+              "title": "合成发行",
+              "track_count": 5,
+              "year": null
+            },
+            "source": {
+              "bit_depth": null,
+              "bitrate": null,
+              "channels": null,
+              "codec": null,
+              "sample_rate": null,
+              "source_kind": "physical"
+            },
+            "title": "合成曲目 4",
+            "track_id": "00000000-0000-4000-8000-000000000004"
+          }
+        },
+        {
+          "entry_id": "00000000-0000-4000-8000-000000000005",
+          "track": {
+            "artist": "测试艺人",
+            "artist_refs": [],
+            "duration_seconds": 20,
+            "group_id": "00000000-0000-4000-8000-000000000002",
+            "present": true,
+            "release": {
+              "album_artist": null,
+              "album_artist_refs": [],
+              "artist": "测试艺人",
+              "artist_refs": [],
+              "artwork": null,
+              "attention_count": 0,
+              "id": "00000000-0000-4000-8000-000000000003",
+              "media_type": null,
+              "medium_count": 1,
+              "source_type": null,
+              "title": "合成发行",
+              "track_count": 5,
+              "year": null
+            },
+            "source": {
+              "bit_depth": null,
+              "bitrate": null,
+              "channels": null,
+              "codec": null,
+              "sample_rate": null,
+              "source_kind": "physical"
+            },
+            "title": "合成曲目 5",
+            "track_id": "00000000-0000-4000-8000-000000000006"
+          }
+        }
+      ],
+      "index": 3,
+      "kind": "insert",
+      "queue_revision": 2
+    },
+    "server_time": "2026-01-01T00:00:00Z",
+    "zone": {
+      "current": {
+        "entry_id": "00000000-0000-4000-8000-000000000007",
+        "track": {
+          "artist": "测试艺人",
+          "artist_refs": [],
+          "duration_seconds": 20,
+          "group_id": "00000000-0000-4000-8000-000000000002",
+          "present": true,
+          "release": {
+            "album_artist": null,
+            "album_artist_refs": [],
+            "artist": "测试艺人",
+            "artist_refs": [],
+            "artwork": null,
+            "attention_count": 0,
+            "id": "00000000-0000-4000-8000-000000000003",
+            "media_type": null,
+            "medium_count": 1,
+            "source_type": null,
+            "title": "合成发行",
+            "track_count": 5,
+            "year": null
+          },
+          "source": {
+            "bit_depth": null,
+            "bitrate": null,
+            "channels": null,
+            "codec": null,
+            "sample_rate": null,
+            "source_kind": "physical"
+          },
+          "title": "合成曲目 2",
+          "track_id": "00000000-0000-4000-8000-000000000008"
+        }
+      },
+      "device_id": "00000000-0000-4000-8000-000000000009",
+      "event": {
+        "kind": "autoplay_blocked",
+        "seq": 13
+      },
+      "failures": [],
+      "fault": null,
+      "has_next": true,
+      "intent": "pause",
+      "mode": "sequential",
+      "next_stream": null,
+      "paused_at": "2026-01-01T00:00:00Z",
+      "position": {
+        "at": "2026-01-01T00:00:00Z",
+        "duration_seconds": 20,
+        "seconds": 0,
+        "seekable": true
+      },
+      "queue_length": 5,
+      "queue_revision": 2,
+      "revision": 17,
+      "settings": {
+        "crossfade": false,
+        "crossfade_seconds": 5,
+        "gapless": true,
+        "headroom": {
+          "clip_indicator": false,
+          "db": -3,
+          "enabled": false
+        },
+        "leveling": "auto",
+        "quality": "lossless"
+      },
+      "signal": null,
+      "status": "paused",
+      "stream": null,
+      "zone_id": "00000000-0000-4000-8000-000000000010"
+    }
+  },
+  "status": 200
+}

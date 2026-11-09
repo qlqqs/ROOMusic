@@ -1,0 +1,106 @@
+{
+  "body": {
+    "device": {
+      "capabilities": {
+        "dsd": "none",
+        "exclusive": false,
+        "max_channels": 2,
+        "stream_formats": [
+          {
+            "codec": "wav",
+            "lossless": true,
+            "max_bit_depth": null,
+            "max_sample_rate": null,
+            "mime_type": "audio/wav"
+          }
+        ],
+        "volume": "number"
+      },
+      "device_id": "00000000-0000-4000-8000-000000000001",
+      "kind": "browser",
+      "last_seen_at": "2026-01-01T00:00:00Z",
+      "muted": true,
+      "name": "客厅",
+      "online": true,
+      "output_session_id": "00000000-0000-4000-8000-000000000002",
+      "volume": 0.8,
+      "zone_id": "00000000-0000-4000-8000-000000000003"
+    },
+    "server_time": "2026-01-01T00:00:01Z",
+    "zone": {
+      "current": {
+        "entry_id": "00000000-0000-4000-8000-000000000004",
+        "track": {
+          "artist": "测试艺人",
+          "artist_refs": [],
+          "duration_seconds": 20,
+          "group_id": "00000000-0000-4000-8000-000000000005",
+          "present": true,
+          "release": {
+            "album_artist": null,
+            "album_artist_refs": [],
+            "artist": "测试艺人",
+            "artist_refs": [],
+            "artwork": null,
+            "attention_count": 0,
+            "id": "00000000-0000-4000-8000-000000000006",
+            "media_type": null,
+            "medium_count": 1,
+            "source_type": null,
+            "title": "合成发行",
+            "track_count": 5,
+            "year": null
+          },
+          "source": {
+            "bit_depth": null,
+            "bitrate": null,
+            "channels": null,
+            "codec": null,
+            "sample_rate": null,
+            "source_kind": "physical"
+          },
+          "title": "合成曲目 2",
+          "track_id": "00000000-0000-4000-8000-000000000007"
+        }
+      },
+      "device_id": "00000000-0000-4000-8000-000000000001",
+      "event": {
+        "kind": "autoplay_blocked",
+        "seq": 13
+      },
+      "failures": [],
+      "fault": null,
+      "has_next": true,
+      "intent": "pause",
+      "mode": "sequential",
+      "next_stream": null,
+      "paused_at": "2026-01-01T00:00:01Z",
+      "position": {
+        "at": "2026-01-01T00:00:01Z",
+        "duration_seconds": 20,
+        "seconds": 0,
+        "seekable": true
+      },
+      "queue_length": 3,
+      "queue_revision": 1,
+      "revision": 16,
+      "settings": {
+        "crossfade": false,
+        "crossfade_seconds": 5,
+        "gapless": true,
+        "headroom": {
+          "clip_indicator": false,
+          "db": -3,
+          "enabled": false
+        },
+        "leveling": "auto",
+        "quality": "lossless"
+      },
+      "signal": null,
+      "status": "paused",
+      "stream": null,
+      "zone_id": "00000000-0000-4000-8000-000000000003"
+    }
+  },
+  "status": 200
+}

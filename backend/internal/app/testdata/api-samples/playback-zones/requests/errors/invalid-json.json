@@ -1,0 +1,7 @@
+{
+  "body": [
+    "not-an-object"
+  ],
+  "method": "POST",
+  "path": "/api/v1/me/playback/devices"
+}

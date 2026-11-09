@@ -1,0 +1,132 @@
+{
+  "body": {
+    "queue_change": null,
+    "server_time": "2026-01-01T00:00:00Z",
+    "zone": {
+      "current": {
+        "entry_id": "00000000-0000-4000-8000-000000000001",
+        "track": {
+          "artist": "测试艺人",
+          "artist_refs": [],
+          "duration_seconds": 20,
+          "group_id": "00000000-0000-4000-8000-000000000002",
+          "present": true,
+          "release": {
+            "album_artist": null,
+            "album_artist_refs": [],
+            "artist": "测试艺人",
+            "artist_refs": [],
+            "artwork": null,
+            "attention_count": 0,
+            "id": "00000000-0000-4000-8000-000000000003",
+            "media_type": null,
+            "medium_count": 1,
+            "source_type": null,
+            "title": "合成发行",
+            "track_count": 5,
+            "year": null
+          },
+          "source": {
+            "bit_depth": null,
+            "bitrate": null,
+            "channels": null,
+            "codec": null,
+            "sample_rate": null,
+            "source_kind": "physical"
+          },
+          "title": "合成曲目 1",
+          "track_id": "00000000-0000-4000-8000-000000000004"
+        }
+      },
+      "device_id": "00000000-0000-4000-8000-000000000005",
+      "event": {
+        "entry_id": "00000000-0000-4000-8000-000000000001",
+        "kind": "track_started",
+        "seq": 24
+      },
+      "failures": [],
+      "fault": null,
+      "has_next": true,
+      "intent": "play",
+      "mode": "repeat_all",
+      "next_stream": null,
+      "paused_at": null,
+      "position": {
+        "at": "2026-01-01T00:00:00Z",
+        "duration_seconds": 20,
+        "seconds": 0,
+        "seekable": true
+      },
+      "queue_length": 5,
+      "queue_revision": 5,
+      "revision": 24,
+      "settings": {
+        "crossfade": false,
+        "crossfade_seconds": 5,
+        "gapless": true,
+        "headroom": {
+          "clip_indicator": false,
+          "db": -3,
+          "enabled": false
+        },
+        "leveling": "auto",
+        "quality": "lossless"
+      },
+      "signal": null,
+      "status": "loading",
+      "stream": {
+        "format": {
+          "bit_depth": 16,
+          "channels": 2,
+          "codec": "wav",
+          "sample_rate": 48000
+        },
+        "mime_type": "audio/wav",
+        "quality": "lossless",
+        "segments": [
+          {
+            "entry_id": "00000000-0000-4000-8000-000000000001",
+            "stream_start_seconds": 0,
+            "track": {
+              "artist": "测试艺人",
+              "artist_refs": [],
+              "duration_seconds": 20,
+              "group_id": "00000000-0000-4000-8000-000000000002",
+              "present": true,
+              "release": {
+                "album_artist": null,
+                "album_artist_refs": [],
+                "artist": "测试艺人",
+                "artist_refs": [],
+                "artwork": null,
+                "attention_count": 0,
+                "id": "00000000-0000-4000-8000-000000000003",
+                "media_type": null,
+                "medium_count": 1,
+                "source_type": null,
+                "title": "合成发行",
+                "track_count": 5,
+                "year": null
+              },
+              "source": {
+                "bit_depth": null,
+                "bitrate": null,
+                "channels": null,
+                "codec": null,
+                "sample_rate": null,
+                "source_kind": "physical"
+              },
+              "title": "合成曲目 1",
+              "track_id": "00000000-0000-4000-8000-000000000004"
+            },
+            "track_start_seconds": 0
+          }
+        ],
+        "seq": 24,
+        "url": "/api/v1/me/playback/zones/00000000-0000-4000-8000-000000000006/streams/24"
+      },
+      "zone_id": "00000000-0000-4000-8000-000000000006"
+    }
+  },
+  "status": 200
+}

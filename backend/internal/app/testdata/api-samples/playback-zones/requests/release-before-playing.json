@@ -1,0 +1,8 @@
+{
+  "body": {
+    "stream_seconds": 3,
+    "stream_seq": 4
+  },
+  "method": "POST",
+  "path": "/api/v1/me/playback/outputs/00000000-0000-4000-8000-000000000001/release"
+}

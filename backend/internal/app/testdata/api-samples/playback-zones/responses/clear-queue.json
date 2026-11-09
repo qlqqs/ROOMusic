@@ -1,0 +1,50 @@
+{
+  "body": {
+    "queue_change": {
+      "kind": "clear",
+      "queue_revision": 6
+    },
+    "server_time": "2026-01-01T00:00:00Z",
+    "zone": {
+      "current": null,
+      "device_id": "00000000-0000-4000-8000-000000000001",
+      "event": {
+        "kind": "no_stream_format",
+        "seq": 33
+      },
+      "failures": [],
+      "fault": null,
+      "has_next": false,
+      "intent": "pause",
+      "mode": "repeat_all",
+      "next_stream": null,
+      "paused_at": "2026-01-01T00:00:00Z",
+      "position": {
+        "at": "2026-01-01T00:00:00Z",
+        "duration_seconds": null,
+        "seconds": 0,
+        "seekable": false
+      },
+      "queue_length": 0,
+      "queue_revision": 6,
+      "revision": 34,
+      "settings": {
+        "crossfade": true,
+        "crossfade_seconds": 8,
+        "gapless": true,
+        "headroom": {
+          "clip_indicator": false,
+          "db": -3,
+          "enabled": false
+        },
+        "leveling": "album",
+        "quality": "lossless"
+      },
+      "signal": null,
+      "status": "idle",
+      "stream": null,
+      "zone_id": "00000000-0000-4000-8000-000000000002"
+    }
+  },
+  "status": 200
+}

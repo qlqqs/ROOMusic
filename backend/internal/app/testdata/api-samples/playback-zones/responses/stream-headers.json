@@ -1,0 +1,11 @@
+{
+  "headers": {
+    "Accept-Ranges": "none",
+    "Cache-Control": "no-store",
+    "Content-Length": "",
+    "Content-Type": "audio/wav",
+    "X-Accel-Buffering": "no",
+    "X-Content-Type-Options": "nosniff"
+  },
+  "status": 200
+}

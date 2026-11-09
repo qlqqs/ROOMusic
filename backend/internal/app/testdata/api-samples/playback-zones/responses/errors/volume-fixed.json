@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "volume_fixed",
+      "message": "这台设备不能调音量"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

@@ -1267,6 +1267,9 @@ func (recorder *apiSampleRecorder) finish() {
 
 // ownsSample 同时保留 personal 的目录/错误前缀隔离与扫描反馈的子目录隔离。
 func (recorder *apiSampleRecorder) ownsSample(name string) bool {
+	if strings.HasPrefix(name, "playback-zones/") {
+		return recorder.scope == "playback-zones"
+	}
 	if isSystemAPISample(name) {
 		return recorder.scope == "system"
 	}
@@ -1289,6 +1292,7 @@ func TestAPISampleRecorderOwnership(t *testing.T) {
 		ordinary bool
 		feedback bool
 	}{
+		{"playback-zones/responses/snapshot.json", false, false},
 		{"system/backups.json", false, false},
 		{"errors/backup-busy.json", false, false},
 		{"release-groups/list.json", true, false},
@@ -1300,6 +1304,10 @@ func TestAPISampleRecorderOwnership(t *testing.T) {
 		{"scan-feedback/report-ready.json", false, true},
 	} {
 		t.Run(sample.name, func(t *testing.T) {
+			zones := &apiSampleRecorder{scope: "playback-zones"}
+			if got := zones.ownsSample(sample.name); got != strings.HasPrefix(sample.name, "playback-zones/") {
+				t.Errorf("播放区样本所有权 = %v", got)
+			}
 			system := &apiSampleRecorder{scope: "system"}
 			if got := system.ownsSample(sample.name); got != isSystemAPISample(sample.name) {
 				t.Errorf("系统样本所有权 = %v", got)

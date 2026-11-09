@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "zone_offline",
+      "message": "播放设备已离线"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

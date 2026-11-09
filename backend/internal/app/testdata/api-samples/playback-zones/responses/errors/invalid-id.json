@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_id",
+      "message": "标识无效"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}
