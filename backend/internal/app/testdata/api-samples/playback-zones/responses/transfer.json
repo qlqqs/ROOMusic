@@ -66,6 +66,9 @@
       "settings": {
         "crossfade": false,
         "crossfade_seconds": 5,
+        "downmix": {
+          "enabled": true
+        },
         "gapless": true,
         "headroom": {
           "clip_indicator": false,
@@ -158,6 +161,9 @@
       "settings": {
         "crossfade": true,
         "crossfade_seconds": 8,
+        "downmix": {
+          "enabled": true
+        },
         "gapless": true,
         "headroom": {
           "clip_indicator": false,

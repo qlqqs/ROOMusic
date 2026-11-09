@@ -31,6 +31,7 @@ export type SettingsPatch = Partial<{
   quality: StreamQuality;
   headroom: { enabled: boolean; db: number; clip_indicator: boolean };
   sample_rate: { strategy: SampleRateStrategy; custom_rate: number | null; filter: SampleRateFilter };
+  downmix: { enabled: boolean };
 }>;
 
 /** 合同 §3.3 的命令。 */

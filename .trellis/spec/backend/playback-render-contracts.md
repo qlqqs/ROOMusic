@@ -24,7 +24,7 @@ G-2 在同一 PCM 入口接入无缝、交叉淡化、就绪超时与静音间�
 - 量子为来源段采样率/5，通常最多领先播放头 20 秒；编码器输入与 Body 的管道传递背压。处理速度不计预缓冲、领先限制和编码输出等待。
 - 所有长流（`Delivery != "hls"`）共用编码字节下限，涵盖 FLAC、Opus、AAC 和 WAV；FLAC 仍保留默认编码帧长、压缩级别 5 与逐包冲刷。`waitToRender` 仅在领先达到 20 秒且“已编码但尚未播放”的字节达到 64 KiB 时等待；不足 64 KiB 的高压缩内容可以继续渲染到字节下限或真实 EOF，避免数字静音与客户端 32 KiB 读取互相等待。非 HLS 编码输出在写入交付管道之前原子累计；ffmpeg 使用现有输出协程，WAV 的流头和 PCM 直接写出也经过同一计数出口；`waitToRender` 把累计值按块采样到最新已提交 PCM 块的末帧，同帧合并，EOF 补采尾部输出。这是块级近似：异步滞后的输出归入后续采样块，可能较晚扣除，不解析编码帧。`Observe` 和现有派发时钟随播放头推进修剪检查点，仅保留已播累计基线和未播放检查点；回退回报不复活已删除历史。已交给浏览器但尚未播放的字节仍计入，不按 `Body.Read` 扣减。64 KiB 是继续渲染的字节下限，不是字节缓存硬上限；每次最多多放行一个现有量子。HLS 仍保持原来的 20 秒领先限制，不参与该字节计数与下限判断。不新增协程、定时器，不修改 PCM 或增加噪声/抖动，不为普通音乐统一缩短 FLAC 帧长。回归 `TestRenderSilentFLACStartsWithinRenderWindow` 验证无播放头推进时可读取至少 32 KiB、完整静音 PCM 长度与 MD5 不变；非静音 16/24 位沿用 `TestRenderSession`。
 - Negotiate 按设备偏好过滤可产出的编码，再选期望档位，无匹配档位时降到另一档。`StreamFormat.MaxSampleRate/MaxBitDepth/MaxChannels` 随值携带设备上限，标记 `json:"-"`；不能用渲染器全局可变缓存存最近一次协商能力。
-- Open 确定不可变的具体格式：采样率由 `src.Choose` 按策略及编码/设备上限确定，声道不超过能力（第一批 FLAC/Opus/AAC 使用最多八声道标准布局，WAV 保留能力上限）；透明整数源保持 16/24 位，其余按 24 位或设备上限；Opus 为 48 kHz，AAC 保留符合设备上限的 44.1/48 kHz 来源率，否则按 C2 兼容回退选择。变率由链 ② SRC 完成；临时降混仍由 ffmpeg 完成。
+- Open 确定不可变的具体格式：采样率由 `src.Choose` 按策略及编码/设备上限确定，声道不超过能力（第一批 FLAC/Opus/AAC 使用最多八声道标准布局，WAV 保留能力上限）；透明整数源保持 16/24 位，其余按 24 位或设备上限；Opus 为 48 kHz，AAC 保留符合设备上限的 44.1/48 kHz 来源率，否则按 C2 兼容回退选择。变率由链 ② SRC 完成，降混由其后的链 ③ 矩阵节点完成；关闭时在 Tail 纯选择声道。
 - Cursor.Next 只在会话协程调用，不能在 Open 同步调用。Observe、NextChanged、会话 Close 不等待 Cursor 或子进程回收，允许持 zones 锁调用；渲染器 Close 在区锁释放后等待。
 - 首曲准备失败时，由异步流程发 track_failed、跳过失败条目；找到成功曲后用 format_boundary 交给接续会话，不能在 Open 返回后更改 Format。
 - time、track_started、track_failed、stream_ended 和带分段的 signal 按流帧号到播放头才派发；格式边界、重建与处理速度立即派发。time 按 200 ms 网格补齐，回退不重发，播放头不超过已写编码器的帧数。初始条目不发 track_started；未完成渲染时 time 不派发已写区间的右端点，防止同帧换轨尚未登记。尾部 time 先于 stream_ended。
@@ -67,7 +67,7 @@ G-2 在同一 PCM 入口接入无缝、交叉淡化、就绪超时与静音间�
 
 - 无损出口每块按 `Exact && 0 < SourceBits && SourceBits <= bits` 判定直通；其余走 TPDF。流尾冲刷同样量化，FLAC、WAV 与 HLS ALAC 共用字节出口，不再另写取整逻辑。
 - 链 ① 使用 `settings.headroom` 装配；即使 0 dB，启用后也清除 `Exact`。电平化恰为 0 dB 时沿用 `leveling.Apply` 保留 `Exact` 的合同，不为实际直通的曲目虚报抖动。
-- 信号按来源、临时降混、电平化、共享链步骤（含 ② SRC）、抖动、编码的实际顺序计算。质量取最差档，降位深的抖动标兼容转换；交叉淡化窗口的临时抖动不展示。无损 HLS ALAC 编码与 FLAC/WAV 同属 `lossless`。SRC 接入后，Opus 固定 48 kHz 的实际转换也由唯一的 `sample_rate` 步骤表达，标兼容转换。
+- 信号按来源、电平化、共享链步骤（含 ② SRC、③ 降混及 Tail 声道选择）、抖动、编码的实际顺序计算。质量取最差档，降位深的抖动标兼容转换；交叉淡化窗口的临时抖动不展示。无损 HLS ALAC 编码与 FLAC/WAV 同属 `lossless`。SRC 接入后，Opus 固定 48 kHz 的实际转换也由唯一的 `sample_rate` 步骤表达，标兼容转换。
 - 量化器始终返回钳位数；仅开启 `clip_indicator` 时登记块起点的内部 `clip`。有损出口仅在此开关开启时统计 `abs(sample) > 1`，仍把浮点交给编码器，不额外钳位。
 - 派发器独占信号状态：播放头到达 `clip` 时亮起，独立的 250 ms 时钟复评，最后一次削波满 450 ms 后熄灭；关闭开关时省略 `clipping`。实时更新保留正在播放的曲目路径，不采用尚未听到的下一段路径。
 - 处理速度沿用累计音频时长/处理墙钟时长，量化到 0.1，值改变且距上次上报至少 1 秒才更新；预缓冲、领先上限、编码器背压和事件队列等待均不计。速度通过派发器合入当前路径后发出。
@@ -134,7 +134,18 @@ G-2 在同一 PCM 入口接入无缝、交叉淡化、就绪超时与静音间�
 
 ## 12. SRC 后端接入（2026-11-09）
 
-- `renderPlan` 保存 `src.Plan` 与滤波器，不生成核；`sourcePCM` 使用源采样率、临时降混后的声道，`outputPCM` 与交付格式同率同声道。需要 SRC 的计划在会话 `run` 开头调用 `buildChain` 生成核，不能在 zones 控制锁内生成最小相位核。
+- `renderPlan` 保存 `src.Plan` 与滤波器，不生成核；`sourcePCM` 使用源采样率、源声道与源布局，`outputPCM` 与交付格式同率同声道。需要 SRC 的计划在会话 `run` 开头调用 `buildChain` 生成核，不能在 zones 控制锁内生成最小相位核。
 - 顺序为 Headroom → `Spec.Stages` 中的 `chain.Wrap(src.New(...), in, out, step, true)` → 后续用户节点 → 量化。无变率不插节点；DSD 保留策略显式按 `none` 重新规划。输入提交、事件映射及 Drain 沿用骨架两套帧域，不再次补偿延迟。
-- 有损交付覆盖用户目标：Opus 固定 48000，AAC/HLS-AAC 保留符合设备上限的 44100/48000 来源率，否则以 `none` 策略按 C2 兼容回退选择，Compatibility 直接使用 Choose 结果；低于 44100 无合法转换目标，Negotiate 阶段就排除该 AAC 能力，不改 Open 错误映射。编码器仅接收最终 PCM，不设 aresample；输出 `-ar` 与输入率相同。解码只保留 `-ac` 和 CUE 的绝对 PTS 截取。
+- 有损交付覆盖用户目标：Opus 固定 48000，AAC/HLS-AAC 保留符合设备上限的 44100/48000 来源率，否则以 `none` 策略按 C2 兼容回退选择，Compatibility 直接使用 Choose 结果；低于 44100 无合法转换目标，Negotiate 阶段就排除该 AAC 能力，不改 Open 错误映射。编码器仅接收最终 PCM，不设 aresample；输出 `-ar` 与输入率相同。解码保持源声道，不设置 `-ac`，只保留 CUE 的绝对 PTS 截取。
 - `sample_rate.params = {from_rate:int,to_rate:int,filter:string}`；用户转换为 `enhanced/compat=false`，兼容回退或有损约束转换为 `high/compat=true`；旧 `convert` 不再生成。无转换保持既有 MD5；有损接入验证输出格式、唯一 SRC 步骤、实际编码流采样率和事件时长，不读取 `/proc`。
+
+
+## 13. 降混后端接入（2026-11-09）
+
+- SRC 后插入 `chain.Wrap(downmix.New(matrix), in, out, step, true)`。矩阵清 Exact；用户节点接续其格式。
+- 关闭、mono 设备或未知布局需缩减时，Tail 选择前 N 声道，保留 Exact/SourceBits。已知掩码取低位，未知为 0，mono 用 `0x4`。
+- 解码删除 `-ac`；编码声明布局，多声道 WAV 写扩展头掩码。
+- 信号 params 见[播放区协议 §7](./playback-zone-contracts.md#7-信号路径与-headroom)；未知布局显示声道数。
+- 设置及验证见[合同 §9](./zones-data-contracts.md#9-降混设置文档0046)。
+
+错误：ffmpeg 与链重复混合。正确：仅矩阵或 Tail 缩减，交付格式等于链输出。

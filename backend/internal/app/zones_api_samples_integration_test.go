@@ -326,6 +326,13 @@ func TestPostgreSQLZonesAPIResponseSamples(t *testing.T) {
 		}
 	}
 
+	{
+		device := c.device("")
+		c.claim("", device.Device.DeviceID, false, nil)
+		value := zones.DownmixSettings{Enabled: false}
+		c.command("set-settings-downmix", device.Zone.ZoneID, map[string]any{"command": "set_settings", "settings": map[string]any{"downmix": value}})
+	}
+
 	samples.finish()
 }
 func (c zonesSampleCalls) commandError(name, id string, body map[string]any, status int) {

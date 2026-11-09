@@ -3,8 +3,10 @@ package render
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"testing"
 
@@ -355,5 +357,82 @@ func TestRenderExplicitLayout(t *testing.T) {
 	}
 	if track.Layout != 0x33 || p.sourcePCM.Layout != 0x33 || p.outputPCM.Layout != 0x33 || f.Layout != 0x33 {
 		t.Fatalf("显式布局未贯通：%+v / %+v", f, p)
+	}
+}
+
+// 在启动边界截获解码参数，不创建子进程或音频夹具。
+type downmixDecoderStarter struct{ args []string }
+
+func (s *downmixDecoderStarter) Start(_ context.Context, options ffmpeg.StartOptions) (*ffmpeg.Process, error) {
+	s.args = options.Args
+	return nil, context.Canceled
+}
+
+func TestRenderDownmixExplicitLayout(t *testing.T) {
+	// 5.1 后环绕掩码不同于默认六声道的侧环绕布局，确保使用显式 WAV 掩码。
+	track := Track{Codec: "wav_extensible", SampleRate: 44100, Channels: 6, BitDepth: 16, Layout: 0x3f}
+	for _, tc := range []struct {
+		name    string
+		enabled bool
+		mode    string
+		bits    int
+	}{
+		{name: "开启矩阵降混", enabled: true, mode: "matrix", bits: 24},
+		{name: "关闭时仅选择前两声道", mode: "select", bits: 16},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			spec := renderSpec("wav")
+			var err error
+			spec.Settings.Downmix, err = zones.NewDownmixDocument(zones.DownmixSettings{Enabled: tc.enabled})
+			if err != nil {
+				t.Fatal(err)
+			}
+			format, plan, err := concreteFormat(spec, track)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if plan.sourcePCM.Channels != 6 || plan.sourcePCM.Layout != 0x3f {
+				t.Fatalf("来源声道/显式布局未保留：%+v", plan.sourcePCM)
+			}
+			if format.Channels != 2 || format.Layout != 0x3 || format.BitDepth != tc.bits {
+				t.Fatalf("交付格式=%+v，期望双声道 0x3、%d 位", format, tc.bits)
+			}
+			if tc.enabled {
+				if len(plan.stages) != 1 || len(plan.tail) != 0 {
+					t.Fatalf("矩阵应在 Stages：%+v", plan)
+				}
+			} else if len(plan.stages) != 0 || len(plan.tail) != 1 || plan.tail[0].Modifies {
+				t.Fatalf("纯选择应在 Tail 且不算处理：%+v", plan)
+			}
+			c, err := plan.buildChain(spec.Settings, format.BitDepth)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c.OutputFormat().Channels != 2 || c.OutputFormat().Layout != 0x3 {
+				t.Fatalf("实际链输出=%+v", c.OutputFormat())
+			}
+			steps := c.Steps()
+			if len(steps) != 1 || steps[0].Kind != "downmix" || steps[0].Params["mode"] != tc.mode || steps[0].Params["from_layout"] != "5.1" || steps[0].Params["to_layout"] != "2.0" {
+				t.Fatalf("降混信号步骤=%+v", steps)
+			}
+			if hasProcessing(plan.facts) != tc.enabled || c.ModifiesSamples() != tc.enabled {
+				t.Fatalf("处理判定=%+v，链修改样本=%v", plan.facts, c.ModifiesSamples())
+			}
+			out := c.Process(&chain.Buffer{Samples: [][]float64{{0.25}, {0.5}, {0.125}, {0}, {-0.25}, {-0.5}}, Frames: 1, Exact: true, SourceBits: 16})
+			if len(out.Samples) != 2 || out.Exact != !tc.enabled {
+				t.Fatalf("输出声道/Exact=%d/%v", len(out.Samples), out.Exact)
+			}
+			if !tc.enabled && (out.SourceBits != 16 || out.Samples[0][0] != 0.25 || out.Samples[1][0] != 0.5) {
+				t.Fatalf("Tail 未保持前两声道及无损位深：%+v", out)
+			}
+			starter := &downmixDecoderStarter{}
+			_, err = openDecoder(context.Background(), starter, nil, track, spec.Start, plan.sourcePCM, 0, spec.Settings.Leveling)
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("未到达解码启动边界：%v", err)
+			}
+			if slices.Contains(starter.args, "-ac") {
+				t.Fatalf("解码不应通过 ffmpeg 降混：%v", starter.args)
+			}
+		})
 	}
 }

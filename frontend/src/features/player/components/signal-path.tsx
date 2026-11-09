@@ -51,7 +51,7 @@ function stepText(step: SignalStep): string {
     case "sample_rate":
       return `采样率转换 ${rateLabel(step.params.fromRate)} → ${rateLabel(step.params.toRate)}`;
     case "downmix":
-      return `声道 ${step.params.fromChannels} → ${step.params.toChannels}`;
+      return `${step.params.mode === "select" ? "声道选择" : "降混"} ${step.params.fromLayout ?? step.params.fromChannels} → ${step.params.toLayout ?? step.params.toChannels}`;
     case "leveling":
       return `电平化 ${gainLabel(step.params.gainDb)}`;
     case "headroom":

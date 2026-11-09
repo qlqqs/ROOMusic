@@ -110,7 +110,7 @@ export function PlaybackSettingsDevice() {
   return <span className={styles.device}><MonitorSpeaker size={14} aria-hidden="true" /><span className={styles.deviceName}>{name}</span></span>;
 }
 
-/** 设置 › 播放：音量均衡、无缝、交叉渐变、音质、采样率转换与 Headroom，作用于正在控制的播放区（服务端渲染）；还没读到播放区时禁用。 */
+/** 设置 › 播放：音量均衡、无缝、交叉渐变、音质、采样率转换、降混与 Headroom，作用于正在控制的播放区（服务端渲染）；还没读到播放区时禁用。 */
 export function PlaybackSettingsForm() {
   const engine = usePlayerEngine();
   const settings = usePlayerSelector((snapshot) => snapshot.settings);
@@ -163,6 +163,7 @@ export function PlaybackSettingsForm() {
         disabled={disabled}
         onChange={(filter) => engine.setPlaybackSettings({ sampleRate: { ...settings.sampleRate, filter } })}
       />
+      <Switch label="多声道降为双声道" checked={settings.downmix.enabled} disabled={disabled} onChange={(enabled) => engine.setPlaybackSettings({ downmix: { enabled } })} />
       <Switch label="Headroom" checked={settings.headroom.enabled} disabled={disabled} onChange={(enabled) => engine.setPlaybackSettings({ headroom: { ...settings.headroom, enabled } })} />
       <GainSlider value={settings.headroom.db} disabled={disabled || !settings.headroom.enabled} onCommit={(db) => engine.setPlaybackSettings({ headroom: { ...settings.headroom, db } })} />
       <Switch label="削波指示" checked={settings.headroom.clipIndicator} disabled={disabled} onChange={(clipIndicator) => engine.setPlaybackSettings({ headroom: { ...settings.headroom, clipIndicator } })} />

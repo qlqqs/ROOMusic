@@ -175,6 +175,20 @@ describe("播放栏、全屏、队列与信号路径", () => {
     ]);
   });
 
+  it("DownmixSwitchSubmitsDisabledSettings", async () => {
+    const user = userEvent.setup();
+    await waitFor(() => expect(engine.getSnapshot().zone).not.toBeNull());
+    view(<PlaybackSettingsForm />);
+    const downmix = screen.getByRole("switch", { name: "多声道降为双声道" });
+    expect((downmix as HTMLInputElement).checked).toBe(true);
+    await user.click(downmix);
+    await waitFor(() => expect(engine.getSnapshot().settings.downmix.enabled).toBe(false));
+    expect((downmix as HTMLInputElement).checked).toBe(false);
+    expect(server.commands).toEqual([
+      { command: "set_settings", settings: { downmix: { enabled: false } } },
+    ]);
+  });
+
   it("SampleRateSettingsSubmitCompleteDocuments", async () => {
     const user = userEvent.setup();
     await waitFor(() => expect(engine.getSnapshot().zone).not.toBeNull());

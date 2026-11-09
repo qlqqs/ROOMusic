@@ -38,6 +38,7 @@ const settings: Zone["settings"] = {
   quality: "lossless",
   headroom: { enabled: false, db: -3, clipIndicator: false },
   sampleRate: { strategy: "none", customRate: null, filter: "linear_precise" },
+  downmix: { enabled: true },
 };
 
 const registeredDevice: Device = {
