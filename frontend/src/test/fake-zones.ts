@@ -221,6 +221,13 @@ export function fakeZoneServer(options: { trackOf?: (trackId: string) => PlayerT
       device = { ...device, volume, muted };
       return { serverTime: Date.now(), device };
     },
+    renameDevice: async (_deviceId, name) => {
+      device = { ...device, name };
+      return { serverTime: Date.now(), device };
+    },
+    deleteDevice: async () => {
+      if (device.online) throw new ApiError({ kind: "http", status: 409, code: "device_online", message: "设备在线", requestId: "fake" });
+    },
     claimOutput: async (_deviceId, body) => {
       claims.push(body);
       device = { ...device, online: true, outputSessionId: "00000000-0000-4000-8000-00000000f001", volumeControllable: body.capabilities.volume !== "fixed" };
@@ -339,6 +346,8 @@ export function delegatingZoneApi(current: () => FakeZoneServer): ZoneApi {
     registerDevice: (body) => current().api.registerDevice(body),
     sendZoneCommand: (zoneId, command) => current().api.sendZoneCommand(zoneId, command),
     putDeviceVolume: (deviceId, volume, muted) => current().api.putDeviceVolume(deviceId, volume, muted),
+    renameDevice: (deviceId, name) => current().api.renameDevice(deviceId, name),
+    deleteDevice: (deviceId) => current().api.deleteDevice(deviceId),
     claimOutput: (deviceId, body) => current().api.claimOutput(deviceId, body),
     postOutputReport: (sessionId, body) => current().api.postOutputReport(sessionId, body),
     releaseOutput: (sessionId, body) => current().api.releaseOutput(sessionId, body),

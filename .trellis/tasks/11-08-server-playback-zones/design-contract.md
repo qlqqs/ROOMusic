@@ -303,7 +303,7 @@ Capabilities = {
 | 项 | 约定 |
 | --- | --- |
 | 设备 ID | `localStorage["roomusic:playback-device:v1:<userId>"]` = `{version: 1, deviceId}`，边界解码，坏了就当没有 |
-| 控制目标 | `localStorage["roomusic:control-target:v1:<userId>"]` = `{version: 1, zoneId}`，`storage` 事件同步标签页 |
+| 控制目标 | `localStorage["roomusic:control-target:v1:<userId>"]` = `{version: 1, zoneId, selectedAt}`，`storage` 事件同步标签页；15 分钟从“暂停时刻”与“选中时刻”中较晚的一个算起（选中一台早已暂停的设备不会立即回退） |
 | 旧队列 | `sessionStorage["roomusic:player:v1:<userId>"]`，只读一次用于 `import`，之后删除 |
 | 旧偏好 | `roomusic:player-volume:v1`、`roomusic:playback-settings:v1`，只在登记时读作初值（音量、电平化、交叉渐变），不再写入，不删除 |
 | 多标签页 | Web Lock `roomusic:output:<deviceId>` 选出唯一的输出端标签页，`roomusic:device-registration:<userId>` 串行首次登记；接替时认领带 `takeover: true` |

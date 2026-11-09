@@ -93,3 +93,6 @@ dialog.dialog > div[aria-hidden="true"], .root dialog > div[aria-hidden="true"] 
   .dock { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "seek seek seek" "transport transport transport" "signal . options"; gap: var(--space-1) var(--space-2); }
   .volume { display: none; }
 }
+
+/* 窄屏设备按钮里放不下名字：正在控制的设备名写在状态行下。 */
+@media (min-width: 768px) { .narrowOnly { display: none; } }

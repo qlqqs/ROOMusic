@@ -1,7 +1,7 @@
 // 播放器控制器：界面唯一的入口。命令方法与旧的浏览器引擎同名（playTracks、next、seek……），都发给正在控制的播放区；
 // 状态来自 zone store，组装成界面认识的 PlayerSnapshot / PlayerProgress。它还负责本标签页的启动顺序：
 // 读快照 → 确认或登记设备（Web Lock 串行）→ 读本机播放区的队列 → 连事件流 → 导入旧队列（R11）→ 排队拿输出锁，拿到的标签页才出声。
-// 首版正在控制的播放区就是本机播放区；控制目标与回退（R4）由 F3 加在这里。
+// 正在控制的播放区默认是本机；选了别的设备时按 control-target.ts 的规则在它不再可用时回到本机（R4）。媒体键与系统暂停总是发给本机。
 import { failureOf } from "../../../shared/api";
 import type { MediaSessionPort } from "../engine/media-session";
 import type { StorageLike } from "../engine/persistence";
@@ -9,6 +9,7 @@ import { emptyQueue, MAX_QUEUE_ENTRIES, type PlayerTrack, type QueueState, type 
 import { MediaSessionBinding, type MediaSessionCommands } from "../output/media-session-binding";
 import { OutputEndpoint, type AudioLike } from "../output/output";
 import type { ClaimBody, RegisterBody, ReportBody, SettingsPatch, ZoneCommand } from "./api";
+import { isUsableTarget, readControlTarget, writeControlTarget, controlTargetStorageKey, type ControlTarget } from "./control-target";
 import type { ClaimResult, CommandResult, DeviceResult, RegisterResult, ReportResult, StreamEvent } from "./decoders";
 import { deviceStorageKey, readDeviceId, registerBodyOf, withRegistrationLock, writeDeviceId, type LockManagerLike } from "./device";
 import { EventStream, type EventStreamDeps } from "./event-stream";
@@ -39,7 +40,12 @@ export type PlayerSnapshot = {
   device: Device | null;
   /** 正在控制的是本机播放区。 */
   isLocal: boolean;
+  /** 设备列表：本机在前，其余按登记顺序。 */
+  devices: readonly PlaybackDeviceRow[];
 };
+
+/** 设备列表的一行：设备、它的播放区（还没读到时为 null）、是不是本机、是不是正在控制的。 */
+export type PlaybackDeviceRow = { device: Device; zone: Zone | null; isLocal: boolean; isTarget: boolean };
 
 export type PlayerProgress = {
   positionSeconds: number;
@@ -61,6 +67,8 @@ export type ZoneApi = {
   registerDevice: (body: RegisterBody) => Promise<RegisterResult>;
   sendZoneCommand: (zoneId: string, command: ZoneCommand) => Promise<CommandResult>;
   putDeviceVolume: (deviceId: string, volume: number, muted: boolean) => Promise<DeviceResult>;
+  renameDevice: (deviceId: string, name: string) => Promise<DeviceResult>;
+  deleteDevice: (deviceId: string) => Promise<void>;
   claimOutput: (deviceId: string, body: ClaimBody) => Promise<ClaimResult>;
   postOutputReport: (sessionId: string, body: ReportBody) => Promise<ReportResult>;
   releaseOutput: (sessionId: string, body: { stream_seq: number | null; stream_seconds: number }) => void;
@@ -90,6 +98,7 @@ const BOOT_RETRY_MS = [1_000, 2_000, 5_000, 10_000] as const;
 const PROGRESS_INTERVAL_MS = 250;
 const VOLUME_THROTTLE_MS = 125;
 const VOLUME_OPTIMISTIC_MS = 1_000;
+const TARGET_RECHECK_MS = 60_000;
 
 const defaultSettings: PlaybackSettings = { leveling: "auto", gapless: true, crossfade: false, crossfadeSeconds: 5, quality: "lossless", headroom: { enabled: false, db: 0, clipIndicator: false } };
 const idleProgress: PlayerProgress = { positionSeconds: 0, durationSeconds: null, seekable: false };
@@ -132,7 +141,7 @@ export class PlayerController {
   private progress: PlayerProgress = idleProgress;
   private progressTimer: ReturnType<typeof setInterval> | null = null;
   private seekOverride: { zoneId: string; revision: number; seconds: number } | null = null;
-  private pendingVolume: { volume: number; muted: boolean; until: number } | null = null;
+  private pendingVolume: { deviceId: string; volume: number; muted: boolean; until: number } | null = null;
   private volumeTimer: ReturnType<typeof setTimeout> | null = null;
   private volumeDirty = false;
   private alignedZone: Zone | null = null;
@@ -140,9 +149,14 @@ export class PlayerController {
   private readonly listeners = new Set<() => void>();
   private readonly progressListeners = new Set<() => void>();
   private unsubscribeStore: (() => void) | null = null;
+  private target: ControlTarget | null;
+  private targetTimer: ReturnType<typeof setInterval> | null = null;
+  private unsubscribeVisibility: (() => void) | null = null;
+  private rowsCache: { devices: readonly Device[]; zones: ReadonlyMap<string, Zone>; localId: string | null; targetId: string | undefined; rows: readonly PlaybackDeviceRow[] } | null = null;
 
   constructor(deps: PlayerControllerDeps) {
     this.deps = deps;
+    this.target = readControlTarget(deps.localStorage, deps.userId);
     this.readyPromise = new Promise((resolve) => (this.resolveReady = resolve));
     this.store = new ZoneStore({
       fetchQueue: (zoneId) => deps.api.fetchZoneQueue(zoneId),
@@ -182,6 +196,11 @@ export class PlayerController {
     this.unsubscribeStore = this.store.subscribe(this.onStoreChange);
     document.addEventListener("pointerdown", this.onFirstGesture, { capture: true, once: true });
     document.addEventListener("keydown", this.onFirstGesture, { capture: true, once: true });
+    window.addEventListener("storage", this.onStorage);
+    this.targetTimer = setInterval(this.recheckTarget, TARGET_RECHECK_MS);
+    this.unsubscribeVisibility = this.deps.visibility?.subscribe(() => {
+      if (this.deps.visibility?.hidden() === false) this.recheckTarget();
+    }) ?? null;
     void this.boot(this.abort.signal);
   }
 
@@ -197,6 +216,11 @@ export class PlayerController {
     this.unsubscribeStore = null;
     document.removeEventListener("pointerdown", this.onFirstGesture, { capture: true });
     document.removeEventListener("keydown", this.onFirstGesture, { capture: true });
+    window.removeEventListener("storage", this.onStorage);
+    if (this.targetTimer !== null) clearInterval(this.targetTimer);
+    this.targetTimer = null;
+    this.unsubscribeVisibility?.();
+    this.unsubscribeVisibility = null;
     this.stopProgressTimer();
   }
 
@@ -522,27 +546,27 @@ export class PlayerController {
   private changeVolume(volume: number, muted: boolean): void {
     const device = this.snapshot.device;
     if (this.lifecycle === "ended" || device === null || !device.volumeControllable) return;
-    this.pendingVolume = { volume, muted, until: this.deps.now() + VOLUME_OPTIMISTIC_MS };
+    this.pendingVolume = { deviceId: device.deviceId, volume, muted, until: this.deps.now() + VOLUME_OPTIMISTIC_MS };
     this.syncOutput();
     this.rebuild();
     if (this.volumeTimer !== null) {
       this.volumeDirty = true;
       return;
     }
-    this.flushVolume(device.deviceId);
+    this.flushVolume();
   }
 
-  private flushVolume(deviceId: string): void {
+  private flushVolume(): void {
     const pending = this.pendingVolume;
     if (pending === null) return;
     this.volumeDirty = false;
-    this.deps.api.putDeviceVolume(deviceId, pending.volume, pending.muted).then((result) => {
+    this.deps.api.putDeviceVolume(pending.deviceId, pending.volume, pending.muted).then((result) => {
       this.store.noteServerTime(result.serverTime);
       this.store.applyDevice(result.device);
     }, () => undefined);
     this.volumeTimer = setTimeout(() => {
       this.volumeTimer = null;
-      if (this.volumeDirty) this.flushVolume(deviceId);
+      if (this.volumeDirty) this.flushVolume();
       // 乐观显示到期后回到服务端的值。
       setTimeout(() => this.rebuild(), VOLUME_OPTIMISTIC_MS);
     }, VOLUME_THROTTLE_MS);
@@ -550,8 +574,77 @@ export class PlayerController {
 
   private effectiveVolume(device: Device): { volume: number; muted: boolean } {
     const pending = this.pendingVolume;
-    if (pending !== null && pending.until > this.deps.now()) return { volume: pending.volume, muted: pending.muted };
+    if (pending !== null && pending.deviceId === device.deviceId && pending.until > this.deps.now()) return { volume: pending.volume, muted: pending.muted };
     return { volume: device.volume, muted: device.muted };
+  }
+
+  // ---- 设备与控制目标 ----
+
+  /** 改为控制这个播放区；选本机即清掉存的目标。 */
+  setControlTarget(zoneId: string): void {
+    if (this.lifecycle === "ended") return;
+    const local = this.localDevice()?.zoneId;
+    this.setTarget(zoneId === local ? null : { zoneId, selectedAt: this.deps.now() });
+  }
+
+  /**
+   * 把 sourceZoneId 的播放整体转到 targetZoneId（design.md §5.4）：目标从原位置直接播放，源清空。成功后控制目标跟到目标。
+   * 失败（例如目标刚离线）时 promise 带着错误，界面据此提示。
+   */
+  async transfer(sourceZoneId: string, targetZoneId: string): Promise<void> {
+    if (this.lifecycle === "ended") return;
+    if (targetZoneId === this.localDevice()?.zoneId) this.output?.unlock();
+    await this.enqueueCommand(() => sourceZoneId, { command: "transfer", target_zone_id: targetZoneId });
+    this.setControlTarget(targetZoneId);
+  }
+
+  async renameDevice(deviceId: string, name: string): Promise<void> {
+    if (this.lifecycle === "ended") return;
+    const result = await this.deps.api.renameDevice(deviceId, name);
+    if (this.isEnded()) return;
+    this.store.noteServerTime(result.serverTime);
+    this.store.applyDevice(result.device);
+  }
+
+  /** 删除离线设备，连同它的播放区与队列。 */
+  async deleteDevice(deviceId: string): Promise<void> {
+    if (this.lifecycle === "ended") return;
+    const zoneId = this.store.device(deviceId)?.zoneId;
+    await this.deps.api.deleteDevice(deviceId);
+    if (!this.isEnded() && zoneId !== undefined) this.store.removeDevice(deviceId, zoneId);
+  }
+
+  private setTarget(target: ControlTarget | null): void {
+    this.target = target;
+    writeControlTarget(this.deps.localStorage, this.deps.userId, target);
+    this.rebuild();
+  }
+
+  /** 别的标签页改了控制目标。 */
+  private readonly onStorage = (event: StorageEvent): void => {
+    if (event.key !== controlTargetStorageKey(this.deps.userId)) return;
+    this.target = readControlTarget(this.deps.localStorage, this.deps.userId);
+    this.rebuild();
+  };
+
+  /** 每分钟与页面重新可见时：目标不再可用就回到本机。 */
+  private readonly recheckTarget = (): void => {
+    if (this.target !== null && !this.targetUsable(this.target)) this.rebuild();
+  };
+
+  private targetUsable(target: ControlTarget): boolean {
+    const zone = this.store.zone(target.zoneId);
+    const device = zone === undefined ? undefined : this.store.device(zone.deviceId);
+    return isUsableTarget(target, zone, device, this.store.serverNow(), this.deps.now());
+  }
+
+  /** 读完快照后，存的目标不再可用（或就是本机）时清掉，此后控制本机。 */
+  private settleTarget(): void {
+    const target = this.target;
+    if (!this.ready || target === null) return;
+    if (target.zoneId !== this.localDevice()?.zoneId && this.targetUsable(target)) return;
+    this.target = null;
+    writeControlTarget(this.deps.localStorage, this.deps.userId, null);
   }
 
   /** 播放类命令的点击：本机是输出端时在这次点击里解锁元素、直接 play() 暂停中的当前流。 */
@@ -608,9 +701,23 @@ export class PlayerController {
     return device === undefined ? undefined : this.store.zone(device.zoneId);
   }
 
-  /** 正在控制的播放区；首版就是本机播放区。 */
+  /** 正在控制的播放区：可用的控制目标，否则是本机播放区。 */
   private controlledZoneId(): string | undefined {
+    const target = this.target;
+    if (target !== null && this.targetUsable(target)) return target.zoneId;
     return this.localDevice()?.zoneId;
+  }
+
+  /** 设备列表的行：输入没变时沿用上一次的数组，订阅它的组件不因无关变化重绘。 */
+  private deviceRows(targetId: string | undefined): readonly PlaybackDeviceRow[] {
+    const { devices, zones } = this.store.getState();
+    const localId = this.deviceId;
+    const cache = this.rowsCache;
+    if (cache !== null && cache.devices === devices && cache.zones === zones && cache.localId === localId && cache.targetId === targetId) return cache.rows;
+    const rows = devices.map((device) => ({ device, zone: zones.get(device.zoneId) ?? null, isLocal: device.deviceId === localId, isTarget: device.zoneId === targetId }));
+    rows.sort((a, b) => Number(b.isLocal) - Number(a.isLocal));
+    this.rowsCache = { devices, zones, localId, targetId, rows };
+    return rows;
   }
 
   private isControllingLocal(): boolean {
@@ -644,10 +751,14 @@ export class PlayerController {
       zone,
       device,
       isLocal: zone !== null && zone.deviceId === this.deviceId,
+      devices: this.deviceRows(zoneId),
     };
   }
 
   private rebuild(): void {
+    this.settleTarget();
+    const zoneId = this.controlledZoneId();
+    if (this.ready && zoneId !== undefined) this.store.watchQueue(zoneId);
     this.snapshot = this.buildSnapshot();
     for (const listener of [...this.listeners]) listener();
     this.updateProgress();

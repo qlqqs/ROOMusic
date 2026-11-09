@@ -1,9 +1,11 @@
+import { MonitorSpeaker } from "lucide-react";
 import { useId } from "react";
-import { crossfadeDurations, levelingModes, type CrossfadeSeconds, type LevelingMode } from "../zones/model";
+import { crossfadeDurations, levelingModes, streamQualities, type CrossfadeSeconds, type LevelingMode, type StreamQuality } from "../zones/model";
 import { usePlayerEngine, usePlayerSelector } from "../player-provider";
 import styles from "./playback-settings-form.module.css";
 
 const levelingLabels: Record<LevelingMode, string> = { off: "关", auto: "自动", track: "按曲目", album: "按专辑" };
+const qualityLabels: Record<StreamQuality, string> = { lossless: "无损", lossy: "省流量" };
 
 type Option<T extends string | number> = { value: T; label: string };
 
@@ -25,7 +27,24 @@ function Segmented<T extends string | number>({ legend, options, value, disabled
   );
 }
 
-/** 设置 › 播放：音量均衡与交叉渐变，作用于正在控制的播放区（服务端渲染）；还没读到播放区时禁用。 */
+/** 开关：带 role="switch" 的复选框。 */
+function Switch({ label, checked, disabled, onChange }: { label: string; checked: boolean; disabled: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <label className={styles.switchRow}>
+      <span className={styles.legend}>{label}</span>
+      <input type="checkbox" role="switch" className={styles.switch} checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
+    </label>
+  );
+}
+
+/** 设置页标题旁的设备名：这些设置改的是正在控制的那台设备。 */
+export function PlaybackSettingsDevice() {
+  const name = usePlayerSelector((snapshot) => snapshot.device?.name ?? null);
+  if (name === null) return null;
+  return <span className={styles.device}><MonitorSpeaker size={14} aria-hidden="true" /><span className={styles.deviceName}>{name}</span></span>;
+}
+
+/** 设置 › 播放：音量均衡、无缝、交叉渐变与音质，作用于正在控制的播放区（服务端渲染）；还没读到播放区时禁用。 */
 export function PlaybackSettingsForm() {
   const engine = usePlayerEngine();
   const settings = usePlayerSelector((snapshot) => snapshot.settings);
@@ -39,16 +58,21 @@ export function PlaybackSettingsForm() {
         disabled={disabled}
         onChange={(leveling) => engine.setPlaybackSettings({ leveling })}
       />
-      <label className={styles.switchRow}>
-        <span className={styles.legend}>交叉渐变</span>
-        <input type="checkbox" role="switch" className={styles.switch} checked={settings.crossfade} disabled={disabled} onChange={(event) => engine.setPlaybackSettings({ crossfade: event.target.checked })} />
-      </label>
+      <Switch label="无缝播放" checked={settings.gapless} disabled={disabled} onChange={(gapless) => engine.setPlaybackSettings({ gapless })} />
+      <Switch label="交叉渐变" checked={settings.crossfade} disabled={disabled} onChange={(crossfade) => engine.setPlaybackSettings({ crossfade })} />
       <Segmented<CrossfadeSeconds>
         legend="渐变时长"
         options={crossfadeDurations.map((seconds) => ({ value: seconds, label: `${seconds} 秒` }))}
         value={settings.crossfadeSeconds}
         disabled={disabled || !settings.crossfade}
         onChange={(crossfadeSeconds) => engine.setPlaybackSettings({ crossfadeSeconds })}
+      />
+      <Segmented
+        legend="音质"
+        options={streamQualities.map((quality) => ({ value: quality, label: qualityLabels[quality] }))}
+        value={settings.quality}
+        disabled={disabled}
+        onChange={(quality) => engine.setPlaybackSettings({ quality })}
       />
     </div>
   );

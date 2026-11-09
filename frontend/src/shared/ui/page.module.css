@@ -31,6 +31,14 @@
   overflow-wrap: anywhere;
 }
 
+.titleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  min-width: 0;
+}
+
 .description {
   max-width: 62ch;
   color: var(--text-secondary);

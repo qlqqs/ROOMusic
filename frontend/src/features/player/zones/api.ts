@@ -130,6 +130,10 @@ export const browserZoneApi: ZoneApi = {
   registerDevice: async (body) => (await registerDevice(body)).data,
   sendZoneCommand: async (zoneId, command) => (await sendZoneCommand(zoneId, command)).data,
   putDeviceVolume: async (deviceId, volume, muted) => (await putDeviceVolume(deviceId, volume, muted)).data,
+  renameDevice: async (deviceId, name) => (await renameDevice(deviceId, name)).data,
+  deleteDevice: async (deviceId) => {
+    await deleteDevice(deviceId);
+  },
   claimOutput: async (deviceId, body) => (await claimOutput(deviceId, body)).data,
   postOutputReport: async (sessionId, body) => (await postOutputReport(sessionId, body)).data,
   releaseOutput,
