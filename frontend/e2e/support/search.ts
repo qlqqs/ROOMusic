@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { installZoneAudio } from "./zones";
 import type { Page } from "@playwright/test";
 import { decodeAlbumResults, decodeArtistResults, decodeSearchSuggestions, decodeTrackResults } from "../../src/features/search/api/decoders";
 import { sampleBody } from "../../src/test/api-samples";
@@ -44,28 +44,13 @@ export function seedSearch(mock: ApiMock, long = false) {
   register("/api/v1/search", { q: "爱", type: "artists", page_size: "12" }, decodeArtistResults(searchArtistPage({ items: [], pagination: { page_size: 12 } })));
   register("/api/v1/search", { q: "爱", type: "albums", page_size: "12" }, decodeAlbumResults(searchAlbumPage({ items: [album], pagination: { page_size: 12 } })));
   register("/api/v1/search", { q: "爱", type: "tracks", page_size: "20" }, decodeTrackResults(searchTrackPage({ items: [track], pagination: { page_size: 20 } })));
+  mock.zones.register([track]);
   return { album, track };
 }
 
-/** 路由只提供预检和合成音频，浏览器仍用原生播放器解码与播放。 */
+/** 搜索入口使用服务端播放区与合成渲染流，保留原生媒体播放。 */
 export async function installSearchPlayback(page: Page) {
-  const flac = readFileSync(new URL("../../../backend/testdata/playback/flac-16-44100.flac", import.meta.url));
-  await page.route("**/api/v1/tracks/*/playback", (route) => {
-    const id = new URL(route.request().url()).pathname.split("/").at(-2);
-    return route.fulfill({ json: { track_id: id, representation: {
-      kind: "original", url: `/api/v1/tracks/${id}/audio`, mime_type: "audio/flac", codecs: null, size_bytes: flac.length,
-    } } });
-  });
-  await page.route("**/api/v1/tracks/*/audio", (route) => {
-    const range = /^bytes=(\d+)-(\d*)$/.exec(route.request().headers()["range"] ?? "");
-    const start = Number(range?.[1] ?? 0);
-    const end = Math.min(Number(range?.[2] || flac.length - 1), flac.length - 1);
-    if (start > end) return route.fulfill({ status: 416, headers: { "Content-Range": `bytes */${flac.length}` } });
-    return route.fulfill({ status: range ? 206 : 200, contentType: "audio/flac", body: flac.subarray(start, end + 1), headers: {
-      "Accept-Ranges": "bytes", "Content-Length": String(end - start + 1),
-      ...(range ? { "Content-Range": `bytes ${start}-${end}/${flac.length}` } : {}),
-    } });
-  });
+  await installZoneAudio(page);
   await page.route("**/api/v1/tracks/*/lyrics", (route) => route.fulfill({ json: {
     track_id: new URL(route.request().url()).pathname.split("/").at(-2), lyrics: null,
   } }));

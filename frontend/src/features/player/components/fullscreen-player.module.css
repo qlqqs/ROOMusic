@@ -15,6 +15,9 @@ dialog.dialog::backdrop { background: transparent; }
   --color-pressed: rgb(255 255 255 / 14%);
   --color-selected: color-mix(in srgb, var(--color-accent) 14%, transparent);
   --focus-ring: 2px solid var(--color-accent-300);
+  --color-signal-enhanced: #8dbde4;
+  --color-signal-high: #93cf9f;
+  --color-warning: #ff8a80;
   --wave-height: 40px;
   position: relative;
   height: 100%;
@@ -93,3 +96,6 @@ dialog.dialog > div[aria-hidden="true"], .root dialog > div[aria-hidden="true"] 
   .dock { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "seek seek seek" "transport transport transport" "signal . options"; gap: var(--space-1) var(--space-2); }
   .volume { display: none; }
 }
+
+/* 窄屏设备按钮里放不下名字：正在控制的设备名写在状态行下。 */
+@media (min-width: 768px) { .narrowOnly { display: none; } }

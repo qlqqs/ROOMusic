@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { installZoneAudio } from "./support/zones";
 import AxeBuilder from "@axe-core/playwright";
 import type { Locator, Page, TestInfo } from "@playwright/test";
 import { albumGroup } from "../src/test/catalog-data";
@@ -10,7 +10,6 @@ import { expect, test } from "./support/fixtures";
 
 const playlistName = "晚间室内乐";
 const longName = "室内乐与交响诗".repeat(14).slice(0, 100);
-const flac = readFileSync(new URL("../../backend/testdata/playback/flac-16-44100.flac", import.meta.url));
 
 function seed(mock: ApiMock, long = false) {
   mock.groups = [
@@ -32,22 +31,6 @@ function seed(mock: ApiMock, long = false) {
   const playlist = seedPlaylist(mock.personal, PERSONAL_LISTENER_ID, { name: playlistName, trackIds: tracks.map((track) => track.track_id) });
   seedPlaylist(mock.personal, PERSONAL_LISTENER_ID, { name: longName, trackIds: tracks.slice(0, 2).map((track) => track.track_id) });
   return { tracks, playlist };
-}
-
-async function audio(page: Page) {
-  await page.route("**/api/v1/tracks/*/playback", (route) => {
-    const id = new URL(route.request().url()).pathname.split("/").at(-2);
-    return route.fulfill({ json: { track_id: id, representation: { kind: "original", url: `/api/v1/tracks/${id}/audio`, mime_type: "audio/flac", codecs: null, size_bytes: flac.length } } });
-  });
-  await page.route("**/api/v1/tracks/*/audio", (route) => {
-    const range = /^bytes=(\d+)-(\d*)$/.exec(route.request().headers()["range"] ?? "");
-    const start = Number(range?.[1] ?? 0);
-    const end = Math.min(Number(range?.[2] || flac.length - 1), flac.length - 1);
-    if (start > end) return route.fulfill({ status: 416, headers: { "Content-Range": `bytes */${flac.length}` } });
-    return route.fulfill({ status: range ? 206 : 200, contentType: "audio/flac", body: flac.subarray(start, end + 1), headers: {
-      "Accept-Ranges": "bytes", "Content-Length": String(end - start + 1), ...(range ? { "Content-Range": `bytes ${start}-${end}/${flac.length}` } : {}),
-    } });
-  });
 }
 
 async function axe(page: Page, label: string) {
@@ -247,7 +230,7 @@ for (const width of widths) {
   test(`${width}px 添加对话框与播放器心形：边界、文字行数与 axe`, async ({ page, backend }, info) => {
     const mock = await backend.start({ signedInAs: "listener" });
     seed(mock);
-    await audio(page);
+    await installZoneAudio(page);
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/me/liked");
     const first = trackTable(page).getByRole("row").filter({ has: page.getByText("第一乐章", { exact: true }) });
@@ -311,7 +294,7 @@ async function keyboardMenu(page: Page, trigger: Locator, label: string) {
 test("纯键盘：收藏与取消、新建并加入、四种菜单移动、键盘拖动、移除撤销与播放", async ({ page, backend }) => {
   const mock = await backend.start({ signedInAs: "listener" });
   seed(mock);
-  await audio(page);
+  await installZoneAudio(page);
   await page.goto("/me/liked");
   const first = trackTable(page).getByRole("row").filter({ has: page.getByText("第一乐章", { exact: true }) });
   const heart = first.getByRole("button", { name: "收藏《第一乐章》", exact: true });

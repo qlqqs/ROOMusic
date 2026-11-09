@@ -3,7 +3,7 @@
   "name": "zones-e-acceptance",
   "title": "E 第一批验收",
   "description": "真实服务端到端、iOS 真机核对、派生退役升级核对、spec 更新（测试）",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

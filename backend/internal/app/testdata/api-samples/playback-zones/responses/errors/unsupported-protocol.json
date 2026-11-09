@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "unsupported_protocol",
+      "message": "不支持这个输出端协议版本"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

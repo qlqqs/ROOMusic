@@ -1,15 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { memoryStorage } from "../../../test/memory-storage";
-import { playerTrack } from "../../../test/player-data";
 import {
   clearSavedQueue,
   defaultVolume,
   loadSavedQueue,
   loadVolume,
   queueStorageKey,
-  savedEntriesOf,
-  saveQueue,
-  saveVolume,
   VOLUME_STORAGE_KEY,
   type SavedQueue,
   type StorageLike,
@@ -33,38 +29,13 @@ const saved: SavedQueue = {
   history: ["e1"],
 };
 
-describe("队列的保存与恢复", () => {
-  it("保存后能原样读回，键带账号", () => {
-    const storage = memoryStorage();
-    expect(saveQueue(storage, userId, saved)).toBe(true);
-    expect([...storage.data.keys()]).toEqual([queueStorageKey(userId)]);
+const stored = (queue: SavedQueue) => JSON.stringify({ version: 1, ...queue });
+
+describe("旧版本保存的队列", () => {
+  it("原样读回，键带账号；clearSavedQueue 删除它", () => {
+    const storage = memoryStorage({ [queueStorageKey(userId)]: stored(saved) });
     expect(loadSavedQueue(storage, userId)).toEqual(saved);
     expect(loadSavedQueue(storage, otherUserId)).toBeNull();
-  });
-
-  it("只保存标识、模式与位置，不保存标题、路径或凭据", () => {
-    const storage = memoryStorage();
-    saveQueue(storage, userId, saved);
-    const text = storage.data.get(queueStorageKey(userId)) ?? "";
-    expect(Object.keys(JSON.parse(text) as object).sort()).toEqual(["currentEntryId", "entries", "history", "mode", "positionSeconds", "version"]);
-    expect(Object.keys((JSON.parse(text) as { entries: object[] }).entries[0] ?? {}).sort()).toEqual(["entryId", "groupId", "releaseId", "trackId"]);
-  });
-
-  it("同一个条目数组再次保存时复用条目的 JSON，结果与整体序列化等价", () => {
-    const storage = memoryStorage();
-    saveQueue(storage, userId, saved);
-    const moved = { ...saved, positionSeconds: 120 };
-    expect(saveQueue(storage, userId, moved)).toBe(true);
-    expect(JSON.parse(storage.data.get(queueStorageKey(userId)) ?? "null")).toEqual({ version: 1, ...moved });
-    expect(loadSavedQueue(storage, userId)).toEqual(moved);
-  });
-
-  it("空队列删除保存的数据；clearSavedQueue 删除保存的队列", () => {
-    const storage = memoryStorage();
-    saveQueue(storage, userId, saved);
-    expect(saveQueue(storage, userId, { ...saved, entries: [], currentEntryId: null, history: [] })).toBe(true);
-    expect(storage.data.size).toBe(0);
-    saveQueue(storage, userId, saved);
     clearSavedQueue(storage, userId);
     expect(storage.data.size).toBe(0);
   });
@@ -90,9 +61,8 @@ describe("队列的保存与恢复", () => {
     expect(loadSavedQueue(storage, userId)?.history).toEqual(["e1"]);
   });
 
-  it("存储不可用（为 null、读写都抛错）时恢复为没有保存的队列，写入失败不声称已保存", () => {
+  it("存储不可用（为 null、读写都抛错）时当作没有保存的队列", () => {
     expect(loadSavedQueue(null, userId)).toBeNull();
-    expect(saveQueue(null, userId, saved)).toBe(false);
     const broken: StorageLike = {
       getItem: () => {
         throw new Error("SecurityError");
@@ -105,32 +75,18 @@ describe("队列的保存与恢复", () => {
       },
     };
     expect(loadSavedQueue(broken, userId)).toBeNull();
-    expect(saveQueue(broken, userId, saved)).toBe(false);
     expect(() => clearSavedQueue(broken, userId)).not.toThrow();
     expect(() => clearSavedQueue(null, userId)).not.toThrow();
-  });
-
-  it("要保存的条目只含标识；同一个条目数组得到同一个结果，数组变了才重建", () => {
-    const entries = [{ entryId: "e1", track: playerTrack("a", { trackId: trackA, releaseId: release, groupId: group }) }];
-    const ids = savedEntriesOf(entries);
-    expect(ids).toEqual([{ entryId: "e1", trackId: trackA, releaseId: release, groupId: group }]);
-    expect(savedEntriesOf(entries)).toBe(ids);
-    const next = [...entries];
-    expect(savedEntriesOf(next)).not.toBe(ids);
-    expect(savedEntriesOf(next)).toEqual(ids);
   });
 });
 
 describe("音量偏好", () => {
-  it("保存后读回；没有、损坏、越界或存储不可用时用默认值", () => {
-    const storage = memoryStorage();
-    expect(loadVolume(storage)).toEqual(defaultVolume);
-    expect(saveVolume(storage, { volume: 0.4, muted: true })).toBe(true);
-    expect(loadVolume(storage)).toEqual({ volume: 0.4, muted: true });
+  it("读回旧版本的偏好；没有、损坏、越界或存储不可用时用默认值", () => {
+    expect(loadVolume(memoryStorage())).toEqual(defaultVolume);
+    expect(loadVolume(memoryStorage({ [VOLUME_STORAGE_KEY]: JSON.stringify({ version: 1, volume: 0.4, muted: true }) }))).toEqual({ volume: 0.4, muted: true });
     expect(loadVolume(memoryStorage({ [VOLUME_STORAGE_KEY]: "坏" }))).toEqual(defaultVolume);
     expect(loadVolume(memoryStorage({ [VOLUME_STORAGE_KEY]: JSON.stringify({ version: 1, volume: 7, muted: false }) }))).toEqual(defaultVolume);
     expect(loadVolume(memoryStorage({ [VOLUME_STORAGE_KEY]: JSON.stringify({ version: 2, volume: 0.5, muted: false }) }))).toEqual(defaultVolume);
     expect(loadVolume(null)).toEqual(defaultVolume);
-    expect(saveVolume(null, defaultVolume)).toBe(false);
   });
 });

@@ -151,7 +151,7 @@ for (const width of [375, 1440]) {
     const fixture = seedSearchStep4(mock);
     await page.goto("/albums");
     await expect(page.getByRole("heading", { name: "专辑", exact: true })).toBeVisible();
-    const before = await queueSnapshotStep4(page);
+    const before = await queueSnapshotStep4(mock);
     await chooseTrackSuggestionStep4(page, fixture.target.title);
     const row = await expectLocated(page, fixture);
     await expectVisibleFocusRing(page, "定位后的曲目行");
@@ -168,8 +168,8 @@ for (const width of [375, 1440]) {
     await expect(heart).toHaveAttribute("aria-pressed", "true");
     await expect(heart).not.toHaveAttribute("aria-busy", "true");
     expect(personalUserOf(mock.personal, PERSONAL_LISTENER_ID).tracks.has(fixture.target.id)).toBe(true);
-    expect(await queueSnapshotStep4(page)).toEqual(before);
-    expect(mock.callsTo("GET", /\/playback$/)).toHaveLength(0);
+    expect(await queueSnapshotStep4(mock)).toEqual(before);
+    expect(mock.callsTo("POST", /\/commands$/).filter((call) => typeof call.body === "object" && call.body !== null && "command" in call.body && ["play_tracks", "play", "play_entry", "next", "previous"].includes(String(call.body.command)))).toHaveLength(0);
     await expect(page.getByRole("region", { name: "播放器", exact: true })).toHaveCount(0);
     await layout(page, "多碟目标曲目");
   });
@@ -182,13 +182,13 @@ test("定位：已有非空队列时选择曲目建议，不替换队列或触�
   const result = page.getByRole("table", { name: "曲目结果" }).getByRole("row").filter({ has: page.getByText(fixture.target.title, { exact: true }) });
   await keyboardMenuStep4(page, result.getByRole("button", { name: "更多操作", exact: true }), "加入队列");
   await expect(result.getByRole("status")).toHaveText("已加入队列。");
-  const before = await queueSnapshotStep4(page);
-  expect(Object.keys(before), "必须真的已有队列，不能拿两个空对象声称保护了已有队列").toHaveLength(1);
-  expect(Object.values(before)[0]).toContain(fixture.target.id);
+  const before = await queueSnapshotStep4(mock);
+  expect(before.entries, "必须真的已有队列，不能拿两个空对象声称保护了已有队列").toHaveLength(1);
+  expect(before.entries[0]?.track.track_id).toBe(fixture.target.id);
   await chooseTrackSuggestionStep4(page, fixture.target.title);
   await expectLocated(page, fixture);
-  expect(await queueSnapshotStep4(page)).toEqual(before);
-  expect(mock.callsTo("GET", /\/playback$/)).toHaveLength(0);
+  expect(await queueSnapshotStep4(mock)).toEqual(before);
+  expect(mock.callsTo("POST", /\/commands$/).filter((call) => typeof call.body === "object" && call.body !== null && "command" in call.body && ["play_tracks", "play", "play_entry", "next", "previous"].includes(String(call.body.command)))).toHaveLength(0);
   await expect(page.getByRole("region", { name: "播放器", exact: true }).getByRole("button", { name: "队列（1）", exact: true })).toBeVisible();
 });
 
@@ -216,7 +216,7 @@ test("定位：后退、前进与 reload 都重新聚焦并滚到目标曲目", 
   await expectLocated(page, fixture);
   await page.reload();
   await expectLocated(page, fixture);
-  expect(mock.callsTo("GET", /\/playback$/)).toHaveLength(0);
+  expect(mock.callsTo("POST", /\/commands$/).filter((call) => typeof call.body === "object" && call.body !== null && "command" in call.body && ["play_tracks", "play", "play_entry", "next", "previous"].includes(String(call.body.command)))).toHaveLength(0);
 });
 
 test("定位：多碟长专辑原本在屏幕外的末碟曲目，同路径建议导航也能滚到", async ({ page, backend }) => {
@@ -308,7 +308,7 @@ for (const width of [375, 1440]) {
     const heart = row.getByRole("button", { name: `收藏《${fixture.target.title}》`, exact: true });
     await expect(heart).toHaveAttribute("aria-pressed", "false");
     await expect(heart).not.toHaveAttribute("aria-busy", "true");
-    const before = await queueSnapshotStep4(page);
+    const before = await queueSnapshotStep4(mock);
     await keyboardTargetStep4(page, heart, false);
     await expectVisibleFocusRing(page, "搜索结果收藏");
     await page.keyboard.press("Enter");
@@ -325,8 +325,8 @@ for (const width of [375, 1440]) {
     expect(fixture.playlist.items.map((item) => item.track_id)).toEqual([fixture.target.id]);
     expect(mock.callsTo("PUT", new RegExp(`/favorites/tracks/${fixture.target.id}$`))).toHaveLength(1);
     expect(mock.callsTo("POST", new RegExp(`/playlists/${fixture.playlist.state.id}/items$`))).toHaveLength(1);
-    expect(mock.callsTo("GET", /\/playback$/)).toHaveLength(0);
-    expect(await queueSnapshotStep4(page)).toEqual(before);
+    expect(mock.callsTo("POST", /\/commands$/).filter((call) => typeof call.body === "object" && call.body !== null && "command" in call.body && ["play_tracks", "play", "play_entry", "next", "previous"].includes(String(call.body.command)))).toHaveLength(0);
+    expect(await queueSnapshotStep4(mock)).toEqual(before);
     await layout(page, "结果行完成收藏与添加歌单");
   });
 }

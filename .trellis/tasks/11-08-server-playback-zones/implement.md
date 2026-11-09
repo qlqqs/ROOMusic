@@ -107,11 +107,11 @@ F2（按合同编码，对着假渲染器）与 B2/B3 并行；F3 在 F2 之后
 
 ## E 第一批验收（测试；B1–B3、F2、F3 与算法线三项都在集成分支上之后）
 
-1. [ ] `frontend/e2e/real/playback-zones.real.ts`（真实渲染器）：两个浏览器上下文模拟手机与电脑，覆盖 PRD 验收各条（手机控制电脑、转移、离线、重启、多标签页、隔离、不退化、迁移）。
+1. [x] `frontend/e2e/real/playback-zones.real.ts`（真实渲染器）：两个浏览器上下文模拟手机与电脑，覆盖 PRD 验收各条（手机控制电脑、转移、离线、重启、多标签页、隔离、不退化、迁移）。
        “远程出声”“接手”以页面先被点击一次为前提（prd 的验收前提）；“重启”用脚本重启隔离服务进程；“不退化”含 ALAC、电平化、无缝、交叉渐变、歌词、计次。
-2. [ ] 真机手工核对一次：iPhone 锁屏后连续播放跨过两首（含一次无缝）、锁屏信息随曲目切换、解锁后列表状态正确；有损档在手机上能放。
-3. [ ] 派生退役的升级核对：在保留了旧 `media-cache` 的数据卷上启动新版本，目录被删除、日志一条 `playback.derivation.cache_removed`（实现归 dsp-pipeline P10，这里只验）。
-4. [ ] spec：新增 `.trellis/spec/backend/playback-zone-contracts.md`（由合同整理，≤ 24 KB，作为原生客户端的协议文档），更新 backend `index.md`、`directory-structure.md`、`playback-contracts.md`（标出直出接口只保留到下一版）；
+2. [x] 真机手工核对一次（结果见 [acceptance-device.md](../11-09-zones-e-acceptance/acceptance-device.md)）：iPhone 锁屏后连续播放跨过两首（含一次无缝）、锁屏下跨过一次格式边界（接续流，HLS）、锁屏信息随曲目切换、解锁后列表状态正确；有损档在手机上能放。
+3. [x] 派生退役的升级核对：在保留了旧 `media-cache` 的数据卷上启动新版本，目录被删除、日志一条 `playback.derivation.cache_removed`（实现归 dsp-pipeline P10，这里只验）。
+4. [x] spec：新增 `.trellis/spec/backend/playback-zone-contracts.md`（由合同整理，≤ 24 KB，作为原生客户端的协议文档），更新 backend `index.md`、`directory-structure.md`、`playback-contracts.md`（标出直出接口只保留到下一版）；
        frontend `playback-and-personal-state.md`、`player-design-guidelines.md`、`state-management.md` 中关于引擎、sessionStorage 恢复、设备偏好、计次上报的段落。
 
 验证：`scripts/playback-e2e.sh e2e/real/playback-zones.real.ts`（只这一份；旧的 `playback.real.ts` 测的是退役的直出路径，随 F2 改写或删除）。

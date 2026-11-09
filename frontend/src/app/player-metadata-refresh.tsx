@@ -30,7 +30,7 @@ function refreshTrackIds(entries: readonly { track: { trackId: string } }[], cur
  * 有界刷新播放器队列里的显示元数据（M5 ⑤，I4）：艺人数据变为就绪（或已就绪时 epoch 变大）、艺人治理成功之后，
  * 从当前曲目起往后再到前面，去重后最多 1,000 首，一次批量读取曲目摘要（POST /tracks/summaries），
  * 只把标题、艺人与艺人链接、专辑名与封面换成新的；不改顺序、当前位置、播放状态与进度，不重新加载音频。
- * 读不到的曲目（不在结果里、请求失败）保持原样；新一轮开始后旧一轮的结果作废。player 不导入 catalog 的界面层，所以由 app 驱动、引擎只提供改元数据的方法。
+ * 读不到的曲目（不在结果里、请求失败）保持原样；新一轮开始后旧一轮的结果作废。player 不导入 catalog 的界面层，所以由 app 驱动；控制器只修补 store 里的显示数据，下一次服务端状态照常覆盖。
  */
 export function PlayerMetadataRefresh({ children }: { children: ReactNode }) {
   const engine = usePlayerEngine();

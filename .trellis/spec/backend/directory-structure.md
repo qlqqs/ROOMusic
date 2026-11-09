@@ -30,10 +30,17 @@ backend/
 │   │   ├── parser/                 # 音频与 CUE 解析、与标签无关的音频内容指纹（叶子包）
 │   │   │   └── parsertest/         # 仅测试使用：合成音频夹具
 │   │   └── httpapi/                # 目录、目录操作、扫描
-│   ├── playback/                   # 鉴权交付核心：来源核对、安全打开、格式表、停机中止与派生编排
-│   │   ├── derivation/             # 无损派生：受管缓存、转换任务、ffmpeg 适配与输出核对（不含 HTTP，不依赖任何内部包）
+│   ├── playback/                   # 来源核对、安全打开、可渲染格式表与渲染来源入口（OpenForRender）、旧直出与停机中止
+│   │   ├── render/                 # 渲染器：实现 zones 的 Renderer 端口（解码、处理链、换轨与淡化、抖动、编码、HLS 切片、未来事件队列、信号路径）
+│   │   │   └── ffmpeg/             # ffmpeg 定位、版本与编解码清单、内嵌素材自检（标准库叶子包）
 │   │   ├── analysis/               # 后台音频分析：ffmpeg 探测与自检、一首的响度/真峰值/波形/首尾静音（叶子包，不读数据库，不依赖任何内部包）
-│   │   └── httpapi/                # 格式表、曲目预检（含派生等待）与音频、音频分析进度
+│   │   └── httpapi/                # 格式表、旧曲目预检与音频（下一版删除）、音频分析进度
+│   ├── dsp/                        # 纯算法包，只依赖标准库：leveling（电平化选择与施加）、fade（淡化曲线）、dither（LFSR/TPDF 量化）
+│   │   └── chain/                  # 处理链：Headroom、量化出口、适配器与信号路径步骤（只导入 dsp 算法包）
+│   ├── zones/                      # 播放区：设备、队列与传输状态、命令、输出端会话与租约、hub、会话事件应用、服务端计次、协商调用
+│   │   ├── queue/                  # 队列纯函数：四种模式、插入移除移动、前进后退、随机预选（标准库叶子包）
+│   │   ├── zonestest/              # 仅测试使用：静音 WAV 假渲染器
+│   │   └── httpapi/                # 控制接口、事件流（SSE）、输出端认领/回报/释放、长流与 HLS 写出
 │   ├── listening/                  # 播放历史：每用户的真实播放记录、计次门槛校验、最近播放的发行与清除（发行归属只经 catalog 公开函数换算）
 │   │   └── httpapi/                # 记录一次播放、最近播放、清除
 │   ├── personal/                   # 本人收藏、歌单、排序、幂等收据与适应撤销；目录事实只经 catalog 公开读取
@@ -94,10 +101,9 @@ C2 的 B3 已将治理实现移到 `catalog/governance`，其 `Store` 经 `NewSt
   `ingest.Fingerprinter` 向 library 取值（library 在注册 root 内校验路径后调用 parser）。ingest 不导入 catalog 核心、library 或
   parser。library 经 ingest 公开合同完成扫描写入；ingest 的负向对账保留读取 `scan_runs.started_at` 的既有跨表查询，本次不改变。
   library 的读取侧仍通过 `catalog.SafeRelativeSourceRef` 等核心合同取值。M5 管理员报告另消费 `catalog.Store.ListScanAddedAlbums` 与 `catalog/governance.Store.LoadClaimHintsBatch` 的公开只读入口，共用library拥有的只读RR事务，不查询catalog/治理私表。
-- `playback` 拥有只读直出、派生交付编排与停机中止，经 catalog、library 公开合同读取来源，经 `playback/derivation` 的窄端口取得派生文件；
-  HTTP 层经 identity 鉴权。具体错误、Range 与资源关闭规则见[播放合同](./playback-contracts.md)。
-  `playback/derivation` 拥有缓存目录、转换任务与 ffmpeg 适配，不知道曲目与权限，由 `playback` 提供源文件版本与“安全打开并核对”的回调，
-  由 `app.OpenDerivation` 在启动时装配（含缓存目录与音乐根互不包含的检查），见[无损派生合同](./playback-derivation-contracts.md)。
+- `playback` 拥有来源核对与安全打开、可渲染格式表、渲染来源入口 `OpenForRender` 与旧直出（下一版删除），经 catalog、library 公开合同读取来源；
+  HTTP 层经 identity 鉴权。规则见[播放格式表与旧直出接口合同](./playback-contracts.md)。派生缓存已退役，`app.RemoveLegacyMediaCache` 在启动时删除旧 `media-cache`。
+  `zones` 是播放控制面，`playback/render` 实现它的渲染端口，`dsp/*` 是渲染用的纯算法；三者的依赖方向见下文“播放区”与“DSP”各节，对外协议见[播放区协议](./playback-zone-contracts.md)。
   `playback/analysis_worker.go` 拥有后台音频分析的单线程调度（扫描让路、低优先级、失败不阻塞）、源文件安全打开与进度提供者，经 catalog 公开函数读写分析结果、
   经 library 公开合同核对目录；`playback/analysis` 是只管 ffmpeg 与 PCM 计算的叶子包，由 `app.OpenAnalysis` 探测并装配，见[后台音频分析合同](./audio-analysis-contracts.md)。
 - `catalog` 核心的 `track_analysis.go` 拥有表 `track_analyses`（2026-11-08，迁移 0033）：待分析候选、分析结果写入、按曲目读取（含按 Roon 的曲目与专辑增益）与进度计数；
@@ -209,3 +215,51 @@ maintenance的原始名字工作量估计经`artistgraph.ArtistInputNameCost`窄
 ## ⑧古典作品叶子包
 
 `catalog/classical` 只依赖标准库，公开作品编号解析、排序键、标题段切分与作品拆分纯函数；不读流派、数据库或容器。仅 `library/parser`（TIT1保护）和 `catalog/ingest`（候选作品分配）获准导入，精确登记于 `app/dependency_rules_test.go`，不扩大核心或其它能力的依赖范围。parser不再仅依赖metadata，作品标签读取仍在parser，扫描写入仍在ingest。
+
+## 播放区 B1 增量
+
+`zones/queue` 是只依赖标准库的队列叶子包；B1 在 `zones` 引入持久化，允许依赖 `catalog`、`platform/uuid`、`zones/queue`，不导入 listening 或 DSP。详见[播放区数据与队列合同](./zones-data-contracts.md)。
+
+## 播放区 B2 增量
+
+`zones` 增加控制 Service、渲染消费方端口、设备与命令、内部 hub；`zones/httpapi` 依赖 `identity`、`platform/httpserver`、`platform/uuid`、`zones`，负责控制接口、SSE、输出端认领/回报/释放与渲染流写出；在线租约、会话事件与计次策略仍属于 zones。
+`zones/zonestest` 只依赖 zones 与标准库，拥有静音 WAV 假渲染器；生产 `app` 不允许导入此测试辅助包。
+`app.New` 装配 Service 与路由，进程关停经 `WaitForZones` 等待 Service 关闭；真实 Renderer 未装配时不拿假渲染器顶替。服务端合同见[播放区服务端实现合同](./playback-zone-service-contracts.md)，对外协议见[播放区协议](./playback-zone-contracts.md)。
+
+## DSP 第一批纯包合同
+
+### 1. 范围
+
+`dsp/leveling`、`dsp/fade`、`dsp/dither` 是只依赖标准库的算法叶子包；`dsp/chain` 只允许导入这些算法包，精确 allowlist 见依赖方向测试。不接数据库、播放区或前端；由 `playback/render` 的渲染会话调用。
+
+### 2. 签名
+
+- `chain.Build(Spec) (*Chain, error)` 装配 Headroom 与独立量化出口；`Chain.Process(*Buffer) *Buffer`、`Drain() *Buffer`、`Quantize([]byte, *Buffer) ([]byte, int)`、`Reset()`、`Steps() []SignalStep`。
+- `chain.Wrap(Processor, Format, Format, SignalStep, bool) *Adapter`；适配器实现 `Node`，另提供 `Drain() *Buffer`。
+- `leveling.Apply(samples [][]float64, regions *[]GainRegion, exact *bool)`；`GainRegion` 定义于 leveling，`chain.GainRegion` 是别名。调用方式为 `leveling.Apply(b.Samples, &b.Regions, &b.Exact)`，避免 leveling 反向导入 chain。
+
+### 3. 合同
+
+样本为 planar float64。适配器按流内绝对帧号映射区域，丢弃流头固有延迟，流尾喂零至总输出为 `floor(总输入 × 输出率 / 输入率)`；输入元数据保留至对应输出产生，不能以当前输入块的 `Exact` 冒充延迟输出的属性。`Drain` 分块返回，调用至 nil；返回缓冲只在下次调用前有效。容量增长后复用，不逐块分配。
+
+增益由分析阶段算好，Choose 只选择、不再限峰值。Apply 清空区域，只有增益不等于 1 时清 Exact。Headroom 启用即清 Exact。量化直通条件为 `Exact && 0 < SourceBits && SourceBits <= OutputBits`，直通不推进 LFSR。Steps 只含构造时的节点，逐曲目的电平化/抖动显示由后续渲染会话添加。
+
+### 4. 校验与错误
+
+Build 的采样率/声道非正、输出位深非 0/16/24、启用的 Headroom 超出 −30…0 dB 或不符合 0.1 dB 步进，返回错误。共享链收到未施加区域、冲刷后未经 Reset 又 Process，以及纯算法的非法装配参数，视为程序错误并 panic；不作为用户输入边界使用。
+
+### 5. 正常、基准与错误案例
+
+正常：延迟处理器的输出沿用对应来源的元数据，尾部补齐真实输入的帧数。基准：16 位精确源经关闭 Headroom 的链输出 16/24 位时逐位还原。错误：在链头仍携带电平化区域，或把补零当成新输入计入长度。
+
+### 6. 必需测试
+
+独立测试 agent 补充：固定延迟与攒块冲刷、变率绝对边界、跨块 Exact/SourceBits、区域入口 panic、选择表与 Apply、淡化分块公式、LFSR/TPDF/量化、稳态分配。具体向量见三个任务设计的测试节；本次实现自查不代替算法单测验收。
+
+### 7. 错误与正确调用
+
+错误：循环复用未清空的 Regions，重复电平化；直接把 Exact 传给量化器而忽略降位深。正确：来源段先 Apply 清空区域，再进入共享链，使用 `Chain.Quantize` 判断逐位直通，流尾循环 Drain 并立即消费每块。
+
+## DSP 渲染骨架增量（P-c）
+
+`playback/render/ffmpeg` 是标准库叶子包；`playback/render` 只依赖 zones 端口、dsp 算法与 chain、ffmpeg 和 uuid，不反向导入 playback 或 catalog。app 通过 `OpenForRender` 与 catalog 的分析读取实现 TrackSource。生产装配使用真实 Renderer，测试假渲染器保留；关停先关闭 zones 再等待 Renderer 回收。派生已在 P-d 删除。详见[服务端渲染合同](./playback-render-contracts.md)。

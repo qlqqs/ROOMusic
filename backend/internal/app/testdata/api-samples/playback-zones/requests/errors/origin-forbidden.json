@@ -1,0 +1,7 @@
+{
+  "body": {
+    "name": "拒绝"
+  },
+  "method": "PATCH",
+  "path": "/api/v1/me/playback/devices/00000000-0000-4000-8000-000000000001"
+}

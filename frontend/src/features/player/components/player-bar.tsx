@@ -4,6 +4,7 @@ import { useTooltip } from "../../../shared/ui";
 import { ArtistNames } from "../../catalog";
 import type { PlayerTrack } from "../engine/queue";
 import { useFullscreenPlayer } from "../hooks/use-fullscreen-player";
+import { ControlTargetLine, DeviceButton } from "./device-picker";
 import { usePlayer } from "../player-provider";
 import { PlayerArtwork } from "./player-artwork";
 import { ModeControl, TransportControls, VolumeControl } from "./player-controls";
@@ -40,9 +41,10 @@ export function PlayerBar({ renderCurrentTrackActions, renderQueueActions }: Pla
   const track = snapshot.current?.track;
   return <section aria-label="播放器" className={styles.bar}>
     <div className={styles.identity}>
-      {track === undefined ? <PlayerFaultInline /> : <><ExpandArtworkButton track={track} /><div className={styles.text}>
+      {track === undefined ? <div className={styles.text}><PlayerFaultInline /><ControlTargetLine className={styles.narrowOnly} /></div> : <><ExpandArtworkButton track={track} /><div className={styles.text}>
         <p className={styles.title} title={track.title}>{track.title}</p>
         <PlayerFaultInline />
+        <ControlTargetLine className={styles.narrowOnly} />
         <p className={styles.subtitle}><ArtistNames text={track.artist} refs={track.artistRefs ?? noRefs} /> — <Link to="/albums/$groupId" params={{ groupId: track.groupId }} search={{ release: track.releaseId }}>{track.albumTitle}</Link></p>
       </div>{renderCurrentTrackActions === undefined ? null : <div className={styles.trackActions}>{renderCurrentTrackActions(track)}</div>}</>}
     </div>
@@ -51,6 +53,7 @@ export function PlayerBar({ renderCurrentTrackActions, renderQueueActions }: Pla
       <div className={`${styles.desktop} ${styles.format}`}>{track === undefined ? null : <SignalPathButton />}<span className={styles.formatText}><span>{track === undefined ? "未知格式" : sourceFormat(track)}</span><span className={styles.state}>{statusLabels[snapshot.status]}</span></span></div>
       <div className={styles.desktop}><ModeControl /></div>
       <div className={styles.volume}><VolumeControl /></div>
+      <DeviceButton />
       <QueueButton renderQueueActions={renderQueueActions} />
     </div>
   </section>;

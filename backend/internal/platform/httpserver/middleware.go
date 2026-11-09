@@ -145,11 +145,7 @@ func (w *recordingResponseWriter) FlushError() error {
 	if !w.written {
 		w.WriteHeader(http.StatusOK)
 	}
-	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
-		flusher.Flush()
-		return nil
-	}
-	return http.ErrNotSupported
+	return http.NewResponseController(w.ResponseWriter).Flush()
 }
 
 func (w *recordingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {

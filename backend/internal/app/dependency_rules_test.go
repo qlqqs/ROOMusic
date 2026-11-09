@@ -9,7 +9,10 @@ import (
 	"testing"
 )
 
-const internalPrefix = "github.com/qlqq/roomusic/backend/internal/"
+const (
+	backendPrefix  = "github.com/qlqq/roomusic/backend/"
+	internalPrefix = backendPrefix + "internal/"
+)
 
 // packageRule 规定一个 internal 包允许依赖的内部包（相对 internal/ 的路径），以及是否可以使用 net/http。
 type packageRule struct {
@@ -50,9 +53,18 @@ var packageRules = map[string]packageRule{
 	"library/parser":                 {imports: []string{"catalog/metadata", "catalog/classical"}},
 	"library/parser/parsertest":      {},
 	"library":                        {imports: []string{"catalog", "catalog/governance", "catalog/artwork", "catalog/ingest", "catalog/metadata", "library/parser", "platform/uuid", "platform/workpool"}},
+	"dsp/chain":                      {imports: []string{"dsp/leveling", "dsp/fade", "dsp/dither"}},
+	"dsp/leveling":                   {},
+	"dsp/fade":                       {},
+	"dsp/dither":                     {},
 	"playback/analysis":              {},
-	"playback/derivation":            {},
-	"playback":                       {imports: []string{"catalog", "library", "playback/analysis", "playback/derivation"}},
+	"playback/render/ffmpeg":         {},
+	"playback/render":                {imports: []string{"zones", "dsp/chain", "dsp/leveling", "dsp/fade", "dsp/dither", "playback/render/ffmpeg", "platform/uuid"}},
+	"playback":                       {imports: []string{"catalog", "library", "playback/analysis"}},
+	"zones/queue":                    {},
+	"zones/httpapi":                  {imports: []string{"identity", "platform/httpserver", "platform/uuid", "zones"}, http: true},
+	"zones/zonestest":                {imports: []string{"zones"}},
+	"zones":                          {imports: []string{"catalog", "platform/uuid", "zones/queue"}},
 	"listening":                      {imports: []string{"catalog"}},
 	"personal":                       {imports: []string{"catalog", "platform/uuid"}},
 	"personal/httpapi":               {imports: []string{"identity", "personal", "platform/httpserver", "platform/uuid"}, http: true},
@@ -63,9 +75,9 @@ var packageRules = map[string]packageRule{
 	"playback/httpapi":               {imports: []string{"identity", "platform/httpserver", "platform/uuid", "playback"}, http: true},
 	"listening/httpapi":              {imports: []string{"identity", "listening", "platform/httpserver", "platform/uuid"}, http: true},
 	"app": {imports: []string{
-		"backup", "backup/httpapi",
+		"backup", "backup/httpapi", "zones", "zones/queue", "zones/httpapi",
 		"catalog", "catalog/governance", "catalog/httpapi", "catalog/maintenance", "identity", "identity/httpapi", "library", "library/httpapi", "listening", "listening/httpapi",
-		"personal", "personal/httpapi", "operations/httpapi", "platform/config", "platform/httpserver", "playback", "playback/analysis", "playback/derivation", "playback/httpapi",
+		"personal", "personal/httpapi", "operations/httpapi", "platform/config", "platform/httpserver", "playback", "playback/analysis", "playback/httpapi", "playback/render", "playback/render/ffmpeg",
 	}, http: true},
 }
 
@@ -95,6 +107,10 @@ func TestPackageDependencyDirections(t *testing.T) {
 			allowed[item] = true
 		}
 		for _, imported := range pkg.Imports {
+			// DSP 也不能绕过 internal 规则导入迁移等项目包。
+			if strings.HasPrefix(relative, "dsp/") && strings.HasPrefix(imported, backendPrefix) && !strings.HasPrefix(imported, internalPrefix) {
+				t.Errorf("internal/%s must not import %s", relative, imported)
+			}
 			if imported == "net/http" && !rule.http {
 				t.Errorf("internal/%s must not import net/http", relative)
 			}

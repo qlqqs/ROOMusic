@@ -11,13 +11,16 @@ backend.
 loader，页面直接调用 feature 查询 hook，不让 Router 缓存与 Query 缓存并存），会话由 `features/auth/session` 的会话控制器
 持有（普通 TypeScript 对象，组件经 `useSyncExternalStore` 读取）。没有全局 store。选型依据见
 [前端基础 ADR](../../../docs/architecture/adr/0001-frontend-foundations.md) 决策记录；M1b（2026-10-03）又落地了专辑的搜索与详情 URL；
-尚未实现的部分（受治理操作、播放）保留为目标合同。
+尚未实现的部分（受治理操作）保留为目标合同。
+
+播放（2026-11-09 起）是唯一不经 Query 缓存的服务器状态：设备、播放区、队列与传输状态的权威在服务端播放区，前端由 `features/player` 的 zone store（普通 TypeScript 对象，经 `useSyncExternalStore` 读取）按快照、命令响应与事件流对齐，按 `revision` 丢弃旧状态。浏览器只存设备 ID 与控制目标（按账号命名的 `localStorage`），不存队列、位置、播放设置或计次。
 
 ## State Categories
 
 | Category | Examples | Owner |
 | --- | --- | --- |
 | Server state | current user, library roots, scan runs, Releases, search results, Change Sets | selected query/cache mechanism through typed feature API |
+| 播放区状态 | 设备、播放区、队列、传输状态、播放设置 | 服务端播放区；前端 zone store 经快照与事件流对齐，不进 Query 缓存 |
 | URL state | search query, filters, sort, page, selected tab when shareable | router/search parameters |
 | Local UI state | dialog open, focused row, draft input, disclosure state | nearest component/feature |
 | Form state | login, setup, directory command inputs and field errors | form/component until submit |
@@ -220,7 +223,7 @@ the backend journal.
 
 ## 播放与个人状态的阶段边界
 
-M2a 播放生命周期与恢复、阶段 P 播放上报与最近播放、M5 ① 播放历史与 M5 ④ 全局搜索的查询键、URL 与目录状态见[播放与个人状态](./playback-and-personal-state.md)。
+播放区客户端（zone store、事件流、输出端、设备身份与控制目标、旧 sessionStorage 队列的一次性导入、旧偏好只作登记初值）、播放设置、服务端计次与最近播放、M5 ① 播放历史与 M5 ④ 全局搜索的查询键、URL 与目录状态见[播放与个人状态](./playback-and-personal-state.md)。
 
 See [Hook Guidelines](./hook-guidelines.md),
 [Cross-Layer Thinking](../guides/cross-layer-thinking-guide.md), and the

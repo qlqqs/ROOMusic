@@ -1,24 +1,21 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSessionController, SessionProvider, ViewerScopeProvider } from "../features/auth";
 import { PlayerProvider } from "../features/player";
-import { PlayerEngine } from "../features/player/engine/player-engine";
 import { MAX_QUEUE_ENTRIES } from "../features/player/engine/queue";
 import type { SearchTrackItemDTO } from "../features/search";
 import { deferred } from "../test/deferred";
 import { installFakeApi, installFakeSession, type FakeApi } from "../test/fake-api";
-import { FakeAudio } from "../test/fake-audio";
+import { playerHarness } from "../test/fake-zones";
 import { jsonResponse, sampleResponse } from "../test/http";
 import { playerTrack } from "../test/player-data";
-import { silentPlayRecorder } from "../test/play-recorder";
 import { searchTrackItem } from "../test/search-data";
 import { SearchPlaybackNotice, SearchTrackActions } from "./routes/search-playback";
 import { TrackFavoritesScope } from "./routes/track-favorites-scope";
 
 const cleanups: (() => void)[] = [];
-beforeEach(() => { vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue("probably"); });
 afterEach(() => { for (const cleanup of cleanups.splice(0)) cleanup(); vi.restoreAllMocks(); });
 
 async function setup(item: SearchTrackItemDTO = searchTrackItem(), configure?: (api: FakeApi) => void) {
@@ -30,25 +27,17 @@ async function setup(item: SearchTrackItemDTO = searchTrackItem(), configure?: (
   const state = controller.getSnapshot();
   if (state.status !== "authenticated") throw new Error("应已登录");
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const audio = new FakeAudio();
-  let id = 0;
-  const engine = new PlayerEngine({
-    userId: state.viewer.id, audio,
-    loadPlayback: async (trackId) => ({ state: "ready", playback: { track_id: trackId, representation: { kind: "original", url: `/api/v1/tracks/${trackId}/audio`, mime_type: "audio/flac", codecs: null, size_bytes: 100 } } }),
-    shouldPrefetch: () => false,
-    loadRelease: async () => { throw new Error("本测试没有保存的队列"); },
-    sessionStorage: null, localStorage: null, mediaSession: null,
-    artworkUrl: (value) => value, newId: () => `entry-${++id}`, random: () => 0, now: Date.now, playRecorder: silentPlayRecorder,
-  });
+  const player = playerHarness();
+  const { engine } = player;
   cleanups.push(() => { engine.endSession(); controller.dispose(); client.clear(); });
   render(<QueryClientProvider client={client}><SessionProvider controller={controller}>
     <ViewerScopeProvider viewer={state.viewer} generation={state.generation}>
-      <PlayerProvider userId={state.viewer.id} engine={engine}>
+      <PlayerProvider userId={state.viewer.id} controller={engine}>
         <TrackFavoritesScope tracks={[item]}><SearchPlaybackNotice /><SearchTrackActions item={item} /></TrackFavoritesScope>
       </PlayerProvider>
     </ViewerScopeProvider>
   </SessionProvider></QueryClientProvider>);
-  return { api, audio, engine, item };
+  return { api, player, engine, item };
 }
 
 async function playable() {
@@ -58,18 +47,23 @@ async function menu(name: string) {
   await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
   await userEvent.click(screen.getByRole("menuitem", { name }));
 }
-async function start(engine: PlayerEngine, audio: FakeAudio, count = 2) {
-  await act(async () => { engine.playTracks(Array.from({ length: count }, (_, index) => playerTrack(String(index)))); });
-  act(() => { audio.loadMetadata(120); audio.beginPlaying(); audio.tick(17); engine.setMode("repeat_all"); });
+/** 先放一个 count 首的旧队列（列表循环），出声到 17 秒；返回在放的元素。 */
+async function start(player: ReturnType<typeof playerHarness>, count = 2) {
+  act(() => { player.engine.playTracks(Array.from({ length: count }, (_, index) => playerTrack(String(index)))); player.engine.setMode("repeat_all"); });
+  const audio = await player.sounding(17);
+  await waitFor(() => expect(player.engine.getSnapshot().queue.mode).toBe("repeat_all"));
+  await player.queued(count);
+  return audio;
 }
 
 describe("搜索曲目播放动作", () => {
   it("播放只替换为这一首，摘要完整映射并保留队列模式", async () => {
-    const { item, engine, audio } = await setup();
+    const { item, engine, player } = await setup();
     await playable();
-    await start(engine, audio);
+    await start(player);
     await userEvent.click(screen.getByRole("button", { name: `播放 ${item.title}` }));
-    await waitFor(() => expect(audio.src).toBe(`/api/v1/tracks/${item.track_id}/audio`));
+    await waitFor(() => expect(engine.getSnapshot().current?.track.trackId).toBe(item.track_id));
+    expect(player.server.commands.at(-1)).toEqual({ command: "play_tracks", track_ids: [item.track_id], start_index: 0 });
     const queue = engine.getSnapshot().queue;
     expect(queue.entries).toHaveLength(1);
     expect(queue.mode).toBe("repeat_all");
@@ -82,17 +76,17 @@ describe("搜索曲目播放动作", () => {
   });
 
   it.each(["下一首播放", "加入队列"])("%s 不打断当前曲目、进度、模式或原条目身份", async (action) => {
-    const { engine, audio, item } = await setup();
+    const { engine, player, item } = await setup();
     await playable();
-    await start(engine, audio);
+    const audio = await start(player);
     const before = engine.getSnapshot();
     const sources = [...audio.sources];
     const playCalls = audio.playCalls;
     const pauseCalls = audio.pauseCalls;
     await menu(action);
+    await waitFor(() => expect(engine.getSnapshot().queue.entries.map((entry) => entry.track.trackId)).toEqual(action === "下一首播放"
+      ? ["track-0", item.track_id, "track-1"] : ["track-0", "track-1", item.track_id]));
     const after = engine.getSnapshot();
-    expect(after.queue.entries.map((entry) => entry.track.trackId)).toEqual(action === "下一首播放"
-      ? ["track-0", item.track_id, "track-1"] : ["track-0", "track-1", item.track_id]);
     expect(after.current?.entryId).toBe(before.current?.entryId);
     expect(after.queue.entries.filter((entry) => entry.track.trackId.startsWith("track-"))).toEqual(before.queue.entries);
     expect(after.queue.mode).toBe("repeat_all");
@@ -105,13 +99,15 @@ describe("搜索曲目播放动作", () => {
   });
 
   it.each(["下一首播放", "加入队列"])("队列满时 %s 给提示，不截断或清空任何已有条目", async (action) => {
-    const { engine, audio } = await setup();
+    const { engine, player } = await setup();
     await playable();
-    await start(engine, audio, MAX_QUEUE_ENTRIES);
+    const audio = await start(player, MAX_QUEUE_ENTRIES);
     const queue = engine.getSnapshot().queue;
     const sources = [...audio.sources];
+    const sent = player.server.commands.length;
     await menu(action);
     expect(screen.getByRole("status").textContent).toBe("队列已满，请先移除一些条目。");
+    expect(player.server.commands).toHaveLength(sent);
     expect(engine.getSnapshot().queue).toBe(queue);
     expect(engine.getSnapshot().queue.entries).toHaveLength(MAX_QUEUE_ENTRIES);
     expect(engine.getProgress().positionSeconds).toBe(17);
@@ -120,15 +116,11 @@ describe("搜索曲目播放动作", () => {
 
   it.each([
     { kind: "missing", reason: "文件缺失，不能播放" },
-    { kind: "cue", reason: "CUE 分轨曲目需要切分，目前不能播放" },
-    { kind: "unknown", reason: "这种格式目前不能直接播放" },
-    { kind: "browser", reason: "当前浏览器不能解码 FLAC" },
+    { kind: "unknown", reason: "这种格式目前不能播放" },
   ])("$kind 不可播，原因与禁用播放按钮关联且两个入队动作也禁用", async ({ kind, reason }) => {
     const item = searchTrackItem();
     if (kind === "missing") item.present = false;
-    if (kind === "cue") item.source.source_kind = "cue_virtual";
     if (kind === "unknown") item.source.codec = "unknown";
-    if (kind === "browser") { item.source.source_kind = "flac_vorbis_comment"; item.source.codec = "flac"; vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue(""); }
     const { engine } = await setup(item);
     await screen.findByText(reason);
     const button = screen.getByRole("button", { name: /^播放 / });

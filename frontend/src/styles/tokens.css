@@ -55,6 +55,11 @@
   --color-pressed: color-mix(in srgb, var(--color-text) 12%, transparent);
   --color-selected: color-mix(in srgb, var(--color-accent) 11%, transparent);
 
+  /* 信号路径的“增强”“高质量”两档与削波警示（图标色）；无损用强调色，有损用次要文字色。 */
+  --color-signal-enhanced: #2f6a9a;
+  --color-signal-high: #3d7548;
+  --color-warning: #b3261e;
+
   --focus-ring: 2px solid var(--color-accent-700);
   --focus-offset: 2px;
 

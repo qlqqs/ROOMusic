@@ -1,0 +1,11 @@
+{
+  "body": {
+    "fault": "stream_lost",
+    "kind": "fault",
+    "status": "buffering",
+    "stream_seconds": 2,
+    "stream_seq": 9
+  },
+  "method": "POST",
+  "path": "/api/v1/me/playback/outputs/00000000-0000-4000-8000-000000000001/reports"
+}

@@ -1,0 +1,61 @@
+{
+  "body": {
+    "device": {
+      "capabilities": {
+        "dsd": "none",
+        "exclusive": false,
+        "max_channels": 2,
+        "stream_formats": [],
+        "volume": "number"
+      },
+      "device_id": "00000000-0000-4000-8000-000000000001",
+      "kind": "browser",
+      "last_seen_at": "2026-01-01T00:00:00Z",
+      "muted": false,
+      "name": "样本设备",
+      "online": false,
+      "output_session_id": null,
+      "volume": 0.5,
+      "zone_id": "00000000-0000-4000-8000-000000000002"
+    },
+    "server_time": "2026-01-01T00:00:00Z",
+    "zone": {
+      "current": null,
+      "device_id": "00000000-0000-4000-8000-000000000001",
+      "event": null,
+      "failures": [],
+      "fault": null,
+      "has_next": false,
+      "intent": "pause",
+      "mode": "sequential",
+      "next_stream": null,
+      "paused_at": "2026-01-01T00:00:00Z",
+      "position": {
+        "at": "2026-01-01T00:00:00Z",
+        "duration_seconds": null,
+        "seconds": 0,
+        "seekable": false
+      },
+      "queue_length": 0,
+      "queue_revision": 0,
+      "revision": 0,
+      "settings": {
+        "crossfade": false,
+        "crossfade_seconds": 5,
+        "gapless": true,
+        "headroom": {
+          "clip_indicator": false,
+          "db": -3,
+          "enabled": false
+        },
+        "leveling": "auto",
+        "quality": "lossless"
+      },
+      "signal": null,
+      "status": "idle",
+      "stream": null,
+      "zone_id": "00000000-0000-4000-8000-000000000002"
+    }
+  },
+  "status": 201
+}

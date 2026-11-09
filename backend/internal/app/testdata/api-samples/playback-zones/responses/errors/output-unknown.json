@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "output_unknown",
+      "message": "输出会话不存在"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 404
+}

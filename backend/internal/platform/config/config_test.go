@@ -17,10 +17,9 @@ func setRequired(t *testing.T) {
 	t.Setenv("ROOMUSIC_PUBLIC_URL", "")
 	t.Setenv("ROOMUSIC_FFMPEG_PATH", "")
 	t.Setenv("ROOMUSIC_AUDIO_ANALYSIS", "")
-	t.Setenv("ROOMUSIC_MEDIA_CACHE_MAX_MIB", "")
 }
 
-func TestLoadUsesTheDerivationDefaults(t *testing.T) {
+func TestLoadUsesTheFFmpegDefault(t *testing.T) {
 	setRequired(t)
 	settings, err := Load()
 	if err != nil {
@@ -29,49 +28,17 @@ func TestLoadUsesTheDerivationDefaults(t *testing.T) {
 	if settings.FFmpegPath != "" {
 		t.Errorf("FFmpegPath = %q, want empty (look up PATH)", settings.FFmpegPath)
 	}
-	if want := int64(10) << 30; settings.MediaCacheMaxBytes != want {
-		t.Errorf("MediaCacheMaxBytes = %d, want %d", settings.MediaCacheMaxBytes, want)
-	}
 }
 
-func TestLoadReadsTheDerivationSettings(t *testing.T) {
+func TestLoadReadsTheFFmpegPath(t *testing.T) {
 	setRequired(t)
 	t.Setenv("ROOMUSIC_FFMPEG_PATH", "  /opt/ffmpeg/bin/ffmpeg  ")
-	t.Setenv("ROOMUSIC_MEDIA_CACHE_MAX_MIB", " 2048 ")
 	settings, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	if settings.FFmpegPath != "/opt/ffmpeg/bin/ffmpeg" {
 		t.Errorf("FFmpegPath = %q", settings.FFmpegPath)
-	}
-	if want := int64(2048) << 20; settings.MediaCacheMaxBytes != want {
-		t.Errorf("MediaCacheMaxBytes = %d, want %d", settings.MediaCacheMaxBytes, want)
-	}
-}
-
-func TestLoadAcceptsTheMinimumMediaCacheLimit(t *testing.T) {
-	setRequired(t)
-	t.Setenv("ROOMUSIC_MEDIA_CACHE_MAX_MIB", "256")
-	settings, err := Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if want := int64(256) << 20; settings.MediaCacheMaxBytes != want {
-		t.Errorf("MediaCacheMaxBytes = %d, want %d", settings.MediaCacheMaxBytes, want)
-	}
-}
-
-func TestLoadRejectsAnInvalidMediaCacheLimit(t *testing.T) {
-	for _, value := range []string{"255", "0", "-1", "abc", "1.5", "10G", "9223372036854775807", "99999999999999999999"} {
-		t.Run(value, func(t *testing.T) {
-			setRequired(t)
-			t.Setenv("ROOMUSIC_MEDIA_CACHE_MAX_MIB", value)
-			_, err := Load()
-			if err == nil || !strings.Contains(err.Error(), "ROOMUSIC_MEDIA_CACHE_MAX_MIB") {
-				t.Fatalf("Load error = %v, want a ROOMUSIC_MEDIA_CACHE_MAX_MIB error", err)
-			}
-		})
 	}
 }
 

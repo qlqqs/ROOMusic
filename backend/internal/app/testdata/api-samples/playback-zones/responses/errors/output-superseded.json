@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "output_superseded",
+      "message": "输出会话已被接替"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

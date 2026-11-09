@@ -1,9 +1,8 @@
-// 浏览器里保存的播放状态。两处都带版本、边界校验，损坏、未知版本与存储不可用都能恢复，写失败不声称“已保存”：
-// - 队列：sessionStorage（只在本标签页、刷新后仍在、关闭标签页即消失，多个标签页互不覆盖），按账号命名，只存标识，
-//   不存标题、路径或凭据（不把私有服务器数据放进浏览器持久层）；会话结束时删除。
-// - 音量与静音：localStorage，是设备偏好，不含任何私有数据，不随会话清除。
+// 旧版本（浏览器本地播放）留在浏览器里的播放状态，只读不写（合同 §8）：
+// - 队列：sessionStorage，按账号命名，只存标识；升级后第一次打开时读一次导入本机播放区（R11），之后删除。
+// - 音量与静音：localStorage 的设备偏好，只在登记设备时读作初值，不删除。
 import { decode as d } from "../../../shared/api";
-import { MAX_QUEUE_ENTRIES, playModes, type PlayMode, type QueueEntry } from "./queue";
+import { MAX_QUEUE_ENTRIES, playModes, type PlayMode } from "./queue";
 
 export type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
@@ -43,8 +42,8 @@ const savedQueueDecoder = d.defineDecoder(
 );
 
 /**
- * 读取保存的队列。没有、不是合法 JSON、版本未知、字段不合法、条目 ID 重复或当前条目不在队列里，都返回 null，
- * 并删除这份坏数据（下一次保存会写入新的）。历史里不在队列里的条目 ID 被丢掉。存储不可用时返回 null。
+ * 读取旧版本保存的队列。没有、不是合法 JSON、版本未知、字段不合法、条目 ID 重复或当前条目不在队列里，都返回 null，
+ * 并删除这份坏数据。历史里不在队列里的条目 ID 被丢掉。存储不可用时返回 null。
  */
 export function loadSavedQueue(storage: StorageLike | null, userId: string): SavedQueue | null {
   if (storage === null) return null;
@@ -74,44 +73,6 @@ export function loadSavedQueue(storage: StorageLike | null, userId: string): Sav
   }
 }
 
-/** 队列条目数组 → 要保存的条目标识，按数组引用缓存：队列没变时（播放中定时保存只有位置在变）不重建上万个条目。 */
-const savedEntriesCache = new WeakMap<readonly QueueEntry[], SavedQueue["entries"]>();
-
-/** 队列条目 → 要保存的条目标识（不含标题等曲目信息）。同一个条目数组返回同一个结果数组，saveQueue 据此复用条目的 JSON。 */
-export function savedEntriesOf(source: readonly QueueEntry[]): SavedQueue["entries"] {
-  let entries = savedEntriesCache.get(source);
-  if (entries === undefined) {
-    entries = source.map((entry) => ({ entryId: entry.entryId, trackId: entry.track.trackId, releaseId: entry.track.releaseId, groupId: entry.track.groupId }));
-    savedEntriesCache.set(source, entries);
-  }
-  return entries;
-}
-
-/** 条目数组 → 它的 JSON。队列没变时引擎传入同一个数组，播放中每 5 秒的保存就不必再序列化上万个条目。 */
-const entriesJson = new WeakMap<SavedQueue["entries"], string>();
-
-/** 保存队列；空队列直接删除。返回是否写入成功：存储不可用或已满时返回 false，调用方不能因此提示“已保存”。 */
-export function saveQueue(storage: StorageLike | null, userId: string, saved: SavedQueue): boolean {
-  if (storage === null) return false;
-  try {
-    if (saved.entries.length === 0) {
-      storage.removeItem(queueStorageKey(userId));
-      return true;
-    }
-    let entries = entriesJson.get(saved.entries);
-    if (entries === undefined) {
-      entries = JSON.stringify(saved.entries);
-      entriesJson.set(saved.entries, entries);
-    }
-    const head = JSON.stringify({ version: QUEUE_FORMAT_VERSION, currentEntryId: saved.currentEntryId, mode: saved.mode, positionSeconds: saved.positionSeconds, history: saved.history });
-    // 把缓存的条目拼进同一个 JSON 对象：head 以“}”结尾且至少有 version 一个字段，结果与整体 JSON.stringify 等价。
-    storage.setItem(queueStorageKey(userId), `${head.slice(0, -1)},"entries":${entries}}`);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export function clearSavedQueue(storage: StorageLike | null, userId: string): void {
   try {
     storage?.removeItem(queueStorageKey(userId));
@@ -137,15 +98,5 @@ export function loadVolume(storage: StorageLike | null): VolumeSetting {
     return { volume: saved.volume, muted: saved.muted };
   } catch {
     return defaultVolume;
-  }
-}
-
-export function saveVolume(storage: StorageLike | null, setting: VolumeSetting): boolean {
-  if (storage === null) return false;
-  try {
-    storage.setItem(VOLUME_STORAGE_KEY, JSON.stringify({ version: 1, ...setting }));
-    return true;
-  } catch {
-    return false;
   }
 }

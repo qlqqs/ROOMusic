@@ -1,0 +1,81 @@
+{
+  "data": {
+    "zone": {
+      "current": {
+        "entry_id": "00000000-0000-4000-8000-000000000001",
+        "track": {
+          "artist": "测试艺人",
+          "artist_refs": [],
+          "duration_seconds": 20,
+          "group_id": "00000000-0000-4000-8000-000000000002",
+          "present": true,
+          "release": {
+            "album_artist": null,
+            "album_artist_refs": [],
+            "artist": "测试艺人",
+            "artist_refs": [],
+            "artwork": null,
+            "attention_count": 0,
+            "id": "00000000-0000-4000-8000-000000000003",
+            "media_type": null,
+            "medium_count": 1,
+            "source_type": null,
+            "title": "合成发行",
+            "track_count": 5,
+            "year": null
+          },
+          "source": {
+            "bit_depth": null,
+            "bitrate": null,
+            "channels": null,
+            "codec": null,
+            "sample_rate": null,
+            "source_kind": "physical"
+          },
+          "title": "合成曲目 1",
+          "track_id": "00000000-0000-4000-8000-000000000004"
+        }
+      },
+      "device_id": "00000000-0000-4000-8000-000000000005",
+      "event": {
+        "kind": "no_stream_format",
+        "seq": 33
+      },
+      "failures": [],
+      "fault": {
+        "kind": "no_stream_format"
+      },
+      "has_next": true,
+      "intent": "pause",
+      "mode": "repeat_all",
+      "next_stream": null,
+      "paused_at": "2026-01-01T00:00:00Z",
+      "position": {
+        "at": "2026-01-01T00:00:00Z",
+        "duration_seconds": 20,
+        "seconds": 0,
+        "seekable": true
+      },
+      "queue_length": 5,
+      "queue_revision": 5,
+      "revision": 33,
+      "settings": {
+        "crossfade": true,
+        "crossfade_seconds": 8,
+        "gapless": true,
+        "headroom": {
+          "clip_indicator": false,
+          "db": -3,
+          "enabled": false
+        },
+        "leveling": "album",
+        "quality": "lossless"
+      },
+      "signal": null,
+      "status": "paused",
+      "stream": null,
+      "zone_id": "00000000-0000-4000-8000-000000000006"
+    }
+  },
+  "event": "zone"
+}

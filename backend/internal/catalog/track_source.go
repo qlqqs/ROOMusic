@@ -29,22 +29,27 @@ type TrackSource struct {
 	BitDepth           int
 	SampleRate         int
 	Channels           int
+	// CUE 的路径指向父音频；区间保留扫描记录的 75 Hz 帧，不是 PCM 样本帧。
+	CueParentRelativePath        *string
+	CueIndexFrames, CueEndFrames *int32
 }
 
 // LoadTrackSource 读取 present 曲目的来源事实；曲目不存在或已缺失时返回 ErrTrackNotFound。
 // 它不检查目录状态，也不触碰文件系统；trackID 必须是 UUID 文本，由调用方在传输层校验。
 func (s *Store) LoadTrackSource(ctx context.Context, trackID string) (TrackSource, error) {
 	var source TrackSource
-	var codec, fingerprint sql.NullString
+	var codec, fingerprint, cueParent sql.NullString
 	var size sql.NullInt64
-	var bitDepth, sampleRate, channels sql.NullInt32
+	var bitDepth, sampleRate, channels, cueIndex, cueEnd sql.NullInt32
 	var modifiedAt sql.NullTime
 	err := s.database.QueryRowContext(ctx, `SELECT id::text, source_root_id::text, relative_path, source_kind,
-		codec, source_size, source_modified_at, content_fingerprint, bit_depth, sample_rate, channels
+		codec, source_size, source_modified_at, content_fingerprint, bit_depth, sample_rate, channels,
+		cue_parent_relative_path, cue_index_frames, cue_end_frames
 		FROM tracks
 		WHERE id=$1::uuid AND source_status='present'`, trackID).Scan(
 		&source.TrackID, &source.RootID, &source.RelativePath, &source.SourceKind,
 		&codec, &size, &modifiedAt, &fingerprint, &bitDepth, &sampleRate, &channels,
+		&cueParent, &cueIndex, &cueEnd,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return TrackSource{}, ErrTrackNotFound
@@ -63,6 +68,11 @@ func (s *Store) LoadTrackSource(ctx context.Context, trackID string) (TrackSourc
 	if modifiedAt.Valid {
 		source.ModifiedAt = &modifiedAt.Time
 	}
+	if cueParent.Valid {
+		source.CueParentRelativePath = &cueParent.String
+	}
+	source.CueIndexFrames = nullInt32Pointer(cueIndex)
+	source.CueEndFrames = nullInt32Pointer(cueEnd)
 	return source, nil
 }
 

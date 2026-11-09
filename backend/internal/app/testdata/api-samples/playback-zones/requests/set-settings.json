@@ -1,0 +1,12 @@
+{
+  "body": {
+    "command": "set_settings",
+    "settings": {
+      "crossfade": true,
+      "crossfade_seconds": 8,
+      "leveling": "album"
+    }
+  },
+  "method": "POST",
+  "path": "/api/v1/me/playback/zones/00000000-0000-4000-8000-000000000001/commands"
+}

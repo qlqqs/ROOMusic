@@ -2,7 +2,7 @@ import { MoreHorizontal, Play } from "lucide-react";
 import { useId, useState } from "react";
 import { Button, MenuButton, VisuallyHidden, type MenuAction } from "../../shared/ui";
 import { AddToPlaylistDialog, FavoriteButton } from "../../features/personal";
-import { usePlaybackCapabilities, usePlayerEngine, type CapabilityTable, type PlayerEngine, type PlayerTrack } from "../../features/player";
+import { usePlaybackCapabilities, usePlayerEngine, type CapabilityTable, type PlayerController, type PlayerTrack } from "../../features/player";
 import { unplayableReason } from "./track-playback";
 import styles from "./track-actions.module.css";
 
@@ -19,7 +19,7 @@ type TrackActionsProps = {
   /** 播放图标的读屏名和悬停提示（“播放《…》”“从这首开始播放”）。 */
   playLabel?: string;
   /** 行内播放：默认只放这一首、替换当前队列；专辑页从这首起放整张。返回要显示的提示（没有就是空字符串）。 */
-  onPlay?: ((context: { engine: PlayerEngine; table: CapabilityTable }) => string) | undefined;
+  onPlay?: ((context: { engine: PlayerController; table: CapabilityTable }) => string) | undefined;
   /** 能力检查失败时，告诉用户去哪里重试（例如“请在专辑头部重试”）。 */
   retryHint: string;
   /** 页面自己的菜单项，放在通用项之后（从历史中移除、歌单的移动与移除）。 */

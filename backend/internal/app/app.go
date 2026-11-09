@@ -9,7 +9,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/backup"
 	backupapi "github.com/qlqq/roomusic/backend/internal/backup/httpapi"
@@ -30,6 +29,9 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/playback"
 	"github.com/qlqq/roomusic/backend/internal/playback/analysis"
 	playbackapi "github.com/qlqq/roomusic/backend/internal/playback/httpapi"
+	"github.com/qlqq/roomusic/backend/internal/playback/render/ffmpeg"
+	"github.com/qlqq/roomusic/backend/internal/zones"
+	zonesapi "github.com/qlqq/roomusic/backend/internal/zones/httpapi"
 )
 
 // App 是装配完成的应用：请求 handler 加上需要在停机时等待的后台工作。
@@ -40,18 +42,18 @@ type App struct {
 	catalogDone       <-chan struct{}
 	analysisDone      <-chan struct{}
 	scanSchedulerDone <-chan struct{}
+	zonesDone         <-chan struct{}
 }
 
 // Option 调整装配。生产路径不传任何选项；选项只用于测试把时间常量缩短到可以快速验证。
 type Option func(*options)
 
 type options struct {
-	backups               *backup.Service
-	loginThrottle         *identity.LoginThrottle
-	playbackPreflightWait time.Duration
-	derivation            playback.Derivation
-	analysis              *analysis.Analyzer
-	scanSchedulerClock    library.ScanSchedulerClock
+	backups            *backup.Service
+	loginThrottle      *identity.LoginThrottle
+	analysis           *analysis.Analyzer
+	renderer           *ffmpeg.Tool
+	scanSchedulerClock library.ScanSchedulerClock
 	// 测试直接插入旧目录夹具时暂停后台，搜索测试再显式回填。
 	pauseCatalogMaintenance bool
 }
@@ -66,26 +68,15 @@ func WithLoginThrottle(throttle *identity.LoginThrottle) Option {
 	return func(settings *options) { settings.loginThrottle = throttle }
 }
 
-// WithPlaybackPreflightWait 设置预检等待派生完成的最长时间（默认 playback.DefaultPreflightWait）。
-func WithPlaybackPreflightWait(wait time.Duration) Option {
-	return func(settings *options) { settings.playbackPreflightWait = wait }
-}
-
 // WithAnalysis 启用已经由 OpenAnalysis 探测通过的后台音频分析器。
 func WithAnalysis(analyzer *analysis.Analyzer) Option {
 	return func(settings *options) { settings.analysis = analyzer }
 }
 
-// WithDerivation 启用 ALAC 的无损派生：派生格式进入格式表，预检在缓存未命中时启动转换。不传时 ALAC 保持“不能直接播放”。
-// 生产路径的实现来自 OpenDerivation；调用方不得传入持有 nil 指针的接口值（OpenDerivation 返回 nil 时就不要装配）。
-func WithDerivation(port playback.Derivation) Option {
-	return func(settings *options) { settings.derivation = port }
-}
-
 // WithBackups 注入备份能力；不提供时不注册系统接口。
 func WithBackups(service *backup.Service) Option { return func(o *options) { o.backups = service } }
 
-// New 装配应用。lifecycle 是应用的生命周期上下文（进程停机时取消）：扫描 worker 与已建立的音频传输都以它为界；
+// New 装配应用。lifecycle 是应用的生命周期上下文（进程停机时取消）：扫描 worker、播放区会话与已建立的音频传输都以它为界；
 // 调用方先完成 InitializeCatalog；正常服务不等待后台投影完成。
 // frontend 是前端产物子树。database 为 nil 时路由表照常建立但 /readyz 报告未就绪，供不连接数据库的路由测试使用。
 func New(lifecycle context.Context, settings config.Server, database *sql.DB, frontend fs.FS, logger *slog.Logger, applied ...Option) *App {
@@ -110,6 +101,20 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	guard.WithLogger(logger)
 	libraryService := library.NewService(lifecycle, database, settings.DataDirectory, logger).WithScanConcurrency(settings.ScanWorkers)
 	personalService := personal.NewService(database)
+	listeningService := listening.NewService(database)
+	playbackService := newPlaybackService(database, settings, assembly)
+	renderer, closeRenderer := assembleRenderer(database, playbackService, assembly.renderer, logger)
+	zonesService := zones.NewService(database, zones.Options{Logger: logger, Renderer: renderer, PlayRecorder: zonePlayRecorder{service: listeningService}})
+	zonesDone := make(chan struct{})
+	if lifecycle != nil {
+		context.AfterFunc(lifecycle, func() {
+			zonesService.Close()
+			closeRenderer()
+			close(zonesDone)
+		})
+	} else {
+		close(zonesDone)
+	}
 	libraryService.SetAlbumFavoriteMover(personalService.MoveAlbumFavorites)
 	libraryService.WithScanSchedulerClock(assembly.scanSchedulerClock)
 	scanSchedulerDone := make(chan struct{})
@@ -132,7 +137,6 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	// 受治理操作的撤销与展示：每种操作类型的能力由拥有对应业务表的包提供，operations/httpapi 不导入业务包。
 	operationsapi.New(database, guard, logger, governance.CorrectionOperations(), governance.GroupChangeOperations(), governance.GroupDefaultOperations(),
 		governance.IssueReviewOperations(), governance.ClaimOperations(), governance.ArtistMergeKind{}, governance.ArtistSplitKind{}, governance.ArtistRenameKind{}, governance.ArtistCandidateIgnoreKind{}).Register(mux)
-	playbackService := playback.NewService(database, settings.AllowedLibraryRoots, playback.WithDerivation(assembly.derivation))
 	var analysisWorker *playback.AnalysisWorker
 	analysisDone := make(chan struct{})
 	if database != nil && assembly.analysis != nil {
@@ -146,11 +150,11 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	}
 	progress := playback.NewAnalysisProgressProvider(database, analysis.Version, analysisWorker)
 	playbackapi.New(guard, playbackService, lifecycle, logger, playbackapi.Options{
-		PreflightWait:    assembly.playbackPreflightWait,
 		AnalysisProgress: progress,
 	}).Register(mux)
-	listeningapi.New(guard, listening.NewService(database)).Register(mux)
+	listeningapi.New(guard, listeningService).Register(mux)
 	personalapi.New(guard, personalService).Register(mux)
+	zonesapi.New(guard, zonesService).Register(mux)
 	if assembly.backups != nil {
 		backupapi.New(assembly.backups, database, guard, lifecycle).Register(mux)
 	}
@@ -167,13 +171,23 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	} else {
 		close(catalogDone)
 	}
-	return &App{mux: mux, handler: httpserver.Middleware(logger, mux), library: libraryService, catalogDone: catalogDone, analysisDone: analysisDone, scanSchedulerDone: scanSchedulerDone}
+	return &App{mux: mux, handler: httpserver.Middleware(logger, mux), library: libraryService, catalogDone: catalogDone, analysisDone: analysisDone, scanSchedulerDone: scanSchedulerDone, zonesDone: zonesDone}
 }
 
 // InitializeCatalog 在允许扫描与治理写入前短事务登记目标版本，不发现对象或等待回填。
 // 数据库或结构错误返回调用方；规范化预检失败只禁用新投影，保留旧服务。
 func InitializeCatalog(ctx context.Context, database *sql.DB) error {
 	return maintenance.Initialize(ctx, database)
+}
+
+// WaitForZones 在关闭数据库前等待播放区释放会话并停止定时任务。
+func (application *App) WaitForZones(ctx context.Context) error {
+	select {
+	case <-application.zonesDone:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // WaitForCatalogMaintenance 在关闭数据库前有界等待已取消的后台维护退出。

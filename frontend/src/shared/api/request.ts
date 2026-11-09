@@ -10,6 +10,8 @@ export type ApiRequestSpec = {
   body?: unknown;
   idempotencyKey?: string | undefined;
   signal?: AbortSignal | undefined;
+  /** 页面卸载时仍要发出的请求（输出端的 release）。 */
+  keepalive?: boolean;
   /** "required"（默认）的请求得到 401 unauthorized 时通知会话边界；初始化状态、初始化与登录接口用 "none"。 */
   session?: "required" | "none";
 };
@@ -58,6 +60,7 @@ export async function apiRequest<T>(spec: ApiRequestSpec, decode: (input: unknow
   const headers = new Headers({ Accept: "application/json", "X-Request-ID": requestId });
   const init: RequestInit = { method: spec.method, headers, credentials: "same-origin", cache: "no-store" };
   if (spec.signal !== undefined) init.signal = spec.signal;
+  if (spec.keepalive === true) init.keepalive = true;
   if (spec.body !== undefined) {
     headers.set("Content-Type", "application/json");
     init.body = JSON.stringify(spec.body);
@@ -68,6 +71,8 @@ export async function apiRequest<T>(spec: ApiRequestSpec, decode: (input: unknow
   let body: JsonBody;
   try {
     response = await fetch(spec.path, init);
+    // 204 没有响应体：解码器拿到 null。
+    if (response.status === 204) return { status: 204, data: decode(null, 204) };
     body = await readJsonBody(response);
   } catch (error) {
     if (spec.signal?.aborted) throw new ApiError({ kind: "aborted" }, { cause: error });
@@ -101,4 +106,38 @@ export async function apiRequest<T>(spec: ApiRequestSpec, decode: (input: unknow
   } catch (error) {
     throw new ApiError({ kind: "invalid_response", status, requestId }, { cause: error });
   }
+}
+
+/**
+ * 打开一条长响应（播放区事件流 text/event-stream）：与 apiRequest 同样同源、带 Cookie、不缓存、带请求 ID。
+ * 200 时把响应交给调用方逐块读取；其他状态按错误信封抛出 ApiError，401 unauthorized 同样通知会话边界（带请求发出时的代次）。
+ */
+export async function apiStream(spec: { path: ApiPath; signal: AbortSignal }): Promise<Response> {
+  const requestId = newRequestId();
+  const generation = sessionBoundary?.currentGeneration() ?? 0;
+  const headers = new Headers({ Accept: "text/event-stream", "X-Request-ID": requestId });
+  let response: Response;
+  try {
+    response = await fetch(spec.path, { method: "GET", headers, credentials: "same-origin", cache: "no-store", signal: spec.signal });
+  } catch (error) {
+    if (spec.signal.aborted) throw new ApiError({ kind: "aborted" }, { cause: error });
+    throw new ApiError({ kind: "network", requestId }, { cause: error });
+  }
+  if (response.ok && response.body !== null) return response;
+  const { status } = response;
+  let body: JsonBody;
+  try {
+    body = await readJsonBody(response);
+  } catch (error) {
+    throw new ApiError({ kind: "network", requestId }, { cause: error });
+  }
+  if (response.ok || !body.ok) throw new ApiError({ kind: "invalid_response", status, requestId });
+  let envelope: ReturnType<typeof decodeErrorEnvelope>;
+  try {
+    envelope = decodeErrorEnvelope(body.value);
+  } catch (error) {
+    throw new ApiError({ kind: "invalid_response", status, requestId }, { cause: error });
+  }
+  if (status === 401 && envelope.error.code === "unauthorized") sessionBoundary?.onUnauthorized(generation);
+  throw new ApiError({ kind: "http", status, code: envelope.error.code, message: envelope.error.message, requestId: envelope.request_id === "" ? requestId : envelope.request_id });
 }

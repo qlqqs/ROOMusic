@@ -77,6 +77,111 @@
         "delivery": "derived",
         "mime_type": "audio/flac",
         "source_kind": "aiff_id3"
+      },
+      {
+        "codec": "ieee_float",
+        "codecs": null,
+        "delivery": "derived",
+        "mime_type": "audio/flac",
+        "source_kind": "wav_info"
+      },
+      {
+        "codec": "wav_extensible",
+        "codecs": null,
+        "delivery": "derived",
+        "mime_type": "audio/flac",
+        "source_kind": "wav_info"
+      },
+      {
+        "codec": "flac",
+        "codecs": null,
+        "delivery": "derived",
+        "mime_type": "audio/flac",
+        "source_kind": "cue_virtual"
+      },
+      {
+        "codec": "mp3",
+        "codecs": null,
+        "delivery": "derived",
+        "mime_type": "audio/flac",
+        "source_kind": "cue_virtual"
+      },
+      {
+        "codec": "pcm",
+        "codecs": null,
+        "delivery": "derived",
+        "mime_type": "audio/flac",
+        "source_kind": "cue_virtual"
+      },
+      {
+        "codec": "aac",
+        "codecs": null,
+        "delivery": "derived",
+        "mime_type": "audio/flac",
+        "source_kind": "cue_virtual"
+      },
+      {
+        "codec": "vorbis",
+        "codecs": null,
+        "delivery": "derived",
+        "mime_type": "audio/flac",
+        "source_kind": "cue_virtual"
+      },
+      {
+        "codec": "opus",
+        "codecs": null,
+        "delivery": "derived",
+        "mime_type": "audio/flac",
+        "source_kind": "cue_virtual"
+      },
+      {
+        "codec": "alac",
+        "codecs": null,
+        "delivery": "derived",
+        "mime_type": "audio/flac",
+        "source_kind": "cue_virtual"
+      },
+      {
+        "codec": "ape",
+        "codecs": null,
+        "delivery": "derived",
+        "mime_type": "audio/flac",
+        "source_kind": "cue_virtual"
+      },
+      {
+        "codec": "wavpack",
+        "codecs": null,
+        "delivery": "derived",
+        "mime_type": "audio/flac",
+        "source_kind": "cue_virtual"
+      },
+      {
+        "codec": "wavpack_hybrid",
+        "codecs": null,
+        "delivery": "derived",
+        "mime_type": "audio/flac",
+        "source_kind": "cue_virtual"
+      },
+      {
+        "codec": "aiff",
+        "codecs": null,
+        "delivery": "derived",
+        "mime_type": "audio/flac",
+        "source_kind": "cue_virtual"
+      },
+      {
+        "codec": "ieee_float",
+        "codecs": null,
+        "delivery": "derived",
+        "mime_type": "audio/flac",
+        "source_kind": "cue_virtual"
+      },
+      {
+        "codec": "wav_extensible",
+        "codecs": null,
+        "delivery": "derived",
+        "mime_type": "audio/flac",
+        "source_kind": "cue_virtual"
       }
     ]
   },

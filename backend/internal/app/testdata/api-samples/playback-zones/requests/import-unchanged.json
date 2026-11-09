@@ -1,0 +1,12 @@
+{
+  "body": {
+    "command": "import",
+    "current_entry_id": null,
+    "entries": [],
+    "history": [],
+    "mode": "sequential",
+    "position_seconds": 0
+  },
+  "method": "POST",
+  "path": "/api/v1/me/playback/zones/00000000-0000-4000-8000-000000000001/commands"
+}

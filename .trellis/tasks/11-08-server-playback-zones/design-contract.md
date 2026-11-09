@@ -61,9 +61,9 @@ Zone = {
 }
 Stream = {
   seq: integer,                 // 播放区的流序号，单调递增（跨重启也是）
-  url: string,                  // 服务端给出，客户端不拼接
-  mime_type: string, quality: "lossless" | "lossy",
-  format: {codec: string, sample_rate: integer, bit_depth: integer?, channels: integer},   // 渲染会话确定首曲后给出；有损档 bit_depth 为 null
+  url: string,                  // 服务端给出，客户端不拼接；长流指向流端点（§4.4），HLS 指向播放列表（§4.5）
+  mime_type: string, quality: "lossless" | "lossy",   // 长流为音频 MIME；HLS 为 application/vnd.apple.mpegurl
+  format: {codec: string, sample_rate: integer, bit_depth: integer?, channels: integer}?,  // 渲染会话确定首曲后给出；首曲打不开的空流为 null，有损档 bit_depth 为 null；codec 可为 alac（HLS）
   segments: [{entry_id: UUID, track: QueueTrack, stream_start_seconds: number, track_start_seconds: number}]
                                 // 已渲染、尚未播完的曲目分段：从流内 stream_start_seconds 起是这首的 track_start_seconds 秒
 }
@@ -76,6 +76,7 @@ ZoneEvent = {seq: integer} & (            // seq 取产生事件时的 revision�
 
 - `status` 是输出端回报的状态；服务端开新流时先置为 `loading`，离线时为 `paused`（有当前项）或 `idle`。
 - `position.seconds` 在 `status == "playing"` 时按 `seconds + (服务端现在 − at)` 外推，不超过 `duration_seconds`。输出端用 `segments` 与本地流内位置自己算。
+- 2026-11-09 算法线对接补充：起始条目打不开时 `Open` 可返回 `Format()` 零值、Body 立即 EOF 的空流，对外 `format: null`；随后异步的 `track_failed` 与 `format_boundary` 决定失败公告和接续流。不能仅因空流的输出端 `ended` 提前关闭会话，吞掉这些事件。
 - `failures` 只在内存里，替换队列、清空、重启时清除。`play_recorded`：服务端记下一次播放，浏览器据此让本人的播放历史查询失效。
 - 失败原因去掉了直出时代的 `not_directly_playable`、`derivation_failed`；`unsupported_format` 是服务端也解不了的格式（实际取值以 dsp-pipeline 的打开逻辑为准，只增不减）。
 
@@ -113,8 +114,9 @@ PlayheadSample = {stream_seq: integer, stream_seconds: number, playing: boolean}
 
 ```text
 Capabilities = {
-  stream_formats: [{codec: "flac" | "wav" | "opus" | "aac" | string, mime_type: string, lossless: boolean,
-                    max_sample_rate: integer?, max_bit_depth: integer?}],   // 能解的流格式，按偏好排序；具体取值由 dsp-pipeline 的 iOS 验证定
+  stream_formats: [{codec: "flac" | "wav" | "opus" | "aac" | "alac" | string, mime_type: string, lossless: boolean,
+                    max_sample_rate: integer?, max_bit_depth: integer?}],   // 能解的流格式，按偏好排序；浏览器的取值见 dsp-pipeline design-delivery.md §3、§5.7
+                                // mime_type 为 application/vnd.apple.mpegurl 表示 HLS（fMP4 分片里是 codec），否则是长流
   max_channels: integer,        // 能放的最多声道
   dsd: "none" | "dop" | "native",
   exclusive: boolean,           // 能否独占输出（原生客户端用；浏览器为 false）
@@ -221,13 +223,19 @@ Capabilities = {
 请求 `{stream_seq: integer?, stream_seconds: number}`，`204`。输出端停止出声或退出时发出（浏览器在 `pagehide` 与会话结束时发）。
 会话失效、设备离线、关闭渲染会话；意图为播放时改为暂停并记 `offline_paused` 与释放时刻；推送。会话不存在时同样 `204`。
 
-### 4.4 渲染流 `GET /zones/{zone_id}/streams/{seq}`
+### 4.4 渲染流（长流）`GET /zones/{zone_id}/streams/{seq}`
 
 - 只有该播放区当前输出会话的用户能取；`seq` 不是当前流或接续流：`410 stream_gone`。
 - 一条流只能被取一次（流头只在开头，无法从中途接上）：同一条流的第二个连接得 `410 stream_gone`，输出端按 `fault: stream_lost` 回报续流。
-  若 dsp-pipeline 的 iOS 验证发现 Safari 先发探测请求再正式请求，改用 dsp-pipeline design-delivery.md §1.4 的头部重放，协议形状不变。
-- 响应体是从开流时的起始位置开始、跨曲目连续的音频，`Content-Type` 等于 `Stream.mime_type`；`Cache-Control: no-store`。是否支持 Range、是否带长度，由 dsp-pipeline 的 iOS 验证决定。
+- 响应体是从开流时的起始位置开始、跨曲目连续的音频，`Content-Type` 等于 `Stream.mime_type`；`Cache-Control: no-store`。不支持 Range、不带长度（dsp-pipeline design-delivery.md §1.3）。
 - 曲目边界、失败与流结束只经服务端的未来事件队列处理，不写进响应体；客户端只需要 `Stream.segments`。
+
+### 4.5 HLS 流 `GET /zones/{zone_id}/streams/{seq}/{file}`
+
+- `file` 为 `index.m3u8`（播放列表，`Stream.url` 指向它）、`init.mp4`（初始化段）或 `{n}.m4s`（分片）；列表里用相对地址。
+- 能取的条件同 §4.4，但**可重复取**（播放列表会被反复取，分片可能被重试）；不满足得 `410 stream_gone`，片号还没产出或已删除得 `404 not_found`。
+- 播放列表是 EVENT 列表，从流开头起、条目只增不删（较早的分片文件可能已删除），流结束时带 ENDLIST；回报的 `stream_seconds` 即列表时间线上的位置。曲目边界同样只经 `Stream.segments`。
+- 编码、片长、保留时长与响应头归 dsp-pipeline design-delivery.md §5。
 
 ## 5. 事件流 `GET /api/v1/me/playback/events[?output_session=<UUID>]`
 
@@ -258,7 +266,7 @@ Capabilities = {
 | `400 unsupported_protocol` | 认领时声明的协议版本不受支持 |
 | `401 unauthorized` | 未鉴权、凭据失效、成员停用 |
 | `403 origin_required` / `origin_forbidden` | Cookie 会话写请求的来源校验 |
-| `404 not_found` | 设备、播放区或流不存在或不属于该用户 |
+| `404 not_found` | 设备、播放区或流不存在或不属于该用户；HLS 分片没产出或已删除 |
 | `404 track_not_found` | 命令里有不存在的曲目 |
 | `404 output_unknown` | 输出会话不存在 |
 | `409 queue_full` | 加入后超过 10,000 条 |
@@ -266,7 +274,7 @@ Capabilities = {
 | `409 device_online` | 删除在线设备 |
 | `409 volume_fixed` | 给不能调音量的设备设音量 |
 | `409 output_superseded` | 输出会话已被取代 |
-| `410 stream_gone` | 流的 seq 已不是当前流或接续流，或这条流已经被取过 |
+| `410 stream_gone` | 流的 seq 已不是当前流或接续流，或这条长流已经被取过 |
 | `503 database_unavailable` | 数据库失败 |
 
 检查顺序：来源 → 鉴权 → 路径 ID → JSON → 字段 → 归属（404）→ 状态冲突（409/410）→ 写入。
@@ -295,12 +303,12 @@ Capabilities = {
 | 项 | 约定 |
 | --- | --- |
 | 设备 ID | `localStorage["roomusic:playback-device:v1:<userId>"]` = `{version: 1, deviceId}`，边界解码，坏了就当没有 |
-| 控制目标 | `localStorage["roomusic:control-target:v1:<userId>"]` = `{version: 1, zoneId}`，`storage` 事件同步标签页 |
+| 控制目标 | `localStorage["roomusic:control-target:v1:<userId>"]` = `{version: 1, zoneId, selectedAt}`，`storage` 事件同步标签页；15 分钟从“暂停时刻”与“选中时刻”中较晚的一个算起（选中一台早已暂停的设备不会立即回退） |
 | 旧队列 | `sessionStorage["roomusic:player:v1:<userId>"]`，只读一次用于 `import`，之后删除 |
 | 旧偏好 | `roomusic:player-volume:v1`、`roomusic:playback-settings:v1`，只在登记时读作初值（音量、电平化、交叉渐变），不再写入，不删除 |
 | 多标签页 | Web Lock `roomusic:output:<deviceId>` 选出唯一的输出端标签页，`roomusic:device-registration:<userId>` 串行首次登记；接替时认领带 `takeover: true` |
 | 释放 | `pagehide` 与会话结束时 `fetch(…, {method: "POST", keepalive: true})` 发 `release` |
 | 事件流 | `fetch` + `ReadableStream` 按行解析（不用 `EventSource`）；401 经 `SessionBoundary.onUnauthorized(请求时的代次)`；控制端标签页隐藏 30 秒后断开 |
 | 手势解锁 | 本机第一次点击时，在同一个点击里对两个 `<audio>` 元素各同步 `play()` 一段静音再暂停，之后远程起播、换流、续流不需要新的手势 |
-| 能力 | `stream_formats` 用 `canPlayType` / `MediaSource.isTypeSupported` 探测 dsp-pipeline 给出的候选；`volume` 按“写 0.5 读回”判定；`max_channels: 2`、`dsd: "none"`、`exclusive: false` |
+| 能力 | `stream_formats` 只用 `canPlayType` 探测（不用 `mediaCapabilities.decodingInfo`）；HLS 候选都能探测到（WebKit，含桌面 Safari）时只声明 HLS 候选，音量不参与判定，否则只声明长流候选（dsp-pipeline design-delivery.md §3、§5.7）；`volume` 按“写 0.5 读回”判定；`max_channels: 2`、`dsd: "none"`、`exclusive: false` |
 | 音量 | 直接写元素的 `volume` / `muted`；没有 Web Audio |

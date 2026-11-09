@@ -6,6 +6,7 @@ export { ApiError, failureOf, isApiError, isHttpFailure, isOutcomeUncertain, typ
 export { describeFailure, type FailureContext, type FailureDescription, type FailureTextOptions } from "./failure-text";
 export {
   apiRequest,
+  apiStream,
   setSessionBoundary,
   type ApiPath,
   type ApiRequestSpec,

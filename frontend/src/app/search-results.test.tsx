@@ -1,7 +1,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { loadSavedQueue } from "../features/player/engine/persistence";
+import { playerTrackOfSummary } from "../features/player";
 import { decodeSearchSuggestions } from "../features/search/api/decoders";
 import { sampleBody } from "../test/api-samples";
 import { albumGroup, groupDetailOf, releaseVersions } from "../test/catalog-data";
@@ -11,6 +11,7 @@ import { installFakeApi, installFakeSession } from "../test/fake-api";
 import { installPersonalApi } from "../test/fake-personal";
 import { seedPersonalTracks, seedPlaylist } from "../test/personal-data";
 import { FakeAudio } from "../test/fake-audio";
+import { fakeZoneServer, type FakeZoneServer } from "../test/fake-zones";
 import { jsonResponse } from "../test/http";
 import { renderApp } from "../test/render-app";
 import { searchAlbumItem, searchAlbumPage, searchArtistPage, searchTrackItem, searchTrackPage } from "../test/search-data";
@@ -25,10 +26,19 @@ const labels = { albums: "专辑", tracks: "曲目" };
 const paramsOf = (url: string) => new URL(url, "http://test").searchParams;
 const section = (type: Kind) => screen.getByRole("region", { name: labels[type] });
 
+const zones = vi.hoisted(() => ({ server: undefined as FakeZoneServer | undefined }));
+vi.mock("../features/player/zones/api", async (original) => {
+  const { delegatingZoneApi } = await import("../test/fake-zones");
+  return { ...await original<typeof import("../features/player/zones/api")>(), browserZoneApi: delegatingZoneApi(() => { if (zones.server === undefined) throw new Error("缺少播放区替身"); return zones.server; }) };
+});
+
+let audios: FakeAudio[];
 beforeEach(() => {
-  vi.stubGlobal("Audio", class { constructor() { return new FakeAudio(); } });
-  vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue("probably");
+  audios = [];
+  zones.server = fakeZoneServer({ trackOf: () => playerTrackOfSummary(searchTrackItem()) });
+  vi.stubGlobal("Audio", class { constructor() { const audio = new FakeAudio(); audios.push(audio); return audio; } });
   sessionStorage.clear();
+  localStorage.clear();
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
@@ -69,8 +79,8 @@ async function loaded() {
 describe("搜索结果页", () => {
   it("点曲目建议携带 release 与 track，只导航、不改变已有队列与音频", async () => {
     const { api } = setup();
-    const audio = new FakeAudio();
-    vi.stubGlobal("Audio", class { constructor() { return audio; } });
+    const server = zones.server;
+    if (server === undefined) throw new Error("缺少播放区替身");
     const suggestion = { ...firstTrack, track_id: "00000000-0000-4000-8000-000000000099", title: "另一首建议曲目" };
     const data = decodeSearchSuggestions(sampleBody("search/suggestions"));
     data.tracks.items = [suggestion];
@@ -90,14 +100,10 @@ describe("搜索结果页", () => {
       await userEvent.click(within(row).getByRole("button", { name: "更多操作" }));
       await userEvent.click(screen.getByRole("menuitem", { name: "加入队列" }));
     }
-    const userId = "00000000-0000-4000-8000-000000000003";
-    const before = loadSavedQueue(sessionStorage, userId);
-    expect(before?.entries).toHaveLength(2);
-    expect(before?.entries.map((entry) => entry.trackId)).toEqual([firstTrack.track_id, firstTrack.track_id]);
-    expect(new Set(before?.entries.map((entry) => entry.entryId)).size).toBe(2);
-    const sources = [...audio.sources];
-    const playCalls = audio.playCalls;
-    const pauseCalls = audio.pauseCalls;
+    await waitFor(() => expect(server.queueIds()).toEqual([firstTrack.track_id, firstTrack.track_id]));
+    const before = server.zone();
+    const commands = server.commands.length;
+    const sources = audios.map((audio) => [...audio.sources]);
     const lookupCount = api.requestsTo("POST", "/api/v1/me/favorites/lookup").length;
     const input = screen.getAllByRole("combobox", { name: "搜索" })[0];
     if (input === undefined) throw new Error("缺少搜索框");
@@ -111,11 +117,9 @@ describe("搜索结果页", () => {
     await waitFor(() => expect(history.location.pathname).toBe(`/albums/${suggestion.group_id}`));
     await screen.findByRole("region", { name: "曲目" });
     expect(new URLSearchParams(history.location.search)).toEqual(new URLSearchParams({ release: suggestion.release.id, track: suggestion.track_id }));
-    expect(loadSavedQueue(sessionStorage, userId)).toEqual(before);
-    expect(audio.sources).toEqual(sources);
-    expect(audio.playCalls).toBe(playCalls);
-    expect(audio.pauseCalls).toBe(pauseCalls);
-    expect(api.requestsTo("GET", /^\/api\/v1\/tracks\/[^/]+\/playback$/)).toHaveLength(0);
+    expect(server.commands).toHaveLength(commands);
+    expect(server.zone()).toBe(before);
+    expect(audios.map((audio) => audio.sources)).toEqual(sources);
   });
 
   it("一页多行仅批量查询一次收藏状态，翻曲目页与换词各自读取新一批", async () => {
@@ -159,7 +163,7 @@ describe("搜索结果页", () => {
 
   it.each(["正常", "缺失", "不可播"])("%s曲目的心形与添加歌单可用，个人操作不触发播放", async (kind) => {
     const { api, personal } = setup();
-    const item = { ...firstTrack, present: kind !== "缺失", source: { ...firstTrack.source, ...(kind === "不可播" ? { source_kind: "cue_virtual" } : {}) } };
+    const item = { ...firstTrack, present: kind !== "缺失", source: { ...firstTrack.source, ...(kind === "不可播" ? { codec: "unknown" } : {}) } };
     seedPersonalTracks(personal, [item]);
     const playlist = seedPlaylist(personal, "00000000-0000-4000-8000-000000000003", { name: "搜索收藏歌单" });
     api.on("GET", path, (request) => jsonResponse(200, paramsOf(request.path).get("type") === "artists" ? searchArtistPage({ items: [] }) : paramsOf(request.path).get("type") === "tracks" ? searchTrackPage({ items: [item] }) : albums));

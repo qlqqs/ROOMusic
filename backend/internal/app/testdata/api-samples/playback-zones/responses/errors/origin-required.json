@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "origin_required",
+      "message": "请求缺少来源校验"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 403
+}

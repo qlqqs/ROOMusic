@@ -4,13 +4,12 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSessionController, SessionProvider, ViewerScopeProvider } from "../features/auth";
 import { decodePlaylistCreated } from "../features/personal/api/decoders";
-import { PlayerEngine, PlayerProvider, usePlayer, type PlayerTrack } from "../features/player";
+import { PlayerProvider, usePlayer, type PlayerTrack } from "../features/player";
 import { sampleBody } from "../test/api-samples";
 import { deferred } from "../test/deferred";
 import { installFakeApi, installFakeSession } from "../test/fake-api";
-import { FakeAudio } from "../test/fake-audio";
+import { playerHarness } from "../test/fake-zones";
 import { jsonResponse } from "../test/http";
-import { silentPlayRecorder } from "../test/play-recorder";
 import { playerTrack } from "../test/player-data";
 import { distinctTrackIds, SaveQueueAsPlaylist } from "./player-personal-actions";
 
@@ -30,7 +29,7 @@ function created(name: string, count: number) {
   return { ...createdSample, playlist: { ...createdSample.playlist, name, track_count: count }, added_count: count, existing_count: 0, duplicate_count: 0 };
 }
 
-// 和 player 的中立插槽一样，直接订阅真实引擎，传入有重复条目的当前队列，不模拟保存业务。
+// 和 player 的中立插槽一样，直接订阅真实控制器，传入有重复条目的当前队列，不模拟保存业务。
 function QueueActions() {
   const { snapshot } = usePlayer();
   return <SaveQueueAsPlaylist tracks={snapshot.queue.entries.map((entry) => entry.track)} />;
@@ -44,24 +43,17 @@ async function setup(tracks: readonly PlayerTrack[]) {
   const state = controller.getSnapshot();
   if (state.status !== "authenticated") throw new Error("会话未就绪");
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const audio = new FakeAudio();
-  let nextId = 0;
-  const engine = new PlayerEngine({
-    userId: state.viewer.id, audio,
-    loadPlayback: async (trackId) => ({ state: "ready", playback: { track_id: trackId, representation: { kind: "original", url: `/api/v1/tracks/${trackId}/audio`, mime_type: "audio/flac", codecs: null, size_bytes: 100 } } }),
-    loadRelease: async () => { throw new Error("本测试没有持久化队列"); },
-    shouldPrefetch: () => false,
-    sessionStorage: null, localStorage: null, mediaSession: null,
-    artworkUrl: (value) => value, newId: () => `entry-${++nextId}`, random: () => 0, now: Date.now, playRecorder: silentPlayRecorder,
-  });
+  const player = playerHarness();
+  const { engine } = player;
   engine.enqueue(tracks);
   dispose.push(() => { engine.endSession(); controller.dispose(); client.clear(); });
   render(<QueryClientProvider client={client}><SessionProvider controller={controller}>
     <ViewerScopeProvider viewer={state.viewer} generation={state.generation}>
-      <PlayerProvider userId={state.viewer.id} engine={engine}><QueueActions /></PlayerProvider>
+      <PlayerProvider userId={state.viewer.id} controller={engine}><QueueActions /></PlayerProvider>
     </ViewerScopeProvider>
   </SessionProvider></QueryClientProvider>);
-  return { api, engine, audio };
+  await player.queued(tracks.length);
+  return { api, engine, player };
 }
 async function openSave() {
   await userEvent.click(screen.getByRole("button", { name: "存为歌单" }));
@@ -101,10 +93,10 @@ describe("队列存为歌单", () => {
   it("按真实队列首次顺序将名字与去重曲目一次新建，携带幂等键且不改变正在播放的队列", async () => {
     setLocalDay();
     const tracks = [track(9), track(2), track(9), track(7), track(2)];
-    const { api, engine, audio } = await setup(tracks);
+    const { api, engine, player } = await setup(tracks);
     api.on("POST", createPath, () => jsonResponse(201, created("队列 2026-11-04", 3)));
-    await act(async () => engine.play());
-    act(() => { audio.loadMetadata(120); audio.beginPlaying(); audio.tick(23); });
+    act(() => engine.play());
+    const audio = await player.sounding(23);
     const before = engine.getSnapshot().queue;
     const plays = audio.playCalls;
     const dialog = await openSave();
@@ -127,15 +119,15 @@ describe("队列存为歌单", () => {
   it("随机模式且当前项不在队首时仍按完整列表顺序保存，不只保存待播部分", async () => {
     setLocalDay();
     const tracks = [track(8), track(3), track(8), track(5)];
-    const { api, engine, audio } = await setup(tracks);
+    const { api, engine, player } = await setup(tracks);
     api.on("POST", createPath, () => jsonResponse(201, created("队列 2026-11-04", 3)));
-    await act(async () => {
+    act(() => {
       engine.setMode("shuffle");
       const last = engine.getSnapshot().queue.entries.at(-1);
       if (last === undefined) throw new Error("测试队列缺少末项");
       engine.playEntry(last.entryId);
     });
-    act(() => audio.beginPlaying());
+    await player.sounding();
     expect(engine.getSnapshot().current?.track.trackId).toBe(track(5).trackId);
     const before = engine.getSnapshot().queue;
     const dialog = await openSave();
@@ -241,7 +233,7 @@ describe("队列存为歌单", () => {
     expect(requests).toHaveLength(2);
     expect(requests[1]?.body).toEqual(first?.body);
     expect(requests[1]?.headers.get("Idempotency-Key")).toBe(first?.headers.get("Idempotency-Key"));
-    expect(engine.getSnapshot().queue.entries.map((entry) => entry.track.trackId)).toEqual([track(6).trackId, track(1).trackId, track(6).trackId, track(9).trackId]);
+    await waitFor(() => expect(engine.getSnapshot().queue.entries.map((entry) => entry.track.trackId)).toEqual([track(6).trackId, track(1).trackId, track(6).trackId, track(9).trackId]));
   });
 
   it("空白名字不能提交，保留原队列并提示修正", async () => {

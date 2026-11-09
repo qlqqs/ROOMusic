@@ -1,0 +1,14 @@
+{
+  "body": {
+    "command": "set_settings",
+    "settings": {
+      "headroom": {
+        "clip_indicator": true,
+        "db": -3.1,
+        "enabled": true
+      }
+    }
+  },
+  "method": "POST",
+  "path": "/api/v1/me/playback/zones/00000000-0000-4000-8000-000000000001/commands"
+}

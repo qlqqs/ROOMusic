@@ -230,7 +230,7 @@ func Linear(db float64) float64 // 10^(db/20)
 ### 8.1 Headroom
 
 - 设置：`{enabled: false, db: −3.0, clip_indicator: false}`，`db` 取值 −30.0…0.0、步进 0.1（存一位小数的值，服务端按步进校验）。
-- 存储：本线迁移 `00NN_playback_zone_headroom.sql`（排在 zones 的 0037 之后，合入 main 时顺延）给 `playback_zones` 加 `headroom jsonb NOT NULL DEFAULT '{"enabled":false,"db":-3.0,"clip_indicator":false}'`，带 `.down.sql`。用 jsonb 是为了与第二批的复杂设置同形（它们也会各占一列 jsonb）；值在服务端解码校验，坏值按默认处理。
+- 存储：本线迁移 `00NN_playback_zone_headroom.sql`（排在 zones 的 0037 之后，合入 main 时顺延）给 `playback_zones` 加 `headroom jsonb NOT NULL DEFAULT '{"enabled":false,"db":-3.0,"clip_indicator":false}'`，带 `.down.sql`。用 jsonb 是为了与第二批的复杂设置同形（它们也会各占一列 jsonb）；写入前按范围与步进校验；列只由本程序写入，读取时直接解码，不另设回退。
 - 节点：链 ① 的 `chain.Headroom`，乘 `10^(db/20)`，清 `Exact`。启用后整条流都不是逐位（父任务“启用后强制浮点链”在这里的含义就是：样本被改过，量化时加抖动）。
 - 设置接口：`set_settings` 接受 `headroom` 键（zones 合同 §2.2 加键，父设计 §8 第 7 条）；改动由 zones 去抖重建。
 
@@ -281,7 +281,7 @@ SignalStep = {
 
 ### 9.2 界面（前端子步骤，F3 之后）
 
-- 播放栏加一个信号路径图标按钮（颜色按 `quality`，无边框），点开是一列步骤：每行一个图标和一行短文字，如“FLAC 44.1 kHz 16 bit”“电平化 −3.2 dB”“TPDF 抖动 24 bit”“Opus 128 kbps”“iPhone · Safari”。有损的行标“有损”，兼容性转换的行标“兼容转换”。处理速度一行（“处理速度 85.3×”）；削波时图标变成警示色。
+- 播放栏加一个信号路径图标按钮（颜色按 `quality`，无边框），点开是一列步骤：每行一个图标和一行短文字，如“FLAC 44.1 kHz 16 bit”“电平化 −3.2 dB”“TPDF 抖动 24 bit”“Opus 128 kbps”“iPhone · Safari”。有损的行标“有损”，兼容性转换的行标“兼容转换”。来源之后保留已上线的响度一行（积分响度、响度范围、峰值，没有分析结果时不显示，不参与评级）。处理速度一行（“处理速度 85.3×”）；削波时图标变成警示色。
 - “设置 › 播放”加 Headroom：开关、增益滑块（−30…0 dB，0.1）、“削波指示”开关。
 - 不写说明句（全局文案约束）。
 

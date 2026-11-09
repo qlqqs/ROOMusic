@@ -1,0 +1,38 @@
+/* 控制别的设备时：图标加设备名，强调色；名字过长截断，完整名字在悬停提示里。窄屏只留图标，名字由播放栏写在标题下。 */
+.remote { display: inline-flex; min-width: 0; }
+.remote button { max-width: 160px; min-width: 0; color: var(--text-accent); }
+.remoteName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 窄屏播放栏标题下的一行：正在控制的设备。 */
+.targetLine { display: flex; align-items: center; gap: 4px; min-width: 0; font-size: var(--fs-12); color: var(--text-accent); }
+.targetLine span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 弹层沿用信号路径的做法：对话框铺满视口且透明，弹层按按钮位置摆在它上方；点在弹层外即关闭。 */
+dialog.dialog { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; overflow: hidden; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+dialog.dialog::backdrop { background: transparent; }
+.content { position: absolute; left: clamp(var(--space-2), calc(var(--anchor-x, 50vw) - 170px), calc(100vw - 340px - var(--space-2))); bottom: calc(100dvh - var(--anchor-top, 100dvh) + var(--space-2)); display: grid; align-content: start; gap: var(--space-2); width: 340px; max-height: calc(100dvh - 2 * var(--space-4)); overflow-y: auto; padding: var(--space-3) var(--space-2) var(--space-3) var(--space-3); border: 1px solid var(--color-divider); border-radius: var(--radius-lg); background: var(--color-surface); color: var(--text-primary); box-shadow: var(--shadow-lg); }
+.header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding-left: var(--space-1); }
+.title { font-size: var(--fs-15); }
+
+.list { display: grid; margin: 0; padding: 0; list-style: none; }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-1); border-radius: var(--radius-md); }
+.row[aria-current] { background: var(--color-selected); }
+.select { display: grid; gap: 2px; min-width: 0; padding: var(--space-2) var(--space-1); border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; font: inherit; text-align: left; }
+button.select { cursor: pointer; }
+button.select:hover { background: var(--color-hover); }
+.name { display: flex; align-items: center; gap: var(--space-1); min-width: 0; font-size: var(--fs-13); }
+.nameText { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row[aria-current] .nameText { color: var(--text-accent); font-weight: 600; }
+.state { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-12); color: var(--text-secondary); }
+.actions { display: flex; flex-wrap: nowrap; gap: 2px; }
+
+.renameDialog { width: min(400px, calc(100vw - 2 * var(--space-4))); }
+.renameForm { display: grid; gap: var(--space-3); padding: var(--space-4); }
+.formActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
+
+/* 窄屏：从底部弹出，铺满宽度。 */
+@media (max-width: 767px) {
+  .remote .remoteName { display: none; }
+  dialog.dialog::backdrop { background: color-mix(in srgb, var(--color-neutral-900) 40%, transparent); }
+  .content { left: 0; right: 0; bottom: 0; width: auto; max-height: 80dvh; padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px)); border-width: 1px 0 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+}

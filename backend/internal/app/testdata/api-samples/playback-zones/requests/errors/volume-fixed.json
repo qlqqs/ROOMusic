@@ -1,0 +1,8 @@
+{
+  "body": {
+    "muted": false,
+    "volume": 0.4
+  },
+  "method": "PUT",
+  "path": "/api/v1/me/playback/devices/00000000-0000-4000-8000-000000000001/volume"
+}

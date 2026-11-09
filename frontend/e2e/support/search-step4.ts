@@ -113,6 +113,6 @@ export async function textLineMetricsStep4(locator: Locator) {
 }
 
 /** 对空队列也保留精确快照，不能只靠“播放器没出现”推断导航没有偷偷改队列。 */
-export function queueSnapshotStep4(page: Page) {
-  return page.evaluate(() => Object.fromEntries(Object.entries(sessionStorage).filter(([key]) => key.startsWith("roomusic:player:"))));
+export function queueSnapshotStep4(mock: ApiMock) {
+  return mock.zones.queueSnapshot();
 }

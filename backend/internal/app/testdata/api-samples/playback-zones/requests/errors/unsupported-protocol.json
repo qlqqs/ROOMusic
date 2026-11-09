@@ -1,0 +1,24 @@
+{
+  "body": {
+    "capabilities": {
+      "dsd": "none",
+      "exclusive": false,
+      "max_channels": 2,
+      "stream_formats": [
+        {
+          "codec": "wav",
+          "lossless": true,
+          "max_bit_depth": null,
+          "max_sample_rate": null,
+          "mime_type": "audio/wav"
+        }
+      ],
+      "volume": "number"
+    },
+    "playing": null,
+    "protocol": 2,
+    "takeover": false
+  },
+  "method": "POST",
+  "path": "/api/v1/me/playback/devices/00000000-0000-4000-8000-000000000001/output"
+}

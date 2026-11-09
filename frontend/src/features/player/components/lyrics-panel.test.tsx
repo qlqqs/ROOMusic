@@ -6,29 +6,28 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSessionController, SessionProvider, ViewerScopeProvider, type SessionController } from "../../auth";
 import { setSessionBoundary } from "../../../shared/api";
 import { installFakeApi, installFakeSession } from "../../../test/fake-api";
-import { FakeAudio } from "../../../test/fake-audio";
+import type { FakeAudio } from "../../../test/fake-audio";
+import { fakeZoneServer, testPlayerController, type FakeZoneServer } from "../../../test/fake-zones";
 import { jsonResponse, sampleResponse, type RecordedRequest } from "../../../test/http";
-import { memoryStorage } from "../../../test/memory-storage";
 import { playerTrack } from "../../../test/player-data";
-import { silentPlayRecorder } from "../../../test/play-recorder";
-import { PlayerEngine } from "../engine/player-engine";
+import type { PlayerController } from "../zones/controller";
 import { PlayerProvider } from "../player-provider";
 import { LyricsPanel } from "./lyrics-panel";
 
 const trackId = "00000000-0000-4000-8000-000000000001";
 const controllers: SessionController[] = [];
-const engines: PlayerEngine[] = [];
+const players: PlayerController[] = [];
 
 afterEach(() => {
-  for (const engine of engines.splice(0)) engine.endSession();
+  for (const player of players.splice(0)) player.endSession();
   for (const controller of controllers.splice(0)) controller.dispose();
   setSessionBoundary(null);
   vi.restoreAllMocks();
 });
 
-type Mounted = { audio: FakeAudio; engine: PlayerEngine; commits: () => number; api: ReturnType<typeof installFakeApi> };
+type Mounted = { audio: FakeAudio; server: FakeZoneServer; player: PlayerController; playing: () => FakeAudio | undefined; commits: () => number; api: ReturnType<typeof installFakeApi> };
 
-/** 真实的会话、查询、播放器 Provider 与引擎（媒体元素是替身），后端是按合同回放样本的替身。 */
+/** 真实的会话、查询、播放器 Provider 与控制器（播放区服务端与媒体元素是替身），歌词接口按合同回放样本。 */
 async function mount(options: { lyrics?: (request: RecordedRequest) => Response | Promise<Response> } = {}): Promise<Mounted> {
   const api = installFakeApi();
   installFakeSession(api, { current: "curator" });
@@ -39,32 +38,43 @@ async function mount(options: { lyrics?: (request: RecordedRequest) => Response 
   const state = controller.getSnapshot();
   if (state.status !== "authenticated") throw new Error("应已登录");
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const audio = new FakeAudio();
-  const engine = new PlayerEngine({
-    userId: state.viewer.id, audio,
-    loadPlayback: async (id) => ({ state: "ready", playback: { track_id: id, representation: { kind: "original", url: `/api/v1/tracks/${id}/audio`, mime_type: "audio/flac", codecs: null, size_bytes: 100 } } }),
-    shouldPrefetch: () => false,
-    loadRelease: async () => { throw new Error("没有保存的队列"); },
-    sessionStorage: memoryStorage(), localStorage: null, mediaSession: null,
-    artworkUrl: (id) => id, newId: () => "entry", random: () => 0, now: Date.now, playRecorder: silentPlayRecorder,
-  });
-  engines.push(engine);
+  const server = fakeZoneServer();
+  const { controller: player, playing } = testPlayerController(server, { audio: true });
+  players.push(player);
   let commits = 0;
   const Wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>
     <SessionProvider controller={controller}>
       <ViewerScopeProvider viewer={state.viewer} generation={state.generation}>
-        <PlayerProvider userId={state.viewer.id} engine={engine}><Profiler id="lyrics" onRender={() => { commits += 1; }}>{children}</Profiler></PlayerProvider>
+        <PlayerProvider userId={state.viewer.id} controller={player}><Profiler id="lyrics" onRender={() => { commits += 1; }}>{children}</Profiler></PlayerProvider>
       </ViewerScopeProvider>
     </SessionProvider>
   </QueryClientProvider>;
   render(<Wrapper><LyricsPanel trackId={trackId} /></Wrapper>);
-  return { audio, engine, api, commits: () => commits };
+  const mounted: Mounted = { audio: undefined as unknown as FakeAudio, server, player, playing, api, commits: () => commits };
+  return mounted;
 }
 
-/** 曲目开始出声；seekable 为假时模拟不能定位的流。 */
-async function startPlayback({ audio, engine }: Mounted, options: { seekable?: boolean } = {}) {
-  await act(async () => { engine.playTracks([playerTrack("1", { trackId })]); });
-  act(() => { audio.loadMetadata(100, { seekable: options.seekable ?? true }); audio.beginPlaying(); });
+/** 正在放当前流的元素开始出声。 */
+async function sounding(mounted: Mounted): Promise<FakeAudio> {
+  await waitFor(() => expect(mounted.playing()?.sources.at(-1)).toBe(mounted.server.zone().stream?.url));
+  const audio = mounted.playing();
+  if (audio === undefined) throw new Error("没有在放的元素");
+  act(() => audio.beginPlaying());
+  mounted.audio = audio;
+  return audio;
+}
+
+/** 曲目开始出声；seekable 为假时服务端说这首不能定位。 */
+async function startPlayback(mounted: Mounted, options: { seekable?: boolean } = {}) {
+  if (options.seekable === false) mounted.server.afterNext({ position: { seconds: 0, at: Date.now(), durationSeconds: 100, seekable: false } });
+  act(() => { mounted.player.playTracks([playerTrack("1", { trackId, durationSeconds: 100 })]); });
+  await sounding(mounted);
+}
+
+/** 点了一行之后：服务端收到定位，从那里开新流，新流出声。 */
+async function seekedTo(mounted: Mounted, seconds: number): Promise<FakeAudio> {
+  await waitFor(() => expect(mounted.server.commands.at(-1)).toEqual({ command: "seek", position_seconds: seconds }));
+  return sounding(mounted);
 }
 
 const lyricsList = () => screen.findByRole("list");
@@ -127,14 +137,15 @@ describe("歌词面板", () => {
     expect(screen.queryAllByRole("button")).toHaveLength(0);
     expect(screen.getByRole("group", { name: "逐行歌词" }).getAttribute("tabindex")).toBe("0");
 
-    act(() => { mounted.audio.loadMetadata(100); });
-    expect(screen.getByRole("group", { name: "逐行歌词" }).hasAttribute("tabindex")).toBe(false);
+    act(() => { mounted.player.playTracks([playerTrack("1", { trackId, durationSeconds: 100 })]); });
+    await sounding(mounted);
+    await waitFor(() => expect(screen.getByRole("group", { name: "逐行歌词" }).hasAttribute("tabindex")).toBe(false));
     const buttons = screen.getAllByRole("button");
     expect(buttons.map((button) => button.textContent)).toEqual(["First line of the sample", "Second line of the sample样本的第二行", "Chorus line", "Chorus line"]);
     await userEvent.click(buttons[2] as HTMLElement);
-    expect(mounted.audio.currentTime).toBe(20.5);
-    // 媒体报告位置之后，当前组随之变化；位置比该行早几毫秒也算轮到它，点击后高亮不会停在上一句。
-    act(() => { mounted.audio.tick(20.5 - 0.02); mounted.audio.emit("seeked"); });
+    const next = await seekedTo(mounted, 20.5);
+    // 新流报告位置之后，当前组随之变化；位置比该行早几毫秒也算轮到它，点击后高亮不会停在上一句。
+    act(() => next.tick(-0.02));
     expect(current().map((item) => item.textContent)).toEqual(["Chorus line"]);
     expect(states()).toEqual(["past", "past", "active", "upcoming"]);
   });
@@ -159,7 +170,7 @@ describe("歌词面板", () => {
     await userEvent.keyboard("{ArrowUp}");
     expect(document.activeElement).toBe(buttons[0]);
     await userEvent.keyboard("{Enter}");
-    expect(mounted.audio.currentTime).toBe(12.34);
+    await waitFor(() => expect(mounted.server.commands.at(-1)).toEqual({ command: "seek", position_seconds: 12.34 }));
     // 当前组还没有时（位置在第一句之前），第一句是 Tab 停靠点。
     act(() => mounted.audio.tick(1));
     expect(screen.getAllByRole("button").filter((button) => button.tabIndex === 0).map((button) => button.textContent)).toEqual(["First line of the sample"]);
@@ -290,8 +301,8 @@ describe("歌词面板", () => {
       if (chorus === undefined) throw new Error("应有“Chorus line”按钮");
       await userEvent.click(chorus);
       expect(screen.queryByRole("button", { name: "回到当前行" })).toBeNull();
-      expect(mounted.audio.currentTime).toBe(20.5);
-      act(() => mounted.audio.tick(21));
+      const next = await seekedTo(mounted, 20.5);
+      act(() => next.tick(0.5));
       expect(scrollTo.mock.calls.length).toBeGreaterThan(calls);
     });
 

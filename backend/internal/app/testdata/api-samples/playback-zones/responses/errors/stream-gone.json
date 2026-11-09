@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "stream_gone",
+      "message": "音频流已失效"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 410
+}

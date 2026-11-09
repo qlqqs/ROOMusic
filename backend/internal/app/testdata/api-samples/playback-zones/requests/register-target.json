@@ -1,0 +1,11 @@
+{
+  "body": {
+    "kind": "browser",
+    "muted": false,
+    "name": "样本设备",
+    "settings": {},
+    "volume": 0.5
+  },
+  "method": "POST",
+  "path": "/api/v1/me/playback/devices"
+}

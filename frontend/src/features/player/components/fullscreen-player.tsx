@@ -3,13 +3,14 @@ import { ChevronDown, Disc3 } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import { Button, ModalDialog, useTooltip } from "../../../shared/ui";
 import { ArtistNames, artworkPath } from "../../catalog";
-import { isPlaybackActive } from "../engine/player-engine";
+import { isPlaybackActive } from "../zones/controller";
 import type { PlayerTrack } from "../engine/queue";
 import { fullscreenOrigin, useFullscreenPlayer } from "../hooks/use-fullscreen-player";
 import { usePlayerSelector } from "../player-provider";
 import { LyricsPanel } from "./lyrics-panel";
 import { PlayerArtwork } from "./player-artwork";
 import { ModeControl, TransportControls, VolumeControl } from "./player-controls";
+import { ControlTargetLine, DeviceButton } from "./device-picker";
 import { PlayerFaultInline } from "./player-feedback";
 import { QueueButton } from "./queue-drawer";
 import { SignalPathButton } from "./signal-path";
@@ -91,7 +92,7 @@ export function FullscreenPlayer({ renderCurrentTrackActions, renderQueueActions
             <div className={styles.signal}><SignalPathButton /></div>
             <div className={styles.transport}><TransportControls size="large" /></div>
             <div className={styles.seek}><WaveformSeek layout="ends" /></div>
-            <div className={styles.options}><ModeControl /><QueueButton renderQueueActions={renderQueueActions} /><div className={styles.volume}><VolumeControl /></div></div>
+            <div className={styles.options}><ModeControl /><DeviceButton /><QueueButton renderQueueActions={renderQueueActions} /><div className={styles.volume}><VolumeControl /></div></div>
           </div>
         </div>
       </>}
@@ -119,6 +120,7 @@ function Stage({ track, titleId, renderCurrentTrackActions }: { track: PlayerTra
       <ArtistNames text={track.artist} refs={track.artistRefs ?? noRefs} />
     </p>
     <PlayerFaultInline showStatus className={styles.status} />
+    <ControlTargetLine className={styles.narrowOnly} />
     {renderCurrentTrackActions === undefined ? null : <div className={styles.trackActions}>{renderCurrentTrackActions(track)}</div>}
   </div>;
   // 宽屏：唱片在左，标题与歌词在右；窄屏：唱片与歌词占同一块，点唱片看歌词，歌词右上角的图标回到唱片。
