@@ -13,7 +13,7 @@
 
 **入口与订阅**：`features/player` 公开 `PlayerProvider({ userId, children })`、`usePlayer()`、`usePlayerProgress()`、`usePlayerProgressSelector()`、`usePlayerEngine()`（返回 `PlayerController`，只发命令）、
 `usePlayerSelector()`、`useCurrentTrackMarker()`、`usePlaybackCapabilities()`。provider 放在已登录会话代次子树内，创建一个不依赖 React 的 `PlayerController`（`zones/controller.ts`），切页不重建。
-离散快照与进度分开订阅；`PlayerSnapshot` 仍是 `status/queue/current/hasNext/failures/fault/event/volume/muted/restoring/settings/volumeControllable`，另加 `zone/device/isLocal/devices`。
+离散快照与进度分开订阅；`PlayerSnapshot` 仍是 `status/queue/current/hasNext/failures/fault/event/volume/muted/restoring/settings/volumeControllable`，另加 `zone/device/isLocal/devices/rejection`。
 大量重复的组件只用 `usePlayerEngine()` 发命令，只关心某个值的组件用 `usePlayerSelector()` 选出基本值；曲目行 `memo`。
 
 **zone store**（`zones/zone-store.ts`）：服务端快照（设备与播放区）、正在显示的播放区队列与时钟偏移，不进 Query 缓存。每个播放区按 `revision` 丢弃旧状态；
@@ -39,7 +39,7 @@
 有效 = 播放区还在、设备在线，并且正在播放或停下不到 15 分钟（从 `paused_at` 与 `selectedAt` 中较晚的算起）；每分钟与页面重新可见时重算，失效就清掉回到本机。转移成功后目标跟到目标播放区。
 
 **命令与音量**：控制器的方法名沿用旧引擎（`playTracks/playNext/enqueue/playEntry/removeEntry/moveEntry/clearQueue/setMode/play/pause/togglePlayback/stop/next/previous/seek/retry/setPlaybackSettings/setVolume/setMuted`），
-另有 `setControlTarget/transfer/renameDevice/deleteDevice`。命令发给有效控制目标，按顺序一条条发、不自动重试；三种入队动作在本地先按 10,000 上限判断，返回 `added|queue_full`。
+另有 `setControlTarget/transfer/renameDevice/deleteDevice`。命令发给有效控制目标，按顺序一条条发、不自动重试；命令得 `409 zone_offline` 时记为 `rejection`（转移除外），下一条命令成功或换控制目标时清掉，其他失败不记（界面规则见[播放器规范](./player-design-guidelines.md)的错误矩阵）；三种入队动作在本地先按 10,000 上限判断，返回 `added|queue_full`。
 音量属于设备：本机先立即写元素，再按 125 ms 节流发 `PUT volume`，1 秒内以本地值显示；控制的设备 `volume: fixed` 时音量控件禁用。
 
 **旧版本留下的浏览器数据**（只读，`engine/persistence.ts`、`engine/playback-settings.ts`）
@@ -52,7 +52,7 @@
 存着的设备 ID 与控制目标保留。`401`、跨标签页核对发现退出、换查看者都走这一边界。
 
 歌词是服务器状态：`useTrackLyrics(trackId)`（键 `playerKeys.lyrics`，`staleTime: Infinity`，随代次清空）；面板的跟随与暂停跟随是组件内局部状态。
-能否播放只看服务端格式表（`usePlaybackCapabilities`，键 `playerKeys.formats`，会话内有效），与设备无关。
+能否播放只看服务端格式表（`usePlaybackCapabilities`，键 `playerKeys.formats`，会话内有效），与设备无关，不特判来源类别（CUE 分轨同样按表放行）。
 
 ## 分析数据与播放设置（2026-11-09 更新）
 

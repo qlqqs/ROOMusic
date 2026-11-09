@@ -168,7 +168,7 @@ M0 只核对文档合同；以上界面与播放验收不因写完本规范而�
   曲目由 catalog 的已解码详情经 `playerTrackOf/playerTracksOf` 转换。控制器、zone store 与输出端见[播放与个人状态](./playback-and-personal-state.md)“播放区客户端”。
 - 命令：`playTracks/playNext/enqueue/playEntry/removeEntry/moveEntry/clearQueue/setMode/play/pause/togglePlayback/stop/next/previous/seek/setVolume/setMuted/retry/setPlaybackSettings`，
   以及设备列表用的 `setControlTarget/transfer/renameDevice/deleteDevice`。三种入队动作返回 `added|queue_full`，上限 10,000；拒绝超限并提示，不静默截断或部分替换。
-- 能否播放只看服务端格式表（`buildCapabilityTable` + `unplayableText`），与设备无关：不在表里写“这种格式目前不能播放”；`cue_virtual` 现在仍判为不能播放（“CUE 分轨曲目需要切分，目前不能播放”）。
+- 能否播放只看服务端格式表（`buildCapabilityTable` + `unplayableText`），与设备无关：不在表里写“这种格式目前不能播放”。前端不特判任何来源类别，CUE 分轨（`cue_virtual`）在表里就能播放，经渲染流按样本截取交付。
   整张播放只加入可播项并提示跳过数量。
 
 | 事件或故障 | 可观察处理 |
@@ -178,11 +178,12 @@ M0 只核对文档合同；以上界面与播放验收不因写完本规范而�
 | `fault: transient` | 已暂停；播放栏与全屏写“读取失败”并给“重试播放”图标按钮，公告“暂时无法读取音频，已暂停，可以重试。” |
 | `fault: autoplay_blocked` | 本机写“请按播放”，远端写“请在那台设备上点一下播放” |
 | `fault: no_stream_format` | “这台设备放不了服务器给的音频格式。” |
+| 命令得 `409 zone_offline`（`rejection`） | 播放栏与全屏的状态行（`PlayerFaultInline`）和读屏播报写“那台设备已离线。”；优先于其他故障显示，期间不给“重试播放” |
 | `queue_restored` | 公告“已恢复 N 首，保持暂停。”，有丢弃时加“已移除 M 首找不到的曲目。” |
 | 401 | 会话边界同步结束并清理，不保留旧账号状态 |
 | 未知时长或 `seekable` 为假 | 显示未知值，禁用定位 |
 
-命令被拒（如 `409 zone_offline`、`503 renderer_unavailable`）现在不提示，界面保持服务端给的状态。
+只有 `409 zone_offline` 记为快照的 `rejection`（`{seq, reason}`，读屏按 `seq` 播报一次）；下一条命令成功或换了控制目标时清掉。转移失败由设备列表就近提示，不记 `rejection`；其他失败（如 `503 renderer_unavailable`）不提示，界面保持服务端给的状态。
 
 必需验证：API 样本与 decoder、zone store 的 revision 与队列增量、对齐函数与换流、事件流解析与 401、控制目标回退、旧队列导入、
 播放栏与全屏播放器组件、键盘菜单与队列抽屉、五种宽度布局与 axe、真实服务（`scripts/playback-e2e.sh`）的两台设备用例。
