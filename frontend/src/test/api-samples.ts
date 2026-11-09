@@ -15,8 +15,13 @@ export function listApiSampleNames(): string[] {
     .sort();
 }
 
+/** 原始样本也包括请求与 SSE 事件，不强制为 HTTP JSON 响应结构。 */
+export function loadRawApiSample(name: string): unknown {
+  return JSON.parse(readFileSync(`${samplesDirectory}/${name}.json`, "utf8"));
+}
+
 export function loadApiSample(name: string): ApiSample {
-  const parsed: unknown = JSON.parse(readFileSync(`${samplesDirectory}/${name}.json`, "utf8"));
+  const parsed = loadRawApiSample(name);
   if (typeof parsed !== "object" || parsed === null || !("status" in parsed) || !("body" in parsed) || typeof parsed.status !== "number") {
     throw new Error(`样本 ${name} 不是 {status, body} 结构`);
   }
