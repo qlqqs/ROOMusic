@@ -13,7 +13,7 @@ func WithRenderDecoders(decoders RenderDecoders) ServiceOption {
 	return func(service *Service) { service.renderDecoders = decoders }
 }
 
-// renderFormatTable 是直出六项之外的可渲染组合；具体解码器由 renderDecoderNames 指定。
+// renderFormatTable 是直出六项之外的可渲染组合；DSD 使用内置转换，其余由 renderDecoderNames 指定。
 var renderFormatTable = []Format{
 	{SourceKind: "m4a", Codec: "alac", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerMP4},
 	{SourceKind: "ape_apev2", Codec: "ape", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerAPE},
@@ -22,6 +22,8 @@ var renderFormatTable = []Format{
 	{SourceKind: "aiff_id3", Codec: "aiff", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerAIFF},
 	{SourceKind: "wav_info", Codec: "ieee_float", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerWAV},
 	{SourceKind: "wav_info", Codec: "wav_extensible", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerWAV},
+	{SourceKind: "dsf_id3", Codec: "dsf", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerDSF},
+	{SourceKind: "dff_diin", Codec: "dff", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerDFF},
 	// CUE 沿用父音频编码与容器，只能经渲染截取后交付。
 	{SourceKind: "cue_virtual", Codec: "flac", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerFLAC},
 	{SourceKind: "cue_virtual", Codec: "mp3", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerMP3},
@@ -36,9 +38,12 @@ var renderFormatTable = []Format{
 	{SourceKind: "cue_virtual", Codec: "aiff", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerAIFF},
 	{SourceKind: "cue_virtual", Codec: "ieee_float", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerWAV},
 	{SourceKind: "cue_virtual", Codec: "wav_extensible", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerWAV},
+	{SourceKind: "cue_virtual", Codec: "dsf", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerDSF},
+	{SourceKind: "cue_virtual", Codec: "dff", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerDFF},
 }
 
-// RenderFormats 返回可渲染组合的副本；只发布至少有一种对应解码器的组合。
+// RenderFormats 返回可渲染组合的副本；发布内置 DSD 或至少有一种对应解码器的组合。
+// DSD 仍要求整体渲染可用，安全打开后核对原始负载与转换采样率并拒绝 DST。
 // PCM 组合的具体位深与扩展 WAV 子类型在安全打开后再次核对。
 // 保留原六项的表示字段；原派生项和新增 WAV 项仍以 derived 表示服务端处理交付。
 func (service *Service) RenderFormats() []Format {
@@ -49,6 +54,10 @@ func (service *Service) RenderFormats() []Format {
 	candidates := append([]Format(nil), formatTable...)
 	candidates = append(candidates, renderFormatTable...)
 	for _, format := range candidates {
+		if format.container == containerDSF || format.container == containerDFF {
+			formats = append(formats, format)
+			continue
+		}
 		for _, decoder := range renderDecoderNames(format.Codec) {
 			if service.renderDecoders.HasDecoder(decoder) {
 				formats = append(formats, format)

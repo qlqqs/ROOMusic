@@ -40,7 +40,7 @@ func (filter scanFilter) skipFile(name string) bool { return strings.HasPrefix(n
 
 func isSupportedAudioExtension(extension string) bool {
 	switch extension {
-	case ".flac", ".mp3", ".ogg", ".opus", ".wav", ".m4a", ".ape", ".wv", ".aif", ".aiff":
+	case ".flac", ".mp3", ".ogg", ".opus", ".wav", ".m4a", ".ape", ".wv", ".aif", ".aiff", ".dsf", ".dff":
 		return true
 	default:
 		return false

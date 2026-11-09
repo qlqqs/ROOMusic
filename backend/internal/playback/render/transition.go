@@ -92,16 +92,26 @@ func (p *player) prepareNext(ctx context.Context, entry zones.Entry, allowFade b
 	if allowFade {
 		plan = p.planTransition(track)
 	}
-	reservation, err := p.session.owner.options.FFmpeg.Reserve(ctx, 1)
-	if err != nil {
-		_ = track.File.Close()
-		if p.session.ctx.Err() != nil {
-			return false, p.session.ctx.Err()
+	if p.current != nil && plan.kind != "crossfade" {
+		if next := p.current.continueDSD(track, entry, p.session.spec.Settings.Leveling); next != nil {
+			p.next, p.plan = next, plan
+			return true, nil
 		}
-		return true, p.announceBoundary(entry, "not_ready")
 	}
-	next, err := openDecoder(p.session.ctx, reservation, p.session.owner.options.FFmpeg, track, entry, p.session.sourcePCM, plan.startSeconds, p.session.spec.Settings.Leveling)
-	_ = reservation.Close()
+	var starter processStarter
+	if track.DSDLayout == nil {
+		reservation, err := p.session.owner.options.FFmpeg.Reserve(ctx, 1)
+		if err != nil {
+			_ = track.File.Close()
+			if p.session.ctx.Err() != nil {
+				return false, p.session.ctx.Err()
+			}
+			return true, p.announceBoundary(entry, "not_ready")
+		}
+		defer reservation.Close()
+		starter = reservation
+	}
+	next, err := openDecoder(p.session.ctx, starter, p.session.owner.options.FFmpeg, track, entry, p.session.sourcePCM, plan.startSeconds, p.session.spec.Settings.Leveling)
 	if err != nil {
 		_ = track.File.Close()
 		return false, p.recordFailure(entry, err)
@@ -189,6 +199,9 @@ func (p *player) rejectEmptyNext(ctx context.Context) (bool, error) {
 	d.ring.mu.Lock()
 	empty, terminal := d.ring.size < p.session.sourcePCM.Channels*4, d.ring.terminal
 	d.ring.mu.Unlock()
+	if d.segmentFrames != nil && *d.segmentFrames == 0 {
+		empty, terminal = true, io.EOF
+	}
 	if !empty || terminal == nil {
 		return false, nil
 	}

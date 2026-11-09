@@ -1,0 +1,70 @@
+{
+  "body": {
+    "album_artist": null,
+    "album_artist_refs": [],
+    "artist": "未知艺术家",
+    "artist_refs": [],
+    "artwork": null,
+    "attention_count": 2,
+    "barcode": null,
+    "candidate_kind": "ordinary_directory",
+    "catalog_number": null,
+    "corrected_fields": [],
+    "credits": [],
+    "edition": null,
+    "evidence": [
+      {
+        "action": "uncertain_apply",
+        "confidence": "low",
+        "field": "artist",
+        "rule_id": "majority_v1",
+        "source": "display_fallback"
+      },
+      {
+        "action": "uncertain_apply",
+        "confidence": "low",
+        "field": "title",
+        "rule_id": "majority_v1",
+        "source": "folder_fallback"
+      }
+    ],
+    "genres": [],
+    "id": "00000000-0000-4000-8000-000000000001",
+    "label": null,
+    "media": [
+      {
+        "id": "00000000-0000-4000-8000-000000000002",
+        "position": 1,
+        "title": "Medium",
+        "tracks": [
+          {
+            "artist": "未知艺术家",
+            "artist_refs": [],
+            "bit_depth": 1,
+            "bitrate": 5644,
+            "channels": 2,
+            "codec": "dsf",
+            "credits": [],
+            "cue": null,
+            "duration_seconds": 0.5,
+            "id": "00000000-0000-4000-8000-000000000003",
+            "position": 1,
+            "sample_rate": 2822400,
+            "source": "01.dsf",
+            "source_kind": "dsf_id3",
+            "title": "01",
+            "work": null
+          }
+        ]
+      }
+    ],
+    "media_type": null,
+    "medium_count": 1,
+    "revision": 1,
+    "source_type": null,
+    "title": "dsf",
+    "track_count": 1,
+    "year": null
+  },
+  "status": 200
+}

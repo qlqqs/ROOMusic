@@ -26,6 +26,8 @@ type pcmRange struct {
 type decoder struct {
 	track          Track
 	entry          zones.Entry
+	producer       *dsdProducer
+	segmentFrames  *int64
 	process        *ffmpeg.Process
 	cancel         context.CancelFunc
 	done           chan struct{}
@@ -46,7 +48,7 @@ type processStarter interface {
 }
 
 func openDecoder(ctx context.Context, starter processStarter, tool *ffmpeg.Tool, track Track, entry zones.Entry, format chain.Format, startSeconds float64, mode string) (*decoder, error) {
-	span := pcmRange{start: int64(math.Round(startSeconds * float64(track.SampleRate)))}
+	span := pcmRange{start: int64(math.Round(startSeconds * float64(effectiveSource(track).pcm.SampleRate)))}
 	if track.CueStartFrame != nil {
 		span.start += *track.CueStartFrame
 	}
@@ -60,6 +62,9 @@ func openDecoder(ctx context.Context, starter processStarter, tool *ffmpeg.Tool,
 	capacity := int64(format.SampleRate) * int64(format.Channels) * 4 * 10
 	if capacity > 256<<20 {
 		return nil, &SourceError{Reason: "unsupported_format"}
+	}
+	if track.DSDLayout != nil {
+		return openDSDDecoder(ctx, track, entry, format, startSeconds, mode, span, int(capacity))
 	}
 	integer := integerSource(track)
 	pcmKind := "f32le"
@@ -145,7 +150,14 @@ func (d *decoder) fill(ctx context.Context) {
 	}
 }
 
-func (d *decoder) close() { d.cancel(); <-d.done }
+func (d *decoder) close() {
+	if d.producer != nil {
+		d.producer.release()
+		return
+	}
+	d.cancel()
+	<-d.done
+}
 
 func (d *decoder) position() int64 {
 	return int64(math.Round(d.startSeconds*float64(d.format.SampleRate))) + d.consumed
@@ -153,6 +165,13 @@ func (d *decoder) position() int64 {
 
 // read 的等待发生在计时区外；只累计环拷贝、格式换算与电平化的耗时。
 func (d *decoder) read(ctx context.Context, frames int, ready bool, clock func() time.Time) (*chain.Buffer, time.Duration, error) {
+	if d.segmentFrames != nil {
+		remaining := *d.segmentFrames - d.consumed
+		if remaining <= 0 {
+			return nil, 0, io.EOF
+		}
+		frames = int(min(int64(frames), remaining))
+	}
 	needed := frames * d.format.Channels * 4
 	if err := d.ring.wait(ctx, needed, ready); err != nil {
 		return nil, 0, err
@@ -192,6 +211,9 @@ func (d *decoder) read(ctx context.Context, frames int, ready bool, clock func()
 		leveling.Apply(b.Samples, &b.Regions, &b.Exact)
 	}
 	d.consumed += int64(count)
+	if d.segmentFrames != nil && d.consumed == *d.segmentFrames && (err == nil || errors.Is(err, io.EOF)) {
+		err = io.EOF
+	}
 	return b, clock().Sub(begin), err
 }
 

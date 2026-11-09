@@ -111,21 +111,28 @@ func (s *session) prepare() error {
 	if err := s.ctx.Err(); err != nil {
 		return err
 	}
-	count := 2
-	if s.format.Codec == "wav" {
-		count = 1
+	count := 0
+	if track.DSDLayout == nil {
+		count++
 	}
-	reservation, err := s.owner.options.FFmpeg.Reserve(s.ctx, count)
-	if err != nil {
-		return errors.Join(ErrBusy, err)
+	if s.format.Codec != "wav" {
+		count++
 	}
-	defer reservation.Close()
-	enc, err := newEncoder(s.ctx, reservation, s.owner.options.FFmpeg, s.format, s.outputPCM, s.writer, s.hls, s.fail)
+	var starter processStarter
+	if count > 0 {
+		reservation, err := s.owner.options.FFmpeg.Reserve(s.ctx, count)
+		if err != nil {
+			return errors.Join(ErrBusy, err)
+		}
+		defer reservation.Close()
+		starter = reservation
+	}
+	enc, err := newEncoder(s.ctx, starter, s.owner.options.FFmpeg, s.format, s.outputPCM, s.writer, s.hls, s.fail)
 	if err != nil {
 		return err
 	}
 	s.encoder = enc
-	d, err := openDecoder(s.ctx, reservation, s.owner.options.FFmpeg, track, s.spec.Start, s.sourcePCM, s.spec.StartSeconds, s.spec.Settings.Leveling)
+	d, err := openDecoder(s.ctx, starter, s.owner.options.FFmpeg, track, s.spec.Start, s.sourcePCM, s.spec.StartSeconds, s.spec.Settings.Leveling)
 	if err != nil {
 		s.player.firstErr = err
 	} else {

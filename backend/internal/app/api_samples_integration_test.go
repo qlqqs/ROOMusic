@@ -386,6 +386,8 @@ func TestPostgreSQLAPIResponseSamples(t *testing.T) {
 	// 改路径样本放在最后，不改变之前的目录、操作记录与扫描样本。
 	recordRootRelocateSamples(t, application, samples, call, admin, rootB)
 
+	recordDSDFormatSamples(t, application, samples, call, admin)
+
 	samples.finish()
 }
 

@@ -52,7 +52,7 @@ CUE 的分析时长本来就是 `-ss/-t` 解码的片段时长，末轨解码到
 - 没有候选进入 `idle`，等 1 分钟再查（新扫描的曲目最迟 1 分钟后开始）。数据库或读取扫描状态失败：记日志，等 1 分钟。
 - 每首之后等 `max(2 秒, 本首耗时)`。单首失败写入 `failed` 行，不阻塞后续曲目；准备来源时遇到数据库错误不写行，等 1 分钟。
 - 安全打开：读登记目录，未启用或不存在记 `source_unavailable`；`library.ValidatePath` 核对仍在允许范围；`os.OpenRoot` + `O_RDONLY|O_NONBLOCK`，必须是普通文件；
-  大小与修改时间（截到微秒）等于扫描记录，否则 `source_changed`。CUE 虚拟轨打开 `cue_parent_relative_path`。不重算指纹、不嗅探容器。
+  大小与修改时间（截到微秒）等于扫描记录，否则 `source_changed`。CUE 虚拟轨打开 `cue_parent_relative_path`。不重算指纹；普通 DSD 与 CUE 父音频从安全句柄嗅探并复用内置转换，具体见 [DSD 合同](./dsd-contracts.md)。
 - 进程：自成进程组（取消时 SIGKILL 整组，`WaitDelay` 2 秒），环境只给 `LC_ALL=C`；启动后 `setpriority` nice 19，Linux 上 `ioprio_set` 空闲 IO 类（失败忽略）；单首超时 10 分钟（`timeout`）。
 - 生命周期：父 context 是应用生命周期；`main` 在 HTTP 停止、扫描结束之后 `WaitForAnalysis`，取消即杀进程组。
 - 日志：`playback.analysis.ready`（`ffmpeg_version`）、`playback.analysis.unavailable`（`reason`：`disabled|not_found|version_failed|selftest_failed|unsupported_platform`）、

@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -33,6 +34,13 @@ type Result struct {
 	IntegratedLUFS, TruePeakDBTP                    *float64
 	DurationMS, LeadingSilenceMS, TrailingSilenceMS *int32
 	Waveform                                        []byte
+}
+
+// PCMInput 描述 stdin 上无文件头的交错 PCM；目前只接收 f32le。
+type PCMInput struct {
+	Format     string
+	SampleRate int
+	Channels   int
 }
 
 type Analyzer struct{ path, version string }
@@ -91,7 +99,7 @@ func Open(ctx context.Context, configuredPath string) (*Analyzer, error) {
 	analyzer := &Analyzer{path: path, version: version}
 	selfCtx, cancelSelf := context.WithTimeout(ctx, selfTestTimeout)
 	defer cancelSelf()
-	result, err := analyzer.analyzeInput(selfCtx, nil, selfTestWAV(), nil, nil)
+	result, err := analyzer.analyzeInput(selfCtx, nil, bytes.NewReader(selfTestWAV()), nil, nil, nil)
 	if err != nil {
 		return nil, &UnavailableError{Reason: "selftest_failed", Err: err}
 	}
@@ -108,10 +116,32 @@ func (a *Analyzer) FFmpegVersion() string { return a.version }
 func (a *Analyzer) Analyze(ctx context.Context, source *os.File, cueIndex, cueEnd *int32) (Result, error) {
 	ctx, cancel := context.WithTimeout(ctx, trackTimeout)
 	defer cancel()
-	return a.analyzeInput(ctx, source, nil, cueIndex, cueEnd)
+	return a.analyzeInput(ctx, source, nil, nil, cueIndex, cueEnd)
 }
 
-func (a *Analyzer) analyzeInput(ctx context.Context, source *os.File, stdin []byte, cueIndex, cueEnd *int32) (Result, error) {
+// AnalyzePCM 分析已按曲目区间截取的 PCM，不再应用 CUE 的 -ss/-t。
+// 若 stdin 实现 io.Closer，本方法在取消、启动失败、输出结束时关闭它；
+// 流式来源必须提供可并发调用的 Close，以取消转换并解除 Read 阻塞。
+func (a *Analyzer) AnalyzePCM(ctx context.Context, stdin io.Reader, input PCMInput) (Result, error) {
+	return a.analyzeInput(ctx, nil, stdin, &input, nil, nil)
+}
+
+func (a *Analyzer) analyzeInput(ctx context.Context, source *os.File, stdin io.Reader, inputFormat *PCMInput, cueIndex, cueEnd *int32) (Result, error) {
+	ctx, cancel := context.WithTimeout(ctx, trackTimeout)
+	defer cancel()
+	closeInput := sync.OnceFunc(func() {
+		if closer, ok := stdin.(io.Closer); ok {
+			_ = closer.Close()
+		}
+	})
+	stopClose := context.AfterFunc(ctx, closeInput)
+	defer func() {
+		stopClose()
+		closeInput()
+	}()
+	if inputFormat != nil && (stdin == nil || inputFormat.Format != "f32le" || inputFormat.SampleRate <= 0 || inputFormat.Channels < 1 || inputFormat.Channels > 32) {
+		return Result{}, &Failure{Category: "parse", Err: errors.New("invalid PCM input description")}
+	}
 	args := []string{"-nostdin", "-hide_banner", "-nostats", "-loglevel", "info", "-threads", "1", "-protocol_whitelist", "file,pipe"}
 	if cueIndex != nil {
 		args = append(args, "-ss", seconds75(*cueIndex))
@@ -123,16 +153,17 @@ func (a *Analyzer) analyzeInput(ctx context.Context, source *os.File, stdin []by
 	if stdin != nil {
 		input = "pipe:0"
 	}
+	if inputFormat != nil {
+		args = append(args, "-f", inputFormat.Format, "-ar", strconv.Itoa(inputFormat.SampleRate), "-ac", strconv.Itoa(inputFormat.Channels))
+	}
 	args = append(args, "-i", input, "-filter_complex", "[0:a:0]asplit=2[l][w];[l]ebur128=peak=sample+true:framelog=quiet,anullsink;[w]aresample=8000,aformat=sample_fmts=s16:channel_layouts=mono[pcm]", "-map", "[pcm]", "-f", "s16le", "pipe:1")
-	ctx, cancel := context.WithTimeout(ctx, trackTimeout)
-	defer cancel()
 	cmd := exec.CommandContext(ctx, a.path, args...)
 	cmd.Env = []string{"LC_ALL=C"}
 	if source != nil {
 		cmd.ExtraFiles = []*os.File{source}
 	}
 	if stdin != nil {
-		cmd.Stdin = bytes.NewReader(stdin)
+		cmd.Stdin = stdin
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -150,6 +181,8 @@ func (a *Analyzer) analyzeInput(ctx context.Context, source *os.File, stdin []by
 	if readErr != nil {
 		_ = cmd.Process.Kill()
 	}
+	// stdout 提前结束也必须先解除 stdin 的生产者阻塞，再等待 exec 的复制协程。
+	closeInput()
 	waitErr := cmd.Wait()
 	if ctx.Err() != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {

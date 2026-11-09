@@ -30,6 +30,10 @@ func (a *workerTestAnalyzer) Analyze(ctx context.Context, _ *os.File, _, _ *int3
 	return analysis.Result{}, ctx.Err()
 }
 
+func (a *workerTestAnalyzer) AnalyzePCM(ctx context.Context, _ io.Reader, _ analysis.PCMInput) (analysis.Result, error) {
+	return a.Analyze(ctx, nil, nil, nil)
+}
+
 func TestAnalysisWorkerWaitsForScanWithoutAnalyzing(t *testing.T) {
 	fixture := newPlaybackFixture(t)
 	fixture.insertPlayableFLAC(t, "first.flac")

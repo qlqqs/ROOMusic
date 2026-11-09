@@ -92,6 +92,10 @@ func fingerprintFunc(extension string) func(context.Context, io.ReaderAt, int64)
 		return wavpackFingerprint
 	case ".aif", ".aiff":
 		return aiffFingerprint
+	case ".dsf":
+		return dsfFingerprint
+	case ".dff":
+		return dffFingerprint
 	}
 	return nil
 }

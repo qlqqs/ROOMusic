@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"sync"
@@ -30,6 +31,7 @@ var (
 type analysisRunner interface {
 	Version() int16
 	Analyze(context.Context, *os.File, *int32, *int32) (analysis.Result, error)
+	AnalyzePCM(context.Context, io.Reader, analysis.PCMInput) (analysis.Result, error)
 }
 
 // AnalysisWorker 顺序分析 catalog 提供的曲目快照；一个 worker 最多运行一个 ffmpeg。
@@ -164,12 +166,7 @@ func (w *AnalysisWorker) analyze(ctx context.Context, candidate catalog.TrackAna
 		return catalog.TrackAnalysisResult{Status: "failed", FailureCategory: category}, nil
 	}
 	defer file.Close()
-	var cueIndex, cueEnd *int32
-	if candidate.SourceKind == "cue_virtual" {
-		cueIndex = candidate.CueIndexFrames
-		cueEnd = candidate.CueEndFrames
-	}
-	result, err := w.analyzer.Analyze(ctx, file, cueIndex, cueEnd)
+	result, err := w.analyzeSource(ctx, file, candidate)
 	if err != nil {
 		if ctx.Err() != nil {
 			return catalog.TrackAnalysisResult{}, ctx.Err()

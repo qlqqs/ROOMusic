@@ -20,6 +20,8 @@ var formatVersions = map[string]int{
 	".opus": 1,
 	".wav":  1,
 	".m4a":  1,
+	".dsf":  1,
+	".dff":  1,
 }
 
 // CacheVersion 返回扩展名的解析缓存版本；未支持的格式不缓存。

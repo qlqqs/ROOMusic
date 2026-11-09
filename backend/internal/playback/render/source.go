@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"os"
+
+	"github.com/qlqq/roomusic/backend/internal/playback/dsdio"
 )
 
 // TrackSource 由装配层提供安全打开与分析结果，不向渲染层泄露目录存储实现。
@@ -11,13 +13,15 @@ type TrackSource interface {
 	Prepare(ctx context.Context, userID, trackID string) (Track, error)
 }
 
-// Track 的 File 由渲染会话关闭；帧范围按源 PCM 采样率计，不是 CUE 的 75 Hz 索引。
+// Track 的 File 由渲染会话关闭；帧范围按有效来源 PCM 采样率计，不是 CUE 的 75 Hz 索引。
+// DSD 的 SampleRate、BitDepth 是文件比特率与 1 bit；DSDLayout 来自同一句柄且不可修改。
 type Track struct {
 	File                           *os.File
 	SourceKind, Codec              string
 	SampleRate, Channels, BitDepth int
 	IsFloat                        bool
 	Layout                         uint32
+	DSDLayout                      *dsdio.Layout
 	DurationSeconds                float64
 	ReleaseID                      string
 	LeadingSilence, TrailingStart  *float64

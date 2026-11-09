@@ -91,6 +91,7 @@ export type SignalQuality = (typeof signalQualities)[number];
 export type SignalStep = { quality: SignalQuality; lossy: boolean; compat: boolean } & (
   | { kind: "source"; params: { codec: string; sampleRate: number; bitDepth: number | null; channels: number } }
   | { kind: "convert"; params: { fromRate: number; toRate: number; by: string } }
+  | { kind: "dsd_to_pcm"; params: { from: string; dsdRate: number; toRate: number; filter: number } }
   | { kind: "sample_rate"; params: { fromRate: number; toRate: number; filter: SampleRateFilter } }
   | { kind: "peq"; params: { label: string; bands: number } }
   | { kind: "convolution"; params: { name: string; taps: number; resampledFrom: number | null } }

@@ -1,5 +1,6 @@
-import { ArrowDownToLine, ArrowLeftRight, AudioLines, AudioWaveform, Binary, FileAudio, Gauge, Grip, Merge, MonitorSpeaker, SlidersHorizontal, SlidersVertical, Waves, X, type LucideIcon } from "lucide-react";
+import { ArrowDownToLine, ArrowLeftRight, AudioLines, AudioWaveform, Binary, FileAudio, Gauge, Grip, Merge, MonitorSpeaker, SlidersHorizontal, SlidersVertical, Waves, X, Zap, type LucideIcon } from "lucide-react";
 import { Fragment, useId, useState, type CSSProperties, type ReactNode } from "react";
+import { dsdRateName } from "../../../shared/lib/dsd";
 import { Button, ModalDialog, StatusTag, useTooltip } from "../../../shared/ui";
 import { useTrackAnalysis } from "../hooks/use-track-analysis";
 import { usePlayerSelector } from "../player-provider";
@@ -14,6 +15,8 @@ const codecNames = new Map([
   ["wavpack", "WavPack"],
   ["wavpack_hybrid", "WavPack"],
   ["aiff", "AIFF"],
+  ["dsf", "DSD（DSF）"],
+  ["dff", "DSD（DFF）"],
   ["opus", "Opus"],
   ["vorbis", "Vorbis"],
 ]);
@@ -24,10 +27,12 @@ function codecName(codec: string): string {
 }
 
 function rateLabel(sampleRate: number): string {
-  return `${sampleRate / 1000} kHz`;
+  return dsdRateName(sampleRate) ?? `${sampleRate / 1000} kHz`;
 }
 
 function formatLabel(codec: string, sampleRate: number, bitDepth: number | null): string {
+  const dsd = dsdRateName(sampleRate);
+  if (dsd !== null) return `${codecName(codec)} ${dsd}`;
   return `${codecName(codec)} ${rateLabel(sampleRate)}${bitDepth === null ? "" : ` ${bitDepth} bit`}`;
 }
 
@@ -35,6 +40,7 @@ const stepIcons: Record<SignalStep["kind"], LucideIcon> = {
   source: FileAudio,
   convert: ArrowLeftRight,
   sample_rate: ArrowLeftRight,
+  dsd_to_pcm: Zap,
   downmix: Merge,
   peq: SlidersVertical,
   convolution: Waves,
@@ -50,6 +56,8 @@ function stepText(step: SignalStep): string {
       return formatLabel(step.params.codec, step.params.sampleRate, step.params.bitDepth);
     case "convert":
       return `采样率 ${rateLabel(step.params.fromRate)} → ${rateLabel(step.params.toRate)}`;
+    case "dsd_to_pcm":
+      return `${step.params.from} → PCM ${rateLabel(step.params.toRate)}`;
     case "sample_rate":
       return `采样率转换 ${rateLabel(step.params.fromRate)} → ${rateLabel(step.params.toRate)}`;
     case "downmix":
