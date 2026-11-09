@@ -1888,3 +1888,51 @@ F 线变基到含 P 线的 main（迁移改为 0023/0024），导出树全量全
 ### Status
 
 [OK] **Completed**
+
+
+## Session 51: 播放区与算法线第一批收尾，发布 v0.5.0
+<!-- trellis-session: v=2 fp=fa791637ed9173ff -->
+
+**Date**: 2026-11-09
+**Task**: 播放区与算法线第一批收尾，发布 v0.5.0
+**Branch**: `main`
+
+### Summary
+
+合入 main、修 CI、发布 v0.5.0、八号机升级、清理与归档
+
+### Main Changes
+
+## 第一批服务端播放区与算法线收尾，发布 v0.5.0
+
+- 集成分支 playback-baseline 合入 main（a51bfd8）。首次 CI 暴露 4 处过时的测试期望：
+  - parser 夹具清单少登记 APE；
+  - 分析进度样本总数 12→9；
+  - formats 集成测试缺 cue_virtual；
+  - real e2e 跨文件残留设备，搜索断言仍按直连 URL。
+
+  修复提交为 c4fa9da。第二轮暴露 mock e2e 问题：CUE 用例过时、全屏测量时缩放动画未结束、悬停提示在淡入中途被 axe 检查，还有 Headroom 停用时读数对比度只有 2.74:1，这一处是真实的界面问题，改为只淡化滑块。修复提交为 8e5a16e。第三轮 CI 全绿。
+- tag v0.5.0 打在 8e5a16e。Release workflow 成功，产出多架构镜像，Release 正文取自 release-notes.md。
+- 八号机从 v0.4.1 升到 v0.5.0：
+  - 手动备份 `roomusic-20261109-185801-manual.dump`，迁移前自动备份成功；
+  - 迁移 42→44，`playback.render.ready`，`/readyz` 返回 200；
+  - `.env` 固定 `ROOMUSIC_VERSION=0.5.0`，原文件存为 `.env.bak-0.4.1`。
+- 已删除测试实例 roomusic-etest（容器、卷、网络、镜像、目录）。
+- 已删除 7 个工作树和分支：playback-baseline、dsp-pure、dsp-render、dsp-gapless、dsp-exit、ios-probe、hotfix-ios-decoding。
+- 归档 10 个任务：播放区父任务及 6 个子任务，算法线 dsp-pipeline、gapless-crossfade、dither。参考稿目录的忽略规则改为归档后的新路径，指向已归档任务的链接一并修正。
+- 教训：子任务各自只跑最小测试集，跨文件的相互干扰和过时的旧断言要到合入后的 CI 才暴露。下一批合入前，先在集成分支按 CI 的方式整组跑一次 real e2e 和 mock e2e。
+- 遗留：下一版删除旧的逐首播放接口（`GET /tracks/{id}/playback`、`/audio`、`POST /me/plays`）；算法线第二、三批（PEQ、卷积、降混、SRC、DSD、SDM）待开工。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a51bfd8` | merge: 第一批服务端播放区与算法线（播放区、渲染流、无缝/交叉渐变、Headroom、抖动、CUE、HLS） |
+| `c4fa9da` | test: 对齐合入 main 后过时的测试期望 |
+| `8e5a16e` | fix(player): Headroom 停用时数值保持可读；修正过时的模拟 e2e |
+| `933ea51` | chore(trellis): 归档第一批播放区与算法线任务 |
+
+### Status
+
+[OK] **Completed**

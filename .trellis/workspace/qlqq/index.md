@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 50
+- **Total Sessions**: 51
 - **Last Active**: 2026-11-09
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1890 | Active |
+| `journal-1.md` | ~1938 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 51 | 2026-11-09 | 播放区与算法线第一批收尾，发布 v0.5.0 | `a51bfd8`, `c4fa9da`, `8e5a16e`, `933ea51` | `main` |
 | 50 | 2026-11-09 | v0.4.0 发布、八号机部署与扫描工作区清理 | `3e7f17e` | `main` |
 | 49 | 2026-11-08 | 扫描子系统对标：13 项四线并行完成并归档 | `451fad5`, `974133a`, `f5cad9e`, `a7ea895`, `faceabb`, `679ea7f`, `7a672a5`, `c4a4514`, `f3d3d04`, `098be1c`, `9fd2b3e`, `f29aa77`, `c08c15e`, `c4b7d28`, `c069d5f`, `7494953`, `6ee547b`, `d5b1b0c`, `30e86f8`, `9cc8a66`, `a665fea`, `ab46693`, `19427e6`, `ee7c616`, `b695a05`, `e042f2c`, `9893f85`, `86c3aa5`, `f6847ca`, `f18a69d`, `973d9ed`, `52fdeea`, `a4004d4`, `dda4262`, `65eb019`, `944b854`, `cce4374`, `94623b5`, `d387b43`, `bee676d`, `d0ecf9e`, `20a596b`, `3e990fb`, `45bc6ec`, `74a3ceb`, `02f113a`, `68115b9`, `b2c88af`, `d1f173c`, `5f16451`, `0a23e68`, `64bc78b`, `fe577fd`, `a666aaa`, `8939583`, `04ed685`, `a322e46`, `a8f3a6a`, `16a32a7`, `c9e69d5`, `7deacf9`, `3c1028d`, `55372f9` | `main` |
 | 48 | 2026-11-08 | 全屏播放器、后台音频分析与概览改版 | `2f80c3a`, `4790f4d`, `85eb0b2`, `37a871b`, `e90beec`, `0d4d3bc`, `aab1e09`, `c44ba31`, `ff83dda`, `890cf53`, `3ea63b4`, `3eece9c`, `a4ef27b`, `225874e`, `402b680` | `main` |
