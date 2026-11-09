@@ -46,6 +46,21 @@ export ROOMUSIC_TEST_FFMPEG="$(scripts/ffmpeg-pinned.sh)"
 验证：`go test ./internal/playback/render/...`、`./internal/playback/...`（只本包）、依赖方向。联调信号：一首 FLAC 能在桌面 Chrome 里经 zones 放出来（主会话手工一次）。
 风险文件：`internal/app/app.go`、`cmd/roomusic/main.go`（装配与关停顺序）、`playback/service.go`。回滚点：P-c 提交。
 
+## P-h iOS：HLS 交付（design-delivery.md §5；小验证现在就可做，实现在 P-c 合入、§5.11 的合同改动裁决之后）
+
+1. [ ] 后端 GPT：在 `ios-probe` 分支加 G–J（§5.10 H1–H4：HLS 按 §5.1–§5.2 实时生成，测试 Cookie 只记有无）。主会话部署到八号机，经 HTTPS 反代；用户在 iPhone 上测约 15 分钟。
+       主会话按结果填 §5.7 ALAC 的上限；任一项落到“交主会话裁决”就先停在这里。
+2. [ ] 主会话：按 §5.11 改 zones 合同与协议文档（与 B3 的收尾一起裁决）。
+3. [ ] 后端 GPT：`render`：`(codec, mime_type)` 配对表与 `Delivery`（§5.6）、分片 MP4 封装参数（§5.2）、`hls.go` 切片器与分片仓库与播放列表（§5.1–§5.3）、`HLS()`；
+       `zones`：`HLSMedia` 端口、按 `Delivery` 给 `Stream.url`、取媒体不置 `taken`；`zones/httpapi`：`GET …/streams/{seq}/{file}`、文件名校验、播放列表 gzip、分片 `ServeContent`（§5.4、§5.9）。
+4. [ ] 前端 Opus（新开一个子 agent）：`output/capabilities.ts` 按 §5.7 声明候选（只用 `canPlayType`）。不加任何界面文案。
+5. [ ] 测试 agent（只测下列行为）：`Negotiate` 配对表加两行（HLS 候选只配 HLS、长流候选不配 HLS）；切片器对真实 ffmpeg 分片 MP4 输出的片长之和等于写入帧数；
+       ALAC HLS 逐位一致（初始化段 + 全部分片拼起来解码，MD5 等于源，16/24 位各一）；播放列表（START、不足 3 片时等待、结束后有 ENDLIST、删旧片后取它得 404）；
+       handler（非当前 `seq` 得 410、播放列表可重复取、gzip）；前端能力两条（音量只读且 HLS 可探测时只有两项 HLS，否则与原表相同）。
+
+验证：`go test ./internal/playback/render/... ./internal/zones/...`（只本次相关的测试名）、`(cd frontend && npx vitest run src/features/player/output)`。联调：iPhone 上放一张专辑并锁屏（归 E）。
+风险文件：`zones/ports.go`、`zones/outputs.go`、`zones/render_events.go`、`zones/httpapi/stream.go`、`render/session.go`、`render/encode.go`。回滚点：P-h 提交。
+
 ## P-e Headroom、削波、处理速度、信号路径（后端；P-c 之后，与 G、D、P-d 并行）
 
 1. [ ] 后端 GPT：迁移 `00NN_playback_zone_headroom.sql`（+ `.down.sql`，编号接在 zones 的 0037 之后，design.md §8.1）；zones 的设置结构、`set_settings` 校验与合同 DTO 加 `headroom` 键（父设计 §8 第 7 条，改 zones 代码需主会话先确认 B2 已合入）。
@@ -77,5 +92,5 @@ export ROOMUSIC_TEST_FFMPEG="$(scripts/ffmpeg-pinned.sh)"
 
 ## 完成标准
 
-- P-a 有结论并已落到设计；P-b、P-c、P-e、P-d、P-f 各自的测试通过并经主会话验收、合入 `playback-baseline`。
+- P-a 有结论并已落到设计；P-b、P-c、P-h、P-e、P-d、P-f 各自的测试通过并经主会话验收、合入 `playback-baseline`。
 - 本子项的 prd 验收由 E 统一核对（父 implement.md §2）。

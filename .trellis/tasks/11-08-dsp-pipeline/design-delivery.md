@@ -1,4 +1,4 @@
-# 技术设计（二）：编码交付、协商与 iOS 交付小验证
+# 技术设计（二）：编码交付、协商、iOS 交付小验证与 HLS 交付
 
 [design.md](./design.md) 的续篇（章节号与它共用、从 §1 起各自编号，引用时写“design-delivery.md §N”）。父设计指[父任务 design.md](../11-08-audio-dsp-reference-port/design.md)；zones 设计指播放区线的定稿设计。
 
@@ -30,11 +30,11 @@
 ### 1.3 HTTP 交付（zones 合同 §4.4 的实现细节）
 
 - `200`；`Content-Type` 为流的 MIME；**不带 `Content-Length`**（HTTP/1.1 分块传输，HTTP/2 按帧）；`Cache-Control: no-store`；`Accept-Ranges: none`；`X-Content-Type-Options: nosniff`；`X-Accel-Buffering: no`（与事件流同样的反代要求）。
-- 请求带 `Range` 时忽略，照常回 `200` 完整流（HTTP 允许）。是否要改成 §1.4 的做法由 iOS 验证决定。
+- 请求带 `Range` 时忽略，照常回 `200` 完整流（HTTP 允许）。长流只给桌面浏览器，iPhone/iPad 用 HLS（§5），这里不再改。
 - zones/httpapi 以 32 KB 缓冲从 `Body` 拷贝，每次读到数据就写出并 `Flush`。客户端断开时 handler 返回，不关闭会话（会话生命周期归 zones）。
 - 同一条流的第二个连接：建议回 `410 stream_gone`（父设计 §8 第 5 条）。
 
-### 1.4 备用：头部重放与伪长度（只在 iOS 验证证明需要时启用）
+### 1.4 备用：头部重放与伪长度（不启用：iOS 改用 HLS，§5；只留作记录）
 
 - **头部重放**：会话保留 `Body` 最开头的 64 KB。第二个连接的 `Range` 从 0 开始（或没有 `Range`），且前一个连接读走的不超过 64 KB 时，先重放头部再接着读实时输出。用于“先发 `bytes=0-1` 探测、再正式请求”的客户端。
 - **伪长度**：对 `Range: bytes=0-1` 回 `206`、`Content-Range: bytes 0-1/<L>`；对 `bytes=0-` 回 `206`、`Content-Range: bytes 0-<L−1>/<L>` 并开始实时输出。`L` 取一个足够大的上界（按“流格式的最高码率 × 6 小时”算）。流提前结束时连接正常关闭，客户端按结束处理。
@@ -80,7 +80,7 @@ FLAC 44.1/16 约 0.7–1.0 Mbps；开了电平化后按 24 位输出（§2.2）�
 
 - `max_channels: 2`、`dsd: "none"`、`exclusive: false`（zones 合同 §8）。
 - 192 kHz 是先取的稳妥上限：桌面浏览器多半更高，但浏览器之后还要经过系统混音，更高的采样率没有收益。
-- **iOS 的取值等 §4 的结果再定**（例如 FLAC 不行就去掉 1，把 WAV 放第一；Opus 不行就去掉 3）。结果写回本节，由 zones F2 照表实现。
+- **iPhone/iPad 不用本表**：只声明 §5.7 的两项 HLS 候选（2026-11-09 裁决）。
 
 ## 4. iOS 交付小验证
 
@@ -148,7 +148,7 @@ FLAC 44.1/16 约 0.7–1.0 Mbps；开了电平化后按 24 位输出（§2.2）�
 | A 全部正常 | iOS 与桌面相同：FLAC 长流，`200`、无长度、不支持 Range | 无 |
 | A 不能播或锁屏后断，C 正常 | iOS 无损档用 WAV（码率约多一半到一倍）；§3 把 WAV 排在 FLAC 前 | 只改候选表 |
 | A/C 失败，日志显示 Safari 先发 `bytes=0-1` 再请求 | 用 `?range=fake` 重测 A；通过就启用 §1.4 的头部重放与伪长度 | 只改 HTTP 层 |
-| A、C（含伪长度）都失败，F 正常 | iOS 改用 HLS：同一个渲染会话的输出切成 fMP4 片段、提供播放列表 | **要改 zones 合同 §4.4（流地址指向播放列表、片段子资源）与 output 模块，交主会话裁决** |
+| A、C（含伪长度）都失败，F 正常 | iOS 改用 HLS：同一个渲染会话的输出切成 fMP4 片段、提供播放列表 | **要改 zones 合同 §4.4（流地址指向播放列表、片段子资源）与 output 模块，交主会话裁决**；**已采用（2026-11-09），见 §5** |
 | V4 失败（锁屏时回报到不了服务器） | 在线判定加一条“渲染流仍在被读取”，播放头按“已被读取的帧 − 估计的客户端缓冲”估算 | 改 zones design-protocol.md §3.7，交主会话裁决 |
 | V5 失败（锁屏时标题不变） | 锁屏信息只在页面可见时更新；锁屏时显示开流时的那首 | 只改 output 模块，记为已知限制 |
 | V6a 失败（后台不能换源） | iOS 输出端尽量不在后台换流：格式不同的下一首在同一条流里转换成当前流的格式（第一批用解码 ffmpeg 转），定位、改设置的重建留到页面可见时 | 改 zones §3.5 的接续流规则（只对声明了此限制的输出端），交主会话裁决 |
@@ -159,3 +159,164 @@ FLAC 44.1/16 约 0.7–1.0 Mbps；开了电平化后按 24 位输出（§2.2）�
 | `navigator.mediaSession` 不存在（非安全上下文） | 用 HTTPS 地址复测 A 的 V5，其余结论照用 | 无 |
 
 需要交主会话裁决的几行都不改协议的“期望状态 + 回报”形状，只改个别规则或交付的 HTTP 形式。
+
+**实际结果（2026-11-09，见 prd“已裁决”）**：FLAC/WAV 长流要伪长度才能放且很脆弱，长流锁屏后页面没有任何回报；F（HLS）锁屏正常——命中“改用 HLS”一行，用户已裁决采用，设计见 §5。表中其他行是按长流写的，对 HLS 不再适用；HLS 上还没覆盖到的行为改由 §5.10 补验。
+
+## 5. iOS：HLS 交付
+
+2026-11-09 裁决：iPhone/iPad 的输出端用 HLS 取服务端渲染流，桌面浏览器照旧用长流（§1.1–§1.3）。渲染会话、未来事件队列、播放头、接续流、回报都不变；
+变的只有编码器的封装（分片 MP4）、会话把输出切成分片并维护播放列表、流端点的形式，以及浏览器的能力声明。依据见 prd“已裁决”。
+
+### 5.1 播放列表：增长型 EVENT 列表
+
+```text
+#EXTM3U
+#EXT-X-VERSION:7
+#EXT-X-TARGETDURATION:4
+#EXT-X-PLAYLIST-TYPE:EVENT
+#EXT-X-START:TIME-OFFSET=0,PRECISE=YES
+#EXT-X-INDEPENDENT-SEGMENTS
+#EXT-X-MEDIA-SEQUENCE:0
+#EXT-X-MAP:URI="init.mp4"
+#EXTINF:4.087,
+0.m4s
+#EXTINF:4.087,
+1.m4s
+#EXT-X-ENDLIST            ← 只在会话自然结束（队列放完或格式边界）后写
+```
+
+- 一条渲染流 = 一个播放列表。分片完整产出后才追加；条目只增不删（EVENT 的规则），时间线从流开头算起，所以 `currentTime` 就是流内秒数，与已验证的 VOD 列表相同。
+- `EXT-X-START:TIME-OFFSET=0`：没有 ENDLIST 的列表，客户端默认从末尾附近起播，必须显式要求从头放。
+- 片长 4 秒（与验证一致）：编码器满 4 秒后在下一个包边界切，最长约 4.2 秒，四舍五入不超过 `TARGETDURATION`。`EXTINF` 取分片里的真实样本时长（§5.2），三位小数。
+- 列表里不足 3 片且流没结束时，播放列表请求等待，最多 10 秒，之后按当时内容回应。理由：HLS 规定没有 ENDLIST 的列表不应从最后 3 片内起播；渲染远快于实时，3 片通常几百毫秒内就有。
+- 列表随流增长，每片约 22 字节，Safari 每个片长重取一次。同格式连续播放几小时（例如整库 CD 抓轨随机播放）时，3 小时的列表约 60 KB，不压缩约 120 kbps，相对有损档的 256 kbps 不能忽略；
+  所以请求带 `Accept-Encoding: gzip` 时播放列表用 gzip 回应（重复度高，约压到 1/6 以下）。分片不压缩。
+- **放弃滑动窗口的直播列表**（不写 PLAYLIST-TYPE、按 MEDIA-SEQUENCE 删旧条目）：列表大小恒定，但窗口滑动后 `currentTime` 以哪里为零点没有验证过，而位置回报依赖它；EVENT 的时间线由规范固定。
+
+### 5.2 编码与切片
+
+| 档 | 分片里的编码 | 编码参数（输入同 §1.1、§1.2） | `Stream.format.codec` |
+| --- | --- | --- | --- |
+| 无损 | ALAC | `-c:a alac` | `alac` |
+| 有损 | AAC-LC 256 kbps | `-c:a aac -profile:a aac_low -b:a 256k` | `aac` |
+
+两档共用封装参数 `-f mp4 -movflags +empty_moov+default_base_moof+skip_trailer -frag_duration 4000000 -flush_packets 1 pipe:1`。
+
+- 无损档仍经量化器、按 §2.2 定 16/24 位，以 `s16le`/`s24le` 交给编码器；ALAC 是无损的，逐位一致与 FLAC 一样只取决于量化器是否直通。有损档同 §1.2 交浮点。
+- **由 Go 切片**：会话按顶层 box 读编码器 stdout，`ftyp`+`moov` 是初始化段，此后每个 `moof`+`mdat` 是一片，其他顶层 box 忽略。片长从 `moof` 里读出
+  （`trun` 的样本时长，没有就用 `tfhd`/`trex` 的默认值，单位是 `mdhd` 的时间刻度），不按墙钟估。
+- 编码器进程、名额、失败处理沿用 P-c 的 `encoder`，只是 stdout 交给切片器而不是 `Body` 的管道。切片器一直在读，编码器不再受 HTTP 背压；产出由渲染循环的领先上限（design.md §2，20 秒）约束，与长流相同。
+- **放弃 ffmpeg 的 `hls` 封装器**（探针用的就是它）：它只能写目录，要监视它重写的播放列表文件才知道分片何时写完，列表还得按我们的地址、START、ENDLIST 规则重写，按时间删旧片也只在滑动窗口模式下有。
+  自己切只需读顶层 box，数据都在内存，分片可用是确定的事件。两者产出的都是 ffmpeg mp4 封装器的分片；自己切的分片 Safari 能否放，放进 §5.10 H2 一起验。
+- 信号路径的 `encode` 步骤：`alac` 记 `lossless`，`aac` 同 §1.2 记 `low`、有损。交付方式不进信号路径。
+
+### 5.3 分片的保留与上限
+
+- 分片只在内存里，不落盘。分片的结束时刻早于“播放头 − 30 秒”就删除（播放头即 design.md §6.2 的值；30 秒覆盖回报间隔与外推误差）。被删分片的条目仍留在列表里（EVENT 的规则）；
+  Safari 不会回头取已放过的片，真被取到回 404。
+- 产出端受领先上限约束，每个会话常驻约 30 + 20 + 4 秒的音频：ALAC 44.1/16 约 6 MB，96/24 约 20 MB，192/24 约 40 MB；AAC 约 2 MB。一个播放区最多两个会话（当前流与接续流）。时长窗口已经封顶，不另设字节上限。
+- 会话 `Close` 或出错结束后整份丢弃，之后的请求得 410。
+
+### 5.4 HTTP 与协议的对应
+
+- **地址**：`Stream.url` 指向播放列表 `/api/v1/me/playback/zones/{zone_id}/streams/{seq}/index.m3u8`，`mime_type` 为 `application/vnd.apple.mpegurl`；
+  列表里用相对地址 `init.mp4`、`{n}.m4s`，即同一目录下的 `GET …/streams/{seq}/{file}`。
+- **可重复取**：能取的条件与长流相同（该播放区有当前输出会话、`seq` 是当前流或接续流、会话还在），不满足得 `410 stream_gone`；但不限次数，播放列表会被反复取，分片可能被重试。
+  片号还没产出或已删除：`404 not_found`。长流“只能取一次、第二个连接 410”的规则只对长流成立。
+- **响应头**：播放列表 `application/vnd.apple.mpegurl`；初始化段与分片 `audio/mp4`，用 `http.ServeContent` 回应（带长度、支持 Range）。都带 `Cache-Control: no-store`、`X-Content-Type-Options: nosniff`。
+- **鉴权**：同源请求，浏览器带 Cookie（HttpOnly、SameSite=Lax），经 `Guard.Authenticate`；地址里没有凭据（合同 §1）。原生 HLS 播放器给分片请求带不带 Cookie 没验证过，见 H1。
+- **位置**：`currentTime` 就是流内秒数（§5.1），回报照合同 §4.2；`Observe`、事件队列、分段换算都不变。AAC 的编码延迟同 design.md §6.2，不修正。
+- **`stream_lost`**：元素出 `error`（播放列表 410/404、分片取不到）或长时间 `waiting` 时回报，照常续流。HLS 每片一个请求，短暂断网、换网络时 Safari 自己重试，多半不必续流。
+- **开新流**：重建、定位、暂停超过 5 秒后恢复、接手、转移，对输出端都是换一个播放列表地址，规则不变（zones design-protocol.md §3.5）。
+  旧流随会话关闭得 410；旧元素随后出的错误带旧 `stream_seq`，服务端按“不是当前流”只刷新在线时间。
+
+### 5.5 格式边界：沿用接续流
+
+- **选 `next_stream`**：会话在格式边界写 ENDLIST，Safari 放完出 `ended`，输出端换上已在备用元素预载的下一条播放列表，与桌面相同（zones design-protocol.md §3.5）。
+- **放弃同一播放列表内 `EXT-X-DISCONTINUITY` + 新 `EXT-X-MAP`**：好处是锁屏下换格式不靠页面脚本。但一条流要跨两种格式：要么渲染会话中途换链与编码器，`Stream.format` 与帧号换算都变成分段的；
+  要么 zones 把两个会话拼进一个列表，回报的流内秒数再按会话拆开。两种都要改 B3 刚定的 zones 模型与合同，而跨采样率、位深的 DISCONTINUITY 是否无声断续同样没验证。
+- **代价**：锁屏下在 `ended` 里对另一个元素 `play()` 还没在 HLS 上验证过（长流那次验证里页面根本没运行），见 H3。H3 失败时的退路是 §4.5 的 V6a 一行
+  （只对 HLS 输出端：格式不同的下一首在流内转成当前格式，信号路径标兼容转换），交主会话裁决。
+
+### 5.6 协商
+
+- 服务端能产出的组合（§2.1 第 1 步的过滤表）增加两项，过滤从“只看 `codec`”改成按 `(codec, mime_type)` 配对：
+
+| `codec` | `mime_type` | 无损 | 交付 | 需要的编码器 |
+| --- | --- | --- | --- | --- |
+| `flac` / `wav` / `opus` / `aac` | 同 §3 表 | 同 §3 表 | 长流 | 同 §2.1 |
+| `alac` | `application/vnd.apple.mpegurl` | 是 | HLS | `alac` |
+| `aac` | `application/vnd.apple.mpegurl` | 否 | HLS | `aac` |
+
+- 其余规则不变：§2.1 选档，§2.2 定采样率、位深与声道，ALAC 按无损的规则。`StreamFormat` 加内部字段 `Delivery`（`stream` | `hls`，`json:"-"`），会话据此选封装与切片，zones 据此给地址。
+
+### 5.7 能力声明（zones 合同 §2.6、§8）
+
+- 合同 §2.6 只增加取值：`codec` 增加 `alac`；`mime_type` 为 `application/vnd.apple.mpegurl` 表示 HLS（分片是 fMP4，里面是 `codec`），其他是长流。不加新字段。
+- 浏览器的两项 HLS 候选：
+
+| `codec` | `mime_type` | `lossless` | `max_sample_rate` | `max_bit_depth` | 探测（`canPlayType` 都非空） |
+| --- | --- | --- | --- | --- | --- |
+| `alac` | `application/vnd.apple.mpegurl` | true | 按 H4 | 按 H4 | 播放列表类型，与 `audio/mp4; codecs="alac"` |
+| `aac` | `application/vnd.apple.mpegurl` | false | 48000 | — | 播放列表类型，与 `audio/mp4; codecs="mp4a.40.2"` |
+
+- **何时声明**：两项都能探测到、且音量只读（合同 §8 已有的“写 0.5 读回”，只有 iPhone/iPad 的网页如此）时，**只声明这两项**，不声明 §3 的长流候选；否则照旧只用 §3 的四项。
+  长流在 iOS 上锁屏没有回报、FLAC/WAV 要伪长度，不能当退路。macOS Safari 也能放 HLS，但用户裁决桌面用长流；按音量只读区分，正好把 UA 冒充 macOS 的 iPadOS 也算进来，不需要识别 UA。
+- 只用 `canPlayType`，不用 `mediaCapabilities.decodingInfo`（iOS 对能放的格式也报不支持）。
+- AAC 写 48 kHz：iOS 上 96 kHz AAC 没验证，256 kbps 下也没有收益；P-c 已按声明的 `max_sample_rate` 同族减半，不用改代码。
+
+### 5.8 锁屏信息
+
+- 输出端在 `Stream.segments` 的曲目边界设置完整的 `MediaMetadata`（标题、艺人、专辑、封面）与 `setPositionState`（曲目时长、曲目内位置），由 `timeupdate` 驱动；
+  锁屏下至少每 5 秒一次，边界最多晚这么久。只给标题时 iOS 锁屏不显示（已验证）。现有 `MediaSessionBinding` 已经这样做，HLS 不用改。
+- 增长型列表的 `duration` 是 `Infinity`，锁屏进度条是否按 `setPositionState` 显示、HLS 播放中途换曲目信息，归 E 的真机核对（prd 已裁决），不影响本设计。
+
+### 5.9 反代与改动的文件
+
+- **反代没有新要求**：HLS 都是普通短请求，播放列表最多等 10 秒，在现有 60 秒读超时内；nginx 播放区 location 的 `gzip off` 不影响应用自己压缩的播放列表。长流的要求仍为桌面保留，部署 README 不改。
+- 端口（zones 定义，算法线实现）：
+
+```go
+type HLSMedia interface {
+	Playlist(ctx context.Context) ([]byte, error) // 不足 3 片且流没结束时等待，最多 10 秒
+	Init() ([]byte, error)
+	Segment(n int64) ([]byte, error)              // 没产出或已删除：ErrSegmentMissing；会话已关闭或出错：ErrStreamGone
+}
+// RenderSession 增加 HLS() HLSMedia：Delivery 为 hls 时非 nil，此时 Body() 立即 EOF；长流为 nil。
+```
+
+| 文件 | 改动 |
+| --- | --- |
+| `playback/render/hls.go`（新） | 切片器（读顶层 box、片长）、分片仓库（保留窗口）、播放列表（等待、ENDLIST） |
+| `render/encode.go`、`negotiate.go`、`session.go` | HLS 的封装参数与 stdout 去向；`(codec, mime_type)` 配对表与 `Delivery`；`HLS()` 与按播放头删旧片 |
+| `zones/ports.go`、`render_events.go`、`outputs.go` | 端口；按 `Delivery` 给 `Stream.url`；按 `TakeStream` 的检查取 `HLSMedia`，但不置 `taken` |
+| `zones/httpapi/handlers.go`、`stream.go` | `GET …/streams/{seq}/{file}`，文件名只认 `index.m3u8`、`init.mp4`、`<数字>.m4s`；播放列表 gzip；分片 `ServeContent` |
+| `frontend/src/features/player/output/capabilities.ts` | §5.7 的候选与声明规则 |
+
+### 5.10 实现前要补的小验证
+
+复用 `ios-probe`，加 G–J 四项（约 15 分钟）。HLS 按 §5.1–§5.2 实时生成：ffmpeg 分片 MP4 写管道、Go 切片、EVENT 列表、领先 20 秒；在八号机经 HTTPS 反代访问，
+页面加载时探针设一个 HttpOnly、SameSite=Lax 的测试 Cookie，HLS 请求的日志只记 Cookie 有无。
+
+| 编号 | 用例 | 判定 | 失败时 |
+| --- | --- | --- | --- |
+| H1 | 下面任一 HLS 用例 | 播放列表、初始化段、分片三类请求都带测试 Cookie | 交主会话裁决（流地址要带凭据就得改合同 §1） |
+| H2 | EVENT 列表 ALAC 44.1/16，每 30 秒换音高，10 分钟后写 ENDLIST；锁屏 | 一直出声到结束并出 `ended`；锁屏时播放列表重取间隔 ≤ 8 秒；第一条回报 `currentTime` < 1 秒（从头起播）；`currentTime` 与墙钟误差 < 0.5 秒/10 分钟、不回退；隐藏时回报间隔 ≤ 10 秒 | 本设计不成立，交主会话裁决 |
+| H3 | a. 锁屏，2 分钟的 EVENT 流放完，在 `ended` 里对已预载的备用元素（另一条 48 kHz、音色不同的流）`play()`；b. 锁屏后用锁屏控件暂停 10 秒再播放，处理函数给元素换新播放列表并 `play()` | 两次都继续出声；日志里新流在 `hidden` 下出 `playing` | a 按 §5.5 的退路；b 按 §4.5 的 V6b 一行（HLS 输出端暂停时不关会话）；都交主会话裁决 |
+| H4 | 不锁屏，依次放 ALAC 44.1/24、96/24、192/24 与 AAC 48 kHz 各 15 秒（VOD 即可） | 都出声 | ALAC 上限按能放的最高值填（192/96/48 kHz；24 位不行就填 16 位） |
+
+H2 同时验锁屏信息：每次换音高时给齐标题、艺人、专辑与封面（各次不同），判定由用户在锁屏上看到信息显示且随之切换（不以页面日志为准）；不显示交主会话裁决。只做这四项；锁屏进度条留给 E。
+
+### 5.11 需要改动的 zones 合同条目（交主会话裁决）
+
+| 位置 | 现在 | 建议 |
+| --- | --- | --- |
+| 合同 §2.2 `Stream` | `url` 注释“服务端给出，客户端不拼接”；`format.codec` 未列 ALAC | `url`：“长流指向流端点（§4.4），HLS 指向播放列表（§4.5）”；`mime_type`：“HLS 为 `application/vnd.apple.mpegurl`”；`format.codec` 可为 `alac` |
+| 合同 §2.6 `stream_formats` | `codec: "flac" \| "wav" \| "opus" \| "aac" \| string`；“具体取值由 dsp-pipeline 的 iOS 验证定” | 增加 `"alac"`；加一句“`mime_type` 为 `application/vnd.apple.mpegurl` 表示 HLS（fMP4 分片里是 `codec`），否则是长流”；取值改指 dsp-pipeline design-delivery.md §3、§5.7 |
+| 合同 §4.4 | 标题“渲染流”；“若 … Safari 先发探测请求 … 改用头部重放”；“是否支持 Range、是否带长度，由 … iOS 验证决定” | 标题改“渲染流（长流）”；删去头部重放一句；改为“不支持 Range、不带长度（design-delivery.md §1.3）” |
+| 合同新增 §4.5 | — | “HLS 流 `GET /zones/{zone_id}/streams/{seq}/{file}`”：文件为 `index.m3u8`、`init.mp4`、`{n}.m4s`；能取的条件同 §4.4 但可重复取；不满足 `410 stream_gone`，片号没产出或已删除 `404 not_found`；EVENT 列表从流开头起、流结束时有 ENDLIST，`stream_seconds` 即列表时间线上的位置 |
+| 合同 §6 | `410 stream_gone`：“… 或这条流已经被取过” | “… 或这条长流已经被取过”；`404 not_found` 的条件加“HLS 分片没产出或已删除” |
+| 合同 §8 “能力”行 | “用 `canPlayType` / `MediaSource.isTypeSupported` 探测 dsp-pipeline 给出的候选” | “只用 `canPlayType`（不用 `mediaCapabilities.decodingInfo`）；HLS 候选都能探测到且音量只读时只声明 HLS 候选，否则只声明长流候选（design-delivery.md §3、§5.7）” |
+| design-protocol.md §3.2 “地址” | “一条流只能被取一次 … iOS 上用长 FLAC/WAV 响应还是 ManagedMediaSource，由 dsp-pipeline 设计（§14）” | “长流只能被取一次；HLS 的播放列表与分片在流有效期内可重复取（合同 §4.5）。iPhone/iPad 用 HLS，桌面用长流（dsp-pipeline design-delivery.md §5）” |
+| design-protocol.md §3.6 | “锁屏信息：… 换 Media Session 的标题与时长”；末条“iOS 风险（须先做小验证）…” | 锁屏信息改为“标题、艺人、专辑、封面与时长（只给标题时 iOS 锁屏不显示）”；末条改为“iOS：已验证并裁决用 HLS（dsp-pipeline prd 2026-11-09），锁屏下页面照常运行、回报照常” |
+| design.md §14 端口 | `RenderSession` 只有 `Body()`；表中“流只能被取一次”“iOS 交付验证 … 结论决定 … 流端点是否需要 Range” | 增加 `HLS() HLSMedia` 与 `HLSMedia` 接口（§5.9），`StreamFormat` 加内部字段 `Delivery`；表中改为“长流只能被取一次，HLS 可重复取”“iOS 用 HLS，已定” |
