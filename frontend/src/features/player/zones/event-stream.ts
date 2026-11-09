@@ -45,7 +45,8 @@ export class SseParser {
 
 export type EventStreamDeps = {
   open: (outputSessionId: string | null, signal: AbortSignal) => Promise<Response>;
-  onEvent: (event: StreamEvent) => void;
+  /** outputSessionId：这条连接打开时带的输出会话（控制端为 null）。 */
+  onEvent: (event: StreamEvent, outputSessionId: string | null) => void;
   /** 页面可见性；没有 document 的环境（测试）可以不给。 */
   visibility?: { hidden: () => boolean; subscribe: (listener: () => void) => () => void } | undefined;
 };
@@ -123,8 +124,9 @@ export class EventStream {
     while (this.token === token) {
       const controller = new AbortController();
       this.abort = controller;
+      const session = this.outputSessionId;
       try {
-        const response = await this.deps.open(this.outputSessionId, controller.signal);
+        const response = await this.deps.open(session, controller.signal);
         if (response.body === null) throw new Error("事件流没有响应体");
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -142,7 +144,7 @@ export class EventStream {
             }
             if (event === null) continue;
             if (event.type === "snapshot") attempt = 0;
-            this.deps.onEvent(event);
+            this.deps.onEvent(event, session);
           }
         }
         controller.abort();

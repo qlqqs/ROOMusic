@@ -197,8 +197,11 @@ export class OutputEndpoint {
     if (stream === null) {
       this.unload(this.active);
       this.unload(this.spare);
-    } else if (this.active.stream?.seq === stream.seq || this.endedSeqs.has(stream.seq)) {
-      // 正在放，或者刚放完换上了接续流、服务端还没跟上。
+    } else if (this.active.stream?.seq === stream.seq) {
+      // 正在放：同一条连续流里服务端会追加分段（无缝、交叉渐变换曲），换成最新的流对象，锁屏信息才能跟到下一首。
+      this.active.stream = stream;
+    } else if (this.endedSeqs.has(stream.seq)) {
+      // 刚放完换上了接续流、服务端还没跟上。
     } else if (this.spare.stream?.seq === stream.seq) {
       // 接续流已被服务端认定为当前流，而这边的当前流已经没有了：直接换上。
       if (this.spare.role === "next" && (this.active.stream === null || this.handsOff())) this.promote(zone.intent === "play");
@@ -437,7 +440,8 @@ export class OutputEndpoint {
     if (failure.status === 404 && failure.code === "output_unknown") this.reclaim();
   }
 
-  private reclaim(): void {
+  /** 会话已失效（回报得 404 output_unknown，或重连后的快照说设备已不在这个会话上）：带上正在放的曲目与位置重新认领。 */
+  reclaim(): void {
     this.reports.close();
     this.sessionId = null;
     this.deps.onSession(null);

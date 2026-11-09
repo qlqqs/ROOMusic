@@ -3,6 +3,7 @@ import { waitFor } from "@testing-library/react";
 import startedSample from "../../../../../backend/internal/app/testdata/api-samples/playback-zones/events/zone-track-started.json";
 import recordedSample from "../../../../../backend/internal/app/testdata/api-samples/playback-zones/events/zone-play-recorded.json";
 import { fakeZoneServer, testPlayerController } from "../../../test/fake-zones";
+import { playerTrack } from "../../../test/player-data";
 import { memoryStorage } from "../../../test/memory-storage";
 import { decodeStreamEvent } from "./decoders";
 import { deviceStorageKey } from "./device";
@@ -74,4 +75,36 @@ it("首个快照中的 track_started 不再公告，随后 play_recorded 只通�
   await waitFor(() => expect(controller.getSnapshot().zone?.revision).toBe(newerZone.revision));
   expect(controller.getSnapshot().event).toEqual(recorded.event);
   expect(onPlayRecorded).toHaveBeenCalledTimes(1);
+});
+
+it("重连后的快照说设备已不在本会话上：带正在放的条目与位置重新认领，不先卸载媒体", async () => {
+  const server = fakeZoneServer();
+  const pushes: ((text: string) => void)[] = [];
+  const openEventStream = vi.fn(async (session: string | null) => {
+    const body = new ReadableStream<Uint8Array>({ start(sink) { if (session !== null) pushes.push((text) => sink.enqueue(new TextEncoder().encode(text))); } });
+    return new Response(body);
+  });
+  const { controller, playing } = testPlayerController(server, { audio: true, deps: { api: { ...server.api, openEventStream } } });
+  controllers.push(controller);
+  controller.attach();
+  await waitFor(() => expect(server.claims).toHaveLength(1));
+  controller.playTracks([playerTrack("一")]);
+  await waitFor(() => expect(playing()).toBeDefined());
+  const audio = playing();
+  if (audio === undefined) throw new Error("没有在放的元素");
+  audio.beginPlaying();
+  audio.tick(12);
+  await waitFor(() => expect(pushes.length).toBeGreaterThan(0));
+  const entryId = controller.getSnapshot().current?.entryId;
+  // 服务重启：带旧会话重连的事件流照常返回快照，但设备离线、没有输出会话。
+  const device = server.device();
+  const offline = {
+    device_id: device.deviceId, zone_id: device.zoneId, name: device.name, kind: "browser", online: false, last_seen_at: "2026-01-01T00:00:00.000Z",
+    volume: device.volume, muted: device.muted, capabilities: { volume: "number" }, output_session_id: null,
+  };
+  pushes.at(-1)?.(`event: snapshot\ndata: ${JSON.stringify({ server_time: "2026-01-01T00:00:00.000Z", protocol: 1, devices: [offline], zones: [] })}\n\n`);
+  await waitFor(() => expect(server.claims).toHaveLength(2));
+  expect(server.claims[1]).toMatchObject({ takeover: false, playing: { entry_id: entryId, position_seconds: 12 } });
+  expect(audio.src).not.toBe("");
+  expect(audio.paused).toBe(false);
 });

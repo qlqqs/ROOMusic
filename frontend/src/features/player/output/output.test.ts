@@ -141,6 +141,20 @@ describe("输出端对齐", () => {
     expect(h.metadata).toHaveBeenLastCalledWith({ title: second.title, artist: second.artist, album: second.albumTitle, artwork: [{ src: "https://roomusic.test/artwork/cover-2" }] });
   });
 
+  it("同一条流追加了下一首的分段后，锁屏信息在边界换成下一首", async () => {
+    const h = await harness();
+    const first = playerTrack("一");
+    const second = playerTrack("二");
+    const opening: ZoneStream = { ...stream(1), segments: [{ entryId: "entry-1", track: first, streamStartSeconds: 0, trackStartSeconds: 0 }] };
+    const audio = h.start(opening);
+    expect(h.metadata).toHaveBeenLastCalledWith(expect.objectContaining({ title: first.title }));
+    // 服务端在同一条流（同一个 seq）里追加第二首的分段，元素不重新加载。
+    h.align({ revision: 11, stream: { ...opening, segments: [...opening.segments, { entryId: "entry-2", track: second, streamStartSeconds: 20, trackStartSeconds: 0 }] } });
+    expect(audio.sources).toEqual([opening.url]);
+    audio.tick(20);
+    expect(h.metadata).toHaveBeenLastCalledWith(expect.objectContaining({ title: second.title }));
+  });
+
   it("首曲打不开的空流未触发 playing 就出错，仍能换上晚到的接续流", async () => {
     const h = await harness();
     const empty: ZoneStream = { ...stream(1), format: null, segments: [] };

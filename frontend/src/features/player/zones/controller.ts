@@ -383,11 +383,17 @@ export class PlayerController {
     this.output?.unlock();
   };
 
-  private readonly onStreamEvent = (event: StreamEvent): void => {
+  private readonly onStreamEvent = (event: StreamEvent, session: string | null): void => {
     switch (event.type) {
-      case "snapshot":
+      case "snapshot": {
+        // 带着本标签页的输出会话连上，快照却说设备不在线或会话不是它：会话已失效（服务重启）。
+        // 先重新认领（此时取正在放的条目与位置），再应用快照；认领前输出端不对齐，不会因快照里的 stream: null 卸载媒体。
+        const output = this.output;
+        const device = event.snapshot.devices.find((item) => item.deviceId === this.deviceId);
+        if (output !== null && session !== null && session === output.session && device !== undefined && (!device.online || device.outputSessionId !== session)) output.reclaim();
         this.store.applySnapshot(event.snapshot);
         return;
+      }
       case "zone":
         this.store.applyZone(event.zone);
         return;
