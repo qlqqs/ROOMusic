@@ -48,9 +48,9 @@ export ROOMUSIC_TEST_FFMPEG="$(scripts/ffmpeg-pinned.sh)"
 
 ## P-h iOS：HLS 交付（design-delivery.md §5；小验证现在就可做，实现在 P-c 合入、§5.11 的合同改动裁决之后）
 
-1. [ ] 后端 GPT：在 `ios-probe` 分支加 G–J（§5.10 H1–H4：HLS 按 §5.1–§5.2 实时生成，测试 Cookie 只记有无）。主会话部署到八号机，经 HTTPS 反代；用户在 iPhone 上测约 15 分钟。
+1. [x] 后端 GPT：在 `ios-probe` 分支加 G–J（§5.10 H1–H4：HLS 按 §5.1–§5.2 实时生成，测试 Cookie 只记有无）。主会话部署到八号机，经 HTTPS 反代；用户在 iPhone 上测约 15 分钟。
        主会话按结果填 §5.7 ALAC 的上限；任一项落到“交主会话裁决”就先停在这里。
-2. [ ] 主会话：按 §5.11 改 zones 合同与协议文档（与 B3 的收尾一起裁决）。
+2. [x] 主会话：按 §5.11 改 zones 合同与协议文档（与 B3 的收尾一起裁决）。
 3. [ ] 后端 GPT：`render`：`(codec, mime_type)` 配对表与 `Delivery`（§5.6）、分片 MP4 封装参数（§5.2）、`hls.go` 切片器与分片仓库与播放列表（§5.1–§5.3）、`HLS()`；
        `zones`：`HLSMedia` 端口、按 `Delivery` 给 `Stream.url`、取媒体不置 `taken`；`zones/httpapi`：`GET …/streams/{seq}/{file}`、文件名校验、播放列表 gzip、分片 `ServeContent`（§5.4、§5.9）。
 4. [ ] 前端 Opus（新开一个子 agent）：`output/capabilities.ts` 按 §5.7 声明候选（只用 `canPlayType`）。不加任何界面文案。
