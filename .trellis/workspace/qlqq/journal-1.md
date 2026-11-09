@@ -1838,3 +1838,53 @@ F 线变基到含 P 线的 main（迁移改为 0023/0024），导出树全量全
 ### Next Steps
 
 - 部署八号机需另行征求用户确认（升级后首扫会完整重新解析一次）
+
+
+## Session 50: v0.4.0 发布、八号机部署与扫描工作区清理
+<!-- trellis-session: v=2 fp=97477a1837d1fd51 -->
+
+**Date**: 2026-11-09
+**Task**: v0.4.0 发布、八号机部署与扫描工作区清理
+**Branch**: `main`
+
+### Summary
+
+发布扫描子系统升级；修复 CI 旧测试前提，备份后迁移部署并核实全部身份稳定，清理四条已合入工作区。
+
+### Main Changes
+
+### 发布与部署
+
+- 用户批准提交、推送、发版、部署八号机，并在部署成功后清理扫描 S/O/T/M 工作区。
+- 发布标签 `v0.4.0` 指向 `3e7f17e`；只包含扫描改造与本次两份测试修复，不带其他会话的播放区/DSP 规划提交。
+- 首轮 CI 暴露两条署名展示旧断言及一个归组冲突旧夹具。修复只改测试，保留原有覆盖；第二轮 CI（42546788554）全部通过，Release（42547933389）完成 amd64/arm64 镜像发布。
+- 八号机已从 v0.3.2 更新到 v0.4.0，生产 Compose 固定 `ROOMUSIC_VERSION=0.4.0`。应用和 PostgreSQL 均 healthy，首页、静态资源和 `/readyz` 返回 200。
+- 部署前手动备份成功，迁移前自动备份成功；数据库 0033→0042。284 首曲目、68 个发行的全部 ID 与部署前逐行比较一致。未主动触发生产全库重扫。
+- 自动扫描默认开启，时间为服务配置时区每天 4 点。
+- 四个 Paseo 工作区已归档、worktree 目录和九个已合入的线分支/备份分支已清理；其他工作区未改。忽略的测试证据另存于本机私有证据目录。
+
+### 实际验证命令
+
+- `scripts/release-check.sh v0.4.0`
+- `bash scripts/check-production-compose.sh`
+- `npm run test -- src/app/album-detail.test.tsx`（47/47）
+- `npm run typecheck`
+- `npx --no-install eslint src/app/album-detail.test.tsx`
+- `go vet ./internal/app`、`go build ./internal/app`
+- `go test -v ./internal/app -run '^TestPostgreSQLIssueReviewsSurviveARealRescan$' -count=1 -timeout 3m`
+- `go test -v ./internal/app -run '^TestPostgreSQL(IssueReviewAPI.*|IssueReviewsSurviveARealRescan|IssueReadAPI)$' -count=1 -timeout 3m`（5 个顶层测试、0 SKIP）
+- `gh run watch 42546788554 --exit-status`、`gh run watch 42547933389 --exit-status`
+- 生产 `docker compose -p roomusic config --quiet`、`up -d --no-deps --wait --wait-timeout 300 app`、`exec -T app /app/roomusic --version`；HTTP 与数据库只读检查。
+
+本机仅运行受影响的最小测试集，未重复全量测试；远端发布必需 CI 已执行全量单测、竞态、集成及浏览器门禁。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3e7f17e` | test(scan): 更新归组冲突夹具与署名展示断言 |
+
+### Status
+
+[OK] **Completed**
