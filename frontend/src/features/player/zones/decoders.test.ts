@@ -37,6 +37,7 @@ const settings: Zone["settings"] = {
   crossfadeSeconds: 5,
   quality: "lossless",
   headroom: { enabled: false, db: -3, clipIndicator: false },
+  sampleRate: { strategy: "none", customRate: null, filter: "linear_precise" },
 };
 
 const registeredDevice: Device = {

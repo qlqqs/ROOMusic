@@ -97,7 +97,12 @@
           "enabled": false
         },
         "leveling": "auto",
-        "quality": "lossless"
+        "quality": "lossless",
+        "sample_rate": {
+          "custom_rate": null,
+          "filter": "linear_precise",
+          "strategy": "none"
+        }
       },
       "signal": null,
       "status": "loading",

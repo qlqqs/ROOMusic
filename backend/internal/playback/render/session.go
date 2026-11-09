@@ -3,7 +3,6 @@ package render
 import (
 	"context"
 	"encoding/binary"
-	"errors"
 	"io"
 	"math"
 	"sync"
@@ -29,6 +28,7 @@ type session struct {
 	format                             zones.StreamFormat
 	sourcePCM, outputPCM               chain.Format
 	chain                              *chain.Chain
+	pendingPlan                        *renderPlan
 	player                             *player
 	encoder                            *encoder
 	hls                                *hlsMedia
@@ -61,14 +61,11 @@ type session struct {
 
 func newSession(parent context.Context, owner *Renderer, spec zones.RenderSpec, format zones.StreamFormat, plan renderPlan, track Track, prepareErr error, reservation *ffmpeg.Reservation) (*session, error) {
 	var c *chain.Chain
-	if prepareErr == nil {
+	if prepareErr == nil && len(plan.sampleRate.Stages) == 0 {
 		var err error
-		c, err = chain.Build(chain.Spec{Format: plan.sourcePCM, Stages: plan.stages, User: plan.user, Tail: plan.tail, Headroom: chain.HeadroomSettings{Enabled: spec.Settings.Headroom.Enabled, DB: spec.Settings.Headroom.DB}, OutputBits: format.BitDepth, Seed: 1})
+		c, err = plan.buildChain(spec.Settings, format.BitDepth)
 		if err != nil {
 			return nil, err
-		}
-		if c.OutputFormat() != plan.outputPCM {
-			return nil, errors.New("render: 处理链输出与计划不符")
 		}
 	}
 	ctx, cancel := context.WithCancel(parent)
@@ -91,6 +88,9 @@ func newSession(parent context.Context, owner *Renderer, spec zones.RenderSpec, 
 		_ = writer.Close()
 		s.markReady()
 		return s, nil
+	}
+	if c == nil {
+		s.pendingPlan = &plan
 	}
 	enc, err := newEncoder(ctx, reservation, owner.options.FFmpeg, format, plan.outputPCM, writer, s.hls, s.fail)
 	if err != nil {
@@ -308,6 +308,20 @@ func (s *session) runFailure() {
 func (s *session) run() {
 	defer s.player.close()
 	defer s.encoder.close()
+	if s.pendingPlan != nil {
+		if s.ctx.Err() != nil {
+			return
+		}
+		c, err := s.pendingPlan.buildChain(s.spec.Settings, s.format.BitDepth)
+		if err != nil {
+			s.fail(err)
+			return
+		}
+		s.chain, s.pendingPlan = c, nil
+		if s.ctx.Err() != nil {
+			return
+		}
+	}
 	ticker := s.owner.options.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	var speed speedMonitor

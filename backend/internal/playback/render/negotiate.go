@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/dsp/chain"
+	"github.com/qlqq/roomusic/backend/internal/dsp/src"
 	"github.com/qlqq/roomusic/backend/internal/zones"
 )
 
@@ -67,6 +68,9 @@ func (r *Renderer) Negotiate(caps zones.Capabilities, quality string) (zones.Str
 		if capability.Codec == "opus" && format.MaxSampleRate > 0 && format.MaxSampleRate < 48000 {
 			continue
 		}
+		if capability.Codec == "aac" && format.MaxSampleRate > 0 && format.MaxSampleRate < 44100 {
+			continue
+		}
 		if format.Quality == quality {
 			return format, nil
 		}
@@ -120,24 +124,25 @@ func concreteFormat(spec zones.RenderSpec, source Track) (zones.StreamFormat, re
 	if f.Codec != "wav" {
 		channels = min(channels, 8)
 	}
-	rate := source.SampleRate
-	if lossless && f.MaxSampleRate > 0 {
-		for rate > f.MaxSampleRate {
-			rate /= 2
-		}
-	}
-	if rate < 5 || channels < 1 {
+	if source.SampleRate < 5 || channels < 1 {
 		return f, renderPlan{}, ErrNoStreamFormat
 	}
 	layout := trackLayout(source)
 	if channels != source.Channels {
 		layout = chain.DefaultLayout(channels)
 	}
-	pcm := chain.Format{SampleRate: rate, Channels: channels, Layout: layout}
-	plan := renderPlan{sourcePCM: pcm, outputPCM: pcm}
+	conversion, filter, err := chooseSampleRate(source.SampleRate, spec.Settings.SampleRate, f)
+	if err != nil {
+		return f, renderPlan{}, err
+	}
+	pcm := chain.Format{SampleRate: source.SampleRate, Channels: channels, Layout: layout}
+	out := pcm
+	out.SampleRate = conversion.To
+	plan := renderPlan{sourcePCM: pcm, outputPCM: out, sampleRate: conversion, sampleRateFilter: filter}
 	plan.facts = sourceProcessing(source, spec.Start, spec.Settings, pcm)
+	plan.facts.stages = len(conversion.Stages) > 0
 	f.Layout = layout
-	f.SampleRate, f.Channels, f.BitDepth = rate, channels, 0
+	f.SampleRate, f.Channels, f.BitDepth = out.SampleRate, channels, 0
 	if lossless {
 		f.BitDepth = 24
 		if integerSource(source) && source.BitDepth > 0 && source.BitDepth <= 16 && !hasProcessing(plan.facts) {
@@ -149,22 +154,42 @@ func concreteFormat(spec zones.RenderSpec, source Track) (zones.StreamFormat, re
 		if f.MaxBitDepth > 0 && f.MaxBitDepth < 16 {
 			return f, renderPlan{}, ErrNoStreamFormat
 		}
-	} else if f.Codec == "opus" {
-		f.SampleRate = 48000
-		if f.MaxSampleRate > 0 && f.MaxSampleRate < 48000 {
-			return f, renderPlan{}, ErrNoStreamFormat
-		}
-	} else {
-		maximum := 96000
-		if f.MaxSampleRate > 0 {
-			maximum = min(maximum, f.MaxSampleRate)
-		}
-		for f.SampleRate > maximum {
-			f.SampleRate /= 2
-		}
-		if f.SampleRate < 7350 {
-			return f, renderPlan{}, ErrNoStreamFormat
-		}
 	}
 	return f, plan, nil
+}
+
+// chooseSampleRate 只规划，不生成核；有损交付约束在用户节点之前生效。
+func chooseSampleRate(sourceRate int, document zones.SettingsDocument, f zones.StreamFormat) (src.Plan, string, error) {
+	settings, err := zones.DecodeSettingsDocument[zones.SampleRateSettings](document)
+	if err != nil {
+		return src.Plan{}, "", err
+	}
+	maximum := 768000
+	if f.MaxSampleRate > 0 {
+		maximum = min(maximum, f.MaxSampleRate)
+	}
+	request := src.Request{SourceRate: sourceRate, Strategy: settings.Strategy, Filter: src.Filter(settings.Filter), MaxRate: maximum,
+		Supported: func(rate int) bool { return rate > 0 && rate <= maximum },
+	}
+	if settings.CustomRate != nil {
+		request.CustomRate = *settings.CustomRate
+	}
+	constrained := f.Codec == "opus" || f.Codec == "aac"
+	if constrained {
+		// Choose 的标准集合与实际编码合法率取交集，不先按用户设置升频再让编码器降频。
+		request.Strategy = "none"
+		request.MaxRate = min(maximum, 48000)
+		request.Supported = func(rate int) bool {
+			return rate == 48000 || f.Codec == "aac" && rate == 44100
+		}
+	}
+	plan, err := src.Choose(request)
+	if errors.Is(err, src.ErrStrategyUnavailable) {
+		request.Strategy = "none"
+		plan, err = src.Choose(request)
+	}
+	if err != nil {
+		return src.Plan{}, "", errors.Join(ErrNoStreamFormat, err)
+	}
+	return plan, settings.Filter, nil
 }

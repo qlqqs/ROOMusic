@@ -8,6 +8,8 @@ import {
   crossfadeDurations,
   levelingModes,
   playbackFailureReasons,
+  sampleRateFilters,
+  sampleRateStrategies,
   signalQualities,
   streamQualities,
   type Capabilities,
@@ -44,6 +46,7 @@ function lenient<const V extends readonly string[]>(values: V, fallback: V[numbe
 }
 
 const signalQualityDecoder = lenient(signalQualities, "low");
+const sampleRateFilterDecoder = lenient(sampleRateFilters, "linear_precise");
 
 /** 信号路径的一步（dsp-pipeline 设计 §9.1）；不认识的种类是 null，整步不显示。 */
 const signalStepDecoder: d.Decoder<SignalStep | null> = (input, path) => {
@@ -58,6 +61,10 @@ const signalStepDecoder: d.Decoder<SignalStep | null> = (input, path) => {
     case "convert": {
       const raw = paramsOf(d.object({ from_rate: d.integer({ min: 0 }), to_rate: d.integer({ min: 0 }), by: d.string({ max: 64 }) }));
       return { ...base, kind: "convert", params: { fromRate: raw.from_rate, toRate: raw.to_rate, by: raw.by } };
+    }
+    case "sample_rate": {
+      const raw = paramsOf(d.object({ from_rate: d.integer({ min: 0 }), to_rate: d.integer({ min: 0 }), filter: sampleRateFilterDecoder }));
+      return { ...base, kind: "sample_rate", params: { fromRate: raw.from_rate, toRate: raw.to_rate, filter: raw.filter } };
     }
     case "downmix": {
       const raw = paramsOf(d.object({ from_channels: d.integer({ min: 0 }), to_channels: d.integer({ min: 0 }), by: d.string({ max: 64 }) }));
@@ -112,6 +119,7 @@ const settingsDecoder: d.Decoder<PlaybackSettings> = (input, path) => {
     crossfade_seconds: crossfadeSecondsDecoder,
     quality: lenient(streamQualities, "lossless"),
     headroom: d.object({ enabled: d.boolean(), db: d.number(), clip_indicator: d.boolean() }),
+    sample_rate: d.object({ strategy: lenient(sampleRateStrategies, "none"), custom_rate: d.nullable(d.integer({ min: 0 })), filter: sampleRateFilterDecoder }),
   })(input, path);
   return {
     leveling: raw.leveling,
@@ -120,6 +128,7 @@ const settingsDecoder: d.Decoder<PlaybackSettings> = (input, path) => {
     crossfadeSeconds: raw.crossfade_seconds,
     quality: raw.quality,
     headroom: { enabled: raw.headroom.enabled, db: raw.headroom.db, clipIndicator: raw.headroom.clip_indicator },
+    sampleRate: { strategy: raw.sample_rate.strategy, customRate: raw.sample_rate.custom_rate, filter: raw.sample_rate.filter },
   };
 };
 

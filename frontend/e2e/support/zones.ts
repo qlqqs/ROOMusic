@@ -31,7 +31,7 @@ export function zonesMock(trackOf: (id: string) => TrackSummaryDTO | undefined) 
   const zone = {
     zone_id: MOCK_ZONE, device_id: DEVICE, revision: 1, queue_revision: 0, queue_length: 0,
     mode: "sequential" as Zone["mode"], intent: "pause" as Zone["intent"], status: "idle" as Zone["status"],
-    settings: { leveling: "auto", gapless: true, crossfade: false, crossfade_seconds: 5, quality: "lossless", headroom: { enabled: false, db: -3, clip_indicator: false } },
+    settings: { leveling: "auto", gapless: true, crossfade: false, crossfade_seconds: 5, quality: "lossless", headroom: { enabled: false, db: -3, clip_indicator: false }, sample_rate: { strategy: "none", custom_rate: null as number | null, filter: "linear_precise" } },
     current: null as Entry | null, has_next: false, fault: null, failures: [],
     position: { seconds: 0, at: now(), duration_seconds: null as number | null, seekable: false },
     stream: null as Stream | null, next_stream: null, paused_at: null as string | null, signal: null as unknown,
@@ -259,6 +259,7 @@ export function zonesMock(trackOf: (id: string) => TrackSummaryDTO | undefined) 
             gapless: d.optional(d.boolean()), crossfade: d.optional(d.boolean()),
             crossfade_seconds: d.optional(d.number()), quality: d.optional(d.oneOf(["lossless", "lossy"] as const)),
             headroom: d.optional(d.object({ enabled: d.boolean(), db: d.number(), clip_indicator: d.boolean() })),
+            sample_rate: d.optional(d.object({ strategy: d.oneOf(["none", "max_sample_rate", "power_of_2", "custom"] as const), custom_rate: d.nullable(d.integer()), filter: d.oneOf(["linear_precise", "minimum_precise", "linear_smooth", "minimum_smooth"] as const) })),
           }) })(input, "$" );
           for (const [key, value] of Object.entries(settings)) if (value !== undefined) Object.assign(source.zone.settings, { [key]: value });
           source.zone.revision += 1;

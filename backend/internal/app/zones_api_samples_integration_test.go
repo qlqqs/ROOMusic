@@ -314,6 +314,18 @@ func TestPostgreSQLZonesAPIResponseSamples(t *testing.T) {
 			return true
 		}))
 	}
+	{
+		device := c.device("")
+		c.claim("", device.Device.DeviceID, false, nil)
+		rate := 96000
+		value := zones.SampleRateSettings{Strategy: "custom", CustomRate: &rate, Filter: "minimum_smooth"}
+		settings := c.command("set-settings-sample-rate", device.Zone.ZoneID, map[string]any{"command": "set_settings", "settings": map[string]any{"sample_rate": value}})
+		want, err := zones.NewSampleRateDocument(value)
+		if err != nil || settings.Zone.Settings.SampleRate != want {
+			t.Fatalf("设置样本未保留非默认 sample_rate：%+v，%v", settings.Zone.Settings.SampleRate, err)
+		}
+	}
+
 	samples.finish()
 }
 func (c zonesSampleCalls) commandError(name, id string, body map[string]any, status int) {

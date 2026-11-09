@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -24,7 +25,7 @@ func invalidJSON(w http.ResponseWriter, r *http.Request) {
 	httpserver.WriteError(w, r, http.StatusBadRequest, "invalid_json", "请求格式无效")
 }
 
-// decodeInput 复用平台的大小限制；完整读完后再解码，拒绝尾随 JSON 和超限空白。
+// decodeInput 保持 1 MiB 大小限制；完整读完后再解码，拒绝尾随 JSON 和超限空白。
 // JSON 类型检查先于字段取值检查，未知设置键由调用方映射为 invalid_input。
 func decodeInput(w http.ResponseWriter, r *http.Request, destination any) (inputObject, bool) {
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
@@ -32,8 +33,12 @@ func decodeInput(w http.ResponseWriter, r *http.Request, destination any) (input
 		invalidJSON(w, r)
 		return nil, false
 	}
-	r.Body = io.NopCloser(bytes.NewReader(body))
-	if !httpserver.DecodeJSON(w, r, destination) {
+	if err := json.Unmarshal(body, destination); err != nil {
+		if errors.Is(err, zones.ErrInvalidInput) {
+			invalidInput(w, r)
+		} else {
+			invalidJSON(w, r)
+		}
 		return nil, false
 	}
 	var fields inputObject

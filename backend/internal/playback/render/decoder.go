@@ -85,13 +85,10 @@ func openDecoder(ctx context.Context, starter processStarter, tool *ffmpeg.Tool,
 		}
 		filters = append(filters, "asettb=1/"+strconv.Itoa(track.SampleRate), trim, "asetpts=PTS-STARTPTS")
 	}
-	if track.SampleRate != format.SampleRate {
-		filters = append(filters, resampleFilter(format.SampleRate, tool.Soxr()))
-	}
 	if len(filters) > 0 {
 		args = append(args, "-af", strings.Join(filters, ","))
 	}
-	args = append(args, "-ar", strconv.Itoa(format.SampleRate), "-ac", strconv.Itoa(format.Channels), "-f", pcmKind, "pipe:1")
+	args = append(args, "-ac", strconv.Itoa(format.Channels), "-f", pcmKind, "pipe:1")
 	child, cancel := context.WithCancel(ctx)
 	process, err := starter.Start(child, ffmpeg.StartOptions{Args: args, Source: track.File, ReadTimeout: true})
 	if err != nil {
@@ -107,14 +104,6 @@ func openDecoder(ctx context.Context, starter processStarter, tool *ffmpeg.Tool,
 	}
 	go d.fill(child)
 	return d, nil
-}
-
-func resampleFilter(rate int, soxr bool) string {
-	filter := "aresample=" + strconv.Itoa(rate)
-	if soxr {
-		return filter + ":resampler=soxr:precision=28"
-	}
-	return filter + ":filter_size=64:phase_shift=10"
 }
 
 func (d *decoder) fill(ctx context.Context) {

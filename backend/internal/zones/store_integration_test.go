@@ -168,7 +168,7 @@ func TestPostgreSQLZonesStoreRoundTrip(t *testing.T) {
 		zone.Queue.History == nil || len(zone.Queue.History) != 0 || zone.Queue.Bag == nil || len(zone.Queue.Bag) != 0 {
 		t.Fatalf("默认数组/null字段错误：%+v", zone)
 	}
-	if !zone.Settings.Gapless || zone.Settings.Quality != "lossless" {
+	if !zone.Settings.Gapless || zone.Settings.Quality != "lossless" || zone.Settings.SampleRate != DefaultSampleRateDocument() {
 		t.Fatalf("默认设置错误：%+v", zone.Settings)
 	}
 	a, b, c, x, y := f.entry(0), f.entry(1), f.entry(2), f.entry(3), f.entry(0)
@@ -193,7 +193,9 @@ func TestPostgreSQLZonesStoreRoundTrip(t *testing.T) {
 		zone.Queue.CurrentEntryID, zone.Queue.Mode = y.EntryID, queue.ModeShuffle
 		zone.Queue.History, zone.Queue.Bag = []string{b.EntryID, a.EntryID, b.EntryID}, []string{c.EntryID, a.EntryID}
 		zone.PositionSeconds, zone.PositionSavedAt = 12.5, at.Add(2*time.Minute)
-		zone.Settings = PlaybackSettings{Leveling: "album", Crossfade: true, CrossfadeSeconds: 8, Gapless: false, Quality: "lossy"}
+		sampleRate, err := ParseSampleRateDocument([]byte(`{"strategy":"custom","custom_rate":96000,"filter":"minimum_smooth"}`))
+		requireZonesOK(t, err)
+		zone.Settings = PlaybackSettings{Leveling: "album", Crossfade: true, CrossfadeSeconds: 8, Gapless: false, Quality: "lossy", SampleRate: sampleRate}
 		zone.Revision, zone.QueueRevision, zone.ImportedAt = 7, 4, &at
 		requireZonesOK(t, store.UpdateZone(ctx, user, zone))
 	})

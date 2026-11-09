@@ -1,0 +1,14 @@
+{
+  "body": {
+    "command": "set_settings",
+    "settings": {
+      "sample_rate": {
+        "custom_rate": 96000,
+        "filter": "minimum_smooth",
+        "strategy": "custom"
+      }
+    }
+  },
+  "method": "POST",
+  "path": "/api/v1/me/playback/zones/00000000-0000-4000-8000-000000000001/commands"
+}

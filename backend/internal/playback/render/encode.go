@@ -33,9 +33,6 @@ func newEncoder(ctx context.Context, reservation *ffmpeg.Reservation, tool *ffmp
 		input = "s" + strconv.Itoa(f.BitDepth) + "le"
 	}
 	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-f", input, "-ar", strconv.Itoa(pcm.SampleRate), "-ac", strconv.Itoa(pcm.Channels), "-i", "pipe:0", "-map_metadata", "-1", "-threads", "1"}
-	if pcm.SampleRate != f.SampleRate {
-		args = append(args, "-af", resampleFilter(f.SampleRate, tool.Soxr()))
-	}
 	switch f.Codec {
 	case "flac":
 		args = append(args, "-c:a", "flac", "-compression_level", "5", "-f", "flac")
@@ -46,12 +43,12 @@ func newEncoder(ctx context.Context, reservation *ffmpeg.Reservation, tool *ffmp
 		}
 		args = append(args, "-c:a", "alac", "-sample_fmt", sampleFormat, "-bits_per_raw_sample", strconv.Itoa(f.BitDepth))
 	case "opus":
-		args = append(args, "-c:a", "libopus", "-b:a", "128k", "-application", "audio", "-ar", "48000", "-f", "ogg", "-page_duration", "100000")
+		args = append(args, "-c:a", "libopus", "-b:a", "128k", "-application", "audio", "-ar", strconv.Itoa(pcm.SampleRate), "-f", "ogg", "-page_duration", "100000")
 		if f.Channels > 2 {
 			args = append(args, "-mapping_family", "1")
 		}
 	case "aac":
-		args = append(args, "-c:a", "aac", "-profile:a", "aac_low", "-b:a", "256k", "-ar", strconv.Itoa(f.SampleRate))
+		args = append(args, "-c:a", "aac", "-profile:a", "aac_low", "-b:a", "256k", "-ar", strconv.Itoa(pcm.SampleRate))
 		if f.Delivery == "stream" {
 			args = append(args, "-f", "adts")
 		}

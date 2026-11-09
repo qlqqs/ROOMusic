@@ -87,6 +87,10 @@ func ValidateSettingsShape(raw []byte) error {
 			if !validHeadroomShape(value) {
 				return ErrInvalidInput
 			}
+		case "sample_rate":
+			if !validSampleRateShape(value) {
+				return ErrInvalidInput
+			}
 		default:
 			return ErrInvalidInput
 		}
@@ -117,4 +121,48 @@ func settingsObject(raw []byte) (map[string]json.RawMessage, bool) {
 
 func isSettingsNull(raw []byte) bool {
 	return bytes.Equal(bytes.TrimSpace(raw), []byte("null"))
+}
+
+// UnmarshalJSON 将算法完整文档送入所属解析入口，不能直接解码 SettingsDocument。
+func (p *SettingsPatch) UnmarshalJSON(raw []byte) error {
+	type plain SettingsPatch
+	var decoded plain
+	wire := struct {
+		*plain
+		SampleRate json.RawMessage `json:"sample_rate"`
+	}{plain: &decoded}
+	if err := json.Unmarshal(raw, &wire); err != nil {
+		return err
+	}
+	if wire.SampleRate != nil {
+		document, err := ParseSampleRateDocument(wire.SampleRate)
+		if err != nil {
+			return err
+		}
+		decoded.SampleRate = &document
+	}
+	*p = SettingsPatch(decoded)
+	return nil
+}
+
+// UnmarshalJSON 供 DTO 消费方恢复规范设置；共享文档本身不接受任意 JSON。
+func (p *PlaybackSettings) UnmarshalJSON(raw []byte) error {
+	type plain PlaybackSettings
+	var decoded plain
+	wire := struct {
+		*plain
+		SampleRate json.RawMessage `json:"sample_rate"`
+	}{plain: &decoded}
+	if err := json.Unmarshal(raw, &wire); err != nil {
+		return err
+	}
+	if wire.SampleRate != nil {
+		document, err := ParseSampleRateDocument(wire.SampleRate)
+		if err != nil {
+			return err
+		}
+		decoded.SampleRate = document
+	}
+	*p = PlaybackSettings(decoded)
+	return nil
 }

@@ -36,3 +36,9 @@
 .slider input { width: 220px; max-width: 100%; min-height: 24px; accent-color: var(--text-accent); }
 .slider input:disabled { cursor: not-allowed; }
 .sliderValue { min-width: 7ch; font-size: var(--fs-13); font-variant-numeric: tabular-nums; }
+
+/* 下拉选择：与其他控件同高，细边框。 */
+.select { min-height: var(--control-height); padding: 4px 8px; border: 1px solid var(--color-control-border); border-radius: var(--radius-md); background: transparent; color: var(--text-primary); font: inherit; font-size: var(--fs-13); }
+.select:hover:not(:disabled) { border-color: var(--color-neutral-800); }
+.select:focus-visible { border-color: var(--color-accent-700); outline-offset: 0; }
+.select:disabled { cursor: not-allowed; }
