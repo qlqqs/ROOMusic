@@ -1,10 +1,10 @@
-# 服务端渲染合同（P-c、G-2、D-2、P-e）
+# 服务端渲染合同（P-c、G-2、D-2、P-e、P-g）
 
 ## 1. 范围
 
 `playback/render` 实现 `zones.Renderer`，通过消费方端口 `TrackSource` 获取已经安全打开的文件和分析结果；不导入 playback、catalog，不连接数据库。`render/ffmpeg` 是标准库叶子包。app 是唯一装配根。
 
-G-2 在同一 PCM 入口接入无缝、交叉淡化、就绪超时与静音间隔，长流与 HLS 共用；D-2 / P-e 提供抖动出口、Headroom、削波指示与完整信号路径。本次 G-2 接入不涉及 CUE 放行（P-g）与派生退役（P-d）等其他子项。
+G-2 在同一 PCM 入口接入无缝、交叉淡化、就绪超时与静音间隔，长流与 HLS 共用；D-2 / P-e 提供抖动出口、Headroom、削波指示与完整信号路径。P-g 放行 CUE 虚拟分轨，来源与截取合同见 §10；派生退役（P-d）另行处理。
 
 ## 2. 签名
 
@@ -12,7 +12,7 @@ G-2 在同一 PCM 入口接入无缝、交叉淡化、就绪超时与静音间�
 - `Tool.Reserve(ctx, n) (*Reservation, error)` 原子预留多个名额；`Reservation.Start(ctx, StartOptions)`、`Tool.Start(ctx, StartOptions)` 返回 `*Process`。
 - `Process` 实现 Read/Write/Wait/Close，另有 CloseInput、Stdout。Source 经 fd 3 借用，所有者仍须关闭原句柄。自然结束先 CloseInput、读到 EOF、Wait，最后必须 Close。
 - `render.New(Options{FFmpeg, Sources, Clock, NewTicker, Logger}) *Renderer`；实现 zones 两个端口；`Renderer.Close()` 等待资源回收。
-- `TrackSource.Prepare(ctx, userID, trackID) (Track, error)`；Track 包含源格式、IsFloat、文件、时长、发行、首尾静音、曲目/专辑增益。`CueStartFrame/CueEndFrame` 以源 PCM 帧计，是未来截取挂点，不是 CUE 75 Hz 索引。
+- `TrackSource.Prepare(ctx, userID, trackID) (Track, error)`；Track 包含源格式、IsFloat、文件、时长、发行、首尾静音、曲目/专辑增益。`CueStartFrame/CueEndFrame` 以源 PCM 帧计，用于 CUE 截取，不是数据库的 CUE 75 Hz 索引。
 - `playback.WithRenderDecoders(RenderDecoders)`、`Service.RenderFormats() []Format`、`Service.OpenForRender(ctx, trackID) (*RenderSource, error)`；RenderDecoders 只含 HasDecoder。
 - `app.OpenRenderer(ctx, settings, logger) (*ffmpeg.Tool, error)`；`app.WithRenderer(tool)` 注入工具，由 app 组合 playback 和 catalog 公开合同。
 
@@ -36,9 +36,9 @@ G-2 在同一 PCM 入口接入无缝、交叉淡化、就绪超时与静音间�
 | --- | --- |
 | 来源不存在或非 present | not_found |
 | 目录停用 | root_disabled |
-| 非可渲染组合、CUE 或缺少对应解码器 | unsupported_format |
+| 非可渲染组合或缺少对应解码器 | unsupported_format |
 | 安全打开失败、文件非普通文件或逃逸 | source_unavailable |
-| 扫描大小/修改时间/容器不符 | source_changed |
+| 扫描大小/修改时间/容器不符，或 CUE 父路径/区间记录不完整 | source_changed |
 | 解码启动失败、超时、空样本、非零退出 | decode_failed |
 | 数据库/取消等非曲目错误 | transient，不冒充曲目失败 |
 | 获取进程名额超时 | ErrBusy |
@@ -84,3 +84,32 @@ G-2 在同一 PCM 入口接入无缝、交叉淡化、就绪超时与静音间�
 - `NextChanged` 未预取时无事；预取未进入链时关闭旧来源并立即重取重判；已经宣布边界时只更新接续流；已编码但未播放的换轨要求 `rebuild_needed`。`NextChanged` 从原子快照锁存通知时的换轨状态，不因渲染协程处理前播放头推进而漏掉重建；仍不等待会话锁。编码结束后不能恢复追加 PCM；无后继的已宣布边界沿用重建语义。
 
 测试由独立测试 agent 补充设计 §6 的逐位拼接、边界、条件表、五秒超时、间隔与队列变化。实现自查只运行 `go build ./...`、`go vet ./internal/playback/render/...`、固定 ffmpeg 下的 `go test ./internal/playback/render/... -count=1`，不把既有测试通过视作新增场景已经覆盖。
+
+
+## 10. P-g CUE 虚拟分轨
+
+依据：dsp-pipeline 的 prd.md P12、design.md §4.1 / §4.2 / §10.1、implement.md P-g。
+
+- `catalog.TrackSource` 增加 `CueParentRelativePath *string`、`CueIndexFrames/CueEndFrames *int32`，沿用 `TrackAnalysisCandidate` 的来源字段与单位。扫描器直接保存 parser 的 75 Hz 索引，没有换成样本帧；大小、修改时间、编码与音频参数取自父音频。
+- `cue_virtual` 只在渲染表放行已支持的父音频编码，并仍按解码器能力过滤，交付类型为 `derived`。旧直出表不变；未知父编码仍拒绝。信号路径 `source` 使用父音频的 `Codec`，不把 CUE 当作编码。
+- 分析工作者与播放入口共用 `sourceAudioPath` 和 `openScannedSource`。渲染仍按来源 present → 目录启用 → 格式表 → 允许根 → 安全打开父文件 → 大小/微秒修改时间 → 容器的顺序核对；CUE 父路径缺失返回 `source_changed`，不尝试打开虚拟路径。分析保留自身的错误分类，不新增播放格式限制。
+- 渲染来源边界把起、止索引**分别**换算为 `int64(index) * int64(sampleRate) / 75`，区间为 `[start,end)`。非整除采样率向下对齐到源样本边界；不得改为对持续时间取整后加到起点。比如 32 kHz 的索引 1、2 分别为样本 426、853，中间段长 427 帧；前轨终点与后轨起点始终相同。缺少起点、负起点、倒置区间或缺少采样率返回 `source_changed`；结束索引为 nil 则一直解到父音频 EOF。
+- `render/decoder.go` 复用 `pcmRange`；CUE 使用输入侧 `-copyts -ss <coarseSeconds> -noaccurate_seek` 粗定位，保留实际解码块的源绝对时间戳。滤镜依次为 `asettb=1/<源采样率>`、`atrim=start_pts=<start>[:end_pts=<end>]`、`asetpts=PTS-STARTPTS`，最后才做需要的重采样。`start_pts/end_pts` 因时间基为一个源样本而直接使用绝对样本位置，不从粗定位落点重新计数；不使用 `-start_at_zero` 或在截取前重置 PTS。
+- 粗定位为 `max(0, start / sampleRate - 1)` 整秒，即通常向前留 1–2 秒，靠近文件开头时取 0。此余量不是容器块长度的上限：FFmpeg 7.1.1 输入 seek 的最大时间戳就是请求落点，解复用器向前找可解码块，因此长块由容器索引自身处理。例如 APE extra-high 的 294912 样本块在 44.1 kHz 下约 6.69 秒，不必再人为预解码整张专辑或额外退回一个最大块。整数秒避免微秒换算触及精确切点；`-noaccurate_seek` 不让输入侧另做精确丢弃，真实起止统一由绝对 PTS 截取。没有从头解码的回退分支。
+- CUE 内 seek 先把曲内秒数四舍五入为样本帧，加到 CUE 起点，再走同一粗定位和绝对样本截取路径。结束索引为 nil 时不设置 `end_pts`，读取父文件 EOF；普通曲目保持原输入侧 `-ss`。
+- 相对 design.md §4.2 的差异：CUE 的输入侧 `-ss` 只负责提前到达附近，不承担样本精确定位；用绝对 PTS 截取替代按输出字节数截断，并让重采样器自然冲刷。取消此前从文件开头解码的实现，避免靠后分轨的预解码时间随整轨位置增长；现有 5 秒换轨等待与 10 秒读取超时不变。
+- G-2 的源格式比较、同发行不淡化、整数精确量化直接复用，不增加 CUE 专用换轨路径。关闭处理且输出格式不变时，相邻无损整数轨的源样本连续，保持 `Exact`。
+- 必需验收由测试 agent 补充：非零起点、相邻两轨完整渲染后 PCM MD5、非整除采样率的共享切点、无结束索引到 EOF、父文件变更/逃逸拒绝、信号路径父编码。既有用例通过不代表这些新增端到端场景已经覆盖。
+
+### P-g 粗定位的临时验证（2026-11-09）
+
+- 固定 `ROOMUSIC_TEST_FFMPEG=/home/qlqq/.cache/roomusic/ffmpeg-11a44711684c/ffmpeg`（7.1.1）。WAV、FLAC、ALAC、AIFF、WavPack × 32/44.1/96 kHz × 16/24 bit 共 30 组，原近零切点及实际触发粗定位的非零切点均逐字节相等；同时核对相邻区间拼接、无结束帧到 EOF、非整样本秒数的曲内 seek。全部使用临时合成素材，未新增仓库测试。
+- 性能素材为 70 分钟、44.1 kHz/16 bit 双声道的合成正弦加噪声 WAV，编码为 APE 3990、extra-high（4000），每压缩块 294912 样本。目标起点为第 60 分钟。新命令另外核对了该位置的相邻区间、曲内 seek 以及接近整轨结尾的无结束帧截取，均逐字节等于 WAV 对应区间。
+- 测量口径为打开源文件至固定 ffmpeg 输出首个完整 32 KiB PCM 块，包含子进程启动，不包含 catalog 查询和进程名额等待。改前/改后交替各运行三次，不清除系统文件缓存；直接运行解码命令，不套生产 10 秒超时，以便测出旧命令的真实等待时间（生产旧路径会先超时）。预缓冲列表示读出 3.3 秒 PCM，而不是数据库/API 端到端耗时。
+
+| 命令 | 首块 PCM 三次耗时（秒） | 首块中位数（秒） | 3.3 秒 PCM 中位数（秒） |
+| --- | --- | --- | --- |
+| 改前：从头解码，`start_sample/end_sample` | 28.860 / 28.522 / 29.043 | 28.860 | 28.886 |
+| 改后：粗定位、绝对 PTS 截取 | 0.03145 / 0.03166 / 0.02941 | 0.03145 | 0.05665 |
+
+性能测量输出的 PCM 同时与原 WAV 核对；这组数字只代表本机与该合成 APE，不承诺所有容器或设备的延迟上限。完整播放区新增回归仍由测试 agent 负责。

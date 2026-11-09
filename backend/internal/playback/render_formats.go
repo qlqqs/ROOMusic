@@ -22,12 +22,25 @@ var renderFormatTable = []Format{
 	{SourceKind: "aiff_id3", Codec: "aiff", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerAIFF},
 	{SourceKind: "wav_info", Codec: "ieee_float", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerWAV},
 	{SourceKind: "wav_info", Codec: "wav_extensible", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerWAV},
+	// CUE 沿用父音频编码与容器，只能经渲染截取后交付。
+	{SourceKind: "cue_virtual", Codec: "flac", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerFLAC},
+	{SourceKind: "cue_virtual", Codec: "mp3", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerMP3},
+	{SourceKind: "cue_virtual", Codec: "pcm", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerWAV},
+	{SourceKind: "cue_virtual", Codec: "aac", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerMP4},
+	{SourceKind: "cue_virtual", Codec: "vorbis", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerOgg},
+	{SourceKind: "cue_virtual", Codec: "opus", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerOgg},
+	{SourceKind: "cue_virtual", Codec: "alac", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerMP4},
+	{SourceKind: "cue_virtual", Codec: "ape", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerAPE},
+	{SourceKind: "cue_virtual", Codec: "wavpack", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerWavPack},
+	{SourceKind: "cue_virtual", Codec: "wavpack_hybrid", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerWavPack},
+	{SourceKind: "cue_virtual", Codec: "aiff", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerAIFF},
+	{SourceKind: "cue_virtual", Codec: "ieee_float", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerWAV},
+	{SourceKind: "cue_virtual", Codec: "wav_extensible", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerWAV},
 }
 
 // RenderFormats 返回可渲染组合的副本；只发布至少有一种对应解码器的组合。
 // PCM 组合的具体位深与扩展 WAV 子类型在安全打开后再次核对。
 // 保留原六项的表示字段；原派生项和新增 WAV 项仍以 derived 表示服务端处理交付。
-// 此入口不启用 CUE。
 func (service *Service) RenderFormats() []Format {
 	formats := make([]Format, 0, len(formatTable)+len(renderFormatTable))
 	if service.renderDecoders == nil {

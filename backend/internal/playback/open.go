@@ -33,11 +33,38 @@ type openedSource struct {
 	ETag string
 }
 
-// openVerified 在 rootPath 内只读打开 relativePath，并核对它仍是扫描时的那个文件。rootPath 必须已经通过允许根校验。
-//
-// 安全性依赖三点：os.Root 拒绝 ".." 与逃出根目录的符号链接；O_NONBLOCK 让检查之后被换成 FIFO 的路径也不会阻塞打开；
-// 之后只对已打开的句柄做 fstat 与读取，不再按路径访问，所以“检查后替换”不能让读取越界。源文件始终只读。
+// sourceAudioPath 与后台分析共用来源定位；虚拟路径不能作为音频文件打开。
+func sourceAudioPath(kind, relative string, cueParent *string) (string, error) {
+	if kind != "cue_virtual" {
+		return relative, nil
+	}
+	if cueParent == nil || *cueParent == "" {
+		return "", fmt.Errorf("%w: scan record has no CUE parent", ErrSourceChanged)
+	}
+	return *cueParent, nil
+}
+
+// openVerified 在扫描快照核对后检查容器；rootPath 必须已经通过允许根校验。
 func openVerified(rootPath, relativePath string, expected expectedSource, kind container, trackID string) (*openedSource, error) {
+	opened, err := openScannedSource(rootPath, relativePath, expected, trackID)
+	if err != nil {
+		return nil, err
+	}
+	matches, err := matchesContainer(opened.File, opened.Size, kind)
+	if err != nil {
+		_ = opened.File.Close()
+		return nil, fmt.Errorf("%w: read file header: %w", ErrSourceUnavailable, err)
+	}
+	if !matches {
+		_ = opened.File.Close()
+		return nil, fmt.Errorf("%w: container does not match the format", ErrSourceChanged)
+	}
+	return opened, nil
+}
+
+// openScannedSource 与分析工作者共用安全打开和扫描快照核对，不要求分析输入在播放格式表内。
+// os.Root 拒绝逃逸，O_NONBLOCK 防止 FIFO 阻塞；打开后只对句柄检查，不再次按路径访问。
+func openScannedSource(rootPath, relativePath string, expected expectedSource, trackID string) (*openedSource, error) {
 	root, err := os.OpenRoot(rootPath)
 	if err != nil {
 		return nil, fmt.Errorf("%w: open root: %w", ErrSourceUnavailable, err)
@@ -47,7 +74,7 @@ func openVerified(rootPath, relativePath string, expected expectedSource, kind c
 	if err != nil {
 		return nil, fmt.Errorf("%w: open file: %w", ErrSourceUnavailable, err)
 	}
-	opened, err := verifyHandle(file, expected, kind, trackID)
+	opened, err := verifyScanSnapshot(file, expected, trackID)
 	if err != nil {
 		_ = file.Close()
 		return nil, err
@@ -55,7 +82,7 @@ func openVerified(rootPath, relativePath string, expected expectedSource, kind c
 	return opened, nil
 }
 
-func verifyHandle(file *os.File, expected expectedSource, kind container, trackID string) (*openedSource, error) {
+func verifyScanSnapshot(file *os.File, expected expectedSource, trackID string) (*openedSource, error) {
 	info, err := file.Stat()
 	if err != nil {
 		return nil, fmt.Errorf("%w: stat file: %w", ErrSourceUnavailable, err)
@@ -69,13 +96,6 @@ func verifyHandle(file *os.File, expected expectedSource, kind container, trackI
 	}
 	if info.Size() != *expected.Size || !info.ModTime().UTC().Truncate(time.Microsecond).Equal(expected.ModifiedAt.UTC()) {
 		return nil, fmt.Errorf("%w: size or modification time differs", ErrSourceChanged)
-	}
-	matches, err := matchesContainer(file, info.Size(), kind)
-	if err != nil {
-		return nil, fmt.Errorf("%w: read file header: %w", ErrSourceUnavailable, err)
-	}
-	if !matches {
-		return nil, fmt.Errorf("%w: container does not match the format", ErrSourceChanged)
 	}
 	return &openedSource{File: file, Size: info.Size(), ETag: entityTagValue(trackID, expected, info.Size())}, nil
 }

@@ -42,7 +42,7 @@ type Format struct {
 }
 
 // formatTable 是直出格式表，只保留拿到验证证据的组合（见 M2a 设计的格式表）：表中格式都经真实 Chromium 自动化用合成样本验证。
-// 不在表中的组合一律不直出：m4a/alac（通过渲染交付）、cue_virtual（需要精确切分，另行规划）、
+// 不在表中的组合一律不直出：m4a/alac（通过渲染交付）、cue_virtual（仅经渲染精确切分交付）、
 // ieee_float、wav_extensible 与其他 WAV 编码、未知组合。
 var formatTable = []Format{
 	{SourceKind: "flac_vorbis_comment", Codec: "flac", Delivery: DeliveryOriginal, MIMEType: "audio/flac", container: containerFLAC},

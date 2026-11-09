@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -66,12 +67,29 @@ func openDecoder(ctx context.Context, starter processStarter, tool *ffmpeg.Tool,
 		pcmKind = "s32le"
 	}
 	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-threads", "1", "-protocol_whitelist", "file,pipe"}
-	if span.start > 0 {
+	cue := track.CueStartFrame != nil || track.CueEndFrame != nil
+	if cue {
+		// 粗定位向前留至少一秒，容器再回到此前的可解码块；保留其绝对时间戳供精确截取。
+		seekSeconds := max(int64(0), span.start/int64(track.SampleRate)-1)
+		args = append(args, "-copyts", "-ss", strconv.FormatInt(seekSeconds, 10), "-noaccurate_seek")
+	} else if span.start > 0 {
 		args = append(args, "-ss", strconv.FormatFloat(float64(span.start)/float64(track.SampleRate), 'f', 9, 64))
 	}
 	args = append(args, "-i", "file:/dev/fd/3", "-map", "0:a:0", "-vn", "-map_metadata", "-1", "-threads", "1")
+	var filters []string
+	if cue {
+		// 先把时间基设为一个源样本，再按绝对样本位置截取，不从粗定位落点重新数样本。
+		trim := "atrim=start_pts=" + strconv.FormatInt(span.start, 10)
+		if span.end != nil {
+			trim += ":end_pts=" + strconv.FormatInt(*span.end, 10)
+		}
+		filters = append(filters, "asettb=1/"+strconv.Itoa(track.SampleRate), trim, "asetpts=PTS-STARTPTS")
+	}
 	if track.SampleRate != format.SampleRate {
-		args = append(args, "-af", resampleFilter(format.SampleRate, tool.Soxr()))
+		filters = append(filters, resampleFilter(format.SampleRate, tool.Soxr()))
+	}
+	if len(filters) > 0 {
+		args = append(args, "-af", strings.Join(filters, ","))
 	}
 	args = append(args, "-ar", strconv.Itoa(format.SampleRate), "-ac", strconv.Itoa(format.Channels), "-f", pcmKind, "pipe:1")
 	child, cancel := context.WithCancel(ctx)
@@ -87,11 +105,7 @@ func openDecoder(ctx context.Context, starter processStarter, tool *ffmpeg.Tool,
 	if integer && d.sourceBits == 0 {
 		d.sourceBits = 32
 	}
-	var limit int64 = -1
-	if span.end != nil {
-		limit = (*span.end - span.start) * int64(format.SampleRate) / int64(track.SampleRate) * int64(format.Channels) * 4
-	}
-	go d.fill(child, limit)
+	go d.fill(child)
 	return d, nil
 }
 
@@ -103,7 +117,7 @@ func resampleFilter(rate int, soxr bool) string {
 	return filter + ":filter_size=64:phase_shift=10"
 }
 
-func (d *decoder) fill(ctx context.Context, limit int64) {
+func (d *decoder) fill(ctx context.Context) {
 	defer close(d.done)
 	stop := context.AfterFunc(ctx, func() { d.ring.finish(ctx.Err()) })
 	defer stop()
@@ -112,19 +126,12 @@ func (d *decoder) fill(ctx context.Context, limit int64) {
 	chunk := make([]byte, 32*1024)
 	var total int64
 	for {
-		if limit >= 0 && total >= limit {
-			d.ring.finish(io.EOF)
-			return
-		}
 		available, err := d.ring.free(ctx)
 		if err != nil {
 			d.ring.finish(err)
 			return
 		}
 		size := min(len(chunk), available)
-		if limit >= 0 {
-			size = min(size, int(limit-total))
-		}
 		// 只有真实 stdout 读取才启用 ffmpeg 的 10 秒超时；环满的等待在上面。
 		n, readErr := d.process.Read(chunk[:size])
 		if n > 0 {

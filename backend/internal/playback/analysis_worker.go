@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
@@ -200,33 +198,20 @@ func (w *AnalysisWorker) openSource(ctx context.Context, catalogCandidate catalo
 	if err != nil || rootPath != location.Path {
 		return nil, fmt.Errorf("%w: root is outside allowed roots", errAnalysisSourceUnavailable)
 	}
-	relative := catalogCandidate.RelativePath
-	if catalogCandidate.SourceKind == "cue_virtual" && catalogCandidate.CueParentRelativePath != nil {
-		relative = *catalogCandidate.CueParentRelativePath
+	relative, err := sourceAudioPath(catalogCandidate.SourceKind, catalogCandidate.RelativePath, catalogCandidate.CueParentRelativePath)
+	var opened *openedSource
+	if err == nil {
+		opened, err = openScannedSource(rootPath, relative, expectedSource{
+			Size: &catalogCandidate.SourceSize, ModifiedAt: &catalogCandidate.SourceModifiedAt,
+		}, catalogCandidate.TrackID)
 	}
-	root, err := os.OpenRoot(rootPath)
+	if errors.Is(err, ErrSourceChanged) {
+		return nil, fmt.Errorf("%w: %w", errAnalysisSourceChanged, err)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("%w: open root: %w", errAnalysisSourceUnavailable, err)
+		return nil, fmt.Errorf("%w: %w", errAnalysisSourceUnavailable, err)
 	}
-	defer root.Close()
-	file, err := root.OpenFile(filepath.Clean(relative), os.O_RDONLY|syscall.O_NONBLOCK, 0)
-	if err != nil {
-		return nil, fmt.Errorf("%w: open source: %w", errAnalysisSourceUnavailable, err)
-	}
-	info, err := file.Stat()
-	if err != nil {
-		file.Close()
-		return nil, fmt.Errorf("%w: stat source: %w", errAnalysisSourceUnavailable, err)
-	}
-	if !info.Mode().IsRegular() {
-		file.Close()
-		return nil, errAnalysisSourceUnavailable
-	}
-	if info.Size() != catalogCandidate.SourceSize || !info.ModTime().UTC().Truncate(time.Microsecond).Equal(catalogCandidate.SourceModifiedAt.UTC()) {
-		file.Close()
-		return nil, errAnalysisSourceChanged
-	}
-	return file, nil
+	return opened.File, nil
 }
 
 func waitAnalysis(ctx context.Context, delay time.Duration) bool {

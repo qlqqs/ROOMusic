@@ -108,7 +108,11 @@ func (r resolved) expected() expectedSource {
 
 // openSource 安全地只读打开源文件并核对它仍是扫描时的那个（大小、修改时间、容器）。调用方负责关闭 File。
 func (r resolved) openSource() (*openedSource, error) {
-	return openVerified(r.rootPath, r.source.RelativePath, r.expected(), r.format.container, r.source.TrackID)
+	relative, err := sourceAudioPath(r.source.SourceKind, r.source.RelativePath, r.source.CueParentRelativePath)
+	if err != nil {
+		return nil, err
+	}
+	return openVerified(r.rootPath, relative, r.expected(), r.format.container, r.source.TrackID)
 }
 
 // Prepare 按固定顺序核对并打开曲目要交付的文件：曲目存在且 present → 目录仍启用 → 在格式表中 →

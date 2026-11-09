@@ -12,7 +12,7 @@ var ErrNotRenderable = errors.New("playback track is not renderable")
 
 // RenderSource 是已安全打开、可交给解码器的原始来源；File 由调用方关闭。
 // BitDepth 是整数源的有效位深；浮点 WAV 为 0，IsFloat 明确标识扩展 WAV 的浮点子类型。
-// CUE 字段预留区间挂点，本阶段不接受虚拟轨，因此始终为 nil。
+// CUE 区间由扫描的 75 Hz 索引换算成父音频的 PCM 样本帧，结束帧不包含在区间内。
 type RenderSource struct {
 	File                           *os.File
 	TrackID, SourceKind, Codec     string
@@ -73,6 +73,20 @@ func (service *Service) OpenForRender(ctx context.Context, trackID string) (*Ren
 	}
 	if target.format.container == containerWAV {
 		err = service.verifyRenderWAV(result, opened.Size)
+	}
+	if err == nil && target.source.SourceKind == "cue_virtual" {
+		start, end := target.source.CueIndexFrames, target.source.CueEndFrames
+		if start == nil || *start < 0 || result.SampleRate <= 0 || end != nil && *end < *start {
+			err = fmt.Errorf("%w: invalid CUE scan range", ErrSourceChanged)
+		} else {
+			// 两端分别换算绝对索引；相邻轨共用同一边界，不能对持续时间单独取整。
+			frame := int64(*start) * int64(result.SampleRate) / 75
+			result.CueStartFrame = &frame
+			if end != nil {
+				frame := int64(*end) * int64(result.SampleRate) / 75
+				result.CueEndFrame = &frame
+			}
+		}
 	}
 	if err == nil {
 		result.DurationSeconds, err = service.sources.LoadTrackDuration(ctx, trackID)
