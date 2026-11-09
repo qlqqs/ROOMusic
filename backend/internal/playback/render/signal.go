@@ -46,9 +46,6 @@ func (s *session) segmentSignal(d *decoder) signalPath {
 		source.Quality, source.Lossy = "low", true
 	}
 	path.append(source)
-	if track.Channels != s.sourcePCM.Channels {
-		path.append(chain.SignalStep{Kind: "downmix", Quality: "high", Compat: true, Params: map[string]any{"from_channels": track.Channels, "to_channels": s.sourcePCM.Channels, "by": "ffmpeg"}})
-	}
 	gainDB, basis, enabled := leveling.Choose(leveling.Mode(s.spec.Settings.Leveling), track.TrackGainDB, track.AlbumGainDB, d.entry.AlbumContext)
 	if enabled {
 		path.append(chain.SignalStep{Kind: "leveling", Quality: "enhanced", Params: map[string]any{"gain_db": gainDB, "basis": basis}})

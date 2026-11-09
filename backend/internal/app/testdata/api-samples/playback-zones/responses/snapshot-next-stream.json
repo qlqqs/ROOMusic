@@ -142,6 +142,9 @@
         "settings": {
           "crossfade": false,
           "crossfade_seconds": 5,
+          "downmix": {
+            "enabled": true
+          },
           "gapless": true,
           "headroom": {
             "clip_indicator": false,

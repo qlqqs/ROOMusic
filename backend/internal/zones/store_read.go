@@ -72,7 +72,7 @@ func loadZones(ctx context.Context, tx *sql.Tx, userID string, state *UserState,
 SELECT z.id, z.device_id, z.mode, z.current_entry_id,
  z.position_seconds, z.position_saved_at, to_json(z.history), to_json(z.shuffle_bag),
  z.leveling, z.crossfade, z.crossfade_seconds, z.gapless, z.quality,
- z.revision, z.queue_revision, z.imported_at, z.headroom, z.sample_rate
+ z.revision, z.queue_revision, z.imported_at, z.headroom, z.sample_rate, z.downmix
 FROM playback_zones z
 JOIN playback_devices d ON d.id=z.device_id AND d.user_id=z.user_id
 WHERE z.user_id=$1::uuid ORDER BY d.created_at, d.id, z.id`, userID)
@@ -84,16 +84,17 @@ WHERE z.user_id=$1::uuid ORDER BY d.created_at, d.id, z.id`, userID)
 		zone := PersistedZone{Queue: queue.State{Entries: []queue.Entry{}}, Settings: defaultSettings()}
 		var current sql.NullString
 		var imported sql.NullTime
-		var history, bag, headroom, sampleRate []byte
+		var history, bag, headroom, sampleRate, downmix []byte
 		if err := rows.Scan(&zone.ZoneID, &zone.DeviceID, &zone.Queue.Mode, &current,
 			&zone.PositionSeconds, &zone.PositionSavedAt, &history, &bag,
 			&zone.Settings.Leveling, &zone.Settings.Crossfade, &zone.Settings.CrossfadeSeconds,
 			&zone.Settings.Gapless, &zone.Settings.Quality,
-			&zone.Revision, &zone.QueueRevision, &imported, &headroom, &sampleRate); err != nil {
+			&zone.Revision, &zone.QueueRevision, &imported, &headroom, &sampleRate, &downmix); err != nil {
 			return fmt.Errorf("scan playback zone: %w", err)
 		}
 		zone.Settings.Headroom = readHeadroom(ctx, logger, zone.ZoneID, headroom)
 		zone.Settings.SampleRate = readSampleRate(ctx, logger, zone.ZoneID, sampleRate)
+		zone.Settings.Downmix = readDownmix(ctx, logger, zone.ZoneID, downmix)
 		zone.Queue.CurrentEntryID = current.String
 		if imported.Valid {
 			zone.ImportedAt = &imported.Time
@@ -168,4 +169,16 @@ func readSampleRate(ctx context.Context, logger *slog.Logger, zoneID string, raw
 		"event", "zones.settings.invalid", "module", "zones",
 		"zone_id", zoneID, "key", "sample_rate", "reason", "invalid_document")
 	return DefaultSampleRateDocument()
+}
+
+// readDownmix 的坏值仅回退当前键，日志不包含文档内容。
+func readDownmix(ctx context.Context, logger *slog.Logger, zoneID string, raw []byte) SettingsDocument {
+	document, err := ParseDownmixDocument(raw)
+	if err == nil {
+		return document
+	}
+	logger.WarnContext(ctx, "播放区设置无效，使用默认值",
+		"event", "zones.settings.invalid", "module", "zones",
+		"zone_id", zoneID, "key", "downmix", "reason", "invalid_document")
+	return DefaultDownmixDocument()
 }

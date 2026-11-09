@@ -113,36 +113,32 @@ func concreteFormat(spec zones.RenderSpec, source Track) (zones.StreamFormat, re
 		f.Quality = "lossless"
 	}
 	maxChannels := f.MaxChannels
-	if maxChannels == 0 {
-		maxChannels = 2
-	}
 	if maxChannels < 1 || maxChannels > 32 {
 		return f, renderPlan{}, ErrNoStreamFormat
 	}
-	channels := min(source.Channels, maxChannels)
-	// 第一批压缩编码使用最多八声道的标准布局；WAV 保留设备声明的声道数。
+	// 压缩编码最多交付八声道；WAV 保留设备声明的上限。
 	if f.Codec != "wav" {
-		channels = min(channels, 8)
+		maxChannels = min(maxChannels, 8)
 	}
-	if source.SampleRate < 5 || channels < 1 {
+	if source.SampleRate < 5 || source.Channels < 1 {
 		return f, renderPlan{}, ErrNoStreamFormat
-	}
-	layout := trackLayout(source)
-	if channels != source.Channels {
-		layout = chain.DefaultLayout(channels)
 	}
 	conversion, filter, err := chooseSampleRate(source.SampleRate, spec.Settings.SampleRate, f)
 	if err != nil {
 		return f, renderPlan{}, err
 	}
-	pcm := chain.Format{SampleRate: source.SampleRate, Channels: channels, Layout: layout}
+	pcm := chain.Format{SampleRate: source.SampleRate, Channels: source.Channels, Layout: trackLayout(source)}
 	out := pcm
 	out.SampleRate = conversion.To
 	plan := renderPlan{sourcePCM: pcm, outputPCM: out, sampleRate: conversion, sampleRateFilter: filter}
+	if err := plan.chooseChannels(spec.Settings.Downmix, maxChannels); err != nil {
+		return f, renderPlan{}, err
+	}
+	out = plan.outputPCM
 	plan.facts = sourceProcessing(source, spec.Start, spec.Settings, pcm)
-	plan.facts.stages = len(conversion.Stages) > 0
-	f.Layout = layout
-	f.SampleRate, f.Channels, f.BitDepth = out.SampleRate, channels, 0
+	plan.facts.stages = len(conversion.Stages) > 0 || len(plan.stages) > 0
+	f.Layout = out.Layout
+	f.SampleRate, f.Channels, f.BitDepth = out.SampleRate, out.Channels, 0
 	if lossless {
 		f.BitDepth = 24
 		if integerSource(source) && source.BitDepth > 0 && source.BitDepth <= 16 && !hasProcessing(plan.facts) {

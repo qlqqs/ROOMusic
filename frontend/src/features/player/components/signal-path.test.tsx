@@ -89,6 +89,19 @@ describe("服务端信号路径", () => {
     expect(within(dialog).queryByText(/LUFS|dBTP|dBFS/)).toBeNull();
   });
 
+  it("DownmixStepShowsChannelLayouts", async () => {
+    const user = userEvent.setup();
+    viewSignal({
+      ...losslessSignal, quality: "high",
+      steps: [
+        { kind: "downmix", quality: "high", lossy: false, compat: true, params: { fromChannels: 6, toChannels: 2, fromLayout: "5.1", toLayout: "2.0", by: "roomusic", mode: "matrix" } },
+      ],
+    });
+    await user.click(screen.getByRole("button", { name: "信号路径：高质量" }));
+    const dialog = screen.getByRole("dialog", { name: "信号路径：高质量" });
+    expect(within(dialog).getByText("降混 5.1 → 2.0", { exact: true })).toBeTruthy();
+  });
+
   it("SampleRateStepShowsCompatibilityConversion", async () => {
     const user = userEvent.setup();
     viewSignal({

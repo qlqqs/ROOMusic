@@ -33,7 +33,7 @@ Zone = {zone_id, device_id, revision, queue_revision, queue_length,
         paused_at: time?, signal: Signal?, event: ZoneEvent?}
 Settings = {leveling: "off"|"auto"|"track"|"album", gapless, crossfade, crossfade_seconds: 3|5|8|12,
             quality: "lossless"|"lossy", headroom: {enabled, db, clip_indicator},
-            sample_rate: {strategy, custom_rate: number|null, filter}}
+            sample_rate: {strategy, custom_rate: number|null, filter}, downmix: {enabled: boolean}}
 ```
 
 - `revision` 每次状态变化加一，客户端按它丢弃旧状态；`queue_revision` 只在条目增删移动时加一。
@@ -41,6 +41,7 @@ Settings = {leveling: "off"|"auto"|"track"|"album", gapless, crossfade, crossfad
 - `position` 是曲目内位置；`status == "playing"` 时控制端按 `seconds + (服务端现在 − at)` 外推，不超过时长。输出端用流内位置自己算（§3.4）。
 - `failures` 只在内存，替换队列、清空、重启时清除；`reason` ∈ `not_found/root_disabled/unsupported_format/source_unavailable/source_changed/decode_failed`。
 - 默认设置：`auto`、无缝开、交叉渐变关、5 秒、`lossless`、Headroom `{enabled: false, db: -3, clip_indicator: false}`。
+- `downmix` 默认 `{enabled:true}`，完整文档合同见[设置合同 §9](./zones-data-contracts.md#9-降混设置文档0046)。
 - `sample_rate` 默认 `{strategy:"none",custom_rate:null,filter:"linear_precise"}`；策略、滤波器枚举、标准采样率与完整文档校验见[设置合同 §8](./zones-data-contracts.md#8-src-设置文档0045)。
 - `ZoneEvent = {seq, kind, …}` 是一次性公告，`seq` 取当时的 `revision`，每个 `seq` 只公告一次；只带与 `kind` 有关的字段：
   `track_started {entry_id}`、`track_failed {entry_id, reason}`（服务端已跳到下一首）、`all_failed`、`failures_stopped`（连续 5 首失败，已暂停）、
@@ -84,7 +85,7 @@ QueueChange = {queue_revision, kind, …}: replace {entries}（超过 500 条改
 | `play`、`pause`、`stop` | — | 播放（没有当前项取第一项）；暂停；暂停并回到 0 |
 | `next`、`previous` | — | 手动下一首（跳过失败项）；上一首（结果是当前项时从头放） |
 | `seek` | `position_seconds ≥ 0` | 钳到 `[0, 时长]`，300 ms 去抖后从新位置开流 |
-| `set_settings` | `settings`：任意子集，给出的键非 `null`，`headroom`、`sample_rate` 须是完整对象 | 部分更新；正在放时 300 ms 去抖后重建流 |
+| `set_settings` | `settings`：任意子集，给出的键非 `null`，`headroom`、`sample_rate`、`downmix` 须是完整对象 | 部分更新；正在放时 300 ms 去抖后重建流 |
 | `retry` | — | 只在 `fault: transient` 时起播并续流 |
 | `transfer` | `target_zone_id` | 队列、当前项、位置、模式与历史搬到目标并直接播放，源清空；给自己 `400 invalid_input` |
 | `import` | `entries: [{entry_id: string(1..64), track_id}]`（≤ 10,000，ID 不重复）、`current_entry_id: string?`、`mode`、`position_seconds`、`history: string[≤500]` | 只在播放区为空且从没导入过时生效（`imported: true`，公告 `queue_restored`），否则 `imported: false` |
@@ -199,7 +200,7 @@ Capabilities = {stream_formats: [{codec, mime_type, lossless, max_sample_rate: i
 - 服务端能产出的 `(codec, mime_type)`：长流 `flac`、`wav`、`opus`、`aac`（MIME 同 §5），HLS `alac`、`aac`；只发布 ffmpeg 有对应编码器的组合（WAV 总可用）。
 
 协商在每次开流时进行：按声明顺序过滤出能产出的项；`quality: lossless` 取第一个无损项，没有就取第一个有损项，`lossy` 反之；一个都没有则 `fault: no_stream_format`、暂停。
-具体格式按首曲定：声道 `min(源, max_channels)`（多了服务端降混）；采样率取源值，超过 `max_sample_rate` 时同族减半，Opus 固定 48 kHz，AAC ≤ 96 kHz；
+具体格式按首曲定：`max_channels` 为 1–32，非 WAV 限 8。超限时按[降混合同](./playback-render-contracts.md#13-降混后端接入2026-11-09)混合或选择声道。采样率按 SRC 策略与设备上限规划，Opus 固定 48 kHz，AAC 使用 44.1/48 kHz；
 无损位深在处理链透明（整数源、电平化与 Headroom 都不施加）时取源位深（≤ 16 → 16，其余 24），否则 24，不超过 `max_bit_depth`。下一首源格式不同时以接续流交付。
 浏览器的声明见[播放与个人状态](../frontend/playback-and-personal-state.md)“播放区客户端”。
 
@@ -217,7 +218,7 @@ quality ∈ "lossless" > "enhanced" > "high" > "low"（从好到差；Signal.qua
 | --- | --- | --- |
 | `source` | `{codec, sample_rate, channels, bit_depth?}` | 无损源 `lossless`；`mp3/aac/vorbis/opus/wavpack_hybrid` 为 `low`、有损 |
 | `sample_rate` | `{from_rate:int, to_rate:int, filter:string}` | 用户转换 `enhanced`；设备/有损约束 `high`、兼容转换；仅链 ② 产生 |
-| `downmix` | `{from_channels, to_channels, by: "ffmpeg"}` | `high`、兼容转换 |
+| `downmix` | `{from_channels, to_channels, from_layout, to_layout, by:"roomusic", mode:"matrix"\|"select"}` | `high`、兼容转换；`select` 为纯选择；兼容旧 `by:"ffmpeg"` |
 | `leveling` | `{gain_db, basis}` | `enhanced`；电平化不为“关”时出现 |
 | `headroom` | `{gain_db}` | `enhanced`；开启时出现 |
 | `dither` | `{bits, kind: "tpdf"}` | `enhanced`；降位深时 `high`、兼容转换；逐位直通时不出现 |

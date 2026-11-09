@@ -88,7 +88,7 @@ func openDecoder(ctx context.Context, starter processStarter, tool *ffmpeg.Tool,
 	if len(filters) > 0 {
 		args = append(args, "-af", strings.Join(filters, ","))
 	}
-	args = append(args, "-ac", strconv.Itoa(format.Channels), "-f", pcmKind, "pipe:1")
+	args = append(args, "-f", pcmKind, "pipe:1")
 	child, cancel := context.WithCancel(ctx)
 	process, err := starter.Start(child, ffmpeg.StartOptions{Args: args, Source: track.File, ReadTimeout: true})
 	if err != nil {

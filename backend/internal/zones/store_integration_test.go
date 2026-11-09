@@ -195,7 +195,7 @@ func TestPostgreSQLZonesStoreRoundTrip(t *testing.T) {
 		zone.PositionSeconds, zone.PositionSavedAt = 12.5, at.Add(2*time.Minute)
 		sampleRate, err := ParseSampleRateDocument([]byte(`{"strategy":"custom","custom_rate":96000,"filter":"minimum_smooth"}`))
 		requireZonesOK(t, err)
-		zone.Settings = PlaybackSettings{Leveling: "album", Crossfade: true, CrossfadeSeconds: 8, Gapless: false, Quality: "lossy", SampleRate: sampleRate}
+		zone.Settings = PlaybackSettings{Leveling: "album", Crossfade: true, CrossfadeSeconds: 8, Gapless: false, Quality: "lossy", SampleRate: sampleRate, Downmix: DefaultDownmixDocument()}
 		zone.Revision, zone.QueueRevision, zone.ImportedAt = 7, 4, &at
 		requireZonesOK(t, store.UpdateZone(ctx, user, zone))
 	})

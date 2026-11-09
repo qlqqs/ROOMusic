@@ -6,6 +6,7 @@ import { playModes, MAX_QUEUE_ENTRIES, type QueueEntry } from "../engine/queue";
 import { playerTrackOfSummary } from "../engine/tracks";
 import {
   crossfadeDurations,
+  downmixModes,
   levelingModes,
   playbackFailureReasons,
   sampleRateFilters,
@@ -67,8 +68,8 @@ const signalStepDecoder: d.Decoder<SignalStep | null> = (input, path) => {
       return { ...base, kind: "sample_rate", params: { fromRate: raw.from_rate, toRate: raw.to_rate, filter: raw.filter } };
     }
     case "downmix": {
-      const raw = paramsOf(d.object({ from_channels: d.integer({ min: 0 }), to_channels: d.integer({ min: 0 }), by: d.string({ max: 64 }) }));
-      return { ...base, kind: "downmix", params: { fromChannels: raw.from_channels, toChannels: raw.to_channels, by: raw.by } };
+      const raw = paramsOf(d.object({ from_channels: d.integer({ min: 0 }), to_channels: d.integer({ min: 0 }), from_layout: d.optional(d.string({ max: 64 })), to_layout: d.optional(d.string({ max: 64 })), by: d.string({ max: 64 }), mode: d.optional(lenient(downmixModes, "matrix")) }));
+      return { ...base, kind: "downmix", params: { fromChannels: raw.from_channels, toChannels: raw.to_channels, fromLayout: raw.from_layout ?? null, toLayout: raw.to_layout ?? null, by: raw.by, mode: raw.mode ?? null } };
     }
     case "leveling": {
       const raw = paramsOf(d.object({ gain_db: d.number(), basis: d.string({ max: 64 }) }));
@@ -120,6 +121,7 @@ const settingsDecoder: d.Decoder<PlaybackSettings> = (input, path) => {
     quality: lenient(streamQualities, "lossless"),
     headroom: d.object({ enabled: d.boolean(), db: d.number(), clip_indicator: d.boolean() }),
     sample_rate: d.object({ strategy: lenient(sampleRateStrategies, "none"), custom_rate: d.nullable(d.integer({ min: 0 })), filter: sampleRateFilterDecoder }),
+    downmix: d.object({ enabled: d.boolean() }),
   })(input, path);
   return {
     leveling: raw.leveling,
@@ -129,6 +131,7 @@ const settingsDecoder: d.Decoder<PlaybackSettings> = (input, path) => {
     quality: raw.quality,
     headroom: { enabled: raw.headroom.enabled, db: raw.headroom.db, clipIndicator: raw.headroom.clip_indicator },
     sampleRate: { strategy: raw.sample_rate.strategy, customRate: raw.sample_rate.custom_rate, filter: raw.sample_rate.filter },
+    downmix: { enabled: raw.downmix.enabled },
   };
 };
 

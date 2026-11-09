@@ -97,3 +97,31 @@ func (s *Store) UpdateZone(ctx context.Context, userID string, zone PersistedZon
 最小验证复用文档表测、同值不重建和坏值回退集成用例；只刷新 `TestPostgreSQLZonesAPIResponseSamples` 所属金样，新增 `set-settings-sample-rate` 非默认请求/响应；迁移执行升级→回退→再升级并比较 schema。
 
 错误做法：在 DTO 留可变指针并用地址判断设置变化，或直接封装任意 RawMessage。正确做法：先按明确类型校验、规范化，再保存不可变文档，由 zones 单一拥有规则。
+
+
+## 9. 降混设置文档（0046）
+
+### 范围与入口
+
+迁移 `0046_playback_zone_downmix.sql/.down.sql` 增删 `playback_zones.downmix JSONB NOT NULL DEFAULT '{"enabled":true}'`。zones 拥有 `DownmixSettings{Enabled bool}`、`DefaultDownmixDocument()`、`NewDownmixDocument(DownmixSettings)`、`ParseDownmixDocument([]byte)`；render 使用 `DecodeSettingsDocument[DownmixSettings]`。
+
+### 请求、默认与比较
+
+`settings.downmix` 为完整对象 `{enabled:boolean}`，默认开启。注册与 `set_settings` 复用统一白名单及规范文档入口；patch 仅替换给出的键，不递归合并；`EqualSettings` 比较规范值。读写列、Scan 和参数同步增加 downmix；注册设备沿用数据库默认值，随后统一 UpdateZone 写入规范设置。
+
+### 校验与错误
+
+| 条件 | 行为 |
+| --- | --- |
+| 文档不是对象、未知键、缺 enabled、null 或非布尔值 | `400 invalid_input`，无字段路径 |
+| 持久值形状或类型损坏 | 仅 downmix 回退默认 true，每次加载记录 `zones.settings.invalid` 的 zone_id/key/reason；不记原文，不写回库 |
+| SQL 查询或队列损坏 | 保留既有错误，不伪装成 DSP 默认 |
+| 回退 0046 | 删除列及设置；再升级恢复默认开启 |
+
+### 案例与验证
+
+正常：`set_settings` 提交 `{"downmix":{"enabled":false}}` 后返回关闭文档，重建沿用 300 ms 去抖。基准：未给出键使用默认 true，同值不会触发重建。错误：`{"downmix":{}}`、`{"downmix":{"enabled":null}}` 均拒绝。
+
+独立测试应覆盖完整文档/同值比较、坏值默认及存储往返；API recorder 在末尾独立播放区采集 `set-settings-downmix` 非默认请求/响应，仅刷新自身拥有的金样。迁移往返验证须在后续获准的隔离数据库中执行，不能把未运行记为通过。
+
+错误做法：新增 boolean 列或为 downmix 再造 HTTP/SQL 注册框架。正确做法：按 sample_rate 的文档模式接入固定读写列与公共校验入口。

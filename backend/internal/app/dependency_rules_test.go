@@ -63,7 +63,7 @@ var packageRules = map[string]packageRule{
 	"dsp/downmix":                    {},
 	"playback/analysis":              {},
 	"playback/render/ffmpeg":         {},
-	"playback/render":                {imports: []string{"zones", "dsp/chain", "dsp/leveling", "dsp/fade", "dsp/dither", "dsp/src", "playback/render/ffmpeg", "platform/uuid"}},
+	"playback/render":                {imports: []string{"zones", "dsp/chain", "dsp/leveling", "dsp/fade", "dsp/dither", "dsp/src", "dsp/downmix", "playback/render/ffmpeg", "platform/uuid"}},
 	"playback":                       {imports: []string{"catalog", "library", "playback/analysis"}},
 	"zones/queue":                    {},
 	"zones/httpapi":                  {imports: []string{"identity", "platform/httpserver", "platform/uuid", "zones"}, http: true},

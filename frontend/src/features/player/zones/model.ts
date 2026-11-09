@@ -18,6 +18,10 @@ export type SampleRateStrategy = (typeof sampleRateStrategies)[number];
 export const sampleRateFilters = ["linear_precise", "minimum_precise", "linear_smooth", "minimum_smooth"] as const;
 export type SampleRateFilter = (typeof sampleRateFilters)[number];
 
+/** 降混步骤的做法：矩阵混合，或只取前几个声道。 */
+export const downmixModes = ["matrix", "select"] as const;
+export type DownmixMode = (typeof downmixModes)[number];
+
 /** 指定采样率可选的标准率：44.1 与 48 kHz 两族的 1、2、4、8、16 倍。 */
 export const customSampleRates = [44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000, 705600, 768000] as const;
 
@@ -32,6 +36,7 @@ export type PlaybackSettings = {
   quality: StreamQuality;
   headroom: { enabled: boolean; db: number; clipIndicator: boolean };
   sampleRate: SampleRateSettings;
+  downmix: { enabled: boolean };
 };
 
 /** 曲目不能播放的原因；界面按它选文案。服务端以后增加的原因按“音频文件无法读取”显示。 */
@@ -81,7 +86,7 @@ export type SignalStep = { quality: SignalQuality; lossy: boolean; compat: boole
   | { kind: "source"; params: { codec: string; sampleRate: number; bitDepth: number | null; channels: number } }
   | { kind: "convert"; params: { fromRate: number; toRate: number; by: string } }
   | { kind: "sample_rate"; params: { fromRate: number; toRate: number; filter: SampleRateFilter } }
-  | { kind: "downmix"; params: { fromChannels: number; toChannels: number; by: string } }
+  | { kind: "downmix"; params: { fromChannels: number; toChannels: number; fromLayout: string | null; toLayout: string | null; by: string; mode: DownmixMode | null } }
   | { kind: "leveling"; params: { gainDb: number; basis: string } }
   | { kind: "headroom"; params: { gainDb: number } }
   | { kind: "dither"; params: { bits: number; kind: string } }

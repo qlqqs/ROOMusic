@@ -32,7 +32,12 @@ func newEncoder(ctx context.Context, reservation *ffmpeg.Reservation, tool *ffmp
 	if f.BitDepth != 0 {
 		input = "s" + strconv.Itoa(f.BitDepth) + "le"
 	}
-	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-f", input, "-ar", strconv.Itoa(pcm.SampleRate), "-ac", strconv.Itoa(pcm.Channels), "-i", "pipe:0", "-map_metadata", "-1", "-threads", "1"}
+	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-f", input, "-ar", strconv.Itoa(pcm.SampleRate), "-ac", strconv.Itoa(pcm.Channels)}
+	if pcm.Layout != 0 {
+		// 原始 PCM 不携带布局，显式声明链出口，避免编码器按声道数猜错扬声器位置。
+		args = append(args, "-channel_layout", "0x"+strconv.FormatUint(uint64(pcm.Layout), 16))
+	}
+	args = append(args, "-i", "pipe:0", "-map_metadata", "-1", "-threads", "1")
 	switch f.Codec {
 	case "flac":
 		args = append(args, "-c:a", "flac", "-compression_level", "5", "-f", "flac")
@@ -134,11 +139,16 @@ func writeAll(writer io.Writer, data []byte) error {
 	return nil
 }
 func wavHeader(f zones.StreamFormat) []byte {
-	b := make([]byte, 44)
+	fmtSize := 16
+	extensible := f.Layout != 0 && (f.Channels > 2 || f.Layout != chain.DefaultLayout(f.Channels))
+	if extensible {
+		fmtSize = 40
+	}
+	b := make([]byte, 28+fmtSize)
 	copy(b, "RIFF")
 	binary.LittleEndian.PutUint32(b[4:], 0xffffffff)
 	copy(b[8:], "WAVEfmt ")
-	binary.LittleEndian.PutUint32(b[16:], 16)
+	binary.LittleEndian.PutUint32(b[16:], uint32(fmtSize))
 	binary.LittleEndian.PutUint16(b[20:], 1)
 	binary.LittleEndian.PutUint16(b[22:], uint16(f.Channels))
 	binary.LittleEndian.PutUint32(b[24:], uint32(f.SampleRate))
@@ -146,7 +156,15 @@ func wavHeader(f zones.StreamFormat) []byte {
 	binary.LittleEndian.PutUint32(b[28:], uint32(f.SampleRate*block))
 	binary.LittleEndian.PutUint16(b[32:], uint16(block))
 	binary.LittleEndian.PutUint16(b[34:], uint16(f.BitDepth))
-	copy(b[36:], "data")
-	binary.LittleEndian.PutUint32(b[40:], 0xffffffff)
+	if extensible {
+		// WAVEFORMATEXTENSIBLE 保留矩阵或选择出口的实际扬声器位置。
+		binary.LittleEndian.PutUint16(b[20:], 0xfffe)
+		binary.LittleEndian.PutUint16(b[36:], 22)
+		binary.LittleEndian.PutUint16(b[38:], uint16(f.BitDepth))
+		binary.LittleEndian.PutUint32(b[40:], f.Layout)
+		copy(b[44:], []byte{1, 0, 0, 0, 0, 0, 0x10, 0, 0x80, 0, 0, 0xaa, 0, 0x38, 0x9b, 0x71})
+	}
+	copy(b[20+fmtSize:], "data")
+	binary.LittleEndian.PutUint32(b[24+fmtSize:], 0xffffffff)
 	return b
 }
