@@ -7,27 +7,34 @@ type RenderDecoders interface {
 	HasDecoder(name string) bool
 }
 
-// WithRenderDecoders 启用渲染来源入口，不改变直出、派生与 Formats 的既有语义。
+// WithRenderDecoders 启用渲染来源入口与公开格式表，不改变旧接口的直出限制。
 // 未装配或传 nil 时，RenderFormats 为空，OpenForRender 拒绝所有格式。
 func WithRenderDecoders(decoders RenderDecoders) ServiceOption {
 	return func(service *Service) { service.renderDecoders = decoders }
 }
 
+// renderFormatTable 是直出六项之外的可渲染组合；具体解码器由 renderDecoderNames 指定。
+var renderFormatTable = []Format{
+	{SourceKind: "m4a", Codec: "alac", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerMP4},
+	{SourceKind: "ape_apev2", Codec: "ape", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerAPE},
+	{SourceKind: "wavpack_apev2", Codec: "wavpack", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerWavPack},
+	{SourceKind: "wavpack_apev2", Codec: "wavpack_hybrid", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerWavPack},
+	{SourceKind: "aiff_id3", Codec: "aiff", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerAIFF},
+	{SourceKind: "wav_info", Codec: "ieee_float", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerWAV},
+	{SourceKind: "wav_info", Codec: "wav_extensible", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerWAV},
+}
+
 // RenderFormats 返回可渲染组合的副本；只发布至少有一种对应解码器的组合。
 // PCM 组合的具体位深与扩展 WAV 子类型在安全打开后再次核对。
 // 保留原六项的表示字段；原派生项和新增 WAV 项仍以 derived 表示服务端处理交付。
-// 此入口不启用 CUE；旧 HTTP 格式表直到派生退役阶段才切换到这里。
+// 此入口不启用 CUE。
 func (service *Service) RenderFormats() []Format {
-	formats := make([]Format, 0, len(formatTable)+len(derivedFormatTable)+2)
+	formats := make([]Format, 0, len(formatTable)+len(renderFormatTable))
 	if service.renderDecoders == nil {
 		return formats
 	}
 	candidates := append([]Format(nil), formatTable...)
-	candidates = append(candidates, derivedFormatTable...)
-	candidates = append(candidates,
-		Format{SourceKind: "wav_info", Codec: "ieee_float", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerWAV},
-		Format{SourceKind: "wav_info", Codec: "wav_extensible", Delivery: DeliveryDerived, MIMEType: "audio/flac", container: containerWAV},
-	)
+	candidates = append(candidates, renderFormatTable...)
 	for _, format := range candidates {
 		for _, decoder := range renderDecoderNames(format.Codec) {
 			if service.renderDecoders.HasDecoder(decoder) {

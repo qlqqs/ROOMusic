@@ -43,7 +43,7 @@ func WithRenderer(tool *ffmpeg.Tool) Option {
 }
 
 func newPlaybackService(database *sql.DB, settings config.Server, assembly options) *playback.Service {
-	opts := []playback.ServiceOption{playback.WithDerivation(assembly.derivation)}
+	var opts []playback.ServiceOption
 	if assembly.renderer != nil {
 		opts = append(opts, playback.WithRenderDecoders(assembly.renderer))
 	}

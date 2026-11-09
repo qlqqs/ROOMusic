@@ -47,7 +47,6 @@ docker compose up -d --wait
 | `ROOMUSIC_TIMEZONE` | `Asia/Shanghai` | 自动备份使用的时区 |
 | `ROOMUSIC_BACKUP_KEEP_DAYS` | `14` | 网页上从未设置过自动清理时，备份保留几天 |
 | `ROOMUSIC_ALLOWED_ORIGINS` | 空 | 反向代理改写了 Host 时使用，见第 5 节 |
-| `ROOMUSIC_MEDIA_CACHE_MAX_MIB` | `10240` | ALAC 转码缓存上限（MiB），最小 256 |
 | `COMPOSE_PROJECT_NAME` | `roomusic-server` | 项目名，决定数据卷和网络的名称；已有实例不要改 |
 
 把备份放到宿主机目录时，先创建目录并设置权限：

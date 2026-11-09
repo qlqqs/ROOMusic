@@ -60,8 +60,7 @@ var packageRules = map[string]packageRule{
 	"playback/analysis":              {},
 	"playback/render/ffmpeg":         {},
 	"playback/render":                {imports: []string{"zones", "dsp/chain", "dsp/leveling", "dsp/fade", "dsp/dither", "playback/render/ffmpeg", "platform/uuid"}},
-	"playback/derivation":            {},
-	"playback":                       {imports: []string{"catalog", "library", "playback/analysis", "playback/derivation"}},
+	"playback":                       {imports: []string{"catalog", "library", "playback/analysis"}},
 	"zones/queue":                    {},
 	"zones/httpapi":                  {imports: []string{"identity", "platform/httpserver", "platform/uuid", "zones"}, http: true},
 	"zones/zonestest":                {imports: []string{"zones"}},
@@ -78,7 +77,7 @@ var packageRules = map[string]packageRule{
 	"app": {imports: []string{
 		"backup", "backup/httpapi", "zones", "zones/queue", "zones/httpapi",
 		"catalog", "catalog/governance", "catalog/httpapi", "catalog/maintenance", "identity", "identity/httpapi", "library", "library/httpapi", "listening", "listening/httpapi",
-		"personal", "personal/httpapi", "operations/httpapi", "platform/config", "platform/httpserver", "playback", "playback/analysis", "playback/derivation", "playback/httpapi", "playback/render", "playback/render/ffmpeg",
+		"personal", "personal/httpapi", "operations/httpapi", "platform/config", "platform/httpserver", "playback", "playback/analysis", "playback/httpapi", "playback/render", "playback/render/ffmpeg",
 	}, http: true},
 }
 

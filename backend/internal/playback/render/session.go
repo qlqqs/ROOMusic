@@ -32,6 +32,8 @@ type session struct {
 	closeOnce                          sync.Once
 	closed                             atomic.Bool
 	changed                            atomic.Bool
+	changedTransition                  atomic.Bool
+	changeState                        atomic.Pointer[nextChangeState]
 	controlWake, eventWake, eventSpace chan struct{}
 	events, immediateEvents            chan zones.Event
 	done                               chan struct{}
@@ -49,7 +51,7 @@ func newSession(parent context.Context, owner *Renderer, spec zones.RenderSpec, 
 	var c *chain.Chain
 	if prepareErr == nil {
 		var err error
-		c, err = chain.Build(chain.Spec{Format: pcm, OutputBits: format.BitDepth, Seed: 1})
+		c, err = chain.Build(chain.Spec{Format: pcm, Headroom: chain.HeadroomSettings{Enabled: spec.Settings.Headroom.Enabled, DB: spec.Settings.Headroom.DB}, OutputBits: format.BitDepth, Seed: 1})
 		if err != nil {
 			return nil, err
 		}
@@ -138,8 +140,19 @@ func (s *session) HLS() zones.HLSMedia {
 	return s.hls
 }
 func (s *session) Events() <-chan zones.Event { return s.events }
-func (s *session) NextChanged()               { s.changed.Store(true); wake(s.controlWake) }
-func (s *session) markReady()                 { s.readyOnce.Do(func() { close(s.ready) }) }
+func (s *session) NextChanged() {
+	// 锁存通知时已编码的换轨；处理标志前播放头跨过接缝也不能撤销重建。
+	// 只读不可变原子快照，不等待会话锁、Cursor 或解码进程。
+	if state := s.changeState.Load(); state != nil {
+		head := sampleFrame(state.sample, state.haveSample, state.written, s.pcm.SampleRate, s.owner.options.Clock())
+		if state.transition > head {
+			s.changedTransition.Store(true)
+		}
+	}
+	s.changed.Store(true)
+	wake(s.controlWake)
+}
+func (s *session) markReady() { s.readyOnce.Do(func() { close(s.ready) }) }
 
 // Close 不等待任何会话协程，尤其不能等待可能正在获取 zones 锁的 Cursor。
 func (s *session) Close() {
@@ -275,6 +288,7 @@ func (s *session) run() {
 	defer ticker.Stop()
 	var speed speedMonitor
 	var encoded []byte
+	var clipped int
 	for {
 		if err := s.waitToRender(ticker); err != nil {
 			if s.ctx.Err() == nil {
@@ -301,7 +315,7 @@ func (s *session) run() {
 		s.markReady()
 		begin := s.owner.options.Clock()
 		buffer = s.chain.Process(buffer)
-		encoded = s.encodePCM(encoded[:0], buffer)
+		encoded, clipped = s.encodePCM(encoded[:0], buffer)
 		cost += s.owner.options.Clock().Sub(begin)
 		if err = s.encoder.write(encoded); err != nil {
 			if s.ctx.Err() == nil {
@@ -309,10 +323,9 @@ func (s *session) run() {
 			}
 			return
 		}
-		s.mu.Lock()
-		s.written += int64(buffer.Frames)
-		s.mu.Unlock()
-		wake(s.eventWake)
+		if err := s.recordOutput(buffer.Frames, clipped); err != nil {
+			return
+		}
 		if err = speed.add(s, buffer.Frames, cost); err != nil {
 			return
 		}
@@ -323,7 +336,7 @@ func (s *session) run() {
 		if buffer == nil {
 			break
 		}
-		encoded = s.encodePCM(encoded[:0], buffer)
+		encoded, clipped = s.encodePCM(encoded[:0], buffer)
 		cost := s.owner.options.Clock().Sub(begin)
 		s.markReady()
 		if err := s.encoder.write(encoded); err != nil {
@@ -332,9 +345,9 @@ func (s *session) run() {
 			}
 			return
 		}
-		s.mu.Lock()
-		s.written += int64(buffer.Frames)
-		s.mu.Unlock()
+		if err := s.recordOutput(buffer.Frames, clipped); err != nil {
+			return
+		}
 		if err := speed.add(s, buffer.Frames, cost); err != nil {
 			return
 		}
@@ -422,10 +435,9 @@ func (s *session) waitToRender(ticker Ticker) error {
 		}
 	}
 }
-func (s *session) encodePCM(dst []byte, b *chain.Buffer) []byte {
+func (s *session) encodePCM(dst []byte, b *chain.Buffer) ([]byte, int) {
 	if s.format.BitDepth != 0 {
-		result, _ := s.chain.Quantize(dst, b)
-		return result
+		return s.chain.Quantize(dst, b)
 	}
 	needed := b.Frames * s.pcm.Channels * 4
 	if cap(dst) < needed {
@@ -433,12 +445,17 @@ func (s *session) encodePCM(dst []byte, b *chain.Buffer) []byte {
 	} else {
 		dst = dst[:needed]
 	}
+	clipped := 0
 	for frame := range b.Frames {
 		for channel := range s.pcm.Channels {
-			binary.LittleEndian.PutUint32(dst[(frame*s.pcm.Channels+channel)*4:], math.Float32bits(float32(b.Samples[channel][frame])))
+			sample := b.Samples[channel][frame]
+			if s.spec.Settings.Headroom.ClipIndicator && math.Abs(sample) > 1 {
+				clipped++
+			}
+			binary.LittleEndian.PutUint32(dst[(frame*s.pcm.Channels+channel)*4:], math.Float32bits(float32(sample)))
 		}
 	}
-	return dst
+	return dst, clipped
 }
 
 var _ zones.RenderSession = (*session)(nil)

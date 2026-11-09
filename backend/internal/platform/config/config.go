@@ -12,15 +12,6 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/weborigin"
 )
 
-const (
-	// DefaultMediaCacheMiB 是派生缓存的默认上限：10 GiB（约容纳几十张无损专辑的 FLAC 派生）。
-	DefaultMediaCacheMiB = 10240
-	// MinMediaCacheMiB 是允许配置的派生缓存上限下限：再小连一张高解析度专辑的派生都放不下。
-	MinMediaCacheMiB = 256
-	// maxMediaCacheMiB 只防止换算为字节时溢出（1 PiB）。
-	maxMediaCacheMiB = 1 << 30
-)
-
 // OriginMode 是配置加载时确定的来源校验模式。
 type OriginMode string
 
@@ -42,12 +33,10 @@ type Server struct {
 	SecureCookies       bool
 	DataDirectory       string
 	PublicURL           string
-	// FFmpegPath 是 ffmpeg 可执行文件的绝对路径；空表示在 PATH 中查找。找不到或自检不过时派生关闭，应用照常启动。
-	FFmpegPath string
-	// MediaCacheMaxBytes 是派生缓存的上限（字节），缓存目录是 <DataDirectory>/media-cache。
-	MediaCacheMaxBytes int64
-	AudioAnalysis      bool
-	ScanWorkers        int
+	// FFmpegPath 是 ffmpeg 可执行文件的绝对路径；空表示在 PATH 中查找。找不到或自检不过时渲染不可用，应用照常启动。
+	FFmpegPath    string
+	AudioAnalysis bool
+	ScanWorkers   int
 }
 
 // Load 从环境变量读取并校验配置；缺少必需项或生产环境不安全时返回错误。
@@ -67,10 +56,6 @@ func Load() (Server, error) {
 	if ffmpegPath != "" && !filepath.IsAbs(ffmpegPath) {
 		return Server{}, fmt.Errorf("ROOMUSIC_FFMPEG_PATH must be an absolute path")
 	}
-	mediaCacheMaxBytes, err := configuredMediaCacheMaxBytes()
-	if err != nil {
-		return Server{}, err
-	}
 	databaseURL, err := DatabaseURL()
 	if err != nil {
 		return Server{}, err
@@ -87,7 +72,7 @@ func Load() (Server, error) {
 	if err != nil {
 		return Server{}, err
 	}
-	config := Server{ScanWorkers: scanWorkers, AudioAnalysis: audioAnalysis, Backup: backup, Address: configuredAddress(), Environment: configuredEnvironment(), DatabaseURL: databaseURL, SecureCookies: os.Getenv("ROOMUSIC_SECURE_COOKIES") == "true", DataDirectory: dataDirectory, PublicURL: publicURL, FFmpegPath: ffmpegPath, MediaCacheMaxBytes: mediaCacheMaxBytes}
+	config := Server{ScanWorkers: scanWorkers, AudioAnalysis: audioAnalysis, Backup: backup, Address: configuredAddress(), Environment: configuredEnvironment(), DatabaseURL: databaseURL, SecureCookies: os.Getenv("ROOMUSIC_SECURE_COOKIES") == "true", DataDirectory: dataDirectory, PublicURL: publicURL, FFmpegPath: ffmpegPath}
 	for _, configuredRoot := range strings.Split(os.Getenv("ROOMUSIC_ALLOWED_LIBRARY_ROOTS"), ",") {
 		if root := strings.TrimSpace(configuredRoot); root != "" {
 			config.AllowedLibraryRoots = append(config.AllowedLibraryRoots, root)
@@ -148,19 +133,6 @@ func configuredAllowedOrigins(publicURL string) ([]string, error) {
 		}
 	}
 	return origins, nil
-}
-
-// configuredMediaCacheMaxBytes 读取派生缓存上限（MiB，整数）并换算为字节；未设置用默认值，非法值使配置加载失败。
-func configuredMediaCacheMaxBytes() (int64, error) {
-	value := strings.TrimSpace(os.Getenv("ROOMUSIC_MEDIA_CACHE_MAX_MIB"))
-	if value == "" {
-		return DefaultMediaCacheMiB << 20, nil
-	}
-	mebibytes, err := strconv.ParseInt(value, 10, 64)
-	if err != nil || mebibytes < MinMediaCacheMiB || mebibytes > maxMediaCacheMiB {
-		return 0, fmt.Errorf("ROOMUSIC_MEDIA_CACHE_MAX_MIB must be an integer between %d and %d", MinMediaCacheMiB, maxMediaCacheMiB)
-	}
-	return mebibytes << 20, nil
 }
 
 func configuredEnvironment() string {

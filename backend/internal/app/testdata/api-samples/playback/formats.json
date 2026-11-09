@@ -77,6 +77,20 @@
         "delivery": "derived",
         "mime_type": "audio/flac",
         "source_kind": "aiff_id3"
+      },
+      {
+        "codec": "ieee_float",
+        "codecs": null,
+        "delivery": "derived",
+        "mime_type": "audio/flac",
+        "source_kind": "wav_info"
+      },
+      {
+        "codec": "wav_extensible",
+        "codecs": null,
+        "delivery": "derived",
+        "mime_type": "audio/flac",
+        "source_kind": "wav_info"
       }
     ]
   },

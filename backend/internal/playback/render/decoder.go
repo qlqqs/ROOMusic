@@ -16,7 +16,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/zones"
 )
 
-// pcmRange 为 G-2/后续分轨接入保留源 PCM 帧范围；本层不解析 CUE 索引。
+// pcmRange 保存源 PCM 帧范围；本层不解析 CUE 索引。
 type pcmRange struct {
 	start int64
 	end   *int64
@@ -151,6 +151,10 @@ func (d *decoder) fill(ctx context.Context, limit int64) {
 
 func (d *decoder) close() { d.cancel(); <-d.done }
 
+func (d *decoder) position() int64 {
+	return int64(math.Round(d.startSeconds*float64(d.format.SampleRate))) + d.consumed
+}
+
 // read 的等待发生在计时区外；只累计环拷贝、格式换算与电平化的耗时。
 func (d *decoder) read(ctx context.Context, frames int, ready bool, clock func() time.Time) (*chain.Buffer, time.Duration, error) {
 	needed := frames * d.format.Channels * 4
@@ -202,10 +206,11 @@ type byteRing struct {
 	data               []byte
 	head, size         int
 	terminal           error
+	changed            chan struct{}
 }
 
 func newByteRing(size int) *byteRing {
-	r := &byteRing{data: make([]byte, size)}
+	r := &byteRing{data: make([]byte, size), changed: make(chan struct{}, 1)}
 	r.readable, r.writable = sync.NewCond(&r.mu), sync.NewCond(&r.mu)
 	return r
 }
@@ -215,6 +220,7 @@ func (r *byteRing) finish(err error) {
 	if r.terminal == nil {
 		r.terminal = err
 	}
+	wake(r.changed)
 	r.readable.Broadcast()
 	r.writable.Broadcast()
 }
@@ -236,6 +242,7 @@ func (r *byteRing) put(data []byte) {
 	first := copy(r.data[tail:], data)
 	copy(r.data, data[first:])
 	r.size += len(data)
+	wake(r.changed)
 	r.readable.Signal()
 }
 func (r *byteRing) wait(ctx context.Context, size int, initial bool) error {
@@ -264,4 +271,11 @@ func (r *byteRing) take(dst []byte, frameBytes int) (int, error) {
 	}
 	r.writable.Signal()
 	return n, err
+}
+
+// readiness 与通知通道在同一把锁下取得，避免检查后、开始等待前漏掉就绪。
+func (r *byteRing) readiness(frameBytes int) (bool, <-chan struct{}) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.size >= max(frameBytes, (len(r.data)*33+99)/100) || r.terminal != nil, r.changed
 }

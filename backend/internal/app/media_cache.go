@@ -1,49 +1,68 @@
 package app
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/platform/config"
-	"github.com/qlqq/roomusic/backend/internal/playback/derivation"
 )
 
 // mediaCacheDirectoryName 是派生缓存在数据目录下的子目录名。
 const mediaCacheDirectoryName = "media-cache"
 
-// OpenDerivation 准备 ALAC 的无损派生：先核对缓存目录与允许的音乐根互不包含，再打开缓存、定位并自检 ffmpeg。
-// 返回 (管理器, nil) 表示派生可用，调用方用 WithDerivation 装配并在停机时 Close。
-// ffmpeg 找不到或自检不过不是错误：记录 playback.derivation.unavailable（只含原因类别）并返回 (nil, nil)，
-// 应用照常启动，ALAC 保持“不能直接播放”。缓存目录与音乐根重叠、或缓存目录无法建立是部署配置错误，返回错误，调用方应拒绝启动。
-func OpenDerivation(ctx context.Context, settings config.Server, logger *slog.Logger) (*derivation.Manager, error) {
+// RemoveLegacyMediaCache 在启动时清除旧派生缓存；目录不存在时不操作，也不记录删除日志。
+// 删除只限数据目录内部，并继续要求缓存与所有允许的音乐根互不包含。
+func RemoveLegacyMediaCache(settings config.Server, logger *slog.Logger) error {
 	directory := filepath.Join(settings.DataDirectory, mediaCacheDirectoryName)
-	if err := checkCacheDirectoryIsolated(directory, settings.AllowedLibraryRoots); err != nil {
-		return nil, err
+	if _, err := os.Lstat(directory); errors.Is(err, fs.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("stat media cache directory: %w", err)
 	}
-	manager, err := derivation.Open(ctx, derivation.Config{
-		Dir: directory, MaxBytes: settings.MediaCacheMaxBytes, FFmpegPath: settings.FFmpegPath, Logger: logger,
-	})
-	var unavailable *derivation.UnavailableError
-	if errors.As(err, &unavailable) {
-		logger.Warn("playback derivation unavailable", "event", "playback.derivation.unavailable", "reason", unavailable.Reason)
-		return nil, nil
-	}
+	data, err := resolveForCreate(settings.DataDirectory)
 	if err != nil {
-		return nil, fmt.Errorf("open media cache: %w", err)
+		return fmt.Errorf("resolve data directory: %w", err)
 	}
-	stats := manager.Stats()
-	logger.Info("playback derivation ready", "event", "playback.derivation.ready",
-		"ffmpeg_version", stats.Version, "max_bytes", stats.MaxBytes, "entries", stats.Entries, "bytes", stats.Bytes)
-	return manager, nil
+	cache, err := resolveForCreate(directory)
+	if err != nil {
+		return fmt.Errorf("resolve media cache directory: %w", err)
+	}
+	if cache == data || !isWithin(data, cache) {
+		return fmt.Errorf("media cache directory must remain inside ROOMUSIC_DATA_DIR")
+	}
+	if err := checkCacheDirectoryIsolated(directory, settings.AllowedLibraryRoots); err != nil {
+		return err
+	}
+	var bytes int64
+	if err := filepath.WalkDir(directory, func(_ string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		// 不跟随符号链接，也不把目录元数据计入缓存文件字节数。
+		if entry.Type().IsRegular() {
+			info, err := entry.Info()
+			if err != nil {
+				return err
+			}
+			bytes += info.Size()
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("measure media cache: %w", err)
+	}
+	if err := os.RemoveAll(directory); err != nil {
+		return fmt.Errorf("remove media cache: %w", err)
+	}
+	logger.Info("旧派生缓存已删除", "event", "playback.derivation.cache_removed", "module", "playback", "bytes", bytes)
+	return nil
 }
 
-// checkCacheDirectoryIsolated 要求派生缓存目录与每个允许的音乐根互不包含（ADR 0004：派生文件只写入与音乐根隔离的受管目录）。
-// 缓存目录通常还不存在，而在音乐根内创建目录本身就违背“不写音乐目录”，所以先比较再创建；
+// checkCacheDirectoryIsolated 要求旧缓存目录与每个允许的音乐根互不包含，避免删除音乐文件；
 // 比较用真实路径（符号链接已解析），尚不存在的部分接在最深的已存在祖先之后。
 func checkCacheDirectoryIsolated(directory string, allowedRoots []string) error {
 	cache, err := resolveForCreate(directory)

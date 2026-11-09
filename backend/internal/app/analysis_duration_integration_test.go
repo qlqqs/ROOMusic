@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -244,4 +245,13 @@ func TestPostgreSQLAnalysisCorrectsVBRWithoutXingDurationInReleaseHTTP(t *testin
 	if unchangedDuration != scannedDuration {
 		t.Fatalf("分析改写了扫描时长：分析后=%v，原扫描值=%v", unchangedDuration, scannedDuration)
 	}
+}
+
+func requireTestFFmpeg(t *testing.T) string {
+	t.Helper()
+	path := os.Getenv("ROOMUSIC_TEST_FFMPEG")
+	if path == "" {
+		t.Skip("ROOMUSIC_TEST_FFMPEG is not set")
+	}
+	return path
 }

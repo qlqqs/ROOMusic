@@ -86,10 +86,23 @@ import {
 import { decodeAlbumResults, decodeTrackResults, decodeSearchSuggestions } from "../features/search/api/decoders";
 import { decode as d, decodeErrorEnvelope } from "../shared/api";
 import { decodeTrackSummaries } from "../features/catalog/api/track-summary";
-import { listApiSampleNames, loadApiSample } from "./api-samples";
+import { listApiSampleNames, loadApiSample, loadRawApiSample } from "./api-samples";
+import {
+  decodeClaimResult as decodeOutputClaimResult,
+  decodeCommandResult,
+  decodeDeviceResult,
+  decodeRegisterResult,
+  decodeReportResult,
+  decodeSnapshot,
+  decodeStreamEvent,
+  decodeZoneQueue,
+} from "../features/player/zones/decoders";
+import { queueStorageKey } from "../features/player/engine/persistence";
+import { importLegacyQueue } from "../features/player/zones/legacy-import";
+import { memoryStorage } from "./memory-storage";
 
-// 契约测试：后端的每个真实响应样本都必须有一个 decoder 能解码，并且 decoder 保留了样本里的全部字段
-// （往返后与样本相同）。后端新增字段时，样本测试先失败；在这里补上 decoder 才算确认前端已经知道这个字段。
+// 契约测试：所有样本静态登记并双向核对。JSON 响应交给生产 decoder，保留 wire 形状的结果必须与样本相同；
+// 转换为模型的响应与事件明确标记，字段映射由各 feature 的 decoder 测试负责。请求、空响应与媒体头不冒充 JSON 响应。
 type Contract = { status: number; decode: (input: unknown) => unknown; preservesWireShape?: boolean };
 
 // 旧 /releases 列表未被界面消费，合同测试复用生产摘要 decoder 验证兼容形状。
@@ -102,6 +115,54 @@ const decodeLegacyReleasePage = d.defineDecoder(d.object({
 const retiredByZones = (input: unknown) => input;
 
 const successContracts: Record<string, Contract> = {
+  // 播放区响应把 wire 字段、时间与曲目摘要转换为客户端模型。
+  "playback-zones/responses/claim-fixed": { status: 200, decode: decodeOutputClaimResult, preservesWireShape: false },
+  "playback-zones/responses/claim-playing": { status: 200, decode: decodeOutputClaimResult, preservesWireShape: false },
+  "playback-zones/responses/claim-replacement": { status: 200, decode: decodeOutputClaimResult, preservesWireShape: false },
+  "playback-zones/responses/claim-takeover": { status: 200, decode: decodeOutputClaimResult, preservesWireShape: false },
+  "playback-zones/responses/claim-target": { status: 200, decode: decodeOutputClaimResult, preservesWireShape: false },
+  "playback-zones/responses/claim": { status: 200, decode: decodeOutputClaimResult, preservesWireShape: false },
+  "playback-zones/responses/clear-queue": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
+  "playback-zones/responses/ended": { status: 200, decode: decodeReportResult, preservesWireShape: false },
+  "playback-zones/responses/enqueue": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
+  "playback-zones/responses/fault-autoplay-blocked": { status: 200, decode: decodeReportResult, preservesWireShape: false },
+  "playback-zones/responses/fault-stream-lost": { status: 200, decode: decodeReportResult, preservesWireShape: false },
+  "playback-zones/responses/import-unchanged": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
+  "playback-zones/responses/import": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
+  "playback-zones/responses/move-entry": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
+  "playback-zones/responses/next-stream-playing": { status: 200, decode: decodeReportResult, preservesWireShape: false },
+  "playback-zones/responses/next": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
+  "playback-zones/responses/pause": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
+  "playback-zones/responses/play-empty-format": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
+  "playback-zones/responses/play-entry": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
+  "playback-zones/responses/play-failures": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
+  "playback-zones/responses/play-next": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
+  "playback-zones/responses/play-no-stream-format": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
+  "playback-zones/responses/play-tracks": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
+  "playback-zones/responses/play-transient": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
+  "playback-zones/responses/play": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
+  "playback-zones/responses/previous": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
+  "playback-zones/responses/queue-empty": { status: 200, decode: decodeZoneQueue, preservesWireShape: false },
+  "playback-zones/responses/queue": { status: 200, decode: decodeZoneQueue, preservesWireShape: false },
+  "playback-zones/responses/register-device": { status: 201, decode: decodeRegisterResult, preservesWireShape: false },
+  "playback-zones/responses/register-target": { status: 201, decode: decodeRegisterResult, preservesWireShape: false },
+  "playback-zones/responses/remove-entry": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
+  "playback-zones/responses/rename-device": { status: 200, decode: decodeDeviceResult, preservesWireShape: false },
+  "playback-zones/responses/retry": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
+  "playback-zones/responses/seek": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
+  "playback-zones/responses/set-mode": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
+  "playback-zones/responses/set-settings-headroom": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
+  "playback-zones/responses/set-settings": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
+  "playback-zones/responses/snapshot-empty": { status: 200, decode: decodeSnapshot, preservesWireShape: false },
+  "playback-zones/responses/snapshot-next-stream": { status: 200, decode: decodeSnapshot, preservesWireShape: false },
+  "playback-zones/responses/snapshot": { status: 200, decode: decodeSnapshot, preservesWireShape: false },
+  "playback-zones/responses/status-buffering": { status: 200, decode: decodeReportResult, preservesWireShape: false },
+  "playback-zones/responses/status-loading": { status: 200, decode: decodeReportResult, preservesWireShape: false },
+  "playback-zones/responses/status-paused": { status: 200, decode: decodeReportResult, preservesWireShape: false },
+  "playback-zones/responses/status-playing": { status: 200, decode: decodeReportResult, preservesWireShape: false },
+  "playback-zones/responses/stop": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
+  "playback-zones/responses/transfer": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
+  "playback-zones/responses/volume": { status: 200, decode: decodeDeviceResult, preservesWireShape: false },
   // I1/I2/I4/I6：独立 adjudication recorder 的正式真实样本，不复用合成响应。
   "system/version-dev": { status: 200, decode: decodeBuildInfo },
   "system/backups-empty": { status: 200, decode: decodeBackupOverview },
@@ -288,8 +349,6 @@ const successContracts: Record<string, Contract> = {
   // 格式表只取来源类别与编码（可播判定），交付方式与媒体类型不再使用。
   "playback/formats": { status: 200, decode: decodePlaybackFormats, preservesWireShape: false },
   "tracks/playback": { status: 200, decode: retiredByZones },
-  "tracks/playback-derived": { status: 200, decode: retiredByZones },
-  "tracks/playback-preparing": { status: 202, decode: retiredByZones },
   // 曲目分析 decoder 是播放器 DTO 投影（字段名转换、base64 转 Uint8Array），不保留 wire 形状；这里仍调用生产 decoder 验证样本可解码。
   "tracks/analysis-done": { status: 200, decode: decodeTrackAnalysis, preservesWireShape: false },
   "tracks/analysis-failed": { status: 200, decode: decodeTrackAnalysis, preservesWireShape: false },
@@ -455,6 +514,23 @@ const successContracts: Record<string, Contract> = {
 
 // 错误样本都用统一信封；这里同时记录界面要处理的错误码与状态码。
 const errorContracts: Record<string, { status: number; code: string }> = {
+  "playback-zones/responses/errors/database-unavailable": { status: 503, code: "database_unavailable" },
+  "playback-zones/responses/errors/device-online": { status: 409, code: "device_online" },
+  "playback-zones/responses/errors/invalid-id": { status: 400, code: "invalid_id" },
+  "playback-zones/responses/errors/invalid-input": { status: 400, code: "invalid_input" },
+  "playback-zones/responses/errors/invalid-json": { status: 400, code: "invalid_json" },
+  "playback-zones/responses/errors/not-found": { status: 404, code: "not_found" },
+  "playback-zones/responses/errors/origin-forbidden": { status: 403, code: "origin_forbidden" },
+  "playback-zones/responses/errors/origin-required": { status: 403, code: "origin_required" },
+  "playback-zones/responses/errors/output-superseded": { status: 409, code: "output_superseded" },
+  "playback-zones/responses/errors/output-unknown": { status: 404, code: "output_unknown" },
+  "playback-zones/responses/errors/queue-full": { status: 409, code: "queue_full" },
+  "playback-zones/responses/errors/stream-gone": { status: 410, code: "stream_gone" },
+  "playback-zones/responses/errors/track-not-found": { status: 404, code: "track_not_found" },
+  "playback-zones/responses/errors/unauthorized": { status: 401, code: "unauthorized" },
+  "playback-zones/responses/errors/unsupported-protocol": { status: 400, code: "unsupported_protocol" },
+  "playback-zones/responses/errors/volume-fixed": { status: 409, code: "volume_fixed" },
+  "playback-zones/responses/errors/zone-offline": { status: 409, code: "zone_offline" },
   "errors/backup-deletions-invalid": { status: 400, code: "invalid_input" },
   "errors/backup-retention-invalid": { status: 400, code: "invalid_input" },
   "artists/adjudication/albums-any-preparing": { status: 503, code: "artist_catalog_preparing" },
@@ -539,9 +615,6 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "errors/not-directly-playable": { status: 409, code: "not_directly_playable" },
   "errors/source-unavailable": { status: 409, code: "source_unavailable" },
   "errors/source-changed": { status: 409, code: "source_changed" },
-  "errors/derivation-not-ready": { status: 409, code: "derivation_not_ready" },
-  "errors/derivation-failed": { status: 409, code: "derivation_failed" },
-  "errors/derivation-busy": { status: 503, code: "derivation_busy" },
   "errors/not-found-track": { status: 404, code: "not_found" },
   "errors/play-too-short": { status: 400, code: "play_too_short" },
   "errors/range-not-satisfiable": { status: 416, code: "range_not_satisfiable" },
@@ -608,11 +681,150 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "errors/personal-unauthorized": { status: 401, code: "unauthorized" },
 };
 
+// 204 没有 JSON 响应体；生产 API 的空结果回调不承担解码。
+const emptyResponseContracts: Record<string, { status: number }> = {
+  "playback-zones/responses/delete-device": { status: 204 },
+  "playback-zones/responses/release-before-playing": { status: 204 },
+  "playback-zones/responses/release-fixed": { status: 204 },
+  "playback-zones/responses/release-unknown": { status: 204 },
+  "playback-zones/responses/release": { status: 204 },
+};
+
+// 媒体响应交给 <audio> 消费，没有前端 JSON decoder；这里只登记协议样本，不声称验证了媒体交付。
+const mediaResponseContracts: Record<string, { reason: string }> = {
+  "playback-zones/responses/stream-headers": { reason: "渲染流响应头由媒体元素消费，不是 JSON 响应体" },
+};
+
+const eventContracts: Record<string, { event: string; preservesWireShape: boolean }> = {
+  "playback-zones/events/device-removed": { event: "device_removed", preservesWireShape: false },
+  "playback-zones/events/device": { event: "device", preservesWireShape: false },
+  "playback-zones/events/queue": { event: "queue", preservesWireShape: false },
+  "playback-zones/events/snapshot": { event: "snapshot", preservesWireShape: false },
+  "playback-zones/events/zone-all-failed": { event: "zone", preservesWireShape: false },
+  "playback-zones/events/zone-autoplay-blocked": { event: "zone", preservesWireShape: false },
+  "playback-zones/events/zone-failures-stopped": { event: "zone", preservesWireShape: false },
+  "playback-zones/events/zone-next-stream": { event: "zone", preservesWireShape: false },
+  "playback-zones/events/zone-no-stream-format": { event: "zone", preservesWireShape: false },
+  "playback-zones/events/zone-play-recorded": { event: "zone", preservesWireShape: false },
+  "playback-zones/events/zone-queue-restored": { event: "zone", preservesWireShape: false },
+  "playback-zones/events/zone-signal": { event: "zone", preservesWireShape: false },
+  "playback-zones/events/zone-track-failed": { event: "zone", preservesWireShape: false },
+  "playback-zones/events/zone-track-started": { event: "zone", preservesWireShape: false },
+  "playback-zones/events/zone-transient-failure": { event: "zone", preservesWireShape: false },
+};
+
+type RequestContract = { encode?: () => Promise<unknown> };
+
+// zones/api.ts 直接传协议 DTO，没有独立编码器的请求只登记；不将网络方法当编码器。
+// import 通过既有迁移入口生成请求体；import-unchanged 的空队列不会由前端发送，也只登记。
+const requestContracts: Record<string, RequestContract> = {
+  "playback-zones/requests/claim-fixed": {},
+  "playback-zones/requests/claim-playing": {},
+  "playback-zones/requests/claim-replacement": {},
+  "playback-zones/requests/claim-takeover": {},
+  "playback-zones/requests/claim-target": {},
+  "playback-zones/requests/claim": {},
+  "playback-zones/requests/clear-queue": {},
+  "playback-zones/requests/delete-device": {},
+  "playback-zones/requests/ended": {},
+  "playback-zones/requests/enqueue": {},
+  "playback-zones/requests/errors/database-unavailable": {},
+  "playback-zones/requests/errors/device-online": {},
+  "playback-zones/requests/errors/invalid-id": {},
+  "playback-zones/requests/errors/invalid-input": {},
+  "playback-zones/requests/errors/invalid-json": {},
+  "playback-zones/requests/errors/not-found": {},
+  "playback-zones/requests/errors/origin-forbidden": {},
+  "playback-zones/requests/errors/origin-required": {},
+  "playback-zones/requests/errors/output-superseded": {},
+  "playback-zones/requests/errors/output-unknown": {},
+  "playback-zones/requests/errors/queue-full": {},
+  "playback-zones/requests/errors/stream-gone": {},
+  "playback-zones/requests/errors/track-not-found": {},
+  "playback-zones/requests/errors/unauthorized": {},
+  "playback-zones/requests/errors/unsupported-protocol": {},
+  "playback-zones/requests/errors/volume-fixed": {},
+  "playback-zones/requests/errors/zone-offline": {},
+  "playback-zones/requests/events": {},
+  "playback-zones/requests/fault-autoplay-blocked": {},
+  "playback-zones/requests/fault-stream-lost": {},
+  "playback-zones/requests/import-unchanged": {},
+  "playback-zones/requests/import": {
+    encode: async () => {
+      const userId = "00000000-0000-4000-8000-000000000003";
+      const storage = memoryStorage({
+        [queueStorageKey(userId)]: JSON.stringify({
+          version: 1,
+          entries: [{
+            entryId: "legacy-1",
+            trackId: "00000000-0000-4000-8000-000000000001",
+            releaseId: "00000000-0000-4000-8000-000000000004",
+            groupId: "00000000-0000-4000-8000-000000000005",
+          }],
+          currentEntryId: "legacy-1",
+          mode: "sequential",
+          positionSeconds: 2,
+          history: [],
+        }),
+      });
+      let body: unknown;
+      await importLegacyQueue(storage, userId, async (command) => { body = command; });
+      return body;
+    },
+  },
+  "playback-zones/requests/move-entry": {},
+  "playback-zones/requests/next-stream-playing": {},
+  "playback-zones/requests/next": {},
+  "playback-zones/requests/pause": {},
+  "playback-zones/requests/play-empty-format": {},
+  "playback-zones/requests/play-entry": {},
+  "playback-zones/requests/play-failures": {},
+  "playback-zones/requests/play-next": {},
+  "playback-zones/requests/play-no-stream-format": {},
+  "playback-zones/requests/play-tracks": {},
+  "playback-zones/requests/play-transient": {},
+  "playback-zones/requests/play": {},
+  "playback-zones/requests/previous": {},
+  "playback-zones/requests/queue-empty": {},
+  "playback-zones/requests/queue": {},
+  "playback-zones/requests/register-device": {},
+  "playback-zones/requests/register-target": {},
+  "playback-zones/requests/release-before-playing": {},
+  "playback-zones/requests/release-fixed": {},
+  "playback-zones/requests/release-unknown": {},
+  "playback-zones/requests/release": {},
+  "playback-zones/requests/remove-entry": {},
+  "playback-zones/requests/rename-device": {},
+  "playback-zones/requests/retry": {},
+  "playback-zones/requests/seek": {},
+  "playback-zones/requests/set-mode": {},
+  "playback-zones/requests/set-settings-headroom": {},
+  "playback-zones/requests/set-settings": {},
+  "playback-zones/requests/snapshot-empty": {},
+  "playback-zones/requests/snapshot-next-stream": {},
+  "playback-zones/requests/snapshot": {},
+  "playback-zones/requests/status-buffering": {},
+  "playback-zones/requests/status-loading": {},
+  "playback-zones/requests/status-paused": {},
+  "playback-zones/requests/status-playing": {},
+  "playback-zones/requests/stop": {},
+  "playback-zones/requests/stream": {},
+  "playback-zones/requests/transfer": {},
+  "playback-zones/requests/volume": {},
+};
+
 const sampleNames = listApiSampleNames();
 
 describe("API 样本契约", () => {
   it("每个样本都有契约，每个契约都有样本", () => {
-    const contractNames = [...Object.keys(successContracts), ...Object.keys(errorContracts)].sort();
+    const contractNames = [
+      ...Object.keys(successContracts),
+      ...Object.keys(errorContracts),
+      ...Object.keys(emptyResponseContracts),
+      ...Object.keys(mediaResponseContracts),
+      ...Object.keys(eventContracts),
+      ...Object.keys(requestContracts),
+    ].sort();
     expect(sampleNames.filter((name) => !contractNames.includes(name)), "没有契约的样本").toEqual([]);
     expect(contractNames.filter((name) => !sampleNames.includes(name)), "没有样本的契约").toEqual([]);
   });
@@ -624,6 +836,37 @@ describe("API 样本契约", () => {
     expect(sample.status).toBe(contract.status);
     const decoded = contract.decode(sample.body);
     if (contract.preservesWireShape !== false) expect(decoded).toEqual(sample.body);
+  });
+
+  it.each(sampleNames.filter((name) => name in emptyResponseContracts))("空响应样本 %s 没有响应体", (name) => {
+    const contract = emptyResponseContracts[name];
+    if (contract === undefined) throw new Error(`缺少契约：${name}`);
+    const sample = loadApiSample(name);
+    expect(sample.status).toBe(contract.status);
+    expect(sample.body).toEqual(null);
+  });
+
+  it.each(sampleNames.filter((name) => name in eventContracts))("事件样本 %s 被事件 decoder 解码", (name) => {
+    const contract = eventContracts[name];
+    if (contract === undefined) throw new Error(`缺少契约：${name}`);
+    const sample = loadRawApiSample(name);
+    if (typeof sample !== "object" || sample === null || !("event" in sample) || !("data" in sample) || typeof sample.event !== "string") {
+      throw new Error(`样本 ${name} 不是 {event, data} 结构`);
+    }
+    expect(sample.event).toBe(contract.event);
+    const decoded = decodeStreamEvent(sample.event, JSON.stringify(sample.data));
+    expect(decoded?.type).toBe(contract.event);
+    if (contract.preservesWireShape) expect(decoded).toEqual(sample.data);
+  });
+
+  it.each(sampleNames.filter((name) => requestContracts[name]?.encode !== undefined))("请求样本 %s 与现有编码结果一致", async (name) => {
+    const contract = requestContracts[name];
+    if (contract?.encode === undefined) throw new Error(`缺少请求编码契约：${name}`);
+    const sample = loadRawApiSample(name);
+    if (typeof sample !== "object" || sample === null || !("method" in sample) || !("path" in sample) || !("body" in sample)) {
+      throw new Error(`样本 ${name} 不是 {method, path, body} 结构`);
+    }
+    expect(await contract.encode()).toEqual(sample.body);
   });
 
   it.each(sampleNames.filter((name) => name in errorContracts))("错误样本 %s 被错误信封 decoder 解码", (name) => {

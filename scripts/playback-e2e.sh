@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 只使用合成素材、独立数据库和独占测试项目；不读取 .env 或真实音乐目录。
-# ALAC 的派生播放用 scripts/ffmpeg-pinned.sh 取出的固定版本 ffmpeg（经 ROOMUSIC_FFMPEG_PATH 交给隔离服务）；取不到时脚本失败，
+# 服务端渲染播放用 scripts/ffmpeg-pinned.sh 取出的固定版本 ffmpeg（经 ROOMUSIC_FFMPEG_PATH 交给隔离服务）；取不到时脚本失败，
 # 不会静默退回“ALAC 不能播放”。
 set -Eeuo pipefail
 umask 077
@@ -146,8 +146,8 @@ for _ in {1..150}; do
   sleep 0.2
 done
 [[ "$ready" == true ]] || { echo '隔离服务启动超时' >&2; exit 1; }
-# 派生必须已就绪（ffmpeg 自检通过）：否则 ALAC 用例会以“不能播放”失败，这里先给出明确原因。
+# 渲染必须已就绪（ffmpeg 自检通过）：否则播放用例会以“不能播放”失败，这里先给出明确原因。
 if [[ "$SCAN_FEEDBACK_ONLY" == false ]]; then
-  grep -q '"event":"playback.derivation.ready"' "$TEMP_DIR/server.log" || { echo '隔离服务没有启用 ALAC 派生（ffmpeg 不可用或自检失败）' >&2; exit 1; }
+  grep -q '"event":"playback.render.ready"' "$TEMP_DIR/server.log" || { echo '隔离服务渲染不可用（ffmpeg 不可用或自检失败）' >&2; exit 1; }
 fi
 (cd "$ROOT_DIR/frontend" && npm exec playwright -- test --config playwright.real.config.ts "$@")

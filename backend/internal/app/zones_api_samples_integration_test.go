@@ -276,6 +276,44 @@ func TestPostgreSQLZonesAPIResponseSamples(t *testing.T) {
 	c.call("delete-device", "DELETE", "/devices/"+did, nil, 204)
 	samples.recordZonesPayload("events/device-removed", events.wait(t, func(frame zonesSampleFrame) bool { return frame.Event == "device_removed" }))
 	c.call("release-unknown", "POST", "/outputs/"+newer.SessionID+"/release", zones.ReleaseOutputInput{}, 204)
+	// 新合同使用末尾独立播放区，不改变既有样本的设置、事件顺序与 revision。
+	{
+		device := c.device("")
+		id := device.Zone.ZoneID
+		c.claim("", device.Device.DeviceID, false, nil)
+		headroom := zones.Headroom{Enabled: true, DB: -3.1, ClipIndicator: true}
+		settings := c.command("set-settings-headroom", id, map[string]any{"command": "set_settings", "settings": map[string]any{"headroom": headroom}})
+		if settings.Zone.Settings.Headroom != headroom {
+			t.Fatalf("设置样本未保留非默认 Headroom：%+v", settings.Zone.Settings.Headroom)
+		}
+		c.command("", id, map[string]any{"command": "play_tracks", "track_ids": f.tracks[:1], "start_index": 0})
+		// 经渲染端口与真实 SSE 投影生成非空路径，而非直接拼出响应样本。
+		signal := map[string]any{
+			"quality": "enhanced", "clipping": true, "processing_speed": 85.3,
+			"steps": []map[string]any{
+				{"kind": "source", "quality": "lossless", "lossy": false, "compat": false, "params": map[string]any{"codec": "wav", "sample_rate": 48000, "bit_depth": 16, "channels": 2}},
+				{"kind": "headroom", "quality": "enhanced", "lossy": false, "compat": false, "params": map[string]any{"gain_db": -3.1}},
+				{"kind": "dither", "quality": "enhanced", "lossy": false, "compat": false, "params": map[string]any{"bits": 16, "kind": "tpdf"}},
+				{"kind": "encode", "quality": "lossless", "lossy": false, "compat": false, "params": map[string]any{"codec": "wav", "sample_rate": 48000, "bit_depth": 16}},
+			},
+		}
+		wantSignal, err := json.Marshal(signal)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sessions := f.renderer.Sessions()
+		f.emit(t, sessions[len(sessions)-1], zones.Event{Kind: "signal", Signal: signal})
+		samples.recordZonesPayload("events/zone-signal", events.zone(t, id, func(z zones.Zone) bool {
+			if z.Signal == nil {
+				return false
+			}
+			got, err := json.Marshal(z.Signal)
+			if err != nil || !bytes.Equal(got, wantSignal) {
+				t.Fatalf("信号事件未原样投影：signal=%s err=%v", got, err)
+			}
+			return true
+		}))
+	}
 	samples.finish()
 }
 func (c zonesSampleCalls) commandError(name, id string, body map[string]any, status int) {

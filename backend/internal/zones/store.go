@@ -4,6 +4,7 @@ package zones
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -44,13 +45,14 @@ type PersistedDevice struct {
 	LastSeenAt   time.Time
 }
 
-// PlaybackSettings 只包含本批迁移拥有的播放设置。
+// PlaybackSettings 保存播放区的持久化播放设置。
 type PlaybackSettings struct {
 	Leveling         string
 	Crossfade        bool
 	CrossfadeSeconds int
 	Gapless          bool
 	Quality          string
+	Headroom         Headroom
 }
 
 // PersistedZone 保存播放区的持久状态；空 CurrentEntryID 和 nil ImportedAt 表示未设置。
@@ -84,6 +86,10 @@ func NewStore(tx *sql.Tx) *Store { return &Store{tx: tx} }
 // Queue.Entries 不参与此操作；条目变更须在同一事务内调用对应原语。
 // 版本号及队列语义由调用者计算，本层不自行递增或验证当前项的归属。
 func (s *Store) UpdateZone(ctx context.Context, userID string, zone PersistedZone) error {
+	headroom, err := json.Marshal(zone.Settings.Headroom)
+	if err != nil {
+		return fmt.Errorf("encode playback headroom: %w", err)
+	}
 	result, err := s.tx.ExecContext(ctx, `
 UPDATE playback_zones SET
  mode=$3, current_entry_id=NULLIF($4, '')::uuid,
@@ -91,12 +97,12 @@ UPDATE playback_zones SET
  history=COALESCE($7::text[]::uuid[], '{}'::uuid[]),
  shuffle_bag=COALESCE($8::text[]::uuid[], '{}'::uuid[]),
  leveling=$9, crossfade=$10, crossfade_seconds=$11, gapless=$12, quality=$13,
- revision=$14, queue_revision=$15, imported_at=$16
+ revision=$14, queue_revision=$15, imported_at=$16, headroom=$17::jsonb
 WHERE user_id=$1::uuid AND id=$2::uuid`,
 		userID, zone.ZoneID, zone.Queue.Mode, zone.Queue.CurrentEntryID,
 		zone.PositionSeconds, zone.PositionSavedAt, zone.Queue.History, zone.Queue.Bag,
 		zone.Settings.Leveling, zone.Settings.Crossfade, zone.Settings.CrossfadeSeconds,
-		zone.Settings.Gapless, zone.Settings.Quality, zone.Revision, zone.QueueRevision, zone.ImportedAt)
+		zone.Settings.Gapless, zone.Settings.Quality, zone.Revision, zone.QueueRevision, zone.ImportedAt, headroom)
 	if err != nil {
 		return fmt.Errorf("update playback zone: %w", err)
 	}
