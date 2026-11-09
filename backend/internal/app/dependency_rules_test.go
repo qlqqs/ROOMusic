@@ -63,6 +63,7 @@ var packageRules = map[string]packageRule{
 	"dsp/dsd":                        {},
 	"dsp/dsd/internal/gen":           {},
 	"playback/dsdio":                 {},
+	"playback/dsdpcm":                {imports: []string{"playback/dsdio", "dsp/dsd", "dsp/src", "dsp/peq"}},
 	"dsp/peq":                        {},
 	"dspsettings/opra":               {},
 	"playback/analysis":              {},
