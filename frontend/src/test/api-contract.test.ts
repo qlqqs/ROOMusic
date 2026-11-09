@@ -288,8 +288,6 @@ const successContracts: Record<string, Contract> = {
   // 格式表只取来源类别与编码（可播判定），交付方式与媒体类型不再使用。
   "playback/formats": { status: 200, decode: decodePlaybackFormats, preservesWireShape: false },
   "tracks/playback": { status: 200, decode: retiredByZones },
-  "tracks/playback-derived": { status: 200, decode: retiredByZones },
-  "tracks/playback-preparing": { status: 202, decode: retiredByZones },
   // 曲目分析 decoder 是播放器 DTO 投影（字段名转换、base64 转 Uint8Array），不保留 wire 形状；这里仍调用生产 decoder 验证样本可解码。
   "tracks/analysis-done": { status: 200, decode: decodeTrackAnalysis, preservesWireShape: false },
   "tracks/analysis-failed": { status: 200, decode: decodeTrackAnalysis, preservesWireShape: false },
@@ -539,9 +537,6 @@ const errorContracts: Record<string, { status: number; code: string }> = {
   "errors/not-directly-playable": { status: 409, code: "not_directly_playable" },
   "errors/source-unavailable": { status: 409, code: "source_unavailable" },
   "errors/source-changed": { status: 409, code: "source_changed" },
-  "errors/derivation-not-ready": { status: 409, code: "derivation_not_ready" },
-  "errors/derivation-failed": { status: 409, code: "derivation_failed" },
-  "errors/derivation-busy": { status: 503, code: "derivation_busy" },
   "errors/not-found-track": { status: 404, code: "not_found" },
   "errors/play-too-short": { status: 400, code: "play_too_short" },
   "errors/range-not-satisfiable": { status: 416, code: "range_not_satisfiable" },

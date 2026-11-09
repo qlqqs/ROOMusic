@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
+	"github.com/qlqq/roomusic/backend/internal/playback/render/ffmpeg"
 )
 
 // playbackModified 带有纳秒残留：文件系统的修改时间有纳秒精度，扫描记录（TIMESTAMPTZ）只到微秒。
@@ -341,7 +343,7 @@ func TestPostgreSQLPlaybackAudioRejectsUnusableRangesWithAJSON416(t *testing.T) 
 }
 
 func TestPostgreSQLPlaybackChecksRunInTheDocumentedOrder(t *testing.T) {
-	application := newIntegrationTestApplication(t)
+	application := newIntegrationTestApplication(t, withTestRenderer(t))
 	library := createPlaybackLibrary(t, application)
 	user := application.createUser(t, "user")
 	content := flacBytes(4096)
@@ -469,6 +471,57 @@ func TestPostgreSQLPlaybackPreflightDescribesTheOriginalRepresentation(t *testin
 		t.Fatalf("remove source: %v", err)
 	}
 	requireAPIError(t, application.request(t, http.MethodGet, "/api/v1/tracks/"+flac+"/playback", nil, &user, nil), http.StatusConflict, "source_unavailable")
+}
+
+// withTestRenderer 为格式合同和样本装配通过自检的真实 ffmpeg。
+func withTestRenderer(t *testing.T) Option {
+	t.Helper()
+	tool, err := ffmpeg.Open(context.Background(), requireTestFFmpeg(t))
+	if err != nil {
+		t.Fatalf("打开测试渲染器失败：%v", err)
+	}
+	return WithRenderer(tool)
+}
+
+func TestPostgreSQLPlaybackFormatsIncludeRenderableFormats(t *testing.T) {
+	application := newIntegrationTestApplication(t, withTestRenderer(t))
+	user := application.createUser(t, "user")
+	response := application.request(t, http.MethodGet, "/api/v1/playback/formats", nil, &user, nil)
+	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("formats: HTTP %d, Cache-Control %q", response.Code, response.Header().Get("Cache-Control"))
+	}
+	var decoded struct {
+		Items []struct {
+			SourceKind string `json:"source_kind"`
+			Codec      string `json:"codec"`
+			Delivery   string `json:"delivery"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &decoded); err != nil {
+		t.Fatalf("解码格式表失败：%v", err)
+	}
+	var got []string
+	for _, item := range decoded.Items {
+		got = append(got, item.SourceKind+"/"+item.Codec+" "+item.Delivery)
+	}
+	want := []string{
+		"flac_vorbis_comment/flac original",
+		"mp3_id3v2/mp3 original",
+		"wav_info/pcm original",
+		"m4a/aac original",
+		"ogg_vorbis_comment/vorbis original",
+		"opus_tags/opus original",
+		"m4a/alac derived",
+		"ape_apev2/ape derived",
+		"wavpack_apev2/wavpack derived",
+		"wavpack_apev2/wavpack_hybrid derived",
+		"aiff_id3/aiff derived",
+		"wav_info/ieee_float derived",
+		"wav_info/wav_extensible derived",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("formats =\n%s\n期望\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
 }
 
 func TestPostgreSQLPlaybackFormatsAreEmptyWithoutRenderer(t *testing.T) {

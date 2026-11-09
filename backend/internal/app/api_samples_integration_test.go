@@ -42,7 +42,7 @@ const (
 )
 
 func TestPostgreSQLAPIResponseSamples(t *testing.T) {
-	application := newIntegrationTestApplication(t)
+	application := newIntegrationTestApplication(t, withTestRenderer(t))
 	samples := newAPISampleRecorder(t, application)
 	call := func(method, path string, body any, user *integrationTestUser, extraHeaders ...map[string]string) *httptest.ResponseRecorder {
 		t.Helper()

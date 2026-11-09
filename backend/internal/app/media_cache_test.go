@@ -1,11 +1,15 @@
 package app
 
 import (
+	"errors"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/qlqq/roomusic/backend/internal/platform/config"
 )
 
 func jsonLogger() (*slog.Logger, *lockedBuffer) {
@@ -122,5 +126,84 @@ func TestIsWithin(t *testing.T) {
 		if got := isWithin(testCase.parent, testCase.child); got != testCase.want {
 			t.Errorf("isWithin(%q, %q) = %v, want %v", testCase.parent, testCase.child, got, testCase.want)
 		}
+	}
+}
+
+func TestRemoveLegacyMediaCacheRemovesFilesAndLogsTheirBytes(t *testing.T) {
+	data := t.TempDir()
+	cache := filepath.Join(data, mediaCacheDirectoryName)
+	if err := os.MkdirAll(filepath.Join(cache, "nested"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var wantBytes int64
+	for name, content := range map[string]string{"original.flac": "cached audio", "nested/other.flac": "another cached file"} {
+		if err := os.WriteFile(filepath.Join(cache, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		wantBytes += int64(len(content))
+	}
+	logger, logs := jsonLogger()
+	if err := RemoveLegacyMediaCache(config.Server{DataDirectory: data, AllowedLibraryRoots: []string{t.TempDir()}}, logger); err != nil {
+		t.Fatalf("删除旧缓存失败：%v", err)
+	}
+	if _, err := os.Stat(cache); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("旧缓存目录未删除：%v", err)
+	}
+	events := logEvents(t, logs, "playback.derivation.cache_removed")
+	if len(events) != 1 {
+		t.Fatalf("删除日志数量 = %d，期望 1", len(events))
+	}
+	if events[0]["bytes"] != float64(wantBytes) {
+		t.Fatalf("删除字节数 = %v，期望 %d", events[0]["bytes"], wantBytes)
+	}
+}
+
+func TestRemoveLegacyMediaCacheDoesNotLogWhenAbsent(t *testing.T) {
+	logger, logs := jsonLogger()
+	if err := RemoveLegacyMediaCache(config.Server{DataDirectory: t.TempDir()}, logger); err != nil {
+		t.Fatalf("缓存不存在时不应报错：%v", err)
+	}
+	if logs.String() != "" {
+		t.Fatalf("缓存不存在时不应记录日志：%s", logs.String())
+	}
+}
+
+func TestRemoveLegacyMediaCacheRefusesOverlappingLibraryRootsWithoutDeleting(t *testing.T) {
+	for _, rootInsideCache := range []bool{false, true} {
+		name := "缓存位于音乐根内"
+		if rootInsideCache {
+			name = "音乐根位于缓存内"
+		}
+		t.Run(name, func(t *testing.T) {
+			data := t.TempDir()
+			cache := filepath.Join(data, mediaCacheDirectoryName)
+			music := data
+			if rootInsideCache {
+				music = filepath.Join(cache, "music")
+			}
+			for _, directory := range []string{cache, music} {
+				if err := os.MkdirAll(directory, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			files := []string{filepath.Join(cache, "cached.flac"), filepath.Join(music, "source.flac")}
+			for _, file := range files {
+				if err := os.WriteFile(file, []byte("keep"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			logger, logs := jsonLogger()
+			if err := RemoveLegacyMediaCache(config.Server{DataDirectory: data, AllowedLibraryRoots: []string{music}}, logger); err == nil {
+				t.Fatal("重叠目录未被拒绝")
+			}
+			for _, file := range files {
+				if content, err := os.ReadFile(file); err != nil || string(content) != "keep" {
+					t.Fatalf("拒绝删除后文件发生变化：content=%q err=%v", content, err)
+				}
+			}
+			if events := logEvents(t, logs, "playback.derivation.cache_removed"); len(events) != 0 {
+				t.Fatalf("拒绝删除不应记录成功日志：%v", events)
+			}
+		})
 	}
 }
