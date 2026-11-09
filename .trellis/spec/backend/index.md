@@ -72,6 +72,7 @@ Before writing or reviewing backend code:
 | [内嵌歌词合同](./lyrics-contracts.md) | M2b 歌词：标签提取与规范化、`tracks.lyrics` 与约束、歌词接口、LRC 解析规则、测试 |
 | [后台音频分析合同](./audio-analysis-contracts.md) | 0033：`track_analyses` 与待分析判定、单线程低优先级工作者、ffmpeg 命令与自检、`ROOMUSIC_AUDIO_ANALYSIS`、按 Roon 的增益公式、分析结果与进度接口、测试 |
 | [参数均衡后端合同](./peq-contracts.md) | PEQ 文档、0047、成员预设与 OPRA HTTP、频响和渲染接入 |
+| [卷积校正后端合同](./convolution-contracts.md) | 卷积设置、0048/0049、成员 IR 上传装载与缓存、事务删除及异步渲染接入 |
 | [播放区数据与队列合同](./zones-data-contracts.md) | B1：0043 三表、纯队列语义、用户隔离读取与调用方事务写入 |
 | [播放区协议 v1](./playback-zone-contracts.md) | 客户端协议文档（原生客户端据此实现）：设备与播放区、命令、期望状态与回报、事件流、长流与 HLS、能力协商、信号路径与 Headroom、错误码 |
 | [播放区服务端实现合同](./playback-zone-service-contracts.md) | B2/B3：Service 签名与渲染端口、锁与事务、hub、输出端租约、会话事件应用与服务端计次、测试接点 |

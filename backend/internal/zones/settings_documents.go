@@ -87,6 +87,10 @@ func ValidateSettingsShape(raw []byte) error {
 			if !validHeadroomShape(value) {
 				return ErrInvalidInput
 			}
+		case "convolution":
+			if !validConvolutionShape(value) {
+				return ErrInvalidInput
+			}
 		case "peq":
 			if !validPEQShape(value) {
 				return ErrInvalidInput
@@ -137,9 +141,10 @@ func (p *SettingsPatch) UnmarshalJSON(raw []byte) error {
 	var decoded plain
 	wire := struct {
 		*plain
-		SampleRate json.RawMessage `json:"sample_rate"`
-		Downmix    json.RawMessage `json:"downmix"`
-		PEQ        json.RawMessage `json:"peq"`
+		SampleRate  json.RawMessage `json:"sample_rate"`
+		Downmix     json.RawMessage `json:"downmix"`
+		PEQ         json.RawMessage `json:"peq"`
+		Convolution json.RawMessage `json:"convolution"`
 	}{plain: &decoded}
 	if err := json.Unmarshal(raw, &wire); err != nil {
 		return err
@@ -165,6 +170,13 @@ func (p *SettingsPatch) UnmarshalJSON(raw []byte) error {
 		}
 		decoded.PEQ = &document
 	}
+	if wire.Convolution != nil {
+		document, err := ParseConvolutionDocument(wire.Convolution)
+		if err != nil {
+			return err
+		}
+		decoded.Convolution = &document
+	}
 	*p = SettingsPatch(decoded)
 	return nil
 }
@@ -175,9 +187,10 @@ func (p *PlaybackSettings) UnmarshalJSON(raw []byte) error {
 	var decoded plain
 	wire := struct {
 		*plain
-		SampleRate json.RawMessage `json:"sample_rate"`
-		Downmix    json.RawMessage `json:"downmix"`
-		PEQ        json.RawMessage `json:"peq"`
+		SampleRate  json.RawMessage `json:"sample_rate"`
+		Downmix     json.RawMessage `json:"downmix"`
+		PEQ         json.RawMessage `json:"peq"`
+		Convolution json.RawMessage `json:"convolution"`
 	}{plain: &decoded}
 	if err := json.Unmarshal(raw, &wire); err != nil {
 		return err
@@ -202,6 +215,13 @@ func (p *PlaybackSettings) UnmarshalJSON(raw []byte) error {
 			return err
 		}
 		decoded.PEQ = document
+	}
+	if wire.Convolution != nil {
+		document, err := ParseConvolutionDocument(wire.Convolution)
+		if err != nil {
+			return err
+		}
+		decoded.Convolution = document
 	}
 	*p = PlaybackSettings(decoded)
 	return nil

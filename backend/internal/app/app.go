@@ -17,6 +17,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/catalog/maintenance"
 	"github.com/qlqq/roomusic/backend/internal/dspsettings"
 	dspsettingsapi "github.com/qlqq/roomusic/backend/internal/dspsettings/httpapi"
+	"github.com/qlqq/roomusic/backend/internal/dspsettings/irload"
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	identityapi "github.com/qlqq/roomusic/backend/internal/identity/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/library"
@@ -104,10 +105,11 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	libraryService := library.NewService(lifecycle, database, settings.DataDirectory, logger).WithScanConcurrency(settings.ScanWorkers)
 	personalService := personal.NewService(database)
 	dspSettingsService := dspsettings.NewService(database)
+	dspSettingsService.ConfigureIR(irload.NewLoader(assembly.renderer))
 	listeningService := listening.NewService(database)
 	playbackService := newPlaybackService(database, settings, assembly)
-	renderer, closeRenderer := assembleRenderer(database, playbackService, assembly.renderer, logger)
-	zonesService := zones.NewService(database, zones.Options{Logger: logger, Renderer: renderer, PlayRecorder: zonePlayRecorder{service: listeningService}})
+	renderer, closeRenderer := assembleRenderer(database, playbackService, assembly.renderer, logger, dspSettingsService)
+	zonesService := zones.NewService(database, zones.Options{Logger: logger, Renderer: renderer, IRReferences: zoneIRReferences{service: dspSettingsService}, PlayRecorder: zonePlayRecorder{service: listeningService}})
 	zonesDone := make(chan struct{})
 	if lifecycle != nil {
 		context.AfterFunc(lifecycle, func() {
@@ -158,7 +160,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	listeningapi.New(guard, listeningService).Register(mux)
 	personalapi.New(guard, personalService).Register(mux)
 	zonesapi.New(guard, zonesService).Register(mux)
-	dspsettingsapi.New(guard, dspSettingsService).Register(mux)
+	dspsettingsapi.New(guard, dspSettingsService, dspsettingsapi.WithIRDeleter(zonesService)).Register(mux)
 	if assembly.backups != nil {
 		backupapi.New(assembly.backups, database, guard, lifecycle).Register(mux)
 	}

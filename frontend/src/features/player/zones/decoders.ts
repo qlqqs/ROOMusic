@@ -76,6 +76,10 @@ const signalStepDecoder: d.Decoder<SignalStep | null> = (input, path) => {
       const raw = paramsOf(d.object({ label: d.string({ max: 512 }), bands: d.integer({ min: 0 }) }));
       return { ...base, kind: "peq", params: { label: raw.label, bands: raw.bands } };
     }
+    case "convolution": {
+      const raw = paramsOf(d.object({ name: d.string({ max: 256 }), taps: d.integer({ min: 0 }), resampled_from: d.optional(d.integer({ min: 0 })) }));
+      return { ...base, kind: "convolution", params: { name: raw.name, taps: raw.taps, resampledFrom: raw.resampled_from ?? null } };
+    }
     case "leveling": {
       const raw = paramsOf(d.object({ gain_db: d.number(), basis: d.string({ max: 64 }) }));
       return { ...base, kind: "leveling", params: { gainDb: raw.gain_db, basis: raw.basis } };
@@ -128,6 +132,7 @@ const settingsDecoder: d.Decoder<PlaybackSettings> = (input, path) => {
     sample_rate: d.object({ strategy: lenient(sampleRateStrategies, "none"), custom_rate: d.nullable(d.integer({ min: 0 })), filter: sampleRateFilterDecoder }),
     downmix: d.object({ enabled: d.boolean() }),
     peq: peqDocumentDecoder,
+    convolution: d.object({ enabled: d.boolean(), ir_id: d.nullable(d.uuid()), before_peq: d.boolean() }),
   })(input, path);
   return {
     leveling: raw.leveling,
@@ -139,6 +144,7 @@ const settingsDecoder: d.Decoder<PlaybackSettings> = (input, path) => {
     sampleRate: { strategy: raw.sample_rate.strategy, customRate: raw.sample_rate.custom_rate, filter: raw.sample_rate.filter },
     downmix: { enabled: raw.downmix.enabled },
     peq: raw.peq,
+    convolution: { enabled: raw.convolution.enabled, irId: raw.convolution.ir_id, beforePeq: raw.convolution.before_peq },
   };
 };
 

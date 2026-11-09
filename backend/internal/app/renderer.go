@@ -6,8 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
+	"github.com/qlqq/roomusic/backend/internal/dsp/chain"
+	"github.com/qlqq/roomusic/backend/internal/dspsettings"
 	"github.com/qlqq/roomusic/backend/internal/platform/config"
 	"github.com/qlqq/roomusic/backend/internal/playback"
 	"github.com/qlqq/roomusic/backend/internal/playback/analysis"
@@ -50,12 +53,13 @@ func newPlaybackService(database *sql.DB, settings config.Server, assembly optio
 	return playback.NewService(database, settings.AllowedLibraryRoots, opts...)
 }
 
-func assembleRenderer(database *sql.DB, service *playback.Service, tool *ffmpeg.Tool, logger *slog.Logger) (zones.Renderer, func()) {
+func assembleRenderer(database *sql.DB, service *playback.Service, tool *ffmpeg.Tool, logger *slog.Logger, irs *dspsettings.Service) (zones.Renderer, func()) {
 	if tool == nil || database == nil {
 		return nil, func() {}
 	}
 	renderer := render.New(render.Options{
 		FFmpeg:  tool,
+		IRs:     renderIRSource{service: irs},
 		Sources: renderTrackSource{playback: service, catalog: catalog.NewStore(database)},
 		Logger:  logger,
 	})
@@ -121,4 +125,28 @@ func renderSeconds(milliseconds *int32) *float64 {
 	}
 	seconds := float64(*milliseconds) / 1000
 	return &seconds
+}
+
+// renderIRSource 只转换端口类型，不把资源服务依赖带进渲染包。
+type renderIRSource struct{ service *dspsettings.Service }
+
+func (s renderIRSource) Load(ctx context.Context, userID, irID string, format chain.Format) (render.LoadedIR, error) {
+	ir, err := s.service.LoadIR(ctx, userID, irID, format.SampleRate, format.Channels, strconv.FormatUint(uint64(format.Layout), 16))
+	return render.LoadedIR{Name: ir.Name, ResampledFrom: ir.ResampledFrom, Config: ir.Config}, err
+}
+
+type zoneIRReferences struct{ service *dspsettings.Service }
+
+func (r zoneIRReferences) Check(ctx context.Context, tx *sql.Tx, userID, irID string) error {
+	return zoneIRError(r.service.CheckIR(ctx, tx, userID, irID))
+}
+func (r zoneIRReferences) Delete(ctx context.Context, tx *sql.Tx, userID, irID string) error {
+	return zoneIRError(r.service.DeleteIR(ctx, tx, userID, irID))
+}
+func (r zoneIRReferences) Invalidate(userID, irID string) { r.service.InvalidateIR(userID, irID) }
+func zoneIRError(err error) error {
+	if errors.Is(err, dspsettings.ErrNotFound) {
+		return zones.ErrNotFound
+	}
+	return err
 }

@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/qlqq/roomusic/backend/internal/dspsettings"
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/listening"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
@@ -144,7 +145,7 @@ func newZonesSampleFixture(t *testing.T) *zonesSampleFixture {
 	clock := &zonesSampleClock{now: time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)}
 	renderer := &zonesSampleRenderer{Renderer: zonestest.NewRenderer(zonestest.Options{Now: clock.Now})}
 	id := 0
-	service := zones.NewService(db, zones.Options{Renderer: renderer, Now: clock.Now, AfterFunc: clock.After, Random: func() float64 { return 0 }, NewID: func() string { id++; return fmt.Sprintf("20000000-0000-4000-8000-%012d", id) }, PlayRecorder: zonePlayRecorder{service: listening.NewService(db)}})
+	service := zones.NewService(db, zones.Options{Renderer: renderer, IRReferences: zoneIRReferences{service: dspsettings.NewService(db)}, Now: clock.Now, AfterFunc: clock.After, Random: func() float64 { return 0 }, NewID: func() string { id++; return fmt.Sprintf("20000000-0000-4000-8000-%012d", id) }, PlayRecorder: zonePlayRecorder{service: listening.NewService(db)}})
 	t.Cleanup(service.Close)
 	mux := http.NewServeMux()
 	zonesapi.New(identity.NewGuard(db, false, "http://roomusic.test"), service).Register(mux)

@@ -3,6 +3,7 @@ package irload
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"path"
@@ -38,6 +39,14 @@ type cfgCandidate struct {
 // ParseZIP 在内存解压并按实际读取字节计总量；不访问文件系统或网络。
 // cfg 优先级依次为目标采样率匹配、输入声道数匹配、文件名字典序。
 func ParseZIP(data []byte, sampleRate, channels int) (*Archive, error) {
+	archives, err := parseZIPArchives(context.Background(), data, sampleRate, channels, false)
+	if err != nil {
+		return nil, err
+	}
+	return archives[0], nil
+}
+
+func parseZIPArchives(ctx context.Context, data []byte, sampleRate, channels int, all bool) ([]*Archive, error) {
 	if sampleRate <= 0 || channels < 1 || channels > 8 {
 		return nil, fmt.Errorf("irload: invalid target format")
 	}
@@ -46,13 +55,16 @@ func ParseZIP(data []byte, sampleRate, channels int) (*Archive, error) {
 		return nil, fmt.Errorf("irload: invalid zip: %w", err)
 	}
 	if len(r.File) > MaxZIPEntries {
-		return nil, fmt.Errorf("irload: zip entry limit exceeded")
+		return nil, fmt.Errorf("irload: zip entry limit exceeded: %w", ErrTooLarge)
 	}
 	files := make(map[string]Source)
 	var candidates []cfgCandidate
 	var audio []Source
 	total := int64(0)
 	for _, f := range r.File {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		name, err := archiveName(".", f.Name)
 		if err != nil {
 			return nil, err
@@ -60,7 +72,7 @@ func ParseZIP(data []byte, sampleRate, channels int) (*Archive, error) {
 		if !f.Mode().IsRegular() && !f.FileInfo().IsDir() {
 			return nil, fmt.Errorf("irload: non-regular zip entry")
 		}
-		contents, err := readEntry(f, int64(MaxZIPBytes)-total)
+		contents, err := readEntryContext(ctx, f, int64(MaxZIPBytes)-total)
 		if err != nil {
 			return nil, err
 		}
@@ -79,6 +91,9 @@ func ParseZIP(data []byte, sampleRate, channels int) (*Archive, error) {
 		files[key] = source
 		ext := strings.ToLower(path.Ext(name))
 		if ext == ".cfg" {
+			if len(contents) > 1<<20 {
+				return nil, ErrTooLarge
+			}
 			cfg, err := ParseCFG(contents)
 			if err != nil {
 				return nil, err
@@ -92,7 +107,7 @@ func ParseZIP(data []byte, sampleRate, channels int) (*Archive, error) {
 		if len(audio) != 1 {
 			return nil, fmt.Errorf("irload: zip without cfg must contain exactly one audio file")
 		}
-		return &Archive{Sources: audio}, nil
+		return []*Archive{{Sources: audio}}, nil
 	}
 	sort.Slice(candidates, func(i, j int) bool {
 		a, b := candidates[i], candidates[j]
@@ -104,42 +119,52 @@ func ParseZIP(data []byte, sampleRate, channels int) (*Archive, error) {
 		}
 		return a.name < b.name
 	})
-	selected := candidates[0]
-	archive := &Archive{Config: selected.config, ConfigName: selected.name}
-	for _, p := range selected.config.Paths {
-		name, err := archiveName(path.Dir(selected.name), p.File)
-		if err != nil {
-			return nil, cfgError(p.Line, "IR reference must stay inside zip")
-		}
-		source, exists := files[strings.ToLower(name)]
-		if !exists {
-			return nil, cfgError(p.Line, "referenced IR file is missing")
-		}
-		ext := strings.ToLower(path.Ext(source.Name))
-		if !audioExtension(ext) && ext != ".pcm" && ext != ".dbl" {
-			return nil, cfgError(p.Line, "unsupported IR file format")
-		}
-		if (ext == ".pcm" || ext == ".dbl") && p.Channel != 0 {
-			return nil, cfgError(p.Line, "raw IR has only channel zero")
-		}
-		archive.Sources = append(archive.Sources, source)
+	if !all {
+		candidates = candidates[:1]
 	}
-	return archive, nil
+	result := make([]*Archive, 0, len(candidates))
+	for _, selected := range candidates {
+		archive := &Archive{Config: selected.config, ConfigName: selected.name}
+		for _, p := range selected.config.Paths {
+			name, err := archiveName(path.Dir(selected.name), p.File)
+			if err != nil {
+				return nil, cfgError(p.Line, "IR reference must stay inside zip")
+			}
+			source, exists := files[strings.ToLower(name)]
+			if !exists {
+				return nil, cfgError(p.Line, "referenced IR file is missing")
+			}
+			ext := strings.ToLower(path.Ext(source.Name))
+			if !audioExtension(ext) && ext != ".pcm" && ext != ".dbl" {
+				return nil, cfgError(p.Line, "unsupported IR file format")
+			}
+			if (ext == ".pcm" || ext == ".dbl") && p.Channel != 0 {
+				return nil, cfgError(p.Line, "raw IR has only channel zero")
+			}
+			archive.Sources = append(archive.Sources, source)
+		}
+		result = append(result, archive)
+	}
+	return result, nil
 }
 
 func readEntry(f *zip.File, remaining int64) ([]byte, error) {
+	return readEntryContext(context.Background(), f, remaining)
+}
+
+func readEntryContext(ctx context.Context, f *zip.File, remaining int64) ([]byte, error) {
 	// 声明大小只用于提前拒绝；真正的限额仍由有界读取和累计字节保证。
 	if f.UncompressedSize64 > uint64(remaining) {
-		return nil, fmt.Errorf("irload: zip decompressed size limit exceeded")
+		return nil, fmt.Errorf("irload: zip decompressed size limit exceeded: %w", ErrTooLarge)
 	}
 	r, err := f.Open()
 	if err != nil {
 		return nil, fmt.Errorf("irload: open zip entry: %w", err)
 	}
-	data, readErr := io.ReadAll(io.LimitReader(r, remaining+1))
+	data, readErr := io.ReadAll(io.LimitReader(contextReader{ctx, r}, remaining+1))
 	closeErr := r.Close()
 	if int64(len(data)) > remaining {
-		return nil, fmt.Errorf("irload: zip decompressed size limit exceeded")
+		return nil, fmt.Errorf("irload: zip decompressed size limit exceeded: %w", ErrTooLarge)
 	}
 	if readErr != nil {
 		return nil, fmt.Errorf("irload: read zip entry: %w", readErr)
@@ -169,4 +194,17 @@ func audioExtension(ext string) bool {
 		return true
 	}
 	return false
+}
+
+// 解压与上传都在每次读取前观察取消；底层阻塞读取另由请求期限约束。
+type contextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (r contextReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return r.reader.Read(p)
 }

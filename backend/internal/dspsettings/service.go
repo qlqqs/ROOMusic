@@ -4,7 +4,9 @@ package dspsettings
 import (
 	"database/sql"
 	"errors"
+	"sync"
 
+	"github.com/qlqq/roomusic/backend/internal/dspsettings/irload"
 	"github.com/qlqq/roomusic/backend/internal/dspsettings/opra"
 )
 
@@ -18,7 +20,13 @@ var (
 
 const PresetLimit = 200
 
-type Service struct{ database *sql.DB }
+type Service struct {
+	database *sql.DB
+	irLoader *irload.Loader
+	irMu     sync.Mutex
+	irCache  []irCacheEntry
+	irEpoch  uint64
+}
 
 // NewService 不加载 OPRA；首次资源查询才解压内置目录。
 func NewService(database *sql.DB) *Service { return &Service{database: database} }

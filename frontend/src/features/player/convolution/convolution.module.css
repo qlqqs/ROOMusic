@@ -1,0 +1,22 @@
+/* IR 文件管理面板。 */
+.dialog { width: min(520px, calc(100vw - 2 * var(--space-4))); }
+.panel { display: grid; gap: var(--space-3); min-width: 0; padding: var(--space-4); }
+.header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.title { font-size: var(--fs-16); }
+.body { display: grid; gap: var(--space-3); min-width: 0; }
+
+.list { display: grid; gap: var(--space-1); max-height: 50dvh; margin: 0; padding: 0; overflow: auto; list-style: none; }
+.row { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) 0; border-bottom: 1px solid var(--color-divider); }
+.text { display: grid; flex: 1; gap: 2px; min-width: 0; }
+.name { min-width: 0; overflow-wrap: anywhere; }
+.meta { color: var(--text-secondary); font-size: var(--fs-13); font-variant-numeric: tabular-nums; }
+
+.inline { display: flex; flex: 1; align-items: center; gap: var(--space-2); }
+.input { flex: 1; min-width: 0; min-height: var(--control-height); padding: 4px 6px; border: 1px solid var(--color-control-border); border-radius: var(--radius-md); background: transparent; color: var(--text-primary); font: inherit; font-size: var(--fs-13); }
+.input:focus-visible { border-color: var(--color-accent-700); outline-offset: 0; }
+
+/* 上传中：文件名、进度条、百分比与取消。 */
+.progress { display: flex; align-items: center; gap: var(--space-2); }
+.progress .name { flex: 1; font-size: var(--fs-13); }
+.progress progress { width: 120px; accent-color: var(--text-accent); }
+.actions { display: flex; justify-content: flex-end; }

@@ -7,10 +7,12 @@ export { describeFailure, type FailureContext, type FailureDescription, type Fai
 export {
   apiRequest,
   apiStream,
+  apiUpload,
   setSessionBoundary,
   type ApiPath,
   type ApiRequestSpec,
   type ApiResponse,
+  type ApiUploadSpec,
   type SessionBoundary,
 } from "./request";
 export { MAX_QUERY_RETRIES, shouldRetryQuery } from "./retry";

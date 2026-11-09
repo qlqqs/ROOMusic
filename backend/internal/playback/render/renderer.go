@@ -24,6 +24,7 @@ func (t wallTicker) C() <-chan time.Time { return t.Ticker.C }
 type Options struct {
 	FFmpeg    *ffmpeg.Tool
 	Sources   TrackSource
+	IRs       IRSource
 	Clock     func() time.Time
 	NewTicker func(time.Duration) Ticker
 	Logger    *slog.Logger
@@ -82,15 +83,6 @@ func (r *Renderer) Open(ctx context.Context, spec zones.RenderSpec) (zones.Rende
 	default:
 		return nil, errors.New("render: 电平化模式无效")
 	}
-	count := 2
-	if spec.Format.Codec == "wav" {
-		count = 1
-	}
-	reservation, err := r.options.FFmpeg.Reserve(ctx, count)
-	if err != nil {
-		return nil, errors.Join(ErrBusy, err)
-	}
-	defer reservation.Close()
 	source, prepareErr := r.options.Sources.Prepare(ctx, spec.UserID, spec.Start.TrackID)
 	if prepareErr == nil {
 		prepareErr = validateTrack(source)
@@ -107,6 +99,7 @@ func (r *Renderer) Open(ctx context.Context, spec zones.RenderSpec) (zones.Rende
 		format.Delivery, format.MimeType = spec.Format.Delivery, spec.Format.MimeType
 	}
 	var plan renderPlan
+	var err error
 	if prepareErr == nil {
 		format, plan, err = concreteFormat(spec, source)
 		if err != nil {
@@ -116,7 +109,7 @@ func (r *Renderer) Open(ctx context.Context, spec zones.RenderSpec) (zones.Rende
 			return nil, err
 		}
 	}
-	s, err := newSession(ctx, r, spec, format, plan, source, prepareErr, reservation)
+	s, err := newSession(ctx, r, spec, format, plan, source, prepareErr)
 	if err != nil {
 		if source.File != nil {
 			_ = source.File.Close()

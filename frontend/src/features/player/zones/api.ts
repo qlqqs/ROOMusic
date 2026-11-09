@@ -34,6 +34,7 @@ export type SettingsPatch = Partial<{
   sample_rate: { strategy: SampleRateStrategy; custom_rate: number | null; filter: SampleRateFilter };
   downmix: { enabled: boolean };
   peq: PeqWire;
+  convolution: { enabled: boolean; ir_id: string | null; before_peq: boolean };
 }>;
 
 /** 合同 §3.3 的命令。 */

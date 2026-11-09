@@ -40,7 +40,15 @@ func (s *Service) RegisterDevice(ctx context.Context, userID string, input Regis
 	paused := timestamp(now)
 	d := PersistedDevice{DeviceID: s.newID(), Kind: input.Kind, Name: name, Capabilities: defaultCapabilities(), Volume: input.Volume, Muted: input.Muted, CreatedAt: now, LastSeenAt: now}
 	p := PersistedZone{ZoneID: s.newID(), DeviceID: d.DeviceID, Queue: queue.EmptyQueue(), PositionSavedAt: now, Settings: applySettings(defaultSettings(), input.Settings)}
-	if err := s.transact(ctx, func(store *Store) error { return store.CreateDevice(ctx, userID, d, p) }); err != nil {
+	if err := s.checkIRReference(ctx, nil, userID, p.Settings.Convolution); err != nil {
+		return RegisterDeviceResult{}, err
+	}
+	if err := s.transact(ctx, func(store *Store) error {
+		if err := s.checkIRReference(ctx, store.tx, userID, p.Settings.Convolution); err != nil {
+			return err
+		}
+		return store.CreateDevice(ctx, userID, d, p)
+	}); err != nil {
 		return RegisterDeviceResult{}, err
 	}
 	z := &zoneRuntime{persisted: p, device: d, intent: "pause", status: "idle", failures: []Failure{}, pausedAt: &paused, prepared: map[string]string{}}

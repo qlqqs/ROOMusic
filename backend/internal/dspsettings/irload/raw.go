@@ -19,7 +19,10 @@ func ParseRaw(data []byte, extension string) ([]float64, error) {
 	default:
 		return nil, fmt.Errorf("irload: unsupported raw IR format")
 	}
-	if len(data) == 0 || len(data)%width != 0 || len(data)/width > 1<<19 {
+	if len(data)/width > 1<<19 {
+		return nil, ErrTooLarge
+	}
+	if len(data) == 0 || len(data)%width != 0 {
 		return nil, fmt.Errorf("irload: invalid raw IR length")
 	}
 	samples := make([]float64, len(data)/width)

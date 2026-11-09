@@ -104,7 +104,7 @@ func fixtureSource(fixtures map[string]audioFixture) testSource {
 }
 func renderSpec(codec string) zones.RenderSpec {
 	mime := map[string]string{"flac": "audio/flac", "wav": "audio/wav", "opus": `audio/ogg; codecs="opus"`, "aac": "audio/aac", "alac": "application/vnd.apple.mpegurl"}[codec]
-	return zones.RenderSpec{Seq: 1, UserID: "user", Start: zones.Entry{EntryID: "entry-a", TrackID: "a"}, Settings: zones.ZoneSettings{Leveling: "off", Gapless: true, Quality: "lossless", SampleRate: zones.DefaultSampleRateDocument(), Downmix: zones.DefaultDownmixDocument(), PEQ: zones.DefaultPEQDocument()}, Format: zones.StreamFormat{Codec: codec, MimeType: mime, MaxChannels: 2}}
+	return zones.RenderSpec{Seq: 1, UserID: "user", Start: zones.Entry{EntryID: "entry-a", TrackID: "a"}, Settings: zones.ZoneSettings{Leveling: "off", Gapless: true, Quality: "lossless", SampleRate: zones.DefaultSampleRateDocument(), Downmix: zones.DefaultDownmixDocument(), PEQ: zones.DefaultPEQDocument(), Convolution: zones.DefaultConvolutionDocument()}, Format: zones.StreamFormat{Codec: codec, MimeType: mime, MaxChannels: 2}}
 }
 func nextB(after string) (zones.Entry, bool) {
 	return zones.Entry{EntryID: "entry-b", TrackID: "b"}, after == "entry-a"
@@ -122,6 +122,11 @@ func openTestSession(t *testing.T, r *Renderer, spec zones.RenderSpec) *session 
 		t.Fatalf("Open: %v", err)
 	}
 	t.Cleanup(s.Close)
+	select {
+	case <-s.(*session).prepared:
+	case <-time.After(testWait):
+		t.Fatal("会话准备未完成")
+	}
 	return s.(*session)
 }
 func readBody(t *testing.T, s *session) []byte {

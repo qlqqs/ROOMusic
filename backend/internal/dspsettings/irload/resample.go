@@ -58,11 +58,11 @@ func resampledLength(taps, from, to int) (int, error) {
 	}
 	hi, lo := bits.Mul64(uint64(taps), uint64(to))
 	if hi >= uint64(from) {
-		return 0, fmt.Errorf("irload: resampled IR exceeds tap limit")
+		return 0, fmt.Errorf("irload: resampled IR exceeds tap limit: %w", ErrTooLarge)
 	}
 	n, remainder := bits.Div64(hi, lo, uint64(from))
 	if n > convolution.MaxTaps || (n == convolution.MaxTaps && remainder != 0) {
-		return 0, fmt.Errorf("irload: resampled IR exceeds tap limit")
+		return 0, fmt.Errorf("irload: resampled IR exceeds tap limit: %w", ErrTooLarge)
 	}
 	if remainder != 0 {
 		n++

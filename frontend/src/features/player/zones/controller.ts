@@ -103,7 +103,7 @@ const VOLUME_THROTTLE_MS = 125;
 const VOLUME_OPTIMISTIC_MS = 1_000;
 const TARGET_RECHECK_MS = 60_000;
 
-const defaultSettings: PlaybackSettings = { leveling: "auto", gapless: true, crossfade: false, crossfadeSeconds: 5, quality: "lossless", headroom: { enabled: false, db: -3, clipIndicator: false }, sampleRate: { strategy: "none", customRate: null, filter: "linear_precise" }, downmix: { enabled: true }, peq: defaultPeq };
+const defaultSettings: PlaybackSettings = { leveling: "auto", gapless: true, crossfade: false, crossfadeSeconds: 5, quality: "lossless", headroom: { enabled: false, db: -3, clipIndicator: false }, sampleRate: { strategy: "none", customRate: null, filter: "linear_precise" }, downmix: { enabled: true }, peq: defaultPeq, convolution: { enabled: false, irId: null, beforePeq: false } };
 const idleProgress: PlayerProgress = { positionSeconds: 0, durationSeconds: null, seekable: false };
 
 function settingsPatchOf(patch: Partial<PlaybackSettings>): SettingsPatch {
@@ -117,6 +117,7 @@ function settingsPatchOf(patch: Partial<PlaybackSettings>): SettingsPatch {
   if (patch.sampleRate !== undefined) out.sample_rate = { strategy: patch.sampleRate.strategy, custom_rate: patch.sampleRate.customRate, filter: patch.sampleRate.filter };
   if (patch.downmix !== undefined) out.downmix = { enabled: patch.downmix.enabled };
   if (patch.peq !== undefined) out.peq = peqToWire(patch.peq);
+  if (patch.convolution !== undefined) out.convolution = { enabled: patch.convolution.enabled, ir_id: patch.convolution.irId, before_peq: patch.convolution.beforePeq };
   return out;
 }
 

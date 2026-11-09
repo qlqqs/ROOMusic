@@ -1,10 +1,14 @@
 package irload
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/qlqq/roomusic/backend/internal/dsp/convolution"
 )
+
+// MaxDelayBytes 限制一个配置全部输入/输出延时线的 float64 存储，与解压预算同量级。
+const MaxDelayBytes = 256 << 20
 
 // DecodedIR 是解码边界提供的同长度 planar 样本，不包含文件或进程句柄。
 // 音频文件使用实际解码采样率；裸浮点文件使用 cfg 的 SampleRate。
@@ -19,6 +23,14 @@ type DecodedIR struct {
 // 不修改 cfg 或 sources；返回配置与输入样本不共享内存，但路径之间可共享只读 IR。
 // 输入/输出延时独立保留，不能折进 IR 而改变卷积器的峰位置 Latency。
 func Prepare(cfg *CFG, sources []*DecodedIR, sampleRate, channels int) (convolution.Config, error) {
+	return PrepareContext(context.Background(), cfg, sources, sampleRate, channels)
+}
+
+// PrepareContext 在每条路径前后检查取消，不让过期准备继续下一轮重采样。
+func PrepareContext(ctx context.Context, cfg *CFG, sources []*DecodedIR, sampleRate, channels int) (convolution.Config, error) {
+	if err := ctx.Err(); err != nil {
+		return convolution.Config{}, err
+	}
 	if err := validatePreparation(cfg, sources, sampleRate, channels); err != nil {
 		return convolution.Config{}, err
 	}
@@ -33,6 +45,9 @@ func Prepare(cfg *CFG, sources []*DecodedIR, sampleRate, channels int) (convolut
 	}
 	prepared := make(map[sourceChannel][]float64)
 	load := func(index, channel int) ([]float64, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		ir := sources[index]
 		key := sourceChannel{ir, channel}
 		if samples, ok := prepared[key]; ok {
@@ -41,6 +56,9 @@ func Prepare(cfg *CFG, sources []*DecodedIR, sampleRate, channels int) (convolut
 		samples, err := ResampleIR(ir.Samples[channel], ir.SampleRate, sampleRate)
 		if err != nil {
 			return nil, fmt.Errorf("irload: source %d channel %d: %w", index, channel, err)
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
 		prepared[key] = samples
 		return samples, nil
@@ -74,19 +92,27 @@ func Prepare(cfg *CFG, sources []*DecodedIR, sampleRate, channels int) (convolut
 	if err != nil {
 		return convolution.Config{}, err
 	}
+	if err := validateDelayBudget(inDelay, outDelay); err != nil {
+		return convolution.Config{}, err
+	}
 	if len(cfg.Paths) == 1 && len(cfg.Paths[0].Inputs) == 1 && len(cfg.Paths[0].Outputs) == 1 {
 		p := cfg.Paths[0]
+		input, output := p.Inputs[0], p.Outputs[0]
+		for ch := range channels {
+			result.InDelay[ch], result.OutDelay[ch] = inDelay[input.Channel], outDelay[output.Channel]
+		}
+		if err := validateDelayBudget(result.InDelay, result.OutDelay); err != nil {
+			return convolution.Config{}, err
+		}
 		samples, err := load(0, p.Channel)
 		if err != nil {
 			return convolution.Config{}, err
 		}
-		input, output := p.Inputs[0], p.Outputs[0]
 		for ch := 0; ch < channels; ch++ {
 			result.Paths = append(result.Paths, convolution.Path{
 				IR: samples, Inputs: []convolution.Weighted{{Channel: ch, Weight: input.Weight}},
 				Outputs: []convolution.Weighted{{Channel: ch, Weight: output.Weight}},
 			})
-			result.InDelay[ch], result.OutDelay[ch] = inDelay[input.Channel], outDelay[output.Channel]
 		}
 		return result, nil
 	}
@@ -185,4 +211,18 @@ func mapWeights(weights []Weighted, channels int) []convolution.Weighted {
 		}
 	}
 	return result
+}
+
+// 在卷积器分配延时线之前核验；减法预算避免累加超大延时发生整数溢出。
+func validateDelayBudget(in, out []int) error {
+	remaining := MaxDelayBytes / 8
+	for _, delays := range [][]int{in, out} {
+		for _, frames := range delays {
+			if frames > remaining {
+				return ErrTooLarge
+			}
+			remaining -= frames
+		}
+	}
+	return nil
 }

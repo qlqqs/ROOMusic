@@ -3,6 +3,7 @@ package render
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"io"
 	"math"
 	"sync"
@@ -10,7 +11,6 @@ import (
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/dsp/chain"
-	"github.com/qlqq/roomusic/backend/internal/playback/render/ffmpeg"
 	"github.com/qlqq/roomusic/backend/internal/zones"
 )
 
@@ -35,6 +35,7 @@ type session struct {
 	reader                             *io.PipeReader
 	writer                             *io.PipeWriter
 	ready                              chan struct{}
+	prepared                           chan struct{}
 	readyOnce                          sync.Once
 	closeOnce                          sync.Once
 	closed                             atomic.Bool
@@ -59,18 +60,10 @@ type session struct {
 	encodedHead                        int64
 }
 
-func newSession(parent context.Context, owner *Renderer, spec zones.RenderSpec, format zones.StreamFormat, plan renderPlan, track Track, prepareErr error, reservation *ffmpeg.Reservation) (*session, error) {
-	var c *chain.Chain
-	if prepareErr == nil && len(plan.sampleRate.Stages) == 0 {
-		var err error
-		c, err = plan.buildChain(spec.Settings, format.BitDepth)
-		if err != nil {
-			return nil, err
-		}
-	}
+func newSession(parent context.Context, owner *Renderer, spec zones.RenderSpec, format zones.StreamFormat, plan renderPlan, track Track, prepareErr error) (*session, error) {
 	ctx, cancel := context.WithCancel(parent)
 	reader, writer := io.Pipe()
-	s := &session{owner: owner, ctx: ctx, cancel: cancel, spec: spec, format: format, sourcePCM: plan.sourcePCM, outputPCM: plan.outputPCM, chain: c, reader: reader, writer: writer, ready: make(chan struct{}),
+	s := &session{owner: owner, ctx: ctx, cancel: cancel, spec: spec, format: format, sourcePCM: plan.sourcePCM, outputPCM: plan.outputPCM, reader: reader, writer: writer, ready: make(chan struct{}), prepared: make(chan struct{}),
 		controlWake: make(chan struct{}, 1), eventWake: make(chan struct{}, 1), eventSpace: make(chan struct{}, 1), events: make(chan zones.Event, 64), immediateEvents: make(chan zones.Event, 64), done: make(chan struct{})}
 	if format.Delivery == "hls" {
 		s.hls = newHLSMedia(ctx, func() float64 {
@@ -89,59 +82,100 @@ func newSession(parent context.Context, owner *Renderer, spec zones.RenderSpec, 
 		s.markReady()
 		return s, nil
 	}
-	if c == nil {
-		s.pendingPlan = &plan
-	}
-	enc, err := newEncoder(ctx, reservation, owner.options.FFmpeg, format, plan.outputPCM, writer, s.hls, s.fail)
-	if err != nil {
-		cancel()
-		_ = reader.Close()
-		_ = writer.Close()
-		return nil, err
-	}
-	s.encoder = enc
-	d, err := openDecoder(ctx, reservation, owner.options.FFmpeg, track, spec.Start, plan.sourcePCM, spec.StartSeconds, spec.Settings.Leveling)
-	if err != nil {
-		_ = track.File.Close()
-		p.firstErr = err
-	} else {
-		p.current = d
-	}
+	s.pendingPlan = &plan
 	return s, nil
 }
 
-func (s *session) start() {
-	if s.encoder == nil {
-		go func() {
-			defer close(s.done)
-			if s.hls != nil {
-				defer s.hls.close()
-			}
-			s.runFailure()
-		}()
-		return
+// prepare 只在会话协程中装载资源、构链，完成后才预留播放进程名额。
+func (s *session) prepare() error {
+	defer close(s.prepared)
+	track := s.player.anchor
+	transferred := false
+	defer func() {
+		if !transferred && track.File != nil {
+			_ = track.File.Close()
+		}
+	}()
+	plan := s.pendingPlan
+	if err := s.ctx.Err(); err != nil {
+		return err
 	}
-	stop := context.AfterFunc(s.ctx, func() {
-		if s.hls != nil {
-			s.hls.close()
-		}
-		s.mu.Lock()
-		err := s.failure
-		s.mu.Unlock()
-		_ = s.writer.CloseWithError(err)
-		s.markReady()
-	})
-	var workers sync.WaitGroup
-	workers.Add(2)
-	go func() { defer workers.Done(); s.dispatch() }()
-	go func() { defer workers.Done(); s.run() }()
+	if err := s.loadConvolution(plan); err != nil {
+		return err
+	}
+	c, err := plan.buildChain(s.spec.Settings, s.format.BitDepth)
+	if err != nil {
+		return err
+	}
+	s.chain, s.pendingPlan = c, nil
+	if err := s.ctx.Err(); err != nil {
+		return err
+	}
+	count := 2
+	if s.format.Codec == "wav" {
+		count = 1
+	}
+	reservation, err := s.owner.options.FFmpeg.Reserve(s.ctx, count)
+	if err != nil {
+		return errors.Join(ErrBusy, err)
+	}
+	defer reservation.Close()
+	enc, err := newEncoder(s.ctx, reservation, s.owner.options.FFmpeg, s.format, s.outputPCM, s.writer, s.hls, s.fail)
+	if err != nil {
+		return err
+	}
+	s.encoder = enc
+	d, err := openDecoder(s.ctx, reservation, s.owner.options.FFmpeg, track, s.spec.Start, s.sourcePCM, s.spec.StartSeconds, s.spec.Settings.Leveling)
+	if err != nil {
+		s.player.firstErr = err
+	} else {
+		s.player.current = d
+		transferred = true
+	}
+	return nil
+}
+
+func (s *session) start() {
 	go func() {
-		workers.Wait()
-		stop()
+		defer close(s.done)
 		if s.hls != nil {
-			s.hls.close()
+			defer s.hls.close()
 		}
-		close(s.done)
+		stop := context.AfterFunc(s.ctx, func() {
+			if s.hls != nil {
+				s.hls.close()
+			}
+			s.mu.Lock()
+			err := s.failure
+			s.mu.Unlock()
+			_ = s.writer.CloseWithError(err)
+			s.markReady()
+		})
+		defer stop()
+		// 失败来源没有计划；准备中的 encoder=nil 不是来源失败。
+		if s.pendingPlan == nil {
+			close(s.prepared)
+			s.runFailure()
+			return
+		}
+		defer s.player.close()
+		defer func() {
+			if s.encoder != nil {
+				s.encoder.close()
+			}
+		}()
+		if err := s.prepare(); err != nil {
+			if s.ctx.Err() == nil {
+				s.fail(err)
+			}
+			close(s.events)
+			return
+		}
+		var workers sync.WaitGroup
+		workers.Add(1)
+		go func() { defer workers.Done(); s.dispatch() }()
+		s.run()
+		workers.Wait()
 	}()
 }
 
@@ -306,22 +340,6 @@ func (s *session) runFailure() {
 }
 
 func (s *session) run() {
-	defer s.player.close()
-	defer s.encoder.close()
-	if s.pendingPlan != nil {
-		if s.ctx.Err() != nil {
-			return
-		}
-		c, err := s.pendingPlan.buildChain(s.spec.Settings, s.format.BitDepth)
-		if err != nil {
-			s.fail(err)
-			return
-		}
-		s.chain, s.pendingPlan = c, nil
-		if s.ctx.Err() != nil {
-			return
-		}
-	}
 	ticker := s.owner.options.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	var speed speedMonitor

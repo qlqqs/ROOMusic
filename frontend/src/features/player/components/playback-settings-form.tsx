@@ -1,4 +1,4 @@
-import { MonitorSpeaker, SlidersVertical } from "lucide-react";
+import { ArrowUp, FolderOpen, MonitorSpeaker, SlidersVertical } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import {
   crossfadeDurations,
@@ -13,6 +13,8 @@ import {
   type SampleRateStrategy,
   type StreamQuality,
 } from "../zones/model";
+import { IrFilesDialog } from "../convolution/ir-files-dialog";
+import { useIrFiles } from "../convolution/hooks";
 import { PeqEditorDialog } from "../peq/peq-editor";
 import { usePlayerEngine, usePlayerSelector } from "../player-provider";
 import { Button } from "../../../shared/ui";
@@ -122,6 +124,51 @@ function PeqRow({ disabled }: { disabled: boolean }) {
   );
 }
 
+/** 卷积：开关、选 IR，旁边的按钮打开 IR 文件管理；选中一个 IR 就打开卷积。 */
+function ConvolutionRow({ disabled }: { disabled: boolean }) {
+  const engine = usePlayerEngine();
+  const convolution = usePlayerSelector((snapshot) => snapshot.settings.convolution);
+  const files = useIrFiles();
+  const [managing, setManaging] = useState(false);
+  return (
+    <div className={styles.switchRow}>
+      <label className={styles.switchRow}>
+        <span className={styles.legend}>卷积</span>
+        <input type="checkbox" role="switch" className={styles.switch} checked={convolution.enabled} disabled={disabled} onChange={(event) => engine.setPlaybackSettings({ convolution: { ...convolution, enabled: event.target.checked } })} />
+      </label>
+      <select aria-label="IR 文件" className={styles.select} value={convolution.irId ?? ""} disabled={disabled || files.data === undefined} onChange={(event) => {
+        if (event.target.value !== "") engine.setPlaybackSettings({ convolution: { ...convolution, irId: event.target.value, enabled: true } });
+      }}>
+        {convolution.irId === null ? <option value="">选择 IR</option> : null}
+        {files.data?.map((file) => <option key={file.irId} value={file.irId}>{file.name}</option>)}
+      </select>
+      <Button variant="icon" icon={<FolderOpen size={18} />} label="管理 IR 文件" disabled={disabled} onClick={() => setManaging(true)} />
+      <IrFilesDialog open={managing} onClose={() => setManaging(false)} />
+    </div>
+  );
+}
+
+/** 参数均衡与卷积都开着时的先后：第二项可以上移。 */
+function DspOrder({ disabled }: { disabled: boolean }) {
+  const engine = usePlayerEngine();
+  const convolution = usePlayerSelector((snapshot) => snapshot.settings.convolution);
+  const peqEnabled = usePlayerSelector((snapshot) => snapshot.settings.peq.enabled);
+  if (!peqEnabled || !convolution.enabled || convolution.irId === null) return null;
+  const order = convolution.beforePeq ? ["卷积", "参数均衡"] : ["参数均衡", "卷积"];
+  return (
+    <div className={styles.field}>
+      <span className={styles.legend}>处理顺序</span>
+      <ol className={styles.order}>
+        <li>{order[0]}</li>
+        <li>
+          {order[1]}
+          <Button variant="icon" icon={<ArrowUp size={16} />} label={`${order[1]}上移`} disabled={disabled} onClick={() => engine.setPlaybackSettings({ convolution: { ...convolution, beforePeq: !convolution.beforePeq } })} />
+        </li>
+      </ol>
+    </div>
+  );
+}
+
 /** 设置页标题旁的设备名：这些设置改的是正在控制的那台设备。 */
 export function PlaybackSettingsDevice() {
   const name = usePlayerSelector((snapshot) => snapshot.device?.name ?? null);
@@ -184,6 +231,8 @@ export function PlaybackSettingsForm() {
       />
       <Switch label="多声道降为双声道" checked={settings.downmix.enabled} disabled={disabled} onChange={(enabled) => engine.setPlaybackSettings({ downmix: { enabled } })} />
       <PeqRow disabled={disabled} />
+      <ConvolutionRow disabled={disabled} />
+      <DspOrder disabled={disabled} />
       <Switch label="Headroom" checked={settings.headroom.enabled} disabled={disabled} onChange={(enabled) => engine.setPlaybackSettings({ headroom: { ...settings.headroom, enabled } })} />
       <GainSlider value={settings.headroom.db} disabled={disabled || !settings.headroom.enabled} onCommit={(db) => engine.setPlaybackSettings({ headroom: { ...settings.headroom, db } })} />
       <Switch label="削波指示" checked={settings.headroom.clipIndicator} disabled={disabled} onChange={(clipIndicator) => engine.setPlaybackSettings({ headroom: { ...settings.headroom, clipIndicator } })} />

@@ -42,3 +42,8 @@
 .select:hover:not(:disabled) { border-color: var(--color-neutral-800); }
 .select:focus-visible { border-color: var(--color-accent-700); outline-offset: 0; }
 .select:disabled { cursor: not-allowed; }
+
+/* 参数均衡与卷积的先后：编号列表，第二项带上移按钮。 */
+.order { display: grid; gap: var(--space-1); margin: 0; padding-left: 1.5em; font-size: var(--fs-13); }
+.order li { min-height: var(--control-height); line-height: var(--control-height); }
+.order li > button { margin-left: var(--space-2); vertical-align: middle; }

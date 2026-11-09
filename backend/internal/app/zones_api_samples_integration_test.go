@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -343,6 +344,16 @@ func TestPostgreSQLZonesAPIResponseSamples(t *testing.T) {
 		c.command("set-settings-peq", device.Zone.ZoneID, map[string]any{"command": "set_settings", "settings": map[string]any{"peq": dspSamplePEQ()}})
 	}
 
+	{
+		device := c.device("")
+		c.claim("", device.Device.DeviceID, false, nil)
+		id := uuid.New()
+		content := dspSampleIRWAV()
+		digest := sha256.Sum256(content)
+		f.exec(t, `INSERT INTO dsp_ir_files(id,user_id,name,file_name,container,sample_rate,channels,paths,taps,size_bytes,sha256,content) VALUES($1,$2,'试听卷积','impulse.wav','wav',48000,1,1,4,$3,$4,$5)`, id, f.user.id, len(content), digest[:], content)
+		value := zones.ConvolutionSettings{Enabled: true, IRID: &id, BeforePEQ: true}
+		c.command("set-settings-convolution", device.Zone.ZoneID, map[string]any{"command": "set_settings", "settings": map[string]any{"convolution": value}})
+	}
 	samples.finish()
 }
 func (c zonesSampleCalls) commandError(name, id string, body map[string]any, status int) {

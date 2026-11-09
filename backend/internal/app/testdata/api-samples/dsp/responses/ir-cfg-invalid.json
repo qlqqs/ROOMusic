@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "ir_cfg_invalid",
+      "message": "cfg 第 1 行看不懂"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

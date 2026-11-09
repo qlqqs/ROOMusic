@@ -50,13 +50,7 @@ func skeletonSession(t *testing.T, r *Renderer, spec zones.RenderSpec, configure
 		t.Fatal(err)
 	}
 	configure(&format, &plan)
-	reservation, err := r.options.FFmpeg.Reserve(context.Background(), 1)
-	if err != nil {
-		track.File.Close()
-		t.Fatal(err)
-	}
-	defer reservation.Close()
-	s, err := newSession(context.Background(), r, spec, format, plan, track, nil, reservation)
+	s, err := newSession(context.Background(), r, spec, format, plan, track, nil)
 	if err != nil {
 		track.File.Close()
 		t.Fatal(err)
@@ -65,6 +59,10 @@ func skeletonSession(t *testing.T, r *Renderer, spec zones.RenderSpec, configure
 		s.start()
 		t.Cleanup(func() { s.Close(); <-s.done })
 	} else {
+		if err := s.prepare(); err != nil {
+			s.Close()
+			t.Fatal(err)
+		}
 		t.Cleanup(func() { s.Close(); s.player.close(); s.encoder.close() })
 	}
 	return s

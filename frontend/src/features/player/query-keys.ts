@@ -11,4 +11,5 @@ export const playerKeys = {
   peqResponse: (generation: number, body: string) => viewerQueryKey(generation, "player", "peq", "response", body),
   peqImport: (generation: number, text: string) => viewerQueryKey(generation, "player", "peq", "import", text),
   peqPresets: (generation: number) => viewerQueryKey(generation, "player", "peq", "presets"),
+  irFiles: (generation: number) => viewerQueryKey(generation, "player", "ir-files"),
 };
