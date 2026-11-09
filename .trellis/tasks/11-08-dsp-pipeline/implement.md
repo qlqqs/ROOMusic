@@ -81,7 +81,7 @@ export ROOMUSIC_TEST_FFMPEG="$(scripts/ffmpeg-pinned.sh)"
 ## P-g CUE 虚拟分轨（P-c 之后，与 P-d 并行；prd P12）
 
 1. [x] 后端 GPT：可渲染格式表放开 `cue_virtual`；来源段按 `cue_index_frames`/`cue_end_frames` 截取（打开的是整轨父文件，复用分析里的同一套定位）；同一整轨的相邻两轨按无缝条件拼接。
-2. [ ] 测试 agent：相邻两轨无缝拼接后的 PCM 与整轨对应区间逐位相同（MD5）；起点不在 0 的单轨位置与时长正确。
+2. [x] 测试 agent：相邻两轨无缝拼接后的 PCM 与整轨对应区间逐位相同（MD5）；起点不在 0 的单轨位置与时长正确。
 
 ## P-f 前端：信号路径与 Headroom 设置（zones F3 之后；Opus，一个子 agent 做完）
 
