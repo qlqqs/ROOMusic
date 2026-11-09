@@ -17,19 +17,19 @@ export ROOMUSIC_TEST_FFMPEG="$(scripts/ffmpeg-pinned.sh)"
 
 ## P-a iOS 交付小验证（最先做，与 zones B1 并行）
 
-1. [ ] 后端 GPT：在一次性分支 `ios-probe` 上写 `backend/cmd/ios-probe/`（design-delivery.md §4.2：流、HLS、日志、页面、`?range=fake`）。只用标准库与 ffmpeg；页面文案只有每项一句提示。
-2. [ ] 主会话：构建并拷到八号机（连同 `scripts/ffmpeg-pinned.sh` 取出的 ffmpeg），后台运行在 `:18090`；自己用桌面 Chrome 打开走一遍 A 的前 30 秒，确认能出声、日志在写。
-3. [ ] 用户：按 design-delivery.md §4.4 的四步在 iPhone 上测（约 20 分钟）。
-4. [ ] 主会话：读 JSONL 日志与结论，按 §4.5 定方案；结论写进本 prd“已裁决”（附 Safari 版本），更新 design-delivery.md §3 的 iOS 候选；命中“交主会话裁决”的行先裁决。停掉探针、删除分支。
+1. [x] 后端 GPT：在一次性分支 `ios-probe` 上写 `backend/cmd/ios-probe/`（design-delivery.md §4.2：流、HLS、日志、页面、`?range=fake`）。只用标准库与 ffmpeg；页面文案只有每项一句提示。
+2. [x] 主会话：构建并拷到八号机（连同 `scripts/ffmpeg-pinned.sh` 取出的 ffmpeg），后台运行在 `:18090`；自己用桌面 Chrome 打开走一遍 A 的前 30 秒，确认能出声、日志在写。
+3. [x] 用户：按 design-delivery.md §4.4 的四步在 iPhone 上测（约 20 分钟）。
+4. [x] 主会话：读 JSONL 日志与结论，按 §4.5 定方案；结论写进本 prd“已裁决”（附 Safari 版本），更新 design-delivery.md §3 的 iOS 候选；命中“交主会话裁决”的行先裁决。停掉探针、删除分支（探针已停；`ios-probe` 分支与 worktree 在本线收尾时删除）。
 
 验收：§4.1 的 V1–V10 每项都有结论（V11 只在需要时）。没有自动化测试。
 
 ## P-b 纯包（与 P-a 并行；gapless-crossfade 的 `dsp/fade`、dither 的 `dsp/dither` 同期）
 
-1. [ ] 后端 GPT：`dsp/chain`：`Format`、`Buffer`、`GainRegion`、`Processor`/`Node`、`Wrap`（延迟补偿、变长输出、按绝对帧号搬运区域）、`Build`（参考稿 §6.1 的顺序，第一批只装 ① 与出口量化）、`Drain`、`Headroom` 节点、`SignalStep` 结构（父设计 §2–§5）。
-2. [ ] 后端 GPT：`dsp/leveling`：`Choose`、`Linear`、`Apply`（design.md §7）。
-3. [ ] `dependency_rules_test.go` 加 `dsp/*` 的规则（都不允许导入项目内包，`dsp/chain` 只允许 `dsp/` 下的算法包）。
-4. [ ] 测试 agent：design.md §11 的 `dsp/leveling` 与 `dsp/chain` 几条。
+1. [x] 后端 GPT：`dsp/chain`：`Format`、`Buffer`、`GainRegion`、`Processor`/`Node`、`Wrap`（延迟补偿、变长输出、按绝对帧号搬运区域）、`Build`（参考稿 §6.1 的顺序，第一批只装 ① 与出口量化）、`Drain`、`Headroom` 节点、`SignalStep` 结构（父设计 §2–§5）。
+2. [x] 后端 GPT：`dsp/leveling`：`Choose`、`Linear`、`Apply`（design.md §7）。
+3. [x] `dependency_rules_test.go` 加 `dsp/*` 的规则（都不允许导入项目内包，`dsp/chain` 只允许 `dsp/` 下的算法包）。
+4. [x] 测试 agent：design.md §11 的 `dsp/leveling` 与 `dsp/chain` 几条。
 
 验证：`go test ./internal/dsp/...`；依赖方向。回滚点：P-b 提交。
 
@@ -41,7 +41,7 @@ export ROOMUSIC_TEST_FFMPEG="$(scripts/ffmpeg-pinned.sh)"
        量化先用 `dsp/dither` 已有的接口（D 接入前若 `dsp/dither` 还没合入，用直通 + 四舍五入的临时实现，D 接入时删掉）。
 3. [x] `playback`：`Service.OpenForRender`（复用 `resolve` 与 `openVerified`，按 design.md §4.1 映射错误）；可渲染格式表（design.md §10.1）。
 4. [x] `app`：`OpenRenderer`（定位、清单、自检 §10.2）与装配：`TrackSource` 适配器（`playback.Service` + `catalog.Store.LoadTrackAnalysis`）、`render.New`、交给 `zones.NewService`；关停时 `Renderer.Close`。替换 zones B2 的假渲染器在生产装配里的位置（测试装配里假渲染器保留）。
-5. [ ] 测试 agent：design.md §11 的 `playback/render` 各条（逐位 MD5、事件队列、预缓冲、超时、定位）；`Negotiate` 的规则表一条表驱动测试（lossless/lossy × 有无对应格式 × 没有可用格式）。
+5. [x] 测试 agent：design.md §11 的 `playback/render` 各条（逐位 MD5、事件队列、预缓冲、超时、定位）；`Negotiate` 的规则表一条表驱动测试（lossless/lossy × 有无对应格式 × 没有可用格式）。
 
 验证：`go test ./internal/playback/render/...`、`./internal/playback/...`（只本包）、依赖方向。联调信号：一首 FLAC 能在桌面 Chrome 里经 zones 放出来（主会话手工一次）。
 风险文件：`internal/app/app.go`、`cmd/roomusic/main.go`（装配与关停顺序）、`playback/service.go`。回滚点：P-c 提交。
@@ -51,10 +51,10 @@ export ROOMUSIC_TEST_FFMPEG="$(scripts/ffmpeg-pinned.sh)"
 1. [x] 后端 GPT：在 `ios-probe` 分支加 G–J（§5.10 H1–H4：HLS 按 §5.1–§5.2 实时生成，测试 Cookie 只记有无）。主会话部署到八号机，经 HTTPS 反代；用户在 iPhone 上测约 15 分钟。
        主会话按结果填 §5.7 ALAC 的上限；任一项落到“交主会话裁决”就先停在这里。
 2. [x] 主会话：按 §5.11 改 zones 合同与协议文档（与 B3 的收尾一起裁决）。
-3. [ ] 后端 GPT：`render`：`(codec, mime_type)` 配对表与 `Delivery`（§5.6）、分片 MP4 封装参数（§5.2）、`hls.go` 切片器与分片仓库与播放列表（§5.1–§5.3）、`HLS()`；
+3. [x] 后端 GPT：`render`：`(codec, mime_type)` 配对表与 `Delivery`（§5.6）、分片 MP4 封装参数（§5.2）、`hls.go` 切片器与分片仓库与播放列表（§5.1–§5.3）、`HLS()`；
        `zones`：`HLSMedia` 端口、按 `Delivery` 给 `Stream.url`、取媒体不置 `taken`；`zones/httpapi`：`GET …/streams/{seq}/{file}`、文件名校验、播放列表 gzip、分片 `ServeContent`（§5.4、§5.9）。
-4. [ ] 前端 Opus（新开一个子 agent）：`output/capabilities.ts` 按 §5.7 声明候选（只用 `canPlayType`）。不加任何界面文案。
-5. [ ] 测试 agent（只测下列行为）：`Negotiate` 配对表加两行（HLS 候选只配 HLS、长流候选不配 HLS）；切片器对真实 ffmpeg 分片 MP4 输出的片长之和等于写入帧数；
+4. [x] 前端 Opus（新开一个子 agent）：`output/capabilities.ts` 按 §5.7 声明候选（只用 `canPlayType`）。不加任何界面文案。
+5. [x] 测试 agent（只测下列行为）：`Negotiate` 配对表加两行（HLS 候选只配 HLS、长流候选不配 HLS）；切片器对真实 ffmpeg 分片 MP4 输出的片长之和等于写入帧数；
        ALAC HLS 逐位一致（初始化段 + 全部分片拼起来解码，MD5 等于源，16/24 位各一）；播放列表（START、不足 3 片时等待、结束后有 ENDLIST、删旧片后取它得 404）；
        handler（非当前 `seq` 得 410、播放列表可重复取、gzip）；前端能力两条（音量只读且 HLS 可探测时只有两项 HLS，否则与原表相同）。
 

@@ -11,8 +11,8 @@ export ROOMUSIC_TEST_FFMPEG="$(scripts/ffmpeg-pinned.sh)"
 
 ## D-1 纯包 `dsp/dither`（与 dsp-pipeline P-b 同期，不依赖端口）
 
-1. [ ] 后端 GPT：`LFSR`（x³¹ + x²⁸ + 1，每次取值推进 31 步）、`Uniform`、`Triangular`、`Quantizer`（`pack16`/`pack24`、直通、TPDF 取整、钳位与削波数）、`Reset`（design.md §2、§5）。不导入任何包；稳态不分配。
-2. [ ] 测试 agent：design.md §7 的单元测试五条（周期、分布、直通、抖动线性化、钳位与削波）。
+1. [x] 后端 GPT：`LFSR`（x³¹ + x²⁸ + 1，每次取值推进 31 步）、`Uniform`、`Triangular`、`Quantizer`（`pack16`/`pack24`、直通、TPDF 取整、钳位与削波数）、`Reset`（design.md §2、§5）。不导入任何包；稳态不分配。
+2. [x] 测试 agent：design.md §7 的单元测试五条（周期、分布、直通、抖动线性化、钳位与削波）。
 
 回滚点：D-1 提交（可与 P-b 一起合入）。
 

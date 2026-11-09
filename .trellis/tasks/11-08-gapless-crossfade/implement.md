@@ -10,8 +10,8 @@ export ROOMUSIC_TEST_FFMPEG="$(scripts/ffmpeg-pinned.sh)"
 
 ## G-1 纯包 `dsp/fade`（与 dsp-pipeline P-b 同期，不依赖端口）
 
-1. [ ] 后端 GPT：`FadeIn`、`FadeOut`、`AlignDown8`、`Mix`（按窗口内起始帧与窗口长度分段混音）、常量 `Warmup` 与注释（design.md §3.3）。不导入任何包。
-2. [ ] 测试 agent：design.md §6 的“曲线与截断”一条（几个点的数值、对齐、分三次 `Mix` 的抽查）。
+1. [x] 后端 GPT：`FadeIn`、`FadeOut`、`AlignDown8`、`Mix`（按窗口内起始帧与窗口长度分段混音）、常量 `Warmup` 与注释（design.md §3.3）。不导入任何包。
+2. [x] 测试 agent：design.md §6 的“曲线与截断”一条（几个点的数值、对齐、分三次 `Mix` 的抽查）。
 
 回滚点：G-1 提交（可与 P-b 一起合入）。
 
