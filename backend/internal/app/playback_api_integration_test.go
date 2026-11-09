@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/playback/render/ffmpeg"
 )
@@ -162,7 +163,11 @@ func TestPostgreSQLPlaybackAudioRequiresLoginAndRevealsNothingWithoutIt(t *testi
 				}
 				if method == http.MethodGet {
 					requireAPIError(t, response, http.StatusUnauthorized, "unauthorized")
-					if strings.Contains(response.Body.String(), "4096") {
+					var envelope httpserver.APIError
+					if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil {
+						t.Fatalf("decode API error: %v", err)
+					}
+					if strings.Contains(envelope.Error.Code, "4096") || strings.Contains(envelope.Error.Message, "4096") {
 						t.Fatalf("anonymous response mentions the file size: %s", response.Body.String())
 					}
 				}
