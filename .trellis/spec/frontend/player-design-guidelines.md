@@ -161,8 +161,8 @@ M0 只核对文档合同；以上界面与播放验收不因写完本规范而�
   曲目由 catalog 的已解码详情经 `playerTrackOf/playerTracksOf` 转换。
 - 命令：`playTracks/playNext/enqueue/playEntry/removeEntry/moveEntry/clearQueue/setMode/play/pause/togglePlayback/stop/next/previous/seek/setVolume/setMuted/retry/setPlaybackSettings`。
   三种入队动作返回 `added|queue_full`，上限 10,000；拒绝超限并提示，不静默截断或部分替换。
-- 能力：服务端格式表（每项带 `delivery`）+ `canPlayType` + 可选 `decodingInfo.supported`；询问的是浏览器实际拿到的表示（派生项是转换后的 `audio/flac`），
-  API 缺失/抛错时只采用可获得的能力。虚拟 CUE、非白名单（含派生不可用时的 ALAC）与浏览器不支持各有明确原因，整张播放仅加入可播项并提示跳过数量。
+- 能力：服务端格式表（每项带 `delivery`）+ `canPlayType`（非空即可解码）；询问的是浏览器实际拿到的表示（派生项是转换后的 `audio/flac`）。
+  不用 `decodingInfo`：iOS Safari 对能播放的 FLAC/MP3 也报告 `supported: false`。虚拟 CUE、非白名单（含派生不可用时的 ALAC）与浏览器不支持各有明确原因，整张播放仅加入可播项并提示跳过数量。
 - 预检成功后使用返回的同源音频路径；媒体错误再次预检以区分来源/权限与解码问题。
 - 派生：预检收到 202 进入“正在准备”并立即再次预检（服务端把预检挂起约 20 秒，两次之间仍至少间隔 1 秒，防止异常的立即 202 被高速重试），
   从第一次 202 起超过 11 分钟按转换失败；切歌、暂停、停止与会话结束放弃等待。音频请求失败后的再次预检得到 202 同样回到“正在准备”。
