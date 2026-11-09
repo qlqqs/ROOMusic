@@ -35,9 +35,3 @@ func ParseRaw(data []byte, extension string) ([]float64, error) {
 	}
 	return samples, nil
 }
-
-// ResampleFunc 预留给后续 IR 装载步骤，不在本阶段调用或提供实现。
-// 实现应调用 SRC 的线性相位 precise ResampleAll，并按设计 §4 做代数和归一；
-// 目标长度为 ceil(len(samples)*to/from)，分配前须核验抽头上限。
-// 此接口的错误用于报告目标几何超限等装载错误，不允许原率静默回退。
-type ResampleFunc func(samples []float64, from, to int) ([]float64, error)

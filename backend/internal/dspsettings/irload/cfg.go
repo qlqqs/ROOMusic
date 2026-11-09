@@ -1,5 +1,5 @@
-// Package irload 解析卷积 IR 的 cfg、zip 与裸浮点数据，不执行文件或进程 I/O。
-// 音频解码、声道匹配和装载编排由后续接入实现。
+// Package irload 解析卷积 IR 的 cfg、zip 与裸浮点数据，并将已解码 IR 重采样、匹配到流声道。
+// 不执行文件或进程 I/O；音频解码、存储与渲染接线由调用方负责。
 package irload
 
 import (
