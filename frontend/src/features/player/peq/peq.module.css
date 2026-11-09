@@ -1,0 +1,92 @@
+/* PEQ 编辑面板与它的三个子面板（耳机校正、粘贴导入、预设）。 */
+.dialog { width: min(760px, calc(100vw - 2 * var(--space-4))); }
+.subDialog { width: min(520px, calc(100vw - 2 * var(--space-4))); }
+
+.editor, .panel { display: grid; gap: var(--space-4); min-width: 0; padding: var(--space-4); }
+.panel { gap: var(--space-3); }
+.panelBody { display: grid; gap: var(--space-3); min-width: 0; }
+
+.header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.heading { display: grid; gap: 2px; min-width: 0; }
+.title { font-size: var(--fs-16); }
+.source { color: var(--text-secondary); font-size: var(--fs-13); overflow-wrap: anywhere; }
+.source a, .eqText a, .attribution a { color: var(--text-accent); }
+.toolbar { display: flex; flex-shrink: 0; gap: var(--space-1); }
+
+.label { font-size: var(--fs-13); font-weight: 600; }
+.meta { color: var(--text-secondary); font-size: var(--fs-13); overflow-wrap: anywhere; }
+.preamp { display: flex; align-items: center; gap: var(--space-3); }
+
+/* 数字输入：数字等宽、单位跟在后面。 */
+.number { display: inline-flex; align-items: center; gap: var(--space-1); }
+.number input, .input, .select {
+  min-height: var(--control-height);
+  padding: 4px 6px;
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--fs-13);
+}
+.number input { width: 9ch; font-variant-numeric: tabular-nums; }
+.input { min-width: 0; flex: 1; }
+.unit { min-width: 2.5ch; color: var(--text-secondary); font-size: var(--fs-12); }
+.number input:focus-visible, .input:focus-visible, .select:focus-visible { border-color: var(--color-accent-700); outline-offset: 0; }
+
+/* 频响曲线：网格只有三条频率线、±半量程与 0 dB。 */
+.curve { margin: 0; }
+.curve svg { display: block; width: 100%; height: 180px; border: 1px solid var(--color-divider); border-radius: var(--radius-md); }
+.grid { stroke: var(--color-divider); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.zero { stroke: var(--color-neutral-500); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.curveAxis { position: relative; height: 18px; color: var(--text-secondary); font-size: var(--fs-12); font-variant-numeric: tabular-nums; }
+.curveAxis span { position: absolute; top: 2px; transform: translateX(-50%); }
+.curveLegend { display: flex; flex-wrap: wrap; gap: var(--space-3); color: var(--text-secondary); font-size: var(--fs-12); }
+.curveLegend span { display: inline-flex; align-items: center; gap: var(--space-1); }
+.curveLegend i { width: 12px; height: 2px; }
+.curveLegend .curveRange { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+/* 段列表：宽屏一行一段，窄屏自动折行。 */
+.bands { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.band { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding-bottom: var(--space-2); border-bottom: 1px solid var(--color-divider); }
+.band[data-off] > :not(.check) { opacity: 0.5; }
+.check { width: 16px; height: 16px; margin: 0; accent-color: var(--text-accent); }
+.empty { width: calc(9ch + 2.5ch + 16px); }
+@media (max-width: 600px) { .empty { display: none; } }
+
+/* 子面板里的列表。 */
+.list { display: grid; gap: var(--space-1); max-height: 50dvh; margin: 0; padding: 0; overflow: auto; list-style: none; }
+.option {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--control-height);
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.option:hover { background: var(--color-hover); }
+.productHeader { display: flex; align-items: center; gap: var(--space-2); }
+.productName { font-weight: 600; overflow-wrap: anywhere; }
+.eq { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) 0; border-bottom: 1px solid var(--color-divider); }
+.eqText { display: grid; gap: 2px; min-width: 0; }
+.author { font-size: var(--fs-15); }
+
+/* OPRA 署名：标识比作者名小。 */
+.attribution { display: flex; align-items: center; gap: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--color-divider); color: var(--text-secondary); font-size: var(--fs-12); }
+.attribution img { flex-shrink: 0; }
+.attribution a { margin-left: var(--space-1); }
+
+.textarea { width: 100%; min-height: 160px; padding: var(--space-2); border: 1px solid var(--color-control-border); border-radius: var(--radius-md); background: transparent; color: var(--text-primary); font-family: var(--font-mono); font-size: var(--fs-12); resize: vertical; }
+.actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+
+.presetRow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-1) 0; }
+.presetName { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.rename { display: flex; align-items: center; gap: var(--space-2); width: 100%; }

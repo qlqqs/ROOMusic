@@ -115,6 +115,11 @@
           "enabled": false
         },
         "leveling": "album",
+        "peq": {
+          "bands": [],
+          "enabled": false,
+          "preamp_db": 0
+        },
         "quality": "lossless",
         "sample_rate": {
           "custom_rate": null,

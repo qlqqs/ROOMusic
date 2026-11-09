@@ -33,7 +33,7 @@ func TestPostgreSQLZonesInvalidSettingsFallback(t *testing.T) {
 			if len(state.Zones) != 1 {
 				t.Fatalf("播放区数量=%d", len(state.Zones))
 			}
-			want := PlaybackSettings{Leveling: "track", Gapless: false, Crossfade: true, CrossfadeSeconds: 8, Quality: "lossy", Headroom: defaultHeadroom(), SampleRate: DefaultSampleRateDocument(), Downmix: DefaultDownmixDocument()}
+			want := PlaybackSettings{Leveling: "track", Gapless: false, Crossfade: true, CrossfadeSeconds: 8, Quality: "lossy", Headroom: defaultHeadroom(), SampleRate: DefaultSampleRateDocument(), Downmix: DefaultDownmixDocument(), PEQ: DefaultPEQDocument()}
 			if !EqualSettings(state.Zones[0].Settings, want) {
 				t.Fatalf("坏键影响其他设置：%+v", state.Zones[0].Settings)
 			}

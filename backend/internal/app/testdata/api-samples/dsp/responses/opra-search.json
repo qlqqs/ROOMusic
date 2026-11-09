@@ -1,0 +1,35 @@
+{
+  "body": {
+    "items": [
+      {
+        "eq_count": 3,
+        "name": "HD650",
+        "product_id": "sennheiser::hd650",
+        "subtype": "over_the_ear",
+        "vendor": "Sennheiser"
+      },
+      {
+        "eq_count": 13,
+        "name": "HD 650",
+        "product_id": "sennheiser::hd_650",
+        "subtype": "over_the_ear",
+        "vendor": "Sennheiser"
+      },
+      {
+        "eq_count": 1,
+        "name": "HD 650 (2020)",
+        "product_id": "sennheiser::hd_650_2020",
+        "subtype": "over_the_ear",
+        "vendor": "Sennheiser"
+      },
+      {
+        "eq_count": 1,
+        "name": "HD 650 (balanced)",
+        "product_id": "sennheiser::hd_650_balanced",
+        "subtype": "over_the_ear",
+        "vendor": "Sennheiser"
+      }
+    ]
+  },
+  "status": 200
+}

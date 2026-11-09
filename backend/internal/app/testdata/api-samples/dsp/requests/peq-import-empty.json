@@ -1,0 +1,7 @@
+{
+  "body": {
+    "text": "Preamp: -3 dB"
+  },
+  "method": "POST",
+  "path": "/api/v1/me/dsp/peq/import"
+}

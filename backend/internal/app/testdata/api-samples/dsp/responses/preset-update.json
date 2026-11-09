@@ -1,0 +1,36 @@
+{
+  "body": {
+    "created_at": "2026-01-01T00:00:00Z",
+    "name": "客厅均衡",
+    "peq": {
+      "bands": [
+        {
+          "channels": "all",
+          "enabled": true,
+          "freq_hz": 1000,
+          "gain_db": 6,
+          "q": 1,
+          "type": "peaking"
+        },
+        {
+          "channels": [
+            0,
+            1
+          ],
+          "enabled": true,
+          "freq_hz": 20,
+          "slope_db": 12,
+          "type": "high_pass"
+        }
+      ],
+      "enabled": true,
+      "preamp_db": -3,
+      "source": {
+        "kind": "import"
+      }
+    },
+    "preset_id": "00000000-0000-4000-8000-000000000001",
+    "updated_at": "2026-01-01T00:00:01Z"
+  },
+  "status": 200
+}

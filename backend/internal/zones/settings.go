@@ -13,6 +13,7 @@ type PlaybackSettings struct {
 	Headroom         Headroom         `json:"headroom"`
 	SampleRate       SettingsDocument `json:"sample_rate"`
 	Downmix          SettingsDocument `json:"downmix"`
+	PEQ              SettingsDocument `json:"peq"`
 }
 
 type Headroom struct {
@@ -33,13 +34,14 @@ type SettingsPatch struct {
 	Headroom         *Headroom         `json:"headroom"`
 	SampleRate       *SettingsDocument `json:"sample_rate"`
 	Downmix          *SettingsDocument `json:"downmix"`
+	PEQ              *SettingsDocument `json:"peq"`
 }
 
 // EqualSettings 统一设置相等判定；文档比较使用其规范 JSON 值。
 func EqualSettings(a, b PlaybackSettings) bool { return a == b }
 
 func defaultSettings() PlaybackSettings {
-	return PlaybackSettings{Leveling: "auto", Gapless: true, CrossfadeSeconds: 5, Quality: "lossless", Headroom: defaultHeadroom(), SampleRate: DefaultSampleRateDocument(), Downmix: DefaultDownmixDocument()}
+	return PlaybackSettings{Leveling: "auto", Gapless: true, CrossfadeSeconds: 5, Quality: "lossless", Headroom: defaultHeadroom(), SampleRate: DefaultSampleRateDocument(), Downmix: DefaultDownmixDocument(), PEQ: DefaultPEQDocument()}
 }
 
 func settingsOf(p PlaybackSettings) ZoneSettings { return p }
@@ -74,6 +76,11 @@ func ValidateSettingsPatch(p SettingsPatch) error {
 			return ErrInvalidInput
 		}
 	}
+	if p.PEQ != nil {
+		if _, err := ParsePEQDocument([]byte(p.PEQ.canonical)); err != nil {
+			return ErrInvalidInput
+		}
+	}
 	return nil
 }
 func applySettings(p PlaybackSettings, patch SettingsPatch) PlaybackSettings {
@@ -100,6 +107,9 @@ func applySettings(p PlaybackSettings, patch SettingsPatch) PlaybackSettings {
 	}
 	if patch.Downmix != nil {
 		p.Downmix = *patch.Downmix
+	}
+	if patch.PEQ != nil {
+		p.PEQ = *patch.PEQ
 	}
 	return p
 }

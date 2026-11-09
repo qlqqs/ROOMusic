@@ -87,6 +87,10 @@ func ValidateSettingsShape(raw []byte) error {
 			if !validHeadroomShape(value) {
 				return ErrInvalidInput
 			}
+		case "peq":
+			if !validPEQShape(value) {
+				return ErrInvalidInput
+			}
 		case "downmix":
 			if !validDownmixShape(value) {
 				return ErrInvalidInput
@@ -135,6 +139,7 @@ func (p *SettingsPatch) UnmarshalJSON(raw []byte) error {
 		*plain
 		SampleRate json.RawMessage `json:"sample_rate"`
 		Downmix    json.RawMessage `json:"downmix"`
+		PEQ        json.RawMessage `json:"peq"`
 	}{plain: &decoded}
 	if err := json.Unmarshal(raw, &wire); err != nil {
 		return err
@@ -153,6 +158,13 @@ func (p *SettingsPatch) UnmarshalJSON(raw []byte) error {
 		}
 		decoded.Downmix = &document
 	}
+	if wire.PEQ != nil {
+		document, err := ParsePEQDocument(wire.PEQ)
+		if err != nil {
+			return err
+		}
+		decoded.PEQ = &document
+	}
 	*p = SettingsPatch(decoded)
 	return nil
 }
@@ -165,6 +177,7 @@ func (p *PlaybackSettings) UnmarshalJSON(raw []byte) error {
 		*plain
 		SampleRate json.RawMessage `json:"sample_rate"`
 		Downmix    json.RawMessage `json:"downmix"`
+		PEQ        json.RawMessage `json:"peq"`
 	}{plain: &decoded}
 	if err := json.Unmarshal(raw, &wire); err != nil {
 		return err
@@ -182,6 +195,13 @@ func (p *PlaybackSettings) UnmarshalJSON(raw []byte) error {
 			return err
 		}
 		decoded.Downmix = document
+	}
+	if wire.PEQ != nil {
+		document, err := ParsePEQDocument(wire.PEQ)
+		if err != nil {
+			return err
+		}
+		decoded.PEQ = document
 	}
 	*p = PlaybackSettings(decoded)
 	return nil

@@ -1,5 +1,6 @@
 // 播放区协议 v1 在浏览器里的形状（合同 §2）：解码器把服务端的 JSON 换成这里的类型，界面与输出端只认这些类型。
 // 时间都换成本地可比较的毫秒数（服务端时钟，用时钟偏移换算）；队列曲目换成 PlayerTrack。
+import type { PeqDocument } from "../peq/document";
 import type { PlayMode, PlayerTrack, QueueEntry } from "../engine/queue";
 
 export const levelingModes = ["off", "auto", "track", "album"] as const;
@@ -37,6 +38,7 @@ export type PlaybackSettings = {
   headroom: { enabled: boolean; db: number; clipIndicator: boolean };
   sampleRate: SampleRateSettings;
   downmix: { enabled: boolean };
+  peq: PeqDocument;
 };
 
 /** 曲目不能播放的原因；界面按它选文案。服务端以后增加的原因按“音频文件无法读取”显示。 */
@@ -86,6 +88,7 @@ export type SignalStep = { quality: SignalQuality; lossy: boolean; compat: boole
   | { kind: "source"; params: { codec: string; sampleRate: number; bitDepth: number | null; channels: number } }
   | { kind: "convert"; params: { fromRate: number; toRate: number; by: string } }
   | { kind: "sample_rate"; params: { fromRate: number; toRate: number; filter: SampleRateFilter } }
+  | { kind: "peq"; params: { label: string; bands: number } }
   | { kind: "downmix"; params: { fromChannels: number; toChannels: number; fromLayout: string | null; toLayout: string | null; by: string; mode: DownmixMode | null } }
   | { kind: "leveling"; params: { gainDb: number; basis: string } }
   | { kind: "headroom"; params: { gainDb: number } }

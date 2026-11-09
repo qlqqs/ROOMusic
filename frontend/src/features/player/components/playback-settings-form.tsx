@@ -1,4 +1,4 @@
-import { MonitorSpeaker } from "lucide-react";
+import { MonitorSpeaker, SlidersVertical } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import {
   crossfadeDurations,
@@ -13,7 +13,9 @@ import {
   type SampleRateStrategy,
   type StreamQuality,
 } from "../zones/model";
+import { PeqEditorDialog } from "../peq/peq-editor";
 import { usePlayerEngine, usePlayerSelector } from "../player-provider";
+import { Button } from "../../../shared/ui";
 import { gainLabel } from "./player-labels";
 import styles from "./playback-settings-form.module.css";
 
@@ -103,6 +105,23 @@ function GainSlider({ value, disabled, onCommit }: { value: number; disabled: bo
   );
 }
 
+/** 参数均衡：开关，旁边的按钮打开编辑面板。 */
+function PeqRow({ disabled }: { disabled: boolean }) {
+  const engine = usePlayerEngine();
+  const peq = usePlayerSelector((snapshot) => snapshot.settings.peq);
+  const [editing, setEditing] = useState(false);
+  return (
+    <div className={styles.switchRow}>
+      <label className={styles.switchRow}>
+        <span className={styles.legend}>参数均衡</span>
+        <input type="checkbox" role="switch" className={styles.switch} checked={peq.enabled} disabled={disabled} onChange={(event) => engine.setPlaybackSettings({ peq: { ...peq, enabled: event.target.checked } })} />
+      </label>
+      <Button variant="icon" icon={<SlidersVertical size={18} />} label="编辑参数均衡" disabled={disabled} onClick={() => setEditing(true)} />
+      <PeqEditorDialog open={editing} onClose={() => setEditing(false)} />
+    </div>
+  );
+}
+
 /** 设置页标题旁的设备名：这些设置改的是正在控制的那台设备。 */
 export function PlaybackSettingsDevice() {
   const name = usePlayerSelector((snapshot) => snapshot.device?.name ?? null);
@@ -110,7 +129,7 @@ export function PlaybackSettingsDevice() {
   return <span className={styles.device}><MonitorSpeaker size={14} aria-hidden="true" /><span className={styles.deviceName}>{name}</span></span>;
 }
 
-/** 设置 › 播放：音量均衡、无缝、交叉渐变、音质、采样率转换、降混与 Headroom，作用于正在控制的播放区（服务端渲染）；还没读到播放区时禁用。 */
+/** 设置 › 播放：音量均衡、无缝、交叉渐变、音质、采样率转换、降混、参数均衡与 Headroom，作用于正在控制的播放区（服务端渲染）；还没读到播放区时禁用。 */
 export function PlaybackSettingsForm() {
   const engine = usePlayerEngine();
   const settings = usePlayerSelector((snapshot) => snapshot.settings);
@@ -164,6 +183,7 @@ export function PlaybackSettingsForm() {
         onChange={(filter) => engine.setPlaybackSettings({ sampleRate: { ...settings.sampleRate, filter } })}
       />
       <Switch label="多声道降为双声道" checked={settings.downmix.enabled} disabled={disabled} onChange={(enabled) => engine.setPlaybackSettings({ downmix: { enabled } })} />
+      <PeqRow disabled={disabled} />
       <Switch label="Headroom" checked={settings.headroom.enabled} disabled={disabled} onChange={(enabled) => engine.setPlaybackSettings({ headroom: { ...settings.headroom, enabled } })} />
       <GainSlider value={settings.headroom.db} disabled={disabled || !settings.headroom.enabled} onCommit={(db) => engine.setPlaybackSettings({ headroom: { ...settings.headroom, db } })} />
       <Switch label="削波指示" checked={settings.headroom.clipIndicator} disabled={disabled} onChange={(clipIndicator) => engine.setPlaybackSettings({ headroom: { ...settings.headroom, clipIndicator } })} />

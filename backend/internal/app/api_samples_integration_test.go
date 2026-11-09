@@ -1231,6 +1231,9 @@ func (recorder *apiSampleRecorder) finish() {
 
 // ownsSample 同时保留 personal 的目录/错误前缀隔离与扫描反馈的子目录隔离。
 func (recorder *apiSampleRecorder) ownsSample(name string) bool {
+	if strings.HasPrefix(name, "dsp/") {
+		return recorder.scope == "dsp"
+	}
 	if strings.HasPrefix(name, "playback-zones/") {
 		return recorder.scope == "playback-zones"
 	}

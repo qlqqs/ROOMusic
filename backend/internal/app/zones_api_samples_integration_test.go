@@ -19,7 +19,11 @@ import (
 // 请求与 SSE 保留自己的信封，不伪装为 JSON HTTP 响应；共用已有规范化和敏感值检测。
 func (r *apiSampleRecorder) recordZonesPayload(name string, payload any) {
 	r.t.Helper()
-	name = "playback-zones/" + name
+	r.recordPayload("playback-zones/"+name, payload)
+}
+
+func (r *apiSampleRecorder) recordPayload(name string, payload any) {
+	r.t.Helper()
 	if _, exists := r.samples[name]; exists {
 		r.t.Fatalf("重复样本 %s", name)
 	}
@@ -331,6 +335,12 @@ func TestPostgreSQLZonesAPIResponseSamples(t *testing.T) {
 		c.claim("", device.Device.DeviceID, false, nil)
 		value := zones.DownmixSettings{Enabled: false}
 		c.command("set-settings-downmix", device.Zone.ZoneID, map[string]any{"command": "set_settings", "settings": map[string]any{"downmix": value}})
+	}
+
+	{
+		device := c.device("")
+		c.claim("", device.Device.DeviceID, false, nil)
+		c.command("set-settings-peq", device.Zone.ZoneID, map[string]any{"command": "set_settings", "settings": map[string]any{"peq": dspSamplePEQ()}})
 	}
 
 	samples.finish()

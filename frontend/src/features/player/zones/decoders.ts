@@ -4,6 +4,7 @@ import { decode as d } from "../../../shared/api";
 import { trackSummaryDecoder } from "../../catalog";
 import { playModes, MAX_QUEUE_ENTRIES, type QueueEntry } from "../engine/queue";
 import { playerTrackOfSummary } from "../engine/tracks";
+import { peqDocumentDecoder } from "../peq/document";
 import {
   crossfadeDurations,
   downmixModes,
@@ -71,6 +72,10 @@ const signalStepDecoder: d.Decoder<SignalStep | null> = (input, path) => {
       const raw = paramsOf(d.object({ from_channels: d.integer({ min: 0 }), to_channels: d.integer({ min: 0 }), from_layout: d.optional(d.string({ max: 64 })), to_layout: d.optional(d.string({ max: 64 })), by: d.string({ max: 64 }), mode: d.optional(lenient(downmixModes, "matrix")) }));
       return { ...base, kind: "downmix", params: { fromChannels: raw.from_channels, toChannels: raw.to_channels, fromLayout: raw.from_layout ?? null, toLayout: raw.to_layout ?? null, by: raw.by, mode: raw.mode ?? null } };
     }
+    case "peq": {
+      const raw = paramsOf(d.object({ label: d.string({ max: 512 }), bands: d.integer({ min: 0 }) }));
+      return { ...base, kind: "peq", params: { label: raw.label, bands: raw.bands } };
+    }
     case "leveling": {
       const raw = paramsOf(d.object({ gain_db: d.number(), basis: d.string({ max: 64 }) }));
       return { ...base, kind: "leveling", params: { gainDb: raw.gain_db, basis: raw.basis } };
@@ -122,6 +127,7 @@ const settingsDecoder: d.Decoder<PlaybackSettings> = (input, path) => {
     headroom: d.object({ enabled: d.boolean(), db: d.number(), clip_indicator: d.boolean() }),
     sample_rate: d.object({ strategy: lenient(sampleRateStrategies, "none"), custom_rate: d.nullable(d.integer({ min: 0 })), filter: sampleRateFilterDecoder }),
     downmix: d.object({ enabled: d.boolean() }),
+    peq: peqDocumentDecoder,
   })(input, path);
   return {
     leveling: raw.leveling,
@@ -132,6 +138,7 @@ const settingsDecoder: d.Decoder<PlaybackSettings> = (input, path) => {
     headroom: { enabled: raw.headroom.enabled, db: raw.headroom.db, clipIndicator: raw.headroom.clip_indicator },
     sampleRate: { strategy: raw.sample_rate.strategy, customRate: raw.sample_rate.custom_rate, filter: raw.sample_rate.filter },
     downmix: { enabled: raw.downmix.enabled },
+    peq: raw.peq,
   };
 };
 
