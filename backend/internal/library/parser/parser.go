@@ -1,5 +1,5 @@
 // Package parser 解析音频文件与 CUE 抄本，只产出安全、有界的事实观察，不读取音乐库之外的位置，
-// 也不写入任何文件。它是叶子包：只依赖标准库、字符集解码库、catalog/metadata 与 catalog/classical。
+// 也不写入任何文件。标签规则复用 catalog/metadata 与 catalog/classical，DSD 容器事实复用 playback/dsdio。
 package parser
 
 import (
@@ -92,6 +92,10 @@ func ParseAudioFile(path string) (AudioObservation, error) {
 		return parseWavPack(path)
 	case ".aif", ".aiff":
 		return parseAIFF(path)
+	case ".dsf":
+		return parseDSF(path)
+	case ".dff":
+		return parseDFF(path)
 	default:
 		return AudioObservation{}, fmt.Errorf("unsupported format")
 	}

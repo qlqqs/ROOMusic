@@ -21,6 +21,14 @@ func matchesContainer(source io.ReaderAt, size int64, kind container) (bool, err
 	if kind == containerMP4 {
 		return hasMP4FileType(source, size)
 	}
+	if kind == containerDFF {
+		var header [16]byte
+		read, err := source.ReadAt(header[:], 0)
+		if err != nil && !errors.Is(err, io.EOF) {
+			return false, err
+		}
+		return read == len(header) && bytes.Equal(header[:4], []byte("FRM8")) && bytes.Equal(header[12:16], []byte("DSD ")), nil
+	}
 	var header [12]byte
 	read, err := source.ReadAt(header[:], 0)
 	if err != nil && !errors.Is(err, io.EOF) {
@@ -28,6 +36,8 @@ func matchesContainer(source io.ReaderAt, size int64, kind container) (bool, err
 	}
 	head := header[:read]
 	switch kind {
+	case containerDSF:
+		return bytes.HasPrefix(head, []byte("DSD ")), nil
 	case containerWavPack:
 		return bytes.HasPrefix(head, []byte("wvpk")), nil
 	case containerAIFF:

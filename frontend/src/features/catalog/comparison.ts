@@ -1,3 +1,4 @@
+import { dsdRateName } from "../../shared/lib/dsd";
 import { formatDuration } from "../../shared/lib/duration";
 import { formatCount } from "../../shared/lib/number";
 import type { AudioFormatDTO, ComparedReleaseDTO } from "./api/decoders";
@@ -12,9 +13,10 @@ export function formatSampleRate(hertz: number): string {
   return `${Number((hertz / 1000).toFixed(3))} kHz`;
 }
 
-/** 一种音频格式的显示：“FLAC · 24 bit / 96 kHz”。没有的参数省略，编码与参数都未知时写“参数未知”。 */
+/** 一种音频格式的显示：“FLAC · 24 bit / 96 kHz”，DSD 写“DSD（DSF） · DSD64”。没有的参数省略，编码与参数都未知时写“参数未知”。 */
 export function audioFormatText(format: Pick<AudioFormatDTO, "codec" | "bit_depth" | "sample_rate">): string {
-  const parameters = [format.bit_depth === null ? null : `${format.bit_depth} bit`, format.sample_rate === null ? null : formatSampleRate(format.sample_rate)]
+  const dsd = format.sample_rate === null ? null : dsdRateName(format.sample_rate);
+  const parameters = dsd ?? [format.bit_depth === null ? null : `${format.bit_depth} bit`, format.sample_rate === null ? null : formatSampleRate(format.sample_rate)]
     .filter((part) => part !== null)
     .join(" / ");
   const parts = [format.codec === null ? null : codecLabel(format.codec), parameters === "" ? null : parameters].filter((part) => part !== null);

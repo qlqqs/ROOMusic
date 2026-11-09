@@ -354,6 +354,24 @@ func TestPostgreSQLZonesAPIResponseSamples(t *testing.T) {
 		value := zones.ConvolutionSettings{Enabled: true, IRID: &id, BeforePEQ: true}
 		c.command("set-settings-convolution", device.Zone.ZoneID, map[string]any{"command": "set_settings", "settings": map[string]any{"convolution": value}})
 	}
+	{
+		device := c.device("")
+		id := device.Zone.ZoneID
+		c.claim("", device.Device.DeviceID, false, nil)
+		c.command("", id, map[string]any{"command": "play_tracks", "track_ids": f.tracks[:1], "start_index": 0})
+		// 独立样本展示 DSD 来源段；经渲染端口与真实 SSE 输出，不覆盖原信号样本。
+		signal := map[string]any{"quality": "high", "steps": []map[string]any{
+			{"kind": "source", "quality": "lossless", "lossy": false, "compat": false, "params": map[string]any{"codec": "dsf", "sample_rate": 2822400, "channels": 2}},
+			{"kind": "dsd_to_pcm", "quality": "high", "lossy": false, "compat": true, "params": map[string]any{"from": "DSD64", "dsd_rate": 2822400, "to_rate": 352800, "filter": 1}},
+			{"kind": "sample_rate", "quality": "high", "lossy": false, "compat": true, "params": map[string]any{"from_rate": 352800, "to_rate": 176400, "filter": "linear_precise"}},
+			{"kind": "dither", "quality": "enhanced", "lossy": false, "compat": false, "params": map[string]any{"bits": 24, "kind": "tpdf"}},
+			{"kind": "encode", "quality": "lossless", "lossy": false, "compat": false, "params": map[string]any{"codec": "flac", "sample_rate": 176400, "bit_depth": 24}},
+		}}
+		sessions := f.renderer.Sessions()
+		f.emit(t, sessions[len(sessions)-1], zones.Event{Kind: "signal", Signal: signal})
+		samples.recordZonesPayload("events/zone-signal-dsd", events.zone(t, id, func(z zones.Zone) bool { return z.Signal != nil }))
+	}
+
 	samples.finish()
 }
 func (c zonesSampleCalls) commandError(name, id string, body map[string]any, status int) {

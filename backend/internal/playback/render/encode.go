@@ -21,7 +21,7 @@ type encoder struct {
 	encodedBytes atomic.Int64
 }
 
-func newEncoder(ctx context.Context, reservation *ffmpeg.Reservation, tool *ffmpeg.Tool, f zones.StreamFormat, pcm chain.Format, output *io.PipeWriter, hls *hlsMedia, fail func(error)) (*encoder, error) {
+func newEncoder(ctx context.Context, reservation processStarter, tool *ffmpeg.Tool, f zones.StreamFormat, pcm chain.Format, output *io.PipeWriter, hls *hlsMedia, fail func(error)) (*encoder, error) {
 	e := &encoder{format: f, output: output, done: make(chan struct{})}
 	if f.Codec == "wav" {
 		e.format.SampleRate, e.format.Channels, e.format.Layout = pcm.SampleRate, pcm.Channels, pcm.Layout

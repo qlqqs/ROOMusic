@@ -17,12 +17,23 @@ func TestFormatTableContainsOnlyTheApprovedCombinations(t *testing.T) {
 		{"opus_tags", "opus", DeliveryOriginal, "audio/ogg", "opus"},
 	}
 	for name, testCase := range map[string]struct {
+		got  []Format
 		want []combination
 	}{
-		"direct": {direct},
+		"direct": {formatTable, direct},
+		"DSD无需ffmpeg解码器": {
+			(&Service{renderDecoders: noRenderDecoders{}}).RenderFormats(),
+			[]combination{
+				{"dsf_id3", "dsf", DeliveryDerived, "audio/flac", ""},
+				{"dff_diin", "dff", DeliveryDerived, "audio/flac", ""},
+				{"cue_virtual", "dsf", DeliveryDerived, "audio/flac", ""},
+				{"cue_virtual", "dff", DeliveryDerived, "audio/flac", ""},
+			},
+		},
+		"未装配渲染器也不发布DSD": {(&Service{}).RenderFormats(), nil},
 	} {
 		t.Run(name, func(t *testing.T) {
-			got := formatTable
+			got := testCase.got
 			if len(got) != len(testCase.want) {
 				t.Fatalf("format table has %d rows, want %d", len(got), len(testCase.want))
 			}
@@ -102,3 +113,8 @@ func TestFormatsReturnsACopy(t *testing.T) {
 type allRenderDecoders struct{}
 
 func (allRenderDecoders) HasDecoder(string) bool { return true }
+
+// 已装配渲染器，但没有任何 ffmpeg 来源解码器；DSD 由内置转换负责。
+type noRenderDecoders struct{}
+
+func (noRenderDecoders) HasDecoder(string) bool { return false }

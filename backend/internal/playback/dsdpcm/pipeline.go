@@ -39,22 +39,27 @@ type pipeline struct {
 	frames    int64
 }
 
+// OutputRate 返回 DSD 来源的固定 PCM 率，只检查倍率，不构建滤波器。
+// 安全打开、格式规划和分析共用这一规则。
+func OutputRate(dsdRate int) (int, error) {
+	for _, base := range []int{2822400, 3072000} {
+		if dsdRate >= base && dsdRate%base == 0 {
+			factor := dsdRate / base
+			if factor&(factor-1) == 0 {
+				return base / 8, nil
+			}
+		}
+	}
+	return 0, fmt.Errorf("dsdpcm: 不支持的 DSD 采样率 %d", dsdRate)
+}
+
 func newPipeline(layout dsdio.Layout, options Options) (*pipeline, error) {
 	if options.Filter < 0 || options.Filter > 3 {
 		return nil, fmt.Errorf("dsdpcm: 后置低通档位必须在 0–3 之间")
 	}
-	target := 0
-	for _, base := range []int{2822400, 3072000} {
-		if layout.Rate >= base && layout.Rate%base == 0 {
-			factor := layout.Rate / base
-			if factor&(factor-1) == 0 {
-				target = base / 8
-				break
-			}
-		}
-	}
-	if target == 0 {
-		return nil, fmt.Errorf("dsdpcm: 不支持的 DSD 采样率 %d", layout.Rate)
+	target, err := OutputRate(layout.Rate)
+	if err != nil {
+		return nil, err
 	}
 	byteRate := layout.Rate / 8
 	factor := byteRate / target

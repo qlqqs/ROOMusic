@@ -27,12 +27,20 @@ func TestRenderSession(t *testing.T) {
 		cursor      zones.Cursor
 		pcm         []byte
 		bits        int
+		dsdCodec    string
+		slots       int
 	}{
-		{"16位逐位一致", "a", nil, a.pcm, 16},
-		{"24位逐位一致", "high", nil, high.pcm, 24},
-		{"同格式无缝拼接", "a", testCursor(nextB), append(append([]byte(nil), a.pcm...), b.pcm...), 16},
+		{name: "16位逐位一致", first: "a", pcm: a.pcm, bits: 16},
+		{name: "24位逐位一致", first: "high", pcm: high.pcm, bits: 24},
+		{name: "同格式无缝拼接", first: "a", cursor: testCursor(nextB), pcm: append(append([]byte(nil), a.pcm...), b.pcm...), bits: 16},
+		{name: "DSD到WAV零进程", dsdCodec: "wav", slots: 0},
+		{name: "DSD到FLAC仅编码名额", dsdCodec: "flac", slots: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.dsdCodec != "" {
+				testDSDSessionCapacityAndClocks(t, tool, tc.dsdCodec, tc.slots)
+				return
+			}
 			r := newTestRenderer(t, tool, source)
 			spec := renderSpec("flac")
 			spec.Start.TrackID, spec.Cursor = tc.first, tc.cursor

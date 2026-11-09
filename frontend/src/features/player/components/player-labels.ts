@@ -1,3 +1,4 @@
+import { dsdRateName } from "../../../shared/lib/dsd";
 import type { PlayMode, PlayerTrack } from "../engine/queue";
 import type { CommandRejection, PlaybackFailureReason, PlayerStatus } from "../zones/model";
 
@@ -8,6 +9,8 @@ export const failureLabels: Record<PlaybackFailureReason, string> = { not_found:
 export const rejectionLabels: Record<CommandRejection["reason"], string> = { zone_offline: "那台设备已离线。" };
 export function sourceFormat(track: PlayerTrack): string {
   const source = track.source;
+  const dsd = source.sampleRate === null ? null : dsdRateName(source.sampleRate);
+  if (dsd !== null) return `${source.codec?.toUpperCase() ?? "DSD"} ${dsd}`;
   return `${source.codec?.toUpperCase() ?? "未知编码"}${source.bitDepth === null ? "" : ` ${source.bitDepth}`}${source.sampleRate === null ? "" : `/${source.sampleRate / 1000}`}`;
 }
 

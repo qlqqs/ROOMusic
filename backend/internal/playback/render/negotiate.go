@@ -6,6 +6,7 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/dsp/chain"
 	"github.com/qlqq/roomusic/backend/internal/dsp/src"
+	"github.com/qlqq/roomusic/backend/internal/playback/dsdpcm"
 	"github.com/qlqq/roomusic/backend/internal/zones"
 )
 
@@ -86,7 +87,7 @@ func (r *Renderer) Negotiate(caps zones.Capabilities, quality string) (zones.Str
 }
 
 func integerSource(t Track) bool {
-	if t.IsFloat {
+	if t.DSDLayout != nil || t.IsFloat {
 		return false
 	}
 	switch strings.ToLower(t.Codec) {
@@ -96,8 +97,28 @@ func integerSource(t Track) bool {
 	return strings.HasPrefix(strings.ToLower(t.Codec), "pcm_s") || strings.HasPrefix(strings.ToLower(t.Codec), "pcm_u")
 }
 
+// sourceFormat 比较来源段的有效格式，不拿 DSD 比特率充当 PCM 时钟。
+// 浮点统一为非精确样本，整数仍保留有效位深边界。
+type sourceFormat struct {
+	pcm     chain.Format
+	integer bool
+	bits    int
+}
+
+func effectiveSource(t Track) sourceFormat {
+	rate := t.SampleRate
+	if t.DSDLayout != nil {
+		rate, _ = dsdpcm.OutputRate(t.DSDLayout.Rate)
+	}
+	f := sourceFormat{pcm: chain.Format{SampleRate: rate, Channels: t.Channels, Layout: trackLayout(t)}, integer: integerSource(t)}
+	if f.integer {
+		f.bits = t.BitDepth
+	}
+	return f
+}
+
 func sameSourceFormat(a, b Track) bool {
-	return a.SampleRate == b.SampleRate && a.Channels == b.Channels && a.BitDepth == b.BitDepth && integerSource(a) == integerSource(b) && a.IsFloat == b.IsFloat && trackLayout(a) == trackLayout(b)
+	return effectiveSource(a) == effectiveSource(b)
 }
 
 func concreteFormat(spec zones.RenderSpec, source Track) (zones.StreamFormat, renderPlan, error) {
@@ -120,14 +141,14 @@ func concreteFormat(spec zones.RenderSpec, source Track) (zones.StreamFormat, re
 	if f.Codec != "wav" {
 		maxChannels = min(maxChannels, 8)
 	}
-	if source.SampleRate < 5 || source.Channels < 1 {
+	pcm := effectiveSource(source).pcm
+	if pcm.SampleRate < 5 || pcm.Channels < 1 {
 		return f, renderPlan{}, ErrNoStreamFormat
 	}
-	conversion, filter, err := chooseSampleRate(source.SampleRate, spec.Settings.SampleRate, f)
+	conversion, filter, err := chooseSampleRate(pcm.SampleRate, spec.Settings.SampleRate, f)
 	if err != nil {
 		return f, renderPlan{}, err
 	}
-	pcm := chain.Format{SampleRate: source.SampleRate, Channels: source.Channels, Layout: trackLayout(source)}
 	out := pcm
 	out.SampleRate = conversion.To
 	plan := renderPlan{sourcePCM: pcm, outputPCM: out, sampleRate: conversion, sampleRateFilter: filter}

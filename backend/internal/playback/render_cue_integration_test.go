@@ -52,3 +52,51 @@ func TestPostgreSQLRenderCUEFramesShareBoundary(t *testing.T) {
 		})
 	}
 }
+
+func TestPostgreSQLRenderDSDCUEFramesShareBoundary(t *testing.T) {
+	fixture := newPlaybackFixture(t)
+	service := NewService(fixture.database, []string{fixture.allowedRoot}, WithRenderDecoders(noRenderDecoders{}))
+	const parent = "专辑/整轨.dsf"
+	const dsdRate = 5644800
+	content := dsdSourceContent(dsdRate)
+	writeSource(t, fixture.musicRoot, parent, content, scanTime)
+	size := int64(len(content))
+	endIndex, endFrame := int32(1), int64(4704)
+	for _, tc := range []struct {
+		name      string
+		start     int32
+		end       *int32
+		wantStart int64
+		wantEnd   *int64
+	}{
+		{"前轨到共享边界", 0, &endIndex, 0, &endFrame},
+		{"非零起点到EOF", 1, nil, 4704, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			id := fixture.insertTrack(t, trackSpec{
+				relativePath: "专辑/整轨.cue#" + tc.name, sourceKind: "cue_virtual", codec: textPointer("dsf"),
+				size: &size, modifiedAt: &scanTime, bitDepth: 1, sampleRate: dsdRate, channels: 1,
+			})
+			fixture.exec(t, `UPDATE tracks SET cue_parent_relative_path=$2, cue_index_frames=$3, cue_end_frames=$4 WHERE id=$1::uuid`, id, parent, tc.start, tc.end)
+			source, err := service.OpenForRender(context.Background(), id)
+			if err != nil {
+				t.Fatalf("OpenForRender: %v", err)
+			}
+			defer source.File.Close()
+			if source.CueStartFrame == nil || *source.CueStartFrame != tc.wantStart {
+				t.Fatalf("CUE 起点=%v，期望 352800 Hz 的绝对帧 %d", source.CueStartFrame, tc.wantStart)
+			}
+			if tc.wantEnd == nil {
+				if source.CueEndFrame != nil {
+					t.Fatalf("到 EOF 的轨不应设置结束帧：%d", *source.CueEndFrame)
+				}
+			} else if source.CueEndFrame == nil || *source.CueEndFrame != *tc.wantEnd {
+				t.Fatalf("CUE 终点=%v，期望 352800 Hz 的绝对帧 %d", source.CueEndFrame, *tc.wantEnd)
+			}
+			if source.DSDLayout == nil || source.DSDLayout.Rate != dsdRate || source.SampleRate != dsdRate ||
+				source.BitDepth != 1 || source.IsFloat || source.Channels != 1 || source.Layout != 4 {
+				t.Fatalf("来源必须保留 DSD 文件事实，不能用 PCM 时钟覆盖：%+v", source)
+			}
+		})
+	}
+}

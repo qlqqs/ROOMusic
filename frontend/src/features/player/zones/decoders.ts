@@ -64,6 +64,10 @@ const signalStepDecoder: d.Decoder<SignalStep | null> = (input, path) => {
       const raw = paramsOf(d.object({ from_rate: d.integer({ min: 0 }), to_rate: d.integer({ min: 0 }), by: d.string({ max: 64 }) }));
       return { ...base, kind: "convert", params: { fromRate: raw.from_rate, toRate: raw.to_rate, by: raw.by } };
     }
+    case "dsd_to_pcm": {
+      const raw = paramsOf(d.object({ from: d.string({ max: 32 }), dsd_rate: d.integer({ min: 0 }), to_rate: d.integer({ min: 0 }), filter: d.integer({ min: 0 }) }));
+      return { ...base, kind: "dsd_to_pcm", params: { from: raw.from, dsdRate: raw.dsd_rate, toRate: raw.to_rate, filter: raw.filter } };
+    }
     case "sample_rate": {
       const raw = paramsOf(d.object({ from_rate: d.integer({ min: 0 }), to_rate: d.integer({ min: 0 }), filter: sampleRateFilterDecoder }));
       return { ...base, kind: "sample_rate", params: { fromRate: raw.from_rate, toRate: raw.to_rate, filter: raw.filter } };

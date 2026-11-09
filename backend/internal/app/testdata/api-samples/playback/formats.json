@@ -93,6 +93,20 @@
         "source_kind": "wav_info"
       },
       {
+        "codec": "dsf",
+        "codecs": null,
+        "delivery": "derived",
+        "mime_type": "audio/flac",
+        "source_kind": "dsf_id3"
+      },
+      {
+        "codec": "dff",
+        "codecs": null,
+        "delivery": "derived",
+        "mime_type": "audio/flac",
+        "source_kind": "dff_diin"
+      },
+      {
         "codec": "flac",
         "codecs": null,
         "delivery": "derived",
@@ -178,6 +192,20 @@
       },
       {
         "codec": "wav_extensible",
+        "codecs": null,
+        "delivery": "derived",
+        "mime_type": "audio/flac",
+        "source_kind": "cue_virtual"
+      },
+      {
+        "codec": "dsf",
+        "codecs": null,
+        "delivery": "derived",
+        "mime_type": "audio/flac",
+        "source_kind": "cue_virtual"
+      },
+      {
+        "codec": "dff",
         "codecs": null,
         "delivery": "derived",
         "mime_type": "audio/flac",

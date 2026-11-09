@@ -107,6 +107,7 @@ func (s renderTrackSource) withAnalysis(ctx context.Context, trackID string, ope
 		SampleRate: opened.SampleRate, Channels: opened.Channels, BitDepth: opened.BitDepth, IsFloat: opened.IsFloat, Layout: opened.Layout,
 		DurationSeconds: opened.DurationSeconds, ReleaseID: placement.Release.ID,
 		CueStartFrame: opened.CueStartFrame, CueEndFrame: opened.CueEndFrame,
+		DSDLayout: opened.DSDLayout,
 	}
 	if result.Analysis != nil {
 		track.TrackGainDB = result.Analysis.TrackGainDB

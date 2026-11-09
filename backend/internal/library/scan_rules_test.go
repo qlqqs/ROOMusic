@@ -1,9 +1,14 @@
 package library
 
 import (
+	"context"
+	"encoding/binary"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/qlqq/roomusic/backend/internal/library/parser"
 )
 
 func TestValidateLibraryPathEnforcesRealContainment(t *testing.T) {
@@ -141,12 +146,12 @@ func TestMissingReconciliationRequiresSuccessfulTerminalState(t *testing.T) {
 }
 
 func TestScannerOnlyDiagnosesKnownUnsupportedAudioExtensions(t *testing.T) {
-	for _, extension := range []string{".flac", ".mp3", ".ogg", ".opus", ".wav", ".m4a", ".ape", ".wv", ".aif", ".aiff"} {
+	for _, extension := range []string{".flac", ".mp3", ".ogg", ".opus", ".wav", ".m4a", ".ape", ".wv", ".aif", ".aiff", ".dsf", ".dff"} {
 		if !isSupportedAudioExtension(extension) {
 			t.Fatalf("supported extension %s was not recognized", extension)
 		}
 	}
-	for _, extension := range []string{".aac", ".dsf", ".dff", ".wma", ".mka", ".tak"} {
+	for _, extension := range []string{".aac", ".wma", ".mka", ".tak"} {
 		if !isAudioCandidateExtension(extension) || isSupportedAudioExtension(extension) {
 			t.Fatalf("不支持的音频扩展名 %s 没有仅进入诊断候选", extension)
 		}
@@ -156,6 +161,63 @@ func TestScannerOnlyDiagnosesKnownUnsupportedAudioExtensions(t *testing.T) {
 			t.Fatalf("扩展名 %s 不应进入不支持格式诊断", extension)
 		}
 	}
+
+	t.Run("DST普通及CUE诊断", func(t *testing.T) {
+		root := t.TempDir()
+		chunk := func(id string, body []byte) []byte {
+			data := append([]byte(id), binary.BigEndian.AppendUint64(nil, uint64(len(body)))...)
+			data = append(data, body...)
+			if len(body)%2 != 0 {
+				data = append(data, 0)
+			}
+			return data
+		}
+		properties := append([]byte("SND "), chunk("FS  ", binary.BigEndian.AppendUint32(nil, 2822400))...)
+		properties = append(properties, chunk("CHNL", append(binary.BigEndian.AppendUint16(nil, 2), "SLFTSRGT"...))...)
+		properties = append(properties, chunk("CMPR", []byte{'D', 'S', 'T', ' ', 0})...)
+		body := append([]byte("DSD "), chunk("FVER", []byte{1, 5, 0, 0})...)
+		body = append(body, chunk("PROP", properties)...)
+		body = append(body, chunk("DST ", []byte{1, 2, 3, 4})...)
+		parent := filepath.Join(root, "compressed.dff")
+		if err := os.WriteFile(parent, chunk("FRM8", body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		_, parseErr := parser.ParseAudioFile(parent)
+		if !errors.Is(parseErr, parser.ErrUnsupportedEncoding) {
+			t.Fatalf("DST 未进入不支持编码分支：%v", parseErr)
+		}
+		cuePath := filepath.Join(root, "album.cue")
+		if err := os.WriteFile(cuePath, []byte("FILE \"compressed.dff\" WAVE\n  TRACK 01 AUDIO\n    INDEX 01 00:00:00\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		document, err := parser.ParseCueSheet(cuePath, root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, tc := range []struct {
+			name, relative string
+			cue            *parser.CueDocument
+		}{
+			{"普通", "compressed.dff", nil},
+			{"CUE", "album.cue", &document},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				// 在诊断持久化处截获类别；无需数据库，也不把解析失败冒充已入库。
+				stop := errors.New("已捕获诊断")
+				executor := &cleanupFailureScanExecutor{diagnosticError: stop}
+				pipeline := &scanPipeline{
+					ctx: context.Background(), service: &Service{}, executor: executor,
+					cache: &parseCache{}, scanID: "scan-id", root: registeredRoot{ID: "root-id", Path: root},
+				}
+				err := pipeline.apply(scanSlot{relative: tc.relative, cue: tc.cue, audio: []scanAudio{{
+					path: parent, err: parseErr, diagnosticKind: "parse_failure", diagnosticMessage: "CUE 引用音频解析失败",
+				}}})
+				if !errors.Is(err, stop) || len(executor.diagnosticKinds) != 1 || executor.diagnosticKinds[0] != "unsupported_format" {
+					t.Fatalf("诊断=%v，错误=%v；期望 unsupported_format", executor.diagnosticKinds, err)
+				}
+			})
+		}
+	})
 }
 
 func TestTrackSourceIdentityIsStableOnlyForSameRootAndPath(t *testing.T) {

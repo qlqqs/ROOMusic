@@ -1,6 +1,7 @@
 package render
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/qlqq/roomusic/backend/internal/dsp/chain"
@@ -38,7 +39,7 @@ func (s *session) segmentSignal(d *decoder) signalPath {
 	path := signalPath{Quality: "lossless", Steps: []chain.SignalStep{}}
 	track := d.track
 	source := chain.SignalStep{Kind: "source", Quality: "lossless", Params: map[string]any{"codec": track.Codec, "sample_rate": track.SampleRate, "channels": track.Channels}}
-	if track.BitDepth > 0 {
+	if track.BitDepth > 0 && track.DSDLayout == nil {
 		source.Params["bit_depth"] = track.BitDepth
 	}
 	switch strings.ToLower(track.Codec) {
@@ -46,6 +47,16 @@ func (s *session) segmentSignal(d *decoder) signalPath {
 		source.Quality, source.Lossy = "low", true
 	}
 	path.append(source)
+	if track.DSDLayout != nil {
+		base := 44100
+		if d.format.SampleRate == 384000 {
+			base = 48000
+		}
+		path.append(chain.SignalStep{Kind: "dsd_to_pcm", Quality: "high", Compat: true, Params: map[string]any{
+			"from": "DSD" + strconv.Itoa(track.SampleRate/base), "dsd_rate": track.SampleRate,
+			"to_rate": d.format.SampleRate, "filter": 1,
+		}})
+	}
 	gainDB, basis, enabled := leveling.Choose(leveling.Mode(s.spec.Settings.Leveling), track.TrackGainDB, track.AlbumGainDB, d.entry.AlbumContext)
 	if enabled {
 		path.append(chain.SignalStep{Kind: "leveling", Quality: "enhanced", Params: map[string]any{"gain_db": gainDB, "basis": basis}})

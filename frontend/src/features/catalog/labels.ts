@@ -143,5 +143,7 @@ export const codecLabel = labeller({
   wavpack_float: "WavPack（浮点）",
   wavpack_dsd: "WavPack（DSD）",
   aiff: "AIFF",
+  dsf: "DSD（DSF）",
+  dff: "DSD（DFF）",
   aiff_float: "AIFF（浮点）",
 });

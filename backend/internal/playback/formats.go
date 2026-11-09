@@ -16,6 +16,8 @@ const (
 	containerAPE
 	containerWavPack
 	containerAIFF
+	containerDSF
+	containerDFF
 )
 
 // Delivery 是格式交给浏览器的方式。

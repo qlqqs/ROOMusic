@@ -70,6 +70,7 @@ Before writing or reviewing backend code:
 | [播放格式表与旧直出接口合同](./playback-contracts.md) | 可渲染格式表（含 CUE）；旧直出接口与 `POST /me/plays` 只保留到下一版；派生退役与启动删除旧 `media-cache`；安全打开与停机中止 |
 | [服务端渲染合同](./playback-render-contracts.md) | P-c、G-2、D-2、P-e、P-g、P-d：ffmpeg 配置与自检、安全来源、共享链、换轨与交叉淡化、抖动出口、Headroom 与信号监测、CUE 截取、派生退役 |
 | [内嵌歌词合同](./lyrics-contracts.md) | M2b 歌词：标签提取与规范化、`tracks.lyrics` 与约束、歌词接口、LRC 解析规则、测试 |
+| [DSD 入库与播放合同](./dsd-contracts.md) | DSF/DFF 准入与指纹、DST 分类、安全布局传递、DSD 来源转换、CUE 共享状态、流式分析与信号参数 |
 | [后台音频分析合同](./audio-analysis-contracts.md) | 0033：`track_analyses` 与待分析判定、单线程低优先级工作者、ffmpeg 命令与自检、`ROOMUSIC_AUDIO_ANALYSIS`、按 Roon 的增益公式、分析结果与进度接口、测试 |
 | [参数均衡后端合同](./peq-contracts.md) | PEQ 文档、0047、成员预设与 OPRA HTTP、频响和渲染接入 |
 | [卷积校正后端合同](./convolution-contracts.md) | 卷积设置、0048/0049、成员 IR 上传装载与缓存、事务删除及异步渲染接入 |

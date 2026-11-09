@@ -1,6 +1,7 @@
 package playback
 
 import (
+	"encoding/binary"
 	"os"
 	"path/filepath"
 	"testing"
@@ -63,4 +64,32 @@ func TestFixturesFromARealEncoderMatchTheFormatTable(t *testing.T) {
 			}
 		})
 	}
+}
+
+// dsdSourceContent 生成 6000 PCM 帧的单声道 DSF，供来源边界与分析流共用。
+// 保留尾块填充；DSD64/128 的物理负载分别为 8/12 KiB，另有 92 字节头部。
+func dsdSourceContent(rate int) []byte {
+	const blockSize = 4096
+	byteFrames := 6000 * (rate / 2822400)
+	blocks := (byteFrames + blockSize - 1) / blockSize
+	data := make([]byte, 92+blocks*blockSize)
+	le := binary.LittleEndian
+	copy(data, "DSD ")
+	le.PutUint64(data[4:], 28)
+	le.PutUint64(data[12:], uint64(len(data)))
+	copy(data[28:], "fmt ")
+	le.PutUint64(data[32:], 52)
+	le.PutUint32(data[40:], 1)
+	le.PutUint32(data[48:], 1)
+	le.PutUint32(data[52:], 1)
+	le.PutUint32(data[56:], uint32(rate))
+	le.PutUint32(data[60:], 1)
+	le.PutUint64(data[64:], uint64(byteFrames*8))
+	le.PutUint32(data[72:], blockSize)
+	copy(data[80:], "data")
+	le.PutUint64(data[84:], uint64(len(data)-80))
+	for frame := 0; frame < byteFrames; frame++ {
+		data[92+frame] = byte(frame*37 + frame/251)
+	}
+	return data
 }

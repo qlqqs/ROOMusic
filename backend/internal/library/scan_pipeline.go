@@ -160,6 +160,9 @@ func (pipeline *scanPipeline) apply(slot scanSlot) error {
 		audio := slot.audio[0]
 		if audio.err != nil {
 			slot.diagnostics = []scanDiagnostic{{"parse_failure", "音频文件解析失败"}}
+			if errors.Is(audio.err, parser.ErrUnsupportedEncoding) {
+				slot.diagnostics = []scanDiagnostic{{"unsupported_format", "不支持的音频格式"}}
+			}
 			slot.heldKind = ingest.HeldFile
 		} else {
 			observation := buildPhysicalSourceObservation(audio.observation, slot.relative)
@@ -214,7 +217,11 @@ func (pipeline *scanPipeline) applyCue(slot scanSlot) error {
 		audio := parents[reference.ResolvedPath]
 		if audio.err != nil {
 			cueFailed = true
-			if err := pipeline.diagnose(slot.relative, audio.diagnosticKind, audio.diagnosticMessage); err != nil {
+			kind, message := audio.diagnosticKind, audio.diagnosticMessage
+			if errors.Is(audio.err, parser.ErrUnsupportedEncoding) {
+				kind, message = "unsupported_format", "不支持的 CUE 引用音频格式"
+			}
+			if err := pipeline.diagnose(slot.relative, kind, message); err != nil {
 				return err
 			}
 			continue

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/qlqq/roomusic/backend/internal/playback/dsdpcm"
 	"github.com/qlqq/roomusic/backend/internal/playback/render/ffmpeg"
 	"github.com/qlqq/roomusic/backend/internal/zones"
 )
@@ -142,7 +143,15 @@ func (r *Renderer) Open(ctx context.Context, spec zones.RenderSpec) (zones.Rende
 }
 
 func validateTrack(t Track) error {
-	if t.File == nil || t.SampleRate < 5 || t.SampleRate > 768000 || t.Channels < 1 || t.Channels > 32 || t.BitDepth < 0 || t.BitDepth > 64 {
+	if t.File == nil || t.SampleRate < 5 || t.Channels < 1 || t.Channels > 32 || t.BitDepth < 0 || t.BitDepth > 64 {
+		return &SourceError{Reason: "unsupported_format"}
+	}
+	if t.DSDLayout != nil {
+		layout := t.DSDLayout
+		if _, err := dsdpcm.OutputRate(layout.Rate); err != nil || layout.Rate != t.SampleRate || layout.Channels != t.Channels || string(layout.Container) != t.Codec || t.BitDepth != 1 {
+			return &SourceError{Reason: "unsupported_format"}
+		}
+	} else if t.SampleRate > 768000 {
 		return &SourceError{Reason: "unsupported_format"}
 	}
 	return nil

@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+
+	"github.com/qlqq/roomusic/backend/internal/playback/dsdio"
+	"github.com/qlqq/roomusic/backend/internal/playback/dsdpcm"
 )
 
 // ErrNotRenderable 表示来源组合、PCM 子类型或所需解码器不在当前渲染能力内。
@@ -12,7 +15,8 @@ var ErrNotRenderable = errors.New("playback track is not renderable")
 
 // RenderSource 是已安全打开、可交给解码器的原始来源；File 由调用方关闭。
 // BitDepth 是整数源的有效位深；浮点 WAV 为 0，IsFloat 明确标识扩展 WAV 的浮点子类型。
-// CUE 区间由扫描的 75 Hz 索引换算成父音频的 PCM 样本帧，结束帧不包含在区间内。
+// DSD 的 SampleRate、BitDepth 保留文件比特率与 1 bit，DSDLayout 是同一句柄探测的不可变事实。
+// CUE 区间由扫描的 75 Hz 索引直接换算成有效来源 PCM 帧，结束帧不包含在区间内。
 type RenderSource struct {
 	File                           *os.File
 	TrackID, SourceKind, Codec     string
@@ -20,6 +24,7 @@ type RenderSource struct {
 	DurationSeconds                float64
 	IsFloat                        bool
 	Layout                         uint32
+	DSDLayout                      *dsdio.Layout
 	CueStartFrame, CueEndFrame     *int64
 }
 
@@ -72,19 +77,24 @@ func (service *Service) OpenForRender(ctx context.Context, trackID string) (*Ren
 		SourceKind: target.source.SourceKind, Codec: target.source.Codec,
 		SampleRate: target.source.SampleRate, Channels: target.source.Channels, BitDepth: target.source.BitDepth,
 	}
-	if target.format.container == containerWAV {
+	pcmRate := result.SampleRate
+	switch target.format.container {
+	case containerWAV:
 		err = service.verifyRenderWAV(result, opened.Size)
+		pcmRate = result.SampleRate
+	case containerDSF, containerDFF:
+		pcmRate, err = verifyRenderDSD(result, opened.Size)
 	}
 	if err == nil && target.source.SourceKind == "cue_virtual" {
 		start, end := target.source.CueIndexFrames, target.source.CueEndFrames
-		if start == nil || *start < 0 || result.SampleRate <= 0 || end != nil && *end < *start {
+		if start == nil || *start < 0 || pcmRate <= 0 || end != nil && *end < *start {
 			err = fmt.Errorf("%w: invalid CUE scan range", ErrSourceChanged)
 		} else {
 			// 两端分别换算绝对索引；相邻轨共用同一边界，不能对持续时间单独取整。
-			frame := int64(*start) * int64(result.SampleRate) / 75
+			frame := int64(*start) * int64(pcmRate) / 75
 			result.CueStartFrame = &frame
 			if end != nil {
-				frame := int64(*end) * int64(result.SampleRate) / 75
+				frame := int64(*end) * int64(pcmRate) / 75
 				result.CueEndFrame = &frame
 			}
 		}
@@ -126,4 +136,31 @@ func (service *Service) verifyRenderWAV(source *RenderSource, size int64) error 
 		source.BitDepth = 0
 	}
 	return nil
+}
+
+// verifyRenderDSD 只从已核对版本的安全句柄重读布局，不创建转换器或重新按路径打开。
+// 返回值是来源段输出 PCM 率；来源本身仍保留 DSD 文件参数供信号路径使用。
+func verifyRenderDSD(source *RenderSource, size int64) (int, error) {
+	layout, err := dsdio.Probe(source.File, size)
+	if err != nil {
+		var unsupported *dsdio.UnsupportedEncodingError
+		if errors.As(err, &unsupported) {
+			return 0, fmt.Errorf("%w: %w", ErrNotRenderable, err)
+		}
+		return 0, fmt.Errorf("%w: read DSD format: %w", ErrSourceUnavailable, err)
+	}
+	if string(layout.Container) != source.Codec ||
+		(source.SampleRate != 0 && source.SampleRate != layout.Rate) ||
+		(source.Channels != 0 && source.Channels != layout.Channels) ||
+		(source.BitDepth != 0 && source.BitDepth != 1) {
+		return 0, fmt.Errorf("%w: DSD format differs from scan record", ErrSourceChanged)
+	}
+	pcmRate, err := dsdpcm.OutputRate(layout.Rate)
+	if err != nil {
+		return 0, fmt.Errorf("%w: %w", ErrNotRenderable, err)
+	}
+	source.SampleRate, source.Channels, source.BitDepth = layout.Rate, layout.Channels, 1
+	source.IsFloat = false
+	source.Layout, source.DSDLayout = layout.Mask, &layout
+	return pcmRate, nil
 }
