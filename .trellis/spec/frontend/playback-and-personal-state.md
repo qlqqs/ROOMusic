@@ -31,7 +31,8 @@
 - 每个标签页排队请求 Web Lock `roomusic:output:<deviceId>`：拿到的创建输出端（`output/output.ts`）并认领，排队等到的认领带 `takeover: true`；其他标签页是纯控制端，不创建音频元素。没有 Web Locks 时直接出声。
 - 输出端用两个 `<audio>` 元素按协议的对齐规则换流、预载接续流；回报经 `output/report-queue.ts` 串行发送；`waiting` 超过 15 秒或元素出错按 `stream_lost` 回报。
   `pagehide` 与 `detach` 时以 `keepalive` 请求释放。本机第一次点击或按键时同步解锁两个元素，之后远程起播、换流不再需要手势。
-- 能力声明（`output/capabilities.ts`）只用 `canPlayType`：长流候选按 FLAC、WAV、Opus、AAC 顺序；音量只读（写 0.5 读回不变，即 iPhone/iPad）且两项 HLS 候选（ALAC、AAC）都能探测到时只声明 HLS。
+- 能力声明（`output/capabilities.ts`）只用 `canPlayType`：长流候选按 FLAC、WAV、Opus、AAC 顺序；两项 HLS 候选（ALAC、AAC）都能探测到（即 WebKit，含桌面 Safari）时只声明 HLS。
+  音量能否写入不参与判定：iOS 27 的 Edge 音量写入可读回，不能用它识别 iPhone。
   `max_channels: 2`、`dsd: "none"`、`exclusive: false`。
 - 锁屏信息由 `MediaSessionBinding` 按 `segments` 在曲目边界本地切换（标题、艺人、专辑、封面与时长）；媒体键与系统暂停总是发给本机播放区。
 

@@ -310,5 +310,5 @@ Capabilities = {
 | 释放 | `pagehide` 与会话结束时 `fetch(…, {method: "POST", keepalive: true})` 发 `release` |
 | 事件流 | `fetch` + `ReadableStream` 按行解析（不用 `EventSource`）；401 经 `SessionBoundary.onUnauthorized(请求时的代次)`；控制端标签页隐藏 30 秒后断开 |
 | 手势解锁 | 本机第一次点击时，在同一个点击里对两个 `<audio>` 元素各同步 `play()` 一段静音再暂停，之后远程起播、换流、续流不需要新的手势 |
-| 能力 | `stream_formats` 只用 `canPlayType` 探测（不用 `mediaCapabilities.decodingInfo`）；HLS 候选都能探测到且音量只读时只声明 HLS 候选，否则只声明长流候选（dsp-pipeline design-delivery.md §3、§5.7）；`volume` 按“写 0.5 读回”判定；`max_channels: 2`、`dsd: "none"`、`exclusive: false` |
+| 能力 | `stream_formats` 只用 `canPlayType` 探测（不用 `mediaCapabilities.decodingInfo`）；HLS 候选都能探测到（WebKit，含桌面 Safari）时只声明 HLS 候选，音量不参与判定，否则只声明长流候选（dsp-pipeline design-delivery.md §3、§5.7）；`volume` 按“写 0.5 读回”判定；`max_channels: 2`、`dsd: "none"`、`exclusive: false` |
 | 音量 | 直接写元素的 `volume` / `muted`；没有 Web Audio |

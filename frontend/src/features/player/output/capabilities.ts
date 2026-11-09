@@ -1,6 +1,6 @@
 // 浏览器输出端认领时声明的能力（合同 §2.6、§8；候选表见 dsp-pipeline design-delivery.md §3、§5.7）。
-// 只用 canPlayType 探测；音量按“写 0.5 读回”判定（iPhone / iPad 的网页音量只读）。
-// 两项 HLS 候选都能探测到且音量只读时只声明 HLS 候选，否则按长流候选表的顺序放进能解的。
+// 只用 canPlayType 探测：两项 HLS 候选都能探测到（只有 WebKit，含 iOS 上所有浏览器与桌面 Safari）时只声明 HLS 候选，
+// 否则按长流候选表的顺序放进能解的。音量按“写 0.5 读回”判定，不参与 HLS 判定（iOS 27 的 Edge 写入能读回）。
 import type { Capabilities } from "../zones/model";
 
 type Candidate = Capabilities["stream_formats"][number];
@@ -37,8 +37,7 @@ export function volumeControllable(element: { volume: number }): boolean {
 
 export function browserCapabilities(element: { canPlayType: (type: string) => string; volume: number }): Capabilities {
   const canPlay = (type: string) => element.canPlayType(type) !== "";
-  const controllable = volumeControllable(element);
-  const hls = !controllable && hlsCandidates.every(({ probes }) => probes.every(canPlay));
+  const hls = hlsCandidates.every(({ probes }) => probes.every(canPlay));
   return {
     stream_formats: hls
       ? hlsCandidates.map(({ candidate }) => candidate)
@@ -46,6 +45,6 @@ export function browserCapabilities(element: { canPlayType: (type: string) => st
     max_channels: 2,
     dsd: "none",
     exclusive: false,
-    volume: controllable ? "number" : "fixed",
+    volume: volumeControllable(element) ? "number" : "fixed",
   };
 }

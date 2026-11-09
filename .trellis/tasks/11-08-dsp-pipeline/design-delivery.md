@@ -80,7 +80,7 @@ FLAC 44.1/16 约 0.7–1.0 Mbps；开了电平化后按 24 位输出（§2.2）�
 
 - `max_channels: 2`、`dsd: "none"`、`exclusive: false`（zones 合同 §8）。
 - 192 kHz 是先取的稳妥上限：桌面浏览器多半更高，但浏览器之后还要经过系统混音，更高的采样率没有收益。
-- **iPhone/iPad 不用本表**：只声明 §5.7 的两项 HLS 候选（2026-11-09 裁决）。
+- **能放 HLS 的浏览器（WebKit：iPhone/iPad 与桌面 Safari）不用本表**：只声明 §5.7 的两项 HLS 候选（2026-11-09 裁决，判定见 §5.7）。
 
 ## 4. iOS 交付小验证
 
@@ -260,8 +260,9 @@ FLAC 44.1/16 约 0.7–1.0 Mbps；开了电平化后按 24 位输出（§2.2）�
 | `alac` | `application/vnd.apple.mpegurl` | true | 192000 | 24 | 播放列表类型，与 `audio/mp4; codecs="alac"` |
 | `aac` | `application/vnd.apple.mpegurl` | false | 48000 | — | 播放列表类型，与 `audio/mp4; codecs="mp4a.40.2"` |
 
-- **何时声明**：两项都能探测到、且音量只读（合同 §8 已有的“写 0.5 读回”，只有 iPhone/iPad 的网页如此）时，**只声明这两项**，不声明 §3 的长流候选；否则照旧只用 §3 的四项。
-  长流在 iOS 上锁屏没有回报、FLAC/WAV 要伪长度，不能当退路。macOS Safari 也能放 HLS，但用户裁决桌面用长流；按音量只读区分，正好把 UA 冒充 macOS 的 iPadOS 也算进来，不需要识别 UA。
+- **何时声明**：两项都能探测到时，**只声明这两项**，不声明 §3 的长流候选；否则照旧只用 §3 的四项。
+  长流在 iOS 上锁屏没有回报、FLAC/WAV 要伪长度，不能当退路。能原生放 HLS + ALAC 的只有 WebKit（iOS 上所有浏览器都是），桌面 Safari 也随之走 HLS，这是有意的；不识别 UA。
+  音量能否写入不参与判定（2026-11-09 真机返工）：iOS 27 的 Edge 音量写入可读回，不能用它识别 iPhone。
 - 只用 `canPlayType`，不用 `mediaCapabilities.decodingInfo`（iOS 对能放的格式也报不支持）。
 - AAC 写 48 kHz：iOS 上 96 kHz AAC 没验证，256 kbps 下也没有收益；P-c 已按声明的 `max_sample_rate` 同族减半，不用改代码。
 
