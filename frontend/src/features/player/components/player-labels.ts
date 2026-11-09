@@ -8,3 +8,10 @@ export function sourceFormat(track: PlayerTrack): string {
   const source = track.source;
   return `${source.codec?.toUpperCase() ?? "未知编码"}${source.bitDepth === null ? "" : ` ${source.bitDepth}`}${source.sampleRate === null ? "" : `/${source.sampleRate / 1000}`}`;
 }
+
+/** 增益：一位小数，负号用 −，正值带 +，0 写 0.0 dB。 */
+export function gainLabel(db: number): string {
+  const rounded = Math.round(db * 10) / 10;
+  if (rounded === 0) return "0.0 dB";
+  return `${rounded < 0 ? "−" : "+"}${Math.abs(rounded).toFixed(1)} dB`;
+}

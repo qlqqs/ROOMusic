@@ -8,6 +8,7 @@ import {
   crossfadeDurations,
   levelingModes,
   playbackFailureReasons,
+  signalQualities,
   streamQualities,
   type Capabilities,
   type CrossfadeSeconds,
@@ -17,6 +18,8 @@ import {
   type PlayerEvent,
   type PlayerFault,
   type QueueChange,
+  type Signal,
+  type SignalStep,
   type Snapshot,
   type Zone,
   type ZoneQueue,
@@ -40,10 +43,53 @@ function lenient<const V extends readonly string[]>(values: V, fallback: V[numbe
   };
 }
 
-/** 原样保留的对象（信号路径，结构归算法线）；null 保持 null。 */
-const opaque: d.Decoder<unknown> = (input, path) => {
-  if (input !== null && (typeof input !== "object" || Array.isArray(input))) throw new d.DecodeError(path, "应为对象或 null");
-  return input;
+const signalQualityDecoder = lenient(signalQualities, "low");
+
+/** 信号路径的一步（dsp-pipeline 设计 §9.1）；不认识的种类是 null，整步不显示。 */
+const signalStepDecoder: d.Decoder<SignalStep | null> = (input, path) => {
+  const head = d.object({ kind: d.string({ max: 64 }), quality: signalQualityDecoder, lossy: d.boolean(), compat: d.boolean() })(input, path);
+  const base = { quality: head.quality, lossy: head.lossy, compat: head.compat };
+  const paramsOf = <T,>(params: d.Decoder<T>): T => d.object({ params })(input, path).params;
+  switch (head.kind) {
+    case "source": {
+      const raw = paramsOf(d.object({ codec: d.string({ max: 64 }), sample_rate: d.integer({ min: 0 }), bit_depth: d.optional(d.integer({ min: 0 })), channels: d.integer({ min: 0 }) }));
+      return { ...base, kind: "source", params: { codec: raw.codec, sampleRate: raw.sample_rate, bitDepth: raw.bit_depth ?? null, channels: raw.channels } };
+    }
+    case "convert": {
+      const raw = paramsOf(d.object({ from_rate: d.integer({ min: 0 }), to_rate: d.integer({ min: 0 }), by: d.string({ max: 64 }) }));
+      return { ...base, kind: "convert", params: { fromRate: raw.from_rate, toRate: raw.to_rate, by: raw.by } };
+    }
+    case "downmix": {
+      const raw = paramsOf(d.object({ from_channels: d.integer({ min: 0 }), to_channels: d.integer({ min: 0 }), by: d.string({ max: 64 }) }));
+      return { ...base, kind: "downmix", params: { fromChannels: raw.from_channels, toChannels: raw.to_channels, by: raw.by } };
+    }
+    case "leveling": {
+      const raw = paramsOf(d.object({ gain_db: d.number(), basis: d.string({ max: 64 }) }));
+      return { ...base, kind: "leveling", params: { gainDb: raw.gain_db, basis: raw.basis } };
+    }
+    case "headroom":
+      return { ...base, kind: "headroom", params: { gainDb: paramsOf(d.object({ gain_db: d.number() })).gain_db } };
+    case "dither": {
+      const raw = paramsOf(d.object({ bits: d.integer({ min: 0 }), kind: d.string({ max: 64 }) }));
+      return { ...base, kind: "dither", params: { bits: raw.bits, kind: raw.kind } };
+    }
+    case "encode": {
+      const raw = paramsOf(d.object({ codec: d.string({ max: 64 }), sample_rate: d.integer({ min: 0 }), bit_depth: d.optional(d.integer({ min: 0 })), bitrate_kbps: d.optional(d.integer({ min: 0 })) }));
+      return { ...base, kind: "encode", params: { codec: raw.codec, sampleRate: raw.sample_rate, bitDepth: raw.bit_depth ?? null, bitrateKbps: raw.bitrate_kbps ?? null } };
+    }
+    default:
+      return null;
+  }
+};
+
+const signalDecoder: d.Decoder<Signal> = (input, path) => {
+  const raw = d.object({
+    quality: signalQualityDecoder,
+    steps: d.array(signalStepDecoder, { max: 64 }),
+    clipping: d.optional(d.boolean()),
+    processing_speed: d.optional(d.number({ min: 0 })),
+  })(input, path);
+  return { quality: raw.quality, steps: raw.steps.filter((step) => step !== null), clipping: raw.clipping ?? null, processingSpeed: raw.processing_speed ?? null };
 };
 
 const queueEntryDecoder: d.Decoder<QueueEntry> = (input, path) => {
@@ -159,7 +205,7 @@ export const zoneDecoder: d.Decoder<Zone> = (input, path) => {
     stream: d.nullable(streamDecoder),
     next_stream: d.nullable(streamDecoder),
     paused_at: d.nullable(time()),
-    signal: opaque,
+    signal: d.nullable(signalDecoder),
     event: d.nullable(eventDecoder),
   })(input, path);
   const failures: Record<string, PlaybackFailureReason> = {};

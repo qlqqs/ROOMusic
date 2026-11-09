@@ -1,22 +1,25 @@
-/* 圆点：12px 实心圆放在 32px 的命中区里。无损金色、有损灰色、未知空心。 */
-.dot { display: inline-grid; place-items: center; flex: 0 0 auto; width: var(--control-height); height: var(--control-height); padding: 0; border: 0; border-radius: var(--radius-md); background: transparent; cursor: pointer; }
-.dot:hover { background: var(--color-hover); }
-.dot span { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--color-neutral-600); }
-.dot[data-quality="lossless"] span { border-color: var(--color-accent); background: var(--color-accent); }
-.dot[data-quality="lossy"] span { border-color: var(--color-neutral-500); background: var(--color-neutral-500); }
+/* 按钮：只有图标、无边框，颜色按整体质量；削波时是警示色。 */
+.trigger { display: inline-grid; place-items: center; flex: 0 0 auto; width: var(--control-height); height: var(--control-height); padding: 0; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--signal-color); cursor: pointer; }
+.trigger:hover { background: var(--color-hover); }
+.trigger:active { background: var(--color-pressed); }
+.trigger[data-clipping] { color: var(--color-warning); }
 
-/* 对话框铺满视口且透明，弹层在里面按圆点位置摆放；点在弹层外就是点在对话框本身，即关闭。 */
+/* 四档质量的颜色：按钮与各步的图标共用。 */
+:is(.trigger, .icon)[data-quality="lossless"] { --signal-color: var(--text-accent); }
+:is(.trigger, .icon)[data-quality="enhanced"] { --signal-color: var(--color-signal-enhanced); }
+:is(.trigger, .icon)[data-quality="high"] { --signal-color: var(--color-signal-high); }
+:is(.trigger, .icon)[data-quality="low"] { --signal-color: var(--text-secondary); }
+
+/* 对话框铺满视口且透明，弹层在里面按按钮位置摆放；点在弹层外就是点在对话框本身，即关闭。 */
 dialog.dialog { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; overflow: hidden; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 dialog.dialog::backdrop { background: transparent; }
-.content { position: absolute; left: clamp(var(--space-2), calc(var(--anchor-x, 50vw) - 150px), calc(100vw - 300px - var(--space-2))); bottom: calc(100dvh - var(--anchor-top, 100dvh) + var(--space-2)); display: grid; gap: var(--space-3); width: 300px; max-height: calc(100dvh - 2 * var(--space-4)); overflow-y: auto; padding: var(--space-3) var(--space-4) var(--space-4); border: 1px solid var(--color-divider); border-radius: var(--radius-lg); background: var(--color-surface); color: var(--text-primary); box-shadow: var(--shadow-lg); }
+.content { position: absolute; left: clamp(var(--space-2), calc(var(--anchor-x, 50vw) - 140px), calc(100vw - 280px - var(--space-2))); bottom: calc(100dvh - var(--anchor-top, 100dvh) + var(--space-2)); display: grid; gap: var(--space-3); width: 280px; max-height: calc(100dvh - 2 * var(--space-4)); overflow-y: auto; padding: var(--space-3) var(--space-4) var(--space-4); border: 1px solid var(--color-divider); border-radius: var(--radius-lg); background: var(--color-surface); color: var(--text-primary); box-shadow: var(--shadow-lg); }
 .header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .title { font-size: var(--fs-15); }
-.layers { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
-.layers li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-3); align-items: start; }
-.icon { margin-top: 2px; color: var(--text-secondary); }
-.layerText { min-width: 0; overflow-wrap: anywhere; }
-.name { font-size: var(--fs-13); font-weight: 600; }
-.value { font-size: var(--fs-13); color: var(--text-secondary); font-variant-numeric: lining-nums tabular-nums; }
+.steps { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.steps li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); font-size: var(--fs-13); }
+.icon { flex: none; color: var(--signal-color, var(--text-secondary)); }
+.text { min-width: 0; overflow-wrap: anywhere; font-variant-numeric: lining-nums tabular-nums; }
 .nowrap { white-space: nowrap; }
 
 /* 窄屏：从底部弹出，铺满宽度。 */

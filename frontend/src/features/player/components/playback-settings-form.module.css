@@ -27,3 +27,10 @@
 /* 标题旁的设备名。 */
 .device { display: inline-flex; align-items: center; gap: var(--space-1); min-width: 0; max-width: 100%; font-size: var(--fs-13); color: var(--text-secondary); }
 .deviceName { min-width: 0; overflow-wrap: anywhere; }
+
+/* Headroom 增益：滑块与数值同一行，数值等宽数字、固定宽度，拖动时不挤动滑块。 */
+.field[data-disabled] { opacity: 0.45; }
+.slider { display: flex; align-items: center; gap: var(--space-3); }
+.slider input { width: 220px; max-width: 100%; min-height: 24px; accent-color: var(--text-accent); }
+.slider input:disabled { cursor: not-allowed; }
+.sliderValue { min-width: 7ch; font-size: var(--fs-13); font-variant-numeric: tabular-nums; }

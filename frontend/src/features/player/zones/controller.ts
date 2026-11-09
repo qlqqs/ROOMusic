@@ -100,7 +100,7 @@ const VOLUME_THROTTLE_MS = 125;
 const VOLUME_OPTIMISTIC_MS = 1_000;
 const TARGET_RECHECK_MS = 60_000;
 
-const defaultSettings: PlaybackSettings = { leveling: "auto", gapless: true, crossfade: false, crossfadeSeconds: 5, quality: "lossless", headroom: { enabled: false, db: 0, clipIndicator: false } };
+const defaultSettings: PlaybackSettings = { leveling: "auto", gapless: true, crossfade: false, crossfadeSeconds: 5, quality: "lossless", headroom: { enabled: false, db: -3, clipIndicator: false } };
 const idleProgress: PlayerProgress = { positionSeconds: 0, durationSeconds: null, seekable: false };
 
 function settingsPatchOf(patch: Partial<PlaybackSettings>): SettingsPatch {
@@ -110,6 +110,7 @@ function settingsPatchOf(patch: Partial<PlaybackSettings>): SettingsPatch {
   if (patch.crossfade !== undefined) out.crossfade = patch.crossfade;
   if (patch.crossfadeSeconds !== undefined) out.crossfade_seconds = patch.crossfadeSeconds;
   if (patch.quality !== undefined) out.quality = patch.quality;
+  if (patch.headroom !== undefined) out.headroom = { enabled: patch.headroom.enabled, db: patch.headroom.db, clip_indicator: patch.headroom.clipIndicator };
   return out;
 }
 

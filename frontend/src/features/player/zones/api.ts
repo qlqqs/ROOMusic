@@ -29,6 +29,7 @@ export type SettingsPatch = Partial<{
   crossfade: boolean;
   crossfade_seconds: CrossfadeSeconds;
   quality: StreamQuality;
+  headroom: { enabled: boolean; db: number; clip_indicator: boolean };
 }>;
 
 /** 合同 §3.3 的命令。 */

@@ -1,7 +1,8 @@
 import { MonitorSpeaker } from "lucide-react";
-import { useId } from "react";
+import { useId, useState } from "react";
 import { crossfadeDurations, levelingModes, streamQualities, type CrossfadeSeconds, type LevelingMode, type StreamQuality } from "../zones/model";
 import { usePlayerEngine, usePlayerSelector } from "../player-provider";
+import { gainLabel } from "./player-labels";
 import styles from "./playback-settings-form.module.css";
 
 const levelingLabels: Record<LevelingMode, string> = { off: "关", auto: "自动", track: "按曲目", album: "按专辑" };
@@ -37,6 +38,30 @@ function Switch({ label, checked, disabled, onChange }: { label: string; checked
   );
 }
 
+/** Headroom 增益滑块：拖动时只改本地显示，松手、按键抬起或离开时才发出；服务端的值变了就跟上服务端。 */
+function GainSlider({ value, disabled, onCommit }: { value: number; disabled: boolean; onCommit: (db: number) => void }) {
+  const id = useId();
+  const [draft, setDraft] = useState<number | null>(null);
+  const [seen, setSeen] = useState(value);
+  if (value !== seen) {
+    setSeen(value);
+    setDraft(null);
+  }
+  const shown = draft ?? value;
+  const commit = () => {
+    if (draft !== null && draft !== value) onCommit(draft);
+  };
+  return (
+    <div className={styles.field} data-disabled={disabled ? "" : undefined}>
+      <label htmlFor={id} className={styles.legend}>增益</label>
+      <div className={styles.slider}>
+        <input id={id} type="range" min={-30} max={0} step={0.1} value={shown} aria-valuetext={gainLabel(shown)} disabled={disabled} onChange={(event) => setDraft(Math.round(Number(event.target.value) * 10) / 10)} onPointerUp={commit} onKeyUp={commit} onBlur={commit} />
+        <output htmlFor={id} className={styles.sliderValue}>{gainLabel(shown)}</output>
+      </div>
+    </div>
+  );
+}
+
 /** 设置页标题旁的设备名：这些设置改的是正在控制的那台设备。 */
 export function PlaybackSettingsDevice() {
   const name = usePlayerSelector((snapshot) => snapshot.device?.name ?? null);
@@ -44,7 +69,7 @@ export function PlaybackSettingsDevice() {
   return <span className={styles.device}><MonitorSpeaker size={14} aria-hidden="true" /><span className={styles.deviceName}>{name}</span></span>;
 }
 
-/** 设置 › 播放：音量均衡、无缝、交叉渐变与音质，作用于正在控制的播放区（服务端渲染）；还没读到播放区时禁用。 */
+/** 设置 › 播放：音量均衡、无缝、交叉渐变、音质与 Headroom，作用于正在控制的播放区（服务端渲染）；还没读到播放区时禁用。 */
 export function PlaybackSettingsForm() {
   const engine = usePlayerEngine();
   const settings = usePlayerSelector((snapshot) => snapshot.settings);
@@ -74,6 +99,9 @@ export function PlaybackSettingsForm() {
         disabled={disabled}
         onChange={(quality) => engine.setPlaybackSettings({ quality })}
       />
+      <Switch label="Headroom" checked={settings.headroom.enabled} disabled={disabled} onChange={(enabled) => engine.setPlaybackSettings({ headroom: { ...settings.headroom, enabled } })} />
+      <GainSlider value={settings.headroom.db} disabled={disabled || !settings.headroom.enabled} onCommit={(db) => engine.setPlaybackSettings({ headroom: { ...settings.headroom, db } })} />
+      <Switch label="削波指示" checked={settings.headroom.clipIndicator} disabled={disabled} onChange={(clipIndicator) => engine.setPlaybackSettings({ headroom: { ...settings.headroom, clipIndicator } })} />
     </div>
   );
 }

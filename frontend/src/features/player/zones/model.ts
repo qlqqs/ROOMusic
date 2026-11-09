@@ -56,6 +56,24 @@ export type ZoneStream = {
   segments: readonly StreamSegment[];
 };
 
+/** 信号质量，从好到差：逐位、用户开的处理、为兼容做的转换、有损。 */
+export const signalQualities = ["lossless", "enhanced", "high", "low"] as const;
+export type SignalQuality = (typeof signalQualities)[number];
+
+/** 信号路径的一步；params 按 kind 区分。 */
+export type SignalStep = { quality: SignalQuality; lossy: boolean; compat: boolean } & (
+  | { kind: "source"; params: { codec: string; sampleRate: number; bitDepth: number | null; channels: number } }
+  | { kind: "convert"; params: { fromRate: number; toRate: number; by: string } }
+  | { kind: "downmix"; params: { fromChannels: number; toChannels: number; by: string } }
+  | { kind: "leveling"; params: { gainDb: number; basis: string } }
+  | { kind: "headroom"; params: { gainDb: number } }
+  | { kind: "dither"; params: { bits: number; kind: string } }
+  | { kind: "encode"; params: { codec: string; sampleRate: number; bitDepth: number | null; bitrateKbps: number | null } }
+);
+
+/** 信号路径：整体质量是各步里最差的一档；削波只在削波指示开着时有，处理速度是倍实时。 */
+export type Signal = { quality: SignalQuality; steps: readonly SignalStep[]; clipping: boolean | null; processingSpeed: number | null };
+
 export type Zone = {
   zoneId: string;
   deviceId: string;
@@ -76,8 +94,8 @@ export type Zone = {
   nextStream: ZoneStream | null;
   /** 意图变为暂停的时刻（服务端时钟毫秒）；播放中为 null。 */
   pausedAt: number | null;
-  /** 信号路径，结构归算法线（dsp-pipeline P11）。 */
-  signal: unknown;
+  /** 正在放的那首的信号路径（dsp-pipeline 设计 §9.1）；没有在渲染时是 null。 */
+  signal: Signal | null;
   event: PlayerEvent | null;
 };
 
