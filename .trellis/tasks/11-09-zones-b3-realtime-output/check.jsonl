@@ -1,5 +1,0 @@
-{"file": ".trellis/tasks/11-08-server-playback-zones/design-contract.md", "reason": "核对实现与协议 v1 合同一致"}
-{"file": ".trellis/tasks/11-08-server-playback-zones/design-protocol.md", "reason": "核对行为规则与测试范围"}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端代码质量与测试范围"}
-{"file": ".trellis/spec/backend/database-verification.md", "reason": "迁移升级/回退与隔离库集成测试的验证方法"}
-{"file": ".trellis/spec/backend/identity-contracts.md", "reason": "核对隔离：不属于本人的设备、播放区、流一律 404"}

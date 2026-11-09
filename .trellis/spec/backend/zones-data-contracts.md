@@ -3,7 +3,7 @@
 ## 1. 范围
 
 `zones/queue` 拥有队列纯函数，`zones` 拥有三张播放区表与存储操作。B1 不包含 Service、命令、HTTP、输出端或渲染器。
-设计见[播放区父任务](../../tasks/11-08-server-playback-zones/design.md)。运行时按单进程设计；后续 Service 在播放区锁内计算新状态，事务提交后才替换内存。
+设计见[播放区父任务](../../tasks/archive/2026-11/11-08-server-playback-zones/design.md)。运行时按单进程设计；后续 Service 在播放区锁内计算新状态，事务提交后才替换内存。
 
 ## 2. 数据与入口
 

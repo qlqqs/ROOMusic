@@ -1,7 +1,7 @@
 # 执行清单：音频算法对标（父任务）
 
-设计：[design.md](./design.md)（跨子项架构）。子项的执行清单：[dsp-pipeline](../11-08-dsp-pipeline/implement.md)、[gapless-crossfade](../11-08-gapless-crossfade/implement.md)、[dither](../11-08-dither/implement.md)；第二、三批的子项另行设计。
-播放区线的执行清单：[zones implement.md](../11-08-server-playback-zones/implement.md)（下称“zones 清单”），本文的时间点都对齐它的 B1/B2/B3/F2/F3/E。
+设计：[design.md](./design.md)（跨子项架构）。子项的执行清单：[dsp-pipeline](../archive/2026-11/11-08-dsp-pipeline/implement.md)、[gapless-crossfade](../archive/2026-11/11-08-gapless-crossfade/implement.md)、[dither](../archive/2026-11/11-08-dither/implement.md)；第二、三批的子项另行设计。
+播放区线的执行清单：[zones implement.md](../archive/2026-11/11-08-server-playback-zones/implement.md)（下称“zones 清单”），本文的时间点都对齐它的 B1/B2/B3/F2/F3/E。
 
 ## 0. 开工前
 

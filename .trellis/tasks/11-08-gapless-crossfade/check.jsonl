@@ -1,3 +1,0 @@
-{"file": ".trellis/tasks/11-08-audio-dsp-reference-port/design.md", "reason": "核对节点接口、逐位一致规则、知识产权约束（不摘录参考稿、不写参考系数）"}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量与最小测试集"}
-{"file": ".trellis/tasks/11-08-dsp-pipeline/design.md", "reason": "核对 track_started/format_boundary 事件与分段表"}

@@ -74,7 +74,7 @@ G-2 在同一 PCM 入口接入无缝、交叉淡化、就绪超时与静音间�
 
 ## 9. G-2 换轨与淡化
 
-实现与验收依据：[gapless-crossfade 设计 §1–§6](../../tasks/11-08-gapless-crossfade/design.md)。策略在 `player`，不进入编码器、交付层或共享链。
+实现与验收依据：[gapless-crossfade 设计 §1–§6](../../tasks/archive/2026-11/11-08-gapless-crossfade/design.md)。策略在 `player`，不进入编码器、交付层或共享链。
 
 - 预取时依次判断源格式边界、交叉淡化、`gapless`、`gap`。源格式不同比较扫描采样率、位深、声道数与样本类型；第一批布局按声道数默认值。格式边界立即发布，旧流读到曲尾，不发布 `stream_ended`。
 - 曲尾用循环补足当前量子，覆盖极短曲目，不设任意换轨次数上限。下一首 33% 预缓冲或终态就绪；曲尾重新准备、进程名额和预缓冲共用最多 5 秒的可取消等待，通过 `Options.NewTicker(5*time.Second)` 注入，超时立即发布 `format_boundary{reason: "not_ready"}`。等待不计处理速度。

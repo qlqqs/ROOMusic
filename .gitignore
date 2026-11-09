@@ -49,4 +49,4 @@ __pycache__/
 .roomusic-smoke/
 
 # 播放链路参考稿与系数（外部资料，只留本机，不进公开仓库；正本在 ~/.local/share/roomusic-reference/）
-/.trellis/tasks/11-08-server-playback-zones/research/
+/.trellis/tasks/archive/2026-11/11-08-server-playback-zones/research/

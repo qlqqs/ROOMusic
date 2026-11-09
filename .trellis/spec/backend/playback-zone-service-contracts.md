@@ -192,6 +192,6 @@ func (s *Service) AfterFunc(time.Duration, func()) Timer
 
 第 9 步独立测试需覆盖：原子快照/增量/用户隔离/溢出与关停；45 秒租约、10 秒接手、5 秒暂停关闭；重启与取代；单次取流/32 KiB及时Flush/取消；全部会话事件与连续失败门槛；Visit 的暂停/seek/续流/循环/转移以及计次失败重试。
 时钟、定时器与 ID 用 `zones.Options.Now/AfterFunc/NewID` 注入；HTTP 心跳与复核复用该时钟，不真实等待。
-API 样本由独立测试经真实 handler 生成到 `backend/internal/app/testdata/api-samples/playback-zones/`，生成约定见 B3 `implementation-notes.md`；独立测试已新增 `TestPostgreSQLZonesAPIResponseSamples`，结果与本轮限定范围见 [B3 测试记录](../../tasks/11-09-zones-b3-realtime-output/test-notes.md)。
+API 样本由独立测试经真实 handler 生成到 `backend/internal/app/testdata/api-samples/playback-zones/`，生成约定见 B3 `implementation-notes.md`；独立测试已新增 `TestPostgreSQLZonesAPIResponseSamples`，结果与本轮限定范围见 [B3 测试记录](../../tasks/archive/2026-11/11-09-zones-b3-realtime-output/test-notes.md)。
 
 测试接点注意：`zonestest.Session.Emit` 的确认可能晚于终结事件触发的 `Close`；仅终结事件允许 `zonestest.ErrClosed`，且仍须等待相应状态公告作为成功证据。不能把全部 Emit 错误统一忽略，也不能仅凭 Emit 返回成功认定事件已应用。

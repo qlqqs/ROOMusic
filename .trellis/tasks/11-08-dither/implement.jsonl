@@ -1,5 +1,0 @@
-{"file": ".trellis/tasks/11-08-audio-dsp-reference-port/design.md", "reason": "父设计：包布局、Buffer/Processor/Node 接口、增益区域、链顺序、第一批格式适配、对照验证与知识产权约束"}
-{"file": ".trellis/tasks/11-08-server-playback-zones/design.md", "reason": "播放区线 §14 的 Renderer/RenderSession/Cursor 端口（渲染器实现的约束）"}
-{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新包 dsp/*、playback/render 的位置与依赖方向"}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端代码质量与测试范围"}
-{"file": ".trellis/tasks/11-08-dsp-pipeline/design-delivery.md", "reason": "量化器输出与编码器的衔接、输出位深规则"}

@@ -1,0 +1,10 @@
+{"file": ".trellis/tasks/11-08-audio-dsp-reference-port/design.md", "reason": "父设计：包布局、Buffer/Processor/Node 接口、增益区域、链顺序、第一批格式适配、对照验证与知识产权约束"}
+{"file": ".trellis/tasks/archive/2026-11/11-08-server-playback-zones/design.md", "reason": "播放区线 §14 的 Renderer/RenderSession/Cursor 端口（渲染器实现的约束）"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新包 dsp/*、playback/render 的位置与依赖方向"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端代码质量与测试范围"}
+{"file": ".trellis/tasks/archive/2026-11/11-08-server-playback-zones/design-protocol.md", "reason": "§3 输出端协议、会话事件、重建与换流、iOS 风险"}
+{"file": ".trellis/tasks/archive/2026-11/11-08-server-playback-zones/design-contract.md", "reason": "Stream、Capabilities、失败原因、渲染流端点 §4.4"}
+{"file": ".trellis/spec/backend/playback-contracts.md", "reason": "现有安全打开与格式表，OpenForRender 复用"}
+{"file": ".trellis/spec/backend/playback-derivation-contracts.md", "reason": "派生退役 P10 要删除的部分与 ffmpeg 定位"}
+{"file": ".trellis/spec/backend/audio-analysis-contracts.md", "reason": "电平化增益来源（−14 LUFS、真峰值 0.5 dB）"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Headroom 设置迁移的编号与 .down.sql"}

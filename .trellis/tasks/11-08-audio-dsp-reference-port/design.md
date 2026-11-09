@@ -1,10 +1,10 @@
 # 技术设计：音频算法对标（父任务）
 
 需求与裁决以 [prd.md](./prd.md) 为准。本文写跨子项的架构：包布局、样本与缓冲、节点接口、增益区域、处理链的装配与重建、第一批的格式适配、批次与上线顺序、与播放区线的对接、对照验证的做法。
-各子项的细节在各自的 design.md：[dsp-pipeline](../11-08-dsp-pipeline/design.md)（渲染会话、解码、事件队列、电平化）与它的 [design-delivery.md](../11-08-dsp-pipeline/design-delivery.md)（编码交付、协商、iOS 验证）、
-[gapless-crossfade](../11-08-gapless-crossfade/design.md)、[dither](../11-08-dither/design.md)。
+各子项的细节在各自的 design.md：[dsp-pipeline](../archive/2026-11/11-08-dsp-pipeline/design.md)（渲染会话、解码、事件队列、电平化）与它的 [design-delivery.md](../archive/2026-11/11-08-dsp-pipeline/design-delivery.md)（编码交付、协商、iOS 验证）、
+[gapless-crossfade](../archive/2026-11/11-08-gapless-crossfade/design.md)、[dither](../archive/2026-11/11-08-dither/design.md)。
 参考稿正本在本机 `~/.local/share/roomusic-reference/reference-design.md`（不进仓库），本文只引用章节号与我们自己的概括，写作“参考稿 §N”；本文自己的章节写作“§N”。
-播放区线的定稿设计（[design.md](../11-08-server-playback-zones/design.md) §14、[design-protocol.md](../11-08-server-playback-zones/design-protocol.md) §3、[design-contract.md](../11-08-server-playback-zones/design-contract.md)）是本线的接口约束，下文称“zones 设计”。
+播放区线的定稿设计（[design.md](../archive/2026-11/11-08-server-playback-zones/design.md) §14、[design-protocol.md](../archive/2026-11/11-08-server-playback-zones/design-protocol.md) §3、[design-contract.md](../archive/2026-11/11-08-server-playback-zones/design-contract.md)）是本线的接口约束，下文称“zones 设计”。
 
 ## 0. 结论
 
