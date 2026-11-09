@@ -108,3 +108,29 @@ it("重连后的快照说设备已不在本会话上：带正在放的条目与�
   expect(audio.src).not.toBe("");
   expect(audio.paused).toBe(false);
 });
+
+it("本机拖动后服务端版本已更新、输出端还在旧流上时，进度停在目标位置，新流出声后从那里走", async () => {
+  const server = fakeZoneServer();
+  const { controller, playing } = testPlayerController(server, { audio: true });
+  controllers.push(controller);
+  controller.attach();
+  await waitFor(() => expect(server.claims).toHaveLength(1));
+  controller.playTracks([playerTrack("一", { durationSeconds: 60 })]);
+  await waitFor(() => expect(playing()).toBeDefined());
+  const old = playing();
+  if (old === undefined) throw new Error("没有在放的元素");
+  old.beginPlaying();
+  old.tick(10);
+  await waitFor(() => expect(controller.getProgress().positionSeconds).toBe(10));
+  const revision = controller.getSnapshot().zone?.revision;
+  controller.seek(50);
+  // 服务端确认定位（版本号变了、给出新流），本机仍在放旧流，旧播放头继续往前走。
+  await waitFor(() => expect(controller.getSnapshot().zone?.revision).not.toBe(revision));
+  old.tick(11);
+  expect(controller.getProgress().positionSeconds).toBe(50);
+  const next = playing();
+  if (next === undefined || next === old) throw new Error("新流没有加载到备用元素");
+  next.beginPlaying();
+  next.tick(1);
+  expect(controller.getProgress().positionSeconds).toBe(51);
+});

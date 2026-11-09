@@ -143,7 +143,8 @@ export class PlayerController {
   private snapshot: PlayerSnapshot;
   private progress: PlayerProgress = idleProgress;
   private progressTimer: ReturnType<typeof setInterval> | null = null;
-  private seekOverride: { zoneId: string; revision: number; seconds: number } | null = null;
+  /** 拖动的目标位置：revision 是拖动时的状态版本，streamSeq 是那时本机输出端正在放的流（本机不出声时为 null）。 */
+  private seekOverride: { zoneId: string; revision: number; seconds: number; streamSeq: number | null } | null = null;
   private pendingVolume: { deviceId: string; volume: number; muted: boolean; until: number } | null = null;
   private volumeTimer: ReturnType<typeof setTimeout> | null = null;
   private volumeDirty = false;
@@ -527,7 +528,7 @@ export class PlayerController {
     if (this.lifecycle === "ended" || zone === null || !Number.isFinite(seconds) || !this.progress.seekable) return;
     const duration = zone.position.durationSeconds;
     const target = Math.max(0, duration === null ? seconds : Math.min(seconds, duration));
-    this.seekOverride = { zoneId: zone.zoneId, revision: zone.revision, seconds: target };
+    this.seekOverride = { zoneId: zone.zoneId, revision: zone.revision, seconds: target, streamSeq: this.snapshot.isLocal ? (this.output?.trackPosition()?.streamSeq ?? null) : null };
     this.updateProgress();
     void this.send({ command: "seek", position_seconds: target });
   }
@@ -803,10 +804,13 @@ export class PlayerController {
     const duration = zone.position.durationSeconds;
     const seekable = zone.position.seekable && duration !== null;
     const clamp = (seconds: number) => Math.max(0, duration === null ? seconds : Math.min(seconds, duration));
-    const override = this.seekOverride;
-    if (override !== null && override.zoneId === zone.zoneId && override.revision === zone.revision) return { positionSeconds: override.seconds, durationSeconds: duration, seekable };
-    this.seekOverride = null;
     const local = this.snapshot.isLocal ? this.output?.trackPosition() : null;
+    // 拖动之后先显示目标位置：远端直到服务端的新状态到达；本机出声时直到输出端换上新流（旧流的播放头还停在原处）。
+    const override = this.seekOverride;
+    const pending = override !== null && override.zoneId === zone.zoneId
+      && (override.revision === zone.revision || (override.streamSeq !== null && local?.streamSeq === override.streamSeq));
+    if (override !== null && pending) return { positionSeconds: override.seconds, durationSeconds: duration, seekable };
+    this.seekOverride = null;
     if (local !== null && local !== undefined && local.entryId === zone.current.entryId) return { positionSeconds: clamp(local.seconds), durationSeconds: duration ?? local.durationSeconds, seekable };
     const elapsed = zone.status === "playing" ? (this.store.serverNow() - zone.position.at) / 1000 : 0;
     return { positionSeconds: clamp(zone.position.seconds + Math.max(0, elapsed)), durationSeconds: duration, seekable };

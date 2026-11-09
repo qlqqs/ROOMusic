@@ -176,10 +176,11 @@ export class OutputEndpoint {
   }
 
   /** 曲目内的位置：按分段与流内位置换算；没有在放的流时是 null。 */
-  trackPosition(): { entryId: string; seconds: number; durationSeconds: number | null } | null {
+  trackPosition(): { streamSeq: number; entryId: string; seconds: number; durationSeconds: number | null } | null {
     const segment = this.segment();
-    if (segment === null) return null;
-    return { entryId: segment.entryId, seconds: Math.max(0, segment.trackStartSeconds + this.active.el.currentTime - segment.streamStartSeconds), durationSeconds: segment.track.durationSeconds };
+    const stream = this.active.stream;
+    if (segment === null || stream === null) return null;
+    return { streamSeq: stream.seq, entryId: segment.entryId, seconds: Math.max(0, segment.trackStartSeconds + this.active.el.currentTime - segment.streamStartSeconds), durationSeconds: segment.track.durationSeconds };
   }
 
   /** 对齐到播放区的期望状态（design-protocol.md §3.1）。认领成功之前不对齐：流只给当前输出会话。 */
