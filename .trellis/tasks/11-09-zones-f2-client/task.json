@@ -12,7 +12,7 @@
   "assignee": "qlqq",
   "createdAt": "2026-11-09",
   "completedAt": null,
-  "branch": null,
+  "branch": "playback-baseline",
   "base_branch": "main",
   "worktree_path": null,
   "commit": null,
