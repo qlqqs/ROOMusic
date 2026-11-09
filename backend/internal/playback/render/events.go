@@ -107,12 +107,11 @@ func (s *session) immediate(event zones.Event) error {
 		return nil
 	}
 }
-func (s *session) addSegment(frame int64, value zones.Segment) error {
+func (s *session) addSegment(frame int64, value zones.Segment, path signalPath) error {
 	s.mu.Lock()
 	s.segments = append(s.segments, segment{frame, value})
 	s.mu.Unlock()
-	// P-e 再填完整信号路径；P-c 只发布分段，不虚构质量与未接入步骤。
-	return s.queueEvent(frame, zones.Event{Kind: "signal", Segments: []zones.Segment{value}})
+	return s.queueEvent(frame, zones.Event{Kind: "segment_signal", Segments: []zones.Segment{value}, Signal: path})
 }
 
 func (s *session) segmentsLocked(frame int64) []zones.Segment {
@@ -145,7 +144,7 @@ func (s *session) dueEvent(now time.Time) (zones.Event, bool) {
 		s.pending = s.pending[1:]
 		event := item.event
 		event.At = now
-		if event.Kind == "signal" && event.Segments != nil || event.Kind == "track_started" {
+		if event.Kind == "segment_signal" || event.Kind == "track_started" {
 			event.Segments = s.segmentsLocked(item.frame)
 		}
 		wake(s.eventSpace)
@@ -174,7 +173,19 @@ func (s *session) dispatch() {
 	defer close(s.events)
 	ticker := s.owner.options.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
+	monitor := signalMonitor{clipEnabled: s.spec.Settings.Headroom.ClipIndicator}
+	var clipTicks <-chan time.Time
+	if monitor.clipEnabled {
+		clipTicker := s.owner.options.NewTicker(250 * time.Millisecond)
+		defer clipTicker.Stop()
+		clipTicks = clipTicker.C()
+	}
 	send := func(event zones.Event) bool {
+		var ok bool
+		event, ok = monitor.apply(event, s.owner.options.Clock())
+		if !ok {
+			return true
+		}
 		if s.ctx.Err() != nil {
 			return false
 		}
@@ -185,7 +196,19 @@ func (s *session) dispatch() {
 			return true
 		}
 	}
+	reevaluate := func() bool {
+		event, ok := monitor.reevaluate(s.owner.options.Clock())
+		return !ok || send(event)
+	}
 	for {
+		// 即使未来事件正在补发，也按独立的 250 ms 时钟复评。
+		select {
+		case <-clipTicks:
+			if !reevaluate() {
+				return
+			}
+		default:
+		}
 		if s.hls != nil {
 			s.hls.prune()
 		}
@@ -213,6 +236,10 @@ func (s *session) dispatch() {
 				return
 			}
 		case <-s.eventWake:
+		case <-clipTicks:
+			if !reevaluate() {
+				return
+			}
 		case <-ticker.C():
 		}
 	}

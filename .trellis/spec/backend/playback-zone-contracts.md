@@ -59,7 +59,7 @@ JSON 只接受单个对象，完整请求不超过 1 MiB；HTTP 负责类型、�
 - `seek` 与正在放的会话上的 `set_settings` 共用 300 ms 去抖；暂停 5 秒后仍暂停才关闭会话；停止、清空、转移与切歌取消旧定时器。
 - 所有已接受控制命令撤销 `offlinePaused` 自动恢复标记；起播清故障与连续失败计数。重复暂停不延后既有五秒期限，无操作不广播。
 - 队列/模式变动通知 `NextChanged()`，是否需要重建由渲染会话发 `rebuild_needed` 决定，经同一 300 ms 定时器去抖。
-- Headroom 本阶段只输出默认 `{enabled:false,db:-3,clip_indicator:false}`，不新增持久列；仅接受显式默认的 `settings.headroom`，非默认值返回 `400 invalid_input`，待算法线接入后开放，不能接受后静默丢弃。
+- Headroom 默认 `{enabled:false,db:-3,clip_indicator:false}`；登记与 `set_settings` 接受完整 `settings.headroom` 对象，`db` 须有限、在 −30…0 内且按 0.1 步进，否则 `400 invalid_input`。省略整项保留原值；提交后经 0044 的 JSONB 列持久化，DTO 与渲染设置返回实际值；改动复用既有 300 ms 去抖，无变化不重建。存储坏值的默认回退见播放区数据合同。
 - hub 按用户扇出，订阅缓冲 64 条；满则关闭该订阅，不阻塞命令。队列事件先于状态事件，B3 用订阅接口写 SSE。
 - 每小时清理超过 30 天未上线且当前离线的设备，删除前持锁重新核对；覆盖尚未加载到内存的用户。
 

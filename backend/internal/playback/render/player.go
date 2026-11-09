@@ -124,7 +124,7 @@ func (p *player) startCurrent(frame int64) error {
 		return nil
 	}
 	segment := zones.Segment{EntryID: d.entry.EntryID, TrackID: d.entry.TrackID, StreamStartSeconds: float64(frame) / float64(p.session.pcm.SampleRate), TrackStartSeconds: d.startSeconds}
-	if err := p.session.addSegment(frame, segment); err != nil {
+	if err := p.session.addSegment(frame, segment, p.session.segmentSignal(d)); err != nil {
 		return err
 	}
 	if frame != 0 || d.entry.EntryID != p.session.spec.Start.EntryID {

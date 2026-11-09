@@ -49,7 +49,7 @@ func newSession(parent context.Context, owner *Renderer, spec zones.RenderSpec, 
 	var c *chain.Chain
 	if prepareErr == nil {
 		var err error
-		c, err = chain.Build(chain.Spec{Format: pcm, OutputBits: format.BitDepth, Seed: 1})
+		c, err = chain.Build(chain.Spec{Format: pcm, Headroom: chain.HeadroomSettings{Enabled: spec.Settings.Headroom.Enabled, DB: spec.Settings.Headroom.DB}, OutputBits: format.BitDepth, Seed: 1})
 		if err != nil {
 			return nil, err
 		}
@@ -275,6 +275,7 @@ func (s *session) run() {
 	defer ticker.Stop()
 	var speed speedMonitor
 	var encoded []byte
+	var clipped int
 	for {
 		if err := s.waitToRender(ticker); err != nil {
 			if s.ctx.Err() == nil {
@@ -301,7 +302,7 @@ func (s *session) run() {
 		s.markReady()
 		begin := s.owner.options.Clock()
 		buffer = s.chain.Process(buffer)
-		encoded = s.encodePCM(encoded[:0], buffer)
+		encoded, clipped = s.encodePCM(encoded[:0], buffer)
 		cost += s.owner.options.Clock().Sub(begin)
 		if err = s.encoder.write(encoded); err != nil {
 			if s.ctx.Err() == nil {
@@ -309,10 +310,9 @@ func (s *session) run() {
 			}
 			return
 		}
-		s.mu.Lock()
-		s.written += int64(buffer.Frames)
-		s.mu.Unlock()
-		wake(s.eventWake)
+		if err := s.recordOutput(buffer.Frames, clipped); err != nil {
+			return
+		}
 		if err = speed.add(s, buffer.Frames, cost); err != nil {
 			return
 		}
@@ -323,7 +323,7 @@ func (s *session) run() {
 		if buffer == nil {
 			break
 		}
-		encoded = s.encodePCM(encoded[:0], buffer)
+		encoded, clipped = s.encodePCM(encoded[:0], buffer)
 		cost := s.owner.options.Clock().Sub(begin)
 		s.markReady()
 		if err := s.encoder.write(encoded); err != nil {
@@ -332,9 +332,9 @@ func (s *session) run() {
 			}
 			return
 		}
-		s.mu.Lock()
-		s.written += int64(buffer.Frames)
-		s.mu.Unlock()
+		if err := s.recordOutput(buffer.Frames, clipped); err != nil {
+			return
+		}
 		if err := speed.add(s, buffer.Frames, cost); err != nil {
 			return
 		}
@@ -422,10 +422,9 @@ func (s *session) waitToRender(ticker Ticker) error {
 		}
 	}
 }
-func (s *session) encodePCM(dst []byte, b *chain.Buffer) []byte {
+func (s *session) encodePCM(dst []byte, b *chain.Buffer) ([]byte, int) {
 	if s.format.BitDepth != 0 {
-		result, _ := s.chain.Quantize(dst, b)
-		return result
+		return s.chain.Quantize(dst, b)
 	}
 	needed := b.Frames * s.pcm.Channels * 4
 	if cap(dst) < needed {
@@ -433,12 +432,17 @@ func (s *session) encodePCM(dst []byte, b *chain.Buffer) []byte {
 	} else {
 		dst = dst[:needed]
 	}
+	clipped := 0
 	for frame := range b.Frames {
 		for channel := range s.pcm.Channels {
-			binary.LittleEndian.PutUint32(dst[(frame*s.pcm.Channels+channel)*4:], math.Float32bits(float32(b.Samples[channel][frame])))
+			sample := b.Samples[channel][frame]
+			if s.spec.Settings.Headroom.ClipIndicator && math.Abs(sample) > 1 {
+				clipped++
+			}
+			binary.LittleEndian.PutUint32(dst[(frame*s.pcm.Channels+channel)*4:], math.Float32bits(float32(sample)))
 		}
 	}
-	return dst
+	return dst, clipped
 }
 
 var _ zones.RenderSession = (*session)(nil)

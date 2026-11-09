@@ -67,7 +67,7 @@ func loadZones(ctx context.Context, tx *sql.Tx, userID string, state *UserState)
 SELECT z.id, z.device_id, z.mode, z.current_entry_id,
  z.position_seconds, z.position_saved_at, to_json(z.history), to_json(z.shuffle_bag),
  z.leveling, z.crossfade, z.crossfade_seconds, z.gapless, z.quality,
- z.revision, z.queue_revision, z.imported_at
+ z.revision, z.queue_revision, z.imported_at, z.headroom
 FROM playback_zones z
 JOIN playback_devices d ON d.id=z.device_id AND d.user_id=z.user_id
 WHERE z.user_id=$1::uuid ORDER BY d.created_at, d.id, z.id`, userID)
@@ -79,13 +79,16 @@ WHERE z.user_id=$1::uuid ORDER BY d.created_at, d.id, z.id`, userID)
 		zone := PersistedZone{Queue: queue.State{Entries: []queue.Entry{}}}
 		var current sql.NullString
 		var imported sql.NullTime
-		var history, bag []byte
+		var history, bag, headroom []byte
 		if err := rows.Scan(&zone.ZoneID, &zone.DeviceID, &zone.Queue.Mode, &current,
 			&zone.PositionSeconds, &zone.PositionSavedAt, &history, &bag,
 			&zone.Settings.Leveling, &zone.Settings.Crossfade, &zone.Settings.CrossfadeSeconds,
 			&zone.Settings.Gapless, &zone.Settings.Quality,
-			&zone.Revision, &zone.QueueRevision, &imported); err != nil {
+			&zone.Revision, &zone.QueueRevision, &imported, &headroom); err != nil {
 			return fmt.Errorf("scan playback zone: %w", err)
+		}
+		if err := json.Unmarshal(headroom, &zone.Settings.Headroom); err != nil {
+			return fmt.Errorf("decode playback headroom: %w", err)
 		}
 		zone.Queue.CurrentEntryID = current.String
 		if imported.Valid {

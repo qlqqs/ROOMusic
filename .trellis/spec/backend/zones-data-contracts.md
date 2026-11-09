@@ -9,7 +9,7 @@
 
 迁移 `0043_playback_zones.sql`（及 `.down.sql`）新增 `playback_devices`、`playback_zones`、`playback_queue_entries`。
 设备与播放区一对一，复合外键保证同属用户，删除设备级联删除区与条目；曲目引用不级联。
-播放区包含电平化、交叉渐变、`gapless=true`、`quality=lossless`，不预建 Headroom 列。
+播放区包含电平化、交叉渐变、`gapless=true`、`quality=lossless`；迁移 `0044_playback_zone_headroom.sql` 增加 `headroom JSONB NOT NULL`，默认 `{enabled:false,db:-3,clip_indicator:false}`，同名 `.down.sql` 仅删除该列（回退会丢失 Headroom 设置）。
 条目位置非负，`UNIQUE(zone_id,position) DEFERRABLE INITIALLY DEFERRED` 允许事务内腾位和交换。
 
 `LoadUser(ctx, db, userID)` 在显式只读 REPEATABLE READ 事务中加载设备、播放区与条目，设备按 `created_at,id` 稳定排序；队列按位置排序。
@@ -25,6 +25,8 @@ func (s *Store) UpdateZone(ctx context.Context, userID string, zone PersistedZon
 
 `LoadUser` 返回 `(UserState, error)`，`UserState` 含 `Devices []PersistedDevice`、`Zones []PersistedZone`；`PersistedZone.Queue` 为 `queue.State`。
 空插入锚点表示队首，空替换表示清空；版本号由调用方计算，`UpdateZone` 不写 `Queue.Entries`。
+
+`PlaybackSettings.Headroom` 与其他设置同事务写入，注册默认值、读取和 DTO／渲染端口使用同一份设置。`db` 必须有限、在 −30…0 内且为 0.1 的步进；存储读取遇到非对象、缺失/null 字段、类型不符、未知字段或非法 `db` 时整项回退默认值，不因坏设置阻断播放区加载，也不在只读加载中修复数据库。JSONB 列不额外添加字段形状或范围 CHECK，校验由 zones 拥有。
 
 ## 3. 行为约束
 
