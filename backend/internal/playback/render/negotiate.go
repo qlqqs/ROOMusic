@@ -138,9 +138,13 @@ func concreteFormat(spec zones.RenderSpec, source Track) (zones.StreamFormat, re
 	if err != nil {
 		return f, renderPlan{}, err
 	}
+	plan.convolution, err = spec.Settings.Convolution.DecodeConvolution()
+	if err != nil {
+		return f, renderPlan{}, err
+	}
 	out = plan.outputPCM
 	plan.facts = sourceProcessing(source, spec.Start, spec.Settings, pcm)
-	plan.facts.stages = len(conversion.Stages) > 0 || len(plan.stages) > 0 || plan.peq.Enabled
+	plan.facts.stages = len(conversion.Stages) > 0 || len(plan.stages) > 0 || plan.peq.Enabled || plan.convolution.Enabled && plan.convolution.IRID != nil
 	f.Layout = out.Layout
 	f.SampleRate, f.Channels, f.BitDepth = out.SampleRate, out.Channels, 0
 	if lossless {

@@ -14,6 +14,7 @@ import { decodeArtistResults } from "../features/search/api/decoders";
 import { describe, expect, it } from "vitest";
 import { decodePlaybackFormats, decodeTrackAnalysis, decodeTrackLyrics } from "../features/player/api/decoders";
 import { decodeCurves, decodeImport, decodePreset, decodePresets, decodeProduct, decodeSearch } from "../features/player/peq/api";
+import { decodeIrFile, decodeIrFiles } from "../features/player/convolution/api";
 import { decodeLoggedOut, decodePasswordChanged, decodeSetupStatus, decodeViewer } from "../features/auth/api/decoders";
 import {
   decodeRecentlyAdded,
@@ -360,6 +361,10 @@ const successContracts: Record<string, Contract> = {
   "dsp/responses/presets-empty": { status: 200, decode: decodePresets, preservesWireShape: false },
   "dsp/responses/presets-list": { status: 200, decode: decodePresets, preservesWireShape: false },
   "playback-zones/responses/set-settings-peq": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
+  "playback-zones/responses/set-settings-convolution": { status: 200, decode: decodeCommandResult, preservesWireShape: false },
+  "dsp/responses/ir-list": { status: 200, decode: decodeIrFiles, preservesWireShape: false },
+  "dsp/responses/ir-upload": { status: 201, decode: decodeIrFile, preservesWireShape: false },
+  "dsp/responses/ir-rename": { status: 200, decode: decodeIrFile, preservesWireShape: false },
   "playback/formats": { status: 200, decode: decodePlaybackFormats, preservesWireShape: false },
   "tracks/playback": { status: 200, decode: retiredByZones },
   // 曲目分析 decoder 是播放器 DTO 投影（字段名转换、base64 转 Uint8Array），不保留 wire 形状；这里仍调用生产 decoder 验证样本可解码。
@@ -528,6 +533,9 @@ const successContracts: Record<string, Contract> = {
 // 错误样本都用统一信封；这里同时记录界面要处理的错误码与状态码。
 const errorContracts: Record<string, { status: number; code: string }> = {
   "dsp/responses/opra-not-found": { status: 404, code: "not_found" },
+  "dsp/responses/ir-cfg-invalid": { status: 400, code: "ir_cfg_invalid" },
+  "dsp/responses/ir-too-large": { status: 413, code: "ir_too_large" },
+  "dsp/responses/ir-not-found": { status: 404, code: "not_found" },
   "dsp/responses/peq-import-empty": { status: 400, code: "peq_import_empty" },
   "dsp/responses/peq-response-invalid": { status: 400, code: "invalid_input" },
   "dsp/responses/preset-invalid": { status: 400, code: "invalid_input" },
@@ -761,6 +769,13 @@ const requestContracts: Record<string, RequestContract> = {
   "dsp/requests/presets-list": {},
   "dsp/requests/unauthorized": {},
   "playback-zones/requests/set-settings-peq": {},
+  "playback-zones/requests/set-settings-convolution": {},
+  "dsp/requests/ir-list": {},
+  "dsp/requests/ir-upload": {},
+  "dsp/requests/ir-rename": {},
+  "dsp/requests/ir-cfg-invalid": {},
+  "dsp/requests/ir-too-large": {},
+  "dsp/requests/ir-not-found": {},
   "playback-zones/requests/claim-fixed": {},
   "playback-zones/requests/claim-playing": {},
   "playback-zones/requests/claim-replacement": {},

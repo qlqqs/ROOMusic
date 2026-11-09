@@ -2,6 +2,7 @@ package zones
 
 import (
 	"context"
+	"database/sql"
 	"io"
 	"time"
 )
@@ -109,4 +110,14 @@ type Event struct {
 // PlayRecorder 是计次消费方端口，由 app 装配 listening 适配器。
 type PlayRecorder interface {
 	Record(ctx context.Context, userID, idempotencyKey, trackID string, playedSeconds float64) error
+}
+
+// IRReferences 是成员 IR 资源的消费方端口，由 app 适配，不直接访问资源表。
+// Check 的 nil tx 仅用于预检；实际写入必须传入调用方事务并锁定资源行。
+// 不存在和非本人资源均返回 ErrNotFound。Delete 不提交事务，Invalidate 仅在提交后调用。
+// Invalidate 不得回调 zones，且须阻止删除前的异步装载重新填充缓存。
+type IRReferences interface {
+	Check(ctx context.Context, tx *sql.Tx, userID, irID string) error
+	Delete(ctx context.Context, tx *sql.Tx, userID, irID string) error
+	Invalidate(userID, irID string)
 }

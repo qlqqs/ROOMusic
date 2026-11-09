@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "ir_too_large",
+      "message": "IR 文件或解码结果太大"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 413
+}

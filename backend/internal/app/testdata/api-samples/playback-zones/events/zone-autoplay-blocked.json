@@ -60,6 +60,11 @@
       "queue_revision": 1,
       "revision": 13,
       "settings": {
+        "convolution": {
+          "before_peq": false,
+          "enabled": false,
+          "ir_id": null
+        },
         "crossfade": false,
         "crossfade_seconds": 5,
         "downmix": {

@@ -40,6 +40,7 @@ const settings: Zone["settings"] = {
   sampleRate: { strategy: "none", customRate: null, filter: "linear_precise" },
   downmix: { enabled: true },
   peq: { enabled: false, preampDb: 0, bands: [], source: null },
+  convolution: { enabled: false, irId: null, beforePeq: false },
 };
 
 const registeredDevice: Device = {

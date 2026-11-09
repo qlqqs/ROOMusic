@@ -181,6 +181,7 @@ type Options struct {
 	Logger       *slog.Logger
 	Renderer     Renderer
 	PlayRecorder PlayRecorder
+	IRReferences IRReferences
 	Now          func() time.Time
 	AfterFunc    func(time.Duration, func()) Timer
 	Random       func() float64

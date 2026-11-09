@@ -1,0 +1,19 @@
+{
+  "body": {
+    "items": [
+      {
+        "channels": 1,
+        "container": "wav",
+        "created_at": "2026-01-01T00:00:00Z",
+        "file_name": "impulse.wav",
+        "ir_id": "00000000-0000-4000-8000-000000000001",
+        "name": "试听卷积",
+        "paths": 1,
+        "sample_rate": 48000,
+        "taps": 4,
+        "updated_at": "2026-01-01T00:00:00Z"
+      }
+    ]
+  },
+  "status": 200
+}

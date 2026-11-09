@@ -39,7 +39,11 @@ export type PlaybackSettings = {
   sampleRate: SampleRateSettings;
   downmix: { enabled: boolean };
   peq: PeqDocument;
+  convolution: ConvolutionSettings;
 };
+
+/** 卷积校正：选一个本人的 IR；beforePeq 时卷积排在参数均衡之前。 */
+export type ConvolutionSettings = { enabled: boolean; irId: string | null; beforePeq: boolean };
 
 /** 曲目不能播放的原因；界面按它选文案。服务端以后增加的原因按“音频文件无法读取”显示。 */
 export const playbackFailureReasons = ["not_found", "root_disabled", "unsupported_format", "source_unavailable", "source_changed", "decode_failed"] as const;
@@ -89,6 +93,7 @@ export type SignalStep = { quality: SignalQuality; lossy: boolean; compat: boole
   | { kind: "convert"; params: { fromRate: number; toRate: number; by: string } }
   | { kind: "sample_rate"; params: { fromRate: number; toRate: number; filter: SampleRateFilter } }
   | { kind: "peq"; params: { label: string; bands: number } }
+  | { kind: "convolution"; params: { name: string; taps: number; resampledFrom: number | null } }
   | { kind: "downmix"; params: { fromChannels: number; toChannels: number; fromLayout: string | null; toLayout: string | null; by: string; mode: DownmixMode | null } }
   | { kind: "leveling"; params: { gainDb: number; basis: string } }
   | { kind: "headroom"; params: { gainDb: number } }

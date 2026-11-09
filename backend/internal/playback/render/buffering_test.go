@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -157,13 +158,15 @@ func TestRenderOpenProcessCapacityTimeout(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer slots.Close()
-	r := newTestRenderer(t, tool, fixtureSource(nil))
+	fixture := makeFLAC(t, ff, 16, 8000, 997, 0.2)
+	r := newTestRenderer(t, tool, fixtureSource(map[string]audioFixture{"a": fixture}))
 	timers.armed.Store(true)
 	result := make(chan error, 1)
 	go func() {
 		s, err := r.Open(context.Background(), renderSpec("flac"))
-		if s != nil {
-			s.Close()
+		if err == nil {
+			defer s.Close()
+			_, err = io.ReadAll(s.Body())
 		}
 		result <- err
 	}()
@@ -171,9 +174,9 @@ func TestRenderOpenProcessCapacityTimeout(t *testing.T) {
 	select {
 	case err := <-result:
 		if !errors.Is(err, ErrBusy) || !errors.Is(err, ffmpeg.ErrBusy) {
-			t.Fatalf("Open 名额超时 = %v", err)
+			t.Fatalf("准备阶段名额超时 = %v", err)
 		}
 	case <-time.After(testWait):
-		t.Fatal("注入 5 秒超时后 Open 未返回")
+		t.Fatal("注入 5 秒超时后准备阶段未返回")
 	}
 }

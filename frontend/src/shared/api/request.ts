@@ -48,7 +48,7 @@ async function readJsonBody(response: Response): Promise<JsonBody> {
 }
 
 /**
- * 唯一发出 /api/v1 请求的函数：同源、携带 Cookie、不使用浏览器缓存、带客户端请求 ID。
+ * 发出 /api/v1 JSON 请求的函数（上传走 apiUpload）：同源、携带 Cookie、不使用浏览器缓存、带客户端请求 ID。
  * 只有 JSON 响应进入解码；失败时抛出携带 ApiFailure 的 ApiError。
  * decode 的第二个参数是成功响应的状态码：同一路径的 200 与 202 形状不同时（播放预检），解码器借它核对状态码与响应体相符；
  * 其余只关心响应体的解码器可以忽略它。
@@ -79,17 +79,21 @@ export async function apiRequest<T>(spec: ApiRequestSpec, decode: (input: unknow
     throw new ApiError({ kind: "network", requestId }, { cause: error });
   }
 
-  const { status } = response;
+  return settle(response.status, body, requestId, generation, spec.session, decode);
+}
+
+/** 拿到响应体之后的共同收尾：错误信封转成 ApiError（401 通知会话边界），成功时解码。 */
+function settle<T>(status: number, body: JsonBody, requestId: string, generation: number, session: "required" | "none" | undefined, decode: (input: unknown, status: number) => T): ApiResponse<T> {
   if (!body.ok) throw new ApiError({ kind: "invalid_response", status, requestId });
 
-  if (!response.ok) {
+  if (status < 200 || status > 299) {
     let envelope: ReturnType<typeof decodeErrorEnvelope>;
     try {
       envelope = decodeErrorEnvelope(body.value);
     } catch (error) {
       throw new ApiError({ kind: "invalid_response", status, requestId }, { cause: error });
     }
-    if (status === 401 && envelope.error.code === "unauthorized" && spec.session !== "none") {
+    if (status === 401 && envelope.error.code === "unauthorized" && session !== "none") {
       sessionBoundary?.onUnauthorized(generation);
     }
     throw new ApiError({
@@ -106,6 +110,67 @@ export async function apiRequest<T>(spec: ApiRequestSpec, decode: (input: unknow
   } catch (error) {
     throw new ApiError({ kind: "invalid_response", status, requestId }, { cause: error });
   }
+}
+
+export type ApiUploadSpec = {
+  path: ApiPath;
+  form: FormData;
+  signal?: AbortSignal | undefined;
+  /** 已发出的比例 0–1；浏览器算不出总长时不回调。 */
+  onProgress?: (fraction: number) => void;
+};
+
+/**
+ * 上传文件（multipart）：与 apiRequest 同源、带 Cookie、带请求 ID，响应同样按错误信封与 decoder 处理。
+ * fetch 拿不到上传进度，这里用 XMLHttpRequest；Content-Type 由浏览器连同 boundary 一起生成。
+ */
+export function apiUpload<T>(spec: ApiUploadSpec, decode: (input: unknown, status: number) => T): Promise<ApiResponse<T>> {
+  const requestId = newRequestId();
+  const generation = sessionBoundary?.currentGeneration() ?? 0;
+  return new Promise((resolve, reject) => {
+    if (spec.signal?.aborted) {
+      reject(new ApiError({ kind: "aborted" }));
+      return;
+    }
+    const xhr = new XMLHttpRequest();
+    const abort = () => xhr.abort();
+    spec.signal?.addEventListener("abort", abort, { once: true });
+    const finish = () => spec.signal?.removeEventListener("abort", abort);
+    xhr.open("POST", spec.path);
+    xhr.setRequestHeader("Accept", "application/json");
+    xhr.setRequestHeader("X-Request-ID", requestId);
+    const { onProgress } = spec;
+    if (onProgress !== undefined) {
+      xhr.upload.addEventListener("progress", (event) => {
+        if (event.lengthComputable && event.total > 0) onProgress(event.loaded / event.total);
+      });
+    }
+    xhr.addEventListener("load", () => {
+      finish();
+      let body: JsonBody = { ok: false };
+      if (jsonContentType.test(xhr.getResponseHeader("Content-Type") ?? "")) {
+        try {
+          body = { ok: true, value: JSON.parse(xhr.responseText) as unknown };
+        } catch {
+          body = { ok: false };
+        }
+      }
+      try {
+        resolve(settle(xhr.status, body, requestId, generation, "required", decode));
+      } catch (error) {
+        reject(error instanceof Error ? error : new ApiError({ kind: "invalid_response", status: xhr.status, requestId }));
+      }
+    });
+    xhr.addEventListener("error", () => {
+      finish();
+      reject(new ApiError({ kind: "network", requestId }));
+    });
+    xhr.addEventListener("abort", () => {
+      finish();
+      reject(new ApiError({ kind: "aborted" }));
+    });
+    xhr.send(spec.form);
+  });
 }
 
 /**

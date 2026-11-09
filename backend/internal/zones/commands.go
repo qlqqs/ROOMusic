@@ -86,6 +86,11 @@ func (s *Service) commandLocked(ctx context.Context, userID string, z *zoneRunti
 		plan.change.QueueRevision = plan.persisted.QueueRevision
 	}
 	if err = s.transact(ctx, func(store *Store) error {
+		if c.Command == "set_settings" {
+			if err := s.checkIRReference(ctx, store.tx, userID, plan.persisted.Settings.Convolution); err != nil {
+				return err
+			}
+		}
 		if plan.writeEntries != nil {
 			if e := plan.writeEntries(store); e != nil {
 				return e
@@ -379,6 +384,9 @@ func (s *Service) plan(ctx context.Context, userID string, z *zoneRuntime, c Com
 		p.debounce = z.session != nil
 	case "set_settings":
 		p.persisted.Settings = applySettings(p.persisted.Settings, c.Settings)
+		if err := s.checkIRReference(ctx, nil, userID, p.persisted.Settings.Convolution); err != nil {
+			return p, err
+		}
 		if EqualSettings(p.persisted.Settings, z.persisted.Settings) {
 			p.noop = true
 			break

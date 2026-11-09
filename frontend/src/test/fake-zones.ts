@@ -37,7 +37,7 @@ export type FakeZoneServer = {
 const DEVICE_ID = "00000000-0000-4000-8000-00000000d001";
 const ZONE_ID = "00000000-0000-4000-8000-00000000e001";
 
-const defaultSettings: PlaybackSettings = { leveling: "auto", gapless: true, crossfade: false, crossfadeSeconds: 5, quality: "lossless", headroom: { enabled: false, db: -3, clipIndicator: false }, sampleRate: { strategy: "none", customRate: null, filter: "linear_precise" }, downmix: { enabled: true }, peq: defaultPeq };
+const defaultSettings: PlaybackSettings = { leveling: "auto", gapless: true, crossfade: false, crossfadeSeconds: 5, quality: "lossless", headroom: { enabled: false, db: -3, clipIndicator: false }, sampleRate: { strategy: "none", customRate: null, filter: "linear_precise" }, downmix: { enabled: true }, peq: defaultPeq, convolution: { enabled: false, irId: null, beforePeq: false } };
 
 function defaultTrackOf(trackId: string): PlayerTrack {
   return trackId.startsWith("track-") ? playerTrack(trackId.slice("track-".length)) : playerTrack(trackId, { trackId });
@@ -179,7 +179,7 @@ export function fakeZoneServer(options: { trackOf?: (trackId: string) => PlayerT
         return { queueChanged: false, imported: null };
       case "set_settings": {
         const patch = command.settings;
-        commit({ settings: { ...zone.settings, ...(patch.leveling === undefined ? {} : { leveling: patch.leveling }), ...(patch.gapless === undefined ? {} : { gapless: patch.gapless }), ...(patch.crossfade === undefined ? {} : { crossfade: patch.crossfade }), ...(patch.crossfade_seconds === undefined ? {} : { crossfadeSeconds: patch.crossfade_seconds }), ...(patch.quality === undefined ? {} : { quality: patch.quality }), ...(patch.headroom === undefined ? {} : { headroom: { enabled: patch.headroom.enabled, db: patch.headroom.db, clipIndicator: patch.headroom.clip_indicator } }), ...(patch.sample_rate === undefined ? {} : { sampleRate: { strategy: patch.sample_rate.strategy, customRate: patch.sample_rate.custom_rate, filter: patch.sample_rate.filter } }), ...(patch.downmix === undefined ? {} : { downmix: { enabled: patch.downmix.enabled } }), ...(patch.peq === undefined ? {} : { peq: peqDocumentDecoder(patch.peq, "$.peq") }) } }, false);
+        commit({ settings: { ...zone.settings, ...(patch.leveling === undefined ? {} : { leveling: patch.leveling }), ...(patch.gapless === undefined ? {} : { gapless: patch.gapless }), ...(patch.crossfade === undefined ? {} : { crossfade: patch.crossfade }), ...(patch.crossfade_seconds === undefined ? {} : { crossfadeSeconds: patch.crossfade_seconds }), ...(patch.quality === undefined ? {} : { quality: patch.quality }), ...(patch.headroom === undefined ? {} : { headroom: { enabled: patch.headroom.enabled, db: patch.headroom.db, clipIndicator: patch.headroom.clip_indicator } }), ...(patch.sample_rate === undefined ? {} : { sampleRate: { strategy: patch.sample_rate.strategy, customRate: patch.sample_rate.custom_rate, filter: patch.sample_rate.filter } }), ...(patch.downmix === undefined ? {} : { downmix: { enabled: patch.downmix.enabled } }), ...(patch.peq === undefined ? {} : { peq: peqDocumentDecoder(patch.peq, "$.peq") }), ...(patch.convolution === undefined ? {} : { convolution: { enabled: patch.convolution.enabled, irId: patch.convolution.ir_id, beforePeq: patch.convolution.before_peq } }) } }, false);
         return { queueChanged: false, imported: null };
       }
       case "retry": {

@@ -59,13 +59,7 @@ func testRenderSampleRate(t *testing.T, codec string, sourceRate, customRate int
 	}
 	probe := &sampleRateUserProbe{}
 	plan.user = []chain.Stage{{Node: probe, In: plan.outputPCM, Out: plan.outputPCM}}
-	// 骨架 helper 只预留 WAV 所需的一个名额；AAC/Opus 同时需要编码器和解码器。
-	reservation, err := tool.Reserve(context.Background(), 2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer reservation.Close()
-	s, err := newSession(context.Background(), r, spec, format, plan, track, nil, reservation)
+	s, err := newSession(context.Background(), r, spec, format, plan, track, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

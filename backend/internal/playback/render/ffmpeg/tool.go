@@ -39,7 +39,7 @@ func (t realTimer) C() <-chan time.Time { return t.Timer.C }
 // Options 只注入计时机制，不改变生产超时与容量策略。
 type Options struct{ NewTimer func(time.Duration) Timer }
 
-// Tool 的能力表构造后不变；所有编码、解码进程共用同一配额。
+// Tool 的能力表构造后不变；同一实例的编码、解码进程共用配额。
 type Tool struct {
 	path, version      string
 	decoders, encoders map[string]bool
@@ -125,6 +125,12 @@ func (t *Tool) Version() string             { return t.version }
 func (t *Tool) HasDecoder(name string) bool { return t.decoders[name] }
 func (t *Tool) HasEncoder(name string) bool { return t.encoders[name] }
 func (t *Tool) Soxr() bool                  { return t.soxr }
+
+// Independent 复用已探测的只读能力，给离线资源装载分配独立进程名额。
+func (t *Tool) Independent(capacity int) *Tool {
+	return &Tool{path: t.path, version: t.version, decoders: t.decoders, encoders: t.encoders,
+		soxr: t.soxr, newTimer: t.newTimer, capacity: capacity, changed: make(chan struct{})}
+}
 
 // Encoders 返回排序后的副本，调用方不能修改能力表。
 func (t *Tool) Encoders() []string {

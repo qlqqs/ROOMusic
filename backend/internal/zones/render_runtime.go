@@ -166,8 +166,14 @@ func (s *Service) scheduleRebuild(userID string, z *zoneRuntime) {
 	s.scheduleRebuildAfter(userID, z, 300*time.Millisecond)
 }
 func (s *Service) scheduleRebuildAfter(userID string, z *zoneRuntime, delay time.Duration) {
+	// 普通设置、定位及渲染事件仍只按旧会话是否存在决定重建资格。
+	s.scheduleRebuildWhile(userID, z, delay, func() bool { return z.session != nil })
+}
+
+// scheduleRebuildWhile 复用去抖、事务与重试；资格检查均在区锁内执行。
+func (s *Service) scheduleRebuildWhile(userID string, z *zoneRuntime, delay time.Duration, eligible func() bool) {
 	s.cancelRebuild(z)
-	if z.session == nil {
+	if !eligible() {
 		return
 	}
 	z.status = "loading"
@@ -176,7 +182,7 @@ func (s *Service) scheduleRebuildAfter(userID string, z *zoneRuntime, delay time
 		z.dispatch.Lock()
 		defer z.dispatch.Unlock()
 		z.mu.Lock()
-		if s.closed.Load() || z.deleted || z.rebuildVersion != version || z.session == nil {
+		if s.closed.Load() || z.deleted || z.rebuildVersion != version || !eligible() {
 			z.mu.Unlock()
 			return
 		}
@@ -188,7 +194,7 @@ func (s *Service) scheduleRebuildAfter(userID string, z *zoneRuntime, delay time
 		}
 		if err != nil {
 			s.reportAsync("rebuild", userID, p.ZoneID, err)
-			s.scheduleRebuildAfter(userID, z, time.Second)
+			s.scheduleRebuildWhile(userID, z, time.Second, eligible)
 			z.mu.Unlock()
 			return
 		}

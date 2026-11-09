@@ -1,0 +1,11 @@
+{
+  "method": "POST",
+  "multipart": {
+    "file": {
+      "file_name": "oversized.wav",
+      "size_bytes": 33554433
+    },
+    "name": "试听卷积"
+  },
+  "path": "/api/v1/me/dsp/ir-files"
+}

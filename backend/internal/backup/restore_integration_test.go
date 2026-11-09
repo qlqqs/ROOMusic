@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -21,6 +22,30 @@ func TestPostgreSQLBackupRestoreIndependentDatabaseRowCounts(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
 	if _, err := source.Exec(`CREATE TABLE schema_migrations(version bigint PRIMARY KEY); INSERT INTO schema_migrations VALUES(1),(2); CREATE TABLE users(id int); INSERT INTO users VALUES(1),(2),(3); CREATE TABLE releases(id int); INSERT INTO releases VALUES(1),(2); CREATE TABLE tracks(id int); INSERT INTO tracks SELECT generate_series(1,7); CREATE TABLE favorite_tracks(id int); INSERT INTO favorite_tracks VALUES(1); CREATE TABLE favorite_albums(id int);`); err != nil {
+		t.Fatal(err)
+	}
+	// 沿用本测试的极简 schema，只增加原文件与播放区选择，不运行整套迁移。
+	if _, err := source.ExecContext(ctx, `
+		CREATE TABLE dsp_ir_files(id uuid PRIMARY KEY, user_id int NOT NULL, content bytea NOT NULL);
+		CREATE TABLE playback_zones(id uuid PRIMARY KEY, user_id int NOT NULL, convolution jsonb NOT NULL);
+	`); err != nil {
+		t.Fatal(err)
+	}
+	// 48 kHz、单声道 PCM16 WAV，四个合成抽头：32767、0、-8192、0。
+	irContent := []byte("RIFF\x2c\x00\x00\x00WAVEfmt \x10\x00\x00\x00" +
+		"\x01\x00\x01\x00\x80\xbb\x00\x00\x00\x77\x01\x00\x02\x00\x10\x00" +
+		"data\x08\x00\x00\x00\xff\x7f\x00\x00\x00\xe0\x00\x00")
+	irID, zoneID := uuid.New(), uuid.New()
+	const userID = 1
+	if _, err := source.ExecContext(ctx, `INSERT INTO dsp_ir_files(id,user_id,content) VALUES($1,$2,$3)`, irID, userID, irContent); err != nil {
+		t.Fatal(err)
+	}
+	convolution := fmt.Sprintf(`{"enabled":true,"ir_id":%q,"before_peq":true}`, irID)
+	var storedConvolution []byte
+	if err := source.QueryRowContext(ctx, `
+		INSERT INTO playback_zones(id,user_id,convolution) VALUES($1,$2,$3::jsonb)
+		RETURNING convolution::text
+	`, zoneID, userID, convolution).Scan(&storedConvolution); err != nil {
 		t.Fatal(err)
 	}
 	settings := integrationSettings(t, address)
@@ -74,6 +99,22 @@ func TestPostgreSQLBackupRestoreIndependentDatabaseRowCounts(t *testing.T) {
 	var count int
 	if err := restored.QueryRow(`SELECT count(*) FROM backup_probe`).Scan(&count); err != nil || count != 2 {
 		t.Fatalf("独立库内容未恢复：%d %v", count, err)
+	}
+	var restoredIR, restoredConvolution []byte
+	if err := restored.QueryRowContext(ctx, `
+		SELECT ir.content, zone.convolution::text
+		FROM playback_zones AS zone
+		JOIN dsp_ir_files AS ir ON ir.id::text = zone.convolution->>'ir_id' AND ir.user_id = zone.user_id
+		WHERE zone.id = $1 AND zone.user_id = $2 AND ir.id = $3
+	`, zoneID, userID, irID).Scan(&restoredIR, &restoredConvolution); err != nil {
+		t.Fatalf("恢复后播放区与本人成员 IR 的关联丢失：%v", err)
+	}
+	if !bytes.Equal(restoredIR, irContent) {
+		t.Fatal("恢复后 IR 原文件字节不一致")
+	}
+	// 比较同一 PostgreSQL 表示，避免 jsonb 键顺序和空白规范化影响断言。
+	if !bytes.Equal(restoredConvolution, storedConvolution) {
+		t.Fatalf("恢复后卷积选择不一致：%s，期望 %s", restoredConvolution, storedConvolution)
 	}
 	safety, _, err := r.OpenBackup(result.SafetyBackup)
 	if err != nil {
