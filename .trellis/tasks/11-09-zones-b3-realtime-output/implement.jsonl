@@ -1,0 +1,13 @@
+{"file": ".trellis/tasks/11-08-server-playback-zones/prd.md", "reason": "父任务需求、验收与已裁决"}
+{"file": ".trellis/tasks/11-08-server-playback-zones/design.md", "reason": "架构、各需求判定、上线回滚、§14 渲染端口"}
+{"file": ".trellis/tasks/11-08-server-playback-zones/design-protocol.md", "reason": "实时通道、输出端协议、数据模型、界面文案、测试范围"}
+{"file": ".trellis/tasks/11-08-server-playback-zones/design-contract.md", "reason": "协议 v1 的 DTO、端点、事件、错误码"}
+{"file": ".trellis/tasks/11-08-server-playback-zones/implement.md", "reason": "各子任务的步骤、验证命令、风险文件与回滚点"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新包 internal/zones、zones/queue、zones/httpapi 的位置与依赖方向"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移编号顺延、每个迁移带 .down.sql、事务写法"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "统一错误信封与合同 §6 错误码的映射"}
+{"file": ".trellis/spec/backend/identity-contracts.md", "reason": "Guard 鉴权、同源校验（写接口 403→401）"}
+{"file": ".trellis/spec/backend/playback-contracts.md", "reason": "现有播放交付合同：旧标签页本批保留的三个接口"}
+{"file": ".trellis/spec/backend/listening-contracts.md", "reason": "计一次播放的写入与幂等键，服务端计次经 PlayRecorder 接到这里"}
+{"file": ".trellis/spec/backend/catalog-summary-contracts.md", "reason": "队列条目经 LoadTrackSummaries 取显示信息"}
+{"file": ".trellis/tasks/11-08-audio-dsp-reference-port/design.md", "reason": "算法线父设计 §8：端口补充已并入 zones §14"}

@@ -1,0 +1,6 @@
+{"file": ".trellis/tasks/11-08-audio-dsp-reference-port/design.md", "reason": "核对节点接口、延迟补偿、知识产权约束（不摘录参考稿、不写参考系数、对照测试缺数据就跳过）"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端代码质量与最小测试集"}
+{"file": ".trellis/spec/backend/database-verification.md", "reason": "迁移与集成测试的验证方式"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质量与最小测试集"}
+{"file": ".trellis/spec/frontend/quality-verification-layers.md", "reason": "前端验证分层"}
+{"file": ".trellis/spec/frontend/player-design-guidelines.md", "reason": "播放器界面与文案约束"}

@@ -1,0 +1,4 @@
+{"file": ".trellis/tasks/11-08-audio-dsp-reference-port/design.md", "reason": "父设计：包布局、Processor/Node 接口与 Wrap 延迟补偿、增益区域、§6.1 链顺序、对照验证与知识产权约束"}
+{"file": ".trellis/tasks/11-08-dsd-playback/design.md", "reason": "DSD→PCM 抽取，往返验证依赖"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新包位置与依赖方向"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端代码质量与最小测试集"}

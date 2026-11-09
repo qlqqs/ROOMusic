@@ -1,0 +1,9 @@
+{"file": ".trellis/tasks/11-08-server-playback-zones/prd.md", "reason": "父任务需求、验收与已裁决"}
+{"file": ".trellis/tasks/11-08-server-playback-zones/design.md", "reason": "架构、各需求判定、上线回滚、§14 渲染端口"}
+{"file": ".trellis/tasks/11-08-server-playback-zones/design-protocol.md", "reason": "实时通道、输出端协议、数据模型、界面文案、测试范围"}
+{"file": ".trellis/tasks/11-08-server-playback-zones/design-contract.md", "reason": "协议 v1 的 DTO、端点、事件、错误码"}
+{"file": ".trellis/tasks/11-08-server-playback-zones/implement.md", "reason": "各子任务的步骤、验证命令、风险文件与回滚点"}
+{"file": ".trellis/spec/frontend/playback-and-personal-state.md", "reason": "现有播放状态与个人数据的约定，F2 改写引擎时对照"}
+{"file": ".trellis/spec/frontend/player-design-guidelines.md", "reason": "播放栏、全屏、队列抽屉的界面约定，F3 设备列表沿用"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "store 与查询失效（play_recorded 让历史失效）"}
+{"file": ".trellis/spec/frontend/session-lifecycle.md", "reason": "事件流 401 经 SessionBoundary 处理"}

@@ -1,0 +1,2 @@
+{"file": ".trellis/tasks/11-08-server-playback-zones/design.md", "reason": "播放区线 §11 子任务与 §14 端口，第一批集成分支的共同时间线"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "dsp/* 与 playback/render 的依赖规则"}

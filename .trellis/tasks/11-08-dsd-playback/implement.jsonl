@@ -1,0 +1,10 @@
+{"file": ".trellis/tasks/11-08-audio-dsp-reference-port/design.md", "reason": "父设计：包布局、Processor/Node 接口与 Wrap 延迟补偿、增益区域、§6.1 链顺序、对照验证与知识产权约束"}
+{"file": ".trellis/tasks/11-08-dsp-pipeline/design.md", "reason": "渲染会话、每曲来源段、信号路径结构（§9）与处理设置的装配"}
+{"file": ".trellis/tasks/11-08-dsp-pipeline/design-delivery.md", "reason": "第一批 ffmpeg 临时适配与协商规则（本项替换的部分）"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新包位置与依赖方向"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端代码质量与最小测试集"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移、表与外键约定"}
+{"file": ".trellis/spec/backend/library-scan-contracts.md", "reason": "DSD 文件的扫描与入库"}
+{"file": ".trellis/spec/backend/playback-contracts.md", "reason": "格式表与安全打开"}
+{"file": ".trellis/spec/backend/audio-analysis-contracts.md", "reason": "DSD 曲目的分析与增益"}
+{"file": ".trellis/spec/frontend/playback-and-personal-state.md", "reason": "播放设置界面与状态"}
