@@ -1,10 +1,10 @@
-# 服务端渲染骨架合同（P-c）
+# 服务端渲染合同（P-c / D-2 / P-e）
 
 ## 1. 范围
 
 `playback/render` 实现 `zones.Renderer`，通过消费方端口 `TrackSource` 获取已经安全打开的文件和分析结果；不导入 playback、catalog，不连接数据库。`render/ffmpeg` 是标准库叶子包。app 是唯一装配根。
 
-本阶段只含同格式短读拼接，不含交叉淡化、换轨就绪超时、关闭无缝时的静音间隔（G-2）、Headroom 与完整信号路径（P-e）、CUE 放行（P-g）、派生退役（P-d）。旧 `Formats()` 和 HTTP 交付保持不变。
+本阶段只含同格式短读拼接，不含交叉淡化、换轨就绪超时、关闭无缝时的静音间隔（G-2）、CUE 放行（P-g）、派生退役（P-d）。旧 `Formats()` 和 HTTP 交付保持不变。
 
 ## 2. 签名
 
@@ -27,7 +27,7 @@
 - Cursor.Next 只在会话协程调用，不能在 Open 同步调用。Observe、NextChanged、会话 Close 不等待 Cursor 或子进程回收，允许持 zones 锁调用；渲染器 Close 在区锁释放后等待。
 - 首曲准备失败时，由异步流程发 track_failed、跳过失败条目；找到成功曲后用 format_boundary 交给接续会话，不能在 Open 返回后更改 Format。
 - time、track_started、track_failed、stream_ended 和带分段的 signal 按流帧号到播放头才派发；格式边界、重建与处理速度立即派发。time 按 200 ms 网格补齐，回退不重发，播放头不超过已写编码器的帧数。初始条目不发 track_started；未完成渲染时 time 不派发已写区间的右端点，防止同帧换轨尚未登记。尾部 time 先于 stream_ended。
-- 边界一经宣布不可撤销为同流拼接；NextChanged 重选只重复宣布接续流，无后继则要求重建，避免控制面残留旧 next_stream。分段 signal 的 Signal 为 nil，速度更新只含 processing_speed，完整质量与步骤留给 P-e。
+- 边界一经宣布不可撤销为同流拼接；NextChanged 重选只重复宣布接续流，无后继则要求重建，避免控制面残留旧 next_stream。分段路径由内部 `segment_signal` 按曲目起点登记，到播放头时转换为 `signal`。每次对外发完整路径快照，速度与削波变化不能覆盖 `quality`、`steps`。
 - Events 容量 64，满则等待，取消可解除等待；自然 EOF 后仍保留播放头派发，编码错误则停止派发、Body 以错误结束。显式 Close 后 Body 为 EOF。
 
 ## 4. 校验与错误
@@ -61,3 +61,12 @@
 错误：同步 Open → Cursor.Next；会话 Close 等待持区锁的 Cursor；拿读取 Body 的速度当播放头；以 source.BitDepth 为 0 推断所有源都是整数；只 Wait 不 Close 进程。
 
 正确：会话协程取下一首，非阻塞取消与同步资源回收分开；Observe 驱动播放头；源整数/浮点分类与量化精度分开；在所有结束路径 Close 进程和源文件。生产 ffmpeg 不可用时保留 nil Renderer，不用测试假渲染器顶替。
+
+## 8. 量化出口与信号监测（D-2 / P-e）
+
+- 无损出口每块按 `Exact && 0 < SourceBits && SourceBits <= bits` 判定直通；其余走 TPDF。流尾冲刷同样量化，FLAC、WAV 与 HLS ALAC 共用字节出口，不再另写取整逻辑。
+- 链 ① 使用 `settings.headroom` 装配；即使 0 dB，启用后也清除 `Exact`。电平化恰为 0 dB 时沿用 `leveling.Apply` 保留 `Exact` 的合同，不为实际直通的曲目虚报抖动。
+- 信号按来源、解码兼容转换/降混、电平化、共享链步骤、抖动、编码侧转换、编码的实际顺序计算。质量取最差档，降位深的抖动标兼容转换；交叉淡化窗口的临时抖动不展示。无损 HLS ALAC 编码与 FLAC/WAV 同属 `lossless`。Opus 的固定 48 kHz 由编码步骤的输出采样率表达，不单列设备兼容转换（父设计 §6）。
+- 量化器始终返回钳位数；仅开启 `clip_indicator` 时登记块起点的内部 `clip`。有损出口仅在此开关开启时统计 `abs(sample) > 1`，仍把浮点交给编码器，不额外钳位。
+- 派发器独占信号状态：播放头到达 `clip` 时亮起，独立的 250 ms 时钟复评，最后一次削波满 450 ms 后熄灭；关闭开关时省略 `clipping`。实时更新保留正在播放的曲目路径，不采用尚未听到的下一段路径。
+- 处理速度沿用累计音频时长/处理墙钟时长，量化到 0.1，值改变且距上次上报至少 1 秒才更新；预缓冲、领先上限、编码器背压和事件队列等待均不计。速度通过派发器合入当前路径后发出。
