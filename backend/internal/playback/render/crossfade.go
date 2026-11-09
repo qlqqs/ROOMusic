@@ -27,8 +27,16 @@ func (p *player) closeMix() {
 func (p *player) beginCrossfade(frame int64) error {
 	ready, _ := p.next.ring.readiness(p.session.sourcePCM.Channels * 4)
 	if !ready {
-		p.abandonCrossfade()
-		return nil
+		ctx, cancel := p.nextDeadline()
+		defer cancel()
+		ready, err := p.waitNextReady(ctx)
+		if err != nil {
+			return err
+		}
+		if !ready {
+			p.abandonCrossfade()
+			return nil
+		}
 	}
 	p.next.ring.mu.Lock()
 	hasAudio := p.next.ring.size >= p.session.sourcePCM.Channels*4

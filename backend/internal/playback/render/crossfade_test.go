@@ -3,9 +3,11 @@ package render
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"io"
 	"math"
 	"testing"
+	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/dsp/chain"
 	"github.com/qlqq/roomusic/backend/internal/dsp/fade"
@@ -171,6 +173,206 @@ func TestRenderCrossfadePCMAndTimeline(t *testing.T) {
 	}
 	if started != 1 {
 		t.Fatalf("截断点收到 %d 次换轨，期望恰好一次", started)
+	}
+}
+
+func TestRenderCrossfadeWaitAtCut(t *testing.T) {
+	for _, outcome := range []string{"ready", "timeout", "cancel"} {
+		t.Run(outcome, func(t *testing.T) {
+			// 缩小源帧率以逐样本核对整条流；不经过编码器或格式协商。
+			const rate, window, cut, oldEnd = 80, 3 * 80, 7 * 80, 11 * 80
+			spec := renderSpec("flac")
+			spec.Settings.Crossfade, spec.Settings.CrossfadeSeconds = true, 3
+			pcm := chain.Format{SampleRate: rate, Channels: 2}
+			effectiveEnd := 10.0
+			a := Track{Codec: "flac", SampleRate: rate, Channels: 2, BitDepth: 16,
+				ReleaseID: "release-a", DurationSeconds: 11, TrailingStart: &effectiveEnd}
+			b := a
+			b.ReleaseID, b.DurationSeconds, b.TrailingStart = "release-b", 10, nil
+			valuesA, valuesB := [2]float64{0.5, -0.25}, [2]float64{0.25, 0.125}
+			ctx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
+			r := newTestRenderer(t, nil, nil)
+			type deadline struct {
+				duration time.Duration
+				ticker   testTicker
+			}
+			deadlines := make(chan deadline, 8)
+			r.options.NewTicker = func(d time.Duration) Ticker {
+				ticker := testTicker{make(chan time.Time, 1)}
+				deadlines <- deadline{d, ticker}
+				return ticker
+			}
+			s := &session{owner: r, ctx: ctx, spec: spec, sourcePCM: pcm, outputPCM: pcm, chain: chain.New(),
+				format:          zones.StreamFormat{Codec: "flac", SampleRate: rate, Channels: 2, BitDepth: 16},
+				immediateEvents: make(chan zones.Event, 8)}
+			outgoing := crossfadeMemoryDecoder(a, spec.Start, pcm, valuesA)
+			entryB, _ := nextB(spec.Start.EntryID)
+			incoming := crossfadeMemoryDecoder(b, entryB, pcm, valuesB)
+			// 保留合成 PCM，但在切点前不发布任何字节或终态。
+			raw := append([]byte(nil), incoming.ring.data...)
+			incoming.ring = newByteRing(len(raw))
+			incomingClosed := false
+			incoming.cancel = func() { incomingClosed = true }
+			p := &player{session: s, current: outgoing, next: incoming, last: spec.Start, selected: true}
+			s.player = p
+			t.Cleanup(p.close)
+			p.plan = p.planTransition(b)
+			if p.plan.kind != "crossfade" || p.plan.cut != cut || p.plan.frames != window {
+				t.Fatalf("淡化计划错误：%+v", p.plan)
+			}
+			if ready, _ := incoming.ring.readiness(pcm.Channels * 4); ready {
+				t.Fatal("下一首不应在切点前就绪")
+			}
+
+			transition, transitionFrame := "crossfade", int64(cut)
+			if outcome == "timeout" {
+				transition, transitionFrame = "gapless", oldEnd
+			}
+			var total int64
+			checkBlock := func(block *chain.Buffer) {
+				t.Helper()
+				overlaps := outcome == "ready" && total < cut+window && total+int64(block.Frames) > cut
+				if block.Exact == overlaps {
+					t.Fatalf("块 %d 的 Exact=%v，是否包含淡化=%v", total, block.Exact, overlaps)
+				}
+				for i := range block.Frames {
+					frame := total + int64(i)
+					for ch := range pcm.Channels {
+						want := valuesA[ch]
+						if frame >= transitionFrame {
+							want = valuesB[ch]
+							if outcome == "ready" && frame < cut+window {
+								x := float64(frame-cut) / window
+								want = valuesA[ch]*math.Pow(math.Cos(math.Pi*x/2), 4) + valuesB[ch]*math.Sqrt(math.Sin(math.Pi*x/2))
+							}
+						}
+						if got := block.Samples[ch][i]; math.IsNaN(got) || math.Abs(got-want) > 1e-12 {
+							t.Fatalf("流帧 %d，声道 %d：样本 %.16g，期望 %.16g", frame, ch, got, want)
+						}
+					}
+				}
+				total += int64(block.Frames)
+			}
+			block, _, err := p.read(cut)
+			if err != nil || block == nil || block.Frames != cut {
+				t.Fatalf("读取至切点失败：块 %+v，错误 %v", block, err)
+			}
+			checkBlock(block)
+			select {
+			case <-deadlines:
+				t.Fatal("切点前不应创建等待期限")
+			default:
+			}
+
+			type readResult struct {
+				block *chain.Buffer
+				err   error
+			}
+			result := make(chan readResult, 1)
+			finished := make(chan struct{})
+			go func() {
+				defer close(finished)
+				block, _, err := p.read(rate / 5)
+				result <- readResult{block, err}
+			}()
+			t.Cleanup(func() {
+				cancel()
+				incoming.ring.finish(context.Canceled)
+				<-finished
+			})
+			var waiting deadline
+			select {
+			case waiting = <-deadlines:
+			case got := <-result:
+				t.Fatalf("下一首未就绪时跳过了切点等待：%v", got.err)
+			case <-time.After(testWait):
+				t.Fatal("未进入切点等待")
+			}
+			if waiting.duration != 5*time.Second {
+				t.Fatalf("切点等待期限 = %v，期望五秒", waiting.duration)
+			}
+			select {
+			case got := <-result:
+				t.Fatalf("未就绪且未触发期限时读取提前返回：%v", got.err)
+			default:
+			}
+			switch outcome {
+			case "ready":
+				incoming.ring.put(raw)
+				incoming.ring.finish(io.EOF)
+			case "timeout":
+				waiting.ticker.ticks <- testNow.Add(5 * time.Second)
+			case "cancel":
+				cancel()
+			}
+			var got readResult
+			select {
+			case got = <-result:
+			case <-time.After(testWait):
+				t.Fatal("就绪、超时或取消后读取没有结束")
+			}
+			if p.boundary || len(s.immediateEvents) != 0 || incomingClosed {
+				t.Fatalf("切点等待不应宣布边界或关闭下一首：boundary=%v，events=%d，closed=%v", p.boundary, len(s.immediateEvents), incomingClosed)
+			}
+			if outcome == "cancel" {
+				if !errors.Is(got.err, context.Canceled) || got.block != nil {
+					t.Fatalf("取消没有原样返回：块 %+v，错误 %v", got.block, got.err)
+				}
+				if p.current != outgoing || p.next != incoming || p.mix != nil || len(s.segments) != 1 || outgoing.position() != cut {
+					t.Fatal("取消等待不应推进样本或换轨")
+				}
+				return
+			}
+			if got.err != nil || got.block == nil || got.block.Frames != rate/5 {
+				t.Fatalf("切点后的量子错误：块 %+v，错误 %v", got.block, got.err)
+			}
+			checkBlock(got.block)
+			if outcome == "timeout" {
+				if p.current != outgoing || p.next != incoming || p.mix != nil || p.plan.kind != "gapless" || len(s.segments) != 1 || incoming.consumed != 0 {
+					t.Fatal("切点超时应保留旧曲与预取来源，仅降级为普通换轨")
+				}
+				// 超时后才让 B 就绪；A 必须保留包括有效结尾之后在内的全部真实尾部。
+				incoming.ring.put(raw)
+				incoming.ring.finish(io.EOF)
+			}
+			wantFrames := transitionFrame + int64(math.Round(b.DurationSeconds*rate))
+			for {
+				block, _, err := p.read(rate / 5)
+				if err != nil {
+					t.Fatalf("继续读取第 %d 帧：%v", total, err)
+				}
+				if block.Frames == 0 {
+					break
+				}
+				checkBlock(block)
+				if total > wantFrames {
+					t.Fatalf("流长度超过期望 %d", wantFrames)
+				}
+			}
+			wantOldEnd := int64(cut + window)
+			if outcome == "timeout" {
+				wantOldEnd = oldEnd
+			}
+			if total != wantFrames || outgoing.position() != wantOldEnd {
+				t.Fatalf("流长度或旧曲消费位置错误：total=%d，want=%d，A=%d，wantA=%d", total, wantFrames, outgoing.position(), wantOldEnd)
+			}
+			if len(s.segments) != 2 || s.segments[1].frame != transitionFrame || s.segments[1].value.EntryID != entryB.EntryID || s.segments[1].value.TrackStartSeconds != 0 {
+				t.Fatalf("换轨分段错误：%+v", s.segments)
+			}
+			started := 0
+			for _, pending := range s.pending {
+				if pending.event.Kind == "track_started" {
+					started++
+					if pending.frame != transitionFrame || pending.event.EntryID != entryB.EntryID || pending.event.Transition != transition {
+						t.Fatalf("换轨事件错误：%+v", pending)
+					}
+				}
+			}
+			if started != 1 || p.boundary || len(s.immediateEvents) != 0 {
+				t.Fatalf("应在同一条流中恰好换轨一次：started=%d，boundary=%v，events=%d", started, p.boundary, len(s.immediateEvents))
+			}
+		})
 	}
 }
 

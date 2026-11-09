@@ -150,18 +150,27 @@ func (p *player) nextDeadline() (context.Context, context.CancelFunc) {
 	return ctx, cancel
 }
 
-// 等待只发生在真实曲尾，不在淡化截断点；不计入处理速度。
+// 曲尾超时才宣布格式边界；淡化切点复用就绪等待，但保留旧曲继续播放。
 func (p *player) waitNext(ctx context.Context) (bool, error) {
+	ready, err := p.waitNextReady(ctx)
+	if ready || err != nil {
+		return ready, err
+	}
+	err = p.announceBoundary(p.next.entry, "not_ready")
+	p.next.close()
+	p.next = nil
+	return false, err
+}
+
+// 就绪等待不改变换轨状态，也不计入处理速度。
+func (p *player) waitNextReady(ctx context.Context) (bool, error) {
 	r := p.next.ring
 	for {
 		if ctx.Err() != nil {
 			if p.session.ctx.Err() != nil {
 				return false, p.session.ctx.Err()
 			}
-			err := p.announceBoundary(p.next.entry, "not_ready")
-			p.next.close()
-			p.next = nil
-			return false, err
+			return false, nil
 		}
 		ready, changed := r.readiness(p.session.sourcePCM.Channels * 4)
 		if ready {
