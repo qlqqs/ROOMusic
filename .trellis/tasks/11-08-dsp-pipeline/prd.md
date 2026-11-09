@@ -32,9 +32,19 @@
 - CUE 虚拟分轨能播；同一整轨的相邻两轨无缝拼接后与整轨对应区间逐位相同。
 - 升级后旧的派生缓存目录被删掉，日志记一条 `playback.derivation.cache_removed`。
 
+## 已裁决
+
+- 2026-11-09 iOS 交付小验证（iPhone，iOS 27，WebKit 内核的 Edge，经 HTTPS 反代，`isSecureContext` 为真）：
+  - FLAC/WAV 长流每次先发 `Range: bytes=0-1` 探测，回 200 整条流时 `play()` 报 NotSupportedError；
+  - 改用伪长度后能出声，但 WebKit 会跳到远处偏移反复探测，实时流只能用当前数据冒充，很脆弱；
+  - 锁屏约 7 分钟内页面没有任何上报（没有位置回报，第 3 分钟的换流和标题更新都没发生）；
+  - AAC/Opus 先探测、再发无 Range 请求后能播；
+  - HLS（fMP4 ALAC）锁屏下一直正常：每 5 秒上报位置，标题每 30 秒更新，放到结尾。
+- 2026-11-09 用户：**iPhone/iPad 用 HLS 交付服务端渲染流**（采纳推荐）。桌面浏览器继续用长流（FLAC/WAV/Opus/AAC）。理由：手机上同样有无缝、电平化、耳机校正与省流量档，锁屏表现已实测正常；没有选“iOS 本地直放原文件”，因为那样 iPhone 上没有无缝、锁屏电平化与第二批的处理。交付设计见 design-hls.md（待写），协议上按能力声明区分，播放区“期望状态 + 回报”的形状不变。
+
 ## 风险
 
-- iOS Safari 能否用一条没有长度的长 FLAC/WAV 响应锁屏连续播放，要先用真机小验证确认（[design-delivery.md](./design-delivery.md) §4，用户在 iPhone 上约 20 分钟）；各种结果对应的交付方案见同节 §4.5，其中改 HLS 或改播放区规则的几种要交主会话裁决。
+- （已验证，结论见“已裁决”）iOS Safari 能否用一条没有长度的长 FLAC/WAV 响应锁屏连续播放，要先用真机小验证确认（[design-delivery.md](./design-delivery.md) §4，用户在 iPhone 上约 20 分钟）；各种结果对应的交付方案见同节 §4.5，其中改 HLS 或改播放区规则的几种要交主会话裁决。
 
 ## 依赖
 
