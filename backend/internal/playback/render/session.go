@@ -45,14 +45,26 @@ type session struct {
 }
 
 func newSession(parent context.Context, owner *Renderer, spec zones.RenderSpec, format zones.StreamFormat, pcm chain.Format, track Track, prepareErr error, reservation *ffmpeg.Reservation) (*session, error) {
-	c, err := chain.Build(chain.Spec{Format: pcm, OutputBits: format.BitDepth, Seed: 1})
-	if err != nil {
-		return nil, err
+	var c *chain.Chain
+	if prepareErr == nil {
+		var err error
+		c, err = chain.Build(chain.Spec{Format: pcm, OutputBits: format.BitDepth, Seed: 1})
+		if err != nil {
+			return nil, err
+		}
 	}
 	ctx, cancel := context.WithCancel(parent)
 	reader, writer := io.Pipe()
 	s := &session{owner: owner, ctx: ctx, cancel: cancel, spec: spec, format: format, pcm: pcm, chain: c, reader: reader, writer: writer, ready: make(chan struct{}),
 		controlWake: make(chan struct{}, 1), eventWake: make(chan struct{}, 1), eventSpace: make(chan struct{}, 1), events: make(chan zones.Event, 64), immediateEvents: make(chan zones.Event, 64), done: make(chan struct{})}
+	p := &player{session: s, anchor: track, anchorKnown: prepareErr == nil, last: spec.Start, firstErr: prepareErr}
+	s.player = p
+	if prepareErr != nil {
+		// 没有源格式就没有音频流；查找接续条目不能阻塞 Body 或 Open。
+		_ = writer.Close()
+		s.markReady()
+		return s, nil
+	}
 	enc, err := newEncoder(ctx, reservation, owner.options.FFmpeg, format, pcm, writer, s.fail)
 	if err != nil {
 		cancel()
@@ -61,21 +73,24 @@ func newSession(parent context.Context, owner *Renderer, spec zones.RenderSpec, 
 		return nil, err
 	}
 	s.encoder = enc
-	p := &player{session: s, anchor: track, anchorKnown: prepareErr == nil, last: spec.Start, firstErr: prepareErr}
-	s.player = p
-	if prepareErr == nil {
-		d, err := openDecoder(ctx, reservation, owner.options.FFmpeg, track, spec.Start, pcm, spec.StartSeconds, spec.Settings.Leveling)
-		if err != nil {
-			_ = track.File.Close()
-			p.firstErr = err
-		} else {
-			p.current = d
-		}
+	d, err := openDecoder(ctx, reservation, owner.options.FFmpeg, track, spec.Start, pcm, spec.StartSeconds, spec.Settings.Leveling)
+	if err != nil {
+		_ = track.File.Close()
+		p.firstErr = err
+	} else {
+		p.current = d
 	}
 	return s, nil
 }
 
 func (s *session) start() {
+	if s.encoder == nil {
+		go func() {
+			defer close(s.done)
+			s.runFailure()
+		}()
+		return
+	}
 	stop := context.AfterFunc(s.ctx, func() {
 		s.mu.Lock()
 		err := s.failure
@@ -148,6 +163,65 @@ func (body sessionBody) Read(data []byte) (int, error) {
 		return 0, io.EOF
 	}
 	return n, err
+}
+
+// runFailure 只派发帧 0 的事件，不进入依赖 PCM 格式的渲染或播放头计算。
+// 单一协程顺序写出，保证失败条目先于接续边界；Cursor 只在 Open 之外调用。
+func (s *session) runFailure() {
+	defer close(s.events)
+	send := func(event zones.Event) bool {
+		if s.ctx.Err() != nil {
+			return false
+		}
+		event.At = s.owner.options.Clock()
+		select {
+		case <-s.ctx.Done():
+			return false
+		case s.events <- event:
+			return true
+		}
+	}
+	entry, err := s.spec.Start, s.player.firstErr
+	for failures := 0; failures < 5; failures++ {
+		if !send(zones.Event{Kind: "track_failed", EntryID: entry.EntryID, Reason: failureReason(err)}) {
+			return
+		}
+		if failures == 4 || s.spec.Cursor == nil {
+			break
+		}
+		var ok bool
+		entry, ok = s.spec.Cursor.Next(entry.EntryID)
+		if s.ctx.Err() != nil {
+			return
+		}
+		if !ok {
+			break
+		}
+		var track Track
+		track, err = s.owner.options.Sources.Prepare(s.ctx, s.spec.UserID, entry.TrackID)
+		if err == nil {
+			err = validateTrack(track)
+		}
+		if track.File != nil {
+			_ = track.File.Close()
+		}
+		if s.ctx.Err() != nil {
+			return
+		}
+		if err == nil {
+			if send(zones.Event{Kind: "format_boundary", NextEntryID: entry.EntryID, Reason: "format"}) {
+				<-s.ctx.Done()
+			}
+			return
+		}
+		if failureReason(err) == "transient" {
+			s.fail(err)
+			return
+		}
+	}
+	if send(zones.Event{Kind: "stream_ended"}) {
+		<-s.ctx.Done()
+	}
 }
 
 func (s *session) run() {

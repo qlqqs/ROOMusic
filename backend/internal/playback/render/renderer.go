@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/qlqq/roomusic/backend/internal/dsp/chain"
 	"github.com/qlqq/roomusic/backend/internal/playback/render/ffmpeg"
 	"github.com/qlqq/roomusic/backend/internal/zones"
 )
@@ -102,18 +103,16 @@ func (r *Renderer) Open(ctx context.Context, spec zones.RenderSpec) (zones.Rende
 	if prepareErr != nil && failureReason(prepareErr) == "transient" {
 		return nil, prepareErr
 	}
-	formatSource := source
-	if prepareErr != nil {
-		// Open 在 zones 锁内，不能为确定下一首格式同步调用 Cursor。
-		// 失败首曲使用固定空流格式，异步找到的成功曲交给 format_boundary 新开。
-		formatSource = Track{Codec: "pcm", SampleRate: 44100, Channels: 2, BitDepth: 16}
-	}
-	format, pcm, err := concreteFormat(spec, formatSource)
-	if err != nil {
-		if source.File != nil {
-			_ = source.File.Close()
+	var format zones.StreamFormat
+	var pcm chain.Format
+	if prepareErr == nil {
+		format, pcm, err = concreteFormat(spec, source)
+		if err != nil {
+			if source.File != nil {
+				_ = source.File.Close()
+			}
+			return nil, err
 		}
-		return nil, err
 	}
 	s, err := newSession(ctx, r, spec, format, pcm, source, prepareErr, reservation)
 	if err != nil {
