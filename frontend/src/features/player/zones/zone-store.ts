@@ -68,7 +68,10 @@ export class ZoneStore {
   private readonly watched = new Set<string>();
   /** 正在重读的队列；重读期间又发现对不上时再读一次。 */
   private readonly reloading = new Map<string, { again: boolean }>();
+  /** 每个播放区已经交出的最新事件序号。 */
   private readonly announced = new Map<string, number>();
+  /** 第一次看到播放区时它身上已有的事件序号：那是之前发生的，不再交出，也不公告。 */
+  private readonly baseline = new Map<string, number>();
   private disposed = false;
 
   constructor(deps: ZoneStoreDeps) {
@@ -202,9 +205,17 @@ export class ZoneStore {
     this.listeners.clear();
   }
 
+  /** 播放区的事件是这个标签页看到它之后才发生的：状态里的 event 一直保留到下一个事件，打开页面时读到的是以前的。 */
+  isFreshEvent(zone: Zone): boolean {
+    return zone.event !== null && zone.event.seq > (this.baseline.get(zone.zoneId) ?? -1);
+  }
+
   private afterZone(zone: Zone): void {
     const event = zone.event;
-    if (event !== null && (this.announced.get(zone.zoneId) ?? -1) < event.seq) {
+    if (!this.baseline.has(zone.zoneId)) {
+      this.baseline.set(zone.zoneId, event?.seq ?? -1);
+      this.announced.set(zone.zoneId, event?.seq ?? -1);
+    } else if (event !== null && (this.announced.get(zone.zoneId) ?? -1) < event.seq) {
       this.announced.set(zone.zoneId, event.seq);
       this.deps.onZoneEvent?.(zone);
     }

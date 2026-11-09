@@ -635,7 +635,7 @@ export class PlayerController {
       hasNext: zone?.hasNext ?? false,
       failures: zone?.failures ?? {},
       fault: zone?.fault ?? null,
-      event: zone?.event ?? null,
+      event: zone !== null && this.store.isFreshEvent(zone) ? zone.event : null,
       volume: volume.volume,
       muted: volume.muted,
       restoring: !this.ready,
