@@ -20,6 +20,8 @@ API 全样本清单必须注册播放（含派生）与歌词的全部成功样�
 - 隔离脚本拒绝接管已存在的测试容器/数据卷，Compose `--env-file /dev/null`与临时Vite `envDir:false`不读本机.env。
   白名单复制后端源码到临时树，前端输出同一临时树，不覆盖工作区内嵌产物；结束按精确PID与本轮Compose资源清理。
   不与`test-integration.sh`并行争用`roomusic-test`。
+- 播放区真实服务用例共用账号时，先记录已有 `device_id`，只统计本例新登记的设备；不能把账号下全部在线输出会话数断言为 1。跨文件隔离问题用 CI 同样的 `./scripts/playback-e2e.sh` 整组验证一次，单跑播放区文件不能证明没有干扰。
+- 渲染流 URL 标识播放区和流序号，不包含曲目 ID。搜索结果实播应同时验证原生 `playing`/时间前进、媒体 URL 对应的播放区 `stream.url`，以及该播放区 `current.track.track_id` 等于搜索命中的曲目，不能再用 `media.src` 包含 `track_id` 判断。
 - 音频真实时间、seek与自然结束必须观察原生媒体事件，不替换播放行为假装实播。
   长期撤销用180秒合成PCM与有背压的真实TCP读取，服务端慢速流测试独立证明复核；短素材通常已缓冲，不能代替。
 - 三组手工：macOS Safari、Windows Chrome或Edge、任一OS Firefox，记录版本与格式/定位结果。

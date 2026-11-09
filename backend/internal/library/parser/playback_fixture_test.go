@@ -36,6 +36,7 @@ func TestPlaybackFixturesMatchTheirDocumentedFacts(t *testing.T) {
 		{"wav-24-48000.wav", "wav_info", "wav_extensible", 24, 48000, "WAV 24-48", 0.5},
 		{"vorbis-44100.ogg", "ogg_vorbis_comment", "vorbis", 0, 44100, "Vorbis", 0},
 		{"opus-48000.opus", "opus_tags", "opus", 0, 48000, "Opus", 0},
+		{"ape-16-44100.ape", "ape_apev2", "ape", 16, 44100, "ape-16-44100", 0.25},
 	} {
 		t.Run(expected.file, func(t *testing.T) {
 			observation, err := ParseAudioFile(filepath.Join(playbackFixtureDirectory, expected.file))
@@ -51,7 +52,12 @@ func TestPlaybackFixturesMatchTheirDocumentedFacts(t *testing.T) {
 			if expected.bitDepth != 0 && observation.BitDepth != expected.bitDepth {
 				t.Errorf("bit depth = %d, want %d", observation.BitDepth, expected.bitDepth)
 			}
-			if observation.Title != expected.title || observation.Album != "Playback Fixtures" || observation.Artist != "Fixture Artist" {
+			wantAlbum, wantArtist := "Playback Fixtures", "Fixture Artist"
+			// Monkey's Audio 夹具没有标签，按解析器规则从文件名、目录名及未知艺人兜底。
+			if expected.file == "ape-16-44100.ape" {
+				wantAlbum, wantArtist = "playback", "未知艺术家"
+			}
+			if observation.Title != expected.title || observation.Album != wantAlbum || observation.Artist != wantArtist {
 				t.Errorf("tags = %q / %q / %q", observation.Title, observation.Album, observation.Artist)
 			}
 			if expected.seconds != 0 && math.Abs(observation.DurationSeconds-expected.seconds) > 0.05 {
@@ -89,9 +95,9 @@ func TestPlaybackFixturesAreAllCoveredAndSmall(t *testing.T) {
 		total += info.Size()
 		count++
 	}
-	// 十个文件：FLAC×2、ALAC×2、MP3、AAC、WAV×2、Vorbis、Opus。增删素材要同时更新上面的事实表。
-	if count != 10 {
-		t.Errorf("fixture files = %d, want 10", count)
+	// 十一个文件：FLAC×2、ALAC×2、MP3、AAC、WAV×2、Vorbis、Opus、APE。增删素材要同时更新上面的事实表。
+	if count != 11 {
+		t.Errorf("fixture files = %d, want 11", count)
 	}
 	if total > 1_000_000 {
 		t.Errorf("fixtures total %d bytes, want at most 1,000,000", total)

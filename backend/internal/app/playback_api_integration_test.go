@@ -518,6 +518,20 @@ func TestPostgreSQLPlaybackFormatsIncludeRenderableFormats(t *testing.T) {
 		"aiff_id3/aiff derived",
 		"wav_info/ieee_float derived",
 		"wav_info/wav_extensible derived",
+		// CUE 虚拟轨按父文件编码经渲染流截取，全部属于服务端处理后的交付。
+		"cue_virtual/flac derived",
+		"cue_virtual/mp3 derived",
+		"cue_virtual/pcm derived",
+		"cue_virtual/aac derived",
+		"cue_virtual/vorbis derived",
+		"cue_virtual/opus derived",
+		"cue_virtual/alac derived",
+		"cue_virtual/ape derived",
+		"cue_virtual/wavpack derived",
+		"cue_virtual/wavpack_hybrid derived",
+		"cue_virtual/aiff derived",
+		"cue_virtual/ieee_float derived",
+		"cue_virtual/wav_extensible derived",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("formats =\n%s\n期望\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))

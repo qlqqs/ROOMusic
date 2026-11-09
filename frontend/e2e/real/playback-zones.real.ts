@@ -167,12 +167,14 @@ test("同一浏览器两个标签页只有一个出声，关闭出声页后另�
   const snapshot = async () => decodeSnapshot(await body(await context.request.get("/api/v1/me/playback")));
   const bar = (tab: Page) => tab.getByRole("region", { name: "播放器", exact: true });
 
+  // 同账号的其他用例会留下设备；本例只统计打开页面后新登记的设备。
+  const knownDevices = new Set((await snapshot()).devices.map((device) => device.device_id));
   await observeMedia(page);
   await page.goto(`/albums/${album.groupId}`);
   // 先让第一页取得输出权，再打开控制页；这条用例只验证单一出声与关闭接手，不扩大到同时登记。
-  await expect.poll(async () => (await snapshot()).devices.filter((device) => device.online && device.output_session_id !== null).length).toBe(1);
+  await expect.poll(async () => (await snapshot()).devices.filter((device) => !knownDevices.has(device.device_id) && device.online && device.output_session_id !== null).length).toBe(1);
   const initial = await snapshot();
-  const device = initial.devices[0];
+  const device = initial.devices.find((item) => !knownDevices.has(item.device_id));
   if (device === undefined || device.output_session_id === null) throw new Error("第一页没有取得输出会话");
 
   const other = await context.newPage();
@@ -189,7 +191,7 @@ test("同一浏览器两个标签页只有一个出声，关闭出声页后另�
     expect(await sounding(other)).toEqual([]);
     const beforeClose = (await sounding(page))[0];
     if (beforeClose === undefined) throw new Error("第一页没有原生媒体正在播放");
-    expect((await snapshot()).devices).toHaveLength(1);
+    expect((await snapshot()).devices.filter((item) => !knownDevices.has(item.device_id))).toHaveLength(1);
 
     const closed = page.waitForEvent("close");
     await page.close({ runBeforeUnload: true });
@@ -202,8 +204,8 @@ test("同一浏览器两个标签页只有一个出声，关闭出声页后另�
     }).not.toBe(device.output_session_id);
     const resumed = await snapshot();
     const zone = resumed.zones.find((item) => item.zone_id === device.zone_id);
-    expect(resumed.devices).toHaveLength(1);
-    expect(resumed.devices[0]?.online).toBe(true);
+    expect(resumed.devices.filter((item) => !knownDevices.has(item.device_id))).toHaveLength(1);
+    expect(resumed.devices.find((item) => item.device_id === device.device_id)?.online).toBe(true);
     expect(zone?.intent).toBe("play");
     expect(zone?.current?.track.track_id).toBe(track.id);
     expect(zone?.stream?.url).not.toBe(new URL(beforeClose.src).pathname);

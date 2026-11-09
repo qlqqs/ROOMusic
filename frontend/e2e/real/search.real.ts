@@ -4,7 +4,16 @@ import { expect, test } from "@playwright/test";
 import { decodeCatalogState } from "../../src/features/catalog/api/decoders";
 import { decodeTrackResults } from "../../src/features/search/api/decoders";
 import { decodeFavoriteTracksPage } from "../../src/features/personal/api/decoders";
+import { decode as d } from "../../src/shared/api";
 import { body, fixtureRoot, login, mediaState, observeMedia, origin, prepareLibrary, scan, syntheticWav } from "./support";
+
+// 只解码实播断言需要的协议字段，不从媒体 URL 推断曲目身份。
+const decodePlayback = d.defineDecoder(d.object({
+  zones: d.array(d.object({
+    current: d.nullable(d.object({ track: d.object({ track_id: d.uuid() }) })),
+    stream: d.nullable(d.object({ url: d.string() })),
+  }), { max: 10_000 }),
+}));
 
 const folder = join(fixtureRoot, "search-normalization");
 const examples = [
@@ -54,8 +63,15 @@ test.describe("真实搜索规范化", () => {
       await row.getByRole("button", { name: /^播放 / }).click();
       await expect.poll(async () => (await mediaState(page))?.paused).toBe(false);
       await expect.poll(async () => (await mediaState(page))?.time).toBeGreaterThan(0);
-      expect((await mediaState(page))?.src).toContain(hit?.track_id);
-      expect(await page.evaluate(() => window.playbackTestEvents.some((event) => event.type === "playing"))).toBe(true);
+      const media = await mediaState(page);
+      if (media === null) throw new Error("没有原生媒体正在播放");
+      const streamPath = new URL(media.src).pathname;
+      expect(streamPath).toMatch(/^\/api\/v1\/me\/playback\/zones\/[^/]+\/streams\//);
+      await expect.poll(async () => {
+        const playback = decodePlayback(await body(await page.request.get("/api/v1/me/playback")));
+        return playback.zones.find((zone) => zone.stream?.url === streamPath)?.current?.track.track_id;
+      }).toBe(hit.track_id);
+      expect(await page.evaluate((src) => window.playbackTestEvents.some((event) => event.type === "playing" && event.src === src), media.src)).toBe(true);
     });
   }
 });

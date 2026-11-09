@@ -257,6 +257,7 @@ describe("诊断", () => {
 
 describe("decodeAnalysisProgress", () => {
   it("解码音频分析进度样本", () => {
-    expect(decodeAnalysisProgress(sampleBody("audio-analysis/progress"))).toEqual({ total: 12, analyzed: 1, failed: 1, state: "unavailable" });
+    // 派生退役后，后端样本流程不再登记三首 ALAC 派生曲目，候选总数为 9。
+    expect(decodeAnalysisProgress(sampleBody("audio-analysis/progress"))).toEqual({ total: 9, analyzed: 1, failed: 1, state: "unavailable" });
   });
 });
