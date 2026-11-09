@@ -1,5 +1,5 @@
 import { MonitorSpeaker } from "lucide-react";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { crossfadeDurations, levelingModes, streamQualities, type CrossfadeSeconds, type LevelingMode, type StreamQuality } from "../zones/model";
 import { usePlayerEngine, usePlayerSelector } from "../player-provider";
 import { gainLabel } from "./player-labels";
@@ -38,24 +38,28 @@ function Switch({ label, checked, disabled, onChange }: { label: string; checked
   );
 }
 
-/** Headroom 增益滑块：拖动时只改本地显示，松手、按键抬起或离开时才发出；服务端的值变了就跟上服务端。 */
+/** Headroom 增益滑块：拖动时只改本地显示，松手、按键抬起或离开时才发出，同一个草稿值只发一次；服务端的值变了就跟上服务端。 */
 function GainSlider({ value, disabled, onCommit }: { value: number; disabled: boolean; onCommit: (db: number) => void }) {
   const id = useId();
-  const [draft, setDraft] = useState<number | null>(null);
+  // 每次拖动换一个草稿对象；发出过的草稿记在 ref 里（松手与失焦可能在同一批事件里，等不到重新渲染）。
+  const [draft, setDraft] = useState<{ db: number } | null>(null);
+  const sent = useRef<{ db: number } | null>(null);
   const [seen, setSeen] = useState(value);
   if (value !== seen) {
     setSeen(value);
     setDraft(null);
   }
-  const shown = draft ?? value;
+  const shown = draft?.db ?? value;
   const commit = () => {
-    if (draft !== null && draft !== value) onCommit(draft);
+    if (draft === null || draft === sent.current || draft.db === value) return;
+    sent.current = draft;
+    onCommit(draft.db);
   };
   return (
     <div className={styles.field} data-disabled={disabled ? "" : undefined}>
       <label htmlFor={id} className={styles.legend}>增益</label>
       <div className={styles.slider}>
-        <input id={id} type="range" min={-30} max={0} step={0.1} value={shown} aria-valuetext={gainLabel(shown)} disabled={disabled} onChange={(event) => setDraft(Math.round(Number(event.target.value) * 10) / 10)} onPointerUp={commit} onKeyUp={commit} onBlur={commit} />
+        <input id={id} type="range" min={-30} max={0} step={0.1} value={shown} aria-valuetext={gainLabel(shown)} disabled={disabled} onChange={(event) => setDraft({ db: Math.round(Number(event.target.value) * 10) / 10 })} onPointerUp={commit} onKeyUp={commit} onBlur={commit} />
         <output htmlFor={id} className={styles.sliderValue}>{gainLabel(shown)}</output>
       </div>
     </div>

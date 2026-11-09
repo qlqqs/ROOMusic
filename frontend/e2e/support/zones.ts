@@ -31,10 +31,10 @@ export function zonesMock(trackOf: (id: string) => TrackSummaryDTO | undefined) 
   const zone = {
     zone_id: MOCK_ZONE, device_id: DEVICE, revision: 1, queue_revision: 0, queue_length: 0,
     mode: "sequential" as Zone["mode"], intent: "pause" as Zone["intent"], status: "idle" as Zone["status"],
-    settings: { leveling: "auto", gapless: true, crossfade: false, crossfade_seconds: 5, quality: "lossless", headroom: { enabled: false, db: 0, clip_indicator: false } },
+    settings: { leveling: "auto", gapless: true, crossfade: false, crossfade_seconds: 5, quality: "lossless", headroom: { enabled: false, db: -3, clip_indicator: false } },
     current: null as Entry | null, has_next: false, fault: null, failures: [],
     position: { seconds: 0, at: now(), duration_seconds: null as number | null, seekable: false },
-    stream: null as Stream | null, next_stream: null, paused_at: null as string | null, signal: null,
+    stream: null as Stream | null, next_stream: null, paused_at: null as string | null, signal: null as unknown,
     event: null as { seq: number; kind: "track_started"; entry_id: string } | null,
   };
   const remotes = new Map<string, { device: typeof device; zone: typeof zone; entries: Entry[] }>();
@@ -181,6 +181,11 @@ export function zonesMock(trackOf: (id: string) => TrackSummaryDTO | undefined) 
       zone.queue_revision += 1;
       update();
     },
+    /** 预置信号路径的 wire 数据，经真实客户端解码后显示。 */
+    seedSignal(signal: unknown) {
+      zone.signal = structuredClone(signal);
+      update();
+    },
     /** F3 的远端设备；与本机使用同一份 DTO 形状，但各自保有队列、设置和音量。 */
     addDevice(options: { name: string; online: boolean; fixed?: boolean; track: TrackSummaryDTO }) {
       const suffix = String(remotes.size + 2).padStart(3, "0");
@@ -253,6 +258,7 @@ export function zonesMock(trackOf: (id: string) => TrackSummaryDTO | undefined) 
             leveling: d.optional(d.oneOf(["off", "auto", "track", "album"] as const)),
             gapless: d.optional(d.boolean()), crossfade: d.optional(d.boolean()),
             crossfade_seconds: d.optional(d.number()), quality: d.optional(d.oneOf(["lossless", "lossy"] as const)),
+            headroom: d.optional(d.object({ enabled: d.boolean(), db: d.number(), clip_indicator: d.boolean() })),
           }) })(input, "$" );
           for (const [key, value] of Object.entries(settings)) if (value !== undefined) Object.assign(source.zone.settings, { [key]: value });
           source.zone.revision += 1;

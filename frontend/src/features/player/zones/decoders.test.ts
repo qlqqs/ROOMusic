@@ -286,10 +286,44 @@ describe("五种 SSE 事件的真实样本", () => {
   it("非空信号路径事件保留步骤、削波与处理速度", () => {
     const decoded = decodeStreamEvent(signalEvent.event, JSON.stringify(signalEvent.data));
     if (decoded?.type !== "zone") throw new Error("信号样本未解码为播放区事件");
-    expect(decoded.zone.signal).toStrictEqual(signalEvent.data.zone.signal);
-    expect(decoded.zone.signal).toMatchObject({
-      quality: "enhanced", clipping: true, processing_speed: 85.3,
-      steps: [{ kind: "source" }, { kind: "headroom" }, { kind: "dither" }, { kind: "encode" }],
+    expect(decoded.zone.signal).toStrictEqual({
+      quality: "enhanced", clipping: true, processingSpeed: 85.3,
+      steps: [
+        { kind: "source", quality: "lossless", lossy: false, compat: false, params: { codec: "wav", sampleRate: 48000, bitDepth: 16, channels: 2 } },
+        { kind: "headroom", quality: "enhanced", lossy: false, compat: false, params: { gainDb: -3.1 } },
+        { kind: "dither", quality: "enhanced", lossy: false, compat: false, params: { bits: 16, kind: "tpdf" } },
+        { kind: "encode", quality: "lossless", lossy: false, compat: false, params: { codec: "wav", sampleRate: 48000, bitDepth: 16, bitrateKbps: null } },
+      ],
+    });
+  });
+
+  it("跳过未知步骤，保留前后已知步骤与服务端整体评级", () => {
+    const signal = signalEvent.data.zone.signal;
+    const zone = zoneDecoder({
+      ...signalEvent.data.zone,
+      signal: { ...signal, steps: [signal.steps[0], { kind: "future_step", quality: "enhanced", lossy: false, compat: false, params: {} }, ...signal.steps.slice(1)] },
+    }, "$");
+    expect(zone.signal?.steps.map((step) => step.kind)).toEqual(["source", "headroom", "dither", "encode"]);
+    expect(zone.signal?.quality).toBe("enhanced");
+  });
+
+  it("缺失的削波、速度、来源位深与编码可选参数解成 null", () => {
+    const zone = zoneDecoder({
+      ...signalEvent.data.zone,
+      signal: {
+        quality: "low",
+        steps: [
+          { kind: "source", quality: "low", lossy: true, compat: false, params: { codec: "mp3", sample_rate: 44100, channels: 2 } },
+          { kind: "encode", quality: "low", lossy: true, compat: false, params: { codec: "opus", sample_rate: 48000 } },
+        ],
+      },
+    }, "$");
+    expect(zone.signal).toStrictEqual({
+      quality: "low", clipping: null, processingSpeed: null,
+      steps: [
+        { kind: "source", quality: "low", lossy: true, compat: false, params: { codec: "mp3", sampleRate: 44100, bitDepth: null, channels: 2 } },
+        { kind: "encode", quality: "low", lossy: true, compat: false, params: { codec: "opus", sampleRate: 48000, bitDepth: null, bitrateKbps: null } },
+      ],
     });
   });
 

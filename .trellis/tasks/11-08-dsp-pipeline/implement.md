@@ -85,8 +85,8 @@ export ROOMUSIC_TEST_FFMPEG="$(scripts/ffmpeg-pinned.sh)"
 
 ## P-f 前端：信号路径与 Headroom 设置（zones F3 之后；Opus，一个子 agent 做完）
 
-1. [ ] 前端 Opus：播放栏的信号路径按钮与弹出列表（design.md §9.2）；“设置 › 播放”加 Headroom 开关、增益滑块、削波指示开关（作用对象与 zones F3 的其他设置相同）；zones 客户端解码器加 `signal` 与 `settings.headroom`。文案遵守全局约束：不写说明句。
-2. [ ] 测试 agent：信号路径按 `quality` 显示颜色、有损与兼容转换的行有标记、削波时图标变色；设置改动发出 `set_settings`；五种宽度不溢出、axe。
+1. [x] 前端 Opus：播放栏的信号路径按钮与弹出列表（design.md §9.2）；“设置 › 播放”加 Headroom 开关、增益滑块、削波指示开关（作用对象与 zones F3 的其他设置相同）；zones 客户端解码器加 `signal` 与 `settings.headroom`。文案遵守全局约束：不写说明句。
+2. [x] 测试 agent：信号路径按 `quality` 显示颜色、有损与兼容转换的行有标记、削波时图标变色；设置改动发出 `set_settings`；五种宽度不溢出、axe。
 
 验证：前端三件套与相关组件测试。回滚点：P-f 提交。
 

@@ -3,11 +3,13 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { useSyncExternalStore, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import signalEvent from "../../../../../backend/internal/app/testdata/api-samples/playback-zones/events/zone-signal.json";
 import { albumGroup, releaseDetailOf } from "../../../test/catalog-data";
 import { FakeAudio } from "../../../test/fake-audio";
 import { fakeZoneServer, testPlayerController, type FakeZoneServer } from "../../../test/fake-zones";
 import { playerTrack } from "../../../test/player-data";
 import type { PlayerController, PlayerProgress, PlayerSnapshot } from "../zones/controller";
+import { decodeStreamEvent } from "../zones/decoders";
 import type { PlayerTrack } from "../engine/queue";
 import type { CapabilityTable } from "../engine/capability";
 import { AlbumPlaybackActions } from "./album-playback-actions";
@@ -154,6 +156,71 @@ describe("播放栏、全屏、队列与信号路径", () => {
     expect(server.commands.at(-1)).toEqual({ command: "set_settings", settings: { leveling: "album" } });
   });
 
+  it("Headroom 与削波开关各发送一次完整设置，保留其他 Headroom 字段", async () => {
+    const user = userEvent.setup();
+    await waitFor(() => expect(engine.getSnapshot().zone).not.toBeNull());
+    view(<PlaybackSettingsForm />);
+    expect((screen.getByRole("slider", { name: "增益" }) as HTMLInputElement).disabled).toBe(true);
+    await user.click(screen.getByRole("switch", { name: "Headroom" }));
+    await waitFor(() => expect(engine.getSnapshot().settings.headroom.enabled).toBe(true));
+    expect(server.commands).toEqual([
+      { command: "set_settings", settings: { headroom: { enabled: true, db: -3, clip_indicator: false } } },
+    ]);
+    expect((screen.getByRole("slider", { name: "增益" }) as HTMLInputElement).disabled).toBe(false);
+    await user.click(screen.getByRole("switch", { name: "削波指示" }));
+    await waitFor(() => expect(engine.getSnapshot().settings.headroom.clipIndicator).toBe(true));
+    expect(server.commands).toEqual([
+      { command: "set_settings", settings: { headroom: { enabled: true, db: -3, clip_indicator: false } } },
+      { command: "set_settings", settings: { headroom: { enabled: true, db: -3, clip_indicator: true } } },
+    ]);
+  });
+
+  it("Headroom 拖动只预览一位小数，松手提交一次，紧接的失焦不重复提交", async () => {
+    await waitFor(() => expect(engine.getSnapshot().zone).not.toBeNull());
+    server.afterNext({ settings: { ...server.zone().settings, headroom: { enabled: true, db: -3, clipIndicator: true } } });
+    await enqueue([playerTrack("1")]);
+    server.commands.length = 0;
+    view(<PlaybackSettingsForm />);
+    const slider = screen.getByRole("slider", { name: "增益" });
+    expect(slider.getAttribute("min")).toBe("-30");
+    expect(slider.getAttribute("max")).toBe("0");
+    expect(slider.getAttribute("step")).toBe("0.1");
+    fireEvent.pointerDown(slider);
+    fireEvent.change(slider, { target: { value: "-4.2" } });
+    fireEvent.change(slider, { target: { value: "-4.3" } });
+    expect(slider.getAttribute("aria-valuetext")).toBe("−4.3 dB");
+    expect(screen.getByText("−4.3 dB")).toBeTruthy();
+    expect(server.commands).toEqual([]);
+    await act(async () => {
+      fireEvent.pointerUp(slider);
+      fireEvent.blur(slider);
+    });
+    expect(server.commands).toEqual([
+      { command: "set_settings", settings: { headroom: { enabled: true, db: -4.3, clip_indicator: true } } },
+    ]);
+  });
+
+  it.each(["按键抬起", "失焦"] as const)("Headroom 滑块在%s时提交尚未发送的增益", async (commit) => {
+    await waitFor(() => expect(engine.getSnapshot().zone).not.toBeNull());
+    server.afterNext({ settings: { ...server.zone().settings, headroom: { enabled: true, db: -3, clipIndicator: false } } });
+    await enqueue([playerTrack("1")]);
+    server.commands.length = 0;
+    view(<PlaybackSettingsForm />);
+    const slider = screen.getByRole("slider", { name: "增益" });
+    fireEvent.focus(slider);
+    fireEvent.keyDown(slider, { key: "ArrowRight" });
+    // jsdom 不执行原生 range 的按键步进，用 change 模拟浏览器产生的新值。
+    fireEvent.change(slider, { target: { value: "-2.9" } });
+    expect(server.commands).toEqual([]);
+    await act(async () => {
+      if (commit === "按键抬起") fireEvent.keyUp(slider, { key: "ArrowRight" });
+      else fireEvent.blur(slider);
+    });
+    expect(server.commands).toEqual([
+      { command: "set_settings", settings: { headroom: { enabled: true, db: -2.9, clip_indicator: false } } },
+    ]);
+  });
+
   it("设备不能调音量时音量控件禁用，悬停说明原因", async () => {
     engine.endSession();
     start({ lockedVolume: true });
@@ -177,21 +244,24 @@ describe("播放栏、全屏、队列与信号路径", () => {
     expect(document.activeElement).toBe(opener);
   });
 
-  it("信号路径弹层只呈现四层取值，服务端一行是渲染流的格式，不显示解释句", async () => {
+  it("信号事件经控制器展示处理步骤，不再从曲目元数据拼出四层路径", async () => {
     const user = userEvent.setup();
+    const event = decodeStreamEvent(signalEvent.event, JSON.stringify(signalEvent.data));
+    if (event?.type !== "zone") throw new Error("信号样本未解码为播放区事件");
+    server.afterNext({ signal: event.zone.signal });
     act(() => { engine.playTracks([playerTrack("1", { source: { sourceKind: "m4a", codec: "alac", bitDepth: 24, sampleRate: 48000, channels: 2, bitrate: null } })]); });
-    await waitFor(() => expect(engine.getSnapshot().zone?.stream).not.toBeNull());
+    await waitFor(() => expect(engine.getSnapshot().zone?.signal).toEqual(event.zone.signal));
     view(<SignalPathButton />);
-    await user.click(screen.getByRole("button", { name: "信号路径：无损" }));
-    const dialog = await screen.findByRole("dialog", { name: "信号路径：无损" });
-    const rows = within(dialog).getAllByRole("listitem");
-    expect(rows.map((row) => row.textContent)).toEqual([
-      "数据源ALAC 48kHz 24bit 2ch",
-      "服务端WAV 44.1kHz 16bit 2ch",
-      "浏览器解码",
-      "系统输出系统默认输出",
+    await user.click(screen.getByRole("button", { name: "信号路径：增强，削波" }));
+    const dialog = await screen.findByRole("dialog", { name: "信号路径：增强，削波" });
+    expect(within(dialog).getAllByRole("listitem").map((row) => row.textContent)).toEqual([
+      "WAV 48 kHz 16 bit",
+      "Headroom −3.1 dB",
+      "TPDF 抖动 16 bit",
+      "WAV 48 kHz 16 bit",
+      "处理速度 85.3×",
+      "测试设备",
     ]);
-    for (const removedText of ["原样发送，不转码。", "由浏览器解码，可能按输出设备重新采样。", "网页看不到声卡的实际格式。"]) expect(dialog.textContent).not.toContain(removedText);
   });
 
   it("渲染器暂时不可用时显示可重试状态，重试后恢复", async () => {

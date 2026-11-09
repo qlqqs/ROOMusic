@@ -21,6 +21,8 @@ dialog.dialog::backdrop { background: transparent; }
 .icon { flex: none; color: var(--signal-color, var(--text-secondary)); }
 .text { min-width: 0; overflow-wrap: anywhere; font-variant-numeric: lining-nums tabular-nums; }
 .nowrap { white-space: nowrap; }
+/* “有损”“兼容转换”标签：字色跟随所在面的次要文字色，全屏深色面里也看得清。 */
+.steps li [data-tone] { color: var(--text-secondary); }
 
 /* 窄屏：从底部弹出，铺满宽度。 */
 @media (max-width: 767px) {

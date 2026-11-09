@@ -36,7 +36,7 @@ export type FakeZoneServer = {
 const DEVICE_ID = "00000000-0000-4000-8000-00000000d001";
 const ZONE_ID = "00000000-0000-4000-8000-00000000e001";
 
-const defaultSettings: PlaybackSettings = { leveling: "auto", gapless: true, crossfade: false, crossfadeSeconds: 5, quality: "lossless", headroom: { enabled: false, db: 0, clipIndicator: false } };
+const defaultSettings: PlaybackSettings = { leveling: "auto", gapless: true, crossfade: false, crossfadeSeconds: 5, quality: "lossless", headroom: { enabled: false, db: -3, clipIndicator: false } };
 
 function defaultTrackOf(trackId: string): PlayerTrack {
   return trackId.startsWith("track-") ? playerTrack(trackId.slice("track-".length)) : playerTrack(trackId, { trackId });
@@ -178,7 +178,7 @@ export function fakeZoneServer(options: { trackOf?: (trackId: string) => PlayerT
         return { queueChanged: false, imported: null };
       case "set_settings": {
         const patch = command.settings;
-        commit({ settings: { ...zone.settings, ...(patch.leveling === undefined ? {} : { leveling: patch.leveling }), ...(patch.gapless === undefined ? {} : { gapless: patch.gapless }), ...(patch.crossfade === undefined ? {} : { crossfade: patch.crossfade }), ...(patch.crossfade_seconds === undefined ? {} : { crossfadeSeconds: patch.crossfade_seconds }), ...(patch.quality === undefined ? {} : { quality: patch.quality }) } }, false);
+        commit({ settings: { ...zone.settings, ...(patch.leveling === undefined ? {} : { leveling: patch.leveling }), ...(patch.gapless === undefined ? {} : { gapless: patch.gapless }), ...(patch.crossfade === undefined ? {} : { crossfade: patch.crossfade }), ...(patch.crossfade_seconds === undefined ? {} : { crossfadeSeconds: patch.crossfade_seconds }), ...(patch.quality === undefined ? {} : { quality: patch.quality }), ...(patch.headroom === undefined ? {} : { headroom: { enabled: patch.headroom.enabled, db: patch.headroom.db, clipIndicator: patch.headroom.clip_indicator } }) } }, false);
         return { queueChanged: false, imported: null };
       }
       case "retry": {
