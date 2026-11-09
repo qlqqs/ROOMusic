@@ -92,6 +92,8 @@ docker compose exec app /app/roomusic --version
 - **降级**：先自动备份，再把新版本做过的结构改动撤回。撤回会删掉新功能产生的数据，这些数据仍保留在刚才的备份里。
 - **无法自动撤回**：应用不会启动，数据库保持不变，日志会给出要恢复的备份文件和完整命令。按第 4 节恢复，或者把版本改回去。
 
+降级到不支持服务端播放区的版本后，各设备的播放队列会清空；降级前的队列保留在自动备份里。
+
 最低可以降到 `0.1.0`。
 
 `0.1.0` 不认识网页上设置的自动清理，只按 `ROOMUSIC_BACKUP_KEEP_DAYS` 清理旧备份。如果在网页上把保留天数设成了“不限”或比这个值更长，
@@ -142,6 +144,24 @@ ROOMUSIC_ALLOWED_ORIGINS=http://192.168.1.10:8090,https://music.example.com:8888
 
 Cookie 的 Secure 属性会跟随访问协议自动设置，不需要额外配置。局域网 IP 和公网域名各自登录。
 经反向代理访问的用户共用同一个登录限速来源。
+
+### 播放区事件流与渲染流
+
+事件流 `/api/v1/me/playback/events` 与渲染流 `/api/v1/me/playback/zones/{zone_id}/streams/{seq}` 都是长响应：
+
+- 禁止响应缓冲。应用会发送 `X-Accel-Buffering: no`；代理不能忽略它，其他代理需要显式关闭缓冲。
+- 上游读超时至少 **60 秒**（事件流每 15 秒发送心跳）。
+- 不压缩 `text/event-stream`，避免压缩器积攒事件导致延迟。
+
+可在现有 nginx 播放区代理 location 中加入下列设置（沿用原有 `proxy_pass` 与 Host 转发）：
+
+```nginx
+proxy_buffering off;
+proxy_read_timeout 60s;
+gzip off;
+```
+
+其他代理也须设置等效选项。若别的设备上的播放变化很久才出现，先检查事件流是否被缓冲或压缩。
 
 ## 6. 固定子网
 

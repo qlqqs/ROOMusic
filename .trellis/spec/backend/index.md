@@ -72,7 +72,7 @@ Before writing or reviewing backend code:
 | [内嵌歌词合同](./lyrics-contracts.md) | M2b 歌词：标签提取与规范化、`tracks.lyrics` 与约束、歌词接口、LRC 解析规则、测试 |
 | [后台音频分析合同](./audio-analysis-contracts.md) | 0033：`track_analyses` 与待分析判定、单线程低优先级工作者、ffmpeg 命令与自检、`ROOMUSIC_AUDIO_ANALYSIS`、按 Roon 的增益公式、分析结果与进度接口、测试 |
 | [播放区数据与队列合同](./zones-data-contracts.md) | B1：0043 三表、纯队列语义、用户隔离读取与调用方事务写入 |
-| [播放区控制面合同](./playback-zone-contracts.md) | B2：设备与命令、渲染端口、去抖与暂停、内部 hub、HTTP 与 B3 接点 |
+| [播放区控制面合同](./playback-zone-contracts.md) | B2/B3：设备与命令、渲染端口、SSE、输出端租约、单次取流、事件应用与服务端计次 |
 | [播放历史合同](./listening-contracts.md) | 阶段 P：`play_history`、计次规则与服务端校验、三个接口、最近播放读取规则、前端计次与上报、测试 |
 | [本人收藏与歌单合同](./personal-contracts.md) | M5 P 线：typed 收藏、歌单间隔键/revision、稳定收据、适应撤销、队列限量与精确统计 |
 | [受治理操作合同](./governance-contracts.md) | 阶段 M3：操作记录与共同写入流程 `operations.Run`、发行字段修正与有效值视图、人工归组、撤销、操作记录接口、错误码、测试与真实服务用例 |

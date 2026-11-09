@@ -113,8 +113,9 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	guard.WithLogger(logger)
 	libraryService := library.NewService(lifecycle, database, settings.DataDirectory, logger).WithScanConcurrency(settings.ScanWorkers)
 	personalService := personal.NewService(database)
+	listeningService := listening.NewService(database)
 	// 算法线尚未接入时不安装替代渲染器；起播由服务返回 renderer_unavailable。
-	zonesService := zones.NewService(database, zones.Options{Logger: logger})
+	zonesService := zones.NewService(database, zones.Options{Logger: logger, PlayRecorder: zonePlayRecorder{service: listeningService}})
 	zonesDone := make(chan struct{})
 	if lifecycle != nil {
 		context.AfterFunc(lifecycle, func() {
@@ -163,7 +164,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		PreflightWait:    assembly.playbackPreflightWait,
 		AnalysisProgress: progress,
 	}).Register(mux)
-	listeningapi.New(guard, listening.NewService(database)).Register(mux)
+	listeningapi.New(guard, listeningService).Register(mux)
 	personalapi.New(guard, personalService).Register(mux)
 	zonesapi.New(guard, zonesService).Register(mux)
 	if assembly.backups != nil {

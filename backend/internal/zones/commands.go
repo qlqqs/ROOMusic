@@ -96,6 +96,13 @@ func (s *Service) commandLocked(ctx context.Context, userID string, z *zoneRunti
 		return CommandResult{}, err
 	}
 	z.persisted = plan.persisted
+	z.positionWrittenAt = now
+	if c.Command == "stop" || c.Command == "clear_queue" || (c.Command == "remove_entry" && z.visit != nil && z.visit.entryID == c.EntryID) {
+		z.visit = nil
+	}
+	if c.Command == "seek" {
+		suspendVisit(z)
+	}
 	z.cursorTracks = tracks
 	z.offlinePaused = false
 	if plan.event != nil {
@@ -121,6 +128,8 @@ func (s *Service) commandLocked(ctx context.Context, userID string, z *zoneRunti
 	}
 	if plan.start {
 		z.consecutiveFailures = 0
+		z.resumeFailures = 0
+		z.resumeAwaitingSeq = 0
 		z.intent = "play"
 		z.fault = nil
 		z.pausedAt = nil
@@ -148,6 +157,9 @@ func (s *Service) commandLocked(ctx context.Context, userID string, z *zoneRunti
 		s.scheduleRebuild(userID, z)
 	} else if plan.notify && z.session != nil {
 		z.session.NextChanged()
+		if z.nextSession != nil {
+			z.nextSession.NextChanged()
+		}
 	}
 	result := CommandResult{ServerTime: timestamp(now), Zone: s.zoneOf(z, tracks), QueueChange: plan.change, Imported: plan.imported}
 	return result, nil
@@ -420,6 +432,10 @@ func replaceChange(entries []queue.Entry, tracks map[string]catalog.TrackSummary
 	return &QueueChange{Kind: "replace", Entries: projected}
 }
 func (s *Service) pauseState(z *zoneRuntime, now time.Time) {
+	if z.session != nil && z.stream != nil {
+		z.session.Observe(PlayheadSample{StreamSeq: z.stream.Seq, StreamSeconds: streamPosition(z.stream, z.persisted.Queue.CurrentEntryID, z.persisted.PositionSeconds), At: now, Playing: false})
+	}
+	suspendVisit(z)
 	z.intent = "pause"
 	if z.persisted.Queue.CurrentEntryID == "" {
 		z.status = "idle"

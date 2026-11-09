@@ -1,4 +1,4 @@
-// Package httpapi 提供播放区控制端的鉴权、输入解码与响应映射；业务与存储由 zones 拥有。
+// Package httpapi 提供播放区的鉴权、输入解码、实时与音频流交付；业务与存储由 zones 拥有。
 package httpapi
 
 import (
@@ -19,9 +19,16 @@ func New(guard *identity.Guard, service *zones.Service) *Handlers {
 	return &Handlers{guard: guard, service: service}
 }
 
-// Register 仅挂载 B2 控制接口，输出端与 SSE 由后续阶段接入。
+// Register 挂载本人播放区的控制、输出端与实时接口。
 func (h *Handlers) Register(mux *http.ServeMux) {
 	h.route(mux, "GET /api/v1/me/playback", false, h.snapshot)
+	h.route(mux, "GET /api/v1/me/playback/events", false, h.events)
+	h.route(mux, "HEAD /api/v1/me/playback/events", false, h.rejectStreamHead)
+	h.route(mux, "GET /api/v1/me/playback/zones/{zone_id}/streams/{seq}", false, h.stream)
+	h.route(mux, "HEAD /api/v1/me/playback/zones/{zone_id}/streams/{seq}", false, h.rejectStreamHead)
+	h.route(mux, "POST /api/v1/me/playback/devices/{device_id}/output", true, h.claimOutput)
+	h.route(mux, "POST /api/v1/me/playback/outputs/{session_id}/reports", true, h.reportOutput)
+	h.route(mux, "POST /api/v1/me/playback/outputs/{session_id}/release", true, h.releaseOutput)
 	h.route(mux, "GET /api/v1/me/playback/zones/{zone_id}/queue", false, h.queue)
 	h.route(mux, "POST /api/v1/me/playback/devices", true, h.registerDevice)
 	h.route(mux, "PATCH /api/v1/me/playback/devices/{device_id}", true, h.renameDevice)
@@ -42,6 +49,12 @@ func (h *Handlers) route(mux *http.ServeMux, pattern string, write bool, handler
 		}
 		handler(w, r, user.ID)
 	})
+}
+
+// HEAD 只鉴权并拒绝，不订阅事件，也不消耗只能取一次的音频流。
+func (h *Handlers) rejectStreamHead(w http.ResponseWriter, r *http.Request, _ string) {
+	w.Header().Set("Allow", "GET")
+	httpserver.WriteError(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "接口不支持该请求方法")
 }
 
 func (h *Handlers) snapshot(w http.ResponseWriter, r *http.Request, userID string) {
@@ -156,6 +169,14 @@ func respond(w http.ResponseWriter, r *http.Request, status int, result any, err
 func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	status, code, message := http.StatusServiceUnavailable, "database_unavailable", "播放区暂时不可用"
 	switch {
+	case errors.Is(err, zones.ErrUnsupportedProtocol):
+		status, code, message = http.StatusBadRequest, "unsupported_protocol", "不支持这个输出端协议版本"
+	case errors.Is(err, zones.ErrOutputSuperseded):
+		status, code, message = http.StatusConflict, "output_superseded", "输出会话已被接替"
+	case errors.Is(err, zones.ErrOutputUnknown):
+		status, code, message = http.StatusNotFound, "output_unknown", "输出会话不存在"
+	case errors.Is(err, zones.ErrStreamGone):
+		status, code, message = http.StatusGone, "stream_gone", "音频流已失效"
 	case errors.Is(err, zones.ErrInvalidInput):
 		status, code, message = http.StatusBadRequest, "invalid_input", "请求参数无效"
 	case errors.Is(err, zones.ErrNotFound):

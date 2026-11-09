@@ -111,12 +111,12 @@ type StreamSegment struct {
 	TrackStartSeconds  float64              `json:"track_start_seconds"`
 }
 type Stream struct {
-	Seq      int64             `json:"seq"`
-	URL      string            `json:"url"`
-	MimeType string            `json:"mime_type"`
-	Quality  string            `json:"quality"`
-	Format   StreamAudioFormat `json:"format"`
-	Segments []StreamSegment   `json:"segments"`
+	Seq      int64              `json:"seq"`
+	URL      string             `json:"url"`
+	MimeType string             `json:"mime_type"`
+	Quality  string             `json:"quality"`
+	Format   *StreamAudioFormat `json:"format"`
+	Segments []StreamSegment    `json:"segments"`
 }
 type ZoneEvent struct {
 	Seq      int64  `json:"seq"`

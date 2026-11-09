@@ -26,7 +26,9 @@ func (s *Service) RegisterDevice(ctx context.Context, userID string, input Regis
 	defer u.mu.Unlock()
 	names := map[string]bool{}
 	for _, z := range u.order {
+		z.mu.Lock()
 		names[z.device.Name] = true
+		z.mu.Unlock()
 	}
 	name := input.Name
 	for n := 2; names[name]; n++ {
@@ -186,7 +188,7 @@ func validCapabilities(c Capabilities) bool {
 	return true
 }
 
-// SetOutputState 不分配输出会话，也不消费回报；B3 的会话管理器负责调用。
+// SetOutputState 是测试用在线接点，不分配输出会话，也不消费回报。
 func (s *Service) SetOutputState(ctx context.Context, userID, deviceID string, state OutputState) (DeviceResult, error) {
 	if !validID(deviceID) || (state.Capabilities != nil && !validCapabilities(*state.Capabilities)) {
 		return DeviceResult{}, ErrInvalidInput
@@ -207,8 +209,7 @@ func (s *Service) SetOutputState(ctx context.Context, userID, deviceID string, s
 	z.mu.Lock()
 	d, p := z.device, z.persisted
 	if state.Capabilities != nil {
-		d.Capabilities = *state.Capabilities
-		d.Capabilities.StreamFormats = append([]StreamFormatCapability{}, state.Capabilities.StreamFormats...)
+		d.Capabilities = cloneCapabilities(*state.Capabilities)
 	}
 	now := s.options.Now()
 	d.LastSeenAt = now

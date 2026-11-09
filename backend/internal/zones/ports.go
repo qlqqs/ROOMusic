@@ -61,7 +61,7 @@ type RenderSession interface {
 	Body() io.Reader      // 只能读取一次；Close 后读取返回 EOF。
 	Observe(sample PlayheadSample)
 	NextChanged()         // 预选失效；未发出字节时重选，否则发 rebuild_needed。
-	Events() <-chan Event // 带缓冲；由 zones 持续读取直到通道关闭（B3 接入）。
+	Events() <-chan Event // 带缓冲；由 zones 持续读取直到通道关闭。
 	Close()               // 可重复调用，同时结束 Body 和 Events。
 }
 
@@ -79,7 +79,7 @@ type Segment struct {
 	StreamStartSeconds, TrackStartSeconds float64
 }
 
-// Event.Kind 的完整协议由 B3 消费，不同类型的派发时机如下。
+// Event.Kind 的完整协议由 zones 消费，不同类型的派发时机如下。
 // 到达播放头才派发：
 //   - time：EntryID 对应曲目，Seconds 为曲内秒数，At 为服务端采样时刻。
 //   - track_started：EntryID 为新条目，Transition 为 gapless、crossfade 或 gap；
@@ -108,7 +108,7 @@ type Event struct {
 	Signal        any
 }
 
-// PlayRecorder 仅定义消费方端口；B3 再接入计次与 listening 适配。
+// PlayRecorder 是计次消费方端口，由 app 装配 listening 适配器。
 type PlayRecorder interface {
 	Record(ctx context.Context, userID, idempotencyKey, trackID string, playedSeconds float64) error
 }

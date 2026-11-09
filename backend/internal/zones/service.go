@@ -3,6 +3,7 @@ package zones
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -20,16 +21,20 @@ import (
 
 // Service 的注册表只管理对象生命周期，播放状态由每区锁保护；仅支持单进程。
 type Service struct {
-	db        *sql.DB
-	options   Options
-	mu        sync.Mutex
-	users     map[string]*userRuntime
-	hub       *Hub
-	ctx       context.Context
-	cancel    context.CancelFunc
-	closed    atomic.Bool
-	cleanup   Timer
-	entropyMu sync.Mutex
+	db          *sql.DB
+	options     Options
+	mu          sync.Mutex
+	users       map[string]*userRuntime
+	hub         *Hub
+	ctx         context.Context
+	cancel      context.CancelFunc
+	closed      atomic.Bool
+	cleanup     Timer
+	entropyMu   sync.Mutex
+	outputMu    sync.Mutex
+	outputs     map[string]*outputSession
+	offlineScan Timer
+	workers     sync.WaitGroup
 }
 type userRuntime struct {
 	mu      sync.RWMutex
@@ -39,32 +44,42 @@ type userRuntime struct {
 }
 type zoneRuntime struct {
 	// dispatch 让解锁后的广播仍与同区命令顺序一致；双区始终按 ID 取锁。
-	dispatch            sync.Mutex
-	mu                  sync.Mutex
-	persisted           PersistedZone
-	device              PersistedDevice
-	online              bool
-	outputSessionID     *string
-	deleted             bool
-	intent, status      string
-	fault               *Fault
-	failures            []Failure
-	consecutiveFailures int // B3 按渲染事件递增，起播命令先清零。
-	pausedAt            *Timestamp
-	event               *ZoneEvent
-	signal              any
-	session             RenderSession
-	stream, nextStream  *Stream
-	nextSession         RenderSession
-	offlinePaused       bool
-	prepared            map[string]string
-	cursorState         queue.State
-	cursorTracks        map[string]catalog.TrackSummary
-	generation          uint64
-	rebuild             Timer
-	pause               Timer
-	rebuildVersion      uint64
-	pauseVersion        uint64
+	dispatch                  sync.Mutex
+	mu                        sync.Mutex
+	persisted                 PersistedZone
+	device                    PersistedDevice
+	online                    bool
+	outputSessionID           *string
+	deleted                   bool
+	intent, status            string
+	fault                     *Fault
+	failures                  []Failure
+	consecutiveFailures       int // 按渲染事件递增，起播命令先清零。
+	pausedAt                  *Timestamp
+	event                     *ZoneEvent
+	signal                    json.RawMessage
+	session                   RenderSession
+	stream, nextStream        *Stream
+	nextSession               RenderSession
+	offlinePaused             bool
+	prepared                  map[string]string
+	cursorState               queue.State
+	cursorTracks              map[string]catalog.TrackSummary
+	generation                uint64
+	rebuild                   Timer
+	pause                     Timer
+	rebuildVersion            uint64
+	pauseVersion              uint64
+	output                    *outputSession
+	releasedAt                time.Time
+	positionWrittenAt         time.Time
+	currentHandle, nextHandle *renderHandle
+	lostStream                *Stream
+	resumeFailures            int
+	resumeAwaitingSeq         int64
+	visit                     *listenVisit
+	resumeRetry               Timer
+	resumeVersion             uint64
 }
 
 func NewService(db *sql.DB, options Options) *Service {
@@ -84,9 +99,10 @@ func NewService(db *sql.DB, options Options) *Service {
 		options.NewID = uuid.New
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	s := &Service{db: db, options: options, users: map[string]*userRuntime{}, hub: NewHub(), ctx: ctx, cancel: cancel}
+	s := &Service{db: db, options: options, users: map[string]*userRuntime{}, outputs: map[string]*outputSession{}, hub: NewHub(), ctx: ctx, cancel: cancel}
 	if db != nil {
 		s.scheduleCleanup()
+		s.scheduleOfflineScan()
 	}
 	return s
 }
@@ -97,6 +113,9 @@ func (s *Service) Close() {
 	}
 	s.cancel()
 	s.mu.Lock()
+	if s.offlineScan != nil {
+		s.offlineScan.Stop()
+	}
 	if s.cleanup != nil {
 		s.cleanup.Stop()
 	}
@@ -116,6 +135,7 @@ func (s *Service) Close() {
 		u.mu.Unlock()
 	}
 	s.hub.Close()
+	s.workers.Wait()
 }
 
 func (s *Service) user(ctx context.Context, userID string) (*userRuntime, error) {
@@ -225,7 +245,7 @@ func queueProjection(entries []queue.Entry, tracks map[string]catalog.TrackSumma
 		if !ok {
 			return nil, fmt.Errorf("%w: missing queue summary", ErrDatabaseUnavailable)
 		}
-		out = append(out, QueueEntry{e.EntryID, track})
+		out = append(out, QueueEntry{e.EntryID, cloneTrack(track)})
 	}
 	return out, nil
 }
@@ -289,18 +309,20 @@ func (s *Service) ReadQueue(ctx context.Context, userID, zoneID string) (QueueRe
 }
 func deviceOf(z *zoneRuntime) Device {
 	d := z.device
-	caps := d.Capabilities
-	caps.StreamFormats = append([]StreamFormatCapability{}, caps.StreamFormats...)
-	return Device{DeviceID: d.DeviceID, ZoneID: z.persisted.ZoneID, Name: d.Name, Kind: d.Kind, Online: z.online, LastSeenAt: timestamp(d.LastSeenAt), Volume: d.Volume, Muted: d.Muted, Capabilities: caps, OutputSessionID: z.outputSessionID}
+	caps := cloneCapabilities(d.Capabilities)
+	return Device{DeviceID: d.DeviceID, ZoneID: z.persisted.ZoneID, Name: d.Name, Kind: d.Kind, Online: z.online, LastSeenAt: timestamp(d.LastSeenAt), Volume: d.Volume, Muted: d.Muted, Capabilities: caps, OutputSessionID: cloneValue(z.outputSessionID)}
 }
 func (s *Service) zoneOf(z *zoneRuntime, tracks map[string]catalog.TrackSummary) Zone {
 	p := z.persisted
-	out := Zone{ZoneID: p.ZoneID, DeviceID: p.DeviceID, Revision: p.Revision, QueueRevision: p.QueueRevision, QueueLength: len(p.Queue.Entries), Mode: p.Queue.Mode, Settings: settingsOf(p.Settings), Intent: z.intent, Status: z.status, Fault: z.fault, Failures: append([]Failure{}, z.failures...), PausedAt: z.pausedAt, Stream: z.stream, NextStream: z.nextStream, Signal: z.signal, Event: z.event, Position: Position{Seconds: p.PositionSeconds, At: timestamp(p.PositionSavedAt)}}
+	out := Zone{ZoneID: p.ZoneID, DeviceID: p.DeviceID, Revision: p.Revision, QueueRevision: p.QueueRevision, QueueLength: len(p.Queue.Entries), Mode: p.Queue.Mode, Settings: settingsOf(p.Settings), Intent: z.intent, Status: z.status, Fault: cloneValue(z.fault), Failures: append([]Failure{}, z.failures...), PausedAt: cloneValue(z.pausedAt), Stream: cloneStream(z.stream), NextStream: cloneStream(z.nextStream), Event: cloneZoneEvent(z.event), Position: Position{Seconds: p.PositionSeconds, At: timestamp(p.PositionSavedAt)}}
+	if z.signal != nil {
+		out.Signal = append(json.RawMessage(nil), z.signal...)
+	}
 	for _, e := range p.Queue.Entries {
 		if e.EntryID == p.Queue.CurrentEntryID {
 			if track, ok := tracks[e.TrackID]; ok {
-				out.Current = &QueueEntry{e.EntryID, track}
-				out.Position.DurationSeconds = track.DurationSeconds
+				out.Current = &QueueEntry{e.EntryID, cloneTrack(track)}
+				out.Position.DurationSeconds = cloneValue(track.DurationSeconds)
 				out.Position.Seekable = true
 			}
 			break
@@ -333,7 +355,12 @@ func sortedZones(a, b *zoneRuntime) (*zoneRuntime, *zoneRuntime) {
 }
 func sortUser(u *userRuntime) {
 	sort.Slice(u.order, func(i, j int) bool {
-		a, b := u.order[i].device, u.order[j].device
+		u.order[i].mu.Lock()
+		a := u.order[i].device
+		u.order[i].mu.Unlock()
+		u.order[j].mu.Lock()
+		b := u.order[j].device
+		u.order[j].mu.Unlock()
 		if a.CreatedAt.Equal(b.CreatedAt) {
 			return a.DeviceID < b.DeviceID
 		}

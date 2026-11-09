@@ -64,6 +64,12 @@ func (s *Service) transferLocked(ctx context.Context, userID string, source, tar
 	s.cancelTimers(target)
 	s.closeSession(target)
 	source.persisted = sp
+	source.visit = nil
+	source.positionWrittenAt = now
+	target.visit = nil
+	target.positionWrittenAt = now
+	target.resumeFailures = 0
+	target.resumeAwaitingSeq = 0
 	source.failures = []Failure{}
 	source.consecutiveFailures = 0
 	source.fault = nil

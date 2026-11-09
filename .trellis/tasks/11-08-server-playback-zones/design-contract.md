@@ -63,7 +63,7 @@ Stream = {
   seq: integer,                 // 播放区的流序号，单调递增（跨重启也是）
   url: string,                  // 服务端给出，客户端不拼接
   mime_type: string, quality: "lossless" | "lossy",
-  format: {codec: string, sample_rate: integer, bit_depth: integer?, channels: integer},   // 渲染会话确定首曲后给出；有损档 bit_depth 为 null
+  format: {codec: string, sample_rate: integer, bit_depth: integer?, channels: integer}?,  // 渲染会话确定首曲后给出；首曲打不开的空流为 null，有损档 bit_depth 为 null
   segments: [{entry_id: UUID, track: QueueTrack, stream_start_seconds: number, track_start_seconds: number}]
                                 // 已渲染、尚未播完的曲目分段：从流内 stream_start_seconds 起是这首的 track_start_seconds 秒
 }
@@ -76,6 +76,7 @@ ZoneEvent = {seq: integer} & (            // seq 取产生事件时的 revision�
 
 - `status` 是输出端回报的状态；服务端开新流时先置为 `loading`，离线时为 `paused`（有当前项）或 `idle`。
 - `position.seconds` 在 `status == "playing"` 时按 `seconds + (服务端现在 − at)` 外推，不超过 `duration_seconds`。输出端用 `segments` 与本地流内位置自己算。
+- 2026-11-09 算法线对接补充：起始条目打不开时 `Open` 可返回 `Format()` 零值、Body 立即 EOF 的空流，对外 `format: null`；随后异步的 `track_failed` 与 `format_boundary` 决定失败公告和接续流。不能仅因空流的输出端 `ended` 提前关闭会话，吞掉这些事件。
 - `failures` 只在内存里，替换队列、清空、重启时清除。`play_recorded`：服务端记下一次播放，浏览器据此让本人的播放历史查询失效。
 - 失败原因去掉了直出时代的 `not_directly_playable`、`derivation_failed`；`unsupported_format` 是服务端也解不了的格式（实际取值以 dsp-pipeline 的打开逻辑为准，只增不减）。
 

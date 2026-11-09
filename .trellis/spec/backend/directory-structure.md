@@ -216,7 +216,7 @@ maintenance的原始名字工作量估计经`artistgraph.ArtistInputNameCost`窄
 
 ## 播放区 B2 增量
 
-`zones` 增加控制 Service、渲染消费方端口、设备与命令、内部 hub；`zones/httpapi` 依赖 `identity`、`platform/httpserver`、`platform/uuid`、`zones`，只负责控制接口，不包含 B3 的 SSE/输出端/渲染流。
+`zones` 增加控制 Service、渲染消费方端口、设备与命令、内部 hub；`zones/httpapi` 依赖 `identity`、`platform/httpserver`、`platform/uuid`、`zones`，负责控制接口、SSE、输出端认领/回报/释放与渲染流写出；在线租约、会话事件与计次策略仍属于 zones。
 `zones/zonestest` 只依赖 zones 与标准库，拥有静音 WAV 假渲染器；生产 `app` 不允许导入此测试辅助包。
 `app.New` 装配 Service 与路由，进程关停经 `WaitForZones` 等待 Service 关闭；真实 Renderer 未装配时不拿假渲染器顶替。完整合同见[播放区控制面合同](./playback-zone-contracts.md)。
 

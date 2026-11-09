@@ -1,7 +1,6 @@
 package zones
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
@@ -10,6 +9,15 @@ import (
 
 func (s *Service) closeSession(z *zoneRuntime) {
 	z.generation++
+	s.cancelResume(z)
+	suspendVisit(z)
+	if z.currentHandle != nil {
+		z.currentHandle.close()
+	}
+	if z.nextHandle != nil {
+		z.nextHandle.close()
+	}
+	z.currentHandle, z.nextHandle = nil, nil
 	if z.session != nil {
 		z.session.Close()
 		z.session = nil
@@ -40,7 +48,18 @@ func (s *Service) cancelPause(z *zoneRuntime) {
 		z.pause = nil
 	}
 }
-func (s *Service) cancelTimers(z *zoneRuntime) { s.cancelRebuild(z); s.cancelPause(z) }
+func (s *Service) cancelResume(z *zoneRuntime) {
+	z.resumeVersion++
+	if z.resumeRetry != nil {
+		z.resumeRetry.Stop()
+		z.resumeRetry = nil
+	}
+}
+func (s *Service) cancelTimers(z *zoneRuntime) {
+	s.cancelRebuild(z)
+	s.cancelPause(z)
+	s.cancelResume(z)
+}
 func renderEntry(q queue.State, id string, tracks map[string]catalog.TrackSummary) Entry {
 	at := entryIndex(q.Entries, id)
 	if at < 0 {
@@ -68,40 +87,23 @@ func (s *Service) openSession(userID string, z *zoneRuntime, tracks map[string]c
 	if z.persisted.Queue.CurrentEntryID == "" {
 		return
 	}
-	if s.options.Renderer == nil {
-		s.renderFault(z, "transient")
+	s.beginVisit(z, z.persisted.Queue.CurrentEntryID, newVisit)
+	handle, kind := s.createRender(userID, z, z.persisted.Queue.CurrentEntryID, z.persisted.PositionSeconds)
+	if handle == nil {
+		s.renderFault(z, kind)
 		return
 	}
-	format, err := s.options.Renderer.Negotiate(z.device.Capabilities, z.persisted.Settings.Quality)
-	if err != nil {
-		s.renderFault(z, "no_stream_format")
-		return
-	}
-	entry := renderEntry(z.persisted.Queue, z.persisted.Queue.CurrentEntryID, tracks)
-	spec := RenderSpec{UserID: userID, ZoneID: z.persisted.ZoneID, Seq: z.persisted.Revision, Start: entry, StartSeconds: z.persisted.PositionSeconds, Settings: settingsOf(z.persisted.Settings), Format: format, Cursor: &renderCursor{service: s, zone: z, generation: z.generation}}
-	session, err := s.options.Renderer.Open(s.ctx, spec)
-	if err != nil || session == nil {
-		if session != nil {
-			session.Close()
-		}
-		s.renderFault(z, "transient")
-		return
-	}
-	z.session = session
-	concrete := session.Format()
-	var bits *int
-	if concrete.BitDepth > 0 {
-		value := concrete.BitDepth
-		bits = &value
-	}
-	z.stream = &Stream{Seq: spec.Seq, URL: fmt.Sprintf("/api/v1/me/playback/zones/%s/streams/%d", spec.ZoneID, spec.Seq), MimeType: session.MimeType(), Quality: concrete.Quality, Format: StreamAudioFormat{Codec: concrete.Codec, SampleRate: concrete.SampleRate, BitDepth: bits, Channels: concrete.Channels}, Segments: []StreamSegment{{EntryID: entry.EntryID, Track: tracks[entry.TrackID], TrackStartSeconds: spec.StartSeconds}}}
+	z.currentHandle = handle
+	z.session, z.stream = handle.session, handle.stream
 	z.status = "loading"
 	z.fault = nil
+	z.lostStream = nil
 	if newVisit {
-		z.event = &ZoneEvent{Seq: z.persisted.Revision, Kind: "track_started", EntryID: entry.EntryID}
+		z.event = &ZoneEvent{Seq: z.persisted.Revision, Kind: "track_started", EntryID: handle.entryID}
 	}
-	// Events 的读取、栅栏与应用由 B3 接在这里；B2 不推进播放头、不计次。
+	s.consumeRender(userID, z, handle)
 }
+
 func (s *Service) renderFault(z *zoneRuntime, kind string) {
 	z.fault = &Fault{Kind: kind}
 	s.pauseState(z, s.options.Now())
@@ -112,12 +114,19 @@ func (s *Service) renderFault(z *zoneRuntime, kind string) {
 	z.event = &ZoneEvent{Seq: z.persisted.Revision, Kind: event}
 }
 func (s *Service) schedulePause(userID string, z *zoneRuntime) {
+	delay := 5 * time.Second
+	if z.pausedAt != nil {
+		delay = max(0, delay-s.Now().Sub(z.pausedAt.Time))
+	}
+	s.schedulePauseAfter(userID, z, delay)
+}
+func (s *Service) schedulePauseAfter(userID string, z *zoneRuntime, delay time.Duration) {
 	s.cancelPause(z)
 	if z.session == nil {
 		return
 	}
 	version := z.pauseVersion
-	z.pause = s.options.AfterFunc(5*time.Second, func() {
+	z.pause = s.options.AfterFunc(delay, func() {
 		z.dispatch.Lock()
 		defer z.dispatch.Unlock()
 		z.mu.Lock()
@@ -134,11 +143,12 @@ func (s *Service) schedulePause(userID string, z *zoneRuntime) {
 		if err != nil {
 			s.reportAsync("pause_close", userID, p.ZoneID, err)
 			// 失败不能发布未提交状态；仍暂停时五秒后重试，避免永久占着渲染会话。
-			s.schedulePause(userID, z)
+			s.schedulePauseAfter(userID, z, 5*time.Second)
 			z.mu.Unlock()
 			return
 		}
 		z.persisted = p
+		z.positionWrittenAt = s.Now()
 		s.cancelRebuild(z)
 		s.closeSession(z)
 		if z.persisted.Queue.CurrentEntryID == "" {
@@ -183,6 +193,7 @@ func (s *Service) scheduleRebuildAfter(userID string, z *zoneRuntime, delay time
 			return
 		}
 		z.persisted = p
+		z.positionWrittenAt = s.Now()
 		z.rebuild = nil
 		s.openSession(userID, z, tracks, false)
 		result := s.zoneOf(z, tracks)
@@ -195,13 +206,14 @@ type renderCursor struct {
 	service    *Service
 	zone       *zoneRuntime
 	generation uint64
+	seq        int64
 }
 
 func (c *renderCursor) Next(afterEntryID string) (Entry, bool) {
 	z, s := c.zone, c.service
 	z.mu.Lock()
 	defer z.mu.Unlock()
-	if z.deleted || s.closed.Load() || z.generation != c.generation {
+	if z.deleted || s.closed.Load() || z.generation != c.generation || (c.seq != 0 && !z.hasRenderSeq(c.seq)) {
 		return Entry{}, false
 	}
 	q := z.cursorState
@@ -231,5 +243,5 @@ func (c *renderCursor) Next(afterEntryID string) (Entry, bool) {
 	return renderEntry(step.State, id, z.cursorTracks), true
 }
 
-// 计次、播放头和渲染事件的消费保持在 B3；不让会话反向调用控制命令。
+// 不让会话反向调用控制命令。
 var _ Cursor = (*renderCursor)(nil)

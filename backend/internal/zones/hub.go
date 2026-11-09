@@ -19,6 +19,9 @@ type Hub struct {
 }
 type Subscription struct {
 	Events  <-chan Message
+	Done    <-chan struct{}
+	done    chan struct{}
+	detach  func()
 	channel chan Message
 	hub     *Hub
 	userID  string
@@ -29,9 +32,11 @@ func (h *Hub) Subscribe(userID string) *Subscription {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	ch := make(chan Message, 64)
-	sub := &Subscription{Events: ch, channel: ch, hub: h, userID: userID}
+	done := make(chan struct{})
+	sub := &Subscription{Events: ch, channel: ch, hub: h, userID: userID, Done: done, done: done}
 	if h.closed {
 		close(ch)
+		close(done)
 		return sub
 	}
 	if h.subscribers[userID] == nil {
@@ -51,13 +56,18 @@ func (h *Hub) remove(sub *Subscription) {
 	if _, ok := group[sub]; ok {
 		delete(group, sub)
 		close(sub.channel)
+		close(sub.done)
+		if sub.detach != nil {
+			sub.detach()
+			sub.detach = nil
+		}
 		if len(group) == 0 {
 			delete(h.subscribers, sub.userID)
 		}
 	}
 }
 
-// Publish 不等待消费者；满缓冲关闭订阅，B3 的 SSE 将据此结束连接。
+// Publish 不等待消费者；满缓冲关闭订阅，SSE 据此结束连接。
 func (h *Hub) Publish(userID, kind string, data any) error {
 	encoded, err := json.Marshal(data)
 	if err != nil {
@@ -113,4 +123,26 @@ func (s *Service) publishDevice(userID string, device Device) {
 	s.publish(userID, "device", struct {
 		Device Device `json:"device"`
 	}{device})
+}
+
+// 首条快照与注册在同一 hub 临界区内完成。
+func (h *Hub) subscribeSnapshot(userID string, snapshot Snapshot, detach func()) (*Subscription, error) {
+	encoded, err := json.Marshal(snapshot)
+	if err != nil {
+		return nil, err
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.closed {
+		return nil, ErrClosed
+	}
+	ch := make(chan Message, 64)
+	done := make(chan struct{})
+	sub := &Subscription{Events: ch, channel: ch, Done: done, done: done, hub: h, userID: userID, detach: detach}
+	ch <- Message{Kind: "snapshot", Data: encoded}
+	if h.subscribers[userID] == nil {
+		h.subscribers[userID] = map[*Subscription]struct{}{}
+	}
+	h.subscribers[userID][sub] = struct{}{}
+	return sub, nil
 }
