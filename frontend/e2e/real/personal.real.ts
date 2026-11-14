@@ -61,7 +61,7 @@ test("真实服务：收藏一首刷新仍在，取消时保留行、刷新后�
   await expect.poll(async () => decodeFavoriteTracksPage(await body(await page.request.get("/api/v1/me/favorites/tracks"))).items.map((item) => item.track.track_id)).not.toContain(id);
   await expect(table.getByText(titles[0], { exact: true })).toBeVisible();
   await page.reload();
-  await expect(page.getByText("还没有收藏的曲目。", { exact: false })).toBeVisible();
+  await expect(page.getByText("还没有喜欢的曲目", { exact: true })).toBeVisible();
   await expect(table).toHaveCount(0);
 });
 

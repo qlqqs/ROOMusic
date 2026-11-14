@@ -5,6 +5,7 @@ import { DataTable, QueryContent, SettingsGroup, Skeleton, StatusTag, type Colum
 import type { RootOperationDTO } from "../api/decoders";
 import { useRootOperations } from "../hooks/use-root-operations";
 import { useRoots } from "../hooks/use-roots";
+import { rootOperationErrorFallback, rootOperationErrorMessages } from "./root-messages";
 import styles from "./root-operations-section.module.css";
 
 const operationLabels: Record<RootOperationDTO["operation"], string> = {
@@ -19,7 +20,10 @@ const operationLabels: Record<RootOperationDTO["operation"], string> = {
 /** 后端最多返回最近 100 条；达到上限时提示这不是全部历史。 */
 const OPERATION_LIMIT = 100;
 
-/** 扫描目录页的“目录操作记录”卡片（页面最后一组）：目录的新增、停用、恢复、改路径与不扫描的子文件夹的增删，最新的在前。这是目录管理记录，不是通用审批或回滚点。 */
+/**
+ * 扫描目录页的“目录操作记录”卡片（页面最后一组）：目录的新增、停用、恢复、改路径与不扫描的子文件夹的增删，最新的在前。这是目录管理记录，不是通用审批或回滚点。
+ * 失败的记录在结果旁用一句话说明原因，不显示错误码。
+ */
 export function RootOperationsSection() {
   const operations = useRootOperations();
   // 与“音乐目录”区段共用同一个缓存条目，不会多一次请求。
@@ -39,13 +43,15 @@ export function RootOperationsSection() {
             成功
           </StatusTag>
         ) : (
-          <StatusTag tone="outline" icon={<CircleX size={14} />}>
-            失败
-          </StatusTag>
+          <span className={styles.failed}>
+            <StatusTag tone="outline" icon={<CircleX size={14} />}>
+              失败
+            </StatusTag>
+            <span>{(item.error_code === undefined ? undefined : rootOperationErrorMessages[item.error_code]) ?? rootOperationErrorFallback}</span>
+          </span>
         ),
     },
-    { id: "revision", header: "Revision", cell: (item) => item.revision ?? UNKNOWN_TIME, numeric: true },
-    { id: "error", header: "错误码", cell: (item) => (item.error_code === undefined ? UNKNOWN_TIME : <code>{item.error_code}</code>) },
+    { id: "revision", header: "版本号", cell: (item) => item.revision ?? UNKNOWN_TIME, numeric: true },
   ];
 
   const limited = (operations.data?.length ?? 0) >= OPERATION_LIMIT;

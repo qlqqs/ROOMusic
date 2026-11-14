@@ -83,11 +83,11 @@ describe("我的音乐历史页", () => {
     expect(screen.queryByRole("button", { name: "播放全部" })).toBeNull();
   });
 
-  it("读取失败显示请求 ID，手动重试恢复，不把失败当作空历史", async () => {
+  it("读取失败显示错误（不显示请求 ID），手动重试恢复，不把失败当作空历史", async () => {
     const { api } = setup();
     api.on("GET", tracks, () => jsonResponse(500, { error: { code: "internal_error", message: "历史读取失败" }, request_id: "history-error" }));
     renderApp({ path: "/me/history" });
-    expect((await screen.findByRole("alert")).textContent).toContain("history-error");
+    expect((await screen.findByRole("alert")).textContent).not.toContain("history-error");
     expect(screen.queryByText(emptyText)).toBeNull();
     api.on("GET", tracks, () => jsonResponse(200, historyPage([first])));
     await userEvent.click(screen.getByRole("button", { name: "重试" }));

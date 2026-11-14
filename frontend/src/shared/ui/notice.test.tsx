@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api";
 import { FailureNotice } from "./failure-notice";
 import { Notice } from "./notice";
@@ -13,11 +13,16 @@ describe("Notice", () => {
     expect(screen.getByRole("status").textContent).toContain("已保存");
   });
 
-  it("有请求 ID 时显示，没有时不显示", () => {
-    const { rerender } = render(<Notice requestId="web-0123456789abcdef">说明</Notice>);
-    expect(screen.getByText("web-0123456789abcdef")).toBeTruthy();
-    rerender(<Notice>说明</Notice>);
+  afterEach(() => vi.restoreAllMocks());
+
+  it("请求 ID 不显示在界面上，只记到控制台", () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const { container, rerender } = render(<Notice requestId="web-0123456789abcdef">说明</Notice>);
+    expect(container.textContent).not.toContain("web-0123456789abcdef");
     expect(screen.queryByText(/请求 ID/)).toBeNull();
+    expect(info).toHaveBeenCalledWith("请求 ID：web-0123456789abcdef");
+    rerender(<Notice>说明</Notice>);
+    expect(info).toHaveBeenCalledTimes(1);
   });
 
   it("显示标题与下一步操作", () => {
@@ -32,12 +37,12 @@ describe("Notice", () => {
 });
 
 describe("FailureNotice", () => {
-  it("把 http 失败转成中文文案并显示请求 ID，feature 文案优先", () => {
+  it("把 http 失败转成中文文案，feature 文案优先，不显示请求 ID", () => {
     const error = new ApiError({ kind: "http", status: 409, code: "last_admin", message: "x", requestId: "web-abc" });
     render(<FailureNotice error={error} messages={{ last_admin: "不能停用最后一个管理员。" }} />);
     const alert = screen.getByRole("alert");
     expect(alert.textContent).toContain("不能停用最后一个管理员。");
-    expect(alert.textContent).toContain("web-abc");
+    expect(alert.textContent).not.toContain("web-abc");
   });
 
   it("写请求的网络失败说明结果未知", () => {

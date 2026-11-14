@@ -191,14 +191,14 @@ describe("操作记录页：列表", () => {
     expect(within(table).getByText("专辑已不可见")).toBeTruthy();
   });
 
-  it("读取失败时有带请求 ID 的错误与重试；重试成功后显示记录", async () => {
+  it("读取失败时有错误（不显示请求 ID）与重试；重试成功后显示记录", async () => {
     const { api, governance } = setup();
     correct(governance, releaseOf(albumC()), 1, "genre", "Sonata");
     // 500 立即显示失败（503 与网络错误会被查询自动重试）。
     api.on("GET", "/api/v1/operations", () => jsonResponse(500, { error: { code: "internal_error", message: "boom" }, request_id: "req-ops-1" }));
     const user = userEvent.setup();
     renderApp({ path: "/settings/operations" });
-    expect(await screen.findByText(/req-ops-1/)).toBeTruthy();
+    expect((await screen.findByRole("alert")).textContent).not.toContain("req-ops-1");
     const { respondToOperations } = await import("../test/governance-data");
     api.on("GET", "/api/v1/operations", (request) => {
       const result = respondToOperations(governance, new URL(request.path, "http://localhost").searchParams);

@@ -226,7 +226,7 @@ describe("收藏页的保留行与服务端列表", () => {
     await screen.findByRole("heading", { level: 2, name: /歌曲\s*1/ });
     const nav = within(screen.getByRole("navigation", { name: "主导航" }));
     await userEvent.click(nav.getByRole("link", { name: "我的歌单" }));
-    await screen.findByText("还没有歌单。");
+    await screen.findByText("还没有歌单");
     await userEvent.click(nav.getByRole("link", { name: "我喜欢的音乐" }));
     await screen.findByText(second.track.title, { exact: true });
     expect(screen.queryByText(first.track.title, { exact: true })).toBeNull();
@@ -282,15 +282,25 @@ describe("收藏页的保留行与服务端列表", () => {
     expect(heart(first.track.title).getAttribute("aria-pressed")).toBe("true");
   });
 
+  it("没有收藏的曲目时是说明怎么收藏的空状态，不显示“歌曲 0”", async () => {
+    setup([]);
+    renderApp({ path: "/me/liked" });
+    expect(await screen.findByText("还没有喜欢的曲目")).toBeTruthy();
+    expect(screen.getByText(/点曲目旁、播放栏或全屏播放器里的心形/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "去专辑页看看" }).getAttribute("href")).toBe("/albums");
+    expect(screen.queryByRole("heading", { level: 2, name: /歌曲/ })).toBeNull();
+    expect(screen.queryByRole("table", { name: "收藏的曲目" })).toBeNull();
+  });
+
   it("加载中和读取失败不冒充空态，手动重试能恢复", async () => {
     const { api, list } = setup();
     const pending = deferred<Response>();
     api.on("GET", tracksPath, () => pending.promise);
     renderApp({ path: "/me/favorites?tab=tracks" });
     await screen.findByText("正在加载收藏的曲目");
-    expect(screen.queryByText("还没有收藏的曲目。", { exact: false })).toBeNull();
+    expect(screen.queryByText("还没有喜欢的曲目")).toBeNull();
     await act(async () => { pending.resolve(jsonResponse(500, { error: { code: "internal_error", message: "读取失败" }, request_id: "favorites-read-error" })); });
-    expect((await screen.findByRole("alert")).textContent).toContain("favorites-read-error");
+    expect((await screen.findByRole("alert")).textContent).not.toContain("favorites-read-error");
     api.on("GET", tracksPath, (request) => list("tracks", request));
     await userEvent.click(screen.getByRole("button", { name: "重试" }));
     expect(await screen.findByRole("table", { name: "收藏的曲目" })).toBeTruthy();

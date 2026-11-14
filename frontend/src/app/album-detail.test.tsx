@@ -548,14 +548,14 @@ describe("专辑详情：不存在与失败", () => {
     expect(groupRequests(api).length).toBeGreaterThanOrEqual(2);
   });
 
-  it("组详情读取失败（503）：带请求 ID 的错误与重试，重试成功后显示专辑", async () => {
+  it("组详情读取失败（503）：错误（不显示请求 ID）与重试，重试成功后显示专辑", async () => {
     const album = symphonies();
     const { catalog } = setup({ groups: [album] });
     catalog.groupFailure = sampleResponse("errors/database-unavailable");
     renderApp({ path: `/albums/${album.id}` });
     // 503 会被自动重试（最多 2 次，带退避），耗尽后才显示错误。
     const alert = await screen.findByRole("alert", {}, { timeout: 8000 });
-    expect(within(alert).getByText(/请求 ID：/)).toBeTruthy();
+    expect(within(alert).queryByText(/请求 ID/)).toBeNull();
 
     catalog.groupFailure = null;
     await userEvent.click(within(alert).getByRole("button", { name: "重试" }));
@@ -721,7 +721,7 @@ describe("专辑详情：来源与证据", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("完整证据 503：带请求 ID 的错误，页面其他部分不受影响", async () => {
+  it("完整证据 503：错误（不显示请求 ID），页面其他部分不受影响", async () => {
     const album = symphonies();
     const { catalog } = setup({ groups: [album] });
     catalog.evidenceFailure = sampleResponse("errors/database-unavailable");
@@ -730,7 +730,7 @@ describe("专辑详情：来源与证据", () => {
     await userEvent.click(screen.getByText("来源与证据"));
     await userEvent.click(await screen.findByRole("button", { name: "查看完整证据" }));
     const alert = await screen.findByRole("alert", {}, { timeout: 8000 });
-    expect(within(alert).getByText(/请求 ID：/)).toBeTruthy();
+    expect(within(alert).queryByText(/请求 ID/)).toBeNull();
     expect(screen.getByRole("table", { name: "证据摘要" })).toBeTruthy();
   }, 15_000);
 

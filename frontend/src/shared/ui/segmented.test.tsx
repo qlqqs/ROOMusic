@@ -157,4 +157,21 @@ describe("设置行", () => {
     expect(screen.getByRole("button", { name: "对调处理顺序" })).toBeTruthy();
     expect(screen.getByText("处理顺序").tagName).toBe("SPAN");
   });
+
+  it("status 紧跟在分组标题后面，不改变分组的名称；没有标题时不显示", () => {
+    const { rerender } = render(
+      <SettingsGroup title="自动清理" status={<p role="status">已保存。</p>}>
+        <SettingRow label="保留天数">{(ids) => <input id={ids.controlId} />}</SettingRow>
+      </SettingsGroup>,
+    );
+    const heading = screen.getByRole("heading", { level: 2, name: "自动清理" });
+    expect(screen.getByRole("region", { name: "自动清理" })).toBeTruthy();
+    expect(heading.nextElementSibling).toBe(screen.getByRole("status"));
+    rerender(
+      <SettingsGroup status={<p role="status">已保存。</p>}>
+        <SettingRow label="保留天数">{(ids) => <input id={ids.controlId} />}</SettingRow>
+      </SettingsGroup>,
+    );
+    expect(screen.queryByRole("status")).toBeNull();
+  });
 });

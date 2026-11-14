@@ -1,5 +1,5 @@
 // 管理员对发行的写操作按错误码覆盖的文案：界面按错误码选文案，不比较后端 message 的字符串；
-// 没有列出的错误码（例如 invalid_correction，后端给出的是具体的、可以直接展示的说明）显示后端的安全 message 与请求 ID。
+// 没有列出的错误码（例如 invalid_correction，后端给出的是具体的、可以直接展示的说明）显示后端的安全 message。
 
 export const governanceFailureMessages = {
   revision_conflict: "这张专辑刚被修改过，页面已刷新。请核对当前内容后再操作。",

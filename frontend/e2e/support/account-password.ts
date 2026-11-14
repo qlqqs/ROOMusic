@@ -9,6 +9,15 @@ import { openSettings, userTrigger } from "./settings";
 export const changedPassword = "changed-password-2026";
 export const passwordDialog = (page: Page) => page.getByRole("dialog", { name: "修改密码", exact: true });
 export const memberRow = (page: Page, username: string) => page.getByRole("table", { name: "成员列表" }).getByRole("row", { name: new RegExp(username) });
+/** 成员行尾的“更多”按钮与它打开的菜单。 */
+export const memberMenuButton = (page: Page, username: string) => memberRow(page, username).getByRole("button", { name: `成员 ${username} 的更多操作`, exact: true });
+export const memberMenu = (page: Page, username: string) => page.getByRole("menu", { name: `成员 ${username} 的更多操作`, exact: true });
+
+/** 打开成员行的“更多”菜单并选一项（“重置密码…”“撤销会话…”“停用…”“重新启用”）。 */
+export async function chooseMemberAction(page: Page, username: string, action: string): Promise<void> {
+  await memberMenuButton(page, username).click();
+  await memberMenu(page, username).getByRole("menuitem", { name: action, exact: true }).click();
+}
 
 /** 从用户菜单进入设置账号栏，不绕过窄屏模态导航。 */
 export async function openPasswordDialog(page: Page): Promise<Locator> {
@@ -26,7 +35,7 @@ export async function fillPasswordChange(page: Page, current: string | null = nu
   await dialog.getByLabel("确认新密码", { exact: true }).fill(confirmation);
 }
 
-export const accountLayoutScenes = ["账号栏", "对话框内成功", "成功关闭后账号栏", "修改密码对话框", "成员三按钮", "重置密码对话框", "停用成员重置对话框", "候选待处理", "候选已忽略"] as const;
+export const accountLayoutScenes = ["账号栏", "对话框内成功", "成功关闭后账号栏", "修改密码对话框", "成员行菜单", "重置密码对话框", "停用成员重置对话框", "候选待处理", "候选已忽略"] as const;
 export const accountAxeScenes = [...accountLayoutScenes, "当前密码错误", "新密码字段错误", "改密码结果未确认", "重置密码字段错误", "重置密码成功提示", "重置密码失败提示", "候选已忽略空态"] as const;
 export type AccountScene = (typeof accountAxeScenes)[number];
 
@@ -49,13 +58,15 @@ export async function openAccountScene(page: Page, mock: ApiMock, scene: Account
   }
   if (scene.startsWith("成员") || scene.includes("重置")) {
     await page.goto("/settings/members");
-    await expect(memberRow(page, "listener").getByRole("button")).toHaveCount(3);
-    if (scene === "成员三按钮") {
+    await expect(memberMenuButton(page, "listener")).toBeVisible();
+    if (scene === "成员行菜单") {
       await memberRow(page, "listener").scrollIntoViewIfNeeded();
+      await memberMenuButton(page, "listener").click();
+      await expect(memberMenu(page, "listener").getByRole("menuitem")).toHaveCount(3);
       return;
     }
     const username = scene === "停用成员重置对话框" ? "archivist" : "listener";
-    await memberRow(page, username).getByRole("button", { name: `重置成员 ${username} 的密码`, exact: true }).click();
+    await chooseMemberAction(page, username, "重置密码…");
     const dialog = page.getByRole("dialog", { name: `重置“${username}”的密码`, exact: true });
     await expect(dialog).toBeVisible();
     if (scene === "重置密码对话框" || scene === "停用成员重置对话框") return;

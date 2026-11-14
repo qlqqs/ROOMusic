@@ -14,7 +14,7 @@ type FailureNoticeProps = {
   action?: ReactNode;
 };
 
-/** 把请求失败显示为带请求 ID 的行内错误，所有页面的错误状态共用同一份文案规则。 */
+/** 把请求失败显示为行内错误（请求 ID 只记到控制台），所有页面的错误状态共用同一份文案规则。 */
 export function FailureNotice({ error, context, messages, title, action }: FailureNoticeProps) {
   const failure = failureOf(error);
   const description =

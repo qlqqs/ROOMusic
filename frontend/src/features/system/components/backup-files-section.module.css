@@ -4,13 +4,78 @@
   font-size: var(--fs-13);
 }
 
-/* 表格上方一行：“全选”与“删除所选（n）”。窄屏也放得下一行。 */
-.toolbar {
+/* 表格上方的批量操作条：浅金色底，“已选 n 个”在左、下载与删除在右。宽容器里没有勾选时不显示（全选在表头）。 */
+.bulk {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2) var(--space-4);
-  min-height: var(--control-height);
+  gap: var(--space-1) var(--space-3);
+  min-height: 44px;
+  background: var(--color-accent-100);
+}
+
+.bulk[data-empty] {
+  display: none;
+}
+
+/* 隐藏的操作条之后，表格是卡片里看得见的第一项，不再画顶部分隔线。 */
+.bulk[data-empty] + .table {
+  border-top: 0;
+}
+
+.barSelectAll {
+  display: none;
+}
+
+.selectedCount {
+  margin-inline-end: auto;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.bulkActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.danger > button {
+  color: var(--color-warning);
+}
+
+/* 表头的全选与每行的勾选框对齐。 */
+.headSelectAll {
+  display: inline-flex;
+}
+
+.headSelectAll .check {
+  min-height: 0;
+}
+
+/* 窄容器：表头隐藏，全选放到操作条上，操作条一直显示（没有勾选时只有全选）。 */
+@container (max-width: 639px) {
+  .bulk,
+  .bulk[data-empty] {
+    display: flex;
+    background: transparent;
+  }
+
+  .bulk:not([data-empty]) {
+    background: var(--color-accent-100);
+  }
+
+  .bulk[data-empty] + .table {
+    border-top: 1px solid var(--color-divider);
+  }
+
+  .barSelectAll {
+    display: inline-flex;
+  }
+
+  .headSelectAll {
+    display: none;
+  }
 }
 
 .check {
@@ -35,13 +100,13 @@ td .check {
   min-height: 0;
 }
 
-/* “下载”与“删除”同一行，不折行。 */
-.actions {
-  display: flex;
-  flex-wrap: nowrap;
+/* 宽表格里每格垂直居中（窄容器堆叠时，行标题与“更多”按钮同一行也居中）：行尾的“更多”按钮比文字高。 */
+.table tbody :is(th, td) {
+  vertical-align: middle;
+}
+
+.table tbody tr {
   align-items: center;
-  gap: var(--space-4);
-  white-space: nowrap;
 }
 
 .failedList {

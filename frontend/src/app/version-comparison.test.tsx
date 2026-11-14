@@ -199,7 +199,7 @@ describe("版本对比：对话框", () => {
     expect(await within(again).findByRole("table", { name: "各个版本的对比" })).toBeTruthy();
   });
 
-  it("读取失败：显示带请求 ID 的错误和重试，重试后显示对比", async () => {
+  it("读取失败：显示错误（不显示请求 ID）和重试，重试后显示对比", async () => {
     const { catalog, album } = setup();
     // 500 不会被查询自动重试，错误立刻显示。
     catalog.comparisonFailure = jsonResponse(500, { error: { code: "internal_error", message: "服务器内部错误" }, request_id: "req-compare" });
@@ -208,7 +208,7 @@ describe("版本对比：对话框", () => {
     await heading("Sample Symphonies");
     const dialog = await openDialog(user);
     const alert = await within(dialog).findByRole("alert");
-    expect(alert.textContent).toContain("req-compare");
+    expect(alert.textContent).not.toContain("req-compare");
     catalog.comparisonFailure = null;
     await user.click(within(dialog).getByRole("button", { name: "重试" }));
     expect(await within(dialog).findByRole("table", { name: "各个版本的对比" })).toBeTruthy();

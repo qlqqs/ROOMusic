@@ -51,7 +51,7 @@ export async function logoutFromMenu(page: Page): Promise<void> {
   await page.getByRole("menuitem", { name: "退出登录", exact: true }).click();
 }
 
-export const settingsScenes = ["设置账号", "设置备份", "备份删除确认框", "备份批量选择", "备份批量删除确认框", "自动清理确认框", "用户菜单"] as const;
+export const settingsScenes = ["设置账号", "设置备份", "备份行菜单", "备份删除确认框", "备份批量选择", "备份批量删除确认框", "自动清理确认框", "用户菜单"] as const;
 export type SettingsScene = (typeof settingsScenes)[number];
 
 /** axe 与响应式检查共用状态，所有确认框都由实际交互打开。 */
@@ -73,21 +73,28 @@ export async function openSettingsScene(page: Page, scene: SettingsScene): Promi
   await expect(heading(page, "备份")).toBeVisible();
   const files = page.getByRole("region", { name: "备份文件", exact: true });
   await expect(files.getByRole("table")).toBeVisible();
-  if (scene === "备份删除确认框") {
-    await files.getByRole("button", { name: /^删除 .* 的备份$/ }).first().click();
+  if (scene === "备份行菜单" || scene === "备份删除确认框") {
+    await files.getByRole("button", { name: /的备份的更多操作$/ }).first().click();
+    const menu = page.getByRole("menu", { name: /的备份的更多操作$/ });
+    await expect(menu).toBeVisible();
+    if (scene === "备份行菜单") return;
+    await menu.getByRole("menuitem", { name: "删除…", exact: true }).click();
     await expect(page.getByRole("dialog", { name: /^删除 .* 的备份？$/ })).toBeVisible();
   } else if (scene === "备份批量选择" || scene === "备份批量删除确认框") {
     await files.getByRole("checkbox", { name: "全选", exact: true }).check();
     if (scene === "备份批量删除确认框") {
-      await files.getByRole("button", { name: /^删除所选/ }).click();
+      await files.getByRole("button", { name: /^删除\s*所选的/ }).click();
       await expect(page.getByRole("dialog", { name: /^删除 \d+ 份备份？$/ })).toBeVisible();
     }
   } else if (scene === "自动清理确认框") {
     const retention = page.getByRole("region", { name: "自动清理", exact: true });
+    // 即改即存：勾上“不限”立即保存；取消份数的“不限”、填 1 后回车保存，会删除旧备份时弹出确认。
     await retention.getByRole("group", { name: "保留天数", exact: true }).getByRole("checkbox", { name: "不限" }).check();
+    await expect(retention.locator('p[role="status"]')).toHaveText("已保存。");
     await retention.getByRole("group", { name: "保留份数", exact: true }).getByRole("checkbox", { name: "不限" }).uncheck();
-    await retention.getByRole("spinbutton", { name: "保留份数", exact: true }).fill("1");
-    await retention.getByRole("button", { name: "保存", exact: true }).click();
+    const count = retention.getByRole("spinbutton", { name: "保留份数", exact: true });
+    await count.fill("1");
+    await count.press("Enter");
     await expect(page.getByRole("dialog", { name: "保存清理设置？", exact: true })).toBeVisible();
   }
 }

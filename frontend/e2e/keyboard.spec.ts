@@ -197,8 +197,13 @@ test.describe("键盘", () => {
     await page.keyboard.press("Enter");
     await expect(page.getByText(/已创建成员“keyboard-user”/)).toBeVisible();
 
-    const trigger = page.getByRole("button", { name: "撤销会话 keyboard-user" });
+    // 行尾“更多”菜单：回车打开并聚焦第一项（重置密码…），下箭头到“撤销会话…”。
+    const trigger = page.getByRole("button", { name: "成员 keyboard-user 的更多操作" });
     await trigger.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("menuitem", { name: "重置密码…" })).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(page.getByRole("menuitem", { name: "撤销会话…" })).toBeFocused();
     await page.keyboard.press("Enter");
     const dialog = page.getByRole("dialog", { name: "撤销成员“keyboard-user”的全部会话？" });
     await expect(dialog.getByRole("button", { name: "取消" })).toBeFocused();

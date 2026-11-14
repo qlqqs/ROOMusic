@@ -1,6 +1,6 @@
 import { openSettingsScene, settingsScenes } from "./support/settings";
 import AxeBuilder from "@axe-core/playwright";
-import { accountAxeScenes, openAccountScene } from "./support/account-password";
+import { accountAxeScenes, chooseMemberAction, openAccountScene } from "./support/account-password";
 import type { Page } from "@playwright/test";
 import { sampleBody } from "../src/test/api-samples";
 import { albumGroup, albumGroups } from "../src/test/catalog-data";
@@ -434,7 +434,7 @@ const states: State[] = [
     options: { signedInAs: "curator" },
     reach: async (page) => {
       await page.goto("/settings/members");
-      await page.getByRole("button", { name: "停用成员 curator" }).click();
+      await chooseMemberAction(page, "curator", "停用…");
       await expect(page.getByRole("dialog", { name: "停用成员“curator”？" })).toBeVisible();
     },
   },

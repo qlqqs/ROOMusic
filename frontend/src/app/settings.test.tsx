@@ -1,6 +1,6 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { installFakeApi, installFakeSession } from "../test/fake-api";
 import { renderApp } from "../test/render-app";
 
@@ -82,6 +82,58 @@ describe("设置页与权限", () => {
     await accountHeading();
     expect(history.location.pathname).toBe("/settings/account");
     expect(history.length).toBe(1);
+  });
+});
+
+describe("窄屏的胶囊标签行", () => {
+  /** 标签行（设置导航里的第二个子元素）；jsdom 没有布局，宽度与滚动位置由测试给出。 */
+  function tabsRow(): HTMLElement {
+    const row = screen.getByRole("navigation", { name: "设置" }).children[1];
+    if (!(row instanceof HTMLElement)) throw new Error("缺少标签行");
+    return row;
+  }
+  function layout(row: HTMLElement, sizes: { scrollWidth: number; clientWidth: number; scrollLeft: number }) {
+    for (const [key, value] of Object.entries(sizes)) Object.defineProperty(row, key, { configurable: true, value });
+  }
+
+  it("按滚动位置标出哪一端还有被遮住的标签（样式据此渐隐），不溢出时两端都不标", async () => {
+    setup();
+    renderApp({ path: "/settings/account" });
+    await accountHeading();
+    const row = tabsRow();
+    expect(row.hasAttribute("data-fade-start")).toBe(false);
+    expect(row.hasAttribute("data-fade-end")).toBe(false);
+    const scrollTo = (left: number) => {
+      layout(row, { scrollWidth: 600, clientWidth: 300, scrollLeft: left });
+      act(() => { row.dispatchEvent(new Event("scroll")); });
+    };
+    scrollTo(0);
+    expect(row.hasAttribute("data-fade-start")).toBe(false);
+    expect(row.hasAttribute("data-fade-end")).toBe(true);
+    scrollTo(150);
+    expect(row.hasAttribute("data-fade-start")).toBe(true);
+    expect(row.hasAttribute("data-fade-end")).toBe(true);
+    scrollTo(300);
+    expect(row.hasAttribute("data-fade-start")).toBe(true);
+    expect(row.hasAttribute("data-fade-end")).toBe(false);
+  });
+
+  it("换栏目时只在标签行里横向滚动，把当前标签放到中间", async () => {
+    setup();
+    renderApp({ path: "/settings/account" });
+    await accountHeading();
+    const row = tabsRow();
+    layout(row, { scrollWidth: 600, clientWidth: 300, scrollLeft: 0 });
+    const scroll = vi.fn();
+    row.scrollTo = scroll as typeof row.scrollTo;
+    const nav = screen.getByRole("navigation", { name: "设置" });
+    const backups = within(nav).getByRole("link", { name: "备份" });
+    Object.defineProperty(backups, "offsetWidth", { configurable: true, value: 60 });
+    backups.getBoundingClientRect = () => ({ left: 500, right: 560, top: 0, bottom: 30, width: 60, height: 30, x: 500, y: 0, toJSON: () => ({}) });
+    await userEvent.click(backups);
+    await screen.findByRole("heading", { level: 1, name: "备份" });
+    // 标签左端 500，行宽 300：(500 - (300 - 60) / 2) = 380，超过可滚的 300，取 300。
+    await waitFor(() => expect(scroll).toHaveBeenCalledWith({ left: 300 }));
   });
 });
 

@@ -6,6 +6,8 @@
 @media (hover: hover) and (pointer: fine) { .menu button:hover { background: var(--color-hover); } }
 .menu button[data-icon] { display: flex; align-items: center; gap: var(--space-2); }
 .icon { display: inline-flex; flex-shrink: 0; color: var(--text-secondary); }
+/* 破坏性操作：文字与图标用警示色（对纸面约 5.9:1）；停用时仍是次要色。 */
+.menu button[data-danger]:enabled, .menu button[data-danger]:enabled .icon { color: var(--color-warning); }
 
 /* 分组：组与组之间一条淡分隔线，组标题是不可聚焦的小字。 */
 .separator { height: 1px; margin: var(--space-1); background: var(--color-divider); }

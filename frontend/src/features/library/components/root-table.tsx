@@ -37,7 +37,7 @@ export function RootTable({ roots, busy, onDisable, onRestore, onEditExclusions,
           { id: "exclusions", label: "不扫描的文件夹…", icon: <FolderMinus size={16} />, onSelect: () => onEditExclusions(root) },
           { id: "relocate", label: "改路径…", icon: <FolderPen size={16} />, disabled: busy, onSelect: () => onRelocate(root) },
           root.status === "active"
-            ? { id: "disable", label: "停用目录", icon: <Ban size={16} />, disabled: busy, onSelect: () => onDisable(root) }
+            ? { id: "disable", label: "停用目录", icon: <Ban size={16} />, disabled: busy, danger: true, onSelect: () => onDisable(root) }
             : { id: "restore", label: "恢复目录", icon: <RotateCcw size={16} />, disabled: busy, onSelect: () => onRestore(root) },
         ];
         return (

@@ -1,4 +1,4 @@
-/* 表单在设置卡片里贴边：两行上限加末尾的保存行，行间一条淡分隔线。 */
+/* 两行上限在设置卡片里贴边，行间一条淡分隔线。 */
 .form {
   display: grid;
   min-width: 0;
@@ -96,21 +96,11 @@
   overflow-wrap: anywhere;
 }
 
-/* 保存行：按钮与结果同一行，结果放不下时换行；其后是删除失败或保存失败的提示。 */
-.submit {
-  display: grid;
-  gap: var(--space-2);
-  min-width: 0;
-  padding: var(--space-3) var(--space-4);
-}
-
-.submitLine {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2) var(--space-4);
-}
-
+/* 标题旁的“已保存”：勾加一句话，绿色（对纸面约 5:1）；空的时候不占位。 */
 .saved {
-  font-size: var(--fs-13);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-signal-high);
+  font-size: var(--fs-12);
 }

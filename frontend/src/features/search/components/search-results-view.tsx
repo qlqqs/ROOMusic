@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { Page } from "../../../shared/ui";
+import { Button, FailureNotice, Page } from "../../../shared/ui";
 import type { SearchTrackItemDTO } from "../api/decoders";
 import { useCatalogState } from "../../catalog";
 import { useAlbumResults, useArtistResults, useTrackResults } from "../hooks/use-search-results";
@@ -27,7 +27,7 @@ type SearchResultsViewProps = {
 const COMPACT_TITLE_LENGTH = 40;
 
 /**
- * 搜索结果页：艺人（就绪时）、专辑、曲目各一栏，各自加载、失败、重试与分页（只改自己那一栏的页码）。
+ * 搜索结果页：艺人（就绪时）、专辑、曲目各一栏，各自加载、失败、重试与分页（只改自己那一栏的页码）；几栏都失败时合成一条错误。
  * 页面里的搜索框只在窄屏出现（宽屏用侧栏的那一个）；没有查询词时任何宽度都显示它。
  */
 export function SearchResultsView({ search, renderTrackActions, renderTrackRowsScope, tracksNotice }: SearchResultsViewProps) {
@@ -41,18 +41,68 @@ export function SearchResultsView({ search, renderTrackActions, renderTrackRowsS
         <GlobalSearchBox currentQuery={q} />
       </div>
       {q === undefined ? null : (
-        <div className={styles.sections}>
-          {artistsReady ? <ArtistSection search={search} q={q} /> : null}
-          <AlbumSection search={search} q={q} />
-          <TrackSection search={search} q={q} renderTrackActions={renderTrackActions} renderRowsScope={renderTrackRowsScope} notice={tracksNotice} />
-        </div>
+        <ResultSections
+          search={search}
+          q={q}
+          artistsReady={artistsReady}
+          renderTrackActions={renderTrackActions}
+          renderTrackRowsScope={renderTrackRowsScope}
+          tracksNotice={tracksNotice}
+        />
       )}
     </Page>
   );
 }
 
-function ArtistSection({ search, q }: { search: SearchPageSearch; q: string }) {
-  const artists = useArtistResults(q, search.artists_page ?? 1, true);
+type Results = {
+  artists: ReturnType<typeof useArtistResults>;
+  albums: ReturnType<typeof useAlbumResults>;
+  tracks: ReturnType<typeof useTrackResults>;
+};
+
+/**
+ * 各栏的查询在这里发出：出现的几栏都失败且没有旧结果时（通常是同一个原因，例如服务器没有响应），只显示一条错误和一个“重试”（重试所有栏），
+ * 不在每一栏重复同一句话；只有部分栏失败时，各栏照常各自显示错误与重试。
+ */
+function ResultSections({
+  search,
+  q,
+  artistsReady,
+  renderTrackActions,
+  renderTrackRowsScope,
+  tracksNotice,
+}: Omit<SearchResultsViewProps, "search"> & { search: SearchPageSearch; q: string; artistsReady: boolean }) {
+  const results: Results = {
+    artists: useArtistResults(q, search.artists_page ?? 1, artistsReady),
+    albums: useAlbumResults(q, search.albums_page ?? 1),
+    tracks: useTrackResults(q, search.tracks_page ?? 1),
+  };
+  const shown = artistsReady ? [results.artists, results.albums, results.tracks] : [results.albums, results.tracks];
+  if (shown.every((query) => query.status === "error" && query.data === undefined)) {
+    return (
+      <FailureNotice
+        error={results.albums.error}
+        title="暂时搜不到结果"
+        action={
+          shown.some((query) => query.isFetching) ? (
+            <Button busy>正在重试…</Button>
+          ) : (
+            <Button onClick={() => shown.forEach((query) => void query.refetch())}>重试</Button>
+          )
+        }
+      />
+    );
+  }
+  return (
+    <div className={styles.sections}>
+      {artistsReady ? <ArtistSection search={search} artists={results.artists} /> : null}
+      <AlbumSection search={search} albums={results.albums} />
+      <TrackSection search={search} tracks={results.tracks} renderTrackActions={renderTrackActions} renderRowsScope={renderTrackRowsScope} notice={tracksNotice} />
+    </div>
+  );
+}
+
+function ArtistSection({ search, artists }: { search: SearchPageSearch; artists: Results["artists"] }) {
   return (
     <ResultSection
       title="艺人"
@@ -66,8 +116,7 @@ function ArtistSection({ search, q }: { search: SearchPageSearch; q: string }) {
   );
 }
 
-function AlbumSection({ search, q }: { search: SearchPageSearch; q: string }) {
-  const albums = useAlbumResults(q, search.albums_page ?? 1);
+function AlbumSection({ search, albums }: { search: SearchPageSearch; albums: Results["albums"] }) {
   return (
     <ResultSection
       title="专辑"
@@ -83,18 +132,17 @@ function AlbumSection({ search, q }: { search: SearchPageSearch; q: string }) {
 
 function TrackSection({
   search,
-  q,
+  tracks,
   renderTrackActions,
   renderRowsScope,
   notice,
 }: {
   search: SearchPageSearch;
-  q: string;
+  tracks: Results["tracks"];
   renderTrackActions: SearchResultsViewProps["renderTrackActions"];
   renderRowsScope: SearchResultsViewProps["renderTrackRowsScope"];
   notice: ReactNode;
 }) {
-  const tracks = useTrackResults(q, search.tracks_page ?? 1);
   return (
     <ResultSection
       title="曲目"

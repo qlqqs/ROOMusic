@@ -18,6 +18,8 @@ export function useSettingsNarrow(): boolean {
 type SettingsGroupProps = {
   /** 分组标题（h2）；不给时只有卡片。 */
   title?: string;
+  /** 紧跟在标题后面的状态（例如即改即存的“已保存”）；只在有标题时显示。 */
+  status?: ReactNode;
   /** 标题行右侧的操作（例如“添加目录…”）；只在有标题时显示。 */
   action?: ReactNode;
   /** 标题元素的引用；给了它，标题可以被程序聚焦（tabIndex=-1，不进 Tab 顺序），例如删除行之后把焦点带回区块顶部。 */
@@ -32,7 +34,7 @@ type SettingsGroupProps = {
  * 卡片里不是 SettingRow、也不含表格的直接子元素（加载占位、错误、空状态的一句话）自动加上与行相同的内边距；表格贴边，单元格自己留边距。
  * 卡片宽度用 ResizeObserver 量出，告诉里面的分段选择该不该改成下拉；没有 ResizeObserver（jsdom）时按宽处理。
  */
-export function SettingsGroup({ title, action, headingRef, footer, children }: SettingsGroupProps) {
+export function SettingsGroup({ title, status, action, headingRef, footer, children }: SettingsGroupProps) {
   const headingId = useId();
   const card = useRef<HTMLDivElement>(null);
   const [narrow, setNarrow] = useState(false);
@@ -49,9 +51,12 @@ export function SettingsGroup({ title, action, headingRef, footer, children }: S
     <section className={styles.group} aria-labelledby={title === undefined ? undefined : headingId}>
       {title === undefined ? null : (
         <div className={styles.header}>
-          <h2 id={headingId} ref={headingRef} tabIndex={headingRef === undefined ? undefined : -1} className={styles.title}>
-            {title}
-          </h2>
+          <div className={styles.titleLine}>
+            <h2 id={headingId} ref={headingRef} tabIndex={headingRef === undefined ? undefined : -1} className={styles.title}>
+              {title}
+            </h2>
+            {status}
+          </div>
           {action === undefined ? null : <div className={styles.action}>{action}</div>}
         </div>
       )}

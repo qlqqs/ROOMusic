@@ -164,7 +164,7 @@ describe("扫描报告：真实样本与状态边界", () => {
     renderDetail(scan);
     const region = await reportRegion();
     const alert = await within(region).findByRole("alert");
-    expect(alert.textContent).toContain("report-read-failure");
+    expect(alert.textContent).not.toContain("report-read-failure");
     expect(within(await statusRegion()).getByRole("status").textContent).toBe("成功");
     expect(await screen.findByRole("region", { name: "诊断" })).toBeTruthy();
     failed = false;

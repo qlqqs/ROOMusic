@@ -13,8 +13,14 @@
   display: none;
 }
 
-/* 横向滚动时焦点环不被裁掉：四周留出焦点环的位置，再用负外边距抵消。 */
+/*
+ * 横向滚动时焦点环不被裁掉：四周留出焦点环的位置，再用负外边距抵消。
+ * 还有被遮住的标签的一端渐隐（data-fade-start / data-fade-end 由 settings-layout.tsx 按滚动位置标出），提示还能往那边滑；
+ * 末尾多留一段，滑到底时最后一个标签完整露出、不贴着渐隐。
+ */
 .tabs {
+  --fade-start: 0px;
+  --fade-end: 0px;
   display: flex;
   flex-wrap: nowrap;
   gap: var(--space-1);
@@ -22,6 +28,25 @@
   padding: 4px;
   overflow-x: auto;
   scrollbar-width: none;
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent 100%);
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tabs::after {
+  content: "";
+  flex: none;
+  width: var(--space-2);
+}
+
+.tabs[data-fade-start] {
+  --fade-start: 40px;
+}
+
+.tabs[data-fade-end] {
+  --fade-end: 40px;
 }
 
 .section {
@@ -109,6 +134,11 @@
     margin: 0;
     padding: 0;
     overflow: visible;
+    mask-image: none;
+  }
+
+  .tabs::after {
+    content: none;
   }
 
   .section {
