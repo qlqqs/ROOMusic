@@ -186,6 +186,23 @@
   overflow-wrap: anywhere;
 }
 
+/*
+ * 精确指针设备上悬停的行：墨色浅底，曲目号换成主文字色；行内动作随之显现（规则在 track-actions.module.css，按 data-track-row 找到这一行）。
+ * 底色与搜索定位的高亮一样往左右各延伸 6px，不压到上下相邻的行，也在介质分段的 6px 余量之内。
+ */
+@media (hover: hover) and (pointer: fine) {
+  .track:hover {
+    background: var(--color-hover);
+    box-shadow:
+      -6px 0 0 0 var(--color-hover),
+      6px 0 0 0 var(--color-hover);
+  }
+
+  .track:hover .number {
+    color: var(--text-primary);
+  }
+}
+
 @media (max-width: 767px) {
   .track {
     grid-template-columns: 1.8em minmax(0, 1fr) auto auto;

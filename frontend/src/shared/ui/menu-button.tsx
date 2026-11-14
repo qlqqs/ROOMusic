@@ -1,9 +1,25 @@
-import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+import { Fragment, useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "./button";
 import styles from "./menu-button.module.css";
 
-export type MenuAction = { id: string; label: string; onSelect: () => void; disabled?: boolean; icon?: ReactNode };
+/**
+ * group：相邻且 group 相同的项为一组，组与组之间画分隔线；组名不为空时在组首显示组标题（不可聚焦，方向键跳过）。
+ * 不给 group 的项都在同一个无名组里，旧的调用方不受影响。
+ */
+export type MenuAction = { id: string; label: string; onSelect: () => void; disabled?: boolean; icon?: ReactNode; group?: string };
+
+/** 把相邻且 group 相同的项归成一段。 */
+function groupActions(actions: readonly MenuAction[]): { name: string; actions: MenuAction[] }[] {
+  const groups: { name: string; actions: MenuAction[] }[] = [];
+  for (const action of actions) {
+    const name = action.group ?? "";
+    const last = groups.at(-1);
+    if (last !== undefined && last.name === name) last.actions.push(action);
+    else groups.push({ name, actions: [action] });
+  }
+  return groups;
+}
 
 type MenuOptions = {
   /** 菜单的可访问名称。 */
@@ -101,11 +117,19 @@ export function useMenu({ label, actions, placement = "below", matchTriggerWidth
       if (["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) { event.preventDefault(); open(event.key === "ArrowUp" ? "last" : "first"); }
     },
   };
+  const item = (action: MenuAction) => <button type="button" key={action.id} role="menuitem" tabIndex={-1} disabled={action.disabled} data-icon={action.icon === undefined ? undefined : ""} onClick={() => { close(); action.onSelect(); }}>
+    {action.icon === undefined ? null : <span className={styles.icon} aria-hidden="true">{action.icon}</span>}
+    {action.label}
+  </button>;
+  // 有名字的组用 role="group" 包起来，组标题是它的名称；无名组的项直接放在菜单里，与没有分组时的结构相同。
   const content = position === null ? null : createPortal(<div id={id} ref={menu} role="menu" aria-label={label} className={styles.menu} style={position.style} onKeyDown={onMenuKey}>
-    {actions.map((action) => <button type="button" key={action.id} role="menuitem" tabIndex={-1} disabled={action.disabled} data-icon={action.icon === undefined ? undefined : ""} onClick={() => { close(); action.onSelect(); }}>
-      {action.icon === undefined ? null : <span className={styles.icon} aria-hidden="true">{action.icon}</span>}
-      {action.label}
-    </button>)}
+    {groupActions(actions).map((group, index) => <Fragment key={`${index}:${group.name}`}>
+      {index === 0 ? null : <div role="separator" className={styles.separator} />}
+      {group.name === "" ? group.actions.map(item) : <div role="group" aria-labelledby={`${id}-group-${index}`} className={styles.group}>
+        <div role="presentation" id={`${id}-group-${index}`} className={styles.groupTitle}>{group.name}</div>
+        {group.actions.map(item)}
+      </div>}
+    </Fragment>)}
   </div>, position.container);
   return { triggerProps, menu: content, open: position !== null };
 }

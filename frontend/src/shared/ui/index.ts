@@ -16,6 +16,8 @@ export { Page } from "./page";
 export { Pagination, type PaginationLinkProps } from "./pagination";
 export { Panel } from "./panel";
 export { QueryContent, type QuerySource } from "./query-content";
+export { Segmented, type SegmentedOption } from "./segmented";
+export { SettingRow, SettingsGroup, type SettingRowIds } from "./settings-group";
 export { StatList, type Stat } from "./stat-list";
 
 export { MenuButton, useMenu, type MenuAction } from "./menu-button";

@@ -67,7 +67,7 @@ const TrackRow = memo(function TrackRow({
   }, [focusToken]);
   return (
     // 定位到的行可以被程序聚焦（不进 Tab 顺序），读屏随之读出这一行，键盘从这里继续。高亮结束后仍保留，焦点不会因此丢失。
-    <li ref={rowRef} className={styles.track} tabIndex={focusToken === undefined ? undefined : -1} data-located={highlighted ? "" : undefined}>
+    <li ref={rowRef} className={styles.track} data-track-row="" tabIndex={focusToken === undefined ? undefined : -1} data-located={highlighted ? "" : undefined}>
       <span className={styles.number}>{track.position >= 1 ? track.position : "—"}</span>
       <p className={styles.title}>
         <span>{title}</span>

@@ -1,0 +1,89 @@
+/* 分段选择：浅底槽里几段，选中的一段是浮起的浅色块；整体与下拉同高。 */
+.segments {
+  display: inline-flex;
+  flex-wrap: wrap;
+  max-width: 100%;
+  padding: 2px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.segment {
+  position: relative;
+  display: inline-flex;
+}
+
+.segment input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.segment span {
+  display: inline-flex;
+  align-items: center;
+  min-height: calc(var(--control-height) - 4px);
+  padding: 0 var(--space-3);
+  border-radius: calc(var(--radius-lg) - 2px);
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .segment:hover input:not(:checked, :disabled) + span {
+    color: var(--text-primary);
+  }
+}
+
+.segment input:checked + span {
+  background: var(--color-neutral-100);
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+
+.segment:has(input:focus-visible) {
+  border-radius: calc(var(--radius-lg) - 2px);
+  outline: var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.segments[aria-disabled] {
+  opacity: 0.45;
+}
+
+.segment input:disabled,
+.segment input:disabled + span {
+  cursor: not-allowed;
+}
+
+/* 窄卡片里的下拉：与其他控件同高，细边框。 */
+.select {
+  min-height: var(--control-height);
+  max-width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--fs-13);
+}
+
+.select:hover:not(:disabled) {
+  border-color: var(--color-neutral-800);
+}
+
+.select:focus-visible {
+  border-color: var(--color-accent-700);
+  outline-offset: 0;
+}
+
+.select:disabled {
+  cursor: not-allowed;
+}

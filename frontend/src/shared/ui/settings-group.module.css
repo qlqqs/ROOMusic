@@ -1,0 +1,93 @@
+/* 设置分组：h2 标题加一张浅色卡片；卡片是容器查询的容器，行按卡片宽度而不是视口宽度换行。 */
+.group {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.title {
+  margin: 0 0 0 2px;
+  font-size: var(--fs-14);
+  font-weight: var(--font-heading-weight);
+}
+
+.card {
+  container: settings-card / inline-size;
+  min-width: 0;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, white 45%, var(--color-bg));
+}
+
+.card > * + * {
+  border-top: 1px solid var(--color-divider);
+}
+
+/* 一行：名称与说明 | 控件；控件右对齐。 */
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+}
+
+.text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.label {
+  font-size: var(--fs-14);
+  overflow-wrap: anywhere;
+}
+
+.description {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  overflow-wrap: anywhere;
+}
+
+.control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* 从属项：缩进在所属开关下，名称用次要文字色、小一级。 */
+.nested {
+  padding-inline-start: var(--space-8);
+}
+
+.nested .label {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+}
+
+/* 窄卡片：名称占一行的剩余宽度，控件放不下就整体换到下一行，仍靠右。639px 与 settings-group.tsx 的 NARROW_BELOW 对应。 */
+@container settings-card (max-width: 639px) {
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .text {
+    flex: 1 1 10em;
+  }
+
+  .control {
+    flex: 0 1 auto;
+    max-width: 100%;
+    margin-inline-start: auto;
+  }
+
+  .nested {
+    padding-inline-start: var(--space-6);
+  }
+}
