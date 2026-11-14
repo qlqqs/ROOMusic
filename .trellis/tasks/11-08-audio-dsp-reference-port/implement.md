@@ -73,19 +73,19 @@ zones:  B1 ───────► B2（端口定稿）──► B3 ───�
 
 ## 5. 第二、三批执行安排（2026-11-09）
 
-本节是第一批 `main e29b65d / v0.5.0` 之后的执行依据，取代 §4 及父 design 中“接入可任意并行”的旧安排；历史第一批清单不回写。用户裁决：纯包并行，**骨架先合入，再按 SRC → 降混 → PEQ → 卷积 → DSD 串行接入**；PCM→DSD 只做库，往返依赖 DSD。接口以[骨架 design](../11-09-dsp-batch2-skeleton/design.md)及修订后的子设计为准。
+本节是第一批 `main e29b65d / v0.5.0` 之后的执行依据，取代 §4 及父 design 中“接入可任意并行”的旧安排；历史第一批清单不回写。用户裁决：纯包并行，**骨架先合入，再按 SRC → 降混 → PEQ → 卷积 → DSD 串行接入**；PCM→DSD 只做库，往返依赖 DSD。接口以[骨架 design](../archive/2026-11/11-09-dsp-batch2-skeleton/design.md)及修订后的子设计为准。
 
 ### 5.1 子任务、工作树与资源
 
 | 子项 | 可并行的纯包/基础 | 接入前置 | 后端实现 / 独立测试 | 工作树；分支建议 | 测试项目 | 迁移 |
 | --- | --- | --- | --- | --- | --- | --- |
-| [公共骨架](../11-09-dsp-batch2-skeleton/implement.md) | refdata 基础小提交 | 第一批 main | gpt-6-astra / gpt-6-astra | ROOMusic-dsp-skeleton；dsp/batch2-skeleton | roomusic-test-dsp-skeleton | 无 |
-| [SRC](../11-08-sample-rate-conversion/implement.md) | fft、src、2s 生成器 | 骨架 | gpt-6-astra / gpt-6-astra | ROOMusic-dsp-src；dsp/src-pure → dsp/src-integration | roomusic-test-src | 0045 |
-| [降混](../11-08-downmix/implement.md) | downmix 矩阵/处理器 | SRC 接入合 main | gpt-6.1-sol / gpt-6.1-sol | ROOMusic-dsp-downmix；dsp/downmix-pure → dsp/downmix-integration | roomusic-test-downmix | 0046 |
-| [PEQ](../11-08-peq/implement.md) | peq；OPRA/导入纯解析准备 | 降混接入合 main | gpt-6-astra / gpt-6-astra | ROOMusic-dsp-peq；dsp/peq-pure → dsp/peq-integration | roomusic-test-peq | 0047（含预设表） |
-| [卷积](../11-08-convolution/implement.md) | convolution（等 fft）、cfg；IR 重采样等 src | PEQ 接入合 main | gpt-6-astra / gpt-6-astra | ROOMusic-dsp-convolution；dsp/convolution-pure → dsp/convolution-integration | roomusic-test-convolution | 0048 IR 表、0049 设置 |
-| [DSD](../11-08-dsd-playback/implement.md) | dsd/生成器；中性容器解析；组合等 src/peq | 卷积接入合 main；扫描⑩已满足 | gpt-6-astra / gpt-6-astra | ROOMusic-dsp-dsd；dsp/dsd-pure → dsp/dsd-integration | roomusic-test-dsd | 无 |
-| [PCM→DSD](../11-08-pcm-to-dsd/implement.md) | sdm/生成器；往返等 dsd | 无产品接入；最终合入在 DSD 后 | gpt-6.1-sol / gpt-6.1-sol | ROOMusic-dsp-sdm；dsp/sdm-pure | roomusic-test-sdm（纯包无需DB） | 无 |
+| [公共骨架](../archive/2026-11/11-09-dsp-batch2-skeleton/implement.md) | refdata 基础小提交 | 第一批 main | gpt-6-astra / gpt-6-astra | ROOMusic-dsp-skeleton；dsp/batch2-skeleton | roomusic-test-dsp-skeleton | 无 |
+| [SRC](../archive/2026-11/11-08-sample-rate-conversion/implement.md) | fft、src、2s 生成器 | 骨架 | gpt-6-astra / gpt-6-astra | ROOMusic-dsp-src；dsp/src-pure → dsp/src-integration | roomusic-test-src | 0045 |
+| [降混](../archive/2026-11/11-08-downmix/implement.md) | downmix 矩阵/处理器 | SRC 接入合 main | gpt-6.1-sol / gpt-6.1-sol | ROOMusic-dsp-downmix；dsp/downmix-pure → dsp/downmix-integration | roomusic-test-downmix | 0046 |
+| [PEQ](../archive/2026-11/11-08-peq/implement.md) | peq；OPRA/导入纯解析准备 | 降混接入合 main | gpt-6-astra / gpt-6-astra | ROOMusic-dsp-peq；dsp/peq-pure → dsp/peq-integration | roomusic-test-peq | 0047（含预设表） |
+| [卷积](../archive/2026-11/11-08-convolution/implement.md) | convolution（等 fft）、cfg；IR 重采样等 src | PEQ 接入合 main | gpt-6-astra / gpt-6-astra | ROOMusic-dsp-convolution；dsp/convolution-pure → dsp/convolution-integration | roomusic-test-convolution | 0048 IR 表、0049 设置 |
+| [DSD](../archive/2026-11/11-08-dsd-playback/implement.md) | dsd/生成器；中性容器解析；组合等 src/peq | 卷积接入合 main；扫描⑩已满足 | gpt-6-astra / gpt-6-astra | ROOMusic-dsp-dsd；dsp/dsd-pure → dsp/dsd-integration | roomusic-test-dsd | 无 |
+| [PCM→DSD](../archive/2026-11/11-08-pcm-to-dsd/implement.md) | sdm/生成器；往返等 dsd | 无产品接入；最终合入在 DSD 后 | gpt-6.1-sol / gpt-6.1-sol | ROOMusic-dsp-sdm；dsp/sdm-pure | roomusic-test-sdm（纯包无需DB） | 无 |
 
 模型 provider 都是 `codex`、reasoning 都是 high；实现与测试是独立 agent。**所有前端由主会话写**，不沿用旧稿 Opus 前端派工。此处是分支/项目命名建议，不表示本起草会话已创建工作树或启动 agent。
 
@@ -146,3 +146,14 @@ git diff --check
 - [ ] 部署八号机前备份数据库（含 IR bytea、PEQ预设及设备选择），按生产部署文档升级、记录原镜像/新镜像摘要、schema 与健康结果；只在用户授权的部署窗口操作。失败按已留存镜像与迁移回退/备份流程处置，不能把原IR当缓存删除。
 - [ ] 部署后先做服务健康与桌面最小播放检查，再进行**最后一轮 iPhone 真机验收**：无损/有损、SRC/降混/PEQ/卷积的信号与设置、DSD64/128及CUE相邻分轨、定位/歌词/锁屏连续/计次；借真实使用路径合并核对，不给每个算法重复整套手机测试。
 - [ ] iPhone 结果由主会话/用户记录；本机Chromium不替代真机。若未完成，父任务不标全部验收完成。v0.6.0 同批部署及最终真机顺序按用户2026-11-09裁决执行。
+
+## 进度核对（2026-11-14）
+
+本节是当前状态，优先于上方未逐项回填的历史执行清单。
+
+- [x] 公共骨架、SRC、降混、PEQ、卷积、DSD 播放及 PCM→DSD 纯库已合入 main，7 个子任务本次归档；连同第一批，10 个算法子任务均已交付归档。
+- [x] v0.6.0 已于 2026-11-09 发布，提交 `c3a27b79`；[CI](https://github.com/qlqqs/ROOMusic/actions/runs/42693220952) 与 [Release](https://github.com/qlqqs/ROOMusic/actions/runs/42695792805) 成功。
+- [ ] 核实 v0.6.0 八号机部署，补录备份、镜像、schema 与健康结果。现有日志仅明确记录 v0.5.0 部署，不据此推断当前生产版本。
+- [ ] 补齐最终 iPhone 真机验收结果（范围见 §5.4）；未找到完成证据，不标为通过。
+
+父任务保持 `in_progress`；生产与真机验收收齐后再归档。旧逐首播放接口仍保留，不作为本轮已完成事项。
