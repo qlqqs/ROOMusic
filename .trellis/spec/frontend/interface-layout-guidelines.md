@@ -23,7 +23,7 @@
   等待确认的心形（`aria-busy`）常驻。触屏不隐藏任何动作。不用 `:has()`（目标浏览器含 Firefox 113）。淡入 0.12s，`prefers-reduced-motion` 下无过渡。
 - 专辑页：带 `data-track-play` 的播放按钮放在序号位（`TrackActions playPlacement="lead"`），悬停或聚焦时盖住序号；触屏常驻。当前曲目的序号位是音柱（减少动态效果时静止），
   标题用强调色，“正在播放 / 已暂停”只给读屏。双击行等于点它的播放按钮；双击发生在链接或按钮里时不触发，双击不选中文字。
-- 窄屏（< 767px）心形收进行的“更多”，菜单项是“收藏 / 取消收藏”。其他列表页（历史、搜索、艺人、收藏、歌单）播放按钮仍在心形旁，显隐规则相同。
+- 窄屏（< 767px）心形收进行的“更多”，菜单项是“收藏 / 取消收藏”。结果不确定且重读失败时，菜单项不可用，菜单旁出现与心形相同的“重新读取”（`useFavoriteMenuAction` 返回 `{ action, retry }`，`data-favorite-retry` 常驻）。其他列表页（历史、搜索、艺人、收藏、歌单）播放按钮仍在心形旁，显隐规则相同。
 
 ## 专辑详情
 
@@ -47,6 +47,7 @@
 
 - 入口 `SignalPathButton` 是“圆点 + 格式文字”的胶囊，名称“FLAC 24/96，信号路径：增强”（含可见文字），削波时加“，削波”；没有 `signal` 时只是格式文字，不是按钮。
   弹层的可访问名称仍是“信号路径：…”。
+- `StatusTag` 的中性色字用 `--tag-neutral-text`（默认 `--color-neutral-800`），全屏深色面改写为 `--color-neutral-200`，从全屏打开的设备列表里的“本机”标签才有足够对比度。
 - 圆点颜色按整体评级（无损 `--text-accent`、增强 `--color-signal-enhanced`、高质量 `--color-signal-high`、有损 `--text-secondary`），削波 `--color-warning`。
 - 呼吸：只在 `playing` 时动，暂停、缓冲、出错静止。4s 一轮：0→38% 吸气（`cubic-bezier(.37,0,.63,1)`，scale .78→1、opacity .55→1），38→88% 呼气（`cubic-bezier(.45,.05,.3,1)`），88→100% 停顿；
   `::after` 光晕独立一层（8→42% scale 1→1.9、opacity 0→.26，42→80% 扩到 2.6 并淡出）。削波是红色约 0.9s 的脉冲（同样只用 transform 与 opacity）。只动画 transform 与 opacity；

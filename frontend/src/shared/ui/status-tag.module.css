@@ -16,7 +16,8 @@
 
 .tag[data-tone="neutral"] {
   background: color-mix(in srgb, var(--color-text) 7%, transparent);
-  color: var(--color-neutral-800);
+  /* 深色面（全屏播放器）改写 --tag-neutral-text，否则深字落在深底上 */
+  color: var(--tag-neutral-text, var(--color-neutral-800));
 }
 
 .tag[data-tone="accent"] {

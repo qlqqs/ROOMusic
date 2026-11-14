@@ -2,7 +2,7 @@ import { Heart } from "lucide-react";
 import { useEffect, useEffectEvent } from "react";
 import { Button, VisuallyHidden } from "../../../shared/ui";
 import type { FavoriteKind } from "../api/decoders";
-import { favoriteFailureText, useFavoriteToggle } from "../hooks/use-favorite-toggle";
+import { favoriteFailureText, uncertainFavoriteText, useFavoriteToggle } from "../hooks/use-favorite-toggle";
 import { useFavoriteStatus } from "./favorite-status-scope";
 import styles from "./favorite-button.module.css";
 
@@ -31,9 +31,7 @@ export function FavoriteButton({ target, message = "visible" }: FavoriteButtonPr
   const unconfirmed = status.unconfirmedOf(target.kind, target.id);
   const busy = status.pendingOf(target.kind, target.id) || unconfirmed;
   const waiting = unconfirmed && !status.refreshing;
-  // 结果不确定时的那句话随重读的进展变化：重读中（只有发起切换的位置说）、重读失败（每个位置都说）、确认之后清掉。
-  // null 表示与结果不确定无关，由普通的失败文案决定。
-  const uncertainText = unconfirmed ? (waiting ? "没能确认是否已收藏。" : failure?.uncertain === true ? favoriteFailureText(failure) : "") : failure?.uncertain === true ? "" : null;
+  const uncertainText = uncertainFavoriteText(unconfirmed, waiting, failure);
   const text = uncertainText ?? (failure === null ? "" : favoriteFailureText(failure));
   const hint = pressed === undefined ? (status.failed ? "暂时读不到收藏状态" : "正在读取收藏状态") : pressed ? "取消收藏" : "收藏";
   const report = typeof message === "function" ? message : undefined;

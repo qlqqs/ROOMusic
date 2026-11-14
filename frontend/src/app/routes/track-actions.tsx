@@ -39,8 +39,11 @@ const NARROW = "(max-width: 767px)";
 
 /** 窄屏的“更多操作”：最前面多一项“收藏”或“取消收藏”。单独成组件：宽屏不为每一行多订阅一份收藏切换。 */
 function NarrowTrackMenu({ favorite, report, actions }: { favorite: FavoriteTarget; report: (text: string) => void; actions: readonly MenuAction[] }) {
-  const favoriteAction = useFavoriteMenuAction(favorite, report);
-  return <MenuButton label="更多操作" iconOnly icon={<MoreHorizontal size={16} />} actions={[favoriteAction, ...actions]} />;
+  const { action: favoriteAction, retry } = useFavoriteMenuAction(favorite, report);
+  return <>
+    <MenuButton label="更多操作" iconOnly icon={<MoreHorizontal size={16} />} actions={[favoriteAction, ...actions]} />
+    {retry}
+  </>;
 }
 
 /**

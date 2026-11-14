@@ -40,6 +40,15 @@ export function favoriteFailureText({ favorited, uncertain, gone, preparing }: F
 }
 
 /**
+ * 结果不确定时的那句话，随重读的进展变化：重读中（只有发起切换的位置说）、重读失败（每个位置都说，waiting）、确认之后清掉。
+ * null 表示与结果不确定无关，由普通的失败文案决定。心形与它的菜单项版本共用。
+ */
+export function uncertainFavoriteText(unconfirmed: boolean, waiting: boolean, failure: FavoriteToggleFailure | null): string | null {
+  if (unconfirmed) return waiting ? "没能确认是否已收藏。" : failure?.uncertain === true ? favoriteFailureText(failure) : "";
+  return failure?.uncertain === true ? "" : null;
+}
+
+/**
  * 切换一个目标的收藏。进行中的目标值由 FavoriteStatusScope 叠加显示（乐观），失败后自然回到服务端的状态；
  * 成功后只确认这一个目标（修补每一份已缓存的批量状态），再让收藏的全部查询失效，由服务端的状态收敛。
  * 同一目标的切换共用一个写操作键，范围据此在进行中禁止再次切换。

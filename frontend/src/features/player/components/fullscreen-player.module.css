@@ -8,6 +8,7 @@ dialog.dialog::backdrop { background: transparent; }
   --color-text: var(--color-neutral-100);
   --text-primary: var(--color-neutral-100);
   --text-secondary: var(--color-neutral-300);
+  --tag-neutral-text: var(--color-neutral-200);
   --text-accent: var(--color-accent-300);
   --color-divider: rgb(255 255 255 / 16%);
   --color-control-border: var(--color-neutral-500);

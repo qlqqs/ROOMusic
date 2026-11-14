@@ -47,7 +47,7 @@
  * 精确指针设备上，播放、心形与“更多”平时不显示，所在的行悬停或行内任一控件获得焦点时才出现。
  * 行是最近的 [role="row"]（表格式列表）或带 data-track-row 的元素（专辑的曲目列表）。
  * 用透明度与 pointer-events 隐藏，不用 display: none：Tab 仍能到达，聚焦时行的 :focus-within 让它们显现。
- * 已收藏的心形、正在打开的菜单与等待确认的收藏（含旁边的“重新读取”）常驻。触屏与没有悬停的设备不受影响，始终显示。
+ * 已收藏的心形、正在打开的菜单与等待确认的收藏（含旁边的“重新读取”，窄屏菜单旁的也是）常驻。触屏与没有悬停的设备不受影响，始终显示。
  */
 @media (hover: hover) and (pointer: fine) {
   .actions button {
@@ -59,7 +59,8 @@
   [role="row"]:is(:hover, :focus-within) .actions button,
   [data-track-row]:is(:hover, :focus-within) .actions button,
   .actions button:is([aria-pressed="true"], [aria-expanded="true"], [aria-busy="true"]),
-  .actions [aria-busy="true"] + button {
+  .actions [aria-busy="true"] + button,
+  .actions [data-favorite-retry] {
     opacity: 1;
     pointer-events: auto;
   }
