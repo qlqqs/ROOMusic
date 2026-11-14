@@ -1,6 +1,6 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, createEvent, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sampleBody } from "../../../test/api-samples";
 import { fakeZoneServer, testPlayerController } from "../../../test/fake-zones";
 import { playerTrack } from "../../../test/player-data";
@@ -24,6 +24,10 @@ let snapshotStatus: PlayerSnapshot["status"] = "paused";
 beforeEach(() => {
   analysis = null;
   snapshotStatus = "paused";
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 const losslessSignal: Signal = {
@@ -62,17 +66,59 @@ describe("服务端信号路径", () => {
     ["lossless", "无损"], ["enhanced", "增强"], ["high", "高质量"], ["low", "有损"],
   ] as const)("按钮按服务端 %s 评级选择颜色，不按曲目来源推断", (quality, label) => {
     viewSignal({ ...losslessSignal, quality });
-    const trigger = screen.getByRole("button", { name: `FLAC 16/44.1，信号路径：${label}` });
-    expect(trigger.textContent).toBe("FLAC 16/44.1");
+    const trigger = screen.getByRole("button", { name: `信号路径：FLAC 16/44.1，${label}` });
+    // 入口只有圆点，没有可见文字；格式与质量只在读屏名与悬停提示里。
+    expect(trigger.textContent).toBe("");
+    expect(trigger.querySelector(`.${styles.dot}`)).not.toBeNull();
     expect(trigger.className.split(" ")).toContain(styles.trigger);
     expect(trigger.dataset.quality).toBe(quality);
     expect(trigger.hasAttribute("data-clipping")).toBe(false);
   });
 
-  it("signal 为 null 时不显示按钮，只显示格式文字", () => {
-    viewSignal(null);
+  it("signal 为 null 时不显示按钮与圆点，格式只留给读屏", () => {
+    const { container } = viewSignal(null);
     expect(screen.queryByRole("button", { name: /信号路径/ })).toBeNull();
-    expect(screen.getByText("FLAC 16/44.1", { exact: true })).toBeTruthy();
+    expect(container.querySelector(`.${styles.dot}`)).toBeNull();
+    const format = screen.getByText("FLAC 16/44.1", { exact: true });
+    expect(format.closest("button")).toBeNull();
+    expect(container.textContent).toBe("FLAC 16/44.1");
+  });
+
+  it("没有当前曲目时什么也不渲染", () => {
+    const server = fakeZoneServer();
+    snapshot = { ...testPlayerController(server).controller.getSnapshot(), current: null, zone: { ...server.zone(), signal: losslessSignal } };
+    const { container } = render(<SignalPathButton />);
+    expect(container.innerHTML).toBe("");
+  });
+
+  it("鼠标停留时悬停提示写出格式、质量与削波，与读屏名一致", () => {
+    vi.useFakeTimers();
+    viewSignal({ ...losslessSignal, quality: "enhanced", clipping: true });
+    const trigger = screen.getByRole("button", { name: "信号路径：FLAC 16/44.1，增强，削波" });
+    const over = createEvent.pointerOver(trigger);
+    Object.defineProperty(over, "pointerType", { value: "mouse" });
+    fireEvent(trigger, over);
+    act(() => vi.advanceTimersByTime(300));
+    const tip = screen.getByText("信号路径：FLAC 16/44.1，增强，削波");
+    expect(tip.getAttribute("aria-hidden")).toBe("true");
+    expect(trigger.hasAttribute("title")).toBe(false);
+  });
+
+  it("圆点在视口上半部时弹层改在按钮下方，在下半部时在上方", async () => {
+    const user = userEvent.setup();
+    viewSignal();
+    const trigger = screen.getByRole("button", { name: /信号路径/ });
+    const rect = (top: number) => ({ top, bottom: top + 28, left: 100, right: 128, width: 28, height: 28, x: 100, y: top, toJSON: () => ({}) }) as DOMRect;
+    vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue(rect(40));
+    await user.click(trigger);
+    let content = screen.getByRole("dialog", { name: "信号路径：无损" }).firstElementChild as HTMLElement;
+    expect(content.hasAttribute("data-below")).toBe(true);
+    expect(content.style.getPropertyValue("--anchor-bottom")).toBe("68px");
+    await user.click(within(screen.getByRole("dialog", { name: "信号路径：无损" })).getByRole("button", { name: "关闭" }));
+    vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue(rect(window.innerHeight - 50));
+    await user.click(trigger);
+    content = screen.getByRole("dialog", { name: "信号路径：无损" }).firstElementChild as HTMLElement;
+    expect(content.hasAttribute("data-below")).toBe(false);
   });
 
   it("按步骤顺序显示链：步骤名与取值、兼容转换与有损标记，最后是输出设备；处理速度在测量格，不显示缺失的响度", async () => {
@@ -86,7 +132,7 @@ describe("服务端信号路径", () => {
         { kind: "encode", quality: "low", lossy: true, compat: false, params: { codec: "opus", sampleRate: 48000, bitDepth: null, bitrateKbps: 128 } },
       ],
     });
-    await user.click(screen.getByRole("button", { name: "FLAC 16/44.1，信号路径：有损" }));
+    await user.click(screen.getByRole("button", { name: "信号路径：FLAC 16/44.1，有损" }));
     const dialog = screen.getByRole("dialog", { name: "信号路径：有损" });
     expect(within(dialog).getByText("FLAC 384 kHz 24 bit → 客厅 · Chrome")).toBeTruthy();
     const rows = within(dialog).getAllByRole("listitem");
@@ -112,7 +158,7 @@ describe("服务端信号路径", () => {
         { kind: "downmix", quality: "high", lossy: false, compat: true, params: { fromChannels: 6, toChannels: 2, fromLayout: "5.1", toLayout: "2.0", by: "roomusic", mode: "matrix" } },
       ],
     });
-    await user.click(screen.getByRole("button", { name: "FLAC 16/44.1，信号路径：高质量" }));
+    await user.click(screen.getByRole("button", { name: "信号路径：FLAC 16/44.1，高质量" }));
     const dialog = screen.getByRole("dialog", { name: "信号路径：高质量" });
     expect(within(dialog).getByText("降混", { exact: true })).toBeTruthy();
     expect(within(dialog).getByText("5.1 → 2.0", { exact: true })).toBeTruthy();
@@ -128,7 +174,7 @@ describe("服务端信号路径", () => {
         { kind: "encode", quality: "lossless", lossy: false, compat: false, params: { codec: "wav", sampleRate: 48000, bitDepth: 16, bitrateKbps: null } },
       ],
     });
-    await user.click(screen.getByRole("button", { name: "FLAC 16/44.1，信号路径：高质量" }));
+    await user.click(screen.getByRole("button", { name: "信号路径：FLAC 16/44.1，高质量" }));
     const dialog = screen.getByRole("dialog", { name: "信号路径：高质量" });
     const row = within(dialog).getByText("采样率转换", { exact: true }).closest("li");
     if (row === null) throw new Error("缺少采样率转换这一步");
@@ -139,7 +185,7 @@ describe("服务端信号路径", () => {
   it("削波时按钮启用警示色选择器，可访问名称同时标出削波，弹层有“正在削波”", async () => {
     const user = userEvent.setup();
     viewSignal({ ...losslessSignal, clipping: true });
-    const trigger = screen.getByRole("button", { name: "FLAC 16/44.1，信号路径：无损，削波" });
+    const trigger = screen.getByRole("button", { name: "信号路径：FLAC 16/44.1，无损，削波" });
     expect(trigger.className.split(" ")).toContain(styles.trigger);
     expect(trigger.hasAttribute("data-clipping")).toBe(true);
     await user.click(trigger);
@@ -173,7 +219,7 @@ describe("服务端信号路径", () => {
     const user = userEvent.setup();
     analysis = loudnessAnalysis();
     viewSignal();
-    const trigger = screen.getByRole("button", { name: "FLAC 16/44.1，信号路径：无损" });
+    const trigger = screen.getByRole("button", { name: "信号路径：FLAC 16/44.1，无损" });
     expect(trigger.dataset.quality).toBe("lossless");
     await user.click(trigger);
     const dialog = screen.getByRole("dialog", { name: "信号路径：无损" });

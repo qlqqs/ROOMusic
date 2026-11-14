@@ -1,5 +1,6 @@
-import { ArrowRightLeft, ChevronDown, MonitorSpeaker, Pencil, Trash2, X } from "lucide-react";
+import { ArrowRightLeft, MonitorSpeaker, Pencil, Trash2, X } from "lucide-react";
 import { useId, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { cx } from "../../../shared/lib/class-names";
 import { Button, ConfirmDialog, FailureNotice, ModalDialog, StatusTag, TextField } from "../../../shared/ui";
 import { usePlayer, usePlayerSelector } from "../player-provider";
 import type { PlaybackDeviceRow } from "../zones/controller";
@@ -17,40 +18,28 @@ function stateText({ device, zone }: PlaybackDeviceRow): string {
 }
 
 /**
- * “播放设备”按钮：点开设备列表。播放栏（icon）：正在控制本机时只有图标；控制别的设备时图标加设备名，一眼看出命令发往哪里。
- * 全屏播放器（pill）：总是写出正在控制的设备名，做成信号路径旁的胶囊；还没读到设备时退回只有图标。
+ * “播放设备”按钮：只有图标，点开设备列表。控制本机时是普通图标；控制别的设备时图标用强调色、右上角一个小圆点，
+ * 读屏名与悬停提示写“正在控制：设备名”（不只靠颜色）。窄屏迷你栏只在控制别的设备时显示（由所在位置按 data-remote 决定）。
  */
-export function DeviceButton({ appearance = "icon" }: { appearance?: "icon" | "pill" }) {
+export function DeviceButton({ className }: { className?: string | undefined }) {
   const remoteName = usePlayerSelector((snapshot) => (snapshot.isLocal || snapshot.device === null ? null : snapshot.device.name));
-  const deviceName = usePlayerSelector((snapshot) => snapshot.device?.name ?? null);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
-  const open = (target: HTMLElement) => setAnchor(target.getBoundingClientRect());
-  const shownName = appearance === "pill" ? deviceName : remoteName;
-  return <>
-    {shownName === null
-      ? <Button variant="icon" icon={<MonitorSpeaker size={18} />} label="播放设备" onClick={(event) => open(event.currentTarget)} />
-      : appearance === "pill"
-        ? <button type="button" className={styles.pill} aria-label={`播放设备：${shownName}`} onClick={(event) => open(event.currentTarget)}>
-          <MonitorSpeaker size={16} aria-hidden="true" /><span className={styles.remoteName}>{shownName}</span><ChevronDown size={12} aria-hidden="true" />
-        </button>
-        : <span className={styles.remote}><Button icon={<MonitorSpeaker size={16} />} aria-label={`播放设备：${shownName}`} title={shownName} onClick={(event) => open(event.currentTarget)}><span className={styles.remoteName}>{shownName}</span></Button></span>}
+  return <span className={cx(styles.device, className)} data-remote={remoteName === null ? undefined : ""}>
+    <Button variant="icon" icon={<MonitorSpeaker size={18} />} label={remoteName === null ? "播放设备" : `正在控制：${remoteName}`} onClick={(event) => setAnchor(event.currentTarget.getBoundingClientRect())} />
     <DeviceDialog anchor={anchor} onClose={() => setAnchor(null)} />
-  </>;
+  </span>;
 }
 
-/** 正在控制的设备名（图标 + 名字）；控制本机时不渲染。窄屏播放栏把它放在标题下，代替设备按钮里放不下的名字。 */
-export function ControlTargetLine({ className }: { className?: string | undefined }) {
-  const remoteName = usePlayerSelector((snapshot) => (snapshot.isLocal || snapshot.device === null ? null : snapshot.device.name));
-  if (remoteName === null) return null;
-  return <p className={`${styles.targetLine} ${className ?? ""}`}><MonitorSpeaker size={12} aria-hidden="true" /><span>{remoteName}</span></p>;
-}
-
-/** 设备列表弹层：桌面在按钮上方，窄屏从底部弹出。点一行即控制那台设备；行内可以转移、改名，离线的还能转到本机或删除。 */
+/**
+ * 设备列表弹层：桌面在按钮上方（播放栏）；按钮在视口上半部时（全屏播放器右上角）改在按钮下方。窄屏从底部弹出。
+ * 点一行即控制那台设备；行内可以转移、改名，离线的还能转到本机或删除。
+ */
 function DeviceDialog({ anchor, onClose }: { anchor: DOMRect | null; onClose: () => void }) {
   const titleId = useId();
-  const position = anchor === null ? undefined : ({ "--anchor-x": `${anchor.left + anchor.width / 2}px`, "--anchor-top": `${anchor.top}px` } as CSSProperties);
+  const position = anchor === null ? undefined : ({ "--anchor-x": `${anchor.left + anchor.width / 2}px`, "--anchor-top": `${anchor.top}px`, "--anchor-bottom": `${anchor.bottom}px` } as CSSProperties);
+  const below = anchor !== null && anchor.top < window.innerHeight / 2;
   return <ModalDialog open={anchor !== null} titleId={titleId} onRequestClose={onClose} closeOnBackdrop className={styles.dialog}>
-    <div className={styles.content} style={position}><DeviceList titleId={titleId} onClose={onClose} /></div>
+    <div className={styles.content} style={position} data-below={below ? "" : undefined}><DeviceList titleId={titleId} onClose={onClose} /></div>
   </ModalDialog>;
 }
 

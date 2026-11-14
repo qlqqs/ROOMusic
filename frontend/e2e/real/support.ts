@@ -91,6 +91,8 @@ export async function mediaState(page: Page) {
 export async function playTrack(page: Page, item: ReturnType<typeof findTrack>) {
   await page.goto(`/albums/${item.groupId}`);
   const row = page.locator("ol > li").filter({ has: page.getByText(item.track.title, { exact: true }) });
+  // 序号位的播放按钮在悬停或聚焦这一行时才显现，先悬停，不被序号层挡住。
+  await row.hover();
   await row.getByRole("button", { name: "从这首开始播放", exact: true }).click();
   await expect.poll(async () => (await mediaState(page))?.paused).toBe(false);
 }

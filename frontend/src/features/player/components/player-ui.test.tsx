@@ -17,6 +17,7 @@ import type { ReleaseDetailDTO } from "../../catalog";
 import { useAlbumPlayback } from "./album-playback-actions";
 import { FullscreenPlayer } from "./fullscreen-player";
 import { PlayerBar } from "./player-bar";
+import barStyles from "./player-bar.module.css";
 import { PlayerQueue } from "./player-queue";
 import { PlayerAnnouncement } from "./player-feedback";
 import { SignalPathButton } from "./signal-path";
@@ -190,28 +191,79 @@ describe("播放栏、全屏、队列与信号路径", () => {
     expect(within(dialog).getByRole("group", { name: "歌词文本" })).toBeTruthy();
   });
 
-  it("全屏宽屏：收起与队列在顶栏，标题旁有“更多操作”，信号路径、设备、进度、传输键与音量在左栏", async () => {
+  it("全屏宽屏：收起与播放设备在顶栏、没有队列按钮，标题旁有信号路径与“更多操作”，进度、传输键与音量在左栏", async () => {
     await enqueue([playerTrack("1")]);
     fullscreenState.open = true;
     view(<FullscreenPlayer />);
     const dialog = await screen.findByRole("dialog", { name: "曲目 1" });
     const collapse = within(dialog).getByRole("button", { name: "收起全屏播放器" });
-    const queue = within(dialog).getByRole("button", { name: "队列（1）" });
+    const device = within(dialog).getByRole("button", { name: "播放设备" });
     const heading = within(dialog).getByRole("heading", { name: "曲目 1", level: 2 });
-    // 收起与队列同在顶栏：两者最近的共同祖先不包含标题，且在标题之前。
+    // 队列从右栏的“接下来”看，顶栏不再有队列按钮。
+    expect(within(dialog).queryByRole("button", { name: /^队列/ })).toBeNull();
+    // 收起与播放设备同在顶栏：两者最近的共同祖先不包含标题，且在标题之前。
     let topbar: HTMLElement | null = collapse.parentElement;
-    while (topbar !== null && !topbar.contains(queue)) topbar = topbar.parentElement;
+    while (topbar !== null && !topbar.contains(device)) topbar = topbar.parentElement;
     expect(topbar?.contains(heading)).toBe(false);
-    expect(collapse.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(device.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const titleRow = heading.parentElement;
     if (titleRow === null) throw new Error("缺少标题行");
     expect(within(titleRow).getByRole("button", { name: "更多操作" })).toBeTruthy();
+    // 没有信号路径时标题后只有给读屏的格式，没有可点的圆点。
+    expect(within(titleRow).queryByRole("button", { name: /^信号路径：/ })).toBeNull();
+    expect(titleRow.textContent).toContain("曲目 1");
     for (const control of [
       within(dialog).getByRole("slider", { name: "播放进度" }),
       within(dialog).getByRole("button", { name: "随机播放" }),
       within(dialog).getByRole("button", { name: "循环：关" }),
       within(dialog).getByRole("slider", { name: "播放器音量" }),
     ]) expect(heading.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("全屏有信号路径时圆点紧跟标题，在“更多操作”之前", async () => {
+    const event = decodeStreamEvent(signalEvent.event, JSON.stringify(signalEvent.data));
+    if (event?.type !== "zone") throw new Error("信号样本未解码为播放区事件");
+    server.afterNext({ signal: event.zone.signal });
+    act(() => { engine.playTracks([playerTrack("1")]); });
+    await waitFor(() => expect(engine.getSnapshot().zone?.signal).toEqual(event.zone.signal));
+    fullscreenState.open = true;
+    view(<FullscreenPlayer />);
+    const dialog = await screen.findByRole("dialog", { name: "曲目 1" });
+    const heading = within(dialog).getByRole("heading", { name: "曲目 1", level: 2 });
+    const titleRow = heading.parentElement;
+    if (titleRow === null) throw new Error("缺少标题行");
+    const signal = within(titleRow).getByRole("button", { name: /^信号路径：.+，增强，削波$/ });
+    expect(signal.textContent).toBe("");
+    const more = within(titleRow).getByRole("button", { name: "更多操作" });
+    expect(heading.compareDocumentPosition(signal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(signal.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("播放栏：信号路径圆点在标题后；右侧依次是队列、分隔线、播放设备、音量，设备按钮没有文字", async () => {
+    const event = decodeStreamEvent(signalEvent.event, JSON.stringify(signalEvent.data));
+    if (event?.type !== "zone") throw new Error("信号样本未解码为播放区事件");
+    server.afterNext({ signal: event.zone.signal });
+    act(() => { engine.playTracks([playerTrack("1")]); });
+    await waitFor(() => expect(engine.getSnapshot().zone?.signal).toEqual(event.zone.signal));
+    view(<PlayerBar />);
+    const bar = screen.getByRole("region", { name: "播放器" });
+    const title = within(bar).getByText("曲目 1", { selector: "p" });
+    const signal = within(bar).getByRole("button", { name: /^信号路径：/ });
+    expect(title.parentElement?.contains(signal)).toBe(true);
+    expect(title.compareDocumentPosition(signal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const queue = within(bar).getByRole("button", { name: "队列（1）" });
+    const device = within(bar).getByRole("button", { name: "播放设备" });
+    const volume = within(bar).getByRole("slider", { name: "播放器音量" });
+    expect(device.textContent).toBe("");
+    expect(queue.compareDocumentPosition(device) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(device.compareDocumentPosition(volume) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // 分隔线在队列之后、设备之前。
+    const separator = bar.querySelector(`.${barStyles.separator}`);
+    if (separator === null) throw new Error("缺少分隔线");
+    expect(queue.compareDocumentPosition(separator) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(separator.compareDocumentPosition(device) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // 本机时设备按钮所在的位置没有远端标记（迷你栏据此隐藏它）。
+    expect(device.closest("[data-remote]")).toBeNull();
   });
 
   it("全屏窄屏：底部有“歌词”按钮，切到歌词视图后进度与传输键还是同一组元素", async () => {
@@ -430,7 +482,7 @@ describe("播放栏、全屏、队列与信号路径", () => {
     act(() => { engine.playTracks([playerTrack("1", { source: { sourceKind: "m4a", codec: "alac", bitDepth: 24, sampleRate: 48000, channels: 2, bitrate: null } })]); });
     await waitFor(() => expect(engine.getSnapshot().zone?.signal).toEqual(event.zone.signal));
     view(<SignalPathButton />);
-    await user.click(screen.getByRole("button", { name: "ALAC 24/48，信号路径：增强，削波" }));
+    await user.click(screen.getByRole("button", { name: "信号路径：ALAC 24/48，增强，削波" }));
     const dialog = await screen.findByRole("dialog", { name: "信号路径：增强，削波" });
     expect(within(dialog).getAllByRole("listitem").map((row) => row.textContent)).toEqual([
       "来源WAV 48 kHz 16 bit",

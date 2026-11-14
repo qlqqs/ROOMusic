@@ -267,7 +267,7 @@ for (const width of widths) {
     const player = page.getByRole("region", { name: "播放器", exact: true });
     const heart = player.getByRole("button", { name: "收藏《第一乐章》", exact: true });
     if (width < 768) {
-      // 窄屏的迷你栏只有封面、标题与设备名、播放、下一首、队列；心形在全屏播放器的标题旁。
+      // 窄屏的迷你栏只有封面、标题与信号路径圆点、（控制别的设备时的）设备、播放、下一首、队列；心形在全屏播放器的标题旁。
       await expect(player.getByText("第一乐章", { exact: true })).toBeVisible();
       await expect(heart).toHaveCount(0);
       await player.getByRole("button", { name: "打开全屏播放器", exact: true }).click();

@@ -103,9 +103,9 @@ function useMeasurements(signal: Signal): Measurement[] {
   return cells.filter((cell) => cell !== null);
 }
 
-/** 名称与悬停提示写出整体质量与是否在削波，不只靠颜色。 */
-function titleOf(signal: Signal): string {
-  return `信号路径：${qualityLabels[signal.quality]}${signal.clipping === true ? "，削波" : ""}`;
+/** 入口的读屏名与悬停提示：格式在前，质量与削波在后（如“信号路径：FLAC 24/96，无损”），不只靠圆点颜色。 */
+function entryLabel(format: string, signal: Signal): string {
+  return `信号路径：${format}，${qualityLabels[signal.quality]}${signal.clipping === true ? "，削波" : ""}`;
 }
 
 /** 正在控制的播放区里正在放的那首的信号路径。 */
@@ -114,26 +114,26 @@ function useSignal(): Signal | null {
 }
 
 /**
- * 信号路径入口：一个胶囊按钮，质量色圆点加来源格式（如“FLAC 24/96”）。可访问名是“格式，信号路径：质量”，含可见文字。
+ * 信号路径入口：放在曲目标题后面，只有一个质量色的呼吸圆点，没有可见文字；格式、质量与削波写在读屏名和悬停提示里。
  * 播放中圆点约 4 秒一次呼吸，暂停、缓冲、出错时静止；削波时变警示色并快速脉动（动画只在 CSS 里，减少动态效果时没有）。
- * 没有信号路径时只是格式文字，不是按钮；没有当前曲目时不渲染。
+ * 没有信号路径时不是按钮，也不显示圆点，格式只留给读屏；没有当前曲目时不渲染。
  */
 export function SignalPathButton() {
   const signal = useSignal();
   const track = usePlayerSelector((snapshot) => snapshot.current?.track ?? null);
   const breathing = usePlayerSelector((snapshot) => snapshot.status === "playing" && snapshot.fault === null);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
-  const tip = useTooltip(signal === null ? undefined : titleOf(signal));
+  const format = track === null ? "" : sourceFormat(track);
+  const label = signal === null ? undefined : entryLabel(format, signal);
+  const tip = useTooltip(label);
   if (signal === null || track === null) {
     if (anchor !== null) setAnchor(null);
-    return track === null ? null : <span className={styles.plain}>{sourceFormat(track)}</span>;
+    return track === null ? null : <VisuallyHidden>{format}</VisuallyHidden>;
   }
-  const format = sourceFormat(track);
   const clipping = signal.clipping === true;
   return <>
-    <button type="button" className={styles.trigger} data-quality={signal.quality} data-clipping={clipping ? "" : undefined} data-state={breathing ? "breathing" : undefined} aria-label={`${format}，${titleOf(signal)}`} {...tip.triggerProps} onClick={(event) => setAnchor(event.currentTarget.getBoundingClientRect())}>
+    <button type="button" className={styles.trigger} data-quality={signal.quality} data-clipping={clipping ? "" : undefined} data-state={breathing ? "breathing" : undefined} aria-label={label} {...tip.triggerProps} onClick={(event) => setAnchor(event.currentTarget.getBoundingClientRect())}>
       <span className={styles.dot} aria-hidden="true" />
-      <span className={styles.format}>{format}</span>
     </button>
     {tip.tooltip}
     <SignalPathDialog signal={signal} anchor={anchor} onClose={() => setAnchor(null)} />
@@ -148,7 +148,7 @@ function worstIndex(signal: Signal): number {
 
 /**
  * 信号路径弹层（340px）：头部是质量词与“来源格式 → 输出设备”，削波时下面一条“正在削波”；中间是从来源到输出设备的竖向链，
- * 每步“步骤名 + 取值”，最差一步加粗；底部是测量格。桌面在按钮上方，窄屏从底部弹出。
+ * 每步“步骤名 + 取值”，最差一步加粗；底部是测量格。桌面在圆点上方（圆点在视口上半部时改在下方），窄屏从底部弹出。
  */
 function SignalPathDialog({ signal, anchor, onClose }: { signal: Signal; anchor: DOMRect | null; onClose: () => void }) {
   const titleId = useId();
@@ -159,9 +159,10 @@ function SignalPathDialog({ signal, anchor, onClose }: { signal: Signal; anchor:
   const subtitle = [sourceText, deviceName].filter((part) => part !== null).join(" → ");
   const worst = worstIndex(signal);
   const QualityIcon = qualityIcons[signal.quality];
-  const position = anchor === null ? undefined : ({ "--anchor-x": `${anchor.left + anchor.width / 2}px`, "--anchor-top": `${anchor.top}px` } as CSSProperties);
+  const position = anchor === null ? undefined : ({ "--anchor-x": `${anchor.left + anchor.width / 2}px`, "--anchor-top": `${anchor.top}px`, "--anchor-bottom": `${anchor.bottom}px` } as CSSProperties);
+  const below = anchor !== null && anchor.top < window.innerHeight / 2;
   return <ModalDialog open={anchor !== null} titleId={titleId} onRequestClose={onClose} closeOnBackdrop className={styles.dialog}>
-    <div className={styles.content} style={position} data-quality={signal.quality}>
+    <div className={styles.content} style={position} data-quality={signal.quality} data-below={below ? "" : undefined}>
       <div className={styles.header}>
         <span className={styles.badge} aria-hidden="true"><QualityIcon size={20} /></span>
         <div className={styles.heading}>

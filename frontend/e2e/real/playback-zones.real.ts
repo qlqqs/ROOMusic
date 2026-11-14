@@ -99,25 +99,53 @@ async function openOutput(page: Page, name: string) {
   return { ...device, name };
 }
 
+/**
+ * 打开设备列表。设备按钮只有图标：控制本机时名为“播放设备”，控制别的设备时名为“正在控制：设备名”。
+ * 窄屏迷你栏只在控制别的设备时有设备按钮；控制本机时从全屏播放器底部一排打开，选完后收起全屏。
+ */
+async function openDevicePicker(page: Page) {
+  const button = bar(page).getByRole("button", { name: /^(播放设备|正在控制：)/ });
+  if (await button.isVisible()) {
+    await button.click();
+    return;
+  }
+  await bar(page).getByRole("button", { name: "打开全屏播放器", exact: true }).click();
+  const fullscreen = page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "收起全屏播放器", exact: true }) });
+  await fullscreen.getByRole("button", { name: /^(播放设备|正在控制：)/ }).click();
+}
+
+/** 设备列表关闭后，若是从全屏打开的，收起全屏回到页面。 */
+async function closeFullscreenIfOpen(page: Page) {
+  const collapse = page.getByRole("button", { name: "收起全屏播放器", exact: true });
+  if (await collapse.isVisible()) {
+    await collapse.click();
+    await expect(collapse).toBeHidden();
+  }
+}
+
 async function selectDevice(page: Page, name: string) {
-  await bar(page).getByRole("button", { name: /^播放设备/ }).click();
+  await openDevicePicker(page);
   const picker = page.getByRole("dialog", { name: "播放设备", exact: true });
   await picker.getByRole("button").filter({ has: page.getByText(name, { exact: true }) }).click();
   await expect(picker).toBeHidden();
+  await closeFullscreenIfOpen(page);
 }
 
 async function transferTo(page: Page, name: string, offline = false) {
-  await bar(page).getByRole("button", { name: /^播放设备/ }).click();
+  await openDevicePicker(page);
   const picker = page.getByRole("dialog", { name: "播放设备", exact: true });
   const row = picker.getByRole("listitem").filter({ has: page.getByText(name, { exact: true }) });
   if (offline) await expect(row.getByText("离线", { exact: true })).toBeVisible();
   await row.getByRole("button", { name: offline ? "转到本机" : "转到这台设备", exact: true }).click();
   await expect(picker).toBeHidden();
+  await closeFullscreenIfOpen(page);
 }
 
 async function startFromAlbum(page: Page, item: ReturnType<typeof trackNamed>) {
   await page.goto(`/albums/${item.groupId}`);
   const row = page.locator("ol > li").filter({ has: page.getByText(item.track.title, { exact: true }) });
+  // 序号位的播放按钮在悬停或聚焦这一行时才显现，先悬停，不被序号层挡住。
+  await row.hover();
   await row.getByRole("button", { name: "从这首开始播放", exact: true }).click();
 }
 
@@ -239,7 +267,7 @@ test("手机远程控制电脑：进度、暂停、切歌与定位生效，转�
       await command(mobile.request, pc.zone_id, { command: "enqueue", track_ids: [alac.track.id, slow.track.id] });
       await expect.poll(async () => (await sounding(computer))[0]?.seconds ?? 0).toBeGreaterThan(1);
       expect(await sounding(phone)).toEqual([]);
-      await expect(bar(phone).getByRole("button", { name: `播放设备：${pc.name}`, exact: true })).toBeVisible();
+      await expect(bar(phone).getByRole("button", { name: `正在控制：${pc.name}`, exact: true })).toBeVisible();
       await bar(phone).getByRole("button", { name: "打开全屏播放器" }).click();
       const fullscreen = phone.getByRole("dialog", { name: slow.track.title, exact: true });
       const progress = fullscreen.getByRole("slider", { name: "播放进度" });
@@ -406,7 +434,7 @@ test("成员只看见自己的设备，跨成员读取队列、控制、转移�
         const state = await snapshot(page.request);
         expect(state.devices.map((item) => item.device_id)).toEqual([own.device_id]);
         expect(state.zones.map((item) => item.zone_id)).toEqual([own.zone_id]);
-        await bar(page).getByRole("button", { name: /^播放设备/ }).click();
+        await bar(page).getByRole("button", { name: /^(播放设备|正在控制：)/ }).click();
         const picker = page.getByRole("dialog", { name: "播放设备", exact: true });
         await expect(picker.getByText(own.name, { exact: true })).toBeVisible();
         await expect(picker.getByText(foreign.name, { exact: true })).toHaveCount(0);

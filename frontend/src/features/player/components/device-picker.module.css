@@ -1,20 +1,14 @@
-/* 控制别的设备时：图标加设备名，强调色；名字过长截断，完整名字在悬停提示里。窄屏只留图标，名字由播放栏写在标题下。 */
-.remote { display: inline-flex; min-width: 0; }
-.remote button { max-width: 160px; min-width: 0; color: var(--text-accent); }
-.remoteName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* 全屏播放器里的设备胶囊：图标、设备名与下拉箭头；名字过长截断。 */
-.pill { display: inline-flex; align-items: center; gap: 6px; max-width: 220px; min-width: 0; min-height: 28px; padding: 0 10px; border: 0; border-radius: 14px; background: var(--color-hover); color: var(--text-secondary); font-family: var(--font-body); font-size: var(--fs-12); cursor: pointer; }
-.pill:hover { background: var(--color-pressed); color: var(--text-primary); }
-
-/* 窄屏播放栏标题下的一行：正在控制的设备。 */
-.targetLine { display: flex; align-items: center; gap: 4px; min-width: 0; font-size: var(--fs-12); color: var(--text-accent); }
-.targetLine span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 设备按钮：控制别的设备时图标用强调色，图标右上角一个小圆点（按按钮中心定位，32px 与 44px 的按钮都落在图标角上）。 */
+.device { position: relative; display: inline-flex; flex: none; }
+/* 颜色写在图标上：图标按钮悬停时会改按钮的字色，强调色不随悬停丢掉。 */
+.device[data-remote] svg { color: var(--text-accent); }
+.device[data-remote]::after { content: ""; position: absolute; top: calc(50% - 12px); right: calc(50% - 12px); width: 6px; height: 6px; border-radius: 50%; background: var(--text-accent); box-shadow: 0 0 0 2px var(--device-dot-ring, var(--color-bg)); pointer-events: none; }
 
 /* 弹层沿用信号路径的做法：对话框铺满视口且透明，弹层按按钮位置摆在它上方；点在弹层外即关闭。 */
 dialog.dialog { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; overflow: hidden; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 dialog.dialog::backdrop { background: transparent; }
 .content { position: absolute; left: clamp(var(--space-2), calc(var(--anchor-x, 50vw) - 170px), calc(100vw - 340px - var(--space-2))); bottom: calc(100dvh - var(--anchor-top, 100dvh) + var(--space-2)); display: grid; align-content: start; gap: var(--space-2); width: 340px; max-height: calc(100dvh - 2 * var(--space-4)); overflow-y: auto; padding: var(--space-3) var(--space-2) var(--space-3) var(--space-3); border: 1px solid var(--color-divider); border-radius: var(--radius-lg); background: var(--color-surface); color: var(--text-primary); box-shadow: var(--shadow-lg); }
+.content[data-below] { top: calc(var(--anchor-bottom) + var(--space-2)); bottom: auto; max-height: calc(100dvh - var(--anchor-bottom) - 2 * var(--space-4)); }
 .header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding-left: var(--space-1); }
 .title { font-size: var(--fs-15); }
 
@@ -36,8 +30,6 @@ button.select:hover { background: var(--color-hover); }
 
 /* 窄屏：从底部弹出，铺满宽度。 */
 @media (max-width: 767px) {
-  .remote .remoteName { display: none; }
-  .pill { min-height: var(--control-height); padding: 0 14px; border-radius: 22px; }
   dialog.dialog::backdrop { background: color-mix(in srgb, var(--color-neutral-900) 40%, transparent); }
-  .content { left: 0; right: 0; bottom: 0; width: auto; max-height: 80dvh; padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px)); border-width: 1px 0 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+  .content, .content[data-below] { top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 80dvh; padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px)); border-width: 1px 0 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
 }
