@@ -1,9 +1,9 @@
 # 部署说明
 
-ROOMusic 生产环境只有两个容器：`app` 和 PostgreSQL 18。应用自带备份和 ffmpeg，数据库不对外开放端口。
+ROOMusic 生产环境包含 `app`、PostgreSQL 18，以及完成后退出的 `init` 初始化服务。应用自带备份和 ffmpeg，数据库不对外开放端口。
 宿主机只需要 Docker 和 Docker Compose v2，不需要克隆仓库。下文命令都在部署目录里执行。
 
-**不要运行 `docker compose down -v`，它会删除数据库。**
+数据全部存放在部署目录的宿主机文件夹中，不创建 Docker 数据卷。
 
 ## 1. 安装
 
@@ -16,11 +16,10 @@ curl -fL -o .env https://raw.githubusercontent.com/qlqqs/ROOMusic/main/.env.prod
 chmod 600 .env
 ```
 
-编辑 `.env`，必填两项：
+编辑 `.env`，必填音乐目录：
 
 | 变量 | 填写内容 |
 | --- | --- |
-| `ROOMUSIC_DB_PASSWORD` | 数据库密码，只用字母和数字，可以用 `openssl rand -hex 24` 生成。第一次启动后再改不会改数据库里的密码 |
 | `ROOMUSIC_MUSIC_DIR` | 音乐目录的绝对路径，需要 uid 1000 可读，以只读方式挂载到 `/music` |
 
 启动：
@@ -32,7 +31,23 @@ docker compose up -d --wait
 打开 `http://<主机>:8090`，**先创建管理员，再开放公网访问**。在“扫描目录”添加 `/music` 或其子目录，扫描完成后即可浏览和播放；
 在“成员”页添加其他账号。
 
-`.env` 含密码，请另存一份，不要公开。要检查配置，运行 `docker compose config --quiet`，不要分享完整输出。
+首次启动会生成随机数据库密码，保存为 `secrets/postgres_password`。应用和数据库读取同一文件，后续启动复用。首次安装也可在 `.env` 设置 `ROOMUSIC_DB_PASSWORD`；已有密码文件时，该值必须与文件一致。
+
+目录结构：
+
+```text
+roomusic/
+├── compose.yaml
+├── .env
+├── secrets/postgres_password
+├── postgres/
+├── data/
+└── backups/
+```
+
+初始化服务准备应用目录的 UID 1000 写入权限；PostgreSQL 自行设置数据库目录权限。检查配置使用 `docker compose config --quiet`。
+
+此 Compose 配套 v0.7.0 及后续镜像。v0.6.0 及更早镜像使用对应版本的部署配置。
 
 ### 可选设置
 
@@ -42,20 +57,14 @@ docker compose up -d --wait
 | --- | --- | --- |
 | `ROOMUSIC_VERSION` | `latest` | 镜像版本；固定或降级时填具体版本，不带 `v` |
 | `ROOMUSIC_HTTP_PORT` | `8090` | 网页端口 |
-| `ROOMUSIC_BACKUP_DIR` | Docker 卷 `backups` | 填绝对路径则把备份放在宿主机目录，需要 uid 1000 可写 |
+| `ROOMUSIC_BACKUP_DIR` | `./backups` | 可指定其他宿主机目录，初始化服务设置目录权限 |
 | `ROOMUSIC_BACKUP_HOUR` | `3` | 每天几点后自动备份，0–23 |
 | `ROOMUSIC_TIMEZONE` | `Asia/Shanghai` | 自动备份使用的时区 |
 | `ROOMUSIC_BACKUP_KEEP_DAYS` | `14` | 网页上从未设置过自动清理时，备份保留几天 |
 | `ROOMUSIC_ALLOWED_ORIGINS` | 空 | 反向代理改写了 Host 时使用，见第 5 节 |
-| `COMPOSE_PROJECT_NAME` | `roomusic-server` | 项目名，决定数据卷和网络的名称；已有实例不要改 |
+| `COMPOSE_PROJECT_NAME` | `roomusic-server` | 项目名，决定容器和网络名称；同机多个实例分别设置 |
 
-把备份放到宿主机目录时，先创建目录并设置权限：
-
-```bash
-mkdir -p /srv/roomusic-backups && sudo chown 1000:1000 /srv/roomusic-backups
-```
-
-然后在 `.env` 写 `ROOMUSIC_BACKUP_DIR=/srv/roomusic-backups`。
+指定其他备份目录时，在 `.env` 写 `ROOMUSIC_BACKUP_DIR=/srv/roomusic-backups`。
 
 运行命令的终端里不要设置同名的 `ROOMUSIC_*` 或 `COMPOSE_*` 环境变量，它们会覆盖 `.env`。
 
@@ -82,7 +91,7 @@ docker compose pull && docker compose up -d --wait
 docker compose exec app /app/roomusic --version
 ```
 
-要固定或降级版本，把 `.env` 里的 `ROOMUSIC_VERSION` 改成具体版本（如 `0.1.0`，不带 `v`），再执行同样的命令。
+要固定或降级版本，把 `.env` 里的 `ROOMUSIC_VERSION` 改成具体版本（不带 `v`），再执行同样的命令。
 
 应用启动时会比较自己的数据库结构和数据库里的现状：
 
@@ -93,7 +102,7 @@ docker compose exec app /app/roomusic --version
 
 降级到不支持服务端播放区的版本后，各设备的播放队列会清空；降级前的队列保留在自动备份里。
 
-最低可以降到 `0.1.0`。
+旧版本镜像使用该版本的 Compose 和凭据配置；新部署文件不能直接搭配 v0.6.0 及更早镜像。
 
 `0.1.0` 不认识网页上设置的自动清理，只按 `ROOMUSIC_BACKUP_KEEP_DAYS` 清理旧备份。如果在网页上把保留天数设成了“不限”或比这个值更长，
 降级前先把 `ROOMUSIC_BACKUP_KEEP_DAYS` 调大，不然降级后第一次备份完成时会按它删掉更早的备份。再升级回来，网页上的设置照常生效。
@@ -107,7 +116,7 @@ docker compose exec app /app/roomusic --version
 最新的一份始终保留。保存时如果会删掉已有的备份，会先确认要删几份。网页上设置过之后，`ROOMUSIC_BACKUP_KEEP_DAYS` 就不再起作用；
 设置保存在备份目录里，重启或恢复数据库都不会改变它，换了备份目录则回到默认值。
 
-备份只包含数据库，不含音乐文件、封面和 ALAC 转码缓存；需要异地保护时，把备份文件另存到其他机器。
+备份只包含数据库，不含音乐文件和 `data/`；需要异地保护时，把备份文件另存到其他机器。
 备份里有账号等私人数据，请妥善保管，只恢复可信来源的文件。
 
 ### 恢复
@@ -121,6 +130,14 @@ docker compose run --rm app restore <备份文件名> && docker compose up -d --
 
 命令会先显示备份信息，输入 `roomusic` 回车确认。恢复前会先备份当前数据库，所以恢复操作本身也可以撤回；
 恢复后，备份时间点之后的数据会被替换。恢复失败时应用保持停止，按输出的提示处理后再启动。
+
+### 整目录迁移
+
+1. 执行 `docker compose down` 停止部署。
+2. 使用 `rsync -a --numeric-ids` 或 `cp -a` 复制整个部署目录，保留属主和权限。音乐及另行指定的备份目录一并复制或保持可访问。
+3. 在目标机器使用相同 PostgreSQL 主版本，调整 `.env` 中的外部路径，执行 `docker compose up -d --wait`。
+
+复制 PostgreSQL 数据文件前需要停止服务。日常在线备份继续使用应用的数据库备份功能，再另存配置、密码文件、应用数据和音乐。
 
 ## 5. 反向代理
 

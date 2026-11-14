@@ -1,4 +1,4 @@
-// Package config 解码并校验进程的环境变量配置。它只读环境，不做任何 I/O，也不含业务默认策略。
+// Package config 解码并校验进程的环境变量配置。它读取环境变量与指定的凭据文件，不含业务默认策略。
 package config
 
 import (
@@ -155,7 +155,28 @@ func DatabaseURL() (string, error) {
 	if value == "" {
 		return "", fmt.Errorf("ROOMUSIC_DATABASE_URL is required")
 	}
-	return value, nil
+	passwordFile := os.Getenv("ROOMUSIC_DB_PASSWORD_FILE")
+	if passwordFile == "" {
+		return value, nil
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || (parsed.Scheme != "postgres" && parsed.Scheme != "postgresql") || parsed.Host == "" || parsed.User == nil || parsed.User.Username() == "" {
+		return "", fmt.Errorf("使用密码文件时 ROOMUSIC_DATABASE_URL 必须是包含用户名的 PostgreSQL URL")
+	}
+	if _, present := parsed.User.Password(); present || parsed.Query().Has("password") {
+		return "", fmt.Errorf("数据库密码不能同时配置在 URL 和密码文件中")
+	}
+	content, err := os.ReadFile(passwordFile)
+	if err != nil {
+		return "", fmt.Errorf("无法读取 ROOMUSIC_DB_PASSWORD_FILE")
+	}
+	// 与 PostgreSQL 官方入口的文件读取一致，去除文件末尾的换行。
+	password := strings.TrimRight(string(content), "\n")
+	if password == "" || strings.ContainsAny(password, "\r\n\x00") {
+		return "", fmt.Errorf("数据库密码文件必须包含非空的单行密码")
+	}
+	parsed.User = url.UserPassword(parsed.User.Username(), password)
+	return parsed.String(), nil
 }
 
 // configuredAudioAnalysis 解析后台分析开关；默认开启。

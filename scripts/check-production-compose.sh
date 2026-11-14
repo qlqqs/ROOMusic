@@ -4,7 +4,8 @@ trap 'printf "生产 Compose 静态校验失败（第 %s 行）\n" "$LINENO" >&2
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 umask 077
-work=$(mktemp -d)
+mkdir -p "$ROOT_DIR/temp"
+work=$(mktemp -d "$ROOT_DIR/temp/compose-config.XXXXXX")
 trap 'rm -rf -- "$work"' EXIT
 
 # 在独立目录中仅使用假值；不会读取工作区或部署目录的配置，也不创建容器与网络。
@@ -32,29 +33,36 @@ expect_missing() {
 }
 
 compose required.env config --quiet
-expect_missing no-password.env ROOMUSIC_DB_PASSWORD
+compose no-password.env config --quiet
 expect_missing no-music.env ROOMUSIC_MUSIC_DIR
 
 # 完整 config 只进入管道；断言只读取非敏感字段，不向终端打印配置。
 # 部分 Compose 版本会为未配置的 ipam 输出空对象，与字段缺失等价。
 compose required.env config --format json | jq -e '
   .name == "roomusic-server" and
-  (.services | keys) == ["app", "postgres"] and
+  (.services | keys) == ["app", "init", "postgres"] and
   .services.app.image == "ghcr.io/qlqqs/roomusic:latest" and
-  .services.app.container_name == "roomusic" and
-  .services.postgres.container_name == "roomusic-postgres" and
+  ([.services[] | has("container_name")] | any | not) and
+  ((.volumes // {}) | length) == 0 and
+  ([.services[].volumes[] | .type == "bind"] | all) and
+  .services.init.user == "0:0" and
+  .services.init.healthcheck.disable == true and
+  .services.postgres.depends_on.init.condition == "service_completed_successfully" and
+  .services.app.depends_on.postgres.condition == "service_healthy" and
+  .services.app.environment.ROOMUSIC_DB_PASSWORD_FILE == "/run/secrets/postgres_password" and
+  .services.postgres.environment.POSTGRES_PASSWORD_FILE == "/run/secrets/postgres_password" and
   (.services.app.ports | length) == 1 and
   .services.app.ports[0].published == "8090" and
   .services.app.ports[0].target == 8080 and
   .services.app.ports[0].host_ip == "0.0.0.0" and
   (.networks.roomusic.ipam // {}) == {} and
-  ([.services.app.volumes[] | select(.target == "/backups") | {type, source}]
-    == [{"type": "volume", "source": "backups"}]) and
+  ([.services.app.volumes[] | select(.target == "/backups") | .source | endswith("/backups")] | all) and
+  ([.services.postgres.volumes[] | select(.target == "/var/lib/postgresql") | .source | endswith("/postgres")] | all) and
   ([.services[] | has("pull_policy")] | any | not)
 ' > /dev/null
 compose bind.env config --format json | jq -e '
-  [.services.app.volumes[] | select(.target == "/backups") | {type, source}]
-    == [{"type": "bind", "source": "/srv/x"}]
+  [.services.app.volumes[], .services.init.volumes[] | select(.target == "/backups") | {type, source}]
+    == [{"type": "bind", "source": "/srv/x"}, {"type": "bind", "source": "/srv/x"}]
 ' > /dev/null
 
 cat > "$work/compose.override.yaml" <<'YAML'

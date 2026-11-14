@@ -48,6 +48,7 @@ Before writing or reviewing backend code:
 | [Error Handling](./error-handling.md) | Classified application errors and stable REST responses |
 | [Logging Guidelines](./logging-guidelines.md) | Structured JSON events, correlation, and redaction |
 | [Core 0 当前运行合同](./core0-runtime-contracts.md) | 总览：平台层 REST 通则、HTTP 缓存、迁移、环境、CI、完成日志，以及专题文件表（后续技术债在 [core0-tech-debt.md](./core0-tech-debt.md)） |
+| [部署环境与 CI 合同](./deployment-environment-contracts.md) | 生产初始化、凭据文件、目录挂载、备份与 CI 作业 |
 | [身份与成员合同](./identity-contracts.md) | 密码规则、初始化与成员接口、用户停用事务、写入失败映射 |
 | [来源与会话 Cookie 合同](./identity-origin-contracts.md) | 三模式配置、Host 规范化、守卫装配、Cookie Secure 与来源拒绝日志 |
 | [音乐目录浏览合同](./library-folder-contracts.md) | 管理员逐级浏览允许范围内的子文件夹、登记标记、错误与截断 |

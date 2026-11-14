@@ -9,13 +9,30 @@ x-logging: &logging
   options: { max-size: "10m", max-file: "5" }
 
 services:
+  init:
+    image: "ghcr.io/qlqqs/roomusic:${ROOMUSIC_VERSION:-latest}"
+    user: "0:0"
+    entrypoint: ["/app/init.sh"]
+    environment:
+      ROOMUSIC_DB_PASSWORD: "${ROOMUSIC_DB_PASSWORD:-}"
+    volumes:
+      - ./secrets:/secrets
+      - ./data:/data
+      - "${ROOMUSIC_BACKUP_DIR:-./backups}:/backups"
+      - ./postgres:/postgres:ro
+    read_only: true
+    network_mode: none
+    healthcheck: { disable: true }
+    restart: "no"
+    logging: *logging
+
   app:
     image: "ghcr.io/qlqqs/roomusic:${ROOMUSIC_VERSION:-latest}"
-    container_name: roomusic
     environment:
       ROOMUSIC_ENV: production
       ROOMUSIC_HTTP_ADDR: ":8080"
-      ROOMUSIC_DATABASE_URL: "postgres://roomusic:${ROOMUSIC_DB_PASSWORD:?请在 .env 里填写 ROOMUSIC_DB_PASSWORD（数据库密码）}@postgres:5432/roomusic?sslmode=disable"
+      ROOMUSIC_DATABASE_URL: "postgres://roomusic@postgres:5432/roomusic?sslmode=disable"
+      ROOMUSIC_DB_PASSWORD_FILE: /run/secrets/postgres_password
       ROOMUSIC_ALLOWED_ORIGINS: "${ROOMUSIC_ALLOWED_ORIGINS:-}"
       ROOMUSIC_ALLOWED_LIBRARY_ROOTS: /music
       ROOMUSIC_SCAN_WORKERS: "${ROOMUSIC_SCAN_WORKERS:-4}"
@@ -35,9 +52,9 @@ services:
         target: /music
         read_only: true
         bind: { create_host_path: false }
-      - app-data:/data
-      # 不填时是命名卷 backups；填宿主机绝对路径时改为挂载该目录。
-      - "${ROOMUSIC_BACKUP_DIR:-backups}:/backups"
+      - ./data:/data
+      - ./secrets:/run/secrets:ro
+      - "${ROOMUSIC_BACKUP_DIR:-./backups}:/backups"
     read_only: true
     tmpfs: ["/tmp:size=64m,mode=1777"]
     cap_drop: [ALL]
@@ -50,12 +67,15 @@ services:
 
   postgres:
     image: *postgres-image
-    container_name: roomusic-postgres
     environment:
       POSTGRES_DB: roomusic
       POSTGRES_USER: roomusic
-      POSTGRES_PASSWORD: "${ROOMUSIC_DB_PASSWORD:?请在 .env 里填写 ROOMUSIC_DB_PASSWORD（数据库密码）}"
-    volumes: [postgres-data:/var/lib/postgresql]
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    volumes:
+      - ./postgres:/var/lib/postgresql
+      - ./secrets:/run/secrets:ro
+    depends_on:
+      init: { condition: service_completed_successfully }
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U roomusic -d roomusic"]
       interval: 5s
@@ -71,8 +91,3 @@ networks:
   # 默认由 Docker 分配子网；需要固定子网时在同目录放 compose.override.yaml（见部署说明）。
   roomusic:
     driver: bridge
-
-volumes:
-  postgres-data:
-  app-data:
-  backups:

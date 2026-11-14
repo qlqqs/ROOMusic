@@ -26,10 +26,9 @@ curl -fL -o .env https://raw.githubusercontent.com/qlqqs/ROOMusic/main/.env.prod
 chmod 600 .env
 ```
 
-编辑 `.env`，填两项：
+编辑 `.env`，填写音乐目录：
 
 ```ini
-ROOMUSIC_DB_PASSWORD=一串字母和数字   # 可以用 openssl rand -hex 24 生成
 ROOMUSIC_MUSIC_DIR=/path/to/music     # 音乐目录的绝对路径
 ```
 
@@ -38,6 +37,8 @@ ROOMUSIC_MUSIC_DIR=/path/to/music     # 音乐目录的绝对路径
 ```bash
 docker compose up -d --wait
 ```
+
+首次启动自动生成数据库密码，持久化目录为 `secrets/`、`postgres/`、`data/` 和 `backups/`，均位于部署目录。
 
 打开 `http://<主机>:8090`，创建管理员，在“扫描目录”添加 `/music`，扫描完成后就可以听歌了。
 
@@ -49,11 +50,11 @@ docker compose up -d --wait
 docker compose pull && docker compose up -d --wait
 ```
 
-要固定或降级版本，把 `.env` 里的 `ROOMUSIC_VERSION` 改成具体版本（如 `0.1.0`，不带 `v`），再执行同样的命令。
+要固定或降级版本，把 `.env` 里的 `ROOMUSIC_VERSION` 改成具体版本（不带 `v`），再执行同样的命令。
 
 升级后会自动删除旧的 ALAC 转码缓存。
 
-数据库结构变化前会先自动备份。最低可以降到 `0.1.0`；遇到无法自动回退的版本，应用不会启动，日志会给出恢复备份的命令。
+数据库结构变化前会先自动备份。旧版本使用其对应的 Compose 和凭据配置；遇到无法自动回退的版本，应用不会启动，日志会给出恢复备份的命令。
 
 端口、备份目录、反向代理、备份恢复等更多内容见[部署说明](deploy/production/README.md)。
 
