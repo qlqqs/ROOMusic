@@ -1,7 +1,7 @@
 import { CircleAlert } from "lucide-react";
-import { useId, useRef, useState, type FormEvent, type RefObject } from "react";
+import { useRef, useState, type FormEvent, type RefObject } from "react";
 import { flushSync } from "react-dom";
-import { Button, ConfirmDialog, FailureNotice, Notice, Panel, QueryContent, Skeleton } from "../../../shared/ui";
+import { Button, ConfirmDialog, FailureNotice, Notice, QueryContent, SettingRow, SettingsGroup, Skeleton } from "../../../shared/ui";
 import { RETENTION_COUNT_RANGE, RETENTION_DAYS_RANGE, type BackupRetentionDTO } from "../api/decoders";
 import { useBackupOverview } from "../hooks/use-backup-overview";
 import { useSaveRetention } from "../hooks/use-save-retention";
@@ -38,17 +38,17 @@ function parseLimit(value: string, range: { min: number; max: number }): number 
 }
 
 /**
- * 备份页的“自动清理”：保留天数与保留份数，每项可以勾“不限”。数据来自与其他区段相同的查询；表单没改过时跟着服务器的值，改过就不覆盖。
+ * 备份页的“自动清理”卡片：保留天数与保留份数各一行，每项可以勾“不限”；末行是“保存”与结果。数据来自与其他区段相同的查询；表单没改过时跟着服务器的值，改过就不覆盖。
  * 保存先不带确认提交：会删除旧备份时服务器什么都不改、只回答份数，这时弹确认框，确认后再带确认提交。结果就近显示在按钮旁。
  */
 export function BackupRetentionSection() {
   const overview = useBackupOverview();
   return (
-    <Panel title="自动清理">
+    <SettingsGroup title="自动清理">
       <QueryContent query={overview} loading={<Skeleton label="正在加载自动清理设置" lines={2} />}>
         {(data) => <RetentionForm retention={data.retention} />}
       </QueryContent>
-    </Panel>
+    </SettingsGroup>
   );
 }
 
@@ -116,47 +116,48 @@ function RetentionForm({ retention }: { retention: BackupRetentionDTO | null }) 
   return (
     <>
       {retention === null ? <Notice tone="warning">{RETENTION_UNREADABLE_MESSAGE}</Notice> : null}
-      <form className={styles.form} noValidate onSubmit={submit}>
-        <div className={styles.fields}>
-          <LimitField
-            legend="保留天数"
-            unit="天"
-            range={RETENTION_DAYS_RANGE}
-            value={form.days}
-            unlimited={form.daysUnlimited}
-            error={errors.days}
-            inputRef={daysRef}
-            onValue={(days) => {
-              edit({ days });
-              setErrors((previous) => ({ ...previous, days: null }));
-            }}
-            onUnlimited={(daysUnlimited) => edit({ daysUnlimited })}
-          />
-          <LimitField
-            legend="保留份数"
-            unit="份"
-            range={RETENTION_COUNT_RANGE}
-            value={form.count}
-            unlimited={form.countUnlimited}
-            error={errors.count}
-            inputRef={countRef}
-            onValue={(count) => {
-              edit({ count });
-              setErrors((previous) => ({ ...previous, count: null }));
-            }}
-            onUnlimited={(countUnlimited) => edit({ countUnlimited })}
-          />
-        </div>
+      {/* 表单在卡片里贴边，自己画行间的分隔线（设置行不是卡片的直接子元素）。 */}
+      <form className={styles.form} noValidate onSubmit={submit} data-settings-flush="">
+        <LimitField
+          legend="保留天数"
+          unit="天"
+          range={RETENTION_DAYS_RANGE}
+          value={form.days}
+          unlimited={form.daysUnlimited}
+          error={errors.days}
+          inputRef={daysRef}
+          onValue={(days) => {
+            edit({ days });
+            setErrors((previous) => ({ ...previous, days: null }));
+          }}
+          onUnlimited={(daysUnlimited) => edit({ daysUnlimited })}
+        />
+        <LimitField
+          legend="保留份数"
+          unit="份"
+          range={RETENTION_COUNT_RANGE}
+          value={form.count}
+          unlimited={form.countUnlimited}
+          error={errors.count}
+          inputRef={countRef}
+          onValue={(count) => {
+            edit({ count });
+            setErrors((previous) => ({ ...previous, count: null }));
+          }}
+          onUnlimited={(countUnlimited) => edit({ countUnlimited })}
+        />
         <div className={styles.submit}>
-          <Button type="submit" variant="primary" busy={save.isPending && confirming === null}>
-            {save.isPending && confirming === null ? "正在保存…" : "保存"}
-          </Button>
-          <p role="status" className={styles.saved}>
-            {result === null ? "" : retentionSavedText(result.deleted)}
-          </p>
+          <div className={styles.submitLine}>
+            <Button type="submit" variant="primary" busy={save.isPending && confirming === null}>
+              {save.isPending && confirming === null ? "正在保存…" : "保存"}
+            </Button>
+            <p role="status" className={styles.saved}>
+              {result === null ? "" : retentionSavedText(result.deleted)}
+            </p>
+          </div>
+          {result !== null && result.failed > 0 ? <Notice tone="warning">{retentionFailedText(result.failed)}</Notice> : null}
+          {save.isError && confirming === null ? <FailureNotice error={save.error} context="write" messages={BACKUP_RETENTION_MESSAGES} /> : null}
         </div>
-        {result !== null && result.failed > 0 ? <Notice tone="warning">{retentionFailedText(result.failed)}</Notice> : null}
-        {save.isError && confirming === null ? <FailureNotice error={save.error} context="write" messages={BACKUP_RETENTION_MESSAGES} /> : null}
       </form>
       <ConfirmDialog
         open={confirming !== null}
@@ -176,7 +177,10 @@ function RetentionForm({ retention }: { retention: BackupRetentionDTO | null }) 
   );
 }
 
-/** 一项上限：数字框、单位与“不限”。勾“不限”时数字框停用但保留原值；取消勾选时焦点回到数字框。 */
+/**
+ * 一项上限的设置行：名称在左，右侧是数字框、单位与“不限”（一组，以名称为组名）。勾“不限”时数字框停用但保留原值；取消勾选时焦点回到数字框。
+ * 错误在控件下方一行。
+ */
 function LimitField({
   legend,
   unit,
@@ -198,50 +202,55 @@ function LimitField({
   onValue: (value: string) => void;
   onUnlimited: (unlimited: boolean) => void;
 }) {
-  const id = useId();
-  const errorId = `${id}-error`;
   return (
-    <fieldset className={styles.field}>
-      <legend className={styles.legend}>{legend}</legend>
-      <div className={styles.row}>
-        <input
-          ref={inputRef}
-          type="number"
-          inputMode="numeric"
-          min={range.min}
-          max={range.max}
-          step={1}
-          className={styles.input}
-          aria-label={legend}
-          aria-invalid={error === null || unlimited ? undefined : true}
-          aria-describedby={error === null || unlimited ? undefined : errorId}
-          disabled={unlimited}
-          value={value}
-          onChange={(event) => onValue(event.target.value)}
-        />
-        <span className={styles.unit} aria-hidden="true">
-          {unit}
-        </span>
-        <label className={styles.check}>
-          <input
-            type="checkbox"
-            checked={unlimited}
-            onChange={(event) => {
-              const checked = event.target.checked;
-              // 取消“不限”时数字框要先解除停用才能聚焦，所以同步提交这次更新。
-              flushSync(() => onUnlimited(checked));
-              if (!checked) inputRef.current?.focus();
-            }}
-          />
-          <span>不限</span>
-        </label>
-      </div>
-      {error === null || unlimited ? null : (
-        <p id={errorId} className={styles.error}>
-          <CircleAlert size={14} aria-hidden="true" />
-          <span>{error}</span>
-        </p>
-      )}
-    </fieldset>
+    <SettingRow label={legend} plainLabel>
+      {(ids) => {
+        const errorId = `${ids.controlId}-error`;
+        return (
+          <div role="group" aria-labelledby={ids.labelId} className={styles.field}>
+            <div className={styles.row}>
+              <input
+                ref={inputRef}
+                id={ids.controlId}
+                type="number"
+                inputMode="numeric"
+                min={range.min}
+                max={range.max}
+                step={1}
+                className={styles.input}
+                aria-label={legend}
+                aria-invalid={error === null || unlimited ? undefined : true}
+                aria-describedby={error === null || unlimited ? undefined : errorId}
+                disabled={unlimited}
+                value={value}
+                onChange={(event) => onValue(event.target.value)}
+              />
+              <span className={styles.unit} aria-hidden="true">
+                {unit}
+              </span>
+              <label className={styles.check}>
+                <input
+                  type="checkbox"
+                  checked={unlimited}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    // 取消“不限”时数字框要先解除停用才能聚焦，所以同步提交这次更新。
+                    flushSync(() => onUnlimited(checked));
+                    if (!checked) inputRef.current?.focus();
+                  }}
+                />
+                <span>不限</span>
+              </label>
+            </div>
+            {error === null || unlimited ? null : (
+              <p id={errorId} className={styles.error}>
+                <CircleAlert size={14} aria-hidden="true" />
+                <span>{error}</span>
+              </p>
+            )}
+          </div>
+        );
+      }}
+    </SettingRow>
   );
 }

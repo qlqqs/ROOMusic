@@ -45,6 +45,11 @@
   font-size: var(--fs-13);
 }
 
+/* 说明由组件按数据决定是否有内容（例如设置页的控制目标设备）；没有内容时不留空行。 */
+.description:empty {
+  display: none;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;

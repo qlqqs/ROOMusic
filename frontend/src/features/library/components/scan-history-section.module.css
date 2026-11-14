@@ -9,3 +9,13 @@
   align-items: center;
   gap: var(--space-1) var(--space-2);
 }
+
+/* 卡片下方：总次数在左，分页在右；放不下时分页换到下一行。 */
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  padding: 0 2px;
+}

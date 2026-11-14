@@ -1,5 +1,7 @@
-.status {
-  display: grid;
-  gap: var(--space-4);
-  min-width: 0;
+/* 只读的值：等宽数字，长值完整显示并换行。 */
+.value {
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+  text-align: end;
 }

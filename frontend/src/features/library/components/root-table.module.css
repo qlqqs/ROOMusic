@@ -1,5 +1,29 @@
-.actions {
-  display: inline-flex;
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 一行：图标 | 名称 | 状态 | 更多；行间一条淡分隔线。 */
+.row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-3);
+  min-height: 52px;
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-4);
+}
+
+.row + .row {
+  border-top: 1px solid var(--color-divider);
+}
+
+.icon {
+  color: var(--color-neutral-600);
+}
+
+.name {
+  min-width: 0;
+  font-weight: 500;
+  overflow-wrap: anywhere;
 }

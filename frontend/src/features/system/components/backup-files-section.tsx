@@ -2,7 +2,7 @@ import { Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { formatBytes } from "../../../shared/lib/bytes";
 import { formatDateTime } from "../../../shared/lib/time";
-import { Button, ConfirmDialog, DataTable, FailureNotice, Notice, Panel, QueryContent, Skeleton, VisuallyHidden, type Column } from "../../../shared/ui";
+import { Button, ConfirmDialog, DataTable, FailureNotice, Notice, QueryContent, SettingsGroup, Skeleton, VisuallyHidden, type Column } from "../../../shared/ui";
 import { BACKUP_LIST_LIMIT, type BackupFileDTO } from "../api/decoders";
 import { backupDownloadPath } from "../api/endpoints";
 import { useBackupOverview } from "../hooks/use-backup-overview";
@@ -22,7 +22,7 @@ import styles from "./backup-files-section.module.css";
 const noBackups: readonly BackupFileDTO[] = [];
 
 /**
- * 备份页的“备份文件”区段：最新的在前，最多列出最近 500 份。与状态区段共用同一个查询。
+ * 备份页的“备份文件”卡片：最新的在前，最多列出最近 500 份。与状态区段共用同一个查询。
  * 每行可以下载、删除，也可以勾选后一起删除；“全选”放在表格上方（窄容器里表头是隐藏的）。勾选按文件名记，列表变化后已经不在的自动去掉。
  * 删除成功后被删的行已经不在，焦点回到区段标题，结果只告诉读屏。已经不在的备份（404 或 missing）按删除成功处理。
  */
@@ -150,38 +150,43 @@ export function BackupFilesSection() {
   ];
 
   return (
-    <Panel title="备份文件" headingRef={headingRef}>
-      <QueryContent query={overview} loading={<Skeleton label="正在加载备份文件" lines={3} />}>
-        {(data) =>
-          data.backups.length === 0 ? (
-            <p>还没有备份。</p>
-          ) : (
-            <>
-              <div className={styles.toolbar}>
-                <SelectAll
-                  total={data.backups.length}
-                  count={chosen.length}
-                  onChange={(all) => setSelected(all ? new Set(data.backups.map((file) => file.name)) : new Set())}
-                />
-                {chosen.length === 0 ? null : (
-                  <Button
-                    icon={<Trash2 size={16} />}
-                    onClick={() => {
-                      removeMany.reset();
-                      setFailedNames([]);
-                      setRemovingMany(true);
-                    }}
-                  >
-                    {deleteSelectedLabel(chosen.length)}
-                  </Button>
-                )}
-              </div>
-              <DataTable caption="备份文件" columns={columns} rows={data.backups} rowKey={(file) => file.name} />
-              {data.total > data.backups.length ? <p className={styles.note}>只显示最近 {BACKUP_LIST_LIMIT} 份。</p> : null}
-            </>
-          )
-        }
-      </QueryContent>
+    <>
+      <SettingsGroup
+        title="备份文件"
+        headingRef={headingRef}
+        footer={overview.data !== undefined && overview.data.total > overview.data.backups.length ? <p className={styles.note}>只显示最近 {BACKUP_LIST_LIMIT} 份。</p> : null}
+      >
+        <QueryContent query={overview} loading={<Skeleton label="正在加载备份文件" lines={3} />}>
+          {(data) =>
+            data.backups.length === 0 ? (
+              <p>还没有备份。</p>
+            ) : (
+              <>
+                <div className={styles.toolbar}>
+                  <SelectAll
+                    total={data.backups.length}
+                    count={chosen.length}
+                    onChange={(all) => setSelected(all ? new Set(data.backups.map((file) => file.name)) : new Set())}
+                  />
+                  {chosen.length === 0 ? null : (
+                    <Button
+                      icon={<Trash2 size={16} />}
+                      onClick={() => {
+                        removeMany.reset();
+                        setFailedNames([]);
+                        setRemovingMany(true);
+                      }}
+                    >
+                      {deleteSelectedLabel(chosen.length)}
+                    </Button>
+                  )}
+                </div>
+                <DataTable caption="备份文件" columns={columns} rows={data.backups} rowKey={(file) => file.name} />
+              </>
+            )
+          }
+        </QueryContent>
+      </SettingsGroup>
       <VisuallyHidden>
         <span role="status">{announcement}</span>
       </VisuallyHidden>
@@ -223,7 +228,7 @@ export function BackupFilesSection() {
       >
         <p>{BACKUP_DELETE_WARNING}</p>
       </ConfirmDialog>
-    </Panel>
+    </>
   );
 }
 

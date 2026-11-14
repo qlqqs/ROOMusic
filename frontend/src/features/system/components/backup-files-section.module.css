@@ -1,4 +1,5 @@
 .note {
+  padding: 0 2px;
   color: var(--text-secondary);
   font-size: var(--fs-13);
 }

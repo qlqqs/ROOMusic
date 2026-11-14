@@ -5,10 +5,43 @@
   min-width: 0;
 }
 
+/* 标题行：h2 在左，可选的操作在右；放不下时操作换到下一行。 */
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-3);
+  min-width: 0;
+  min-height: var(--control-height);
+}
+
 .title {
+  min-width: 0;
   margin: 0 0 0 2px;
   font-size: var(--fs-14);
   font-weight: var(--font-heading-weight);
+  overflow-wrap: anywhere;
+  /* 被程序聚焦并滚到视野顶部时不被窄屏的吸顶栏盖住。 */
+  scroll-margin-top: calc(var(--layout-topbar-height) + var(--space-3));
+}
+
+.action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* 卡片下方：结果提示、条数说明与分页；没有内容时不占位。 */
+.footer {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.footer:empty {
+  display: none;
 }
 
 .card {
@@ -19,8 +52,44 @@
   background: color-mix(in srgb, white 45%, var(--color-bg));
 }
 
-.card > * + * {
+/* 对话框可以和触发它的内容放在卡片里（关着时不显示，打开时在顶层），不参与分隔线与内边距；放在卡片末尾。 */
+.card > * + :not(dialog) {
   border-top: 1px solid var(--color-divider);
+}
+
+/* 不是设置行、也不含表格的直接子元素（加载占位、错误、空状态的一句话、提示）与行同样留边；自带行内边距的列表用 data-settings-flush 声明。 */
+.card > :not(.row, dialog, [data-settings-flush]):not(:has(table)) {
+  padding: var(--space-3) var(--space-4);
+}
+
+/* 卡片里的表格：首尾单元格与行的左右边距对齐，表头上方留白，最后一行不再画下边线（卡片的边框已经收口）。 */
+.card table thead th {
+  padding-top: var(--space-3);
+}
+
+.card table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+@container (min-width: 640px) {
+  .card table :is(th, td):first-child {
+    padding-inline-start: var(--space-4);
+  }
+
+  .card table :is(th, td):last-child {
+    padding-inline-end: var(--space-4);
+  }
+}
+
+/* 表格按容器宽度堆叠成“标签：值”时，每一行左右与设置行同样留边。 */
+@container (max-width: 639px) {
+  .card table tr {
+    padding-inline: var(--space-4);
+  }
+
+  .card table tbody tr:last-child {
+    border-bottom: 0;
+  }
 }
 
 /* 一行：名称与说明 | 控件；控件右对齐。 */
