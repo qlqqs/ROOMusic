@@ -1,3 +1,4 @@
+import { ListMusic } from "lucide-react";
 import { useState } from "react";
 import { Button } from "../../../shared/ui";
 import type { ArtworkDTO } from "../api/decoders";
@@ -8,8 +9,11 @@ type CoverProps = {
   /** 接口给的封面摘要；没有封面时为 null。 */
   artwork: ArtworkDTO | null;
   title: string;
-  /** card：列表卡片里的装饰（标题已在链接名称里）；detail：详情页，封面有替代文字，失败后可以重新加载。 */
-  variant: "card" | "detail";
+  /**
+   * card：列表卡片里的装饰（标题已在链接名称里）；detail：详情页，封面有替代文字，失败后可以重新加载；
+   * thumb：侧栏这类小尺寸的装饰缩略图，没有裱边，没有封面或加载失败时只显示歌单图标，不排标题、也不给重试。
+   */
+  variant: "card" | "detail" | "thumb";
 };
 
 /**
@@ -18,6 +22,7 @@ type CoverProps = {
  */
 export function Cover({ artwork, title, variant }: CoverProps) {
   const [attempt, setAttempt] = useState(0);
+  if (variant === "thumb") return <ThumbCover key={artwork?.resource_id ?? "none"} artwork={artwork} />;
   if (artwork === null) {
     return (
       <div className={styles.cover} data-variant={variant} aria-hidden={variant === "card" ? true : undefined}>
@@ -54,6 +59,30 @@ function CoverImage({ artwork, title, variant, onRetry }: CoverProps & { artwork
       </div>
       {state === "failed" && variant === "detail" ? <Button onClick={onRetry}>重新加载封面</Button> : null}
     </div>
+  );
+}
+
+/** 小缩略图：同尺寸底色上懒加载图片；没有封面或加载失败时是图标。整个是装饰，名称在旁边的链接里。 */
+function ThumbCover({ artwork }: { artwork: ArtworkDTO | null }) {
+  const [failed, setFailed] = useState(false);
+  const showImage = artwork !== null && !failed;
+  return (
+    <span className={styles.thumb} data-state={showImage ? "image" : "none"} aria-hidden="true">
+      {showImage ? (
+        <img
+          className={styles.thumbImage}
+          src={artworkPath(artwork.resource_id)}
+          width={artwork.width}
+          height={artwork.height}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <ListMusic size={14} />
+      )}
+    </span>
   );
 }
 

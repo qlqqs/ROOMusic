@@ -1,10 +1,13 @@
+/* 各层网格的列都可以收缩到侧栏宽度：歌单名再长也只在行内省略，不把整列撑宽。 */
 .nav {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
 }
 
 .group {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-1);
 }
 
@@ -17,6 +20,7 @@
 
 .list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 2px;
   margin: 0;
   padding: 0;
@@ -36,6 +40,11 @@
   transition: background-color 0.12s ease;
 }
 
+.link svg {
+  flex: none;
+  color: var(--text-secondary);
+}
+
 .link:hover {
   background: var(--color-hover);
 }
@@ -44,6 +53,25 @@
   background: var(--color-selected);
   color: var(--text-accent);
   font-weight: 600;
+}
+
+.link[aria-current="page"] svg {
+  color: var(--text-accent);
+}
+
+.label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* 待办数量：靠右的小号数字，不加底色，不与选中态争夺注意力。 */
+.count {
+  margin-left: auto;
+  padding-left: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
 }
 
 /* “我的歌单”一行：链接占满，展开收起按钮在右侧。 */
@@ -58,9 +86,13 @@
   min-width: 0;
 }
 
-/* 展开后的歌单：与上面的文字对齐，单行显示，过长省略。 */
+/*
+ * 展开后的歌单：不缩进，与一级导航同一左内边距。封面 26px 比 18px 的图标宽，左内边距相应减 4px，两者的中线落在同一列；
+ * 名称起点比一级文字靠右约 4px（基本对齐），“全部歌单”的文字与歌单名对齐。单行显示，过长省略。
+ */
 .sublist {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 2px;
   margin: 2px 0 0;
   padding: 0;
@@ -72,17 +104,27 @@
 }
 
 .sublink {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   min-height: var(--control-height);
-  padding: 0 var(--space-3) 0 40px;
+  padding: 0 var(--space-3) 0 calc(var(--space-3) - 4px);
   border-radius: var(--radius-md);
   color: var(--text-secondary);
   font-size: var(--fs-13);
   text-decoration: none;
-  white-space: nowrap;
+  transition: background-color 0.12s ease;
+}
+
+.sublink[data-kind="all"] {
+  padding-left: calc(var(--space-3) - 4px + 26px + 10px);
+}
+
+.sublabel {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: var(--control-height);
+  white-space: nowrap;
 }
 
 .sublink:hover {

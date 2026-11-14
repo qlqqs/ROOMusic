@@ -280,6 +280,7 @@ export function GlobalSearchBox({ currentQuery, onNavigate, className }: GlobalS
             aria-activedescendant={showPopup && activeIndex >= 0 ? optionId(activeIndex) : undefined}
             aria-describedby={tooLong ? statusId : undefined}
             aria-invalid={tooLong ? true : undefined}
+            aria-keyshortcuts="/"
             value={draft}
             onChange={(event) => {
               setDraft(event.target.value);
@@ -292,6 +293,10 @@ export function GlobalSearchBox({ currentQuery, onNavigate, className }: GlobalS
             onCompositionStart={() => setComposing(true)}
             onCompositionEnd={() => setComposing(false)}
           />
+          {/* 外壳的“/”快捷键（app-shell）：只在精确指针设备上、输入框为空且没有焦点时提示；读屏从 aria-keyshortcuts 得知。 */}
+          <kbd className={styles.shortcut} aria-hidden="true">
+            /
+          </kbd>
         </div>
         {tooLong ? (
           <p id={statusId} className={styles.error}>

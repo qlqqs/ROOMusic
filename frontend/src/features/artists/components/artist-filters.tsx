@@ -36,21 +36,24 @@ export function ArtistFilters({ search }: { search: ArtistsSearch }) {
 
   return (
     <form role="search" aria-label="查找艺人" className={styles.form} onSubmit={submit}>
-      <div className={styles.input}>
-        <TextField
-          ref={inputRef}
-          label="查找艺人"
-          name="q"
-          type="text"
-          inputMode="search"
-          enterKeyHint="search"
-          autoComplete="off"
-          value={draft}
-          error={error}
-          onChange={(event) => setDraft(event.target.value)}
-        />
-      </div>
-      <div className={styles.actions}>
+      {/* 工具条一行：查找（输入框、查找、清除）、角色、排序，与专辑列表同一套。 */}
+      <div className={styles.search}>
+        <div className={styles.input}>
+          <TextField
+            ref={inputRef}
+            label="查找艺人"
+            labelHidden
+            placeholder="查找艺人"
+            name="q"
+            type="text"
+            inputMode="search"
+            enterKeyHint="search"
+            autoComplete="off"
+            value={draft}
+            error={error}
+            onChange={(event) => setDraft(event.target.value)}
+          />
+        </div>
         <Button type="submit" variant="primary">
           查找
         </Button>
@@ -66,6 +69,8 @@ export function ArtistFilters({ search }: { search: ArtistsSearch }) {
             清除
           </Button>
         )}
+      </div>
+      <div className={styles.actions}>
         <label className={styles.select}>
           <span>角色</span>
           {/* 地址里的 release_artist（只匹配发行艺人）没有单独的选项，显示在“专辑艺人”下。 */}
