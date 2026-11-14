@@ -63,6 +63,7 @@ Before writing or reviewing frontend code:
 | [艺人与别名的前端约定](./artist-guidelines.md) | M5 ⑤：`features/artists` 的归属、可点的艺人名（`ArtistNames` 与就绪判断）、艺人列表与艺人页的地址与查询键、艺人收藏的分开读取、整理中的处理、合并/拆开/改名与候选的界面 |
 | [收藏与歌单的前端约定](./personal-guidelines.md) | M5 ② ③：`features/personal` 的归属、查询键与跨标签页刷新、心形与批量状态、收藏页的保留行、歌单的幂等命令、拖动与菜单排序、撤销、“添加到歌单…”与统一曲目行动作 |
 | [播放器设计规范](./player-design-guidelines.md) | 工作台视觉层级、响应式布局、播放交互与可访问性 |
+| [界面布局与交互约定](./interface-layout-guidelines.md) | 2026-11-14 整理：菜单分组、设置卡片行与分段选择、曲目行动作显隐与双击播放、专辑页头与操作行、播放栏与随机/循环按钮、信号路径胶囊与呼吸、全屏两栏与接下来、设置分组、侧栏歌单封面 |
 | [Core 0 当前运行合同](../backend/core0-runtime-contracts.md) | 平台层 REST 通则、HTTP 缓存、环境、CI 与专题合同索引 |
 | [身份与成员合同](../backend/identity-contracts.md) | 查看者响应、密码规则、成员与初始化接口的错误映射 |
 | [目录与扫描流程合同](../backend/library-scan-contracts.md) | 目录接口、目录幂等、扫描整理与封面发现 |

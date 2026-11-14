@@ -20,6 +20,8 @@
 | `Disclosure`（M3） | 页面底部折叠的区块（“来源与证据”“修改记录”）：原生 `<details>` 的展开状态由 React 持有，**折叠时不渲染内容**（没有可聚焦的隐藏控件，内容里的请求也在展开后才发出），展开时挂载；标题行是原生 `summary`（Enter 与空格展开），可经 `summaryRef` 取到，区块外的操作结束后可把焦点带回；换对象时用 `key` 回到折叠 |
 | `Pagination`（F3） | `<nav>` 带可访问名称（如“扫描记录分页”，同一页面可能不止一个分页），内容是“上一页”“第 x / y 页”“下一页”；当前页 `aria-current="page"`；到头的方向显示为 `aria-disabled` 的文字而不是消失，布局不跳动；只有一页或没有数据时不渲染；链接由调用方经 `renderLink` 生成（通常是路由 `Link`，组件不依赖路由），上一页与下一页带 `rel`。页码的 URL 约定见[状态规范](./state-management.md) |
 
+2026-11-14 新增的 `SettingsGroup`、`SettingRow`、`Segmented`、`Switch`、`MenuAction.group`、`TextField labelHidden` 与 `useMediaQuery` 的约定见[界面布局与交互约定](./interface-layout-guidelines.md)。
+
 页面级约定：
 
 - 外壳有“跳到主要内容”链接、`nav` 与 `main` 地标；导航用链接，当前页有 `aria-current`；窄屏的“菜单”按钮打开原生 `<dialog>` 模态导航，
@@ -65,6 +67,8 @@
   在 `body` 上”，而不是要求严格循环。
 
 ## 已实现的专辑组件（M1b，`features/catalog`）
+
+2026-11-14 起专辑页头（`AlbumHeader` 经 `Page header` 渲染、操作行与“更多”菜单）、版本标签、曲目行序号位播放与双击播放、`Cover variant="thumb"` 以[界面布局与交互约定](./interface-layout-guidelines.md)为准。
 
 | 组件 | 约定 |
 | --- | --- |
