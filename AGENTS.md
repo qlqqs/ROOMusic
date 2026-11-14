@@ -37,6 +37,7 @@ Managed by Trellis. Edits outside this block are preserved; edits inside may be 
 - 项目文档和新增说明性注释使用简体中文。
 - 不添加防御性说明，不为不存在的场景设计兜底。
 - 只对实际输入边界、依赖和已知失败情况做必要校验。
+- 制定方案前先查找本机环境有没有相似的项目或者内容，是否可以复用或者沿用，而不是另外起一个完全不同的方案。
 
 ## 工具链管理
 
