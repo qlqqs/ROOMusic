@@ -2,5 +2,3 @@
 !backend/
 backend/data/
 !deploy/production/entrypoint.sh
-
-!deploy/production/init.sh

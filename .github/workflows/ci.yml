@@ -118,6 +118,7 @@ jobs:
           docker compose -f compose.dev.yaml config --quiet
           docker compose -f compose.test.yaml config --quiet
           scripts/check-production-compose.sh
+          python3 scripts/tests/test_production_init.py
           for script in deploy/production/*.sh; do bash -n "$script"; done
           grep -qF "$(scripts/ffmpeg-pinned.sh --image)" deploy/production/Dockerfile
           grep -qF "golang:$(sed -n 's/^go = "\(.*\)"/\1/p' .mise.toml)-" deploy/production/Dockerfile

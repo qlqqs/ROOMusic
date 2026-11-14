@@ -40,14 +40,12 @@ expect_missing no-music.env ROOMUSIC_MUSIC_DIR
 # 部分 Compose 版本会为未配置的 ipam 输出空对象，与字段缺失等价。
 compose required.env config --format json | jq -e '
   .name == "roomusic-server" and
-  (.services | keys) == ["app", "init", "postgres"] and
+  (.services | keys) == ["app", "postgres"] and
   .services.app.image == "ghcr.io/qlqqs/roomusic:latest" and
-  ([.services[] | has("container_name")] | any | not) and
+  .services.app.container_name == "roomusic-app" and
+  .services.postgres.container_name == "roomusic-postgres" and
   ((.volumes // {}) | length) == 0 and
   ([.services[].volumes[] | .type == "bind"] | all) and
-  .services.init.user == "0:0" and
-  .services.init.healthcheck.disable == true and
-  .services.postgres.depends_on.init.condition == "service_completed_successfully" and
   .services.app.depends_on.postgres.condition == "service_healthy" and
   .services.app.environment.ROOMUSIC_DB_PASSWORD_FILE == "/run/secrets/postgres_password" and
   .services.postgres.environment.POSTGRES_PASSWORD_FILE == "/run/secrets/postgres_password" and
@@ -61,8 +59,15 @@ compose required.env config --format json | jq -e '
   ([.services[] | has("pull_policy")] | any | not)
 ' > /dev/null
 compose bind.env config --format json | jq -e '
-  [.services.app.volumes[], .services.init.volumes[] | select(.target == "/backups") | {type, source}]
-    == [{"type": "bind", "source": "/srv/x"}, {"type": "bind", "source": "/srv/x"}]
+  [.services.app.volumes[] | select(.target == "/backups") | {type, source}]
+    == [{"type": "bind", "source": "/srv/x"}]
+' > /dev/null
+
+printf '%s\n' 'ROOMUSIC_APP_CONTAINER_NAME=test-app' 'ROOMUSIC_POSTGRES_CONTAINER_NAME=test-postgres' >> "$work/bind.env"
+compose bind.env config --format json | jq -e '
+  .services.app.container_name == "test-app" and
+  .services.postgres.container_name == "test-postgres" and
+  ((.services.postgres.depends_on // {}) | length) == 0
 ' > /dev/null
 
 cat > "$work/compose.override.yaml" <<'YAML'

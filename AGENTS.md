@@ -49,7 +49,8 @@ Managed by Trellis. Edits outside this block are preserved; edits inside may be 
 
 - Docker daemon 的本机访问方式见本机环境说明。
 - 开发、测试、生产使用不同的 Compose 项目名。
-- 避免固定 container_name，由 Compose 生成隔离名称。
+- 生产使用可配置的固定 container_name，不带实例编号；同机多实例分别设置唯一名称。
+- 禁止使用初始化容器；宿主机脚本仅在首次安装时运行，Compose 不依赖该脚本，升级直接 pull 后 up。
 - 每个项目使用独立网络和数据目录。
 - 开发和测试端口绑定 0.0.0.0，使用独立端口避免冲突。
 
@@ -62,6 +63,8 @@ Managed by Trellis. Edits outside this block are preserved; edits inside may be 
 - 每次集成测试使用独立临时目录和唯一 Compose 项目名。
 - 测试使用合成数据，不读取现有实例的数据、配置或凭据。
 - 未经明确授权，不启动、停止、升级、迁移或删除现有实例。
+- 简单任务禁止开新分支实现。
+- 合并推送分支后要清理旧分支。
 
 ## 凭据使用
 

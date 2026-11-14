@@ -1,5 +1,5 @@
-# 从仓库 main 分支下载 compose.prod.yaml 和 .env.prod.example，分别存为部署目录里的 compose.yaml 和 .env；执行 chmod 600 .env，再执行 docker compose up -d --wait。
-# 在仓库根目录使用时，将 .env.prod.example 复制为 .env.prod，执行 chmod 600 .env.prod，再执行 docker compose -f compose.prod.yaml --env-file .env.prod up -d --wait。
+# 从仓库 main 分支下载 compose.prod.yaml、.env.prod.example 和 scripts/production-init.sh，分别存为部署目录里的 compose.yaml、.env 和 production-init.sh；执行 chmod 600 .env，首次安装先执行 sudo sh ./production-init.sh，再执行 docker compose up -d --wait。
+# 在仓库根目录使用时，将 .env.prod.example 复制为 .env.prod，执行 chmod 600 .env.prod，首次安装先执行 sudo sh scripts/production-init.sh compose.prod.yaml .env.prod，再执行 docker compose -f compose.prod.yaml --env-file .env.prod up -d --wait。
 # 项目名默认 roomusic-server；本机生产实例可在对应环境文件里用 COMPOSE_PROJECT_NAME 指定为 roomusic-prod。
 name: roomusic-server
 
@@ -9,24 +9,8 @@ x-logging: &logging
   options: { max-size: "10m", max-file: "5" }
 
 services:
-  init:
-    image: "ghcr.io/qlqqs/roomusic:${ROOMUSIC_VERSION:-latest}"
-    user: "0:0"
-    entrypoint: ["/app/init.sh"]
-    environment:
-      ROOMUSIC_DB_PASSWORD: "${ROOMUSIC_DB_PASSWORD:-}"
-    volumes:
-      - ./secrets:/secrets
-      - ./data:/data
-      - "${ROOMUSIC_BACKUP_DIR:-./backups}:/backups"
-      - ./postgres:/postgres:ro
-    read_only: true
-    network_mode: none
-    healthcheck: { disable: true }
-    restart: "no"
-    logging: *logging
-
   app:
+    container_name: "${ROOMUSIC_APP_CONTAINER_NAME:-roomusic-app}"
     image: "ghcr.io/qlqqs/roomusic:${ROOMUSIC_VERSION:-latest}"
     environment:
       ROOMUSIC_ENV: production
@@ -66,6 +50,7 @@ services:
     logging: *logging
 
   postgres:
+    container_name: "${ROOMUSIC_POSTGRES_CONTAINER_NAME:-roomusic-postgres}"
     image: *postgres-image
     environment:
       POSTGRES_DB: roomusic
@@ -74,8 +59,6 @@ services:
     volumes:
       - ./postgres:/var/lib/postgresql
       - ./secrets:/run/secrets:ro
-    depends_on:
-      init: { condition: service_completed_successfully }
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U roomusic -d roomusic"]
       interval: 5s

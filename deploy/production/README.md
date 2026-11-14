@@ -1,7 +1,7 @@
 # 部署说明
 
-ROOMusic 生产环境包含 `app`、PostgreSQL 18，以及完成后退出的 `init` 初始化服务。应用自带备份和 ffmpeg，数据库不对外开放端口。
-宿主机只需要 Docker 和 Docker Compose v2，不需要克隆仓库。下文命令都在部署目录里执行。
+ROOMusic 生产环境只包含应用和 PostgreSQL 18 两个容器，默认固定名称为 `roomusic-app`、`roomusic-postgres`。应用自带备份和 ffmpeg，数据库不对外开放端口。
+宿主机需要 Docker、Docker Compose v2，以及首次安装脚本用于解析配置的 Python 3，不需要克隆仓库。下文命令都在部署目录里执行。
 
 数据全部存放在部署目录的宿主机文件夹中，不创建 Docker 数据卷。
 
@@ -13,6 +13,7 @@ ROOMusic 生产环境包含 `app`、PostgreSQL 18，以及完成后退出的 `in
 mkdir -p /srv/roomusic && cd /srv/roomusic
 curl -fL -o compose.yaml https://raw.githubusercontent.com/qlqqs/ROOMusic/main/compose.prod.yaml
 curl -fL -o .env https://raw.githubusercontent.com/qlqqs/ROOMusic/main/.env.prod.example
+curl -fL -o production-init.sh https://raw.githubusercontent.com/qlqqs/ROOMusic/main/scripts/production-init.sh
 chmod 600 .env
 ```
 
@@ -22,16 +23,17 @@ chmod 600 .env
 | --- | --- |
 | `ROOMUSIC_MUSIC_DIR` | 音乐目录的绝对路径，需要 uid 1000 可读，以只读方式挂载到 `/music` |
 
-启动：
+仅首次安装执行宿主机初始化脚本，然后启动：
 
 ```bash
+sudo sh ./production-init.sh
 docker compose up -d --wait
 ```
 
 打开 `http://<主机>:8090`，**先创建管理员，再开放公网访问**。在“扫描目录”添加 `/music` 或其子目录，扫描完成后即可浏览和播放；
 在“成员”页添加其他账号。
 
-首次启动会生成随机数据库密码，保存为 `secrets/postgres_password`。应用和数据库读取同一文件，后续启动复用。首次安装也可在 `.env` 设置 `ROOMUSIC_DB_PASSWORD`；已有密码文件时，该值必须与文件一致。
+首次安装脚本会生成随机数据库密码，保存为 `secrets/postgres_password`。应用和数据库读取同一文件，后续启动直接读取文件。首次安装也可在 `.env` 设置 `ROOMUSIC_DB_PASSWORD`；脚本重复执行时，已有密码文件与显式设置的密码必须一致；日常启动只读取密码文件。
 
 目录结构：
 
@@ -39,13 +41,18 @@ docker compose up -d --wait
 roomusic/
 ├── compose.yaml
 ├── .env
+├── production-init.sh
 ├── secrets/postgres_password
 ├── postgres/
 ├── data/
 └── backups/
 ```
 
-初始化服务准备应用目录的 UID 1000 写入权限；PostgreSQL 自行设置数据库目录权限。检查配置使用 `docker compose config --quiet`。
+宿主机脚本以 root 准备应用目录的 UID 1000 写入权限；PostgreSQL 自行设置数据库目录权限。检查配置使用 `docker compose config --quiet`。
+
+脚本只用于首次安装，不启动容器；Compose 不引用、不执行也不依赖该脚本。升级直接 `pull` 后 `up`，无需再次初始化。脚本不会修改 `.env` 的属主，部署用户需要能读取该文件。
+
+在仓库根目录首次安装时使用 `sudo sh scripts/production-init.sh compose.prod.yaml .env.prod`；后续 Compose 命令加 `-f compose.prod.yaml --env-file .env.prod`。脚本始终以当前目录为部署目录。
 
 此 Compose 配套 v0.6.1 及后续镜像。v0.6.0 及更早镜像使用对应版本的部署配置。
 
@@ -56,15 +63,19 @@ roomusic/
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `ROOMUSIC_VERSION` | `latest` | 镜像版本；固定或降级时填具体版本，不带 `v` |
+| `ROOMUSIC_APP_CONTAINER_NAME` | `roomusic-app` | 应用固定容器名，同机多实例分别设置 |
+| `ROOMUSIC_POSTGRES_CONTAINER_NAME` | `roomusic-postgres` | 数据库固定容器名，同机多实例分别设置 |
 | `ROOMUSIC_HTTP_PORT` | `8090` | 网页端口 |
-| `ROOMUSIC_BACKUP_DIR` | `./backups` | 可指定其他宿主机目录，初始化服务设置目录权限 |
+| `ROOMUSIC_BACKUP_DIR` | `./backups` | 可指定其他宿主机目录，首次安装脚本设置目录权限 |
 | `ROOMUSIC_BACKUP_HOUR` | `3` | 每天几点后自动备份，0–23 |
 | `ROOMUSIC_TIMEZONE` | `Asia/Shanghai` | 自动备份使用的时区 |
 | `ROOMUSIC_BACKUP_KEEP_DAYS` | `14` | 网页上从未设置过自动清理时，备份保留几天 |
 | `ROOMUSIC_ALLOWED_ORIGINS` | 空 | 反向代理改写了 Host 时使用，见第 5 节 |
-| `COMPOSE_PROJECT_NAME` | `roomusic-server` | 项目名，决定容器和网络名称；同机多个实例分别设置 |
+| `COMPOSE_PROJECT_NAME` | `roomusic-server` | 项目名，用于网络等 Compose 资源；同机多个实例分别设置 |
 
 指定其他备份目录时，在 `.env` 写 `ROOMUSIC_BACKUP_DIR=/srv/roomusic-backups`。
+
+首次安装后若修改备份目录，请自行准备新目录的 UID/GID 1000 和 0700 权限，再启动应用。
 
 运行命令的终端里不要设置同名的 `ROOMUSIC_*` 或 `COMPOSE_*` 环境变量，它们会覆盖 `.env`。
 
@@ -90,6 +101,8 @@ roomusic/
 docker compose pull && docker compose up -d --wait
 docker compose exec app /app/roomusic --version
 ```
+
+从旧版包含 `init` 的 Compose 切换时，先更新部署文件，并执行一次 `docker compose up -d --wait --remove-orphans`，清除该项目遗留的初始化容器；已有目录和密码继续复用，不再运行初始化脚本。固定名称变更会重建应用和数据库容器，安排在维护窗口执行。
 
 要固定或降级版本，把 `.env` 里的 `ROOMUSIC_VERSION` 改成具体版本（不带 `v`），再执行同样的命令。
 

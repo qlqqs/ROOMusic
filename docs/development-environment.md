@@ -23,7 +23,7 @@ mise exec -- node --version
 
 ## Docker 隔离约定
 
-开发项目名使用 `roomusic-compose-dev`；每次集成测试使用 `roomusic-compose-test-` 加随机后缀；生产使用独立项目名。不同项目各自使用网络及目录，不设置固定容器名。
+开发项目名使用 `roomusic-compose-dev`；每次集成测试使用 `roomusic-compose-test-` 加随机后缀；生产使用独立项目名。不同项目各自使用网络及目录，开发和测试由 Compose 生成容器名；生产使用可配置的固定容器名。
 
 开发和测试端口绑定 `0.0.0.0`；开发使用独立端口，测试由 Docker 分配可用端口。测试容器限制 CPU 与内存，数据库集成和端到端测试串行运行。
 

@@ -24,7 +24,6 @@ RUN apk add --no-cache ca-certificates postgresql18-client \
 COPY --from=build /out/roomusic /app/roomusic
 COPY --from=ffmpeg /ffmpeg /usr/local/bin/ffmpeg
 COPY --chmod=0755 deploy/production/entrypoint.sh /app/entrypoint.sh
-COPY --chmod=0755 deploy/production/init.sh /app/init.sh
 USER 1000:1000
 WORKDIR /app
 EXPOSE 8080
