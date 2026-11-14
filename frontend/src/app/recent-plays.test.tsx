@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { decodeRecentReleases, type RecentReleaseDTO } from "../features/listening/api/decoders";
 import { listeningKeys } from "../features/listening";
-import { formatDateTime } from "../shared/lib/time";
+import { formatRelativeTime } from "../shared/lib/time";
 import { sampleBody } from "../test/api-samples";
 import { deferred } from "../test/deferred";
 import { installFakeApi, installFakeSession, installOverviewApi } from "../test/fake-api";
@@ -53,7 +53,16 @@ function setup(items: readonly RecentReleaseDTO[] = [], hasHistory = items.lengt
 }
 
 const region = () => screen.findByRole("region", { name: "最近播放" });
-const clearButton = (scope: HTMLElement) => within(scope).queryByRole("button", { name: "清除播放历史" });
+/** 标题行的“更多”菜单按钮，“清除播放历史”在它的菜单里。 */
+const moreButton = (scope: HTMLElement) => within(scope).queryByRole("button", { name: "最近播放的更多操作" });
+
+/** 经“更多”菜单打开清除确认；返回菜单按钮（对话框关闭后焦点回到它）。 */
+async function openClear(scope: HTMLElement): Promise<HTMLElement> {
+  const more = await within(scope).findByRole("button", { name: "最近播放的更多操作" });
+  await userEvent.click(more);
+  await userEvent.click(await screen.findByRole("menuitem", { name: "清除播放历史" }));
+  return more;
+}
 
 describe("概览的“最近播放”", () => {
   it("排在概览最前；读取期间显示占位，没有记录时说明计次规则，也不提供清除", async () => {
@@ -68,7 +77,7 @@ describe("概览的“最近播放”", () => {
     pending.resolve(sampleResponse("listening/recent-releases-empty"));
     expect(await within(panel).findByText(emptyText)).toBeTruthy();
     expect(within(panel).queryByRole("status")).toBeNull();
-    expect(clearButton(panel)).toBeNull();
+    expect(moreButton(panel)).toBeNull();
     expect(within(panel).queryByRole("link", { name: "全部历史" })).toBeNull();
   });
 
@@ -82,11 +91,11 @@ describe("概览的“最近播放”", () => {
     expect(within(panel).getAllByRole("link")).toHaveLength(items.length + 1);
     expect(links.map((link) => link.getAttribute("href"))).toEqual(items.map((item) => `/albums/${item.group_id}?release=${item.release.id}`));
     // 专辑艺人缺失时退回到艺人；链接名称里写着上次播放的时间。封面是装饰，不进名称。
-    expect(within(panel).getByRole("link", { name: `专辑 3 艺术家 3 上次播放 ${formatDateTime("2026-01-03T08:30:00Z")}` })).toBe(links[0]);
-    expect(within(panel).getByRole("link", { name: `专辑 2 专辑艺人 2 上次播放 ${formatDateTime("2026-01-02T08:30:00Z")}` })).toBe(links[1]);
-    expect(within(panel).getByRole("link", { name: `专辑 1 艺术家 1 上次播放 ${formatDateTime("2026-01-01T08:30:00Z")}` })).toBe(links[2]);
+    expect(within(panel).getByRole("link", { name: `专辑 3 艺术家 3 上次播放 ${formatRelativeTime("2026-01-03T08:30:00Z")}` })).toBe(links[0]);
+    expect(within(panel).getByRole("link", { name: `专辑 2 专辑艺人 2 上次播放 ${formatRelativeTime("2026-01-02T08:30:00Z")}` })).toBe(links[1]);
+    expect(within(panel).getByRole("link", { name: `专辑 1 艺术家 1 上次播放 ${formatRelativeTime("2026-01-01T08:30:00Z")}` })).toBe(links[2]);
     expect(within(panel).queryByText(emptyText)).toBeNull();
-    expect(clearButton(panel)).toBeTruthy();
+    expect(moreButton(panel)).toBeTruthy();
   });
 
   it("点击卡片进入播放过的那个版本", async () => {
@@ -106,7 +115,7 @@ describe("概览的“最近播放”", () => {
     expect(await within(panel).findByText(hiddenText)).toBeTruthy();
     expect(within(panel).getByRole("link", { name: "全部历史" }).getAttribute("href")).toBe("/me/history");
     expect(within(panel).queryByText(emptyText)).toBeNull();
-    expect(clearButton(panel)).toBeTruthy();
+    expect(moreButton(panel)).toBeTruthy();
   });
 
   it("读取失败显示带请求 ID 的错误与重试，其余区块照常；重试成功后显示卡片", async () => {
@@ -127,15 +136,13 @@ describe("概览的“最近播放”", () => {
   });
 
   describe("清除播放历史", () => {
-    it("先确认：取消不发请求，焦点回到按钮；确认后区块为空、提示结果、焦点到标题，按钮消失", async () => {
+    it("先确认（经“更多”菜单）：取消不发请求，焦点回到“更多”；确认后区块为空、提示结果、焦点到标题，“更多”消失", async () => {
       const { api } = setup([recentRelease(2), recentRelease(1)]);
       renderApp();
       const panel = await region();
       await within(panel).findAllByRole("link");
 
-      const opener = clearButton(panel);
-      if (opener === null) throw new Error("没有清除按钮");
-      await userEvent.click(opener);
+      const opener = await openClear(panel);
       const dialog = await screen.findByRole("dialog", { name: "清除播放历史？" });
       expect(within(dialog).getByText("全部播放记录都会被清除，不能恢复。")).toBeTruthy();
       expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "取消" }));
@@ -146,14 +153,14 @@ describe("概览的“最近播放”", () => {
       expect(document.activeElement).toBe(opener);
       expect(within(panel).getAllByRole("link")).toHaveLength(3);
 
-      await userEvent.click(opener);
+      await openClear(panel);
       await userEvent.click(within(await screen.findByRole("dialog", { name: "清除播放历史？" })).getByRole("button", { name: "清除播放历史" }));
       await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
       expect(api.requestsTo("DELETE", playsPath)).toHaveLength(1);
       expect(await within(panel).findByText("已清除你的播放历史。")).toBeTruthy();
       expect(within(panel).getByText(emptyText)).toBeTruthy();
       expect(within(panel).queryByRole("link")).toBeNull();
-      expect(clearButton(panel)).toBeNull();
+      expect(moreButton(panel)).toBeNull();
       expect(document.activeElement).toBe(within(panel).getByRole("heading", { level: 2, name: "最近播放" }));
     });
 
@@ -161,7 +168,7 @@ describe("概览的“最近播放”", () => {
       const { api } = setup([recentRelease(1)]);
       renderApp();
       const panel = await region();
-      await userEvent.click(await within(panel).findByRole("button", { name: "清除播放历史" }));
+      await openClear(panel);
       const refetch = deferred<Response>();
       api.on("GET", recentPath, () => refetch.promise);
       await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "清除播放历史" }));
@@ -178,7 +185,7 @@ describe("概览的“最近播放”", () => {
       const { runtime } = renderApp();
       const panel = await region();
       await within(panel).findAllByRole("link");
-      await userEvent.click(clearButton(panel) as HTMLElement);
+      await openClear(panel);
       await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "清除播放历史" }));
       expect(await within(panel).findByText("已清除你的播放历史。")).toBeTruthy();
 
@@ -187,7 +194,7 @@ describe("概览的“最近播放”", () => {
       await runtime.queryClient.invalidateQueries({ queryKey: listeningKeys.recentReleases(runtime.session.currentGeneration()) });
       expect(await within(panel).findByRole("link", { name: /^专辑 5/ })).toBeTruthy();
       expect(within(panel).queryByText("已清除你的播放历史。")).toBeNull();
-      expect(clearButton(panel)).toBeTruthy();
+      expect(moreButton(panel)).toBeTruthy();
     });
 
     /** 第一次 DELETE 失败（503），之后成功并清空服务端的记录。 */
@@ -207,7 +214,7 @@ describe("概览的“最近播放”", () => {
       failOnceThenSucceed(context);
       renderApp();
       const panel = await region();
-      await userEvent.click(await within(panel).findByRole("button", { name: "清除播放历史" }));
+      await openClear(panel);
       const dialog = await screen.findByRole("dialog", { name: "清除播放历史？" });
       await userEvent.click(within(dialog).getByRole("button", { name: "清除播放历史" }));
       expect(await within(dialog).findByRole("alert")).toBeTruthy();
@@ -225,13 +232,13 @@ describe("概览的“最近播放”", () => {
       failOnceThenSucceed(context);
       renderApp();
       const panel = await region();
-      await userEvent.click(await within(panel).findByRole("button", { name: "清除播放历史" }));
+      await openClear(panel);
       const dialog = await screen.findByRole("dialog", { name: "清除播放历史？" });
       await userEvent.click(within(dialog).getByRole("button", { name: "清除播放历史" }));
       expect(await within(dialog).findByRole("alert")).toBeTruthy();
 
       await userEvent.click(within(dialog).getByRole("button", { name: "取消" }));
-      await userEvent.click(within(panel).getByRole("button", { name: "清除播放历史" }));
+      await openClear(panel);
       const reopened = await screen.findByRole("dialog", { name: "清除播放历史？" });
       expect(within(reopened).queryByRole("alert")).toBeNull();
       expect(within(reopened).queryByRole("button", { name: "重试清除" })).toBeNull();
@@ -246,7 +253,7 @@ describe("概览的“最近播放”", () => {
       api.on("DELETE", playsPath, () => pending.promise);
       renderApp();
       const panel = await region();
-      await userEvent.click(await within(panel).findByRole("button", { name: "清除播放历史" }));
+      await openClear(panel);
       const dialog = await screen.findByRole("dialog", { name: "清除播放历史？" });
       await userEvent.click(within(dialog).getByRole("button", { name: "清除播放历史" }));
       await waitFor(() => expect((within(dialog).getByRole("button", { name: "取消" }) as HTMLButtonElement).disabled).toBe(true));
@@ -254,13 +261,15 @@ describe("概览的“最近播放”", () => {
       await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     });
 
-    it("只用键盘就能完成：Tab 到按钮、Enter 打开，对话框里 Tab 到确认、Enter 清除", async () => {
+    it("只用键盘就能完成：Enter 打开“更多”菜单、选“清除播放历史”，对话框里 Tab 到确认、Enter 清除", async () => {
       const { api } = setup([recentRelease(1)]);
       renderApp();
       const panel = await region();
-      const opener = await within(panel).findByRole("button", { name: "清除播放历史" });
-      // 区块里依次是卡片链接与清除按钮（标题右侧的按钮在 DOM 里先于卡片，Tab 顺序按 DOM）。
+      const opener = await within(panel).findByRole("button", { name: "最近播放的更多操作" });
       opener.focus();
+      await userEvent.keyboard("{Enter}");
+      const item = await screen.findByRole("menuitem", { name: "清除播放历史" });
+      await waitFor(() => expect(document.activeElement).toBe(item));
       await userEvent.keyboard("{Enter}");
       const dialog = await screen.findByRole("dialog", { name: "清除播放历史？" });
       expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "取消" }));

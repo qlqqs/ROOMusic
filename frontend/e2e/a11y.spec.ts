@@ -91,7 +91,7 @@ const states: State[] = [
     reach: async (page, mock) => {
       mock.seedScan({}, true);
       await page.goto("/");
-      await expect(page.getByRole("link", { name: "查看扫描详情" })).toBeVisible();
+      await expect(page.getByRole("region", { name: "资料库状态" }).getByRole("progressbar", { name: "扫描进度" })).toBeVisible();
     },
   },
   {
@@ -100,7 +100,7 @@ const states: State[] = [
     reach: async (page) => {
       await page.goto("/");
       await expect(heading(page, "概览")).toBeVisible();
-      await expect(page.getByText("没有正在运行的扫描。")).toBeVisible();
+      await expect(page.getByRole("region", { name: "资料库状态" }).getByText("没有正在运行的扫描")).toBeVisible();
     },
   },
   {
@@ -119,7 +119,8 @@ const states: State[] = [
     reach: async (page, mock) => {
       mock.seedRecentPlays(3);
       await page.goto("/");
-      await page.getByRole("button", { name: "清除播放历史" }).click();
+      await page.getByRole("button", { name: "最近播放的更多操作" }).click();
+      await page.getByRole("menuitem", { name: "清除播放历史" }).click();
       await expect(page.getByRole("dialog", { name: "清除播放历史？" })).toBeVisible();
     },
   },
@@ -129,7 +130,8 @@ const states: State[] = [
     reach: async (page, mock) => {
       mock.seedRecentPlays(3);
       await page.goto("/");
-      await page.getByRole("button", { name: "清除播放历史" }).click();
+      await page.getByRole("button", { name: "最近播放的更多操作" }).click();
+      await page.getByRole("menuitem", { name: "清除播放历史" }).click();
       await page.getByRole("dialog", { name: "清除播放历史？" }).getByRole("button", { name: "清除播放历史" }).click();
       await expect(page.getByText("已清除你的播放历史。")).toBeVisible();
     },

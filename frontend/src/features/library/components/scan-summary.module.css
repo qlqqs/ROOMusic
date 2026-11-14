@@ -1,0 +1,25 @@
+/* 细进度条：4px 高，已完成部分用强调色；没有进度数据（正在准备）时只有底色。 */
+.track {
+  display: block;
+  height: 4px;
+  margin-top: var(--space-1);
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--color-neutral-300);
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  background: var(--color-accent-700);
+}
+
+@media (forced-colors: active) {
+  .track {
+    border: 1px solid CanvasText;
+  }
+
+  .fill {
+    background: Highlight;
+  }
+}

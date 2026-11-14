@@ -8,7 +8,7 @@ import styles from "./album-grid.module.css";
 type AlbumGridProps = {
   groups: readonly ReleaseGroupSummaryDTO[];
   search: AlbumSearch;
-  /** 列表元素的引用：需要知道当前列数的调用方（概览的“最近新增”）用它量网格。 */
+  /** 列表元素的引用：概览的“最近新增”把它交给横排，量是否需要翻页。 */
   listRef?: Ref<HTMLUListElement>;
 };
 
@@ -31,14 +31,13 @@ export function AlbumGridLayout({ children }: { children: ReactNode }) {
 const PLACEHOLDER_CARDS = 12;
 
 /**
- * 首次加载的占位：与卡片网格同结构（方形封面加两行文字），不画成空库，也没有动画。count 是占位卡片数（默认 12）；
- * listRef 同 AlbumGrid，让调用方按同一个网格的列数决定占位张数。
+ * 首次加载的占位：与卡片网格同结构（方形封面加两行文字），不画成空库，也没有动画。count 是占位卡片数（默认 12）。
  */
-export function AlbumGridSkeleton({ count = PLACEHOLDER_CARDS, listRef }: { count?: number; listRef?: Ref<HTMLUListElement> }) {
+export function AlbumGridSkeleton({ count = PLACEHOLDER_CARDS }: { count?: number }) {
   return (
     <div role="status">
       <VisuallyHidden>正在加载专辑</VisuallyHidden>
-      <ul className={styles.grid} aria-hidden="true" ref={listRef}>
+      <ul className={styles.grid} aria-hidden="true">
         {Array.from({ length: count }, (_, index) => (
           <li key={index} className={styles.placeholder}>
             <span className={styles.placeholderCover} />

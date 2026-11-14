@@ -45,7 +45,7 @@ test.describe("键盘", () => {
     await expect(page.locator("main#main")).toBeFocused();
   });
 
-  test("最近播放：卡片是整张的链接；清除确认对话框约束焦点，Esc 还回焦点，Enter 确认后焦点到区块标题", async ({ page, backend }) => {
+  test("最近播放：卡片是整张的链接；“更多”菜单里的清除确认对话框约束焦点，Esc 还回焦点，Enter 确认后焦点到区块标题", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "listener" });
     mock.seedRecentPlays(3);
     await page.goto("/");
@@ -55,9 +55,13 @@ test.describe("键盘", () => {
     await cards.first().focus();
     await expectVisibleFocusRing(page, "最近播放的卡片");
 
-    const trigger = panel.getByRole("button", { name: "清除播放历史" });
+    const trigger = panel.getByRole("button", { name: "最近播放的更多操作" });
     await trigger.focus();
-    await expectVisibleFocusRing(page, "清除播放历史按钮");
+    await expectVisibleFocusRing(page, "最近播放的更多操作按钮");
+    // Enter 打开菜单，焦点在唯一的“清除播放历史”上，再按 Enter 打开确认。
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("menuitem", { name: "清除播放历史" })).toBeFocused();
+    await expectVisibleFocusRing(page, "清除播放历史菜单项");
     await page.keyboard.press("Enter");
     const dialog = page.getByRole("dialog", { name: "清除播放历史？" });
     await expect(dialog).toBeVisible();
@@ -71,13 +75,15 @@ test.describe("键盘", () => {
     expect(mock.callsTo("DELETE", "/api/v1/me/plays")).toHaveLength(0);
 
     await page.keyboard.press("Enter");
+    await expect(page.getByRole("menuitem", { name: "清除播放历史" })).toBeFocused();
+    await page.keyboard.press("Enter");
     await expect(dialog).toBeVisible();
     await page.keyboard.press("Tab");
     expect(await focusedName(page)).toBe("清除播放历史");
     await page.keyboard.press("Enter");
     await expect(dialog).toBeHidden();
     expect(mock.callsTo("DELETE", "/api/v1/me/plays")).toHaveLength(1);
-    // 打开对话框的按钮已经不存在：焦点到区块标题，读屏用户同时听到“已清除”的状态提示。
+    // 打开对话框的“更多”按钮已经不存在：焦点到区块标题，读屏用户同时听到“已清除”的状态提示。
     await expect(panel.getByRole("heading", { level: 2, name: "最近播放" })).toBeFocused();
     await expect(panel.getByText("已清除你的播放历史。")).toBeVisible();
     await expect(cards).toHaveCount(0);

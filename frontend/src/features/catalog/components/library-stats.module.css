@@ -1,11 +1,67 @@
-/* 四张卡：容器宽于 640px 一行四张，否则两列两行。宽度按概览主内容的容器算，不按视口。 */
-.section { container: library-stats / inline-size; min-width: 0; }
-.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
-@container library-stats (min-width: 640px) { .cards { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-.cards li { display: grid; min-width: 0; }
-.card { display: grid; justify-items: start; gap: var(--space-1); align-content: start; min-width: 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-lg); background: var(--color-surface); color: var(--text-primary); text-decoration: none; }
-a.card { transition: background-color 0.12s ease; }
-a.card:hover { background: color-mix(in srgb, var(--color-surface), var(--color-text) 6%); }
-.icon { margin-bottom: var(--space-1); color: var(--text-accent); }
-.value { overflow-wrap: anywhere; font-size: var(--fs-24); font-weight: 600; line-height: 1.15; font-variant-numeric: lining-nums tabular-nums; }
-.label { font-size: var(--fs-13); color: var(--text-secondary); }
+/* 页底一行账目：上方一条淡分隔线，小字的“资料库”后面是几项“数字 + 单位”，项与项之间一条细竖线；窄时换行，换行处不留竖线在行首。 */
+.ledger {
+  min-width: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-divider);
+  font-size: var(--fs-13);
+  color: var(--text-secondary);
+}
+
+.line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-4);
+}
+
+.caption {
+  /* 不用更浅的 neutral-600：浅色背景上小字对比度不到 4.5:1。 */
+  color: var(--text-secondary);
+}
+
+.entries {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) 0;
+  /* 上下留出焦点环（外偏移 2px）的空间，不被 overflow 裁掉。 */
+  margin: -4px 0;
+  padding: 4px 0;
+  overflow: hidden;
+  list-style: none;
+}
+
+.entry {
+  /* 竖线画在每项的左侧，再用负外边距把它推出容器：换行后位于行首的那一项，竖线被 overflow 裁掉。 */
+  margin-left: -1px;
+  padding-inline: var(--space-4);
+  border-left: 1px solid var(--color-divider);
+}
+
+.entry:first-child {
+  /* 第一项左边留出焦点环的 4px。 */
+  padding-left: 4px;
+}
+
+.item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.link:hover .unit {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.value {
+  font-size: var(--fs-15);
+  font-weight: 600;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.unit {
+  color: var(--text-secondary);
+}
