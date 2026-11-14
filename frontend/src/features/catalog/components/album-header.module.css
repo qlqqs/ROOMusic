@@ -1,23 +1,61 @@
 /* 容器查询：带侧栏的中等视口里内容区很窄，按容器宽度而不是视口宽度决定封面是否并排。 */
 .container {
   container-type: inline-size;
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* “‹ 专辑”：标题上方的一个小链接，次要文字色，悬停有浅底；往左推出内边距，箭头与封面左缘对齐。 */
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  justify-self: start;
+  min-height: 28px;
+  margin-inline-start: -6px;
+  padding: 0 6px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  text-decoration: none;
+}
+
+.back:hover {
+  background: var(--color-hover);
+  color: var(--text-primary);
 }
 
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4) var(--space-6);
-  align-items: start;
+  align-items: end;
 }
 
 .cover {
-  width: min(100%, 280px);
+  width: min(100%, 232px);
 }
 
 .info {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-2);
   min-width: 0;
+}
+
+.heading {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.heading h1 {
+  overflow-wrap: anywhere;
+}
+
+.artist {
+  font-size: var(--fs-15);
+  overflow-wrap: anywhere;
 }
 
 /*
@@ -29,7 +67,7 @@
 }
 
 .facts {
-  --sep-gap: 12px;
+  --sep-gap: 10px;
   display: flex;
   flex-wrap: wrap;
   row-gap: 2px;
@@ -67,6 +105,14 @@
   vertical-align: middle;
 }
 
+/* 操作区：一条操作行，下面是状态与结果提示；与概况之间多留一点距离。 */
+.actions {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  margin-top: var(--space-3);
+}
+
 .attention {
   display: flex;
   flex-wrap: wrap;
@@ -76,9 +122,27 @@
   font-size: var(--fs-13);
 }
 
+@media (min-width: 768px) {
+  .heading h1 {
+    font-size: var(--fs-24);
+  }
+}
+
+/* 长标题降一级字号（窄屏 20 → 18px，宽屏 24 → 20px）；选择器更具体，两种宽度下都压过上面的规则。 */
+.heading[data-compact] h1 {
+  font-size: var(--fs-18);
+}
+
+@media (min-width: 768px) {
+  .heading[data-compact] h1 {
+    font-size: var(--fs-20);
+  }
+}
+
 @container (min-width: 560px) {
   .hero {
-    grid-template-columns: 240px minmax(0, 1fr);
+    grid-template-columns: 232px minmax(0, 1fr);
+    gap: var(--space-6);
   }
 
   .cover {

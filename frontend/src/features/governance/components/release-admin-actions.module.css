@@ -1,33 +1,6 @@
+/* 线索、结果提示与对话框并入调用方的布局（专辑头部操作行下方）；没有内容时不占位。 */
 .admin {
-  display: grid;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-/* “查看问题”是导航（链接），外观与旁边的图标按钮一致：方形、无边框，悬停有浅底。 */
-.iconLink {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--control-height);
-  height: var(--control-height);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  transition:
-    background-color 0.12s ease,
-    color 0.12s ease;
-}
-
-.iconLink:hover {
-  background: var(--color-hover);
-  color: var(--text-primary);
+  display: contents;
 }
 
 /* 保存默认版本时的转圈；减少动态时静止。 */

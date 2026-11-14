@@ -1,11 +1,13 @@
 import { useNavigate } from "@tanstack/react-router";
+import { MoreHorizontal } from "lucide-react";
 import { useCallback, useMemo, type ReactNode } from "react";
-import { AlbumDetailView, type AlbumSearch, type ReleaseDetailDTO, type ReleaseTrackDTO } from "../../features/catalog";
-import { ReleaseAdminActions, ReleaseHistory, useReleaseCommands } from "../../features/governance";
+import { AlbumDetailView, type AlbumSearch, type ReleaseActionsContext, type ReleaseDetailDTO, type ReleaseTrackDTO } from "../../features/catalog";
+import { ReleaseHistory, useReleaseAdminActions, useReleaseCommands, type ReleaseCommands } from "../../features/governance";
 import { AddToPlaylistButton, FavoriteButton, FavoriteStatusScope } from "../../features/personal";
-import { AlbumPlaybackActions, playerTrackOf, playerTracksOf, useCurrentTrackMarker } from "../../features/player";
+import { playerTrackOf, playerTracksOf, useAlbumPlayback, useCurrentTrackMarker } from "../../features/player";
 import { useViewerScope } from "../../features/auth";
 import { formatCount } from "../../shared/lib/number";
+import { MenuButton, type MenuAction } from "../../shared/ui";
 import { QUEUE_FULL_TEXT, TrackActions } from "./track-actions";
 import { unplayableReason } from "./track-playback";
 import { useReleaseDataRefresh } from "./use-release-refresh";
@@ -35,18 +37,44 @@ function AlbumFavoritesScope({ groupId, release, children }: { groupId: string; 
   );
 }
 
-/** 专辑头部：播放整张、加入队列，以及收藏这张专辑（按专辑收藏，不分版本）与把当前版本整张加入歌单。 */
-function AlbumHeaderActions({ release, groupId }: { release: ReleaseDetailDTO; groupId: string }) {
+const noActions: readonly MenuAction[] = [];
+
+/**
+ * 专辑头部的操作区：一条操作行——圆形“播放整张专辑”（唯一的主要操作）、随机播放、收藏这张专辑（按专辑收藏，不分版本）、
+ * 把当前版本整张加入歌单、“更多操作”（下一首播放、加入队列，管理员另有“管理”分组）；下方是播放的状态与结果、管理员的线索与结果提示。
+ */
+function AlbumActionRow({ release, groupId, adminActions = noActions, adminPanel = null }: { release: ReleaseDetailDTO; groupId: string; adminActions?: readonly MenuAction[]; adminPanel?: ReactNode }) {
+  const playback = useAlbumPlayback({ release, groupId });
   const count = release.media.reduce((total, medium) => total + medium.tracks.length, 0);
   return (
-    <div className={styles.headerActions}>
-      <AlbumPlaybackActions release={release} groupId={groupId} />
-      <div className={styles.personal}>
+    <>
+      <div className={styles.row}>
+        <span className={styles.primary}>
+          {playback.play}
+          {playback.shuffle}
+        </span>
         <FavoriteButton target={{ kind: "album", id: groupId, title: release.title }} />
-        <AddToPlaylistButton trackIds={() => trackIdsOf(release)} subject={`《${release.title}》的 ${formatCount(count)} 首`} disabled={count === 0} />
+        <AddToPlaylistButton iconOnly trackIds={() => trackIdsOf(release)} subject={`《${release.title}》的 ${formatCount(count)} 首`} disabled={count === 0} />
+        <MenuButton label="更多操作" iconOnly icon={<MoreHorizontal size={18} />} actions={[...playback.actions, ...adminActions]} />
       </div>
-    </div>
+      {playback.status}
+      {adminPanel}
+    </>
   );
+}
+
+/** 管理员的操作区：管理员的项并入“更多操作”的“管理”分组，线索、结果提示与对话框放在操作行下方。 */
+function AdminAlbumActionRow({ context, commands }: { context: ReleaseActionsContext; commands: ReleaseCommands }) {
+  const { release, groupId, releaseCount, groupRevision, defaultReleaseId } = context;
+  const admin = useReleaseAdminActions({
+    release: { id: release.id, title: release.title, revision: release.revision, attentionCount: release.attention_count },
+    groupId,
+    releaseCount,
+    groupRevision,
+    defaultReleaseId,
+    commands,
+  });
+  return <AlbumActionRow release={release} groupId={groupId} adminActions={admin.actions} adminPanel={admin.panel} />;
 }
 
 /** 专辑页的一行：“从这首开始播放”放整张里能播放的曲目、从这一首起；其余与各页相同（心形、“更多”）。 */
@@ -56,6 +84,7 @@ function AlbumTrackActions({ release, track, groupId }: { release: ReleaseDetail
     <TrackActions
       track={item}
       present
+      playPlacement="lead"
       playLabel="从这首开始播放"
       retryHint="请在专辑头部重试。"
       onPlay={({ engine, table }) => {
@@ -69,7 +98,7 @@ function AlbumTrackActions({ release, track, groupId }: { release: ReleaseDetail
 }
 
 /**
- * 专辑详情：所有登录用户都能读；管理员在“来源与证据”里多一个完整证据，在头部多一个操作区（编辑发行信息、设定默认版本……）。
+ * 专辑详情：所有登录用户都能读；管理员在“来源与证据”里多一个完整证据，头部“更多操作”里多一个“管理”分组（编辑发行信息、设定默认版本……）。
  * 页面标题与 h1 由详情自己给出（取决于选中的版本）。管理员写操作的命令状态由这里持有：写操作之后路由可能换到另一个专辑组，
  * 详情组件会重新挂载，结果提示仍要留在页面上。头部的操作与“修改记录”里的撤销各有一个命令状态，结果提示各自显示在自己的区域。
  * 头部与每一行的心形共用一个收藏状态范围（整个版本一次读取）。
@@ -101,22 +130,17 @@ export function AlbumDetailPage(props: AlbumDetailPageProps) {
     ),
     [],
   );
-  const renderReleaseActions = useCallback((release: ReleaseDetailDTO) => <AlbumHeaderActions key={`playback-${release.id}`} release={release} groupId={groupId} />, [groupId]);
-  const renderTrackActions = useCallback((track: ReleaseTrackDTO, release: ReleaseDetailDTO) => <AlbumTrackActions key={track.id} release={release} track={track} groupId={groupId} />, [groupId]);
-  const renderAdminActions = useCallback(
-    ({ release, groupId: currentGroupId, releaseCount, groupRevision, defaultReleaseId }: { release: ReleaseDetailDTO; groupId: string; releaseCount: number; groupRevision: number; defaultReleaseId: string | null }) => (
-      <ReleaseAdminActions
-        key={`admin-${release.id}`}
-        release={{ id: release.id, title: release.title, revision: release.revision, attentionCount: release.attention_count }}
-        groupId={currentGroupId}
-        releaseCount={releaseCount}
-        groupRevision={groupRevision}
-        defaultReleaseId={defaultReleaseId}
-        commands={commands}
-      />
-    ),
+  // 换版本时用 key 重新开始：播放结果与管理员对话框的开合不带到另一个版本。
+  const renderReleaseActions = useCallback(
+    (context: ReleaseActionsContext) =>
+      context.admin ? (
+        <AdminAlbumActionRow key={`actions-${context.release.id}`} context={context} commands={commands} />
+      ) : (
+        <AlbumActionRow key={`actions-${context.release.id}`} release={context.release} groupId={context.groupId} />
+      ),
     [commands],
   );
+  const renderTrackActions = useCallback((track: ReleaseTrackDTO, release: ReleaseDetailDTO) => <AlbumTrackActions key={track.id} release={release} track={track} groupId={groupId} />, [groupId]);
   const renderAdminSections = useCallback(
     ({ release, groupId: currentGroupId }: { release: ReleaseDetailDTO; groupId: string }) => (
       <ReleaseHistory key={`history-${release.id}`} release={{ id: release.id, title: release.title }} groupId={currentGroupId} commands={historyCommands} />
@@ -124,8 +148,8 @@ export function AlbumDetailPage(props: AlbumDetailPageProps) {
     [historyCommands],
   );
   return <AlbumDetailView {...props} isAdmin={isAdmin}
-    currentTrackId={marker.trackId} currentTrackLabel={marker.label}
+    currentTrackId={marker.trackId} currentTrackLabel={marker.label} currentTrackPlaying={marker.playing}
     renderReleaseScope={renderReleaseScope}
     renderReleaseActions={renderReleaseActions} renderTrackActions={renderTrackActions}
-    {...(isAdmin ? { renderAdminActions, renderAdminSections } : {})} />;
+    {...(isAdmin ? { renderAdminSections } : {})} />;
 }

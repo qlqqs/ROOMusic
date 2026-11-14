@@ -187,6 +187,28 @@
 }
 
 /*
+ * 有动作的行：播放按钮放在曲目号的位置（按钮在 app 的 track-actions 里，按这里给出的变量绝对定位，行是定位祖先）。
+ * 曲目号一列与控件同宽，按钮正好盖住它；精确指针设备上悬停或行内获得焦点时曲目号淡出、按钮显现，触屏与没有悬停的设备上按钮常驻。
+ * 曲目号用透明度隐藏而不是 visibility，读屏仍能读到它。
+ */
+.track[data-has-actions] {
+  --track-lead-top: var(--space-1);
+  --track-lead-width: var(--control-height);
+  position: relative;
+  grid-template-columns: var(--track-lead-width) minmax(0, 1fr) auto auto;
+}
+
+.track[data-has-actions] .number {
+  justify-content: center;
+}
+
+.numberContent {
+  display: inline-flex;
+  align-items: center;
+  transition: opacity 0.12s ease;
+}
+
+/*
  * 精确指针设备上悬停的行：墨色浅底，曲目号换成主文字色；行内动作随之显现（规则在 track-actions.module.css，按 data-track-row 找到这一行）。
  * 底色与搜索定位的高亮一样往左右各延伸 6px，不压到上下相邻的行，也在介质分段的 6px 余量之内。
  */
@@ -200,6 +222,77 @@
 
   .track:hover .number {
     color: var(--text-primary);
+  }
+
+  .track[data-has-actions]:is(:hover, :focus-within) .numberContent {
+    opacity: 0;
+  }
+}
+
+@media not ((hover: hover) and (pointer: fine)) {
+  .track[data-has-actions] .numberContent {
+    opacity: 0;
+  }
+}
+
+/* 当前曲目：标题用强调色加粗，曲目号换成三根音柱（只在播放时跳动）。 */
+.track[data-current] .title > span:first-child {
+  color: var(--text-accent);
+  font-weight: 600;
+}
+
+.eq {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+
+.eq i {
+  width: 3px;
+  border-radius: 1px;
+  background: var(--color-accent);
+}
+
+.eq i:nth-child(1) {
+  height: 5px;
+}
+
+.eq i:nth-child(2) {
+  height: 10px;
+}
+
+.eq i:nth-child(3) {
+  height: 7px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .eq[data-playing] i {
+    animation: eq 1s ease-in-out infinite;
+  }
+
+  .eq[data-playing] i:nth-child(2) {
+    animation-delay: -0.4s;
+  }
+
+  .eq[data-playing] i:nth-child(3) {
+    animation-delay: -0.7s;
+  }
+}
+
+@keyframes eq {
+  0%,
+  100% {
+    height: 3px;
+  }
+  50% {
+    height: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .numberContent {
+    transition: none;
   }
 }
 

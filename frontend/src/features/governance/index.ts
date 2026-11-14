@@ -6,7 +6,7 @@ export { IssuesView } from "./components/issues-view";
 export { parseIssuesSearch, type IssuesSearch } from "./issues-search";
 export { OperationsView } from "./components/operations-view";
 export { parseOperationsSearch, type OperationsSearch } from "./operations-search";
-export { ReleaseAdminActions } from "./components/release-admin-actions";
+export { useReleaseAdminActions } from "./components/release-admin-actions";
 export { ReleaseHistory } from "./components/release-history";
 export { useReleaseCommands, type ReleaseCommands } from "./hooks/use-release-commands";
 export { ArtistAdminActions } from "./components/artist-admin-actions";

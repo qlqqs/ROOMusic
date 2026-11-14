@@ -14,6 +14,23 @@
   gap: 2px;
 }
 
+.inline {
+  display: inline-flex;
+}
+
+/*
+ * 专辑曲目行：播放按钮放在曲目号的位置。位置与宽度由所在的行给出（--track-lead-top、--track-lead-width，行是定位祖先），
+ * 这里不重复行的列宽；按钮在那一格里居中。显隐规则与其他图标相同（下面），曲目号的隐藏由行负责。
+ */
+.lead {
+  position: absolute;
+  inset-block-start: var(--track-lead-top, 0);
+  inset-inline-start: 0;
+  display: flex;
+  justify-content: center;
+  width: var(--track-lead-width, var(--control-height));
+}
+
 .row p {
   contain: inline-size;
   width: 100%;
