@@ -4,7 +4,7 @@ import { expectVisibleFocusRing } from "./support/checks";
 import { expect, test } from "./support/fixtures";
 import { expectFocusStaysInDialog, focusedName, tabTo } from "./support/keyboard";
 import { heading } from "./support/locators";
-import { openSettings, userTrigger } from "./support/settings";
+import { openSettings, tabBar } from "./support/settings";
 
 // 只用键盘完成主要路径：登录、跳到主要内容、导航、停用确认对话框（焦点进入、约束、Esc 关闭、焦点恢复）、窄屏菜单。
 
@@ -140,33 +140,37 @@ test.describe("键盘", () => {
     await expect(heading(page, "扫描详情")).toBeVisible();
   });
 
-  test("窄屏菜单：Enter 打开，焦点进入并被约束，Esc 关闭并把焦点还给“菜单”按钮；选择链接后菜单关闭", async ({ page, backend }) => {
+  test("窄屏：顶栏搜索按钮 Enter 打开搜索对话框，焦点进输入框，Esc 关闭并还给按钮；标签栏“我的”进设置分栏", async ({ page, backend }) => {
     await backend.start({ signedInAs: "curator" });
     await page.setViewportSize({ width: 375, height: 800 });
     await page.goto("/");
-    const menu = page.getByRole("button", { name: "菜单" });
-    await menu.focus();
+    await expect(heading(page, "概览")).toBeVisible();
+    await expect(page.getByRole("button", { name: "菜单" })).toHaveCount(0);
+    const search = page.getByRole("button", { name: "搜索全部音乐", exact: true });
+    await search.focus();
     await page.keyboard.press("Enter");
-
-    const dialog = page.getByRole("dialog", { name: "菜单" });
+    const dialog = page.getByRole("dialog", { name: "搜索全部音乐", exact: true });
     await expect(dialog).toBeVisible();
-    await expectFocusStaysInDialog(page, dialog, 6);
+    await expect(dialog.getByRole("combobox", { name: "搜索" })).toBeFocused();
+    await expectFocusStaysInDialog(page, dialog, 3);
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
-    await expect(menu).toBeFocused();
+    await expect(search).toBeFocused();
 
+    const me = tabBar(page).getByRole("link", { name: "我的", exact: true });
+    await me.focus();
+    await expectVisibleFocusRing(page, "标签栏的“我的”");
     await page.keyboard.press("Enter");
-    await userTrigger(page).focus();
-    await page.keyboard.press("Enter");
-    const accountMenu = dialog.getByRole("menu", { name: "账号", exact: true });
-    await expect(accountMenu.getByRole("menuitem", { name: "设置", exact: true })).toBeFocused();
+    await expect(heading(page, "我的")).toBeVisible();
+    await expect(me).toHaveAttribute("aria-current", "page");
+    await page.getByRole("main").getByRole("link", { name: "设置", exact: true }).focus();
     await page.keyboard.press("Enter");
     await expect(heading(page, "账号")).toBeVisible();
     await page.getByRole("navigation", { name: "设置", exact: true }).getByRole("link", { name: "扫描目录" }).focus();
     await expectVisibleFocusRing(page, "扫描目录分栏链接");
     await page.keyboard.press("Enter");
     await expect(heading(page, "扫描目录")).toBeVisible();
-    await expect(dialog).toBeHidden();
+    await expect(me).toHaveAttribute("aria-current", "page");
   });
 
   test("成员页：键盘完成新建（Tab 顺序与 Enter 提交）与对话框确认", async ({ page, backend }) => {

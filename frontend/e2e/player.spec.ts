@@ -126,7 +126,9 @@ for (const width of widths) {
     await expectNoHorizontalOverflow(page, "长标题空播放器");
     await expect(bar(page)).toHaveCount(0);
     await expect(page.locator("[data-player]")).toHaveCount(0);
-    expect(await page.locator("#main").evaluate((main) => getComputedStyle(main).paddingBottom)).toBe("0px");
+    // 没有播放栏时：宽屏不留底部空白；窄屏只给底部标签栏留出它的实际高度。
+    const tabBarHeight = width < 768 ? await page.getByRole("navigation", { name: "主导航", exact: true }).evaluate((nav) => nav.getBoundingClientRect().height) : 0;
+    expect(await page.locator("#main").evaluate((main) => getComputedStyle(main).paddingBottom)).toBe(`${tabBarHeight}px`);
     await tracks.last().scrollIntoViewIfNeeded();
     await expect(tracks.last()).toBeInViewport();
     await startAndPause(page);

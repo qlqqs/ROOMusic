@@ -57,7 +57,7 @@ for (const width of [320, 375, 390, 768, 1024, 1440]) {
       expect(rect?.x).toBeGreaterThanOrEqual(0);
       expect((rect?.x ?? 0) + (rect?.width ?? 0)).toBeLessThanOrEqual(216);
     } else {
-      await expect(page.getByRole("dialog", { name: "菜单" })).toBeVisible();
+      await expect(page.getByRole("dialog", { name: "搜索全部音乐" })).toBeVisible();
       expect(await page.getByRole("dialog").evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(0);
     }
     await input.fill("爱");

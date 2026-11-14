@@ -17,7 +17,8 @@ export type NavItem = {
   todo?: "issues" | "claims";
 };
 
-// 只列真实可用的页面；Steward 留待对应阶段。扫描目录、成员、操作记录与备份在设置页里（入口是侧栏底部的用户菜单）。
+// 只列真实可用的页面；Steward 留待对应阶段。扫描目录、成员、操作记录与备份在设置页里（入口是侧栏底部的齿轮按钮）。
+// 管理员的待办工具叫“管理”而不是“资料库”：常见音乐应用里“资料库”指自己的音乐，容易误会。
 const navItems: readonly NavItem[] = [
   { to: "/", label: "概览", icon: LayoutDashboard, adminOnly: false, group: "聆听" },
   { to: "/albums", label: "专辑", icon: Disc3, adminOnly: false, group: "聆听" },
@@ -26,9 +27,9 @@ const navItems: readonly NavItem[] = [
   { to: "/me/favorites", label: "我的收藏", icon: Star, adminOnly: false, group: "我的音乐" },
   { to: "/me/history", label: "播放历史", icon: History, adminOnly: false, group: "我的音乐" },
   { to: "/me/playlists", label: "我的歌单", icon: ListMusic, adminOnly: false, group: "我的音乐", playlists: true },
-  { to: "/issues", label: "元数据", icon: ClipboardCheck, adminOnly: true, group: "资料库", todo: "issues" },
-  { to: "/claims", label: "待认领", icon: ArrowRightLeft, adminOnly: true, group: "资料库", todo: "claims" },
-  { to: "/artist-candidates", label: "重复艺人", icon: Combine, adminOnly: true, group: "资料库", artists: true },
+  { to: "/issues", label: "元数据", icon: ClipboardCheck, adminOnly: true, group: "管理", todo: "issues" },
+  { to: "/claims", label: "待认领", icon: ArrowRightLeft, adminOnly: true, group: "管理", todo: "claims" },
+  { to: "/artist-candidates", label: "重复艺人", icon: Combine, adminOnly: true, group: "管理", artists: true },
 ];
 
 export type NavGroup = { label: string | null; items: readonly NavItem[] };

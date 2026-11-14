@@ -32,7 +32,7 @@
   justify-content: space-between;
   gap: var(--space-3);
   min-height: var(--layout-topbar-height);
-  padding: var(--space-2) var(--layout-page-inset-x);
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--layout-page-inset-x);
   border-bottom: 1px solid var(--color-divider);
   background: var(--color-bg);
 }
@@ -50,37 +50,34 @@
   outline: none;
 }
 
-.drawer {
-  width: min(320px, 85vw);
-  height: 100dvh;
-  max-height: 100dvh;
-  margin: 0 auto 0 0;
-  border-width: 0 1px 0 0;
+/* 窄屏的搜索：贴在窗口顶部的一条（输入框加“取消”），建议浮层照常在它下方；点下面的遮罩关闭。 */
+.searchSheet {
+  width: 100%;
+  max-width: 100%;
+  margin: 0 0 auto;
+  border-width: 0 0 1px;
   border-radius: 0;
+  background: var(--color-bg);
 }
 
-/* 纵向排列，当前用户按钮像宽屏侧栏一样贴在底部；内容多到要滚动时，它随内容排在最后，不遮挡导航。 */
-.drawerContent {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  min-height: 100%;
-  padding: var(--space-4);
-}
-
-.drawerContent > * {
-  flex-shrink: 0;
-}
-
-.drawerIdentity {
-  margin-top: auto;
-}
-
-.drawerHeader {
+.searchContent {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--layout-page-inset-x);
+}
+
+.searchBox {
+  flex: 1 1 auto;
+}
+
+.searchTitle {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 @media (min-width: 768px) {
@@ -148,11 +145,15 @@
   }
 }
 
-/* 桌面播放器参与网格；窄屏按实际测量高度（包含安全区与迷你栏四周的留白）留白。窄屏的迷你栏是浮起的卡片，外层透明、不挡下面的点击。 */
-.player { position: fixed; bottom: 0; left: 0; right: 0; z-index: 15; min-width: 0; padding-bottom: env(safe-area-inset-bottom, 0px); pointer-events: none; }
-.frame[data-player] .main { padding-bottom: var(--player-measured-height, calc(68px + env(safe-area-inset-bottom, 0px))); }
+/*
+ * 窄屏：标签栏固定在底部（自己包含底部安全区），迷你播放栏浮在它上方；主内容的底部留白是两者按实际测量的高度之和，最后一行不被遮住。
+ * 迷你栏是浮起的卡片，外层透明、不挡下面的点击。桌面播放器参与网格，没有标签栏。
+ */
+.player { position: fixed; bottom: var(--tabbar-measured-height, calc(57px + env(safe-area-inset-bottom, 0px))); left: 0; right: 0; z-index: 15; min-width: 0; pointer-events: none; }
+.main { padding-bottom: var(--tabbar-measured-height, calc(57px + env(safe-area-inset-bottom, 0px))); }
+.frame[data-player] .main { padding-bottom: calc(var(--tabbar-measured-height, calc(57px + env(safe-area-inset-bottom, 0px))) + var(--player-measured-height, 72px)); }
 @media (min-width: 768px) {
+  .main, .frame[data-player] .main { padding-bottom: 0; }
   .frame[data-player] { grid-template-rows: minmax(0, 1fr) 68px; }
-  .frame[data-player] .main { padding-bottom: 0; }
-  .player { position: relative; grid-column: 1 / -1; grid-row: 2; z-index: 15; padding-bottom: 0; background: var(--color-bg); pointer-events: auto; }
+  .player { position: relative; bottom: auto; grid-column: 1 / -1; grid-row: 2; z-index: 15; background: var(--color-bg); pointer-events: auto; }
 }

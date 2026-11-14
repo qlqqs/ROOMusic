@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { channelPair } from "../test/channel";
 import { deferred } from "../test/deferred";
 import { sampleBody } from "../test/api-samples";
-import { installFakeApi, installFakeSession, installOverviewApi, type FakeApi, type FakeSession } from "../test/fake-api";
+import { installFakeApi, installFakeSearch, installFakeSession, installOverviewApi, type FakeApi, type FakeSession } from "../test/fake-api";
 import { jsonResponse, sampleResponse } from "../test/http";
 import { renderApp } from "../test/render-app";
 
@@ -341,28 +341,50 @@ describe("外壳", () => {
     expect(document.activeElement).toBe(main);
   });
 
-  it("窄屏的“菜单”按钮打开带名称的模态导航，关闭后焦点回到按钮", async () => {
+  it("窄屏顶栏的搜索按钮打开带名称的搜索对话框，焦点进输入框，取消后焦点回到按钮", async () => {
     setup({ current: "curator" });
     renderApp();
     await heading("概览");
-    const menuButton = screen.getByRole("button", { name: "菜单" });
-    await userEvent.click(menuButton);
-    const dialog = screen.getByRole("dialog", { name: "菜单" });
-    expect(within(dialog).getByRole("navigation", { name: "主导航" })).toBeTruthy();
-    await userEvent.click(within(dialog).getByRole("button", { name: "curator 管理员" }));
-    expect(within(dialog).getByRole("menuitem", { name: "退出登录" })).toBeTruthy();
-    await userEvent.keyboard("{Escape}");
-    await userEvent.click(within(dialog).getByRole("button", { name: "关闭" }));
+    // 没有“菜单”按钮与导航抽屉：导航在底部标签栏，个人入口在“我的”页。
+    expect(screen.queryByRole("button", { name: "菜单" })).toBeNull();
+    const searchButton = screen.getByRole("button", { name: "搜索全部音乐" });
+    await userEvent.click(searchButton);
+    const dialog = screen.getByRole("dialog", { name: "搜索全部音乐" });
+    const input = within(dialog).getByRole("combobox", { name: "搜索" });
+    expect(document.activeElement).toBe(input);
+    expect(input.getAttribute("placeholder")).toBe("搜索全部音乐");
+    expect(within(dialog).queryByRole("navigation")).toBeNull();
+    await userEvent.click(within(dialog).getByRole("button", { name: "取消" }));
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(document.activeElement).toBe(menuButton);
+    expect(document.activeElement).toBe(searchButton);
   });
 
-  it("在导航对话框里按 Esc 关闭", async () => {
+  it("搜索对话框按 Esc 或点遮罩关闭", async () => {
     setup({ current: "curator" });
     renderApp();
     await heading("概览");
-    await userEvent.click(screen.getByRole("button", { name: "菜单" }));
+    await userEvent.click(screen.getByRole("button", { name: "搜索全部音乐" }));
     fireEvent(screen.getByRole("dialog"), new Event("cancel", { cancelable: true }));
     expect(screen.queryByRole("dialog")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "搜索全部音乐" }));
+    const dialog = screen.getByRole("dialog", { name: "搜索全部音乐" });
+    // 点在输入框上不关闭；点遮罩时事件目标是 <dialog> 本身。
+    await userEvent.click(within(dialog).getByRole("combobox", { name: "搜索" }));
+    expect(screen.getByRole("dialog", { name: "搜索全部音乐" })).toBe(dialog);
+    fireEvent.click(dialog);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("在搜索对话框里提交后进入结果页并关闭对话框", async () => {
+    const { api } = setup({ current: "curator" });
+    installFakeSearch(api);
+    const { history } = renderApp();
+    await heading("概览");
+    await userEvent.click(screen.getByRole("button", { name: "搜索全部音乐" }));
+    const dialog = screen.getByRole("dialog", { name: "搜索全部音乐" });
+    await userEvent.type(within(dialog).getByRole("combobox", { name: "搜索" }), "巴赫{Enter}");
+    await heading("搜索“巴赫”");
+    expect(history.location.pathname).toBe("/search");
+    expect(screen.queryByRole("dialog", { name: "搜索全部音乐" })).toBeNull();
   });
 });

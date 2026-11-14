@@ -68,7 +68,7 @@ test("真实服务：收藏一首刷新仍在，取消时保留行、刷新后�
 test("真实服务：新建歌单、整张加入两首、菜单交换顺序，刷新仍保持", async ({ page }) => {
   const name = "真实服务双曲歌单";
   await page.goto("/me/playlists");
-  await page.getByRole("button", { name: "新建歌单", exact: true }).click();
+  await page.getByRole("main").getByRole("button", { name: "新建歌单", exact: true }).click();
   const create = page.getByRole("dialog", { name: "新建歌单", exact: true });
   await create.getByRole("textbox", { name: "名字", exact: true }).fill(name);
   await create.getByRole("button", { name: "新建", exact: true }).click();
