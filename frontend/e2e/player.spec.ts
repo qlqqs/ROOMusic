@@ -149,7 +149,13 @@ for (const width of widths) {
     await expectNoDocumentScroll(page, "全屏长标题");
     await expectNoSeriousViolations(page, "全屏播放器");
 
-    const queueButton = full.getByRole("button", { name: "队列（18）", exact: true });
+    // 宽屏全屏没有队列按钮（队列从右栏的“接下来”看），从播放栏打开队列抽屉；窄屏全屏底部一排仍有队列按钮。
+    if (width >= 768) {
+      await expect(full.getByRole("button", { name: /^队列/ })).toHaveCount(0);
+      await page.keyboard.press("Escape");
+      await expect(full).not.toBeVisible();
+    }
+    const queueButton = (width >= 768 ? bar(page) : full).getByRole("button", { name: "队列（18）", exact: true });
     await queueButton.click();
     await expect(queue(page)).toHaveCount(18);
     await expectNoHorizontalOverflow(page, "队列抽屉");
@@ -309,7 +315,7 @@ async function setMediaTime(page: Page, seconds: number) {
 }
 
 /**
- * 768px 及以上是两栏：左栏“唱机 + 控制台”（唱片下依次是标题、进度、传输键与音量），右栏“歌词 / 接下来”；收起在左上角，队列在右上角。
+ * 768px 及以上是两栏等宽、整体居中：左栏“唱机 + 控制台”（唱片下依次是标题、进度、传输键与音量），右栏“歌词 / 接下来”；收起在左上角，播放设备在右上角，没有队列按钮。
  * 窄屏切换到歌词视图时，唱片换成一行小封面与标题，标题在歌词上方。
  */
 async function expectLyricsLayout(page: Page, label: string) {
@@ -341,12 +347,16 @@ async function expectLyricsLayout(page: Page, label: string) {
       expect(box.x + box.width, `${label}：${name}在左栏`).toBeLessThanOrEqual(lyricsBox.x + 1);
     }
     const collapse = await full.getByRole("button", { name: "收起全屏播放器", exact: true }).boundingBox();
-    const queueButton = await full.getByRole("button", { name: /^队列（\d+）$/ }).boundingBox();
-    if (collapse === null || queueButton === null) throw new Error(`${label}：缺少收起或队列按钮`);
+    const device = await full.getByRole("button", { name: /^(播放设备|正在控制：)/ }).boundingBox();
+    if (collapse === null || device === null) throw new Error(`${label}：缺少收起或播放设备按钮`);
     expect(collapse.x + collapse.width, `${label}：收起在左上角`).toBeLessThanOrEqual(width / 4);
     expect(collapse.y, `${label}：收起在左上角`).toBeLessThanOrEqual(80);
-    expect(queueButton.x, `${label}：队列在右上角`).toBeGreaterThanOrEqual(width * 0.75);
-    expect(queueButton.y, `${label}：队列在右上角`).toBeLessThanOrEqual(80);
+    expect(device.x, `${label}：播放设备在右上角`).toBeGreaterThanOrEqual(width * 0.75);
+    expect(device.y, `${label}：播放设备在右上角`).toBeLessThanOrEqual(80);
+    await expect(full.getByRole("button", { name: /^队列/ }), `${label}：宽屏全屏没有队列按钮`).toHaveCount(0);
+    // 两栏等宽、整体居中：唱片与右栏各在自己一栏里居中，两者的中点落在窗口中线附近，右侧不留大片空白。
+    const middle = (coverBox.x + coverBox.width / 2 + lyricsBox.x + lyricsBox.width / 2) / 2;
+    expect(Math.abs(middle - width / 2), `${label}：两栏整体居中`).toBeLessThanOrEqual(24);
   } else {
     expect(titleBox.y + titleBox.height, `${label}：小封面一行的标题在歌词上方`).toBeLessThanOrEqual(lyricsBox.y + 1);
   }

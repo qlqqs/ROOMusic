@@ -33,9 +33,10 @@ const CLOSE_MS = 180;
 const noRefs: readonly never[] = [];
 
 /**
- * 全屏播放器：点播放栏封面打开，左上角向下箭头、Esc、浏览器返回收起（开合记在历史记录里），右上角是队列。
- * 宽屏两栏：左边“唱机 + 控制台”（唱片下依次是标题与心形、专辑 · 艺人、信号路径与设备、进度、传输键、音量），右边“歌词 / 接下来”切换。
- * 窄屏单栏：顶部收起、“正在播放 · 专辑名”与更多；唱片视图与歌词视图切换（“歌词”按钮或点唱片），下面的进度、传输键与底部一排位置不变。
+ * 全屏播放器：点播放栏封面打开，左上角向下箭头、Esc、浏览器返回收起（开合记在历史记录里）。
+ * 宽屏两栏等宽、整体居中：左边“唱机 + 控制台”（唱片下依次是标题与信号路径圆点、心形与更多、专辑 · 艺人、进度、传输键、音量），
+ * 右边“歌词 / 接下来”切换；右上角是播放设备图标（队列从右栏的“接下来”看，不另放队列按钮）。
+ * 窄屏单栏：顶部收起、“正在播放 · 专辑名”与更多；唱片视图与歌词视图切换（“歌词”按钮或点唱片），下面的进度、传输键与底部一排（设备 | 歌词、队列）位置不变。
  */
 export function FullscreenPlayer({ renderCurrentTrackActions, renderQueueActions }: FullscreenPlayerProps) {
   const { open, closePlayer } = useFullscreenPlayer();
@@ -103,10 +104,9 @@ type LayoutProps = {
 function Layout({ track, titleId, collapseRef, onCollapse, renderCurrentTrackActions, renderQueueActions }: LayoutProps) {
   const narrow = useMediaQuery(NARROW);
   const collapse = <Button ref={collapseRef} variant="icon" icon={<ChevronDown size={22} />} label="收起全屏播放器" onClick={onCollapse} />;
-  const queue = <QueueButton renderQueueActions={renderQueueActions} />;
-  if (narrow) return <NarrowLayout track={track} titleId={titleId} collapse={collapse} queue={queue} renderCurrentTrackActions={renderCurrentTrackActions} />;
+  if (narrow) return <NarrowLayout track={track} titleId={titleId} collapse={collapse} queue={<QueueButton renderQueueActions={renderQueueActions} />} renderCurrentTrackActions={renderCurrentTrackActions} />;
   return <div className={styles.layout}>
-    <div className={styles.topbar}><span className={styles.collapse}>{collapse}</span>{queue}</div>
+    <div className={styles.topbar}><span className={styles.collapse}>{collapse}</span><DeviceButton /></div>
     <div className={styles.stage}>
       <div className={styles.left}>
         <VinylDeck track={track} />
@@ -114,11 +114,11 @@ function Layout({ track, titleId, collapseRef, onCollapse, renderCurrentTrackAct
           <div className={styles.info}>
             <div className={styles.titleRow}>
               <h2 id={titleId} className={styles.title} title={track.title}>{track.title}</h2>
+              <span className={styles.signal}><SignalPathButton /></span>
               {renderCurrentTrackActions === undefined ? null : <div className={styles.trackActions}>{renderCurrentTrackActions(track)}</div>}
               <TrackMenu track={track} />
             </div>
             <TrackMeta track={track} />
-            <div className={styles.signalRow}><SignalPathButton /><DeviceButton appearance="pill" /></div>
             <PlayerFaultInline showStatus className={styles.status} />
           </div>
           <div className={styles.seek}><WaveformSeek layout="ends" /></div>
@@ -182,9 +182,8 @@ function NarrowLayout({ track, titleId, collapse, queue, renderCurrentTrackActio
       ? <div className={styles.view}>
         <div className={styles.deckCell}><button type="button" className={styles.deckButton} aria-label="显示歌词" {...deckTip.triggerProps} onClick={() => setView("lyrics")}><VinylDeck track={track} /></button>{deckTip.tooltip}</div>
         <div className={styles.info}>
-          <div className={styles.titleRow}><h2 id={titleId} className={styles.title} title={track.title}>{track.title}</h2>{actions}</div>
+          <div className={styles.titleRow}><h2 id={titleId} className={styles.title} title={track.title}>{track.title}</h2><span className={styles.signal}><SignalPathButton /></span>{actions}</div>
           <TrackMeta track={track} />
-          <div className={styles.signalRow}><SignalPathButton /></div>
         </div>
       </div>
       : <div className={`${styles.view} ${styles.lyricsView}`}>
@@ -200,7 +199,7 @@ function NarrowLayout({ track, titleId, collapse, queue, renderCurrentTrackActio
       <div className={styles.seek}><WaveformSeek layout="ends" /></div>
       <TransportControls size="large" modes />
       <div className={styles.bottomRow}>
-        <DeviceButton appearance="pill" />
+        <DeviceButton />
         <div className={styles.bottomActions}>
           <Button variant="icon" icon={<MicVocal size={20} />} label="歌词" aria-pressed={view === "lyrics"} onClick={() => setView(view === "lyrics" ? "deck" : "lyrics")} />
           {queue}

@@ -4,7 +4,7 @@ import { useTooltip } from "../../../shared/ui";
 import { ArtistNames } from "../../catalog";
 import type { PlayerTrack } from "../engine/queue";
 import { useFullscreenPlayer } from "../hooks/use-fullscreen-player";
-import { ControlTargetLine, DeviceButton } from "./device-picker";
+import { DeviceButton } from "./device-picker";
 import { usePlayerProgressSelector, usePlayerSelector } from "../player-provider";
 import { PlayerArtwork } from "./player-artwork";
 import { TransportControls, VolumeControl } from "./player-controls";
@@ -40,7 +40,7 @@ function ExpandArtworkButton({ track }: { track: PlayerTrack }) {
 function TransientStatus() {
   const status = usePlayerSelector((snapshot) => snapshot.status);
   if (status !== "loading" && status !== "buffering") return null;
-  return <span className={styles.state}>{statusLabels[status]}</span>;
+  return <span className={`${styles.state} ${styles.desktop}`}>{statusLabels[status]}</span>;
 }
 
 /** 窄屏迷你栏底边的进度线：只是示意（对读屏隐藏），拖动与键盘在全屏播放器的进度条上。只动 transform。 */
@@ -50,17 +50,17 @@ function ProgressLine() {
 }
 
 /**
- * 底部播放栏。宽屏三段：左边曲目（封面、标题、艺人 — 专辑、心形），中间随机、上一首、播放、下一首、循环与两端写时间的进度，
- * 右边固定顺序：格式与信号路径、设备、队列、分隔线、音量。窄屏是浮起的迷你栏：封面、标题与设备名、播放、下一首、队列，底边一条进度线。
+ * 底部播放栏。宽屏三段：左边曲目（封面、标题与信号路径圆点、艺人 — 专辑、心形），中间随机、上一首、播放、下一首、循环与两端写时间的进度，
+ * 右边固定顺序：（加载与缓冲时的状态）队列、分隔线、设备、音量。窄屏是浮起的迷你栏：封面、标题与圆点、（控制别的设备时的）设备、播放、下一首、队列，
+ * 底边一条进度线。
  */
 export function PlayerBar({ renderCurrentTrackActions, renderQueueActions }: PlayerBarProps = {}) {
   const track = usePlayerSelector((snapshot) => snapshot.current?.track);
   return <section aria-label="播放器" className={styles.bar}>
     <div className={styles.identity}>
-      {track === undefined ? <div className={styles.text}><PlayerFaultInline /><ControlTargetLine className={styles.narrowOnly} /></div> : <><ExpandArtworkButton track={track} /><div className={styles.text}>
-        <p className={styles.title} title={track.title}>{track.title}</p>
+      {track === undefined ? <div className={styles.text}><PlayerFaultInline /></div> : <><ExpandArtworkButton track={track} /><div className={styles.text}>
+        <div className={styles.titleRow}><p className={styles.title} title={track.title}>{track.title}</p><SignalPathButton /></div>
         <PlayerFaultInline />
-        <ControlTargetLine className={styles.narrowOnly} />
         <p className={styles.subtitle}><ArtistNames text={track.artist} refs={track.artistRefs ?? noRefs} /> — <Link to="/albums/$groupId" params={{ groupId: track.groupId }} search={{ release: track.releaseId }}>{track.albumTitle}</Link></p>
       </div>{renderCurrentTrackActions === undefined ? null : <div className={styles.trackActions}>{renderCurrentTrackActions(track)}</div>}</>}
     </div>
@@ -69,10 +69,10 @@ export function PlayerBar({ renderCurrentTrackActions, renderQueueActions }: Pla
       <div className={styles.desktop}><WaveformSeek layout="ends" /></div>
     </div>
     <div className={styles.end}>
-      <div className={`${styles.desktop} ${styles.format}`}><SignalPathButton /><TransientStatus /></div>
-      <span className={styles.desktop}><DeviceButton /></span>
-      <QueueButton renderQueueActions={renderQueueActions} />
+      <TransientStatus />
+      <span className={styles.queue}><QueueButton renderQueueActions={renderQueueActions} /></span>
       <span className={`${styles.separator} ${styles.desktop}`} aria-hidden="true" />
+      <DeviceButton className={styles.device} />
       <div className={`${styles.volume} ${styles.desktop}`}><VolumeControl /></div>
     </div>
     {track === undefined ? null : <ProgressLine />}

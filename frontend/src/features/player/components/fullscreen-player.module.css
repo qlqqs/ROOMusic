@@ -20,8 +20,7 @@ dialog.dialog::backdrop { background: transparent; }
   --color-signal-high: #93cf9f;
   --color-warning: #ff8a80;
   --wave-height: 28px;
-  /* 信号路径胶囊与弹层在深色面上的底色。 */
-  --signal-pill-bg: rgb(255 255 255 / 7%);
+  /* 信号路径弹层在深色面上的底色。 */
   --signal-card-bg: var(--color-neutral-900);
   position: relative;
   height: 100%;
@@ -39,19 +38,20 @@ dialog.dialog > div[aria-hidden="true"], .root dialog > div[aria-hidden="true"] 
 .backdrop img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.2); filter: blur(64px) saturate(1.2) brightness(0.45); }
 .backdrop::after { content: ""; position: absolute; inset: 0; background: rgb(0 0 0 / 35%); }
 
-/* 宽屏：顶部一行（左上收起、右上队列），下面两栏：左“唱机 + 控制台”，右“歌词 / 接下来”。 */
+/* 宽屏：顶部一行（左上收起、右上播放设备），下面两栏等宽、整体居中：左“唱机 + 控制台”，右“歌词 / 接下来”，各在自己一栏里居中。 */
 .layout { position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; padding: 18px 20px 36px; }
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-width: 0; }
 .collapse button { width: 40px; height: 40px; }
-.stage { display: grid; grid-template-columns: minmax(320px, 520px) minmax(0, 1fr); gap: 56px; width: 100%; max-width: 1240px; min-height: 0; margin-inline: auto; padding-inline: 36px; }
+.stage { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 56px; width: 100%; max-width: 1240px; min-height: 0; margin-inline: auto; padding-inline: 36px; }
 .left { display: grid; align-content: center; justify-items: center; gap: 22px; min-width: 0; min-height: 0; overflow-y: auto; padding-block: var(--space-2); }
 .console { display: grid; justify-items: center; gap: 14px; width: min(400px, 100%); min-width: 0; }
 .info { display: grid; gap: var(--space-1); width: 100%; min-width: 0; }
 .titleRow { display: flex; align-items: center; gap: var(--space-1); min-width: 0; }
-.title { flex: 1; min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: 26px; font-weight: 600; line-height: 1.3; }
+.title { flex: 0 1 auto; min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: 26px; font-weight: 600; line-height: 1.3; }
 .meta { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: var(--fs-14); color: var(--text-secondary); }
 .meta a { text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: 3px; }
-.signalRow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-width: 0; margin-top: var(--space-2); }
+/* 标题后的信号路径圆点；它把心形与更多推到行尾。没有信号路径时只是读屏文字，仍占这个位置。 */
+.signal { display: inline-flex; flex: none; margin-right: auto; }
 .trackActions { display: flex; align-items: center; flex: none; }
 .seek { width: 100%; min-width: 0; }
 .seek > div > div { --wave-rest: rgb(255 255 255 / 22%); --wave-played: var(--color-accent-300); }
@@ -59,7 +59,7 @@ dialog.dialog > div[aria-hidden="true"], .root dialog > div[aria-hidden="true"] 
 .volume > div { flex: 1; }
 .volume input { flex: 1; width: auto; }
 
-.right { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 22px; min-width: 0; min-height: 0; padding-top: 34px; }
+.right { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 22px; justify-self: center; width: min(520px, 100%); min-width: 0; min-height: 0; padding-top: 34px; }
 .panel { display: grid; min-width: 0; min-height: 0; }
 .segmented { justify-self: start; display: inline-flex; padding: 3px; border-radius: 9px; background: rgb(255 255 255 / 8%); }
 .segmented button { min-height: 28px; padding: 0 14px; white-space: nowrap; border: 0; border-radius: 6px; background: none; color: var(--text-secondary); font-family: var(--font-body); font-size: var(--fs-13); cursor: pointer; }
@@ -68,7 +68,7 @@ dialog.dialog > div[aria-hidden="true"], .root dialog > div[aria-hidden="true"] 
 
 /* 768–1023px：两栏各占一半，收窄间距，右栏的歌词不被挤成一两个字一行。 */
 @media (min-width: 768px) and (max-width: 1023px) {
-  .stage { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-8); padding-inline: 0; }
+  .stage { gap: var(--space-8); padding-inline: 0; }
 }
 
 /* 唱片在左栏里按视口高度缩放，给下面的控制台留出位置。 */
