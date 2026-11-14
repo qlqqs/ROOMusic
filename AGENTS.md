@@ -23,6 +23,11 @@ Managed by Trellis. Edits outside this block are preserved; edits inside may be 
 <!-- TRELLIS:END -->
 
 
+## 说明归属
+
+- 本文件记录项目要求和通用工作约定；项目开发与测试说明见 `docs/development-environment.md`。
+- 项目文档使用相对路径，不记录特定机器的用户名、绝对工作目录或临时任务分支。
+
 ## 工作方式
 
 - 未获明确授权前，只讨论和检查，不修改代码或系统配置。
@@ -36,14 +41,13 @@ Managed by Trellis. Edits outside this block are preserved; edits inside may be 
 ## 工具链管理
 
 - Go、Node 等开发工具统一使用 mise 管理。
-- mise 和工具版本安装在当前用户目录，不通过 apt 安装开发工具链。
 - 优先使用仓库已有的 mise 配置，按项目固定版本。
 - 不替换系统工具、不修改系统级默认版本。
 - 必须增加系统依赖时，先说明具体依赖、用途和系统改动，再取得授权。
 
 ## Docker 使用
 
-- 默认复用本机现有 Docker daemon，不另建 rootless daemon。
+- Docker daemon 的本机访问方式见本机环境说明。
 - 开发、测试、生产使用不同的 Compose 项目名。
 - 避免固定 container_name，由 Compose 生成隔离名称。
 - 每个项目使用独立网络和数据目录。
