@@ -196,7 +196,7 @@ describe("侧栏的歌单导航", () => {
     await screen.findByText("还没有歌单。");
     expect(nav().getByRole("button", { name: "歌单列表" }).getAttribute("aria-expanded")).toBe("true");
     expect(nav().queryByRole("link", { name })).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "新建歌单" }));
+    await userEvent.click(within(screen.getByRole("main")).getByRole("button", { name: "新建歌单" }));
     const dialog = await screen.findByRole("dialog", { name: "新建歌单" });
     await userEvent.type(within(dialog).getByRole("textbox", { name: "名字" }), name);
     await userEvent.click(within(dialog).getByRole("button", { name: "新建" }));
@@ -204,6 +204,36 @@ describe("侧栏的歌单导航", () => {
     expect((await nav().findByRole("link", { name })).getAttribute("href")).toBe(pagePath);
     await screen.findByRole("heading", { name });
     expect(history.location.pathname).toBe(pagePath);
+  });
+
+  it("侧栏“我的歌单”一行的＋在任何页面打开同一个新建对话框，建好后打开新歌单", async () => {
+    const { api, state, playlist } = setup(0);
+    const name = "侧栏新建的歌单";
+    state.deleted = true;
+    api.on("POST", playlistsPath, (request) => {
+      expect(request.body).toEqual({ name });
+      state.name = name;
+      state.deleted = false;
+      return jsonResponse(201, { playlist: playlist(), added_count: 0, existing_count: 0, duplicate_count: 0 });
+    });
+    const { history } = renderApp({ path: "/" });
+    await screen.findByRole("heading", { level: 1, name: "概览" });
+    const create = await nav().findByRole("button", { name: "新建歌单" });
+    await userEvent.click(create);
+    const dialog = await screen.findByRole("dialog", { name: "新建歌单" });
+    // 取消后焦点回到＋，不发请求。
+    await userEvent.click(within(dialog).getByRole("button", { name: "取消" }));
+    expect(screen.queryByRole("dialog", { name: "新建歌单" })).toBeNull();
+    expect(document.activeElement).toBe(create);
+    expect(api.requestsTo("POST", playlistsPath)).toHaveLength(0);
+    await userEvent.click(create);
+    const again = await screen.findByRole("dialog", { name: "新建歌单" });
+    await userEvent.type(within(again).getByRole("textbox", { name: "名字" }), name);
+    await userEvent.click(within(again).getByRole("button", { name: "新建" }));
+    await screen.findByRole("heading", { level: 1, name });
+    expect(history.location.pathname).toBe(pagePath);
+    expect((await nav().findByRole("link", { name })).getAttribute("aria-current")).toBe("page");
+    expect(api.requestsTo("POST", playlistsPath)).toHaveLength(1);
   });
 });
 
@@ -467,7 +497,7 @@ describe("歌单的容量、删除与表单", () => {
   it("新建的输入校验按码点计数，空白、101 个码点与控制字符均不发请求", async () => {
     const { api } = setup();
     renderApp({ path: "/me/playlists" });
-    await userEvent.click(await screen.findByRole("button", { name: "新建歌单" }));
+    await userEvent.click(await within(await screen.findByRole("main")).findByRole("button", { name: "新建歌单" }));
     const dialog = await screen.findByRole("dialog", { name: "新建歌单" });
     const input = within(dialog).getByRole("textbox", { name: "名字" });
     for (const value of ["   ", "🎵".repeat(101), "含\u0001控制字符"]) {
@@ -484,7 +514,7 @@ describe("歌单的容量、删除与表单", () => {
     const name = "🎵".repeat(100);
     api.on("POST", playlistsPath, () => pending.promise);
     const { history } = renderApp({ path: "/me/playlists" });
-    await userEvent.click(await screen.findByRole("button", { name: "新建歌单" }));
+    await userEvent.click(await within(await screen.findByRole("main")).findByRole("button", { name: "新建歌单" }));
     const dialog = await screen.findByRole("dialog", { name: "新建歌单" });
     fireEvent.change(within(dialog).getByRole("textbox", { name: "名字" }), { target: { value: ` ${name} ` } });
     await userEvent.click(within(dialog).getByRole("button", { name: "新建" }));
@@ -503,7 +533,7 @@ describe("歌单的容量、删除与表单", () => {
     const { api } = setup();
     api.on("POST", playlistsPath, () => jsonResponse(409, { error: { code: "playlist_limit_reached", message: "已到上限" }, request_id: "playlist-capacity" }));
     renderApp({ path: "/me/playlists" });
-    await userEvent.click(await screen.findByRole("button", { name: "新建歌单" }));
+    await userEvent.click(await within(await screen.findByRole("main")).findByRole("button", { name: "新建歌单" }));
     const dialog = await screen.findByRole("dialog", { name: "新建歌单" });
     await userEvent.type(within(dialog).getByRole("textbox", { name: "名字" }), "满额后的新歌单");
     await userEvent.click(within(dialog).getByRole("button", { name: "新建" }));

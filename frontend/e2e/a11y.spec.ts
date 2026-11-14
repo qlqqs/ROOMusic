@@ -184,7 +184,7 @@ const states: State[] = [
     reach: async (page) => {
       await page.goto("/albums");
       await page.getByRole("textbox", { name: "搜索专辑" }).fill("长".repeat(70));
-      await page.getByRole("button", { name: "搜索" }).click();
+      await page.getByRole("button", { name: "搜索", exact: true }).click();
       await expect(page.getByText("搜索词太长了，请短一些。")).toBeVisible();
     },
   },
@@ -500,13 +500,23 @@ test.describe("axe 扫描（手机 375px）", () => {
     });
   }
 
-  test("窄屏菜单（模态导航）", async ({ page, backend }) => {
+  test("窄屏搜索对话框", async ({ page, backend }) => {
     await backend.start({ signedInAs: "curator" });
     await page.goto("/");
-    await page.getByRole("button", { name: "菜单" }).click();
-    await expect(page.getByRole("dialog", { name: "菜单" })).toBeVisible();
-    await expectNoSeriousViolations(page, "窄屏菜单");
-    await expectMinimumFontSize(page, "窄屏菜单");
+    await page.getByRole("button", { name: "搜索全部音乐", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "搜索全部音乐", exact: true })).toBeVisible();
+    await expectNoSeriousViolations(page, "窄屏搜索对话框");
+    await expectMinimumFontSize(page, "窄屏搜索对话框");
+  });
+
+  test("窄屏“我的”页与底部标签栏", async ({ page, backend }) => {
+    await backend.start({ signedInAs: "curator" });
+    await page.goto("/me");
+    await expect(page.getByRole("heading", { level: 1, name: "我的", exact: true })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "主导航", exact: true }).getByRole("link", { name: "我的", exact: true })).toHaveAttribute("aria-current", "page");
+    await page.evaluate(() => document.fonts.ready);
+    await expectNoSeriousViolations(page, "窄屏“我的”页");
+    await expectMinimumFontSize(page, "窄屏“我的”页");
   });
 });
 

@@ -157,7 +157,7 @@ test("纯键盘：侧栏进入播放历史，行内播放，更多→移除→�
   expect(state.deletes).toEqual([`${plays}/tracks/${first.track_id}`, plays]);
 });
 
-test("概览全部历史链接直达历史页，/me 直接访问重定向，地址恢复分页", async ({ page, backend }) => {
+test("概览全部历史链接直达历史页，/me 是“我的”页，地址恢复分页", async ({ page, backend }) => {
   const mock = await backend.start({ signedInAs: "listener" });
   const items: HistoryItemDTO[] = Array.from({ length: 51 }, (_, index) => historyItem(index + 1));
   await mockHistory(page, mock, items);
@@ -167,8 +167,11 @@ test("概览全部历史链接直达历史页，/me 直接访问重定向，地�
   await allHistory.click();
   await expect(page).toHaveURL(/\/me\/history$/);
   await expect(table(page)).toBeVisible();
+  // /me 是“我的”页（窄屏标签栏的“我的”），不再转到“我喜欢的音乐”。
   await page.goto("/me");
-  await expect(page).toHaveURL(/\/me\/liked$/);
+  await expect(page).toHaveURL(/\/me$/);
+  await expect(page.getByRole("heading", { level: 1, name: "我的", exact: true })).toBeVisible();
+  await page.goto("/me/liked");
   const nav = page.getByRole("navigation", { name: "主导航", exact: true });
   await expect(nav.getByRole("link", { name: "我喜欢的音乐", exact: true })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("navigation", { name: "我的音乐", exact: true })).toHaveCount(0);

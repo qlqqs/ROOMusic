@@ -272,7 +272,7 @@ export function GlobalSearchBox({ currentQuery, onNavigate, className }: GlobalS
             enterKeyHint="search"
             autoComplete="off"
             spellCheck={false}
-            placeholder="搜索"
+            placeholder="搜索全部音乐"
             role="combobox"
             aria-expanded={showPopup}
             aria-controls={listboxId}
@@ -293,7 +293,7 @@ export function GlobalSearchBox({ currentQuery, onNavigate, className }: GlobalS
             onCompositionStart={() => setComposing(true)}
             onCompositionEnd={() => setComposing(false)}
           />
-          {/* 外壳的“/”快捷键（app-shell）：只在精确指针设备上、输入框为空且没有焦点时提示；读屏从 aria-keyshortcuts 得知。 */}
+          {/* 外壳的“/”快捷键（app-shell）：只在宽屏的精确指针设备上、输入框为空且没有焦点时提示（触屏与窄屏不提示）；读屏从 aria-keyshortcuts 得知。 */}
           <kbd className={styles.shortcut} aria-hidden="true">
             /
           </kbd>

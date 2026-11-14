@@ -1,10 +1,11 @@
 import { useRouterState } from "@tanstack/react-router";
-import { Menu, X } from "lucide-react";
-import { useEffect, useId, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { Search } from "lucide-react";
+import { useEffect, useId, useRef, useState, type MouseEvent, type ReactNode, type RefObject } from "react";
 import { useViewerScope } from "../../features/auth";
 import { usePlayerSelector, FullscreenPlayer, PlayerBar, PlayerAnnouncement } from "../../features/player";
 import { GLOBAL_SEARCH_INPUT_SELECTOR, GlobalSearchBox } from "../../features/search";
 import { ArtistLinksScope } from "../../features/catalog";
+import { useMediaQuery } from "../../shared/lib/use-media-query";
 import { Button, ModalDialog } from "../../shared/ui";
 import { CurrentTrackFavorite, SaveQueueAsPlaylist } from "../player-personal-actions";
 import type { PlayerTrack } from "../../features/player";
@@ -16,9 +17,29 @@ const renderBarTrackActions = (track: PlayerTrack) => <CurrentTrackFavorite trac
 const renderFullscreenTrackActions = (track: PlayerTrack) => <CurrentTrackFavorite track={track} />;
 const renderQueueActions = (tracks: readonly PlayerTrack[]) => <SaveQueueAsPlaylist tracks={tracks} />;
 import { Brand } from "./brand";
+import { PlaybackOriginProvider } from "./playback-origin";
 import { PrimaryNav } from "./primary-nav";
+import { TabBar } from "./tab-bar";
 import { useCatalogEpochSync } from "./use-catalog-epoch-sync";
 import { UserMenu } from "./user-menu";
+
+/** 与外壳样式表的断点一致：窄于 768px 时没有侧栏，底部是标签栏。 */
+const NARROW = "(max-width: 767px)";
+
+/** 把元素的实际高度写进外壳的 CSS 变量，随元素尺寸变化更新（迷你播放栏与标签栏的留白据此计算）。 */
+function useMeasuredHeight(enabled: boolean, target: RefObject<HTMLElement | null>, frame: RefObject<HTMLElement | null>, variable: string) {
+  useEffect(() => {
+    if (!enabled) return;
+    const element = target.current;
+    if (element === null) return;
+    const measure = () => frame.current?.style.setProperty(variable, `${element.getBoundingClientRect().height}px`);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [enabled, target, frame, variable]);
+}
 
 /** 焦点在可编辑的地方时，“/”就是要输入的字符，不拦截。 */
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -27,37 +48,39 @@ function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 /**
- * 已登录界面的外壳。≥768px：左侧导航与主内容各自滚动，当前用户按钮（点开是设置与退出登录）固定在侧栏底部；<768px：顶部栏加“菜单”按钮，导航在模态对话框里，
- * 页面只有一个滚动区。导航切换页面后，焦点回到主内容区，读屏用户得到页面变化的反馈。
+ * 已登录界面的外壳。≥768px：左侧导航与主内容各自滚动，当前用户（齿轮进设置、“更多”里是账号与退出登录）固定在侧栏底部；
+ * <768px：顶部栏是品牌与搜索按钮（打开搜索对话框），底部是标签栏（概览、专辑、艺人、我的），迷你播放栏浮在标签栏上方，页面只有一个滚动区。
+ * 导航切换页面后，焦点回到主内容区，读屏用户得到页面变化的反馈。
  */
 export function AppShell({ children }: { children: ReactNode }) {
+  return (
+    <PlaybackOriginProvider>
+      <ShellFrame>{children}</ShellFrame>
+    </PlaybackOriginProvider>
+  );
+}
+
+function ShellFrame({ children }: { children: ReactNode }) {
   const { viewer } = useViewerScope();
   // 只订阅“播放栏要不要显示”：外壳不随播放状态、音量等每次变化重绘。队列为空但有可重试的故障时，播放栏仍然显示，重试入口不会消失；
   // 有别的在线设备或别的设备上还有曲目时也显示，设备按钮在播放栏里。
   const hasPlayer = usePlayerSelector((snapshot) => snapshot.queue.entries.length > 0 || snapshot.current !== null || snapshot.fault?.kind === "transient"
     || snapshot.devices.some((row) => !row.isLocal && (row.device.online || (row.zone?.current ?? null) !== null)));
+  const narrow = useMediaQuery(NARROW);
   const frameRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!hasPlayer) return;
-    const region = playerRef.current;
-    if (region === null) return;
-    const measure = () => frameRef.current?.style.setProperty("--player-measured-height", `${region.getBoundingClientRect().height}px`);
-    measure();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(region);
-    return () => observer.disconnect();
-  }, [hasPlayer]);
+  const tabBarRef = useRef<HTMLElement>(null);
+  useMeasuredHeight(hasPlayer, playerRef, frameRef, "--player-measured-height");
+  useMeasuredHeight(narrow, tabBarRef, frameRef, "--tabbar-measured-height");
   // 播放栏消失（例如在队列抽屉里清空了队列）时焦点随之消失，放回主内容区。
   const hadPlayer = useRef(hasPlayer);
   useEffect(() => {
     if (hadPlayer.current && !hasPlayer && (document.activeElement === null || document.activeElement === document.body)) mainRef.current?.focus({ preventScroll: true });
     hadPlayer.current = hasPlayer;
   }, [hasPlayer]);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuTitleId = useId();
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchTitleId = useId();
 
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   // 在结果页时，搜索框显示地址里的查询词；别的页面（包括专辑页自己的搜索）不带过来。
@@ -65,10 +88,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   useCatalogEpochSync();
 
   // “/”聚焦搜索框：焦点在输入框、文本区或可编辑内容里时不拦截，带修饰键或输入法组合中也不拦截。
-  // 看得见的搜索框优先（宽屏的侧栏、窄屏结果页里的那一个）；窄屏都看不见时打开菜单并聚焦菜单里的搜索框。
+  // 看得见的搜索框优先（宽屏的侧栏、窄屏结果页里的那一个）；窄屏都看不见时打开搜索对话框。
   // 别的模态对话框打开时只找对话框里的搜索框，找不到就不处理。
-  const focusSearchInMenu = useRef(false);
-  const drawerContentRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey || event.isComposing || event.defaultPrevented) return;
@@ -83,18 +104,17 @@ export function AppShell({ children }: { children: ReactNode }) {
         target.focus();
       } else if (openDialog === null) {
         event.preventDefault();
-        focusSearchInMenu.current = true;
-        setMenuOpen(true);
+        setSearchOpen(true);
       }
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
+  // 搜索对话框打开后焦点直接进输入框。
+  const searchContentRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!menuOpen || !focusSearchInMenu.current) return;
-    focusSearchInMenu.current = false;
-    drawerContentRef.current?.querySelector<HTMLInputElement>(GLOBAL_SEARCH_INPUT_SELECTOR)?.focus();
-  }, [menuOpen]);
+    if (searchOpen) searchContentRef.current?.querySelector<HTMLInputElement>(GLOBAL_SEARCH_INPUT_SELECTOR)?.focus();
+  }, [searchOpen]);
   const previousPathname = useRef(pathname);
   useEffect(() => {
     if (previousPathname.current === pathname) return;
@@ -119,9 +139,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </a>
       <header className={styles.topbar}>
         <Brand />
-        <Button icon={<Menu size={18} />} onClick={() => setMenuOpen(true)}>
-          菜单
-        </Button>
+        <Button variant="icon" icon={<Search size={20} />} label="搜索全部音乐" onClick={() => setSearchOpen(true)} />
       </header>
       <div className={styles.sidebar}>
         <Brand />
@@ -137,20 +155,15 @@ export function AppShell({ children }: { children: ReactNode }) {
         {children}
       </main>
       {hasPlayer ? <div ref={playerRef} className={styles.player}><PlayerBar renderCurrentTrackActions={renderBarTrackActions} renderQueueActions={renderQueueActions} /></div> : null}
+      {narrow ? <TabBar ref={tabBarRef} /> : null}
       <FullscreenPlayer renderCurrentTrackActions={renderFullscreenTrackActions} renderQueueActions={renderQueueActions} />
-      <ModalDialog open={menuOpen} titleId={menuTitleId} className={styles.drawer} onRequestClose={() => setMenuOpen(false)}>
-        <div ref={drawerContentRef} className={styles.drawerContent}>
-          <div className={styles.drawerHeader}>
-            <h2 id={menuTitleId}>菜单</h2>
-            <Button icon={<X size={18} />} onClick={() => setMenuOpen(false)}>
-              关闭
-            </Button>
-          </div>
-          <GlobalSearchBox currentQuery={searchQuery} onNavigate={() => setMenuOpen(false)} />
-          <PrimaryNav role={viewer.role} onNavigate={() => setMenuOpen(false)} />
-          <div className={styles.drawerIdentity}>
-            <UserMenu onNavigate={() => setMenuOpen(false)} />
-          </div>
+      <ModalDialog open={searchOpen} titleId={searchTitleId} className={styles.searchSheet} closeOnBackdrop onRequestClose={() => setSearchOpen(false)}>
+        <div ref={searchContentRef} className={styles.searchContent}>
+          <h2 id={searchTitleId} className={styles.searchTitle}>
+            搜索全部音乐
+          </h2>
+          <GlobalSearchBox currentQuery={searchQuery} onNavigate={() => setSearchOpen(false)} className={styles.searchBox} />
+          <Button onClick={() => setSearchOpen(false)}>取消</Button>
         </div>
       </ModalDialog>
     </div>

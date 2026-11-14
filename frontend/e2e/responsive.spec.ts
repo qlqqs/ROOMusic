@@ -357,22 +357,22 @@ async function expectAccountValueFontSize(page: Page): Promise<void> {
   }
 }
 
-/** 只验证不需要滚动的抽屉，不通过滚动或只查 margin-top 样式来伪造贴底效果。 */
-async function expectDrawerUserAtBottom(page: Page): Promise<void> {
-  const dialog = page.getByRole("dialog", { name: "菜单", exact: true });
-  await expect(dialog).toBeVisible();
-  const { scrollHeight, clientHeight } = await dialog.evaluate((element) => ({ scrollHeight: element.scrollHeight, clientHeight: element.clientHeight }));
-  expect(clientHeight, "菜单抽屉有可测量高度").toBeGreaterThan(0);
-  expect(scrollHeight, "贴底回归的前提：菜单抽屉无需纵向滚动").toBeLessThanOrEqual(clientHeight);
-  const user = dialog.getByRole("region", { name: "当前用户", exact: true }).getByRole("button", { name: "curator 管理员", exact: true });
-  await expect(user).toBeVisible();
-  const dialogBounds = await dialog.boundingBox();
-  const userBounds = await user.boundingBox();
-  if (dialogBounds === null || userBounds === null) throw new Error("菜单抽屉与用户按钮必须有可测量边界");
-  expect(userBounds.height, "用户按钮有可测量高度").toBeGreaterThan(0);
-  const bottomGap = dialogBounds.y + dialogBounds.height - userBounds.y - userBounds.height;
-  expect(bottomGap, "用户按钮底边不能超出菜单抽屉").toBeGreaterThanOrEqual(0);
-  expect(bottomGap, "用户按钮距菜单抽屉底边不超过 24px").toBeLessThanOrEqual(24);
+/**
+ * 窄屏“我的”页：标签栏贴在窗口底部，滚到底时最后一行（退出登录）整行在标签栏上方，不被遮住。
+ * 量真实位置，不只查 padding 样式。
+ */
+async function expectMePageClearsTabBar(page: Page): Promise<void> {
+  const bar = page.getByRole("navigation", { name: "主导航", exact: true });
+  const logout = page.getByRole("main").getByRole("button", { name: "退出登录", exact: true });
+  await expect(bar).toBeVisible();
+  await page.evaluate(() => {
+    for (const element of [document.scrollingElement, document.getElementById("main")]) if (element !== null) element.scrollTop = element.scrollHeight;
+  });
+  const viewport = page.viewportSize();
+  const [barBounds, rowBounds] = await Promise.all([bar.boundingBox(), logout.boundingBox()]);
+  if (viewport === null || barBounds === null || rowBounds === null) throw new Error("标签栏与“退出登录”必须有可测量边界");
+  expect(Math.abs(barBounds.y + barBounds.height - viewport.height), "标签栏贴在窗口底部").toBeLessThanOrEqual(1);
+  expect(rowBounds.y + rowBounds.height, "最后一行在标签栏上方").toBeLessThanOrEqual(barBounds.y + 1);
 }
 
 test.describe("设置与用户菜单：布局和截图", () => {
@@ -388,7 +388,7 @@ test.describe("设置与用户菜单：布局和截图", () => {
         await expectNoDocumentScroll(page, label);
         await expectMinimumFontSize(page, label);
         if (scene === "设置账号") await expectAccountValueFontSize(page);
-        if (scene === "用户菜单" && width === 375) await expectDrawerUserAtBottom(page);
+        if (scene === "用户菜单" && width === 375) await expectMePageClearsTabBar(page);
         for (const overlay of await page.locator('dialog[open], [role="menu"]').all()) {
           const bounds = await overlay.boundingBox();
           expect(bounds, `${label}：浮层有边界`).not.toBeNull();
@@ -434,23 +434,18 @@ test.describe("设置样式回归断言自检", () => {
     }
   });
 
-  test("375px 用户菜单取消自动上边距时，展开和折叠状态的贴底检查都失败", async ({ page, backend }) => {
-    await page.setViewportSize({ width: 375, height: 1000 });
+  test("375px “我的”页去掉主内容的底部留白时，标签栏遮挡检查失败", async ({ page, backend }) => {
+    // 窗口矮于页面内容，最后一行要滚到底才看得到，去掉留白后才会被标签栏盖住。
+    await page.setViewportSize({ width: 375, height: 640 });
     await backend.start({ signedInAs: "curator" });
     await openSettingsScene(page, "用户菜单");
-    const menu = page.getByRole("menu", { name: "账号", exact: true });
-    for (const expanded of [true, false]) {
-      if (!expanded) await page.keyboard.press("Escape");
-      if (expanded) await expect(menu).toBeVisible();
-      else await expect(menu).toBeHidden();
-      await expectDrawerUserAtBottom(page);
-      const style = await page.addStyleTag({ content: 'dialog[open] div:has(> section[aria-label="当前用户"]) { margin-top: 0 !important; }' });
-      try {
-        await expect(expectDrawerUserAtBottom(page)).rejects.toThrow("用户按钮距菜单抽屉底边不超过 24px");
-      } finally {
-        await style.evaluate((element) => element.parentNode?.removeChild(element));
-      }
-      await expectDrawerUserAtBottom(page);
+    await expectMePageClearsTabBar(page);
+    const style = await page.addStyleTag({ content: "#main { padding-bottom: 0 !important; }" });
+    try {
+      await expect(expectMePageClearsTabBar(page)).rejects.toThrow("最后一行在标签栏上方");
+    } finally {
+      await style.evaluate((element) => element.parentNode?.removeChild(element));
     }
+    await expectMePageClearsTabBar(page);
   });
 });

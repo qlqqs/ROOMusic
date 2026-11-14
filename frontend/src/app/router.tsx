@@ -19,6 +19,7 @@ import { ClaimsPage } from "./routes/claims-page";
 import { IssuesPage } from "./routes/issues-page";
 import { LibraryPage } from "./routes/library-page";
 import { LoginPage } from "./routes/login-page";
+import { MePage } from "./routes/me-page";
 import { MembersPage } from "./routes/members-page";
 import { NotFoundPage } from "./routes/not-found-page";
 import { OperationsPage } from "./routes/operations-page";
@@ -178,16 +179,10 @@ const artistDetailRoute = createRoute({
 });
 
 // “我的音乐”：只属于当前用户的数据，所有登录用户都能用。各页在侧栏里各有入口，没有共同的外层布局。
-// /me 本身没有内容，转到“我喜欢的音乐”（替换历史项，返回键不会回到 /me）。
+// /me 本身是“我的”页：窄屏底部标签栏的“我的”，汇集个人入口、歌单、管理员的“管理”入口、设置与退出登录（宽屏侧栏不链接它）。
 const meRoute = createRoute({ getParentRoute: () => authenticatedRoute, path: "/me" });
 
-const meIndexRoute = createRoute({
-  getParentRoute: () => meRoute,
-  path: "/",
-  beforeLoad: () => {
-    throw redirect({ to: "/me/liked", replace: true });
-  },
-});
+const meIndexRoute = createRoute({ getParentRoute: () => meRoute, path: "/", component: MePage });
 
 // 我喜欢的音乐（收藏的曲目）：page 只在 2 及以上时出现；超出末页时，页面在读到真实的总数之后替换成末页。
 function LikedRoute() {

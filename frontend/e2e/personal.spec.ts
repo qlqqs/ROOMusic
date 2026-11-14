@@ -211,7 +211,7 @@ for (const width of widths) {
     const nameBox = await name.boundingBox();
     const metaBox = await link.getByText(/2 首/).boundingBox();
     expect(metaBox?.y ?? 0).toBeGreaterThanOrEqual((nameBox?.y ?? 0) + (nameBox?.height ?? 0));
-    expect(await visibleLines(page.getByRole("button", { name: "新建歌单", exact: true }))).toBe(1);
+    expect(await visibleLines(page.getByRole("main").getByRole("button", { name: "新建歌单", exact: true }))).toBe(1);
     await screenshot(page, info, width, "playlists");
     await layout(page, "歌单列表");
   });

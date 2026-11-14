@@ -3,7 +3,7 @@ import { artistKeyActivate as keyActivate, artistTabTo as keyboardTabTo } from "
 import { expectFocusStaysInDialog } from "./support/keyboard";
 import { expect, test } from "./support/fixtures";
 import { heading } from "./support/locators";
-import { logoutFromMenu, openSettings, userTrigger } from "./support/settings";
+import { logoutFromMenu, openSettings, settingsLink, tabBar, userTrigger } from "./support/settings";
 
 test.describe("初始化、登录与退出", () => {
   test("初始化后自动登录：创建管理员 → 登录 → 概览，密码不出现在页面上", async ({ page, backend }) => {
@@ -259,13 +259,13 @@ test.describe("账户密码：自助修改", () => {
     });
   }
 
-  test("窄屏用户菜单进入账号栏，Esc仅关密码对话框且焦点回到入口", async ({ page, backend }) => {
+  test("窄屏经“我的”页进入账号栏，Esc仅关密码对话框且焦点回到入口", async ({ page, backend }) => {
     await page.setViewportSize({ width: 375, height: 800 });
     const mock = await backend.start({ signedInAs: "curator" });
     await page.goto("/");
-    const menuTrigger = page.getByRole("button", { name: "菜单", exact: true });
     await openSettings(page);
-    const drawer = page.getByRole("dialog", { name: "菜单", exact: true });
+    // 设置页归在“我的”标签下。
+    await expect(tabBar(page).getByRole("link", { name: "我的", exact: true })).toHaveAttribute("aria-current", "page");
     const trigger = page.getByRole("button", { name: "修改密码", exact: true });
     await keyActivate(page, trigger);
     const dialog = passwordDialog(page);
@@ -273,23 +273,16 @@ test.describe("账户密码：自助修改", () => {
     await expectFocusStaysInDialog(page, dialog, 8);
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
-    await expect(drawer).toBeHidden();
     await expect(page.locator("dialog[open]")).toHaveCount(0);
     await expect(trigger).toBeFocused();
     expect(mock.callsTo("POST", "/api/v1/auth/password")).toHaveLength(0);
-    await keyActivate(page, menuTrigger);
-    await expect(drawer).toBeVisible();
-    await page.keyboard.press("Escape");
-    await expect(drawer).toBeHidden();
-    await expect(menuTrigger).toBeFocused();
     await expect(heading(page, "账号")).toBeVisible();
   });
-  test("窄屏用户菜单进入账号栏，成功后Esc关闭且入口焦点保留、重开为空", async ({ page, backend }) => {
+  test("窄屏经“我的”页进入账号栏，成功后Esc关闭且入口焦点保留、重开为空", async ({ page, backend }) => {
     await page.setViewportSize({ width: 375, height: 900 });
     const mock = await backend.start({ signedInAs: "curator" });
     await page.goto("/");
     await openSettings(page);
-    const drawer = page.getByRole("dialog", { name: "菜单", exact: true });
     const trigger = page.getByRole("button", { name: "修改密码", exact: true });
     await keyActivate(page, trigger);
     await fillPasswordChange(page, null);
@@ -297,7 +290,6 @@ test.describe("账户密码：自助修改", () => {
     await expectPasswordChanged(page);
     await page.keyboard.press("Escape");
     await expect(passwordDialog(page)).toBeHidden();
-    await expect(drawer).toBeHidden();
     await expect(page.locator("dialog[open]")).toHaveCount(0);
     await expect(trigger).toBeFocused();
     await expect(page.getByRole("main")).not.toContainText("密码已修改。");
@@ -306,7 +298,7 @@ test.describe("账户密码：自助修改", () => {
     await expect(passwordDialog(page).getByLabel("当前密码", { exact: true })).toHaveCount(0);
     await expect(passwordDialog(page).getByRole("button", { name: "完成", exact: true })).toHaveCount(0);
     await page.keyboard.press("Escape");
-    await expect(drawer).toBeHidden();
+    await expect(page.locator("dialog[open]")).toHaveCount(0);
     await expect(trigger).toBeFocused();
     expect(mock.callsTo("POST", "/api/v1/auth/password")).toHaveLength(1);
     expect(mock.session).toBe("curator");
@@ -314,41 +306,43 @@ test.describe("账户密码：自助修改", () => {
 
 });
 
-test.describe("侧栏用户菜单", () => {
-  test("向上展开、完整键盘循环和 Esc 恢复焦点，设置分栏只在设置页出现", async ({ page, backend }) => {
+test.describe("侧栏底部的当前用户", () => {
+  test("齿轮一步进设置；“账号”菜单向上展开、完整键盘循环和 Esc 恢复焦点；设置分栏只在设置页出现", async ({ page, backend }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await backend.start({ signedInAs: "curator" });
     await page.goto("/");
     await expect(heading(page, "概览")).toBeVisible();
-    const trigger = userTrigger(page);
-    await expect(trigger).toHaveAccessibleName("curator 管理员");
-    await expect(trigger.locator('[aria-hidden="true"]').filter({ hasText: "C" })).toBeVisible();
+    const identity = page.getByRole("region", { name: "当前用户" });
+    await expect(identity).toContainText("curator");
+    await expect(identity).toContainText("管理员");
+    await expect(identity.locator('[aria-hidden="true"]').filter({ hasText: "C" })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: /^(扫描目录|成员|操作记录|备份)$/ })).toHaveCount(0);
+    await expect(settingsLink(page)).not.toHaveAttribute("aria-current", "page");
+    const trigger = userTrigger(page);
     await keyActivate(page, trigger, "ArrowDown");
     const menu = page.getByRole("menu", { name: "账号", exact: true });
-    const settings = menu.getByRole("menuitem", { name: "设置", exact: true });
+    const account = menu.getByRole("menuitem", { name: "账号", exact: true });
     const logout = menu.getByRole("menuitem", { name: "退出登录", exact: true });
-    await expect(menu.getByRole("menuitem")).toHaveText(["设置", "退出登录"]);
-    await expect(settings).toBeFocused();
+    await expect(menu.getByRole("menuitem")).toHaveText(["账号", "退出登录"]);
+    await expect(account).toBeFocused();
     const menuBounds = await menu.boundingBox();
     const triggerBounds = await trigger.boundingBox();
-    if (menuBounds === null || triggerBounds === null) throw new Error("菜单与用户按钮必须有边界");
+    if (menuBounds === null || triggerBounds === null) throw new Error("菜单与“账号”按钮必须有边界");
     expect(menuBounds.y + menuBounds.height).toBeLessThanOrEqual(triggerBounds.y);
-    expect(Math.abs(menuBounds.width - Math.max(triggerBounds.width, 200))).toBeLessThan(2);
     await page.keyboard.press("ArrowUp");
     await expect(logout).toBeFocused();
     await page.keyboard.press("Home");
-    await expect(settings).toBeFocused();
+    await expect(account).toBeFocused();
     await page.keyboard.press("End");
     await expect(logout).toBeFocused();
     await page.keyboard.press("ArrowDown");
-    await expect(settings).toBeFocused();
+    await expect(account).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(menu).toBeHidden();
     await expect(trigger).toBeFocused();
     await expect(trigger).toHaveAttribute("aria-expanded", "false");
     await openSettings(page);
-    await expect(trigger).toHaveAttribute("data-current", "");
+    await expect(settingsLink(page)).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("navigation", { name: "设置", exact: true }).getByRole("link")).toHaveText(["账号", "播放", "扫描目录", "成员", "操作记录", "备份"]);
   });
 
