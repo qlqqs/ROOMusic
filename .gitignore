@@ -55,4 +55,5 @@ __pycache__/
 /.trellis/tasks/archive/2026-11/11-08-server-playback-zones/research/
 
 # 本机开发数据与临时测试文件。
-/temp/
+# 临时文件夹
+temp/
