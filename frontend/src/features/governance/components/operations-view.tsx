@@ -3,7 +3,7 @@ import { useRef } from "react";
 import { formatCount } from "../../../shared/lib/number";
 import { pageCountOf } from "../../../shared/lib/pagination";
 import { useClampedPage } from "../../../shared/lib/use-clamped-page";
-import { Pagination, Panel, QueryContent, Skeleton } from "../../../shared/ui";
+import { Pagination, QueryContent, SettingsGroup, Skeleton } from "../../../shared/ui";
 import type { OperationPageDTO } from "../api/decoders";
 import { OPERATION_PAGE_SIZE, useOperations } from "../hooks/use-operations";
 import type { ReleaseCommands } from "../hooks/use-release-commands";
@@ -76,13 +76,32 @@ export function OperationsView({ page, releaseId, groupId, artistId, commands }:
       void navigate({ to: "/settings/operations", search: (previous) => ({ ...previous, page: lastPage > 1 ? lastPage : undefined }), replace: true }),
   });
 
+  // 有记录时总条数与分页放在卡片下方。
+  const listed = operations.data !== undefined && !outOfRange && operations.data.pagination.total > 0 ? operations.data : null;
   return (
     <>
       {filtered ? <FilterNote releaseId={releaseId} groupId={groupId} artistId={artistId} data={operations.data} /> : null}
       <ReleaseCommandNotice state={commands.state} releaseId={null} hideFailure={revert.target !== null} onRetry={() => commands.retry()} onDismiss={commands.dismiss} />
-      <Panel
+      <SettingsGroup
         title={!filtered ? "全部记录" : artistId !== undefined && releaseId === undefined && groupId === undefined ? "这位艺人的记录" : groupId === undefined ? "这个版本的记录" : releaseId === undefined ? "这张专辑的记录" : "这个版本和专辑的记录"}
         headingRef={headingRef}
+        footer={
+          listed ? (
+            <div aria-busy={operations.isPlaceholderData} className={styles.footer}>
+              <p className={styles.note}>
+                共 {formatCount(listed.pagination.total)} 条记录
+              </p>
+              <Pagination
+                label="操作记录分页"
+                page={listed.pagination.page}
+                pageCount={pageCountOf(listed.pagination.total, listed.pagination.page_size)}
+                renderLink={(target, props) => (
+                  <Link to="/settings/operations" search={(previous) => ({ ...previous, page: target > 1 ? target : undefined })} {...props} />
+                )}
+              />
+            </div>
+          ) : null
+        }
       >
         <QueryContent query={operations} loading={<Skeleton label="正在加载操作记录" lines={4} />}>
           {(data) =>
@@ -93,22 +112,11 @@ export function OperationsView({ page, releaseId, groupId, artistId, commands }:
             ) : (
               <div aria-busy={operations.isPlaceholderData}>
                 <OperationList caption="操作记录" items={data.items} showRelease onRevert={revert.open} />
-                <p className={styles.note}>
-                  共 {formatCount(data.pagination.total)} 条记录
-                </p>
-                <Pagination
-                  label="操作记录分页"
-                  page={data.pagination.page}
-                  pageCount={pageCountOf(data.pagination.total, data.pagination.page_size)}
-                  renderLink={(target, props) => (
-                    <Link to="/settings/operations" search={(previous) => ({ ...previous, page: target > 1 ? target : undefined })} {...props} />
-                  )}
-                />
               </div>
             )
           }
         </QueryContent>
-      </Panel>
+      </SettingsGroup>
       <RevertOperationDialog item={revert.target} commands={commands} onClose={revert.close} />
     </>
   );

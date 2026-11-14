@@ -1,6 +1,6 @@
 import { UserPlus } from "lucide-react";
 import { useState } from "react";
-import { Button, Panel, QueryContent, Skeleton } from "../../../shared/ui";
+import { Button, QueryContent, SettingsGroup, Skeleton } from "../../../shared/ui";
 import { useViewerScope } from "../../auth";
 import type { MemberDTO } from "../api/decoders";
 import { useMemberCommands } from "../hooks/use-member-commands";
@@ -14,7 +14,7 @@ import { ResetPasswordDialog } from "./reset-password-dialog";
 const toTarget = (member: MemberDTO) => ({ id: member.id, username: member.username });
 
 /**
- * 成员管理页的内容：新建成员（对话框）与成员列表共用一个命令状态（同一时刻只有一个成员命令）。
+ * 成员管理页的内容：“成员列表”卡片（标题行右侧是“新建成员”，结果提示在列表上方），新建成员（对话框）与列表共用一个命令状态（同一时刻只有一个成员命令）。
  * 停用与撤销会话先确认，重置密码在对话框里输入新密码；对话框在命令结束（成功或失败）时关闭，结果显示在页面上，
  * 因为成员写操作没有幂等保证，结果不确定时不提供重试，只刷新列表让用户核对。
  */
@@ -35,7 +35,7 @@ export function MemberManagement() {
 
   return (
     <>
-      <Panel
+      <SettingsGroup
         title="成员列表"
         action={
           <Button
@@ -67,7 +67,7 @@ export function MemberManagement() {
             />
           )}
         </QueryContent>
-      </Panel>
+      </SettingsGroup>
       <CreateMemberDialog open={creating} commands={commands} onClose={() => setCreating(false)} />
       <MemberActionDialog
         action={confirming}

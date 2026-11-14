@@ -1,0 +1,24 @@
+/*
+ * 与改路径对话框同宽。文件夹浏览器浮在路径框下方（不推开后面的按钮），所以对话框不裁切溢出的内容；
+ * 基础样式里的 overflow 是零优先级，这里可以覆盖。
+ */
+.dialog {
+  width: min(520px, calc(100vw - 2 * var(--space-4)));
+  overflow: visible;
+}
+
+.content {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-4);
+}
+
+.title {
+  font-size: var(--fs-16);
+}
+
+.hint {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+}

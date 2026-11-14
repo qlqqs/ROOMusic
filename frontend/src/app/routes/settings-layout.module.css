@@ -1,4 +1,4 @@
-/* <1024px：内容上方一行横向链接（同“我的音乐”的下边线页签，不显示图标），左右与下方页面内容对齐。 */
+/* <1024px：内容上方一行可横向滑动的胶囊标签（不显示图标与小标题），左右与下方页面内容对齐。 */
 .settings {
   min-width: 0;
 }
@@ -8,18 +8,33 @@
   padding: var(--space-4) var(--layout-page-inset-x) 0;
 }
 
-.navTitle {
+.navTitle,
+.groupTitle {
   display: none;
+}
+
+/* 横向滚动时焦点环不被裁掉：四周留出焦点环的位置，再用负外边距抵消。 */
+.tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--space-1);
+  margin: -4px;
+  padding: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.section {
+  display: flex;
+  flex: none;
 }
 
 .list {
   display: flex;
   flex-wrap: nowrap;
-  gap: var(--space-4);
+  gap: var(--space-1);
   margin: 0;
   padding: 0;
-  overflow-x: auto;
-  border-bottom: 1px solid var(--color-divider);
   list-style: none;
 }
 
@@ -31,10 +46,11 @@
   display: inline-flex;
   align-items: center;
   min-height: var(--control-height);
-  margin-bottom: -1px;
-  padding: 0 var(--space-1);
-  border-bottom: 2px solid transparent;
+  padding: 0 14px;
+  border-radius: calc(var(--control-height) / 2);
+  background: var(--color-surface);
   color: var(--text-secondary);
+  font-size: var(--fs-13);
   text-decoration: none;
   white-space: nowrap;
 }
@@ -44,8 +60,8 @@
 }
 
 .link[aria-current="page"] {
-  border-bottom-color: var(--color-accent-700);
-  color: var(--text-primary);
+  background: var(--color-text);
+  color: var(--color-bg);
   font-weight: 600;
 }
 
@@ -53,11 +69,17 @@
   display: none;
 }
 
+/* 内容区限宽：一般栏目 720px，扫描目录 820px（含目录列表与记录表格）；页面自己的左右内边距另算。 */
 .content {
   min-width: 0;
+  max-width: calc(720px + 2 * var(--layout-page-inset-x));
 }
 
-/* ≥1024px：左侧竖排分栏（图标加文字，当前项同主导航的选中样式），随页面滚动；顶部与页面标题对齐。 */
+.content[data-wide] {
+  max-width: calc(820px + 2 * var(--layout-page-inset-x));
+}
+
+/* ≥1024px：左侧竖排分栏（图标加文字，当前项同主导航的选中样式），随页面滚动；栏首“设置”与页面标题对齐。 */
 @media (min-width: 1024px) {
   .settings {
     display: grid;
@@ -74,27 +96,44 @@
 
   .navTitle {
     display: block;
+    margin-bottom: var(--space-2);
     padding: 0 var(--space-3);
+    font-size: var(--fs-20);
+    font-weight: var(--font-heading-weight);
+    line-height: 1.3;
+  }
+
+  .tabs {
+    display: grid;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+  }
+
+  .section {
+    display: grid;
+    gap: 2px;
+  }
+
+  .groupTitle {
+    display: block;
+    padding: var(--space-3) var(--space-3) var(--space-1);
     color: var(--text-secondary);
     font-size: var(--fs-12);
-    letter-spacing: 0.06em;
   }
 
   .list {
     display: grid;
     gap: 2px;
-    overflow: visible;
-    border-bottom: 0;
   }
 
   .link {
     display: flex;
     gap: 10px;
-    min-height: var(--control-height);
-    margin-bottom: 0;
     padding: 0 var(--space-3);
-    border-bottom: 0;
     border-radius: var(--radius-md);
+    background: transparent;
     color: var(--text-primary);
     font-size: var(--fs-14);
     transition: background-color 0.12s ease;
@@ -112,5 +151,11 @@
   .icon {
     display: block;
     flex-shrink: 0;
+  }
+}
+
+@media (min-width: 1024px) and (prefers-reduced-motion: reduce) {
+  .link {
+    transition: none;
   }
 }

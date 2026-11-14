@@ -1,7 +1,7 @@
 import { CircleCheck, CircleX } from "lucide-react";
 import { useMemo } from "react";
 import { formatDateTime, UNKNOWN_TIME } from "../../../shared/lib/time";
-import { DataTable, Panel, QueryContent, Skeleton, StatusTag, type Column } from "../../../shared/ui";
+import { DataTable, QueryContent, SettingsGroup, Skeleton, StatusTag, type Column } from "../../../shared/ui";
 import type { RootOperationDTO } from "../api/decoders";
 import { useRootOperations } from "../hooks/use-root-operations";
 import { useRoots } from "../hooks/use-roots";
@@ -19,7 +19,7 @@ const operationLabels: Record<RootOperationDTO["operation"], string> = {
 /** 后端最多返回最近 100 条；达到上限时提示这不是全部历史。 */
 const OPERATION_LIMIT = 100;
 
-/** 扫描目录页的“目录操作记录”区段：目录的新增、停用、恢复、改路径与不扫描的子文件夹的增删，最新的在前。这是目录管理记录，不是通用审批或回滚点。 */
+/** 扫描目录页的“目录操作记录”卡片（页面最后一组）：目录的新增、停用、恢复、改路径与不扫描的子文件夹的增删，最新的在前。这是目录管理记录，不是通用审批或回滚点。 */
 export function RootOperationsSection() {
   const operations = useRootOperations();
   // 与“音乐目录”区段共用同一个缓存条目，不会多一次请求。
@@ -48,20 +48,14 @@ export function RootOperationsSection() {
     { id: "error", header: "错误码", cell: (item) => (item.error_code === undefined ? UNKNOWN_TIME : <code>{item.error_code}</code>) },
   ];
 
+  const limited = (operations.data?.length ?? 0) >= OPERATION_LIMIT;
   return (
-    <Panel title="目录操作记录">
+    <SettingsGroup title="目录操作记录" footer={limited ? <p className={styles.note}>只显示最近 {OPERATION_LIMIT} 条记录。</p> : null}>
       <QueryContent query={operations} loading={<Skeleton label="正在加载目录操作记录" lines={3} />}>
         {(items) =>
-          items.length === 0 ? (
-            <p>还没有目录操作记录。</p>
-          ) : (
-            <>
-              <DataTable caption="目录操作记录" columns={columns} rows={items} rowKey={(item) => item.id} />
-              {items.length >= OPERATION_LIMIT ? <p className={styles.note}>只显示最近 {OPERATION_LIMIT} 条记录。</p> : null}
-            </>
-          )
+          items.length === 0 ? <p>还没有目录操作记录。</p> : <DataTable caption="目录操作记录" columns={columns} rows={items} rowKey={(item) => item.id} />
         }
       </QueryContent>
-    </Panel>
+    </SettingsGroup>
   );
 }

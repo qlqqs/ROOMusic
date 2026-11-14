@@ -1,12 +1,11 @@
-import { CircleCheck, CirclePause, FolderMinus, FolderPen } from "lucide-react";
-import { formatDateTime } from "../../../shared/lib/time";
-import { Button, DataTable, StatusTag, type Column } from "../../../shared/ui";
+import { CircleCheck, CirclePause, Folder, FolderMinus, FolderPen, MoreHorizontal, RotateCcw, Ban } from "lucide-react";
+import { MenuButton, StatusTag, type MenuAction } from "../../../shared/ui";
 import type { RootDTO } from "../api/decoders";
 import styles from "./root-table.module.css";
 
 type RootTableProps = {
   roots: readonly RootDTO[];
-  /** 有命令在进行中：所有操作按钮忙碌（点击被忽略），同一时刻只有一个目录命令。 */
+  /** 有命令在进行中：改路径、停用与恢复暂时不可选，同一时刻只有一个目录命令。 */
   busy: boolean;
   onDisable: (root: RootDTO) => void;
   onRestore: (root: RootDTO) => void;
@@ -26,45 +25,30 @@ function RootStatusTag({ status }: { status: RootDTO["status"] }) {
   );
 }
 
-/** 目录列表：目录名（不显示服务器路径）、状态、更新时间与可用操作。停用要确认，恢复直接执行；改路径与不扫描的文件夹在对话框里设置。 */
+/**
+ * 音乐目录列表：每个目录一行——文件夹图标、目录名（接口只给路径的最后一段，不显示服务器路径）、状态，行尾“更多”菜单里是不扫描的文件夹、改路径与停用/恢复。
+ * 停用要确认，恢复直接执行；改路径与不扫描的文件夹在对话框里设置。
+ */
 export function RootTable({ roots, busy, onDisable, onRestore, onEditExclusions, onRelocate }: RootTableProps) {
-  const columns: Column<RootDTO>[] = [
-    { id: "name", header: "目录", cell: (root) => root.name, rowHeader: true },
-    { id: "status", header: "状态", cell: (root) => <RootStatusTag status={root.status} /> },
-    { id: "updated", header: "更新时间", cell: (root) => formatDateTime(root.updated_at) },
-    {
-      id: "actions",
-      header: "操作",
-      hideLabelWhenStacked: true,
-      cell: (root) => (
-        <span className={styles.actions}>
-          <Button
-            variant="icon"
-            icon={<FolderMinus size={16} />}
-            label={`目录 ${root.name} 里不扫描的文件夹`}
-            tooltip="不扫描的文件夹"
-            onClick={() => onEditExclusions(root)}
-          />
-          <Button
-            variant="icon"
-            icon={<FolderPen size={16} />}
-            label={`改路径 ${root.name}`}
-            tooltip="改路径"
-            busy={busy}
-            onClick={() => onRelocate(root)}
-          />
-          {root.status === "active" ? (
-            <Button busy={busy} aria-label={`停用目录 ${root.name}`} onClick={() => onDisable(root)}>
-              停用
-            </Button>
-          ) : (
-            <Button busy={busy} aria-label={`恢复目录 ${root.name}`} onClick={() => onRestore(root)}>
-              恢复
-            </Button>
-          )}
-        </span>
-      ),
-    },
-  ];
-  return <DataTable caption="音乐目录列表" columns={columns} rows={roots} rowKey={(root) => root.id} />;
+  return (
+    <ul className={styles.list} aria-label="音乐目录列表" data-settings-flush="">
+      {roots.map((root) => {
+        const actions: MenuAction[] = [
+          { id: "exclusions", label: "不扫描的文件夹…", icon: <FolderMinus size={16} />, onSelect: () => onEditExclusions(root) },
+          { id: "relocate", label: "改路径…", icon: <FolderPen size={16} />, disabled: busy, onSelect: () => onRelocate(root) },
+          root.status === "active"
+            ? { id: "disable", label: "停用目录", icon: <Ban size={16} />, disabled: busy, onSelect: () => onDisable(root) }
+            : { id: "restore", label: "恢复目录", icon: <RotateCcw size={16} />, disabled: busy, onSelect: () => onRestore(root) },
+        ];
+        return (
+          <li key={root.id} className={styles.row}>
+            <Folder className={styles.icon} size={18} aria-hidden="true" />
+            <span className={styles.name}>{root.name}</span>
+            <RootStatusTag status={root.status} />
+            <MenuButton iconOnly icon={<MoreHorizontal size={18} />} label={`目录 ${root.name} 的更多操作`} actions={actions} />
+          </li>
+        );
+      })}
+    </ul>
+  );
 }

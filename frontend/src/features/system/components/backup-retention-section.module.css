@@ -1,32 +1,19 @@
+/* 表单在设置卡片里贴边：两行上限加末尾的保存行，行间一条淡分隔线。 */
 .form {
   display: grid;
-  gap: var(--space-4);
-  justify-items: start;
   min-width: 0;
 }
 
-/* 两项在宽处并排，窄处上下排列；每项是“名称”一行，下面一行数字框、单位与“不限”。 */
-.fields {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4) var(--space-8);
-  min-width: 0;
+.form > * + * {
+  border-top: 1px solid var(--color-divider);
 }
 
+/* 一项上限的控件组：数字框、单位与“不限”一行，错误在下方，整体靠右。 */
 .field {
   display: grid;
+  justify-items: end;
   gap: 6px;
   min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.legend {
-  margin-bottom: 6px;
-  padding: 0;
-  color: var(--text-secondary);
-  font-size: var(--fs-13);
 }
 
 .row {
@@ -37,7 +24,7 @@
 }
 
 .input {
-  width: 8em;
+  width: 6em;
   min-height: var(--control-height);
   padding: 6px 10px;
   border: 1px solid var(--color-control-border);
@@ -109,8 +96,15 @@
   overflow-wrap: anywhere;
 }
 
-/* 保存按钮与结果同一行；结果放不下时换到下一行。 */
+/* 保存行：按钮与结果同一行，结果放不下时换行；其后是删除失败或保存失败的提示。 */
 .submit {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+}
+
+.submitLine {
   display: flex;
   flex-wrap: wrap;
   align-items: center;

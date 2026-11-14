@@ -12,6 +12,10 @@ type AddRootFormProps = {
   /** 输入框的内容由区段持有：提交与“重试”成功后都要清空，两者共用同一份状态。 */
   path: string;
   onPathChange: (path: string) => void;
+  /** 添加成功（输入已清空）之后，例如关闭所在的对话框。 */
+  onAdded?: () => void;
+  /** 给了它，“添加目录”左边多一个“取消”（提交中停用）。 */
+  onCancel?: () => void;
 };
 
 /**
@@ -19,7 +23,7 @@ type AddRootFormProps = {
  * 路径框里按下箭头也能打开；只是 Tab 经过不打开。点浏览器外面或按 Esc 收起，Esc 时焦点回到路径框；在路径框里打字也收起。结果的提示（已添加、已登记但停用、失败与重试）由 RootCommandNotice 显示，
  * 这里只处理字段本身的错误：没填，或后端以 invalid_library_path 拒绝了这个路径。失败时保留输入，成功后清空。
  */
-export function AddRootForm({ commands, path, onPathChange }: AddRootFormProps) {
+export function AddRootForm({ commands, path, onPathChange, onAdded, onCancel }: AddRootFormProps) {
   const [missing, setMissing] = useState(false);
   const [browsing, setBrowsing] = useState(false);
   const browserId = useId();
@@ -64,7 +68,12 @@ export function AddRootForm({ commands, path, onPathChange }: AddRootFormProps) 
       setMissing(true);
       return;
     }
-    commands.submit({ kind: "create", path: trimmed }, { onSucceeded: () => onPathChange("") });
+    commands.submit({ kind: "create", path: trimmed }, {
+      onSucceeded: () => {
+        onPathChange("");
+        onAdded?.();
+      },
+    });
   }
 
   return (
@@ -107,7 +116,12 @@ export function AddRootForm({ commands, path, onPathChange }: AddRootFormProps) 
           />
         ) : null}
       </div>
-      <div>
+      <div className={styles.actions}>
+        {onCancel === undefined ? null : (
+          <Button disabled={busy} onClick={onCancel}>
+            取消
+          </Button>
+        )}
         <Button type="submit" variant="primary" icon={<Plus size={16} />} busy={busy}>
           {busy && state.command.kind === "create" ? "正在添加…" : "添加目录"}
         </Button>

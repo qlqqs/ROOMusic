@@ -1,11 +1,19 @@
 .form {
   display: grid;
   gap: var(--space-3);
-  max-width: 44rem;
+  min-width: 0;
 }
 
 /* 路径框与浮在它下面的文件夹浏览器：浏览器以这里为定位基准。 */
 .area {
   position: relative;
   min-width: 0;
+}
+
+/* 按钮行：靠右，“取消”在“添加目录”左边。 */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
 }
