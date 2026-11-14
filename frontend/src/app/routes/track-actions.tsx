@@ -1,7 +1,8 @@
 import { MoreHorizontal, Play } from "lucide-react";
 import { useId, useState } from "react";
 import { Button, MenuButton, VisuallyHidden, type MenuAction } from "../../shared/ui";
-import { AddToPlaylistDialog, FavoriteButton } from "../../features/personal";
+import { useMediaQuery } from "../../shared/lib/use-media-query";
+import { AddToPlaylistDialog, FavoriteButton, useFavoriteMenuAction, type FavoriteTarget } from "../../features/personal";
 import { usePlaybackCapabilities, usePlayerEngine, type CapabilityTable, type PlayerController, type PlayerTrack } from "../../features/player";
 import { unplayableReason } from "./track-playback";
 import styles from "./track-actions.module.css";
@@ -24,20 +25,37 @@ type TrackActionsProps = {
   retryHint: string;
   /** 页面自己的菜单项，放在通用项之后（从历史中移除、歌单的移动与移除）。 */
   extraActions?: readonly MenuAction[] | undefined;
+  /**
+   * 播放按钮放在哪里：inline（默认）与心形、“更多”一排；lead 是专辑曲目行的曲目号位置（按所在行给出的 --track-lead-* 定位，
+   * 平时显示曲目号，悬停、聚焦或触屏时换成播放按钮，见 release-media.module.css）。
+   */
+  playPlacement?: "inline" | "lead";
 };
 
 const noActions: readonly MenuAction[] = [];
 
+/** 窄屏（与外壳的断点相同）：曲目行只留“更多”，心形收进菜单。 */
+const NARROW = "(max-width: 767px)";
+
+/** 窄屏的“更多操作”：最前面多一项“收藏”或“取消收藏”。单独成组件：宽屏不为每一行多订阅一份收藏切换。 */
+function NarrowTrackMenu({ favorite, report, actions }: { favorite: FavoriteTarget; report: (text: string) => void; actions: readonly MenuAction[] }) {
+  const favoriteAction = useFavoriteMenuAction(favorite, report);
+  return <MenuButton label="更多操作" iconOnly icon={<MoreHorizontal size={16} />} actions={[favoriteAction, ...actions]} />;
+}
+
 /**
- * 一首曲目的行内动作：播放、心形与“更多操作”三个只有图标的按钮，一行不换行。不能播放（文件缺失、格式或浏览器不支持）时播放、下一首与入队不可用，原因经 aria-describedby 可读；
+ * 一首曲目的行内动作：播放、心形与“更多操作”三个只有图标的按钮，一行不换行；窄屏上心形收进“更多”（“收藏”“取消收藏”）。
+ * 播放按钮带 data-track-play：专辑曲目行双击时按它（等同于点它）。不能播放（文件缺失、格式或浏览器不支持）时播放、下一首与入队不可用，原因经 aria-describedby 可读；
  * 文件缺失已由行里的“文件缺失”标签显示，这里只给读屏说明。结果提示就近显示在这一行。
  */
-export function TrackActions({ track, present, playLabel = "播放", onPlay, retryHint, extraActions = noActions }: TrackActionsProps) {
+export function TrackActions({ track, present, playLabel = "播放", onPlay, retryHint, extraActions = noActions, playPlacement = "inline" }: TrackActionsProps) {
   const engine = usePlayerEngine();
   const capability = usePlaybackCapabilities();
   const [notice, setNotice] = useState("");
   const [adding, setAdding] = useState(false);
   const reasonId = useId();
+  const narrow = useMediaQuery(NARROW);
+  const favoriteTarget: FavoriteTarget = { kind: "track", id: track.trackId, title: track.title };
   const reason = present && capability.isError ? `无法检查播放能力，${retryHint}` : unplayableReason(track, present, capability.data);
   function play() {
     const table = capability.data;
@@ -68,9 +86,17 @@ export function TrackActions({ track, present, playLabel = "播放", onPlay, ret
   return (
     <div className={styles.row}>
       <div className={styles.actions}>
-        <Button variant="icon" icon={<Play size={16} />} label={playLabel} disabled={reason !== null} aria-describedby={reason === null ? undefined : reasonId} onClick={play} />
-        <FavoriteButton target={{ kind: "track", id: track.trackId, title: track.title }} message={setNotice} />
-        <MenuButton label="更多操作" iconOnly icon={<MoreHorizontal size={16} />} actions={actions} />
+        <span className={playPlacement === "lead" ? styles.lead : styles.inline}>
+          <Button variant="icon" icon={<Play size={16} />} label={playLabel} disabled={reason !== null} aria-describedby={reason === null ? undefined : reasonId} onClick={play} data-track-play="" />
+        </span>
+        {narrow ? (
+          <NarrowTrackMenu favorite={favoriteTarget} report={setNotice} actions={actions} />
+        ) : (
+          <>
+            <FavoriteButton target={favoriteTarget} message={setNotice} />
+            <MenuButton label="更多操作" iconOnly icon={<MoreHorizontal size={16} />} actions={actions} />
+          </>
+        )}
       </div>
       {reason === null ? null : present ? <p id={reasonId}>{reason}</p> : <VisuallyHidden><span id={reasonId}>{reason}</span></VisuallyHidden>}
       <p role="status">{notice}</p>

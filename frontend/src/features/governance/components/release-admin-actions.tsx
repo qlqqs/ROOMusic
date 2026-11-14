@@ -1,7 +1,7 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { ArrowRightLeft, Bookmark, ClipboardCheck, Combine, LoaderCircle, PencilLine, RotateCcw, Split } from "lucide-react";
-import { useState } from "react";
-import { Button, useTooltip } from "../../../shared/ui";
+import { useState, type ReactNode } from "react";
+import type { MenuAction } from "../../../shared/ui";
 import { useClaimHints } from "../hooks/use-claims";
 import type { ReleaseCommand, ReleaseCommandResult, ReleaseCommands, ReleaseTarget } from "../hooks/use-release-commands";
 import { DetachAlbumDialog } from "./detach-album-dialog";
@@ -41,52 +41,55 @@ export function undoIntent(command: ReleaseCommand, result: ReleaseCommandResult
   }
 }
 
+/** “更多”菜单里“管理”分组的组名。 */
+const ADMIN_GROUP = "管理";
+
 /**
- * 专辑详情头部里管理员的操作区（只有管理员看到；后端仍独立鉴权）：编辑发行信息、设为默认版本或改回自动选择（多于一个版本时）、
- * 归入其他专辑、移出为独立专辑、这个版本需要关注时的“查看问题”（打开问题页并选中它），以及上一次操作的结果提示（成功时可以撤销）。设定与清除默认版本不弹确认（随时可以撤销，也不丢数据），
- * 自动选出的代表版本也可以“设为默认版本”：设定之后，以后归入更早的版本也不会把它挤下去。命令的状态由页面持有，
- * 所以提示在导航到别的专辑组之后仍能显示（只显示这个版本相关的结果）；页面怎么跟到版本现在的位置（换了专辑组，或设定默认版本之后
- * 代表版本变了），由命令 hook 的 onMoved（页面提供）负责。按钮与链接只显示图标，名字在读屏名和悬停提示里。
+ * 专辑详情头部里管理员的操作（只有管理员看到；后端仍独立鉴权）。返回两部分，由页面组合：
+ * - actions：放进“更多”菜单“管理”分组的项：编辑发行信息、设为默认版本或改回自动选择（多于一个版本时）、归入其他专辑、
+ *   移出为独立专辑（多于一个版本时）、这个版本需要关注时的“查看问题”（打开问题页并选中它）；
+ * - panel：放在操作行下方的“可能接替了……”线索、上一次操作的结果提示（成功时可以撤销）与各个对话框。
+ * 设定与清除默认版本不弹确认（随时可以撤销，也不丢数据），自动选出的代表版本也可以“设为默认版本”：设定之后，以后归入更早的版本也不会把它挤下去。
+ * 命令的状态由页面持有，所以提示在导航到别的专辑组之后仍能显示（只显示这个版本相关的结果）；页面怎么跟到版本现在的位置（换了专辑组，或设定默认版本之后
+ * 代表版本变了），由命令 hook 的 onMoved（页面提供）负责。换版本时调用方用 key 让对话框的开合状态重新开始。
+ * 菜单项打开对话框时，菜单先把焦点还给“更多”按钮，对话框关闭后焦点回到那里。
  */
-export function ReleaseAdminActions({ release, groupId, releaseCount, groupRevision, defaultReleaseId, commands }: ReleaseAdminActionsProps) {
+export function useReleaseAdminActions({ release, groupId, releaseCount, groupRevision, defaultReleaseId, commands }: ReleaseAdminActionsProps): { actions: MenuAction[]; panel: ReactNode } {
   const [dialog, setDialog] = useState<"edit" | "join" | "detach" | null>(null);
+  const navigate = useNavigate();
   // 提示只是线索：读取中、失败或没有时什么也不显示，不打扰页面。
   const hints = useClaimHints(release.id).data ?? [];
   const isDefault = release.id === defaultReleaseId;
   const defaultPending = commands.state.status === "pending" && commands.state.command.kind === "default";
-  const issuesTip = useTooltip("查看问题");
   const open = (next: "edit" | "join" | "detach") => {
     commands.dismiss();
     setDialog(next);
   };
   const close = () => setDialog(null);
-  return (
-    <div className={styles.admin}>
-      <div className={styles.row}>
-        <Button variant="icon" icon={<PencilLine size={16} />} label="编辑发行信息" onClick={() => open("edit")} />
-        {releaseCount > 1 ? (
-          <Button
-            variant="icon"
-            icon={defaultPending ? <LoaderCircle size={16} className={styles.spinner} /> : isDefault ? <RotateCcw size={16} /> : <Bookmark size={16} />}
-            label={defaultPending ? "正在保存…" : isDefault ? "改回自动选择" : "设为默认版本"}
-            busy={defaultPending}
-            onClick={() => {
+  const actions: MenuAction[] = [
+    { id: "edit", group: ADMIN_GROUP, label: "编辑发行信息", icon: <PencilLine size={16} />, onSelect: () => open("edit") },
+    ...(releaseCount > 1
+      ? [
+          {
+            id: "default",
+            group: ADMIN_GROUP,
+            label: defaultPending ? "正在保存…" : isDefault ? "改回自动选择" : "设为默认版本",
+            icon: defaultPending ? <LoaderCircle size={16} className={styles.spinner} /> : isDefault ? <RotateCcw size={16} /> : <Bookmark size={16} />,
+            disabled: defaultPending,
+            onSelect: () => {
               commands.dismiss();
               commands.submit({ kind: "default", release, group: { id: groupId, revision: groupRevision }, target: isDefault ? null : release.id });
-            }}
-          />
-        ) : null}
-        <Button variant="icon" icon={<Combine size={16} />} label="归入其他专辑…" onClick={() => open("join")} />
-        {releaseCount > 1 ? <Button variant="icon" icon={<Split size={16} />} label="移出为独立专辑" onClick={() => open("detach")} /> : null}
-        {release.attentionCount > 0 ? (
-          <>
-            <Link to="/issues" search={{ release: release.id }} className={styles.iconLink} aria-label="查看问题" {...issuesTip.triggerProps}>
-              <ClipboardCheck size={16} aria-hidden="true" />
-            </Link>
-            {issuesTip.tooltip}
-          </>
-        ) : null}
-      </div>
+            },
+          },
+        ]
+      : []),
+    { id: "join", group: ADMIN_GROUP, label: "归入其他专辑…", icon: <Combine size={16} />, onSelect: () => open("join") },
+    ...(releaseCount > 1 ? [{ id: "detach", group: ADMIN_GROUP, label: "移出为独立专辑", icon: <Split size={16} />, onSelect: () => open("detach") }] : []),
+    // 导航类菜单项：菜单项是按钮，在 onSelect 里跳转（与用户菜单的“设置”相同）。
+    ...(release.attentionCount > 0 ? [{ id: "issues", group: ADMIN_GROUP, label: "查看问题", icon: <ClipboardCheck size={16} />, onSelect: () => void navigate({ to: "/issues", search: { release: release.id } }) }] : []),
+  ];
+  const panel = (
+    <div className={styles.admin}>
       {hints.length === 0 ? null : (
         <ul className={styles.hints} aria-label="可能接替了已不可见的版本">
           {hints.map((hint) => (
@@ -116,4 +119,5 @@ export function ReleaseAdminActions({ release, groupId, releaseCount, groupRevis
       <DetachAlbumDialog release={dialog === "detach" ? release : null} isDefault={isDefault} commands={commands} onClose={close} />
     </div>
   );
+  return { actions, panel };
 }

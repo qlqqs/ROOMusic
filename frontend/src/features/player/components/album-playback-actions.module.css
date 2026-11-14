@@ -1,4 +1,40 @@
-.container { display: grid; gap: var(--space-2); min-width: 0; margin-bottom: var(--space-3); font-size: var(--fs-13); overflow-wrap: anywhere; }
-.actions { display: flex; flex-wrap: wrap; gap: var(--space-2); min-width: 0; }
-.container p:empty { display: none; }
-.quiet { composes: hidden from "../../../shared/ui/visually-hidden.module.css"; }
+/* 专辑头部的“播放整张专辑”：墨色实心圆，与播放栏的播放键同一种形状，是操作行里唯一的主要操作。 */
+.play button {
+  width: 52px;
+  min-width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--color-text);
+  color: var(--color-bg);
+  box-shadow: var(--shadow-md);
+}
+
+.play button:enabled:not([aria-disabled="true"]):hover,
+.play button:enabled:not([aria-disabled="true"]):active {
+  background: var(--color-neutral-800);
+  color: var(--color-bg);
+}
+
+/* 三角形的视觉重心偏左，往右挪一点看起来才居中。 */
+.play button > span {
+  margin-inline-start: 3px;
+}
+
+/* 状态段落并入调用方的布局；空的段落不占位。 */
+.status {
+  display: contents;
+}
+
+.status p {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  overflow-wrap: anywhere;
+}
+
+.status p:empty {
+  display: none;
+}
+
+.quiet {
+  composes: hidden from "../../../shared/ui/visually-hidden.module.css";
+}

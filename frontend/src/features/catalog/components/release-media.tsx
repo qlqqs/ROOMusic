@@ -1,4 +1,3 @@
-import { AudioLines } from "lucide-react";
 import { memo, useEffect, useId, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { formatCount } from "../../../shared/lib/number";
 import { StatusTag, VisuallyHidden } from "../../../shared/ui";
@@ -16,10 +15,16 @@ export type TrackLocate = { trackId: string; token: string };
 const LOCATE_HIGHLIGHT_MS = 2_500;
 
 type ReleaseMediaProps = {
+  /**
+   * 每行的动作。动作里带 data-track-play 的控件是这一行的播放按钮：它显示在曲目号的位置（行给出 --track-lead-top、--track-lead-width，
+   * 行是它的定位祖先），平时显示曲目号，悬停、聚焦或触屏时换成它；双击这一行等同于点它。
+   */
   renderTrackActions?: ((track: ReleaseTrackDTO) => ReactNode) | undefined;
-  /** 当前曲目与它的标记文字（由调用方给出，例如“正在播放”“已暂停”）；只给 ID 时写“当前曲目”。 */
+  /** 当前曲目与它的标记文字（由调用方给出，例如“正在播放”“已暂停”）；只给 ID 时写“当前曲目”。标记文字只给读屏，看得见的是曲目号位置的音柱。 */
   currentTrackId?: string | undefined;
   currentTrackLabel?: string | undefined;
+  /** 当前曲目正在播放：音柱跳动（减少动态效果时静止）；暂停、加载等其他状态静止。 */
+  currentTrackPlaying?: boolean | undefined;
   media: readonly ReleaseMediumDTO[];
   /** 专辑艺人：曲目艺人与它相同时不重复显示。 */
   albumArtist: string;
@@ -31,7 +36,43 @@ type ReleaseMediaProps = {
 /** 定位到的行：focusToken 变化时滚到这一行并把焦点放上去；highlighted 期间短暂高亮。 */
 type Located = { trackId: string; token: string; highlighted: boolean };
 
-type TrackListProps = Pick<ReleaseMediaProps, "albumArtist" | "renderTrackActions" | "currentTrackId" | "currentTrackLabel"> & { located: Located | null };
+type TrackListProps = Pick<ReleaseMediaProps, "albumArtist" | "renderTrackActions" | "currentTrackId" | "currentTrackLabel" | "currentTrackPlaying"> & { located: Located | null };
+
+/** 双击发生在这些元素上时不播放：它们有自己的点击含义。 */
+const INTERACTIVE = "a, button, input, select, textarea, label, summary, [role='menuitem']";
+
+function isInteractive(target: EventTarget): boolean {
+  return target instanceof Element && target.closest(INTERACTIVE) !== null;
+}
+
+/** 双击的第二次按下不选中文字（否则双击会选中一个词）；按在控件上时不拦，焦点照常移动。 */
+function preventWordSelection(event: MouseEvent<HTMLLIElement>) {
+  if (event.detail > 1 && !isInteractive(event.target)) event.preventDefault();
+}
+
+/**
+ * 双击行：等同于点这一行的播放按钮（按钮不可用时什么也不做）。在链接、按钮上双击不触发；
+ * 拖选了文字（选区不是空的）时不触发，免得选文字时误播。
+ */
+function playOnDoubleClick(event: MouseEvent<HTMLLIElement>) {
+  if (isInteractive(event.target)) return;
+  const selection = window.getSelection();
+  if (selection !== null && !selection.isCollapsed) return;
+  const play = event.currentTarget.querySelector<HTMLButtonElement>("button[data-track-play]");
+  if (play === null || play.disabled) return;
+  play.click();
+}
+
+/** 曲目号位置的音柱：装饰性的，当前曲目的状态由标题旁只给读屏的文字说明。 */
+function Equalizer({ playing }: { playing: boolean }) {
+  return (
+    <span className={styles.eq} data-playing={playing ? "" : undefined} aria-hidden="true">
+      <i />
+      <i />
+      <i />
+    </span>
+  );
+}
 
 /**
  * memo：当前曲目或它的状态变化时，只有标记变了的行重绘，万首曲目的版本不必整表重绘。
@@ -42,9 +83,10 @@ const TrackRow = memo(function TrackRow({
   albumArtist,
   renderTrackActions,
   marker,
+  playing,
   focusToken,
   highlighted,
-}: Pick<ReleaseMediaProps, "albumArtist" | "renderTrackActions"> & { track: ReleaseTrackDTO; marker: string | undefined; focusToken: string | undefined; highlighted: boolean }) {
+}: Pick<ReleaseMediaProps, "albumArtist" | "renderTrackActions"> & { track: ReleaseTrackDTO; marker: string | undefined; playing: boolean; focusToken: string | undefined; highlighted: boolean }) {
   // 作品里的曲目在作品小标题下面，行内只写乐章名。
   const shownTitle = track.work?.movement ?? track.title;
   const title = shownTitle.trim() === "" ? "（无标题）" : shownTitle;
@@ -67,11 +109,23 @@ const TrackRow = memo(function TrackRow({
   }, [focusToken]);
   return (
     // 定位到的行可以被程序聚焦（不进 Tab 顺序），读屏随之读出这一行，键盘从这里继续。高亮结束后仍保留，焦点不会因此丢失。
-    <li ref={rowRef} className={styles.track} data-track-row="" tabIndex={focusToken === undefined ? undefined : -1} data-located={highlighted ? "" : undefined}>
-      <span className={styles.number}>{track.position >= 1 ? track.position : "—"}</span>
+    <li
+      ref={rowRef}
+      className={styles.track}
+      data-track-row=""
+      data-has-actions={renderTrackActions === undefined ? undefined : ""}
+      data-current={marker === undefined ? undefined : ""}
+      tabIndex={focusToken === undefined ? undefined : -1}
+      data-located={highlighted ? "" : undefined}
+      onMouseDown={renderTrackActions === undefined ? undefined : preventWordSelection}
+      onDoubleClick={renderTrackActions === undefined ? undefined : playOnDoubleClick}
+    >
+      <span className={styles.number}>
+        <span className={styles.numberContent}>{marker === undefined ? (track.position >= 1 ? track.position : "—") : <Equalizer playing={playing} />}</span>
+      </span>
       <p className={styles.title}>
         <span>{title}</span>
-        {marker === undefined ? null : <StatusTag icon={<AudioLines size={12} />}>{marker}</StatusTag>}
+        {marker === undefined ? null : <VisuallyHidden>{marker}</VisuallyHidden>}
         {isCue ? <StatusTag>CUE 分轨</StatusTag> : null}
       </p>
       {renderTrackActions === undefined ? null : <div className={styles.actions}>{renderTrackActions(track)}</div>}
@@ -164,7 +218,7 @@ export function groupTracksByWork(tracks: readonly ReleaseTrackDTO[]): TrackList
   return items;
 }
 
-function TrackList({ tracks, albumArtist, renderTrackActions, currentTrackId, currentTrackLabel, located }: TrackListProps & { tracks: readonly ReleaseTrackDTO[] }) {
+function TrackList({ tracks, albumArtist, renderTrackActions, currentTrackId, currentTrackLabel, currentTrackPlaying = false, located }: TrackListProps & { tracks: readonly ReleaseTrackDTO[] }) {
   const idPrefix = useId();
   if (tracks.length === 0) return <p>这一张里没有可显示的曲目。</p>;
   const rowOf = (track: ReleaseTrackDTO) => (
@@ -174,6 +228,7 @@ function TrackList({ tracks, albumArtist, renderTrackActions, currentTrackId, cu
       albumArtist={albumArtist}
       renderTrackActions={renderTrackActions}
       marker={track.id === currentTrackId ? (currentTrackLabel ?? "当前曲目") : undefined}
+      playing={track.id === currentTrackId && currentTrackPlaying}
       focusToken={located?.trackId === track.id ? located.token : undefined}
       highlighted={located?.trackId === track.id && located.highlighted}
     />
@@ -207,7 +262,7 @@ function TrackList({ tracks, albumArtist, renderTrackActions, currentTrackId, cu
  * 每个分段用 content-visibility 跳过屏幕外的布局，万首曲目的版本也能流畅滚动；文字都在 DOM 里，页内查找照常可用。
  * 有定位请求时滚到那一行、把焦点放上去并短暂高亮（减少动态效果时不做渐隐动画）。
  */
-export function ReleaseMedia({ media, albumArtist, renderTrackActions, currentTrackId, currentTrackLabel, locate, onLocated }: ReleaseMediaProps) {
+export function ReleaseMedia({ media, albumArtist, renderTrackActions, currentTrackId, currentTrackLabel, currentTrackPlaying, locate, onLocated }: ReleaseMediaProps) {
   const idPrefix = useId();
   // 定位请求按 token 只处理一次（“按属性调整状态”的写法，不需要 effect）：曲目在这个版本里就记下它，不在就什么也不做。
   const [seenToken, setSeenToken] = useState<string | null>(null);
@@ -229,7 +284,7 @@ export function ReleaseMedia({ media, albumArtist, renderTrackActions, currentTr
 
   if (media.length === 0) return <p>这个版本没有可显示的曲目。</p>;
   const [only] = media;
-  const listProps: TrackListProps = { albumArtist, renderTrackActions, currentTrackId, currentTrackLabel, located };
+  const listProps: TrackListProps = { albumArtist, renderTrackActions, currentTrackId, currentTrackLabel, currentTrackPlaying, located };
   if (only !== undefined && media.length === 1) return <TrackList tracks={only.tracks} {...listProps} />;
 
   const headingIdOf = (index: number) => `${idPrefix}-medium-${index}`;

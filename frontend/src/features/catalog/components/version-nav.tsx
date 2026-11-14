@@ -38,9 +38,10 @@ function versionDetail(release: ReleaseSummaryDTO): string {
 }
 
 /**
- * 多版本组的版本导航（调用方只在 release_count > 1 时渲染）。选择写进地址，所以用链接而不是 ARIA 标签页：
- * 前进、后退与分享都成立，也不需要方向键的焦点管理。当前版本的链接带 aria-current（路由按地址自动设置）。
- * 标题旁的“对比版本”（所有登录成员）打开对比对话框；生效中的默认版本带“默认版本”标签。
+ * 多版本组的版本导航（调用方只在 release_count > 1 时渲染）：一行标签（chip），放不下时换行，行尾是“对比版本”。
+ * 选择写进地址，所以用链接而不是 ARIA 标签页：前进、后退与分享都成立，也不需要方向键的焦点管理。
+ * 当前版本的链接带 aria-current（路由按地址自动设置）。“对比版本”（所有登录成员）打开对比对话框；生效中的默认版本带“默认版本”标签。
+ * “版本”标题只给读屏（标签本身已经说明是版本），页面的标题层级不变。
  */
 export function VersionNav({ groupId, releases, releaseCount, representativeId, defaultReleaseId, list }: VersionNavProps) {
   const [comparing, setComparing] = useState(false);
@@ -48,40 +49,42 @@ export function VersionNav({ groupId, releases, releaseCount, representativeId, 
   const titlesDiffer = new Set(releases.map((release) => release.title)).size > 1;
   return (
     <nav aria-label="版本" className={styles.nav}>
-      <div className={styles.top}>
-        <h2 className={styles.heading}>版本</h2>
-        <Button icon={<Columns2 size={16} />} onClick={() => setComparing(true)}>
-          对比版本
-        </Button>
+      <h2 className={styles.heading}>版本</h2>
+      <div className={styles.row}>
+        <ul className={styles.list}>
+          {releases.map((release, index) => (
+            <li key={release.id} className={styles.item}>
+              <Link
+                to="/albums/$groupId"
+                params={{ groupId }}
+                search={{ release: release.id === representativeId ? undefined : release.id }}
+                state={{ albumList: list }}
+                activeOptions={{ exact: true }}
+                className={styles.link}
+              >
+                {/* 各段之间的空格让链接的可访问名称读起来是“版本 2 2015 · CD · 12 首曲目”，而不是连成一串。 */}
+                <span className={styles.name}>版本 {index + 1}</span>{" "}
+                {release.id === defaultReleaseId ? (
+                  <>
+                    <DefaultVersionTag />{" "}
+                  </>
+                ) : null}
+                {titlesDiffer ? (
+                  <>
+                    <span className={styles.title}>{release.title}</span>{" "}
+                  </>
+                ) : null}
+                <span className={styles.detail}>{versionDetail(release)}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+        <span className={styles.compare}>
+          <Button icon={<Columns2 size={16} />} onClick={() => setComparing(true)}>
+            对比版本
+          </Button>
+        </span>
       </div>
-      <ul className={styles.list}>
-        {releases.map((release, index) => (
-          <li key={release.id} className={styles.item}>
-            <Link
-              to="/albums/$groupId"
-              params={{ groupId }}
-              search={{ release: release.id === representativeId ? undefined : release.id }}
-              state={{ albumList: list }}
-              activeOptions={{ exact: true }}
-              className={styles.link}
-            >
-              {/* 各段之间的空格让链接的可访问名称读起来是“版本 2 2015 · CD · 12 首曲目”，而不是连成一串。 */}
-              <span className={styles.name}>版本 {index + 1}</span>{" "}
-              {release.id === defaultReleaseId ? (
-                <>
-                  <DefaultVersionTag />{" "}
-                </>
-              ) : null}
-              {titlesDiffer ? (
-                <>
-                  <span className={styles.title}>{release.title}</span>{" "}
-                </>
-              ) : null}
-              <span className={styles.detail}>{versionDetail(release)}</span>
-            </Link>
-          </li>
-        ))}
-      </ul>
       {releaseCount > releases.length ? (
         <p className={styles.note}>
           共 {formatCount(releaseCount)} 个版本，这里只列出前 {formatCount(releases.length)} 个。
