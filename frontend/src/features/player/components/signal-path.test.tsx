@@ -19,9 +19,11 @@ vi.mock("../hooks/use-track-analysis", () => ({ useTrackAnalysis: () => analysis
 
 let snapshot: PlayerSnapshot;
 let analysis: TrackAnalysisDTO["analysis"] = null;
+let snapshotStatus: PlayerSnapshot["status"] = "paused";
 
 beforeEach(() => {
   analysis = null;
+  snapshotStatus = "paused";
 });
 
 const losslessSignal: Signal = {
@@ -32,15 +34,21 @@ const losslessSignal: Signal = {
   ],
 };
 
-function viewSignal(signal: Signal | null = losslessSignal) {
+function viewSignal(signal: Signal | null = losslessSignal, options: { device?: boolean } = {}) {
   const server = fakeZoneServer();
   snapshot = {
     ...testPlayerController(server).controller.getSnapshot(),
+    status: snapshotStatus,
     current: { entryId: "entry-1", track: playerTrack("1") },
     zone: { ...server.zone(), signal },
-    device: { ...server.device(), name: "客厅 · Chrome" },
+    device: options.device === false ? null : { ...server.device(), name: "客厅 · Chrome" },
   };
   return render(<SignalPathButton />);
+}
+
+/** 底部测量格：每格的名称与取值。 */
+function measurementsOf(dialog: HTMLElement): [string, string][] {
+  return [...dialog.querySelectorAll("dl > div")].map((cell) => [cell.querySelector("dt")?.textContent ?? "", cell.querySelector("dd")?.textContent ?? ""]);
 }
 
 function loudnessAnalysis(): NonNullable<TrackAnalysisDTO["analysis"]> {
@@ -54,18 +62,20 @@ describe("服务端信号路径", () => {
     ["lossless", "无损"], ["enhanced", "增强"], ["high", "高质量"], ["low", "有损"],
   ] as const)("按钮按服务端 %s 评级选择颜色，不按曲目来源推断", (quality, label) => {
     viewSignal({ ...losslessSignal, quality });
-    const trigger = screen.getByRole("button", { name: `信号路径：${label}` });
+    const trigger = screen.getByRole("button", { name: `FLAC 16/44.1，信号路径：${label}` });
+    expect(trigger.textContent).toBe("FLAC 16/44.1");
     expect(trigger.className.split(" ")).toContain(styles.trigger);
     expect(trigger.dataset.quality).toBe(quality);
     expect(trigger.hasAttribute("data-clipping")).toBe(false);
   });
 
-  it("signal 为 null 时不显示按钮", () => {
+  it("signal 为 null 时不显示按钮，只显示格式文字", () => {
     viewSignal(null);
     expect(screen.queryByRole("button", { name: /信号路径/ })).toBeNull();
+    expect(screen.getByText("FLAC 16/44.1", { exact: true })).toBeTruthy();
   });
 
-  it("按步骤顺序显示兼容转换、有损标记、处理速度与设备，不显示缺失的响度", async () => {
+  it("按步骤顺序显示链：步骤名与取值、兼容转换与有损标记，最后是输出设备；处理速度在测量格，不显示缺失的响度", async () => {
     const user = userEvent.setup();
     viewSignal({
       ...losslessSignal, quality: "low",
@@ -76,17 +86,22 @@ describe("服务端信号路径", () => {
         { kind: "encode", quality: "low", lossy: true, compat: false, params: { codec: "opus", sampleRate: 48000, bitDepth: null, bitrateKbps: 128 } },
       ],
     });
-    await user.click(screen.getByRole("button", { name: "信号路径：有损" }));
+    await user.click(screen.getByRole("button", { name: "FLAC 16/44.1，信号路径：有损" }));
     const dialog = screen.getByRole("dialog", { name: "信号路径：有损" });
-    expect(within(dialog).getAllByRole("listitem").map((row) => row.textContent)).toEqual([
-      "FLAC 384 kHz 24 bit",
-      "采样率 384 kHz → 192 kHz兼容转换",
-      "Headroom −3.1 dB",
-      "Opus 128 kbps有损",
-      "处理速度 85.3×",
-      "客厅 · Chrome",
+    expect(within(dialog).getByText("FLAC 384 kHz 24 bit → 客厅 · Chrome")).toBeTruthy();
+    const rows = within(dialog).getAllByRole("listitem");
+    expect(rows.map((row) => row.textContent)).toEqual([
+      "来源FLAC 384 kHz 24 bit",
+      "采样率转换384 kHz → 192 kHz兼容转换",
+      "Headroom−3.1 dB",
+      "编码Opus 128 kbps有损",
+      "输出客厅 · Chrome",
     ]);
+    // 整体是有损：链上第一个有损的一步（编码）决定整体质量，只有它加粗。
+    expect(rows.map((row) => row.hasAttribute("data-worst"))).toEqual([false, false, false, true, false]);
+    expect(measurementsOf(dialog)).toEqual([["处理速度", "85.3×"]]);
     expect(within(dialog).queryByText(/LUFS|dBTP|dBFS/)).toBeNull();
+    expect(within(dialog).queryByText("正在削波")).toBeNull();
   });
 
   it("DownmixStepShowsChannelLayouts", async () => {
@@ -97,9 +112,10 @@ describe("服务端信号路径", () => {
         { kind: "downmix", quality: "high", lossy: false, compat: true, params: { fromChannels: 6, toChannels: 2, fromLayout: "5.1", toLayout: "2.0", by: "roomusic", mode: "matrix" } },
       ],
     });
-    await user.click(screen.getByRole("button", { name: "信号路径：高质量" }));
+    await user.click(screen.getByRole("button", { name: "FLAC 16/44.1，信号路径：高质量" }));
     const dialog = screen.getByRole("dialog", { name: "信号路径：高质量" });
-    expect(within(dialog).getByText("降混 5.1 → 2.0", { exact: true })).toBeTruthy();
+    expect(within(dialog).getByText("降混", { exact: true })).toBeTruthy();
+    expect(within(dialog).getByText("5.1 → 2.0", { exact: true })).toBeTruthy();
   });
 
   it("SampleRateStepShowsCompatibilityConversion", async () => {
@@ -112,34 +128,70 @@ describe("服务端信号路径", () => {
         { kind: "encode", quality: "lossless", lossy: false, compat: false, params: { codec: "wav", sampleRate: 48000, bitDepth: 16, bitrateKbps: null } },
       ],
     });
-    await user.click(screen.getByRole("button", { name: "信号路径：高质量" }));
+    await user.click(screen.getByRole("button", { name: "FLAC 16/44.1，信号路径：高质量" }));
     const dialog = screen.getByRole("dialog", { name: "信号路径：高质量" });
-    expect(within(dialog).getByText("采样率转换 44.1 kHz → 48 kHz")).toBeTruthy();
-    expect(within(dialog).getByText("兼容转换")).toBeTruthy();
+    const row = within(dialog).getByText("采样率转换", { exact: true }).closest("li");
+    if (row === null) throw new Error("缺少采样率转换这一步");
+    expect(row.textContent).toBe("采样率转换44.1 kHz → 48 kHz兼容转换");
+    expect(row.hasAttribute("data-worst")).toBe(true);
   });
 
-  it("削波时按钮启用警示色选择器，可访问名称同时标出削波", () => {
+  it("削波时按钮启用警示色选择器，可访问名称同时标出削波，弹层有“正在削波”", async () => {
+    const user = userEvent.setup();
     viewSignal({ ...losslessSignal, clipping: true });
-    const trigger = screen.getByRole("button", { name: "信号路径：无损，削波" });
+    const trigger = screen.getByRole("button", { name: "FLAC 16/44.1，信号路径：无损，削波" });
     expect(trigger.className.split(" ")).toContain(styles.trigger);
     expect(trigger.hasAttribute("data-clipping")).toBe(true);
+    await user.click(trigger);
+    const dialog = screen.getByRole("dialog", { name: "信号路径：无损，削波" });
+    expect(within(dialog).getByText("正在削波")).toBeTruthy();
+    // 整体无损时没有哪一步拉低质量，不加粗。
+    expect(within(dialog).getAllByRole("listitem").some((row) => row.hasAttribute("data-worst"))).toBe(false);
+  });
+
+  it("圆点只在播放中呼吸，暂停时静止", () => {
+    snapshotStatus = "playing";
+    const { unmount } = viewSignal();
+    expect(screen.getByRole("button", { name: /信号路径/ }).dataset.state).toBe("breathing");
+    unmount();
+    snapshotStatus = "paused";
+    viewSignal();
+    expect(screen.getByRole("button", { name: /信号路径/ }).hasAttribute("data-state")).toBe(false);
+  });
+
+  it("没有分析结果也没有处理速度时不显示测量格；没有设备时链上没有输出节点", async () => {
+    const user = userEvent.setup();
+    viewSignal({ ...losslessSignal, processingSpeed: null }, { device: false });
+    await user.click(screen.getByRole("button", { name: /信号路径/ }));
+    const dialog = screen.getByRole("dialog", { name: "信号路径：无损" });
+    expect(dialog.querySelector("dl")).toBeNull();
+    expect(within(dialog).queryByText("输出")).toBeNull();
+    expect(within(dialog).getByText("FLAC 44.1 kHz 16 bit", { selector: "p" })).toBeTruthy();
   });
 
   it("分析存在时在来源之后显示一位小数的响度、范围与真峰值，不改变评级", async () => {
     const user = userEvent.setup();
     analysis = loudnessAnalysis();
     viewSignal();
-    const trigger = screen.getByRole("button", { name: "信号路径：无损" });
+    const trigger = screen.getByRole("button", { name: "FLAC 16/44.1，信号路径：无损" });
     expect(trigger.dataset.quality).toBe("lossless");
     await user.click(trigger);
     const dialog = screen.getByRole("dialog", { name: "信号路径：无损" });
     expect(within(dialog).getAllByRole("listitem").map((row) => row.textContent)).toEqual([
-      "FLAC 44.1 kHz 16 bit",
-      "−14.2 LUFS · 范围 6.3 LU · 峰值 −0.8 dBTP",
-      "WAV 44.1 kHz 16 bit",
-      "处理速度 85.3×",
-      "客厅 · Chrome",
+      "来源FLAC 44.1 kHz 16 bit",
+      "编码WAV 44.1 kHz 16 bit",
+      "输出客厅 · Chrome",
     ]);
+    expect(measurementsOf(dialog)).toEqual([["响度", "−14.2 LUFS"], ["范围", "6.3 LU"], ["峰值", "−0.8 dBTP"], ["处理速度", "85.3×"]]);
     expect(within(dialog).queryByText(/dBFS|−3\.7/)).toBeNull();
+  });
+
+  it("测量格只列出有的项：分析缺了范围时不显示这一格", async () => {
+    const user = userEvent.setup();
+    analysis = { ...loudnessAnalysis(), loudnessRangeLu: null };
+    viewSignal({ ...losslessSignal, processingSpeed: null });
+    await user.click(screen.getByRole("button", { name: /信号路径/ }));
+    const dialog = screen.getByRole("dialog", { name: "信号路径：无损" });
+    expect(measurementsOf(dialog)).toEqual([["响度", "−14.2 LUFS"], ["峰值", "−0.8 dBTP"]]);
   });
 });

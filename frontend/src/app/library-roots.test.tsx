@@ -26,23 +26,61 @@ function setup(options: { role?: "admin" | "user"; library?: Partial<FakeLibrary
 
 const heading = (name: string) => screen.findByRole("heading", { level: 1, name });
 
+const rootList = () => screen.getByRole("list", { name: "音乐目录列表" });
+/** 音乐目录列表里有没有这个目录（只看目录名）。 */
+const hasRoot = (name: string) => within(rootList()).queryByText(name, { exact: true }) !== null;
+
 function rowOf(name: string): HTMLElement {
-  const row = screen.getByRole("rowheader", { name }).closest("tr");
+  const row = within(rootList()).getByText(name, { exact: true }).closest("li");
   if (row === null) throw new Error(`没有找到目录 ${name} 所在的行`);
   return row;
+}
+
+/** 目录行尾的“更多”菜单里选一项。 */
+async function chooseRootAction(name: string, action: string) {
+  await userEvent.click(within(rowOf(name)).getByRole("button", { name: `目录 ${name} 的更多操作` }));
+  await userEvent.click(within(screen.getByRole("menu", { name: `目录 ${name} 的更多操作` })).getByRole("menuitem", { name: action }));
+}
+
+/** 目录行尾“更多”菜单里各项的名字（读完按 Esc 关上）。 */
+async function rootActions(name: string): Promise<string[]> {
+  await userEvent.click(within(rowOf(name)).getByRole("button", { name: `目录 ${name} 的更多操作` }));
+  const names = within(screen.getByRole("menu", { name: `目录 ${name} 的更多操作` })).getAllByRole("menuitem").map((item) => item.textContent);
+  await userEvent.keyboard("{Escape}");
+  return names;
 }
 
 async function openLibrary(options: Parameters<typeof setup>[0] = {}) {
   const context = setup(options);
   const rendered = renderApp({ path: "/settings/library" });
   await heading("扫描目录");
-  await screen.findByRole("rowheader", { name: "classical-a" });
+  await waitFor(() => expect(hasRoot("classical-a")).toBe(true));
   return { ...context, ...rendered };
 }
 
+const addDialog = () => screen.getByRole("dialog", { name: "添加音乐目录" });
+
+/** 音乐目录卡片标题行的“添加目录…”打开对话框（已经开着就用它）。 */
+async function openAddDialog(): Promise<HTMLElement> {
+  const open = screen.queryByRole("dialog", { name: "添加音乐目录" });
+  if (open !== null) return open;
+  await userEvent.click(screen.getByRole("button", { name: "添加目录…" }));
+  return screen.findByRole("dialog", { name: "添加音乐目录" });
+}
+
 async function addRoot(path: string) {
-  await userEvent.type(screen.getByLabelText("目录路径"), path);
-  await userEvent.click(screen.getByRole("button", { name: "添加目录" }));
+  const dialog = await openAddDialog();
+  await userEvent.type(within(dialog).getByLabelText("目录路径"), path);
+  await userEvent.click(within(dialog).getByRole("button", { name: "添加目录" }));
+}
+
+/** 添加成功：对话框关闭；再打开时输入框是空的（关闭后不保留输入），然后取消。 */
+async function expectAddDialogClosedAndCleared() {
+  await waitFor(() => expect(screen.queryByRole("dialog", { name: "添加音乐目录" })).toBeNull());
+  const dialog = await openAddDialog();
+  expect((within(dialog).getByLabelText("目录路径") as HTMLInputElement).value).toBe("");
+  await userEvent.click(within(dialog).getByRole("button", { name: "取消" }));
+  await waitFor(() => expect(screen.queryByRole("dialog", { name: "添加音乐目录" })).toBeNull());
 }
 
 describe("扫描目录页：访问与列表", () => {
@@ -52,9 +90,11 @@ describe("扫描目录页：访问与列表", () => {
       expect(screen.getByRole("heading", { level: 2, name })).toBeTruthy();
     }
     expect(within(rowOf("classical-a")).getByText("启用")).toBeTruthy();
-    expect(within(rowOf("classical-a")).getByRole("button", { name: "停用目录 classical-a" })).toBeTruthy();
+    expect(await rootActions("classical-a")).toEqual(["不扫描的文件夹…", "改路径…", "停用目录"]);
     expect(within(rowOf("classical-b")).getByText("已停用")).toBeTruthy();
-    expect(within(rowOf("classical-b")).getByRole("button", { name: "恢复目录 classical-b" })).toBeTruthy();
+    expect(await rootActions("classical-b")).toEqual(["不扫描的文件夹…", "改路径…", "恢复目录"]);
+    // 不显示服务器路径。
+    expect(rootList().textContent).not.toContain("/music");
     expect(document.title).toBe("扫描目录 · ROOMusic");
   });
 
@@ -97,7 +137,7 @@ describe("浏览文件夹", () => {
       ],
     }));
 
-    const input = screen.getByRole("combobox", { name: "目录路径" });
+    const input = within(await openAddDialog()).getByRole("combobox", { name: "目录路径" });
     await userEvent.click(input);
     const browser = await screen.findByRole("dialog", { name: "选择文件夹" });
     expect(within(browser).queryByRole("button", { name: "选择 /" })).toBeNull();
@@ -119,9 +159,9 @@ describe("浏览文件夹", () => {
       `/api/v1/library-folders?${childQuery}`,
     ]);
 
-    await userEvent.click(screen.getByRole("button", { name: "添加目录" }));
+    await userEvent.click(within(addDialog()).getByRole("button", { name: "添加目录" }));
     expect(await screen.findByText(/已添加目录“album”/)).toBeTruthy();
-    expect(screen.getByRole("rowheader", { name: "album" })).toBeTruthy();
+    expect(hasRoot("album")).toBe(true);
     expect(api.requestsTo("POST", rootsPath)[0]?.body).toEqual({ path: "/music/classical-a/album" });
   });
 
@@ -129,7 +169,7 @@ describe("浏览文件夹", () => {
     const { api } = await openLibrary();
     const musicQuery = new URLSearchParams({ path: "/music" });
     api.on("GET", `/api/v1/library-folders?${musicQuery}`, () => sampleResponse("errors/invalid-library-folder"));
-    await userEvent.click(screen.getByRole("combobox", { name: "目录路径" }));
+    await userEvent.click(within(await openAddDialog()).getByRole("combobox", { name: "目录路径" }));
     const browser = await screen.findByRole("dialog", { name: "选择文件夹" });
     await userEvent.click(await within(browser).findByRole("button", { name: /^music$/ }));
     expect(await within(browser).findByText("打不开这个文件夹。")).toBeTruthy();
@@ -153,15 +193,15 @@ describe("新增目录", () => {
     expect(request?.body).toEqual({ path: "/music/new-album" });
     expect(request?.headers.get("Idempotency-Key")).toMatch(uuidPattern);
     expect(request?.headers.get("Content-Type")).toBe("application/json");
-    expect(screen.getByRole("rowheader", { name: "new-album" })).toBeTruthy();
-    expect((screen.getByLabelText("目录路径") as HTMLInputElement).value).toBe("");
+    expect(hasRoot("new-album")).toBe(true);
+    await expectAddDialogClosedAndCleared();
   });
 
   it("路径被后端拒绝：错误显示在输入框旁并保留输入，修改后错误消失", async () => {
     await openLibrary();
     await addRoot("/elsewhere/album");
 
-    const input = screen.getByLabelText("目录路径") as HTMLInputElement;
+    const input = within(addDialog()).getByLabelText("目录路径") as HTMLInputElement;
     expect(await screen.findByText("这个路径不在允许的音乐目录里，或者不是绝对路径。")).toBeTruthy();
     expect(input.getAttribute("aria-invalid")).toBe("true");
     expect(input.value).toBe("/elsewhere/album");
@@ -173,7 +213,7 @@ describe("新增目录", () => {
 
   it("没有填写路径：不发请求，提示填写", async () => {
     const { api } = await openLibrary();
-    await userEvent.click(screen.getByRole("button", { name: "添加目录" }));
+    await userEvent.click(within(await openAddDialog()).getByRole("button", { name: "添加目录" }));
     expect(await screen.findByText("请输入目录的绝对路径。")).toBeTruthy();
     expect(api.requestsTo("POST", rootsPath)).toHaveLength(0);
   });
@@ -195,11 +235,12 @@ describe("新增目录", () => {
     const { api, library } = await openLibrary({ library: { loseResponses: 1 } });
     await addRoot("/music/lost-response");
 
-    const alert = await screen.findByRole("alert");
+    // 结果不确定的提示留在对话框里，输入保留。
+    const alert = await within(addDialog()).findByRole("alert");
     expect(within(alert).getByText("结果未确认")).toBeTruthy();
     expect(within(alert).getByText(/不确定操作有没有完成/)).toBeTruthy();
-    expect(await screen.findByRole("rowheader", { name: "lost-response" })).toBeTruthy();
-    expect((screen.getByLabelText("目录路径") as HTMLInputElement).value).toBe("/music/lost-response");
+    await waitFor(() => expect(hasRoot("lost-response")).toBe(true));
+    expect((within(addDialog()).getByLabelText("目录路径") as HTMLInputElement).value).toBe("/music/lost-response");
 
     const operationsBefore = library.operations.length;
     await userEvent.click(within(alert).getByRole("button", { name: "重试" }));
@@ -210,15 +251,15 @@ describe("新增目录", () => {
     expect(second?.body).toEqual(first?.body);
     expect(library.operations).toHaveLength(operationsBefore);
     expect(library.roots.filter((root) => root.name === "lost-response")).toHaveLength(1);
-    // 重试成功后和首次提交成功一样清空输入。
-    expect((screen.getByLabelText("目录路径") as HTMLInputElement).value).toBe("");
+    // 重试成功后和首次提交成功一样关闭对话框、清空输入。
+    await expectAddDialogClosedAndCleared();
   });
 
   it("失败后用户改了输入再点“重试”：重试的是原来的路径，成功后不清掉用户新输入的内容", async () => {
     const { api } = await openLibrary({ library: { loseResponses: 1 } });
     await addRoot("/music/first-try");
-    const alert = await screen.findByRole("alert");
-    const input = screen.getByLabelText("目录路径") as HTMLInputElement;
+    const alert = await within(addDialog()).findByRole("alert");
+    const input = within(addDialog()).getByLabelText("目录路径") as HTMLInputElement;
     await userEvent.clear(input);
     await userEvent.type(input, "/music/other");
 
@@ -242,7 +283,7 @@ describe("新增目录", () => {
 
 describe("停用目录", () => {
   async function openDisableDialog(name = "classical-a") {
-    await userEvent.click(within(rowOf(name)).getByRole("button", { name: `停用目录 ${name}` }));
+    await chooseRootAction(name, "停用目录");
     return screen.findByRole("dialog", { name: `停用目录“${name}”？` });
   }
 
@@ -268,7 +309,7 @@ describe("停用目录", () => {
     expect(request?.body).toEqual({ status: "disabled", expected_revision: 1 });
     expect(request?.headers.get("Idempotency-Key")).toMatch(uuidPattern);
     expect(within(rowOf("classical-a")).getByText("已停用")).toBeTruthy();
-    expect(within(rowOf("classical-a")).getByRole("button", { name: "恢复目录 classical-a" })).toBeTruthy();
+    expect(await rootActions("classical-a")).toContain("恢复目录");
     expect(library.operations[0]).toMatchObject({ operation: "disable", status: "succeeded", revision: 2 });
   });
 
@@ -306,7 +347,7 @@ describe("停用目录", () => {
     expect(api.requestsTo("GET", rootsPath).length).toBeGreaterThan(listsBefore);
     // 再次停用要用新的 revision：这是新的意图。
     await userEvent.click(within(alert).getByRole("button", { name: "关闭" }));
-    await userEvent.click(within(rowOf("classical-a")).getByRole("button", { name: "停用目录 classical-a" }));
+    await chooseRootAction("classical-a", "停用目录");
     await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "停用目录" }));
     expect(await screen.findByText(/已停用目录“classical-a”/)).toBeTruthy();
     expect(api.requestsTo("PATCH", rootPath).at(-1)?.body).toEqual({ status: "disabled", expected_revision: 5 });
@@ -381,14 +422,14 @@ describe("停用目录", () => {
     api.on("PATCH", `${rootsPath}/${classicalA}`, () => sampleResponse("errors/unauthorized"));
     await userEvent.click(within(await openDisableDialog()).getByRole("button", { name: "停用目录" }));
     expect(await heading("登录")).toBeTruthy();
-    expect(screen.queryByRole("rowheader", { name: "classical-a" })).toBeNull();
+    expect(screen.queryByRole("list", { name: "音乐目录列表" })).toBeNull();
   });
 });
 
 describe("恢复目录", () => {
   it("恢复直接执行，不需要确认：带 revision 与幂等键，成功后列表显示启用", async () => {
     const { api } = await openLibrary();
-    await userEvent.click(within(rowOf("classical-b")).getByRole("button", { name: "恢复目录 classical-b" }));
+    await chooseRootAction("classical-b", "恢复目录");
 
     expect(await screen.findByText(/已恢复目录“classical-b”/)).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -403,16 +444,16 @@ describe("恢复目录", () => {
     const second = library.roots[1];
     if (second === undefined) throw new Error("没有种子目录");
     library.roots[1] = { ...second, revision: 9 };
-    await userEvent.click(within(rowOf("classical-b")).getByRole("button", { name: "恢复目录 classical-b" }));
+    await chooseRootAction("classical-b", "恢复目录");
     expect(await screen.findByText(/目录刚有变化，列表已刷新/)).toBeTruthy();
     expect(within(rowOf("classical-b")).getByText("已停用")).toBeTruthy();
   });
 
   it("恢复后的下一次停用与恢复是不同的意图，幂等键不同", async () => {
     const { api } = await openLibrary();
-    await userEvent.click(within(rowOf("classical-b")).getByRole("button", { name: "恢复目录 classical-b" }));
+    await chooseRootAction("classical-b", "恢复目录");
     await screen.findByText(/已恢复目录“classical-b”/);
-    await userEvent.click(within(rowOf("classical-b")).getByRole("button", { name: "停用目录 classical-b" }));
+    await chooseRootAction("classical-b", "停用目录");
     await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "停用目录" }));
     await screen.findByText(/已停用目录“classical-b”/);
 
@@ -431,7 +472,7 @@ describe("修改目录路径", () => {
   const selectedPath = "/music/classical-a/album";
 
   async function selectNewLocation(name = "classical-a") {
-    await userEvent.click(within(rowOf(name)).getByRole("button", { name: `改路径 ${name}` }));
+    await chooseRootAction(name, "改路径…");
     const dialog = await screen.findByRole("dialog", { name: `修改“${name}”的路径` });
     const browser = within(dialog).getByRole("group", { name: "选择文件夹" });
     await userEvent.click(await within(browser).findByRole("button", { name: /^music$/ }));
@@ -490,7 +531,7 @@ describe("修改目录路径", () => {
     expect(await screen.findByText(/已经有扫描在运行。/)).toBeTruthy();
     expect(history.location.pathname).toBe("/settings/library");
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(screen.getByRole("rowheader", { name: "album" })).toBeTruthy();
+    expect(hasRoot("album")).toBe(true);
     expect(screen.getByRole("link", { name: "查看这个扫描" }).getAttribute("href")).toBe(`/settings/library/scans/${library.activeScanId}`);
     expect(api.requestsTo("POST", "/api/v1/scans")).toHaveLength(1);
     expect(library.scans.size).toBe(1);
@@ -513,7 +554,7 @@ describe("修改目录路径", () => {
     expect(within(alert).queryByText("由错误码选择文案，不展示这段后端消息")).toBeNull();
     expect(within(dialog).getByText(selectedPath)).toBeTruthy();
     expect(api.requestsTo("POST", "/api/v1/scans")).toHaveLength(0);
-    expect(screen.getByRole("rowheader", { name: "classical-a" })).toBeTruthy();
+    expect(hasRoot("classical-a")).toBe(true);
   });
 });
 
@@ -536,7 +577,7 @@ describe("目录操作记录", () => {
 
   it("新的操作完成后记录刷新，最新的在最前", async () => {
     await openLibrary();
-    await userEvent.click(within(rowOf("classical-b")).getByRole("button", { name: "恢复目录 classical-b" }));
+    await chooseRootAction("classical-b", "恢复目录");
     await screen.findByText(/已恢复目录“classical-b”/);
     const table = await screen.findByRole("table", { name: "目录操作记录" });
     await waitFor(() => expect(within(table).getAllByRole("row")).toHaveLength(8));

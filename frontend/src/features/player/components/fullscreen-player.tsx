@@ -1,6 +1,7 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { ChevronDown, Disc3, MicVocal, MoreHorizontal, UserRound } from "lucide-react";
-import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
+import { useMediaQuery } from "../../../shared/lib/use-media-query";
 import { Button, MenuButton, ModalDialog, useTooltip, type MenuAction } from "../../../shared/ui";
 import { ArtistNames, artworkPath, useArtistLinksReady } from "../../catalog";
 import { isPlaybackActive } from "../zones/controller";
@@ -30,15 +31,6 @@ const NARROW = "(max-width: 767px)";
 const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
 const CLOSE_MS = 180;
 const noRefs: readonly never[] = [];
-
-function useMediaQuery(query: string): boolean {
-  const subscribe = useCallback((onChange: () => void) => {
-    const list = window.matchMedia(query);
-    list.addEventListener("change", onChange);
-    return () => list.removeEventListener("change", onChange);
-  }, [query]);
-  return useSyncExternalStore(subscribe, () => window.matchMedia(query).matches);
-}
 
 /**
  * 全屏播放器：点播放栏封面打开，左上角向下箭头、Esc、浏览器返回收起（开合记在历史记录里），右上角是队列。

@@ -6,6 +6,7 @@ import { installFakeApi, installFakeSession, installOverviewApi } from "../test/
 import { installCatalogApi } from "../test/fake-catalog";
 import { installGovernanceApi } from "../test/fake-governance";
 import { jsonResponse } from "../test/http";
+import { albumAdminActions, albumMoreButton, chooseAlbumAction } from "../test/album-actions";
 import { renderApp } from "../test/render-app";
 
 // 被移动的专辑 A（1998）、两张可以归入的专辑 B（1990）与 C（2005）、一张有两个版本的专辑 D。
@@ -29,7 +30,7 @@ function setup(options: { role?: "admin" | "user" } = {}) {
 const groupPath = (releaseId: string) => `/api/v1/releases/${releaseId}/group`;
 const heading = (name: string) => screen.findByRole("heading", { level: 1, name });
 const openJoin = async (user: ReturnType<typeof userEvent.setup>) => {
-  await user.click(await screen.findByRole("button", { name: "归入其他专辑…" }));
+  await chooseAlbumAction(user, "归入其他专辑…");
   return screen.findByRole("dialog", { name: "把这个版本归入其他专辑" });
 };
 const search = async (user: ReturnType<typeof userEvent.setup>, dialog: HTMLElement, text: string) => {
@@ -41,15 +42,16 @@ describe("调整归组：入口", () => {
     setup();
     renderApp({ path: `/albums/${albumA().id}` });
     await heading("Sample Symphonies");
-    expect(await screen.findByRole("button", { name: "归入其他专辑…" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "移出为独立专辑" })).toBeNull();
+    const actions = await albumAdminActions(userEvent.setup());
+    expect(actions).toContain("归入其他专辑…");
+    expect(actions).not.toContain("移出为独立专辑");
   });
 
   it("多版本的专辑：有“移出为独立专辑”", async () => {
     setup();
     renderApp({ path: `/albums/${albumD().id}` });
     await heading("Delta Concertos");
-    expect(await screen.findByRole("button", { name: "移出为独立专辑" })).toBeTruthy();
+    expect(await albumAdminActions(userEvent.setup())).toContain("移出为独立专辑");
   });
 
   it("普通成员没有任何调整归组的入口，也不请求归组接口", async () => {
@@ -57,8 +59,7 @@ describe("调整归组：入口", () => {
     renderApp({ path: `/albums/${albumD().id}` });
     await heading("Delta Concertos");
     await screen.findByText("Track 01");
-    expect(screen.queryByRole("button", { name: "归入其他专辑…" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "移出为独立专辑" })).toBeNull();
+    expect(await albumAdminActions(userEvent.setup())).toEqual([]);
     expect(api.requestsTo("POST", /\/group$/)).toHaveLength(0);
   });
 });
@@ -239,7 +240,7 @@ describe("归入其他专辑", () => {
     expect(document.activeElement).toBe(within(dialog).getByRole("heading", { name: "把这个版本归入其他专辑" }));
     await user.click(within(dialog).getByRole("button", { name: "取消" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "把这个版本归入其他专辑" })).toBeNull());
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "归入其他专辑…" }));
+    expect(document.activeElement).toBe(albumMoreButton());
     expect(api.requestsTo("POST", /\/group$/)).toHaveLength(0);
   });
 });
@@ -250,7 +251,7 @@ describe("移出为独立专辑", () => {
     const user = userEvent.setup();
     const { history } = renderApp({ path: `/albums/${albumD().id}` });
     await heading("Delta Concertos");
-    await user.click(await screen.findByRole("button", { name: "移出为独立专辑" }));
+    await chooseAlbumAction(user, "移出为独立专辑");
     const dialog = await screen.findByRole("dialog", { name: "把这个版本移出为独立专辑？" });
     // 确认对话框的初始焦点在“取消”上。
     expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "取消" }));
@@ -264,7 +265,7 @@ describe("移出为独立专辑", () => {
     expect(await screen.findByText("已把这个版本移出为独立专辑。")).toBeTruthy();
     // 新的专辑只有这一个版本：没有版本导航，也没有“移出”。
     expect(screen.queryByRole("navigation", { name: "版本" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "移出为独立专辑" })).toBeNull();
+    expect(await albumAdminActions(user)).not.toContain("移出为独立专辑");
 
     await user.click(screen.getByRole("button", { name: "撤销" }));
     await waitFor(() => expect(history.location.pathname).toBe(`/albums/${albumD().id}`));
@@ -277,7 +278,7 @@ describe("移出为独立专辑", () => {
     const user = userEvent.setup();
     renderApp({ path: `/albums/${albumD().id}` });
     await heading("Delta Concertos");
-    await user.click(await screen.findByRole("button", { name: "移出为独立专辑" }));
+    await chooseAlbumAction(user, "移出为独立专辑");
     const dialog = await screen.findByRole("dialog", { name: "把这个版本移出为独立专辑？" });
     const releaseId = albumD().representative.id;
     api.on("POST", groupPath(releaseId), () => {
@@ -303,7 +304,7 @@ describe("移出为独立专辑", () => {
     const user = userEvent.setup();
     renderApp({ path: `/albums/${albumD().id}` });
     await heading("Delta Concertos");
-    await user.click(await screen.findByRole("button", { name: "移出为独立专辑" }));
+    await chooseAlbumAction(user, "移出为独立专辑");
     const dialog = await screen.findByRole("dialog", { name: "把这个版本移出为独立专辑？" });
     await user.click(within(dialog).getByRole("button", { name: "移出" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "把这个版本移出为独立专辑？" })).toBeNull());
@@ -316,11 +317,11 @@ describe("移出为独立专辑", () => {
     const user = userEvent.setup();
     renderApp({ path: `/albums/${albumD().id}` });
     await heading("Delta Concertos");
-    await user.click(await screen.findByRole("button", { name: "移出为独立专辑" }));
+    await chooseAlbumAction(user, "移出为独立专辑");
     const dialog = await screen.findByRole("dialog", { name: "把这个版本移出为独立专辑？" });
     await user.click(within(dialog).getByRole("button", { name: "取消" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "把这个版本移出为独立专辑？" })).toBeNull());
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "移出为独立专辑" }));
+    expect(document.activeElement).toBe(albumMoreButton());
     expect(api.requestsTo("POST", /\/group$/)).toHaveLength(0);
   });
 });

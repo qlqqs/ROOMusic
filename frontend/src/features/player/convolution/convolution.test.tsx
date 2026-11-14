@@ -109,13 +109,34 @@ describe("卷积最小交互", () => {
     if (!(enabled instanceof HTMLInputElement)) throw new Error("卷积开关不是输入控件");
     await waitFor(() => expect(enabled.checked).toBe(true));
     expect(screen.getByRole("combobox", { name: "IR 文件" }).getAttribute("disabled")).toBeNull();
-    await user.click(await screen.findByRole("button", { name: "卷积上移" }));
+    // 两者都开着才出现处理顺序：默认参数均衡在前。
+    const order = () => screen.getByRole("list", { name: "处理顺序" });
+    expect(within(await waitFor(order)).getAllByRole("listitem").map((item) => item.textContent)).toEqual(["参数均衡", "卷积"]);
+    await user.click(screen.getByRole("button", { name: "对调处理顺序" }));
     await waitFor(() => expect(server.commands).toEqual([
       { command: "set_settings", settings: { convolution: selected } },
       { command: "set_settings", settings: { convolution: { ...selected, before_peq: true } } },
     ]));
-    expect(await screen.findByRole("button", { name: "参数均衡上移" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "卷积上移" })).toBeNull();
-    expect(screen.getAllByRole("listitem").map((item) => item.textContent)).toEqual(["卷积", "参数均衡"]);
+    await waitFor(() => expect(within(order()).getAllByRole("listitem").map((item) => item.textContent)).toEqual(["卷积", "参数均衡"]));
+    // 再对调一次回到参数均衡在前。
+    await user.click(screen.getByRole("button", { name: "对调处理顺序" }));
+    await waitFor(() => expect(server.commands.at(-1)).toEqual({ command: "set_settings", settings: { convolution: { ...selected, before_peq: false } } }));
+    await waitFor(() => expect(within(order()).getAllByRole("listitem").map((item) => item.textContent)).toEqual(["参数均衡", "卷积"]));
+  });
+
+  it("参数均衡关掉时处理顺序整行不出现", async () => {
+    const user = userEvent.setup();
+    stubFetch(() => sampleResponse("dsp/responses/ir-list"));
+    await waitFor(() => expect(engine.getSnapshot().zone).not.toBeNull());
+    render(<QueryClientProvider client={client}><PlaybackSettingsForm /></QueryClientProvider>);
+    const file = api.decodeIrFiles(sampleBody("dsp/responses/ir-list"))[0];
+    if (file === undefined) throw new Error("IR 列表样本没有文件");
+    await screen.findByRole("option", { name: file.name });
+    await user.selectOptions(screen.getByRole("combobox", { name: "IR 文件" }), file.irId);
+    await waitFor(() => expect(engine.getSnapshot().settings.convolution.enabled).toBe(true));
+    expect(screen.queryByRole("list", { name: "处理顺序" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "对调处理顺序" })).toBeNull();
+    await user.click(screen.getByRole("switch", { name: "参数均衡" }));
+    expect(await screen.findByRole("list", { name: "处理顺序" })).toBeTruthy();
   });
 });

@@ -142,6 +142,46 @@ describe("侧栏的歌单导航", () => {
     expect(nav().getByRole("button", { name: "歌单列表" }).getAttribute("aria-expanded")).toBe("true");
   });
 
+  it("每个歌单名前有封面：4 张拼方格，1–3 张用第一张，空歌单与第一张没有封面时是图标；当前歌单高亮；不为封面另发请求", async () => {
+    const { api, summary } = setup(0);
+    const art = (label: string) => ({ resource_id: `cover-${label}.png`, mime: "image/png", width: 600, height: 600 });
+    const group = (index: number, artwork: ReturnType<typeof art> | null) => ({ group_id: `00000000-0000-4000-8000-c${String(index).padStart(11, "0")}`, artwork });
+    // 封面组不能多于曲目数（接口的约束）。
+    const withTracks = (): PlaylistSummaryDTO => ({ ...summary(), track_count: 4 });
+    const playlists: PlaylistSummaryDTO[] = [
+      { ...withTracks(), id: base.id, name: "四张封面", cover_groups: [group(1, art("a")), group(2, art("b")), group(3, null), group(4, art("d"))] },
+      { ...withTracks(), id: "00000000-0000-4000-8000-0000000000b2", name: "两张封面", cover_groups: [group(5, art("e")), group(6, art("f"))] },
+      { ...withTracks(), id: "00000000-0000-4000-8000-0000000000b3", name: "第一张没有封面", cover_groups: [group(7, null), group(8, art("h"))] },
+      { ...withTracks(), id: "00000000-0000-4000-8000-0000000000b4", name: "空歌单", cover_groups: [] },
+    ];
+    api.on("GET", playlistsPath, () => jsonResponse(200, { items: playlists, pagination: { page: 1, page_size: 20, total: playlists.length } }));
+    renderApp({ path: pagePath });
+    await screen.findByRole("navigation", { name: "主导航" });
+    const link = async (name: string) => nav().findByRole("link", { name });
+    const images = (element: HTMLElement) => [...element.querySelectorAll("img")].map((image) => image.getAttribute("src")?.split("/").at(-1));
+    // 4 张：方格里四格，没有封面的那一格是图标。
+    const four = await link("四张封面");
+    expect(images(four)).toEqual(["cover-a.png", "cover-b.png", "cover-d.png"]);
+    expect(four.querySelectorAll("svg")).toHaveLength(1);
+    // 1–3 张：只用第一张。
+    expect(images(await link("两张封面"))).toEqual(["cover-e.png"]);
+    // 第一张没有封面：图标，不跳过它去用后面的。
+    const noFirst = await link("第一张没有封面");
+    expect(images(noFirst)).toEqual([]);
+    expect(noFirst.querySelectorAll("svg")).toHaveLength(1);
+    const empty = await link("空歌单");
+    expect(images(empty)).toEqual([]);
+    expect(empty.querySelectorAll("svg")).toHaveLength(1);
+    // 封面是装饰：可访问名只是歌单名，缩略图对读屏隐藏。
+    for (const item of [four, noFirst, empty]) expect(item.querySelector("[aria-hidden='true']")).not.toBeNull();
+    // 当前打开的歌单高亮。
+    await waitFor(() => expect(four.getAttribute("aria-current")).toBe("page"));
+    expect((await link("两张封面")).getAttribute("aria-current")).toBeNull();
+    // 封面取自列表摘要里的 cover_groups：歌单列表只读一次，也不读各歌单的详情。
+    expect(api.requestsTo("GET", playlistsPath)).toHaveLength(1);
+    for (const playlist of playlists.slice(1)) expect(api.requestsTo("GET", `${playlistsPath}/${playlist.id}`)).toHaveLength(0);
+  });
+
   it("新建歌单成功后侧栏立即出现新歌单，无需刷新或重新展开", async () => {
     const { api, state, playlist } = setup(0);
     const name = "刚建的歌单";

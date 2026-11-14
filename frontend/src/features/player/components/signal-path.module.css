@@ -69,8 +69,7 @@ dialog.dialog::backdrop { background: transparent; }
 /* “有损”“兼容转换”标签：字色跟随所在面的次要文字色，全屏深色面里也看得清。 */
 .value [data-tone] { color: var(--text-secondary); font-weight: 400; }
 
-/* 底部测量格：有几项就分几格。 */
-/* 两列排布：340px 宽放四格时“−21.8 LUFS”之类的取值会挤到相邻格 */
+/* 底部测量格：缺的项不渲染，其余两列排布（340px 宽放四格时“−21.8 LUFS”之类的取值会挤到相邻格）。 */
 .measurements { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; border-top: 1px solid var(--color-divider); background: color-mix(in srgb, var(--text-primary) 3%, transparent); }
 .measurements div { min-width: 0; padding: 9px 10px; font-size: var(--fs-12); color: var(--text-secondary); }
 .measurements div:nth-child(even) { border-left: 1px solid var(--color-divider); }

@@ -297,7 +297,7 @@ describe("扫描目录页：扫描记录", () => {
     // 503 会被自动重试（最多 2 次，带退避），耗尽后才显示错误。
     const alert = await within(region).findByRole("alert", {}, { timeout: 8000 });
     expect(within(alert).getByText(/请求 ID：/)).toBeTruthy();
-    expect(screen.getByRole("rowheader", { name: "classical-a" })).toBeTruthy();
+    expect(within(screen.getByRole("list", { name: "音乐目录列表" })).getByText("classical-a", { exact: true })).toBeTruthy();
 
     api.on("GET", "/api/v1/scans", () => jsonResponse(200, sampleBody("scans/list")));
     await userEvent.click(within(alert).getByRole("button", { name: "重试" }));

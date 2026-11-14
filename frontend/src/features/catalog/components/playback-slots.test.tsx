@@ -1,9 +1,15 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import type { ReactNode } from "react";
+import { describe, expect, it, vi } from "vitest";
 import { albumGroup, releaseDetailOf } from "../../../test/catalog-data";
 import type { ReleaseTrackDTO } from "../api/decoders";
 import { AlbumHeader } from "./album-header";
 import { ReleaseMedia } from "./release-media";
+
+// 页头的“‹ 专辑”是路由链接；这里只验证插槽，不需要真实路由。
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({ children, "aria-label": label }: { children: ReactNode; "aria-label"?: string }) => <a href="/albums" aria-label={label}>{children}</a>,
+}));
 
 describe("专辑播放插槽", () => {
   it("catalog 不依赖播放器：只渲染传入的头部动作、曲目动作与当前曲目标记", () => {
@@ -11,6 +17,8 @@ describe("专辑播放插槽", () => {
     const currentTrackId = release.media[0]?.tracks[0]?.id;
     render(<><AlbumHeader release={release} detail={release} actions={<button>播放整张专辑</button>} /><ReleaseMedia media={release.media} albumArtist={release.album_artist ?? release.artist} currentTrackId={currentTrackId} currentTrackLabel="已暂停" renderTrackActions={(track) => <button aria-label={`播放 ${track.title}`}>播放</button>} /></>);
     expect(screen.getByRole("button", { name: "播放整张专辑" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: release.title })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "返回专辑列表" })).toBeTruthy();
     expect(screen.getAllByRole("button", { name: /^播放 Track/ })).toHaveLength(2);
     expect(screen.getAllByText("已暂停")).toHaveLength(1);
   });

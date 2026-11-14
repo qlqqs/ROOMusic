@@ -126,7 +126,7 @@ export function useMenu({ label, actions, placement = "below", matchTriggerWidth
     {groupActions(actions).map((group, index) => <Fragment key={`${index}:${group.name}`}>
       {index === 0 ? null : <div role="separator" className={styles.separator} />}
       {group.name === "" ? group.actions.map(item) : <div role="group" aria-labelledby={`${id}-group-${index}`} className={styles.group}>
-        <div role="presentation" id={`${id}-group-${index}`} className={styles.groupTitle}>{group.name}</div>
+        <div aria-hidden="true" id={`${id}-group-${index}`} className={styles.groupTitle}>{group.name}</div>
         {group.actions.map(item)}
       </div>}
     </Fragment>)}

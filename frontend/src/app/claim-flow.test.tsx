@@ -5,6 +5,7 @@ import { claimDetail, claimReleaseId, suggestionOf } from "../test/claim-data";
 import { alpha, beta, delta, narrowContainer, setup } from "../test/claims-setup";
 import { respondToClaimRelease, respondToCorrect, respondToIssueReview, respondToReleaseIssues, seedClaim, seedIssues } from "../test/governance-data";
 import { jsonResponse } from "../test/http";
+import { albumAdminActions, albumMoreButton } from "../test/album-actions";
 import { renderApp } from "../test/render-app";
 
 // 认领的交互（第 6 步）：选择接替的版本、预览、认领与撤销。读取与列表在 claims.test.tsx。
@@ -430,7 +431,7 @@ describe("专辑详情里的认领提示", () => {
   it("没有旧版本推荐它时不显示提示", async () => {
     setup();
     renderApp({ path: `/albums/${delta().id}` });
-    await screen.findByRole("button", { name: "编辑发行信息" });
+    await waitFor(albumMoreButton);
     expect(screen.queryByRole("list", { name: "可能接替了已不可见的版本" })).toBeNull();
   });
 
@@ -459,7 +460,7 @@ describe("专辑详情里的认领提示", () => {
     const { api } = setup();
     api.on("GET", /claim-hints$/, () => jsonResponse(500, { error: { code: "internal_error", message: "x" }, request_id: "r" }));
     renderApp({ path: albumPath() });
-    expect(await screen.findByRole("button", { name: "编辑发行信息" })).toBeTruthy();
+    await waitFor(albumMoreButton);
     // 等到请求真的失败了再断言：提示不重试，失败就是终态。
     await waitFor(() => expect(api.requestsTo("GET", /claim-hints$/)).toHaveLength(1));
     await act(async () => {
@@ -467,7 +468,7 @@ describe("专辑详情里的认领提示", () => {
     });
     expect(screen.queryByRole("list", { name: "可能接替了已不可见的版本" })).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getByRole("button", { name: "编辑发行信息" })).toBeTruthy();
+    expect(await albumAdminActions(user())).toContain("编辑发行信息");
   });
 
   it("认领之后回到这张专辑：提示消失（旧版本已不再待认领）", async () => {
@@ -477,7 +478,7 @@ describe("专辑详情里的认领提示", () => {
     await user().click(await claimButton("Alpha Suites New Rip"));
     await user().click(await screen.findByRole("link", { name: "打开这张专辑" }));
     await waitFor(() => expect(history.location.pathname).toBe(`/albums/${alpha().id}`));
-    await screen.findByRole("button", { name: "编辑发行信息" });
+    await waitFor(albumMoreButton);
     await waitFor(() => expect(screen.queryByRole("list", { name: "可能接替了已不可见的版本" })).toBeNull());
   });
 });

@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { albumGroup, mediaOf } from "../../../test/catalog-data";
 import { ReleaseMedia } from "./release-media";
@@ -121,5 +121,77 @@ describe("作品分组", () => {
     }
     expect(screen.queryByText(`${workTitle}: ${firstMovement}`)).toBeNull();
     expect(screen.queryByText(`${workTitle}: ${secondMovement}`)).toBeNull();
+  });
+});
+
+describe("双击播放与当前曲目", () => {
+  const single = mediaOf(albumGroup(1, { medium_count: 1, track_count: 2 }).representative);
+  const [first, second] = single[0]?.tracks ?? [];
+  if (first === undefined || second === undefined) throw new Error("夹具缺少曲目");
+  function view(play: (trackId: string) => void, options: { disabled?: boolean } = {}) {
+    return render(<ReleaseMedia media={single} albumArtist="" renderTrackActions={(item) => <>
+      <button type="button" data-track-play="" disabled={options.disabled === true} onClick={() => play(item.id)}>播放 {item.title}</button>
+      <button type="button">更多 {item.title}</button>
+      <a href="#artist">链接 {item.title}</a>
+    </>} />);
+  }
+  const rowOf = (title: string) => {
+    const found = screen.getByText(title, { exact: true }).closest("li");
+    if (found === null) throw new Error("没有这一行");
+    return found;
+  };
+
+  it("双击行里的文字等同于点这一行的播放按钮", () => {
+    const play = vi.fn();
+    view(play);
+    fireEvent.doubleClick(screen.getByText(second.title, { exact: true }));
+    expect(play).toHaveBeenCalledExactlyOnceWith(second.id);
+  });
+
+  it("双击行内的按钮或链接不播放", () => {
+    const play = vi.fn();
+    view(play);
+    fireEvent.doubleClick(screen.getByRole("button", { name: `更多 ${first.title}` }));
+    fireEvent.doubleClick(screen.getByRole("link", { name: `链接 ${first.title}` }));
+    expect(play).not.toHaveBeenCalled();
+  });
+
+  it("播放按钮不可用时双击什么也不做；拖选了文字时不播放", () => {
+    const play = vi.fn();
+    const rendered = view(play, { disabled: true });
+    fireEvent.doubleClick(screen.getByText(first.title, { exact: true }));
+    expect(play).not.toHaveBeenCalled();
+    rendered.unmount();
+    view(play);
+    vi.spyOn(window, "getSelection").mockReturnValue({ isCollapsed: false } as Selection);
+    fireEvent.doubleClick(screen.getByText(first.title, { exact: true }));
+    expect(play).not.toHaveBeenCalled();
+  });
+
+  it("双击的第二次按下不选中文字，按在控件上时不拦", () => {
+    view(vi.fn());
+    const row = rowOf(first.title);
+    expect(fireEvent.mouseDown(screen.getByText(first.title, { exact: true }), { detail: 2 })).toBe(false);
+    expect(fireEvent.mouseDown(screen.getByText(first.title, { exact: true }), { detail: 1 })).toBe(true);
+    expect(fireEvent.mouseDown(within(row).getByRole("button", { name: `更多 ${first.title}` }), { detail: 2 })).toBe(true);
+  });
+
+  it("没有动作插槽时双击不做任何事，也不拦文字选择", () => {
+    render(<ReleaseMedia media={single} albumArtist="" />);
+    expect(fireEvent.mouseDown(screen.getByText(first.title, { exact: true }), { detail: 2 })).toBe(true);
+  });
+
+  it("当前曲目的曲目号换成音柱，只在播放时跳动；标记文字只给读屏", () => {
+    const { rerender, container } = render(<ReleaseMedia media={single} albumArtist="" currentTrackId={first.id} currentTrackLabel="正在播放" currentTrackPlaying />);
+    const current = rowOf(first.title);
+    expect(current.hasAttribute("data-current")).toBe(true);
+    const eq = current.querySelector("[aria-hidden='true'][data-playing]");
+    expect(eq).not.toBeNull();
+    expect(within(current).queryByText(String(first.position), { exact: true })).toBeNull();
+    expect(within(rowOf(second.title)).getByText(String(second.position), { exact: true })).toBeTruthy();
+    expect(within(current).getByText("正在播放")).toBeTruthy();
+    rerender(<ReleaseMedia media={single} albumArtist="" currentTrackId={first.id} currentTrackLabel="已暂停" />);
+    expect(container.querySelector("[data-playing]")).toBeNull();
+    expect(within(rowOf(first.title)).getByText("已暂停")).toBeTruthy();
   });
 });

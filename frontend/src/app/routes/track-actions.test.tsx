@@ -48,7 +48,7 @@ async function setup(items: readonly PlayerTrack[]) {
       </SessionProvider>
     </QueryClientProvider>,
   );
-  return { engine, player, view };
+  return { api, engine, player, view };
 }
 
 const actions = (track: PlayerTrack) => <TrackActions key={track.trackId} track={track} present playLabel="从这首开始播放" retryHint="请在专辑头部重试。" />;
@@ -129,6 +129,36 @@ describe("统一曲目行动作", () => {
       expect(player.server.commands).toHaveLength(sent);
       expect(engine.getSnapshot().queue).toBe(before);
       expect(engine.getSnapshot().queue.entries).toHaveLength(MAX_QUEUE_ENTRIES);
+    }
+  });
+
+  it("播放按钮带 data-track-play（专辑行双击按它）；lead 放在曲目号位置时同一个按钮、同一个读屏名", async () => {
+    const track = tracks[0];
+    if (track === undefined) throw new Error("缺少测试曲目");
+    const { view } = await setup([track]);
+    view(<TrackActions track={track} present playLabel="从这首开始播放" retryHint="请在专辑头部重试。" playPlacement="lead" />);
+    await ready();
+    const play = screen.getByRole("button", { name: "从这首开始播放" });
+    expect(play.hasAttribute("data-track-play")).toBe(true);
+  });
+
+  it("窄屏：心形收进“更多操作”，第一项是“收藏”，选它发出收藏请求", async () => {
+    const track = tracks[0];
+    if (track === undefined) throw new Error("缺少测试曲目");
+    const original = window.matchMedia;
+    window.matchMedia = (query: string) => ({ ...original(query), matches: query === "(max-width: 767px)" });
+    try {
+      const { api, view } = await setup([track]);
+      view(actions(track));
+      expect(screen.queryByRole("button", { name: /^收藏《/ })).toBeNull();
+      await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+      const items = () => screen.getAllByRole("menuitem").map((item) => item.textContent);
+      expect(items()).toEqual(["收藏", "下一首播放", "加入队列", "添加到歌单…"]);
+      await waitFor(() => expect(screen.getByRole("menuitem", { name: "收藏" }).hasAttribute("disabled")).toBe(false));
+      await userEvent.click(screen.getByRole("menuitem", { name: "收藏" }));
+      await waitFor(() => expect(api.requestsTo("PUT", `/api/v1/me/favorites/tracks/${encodeURIComponent(track.trackId)}`)).toHaveLength(1));
+    } finally {
+      window.matchMedia = original;
     }
   });
 });

@@ -7,6 +7,7 @@ import { installCatalogApi } from "../test/fake-catalog";
 import { installGovernanceApi } from "../test/fake-governance";
 import { respondToCorrect, respondToGroupChange, respondToRevert, type GovernanceData } from "../test/governance-data";
 import { jsonResponse } from "../test/http";
+import { albumMoreButton } from "../test/album-actions";
 import { renderApp } from "../test/render-app";
 
 // A（1998）、B（1990）、C（2005）三张单版本专辑。
@@ -412,8 +413,8 @@ describe("专辑详情：修改记录", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     const notice = await screen.findByText("已撤销这次修改，相关字段恢复到修改之前的状态。");
     expect(screen.getAllByText("已撤销这次修改，相关字段恢复到修改之前的状态。")).toHaveLength(1);
-    // 提示与折叠面板同属“修改记录”区块，不在头部的操作区里。
-    const header = screen.getByRole("button", { name: "编辑发行信息" }).closest("div");
+    // 提示与折叠面板同属“修改记录”区块，不在页头的操作区里。
+    const header = albumMoreButton().closest("header");
     expect(header?.contains(notice)).toBe(false);
     await waitFor(() => expect(within(screen.getByRole("table", { name: "修改记录" })).getAllByRole("row")).toHaveLength(3));
     // 焦点回到标题行（触发撤销的按钮已经消失）。

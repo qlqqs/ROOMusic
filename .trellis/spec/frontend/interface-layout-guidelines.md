@@ -8,7 +8,7 @@
 
 | 组件 | 约定 |
 | --- | --- |
-| `MenuAction.group` | 相邻且 `group` 相同的项为一组，组间一条 `role="separator"`；有名字的组包在 `role="group"` 里，组标题（`role="presentation"` 的小号灰字）是它的名称，不可聚焦，方向键跳过。不给 `group` 的项结构与以前相同 |
+| `MenuAction.group` | 相邻且 `group` 相同的项为一组，组间一条 `role="separator"`；有名字的组包在 `role="group"` 里，组标题（`aria-hidden` 的小号灰字，经 `aria-labelledby` 作为组名，避免读两遍）是它的名称，不可聚焦，方向键跳过。不给 `group` 的项结构与以前相同 |
 | `SettingsGroup` | `section` + `h2` 标题 + 卡片；可给标题旁的操作、标题 ref 与卡片下方的脚注。卡片宽度用 ResizeObserver 量出，经 context 告诉里面的 `Segmented` 是否窄（< 640px，与 CSS 里的 639px 成对修改）；没有 ResizeObserver（jsdom）时按宽处理 |
 | `SettingRow` | 左名称（可带一行说明）、右控件右对齐；名称是指向 `controlId` 的 `<label>`，子内容可以是 `(ids) => ReactNode` 拿到 `controlId`/`labelId`/`descriptionId`。控件是按钮或只读值时用 `plainLabel`（`<label>` 指向按钮会改掉按钮的名称）。`nested` 是从属项：缩进、字号小一级；所属开关关闭时**由调用方不渲染**这一行，不做禁用态。容器查询：卡片窄时控件放不下才换到下一行 |
 | `Segmented` | 宽卡片里是 `role="radiogroup"` 的相连分段，窄卡片里是同名同值的原生 `<select>`（`aria-labelledby` 指向行名称）。用量宽切换而不是 CSS 同时渲染两份，避免读屏与测试看到重复控件 |

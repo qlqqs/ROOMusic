@@ -29,7 +29,7 @@ type AlbumPlayback = {
 
 type Kind = "play" | "shuffle" | "next" | "enqueue";
 
-const doneText: Readonly<Record<Kind, string>> = { play: "已选择", shuffle: "已随机播放", next: "已设为下一首播放：", enqueue: "已加入队列" };
+const doneText: Readonly<Record<Kind, string>> = { play: "已选择", shuffle: "已随机播放", next: "已设为下一首播放", enqueue: "已加入队列" };
 
 /**
  * 专辑头部的播放动作：页面（app）把它们与收藏、“添加到歌单…”、管理员的项组合成一条操作行与一个“更多”菜单。

@@ -7,6 +7,7 @@ import { installCatalogApi } from "../test/fake-catalog";
 import { installGovernanceApi } from "../test/fake-governance";
 import { markUncertain, respondToIssueReview, respondToIssues, respondToReleaseIssues, scanIssues, seedIssues, type GovernanceData } from "../test/governance-data";
 import { jsonResponse } from "../test/http";
+import { albumAdminActions, chooseAlbumAction } from "../test/album-actions";
 import { renderApp } from "../test/render-app";
 
 // 三张专辑：A 有字段、归组冲突与缺失曲目，B 只有拿不准的标题，C 没有问题。
@@ -65,6 +66,34 @@ describe("元数据页：入口与权限", () => {
     await user.click(link);
     expect(await heading("元数据")).toBeTruthy();
     expect(history.location.pathname).toBe("/issues");
+  });
+
+  it("侧栏的数字只取自本会话已读到的问题列表：打开过元数据页才显示（不随筛选变化），离开元数据页后仍在；没有为它另发请求", async () => {
+    const { api } = setup();
+    const user = userEvent.setup();
+    renderApp({ path: "/" });
+    const nav = await screen.findByRole("navigation", { name: "主导航" });
+    await screen.findByRole("heading", { level: 1, name: "概览" });
+    const link = () => within(nav).getByRole("link", { name: "元数据" });
+    expect(link().textContent).toBe("元数据");
+    expect(link().hasAttribute("aria-describedby")).toBe(false);
+    expect(api.requestsTo("GET", "/api/v1/release-issues")).toHaveLength(0);
+
+    await user.click(link());
+    await screen.findByRole("link", { name: /Alpha Suites/ });
+    // 两个版本有待处理的问题；链接的名称不变，数量经 aria-describedby 补充。
+    await waitFor(() => expect(link().textContent).toBe("元数据2"));
+    const description = document.getElementById(link().getAttribute("aria-describedby") ?? "");
+    expect(description?.textContent).toBe("2 个待处理的问题");
+    // 切到别的类别：数字是总数，不随筛选变化。
+    await user.click(within(screen.getByRole("navigation", { name: "问题类别" })).getByRole("link", { name: /^归组/ }));
+    await waitFor(() => expect(within(issueList()).queryByRole("link", { name: /Beta Quartets/ })).toBeNull());
+    expect(link().textContent).toBe("元数据2");
+    const requests = api.requestsTo("GET", "/api/v1/release-issues").length;
+    await user.click(within(nav).getByRole("link", { name: "概览" }));
+    await screen.findByRole("heading", { level: 1, name: "概览" });
+    expect(link().textContent).toBe("元数据2");
+    expect(api.requestsTo("GET", "/api/v1/release-issues")).toHaveLength(requests);
   });
 
   it("成员直接访问：显示“需要管理员权限”，不请求问题接口，导航里也没有这一项", async () => {
@@ -368,14 +397,14 @@ describe("专辑详情的“查看问题”", () => {
     setup();
     const user = userEvent.setup();
     const { history } = renderApp({ path: `/albums/${albumA().id}` });
-    await user.click(await screen.findByRole("link", { name: "查看问题" }));
+    await chooseAlbumAction(user, "查看问题");
     await waitFor(() => expect(history.location.pathname).toBe("/issues"));
     expect(history.location.search).toBe(`?release=${releaseOf(albumA())}`);
     expect(await heading("Alpha Suites", 2)).toBeTruthy();
 
     renderApp({ path: `/albums/${albumC().id}` });
-    await screen.findByRole("button", { name: "编辑发行信息" });
-    expect(screen.queryByRole("link", { name: "查看问题" })).toBeNull();
+    await screen.findByRole("heading", { level: 1, name: "Gamma Sonatas" });
+    expect(await albumAdminActions(user)).not.toContain("查看问题");
   });
 });
 

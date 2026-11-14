@@ -29,6 +29,18 @@ describe("待认领页：入口与权限", () => {
     expect(history.location.pathname).toBe("/claims");
   });
 
+  it("打开过待认领页之后，侧栏写出待认领的总数（取自已读到的列表，名称不变）", async () => {
+    setup();
+    const user = userEvent.setup();
+    renderApp({ path: "/" });
+    const nav = await screen.findByRole("navigation", { name: "主导航" });
+    await user.click(within(nav).getByRole("link", { name: "待认领" }));
+    await screen.findByText("共 3 个版本");
+    const link = within(nav).getByRole("link", { name: "待认领" });
+    await waitFor(() => expect(link.textContent).toBe("待认领3"));
+    expect(document.getElementById(link.getAttribute("aria-describedby") ?? "")?.textContent).toBe("3 个待认领的版本");
+  });
+
   it("成员直接访问：显示“需要管理员权限”，不请求待认领的接口，导航里也没有这一项", async () => {
     const { api } = setup({ role: "user" });
     renderApp({ path: "/claims" });

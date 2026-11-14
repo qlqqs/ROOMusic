@@ -28,7 +28,7 @@ afterEach(() => {
 type Mounted = { audio: FakeAudio; server: FakeZoneServer; player: PlayerController; playing: () => FakeAudio | undefined; commits: () => number; api: ReturnType<typeof installFakeApi> };
 
 /** 真实的会话、查询、播放器 Provider 与控制器（播放区服务端与媒体元素是替身），歌词接口按合同回放样本。 */
-async function mount(options: { lyrics?: (request: RecordedRequest) => Response | Promise<Response> } = {}): Promise<Mounted> {
+async function mount(options: { lyrics?: (request: RecordedRequest) => Response | Promise<Response>; size?: "default" | "large" } = {}): Promise<Mounted> {
   const api = installFakeApi();
   installFakeSession(api, { current: "curator" });
   api.on("GET", `/api/v1/tracks/${trackId}/lyrics`, options.lyrics ?? (() => sampleResponse("tracks/lyrics-synced")));
@@ -49,7 +49,7 @@ async function mount(options: { lyrics?: (request: RecordedRequest) => Response 
       </ViewerScopeProvider>
     </SessionProvider>
   </QueryClientProvider>;
-  render(<Wrapper><LyricsPanel trackId={trackId} /></Wrapper>);
+  render(<Wrapper><LyricsPanel trackId={trackId} size={options.size ?? "default"} /></Wrapper>);
   const mounted: Mounted = { audio: undefined as unknown as FakeAudio, server, player, playing, api, commits: () => commits };
   return mounted;
 }
@@ -204,6 +204,18 @@ describe("歌词面板", () => {
       act(() => mounted.audio.tick(45));
       // 最后一组是第 4 项：4 × 50 − (400 − 40) / 2 = 20。
       expect(scrollTo).toHaveBeenLastCalledWith({ top: 20, behavior: "smooth" });
+    });
+
+    it("大字号外观（全屏右栏）把当前组的中线停在约 35% 高度，而不是正中", async () => {
+      stubLayout();
+      const scrollTo = vi.spyOn(Element.prototype, "scrollTo").mockImplementation(() => undefined);
+      const mounted = await mount({ size: "large" });
+      await lyricsList();
+      expect(screen.getByRole("region", { name: "歌词" }).dataset.size).toBe("large");
+      await startPlayback(mounted);
+      act(() => mounted.audio.tick(45));
+      // 最后一组是第 4 项：4 × 50 + 40 / 2 − 400 × 0.35 = 80。
+      expect(scrollTo).toHaveBeenLastCalledWith({ top: 80, behavior: "auto" });
     });
 
     it("尊重减少动态效果：不平滑滚动", async () => {

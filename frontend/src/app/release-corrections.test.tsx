@@ -7,6 +7,7 @@ import { installCatalogApi } from "../test/fake-catalog";
 import { installGovernanceApi } from "../test/fake-governance";
 import { markUncertain, respondToCorrect } from "../test/governance-data";
 import { jsonResponse, type RecordedRequest } from "../test/http";
+import { albumAdminActions, albumMoreButton, chooseAlbumAction } from "../test/album-actions";
 import { renderApp } from "../test/render-app";
 
 const symphonies = () => albumGroup(1, { title: "Sample Symphonies", album_artist: "Sample Orchestra", artist: "Sample Orchestra", year: 1998, medium_count: 2, track_count: 3, artwork: true });
@@ -25,7 +26,7 @@ function setup(options: { role?: "admin" | "user" } = {}) {
 
 const patchRequests = (api: ReturnType<typeof setup>["api"]) => api.requestsTo("PATCH", correctionsPath);
 const openEditor = async (user: ReturnType<typeof userEvent.setup>) => {
-  await user.click(await screen.findByRole("button", { name: "编辑发行信息" }));
+  await chooseAlbumAction(user, "编辑发行信息");
   return screen.findByRole("dialog", { name: "编辑发行信息" });
 };
 // 有人工修正的字段，图例里还有“人工修正”标记，可访问名称是“标题 人工修正”，所以按前缀匹配。
@@ -39,7 +40,7 @@ describe("编辑发行信息：入口与读取", () => {
     renderApp({ path: `/albums/${groupId}` });
     await screen.findByRole("heading", { level: 1, name: "Sample Symphonies" });
     await screen.findByText("Track 1-01");
-    expect(screen.queryByRole("button", { name: "编辑发行信息" })).toBeNull();
+    expect(await albumAdminActions(userEvent.setup())).toEqual([]);
     expect(api.requestsTo("GET", /\/corrections$/)).toHaveLength(0);
   });
 
@@ -129,7 +130,7 @@ describe("编辑发行信息：保存", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "Sample Symphonies (corrected)" })).toBeTruthy();
     expect(screen.getByText("已保存修改：标题、年份、流派。")).toBeTruthy();
     expect(screen.getByRole("button", { name: "撤销" })).toBeTruthy();
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "编辑发行信息" }));
+    expect(document.activeElement).toBe(albumMoreButton());
     expect(screen.getByRole("list", { name: "概况" }).textContent).toContain("1975");
   });
 
@@ -210,8 +211,7 @@ describe("编辑发行信息：保存", () => {
     expect(patchRequests(api)[0]?.body).toEqual({ expected_revision: 1, changes: { title: { mode: "set", value: "Sample Symphonies" } } });
 
     // 再次打开：标题已有修正（“人工修正”），不再提供“确认”；厂牌仍不确定。
-    await user.click(screen.getByRole("button", { name: "编辑发行信息" }));
-    dialog = await screen.findByRole("dialog", { name: "编辑发行信息" });
+    dialog = await openEditor(user);
     await within(dialog).findByRole("group", { name: prefixed("标题") });
     expect(field(dialog, "标题").getByText("人工修正")).toBeTruthy();
     expect(field(dialog, "标题").queryByRole("button", { name: "确认扫描值" })).toBeNull();
@@ -228,7 +228,7 @@ describe("编辑发行信息：保存", () => {
     await user.click(within(dialog).getByRole("button", { name: "取消" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "编辑发行信息" })).toBeNull());
     expect(patchRequests(api)).toHaveLength(0);
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "编辑发行信息" }));
+    expect(document.activeElement).toBe(albumMoreButton());
 
     dialog = await openEditor(user);
     await within(dialog).findByRole("group", { name: prefixed("流派") });
@@ -387,7 +387,7 @@ describe("撤销与人工修正的标记", () => {
     expect(rowOf("专辑艺人")?.textContent).not.toContain("人工修正");
     expect(screen.getByText(/标有“人工修正”的字段，页面上显示的是改过的值/)).toBeTruthy();
     // 普通成员看不到谁改的，也没有任何编辑入口。
-    expect(screen.queryByRole("button", { name: "编辑发行信息" })).toBeNull();
+    expect(await albumAdminActions(user)).toEqual([]);
     expect(screen.queryByText("curator")).toBeNull();
   });
 });

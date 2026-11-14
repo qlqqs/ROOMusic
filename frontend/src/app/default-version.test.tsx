@@ -9,6 +9,7 @@ import { installCatalogApi } from "../test/fake-catalog";
 import { installGovernanceApi } from "../test/fake-governance";
 import { respondToGroupDefault, respondToRevert, type GovernanceData } from "../test/governance-data";
 import { jsonResponse } from "../test/http";
+import { albumAdminActions, chooseAlbumAction } from "../test/album-actions";
 import { renderApp } from "../test/render-app";
 
 /**
@@ -62,13 +63,18 @@ const openAlbum = async (context: Context, release?: ReleaseSummaryDTO) => {
   return rendered;
 };
 
+/** 页头“更多操作”的“管理”分组里，默认版本的项只有 present 这一个（null 是两个都没有）。 */
+async function expectDefaultAction(present: "设为默认版本" | "改回自动选择" | null) {
+  const actions = await albumAdminActions(userEvent.setup());
+  for (const name of ["设为默认版本", "改回自动选择"]) expect(actions.includes(name), name).toBe(name === present);
+}
+
 describe("设定默认版本：入口与权限", () => {
   it("管理员：多版本的专辑里，不是默认版本的版本有“设为默认版本”（自动选出的代表版本也有），默认版本是“改回自动选择”", async () => {
     const context = setup();
     await openAlbum(context);
     // 自动规则：版本 1 是代表版本，没有指定默认版本，仍然可以把它设为默认版本（钉住）。
-    expect(await screen.findByRole("button", { name: "设为默认版本" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "改回自动选择" })).toBeNull();
+    await expectDefaultAction("设为默认版本");
   });
 
   it("默认版本上显示“改回自动选择”，别的版本上显示“设为默认版本”", async () => {
@@ -76,13 +82,12 @@ describe("设定默认版本：入口与权限", () => {
     seedDefault(context.governance, context.album.id, 1, context.versions[1].id);
     const { history } = await openAlbum(context);
     expect(shownTracks()).toBe("4 首"); // 默认版本现在是代表版本，页面先显示它
-    expect(await screen.findByRole("button", { name: "改回自动选择" })).toBeTruthy();
+    await expectDefaultAction("改回自动选择");
     expect(searchOf(history).get("release")).toBeNull();
     // 去看别的版本：那里是“设为默认版本”。
     await userEvent.setup().click(screen.getByRole("link", { name: /^版本 2 / }));
     await onVersion("3 首");
-    expect(await screen.findByRole("button", { name: "设为默认版本" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "改回自动选择" })).toBeNull();
+    await expectDefaultAction("设为默认版本");
   });
 
   it("普通成员没有任何入口，也不请求写接口；但看得到“默认版本”标签", async () => {
@@ -90,8 +95,7 @@ describe("设定默认版本：入口与权限", () => {
     seedDefault(context.governance, context.album.id, 1, context.versions[2].id);
     await openAlbum(context);
     expect(navLinks()[0]).toBe("版本 1 默认版本 2000 · 2 张介质 · 5 首曲目");
-    expect(screen.queryByRole("button", { name: "设为默认版本" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "改回自动选择" })).toBeNull();
+    expect(await albumAdminActions(userEvent.setup())).toEqual([]);
     expect(context.api.requestsTo("POST", /\/default$/)).toHaveLength(0);
   });
 
@@ -99,9 +103,7 @@ describe("设定默认版本：入口与权限", () => {
     const context = setup();
     renderApp({ path: `/albums/${context.single.id}` });
     await screen.findByRole("heading", { level: 1, name: "Solo Preludes" });
-    await screen.findByRole("button", { name: "编辑发行信息" });
-    expect(screen.queryByRole("button", { name: "设为默认版本" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "改回自动选择" })).toBeNull();
+    expect(await albumAdminActions(userEvent.setup())).toEqual(["编辑发行信息", "归入其他专辑…"]);
   });
 });
 
@@ -111,7 +113,7 @@ describe("设定与清除默认版本", () => {
     const user = userEvent.setup();
     const { history } = await openAlbum(context, context.versions[1]);
     await onVersion("4 首");
-    await user.click(await screen.findByRole("button", { name: "设为默认版本" }));
+    await chooseAlbumAction(user, "设为默认版本");
 
     expect(await screen.findByText("已把这个版本设为默认版本。")).toBeTruthy();
     const [request] = context.api.requestsTo("POST", defaultPath(context.album.id));
@@ -121,7 +123,7 @@ describe("设定与清除默认版本", () => {
     expect(shownTracks()).toBe("4 首");
     await waitFor(() => expect(searchOf(history).get("release")).toBeNull());
     expect(navLinks()).toEqual(["版本 1 默认版本 1999 · 2 张介质 · 4 首曲目", "版本 2 1998 · 2 张介质 · 3 首曲目", "版本 3 2000 · 2 张介质 · 5 首曲目"]);
-    expect(screen.getByRole("button", { name: "改回自动选择" })).toBeTruthy();
+    await expectDefaultAction("改回自动选择");
     // 专辑列表里的代表版本也换了。
     expect(context.catalog.groups.find((group) => group.id === context.album.id)?.representative.id).toBe(context.versions[1].id);
   });
@@ -130,7 +132,7 @@ describe("设定与清除默认版本", () => {
     const context = setup();
     const user = userEvent.setup();
     await openAlbum(context);
-    await user.click(await screen.findByRole("button", { name: "设为默认版本" }));
+    await chooseAlbumAction(user, "设为默认版本");
     expect(await screen.findByText(/已把这个版本设为默认版本/)).toBeTruthy();
     const [request] = context.api.requestsTo("POST", defaultPath(context.album.id));
     expect(request?.body).toEqual({ expected_revision: 1, release_id: context.versions[0].id });
@@ -143,7 +145,7 @@ describe("设定与清除默认版本", () => {
     const user = userEvent.setup();
     const { history } = await openAlbum(context);
     expect(shownTracks()).toBe("4 首");
-    await user.click(await screen.findByRole("button", { name: "改回自动选择" }));
+    await chooseAlbumAction(user, "改回自动选择");
 
     expect(await screen.findByText("已改回自动选择：这张专辑默认显示年份最早的版本。")).toBeTruthy();
     const [request] = context.api.requestsTo("POST", defaultPath(context.album.id));
@@ -152,7 +154,7 @@ describe("设定与清除默认版本", () => {
     await waitFor(() => expect(searchOf(history).get("release")).toBe(context.versions[1].id));
     expect(shownTracks()).toBe("4 首");
     expect(navLinks()).toEqual(["版本 1 1998 · 2 张介质 · 3 首曲目", "版本 2 1999 · 2 张介质 · 4 首曲目", "版本 3 2000 · 2 张介质 · 5 首曲目"]);
-    expect(screen.getByRole("button", { name: "设为默认版本" })).toBeTruthy();
+    await expectDefaultAction("设为默认版本");
   });
 
   it("改回自动选择时专辑还在刷新：地址不按旧数据规范化（旧数据里这个版本还是代表版本），刷新完成后页面仍在这个版本", async () => {
@@ -168,7 +170,7 @@ describe("设定与清除默认版本", () => {
       const result = respondToGroupDetail(context.catalog, context.album.id);
       return jsonResponse(result.status, result.body);
     });
-    await user.click(await screen.findByRole("button", { name: "改回自动选择" }));
+    await chooseAlbumAction(user, "改回自动选择");
     await waitFor(() => expect(searchOf(history).get("release")).toBe(context.versions[1].id));
     await new Promise((resolve) => setTimeout(resolve, 60));
     expect(searchOf(history).get("release")).toBe(context.versions[1].id);
@@ -185,7 +187,7 @@ describe("设定与清除默认版本", () => {
     const user = userEvent.setup();
     const { history } = await openAlbum(context, context.versions[1]);
     await onVersion("4 首");
-    await user.click(await screen.findByRole("button", { name: "设为默认版本" }));
+    await chooseAlbumAction(user, "设为默认版本");
     await screen.findByText(/已把这个版本设为默认版本/);
     await user.click(screen.getByRole("button", { name: "撤销" }));
 
@@ -195,7 +197,7 @@ describe("设定与清除默认版本", () => {
     await waitFor(() => expect(searchOf(history).get("release")).toBe(context.versions[1].id));
     expect(shownTracks()).toBe("4 首");
     expect(navLinks()[0]).toBe("版本 1 1998 · 2 张介质 · 3 首曲目");
-    expect(screen.getByRole("button", { name: "设为默认版本" })).toBeTruthy();
+    await expectDefaultAction("设为默认版本");
   });
 
   it("专辑刚被别人设定过（409）：提示说明并已刷新，再点一次用新的版本号成功", async () => {
@@ -205,12 +207,12 @@ describe("设定与清除默认版本", () => {
     await onVersion("4 首");
     // 页面读到的专辑版本号是 1；在页面之外另一位管理员把版本 3 设为默认版本，版本号变成 2。
     seedDefault(context.governance, context.album.id, 1, context.versions[2].id);
-    await user.click(await screen.findByRole("button", { name: "设为默认版本" }));
+    await chooseAlbumAction(user, "设为默认版本");
 
     expect(await screen.findByText("这张专辑刚被修改过")).toBeTruthy();
     expect(screen.getByText("页面已刷新。请核对当前内容后再重新操作。")).toBeTruthy();
     await waitFor(() => expect(navLinks()[0]).toBe("版本 1 默认版本 2000 · 2 张介质 · 5 首曲目"));
-    await user.click(await screen.findByRole("button", { name: "设为默认版本" }));
+    await chooseAlbumAction(user, "设为默认版本");
     expect(await screen.findByText(/已把这个版本设为默认版本/)).toBeTruthy();
     expect(context.api.requestsTo("POST", defaultPath(context.album.id)).map((request) => (request.body as { expected_revision: number }).expected_revision)).toEqual([1, 2]);
   });
@@ -223,7 +225,7 @@ describe("设定与清除默认版本", () => {
     context.api.on("POST", defaultPath(context.album.id), () => {
       throw new Error("connection reset");
     });
-    await user.click(await screen.findByRole("button", { name: "设为默认版本" }));
+    await chooseAlbumAction(user, "设为默认版本");
     expect(await screen.findByText("结果未确认")).toBeTruthy();
     context.api.on("POST", defaultPath(context.album.id), (request) => {
       const result = respondToGroupDefault(context.governance, context.album.id, request.headers.get("Idempotency-Key"), request.body);
@@ -243,7 +245,7 @@ describe("设定与清除默认版本", () => {
     await openAlbum(context, context.versions[1]);
     await onVersion("4 首");
     context.api.on("POST", defaultPath(context.album.id), () => jsonResponse(409, { error: { code: "not_in_group", message: "这个版本不在这张专辑里，或现在不可见" }, request_id: "r-default" }));
-    await user.click(await screen.findByRole("button", { name: "设为默认版本" }));
+    await chooseAlbumAction(user, "设为默认版本");
     expect(await screen.findByText("这个版本已经不在这张专辑里了，页面已刷新。")).toBeTruthy();
   });
 });
@@ -255,7 +257,7 @@ describe("移出默认版本", () => {
     const user = userEvent.setup();
     const { history } = await openAlbum(context);
     expect(shownTracks()).toBe("4 首");
-    await user.click(await screen.findByRole("button", { name: "移出为独立专辑" }));
+    await chooseAlbumAction(user, "移出为独立专辑");
     const dialog = await screen.findByRole("dialog", { name: "把这个版本移出为独立专辑？" });
     expect(within(dialog).getByText("它是这张专辑的默认版本，移出后会自动另选一个。")).toBeTruthy();
     await user.click(within(dialog).getByRole("button", { name: "移出" }));
@@ -278,7 +280,7 @@ describe("移出默认版本", () => {
     const user = userEvent.setup();
     await openAlbum(context, context.versions[2]);
     await onVersion("5 首");
-    await user.click(await screen.findByRole("button", { name: "移出为独立专辑" }));
+    await chooseAlbumAction(user, "移出为独立专辑");
     const dialog = await screen.findByRole("dialog", { name: "把这个版本移出为独立专辑？" });
     expect(within(dialog).queryByText(/它是这张专辑的默认版本/)).toBeNull();
   });

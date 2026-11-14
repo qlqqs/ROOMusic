@@ -40,8 +40,9 @@ it("按 DSD 倍率显示采样率，并显示 DSF 编码及 DSD 到 PCM 的信�
   };
   const user = userEvent.setup();
   render(<SignalPathButton />);
-  await user.click(screen.getByRole("button", { name: "信号路径：高质量" }));
+  await user.click(screen.getByRole("button", { name: /，信号路径：高质量$/ }));
   const dialog = screen.getByRole("dialog", { name: "信号路径：高质量" });
-  expect(within(dialog).getByText("DSD（DSF） DSD64", { exact: true })).toBeTruthy();
+  expect(within(dialog).getByText("DSD（DSF） DSD64", { exact: true, selector: "li span" })).toBeTruthy();
+  expect(within(dialog).getByText("DSD 转 PCM", { exact: true })).toBeTruthy();
   expect(within(dialog).getByText("DSD64 → PCM 352.8 kHz", { exact: true })).toBeTruthy();
 });

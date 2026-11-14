@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { MenuButton } from "./menu-button";
@@ -90,5 +90,70 @@ describe("菜单浮层与图标", () => {
     expect(select).toHaveBeenCalledTimes(1);
     expect(dialog.open).toBe(true);
     expect(document.activeElement).toBe(trigger);
+  });
+});
+
+describe("菜单分组", () => {
+  const actions = [
+    { id: "next", label: "下一首播放", onSelect: vi.fn() },
+    { id: "enqueue", label: "加入队列", onSelect: vi.fn() },
+    { id: "edit", group: "管理", label: "编辑发行信息", onSelect: vi.fn() },
+    { id: "join", group: "管理", label: "归入其他专辑…", onSelect: vi.fn() },
+  ];
+
+  it("组与组之间一条分隔线，有名字的组带组标题，组的名称就是标题；无名组的项直接在菜单里", async () => {
+    const user = userEvent.setup();
+    render(<MenuButton label="更多" actions={actions} />);
+    await user.click(screen.getByRole("button", { name: "更多" }));
+    const menu = screen.getByRole("menu", { name: "更多" });
+    expect(within(menu).getAllByRole("separator")).toHaveLength(1);
+    const group = within(menu).getByRole("group", { name: "管理" });
+    expect(within(group).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["编辑发行信息", "归入其他专辑…"]);
+    // 无名组的项是菜单的直接子元素，与没有分组时的结构相同。
+    expect([...menu.children].filter((child) => child.getAttribute("role") === "menuitem").map((item) => item.textContent)).toEqual(["下一首播放", "加入队列"]);
+    // 分隔线在两组之间。
+    const separator = within(menu).getByRole("separator");
+    expect(separator.previousElementSibling?.textContent).toBe("加入队列");
+    expect(separator.nextElementSibling).toBe(group);
+  });
+
+  it("组标题不可聚焦，方向键跨组移动时跳过它；Home、End 到两端的菜单项", async () => {
+    const user = userEvent.setup();
+    render(<MenuButton label="更多" actions={actions} />);
+    const trigger = screen.getByRole("button", { name: "更多" });
+    trigger.focus();
+    await user.keyboard("{ArrowDown}");
+    const title = screen.getByText("管理", { exact: true });
+    expect(title.tabIndex).toBe(-1);
+    expect(title.hasAttribute("tabindex")).toBe(false);
+    expect(title.tagName).not.toBe("BUTTON");
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "加入队列" }));
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "编辑发行信息" }));
+    await user.keyboard("{ArrowUp}");
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "加入队列" }));
+    await user.keyboard("{End}");
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "归入其他专辑…" }));
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "下一首播放" }));
+    await user.keyboard("{ArrowUp}{Enter}");
+    expect(actions[3]?.onSelect).toHaveBeenCalledTimes(1);
+  });
+
+  it("所有项都没有组：没有分隔线与组", async () => {
+    const user = userEvent.setup();
+    render(<MenuButton label="更多" actions={actions.slice(0, 2)} />);
+    await user.click(screen.getByRole("button", { name: "更多" }));
+    expect(screen.queryByRole("separator")).toBeNull();
+    expect(screen.queryByRole("group")).toBeNull();
+  });
+
+  it("不相邻的同名组各成一段", async () => {
+    const user = userEvent.setup();
+    render(<MenuButton label="更多" actions={[{ ...actions[2], id: "a" }, { id: "b", label: "加入队列", onSelect: vi.fn() }, { ...actions[3], id: "c" }] as typeof actions} />);
+    await user.click(screen.getByRole("button", { name: "更多" }));
+    expect(screen.getAllByRole("group", { name: "管理" })).toHaveLength(2);
+    expect(screen.getAllByRole("separator")).toHaveLength(2);
   });
 });
