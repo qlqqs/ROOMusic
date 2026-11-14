@@ -3,6 +3,10 @@
 .remote button { max-width: 160px; min-width: 0; color: var(--text-accent); }
 .remoteName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* 全屏播放器里的设备胶囊：图标、设备名与下拉箭头；名字过长截断。 */
+.pill { display: inline-flex; align-items: center; gap: 6px; max-width: 220px; min-width: 0; min-height: 28px; padding: 0 10px; border: 0; border-radius: 14px; background: var(--color-hover); color: var(--text-secondary); font-family: var(--font-body); font-size: var(--fs-12); cursor: pointer; }
+.pill:hover { background: var(--color-pressed); color: var(--text-primary); }
+
 /* 窄屏播放栏标题下的一行：正在控制的设备。 */
 .targetLine { display: flex; align-items: center; gap: 4px; min-width: 0; font-size: var(--fs-12); color: var(--text-accent); }
 .targetLine span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -33,6 +37,7 @@ button.select:hover { background: var(--color-hover); }
 /* 窄屏：从底部弹出，铺满宽度。 */
 @media (max-width: 767px) {
   .remote .remoteName { display: none; }
+  .pill { min-height: var(--control-height); padding: 0 14px; border-radius: 22px; }
   dialog.dialog::backdrop { background: color-mix(in srgb, var(--color-neutral-900) 40%, transparent); }
   .content { left: 0; right: 0; bottom: 0; width: auto; max-height: 80dvh; padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px)); border-width: 1px 0 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
 }

@@ -26,3 +26,18 @@ button.line:hover { color: var(--text-accent); }
 @media (prefers-reduced-motion: no-preference) {
   .group { transition: color 0.2s ease, border-left-color 0.2s ease; }
 }
+
+/*
+ * 大字号外观（全屏宽屏右栏）：当前行 32px 最亮，其余 24px，已唱过的比未唱的更暗；不画左侧标记，上下渐隐更长。
+ * 当前行换行时字号变化会让版面移动，所以字号不做过渡，只有颜色过渡；跟随滚动把当前行放回约 35% 高度。
+ * 三种颜色对深色背景的对比度都不低于 4.5:1（未唱 70%、已唱 52% 的主文字色）。
+ */
+.panel[data-size="large"] .scroller { -webkit-mask-image: linear-gradient(transparent, #000 18%, #000 78%, transparent); mask-image: linear-gradient(transparent, #000 18%, #000 78%, transparent); }
+.panel[data-size="large"] .list { gap: 18px; padding: 30vh 0 50vh; }
+.panel[data-size="large"] .text { padding: var(--space-8) 0 30vh; }
+.panel[data-size="large"] .paragraph { font-size: var(--fs-20); font-weight: 600; line-height: 1.5; }
+.panel[data-size="large"] .group { padding-left: 0; border-left: 0; font-size: var(--fs-24); font-weight: 600; line-height: 1.35; color: color-mix(in srgb, var(--text-primary) 70%, transparent); }
+.panel[data-size="large"] .group[data-state="past"] { color: color-mix(in srgb, var(--text-primary) 52%, transparent); }
+.panel[data-size="large"] .group[data-state="active"] { font-size: 32px; color: var(--text-primary); }
+.panel[data-size="large"] button.line:hover { color: var(--text-primary); }
+.panel[data-size="large"] .secondary { font-size: var(--fs-16); font-weight: 500; }

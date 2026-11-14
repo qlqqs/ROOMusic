@@ -148,11 +148,11 @@
   }
 }
 
-/* 桌面播放器参与网格；窄屏按实际测量高度（包含安全区）留白。 */
-.player { position: fixed; bottom: 0; left: 0; right: 0; z-index: 15; min-width: 0; padding-bottom: env(safe-area-inset-bottom, 0px); background: var(--color-bg); }
+/* 桌面播放器参与网格；窄屏按实际测量高度（包含安全区与迷你栏四周的留白）留白。窄屏的迷你栏是浮起的卡片，外层透明、不挡下面的点击。 */
+.player { position: fixed; bottom: 0; left: 0; right: 0; z-index: 15; min-width: 0; padding-bottom: env(safe-area-inset-bottom, 0px); pointer-events: none; }
 .frame[data-player] .main { padding-bottom: var(--player-measured-height, calc(68px + env(safe-area-inset-bottom, 0px))); }
 @media (min-width: 768px) {
   .frame[data-player] { grid-template-rows: minmax(0, 1fr) 68px; }
   .frame[data-player] .main { padding-bottom: 0; }
-  .player { position: relative; grid-column: 1 / -1; grid-row: 2; z-index: 15; padding-bottom: 0; }
+  .player { position: relative; grid-column: 1 / -1; grid-row: 2; z-index: 15; padding-bottom: 0; background: var(--color-bg); pointer-events: auto; }
 }
