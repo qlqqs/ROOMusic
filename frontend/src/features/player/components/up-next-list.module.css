@@ -1,0 +1,17 @@
+/* 右栏里占满剩余高度，列表在内部滚动。 */
+.panel { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; min-height: 0; }
+.heading { margin: 0; }
+.note { font-size: var(--fs-13); color: var(--text-secondary); }
+.empty { padding: var(--space-8) 0; color: var(--text-secondary); }
+.list { display: grid; align-content: start; gap: 2px; min-height: 0; margin: 0; padding: 0; overflow-y: auto; overscroll-behavior: contain; list-style: none; }
+.item { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); width: 100%; padding: var(--space-2) 10px; border: 0; border-radius: 8px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.item:hover { background: var(--color-hover); }
+.item:active { background: var(--color-pressed); }
+.art { display: block; width: 44px; height: 44px; overflow: hidden; border-radius: var(--radius-md); }
+.art > div { padding: 0; border: 0; }
+.art img { object-fit: cover; }
+.text { display: grid; min-width: 0; }
+.title, .secondary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.title { font-size: var(--fs-14); }
+.secondary, .duration { font-size: var(--fs-12); color: var(--text-secondary); }
+.duration { font-variant-numeric: tabular-nums; }

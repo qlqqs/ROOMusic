@@ -1,19 +1,21 @@
-import { Link, useRouterState } from "@tanstack/react-router";
-import { ChevronDown, Disc3 } from "lucide-react";
-import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
-import { Button, ModalDialog, useTooltip } from "../../../shared/ui";
-import { ArtistNames, artworkPath } from "../../catalog";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { ChevronDown, Disc3, MicVocal, MoreHorizontal, UserRound } from "lucide-react";
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type RefObject } from "react";
+import { Button, MenuButton, ModalDialog, useTooltip, type MenuAction } from "../../../shared/ui";
+import { ArtistNames, artworkPath, useArtistLinksReady } from "../../catalog";
 import { isPlaybackActive } from "../zones/controller";
 import type { PlayerTrack } from "../engine/queue";
 import { fullscreenOrigin, useFullscreenPlayer } from "../hooks/use-fullscreen-player";
+import { useTrackLyrics } from "../hooks/use-track-lyrics";
 import { usePlayerSelector } from "../player-provider";
 import { LyricsPanel } from "./lyrics-panel";
 import { PlayerArtwork } from "./player-artwork";
-import { ModeControl, TransportControls, VolumeControl } from "./player-controls";
-import { ControlTargetLine, DeviceButton } from "./device-picker";
+import { TransportControls, VolumeControl } from "./player-controls";
+import { DeviceButton } from "./device-picker";
 import { PlayerFaultInline } from "./player-feedback";
 import { QueueButton } from "./queue-drawer";
 import { SignalPathButton } from "./signal-path";
+import { UpNextList } from "./up-next-list";
 import { WaveformSeek } from "./waveform-seek";
 import styles from "./fullscreen-player.module.css";
 
@@ -39,8 +41,9 @@ function useMediaQuery(query: string): boolean {
 }
 
 /**
- * 全屏播放器：点播放栏封面打开，向下箭头、Esc、浏览器返回收起（开合记在历史记录里）。
- * 桌面两栏（唱片 | 标题与歌词），窄屏单栏，点唱片与歌词切换；底栏是收起、信号路径、传输控制、进度、播放模式、队列与音量。
+ * 全屏播放器：点播放栏封面打开，左上角向下箭头、Esc、浏览器返回收起（开合记在历史记录里），右上角是队列。
+ * 宽屏两栏：左边“唱机 + 控制台”（唱片下依次是标题与心形、专辑 · 艺人、信号路径与设备、进度、传输键、音量），右边“歌词 / 接下来”切换。
+ * 窄屏单栏：顶部收起、“正在播放 · 专辑名”与更多；唱片视图与歌词视图切换（“歌词”按钮或点唱片），下面的进度、传输键与底部一排位置不变。
  */
 export function FullscreenPlayer({ renderCurrentTrackActions, renderQueueActions }: FullscreenPlayerProps) {
   const { open, closePlayer } = useFullscreenPlayer();
@@ -85,16 +88,7 @@ export function FullscreenPlayer({ renderCurrentTrackActions, renderQueueActions
     <div className={styles.root} style={originStyle} data-closing={closing ? "" : undefined}>
       {track === null ? null : <>
         <Backdrop track={track} />
-        <div className={styles.layout}>
-          <span className={styles.collapse}><Button ref={collapseRef} variant="icon" icon={<ChevronDown size={22} />} label="收起全屏播放器" onClick={closePlayer} /></span>
-          <Stage track={track} titleId={titleId} renderCurrentTrackActions={renderCurrentTrackActions} />
-          <div className={styles.dock}>
-            <div className={styles.signal}><SignalPathButton /></div>
-            <div className={styles.transport}><TransportControls size="large" /></div>
-            <div className={styles.seek}><WaveformSeek layout="ends" /></div>
-            <div className={styles.options}><ModeControl /><DeviceButton /><QueueButton renderQueueActions={renderQueueActions} /><div className={styles.volume}><VolumeControl /></div></div>
-          </div>
-        </div>
+        <Layout track={track} titleId={titleId} collapseRef={collapseRef} onCollapse={closePlayer} renderCurrentTrackActions={renderCurrentTrackActions} renderQueueActions={renderQueueActions} />
       </>}
     </div>
   </ModalDialog>;
@@ -107,29 +101,120 @@ function Backdrop({ track }: { track: PlayerTrack }) {
   return <div className={styles.backdrop} aria-hidden="true"><img src={artworkPath(track.artworkId)} alt="" onError={() => setFailedId(track.artworkId)} /></div>;
 }
 
-function Stage({ track, titleId, renderCurrentTrackActions }: { track: PlayerTrack; titleId: string } & Pick<FullscreenPlayerProps, "renderCurrentTrackActions">) {
+type LayoutProps = {
+  track: PlayerTrack;
+  titleId: string;
+  collapseRef: RefObject<HTMLButtonElement | null>;
+  onCollapse: () => void;
+} & FullscreenPlayerProps;
+
+function Layout({ track, titleId, collapseRef, onCollapse, renderCurrentTrackActions, renderQueueActions }: LayoutProps) {
   const narrow = useMediaQuery(NARROW);
+  const collapse = <Button ref={collapseRef} variant="icon" icon={<ChevronDown size={22} />} label="收起全屏播放器" onClick={onCollapse} />;
+  const queue = <QueueButton renderQueueActions={renderQueueActions} />;
+  if (narrow) return <NarrowLayout track={track} titleId={titleId} collapse={collapse} queue={queue} renderCurrentTrackActions={renderCurrentTrackActions} />;
+  return <div className={styles.layout}>
+    <div className={styles.topbar}><span className={styles.collapse}>{collapse}</span>{queue}</div>
+    <div className={styles.stage}>
+      <div className={styles.left}>
+        <VinylDeck track={track} />
+        <div className={styles.console}>
+          <div className={styles.info}>
+            <div className={styles.titleRow}>
+              <h2 id={titleId} className={styles.title} title={track.title}>{track.title}</h2>
+              {renderCurrentTrackActions === undefined ? null : <div className={styles.trackActions}>{renderCurrentTrackActions(track)}</div>}
+              <TrackMenu track={track} />
+            </div>
+            <TrackMeta track={track} />
+            <div className={styles.signalRow}><SignalPathButton /><DeviceButton appearance="pill" /></div>
+            <PlayerFaultInline showStatus className={styles.status} />
+          </div>
+          <div className={styles.seek}><WaveformSeek layout="ends" /></div>
+          <TransportControls size="large" modes />
+          <div className={styles.volume}><VolumeControl /></div>
+        </div>
+      </div>
+      <FullscreenPanel track={track} />
+    </div>
+  </div>;
+}
+
+/** “专辑 · 艺人”：都是链接（艺人数据还在整理时艺人是纯文字）。 */
+function TrackMeta({ track }: { track: PlayerTrack }) {
+  return <p className={styles.meta}>
+    <Link to="/albums/$groupId" params={{ groupId: track.groupId }} search={{ release: track.releaseId }} title={track.albumTitle}>{track.albumTitle}</Link>
+    <span aria-hidden="true"> · </span>
+    <ArtistNames text={track.artist} refs={track.artistRefs ?? noRefs} />
+  </p>;
+}
+
+/** 当前曲目的“更多”：转到专辑、转到各位艺人（与标题下的链接同一目标）。离开当前页面时全屏随之关闭，返回可回到全屏。 */
+function TrackMenu({ track }: { track: PlayerTrack }) {
+  const navigate = useNavigate();
+  const linked = useArtistLinksReady();
+  const actions: MenuAction[] = [
+    { id: "album", label: "转到专辑", icon: <Disc3 size={16} />, onSelect: () => void navigate({ to: "/albums/$groupId", params: { groupId: track.groupId }, search: { release: track.releaseId } }) },
+    ...(linked ? (track.artistRefs ?? noRefs).map((ref, index): MenuAction => ({ id: `artist-${index}`, label: `转到艺人：${ref.name}`, icon: <UserRound size={16} />, onSelect: () => void navigate({ to: "/artists/$artistId", params: { artistId: ref.artist_id } }) })) : []),
+  ];
+  return <MenuButton iconOnly label="更多操作" icon={<MoreHorizontal size={18} />} actions={actions} />;
+}
+
+/** 宽屏右栏：“歌词 / 接下来”。每次打开时，这首有歌词就先显示歌词，没有就显示接下来；用户选过之后保持所选。 */
+function FullscreenPanel({ track }: { track: PlayerTrack }) {
+  const lyrics = useTrackLyrics(track.trackId);
+  const [choice, setChoice] = useState<"lyrics" | "upnext" | null>(null);
+  const view = choice ?? (lyrics.data === null ? "upnext" : "lyrics");
+  return <div className={styles.right}>
+    <div className={styles.segmented} role="group" aria-label="右栏内容">
+      <button type="button" aria-pressed={view === "lyrics"} onClick={() => setChoice("lyrics")}>歌词</button>
+      <button type="button" aria-pressed={view === "upnext"} onClick={() => setChoice("upnext")}>接下来</button>
+    </div>
+    <div className={styles.panel}>{view === "lyrics" ? <LyricsPanel trackId={track.trackId} size="large" /> : <UpNextList />}</div>
+  </div>;
+}
+
+type NarrowLayoutProps = { track: PlayerTrack; titleId: string; collapse: ReactNode; queue: ReactNode } & Pick<FullscreenPlayerProps, "renderCurrentTrackActions">;
+
+/** 窄屏：上面的视图在唱片与歌词之间切换，下面的进度、传输键与底部一排（设备、歌词、队列）不随视图变化。 */
+function NarrowLayout({ track, titleId, collapse, queue, renderCurrentTrackActions }: NarrowLayoutProps) {
   const [view, setView] = useState<"deck" | "lyrics">("deck");
   const deckTip = useTooltip("显示歌词");
-  const lyrics = <div className={styles.lyrics}><LyricsPanel trackId={track.trackId} /></div>;
-  const info = <div className={styles.info}>
-    <h2 id={titleId} className={styles.title} title={track.title}>{track.title}</h2>
-    <p className={styles.meta}>
-      <Link to="/albums/$groupId" params={{ groupId: track.groupId }} search={{ release: track.releaseId }} title={track.albumTitle}>{track.albumTitle}</Link>
-      <span aria-hidden="true"> · </span>
-      <ArtistNames text={track.artist} refs={track.artistRefs ?? noRefs} />
-    </p>
-    <PlayerFaultInline showStatus className={styles.status} />
-    <ControlTargetLine className={styles.narrowOnly} />
-    {renderCurrentTrackActions === undefined ? null : <div className={styles.trackActions}>{renderCurrentTrackActions(track)}</div>}
-  </div>;
-  // 宽屏：唱片在左，标题与歌词在右；窄屏：唱片与歌词占同一块，点唱片看歌词，歌词右上角的图标回到唱片。
-  if (!narrow) return <div className={styles.stage}><div className={styles.deckCell}><VinylDeck track={track} /></div>{info}{lyrics}</div>;
-  return <div className={styles.stage}>
-    <div className={styles.view}>{view === "deck"
-      ? <><button type="button" className={styles.deckButton} aria-label="显示歌词" {...deckTip.triggerProps} onClick={() => setView("lyrics")}><VinylDeck track={track} /></button>{deckTip.tooltip}</>
-      : <>{lyrics}<span className={styles.showDeck}><Button variant="icon" icon={<Disc3 size={18} />} label="显示唱片" onClick={() => setView("deck")} /></span></>}</div>
-    {info}
+  const actions = renderCurrentTrackActions === undefined ? null : <div className={styles.trackActions}>{renderCurrentTrackActions(track)}</div>;
+  return <div className={styles.layout}>
+    <div className={styles.topbar}>
+      {collapse}
+      <p className={styles.context}>正在播放<span className={styles.contextAlbum}>{track.albumTitle}</span></p>
+      <TrackMenu track={track} />
+    </div>
+    {view === "deck"
+      ? <div className={styles.view}>
+        <div className={styles.deckCell}><button type="button" className={styles.deckButton} aria-label="显示歌词" {...deckTip.triggerProps} onClick={() => setView("lyrics")}><VinylDeck track={track} /></button>{deckTip.tooltip}</div>
+        <div className={styles.info}>
+          <div className={styles.titleRow}><h2 id={titleId} className={styles.title} title={track.title}>{track.title}</h2>{actions}</div>
+          <TrackMeta track={track} />
+          <div className={styles.signalRow}><SignalPathButton /></div>
+        </div>
+      </div>
+      : <div className={`${styles.view} ${styles.lyricsView}`}>
+        <div className={styles.miniHead}>
+          <span className={styles.miniArt}><PlayerArtwork track={track} /></span>
+          <div className={styles.miniText}><h2 id={titleId} className={styles.miniTitle} title={track.title}>{track.title}</h2><p className={styles.meta}><ArtistNames text={track.artist} refs={track.artistRefs ?? noRefs} /></p></div>
+          {actions}
+        </div>
+        <div className={styles.lyrics}><LyricsPanel trackId={track.trackId} /></div>
+      </div>}
+    <div className={styles.controls}>
+      <PlayerFaultInline showStatus className={styles.status} />
+      <div className={styles.seek}><WaveformSeek layout="ends" /></div>
+      <TransportControls size="large" modes />
+      <div className={styles.bottomRow}>
+        <DeviceButton appearance="pill" />
+        <div className={styles.bottomActions}>
+          <Button variant="icon" icon={<MicVocal size={20} />} label="歌词" aria-pressed={view === "lyrics"} onClick={() => setView(view === "lyrics" ? "deck" : "lyrics")} />
+          {queue}
+        </div>
+      </div>
+    </div>
   </div>;
 }
 

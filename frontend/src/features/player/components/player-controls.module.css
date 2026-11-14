@@ -5,8 +5,9 @@
 .play button { width: 32px; min-width: 32px; min-height: 32px; height: 32px; border-radius: 50%; background: var(--color-text); color: var(--color-bg); }
 .play button:enabled:not([aria-disabled="true"]):hover { background: color-mix(in srgb, var(--color-text) 85%, var(--color-bg)); color: var(--color-bg); }
 .play button:enabled:not([aria-disabled="true"]):active { background: color-mix(in srgb, var(--color-text) 75%, var(--color-bg)); }
-/* 不是“顺序”时用强调色，一眼看出开了循环或随机。 */
-.mode:not([data-mode="sequential"]) button { color: var(--text-accent); }
+/* 随机、循环开启时：图标强调色（按钮的 aria-pressed 样式）加下方 4px 圆点。 */
+.mode { position: relative; display: inline-flex; }
+.mode[data-on]::after { content: ""; position: absolute; left: 50%; bottom: 1px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--color-accent); pointer-events: none; }
 .seek { display: flex; gap: var(--space-2); align-items: center; min-width: 0; font-size: var(--fs-12); font-variant-numeric: tabular-nums; }
 .seek input { flex: 1; min-width: 0; width: 100%; }
 .seek span { white-space: nowrap; }
@@ -24,6 +25,13 @@ input[type="range"] { accent-color: var(--text-accent); min-height: 24px; }
 
 @media (min-width: 768px) and (pointer: fine) { .compact { height: 32px; } .compact .play { height: 32px; } .compact button { min-height: 32px; height: 32px; } }
 
-.large { gap: var(--space-2); }
-.large .play { width: 48px; height: 48px; }
-.large .play button { width: 48px; min-width: 48px; min-height: 48px; height: 48px; }
+/* 全屏：按钮 40px、间距 20px，播放键是 64px 的圆，带阴影。 */
+.large { gap: 20px; }
+.large button { width: 40px; min-width: 40px; height: 40px; min-height: 40px; }
+.large .play { width: 64px; height: 64px; }
+.large .play button { width: 64px; min-width: 64px; min-height: 64px; height: 64px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); }
+@media (max-width: 767px) {
+  .large { justify-content: space-between; gap: 0; width: 100%; }
+  .large button { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
+  .large .play, .large .play button { width: 68px; min-width: 68px; height: 68px; min-height: 68px; }
+}

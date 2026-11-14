@@ -1,4 +1,4 @@
-import { ArrowRightLeft, MonitorSpeaker, Pencil, Trash2, X } from "lucide-react";
+import { ArrowRightLeft, ChevronDown, MonitorSpeaker, Pencil, Trash2, X } from "lucide-react";
 import { useId, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { Button, ConfirmDialog, FailureNotice, ModalDialog, StatusTag, TextField } from "../../../shared/ui";
 import { usePlayer, usePlayerSelector } from "../player-provider";
@@ -17,17 +17,23 @@ function stateText({ device, zone }: PlaybackDeviceRow): string {
 }
 
 /**
- * “播放设备”按钮：点开设备列表。正在控制本机时只有图标；控制别的设备时图标加设备名，一眼看出命令发往哪里。
- * 播放栏与全屏底栏各一个。
+ * “播放设备”按钮：点开设备列表。播放栏（icon）：正在控制本机时只有图标；控制别的设备时图标加设备名，一眼看出命令发往哪里。
+ * 全屏播放器（pill）：总是写出正在控制的设备名，做成信号路径旁的胶囊；还没读到设备时退回只有图标。
  */
-export function DeviceButton() {
+export function DeviceButton({ appearance = "icon" }: { appearance?: "icon" | "pill" }) {
   const remoteName = usePlayerSelector((snapshot) => (snapshot.isLocal || snapshot.device === null ? null : snapshot.device.name));
+  const deviceName = usePlayerSelector((snapshot) => snapshot.device?.name ?? null);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const open = (target: HTMLElement) => setAnchor(target.getBoundingClientRect());
+  const shownName = appearance === "pill" ? deviceName : remoteName;
   return <>
-    {remoteName === null
+    {shownName === null
       ? <Button variant="icon" icon={<MonitorSpeaker size={18} />} label="播放设备" onClick={(event) => open(event.currentTarget)} />
-      : <span className={styles.remote}><Button icon={<MonitorSpeaker size={16} />} aria-label={`播放设备：${remoteName}`} title={remoteName} onClick={(event) => open(event.currentTarget)}><span className={styles.remoteName}>{remoteName}</span></Button></span>}
+      : appearance === "pill"
+        ? <button type="button" className={styles.pill} aria-label={`播放设备：${shownName}`} onClick={(event) => open(event.currentTarget)}>
+          <MonitorSpeaker size={16} aria-hidden="true" /><span className={styles.remoteName}>{shownName}</span><ChevronDown size={12} aria-hidden="true" />
+        </button>
+        : <span className={styles.remote}><Button icon={<MonitorSpeaker size={16} />} aria-label={`播放设备：${shownName}`} title={shownName} onClick={(event) => open(event.currentTarget)}><span className={styles.remoteName}>{shownName}</span></Button></span>}
     <DeviceDialog anchor={anchor} onClose={() => setAnchor(null)} />
   </>;
 }

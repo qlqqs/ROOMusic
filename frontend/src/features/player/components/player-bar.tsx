@@ -5,11 +5,11 @@ import { ArtistNames } from "../../catalog";
 import type { PlayerTrack } from "../engine/queue";
 import { useFullscreenPlayer } from "../hooks/use-fullscreen-player";
 import { ControlTargetLine, DeviceButton } from "./device-picker";
-import { usePlayer } from "../player-provider";
+import { usePlayerProgressSelector, usePlayerSelector } from "../player-provider";
 import { PlayerArtwork } from "./player-artwork";
-import { ModeControl, TransportControls, VolumeControl } from "./player-controls";
+import { TransportControls, VolumeControl } from "./player-controls";
 import { PlayerFaultInline } from "./player-feedback";
-import { sourceFormat, statusLabels } from "./player-labels";
+import { statusLabels } from "./player-labels";
 import { QueueButton } from "./queue-drawer";
 import { SignalPathButton } from "./signal-path";
 import { WaveformSeek } from "./waveform-seek";
@@ -36,9 +36,25 @@ function ExpandArtworkButton({ track }: { track: PlayerTrack }) {
   </>;
 }
 
+/** 加载与缓冲时才写出状态；正常播放、暂停不占位置，出错的原因在标题下（PlayerFaultInline）。 */
+function TransientStatus() {
+  const status = usePlayerSelector((snapshot) => snapshot.status);
+  if (status !== "loading" && status !== "buffering") return null;
+  return <span className={styles.state}>{statusLabels[status]}</span>;
+}
+
+/** 窄屏迷你栏底边的进度线：只是示意（对读屏隐藏），拖动与键盘在全屏播放器的进度条上。只动 transform。 */
+function ProgressLine() {
+  const ratio = usePlayerProgressSelector((progress) => (progress.durationSeconds === null || progress.durationSeconds <= 0 ? 0 : Math.min(1, progress.positionSeconds / progress.durationSeconds)));
+  return <span className={styles.progressLine} aria-hidden="true"><span style={{ transform: `scaleX(${ratio})` }} /></span>;
+}
+
+/**
+ * 底部播放栏。宽屏三段：左边曲目（封面、标题、艺人 — 专辑、心形），中间随机、上一首、播放、下一首、循环与两端写时间的进度，
+ * 右边固定顺序：格式与信号路径、设备、队列、分隔线、音量。窄屏是浮起的迷你栏：封面、标题与设备名、播放、下一首、队列，底边一条进度线。
+ */
 export function PlayerBar({ renderCurrentTrackActions, renderQueueActions }: PlayerBarProps = {}) {
-  const { snapshot } = usePlayer();
-  const track = snapshot.current?.track;
+  const track = usePlayerSelector((snapshot) => snapshot.current?.track);
   return <section aria-label="播放器" className={styles.bar}>
     <div className={styles.identity}>
       {track === undefined ? <div className={styles.text}><PlayerFaultInline /><ControlTargetLine className={styles.narrowOnly} /></div> : <><ExpandArtworkButton track={track} /><div className={styles.text}>
@@ -48,13 +64,17 @@ export function PlayerBar({ renderCurrentTrackActions, renderQueueActions }: Pla
         <p className={styles.subtitle}><ArtistNames text={track.artist} refs={track.artistRefs ?? noRefs} /> — <Link to="/albums/$groupId" params={{ groupId: track.groupId }} search={{ release: track.releaseId }}>{track.albumTitle}</Link></p>
       </div>{renderCurrentTrackActions === undefined ? null : <div className={styles.trackActions}>{renderCurrentTrackActions(track)}</div>}</>}
     </div>
-    <div className={styles.center}><TransportControls size="compact" /><div className={styles.desktop}><WaveformSeek /></div></div>
-    <div className={styles.end}>
-      <div className={`${styles.desktop} ${styles.format}`}>{track === undefined ? null : <SignalPathButton />}<span className={styles.formatText}><span>{track === undefined ? "未知格式" : sourceFormat(track)}</span><span className={styles.state}>{statusLabels[snapshot.status]}</span></span></div>
-      <div className={styles.desktop}><ModeControl /></div>
-      <div className={styles.volume}><VolumeControl /></div>
-      <DeviceButton />
-      <QueueButton renderQueueActions={renderQueueActions} />
+    <div className={styles.center}>
+      <TransportControls size="compact" modes />
+      <div className={styles.desktop}><WaveformSeek layout="ends" /></div>
     </div>
+    <div className={styles.end}>
+      <div className={`${styles.desktop} ${styles.format}`}><SignalPathButton /><TransientStatus /></div>
+      <span className={styles.desktop}><DeviceButton /></span>
+      <QueueButton renderQueueActions={renderQueueActions} />
+      <span className={`${styles.separator} ${styles.desktop}`} aria-hidden="true" />
+      <div className={`${styles.volume} ${styles.desktop}`}><VolumeControl /></div>
+    </div>
+    {track === undefined ? null : <ProgressLine />}
   </section>;
 }

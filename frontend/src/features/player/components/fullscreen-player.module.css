@@ -18,7 +18,10 @@ dialog.dialog::backdrop { background: transparent; }
   --color-signal-enhanced: #8dbde4;
   --color-signal-high: #93cf9f;
   --color-warning: #ff8a80;
-  --wave-height: 40px;
+  --wave-height: 28px;
+  /* 信号路径胶囊与弹层在深色面上的底色。 */
+  --signal-pill-bg: rgb(255 255 255 / 7%);
+  --signal-card-bg: var(--color-neutral-900);
   position: relative;
   height: 100%;
   overflow: hidden;
@@ -35,25 +38,40 @@ dialog.dialog > div[aria-hidden="true"], .root dialog > div[aria-hidden="true"] 
 .backdrop img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.2); filter: blur(64px) saturate(1.2) brightness(0.45); }
 .backdrop::after { content: ""; position: absolute; inset: 0; background: rgb(0 0 0 / 35%); }
 
-/* 宽屏：上方两栏（唱片 | 标题与歌词），下方一行底栏，收起在底栏最左。 */
-.layout { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; grid-template-areas: "stage stage" "collapse dock"; gap: var(--space-6) var(--space-2); height: 100%; padding: var(--space-8) var(--space-8) var(--space-4); }
-.collapse { grid-area: collapse; align-self: center; }
-.stage { grid-area: stage; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "deck info" "deck lyrics"; gap: var(--space-4) 64px; width: 100%; max-width: 1200px; min-height: 0; margin-inline: auto; }
-.deckCell { grid-area: deck; align-self: center; }
-.info { grid-area: info; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "title actions" "meta actions" "status status"; gap: var(--space-1) var(--space-3); align-items: start; min-width: 0; padding-top: var(--space-4); }
-.title { grid-area: title; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: var(--fs-24); font-weight: 600; line-height: 1.3; }
-.meta { grid-area: meta; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: var(--fs-14); color: var(--text-secondary); }
-.status { grid-area: status; }
-.trackActions { grid-area: actions; display: flex; align-items: center; min-width: 0; }
-.lyrics { grid-area: lyrics; display: grid; min-width: 0; min-height: 0; }
+/* 宽屏：顶部一行（左上收起、右上队列），下面两栏：左“唱机 + 控制台”，右“歌词 / 接下来”。 */
+.layout { position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; padding: 18px 20px 36px; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-width: 0; }
+.collapse button { width: 40px; height: 40px; }
+.stage { display: grid; grid-template-columns: minmax(320px, 520px) minmax(0, 1fr); gap: 56px; width: 100%; max-width: 1240px; min-height: 0; margin-inline: auto; padding-inline: 36px; }
+.left { display: grid; align-content: center; justify-items: center; gap: 22px; min-width: 0; min-height: 0; overflow-y: auto; padding-block: var(--space-2); }
+.console { display: grid; justify-items: center; gap: 14px; width: min(400px, 100%); min-width: 0; }
+.info { display: grid; gap: var(--space-1); width: 100%; min-width: 0; }
+.titleRow { display: flex; align-items: center; gap: var(--space-1); min-width: 0; }
+.title { flex: 1; min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: 26px; font-weight: 600; line-height: 1.3; }
+.meta { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: var(--fs-14); color: var(--text-secondary); }
+.meta a { text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: 3px; }
+.signalRow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-width: 0; margin-top: var(--space-2); }
+.trackActions { display: flex; align-items: center; flex: none; }
+.seek { width: 100%; min-width: 0; }
+.seek > div > div { --wave-rest: rgb(255 255 255 / 22%); --wave-played: var(--color-accent-300); }
+.volume { display: flex; width: 100%; }
+.volume > div { flex: 1; }
+.volume input { flex: 1; width: auto; }
 
-/* 底栏：信号路径、传输控制、进度（两端时间）、播放模式 / 队列 / 音量。 */
-.dock { grid-area: dock; display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; grid-template-areas: "signal transport seek options"; align-items: center; gap: var(--space-4); min-width: 0; }
-.signal { grid-area: signal; }
-.transport { grid-area: transport; }
-.seek { grid-area: seek; min-width: 0; }
-.seek > div > div { --wave-rest: rgb(255 255 255 / 28%); }
-.options { grid-area: options; display: flex; align-items: center; gap: var(--space-1); }
+.right { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 22px; min-width: 0; min-height: 0; padding-top: 34px; }
+.panel { display: grid; min-width: 0; min-height: 0; }
+.segmented { justify-self: start; display: inline-flex; padding: 3px; border-radius: 9px; background: rgb(255 255 255 / 8%); }
+.segmented button { min-height: 28px; padding: 0 14px; white-space: nowrap; border: 0; border-radius: 6px; background: none; color: var(--text-secondary); font-family: var(--font-body); font-size: var(--fs-13); cursor: pointer; }
+.segmented button:hover { color: var(--text-primary); }
+.segmented button[aria-pressed="true"] { background: rgb(255 255 255 / 16%); color: var(--text-primary); font-weight: 600; }
+
+/* 768–1023px：两栏各占一半，收窄间距，右栏的歌词不被挤成一两个字一行。 */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .stage { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-8); padding-inline: 0; }
+}
+
+/* 唱片在左栏里按视口高度缩放，给下面的控制台留出位置。 */
+.left .deck { width: min(38vh, 30vw, 360px); margin-right: 0; }
 
 /* 黑胶：盘面纹路、中心封面；唱臂绕右上方的支点转动。 */
 .deck { position: relative; width: min(44vh, 38vw, 440px); aspect-ratio: 1; margin-right: 6%; }
@@ -69,8 +87,6 @@ dialog.dialog > div[aria-hidden="true"], .root dialog > div[aria-hidden="true"] 
 .armHead { stroke: var(--color-neutral-200); stroke-width: 11; stroke-linecap: round; }
 
 .deckButton { display: grid; place-items: center; width: 100%; height: 100%; padding: 0; border: 0; border-radius: var(--radius-lg); background: none; cursor: pointer; }
-.view { position: relative; display: grid; min-height: 0; }
-.showDeck { position: absolute; top: 0; right: 0; }
 
 @media (prefers-reduced-motion: no-preference) {
   dialog.dialog[open] .root { animation: grow 220ms ease-out; }
@@ -83,19 +99,26 @@ dialog.dialog > div[aria-hidden="true"], .root dialog > div[aria-hidden="true"] 
 @keyframes shrink { to { opacity: 0; transform: scale(0.08); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* 窄屏：单栏、一个滚动区。收起在顶部；唱片与歌词占同一块；底栏两行半：进度、传输控制、信号路径与模式 / 队列。不显示音量滑块。 */
+/* 窄屏：单栏、一个滚动区。顶部收起、“正在播放 · 专辑名”与更多；中间是唱片或歌词视图；下面的进度、传输键与底部一排（设备 | 歌词、队列）位置不变。不显示音量。 */
 @media (max-width: 767px) {
-  .layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; grid-template-areas: "collapse" "stage" "dock"; gap: var(--space-3); padding: var(--space-2) var(--space-4) calc(var(--space-3) + env(safe-area-inset-bottom, 0px)); overflow-y: auto; }
-  .collapse { justify-self: start; }
-  .stage { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(260px, 1fr) auto; grid-template-areas: "view" "info"; gap: var(--space-4); }
-  .view { grid-area: view; }
-  .view > .lyrics { grid-area: auto; padding-top: var(--space-8); }
-  .deck { width: min(72vw, 44vh, 320px); margin-right: 0; }
-  .info { padding-top: 0; }
-  .title { font-size: var(--fs-20); }
-  .dock { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "seek seek seek" "transport transport transport" "signal . options"; gap: var(--space-1) var(--space-2); }
-  .volume { display: none; }
+  .layout { grid-template-rows: auto minmax(0, 1fr) auto; gap: var(--space-3); padding: var(--space-2) 18px calc(18px + env(safe-area-inset-bottom, 0px)); overflow-y: auto; }
+  .context { flex: 1; display: grid; min-width: 0; text-align: center; font-size: var(--fs-12); line-height: 1.3; color: var(--text-secondary); }
+  .contextAlbum { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-13); font-weight: 600; color: var(--text-primary); }
+  .view { display: grid; grid-template-rows: minmax(240px, 1fr) auto; gap: var(--space-4); min-height: 0; }
+  .deckCell { display: grid; place-items: center; min-height: 0; }
+  .deck { width: min(72vw, 40vh, 300px); margin-right: 0; }
+  .title { font-size: 22px; }
+  .lyricsView { grid-template-rows: auto minmax(0, 1fr); }
+  .miniHead { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); }
+  .miniArt { display: block; width: 52px; height: 52px; overflow: hidden; border-radius: var(--radius-md); }
+  .miniArt > div { padding: 0; border: 0; }
+  .miniArt img { object-fit: cover; }
+  .miniText { min-width: 0; }
+  .miniTitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-15); font-weight: 600; }
+  .miniText .meta { font-size: var(--fs-12); -webkit-line-clamp: 1; }
+  .lyrics { display: grid; min-height: 0; }
+  .controls { display: grid; justify-items: center; gap: var(--space-3); min-width: 0; }
+  .bottomRow { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); width: 100%; min-width: 0; }
+  .bottomActions { display: flex; align-items: center; gap: var(--space-1); }
+  .bottomActions button[aria-pressed="true"] { border-radius: 22px; background: color-mix(in srgb, var(--color-accent-300) 12%, transparent); }
 }
-
-/* 窄屏设备按钮里放不下名字：正在控制的设备名写在状态行下。 */
-@media (min-width: 768px) { .narrowOnly { display: none; } }
