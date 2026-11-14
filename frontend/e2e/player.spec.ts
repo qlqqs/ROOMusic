@@ -139,6 +139,8 @@ for (const width of widths) {
     await bar(page).getByRole("button", { name: "打开全屏播放器", exact: true }).click();
     const full = fullscreenDialog(page);
     await expect(full).toBeVisible();
+    // 可见时 grow 仍可能在淡入、缩放；等待结束再测布局与对比度，避免 axe 读到不同动画帧的混合颜色。
+    await expect(full.locator(":scope > div").first()).toHaveCSS("transform", "none");
     await expect(full.getByRole("heading", { level: 2, name: `1 ${LONG_TITLE}`, exact: true })).toHaveAttribute("title", `1 ${LONG_TITLE}`);
     await expect(full).toContainText(LONG_ARTIST);
     const album = full.getByRole("link", { name: LONG_TITLE, exact: true });

@@ -78,6 +78,10 @@ the UI sends the contract and handles results correctly.
 （react-hooks 的 lint 规则会把它当成 Hook，本项目叫 `provide`）；原生 `<dialog>` 的焦点断言见[组件目录](./component-catalog.md)。
 Playwright 在 CI 里重试一次，失败时上传 HTML 报告与 trace（保留 7 天）；本机复用已在运行的预览服务，CI 不复用。
 
+全屏播放器的 `toBeVisible()` 不代表 220ms 的 `grow` 淡入、缩放已结束。打开后做布局或 axe 对比度检查前，
+先对对话框的首个直接子元素断言 `toHaveCSS("transform", "none")`（见 `e2e/player.spec.ts` 的五种宽度长标题用例与 `openFullscreen`）。
+否则 axe 可能将动画不同帧的透明度与背景混合，误报 `color-contrast`；不要用固定睡眠、重试扫描或关闭对比度规则代替等待稳定状态。
+
 ## Accessibility And Responsive Gate
 
 Run automated accessibility checks on representative screens and manually verify
