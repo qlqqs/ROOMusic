@@ -11,6 +11,7 @@ import type { ApiMock, MockOptions } from "./support/api-mock";
 import { expectMinimumFontSize, expectNoSeriousViolations } from "./support/checks";
 import { expect, test } from "./support/fixtures";
 import { heading } from "./support/locators";
+import { chooseRootAction, openAddRoot, rootItem, rootMenuButton } from "./support/library";
 
 // 无障碍扫描：每个页面状态用 axe（WCAG 2.1 A 与 AA）扫描，serious 或 critical 即失败，并检查最小字号。
 // 除了默认状态，还覆盖对话框打开、错误提示、字段错误与窄屏菜单，这些状态的结构与默认状态不同。
@@ -336,7 +337,7 @@ const states: State[] = [
     options: { signedInAs: "curator" },
     reach: async (page) => {
       await page.goto("/settings/library");
-      await expect(page.getByRole("rowheader", { name: "classical-a" })).toBeVisible();
+      await expect(rootItem(page, "classical-a")).toBeVisible();
     },
   },
   {
@@ -363,21 +364,40 @@ const states: State[] = [
     options: { signedInAs: "curator" },
     reach: async (page) => {
       await page.goto("/settings/library");
-      await page.getByRole("button", { name: "停用目录 classical-a" }).click();
+      await chooseRootAction(page, "classical-a", "停用目录");
       await expect(page.getByRole("dialog", { name: "停用目录“classical-a”？" })).toBeVisible();
     },
   },
   {
-    name: "扫描目录（字段错误与结果提示）",
+    name: "扫描目录（目录菜单）",
     options: { signedInAs: "curator" },
     reach: async (page) => {
       await page.goto("/settings/library");
-      await page.getByLabel("目录路径").fill("/music/accessible");
-      await page.getByRole("button", { name: "添加目录" }).click();
+      await rootMenuButton(page, "classical-a").click();
+      await expect(page.getByRole("menu", { name: "目录 classical-a 的更多操作" }).getByRole("menuitem", { name: "停用目录" })).toBeVisible();
+    },
+  },
+  {
+    name: "扫描目录（添加后的结果提示）",
+    options: { signedInAs: "curator" },
+    reach: async (page) => {
+      await page.goto("/settings/library");
+      const dialog = await openAddRoot(page);
+      await dialog.getByLabel("目录路径").fill("/music/accessible");
+      await dialog.getByRole("button", { name: "添加目录", exact: true }).click();
+      await expect(dialog).toBeHidden();
       await expect(page.getByText(/已添加目录“accessible”/)).toBeVisible();
-      await page.getByLabel("目录路径").fill("/etc");
-      await page.getByRole("button", { name: "添加目录" }).click();
-      await expect(page.getByLabel("目录路径")).toHaveAttribute("aria-invalid", "true");
+    },
+  },
+  {
+    name: "扫描目录（添加对话框的字段错误）",
+    options: { signedInAs: "curator" },
+    reach: async (page) => {
+      await page.goto("/settings/library");
+      const dialog = await openAddRoot(page);
+      await dialog.getByLabel("目录路径").fill("/etc");
+      await dialog.getByRole("button", { name: "添加目录", exact: true }).click();
+      await expect(dialog.getByLabel("目录路径")).toHaveAttribute("aria-invalid", "true");
     },
   },
   {

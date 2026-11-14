@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { albumGroup } from "../src/test/catalog-data";
 import { markUncertain, scanIssues, seedIssues } from "../src/test/governance-data";
 import { LONG_TITLE, LONG_TOKEN } from "./support/albums-data";
+import { chooseAlbumAction } from "./support/album";
 import type { ApiMock } from "./support/api-mock";
 import { expectMinimumFontSize, expectNoDocumentScroll, expectNoHorizontalOverflow, expectNoSeriousViolations, expectVisibleFocusRing, widths } from "./support/checks";
 import { expect, test } from "./support/fixtures";
@@ -116,7 +117,7 @@ test.describe("元数据：主流程", () => {
     const mock = await backend.start({ signedInAs: "curator" });
     start(mock);
     await page.goto(`/albums/${suites().id}`);
-    await page.getByRole("link", { name: "查看问题" }).click();
+    await chooseAlbumAction(page, "查看问题");
     await expect(page).toHaveURL(new RegExp(`/issues\\?release=${releaseOf(suites())}`));
     await expect(detail(page, "Bach: Cello Suites")).toBeVisible();
   });

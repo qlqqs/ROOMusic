@@ -86,9 +86,14 @@ test.describe("键盘", () => {
   test("停用确认对话框：焦点进入且被约束，Esc 关闭并把焦点还给触发按钮，Enter 确认", async ({ page, backend }) => {
     await backend.start({ signedInAs: "curator" });
     await page.goto("/settings/library");
-    const trigger = page.getByRole("button", { name: "停用目录 classical-a" });
+    // 停用在目录行尾的“更多”菜单里：Enter 打开菜单，End 到最后一项“停用目录”，Enter 打开确认。
+    const trigger = page.getByRole("button", { name: "目录 classical-a 的更多操作" });
     await expect(trigger).toBeVisible();
     await trigger.focus();
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("End");
+    await expect(page.getByRole("menuitem", { name: "停用目录" })).toBeFocused();
+    await expectVisibleFocusRing(page, "停用目录菜单项");
     await page.keyboard.press("Enter");
 
     const dialog = page.getByRole("dialog", { name: "停用目录“classical-a”？" });
@@ -104,6 +109,8 @@ test.describe("键盘", () => {
     await expect(trigger).toBeFocused();
 
     // 再次打开，用键盘走到确认按钮并确认。
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("End");
     await page.keyboard.press("Enter");
     await expect(dialog).toBeVisible();
     await page.keyboard.press("Tab");

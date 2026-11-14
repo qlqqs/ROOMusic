@@ -69,10 +69,15 @@ for (const width of widths) {
     await expect(row(page, long.title).getByRole("button", { name: `播放 ${long.title}`, exact: true })).toBeEnabled();
     await expect(row(page, missing.title).getByText("文件缺失", { exact: true })).toBeVisible();
     await expect(row(page, missing.title).getByRole("link")).toHaveCount(0);
-    for (const item of [long, missing]) {
-      const heart = row(page, item.title).getByRole("button", { name: `收藏《${item.title}》`, exact: true });
-      await expect(heart).toBeEnabled();
-      await expect(heart).toHaveAttribute("aria-pressed", "false");
+    // 窄屏（小于 768px）心形收进“更多”，在下面打开菜单时检查“收藏”；宽屏是行内心形（未收藏、平时不显示，悬停所在行才出现）。
+    if (width >= 768) {
+      for (const item of [long, missing]) {
+        const heart = row(page, item.title).getByRole("button", { name: `收藏《${item.title}》`, exact: true });
+        await expect(heart).toBeEnabled();
+        await expect(heart).toHaveAttribute("aria-pressed", "false");
+      }
+    } else {
+      await expect(row(page, long.title).getByRole("button", { name: `收藏《${long.title}》`, exact: true })).toHaveCount(0);
     }
     const muted = await row(page, missing.title).getByText(missing.title, { exact: true }).evaluate((element) => ({ color: getComputedStyle(element).color, secondary: getComputedStyle(document.documentElement).getPropertyValue("--text-secondary").trim() }));
     const secondaryColor = await page.evaluate((value) => { const element = document.createElement("span"); element.style.color = value; document.body.append(element); const color = getComputedStyle(element).color; element.remove(); return color; }, muted.secondary);
@@ -87,8 +92,11 @@ for (const width of widths) {
     await more.evaluate((element) => element.scrollIntoView({ block: "center" }));
     await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
     await expect(more).toBeEnabled();
+    // 精确指针下行内动作平时不接收指针（pointer-events: none），鼠标先移到这一行上才能点到。
+    await row(page, missing.title).hover();
     await more.click();
     await expect(page.getByRole("menuitem", { name: "添加到歌单…" })).toBeEnabled();
+    if (width < 768) await expect(page.getByRole("menuitem", { name: "收藏", exact: true })).toBeEnabled();
     await expect(page.getByRole("menuitem", { name: "下一首播放" })).toBeDisabled();
     await expect(page.getByRole("menuitem", { name: "加入队列" })).toBeDisabled();
     await page.getByRole("menuitem", { name: "从历史中移除" }).click();
@@ -121,7 +129,9 @@ test("纯键盘：侧栏进入播放历史，行内播放，更多→移除→�
   await expect(play).toBeEnabled();
   await keyboardActivate(page, play);
   const bar = page.getByRole("region", { name: "播放器", exact: true });
-  await expect(bar.getByText("正在播放", { exact: true })).toBeVisible();
+  // 状态文字只在加载、缓冲时出现：开始播放后主按钮变成“暂停”，“正在加载”消失。
+  await expect(bar.getByRole("button", { name: "暂停", exact: true })).toBeVisible();
+  await expect(bar.getByText("正在加载", { exact: true })).toHaveCount(0);
   await expect(bar).toContainText(first.title);
   await keyboardActivate(page, row(page, first.title).getByRole("button", { name: "更多操作" }));
   await expect(page.getByRole("menuitem", { name: "添加到歌单…" })).toBeEnabled();

@@ -161,12 +161,27 @@ for (const width of [375, 1440]) {
     await expect(play).toBeEnabled();
     await page.keyboard.press("Tab");
     const heart = row.getByRole("button", { name: `收藏《${fixture.target.title}》`, exact: true });
-    await expect(heart).toBeFocused();
-    await expect(heart).toHaveAttribute("aria-pressed", "false");
-    await expect(heart).not.toHaveAttribute("aria-busy", "true");
-    await page.keyboard.press("Enter");
-    await expect(heart).toHaveAttribute("aria-pressed", "true");
-    await expect(heart).not.toHaveAttribute("aria-busy", "true");
+    if (width < 768) {
+      // 窄屏心形收进“更多”：Tab 到“更多操作”，Enter 打开，第一项是“收藏”。
+      const more = row.getByRole("button", { name: "更多操作", exact: true });
+      await expect(heart).toHaveCount(0);
+      await expect(more).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("menuitem", { name: "收藏", exact: true })).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect.poll(() => personalUserOf(mock.personal, PERSONAL_LISTENER_ID).tracks.has(fixture.target.id)).toBe(true);
+      await expect(more).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("menuitem", { name: "取消收藏", exact: true })).toBeEnabled();
+      await page.keyboard.press("Escape");
+    } else {
+      await expect(heart).toBeFocused();
+      await expect(heart).toHaveAttribute("aria-pressed", "false");
+      await expect(heart).not.toHaveAttribute("aria-busy", "true");
+      await page.keyboard.press("Enter");
+      await expect(heart).toHaveAttribute("aria-pressed", "true");
+      await expect(heart).not.toHaveAttribute("aria-busy", "true");
+    }
     expect(personalUserOf(mock.personal, PERSONAL_LISTENER_ID).tracks.has(fixture.target.id)).toBe(true);
     expect(await queueSnapshotStep4(mock)).toEqual(before);
     expect(mock.callsTo("POST", /\/commands$/).filter((call) => typeof call.body === "object" && call.body !== null && "command" in call.body && ["play_tracks", "play", "play_entry", "next", "previous"].includes(String(call.body.command)))).toHaveLength(0);
@@ -306,14 +321,25 @@ for (const width of [375, 1440]) {
     await page.goto("/search?q=爱");
     const row = page.getByRole("table", { name: "曲目结果" }).getByRole("row").filter({ has: page.getByText(fixture.target.title, { exact: true }) });
     const heart = row.getByRole("button", { name: `收藏《${fixture.target.title}》`, exact: true });
-    await expect(heart).toHaveAttribute("aria-pressed", "false");
-    await expect(heart).not.toHaveAttribute("aria-busy", "true");
     const before = await queueSnapshotStep4(mock);
-    await keyboardTargetStep4(page, heart, false);
-    await expectVisibleFocusRing(page, "搜索结果收藏");
-    await page.keyboard.press("Enter");
-    await expect(heart).toHaveAttribute("aria-pressed", "true");
-    await expect(heart).not.toHaveAttribute("aria-busy", "true");
+    if (width < 768) {
+      // 窄屏心形收进“更多”：用键盘打开菜单选“收藏”，再打开时这一项是“取消收藏”。
+      await expect(row.getByText(fixture.target.title, { exact: true })).toBeVisible();
+      await expect(heart).toHaveCount(0);
+      await keyboardMenuStep4(page, row.getByRole("button", { name: "更多操作", exact: true }), "收藏");
+      await expect.poll(() => personalUserOf(mock.personal, PERSONAL_LISTENER_ID).tracks.has(fixture.target.id)).toBe(true);
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("menuitem", { name: "取消收藏", exact: true })).toBeEnabled();
+      await page.keyboard.press("Escape");
+    } else {
+      await expect(heart).toHaveAttribute("aria-pressed", "false");
+      await expect(heart).not.toHaveAttribute("aria-busy", "true");
+      await keyboardTargetStep4(page, heart, false);
+      await expectVisibleFocusRing(page, "搜索结果收藏");
+      await page.keyboard.press("Enter");
+      await expect(heart).toHaveAttribute("aria-pressed", "true");
+      await expect(heart).not.toHaveAttribute("aria-busy", "true");
+    }
     expect(personalUserOf(mock.personal, PERSONAL_LISTENER_ID).tracks.has(fixture.target.id)).toBe(true);
     await keyboardMenuStep4(page, row.getByRole("button", { name: "更多操作", exact: true }), "添加到歌单…");
     const dialog = page.getByRole("dialog", { name: "添加到歌单", exact: true });

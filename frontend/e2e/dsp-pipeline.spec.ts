@@ -6,8 +6,11 @@ import type { ApiMock } from "./support/api-mock";
 import { expectNoHorizontalOverflow, expectNoSeriousViolations, widths } from "./support/checks";
 import { expect, test } from "./support/fixtures";
 import { tabTo } from "./support/keyboard";
+import { installZoneAudio } from "./support/zones";
 
-const signalButton = (page: Page) => page.getByRole("button", { name: /^信号路径：/ });
+// 入口是“质量色圆点 + 来源格式”的胶囊：可访问名是“格式，信号路径：质量”（含可见文字）。弹层的名称仍以“信号路径：”开头。
+const signalButton = (page: Page) => page.getByRole("button", { name: /，信号路径：/ });
+const fullscreen = (page: Page) => page.getByRole("dialog", { name: "信号路径合成曲目", exact: true });
 const signalDialog = (page: Page) => page.getByRole("dialog", { name: /^信号路径：/ });
 
 async function setup(page: Page, mock: ApiMock) {
@@ -68,15 +71,31 @@ for (const width of widths) {
     await expectFitsViewport(page.getByRole("switch", { name: "削波指示", exact: true }).locator(".."));
     await expectNoSeriousViolations(page, `Headroom ${width}px`);
 
-    // 小于 900px 时播放栏隐藏格式区，信号路径入口保留在全屏播放器中。
-    if (width < 900) await page.getByRole("button", { name: "打开全屏播放器", exact: true }).click();
-    await signalButton(page).click();
+    // 窄屏（小于 768px）迷你栏没有格式区，信号路径入口在全屏播放器里。
+    let entry = page.getByRole("region", { name: "播放器", exact: true }).getByRole("button", { name: /，信号路径：/ });
+    if (width < 768) {
+      await page.getByRole("button", { name: "打开全屏播放器", exact: true }).click();
+      entry = fullscreen(page).getByRole("button", { name: /，信号路径：/ });
+    }
+    await expect(entry).toHaveAccessibleName("FLAC 24/96，信号路径：有损");
+    await expect(entry).toContainText("FLAC 24/96");
+    await entry.click();
     const dialog = signalDialog(page);
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText("−21.8 LUFS", { exact: false })).toBeVisible();
     await expect(dialog.getByText("兼容转换", { exact: true })).toBeVisible();
     await expect(dialog.getByText("有损", { exact: true })).toBeVisible();
-    await expect(dialog.getByRole("listitem").last()).toHaveText("测试浏览器");
+    // 链从来源开始、按服务端步骤的顺序，最后是输出设备；拉低整体质量的那一步（编码为 Opus）加粗。
+    const steps = dialog.getByRole("listitem");
+    await expect(steps).toHaveCount(5);
+    await expect(steps.first()).toContainText("来源");
+    await expect(steps.nth(3)).toContainText("编码");
+    await expect(steps.last()).toHaveText(/^输出\s*测试浏览器$/);
+    await expect.poll(() => steps.nth(3).locator("span", { hasText: "Opus 128 kbps" }).last().evaluate((element) => Number(getComputedStyle(element).fontWeight))).toBeGreaterThanOrEqual(600);
+    await expect.poll(() => steps.first().locator("span", { hasText: "FLAC" }).last().evaluate((element) => Number(getComputedStyle(element).fontWeight))).toBeLessThan(600);
+    // 测量格：响度、范围、峰值来自分析结果，处理速度来自信号路径。
+    await expect(dialog.getByText("处理速度", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("85.3×", { exact: true })).toBeVisible();
     await screenshot(page, "signal-path", width);
     await expectNoHorizontalOverflow(page, `信号路径 ${width}px`);
     await expectFitsViewport(dialog.locator(":scope > div"));
@@ -87,7 +106,7 @@ for (const width of widths) {
 test("纯键盘打开信号路径，Escape 关闭并回到入口", async ({ page, backend }) => {
   const mock = await backend.start({ signedInAs: "listener" });
   await setup(page, mock);
-  await tabTo(page, (name) => name.startsWith("信号路径："), 100);
+  await tabTo(page, (name) => name.includes("，信号路径："), 100);
   await expect(signalButton(page)).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(signalDialog(page)).toBeVisible();
@@ -95,4 +114,44 @@ test("纯键盘打开信号路径，Escape 关闭并回到入口", async ({ page
   await page.keyboard.press("Escape");
   await expect(signalDialog(page)).not.toBeVisible();
   await expect(signalButton(page)).toBeFocused();
+});
+
+/** 入口圆点与它的柔光层（::after）当前的动画名；没有动画时是 none。 */
+async function dotAnimations(entry: Locator) {
+  return entry.locator("span").first().evaluate((dot) => ({ dot: getComputedStyle(dot).animationName, glow: getComputedStyle(dot, "::after").animationName }));
+}
+
+test("信号路径圆点：只在播放中呼吸，暂停时静止；削波时换成削波脉动；减少动态效果时都没有动画", async ({ page, backend }) => {
+  const mock = await backend.start({ signedInAs: "listener" });
+  await installZoneAudio(page);
+  await setup(page, mock);
+  const bar = page.getByRole("region", { name: "播放器", exact: true });
+  const entry = bar.getByRole("button", { name: /，信号路径：/ });
+  // 暂停中：静止。
+  await expect(entry).not.toHaveAttribute("data-state", "breathing");
+  expect(await dotAnimations(entry)).toEqual({ dot: "none", glow: "none" });
+
+  await bar.getByRole("button", { name: "播放", exact: true }).click();
+  await expect(entry).toHaveAttribute("data-state", "breathing");
+  await expect.poll(() => dotAnimations(entry)).toEqual({ dot: expect.stringMatching(/breathe/), glow: expect.stringMatching(/glow/) });
+
+  // 削波：圆点换警示色，呼吸停下，柔光层快速脉动；名称里写出“削波”。
+  mock.zones.seedSignal({ quality: "low", clipping: true, processing_speed: 85.3, steps: [{ kind: "source", quality: "lossless", lossy: false, compat: false, params: { codec: "flac", sample_rate: 96000, bit_depth: 24, channels: 2 } }] });
+  await expect(entry).toHaveAccessibleName("FLAC 24/96，信号路径：有损，削波");
+  await expect.poll(() => dotAnimations(entry)).toEqual({ dot: "none", glow: expect.stringMatching(/clip/) });
+
+  // 减少动态效果：只变色，不做任何动画。
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect.poll(() => dotAnimations(entry)).toEqual({ dot: "none", glow: "none" });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  mock.zones.seedSignal({ quality: "low", clipping: false, processing_speed: 85.3, steps: [{ kind: "source", quality: "lossless", lossy: false, compat: false, params: { codec: "flac", sample_rate: 96000, bit_depth: 24, channels: 2 } }] });
+  await expect.poll(() => dotAnimations(entry)).toEqual({ dot: expect.stringMatching(/breathe/), glow: expect.stringMatching(/glow/) });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect.poll(() => dotAnimations(entry)).toEqual({ dot: "none", glow: "none" });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+
+  // 暂停后回到静止。
+  await bar.getByRole("button", { name: "暂停", exact: true }).click();
+  await expect(entry).not.toHaveAttribute("data-state", "breathing");
+  await expect.poll(() => dotAnimations(entry)).toEqual({ dot: "none", glow: "none" });
 });

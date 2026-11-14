@@ -7,6 +7,7 @@ import { LONG_ARTIST, LONG_TITLE } from "./support/albums-data";
 import type { ApiMock } from "./support/api-mock";
 import { expectMinimumFontSize, expectNoDocumentScroll, expectNoHorizontalOverflow, expectVisibleFocusRing, widths } from "./support/checks";
 import { expect, test } from "./support/fixtures";
+import { clickRowAction } from "./support/track-rows";
 
 const playlistName = "晚间室内乐";
 const longName = "室内乐与交响诗".repeat(14).slice(0, 100);
@@ -72,7 +73,7 @@ async function openMenu(page: Page, trigger: Locator) {
   await trigger.scrollIntoViewIfNeeded();
   // 等自动定位产生的滚动事件交付，避免其关闭刚打开的浮层。
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
-  await trigger.click();
+  await clickRowAction(trigger);
   await expect(page.getByRole("menu")).toBeVisible();
 }
 
@@ -86,23 +87,44 @@ for (const width of [375, 1440]) {
     await page.goto("/me/liked");
     const row = trackTable(page).getByRole("row").filter({ has: page.getByText("第一乐章", { exact: true }) });
     const heart = row.getByRole("button", { name: "收藏《第一乐章》", exact: true });
-    await expect(heart).toHaveAttribute("aria-pressed", "true");
-    await expect(heart).not.toHaveAttribute("aria-busy", "true");
+    const more = row.getByRole("button", { name: "更多操作", exact: true });
+    // 窄屏（小于 768px）心形收进“更多”，菜单里是“取消收藏”；宽屏是行内心形。
+    const narrow = width < 768;
+    if (narrow) {
+      await expect(heart).toHaveCount(0);
+      await openMenu(page, more);
+      await expect(page.getByRole("menuitem", { name: "取消收藏", exact: true })).toBeEnabled();
+      await page.keyboard.press("Escape");
+    } else {
+      await expect(heart).toHaveAttribute("aria-pressed", "true");
+      await expect(heart).not.toHaveAttribute("aria-busy", "true");
+    }
     // 先完成初次读取，再令写入与对账读取都失败，稳定停留在可手动重读的状态。
     const unavailable = { status: 503, json: { error: { code: "database_unavailable", message: "个人音乐暂时不可用" }, request_id: "personal-layout" } };
     await page.route(`**/api/v1/me/favorites/tracks/${firstTrack.track_id}`, (route) => route.request().method() === "DELETE" ? route.fulfill(unavailable) : route.fallback());
     await page.route("**/api/v1/me/favorites/lookup", (route) => route.fulfill(unavailable));
-    await heart.click();
+    if (narrow) {
+      await openMenu(page, more);
+      await page.getByRole("menuitem", { name: "取消收藏", exact: true }).click();
+    } else {
+      await heart.click();
+    }
     const notice = row.getByText("没能确认是否已收藏。", { exact: true });
     const retry = row.getByRole("button", { name: "重新读取《第一乐章》的收藏状态", exact: true });
     await expect(notice).toBeVisible();
     await expect(retry).toBeVisible();
-    await expect(heart).toHaveAttribute("aria-busy", "true");
-    await expect(heart).toHaveAttribute("aria-pressed", "true");
+    if (narrow) {
+      await openMenu(page, more);
+      await expect(page.getByRole("menuitem", { name: "取消收藏", exact: true })).toBeDisabled();
+      await page.keyboard.press("Escape");
+    } else {
+      await expect(heart).toHaveAttribute("aria-busy", "true");
+      await expect(heart).toHaveAttribute("aria-pressed", "true");
+    }
     await screenshot(page, info, width, "favorite-reread-failed");
     const rowBox = await row.boundingBox();
     if (rowBox === null) throw new Error("失败态曲目行不可见");
-    for (const element of [notice, retry, heart, row.getByRole("button", { name: "更多操作", exact: true })]) {
+    for (const element of [notice, retry, ...(narrow ? [] : [heart]), more]) {
       const box = await element.boundingBox();
       if (box === null) throw new Error("失败态内容不可见");
       expect.soft(box.x, "提示和按钮不能超出行左边界").toBeGreaterThanOrEqual(rowBox.x - 1);
@@ -153,16 +175,23 @@ for (const width of widths) {
     await expect(row.getByText("文件缺失", { exact: true })).toBeVisible();
     await expect(row.getByRole("link")).toHaveCount(0);
     await expect(row.getByRole("button", { name: "播放 缺失的第三乐章", exact: true })).toBeDisabled();
-    await expect(row.getByRole("button", { name: "收藏《缺失的第三乐章》", exact: true })).toBeEnabled();
     const play = row.getByRole("button", { name: "播放 缺失的第三乐章", exact: true });
     const heart = row.getByRole("button", { name: "收藏《缺失的第三乐章》", exact: true });
     const more = row.getByRole("button", { name: "更多操作", exact: true });
-    const boxes = await Promise.all([play, heart, more].map((item) => item.boundingBox()));
+    // 窄屏（小于 768px）心形收进“更多”：一行只有播放与“更多”；宽屏是播放、心形、“更多”一排。
+    const actions = width < 768 ? [play, more] : [play, heart, more];
+    if (width < 768) await expect(heart).toHaveCount(0);
+    else await expect(heart).toBeEnabled();
+    const boxes = await Promise.all(actions.map((item) => item.boundingBox()));
     expect(boxes.every((box) => box !== null)).toBe(true);
-    expect((boxes[1]?.x ?? 0) - (boxes[0]?.x ?? 0)).toBeGreaterThan(0);
-    expect((boxes[2]?.x ?? 0) - (boxes[1]?.x ?? 0)).toBeGreaterThan(0);
+    for (let index = 1; index < boxes.length; index += 1) expect((boxes[index]?.x ?? 0) - (boxes[index - 1]?.x ?? 0)).toBeGreaterThan(0);
     await expect(more).toHaveText("");
-    expect(boxes[2]?.y).toBe(boxes[0]?.y);
+    expect(boxes.at(-1)?.y).toBe(boxes[0]?.y);
+    if (width < 768) {
+      await openMenu(page, more);
+      await expect(page.getByRole("menuitem", { name: "取消收藏", exact: true })).toBeEnabled();
+      await page.keyboard.press("Escape");
+    }
     const missingColor = await row.getByText("缺失的第三乐章", { exact: true }).evaluate((element) => getComputedStyle(element).color);
     const presentColor = await table.getByRole("rowheader").getByText(LONG_TITLE, { exact: true }).evaluate((element) => getComputedStyle(element).color);
     expect(missingColor).not.toBe(presentColor);
@@ -234,16 +263,27 @@ for (const width of widths) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/me/liked");
     const first = trackTable(page).getByRole("row").filter({ has: page.getByText("第一乐章", { exact: true }) });
-    await first.getByRole("button", { name: "播放 第一乐章", exact: true }).click();
+    await clickRowAction(first.getByRole("button", { name: "播放 第一乐章", exact: true }));
     const player = page.getByRole("region", { name: "播放器", exact: true });
     const heart = player.getByRole("button", { name: "收藏《第一乐章》", exact: true });
-    await expect(heart).toBeEnabled();
-    const playerBox = await player.boundingBox();
-    const heartBox = await heart.boundingBox();
-    expect(heartBox?.x ?? -1).toBeGreaterThanOrEqual(playerBox?.x ?? 0);
-    expect((heartBox?.x ?? 0) + (heartBox?.width ?? 0)).toBeLessThanOrEqual((playerBox?.x ?? 0) + (playerBox?.width ?? 0));
-    expect(heartBox?.y ?? -1).toBeGreaterThanOrEqual(playerBox?.y ?? 0);
-    expect((heartBox?.y ?? 0) + (heartBox?.height ?? 0)).toBeLessThanOrEqual((playerBox?.y ?? 0) + (playerBox?.height ?? 0));
+    if (width < 768) {
+      // 窄屏的迷你栏只有封面、标题与设备名、播放、下一首、队列；心形在全屏播放器的标题旁。
+      await expect(player.getByText("第一乐章", { exact: true })).toBeVisible();
+      await expect(heart).toHaveCount(0);
+      await player.getByRole("button", { name: "打开全屏播放器", exact: true }).click();
+      const full = page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "收起全屏播放器", exact: true }) });
+      await expect(full.getByRole("button", { name: "收藏《第一乐章》", exact: true })).toBeEnabled();
+      await full.getByRole("button", { name: "收起全屏播放器", exact: true }).click();
+      await expect(full).toBeHidden();
+    } else {
+      await expect(heart).toBeEnabled();
+      const playerBox = await player.boundingBox();
+      const heartBox = await heart.boundingBox();
+      expect(heartBox?.x ?? -1).toBeGreaterThanOrEqual(playerBox?.x ?? 0);
+      expect((heartBox?.x ?? 0) + (heartBox?.width ?? 0)).toBeLessThanOrEqual((playerBox?.x ?? 0) + (playerBox?.width ?? 0));
+      expect(heartBox?.y ?? -1).toBeGreaterThanOrEqual(playerBox?.y ?? 0);
+      expect((heartBox?.y ?? 0) + (heartBox?.height ?? 0)).toBeLessThanOrEqual((playerBox?.y ?? 0) + (playerBox?.height ?? 0));
+    }
     expect(await visibleLines(player.getByText("第一乐章", { exact: true }))).toBeLessThanOrEqual(width < 768 ? 2 : 1);
     await screenshot(page, info, width, "player-heart");
     await layout(page, "播放器心形");

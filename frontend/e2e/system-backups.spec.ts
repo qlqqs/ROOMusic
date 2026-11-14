@@ -64,6 +64,8 @@ for (const width of [1440, 375]) {
 }
 
 const filesPanel = (page: Page) => page.getByRole("region", { name: "备份文件", exact: true });
+// 删除结果的读屏播报：分组卡片之后紧跟的那个仅供读屏的 status（卡片 SettingsGroup 不接收额外的子节点）。
+const filesAnnouncement = (page: Page) => filesPanel(page).locator("xpath=following-sibling::*[1]").getByRole("status");
 const retentionPanel = (page: Page) => page.getByRole("region", { name: "自动清理", exact: true });
 const singleDeleteDialog = (page: Page) => page.getByRole("dialog", { name: /^删除 .* 的备份？$/ });
 const bulkDeleteDialog = (page: Page) => page.getByRole("dialog", { name: /^删除 \d+ 份备份？$/ });
@@ -103,7 +105,8 @@ async function expectBackupControlsLayout(page: Page, width: number): Promise<vo
     const input = field.getByRole("spinbutton", { name, exact: true });
     const unit = field.locator('span[aria-hidden="true"]');
     const unlimited = field.locator("label");
-    await expectSingleTextLine(field.locator("legend"));
+    // 名称是设置行左侧的文字（组经 aria-labelledby 以它为名），不再是 fieldset 的 legend。
+    await expectSingleTextLine(retentionPanel(page).getByText(name, { exact: true }));
     await expectSingleTextLine(unit, true);
     await expectSingleTextLine(unlimited);
     await expectSameRow(input, unit, `${name}：数字框 / 单位`);
@@ -172,7 +175,7 @@ for (const width of [1440, 375]) {
     await expect(dialog).toBeHidden();
     await expect(backupRows(page)).toHaveCount(3);
     await expect(filesPanel(page).getByRole("heading", { name: "备份文件", exact: true })).toBeFocused();
-    await expect(filesPanel(page).getByRole("status")).toHaveText("已删除。");
+    await expect(filesAnnouncement(page)).toHaveText("已删除。");
     expect(mock.callsTo("DELETE", `/api/v1/system/backups/${file.name}`)).toHaveLength(1);
     expect(mock.system.backups.some((backup) => backup.name === file.name)).toBe(false);
     expect(mock.system.status.last_success_at).toBe(mock.system.backups[0]?.created_at);
@@ -228,7 +231,7 @@ for (const width of [1440, 375]) {
     await expect(filesPanel(page).getByText("还没有备份。", { exact: true })).toBeVisible();
     await expect(filesPanel(page).getByRole("button", { name: /^删除所选/ })).toHaveCount(0);
     await expect(filesPanel(page).getByRole("heading", { name: "备份文件", exact: true })).toBeFocused();
-    await expect(filesPanel(page).getByRole("status")).toHaveText("已删除 4 份。");
+    await expect(filesAnnouncement(page)).toHaveText("已删除 4 份。");
     expect(mock.callsTo("POST", "/api/v1/system/backups/deletions").map(({ body }) => body)).toEqual([{ names }]);
   });
 

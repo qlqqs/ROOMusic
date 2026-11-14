@@ -6,6 +6,7 @@ import type { ApiMock } from "./support/api-mock";
 import { expectMinimumFontSize, expectNoHorizontalOverflow, expectNoSeriousViolations, expectVisibleFocusRing, widths } from "./support/checks";
 import { expect, test } from "./support/fixtures";
 import { expectFocusStaysInDialog, tabTo } from "./support/keyboard";
+import { albumMoreButton, arrowToAlbumAction, chooseAlbumAction, openMenu } from "./support/album";
 import { heading, uuidPattern } from "./support/locators";
 
 // 默认版本与版本对比（M4）：管理员设定、改回与撤销默认版本，所有成员看到标签并打开对比对话框。
@@ -41,7 +42,7 @@ test.describe("设定默认版本", () => {
     await expect(shownTracks(page)).toContainText("13 首");
     await expect(versionNav(page).getByText("默认版本")).toHaveCount(0);
 
-    await page.getByRole("button", { name: "设为默认版本" }).click();
+    await chooseAlbumAction(page, "设为默认版本");
     await expect(page.getByText("已把这个版本设为默认版本。")).toBeVisible();
     const [set] = defaultCalls(mock);
     expect(set?.body).toEqual({ expected_revision: 1, release_id: versions[1]?.id });
@@ -55,9 +56,10 @@ test.describe("设定默认版本", () => {
     expect(tagWidth, "“默认版本”标签的宽度").toBeLessThan(cardWidth / 2);
     await expect(page).not.toHaveURL(/release=/);
     await expect(shownTracks(page)).toContainText("13 首");
-    await expect(page.getByRole("button", { name: "改回自动选择" })).toBeVisible();
-
-    await page.getByRole("button", { name: "改回自动选择" }).click();
+    // “更多操作”里这一项随之变成“改回自动选择”。
+    await albumMoreButton(page).click();
+    await expect(openMenu(page).getByRole("menuitem", { name: "设为默认版本" })).toHaveCount(0);
+    await openMenu(page).getByRole("menuitem", { name: "改回自动选择" }).click();
     await expect(page.getByText("已改回自动选择：这张专辑默认显示年份最早的版本。")).toBeVisible();
     expect(defaultCalls(mock)[1]?.body).toEqual({ expected_revision: 2, release_id: null });
     // 这个版本不再是代表版本，地址带上 release，页面还在它上面。
@@ -72,17 +74,22 @@ test.describe("设定默认版本", () => {
     expect(mock.callsTo("POST", /\/revert$/)).toHaveLength(1);
   });
 
-  test("只用键盘完成设定：Tab 到“设为默认版本”，Enter 提交，焦点留在按钮上，提示里的“撤销”也能用键盘到达", async ({ page, backend }) => {
+  test("只用键盘完成设定：Tab 到“更多操作”，方向键到“设为默认版本”，Enter 提交，焦点回到“更多操作”，提示里的“撤销”也能用键盘到达", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
     start(mock);
     await page.goto(groupPath());
     await expect(heading(page, TITLE)).toBeVisible();
-    await tabTo(page, (name) => name === "设为默认版本", 40);
-    await expectVisibleFocusRing(page, "设为默认版本按钮");
+    await tabTo(page, (name) => name === "更多操作", 40);
+    await expectVisibleFocusRing(page, "更多操作按钮");
+    await arrowToAlbumAction(page, "设为默认版本");
+    await expectVisibleFocusRing(page, "设为默认版本菜单项");
     await page.keyboard.press("Enter");
     await expect(page.getByText("已把这个版本设为默认版本。")).toBeVisible();
-    // 提交之后焦点没有丢到页面顶部：仍在这个按钮上（它现在叫“改回自动选择”）。
-    await expect(page.getByRole("button", { name: "改回自动选择" })).toBeFocused();
+    // 提交之后焦点没有丢到页面顶部：回到打开菜单的“更多操作”，菜单里这一项现在叫“改回自动选择”。
+    await expect(albumMoreButton(page)).toBeFocused();
+    await arrowToAlbumAction(page, "改回自动选择");
+    await page.keyboard.press("Escape");
+    await expect(albumMoreButton(page)).toBeFocused();
     await tabTo(page, (name) => name === "撤销", 8);
     await expectVisibleFocusRing(page, "撤销按钮");
     await page.keyboard.press("Enter");
@@ -96,8 +103,10 @@ test.describe("设定默认版本", () => {
     await page.goto(groupPath());
     await expect(heading(page, TITLE)).toBeVisible();
     await expect(versionNav(page).getByRole("link", { name: /^版本 1 默认版本/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: "设为默认版本" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "改回自动选择" })).toHaveCount(0);
+    await albumMoreButton(page).click();
+    await expect(openMenu(page).getByRole("menuitem")).toHaveText(["下一首播放", "加入队列"]);
+    await expect(page.getByRole("menuitem", { name: "设为默认版本" })).toHaveCount(0);
+    await expect(page.getByRole("menuitem", { name: "改回自动选择" })).toHaveCount(0);
     expect(defaultCalls(mock)).toHaveLength(0);
   });
 });

@@ -207,6 +207,8 @@ test("不可播放曲目的心形与更多仍可用，仅播放、下一首播�
   await expect(track.getByRole("button", { name: "收藏《WavPack DSD 曲目》", exact: true })).toBeEnabled();
   const more = track.getByRole("button", { name: "更多操作", exact: true });
   await expect(more).toBeEnabled();
+  // 精确指针下行内动作平时不接收指针，鼠标先移到这一行上。
+  await track.hover();
   await more.click();
   await expect(page.getByRole("menuitem", { name: "下一首播放", exact: true })).toBeDisabled();
   await expect(page.getByRole("menuitem", { name: "加入队列", exact: true })).toBeDisabled();
@@ -306,7 +308,10 @@ async function setMediaTime(page: Page, seconds: number) {
   }, seconds);
 }
 
-/** 768px 以上是“唱片 | 歌词”两栏；窄屏切换到歌词时，标题位于歌词下方。 */
+/**
+ * 768px 及以上是两栏：左栏“唱机 + 控制台”（唱片下依次是标题、进度、传输键与音量），右栏“歌词 / 接下来”；收起在左上角，队列在右上角。
+ * 窄屏切换到歌词视图时，唱片换成一行小封面与标题，标题在歌词上方。
+ */
 async function expectLyricsLayout(page: Page, label: string) {
   const full = fullscreenDialog(page);
   const lyrics = lyricsPanel(page);
@@ -314,15 +319,36 @@ async function expectLyricsLayout(page: Page, label: string) {
   const [lyricsBox, titleBox] = await Promise.all([lyrics.boundingBox(), title.boundingBox()]);
   if (lyricsBox === null || titleBox === null) throw new Error(`${label}：缺少布局元素`);
   const viewport = page.viewportSize();
-  if ((viewport?.width ?? 0) >= 768) {
+  const width = viewport?.width ?? 0;
+  if (width >= 768) {
     const coverBox = await full.getByLabel("没有可用封面").locator("xpath=../../..").boundingBox();
     if (coverBox === null) throw new Error(`${label}：缺少唱片`);
     expect(lyricsBox.x, `${label}：歌词在唱片右侧`).toBeGreaterThanOrEqual(coverBox.x + coverBox.width - 1);
-    expect(titleBox.x, `${label}：标题在右侧信息栏`).toBeGreaterThanOrEqual(coverBox.x + coverBox.width - 1);
-    expect(titleBox.y, `${label}：标题在歌词上方`).toBeLessThanOrEqual(lyricsBox.y + 1);
-    expect(lyricsBox.height, `${label}：歌词与唱片共用上方两栏`).toBeGreaterThanOrEqual(280);
+    expect(lyricsBox.height, `${label}：右栏歌词有足够高度`).toBeGreaterThanOrEqual(280);
+    // 标题、进度、传输键与音量都在唱片下方的左栏里。
+    const console = [
+      ["标题", title],
+      ["进度", full.getByRole("slider", { name: "播放进度", exact: true })],
+      ["播放键", full.getByRole("button", { name: /^(播放|暂停)$/ })],
+      ["随机播放", full.getByRole("button", { name: "随机播放", exact: true })],
+      ["循环", full.getByRole("button", { name: /^(循环：关|列表循环|单曲循环)$/ })],
+      ["音量", full.getByRole("slider", { name: "播放器音量", exact: true })],
+    ] as const;
+    for (const [name, locator] of console) {
+      const box = await locator.boundingBox();
+      if (box === null) throw new Error(`${label}：缺少${name}`);
+      expect(box.y, `${label}：${name}在唱片下方`).toBeGreaterThanOrEqual(coverBox.y + coverBox.height - 1);
+      expect(box.x + box.width, `${label}：${name}在左栏`).toBeLessThanOrEqual(lyricsBox.x + 1);
+    }
+    const collapse = await full.getByRole("button", { name: "收起全屏播放器", exact: true }).boundingBox();
+    const queueButton = await full.getByRole("button", { name: /^队列（\d+）$/ }).boundingBox();
+    if (collapse === null || queueButton === null) throw new Error(`${label}：缺少收起或队列按钮`);
+    expect(collapse.x + collapse.width, `${label}：收起在左上角`).toBeLessThanOrEqual(width / 4);
+    expect(collapse.y, `${label}：收起在左上角`).toBeLessThanOrEqual(80);
+    expect(queueButton.x, `${label}：队列在右上角`).toBeGreaterThanOrEqual(width * 0.75);
+    expect(queueButton.y, `${label}：队列在右上角`).toBeLessThanOrEqual(80);
   } else {
-    expect(lyricsBox.y, `${label}：歌词位于标题上方`).toBeLessThanOrEqual(titleBox.y + 1);
+    expect(titleBox.y + titleBox.height, `${label}：小封面一行的标题在歌词上方`).toBeLessThanOrEqual(lyricsBox.y + 1);
   }
 }
 
@@ -337,6 +363,21 @@ for (const width of widths) {
       const lyrics = lyricsPanel(page);
       if (width < 768) {
         await fullscreenDialog(page).getByRole("button", { name: "显示歌词", exact: true }).click();
+      } else {
+        // 右栏默认：有歌词时是“歌词”，没有歌词时是“接下来”（列出队列里随后的曲目）；切到“歌词”看到没有歌词的说明。
+        const switcher = fullscreenDialog(page).getByRole("group", { name: "右栏内容", exact: true });
+        const showLyrics = switcher.getByRole("button", { name: "歌词", exact: true });
+        const showUpNext = switcher.getByRole("button", { name: "接下来", exact: true });
+        if (kind === "none") {
+          await expect(showUpNext).toHaveAttribute("aria-pressed", "true");
+          await expect(showLyrics).toHaveAttribute("aria-pressed", "false");
+          await expect(fullscreenDialog(page).getByRole("region", { name: "接下来", exact: true }).getByRole("button", { name: "播放《合成曲目 2》", exact: true })).toBeVisible();
+          await expect(lyrics).toHaveCount(0);
+          await showLyrics.click();
+          await expect(showLyrics).toHaveAttribute("aria-pressed", "true");
+        } else {
+          await expect(showLyrics).toHaveAttribute("aria-pressed", "true");
+        }
       }
       await expect(lyrics).toBeVisible();
       if (kind === "synced") await expect(lyrics.getByRole("listitem")).toHaveCount(LYRIC_LINES);
@@ -369,7 +410,7 @@ for (const width of widths) {
   }
 }
 
-test("同步歌词：当前行随播放位置变化并保持在中部，点击与键盘跳转，高亮不改变行高", async ({ page, backend }) => {
+test("同步歌词（全屏大字号）：当前行随播放位置变化并停在中间偏上、最大最亮，已唱过的更暗，点击与键盘跳转", async ({ page, backend }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   const mock = await backend.start({ signedInAs: "listener" });
   await installPlayback(page, mock);
@@ -390,22 +431,32 @@ test("同步歌词：当前行随播放位置变化并保持在中部，点击�
     const [box, area] = await Promise.all([item.boundingBox(), scroller.boundingBox()]);
     return box !== null && area !== null && box.y + 1 >= area.y && box.y + box.height - 1 <= area.y + area.height;
   };
-  const metrics = (item: Locator) => item.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return { fontSize: style.fontSize, fontWeight: style.fontWeight, lineHeight: style.lineHeight };
+  const fontSize = (item: Locator) => item.evaluate((element) => getComputedStyle(element).fontSize);
+  // 颜色是带透明度的主文字色：比较 alpha，越小越暗。
+  const alpha = (item: Locator) => item.evaluate((element) => {
+    const match = /rgba?\(([^)]+)\)|color\(srgb ([^)]+)\)/.exec(getComputedStyle(element).color);
+    const parts = (match?.[1] ?? match?.[2] ?? "").split(/[\s,/]+/).filter(Boolean);
+    return parts.length >= 4 ? Number(parts[3]) : 1;
   });
+  // 当前行中线在歌词区域里的相对高度（0 顶部，1 底部）。
+  const anchorOf = async (item: Locator) => {
+    const [box, area] = await Promise.all([item.boundingBox(), scroller.boundingBox()]);
+    return box === null || area === null ? -1 : (box.y + box.height / 2 - area.y) / area.height;
+  };
 
-  // 位置到 1.55 秒：当前行变为第 16 行（1.5 秒），并被滚到可视区内；高亮前后字号、字重、行高与整份歌词的高度都不变。
-  const listHeight = async () => (await lyrics.getByRole("list").boundingBox())?.height;
-  const heightBefore = await listHeight();
-  if (heightBefore === undefined) throw new Error("歌词列表没有可测量的高度");
-  const plainMetrics = await metrics(items.nth(3));
+  // 位置到 1.55 秒：当前行变为第 16 行（1.5 秒），被滚到歌词区域中间偏上（约 35%）；当前行 32px 最亮，其余 24px，已唱过的比未唱的更暗。
   await setMediaTime(page, 1.55);
   await expect(current).toContainText("第 16 行歌词");
   await expect(current).toHaveCount(1);
   await expect.poll(() => inside(current), { message: "当前行被滚进歌词区域" }).toBe(true);
-  expect(await metrics(current)).toEqual(plainMetrics);
-  expect(await listHeight()).toBeCloseTo(heightBefore, 0);
+  // 平滑滚动途中位置在变，轮询直到停在约 35% 处（0.25–0.45）。
+  await expect.poll(async () => { const anchor = await anchorOf(current); return anchor > 0.25 && anchor < 0.45; }, { message: "当前行停在中间偏上" }).toBe(true);
+  expect(await fontSize(current)).toBe("32px");
+  expect(await fontSize(items.nth(3))).toBe("24px");
+  expect(await fontSize(items.nth(20))).toBe("24px");
+  expect(await alpha(current)).toBe(1);
+  expect(await alpha(items.nth(3)), "已唱过的行比未唱的更暗").toBeLessThan(await alpha(items.nth(20)));
+  expect(await alpha(items.nth(20)), "未唱的行比当前行暗").toBeLessThan(1);
   expect(await scroller.evaluate((element) => element.scrollTop), "已滚动到当前行附近").toBeGreaterThan(0);
 
   // 点击第 25 行（2.4 秒）：命令定位到曲目内位置；新流从 0 起，歌词按分段偏移显示该行。
@@ -512,3 +563,190 @@ for (const width of [375, 1440]) {
     await expectNoSeriousViolations(page, "播放设置");
   });
 }
+
+// ---- 界面整理（曲目行显隐、双击播放、窄屏迷你栏、全屏两栏与窄屏歌词按钮）：只有真实浏览器能验证悬停、触屏媒体查询与真实排版 ----
+
+const trackRows = (page: Page) => page.locator("[data-track-row]");
+/** 行内三个动作按钮的不透明度（精确指针下平时为 0，悬停或聚焦所在行时为 1）。 */
+const actionOpacity = (button: Locator) => button.evaluate((element) => getComputedStyle(element).opacity);
+
+test("精确指针：曲目行平时只显示序号、标题与时长，悬停或 Tab 聚焦时出现播放、心形与“更多”，已收藏的心形常驻", async ({ page, backend }) => {
+  const mock = await backend.start({ signedInAs: "listener" });
+  await installPlayback(page, mock);
+  expect(await page.evaluate(() => matchMedia("(hover: hover) and (pointer: fine)").matches), "桌面 Chrome 是精确指针").toBe(true);
+  const row = trackRows(page).nth(4);
+  const play = row.getByRole("button", { name: "从这首开始播放", exact: true });
+  const heart = row.getByRole("button", { name: "收藏《合成曲目 5》", exact: true });
+  const more = row.getByRole("button", { name: "更多操作", exact: true });
+  await page.mouse.move(0, 0);
+  for (const button of [play, heart, more]) await expect.poll(() => actionOpacity(button)).toBe("0");
+  await expect(row.getByText("合成曲目 5", { exact: true })).toBeVisible();
+
+  await row.hover();
+  for (const button of [play, heart, more]) await expect.poll(() => actionOpacity(button)).toBe("1");
+  // 收藏之后移开鼠标、焦点也离开这一行（点击让心形获得焦点，行内有焦点时动作都显示）：心形常驻，播放与“更多”隐去。
+  await heart.click();
+  await expect(heart).toHaveAttribute("aria-pressed", "true");
+  await heart.evaluate((element) => (element as HTMLElement).blur());
+  await page.mouse.move(0, 0);
+  await expect.poll(() => actionOpacity(heart)).toBe("1");
+  await expect.poll(() => actionOpacity(play)).toBe("0");
+  await expect.poll(() => actionOpacity(more)).toBe("0");
+
+  // 只用键盘：Tab 到第一行的“从这首开始播放”，它与同一行的心形、“更多”显现，焦点环可见。
+  const first = trackRows(page).first();
+  await keyboardFocus(page, first.getByRole("button", { name: "从这首开始播放", exact: true }));
+  await expectVisibleFocusRing(page, "曲目行播放按钮");
+  for (const button of [first.getByRole("button", { name: "从这首开始播放", exact: true }), first.getByRole("button", { name: "收藏《合成曲目 1》", exact: true }), first.getByRole("button", { name: "更多操作", exact: true })]) {
+    await expect.poll(() => actionOpacity(button)).toBe("1");
+  }
+  await expectNoSeriousViolations(page, "曲目行键盘聚焦");
+});
+
+/** 只用 Tab 把焦点移到目标上（不按 Enter）。 */
+async function keyboardFocus(page: Page, target: Locator) {
+  for (let index = 0; index < 120; index += 1) {
+    if (await target.evaluate((element) => element === document.activeElement)) return;
+    await page.keyboard.press("Tab");
+  }
+  throw new Error("键盘无法抵达目标控件");
+}
+
+test.describe("触屏", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 1024, height: 900 } });
+
+  test("触屏（粗指针、没有悬停）：曲目行的播放、心形与“更多”常驻，不依赖悬停", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "listener" });
+    const { release } = await installPlayback(page, mock);
+    expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches), "触屏模拟是粗指针").toBe(true);
+    expect(await page.evaluate(() => matchMedia("(hover: hover) and (pointer: fine)").matches), "触屏模拟没有精确指针的悬停").toBe(false);
+    const row = trackRows(page).nth(4);
+    for (const button of [row.getByRole("button", { name: "从这首开始播放", exact: true }), row.getByRole("button", { name: "收藏《合成曲目 5》", exact: true }), row.getByRole("button", { name: "更多操作", exact: true })]) {
+      await expect(button).toBeVisible();
+      expect(await actionOpacity(button)).toBe("1");
+    }
+    // 点一下就能播放，不需要先悬停。
+    await row.getByRole("button", { name: "从这首开始播放", exact: true }).tap();
+    await expect.poll(() => mock.zones.currentTrack()).toBe(release.media[0]?.tracks[4]?.id);
+  });
+});
+
+test("双击曲目行从这首开始播放；双击行内的按钮或链接不触发", async ({ page, backend }) => {
+  const mock = await backend.start({ signedInAs: "listener" });
+  const { release } = await installPlayback(page, mock);
+  const tracks = release.media[0]?.tracks ?? [];
+  const playCommands = () => mock.callsTo("POST", /\/commands$/).filter((call) => typeof call.body === "object" && call.body !== null && "command" in call.body && call.body.command === "play_tracks");
+  // 双击“更多操作”：只开关菜单，不播放。
+  const third = trackRows(page).nth(2);
+  await third.hover();
+  await third.getByRole("button", { name: "更多操作", exact: true }).dblclick();
+  await page.keyboard.press("Escape");
+  expect(playCommands()).toHaveLength(0);
+  await expect(bar(page)).toHaveCount(0);
+
+  // 双击标题文字：从第 4 首开始放整张。
+  await trackRows(page).nth(3).getByText("合成曲目 4", { exact: true }).dblclick();
+  await expect.poll(() => mock.zones.currentTrack()).toBe(tracks[3]?.id);
+  await expect(bar(page)).toContainText("合成曲目 4");
+  // 双击不会顺带选中标题文字。
+  expect(await page.evaluate(() => window.getSelection()?.toString() ?? "")).toBe("");
+  expect(playCommands()).toHaveLength(1);
+});
+
+test("375px：浮起的迷你栏不遮挡页面最后一行，四周留白；底边有进度线", async ({ page, backend }) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  const mock = await backend.start({ signedInAs: "listener" });
+  await installPlayback(page, mock);
+  await startAndPause(page);
+  const box = await bar(page).boundingBox();
+  if (box === null) throw new Error("迷你栏不可见");
+  expect(box.x, "迷你栏左侧留白").toBeGreaterThanOrEqual(4);
+  expect(box.x + box.width, "迷你栏右侧留白").toBeLessThanOrEqual(375 - 4);
+  expect(box.y + box.height, "迷你栏底部留白").toBeLessThanOrEqual(800 - 4);
+  // 迷你栏里只有播放、下一首与队列；心形、随机与循环、音量在全屏播放器里。
+  await expect(bar(page).getByRole("button", { name: "播放", exact: true })).toBeVisible();
+  await expect(bar(page).getByRole("button", { name: "下一首", exact: true })).toBeVisible();
+  await expect(bar(page).getByRole("button", { name: /^队列（\d+）$/ })).toBeVisible();
+  for (const name of ["随机播放", "上一首"]) await expect(bar(page).getByRole("button", { name, exact: true })).toBeHidden();
+  await expect(bar(page).getByRole("slider", { name: "播放器音量" })).toBeHidden();
+  // 滚到页面最底部：最后一首曲目整行在迷你栏上方。
+  await page.evaluate(() => {
+    for (const element of [document.scrollingElement, document.getElementById("main")]) if (element !== null) element.scrollTop = element.scrollHeight;
+  });
+  const last = trackRows(page).last();
+  await expect(last).toContainText("合成曲目 18");
+  await expect.poll(async () => {
+    const [row, mini] = await Promise.all([last.boundingBox(), bar(page).boundingBox()]);
+    return row !== null && mini !== null && row.y + row.height <= mini.y + 1 && row.y >= 0;
+  }, { message: "最后一行完整显示在迷你栏上方" }).toBe(true);
+  await expectNoHorizontalOverflow(page, "迷你栏");
+  await expectNoSeriousViolations(page, "迷你栏");
+});
+
+test("1280px 全屏“接下来”：列出队列随后的曲目，点一首播放该条目；随机模式写明顺序以实际播放为准", async ({ page, backend }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const mock = await backend.start({ signedInAs: "listener" });
+  const { release } = await installPlayback(page, mock);
+  await mockLyrics(page, lyricsReplies.none);
+  await openFullscreen(page);
+  const full = fullscreenDialog(page);
+  const upNext = full.getByRole("region", { name: "接下来", exact: true });
+  await expect(full.getByRole("button", { name: "接下来", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(upNext.getByRole("listitem").first()).toContainText("合成曲目 2");
+  await expect(upNext.getByText("随机播放中，顺序以实际播放为准")).toHaveCount(0);
+  await expectNoSeriousViolations(page, "全屏接下来");
+
+  await upNext.getByRole("button", { name: "播放《合成曲目 5》", exact: true }).click();
+  await expect.poll(() => mock.zones.currentTrack()).toBe(release.media[0]?.tracks[4]?.id);
+  expect(mock.callsTo("POST", /\/commands$/).some((call) => typeof call.body === "object" && call.body !== null && "command" in call.body && call.body.command === "play_entry")).toBe(true);
+  await expect(full.getByRole("heading", { level: 2, name: "合成曲目 5", exact: true })).toBeVisible();
+
+  // 随机与循环互斥：开随机时循环关，开循环时随机关；随机时列表上方写明。
+  const shuffle = full.getByRole("button", { name: "随机播放", exact: true });
+  await shuffle.click();
+  await expect(shuffle).toHaveAttribute("aria-pressed", "true");
+  await expect(full.getByRole("button", { name: "循环：关", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await expect(upNext.getByText("随机播放中，顺序以实际播放为准")).toBeVisible();
+  await full.getByRole("button", { name: "循环：关", exact: true }).click();
+  await expect(full.getByRole("button", { name: "列表循环", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(shuffle).toHaveAttribute("aria-pressed", "false");
+  await expect(upNext.getByText("随机播放中，顺序以实际播放为准")).toHaveCount(0);
+});
+
+test("375px 全屏：底部一排有“歌词”按钮，切换唱片与歌词视图时进度与传输键位置不变", async ({ page, backend }) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  const mock = await backend.start({ signedInAs: "listener" });
+  await installPlayback(page, mock);
+  await mockLyrics(page, lyricsReplies.synced);
+  await openFullscreen(page);
+  const full = fullscreenDialog(page);
+  const toggle = full.getByRole("button", { name: "歌词", exact: true });
+  await expect(toggle).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await expect(full.getByRole("button", { name: "显示歌词", exact: true })).toBeVisible();
+  await expect(full.getByRole("button", { name: /^播放设备/ })).toBeVisible();
+  const controls = () => Promise.all([
+    full.getByRole("slider", { name: "播放进度", exact: true }).boundingBox(),
+    full.getByRole("button", { name: /^(播放|暂停)$/ }).boundingBox(),
+    toggle.boundingBox(),
+  ]);
+  const before = await controls();
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await expect(lyricsPanel(page).getByRole("listitem")).toHaveCount(LYRIC_LINES);
+  // 歌词视图里唱片换成一行小封面与标题。
+  await expect(full.getByRole("button", { name: "显示歌词", exact: true })).toHaveCount(0);
+  await expect(full.getByRole("heading", { level: 2, name: "合成曲目 1", exact: true })).toBeVisible();
+  const after = await controls();
+  for (const [index, name] of ["进度", "播放键", "歌词按钮"].entries()) {
+    expect(after[index]?.x, `${name}的横向位置不变`).toBeCloseTo(before[index]?.x ?? -1, 0);
+    expect(after[index]?.y, `${name}的纵向位置不变`).toBeCloseTo(before[index]?.y ?? -1, 0);
+  }
+  await expectNoHorizontalOverflow(page, "窄屏歌词视图");
+  await expectNoSeriousViolations(page, "窄屏歌词视图");
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await expect(full.getByRole("button", { name: "显示歌词", exact: true })).toBeVisible();
+});

@@ -27,7 +27,17 @@ async function setup(page: Page, mock: ApiMock, fixed = false) {
 }
 
 async function openPicker(page: Page) {
-  await deviceButton(page).click();
+  // 窄屏（小于 768px）浮起的迷你栏里没有设备按钮，设备在全屏播放器底部一排左侧的设备名按钮里。
+  if ((page.viewportSize()?.width ?? 0) < 768) {
+    await bar(page).getByRole("button", { name: "打开全屏播放器", exact: true }).click();
+    const fullscreen = page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "收起全屏播放器", exact: true }) });
+    const pill = fullscreen.getByRole("button", { name: /^播放设备/ });
+    await expect(pill).toHaveAccessibleName("播放设备：测试浏览器");
+    await expect(pill).toContainText("测试浏览器");
+    await pill.click();
+  } else {
+    await deviceButton(page).click();
+  }
   await expect(picker(page)).toBeVisible();
   // 本机已经认领为在线输出，避免把启动中的本机误当成离线设备。
   await expect(picker(page).getByRole("button", { name: /测试浏览器 本机/ })).toBeVisible();

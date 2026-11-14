@@ -4,15 +4,16 @@ import { expect, test } from "./support/fixtures";
 import { expectNoSeriousViolations } from "./support/checks";
 import { heading, uuidPattern } from "./support/locators";
 import type { Page } from "@playwright/test";
+import { chooseRootAction, openAddRoot, rootItem } from "./support/library";
 
-const rootsTable = (page: Page) => page.getByRole("table", { name: "音乐目录列表" });
 const phaseTag = (page: Page) => page.getByRole("region", { name: "状态" }).getByRole("status");
 
 test.describe("目录", () => {
   test("浏览并选择后添加", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
     await page.goto("/settings/library");
-    const input = page.getByRole("combobox", { name: "目录路径" });
+    const dialog = await openAddRoot(page);
+    const input = dialog.getByRole("combobox", { name: "目录路径" });
     await input.click();
     const browser = page.getByRole("dialog", { name: "选择文件夹" });
     await expect(browser).toBeVisible();
@@ -27,9 +28,10 @@ test.describe("目录", () => {
     await expect(input).toHaveValue("/music/classical-a/album");
     await expect(input).toBeFocused();
     await expect(input).toHaveAttribute("aria-expanded", "false");
-    await page.getByRole("button", { name: "添加目录" }).click();
+    await dialog.getByRole("button", { name: "添加目录", exact: true }).click();
+    await expect(dialog).toBeHidden();
     await expect(page.getByText(/已添加目录“album”/)).toBeVisible();
-    await expect(rootsTable(page).getByRole("rowheader", { name: "album", exact: true })).toBeVisible();
+    await expect(rootItem(page, "album")).toBeVisible();
     expect(mock.callsTo("POST", "/api/v1/library-roots").map((call) => call.body)).toEqual([{ path: "/music/classical-a/album" }]);
   });
 
@@ -37,18 +39,25 @@ test.describe("目录", () => {
     const mock = await backend.start({ signedInAs: "curator" });
     await page.goto("/settings/library");
     await expect(heading(page, "扫描目录")).toBeVisible();
-    await expect(rootsTable(page).getByRole("rowheader", { name: "classical-a" })).toBeVisible();
+    await expect(rootItem(page, "classical-a")).toBeVisible();
 
-    await page.getByLabel("目录路径").fill("/etc");
-    await page.getByRole("button", { name: "添加目录" }).click();
-    await expect(page.getByText("这个路径不在允许的音乐目录里，或者不是绝对路径。")).toBeVisible();
-    await expect(page.getByLabel("目录路径")).toHaveValue("/etc");
+    // 被拒绝：错误在路径框旁，对话框不关、输入保留。
+    const dialog = await openAddRoot(page);
+    await dialog.getByLabel("目录路径").fill("/etc");
+    await dialog.getByRole("button", { name: "添加目录", exact: true }).click();
+    await expect(dialog.getByText("这个路径不在允许的音乐目录里，或者不是绝对路径。")).toBeVisible();
+    await expect(dialog.getByLabel("目录路径")).toHaveValue("/etc");
 
-    await page.getByLabel("目录路径").fill("/music/new-album");
-    await page.getByRole("button", { name: "添加目录" }).click();
+    await dialog.getByLabel("目录路径").fill("/music/new-album");
+    await dialog.getByRole("button", { name: "添加目录", exact: true }).click();
+    await expect(dialog).toBeHidden();
     await expect(page.getByText(/已添加目录“new-album”/)).toBeVisible();
-    await expect(rootsTable(page).getByRole("rowheader", { name: "new-album" })).toBeVisible();
-    await expect(page.getByLabel("目录路径")).toHaveValue("");
+    await expect(rootItem(page, "new-album")).toBeVisible();
+    // 成功后输入已清空：再打开对话框是空的路径框。
+    await openAddRoot(page);
+    await expect(dialog.getByLabel("目录路径")).toHaveValue("");
+    await dialog.getByRole("button", { name: "取消", exact: true }).click();
+    await expect(dialog).toBeHidden();
     await expect(page.getByRole("table", { name: "目录操作记录" }).getByRole("row").nth(1)).toContainText("新增");
 
     const created = mock.callsTo("POST", "/api/v1/library-roots").filter((call) => (call.body as { path: string }).path === "/music/new-album");
@@ -59,28 +68,28 @@ test.describe("目录", () => {
   test("停用要确认，恢复直接执行；写请求带 revision 与幂等键", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
     await page.goto("/settings/library");
-    await rootsTable(page).getByRole("button", { name: "停用目录 classical-a" }).click();
+    await chooseRootAction(page, "classical-a", "停用目录");
     const dialog = page.getByRole("dialog", { name: "停用目录“classical-a”？" });
     await expect(dialog).toContainText("恢复后就能再播");
     await dialog.getByRole("button", { name: "停用目录" }).click();
     await expect(page.getByText(/已停用目录“classical-a”/)).toBeVisible();
     await expect(dialog).toBeHidden();
-    await expect(rootsTable(page).getByRole("row", { name: /classical-a/ })).toContainText("已停用");
+    await expect(rootItem(page, "classical-a")).toContainText("已停用");
 
     const [disable] = mock.callsTo("PATCH", /\/library-roots\/[^/]+$/);
     expect(disable?.body).toEqual({ status: "disabled", expected_revision: 1 });
     expect(disable?.idempotencyKey).toMatch(uuidPattern);
 
-    await rootsTable(page).getByRole("button", { name: "恢复目录 classical-b" }).click();
+    await chooseRootAction(page, "classical-b", "恢复目录");
     await expect(page.getByText(/已恢复目录“classical-b”/)).toBeVisible();
-    await expect(rootsTable(page).getByRole("row", { name: /classical-b/ })).toContainText("启用");
+    await expect(rootItem(page, "classical-b")).toContainText("启用");
     expect(mock.callsTo("POST", /\/restore$/)[0]?.body).toEqual({ expected_revision: 2 });
   });
 
   test("目录在确认期间被别处改动（409）：提示目录已变化并刷新列表", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
     await page.goto("/settings/library");
-    await rootsTable(page).getByRole("button", { name: "停用目录 classical-a" }).click();
+    await chooseRootAction(page, "classical-a", "停用目录");
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
     mock.roots = mock.roots.map((root) => (root.name === "classical-a" ? { ...root, revision: 7 } : root));
@@ -88,7 +97,7 @@ test.describe("目录", () => {
     await dialog.getByRole("button", { name: "停用目录" }).click();
     await expect(page.getByRole("alert").filter({ hasText: "目录刚有变化，列表已刷新" })).toBeVisible();
     await expect(dialog).toBeHidden();
-    await expect(rootsTable(page).getByRole("row", { name: /classical-a/ })).toContainText("启用");
+    await expect(rootItem(page, "classical-a")).toContainText("启用");
   });
 });
 

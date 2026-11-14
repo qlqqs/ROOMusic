@@ -4,6 +4,7 @@ import type { ApiMock } from "./support/api-mock";
 import { expectMinimumFontSize, expectNoHorizontalOverflow, expectNoSeriousViolations, expectVisibleFocusRing, widths } from "./support/checks";
 import { expect, test } from "./support/fixtures";
 import { expectFocusStaysInDialog, focusedName, tabTo } from "./support/keyboard";
+import { albumMoreButton, arrowToAlbumAction, chooseAlbumAction, openMenu } from "./support/album";
 import { heading, mainNav, uuidPattern } from "./support/locators";
 import { openSettings } from "./support/settings";
 
@@ -30,19 +31,27 @@ function seedLabelCorrections(mock: ApiMock, count: number, label = (index: numb
 }
 
 test.describe("编辑发行信息", () => {
-  test("管理按钮悬停显示快速提示、移开消失且不使用原生 title", async ({ page, backend }) => {
+  test("页头“更多操作”悬停显示快速提示、移开消失且不使用原生 title；管理员的项在“管理”分组里", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
     mock.groups = [symphonies()];
     await page.goto(detailPath());
-    const edit = page.getByRole("button", { name: "编辑发行信息" });
-    await expect(edit).toBeVisible();
+    const more = albumMoreButton(page);
+    await expect(more).toBeVisible();
     await expect(page.locator("button[title]")).toHaveCount(0);
 
-    await edit.hover();
-    const tooltip = page.getByText("编辑发行信息", { exact: true });
+    await more.hover();
+    const tooltip = page.getByText("更多操作", { exact: true });
     await expect(tooltip).toBeVisible();
     await page.mouse.move(0, 0);
     await expect(tooltip).toHaveCount(0);
+
+    // 播放类的项在前、无组名；管理员的项在“管理”分组里，组标题不是菜单项。
+    await more.click();
+    const menu = openMenu(page);
+    await expect(menu.getByRole("menuitem")).toHaveText(["下一首播放", "加入队列", "编辑发行信息", "归入其他专辑…"]);
+    const admin = menu.getByRole("group", { name: "管理" });
+    await expect(admin.getByRole("menuitem")).toHaveText(["编辑发行信息", "归入其他专辑…"]);
+    await expect(menu.getByRole("menuitem", { name: "管理" })).toHaveCount(0);
   });
 
   test("修改标题与年份并保存：请求带版本号与幂等键，页面显示新的有效值，提示里的撤销恢复原样", async ({ page, backend }) => {
@@ -51,7 +60,7 @@ test.describe("编辑发行信息", () => {
     await page.goto(detailPath());
     await expect(heading(page, "Sample Symphonies")).toBeVisible();
 
-    await page.getByRole("button", { name: "编辑发行信息" }).click();
+    await chooseAlbumAction(page, "编辑发行信息");
     const dialog = page.getByRole("dialog", { name: "编辑发行信息" });
     await expect(dialog.getByRole("group", { name: "条码" })).toBeVisible();
     await dialog.getByRole("group", { name: "标题" }).getByRole("radio", { name: "自定义" }).check();
@@ -85,20 +94,23 @@ test.describe("编辑发行信息", () => {
     await page.goto(detailPath());
     await expect(heading(page, "Sample Symphonies")).toBeVisible();
 
-    await tabTo(page, (name) => name === "编辑发行信息", 30);
-    await expectVisibleFocusRing(page, "编辑发行信息按钮");
+    await tabTo(page, (name) => name === "更多操作", 30);
+    await expectVisibleFocusRing(page, "更多操作按钮");
+    await arrowToAlbumAction(page, "编辑发行信息");
+    await expectVisibleFocusRing(page, "编辑发行信息菜单项");
     await page.keyboard.press("Enter");
     const dialog = page.getByRole("dialog", { name: "编辑发行信息" });
     await expect(dialog.getByRole("group", { name: "条码" })).toBeVisible();
     await expectFocusStaysInDialog(page, dialog, 14);
 
-    // Esc 取消：没有请求，焦点回到入口。
+    // Esc 取消：没有请求，焦点回到入口（打开菜单的“更多操作”）。
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
-    await expect(page.getByRole("button", { name: "编辑发行信息" })).toBeFocused();
+    await expect(albumMoreButton(page)).toBeFocused();
     expect(mock.callsTo("PATCH", /corrections$/)).toHaveLength(0);
 
     // 重新打开，用方向键选择“自定义”，输入，再 Tab 到保存。
+    await arrowToAlbumAction(page, "编辑发行信息");
     await page.keyboard.press("Enter");
     await expect(dialog.getByRole("group", { name: "条码" })).toBeVisible();
     // 对话框打开时焦点在标题上（读取状态里没有别的稳定的可聚焦元素，字段出现之后焦点也不丢）；Tab 进入第一个字段的单选按钮。
@@ -117,7 +129,7 @@ test.describe("编辑发行信息", () => {
 
     await expect(dialog).toBeHidden();
     await expect(heading(page, "键盘改的标题")).toBeVisible();
-    await expect(page.getByRole("button", { name: "编辑发行信息" })).toBeFocused();
+    await expect(albumMoreButton(page)).toBeFocused();
     await tabTo(page, (name) => name === "撤销", 5);
     await page.keyboard.press("Enter");
     await expect(heading(page, "Sample Symphonies")).toBeVisible();
@@ -129,7 +141,7 @@ test.describe("编辑发行信息", () => {
     mock.groups = [symphonies()];
     markUncertain(mock.governance, releaseId(), ["title"]);
     await page.goto(detailPath());
-    await page.getByRole("button", { name: "编辑发行信息" }).click();
+    await chooseAlbumAction(page, "编辑发行信息");
     const dialog = page.getByRole("dialog", { name: "编辑发行信息" });
     const title = dialog.getByRole("group", { name: "标题" });
     await expect(title.getByText("扫描结果不确定")).toBeVisible();
@@ -147,7 +159,7 @@ test.describe("编辑发行信息", () => {
     const mock = await backend.start({ signedInAs: "curator" });
     mock.groups = [symphonies()];
     await page.goto(detailPath());
-    await page.getByRole("button", { name: "编辑发行信息" }).click();
+    await chooseAlbumAction(page, "编辑发行信息");
     const dialog = page.getByRole("dialog", { name: "编辑发行信息" });
     const title = dialog.getByRole("group", { name: "标题" });
     await title.getByRole("radio", { name: "自定义" }).check();
@@ -169,6 +181,10 @@ test.describe("编辑发行信息", () => {
     await expect(heading(page, "Sample Symphonies")).toBeVisible();
     await expect(page.getByText("Track 1-01")).toBeVisible();
     await expect(page.getByRole("button", { name: "编辑发行信息" })).toHaveCount(0);
+    // “更多操作”里只有播放类的项，没有“管理”分组。
+    await albumMoreButton(page).click();
+    await expect(openMenu(page).getByRole("menuitem")).toHaveText(["下一首播放", "加入队列"]);
+    await expect(openMenu(page).getByRole("group", { name: "管理" })).toHaveCount(0);
     expect(mock.callsTo("GET", /corrections$/)).toHaveLength(0);
   });
 });
@@ -180,7 +196,7 @@ test.describe("编辑发行信息：宽度与无障碍", () => {
     markUncertain(mock.governance, releaseId(), ["title", "year"]);
     await page.goto(detailPath());
     await expect(heading(page, "Sample Symphonies")).toBeVisible();
-    await page.getByRole("button", { name: "编辑发行信息" }).click();
+    await chooseAlbumAction(page, "编辑发行信息");
     const dialog = page.getByRole("dialog", { name: "编辑发行信息" });
     await expect(dialog.getByRole("group", { name: "条码" })).toBeVisible();
     await dialog.getByRole("group", { name: "年份" }).getByRole("radio", { name: "自定义" }).check();
@@ -204,7 +220,7 @@ test.describe("编辑发行信息：宽度与无障碍", () => {
     const mock = await backend.start({ signedInAs: "curator" });
     mock.groups = [symphonies()];
     await page.goto(detailPath());
-    await page.getByRole("button", { name: "编辑发行信息" }).click();
+    await chooseAlbumAction(page, "编辑发行信息");
     const dialog = page.getByRole("dialog", { name: "编辑发行信息" });
     await dialog.getByRole("group", { name: "流派" }).getByRole("radio", { name: "留空" }).check();
     await dialog.getByRole("button", { name: "保存修改" }).click();
@@ -225,7 +241,7 @@ test.describe("调整归组", () => {
     await page.goto(detailPath());
     await expect(heading(page, "Sample Symphonies")).toBeVisible();
 
-    await page.getByRole("button", { name: "归入其他专辑…" }).click();
+    await chooseAlbumAction(page, "归入其他专辑…");
     const dialog = page.getByRole("dialog", { name: "把这个版本归入其他专辑" });
     await dialog.getByRole("textbox", { name: "搜索专辑" }).fill("Quartet");
     await dialog.getByRole("textbox", { name: "搜索专辑" }).press("Enter");
@@ -254,8 +270,10 @@ test.describe("调整归组", () => {
     await page.goto(detailPath());
     await expect(heading(page, "Sample Symphonies")).toBeVisible();
 
-    await tabTo(page, (name) => name === "归入其他专辑…", 30);
-    await expectVisibleFocusRing(page, "归入其他专辑按钮");
+    await tabTo(page, (name) => name === "更多操作", 30);
+    await expectVisibleFocusRing(page, "更多操作按钮");
+    await arrowToAlbumAction(page, "归入其他专辑…");
+    await expectVisibleFocusRing(page, "归入其他专辑菜单项");
     await page.keyboard.press("Enter");
     const dialog = page.getByRole("dialog", { name: "把这个版本归入其他专辑" });
     await expect(dialog).toBeVisible();
@@ -282,13 +300,13 @@ test.describe("调整归组", () => {
     const mock = await backend.start({ signedInAs: "curator" });
     seedGrouping(mock);
     await page.goto(detailPath());
-    await page.getByRole("button", { name: "归入其他专辑…" }).click();
+    await chooseAlbumAction(page, "归入其他专辑…");
     const dialog = page.getByRole("dialog", { name: "把这个版本归入其他专辑" });
     await expect(dialog).toBeVisible();
     await expectFocusStaysInDialog(page, dialog, 6);
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
-    await expect(page.getByRole("button", { name: "归入其他专辑…" })).toBeFocused();
+    await expect(albumMoreButton(page)).toBeFocused();
     expect(mock.callsTo("POST", /\/group$/)).toHaveLength(0);
   });
 
@@ -297,7 +315,7 @@ test.describe("调整归组", () => {
     seedGrouping(mock);
     await page.goto(`/albums/${concertos().id}`);
     await expect(heading(page, "Delta Concertos")).toBeVisible();
-    await page.getByRole("button", { name: "移出为独立专辑" }).click();
+    await chooseAlbumAction(page, "移出为独立专辑");
     const dialog = page.getByRole("dialog", { name: "把这个版本移出为独立专辑？" });
     await expect(dialog.getByRole("button", { name: "取消" })).toBeFocused();
     await dialog.getByRole("button", { name: "移出" }).click();
@@ -318,7 +336,7 @@ test.describe("调整归组", () => {
     seedGrouping(mock);
     await page.goto(detailPath());
     await expect(heading(page, "Sample Symphonies")).toBeVisible();
-    await page.getByRole("button", { name: "归入其他专辑…" }).click();
+    await chooseAlbumAction(page, "归入其他专辑…");
     const dialog = page.getByRole("dialog", { name: "把这个版本归入其他专辑" });
     await dialog.getByRole("textbox", { name: "搜索专辑" }).fill("e");
     await dialog.getByRole("textbox", { name: "搜索专辑" }).press("Enter");
@@ -338,7 +356,7 @@ test.describe("调整归组", () => {
     await dialog.getByRole("button", { name: "取消" }).click();
 
     await page.goto(`/albums/${concertos().id}`);
-    await page.getByRole("button", { name: "移出为独立专辑" }).click();
+    await chooseAlbumAction(page, "移出为独立专辑");
     const confirm = page.getByRole("dialog", { name: "把这个版本移出为独立专辑？" });
     await expect(confirm).toBeVisible();
     for (const width of widths) {

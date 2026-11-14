@@ -156,6 +156,12 @@ export function zonesMock(trackOf: (id: string) => TrackSummaryDTO | undefined) 
         changed = true;
         break;
       }
+      case "set_mode": {
+        // 播放模式是服务端的四选一（随机与循环互斥）；夹具只记下新模式，不模拟随机顺序。
+        const body = d.object({ mode: d.oneOf(["sequential", "repeat_all", "repeat_one", "shuffle"] as const) })(input, "$");
+        zone.mode = body.mode;
+        break;
+      }
       case "clear_queue":
         entries = [];
         setCurrent(null);

@@ -332,20 +332,28 @@ test.describe("账户密码：五宽布局", () => {
   }
 });
 
+/** 账号页一张卡片里的两行只读值：名称在左、值在右（窄卡片时值换到名称下方）。 */
+const accountValues = [["用户名", "curator"], ["角色", "管理员"]] as const;
+
 /** 账号值是正文信息，不应恢复成统计数字；限定 main 并核对两项内容，避免误选侧栏或空列表。 */
 async function expectAccountValueFontSize(page: Page): Promise<void> {
   const main = page.getByRole("main");
-  const values = main.getByRole("definition");
-  await expect(main.getByRole("term")).toHaveText(["用户名", "角色"]);
-  await expect(values).toHaveCount(2);
-  await expect(values).toHaveText(["curator", "管理员"]);
   const bodyFontSize = await page.locator("body").evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
   expect(bodyFontSize, "正文必须有可测量字号").toBeGreaterThan(0);
-  for (const value of await values.all()) {
+  for (const [label, text] of accountValues) {
+    const name = main.getByText(label, { exact: true });
+    const value = main.getByText(text, { exact: true });
+    await expect(name).toBeVisible();
+    await expect(value).toHaveCount(1);
     await expect(value).toBeVisible();
+    // 值在名称这一行：与名称竖直方向重叠（同一行），或紧接在名称下方（窄卡片换行）。
+    const [nameBox, valueBox] = await Promise.all([name.boundingBox(), value.boundingBox()]);
+    if (nameBox === null || valueBox === null) throw new Error(`账号“${label}”的名称与值必须有可测量边界`);
+    expect(valueBox.y, `账号值“${text}”在“${label}”这一行`).toBeLessThanOrEqual(nameBox.y + nameBox.height + 16);
+    expect(valueBox.y + valueBox.height, `账号值“${text}”在“${label}”这一行`).toBeGreaterThanOrEqual(nameBox.y);
     const fontSize = await value.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
     expect(fontSize, "账号值必须有可测量字号").toBeGreaterThan(0);
-    expect(fontSize, `账号值“${await value.innerText()}”字号不超过正文的 1.2 倍`).toBeLessThanOrEqual(bodyFontSize * 1.2);
+    expect(fontSize, `账号值“${text}”字号不超过正文的 1.2 倍`).toBeLessThanOrEqual(bodyFontSize * 1.2);
   }
 }
 
@@ -410,13 +418,17 @@ test.describe("设置样式回归断言自检", () => {
     await backend.start({ signedInAs: "curator" });
     await openSettingsScene(page, "设置账号");
     await expectAccountValueFontSize(page);
-    for (const [index, value] of ["curator", "管理员"].entries()) {
-      const style = await page.addStyleTag({ content: `main dl > div:nth-child(${index + 1}) > dd { font-size: 32px !important; }` });
+    for (const [, value] of accountValues) {
+      // 值的元素是 CSS Modules 的哈希类名，临时打一个属性给样式选中，结束时连同样式一起去掉。
+      const target = page.getByRole("main").getByText(value, { exact: true });
+      await target.evaluate((element) => element.setAttribute("data-check-value", ""));
+      const style = await page.addStyleTag({ content: "main [data-check-value] { font-size: 32px !important; }" });
       try {
-        await expect(page.getByRole("main").getByRole("definition").nth(index)).toHaveCSS("font-size", "32px");
+        await expect(target).toHaveCSS("font-size", "32px");
         await expect(expectAccountValueFontSize(page)).rejects.toThrow(`账号值“${value}”字号不超过正文的 1.2 倍`);
       } finally {
         await style.evaluate((element) => element.parentNode?.removeChild(element));
+        await target.evaluate((element) => element.removeAttribute("data-check-value"));
       }
       await expectAccountValueFontSize(page);
     }
