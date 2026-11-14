@@ -44,25 +44,30 @@ export function AlbumFilters({ search }: { search: AlbumSearch }) {
 
   return (
     <form role="search" aria-label="搜索专辑" className={styles.form} onSubmit={submit}>
-      <div className={styles.input}>
-        <TextField
-          ref={inputRef}
-          label="搜索专辑"
-          name="q"
-          type="text"
-          inputMode="search"
-          enterKeyHint="search"
-          autoComplete="off"
-          value={draft}
-          error={error}
-          onChange={(event) => setDraft(event.target.value)}
-        />
-      </div>
-      <div className={styles.actions}>
+      {/* 工具条一行：搜索（输入框、搜索、清除）、筛选、排序，控件同一高度，窄时整组换行。 */}
+      <div className={styles.search}>
+        <div className={styles.input}>
+          <TextField
+            ref={inputRef}
+            label="搜索专辑"
+            labelHidden
+            placeholder="搜索专辑"
+            name="q"
+            type="text"
+            inputMode="search"
+            enterKeyHint="search"
+            autoComplete="off"
+            value={draft}
+            error={error}
+            onChange={(event) => setDraft(event.target.value)}
+          />
+        </div>
         <Button type="submit" variant="primary">
           搜索
         </Button>
         {search.q === undefined ? null : <Button onClick={clear}>清除</Button>}
+      </div>
+      <div className={styles.actions}>
         <label className={styles.check}>
           <input
             type="checkbox"

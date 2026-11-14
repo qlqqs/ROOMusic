@@ -7,3 +7,23 @@
   min-width: 0;
   aspect-ratio: 1;
 }
+
+/* 侧栏的 26px 缩略图：外框的圆角与描边在这一层，方格间隙 1px；格子太小，没有封面的格子只留底色，不画图标。 */
+.thumb {
+  display: block;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 0 0 1px var(--color-divider);
+}
+
+.mosaic[data-size="thumb"] {
+  gap: 1px;
+  background: var(--color-divider);
+}
+
+.mosaic[data-size="thumb"] svg {
+  display: none;
+}

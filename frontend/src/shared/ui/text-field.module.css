@@ -1,4 +1,6 @@
 .field {
+  /* 隐藏的标签是绝对定位的，需要定位祖先。 */
+  position: relative;
   display: grid;
   gap: 6px;
 }
@@ -6,6 +8,10 @@
 .label {
   color: var(--text-secondary);
   font-size: var(--fs-13);
+}
+
+.hiddenLabel {
+  composes: hidden from "./visually-hidden.module.css";
 }
 
 .input {

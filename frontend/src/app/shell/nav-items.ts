@@ -13,6 +13,8 @@ export type NavItem = {
   artists?: true;
   /** “我的歌单”：旁边有展开收起按钮，展开后列出歌单。 */
   playlists?: true;
+  /** 待办入口：本会话已经读到数量时在右侧显示（取自缓存，不为此发请求）。 */
+  todo?: "issues" | "claims";
 };
 
 // 只列真实可用的页面；Steward 留待对应阶段。扫描目录、成员、操作记录与备份在设置页里（入口是侧栏底部的用户菜单）。
@@ -24,8 +26,8 @@ const navItems: readonly NavItem[] = [
   { to: "/me/favorites", label: "我的收藏", icon: Star, adminOnly: false, group: "我的音乐" },
   { to: "/me/history", label: "播放历史", icon: History, adminOnly: false, group: "我的音乐" },
   { to: "/me/playlists", label: "我的歌单", icon: ListMusic, adminOnly: false, group: "我的音乐", playlists: true },
-  { to: "/issues", label: "元数据", icon: ClipboardCheck, adminOnly: true, group: "资料库" },
-  { to: "/claims", label: "待认领", icon: ArrowRightLeft, adminOnly: true, group: "资料库" },
+  { to: "/issues", label: "元数据", icon: ClipboardCheck, adminOnly: true, group: "资料库", todo: "issues" },
+  { to: "/claims", label: "待认领", icon: ArrowRightLeft, adminOnly: true, group: "资料库", todo: "claims" },
   { to: "/artist-candidates", label: "重复艺人", icon: Combine, adminOnly: true, group: "资料库", artists: true },
 ];
 
