@@ -76,5 +76,3 @@ Managed by Trellis. Edits outside this block are preserved; edits inside may be 
 - 不执行全局 Docker prune，不删除其他项目的资源。
 - 未执行、失败或跳过的验证必须如实记录，不能报告为通过。
 - 完成后说明实际改动、执行的验证命令及尚未完成的事项。
-
-开始工作前，可选读取 /home/qlqq/workspace/work/AGENTS.md 中的需要的凭据。
