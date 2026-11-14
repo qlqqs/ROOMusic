@@ -1936,3 +1936,37 @@ F 线变基到含 P 线的 main（迁移改为 0023/0024），导出树全量全
 ### Status
 
 [OK] **Completed**
+
+
+## Session 52: 算法第二、三批任务归档与发布状态补记
+<!-- trellis-session: v=2 fp=157dc46783650514 -->
+
+**Date**: 2026-11-14
+**Task**: 算法第二、三批任务归档与发布状态补记
+**Branch**: `main`
+
+### Summary
+
+7 个已发布算法子任务归档；补齐 v0.6.0 发布与 CI 证据，父任务保留生产部署核实和 iPhone 真机验收。
+
+### Main Changes
+
+- 归档公共骨架、SRC、降混、PEQ、卷积、DSD 播放、PCM→DSD 纯库；修复归档相对链接及上下文路径。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c3a27b79` | ci: 集成测试超时放宽到 25 分钟（app 包已接近 15 分钟上限） |
+
+### Testing
+
+- [OK] git merge-base --is-ancestor：7 个合入提交均属于 v0.6.0；仅文档及任务状态调整，不重复业务测试。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 核实 v0.6.0 八号机部署并补齐 iPhone 真机验收，再归档 DSP 父任务；M2a 三组手工实播继续保留。
