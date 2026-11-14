@@ -1,0 +1,68 @@
+/*
+ * 一行横排：卡片宽 150px（窄屏 128px），放不下时横向滚动，滚动条隐藏（翻页靠标题行的按钮或触屏滑动）。
+ * 四周留 4px 内边距再用负外边距抵消：滚动容器会裁掉溢出，卡片链接的焦点环（外偏移 2px）需要这点空间。
+ * 窄屏右侧伸到页面边缘，露出半张卡片提示还能往右滑。
+ */
+.shelf,
+.host > ul,
+.host > div > ul {
+  display: grid;
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: 150px;
+  gap: var(--space-4);
+  margin: -4px;
+  padding: 4px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 4px;
+  scrollbar-width: none;
+  list-style: none;
+}
+
+.shelf::-webkit-scrollbar,
+.host > ul::-webkit-scrollbar,
+.host > div > ul::-webkit-scrollbar {
+  display: none;
+}
+
+.shelf > *,
+.host > ul > *,
+.host > div > ul > * {
+  min-width: 0;
+  scroll-snap-align: start;
+}
+
+.host {
+  min-width: 0;
+}
+
+@media (max-width: 767px) {
+  .shelf,
+  .host > ul,
+  .host > div > ul {
+    grid-auto-columns: 128px;
+    gap: var(--space-3);
+    margin-inline-end: calc(-1 * var(--layout-page-inset-x));
+    padding-inline-end: var(--layout-page-inset-x);
+  }
+}
+
+.controls {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 到头的方向：变淡，但仍可聚焦（按下不做任何事），焦点不会因为按钮变成 disabled 而丢失。 */
+.controls button[data-edge] {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* 触屏直接滑动，不显示翻页按钮。 */
+@media (hover: none) {
+  .controls {
+    display: none;
+  }
+}

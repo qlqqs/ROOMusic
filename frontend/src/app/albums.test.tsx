@@ -484,10 +484,10 @@ describe("导航与概览", () => {
     api.on("GET", "/api/v1/catalog/stats", () => jsonResponse(200, { albums: 30, tracks: 5, artists: 7, composers: 1 }));
     const { history } = renderApp({ path: "/" });
     const stats = await screen.findByRole("region", { name: "资料库" });
-    const all = await within(stats).findByRole("link", { name: /专辑/ });
-    const attention = await within(await screen.findByRole("region", { name: "需要关注" })).findByRole("link", { name: "4 张专辑需要关注" });
+    const all = await within(stats).findByRole("link", { name: /张专辑/ });
+    const attention = await within(await screen.findByRole("region", { name: "资料库状态" })).findByRole("link", { name: /^需要关注4 张专辑有待核对的问题4/ });
     expect(all.getAttribute("href")).toBe("/albums");
-    expect(within(stats).getByText("5").closest("a")).toBeNull();
+    expect(within(stats).getByText("首曲目").closest("a")).toBeNull();
     expect(attention.getAttribute("href")).toBe("/albums?attention=required");
 
     await userEvent.click(attention);

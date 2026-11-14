@@ -478,16 +478,19 @@ describe("概览里的入口", () => {
   it("管理员的概览有进入成员管理的链接，成员的概览没有", async () => {
     setup();
     renderApp({ path: "/" });
-    const link = await screen.findByRole("link", { name: "管理成员" });
+    const table = await screen.findByRole("region", { name: "资料库状态" });
+    const link = await within(table).findByRole("link", { name: /^成员/ });
     expect(link.getAttribute("href")).toBe("/settings/members");
   });
 
-  it("成员的概览看不到成员区块与管理链接", async () => {
+  it("成员的概览看不到成员一行与管理链接", async () => {
     setup({ role: "user" });
     renderApp({ path: "/" });
     await heading("概览");
-    expect(screen.queryByRole("link", { name: "管理成员" })).toBeNull();
-    expect(screen.queryByRole("heading", { level: 2, name: "成员" })).toBeNull();
+    const table = await screen.findByRole("region", { name: "资料库状态" });
+    await within(table).findByText("需要关注");
+    expect(within(table).queryByText("成员")).toBeNull();
+    expect(screen.queryAllByRole("link").filter((link) => link.getAttribute("href") === "/settings/members")).toHaveLength(0);
   });
 });
 

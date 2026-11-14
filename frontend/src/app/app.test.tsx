@@ -266,8 +266,11 @@ describe("切换用户时的数据隔离", () => {
     renderApp();
     await heading("概览");
     await screen.findByRole("region", { name: "资料库" });
-    expect(screen.queryByRole("region", { name: "音乐目录" })).toBeNull();
-    expect(screen.queryByRole("region", { name: "成员" })).toBeNull();
+    // 资料库状态表里没有管理员才有的“音乐目录”“成员”两行。
+    const status = await screen.findByRole("region", { name: "资料库状态" });
+    await within(status).findByText("需要关注");
+    expect(within(status).queryByText("音乐目录")).toBeNull();
+    expect(within(status).queryByText("成员")).toBeNull();
     expect(requestsTo(api, "/api/v1/library-roots")).toBe(0);
     expect(requestsTo(api, "/api/v1/users")).toBe(0);
     const identity = screen.getByRole("region", { name: "当前用户" });
@@ -297,7 +300,7 @@ describe("跨标签页与重新可见", () => {
     act(() => theirs.notifyChanged());
     await waitFor(() => expect(within(screen.getByRole("region", { name: "当前用户" })).getByText("listener")).toBeTruthy());
     expect(screen.queryByText("curator")).toBeNull();
-    expect(screen.queryByRole("region", { name: "成员" })).toBeNull();
+    await waitFor(() => expect(within(screen.getByRole("region", { name: "资料库状态" })).queryByText("成员")).toBeNull());
   });
 
   it("没有登录时，另一个标签页登录后本页进入概览", async () => {

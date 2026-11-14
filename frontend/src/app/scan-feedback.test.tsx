@@ -297,7 +297,7 @@ describe("进度页面与轮询接线", () => {
     const { api, library, scan } = setup(undefined, scanSample(`reading_tags-${role === "admin" ? "admin" : "member"}`), role);
     library.activeScanId = scan.id;
     renderApp({ path: "/" });
-    const region = await screen.findByRole("region", { name: "扫描" });
+    const region = await screen.findByRole("region", { name: "资料库状态" });
     const bar = await within(region).findByRole("progressbar", { name: "扫描进度" });
     expect(bar.getAttribute("aria-valuenow")).toBe("12");
     expect(bar.getAttribute("aria-valuetext")).toBe("第 1 / 共 2 个目录，读取标签，已处理 50 / 400 个文件，整体进度 12%");
@@ -305,7 +305,9 @@ describe("进度页面与轮询接线", () => {
     expect(api.requestsTo("GET", reportPath(scan.id))).toHaveLength(0);
     if (role === "user") {
       expect(api.requestsTo("GET", "/api/v1/library-roots")).toHaveLength(0);
-      expect(within(region).queryByRole("link", { name: "查看扫描详情" })).toBeNull();
+      expect(within(region).queryByRole("link", { name: /^扫描/ })).toBeNull();
+    } else {
+      expect(within(region).getByRole("link", { name: /^扫描/ }).getAttribute("href")).toBe(`/settings/library/scans/${scan.id}`);
     }
   });
 
@@ -366,7 +368,7 @@ describe("进度页面与轮询接线", () => {
     library.activeScanId = null;
     await tick(5000);
     await waitFor(() => expect(recentReads()).toBe(4));
-    expect(await screen.findByText("没有正在运行的扫描。")).toBeTruthy();
+    expect(await screen.findByText("没有正在运行的扫描")).toBeTruthy();
     const activeReads = api.requestsTo("GET", "/api/v1/scans/active").length;
     await tick(30_000);
     expect(recentReads()).toBe(4);

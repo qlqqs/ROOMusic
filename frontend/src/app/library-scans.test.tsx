@@ -642,22 +642,25 @@ describe("概览里的入口", () => {
     const { library } = setup();
     const scan = seedScan(library, {}, true);
     renderApp({ path: "/" });
-    expect(await screen.findByRole("link", { name: "管理目录" })).toBeTruthy();
-    expect(await screen.findByRole("link", { name: "查看扫描详情" })).toBeTruthy();
-    const hrefs = screen.getAllByRole("link").map((link) => `${link.textContent}→${link.getAttribute("href")}`);
-    expect(hrefs).toContain("管理目录→/settings/library");
-    // 配置入口已移出主导航；概览扫描区块仍有一个入口。
-    expect(hrefs.filter((entry) => entry === "扫描目录→/settings/library")).toHaveLength(1);
-    expect(hrefs).toContain(`查看扫描详情→/settings/library/scans/${scan.id}`);
+    const table = await screen.findByRole("region", { name: "资料库状态" });
+    // 状态表里：扫描一行（进行中）进入扫描详情，音乐目录一行进入扫描目录。
+    const scanLink = await within(table).findByRole("link", { name: /^扫描/ });
+    expect(scanLink.getAttribute("href")).toBe(`/settings/library/scans/${scan.id}`);
+    expect((await within(table).findByRole("link", { name: /^音乐目录/ })).getAttribute("href")).toBe("/settings/library");
+    // 配置入口已移出主导航；概览里进入扫描目录的入口只有音乐目录这一行。
+    const hrefs = screen.getAllByRole("link").map((link) => link.getAttribute("href"));
+    expect(hrefs.filter((href) => href === "/settings/library")).toHaveLength(1);
   });
 
   it("成员的概览只看到扫描状态，没有管理链接", async () => {
     const { library } = setup({ role: "user" });
     seedScan(library, {}, true);
     renderApp({ path: "/" });
-    expect(await screen.findByText("运行中")).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "扫描目录" })).toBeNull();
+    const table = await screen.findByRole("region", { name: "资料库状态" });
+    expect(await within(table).findByRole("progressbar", { name: "扫描进度" })).toBeTruthy();
+    expect(within(table).queryByRole("link", { name: /^扫描/ })).toBeNull();
+    expect(within(table).queryByRole("link", { name: /^音乐目录/ })).toBeNull();
     expect(screen.queryByRole("link", { name: "查看扫描详情" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "管理目录" })).toBeNull();
+    expect(screen.queryAllByRole("link").filter((link) => link.getAttribute("href")?.startsWith("/settings/library"))).toHaveLength(0);
   });
 });

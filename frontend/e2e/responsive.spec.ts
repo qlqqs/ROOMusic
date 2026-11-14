@@ -158,7 +158,8 @@ const recentPlaysCases: Case[] = [
     path: () => "/",
     title: "概览",
     after: async (page) => {
-      await page.getByRole("button", { name: "清除播放历史" }).click();
+      await page.getByRole("button", { name: "最近播放的更多操作" }).click();
+      await page.getByRole("menuitem", { name: "清除播放历史" }).click();
       await expect(page.getByRole("dialog", { name: "清除播放历史？" })).toBeVisible();
     },
   },
@@ -447,5 +448,43 @@ test.describe("设置样式回归断言自检", () => {
       await style.evaluate((element) => element.parentNode?.removeChild(element));
     }
     await expectMePageClearsTabBar(page);
+  });
+});
+
+test.describe("概览的版面顺序", () => {
+  /** 各块的位置：继续播放、最近播放、资料库状态与页底账目。 */
+  async function boxes(page: Page) {
+    const of = async (name: string) => {
+      const box = await page.getByRole("region", { name, exact: true }).boundingBox();
+      if (box === null) throw new Error(`量不到“${name}”`);
+      return box;
+    };
+    return { resume: await of("继续播放"), recent: await of("最近播放"), status: await of("资料库状态"), ledger: await of("资料库") };
+  }
+
+  test("1440px：状态表在右栏与继续播放同高起，账目在主栏最下方、状态表左侧", async ({ page, backend }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    const mock = await backend.start({ signedInAs: "curator" });
+    mock.seedRecentPlays(3);
+    await page.goto("/");
+    await expect(page.getByRole("region", { name: "资料库", exact: true }).getByRole("link", { name: /张专辑/ })).toBeVisible();
+    const { resume, recent, status, ledger } = await boxes(page);
+    expect(resume.y, "继续播放在最近播放上方").toBeLessThan(recent.y);
+    expect(status.x, "状态表在主栏右侧").toBeGreaterThanOrEqual(recent.x + recent.width);
+    expect(Math.abs(status.y - resume.y), "状态表与继续播放顶端对齐").toBeLessThanOrEqual(1);
+    expect(ledger.y, "账目在最近播放下方").toBeGreaterThanOrEqual(recent.y + recent.height);
+    expect(ledger.x + ledger.width, "账目只在主栏里").toBeLessThanOrEqual(status.x);
+  });
+
+  test("390px：从上到下是继续播放、最近播放、资料库状态，账目在最后", async ({ page, backend }) => {
+    await page.setViewportSize({ width: 390, height: 1000 });
+    const mock = await backend.start({ signedInAs: "listener" });
+    mock.seedRecentPlays(3);
+    await page.goto("/");
+    await expect(page.getByRole("region", { name: "资料库", exact: true }).getByRole("link", { name: /张专辑/ })).toBeVisible();
+    const { resume, recent, status, ledger } = await boxes(page);
+    expect(resume.y + resume.height).toBeLessThanOrEqual(recent.y);
+    expect(recent.y + recent.height).toBeLessThanOrEqual(status.y);
+    expect(status.y + status.height).toBeLessThanOrEqual(ledger.y);
   });
 });
