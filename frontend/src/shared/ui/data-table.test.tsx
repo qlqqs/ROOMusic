@@ -44,4 +44,14 @@ describe("DataTable", () => {
     const dataRows = screen.getAllByRole("row").slice(1);
     expect(within(dataRows[1] as HTMLElement).getByText("12")).toBeTruthy();
   });
+
+  it("headerContent 替换表头里显示的内容，header 仍是窄屏堆叠时的标签", () => {
+    const custom = columns.map((column) => column.id === "count" ? { ...column, headerContent: <input type="checkbox" aria-label="全选" /> } : column);
+    render(<DataTable caption="目录列表" columns={custom} rows={rows} rowKey={(row) => row.id} />);
+    const headers = screen.getAllByRole("columnheader");
+    expect(within(headers[1] as HTMLElement).getByRole("checkbox", { name: "全选" })).toBeTruthy();
+    expect(headers[1]?.textContent).toBe("");
+    expect(headers[0]?.textContent).toBe("目录");
+    expect(screen.getAllByRole("cell")[0]?.getAttribute("data-label")).toBe("数量");
+  });
 });

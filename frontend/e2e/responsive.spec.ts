@@ -411,6 +411,35 @@ test.describe("设置与用户菜单：布局和截图", () => {
   }
 });
 
+test("设置胶囊标签行 @375px：当前标签完整露出，两端按滚动位置渐隐；宽屏竖排不渐隐", async ({ page, backend }) => {
+  await page.setViewportSize({ width: 375, height: 1000 });
+  await backend.start({ signedInAs: "curator" });
+  const nav = page.getByRole("navigation", { name: "设置", exact: true });
+  const row = nav.locator(":scope > div").first();
+  const fullyInside = async (name: string) => {
+    const tab = await nav.getByRole("link", { name, exact: true }).boundingBox();
+    const box = await row.boundingBox();
+    if (tab === null || box === null) throw new Error("标签行不可见");
+    return tab.x >= box.x && tab.x + tab.width <= box.x + box.width;
+  };
+  await page.goto("/settings/account");
+  await expect(heading(page, "账号")).toBeVisible();
+  await expect(row).toHaveAttribute("data-fade-end", "");
+  await expect(row).not.toHaveAttribute("data-fade-start", "");
+  expect(await row.evaluate((element) => getComputedStyle(element).maskImage)).not.toBe("none");
+  // 排在末尾的“备份”：换过去后滚到它，完整露出，不只露出一半。
+  await nav.getByRole("link", { name: "备份", exact: true }).click();
+  await expect(heading(page, "备份")).toBeVisible();
+  await expect.poll(() => fullyInside("备份")).toBe(true);
+  await expect(row).toHaveAttribute("data-fade-start", "");
+  await expect(row).not.toHaveAttribute("data-fade-end", "");
+
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await expect(row).not.toHaveAttribute("data-fade-start", "");
+  await expect(row).not.toHaveAttribute("data-fade-end", "");
+  expect(await row.evaluate((element) => getComputedStyle(element).maskImage)).toBe("none");
+});
+
 // 自检只改当前浏览器页面的临时 CSS，不触碰产品文件；确认几何断言确实能拦住截图审阅发现的旧样式。
 test.describe("设置样式回归断言自检", () => {
   test("账号值恢复 32px 时，用户名和角色的字号检查分别失败", async ({ page, backend }) => {

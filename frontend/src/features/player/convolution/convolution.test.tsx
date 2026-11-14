@@ -86,7 +86,7 @@ describe("卷积最小交互", () => {
     expect(requests).toHaveLength(2);
   });
 
-  it("选择 IR 提交完整启用设置，卷积上移后翻转 before_peq", async () => {
+  it("打开卷积后在下方的 IR 行选择 IR，提交完整设置，卷积上移后翻转 before_peq", async () => {
     const user = userEvent.setup();
     const file = api.decodeIrFiles(sampleBody("dsp/responses/ir-list"))[0];
     if (file === undefined) throw new Error("IR 列表样本没有文件");
@@ -98,6 +98,8 @@ describe("卷积最小交互", () => {
     render(<QueryClientProvider client={client}><PlaybackSettingsForm /></QueryClientProvider>);
     await user.click(screen.getByRole("switch", { name: "参数均衡" }));
     await waitFor(() => expect(engine.getSnapshot().settings.peq.enabled).toBe(true));
+    await user.click(screen.getByRole("switch", { name: "卷积" }));
+    await waitFor(() => expect(engine.getSnapshot().settings.convolution.enabled).toBe(true));
     server.commands.length = 0;
     await screen.findByRole("option", { name: file.name });
     await user.selectOptions(screen.getByRole("combobox", { name: "IR 文件" }), file.irId);
@@ -131,12 +133,43 @@ describe("卷积最小交互", () => {
     render(<QueryClientProvider client={client}><PlaybackSettingsForm /></QueryClientProvider>);
     const file = api.decodeIrFiles(sampleBody("dsp/responses/ir-list"))[0];
     if (file === undefined) throw new Error("IR 列表样本没有文件");
+    await waitFor(() => expect(screen.getByRole<HTMLInputElement>("switch", { name: "卷积" }).disabled).toBe(false));
+    await user.click(screen.getByRole("switch", { name: "卷积" }));
+    await waitFor(() => expect(engine.getSnapshot().settings.convolution.enabled).toBe(true));
     await screen.findByRole("option", { name: file.name });
     await user.selectOptions(screen.getByRole("combobox", { name: "IR 文件" }), file.irId);
-    await waitFor(() => expect(engine.getSnapshot().settings.convolution.enabled).toBe(true));
+    await waitFor(() => expect(engine.getSnapshot().settings.convolution.irId).toBe(file.irId));
     expect(screen.queryByRole("list", { name: "处理顺序" })).toBeNull();
     expect(screen.queryByRole("button", { name: "对调处理顺序" })).toBeNull();
     await user.click(screen.getByRole("switch", { name: "参数均衡" }));
     expect(await screen.findByRole("list", { name: "处理顺序" })).toBeTruthy();
+  });
+
+  it("参数均衡与卷积的从属行只在开关打开时出现，开关都在行尾", async () => {
+    const user = userEvent.setup();
+    stubFetch(() => sampleResponse("dsp/responses/ir-list"));
+    await waitFor(() => expect(engine.getSnapshot().zone).not.toBeNull());
+    render(<QueryClientProvider client={client}><PlaybackSettingsForm /></QueryClientProvider>);
+    const peq = screen.getByRole<HTMLInputElement>("switch", { name: "参数均衡" });
+    await waitFor(() => expect(peq.disabled).toBe(false));
+    // 关着时看不到“编辑…”、IR 选择与“管理 IR 文件…”。
+    expect(screen.queryByText("均衡曲线")).toBeNull();
+    expect(screen.queryByRole("button", { name: "编辑参数均衡…" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "IR 文件" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "管理 IR 文件…" })).toBeNull();
+
+    await user.click(peq);
+    expect(await screen.findByText("均衡曲线")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "编辑参数均衡…" })).toBeTruthy();
+    // 还没有频段时，说明写在名称下面。
+    if (engine.getSnapshot().settings.peq.bands.length === 0) expect(screen.getByText("还没有频段")).toBeTruthy();
+    await user.click(screen.getByRole("switch", { name: "卷积" }));
+    expect(await screen.findByRole("combobox", { name: "IR 文件" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "管理 IR 文件…" })).toBeTruthy();
+
+    await user.click(screen.getByRole("switch", { name: "卷积" }));
+    await waitFor(() => expect(screen.queryByRole("combobox", { name: "IR 文件" })).toBeNull());
+    await user.click(screen.getByRole("switch", { name: "参数均衡" }));
+    await waitFor(() => expect(screen.queryByText("均衡曲线")).toBeNull());
   });
 });

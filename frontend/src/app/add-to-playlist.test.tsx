@@ -305,7 +305,7 @@ describe("添加到歌单：真实专辑头部与曲目行入口", () => {
     await within(dialog).findByText("正在读取歌单");
     expect(within(dialog).queryByText("还没有歌单。")).toBeNull();
     await act(async () => { pending.resolve(jsonResponse(500, { error: { code: "internal_error", message: "读取失败" }, request_id: "picker-read-error" })); });
-    expect((await within(dialog).findByRole("alert")).textContent).toContain("picker-read-error");
+    expect((await within(dialog).findByRole("alert")).textContent).not.toContain("picker-read-error");
     expect(within(dialog).queryByText("还没有歌单。")).toBeNull();
     api.on("GET", playlistsPath, readPlaylists);
     await userEvent.click(within(dialog).getByRole("button", { name: "重试" }));

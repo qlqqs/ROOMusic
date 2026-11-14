@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { decodeFolderListing } from "../features/library/api/decoders";
+import { decodeFolderListing, decodeRootOperationList } from "../features/library/api/decoders";
 import { sampleBody } from "../test/api-samples";
 import { deferred } from "../test/deferred";
 import { installFakeApi, installFakeSession, installOverviewApi } from "../test/fake-api";
@@ -559,20 +559,40 @@ describe("修改目录路径", () => {
 });
 
 describe("目录操作记录", () => {
-  it("显示操作、结果、revision 与错误码，目录名由目录 ID 对应，对应不上的显示占位", async () => {
+  it("显示操作、结果与版本号，失败的说明原因而不显示错误码，目录名由目录 ID 对应，对应不上的显示占位", async () => {
     await openLibrary();
     const table = await screen.findByRole("table", { name: "目录操作记录" });
+    expect(within(table).getAllByRole("columnheader").map((header) => header.textContent)).toEqual(["时间", "目录", "操作", "结果", "版本号"]);
+    expect(within(table).queryByText(/Revision|错误码|operation_failed/)).toBeNull();
     const rows = within(table).getAllByRole("row").slice(1);
     expect(rows).toHaveLength(6);
 
-    // 样本：最新一条是 classical-b 的失败停用，带错误码，没有 revision。
+    // 样本：最新一条是 classical-b 的失败停用，带错误码 operation_failed，没有 revision。
     const latest = within(rows[0] as HTMLElement).getAllByRole("cell");
-    expect(latest.map((cell) => cell.textContent?.replace(/\s+/g, ""))).toEqual([expect.any(String), "classical-b", "停用", "失败", "—", "operation_failed"]);
+    expect(latest.map((cell) => cell.textContent?.replace(/\s+/g, ""))).toEqual([expect.any(String), "classical-b", "停用", "失败操作没有完成，目录保持原样。", "—"]);
     // 样本：最早一条的目录 ID 不在当前列表里。
     const earliest = within(rows[5] as HTMLElement).getAllByRole("cell");
     expect(earliest[1]?.textContent).toBe("—");
     expect(within(rows[1] as HTMLElement).getByText("恢复")).toBeTruthy();
     expect(within(rows[1] as HTMLElement).getByText("成功")).toBeTruthy();
+  });
+
+  it("没有列出的错误码与没有错误码的失败都写“操作没有完成”", async () => {
+    const [sample] = decodeRootOperationList(sampleBody("library-root-operations/list")).items;
+    if (sample === undefined) throw new Error("目录操作记录样本是空的");
+    const { error_code: _code, ...withoutCode } = sample;
+    await openLibrary({
+      library: {
+        operations: [
+          { ...sample, id: "00000000-0000-4000-8000-0000000000f1", error_code: "some_new_code" },
+          { ...withoutCode, id: "00000000-0000-4000-8000-0000000000f2" },
+        ],
+      },
+    });
+    const table = await screen.findByRole("table", { name: "目录操作记录" });
+    const rows = within(table).getAllByRole("row").slice(1);
+    for (const row of rows) expect(within(row).getAllByRole("cell")[3]?.textContent?.replace(/\s+/g, "")).toBe("失败操作没有完成。");
+    expect(within(table).queryByText(/some_new_code/)).toBeNull();
   });
 
   it("新的操作完成后记录刷新，最新的在最前", async () => {

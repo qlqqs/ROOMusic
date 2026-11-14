@@ -2,14 +2,14 @@ import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, us
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { GripVertical, MoreHorizontal } from "lucide-react";
+import { GripVertical, ListMusic, MoreHorizontal } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { failureOf, isHttpFailure } from "../../../shared/api";
 import { isUuid } from "../../../shared/lib/ids";
 import { formatCount } from "../../../shared/lib/number";
 import { pageCountOf } from "../../../shared/lib/pagination";
 import { useClampedPage } from "../../../shared/lib/use-clamped-page";
-import { Button, ConfirmDialog, FailureNotice, MenuButton, Notice, Page, Pagination, Skeleton, type MenuAction } from "../../../shared/ui";
+import { Button, ConfirmDialog, EmptyState, FailureNotice, MenuButton, Notice, Page, Pagination, Skeleton, type MenuAction } from "../../../shared/ui";
 import { useViewerScope } from "../../auth";
 import { trackTitleOf, useArtworkTint } from "../../catalog";
 import type { ItemMovedDTO, ItemRemovedDTO, ItemRestoredDTO, PlaylistItemDTO, PlaylistItemsPageDTO, PlaylistSummaryDTO } from "../api/decoders";
@@ -265,7 +265,9 @@ function PlaylistDetailContent({ playlistId, page, renderPlayAll, renderTrackAct
           {data === undefined || outOfRange ? (
             items.isError ? null : <Skeleton label="正在加载歌单" lines={6} />
           ) : total === 0 ? (
-            <p>歌单里还没有曲目。</p>
+            <EmptyState icon={<ListMusic />} title="歌单里还没有曲目" action={<Link to="/albums">去专辑里挑选</Link>}>
+              在任意曲目的“更多”里选“添加到歌单…”，或在专辑页把整张专辑加进来。
+            </EmptyState>
           ) : data.items.length === 0 ? (
             <p>
               这一页没有曲目。{" "}

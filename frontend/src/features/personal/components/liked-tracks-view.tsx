@@ -1,8 +1,9 @@
 import { Link, useNavigate } from "@tanstack/react-router";
+import { Heart } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 import { pageCountOf } from "../../../shared/lib/pagination";
 import { useClampedPage } from "../../../shared/lib/use-clamped-page";
-import { Button, FailureNotice, Page, Pagination, Skeleton } from "../../../shared/ui";
+import { Button, EmptyState, FailureNotice, Page, Pagination, Skeleton } from "../../../shared/ui";
 import { useViewerScope } from "../../auth";
 import type { FavoriteTrackDTO } from "../api/decoders";
 import { useFavoriteTracks } from "../hooks/use-favorites";
@@ -26,7 +27,7 @@ type LikedTracksViewProps = {
 const pageSearch = (page: number) => ({ page: page > 1 ? page : undefined });
 
 /**
- * 我喜欢的音乐：心形封面的页头（头像与用户名、“播放全部”）、“歌曲 N”，收藏的曲目按收藏时间倒序。在这一页里取消收藏后，这一行留在原处、心形变空心，离开这一页或按“刷新”后才消失。
+ * 我喜欢的音乐：心形封面的页头（头像与用户名、“播放全部”）、“歌曲 N”，收藏的曲目按收藏时间倒序；没有收藏时是说明怎么收藏的空状态。在这一页里取消收藏后，这一行留在原处、心形变空心，离开这一页或按“刷新”后才消失。
  * 翻页时带上第一页的集合版本，期间收藏有变化就重新读这一页，不把两个版本的结果拼在一起。
  */
 export function LikedTracksView({ page, renderPlayAll, renderTrackActions }: LikedTracksViewProps) {
@@ -68,14 +69,15 @@ export function LikedTracksView({ page, renderPlayAll, renderTrackActions }: Lik
       }
     >
       <div className={styles.view}>
-        <SongsHeading headingRef={headingRef} count={list.data === undefined ? null : total} />
+        {/* 没有收藏时只有空状态：只有“歌曲”一类，不再显示“歌曲 0”。 */}
+        {loaded && empty ? null : <SongsHeading headingRef={headingRef} count={list.data === undefined ? null : total} />}
         {failure}
         {!loaded ? (
           failure === null ? <Skeleton label="正在加载收藏的曲目" lines={4} /> : null
         ) : empty ? (
-          <p>
-            还没有收藏的曲目。 <Link to="/albums">去专辑页看看</Link>
-          </p>
+          <EmptyState icon={<Heart />} title="还没有喜欢的曲目" action={<Link to="/albums">去专辑页看看</Link>}>
+            点曲目旁、播放栏或全屏播放器里的心形，曲目就会收进这里。
+          </EmptyState>
         ) : (
           <div className={styles.results} aria-busy={list.isPlaceholderData || changed}>
             {retained.hasNew ? <UpdatedHint onRefresh={retained.refresh} /> : null}

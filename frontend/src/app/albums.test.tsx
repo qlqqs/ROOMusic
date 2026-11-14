@@ -442,13 +442,13 @@ describe("专辑列表：空库与失败", () => {
     expect(screen.queryByRole("link", { name: "前往扫描目录" })).toBeNull();
   });
 
-  it("读取失败（503）：显示带请求 ID 的错误与重试，重试成功后显示专辑", async () => {
+  it("读取失败（503）：显示错误（不显示请求 ID）与重试，重试成功后显示专辑", async () => {
     const { catalog } = setup({ groups: albumGroups(5) });
     catalog.listFailure = sampleResponse("errors/database-unavailable");
     renderApp({ path: "/albums" });
     // 503 会被自动重试（最多 2 次，带退避），耗尽后才显示错误。
     const alert = await screen.findByRole("alert", {}, { timeout: 8000 });
-    expect(within(alert).getByText(/请求 ID：/)).toBeTruthy();
+    expect(within(alert).queryByText(/请求 ID/)).toBeNull();
     expect(albumLinks()).toHaveLength(0);
 
     catalog.listFailure = null;

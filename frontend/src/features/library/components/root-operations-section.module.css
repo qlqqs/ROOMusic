@@ -3,3 +3,11 @@
   color: var(--text-secondary);
   font-size: var(--fs-13);
 }
+
+/* 失败：标签后面接一句原因，放不下时换行。 */
+.failed {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+}

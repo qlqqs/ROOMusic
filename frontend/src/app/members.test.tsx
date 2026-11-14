@@ -29,6 +29,28 @@ function rowOf(name: string): HTMLElement {
   return row;
 }
 
+/** 行尾的“更多”按钮与它打开的菜单。 */
+const moreButton = (name: string) => within(rowOf(name)).getByRole("button", { name: `成员 ${name} 的更多操作` });
+
+async function openMemberMenu(name: string): Promise<HTMLElement> {
+  await userEvent.click(moreButton(name));
+  return screen.getByRole("menu", { name: `成员 ${name} 的更多操作` });
+}
+
+/** 打开这一行的“更多”菜单并选一项。 */
+async function chooseMember(name: string, action: string) {
+  await userEvent.click(within(await openMemberMenu(name)).getByRole("menuitem", { name: action }));
+}
+
+/** 这一行“更多”菜单里的各项（名称与是否停用），读完按 Esc 关掉。 */
+async function memberActions(name: string): Promise<{ name: string; disabled: boolean }[]> {
+  const items = within(await openMemberMenu(name))
+    .getAllByRole("menuitem")
+    .map((item) => ({ name: item.textContent ?? "", disabled: item.hasAttribute("disabled") }));
+  await userEvent.keyboard("{Escape}");
+  return items;
+}
+
 async function openMembers(options: Parameters<typeof setup>[0] = {}) {
   const context = setup(options);
   const rendered = renderApp({ path: "/settings/members" });
@@ -77,15 +99,15 @@ describe("成员页：访问与列表", () => {
     expect(within(curator).getByText("你")).toBeTruthy();
     expect(within(curator).getByText("管理员")).toBeTruthy();
     expect(within(curator).getByText("启用")).toBeTruthy();
-    expect(within(curator).getByRole("button", { name: "停用成员 curator" })).toBeTruthy();
-    expect(within(curator).getByRole("button", { name: "撤销会话 curator" })).toBeTruthy();
+    // 自己没有“重置密码”；停用是破坏性操作，排在最后。
+    expect((await memberActions("curator")).map((item) => item.name)).toEqual(["撤销会话…", "停用…"]);
 
     // 已停用的成员没有会话可撤销，只提供重新启用。
     const archivist = rowOf("archivist");
     expect(within(archivist).getByText("已停用")).toBeTruthy();
     expect(within(archivist).getByText("成员")).toBeTruthy();
-    expect(within(archivist).getByRole("button", { name: "重新启用成员 archivist" })).toBeTruthy();
-    expect(within(archivist).queryByRole("button", { name: /停用成员|撤销会话/ })).toBeNull();
+    expect((await memberActions("archivist")).map((item) => item.name)).toEqual(["重置密码…", "重新启用"]);
+    expect((await memberActions("listener")).map((item) => item.name)).toEqual(["重置密码…", "撤销会话…", "停用…"]);
     expect(within(archivist).queryByText("你")).toBeNull();
   });
 
@@ -101,7 +123,7 @@ describe("成员页：访问与列表", () => {
 
     expect(within(rowOf("listener")).getByText("你")).toBeTruthy();
     expect(within(rowOf("curator")).queryByText("你")).toBeNull();
-    await userEvent.click(within(rowOf("listener")).getByRole("button", { name: "撤销会话 listener" }));
+    await chooseMember("listener", "撤销会话…");
     expect(within(await screen.findByRole("dialog")).getByText("这是你自己的账号，确认后你会马上退出登录。")).toBeTruthy();
   });
 
@@ -115,7 +137,7 @@ describe("成员页：访问与列表", () => {
     await screen.findByRole("rowheader", { name: /^listener/ });
 
     expect(screen.queryByText("你")).toBeNull();
-    await userEvent.click(within(rowOf("curator")).getByRole("button", { name: "撤销会话 curator" }));
+    await chooseMember("curator", "撤销会话…");
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).queryByText(/这是你自己的账号/)).toBeNull();
   });
@@ -142,14 +164,14 @@ describe("成员页：访问与列表", () => {
     expect(api.requestsTo("GET", usersPath)).toHaveLength(0);
   });
 
-  it("读取失败（403，会话保留）：显示带请求 ID 的拒绝与重试，不退出登录", async () => {
+  it("读取失败（403，会话保留）：显示拒绝（不显示请求 ID）与重试，不退出登录", async () => {
     const { api } = setup();
     api.on("GET", usersPath, () => sampleResponse("errors/forbidden"));
     renderApp({ path: "/settings/members" });
     await heading("成员");
     const alert = await screen.findByRole("alert");
     expect(within(alert).getByText("你没有权限执行此操作。")).toBeTruthy();
-    expect(within(alert).getByText(/请求 ID：/)).toBeTruthy();
+    expect(within(alert).queryByText(/请求 ID/)).toBeNull();
     expect(within(alert).getByRole("button", { name: "重试" })).toBeTruthy();
     expect(screen.getByRole("navigation", { name: "主导航" })).toBeTruthy();
   });
@@ -315,7 +337,7 @@ describe("新建成员", () => {
 describe("停用、重新启用与撤销会话", () => {
   it("停用前要确认：对话框说明会马上退出登录、之后可重新启用，初始焦点在取消上；取消不发请求", async () => {
     const { api } = await openMembers();
-    await userEvent.click(within(rowOf("listener")).getByRole("button", { name: "停用成员 listener" }));
+    await chooseMember("listener", "停用…");
     const dialog = await screen.findByRole("dialog", { name: "停用成员“listener”？" });
     expect(within(dialog).getByText(/停用后对方会马上退出登录，之后可以重新启用/)).toBeTruthy();
     expect(within(dialog).queryByText(/这是你自己的账号/)).toBeNull();
@@ -328,7 +350,7 @@ describe("停用、重新启用与撤销会话", () => {
 
   it("确认后停用：请求没有幂等键，成功后对话框关闭、列表显示已停用并提供重新启用", async () => {
     const { api, members } = await openMembers();
-    await userEvent.click(within(rowOf("listener")).getByRole("button", { name: "停用成员 listener" }));
+    await chooseMember("listener", "停用…");
     await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "停用成员" }));
 
     expect(await screen.findByText(/已停用成员“listener”/)).toBeTruthy();
@@ -342,13 +364,13 @@ describe("停用、重新启用与撤销会话", () => {
       expect(within(found).getByText("已停用")).toBeTruthy();
       return found;
     });
-    expect(within(row).getByRole("button", { name: "重新启用成员 listener" })).toBeTruthy();
-    expect(within(row).queryByRole("button", { name: "撤销会话 listener" })).toBeNull();
+    expect(within(row).getByText("已停用")).toBeTruthy();
+    expect((await memberActions("listener")).map((item) => item.name)).toEqual(["重置密码…", "重新启用"]);
   });
 
   it("重新启用直接执行，不需要确认", async () => {
     const { api } = await openMembers();
-    await userEvent.click(within(rowOf("archivist")).getByRole("button", { name: "重新启用成员 archivist" }));
+    await chooseMember("archivist", "重新启用");
     expect(await screen.findByText(/已重新启用成员“archivist”/)).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(api.requestsTo("PATCH", userPath)[0]?.body).toEqual({ disabled: false });
@@ -357,7 +379,7 @@ describe("停用、重新启用与撤销会话", () => {
 
   it("撤销会话要确认：说明对方需要重新登录而账号不受影响，确认后发请求并提示", async () => {
     const { api, members } = await openMembers();
-    await userEvent.click(within(rowOf("listener")).getByRole("button", { name: "撤销会话 listener" }));
+    await chooseMember("listener", "撤销会话…");
     const dialog = await screen.findByRole("dialog", { name: "撤销成员“listener”的全部会话？" });
     expect(within(dialog).getByText(/对方的所有设备都会退出登录，需要重新登录/)).toBeTruthy();
     await userEvent.click(within(dialog).getByRole("button", { name: "撤销会话" }));
@@ -369,7 +391,7 @@ describe("停用、重新启用与撤销会话", () => {
 
   it("目标是自己：对话框额外提示会被退出登录；停用最后一个管理员被拒绝（409）时会话保留", async () => {
     await openMembers();
-    await userEvent.click(within(rowOf("curator")).getByRole("button", { name: "停用成员 curator" }));
+    await chooseMember("curator", "停用…");
     const dialog = await screen.findByRole("dialog", { name: "停用成员“curator”？" });
     expect(within(dialog).getByText("这是你自己的账号，确认后你会马上退出登录。")).toBeTruthy();
     await userEvent.click(within(dialog).getByRole("button", { name: "停用成员" }));
@@ -387,7 +409,8 @@ describe("停用、重新启用与撤销会话", () => {
     addAdmin(session, members, "second-admin");
     renderApp({ path: "/settings/members" });
     await heading("成员");
-    await userEvent.click(await screen.findByRole("button", { name: "停用成员 curator" }));
+    await screen.findByRole("rowheader", { name: /^curator/ });
+    await chooseMember("curator", "停用…");
     await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "停用成员" }));
 
     expect(await heading("登录")).toBeTruthy();
@@ -397,7 +420,7 @@ describe("停用、重新启用与撤销会话", () => {
 
   it("撤销自己的会话：同样会被退出登录", async () => {
     await openMembers();
-    await userEvent.click(within(rowOf("curator")).getByRole("button", { name: "撤销会话 curator" }));
+    await chooseMember("curator", "撤销会话…");
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("这是你自己的账号，确认后你会马上退出登录。")).toBeTruthy();
     await userEvent.click(within(dialog).getByRole("button", { name: "撤销会话" }));
@@ -407,7 +430,7 @@ describe("停用、重新启用与撤销会话", () => {
   it("成员已不存在（404）：提示并刷新列表", async () => {
     const { api, members } = await openMembers();
     members.users = members.users.filter((user) => user.username !== "listener");
-    await userEvent.click(within(rowOf("listener")).getByRole("button", { name: "停用成员 listener" }));
+    await chooseMember("listener", "停用…");
     await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "停用成员" }));
     expect(await screen.findByText("成员已不存在，列表已刷新。")).toBeTruthy();
     await waitFor(() => expect(screen.queryByRole("rowheader", { name: /^listener/ })).toBeNull());
@@ -417,7 +440,7 @@ describe("停用、重新启用与撤销会话", () => {
   it("撤销会话时成员已不存在（404）：提示并刷新列表，不再提示撤销成功", async () => {
     const { api, members } = await openMembers();
     members.users = members.users.filter((user) => user.username !== "listener");
-    await userEvent.click(within(rowOf("listener")).getByRole("button", { name: "撤销会话 listener" }));
+    await chooseMember("listener", "撤销会话…");
     await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "撤销会话" }));
     expect(await screen.findByText("成员已不存在，列表已刷新。")).toBeTruthy();
     expect(screen.queryByText(/已撤销成员/)).toBeNull();
@@ -427,7 +450,7 @@ describe("停用、重新启用与撤销会话", () => {
 
   it("响应丢失（服务端已停用）：对话框关闭，提示结果未确认，列表已显示已停用，不提供重试也不自动重试", async () => {
     const { api } = await openMembers({ members: { loseResponses: 1 } });
-    await userEvent.click(within(rowOf("listener")).getByRole("button", { name: "停用成员 listener" }));
+    await chooseMember("listener", "停用…");
     await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "停用成员" }));
 
     const alert = await screen.findByRole("alert");
@@ -440,12 +463,12 @@ describe("停用、重新启用与撤销会话", () => {
 
   it("请求丢失（服务端没有执行）：列表仍是启用，用户核对后可以重新操作", async () => {
     const { api } = await openMembers({ members: { loseRequests: 1 } });
-    await userEvent.click(within(rowOf("listener")).getByRole("button", { name: "停用成员 listener" }));
+    await chooseMember("listener", "停用…");
     await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "停用成员" }));
     expect(await screen.findByText("结果未确认")).toBeTruthy();
     expect(within(rowOf("listener")).getByText("启用")).toBeTruthy();
 
-    await userEvent.click(within(rowOf("listener")).getByRole("button", { name: "停用成员 listener" }));
+    await chooseMember("listener", "停用…");
     await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "停用成员" }));
     expect(await screen.findByText(/已停用成员“listener”/)).toBeTruthy();
     expect(api.requestsTo("PATCH", userPath)).toHaveLength(2);
@@ -454,20 +477,21 @@ describe("停用、重新启用与撤销会话", () => {
   it("会话在操作中失效（401）：回到登录页", async () => {
     const { api } = await openMembers();
     api.on("PATCH", userPath, () => sampleResponse("errors/unauthorized"));
-    await userEvent.click(within(rowOf("listener")).getByRole("button", { name: "停用成员 listener" }));
+    await chooseMember("listener", "停用…");
     await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "停用成员" }));
     expect(await heading("登录")).toBeTruthy();
     expect(screen.queryByRole("table", { name: "成员列表" })).toBeNull();
   });
 
-  it("提交中所有操作按钮忙碌，重复点击不会再发请求", async () => {
+  it("提交中所有成员的菜单项都停用，不能再发请求", async () => {
     const { api } = await openMembers();
     const gate = deferred<Response>();
     api.on("PATCH", userPath, () => gate.promise);
-    await userEvent.click(within(rowOf("archivist")).getByRole("button", { name: "重新启用成员 archivist" }));
-    await waitFor(() => expect(within(rowOf("archivist")).getByRole("button", { name: "重新启用成员 archivist" }).getAttribute("aria-busy")).toBe("true"));
-    expect(within(rowOf("listener")).getByRole("button", { name: "停用成员 listener" }).getAttribute("aria-busy")).toBe("true");
-    await userEvent.click(within(rowOf("archivist")).getByRole("button", { name: "重新启用成员 archivist" }));
+    await chooseMember("archivist", "重新启用");
+    await waitFor(async () => expect((await memberActions("archivist")).every((item) => item.disabled)).toBe(true));
+    expect((await memberActions("listener")).every((item) => item.disabled)).toBe(true);
+    await userEvent.click(within(await openMemberMenu("archivist")).getByRole("menuitem", { name: "重新启用" }));
+    await userEvent.keyboard("{Escape}");
     expect(api.requestsTo("PATCH", userPath)).toHaveLength(1);
     gate.resolve(jsonResponse(200, { disabled: false }));
     expect(await screen.findByText(/已重新启用成员“archivist”/)).toBeTruthy();
@@ -495,7 +519,7 @@ const resetPasswordPath = /^\/api\/v1\/users\/[^/]+\/password$/;
 
 async function openReset(username = "listener", options: Parameters<typeof setup>[0] = {}) {
   const context = await openMembers(options);
-  await userEvent.click(within(rowOf(username)).getByRole("button", { name: `重置成员 ${username} 的密码` }));
+  await chooseMember(username, "重置密码…");
   const element = await screen.findByRole("dialog", { name: `重置“${username}”的密码` });
   return { ...context, element, dialog: within(element) };
 }
@@ -522,9 +546,9 @@ function resetFieldError(context: ResetContext, label: string, message: string) 
 describe("V2/V5：管理员重置成员密码", () => {
   it("自己按 ID 不提供重置入口，启用和停用的其他成员都有入口", async () => {
     await openMembers();
-    expect(within(rowOf("curator")).queryByRole("button", { name: /重置/ })).toBeNull();
+    expect((await memberActions("curator")).map((item) => item.name)).not.toContain("重置密码…");
     for (const username of ["listener", "archivist"]) {
-      expect(within(rowOf(username)).getByRole("button", { name: `重置成员 ${username} 的密码` })).toBeTruthy();
+      expect((await memberActions(username)).map((item) => item.name)).toContain("重置密码…");
     }
   });
 
@@ -535,8 +559,8 @@ describe("V2/V5：管理员重置成员密码", () => {
     account.id = memberId(members, "listener");
     renderApp({ path: "/settings/members" });
     await screen.findByRole("rowheader", { name: /^listener/ });
-    expect(within(rowOf("listener")).queryByRole("button", { name: /重置/ })).toBeNull();
-    expect(within(rowOf("curator")).getByRole("button", { name: "重置成员 curator 的密码" })).toBeTruthy();
+    expect((await memberActions("listener")).map((item) => item.name)).not.toContain("重置密码…");
+    expect((await memberActions("curator")).map((item) => item.name)).toContain("重置密码…");
   });
 
   it("启用成员的确认说明提示用新密码重新登录", async () => {

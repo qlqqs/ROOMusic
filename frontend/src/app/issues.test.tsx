@@ -141,14 +141,16 @@ describe("元数据页：列表与筛选", () => {
     await waitFor(() => expect(history.location.search).toBe("?status=reviewed"));
   });
 
-  it("没有任何问题时说明问题什么时候出现", async () => {
+  it("没有任何问题时说明问题什么时候出现，宽屏也只有列表一栏，不提示“从列表里选一个版本”", async () => {
     const api = installFakeApi();
     installFakeSession(api, { current: "curator" });
     installOverviewApi(api);
     installGovernanceApi(api, installCatalogApi(api, { groups: [albumC()] }));
-    renderApp({ path: "/issues" });
+    const { view } = renderApp({ path: "/issues" });
     expect(await screen.findByText("没有待处理的问题。")).toBeTruthy();
     expect(screen.queryByRole("navigation", { name: "问题列表分页" })).toBeNull();
+    expect(screen.queryByText("从列表里选一个版本。")).toBeNull();
+    expect(view.container.querySelector("[data-layout]")?.getAttribute("data-layout")).toBe("sequential");
   });
 
   it("读取失败时显示原因与“重试”，重试成功后列出问题", async () => {

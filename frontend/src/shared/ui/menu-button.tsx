@@ -5,18 +5,28 @@ import styles from "./menu-button.module.css";
 
 /**
  * group：相邻且 group 相同的项为一组，组与组之间画分隔线；组名不为空时在组首显示组标题（不可聚焦，方向键跳过）。
- * 不给 group 的项都在同一个无名组里，旧的调用方不受影响。
+ * 不给 group 的项都在同一个无名组里，旧的调用方不受影响。破坏性的项（danger）与前面的项之间也画分隔线，不需要组名。
  */
-export type MenuAction = { id: string; label: string; onSelect: () => void; disabled?: boolean; icon?: ReactNode; group?: string };
+export type MenuAction = {
+  id: string;
+  label: string;
+  onSelect: () => void;
+  disabled?: boolean;
+  icon?: ReactNode;
+  group?: string;
+  /** 破坏性操作（停用、删除）：文字与图标用警示色，放在菜单最后一组。 */
+  danger?: boolean;
+};
 
-/** 把相邻且 group 相同的项归成一段。 */
-function groupActions(actions: readonly MenuAction[]): { name: string; actions: MenuAction[] }[] {
-  const groups: { name: string; actions: MenuAction[] }[] = [];
+/** 把相邻、group 相同且同为（或同不为）破坏性的项归成一段。 */
+function groupActions(actions: readonly MenuAction[]): { name: string; danger: boolean; actions: MenuAction[] }[] {
+  const groups: { name: string; danger: boolean; actions: MenuAction[] }[] = [];
   for (const action of actions) {
     const name = action.group ?? "";
+    const danger = action.danger === true;
     const last = groups.at(-1);
-    if (last !== undefined && last.name === name) last.actions.push(action);
-    else groups.push({ name, actions: [action] });
+    if (last !== undefined && last.name === name && last.danger === danger) last.actions.push(action);
+    else groups.push({ name, danger, actions: [action] });
   }
   return groups;
 }
@@ -117,15 +127,16 @@ export function useMenu({ label, actions, placement = "below", matchTriggerWidth
       if (["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) { event.preventDefault(); open(event.key === "ArrowUp" ? "last" : "first"); }
     },
   };
-  const item = (action: MenuAction) => <button type="button" key={action.id} role="menuitem" tabIndex={-1} disabled={action.disabled} data-icon={action.icon === undefined ? undefined : ""} onClick={() => { close(); action.onSelect(); }}>
+  const item = (action: MenuAction) => <button type="button" key={action.id} role="menuitem" tabIndex={-1} disabled={action.disabled} data-icon={action.icon === undefined ? undefined : ""} data-danger={action.danger ? "" : undefined} onClick={() => { close(); action.onSelect(); }}>
     {action.icon === undefined ? null : <span className={styles.icon} aria-hidden="true">{action.icon}</span>}
     {action.label}
   </button>;
   // 有名字的组用 role="group" 包起来，组标题是它的名称；无名组的项直接放在菜单里，与没有分组时的结构相同。
   const content = position === null ? null : createPortal(<div id={id} ref={menu} role="menu" aria-label={label} className={styles.menu} style={position.style} onKeyDown={onMenuKey}>
-    {groupActions(actions).map((group, index) => <Fragment key={`${index}:${group.name}`}>
+    {groupActions(actions).map((group, index, groups) => <Fragment key={`${index}:${group.name}`}>
       {index === 0 ? null : <div role="separator" className={styles.separator} />}
-      {group.name === "" ? group.actions.map(item) : <div role="group" aria-labelledby={`${id}-group-${index}`} className={styles.group}>
+      {/* 同名组里的破坏性项另起一段，不再重复组标题。 */}
+      {group.name === "" || groups[index - 1]?.name === group.name ? group.actions.map(item) : <div role="group" aria-labelledby={`${id}-group-${index}`} className={styles.group}>
         <div aria-hidden="true" id={`${id}-group-${index}`} className={styles.groupTitle}>{group.name}</div>
         {group.actions.map(item)}
       </div>}

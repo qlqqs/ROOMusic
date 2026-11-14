@@ -157,3 +157,64 @@ describe("菜单分组", () => {
     expect(screen.getAllByRole("separator")).toHaveLength(2);
   });
 });
+
+describe("破坏性的菜单项", () => {
+  it("danger 的项另起一段（前面一条分隔线），带标记；同名组里的另一段不重复组标题", async () => {
+    const user = userEvent.setup();
+    render(
+      <MenuButton
+        label="更多"
+        actions={[
+          { id: "reset", label: "重置密码…", onSelect: vi.fn() },
+          { id: "revoke", label: "撤销会话…", onSelect: vi.fn() },
+          { id: "disable", label: "停用…", danger: true, onSelect: vi.fn() },
+        ]}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "更多" }));
+    const menu = screen.getByRole("menu", { name: "更多" });
+    const separator = within(menu).getByRole("separator");
+    expect(separator.previousElementSibling?.textContent).toBe("撤销会话…");
+    expect(separator.nextElementSibling?.textContent).toBe("停用…");
+    expect(screen.getByRole("menuitem", { name: "停用…" }).hasAttribute("data-danger")).toBe(true);
+    expect(screen.getByRole("menuitem", { name: "撤销会话…" }).hasAttribute("data-danger")).toBe(false);
+  });
+
+  it("有名字的组里的破坏性项：分隔线隔开，组标题只出现一次", async () => {
+    const user = userEvent.setup();
+    render(
+      <MenuButton
+        label="更多"
+        actions={[
+          { id: "play", label: "播放", onSelect: vi.fn() },
+          { id: "edit", group: "管理", label: "修改主名…", onSelect: vi.fn() },
+          { id: "delete", group: "管理", label: "删除…", danger: true, onSelect: vi.fn() },
+        ]}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "更多" }));
+    const menu = screen.getByRole("menu", { name: "更多" });
+    expect(within(menu).getAllByRole("separator")).toHaveLength(2);
+    expect(within(menu).getAllByRole("group", { name: "管理" })).toHaveLength(1);
+    expect(within(menu).getAllByText("管理", { exact: true })).toHaveLength(1);
+    // 方向键照常走到破坏性项。
+    await user.keyboard("{End}");
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "删除…" }));
+  });
+
+  it("相邻的多个破坏性项在同一段", async () => {
+    const user = userEvent.setup();
+    render(
+      <MenuButton
+        label="更多"
+        actions={[
+          { id: "download", label: "下载", onSelect: vi.fn() },
+          { id: "a", label: "删除…", danger: true, onSelect: vi.fn() },
+          { id: "b", label: "停用…", danger: true, onSelect: vi.fn() },
+        ]}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "更多" }));
+    expect(screen.getAllByRole("separator")).toHaveLength(1);
+  });
+});

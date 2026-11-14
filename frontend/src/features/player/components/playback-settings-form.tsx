@@ -1,3 +1,4 @@
+import { FolderCog } from "lucide-react";
 import { useRef, useState } from "react";
 import {
   crossfadeDurations,
@@ -14,6 +15,7 @@ import {
 } from "../zones/model";
 import { IrFilesDialog } from "../convolution/ir-files-dialog";
 import { useIrFiles } from "../convolution/hooks";
+import { sourceLabel } from "../peq/document";
 import { PeqEditorDialog } from "../peq/peq-editor";
 import { usePlayerEngine, usePlayerSelector } from "../player-provider";
 import { Button, Segmented, SettingRow, SettingsGroup, Switch, VisuallyHidden } from "../../../shared/ui";
@@ -70,42 +72,58 @@ function GainSlider({ id, value, disabled, onCommit }: { id: string; value: numb
   );
 }
 
-/** 参数均衡：“编辑…”打开编辑面板，开关在行尾。 */
-function PeqRow({ disabled }: { disabled: boolean }) {
+/** 均衡曲线的一句话：套用的配置名与段数；还没有频段时说明。 */
+function peqSummary(name: string | null, bands: number): string {
+  if (bands === 0) return "还没有频段";
+  return name === null ? `${bands} 段` : `${name} · ${bands} 段`;
+}
+
+/** 参数均衡：开关在行尾；打开后下面多一行“均衡曲线”，“编辑…”打开编辑面板。 */
+function PeqRows({ disabled }: { disabled: boolean }) {
   const engine = usePlayerEngine();
   const peq = usePlayerSelector((snapshot) => snapshot.settings.peq);
   const [editing, setEditing] = useState(false);
   return (
-    <SettingRow label="参数均衡">
-      {(ids) => <>
-        <Button disabled={disabled} onClick={() => setEditing(true)}><span>编辑<VisuallyHidden>参数均衡</VisuallyHidden>…</span></Button>
-        <Switch id={ids.controlId} checked={peq.enabled} disabled={disabled} onChange={(enabled) => engine.setPlaybackSettings({ peq: { ...peq, enabled } })} />
-        <PeqEditorDialog open={editing} onClose={() => setEditing(false)} />
-      </>}
-    </SettingRow>
+    <>
+      <SettingRow label="参数均衡">
+        {(ids) => <Switch id={ids.controlId} checked={peq.enabled} disabled={disabled} onChange={(enabled) => engine.setPlaybackSettings({ peq: { ...peq, enabled } })} />}
+      </SettingRow>
+      {peq.enabled ? (
+        <SettingRow label="均衡曲线" description={peqSummary(sourceLabel(peq.source), peq.bands.length)} nested plainLabel>
+          <Button disabled={disabled} onClick={() => setEditing(true)}><span>编辑<VisuallyHidden>参数均衡</VisuallyHidden>…</span></Button>
+        </SettingRow>
+      ) : null}
+      <PeqEditorDialog open={editing} onClose={() => setEditing(false)} />
+    </>
   );
 }
 
-/** 卷积：选 IR、“管理文件…”打开 IR 文件管理，开关在行尾；选中一个 IR 就打开卷积。 */
-function ConvolutionRow({ disabled }: { disabled: boolean }) {
+/** 卷积：开关在行尾；打开后下面多一行“IR 文件”，选 IR 与“管理 IR 文件”。 */
+function ConvolutionRows({ disabled }: { disabled: boolean }) {
   const engine = usePlayerEngine();
   const convolution = usePlayerSelector((snapshot) => snapshot.settings.convolution);
   const files = useIrFiles();
   const [managing, setManaging] = useState(false);
   return (
-    <SettingRow label="卷积">
-      {(ids) => <>
-        <select aria-label="IR 文件" className={styles.select} value={convolution.irId ?? ""} disabled={disabled || files.data === undefined} onChange={(event) => {
-          if (event.target.value !== "") engine.setPlaybackSettings({ convolution: { ...convolution, irId: event.target.value, enabled: true } });
-        }}>
-          {convolution.irId === null ? <option value="">选择 IR</option> : null}
-          {files.data?.map((file) => <option key={file.irId} value={file.irId}>{file.name}</option>)}
-        </select>
-        <Button disabled={disabled} onClick={() => setManaging(true)}><span>管理<VisuallyHidden> IR </VisuallyHidden>文件…</span></Button>
-        <Switch id={ids.controlId} checked={convolution.enabled} disabled={disabled} onChange={(enabled) => engine.setPlaybackSettings({ convolution: { ...convolution, enabled } })} />
-        <IrFilesDialog open={managing} onClose={() => setManaging(false)} />
-      </>}
-    </SettingRow>
+    <>
+      <SettingRow label="卷积">
+        {(ids) => <Switch id={ids.controlId} checked={convolution.enabled} disabled={disabled} onChange={(enabled) => engine.setPlaybackSettings({ convolution: { ...convolution, enabled } })} />}
+      </SettingRow>
+      {convolution.enabled ? (
+        <SettingRow label="IR 文件" nested>
+          {(ids) => <>
+            <select id={ids.controlId} className={styles.select} value={convolution.irId ?? ""} disabled={disabled || files.data === undefined} onChange={(event) => {
+              if (event.target.value !== "") engine.setPlaybackSettings({ convolution: { ...convolution, irId: event.target.value } });
+            }}>
+              {convolution.irId === null ? <option value="">选择 IR</option> : null}
+              {files.data?.map((file) => <option key={file.irId} value={file.irId}>{file.name}</option>)}
+            </select>
+            <Button variant="icon" icon={<FolderCog size={18} />} label="管理 IR 文件…" disabled={disabled} onClick={() => setManaging(true)} />
+          </>}
+        </SettingRow>
+      ) : null}
+      <IrFilesDialog open={managing} onClose={() => setManaging(false)} />
+    </>
   );
 }
 
@@ -137,7 +155,7 @@ export function PlaybackSettingsDevice() {
 
 /**
  * 设置 › 播放：分“播放”“输出”“音效处理”三组，作用于正在控制的播放区（服务端渲染）；还没读到播放区时禁用。
- * 从属项（渐变时长、目标采样率、增益）缩进在所属开关或选项下，所属项关着时整行不出现。
+ * 开关一律在行右端；从属项（渐变时长、目标采样率、均衡曲线、IR 文件、增益）缩进在所属开关或选项下，所属项关着时整行不出现。
  */
 export function PlaybackSettingsForm() {
   const engine = usePlayerEngine();
@@ -217,8 +235,8 @@ export function PlaybackSettingsForm() {
         </SettingRow>
       </SettingsGroup>
       <SettingsGroup title="音效处理">
-        <PeqRow disabled={disabled} />
-        <ConvolutionRow disabled={disabled} />
+        <PeqRows disabled={disabled} />
+        <ConvolutionRows disabled={disabled} />
         <DspOrder disabled={disabled} />
         <SettingRow label="Headroom" description="整体降低电平，给均衡与卷积留出余量">
           {(ids) => <Switch id={ids.controlId} aria-describedby={ids.descriptionId} checked={settings.headroom.enabled} disabled={disabled} onChange={(enabled) => engine.setPlaybackSettings({ headroom: { ...settings.headroom, enabled } })} />}

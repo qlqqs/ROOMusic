@@ -1,10 +1,10 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Plus } from "lucide-react";
+import { ListMusic, Plus } from "lucide-react";
 import { useRef, useState } from "react";
 import { pageCountOf } from "../../../shared/lib/pagination";
 import { useClampedPage } from "../../../shared/lib/use-clamped-page";
 import { formatCount } from "../../../shared/lib/number";
-import { Button, Pagination, Panel, QueryContent } from "../../../shared/ui";
+import { Button, EmptyState, Pagination, Panel, QueryContent } from "../../../shared/ui";
 import { AlbumGridLayout, AlbumGridSkeleton } from "../../catalog";
 import type { PlaylistSummaryDTO } from "../api/decoders";
 import { usePlaylists } from "../hooks/use-playlists";
@@ -26,7 +26,7 @@ function PlaylistCard({ playlist }: { playlist: PlaylistSummaryDTO }) {
 
 /**
  * 我的歌单：本人的歌单，按最近修改倒序，卡片显示封面、名字、曲目数与总时长。
- * “新建歌单”只要名字，建好后直接进入这个歌单。
+ * “新建歌单”只要名字，建好后直接进入这个歌单。还没有歌单时“新建歌单”放在居中的空状态里，标题行不再重复。
  */
 export function PlaylistsView({ page }: { page: number }) {
   const list = usePlaylists(page);
@@ -34,6 +34,7 @@ export function PlaylistsView({ page }: { page: number }) {
   const [creating, setCreating] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const ready = list.data !== undefined && !list.isPlaceholderData;
+  const empty = list.data !== undefined && list.data.pagination.total === 0;
   const pageCount = pageCountOf(list.data?.pagination.total ?? 0, list.data?.pagination.page_size ?? 1);
   const outOfRange = useClampedPage({
     page,
@@ -53,9 +54,11 @@ export function PlaylistsView({ page }: { page: number }) {
         title="全部歌单"
         headingRef={headingRef}
         action={
-          <Button icon={<Plus size={16} />} onClick={() => setCreating(true)}>
-            新建歌单
-          </Button>
+          empty ? undefined : (
+            <Button icon={<Plus size={16} />} onClick={() => setCreating(true)}>
+              新建歌单
+            </Button>
+          )
         }
       >
         <QueryContent query={list} loading={<AlbumGridSkeleton />}>
@@ -63,7 +66,17 @@ export function PlaylistsView({ page }: { page: number }) {
             outOfRange ? (
               <AlbumGridSkeleton />
             ) : data.pagination.total === 0 ? (
-              <p>还没有歌单。</p>
+              <EmptyState
+                icon={<ListMusic />}
+                title="还没有歌单"
+                action={
+                  <Button variant="primary" icon={<Plus size={16} />} onClick={() => setCreating(true)}>
+                    新建歌单
+                  </Button>
+                }
+              >
+                把喜欢的曲目收成一组，按自己的顺序播放。也可以在任意曲目的“更多”里添加。
+              </EmptyState>
             ) : (
               <div className={styles.results} aria-busy={list.isPlaceholderData}>
                 <AlbumGridLayout>

@@ -40,7 +40,7 @@ test.describe("初始化、登录与退出", () => {
     await expect(page.getByText("已退出登录。")).toBeVisible();
   });
 
-  test("错误密码：显示提示与请求 ID，不进入应用", async ({ page, backend }) => {
+  test("错误密码：显示提示（不显示请求 ID），不进入应用", async ({ page, backend }) => {
     await backend.start();
     await page.goto("/");
     await page.getByLabel("用户名").fill("curator");
@@ -48,7 +48,7 @@ test.describe("初始化、登录与退出", () => {
     await page.getByRole("button", { name: "登录" }).click();
     const alert = page.getByRole("alert");
     await expect(alert).toContainText("用户名或密码错误");
-    await expect(alert).toContainText("请求 ID");
+    await expect(alert).not.toContainText("请求 ID");
     await expect(heading(page, "登录")).toBeVisible();
   });
 

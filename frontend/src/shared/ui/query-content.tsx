@@ -19,7 +19,7 @@ type QueryContentProps<T> = {
 
 /**
  * 数据区块的四种状态：首次加载、失败、成功、以及“刷新失败但还有旧数据”。
- * 失败时给出带请求 ID 的错误和重试；有旧数据时继续显示旧数据，错误在其上方。
+ * 失败时给出错误和重试；有旧数据时继续显示旧数据，错误在其上方。
  */
 export function QueryContent<T>({ query, loading, children }: QueryContentProps<T>) {
   const retry = (

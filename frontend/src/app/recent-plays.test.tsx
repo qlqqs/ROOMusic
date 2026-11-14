@@ -109,14 +109,14 @@ describe("概览的“最近播放”", () => {
     expect(clearButton(panel)).toBeTruthy();
   });
 
-  it("读取失败显示带请求 ID 的错误与重试，其余区块照常；重试成功后显示卡片", async () => {
+  it("读取失败显示错误（不显示请求 ID）与重试，其余区块照常；重试成功后显示卡片", async () => {
     const { api } = setup([recentRelease(1)]);
     // 500 不会被自动重试（503 与网络失败会，退避要等好几秒），错误立即显示。
     api.on("GET", recentPath, () => jsonResponse(500, { error: { code: "internal_error", message: "服务器内部错误" }, request_id: "req-recent-1" }));
     renderApp();
     const panel = await region();
     const alert = await within(panel).findByRole("alert");
-    expect(within(alert).getByText(/请求 ID：/).textContent).toContain("req-recent-1");
+    expect(alert.textContent).not.toContain("req-recent-1");
     expect(within(panel).queryByRole("link")).toBeNull();
     expect(await screen.findByRole("region", { name: "资料库" })).toBeTruthy();
 

@@ -182,6 +182,27 @@ describe("侧栏的歌单导航", () => {
     for (const playlist of playlists.slice(1)) expect(api.requestsTo("GET", `${playlistsPath}/${playlist.id}`)).toHaveLength(0);
   });
 
+  it("还没有歌单时“新建歌单”只在居中的空状态里，标题行不重复", async () => {
+    const { state } = setup(0);
+    state.deleted = true;
+    renderApp({ path: "/me/playlists" });
+    expect(await screen.findByText("还没有歌单")).toBeTruthy();
+    expect(screen.getByText(/把喜欢的曲目收成一组/)).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "新建歌单" })).toHaveLength(1);
+    await userEvent.click(screen.getByRole("button", { name: "新建歌单" }));
+    expect(await screen.findByRole("dialog", { name: "新建歌单" })).toBeTruthy();
+  });
+
+  it("有歌单时“新建歌单”在标题行", async () => {
+    setup(0);
+    renderApp({ path: "/me/playlists" });
+    const heading = await screen.findByRole("heading", { level: 2, name: "全部歌单" });
+    await screen.findByRole("link", { name: new RegExp(base.name) });
+    expect(screen.queryByText("还没有歌单")).toBeNull();
+    expect(screen.getAllByRole("button", { name: "新建歌单" })).toHaveLength(1);
+    expect(heading).toBeTruthy();
+  });
+
   it("新建歌单成功后侧栏立即出现新歌单，无需刷新或重新展开", async () => {
     const { api, state, playlist } = setup(0);
     const name = "刚建的歌单";
@@ -193,7 +214,7 @@ describe("侧栏的歌单导航", () => {
       return jsonResponse(201, { playlist: playlist(), added_count: 0, existing_count: 0, duplicate_count: 0 });
     });
     const { history } = renderApp({ path: "/me/playlists" });
-    await screen.findByText("还没有歌单。");
+    await screen.findByText("还没有歌单");
     expect(nav().getByRole("button", { name: "歌单列表" }).getAttribute("aria-expanded")).toBe("true");
     expect(nav().queryByRole("link", { name })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "新建歌单" }));
@@ -208,6 +229,15 @@ describe("侧栏的歌单导航", () => {
 });
 
 describe("歌单详情的顺序、冲突与稳定重试", () => {
+  it("歌单里还没有曲目时是空状态，给出去专辑里挑选的入口", async () => {
+    setup(0);
+    renderApp({ path: pagePath });
+    expect(await screen.findByText("歌单里还没有曲目")).toBeTruthy();
+    expect(screen.getByText(/选“添加到歌单…”/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "去专辑里挑选" }).getAttribute("href")).toBe("/albums");
+    expect(screen.queryByRole("table", { name: "歌单曲目" })).toBeNull();
+  });
+
   it("曲目表头按统一列顺序显示，歌单多出调整顺序列", async () => {
     setup();
     renderApp({ path: pagePath });
@@ -445,7 +475,7 @@ describe("歌单的容量、删除与表单", () => {
     await userEvent.click(screen.getByRole("menuitem", { name: "删除歌单" }));
     dialog = await screen.findByRole("dialog", { name: "删除歌单？" });
     await userEvent.click(within(dialog).getByRole("button", { name: "删除歌单" }));
-    await screen.findByText("还没有歌单。");
+    await screen.findByText("还没有歌单");
     expect(history.location.pathname).toBe("/me/playlists");
     expect(api.requestsTo("DELETE", playlistPath)).toHaveLength(1);
     expect(api.requestsTo("DELETE", playlistPath)[0]?.body).toEqual({ expected_revision: 4 });
