@@ -47,7 +47,7 @@ roomusic/
 
 初始化服务准备应用目录的 UID 1000 写入权限；PostgreSQL 自行设置数据库目录权限。检查配置使用 `docker compose config --quiet`。
 
-此 Compose 配套 v0.7.0 及后续镜像。v0.6.0 及更早镜像使用对应版本的部署配置。
+此 Compose 配套 v0.6.1 及后续镜像。v0.6.0 及更早镜像使用对应版本的部署配置。
 
 ### 可选设置
 
