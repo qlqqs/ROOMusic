@@ -1,0 +1,11 @@
+{"file": ".trellis/tasks/11-14-ui-interaction-polish/research/preview.html", "reason": "用户认可的预览（第 5 版），各条改后外观的依据，按 section id 对照分区"}
+{"file": "frontend/DESIGN.md", "reason": "设计变量、应用布局与“唱片目录与校对账簿”的整体气质"}
+{"file": "frontend/DESIGN-components.md", "reason": "按钮、曲目行、播放栏、设置页的现行组件规范"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端规范索引与开发前检查"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "组件合同、无障碍与组合方式"}
+{"file": ".trellis/spec/frontend/component-catalog.md", "reason": "已实现共用组件的约定（MenuButton 分组与图标、Segmented、SettingRow、曲目行）"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "feature 归属与 player/personal 互不导入的边界"}
+{"file": ".trellis/spec/frontend/interface-layout-guidelines.md", "reason": "页面布局、工具条与窄屏约定"}
+{"file": ".trellis/spec/frontend/player-design-guidelines.md", "reason": "播放栏、全屏播放器、信号路径与设备按钮的规范"}
+{"file": ".trellis/spec/frontend/playback-and-personal-state.md", "reason": "播放控制器命令与个人状态"}
+{"file": ".trellis/spec/frontend/artist-guidelines.md", "reason": "艺人列表、角色与详情页约定"}
