@@ -1,0 +1,38 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>信号路径入口对照</title>
+<style>
+body{margin:0;background:var(--background,#fff);color:var(--foreground,#171717);font-family:var(--font-sans,system-ui,sans-serif)}
+.wrap{padding:16px;display:grid;gap:14px}
+.rm{--ink:#201f1d;--n300:#d7d3d3;--n700:#605d5d;--line:color-mix(in srgb,#201f1d 10%,transparent);background:#f3f2f2;color:var(--ink);border:1px solid var(--border,#e5e5e5);border-radius:8px;overflow:hidden;font-family:system-ui,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC","WenQuanYi Micro Hei",sans-serif}
+.row{display:grid;grid-template-columns:200px 1fr;align-items:center;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.lab{padding:14px 16px;font-size:13px;font-weight:600}
+.lab small{display:block;font-weight:400;color:var(--n700);margin-top:2px;line-height:1.5}
+.bar{display:flex;align-items:center;justify-content:flex-end;gap:6px;padding:0 16px;height:72px;background:color-mix(in srgb,#fff 35%,#f3f2f2)}
+.ic{width:32px;height:32px;display:grid;place-items:center;color:#605d5d}
+.ic svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.sep{width:1px;height:20px;background:var(--line);margin:0 6px}
+.rail{width:88px;height:4px;border-radius:2px;background:var(--n300);position:relative}.rail:before{content:"";position:absolute;inset:0 30% 0 0;background:var(--ink);border-radius:2px}
+.pill{display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 12px;border-radius:15px;border:1px solid var(--n300);background:#fbfaf9;font-size:12px;font-weight:500;white-space:nowrap;margin-right:8px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--q);flex:none}
+.solo{width:32px;height:32px;display:grid;place-items:center;border-radius:4px;margin-right:4px}
+.solo .dot{width:10px;height:10px}
+.breathe .dot{animation:br 2.4s ease-in-out infinite}
+@keyframes br{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--q) 45%,transparent);opacity:.75}50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--q) 0%,transparent);opacity:1}}
+.clip .dot{animation:cl .9s ease-in-out infinite}
+@keyframes cl{0%,100%{box-shadow:0 0 0 0 rgba(179,38,30,.55)}50%{box-shadow:0 0 0 5px rgba(179,38,30,0)}}
+
+.soft .dot{animation:soft 4s ease-in-out infinite}
+@keyframes soft{0%,100%{opacity:.55;transform:scale(.9);box-shadow:0 0 0 0 color-mix(in srgb,var(--q) 30%,transparent)}50%{opacity:1;box-shadow:0 0 0 4px color-mix(in srgb,var(--q) 0%,transparent)}}
+.paused .dot{animation:none;opacity:.85}
+@media (prefers-reduced-motion:reduce){.soft .dot{animation:none}}
+@media (prefers-reduced-motion:reduce){.breathe .dot,.clip .dot{animation:none}}
+.q-l{--q:#b68235}.q-e{--q:#2f6a9a}.q-c{--q:#b3261e}
+.states{display:flex;gap:6px;align-items:center}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute"><symbol id="spk" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="4"/><path d="M12 6h.01"/></symbol><symbol id="q" viewBox="0 0 24 24"><path d="M21 15V6"/><circle cx="18.5" cy="15.5" r="2.5"/><path d="M12 12H3"/><path d="M16 6H3"/><path d="M12 18H3"/></symbol><symbol id="v" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></symbol></svg>
+<div class="wrap"><div class="rm">
+ <div class="row"><div class="lab">A · 圆点＋格式<small>静止。点击区是整个胶囊</small></div><div class="bar"><span class="pill q-l"><span class="dot"></span>FLAC 24/96</span><span class="ic"><svg><use href="#spk"/></svg></span><span class="ic"><svg><use href="#q"/></svg></span><span class="sep"></span><span class="ic"><svg><use href="#v"/></svg></span><span class="rail"></span></div></div>
+ <div class="row"><div class="lab">B · 只有呼吸圆点<small>一直缓慢呼吸；格式要点开才看得到</small></div><div class="bar"><span class="solo breathe q-l"><span class="dot"></span></span><span class="ic"><svg><use href="#spk"/></svg></span><span class="ic"><svg><use href="#q"/></svg></span><span class="sep"></span><span class="ic"><svg><use href="#v"/></svg></span><span class="rail"></span></div></div>
+ <div class="row"><div class="lab">D · 采用：平缓呼吸＋削波脉动<small>播放中 4 秒一次平缓呼吸；暂停时静止；削波时红点快速脉动</small></div><div class="bar"><span class="states"><span class="pill soft q-l"><span class="dot"></span>FLAC 24/96</span><span class="pill soft paused q-l" title="暂停"><span class="dot"></span>FLAC 24/96</span><span class="pill clip q-c"><span class="dot"></span>FLAC 24/96</span></span><span class="ic"><svg><use href="#spk"/></svg></span><span class="ic"><svg><use href="#q"/></svg></span><span class="sep"></span><span class="ic"><svg><use href="#v"/></svg></span><span class="rail"></span></div></div>
+ <div class="row"><div class="lab">C · A＋只在需要时动<small>平时静止；削波时红点脉动，正常后停</small></div><div class="bar"><span class="states"><span class="pill q-e"><span class="dot"></span>FLAC 16/44.1</span><span class="pill clip q-c"><span class="dot"></span>FLAC 16/44.1</span></span><span class="ic"><svg><use href="#spk"/></svg></span><span class="ic"><svg><use href="#q"/></svg></span><span class="sep"></span><span class="ic"><svg><use href="#v"/></svg></span><span class="rail"></span></div></div>
+</div></div></body></html>

@@ -1,0 +1,865 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ROOMusic 改版对照</title>
+<style>
+  body { margin: 0; background: var(--background, #fff); color: var(--foreground, #171717); font-family: var(--font-sans, system-ui, sans-serif); }
+  .doc { padding: 16px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; }
+  .tabs button { font: inherit; font-size: 13px; padding: 6px 12px; border: 1px solid var(--border, #e5e5e5); background: var(--card, #fff); color: var(--foreground, #171717); border-radius: 6px; cursor: pointer; }
+  .tabs button[aria-selected="true"] { background: var(--primary, #171717); color: var(--primary-foreground, #fff); border-color: transparent; }
+  .notes { margin: 12px 0 0; padding-left: 20px; font-size: 13px; line-height: 1.7; color: var(--muted-foreground, #555); max-width: 900px; }
+  .notes b { color: var(--foreground, #171717); font-weight: 600; }
+  .stage { position: relative; overflow: hidden; border: 1px solid var(--border, #e5e5e5); border-radius: 8px; }
+  .stage > .frame { transform-origin: 0 0; position: absolute; left: 0; top: 0; }
+  .screen[hidden] { display: none; }
+
+  /* ===== ROOMusic 固定色板，只作用于样稿 ===== */
+  .rm {
+    --bg: #f3f2f2; --surface: #eae9e9; --ink: #201f1d; --gold: #b68235; --gold-700: #7d5411; --gold-100: #fff3e4;
+    --n300: #d7d3d3; --n500: #9b9797; --n600: #7d7979; --n700: #605d5d;
+    --line: color-mix(in srgb, #201f1d 10%, transparent);
+    --hover: color-mix(in srgb, #201f1d 6%, transparent);
+    --sel: color-mix(in srgb, #b68235 11%, transparent);
+    --card-bg: color-mix(in srgb, #ffffff 45%, #f3f2f2);
+    color-scheme: light;
+    background: var(--bg); color: var(--ink);
+    font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", "WenQuanYi Micro Hei", sans-serif;
+    font-size: 14px; line-height: 1.5;
+  }
+  .rm * { box-sizing: border-box; }
+  .rm svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .rm svg.i.s16 { width: 16px; height: 16px; }
+  .rm svg.i.s20 { width: 20px; height: 20px; }
+  .rm svg.i.fill { fill: currentColor; stroke: none; }
+  .rm a { color: var(--gold-700); text-decoration: none; }
+
+  /* 外壳 */
+  .shell { display: grid; grid-template-columns: 216px 1fr; grid-template-rows: minmax(0, 1fr) auto; width: 1280px; height: 800px; }
+  .side { grid-row: 1; min-height: 0; overflow: hidden; border-right: 1px solid var(--line); padding: 20px 12px 12px; display: flex; flex-direction: column; gap: 4px; background: var(--bg); }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 17px; padding: 0 8px 12px; }
+  .brand .mark { width: 22px; height: 22px; border: 2px solid var(--gold); border-radius: 5px; display: grid; place-items: center; }
+  .brand .mark::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ink); }
+  .search { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; border-radius: 7px; background: var(--surface); color: var(--n700); font-size: 13px; margin-bottom: 8px; }
+  .search kbd { margin-left: auto; font: 11px/1 system-ui; color: var(--n600); border: 1px solid var(--n300); border-radius: 4px; padding: 2px 5px; background: var(--bg); }
+  .group { font-size: 12px; color: var(--n600); padding: 12px 10px 4px; }
+  .nav { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; border-radius: 7px; color: var(--ink); font-size: 14px; }
+  .nav svg { color: var(--n700); }
+  .nav.on { background: var(--sel); color: var(--gold-700); font-weight: 600; }
+  .nav.on svg { color: var(--gold-700); }
+  .nav .count { margin-left: auto; font-size: 12px; color: var(--n600); }
+  .nav.sub { height: 30px; padding-left: 38px; font-size: 13px; color: var(--n700); }
+  .me { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 7px; border-top: 1px solid var(--line); }
+  .avatar { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--gold); display: grid; place-items: center; font-size: 12px; color: var(--gold-700); }
+  .me small { display: block; font-size: 12px; color: var(--n600); line-height: 1.2; }
+  .main { grid-row: 1; overflow: hidden; padding: 24px 32px 0; }
+
+  /* 按钮 */
+  .btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border-radius: 4px; border: 0; background: transparent; color: var(--ink); font: 500 13px/1 inherit; font-family: inherit; white-space: nowrap; }
+  .btn.ghost:hover, .btn.hover { background: var(--hover); }
+  .btn.outline { border: 1px solid var(--gold); color: var(--gold-700); padding: 0 12px; }
+  .ibtn { width: 32px; height: 32px; display: inline-grid; place-items: center; border-radius: 4px; color: var(--n700); background: transparent; border: 0; }
+  .ibtn.on { color: var(--gold-700); }
+  .ibtn.big { width: 40px; height: 40px; }
+  .ibtn.big svg { width: 22px; height: 22px; }
+  .playdisc { width: 52px; height: 52px; border-radius: 50%; background: var(--ink); color: #fff; display: grid; place-items: center; box-shadow: 0 3px 10px color-mix(in srgb, #2d2b2b 22%, transparent); }
+  .playdisc svg { width: 22px; height: 22px; margin-left: 3px; }
+
+  /* 专辑头部 */
+  .crumb { display: inline-flex; align-items: center; gap: 2px; font-size: 13px; color: var(--n700); margin: -4px 0 16px -6px; padding: 4px 6px; border-radius: 4px; }
+  .hero { display: grid; grid-template-columns: 232px 1fr; gap: 28px; align-items: end; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
+  .cover { width: 232px; height: 232px; padding: 7px; background: #fbfaf9; border: 1px solid var(--n300); box-shadow: 0 3px 10px color-mix(in srgb, #2d2b2b 16%, transparent); }
+  .cover .art { width: 100%; height: 100%; background: radial-gradient(circle at 30% 25%, #6b4b22, #2a1e10 60%, #17110a); position: relative; overflow: hidden; }
+  .cover .art::before { content: ""; position: absolute; inset: 22% 18% auto auto; width: 60%; height: 60%; border-radius: 50%; border: 1px solid color-mix(in srgb, #e1ad66 40%, transparent); }
+  .cover .art::after { content: "Goldberg"; position: absolute; left: 16px; bottom: 14px; color: #f5e6cc; font: italic 600 20px/1 Georgia, serif; letter-spacing: .02em; }
+  .kind { font-size: 13px; color: var(--n700); margin-bottom: 6px; }
+  .hero h1 { margin: 0; font-size: 34px; line-height: 1.15; font-weight: 650; letter-spacing: -0.01em; }
+  .byline { margin-top: 8px; font-size: 15px; }
+  .facts { display: flex; flex-wrap: wrap; gap: 0; margin-top: 10px; font-size: 13px; color: var(--n700); padding: 0; list-style: none; }
+  .facts li + li::before { content: ""; display: inline-block; width: 1px; height: 11px; background: var(--n300); margin: 0 10px; vertical-align: -1px; }
+  .facts .q { color: var(--gold-700); }
+  .actions { display: flex; align-items: center; gap: 6px; margin-top: 20px; }
+  .actions .playdisc { margin-right: 8px; }
+  .menu { position: absolute; z-index: 5; width: 212px; background: #fbfaf9; border: 1px solid var(--line); border-radius: 7px; box-shadow: 0 12px 32px color-mix(in srgb, #2d2b2b 22%, transparent); padding: 6px; font-size: 13px; }
+  .menu .it { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px; border-radius: 4px; }
+  .menu .it svg { color: var(--n700); }
+  .menu .it.hov { background: var(--hover); }
+  .menu hr { border: 0; border-top: 1px solid var(--line); margin: 6px 4px; }
+  .menu .cap { font-size: 12px; color: var(--n600); padding: 4px 10px 2px; }
+
+  .body { display: grid; grid-template-columns: 1fr 268px; gap: 32px; padding-top: 8px; }
+  .versions { display: flex; gap: 6px; padding: 14px 0 6px; font-size: 13px; }
+  .chip { height: 28px; padding: 0 12px; border-radius: 14px; border: 1px solid var(--n300); display: inline-flex; align-items: center; gap: 6px; color: var(--n700); }
+  .chip.on { border-color: var(--gold); color: var(--gold-700); background: var(--gold-100); }
+  .work { padding: 14px 0 6px 40px; font-size: 13px; color: var(--n700); }
+  .work b { color: var(--ink); font-weight: 600; font-size: 14px; }
+  .tracks { list-style: none; margin: 0; padding: 0; }
+  .tr { display: grid; grid-template-columns: 32px 1fr auto 44px; align-items: center; gap: 8px; min-height: 52px; padding: 6px 8px; border-radius: 6px; }
+  .tr .no { text-align: center; color: var(--n600); font-variant-numeric: tabular-nums; font-size: 13px; }
+  .tr .t { font-size: 14px; }
+  .tr .c { font-size: 12px; color: var(--n700); }
+  .tr .acts { display: flex; align-items: center; gap: 0; opacity: 0; }
+  .tr .acts .ibtn { width: 30px; height: 30px; }
+  .tr .acts .keep { opacity: 1; }
+  .tr .dur { text-align: right; font-size: 13px; color: var(--n700); font-variant-numeric: tabular-nums; }
+  .tr.hov { background: var(--hover); }
+  .tr.hov .acts { opacity: 1; }
+  .tr.hov .no { color: var(--ink); }
+  .tr.fav .acts { opacity: 1; }
+  .tr.fav .acts .ibtn:not(.keep) { visibility: hidden; }
+  .tr.playing .t { color: var(--gold-700); font-weight: 600; }
+  .eq { display: inline-flex; gap: 2px; height: 12px; align-items: flex-end; }
+  .eq i { width: 3px; background: var(--gold); border-radius: 1px; animation: eq 1s ease-in-out infinite; }
+  .eq i:nth-child(2) { animation-delay: -.4s; } .eq i:nth-child(3) { animation-delay: -.7s; }
+  @keyframes eq { 0%,100% { height: 3px; } 50% { height: 12px; } }
+  @media (prefers-reduced-motion: reduce) { .eq i { animation: none; height: 8px; } }
+  .aside h3 { font-size: 13px; font-weight: 600; margin: 14px 0 8px; }
+  .aside dl { display: grid; grid-template-columns: 64px 1fr; gap: 6px 10px; margin: 0; font-size: 13px; }
+  .aside dt { color: var(--n600); } .aside dd { margin: 0; }
+  .tip { position: absolute; z-index: 6; font-size: 12px; padding: 4px 8px; border-radius: 4px; background: var(--ink); color: #fff; white-space: nowrap; }
+
+  /* 播放栏 */
+  .bar { grid-column: 1 / -1; height: 84px; border-top: 1px solid var(--line); background: color-mix(in srgb, #ffffff 35%, #f3f2f2); display: grid; grid-template-columns: 1fr minmax(420px, 560px) 1fr; align-items: center; gap: 24px; padding: 0 20px; }
+  .now { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .now .mini { width: 52px; height: 52px; padding: 3px; background: #fbfaf9; border: 1px solid var(--n300); }
+  .now .mini span { display: block; width: 100%; height: 100%; background: radial-gradient(circle at 30% 25%, #6b4b22, #17110a 70%); }
+  .now .tt { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .now .ta { font-size: 12px; color: var(--n700); white-space: nowrap; }
+  .center { display: grid; gap: 4px; justify-items: center; }
+  .transport { display: flex; align-items: center; gap: 10px; }
+  .transport .pp { width: 38px; height: 38px; border-radius: 50%; background: var(--ink); color: #fff; display: grid; place-items: center; }
+  .transport .ibtn.on { position: relative; }
+  .transport .ibtn.on::after { content: ""; position: absolute; bottom: 2px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--gold); }
+  .seek { justify-self: stretch; display: grid; grid-template-columns: 40px 1fr 40px; align-items: center; gap: 10px; width: 100%; font-size: 12px; color: var(--n700); font-variant-numeric: tabular-nums; }
+  .seek span:last-child { text-align: right; }
+  .wave { height: 18px; display: flex; align-items: center; gap: 2px; }
+  .wave i { display: block; flex: 1; border-radius: 1px; background: var(--n300); }
+  .wave i.p { background: var(--gold); }
+  .end { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+  .fmt { display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 10px; border-radius: 14px; border: 1px solid var(--n300); font-size: 12px; font-weight: 500; margin-right: 8px; white-space: nowrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #3d7548; box-shadow: 0 0 0 3px color-mix(in srgb, #3d7548 18%, transparent); }
+  .vol { display: flex; align-items: center; gap: 4px; }
+  .vol .rail { width: 88px; height: 4px; border-radius: 2px; background: var(--n300); position: relative; }
+  .vol .rail::before { content: ""; position: absolute; inset: 0 30% 0 0; border-radius: 2px; background: var(--ink); }
+  .sep { width: 1px; height: 20px; background: var(--line); margin: 0 6px; }
+  .zone { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px; border-radius: 4px; font-size: 12px; color: var(--n700); }
+
+  /* 设置 */
+  .set { display: grid; grid-template-columns: 176px 1fr; gap: 40px; }
+  .setnav { padding-top: 6px; }
+  .setnav .h { font-size: 20px; font-weight: 650; margin: 0 0 14px 10px; }
+  .setpage { max-width: 720px; }
+  .setpage h1 { margin: 6px 0 4px; font-size: 24px; font-weight: 650; }
+  .setpage .lead { margin: 0 0 18px; color: var(--n700); font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  .sect { margin: 0 0 22px; }
+  .sect h2 { font-size: 14px; font-weight: 600; margin: 0 0 8px 2px; }
+  .card { background: var(--card-bg); border: 1px solid var(--line); border-radius: 9px; }
+  .row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 20px; min-height: 54px; padding: 10px 16px; }
+  .row + .row { border-top: 1px solid var(--line); }
+  .row .lab { font-size: 14px; }
+  .row .help { font-size: 12px; color: var(--n700); margin-top: 2px; }
+  .row.child { padding-left: 34px; min-height: 46px; }
+  .row.child .lab { font-size: 13px; color: var(--n700); }
+  .row .ctl { display: flex; align-items: center; gap: 8px; }
+  .sw { width: 36px; height: 20px; border-radius: 10px; background: var(--n300); position: relative; flex: none; }
+  .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(45,43,43,.3); }
+  .sw.on { background: var(--gold); }
+  .sw.on::after { left: 18px; }
+  .seg { display: inline-flex; padding: 2px; border-radius: 7px; background: var(--surface); }
+  .seg span { height: 26px; padding: 0 12px; display: inline-grid; place-items: center; border-radius: 5px; font-size: 12px; color: var(--n700); }
+  .seg span.on { background: #fff; color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(45,43,43,.18); }
+  .sel { height: 30px; min-width: 150px; padding: 0 30px 0 10px; border: 1px solid var(--n500); border-radius: 4px; font-size: 13px; display: inline-flex; align-items: center; position: relative; background: #fbfaf9; }
+  .sel::after { content: ""; position: absolute; right: 11px; top: 11px; width: 6px; height: 6px; border-right: 1.5px solid var(--n700); border-bottom: 1.5px solid var(--n700); transform: rotate(45deg); }
+  .slider { width: 160px; height: 4px; border-radius: 2px; background: var(--n300); position: relative; }
+  .slider::before { content: ""; position: absolute; inset: 0 25% 0 0; background: var(--gold); border-radius: 2px; }
+  .slider::after { content: ""; position: absolute; right: 25%; top: -6px; width: 16px; height: 16px; margin-right: -8px; border-radius: 50%; background: #fff; border: 1px solid var(--n500); }
+  .val { font-size: 12px; color: var(--n700); font-variant-numeric: tabular-nums; min-width: 48px; text-align: right; }
+  .chain { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--n700); }
+  .chain .node { height: 26px; padding: 0 10px; border-radius: 13px; border: 1px solid var(--n300); display: inline-flex; align-items: center; color: var(--ink); background: #fbfaf9; }
+  .status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #3d7548; }
+  .status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .status.warn { color: #9b7232; }
+  .rootrow { display: grid; grid-template-columns: 22px 1fr auto auto; align-items: center; gap: 12px; min-height: 58px; padding: 8px 12px 8px 16px; }
+  .rootrow + .rootrow { border-top: 1px solid var(--line); }
+  .rootrow .p { font-size: 12px; color: var(--n700); font-family: ui-monospace, Menlo, monospace; }
+  .tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .tbl th { text-align: left; font-weight: 500; color: var(--n600); font-size: 12px; padding: 10px 16px 8px; }
+  .tbl td { padding: 10px 16px; border-top: 1px solid var(--line); }
+  .cardhead { display: flex; align-items: center; justify-content: space-between; padding: 12px 12px 12px 16px; border-bottom: 1px solid var(--line); }
+  .cardhead .lab { font-size: 14px; }
+
+  /* 手机 */
+  .phones { display: flex; gap: 28px; padding: 24px; background: #dcdad8; width: 1280px; }
+  .phone { width: 390px; height: 800px; border-radius: 28px; overflow: hidden; position: relative; border: 8px solid #2d2b2b; background: var(--bg); }
+  .phone .top { height: 52px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; border-bottom: 1px solid var(--line); }
+  .phone .content { padding: 16px; }
+  .mbar { position: absolute; left: 8px; right: 8px; bottom: 8px; height: 64px; border-radius: 10px; background: #fbfaf9; border: 1px solid var(--line); box-shadow: 0 3px 10px rgba(45,43,43,.16); display: grid; grid-template-columns: 48px 1fr auto auto auto; align-items: center; gap: 8px; padding: 0 6px 0 8px; overflow: hidden; }
+  .mbar::after { content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: 38%; background: var(--gold); }
+  .mbar .mini { width: 46px; height: 46px; background: radial-gradient(circle at 30% 25%, #6b4b22, #17110a 70%); border-radius: 3px; }
+  .mbar .ibtn { width: 44px; height: 44px; }
+  .mbar .pp { width: 40px; height: 40px; border-radius: 50%; background: var(--ink); color: #fff; display: grid; place-items: center; }
+  .mhero { display: grid; gap: 14px; justify-items: start; }
+  .mhero .cover { width: 200px; height: 200px; justify-self: center; }
+  .mhero h1 { margin: 0; font-size: 24px; font-weight: 650; }
+  .mrow { display: flex; align-items: center; gap: 4px; width: 100%; }
+  .mrow .ibtn { width: 44px; height: 44px; }
+  .mrow .playdisc { margin-left: auto; width: 52px; height: 52px; }
+  .mtabs { display: flex; gap: 4px; overflow: hidden; margin: 0 -16px 14px; padding: 0 16px; }
+  .mtabs span { height: 34px; padding: 0 14px; border-radius: 17px; display: inline-flex; align-items: center; font-size: 13px; color: var(--n700); background: var(--surface); white-space: nowrap; }
+  .mtabs span.on { background: var(--ink); color: #fff; }
+  .phone .row { grid-template-columns: 1fr auto; padding: 10px 14px; }
+  .phone .row .ctl { max-width: 170px; }
+
+  /* 信号路径 */
+  .sigstage { width: 1280px; padding: 28px 32px 32px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 28px; align-items: end; background: #e6e4e2; }
+  .sigcol { display: grid; gap: 14px; justify-items: end; }
+  .sigcol .cap2 { justify-self: start; font-size: 13px; color: var(--n700); }
+  .scard { width: 340px; border-radius: 10px; background: #fbfaf9; border: 1px solid var(--line); box-shadow: 0 12px 32px color-mix(in srgb, #2d2b2b 22%, transparent); overflow: hidden; }
+  .shead { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; padding: 14px 12px 12px 16px; }
+  .qbadge { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--q) 14%, transparent); color: var(--q); }
+  .qbadge svg { width: 20px; height: 20px; }
+  .qword { font-size: 17px; font-weight: 650; color: var(--q); line-height: 1.2; }
+  .qsub { font-size: 12px; color: var(--n700); margin-top: 2px; }
+  .clipbar { margin: 0 12px 4px; padding: 7px 10px; border-radius: 6px; background: color-mix(in srgb, #b3261e 10%, transparent); color: #b3261e; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .clipbar::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #b3261e; box-shadow: 0 0 0 3px color-mix(in srgb, #b3261e 22%, transparent); }
+  .chainlist { list-style: none; margin: 0; padding: 6px 16px 12px; }
+  .chainlist li { display: grid; grid-template-columns: 22px 1fr; gap: 10px; position: relative; padding: 7px 0; }
+  .chainlist li::before { content: ""; position: absolute; left: 10px; top: 0; bottom: 0; width: 2px; background: var(--n300); }
+  .chainlist li:first-child::before { top: 50%; }
+  .chainlist li:last-child::before { bottom: 50%; }
+  .node2 { position: relative; z-index: 1; width: 22px; height: 22px; border-radius: 50%; background: #fbfaf9; border: 2px solid var(--q, var(--n500)); display: grid; place-items: center; color: var(--q, var(--n500)); align-self: center; }
+  .node2 svg { width: 12px; height: 12px; stroke-width: 2.2; }
+  .node2.end { background: var(--q, var(--ink)); color: #fff; border-color: var(--q, var(--ink)); }
+  .stp { min-width: 0; }
+  .stp .k { font-size: 12px; color: var(--n600); line-height: 1.3; }
+  .stp .v { font-size: 13px; font-variant-numeric: tabular-nums; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .stp .tag { font-size: 11px; padding: 1px 6px; border-radius: 3px; border: 1px solid var(--n300); color: var(--n700); }
+  .stp.worst .v { font-weight: 600; }
+  .sfoot { display: grid; grid-template-columns: 1fr 1fr 1fr; border-top: 1px solid var(--line); background: color-mix(in srgb, #201f1d 3%, transparent); }
+  .sfoot div { padding: 9px 12px; font-size: 12px; color: var(--n700); }
+  .sfoot div + div { border-left: 1px solid var(--line); }
+  .sfoot b { display: block; font-size: 13px; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .pill { white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; border-radius: 15px; border: 1px solid var(--n300); background: #fbfaf9; font-size: 12px; font-weight: 500; }
+  .pill.open { border-color: var(--q); box-shadow: 0 0 0 3px color-mix(in srgb, var(--q) 16%, transparent); }
+  .pill .dot2 { width: 8px; height: 8px; border-radius: 50%; background: var(--q); }
+  .q-lossless { --q: #7d5411; } .q-enhanced { --q: #2f6a9a; } .q-high { --q: #3d7548; } .q-low { --q: #605d5d; } .q-clip { --q: #b3261e; }
+  .scard.dark { background: #2a2622; border-color: #3a3530; color: #f1ece6; }
+  .scard.dark .qsub, .scard.dark .stp .k, .scard.dark .sfoot div { color: #b5ada4; }
+  .scard.dark .chainlist li::before { background: #4a443e; }
+  .scard.dark .node2 { background: #2a2622; }
+  .scard.dark .sfoot { background: rgba(255,255,255,.04); border-color: #3a3530; }
+  .scard.dark .sfoot b { color: #f1ece6; }
+  .scard.dark .sfoot div + div { border-color: #3a3530; }
+  .scard.dark .stp .tag { border-color: #4a443e; color: #cfc7be; }
+  .scard.dark .q-low, .scard.dark.q-low { --q: #cfc7be; }
+  .darkbg { background: linear-gradient(160deg, #3a2a18, #17110a); border-radius: 12px; padding: 18px; display: grid; gap: 14px; justify-items: end; }
+  .darkbg .pill { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.18); color: #f1ece6; }
+
+  .nav.sub { padding-left: 6px; gap: 10px; height: 36px; }
+  .nav.sub.on { background: var(--sel); color: var(--gold-700); font-weight: 600; }
+  .thumb { width: 26px; height: 26px; border-radius: 3px; overflow: hidden; flex: none; box-shadow: 0 0 0 1px var(--line); }
+  .thumb.m { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); }
+  .thumb.m i { display: block; }
+  .thumb.empty { display: grid; place-items: center; background: var(--surface); color: var(--n600); }
+  .thumb.empty svg { width: 14px; height: 14px; }
+  .nav.sub .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nav.sub.all { padding-left: 42px; color: var(--n700); font-size: 12px; height: 30px; }
+
+  /* 全屏播放器 */
+  .fs { position: relative; width: 1280px; height: 800px; overflow: hidden; color: #f4efe8; background: #1d1813; }
+  .fs .bgart { position: absolute; inset: -80px; background: radial-gradient(circle at 25% 35%, #7a5428 0%, #3a2814 35%, #17110a 70%); filter: blur(30px) saturate(1.1); opacity: .9; }
+  .fs .bgart::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(15,12,9,.35), rgba(15,12,9,.6)); }
+  .fs .in { position: relative; display: grid; grid-template-columns: 520px 1fr; gap: 56px; height: 100%; padding: 22px 56px 36px; }
+  .fs .topbar { position: absolute; left: 20px; right: 20px; top: 18px; display: flex; justify-content: space-between; align-items: center; z-index: 2; }
+  .fs .ibtn { color: rgba(244,239,232,.78); }
+  .fs .ibtn.on { color: #f0c27a; }
+  .fs .left { display: grid; align-content: center; justify-items: center; gap: 22px; padding-top: 24px; }
+  .vinyl { width: 330px; height: 330px; border-radius: 50%; position: relative; background: repeating-radial-gradient(circle, #141210 0 2px, #1b1815 2px 4px); box-shadow: 0 24px 60px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.04); }
+  .vinyl::before { content: ""; position: absolute; inset: 31%; border-radius: 50%; background: radial-gradient(circle at 30% 25%, #6b4b22, #2a1e10 60%, #17110a); box-shadow: 0 0 0 3px #0f0d0b; }
+  .vinyl::after { content: ""; position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px; border-radius: 50%; background: #0f0d0b; }
+  .arm { position: absolute; right: -26px; top: -4px; width: 16px; height: 200px; transform-origin: 8px 8px; transform: rotate(22deg); }
+  .arm::before { content: ""; position: absolute; left: 0; top: 0; width: 16px; height: 16px; border-radius: 50%; background: #d9d3cb; box-shadow: 0 0 0 5px rgba(217,211,203,.25); }
+  .arm::after { content: ""; position: absolute; left: 6px; top: 12px; width: 4px; height: 170px; border-radius: 2px; background: linear-gradient(#e6e0d8, #b9b2a9); }
+  .arm i { position: absolute; left: 1px; top: 176px; width: 14px; height: 30px; border-radius: 4px; background: #e6e0d8; transform: rotate(-14deg); }
+  .meta2 { width: 400px; display: grid; gap: 4px; }
+  .meta2 .row1 { display: flex; align-items: center; gap: 4px; }
+  .meta2 h3 { margin: 0; flex: 1; font-size: 26px; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meta2 .sub { font-size: 14px; color: rgba(244,239,232,.72); }
+  .meta2 .sub a { color: rgba(244,239,232,.92); text-decoration: underline; text-decoration-color: rgba(244,239,232,.3); text-underline-offset: 3px; }
+  .meta2 .line2 { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+  .fsphone .ibtn { color: rgba(244,239,232,.85); }
+  .fsphone .ibtn.on { color: #f0c27a; }
+  .fs .pill, .fsphone .pill { background: rgba(255,255,255,.07); border-color: rgba(255,255,255,.18); color: #f4efe8; height: 28px; }
+  .devtag { height: 28px; padding: 0 8px; border-radius: 14px; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: rgba(244,239,232,.72); }
+  .fseek { width: 400px; display: grid; grid-template-columns: 38px 1fr 38px; gap: 10px; align-items: center; font-size: 12px; color: rgba(244,239,232,.7); font-variant-numeric: tabular-nums; }
+  .fseek span:last-child { text-align: right; }
+  .fseek .wave i { background: rgba(244,239,232,.22); }
+  .fseek .wave i.p { background: #f0c27a; }
+  .ftrans { display: flex; align-items: center; gap: 22px; }
+  .ftrans .ibtn { width: 40px; height: 40px; }
+  .ftrans .ibtn svg { width: 22px; height: 22px; }
+  .ftrans .ibtn.small svg { width: 18px; height: 18px; }
+  .ftrans .ibtn.on { position: relative; }
+  .ftrans .ibtn.on::after { content: ""; position: absolute; bottom: 3px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: #f0c27a; }
+  .ftrans .big { width: 64px; height: 64px; border-radius: 50%; background: #f4efe8; color: #1d1813; display: grid; place-items: center; box-shadow: 0 8px 24px rgba(0,0,0,.35); }
+  .ftrans .big svg { width: 26px; height: 26px; }
+  .fvol { width: 400px; display: flex; align-items: center; gap: 8px; }
+  .fvol .rail { flex: 1; height: 4px; border-radius: 2px; background: rgba(244,239,232,.2); position: relative; }
+  .fvol .rail::before { content: ""; position: absolute; inset: 0 30% 0 0; border-radius: 2px; background: #f4efe8; }
+  .right { display: grid; grid-template-rows: auto 1fr; min-height: 0; padding-top: 34px; }
+  .seg2 { justify-self: start; display: inline-flex; padding: 3px; border-radius: 9px; background: rgba(255,255,255,.08); }
+  .seg2 span { height: 28px; padding: 0 14px; display: inline-grid; place-items: center; border-radius: 6px; font-size: 13px; color: rgba(244,239,232,.7); }
+  .seg2 span.on { background: rgba(255,255,255,.16); color: #fff; font-weight: 600; }
+  .lyr { align-self: center; display: grid; gap: 18px; padding: 10px 0; mask-image: linear-gradient(transparent, #000 18%, #000 78%, transparent); }
+  .lyr p { margin: 0; font-size: 24px; font-weight: 650; line-height: 1.35; color: rgba(244,239,232,.32); }
+  .lyr p.past { color: rgba(244,239,232,.22); }
+  .lyr p.cur { color: #fff; font-size: 32px; }
+  .lyr p.tr { font-size: 16px; font-weight: 500; margin-top: -12px; }
+  .upnext { list-style: none; margin: 0; padding: 0; align-self: start; margin-top: 22px; display: grid; gap: 2px; }
+  .upnext li { display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; padding: 8px 10px; border-radius: 8px; }
+  .upnext li.hov { background: rgba(255,255,255,.08); }
+  .upnext .a { width: 44px; height: 44px; border-radius: 4px; background: radial-gradient(circle at 30% 25%, #6b4b22, #17110a 70%); }
+  .upnext .t { font-size: 14px; } .upnext .c { font-size: 12px; color: rgba(244,239,232,.62); }
+  .upnext .d { font-size: 12px; color: rgba(244,239,232,.62); font-variant-numeric: tabular-nums; }
+  .fsrow { display: flex; gap: 28px; padding: 24px; background: #dcdad8; width: 1280px; }
+  .fsphone { width: 390px; height: 800px; border-radius: 28px; overflow: hidden; position: relative; border: 8px solid #2d2b2b; color: #f4efe8; background: #1d1813; flex: none; }
+  .fsphone .bgart { position: absolute; inset: -60px; background: radial-gradient(circle at 50% 30%, #7a5428 0%, #3a2814 40%, #17110a 75%); filter: blur(24px); }
+  .fsphone .ph { position: relative; height: 100%; display: grid; grid-template-rows: auto 1fr auto; padding: 10px 18px 18px; }
+  .fsphone .ptop { display: flex; justify-content: space-between; align-items: center; }
+  .fsphone .ptop .ibtn { color: rgba(244,239,232,.85); width: 44px; height: 44px; }
+  .fsphone .ptop .ctx { font-size: 12px; color: rgba(244,239,232,.72); text-align: center; line-height: 1.3; }
+  .fsphone .ptop .ctx b { display: block; color: #f4efe8; font-size: 13px; font-weight: 600; }
+  .fsphone .stagep { display: grid; place-items: center; min-height: 0; }
+  .fsphone .vinyl { width: 280px; height: 280px; }
+  .fsphone .arm { height: 170px; } .fsphone .arm::after { height: 140px; } .fsphone .arm i { top: 146px; }
+  .fsphone .meta2, .fsphone .fseek, .fsphone .fvol { width: 100%; }
+  .fsphone .meta2 h3 { font-size: 22px; }
+  .fsphone .ftrans { justify-content: space-between; width: 100%; gap: 0; margin: 6px 0 4px; }
+  .fsphone .ftrans .ibtn { width: 44px; height: 44px; }
+  .fsphone .ftrans .big { width: 68px; height: 68px; }
+  .pbottom { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; }
+  .pbottom .devbtn { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border-radius: 18px; background: rgba(255,255,255,.08); font-size: 12px; color: rgba(244,239,232,.85); }
+  .pbottom .grp { display: flex; gap: 4px; }
+  .pbottom .ibtn { width: 44px; height: 44px; color: rgba(244,239,232,.85); }
+  .pbottom .ibtn.on { color: #f0c27a; background: rgba(240,194,122,.12); border-radius: 22px; }
+  .fsphone .lyr { align-self: stretch; align-content: center; gap: 14px; }
+  .fsphone .lyr p { font-size: 20px; } .fsphone .lyr p.cur { font-size: 24px; }
+  .minihead { display: grid; grid-template-columns: 52px 1fr auto; gap: 12px; align-items: center; margin-bottom: 10px; }
+  .minihead .a { width: 52px; height: 52px; border-radius: 4px; background: radial-gradient(circle at 30% 25%, #6b4b22, #17110a 70%); }
+  .minihead .t { font-size: 15px; font-weight: 600; } .minihead .c { font-size: 12px; color: rgba(244,239,232,.7); }
+
+  .pill .dot2 { animation: soft2 4s infinite; }
+  @keyframes soft2 { 0% { transform: scale(.78); opacity: .55; animation-timing-function: cubic-bezier(.37,0,.63,1); } 38% { transform: scale(1); opacity: 1; animation-timing-function: cubic-bezier(.45,.05,.3,1); } 88%,100% { transform: scale(.78); opacity: .55; } }
+  .pill .dot2 { position: relative; }
+  .pill .dot2::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--q); opacity: 0; z-index: -1; animation: glow2 4s infinite; }
+  @keyframes glow2 { 0%,8% { transform: scale(1); opacity: 0; animation-timing-function: cubic-bezier(.3,0,.5,1); } 42% { transform: scale(1.9); opacity: .26; animation-timing-function: cubic-bezier(.2,0,.4,1); } 80%,100% { transform: scale(2.6); opacity: 0; } }
+  .pill.q-clip .dot2::after { animation: none; }
+  .pill.q-clip .dot2 { animation: clip2 .9s ease-in-out infinite; }
+  @keyframes clip2 { 0%,100% { box-shadow: 0 0 0 0 rgba(179,38,30,.55); } 50% { box-shadow: 0 0 0 5px rgba(179,38,30,0); } }
+  @media (prefers-reduced-motion: reduce) { .pill .dot2, .pill .dot2::after { animation: none; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="play" viewBox="0 0 24 24"><path d="M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.8l-12-7.5A1 1 0 0 0 7 4.5Z"/></symbol>
+  <symbol id="pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></symbol>
+  <symbol id="prev" viewBox="0 0 24 24"><path d="M19 20 9 12l10-8v16Z"/><path d="M5 19V5"/></symbol>
+  <symbol id="next" viewBox="0 0 24 24"><path d="m5 4 10 8-10 8V4Z"/><path d="M19 5v14"/></symbol>
+  <symbol id="shuffle" viewBox="0 0 24 24"><path d="m18 14 4 4-4 4"/><path d="m18 2 4 4-4 4"/><path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.7-1.1 2-1.7 3.3-1.7H22"/><path d="M2 6h1.9c1.5 0 2.9.9 3.6 2.2"/><path d="M22 18h-5.9c-1.3 0-2.6-.7-3.3-1.8l-.5-.8"/></symbol>
+  <symbol id="repeat" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></symbol>
+  <symbol id="heart" viewBox="0 0 24 24"><path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7Z"/></symbol>
+  <symbol id="more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></symbol>
+  <symbol id="listplus" viewBox="0 0 24 24"><path d="M11 12H3"/><path d="M16 6H3"/><path d="M16 18H3"/><path d="M18 9v6"/><path d="M21 12h-6"/></symbol>
+  <symbol id="listnext" viewBox="0 0 24 24"><path d="M3 6h13"/><path d="M3 12h9"/><path d="M3 18h9"/><path d="m16 15 5 3-5 3v-6Z"/></symbol>
+  <symbol id="queue" viewBox="0 0 24 24"><path d="M21 15V6"/><circle cx="18.5" cy="15.5" r="2.5"/><path d="M12 12H3"/><path d="M16 6H3"/><path d="M12 18H3"/></symbol>
+  <symbol id="speaker" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="4"/><path d="M12 6h.01"/></symbol>
+  <symbol id="vol" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></symbol>
+  <symbol id="back" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
+  <symbol id="disc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/></symbol>
+  <symbol id="mic" viewBox="0 0 24 24"><path d="m11.7 8.3 4 4"/><path d="M14.5 2.5a5 5 0 0 1 7 7l-7.8 7.8a2 2 0 0 1-2.8 0l-4.2-4.2a2 2 0 0 1 0-2.8Z"/><path d="m7 17-4 4"/></symbol>
+  <symbol id="star" viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9L12 3Z"/></symbol>
+  <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="pl" viewBox="0 0 24 24"><path d="M21 15V6"/><circle cx="18.5" cy="15.5" r="2.5"/><path d="M12 12H3"/><path d="M16 6H3"/><path d="M12 18H3"/></symbol>
+  <symbol id="check" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="m9 13 2 2 4-4"/><path d="M9 4V2.5h6V4"/></symbol>
+  <symbol id="swap" viewBox="0 0 24 24"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></symbol>
+  <symbol id="user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></symbol>
+  <symbol id="wave" viewBox="0 0 24 24"><path d="M2 10v4"/><path d="M6 6v12"/><path d="M10 3v18"/><path d="M14 8v8"/><path d="M18 5v14"/><path d="M22 10v4"/></symbol>
+  <symbol id="folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+  <symbol id="users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21v-1a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v1"/><path d="M16 4a4 4 0 0 1 0 8"/><path d="M22 21v-1a6 6 0 0 0-4-5.6"/></symbol>
+  <symbol id="hist" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="db" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></symbol>
+  <symbol id="pencil" viewBox="0 0 24 24"><path d="M17 3a2.8 2.8 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></symbol>
+  <symbol id="bookmark" viewBox="0 0 24 24"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2Z"/></symbol>
+  <symbol id="combine" viewBox="0 0 24 24"><rect x="2" y="2" width="8" height="8" rx="2"/><rect x="14" y="14" width="8" height="8" rx="2"/><path d="M14 6h4a2 2 0 0 1 2 2v4"/><path d="M10 18H6a2 2 0 0 1-2-2v-4"/></symbol>
+  <symbol id="compare" viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="16" rx="1"/><rect x="14" y="4" width="7" height="16" rx="1"/></symbol>
+  <symbol id="alert" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15.7-6L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.7 6L3 16"/><path d="M8 16H3v5"/></symbol>
+  <symbol id="plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="sliders" viewBox="0 0 24 24"><path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/><path d="M2 14h4"/><path d="M10 8h4"/><path d="M18 16h4"/></symbol>
+  <symbol id="menu" viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></symbol>
+<symbol id="file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></symbol>
+  <symbol id="down2" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></symbol>
+  <symbol id="grip" viewBox="0 0 24 24"><circle cx="8" cy="8" r="1"/><circle cx="16" cy="8" r="1"/><circle cx="8" cy="16" r="1"/><circle cx="16" cy="16" r="1"/><circle cx="12" cy="12" r="1"/></symbol>
+  <symbol id="bin" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="7" rx="1"/><rect x="14" y="13" width="6" height="7" rx="1"/><path d="M14 4h3v7"/><path d="M7 13v7"/></symbol>
+  <symbol id="lyric" viewBox="0 0 24 24"><path d="M4 6h10"/><path d="M4 11h7"/><path d="M4 16h5"/><circle cx="17" cy="16" r="3"/><path d="M20 16V5l-3 1"/></symbol>
+  <symbol id="x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+</svg>
+
+<div class="doc">
+  <div class="tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-s="album">专辑详情＋播放栏</button>
+    <button role="tab" aria-selected="false" data-s="playback">设置 · 播放</button>
+    <button role="tab" aria-selected="false" data-s="library">设置 · 扫描目录</button>
+    <button role="tab" aria-selected="false" data-s="signal">信号路径</button>
+    <button role="tab" aria-selected="false" data-s="fs">全屏播放器</button>
+    <button role="tab" aria-selected="false" data-s="mobile">手机</button>
+  </div>
+
+  <!-- ============ 专辑详情 ============ -->
+  <section class="screen" data-s="album">
+    <div class="stage"><div class="frame rm">
+      <div class="shell">
+        <aside class="side">
+          <div class="brand"><span class="mark"></span>ROOMusic</div>
+          <div class="search"><svg class="i s16"><use href="#search"/></svg>搜索<kbd>/</kbd></div>
+          <div class="group">聆听</div>
+          <div class="nav"><svg class="i"><use href="#grid"/></svg>概览</div>
+          <div class="nav on"><svg class="i"><use href="#disc"/></svg>专辑</div>
+          <div class="nav"><svg class="i"><use href="#mic"/></svg>艺人</div>
+          <div class="group">我的音乐</div>
+          <div class="nav"><svg class="i"><use href="#heart"/></svg>我喜欢的音乐</div>
+          <div class="nav"><svg class="i"><use href="#star"/></svg>我的收藏</div>
+          <div class="nav"><svg class="i"><use href="#clock"/></svg>播放历史</div>
+          <div class="nav"><svg class="i"><use href="#pl"/></svg>我的歌单<span class="count"><svg class="i s16"><use href="#down"/></svg></span></div>
+          <div class="nav sub on"><span class="thumb m"><i style="background:#5a3b0a"></i><i style="background:#2f4a5e"></i><i style="background:#7d5411"></i><i style="background:#3d4a2a"></i></span><span class="nm">深夜巴赫</span></div>
+          <div class="nav sub"><span class="thumb" style="background:radial-gradient(circle at 30% 30%,#9b5a3a,#2a1410)"></span><span class="nm">通勤路上</span></div>
+          <div class="nav sub"><span class="thumb empty"><svg class="i"><use href="#pl"/></svg></span><span class="nm">新歌单</span></div>
+          <div class="nav sub all">全部歌单</div>
+          <div class="group">资料库</div>
+          <div class="nav"><svg class="i"><use href="#check"/></svg>元数据<span class="count">12</span></div>
+          <div class="nav"><svg class="i"><use href="#swap"/></svg>待认领<span class="count">3</span></div>
+          <div class="nav"><svg class="i"><use href="#users"/></svg>重复艺人</div>
+          <div class="me"><span class="avatar">C</span><div>curator<small>管理员</small></div><svg class="i s16" style="margin-left:auto;color:#7d7979"><use href="#down"/></svg></div>
+        </aside>
+
+        <main class="main" style="position:relative">
+          <span class="crumb"><svg class="i s16"><use href="#back"/></svg>专辑</span>
+          <div class="hero">
+            <div class="cover"><div class="art"></div></div>
+            <div>
+                            <h1>哥德堡变奏曲，BWV 988</h1>
+              <div class="byline"><a>Glenn Gould</a></div>
+              <ul class="facts"><li>1981</li><li>巴洛克</li><li>32 首</li><li>51 分钟</li><li class="q">FLAC 24/96</li></ul>
+              <div class="actions">
+                <span class="playdisc" title="播放整张专辑"><svg class="i fill"><use href="#play"/></svg></span>
+                <span class="btn ghost"><svg class="i s16"><use href="#shuffle"/></svg>随机播放</span>
+                <span class="ibtn on" title="已收藏"><svg class="i fill" style="color:#b68235"><use href="#heart"/></svg></span>
+                <span class="ibtn" title="添加到歌单"><svg class="i"><use href="#listplus"/></svg></span>
+                <span class="ibtn hover" style="background:var(--hover)" title="更多操作"><svg class="i"><use href="#more"/></svg></span>
+              </div>
+            </div>
+          </div>
+          <div class="menu" style="left:452px;top:300px">
+            <div class="it"><svg class="i s16"><use href="#listnext"/></svg>下一首播放</div>
+            <div class="it"><svg class="i s16"><use href="#queue"/></svg>加入队列</div>
+            <div class="it"><svg class="i s16"><use href="#compare"/></svg>对比版本</div>
+            <hr><div class="cap">管理</div>
+            <div class="it hov"><svg class="i s16"><use href="#pencil"/></svg>编辑发行信息…</div>
+            <div class="it"><svg class="i s16"><use href="#bookmark"/></svg>设为默认版本</div>
+            <div class="it"><svg class="i s16"><use href="#combine"/></svg>归入其他专辑…</div>
+            <div class="it"><svg class="i s16"><use href="#alert"/></svg>查看问题</div>
+          </div>
+
+          <div class="body">
+            <div>
+              <div class="versions"><span class="chip on">1981 · CBS 原版</span><span class="chip">2002 · SACD 重制</span><span class="chip">2015 · 24/96 母带</span></div>
+              <div class="work"><b>哥德堡变奏曲，BWV 988</b>　作曲 J. S. Bach</div>
+              <ol class="tracks">
+                <li class="tr"><span class="no">1</span><div><div class="t">咏叹调</div><div class="c">Glenn Gould，钢琴</div></div><div class="acts"><span class="ibtn"><svg class="i s16"><use href="#heart"/></svg></span><span class="ibtn"><svg class="i s16"><use href="#more"/></svg></span></div><span class="dur">3:05</span></li>
+                <li class="tr playing"><span class="no"><span class="eq"><i></i><i></i><i></i></span></span><div><div class="t">变奏 1，单键盘</div><div class="c">Glenn Gould，钢琴</div></div><div class="acts"><span class="ibtn"><svg class="i s16"><use href="#heart"/></svg></span><span class="ibtn"><svg class="i s16"><use href="#more"/></svg></span></div><span class="dur">1:04</span></li>
+                <li class="tr fav"><span class="no">3</span><div><div class="t">变奏 2，单键盘</div><div class="c">Glenn Gould，钢琴</div></div><div class="acts"><span class="ibtn keep"><svg class="i s16 fill" style="color:#b68235"><use href="#heart"/></svg></span><span class="ibtn"><svg class="i s16"><use href="#more"/></svg></span></div><span class="dur">0:51</span></li>
+                <li class="tr"><span class="no">4</span><div><div class="t">变奏 3，同度卡农</div><div class="c">Glenn Gould，钢琴</div></div><div class="acts"><span class="ibtn"><svg class="i s16"><use href="#heart"/></svg></span><span class="ibtn"><svg class="i s16"><use href="#more"/></svg></span></div><span class="dur">1:12</span></li>
+                <li class="tr hov" style="position:relative"><span class="no"><svg class="i s16 fill"><use href="#play"/></svg></span><div><div class="t">变奏 4，单键盘</div><div class="c">Glenn Gould，钢琴</div></div><div class="acts"><span class="ibtn"><svg class="i s16"><use href="#heart"/></svg></span><span class="ibtn"><svg class="i s16"><use href="#more"/></svg></span></div><span class="dur">0:44</span><span class="tip" style="left:44px;top:46px">从这首开始播放（双击整行也可以）</span></li>
+              </ol>
+            </div>
+            <div class="aside">
+              <h3>发行信息</h3>
+              <dl><dt>厂牌</dt><dd>CBS Masterworks</dd><dt>编号</dt><dd>IM 37779</dd><dt>条码</dt><dd>0074643777925</dd><dt>版本</dt><dd>Remastered</dd></dl>
+            </div>
+          </div>
+        </main>
+
+        <footer class="bar">
+          <div class="now">
+            <div class="mini"><span></span></div>
+            <div style="min-width:0"><div class="tt">变奏 1，单键盘</div><div class="ta">Glenn Gould — <a>哥德堡变奏曲</a></div></div>
+            <span class="ibtn"><svg class="i s16 fill" style="color:#b68235"><use href="#heart"/></svg></span>
+          </div>
+          <div class="center">
+            <div class="transport">
+              <span class="ibtn on" title="随机播放"><svg class="i s16"><use href="#shuffle"/></svg></span>
+              <span class="ibtn"><svg class="i"><use href="#prev"/></svg></span>
+              <span class="pp"><svg class="i fill"><use href="#pause"/></svg></span>
+              <span class="ibtn"><svg class="i"><use href="#next"/></svg></span>
+              <span class="ibtn" title="循环"><svg class="i s16"><use href="#repeat"/></svg></span>
+            </div>
+            <div class="seek"><span>0:24</span><div class="wave" id="seekwave"></div><span>1:04</span></div>
+          </div>
+          <div class="end">
+            <span class="pill q-lossless" style="margin-right:8px"><span class="dot2"></span>FLAC 24/96</span>
+            <span class="ibtn" title="设备：书房 DAC"><svg class="i"><use href="#speaker"/></svg></span>
+            <span class="ibtn" title="队列"><svg class="i"><use href="#queue"/></svg></span>
+            <span class="sep"></span>
+            <div class="vol"><span class="ibtn"><svg class="i s16"><use href="#vol"/></svg></span><span class="rail"></span></div>
+          </div>
+        </footer>
+      </div>
+    </div></div>
+    <ol class="notes">
+      <li><b>标题进入封面右侧</b>：专辑名、艺人、概况一行写完，“返回专辑列表”改成标题上方的“‹ 专辑”。</li>
+      <li><b>一条操作行</b>：墨色大圆播放键是唯一主操作（与底栏播放键同一形状）；其后是随机播放（新增）、收藏、添加到歌单、“更多”。加入队列、下一首播放（新增）、对比版本和管理员的编辑、默认版本、归组、查看问题都收进“更多”，管理项在“管理”分组下。</li>
+      <li><b>曲目行变干净</b>：平时只有序号、标题、署名、时长；悬停或键盘聚焦时序号变播放键，心形和“更多”出现；已收藏的心形常驻；正在播放的曲目序号换成跳动的音柱（减少动态时静止）。双击整行从这首开始播放（新增）。触屏不依赖悬停，图标常驻。</li>
+      <li><b>版本切换改成标签</b>，作品标题（古典分组）保留在曲目上方。</li>
+      <li><b>播放栏三段式</b>：随机、上一首、播放、下一首、循环挨在一起（启用时下方小金点）；进度条加宽、两端写时间、保留波形；右侧固定顺序“格式与信号路径 → 设备 → 队列 ｜ 音量”，状态文字只在缓冲、出错时出现。</li>
+      <li><b>侧栏</b>：搜索框改成浅底并标出快捷键，待办类入口显示数量；“我的歌单”展开后每个歌单名前有 26px 封面（4 张专辑拼方格，不足 4 张用第一张，空歌单是歌单图标），当前打开的歌单高亮。</li>
+    </ol>
+  </section>
+
+  <!-- ============ 设置 · 播放 ============ -->
+  <section class="screen" data-s="playback" hidden>
+    <div class="stage"><div class="frame rm">
+      <div class="shell" style="height:1060px">
+        <aside class="side">
+          <div class="brand"><span class="mark"></span>ROOMusic</div>
+          <div class="search"><svg class="i s16"><use href="#search"/></svg>搜索<kbd>/</kbd></div>
+          <div class="group">聆听</div>
+          <div class="nav"><svg class="i"><use href="#grid"/></svg>概览</div>
+          <div class="nav"><svg class="i"><use href="#disc"/></svg>专辑</div>
+          <div class="nav"><svg class="i"><use href="#mic"/></svg>艺人</div>
+          <div class="group">我的音乐</div>
+          <div class="nav"><svg class="i"><use href="#heart"/></svg>我喜欢的音乐</div>
+          <div class="nav"><svg class="i"><use href="#star"/></svg>我的收藏</div>
+          <div class="nav"><svg class="i"><use href="#clock"/></svg>播放历史</div>
+          <div class="nav"><svg class="i"><use href="#pl"/></svg>我的歌单</div>
+          <div class="me"><span class="avatar">C</span><div>curator<small>管理员</small></div></div>
+        </aside>
+        <main class="main">
+          <div class="set">
+            <nav class="setnav">
+              <div class="h">设置</div>
+              <div class="nav"><svg class="i"><use href="#user"/></svg>账号</div>
+              <div class="nav on"><svg class="i"><use href="#wave"/></svg>播放</div>
+              <div class="group">管理</div>
+              <div class="nav"><svg class="i"><use href="#folder"/></svg>扫描目录</div>
+              <div class="nav"><svg class="i"><use href="#users"/></svg>成员</div>
+              <div class="nav"><svg class="i"><use href="#hist"/></svg>操作记录</div>
+              <div class="nav"><svg class="i"><use href="#db"/></svg>备份</div>
+            </nav>
+            <div class="setpage">
+              <h1>播放</h1>
+              <p class="lead"><svg class="i s16"><use href="#speaker"/></svg>这些设置作用于正在控制的设备：书房 DAC</p>
+
+              <div class="sect"><h2>播放</h2><div class="card">
+                <div class="row"><div><div class="lab">串流音质</div><div class="help">网络较慢时可以降低码率</div></div><div class="ctl"><span class="seg"><span>省流</span><span class="on">自动</span><span>高</span><span>无损</span></span></div></div>
+                <div class="row"><div><div class="lab">无缝播放</div><div class="help">曲目之间不留空隙，适合现场录音与组曲</div></div><div class="ctl"><span class="sw on"></span></div></div>
+                <div class="row"><div><div class="lab">交叉渐变</div><div class="help">上一首淡出时下一首淡入</div></div><div class="ctl"><span class="sw on"></span></div></div>
+                <div class="row child"><div class="lab">渐变时长</div><div class="ctl"><span class="seg"><span>3 秒</span><span class="on">5 秒</span><span>8 秒</span><span>12 秒</span></span></div></div>
+                <div class="row"><div><div class="lab">音量均衡</div><div class="help">按回放增益统一响度</div></div><div class="ctl"><span class="seg"><span>关</span><span>按曲目</span><span class="on">按专辑</span></span></div></div>
+              </div></div>
+
+              <div class="sect"><h2>输出</h2><div class="card">
+                <div class="row"><div><div class="lab">采样率转换</div><div class="help">设备不支持原始采样率时如何处理</div></div><div class="ctl"><span class="sel">按设备自动</span></div></div>
+                <div class="row"><div class="lab">转换滤波器</div><div class="ctl"><span class="sel">线性相位 · 陡峭</span></div></div>
+                <div class="row"><div class="lab">多声道降为双声道</div><div class="ctl"><span class="sw on"></span></div></div>
+              </div></div>
+
+              <div class="sect"><h2>音效处理</h2><div class="card">
+                <div class="row"><div><div class="lab">参数均衡</div><div class="help">当前预设：HD 650 · Harman</div></div><div class="ctl"><span class="btn ghost"><svg class="i s16"><use href="#sliders"/></svg>编辑…</span><span class="sw"></span></div></div>
+                <div class="row"><div><div class="lab">卷积</div><div class="help">用房间脉冲响应校正</div></div><div class="ctl"><span class="sel" style="min-width:120px">书房.wav</span><span class="btn ghost">管理文件…</span><span class="sw"></span></div></div>
+                <div class="row"><div class="lab">处理顺序</div><div class="ctl"><span class="chain"><span class="node">卷积</span>→<span class="node">参数均衡</span><span class="btn ghost">对调</span></span></div></div>
+                <div class="row"><div><div class="lab">Headroom</div><div class="help">预留余量，避免均衡后削波</div></div><div class="ctl"><span class="sw on"></span></div></div>
+                <div class="row child"><div class="lab">增益</div><div class="ctl"><span class="slider"></span><span class="val">−3.0 dB</span></div></div>
+                <div class="row child"><div class="lab">削波指示</div><div class="ctl"><span class="sw on"></span></div></div>
+              </div></div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div></div>
+    <ol class="notes">
+      <li><b>保留左侧设置分栏</b>，加大标题“设置”，管理员专用的栏目归到“管理”小标题下；内容区限宽 720px，不再挤在左半边。</li>
+      <li><b>分组卡片</b>：播放、输出、音效处理三组。每行左边是名称和一行说明，右边是控件，所有控件右对齐。</li>
+      <li><b>从属项缩进</b>：渐变时长、增益、削波指示缩进在所属开关下方，开关关闭时整行隐藏（现在是变灰）。</li>
+      <li><b>纯图标按钮换成文字按钮</b>：“编辑…”“管理文件…”“对调”；分段控件改成浅底滑块样式，与下拉框同高。</li>
+      <li>页首写明设置作用于哪台设备（播放设置跟随正在控制的设备）。说明文字是示意，落地时按实际含义写。</li>
+    </ol>
+  </section>
+
+  <!-- ============ 设置 · 扫描目录 ============ -->
+  <section class="screen" data-s="library" hidden>
+    <div class="stage"><div class="frame rm">
+      <div class="shell" style="height:860px">
+        <aside class="side">
+          <div class="brand"><span class="mark"></span>ROOMusic</div>
+          <div class="search"><svg class="i s16"><use href="#search"/></svg>搜索<kbd>/</kbd></div>
+          <div class="group">聆听</div>
+          <div class="nav"><svg class="i"><use href="#grid"/></svg>概览</div>
+          <div class="nav"><svg class="i"><use href="#disc"/></svg>专辑</div>
+          <div class="nav"><svg class="i"><use href="#mic"/></svg>艺人</div>
+          <div class="me"><span class="avatar">C</span><div>curator<small>管理员</small></div></div>
+        </aside>
+        <main class="main">
+          <div class="set">
+            <nav class="setnav">
+              <div class="h">设置</div>
+              <div class="nav"><svg class="i"><use href="#user"/></svg>账号</div>
+              <div class="nav"><svg class="i"><use href="#wave"/></svg>播放</div>
+              <div class="group">管理</div>
+              <div class="nav on"><svg class="i"><use href="#folder"/></svg>扫描目录</div>
+              <div class="nav"><svg class="i"><use href="#users"/></svg>成员</div>
+              <div class="nav"><svg class="i"><use href="#hist"/></svg>操作记录</div>
+              <div class="nav"><svg class="i"><use href="#db"/></svg>备份</div>
+            </nav>
+            <div class="setpage" style="max-width:820px">
+              <h1>扫描目录</h1>
+              <p class="lead">资料库从这些目录读取音乐文件。</p>
+
+              <div class="sect"><h2>扫描</h2><div class="card">
+                <div class="row"><div><div class="lab">上次扫描 <span class="status" style="margin-left:8px">已完成</span></div><div class="help">今天 04:00 · 新增 12 张专辑，更新 3 张</div></div><div class="ctl"><span class="btn ghost">查看详情</span><span class="btn outline"><svg class="i s16"><use href="#refresh"/></svg>立即扫描</span></div></div>
+                <div class="row"><div><div class="lab">定时扫描</div><div class="help">每天在这个时间检查新文件</div></div><div class="ctl"><span class="sel" style="min-width:90px">04:00</span><span class="sw on"></span></div></div>
+              </div></div>
+
+              <div class="sect"><div class="card">
+                <div class="cardhead"><div class="lab" style="font-weight:600">音乐目录</div><span class="btn ghost"><svg class="i s16"><use href="#plus"/></svg>添加目录…</span></div>
+                <div class="rootrow"><svg class="i" style="color:#7d7979"><use href="#folder"/></svg><div><div style="font-weight:500">classical-a</div><div class="p">/music/classical-a</div></div><span class="status">可用</span><span class="ibtn"><svg class="i s16"><use href="#more"/></svg></span></div>
+                <div class="rootrow"><svg class="i" style="color:#7d7979"><use href="#folder"/></svg><div><div style="font-weight:500">classical-b</div><div class="p">/music/classical-b</div></div><span class="status warn">已暂停</span><span class="ibtn"><svg class="i s16"><use href="#more"/></svg></span></div>
+              </div></div>
+
+              <div class="sect"><h2>最近的目录操作</h2><div class="card">
+                <table class="tbl"><thead><tr><th>时间</th><th>目录</th><th>操作</th><th>结果</th></tr></thead>
+                <tbody><tr><td>2026-01-01 00:00</td><td>classical-b</td><td>暂停</td><td style="color:#b3261e">失败：operation_failed</td></tr>
+                <tr><td>2026-01-01 00:00</td><td>classical-b</td><td>恢复</td><td>完成</td></tr></tbody></table>
+              </div></div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div></div>
+    <ol class="notes">
+      <li><b>扫描卡片</b>：上次扫描的状态与摘要在左，“立即扫描”是本页唯一主要按钮；定时扫描一行，开关与时间并排。</li>
+      <li><b>目录列表</b>：“添加目录…”在卡片头部，点开对话框填写，不再常驻一个大输入框；每个目录一行（名称、路径、状态），暂停、恢复、移除收进行尾“更多”。</li>
+      <li>操作记录保留表格，放在最后一组。成员、备份、账号页按同样的卡片与行布局整理。</li>
+    </ol>
+  </section>
+
+  <!-- ============ 信号路径 ============ -->
+  <section class="screen" data-s="signal" hidden>
+    <div class="stage"><div class="frame rm">
+      <div class="sigstage">
+        <div class="sigcol"><span class="cap2">原样直通（播放栏）</span><div class="scard q-lossless"><div class="shead"><span class="qbadge"><svg class="i"><use href="#wave"/></svg></span><div><div class="qword">无损</div><div class="qsub">FLAC 96 kHz 24 bit → 书房 DAC</div></div><span class="ibtn" title="关闭"><svg class="i s16"><use href="#x"/></svg></span></div><ol class="chainlist"><li><span class="node2 q-lossless"><svg class="i"><use href="#file"/></svg></span><div class="stp"><div class="k">来源</div><div class="v">FLAC 96 kHz 24 bit</div></div></li><li><span class="node2 end q-lossless"><svg class="i"><use href="#speaker"/></svg></span><div class="stp"><div class="k">输出</div><div class="v">书房 DAC</div></div></li></ol><div class="sfoot"><div>响度<b>−14.2 LUFS</b></div><div>范围<b>8.1 LU</b></div><div>峰值<b>−0.8 dBTP</b></div></div></div><span class="pill open q-lossless"><span class="dot2"></span>FLAC 24/96</span></div>
+        <div class="sigcol"><span class="cap2">开了均衡与卷积</span><div class="scard q-enhanced"><div class="shead"><span class="qbadge"><svg class="i"><use href="#sliders"/></svg></span><div><div class="qword">增强</div><div class="qsub">FLAC 44.1 kHz 16 bit → 客厅功放</div></div><span class="ibtn" title="关闭"><svg class="i s16"><use href="#x"/></svg></span></div><ol class="chainlist"><li><span class="node2 q-lossless"><svg class="i"><use href="#file"/></svg></span><div class="stp"><div class="k">来源</div><div class="v">FLAC 44.1 kHz 16 bit</div></div></li><li><span class="node2 q-high"><svg class="i"><use href="#swap"/></svg></span><div class="stp"><div class="k">采样率转换</div><div class="v">44.1 kHz → 96 kHz</div></div></li><li><span class="node2 q-enhanced"><svg class="i"><use href="#wave"/></svg></span><div class="stp worst"><div class="k">卷积</div><div class="v">客厅.wav · 65536 抽头</div></div></li><li><span class="node2 q-enhanced"><svg class="i"><use href="#sliders"/></svg></span><div class="stp"><div class="k">参数均衡</div><div class="v">HD 650 Harman · 10 段</div></div></li><li><span class="node2 q-lossless"><svg class="i"><use href="#down2"/></svg></span><div class="stp"><div class="k">Headroom</div><div class="v">−3.0 dB</div></div></li><li><span class="node2 q-lossless"><svg class="i"><use href="#grip"/></svg></span><div class="stp"><div class="k">抖动</div><div class="v">TPDF 24 bit</div></div></li><li><span class="node2 end q-enhanced"><svg class="i"><use href="#speaker"/></svg></span><div class="stp"><div class="k">输出</div><div class="v">客厅功放</div></div></li></ol><div class="sfoot"><div>响度<b>−12.6 LUFS</b></div><div>峰值<b>−0.4 dBTP</b></div><div>处理速度<b>38.2×</b></div></div></div><span class="pill open q-enhanced"><span class="dot2"></span>FLAC 16/44.1</span></div>
+        <div class="sigcol"><span class="cap2">手机串流、正在削波（全屏播放器）</span><div class="darkbg"><div class="scard dark q-low"><div class="shead"><span class="qbadge"><svg class="i"><use href="#wave"/></svg></span><div><div class="qword">有损</div><div class="qsub">串流 · 手机网络</div></div><span class="ibtn" title="关闭"><svg class="i s16"><use href="#x"/></svg></span></div><div class="clipbar">正在削波</div><ol class="chainlist"><li><span class="node2 q-lossless"><svg class="i"><use href="#file"/></svg></span><div class="stp"><div class="k">来源</div><div class="v">FLAC 192 kHz 24 bit</div></div></li><li><span class="node2 q-high"><svg class="i"><use href="#swap"/></svg></span><div class="stp"><div class="k">采样率转换</div><div class="v">192 kHz → 48 kHz<span class="tag">兼容转换</span></div></div></li><li><span class="node2 q-lossless"><svg class="i"><use href="#sliders"/></svg></span><div class="stp"><div class="k">电平化</div><div class="v">+2.5 dB</div></div></li><li><span class="node2 q-low"><svg class="i"><use href="#bin"/></svg></span><div class="stp worst"><div class="k">编码</div><div class="v">Opus 160 kbps<span class="tag">有损</span></div></div></li><li><span class="node2 end q-low"><svg class="i"><use href="#speaker"/></svg></span><div class="stp"><div class="k">输出</div><div class="v">这台手机</div></div></li></ol><div class="sfoot"><div>响度<b>−18.9 LUFS</b></div><div>峰值<b>+0.6 dBTP</b></div><div>处理速度<b>12.4×</b></div></div></div><span class="pill open q-clip"><span class="dot2"></span>Opus 160k</span></div></div>
+      </div>
+    </div></div>
+    <ol class="notes">
+      <li><b>入口合并</b>：现在是“彩色波形图标 + 旁边一段格式文字”两样东西，改成一个胶囊按钮：彩色圆点加格式文字（如“FLAC 24/96”），点击区域更大，一眼能看出是可点的。圆点颜色按整体质量；播放中圆点每 4 秒自然呼吸一次（吸短呼长、末尾停顿，内核 78%↔100%，柔光稍晚绽开），暂停时静止；削波时变红并快速脉动，削波结束后恢复。系统开了“减少动态效果”时不动。</li>
+      <li><b>头部先给结论</b>：大号的质量词（无损 / 增强 / 高质量 / 有损）配同色图标，下面一行“来源格式 → 输出设备”。削波时头部下方出现一条红色“正在削波”。</li>
+      <li><b>步骤画成一条链</b>：从来源到输出设备竖向连线，每一步一个彩色节点、上面一行小字写步骤名、下面写取值；“有损”“兼容转换”标签留在取值后面。整体质量由最差的一步决定，那一步加粗，能直接看出是哪一步拉低了质量。</li>
+      <li><b>测量值放到底部</b>：响度、范围、峰值、处理速度不是处理步骤，从链里拿出来放到底部三格；没有分析结果的格子不显示。</li>
+      <li>弹层加宽到 340px；全屏播放器里用深色面；窄屏仍从底部弹出。只显示服务端给出的事实，不加解释句（沿用现行规范）。</li>
+    </ol>
+  </section>
+
+  <!-- ============ 全屏播放器 ============ -->
+  <section class="screen" data-s="fs" hidden>
+    <div class="stage"><div class="frame rm">
+      <div class="fs"><div class="bgart"></div>
+        <div class="topbar"><span class="ibtn big" title="收起全屏播放器"><svg class="i"><use href="#down"/></svg></span><span class="ibtn" title="队列"><svg class="i"><use href="#queue"/></svg></span></div>
+        <div class="in">
+          <div class="left">
+            <div class="vinyl"><span class="arm"><i></i></span></div>
+            <div class="meta2">
+              <div class="row1"><h3>变奏 1，单键盘</h3><span class="ibtn"><svg class="i fill" style="color:#f0c27a"><use href="#heart"/></svg></span><span class="ibtn"><svg class="i"><use href="#more"/></svg></span></div>
+              <div class="sub"><a>哥德堡变奏曲</a> · <a>Glenn Gould</a></div>
+              <div class="line2"><span class="pill q-lossless"><span class="dot2" style="background:#f0c27a"></span>FLAC 24/96</span><span class="devtag" style="background:rgba(255,255,255,.07)"><svg class="i s16"><use href="#speaker"/></svg>书房 DAC<svg class="i s16" style="width:12px;height:12px"><use href="#down"/></svg></span></div>
+            </div>
+            <div class="fseek"><span>0:24</span><div class="wave" data-wave></div><span>1:04</span></div>
+            <div class="ftrans"><span class="ibtn small on"><svg class="i"><use href="#shuffle"/></svg></span><span class="ibtn"><svg class="i"><use href="#prev"/></svg></span><span class="big"><svg class="i fill"><use href="#pause"/></svg></span><span class="ibtn"><svg class="i"><use href="#next"/></svg></span><span class="ibtn small"><svg class="i"><use href="#repeat"/></svg></span></div>
+            <div class="fvol"><svg class="i s16" style="color:rgba(244,239,232,.7)"><use href="#vol"/></svg><span class="rail"></span></div>
+          </div>
+          <div class="right">
+            <div class="seg2"><span class="on">歌词</span><span>接下来</span></div>
+            <div class="lyr">
+              <p class="past">Aria</p>
+              <p class="past">我在寂静中聆听</p>
+              <p>每一个音符都在呼吸</p>
+              <p class="cur">像清晨落在窗台的光</p>
+              <p>缓慢 而坚定</p>
+              <p>你从远处走来</p>
+              <p>带着整个季节的颜色</p>
+              <p>我们沉默 却并不孤单</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="fs" style="margin-top:24px"><div class="bgart"></div>
+        <div class="topbar"><span class="ibtn big"><svg class="i"><use href="#down"/></svg></span><span class="ibtn"><svg class="i"><use href="#queue"/></svg></span></div>
+        <div class="in">
+          <div class="left">
+            <div class="vinyl"><span class="arm"><i></i></span></div>
+            <div class="meta2">
+              <div class="row1"><h3>变奏 1，单键盘</h3><span class="ibtn"><svg class="i fill" style="color:#f0c27a"><use href="#heart"/></svg></span><span class="ibtn"><svg class="i"><use href="#more"/></svg></span></div>
+              <div class="sub"><a>哥德堡变奏曲</a> · <a>Glenn Gould</a></div>
+              <div class="line2"><span class="pill q-lossless"><span class="dot2" style="background:#f0c27a"></span>FLAC 24/96</span><span class="devtag" style="background:rgba(255,255,255,.07)"><svg class="i s16"><use href="#speaker"/></svg>书房 DAC<svg class="i s16" style="width:12px;height:12px"><use href="#down"/></svg></span></div>
+            </div>
+            <div class="fseek"><span>0:24</span><div class="wave" data-wave></div><span>1:04</span></div>
+            <div class="ftrans"><span class="ibtn small on"><svg class="i"><use href="#shuffle"/></svg></span><span class="ibtn"><svg class="i"><use href="#prev"/></svg></span><span class="big"><svg class="i fill"><use href="#pause"/></svg></span><span class="ibtn"><svg class="i"><use href="#next"/></svg></span><span class="ibtn small"><svg class="i"><use href="#repeat"/></svg></span></div>
+            <div class="fvol"><svg class="i s16" style="color:rgba(244,239,232,.7)"><use href="#vol"/></svg><span class="rail"></span></div>
+          </div>
+          <div class="right">
+            <div class="seg2"><span>歌词</span><span class="on">接下来</span></div>
+            <ol class="upnext">
+              <li class="hov"><span class="a"></span><div><div class="t">变奏 2，单键盘</div><div class="c">Glenn Gould</div></div><span class="d">0:51</span></li>
+              <li><span class="a"></span><div><div class="t">变奏 3，同度卡农</div><div class="c">Glenn Gould</div></div><span class="d">1:12</span></li>
+              <li><span class="a"></span><div><div class="t">变奏 4，单键盘</div><div class="c">Glenn Gould</div></div><span class="d">0:44</span></li>
+              <li><span class="a"></span><div><div class="t">变奏 5，单键盘或双键盘</div><div class="c">Glenn Gould</div></div><span class="d">0:38</span></li>
+              <li><span class="a"></span><div><div class="t">变奏 6，二度卡农</div><div class="c">Glenn Gould</div></div><span class="d">0:33</span></li>
+            </ol>
+          </div>
+        </div>
+      </div>
+      <div class="fsrow">
+        <div class="fsphone"><div class="bgart"></div><div class="ph">
+          <div class="ptop"><span class="ibtn"><svg class="i"><use href="#down"/></svg></span><span class="ctx">正在播放<b>哥德堡变奏曲</b></span><span class="ibtn"><svg class="i"><use href="#more"/></svg></span></div>
+          <div class="stagep"><div class="vinyl"><span class="arm"><i></i></span></div></div>
+          <div style="display:grid;gap:12px">
+            <div class="meta2">
+              <div class="row1"><h3>变奏 1，单键盘</h3><span class="ibtn"><svg class="i fill" style="color:#f0c27a"><use href="#heart"/></svg></span></div>
+              <div class="sub"><a>哥德堡变奏曲</a> · <a>Glenn Gould</a></div>
+              <div class="line2"><span class="pill q-lossless"><span class="dot2" style="background:#f0c27a"></span>FLAC 24/96</span></div>
+            </div>
+            <div class="fseek"><span>0:24</span><div class="wave" data-wave></div><span>1:04</span></div>
+            <div class="ftrans"><span class="ibtn small on"><svg class="i"><use href="#shuffle"/></svg></span><span class="ibtn"><svg class="i"><use href="#prev"/></svg></span><span class="big"><svg class="i fill"><use href="#pause"/></svg></span><span class="ibtn"><svg class="i"><use href="#next"/></svg></span><span class="ibtn small"><svg class="i"><use href="#repeat"/></svg></span></div>
+            <div class="pbottom"><span class="devbtn"><svg class="i s16"><use href="#speaker"/></svg>书房 DAC</span><span class="grp"><span class="ibtn" title="歌词"><svg class="i"><use href="#lyric"/></svg></span><span class="ibtn" title="队列"><svg class="i"><use href="#queue"/></svg></span></span></div>
+          </div>
+        </div></div>
+        <div class="fsphone"><div class="bgart"></div><div class="ph">
+          <div class="ptop"><span class="ibtn"><svg class="i"><use href="#down"/></svg></span><span class="ctx">正在播放<b>哥德堡变奏曲</b></span><span class="ibtn"><svg class="i"><use href="#more"/></svg></span></div>
+          <div style="display:grid;grid-template-rows:auto 1fr;min-height:0">
+            <div class="minihead"><span class="a"></span><div><div class="t">变奏 1，单键盘</div><div class="c">Glenn Gould</div></div><span class="ibtn"><svg class="i fill" style="color:#f0c27a"><use href="#heart"/></svg></span></div>
+            <div class="lyr">
+              <p class="past">Aria</p>
+              <p class="past">我在寂静中聆听</p>
+              <p>每一个音符都在呼吸</p>
+              <p class="cur">像清晨落在窗台的光</p>
+              <p>缓慢 而坚定</p>
+              <p>你从远处走来</p>
+              <p>带着整个季节的颜色</p>
+              <p>我们沉默 却并不孤单</p>
+            </div>
+          </div>
+          <div style="display:grid;gap:12px">
+            <div class="fseek"><span>0:24</span><div class="wave" data-wave></div><span>1:04</span></div>
+            <div class="ftrans"><span class="ibtn small on"><svg class="i"><use href="#shuffle"/></svg></span><span class="ibtn"><svg class="i"><use href="#prev"/></svg></span><span class="big"><svg class="i fill"><use href="#pause"/></svg></span><span class="ibtn"><svg class="i"><use href="#next"/></svg></span><span class="ibtn small"><svg class="i"><use href="#repeat"/></svg></span></div>
+            <div class="pbottom"><span class="devbtn"><svg class="i s16"><use href="#speaker"/></svg>书房 DAC</span><span class="grp"><span class="ibtn on" title="歌词"><svg class="i"><use href="#lyric"/></svg></span><span class="ibtn" title="队列"><svg class="i"><use href="#queue"/></svg></span></span></div>
+          </div>
+        </div></div>
+      </div>
+    </div></div>
+    <ol class="notes">
+      <li><b>左栏是“唱机＋控制台”</b>：黑胶唱片（封面作为唱片标签）下面依次是标题、心形、更多，专辑 · 艺人，信号路径胶囊与设备名，进度（两端时间、波形），传输键（随机、上一首、大播放键、下一首、循环），音量。控制集中在唱片下方，不再散落在屏幕最底一条。</li>
+      <li><b>右栏是“歌词 / 接下来”</b>（参考 Apple Music）：歌词大字号，当前行最亮最大，已唱过的更暗，自动滚动并让当前行保持在中间偏上，上下边缘渐隐；点任一行跳到那里（同步歌词时，沿用现有功能）。“接下来”列出队列里随后的几首，点一首直接播放（新增；随机模式下列表不代表实际顺序，标题写明“随机播放中”）；完整管理仍在右上角的队列抽屉。没有歌词时默认显示“接下来”。</li>
+      <li><b>收起在左上角</b>（现在在左下角），队列在右上角；设备名做成信号路径旁的按钮，点开选择设备。</li>
+      <li><b>手机</b>：顶部是收起、“正在播放 · 专辑名”和“更多”；底部一排是设备名按钮（左）与歌词、队列（右），歌词有明确的按钮（现在要点唱片才能切换）。歌词视图把唱片换成一行小封面与标题，控制区位置不动。</li>
+      <li>背景仍是封面放大、模糊、压暗；没有封面时为深色底。</li>
+    </ol>
+  </section>
+
+  <!-- ============ 手机 ============ -->
+  <section class="screen" data-s="mobile" hidden>
+    <div class="stage"><div class="frame rm">
+      <div class="phones">
+        <div class="phone">
+          <div class="top"><span class="crumb" style="margin:0"><svg class="i s16"><use href="#back"/></svg>专辑</span><span class="ibtn"><svg class="i"><use href="#menu"/></svg></span></div>
+          <div class="content">
+            <div class="mhero">
+              <div class="cover"><div class="art"></div></div>
+              <div><h1>哥德堡变奏曲，BWV 988</h1><div class="byline" style="margin-top:4px"><a>Glenn Gould</a></div>
+              <ul class="facts" style="margin-top:6px"><li>1981</li><li>32 首</li><li>51 分钟</li><li class="q">FLAC 24/96</li></ul></div>
+              <div class="mrow">
+                <span class="ibtn"><svg class="i fill" style="color:#b68235"><use href="#heart"/></svg></span>
+                <span class="ibtn"><svg class="i"><use href="#listplus"/></svg></span>
+                <span class="ibtn"><svg class="i"><use href="#more"/></svg></span>
+                <span class="ibtn" style="margin-left:auto"><svg class="i"><use href="#shuffle"/></svg></span>
+                <span class="playdisc" style="margin-left:4px"><svg class="i fill"><use href="#play"/></svg></span>
+              </div>
+            </div>
+            <ol class="tracks" style="margin-top:10px">
+              <li class="tr" style="grid-template-columns:24px 1fr auto 40px"><span class="no">1</span><div><div class="t">咏叹调</div><div class="c">Glenn Gould，钢琴</div></div><div class="acts" style="opacity:1"><span class="ibtn"><svg class="i s16"><use href="#more"/></svg></span></div><span class="dur">3:05</span></li>
+              <li class="tr playing" style="grid-template-columns:24px 1fr auto 40px"><span class="no"><span class="eq"><i></i><i></i><i></i></span></span><div><div class="t">变奏 1，单键盘</div><div class="c">Glenn Gould，钢琴</div></div><div class="acts" style="opacity:1"><span class="ibtn"><svg class="i s16"><use href="#more"/></svg></span></div><span class="dur">1:04</span></li>
+            </ol>
+          </div>
+          <div class="mbar"><span class="mini"></span><div style="min-width:0"><div style="font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">变奏 1，单键盘</div><div style="font-size:12px;color:#605d5d;display:flex;align-items:center;gap:4px"><svg class="i s16" style="width:12px;height:12px"><use href="#speaker"/></svg>书房 DAC</div></div><span class="pp"><svg class="i fill"><use href="#pause"/></svg></span><span class="ibtn"><svg class="i"><use href="#next"/></svg></span><span class="ibtn"><svg class="i"><use href="#queue"/></svg></span></div>
+        </div>
+
+        <div class="phone">
+          <div class="top"><b style="font-size:17px">设置</b><span class="ibtn"><svg class="i"><use href="#menu"/></svg></span></div>
+          <div class="content">
+            <div class="mtabs"><span>账号</span><span class="on">播放</span><span>扫描目录</span><span>成员</span><span>操作记录</span></div>
+            <div class="sect"><h2>播放</h2><div class="card">
+              <div class="row"><div><div class="lab">串流音质</div></div><div class="ctl"><span class="sel" style="min-width:100px">自动</span></div></div>
+              <div class="row"><div><div class="lab">无缝播放</div><div class="help">曲目之间不留空隙</div></div><div class="ctl"><span class="sw on"></span></div></div>
+              <div class="row"><div><div class="lab">交叉渐变</div></div><div class="ctl"><span class="sw on"></span></div></div>
+              <div class="row child"><div class="lab">渐变时长</div><div class="ctl"><span class="sel" style="min-width:80px">5 秒</span></div></div>
+            </div></div>
+            <div class="sect"><h2>输出</h2><div class="card">
+              <div class="row"><div class="lab">采样率转换</div><div class="ctl"><span class="sel" style="min-width:110px">按设备自动</span></div></div>
+              <div class="row"><div class="lab">多声道降为双声道</div><div class="ctl"><span class="sw on"></span></div></div>
+            </div></div>
+          </div>
+          <div class="mbar"><span class="mini"></span><div style="min-width:0"><div style="font-size:14px;font-weight:500">变奏 1，单键盘</div><div style="font-size:12px;color:#605d5d">书房 DAC</div></div><span class="pp"><svg class="i fill"><use href="#pause"/></svg></span><span class="ibtn"><svg class="i"><use href="#next"/></svg></span><span class="ibtn"><svg class="i"><use href="#queue"/></svg></span></div>
+        </div>
+      </div>
+    </div></div>
+    <ol class="notes">
+      <li><b>迷你播放栏浮起</b>：圆角卡片，底边一条细进度线；只留曲目、设备名、播放、下一首、队列，收藏与模式进全屏播放器。</li>
+      <li><b>专辑页</b>：封面居中，操作行左边是收藏、加入歌单、更多，右边是随机和大播放键（拇指好按）。曲目行只留“更多”，点整行播放。</li>
+      <li><b>设置</b>：顶部改成可横向滑动的胶囊标签；卡片行在窄屏里分段控件改为下拉，避免换行。</li>
+    </ol>
+  </section>
+</div>
+
+<script>
+  // 波形示意
+  document.querySelectorAll('#seekwave, [data-wave]').forEach((wave) => {
+    const n = wave.hasAttribute('data-wave') ? 60 : 90;
+    for (let i = 0; i < n; i++) {
+      const h = 4 + Math.round(14 * Math.abs(Math.sin(i * 0.37) * Math.cos(i * 0.11)));
+      const el = document.createElement('i'); el.style.height = h + 'px'; if (i < n * 0.38) el.className = 'p'; wave.appendChild(el);
+    }
+  });
+  // 等比缩放样稿到容器宽度
+  function fit() {
+    document.querySelectorAll('.screen:not([hidden]) .stage').forEach((stage) => {
+      const frame = stage.firstElementChild;
+      const w = frame.scrollWidth, h = frame.scrollHeight;
+      const s = Math.min(1, stage.clientWidth / w);
+      frame.style.transform = `scale(${s})`;
+      stage.style.height = Math.ceil(h * s) + 'px';
+    });
+  }
+  document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.tabs button').forEach((x) => x.setAttribute('aria-selected', x === b));
+    document.querySelectorAll('.screen').forEach((s) => s.hidden = s.dataset.s !== b.dataset.s);
+    fit();
+  }));
+  new ResizeObserver(fit).observe(document.body);
+  fit();
+</script>
+</body>
+</html>
