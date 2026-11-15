@@ -558,17 +558,14 @@ func parseM4AItemValue(itemType string, value, typeCode []byte, observation *Aud
 		return nil
 	}
 	if itemType == "covr" {
-		if len(value) > 0 && len(value) <= int(maxM4AMetadataAtom) {
-			observation.Artwork = append([]byte(nil), value...)
-			switch binary.BigEndian.Uint32(typeCode) {
-			case 13:
-				observation.ArtworkMIME = "image/jpeg"
-			case 14:
-				observation.ArtworkMIME = "image/png"
-			default:
-				observation.ArtworkMIME = "application/octet-stream"
-			}
+		mime := "application/octet-stream"
+		switch binary.BigEndian.Uint32(typeCode) {
+		case 13:
+			mime = "image/jpeg"
+		case 14:
+			mime = "image/png"
 		}
+		offerArtwork(observation, value, mime, -1)
 		return nil
 	}
 	if itemType == "\xa9lyr" {

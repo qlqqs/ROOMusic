@@ -51,6 +51,7 @@ type AudioObservation struct {
 
 	originalYears [8]int
 	workTags      workTags
+	artworkFront  bool
 }
 
 const (
