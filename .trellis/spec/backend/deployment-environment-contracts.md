@@ -18,8 +18,10 @@
 - 服务端渲染需要 ffmpeg：生产镜像构建时从固定摘要镜像复制，开发由部署者安装（项目不单独分发二进制）；`ROOMUSIC_FFMPEG_PATH`（绝对路径，空则在 `PATH` 中查找）。
   找不到或自检失败时应用照常启动、记 `playback.render.unavailable`，格式表为空、起播得 `503 renderer_unavailable`。`ROOMUSIC_MEDIA_CACHE_MAX_MIB` 已不再读取。
   `scripts/ffmpeg-pinned.sh` 取出按摘要固定的 ffmpeg 7.1.1，测试、CI 与推荐部署共用。详见[服务端渲染合同](./playback-render-contracts.md) §11。
-- `scripts/dev.sh` 默认只确保 PostgreSQL、Go 和 Vite；Redis/Meilisearch 是
-  Compose/mise 可选服务。开发的 `mise run env-*` 显式使用 `--env-file .env.dev`。
+- 开发 Compose 项目名 `roomusic-compose-dev`，只有 PostgreSQL；`scripts/dev.sh` 确保 PostgreSQL 后在宿主机运行 Go 和 Vite。
+  后端启动后 10 秒内退出时按 1、2、4…秒退避重启（上限 30 秒），文件变更或运行满 10 秒后退避归零。开发的 `mise run env-*` 显式使用 `--env-file .env.dev`。
+- 端口：应用端口（Vite、Go 后端）绑 `0.0.0.0`，开发与测试的 PostgreSQL 只绑 `127.0.0.1`。
+- 开发与测试的 PostgreSQL 镜像与 `compose.prod.yaml` 的 `x-postgres-image` 是同一个钉死字符串，CI 校验三者一致。
 - 生产镜像固定 Go、Alpine、PostgreSQL 基础镜像版本与摘要，ffmpeg 与 `scripts/ffmpeg-pinned.sh` 同一摘要；
   使用已提交的前端，不依赖 Node。应用以 uid 1000 运行，音乐只读挂载；仅首次安装以 root 在宿主机运行 `scripts/production-init.sh`，镜像不包含初始化脚本。
   生产 Compose 仅包含 postgres（健康检查）→ app，顶层 `name: roomusic-server`。固定容器名默认为 `roomusic-app`、`roomusic-postgres`，分别通过 `ROOMUSIC_APP_CONTAINER_NAME`、`ROOMUSIC_POSTGRES_CONTAINER_NAME` 配置。同机多实例使用不同名称。Compose 不引用、不执行、不依赖初始化脚本；升级直接 pull 后 up。必填仅 `ROOMUSIC_MUSIC_DIR`。

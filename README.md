@@ -63,7 +63,7 @@ docker compose pull && docker compose up -d --wait
 ## 开发
 
 工具链由 [mise](https://mise.jdx.dev/) 管理（Go 1.25.10、Node.js 24.22.1）。Go 和 Node 在宿主机运行，PostgreSQL 由根目录的
-`compose.dev.yaml` 提供，只监听 `127.0.0.1`。
+`compose.dev.yaml` 提供，只监听 `127.0.0.1`；Vite 与 Go 后端监听 `0.0.0.0`，局域网设备可以访问。
 
 ```bash
 mise install
@@ -71,7 +71,7 @@ cp .env.dev.example .env.dev # 填写本地 PostgreSQL 密码
 make dev                    # PostgreSQL + Go 后端（8080）+ Vite（5173）
 ```
 
-前端修改热更新，Go 和迁移文件修改会自动重启后端，`Ctrl-C` 一起停止。开发和生产可以在同一台机器上同时运行，互不影响。
+前端修改热更新，Go 和迁移文件修改会自动重启后端；后端启动后很快退出时按 1、2、4…秒退避重启，最长间隔 30 秒。`Ctrl-C` 一起停止。开发和生产可以在同一台机器上同时运行，互不影响。
 
 - `make dev-reset`：清空开发库的业务数据，保留迁移。
 - `./scripts/reset-password.sh <用户名>`：开发环境重置密码。

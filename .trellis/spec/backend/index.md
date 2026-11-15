@@ -155,5 +155,5 @@ itself, runs a repository update, and returns the database row directly.
 - [Current Compose services](../../../compose.dev.yaml)
 - [Architecture canvas](../../../docs/architecture/roomusic-modular-plugin-architecture.canvas.tsx)
 
-The Compose file includes Redis and Meilisearch as development/future services;
-the Core 0 PRD explicitly makes them optional.
+The development Compose file provides PostgreSQL only; the Core 0 PRD keeps
+Redis and Meilisearch out of the required loop.

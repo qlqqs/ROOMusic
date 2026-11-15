@@ -3,9 +3,9 @@
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # 与真实播放入口使用相同的独占项目命名规则。
-COMPOSE_PROJECT="${ROOMUSIC_TEST_COMPOSE_PROJECT:-roomusic-test}"
-[[ "$COMPOSE_PROJECT" =~ ^roomusic-test(-[a-z0-9]+)*$ ]] || {
-  echo '测试项目必须是 roomusic-test 或其小写字母数字后缀项目' >&2; exit 1;
+COMPOSE_PROJECT="${ROOMUSIC_TEST_COMPOSE_PROJECT:-roomusic-compose-test-${RANDOM}-${RANDOM}}"
+[[ "$COMPOSE_PROJECT" =~ ^roomusic-compose-test(-[a-z0-9]+)*$ ]] || {
+  echo '测试项目必须是 roomusic-compose-test 或其小写字母数字后缀项目' >&2; exit 1;
 }
 COMPOSE=(docker compose --env-file /dev/null -f "$ROOT_DIR/compose.test.yaml" -p "$COMPOSE_PROJECT")
 exec 9>"${TMPDIR:-/tmp}/roomusic-playback-e2e.lock"

@@ -158,10 +158,10 @@ files.
 | Runnable Agent and operator foundation | Mode and authority contracts only | Agent runtime begins after Core 0 |
 | Playback and file operations | Deferred | The first loop is stewardship and read-only browsing |
 
-The current [Compose file](../../../compose.dev.yaml) contains Redis and Meilisearch
-for development and future adapters. Their presence is not evidence that Core 0
-may depend on them. The [README](../../../README.md) explicitly says capabilities
-and configuration are added only when needed.
+The development [Compose file](../../../compose.dev.yaml) provides PostgreSQL only;
+Redis and Meilisearch were removed on 2026-11-15 because nothing used them. A
+future adapter must not assume they exist. The [README](../../../README.md)
+explicitly says capabilities and configuration are added only when needed.
 
 ## Long-Term Direction, Not Current Scope
 
