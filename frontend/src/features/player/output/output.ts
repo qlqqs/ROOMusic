@@ -166,7 +166,7 @@ export class OutputEndpoint {
       el.src = SILENCE;
       const reset = () => {
         if (el.getAttribute("src") !== SILENCE) return;
-        el.pause();
+        this.pauseSlot(slot);
         el.removeAttribute("src");
         el.load();
       };
@@ -335,6 +335,8 @@ export class OutputEndpoint {
   // ---- 媒体事件 ----
 
   private onPlaying(slot: Slot): void {
+    // 解锁静音也会发 playing；只回报当前仍在播放的正式流。
+    if (slot.stream === null || slot.el.paused) return;
     slot.phase = "playing";
     if (slot.role === "switch") {
       this.swap();
@@ -349,7 +351,8 @@ export class OutputEndpoint {
   private onPause(slot: Slot): void {
     const own = slot.ownPause;
     slot.ownPause = false;
-    if (slot.role === "idle" || slot.el.ended) return;
+    // 旧来源的 pause 可以晚于新流起播才交付，不能据此回报暂停或发送系统暂停命令。
+    if (slot.role === "idle" || !slot.el.paused || slot.el.ended) return;
     slot.phase = "paused";
     if (slot !== this.active) return;
     this.clearStall();

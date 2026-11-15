@@ -26,6 +26,7 @@ async function harness() {
   const audios: FakeAudio[] = [];
   const metadata = vi.fn<MediaSessionPort["setMetadata"]>();
   const report = vi.fn(server.api.postOutputReport);
+  const pause = vi.fn();
   const endpoint = new OutputEndpoint({
     claim: (body) => server.api.claimOutput(server.device().deviceId, body),
     report, release: server.api.releaseOutput,
@@ -37,7 +38,7 @@ async function harness() {
       setMetadata: metadata, setPlaybackState: () => undefined,
       setPositionState: () => undefined, setActionHandler: () => undefined,
     }, (id) => `https://roomusic.test/artwork/${id}`, Date.now),
-    commands: { play: vi.fn(), pause: vi.fn(), previous: vi.fn(), next: vi.fn(), stop: vi.fn(), seek: vi.fn(), position: () => 0 },
+    commands: { play: vi.fn(), pause, previous: vi.fn(), next: vi.fn(), stop: vi.fn(), seek: vi.fn(), position: () => 0 },
     now: Date.now,
   });
   endpoints.push(endpoint);
@@ -55,10 +56,47 @@ async function harness() {
     audio.beginPlaying();
     return audio;
   };
-  return { endpoint, audios, metadata, report, align, audioFor, start };
+  return { endpoint, audios, metadata, report, pause, align, audioFor, start };
 }
 
 describe("输出端对齐", () => {
+  it("手势解锁的静音 playing 不回报为正式流播放", async () => {
+    const h = await harness();
+    h.endpoint.unlock();
+    h.audios.forEach((audio) => audio.beginPlaying());
+    expect(h.report).not.toHaveBeenCalled();
+    await Promise.resolve();
+    expect(h.audios.every((audio) => audio.paused && audio.src === "")).toBe(true);
+  });
+
+  it("解锁静音的 pause 迟到时不暂停已出声的正式流，真正系统暂停仍生效", async () => {
+    const h = await harness();
+    const pending: (() => void)[] = [];
+    for (const audio of h.audios) {
+      vi.spyOn(audio, "pause").mockImplementation(() => {
+        audio.pauseCalls += 1;
+        if (audio.paused) return;
+        audio.paused = true;
+        // 原生媒体事件异步交付，可以晚于同一元素加载并播放下一条来源。
+        pending.push(() => audio.emit("pause"));
+      });
+    }
+    h.endpoint.unlock();
+    await Promise.resolve();
+    const audio = h.start(stream(1));
+    await waitFor(() => expect(h.report).toHaveBeenCalledTimes(1));
+    h.report.mockClear();
+    pending.splice(0).forEach((deliver) => deliver());
+    expect(audio.paused).toBe(false);
+    expect(h.pause).not.toHaveBeenCalled();
+    expect(h.report).not.toHaveBeenCalled();
+
+    audio.pause();
+    pending.splice(0).forEach((deliver) => deliver());
+    expect(h.pause).toHaveBeenCalledTimes(1);
+    expect(h.report).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ stream_seq: 1, status: "paused" }));
+  });
+
   it("新流出声后才卸载旧流并回报新序号", async () => {
     const h = await harness();
     const old = h.start(stream(1));
