@@ -1,0 +1,33 @@
+{
+  "id": "project-improvements",
+  "name": "project-improvements",
+  "title": "项目改进意见 1-11 与外置 LRC 歌词",
+  "description": "落实项目检查提出的 1-11 项改进，并实现 TODO 中的外置 .lrc 歌词读取",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "qlqq",
+  "assignee": "qlqq",
+  "createdAt": "2026-11-15",
+  "completedAt": null,
+  "branch": "main",
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "11-15-dev-env-config",
+    "11-15-backend-hygiene",
+    "11-15-frontend-route-split",
+    "11-15-web-assets-build",
+    "11-15-repo-cleanup",
+    "11-15-external-lrc"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/deployment-environment-contracts.md", "reason": "镜像构建与 CI 合同"}
+{"file": ".trellis/spec/backend/core-slice-tooling.md", "reason": "内嵌产物现行约定"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "构建与提交产物现行要求"}
+{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "前端静态资源服务合同"}

@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/deployment-environment-contracts.md", "reason": "开发、测试与生产环境合同"}
+{"file": ".trellis/spec/backend/core-slice-tooling.md", "reason": "开发脚本与工具链约定"}
+{"file": ".trellis/spec/guides/product-goals.md", "reason": "Redis/Meilisearch 现状描述所在"}

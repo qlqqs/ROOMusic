@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/lyrics-contracts.md", "reason": "歌词合同，本任务直接修改"}
+{"file": ".trellis/spec/backend/library-scan-incremental.md", "reason": "增量扫描判定"}
+{"file": ".trellis/spec/backend/library-scan-pipeline.md", "reason": "扫描流程与读取上限"}
+{"file": ".trellis/spec/backend/library-scan-tags.md", "reason": "标签提取规则"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "迁移惯例"}
+{"file": ".trellis/spec/frontend/player-design-guidelines.md", "reason": "歌词面板文案与状态"}
+{"file": ".trellis/tasks/11-15-external-lrc/research/scan-sidecar.md", "reason": "扫描附属文件调研"}
