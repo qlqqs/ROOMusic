@@ -986,10 +986,7 @@ func (service *Service) persistOneCandidate(ctx context.Context, executor scanEx
 		return "", err
 	}
 	stats.candidatesWritten++
-	if observation, ok := candidate.EmbeddedArtwork(); ok && observation.ArtworkDeferred {
-		stats.artworkDeferredLoads++
-	}
-	if artworkErr := service.saveArtworkForRelease(ctx, executor, scanID, releaseID, root, candidate, changes); artworkErr != nil {
+	if artworkErr := service.saveArtworkForRelease(ctx, executor, scanID, releaseID, root, candidate, stats, changes); artworkErr != nil {
 		return releaseID, fmt.Errorf("%w: %v", errArtworkBinding, artworkErr)
 	}
 	return releaseID, nil
@@ -1008,47 +1005,88 @@ func isWithin(root, path string) bool {
 	return rootError == nil && pathError == nil && (pathReal == rootReal || strings.HasPrefix(pathReal, rootReal+string(filepath.Separator)))
 }
 
-// saveArtworkForRelease 为 Release 取得封面并交给受管存储：优先用候选曲目里的内嵌封面，否则按
-// catalog 给出的目录顺序（发行目录、再各曲目目录）发现文件夹封面；两者都没有时移除既有关联。
-// 文件夹封面发现失败只记诊断并保留原关系；受管存储失败仍向上返回。
-func (service *Service) saveArtworkForRelease(ctx context.Context, executor scanExecutor, scanID, releaseID string, root registeredRoot, candidate ingest.OrganizedCandidate, feedbacks ...*ingest.ScanFeedback) error {
-	var data []byte
-	var mimeType string
-	sourceType := "embedded"
-	if observation, ok := candidate.EmbeddedArtwork(); ok {
-		data, mimeType = observation.Artwork, observation.ArtworkMIME
-		if observation.ArtworkDeferred {
-			var readErr error
-			data, mimeType, readErr = readDeferredArtwork(root, observation.ArtworkRelativePath)
-			if readErr != nil {
-				if err := service.recordDiagnosticWith(ctx, executor, scanID, observation.ArtworkRelativePath, "artwork_unreadable", "封面文件读不了"); err != nil {
-					return err
-				}
-			}
-		}
+// saveArtworkForRelease 依次尝试精确名、内嵌、附属图片与 Box 父目录封面。
+// 来源全部不可读时记诊断并保留原关系；受管存储与关联失败仍向上返回。
+func (service *Service) saveArtworkForRelease(ctx context.Context, executor scanExecutor, scanID, releaseID string, root registeredRoot, candidate ingest.OrganizedCandidate, stats *incrementalStats, feedbacks ...*ingest.ScanFeedback) error {
+	data, sourceType, err := service.selectArtwork(ctx, executor, scanID, root, candidate, stats)
+	if errors.Is(err, errArtworkSource) {
+		return service.recordDiagnosticWith(ctx, executor, scanID, candidate.Anchor.Scope, "artwork_unreadable", "封面文件读不了")
 	}
-	if len(data) == 0 {
-		sourceType = "folder"
-		var discoveryErr error
-		data, mimeType, discoveryErr = discoverFolderArtwork(root.Path, candidate.ArtworkDirectories(), root.filter)
-		if errors.Is(discoveryErr, errArtworkSource) {
-			return service.recordDiagnosticWith(ctx, executor, scanID, candidate.Anchor.Scope, "artwork_unreadable", "封面文件读不了")
-		}
-		if discoveryErr != nil {
-			return discoveryErr
-		}
+	if err != nil {
+		return err
 	}
 	store := artwork.NewStore(service.dataDirectory)
 	if len(feedbacks) > 0 && feedbacks[0] != nil {
 		if len(data) == 0 {
 			return store.RemoveWithFeedback(ctx, executor, releaseID, feedbacks[0])
 		}
-		return store.SaveWithFeedback(ctx, executor, releaseID, data, mimeType, sourceType, feedbacks[0])
+		return store.SaveWithFeedback(ctx, executor, releaseID, data, sourceType, feedbacks[0])
 	}
 	if len(data) == 0 {
 		return store.Remove(ctx, executor, releaseID)
 	}
-	return store.Save(ctx, executor, releaseID, data, mimeType, sourceType)
+	return store.Save(ctx, executor, releaseID, data, sourceType)
+}
+
+// selectArtwork 只读取来源，存储失败不参与候选回退。
+func (service *Service) selectArtwork(ctx context.Context, executor scanExecutor, scanID string, root registeredRoot, candidate ingest.OrganizedCandidate, stats *incrementalStats) ([]byte, string, error) {
+	var firstErr error
+	noteError := func(err error) {
+		if firstErr == nil {
+			firstErr = err
+		}
+	}
+	tryEmbedded := func() ([]byte, error) {
+		for _, observation := range candidate.EmbeddedArtworks() {
+			data := observation.Artwork
+			if observation.ArtworkDeferred {
+				stats.artworkDeferredLoads++
+				var err error
+				data, _, err = readDeferredArtwork(root, observation.ArtworkRelativePath)
+				if err != nil {
+					noteError(err)
+					if err := service.recordDiagnosticWith(ctx, executor, scanID, observation.ArtworkRelativePath, "artwork_unreadable", "封面文件读不了"); err != nil {
+						return nil, err
+					}
+					continue
+				}
+			}
+			if _, err := artwork.ValidateImage(data); err != nil {
+				noteError(err)
+				continue
+			}
+			return data, nil
+		}
+		return nil, nil
+	}
+	embeddedTried := false
+	for item, err := range listFolderArtworkCandidates(root, candidate) {
+		if item.Tier != artworkTierExact && !embeddedTried {
+			embeddedTried = true
+			data, err := tryEmbedded()
+			if err != nil || len(data) > 0 {
+				return data, "embedded", err
+			}
+		}
+		if err == nil {
+			var data []byte
+			data, _, err = readFolderArtworkFile(filepath.Join(root.Path, filepath.FromSlash(item.RelativePath)), filepath.Base(item.RelativePath), os.ReadFile)
+			if err == nil {
+				return data, "folder", nil
+			}
+		}
+		noteError(err)
+	}
+	if !embeddedTried {
+		data, err := tryEmbedded()
+		if err != nil || len(data) > 0 {
+			return data, "embedded", err
+		}
+	}
+	if firstErr != nil {
+		return nil, "", fmt.Errorf("%w: %w", errArtworkSource, firstErr)
+	}
+	return nil, "", nil
 }
 
 // readDeferredArtwork 重新核对根内相对路径与普通文件；封面迁移后仍读取原音频，而不是幸存曲目。
@@ -1089,11 +1127,11 @@ func discoverFolderArtwork(rootPath string, directories []string, filter scanFil
 // 每轮命中即返回；无效封面记下第一个错误，四轮全部找完仍没有可用封面才报错。
 func discoverFolderArtworkWithReader(rootPath string, directories []string, readFile func(string) ([]byte, error), filter scanFilter) ([]byte, string, error) {
 	var firstErr error
-	for relativePath, err := range listFolderArtworkCandidates(rootPath, directories, filter) {
+	for candidate, err := range listDirectoryArtworkCandidates(rootPath, directories, filter, false) {
 		if err == nil {
 			var data []byte
 			var mimeType string
-			data, mimeType, err = readFolderArtworkFile(filepath.Join(rootPath, filepath.FromSlash(relativePath)), filepath.Base(relativePath), readFile)
+			data, mimeType, err = readFolderArtworkFile(filepath.Join(rootPath, filepath.FromSlash(candidate.RelativePath)), filepath.Base(candidate.RelativePath), readFile)
 			if err == nil {
 				return data, mimeType, nil
 			}
@@ -1108,10 +1146,52 @@ func discoverFolderArtworkWithReader(rootPath string, directories []string, read
 	return nil, "", nil
 }
 
-// listFolderArtworkCandidates 按四轮查找顺序列出相对路径，不读取或校验封面文件。
-// 惰性列举保留命中即停和首错顺序；签名消费全部条目，查找只消费到第一张可用封面。
-func listFolderArtworkCandidates(rootPath string, directories []string, filter scanFilter) iter.Seq2[string, error] {
-	return func(yield func(string, error) bool) {
+type artworkTier int
+
+const (
+	artworkTierExact         artworkTier = 1
+	artworkTierSupplementary artworkTier = 3
+	artworkTierBoxParent     artworkTier = 4
+)
+
+type folderArtworkCandidate struct {
+	RelativePath string
+	Tier         artworkTier
+}
+
+// listFolderArtworkCandidates 按档位惰性列举候选；选择与签名共用目录归属和顺序规则。
+func listFolderArtworkCandidates(root registeredRoot, candidate ingest.OrganizedCandidate) iter.Seq2[folderArtworkCandidate, error] {
+	return func(yield func(folderArtworkCandidate, error) bool) {
+		switch candidate.Anchor.Kind {
+		case ingest.CandidateSameDirSplit, ingest.CandidateLooseAlbum, ingest.CandidateLooseUnknown:
+			return
+		}
+		for item, err := range listDirectoryArtworkCandidates(root.Path, candidate.ArtworkDirectories(), root.filter, false) {
+			if !yield(item, err) {
+				return
+			}
+		}
+		if candidate.Anchor.Kind != ingest.CandidateBoxLeaf &&
+			!(candidate.Anchor.Kind == ingest.CandidateFormatSplit && candidate.OriginalKind == ingest.CandidateBoxLeaf) {
+			return
+		}
+		parent := ingest.NormalizedPath(pathpkg.Dir(candidate.Anchor.Scope))
+		if parent == "" {
+			return
+		}
+		for item, err := range listDirectoryArtworkCandidates(root.Path, []string{parent}, root.filter, true) {
+			item.Tier = artworkTierBoxParent
+			if !yield(item, err) {
+				return
+			}
+		}
+	}
+}
+
+// listDirectoryArtworkCandidates 每个目录只读一次，按精确名、front、附属目录的顺序产出。
+func listDirectoryArtworkCandidates(rootPath string, directories []string, filter scanFilter, exactOnly bool) iter.Seq2[folderArtworkCandidate, error] {
+	return func(yield func(folderArtworkCandidate, error) bool) {
+		tier := artworkTierExact
 		type artworkDirectory struct {
 			relativePath string
 			entries      []os.DirEntry
@@ -1136,7 +1216,7 @@ func listFolderArtworkCandidates(rootPath string, directories []string, filter s
 				}
 			}
 			for _, name := range names {
-				if !filter.skipFile(name) && !yield(pathpkg.Join(directory.relativePath, name), nil) {
+				if !filter.skipFile(name) && !yield(folderArtworkCandidate{RelativePath: pathpkg.Join(directory.relativePath, name), Tier: tier}, nil) {
 					return false
 				}
 			}
@@ -1146,7 +1226,7 @@ func listFolderArtworkCandidates(rootPath string, directories []string, filter s
 		for _, directory := range directories {
 			loaded, err := readDirectory(directory)
 			if err != nil {
-				if !errors.Is(err, fs.ErrNotExist) && !yield("", err) {
+				if !errors.Is(err, fs.ErrNotExist) && !yield(folderArtworkCandidate{Tier: tier}, err) {
 					return
 				}
 				continue
@@ -1156,6 +1236,10 @@ func listFolderArtworkCandidates(rootPath string, directories []string, filter s
 				return
 			}
 		}
+		if exactOnly {
+			return
+		}
+		tier = artworkTierSupplementary
 		for _, directory := range originals {
 			if !list(directory, false) {
 				return
@@ -1173,7 +1257,7 @@ func listFolderArtworkCandidates(rootPath string, directories []string, filter s
 				}
 				loaded, err := readDirectory(relativePath)
 				if err != nil {
-					if !errors.Is(err, fs.ErrNotExist) && !yield("", err) {
+					if !errors.Is(err, fs.ErrNotExist) && !yield(folderArtworkCandidate{Tier: tier}, err) {
 						return
 					}
 					continue

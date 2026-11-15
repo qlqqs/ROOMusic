@@ -28,6 +28,7 @@ func parseWAV(path string) (AudioObservation, error) {
 		return AudioObservation{}, fmt.Errorf("truncated WAV stream")
 	}
 	o := AudioObservation{SourceKind: "wav_info", InferredFields: map[string]bool{}, Codec: "wav"}
+	infoTags := AudioObservation{SourceKind: "wav_info"}
 	var byteRate int
 	var foundFormat bool
 	var dataBytes int64
@@ -64,7 +65,18 @@ func parseWAV(path string) (AudioObservation, error) {
 			if _, err := io.ReadFull(file, chunk); err != nil {
 				return o, fmt.Errorf("truncated WAV LIST chunk")
 			}
-			if err := parseWAVInfo(chunk, &o); err != nil {
+			if err := parseWAVInfo(chunk, &infoTags); err != nil {
+				return o, err
+			}
+		case "id3 ", "ID3 ":
+			if size > 16<<20 {
+				return o, fmt.Errorf("WAV metadata too large")
+			}
+			chunk := make([]byte, int(size))
+			if _, err := io.ReadFull(file, chunk); err != nil {
+				return o, fmt.Errorf("truncated WAV ID3 chunk")
+			}
+			if err := parseID3Chunk(chunk, &o); err != nil {
 				return o, err
 			}
 		case "data":
@@ -91,8 +103,44 @@ func parseWAV(path string) (AudioObservation, error) {
 		o.DurationSeconds = float64(dataBytes) / float64(byteRate)
 		o.Bitrate = byteRate * 8 / 1000
 	}
+	if err := mergeWAVInfo(&o, infoTags); err != nil {
+		return o, err
+	}
 	finalizeTags(&o)
 	return applyFilenameFallback(path, o), nil
+}
+
+// mergeWAVInfo 在 ID3 全部读完后，用 INFO 补齐缺失字段和署名角色。
+func mergeWAVInfo(observation *AudioObservation, info AudioObservation) error {
+	if observation.Title == "" {
+		observation.Title = info.Title
+	}
+	if observation.Album == "" {
+		observation.Album = info.Album
+	}
+	roles := make(map[string]bool)
+	if observation.Artist != "" {
+		roles["track_artist"] = true
+	}
+	for _, credit := range observation.Credits {
+		roles[credit.Role] = true
+	}
+	for _, entry := range observation.ArtistTagEvidence {
+		roles[entry.Role] = true
+	}
+	for _, entry := range info.ArtistTagEvidence {
+		if !roles[entry.Role] {
+			if err := captureArtistTagRole(observation, entry.Role, entry.TagKey, entry.RawValue); err != nil {
+				return err
+			}
+		}
+	}
+	for _, credit := range info.Credits {
+		if !roles[credit.Role] {
+			appendObservationCredit(observation, credit)
+		}
+	}
+	return nil
 }
 
 func parseWAVFormat(chunk []byte, observation *AudioObservation, byteRate *int) error {

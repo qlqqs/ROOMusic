@@ -58,7 +58,7 @@ func parseAIFF(path string) (AudioObservation, error) {
 			}
 			switch chunk.id {
 			case "ID3 ", "id3 ":
-				if err := parseAIFFID3(data, &observation); err != nil {
+				if err := parseID3Chunk(data, &observation); err != nil {
 					return err
 				}
 			case "NAME":
@@ -188,9 +188,9 @@ func aiffSoundRange(reader io.ReaderAt, chunk aiffChunk) (int64, int64, error) {
 	return chunk.start + 8 + offset, chunk.start + chunk.size, nil
 }
 
-func parseAIFFID3(data []byte, observation *AudioObservation) error {
+func parseID3Chunk(data []byte, observation *AudioObservation) error {
 	if len(data) < 10 || string(data[:3]) != "ID3" || data[6]|data[7]|data[8]|data[9] >= 0x80 {
-		return fmt.Errorf("invalid AIFF ID3 header")
+		return fmt.Errorf("invalid ID3 chunk header")
 	}
 	length := int(data[6])<<21 | int(data[7])<<14 | int(data[8])<<7 | int(data[9])
 	end := 10 + length
@@ -198,7 +198,7 @@ func parseAIFFID3(data []byte, observation *AudioObservation) error {
 		end += 10
 	}
 	if end > len(data) {
-		return fmt.Errorf("truncated AIFF ID3 tag")
+		return fmt.Errorf("truncated ID3 chunk tag")
 	}
 	return parseID3Frames(data[10:10+length], observation, data[3], data[5])
 }

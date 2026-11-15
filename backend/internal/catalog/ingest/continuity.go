@@ -81,14 +81,20 @@ func continuousObservations(observations []SourceObservation, filenames map[stri
 	return continuousAlbum(mixed) || continuousAlbum(filenameOnly)
 }
 
+// observationFormat 返回格式拆分与内嵌封面去重共用的格式键。
+func observationFormat(observation SourceObservation) string {
+	format := strings.ToLower(observation.Codec)
+	if format == "" {
+		format = strings.TrimPrefix(strings.ToLower(filepath.Ext(observation.RelativePath)), ".")
+	}
+	return format
+}
+
 // splitContinuousFormats 先验证各格式完整，再要求所采用的连续性证据存在跨格式重号。
 func splitContinuousFormats(observations []SourceObservation, filenames map[string]filenameNumbers) map[string][]SourceObservation {
 	formats := map[string][]SourceObservation{}
 	for _, observation := range observations {
-		format := strings.ToLower(observation.Codec)
-		if format == "" {
-			format = strings.TrimPrefix(strings.ToLower(filepath.Ext(observation.RelativePath)), ".")
-		}
+		format := observationFormat(observation)
 		formats[format] = append(formats[format], observation)
 	}
 	if len(formats) < 2 {

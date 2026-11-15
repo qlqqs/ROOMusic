@@ -13,7 +13,9 @@
 - `.aac .dsf .dff .wma .mka .tak` 只进入不支持格式诊断，不解析、不入库；TAK 不再静默忽略。
   扩展名表统一由 `library/scan_filter.go` 维护；不支持格式按下表诊断、计跳过并保住旧来源，不令 root 不完整。
 - APE/WavPack 共用 APEv2 页脚标签（可位于 ID3v1 之前），文本多值逐个交给 `setAudioTag`，`TRACK`/`DISC` 映射到位置键；
-  前封面只接收 JPEG/PNG，畸形标签整段忽略。AIFF 读取 ID3 块，`NAME`/`AUTH` 只补缺失值；缺标签统一使用文件名兜底。
+  前封面只接收 JPEG/PNG，畸形标签整段忽略。AIFF 读取 ID3 块，`NAME`/`AUTH` 只补缺失值；WAV 读取 `id3 `/`ID3 ` 块（与 AIFF 共用 `parseID3Chunk`），ID3 为准，`LIST/INFO` 在全部块读完后只补缺失字段与未出现的署名角色，块顺序不影响结果；
+  FLAC 读取 PICTURE 块（类型 6），FLAC/Ogg/Opus 的 Vorbis 注释读取 Base64 `METADATA_BLOCK_PICTURE`（键名不区分大小写、仅该键可超过 1 MiB、MIME 为 `-->` 的外链图片忽略、结构非法静默忽略）；
+  所有格式经 `offerArtwork` 选图：图片类型 3（正面封面）优先，否则先到先得，M4A `covr` 与 APEv2 取第一张；缺标签统一使用文件名兜底。
   三种格式在全部标签读完后、文件名兜底之前统一调用 `finalizeTags`，与 FLAC/MP3 共用专辑艺人、作品/乐章、歌词头部署名和原始年份回退规则；APEv2 的同名作品与署名键直接复用 `setAudioTag`，不另建映射逻辑。
 
 - 扫描只读取 active roots；本地文件或子目录失败按下表诊断并登记保住，不再单独令 root 不完整。只有全根完整的 `succeeded` 才做 missing 对账；成功且 `skipped_files>0` 照常对账。

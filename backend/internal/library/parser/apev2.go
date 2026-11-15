@@ -164,6 +164,5 @@ func applyAPEv2Artwork(value []byte, observation *AudioObservation) {
 	default:
 		return
 	}
-	observation.Artwork = append([]byte(nil), image...)
-	observation.ArtworkMIME = mime
+	offerArtwork(observation, image, mime, -1)
 }

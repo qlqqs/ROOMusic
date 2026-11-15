@@ -64,9 +64,10 @@ func parseID3Frames(data []byte, observation *AudioObservation, major, tagFlags 
 		frame := data[offset : offset+frameSize]
 		offset += frameSize
 		if frameID == "APIC" {
-			if artwork, mimeType, ok := parseID3AttachedPicture(frame); ok {
-				observation.Artwork = artwork
-				observation.ArtworkMIME = mimeType
+			if payload, ok := id3FramePayload(frame, major, formatFlags); ok {
+				if artwork, mimeType, pictureType, valid := parseID3AttachedPicture(payload); valid {
+					offerArtwork(observation, artwork, mimeType, pictureType)
+				}
 			}
 			continue
 		}
@@ -272,18 +273,18 @@ func decodeMP3FrameHeader(header []byte) (bitrate, sampleRate, channels int, val
 	return bitrate, sampleRate, channels, bitrate > 0 && sampleRate > 0
 }
 
-func parseID3AttachedPicture(frame []byte) ([]byte, string, bool) {
+func parseID3AttachedPicture(frame []byte) ([]byte, string, int, bool) {
 	if len(frame) < 4 {
-		return nil, "", false
+		return nil, "", 0, false
 	}
 	mimeLength := bytes.IndexByte(frame[1:], 0)
 	if mimeLength < 1 || mimeLength > 255 {
-		return nil, "", false
+		return nil, "", 0, false
 	}
 	mimeEnd := 1 + mimeLength
 	descriptionStart := mimeEnd + 2
 	if descriptionStart > len(frame) {
-		return nil, "", false
+		return nil, "", 0, false
 	}
 
 	dataStart := -1
@@ -300,16 +301,16 @@ func parseID3AttachedPicture(frame []byte) ([]byte, string, bool) {
 			}
 		}
 	default:
-		return nil, "", false
+		return nil, "", 0, false
 	}
 	if dataStart < 0 || dataStart >= len(frame) {
-		return nil, "", false
+		return nil, "", 0, false
 	}
 	mimeType := strings.ToLower(strings.TrimSpace(string(frame[1:mimeEnd])))
 	if mimeType == "" {
-		return nil, "", false
+		return nil, "", 0, false
 	}
-	return append([]byte(nil), frame[dataStart:]...), mimeType, true
+	return frame[dataStart:], mimeType, int(frame[mimeEnd+1]), true
 }
 
 func decodeID3Text(frame []byte) string {

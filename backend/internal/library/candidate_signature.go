@@ -57,11 +57,11 @@ func candidateSignature(root registeredRoot, candidate ingest.OrganizedCandidate
 			return "", err
 		}
 	}
-	for relativePath, err := range listFolderArtworkCandidates(root.Path, candidate.ArtworkDirectories(), root.filter) {
+	for item, err := range listFolderArtworkCandidates(root, candidate) {
 		if err != nil {
 			return "", err
 		}
-		if err := appendFile("a", relativePath); err != nil {
+		if err := appendFile("a", item.RelativePath); err != nil {
 			return "", err
 		}
 	}

@@ -461,7 +461,7 @@ func TestPostgreSQLIncrementalParseCacheDeferredArtworkSurvivesAddedTrack(t *tes
 	artwork := pngArtworkOfWidth(9)
 	writeIncrementalTestMP3(t, root, "Album/01.mp3", 1, 1, artwork)
 	writeIncrementalTestMP3(t, root, "Album/02.mp3", 2, 2, nil)
-	writeScanFixtureFile(t, root, "Album/cover.png", pngArtworkOfWidth(3))
+	writeScanFixtureFile(t, root, "Album/scans/front.png", pngArtworkOfWidth(3))
 	runIncrementalTestScan(t, service, logs, root)
 	releaseID := assertIncrementalTestManagedArtwork(t, fixture, service, root, artwork)
 	before := readIncrementalTestTracks(t, fixture, root)

@@ -58,6 +58,9 @@ type OrganizedCandidate struct {
 	CatalogNumber              string
 	Edition, Label, Barcode    string
 
+	// OriginalKind 仅 format_split 填写切分前种类。
+	OriginalKind CandidateKind
+
 	// VersionGroup 相同的候选是同一专辑的格式版本，写入时供调用方选择目标组。
 	VersionGroup string
 	// JoinGroupID 仅用于新建发行；已有发行的组保持不变。
@@ -796,6 +799,7 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 		sort.Slice(obs, func(i, j int) bool { return observationSortKey(obs[i]) < observationSortKey(obs[j]) })
 		c := OrganizedCandidate{Anchor: CandidateAnchor{Kind: b.kind, Scope: b.scope, Partition: stableAnchorPartition(b.kind, b.partition, obs)}, ReleaseGroupKey: key, Mediums: map[int][]OrganizedTrack{}, MediumTitles: map[int]string{}}
 		if b.kind == CandidateFormatSplit {
+			c.OriginalKind = b.originalKind
 			c.VersionGroup = "format:" + b.scope
 		}
 		folderDecisionScope := b.scope
@@ -1090,15 +1094,32 @@ func resolveCueCandidateGroups(observations []SourceObservation) []SourceObserva
 				survivors[index] = mergeSingleCueEvidence(survivors[index], group.cues)
 			}
 		}
-		if len(survivors) > 0 && len(survivors[0].Artwork) == 0 && !survivors[0].ArtworkDeferred {
-			for _, member := range members {
-				if len(member.Artwork) > 0 || member.ArtworkDeferred {
-					survivors[0].Artwork = append([]byte(nil), member.Artwork...)
-					survivors[0].ArtworkMIME = member.ArtworkMIME
-					survivors[0].ArtworkDeferred = member.ArtworkDeferred
-					survivors[0].ArtworkRelativePath = member.ArtworkRelativePath
-					break
+		// 按原暂存键保留封面；被 CUE 淘汰的来源迁移到尚无封面的幸存曲目。
+		artworkScopes := map[string]bool{}
+		for _, survivor := range survivors {
+			if len(survivor.Artwork) > 0 || survivor.ArtworkDeferred {
+				artworkScopes[observationArtworkScope(survivor)] = true
+			}
+		}
+		for _, member := range members {
+			if len(member.Artwork) == 0 && !member.ArtworkDeferred {
+				continue
+			}
+			scope := observationArtworkScope(member)
+			if artworkScopes[scope] {
+				continue
+			}
+			for index := range survivors {
+				if len(survivors[index].Artwork) > 0 || survivors[index].ArtworkDeferred {
+					continue
 				}
+				survivors[index].Artwork = append([]byte(nil), member.Artwork...)
+				survivors[index].ArtworkMIME = member.ArtworkMIME
+				survivors[index].ArtworkDeferred = member.ArtworkDeferred
+				survivors[index].ArtworkRelativePath = member.ArtworkRelativePath
+				survivors[index].ArtworkScope = scope
+				artworkScopes[scope] = true
+				break
 			}
 		}
 		for _, survivor := range survivors {
@@ -1308,4 +1329,11 @@ func cueParentPath(observation SourceObservation) string {
 func CandidateIdentity(root string, a CandidateAnchor) string {
 	// Partition 只使用安全的相对来源区分符，不包含展示标题。
 	return fmt.Sprintf("%s:v2:%s:%s:%s", metadata.NormalizeValue(root), a.Kind, NormalizedPath(a.Scope), NormalizedPath(a.Partition))
+}
+
+func observationArtworkScope(observation SourceObservation) string {
+	if observation.ArtworkScope != "" {
+		return observation.ArtworkScope
+	}
+	return artworkScope(observation)
 }

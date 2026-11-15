@@ -1,12 +1,12 @@
 package parser
 
 import (
-	"bufio"
+	"bytes"
+	"encoding/base64"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
-	"strings"
 )
 
 func parseFLAC(path string) (AudioObservation, error) {
@@ -50,6 +50,10 @@ func parseFLAC(path string) (AudioObservation, error) {
 			if err := parseVorbisComments(block, &observation); err != nil {
 				return observation, err
 			}
+		case 6:
+			if pictureType, mime, data, ok := parseFLACPicture(block); ok {
+				offerArtwork(&observation, data, mime, pictureType)
+			}
 		}
 	}
 	finalizeTags(&observation)
@@ -86,38 +90,85 @@ func decodeFLACStreamInfo(block []byte) (sampleRate, channels, bitDepth int, tot
 }
 
 func parseVorbisComments(block []byte, observation *AudioObservation) error {
-	reader := bufio.NewReader(strings.NewReader(string(block)))
-	var vendorLength uint32
-	if binary.Read(reader, binary.LittleEndian, &vendorLength) != nil {
+	if len(block) < 4 {
 		return nil
 	}
-	if vendorLength > uint32(len(block)) {
+	vendorLength := binary.LittleEndian.Uint32(block[:4])
+	block = block[4:]
+	if uint64(vendorLength) > uint64(len(block)) {
 		return nil
 	}
-	commentVendor := make([]byte, vendorLength)
-	if _, err := io.ReadFull(reader, commentVendor); err != nil {
+	block = block[vendorLength:]
+	if len(block) < 4 {
 		return nil
 	}
-	var commentCount uint32
-	if binary.Read(reader, binary.LittleEndian, &commentCount) != nil {
-		return nil
-	}
+	commentCount := binary.LittleEndian.Uint32(block[:4])
+	block = block[4:]
 	for index := uint32(0); index < commentCount; index++ {
-		var commentLength uint32
-		if binary.Read(reader, binary.LittleEndian, &commentLength) != nil || commentLength > 1<<20 {
+		if len(block) < 4 {
 			return fmt.Errorf("invalid Vorbis comment")
 		}
-		value := make([]byte, commentLength)
-		if _, err := io.ReadFull(reader, value); err != nil {
+		commentLength := binary.LittleEndian.Uint32(block[:4])
+		block = block[4:]
+		if uint64(commentLength) > uint64(len(block)) {
 			return fmt.Errorf("invalid Vorbis comment")
 		}
-		keyValue := strings.SplitN(string(value), "=", 2)
-		if len(keyValue) != 2 {
+		key, value, found := bytes.Cut(block[:commentLength], []byte("="))
+		block = block[commentLength:]
+		picture := found && bytes.EqualFold(key, []byte("METADATA_BLOCK_PICTURE"))
+		if commentLength > 1<<20 && !picture {
+			return fmt.Errorf("invalid Vorbis comment")
+		}
+		if !found {
 			continue
 		}
-		if err := setAudioTag(observation, keyValue[0], keyValue[1]); err != nil {
+		if picture {
+			decoded, err := base64.StdEncoding.DecodeString(string(value))
+			if err == nil {
+				if pictureType, mime, data, ok := parseFLACPicture(decoded); ok {
+					offerArtwork(observation, data, mime, pictureType)
+				}
+			}
+			continue
+		}
+		if err := setAudioTag(observation, string(key), string(value)); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func parseFLACPicture(b []byte) (pictureType int, mime string, data []byte, ok bool) {
+	if len(b) < 8 {
+		return 0, "", nil, false
+	}
+	pictureType = int(binary.BigEndian.Uint32(b[:4]))
+	mimeLength := binary.BigEndian.Uint32(b[4:8])
+	b = b[8:]
+	if uint64(mimeLength) > uint64(len(b)) {
+		return 0, "", nil, false
+	}
+	mime = string(b[:mimeLength])
+	if mime == "-->" {
+		return 0, "", nil, false
+	}
+	b = b[mimeLength:]
+	if len(b) < 4 {
+		return 0, "", nil, false
+	}
+	descriptionLength := binary.BigEndian.Uint32(b[:4])
+	b = b[4:]
+	if uint64(descriptionLength) > uint64(len(b)) {
+		return 0, "", nil, false
+	}
+	b = b[descriptionLength:]
+	if len(b) < 20 {
+		return 0, "", nil, false
+	}
+	dataLength := binary.BigEndian.Uint32(b[16:20])
+	b = b[20:]
+	if uint64(dataLength) > uint64(len(b)) {
+		return 0, "", nil, false
+	}
+	return pictureType, mime, b[:dataLength], true
 }

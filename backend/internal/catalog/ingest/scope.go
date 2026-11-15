@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 )
 
@@ -19,4 +20,17 @@ func OrganizationScope(observation SourceObservation) string {
 		return "root-source:" + NormalizedPath(observation.RelativePath)
 	}
 	return "directory:" + location.dir
+}
+
+// artworkScope 按目录、专辑与格式保留内嵌封面；根内无专辑的散曲按路径区分。
+// JSON 字符串编码保留键的边界，同时避免把 NUL 写入 PostgreSQL jsonb。
+func artworkScope(observation SourceObservation) string {
+	location := locateObservation(observation)
+	album := albumEvidence(observation)
+	key := "dir:" + location.dir + "\x00" + album + "\x00" + observationFormat(observation)
+	if location.dir == "" && album == "" {
+		key = "path:" + NormalizedPath(observation.RelativePath)
+	}
+	encoded, _ := json.Marshal(key)
+	return string(encoded)
 }
