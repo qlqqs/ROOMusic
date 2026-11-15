@@ -42,6 +42,7 @@
   标签按 `/、&` 拆子标签，先整体查角色/乐器表，未命中再按连续中文段、拉丁段查表；至少一项命中才是署名行，首次非署名行结束整个块。
   所有命中项均产出；没有细分的角色 detail 为空，带细分的工种与乐器保留命中子标签原文（如“混音工程师”“Guitar”），不改成标签来源的规范键。
   名字按共用规则拆分并去掉 `@` 起的团体/工作室后缀（去后为空则保留原文），`Source="lyrics"`；某角色已有 tag 署名时，该角色全部歌词署名丢弃。
+  署名随生效的歌词走：外置 `.lrc` 生效时，scanner 在缓存之外的观察副本上调用 `parser.ApplyExternalLyrics`，删除从内嵌歌词抽出的 `Source="lyrics"` 署名，按同一规则从 `.lrc` 开头重新抽取；`InferredFields["title"]` 为真时视作空标题（见[歌词合同](./lyrics-contracts.md) §3a）。
   ④ 首次合入以全部 M/O/T 规则为版本 1 基线；从尚无解析缓存的 main 升级后首扫重新解析。艺人图/搜索投影版本为4/2，不改 textnorm.Version。
 - `AudioObservation.Compilation bool` 经 scanner 原样传给 `SourceObservation.Compilation`（JSON `compilation,omitempty`）。
   Vorbis 的 `COMPILATION/ITUNESCOMPILATION`、ID3 的 `TCMP/TXXX:COMPILATION`、M4A 的 `----:COMPILATION` 去空白、小写后任一为

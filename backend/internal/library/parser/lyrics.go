@@ -6,24 +6,31 @@ import (
 	"strings"
 	"unicode/utf16"
 	"unicode/utf8"
+
+	"github.com/qlqq/roomusic/backend/internal/catalog/metadata"
+	"golang.org/x/text/encoding/simplifiedchinese"
 )
 
-// 歌词的来源键：写入 tracks.lyrics_source（迁移 0015 的约束取这四个值），说明歌词取自哪种标签。
+// 歌词的来源键：写入 tracks.lyrics_source，区分内嵌标签与外置文件。
 const (
 	LyricsSourceVorbisLyrics   = "vorbis_lyrics"
 	LyricsSourceVorbisUnsynced = "vorbis_unsyncedlyrics"
 	LyricsSourceMP4            = "mp4_lyr"
 	LyricsSourceID3USLT        = "id3_uslt"
+	LyricsSourceLRCFile        = "lrc_file"
 )
 
 // MaxLyricsBytes 是保存的歌词原文（规范化之后）的上限。
 const MaxLyricsBytes = 64 << 10
 
+// MaxExternalLyricsBytes 是外置歌词解码前的原始字节上限。
+const MaxExternalLyricsBytes = 256 << 10
+
 // maxLyricsFrameTextBytes 是 USLT 帧里歌词文本解码前的上限：规范化后不超过 MaxLyricsBytes 的歌词，原文远小于它。
 // 先按它拒绝，避免为一个异常大的帧分配数倍于其大小的临时内存。
 const maxLyricsFrameTextBytes = 4 * MaxLyricsBytes
 
-// NormalizeLyrics 规范化内嵌歌词原文：去掉 UTF-8 BOM；`\r\n` 与 `\r` 改为 `\n`；删除 NUL 与除 `\n`、`\t` 外的 C0 控制字符；
+// NormalizeLyrics 规范化歌词原文：去掉 UTF-8 BOM；`\r\n` 与 `\r` 改为 `\n`；删除 NUL 与除 `\n`、`\t` 外的 C0 控制字符；
 // 去掉首尾空白。不是合法 UTF-8、规范化后为空或超过 MaxLyricsBytes 时返回 false：歌词缺失不影响曲目可用性，所以不记诊断。
 // 它保留换行与行内空白（与曲目标题等字段使用的 metadata.BoundedText 不同），LRC 的行结构要靠它。
 func NormalizeLyrics(raw string) (string, bool) {
@@ -46,6 +53,52 @@ func NormalizeLyrics(raw string) (string, bool) {
 		return "", false
 	}
 	return normalized, true
+}
+
+// DecodeExternalLyrics 按 BOM、合法 UTF-8、GB18030 的顺序解码并规范化外置歌词；无效或超限时返回 false。
+func DecodeExternalLyrics(data []byte) (string, bool) {
+	if len(data) == 0 || len(data) > MaxExternalLyricsBytes {
+		return "", false
+	}
+	if bytes.HasPrefix(data, []byte{0x00, 0x00, 0xfe, 0xff}) || bytes.HasPrefix(data, []byte{0xff, 0xfe, 0x00, 0x00}) {
+		return "", false
+	}
+	if bytes.HasPrefix(data, []byte{0xef, 0xbb, 0xbf}) {
+		return NormalizeLyrics(string(data[3:]))
+	}
+	if bytes.HasPrefix(data, []byte{0xff, 0xfe}) || bytes.HasPrefix(data, []byte{0xfe, 0xff}) {
+		decoded, ok := decodeID3Lyrics(1, data)
+		if !ok {
+			return "", false
+		}
+		return NormalizeLyrics(decoded)
+	}
+	if utf8.Valid(data) {
+		return NormalizeLyrics(string(data))
+	}
+	decoded, err := simplifiedchinese.GB18030.NewDecoder().Bytes(data)
+	if err != nil || bytes.ContainsRune(decoded, utf8.RuneError) {
+		return "", false
+	}
+	return NormalizeLyrics(string(decoded))
+}
+
+// ApplyExternalLyrics 将已规范化的外置歌词及其署名应用到观察副本，不修改共享的署名切片。
+func ApplyExternalLyrics(observation *AudioObservation, text string) {
+	credits := *observation
+	credits.Credits = make([]metadata.Credit, 0, len(observation.Credits))
+	for _, credit := range observation.Credits {
+		if credit.Source != "lyrics" {
+			credits.Credits = append(credits.Credits, credit)
+		}
+	}
+	credits.Lyrics = text
+	if credits.InferredFields["title"] {
+		credits.Title = ""
+	}
+	addLyricsCredits(&credits)
+	observation.Credits = metadata.CanonicalCredits(credits.Credits)
+	observation.Lyrics, observation.LyricsSource = text, LyricsSourceLRCFile
 }
 
 // setAudioLyrics 处理 Vorbis 注释里的歌词键，返回键是否是歌词键（是则调用方不再按普通标签处理）。

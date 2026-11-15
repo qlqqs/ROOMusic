@@ -9,13 +9,16 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/qlqq/roomusic/backend/internal/library/parser"
 )
 
-// 歌词的显示形态与来源：synced 的每行带开始时间，plain 的每行没有；source 目前只有内嵌标签一种。
+// 歌词的显示形态与来源：synced 的每行带开始时间，plain 的每行没有；source 区分内嵌标签与外置文件。
 const (
 	LyricsKindSynced     = "synced"
 	LyricsKindPlain      = "plain"
 	LyricsSourceEmbedded = "embedded"
+	LyricsSourceExternal = "external"
 )
 
 const (
@@ -44,13 +47,13 @@ type TrackLyrics struct {
 	Lyrics  *Lyrics `json:"lyrics"`
 }
 
-// LoadTrackLyrics 读取 present 曲目的内嵌歌词并解析；曲目不存在或已缺失时返回 ErrTrackNotFound。
+// LoadTrackLyrics 读取 present 曲目的歌词并解析；曲目不存在或已缺失时返回 ErrTrackNotFound。
 // 它只读数据库，不触碰文件系统，也不检查目录状态（歌词是已入库的目录事实，停用目录后仍可浏览）。
 // trackID 必须是 UUID 文本，由调用方在传输层校验。
 func (s *Store) LoadTrackLyrics(ctx context.Context, trackID string) (TrackLyrics, error) {
 	var id string
-	var raw sql.NullString
-	err := s.database.QueryRowContext(ctx, `SELECT id::text, lyrics FROM tracks WHERE id=$1::uuid AND source_status='present'`, trackID).Scan(&id, &raw)
+	var raw, source sql.NullString
+	err := s.database.QueryRowContext(ctx, `SELECT id::text, lyrics, lyrics_source FROM tracks WHERE id=$1::uuid AND source_status='present'`, trackID).Scan(&id, &raw, &source)
 	if errors.Is(err, sql.ErrNoRows) {
 		return TrackLyrics{}, ErrTrackNotFound
 	}
@@ -60,6 +63,9 @@ func (s *Store) LoadTrackLyrics(ctx context.Context, trackID string) (TrackLyric
 	result := TrackLyrics{TrackID: id}
 	if raw.Valid {
 		if lyrics, ok := ParseLyrics(raw.String); ok {
+			if source.String == parser.LyricsSourceLRCFile {
+				lyrics.Source = LyricsSourceExternal
+			}
 			result.Lyrics = &lyrics
 		}
 	}
