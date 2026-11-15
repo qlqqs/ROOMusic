@@ -1,10 +1,10 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useCallback, useEffect, useEffectEvent, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useEffectEvent, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useViewerScope } from "../../auth";
 import { failureOf, isHttpFailure } from "../../../shared/api";
 import { isUuid } from "../../../shared/lib/ids";
-import { Button, FailureNotice, Notice, Page, Panel, QueryContent, Skeleton } from "../../../shared/ui";
+import { Button, FailureNotice, ModalDialog, Notice, Page, Panel, QueryContent, Skeleton, VisuallyHidden } from "../../../shared/ui";
 import type { ReleaseDetailDTO, ReleaseGroupDetailDTO, ReleaseSummaryDTO, ReleaseTrackDTO } from "../api/decoders";
 import type { AlbumSearch } from "../album-search";
 import { albumArtistOf } from "../format";
@@ -17,6 +17,7 @@ import { AlbumHeader } from "./album-header";
 import { EvidenceSection } from "./evidence-section";
 import { ReleaseFacts } from "./release-facts";
 import { ReleaseMedia, type TrackLocate } from "./release-media";
+import { TrackInfo, type TrackPlace } from "./track-info";
 import { VersionNav } from "./version-nav";
 
 /** 标题超过这个长度（字符数）时降一级字号，完整显示并换行。 */
@@ -32,8 +33,10 @@ export type ReleaseActionsContext = { release: ReleaseDetailDTO; groupId: string
 type PlaybackSlots = {
   /** 头部的操作区（一条操作行与它下方的提示）；版本详情到达之后才渲染。传入稳定的函数引用。 */
   renderReleaseActions?: ((context: ReleaseActionsContext) => ReactNode) | undefined;
-  /** 每行的动作；传入稳定的函数引用，曲目行才能跳过没有变化的重绘。 */
-  renderTrackActions?: ((track: ReleaseTrackDTO, release: ReleaseDetailDTO) => ReactNode) | undefined;
+  /** 每行的动作；传入稳定的函数引用，曲目行才能跳过没有变化的重绘。showInfo 选中这一行并把焦点移到“曲目信息”（菜单里的“曲目信息”用它）。 */
+  renderTrackActions?: ((track: ReleaseTrackDTO, release: ReleaseDetailDTO, showInfo: () => void) => ReactNode) | undefined;
+  /** “曲目信息”里需要别的模块的项（响度），渲染成 <dt>/<dd>；传入稳定的函数引用。 */
+  renderTrackFacts?: ((trackId: string) => ReactNode) | undefined;
   /** 播放器的当前曲目与它的状态文字（“正在播放”“已暂停”……）；catalog 只按它显示标记，不判断播放状态。 */
   currentTrackId?: string | undefined;
   currentTrackLabel?: string | undefined;
@@ -92,23 +95,103 @@ type ReleaseBodyProps = PlaybackSlots & AdminSlots & LocateSlot & {
   isAdmin: boolean;
 };
 
-function ReleaseContent({ groupId, release, versioned, isAdmin, renderAdminSections, renderTrackActions, currentTrackId, currentTrackLabel, currentTrackPlaying, locate, onLocated }: PlaybackSlots & Pick<AdminSlots, "renderAdminSections"> & LocateSlot & { groupId: string; release: ReleaseDetailDTO; versioned: boolean; isAdmin: boolean }) {
+/** 右栏排到曲目下方的宽度（与 .columns 的容器查询相同）：这时曲目信息改为从底部弹出的面板。 */
+const SIDE_BY_SIDE_MIN = 720;
+
+/** 版面是否单栏（右栏在曲目下方）：量 .layout 的宽度；没有 ResizeObserver（jsdom）时按并排处理。 */
+function useStacked(element: RefObject<HTMLElement | null>): boolean {
+  const [stacked, setStacked] = useState(false);
+  useEffect(() => {
+    const node = element.current;
+    if (node === null || typeof ResizeObserver === "undefined") return;
+    const measure = () => setStacked(node.getBoundingClientRect().width < SIDE_BY_SIDE_MIN);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [element]);
+  return stacked;
+}
+
+/** 选中曲目与它在版本里的位置；版本里没有它（换了版本）时是 null。 */
+function findTrack(release: ReleaseDetailDTO, trackId: string | null): { track: ReleaseTrackDTO; place: TrackPlace } | null {
+  if (trackId === null) return null;
+  for (const [mediumIndex, medium] of release.media.entries()) {
+    const index = medium.tracks.findIndex((track) => track.id === trackId);
+    const track = medium.tracks[index];
+    if (track !== undefined) return { track, place: { disc: release.media.length > 1 ? mediumIndex + 1 : null, number: track.position >= 1 ? track.position : index + 1 } };
+  }
+  return null;
+}
+
+/**
+ * 选中的曲目：单击一行选中、再次单击同一行或 Esc 取消；菜单里的“曲目信息”选中并把焦点移到曲目信息的标题。
+ * Esc 在页面上监听：焦点在菜单或对话框里时由它们自己处理。
+ */
+function useTrackSelection() {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const focusPending = useRef(false);
+  const toggle = useCallback((trackId: string) => setSelectedId((current) => (current === trackId ? null : trackId)), []);
+  const show = useCallback((trackId: string) => {
+    focusPending.current = true;
+    setSelectedId(trackId);
+  }, []);
+  const clear = useCallback(() => setSelectedId(null), []);
+  useEffect(() => {
+    if (selectedId === null || !focusPending.current) return;
+    focusPending.current = false;
+    headingRef.current?.focus();
+  }, [selectedId]);
+  useEffect(() => {
+    if (selectedId === null) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (event.target instanceof Element && event.target.closest("dialog, [role='menu']") !== null) return;
+      setSelectedId(null);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [selectedId]);
+  return { selectedId, headingRef, toggle, show, clear };
+}
+
+function ReleaseContent({ groupId, release, versioned, isAdmin, renderAdminSections, renderTrackActions, renderTrackFacts, currentTrackId, currentTrackLabel, currentTrackPlaying, locate, onLocated }: PlaybackSlots & Pick<AdminSlots, "renderAdminSections"> & LocateSlot & { groupId: string; release: ReleaseDetailDTO; versioned: boolean; isAdmin: boolean }) {
+  const selection = useTrackSelection();
+  const { show } = selection;
   // 版本与插槽不变时保持同一个函数，曲目行才能跳过重绘。
-  const renderRowActions = useMemo(() => (renderTrackActions === undefined ? undefined : (track: ReleaseTrackDTO) => renderTrackActions(track, release)), [renderTrackActions, release]);
-  // 全部曲目共有的署名已经在页头列过一次，曲目行只写与它不同的部分。
+  const renderRowActions = useMemo(() => (renderTrackActions === undefined ? undefined : (track: ReleaseTrackDTO) => renderTrackActions(track, release, () => show(track.id))), [renderTrackActions, release, show]);
+  // 全部曲目共有的署名已经在页头列过一次，曲目信息只写与它不同的部分。
   const sharedCredits = useMemo(() => sharedTrackCredits(release.media).keys, [release.media]);
+  const albumArtist = albumArtistOf(release);
+  const layoutRef = useRef<HTMLDivElement>(null);
+  const stacked = useStacked(layoutRef);
+  const sheetTitleId = useId();
+  const selected = findTrack(release, selection.selectedId);
+  const info = selected === null ? null : <TrackInfo track={selected.track} place={selected.place} albumArtist={albumArtist} sharedCredits={sharedCredits} renderExtraFacts={renderTrackFacts} headingRef={selection.headingRef} onClose={selection.clear} />;
   return (
     <>
-      <div className={styles.layout}>
+      <div className={styles.layout} ref={layoutRef}>
         <div className={styles.columns}>
           <Panel title="曲目">
-            <ReleaseMedia media={release.media} albumArtist={albumArtistOf(release)} currentTrackId={currentTrackId} currentTrackLabel={currentTrackLabel} currentTrackPlaying={currentTrackPlaying} sharedCredits={sharedCredits} renderTrackActions={renderRowActions} locate={locate} onLocated={onLocated} />
+            <ReleaseMedia media={release.media} albumArtist={albumArtist} currentTrackId={currentTrackId} currentTrackLabel={currentTrackLabel} currentTrackPlaying={currentTrackPlaying} selectedTrackId={selected?.track.id} onSelectTrack={selection.toggle} renderTrackActions={renderRowActions} locate={locate} onLocated={onLocated} />
           </Panel>
           <aside className={styles.aside} aria-label="发行信息">
             <ReleaseFacts release={release} versioned={versioned} />
+            {stacked ? null : info}
           </aside>
         </div>
       </div>
+      {stacked ? (
+        <ModalDialog open={info !== null} titleId={sheetTitleId} onRequestClose={selection.clear} closeOnBackdrop initialFocus={selection.headingRef} className={styles.sheet}>
+          <div className={styles.sheetBody}>
+            <VisuallyHidden>
+              <span id={sheetTitleId}>曲目信息</span>
+            </VisuallyHidden>
+            {info}
+          </div>
+        </ModalDialog>
+      ) : null}
       <EvidenceSection key={`evidence-${release.id}`} release={release} isAdmin={isAdmin} />
       {isAdmin ? renderAdminSections?.({ release, groupId }) : null}
     </>
@@ -151,7 +234,7 @@ function ReleaseGone({ groupId, group, selected }: { groupId: string; group: Rel
  * 选中版本的整页：页头（经 Page 的 header 插槽，由 AlbumHeader 渲染 h1）、版本导航、曲目、发行信息与证据。
  * 头部用组详情里的摘要先渲染，操作区与曲目区等版本详情；组详情刷新失败但还有旧数据时，错误显示在页头下方。
  */
-function ReleaseBody({ groupId, group, groupFailure, selected, list, isAdmin, renderReleaseActions, renderAdminSections, renderTrackActions, renderReleaseScope, currentTrackId, currentTrackLabel, currentTrackPlaying, albumPlaying = false, locate, onLocated }: ReleaseBodyProps & { groupFailure: ReactNode }) {
+function ReleaseBody({ groupId, group, groupFailure, selected, list, isAdmin, renderReleaseActions, renderAdminSections, renderTrackActions, renderTrackFacts, renderReleaseScope, currentTrackId, currentTrackLabel, currentTrackPlaying, albumPlaying = false, locate, onLocated }: ReleaseBodyProps & { groupFailure: ReactNode }) {
   const detail = useRelease(selected.id);
   const gone = detail.isError && isHttpFailure(failureOf(detail.error), 404);
   const actions =
@@ -171,7 +254,7 @@ function ReleaseBody({ groupId, group, groupFailure, selected, list, isAdmin, re
         <ReleaseGone groupId={groupId} group={group} selected={selected} />
       ) : (
         <QueryContent query={detail} loading={<Skeleton label="正在加载曲目" lines={6} />}>
-          {(data) => <ReleaseContent groupId={groupId} release={data} versioned={group.release_count > 1} isAdmin={isAdmin} renderAdminSections={renderAdminSections} renderTrackActions={renderTrackActions} currentTrackId={currentTrackId} currentTrackLabel={currentTrackLabel} currentTrackPlaying={currentTrackPlaying} locate={locate} onLocated={onLocated} />}
+          {(data) => <ReleaseContent groupId={groupId} release={data} versioned={group.release_count > 1} isAdmin={isAdmin} renderAdminSections={renderAdminSections} renderTrackActions={renderTrackActions} renderTrackFacts={renderTrackFacts} currentTrackId={currentTrackId} currentTrackLabel={currentTrackLabel} currentTrackPlaying={currentTrackPlaying} locate={locate} onLocated={onLocated} />}
         </QueryContent>
       )}
     </Page>
@@ -185,7 +268,7 @@ function canonicalRelease(group: ReleaseGroupDetailDTO, requested: string | unde
   return member === undefined || member.id === group.representative.id ? undefined : member.id;
 }
 
-function AlbumDetailContent({ groupId, release: requested, track, list, isAdmin, renderReleaseActions, renderAdminSections, renderTrackActions, renderReleaseScope, currentTrackId, currentTrackLabel, currentTrackPlaying, albumPlaying }: AlbumDetailViewProps) {
+function AlbumDetailContent({ groupId, release: requested, track, list, isAdmin, renderReleaseActions, renderAdminSections, renderTrackActions, renderTrackFacts, renderReleaseScope, currentTrackId, currentTrackLabel, currentTrackPlaying, albumPlaying }: AlbumDetailViewProps) {
   const group = useAlbum(groupId);
   const navigate = useNavigate();
   const data = group.data;
@@ -228,7 +311,7 @@ function AlbumDetailContent({ groupId, release: requested, track, list, isAdmin,
     );
   }
   const groupFailure = group.status === "error" ? <FailureNotice error={group.error} action={<Button onClick={() => void group.refetch()}>重试</Button>} /> : null;
-  return <ReleaseBody groupId={groupId} group={data} groupFailure={groupFailure} selected={selected} list={list} isAdmin={isAdmin} renderReleaseActions={renderReleaseActions} renderAdminSections={renderAdminSections} renderTrackActions={renderTrackActions} renderReleaseScope={renderReleaseScope} currentTrackId={currentTrackId} currentTrackLabel={currentTrackLabel} currentTrackPlaying={currentTrackPlaying} albumPlaying={albumPlaying} locate={locate} onLocated={onLocated} />;
+  return <ReleaseBody groupId={groupId} group={data} groupFailure={groupFailure} selected={selected} list={list} isAdmin={isAdmin} renderReleaseActions={renderReleaseActions} renderAdminSections={renderAdminSections} renderTrackActions={renderTrackActions} renderTrackFacts={renderTrackFacts} renderReleaseScope={renderReleaseScope} currentTrackId={currentTrackId} currentTrackLabel={currentTrackLabel} currentTrackPlaying={currentTrackPlaying} albumPlaying={albumPlaying} locate={locate} onLocated={onLocated} />;
 }
 
 /**

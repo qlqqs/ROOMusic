@@ -56,25 +56,43 @@ type MenuTriggerProps = {
 
 type Position = { style: CSSProperties; container: Element };
 
+/** 在指定位置打开（右键菜单）：point 是视口坐标，anchor 是菜单所属的元素（通常是曲目行）；关闭后焦点回到打开前的元素。 */
+export type OpenMenuAt = (point: { x: number; y: number }, anchor: HTMLElement) => void;
+
 /**
  * 菜单的状态、键盘与浮层；触发器由调用方渲染，把 triggerProps 展开到一个按钮上。
  * 浮层渲染到触发器所在的模态 <dialog> 里（没有时是 body）：模态对话框之外的内容是惰性的，放在 body 上就点不到。
  * 浮在文档层也避免被曲目分段的 content-visibility 裁切。
  */
-export function useMenu({ label, actions, placement = "below", matchTriggerWidth = false }: MenuOptions): { triggerProps: MenuTriggerProps; menu: ReactNode; open: boolean } {
+export function useMenu({ label, actions, placement = "below", matchTriggerWidth = false }: MenuOptions): { triggerProps: MenuTriggerProps; menu: ReactNode; open: boolean; openAt: OpenMenuAt } {
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
+  // 按坐标打开时：菜单锚在哪个元素上（滚动移动它就关闭），关闭后焦点回到哪里。按触发器打开时两者都是空的。
+  const anchorElement = useRef<HTMLElement | null>(null);
+  const restoreTo = useRef<HTMLElement | null>(null);
   const menu = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<Position | null>(null);
   const first = useRef<"first" | "last">("first");
   const items = () => Array.from(menu.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? []);
   function close(restore = true) {
     setPosition(null);
-    if (restore) trigger.current?.focus();
+    if (restore) (restoreTo.current ?? trigger.current)?.focus();
+  }
+  function openAt(point: { x: number; y: number }, anchor: HTMLElement) {
+    const width = 240;
+    anchorElement.current = anchor;
+    const active = document.activeElement;
+    // 已经打开时再次触发（键盘菜单键后浏览器补发的 contextmenu）：焦点已在菜单里，沿用原来的归还目标。
+    if (!(active instanceof Node && menu.current?.contains(active))) restoreTo.current = active instanceof HTMLElement && active !== document.body ? active : anchor;
+    first.current = "first";
+    const left = Math.max(8, Math.min(point.x, window.innerWidth - width - 8));
+    setPosition({ style: { left, top: point.y }, container: anchor.closest("dialog") ?? document.body });
   }
   function open(edge: "first" | "last" = "first") {
     const element = trigger.current;
     if (element === null) return;
+    anchorElement.current = null;
+    restoreTo.current = null;
     const rect = element.getBoundingClientRect();
     first.current = edge;
     const width = matchTriggerWidth ? Math.min(Math.max(rect.width, 200), window.innerWidth - 16) : 240;
@@ -90,19 +108,20 @@ export function useMenu({ label, actions, placement = "below", matchTriggerWidth
     if (position === null) return;
     const buttons = items();
     const rect = menu.current?.getBoundingClientRect();
-    if (placement === "below" && rect !== undefined && rect.bottom > window.innerHeight - 8) {
+    if ((placement === "below" || anchorElement.current !== null) && rect !== undefined && rect.bottom > window.innerHeight - 8) {
       menu.current?.style.setProperty("top", `${Math.max(8, window.innerHeight - rect.height - 8)}px`);
     }
     if (menu.current !== null) menu.current.scrollTop = first.current === "last" ? menu.current.scrollHeight : 0;
     // 先把菜单移入视口，再聚焦；靠底边打开时不触发页面滚动，否则滚动监听会立即把菜单关闭。
     (first.current === "last" ? buttons.at(-1) : buttons[0])?.focus({ preventScroll: true });
-    const anchor = trigger.current?.getBoundingClientRect();
+    const anchorOf = () => (anchorElement.current ?? trigger.current)?.getBoundingClientRect();
+    const anchor = anchorOf();
     const dismiss = (event: PointerEvent) => {
       if (event.target instanceof Node && !menu.current?.contains(event.target) && !trigger.current?.contains(event.target)) setPosition(null);
     };
     const resized = () => setPosition(null);
     const moved = () => {
-      const current = trigger.current?.getBoundingClientRect();
+      const current = anchorOf();
       // 点按前浏览器把触发器滚入视口的 scroll 事件可能迟到；只有打开后锚点真的移动才关闭，菜单内部滚动也不关闭。
       if (current?.top !== anchor?.top || current?.left !== anchor?.left) setPosition(null);
     };
@@ -156,7 +175,7 @@ export function useMenu({ label, actions, placement = "below", matchTriggerWidth
       </div>}
     </Fragment>)}
   </div>, position.container);
-  return { triggerProps, menu: content, open: position !== null };
+  return { triggerProps, menu: content, open: position !== null, openAt };
 }
 
 /** iconOnly 时触发器只显示图标（必须给 icon），label 作为读屏名和悬停提示。 */

@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FavoriteAlbumDTO, FavoriteTrackDTO, FavoriteTracksPageDTO } from "../features/personal/api/decoders";
@@ -113,12 +113,43 @@ describe("收藏曲目旧地址迁移", () => {
 });
 
 describe("收藏页的保留行与服务端列表", () => {
+  it("右键曲目行在指针处打开播放菜单，右键行内链接保留浏览器菜单", async () => {
+    setup();
+    renderApp({ path: "/me/liked" });
+    await screen.findByRole("table", { name: "收藏的曲目" });
+    const trackRow = row(first.track.title);
+    expect(fireEvent.contextMenu(within(trackRow).getByRole("link"), { button: 2 })).toBe(true);
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(fireEvent.contextMenu(trackRow, { button: 2, clientX: 180, clientY: 220 })).toBe(false);
+    const menu = screen.getByRole("menu", { name: `《${first.track.title}》的操作` });
+    const items = within(menu).getAllByRole("menuitem");
+    expect(items[0]?.textContent).toBe("播放");
+    expect(within(menu).getByRole("menuitem", { name: "下一首播放" })).toBeTruthy();
+    expect(menu.style.left).toBe("180px");
+    expect(menu.style.top).toBe("220px");
+    expect(document.activeElement).toBe(items[0]);
+  });
+
+  it.each([{ key: "F10", shiftKey: true }, { key: "ContextMenu" }])("行内按钮按 $key 打开菜单，Esc 后焦点回到原按钮", async (keys) => {
+    setup();
+    renderApp({ path: "/me/liked" });
+    await screen.findByRole("table", { name: "收藏的曲目" });
+    const trigger = within(row(first.track.title)).getByRole("button", { name: "更多操作" });
+    trigger.focus();
+    fireEvent.keyDown(trigger, keys);
+    const menu = screen.getByRole("menu", { name: `《${first.track.title}》的操作` });
+    expect(document.activeElement).toBe(within(menu).getAllByRole("menuitem")[0]);
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it("曲目表头按统一列顺序显示且不含收藏时间", async () => {
     setup();
     renderApp({ path: "/me/liked" });
     const table = await screen.findByRole("table", { name: "收藏的曲目" });
     expect(Array.from(table.querySelectorAll('[role="columnheader"]')).map((cell) => cell.textContent)).toEqual([
-      "#序号", "标题", "专辑艺人", "专辑", "发行", "操作", "时长",
+      "#序号", "标题", "艺人", "专辑", "发行", "操作", "时长",
     ]);
     expect(within(table).queryByText("收藏时间")).toBeNull();
   });
@@ -199,7 +230,7 @@ describe("收藏页的保留行与服务端列表", () => {
     await userEvent.click(screen.getByRole("button", { name: "刷新" }));
     expect(await screen.findByText("收藏曲目 3", { exact: true })).toBeTruthy();
     expect(screen.queryByText(first.track.title, { exact: true })).toBeNull();
-    expect(visibleTitles()).toEqual(["收藏曲目 3曲目艺人 3", "收藏曲目 2曲目艺人 2"]);
+    expect(visibleTitles()).toEqual(["收藏曲目 3", "收藏曲目 2"]);
     expect(screen.queryByText("列表有更新。", { exact: false })).toBeNull();
   });
 

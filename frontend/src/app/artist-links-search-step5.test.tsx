@@ -44,7 +44,7 @@ describe("艺人名字链接与回退", () => {
     first.artist = "无法解析的原始署名";
     first.artist_refs = [];
     renderApp({ path: `/artists/${id}` });
-    const cell = within(await screen.findByRole("row", { name: /曲目1-1/ })).getByRole("rowheader");
+    const cell = within(await screen.findByRole("row", { name: /曲目1-1/ })).getByRole("cell", { name: "无法解析的原始署名" });
     expect(within(cell).getByText("无法解析的原始署名")).toBeTruthy();
     expect(within(cell).queryByRole("link")).toBeNull();
     expect(cell.textContent).not.toContain("整理");
@@ -65,7 +65,8 @@ describe("艺人名字链接与回退", () => {
     first.artist_refs = [{ artist_id: id, name: "邓麗君", display_name: "邓丽君" }, { artist_id: artistTestId(2), name: "第二位", display_name: "第二主名" }];
     const { runtime } = renderApp({ path: `/artists/${id}` });
     const row = await screen.findByRole("row", { name: /曲目1-1/ });
-    const cell = within(row).getByRole("rowheader");
+    const cell = within(row).getByRole("cell", { name: "邓麗君 / 第二位" });
+    expect(within(row).getByRole("rowheader").textContent).toBe(first.title);
     expect(within(cell).getByRole("link", { name: "邓麗君" }).getAttribute("href")).toBe(`/artists/${id}`);
     expect(within(cell).getByRole("link", { name: "第二位" }).getAttribute("href")).toBe(`/artists/${artistTestId(2)}`);
     expect(cell.textContent).toContain("邓麗君 / 第二位");
@@ -88,7 +89,7 @@ describe("艺人名字链接与回退", () => {
     first.release.album_artist_refs = [{ artist_id: artistTestId(56), name: "专辑署名", display_name: "专辑主名" }];
     first.release.artist_refs = [{ artist_id: artistTestId(57), name: "发行署名", display_name: "发行主名" }];
     renderApp({ path: `/artists/${id}` });
-    const cell = within(await screen.findByRole("row", { name: /曲目1-1/ })).getByRole("rowheader");
+    const cell = within(await screen.findByRole("row", { name: /曲目1-1/ })).getByRole("cell", { name: hasAlbumArtist ? "专辑署名" : "发行署名" });
     expect(within(cell).getByRole("link", { name: hasAlbumArtist ? "专辑署名" : "发行署名" }).getAttribute("href")).toBe(`/artists/${artistTestId(hasAlbumArtist ? 56 : 57)}`);
     expect(within(cell).queryByText("不应出现")).toBeNull();
   });

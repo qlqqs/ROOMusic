@@ -275,7 +275,7 @@ describe("歌单详情的顺序、冲突与稳定重试", () => {
     renderApp({ path: pagePath });
     const table = await screen.findByRole("table", { name: "歌单曲目" });
     expect(Array.from(table.querySelectorAll('[role="columnheader"]')).map((cell) => cell.textContent)).toEqual([
-      "调整顺序", "#序号", "标题", "专辑艺人", "专辑", "发行", "操作", "时长",
+      "调整顺序", "#序号", "标题", "艺人", "专辑", "发行", "操作", "时长",
     ]);
   });
 

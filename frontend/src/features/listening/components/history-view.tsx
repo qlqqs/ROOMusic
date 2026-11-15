@@ -30,7 +30,7 @@ type Outcome = { kind: "removed"; title: string; page: number } | { kind: "clear
 
 /** 文件缺失的行整行灰色；“文件缺失”标签用文字表达同一件事，不只靠颜色。 */
 function Muted({ item, children }: { item: HistoryItemDTO; children: ReactNode }) {
-  return <div className={item.present ? undefined : styles.missing}>{children}</div>;
+  return <span className={item.present ? undefined : styles.missing}>{children}</span>;
 }
 
 /** 时间：日期与时分各自一段、不在中间换行；两段之间仍是一个空格，文字内容与 formatDateTime 的结果相同。 */
@@ -89,12 +89,12 @@ export function HistoryView({ page, renderPlayAll, renderTrackActions, renderRow
         id: "track",
         header: "曲目",
         rowHeader: true,
+        truncate: true,
+        width: "30%",
+        cellTitle: (item) => historyTitleOf(item),
         cell: (item) => (
           <Muted item={item}>
             <span className={styles.title}>{historyTitleOf(item)}</span>
-            <span className={styles.artist}>
-              <ArtistNames text={historyArtistOf(item)} refs={trackArtistRefsOf(item)} />
-            </span>
             {item.present ? null : (
               <span className={styles.tag}>
                 <StatusTag tone="outline">文件缺失</StatusTag>
@@ -104,8 +104,25 @@ export function HistoryView({ page, renderPlayAll, renderTrackActions, renderRow
         ),
       },
       {
+        id: "artist",
+        header: "艺人",
+        truncate: true,
+        width: "18%",
+        secondary: true,
+        cellTitle: (item) => historyArtistOf(item),
+        cell: (item) => (
+          <Muted item={item}>
+            <ArtistNames text={historyArtistOf(item)} refs={trackArtistRefsOf(item)} />
+          </Muted>
+        ),
+      },
+      {
         id: "album",
         header: "专辑",
+        truncate: true,
+        width: "22%",
+        secondary: true,
+        cellTitle: (item) => item.release.title,
         cell: (item) => (
           <Muted item={item}>
             {item.present ? (
@@ -144,7 +161,7 @@ export function HistoryView({ page, renderPlayAll, renderTrackActions, renderRow
     [renderTrackActions],
   );
 
-  const table = (items: readonly HistoryItemDTO[]) => <DataTable caption="播放历史" columns={columns} rows={items} rowKey={(item) => item.track_id} />;
+  const table = (items: readonly HistoryItemDTO[]) => <DataTable caption="播放历史" columns={columns} rows={items} rowKey={(item) => item.track_id} contextRows />;
   const hasHistory = history.data?.has_history === true;
   const closeRemove = () => setRemoving(null);
   const closeClear = () => setClearing(false);

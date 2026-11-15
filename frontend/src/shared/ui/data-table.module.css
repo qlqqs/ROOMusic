@@ -64,6 +64,17 @@
   min-width: 0;
 }
 
+/* 只占一行的列：max-width: 0 让列宽按表格分配而不是被长文字撑开，内容末尾省略。 */
+.table .truncate {
+  max-width: 0;
+}
+
+.table .truncate > .value {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 @container (max-width: 639px) {
   .table,
   .table thead,
@@ -137,5 +148,75 @@
 
   .table .numeric {
     text-align: start;
+  }
+
+  /*
+   * 有 secondary 列的表（曲目列表）：第一行是行标题与行尾动作，第二行是 secondary 列合成的一行淡色小字（“艺人 · 专辑”），
+   * 其余列仍是带标签的整行。用弹性换行加 order 排：伪元素是第一行与第二行之间的强制换行。
+   */
+  .compound tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: var(--space-2) 0;
+  }
+
+  .compound tr::before {
+    content: "";
+    order: 2;
+    flex-basis: 100%;
+  }
+
+  .compound tr > .rowHeader {
+    order: 0;
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .compound tr > .beside {
+    order: 1;
+    flex: none;
+  }
+
+  .compound tr > * {
+    order: 4;
+    flex-basis: 100%;
+  }
+
+  .compound tr > .secondary {
+    order: 3;
+    display: block;
+    flex: 0 1 auto;
+    max-width: 100%;
+    min-width: 0;
+    padding: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--text-secondary);
+    font-size: var(--fs-12);
+  }
+
+  .compound tr > .secondary > .value {
+    display: inline;
+    white-space: nowrap;
+  }
+
+  .compound tr > .secondary::before {
+    content: none;
+  }
+
+  .compound tr > .secondary ~ .secondary::before {
+    content: "·";
+    margin-inline: var(--space-1);
+  }
+
+  /* 宽表的单行省略在堆叠时不需要：行标题可以换行。 */
+  .table .truncate {
+    max-width: none;
+  }
+
+  .table .truncate > .value {
+    white-space: normal;
   }
 }

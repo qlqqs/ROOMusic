@@ -59,22 +59,77 @@
   font-variant-numeric: tabular-nums;
 }
 
-.tracks {
+/* 曲目表按自身宽度（容器查询）在“分栏一行”与“两行”之间切换：右栏在旁边时曲目区比页面窄得多。 */
+.frame {
+  container-type: inline-size;
+  min-width: 0;
+}
+
+/*
+ * 栏目：曲目号、标题、艺人、（作曲）、动作、时长。轨道定义在 .grid 上，表头、列表、作品与每一行都是 subgrid，
+ * 动作与时长按全表最宽者对齐。曲目号一栏宽度随有无动作变化（有动作时与播放按钮同宽）。
+ */
+.grid {
+  --lead: 2.4em;
   display: grid;
+  grid-template-columns: var(--lead) minmax(0, 2fr) minmax(0, 1.2fr) auto auto;
+  column-gap: var(--space-3);
+  min-width: 0;
+}
+
+.grid[data-composer] {
+  grid-template-columns: var(--lead) minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1fr) auto auto;
+}
+
+.grid:not([data-has-actions]) {
+  grid-template-columns: var(--lead) minmax(0, 2fr) minmax(0, 1.2fr) auto;
+}
+
+.grid[data-composer]:not([data-has-actions]) {
+  grid-template-columns: var(--lead) minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1fr) auto;
+}
+
+.grid[data-has-actions] {
+  --lead: var(--control-height);
+}
+
+.columns,
+.tracks,
+.work,
+.workHeading,
+.track {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  min-width: 0;
+}
+
+.columns {
+  align-items: end;
+  padding-bottom: var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+}
+
+.columns > .number {
+  justify-content: center;
+  min-height: 0;
+}
+
+.columns > .duration {
+  justify-content: flex-end;
+  min-height: 0;
+}
+
+.tracks {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-/*
- * 一行两层：第一层是曲目号、标题、动作图标与时长，第二层是艺人与署名（从标题列铺到行尾）。
- * 标题、曲目号与时长至少和图标一样高并垂直居中，单行标题与图标对齐；标题换行时图标留在第一行。
- */
+/* 一行一首：各栏垂直居中，至少和图标一样高。 */
 .track {
-  display: grid;
-  grid-template-columns: 2.4em minmax(0, 1fr) auto auto;
-  align-items: start;
-  gap: 0 var(--space-3);
+  align-items: center;
   padding: var(--space-1) 0;
   border-top: 1px solid var(--color-divider);
 }
@@ -137,27 +192,54 @@
   justify-content: flex-end;
 }
 
-.title {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  align-content: center;
-  gap: var(--space-1) var(--space-2);
+/* 标题、艺人、作曲都只占一行，过长末尾省略（单元格的 title 给出全文）。 */
+.title,
+.artist,
+.composer {
   min-width: 0;
-  min-height: var(--control-height);
-  font-size: var(--fs-14);
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-.meta {
-  display: grid;
-  grid-column: 2 / -1;
-  gap: 2px;
+.title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-height);
+  font-size: var(--fs-14);
+}
+
+.titleText {
   min-width: 0;
-  padding-bottom: var(--space-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.title > :not(.titleText) {
+  flex: none;
+}
+
+.artist,
+.composer {
   color: var(--text-secondary);
   font-size: var(--fs-13);
-  overflow-wrap: anywhere;
+}
+
+/* 宽版面：两个单元格直接放进行的栏目里。 */
+.meta {
+  display: contents;
+}
+
+/* 行里的艺人、作曲链接用次要文字色，悬停加下划线。 */
+.meta a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.meta a:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
 }
 
 .actions {
@@ -170,16 +252,16 @@
 }
 
 .workHeading {
-  display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
   min-height: var(--control-height);
+  margin: 0;
   padding: var(--space-1) 0;
   border-top: 1px solid var(--color-divider);
 }
 
+/* 作品名从标题栏铺到动作栏，总时长在时长栏。 */
 .workTitle {
+  grid-column: 2 / -2;
   min-width: 0;
   font-size: var(--fs-14);
   font-weight: var(--font-heading-weight);
@@ -193,9 +275,8 @@
  */
 .track[data-has-actions] {
   --track-lead-top: var(--space-1);
-  --track-lead-width: var(--control-height);
+  --track-lead-width: var(--lead);
   position: relative;
-  grid-template-columns: var(--track-lead-width) minmax(0, 1fr) auto auto;
 }
 
 .track[data-has-actions] .number {
@@ -235,8 +316,20 @@
   }
 }
 
+/*
+ * 选中的行（单击，右栏显示曲目信息）：选中底色加左侧 3px 黄铜细线，与搜索定位的高亮同一种画法（细线与底色延伸都画在行外，内容不移动）；
+ * 悬停时保持选中的样子。
+ */
+.track[data-selected],
+.track[data-selected]:hover {
+  background: var(--color-selected);
+  box-shadow:
+    -3px 0 0 0 var(--color-accent),
+    6px 0 0 0 var(--color-selected);
+}
+
 /* 当前曲目：标题用强调色加粗，曲目号换成三根音柱（只在播放时跳动）。 */
-.track[data-current] .title > span:first-child {
+.track[data-current] .titleText {
   color: var(--text-accent);
   font-weight: 600;
 }
@@ -297,8 +390,90 @@
 }
 
 @media (max-width: 767px) {
-  .track {
-    grid-template-columns: 1.8em minmax(0, 1fr) auto auto;
+  .grid:not([data-has-actions]) {
+    --lead: 1.8em;
+  }
+}
+
+/*
+ * 窄的曲目区（< 640px）：不显示表头，栏目只剩曲目号、标题、动作、时长；艺人与作曲成为标题下一行淡色小字（“艺人 · 作曲”），
+ * 艺人与专辑艺人相同时不写，两者都没有时没有第二行。
+ */
+@container (max-width: 639px) {
+  .grid,
+  .grid[data-composer] {
+    grid-template-columns: var(--lead) minmax(0, 1fr) auto auto;
     column-gap: var(--space-2);
+  }
+
+  .grid:not([data-has-actions]),
+  .grid[data-composer]:not([data-has-actions]) {
+    grid-template-columns: var(--lead) minmax(0, 1fr) auto;
+  }
+
+  .columns {
+    display: none;
+  }
+
+  .track {
+    min-height: calc(var(--control-height) + 2 * var(--space-1));
+  }
+
+  .track > .number {
+    grid-row: 1 / span 2;
+  }
+
+  .title {
+    grid-column: 2;
+    grid-row: 1;
+    min-height: 0;
+  }
+
+  .meta {
+    display: block;
+    grid-column: 2;
+    grid-row: 2;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--text-secondary);
+    font-size: var(--fs-12);
+  }
+
+  .meta > * {
+    display: inline;
+    font-size: inherit;
+  }
+
+  .meta > [data-same],
+  .meta > :empty {
+    display: none;
+  }
+
+  .meta > :not([data-same], :empty) ~ :not(:empty)::before {
+    content: "·";
+    margin-inline: var(--space-1);
+  }
+
+  .meta:not(:has(> :not([data-same], :empty))) {
+    display: none;
+  }
+
+  .track > .actions,
+  .track > .duration {
+    grid-row: 1 / span 2;
+  }
+
+  .track > .actions {
+    grid-column: -3 / -2;
+  }
+
+  .track > .duration {
+    grid-column: -2 / -1;
+  }
+
+  .workTitle {
+    grid-column: 2 / -2;
   }
 }

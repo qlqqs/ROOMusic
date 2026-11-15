@@ -16,13 +16,13 @@ type ReleaseFactsProps = {
 
 /**
  * 侧栏：发行信息（没有值的条目不列出，都没有时说明暂无）与“制作人员”（专辑级署名，没有就不显示这个区块）。
- * 曲目自己的署名在曲目行里。
+ * 专辑艺人已写在页头标题下，制作人员里不再列。曲目自己的署名在选中曲目后的“曲目信息”里。
  */
 export function ReleaseFacts({ release, versioned }: ReleaseFactsProps) {
   const facts = releaseFacts(release);
   // 按角色归并，角色与姓名都保持接口给出的顺序；艺人就绪时每个名字是链接。
   const groups = new Map<string, ReleaseCreditDTO[]>();
-  for (const credit of release.credits) groups.set(credit.role, [...(groups.get(credit.role) ?? []), credit]);
+  for (const credit of release.credits) if (credit.role !== "album_artist") groups.set(credit.role, [...(groups.get(credit.role) ?? []), credit]);
   const credits = Array.from(groups, ([role, entries]) => ({ role, entries }));
   return (
     <>

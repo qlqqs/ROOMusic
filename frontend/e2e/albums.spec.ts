@@ -1,3 +1,5 @@
+import AxeBuilder from "@axe-core/playwright";
+import { expectNoHorizontalOverflow } from "./support/checks";
 import type { Page } from "@playwright/test";
 import { albumGroup, albumGroups } from "../src/test/catalog-data";
 import { LONG_TITLE, multiVersionGroup, seedVersions } from "./support/albums-data";
@@ -417,3 +419,42 @@ test.describe("专辑详情", () => {
     await expect(heading(page, LONG_TITLE)).toBeVisible();
   });
 });
+
+for (const width of [1440, 390]) {
+  test(`${width}px：曲目选中显示详情，宽屏右键菜单与手机底部面板可用`, async ({ page, backend }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const mock = await backend.start({ signedInAs: "listener" });
+    const group = albumGroup(1, { medium_count: 1, track_count: 2 });
+    mock.groups = [group];
+    await page.goto(`/albums/${group.id}`);
+    const row = page.locator("[data-track-row]").first();
+    await expect(row).toBeVisible();
+    if (width === 1440) {
+      await row.getByText("Track 01", { exact: true }).click({ button: "right" });
+      const menu = page.getByRole("menu", { name: "《Track 01》的操作" });
+      await expect(menu).toBeVisible();
+      await expect(menu.getByRole("menuitem").first()).toHaveText("播放");
+      await menu.getByRole("menuitem", { name: "曲目信息", exact: true }).click();
+      await expect(page.getByRole("complementary", { name: "发行信息" }).getByRole("region", { name: "曲目信息" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "曲目信息", exact: true })).toBeFocused();
+      await expect(page.getByRole("dialog", { name: "曲目信息" })).toHaveCount(0);
+    } else {
+      await row.getByText("Track 01", { exact: true }).click();
+      const sheet = page.getByRole("dialog", { name: "曲目信息", exact: true });
+      await expect(sheet).toBeVisible();
+      await expect(sheet.getByRole("region", { name: "曲目信息" })).toBeVisible();
+      const bounds = await sheet.boundingBox();
+      if (bounds === null) throw new Error("底部面板不可见");
+      expect(bounds.y).toBeGreaterThan(0);
+      expect(Math.abs(bounds.y + bounds.height - 900)).toBeLessThanOrEqual(2);
+      expect(await sheet.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(0);
+    }
+    await expect(row).toHaveAttribute("data-selected", "");
+    await expectNoHorizontalOverflow(page, "曲目信息");
+    const { violations } = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+    expect(violations.map(({ id, nodes }) => ({ id, targets: nodes.map((node) => node.target) }))).toEqual([]);
+    await page.getByRole("button", { name: "关闭曲目信息" }).click();
+    await expect(page.getByRole("region", { name: "曲目信息" })).toHaveCount(0);
+    await expect(row).not.toHaveAttribute("data-selected", "");
+  });
+}
