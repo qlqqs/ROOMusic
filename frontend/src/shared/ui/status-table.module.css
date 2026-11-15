@@ -1,24 +1,33 @@
-/* 浅底卡片：标题一行，下面每行之间一条淡分隔线；行高至少 52px，名称与说明在左、状态在右。 */
+/* 标题在卡片外（顶线加 h2，同 Panel）；实心圆角卡片里每行之间一条从名称起的淡分隔线；行高至少 52px，名称与说明在左、状态在右。 */
 .table {
+  display: grid;
+  gap: var(--space-3);
   min-width: 0;
-  border: 1px solid var(--color-divider);
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, white 45%, var(--color-bg));
-}
-
-.title {
-  padding: var(--space-3) var(--space-4) var(--space-2);
-  font-size: var(--fs-13);
-  font-weight: 600;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-divider);
 }
 
 .rows {
+  min-width: 0;
   margin: 0;
   padding: 0;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--color-surface);
   list-style: none;
 }
 
 .item {
+  position: relative;
+}
+
+/* 行间分隔线从名称起（图标 16px 与间距之后），不贯穿图标列。 */
+.item + .item::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: calc(var(--space-4) + 16px + var(--space-3));
   border-top: 1px solid var(--color-divider);
 }
 
@@ -31,20 +40,22 @@
   min-height: 52px;
   padding: var(--space-2) var(--space-4);
   color: var(--text-primary);
-  font-size: var(--fs-13);
+  font-size: var(--fs-14);
   text-decoration: none;
-}
-
-.item:last-child .row {
-  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
 
 .link {
   transition: background-color 0.12s ease;
 }
 
-.link:hover {
-  background: var(--color-hover);
+.link:active {
+  background: var(--color-pressed);
+}
+
+@media (hover: hover) {
+  .link:hover {
+    background: var(--color-hover);
+  }
 }
 
 .link:focus-visible {

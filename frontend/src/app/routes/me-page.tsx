@@ -14,6 +14,7 @@ import styles from "./me-page.module.css";
 /**
  * “我的”（/me）：窄屏底部标签栏的第四项，汇集宽屏侧栏里“我的音乐”、歌单、管理员的“管理”分组与侧栏底部的设置、退出登录，
  * 手机上不需要另开菜单。入口与侧栏同源（visibleNavGroups），宽屏侧栏不链接这一页，直接打开地址也能用。
+ * 外观仿手机设置页：每组一张圆角卡片，进入子页的行尾有箭头，“退出登录”是动作、没有箭头。
  */
 export function MePage() {
   const { viewer } = useViewerScope();
@@ -65,6 +66,7 @@ export function MePage() {
               <Link to="/settings" className={styles.row}>
                 <Settings size={18} aria-hidden="true" />
                 <span className={styles.label}>设置</span>
+                <ChevronRight size={16} aria-hidden="true" className={styles.chevron} />
               </Link>
             </li>
             <li>
@@ -111,6 +113,7 @@ function EntryRow({ item, count = null }: { item: NavItem; count?: number | null
             {formatCount(count)}
           </span>
         ) : null}
+        <ChevronRight size={16} aria-hidden="true" className={styles.chevron} />
       </Link>
       {showCount && item.todo !== undefined ? (
         <span id={descriptionId} hidden>
@@ -129,23 +132,28 @@ function PlaylistRows() {
   const playlists = usePlaylists(1);
   const data = playlists.data;
   if (data !== undefined && data.items.length === 0) {
-    return <li className={styles.empty}>还没有歌单，点“＋”新建一个。</li>;
+    return (
+      <li className={styles.empty} data-kind="plain">
+        还没有歌单，点“＋”新建一个。
+      </li>
+    );
   }
   return (
     <>
       {data?.items.map((playlist) => (
-        <li key={playlist.id}>
+        <li key={playlist.id} data-kind="cover">
           <Link to="/me/playlists/$playlistId" params={{ playlistId: playlist.id }} className={styles.row}>
             <span className={styles.cover}>
               <PlaylistCover playlist={playlist} size="thumb" />
             </span>
             <span className={styles.label}>{playlist.name}</span>
             <span className={styles.meta}>{formatCount(playlist.track_count)} 首</span>
+            <ChevronRight size={16} aria-hidden="true" className={styles.chevron} />
           </Link>
         </li>
       ))}
       {data === undefined || data.pagination.total > data.items.length ? (
-        <li>
+        <li data-kind="plain">
           <Link to="/me/playlists" className={styles.row} data-kind="all">
             <span className={styles.label}>全部歌单</span>
             <ChevronRight size={16} aria-hidden="true" className={styles.chevron} />

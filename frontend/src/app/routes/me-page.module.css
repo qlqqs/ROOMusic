@@ -1,4 +1,7 @@
-/* 手机设置风格的列表：分组小标题，每行图标、名称与右侧的计数，行间一条淡分隔线；宽屏打开时最宽 640px。 */
+/*
+ * 手机设置风格：每组一张实心圆角卡片（分组小标题在卡片上方），每行图标、名称、右侧的计数与箭头；
+ * 行间一条从名称起的淡分隔线，不贯穿图标列。宽屏打开时最宽 640px。
+ */
 .sections {
   display: grid;
   gap: var(--space-6);
@@ -10,12 +13,14 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  min-height: 56px;
+  min-height: 64px;
   min-width: 0;
-  padding: 0 var(--space-1);
-  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-4);
+  border-radius: 12px;
+  background: var(--color-surface);
   color: var(--text-primary);
   text-decoration: none;
+  transition: background-color 0.12s ease;
 }
 
 /* 头像放大到 40px：共用头像组件是 28px，这里只改尺寸。 */
@@ -77,29 +82,56 @@
   grid-template-columns: minmax(0, 1fr);
   margin: 0;
   padding: 0;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--color-surface);
   list-style: none;
 }
 
+/*
+ * 分隔线画在下一行的顶部，从这一行的名称起：图标行在 18px 图标之后，歌单行在 36px 封面之后，没有图标的行（全部歌单、空歌单提示）从内边距起。
+ * 用伪元素而不是边框，按下或悬停时的底色仍铺满整行。
+ */
 .list > li {
+  --divider-start: calc(var(--space-4) + 18px + var(--space-3));
+  position: relative;
   min-width: 0;
-  border-bottom: 1px solid var(--color-divider);
 }
 
-/* 一行：链接或按钮，整行可点，至少 48px 高。 */
+.list > li[data-kind="cover"] {
+  --divider-start: calc(var(--space-4) + 36px + var(--space-3));
+}
+
+.list > li[data-kind="plain"] {
+  --divider-start: var(--space-4);
+}
+
+.list > li + li::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: var(--divider-start);
+  z-index: 1;
+  border-top: 1px solid var(--color-divider);
+  pointer-events: none;
+}
+
+/* 一行：链接或按钮，整行可点，至少 52px 高。 */
 .row {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   width: 100%;
   min-width: 0;
-  min-height: 48px;
-  padding: var(--space-1) var(--space-1);
+  min-height: 52px;
+  padding: var(--space-1) var(--space-4);
   border: 0;
-  border-radius: var(--radius-md);
+  border-radius: 0;
   background: transparent;
   color: var(--text-primary);
   font: inherit;
-  font-size: var(--fs-14);
+  font-size: var(--fs-15);
   text-align: start;
   text-decoration: none;
   cursor: pointer;
@@ -123,10 +155,22 @@
   }
 }
 
-.row:focus-visible,
+/* 卡片裁切圆角外的内容，焦点环画在行内侧才不被裁掉；账号卡片自己就是圆角，环画在外侧。 */
+.row:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: -3px;
+}
+
 .account:focus-visible {
   outline: var(--focus-ring);
   outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row,
+  .account {
+    transition: none;
+  }
 }
 
 .row[aria-busy="true"] {
@@ -179,7 +223,7 @@
 }
 
 .empty {
-  padding: var(--space-3) var(--space-1);
+  padding: var(--space-4);
   color: var(--text-secondary);
   font-size: var(--fs-13);
 }

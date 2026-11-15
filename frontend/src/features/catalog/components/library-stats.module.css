@@ -1,76 +1,92 @@
-/* 概览右栏的资料库卡片：与“资料库状态”表同一种浅底卡片；标题一行，下面四行“数字 + 单位”，行间淡分隔线。 */
-.card {
+/* 概览的资料库：标题在卡片外（与“最近播放”等区块同样的顶线加标题）；卡片里 2×2 宫格，每格大号数字在上、单位在下，可进入的格子单位后有箭头。 */
+.section {
+  display: grid;
+  gap: var(--space-3);
   min-width: 0;
-  border: 1px solid var(--color-divider);
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, white 45%, var(--color-bg));
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-divider);
 }
 
-.title {
-  padding: var(--space-3) var(--space-4) var(--space-2);
-  font-size: var(--fs-13);
-  font-weight: 600;
+.card {
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--color-surface);
 }
 
 .pending,
 .empty {
-  padding: 0 var(--space-4) var(--space-3);
+  padding: var(--space-4);
   font-size: var(--fs-13);
   color: var(--text-secondary);
 }
 
+/* 格子之间 1px 的分隔线：网格间隙透出卡片底下的分隔色。 */
 .entries {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
   margin: 0;
   padding: 0;
+  background: var(--color-divider);
   list-style: none;
 }
 
 .entry {
-  border-top: 1px solid var(--color-divider);
+  display: grid;
+  min-width: 0;
+  background: var(--color-surface);
 }
 
-.entry:last-child .item {
-  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-}
-
-/* 数字列按最宽的数字右对齐（各行同一网格宽度由 5.5em 的最小宽度保证）；单位在后，箭头列总是留出来。 */
 .item {
   display: grid;
-  grid-template-columns: minmax(5.5em, auto) minmax(0, 1fr) 16px;
-  align-items: baseline;
-  gap: var(--space-2);
-  min-height: 44px;
-  padding: var(--space-2) var(--space-4);
+  align-content: center;
+  gap: 2px;
+  min-height: 76px;
+  padding: var(--space-3) var(--space-4);
   color: var(--text-primary);
-  font-size: var(--fs-13);
   text-decoration: none;
 }
 
-.link:hover {
-  background: var(--color-hover);
+.link {
+  transition: background-color 0.12s ease;
 }
 
-.link:hover .unit {
-  text-decoration: underline;
-  text-underline-offset: 3px;
+.link:active {
+  background: var(--color-pressed);
+}
+
+@media (hover: hover) {
+  .link:hover {
+    background: var(--color-hover);
+  }
+}
+
+.link:focus-visible {
+  outline-offset: -3px;
 }
 
 .value {
-  justify-self: end;
-  align-self: center;
-  font-size: var(--fs-18);
+  font-size: var(--fs-24);
   font-weight: 600;
+  line-height: 1.15;
   font-variant-numeric: lining-nums tabular-nums;
 }
 
 .unit {
-  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   color: var(--text-secondary);
+  font-size: var(--fs-13);
 }
 
 .arrow {
-  display: grid;
-  place-items: center;
-  align-self: center;
-  color: var(--text-secondary);
+  flex: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .link {
+    transition: none;
+  }
 }

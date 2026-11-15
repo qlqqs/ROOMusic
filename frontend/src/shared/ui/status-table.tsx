@@ -4,14 +4,12 @@ import { cx } from "../lib/class-names";
 import { Button } from "./button";
 import styles from "./status-table.module.css";
 
-/** 一张状态表：带标题的浅底卡片，每行一个对象（StatusRow）。 */
+/** 一张状态表：卡片外是标题（与 Panel 同样的顶线加 h2），卡片里每行一个对象（StatusRow）。 */
 export function StatusTable({ title, children }: { title: string; children: ReactNode }) {
   const headingId = useId();
   return (
     <section className={styles.table} aria-labelledby={headingId}>
-      <h2 id={headingId} className={styles.title}>
-        {title}
-      </h2>
+      <h2 id={headingId}>{title}</h2>
       <ul role="list" className={styles.rows}>
         {children}
       </ul>

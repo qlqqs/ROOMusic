@@ -17,43 +17,45 @@ const entries: readonly Entry[] = [
 ];
 
 /**
- * 概览右栏顶部的资料库卡片：标题“资料库”，下面四行“数字 + 单位”（数字右对齐、等宽），除曲目外每行链接到对应列表，行尾一个箭头。
+ * 概览右栏顶部的资料库：标题“资料库”在卡片外，卡片里 2×2 宫格，每格大号数字在上、单位在下；除曲目外整格链接到对应列表，单位后一个箭头。
  * 艺人数据还在整理时艺人与作曲家写“—”且不链接。资料库里还没有专辑时只说一句话。外观与下面的“资料库状态”表同一种卡片。
  */
 export function LibraryStats({ isAdmin }: { isAdmin: boolean }) {
   const stats = useCatalogStats();
   const headingId = useId();
   return (
-    <section aria-labelledby={headingId} className={styles.card}>
-      <h2 id={headingId} className={styles.title}>
-        资料库
-      </h2>
-      <QueryContent query={stats} loading={<div className={styles.pending}><Skeleton label="正在加载资料库统计" lines={2} /></div>}>
-        {(data) =>
-          data.albums === 0 ? (
-            <p className={styles.empty}>{isAdmin ? "资料库里还没有专辑。添加音乐目录并扫描后就会出现。" : "资料库里还没有专辑。"}</p>
-          ) : (
-            <ul role="list" className={styles.entries}>
-              {entries.map(({ key, unit, link }) => {
-                const value = data[key];
-                const linked = value !== null && link !== null;
-                const content = (
-                  <>
-                    <span className={styles.value}>{value === null ? "—" : formatCount(value)}</span>
-                    <span className={styles.unit}>{unit}</span>
-                    <span className={styles.arrow} aria-hidden="true">{linked ? <ChevronRight size={14} /> : null}</span>
-                  </>
-                );
-                return (
-                  <li key={key} className={styles.entry}>
-                    {linked ? link(`${styles.item} ${styles.link}`, content) : <span className={styles.item}>{content}</span>}
-                  </li>
-                );
-              })}
-            </ul>
-          )
-        }
-      </QueryContent>
+    <section aria-labelledby={headingId} className={styles.section}>
+      <h2 id={headingId}>资料库</h2>
+      <div className={styles.card}>
+        <QueryContent query={stats} loading={<div className={styles.pending}><Skeleton label="正在加载资料库统计" lines={2} /></div>}>
+          {(data) =>
+            data.albums === 0 ? (
+              <p className={styles.empty}>{isAdmin ? "资料库里还没有专辑。添加音乐目录并扫描后就会出现。" : "资料库里还没有专辑。"}</p>
+            ) : (
+              <ul role="list" className={styles.entries}>
+                {entries.map(({ key, unit, link }) => {
+                  const value = data[key];
+                  const linked = value !== null && link !== null;
+                  const content = (
+                    <>
+                      <span className={styles.value}>{value === null ? "—" : formatCount(value)}</span>
+                      <span className={styles.unit}>
+                        {unit}
+                        {linked ? <ChevronRight size={14} aria-hidden="true" className={styles.arrow} /> : null}
+                      </span>
+                    </>
+                  );
+                  return (
+                    <li key={key} className={styles.entry}>
+                      {linked ? link(`${styles.item} ${styles.link}`, content) : <span className={styles.item}>{content}</span>}
+                    </li>
+                  );
+                })}
+              </ul>
+            )
+          }
+        </QueryContent>
+      </div>
     </section>
   );
 }
