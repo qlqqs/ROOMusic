@@ -1,32 +1,36 @@
-import { Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume2, VolumeX } from "lucide-react";
-import type { ReactNode } from "react";
+import { ListOrdered, Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume1, Volume2, VolumeX, type LucideIcon } from "lucide-react";
+import { useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { cx } from "../../../shared/lib/class-names";
 import { formatDuration } from "../../../shared/lib/duration";
-import { Button } from "../../../shared/ui";
+import { Button, ModalDialog, VisuallyHidden } from "../../../shared/ui";
 import type { PlayMode } from "../engine/queue";
 import { usePlayer, usePlayerEngine, usePlayerProgress } from "../player-provider";
-import { repeatLabels } from "./player-labels";
+import { playModeLabels } from "./player-labels";
 import styles from "./player-controls.module.css";
 
 type TransportProps = {
   /** compact 是播放栏（窄屏只留播放与下一首），large 是全屏播放器（播放键更大）。 */
   size?: "compact" | "default" | "large";
-  /** 两侧加随机与循环按钮：随机、上一首、播放、下一首、循环一排。 */
-  modes?: boolean;
+  /** 上一首之前的控件（信号路径、播放设备）；compact 窄屏时与上一首一起隐藏。 */
+  leading?: ReactNode;
+  /** 下一首之后的控件（播放模式、音量）；compact 窄屏时隐藏。 */
+  trailing?: ReactNode;
 };
 
-/** 上一首、播放暂停、下一首；modes 时两侧是随机与循环。 */
-export function TransportControls({ size = "default", modes = false }: TransportProps) {
+/** 上一首、播放暂停、下一首；两侧插槽由调用方放信号路径、设备、播放模式与音量。 */
+export function TransportControls({ size = "default", leading, trailing }: TransportProps) {
   const compact = size === "compact";
   const { engine, snapshot } = usePlayer();
   // 与 togglePlayback 用同一判定：播放区的意图是播放时按下去是暂停，按钮就写“暂停”。
   const active = snapshot.zone?.intent === "play";
   const playSize = size === "large" ? 26 : 18;
-  return <div className={`${styles.transport} ${compact ? styles.compact : ""} ${size === "large" ? styles.large : ""}`}>
-    {modes ? <span className={compact ? styles.desktop : undefined}><ShuffleButton /></span> : null}
-    <span className={compact ? styles.desktop : undefined}><Button variant="icon" label="上一首" icon={<SkipBack size={18} />} disabled={snapshot.current === null} onClick={() => engine.previous()} /></span>
+  const hideNarrow = compact ? styles.desktop : undefined;
+  return <div className={cx(styles.transport, compact && styles.compact, size === "large" && styles.large)}>
+    {leading === undefined ? null : <span className={cx(styles.slot, hideNarrow)}>{leading}</span>}
+    <span className={hideNarrow}><Button variant="icon" label="上一首" icon={<SkipBack size={18} />} disabled={snapshot.current === null} onClick={() => engine.previous()} /></span>
     <span className={styles.play}><Button variant="icon" label={active ? "暂停" : "播放"} icon={active ? <Pause size={playSize} /> : <Play size={playSize} />} disabled={snapshot.current === null} onClick={() => engine.togglePlayback()} /></span>
     <Button variant="icon" label="下一首" icon={<SkipForward size={18} />} disabled={!snapshot.hasNext} onClick={() => engine.next()} />
-    {modes ? <span className={compact ? styles.desktop : undefined}><RepeatButton /></span> : null}
+    {trailing === undefined ? null : <span className={cx(styles.slot, hideNarrow)}>{trailing}</span>}
   </div>;
 }
 /**
@@ -44,33 +48,51 @@ export function SeekControl({ layout = "inline", wave }: { layout?: "inline" | "
   if (layout === "ends") return <div className={styles.seek}><span aria-hidden="true">{position}</span>{input}<span aria-hidden="true">{duration}</span></div>;
   return <div className={styles.seek}>{input}<span>{text}</span></div>;
 }
+// 每按一次切到下一种：顺序 → 列表循环 → 单曲循环 → 随机 → 顺序。
+const nextMode: Record<PlayMode, PlayMode> = { sequential: "repeat_all", repeat_all: "repeat_one", repeat_one: "shuffle", shuffle: "sequential" };
+const modeIcons: Record<PlayMode, LucideIcon> = { sequential: ListOrdered, repeat_all: Repeat, repeat_one: Repeat1, shuffle: Shuffle };
+
 /**
- * 随机与循环两个按钮，底层仍是服务端的四选一播放模式，所以两者互斥：开随机即关循环，开循环即关随机。
- * 开启时图标用强调色，下方一个小圆点（不只靠颜色）。
+ * 播放模式：服务端的四选一模式合成一个按钮，按一次换下一种，图标随模式变化。读屏名与悬停提示写出当前模式（播放模式：顺序 / …），
+ * 非顺序时是按下态：图标强调色加下方小圆点（不只靠颜色）。
  */
-export function ShuffleButton() {
-  const { engine, snapshot } = usePlayer();
-  const on = snapshot.queue.mode === "shuffle";
-  return <span className={styles.mode} data-on={on ? "" : undefined}><Button variant="icon" label="随机播放" aria-pressed={on} icon={<Shuffle size={16} />} onClick={() => engine.setMode(on ? "sequential" : "shuffle")} /></span>;
-}
-
-// 每按一次：关 → 列表循环 → 单曲循环 → 关；随机时按下进入列表循环。
-const nextRepeat: Record<PlayMode, PlayMode> = { sequential: "repeat_all", repeat_all: "repeat_one", repeat_one: "sequential", shuffle: "repeat_all" };
-
-/** 循环：读屏名写出当前状态（循环：关 / 列表循环 / 单曲循环），非“关”时按下态。 */
-export function RepeatButton() {
+export function PlayModeButton() {
   const { engine, snapshot } = usePlayer();
   const mode = snapshot.queue.mode;
-  const on = mode === "repeat_all" || mode === "repeat_one";
-  const Icon = mode === "repeat_one" ? Repeat1 : Repeat;
-  return <span className={styles.mode} data-on={on ? "" : undefined}><Button variant="icon" label={repeatLabels[mode]} aria-pressed={on} icon={<Icon size={16} />} onClick={() => engine.setMode(nextRepeat[mode])} /></span>;
+  const on = mode !== "sequential";
+  const Icon = modeIcons[mode];
+  return <span className={styles.mode} data-on={on ? "" : undefined}><Button variant="icon" label={playModeLabels[mode]} aria-pressed={on} icon={<Icon size={16} />} onClick={() => engine.setMode(nextMode[mode])} /></span>;
 }
-/** 音量属于正在控制的设备；那台设备不能调音量（iPhone / iPad 的网页）时禁用，悬停提示原因。 */
-export function VolumeControl() {
-  const { engine, snapshot } = usePlayer();
+
+/**
+ * 音量：只有一个喇叭图标（静音或音量为 0 时是静音图标），点开锚定在它上方的小弹层（图标在视口上半部时改在下方），
+ * 里面是竖向音量滑块与静音开关。音量属于正在控制的设备；那台设备不能调音量（iPhone / iPad 的网页）时图标禁用，悬停提示原因。
+ */
+export function VolumeButton() {
+  const { snapshot } = usePlayer();
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const fixed = !snapshot.volumeControllable;
-  return <div className={styles.volume} title={fixed ? "这台设备不能调音量" : undefined}>
-    <Button variant="icon" label={snapshot.muted ? "取消静音" : "静音"} aria-pressed={snapshot.muted} icon={snapshot.muted ? <VolumeX size={16} /> : <Volume2 size={16} />} disabled={fixed} onClick={() => engine.setMuted(!snapshot.muted)} />
-    <input type="range" aria-label="播放器音量" aria-valuetext={`${Math.round(snapshot.volume * 100)}%`} min={0} max={1} step={0.01} value={snapshot.volume} disabled={fixed} onChange={(event) => engine.setVolume(Number(event.target.value))} />
-  </div>;
+  const silent = snapshot.muted || snapshot.volume === 0;
+  const Icon = silent ? VolumeX : snapshot.volume < 0.5 ? Volume1 : Volume2;
+  if (fixed && anchor !== null) setAnchor(null);
+  return <span className={styles.volumeButton} title={fixed ? "这台设备不能调音量" : undefined}>
+    <Button variant="icon" label={snapshot.muted ? "音量（已静音）" : "音量"} aria-haspopup="dialog" aria-expanded={anchor !== null} icon={<Icon size={16} />} disabled={fixed} onClick={(event) => setAnchor(event.currentTarget.getBoundingClientRect())} />
+    <VolumeDialog anchor={anchor} onClose={() => setAnchor(null)} />
+  </span>;
+}
+
+function VolumeDialog({ anchor, onClose }: { anchor: DOMRect | null; onClose: () => void }) {
+  const { engine, snapshot } = usePlayer();
+  const titleId = useId();
+  const sliderRef = useRef<HTMLInputElement>(null);
+  const position = anchor === null ? undefined : ({ "--anchor-x": `${anchor.left + anchor.width / 2}px`, "--anchor-top": `${anchor.top}px`, "--anchor-bottom": `${anchor.bottom}px` } as CSSProperties);
+  const below = anchor !== null && anchor.top < window.innerHeight / 2;
+  const percent = `${Math.round(snapshot.volume * 100)}%`;
+  return <ModalDialog open={anchor !== null} titleId={titleId} onRequestClose={onClose} closeOnBackdrop initialFocus={sliderRef} className={styles.volumeDialog}>
+    <div className={styles.volumeCard} style={position} data-below={below ? "" : undefined}>
+      <h2 id={titleId} className={styles.volumeValue}><VisuallyHidden>音量 </VisuallyHidden>{snapshot.muted ? "静音" : percent}</h2>
+      <input ref={sliderRef} type="range" className={styles.volumeSlider} aria-label="播放器音量" aria-valuetext={percent} min={0} max={1} step={0.01} value={snapshot.volume} onChange={(event) => engine.setVolume(Number(event.target.value))} />
+      <Button variant="icon" label={snapshot.muted ? "取消静音" : "静音"} aria-pressed={snapshot.muted} icon={snapshot.muted ? <VolumeX size={16} /> : <Volume2 size={16} />} onClick={() => engine.setMuted(!snapshot.muted)} />
+    </div>
+  </ModalDialog>;
 }

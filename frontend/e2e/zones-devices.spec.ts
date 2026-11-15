@@ -154,18 +154,22 @@ test("设置标题旁显示控制目标设备名，各项改动向该播放区�
   }
 });
 
-test("远端 volume fixed 时播放栏和全屏的音量及静音控件禁用", async ({ page, backend }) => {
+test("远端 volume fixed 时播放栏和全屏的音量按钮禁用并说明原因", async ({ page, backend }) => {
   const mock = await backend.start({ signedInAs: "listener" });
   await setup(page, mock, true);
   await openPicker(page);
   await picker(page).getByRole("button", { name: /客厅音箱/ }).click();
-  await expect(bar(page).getByRole("slider", { name: "播放器音量" })).toBeDisabled();
-  await expect(bar(page).getByRole("button", { name: "静音", exact: true })).toBeDisabled();
-  await expect(bar(page).getByRole("slider", { name: "播放器音量" }).locator("..")).toHaveAttribute("title", "这台设备不能调音量");
+  const volume = bar(page).getByRole("button", { name: "音量", exact: true });
+  await expect(volume).toBeDisabled();
+  await expect(volume).toHaveAttribute("aria-haspopup", "dialog");
+  await expect(volume.locator("..")).toHaveAttribute("title", "这台设备不能调音量");
+  await expect(page.getByRole("slider", { name: "播放器音量" })).toHaveCount(0);
   await bar(page).getByRole("button", { name: "打开全屏播放器", exact: true }).click();
   const fullscreen = page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "收起全屏播放器", exact: true }) });
-  await expect(fullscreen.getByRole("slider", { name: "播放器音量" })).toBeDisabled();
-  await expect(fullscreen.getByRole("button", { name: "静音", exact: true })).toBeDisabled();
+  const fullVolume = fullscreen.getByRole("button", { name: "音量", exact: true });
+  await expect(fullVolume).toBeDisabled();
+  await expect(fullVolume.locator("..")).toHaveAttribute("title", "这台设备不能调音量");
+  await expect(page.getByRole("slider", { name: "播放器音量" })).toHaveCount(0);
 });
 
 for (const width of widths) {
@@ -258,7 +262,7 @@ test("375px 迷你栏：控制本机时没有设备按钮，控制别的设备�
   await expectNoSeriousViolations(page, "迷你栏打开设备列表");
 });
 
-test("1440px 全屏：设备图标在右上角，设备列表在它下方展开、不超出窗口", async ({ page, backend }) => {
+test("1440px 全屏：设备图标在控件行，设备列表在它上方展开、不超出窗口", async ({ page, backend }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const mock = await backend.start({ signedInAs: "listener" });
   await setup(page, mock);
@@ -269,8 +273,11 @@ test("1440px 全屏：设备图标在右上角，设备列表在它下方展开�
   const device = full.getByRole("button", { name: "播放设备", exact: true });
   const box = await device.boundingBox();
   if (box === null) throw new Error("缺少全屏设备按钮");
-  expect(box.x, "设备在右上角").toBeGreaterThanOrEqual(1440 * 0.9);
-  expect(box.y, "设备在右上角").toBeLessThanOrEqual(80);
+  const previous = await full.getByRole("button", { name: "上一首", exact: true }).boundingBox();
+  if (previous === null) throw new Error("缺少上一首按钮");
+  expect(box.y, "设备在窗口下半部").toBeGreaterThan(900 / 2);
+  expect(box.x + box.width, "设备在上一首左边").toBeLessThanOrEqual(previous.x);
+  expect(Math.abs(box.y + box.height / 2 - previous.y - previous.height / 2), "设备与传输键同一行").toBeLessThanOrEqual(1);
   await device.click();
   await expect(picker(page)).toBeVisible();
   const list = await picker(page).getByRole("list").boundingBox();
@@ -279,7 +286,8 @@ test("1440px 全屏：设备图标在右上角，设备列表在它下方展开�
     return { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right };
   });
   if (list === null) throw new Error("缺少设备列表");
-  expect(content.top, "列表在按钮下方").toBeGreaterThanOrEqual(box.y + box.height);
+  expect(content.bottom, "列表在按钮上方").toBeLessThanOrEqual(box.y);
+  expect(content.top).toBeGreaterThanOrEqual(0);
   expect(content.bottom).toBeLessThanOrEqual(900);
   expect(content.left).toBeGreaterThanOrEqual(0);
   expect(content.right).toBeLessThanOrEqual(1440);

@@ -2,8 +2,8 @@ import { dsdRateName } from "../../../shared/lib/dsd";
 import type { PlayMode, PlayerTrack } from "../engine/queue";
 import type { CommandRejection, PlaybackFailureReason, PlayerStatus } from "../zones/model";
 
-/** 循环按钮的读屏名：随机模式下循环是关的（四种模式互斥）。 */
-export const repeatLabels: Record<PlayMode, string> = { sequential: "循环：关", repeat_all: "列表循环", repeat_one: "单曲循环", shuffle: "循环：关" };
+/** 播放模式按钮的读屏名与悬停提示：写出当前模式。 */
+export const playModeLabels: Record<PlayMode, string> = { sequential: "播放模式：顺序", repeat_all: "播放模式：列表循环", repeat_one: "播放模式：单曲循环", shuffle: "播放模式：随机" };
 export const statusLabels: Record<PlayerStatus, string> = { idle: "未播放", loading: "正在加载", playing: "正在播放", paused: "已暂停", buffering: "正在缓冲" };
 export const failureLabels: Record<PlaybackFailureReason, string> = { not_found: "找不到这首曲目了", root_disabled: "曲目所在的目录已停用", unsupported_format: "这种格式目前不能播放", source_unavailable: "音频文件无法读取", source_changed: "音频文件已变化，请重新扫描", decode_failed: "这首曲目解码失败" };
 /** 被拒的命令里用户能自己处理的原因（设备列表的失败提示也用它）。 */

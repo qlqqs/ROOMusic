@@ -3,7 +3,9 @@
 .heading { margin: 0; }
 .frame { position: absolute; inset: 0; display: flex; flex-direction: column; gap: var(--space-2); min-height: 0; }
 .state { flex: 1 1 auto; display: grid; place-items: center; align-content: center; gap: var(--space-3); margin: 0; padding: var(--space-4); text-align: center; color: var(--text-secondary); }
-.scroller { position: relative; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-inline: var(--space-2); -webkit-mask-image: linear-gradient(transparent, #000 10%, #000 90%, transparent); mask-image: linear-gradient(transparent, #000 10%, #000 90%, transparent); }
+/* 不显示滚动条（参考 Apple Music、Spotify），滚轮、触控与键盘照常滚动；上下渐隐提示还有内容。 */
+.scroller { position: relative; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; padding-inline: var(--space-2); -webkit-mask-image: linear-gradient(transparent, #000 10%, #000 90%, transparent); mask-image: linear-gradient(transparent, #000 10%, #000 90%, transparent); }
+.scroller::-webkit-scrollbar { display: none; }
 .list { margin: 0; padding: var(--space-8) 0; list-style: none; display: grid; gap: var(--space-3); }
 .text { padding: var(--space-8) 0; display: grid; gap: var(--space-4); }
 .paragraph { margin: 0; font-family: var(--font-heading); font-size: var(--fs-15); line-height: 1.6; overflow-wrap: anywhere; }

@@ -317,7 +317,7 @@ async function setMediaTime(page: Page, seconds: number) {
 }
 
 /**
- * 768px 及以上是两栏等宽、整体居中：左栏“唱机 + 控制台”（唱片下依次是标题、进度、传输键与音量），右栏“歌词 / 接下来”；收起在左上角，播放设备在右上角，没有队列按钮。
+ * 768px 及以上是两栏等宽、整体居中：左栏“唱机 + 控制台”（唱片下依次是标题、进度、传输键与音量），右栏“歌词 / 接下来”；收起在左上角，设备、播放模式与音量按钮并入传输行，没有队列按钮。
  * 窄屏切换到歌词视图时，唱片换成一行小封面与标题，标题在歌词上方。
  */
 async function expectLyricsLayout(page: Page, label: string) {
@@ -338,9 +338,9 @@ async function expectLyricsLayout(page: Page, label: string) {
       ["标题", title],
       ["进度", full.getByRole("slider", { name: "播放进度", exact: true })],
       ["播放键", full.getByRole("button", { name: /^(播放|暂停)$/ })],
-      ["随机播放", full.getByRole("button", { name: "随机播放", exact: true })],
-      ["循环", full.getByRole("button", { name: /^(循环：关|列表循环|单曲循环)$/ })],
-      ["音量", full.getByRole("slider", { name: "播放器音量", exact: true })],
+      ["播放设备", full.getByRole("button", { name: /^(播放设备|正在控制：)/ })],
+      ["播放模式", full.getByRole("button", { name: /^播放模式：/ })],
+      ["音量", full.getByRole("button", { name: "音量", exact: true })],
     ] as const;
     for (const [name, locator] of console) {
       const box = await locator.boundingBox();
@@ -353,8 +353,10 @@ async function expectLyricsLayout(page: Page, label: string) {
     if (collapse === null || device === null) throw new Error(`${label}：缺少收起或播放设备按钮`);
     expect(collapse.x + collapse.width, `${label}：收起在左上角`).toBeLessThanOrEqual(width / 4);
     expect(collapse.y, `${label}：收起在左上角`).toBeLessThanOrEqual(80);
-    expect(device.x, `${label}：播放设备在右上角`).toBeGreaterThanOrEqual(width * 0.75);
-    expect(device.y, `${label}：播放设备在右上角`).toBeLessThanOrEqual(80);
+    const previous = await full.getByRole("button", { name: "上一首", exact: true }).boundingBox();
+    if (previous === null) throw new Error(`${label}：缺少上一首按钮`);
+    expect(device.x + device.width, `${label}：设备在上一首左边`).toBeLessThanOrEqual(previous.x);
+    expect(Math.abs(device.y + device.height / 2 - previous.y - previous.height / 2), `${label}：设备在传输行里`).toBeLessThanOrEqual(1);
     await expect(full.getByRole("button", { name: /^队列/ }), `${label}：宽屏全屏没有队列按钮`).toHaveCount(0);
     // 两栏等宽、整体居中：唱片与右栏各在自己一栏里居中，两者的中点落在窗口中线附近，右侧不留大片空白。
     const middle = (coverBox.x + coverBox.width / 2 + lyricsBox.x + lyricsBox.width / 2) / 2;
@@ -675,12 +677,12 @@ test("375px：浮起的迷你栏不遮挡页面最后一行，四周留白；底
   expect(box.x, "迷你栏左侧留白").toBeGreaterThanOrEqual(4);
   expect(box.x + box.width, "迷你栏右侧留白").toBeLessThanOrEqual(375 - 4);
   expect(box.y + box.height, "迷你栏底部留白").toBeLessThanOrEqual(800 - 4);
-  // 迷你栏里只有播放、下一首与队列；心形、随机与循环、音量在全屏播放器里。
+  // 迷你栏不显示信号路径、上一首、播放模式与音量；心形在全屏标题旁，手机全屏也不显示音量。
   await expect(bar(page).getByRole("button", { name: "播放", exact: true })).toBeVisible();
   await expect(bar(page).getByRole("button", { name: "下一首", exact: true })).toBeVisible();
   await expect(bar(page).getByRole("button", { name: /^队列（\d+）$/ })).toBeVisible();
-  for (const name of ["随机播放", "上一首"]) await expect(bar(page).getByRole("button", { name, exact: true })).toBeHidden();
-  await expect(bar(page).getByRole("slider", { name: "播放器音量" })).toBeHidden();
+  for (const name of ["播放模式：顺序", "上一首", "音量"]) await expect(bar(page).getByRole("button", { name, exact: true })).toBeHidden();
+  await expect(bar(page).getByRole("button", { name: /^信号路径：/ })).toBeHidden();
   // 滚到页面最底部：最后一首曲目整行在迷你栏上方。
   await page.evaluate(() => {
     for (const element of [document.scrollingElement, document.getElementById("main")]) if (element !== null) element.scrollTop = element.scrollHeight;
@@ -713,15 +715,14 @@ test("1280px 全屏“接下来”：列出队列随后的曲目，点一首播�
   expect(mock.callsTo("POST", /\/commands$/).some((call) => typeof call.body === "object" && call.body !== null && "command" in call.body && call.body.command === "play_entry")).toBe(true);
   await expect(full.getByRole("heading", { level: 2, name: "合成曲目 5", exact: true })).toBeVisible();
 
-  // 随机与循环互斥：开随机时循环关，开循环时随机关；随机时列表上方写明。
-  const shuffle = full.getByRole("button", { name: "随机播放", exact: true });
-  await shuffle.click();
-  await expect(shuffle).toHaveAttribute("aria-pressed", "true");
-  await expect(full.getByRole("button", { name: "循环：关", exact: true })).toHaveAttribute("aria-pressed", "false");
+  // 四种模式共用一个入口；只有随机模式显示顺序说明，回到顺序后说明消失。
+  for (const [current, next] of [["顺序", "列表循环"], ["列表循环", "单曲循环"], ["单曲循环", "随机"]]) {
+    await full.getByRole("button", { name: `播放模式：${current}`, exact: true }).click();
+    await expect(full.getByRole("button", { name: `播放模式：${next}`, exact: true })).toHaveAttribute("aria-pressed", "true");
+  }
   await expect(upNext.getByText("随机播放中，顺序以实际播放为准")).toBeVisible();
-  await full.getByRole("button", { name: "循环：关", exact: true }).click();
-  await expect(full.getByRole("button", { name: "列表循环", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(shuffle).toHaveAttribute("aria-pressed", "false");
+  await full.getByRole("button", { name: "播放模式：随机", exact: true }).click();
+  await expect(full.getByRole("button", { name: "播放模式：顺序", exact: true })).toHaveAttribute("aria-pressed", "false");
   await expect(upNext.getByText("随机播放中，顺序以实际播放为准")).toHaveCount(0);
 });
 

@@ -114,9 +114,9 @@ function useSignal(): Signal | null {
 }
 
 /**
- * 信号路径入口：放在曲目标题后面，只有一个质量色的呼吸圆点，没有可见文字；格式、质量与削波写在读屏名和悬停提示里。
+ * 信号路径入口：放在传输键最左边一格（与图标按钮同宽），只有一个质量色的呼吸圆点，没有可见文字；格式、质量与削波写在读屏名和悬停提示里。
  * 播放中圆点约 4 秒一次呼吸，暂停、缓冲、出错时静止；削波时变警示色并快速脉动（动画只在 CSS 里，减少动态效果时没有）。
- * 没有信号路径时不是按钮，也不显示圆点，格式只留给读屏；没有当前曲目时不渲染。
+ * 没有信号路径时格子仍在（传输键不随曲目左右移动），但不是按钮，格式只留给读屏；没有当前曲目时格子是空的。
  */
 export function SignalPathButton() {
   const signal = useSignal();
@@ -128,16 +128,16 @@ export function SignalPathButton() {
   const tip = useTooltip(label);
   if (signal === null || track === null) {
     if (anchor !== null) setAnchor(null);
-    return track === null ? null : <VisuallyHidden>{format}</VisuallyHidden>;
+    return <span className={styles.slot}>{track === null ? null : <VisuallyHidden>{format}</VisuallyHidden>}</span>;
   }
   const clipping = signal.clipping === true;
-  return <>
+  return <span className={styles.slot}>
     <button type="button" className={styles.trigger} data-quality={signal.quality} data-clipping={clipping ? "" : undefined} data-state={breathing ? "breathing" : undefined} aria-label={label} {...tip.triggerProps} onClick={(event) => setAnchor(event.currentTarget.getBoundingClientRect())}>
       <span className={styles.dot} aria-hidden="true" />
     </button>
     {tip.tooltip}
     <SignalPathDialog signal={signal} anchor={anchor} onClose={() => setAnchor(null)} />
-  </>;
+  </span>;
 }
 
 /** 决定整体质量的那一步：链上第一个与整体评级相同的步骤；整体是无损时没有哪一步拉低质量，不标。 */

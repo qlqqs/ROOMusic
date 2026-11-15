@@ -171,7 +171,7 @@ describe("播放栏、全屏、队列与信号路径", () => {
     view(<FullscreenPlayer />);
     const dialog = await screen.findByRole("dialog", { name: "曲目 1" });
     expect(within(dialog).getByText("随机播放中，顺序以实际播放为准")).toBeTruthy();
-    expect(within(dialog).getByRole("button", { name: "随机播放" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(dialog).getByRole("button", { name: "播放模式：随机" }).getAttribute("aria-pressed")).toBe("true");
   });
 
   it("全屏有歌词时右栏默认是歌词，可以切到“接下来”再切回", async () => {
@@ -191,7 +191,7 @@ describe("播放栏、全屏、队列与信号路径", () => {
     expect(within(dialog).getByRole("group", { name: "歌词文本" })).toBeTruthy();
   });
 
-  it("全屏宽屏：收起与播放设备在顶栏、没有队列按钮，标题旁有信号路径与“更多操作”，进度、传输键与音量在左栏", async () => {
+  it("全屏宽屏：顶栏只有收起，标题旁有“更多操作”，设备、传输键、模式与音量在控制台", async () => {
     await enqueue([playerTrack("1")]);
     fullscreenState.open = true;
     view(<FullscreenPlayer />);
@@ -201,26 +201,25 @@ describe("播放栏、全屏、队列与信号路径", () => {
     const heading = within(dialog).getByRole("heading", { name: "曲目 1", level: 2 });
     // 队列从右栏的“接下来”看，顶栏不再有队列按钮。
     expect(within(dialog).queryByRole("button", { name: /^队列/ })).toBeNull();
-    // 收起与播放设备同在顶栏：两者最近的共同祖先不包含标题，且在标题之前。
-    let topbar: HTMLElement | null = collapse.parentElement;
-    while (topbar !== null && !topbar.contains(device)) topbar = topbar.parentElement;
-    expect(topbar?.contains(heading)).toBe(false);
-    expect(device.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const topbar = collapse.parentElement?.parentElement;
+    expect(topbar?.querySelectorAll("button")).toHaveLength(1);
+    expect(topbar?.contains(device)).toBe(false);
+    expect(heading.compareDocumentPosition(device) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const titleRow = heading.parentElement;
     if (titleRow === null) throw new Error("缺少标题行");
     expect(within(titleRow).getByRole("button", { name: "更多操作" })).toBeTruthy();
-    // 没有信号路径时标题后只有给读屏的格式，没有可点的圆点。
+    // 标题行不再放信号路径，空信号格位于控制台。
     expect(within(titleRow).queryByRole("button", { name: /^信号路径：/ })).toBeNull();
     expect(titleRow.textContent).toContain("曲目 1");
     for (const control of [
       within(dialog).getByRole("slider", { name: "播放进度" }),
-      within(dialog).getByRole("button", { name: "随机播放" }),
-      within(dialog).getByRole("button", { name: "循环：关" }),
-      within(dialog).getByRole("slider", { name: "播放器音量" }),
+      device,
+      within(dialog).getByRole("button", { name: "播放模式：顺序" }),
+      within(dialog).getByRole("button", { name: "音量" }),
     ]) expect(heading.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("全屏有信号路径时圆点紧跟标题，在“更多操作”之前", async () => {
+  it("全屏信号路径在控件行最前面，随后是设备、传输键、模式与音量", async () => {
     const event = decodeStreamEvent(signalEvent.event, JSON.stringify(signalEvent.data));
     if (event?.type !== "zone") throw new Error("信号样本未解码为播放区事件");
     server.afterNext({ signal: event.zone.signal });
@@ -232,14 +231,17 @@ describe("播放栏、全屏、队列与信号路径", () => {
     const heading = within(dialog).getByRole("heading", { name: "曲目 1", level: 2 });
     const titleRow = heading.parentElement;
     if (titleRow === null) throw new Error("缺少标题行");
-    const signal = within(titleRow).getByRole("button", { name: /^信号路径：.+，增强，削波$/ });
+    expect(within(titleRow).queryByRole("button", { name: /^信号路径：/ })).toBeNull();
+    const signal = within(dialog).getByRole("button", { name: /^信号路径：.+，增强，削波$/ });
     expect(signal.textContent).toBe("");
-    const more = within(titleRow).getByRole("button", { name: "更多操作" });
-    expect(heading.compareDocumentPosition(signal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(signal.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const controls = signal.parentElement?.parentElement?.parentElement;
+    if (controls === null || controls === undefined) throw new Error("缺少传输行");
+    expect(within(controls).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual([
+      signal.getAttribute("aria-label"), "播放设备", "上一首", "暂停", "下一首", "播放模式：顺序", "音量",
+    ]);
   });
 
-  it("播放栏：信号路径圆点在标题后；右侧依次是队列、分隔线、播放设备、音量，设备按钮没有文字", async () => {
+  it("播放栏：信号路径在传输行最前面；右侧依次是模式、队列、分隔线、设备、音量", async () => {
     const event = decodeStreamEvent(signalEvent.event, JSON.stringify(signalEvent.data));
     if (event?.type !== "zone") throw new Error("信号样本未解码为播放区事件");
     server.afterNext({ signal: event.zone.signal });
@@ -249,11 +251,18 @@ describe("播放栏、全屏、队列与信号路径", () => {
     const bar = screen.getByRole("region", { name: "播放器" });
     const title = within(bar).getByText("曲目 1", { selector: "p" });
     const signal = within(bar).getByRole("button", { name: /^信号路径：/ });
-    expect(title.parentElement?.contains(signal)).toBe(true);
+    expect(title.parentElement?.contains(signal)).toBe(false);
+    const controls = signal.parentElement?.parentElement?.parentElement;
+    if (controls === null || controls === undefined) throw new Error("缺少传输行");
+    expect(within(controls).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual([
+      signal.getAttribute("aria-label"), "上一首", "暂停", "下一首",
+    ]);
     expect(title.compareDocumentPosition(signal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const queue = within(bar).getByRole("button", { name: "队列（1）" });
     const device = within(bar).getByRole("button", { name: "播放设备" });
-    const volume = within(bar).getByRole("slider", { name: "播放器音量" });
+    const volume = within(bar).getByRole("button", { name: "音量" });
+    const mode = within(bar).getByRole("button", { name: "播放模式：顺序" });
+    expect(mode.compareDocumentPosition(queue) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(device.textContent).toBe("");
     expect(queue.compareDocumentPosition(device) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(device.compareDocumentPosition(volume) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -456,9 +465,11 @@ describe("播放栏、全屏、队列与信号路径", () => {
     start({ lockedVolume: true });
     await waitFor(() => expect(engine.getSnapshot().volumeControllable).toBe(false));
     view(<PlayerBar />);
-    expect((screen.getByRole("slider", { name: "播放器音量" }) as HTMLInputElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "静音" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByRole("slider", { name: "播放器音量" }).closest("[title]")?.getAttribute("title")).toBe("这台设备不能调音量");
+    const volume = screen.getByRole("button", { name: "音量" });
+    expect((volume as HTMLButtonElement).disabled).toBe(true);
+    expect(volume.getAttribute("aria-haspopup")).toBe("dialog");
+    expect(volume.closest("[title]")?.getAttribute("title")).toBe("这台设备不能调音量");
+    expect(screen.queryByRole("slider", { name: "播放器音量" })).toBeNull();
   });
 
   it("队列抽屉关闭后焦点返回队列图标", async () => {
@@ -569,46 +580,44 @@ describe("播放栏、全屏、队列与信号路径", () => {
     expect(screen.getByRole("status")).toBe(region);
   });
 
-  it("循环依次为关、列表循环、单曲循环；静音、音量与下一首可用", async () => {
+  it("播放模式依次为顺序、列表循环、单曲循环、随机，再回到顺序", async () => {
     await enqueue([playerTrack("1"), playerTrack("2")]);
     view(<PlayerBar />);
+    expect(screen.getByRole("button", { name: "播放模式：顺序" }).getAttribute("aria-pressed")).toBe("false");
     for (const [current, next, mode] of [
-      ["循环：关", "列表循环", "repeat_all"], ["列表循环", "单曲循环", "repeat_one"], ["单曲循环", "循环：关", "sequential"],
+      ["顺序", "列表循环", "repeat_all"], ["列表循环", "单曲循环", "repeat_one"],
+      ["单曲循环", "随机", "shuffle"], ["随机", "顺序", "sequential"],
     ] as const) {
-      await userEvent.click(screen.getByRole("button", { name: current }));
+      await userEvent.click(screen.getByRole("button", { name: `播放模式：${current}` }));
       await waitFor(() => expect(engine.getSnapshot().queue.mode).toBe(mode));
-      const repeat = screen.getByRole("button", { name: next });
-      expect(repeat.getAttribute("aria-pressed")).toBe(mode === "sequential" ? "false" : "true");
-      expect(screen.getByRole("button", { name: "随机播放" }).getAttribute("aria-pressed")).toBe("false");
+      expect(screen.getByRole("button", { name: `播放模式：${next}` }).getAttribute("aria-pressed")).toBe(mode === "sequential" ? "false" : "true");
+      expect(screen.getAllByRole("button", { name: /^播放模式：/ })).toHaveLength(1);
     }
-    await userEvent.click(screen.getByRole("button", { name: "静音" }));
-    expect(engine.getSnapshot().muted).toBe(true);
-    fireEvent.change(screen.getByRole("slider", { name: "播放器音量" }), { target: { value: "0.4" } });
-    expect(engine.getSnapshot().volume).toBe(0.4);
-    await userEvent.click(screen.getByRole("button", { name: "下一首" }));
-    await waitFor(() => expect(engine.getSnapshot().current?.track.trackId).toBe("track-2"));
   });
 
-  it("随机与循环互斥：开随机即关循环，随机时按循环进入列表循环；随机开着时再按随机回到顺序", async () => {
+  it("音量按钮打开弹层后可静音、取消静音与调节音量，关闭后下一首仍可用", async () => {
     await enqueue([playerTrack("1"), playerTrack("2")]);
     view(<PlayerBar />);
-    const shuffle = () => screen.getByRole("button", { name: "随机播放" });
-    await userEvent.click(screen.getByRole("button", { name: "循环：关" }));
-    await waitFor(() => expect(engine.getSnapshot().queue.mode).toBe("repeat_all"));
-    await userEvent.click(shuffle());
-    await waitFor(() => expect(engine.getSnapshot().queue.mode).toBe("shuffle"));
-    expect(shuffle().getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByRole("button", { name: "循环：关" }).getAttribute("aria-pressed")).toBe("false");
-    await userEvent.click(screen.getByRole("button", { name: "循环：关" }));
-    await waitFor(() => expect(engine.getSnapshot().queue.mode).toBe("repeat_all"));
-    expect(shuffle().getAttribute("aria-pressed")).toBe("false");
-    expect(screen.getByRole("button", { name: "列表循环" }).getAttribute("aria-pressed")).toBe("true");
-    await userEvent.click(shuffle());
-    await waitFor(() => expect(engine.getSnapshot().queue.mode).toBe("shuffle"));
-    // 随机开着时再按随机：关掉随机，回到顺序播放。
-    await userEvent.click(shuffle());
-    await waitFor(() => expect(engine.getSnapshot().queue.mode).toBe("sequential"));
-    expect(shuffle().getAttribute("aria-pressed")).toBe("false");
+    const volume = screen.getByRole("button", { name: "音量" });
+    expect(volume.getAttribute("aria-haspopup")).toBe("dialog");
+    expect(screen.queryByRole("slider", { name: "播放器音量" })).toBeNull();
+    await userEvent.click(volume);
+    const dialog = screen.getByRole("dialog", { name: /^音量/ });
+    const slider = within(dialog).getByRole("slider", { name: "播放器音量" });
+    expect(document.activeElement).toBe(slider);
+    await userEvent.click(within(dialog).getByRole("button", { name: "静音" }));
+    expect(engine.getSnapshot().muted).toBe(true);
+    expect(volume.getAttribute("aria-label")).toBe("音量（已静音）");
+    await userEvent.click(within(dialog).getByRole("button", { name: "取消静音" }));
+    expect(engine.getSnapshot().muted).toBe(false);
+    fireEvent.change(slider, { target: { value: "0.4" } });
+    expect(engine.getSnapshot().volume).toBe(0.4);
+    expect(slider.getAttribute("aria-valuetext")).toBe("40%");
+    fireEvent(dialog, new Event("cancel", { bubbles: true, cancelable: true }));
+    await waitFor(() => expect(dialog.hasAttribute("open")).toBe(false));
+    expect(document.activeElement).toBe(volume);
+    await userEvent.click(screen.getByRole("button", { name: "下一首" }));
+    await waitFor(() => expect(engine.getSnapshot().current?.track.trackId).toBe("track-2"));
   });
 
   it("选曲公告不把加载意图说成已经播放", async () => {
