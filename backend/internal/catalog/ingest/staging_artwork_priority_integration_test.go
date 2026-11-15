@@ -40,6 +40,34 @@ func TestPostgreSQLArtworkPriorityStagingStrictDiscDirectories(t *testing.T) {
 	}, 1)
 }
 
+// 同目录同专辑的不同格式各留一份内嵌图，同格式后续曲目的图片仍去重。
+func TestPostgreSQLArtworkPriority暂存格式版本各留内嵌封面(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		codec    bool
+		deferred bool
+	}{
+		{"编码字段归一且保留字节", true, false},
+		{"编码字段归一且保留延迟来源", true, true},
+		{"无编码字段按扩展名区分", false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			flac := artworkPriorityObservation(t, "Album/01.flac", "同名专辑", 4, tc.deferred)
+			mp3 := artworkPriorityObservation(t, "Album/01.mp3", "同名专辑", 8, tc.deferred)
+			flacDuplicate := artworkPriorityObservation(t, "Album/02.FLAC", "同名专辑", 5, !tc.deferred)
+			mp3Duplicate := artworkPriorityObservation(t, "Album/02.MP3", "同名专辑", 9, !tc.deferred)
+			mp3.SourceKind, mp3Duplicate.SourceKind = "mp3_id3v2", "mp3_id3v2"
+			if tc.codec {
+				flac.Codec, mp3.Codec = "FLAC", "MP3"
+				flacDuplicate.Codec, mp3Duplicate.Codec = "flac", "mp3"
+			}
+			assertArtworkPriorityStaging(t, []artworkPriorityStagingCase{
+				{flac, true}, {mp3, true}, {flacDuplicate, false}, {mp3Duplicate, false},
+			}, 1)
+		})
+	}
+}
+
 type artworkPriorityStagingCase struct {
 	observation SourceObservation
 	keepArtwork bool

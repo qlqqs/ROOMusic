@@ -14,11 +14,11 @@
 
 范围是 design §2，只改 `backend/internal/library/parser/`。
 
-- [ ] A1 新增 `offerArtwork` 和 `artworkFront`；APIC、M4A、APEv2 改走统一入口
-- [ ] A2 新增 `parseFLACPicture`；`parseFLAC` 处理块类型 6
-- [ ] A3 `parseVorbisComments` 处理 `METADATA_BLOCK_PICTURE`，并放宽这个键的长度上限
-- [ ] A4 WAV 处理 `id3 ` 块，INFO 只补缺失值
-- [ ] A5 `CommonVersion` 改为 3
+- [x] A1 新增 `offerArtwork` 和 `artworkFront`；APIC、M4A、APEv2 改走统一入口
+- [x] A2 新增 `parseFLACPicture`；`parseFLAC` 处理块类型 6
+- [x] A3 `parseVorbisComments` 处理 `METADATA_BLOCK_PICTURE`，并放宽这个键的长度上限
+- [x] A4 WAV 处理 `id3 ` 块，INFO 只补缺失值
+- [x] A5 `CommonVersion` 改为 3
 
 验证：`cd backend && mise exec -- go test ./internal/library/parser/... -count=1`
 
@@ -28,11 +28,11 @@
 
 依赖阶段 A 合入。范围是 design §3 到 §5。
 
-- [ ] B1 `artwork.describe` 以探测结果为准；`Save` / `SaveWithFeedback` 去掉 `mimeType` 参数
-- [ ] B2 `SourceObservation.ArtworkScope`；`StageObservation` 去重键与 SQL；`EmbeddedArtworks()`；`GroupingVersion` 改为 2
-- [ ] B3 `listFolderArtworkCandidates` 改为带档位的统一入口，处理歧义候选与 Box 父目录
-- [ ] B4 `saveArtworkForRelease` 改为分档逐级回退
-- [ ] B5 修改与新规则冲突的既有测试（“Box 叶子不取父目录”“内嵌优先”等），并在汇报中列出每处改动
+- [x] B1 `artwork.describe` 以探测结果为准；`Save` / `SaveWithFeedback` 去掉 `mimeType` 参数
+- [x] B2 `SourceObservation.ArtworkScope`；`StageObservation` 去重键与 SQL；`EmbeddedArtworks()`；`GroupingVersion` 改为 2
+- [x] B3 `listFolderArtworkCandidates` 改为带档位的统一入口，处理歧义候选与 Box 父目录
+- [x] B4 `saveArtworkForRelease` 改为分档逐级回退
+- [x] B5 修改与新规则冲突的既有测试（“Box 叶子不取父目录”“内嵌优先”等），并在汇报中列出每处改动
 
 验证：
 ```bash
@@ -47,10 +47,10 @@ ROOMUSIC_TEST_RUN='TestPostgreSQL.*(Artwork|Scan|Stage|Candidate)' ./scripts/tes
 
 ## 3 阶段 C：规范与验收（主代理）
 
-- [ ] C1 审阅阶段 A、B 的改动与验证输出
-- [ ] C2 按 design §6 更新四份规范
-- [ ] C3 运行 `trellis-check`；只复跑受影响的测试，不跑全量
-- [ ] C4 在提交说明中写明行为变化（封面来源可能改变；歧义目录的文件夹封面会被移除）
+- [x] C1 审阅阶段 A、B 的改动与验证输出
+- [x] C2 按 design §6 更新四份规范
+- [x] C3 运行 `trellis-check`；只复跑受影响的测试，不跑全量
+- [x] C4 在提交说明中写明行为变化（封面来源可能改变；歧义目录的文件夹封面会被移除）
 
 ## 回滚点
 

@@ -135,6 +135,72 @@ func TestPostgreSQLArtworkPriorityBox叶子各用内嵌封面(t *testing.T) {
 	}
 }
 
+// 同目录同专辑拆成格式版本后，各发行仍使用自己音频里的内嵌封面。
+func TestPostgreSQLArtworkPriority格式版本各用内嵌封面(t *testing.T) {
+	fixture := newLibraryFixture(t)
+	root := insertScannerRoot(t, fixture, "artwork-priority-formats")
+	service, logs := newIncrementalTestService(t, fixture)
+	flac, mp3 := jpegArtworkOfWidth(4), jpegArtworkOfWidth(8)
+	writeArtworkPriorityFLAC(t, root, "Album/01.flac", "Album", 1, 1, flac)
+	writeIncrementalTestMP3(t, root, "Album/01.mp3", 2, 1, mp3)
+	runIncrementalTestScan(t, service, logs, root)
+	flacID := assertArtworkPriorityBinding(t, fixture, service, root, "Album/01.flac", "format_split", "embedded", flac)
+	mp3ID := assertArtworkPriorityBinding(t, fixture, service, root, "Album/01.mp3", "format_split", "embedded", mp3)
+	if flacID == mp3ID {
+		t.Fatal("两种格式应属于各自的发行版本")
+	}
+	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM releases WHERE source_root_id=$1::uuid`, 2, root.ID)
+}
+
+// 不同专辑的碟目录保持 Box 叶子；格式拆分后仍能用 Box 父目录的精确名封面兜底。
+func TestPostgreSQLArtworkPriority格式拆分Box叶子使用父目录封面(t *testing.T) {
+	fixture := newLibraryFixture(t)
+	root := insertScannerRoot(t, fixture, "artwork-priority-box-formats")
+	service, logs := newIncrementalTestService(t, fixture)
+	cover := jpegArtworkOfWidth(7)
+	writeArtworkPriorityFLAC(t, root, "Box/Disc 1/01.flac", "Album", 1, 1, nil)
+	writeIncrementalTestMP3(t, root, "Box/Disc 1/01.mp3", 2, 1, nil)
+	writeArtworkPriorityFLAC(t, root, "Box/Disc 3/01.flac", "另一专辑", 3, 3, nil)
+	writeScanFixtureFile(t, root, "Box/cover.jpg", cover)
+	runIncrementalTestScan(t, service, logs, root)
+	flacID := assertArtworkPriorityBinding(t, fixture, service, root, "Box/Disc 1/01.flac", "format_split", "folder", cover)
+	mp3ID := assertArtworkPriorityBinding(t, fixture, service, root, "Box/Disc 1/01.mp3", "format_split", "folder", cover)
+	if flacID == mp3ID {
+		t.Fatal("Box 叶子的两种格式应属于各自的发行版本")
+	}
+	assertArtworkPriorityBinding(t, fixture, service, root, "Box/Disc 3/01.flac", "box_leaf", "folder", cover)
+	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM releases WHERE source_root_id=$1::uuid`, 3, root.ID)
+}
+
+// 注册根里的图片不属于任何一个 Box 叶子，普通叶子与格式拆分叶子都不能继承。
+func TestPostgreSQLArtworkPriorityBox叶子不使用注册根封面(t *testing.T) {
+	for _, split := range []bool{false, true} {
+		name, kind := "普通Box叶子", "box_leaf"
+		if split {
+			name, kind = "格式拆分Box叶子", "format_split"
+		}
+		t.Run(name, func(t *testing.T) {
+			fixture := newLibraryFixture(t)
+			root := insertScannerRoot(t, fixture, "artwork-priority-root-box")
+			service, logs := newIncrementalTestService(t, fixture)
+			writeArtworkPriorityFLAC(t, root, "Disc 1/01.flac", "Album", 1, 1, nil)
+			if split {
+				writeIncrementalTestMP3(t, root, "Disc 1/01.mp3", 2, 1, nil)
+			}
+			writeScanFixtureFile(t, root, "cover.jpg", jpegArtworkOfWidth(6))
+			runIncrementalTestScan(t, service, logs, root)
+			flacID := assertArtworkPriorityBinding(t, fixture, service, root, "Disc 1/01.flac", kind, "", nil)
+			if split {
+				mp3ID := assertArtworkPriorityBinding(t, fixture, service, root, "Disc 1/01.mp3", kind, "", nil)
+				if flacID == mp3ID {
+					t.Fatal("注册根下的两种格式应属于各自的发行版本")
+				}
+			}
+			assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM release_artworks a JOIN releases r ON r.id=a.release_id WHERE r.source_root_id=$1::uuid`, 0, root.ID)
+		})
+	}
+}
+
 // AC6：高档候选损坏时继续向下找；最终找到有效图片的扫描不产生封面失败诊断。
 func TestPostgreSQLArtworkPriority损坏封面逐档回退(t *testing.T) {
 	for _, tc := range []struct {
