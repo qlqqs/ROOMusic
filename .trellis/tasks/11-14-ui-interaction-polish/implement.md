@@ -30,7 +30,7 @@
 - [x] 更新 `frontend/DESIGN-components.md`、`frontend/DESIGN.md`、`.trellis/spec/frontend/component-catalog.md`、`player-design-guidelines.md`、`interface-layout-guidelines.md`。
 - [x] 合并后跑一次全量单元测试与 e2e；首次失败修复后仅定向复验，详情见最终验收报告。
 - [x] `npm run build` 更新 `backend/cmd/roomusic/web` 产物并提交。
-- [ ] 清理分区工作目录与分支。
+- [x] 清理分区工作目录与分支。
 
 ## 验证命令
 
@@ -57,3 +57,7 @@ A 区已完成检查并与 B–E 集成，最近新增卡片播放已接通。A 
 ## 2026-11-15 最终验收
 
 功能及自动化门禁完成，生产构建与前端规范已同步。单测 4026 通过、1 条条件跳过，模拟后端浏览器 592 通过，相关真实服务 15/15 通过；计数复用全量基线与定向复验。35 项已逐条截图核对，与样机的落地差异明确保留。见 [最终验收汇总](verification/final-acceptance.md)。主分支集成、推送及分区清理尚未执行，任务保持进行中。
+
+## 2026-11-15 主分支集成收尾
+
+用户要求合入 main 并推送，已通过合并提交 `f0b8c0fe` 完成并推送。合并没有冲突，前后端文件与最终验收提交完全一致，复用既有测试结果。六个任务及分区工作目录和对应本地分支已清理；日志、截图和主工作区原有未跟踪任务资料保留在 `temp/archive/2026-11-15/ui-interaction-polish/`。任务随本次收尾归档。
