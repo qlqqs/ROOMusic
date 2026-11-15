@@ -127,14 +127,25 @@ for (const width of [320, 375, 390, 768, 1024, 1440]) {
     expect(albumBox).not.toBeNull();
     expect(trackBox).not.toBeNull();
     expect(trackBox?.y).toBeGreaterThan((albumBox?.y ?? 0) + (albumBox?.height ?? 0));
-    // D6 只约束建议：结果页曲目标题、艺人与匹配说明仍可自然换行。
+    // 宽表单行省略，窄容器标题可换行；省略后仍提供完整的悬停文字与可访问名称。
     const table = page.getByRole("table", { name: "曲目结果" });
-    await expect(table.getByRole("link", { name: track.artist, exact: true })).toBeVisible();
-    for (const text of [track.title, track.artist, `厂牌：${track.match.original}`]) {
-      const content = table.getByText(text, { exact: true });
-      if (width < 1440) expect(await textLines(content)).toBeGreaterThan(1);
-      expect(await content.evaluate((node) => getComputedStyle(node).webkitLineClamp)).toBe("none");
+    const stacked = await table.evaluate((node) => node.clientWidth < 640);
+    const artist = table.getByRole("link", { name: track.artist, exact: true });
+    await expect(artist).toBeVisible();
+    await expect(artist).toHaveAccessibleName(track.artist);
+    for (const text of [track.title, track.artist, track.release.title]) {
+      const content = table.getByTitle(text, { exact: true });
+      await expect(content).toContainText(text);
+      await expect(content).toHaveAttribute("title", text);
+      if (!stacked) {
+        await expect(content).toHaveCSS("white-space", "nowrap");
+        await expect(content).toHaveCSS("text-overflow", "ellipsis");
+      }
     }
+    await expect(table.getByRole("rowheader", { name: track.title })).toBeVisible();
+    await expect(table.getByText(`厂牌：${track.match.original}`, { exact: true })).toHaveText(`厂牌：${track.match.original}`);
+    expect(await textLines(artist), "艺人栏目在宽表与窄容器中均保持单行").toBe(1);
+    if (stacked) expect(await textLines(table.getByText(track.title, { exact: true })), "窄容器的长标题可换行").toBeGreaterThan(1);
     const action = page.getByRole("button", { name: /^播放 / });
     await expect(action).toHaveAccessibleName(/^播放 /);
     expect(await action.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);

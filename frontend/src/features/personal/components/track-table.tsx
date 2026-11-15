@@ -4,7 +4,7 @@ import { cx } from "../../../shared/lib/class-names";
 import { formatDuration } from "../../../shared/lib/duration";
 import { formatCount } from "../../../shared/lib/number";
 import { StatusTag, VisuallyHidden } from "../../../shared/ui";
-import { albumArtistOf, albumArtistRefsOf, ArtistNames, trackArtistOf, trackArtistRefsOf, trackTitleOf, type TrackSummaryDTO } from "../../catalog";
+import { ArtistNames, trackArtistOf, trackArtistRefsOf, trackTitleOf, type TrackSummaryDTO } from "../../catalog";
 import styles from "./track-table.module.css";
 
 type TrackTableProps = {
@@ -17,8 +17,8 @@ type TrackTableProps = {
 };
 
 /**
- * 我喜欢的音乐与歌单详情共用的曲目表：[把手]、#、标题、专辑艺人、专辑、发行、操作、时长，带表头。
- * 用 div 加表格角色：各行用 subgrid 与表头对齐，窄容器（< 640px）折叠成“标题 + 次要信息”两行，操作与时长留在右边，不横向滚动。
+ * 我喜欢的音乐与歌单详情共用的曲目表：[把手]、#、标题、艺人（曲目艺人）、专辑、发行、操作、时长，带表头；宽容器里每首一行，过长省略。
+ * 用 div 加表格角色：各行用 subgrid 与表头对齐，窄容器（< 640px）折叠成“标题 + 艺人 · 专辑 · 发行”两行，操作与时长留在右边，不横向滚动。
  */
 export function TrackTable({ label, sortable = false, children }: TrackTableProps) {
   return (
@@ -36,7 +36,7 @@ export function TrackTable({ label, sortable = false, children }: TrackTableProp
               <VisuallyHidden>序号</VisuallyHidden>
             </div>
             <div role="columnheader">标题</div>
-            <div role="columnheader">专辑艺人</div>
+            <div role="columnheader">艺人</div>
             <div role="columnheader">专辑</div>
             <div role="columnheader">发行</div>
             <div role="columnheader">
@@ -68,16 +68,10 @@ type TrackTableRowProps = {
   dragging?: boolean;
 };
 
-/** 曲目艺人与专辑艺人不同时，标题下小字写曲目艺人（与专辑页规则相同）。 */
-function showsTrackArtist(track: TrackSummaryDTO): boolean {
-  const artist = track.artist.trim();
-  return artist !== "" && artist !== albumArtistOf(track.release);
-}
-
 export function TrackTableRow({ track, number, actions, handle, ref, style, dragging = false }: TrackTableRowProps) {
   const { release } = track;
   return (
-    <div ref={ref} role="row" className={styles.row} style={style} data-dragging={dragging ? "" : undefined} data-missing={track.present ? undefined : ""}>
+    <div ref={ref} role="row" className={styles.row} style={style} data-context-row="" data-dragging={dragging ? "" : undefined} data-missing={track.present ? undefined : ""}>
       {handle === undefined ? null : (
         <div role="cell" className={styles.handle}>
           {handle}
@@ -86,13 +80,8 @@ export function TrackTableRow({ track, number, actions, handle, ref, style, drag
       <div role="cell" className={styles.number}>
         {formatCount(number)}
       </div>
-      <div role="rowheader" className={styles.title}>
+      <div role="rowheader" className={styles.title} title={trackTitleOf(track)}>
         <span className={styles.name}>{trackTitleOf(track)}</span>
-        {showsTrackArtist(track) ? (
-          <span className={styles.artist}>
-            <ArtistNames text={trackArtistOf(track)} refs={trackArtistRefsOf(track)} />
-          </span>
-        ) : null}
         {track.present ? null : (
           <span className={styles.tag}>
             <StatusTag tone="outline">文件缺失</StatusTag>
@@ -101,10 +90,10 @@ export function TrackTableRow({ track, number, actions, handle, ref, style, drag
       </div>
       {/* 宽容器里 display: contents，三个单元格直接对齐表头；窄容器里成为标题下的第二行。 */}
       <div className={styles.meta}>
-        <div role="cell">
-          <ArtistNames text={albumArtistOf(release)} refs={albumArtistRefsOf(release)} />
+        <div role="cell" title={trackArtistOf(track)}>
+          <ArtistNames text={trackArtistOf(track)} refs={trackArtistRefsOf(track)} />
         </div>
-        <div role="cell">
+        <div role="cell" title={release.title}>
           {track.present ? (
             <Link to="/albums/$groupId" params={{ groupId: track.group_id }} search={{ release: release.id }}>
               {release.title}

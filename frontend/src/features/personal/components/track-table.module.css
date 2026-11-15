@@ -58,26 +58,17 @@
   text-align: right;
 }
 
+/* 宽容器里每首一行：标题、艺人、专辑过长时末尾省略，悬停提示全文。 */
 .title {
-  display: grid;
-  justify-items: start;
-  gap: 2px;
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-weight: 500;
 }
 
-.name {
-  overflow-wrap: anywhere;
-}
-
-.artist {
-  color: var(--text-secondary);
-  font-size: var(--fs-13);
-  font-weight: 400;
-}
-
 .tag {
+  margin-left: var(--space-2);
   font-weight: 400;
 }
 
@@ -92,7 +83,9 @@
 
 .meta > * {
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   color: var(--text-secondary);
   font-size: var(--fs-13);
 }
@@ -102,13 +95,11 @@
 }
 
 /* 行里的次要链接（艺人、专辑）用次要文字色，悬停加下划线。 */
-.artist a,
 .meta a {
   color: inherit;
   text-decoration: none;
 }
 
-.artist a:hover,
 .meta a:hover {
   color: var(--text-primary);
   text-decoration: underline;
@@ -157,7 +148,7 @@
 }
 
 /*
- * 窄容器：去掉表头，列只剩 [把手] 序号、标题、操作、时长；专辑艺人、专辑与发行成为标题下的单行次要信息，用“ · ”隔开。
+ * 窄容器：去掉表头，列只剩 [把手] 序号、标题、操作、时长；艺人、专辑与发行成为标题下的单行次要信息，用“ · ”隔开。
  * 列位置从右往左数，有没有把手列都一样。
  */
 @container (max-width: 639px) {
@@ -191,6 +182,8 @@
   .title {
     grid-column: -4 / -3;
     grid-row: 1;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   /* 次要信息只占一行，放不下时末尾省略。 */

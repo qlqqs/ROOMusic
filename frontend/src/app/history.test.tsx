@@ -99,7 +99,9 @@ describe("我的音乐历史页", () => {
     setup([second, first]);
     renderApp({ path: "/me/history" });
     const table = await screen.findByRole("table", { name: "播放历史" });
-    expect(within(table).getAllByRole("rowheader").map((cell) => cell.textContent)).toEqual([`${second.title}${second.artist}`, `${first.title}${first.artist}`]);
+    expect(within(table).getAllByRole("rowheader").map((cell) => cell.textContent)).toEqual([second.title, first.title]);
+    expect(within(table).getByRole("columnheader", { name: "艺人" })).toBeTruthy();
+    expect(within(row(first.title)).getByRole("cell", { name: first.artist })).toBeTruthy();
     expect(within(row(first.title)).getByRole("link").getAttribute("href")).toBe(`/albums/${first.group_id}?release=${first.release.id}`);
     expect(within(row(first.title)).getByText(String(first.play_count))).toBeTruthy();
     expect(row(first.title).querySelector("time")?.textContent).toBe(formatDateTime(first.last_played_at));

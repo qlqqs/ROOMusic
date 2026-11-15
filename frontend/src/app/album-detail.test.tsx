@@ -27,10 +27,10 @@ const heading = (name: string) => screen.findByRole("heading", { level: 1, name 
 const groupRequests = (api: Api) => api.requestsTo("GET", /^\/api\/v1\/release-groups\/[^/]+$/);
 const releaseRequests = (api: Api) => api.requestsTo("GET", /^\/api\/v1\/releases\/[^/]+$/);
 const evidenceRequests = (api: Api) => api.requestsTo("GET", /^\/api\/v1\/releases\/[^/]+\/evidence$/);
-const trackRows = () => Array.from(document.querySelectorAll("ol > li"));
+const trackRows = () => Array.from(document.querySelectorAll<HTMLLIElement>("ol > li"));
 /** 页头里“全部曲目”那一行（全部曲目共有的署名）；没有时是 null。 */
 const sharedCreditsText = () => Array.from(document.querySelectorAll("header p")).find((line) => line.textContent.startsWith("全部曲目"))?.textContent ?? null;
-/** 曲目行自身的文字（序号、标题、艺人与署名、时长、标记），不含播放器放进行末插槽的动作；插槽内容由播放器测试覆盖。 */
+/** 曲目行自身的文字（序号、标题、艺人与作曲栏、时长、标记），不含播放器放进行末插槽的动作；插槽内容由播放器测试覆盖。 */
 function rowFacts(row: Element | undefined): string | null | undefined {
   if (row === undefined) return undefined;
   const copy = row.cloneNode(true) as Element;
@@ -47,7 +47,7 @@ function headerFact(label: string): string | null {
 }
 
 describe("专辑详情：单版本", () => {
-  it("标题与专辑艺人、头部概况、侧栏发行信息与制作人员；没有版本导航与“个版本”字样", async () => {
+  it("标题与专辑艺人、头部概况、侧栏发行信息；只有专辑艺人时不显示制作人员；没有版本导航与“个版本”字样", async () => {
     const album = symphonies();
     setup({ groups: [album] });
     renderApp({ path: `/albums/${album.id}` });
@@ -71,8 +71,7 @@ describe("专辑详情：单版本", () => {
     expect(facts.getByText("条码").nextElementSibling?.textContent).toBe("0123456789012");
     expect(facts.getByText("版本说明").nextElementSibling?.textContent).toBe("Remastered");
     expect(facts.queryByText("来源类型")).toBeNull(); // 没有值的条目不列出
-    const credits = within(within(aside).getByRole("region", { name: "制作人员" }));
-    expect(credits.getByText("专辑艺人").nextElementSibling?.textContent).toBe("Sample Orchestra");
+    expect(within(aside).queryByRole("region", { name: "制作人员" })).toBeNull();
 
     expect(screen.queryByRole("navigation", { name: "版本" })).toBeNull();
     expect(screen.queryByText(/个版本/)).toBeNull();
@@ -162,9 +161,9 @@ describe("专辑详情：介质与曲目", () => {
     expect(first.getAllByRole("listitem")).toHaveLength(2);
     expect(second.getAllByRole("listitem")).toHaveLength(1);
     expect(first.getByRole("heading", { level: 3 }).textContent).toBe("第 1 张，2 首");
-    // 序号、标题与时长；曲目艺人与专辑艺人相同时不重复。每一首都是同一位作曲、指挥：署名只在页头列一次，曲目行不再重复。
+    // 宽表艺人与作曲分栏；共同的指挥署名只在页头列一次。
     const row = first.getAllByRole("listitem")[0];
-    expect(rowFacts(row)).toBe("1Track 1-011:51");
+    expect(rowFacts(row)).toBe("1Track 1-01艺人：Sample Orchestra作曲：Sample Composer1:51");
     expect(sharedCreditsText()).toBe("全部曲目：作曲： Sample Composer；指挥： Sample Conductor");
     // 播放动作在行末单独的插槽里，不混进曲目事实。
     if (row === undefined) throw new Error("缺少曲目行");
@@ -205,7 +204,7 @@ describe("专辑详情：介质与曲目", () => {
     expect(headerFact("介质")).toBeNull();
   });
 
-  it("曲目艺人与专辑艺人不同时才显示；没有署名的曲目不留空行；未知时长写“—”并给读屏“时长未知”", async () => {
+  it("艺人和作曲分栏，其他署名在曲目信息里显示；未知时长写“—”并给读屏“时长未知”", async () => {
     const album = symphonies({ medium_count: 1, track_count: 3 });
     const { catalog } = setup({ groups: [album] });
     catalog.releases.set(
@@ -220,17 +219,29 @@ describe("专辑详情：介质与曲目", () => {
     await screen.findByText("Track 01");
 
     const rows = trackRows();
-    expect(rowFacts(rows[0])).toBe("1Track 011:51作曲：Sample Composer；指挥：Sample Conductor");
-    expect(rowFacts(rows[1])).toBe("2Track 02—时长未知Sample Soloist");
-    // 标题缺失写“（无标题）”；未知角色原样显示。
-    expect(rowFacts(rows[2])).toBe("3（无标题）2:11mixer：Someone");
+    expect(rowFacts(rows[0])).toBe("1Track 01艺人：Sample Orchestra作曲：Sample Composer1:51");
+    expect(rowFacts(rows[1])).toBe("2Track 02艺人：Sample Soloist—时长未知");
+    await userEvent.click(screen.getByText("Track 01"));
+    let info = within(screen.getByRole("region", { name: "曲目信息" }));
+    expect(info.queryByText("艺人", { exact: true })).toBeNull();
+    expect(info.getByText("作曲").nextElementSibling?.textContent).toBe("Sample Composer");
+    expect(info.getByText("指挥").nextElementSibling?.textContent).toBe("Sample Conductor");
+    await userEvent.click(screen.getByText("Track 02"));
+    info = within(screen.getByRole("region", { name: "曲目信息" }));
+    expect(info.getByText("艺人").nextElementSibling?.textContent).toBe("Sample Soloist");
+    expect(info.queryByText("作曲", { exact: true })).toBeNull();
+    // 标题缺失写“（无标题）”；未知角色在曲目信息里原样显示。
+    expect(rowFacts(rows[2])).toBe("3（无标题）艺人：Sample Orchestra2:11");
+    await userEvent.click(screen.getByText("（无标题）"));
+    info = within(screen.getByRole("region", { name: "曲目信息" }));
+    expect(info.getByText("mixer").nextElementSibling?.textContent).toBe("Someone");
     // 有一首的时长未知，就不写总时长。
     expect(screen.queryByText("总时长")).toBeNull();
     // 不是每一首都有的署名不上提到页头。
     expect(sharedCreditsText()).toBeNull();
   });
 
-  it("全部曲目共有的署名只在页头列一次：同一位作曲上提，各首不同的指挥留在曲目行；只有一首曲目时不上提", async () => {
+  it("全部曲目共有的署名只在页头列一次：同一位作曲上提，各首不同的指挥留在曲目信息", async () => {
     const album = symphonies({ medium_count: 1, track_count: 3 });
     const { catalog } = setup({ groups: [album] });
     catalog.releases.set(
@@ -240,6 +251,7 @@ describe("专辑详情：介质与曲目", () => {
           credits: [
             { role: "composer", name: "Sample Composer" },
             { role: "conductor", name: `Conductor ${track}` },
+            ...(track === 1 ? [{ role: "performer", name: "Sample Orchestra" }] : []),
           ],
         })),
       }),
@@ -247,16 +259,27 @@ describe("专辑详情：介质与曲目", () => {
     renderApp({ path: `/albums/${album.id}` });
     await screen.findByText("Track 01");
     expect(sharedCreditsText()).toBe("全部曲目：作曲： Sample Composer");
-    expect(trackRows().map(rowFacts)).toEqual(["1Track 011:51指挥：Conductor 1", "2Track 022:01指挥：Conductor 2", "3Track 032:11指挥：Conductor 3"]);
+    for (const [index, row] of trackRows().entries()) {
+      expect(row.textContent).not.toContain("Conductor");
+      await userEvent.click(row);
+      const info = within(screen.getByRole("region", { name: "曲目信息" }));
+      expect(info.queryByText("作曲", { exact: true })).toBeNull();
+      expect(info.queryByText("Sample Composer")).toBeNull();
+      expect(info.queryByText("Sample Orchestra")).toBeNull();
+      expect(info.getByText("指挥").nextElementSibling?.textContent).toBe(`Conductor ${index + 1}`);
+    }
   });
 
-  it("只有一首曲目：署名照旧写在曲目行，页头没有“全部曲目”", async () => {
+  it("只有一首曲目：署名保留在曲目信息，页头没有“全部曲目”", async () => {
     const album = symphonies({ medium_count: 1, track_count: 1 });
     setup({ groups: [album] });
     renderApp({ path: `/albums/${album.id}` });
     await screen.findByText("Track 01");
     expect(sharedCreditsText()).toBeNull();
-    expect(rowFacts(trackRows()[0])).toBe("1Track 011:51作曲：Sample Composer；指挥：Sample Conductor");
+    await userEvent.click(screen.getByText("Track 01"));
+    const info = within(screen.getByRole("region", { name: "曲目信息" }));
+    expect(info.getByText("作曲").nextElementSibling?.textContent).toBe("Sample Composer");
+    expect(info.getByText("指挥").nextElementSibling?.textContent).toBe("Sample Conductor");
   });
 
   it("CUE 分轨带标记：取自真实的 CUE 样本", async () => {
@@ -269,7 +292,7 @@ describe("专辑详情：介质与曲目", () => {
     await screen.findByText("Cue One");
     expect(screen.getByText("Cue Two")).toBeTruthy();
     expect(screen.getAllByText("CUE 分轨")).toHaveLength(2);
-    expect(trackRows().map((row) => rowFacts(row))).toEqual(["1Cue OneCUE 分轨2:00", "2Cue TwoCUE 分轨2:00"]);
+    expect(trackRows().map((row) => rowFacts(row))).toEqual(["1Cue OneCUE 分轨艺人：Sample Cue Artist2:00", "2Cue TwoCUE 分轨艺人：Sample Cue Artist2:00"]);
     expect(headerFact("总时长")).toBe("4 分钟");
   });
 
@@ -298,6 +321,61 @@ describe("专辑详情：介质与曲目", () => {
     catalog.releases.set(album.representative.id, releaseDetailOf(album.representative, { media: [] }));
     renderApp({ path: `/albums/${album.id}` });
     expect(await screen.findByText("这个版本没有可显示的曲目。")).toBeTruthy();
+  });
+});
+
+describe("专辑详情：曲目选中与信息", () => {
+  it("单击行在发行信息后显示曲目信息，再次单击、Esc 或关闭按钮取消选中", async () => {
+    const album = symphonies({ medium_count: 1, track_count: 2 });
+    const { catalog } = setup({ groups: [album] });
+    catalog.releases.set(album.representative.id, releaseDetailOf(album.representative, {
+      credits: [{ role: "album_artist", name: "Sample Orchestra" }, { role: "producer", name: "Sample Producer" }],
+    }));
+    renderApp({ path: `/albums/${album.id}` });
+    const title = await screen.findByText("Track 01");
+    const row = title.closest("li");
+    if (row === null) throw new Error("缺少曲目行");
+    await userEvent.click(title);
+    expect(row.hasAttribute("data-selected")).toBe(true);
+    expect(within(row).getByText("，已选中")).toBeTruthy();
+    const aside = screen.getByRole("complementary", { name: "发行信息" });
+    expect(within(aside).getAllByRole("region").map((region) => within(region).getByRole("heading").textContent)).toEqual(["发行信息", "制作人员", "曲目信息"]);
+    const credits = within(screen.getByRole("region", { name: "制作人员" }));
+    expect(credits.getByText("制作人").nextElementSibling?.textContent).toBe("Sample Producer");
+    expect(credits.queryByText("专辑艺人")).toBeNull();
+    const info = within(screen.getByRole("region", { name: "曲目信息" }));
+    expect(info.getByText("第 1 首 · 1:51")).toBeTruthy();
+    expect(info.queryByText("艺人", { exact: true })).toBeNull();
+    expect(info.queryByText("Sample Composer")).toBeNull();
+    expect(info.queryByText("Sample Conductor")).toBeNull();
+    await userEvent.click(title);
+    expect(screen.queryByRole("region", { name: "曲目信息" })).toBeNull();
+    expect(row.hasAttribute("data-selected")).toBe(false);
+    await userEvent.click(title);
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("region", { name: "曲目信息" })).toBeNull();
+    await userEvent.click(title);
+    await userEvent.click(screen.getByRole("button", { name: "关闭曲目信息" }));
+    expect(screen.queryByRole("region", { name: "曲目信息" })).toBeNull();
+  });
+
+  it("右键和更多菜单的曲目信息项都选中对应行并聚焦标题", async () => {
+    const album = symphonies({ medium_count: 1, track_count: 2 });
+    setup({ groups: [album] });
+    renderApp({ path: `/albums/${album.id}` });
+    await screen.findByText("Track 01");
+    for (const [index, row] of trackRows().entries()) {
+      if (index === 0) fireEvent.contextMenu(row, { button: 2, clientX: 100, clientY: 100 });
+      else await userEvent.click(within(row).getByRole("button", { name: "更多操作" }));
+      const menu = screen.getByRole("menu");
+      expect(within(menu).getAllByRole("menuitem").at(-1)?.textContent).toBe("曲目信息");
+      await userEvent.click(within(menu).getByRole("menuitem", { name: "曲目信息" }));
+      expect(row.hasAttribute("data-selected")).toBe(true);
+      const info = screen.getByRole("region", { name: "曲目信息" });
+      expect(within(info).getByText(`Track 0${index + 1}`)).toBeTruthy();
+      expect(document.activeElement).toBe(within(info).getByRole("heading", { name: "曲目信息" }));
+      await userEvent.click(screen.getByRole("button", { name: "关闭曲目信息" }));
+    }
   });
 });
 
@@ -813,6 +891,7 @@ describe("专辑详情：来源与证据", () => {
     ]);
     // 未知角色原样显示；新增的已知角色显示中文名，并保留对应署名。
     const credits = within(screen.getByRole("region", { name: "制作人员" }));
+    expect(credits.queryByText("专辑艺人")).toBeNull();
     expect(credits.getByText("unknown_role").nextElementSibling?.textContent).toBe("Someone Else");
     expect(credits.getByText("作词").nextElementSibling?.textContent).toBe("Sample Lyricist");
     expect(credits.getByText("编曲").nextElementSibling?.textContent).toBe("Sample Arranger");
@@ -831,10 +910,9 @@ describe("样本数据", () => {
     expect(trackRows().map((row) => row.querySelector("p")?.textContent)).toEqual(["Allegro", "Andante", "Finale"]);
     expect(screen.getByRole("region", { name: /^第 1 张/ })).toBeTruthy();
     expect(screen.getByRole("region", { name: /^第 2 张/ })).toBeTruthy();
-    // 曲目艺人与专辑艺人不同：第二首单独一行显示 Sample Soloist；第一首的艺人与专辑艺人相同，只有署名里提到演奏者。
-    const lines = (row: Element | undefined) => Array.from(row?.querySelectorAll("p") ?? []).map((line) => line.textContent);
-    expect(lines(trackRows()[1])).toContain("Sample Soloist");
-    expect(lines(trackRows()[0])).not.toContain("Sample Soloist");
+    // 曲目艺人在独立栏目里，第二首与专辑艺人不同。
+    expect(trackRows()[1]?.querySelector('p[title="Sample Soloist"]')?.textContent).toBe("艺人：Sample Soloist");
+    expect(trackRows()[0]?.querySelector('p[title="Sample Orchestra"]')?.textContent).toBe("艺人：Sample Orchestra");
     // 样本里三首的署名相同：页头列一次，曲目行不再重复。
     expect(sharedCreditsText()).toBe("全部曲目：作词： Sample Lyricist；作曲： Sample Composer；编曲： Sample Arranger；指挥： Sample Conductor；小提琴： Sample Soloist");
     for (const row of trackRows()) expect(row.textContent).not.toContain("Sample Lyricist");

@@ -16,7 +16,7 @@
 | `useTooltip`（2026-11-08） | 图标按钮与图标链接的悬停提示：返回 `triggerProps`（放到触发元素上）与 `tooltip`（渲染在触发元素旁）。只响应鼠标，停留 300ms 显示，移开、按下、Esc、滚动或窗口缩放立即消失，按下后要移出再移入才会再出现；键盘焦点不弹，提示 `aria-hidden`（读屏靠 `aria-label`）。浮层 fixed 定位，渲染到 `trigger.closest("dialog") ?? document.body`，不被表格、播放器栏裁掉，默认在上方、放不下翻到下方。`Button variant="icon"`（含 `MenuButton iconOnly`）、心形、侧栏展开按钮都用它；新加的图标控件也用它，不写 `title` |
 | `Avatar`（2026-11-08） | 圆形头像，内容是用户名的第一个字素（拉丁字母大写）；装饰性（`aria-hidden`），旁边总要写出用户名。用户菜单与歌单页头共用 |
 | `ModalDialog`、`ConfirmDialog` | 原生 `<dialog>` 的模态：有可访问名称，打开时焦点进入（确认对话框初始焦点在“取消”，避免回车直接确认），Esc 与取消可关闭，关闭后焦点回到触发按钮；提交中确认忙碌、取消与 Esc 暂时无效；阻塞性错误留在对话框内。子内容只在打开时渲染，关闭即丢弃其中的私有状态 |
-| `DataTable` | 真正的 `<table>`（有 caption、`rowHeader`）；以**容器宽度**（CSS 容器查询，小于 640px）而不是视口宽度决定是否堆叠成“标签：值”，因为带侧栏时 768px 视口里内容区只有约 500px；不产生任何横向滚动（局部滚动区需要可聚焦，会引入额外的无障碍负担） |
+| `DataTable` | 真正的 `<table>`（有 caption、`rowHeader`）；以**容器宽度**（CSS 容器查询，小于 640px）而不是视口宽度决定是否堆叠成“标签：值”，因为带侧栏时 768px 视口里内容区只有约 500px；不产生任何横向滚动（局部滚动区需要可聚焦，会引入额外的无障碍负担）。列选项：`truncate`（宽表单行省略，`max-width: 0` 让列宽按 `width` 比例分配，`cellTitle` 给悬停全文）、`secondary`（堆叠时不带标签，与其他 secondary 列在行标题下合成一行“·”分隔的小字）；`contextRows` 给行加 `data-context-row` |
 | `Disclosure`（M3） | 页面底部折叠的区块（“来源与证据”“修改记录”）：原生 `<details>` 的展开状态由 React 持有，**折叠时不渲染内容**（没有可聚焦的隐藏控件，内容里的请求也在展开后才发出），展开时挂载；标题行是原生 `summary`（Enter 与空格展开），可经 `summaryRef` 取到，区块外的操作结束后可把焦点带回；换对象时用 `key` 回到折叠 |
 | `Pagination`（F3） | `<nav>` 带可访问名称（如“扫描记录分页”，同一页面可能不止一个分页），内容是“上一页”“第 x / y 页”“下一页”；当前页 `aria-current="page"`；到头的方向显示为 `aria-disabled` 的文字而不是消失，布局不跳动；只有一页或没有数据时不渲染；链接由调用方经 `renderLink` 生成（通常是路由 `Link`，组件不依赖路由），上一页与下一页带 `rel`。页码的 URL 约定见[状态规范](./state-management.md) |
 
@@ -30,6 +30,8 @@
 - 菜单用 `useMenu`（`shared/ui/menu-button.tsx`）：`placement: "above" | "below"`、`matchTriggerWidth`、菜单项 `icon`（不进可访问名称）；
   浮层渲染到 `trigger.closest("dialog") ?? document.body`——模态 `<dialog>` 打开时 body 之外的内容是惰性的，渲染到 body 的菜单在对话框里点不了。
   `MenuButton` 是它的薄包装。菜单项是按钮，导航类菜单项（“设置”）在 `onSelect` 里 `navigate`，这是“导航用链接”的例外。
+  `useMenu` 另返回 `openAt(point, anchor)`：按视口坐标打开（右键菜单），滚动移动 anchor 时关闭，关闭后焦点回到打开前的元素。
+  `useRowContextMenu({ label, actions, inside })`（`shared/ui/context-menu.tsx`）把它挂到 `inside` 最近的 `[data-context-row]` 祖先上，处理右键、菜单键与 Shift+F10。
 - 管理页由 `AdminGate` 把关：非管理员显示“需要管理员权限”，不渲染页面内容，也就不调用管理接口；后端仍独立鉴权。
 - 停用与撤销类操作先确认并说明影响范围，恢复与重新启用直接执行；目标是自己时对话框额外提示会被退出登录。
 - 失败文案按**错误码**选择（各 feature 的 `*-messages.ts`，`as const` 映射），不比较后端 message；未知错误码显示后端的安全

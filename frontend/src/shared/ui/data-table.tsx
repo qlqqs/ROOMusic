@@ -17,6 +17,12 @@ export type Column<Row> = {
   hideLabelWhenStacked?: boolean;
   /** 窄屏堆叠时放在行标题同一行的右侧（曲目行的动作图标），不单独占一行。 */
   besideRowHeader?: boolean;
+  /** 宽表里只占一行，过长末尾省略；cellTitle 给出悬停时看到的全文。省略的列应给 width（占表宽的比例），否则列宽分配不稳定。 */
+  truncate?: boolean;
+  width?: string;
+  cellTitle?: (row: Row) => string | undefined;
+  /** 窄屏堆叠时不带标签，与其他 secondary 列在行标题下合成一行淡色小字，用“·”隔开（曲目的“艺人 · 专辑”）。 */
+  secondary?: boolean;
 };
 
 type DataTableProps<Row> = {
@@ -26,6 +32,8 @@ type DataTableProps<Row> = {
   rows: readonly Row[];
   /** 行的稳定标识（后端 ID），不用下标或显示内容。 */
   rowKey: (row: Row) => string;
+  /** 行上挂 data-context-row：行里的 TrackActions 据此接管右键菜单。 */
+  contextRows?: boolean;
 };
 
 /**
@@ -33,15 +41,16 @@ type DataTableProps<Row> = {
  * 不产生整页或局部的横向滚动。显式写出 ARIA 角色，是因为 Safari 在把表格元素改成块级显示后会丢掉表格语义。
  * 空列表由调用方显示空态，不渲染只有表头的空表。
  */
-export function DataTable<Row>({ caption, columns, rows, rowKey }: DataTableProps<Row>) {
+export function DataTable<Row>({ caption, columns, rows, rowKey, contextRows = false }: DataTableProps<Row>) {
+  const compound = columns.some((column) => column.secondary);
   return (
     <div className={styles.container}>
-      <table className={styles.table} role="table">
+      <table className={cx(styles.table, compound && styles.compound)} role="table">
         <caption className={styles.caption}>{caption}</caption>
         <thead role="rowgroup">
           <tr role="row">
             {columns.map((column) => (
-              <th key={column.id} scope="col" role="columnheader" className={cx(column.numeric && styles.numeric, column.besideRowHeader && styles.beside)}>
+              <th key={column.id} scope="col" role="columnheader" className={cx(column.numeric && styles.numeric, column.besideRowHeader && styles.beside)} style={column.width === undefined ? undefined : { width: column.width }}>
                 {column.headerContent ?? column.header}
               </th>
             ))}
@@ -49,12 +58,12 @@ export function DataTable<Row>({ caption, columns, rows, rowKey }: DataTableProp
         </thead>
         <tbody role="rowgroup">
           {rows.map((row) => (
-            <tr key={rowKey(row)} role="row">
+            <tr key={rowKey(row)} role="row" data-context-row={contextRows ? "" : undefined}>
               {columns.map((column) => {
-                const content = <div className={styles.value}>{column.cell(row)}</div>;
+                const content = <div className={styles.value} title={column.cellTitle?.(row)}>{column.cell(row)}</div>;
                 if (column.rowHeader) {
                   return (
-                    <th key={column.id} scope="row" role="rowheader" className={styles.rowHeader}>
+                    <th key={column.id} scope="row" role="rowheader" className={cx(styles.rowHeader, column.truncate && styles.truncate)}>
                       {content}
                     </th>
                   );
@@ -63,8 +72,14 @@ export function DataTable<Row>({ caption, columns, rows, rowKey }: DataTableProp
                   <td
                     key={column.id}
                     role="cell"
-                    data-label={column.hideLabelWhenStacked ? undefined : column.header}
-                    className={cx(column.numeric && styles.numeric, column.hideLabelWhenStacked && styles.unlabeled, column.besideRowHeader && styles.beside)}
+                    data-label={column.hideLabelWhenStacked || column.secondary ? undefined : column.header}
+                    className={cx(
+                      column.numeric && styles.numeric,
+                      column.hideLabelWhenStacked && styles.unlabeled,
+                      column.besideRowHeader && styles.beside,
+                      column.truncate && styles.truncate,
+                      column.secondary && styles.secondary,
+                    )}
                   >
                     {content}
                   </td>

@@ -1,7 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import { Disc3, ListEnd, ListPlus, ListStart, MoreHorizontal, Play, UserRound } from "lucide-react";
-import { useId, useState } from "react";
-import { Button, MenuButton, VisuallyHidden, type MenuAction } from "../../shared/ui";
+import { useId, useRef, useState } from "react";
+import { Button, MenuButton, useRowContextMenu, VisuallyHidden, type MenuAction } from "../../shared/ui";
 import { useMediaQuery } from "../../shared/lib/use-media-query";
 import { useArtistLinksReady } from "../../features/catalog";
 import { AddToPlaylistDialog, FavoriteButton, useFavoriteMenuAction, type FavoriteTarget } from "../../features/personal";
@@ -12,6 +12,7 @@ import styles from "./track-actions.module.css";
 // 曲目行的统一动作：行内播放、心形与“更多操作”（下一首播放、加入队列、添加到歌单…；前往艺人、前往专辑；再加页面自己的项）。
 // 专辑、历史、收藏、歌单（以后还有搜索结果与艺人页）都用它，由 app 组合：player 与 personal 互不导入。
 // 心形需要放在页面的 FavoriteStatusScope 里（一页一次批量读取收藏状态）。
+// 所在行加 data-context-row 后，右键这一行（或行内按菜单键、Shift+F10）弹出同一组动作，最前面多一项“播放”。
 
 export const QUEUE_FULL_TEXT = "队列已满，请先移除一些条目。";
 
@@ -66,6 +67,7 @@ export function TrackActions({ track, present, playLabel = "播放", onPlay, ret
   const [adding, setAdding] = useState(false);
   const reasonId = useId();
   const narrow = useMediaQuery(NARROW);
+  const root = useRef<HTMLDivElement>(null);
   const favoriteTarget: FavoriteTarget = { kind: "track", id: track.trackId, title: track.title };
   const reason = present && capability.isError ? `无法检查播放能力，${retryHint}` : unplayableReason(track, present, capability.data);
   function play() {
@@ -112,8 +114,13 @@ export function TrackActions({ track, present, playLabel = "播放", onPlay, ret
       : []),
     ...extraActions,
   ];
+  const contextMenu = useRowContextMenu({
+    label: `《${track.title}》的操作`,
+    actions: [{ id: "play", label: "播放", icon: <Play size={16} />, disabled: reason !== null, onSelect: play }, ...actions],
+    inside: root,
+  });
   return (
-    <div className={styles.row}>
+    <div className={styles.row} ref={root}>
       <div className={styles.actions}>
         <span className={playPlacement === "lead" ? styles.lead : styles.inline}>
           <Button variant="icon" icon={<Play size={16} />} label={playLabel} disabled={reason !== null} aria-describedby={reason === null ? undefined : reasonId} onClick={play} data-track-play="" />
@@ -142,6 +149,7 @@ export function TrackActions({ track, present, playLabel = "播放", onPlay, ret
           }}
         />
       ) : null}
+      {contextMenu}
     </div>
   );
 }

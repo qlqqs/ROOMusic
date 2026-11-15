@@ -28,3 +28,4 @@ export { useShelf } from "./shelf";
 export { Switch } from "./switch";
 
 export { MenuButton, useMenu, type MenuAction } from "./menu-button";
+export { useRowContextMenu } from "./context-menu";

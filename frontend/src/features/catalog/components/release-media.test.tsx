@@ -1,4 +1,6 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { useRef, useState } from "react";
+import { TrackInfo } from "./track-info";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { albumGroup, mediaOf } from "../../../test/catalog-data";
 import { ReleaseMedia } from "./release-media";
@@ -89,10 +91,22 @@ describe("曲目署名", () => {
         { role: "producer", name: "欧姆", detail: "混音工程师" },
       ],
     }));
-    render(<ReleaseMedia media={creditedMedia} albumArtist={release.artist} />);
-    expect(screen.getByText("方文山").closest("p")?.textContent).toBe(
-      "作词：方文山；小提琴：Hilary Hahn、Anne-Sophie Mutter；混音：某某；混音工程师：欧姆",
-    );
+    function CreditedTracks() {
+      const [selectedId, select] = useState<string | null>(null);
+      const headingRef = useRef<HTMLHeadingElement>(null);
+      const selected = creditedMedia.flatMap((medium) => medium.tracks).find((track) => track.id === selectedId);
+      return <>
+        <ReleaseMedia media={creditedMedia} albumArtist={release.artist} selectedTrackId={selectedId ?? undefined} onSelectTrack={select} />
+        {selected === undefined ? null : <TrackInfo track={selected} place={{ disc: null, number: 1 }} albumArtist={release.artist} sharedCredits={new Set()} headingRef={headingRef} onClose={() => select(null)} />}
+      </>;
+    }
+    render(<CreditedTracks />);
+    expect(screen.queryByText("方文山")).toBeNull();
+    fireEvent.click(screen.getByText("Track 01"));
+    const info = within(screen.getByRole("region", { name: "曲目信息" }));
+    for (const [label, names] of [["作词", "方文山"], ["小提琴", "Hilary Hahn、Anne-Sophie Mutter"], ["混音", "某某"], ["混音工程师", "欧姆"]] as const) {
+      expect(info.getByText(label).nextElementSibling?.textContent).toBe(names);
+    }
   });
 });
 

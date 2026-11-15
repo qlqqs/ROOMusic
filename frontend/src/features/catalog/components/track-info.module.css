@@ -1,0 +1,35 @@
+/* 与“发行信息”“制作人员”同一套外观（Panel 加两列描述列表）。 */
+.lead {
+  display: grid;
+  gap: 2px;
+}
+
+.title {
+  font-size: var(--fs-15);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.place {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-1) var(--space-4);
+  margin: 0;
+  font-size: var(--fs-13);
+}
+
+.facts dt {
+  color: var(--text-secondary);
+}
+
+.facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}

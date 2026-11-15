@@ -21,3 +21,25 @@
     grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
   }
 }
+
+/* 单栏版面里的曲目信息：从底部弹出、铺满宽度的面板（与设备列表、信号路径的窄屏弹层相同）。 */
+dialog.sheet {
+  width: 100vw;
+  max-width: none;
+  max-height: 80dvh;
+  margin: auto 0 0;
+  border-width: 1px 0 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: var(--color-bg);
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+/* 底部面板里不需要区块上方的分隔线。 */
+.sheetBody > section {
+  border-top: 0;
+}
+
+.sheetBody {
+  padding: var(--space-2) var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+}

@@ -234,23 +234,36 @@ function RoleTracks({ detail, roles, role, search, renderTrackActions, renderTra
         id: "track",
         header: "曲目",
         rowHeader: true,
+        truncate: true,
+        width: "40%",
+        cellTitle: (item) => trackTitleOf(item),
         cell: (item) => (
-          <div className={item.present ? undefined : styles.missing}>
+          <span className={item.present ? undefined : styles.missing}>
             <span className={styles.trackTitle}>{trackTitleOf(item)}</span>
-            <span className={styles.trackArtist}>
-              <ArtistNames text={trackArtistOf(item)} refs={trackArtistRefsOf(item)} />
-            </span>
             {item.present ? null : (
               <span className={styles.tag}>
                 <StatusTag tone="outline">文件缺失</StatusTag>
               </span>
             )}
-          </div>
+          </span>
         ),
+      },
+      {
+        id: "artist",
+        header: "艺人",
+        truncate: true,
+        width: "22%",
+        secondary: true,
+        cellTitle: (item) => trackArtistOf(item),
+        cell: (item) => <ArtistNames text={trackArtistOf(item)} refs={trackArtistRefsOf(item)} />,
       },
       {
         id: "album",
         header: "专辑",
+        truncate: true,
+        width: "26%",
+        secondary: true,
+        cellTitle: (item) => item.release.title,
         cell: (item) =>
           item.present ? (
             <Link to="/albums/$groupId" params={{ groupId: item.group_id }} search={{ release: item.release.id }}>
@@ -261,7 +274,7 @@ function RoleTracks({ detail, roles, role, search, renderTrackActions, renderTra
           ),
       },
       { id: "actions", header: "操作", hideLabelWhenStacked: true, besideRowHeader: true, cell: (item) => renderTrackActions(item) },
-      { id: "duration", header: "时长", numeric: true, cell: (item) => <span className={styles.duration}>{formatDuration(item.duration_seconds)}</span> },
+      { id: "duration", header: "时长", numeric: true, secondary: true, cell: (item) => <span className={styles.duration}>{formatDuration(item.duration_seconds)}</span> },
     ],
     [renderTrackActions],
   );
@@ -305,7 +318,7 @@ function RoleTracks({ detail, roles, role, search, renderTrackActions, renderTra
               </p>
             );
           }
-          const table = <DataTable caption={`${artistRoleLabels[role]}的曲目`} columns={columns} rows={data.items} rowKey={(item) => item.track_id} />;
+          const table = <DataTable caption={`${artistRoleLabels[role]}的曲目`} columns={columns} rows={data.items} rowKey={(item) => item.track_id} contextRows />;
           return (
             <div className={styles.results} aria-busy={tracks.isPlaceholderData}>
               {renderTrackRowsScope === undefined ? table : renderTrackRowsScope(data.items, table)}

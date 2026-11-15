@@ -1,10 +1,10 @@
 import { useNavigate } from "@tanstack/react-router";
-import { MoreHorizontal } from "lucide-react";
+import { Info, MoreHorizontal } from "lucide-react";
 import { useCallback, useMemo, type ReactNode } from "react";
 import { AlbumDetailView, type AlbumSearch, type ReleaseActionsContext, type ReleaseDetailDTO, type ReleaseTrackDTO } from "../../features/catalog";
 import { ReleaseHistory, useReleaseAdminActions, useReleaseCommands, type ReleaseCommands } from "../../features/governance";
 import { AddToPlaylistButton, FavoriteButton, FavoriteStatusScope } from "../../features/personal";
-import { playerTrackOf, playerTracksOf, useAlbumPlayback, useCurrentTrackMarker, usePlayerSelector } from "../../features/player";
+import { playerTrackOf, playerTracksOf, TrackLoudness, useAlbumPlayback, useCurrentTrackMarker, usePlayerSelector } from "../../features/player";
 import { useViewerScope } from "../../features/auth";
 import { formatCount } from "../../shared/lib/number";
 import { MenuButton, type MenuAction } from "../../shared/ui";
@@ -77,11 +77,18 @@ function AdminAlbumActionRow({ context, commands }: { context: ReleaseActionsCon
   return <AlbumActionRow release={release} groupId={groupId} adminActions={admin.actions} adminPanel={admin.panel} />;
 }
 
-/** 专辑页的一行：“从这首开始播放”放整张里能播放的曲目、从这一首起；其余与各页相同（心形、“更多”）。 */
-function AlbumTrackActions({ release, track, groupId }: { release: ReleaseDetailDTO; track: ReleaseTrackDTO; groupId: string }) {
+/** 专辑页“曲目信息”里的响度：来自播放器的分析结果，catalog 不导入 player。 */
+const renderTrackFacts = (trackId: string) => <TrackLoudness trackId={trackId} />;
+
+/**
+ * 专辑页的一行：“从这首开始播放”放整张里能播放的曲目、从这一首起；其余与各页相同（心形、“更多”），
+ * 菜单（含右键）最后多一项“曲目信息”：选中这一行并把焦点移到右栏的曲目信息。
+ */
+function AlbumTrackActions({ release, track, groupId, showInfo }: { release: ReleaseDetailDTO; track: ReleaseTrackDTO; groupId: string; showInfo: () => void }) {
   const item = playerTrackOf(release, track, groupId);
   return (
     <TrackActions
+      extraActions={[{ id: "info", label: "曲目信息", icon: <Info size={16} />, onSelect: showInfo }]}
       track={item}
       present
       playPlacement="lead"
@@ -143,7 +150,7 @@ export function AlbumDetailPage(props: AlbumDetailPageProps) {
       ),
     [commands],
   );
-  const renderTrackActions = useCallback((track: ReleaseTrackDTO, release: ReleaseDetailDTO) => <AlbumTrackActions key={track.id} release={release} track={track} groupId={groupId} />, [groupId]);
+  const renderTrackActions = useCallback((track: ReleaseTrackDTO, release: ReleaseDetailDTO, showInfo: () => void) => <AlbumTrackActions key={track.id} release={release} track={track} groupId={groupId} showInfo={showInfo} />, [groupId]);
   const renderAdminSections = useCallback(
     ({ release, groupId: currentGroupId }: { release: ReleaseDetailDTO; groupId: string }) => (
       <ReleaseHistory key={`history-${release.id}`} release={{ id: release.id, title: release.title }} groupId={currentGroupId} commands={historyCommands} />
@@ -153,6 +160,6 @@ export function AlbumDetailPage(props: AlbumDetailPageProps) {
   return <AlbumDetailView {...props} isAdmin={isAdmin}
     currentTrackId={marker.trackId} currentTrackLabel={marker.label} currentTrackPlaying={marker.playing} albumPlaying={albumPlaying}
     renderReleaseScope={renderReleaseScope}
-    renderReleaseActions={renderReleaseActions} renderTrackActions={renderTrackActions}
+    renderReleaseActions={renderReleaseActions} renderTrackActions={renderTrackActions} renderTrackFacts={renderTrackFacts}
     {...(isAdmin ? { renderAdminSections } : {})} />;
 }
