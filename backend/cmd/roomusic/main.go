@@ -84,6 +84,7 @@ func main() {
 		Addr:              settings.Address,
 		Handler:           requestHandler,
 		ReadHeaderTimeout: 5 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	logger.Info("roomusic server starting", "event", "platform.server.starting", "module", "platform", "address", server.Addr, "version", version, "commit", build.Commit)
