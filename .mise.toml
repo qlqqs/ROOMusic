@@ -3,7 +3,7 @@ go = "1.25.10"
 node = "24.22.1"
 
 [tasks.env-up]
-description = "启动本地开发依赖（PostgreSQL / Redis / Meilisearch）"
+description = "启动本地开发依赖（PostgreSQL）"
 run = "docker compose -f compose.dev.yaml --env-file .env.dev up -d --wait"
 
 [tasks.env-down]
@@ -12,7 +12,7 @@ run = "docker compose -f compose.dev.yaml --env-file .env.dev down"
 
 [tasks.env-logs]
 description = "查看本地开发依赖日志"
-run = "docker compose -f compose.dev.yaml --env-file .env.dev logs -f postgres redis meilisearch"
+run = "docker compose -f compose.dev.yaml --env-file .env.dev logs -f postgres"
 
 [tasks.env-check]
 description = "检查工具链和 Compose 配置"

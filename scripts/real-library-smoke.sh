@@ -311,7 +311,7 @@ PY
 
 validate_cleanup_target() {
   [[ -n "$project" && "$project" =~ ^roomusic-smoke-[a-z0-9-]+$ ]] || return 1
-  [[ "$project" != "roomusic" && "$project" != "roomusic-test" ]] || return 1
+  [[ "$project" != "roomusic-compose-dev" && "$project" != "roomusic-compose-test" ]] || return 1
   [[ -n "$project_marker" && -f "$project_marker" ]] || return 1
   [[ "$(<"$project_marker")" == "$project" ]] || return 1
 }

@@ -19,10 +19,10 @@ unset ROOMUSIC_DATABASE_URL ROOMUSIC_TEST_DATABASE_URL
 for dependency in docker go npm python3 curl flock; do
   command -v "$dependency" >/dev/null || { echo "缺少依赖：$dependency" >&2; exit 1; }
 done
-# 默认保持原测试项目；并行实现线可显式选择带安全前缀的独占项目。
-COMPOSE_PROJECT="${ROOMUSIC_TEST_COMPOSE_PROJECT:-roomusic-test}"
-[[ "$COMPOSE_PROJECT" =~ ^roomusic-test(-[a-z0-9]+)*$ ]] || {
-  echo '测试项目必须是 roomusic-test 或其小写字母数字后缀项目' >&2; exit 1;
+# 默认生成随机后缀项目；并行实现线可显式选择带安全前缀的独占项目。
+COMPOSE_PROJECT="${ROOMUSIC_TEST_COMPOSE_PROJECT:-roomusic-compose-test-${RANDOM}-${RANDOM}}"
+[[ "$COMPOSE_PROJECT" =~ ^roomusic-compose-test(-[a-z0-9]+)*$ ]] || {
+  echo '测试项目必须是 roomusic-compose-test 或其小写字母数字后缀项目' >&2; exit 1;
 }
 docker info >/dev/null
 # 与其他使用同一 Compose project 的本入口互斥；已存在的测试容器也不能接管。
@@ -36,7 +36,7 @@ existing_networks="$(docker network ls -q --filter "label=com.docker.compose.pro
 [[ -z "$existing_containers$existing_volumes$existing_networks" ]] || {
   echo "$COMPOSE_PROJECT 已有容器、数据卷或网络；拒绝接管历史测试资源" >&2; exit 1;
 }
-# 先于任何临时资源取出 ffmpeg：它只用 docker create/cp（不属于 roomusic-test 项目），失败就直接退出。
+# 先于任何临时资源取出 ffmpeg：它只用 docker create/cp（不属于 roomusic-compose-test 项目），失败就直接退出。
 FFMPEG_PATH=''
 if [[ "$SCAN_FEEDBACK_ONLY" == false ]]; then
   FFMPEG_PATH="$("$ROOT_DIR/scripts/ffmpeg-pinned.sh")"

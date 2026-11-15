@@ -18,6 +18,9 @@ docker compose -f "$ROOT_DIR/compose.dev.yaml" up -d --wait postgres
 
 backend_pid=""
 frontend_pid=""
+backend_started_at=0
+backend_restart_delay=0
+backend_restart_at=0
 cleanup() {
   trap - INT TERM EXIT
   [[ -n "$backend_pid" ]] && kill "$backend_pid" 2>/dev/null || true
@@ -29,6 +32,8 @@ trap cleanup INT TERM EXIT
 start_backend() {
   (cd "$ROOT_DIR/backend" && exec go run ./cmd/roomusic) &
   backend_pid=$!
+  backend_started_at=$SECONDS
+  backend_restart_at=0
 }
 
 start_backend
@@ -38,16 +43,33 @@ frontend_pid=$!
 last_fingerprint=""
 while :; do
   sleep 1
-  if ! kill -0 "$backend_pid" 2>/dev/null; then
-    start_backend
-    last_fingerprint=""
-    continue
-  fi
   fingerprint="$(find "$ROOT_DIR/backend" -type f \( -name '*.go' -o -name '*.sql' \) -printf '%T@ %p\n' 2>/dev/null | sort | sha256sum)"
   if [[ -n "$last_fingerprint" && "$fingerprint" != "$last_fingerprint" ]]; then
     kill "$backend_pid" 2>/dev/null || true
     wait "$backend_pid" 2>/dev/null || true
+    backend_restart_delay=0
     start_backend
+  elif ! kill -0 "$backend_pid" 2>/dev/null; then
+    if (( backend_restart_at == 0 )); then
+      wait "$backend_pid" 2>/dev/null || true
+      if (( SECONDS - backend_started_at < 10 )); then
+        if (( backend_restart_delay == 0 )); then
+          backend_restart_delay=1
+        else
+          backend_restart_delay=$((backend_restart_delay * 2))
+          (( backend_restart_delay <= 30 )) || backend_restart_delay=30
+        fi
+        printf '后端启动后很快退出，%s 秒后重启\n' "$backend_restart_delay" >&2
+      else
+        backend_restart_delay=0
+      fi
+      backend_restart_at=$((SECONDS + backend_restart_delay))
+    fi
+    if (( SECONDS >= backend_restart_at )); then
+      start_backend
+    fi
+  elif (( SECONDS - backend_started_at >= 10 )); then
+    backend_restart_delay=0
   fi
   last_fingerprint="$fingerprint"
 done

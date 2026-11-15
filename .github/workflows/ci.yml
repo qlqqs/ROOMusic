@@ -113,7 +113,6 @@ jobs:
       - name: Validate Compose configuration
         env:
           PG_PASSWORD: ci-placeholder
-          MEILI_MASTER_KEY: ci-placeholder
         run: |
           docker compose -f compose.dev.yaml config --quiet
           docker compose -f compose.test.yaml config --quiet
@@ -127,6 +126,9 @@ jobs:
           grep -qF "postgresql${pg_major}-client" deploy/production/Dockerfile
           grep -qF "PostgreSQL) ${pg_major}\\." deploy/production/Dockerfile
           grep -qF "$(sed -n 's/^x-postgres-image: &postgres-image //p' compose.prod.yaml)" scripts/pg-client-pinned.sh
+          for compose_file in compose.dev.yaml compose.test.yaml; do
+            grep -qF "image: $(sed -n 's/^x-postgres-image: &postgres-image //p' compose.prod.yaml)" "$compose_file"
+          done
       - name: Test release checks
         run: python3 scripts/tests/test_release_check.py
       - name: Run PostgreSQL 18 and pinned ffmpeg integration tests

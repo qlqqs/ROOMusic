@@ -25,7 +25,7 @@ DOCKER
 chmod +x "$TEMP_DIR/bin/docker"
 export PATH="$TEMP_DIR/bin:$PATH" TMPDIR="$TEMP_DIR" GUARD_CALLS="$TEMP_DIR/calls"
 # 两条实现线都覆盖普通入口与扫描反馈专用入口。
-for GUARD_PROJECT in roomusic-test-m5p roomusic-test-m5f; do
+for GUARD_PROJECT in roomusic-compose-test-m5p roomusic-compose-test-m5f; do
   export GUARD_PROJECT
   for entry in playback scan-feedback; do
     args=()

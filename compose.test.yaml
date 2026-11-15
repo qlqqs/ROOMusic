@@ -1,10 +1,10 @@
-name: roomusic-test
+name: roomusic-compose-test
 
 services:
   postgres:
     # 复用 Docker 默认 bridge，避免自动分配项目子网覆盖本机局域网。
     network_mode: bridge
-    image: postgres:18-alpine
+    image: postgres:18.1-alpine3.23@sha256:aa6eb304ddb6dd26df23d05db4e5cb05af8951cda3e0dc57731b771e0ef4ab29
     ports:
       - "127.0.0.1:${ROOMUSIC_TEST_PG_PORT:-55432}:5432"
     environment:
@@ -12,7 +12,7 @@ services:
       POSTGRES_USER: "${ROOMUSIC_TEST_PG_USER:-roomusic_test}"
       POSTGRES_PASSWORD: "${ROOMUSIC_TEST_PG_PASSWORD:-roomusic_test}"
     volumes:
-      - roomusic-test-postgres-data:/var/lib/postgresql
+      - roomusic-compose-test-postgres-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${ROOMUSIC_TEST_PG_USER:-roomusic_test} -d ${ROOMUSIC_TEST_PG_DATABASE:-roomusic_test}"]
       interval: 2s
@@ -20,4 +20,4 @@ services:
       retries: 30
 
 volumes:
-  roomusic-test-postgres-data:
+  roomusic-compose-test-postgres-data:

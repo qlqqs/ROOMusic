@@ -3,9 +3,9 @@
 ## Core 0 Database Contract
 
 PostgreSQL 18 is the only required business authority for Core 0. The current
-[Compose file](../../../compose.dev.yaml) provides it locally. Redis and Meilisearch
-may be running for development, but application startup, sessions, scanning,
-search, and the user-visible Core 0 loop must work without them.
+[Compose file](../../../compose.dev.yaml) provides it locally and contains no other
+service. Application startup, sessions, scanning, search, and the user-visible
+Core 0 loop must not depend on Redis or Meilisearch.
 
 当前实现使用 `database/sql` + `pgx/v5`，迁移通过 `embed.FS` 发现并按版本排序；
 未引入 ORM、query generator 或外部迁移工具。启动时执行器在单个事务中取得固定

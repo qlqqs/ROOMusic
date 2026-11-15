@@ -14,13 +14,13 @@ API 全样本清单必须注册播放（含派生）与歌词的全部成功样�
   全屏布局测量须等根节点入场缩放结束（`transform: none`），不能用增大像素容差掩盖跨动画帧测量；纯文本先等“歌词文本”分组就绪。检查悬停提示时显式 hover，等提示可见且 `opacity: 1` 后再运行完整 axe，避免淡入中间态被当作最终对比度。
   平滑滚动要等它到位：用轮询判断，轮询函数里不放会抛错的断言；时间很短的状态（如 2 秒素材里只当前半秒的一行）不能靠轮询观察，用 MutationObserver 记录序列。
 - 真实服务：`LD_LIBRARY_PATH=/tmp/chromelibs/root/usr/lib/x86_64-linux-gnu ./scripts/playback-e2e.sh`（本机缺系统库时）。
-  独立临时合成媒体、真实Go、`roomusic-test` PostgreSQL与Chromium，由`playwright.real.config.ts`收集
+  独立临时合成媒体、真实Go、`roomusic-compose-test-<随机后缀>` PostgreSQL与Chromium，由`playwright.real.config.ts`收集
   `e2e/real/*.real.ts`，不能被既有mock `*.spec.ts`混收集。
   输出使用`coverage/playback-real/{results,report}`独立目录，不放mock默认`test-results`下，避免并行运行时被另一配置清空。
   `.gitignore` 精确忽略 `/frontend/coverage/playback-real/`；根 `/coverage/` 不覆盖这个嵌套目录，切换输出位置必须用 `git check-ignore` 实证。
 - 隔离脚本拒绝接管已存在的测试容器/数据卷，Compose `--env-file /dev/null`与临时Vite `envDir:false`不读本机.env。
   白名单复制后端源码到临时树，前端输出同一临时树，不覆盖工作区内嵌产物；结束按精确PID与本轮Compose资源清理。
-  不与`test-integration.sh`并行争用`roomusic-test`。
+  与`test-integration.sh`共用互斥锁，串行运行。
 - 播放区真实服务用例共用账号时，先记录已有 `device_id`，只统计本例新登记的设备；不能把账号下全部在线输出会话数断言为 1。跨文件隔离问题用 CI 同样的 `./scripts/playback-e2e.sh` 整组验证一次，单跑播放区文件不能证明没有干扰。
 - 渲染流 URL 标识播放区和流序号，不包含曲目 ID。搜索结果实播应同时验证原生 `playing`/时间前进、媒体 URL 对应的播放区 `stream.url`，以及该播放区 `current.track.track_id` 等于搜索命中的曲目，不能再用 `media.src` 包含 `track_id` 判断。
 - 音频真实时间、seek与自然结束必须观察原生媒体事件，不替换播放行为假装实播。
@@ -45,7 +45,7 @@ API 全样本清单必须注册播放（含派生）与歌词的全部成功样�
   对话框要检查**自己**没有横向滚动（`scrollWidth - clientWidth`），页面级的溢出检查看不到它。
 - **真实服务**：`e2e/real/governance.real.ts`，经 `scripts/playback-e2e.sh` 与播放用例同一个服务运行：素材是用例自己生成的合成 WAV（INFO 标签带专辑，放在 `library/governance`），
   结束后删除并重扫；不依赖文件先后顺序（两种顺序都验证过）。覆盖页面改标题 → 改文件标签并重扫 → 扫描值更新而修正不动 → 撤销后回到现在的扫描值；
-  归组 → 重扫保持 → 在“修改记录”里撤销后分开；成员没有入口且接口 `403`。脚本拒绝接管已有的 `roomusic-test` 容器，先拆掉自己的测试库再运行。
+  归组 → 重扫保持 → 在“修改记录”里撤销后分开；成员没有入口且接口 `403`。脚本拒绝接管本轮项目名下已有的容器，先拆掉自己的测试库再运行。
 - **变异检查（实践，不入库）**：对新增逻辑逐项临时改坏（可撤销判断、焦点兜底、`staleTime`、地址规范化、同键重试、后端“扫描写入时顺手清掉修正”），确认用例会失败再还原；
   存活的变异必须逐个判断是否等价（例如页面与视图两道 `isAdmin` 把关，去掉一道行为不变）。
 

@@ -34,7 +34,7 @@ func (s *Store) UpdateZone(ctx context.Context, userID string, zone PersistedZon
 - 队列上限 10,000，历史上限 500；随机数与条目 ID 由调用方注入。保持 `queue.ts` 的四模式、增删移动、前进后退语义，函数不修改输入切片。
 - `PeekNatural(state, env, isSkipped) string` 预选下一项；`AdvanceTo(state, entryID, isSkipped) Step` 消费预选，不再次抽签，历史与随机袋更新与 `Advance` 共用逻辑。失效预选返回空 `EntryID` 与原状态，调用方再预选；当前项或模式改变时调用方丢弃缓存。
 - 所有存储读写带用户条件。插入批量腾位，删除不重排，移动由调用方传条目 ID 与从 0 起的目标下标，先按当前 position 排序定位目标，再将源与目标之间的位置按方向平移一位，并把源条目放到目标原 position，替换整段删除后用 `unnest` 批量插入；条目变化与播放区行更新必须同事务。
-- `ROOMUSIC_TEST_COMPOSE_PROJECT` 默认为 `roomusic-test`，只允许 `^roomusic-test(-[a-z0-9]+)*$`；集成脚本的资源检查、启动、清理与日志使用同一项目名，保留与播放 E2E 的共享互斥锁。
+- `ROOMUSIC_TEST_COMPOSE_PROJECT` 默认为 `roomusic-compose-test-` 加随机后缀，只允许 `^roomusic-compose-test(-[a-z0-9]+)*$`；集成脚本的资源检查、启动、清理与日志使用同一项目名，保留与播放 E2E 的共享互斥锁。
 
 ## 4. 校验与错误
 
