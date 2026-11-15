@@ -30,7 +30,7 @@
 | `frontend/vite.config.ts`、`vite.config.dev.ts`、`backend/cmd/roomusic/main.go`（嵌入）、`backend/internal/platform/httpserver/frontend.go`（提供） | 生产产物目标为 `backend/cmd/roomusic/web`，由 Go 嵌入并同源提供；开发配置代理 `/api`，有受限 Host 配置 | 开发代理不是生产网关，也不取代后端 Origin 校验 |
 | `.github/workflows/ci.yml`、`backend/cmd/roomusic/web/index.html` | CI 区分真实入口构建与缺失入口占位检查；当前嵌入页说明前端重设计中 | 占位检查通过不是 M1 UI 验收 |
 | `backend/internal/app/app.go`、`backend/internal/identity/guard.go` | 已有 setup/auth/users/roots/scans/releases/artworks 路由；会话采用 HttpOnly Cookie，后端检查撤销、过期和用户禁用；写操作校验 Origin | 客户端角色、路由守卫或缓存均不具有授权权威 |
-| `frontend-desgin/_ds/classical-d3de10a0-5b67-4da7-b5b3-8d49f26a63f1/styles.css`、`frontend-desgin/ROOMusic 原型.dc.html` | 原型有 Classical CSS 变量；使用 Cormorant Garamond、Lora，页面补充 Noto Serif SC，并通过 Google Fonts 加载 | 原型的远程字体、全局类和运行时不自动成为生产依赖 |
+| `docs/design/_ds/classical-d3de10a0-5b67-4da7-b5b3-8d49f26a63f1/styles.css`、`docs/design/roomusic-prototype.dc.html` | 原型有 Classical CSS 变量；使用 Cormorant Garamond、Lora，页面补充 Noto Serif SC，并通过 Google Fonts 加载 | 原型的远程字体、全局类和运行时不自动成为生产依赖 |
 
 当前锁文件未包含 TanStack Router、TanStack Query 或 Fontsource。旧规范中的 `requestApi`
 和 decoder 是需要承接的边界约束，不是可以直接引用的现存源码。

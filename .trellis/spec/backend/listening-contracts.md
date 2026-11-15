@@ -5,7 +5,7 @@
 每个用户各自保存“真实播放过什么”：一条记录表示“这个用户把这首曲目播放到了计次规则要求的程度”。服务端校验规则、按用户隔离、
 换算“最近播放的发行”；前端按媒体事件累计真正出声的时间，达到规则时带幂等键上报，概览显示最近播放的专辑并可清除自己的历史。
 M5 增加按曲目汇总的历史页、播放全部候选与按曲目移除。修改 `play_history` 表、计次规则、历史接口、读取规则，或前端的计次与上报行为时，先读本文件并同步更新。
-需求与取舍见[播放历史任务](../../tasks/archive/2026-10/10-11-classical-p-play-history/prd.md)与它的[技术设计](../../tasks/archive/2026-10/10-11-classical-p-play-history/design.md)；
+需求与取舍见播放历史任务（本机归档 `.trellis/tasks/archive/2026-10/10-11-classical-p-play-history/prd.md`）与它的技术设计（本机归档 `.trellis/tasks/archive/2026-10/10-11-classical-p-play-history/design.md`）；
 前端的计次实现与概览区块的状态规则见[播放器设计规范](../frontend/player-design-guidelines.md)与[播放与个人状态规范](../frontend/playback-and-personal-state.md)。
 
 范围外：收藏与歌单由独立 `personal` 能力负责（见[本人收藏与歌单合同](./personal-contracts.md)），不扩大 listening；按次数排序、播放统计与推荐、“继续聆听”的进度；暂停记录的开关、删除某一次播放记录（按曲目移除其全部记录已支持）；管理员查看他人的播放；
@@ -135,7 +135,7 @@ M5 增加按曲目汇总的历史页、播放全部候选与按曲目移除。�
 - 历史与 catalog 两条语句不承诺共同快照。稳定分页指无并发变更时不重不漏；新上报/删除可改变 OFFSET，不引入跨请求快照。
 - 引用曲目当前发行/组，不按默认版本改写、不合并同组不同 track_id；文件恢复及发行归属变化在下次读取自然反映。
 - 既有 `(user_id,track_id,played_at DESC)` 索引服务用户筛选、聚合、计数和删除；最新 1,000 只限制返回/补全，准确计数仍扫描本人历史。
-  索引是否追加须以隔离库 EXPLAIN 为证据，本次测量记录见 [M5 设计 §2](../../tasks/archive/2026-11/11-04-classical-m5-history/design.md)。
+  索引是否追加须以隔离库 EXPLAIN 为证据，本次测量记录见 M5 设计 §2（本机归档 `.trellis/tasks/archive/2026-11/11-04-classical-m5-history/design.md`）。
 
 ## 6. 前端的数据合同
 

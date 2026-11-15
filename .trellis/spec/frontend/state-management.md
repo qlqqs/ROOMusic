@@ -227,4 +227,4 @@ the backend journal.
 
 See [Hook Guidelines](./hook-guidelines.md),
 [Cross-Layer Thinking](../guides/cross-layer-thinking-guide.md), and the
-[Core 0 PRD](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md).
+Core 0 PRD（本机归档 `.trellis/tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md`）.

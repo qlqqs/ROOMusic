@@ -1,9 +1,0 @@
-{"file": ".trellis/tasks/11-14-ui-layout-polish/research/mockup-v5.html", "reason": "用户认可的改版对照稿，布局与交互的视觉依据"}
-{"file": ".trellis/tasks/11-14-ui-layout-polish/research/reference-apps.md", "reason": "参考应用的取舍"}
-{"file": "frontend/DESIGN.md", "reason": "设计变量与应用布局（第 3、4 节）"}
-{"file": "frontend/DESIGN-components.md", "reason": "按钮、曲目行、播放条、设置页的现行组件规范"}
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "组件合同、无障碍与组合方式"}
-{"file": ".trellis/spec/frontend/component-catalog.md", "reason": "已实现共用组件的逐项约定（MenuButton、Page、曲目行）"}
-{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "feature 归属与 player/personal 互不导入的边界"}
-{"file": ".trellis/spec/frontend/player-design-guidelines.md", "reason": "播放栏、全屏播放器与队列的规范"}
-{"file": ".trellis/spec/frontend/playback-and-personal-state.md", "reason": "播放区控制器命令（playTracks、playNext、setMode）与播放设置"}

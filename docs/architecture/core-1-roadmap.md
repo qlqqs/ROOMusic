@@ -139,7 +139,7 @@ Playwright 与 axe-core）；仍没有数据库迁移、媒体处理程序、权
 | 立即播放/下一首/加入队列、循环/随机 | 保留为未来真实播放器的行为约定，见[播放器规范](../../.trellis/spec/frontend/player-design-guidelines.md) |
 | 账号隔离、损坏存储、焦点/键盘、长标题 | 保留安全和可访问性要求，不把旧实现视为现存代码 |
 
-`frontend-desgin/` 拼写、原始 `.dc.html`、`_ds` 与 `support.js` 全部保留。是否改名为设计归档目录、
+原始 `.dc.html`、`_ds` 与 `support.js` 全部保留。2026-11-15 目录移到 `docs/design/`（修正旧目录名的拼写），带空格的文件名改为英文短横线名，内容不变；
 是否移除工具运行时，仍需独立确认。原型中的样例数据和功能承诺通过 [DESIGN-acceptance.md](../../frontend/DESIGN-acceptance.md) 的落地差异表处理，不直接改源稿。
 
 ## 验证与后续任务创建

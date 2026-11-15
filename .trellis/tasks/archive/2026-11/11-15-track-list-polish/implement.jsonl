@@ -1,4 +1,0 @@
-{"file": ".trellis/spec/frontend/interface-layout-guidelines.md", "reason": "专辑详情与列表布局"}
-{"file": ".trellis/spec/frontend/component-catalog.md", "reason": "共享组件目录"}
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "组件写法"}
-{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "feature 间依赖方向（catalog 不依赖 player）"}

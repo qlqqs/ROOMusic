@@ -20,6 +20,9 @@ mise exec -- node --version
 - `temp/dev/`：本项目开发数据。
 - `temp/`：临时文件、合成测试素材与每次测试的部署目录。
 - `temp/` 整体加入 Git 忽略规则；临时文件按日期归档到 `temp/archive/YYYY-MM-DD/`。
+- `.trellis/tasks/archive/`：Trellis 归档任务只留本机，加入 Git 忽略规则。`task.py archive` 移动任务后，因为归档目录被忽略，会提示并跳过自动提交；
+  这时手动提交源任务目录的删除（以及被改写的父子任务 `task.json`）：`git add -A .trellis/tasks/<任务目录>` 后提交。
+  spec 与文档引用归档文档时写成不带链接的路径文字，并注明“本机归档”。
 
 ## Docker 隔离约定
 

@@ -147,4 +147,4 @@ exact incidental DOM tree.
 
 See [Hook Guidelines](./hook-guidelines.md),
 [Type Safety](./type-safety.md), and the
-[Core 0 UI requirements](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md).
+Core 0 UI requirements（本机归档 `.trellis/tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md`）.

@@ -1,3 +1,0 @@
-{"file": ".trellis/spec/backend/core0-runtime-contracts.md", "reason": "目录操作运行合同、错误矩阵与技术债"}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "目录变更测试（事务、revision、幂等重试、键冲突）、确定性并发测试与 -race"}
-{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "幂等键作用域与指纹规则"}

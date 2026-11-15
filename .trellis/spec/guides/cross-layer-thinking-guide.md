@@ -117,5 +117,5 @@ stores a managed asset reference rather than a large image binary.
   projection the source of truth.
 
 The current cross-layer acceptance paths are defined in the
-[Core 0 PRD](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md); phase boundaries
+Core 0 PRD（本机归档 `.trellis/tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md`）; phase boundaries
 are summarized in [Product Goals](./product-goals.md).

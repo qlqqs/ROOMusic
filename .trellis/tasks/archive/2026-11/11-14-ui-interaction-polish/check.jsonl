@@ -1,5 +1,0 @@
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "测试、无障碍与门禁要求"}
-{"file": ".trellis/spec/frontend/quality-verification-layers.md", "reason": "单元、e2e 与实播验证的分层"}
-{"file": ".trellis/spec/frontend/component-catalog.md", "reason": "读屏名、角色与组件约定的核对依据"}
-{"file": "frontend/DESIGN-acceptance.md", "reason": "落地差异与验收清单"}
-{"file": ".trellis/tasks/archive/2026-11/11-14-ui-interaction-polish/research/preview.html", "reason": "截图比对的视觉依据"}

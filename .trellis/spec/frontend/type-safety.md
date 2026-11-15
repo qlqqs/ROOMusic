@@ -150,4 +150,4 @@ When changing a REST field or enum, search backend presenter, API documentation,
 decoder, DTO, feature mapping, components, tests, and cached/persisted state.
 Follow the [Cross-Layer Thinking Guide](../guides/cross-layer-thinking-guide.md).
 The current REST and security scope comes from the
-[Core 0 PRD](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md).
+Core 0 PRD（本机归档 `.trellis/tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md`）.

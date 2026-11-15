@@ -1,6 +1,0 @@
-{"file": ".trellis/spec/backend/library-scan-grouping.md", "reason": "F4 封面来源与文件夹封面发现的现行规则，本任务改写"}
-{"file": ".trellis/spec/backend/library-scan-incremental.md", "reason": "解析缓存、延迟封面、暂存去重、版本号升级与候选签名规则"}
-{"file": ".trellis/spec/backend/library-scan-pipeline.md", "reason": "各格式解析范围、封面诊断分类与扫描完整性"}
-{"file": ".trellis/spec/backend/library-scan-tags.md", "reason": "标签解析与 setAudioTag 约定"}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端实现质量要求"}
-{"file": ".trellis/spec/backend/error-handling.md", "reason": "封面失败的错误包装与诊断边界"}

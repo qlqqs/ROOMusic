@@ -14,7 +14,7 @@
 自动化与三组手工实播分别记录，不把浏览器能力提示当作验收证据。
 
 本轮 Classical 的唯一落地设计锚为 [frontend/DESIGN.md](../../../frontend/DESIGN.md)，
-来源是 `frontend-desgin/` 中的原型。旧月刊布局、hash 路由、模拟播放器和生产演示入口
+来源是 `docs/design/` 中的原型。旧月刊布局、hash 路由、模拟播放器和生产演示入口
 不再是默认要求；仍适用的队列语义与安全边界保留在本层规范。
 
 2026-10：M3 增加管理员的受治理写操作（`features/governance`）：专辑详情里编辑发行信息、调整归组与撤销，“资料库”下的“操作记录”页与详情里的“修改记录”；
@@ -23,7 +23,7 @@ M4 的第一项增加默认版本（管理员在专辑详情设定、可撤销�
 第二项增加管理员的“元数据”页（`/issues`：按版本列出问题，核对、取消核对与撤销），合同见[元数据问题与核对合同](../backend/issue-review-contracts.md)；第三项增加管理员的“待认领”页（`/claims`：把已不可见的旧版本上的修改认领给新版本，可撤销），合同见[认领合同](../backend/claim-contracts.md)。依赖与路由方案的决策见
 [前端基础 ADR](../../../docs/architecture/adr/0001-frontend-foundations.md) 决策记录，阶段和
 能力矩阵见 [Core 1 路线](../../../docs/architecture/core-1-roadmap.md)，M1a 的设计与验证记录见任务
-[M1a 技术设计](../../tasks/archive/2026-10/09-28-classical-m1a-shell-admin/design.md)。各规范文件区分“已实现的合同”与尚未实现的目标
+M1a 技术设计（本机归档 `.trellis/tasks/archive/2026-10/09-28-classical-m1a-shell-admin/design.md`）。各规范文件区分“已实现的合同”与尚未实现的目标
 （播放器、搜索、受治理操作与 Agent 界面）；后者不是当前前端已通过验收的声明。
 
 ## Pre-Development Checklist
@@ -138,6 +138,6 @@ browse flows into marketing-style pages.
 
 ## Evidence
 
-- [Core 0 UI acceptance behavior](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md)
+- Core 0 UI acceptance behavior（本机归档 `.trellis/tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md`）
 - [Current development environment](../../../README.md)
 - [Inherited product audience and long-term direction](../guides/product-goals.md)

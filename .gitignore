@@ -51,8 +51,8 @@ __pycache__/
 # 真实音乐 Smoke 的本地基准与脱敏审计产物
 .roomusic-smoke/
 
-# 播放链路参考稿与系数（外部资料，只留本机，不进公开仓库；正本在 ~/.local/share/roomusic-reference/）
-/.trellis/tasks/archive/2026-11/11-08-server-playback-zones/research/
+# Trellis 归档任务只留本机，不进公开仓库（原先单独忽略的播放链路参考稿也在其中）
+/.trellis/tasks/archive/
 
 # 本机开发数据与临时测试文件。
 # 临时文件夹
