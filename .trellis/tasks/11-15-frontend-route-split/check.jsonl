@@ -1,4 +1,0 @@
-{"file": ".trellis/spec/frontend/index.md", "reason": "前端规范入口"}
-{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "feature 公开入口规则"}
-{"file": ".trellis/spec/frontend/quality-verification-layers.md", "reason": "前端验证分层与 e2e"}
-{"file": ".trellis/spec/frontend/state-management.md", "reason": "路由与查询状态"}
