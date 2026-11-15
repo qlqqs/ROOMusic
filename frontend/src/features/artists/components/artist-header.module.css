@@ -1,0 +1,119 @@
+/* 与专辑页头（catalog 的 album-header）同一种版面：容器查询决定圆章是否并排。 */
+.container {
+  container-type: inline-size;
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  justify-self: start;
+  min-height: 28px;
+  margin-inline-start: -6px;
+  padding: 0 6px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  text-decoration: none;
+}
+
+.back:hover {
+  background: var(--color-hover);
+  color: var(--text-primary);
+}
+
+/* 窄容器：圆章居中在上，文字与操作行居中。 */
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: var(--space-4) var(--space-6);
+  align-items: end;
+}
+
+.info {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  text-align: center;
+}
+
+.title {
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 768px) {
+  .title {
+    font-size: var(--fs-24);
+  }
+}
+
+/* 长名字降一级字号（窄屏 18px，宽屏 20px）。 */
+.title[data-compact] {
+  font-size: var(--fs-18);
+}
+
+@media (min-width: 768px) {
+  .title[data-compact] {
+    font-size: var(--fs-20);
+  }
+}
+
+/* 角色标签：细边的小胶囊，只是文字说明，不能点。 */
+.roles {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.roles li {
+  display: inline-grid;
+  place-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--color-neutral-300);
+  border-radius: 11px;
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+}
+
+.meta {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  font-variant-numeric: tabular-nums;
+}
+
+.actions {
+  display: grid;
+  justify-items: center;
+  min-width: 0;
+  margin-top: var(--space-2);
+}
+
+@container (min-width: 560px) {
+  .hero {
+    grid-template-columns: auto minmax(0, 1fr);
+    justify-items: stretch;
+  }
+
+  .info {
+    justify-items: stretch;
+    text-align: start;
+  }
+
+  .roles {
+    justify-content: flex-start;
+  }
+
+  .actions {
+    justify-items: stretch;
+  }
+}

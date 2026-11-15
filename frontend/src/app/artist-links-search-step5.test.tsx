@@ -94,6 +94,62 @@ describe("艺人名字链接与回退", () => {
   });
 });
 
+describe("曲目行“更多”里的前往艺人、前往专辑", () => {
+  it("艺人数据就绪：“前往艺人”去第一位有 ID 的艺人，“前往专辑”带着版本与曲目定位；名称后面是艺人名与专辑名", async () => {
+    const { data } = setup();
+    const first = data.tracks.get(`${id}:track_artist`)?.[0];
+    if (!first) throw new Error("缺少曲目");
+    first.artist = "第二位 / 邓麗君";
+    first.artist_refs = [{ artist_id: artistTestId(2), name: "第二位", display_name: "第二主名" }, { artist_id: id, name: "邓麗君", display_name: "邓丽君" }];
+    const { history } = renderApp({ path: `/artists/${id}` });
+    const row = await screen.findByRole("row", { name: /曲目1-1/ });
+    const user = userEvent.setup();
+    await user.click(within(row).getByRole("button", { name: "更多操作" }));
+    expect(screen.getByRole("menuitem", { name: `前往专辑 ${first.release.title}` })).toBeTruthy();
+    await user.click(screen.getByRole("menuitem", { name: "前往艺人 第二位" }));
+    await waitFor(() => expect(history.location.pathname).toBe(`/artists/${artistTestId(2)}`));
+
+    history.back();
+    const back = await screen.findByRole("row", { name: /曲目1-1/ });
+    await user.click(within(back).getByRole("button", { name: "更多操作" }));
+    await user.click(screen.getByRole("menuitem", { name: `前往专辑 ${first.release.title}` }));
+    await waitFor(() => expect(history.location.pathname).toBe(`/albums/${first.group_id}`));
+    const search = new URLSearchParams(history.location.search);
+    expect(search.get("release")).toBe(first.release.id);
+    expect(search.get("track")).toBe(first.track_id);
+  });
+
+  it("艺人数据整理中或这首没有艺人引用：没有“前往艺人”，“前往专辑”照常", async () => {
+    const { data } = setup();
+    const first = data.tracks.get(`${id}:track_artist`)?.[0];
+    if (!first) throw new Error("缺少曲目");
+    first.artist_refs = [];
+    renderApp({ path: `/artists/${id}` });
+    const row = await screen.findByRole("row", { name: /曲目1-1/ });
+    await userEvent.click(within(row).getByRole("button", { name: "更多操作" }));
+    expect(screen.queryByRole("menuitem", { name: /^前往艺人/ })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: /^前往专辑/ })).toBeTruthy();
+  });
+
+  it("专辑页自己的曲目行没有“前往专辑”（就在这张专辑里）", async () => {
+    const { api, data } = setup();
+    const album = data.albums.get(id)?.[0];
+    if (!album) throw new Error("缺少专辑样本");
+    installCatalogApi(api, { groups: [album.group] });
+    renderApp({ path: `/albums/${album.group.id}` });
+    await screen.findByRole("heading", { level: 1 });
+    // 曲目行在曲目列表（ol）里，页头的“更多操作”不在。
+    const row = await waitFor(() => {
+      const item = document.querySelector("ol > li");
+      if (!(item instanceof HTMLElement)) throw new Error("缺少曲目行");
+      return item;
+    });
+    await userEvent.click(await within(row).findByRole("button", { name: "更多操作" }));
+    expect(screen.getByRole("menuitem", { name: "下一首播放" })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: /^前往专辑/ })).toBeNull();
+  });
+});
+
 describe("I5 艺人入口能力状态", () => {
   it.each(["ready", "preparing", "unavailable", "unknown", "failed"] as const)("%s 下侧栏艺人入口与收藏的艺人一栏同时显示或隐藏", async (state) => {
     const { api, data } = setup();

@@ -1,4 +1,7 @@
+/* 卡片是播放键的定位祖先，也是尺寸容器：封面与卡片同宽，封面底边在 100cqi 处。 */
 .item {
+  position: relative;
+  container-type: inline-size;
   min-width: 0;
 }
 
@@ -54,4 +57,65 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1) var(--space-2);
+}
+
+/*
+ * 封面右下角的圆形播放键（金色实心圆）：精确指针设备上卡片悬停或键盘聚焦到它时出现，平时透明且不接收点击；
+ * 触屏与没有悬停的设备不显示（点卡片进详情页播放）。播放结果的提示不受显隐影响。
+ */
+.play {
+  position: absolute;
+  inset-block-start: calc(100cqi - 48px);
+  inset-inline-end: var(--space-2);
+  display: none;
+}
+
+.play button {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: var(--color-bg);
+  box-shadow: var(--shadow-md);
+}
+
+.play button:enabled:not([aria-disabled="true"]):hover,
+.play button:enabled:not([aria-disabled="true"]):active {
+  background: var(--color-accent-700);
+  color: var(--color-bg);
+}
+
+/* 三角形的视觉重心偏左，往右挪一点看起来才居中。 */
+.play button > span {
+  margin-inline-start: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .play {
+    display: block;
+  }
+
+  .play button {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(4px);
+    transition:
+      opacity 0.12s ease,
+      transform 0.12s ease;
+  }
+
+  .item:is(:hover, :focus-within) .play button,
+  .play button[aria-busy="true"] {
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .play button {
+    transform: none;
+    transition: none;
+  }
 }

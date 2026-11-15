@@ -1,10 +1,11 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useRef } from "react";
+import { useRef, type ReactNode } from "react";
 import { pageCountOf } from "../../../shared/lib/pagination";
 import { formatCount } from "../../../shared/lib/number";
 import { useClampedPage } from "../../../shared/lib/use-clamped-page";
 import { Pagination, Panel, QueryContent } from "../../../shared/ui";
 import { isFiltered, type AlbumSearch } from "../album-search";
+import type { ReleaseGroupSummaryDTO } from "../api/decoders";
 import { useAlbumPage } from "../hooks/use-album-page";
 import { AlbumFilters } from "./album-filters";
 import { AlbumGrid, AlbumGridSkeleton } from "./album-grid";
@@ -13,7 +14,7 @@ import styles from "./album-list-view.module.css";
 /** 结果区块的标题：说明现在看到的是哪一组专辑。 */
 function resultsTitle(search: AlbumSearch): string {
   if (search.q !== undefined && search.attention !== undefined) return `“${search.q}”中需要关注的专辑`;
-  if (search.q !== undefined) return `“${search.q}”的搜索结果`;
+  if (search.q !== undefined) return `“${search.q}”的筛选结果`;
   if (search.attention !== undefined) return "需要关注的专辑";
   return "全部专辑";
 }
@@ -22,7 +23,7 @@ function resultsTitle(search: AlbumSearch): string {
  * 专辑列表：搜索、筛选与排序、卡片网格、分页。搜索词、筛选、排序与页码都在地址里（可刷新、可前进后退）；页码越界时用替换历史的方式改到末页。
  * 翻页与改筛选时旧结果保持可见并标明“正在更新”。isAdmin 只决定空库时的说明，后端仍独立鉴权。
  */
-export function AlbumListView({ search, isAdmin }: { search: AlbumSearch; isAdmin: boolean }) {
+export function AlbumListView({ search, isAdmin, renderAlbumPlay }: { search: AlbumSearch; isAdmin: boolean; renderAlbumPlay?: ((group: ReleaseGroupSummaryDTO) => ReactNode) | undefined }) {
   const query = useAlbumPage(search);
   const navigate = useNavigate();
   const resultsHeading = useRef<HTMLHeadingElement>(null);
@@ -80,7 +81,7 @@ export function AlbumListView({ search, isAdmin }: { search: AlbumSearch; isAdmi
             }
             return (
               <div className={styles.results} aria-busy={query.isPlaceholderData}>
-                <AlbumGrid groups={data.items} search={search} />
+                <AlbumGrid groups={data.items} search={search} renderPlay={renderAlbumPlay} />
                 <Pagination
                   label="专辑分页"
                   page={data.pagination.page}

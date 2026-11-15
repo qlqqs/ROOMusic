@@ -1,7 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
+import type { ReactNode } from "react";
 import { Panel, QueryContent, useShelf } from "../../../shared/ui";
-import { MAX_RECENTLY_ADDED } from "../api/decoders";
+import { MAX_RECENTLY_ADDED, type ReleaseGroupSummaryDTO } from "../api/decoders";
 import { useRecentlyAdded } from "../hooks/use-recently-added";
 import { AlbumGrid, AlbumGridSkeleton } from "./album-grid";
 import styles from "./recently-added-panel.module.css";
@@ -13,7 +14,7 @@ const recentListSearch = { sort: "added_at_desc" } as const;
  * 概览的“最近新增”：按加入时间倒序的专辑（接口给最多 8 张），一行横排，放不下时横向滚动、标题行有翻页按钮，不换行也不落单；
  * 卡片与专辑库一致。“全部专辑”进入按“最近新增”排序的专辑库。加载与失败照常显示；成功但没有专辑时整块不渲染。
  */
-export function RecentlyAddedPanel() {
+export function RecentlyAddedPanel({ renderPlay }: { renderPlay?: (group: ReleaseGroupSummaryDTO) => ReactNode }) {
   const recent = useRecentlyAdded();
   const shelf = useShelf("最近新增");
   if (recent.status === "success" && recent.data.length === 0) return null;
@@ -40,7 +41,7 @@ export function RecentlyAddedPanel() {
       >
         {(groups) => (
           <div className={shelf.hostClassName}>
-            <AlbumGrid groups={groups} search={recentListSearch} listRef={shelf.ref} />
+            <AlbumGrid groups={groups} search={recentListSearch} listRef={shelf.ref} renderPlay={renderPlay} />
           </div>
         )}
       </QueryContent>

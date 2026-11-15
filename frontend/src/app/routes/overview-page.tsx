@@ -5,6 +5,7 @@ import { AnalysisSummary, RootSummary, ScanSummary } from "../../features/librar
 import { MemberSummary } from "../../features/members";
 import { Page, StatusTable } from "../../shared/ui";
 import { ResumeCard, useRecentCardPlayback } from "./overview-playback";
+import { AlbumCardPlay } from "./album-card-play";
 import styles from "./overview-page.module.css";
 
 /** 最近播放：卡片上的播放键由这里组合（listening 不导入 player）。 */
@@ -28,7 +29,7 @@ export function OverviewPage() {
           <div className={styles.main}>
             <ResumeCard />
             <RecentPlays />
-            <RecentlyAddedPanel />
+            <RecentlyAddedPanel renderPlay={(group) => <AlbumCardPlay group={group} />} />
           </div>
           <div className={styles.side}>
             <StatusTable title="资料库状态">

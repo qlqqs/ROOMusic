@@ -1,99 +1,47 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useRef, useState, type FormEvent } from "react";
-import { Button, TextField } from "../../../shared/ui";
+import { FilterChip, FilterField, SortMenu, type SortOption } from "../../../shared/ui";
 import { utf8ByteLength } from "../../auth";
 import { MAX_SEARCH_BYTES, parseSearchText, type AlbumSearch } from "../album-search";
 import styles from "./album-filters.module.css";
 
+type AlbumSort = "title" | "added_at_desc";
+
+const sortOptions: readonly SortOption<AlbumSort>[] = [
+  { value: "title", label: "按标题" },
+  { value: "added_at_desc", label: "最近新增" },
+];
+
+/** 超长的筛选词不静默丢弃：说明现状，不写进地址。 */
+function validate(text: string): string | null {
+  return utf8ByteLength(text.trim()) > MAX_SEARCH_BYTES ? "筛选词太长了，请短一些。" : null;
+}
+
 /**
- * 搜索、筛选与排序：搜索词显式提交（按钮或回车），每次提交一条历史；“只看需要关注”与排序立即生效；提交、切换筛选与换排序都回到第 1 页，
- * 其余条件保留。
- * 输入框的内容在地址变化（后退、前进、清除）时跟着地址走，没有提交的草稿不写进地址。
+ * 专辑列表的工具条：在专辑中筛选（边输入边出结果，一次输入过程只占一条历史，见 FilterField）、“需要关注”胶囊与排序菜单；
+ * 改任何一项都回到第 1 页，其余条件保留。输入框跟着地址走（后退、前进时回到地址里的值）。
+ * 这里只筛当前列表；全库搜索（专辑、艺人、曲目一起）是侧栏的搜索。
  */
 export function AlbumFilters({ search }: { search: AlbumSearch }) {
   const navigate = useNavigate();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [draft, setDraft] = useState(search.q ?? "");
-  const [syncedQuery, setSyncedQuery] = useState(search.q);
-  const [error, setError] = useState<string | null>(null);
-  // 地址里的搜索词变了（后退、前进、清除）：输入框回到地址里的值。这是 React 推荐的“按属性重置状态”写法，不需要 effect。
-  if (syncedQuery !== search.q) {
-    setSyncedQuery(search.q);
-    setDraft(search.q ?? "");
-    setError(null);
-  }
-
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const bytes = utf8ByteLength(draft.trim());
-    if (bytes > MAX_SEARCH_BYTES) {
-      // 不静默丢弃：提示搜索词太长。
-      setError("搜索词太长了，请短一些。");
-      return;
-    }
-    setError(null);
-    void navigate({ to: "/albums", search: { q: parseSearchText(draft), attention: search.attention, sort: search.sort, page: undefined } });
-  };
-
-  const clear = () => {
-    setDraft("");
-    setError(null);
-    inputRef.current?.focus();
-    void navigate({ to: "/albums", search: { q: undefined, attention: search.attention, sort: search.sort, page: undefined } });
-  };
-
+  const go = (next: AlbumSearch, replace = false) => void navigate({ to: "/albums", search: { ...next, page: undefined }, replace });
   return (
-    <form role="search" aria-label="搜索专辑" className={styles.form} onSubmit={submit}>
-      {/* 工具条一行：搜索（输入框、搜索、清除）、筛选、排序，控件同一高度，窄时整组换行。 */}
-      <div className={styles.search}>
-        <div className={styles.input}>
-          <TextField
-            ref={inputRef}
-            label="搜索专辑"
-            labelHidden
-            placeholder="搜索专辑"
-            name="q"
-            type="text"
-            inputMode="search"
-            enterKeyHint="search"
-            autoComplete="off"
-            value={draft}
-            error={error}
-            onChange={(event) => setDraft(event.target.value)}
-          />
-        </div>
-        <Button type="submit" variant="primary">
-          搜索
-        </Button>
-        {search.q === undefined ? null : <Button onClick={clear}>清除</Button>}
+    <div role="search" aria-label="筛选专辑" className={styles.toolbar}>
+      <div className={styles.filter}>
+        <FilterField
+          label="筛选专辑"
+          placeholder="在专辑中筛选"
+          value={search.q}
+          normalize={parseSearchText}
+          validate={validate}
+          onCommit={(q, mode) => go({ ...search, q }, mode === "replace")}
+        />
       </div>
-      <div className={styles.actions}>
-        <label className={styles.check}>
-          <input
-            type="checkbox"
-            checked={search.attention === "required"}
-            onChange={(event) =>
-              void navigate({ to: "/albums", search: { q: search.q, attention: event.target.checked ? "required" : undefined, sort: search.sort, page: undefined } })
-            }
-          />
-          <span>只看需要关注</span>
-        </label>
-        <label className={styles.sort}>
-          <span>排序</span>
-          <select
-            value={search.sort ?? "title"}
-            onChange={(event) =>
-              void navigate({
-                to: "/albums",
-                search: { q: search.q, attention: search.attention, sort: event.target.value === "added_at_desc" ? "added_at_desc" : undefined, page: undefined },
-              })
-            }
-          >
-            <option value="title">按标题</option>
-            <option value="added_at_desc">最近新增</option>
-          </select>
-        </label>
-      </div>
-    </form>
+      <FilterChip pressed={search.attention === "required"} onClick={() => go({ ...search, attention: search.attention === "required" ? undefined : "required" })}>
+        需要关注
+      </FilterChip>
+      <span className={styles.sort}>
+        <SortMenu options={sortOptions} value={search.sort ?? "title"} onChange={(sort) => go({ ...search, sort: sort === "added_at_desc" ? sort : undefined })} />
+      </span>
+    </div>
   );
 }

@@ -9,7 +9,7 @@ export { parseOperationsSearch, type OperationsSearch } from "./operations-searc
 export { useReleaseAdminActions } from "./components/release-admin-actions";
 export { ReleaseHistory } from "./components/release-history";
 export { useReleaseCommands, type ReleaseCommands } from "./hooks/use-release-commands";
-export { ArtistAdminActions } from "./components/artist-admin-actions";
+export { useArtistAdminActions } from "./components/artist-admin-actions";
 export { ArtistCandidatesView, type ArtistCandidateStatus } from "./components/artist-candidates-view";
 export { useArtistCommands, type ArtistCommands } from "./hooks/use-artist-commands";
 export { useCachedTodoCounts } from "./hooks/use-cached-todo-counts";

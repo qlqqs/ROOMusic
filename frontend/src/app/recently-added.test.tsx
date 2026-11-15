@@ -102,7 +102,7 @@ describe("概览最近新增", () => {
     expect(within(placeholders).getAllByRole("listitem", { hidden: true })).toHaveLength(8);
     const data = decodeRecentlyAdded(sampleBody("scan-feedback/recent-eight"));
     pending.resolve(jsonResponse(200, { items: data.items.slice(0, 5) }));
-    await waitFor(() => expect(within(region).queryByRole("status")).toBeNull());
+    await waitFor(() => expect(within(region).queryByText("正在加载专辑")).toBeNull());
     expectRecentCards(region, 5);
   });
 
@@ -111,7 +111,7 @@ describe("概览最近新增", () => {
     api.on("GET", recentPath, () => sampleResponse("scan-feedback/recent-eight"));
     renderApp();
     const region = await panel();
-    await waitFor(() => expect(within(region).queryByRole("status")).toBeNull());
+    await waitFor(() => expect(within(region).queryByText("正在加载专辑")).toBeNull());
     expectRecentCards(region, 8);
     expect(within(region).queryByRole("button", { name: /^最近新增：/ })).toBeNull();
   });

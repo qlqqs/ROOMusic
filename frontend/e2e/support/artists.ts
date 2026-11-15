@@ -21,6 +21,22 @@ export async function artistTabTo(page: Page, target: Locator, limit = 160): Pro
   throw new Error(`纯键盘在 ${limit} 次 Tab 内不能到达 ${await target.getAttribute("aria-label") ?? await target.textContent()}`);
 }
 
+/** 页头的“更多操作”（曲目行也各有一个“更多操作”，所以限定在 h1 所在的页头）。 */
+export function artistHeaderMore(page: Page): Locator {
+  return page.locator("header").filter({ has: page.getByRole("heading", { level: 1 }) }).getByRole("button", { name: "更多操作", exact: true });
+}
+
+/** 纯键盘打开页头“更多”里“管理”分组的一项：Tab 到“更多操作”，Enter 打开，下箭头移到这一项，Enter 选中。 */
+export async function artistKeyAdmin(page: Page, label: string): Promise<void> {
+  await artistTabTo(page, artistHeaderMore(page));
+  await page.keyboard.press("Enter");
+  const item = page.getByRole("group", { name: "管理", exact: true }).getByRole("menuitem", { name: label, exact: true });
+  await expect(item).toBeVisible();
+  for (let step = 0; step < 12 && !(await item.evaluate((element) => element === document.activeElement)); step += 1) await page.keyboard.press("ArrowDown");
+  await expect(item).toBeFocused();
+  await page.keyboard.press("Enter");
+}
+
 export async function artistKeyActivate(page: Page, target: Locator, key = "Enter"): Promise<void> {
   await expect(target).toBeEnabled();
   await artistTabTo(page, target);
@@ -77,7 +93,9 @@ export async function openArtistScene(page: Page, data: ArtistSceneData, scene: 
   if (scene === "detail") return;
   const actions = { merge: "合并艺人…", split: "拆开…", rename: "修改主名…" };
   const titles = { merge: "合并艺人", split: "拆开艺人", rename: "修改主名" };
-  await page.getByRole("button", { name: actions[scene], exact: true }).click();
+  // 管理操作在页头“更多”的“管理”分组里（曲目行也各有一个“更多操作”，所以限定在 h1 所在的页头）。
+  await artistHeaderMore(page).click();
+  await page.getByRole("group", { name: "管理", exact: true }).getByRole("menuitem", { name: actions[scene], exact: true }).click();
   const dialog = page.getByRole("dialog", { name: titles[scene], exact: true });
   await expect(dialog).toBeVisible();
   if (scene === "merge") {

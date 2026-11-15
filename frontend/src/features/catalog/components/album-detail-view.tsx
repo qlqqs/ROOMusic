@@ -11,6 +11,7 @@ import { albumArtistOf } from "../format";
 import { useAlbum } from "../hooks/use-album";
 import { useRelease } from "../hooks/use-release";
 import { catalogKeys } from "../query-keys";
+import { sharedTrackCredits } from "../track-credits";
 import styles from "./album-detail-view.module.css";
 import { AlbumHeader } from "./album-header";
 import { EvidenceSection } from "./evidence-section";
@@ -38,6 +39,8 @@ type PlaybackSlots = {
   currentTrackLabel?: string | undefined;
   /** 当前曲目正在播放（音柱跳动）；由播放器给出。 */
   currentTrackPlaying?: boolean | undefined;
+  /** 正在播放的曲目属于这张专辑（任一版本）且正在出声：标题旁显示“正在播放”；由播放器给出。 */
+  albumPlaying?: boolean | undefined;
   /**
    * 包住选中版本的头部与曲目区的范围（例如一次读出整个版本的收藏状态，供头部与每一行使用）：版本详情还没读到时 release 是 undefined。
    * catalog 不知道范围里是什么，只负责把内容交给它；传入稳定的函数引用。
@@ -92,12 +95,14 @@ type ReleaseBodyProps = PlaybackSlots & AdminSlots & LocateSlot & {
 function ReleaseContent({ groupId, release, versioned, isAdmin, renderAdminSections, renderTrackActions, currentTrackId, currentTrackLabel, currentTrackPlaying, locate, onLocated }: PlaybackSlots & Pick<AdminSlots, "renderAdminSections"> & LocateSlot & { groupId: string; release: ReleaseDetailDTO; versioned: boolean; isAdmin: boolean }) {
   // 版本与插槽不变时保持同一个函数，曲目行才能跳过重绘。
   const renderRowActions = useMemo(() => (renderTrackActions === undefined ? undefined : (track: ReleaseTrackDTO) => renderTrackActions(track, release)), [renderTrackActions, release]);
+  // 全部曲目共有的署名已经在页头列过一次，曲目行只写与它不同的部分。
+  const sharedCredits = useMemo(() => sharedTrackCredits(release.media).keys, [release.media]);
   return (
     <>
       <div className={styles.layout}>
         <div className={styles.columns}>
           <Panel title="曲目">
-            <ReleaseMedia media={release.media} albumArtist={albumArtistOf(release)} currentTrackId={currentTrackId} currentTrackLabel={currentTrackLabel} currentTrackPlaying={currentTrackPlaying} renderTrackActions={renderRowActions} locate={locate} onLocated={onLocated} />
+            <ReleaseMedia media={release.media} albumArtist={albumArtistOf(release)} currentTrackId={currentTrackId} currentTrackLabel={currentTrackLabel} currentTrackPlaying={currentTrackPlaying} sharedCredits={sharedCredits} renderTrackActions={renderRowActions} locate={locate} onLocated={onLocated} />
           </Panel>
           <aside className={styles.aside} aria-label="发行信息">
             <ReleaseFacts release={release} versioned={versioned} />
@@ -146,7 +151,7 @@ function ReleaseGone({ groupId, group, selected }: { groupId: string; group: Rel
  * 选中版本的整页：页头（经 Page 的 header 插槽，由 AlbumHeader 渲染 h1）、版本导航、曲目、发行信息与证据。
  * 头部用组详情里的摘要先渲染，操作区与曲目区等版本详情；组详情刷新失败但还有旧数据时，错误显示在页头下方。
  */
-function ReleaseBody({ groupId, group, groupFailure, selected, list, isAdmin, renderReleaseActions, renderAdminSections, renderTrackActions, renderReleaseScope, currentTrackId, currentTrackLabel, currentTrackPlaying, locate, onLocated }: ReleaseBodyProps & { groupFailure: ReactNode }) {
+function ReleaseBody({ groupId, group, groupFailure, selected, list, isAdmin, renderReleaseActions, renderAdminSections, renderTrackActions, renderReleaseScope, currentTrackId, currentTrackLabel, currentTrackPlaying, albumPlaying = false, locate, onLocated }: ReleaseBodyProps & { groupFailure: ReactNode }) {
   const detail = useRelease(selected.id);
   const gone = detail.isError && isHttpFailure(failureOf(detail.error), 404);
   const actions =
@@ -156,7 +161,7 @@ function ReleaseBody({ groupId, group, groupFailure, selected, list, isAdmin, re
   const content = (
     <Page
       title={selected.title}
-      header={<AlbumHeader release={selected} detail={detail.data} list={list} compactTitle={selected.title.length > LONG_TITLE_CHARS} actions={actions} />}
+      header={<AlbumHeader release={selected} detail={detail.data} list={list} compactTitle={selected.title.length > LONG_TITLE_CHARS} playing={albumPlaying} actions={actions} />}
     >
       {groupFailure}
       {group.release_count > 1 ? (
@@ -180,7 +185,7 @@ function canonicalRelease(group: ReleaseGroupDetailDTO, requested: string | unde
   return member === undefined || member.id === group.representative.id ? undefined : member.id;
 }
 
-function AlbumDetailContent({ groupId, release: requested, track, list, isAdmin, renderReleaseActions, renderAdminSections, renderTrackActions, renderReleaseScope, currentTrackId, currentTrackLabel, currentTrackPlaying }: AlbumDetailViewProps) {
+function AlbumDetailContent({ groupId, release: requested, track, list, isAdmin, renderReleaseActions, renderAdminSections, renderTrackActions, renderReleaseScope, currentTrackId, currentTrackLabel, currentTrackPlaying, albumPlaying }: AlbumDetailViewProps) {
   const group = useAlbum(groupId);
   const navigate = useNavigate();
   const data = group.data;
@@ -223,7 +228,7 @@ function AlbumDetailContent({ groupId, release: requested, track, list, isAdmin,
     );
   }
   const groupFailure = group.status === "error" ? <FailureNotice error={group.error} action={<Button onClick={() => void group.refetch()}>重试</Button>} /> : null;
-  return <ReleaseBody groupId={groupId} group={data} groupFailure={groupFailure} selected={selected} list={list} isAdmin={isAdmin} renderReleaseActions={renderReleaseActions} renderAdminSections={renderAdminSections} renderTrackActions={renderTrackActions} renderReleaseScope={renderReleaseScope} currentTrackId={currentTrackId} currentTrackLabel={currentTrackLabel} currentTrackPlaying={currentTrackPlaying} locate={locate} onLocated={onLocated} />;
+  return <ReleaseBody groupId={groupId} group={data} groupFailure={groupFailure} selected={selected} list={list} isAdmin={isAdmin} renderReleaseActions={renderReleaseActions} renderAdminSections={renderAdminSections} renderTrackActions={renderTrackActions} renderReleaseScope={renderReleaseScope} currentTrackId={currentTrackId} currentTrackLabel={currentTrackLabel} currentTrackPlaying={currentTrackPlaying} albumPlaying={albumPlaying} locate={locate} onLocated={onLocated} />;
 }
 
 /**

@@ -116,9 +116,15 @@ async function openArtistFromList(page: Page, query: string, artist: Artist) {
   await expect(page.getByRole("heading", { name: artist.name, exact: true, level: 1 })).toBeVisible();
 }
 
+/** 管理员的操作在页头“更多”的“管理”分组里（曲目行也各有一个“更多操作”，所以限定在 h1 所在的页头）。 */
+async function chooseAdmin(page: Page, label: string) {
+  await page.locator("header").filter({ has: page.getByRole("heading", { level: 1 }) }).getByRole("button", { name: "更多操作", exact: true }).click();
+  await page.getByRole("group", { name: "管理", exact: true }).getByRole("menuitem", { name: label, exact: true }).click();
+}
+
 async function mergeThroughUI(page: Page, target: Artist, source: Artist) {
   await page.goto(`/artists/${target.id}`);
-  await page.getByRole("button", { name: "合并艺人…", exact: true }).click();
+  await chooseAdmin(page, "合并艺人…");
   const dialog = page.getByRole("dialog", { name: "合并艺人", exact: true });
   await dialog.getByRole("textbox", { name: "查找艺人", exact: true }).fill(source.name);
   await dialog.getByRole("button", { name: "查找", exact: true }).click();
@@ -140,7 +146,7 @@ async function splitBackThroughUI(page: Page, target: Artist, source: Artist) {
   const prior = merged.items.find((item) => item.artist_id === source.id);
   expect(prior?.name).toBe(source.name);
   expect(prior?.name_key_ids.length).toBeGreaterThan(0);
-  await page.getByRole("button", { name: "拆开…", exact: true }).click();
+  await chooseAdmin(page, "拆开…");
   const dialog = page.getByRole("dialog", { name: "拆开艺人", exact: true });
   await dialog.getByRole("button", { name: `拆回 ${source.name}`, exact: true }).click();
   await expect(dialog.getByRole("radio", { name: new RegExp(`^恢复为“${source.name}”`) })).toBeChecked();
@@ -259,6 +265,8 @@ test("真实艺人：普通成员收藏 source，管理员合并后显示 canoni
     expect(viewer).toMatchObject({ id: created.id, role: "user" });
     await memberPage.goto(`/artists/${source.id}`);
     await expect(memberPage.getByRole("button", { name: "合并艺人…", exact: true })).toHaveCount(0);
+    // 普通成员的页头没有“更多”（管理操作都在里面）。
+    await expect(memberPage.locator("header").filter({ has: memberPage.getByRole("heading", { level: 1 }) }).getByRole("button", { name: "更多操作", exact: true })).toHaveCount(0);
     const heart = memberPage.getByRole("button", { name: `收藏“${source.name}”`, exact: true });
     await expect(heart).toHaveAttribute("aria-pressed", "false");
     await heart.click();

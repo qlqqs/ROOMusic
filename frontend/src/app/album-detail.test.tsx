@@ -28,6 +28,8 @@ const groupRequests = (api: Api) => api.requestsTo("GET", /^\/api\/v1\/release-g
 const releaseRequests = (api: Api) => api.requestsTo("GET", /^\/api\/v1\/releases\/[^/]+$/);
 const evidenceRequests = (api: Api) => api.requestsTo("GET", /^\/api\/v1\/releases\/[^/]+\/evidence$/);
 const trackRows = () => Array.from(document.querySelectorAll("ol > li"));
+/** 页头里“全部曲目”那一行（全部曲目共有的署名）；没有时是 null。 */
+const sharedCreditsText = () => Array.from(document.querySelectorAll("header p")).find((line) => line.textContent.startsWith("全部曲目"))?.textContent ?? null;
 /** 曲目行自身的文字（序号、标题、艺人与署名、时长、标记），不含播放器放进行末插槽的动作；插槽内容由播放器测试覆盖。 */
 function rowFacts(row: Element | undefined): string | null | undefined {
   if (row === undefined) return undefined;
@@ -160,9 +162,10 @@ describe("专辑详情：介质与曲目", () => {
     expect(first.getAllByRole("listitem")).toHaveLength(2);
     expect(second.getAllByRole("listitem")).toHaveLength(1);
     expect(first.getByRole("heading", { level: 3 }).textContent).toBe("第 1 张，2 首");
-    // 序号、标题、署名与时长；曲目艺人与专辑艺人相同时不重复。
+    // 序号、标题与时长；曲目艺人与专辑艺人相同时不重复。每一首都是同一位作曲、指挥：署名只在页头列一次，曲目行不再重复。
     const row = first.getAllByRole("listitem")[0];
-    expect(rowFacts(row)).toBe("1Track 1-011:51作曲：Sample Composer；指挥：Sample Conductor");
+    expect(rowFacts(row)).toBe("1Track 1-011:51");
+    expect(sharedCreditsText()).toBe("全部曲目：作曲： Sample Composer；指挥： Sample Conductor");
     // 播放动作在行末单独的插槽里，不混进曲目事实。
     if (row === undefined) throw new Error("缺少曲目行");
     expect(within(row).getByRole("button", { name: "从这首开始播放" })).toBeTruthy();
@@ -223,6 +226,37 @@ describe("专辑详情：介质与曲目", () => {
     expect(rowFacts(rows[2])).toBe("3（无标题）2:11mixer：Someone");
     // 有一首的时长未知，就不写总时长。
     expect(screen.queryByText("总时长")).toBeNull();
+    // 不是每一首都有的署名不上提到页头。
+    expect(sharedCreditsText()).toBeNull();
+  });
+
+  it("全部曲目共有的署名只在页头列一次：同一位作曲上提，各首不同的指挥留在曲目行；只有一首曲目时不上提", async () => {
+    const album = symphonies({ medium_count: 1, track_count: 3 });
+    const { catalog } = setup({ groups: [album] });
+    catalog.releases.set(
+      album.representative.id,
+      releaseDetailOf(album.representative, {
+        media: mediaOf(album.representative, (_medium, track) => ({
+          credits: [
+            { role: "composer", name: "Sample Composer" },
+            { role: "conductor", name: `Conductor ${track}` },
+          ],
+        })),
+      }),
+    );
+    renderApp({ path: `/albums/${album.id}` });
+    await screen.findByText("Track 01");
+    expect(sharedCreditsText()).toBe("全部曲目：作曲： Sample Composer");
+    expect(trackRows().map(rowFacts)).toEqual(["1Track 011:51指挥：Conductor 1", "2Track 022:01指挥：Conductor 2", "3Track 032:11指挥：Conductor 3"]);
+  });
+
+  it("只有一首曲目：署名照旧写在曲目行，页头没有“全部曲目”", async () => {
+    const album = symphonies({ medium_count: 1, track_count: 1 });
+    setup({ groups: [album] });
+    renderApp({ path: `/albums/${album.id}` });
+    await screen.findByText("Track 01");
+    expect(sharedCreditsText()).toBeNull();
+    expect(rowFacts(trackRows()[0])).toBe("1Track 011:51作曲：Sample Composer；指挥：Sample Conductor");
   });
 
   it("CUE 分轨带标记：取自真实的 CUE 样本", async () => {
@@ -801,6 +835,8 @@ describe("样本数据", () => {
     const lines = (row: Element | undefined) => Array.from(row?.querySelectorAll("p") ?? []).map((line) => line.textContent);
     expect(lines(trackRows()[1])).toContain("Sample Soloist");
     expect(lines(trackRows()[0])).not.toContain("Sample Soloist");
-    expect(lines(trackRows()[0])).toContain("作词：Sample Lyricist；作曲：Sample Composer；编曲：Sample Arranger；指挥：Sample Conductor；小提琴：Sample Soloist");
+    // 样本里三首的署名相同：页头列一次，曲目行不再重复。
+    expect(sharedCreditsText()).toBe("全部曲目：作词： Sample Lyricist；作曲： Sample Composer；编曲： Sample Arranger；指挥： Sample Conductor；小提琴： Sample Soloist");
+    for (const row of trackRows()) expect(row.textContent).not.toContain("Sample Lyricist");
   });
 });

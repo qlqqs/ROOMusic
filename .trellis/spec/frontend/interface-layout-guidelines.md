@@ -9,6 +9,8 @@
 | 组件 | 约定 |
 | --- | --- |
 | `MenuAction.group` | 相邻且 `group` 相同的项为一组，组间一条 `role="separator"`；有名字的组包在 `role="group"` 里，组标题（`aria-hidden` 的小号灰字，经 `aria-labelledby` 作为组名，避免读两遍）是它的名称，不可聚焦，方向键跳过。不给 `group` 的项结构与以前相同 |
+| `MenuAction.hint`、`untitledGroup` | `hint` 是右侧说明，也是菜单项名称的一部分，与标签之间保留空格；`untitledGroup` 保留组间分隔线但不显示组标题 |
+| `FilterField`、`FilterChip`、`SortMenu` | 列表筛选共用控件：250ms 后提交，首次 push、后续 replace；清空与失焦结束输入过程，前进后退由地址同步草稿。校验失败就近提示且不写地址。胶囊用 `aria-pressed`，排序菜单显示当前项；均不发请求、不判断角色 |
 | `SettingsGroup` | `section` + `h2` 标题 + 卡片；可给标题旁的操作、标题 ref 与卡片下方的脚注。卡片宽度用 ResizeObserver 量出，经 context 告诉里面的 `Segmented` 是否窄（< 640px，与 CSS 里的 639px 成对修改）；没有 ResizeObserver（jsdom）时按宽处理 |
 | `SettingRow` | 左名称（可带一行说明）、右控件右对齐；名称是指向 `controlId` 的 `<label>`，子内容可以是 `(ids) => ReactNode` 拿到 `controlId`/`labelId`/`descriptionId`。控件是按钮或只读值时用 `plainLabel`（`<label>` 指向按钮会改掉按钮的名称）。`nested` 是从属项：缩进、字号小一级；所属开关关闭时**由调用方不渲染**这一行，不做禁用态。容器查询：卡片窄时控件放不下才换到下一行 |
 | `Segmented` | 宽卡片里是 `role="radiogroup"` 的相连分段，窄卡片里是同名同值的原生 `<select>`（`aria-labelledby` 指向行名称）。用量宽切换而不是 CSS 同时渲染两份，避免读屏与测试看到重复控件 |
@@ -28,7 +30,9 @@
 ## 专辑详情
 
 - `AlbumHeader` 经 `Page header` 渲染整个页头：“‹ 专辑”返回链接（读屏名“返回专辑列表”）、封面、`h1`、专辑艺人、概况行、操作行、需要关注行；文字与封面底边对齐。
-- 操作行顺序固定：圆形播放（“播放整张专辑”）、随机播放、心形、添加到歌单（只有图标）、更多。键盘顺序与视觉顺序一致，窄屏不重排。
+- 当前曲目与详情同一 `releaseId` 或 `groupId` 时，大按钮按播放区 `intent` 显示“暂停播放 / 继续播放”，调用 `engine.pause()` / `engine.play()`，保留队列、当前曲目与位置；其他专辑仍是从头播放整张。
+- 手机封面宽度约 250px 并居中，标题、概况、共同署名与操作行一起居中。共同署名的提取规则见[组件目录](./component-catalog.md)。
+- 操作行顺序固定：圆形播放（状态名称见上）、随机播放、心形、添加到歌单（只有图标）、更多。键盘顺序与视觉顺序一致，窄屏不重排。
 - 随机播放（`useAlbumPlayback().shuffle`）：先检查队列上限，再 `setMode("shuffle")`，再 `playTracks(可播放曲目, 随机起始下标)`——`playTracks` 默认从 0 开始，必须传随机下标。
 - “更多”菜单：下一首播放（`playNext(整张)`）、加入队列；管理员另有“管理”组（编辑发行信息、设为默认版本 / 改回自动选择、归入其他专辑…、移出为独立专辑、查看问题）。
   `useReleaseAdminActions` 返回 `{ actions, panel }`：`actions` 进菜单，`panel`（认领提示、结果提示、对话框）显示在操作行下方，结果提示位置不变。
@@ -79,4 +83,6 @@
 - “元数据”“待认领”只在本会话已经读过对应列表时显示数字（`useCachedTodoCounts` 只读查询缓存，不发请求）；0 不显示；数字经描述给读屏（“N 个待处理的问题”），链接名称不变。
 - 歌单行在名称前有 26px 封面（`PlaylistCover size="thumb"`，`Cover variant="thumb"`：无裱边、懒加载、`aria-hidden`）：4 组封面拼 2×2，1–3 组用第一张，没有时是歌单图标。
   行与主导航左对齐不缩进，当前歌单高亮；数据就是 `usePlaylists(1)` 的结果。导航列用 `minmax(0, 1fr)`，长名称省略号截断。
-- 专辑与艺人列表的搜索、查找、清除、筛选与排序在同一行工具条里，控件同高，窄屏按组换行；Tab 顺序不变。
+- 专辑与艺人列表用 `FilterField` 即时筛选，去掉提交按钮；关注与角色用胶囊、排序用菜单，控件同高，窄屏按组换行；Tab 顺序不变。
+- 曲目“更多”中的播放与加入歌单项带图标；有可用引用时追加“前往艺人”（第一位），其他专辑的曲目有“前往专辑”（携带 track 定位）；当前专辑页不重复提供自己的专辑入口。
+- 验证重点：`filter-field.test.tsx` 与列表页面测试覆盖一次输入一条历史、清空、超长与后退同步；`player-ui.test.tsx` 覆盖同组其他版本、暂停继续保持第二首；`track-credits.test.ts` 覆盖单首不上提、跨介质共同署名与不同署名保留。

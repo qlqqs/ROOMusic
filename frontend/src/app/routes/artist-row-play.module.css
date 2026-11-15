@@ -1,0 +1,25 @@
+/* 艺人行的播放结果：贴在播放键右侧的小便签，空的时候不占位；只是“已选择 N 首”时只给读屏。 */
+.notice {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: calc(100% + var(--space-1));
+  z-index: 1;
+  width: max-content;
+  max-width: 220px;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-md);
+  color: var(--text-primary);
+  font-size: var(--fs-12);
+  overflow-wrap: anywhere;
+  transform: translateY(-50%);
+}
+
+.notice:empty {
+  display: none;
+}
+
+.quiet {
+  composes: hidden from "../../shared/ui/visually-hidden.module.css";
+}

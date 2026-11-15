@@ -50,11 +50,9 @@
   （或读取时 503 `scan_report_unavailable`）只说“这次的报告没能生成，扫描结果已经保存。”；`legacy`/`pending` 不显示。问题数到上限写“至少 100 条”。
   新增专辑列出扫描时的标题与艺人，现在还看得到就链接到当前所在的专辑，看不到时标“现在看不到了”、不给入口；“可能接替了《…》”的链接沿用
   `/claims?release=<旧版本>&target=<新发行>`，不在报告里创建认领命令。
-- 概览“最近新增”（M5 ⑥，catalog 的 `RecentlyAddedPanel`）：所有成员可见，接口给最多 8 张，卡片复用 `AlbumGrid`/`AlbumCard`，“查看全部”到 `/albums?sort=added_at_desc`；
-  只显示能排满的行：一行能放 3 张及以上时只显示一行（张数等于列数，最多 8），每行 1–2 张时最多两行。列数由 `useGridColumns` 读浏览器解析出的
-  `grid-template-columns`（auto-fill 展开后的列数）并随 ResizeObserver 更新，列宽规则只写在 CSS 里；多出的卡片不渲染（不可 Tab、读屏读不到）；
-  量不到列数（jsdom 没有布局）时全部显示，测试要验证行数时替换 `getComputedStyle`/ResizeObserver；
-  加载与失败照常显示，成功且为空时整块不渲染（概览外层的 `.wide:empty` 不留空行）；接口 404（旧服务）按没有新增处理。
+- 概览“最近新增”（catalog 的 `RecentlyAddedPanel`）：所有成员可见，接口给最多 8 张，卡片复用 `AlbumGrid`/`AlbumCard`，“全部专辑”到 `/albums?sort=added_at_desc`；
+  全部卡片放在 `useShelf` 横向书架中，溢出时在标题行显示翻页按钮，不再按列数截掉卡片。聚焦后卡片滚进可见范围；加载用 8 张占位，失败照常显示，成功且为空时整块不渲染，接口 404 按没有新增处理。
+  app 的概览页通过 `renderPlay(group)` 传入 `AlbumCardPlay`，播放代表版本的可播放曲目；catalog 不导入 player。键盘按每张卡片的链接、播放键依次聚焦，触屏不显示悬停播放键。
 - 用户内容（用户名、目录名、专辑与曲目标题等）允许任意位置换行（`overflow-wrap: anywhere`），超长值不撑破布局。**网格项与弹性项还要 `min-width: 0`**：
   `overflow-wrap: anywhere` 只让文字能折行，网格轨道与弹性项的“自动最小宽度”仍可能取内容的最小宽度（尤其是被 `content-visibility` 跳过、保留着上一次渲染宽度的分段），
   窗口先宽后窄时整页横向溢出；M1b 的 Playwright 有“先宽后窄”的回归用例。
@@ -72,15 +70,15 @@
 
 | 组件 | 约定 |
 | --- | --- |
-| `Cover` | 带裱边的正方形封面，不加滤镜，真实封面 `object-fit: contain` 不裁切；四态（加载中的同尺寸底色、已加载、没有封面的标题文字版面、加载失败加“封面无法加载”）由 `data-state` 表达；`variant="card"` 是装饰（`alt=""`、懒加载、对读屏隐藏），`variant="detail"` 有替代文字（“《标题》封面”“《标题》没有封面”）并在失败后提供“重新加载封面”（换 `key` 重新挂载图片，浏览器重新发请求）。只引用同源的封面接口，不拉外部图片 |
-| `AlbumCard`、`AlbumGrid` | 整张卡片是一个 `Link`（里面没有按钮），可访问名称含标题与艺人，标题最多 3 行（`line-clamp`，完整文字仍在 DOM 里）；网格 `repeat(auto-fill, minmax(160px, 1fr))`；“N 个版本”只在 `release_count > 1` 时出现，单版本组没有版本字样 |
-| `AlbumFilters`、`AlbumListView` | `<form role="search">`：搜索词显式提交，清除后焦点回到输入框，字节超限在字段旁说明现状；“只看需要关注”立即生效。结果数用 `aria-live="polite"`，“正在更新…”只给看得见的人；翻页时旧结果保持可见并标 `aria-busy`；点页码链接时滚到结果标题并聚焦 |
+| `Cover` | 正方形封面：详情保留裱边，网格卡片去掉卡纸边框、仅保留细线与圆角；不加滤镜，真实封面 `object-fit: contain` 不裁切；四态（加载中的同尺寸底色、已加载、没有封面的标题文字版面、加载失败加“封面无法加载”）由 `data-state` 表达；`variant="card"` 是装饰（`alt=""`、懒加载、对读屏隐藏），`variant="detail"` 有替代文字（“《标题》封面”“《标题》没有封面”）并在失败后提供“重新加载封面”（换 `key` 重新挂载图片，浏览器重新发请求）。只引用同源的封面接口，不拉外部图片 |
+| `AlbumCard`、`AlbumGrid` | 卡片主体是一个 `Link`（里面没有按钮），可选 `renderPlay(group)` 在链接之外渲染播放键；精确指针悬停或键盘聚焦时显现，触屏不显示，由 app 组合播放逻辑，catalog 不导入 player；链接的可访问名称含标题与艺人，标题最多 3 行（`line-clamp`，完整文字仍在 DOM 里）；网格 `repeat(auto-fill, minmax(160px, 1fr))`；“N 个版本”只在 `release_count > 1` 时出现，单版本组没有版本字样 |
+| `AlbumFilters`、`AlbumListView` | `FilterField` 即时筛选（250ms，一次输入过程一条历史），清除后焦点回到输入框，字节超限在字段旁说明且不写地址；“需要关注”用 `FilterChip` 立即生效，排序用 `SortMenu`。结果数用 `aria-live="polite"`，“正在更新…”只给看得见的人；翻页时旧结果保持可见并标 `aria-busy`；点页码链接时滚到结果标题并聚焦 |
 | `AlbumDetailView` | 页面标题与 h1 取决于选中的版本，所以详情自己渲染 `Page`（路由组件不包 `Page`）；头部用组详情里的摘要先渲染，曲目区单独显示加载态；选中的版本读详情得到 404 时就地提示并给出办法，不影响页面其余部分 |
 | `AlbumHeader`、`VersionNav` | 头部是封面加概况：一行灰色小字、细竖线分隔、只写值（`ul[aria-label="概况"]`，每项带只给读屏的“年份：”等标签；年份未知不写，介质多于 1 张才写“N 张碟”，流派与总时长有才写，有一首曲目时长未知就不写总时长，总时长用 `formatSpokenDuration` 口语写法；窄屏换行时分隔线不出现在行首，2026-11-08 起）；版本导航是 `<nav aria-label="版本">` 里的链接，不是 ARIA 标签页，各版本标题不同时才附标题；生效中的默认版本带 `DefaultVersionTag`（M4，所有成员可见，自动选择时没有），标题旁的“对比版本”打开对比对话框 |
 | `VersionComparisonDialog`、`ComparisonTable`（M4） | `ModalDialog`，`min(980px, 100vw - 边距)`、最高 90vh，标题行 sticky、内容在对话框内部滚动，初始焦点在标题上；内容只在打开时挂载（打开后才请求）。“字段 × 版本”的真表格（显式 ARIA 角色），以第一列为基准：不同的格加金色下划线并带读屏文字“（与版本 1 不同）”，没有值写“—”加读屏的“没有记录”，有人工修正带 `ManualCorrectionTag`；行的取舍与文字在纯函数 `comparison.ts`（全空的行不出现，标题与专辑艺人只在不同时出现，音频格式写参数不写“最高音质”）；容器窄于 640px 时每个字段堆叠成“版本 N：值”；列头的“查看这个版本”关闭对话框并切换版本 |
 | `ReleaseMedia` | 一张介质时直接是 `<ol role="list">`，多于一张时每张一个 `<section aria-labelledby>` 加“跳到第 N 张”链接（点击把焦点放到分段标题上并滚到视野，不改地址）；分段用 `content-visibility: auto`，占位高度只写块方向的 `contain-intrinsic-block-size`（简写 `contain-intrinsic-size` 带一个值会同时给宽度，窄屏上被跳过的分段有 480px 的固有宽度，整页横向溢出）；古典作品（⑧）：同一张介质里相邻且 `work.index` 相同的曲目由纯函数 `groupTracksByWork` 归成一项，渲染为作品小标题（作品名，右侧是组内总时长，任一首未知即未知）加嵌套的 `ol`（`aria-labelledby` 指向作品名），组内行只写 `work.movement ?? title`，其余照常；`work` 全为 null 时结构不变 |
 | `ReleaseFacts`、`EvidenceSection` | 发行信息里没有值的条目不列出；“来源与证据”是 `Disclosure`（折叠时不渲染内容，换版本用 `key` 回到折叠），有人工修正的字段在证据表里标 `ManualCorrectionTag`（“人工修正”，文字加图标）；管理员的“查看完整证据”按钮在展开后才出现，点击后才请求，按钮留在原处（加载中忙碌、之后可重新加载）使焦点不丢 |
-| `ReleaseMedia` 的 `CreditsLine` | 曲目行署名写成“组名：名字、名字；组名：名字”，不加解释；有 `detail`（乐器或工种）的按细分成组，组名用 `creditDetailLabel`（已知键中文名，歌词或标签原写法原样），否则按角色、组名用 `creditRoleLabel`；组与名字都按接口顺序（后端按作词→作曲→编曲→指挥→演奏→制作人排好） |
+| `ReleaseMedia` 的 `CreditsLine` | `sharedTrackCredits` 将版本内全部曲目共有的署名组上提至页头（至少两首，按细分或角色分组，以排序后的姓名集合比较，展示顺序沿用首曲）；`ownTrackCredits` 只保留未上提的组。曲目行署名写成“组名：名字、名字；组名：名字”，不加解释；有 `detail`（乐器或工种）的按细分成组，组名用 `creditDetailLabel`（已知键中文名，歌词或标签原写法原样），否则按角色、组名用 `creditRoleLabel`；组与名字都按接口顺序（后端按作词→作曲→编曲→指挥→演奏→制作人排好） |
 | `labels.ts` | 署名角色、署名细分、证据字段、来源、可信度、处理方式、原因码与归组方式的中文名；清单按后端当时的取值核对，**未知取值原样显示**，后端新增取值不会让页面出错（样本里出现过的取值都有中文名，由测试保证） |
 
 ## 已实现的受治理操作组件（M3，`features/governance`）

@@ -28,7 +28,7 @@ async function expectRecentShelf(page: Page, supplied: readonly { id: string }[]
   return expectedHrefs;
 }
 
-/** Tab 顺序：“全部专辑”、两个翻页按钮，然后依次是每张卡片；最后一张之后离开这一块。 */
+/** Tab 顺序：“全部专辑”、两个翻页按钮，然后依次是每张卡片链接与播放键；最后一个播放键之后离开这一块。 */
 async function expectRecentTabOrder(page: Page, expectedHrefs: readonly string[]) {
   const recent = page.getByRole("region", { name: "最近新增" });
   await tabTo(page, (name) => name === "全部专辑", 40);
@@ -40,8 +40,11 @@ async function expectRecentTabOrder(page: Page, expectedHrefs: readonly string[]
   const focusedHrefs: (string | null)[] = [];
   for (const href of expectedHrefs) {
     await page.keyboard.press("Tab");
-    await expect(recent.locator(`a[href="${href}"]`)).toBeFocused();
+    const link = recent.locator(`a[href="${href}"]`);
+    await expect(link).toBeFocused();
     focusedHrefs.push(await page.evaluate(() => document.activeElement?.getAttribute("href") ?? null));
+    await page.keyboard.press("Tab");
+    await expect(recent.getByRole("listitem").filter({ has: page.locator(`a[href="${href}"]`) }).getByRole("button", { name: /^播放《/ })).toBeFocused();
   }
   expect(focusedHrefs, "Tab 顺序依次经过每张专辑卡片").toEqual(expectedHrefs);
   // 聚焦到横排里看不见的卡片时，浏览器把它滚进横排的可视范围。
@@ -53,7 +56,7 @@ async function expectRecentTabOrder(page: Page, expectedHrefs: readonly string[]
   await page.keyboard.press("Tab");
   expect(await recent.evaluate((element) => element.contains(document.activeElement)), "最后一张之后立即离开最近新增").toBe(false);
   await page.keyboard.press("Shift+Tab");
-  await expect(last.getByRole("link")).toBeFocused();
+  await expect(last.getByRole("button", { name: /^播放《/ })).toBeFocused();
 }
 
 async function verifyLayout(page: Page, label: string) {
@@ -158,16 +161,17 @@ for (const signedInAs of ["curator", "listener"] as const) {
     await expect(recent).not.toContainText("新增专辑 02");
     await recent.getByRole("link", { name: "全部专辑" }).click();
     await expect(page).toHaveURL(/\/albums\?sort=added_at_desc$/);
-    await expect(page.getByRole("combobox", { name: "排序", exact: true })).toHaveValue("added_at_desc");
+    await expect(page.getByRole("button", { name: "排序：最近新增", exact: true })).toBeVisible();
     const albums = page.getByRole("region", { name: "全部专辑" });
     await expect(albums.getByRole("listitem").first()).toContainText(longAlbumTitle);
     expect(mock.callsTo("GET", "/api/v1/release-groups").some((call) => new URLSearchParams(call.search).get("sort") === "added_at_desc")).toBe(true);
-    await page.getByRole("combobox", { name: "排序", exact: true }).selectOption("title");
+    await page.getByRole("button", { name: "排序：最近新增", exact: true }).click();
+    await page.getByRole("menuitem", { name: "按标题", exact: true }).click();
     await expect(page).toHaveURL(/\/albums$/);
     await page.goBack();
-    await expect(page.getByRole("combobox", { name: "排序", exact: true })).toHaveValue("added_at_desc");
+    await expect(page.getByRole("button", { name: "排序：最近新增", exact: true })).toBeVisible();
     await page.reload();
-    await expect(page.getByRole("combobox", { name: "排序", exact: true })).toHaveValue("added_at_desc");
+    await expect(page.getByRole("button", { name: "排序：最近新增", exact: true })).toBeVisible();
     if (signedInAs === "listener") {
       expect(mock.callsTo("GET", /\/scans\/[^/]+\/report$/)).toHaveLength(0);
       expect(mock.callsTo("GET", "/api/v1/library-roots")).toHaveLength(0);

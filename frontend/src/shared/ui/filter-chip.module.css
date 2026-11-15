@@ -1,0 +1,40 @@
+.chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 0 11px;
+  border: 1px solid var(--color-neutral-300);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--fs-13);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .chip:hover {
+    background: var(--color-hover);
+  }
+}
+
+.chip:active {
+  background: var(--color-pressed);
+}
+
+.chip[aria-pressed="true"] {
+  border-color: transparent;
+  background: var(--color-selected);
+  color: var(--text-accent);
+  font-weight: 600;
+}
+
+/* 触屏与窄屏上胶囊高一些，便于手指点中。 */
+@media (pointer: coarse), (max-width: 767px) {
+  .chip {
+    min-height: 36px;
+  }
+}

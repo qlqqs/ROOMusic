@@ -48,6 +48,13 @@
 - 艺人的心形切换得到 409 `artist_catalog_not_ready` 时就近说同一句话；治理命令的 409 按错误码选文案（`artistFailureMessages`），
   不把整理状态当成数据库故障。
 
+## 列表与详情呈现（2026-11-15）
+
+- 列表用 `FilterField` 即时筛选、`FilterChip` 单选角色与 `SortMenu` 排序，历史规则见[状态规范](./state-management.md)；`release_artist` 仍归到“专辑艺人”胶囊。
+- 宽屏三栏目录，窄屏一栏；每行是 `ArtistMonogram` 名字圆章、姓名、角色与专辑数，姓名是链接名称，其他信息作描述。首字母索引宽屏横排吸顶、手机右侧竖排；不推算接口未提供的分组数量。
+- `ArtistHeader` 统一返回、圆章、名字、角色与操作行；播放与随机由 app 的 `useArtistPlayback` 组合，行内悬停播放复用同一钩子。
+- `useArtistAdminActions` 返回 `{ actions, panel }`，管理项进入详情“更多”的“管理”组，对话框与操作反馈经 panel 渲染；普通成员不显示管理菜单。
+
 ## 治理界面
 
 - 命令模型与发行的相同：一次意图一个幂等键，结果不确定时用同一个键“重试”；悲观更新，成功或失败都刷新；`revision_conflict` 说明“艺人刚被修改过”。

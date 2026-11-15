@@ -165,3 +165,19 @@ describe("最近播放卡片上的播放键", () => {
     expect(within(panel).queryByRole("alert")).toBeNull();
   });
 });
+
+describe("最近新增卡片上的播放键", () => {
+  it("从代表版本第一首播放整张，保持在概览页", async () => {
+    const api = setup([]);
+    api.on("GET", "/api/v1/release-groups/recently-added", () => jsonResponse(200, { items: [group] }));
+    const { history } = renderApp();
+    const panel = await screen.findByRole("region", { name: "最近新增" });
+    const play = await within(panel).findByRole("button", { name: "播放《Goldberg Variations》" });
+    await waitFor(() => expect(play.hasAttribute("disabled")).toBe(false));
+    await userEvent.click(play);
+    await waitFor(() => expect(server().queueIds()).toEqual(tracks.map((entry) => entry.id)));
+    expect(server().zone().current?.track.trackId).toBe(track(0).id);
+    expect(api.requestsTo("GET", `/api/v1/releases/${release.id}`)).toHaveLength(1);
+    expect(history.location.pathname).toBe("/");
+  });
+});

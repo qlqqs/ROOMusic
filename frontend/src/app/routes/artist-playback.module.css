@@ -1,0 +1,60 @@
+/* 艺人页头部的操作行：与专辑页同一套——墨色圆形的“播放全部”、随机播放、心形与“更多”；结果与说明在下方，空的不占位。 */
+.playAll {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: var(--fs-13);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.playAll > p {
+  color: var(--text-secondary);
+}
+
+.playAll > p:empty {
+  display: none;
+}
+
+/* 与专辑页的“播放整张专辑”同一种墨色实心圆。 */
+.disc {
+  display: inline-flex;
+  margin-inline-end: var(--space-2);
+}
+
+.disc button {
+  width: 52px;
+  min-width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--color-text);
+  color: var(--color-bg);
+  box-shadow: var(--shadow-md);
+}
+
+.disc button:enabled:not([aria-disabled="true"]):hover,
+.disc button:enabled:not([aria-disabled="true"]):active {
+  background: var(--color-neutral-800);
+  color: var(--color-bg);
+}
+
+/* 三角形的视觉重心偏左，往右挪一点看起来才居中。 */
+.disc button > span {
+  margin-inline-start: 3px;
+}
+
+/* 随机播放与心形之间多留一点。 */
+.actions > :nth-child(2) {
+  margin-inline-end: var(--space-1);
+}
+
+/* 只是“已选择 N 首”这类没有新信息的结果：只给读屏播报，不显示。 */
+.quiet {
+  composes: hidden from "../../shared/ui/visually-hidden.module.css";
+}

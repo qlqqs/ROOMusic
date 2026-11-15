@@ -730,6 +730,47 @@ describe("专辑播放入口", () => {
     expect(engine.getSnapshot().queue.mode).toBe("sequential");
     expect(engine.playTracks).not.toHaveBeenCalled();
   });
+  it("正在放别的专辑：大按钮仍是“播放整张专辑”，按下换成这张专辑从第一首放起", async () => {
+    await enqueue([playerTrack("别的", { releaseId: "release-other", groupId: "group-other" })]);
+    act(() => { engine.play(); });
+    await waitFor(() => expect(engine.getSnapshot().zone?.intent).toBe("play"));
+    view(<AlbumPlayback release={release()} groupId="group-1" />);
+    expect(screen.queryByRole("button", { name: "暂停播放" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "播放整张专辑" }));
+    await waitFor(() => expect(engine.getSnapshot().current?.track.trackId).toBe("track-1"));
+  });
+  it("正在放这张专辑：大按钮是“暂停播放”，按下暂停而不是从第一首重放；暂停后是“继续播放”，按下从原处继续", async () => {
+    view(<AlbumPlayback release={release()} groupId="group-1" />);
+    await userEvent.click(screen.getByRole("button", { name: "播放整张专辑" }));
+    await waitFor(() => expect(engine.getSnapshot().current?.track.trackId).toBe("track-1"));
+    // 已经在放第二首（CUE 分轨）：暂停与继续都不能回到第一首。
+    act(() => { engine.next(); });
+    await waitFor(() => expect(engine.getSnapshot().current?.track.trackId).toBe("track-3"));
+    const entries = engine.getSnapshot().queue.entries;
+    const pause = await screen.findByRole("button", { name: "暂停播放" });
+    expect(screen.queryByRole("button", { name: "播放整张专辑" })).toBeNull();
+    await userEvent.click(pause);
+    await waitFor(() => expect(engine.getSnapshot().zone?.intent).toBe("pause"));
+    expect(server.commands.at(-1)).toMatchObject({ command: "pause" });
+    expect(engine.getSnapshot().current?.track.trackId).toBe("track-3");
+    await userEvent.click(await screen.findByRole("button", { name: "继续播放" }));
+    await waitFor(() => expect(engine.getSnapshot().zone?.intent).toBe("play"));
+    expect(server.commands.at(-1)).toMatchObject({ command: "play" });
+    expect(engine.getSnapshot().current?.track.trackId).toBe("track-3");
+    expect(engine.getSnapshot().queue.entries).toBe(entries);
+    expect(await screen.findByRole("button", { name: "暂停播放" })).toBeTruthy();
+  });
+  it("同一个专辑组的其他版本正在播放也算这张专辑：不能播放的版本也给出可用的暂停", async () => {
+    table = { verdictOf: () => ({ playable: false, reason: "format_unsupported" }) };
+    await enqueue([playerTrack("别的版本", { releaseId: "release-other", groupId: "group-1" })]);
+    act(() => { engine.play(); });
+    await waitFor(() => expect(engine.getSnapshot().zone?.intent).toBe("play"));
+    view(<AlbumPlayback release={release()} groupId="group-1" />);
+    const pause = await screen.findByRole("button", { name: "暂停播放" });
+    expect((pause as HTMLButtonElement).disabled).toBe(false);
+    await userEvent.click(pause);
+    await waitFor(() => expect(engine.getSnapshot().zone?.intent).toBe("pause"));
+  });
   it("下一首播放：整张能播放的曲目插到当前曲目之后，不打断当前曲目", async () => {
     await enqueue([playerTrack("当前"), playerTrack("原来的下一首")]);
     act(() => { engine.playTracks(engine.getSnapshot().queue.entries.map((entry) => entry.track)); });

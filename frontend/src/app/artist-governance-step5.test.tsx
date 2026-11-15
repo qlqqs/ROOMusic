@@ -55,9 +55,25 @@ function seedSplit(context: Setup, options: { sources?: boolean; emptyKeys?: boo
   seedArtistIntegration(data, primary, { mergedSources: options.sources === false ? [] : [{ artist_id: otherId, name: "旧身份", revision: 4, name_key_ids: options.emptyKeys ? [] : [keyA, keyB], operation_id: artistTestId(720), merged_at: "2026-11-04T12:00:00Z" }] });
 }
 
+/** 页头的“更多操作”（曲目行也各有一个“更多操作”）。 */
+async function headerMore() {
+  return waitFor(() => {
+    const header = screen.getByRole("heading", { level: 1 }).closest("header");
+    if (header === null) throw new Error("缺少页头");
+    return within(header).getByRole("button", { name: "更多操作" });
+  });
+}
+
+/** 管理员的操作在页头“更多”的“管理”分组里：打开菜单，选一项。 */
+async function chooseAdmin(context: Pick<Setup, "user">, label: string) {
+  await context.user.click(await headerMore());
+  const group = within(await screen.findByRole("group", { name: "管理" }));
+  await context.user.click(group.getByRole("menuitem", { name: label }));
+}
+
 async function openDialog(context: Setup, name: "拆开" | "合并艺人" | "修改主名") {
   renderApp({ path: `/artists/${primary}` });
-  await context.user.click(await screen.findByRole("button", { name: `${name}…` }));
+  await chooseAdmin(context, `${name}…`);
   return within(await screen.findByRole("dialog", { name: name === "拆开" ? "拆开艺人" : name }));
 }
 
@@ -135,7 +151,7 @@ describe("艺人治理：预览、确认与恢复", () => {
     await context.user.click(dialog.getByRole("button", { name: "保存" }));
     await screen.findByText("主名已改为“新的主名”。");
     expect(context.api.requestsTo("PATCH", endpoint("name"))[0]?.body).toEqual({ expected_revision: 1, mode: "set", name: "新的主名" });
-    await context.user.click(screen.getByRole("button", { name: "修改主名…" }));
+    await chooseAdmin(context, "修改主名…");
     dialog = within(await screen.findByRole("dialog", { name: "修改主名" }));
     await context.user.click(dialog.getByRole("radio", { name: "改回最常见的写法" }));
     await context.user.click(dialog.getByRole("button", { name: "保存" }));
@@ -369,12 +385,39 @@ describe("候选和操作记录", () => {
     expect(screen.queryByRole("button", { name: /撤销/ })).toBeNull();
   });
 
+  it("管理员：合并、拆开、修改主名与操作记录在页头“更多”的“管理”分组里；对话框关闭后焦点回到“更多”，操作记录带着这位艺人", async () => {
+    const context = setup();
+    const { history } = renderApp({ path: `/artists/${primary}` });
+    const more = await headerMore();
+    // 页头只有一行操作：播放全部、随机播放、心形与“更多”，没有平铺的管理按钮。
+    for (const name of ["合并艺人…", "拆开…", "修改主名…"]) expect(screen.queryByRole("button", { name })).toBeNull();
+    await context.user.click(more);
+    const group = within(await screen.findByRole("group", { name: "管理" }));
+    const items = group.getAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual(["合并艺人…", "拆开…", "修改主名…", "操作记录"]);
+    for (const item of items) expect(item.querySelector("svg")).not.toBeNull();
+    await context.user.click(group.getByRole("menuitem", { name: "修改主名…" }));
+    const dialog = within(await screen.findByRole("dialog", { name: "修改主名" }));
+    await context.user.click(dialog.getByRole("button", { name: "取消" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "修改主名" })).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(more));
+    await chooseAdmin(context, "操作记录");
+    await waitFor(() => expect(history.location.pathname).toBe("/settings/operations"));
+    expect(new URLSearchParams(history.location.search).get("artist")).toBe(primary);
+  });
+
   it("成员艺人页没有治理按钮、操作记录与候选入口，也不读管理员来源接口", async () => {
     const context = setup(true);
     renderApp({ path: `/artists/${primary}` });
     await screen.findByRole("heading", { name: context.detail.artist.name, level: 1 });
     for (const name of ["合并艺人…", "拆开…", "修改主名…"]) expect(screen.queryByRole("button", { name })).toBeNull();
     expect(screen.queryByRole("link", { name: "操作记录" })).toBeNull();
+    // 普通成员的页头没有“更多”（里面不会有别的项）：只有播放全部、随机播放与心形。
+    const header = screen.getByRole("heading", { level: 1 }).closest("header");
+    if (header === null) throw new Error("缺少页头");
+    expect(within(header).queryByRole("button", { name: "更多操作" })).toBeNull();
+    expect(within(header).getByRole("button", { name: "播放全部" })).toBeTruthy();
+    expect(within(header).getByRole("button", { name: "随机播放" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "重复艺人" })).toBeNull();
     expect(context.api.requestsTo("GET", endpoint("merged-sources"))).toHaveLength(0);
   });
@@ -496,7 +539,7 @@ describe("浏览器已确认的艺人治理回归", () => {
   it("合并后缓存过 redirect 的旧身份拆回后，打开成功链接必须留在恢复的艺人页", async () => {
     const context = setup();
     const { runtime, history } = renderApp({ path: `/artists/${primary}` });
-    await context.user.click(await screen.findByRole("button", { name: "合并艺人…" }));
+    await chooseAdmin(context, "合并艺人…");
     const merge = within(await screen.findByRole("dialog", { name: "合并艺人" }));
     await context.user.type(merge.getByRole("textbox", { name: "查找艺人" }), "待合并艺人{Enter}");
     await context.user.click(await merge.findByRole("radio", { name: /待合并艺人/ }));
@@ -507,7 +550,7 @@ describe("浏览器已确认的艺人治理回归", () => {
     // 经真实详情请求缓存旧身份的 redirect，再回到主艺人；不手写 Query 缓存形状。
     await act(async () => { await runtime.router.navigate({ to: "/artists/$artistId", params: { artistId: otherId } }); });
     await waitFor(() => expect(history.location.pathname).toBe(`/artists/${primary}`));
-    await context.user.click(await screen.findByRole("button", { name: "拆开…" }));
+    await chooseAdmin(context, "拆开…");
     const split = within(await screen.findByRole("dialog", { name: "拆开艺人" }));
     await context.user.click(await split.findByRole("button", { name: "拆回 待合并艺人" }));
     await previewSplit(context, split);

@@ -18,6 +18,14 @@ function setup() {
   const data = installArtistsApi(api, artistDataOf(), session);
   return { api, data };
 }
+/** 艺人行链接的说明（角色与专辑数，经 aria-describedby）。 */
+const descriptionOf = (link: HTMLElement) => (link.getAttribute("aria-describedby") ?? "").split(" ").filter((part) => part !== "").map((part) => document.getElementById(part)?.textContent ?? "").join(" | ");
+/** 排序菜单：打开后选一项。 */
+async function chooseSort(user: ReturnType<typeof userEvent.setup>, label: string) {
+  await user.click(screen.getByRole("button", { name: /^排序：/ }));
+  await user.click(screen.getByRole("menuitem", { name: new RegExp(`^${label}`) }));
+}
+const roleChips = () => within(screen.getByRole("group", { name: "角色" })).getAllByRole("button");
 const getDetail = (data: ReturnType<typeof artistDataOf>) => {
   const detail = data.details.get(id);
   if (!detail) throw new Error("缺少主艺人样本");
@@ -46,31 +54,49 @@ describe("艺人浏览与详情（⑤）", () => {
     expect(screen.getByRole("region", { name: "#" })).toBeTruthy();
     expect(screen.getByText("9 位艺人")).toBeTruthy();
     expect(within(screen.getByRole("region", { name: "全部艺人" })).getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual(["D", "T", "Y", "Z", "假名", "#"]);
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "排序" }), "album_count");
+    await chooseSort(userEvent.setup(), "按专辑数");
     await waitFor(() => expect(history.location.search).toContain("sort=album_count"));
     expect(screen.queryByRole("navigation", { name: "首字母" })).toBeNull();
     expect(screen.queryByRole("region", { name: "D" })).toBeNull();
   });
 
-  it("I6：列表概况只有数量不写身份，角色下拉只有一个专辑艺人且提交 album_artist", async () => {
+  it("列表一行：链接名只是名字，角色（发行艺人与专辑艺人只写一次“专辑艺人”）与专辑数是它的说明；角色胶囊只有一个专辑艺人且提交 album_artist", async () => {
     const { api, data } = setup();
-    getDetail(data).artist.roles = ["release_artist", "album_artist", "composer"];
+    const detail = getDetail(data);
+    detail.artist.roles = ["release_artist", "album_artist", "composer"];
+    detail.artist.album_count = 12;
     const { history } = renderApp({ path: "/artists" });
     const artistLink = await screen.findByRole("link", { name: "邓丽君" });
+    expect(descriptionOf(artistLink)).toBe("专辑艺人、作曲 | 12 张专辑");
+    expect(artistLink.textContent).toContain("专辑艺人、作曲");
+    // 每行的播放键在链接之外（链接里不嵌按钮），由 app 组合。
     const item = artistLink.closest("li");
     if (item === null) throw new Error("缺少艺人列表项");
-    expect(within(item).queryByText(/专辑艺人|作曲/)).toBeNull();
-    const roles = screen.getByRole("combobox", { name: "角色" });
-    const options = within(roles).getAllByRole("option", { name: "专辑艺人" });
-    expect(options).toHaveLength(1);
-    expect(options[0]?.getAttribute("value")).toBe("album_artist");
-    expect(within(roles).queryByRole("option", { name: "艺人" })).toBeNull();
-    expect(within(roles).getAllByRole("option").map((option) => option.getAttribute("value"))).not.toContain("release_artist");
-    await userEvent.selectOptions(roles, "album_artist");
+    expect(within(item).getByRole("button", { name: "播放 邓丽君 的全部曲目" }).closest("a")).toBeNull();
+    const chips = roleChips();
+    expect(chips.map((chip) => chip.textContent)).toEqual(["全部", "专辑艺人", "曲目艺人", "作词", "作曲", "编曲", "指挥", "演奏", "制作人"]);
+    expect(chips.map((chip) => chip.getAttribute("aria-pressed"))).toEqual(["true", ...Array<string>(8).fill("false")]);
+    await userEvent.click(within(screen.getByRole("group", { name: "角色" })).getByRole("button", { name: "专辑艺人" }));
     await waitFor(() => expect(new URLSearchParams(history.location.search).get("role")).toBe("album_artist"));
     await waitFor(() => expect(api.requestsTo("GET", "/api/v1/artists")).toHaveLength(2));
     expect(new URL(api.requestsTo("GET", "/api/v1/artists").at(-1)?.path ?? "", "http://test").searchParams.get("role")).toBe("album_artist");
     expect(await screen.findByRole("region", { name: "担任专辑艺人的艺人" })).toBeTruthy();
+    expect(within(screen.getByRole("group", { name: "角色" })).getByRole("button", { name: "专辑艺人" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(screen.getByRole("group", { name: "角色" })).getByRole("button", { name: "全部" }).getAttribute("aria-pressed")).toBe("false");
+    // “全部”去掉角色。
+    await userEvent.click(within(screen.getByRole("group", { name: "角色" })).getByRole("button", { name: "全部" }));
+    await waitFor(() => expect(new URLSearchParams(history.location.search).has("role")).toBe(false));
+  });
+
+  it("没有角色、没有专辑的艺人：链接没有说明，行里不留空的角色与数量", async () => {
+    const { data } = setup();
+    const detail = getDetail(data);
+    detail.artist.roles = [];
+    detail.artist.album_count = 0;
+    renderApp({ path: "/artists" });
+    const artistLink = await screen.findByRole("link", { name: "邓丽君" });
+    expect(artistLink.hasAttribute("aria-describedby")).toBe(false);
+    expect(artistLink.textContent).not.toContain("张专辑");
   });
 
   it("I6：旧 URL 的 release_artist 保持合法并原样请求，筛选显示专辑艺人", async () => {
@@ -81,14 +107,13 @@ describe("艺人浏览与详情（⑤）", () => {
     expect(new URLSearchParams(history.location.search).get("role")).toBe("release_artist");
     expect(api.requestsTo("GET", "/api/v1/artists")).toHaveLength(1);
     expect(new URL(api.requestsTo("GET", "/api/v1/artists")[0]?.path ?? "", "http://test").searchParams.get("role")).toBe("release_artist");
-    const roles = screen.getByRole<HTMLSelectElement>("combobox", { name: "角色" });
-    expect(roles.value).toBe("album_artist");
-    expect(within(roles).getAllByRole("option", { name: "专辑艺人" })).toHaveLength(1);
-    expect(within(roles).getByRole<HTMLOptionElement>("option", { name: "专辑艺人" }).selected).toBe(true);
+    const pressed = roleChips().filter((chip) => chip.getAttribute("aria-pressed") === "true");
+    expect(pressed.map((chip) => chip.textContent)).toEqual(["专辑艺人"]);
+    expect(roleChips().filter((chip) => chip.textContent === "专辑艺人")).toHaveLength(1);
     expect(screen.getByRole("region", { name: "担任专辑艺人的艺人" })).toBeTruthy();
   });
 
-  it.each(["首字母", "角色", "查找", "排序"] as const)("在有效第2页改变%s，回到第1页且请求保留相应筛选", async (filter) => {
+  it.each(["首字母", "角色", "筛选", "排序"] as const)("在有效第2页改变%s，回到第1页且请求保留相应筛选", async (filter) => {
     const { api, data } = setup();
     const detail = getDetail(data);
     detail.artist.roles.push("composer");
@@ -99,14 +124,14 @@ describe("艺人浏览与详情（⑤）", () => {
     await screen.findByRole("link", { name: "邓丽君" });
     expect(history.location.search).toContain("page=2");
     expect(screen.getByText("第 2 / 2 页")).toBeTruthy();
-    expect(screen.getByText(/12 张专辑/)).toBeTruthy();
+    expect(descriptionOf(screen.getByRole("link", { name: "邓丽君" }))).toContain("12 张专辑");
     expect(new URL(api.requestsTo("GET", "/api/v1/artists")[0]?.path ?? "", "http://test").searchParams.get("page")).toBe("2");
     const user = userEvent.setup();
     switch (filter) {
       case "首字母": await user.click(within(screen.getByRole("navigation", { name: "首字母" })).getByRole("link", { name: "D" })); break;
-      case "角色": await user.selectOptions(screen.getByRole("combobox", { name: "角色" }), "performer"); break;
-      case "查找": await user.type(screen.getByRole("textbox", { name: "查找艺人" }), "邓丽君"); await user.click(screen.getByRole("button", { name: "查找" })); break;
-      case "排序": await user.selectOptions(screen.getByRole("combobox", { name: "排序" }), "album_count"); break;
+      case "角色": await user.click(within(screen.getByRole("group", { name: "角色" })).getByRole("button", { name: "演奏" })); break;
+      case "筛选": await user.type(screen.getByRole("textbox", { name: "筛选艺人" }), "邓丽君"); break;
+      case "排序": await chooseSort(user, "按专辑数"); break;
     }
     await waitFor(() => expect(new URLSearchParams(history.location.search).has("page")).toBe(false));
     await screen.findByRole("link", { name: filter === "角色" ? "演奏者" : "邓丽君" });
@@ -115,7 +140,7 @@ describe("艺人浏览与详情（⑤）", () => {
     expect(params.get("page")).toBe("1");
     expect(params.get("role")).toBe(filter === "角色" ? "performer" : "composer");
     if (filter === "首字母") expect(params.get("initial")).toBe("D");
-    if (filter === "查找") expect(params.get("q")).toBe("邓丽君");
+    if (filter === "筛选") expect(params.get("q")).toBe("邓丽君");
     if (filter === "排序") expect(params.get("sort")).toBe("album_count");
   });
 

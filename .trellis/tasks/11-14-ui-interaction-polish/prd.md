@@ -12,6 +12,7 @@
 
 1. 专辑页大播放按钮不反映状态：本专辑正在播放时仍是 ▶，再点从第 1 首重放。`frontend/src/features/player/components/album-playback-actions.tsx:69`
 2. 播放中刷新页面后播放栏停在“正在加载”、0:00、暂停图标，15 秒不变。代码已有 `autoplay_blocked` 处理（`frontend/src/features/player/output/output.ts:287`），可能是模拟后端所致，需用真实后端核实。
+   **核实结论（2026-11-14，`scripts/playback-e2e.sh` 隔离真实服务，合成素材）**：播放到 0:02 时刷新，播放区立即转为暂停（intent=pause、status=paused），位置保留 2.0 秒；播放栏显示曲名、0:02 / 0:12 与格式，16 秒内不变，没有停在“正在加载”。刷新后点一下页面结果相同（不自动续播）。问题是模拟后端所致，真实后端无需修改，本任务不改。另：现有真实测试 `frontend/e2e/real/playback-zones.real.ts` 的 `startFromAlbum` 直接点曲目号位的播放按钮，上一轮改为悬停才显现后会被曲目号层挡住，需要先悬停（本任务阶段 2 一并修正）。
 3. 手机导航层级深：顶栏只有“菜单”，无搜索入口、无底部标签栏；抽屉里的搜索显示 `/` 快捷键提示。
 4. 桌面全屏：右上角队列按钮与右栏“接下来”重复；右栏只占中间一窄条，右侧约 400px 空白，整体重心偏左。`frontend/src/features/player/components/fullscreen-player.tsx:154`
 5. 曲目行“更多操作”菜单项无图标（`frontend/src/app/routes/track-actions.tsx:77`），与页头“更多”菜单（有图标）不一致；缺“前往艺人”“前往专辑”。
