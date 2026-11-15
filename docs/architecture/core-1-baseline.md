@@ -11,8 +11,8 @@
 是唯一必需业务权威。
 
 M1a（2026-10-01）已重建 `frontend/src/`：应用外壳、初始化与会话（会话代次、跨标签页同步）、扫描目录与扫描详情、成员管理、
-简版概览；Go 内嵌的是它的生产构建（`backend/cmd/roomusic/web`，随源码提交）。`.github/workflows/ci.yml` 的前端作业运行
-lint、typecheck、Vitest、生产构建、内嵌资产漂移检查与 Playwright 冒烟（含无障碍与五种宽度的响应式检查），接口响应样本由集成作业把关。
+简版概览；Go 内嵌的是它的生产构建（`backend/cmd/roomusic/web/dist`；2026-11-15 起不再随源码提交，由生产镜像的 Node 阶段生成）。`.github/workflows/ci.yml` 的前端作业运行
+lint、typecheck、Vitest、生产构建与 Playwright 冒烟（含无障碍与五种宽度的响应式检查），`image` 作业构建生产镜像，接口响应样本由集成作业把关。
 Classical 原型与 `_ds` 设计系统已经入库，源目录不搬迁。
 
 M1b（2026-10-03）在这个外壳上增加了专辑浏览，只改前端与样本测试，没有新增后端接口：`/albums`（搜索、需要关注筛选、分页，每页 48 张封面卡片，搜索与页码都在地址里）与

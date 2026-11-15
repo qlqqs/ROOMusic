@@ -25,8 +25,8 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/playback/analysis"
 )
 
-// frontendAssets is populated by the production build in this package's web
-// directory. The development server remains the preferred local loop.
+// frontendAssets 包含 web 下的说明文件与生产构建写入 web/dist 的前端产物。
+// 本地开发使用 Vite 开发服务器。
 //
 //go:embed web
 var frontendAssets embed.FS
@@ -82,7 +82,7 @@ func main() {
 	}
 	server := &http.Server{
 		Addr:              settings.Address,
-		Handler:           requestHandler,
+		Handler:           frontendHandler(frontend, requestHandler, logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
@@ -155,11 +155,37 @@ func openDatabase(ctx context.Context, databaseURL string, options ...postgres.O
 	return connection, nil
 }
 
-// frontendSub 返回嵌入的前端产物子树。嵌入内容是编译期常量，取子树失败属于构建错误，因此直接 panic。
+// frontendSub 返回嵌入的前端产物子树；未构建入口页时返回 nil。
 func frontendSub() fs.FS {
-	webAssets, err := fs.Sub(frontendAssets, "web")
+	webAssets, err := fs.Sub(frontendAssets, "web/dist")
 	if err != nil {
 		panic(fmt.Errorf("load embedded frontend assets: %w", err))
 	}
+	if _, err := fs.Stat(webAssets, "index.html"); errors.Is(err, fs.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		panic(fmt.Errorf("load embedded frontend index: %w", err))
+	}
 	return webAssets
+}
+
+// frontendHandler 在产物缺失时提供开发提示，API 与健康检查仍交给原应用处理。
+// webAssets 是以 dist 为根的文件系统，允许测试传入合成产物。
+func frontendHandler(webAssets fs.FS, application http.Handler, logger *slog.Logger) http.Handler {
+	if webAssets != nil {
+		if _, err := fs.Stat(webAssets, "index.html"); err == nil {
+			return application
+		}
+	}
+	const message = "前端未构建，开发请使用 Vite 开发服务器（默认端口 5173）。"
+	logger.Warn("frontend assets missing", "event", "platform.frontend.missing", "module", "platform")
+	mux := http.NewServeMux()
+	for _, route := range []string{"/api", "/api/", "GET /healthz", "GET /readyz"} {
+		mux.Handle(route, application)
+	}
+	mux.HandleFunc("/", func(responseWriter http.ResponseWriter, request *http.Request) {
+		responseWriter.Header().Set("Cache-Control", "no-store")
+		http.Error(responseWriter, message, http.StatusServiceUnavailable)
+	})
+	return mux
 }

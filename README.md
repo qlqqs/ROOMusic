@@ -86,7 +86,7 @@ make dev                    # PostgreSQL + Go 后端（8080）+ Vite（5173）
 (cd frontend && npm run test:e2e)             # Playwright，不需要启动后端
 ```
 
-**改了前端源码，要运行 `(cd frontend && npm run build)`，并把 `backend/cmd/roomusic/web` 一起提交**，否则 CI 的漂移检查会失败。
+前端构建产物不提交：`npm run build` 写入被忽略的 `backend/cmd/roomusic/web/dist`，生产镜像构建时会重新生成。本地直接运行 Go 后端而没有构建前端时，接口照常可用，页面返回“前端未构建”的提示。
 
 ### 发布
 

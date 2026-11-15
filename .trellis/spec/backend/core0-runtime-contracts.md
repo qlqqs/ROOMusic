@@ -212,7 +212,7 @@ Authorization/session token、密码、数据库 URL、完整 NAS 路径或音�
   级别、请求 ID 回写、可选 actor_id 以及敏感字段脱敏；每个请求只能有一个完成事件。
 - HTTP 缓存（F3）：`platform/httpserver` 的 `frontend_test.go`（`fstest.MapFS`：各类路径的缓存头、目录不列、缺失资源 404、HEAD）、
   `etag_test.go`（弱比较、列表、`*`、无法解析的值）、`response_test.go`（`WriteJSON` 与健康检查 `no-store`）；
-  `cmd/roomusic/main_test.go` 对真实内嵌产物断言 `assets/` 文件名都带哈希段、缓存策略生效；
+  `cmd/roomusic/main_test.go` 用合成文件系统断言入口回落、资源 404、缓存策略与缺产物时的 503 提示，`assets/` 文件名带哈希段的检查只在有真实产物时运行（生产镜像的 Go 阶段必跑）；
   `internal/app/artwork_cache_integration_test.go`（封面 200/304/401/404、删除文件后仍 304、标签不匹配返回新字节、
   不安全存储键、JSON 不可缓存）；`catalog/artwork` 的存储键与读取单元测试。真实二进制的 `curl -I` 冒烟记录在任务
   `10-02-classical-f3-backend-gaps` 的 `research/cache-headers-smoke.md`（只用合成数据）。
