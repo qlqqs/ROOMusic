@@ -36,7 +36,7 @@ function seed(mock: ApiMock, long = false) {
 
 async function axe(page: Page, label: string) {
   const { violations } = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
-  expect(violations.map((item) => ({ id: item.id, targets: item.nodes.map((node) => node.target) })), label).toEqual([]);
+  expect(violations.map((item) => ({ id: item.id, nodes: item.nodes.map((node) => ({ target: node.target, failure: node.failureSummary })) })), label).toEqual([]);
 }
 
 async function layout(page: Page, label: string) {
@@ -196,6 +196,12 @@ for (const width of widths) {
     const presentColor = await table.getByRole("rowheader").getByText(LONG_TITLE, { exact: true }).evaluate((element) => getComputedStyle(element).color);
     expect(missingColor).not.toBe(presentColor);
     await screenshot(page, info, width, "favorites-tracks");
+    // 明确展示提示并等淡入结束，axe 检查完整的悬停状态，避免采到半透明中间帧。
+    await row.hover();
+    await more.hover();
+    const tooltip = page.getByText("更多操作", { exact: true });
+    await expect(tooltip).toBeVisible();
+    await expect(tooltip).toHaveCSS("opacity", "1");
     await layout(page, "收藏曲目");
   });
 
