@@ -9,9 +9,8 @@ function thirdPartyScript(pattern: RegExp) {
 export default defineConfig({
   plugins: [react()],
   build: {
-    // Go embeds this directory so the production binary serves the exact
-    // frontend build from the same origin as the REST API.
-    outDir: "../backend/cmd/roomusic/web",
+    // Go 内嵌 web 目录，生产二进制与 REST API 同源提供这份构建；dist 不入库，生产镜像在 Node 阶段生成。
+    outDir: "../backend/cmd/roomusic/web/dist",
     emptyOutDir: true,
     // 支持 2023 年以后的常青浏览器（ADR 0001 第 5 项）：color-mix() 等特性要求 Chrome/Edge 111、Firefox 113、Safari 16.4。
     target: ["chrome111", "edge111", "firefox113", "safari16.4"],

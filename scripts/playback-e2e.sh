@@ -171,7 +171,7 @@ for index in 1 2; do
 done
 fi
 # 白名单复制编译源树，不接触 backend/data 或其他运行期目录；内嵌资产也只在临时树生成。
-(cd "$ROOT_DIR/backend" && tar --exclude='cmd/roomusic/web' --exclude='.env' --exclude='.env.*' -cf - go.mod go.sum cmd internal migrations testdata) | (cd "$TEMP_DIR/backend" && tar -xf -)
+(cd "$ROOT_DIR/backend" && tar --exclude='cmd/roomusic/web/dist' --exclude='.env' --exclude='.env.*' -cf - go.mod go.sum cmd internal migrations testdata) | (cd "$TEMP_DIR/backend" && tar -xf -)
 # Vite 默认会加载 .env；此隔离配置显式关闭 envDir，连前端 .env 也不读取。
 ln -s "$ROOT_DIR/frontend/node_modules" "$TEMP_DIR/node_modules"
 python3 - "$ROOT_DIR/frontend/vite.config.ts" "$TEMP_DIR/vite.config.mts" <<'PYCONFIG'
@@ -180,7 +180,7 @@ with open(sys.argv[2], 'w') as config:
     config.write('import base from ' + json.dumps(sys.argv[1]) + ';\n')
     config.write('export default { ...base, envDir: false };\n')
 PYCONFIG
-(cd "$ROOT_DIR/frontend" && npm exec tsc -- --noEmit && npm exec vite -- build --config "$TEMP_DIR/vite.config.mts" --outDir "$TEMP_DIR/backend/cmd/roomusic/web" --emptyOutDir)
+(cd "$ROOT_DIR/frontend" && npm exec tsc -- --noEmit && npm exec vite -- build --config "$TEMP_DIR/vite.config.mts" --outDir "$TEMP_DIR/backend/cmd/roomusic/web/dist" --emptyOutDir)
 (cd "$TEMP_DIR/backend" && go build -o "$TEMP_DIR/roomusic" ./cmd/roomusic)
 # 编译门禁通过后才启动 PostgreSQL，避免源码尚未稳定时创建测试数据库。
 printf '隔离测试：project=%s database=%s pg_port=%s compose=%s\n' "$COMPOSE_PROJECT" "$ROOMUSIC_TEST_PG_DATABASE" "$ROOMUSIC_TEST_PG_PORT" "$ROOT_DIR/compose.test.yaml"

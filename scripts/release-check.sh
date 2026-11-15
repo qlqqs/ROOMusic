@@ -71,6 +71,4 @@ for raw in filter(None, paths):
 if found:
     sys.exit(1)
 PY
-git diff --exit-code HEAD -- backend/cmd/roomusic/web >/dev/null || fail '内嵌前端产物有未提交修改'
-[[ -z "$(git ls-files --others --exclude-standard -- backend/cmd/roomusic/web)" ]] || fail '内嵌前端产物有未跟踪文件'
 printf '发布检查通过：版本 %s，提交 %s。未打标签、未推送。\n' "$version" "$(git rev-parse HEAD)"

@@ -35,7 +35,7 @@ backend/cmd/roomusic/main.go # 进程入口与 HTTP 生命周期，不含业务�
 backend/internal/*           # app（组合根）、platform、identity、library（含 parser）、catalog（含 metadata、artwork）；
                              # 各能力的 REST 传输层在 <能力>/httpapi
 backend/migrations/*.sql     # embed.FS 迁移；已共享文件不改写
-backend/cmd/roomusic/web/    # 前端生产构建（随源码提交，由 Go 内嵌；CI 检查漂移）
+backend/cmd/roomusic/web/    # Go 内嵌目录：dist/ 是前端生产构建（Git 忽略，生产镜像的 Node 阶段生成）
 frontend/src/               # M1a 重建的 Classical 客户端（布局见前端目录结构规范）
 frontend/e2e/               # Playwright 冒烟、无障碍与响应式检查
 frontend/DESIGN.md          # Classical 设计依据（第 1–4 节）；标注“M1a 实现”的条目是实际采用的值

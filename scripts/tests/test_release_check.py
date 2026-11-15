@@ -31,7 +31,7 @@ class ReleaseCheckTests(unittest.TestCase):
         self.git("config", "user.email", "release-test@example.invalid")
         self.git("config", "core.hooksPath", "/dev/null")
         self.write("scripts/release-check.sh", SCRIPT.read_text())
-        self.write("backend/cmd/roomusic/web/index.html", "合成前端\n")
+        self.write("tracked.txt", "合成已跟踪文件\n")
         self.commit()
         self.origin = self.root / "origin.git"
         self.git("clone", "--bare", str(self.repo), str(self.origin))
@@ -89,7 +89,7 @@ class ReleaseCheckTests(unittest.TestCase):
         self.write("untracked.txt", "合成未跟踪文件\n")
         self.check(contains="工作区必须干净")
         (self.repo / "untracked.txt").unlink()
-        self.write("backend/cmd/roomusic/web/index.html", "已修改\n")
+        self.write("tracked.txt", "已修改\n")
         self.check(contains="工作区必须干净")
 
     def test_main_branch_required(self):

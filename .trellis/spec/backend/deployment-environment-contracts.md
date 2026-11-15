@@ -6,8 +6,9 @@
 
 - Node/Go 版本由 `.mise.toml` 管理，依赖安装使用 `npm ci`；`package-lock.json`
   是前端可重复安装依据，`package.json` 的直接依赖全部精确固定（M1a）。
-- Vite 的生产构建目标仍为唯一的 `backend/cmd/roomusic/web`，不手工编辑该目录；产物随源码提交，
-  CI 运行真实构建与资产漂移检查（M1a 恢复）。开发
+- Vite 的生产构建目标是 `backend/cmd/roomusic/web/dist`（Git 忽略，不提交、不手工编辑）；`web/` 下只跟踪说明文件，
+  `//go:embed web` 在没有 `dist` 时仍能编译。没有产物时后端照常启动，记一条 `platform.frontend.missing`，非 `/api` 路径返回 503 中文提示。
+  生产镜像在 Node 阶段构建前端（2026-11-15 起，此前产物随源码提交并由 CI 检查漂移）。开发
   `vite.config.dev.ts` 才允许自定义 Host 和 API 代理。
 - 开发 Vite 通过公网反代访问时，`allowedHosts` 只放行 `ROOMUSIC_PUBLIC_URL` 的主机名，
   不得使用 `allowedHosts: true`；后端在非生产且未配置 `ROOMUSIC_ALLOWED_ORIGINS` 时按 `ROOMUSIC_PUBLIC_URL`、Origin scheme/host
@@ -22,8 +23,9 @@
   后端启动后 10 秒内退出时按 1、2、4…秒退避重启（上限 30 秒），文件变更或运行满 10 秒后退避归零。开发的 `mise run env-*` 显式使用 `--env-file .env.dev`。
 - 端口：应用端口（Vite、Go 后端）绑 `0.0.0.0`，开发与测试的 PostgreSQL 只绑 `127.0.0.1`。
 - 开发与测试的 PostgreSQL 镜像与 `compose.prod.yaml` 的 `x-postgres-image` 是同一个钉死字符串，CI 校验三者一致。
-- 生产镜像固定 Go、Alpine、PostgreSQL 基础镜像版本与摘要，ffmpeg 与 `scripts/ffmpeg-pinned.sh` 同一摘要；
-  使用已提交的前端，不依赖 Node。应用以 uid 1000 运行，音乐只读挂载；仅首次安装以 root 在宿主机运行 `scripts/production-init.sh`，镜像不包含初始化脚本。
+- 生产镜像固定 Node、Go、Alpine、PostgreSQL 基础镜像版本与摘要，ffmpeg 与 `scripts/ffmpeg-pinned.sh` 同一摘要；
+  Node 阶段（`--platform=$BUILDPLATFORM`，版本与 `.mise.toml` 一致，CI 校验）`npm ci` 后 `npm run build`，Go 阶段校验 `dist/index.html`、
+  运行 `TestEmbeddedAssetsAreContentHashed` 后内嵌；运行镜像不含 Node。构建上下文的排除规则在 `deploy/production/Dockerfile.dockerignore`。应用以 uid 1000 运行，音乐只读挂载；仅首次安装以 root 在宿主机运行 `scripts/production-init.sh`，镜像不包含初始化脚本。
   生产 Compose 仅包含 postgres（健康检查）→ app，顶层 `name: roomusic-server`。固定容器名默认为 `roomusic-app`、`roomusic-postgres`，分别通过 `ROOMUSIC_APP_CONTAINER_NAME`、`ROOMUSIC_POSTGRES_CONTAINER_NAME` 配置。同机多实例使用不同名称。Compose 不引用、不执行、不依赖初始化脚本；升级直接 pull 后 up。必填仅 `ROOMUSIC_MUSIC_DIR`。
   `./secrets`、`./postgres`、`./data`、`./backups` 全部为 bind mount；PostgreSQL 18 挂载点为 `/var/lib/postgresql`，不创建命名或匿名卷。
   宿主机脚本依赖 Python 3 解析 Compose JSON 配置，不执行 dotenv 内容；只调整 secrets/data/backups 顶层权限；密码文件属主 uid 1000、0600，secrets/data/backups 目录 0700。新建 postgres 挂载根目录为 0755，允许 PostgreSQL 降权后访问；不修改已有数据库目录权限。首次生成 32 字节随机十六进制密码，也可通过 `ROOMUSIC_DB_PASSWORD` 指定；后续启动直接读取，重复执行脚本复用，显式不同密码报错。数据库目录非空但密码文件缺失时停止。
@@ -48,8 +50,7 @@
   `backend/` module 运行 `gofmt`、`go test`、`go test -race`、`go vet` 和 `go build`；
   前端作业使用 `frontend/package-lock.json` 依次执行 `npm ci`、lint、typecheck、`npm run test`
   （Vitest）与 `npm run build`，没有“入口缺失”分支。
-- 生产构建之后执行 `git diff --exit-code -- backend/cmd/roomusic/web`，并检查该目录没有未跟踪生成文件；
-  随后 `npx playwright install --with-deps chromium` 与 `npm run test:e2e`（对生产构建的浏览器冒烟、无障碍与
+- 生产构建之后 `npx playwright install --with-deps chromium` 与 `npm run test:e2e`（对生产构建的浏览器冒烟、无障碍与
   响应式检查，失败时上传报告）。
   集成 job 逐个执行 `bash -n` 检查 `scripts/*.sh` 与 `deploy/production/*.sh`，校验开发、测试 Compose，运行
   `scripts/check-production-compose.sh`（假值、只解析不启动：必填中文提示、服务与端口、默认与自定义备份目录、无数据卷、无初始化服务及依赖、固定容器名参数、override 子网），

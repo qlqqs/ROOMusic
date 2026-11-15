@@ -1,5 +1,13 @@
 # syntax=docker/dockerfile:1
-# 上下文是仓库根（发布时干净检出或 Git 导出树）；前端使用已提交的内嵌产物，不安装 Node。
+# 上下文是仓库根；Node 在构建平台生成前端，Go 校验并内嵌产物，运行镜像无需 Node。
+FROM --platform=$BUILDPLATFORM node:24.22.1-alpine3.23@sha256:0468540aa58203ff9e40c2aab3907c52644ab818af6176b1c70a026137dc92a2 AS web
+WORKDIR /src/frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+COPY backend/internal/app/testdata/api-samples/ /src/backend/internal/app/testdata/api-samples/
+RUN npm run build
+
 FROM --platform=$BUILDPLATFORM golang:1.25.10-alpine3.22@sha256:26b4d7113039cd51356bd7930ecafd1031d2975dc3b6940ec8ed09457e17cf95 AS build
 ARG TARGETOS
 ARG TARGETARCH
@@ -9,7 +17,9 @@ WORKDIR /src
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 COPY backend/ ./
-RUN test -f cmd/roomusic/web/index.html \
+COPY --from=web /src/backend/cmd/roomusic/web/dist cmd/roomusic/web/dist
+RUN test -f cmd/roomusic/web/dist/index.html \
+ && go test ./cmd/roomusic/ -run TestEmbeddedAssetsAreContentHashed \
  && CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -trimpath \
     -ldflags="-s -w -X github.com/qlqq/roomusic/backend/internal/platform/buildinfo.version=${ROOMUSIC_VERSION} -X github.com/qlqq/roomusic/backend/internal/platform/buildinfo.commit=${ROOMUSIC_COMMIT}" \
     -o /out/roomusic ./cmd/roomusic

@@ -1,4 +1,12 @@
 *
 !backend/
+!frontend/
+**/node_modules
 backend/data/
+backend/cmd/roomusic/web/dist/
+frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/
+.env*
+**/.env*
 !deploy/production/entrypoint.sh

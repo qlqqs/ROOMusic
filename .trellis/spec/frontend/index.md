@@ -5,7 +5,7 @@
 2026-10-01：M1a 已实现并验证——应用外壳、初始化与会话、目录与扫描管理、成员管理、简版概览。`frontend/src/`
 按本层规范重建：React 19 与严格 TypeScript、TanStack Router（代码定义路由，不用 loader）与 TanStack Query
 （服务器状态的唯一缓存）、CSS Modules 加集中的全局设计变量、系统无衬线字体栈（2026-11-07 起不再自托管字体，见 `frontend/DESIGN.md` 3.2）；直接依赖全部精确固定。
-生产页面由 Go 同源提供，构建产物（`backend/cmd/roomusic/web`）随源码提交，CI 检查漂移。
+生产页面由 Go 同源提供；构建产物写入被忽略的 `backend/cmd/roomusic/web/dist`，生产镜像构建时生成并内嵌，不随源码提交。
 2026-10-03：M1b 在这个外壳上增加了专辑浏览：`/albums`（搜索、需要关注筛选、分页、封面卡片）与 `/albums/$groupId`（头部、版本导航、介质与曲目、发行信息、
 折叠的来源与证据，管理员可按需读完整证据），详见[状态](./state-management.md)、[组件](./component-catalog.md)与[质量](./quality-guidelines.md)规范。
 
@@ -78,7 +78,7 @@ Before writing or reviewing frontend code:
 
 Before declaring frontend work complete:
 
-- [ ] 按[前端质量规范](./quality-guidelines.md)运行适用门禁：lint、类型检查、Vitest、生产构建与内嵌资产漂移检查；
+- [ ] 按[前端质量规范](./quality-guidelines.md)运行适用门禁：lint、类型检查、Vitest 与生产构建；
       涉及页面与交互时运行 Playwright 冒烟（`npm run test:e2e`），仅文档变更不必运行。
 - [ ] Verify raw REST payloads are decoded once at the feature API boundary,
       types are exhaustive, and state has one clear owner.

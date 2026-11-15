@@ -118,16 +118,16 @@ dev          # vite --config vite.config.dev.ts（开发服务器，代理 /api�
 lint         # eslint .
 typecheck    # tsc --noEmit
 test         # vitest run
-build        # tsc --noEmit && vite build（产物输出到 backend/cmd/roomusic/web）
+build        # tsc --noEmit && vite build（产物输出到 backend/cmd/roomusic/web/dist，Git 忽略）
 preview      # vite preview
 test:e2e     # playwright test（webServer 先构建，再用 preview 提供产物）
 ```
 
 Makefile：`frontend-install`（`npm ci`）、`frontend-check`（lint、typecheck、test）、`frontend-build`、`frontend-e2e`。
 
-CI 前端作业按顺序执行：`npm ci` → lint → typecheck → `npm run test` → `npm run build` → 内嵌资产漂移检查（`git diff --exit-code`
-与未跟踪文件检查）→ `npx playwright install --with-deps chromium` → `npm run test:e2e`，失败时上传 Playwright 报告。
-构建产物（`backend/cmd/roomusic/web`）随源码提交：**每个改动前端源码的提交都重新构建并一起提交**，否则漂移检查失败。
+CI 前端作业按顺序执行：`npm ci` → lint → typecheck → `npm run test` → `npm run build` → `npx playwright install --with-deps chromium`
+→ `npm run test:e2e`，失败时上传 Playwright 报告；`image` 作业构建一次 amd64 生产镜像（不推送）。
+构建产物不提交：生产镜像在 Node 阶段重新构建，前端改动的提交只含源码。
 样本漂移由集成作业（`./scripts/test-integration.sh`）把关。
 
 按改动选择最小相关测试集；仅文档变更检查链接、任务上下文和 diff，不为了“全绿”运行
