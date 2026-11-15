@@ -1,37 +1,41 @@
-import { createRootRouteWithContext, createRoute, createRouter, Outlet, redirect, useLocation, type RouterHistory } from "@tanstack/react-router";
+import { createRootRouteWithContext, createRoute, createRouter, lazyRouteComponent, Outlet, redirect, useLocation, type RouterHistory } from "@tanstack/react-router";
 import { sanitizeRedirect, type SessionController } from "../features/auth";
 import { albumListSearchFromState, parseAlbumDetailSearch, parseAlbumSearch, type AlbumDetailSearch, type AlbumSearch } from "../features/catalog";
 import { parseClaimsSearch, parseIssuesSearch, parseOperationsSearch, type ClaimsSearch, type IssuesSearch, type OperationsSearch } from "../features/governance";
-import { ScanDetail } from "../features/library";
 import { parseSearchPageSearch, type SearchPageSearch } from "../features/search";
 import { parseArtistDetailSearch, parseArtistsSearch, type ArtistDetailSearch, type ArtistsSearch } from "../features/artists";
 import { parsePageParam } from "../shared/lib/pagination";
 import { AuthenticatedLayout } from "./shell/authenticated-layout";
 import { AccountPage } from "./routes/account-page";
-import { PlaybackSettingsPage } from "./routes/playback-settings-page";
 import { AdminGate } from "./routes/admin-gate";
 import { AlbumDetailPage } from "./routes/album-detail-page";
 import { AlbumsPage } from "./routes/albums-page";
-import { BackupsPage } from "./routes/backups-page";
 import { FavoritesPage, LikedPage } from "./routes/favorites-page";
 import { HistoryPage } from "./routes/history-page";
-import { ClaimsPage } from "./routes/claims-page";
-import { IssuesPage } from "./routes/issues-page";
-import { LibraryPage } from "./routes/library-page";
 import { LoginPage } from "./routes/login-page";
 import { MePage } from "./routes/me-page";
-import { MembersPage } from "./routes/members-page";
 import { NotFoundPage } from "./routes/not-found-page";
-import { OperationsPage } from "./routes/operations-page";
 import { OverviewPage } from "./routes/overview-page";
 import { PlaylistDetailPage } from "./routes/playlist-detail-page";
 import { PlaylistsPage } from "./routes/playlists-page";
 import { SearchPage } from "./routes/search-page";
 import { SettingsLayout } from "./routes/settings-layout";
-import { ArtistCandidatesPage } from "./routes/artist-candidates-page";
 import { ArtistDetailPage } from "./routes/artist-detail-page";
 import { ArtistsPage } from "./routes/artists-page";
 import { SetupPage } from "./routes/setup-page";
+import { LazyPage } from "./routes/lazy-page";
+
+// 管理页与播放设置页按需加载：成员首屏不下载这些代码与样式。AdminGate、守卫与 validateSearch 仍在下面的静态路由里，
+// 非管理员在 AdminGate 处止步，不会下载代码块。
+const ArtistCandidatesPage = lazyRouteComponent(() => import("./routes/artist-candidates-page"), "ArtistCandidatesPage");
+const IssuesPage = lazyRouteComponent(() => import("./routes/issues-page"), "IssuesPage");
+const ClaimsPage = lazyRouteComponent(() => import("./routes/claims-page"), "ClaimsPage");
+const PlaybackSettingsPage = lazyRouteComponent(() => import("./routes/playback-settings-page"), "PlaybackSettingsPage");
+const LibraryPage = lazyRouteComponent(() => import("./routes/library-page"), "LibraryPage");
+const ScanDetail = lazyRouteComponent(() => import("../features/library"), "ScanDetail");
+const MembersPage = lazyRouteComponent(() => import("./routes/members-page"), "MembersPage");
+const OperationsPage = lazyRouteComponent(() => import("./routes/operations-page"), "OperationsPage");
+const BackupsPage = lazyRouteComponent(() => import("./routes/backups-page"), "BackupsPage");
 
 export type RouterContext = { session: SessionController };
 
@@ -261,7 +265,9 @@ function ArtistCandidatesRoute() {
   const { page, status } = artistCandidatesRoute.useSearch();
   return (
     <AdminGate>
-      <ArtistCandidatesPage page={page ?? 1} status={status ?? "pending"} />
+      <LazyPage>
+        <ArtistCandidatesPage page={page ?? 1} status={status ?? "pending"} />
+      </LazyPage>
     </AdminGate>
   );
 }
@@ -280,7 +286,9 @@ const artistCandidatesRoute = createRoute({
 function IssuesRoute() {
   return (
     <AdminGate>
-      <IssuesPage search={issuesRoute.useSearch()} />
+      <LazyPage>
+        <IssuesPage search={issuesRoute.useSearch()} />
+      </LazyPage>
     </AdminGate>
   );
 }
@@ -296,7 +304,9 @@ const issuesRoute = createRoute({
 function ClaimsRoute() {
   return (
     <AdminGate>
-      <ClaimsPage search={claimsRoute.useSearch()} />
+      <LazyPage>
+        <ClaimsPage search={claimsRoute.useSearch()} />
+      </LazyPage>
     </AdminGate>
   );
 }
@@ -323,13 +333,23 @@ const settingsIndexRoute = createRoute({
 const accountRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/account", component: AccountPage });
 
 // 播放设置（音量均衡、交叉渐变）：所有登录用户都能用，存在这台设备上。
-const playbackSettingsRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/playback", component: PlaybackSettingsPage });
+function PlaybackSettingsRoute() {
+  return (
+    <LazyPage>
+      <PlaybackSettingsPage />
+    </LazyPage>
+  );
+}
+
+const playbackSettingsRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/playback", component: PlaybackSettingsRoute });
 
 function LibraryRoute() {
   const { scan_page: scanPage } = libraryRoute.useSearch();
   return (
     <AdminGate>
-      <LibraryPage scanPage={scanPage ?? 1} />
+      <LazyPage>
+        <LibraryPage scanPage={scanPage ?? 1} />
+      </LazyPage>
     </AdminGate>
   );
 }
@@ -348,7 +368,9 @@ function ScanDetailRoute() {
   const { scanId } = scanDetailRoute.useParams();
   return (
     <AdminGate>
-      <ScanDetail scanId={scanId} />
+      <LazyPage>
+        <ScanDetail scanId={scanId} />
+      </LazyPage>
     </AdminGate>
   );
 }
@@ -363,7 +385,9 @@ const scanDetailRoute = createRoute({
 function MembersRoute() {
   return (
     <AdminGate>
-      <MembersPage />
+      <LazyPage>
+        <MembersPage />
+      </LazyPage>
     </AdminGate>
   );
 }
@@ -375,7 +399,9 @@ function OperationsRoute() {
   const { page, release, group, artist } = operationsRoute.useSearch();
   return (
     <AdminGate>
-      <OperationsPage page={page ?? 1} releaseId={release} groupId={group} artistId={artist} />
+      <LazyPage>
+        <OperationsPage page={page ?? 1} releaseId={release} groupId={group} artistId={artist} />
+      </LazyPage>
     </AdminGate>
   );
 }
@@ -390,7 +416,9 @@ const operationsRoute = createRoute({
 function BackupsRoute() {
   return (
     <AdminGate>
-      <BackupsPage />
+      <LazyPage>
+        <BackupsPage />
+      </LazyPage>
     </AdminGate>
   );
 }
