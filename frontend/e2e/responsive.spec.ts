@@ -13,6 +13,7 @@ import type { ApiMock, MockOptions } from "./support/api-mock";
 import { expectMinimumFontSize, expectNoDocumentScroll, expectNoHorizontalOverflow, widths } from "./support/checks";
 import { expect, test } from "./support/fixtures";
 import { heading } from "./support/locators";
+import { openQueueScene } from "./support/queue";
 
 // 每个页面在五种宽度下都不能出现横向滚动（页面与主内容区都检查）。
 // 页面按 URL 到达，状态由受控后端预置；扫描详情用一个带多类诊断的失败扫描，让表格与汇总都有内容。
@@ -524,3 +525,25 @@ test.describe("概览的版面顺序", () => {
     expect(stats.y + stats.height).toBeLessThanOrEqual(status.y);
   });
 });
+
+
+for (const width of [390, 768, 1440]) {
+  test(`${width}px：队列抽屉三段与展开的已播放列表不撑出面板`, async ({ page, backend }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const mock = await backend.start({ signedInAs: "listener" });
+    const drawer = await openQueueScene(page, mock);
+    await drawer.getByRole("button", { name: "已播放 1 首", exact: true }).click();
+    await expect(drawer.getByRole("listitem")).toHaveCount(4);
+    await expect(drawer.getByText("4 首 · 4 分钟", { exact: true })).toBeVisible();
+    await expectNoHorizontalOverflow(page, "队列抽屉三段");
+    await expectNoDocumentScroll(page, "队列抽屉三段");
+    expect(await drawer.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(0);
+    const box = await drawer.boundingBox();
+    if (box === null) throw new Error("队列面板不可见");
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    expect(box.y).toBeGreaterThanOrEqual(width < 768 ? 0 : 48);
+    expect(box.y + box.height).toBeLessThanOrEqual(width < 768 ? 900 : 852);
+    await expectMinimumFontSize(page, "队列抽屉三段");
+  });
+}

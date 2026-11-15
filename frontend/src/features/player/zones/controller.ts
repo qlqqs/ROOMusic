@@ -478,8 +478,9 @@ export class PlayerController {
     void this.send({ command: "remove_entry", entry_id: entryId });
   }
 
-  moveEntry(entryId: string, delta: -1 | 1): void {
-    void this.send({ command: "move_entry", entry_id: entryId, delta });
+  /** 把条目移到 toIndex（移动后在队列里的下标，0 起）。返回命令的结果：失败时调用方撤回本地的临时顺序。 */
+  moveEntry(entryId: string, toIndex: number): Promise<void> {
+    return this.send({ command: "move_entry", entry_id: entryId, to_index: toIndex });
   }
 
   clearQueue(): void {

@@ -1,20 +1,87 @@
-.section { display: grid; align-content: start; gap: var(--space-3); min-width: 0; }
-.header { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-3) var(--space-2) var(--space-3) var(--space-4); border-bottom: 1px solid var(--color-divider); background: var(--color-surface); }
-.heading { font-size: var(--fs-15); }
+/*
+ * 队列：一列平铺的清单，没有卡片、阴影与分隔线；悬停只加浅底与圆角。唯一的强调是“正在播放”封面角上的律动条。
+ */
+.section { display: grid; align-content: start; gap: var(--space-2); min-width: 0; padding-bottom: var(--space-4); }
+.header { position: sticky; top: 0; z-index: 2; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-2) var(--space-3) var(--space-4); background: var(--color-surface); }
+.grabber { display: none; }
+.headingBlock { min-width: 0; }
+.heading { font-size: var(--fs-18); }
+.summary { margin-top: 2px; font-size: var(--fs-12); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .headerActions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 2px; min-width: 0; }
-.note { padding-inline: var(--space-4); font-size: var(--fs-13); color: var(--text-secondary); }
-.list { margin: 0; padding: 0; list-style: none; }
-.row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: start; gap: var(--space-1) var(--space-3); padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4); border-top: 1px solid var(--color-divider); min-width: 0; }
-.row:first-child { border-top: 0; }
-.row[aria-current] { background: var(--color-selected); }
-.description { min-width: 0; overflow-wrap: anywhere; }
-.title, .metadata { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
-.secondary { font-size: var(--fs-13); color: var(--text-secondary); }
-.number, .duration { font-variant-numeric: tabular-nums; }
-.duration { display: flex; align-items: center; min-height: var(--control-height); white-space: nowrap; font-size: var(--fs-13); color: var(--text-secondary); }
+
+.group { display: grid; gap: var(--space-1); min-width: 0; padding-inline: var(--space-2); }
+.groupTitle { padding: var(--space-2) var(--space-2) 0; font-size: var(--fs-13); font-weight: 600; color: var(--text-secondary); }
+.note, .empty { padding: 0 var(--space-2); font-size: var(--fs-13); color: var(--text-secondary); }
+.empty { padding-block: var(--space-2); }
+.toggle { display: inline-flex; align-items: center; gap: var(--space-1); justify-self: start; min-height: var(--control-height); padding: 0 var(--space-2); border: 0; border-radius: 8px; background: none; color: var(--text-secondary); font: inherit; font-size: var(--fs-13); font-weight: 600; cursor: pointer; }
+.toggle:hover { background: var(--color-hover); color: var(--text-primary); }
+.chevron { transition: transform 160ms ease-out; }
+.toggle[aria-expanded="true"] .chevron { transform: rotate(90deg); }
+
+.list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+
+/* 行：把手 | 封面与文字（整块是“播放此项”按钮）| 时长 | 移除与更多。 */
+.row { position: relative; display: grid; grid-template-columns: 24px minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-1); min-width: 0; padding: 2px var(--space-1) 2px 0; border-radius: 8px; background: var(--color-surface); }
+.row:hover { background: color-mix(in srgb, var(--color-text) 5%, var(--color-surface)); }
+.main { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: var(--space-3); min-width: 0; padding: var(--space-1) 0; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; text-align: left; }
+button.main { cursor: pointer; }
+.art { position: relative; display: block; width: 40px; height: 40px; overflow: hidden; border-radius: var(--radius-md); }
+.art > div { padding: 0; border: 0; }
+.art img { width: 100%; height: 100%; object-fit: cover; }
+.art svg { width: 20px; height: 20px; }
+.text { display: grid; min-width: 0; }
+.title, .secondary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.title { font-size: var(--fs-14); }
+.secondary { font-size: var(--fs-12); color: var(--text-secondary); }
+.duration { font-size: var(--fs-12); color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .actions { display: flex; flex-wrap: nowrap; gap: 2px; }
-/* 窄屏放不下四个（触屏尺寸的）图标和标题：图标移到下一行右对齐，时长仍在标题右侧。 */
+.handle { display: flex; justify-content: center; }
+.handle button { display: inline-flex; align-items: center; justify-content: center; width: 24px; min-height: var(--control-height); padding: 0; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--text-secondary); cursor: grab; touch-action: none; }
+.handle button:hover { color: var(--text-primary); }
+
+/* 已播放：标题改用次要文字色（不用透明度：小字对比度会低于 4.5:1），封面淡一些。 */
+.row[data-dimmed] .title { color: var(--text-secondary); }
+.row[data-dimmed] .art { opacity: 0.6; }
+
+/* 正在播放：选中底色与 2px 黄铜左线（用内阴影画，状态变化不挪动文字），封面 48px。 */
+.row[data-current] { background: var(--color-selected); box-shadow: inset 2px 0 0 var(--color-accent); }
+.row[data-current] .main { grid-template-columns: 48px minmax(0, 1fr); }
+.row[data-current] .art { width: 48px; height: 48px; }
+.row[data-current] .title { font-weight: 600; color: var(--text-accent); }
+
+/* 律动条：封面右下角三根 2px 的黄铜条，只在播放中按 transform 跳动。 */
+.bars { position: absolute; right: 3px; bottom: 3px; display: flex; align-items: flex-end; gap: 2px; height: 12px; padding: 2px 3px; border-radius: 3px; background: rgb(0 0 0 / 45%); }
+.bars i { width: 2px; height: 100%; border-radius: 1px; background: var(--color-accent-300); transform-origin: bottom; transform: scaleY(0.5); }
+.bars i:nth-child(2) { transform: scaleY(0.9); }
+.bars i:nth-child(3) { transform: scaleY(0.65); }
+
+/* 拖动中的行浮起：轻阴影、略放大，其他行平滑让位（dnd-kit 的 transition）。 */
+.row[data-dragging] { z-index: 1; background: var(--color-bg); box-shadow: var(--shadow-md); scale: 1.02; }
+.row[data-dragging] .handle button { cursor: grabbing; }
+
+/* 移除：行高收起并淡出。 */
+.row[data-removing] { overflow: hidden; pointer-events: none; }
+
+/* 精确指针设备上，把手与行尾操作平时透明，悬停或行内聚焦时出现；触屏常驻。 */
+@media (hover: hover) and (pointer: fine) {
+  .handle button, .actions button { opacity: 0; }
+  .row:is(:hover, :focus-within) :is(.handle, .actions) button, .row[data-dragging] .handle button, .actions button[aria-expanded="true"] { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .bars[data-playing] i { animation: bar 0.9s ease-in-out infinite; }
+  .bars[data-playing] i:nth-child(2) { animation-delay: -0.3s; }
+  .bars[data-playing] i:nth-child(3) { animation-delay: -0.6s; }
+  .row[data-removing] { animation: collapse 160ms ease-in forwards; }
+  .handle button, .actions button { transition: opacity 0.12s ease; }
+  .row[data-dragging] { transition: scale 120ms ease-out, box-shadow 120ms ease-out; }
+}
+@keyframes bar { 0%, 100% { transform: scaleY(0.3); } 50% { transform: scaleY(1); } }
+@keyframes collapse { from { max-height: 64px; } to { max-height: 0; padding-block: 0; margin-block: -2px; opacity: 0; } }
+
+/* 窄屏（底部面板）：顶部一条把手；行尾只留“更多”，移除收进菜单。 */
 @media (max-width: 767px) {
-  .row { grid-template-columns: minmax(0, 1fr) auto; }
-  .actions { grid-column: 1 / -1; grid-row: 2; justify-content: flex-end; }
+  .header { grid-template-columns: minmax(0, 1fr) auto; padding-top: var(--space-4); }
+  .grabber { position: absolute; top: 6px; left: 50%; display: block; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: color-mix(in srgb, var(--color-text) 25%, transparent); }
+  .actions [data-remove] { display: none; }
 }

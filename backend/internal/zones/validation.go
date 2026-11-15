@@ -32,7 +32,7 @@ func validateCommand(c Command) error {
 			return ErrInvalidInput
 		}
 	case "move_entry":
-		if !validID(c.EntryID) || (c.Delta != -1 && c.Delta != 1) {
+		if !validID(c.EntryID) || c.ToIndex < 0 {
 			return ErrInvalidInput
 		}
 	case "set_mode":

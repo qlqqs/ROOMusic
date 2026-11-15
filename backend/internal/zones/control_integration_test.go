@@ -2,6 +2,8 @@ package zones_test
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"reflect"
 	"slices"
@@ -12,6 +14,111 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/zones"
 	"github.com/qlqq/roomusic/backend/internal/zones/queue"
 )
+
+func TestPostgreSQLZonesControlMoveEntry(t *testing.T) {
+	f := newControlFixture(t)
+	user := f.user(t, "user")
+	for _, tc := range []struct {
+		name    string
+		from    int
+		toIndex int
+		missing bool
+		invalid bool
+		order   []int
+	}{
+		{"移到首项后刷新", 3, 0, false, false, []int{3, 0, 1, 2}},
+		{"移到尾项后刷新", 0, 3, false, false, []int{1, 2, 3, 0}},
+		{"向前跨多项后刷新", 3, 1, false, false, []int{0, 3, 1, 2}},
+		{"向后跨多项后刷新", 0, 2, false, false, []int{1, 2, 0, 3}},
+		{"同位置为空操作", 1, 1, false, false, nil},
+		{"条目不存在为空操作", 0, 1, true, false, nil},
+		{"拒绝负下标", 0, -1, false, true, nil},
+		{"拒绝等于队列长度", 0, 4, false, true, nil},
+		{"拒绝超过队列长度", 0, 10, false, true, nil},
+		{"条目不存在也拒绝越界", 0, 4, true, true, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			device := f.device(t, user, true)
+			id := device.Zone.ZoneID
+			initial := f.command(t, user, id, map[string]any{"command": "play_tracks", "track_ids": f.tracks, "start_index": 1})
+			before := f.queue(t, user, id)
+			entryID := before.Entries[tc.from].EntryID
+			if tc.missing {
+				entryID = uuid.New()
+			}
+			sub := f.service.Subscribe(user.id)
+			defer sub.Close()
+			body := map[string]any{"command": "move_entry", "entry_id": entryID, "to_index": tc.toIndex}
+			if tc.invalid {
+				_, err := f.service.Command(context.Background(), user.id, id, zones.Command{Command: "move_entry", EntryID: entryID, ToIndex: tc.toIndex})
+				if !errors.Is(err, zones.ErrInvalidInput) {
+					t.Fatalf("越界命令错误 = %v，期望 ErrInvalidInput", err)
+				}
+				controlError(t, f.request(t, user, "POST", "/zones/"+id+"/commands", body, controlOrigin), http.StatusBadRequest, "invalid_input")
+			} else {
+				response := f.request(t, user, "POST", "/zones/"+id+"/commands", body, controlOrigin)
+				result := controlDecode[zones.CommandResult](t, response, http.StatusOK)
+				if result.Zone.Current == nil || result.Zone.Current.EntryID != before.Entries[1].EntryID {
+					t.Fatalf("移动改变了当前项：%+v", result.Zone.Current)
+				}
+				if tc.order == nil {
+					var fields map[string]json.RawMessage
+					if err := json.Unmarshal(response.Body.Bytes(), &fields); err != nil {
+						t.Fatal(err)
+					}
+					if string(fields["queue_change"]) != "null" || result.QueueChange != nil ||
+						result.Zone.QueueRevision != initial.Zone.QueueRevision || result.Zone.Revision != initial.Zone.Revision {
+						t.Fatalf("空操作的增量或版本错误：%s", response.Body.String())
+					}
+				} else {
+					wantChange := &zones.QueueChange{Kind: "move", EntryID: entryID, ToIndex: tc.toIndex, QueueRevision: before.QueueRevision + 1}
+					if !reflect.DeepEqual(result.QueueChange, wantChange) || result.Zone.QueueRevision != before.QueueRevision+1 || result.Zone.Revision != initial.Zone.Revision+1 {
+						t.Fatalf("移动增量或版本错误：%+v", result)
+					}
+					msg := outputMessage(t, sub)
+					var pushed struct {
+						ZoneID string            `json:"zone_id"`
+						Change zones.QueueChange `json:"change"`
+					}
+					if err := json.Unmarshal(msg.Data, &pushed); err != nil || msg.Kind != "queue" || pushed.ZoneID != id || !reflect.DeepEqual(pushed.Change, *wantChange) {
+						t.Fatalf("移动推送错误：%+v，解码错误=%v", msg, err)
+					}
+				}
+			}
+			after := f.queue(t, user, id)
+			if tc.order == nil {
+				if !reflect.DeepEqual(after, before) {
+					t.Fatal("越界或空操作改变了队列")
+				}
+				for _, zone := range f.snapshot(t, user).Zones {
+					if zone.ZoneID == id && zone.Revision != initial.Zone.Revision {
+						t.Fatal("越界或空操作增加了播放区版本")
+					}
+				}
+				select {
+				case msg := <-sub.Events:
+					t.Fatalf("越界或空操作仍推送事件：%+v", msg)
+				default:
+				}
+				return
+			}
+			want := make([]zones.QueueEntry, len(tc.order))
+			for i, index := range tc.order {
+				want[i] = before.Entries[index]
+			}
+			if !reflect.DeepEqual(after.Entries, want) {
+				t.Fatalf("移动顺序 = %+v，期望 %+v", after.Entries, want)
+			}
+			// 新建 Service 强制从已提交的数据库读取，避免只验证原实例的内存缓存。
+			refreshed := zones.NewService(f.db, zones.Options{Now: f.clock.current, AfterFunc: f.clock.after})
+			defer refreshed.Close()
+			reloaded, err := refreshed.ReadQueue(context.Background(), user.id, id)
+			if err != nil || !reflect.DeepEqual(reloaded, after) {
+				t.Fatalf("刷新后队列 = %+v，期望 %+v，错误=%v", reloaded, after, err)
+			}
+		})
+	}
+}
 
 func TestPostgreSQLZonesControlCommands(t *testing.T) {
 	f := newControlFixture(t)
@@ -69,7 +176,7 @@ func TestPostgreSQLZonesControlCommands(t *testing.T) {
 			case "remove_entry":
 				body["entry_id"] = entries[1].EntryID
 			case "move_entry":
-				body["entry_id"], body["delta"] = entries[2].EntryID, -1
+				body["entry_id"], body["to_index"] = entries[2].EntryID, 1
 			case "set_mode":
 				body["mode"] = "repeat_all"
 			case "seek":

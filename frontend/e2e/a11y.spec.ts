@@ -11,6 +11,7 @@ import type { ApiMock, MockOptions } from "./support/api-mock";
 import { expectMinimumFontSize, expectNoSeriousViolations } from "./support/checks";
 import { expect, test } from "./support/fixtures";
 import { heading } from "./support/locators";
+import { openQueueScene } from "./support/queue";
 import { chooseRootAction, openAddRoot, rootItem, rootMenuButton } from "./support/library";
 
 // 无障碍扫描：每个页面状态用 axe（WCAG 2.1 A 与 AA）扫描，serious 或 critical 即失败，并检查最小字号。
@@ -553,3 +554,23 @@ test.describe("设置与用户菜单：axe", () => {
     }
   }
 });
+
+
+for (const width of [390, 1440]) {
+  test(`${width}px：队列抽屉收起、展开与更多菜单的无障碍`, async ({ page, backend }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const mock = await backend.start({ signedInAs: "listener" });
+    const drawer = await openQueueScene(page, mock);
+    await expectNoSeriousViolations(page, "队列已播放默认收起");
+    const played = drawer.getByRole("button", { name: "已播放 1 首", exact: true });
+    await played.click();
+    await expect(played).toHaveAttribute("aria-expanded", "true");
+    await expect(drawer.getByRole("button", { name: "播放《队列曲目 1》", exact: true })).toBeVisible();
+    await expectNoSeriousViolations(page, "队列已播放展开");
+    await drawer.getByRole("button", { name: "《队列曲目 4》的更多操作", exact: true }).click();
+    await expect(page.getByRole("menuitem", { name: "播放此项", exact: true })).toBeFocused();
+    await expect(page.getByRole("menuitem", { name: "下移", exact: true })).toBeDisabled();
+    await expectNoSeriousViolations(page, "队列更多操作");
+    await expectMinimumFontSize(page, "队列更多操作");
+  });
+}

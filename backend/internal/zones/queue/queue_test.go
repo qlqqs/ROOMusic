@@ -71,6 +71,50 @@ func mustAdd(t *testing.T, state State, err error) State {
 	return state
 }
 
+func TestMoveEntryTo(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		entryID string
+		toIndex int
+		order   []string
+	}{
+		{"移到首项并跨过当前项", "e5", 0, []string{"e5", "e1", "e2", "e3", "e4"}},
+		{"移到尾项并跨过当前项", "e1", 4, []string{"e2", "e3", "e4", "e5", "e1"}},
+		{"向前跨多项", "e5", 1, []string{"e1", "e5", "e2", "e3", "e4"}},
+		{"向后跨多项", "e1", 3, []string{"e2", "e3", "e4", "e1", "e5"}},
+		{"移动当前项", "e3", 0, []string{"e3", "e1", "e2", "e4", "e5"}},
+		{"同位置", "e3", 2, nil},
+		{"负下标", "e1", -1, nil},
+		{"下标等于长度", "e1", 5, nil},
+		{"下标超过长度", "e1", 20, nil},
+		{"不存在条目", "missing", 1, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			state := queueOf([]string{"a", "b", "c", "d", "e"}, 2, ModeShuffle, makeEnv())
+			state.History = []string{"e1", "e4", "e1"}
+			state.Bag = []string{"e5", "e2", "e4"}
+			before := state
+			before.Entries = slices.Clone(state.Entries)
+			before.History = slices.Clone(state.History)
+			before.Bag = slices.Clone(state.Bag)
+			got := MoveEntryTo(state, tc.entryID, tc.toIndex)
+			assertState(t, state, before)
+			want := before
+			if tc.order != nil {
+				want.Entries = make([]Entry, len(tc.order))
+				for i, id := range tc.order {
+					want.Entries[i] = before.Entries[slices.Index(entryIDs(before.Entries), id)]
+				}
+			}
+			assertState(t, got, want)
+		})
+	}
+	t.Run("空队列", func(t *testing.T) {
+		state := EmptyQueue()
+		assertState(t, MoveEntryTo(state, "e1", 0), state)
+	})
+}
+
 // 逐条对应 frontend/src/features/player/engine/queue.test.ts；标题断言改为 TrackID。
 func TestZonesQueue(t *testing.T) {
 	cases := []struct {
@@ -220,12 +264,12 @@ func TestZonesQueue(t *testing.T) {
 		}},
 		{"编辑/上移与下移交换相邻条目，两端不动，当前条目不变", func(t *testing.T) {
 			state := queueOf([]string{"a", "b", "c"}, 1, ModeSequential, makeEnv())
-			assertIDs(t, entryIDs(MoveEntry(state, "e2", -1).Entries), []string{"e2", "e1", "e3"})
-			assertIDs(t, entryIDs(MoveEntry(state, "e2", 1).Entries), []string{"e1", "e3", "e2"})
-			assertState(t, MoveEntry(state, "e1", -1), state)
-			assertState(t, MoveEntry(state, "e3", 1), state)
-			assertState(t, MoveEntry(state, "nope", 1), state)
-			assertEqual(t, MoveEntry(state, "e2", -1).CurrentEntryID, "e2")
+			assertIDs(t, entryIDs(MoveEntryTo(state, "e2", 0).Entries), []string{"e2", "e1", "e3"})
+			assertIDs(t, entryIDs(MoveEntryTo(state, "e2", 2).Entries), []string{"e1", "e3", "e2"})
+			assertState(t, MoveEntryTo(state, "e1", -1), state)
+			assertState(t, MoveEntryTo(state, "e3", 3), state)
+			assertState(t, MoveEntryTo(state, "nope", 1), state)
+			assertEqual(t, MoveEntryTo(state, "e2", 0).CurrentEntryID, "e2")
 		}},
 		{"编辑/清空队列保留播放模式", func(t *testing.T) {
 			state := queueOf([]string{"a", "b"}, 0, ModeRepeatOne, makeEnv())

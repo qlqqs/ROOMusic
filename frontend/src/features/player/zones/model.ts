@@ -152,7 +152,7 @@ export type QueueChange = { queueRevision: number } & (
   | { kind: "reload" }
   | { kind: "insert"; index: number; entries: readonly QueueEntry[] }
   | { kind: "remove"; entryId: string }
-  | { kind: "move"; entryId: string; delta: -1 | 1 }
+  | { kind: "move"; entryId: string; toIndex: number }
   | { kind: "clear" }
 );
 

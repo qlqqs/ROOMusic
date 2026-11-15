@@ -1,10 +1,10 @@
 {
   "body": {
     "queue_change": {
-      "delta": -1,
       "entry_id": "00000000-0000-4000-8000-000000000001",
       "kind": "move",
-      "queue_revision": 4
+      "queue_revision": 4,
+      "to_index": 2
     },
     "server_time": "2026-01-01T00:00:00Z",
     "zone": {

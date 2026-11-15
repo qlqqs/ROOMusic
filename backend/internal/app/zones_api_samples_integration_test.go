@@ -175,7 +175,7 @@ func TestPostgreSQLZonesAPIResponseSamples(t *testing.T) {
 	c.report("ended", output.SessionID, "ended", "paused", &recovered.Zone.Stream.Seq, 0, nil)
 	c.command("enqueue", id, map[string]any{"command": "enqueue", "track_ids": f.tracks[3:]})
 	c.command("play-next", id, map[string]any{"command": "play_next", "track_ids": f.tracks[3:4]})
-	c.command("move-entry", id, map[string]any{"command": "move_entry", "entry_id": queue.Entries[2].EntryID, "delta": -1})
+	c.command("move-entry", id, map[string]any{"command": "move_entry", "entry_id": queue.Entries[2].EntryID, "to_index": 2})
 	c.command("remove-entry", id, map[string]any{"command": "remove_entry", "entry_id": queue.Entries[2].EntryID})
 	c.command("play-entry", id, map[string]any{"command": "play_entry", "entry_id": queue.Entries[0].EntryID})
 	c.command("set-mode", id, map[string]any{"command": "set_mode", "mode": "repeat_all"})

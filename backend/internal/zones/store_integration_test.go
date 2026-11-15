@@ -149,6 +149,55 @@ func requireZoneEntries(t *testing.T, got PersistedZone, want ...queue.Entry) {
 	}
 }
 
+func TestPostgreSQLZonesStoreMoveEntryWithPositionGaps(t *testing.T) {
+	f := newZonesFixture(t)
+	ctx := context.Background()
+	user := f.user(t)
+	for _, tc := range []struct {
+		name    string
+		from    int
+		toIndex int
+		order   []int
+	}{
+		{"移到首项", 4, 0, []int{4, 0, 1, 2, 3}},
+		{"移到尾项", 0, 4, []int{1, 2, 3, 4, 0}},
+		{"向前移到中间", 4, 2, []int{0, 1, 4, 2, 3}},
+		{"向后移到中间", 0, 2, []int{1, 2, 0, 3, 4}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			zoneID, _ := f.zone(t, user, time.Now())
+			entries := []queue.Entry{f.entry(0), f.entry(1), f.entry(2), f.entry(3), f.entry(0)}
+			f.write(t, func(store *Store) {
+				requireZonesOK(t, store.ReplaceEntries(ctx, user, zoneID, entries))
+			})
+			// 同时包含空洞和连续位置，目标下标与数据库 position 不同。
+			positions := []int{2, 5, 6, 11, 20}
+			f.exec(t, `UPDATE playback_queue_entries SET position=CASE position
+ WHEN 0 THEN 2 WHEN 1 THEN 5 WHEN 2 THEN 6 WHEN 3 THEN 11 WHEN 4 THEN 20 END WHERE zone_id=$1`, zoneID)
+			for i, entry := range entries {
+				if got := f.positions(t, zoneID)[entry.EntryID]; got != positions[i] {
+					t.Fatalf("空洞夹具 position=%d，期望 %d", got, positions[i])
+				}
+			}
+			f.write(t, func(store *Store) {
+				changed, err := store.MoveEntry(ctx, user, zoneID, entries[tc.from].EntryID, tc.toIndex)
+				requireZonesChanged(t, changed, err)
+			})
+			want := make([]queue.Entry, len(tc.order))
+			for i, index := range tc.order {
+				want[i] = entries[index]
+			}
+			for _, zone := range f.load(t, user).Zones {
+				if zone.ZoneID == zoneID {
+					requireZoneEntries(t, zone, want...)
+					return
+				}
+			}
+			t.Fatal("重读后播放区不存在")
+		})
+	}
+}
+
 func TestPostgreSQLZonesStoreRoundTrip(t *testing.T) {
 	f := newZonesFixture(t)
 	ctx := context.Background()
@@ -188,7 +237,7 @@ func TestPostgreSQLZonesStoreRoundTrip(t *testing.T) {
 	f.write(t, func(store *Store) {
 		requireZonesOK(t, store.InsertEntries(ctx, user, zoneID, b.EntryID, []queue.Entry{y}))
 		// a 与 b 在逻辑列表里相邻，但实际位置中间有空隙。
-		changed, err := store.SwapEntries(ctx, user, zoneID, a.EntryID, b.EntryID)
+		changed, err := store.MoveEntry(ctx, user, zoneID, a.EntryID, 1)
 		requireZonesChanged(t, changed, err)
 		zone.Queue.CurrentEntryID, zone.Queue.Mode = y.EntryID, queue.ModeShuffle
 		zone.Queue.History, zone.Queue.Bag = []string{b.EntryID, a.EntryID, b.EntryID}, []string{c.EntryID, a.EntryID}
@@ -274,7 +323,7 @@ func TestPostgreSQLZonesUserIsolation(t *testing.T) {
 			if changed {
 				t.Fatal("删除了其他用户的条目")
 			}
-			changed, err = store.SwapEntries(ctx, tc.actor, tc.target.ZoneID, tc.entry.EntryID, tc.second.EntryID)
+			changed, err = store.MoveEntry(ctx, tc.actor, tc.target.ZoneID, tc.entry.EntryID, 1)
 			requireZonesOK(t, err)
 			if changed {
 				t.Fatal("交换了其他用户的条目")
@@ -291,7 +340,7 @@ func TestPostgreSQLZonesUserIsolation(t *testing.T) {
 		if changed {
 			t.Fatal("跨区删除成功")
 		}
-		changed, err = store.SwapEntries(ctx, userA, zoneA, a.EntryID, b.EntryID)
+		changed, err = store.MoveEntry(ctx, userA, zoneA, b.EntryID, 1)
 		requireZonesOK(t, err)
 		if changed {
 			t.Fatal("跨区交换成功")

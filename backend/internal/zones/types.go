@@ -48,7 +48,7 @@ type Command struct {
 	TrackIDs        []string      `json:"track_ids"`
 	StartIndex      int           `json:"start_index"`
 	EntryID         string        `json:"entry_id"`
-	Delta           int           `json:"delta"`
+	ToIndex         int           `json:"to_index"`
 	Mode            queue.Mode    `json:"mode"`
 	PositionSeconds float64       `json:"position_seconds"`
 	Settings        SettingsPatch `json:"settings"`
@@ -156,7 +156,7 @@ type QueueChange struct {
 	Entries       []QueueEntry `json:"entries,omitempty"`
 	Index         *int         `json:"index,omitempty"`
 	EntryID       string       `json:"entry_id,omitempty"`
-	Delta         int          `json:"delta,omitempty"`
+	ToIndex       int          `json:"to_index,omitempty"`
 }
 type DeviceResult struct {
 	ServerTime Timestamp `json:"server_time"`
@@ -210,7 +210,7 @@ func (c QueueChange) MarshalJSON() ([]byte, error) {
 		fields["entry_id"] = c.EntryID
 	case "move":
 		fields["entry_id"] = c.EntryID
-		fields["delta"] = c.Delta
+		fields["to_index"] = c.ToIndex
 	}
 	return json.Marshal(fields)
 }

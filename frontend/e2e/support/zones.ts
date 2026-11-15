@@ -135,10 +135,10 @@ export function zonesMock(trackOf: (id: string) => TrackSummaryDTO | undefined) 
         break;
       }
       case "move_entry": {
-        const body = d.object({ entry_id: d.uuid(), delta: d.integer({ min: -1, max: 1 }) })(input, "$");
+        const body = d.object({ entry_id: d.uuid(), to_index: d.integer({ min: 0 }) })(input, "$");
         const from = entries.findIndex((item) => item.entry_id === body.entry_id);
         const entry = entries[from];
-        if (entry && entries[from + body.delta]) { entries.splice(from, 1); entries.splice(from + body.delta, 0, entry); changed = true; }
+        if (entry && body.to_index < entries.length && body.to_index !== from) { entries.splice(from, 1); entries.splice(body.to_index, 0, entry); changed = true; }
         break;
       }
       case "remove_entry": {

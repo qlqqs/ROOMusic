@@ -138,13 +138,10 @@ export function fakeZoneServer(options: { trackOf?: (trackId: string) => PlayerT
       }
       case "move_entry": {
         const at = index(command.entry_id);
-        const to = at + command.delta;
         const moving = entries[at];
-        const other = entries[to];
-        if (moving === undefined || other === undefined) return { queueChanged: false, imported: null };
-        entries = [...entries];
-        entries[at] = other;
-        entries[to] = moving;
+        if (moving === undefined || command.to_index >= entries.length || command.to_index === at) return { queueChanged: false, imported: null };
+        entries = entries.filter((_, position) => position !== at);
+        entries.splice(command.to_index, 0, moving);
         commit({}, true);
         return { queueChanged: true, imported: null };
       }

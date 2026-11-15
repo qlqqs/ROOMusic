@@ -304,18 +304,19 @@ func (s *Service) plan(ctx context.Context, userID string, z *zoneRuntime, c Com
 			p.notify = true
 		}
 	case "move_entry":
+		if c.ToIndex >= len(q.Entries) {
+			return p, ErrInvalidInput
+		}
 		i := entryIndex(q.Entries, c.EntryID)
-		target := i + c.Delta
-		if i < 0 || target < 0 || target >= len(q.Entries) {
+		if i < 0 || i == c.ToIndex {
 			p.noop = true
 			break
 		}
-		otherID := q.Entries[target].EntryID
-		p.persisted.Queue = queue.MoveEntry(q, c.EntryID, c.Delta)
+		p.persisted.Queue = queue.MoveEntryTo(q, c.EntryID, c.ToIndex)
 		p.notify = true
-		p.change = &QueueChange{Kind: "move", EntryID: c.EntryID, Delta: c.Delta}
+		p.change = &QueueChange{Kind: "move", EntryID: c.EntryID, ToIndex: c.ToIndex}
 		p.writeEntries = func(store *Store) error {
-			_, err := store.SwapEntries(ctx, userID, z.persisted.ZoneID, c.EntryID, otherID)
+			_, err := store.MoveEntry(ctx, userID, z.persisted.ZoneID, c.EntryID, c.ToIndex)
 			return err
 		}
 	case "clear_queue":

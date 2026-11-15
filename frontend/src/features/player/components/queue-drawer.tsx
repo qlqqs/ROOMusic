@@ -1,5 +1,6 @@
 import { ListMusic } from "lucide-react";
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
+import { cx } from "../../../shared/lib/class-names";
 import { Button, ModalDialog } from "../../../shared/ui";
 import type { PlayerTrack } from "../engine/queue";
 import { usePlayerSelector } from "../player-provider";
@@ -21,10 +22,29 @@ export function QueueButton({ renderQueueActions }: QueueButtonProps) {
   </>;
 }
 
-/** 右侧滑出的队列抽屉：Esc、关闭图标或点外面关闭。 */
+const CLOSE_MS = 200;
+
+/**
+ * 队列抽屉：宽屏是右侧浮起的面板，窄屏是从底部升起的整屏面板。Esc、关闭图标或点外面关闭；
+ * 关闭时先播放 200ms 的退场动画再真正关闭（减少动态效果时直接关闭）。
+ */
 function QueueDrawer({ open, onClose, renderQueueActions }: { open: boolean; onClose: () => void } & QueueButtonProps) {
   const headingId = useId();
-  return <ModalDialog open={open} titleId={headingId} onRequestClose={onClose} closeOnBackdrop className={styles.drawer}>
-    <div className={styles.content}><PlayerQueue headingId={headingId} onClose={onClose} renderQueueActions={renderQueueActions} /></div>
+  const [closing, setClosing] = useState(false);
+  const requestClose = () => {
+    if (closing) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) onClose();
+    else setClosing(true);
+  };
+  useEffect(() => {
+    if (!closing) return;
+    const timer = window.setTimeout(() => {
+      setClosing(false);
+      onClose();
+    }, CLOSE_MS);
+    return () => window.clearTimeout(timer);
+  }, [closing, onClose]);
+  return <ModalDialog open={open} titleId={headingId} onRequestClose={requestClose} closeOnBackdrop className={cx(styles.drawer, closing && styles.closing)}>
+    <div className={styles.content}><PlayerQueue headingId={headingId} onClose={requestClose} renderQueueActions={renderQueueActions} /></div>
   </ModalDialog>;
 }

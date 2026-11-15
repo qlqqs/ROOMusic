@@ -7,12 +7,13 @@ import { expectNoDocumentScroll, expectNoHorizontalOverflow, expectNoSeriousViol
 import { expect, test } from "./support/fixtures";
 import { installZoneAudio } from "./support/zones";
 import type { ApiMock } from "./support/api-mock";
+import { openQueueScene } from "./support/queue";
 
 // 仅路由模拟 API；音频取仓库内由编码器生成的合成立体声 FLAC，不替换生产 Audio、play 或媒体事件。
 // 本组验证界面/键盘/布局，不替代 real/ 的鉴权、撤销、格式矩阵与真实服务实播验收。
 const flac = readFileSync(new URL("../../backend/testdata/playback/flac-16-44100.flac", import.meta.url));
 const bar = (page: Page) => page.getByRole("region", { name: "播放器", exact: true });
-const queueDialog = (page: Page) => page.getByRole("dialog", { name: /队列（\d+）/ });
+const queueDialog = (page: Page) => page.getByRole("dialog", { name: "队列", exact: true });
 const queue = (page: Page) => queueDialog(page).getByRole("list").getByRole("listitem");
 const fullscreenDialog = (page: Page) => page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "收起全屏播放器", exact: true }) });
 
@@ -160,6 +161,9 @@ for (const width of widths) {
     const queueButton = (width >= 768 ? bar(page) : full).getByRole("button", { name: "队列（18）", exact: true });
     await queueButton.click();
     await expect(queue(page)).toHaveCount(18);
+    await expect(queueDialog(page)).toHaveCSS("transform", "none");
+    await expect(queueDialog(page).getByRole("heading", { name: "队列", level: 2, exact: true })).toBeVisible();
+    await expect(queueDialog(page).getByText("18 首 · 54 秒", { exact: true })).toBeVisible();
     await expectNoHorizontalOverflow(page, "队列抽屉");
     await expectNoSeriousViolations(page, "队列抽屉");
     await page.keyboard.press("Escape");
@@ -255,14 +259,19 @@ test("纯键盘：播放、下一首播放、不打断当前、切歌、队列�
   await keyboardActivate(page, bar(page).getByRole("button", { name: "暂停", exact: true }));
   await expect.poll(async () => (await media(page))?.paused).toBe(true);
   await keyboardActivate(page, bar(page).getByRole("button", { name: "队列（19）", exact: true }));
+  await expect(queue(page)).toHaveCount(18);
+  await keyboardActivate(page, queueDialog(page).getByRole("button", { name: "已播放 1 首", exact: true }));
   await expect(queue(page)).toHaveCount(19);
   await expect(queue(page).nth(1)).toContainText(third.title);
-  await keyboardActivate(page, queue(page).nth(1).getByRole("button", { name: "上移", exact: true }));
+  const movedId = await queue(page).nth(1).getAttribute("data-entry-id");
+  await keyboardActivate(page, queue(page).nth(1).getByRole("button", { name: `《${third.title}》的更多操作`, exact: true }));
+  await page.getByRole("menuitem", { name: "上移", exact: true }).press("Enter");
+  await expect.poll(() => mock.callsTo("POST", /\/commands$/).at(-1)?.body).toEqual({ command: "move_entry", entry_id: movedId, to_index: 0 });
   await expect(queue(page).first()).toContainText(third.title);
   await expect(queue(page).first()).toHaveAttribute("aria-current", "true");
-  await keyboardActivate(page, queue(page).first().getByRole("button", { name: "移除", exact: true }));
+  await keyboardActivate(page, queue(page).first().getByRole("button", { name: /^移除《/ }));
   await expect(queue(page)).toHaveCount(18);
-  await expect(queue(page).first().getByRole("button", { name: "移除", exact: true })).toBeFocused();
+  await expect(queue(page).first().getByRole("button", { name: /^移除《/ })).toBeFocused();
   await keyboardActivate(page, page.getByRole("button", { name: "清空队列", exact: true }));
   const dialog = page.getByRole("dialog", { name: "清空播放队列？", exact: true });
   await expect(dialog).toBeVisible();
@@ -762,4 +771,83 @@ test("375px 全屏：底部一排有“歌词”按钮，切换唱片与歌词�
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-pressed", "false");
   await expect(full.getByRole("button", { name: "显示歌词", exact: true })).toBeVisible();
+});
+
+
+test("1440px：把第 4 项的把手拖到第 2 项，发出目标下标并保持服务端顺序", async ({ page, backend }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const mock = await backend.start({ signedInAs: "listener" });
+  const drawer = await openQueueScene(page, mock);
+  await drawer.getByRole("button", { name: "已播放 1 首", exact: true }).click();
+  const before = mock.zones.queueSnapshot().entries.map((entry) => entry.entry_id);
+  const handle = drawer.getByRole("button", { name: "拖动《队列曲目 4》调整顺序", exact: true });
+  const target = drawer.getByRole("region", { name: "正在播放", exact: true }).getByRole("listitem");
+  await handle.hover();
+  const from = await handle.boundingBox();
+  const to = await target.boundingBox();
+  if (from === null || to === null) throw new Error("拖动把手或目标行不可见");
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2 - 8, { steps: 2 });
+  await expect(handle).toHaveAttribute("aria-pressed", "true");
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 15 });
+  await expect(drawer.getByRole("status")).toContainText("移到第 2 首");
+  await page.mouse.up();
+  await expect.poll(() => mock.callsTo("POST", /\/commands$/).at(-1)?.body).toEqual({ command: "move_entry", entry_id: before[3], to_index: 1 });
+  await expect.poll(() => mock.zones.queueSnapshot().entries.map((entry) => entry.entry_id)).toEqual([before[0], before[3], before[1], before[2]]);
+  await expect(queue(page)).toHaveText([/队列曲目 1/, /队列曲目 4/, /队列曲目 2/, /队列曲目 3/]);
+  await expectNoSeriousViolations(page, "队列鼠标拖动后");
+});
+
+test("键盘拖动：空格拿起、方向键下移、空格放下，发送完整队列目标下标；Esc 取消", async ({ page, backend }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const mock = await backend.start({ signedInAs: "listener" });
+  const drawer = await openQueueScene(page, mock);
+  const before = mock.zones.queueSnapshot().entries.map((entry) => entry.entry_id);
+  const handle = drawer.getByRole("button", { name: "拖动《队列曲目 3》调整顺序", exact: true });
+  await keyboardFocus(page, handle);
+  await expectVisibleFocusRing(page, "队列拖动把手");
+  await page.keyboard.press("Space");
+  await expect(handle).toHaveAttribute("aria-pressed", "true");
+  await expect(drawer.getByRole("status")).toHaveText(/《队列曲目 3》.*第 3 首/);
+  await page.keyboard.press("ArrowDown");
+  await expect(drawer.getByRole("status")).toContainText("移到第 4 首");
+  await page.keyboard.press("Space");
+  await expect.poll(() => mock.callsTo("POST", /\/commands$/).at(-1)?.body).toEqual({ command: "move_entry", entry_id: before[2], to_index: 3 });
+  await expect.poll(() => mock.zones.queueSnapshot().entries.map((entry) => entry.entry_id)).toEqual([before[0], before[1], before[3], before[2]]);
+  await expect(queue(page)).toHaveText([/队列曲目 2/, /队列曲目 4/, /队列曲目 3/]);
+  await expect(handle).toBeFocused();
+  const count = mock.callsTo("POST", /\/commands$/).length;
+  await page.keyboard.press("Space");
+  await page.keyboard.press("ArrowUp");
+  await expect(drawer.getByRole("status")).toContainText("移到第 3 首");
+  await page.keyboard.press("Escape");
+  // dnd-kit 在拖动结束后去掉 aria-pressed；取消拖动的 Esc 不关闭抽屉。
+  await expect(handle).not.toHaveAttribute("aria-pressed");
+  await expect(drawer).toBeVisible();
+  await expect(drawer.getByRole("status")).toContainText("已取消");
+  expect(mock.callsTo("POST", /\/commands$/)).toHaveLength(count);
+  expect(mock.zones.queueSnapshot().entries.map((entry) => entry.entry_id)).toEqual([before[0], before[1], before[3], before[2]]);
+});
+
+test("390px：队列底部面板不溢出，菜单可移除且 axe 无严重问题", async ({ page, backend }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mock = await backend.start({ signedInAs: "listener" });
+  const drawer = await openQueueScene(page, mock);
+  const box = await drawer.boundingBox();
+  if (box === null) throw new Error("队列底部面板不可见");
+  expect(box.x).toBe(0);
+  expect(box.width).toBe(390);
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(844);
+  expect(await drawer.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(0);
+  await expect(drawer.getByRole("button", { name: "移除《队列曲目 3》", exact: true })).toBeHidden();
+  await expect(drawer.getByRole("button", { name: "拖动《队列曲目 3》调整顺序", exact: true })).toBeVisible();
+  await drawer.getByRole("button", { name: "《队列曲目 3》的更多操作", exact: true }).click();
+  await expect(page.getByRole("menuitem", { name: "播放此项", exact: true })).toBeFocused();
+  await expectNoHorizontalOverflow(page, "390px 队列底部面板");
+  await expectNoSeriousViolations(page, "390px 队列菜单");
+  await page.getByRole("menuitem", { name: "移除", exact: true }).click();
+  await expect(drawer.getByRole("listitem")).toHaveCount(2);
+  await expectNoSeriousViolations(page, "390px 移除队列项后");
 });

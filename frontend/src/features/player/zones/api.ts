@@ -44,7 +44,7 @@ export type ZoneCommand =
   | { command: "enqueue"; track_ids: readonly string[] }
   | { command: "play_entry"; entry_id: string }
   | { command: "remove_entry"; entry_id: string }
-  | { command: "move_entry"; entry_id: string; delta: -1 | 1 }
+  | { command: "move_entry"; entry_id: string; to_index: number }
   | { command: "clear_queue" }
   | { command: "set_mode"; mode: PlayMode }
   | { command: "play" }

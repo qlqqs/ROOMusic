@@ -368,3 +368,28 @@ describe("五种 SSE 事件的真实样本", () => {
     });
   });
 });
+
+
+describe("队列移动增量的目标下标合同", () => {
+  it("真实 move_entry 命令响应映射目标下标", () => {
+    expect(decodeCommandResult(response("move-entry")).queueChange).toStrictEqual({
+      kind: "move", queueRevision: 4, entryId: id(1), toIndex: 2,
+    });
+  });
+
+  it.each([0, 1, 9_999])("解析 move 的 to_index=%i，并保留条目身份", (toIndex) => {
+    const change = { kind: "move", queue_revision: 8, entry_id: id(5), to_index: toIndex };
+    expect(queueChangeDecoder(change, "$")).toStrictEqual({ kind: "move", queueRevision: 8, entryId: id(5), toIndex });
+    expect(decodeStreamEvent("queue", JSON.stringify({ zone_id: id(9), change }))).toStrictEqual({
+      type: "queue", zoneId: id(9), change: { kind: "move", queueRevision: 8, entryId: id(5), toIndex },
+    });
+  });
+
+  it.each([-1, 1])("旧 delta=%i 不能代替必填的 to_index", (delta) => {
+    expect(() => queueChangeDecoder({ kind: "move", queue_revision: 8, entry_id: id(5), delta }, "$")).toThrow("$.to_index");
+  });
+
+  it.each([-1, 0.5, 10_000, "0", null, undefined])("拒绝无效的目标下标 %s", (toIndex) => {
+    expect(() => queueChangeDecoder({ kind: "move", queue_revision: 8, entry_id: id(5), to_index: toIndex }, "$")).toThrow("$.to_index");
+  });
+});
