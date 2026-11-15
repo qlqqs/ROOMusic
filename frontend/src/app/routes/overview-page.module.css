@@ -1,6 +1,6 @@
 /*
- * 版面按主内容的宽度（容器查询）而不是视口：宽于 960px 时主栏与 280px 的状态栏并排，账目在主栏下方；
- * 否则从上到下是主栏、状态表、账目。
+ * 版面按主内容的宽度（容器查询）而不是视口：宽于 960px 时主栏与 280px 的右栏并排；
+ * 否则从上到下是主栏、右栏（资料库卡片、资料库状态）。
  */
 .layout {
   container: overview / inline-size;
@@ -11,8 +11,7 @@
   display: grid;
   grid-template-areas:
     "main"
-    "side"
-    "ledger";
+    "side";
   gap: var(--space-6);
   align-items: start;
   min-width: 0;
@@ -28,21 +27,16 @@
 
 .side {
   grid-area: side;
-  min-width: 0;
-}
-
-.ledger {
-  grid-area: ledger;
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
   min-width: 0;
 }
 
 @container overview (min-width: 960px) {
   .columns {
     grid-template-columns: minmax(0, 1fr) 280px;
-    grid-template-rows: auto 1fr;
-    grid-template-areas:
-      "main side"
-      "ledger side";
+    grid-template-areas: "main side";
     gap: var(--space-6) var(--space-8);
   }
 }

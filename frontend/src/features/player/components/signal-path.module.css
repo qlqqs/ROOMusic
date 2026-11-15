@@ -4,8 +4,10 @@
 :is(.trigger, .content, .node)[data-quality="high"] { --signal-color: var(--color-signal-high); }
 :is(.trigger, .content, .node)[data-quality="low"] { --signal-color: var(--text-secondary); }
 
-/* 入口：只有圆点的圆形按钮（28px），悬停与按下有浅底；削波时圆点是警示色。 */
-.trigger { display: inline-grid; place-items: center; flex: none; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: pointer; }
+/* 入口格：与所在传输键同宽同高（--transport-button），没有信号路径时也占位。 */
+.slot { display: inline-grid; place-items: center; flex: none; width: var(--transport-button, var(--control-height)); height: var(--transport-button, var(--control-height)); }
+/* 入口：铺满格子的圆形按钮，中间一个圆点，悬停与按下有浅底；削波时圆点是警示色。 */
+.slot > .trigger { display: inline-grid; place-items: center; flex: none; width: 100%; min-width: 0; height: 100%; min-height: 0; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: pointer; }
 .trigger:hover { background: var(--color-hover); }
 .trigger:active { background: var(--color-pressed); }
 .trigger[data-clipping] { --signal-color: var(--color-warning); }
@@ -39,7 +41,7 @@
 /* 对话框铺满视口且透明，弹层在里面按按钮位置摆放；点在弹层外就是点在对话框本身，即关闭。 */
 dialog.dialog { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; overflow: hidden; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 dialog.dialog::backdrop { background: transparent; }
-.content { position: absolute; left: clamp(var(--space-2), calc(var(--anchor-x, 50vw) - 170px), calc(100vw - 340px - var(--space-2))); bottom: calc(100dvh - var(--anchor-top, 100dvh) + var(--space-2)); display: grid; width: 340px; max-height: calc(var(--anchor-top, 100dvh) - 2 * var(--space-4)); overflow-y: auto; border: 1px solid var(--color-divider); border-radius: 10px; background: var(--signal-card-bg, color-mix(in srgb, white 55%, var(--color-bg))); color: var(--text-primary); box-shadow: var(--shadow-lg); }
+.content { position: absolute; left: clamp(var(--space-2), calc(var(--anchor-x, 50vw) - 170px), calc(100vw - 340px - var(--space-2))); bottom: calc(100dvh - var(--anchor-top, 100dvh) + var(--space-2)); display: grid; width: 340px; max-height: calc(var(--anchor-top, 100dvh) - 2 * var(--space-4)); overflow-y: auto; border: 1px solid var(--color-divider); border-radius: 10px; background: var(--signal-card-bg, color-mix(in srgb, white 55%, var(--color-bg))); color: var(--text-primary); box-shadow: var(--shadow-lg); scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) transparent; }
 .content[data-below] { top: calc(var(--anchor-bottom) + var(--space-2)); bottom: auto; max-height: calc(100dvh - var(--anchor-bottom) - 2 * var(--space-4)); }
 
 /* 头部：质量徽标、质量词与“来源格式 → 输出设备”、关闭。 */
@@ -78,9 +80,4 @@ dialog.dialog::backdrop { background: transparent; }
 @media (max-width: 767px) {
   dialog.dialog::backdrop { background: color-mix(in srgb, var(--color-neutral-900) 40%, transparent); }
   .content, .content[data-below] { top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 80dvh; padding-bottom: env(safe-area-inset-bottom, 0px); border-width: 1px 0 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
-}
-
-/* 触屏：命中区放大到控件高度，负外边距让它在排版里仍只占 28px，不把标题行撑高。 */
-@media (pointer: coarse), (max-width: 767px) {
-  .trigger { width: var(--control-height); height: var(--control-height); margin: calc((28px - var(--control-height)) / 2); }
 }

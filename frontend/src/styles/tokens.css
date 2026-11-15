@@ -60,6 +60,9 @@
   --color-signal-high: #3d7548;
   --color-warning: #b3261e;
 
+  /* 弹层与面板里的细滚动条滑块：currentColor 在使用处取值，深色面上自然是半透明浅色；轨道透明。 */
+  --scrollbar-thumb: color-mix(in srgb, currentColor 28%, transparent);
+
   --focus-ring: 2px solid var(--color-accent-700);
   --focus-offset: 2px;
 

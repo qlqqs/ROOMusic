@@ -1,11 +1,14 @@
-.transport { display: flex; align-items: center; justify-content: center; gap: var(--space-1); min-width: 0; }
-.transport button { width: var(--control-height); }
+.transport { --transport-button: var(--control-height); display: flex; align-items: center; justify-content: center; gap: var(--space-1); min-width: 0; }
+/* 只管传输行自己的按钮：插槽里的设备、音量、信号路径弹层是渲染在行内的 <dialog>，里面的按钮不受这些尺寸影响。 */
+.transport button:where(:not(.transport dialog *)) { width: var(--transport-button); }
+/* 两侧插槽：里面的按钮与传输键同一间距。 */
+.slot { display: inline-flex; align-items: center; gap: inherit; }
 .play { display: inline-flex; align-items: center; justify-content: center; width: var(--control-height); height: var(--control-height); }
 /* 播放键是播放条的主要操作：墨色实心圆。 */
 .play button { width: 32px; min-width: 32px; min-height: 32px; height: 32px; border-radius: 50%; background: var(--color-text); color: var(--color-bg); }
 .play button:enabled:not([aria-disabled="true"]):hover { background: color-mix(in srgb, var(--color-text) 85%, var(--color-bg)); color: var(--color-bg); }
 .play button:enabled:not([aria-disabled="true"]):active { background: color-mix(in srgb, var(--color-text) 75%, var(--color-bg)); }
-/* 随机、循环开启时：图标强调色（按钮的 aria-pressed 样式）加下方 4px 圆点。 */
+/* 播放模式非顺序时：图标强调色（按钮的 aria-pressed 样式）加下方 4px 圆点。 */
 .mode { position: relative; display: inline-flex; }
 .mode[data-on]::after { content: ""; position: absolute; left: 50%; bottom: 1px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--color-accent); pointer-events: none; }
 .seek { display: flex; gap: var(--space-2); align-items: center; min-width: 0; font-size: var(--fs-12); font-variant-numeric: tabular-nums; }
@@ -17,21 +20,28 @@
 .wave .overlay { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; opacity: 0; cursor: pointer; }
 .wave .overlay:disabled { cursor: default; }
 .wave:has(.overlay:focus-visible) { outline: var(--focus-ring); outline-offset: var(--focus-offset); border-radius: var(--radius-sm); }
-.volume { display: flex; gap: var(--space-1); align-items: center; min-width: 0; }
-.volume input { width: 90px; min-width: 0; }
+/* 喇叭按钮与音量弹层：对话框铺满视口且透明（同信号路径、设备列表），小卡片锚在按钮上方或下方，点外面即关闭。 */
+.volumeButton { display: inline-flex; }
+dialog.volumeDialog { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; overflow: hidden; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+dialog.volumeDialog::backdrop { background: transparent; }
+.volumeCard { position: absolute; left: clamp(var(--space-2), calc(var(--anchor-x, 50vw) - 28px), calc(100vw - 56px - var(--space-2))); bottom: calc(100dvh - var(--anchor-top, 100dvh) + var(--space-2)); display: grid; justify-items: center; gap: var(--space-2); width: 56px; padding: var(--space-2) 0 var(--space-1); border: 1px solid var(--color-divider); border-radius: 10px; background: var(--signal-card-bg, color-mix(in srgb, white 55%, var(--color-bg))); color: var(--text-primary); box-shadow: var(--shadow-lg); }
+.volumeCard[data-below] { top: calc(var(--anchor-bottom) + var(--space-2)); bottom: auto; }
+.volumeValue { font-size: var(--fs-12); font-weight: 500; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+/* 竖向滑块：标准的 writing-mode 写法，底端是 0。 */
+.volumeCard .volumeSlider { writing-mode: vertical-lr; direction: rtl; width: 24px; height: 120px; min-height: 0; margin: 0; }
 input[type="range"] { accent-color: var(--text-accent); min-height: 24px; }
-@media (max-width: 767px) { .desktop { display: none; } .play button { width: 44px; min-width: 44px; height: 44px; min-height: 44px; } .seek input { min-height: 44px; } .volume input { min-height: 44px; } }
+@media (max-width: 767px) { .desktop { display: none; } .play button { width: 44px; min-width: 44px; height: 44px; min-height: 44px; } .seek input { min-height: 44px; } }
 @media (pointer: coarse) { .play button { width: 44px; min-width: 44px; height: 44px; min-height: 44px; } }
 
-@media (min-width: 768px) and (pointer: fine) { .compact { height: 32px; } .compact .play { height: 32px; } .compact button { min-height: 32px; height: 32px; } }
+@media (min-width: 768px) and (pointer: fine) { .compact { height: 32px; } .compact .play { height: 32px; } .compact button:where(:not(.transport dialog *)) { min-height: 32px; height: 32px; } }
 
-/* 全屏：按钮 40px、间距 20px，播放键是 64px 的圆，带阴影。 */
-.large { gap: 20px; }
-.large button { width: 40px; min-width: 40px; height: 40px; min-height: 40px; }
+/* 全屏：按钮 40px、间距 14px（宽屏一行七个控件放进 400px 的控制台），播放键是 64px 的圆，带阴影。 */
+.large { --transport-button: 40px; gap: 14px; }
+.large button:where(:not(.transport dialog *)) { min-width: 40px; height: 40px; min-height: 40px; }
 .large .play { width: 64px; height: 64px; }
 .large .play button { width: 64px; min-width: 64px; min-height: 64px; height: 64px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); }
 @media (max-width: 767px) {
-  .large { justify-content: space-between; gap: 0; width: 100%; }
-  .large button { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
+  .large { --transport-button: 44px; justify-content: space-between; gap: 0; width: 100%; }
+  .large button:where(:not(.transport dialog *)) { min-width: 44px; height: 44px; min-height: 44px; }
   .large .play, .large .play button { width: 68px; min-width: 68px; height: 68px; min-height: 68px; }
 }

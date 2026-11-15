@@ -82,13 +82,18 @@ describe("服务端信号路径", () => {
     const format = screen.getByText("FLAC 16/44.1", { exact: true });
     expect(format.closest("button")).toBeNull();
     expect(container.textContent).toBe("FLAC 16/44.1");
+    expect(format.closest(`.${styles.slot}`)).toBe(container.firstElementChild);
   });
 
-  it("没有当前曲目时什么也不渲染", () => {
+  it("没有当前曲目时保留空信号格，不显示按钮或格式", () => {
     const server = fakeZoneServer();
     snapshot = { ...testPlayerController(server).controller.getSnapshot(), current: null, zone: { ...server.zone(), signal: losslessSignal } };
     const { container } = render(<SignalPathButton />);
-    expect(container.innerHTML).toBe("");
+    expect(container.children).toHaveLength(1);
+    expect(container.firstElementChild?.tagName).toBe("SPAN");
+    expect(container.firstElementChild?.className.split(" ")).toContain(styles.slot);
+    expect(container.firstElementChild?.childNodes).toHaveLength(0);
+    expect(screen.queryByRole("button")).toBeNull();
   });
 
   it("鼠标停留时悬停提示写出格式、质量与削波，与读屏名一致", () => {

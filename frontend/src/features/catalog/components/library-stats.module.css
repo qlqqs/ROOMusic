@@ -1,54 +1,53 @@
-/* 页底一行账目：上方一条淡分隔线，小字的“资料库”后面是几项“数字 + 单位”，项与项之间一条细竖线；窄时换行，换行处不留竖线在行首。 */
-.ledger {
+/* 概览右栏的资料库卡片：与“资料库状态”表同一种浅底卡片；标题一行，下面四行“数字 + 单位”，行间淡分隔线。 */
+.card {
   min-width: 0;
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--color-divider);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, white 45%, var(--color-bg));
+}
+
+.title {
+  padding: var(--space-3) var(--space-4) var(--space-2);
+  font-size: var(--fs-13);
+  font-weight: 600;
+}
+
+.pending,
+.empty {
+  padding: 0 var(--space-4) var(--space-3);
   font-size: var(--fs-13);
   color: var(--text-secondary);
 }
 
-.line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-1) var(--space-4);
-}
-
-.caption {
-  /* 不用更浅的 neutral-600：浅色背景上小字对比度不到 4.5:1。 */
-  color: var(--text-secondary);
-}
-
 .entries {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-1) 0;
-  /* 上下留出焦点环（外偏移 2px）的空间，不被 overflow 裁掉。 */
-  margin: -4px 0;
-  padding: 4px 0;
-  overflow: hidden;
+  margin: 0;
+  padding: 0;
   list-style: none;
 }
 
 .entry {
-  /* 竖线画在每项的左侧，再用负外边距把它推出容器：换行后位于行首的那一项，竖线被 overflow 裁掉。 */
-  margin-left: -1px;
-  padding-inline: var(--space-4);
-  border-left: 1px solid var(--color-divider);
+  border-top: 1px solid var(--color-divider);
 }
 
-.entry:first-child {
-  /* 第一项左边留出焦点环的 4px。 */
-  padding-left: 4px;
+.entry:last-child .item {
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
 
+/* 数字列按最宽的数字右对齐（各行同一网格宽度由 5.5em 的最小宽度保证）；单位在后，箭头列总是留出来。 */
 .item {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: minmax(5.5em, auto) minmax(0, 1fr) 16px;
   align-items: baseline;
-  gap: var(--space-1);
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: var(--space-2) var(--space-4);
   color: var(--text-primary);
+  font-size: var(--fs-13);
   text-decoration: none;
+}
+
+.link:hover {
+  background: var(--color-hover);
 }
 
 .link:hover .unit {
@@ -57,11 +56,21 @@
 }
 
 .value {
-  font-size: var(--fs-15);
+  justify-self: end;
+  align-self: center;
+  font-size: var(--fs-18);
   font-weight: 600;
   font-variant-numeric: lining-nums tabular-nums;
 }
 
 .unit {
+  align-self: center;
+  color: var(--text-secondary);
+}
+
+.arrow {
+  display: grid;
+  place-items: center;
+  align-self: center;
   color: var(--text-secondary);
 }

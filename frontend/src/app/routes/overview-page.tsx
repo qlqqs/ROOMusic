@@ -15,9 +15,9 @@ function RecentPlays() {
 }
 
 /**
- * 概览：主栏从上到下是“继续播放”、最近播放、最近新增（两排都是横排；没有新增专辑时最近新增整块不出现），页底一行资料库账目；
- * 右侧窄栏是一张“资料库状态”表：扫描、音频分析、需要关注，管理员另有音乐目录与成员。
- * 主内容窄时状态表排到主栏下面、账目之前，账目总在最后。
+ * 概览：主栏从上到下是“继续播放”、最近播放、最近新增（两排都是横排；没有新增专辑时最近新增整块不出现）；
+ * 右侧窄栏上面是资料库卡片（专辑、曲目、艺人、作曲家），下面是“资料库状态”表：扫描、音频分析、需要关注，管理员另有音乐目录与成员。
+ * 主内容窄时右栏整体排到主栏下面。
  */
 export function OverviewPage() {
   const { viewer } = useViewerScope();
@@ -32,6 +32,7 @@ export function OverviewPage() {
             <RecentlyAddedPanel renderPlay={(group) => <AlbumCardPlay group={group} />} />
           </div>
           <div className={styles.side}>
+            <LibraryStats isAdmin={isAdmin} />
             <StatusTable title="资料库状态">
               <ScanSummary canManage={isAdmin} />
               <AnalysisSummary />
@@ -39,9 +40,6 @@ export function OverviewPage() {
               {isAdmin ? <RootSummary /> : null}
               {isAdmin ? <MemberSummary /> : null}
             </StatusTable>
-          </div>
-          <div className={styles.ledger}>
-            <LibraryStats isAdmin={isAdmin} />
           </div>
         </div>
       </div>

@@ -481,39 +481,46 @@ test.describe("设置样式回归断言自检", () => {
 });
 
 test.describe("概览的版面顺序", () => {
-  /** 各块的位置：继续播放、最近播放、资料库状态与页底账目。 */
+  /** 各块的位置：继续播放、最近播放、最近新增、资料库卡片与资料库状态。 */
   async function boxes(page: Page) {
     const of = async (name: string) => {
       const box = await page.getByRole("region", { name, exact: true }).boundingBox();
       if (box === null) throw new Error(`量不到“${name}”`);
       return box;
     };
-    return { resume: await of("继续播放"), recent: await of("最近播放"), status: await of("资料库状态"), ledger: await of("资料库") };
+    return { resume: await of("继续播放"), recent: await of("最近播放"), added: await of("最近新增"), stats: await of("资料库"), status: await of("资料库状态") };
   }
 
-  test("1440px：状态表在右栏与继续播放同高起，账目在主栏最下方、状态表左侧", async ({ page, backend }) => {
+  test("1440px：资料库卡片在右栏顶部与继续播放同高起，状态表在卡片下面", async ({ page, backend }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     const mock = await backend.start({ signedInAs: "curator" });
     mock.seedRecentPlays(3);
+    mock.recentlyAdded = mock.groups.slice(0, 3).map((group) => ({ ...group, added_at: "2026-01-02T00:00:00Z" }));
     await page.goto("/");
     await expect(page.getByRole("region", { name: "资料库", exact: true }).getByRole("link", { name: /张专辑/ })).toBeVisible();
-    const { resume, recent, status, ledger } = await boxes(page);
+    await expect(page.getByRole("region", { name: "最近新增", exact: true }).getByRole("list")).toBeVisible();
+    const { resume, recent, added, stats, status } = await boxes(page);
     expect(resume.y, "继续播放在最近播放上方").toBeLessThan(recent.y);
-    expect(status.x, "状态表在主栏右侧").toBeGreaterThanOrEqual(recent.x + recent.width);
-    expect(Math.abs(status.y - resume.y), "状态表与继续播放顶端对齐").toBeLessThanOrEqual(1);
-    expect(ledger.y, "账目在最近播放下方").toBeGreaterThanOrEqual(recent.y + recent.height);
-    expect(ledger.x + ledger.width, "账目只在主栏里").toBeLessThanOrEqual(status.x);
+    expect(recent.y + recent.height, "最近新增在最近播放下方").toBeLessThanOrEqual(added.y);
+    expect(stats.x, "资料库卡片在主栏右侧").toBeGreaterThanOrEqual(recent.x + recent.width);
+    expect(Math.abs(stats.y - resume.y), "资料库卡片与继续播放顶端对齐").toBeLessThanOrEqual(1);
+    expect(stats.y + stats.height, "状态表在卡片下方").toBeLessThanOrEqual(status.y);
+    expect(Math.abs(stats.x - status.x), "卡片与状态表同属右栏").toBeLessThanOrEqual(1);
+    expect(Math.abs(stats.width - status.width), "卡片与状态表等宽").toBeLessThanOrEqual(1);
   });
 
-  test("390px：从上到下是继续播放、最近播放、资料库状态，账目在最后", async ({ page, backend }) => {
+  test("390px：从上到下是继续播放、最近播放、最近新增、资料库卡片、资料库状态", async ({ page, backend }) => {
     await page.setViewportSize({ width: 390, height: 1000 });
     const mock = await backend.start({ signedInAs: "listener" });
     mock.seedRecentPlays(3);
+    mock.recentlyAdded = mock.groups.slice(0, 3).map((group) => ({ ...group, added_at: "2026-01-02T00:00:00Z" }));
     await page.goto("/");
     await expect(page.getByRole("region", { name: "资料库", exact: true }).getByRole("link", { name: /张专辑/ })).toBeVisible();
-    const { resume, recent, status, ledger } = await boxes(page);
+    await expect(page.getByRole("region", { name: "最近新增", exact: true }).getByRole("list")).toBeVisible();
+    const { resume, recent, added, stats, status } = await boxes(page);
     expect(resume.y + resume.height).toBeLessThanOrEqual(recent.y);
-    expect(recent.y + recent.height).toBeLessThanOrEqual(status.y);
-    expect(status.y + status.height).toBeLessThanOrEqual(ledger.y);
+    expect(recent.y + recent.height).toBeLessThanOrEqual(added.y);
+    expect(added.y + added.height).toBeLessThanOrEqual(stats.y);
+    expect(stats.y + stats.height).toBeLessThanOrEqual(status.y);
   });
 });

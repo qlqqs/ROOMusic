@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { ChevronUp } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTooltip } from "../../../shared/ui";
 import { ArtistNames } from "../../catalog";
@@ -7,7 +8,7 @@ import { useFullscreenPlayer } from "../hooks/use-fullscreen-player";
 import { DeviceButton } from "./device-picker";
 import { usePlayerProgressSelector, usePlayerSelector } from "../player-provider";
 import { PlayerArtwork } from "./player-artwork";
-import { TransportControls, VolumeControl } from "./player-controls";
+import { PlayModeButton, TransportControls, VolumeButton } from "./player-controls";
 import { PlayerFaultInline } from "./player-feedback";
 import { statusLabels } from "./player-labels";
 import { QueueButton } from "./queue-drawer";
@@ -24,13 +25,14 @@ type PlayerBarProps = {
 
 const noRefs: readonly never[] = [];
 
-/** 封面按钮：放大成全屏播放器，全屏从封面的位置展开。 */
+/** 封面按钮：放大成全屏播放器，全屏从封面的位置展开。悬停或键盘聚焦时封面压暗，中间一个向上箭头。 */
 function ExpandArtworkButton({ track }: { track: PlayerTrack }) {
   const { openPlayer } = useFullscreenPlayer();
   const tip = useTooltip("打开全屏播放器");
   return <>
     <button type="button" className={styles.cover} aria-label="打开全屏播放器" {...tip.triggerProps} onClick={(event) => openPlayer(event.currentTarget)}>
       <PlayerArtwork track={track} />
+      <span className={styles.coverHint} aria-hidden="true"><ChevronUp size={20} /></span>
     </button>
     {tip.tooltip}
   </>;
@@ -50,8 +52,8 @@ function ProgressLine() {
 }
 
 /**
- * 底部播放栏。宽屏三段：左边曲目（封面、标题与信号路径圆点、艺人 — 专辑、心形），中间随机、上一首、播放、下一首、循环与两端写时间的进度，
- * 右边固定顺序：（加载与缓冲时的状态）队列、分隔线、设备、音量。窄屏是浮起的迷你栏：封面、标题与圆点、（控制别的设备时的）设备、播放、下一首、队列，
+ * 底部播放栏。宽屏三段：左边曲目（封面、标题、艺人 — 专辑、心形），中间信号路径、上一首、播放、下一首与两端写时间的进度，
+ * 右边固定顺序：（加载与缓冲时的状态）播放模式、队列、分隔线、设备、音量。窄屏是浮起的迷你栏：封面、标题、（控制别的设备时的）设备、播放、下一首、队列，
  * 底边一条进度线。
  */
 export function PlayerBar({ renderCurrentTrackActions, renderQueueActions }: PlayerBarProps = {}) {
@@ -62,21 +64,22 @@ export function PlayerBar({ renderCurrentTrackActions, renderQueueActions }: Pla
   return <section aria-label="播放器" className={styles.bar} data-device-visible={showDevice ? "" : undefined}>
     <div className={styles.identity}>
       {track === undefined ? <div className={styles.text}><PlayerFaultInline /></div> : <><ExpandArtworkButton track={track} /><div className={styles.text}>
-        <div className={styles.titleRow}><p className={styles.title} title={track.title}>{track.title}</p><SignalPathButton /></div>
+        <p className={styles.title} title={track.title}>{track.title}</p>
         <PlayerFaultInline />
         <p className={styles.subtitle}><ArtistNames text={track.artist} refs={track.artistRefs ?? noRefs} /> — <Link to="/albums/$groupId" params={{ groupId: track.groupId }} search={{ release: track.releaseId }}>{track.albumTitle}</Link></p>
       </div>{renderCurrentTrackActions === undefined ? null : <div className={styles.trackActions}>{renderCurrentTrackActions(track)}</div>}</>}
     </div>
     <div className={styles.center}>
-      <TransportControls size="compact" modes />
+      <TransportControls size="compact" leading={<SignalPathButton />} />
       <div className={styles.desktop}><WaveformSeek layout="ends" /></div>
     </div>
     <div className={styles.end}>
       <TransientStatus />
+      <span className={styles.desktop}><PlayModeButton /></span>
       <span className={styles.queue}><QueueButton renderQueueActions={renderQueueActions} /></span>
       <span className={`${styles.separator} ${styles.desktop}`} aria-hidden="true" />
       <DeviceButton className={styles.device} />
-      <div className={`${styles.volume} ${styles.desktop}`}><VolumeControl /></div>
+      <span className={styles.desktop}><VolumeButton /></span>
     </div>
     {track === undefined ? null : <ProgressLine />}
   </section>;

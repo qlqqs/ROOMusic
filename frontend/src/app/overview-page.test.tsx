@@ -34,11 +34,12 @@ function statusLabels(table: HTMLElement): string[] {
   return within(table).getAllByRole("listitem").map((item) => item.querySelector("span span")?.textContent ?? "");
 }
 
-describe("概览资料库账目", () => {
-  it("一行账目：专辑、艺人、作曲家链接到对应列表，曲目不链接", async () => {
+describe("概览资料库卡片", () => {
+  it("四行统计：专辑、艺人、作曲家链接到对应列表，曲目不链接", async () => {
     setup();
     renderApp();
     const stats = await overview();
+    expect(within(stats).getByRole("heading", { level: 2, name: "资料库" })).toBeTruthy();
     expect((await within(stats).findByRole("link", { name: /张专辑/ })).getAttribute("href")).toBe("/albums");
     expect(within(stats).getByRole("link", { name: /张专辑/ }).textContent).toBe("12张专辑");
     expect(within(stats).getByText("首曲目").closest("a")).toBeNull();
@@ -46,6 +47,7 @@ describe("概览资料库账目", () => {
     expect(within(stats).getByRole("link", { name: /位艺人/ }).getAttribute("href")).toBe("/artists");
     expect(within(stats).getByRole("link", { name: /位作曲家/ }).getAttribute("href")).toBe("/artists?role=composer");
     expect(within(stats).getAllByRole("link")).toHaveLength(3);
+    expect(within(stats).getAllByRole("listitem").map((row) => row.textContent)).toEqual(["12张专辑", "5首曲目", "7位艺人", "1位作曲家"]);
   });
 
   it("艺人目录整理时用破折号显示艺人与作曲家且不链接", async () => {
@@ -59,7 +61,7 @@ describe("概览资料库账目", () => {
     expect(within(stats).getByRole("link", { name: /张专辑/ }).getAttribute("href")).toBe("/albums");
   });
 
-  it("空资料库不显示账目，只说一句空库文案", async () => {
+  it("空资料库不显示统计列表，只说一句空库文案", async () => {
     const api = setup();
     api.on("GET", "/api/v1/catalog/stats", () => jsonResponse(200, { albums: 0, tracks: 0, artists: 0, composers: 0 }));
     renderApp();

@@ -8,7 +8,7 @@ import { expect, test } from "./support/fixtures";
 import { tabTo } from "./support/keyboard";
 import { installZoneAudio } from "./support/zones";
 
-// 入口是标题后只有质量色圆点的按钮，没有可见文字：可访问名与悬停提示是“信号路径：格式，质量”。弹层的名称是“信号路径：质量”。
+// 入口是传输行最左边只有质量色圆点的按钮，没有可见文字：可访问名与悬停提示是“信号路径：格式，质量”。弹层的名称是“信号路径：质量”。
 const signalButton = (page: Page) => page.getByRole("region", { name: "播放器", exact: true }).getByRole("button", { name: /^信号路径：/ });
 const fullscreen = (page: Page) => page.getByRole("dialog", { name: "信号路径合成曲目", exact: true });
 const signalDialog = (page: Page) => page.getByRole("dialog", { name: /^信号路径：/ });
@@ -71,25 +71,25 @@ for (const width of widths) {
     await expectFitsViewport(page.getByRole("switch", { name: "削波指示", exact: true }).locator(".."));
     await expectNoSeriousViolations(page, `Headroom ${width}px`);
 
-    // 圆点紧跟在播放栏（窄屏是迷你栏）的曲目标题后，没有可见文字；格式与质量在名称与悬停提示里。
+    // 宽屏从播放栏传输行进入；窄屏迷你栏隐藏信号入口，改从全屏传输行打开。
     const bar = page.getByRole("region", { name: "播放器", exact: true });
-    const entry = bar.getByRole("button", { name: /^信号路径：/ });
+    if (width < 768) {
+      await expect(signalButton(page)).toBeHidden();
+      await bar.getByRole("button", { name: "打开全屏播放器", exact: true }).click();
+      await expect(fullscreen(page).locator(":scope > div").first()).toHaveCSS("transform", "none");
+    }
+    const surface = width < 768 ? fullscreen(page) : bar;
+    const entry = surface.getByRole("button", { name: /^信号路径：/ });
     await expect(entry).toHaveAccessibleName("信号路径：FLAC 24/96，有损");
     await expect(entry).toHaveText("");
-    const title = await bar.getByText("信号路径合成曲目", { exact: true }).boundingBox();
+    const previous = await surface.getByRole("button", { name: "上一首", exact: true }).boundingBox();
     const dot = await entry.boundingBox();
-    if (title === null || dot === null) throw new Error("缺少标题或信号路径圆点");
-    expect(dot.x, "圆点在标题之后").toBeGreaterThanOrEqual(title.x + title.width - 16);
-    expect(Math.abs((dot.y + dot.height / 2) - (title.y + title.height / 2)), "圆点与标题同一行").toBeLessThanOrEqual(12);
+    if (previous === null || dot === null) throw new Error("缺少传输键或信号路径圆点");
+    expect(dot.x + dot.width, "信号路径在上一首左边").toBeLessThanOrEqual(previous.x);
+    expect(Math.abs(dot.y + dot.height / 2 - previous.y - previous.height / 2), "信号路径与传输键同一行").toBeLessThanOrEqual(1);
     if (width >= 768) {
       await entry.hover();
       await expect(page.getByText("信号路径：FLAC 24/96，有损", { exact: true })).toBeVisible();
-    } else {
-      // 窄屏全屏播放器里圆点同样跟在标题后。
-      await bar.getByRole("button", { name: "打开全屏播放器", exact: true }).click();
-      await expect(fullscreen(page).getByRole("button", { name: "信号路径：FLAC 24/96，有损", exact: true })).toBeVisible();
-      await page.keyboard.press("Escape");
-      await expect(fullscreen(page)).not.toBeVisible();
     }
     await entry.click();
     const dialog = signalDialog(page);
