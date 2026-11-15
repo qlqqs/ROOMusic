@@ -9,8 +9,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-
-	"github.com/qlqq/roomusic/backend/internal/library/parser"
 )
 
 // 歌词的显示形态与来源：synced 的每行带开始时间，plain 的每行没有；source 区分内嵌标签与外置文件。
@@ -52,8 +50,10 @@ type TrackLyrics struct {
 // trackID 必须是 UUID 文本，由调用方在传输层校验。
 func (s *Store) LoadTrackLyrics(ctx context.Context, trackID string) (TrackLyrics, error) {
 	var id string
-	var raw, source sql.NullString
-	err := s.database.QueryRowContext(ctx, `SELECT id::text, lyrics, lyrics_source FROM tracks WHERE id=$1::uuid AND source_status='present'`, trackID).Scan(&id, &raw, &source)
+	var raw sql.NullString
+	var external bool
+	// lrc_file 是迁移 0050 约束中的来源键，与 parser.LyricsSourceLRCFile 同值。
+	err := s.database.QueryRowContext(ctx, `SELECT id::text, lyrics, COALESCE(lyrics_source = 'lrc_file', false) FROM tracks WHERE id=$1::uuid AND source_status='present'`, trackID).Scan(&id, &raw, &external)
 	if errors.Is(err, sql.ErrNoRows) {
 		return TrackLyrics{}, ErrTrackNotFound
 	}
@@ -63,7 +63,7 @@ func (s *Store) LoadTrackLyrics(ctx context.Context, trackID string) (TrackLyric
 	result := TrackLyrics{TrackID: id}
 	if raw.Valid {
 		if lyrics, ok := ParseLyrics(raw.String); ok {
-			if source.String == parser.LyricsSourceLRCFile {
+			if external {
 				lyrics.Source = LyricsSourceExternal
 			}
 			result.Lyrics = &lyrics
