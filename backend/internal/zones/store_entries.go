@@ -55,30 +55,35 @@ WHERE z.user_id=$1::uuid AND z.id=$2::uuid AND e.zone_id=z.id AND e.entry_id=$3:
 	return count != 0, nil
 }
 
-// SwapEntries 交换调用者选定的两个相邻条目的位置，允许位置之间有空隙。
-// 任一条目不在本人本区或两个 ID 相同时无操作；相邻判定由队列逻辑负责。
-func (s *Store) SwapEntries(ctx context.Context, userID, zoneID, firstEntryID, secondEntryID string) (bool, error) {
+// MoveEntry 按当前队列顺序将条目移到从 0 起的目标下标，允许 position 有空隙。
+// 本人本区无该条目、目标越界或位置相同时无操作；区间平移复用调用方事务及延迟唯一约束。
+func (s *Store) MoveEntry(ctx context.Context, userID, zoneID, entryID string, toIndex int) (bool, error) {
 	result, err := s.tx.ExecContext(ctx, `
-WITH pair AS (
- SELECT a.entry_id AS first_id, a.position AS first_position,
-        b.entry_id AS second_id, b.position AS second_position
+WITH ordered AS (
+ SELECT e.entry_id, e.position, row_number() OVER (ORDER BY e.position)-1 AS index
  FROM playback_zones z
- JOIN playback_queue_entries a ON a.zone_id=z.id
- JOIN playback_queue_entries b ON b.zone_id=z.id
+ JOIN playback_queue_entries e ON e.zone_id=z.id
  WHERE z.user_id=$1::uuid AND z.id=$2::uuid
-   AND a.entry_id=$3::uuid AND b.entry_id=$4::uuid AND a.entry_id<>b.entry_id
+), movement AS (
+ SELECT source.entry_id, source.position AS from_position, target.position AS to_position
+ FROM ordered source, ordered target
+ WHERE source.entry_id=$3::uuid AND target.index=$4 AND source.entry_id<>target.entry_id
 )
 UPDATE playback_queue_entries e
-SET position=CASE WHEN e.entry_id=pair.first_id THEN pair.second_position ELSE pair.first_position END
-FROM pair, playback_zones z
+SET position=CASE
+ WHEN e.entry_id=movement.entry_id THEN movement.to_position
+ WHEN movement.from_position<movement.to_position THEN e.position-1
+ ELSE e.position+1 END
+FROM movement, playback_zones z
 WHERE z.user_id=$1::uuid AND z.id=$2::uuid AND e.zone_id=z.id
- AND e.entry_id IN (pair.first_id, pair.second_id)`, userID, zoneID, firstEntryID, secondEntryID)
+ AND e.position BETWEEN LEAST(movement.from_position, movement.to_position)
+                    AND GREATEST(movement.from_position, movement.to_position)`, userID, zoneID, entryID, toIndex)
 	if err != nil {
-		return false, fmt.Errorf("swap playback queue entries: %w", err)
+		return false, fmt.Errorf("move playback queue entry: %w", err)
 	}
 	count, err := result.RowsAffected()
 	if err != nil {
-		return false, fmt.Errorf("count swapped playback queue entries: %w", err)
+		return false, fmt.Errorf("count moved playback queue entries: %w", err)
 	}
 	return count != 0, nil
 }

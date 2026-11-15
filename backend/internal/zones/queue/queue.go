@@ -144,15 +144,21 @@ func successorAfterRemoval(before State, removedIndex int, entries []Entry, env 
 	return ""
 }
 
-// MoveEntry 交换相邻条目；delta 由调用方校验为 -1 或 1，两端不移动。
-func MoveEntry(state State, entryID string, delta int) State {
+// MoveEntryTo 将条目移到从 0 起的目标下标，保留当前项、历史与随机袋。
+// 条目不存在、目标越界或位置相同时返回原状态；命令层负责拒绝越界输入。
+func MoveEntryTo(state State, entryID string, toIndex int) State {
 	index := indexOfEntry(state.Entries, entryID)
-	target := index + delta
-	if index < 0 || target < 0 || target >= len(state.Entries) {
+	if index < 0 || toIndex < 0 || toIndex >= len(state.Entries) || index == toIndex {
 		return state
 	}
 	entries := slices.Clone(state.Entries)
-	entries[index], entries[target] = entries[target], entries[index]
+	entry := entries[index]
+	if index < toIndex {
+		copy(entries[index:toIndex], entries[index+1:toIndex+1])
+	} else {
+		copy(entries[toIndex+1:index+1], entries[toIndex:index])
+	}
+	entries[toIndex] = entry
 	state.Entries = entries
 	return state
 }

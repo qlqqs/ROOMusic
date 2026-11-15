@@ -160,7 +160,7 @@ describe("队列存为歌单", () => {
     act(() => {
       const second = engine.getSnapshot().queue.entries[1];
       if (second === undefined) throw new Error("测试队列缺少第二项");
-      engine.moveEntry(second.entryId, -1);
+      engine.moveEntry(second.entryId, 0);
       engine.enqueue([track(5)]);
     });
     vi.setSystemTime(new Date(2026, 10, 5, 0, 1, 0));

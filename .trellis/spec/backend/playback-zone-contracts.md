@@ -1,6 +1,6 @@
 # 播放区协议 v1（客户端协议文档）
 
-任何客户端（浏览器、以后的原生客户端）按本文实现控制端与输出端。服务端内部见[播放区服务端实现合同](./playback-zone-service-contracts.md)、
+客户端控制端与输出端遵循本文；服务端实现见[播放区服务端实现合同](./playback-zone-service-contracts.md)、
 [播放区数据合同](./zones-data-contracts.md)与[服务端渲染合同](./playback-render-contracts.md)。本文以已实现代码为准（`zones`、`zones/httpapi`、`playback/render`）。
 
 ## 0. 约定
@@ -51,7 +51,7 @@ Settings = {leveling: "off"|"auto"|"track"|"album", gapless, crossfade, crossfad
 
 ```text
 QueueChange = {queue_revision, kind, …}: replace {entries}（超过 500 条改发 reload）| reload | insert {index, entries}（插在第 index 位之前）
-              | remove {entry_id} | move {entry_id, delta: -1|1} | clear
+              | remove {entry_id} | move {entry_id, to_index} | clear
 ```
 
 手里的 `queue_revision` 等于 `change.queue_revision − 1` 才应用，否则重新 GET。只有显示该队列的客户端需要保存队列。
@@ -80,7 +80,7 @@ QueueChange = {queue_revision, kind, …}: replace {entries}（超过 500 条改
 | `play_tracks` | `track_ids: UUID[1..10000]`、`start_index`（越界取 0） | 替换队列并起播；有不存在的曲目整批 `404 track_not_found` |
 | `play_next` / `enqueue` | `track_ids: UUID[1..]` | 插到当前项后 / 追加到队尾，不打断；超过 10,000 条 `409 queue_full` |
 | `play_entry` / `remove_entry` | `entry_id` | 播放这一项 / 移除（移除正在放的当前项时接着放后继） |
-| `move_entry` | `entry_id`、`delta: -1\|1` | 上移或下移一位 |
+| `move_entry` | `entry_id`、`to_index: integer`（队列下标，从 0 起） | 移到目标位置；越界 `400 invalid_input`；同位置无操作、不推送 |
 | `clear_queue`、`set_mode {mode}` | — | 清空并暂停；切换模式 |
 | `play`、`pause`、`stop` | — | 播放（没有当前项取第一项）；暂停；暂停并回到 0 |
 | `next`、`previous` | — | 手动下一首（跳过失败项）；上一首（结果是当前项时从头放） |

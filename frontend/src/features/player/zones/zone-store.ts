@@ -32,14 +32,12 @@ function applyChange(entries: readonly QueueEntry[], change: QueueChange): reado
     case "remove":
       return entries.filter((entry) => entry.entryId !== change.entryId);
     case "move": {
+      // 取出再插到 toIndex（移动后的下标）；条目不在或目标越界时整份重读。
       const at = entries.findIndex((entry) => entry.entryId === change.entryId);
-      const to = at + change.delta;
       const moving = entries[at];
-      const other = entries[to];
-      if (moving === undefined || other === undefined) return null;
-      const next = [...entries];
-      next[at] = other;
-      next[to] = moving;
+      if (moving === undefined || change.toIndex >= entries.length) return null;
+      const next = entries.filter((_, index) => index !== at);
+      next.splice(change.toIndex, 0, moving);
       return next;
     }
     case "reload":

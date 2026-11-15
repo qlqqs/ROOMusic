@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/playback-zone-contracts.md", "reason": "move_entry 与 QueueChange 契约"}
+{"file": ".trellis/spec/frontend/player-design-guidelines.md", "reason": "队列抽屉规则"}
+{"file": ".trellis/spec/frontend/interface-layout-guidelines.md", "reason": "布局与交互约定"}
+{"file": ".trellis/spec/frontend/playback-and-personal-state.md", "reason": "播放区客户端与命令流"}
+{"file": ".trellis/spec/backend/zones-data-contracts.md", "reason": "队列条目 position 存储约束"}
+{"file": ".trellis/spec/backend/playback-zone-service-contracts.md", "reason": "命令串行与推送"}

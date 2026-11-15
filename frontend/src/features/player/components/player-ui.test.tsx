@@ -478,7 +478,7 @@ describe("播放栏、全屏、队列与信号路径", () => {
     view(<PlayerBar />);
     const opener = screen.getByRole("button", { name: "队列（2）" });
     await user.click(opener);
-    const dialog = await screen.findByRole("dialog", { name: "队列（2）" });
+    const dialog = await screen.findByRole("dialog", { name: "队列" });
     expect(within(dialog).getAllByRole("listitem")).toHaveLength(2);
     await user.click(within(dialog).getByRole("button", { name: "关闭队列" }));
     await waitFor(() => expect(dialog.hasAttribute("open")).toBe(false));
@@ -636,12 +636,15 @@ describe("播放栏、全屏、队列与信号路径", () => {
     let rows = screen.getAllByRole("listitem");
     const secondRow = rows[1];
     if (secondRow === undefined) throw new Error("缺少第二项");
-    await user.click(within(secondRow).getByRole("button", { name: "上移" }));
+    await user.click(within(secondRow).getByRole("button", { name: "《曲目 1》的更多操作" }));
+    await user.click(screen.getByRole("menuitem", { name: "上移" }));
     await waitFor(() => expect(engine.getSnapshot().queue.entries[0]?.entryId).toBe(secondId));
+    expect(server.commands.at(-1)).toEqual({ command: "move_entry", entry_id: secondId, to_index: 0 });
+    await user.click(screen.getByRole("button", { name: "已播放 1 首" }));
     rows = screen.getAllByRole("listitem");
     const firstRow = rows[0];
     if (firstRow === undefined) throw new Error("缺少第一项");
-    await user.click(within(firstRow).getByRole("button", { name: "移除" }));
+    await user.click(within(firstRow).getByRole("button", { name: "移除《曲目 1》" }));
     await waitFor(() => expect(engine.getSnapshot().queue.entries).toHaveLength(2));
     expect(engine.getSnapshot().queue.entries.some((entry) => entry.entryId === secondId)).toBe(false);
     await user.click(screen.getByRole("button", { name: "清空队列" }));
@@ -651,6 +654,151 @@ describe("播放栏、全屏、队列与信号路径", () => {
     await user.click(screen.getByRole("button", { name: "清空队列" }));
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "清空队列" }));
     await waitFor(() => expect(engine.getSnapshot().queue.entries).toHaveLength(0));
+  });
+
+  it("队列按已播放、正在播放与接下来分段，默认收起已播放，头部统计完整队列", async () => {
+    const user = userEvent.setup();
+    await enqueue([playerTrack("1"), playerTrack("2"), playerTrack("3"), playerTrack("4")]);
+    const current = engine.getSnapshot().queue.entries[2];
+    if (current === undefined) throw new Error("缺少当前项");
+    act(() => { engine.playEntry(current.entryId); });
+    await waitFor(() => expect(engine.getSnapshot().current?.entryId).toBe(current.entryId));
+    view(<PlayerQueue headingId="queue-heading" onClose={() => undefined} />);
+    expect(screen.getByRole("heading", { level: 2, name: "队列" })).toBeTruthy();
+    expect(screen.getByText("4 首 · 4 分钟")).toBeTruthy();
+    const played = screen.getByRole("button", { name: "已播放 2 首" });
+    expect(played.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("button", { name: "播放《曲目 1》" })).toBeNull();
+    const now = screen.getByRole("region", { name: "正在播放" });
+    expect(within(now).getByRole("heading", { level: 3, name: "正在播放" })).toBeTruthy();
+    expect(within(now).getByRole("listitem").getAttribute("aria-current")).toBe("true");
+    expect(within(now).queryByRole("button", { name: "播放《曲目 3》" })).toBeNull();
+    expect(within(now).queryByRole("button", { name: "拖动《曲目 3》调整顺序" })).toBeNull();
+    const next = screen.getByRole("region", { name: "接下来" });
+    expect(within(next).getByRole("heading", { level: 3, name: "接下来" })).toBeTruthy();
+    expect(within(next).getAllByRole("listitem")).toHaveLength(1);
+    await user.click(played);
+    expect(played.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getAllByRole("listitem")).toHaveLength(4);
+    await user.click(screen.getByRole("button", { name: "播放《曲目 1》" }));
+    await waitFor(() => expect(engine.getSnapshot().current?.track.trackId).toBe("track-1"));
+    expect(server.commands.at(-1)).toMatchObject({ command: "play_entry", entry_id: expect.any(String) });
+    expect(screen.queryByRole("button", { name: /^已播放/ })).toBeNull();
+  });
+
+  it("队列菜单上移与下移使用完整队列的目标下标，首尾边界禁用", async () => {
+    const user = userEvent.setup();
+    await enqueue([playerTrack("1"), playerTrack("2"), playerTrack("3"), playerTrack("4")]);
+    const secondId = engine.getSnapshot().queue.entries[1]?.entryId;
+    view(<PlayerQueue headingId="queue-heading" onClose={() => undefined} />);
+    await user.click(screen.getByRole("button", { name: "《曲目 1》的更多操作" }));
+    expect(screen.getByRole("menuitem", { name: "上移" }).hasAttribute("disabled")).toBe(true);
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "《曲目 2》的更多操作" }));
+    await user.click(screen.getByRole("menuitem", { name: "下移" }));
+    await waitFor(() => expect(engine.getSnapshot().queue.entries.map((entry) => entry.track.trackId)).toEqual(["track-1", "track-3", "track-2", "track-4"]));
+    expect(server.commands.at(-1)).toEqual({ command: "move_entry", entry_id: secondId, to_index: 2 });
+    await user.click(screen.getByRole("button", { name: "《曲目 2》的更多操作" }));
+    await user.click(screen.getByRole("menuitem", { name: "上移" }));
+    await waitFor(() => expect(engine.getSnapshot().queue.entries[1]?.entryId).toBe(secondId));
+    expect(server.commands.at(-1)).toEqual({ command: "move_entry", entry_id: secondId, to_index: 1 });
+    await user.click(screen.getByRole("button", { name: "《曲目 4》的更多操作" }));
+    expect(screen.getByRole("menuitem", { name: "下移" }).hasAttribute("disabled")).toBe(true);
+    await user.click(screen.getByRole("menuitem", { name: "播放此项" }));
+    await waitFor(() => expect(engine.getSnapshot().current?.track.trackId).toBe("track-4"));
+    expect(screen.getByText("队列里没有接下来的曲目")).toBeTruthy();
+  });
+
+  it("队列随机模式提示只在有接下来曲目时出现，存为歌单插槽收到完整顺序与重复曲目", async () => {
+    const user = userEvent.setup();
+    await enqueue([playerTrack("1"), playerTrack("1"), playerTrack("2")]);
+    act(() => { engine.setMode("shuffle"); });
+    await waitFor(() => expect(engine.getSnapshot().queue.mode).toBe("shuffle"));
+    const save = vi.fn();
+    view(<PlayerQueue headingId="queue-heading" onClose={() => undefined} renderQueueActions={(tracks) => <button onClick={() => save(tracks)}>存为歌单</button>} />);
+    expect(screen.getByText("随机播放时，列表顺序不是实际的播放顺序。")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "存为歌单" }));
+    expect(save.mock.calls[0]?.[0].map((track: PlayerTrack) => track.trackId)).toEqual(["track-1", "track-1", "track-2"]);
+    await user.click(screen.getByRole("button", { name: "播放《曲目 2》" }));
+    await waitFor(() => expect(engine.getSnapshot().current?.track.trackId).toBe("track-2"));
+    expect(screen.queryByText("随机播放时，列表顺序不是实际的播放顺序。")).toBeNull();
+  });
+
+  it("队列菜单移除后焦点到相邻行，移除末项后焦点回到标题", async () => {
+    const user = userEvent.setup();
+    await enqueue([playerTrack("1"), playerTrack("2"), playerTrack("3")]);
+    view(<PlayerQueue headingId="queue-heading" onClose={() => undefined} />);
+    await user.click(screen.getByRole("button", { name: "《曲目 2》的更多操作" }));
+    await user.click(screen.getByRole("menuitem", { name: "移除" }));
+    await waitFor(() => expect(engine.getSnapshot().queue.entries).toHaveLength(2));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "移除《曲目 3》" }));
+    await user.click(screen.getByRole("button", { name: "移除《曲目 3》" }));
+    await waitFor(() => expect(engine.getSnapshot().queue.entries).toHaveLength(1));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "移除《曲目 1》" }));
+    await user.click(screen.getByRole("button", { name: "移除《曲目 1》" }));
+    await waitFor(() => expect(engine.getSnapshot().queue.entries).toHaveLength(0));
+    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "队列", level: 2 }));
+    expect(screen.getByRole("button", { name: "清空队列" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  it.each([false, true])("减少动态效果=%s：移除等待对应时长再发送命令", async (reduced) => {
+    await enqueue([playerTrack("1"), playerTrack("2")]);
+    const matchMedia = window.matchMedia;
+    const media = vi.spyOn(window, "matchMedia").mockImplementation((query) => ({ ...matchMedia(query), matches: reduced && query === "(prefers-reduced-motion: reduce)" }));
+    try {
+      view(<PlayerQueue headingId="queue-heading" onClose={() => undefined} />);
+      vi.useFakeTimers();
+      fireEvent.click(screen.getByRole("button", { name: "移除《曲目 2》" }));
+      expect(server.commands.some((command) => command.command === "remove_entry")).toBe(false);
+      if (!reduced) {
+        await act(async () => { await vi.advanceTimersByTimeAsync(159); });
+        expect(server.commands.some((command) => command.command === "remove_entry")).toBe(false);
+      }
+      await act(async () => { await vi.advanceTimersByTimeAsync(reduced ? 0 : 1); });
+      expect(server.commands.at(-1)).toMatchObject({ command: "remove_entry" });
+      expect(engine.getSnapshot().queue.entries).toHaveLength(1);
+    } finally {
+      media.mockRestore();
+    }
+  });
+
+  it.each([false, true])("减少动态效果=%s：抽屉关闭按偏好等待 200ms 或立即完成", async (reduced) => {
+    await enqueue([playerTrack("1")]);
+    const matchMedia = window.matchMedia;
+    const media = vi.spyOn(window, "matchMedia").mockImplementation((query) => ({ ...matchMedia(query), matches: reduced && query === "(prefers-reduced-motion: reduce)" }));
+    try {
+      view(<PlayerBar />);
+      const opener = screen.getByRole("button", { name: "队列（1）" });
+      opener.focus();
+      fireEvent.click(opener);
+      const dialog = screen.getByRole("dialog", { name: "队列" });
+      vi.useFakeTimers();
+      fireEvent.click(within(dialog).getByRole("button", { name: "关闭队列" }));
+      if (!reduced) {
+        expect(dialog.hasAttribute("open")).toBe(true);
+        await act(async () => { await vi.advanceTimersByTimeAsync(199); });
+        expect(dialog.hasAttribute("open")).toBe(true);
+        await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      }
+      expect(dialog.hasAttribute("open")).toBe(false);
+      expect(document.activeElement).toBe(opener);
+    } finally {
+      media.mockRestore();
+    }
+  });
+
+  it("移动命令失败时撤回临时顺序，保留服务端队列", async () => {
+    const user = userEvent.setup();
+    await enqueue([playerTrack("1"), playerTrack("2"), playerTrack("3")]);
+    const before = engine.getSnapshot().queue.entries.map((entry) => entry.entryId);
+    view(<PlayerQueue headingId="queue-heading" onClose={() => undefined} />);
+    server.failNext(409, "zone_offline");
+    await user.click(screen.getByRole("button", { name: "《曲目 3》的更多操作" }));
+    await user.click(screen.getByRole("menuitem", { name: "上移" }));
+    await waitFor(() => expect(engine.getSnapshot().rejection).not.toBeNull());
+    expect(server.commands.at(-1)).toEqual({ command: "move_entry", entry_id: before[2], to_index: 1 });
+    await waitFor(() => expect(screen.getAllByRole("listitem").map((row) => row.getAttribute("data-entry-id"))).toEqual(before));
+    expect(engine.getSnapshot().queue.entries.map((entry) => entry.entryId)).toEqual(before);
   });
 
   it("播放栏长标题保留完整名称；未知时长禁止拖动，进度来自出声的流", async () => {

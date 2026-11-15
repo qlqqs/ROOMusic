@@ -295,3 +295,25 @@ test("1440px 全屏：设备图标在控件行，设备列表在它上方展开�
   await expect(picker(page)).not.toBeVisible();
   await expect(device).toBeFocused();
 });
+
+
+test("远端队列抽屉显示控制目标的当前项与空的接下来，关闭后焦点回到入口", async ({ page, backend }) => {
+  const mock = await backend.start({ signedInAs: "listener" });
+  await setup(page, mock);
+  await openPicker(page);
+  await picker(page).getByRole("button", { name: /客厅音箱/ }).click();
+  const opener = bar(page).getByRole("button", { name: "队列（1）", exact: true });
+  await opener.click();
+  const drawer = page.getByRole("dialog", { name: "队列", exact: true });
+  await expect(drawer).toBeVisible();
+  await expect(drawer).toHaveCSS("transform", "none");
+  await expect(drawer.getByRole("heading", { name: "队列", level: 2, exact: true })).toBeVisible();
+  await expect(drawer.getByRole("region", { name: "正在播放", exact: true })).toContainText("远端合成曲目");
+  await expect(drawer.getByRole("region", { name: "接下来", exact: true })).toContainText("队列里没有接下来的曲目");
+  await expect(drawer.getByRole("button", { name: /^已播放/ })).toHaveCount(0);
+  await expect(drawer.getByText("本机合成曲目", { exact: true })).toHaveCount(0);
+  await expectNoSeriousViolations(page, "远端队列");
+  await page.keyboard.press("Escape");
+  await expect(drawer).not.toBeVisible();
+  await expect(opener).toBeFocused();
+});

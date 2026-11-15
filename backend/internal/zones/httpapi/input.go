@@ -144,7 +144,7 @@ func validCommandFields(fields inputObject, command string) bool {
 	case "play_entry", "remove_entry":
 		required = []string{"entry_id"}
 	case "move_entry":
-		required = []string{"entry_id", "delta"}
+		required = []string{"entry_id", "to_index"}
 	case "set_mode":
 		required = []string{"mode"}
 	case "seek":

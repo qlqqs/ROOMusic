@@ -316,9 +316,8 @@ export const queueChangeDecoder: d.Decoder<QueueChange> = (input, path) => {
     case "remove":
       return { queueRevision, kind: "remove", entryId: d.object({ entry_id: d.uuid() })(input, path).entry_id };
     case "move": {
-      const raw = d.object({ entry_id: d.uuid(), delta: d.integer({ min: -1, max: 1 }) })(input, path);
-      if (raw.delta === 0) throw new d.DecodeError(`${path}.delta`, "应为 -1 或 1");
-      return { queueRevision, kind: "move", entryId: raw.entry_id, delta: raw.delta === -1 ? -1 : 1 };
+      const raw = d.object({ entry_id: d.uuid(), to_index: d.integer({ min: 0, max: MAX_QUEUE_ENTRIES - 1 }) })(input, path);
+      return { queueRevision, kind: "move", entryId: raw.entry_id, toIndex: raw.to_index };
     }
     case "clear":
       return { queueRevision, kind: "clear" };
