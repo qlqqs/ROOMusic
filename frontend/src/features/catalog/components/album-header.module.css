@@ -33,14 +33,18 @@
   align-items: end;
 }
 
+/* 窄容器（手机）：封面放大到 250px 居中，文字与操作行一起居中；宽容器里封面在左（见文件末尾的容器查询）。 */
 .cover {
-  width: min(100%, 232px);
+  justify-self: center;
+  width: min(100%, 250px);
 }
 
 .info {
   display: grid;
+  justify-items: center;
   gap: var(--space-2);
   min-width: 0;
+  text-align: center;
 }
 
 .heading {
@@ -51,6 +55,102 @@
 
 .heading h1 {
   overflow-wrap: anywhere;
+}
+
+/* 标题后面的“正在播放”：跟在标题文字末尾，标题很长时随文字换行。 */
+.nowPlaying {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-inline-start: var(--space-3);
+  vertical-align: 0.2em;
+  color: var(--text-accent);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.eq {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+
+.eq i {
+  width: 3px;
+  border-radius: 1px;
+  background: var(--color-accent);
+}
+
+.eq i:nth-child(1) {
+  height: 7px;
+}
+
+.eq i:nth-child(2) {
+  height: 12px;
+}
+
+.eq i:nth-child(3) {
+  height: 5px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .eq i {
+    animation: now-playing 1s ease-in-out infinite;
+  }
+
+  .eq i:nth-child(2) {
+    animation-delay: -0.4s;
+  }
+
+  .eq i:nth-child(3) {
+    animation-delay: -0.7s;
+  }
+}
+
+@keyframes now-playing {
+  0%,
+  100% {
+    height: 3px;
+  }
+
+  50% {
+    height: 12px;
+  }
+}
+
+/* 全部曲目共有的署名：组名用次要色，人名用主文字色；一组不拆开，组与组之间留空，放不下时在组之间换行。 */
+.credits {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px var(--space-3);
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+}
+
+/* “全部曲目”：窄屏只给读屏（与 VisuallyHidden 相同的写法），宽屏看得见（文件末尾）。 */
+.creditsLead {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.credit {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.creditName {
+  color: var(--text-primary);
 }
 
 .artist {
@@ -70,6 +170,7 @@
   --sep-gap: 10px;
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   row-gap: 2px;
   margin: 0;
   margin-inline-start: calc(-1 * var(--sep-gap));
@@ -108,6 +209,7 @@
 /* 操作区：一条操作行，下面是状态与结果提示；与概况之间多留一点距离。 */
 .actions {
   display: grid;
+  justify-items: center;
   gap: var(--space-2);
   min-width: 0;
   margin-top: var(--space-3);
@@ -116,6 +218,7 @@
 .attention {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
   gap: var(--space-2);
   color: var(--text-secondary);
@@ -147,5 +250,31 @@
 
   .cover {
     width: 100%;
+  }
+
+  .info {
+    justify-items: stretch;
+    text-align: start;
+  }
+
+  .facts,
+  .credits,
+  .attention {
+    justify-content: flex-start;
+  }
+
+  .actions {
+    justify-items: stretch;
+  }
+
+  /* 宽屏上“全部曲目”看得见，作为这一行的引子。 */
+  .creditsLead {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    clip-path: none;
+    white-space: normal;
   }
 }

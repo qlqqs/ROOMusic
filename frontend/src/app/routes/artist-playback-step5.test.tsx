@@ -11,6 +11,7 @@ import { playerHarness } from "../../test/fake-zones";
 import { jsonResponse, sampleResponse } from "../../test/http";
 import { playerTrack } from "../../test/player-data";
 import { ArtistPlayActions } from "./artist-playback";
+import { ArtistRowPlay } from "./artist-row-play";
 
 const dispose: (() => void)[] = [];
 afterEach(() => { for (const cleanup of dispose.splice(0)) cleanup(); vi.restoreAllMocks(); });
@@ -145,5 +146,29 @@ describe("艺人播放全部与随机播放", () => {
     await userEvent.click(screen.getByRole("button", { name: "播放全部" }));
     await screen.findByText(/队列已满/);
     expectOldPlayback(player, before);
+  });
+});
+
+describe("艺人列表一行的播放键", () => {
+  const rowButton = () => screen.getByRole("button", { name: "播放 邓丽君 的全部曲目" });
+  it("与页头的“播放全部”同一套：不预取，按下按专辑顺序替换队列；有跳过时看得见一句话", async () => {
+    const { api, engine, view, data } = await setup();
+    view(<ArtistRowPlay artistId={artistId} name="邓丽君" />);
+    await waitFor(() => expect(rowButton().hasAttribute("disabled")).toBe(false));
+    expect(api.requestsTo("GET", path)).toHaveLength(0);
+    await userEvent.click(rowButton());
+    await waitFor(() => expect(queueIds(engine)).toEqual(data.tracks.get(`${artistId}:track_artist`)?.filter((item) => item.present).map((item) => item.track_id)));
+    expect(new URL(api.requestsTo("GET", path)[0]?.path ?? "", "http://test").searchParams.get("order")).toBe("album");
+    expect(screen.getByRole("status").textContent).toBe("已选择 2 首。跳过了1 首文件缺失。");
+  });
+
+  it("读取失败压成一句“没能读取曲目，请重试。”，当前队列不变", async () => {
+    const { api, engine, view } = await setup();
+    api.on("GET", path, () => sampleResponse("errors/database-unavailable"));
+    view(<ArtistRowPlay artistId={artistId} name="邓丽君" />);
+    await waitFor(() => expect(rowButton().hasAttribute("disabled")).toBe(false));
+    await userEvent.click(rowButton());
+    expect(await screen.findByText("没能读取曲目，请重试。")).toBeTruthy();
+    expect(engine.getSnapshot().queue.entries).toHaveLength(0);
   });
 });

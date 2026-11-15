@@ -61,7 +61,11 @@ it("I4 合并成功经真实失效链刷新播放器与全屏里的艺人链接�
   expect(api.requestsTo("POST", "/api/v1/tracks/summaries")).toHaveLength(0);
   const before = { sources: [...audio.sources], load: audio.loadCalls, play: audio.playCalls, pause: audio.pauseCalls };
   const commands = server.commands.length;
-  await user.click(screen.getByRole("button", { name: "合并艺人…" }));
+  // 合并在页头“更多”的“管理”分组里（曲目行也各有一个“更多操作”）。
+  const header = screen.getByRole("heading", { level: 1 }).closest("header");
+  if (header === null) throw new Error("缺少页头");
+  await user.click(within(header).getByRole("button", { name: "更多操作" }));
+  await user.click(within(screen.getByRole("group", { name: "管理" })).getByRole("menuitem", { name: "合并艺人…" }));
   const dialog = within(await screen.findByRole("dialog", { name: "合并艺人" }));
   await user.type(dialog.getByRole("textbox", { name: "查找艺人" }), `${source.artist.name}{Enter}`);
   await user.click(await dialog.findByRole("radio", { name: new RegExp(source.artist.name) }));

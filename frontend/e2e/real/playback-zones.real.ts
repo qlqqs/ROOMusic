@@ -118,6 +118,8 @@ async function transferTo(page: Page, name: string, offline = false) {
 async function startFromAlbum(page: Page, item: ReturnType<typeof trackNamed>) {
   await page.goto(`/albums/${item.groupId}`);
   const row = page.locator("ol > li").filter({ has: page.getByText(item.track.title, { exact: true }) });
+  // 序号位的播放键悬停才出现（平时盖着曲目号）：先悬停这一行。
+  await row.hover();
   await row.getByRole("button", { name: "从这首开始播放", exact: true }).click();
 }
 
@@ -184,6 +186,8 @@ test("同一浏览器两个标签页只有一个出声，关闭出声页后另�
     // 两页均有真实用户手势，避免把自动播放策略当作接手协议的一部分。
     await other.getByRole("heading", { name: album.release.title, exact: true }).click();
     const row = page.locator("ol > li").filter({ has: page.getByText(track.title, { exact: true }) });
+    // 序号位的播放键悬停才出现（平时盖着曲目号）：先悬停这一行。
+    await row.hover();
     await row.getByRole("button", { name: "从这首开始播放", exact: true }).click();
     await expect.poll(async () => (await sounding(page))[0]?.seconds ?? 0).toBeGreaterThan(1);
     await expect(bar(other).getByText("正在播放", { exact: true })).toBeVisible();

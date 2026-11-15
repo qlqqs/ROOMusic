@@ -91,6 +91,8 @@ export async function mediaState(page: Page) {
 export async function playTrack(page: Page, item: ReturnType<typeof findTrack>) {
   await page.goto(`/albums/${item.groupId}`);
   const row = page.locator("ol > li").filter({ has: page.getByText(item.track.title, { exact: true }) });
+  // 序号位的播放键悬停才出现（平时盖着曲目号）：先悬停这一行。
+  await row.hover();
   await row.getByRole("button", { name: "从这首开始播放", exact: true }).click();
   await expect.poll(async () => (await mediaState(page))?.paused).toBe(false);
 }

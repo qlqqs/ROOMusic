@@ -10,14 +10,16 @@ type AlbumGridProps = {
   search: AlbumSearch;
   /** 列表元素的引用：需要知道当前列数的调用方（概览的“最近新增”）用它量网格。 */
   listRef?: Ref<HTMLUListElement>;
+  /** 每张卡片封面上的播放键（由 app 组合，见 AlbumCard）；不给时没有。 */
+  renderPlay?: ((group: ReleaseGroupSummaryDTO) => ReactNode) | undefined;
 };
 
 /** 卡片网格：列数随容器宽度变化（每列至少 160px），每页最多 48 张。 */
-export function AlbumGrid({ groups, search, listRef }: AlbumGridProps) {
+export function AlbumGrid({ groups, search, listRef, renderPlay }: AlbumGridProps) {
   return (
     <ul className={styles.grid} ref={listRef}>
       {groups.map((group) => (
-        <AlbumCard key={group.id} group={group} search={search} />
+        <AlbumCard key={group.id} group={group} search={search} renderPlay={renderPlay} />
       ))}
     </ul>
   );

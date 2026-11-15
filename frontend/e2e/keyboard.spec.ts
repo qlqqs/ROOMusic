@@ -197,7 +197,7 @@ test.describe("键盘", () => {
     await expect(trigger).toBeFocused();
   });
 
-  test("专辑主路径只用键盘完成：搜索 → 筛选 → 翻页 → 打开详情 → 切换版本 → 展开证据 → 返回列表，焦点始终可见", async ({ page, backend }) => {
+  test("专辑主路径只用键盘完成：筛选词 → 需要关注 → 翻页 → 打开详情 → 切换版本 → 展开证据 → 返回列表，焦点始终可见", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
     // 每个专辑都需要关注，共 120 个：筛选后仍有三页；有三个版本的“Album Choral”是第二页的第一个。
     const choral = albumGroup(200, {
@@ -223,17 +223,17 @@ test.describe("键盘", () => {
     await page.goto("/albums");
     await expect(cards).toHaveCount(48);
 
-    // 搜索：回车提交，地址记录搜索词。
-    const search = page.getByRole("textbox", { name: "搜索专辑" });
+    // 筛选词：输入即写入地址（回车立即写入）。
+    const search = page.getByRole("textbox", { name: "筛选专辑" });
     await search.focus();
-    await expectVisibleFocusRing(page, "搜索框");
+    await expectVisibleFocusRing(page, "筛选框");
     await page.keyboard.type("Album");
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/\/albums\?q=Album$/);
 
-    // 筛选：Tab 到复选框，空格切换，立即生效。
-    await tabTo(page, (name) => name.includes("只看需要关注"));
-    await expectVisibleFocusRing(page, "只看需要关注");
+    // 需要关注：Tab 到胶囊，空格切换，立即生效。
+    await tabTo(page, (name) => name === "需要关注");
+    await expectVisibleFocusRing(page, "需要关注");
     await page.keyboard.press("Space");
     await expect(page).toHaveURL(/\/albums\?q=Album&attention=required$/);
     await expect(page.getByRole("region", { name: "“Album”中需要关注的专辑" })).toBeVisible();

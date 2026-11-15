@@ -6,17 +6,19 @@ import styles from "./menu-button.module.css";
 /**
  * group：相邻且 group 相同的项为一组，组与组之间画分隔线；组名不为空时在组首显示组标题（不可聚焦，方向键跳过）。
  * 不给 group 的项都在同一个无名组里，旧的调用方不受影响。
+ * untitledGroup：这一组只用分隔线与相邻的组分开，不显示组标题（group 只用来区分组）。
+ * hint：项右侧的灰色小字（例如“前往艺人”后面的艺人名），是菜单项名称的一部分。
  */
-export type MenuAction = { id: string; label: string; onSelect: () => void; disabled?: boolean; icon?: ReactNode; group?: string };
+export type MenuAction = { id: string; label: string; onSelect: () => void; disabled?: boolean; icon?: ReactNode; group?: string; untitledGroup?: boolean; hint?: string };
 
 /** 把相邻且 group 相同的项归成一段。 */
-function groupActions(actions: readonly MenuAction[]): { name: string; actions: MenuAction[] }[] {
-  const groups: { name: string; actions: MenuAction[] }[] = [];
+function groupActions(actions: readonly MenuAction[]): { name: string; titled: boolean; actions: MenuAction[] }[] {
+  const groups: { name: string; titled: boolean; actions: MenuAction[] }[] = [];
   for (const action of actions) {
     const name = action.group ?? "";
     const last = groups.at(-1);
     if (last !== undefined && last.name === name) last.actions.push(action);
-    else groups.push({ name, actions: [action] });
+    else groups.push({ name, titled: name !== "" && action.untitledGroup !== true, actions: [action] });
   }
   return groups;
 }
@@ -117,15 +119,17 @@ export function useMenu({ label, actions, placement = "below", matchTriggerWidth
       if (["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) { event.preventDefault(); open(event.key === "ArrowUp" ? "last" : "first"); }
     },
   };
-  const item = (action: MenuAction) => <button type="button" key={action.id} role="menuitem" tabIndex={-1} disabled={action.disabled} data-icon={action.icon === undefined ? undefined : ""} onClick={() => { close(); action.onSelect(); }}>
+  const item = (action: MenuAction) => <button type="button" key={action.id} role="menuitem" tabIndex={-1} disabled={action.disabled} data-icon={action.icon === undefined ? undefined : ""} data-hint={action.hint === undefined ? undefined : ""} onClick={() => { close(); action.onSelect(); }}>
     {action.icon === undefined ? null : <span className={styles.icon} aria-hidden="true">{action.icon}</span>}
     {action.label}
+    {/* 空格让可访问名称是“前往艺人 某某”而不是连在一起；弹性容器里只有空白的文字不占位。 */}
+    {action.hint === undefined ? null : <>{" "}<span className={styles.hint}>{action.hint}</span></>}
   </button>;
   // 有名字的组用 role="group" 包起来，组标题是它的名称；无名组的项直接放在菜单里，与没有分组时的结构相同。
   const content = position === null ? null : createPortal(<div id={id} ref={menu} role="menu" aria-label={label} className={styles.menu} style={position.style} onKeyDown={onMenuKey}>
     {groupActions(actions).map((group, index) => <Fragment key={`${index}:${group.name}`}>
       {index === 0 ? null : <div role="separator" className={styles.separator} />}
-      {group.name === "" ? group.actions.map(item) : <div role="group" aria-labelledby={`${id}-group-${index}`} className={styles.group}>
+      {!group.titled ? group.actions.map(item) : <div role="group" aria-labelledby={`${id}-group-${index}`} className={styles.group}>
         <div aria-hidden="true" id={`${id}-group-${index}`} className={styles.groupTitle}>{group.name}</div>
         {group.actions.map(item)}
       </div>}

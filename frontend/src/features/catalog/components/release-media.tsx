@@ -4,7 +4,7 @@ import { StatusTag, VisuallyHidden } from "../../../shared/ui";
 import type { ReleaseCreditDTO, ReleaseMediumDTO, ReleaseTrackDTO } from "../api/decoders";
 import { formatDuration } from "../../../shared/lib/duration";
 import { mediumHeading, totalDuration } from "../format";
-import { creditDetailLabel, creditRoleLabel } from "../labels";
+import { groupTrackCredits, ownTrackCredits } from "../track-credits";
 import { ArtistNames } from "./artist-names";
 import styles from "./release-media.module.css";
 
@@ -28,6 +28,8 @@ type ReleaseMediaProps = {
   media: readonly ReleaseMediumDTO[];
   /** 专辑艺人：曲目艺人与它相同时不重复显示。 */
   albumArtist: string;
+  /** 页头已经列过的共同署名（组的 key，见 sharedTrackCredits）：曲目行不再重复；不给时每行写全。 */
+  sharedCredits?: ReadonlySet<string> | undefined;
   /** 要定位的曲目（从全局搜索的建议点进来）；处理完（定位了，或这个版本里没有它）调用 onLocated，调用方据此不再重复请求。 */
   locate?: TrackLocate | undefined;
   onLocated?: ((token: string) => void) | undefined;
@@ -36,7 +38,7 @@ type ReleaseMediaProps = {
 /** 定位到的行：focusToken 变化时滚到这一行并把焦点放上去；highlighted 期间短暂高亮。 */
 type Located = { trackId: string; token: string; highlighted: boolean };
 
-type TrackListProps = Pick<ReleaseMediaProps, "albumArtist" | "renderTrackActions" | "currentTrackId" | "currentTrackLabel" | "currentTrackPlaying"> & { located: Located | null };
+type TrackListProps = Pick<ReleaseMediaProps, "albumArtist" | "renderTrackActions" | "currentTrackId" | "currentTrackLabel" | "currentTrackPlaying"> & { located: Located | null; sharedCredits: ReadonlySet<string> };
 
 /** 双击发生在这些元素上时不播放：它们有自己的点击含义。 */
 const INTERACTIVE = "a, button, input, select, textarea, label, summary, [role='menuitem']";
@@ -82,17 +84,19 @@ const TrackRow = memo(function TrackRow({
   track,
   albumArtist,
   renderTrackActions,
+  sharedCredits,
   marker,
   playing,
   focusToken,
   highlighted,
-}: Pick<ReleaseMediaProps, "albumArtist" | "renderTrackActions"> & { track: ReleaseTrackDTO; marker: string | undefined; playing: boolean; focusToken: string | undefined; highlighted: boolean }) {
+}: Pick<ReleaseMediaProps, "albumArtist" | "renderTrackActions"> & { track: ReleaseTrackDTO; sharedCredits: ReadonlySet<string>; marker: string | undefined; playing: boolean; focusToken: string | undefined; highlighted: boolean }) {
   // 作品里的曲目在作品小标题下面，行内只写乐章名。
   const shownTitle = track.work?.movement ?? track.title;
   const title = shownTitle.trim() === "" ? "（无标题）" : shownTitle;
   const artist = track.artist.trim();
   const showArtist = artist !== "" && artist !== albumArtist;
-  const credits = track.credits;
+  // 页头已经列过的共同署名不再重复，只写这一首与众不同的部分。
+  const credits = ownTrackCredits(track.credits, sharedCredits);
   const isCue = track.source_kind === "cue_virtual" || track.cue !== null;
   const rowRef = useRef<HTMLLIElement>(null);
   useEffect(() => {
@@ -168,16 +172,9 @@ function Duration({ seconds }: { seconds: number | null }) {
  * 组与姓名都保持接口给出的顺序；艺人就绪时每个名字是链接。
  */
 function CreditsLine({ credits }: { credits: readonly ReleaseCreditDTO[] }) {
-  const groups = new Map<string, { label: string; entries: ReleaseCreditDTO[] }>();
-  for (const credit of credits) {
-    const key = credit.detail === null ? `role:${credit.role}` : `detail:${credit.detail}`;
-    const group = groups.get(key);
-    if (group === undefined) groups.set(key, { label: credit.detail === null ? creditRoleLabel(credit.role) : creditDetailLabel(credit.detail), entries: [credit] });
-    else group.entries.push(credit);
-  }
   return (
     <>
-      {Array.from(groups, ([key, { label, entries }], groupIndex) => (
+      {groupTrackCredits(credits).map(({ key, label, entries }, groupIndex) => (
         <span key={key}>
           {groupIndex === 0 ? null : "；"}
           {label}：
@@ -218,7 +215,7 @@ export function groupTracksByWork(tracks: readonly ReleaseTrackDTO[]): TrackList
   return items;
 }
 
-function TrackList({ tracks, albumArtist, renderTrackActions, currentTrackId, currentTrackLabel, currentTrackPlaying = false, located }: TrackListProps & { tracks: readonly ReleaseTrackDTO[] }) {
+function TrackList({ tracks, albumArtist, renderTrackActions, currentTrackId, currentTrackLabel, currentTrackPlaying = false, located, sharedCredits }: TrackListProps & { tracks: readonly ReleaseTrackDTO[] }) {
   const idPrefix = useId();
   if (tracks.length === 0) return <p>这一张里没有可显示的曲目。</p>;
   const rowOf = (track: ReleaseTrackDTO) => (
@@ -227,6 +224,7 @@ function TrackList({ tracks, albumArtist, renderTrackActions, currentTrackId, cu
       track={track}
       albumArtist={albumArtist}
       renderTrackActions={renderTrackActions}
+      sharedCredits={sharedCredits}
       marker={track.id === currentTrackId ? (currentTrackLabel ?? "当前曲目") : undefined}
       playing={track.id === currentTrackId && currentTrackPlaying}
       focusToken={located?.trackId === track.id ? located.token : undefined}
@@ -262,7 +260,9 @@ function TrackList({ tracks, albumArtist, renderTrackActions, currentTrackId, cu
  * 每个分段用 content-visibility 跳过屏幕外的布局，万首曲目的版本也能流畅滚动；文字都在 DOM 里，页内查找照常可用。
  * 有定位请求时滚到那一行、把焦点放上去并短暂高亮（减少动态效果时不做渐隐动画）。
  */
-export function ReleaseMedia({ media, albumArtist, renderTrackActions, currentTrackId, currentTrackLabel, currentTrackPlaying, locate, onLocated }: ReleaseMediaProps) {
+const noSharedCredits: ReadonlySet<string> = new Set();
+
+export function ReleaseMedia({ media, albumArtist, renderTrackActions, currentTrackId, currentTrackLabel, currentTrackPlaying, sharedCredits = noSharedCredits, locate, onLocated }: ReleaseMediaProps) {
   const idPrefix = useId();
   // 定位请求按 token 只处理一次（“按属性调整状态”的写法，不需要 effect）：曲目在这个版本里就记下它，不在就什么也不做。
   const [seenToken, setSeenToken] = useState<string | null>(null);
@@ -284,7 +284,7 @@ export function ReleaseMedia({ media, albumArtist, renderTrackActions, currentTr
 
   if (media.length === 0) return <p>这个版本没有可显示的曲目。</p>;
   const [only] = media;
-  const listProps: TrackListProps = { albumArtist, renderTrackActions, currentTrackId, currentTrackLabel, currentTrackPlaying, located };
+  const listProps: TrackListProps = { albumArtist, renderTrackActions, currentTrackId, currentTrackLabel, currentTrackPlaying, located, sharedCredits };
   if (only !== undefined && media.length === 1) return <TrackList tracks={only.tracks} {...listProps} />;
 
   const headingIdOf = (index: number) => `${idPrefix}-medium-${index}`;

@@ -5,6 +5,8 @@ export { ConfirmDialog } from "./confirm-dialog";
 export { DataTable, type Column } from "./data-table";
 export { Disclosure } from "./disclosure";
 export { FailureNotice } from "./failure-notice";
+export { FilterChip } from "./filter-chip";
+export { FilterField, type FilterCommitMode } from "./filter-field";
 export { ModalDialog } from "./modal-dialog";
 export { Notice } from "./notice";
 export { Skeleton } from "./skeleton";
@@ -18,6 +20,7 @@ export { Panel } from "./panel";
 export { QueryContent, type QuerySource } from "./query-content";
 export { Segmented, type SegmentedOption } from "./segmented";
 export { SettingRow, SettingsGroup, type SettingRowIds } from "./settings-group";
+export { SortMenu, type SortOption } from "./sort-menu";
 export { StatList, type Stat } from "./stat-list";
 export { Switch } from "./switch";
 

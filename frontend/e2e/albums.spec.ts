@@ -9,14 +9,15 @@ import { heading } from "./support/locators";
 
 /** 卡片就是指向专辑详情的链接。 */
 const cards = (page: Page) => page.locator('a[href^="/albums/"]');
-const searchBox = (page: Page) => page.getByRole("textbox", { name: "搜索专辑" });
+const searchBox = (page: Page) => page.getByRole("textbox", { name: "筛选专辑" });
+const attention = (page: Page) => page.getByRole("button", { name: "需要关注" });
 const pager = (page: Page) => page.getByRole("navigation", { name: "专辑分页" });
 
 /** 120 个专辑，每第 10 个需要关注：三页，筛选后 12 个。 */
 const manyGroups = () => albumGroups(120, (index) => ({ attention_count: index % 10 === 0 ? 1 : 0 }));
 
 test.describe("专辑列表", () => {
-  test("搜索、只看需要关注、清除与翻页：地址、结果与分页一致；后退、前进与刷新还原；页码超出末页时替换为末页", async ({ page, backend }) => {
+  test("筛选、需要关注、清除与翻页：地址、结果与分页一致；一次输入只占一条历史；后退、前进与刷新还原；页码超出末页时替换为末页", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
     mock.groups = manyGroups();
     await page.goto("/albums");
@@ -25,26 +26,37 @@ test.describe("专辑列表", () => {
     await expect(page.getByText("共 120 张专辑")).toBeVisible();
     await expect(pager(page).getByText("第 1 / 3 页")).toBeVisible();
 
-    // 搜索：显式提交，地址记录搜索词。
-    await searchBox(page).fill("Album 07");
-    await searchBox(page).press("Enter");
+    // 即时筛选：分两次停顿输入，地址跟着变，没有提交按钮。
+    await searchBox(page).pressSequentially("Album 0");
+    await expect(page).toHaveURL(/\/albums\?q=Album(\+|%20)0$/);
+    await searchBox(page).pressSequentially("7");
     await expect(page).toHaveURL(/\/albums\?q=Album(\+|%20)07$/);
     await expect(cards(page)).toHaveCount(10);
-    await expect(page.getByRole("region", { name: "“Album 07”的搜索结果" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "“Album 07”的筛选结果" })).toBeVisible();
     await expect(page.getByText("找到 10 张专辑")).toBeVisible();
+    // 一次输入过程只占一条历史：后退回到输入前的列表，前进回到最后的筛选词。
+    await page.goBack();
+    await expect(page).toHaveURL(/\/albums$/);
+    await expect(cards(page)).toHaveCount(48);
+    await expect(searchBox(page)).toHaveValue("");
+    await page.goForward();
+    await expect(page).toHaveURL(/\/albums\?q=Album(\+|%20)07$/);
+    await expect(searchBox(page)).toHaveValue("Album 07");
 
-    // 只看需要关注：立即生效，与搜索组合。
-    await page.getByRole("checkbox", { name: "只看需要关注" }).check();
+    // 需要关注：立即生效，与筛选词组合。
+    await expect(attention(page)).toHaveAttribute("aria-pressed", "false");
+    await attention(page).click();
     await expect(page).toHaveURL(/attention=required/);
+    await expect(attention(page)).toHaveAttribute("aria-pressed", "true");
     await expect(cards(page)).toHaveCount(1);
     await expect(page.getByRole("region", { name: "“Album 07”中需要关注的专辑" })).toBeVisible();
 
-    // 清除搜索词，保留筛选；再取消筛选。
-    await page.getByRole("button", { name: "清除" }).click();
+    // 框内的 × 清除筛选词，保留需要关注；再取消需要关注。
+    await page.getByRole("button", { name: "清除筛选" }).click();
     await expect(page).toHaveURL(/\/albums\?attention=required$/);
     await expect(cards(page)).toHaveCount(12);
     await expect(searchBox(page)).toBeFocused();
-    await page.getByRole("checkbox", { name: "只看需要关注" }).uncheck();
+    await attention(page).click();
     await expect(page).toHaveURL(/\/albums$/);
     await expect(cards(page)).toHaveCount(48);
 
@@ -64,6 +76,36 @@ test.describe("专辑列表", () => {
     await page.goto("/albums?page=99");
     await expect(page).toHaveURL(/\/albums\?page=3$/);
     await expect(cards(page)).toHaveCount(24);
+  });
+
+  test("卡片封面上的播放键：平时透明且不接收点击，悬停卡片或键盘聚焦时出现在封面右下角", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "listener" });
+    mock.groups = albumGroups(3);
+    await page.goto("/albums");
+    await expect(cards(page)).toHaveCount(3);
+    const play = page.getByRole("button", { name: "播放《Album 001》", exact: true });
+    // 不悬停时看不见、点不到（pointer-events: none）。
+    await page.mouse.move(0, 0);
+    await expect(play).toHaveCSS("opacity", "0");
+    await expect(play).toHaveCSS("pointer-events", "none");
+    // 悬停卡片：出现在封面右下角，盖在封面上。
+    await cards(page).first().hover();
+    await expect(play).toHaveCSS("opacity", "1");
+    const cover = await cards(page).first().locator("[data-variant='card']").boundingBox();
+    const button = await play.boundingBox();
+    if (cover === null || button === null) throw new Error("封面或播放键不可见");
+    expect(button.x + button.width).toBeLessThanOrEqual(cover.x + cover.width + 0.5);
+    expect(button.y + button.height).toBeLessThanOrEqual(cover.y + cover.width + 0.5);
+    expect(button.x).toBeGreaterThan(cover.x + cover.width / 2);
+    expect(button.y).toBeGreaterThan(cover.y + cover.width / 2);
+    // 按下之后的播放（读代表版本、替换队列）由 album-card-play 的组件测试覆盖：受控后端没有音频流。
+    // 键盘：Tab 到卡片之后是它的播放键，聚焦时看得见。
+    await page.mouse.move(0, 0);
+    await cards(page).nth(1).focus();
+    await page.keyboard.press("Tab");
+    const second = page.getByRole("button", { name: "播放《Album 002》", exact: true });
+    await expect(second).toBeFocused();
+    await expect(second).toHaveCSS("opacity", "1");
   });
 
   test("翻页后结果顶部回到视野并获得焦点，键盘接着就是第一张卡片", async ({ page, backend }) => {
@@ -341,6 +383,29 @@ test.describe("专辑详情", () => {
     await expect(page).toHaveURL(/\/albums\?q=Album&attention=required&page=2$/);
     await expect(pager(page).getByText("第 2 / 3 页")).toBeVisible();
     await expect(cards(page).first()).toContainText("Album 049");
+  });
+
+  test("手机专辑页：封面放大到 250px 居中，标题居中；宽屏封面在左", async ({ page, backend }) => {
+    const mock = await backend.start({ signedInAs: "listener" });
+    const group = albumGroup(1, { title: "Sample Symphonies", medium_count: 1, track_count: 2, artwork: true });
+    mock.groups = [group];
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/albums/${group.id}`);
+    await expect(heading(page, "Sample Symphonies")).toBeVisible();
+    const main = await page.locator("#main").boundingBox();
+    const cover = await page.locator("header [data-variant='detail']").boundingBox();
+    if (main === null || cover === null) throw new Error("主内容区或封面不可见");
+    expect(Math.round(cover.width)).toBe(250);
+    expect(Math.abs(cover.x + cover.width / 2 - (main.x + main.width / 2))).toBeLessThanOrEqual(2);
+    await expect(heading(page, "Sample Symphonies")).toHaveCSS("text-align", "center");
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const wideMain = await page.locator("#main").boundingBox();
+    const wideCover = await page.locator("header [data-variant='detail']").boundingBox();
+    const title = await heading(page, "Sample Symphonies").boundingBox();
+    if (wideMain === null || wideCover === null || title === null) throw new Error("宽屏的主内容区、封面或标题不可见");
+    expect(wideCover.x + wideCover.width).toBeLessThan(title.x);
+    expect(wideCover.x - wideMain.x).toBeLessThan(wideMain.width / 4);
   });
 
   test("长标题：完整显示，页面不出现横向滚动", async ({ page, backend }) => {

@@ -1,4 +1,4 @@
-/* 封面：6px 裱边加 1px 外线，保持正方形；真实封面 contain 不裁切，不加滤镜。 */
+/* 封面：详情页是 6px 裱边加 1px 外线；网格里的卡片没有裱边，只有一圈细线与小圆角。保持正方形；真实封面 contain 不裁切，不加滤镜。 */
 .cover {
   display: grid;
   gap: var(--space-2);
@@ -13,6 +13,14 @@
   padding: 6px;
   border: 1px solid var(--color-divider);
   background: var(--color-surface);
+}
+
+.cover[data-variant="card"] .frame {
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 0 1px var(--color-divider);
 }
 
 .image {

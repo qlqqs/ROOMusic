@@ -179,13 +179,13 @@ const states: State[] = [
     },
   },
   {
-    name: "专辑列表（搜索词过长的字段错误）",
+    name: "专辑列表（筛选词过长的字段错误）",
     options: { signedInAs: "curator" },
     reach: async (page) => {
       await page.goto("/albums");
-      await page.getByRole("textbox", { name: "搜索专辑" }).fill("长".repeat(70));
-      await page.getByRole("button", { name: "搜索" }).click();
-      await expect(page.getByText("搜索词太长了，请短一些。")).toBeVisible();
+      // 即时筛选：停止输入之后就检查，不需要提交。
+      await page.getByRole("textbox", { name: "筛选专辑" }).fill("长".repeat(70));
+      await expect(page.getByText("筛选词太长了，请短一些。")).toBeVisible();
     },
   },
   {

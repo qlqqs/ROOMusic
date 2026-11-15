@@ -142,6 +142,29 @@ describe("统一曲目行动作", () => {
     expect(play.hasAttribute("data-track-play")).toBe(true);
   });
 
+  it("“更多”的项都有图标；“前往专辑”单独一组、名称带专辑名，albumLink={false} 时没有；艺人数据没有就绪时没有“前往艺人”", async () => {
+    const track = tracks[0];
+    if (track === undefined) throw new Error("缺少测试曲目");
+    const { view } = await setup([track]);
+    const result = view(actions(track));
+    await ready();
+    await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    const menu = screen.getByRole("menu");
+    for (const item of screen.getAllByRole("menuitem")) expect(item.querySelector("svg")).not.toBeNull();
+    expect(screen.getByRole("menuitem", { name: "前往专辑 历史专辑 1" })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: /^前往艺人/ })).toBeNull();
+    // 跳转类的项与播放类的项之间有分隔线，组没有标题（不包 role="group"）。
+    expect(menu.querySelectorAll('[role="separator"]')).toHaveLength(1);
+    expect(menu.querySelector('[role="group"]')).toBeNull();
+    await userEvent.keyboard("{Escape}");
+    result.unmount();
+    view(<TrackActions track={track} present playLabel="从这首开始播放" retryHint="请在专辑头部重试。" albumLink={false} />);
+    await ready();
+    await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["下一首播放", "加入队列", "添加到歌单…"]);
+    expect(screen.getByRole("menu").querySelector('[role="separator"]')).toBeNull();
+  });
+
   it("窄屏：心形收进“更多操作”，第一项是“收藏”，选它发出收藏请求", async () => {
     const track = tracks[0];
     if (track === undefined) throw new Error("缺少测试曲目");
@@ -153,7 +176,8 @@ describe("统一曲目行动作", () => {
       expect(screen.queryByRole("button", { name: /^收藏《/ })).toBeNull();
       await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
       const items = () => screen.getAllByRole("menuitem").map((item) => item.textContent);
-      expect(items()).toEqual(["收藏", "下一首播放", "加入队列", "添加到歌单…"]);
+      // 艺人数据没有就绪（没有 ArtistLinksScope）时没有“前往艺人”；“前往专辑”带着专辑名。
+      expect(items()).toEqual(["收藏", "下一首播放", "加入队列", "添加到歌单…", "前往专辑 历史专辑 1"]);
       await waitFor(() => expect(screen.getByRole("menuitem", { name: "收藏" }).hasAttribute("disabled")).toBe(false));
       await userEvent.click(screen.getByRole("menuitem", { name: "收藏" }));
       await waitFor(() => expect(api.requestsTo("PUT", `/api/v1/me/favorites/tracks/${encodeURIComponent(track.trackId)}`)).toHaveLength(1));

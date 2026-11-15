@@ -15,8 +15,8 @@
   color: var(--color-bg);
 }
 
-/* 三角形的视觉重心偏左，往右挪一点看起来才居中。 */
-.play button > span {
+/* 三角形的视觉重心偏左，往右挪一点看起来才居中；暂停图标本来就居中。 */
+.play[data-paused] button > span {
   margin-inline-start: 3px;
 }
 

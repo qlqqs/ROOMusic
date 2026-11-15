@@ -160,16 +160,17 @@ for (const signedInAs of ["curator", "listener"] as const) {
     await expect(recent).not.toContainText("新增专辑 02");
     await recent.getByRole("link", { name: "查看全部" }).click();
     await expect(page).toHaveURL(/\/albums\?sort=added_at_desc$/);
-    await expect(page.getByRole("combobox", { name: "排序", exact: true })).toHaveValue("added_at_desc");
+    await expect(page.getByRole("button", { name: "排序：最近新增", exact: true })).toBeVisible();
     const albums = page.getByRole("region", { name: "全部专辑" });
     await expect(albums.getByRole("listitem").first()).toContainText(longAlbumTitle);
     expect(mock.callsTo("GET", "/api/v1/release-groups").some((call) => new URLSearchParams(call.search).get("sort") === "added_at_desc")).toBe(true);
-    await page.getByRole("combobox", { name: "排序", exact: true }).selectOption("title");
+    await page.getByRole("button", { name: "排序：最近新增", exact: true }).click();
+    await page.getByRole("menuitem", { name: "按标题", exact: true }).click();
     await expect(page).toHaveURL(/\/albums$/);
     await page.goBack();
-    await expect(page.getByRole("combobox", { name: "排序", exact: true })).toHaveValue("added_at_desc");
+    await expect(page.getByRole("button", { name: "排序：最近新增", exact: true })).toBeVisible();
     await page.reload();
-    await expect(page.getByRole("combobox", { name: "排序", exact: true })).toHaveValue("added_at_desc");
+    await expect(page.getByRole("button", { name: "排序：最近新增", exact: true })).toBeVisible();
     if (signedInAs === "listener") {
       expect(mock.callsTo("GET", /\/scans\/[^/]+\/report$/)).toHaveLength(0);
       expect(mock.callsTo("GET", "/api/v1/library-roots")).toHaveLength(0);

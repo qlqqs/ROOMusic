@@ -1,0 +1,30 @@
+/* 淡色圆章：底色与字色同一色相，字色足够深（对底色约 7:1）。 */
+.monogram {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: hsl(var(--monogram-hue) 28% 87%);
+  color: hsl(var(--monogram-hue) 38% 26%);
+  font-size: var(--fs-13);
+  font-weight: 600;
+  line-height: 1;
+  user-select: none;
+}
+
+.monogram[data-size="large"] {
+  width: 168px;
+  height: 168px;
+  font-size: 60px;
+  font-weight: 500;
+}
+
+@media (max-width: 767px) {
+  .monogram[data-size="large"] {
+    width: 128px;
+    height: 128px;
+    font-size: 46px;
+  }
+}

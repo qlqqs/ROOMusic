@@ -1,13 +1,15 @@
-import { MoreHorizontal, Play } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { Disc3, ListEnd, ListPlus, ListStart, MoreHorizontal, Play, UserRound } from "lucide-react";
 import { useId, useState } from "react";
 import { Button, MenuButton, VisuallyHidden, type MenuAction } from "../../shared/ui";
 import { useMediaQuery } from "../../shared/lib/use-media-query";
+import { useArtistLinksReady } from "../../features/catalog";
 import { AddToPlaylistDialog, FavoriteButton, useFavoriteMenuAction, type FavoriteTarget } from "../../features/personal";
 import { usePlaybackCapabilities, usePlayerEngine, type CapabilityTable, type PlayerController, type PlayerTrack } from "../../features/player";
 import { unplayableReason } from "./track-playback";
 import styles from "./track-actions.module.css";
 
-// 曲目行的统一动作：行内播放、心形与“更多操作”（下一首播放、加入队列、添加到歌单…，再加页面自己的项）。
+// 曲目行的统一动作：行内播放、心形与“更多操作”（下一首播放、加入队列、添加到歌单…；前往艺人、前往专辑；再加页面自己的项）。
 // 专辑、历史、收藏、歌单（以后还有搜索结果与艺人页）都用它，由 app 组合：player 与 personal 互不导入。
 // 心形需要放在页面的 FavoriteStatusScope 里（一页一次批量读取收藏状态）。
 
@@ -30,6 +32,8 @@ type TrackActionsProps = {
    * 平时显示曲目号，悬停、聚焦或触屏时换成播放按钮，见 release-media.module.css）。
    */
   playPlacement?: "inline" | "lead";
+  /** “更多”里有没有“前往专辑”：专辑页自己的曲目行不要（就在这张专辑里）。 */
+  albumLink?: boolean;
 };
 
 const noActions: readonly MenuAction[] = [];
@@ -51,8 +55,12 @@ function NarrowTrackMenu({ favorite, report, actions }: { favorite: FavoriteTarg
  * 播放按钮带 data-track-play：专辑曲目行双击时按它（等同于点它）。不能播放（文件缺失、格式或浏览器不支持）时播放、下一首与入队不可用，原因经 aria-describedby 可读；
  * 文件缺失已由行里的“文件缺失”标签显示，这里只给读屏说明。结果提示就近显示在这一行。
  */
-export function TrackActions({ track, present, playLabel = "播放", onPlay, retryHint, extraActions = noActions, playPlacement = "inline" }: TrackActionsProps) {
+export function TrackActions({ track, present, playLabel = "播放", onPlay, retryHint, extraActions = noActions, playPlacement = "inline", albumLink = true }: TrackActionsProps) {
   const engine = usePlayerEngine();
+  const navigate = useNavigate();
+  // 艺人数据就绪才有艺人页可去；多位艺人时去第一位。
+  const artistLinked = useArtistLinksReady();
+  const artist = artistLinked ? track.artistRefs?.[0] : undefined;
   const capability = usePlaybackCapabilities();
   const [notice, setNotice] = useState("");
   const [adding, setAdding] = useState(false);
@@ -73,17 +81,35 @@ export function TrackActions({ track, present, playLabel = "播放", onPlay, ret
     const result = kind === "next" ? engine.playNext([track]) : engine.enqueue([track]);
     setNotice(result === "queue_full" ? QUEUE_FULL_TEXT : kind === "next" ? "已设为下一首播放。" : "已加入队列。");
   }
+  // 图标与专辑页头的“更多”同一套；跳转类的项单独一组（菜单项是按钮，在 onSelect 里跳转，与用户菜单的“设置”相同）。
   const actions: MenuAction[] = [
-    { id: "next", label: "下一首播放", disabled: reason !== null, onSelect: () => add("next") },
-    { id: "enqueue", label: "加入队列", disabled: reason !== null, onSelect: () => add("enqueue") },
+    { id: "next", label: "下一首播放", icon: <ListStart size={16} />, disabled: reason !== null, onSelect: () => add("next") },
+    { id: "enqueue", label: "加入队列", icon: <ListEnd size={16} />, disabled: reason !== null, onSelect: () => add("enqueue") },
     {
       id: "playlist",
       label: "添加到歌单…",
+      icon: <ListPlus size={16} />,
       onSelect: () => {
         setNotice("");
         setAdding(true);
       },
     },
+    ...(artist === undefined
+      ? []
+      : [{ id: "artist", group: "go", untitledGroup: true, label: "前往艺人", hint: artist.name, icon: <UserRound size={16} />, onSelect: () => void navigate({ to: "/artists/$artistId", params: { artistId: artist.artist_id } }) }]),
+    ...(albumLink
+      ? [
+          {
+            id: "album",
+            group: "go",
+            untitledGroup: true,
+            label: "前往专辑",
+            hint: track.albumTitle,
+            icon: <Disc3 size={16} />,
+            onSelect: () => void navigate({ to: "/albums/$groupId", params: { groupId: track.groupId }, search: { release: track.releaseId, track: track.trackId } }),
+          },
+        ]
+      : []),
     ...extraActions,
   ];
   return (

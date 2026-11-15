@@ -156,4 +156,33 @@ describe("菜单分组", () => {
     expect(screen.getAllByRole("group", { name: "管理" })).toHaveLength(2);
     expect(screen.getAllByRole("separator")).toHaveLength(2);
   });
+
+  it("untitledGroup：这一组只用分隔线分开，没有组标题也不包 role=group；方向键照常经过", async () => {
+    const user = userEvent.setup();
+    const go = vi.fn();
+    render(<MenuButton label="更多" actions={[...actions.slice(0, 2), { id: "artist", group: "go", untitledGroup: true, label: "前往艺人", onSelect: go }, { id: "album", group: "go", untitledGroup: true, label: "前往专辑", onSelect: vi.fn() }, ...actions.slice(2)]} />);
+    const trigger = screen.getByRole("button", { name: "更多" });
+    trigger.focus();
+    await user.keyboard("{ArrowDown}");
+    const menu = screen.getByRole("menu", { name: "更多" });
+    expect(within(menu).getAllByRole("separator")).toHaveLength(2);
+    // 只有“管理”一个带标题的组。
+    expect(within(menu).getAllByRole("group")).toHaveLength(1);
+    expect(within(menu).getByRole("group", { name: "管理" })).toBeTruthy();
+    expect(screen.queryByText("go")).toBeNull();
+    expect([...menu.children].filter((child) => child.getAttribute("role") === "menuitem").map((item) => item.textContent)).toEqual(["下一首播放", "加入队列", "前往艺人", "前往专辑"]);
+    await user.keyboard("{ArrowDown}{ArrowDown}");
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "前往艺人" }));
+    await user.keyboard("{Enter}");
+    expect(go).toHaveBeenCalledTimes(1);
+  });
+
+  it("hint：项右侧的灰色小字是名称的一部分，与名称之间有空格", async () => {
+    const user = userEvent.setup();
+    render(<MenuButton label="更多" actions={[{ id: "artist", label: "前往艺人", hint: "邓丽君", onSelect: vi.fn() }, { id: "plain", label: "加入队列", onSelect: vi.fn() }]} />);
+    await user.click(screen.getByRole("button", { name: "更多" }));
+    const item = screen.getByRole("menuitem", { name: "前往艺人 邓丽君" });
+    expect(item.hasAttribute("data-hint")).toBe(true);
+    expect(screen.getByRole("menuitem", { name: "加入队列" }).hasAttribute("data-hint")).toBe(false);
+  });
 });
