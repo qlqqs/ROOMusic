@@ -152,6 +152,17 @@ features/governance/
 - Avoid deep relative imports across boundaries. A public entry is narrow; it is
   not a barrel that re-exports the whole feature.
 
+### 按需加载与 `sideEffects`（2026-11-15）
+
+- 管理页（`/artist-candidates`、`/issues`、`/claims`、`/settings/library` 及扫描详情、`/settings/members`、`/settings/operations`、
+  `/settings/backups`）与 `/settings/playback` 在 `app/router.tsx` 用 `lazyRouteComponent(() => import(...), "导出名")` 按需加载，
+  全项目只用这一种写法。守卫、`validateSearch` 与 `AdminGate` 留在静态路由里，懒加载组件放在 `AdminGate` 之内、外面套
+  `app/routes/lazy-page.tsx` 的 `LazyPage`（加载占位用 `Skeleton`，代码块加载失败显示错误与“刷新页面”）。成员首屏路由不拆。
+- `frontend/package.json` 声明 `"sideEffects": ["**/*.css"]`：只有 CSS 导入算副作用，打包器据此丢掉 feature 公开入口里未被使用的组件，
+  成员页从同一入口导入查询解析函数或小 hook 时不会把管理页组件拉进首屏。因此 TS 模块不能依赖“被导入即执行”的顶层副作用
+  （注册、全局监听、修改原型）；确有需要时在 `main.tsx` 显式调用。
+- 验证：`vite build --manifest` 后从入口沿静态 `imports` 统计首屏 JS/CSS，管理页组件的特征文字只能出现在按需加载的代码块中。
+
 ## Naming
 
 - React components and their exported types use `PascalCase`; hooks start with
