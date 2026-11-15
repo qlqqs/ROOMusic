@@ -17,6 +17,8 @@
 /secrets/
 /backups/
 /backend/data/
+# 前端构建产物：vite build 写入、go:embed 内嵌，生产镜像在 Node 阶段生成
+/backend/cmd/roomusic/web/dist/
 
 # 构建与依赖产物
 /node_modules/
