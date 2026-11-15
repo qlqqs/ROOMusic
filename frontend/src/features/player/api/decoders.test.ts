@@ -36,6 +36,11 @@ describe("歌词 API decoder", () => {
     expect(decodeTrackLyrics(none)).toEqual(none);
   });
 
+  it("接受内嵌与外置两种来源", () => {
+    expect(decodeTrackLyrics(withValue(synced, ["lyrics", "source"], "external")).lyrics?.source).toBe("external");
+    expect(decodeTrackLyrics(synced).lyrics?.source).toBe("embedded");
+  });
+
   it("同步歌词的每一行有开始时间，纯文本的每一行没有；没有歌词是 null", () => {
     const syncedLyrics = decodeTrackLyrics(synced).lyrics;
     expect(syncedLyrics?.kind).toBe("synced");

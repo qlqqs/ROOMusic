@@ -356,7 +356,7 @@ describe("歌词面板", () => {
 
   it("没有歌词是空态说明，不是错误，也不生成占位歌词", async () => {
     await mount({ lyrics: () => sampleResponse("tracks/lyrics-none") });
-    expect(await screen.findByText("这首曲目没有内嵌歌词")).toBeTruthy();
+    expect(await screen.findByText("这首曲目没有歌词")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByRole("list")).toBeNull();
     expect(screen.getByRole("heading", { level: 2, name: "歌词" })).toBeTruthy();
@@ -366,7 +366,7 @@ describe("歌词面板", () => {
     const mounted = await mount({ lyrics: () => sampleResponse("errors/database-unavailable") });
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("服务暂时不可用");
-    expect(screen.queryByText("这首曲目没有内嵌歌词")).toBeNull();
+    expect(screen.queryByText("这首曲目没有歌词")).toBeNull();
     mounted.api.on("GET", `/api/v1/tracks/${trackId}/lyrics`, () => sampleResponse("tracks/lyrics-synced"));
     await userEvent.click(within(alert).getByRole("button", { name: "重试" }));
     await lyricsList();
@@ -377,6 +377,6 @@ describe("歌词面板", () => {
   it("曲目不存在（404）按错误显示，不当成“没有歌词”", async () => {
     await mount({ lyrics: () => sampleResponse("errors/not-found-track") });
     expect((await screen.findByRole("alert")).textContent).toContain("不存在");
-    expect(screen.queryByText("这首曲目没有内嵌歌词")).toBeNull();
+    expect(screen.queryByText("这首曲目没有歌词")).toBeNull();
   });
 });

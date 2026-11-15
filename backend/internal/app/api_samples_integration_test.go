@@ -648,6 +648,11 @@ func recordAlbumDetailSamples(t *testing.T, application *integrationTestApplicat
 			"TITLE=Cello Suite No. 1 in G major, BWV 1007: "+movement)
 	}
 
+	// 外置歌词放在作品曲目旁，不增加署名或改变既有歌词样本。
+	if err := os.WriteFile(filepath.Join(workDirectory, "01.lrc"), []byte("[00:01.00]External sample line\n[00:02.50]外置歌词样本"), 0o644); err != nil {
+		t.Fatalf("write external lyrics fixture: %v", err)
+	}
+
 	// 一张 CUE 专辑：一个整轨 FLAC 加一份 CUE，虚拟曲目的 cue 字段有值（起止帧、秒与 ISRC）。
 	cueDirectory := filepath.Join(libraryA, "cue-album")
 	if err := os.MkdirAll(cueDirectory, 0o755); err != nil {
@@ -965,10 +970,10 @@ const (
 	samplePlainLyrics  = "First verse, line one\nFirst verse, line two\n\nSecond verse, line one"
 )
 
-// recordLyricsSamples 记录歌词接口：同步歌词、纯文本歌词与没有歌词。素材是 recordAlbumDetailSamples 扫描出的合成 FLAC。
+// recordLyricsSamples 记录歌词接口：内嵌同步歌词、纯文本、外置歌词与没有歌词。素材是 recordAlbumDetailSamples 扫描出的合成 FLAC。
 func recordLyricsSamples(t *testing.T, application *integrationTestApplication, samples *apiSampleRecorder, call apiSampleCall, admin *integrationTestUser) {
 	t.Helper()
-	for sample, title := range map[string]string{"tracks/lyrics-synced": "Allegro", "tracks/lyrics-plain": "Andante", "tracks/lyrics-none": "Finale"} {
+	for sample, title := range map[string]string{"tracks/lyrics-synced": "Allegro", "tracks/lyrics-plain": "Andante", "tracks/lyrics-none": "Finale", "tracks/lyrics-external": "Cello Suite No. 1 in G major, BWV 1007: I. Prelude"} {
 		var trackID string
 		if err := application.database.QueryRow(`SELECT id::text FROM tracks WHERE title=$1 AND source_status='present'`, title).Scan(&trackID); err != nil {
 			t.Fatalf("read track %q: %v", title, err)

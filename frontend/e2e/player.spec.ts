@@ -406,7 +406,7 @@ for (const width of widths) {
       if (kind === "synced") await expect(lyrics.getByRole("listitem")).toHaveCount(LYRIC_LINES);
       if (kind === "plain") await expect(lyrics.getByRole("group", { name: "歌词文本", exact: true })).toBeVisible();
       for (const removedText of ["内嵌歌词 · 逐行同步 · 点任一行跳到该处", "内嵌歌词 · 逐行同步", "内嵌歌词 · 纯文本"]) await expect(lyrics).not.toContainText(removedText);
-      if (kind === "none") await expect(lyrics.getByText("这首曲目没有内嵌歌词", { exact: true })).toBeVisible();
+      if (kind === "none") await expect(lyrics.getByText("这首曲目没有歌词", { exact: true })).toBeVisible();
       await expectLyricsLayout(page, `${width}px ${kind}`);
       await expectNoHorizontalOverflow(page, `${kind}歌词`);
       await expectNoDocumentScroll(page, `${kind}歌词`);
@@ -549,7 +549,7 @@ test("歌词读取失败：显示带重试的错误，重试后显示歌词；�
   const lyrics = lyricsPanel(page);
   // 查询对 503 自动重试两次，之后才显示错误。
   await expect(lyrics.getByRole("alert")).toContainText("服务暂时不可用", { timeout: 20_000 });
-  await expect(lyrics.getByText("这首曲目没有内嵌歌词")).toHaveCount(0);
+  await expect(lyrics.getByText("这首曲目没有歌词")).toHaveCount(0);
   await expectNoSeriousViolations(page, "歌词读取失败");
   failing = false;
   await lyrics.getByRole("button", { name: "重试", exact: true }).click();

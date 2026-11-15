@@ -345,6 +345,7 @@ func (service *Service) scanRootWithOptions(ctx context.Context, executor scanEx
 		captureProcessingError(err)
 	})
 	defer pipeline.pool.Close()
+	var lyricsIndex sidecarLyricsIndex
 	err := filepath.WalkDir(root.Path, func(path string, entry fs.DirEntry, walkError error) error {
 		if err := ctx.Err(); err != nil {
 			complete = false
@@ -425,6 +426,7 @@ func (service *Service) scanRootWithOptions(ctx context.Context, executor scanEx
 		if err != nil {
 			return err
 		}
+		audio.externalLyrics = lyricsIndex.read(root.Path, path, filter)
 		slot.audio = []scanAudio{audio}
 		return pipeline.submit(slot)
 	})

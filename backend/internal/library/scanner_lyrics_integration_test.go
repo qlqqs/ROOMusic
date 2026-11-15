@@ -150,11 +150,16 @@ func TestPostgreSQLCueVirtualTracksHaveNoLyricsButTranscriptTracksKeepThem(t *te
 		`    INDEX 01 00:00:00`,
 	}, "\n")))
 
+	writeFixtureFile(t, root, "Image/image.lrc", []byte("作词：整轨署名\n[00:01.00]whole image external"))
+	writeFixtureFile(t, root, "Transcript/01.lrc", []byte("[00:01.00]transcript external"))
+	before := lyricsDirectorySnapshot(t, root.Path)
 	requireScanStatus(t, runTestScan(t, fixture, service, root), "succeeded")
+	requireLyricsDirectoryUnchanged(t, root.Path, before)
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE source_root_id=$1::uuid AND source_kind='cue_virtual' AND lyrics IS NULL AND lyrics_source IS NULL`, 2, root.ID)
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM tracks WHERE source_root_id=$1::uuid AND source_kind='cue_virtual' AND relative_path LIKE 'Image/%'`, 2, root.ID)
 	stored := readStoredLyrics(t, fixture, root.ID)
-	requireStoredLyrics(t, stored, "Transcript/01.flac", "[00:01.00]transcript lyrics", parser.LyricsSourceVorbisLyrics)
+	requireStoredLyrics(t, stored, "Transcript/01.flac", "[00:01.00]transcript external", parser.LyricsSourceLRCFile)
+	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM track_credits c JOIN tracks t ON t.id=c.track_id WHERE t.source_root_id=$1::uuid AND t.source_kind='cue_virtual' AND c.source='lyrics'`, 0, root.ID)
 }
 
 func TestPostgreSQLTrackLyricsConstraint(t *testing.T) {
@@ -180,6 +185,7 @@ func TestPostgreSQLTrackLyricsConstraint(t *testing.T) {
 		"each known source":                {"text", parser.LyricsSourceVorbisLyrics, false},
 		"unsynced Vorbis source":           {"text", parser.LyricsSourceVorbisUnsynced, false},
 		"MP4 source":                       {"text", parser.LyricsSourceMP4, false},
+		"external LRC source":              {"text", parser.LyricsSourceLRCFile, false},
 		"ID3 source":                       {"text", parser.LyricsSourceID3USLT, false},
 		"exactly 64 KiB":                   {strings.Repeat("a", parser.MaxLyricsBytes), parser.LyricsSourceVorbisLyrics, false},
 		"lyrics without a source":          {"text", nil, true},

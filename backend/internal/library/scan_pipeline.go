@@ -31,6 +31,7 @@ type scanAudio struct {
 	path, relative                    string
 	info                              fs.FileInfo
 	observation                       parser.AudioObservation
+	externalLyrics                    string
 	prepared, cached                  bool
 	err                               error
 	diagnosticKind, diagnosticMessage string
@@ -165,6 +166,9 @@ func (pipeline *scanPipeline) apply(slot scanSlot) error {
 			}
 			slot.heldKind = ingest.HeldFile
 		} else {
+			if audio.externalLyrics != "" {
+				parser.ApplyExternalLyrics(&audio.observation, audio.externalLyrics)
+			}
 			observation := buildPhysicalSourceObservation(audio.observation, slot.relative)
 			observation.ArtworkDeferred = audio.deferred()
 			observation.SourceSize, observation.SourceModifiedAt = audio.info.Size(), audio.info.ModTime()

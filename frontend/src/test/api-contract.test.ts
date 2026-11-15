@@ -374,6 +374,7 @@ const successContracts: Record<string, Contract> = {
   "tracks/lyrics-synced": { status: 200, decode: decodeTrackLyrics },
   "tracks/lyrics-plain": { status: 200, decode: decodeTrackLyrics },
   "tracks/lyrics-none": { status: 200, decode: decodeTrackLyrics },
+  "tracks/lyrics-external": { status: 200, decode: decodeTrackLyrics },
   "auth/setup-status-required": { status: 200, decode: decodeSetupStatus },
   "auth/setup-status-completed": { status: 200, decode: decodeSetupStatus },
   "auth/setup-admin-created": { status: 201, decode: decodeViewer },

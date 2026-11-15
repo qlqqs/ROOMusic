@@ -14,6 +14,7 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	50: `UPDATE tracks SET lyrics='外置歌词',lyrics_source='lrc_file' WHERE id='c3000000-0000-4000-8000-000000000050';`,
 	42: `UPDATE scan_runs SET trigger_kind='scheduled' WHERE id='f2000000-0000-4000-8000-000000000001';
  UPDATE scan_schedule SET enabled=FALSE,hour=5 WHERE id=1;`,
 	41: `INSERT INTO library_parse_cache(root_id,relative_path,directory,source_size,source_modified_at,parser_version,observation,seen_scan_id)
@@ -170,6 +171,16 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
  VALUES('f3000000-0000-4000-8000-000000000003','f1000000-0000-4000-8000-000000000001',
  'f0000000-0000-4000-8000-000000000001','create','succeeded','旧目录收据','create-fixture',1,'rollback-create');`)
 			}
+			if m.Version == 50 {
+				// 外置行升级前为空，内嵌行始终保留，快照会核对整行与其余依赖。
+				rollbackExec(t, db, `INSERT INTO library_roots(id,path) VALUES('c6000000-0000-4000-8000-000000000050','/synthetic/lyrics-rollback');
+ INSERT INTO release_groups(id) VALUES('c1000000-0000-4000-8000-000000000050');
+ INSERT INTO releases(id,group_id,title,artist) VALUES('c0000000-0000-4000-8000-000000000050','c1000000-0000-4000-8000-000000000050','歌词迁移测试','测试艺人');
+ INSERT INTO media(id,release_id,position) VALUES('c2000000-0000-4000-8000-000000000050','c0000000-0000-4000-8000-000000000050',1);
+ INSERT INTO tracks(id,medium_id,position,title,artist,source_root_id,relative_path,observed_at,lyrics,lyrics_source) VALUES
+ ('c3000000-0000-4000-8000-000000000050','c2000000-0000-4000-8000-000000000050',1,'外置曲目','测试艺人','c6000000-0000-4000-8000-000000000050','external.flac',NOW(),NULL,NULL),
+ ('c3000000-0000-4000-8000-000000000051','c2000000-0000-4000-8000-000000000050',2,'内嵌曲目','测试艺人','c6000000-0000-4000-8000-000000000050','embedded.flac',NOW(),'保留内嵌歌词','vorbis_lyrics');`)
+			}
 			s0 := rollbackSnapshot(t, db)
 			rollbackApply(t, db, migrationPrefix(available, m.Version))
 			s1 := rollbackSnapshot(t, db)
@@ -179,6 +190,12 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			}
 			if fixture != "" {
 				rollbackExec(t, db, fixture)
+			}
+			if m.Version == 50 {
+				var valid bool
+				if err := db.QueryRow(`SELECT lyrics='外置歌词' AND lyrics_source='lrc_file' FROM tracks WHERE id='c3000000-0000-4000-8000-000000000050'`).Scan(&valid); err != nil || !valid {
+					t.Fatalf("0050 外置夹具未生效：valid=%v err=%v", valid, err)
+				}
 			}
 			if m.Version == 42 {
 				var trigger string
@@ -204,6 +221,12 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			}
 			rollbackApply(t, db, migrationPrefix(available, m.Version-1))
 			s2 := rollbackSnapshot(t, db)
+			if m.Version == 50 {
+				var cleared bool
+				if err := db.QueryRow(`SELECT lyrics IS NULL AND lyrics_source IS NULL FROM tracks WHERE id='c3000000-0000-4000-8000-000000000050'`).Scan(&cleared); err != nil || !cleared {
+					t.Fatalf("0050 下行没有清空外置行：cleared=%v err=%v", cleared, err)
+				}
+			}
 			if m.Version == 35 {
 				var path string
 				var revision int64

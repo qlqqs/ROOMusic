@@ -1,21 +1,24 @@
-# M2b 内嵌歌词合同
+# 歌词合同（内嵌标签与外置 .lrc）
 
 ## 1. 范围与触发
 
-扫描时从音频标签提取歌词原文，保存在曲目记录里；接口读取时把原文解析成可显示的行；前端只做分组、定位与显示。
+扫描时从音频标签或同名外置 `.lrc` 文件提取歌词原文，保存在曲目记录里；接口读取时把原文解析成可显示的行；前端只做分组、定位与显示。
 修改歌词的提取规则、`tracks.lyrics` 两列、歌词接口、LRC 解析规则或前端歌词面板的数据合同时，先读本文件并同步更新。
 需求与取舍见歌词任务（本机归档 `.trellis/tasks/archive/2026-10/10-09-classical-m2b-lyrics/prd.md`）与它的技术设计（本机归档 `.trellis/tasks/archive/2026-10/10-09-classical-m2b-lyrics/design.md`）；
 前端的面板与布局规则见[播放器设计规范](../frontend/player-design-guidelines.md)。
 
-只读内嵌标签：不读外置 `.lrc`、不联网、不提供编辑（M3 的修正覆盖层只覆盖发行的八个字段，不含歌词）、不做逐字高亮、不读 ID3 `SYLT`。
-音乐源文件始终只读，歌词不进入任何派生文件。
+来源：音频内嵌标签，以及与音频同目录、同主名的外置 `.lrc`（2026-11-15 起，外置优先，见第 3a 节）。不联网、不提供编辑
+（M3 的修正覆盖层只覆盖发行的八个字段，不含歌词）、不做逐字高亮、不读 ID3 `SYLT`、不读 `.txt` 等其他歌词文件。
+音乐文件与歌词文件始终只读，歌词不进入任何派生文件。外置歌词的需求与取舍见本机归档 `.trellis/tasks/archive/2026-11/11-15-external-lrc/`。
 
 ## 2. 签名
 
 - `parser.AudioObservation.Lyrics`、`LyricsSource`：规范化后的原文与来源键；没有有效歌词时两者都为空。解析器不解析 LRC。
-- `parser.NormalizeLyrics(raw) (string, bool)`；常量 `MaxLyricsBytes = 64 KiB`；来源键常量 `LyricsSource*`。
+- `parser.NormalizeLyrics(raw) (string, bool)`；常量 `MaxLyricsBytes = 64 KiB`；来源键常量 `LyricsSource*`（含外置文件 `LyricsSourceLRCFile = "lrc_file"`）。
+- `parser.DecodeExternalLyrics(data) (string, bool)`、常量 `MaxExternalLyricsBytes = 256 KiB`；`parser.ApplyExternalLyrics(observation, text)` 把外置歌词与随之抽取的署名应用到观察副本。
+- `library/sidecar_lyrics.go`：每个目录建一次 `.lrc` 文件名索引，按第 3a 节匹配并有界读取。
 - `ingest.SourceObservation.Lyrics`、`LyricsSource`（JSON `lyrics`、`lyrics_source`，`omitempty`），随暂存观察进入整理与曲目写入。
-- `tracks.lyrics`、`tracks.lyrics_source`（迁移 `0015_track_lyrics.sql`）。
+- `tracks.lyrics`、`tracks.lyrics_source`（迁移 `0015_track_lyrics.sql`，`0050_track_lyrics_file.sql` 增加来源键 `lrc_file`）。
 - `catalog.ParseLyrics(raw) (Lyrics, bool)`：纯函数；`catalog.Store.LoadTrackLyrics(ctx, trackID) (TrackLyrics, error)`，曲目不存在或非 `present` 为 `catalog.ErrTrackNotFound`。
 - `GET /api/v1/tracks/{id}/lyrics`，注册在 `catalog/httpapi`。
 
@@ -40,14 +43,28 @@ ID3 帧的读取按版本进行（歌词是第一个会读到很长帧的字段�
 - v2.2（`ULT`）不读取：解析器目前不读 v2.2 的任何帧（帧头是 6 字节），歌词不单独例外。
 - Ogg 与 Opus 逐页流式拼包，注释包可以跨页，单包上限 16 MiB（见[扫描流程合同](./library-scan-pipeline.md)）；Vorbis 注释单条上限 1 MiB。
 
-CUE 虚拟轨没有歌词：它的观察由 CUE 事实构造，不复制父文件的标签，整张镜像里的歌词对应整个文件，不能分给单条曲目。
-逐轨抄本（物理文件加只含一个轨的 CUE）的曲目仍是物理轨，`mergeSingleCueEvidence` 合并 CUE 字段时保留它的歌词。
+CUE 虚拟轨没有歌词：它的观察由 CUE 事实构造，不复制父文件的标签，整张镜像里的歌词对应整个文件，不能分给单条曲目；整轨镜像旁的 `.lrc` 同样不进入虚拟轨。
+逐轨抄本（物理文件加只含一个轨的 CUE）的曲目仍是物理轨，`mergeSingleCueEvidence` 合并 CUE 字段时保留它的歌词（内嵌或按物理音频文件名匹配的外置歌词）。
+
+## 3a. 外置 `.lrc`（扫描器）
+
+- 只在物理音频分支查找（`prepareCueParent` 不查）。主名是音频文件名去掉最后一个扩展名（`a.b.flac` → `a.b`）。在音频所在目录：
+  1. 有名字恰为 `主名.lrc` 的项就用它（它不可用时不再尝试其他变体）；
+  2. 否则主名经 NFC 后不区分大小写相等、扩展名不区分大小写为 `.lrc` 的项恰好一个时用它；零个或多个时没有外置歌词。
+  3. 套用扫描过滤（隐藏文件不取）；`Lstat` 只接受普通文件，拒绝符号链接与目录。不支持 `Song.flac.lrc`、按标题匹配或子目录中的歌词。
+- 读取：大小为 0 或超过 256 KiB 放弃（不截断）。解码：UTF-32 BOM 放弃；UTF-8 BOM 去掉后须为合法 UTF-8；UTF-16LE/BE BOM 解码并校验代理对；
+  无 BOM 的合法 UTF-8 直接用；否则按 GB18030 解码，结果含 `U+FFFD` 放弃。不做 Big5、Shift-JIS 探测。解码结果再经 `NormalizeLyrics`。
+- 任何放弃都静默回落到解析器给出的内嵌歌词，不记诊断，不影响曲目可用性。外置生效时 `LyricsSource = lrc_file`。
+- 外置歌词不进解析缓存：每轮扫描（含缓存命中）都读取，在 `scanPipeline.apply` 写入缓存之后、构造暂存观察的副本上覆盖；缓存里仍是解析器原始输出。
+  不升 `parser.CommonVersion`、`ingest.GroupingVersion`。只增删改 `.lrc` 时由候选签名察觉（见[增量扫描合同](./library-scan-incremental.md)），音频不重新解析。
+- 歌词署名随生效的歌词走：外置生效时去掉从内嵌歌词抽出的 `Source="lyrics"` 署名，改从 `.lrc` 开头抽取；标签署名优先不变；
+  `InferredFields["title"]` 为真（标题来自文件名补位）时按空标题处理，不据此跳过题头。
 
 ## 4. 保存
 
 迁移 `0015_track_lyrics.sql` 增加两个可空列与约束 `tracks_lyrics_ck`：两列同为 NULL；或 `lyrics` 非空、不超过 65,536 字节，
-`lyrics_source` 非空且属于四个来源键。约束里 `lyrics_source IS NOT NULL` 必须显式写出：CHECK 在结果为未知（NULL）时放行，
-只靠 `IN` 挡不住“有歌词、没有来源”（集成测试覆盖这一格）。迁移只增加列与约束，不改写已有数据。
+`lyrics_source` 非空且属于来源键（0015 的四个内嵌来源，0050 起加 `lrc_file`）。约束里 `lyrics_source IS NOT NULL` 必须显式写出：CHECK 在结果为未知（NULL）时放行，
+只靠 `IN` 挡不住“有歌词、没有来源”（集成测试覆盖这一格）。迁移只增加列与约束，不改写已有数据。0050 按原结构重建约束；它的下行迁移先把 `lrc_file` 的两列置 NULL（重扫可重建），再恢复四值约束。
 
 `catalog/ingest/persist_track.go` 的 INSERT 与 UPDATE 都写这两列，观察没有歌词时写 NULL，所以重扫会更新或清空歌词；曲目身份、Release 匹配与内容指纹不受影响。
 已入库的曲目迁移后没有歌词，重扫一次才会有。暂存的观察 JSON 带歌词（最多 64 KiB，远小于 24 MiB 的暂存上限）。
@@ -62,10 +79,11 @@ CUE 虚拟轨没有歌词：它的观察由 CUE 事实构造，不复制父文�
 { "track_id": "…", "lyrics": null }
 { "track_id": "…", "lyrics": { "kind": "synced", "source": "embedded", "lines": [ { "start_ms": 12340, "text": "…" } ] } }
 { "track_id": "…", "lyrics": { "kind": "plain", "source": "embedded", "lines": [ { "start_ms": null, "text": "…" } ] } }
+{ "track_id": "…", "lyrics": { "kind": "synced", "source": "external", "lines": [ { "start_ms": 1000, "text": "…" } ] } }
 ```
 
 没有歌词、或去掉元标签后没有可显示的行是 200 加 `lyrics: null`，不是 404。`synced` 的每行 `start_ms` 是 0 到 24 小时之间的整数且非递减；
-`plain` 的每行都是 `null`，`text` 可以是空串（分段）。`source` 目前只有 `embedded`。
+`plain` 的每行都是 `null`，`text` 可以是空串（分段）。`source` 是 `embedded`（内嵌标签）或 `external`（`lyrics_source = lrc_file`）；`ParseLyrics` 不变，来源由 `LoadTrackLyrics` 按 `lyrics_source` 设置。前端不显示来源。
 
 ## 6. 解析规则（`catalog.ParseLyrics`）
 
@@ -92,12 +110,13 @@ CUE 虚拟轨没有歌词：它的观察由 CUE 事实构造，不复制父文�
 
 ## 8. 必需测试与断言
 
-- 解析器（`go test ./internal/library/parser/`）：`NormalizeLyrics` 表；FLAC、Ogg、Opus、MP4、ID3 的各来源与优先级；USLT 的四种编码、
+- 解析器（`go test ./internal/library/parser/`）：`NormalizeLyrics` 表；`DecodeExternalLyrics` 的各编码、BOM、代理对、`U+FFFD`、256 KiB/64 KiB 边界；`ApplyExternalLyrics` 的署名替换、标签优先、补位标题；FLAC、Ogg、Opus、MP4、ID3 的各来源与优先级；USLT 的四种编码、
   描述优先、分组/数据长度/同步消除/压缩/加密标志、v2.4 的 synchsafe 与普通整数写入器、畸形帧；素材事实测试核对真实 ffmpeg 写出的歌词。
+- `go test ./internal/library/`：外置歌词匹配（精确优先、大小写与 NFC、歧义、精确项不可用、隐藏、符号链接、`Song.flac.lrc`、超限）。
 - `go test ./internal/catalog/`：`ParseLyrics` 表驱动（时间戳各形式、元标签与 offset、逐字标记、间奏、同时间顺序、24 小时、纯文本分段、上限、全部无效）与 JSON 形状。
 - 配置隔离的 `ROOMUSIC_TEST_DATABASE_URL` 后运行 `go test ./internal/library/ ./internal/app/ -run 'TestPostgreSQL'`：
-  扫描写入、重写标签后的更新与清空、CUE 场景、`tracks_lyrics_ck` 的全部格；接口的 401、400、404、200 与 `null`；`TestPostgreSQLAPIResponseSamples`
-  的同步、纯文本、没有歌词三份样本（前端解码器读取同一批样本）。
+  扫描写入、重写标签后的更新与清空、外置优先与各种回落、只增删改 `.lrc` 的增量扫描（`FilesParsed == 0`、曲目 ID 不变、缓存仍为内嵌）、外置署名、CUE 两种场景、`tracks_lyrics_ck` 的全部格（含 `lrc_file`）与 0050 往返；接口的 401、400、404、200 与 `null`；`TestPostgreSQLAPIResponseSamples`
+  的同步、纯文本、没有歌词、外置四份样本（前端解码器读取同一批样本）。
 - 前端与真实服务的用例见[前端验证分层](../frontend/quality-verification-layers.md)：面板各状态、跟随与暂停跟随、键盘、五种宽度、axe；
   `./scripts/playback-e2e.sh` 经真实扫描核对 FLAC 与 ALAC 素材的歌词、CUE 虚拟轨无歌词，以及真实点击后的播放位置。
 
@@ -106,4 +125,4 @@ CUE 虚拟轨没有歌词：它的观察由 CUE 事实构造，不复制父文�
 错误：播放时现读音频文件解析歌词；把整张 CUE 镜像的歌词复制给每条虚拟轨；用 `IN` 单独充当“来源必填”的约束；
 在前端重新解析 LRC，让两处规则分叉；用 `aria-live` 逐行播报当前行；为放大当前行而改字号。
 
-正确：扫描时提取并保存，接口读取时解析，规则只在后端有一份并由接口样本约束；缺失如实显示“这首曲目没有内嵌歌词”，不生成占位歌词。
+正确：扫描时提取并保存，接口读取时解析，规则只在后端有一份并由接口样本约束；缺失如实显示“这首曲目没有歌词”，不生成占位歌词。

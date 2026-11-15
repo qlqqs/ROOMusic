@@ -24,7 +24,7 @@ export function LyricsPanel({ trackId, size = "default" }: { trackId: string; si
     <div className={styles.frame}>
       <QueryContent query={query} loading={<p className={styles.state}>正在加载歌词…</p>}>
         {(lyrics) => {
-          if (lyrics === null) return <p className={styles.state}>这首曲目没有内嵌歌词</p>;
+          if (lyrics === null) return <p className={styles.state}>这首曲目没有歌词</p>;
           // 按曲目重建：关闭跟随等界面状态不带到下一首。
           return lyrics.kind === "synced" ? <SyncedLyrics key={trackId} lines={lyrics.lines} anchor={anchor} /> : <PlainLyrics key={trackId} lines={lyrics.lines} />;
         }}
