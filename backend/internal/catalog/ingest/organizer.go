@@ -60,6 +60,8 @@ type OrganizedCandidate struct {
 
 	// OriginalKind 仅 format_split 填写切分前种类。
 	OriginalKind CandidateKind
+	// BoxParentArtwork 表示 Box 叶子的父目录音频全部属于同父碟目录；格式切分后保留。
+	BoxParentArtwork bool
 
 	// VersionGroup 相同的候选是同一专辑的格式版本，写入时供调用方选择目标组。
 	VersionGroup string
@@ -663,8 +665,22 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 		directory.observations = append(directory.observations, o)
 	}
 	parentPlans := map[string]discParentPlan{}
+	boxParentArtwork := map[string]bool{}
 	for parent, directories := range parentDirectories {
 		parentPlans[parent] = planDiscParent(parent, directories)
+		exclusive := parent != ""
+		// 暂存标记覆盖其它 scope；原始观察保留 CUE 去重前的物理目录证据。
+		for _, observation := range observations {
+			loc := locateObservation(observation)
+			if loc.dir != parent && !strings.HasPrefix(loc.dir, parent+"/") {
+				continue
+			}
+			if !loc.isDiscDir || loc.parent != parent || !observation.DiscParentExclusive {
+				exclusive = false
+				break
+			}
+		}
+		boxParentArtwork[parent] = exclusive
 	}
 
 	type bucket struct {
@@ -801,6 +817,9 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 		if b.kind == CandidateFormatSplit {
 			c.OriginalKind = b.originalKind
 			c.VersionGroup = "format:" + b.scope
+		}
+		if b.originalKind == CandidateBoxLeaf && len(obs) > 0 {
+			c.BoxParentArtwork = boxParentArtwork[locateObservation(obs[0]).parent]
 		}
 		folderDecisionScope := b.scope
 		if b.kind == CandidateMultiDisc && len(obs) > 0 {

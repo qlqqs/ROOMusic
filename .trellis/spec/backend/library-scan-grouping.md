@@ -25,7 +25,8 @@
     1. 原目录精确名单；
     2. 内嵌封面：`ingest.OrganizedCandidate.EmbeddedArtworks()` 按碟序、碟内位置逐个尝试，同一文件内正面封面（图片类型 3）优先，见 parser 规则；
     3. 原目录 `front` 子串 → 附属子目录精确名 → 附属子目录 `front` 子串；
-    4. 仅 `Kind == box_leaf` 或 `Kind == format_split && OriginalKind == box_leaf`：Box 父目录 `path.Dir(Anchor.Scope)` 的精确名单；父目录是注册根时不查。
+    4. 仅 `Kind == box_leaf` 或 `Kind == format_split && OriginalKind == box_leaf`，且 `BoxParentArtwork == true`：Box 父目录 `path.Dir(Anchor.Scope)` 的精确名单；父目录是注册根时不查。独占要求父目录下所有音频都由 `locateObservation` 判为 `isDiscDir` 且 `parent` 相同，父目录直接音频、普通兄弟目录或碟目录更深层的音频均阻止兜底；无音频的图片目录不影响。
+  - `OrganizedCandidate.BoxParentArtwork bool` 由 organizer 在父目录规划旁计算，仅赋给原种类为 `box_leaf` 的候选，格式拆分后保留。必须有暂存层全根 `DiscParentExclusive` 标记，并核对 CUE 去重前输入中的父目录子树观察；不能把单个 `disc-parent:` scope 的观察误当成父目录全集。增量扫描仍遍历全根，缓存命中的音频也重新暂存，独占标记每轮重算。缺少全根标记时不开启第 4 档。
   - 歧义候选（`same_dir_split`、`loose_album`、`loose_unknown`，同一目录或注册根里有多张专辑）只用第 2 档；不使用任何文件夹图片，没有内嵌封面就不绑定。
   - 原目录（`ingest.OrganizedCandidate.ArtworkDirectories`，相对注册根）：先是发行目录 `Anchor.Scope`，
     再按碟序、曲序列出各曲目观察的 `Directory`，去重。CUE 虚拟轨的 `Directory` 是 sheet 所在目录，不能从虚拟路径
@@ -48,12 +49,12 @@
 - `ingest.parseDiscMarker(name) (discMarker,bool)` 输出 `Number/Prefix/Suffix/AtStart`：从左向右取首个有效 `disc/disk/cd`（忽略大小写），支持括号、`CD(1)`、`of N`/`/N`；非 ASCII 单词边界，编号限 1–99，认整数、英文 one–twenty、规范罗马数字。无效编号继续向右找；纯数字目录、中文碟号、`[CD]`、`{…, CD}`、`BACD-0001` 不认。
 - Prefix/Suffix 去空白、分隔符与落单括号，保留配对括号。`stripAlbumDiscMarker` 在标记开头时取 Suffix，否则取 Prefix（截断尾部）；结果空则不剥。只改 `albumPartition` 和 Release 标题比较值，不改 observation 的原始 album。物理观察缺少权威碟号时补剥出的编号，来源 `album_title`，仍 inferred；不改 parser。
 - 碟目录仍进 `disc-parent:<父>` scope。顺序必须是 `AlignCueStagingScopes` → `MarkDiscParentScopes(ctx,db,scanID,rootID)` → `PlanStagedRoot` → 保存。标记把 `disc_parent_exclusive:true` 写入 JSON（`SourceObservation.DiscParentExclusive`）：非空父目录整棵子树没有其它 scope 的音频观察才独占，包含父目录直接音频和碟目录更深层音频；只有图片不影响。本次 scan/root 的 `scan_held_sources`（`file`、`directory`、`cue_sheet`）也参与判断：父目录子树内不属于这些碟目录本身的保住来源或未知目录范围阻止独占，不因未成功暂存而被忽略；碟目录更深层的范围仍属于其它目录，不能按整棵碟目录子树豁免。CUE 对齐在暂存 JSON 中保留 `original_organization_scope`（重复对齐不覆盖）；只有原 scope 与当前 scope 都属于该碟父目录、且 held 所在目录与观察目录精确相等时才豁免，避免跨目录 CUE 的物理父来源把普通目录伪装成碟目录。比较路径按段边界使用 `left` / 相等判断，不用需转义的 LIKE。失败记 `staging_write_failure`，根不完整。
-- 不独占或父为注册根时，仅 Prefix/Suffix 均空的目录走原严格多碟：≥2 个不同编号、每号一个目录、1..max 连续、兼容权威 partition ≤1。其它各自 `box_leaf`，缺自身封面与内嵌封面时以 Box 父目录精确名为最后一档（父为注册根时不查）；仅一个碟目录且无权威 album 时可用 Prefix 兜底（`disc_dir_prefix_fallback_v1`）。
+- 不独占或父为注册根时，仅 Prefix/Suffix 均空的目录走原严格多碟：≥2 个不同编号、每号一个目录、1..max 连续、兼容权威 partition ≤1。其它各自 `box_leaf`；第 4 档另按上述 `BoxParentArtwork` 独占条件判定，不独占或父为注册根时不查父目录封面；仅一个碟目录且无权威 album 时可用 Prefix 兜底（`disc_dir_prefix_fallback_v1`）。
 - 独占时，权威 partition 冲突或非附加碟 Prefix（小写、压空白）不止一种，全部 `box_leaf`。附加碟按 Prefix/Suffix 中 Bonus/Extra/Special 或特典等判定；全是附加碟则全部当正碟。正碟重号时仅在无 Suffix 的正碟非空且无重号时把其它碟改作附加碟，否则不合成。
 - 合成条件：正碟 1..max 连续且 max≥2，或一个正碟加附加碟，或整个父目录只有一碟；缺号时要求每个碟目录至少一条权威 album 且 partition 唯一。正碟保留目录号；附加碟按规范化 Suffix（空则 Prefix）、编号、路径排序，从正碟最大号后顺排。
 - 合成候选仍为 `strict_multidisc`，Scope 为父目录，Partition 为空；无权威 album 时用唯一 Prefix 或父目录名兜底（`multidisc_parent_fallback_v1`）。字段证据仍取首个物理碟目录，不取父目录；独占合成、严格多碟和 `box_leaf` 的碟目录证据统一只解析 `parseDiscMarker` 的 Prefix，Prefix 为空不产生目录证据，非碟目录不变。`OrganizedCandidate.MediumTitles map[int]string`：标题取 Suffix，附加碟空时取 Prefix；去包裹整名的括号；`PersistCandidate` 新增或更新 `media.title`，无碟名恢复 `Medium`。REST 形状不变，候选键仍 `v2`、归组证据仍 `organizer_v2`。
 
-- 归组版本：④ 尚未进入 main，本次整合②③后 `GroupingVersion` 仍从 1 起；后续已发布规则变化按[升版本合同](./library-scan-incremental.md#版本号与升版本规则)执行。候选签名与封面选择共用 `listFolderArtworkCandidates` 的分档列举（含 Box 父目录档）。
+- 归组版本：第 4 档收窄为纯 Box 后 `GroupingVersion` 从 2 升到 3；后续已发布规则变化按[升版本合同](./library-scan-incremental.md#版本号与升版本规则)执行。候选签名与封面选择共用 `listFolderArtworkCandidates` 的分档列举（仅 `BoxParentArtwork` 成立时含 Box 父目录档）。
 
 ### 文件名推断与同目录归组（③）
 
@@ -71,7 +72,7 @@
 - 在上述文件名标题中，仅当艺人 inferred 且来源为 `display_fallback`，并恰好含一个 ` - `、两边非空且左边不全为数字时，拆为艺人与标题。两者仍 inferred；写入展示复用 `metadata.CanonicalTrackArtist`，不复制艺人拆分规则。已有标题/艺人标签不被覆盖。`artistgraph` 接受来源为 `filename_fallback` 的 inferred 曲目艺人，其他 inferred 曲目艺人仍跳过，文件名艺人可以进入艺人页与收藏。判定使用 `track_observations` 中 `field_name='artist'` 那行的 `source_kind`：预处理写 `FieldSources["artist"]`，经 `fieldObservations()` 取为 `field.SourceKind`，由 `PersistCandidate` 写入该列；不是 `tracks.source_kind` 的物理/CUE 来源；O/T 两线分别从 2 升到 3，合并后统一 `artistgraph.Version=4`，确保两线的艺人投影变化均触发重整。
 - `continuousAlbum(pairs []discTrack) bool`：至少 2 首，轨号均正；碟号小于 1 按 1，每碟轨号恰好 1..n，无缺无重，必须有第 1 碟，允许缺中间碟号。两种取数任一通过即可：混合模式按上述碟号优先级、轨号标签优先再文件名（冲突保护前）；文件名模式只取文件名轨号、碟号取文件名再碟目录再 1。不用自然序补位结果作归组证据。
 - 仅 `ordinary_directory`、`box_leaf` 做同目录新判定，不含注册根散曲或已合成多碟。先检查格式切分；不切分时保留现有多数决；仅原规则会按 partition 拆成 `same_dir_split` 时用整目录连续性合并，包括缺少专辑标签的观察。字段仍按 `chooseValue` 多数决并保留 `inconsistent_candidates`。
-- 格式键为小写 `Codec`，空则取相对路径扩展名小写并去前导点（如 `.flac` 归为 `flac`，与已有编码键一致）。至少两种格式、每个格式子集连续（同上两种取数，但允许 1 首）、整组存在重复碟轨，三者同时成立才切分。候选种类 `CandidateFormatSplit = "format_split"`，`Anchor.Scope = 目录`、`Anchor.Partition = "format:<格式键>"`；`stableAnchorPartition` 保留格式 partition，`VersionGroup = "format:" + 目录`。REST 的 `candidate_kind` 白名单接受 `format_split`，响应形状不变。`OrganizedCandidate.OriginalKind CandidateKind` 仅在 `format_split` 时从 bucket 的 `originalKind` 填入切分前种类，供第 4 档封面条件使用。格式版本按切分前的候选种类选择标题兜底：原 `box_leaf` 继承 Box 叶子的 Prefix 兜底及 `disc_dir_prefix_fallback_v1`，原普通目录仍走普通目录规则。
+- 格式键为小写 `Codec`，空则取相对路径扩展名小写并去前导点（如 `.flac` 归为 `flac`，与已有编码键一致）。至少两种格式、每个格式子集连续（同上两种取数，但允许 1 首）、整组存在重复碟轨，三者同时成立才切分。候选种类 `CandidateFormatSplit = "format_split"`，`Anchor.Scope = 目录`、`Anchor.Partition = "format:<格式键>"`；`stableAnchorPartition` 保留格式 partition，`VersionGroup = "format:" + 目录`。REST 的 `candidate_kind` 白名单接受 `format_split`，响应形状不变。`OrganizedCandidate.OriginalKind CandidateKind` 仅在 `format_split` 时从 bucket 的 `originalKind` 填入切分前种类，格式拆分候选同时保留 `BoxParentArtwork`，供第 4 档封面条件使用。格式版本按切分前的候选种类选择标题兜底：原 `box_leaf` 继承 Box 叶子的 Prefix 兜底及 `disc_dir_prefix_fallback_v1`，原普通目录仍走普通目录规则。
 - `OrganizedCandidate.VersionGroup string` 标识本次整理的版本批；`JoinGroupID string` 由 scanner 填，不由 organizer 生成。`PlannedVersionGroup(ctx context.Context, database queryer, scanID, rootID string, candidates []OrganizedCandidate) (string,error)` 返回已规划沿用 Release 的候选中候选键最小者所在的组，全部新建则为空；`ReleaseGroupOf(ctx context.Context, database queryer, releaseID string) (string,error)` 返回发行的组。查询错误向上传递，不伪造空组。
 - scanner 对 scope 内每个 `VersionGroup` 先定目标组，逐候选填 `JoinGroupID`、独立短事务写入；目标为空时从第一个成功写入发行取组，供后续新建版本使用。`persistOneCandidate` 返回 Release ID；仅 `plannedReleaseID == "" && JoinGroupID != ""` 时新建 Release 引用已有组而不新建组。沿用 Release 的组永不移动，即使管理员已把两个版本分到不同组。目标组读取或候选保存失败按 `catalog_write_failure` 令根不完整，已提交候选保留。
 - 新建版本引用已有组只取外键共享锁，不改组的 `default_release_id` / `edit_revision`，不额外调整代表版本或搬移人工修正；既有发行锁与反馈锁顺序仍按[扫描反馈合同](./scan-feedback-contracts.md)。没有新增迁移；② 的腾空旧组收藏转移照常生效。
