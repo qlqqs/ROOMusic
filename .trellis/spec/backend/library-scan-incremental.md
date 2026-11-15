@@ -12,7 +12,7 @@
 - `library` 拥有 `library_parse_cache`：主键 `(root_id, relative_path)`，路径使用 `ingest.NormalizedPath`；列为 `directory/source_size/source_modified_at/parser_version/observation/seen_scan_id/updated_at`，目录索引 `(root_id,directory)`；根外键级联删除。
 - `catalog/ingest` 拥有 `scan_candidate_states`：主键 `(root_id,candidate_key)`，列 `release_id/signature/updated_at`，签名约束为 64 位小写十六进制。`release_id` **不加外键**，避免 KEY SHARE 与发行/组锁顺序交叉。
 - `SourceObservation.ArtworkRelativePath string`（`artwork_relative_path,omitempty`）记录根内真实封面来源文件：物理/CUE 观察构建时填写，organizer 向 survivor 迁移内嵌封面时与 `ArtworkDeferred` 一起复制，延迟读取使用该路径而非 survivor 自身路径；仅属内部观察合同、不进入 REST，字段按字母序排列（2026-11-08 用户批准补充）。
-- `SourceObservation.ArtworkScope string`（`artwork_scope,omitempty`）是内嵌封面暂存去重键，由 `StageObservation` 写入：注册根内无专辑的散曲为 `path:<规范化相对路径>`，其余为 `dir:<观察目录>\x00<专辑证据>`（碟目录取碟目录本身），整体以 JSON 字符串编码存放，避免 NUL 进入 jsonb；organizer 向 survivor 迁移封面时同时复制。仅属内部观察合同，不进 REST（2026-11-15）。
+- `SourceObservation.ArtworkScope string`（`artwork_scope,omitempty`）是内嵌封面暂存去重键，由 `StageObservation` 写入：注册根内无专辑的散曲为 `path:<规范化相对路径>`，其余为 `dir:<观察目录>\x00<专辑证据>\x00<格式键>`（碟目录取碟目录本身；格式键与 `splitContinuousFormats` 共用 `observationFormat`，取小写 `Codec`，空则取相对路径扩展名小写去点），整体以 JSON 字符串编码存放，避免 NUL 进入 jsonb；organizer 向 survivor 迁移封面时同时复制。仅属内部观察合同，不进 REST（2026-11-15）。
 - `SourceObservation` 增加 `ArtworkDeferred bool`（`artwork_deferred,omitempty`）和 `ParserVersion string`（`parser_version,omitempty`），与现有字段按字母序排列。物理轨记录本文件解析器版本，CUE 虚拟轨记录父音频版本；CUE 虚拟轨本身不进入解析缓存。
 
 #### 缓存与延迟封面
@@ -24,7 +24,7 @@
 - 缓存只保存 parser 原始观察，不保存 organizer 推断结果；命中后仍经槽位按序构造并暂存观察，排空后执行 CUE 对齐、碟父目录标记和 organizer。文件名轨号、碟号、艺人每轮重新推断，不因解析缓存冻结；附属目录封面候选在保存阶段按当前过滤规则列举，只有候选需要重写时才读取封面。
 - 解析成功在槽位按序应用时于扫描 holder 上 upsert，写 `seen_scan_id=本次`；不等待候选提交，因为缓存只取决于源文件与解析器版本。失败不缓存；命中项应用时登记 seen，按有界批次更新，目录切换及根排空后刷新。
 - 遍历结束、未取消且无 `walk_error` 时清理本根 `seen_scan_id IS DISTINCT FROM 本次` 的缓存项，涵盖过滤、排除、删除和读失败来源；取消或目录读失败不清理。缓存读写/清理失败只记 WARN `library.scan.parse_cache_failed`，按未命中处理，不改变扫描完整性，不额外重试或引入替代存储。
-- 缓存命中且 MIME 非空时，观察置 `ArtworkDeferred=true`；`StageObservation` 在同一 `organization_scope` 且同一 `artwork_scope` 内去重，把 `artwork` 或 `artwork_deferred` 都算封面，后来者同时清除字节、MIME 与 deferred；因此同目录不同专辑、同一 Box 的不同叶子、严格多碟的每个碟目录各保留一份，同目录无专辑标签的散曲仍只留第一首。`EmbeddedArtworks()` 按碟序/曲序列出全部有字节或 deferred 的观察，`EmbeddedArtwork()` 返回其首个。
+- 缓存命中且 MIME 非空时，观察置 `ArtworkDeferred=true`；`StageObservation` 在同一 `organization_scope` 且同一 `artwork_scope` 内去重，把 `artwork` 或 `artwork_deferred` 都算封面，后来者同时清除字节、MIME 与 deferred；因此同目录不同专辑、同一 Box 的不同叶子、严格多碟的每个碟目录各按格式保留一份，同目录同专辑的不同格式版本各保留一份，同目录无专辑标签的散曲每种格式仍只留第一首。`EmbeddedArtworks()` 按碟序/曲序列出全部有字节或 deferred 的观察，`EmbeddedArtwork()` 返回其首个。
 - 保存候选封面时，deferred 观察经路径安全校验后现读音频取封面；读取失败记 `artwork_unreadable` 后继续下一首内嵌、再下一档文件夹封面；第 1 档精确名命中时不读 deferred（`artwork_deferred_loads` 只统计实际现读次数）。受管封面存储/绑定/清理失败仍阻断完整成功。候选被跳过时不触发 deferred 读取。
 
 #### 版本号与升版本规则
@@ -48,7 +48,7 @@
   1. `ingest.GroupingVersion` 与 `CandidateIdentity(root.ID,candidate.Anchor)`；
   2. 按相对路径字节序排列的成员：路径、大小、微秒 UTC mtime、`ParserVersion`；`LoadStagedScope` 从暂存专用列还原大小与时间，不能从不含这两项的 JSON 得到零值；
   3. 成员引用的 CUE sheet 去重排序后的相对路径、Lstat 大小与微秒 UTC mtime；
-  4. 共用 `listFolderArtworkCandidates` 分档列出的全部封面候选（含 `box_leaf` 的 Box 父目录档；歧义候选为空）相对路径、Lstat 大小与微秒 UTC mtime；
+  4. 共用 `listFolderArtworkCandidates` 分档列出的全部封面候选（含 `box_leaf` 及由它切分的 `format_split` 的 Box 父目录档；歧义候选为空）相对路径、Lstat 大小与微秒 UTC mtime；
   5. `candidateSourceDirectories()` 各目录内按名字字节序排列的普通 `.log`：目录、名字、Lstat 大小与微秒 UTC mtime；扩展名不区分大小写，不读日志内容，不含符号链接或其它非普通文件。
 - `d` 行为 `ingest.CandidateMetadataSignature(candidate) (string,error)`：对候选及其全部成员观察 JSON 作 SHA-256，map 键固定排序、切片保留次序。覆盖 `Artist/AlbumArtist/ArtistTagEvidence`、`Compilation`、`Credits{Role,Name,Detail,Source}`、`Work/MovementName/MovementNumber`、`Year/Lyrics/LyricsSource` 以及全部其他公开观察、字段决定、流派与碟轨位置。仅移除封面字节、`ArtworkDeferred` 和只用于新发行的 `JoinGroupID`；封面来源大小/mtime 仍由文件系统签名覆盖，内容指纹与身份由规划及 `CandidateUnchanged` 校验。摘要失败不跳过；复制成员后归一，不修改原候选。
 - `AssignWorks` 仅在候选写入时运行；签名覆盖其作品标签、标题、流派、碟轨顺序输入。未变跳过只 touch，保留已存作品列；任一输入变化就重写作品列，不额外在跳过路径调用作品写入。

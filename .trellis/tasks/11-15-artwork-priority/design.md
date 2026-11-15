@@ -86,6 +86,10 @@ else                             → key = "dir:" + loc.dir + "\x00" + album
 - 严格多碟专辑每张碟保留一份，数量以碟数为上限。
 - 普通目录里没有专辑标签的文件仍然只保留一份。
 
+审查后补充（2026-11-15，用户同意修复）：
+- 去重键末尾加格式段：`"dir:" + loc.dir + "\x00" + album + "\x00" + format`，`format` 取法与 `splitContinuousFormats` 一致（小写 `Codec`，空则取扩展名小写去点），抽成共用函数。同目录同专辑的 flac 与 mp3 版本（`format_split`）各保留一份内嵌封面，数量以格式数为上限。`path:` 键不变。
+- `OrganizedCandidate` 增加 `OriginalKind CandidateKind`，只在 `format_split` 时填写切分前的种类（来自 bucket 的 `originalKind`）。第 4 档 Box 父目录兜底的条件改为 `Kind == box_leaf`，或 `Kind == format_split && OriginalKind == box_leaf`。
+
 接受的边界：`same_dir_split` 里没有专辑标签、被逐文件拆开的散曲（`|@<path>` 分区）共享 `dir + ""` 这个键，只有第一首保留内嵌封面。这类散曲本来就没有可靠的专辑归属，不为它们放开内存上限。
 
 `ingest.OrganizedCandidate` 增加 `EmbeddedArtworks() []SourceObservation`，按碟序、曲序列出全部带图（有字节或 deferred）的观察。`EmbeddedArtwork()` 保留，改为返回其中第一个。

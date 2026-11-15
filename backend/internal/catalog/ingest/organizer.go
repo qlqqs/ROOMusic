@@ -58,6 +58,9 @@ type OrganizedCandidate struct {
 	CatalogNumber              string
 	Edition, Label, Barcode    string
 
+	// OriginalKind 仅 format_split 填写切分前种类。
+	OriginalKind CandidateKind
+
 	// VersionGroup 相同的候选是同一专辑的格式版本，写入时供调用方选择目标组。
 	VersionGroup string
 	// JoinGroupID 仅用于新建发行；已有发行的组保持不变。
@@ -796,6 +799,7 @@ func OrganizeObservations(observations []SourceObservation) []OrganizedCandidate
 		sort.Slice(obs, func(i, j int) bool { return observationSortKey(obs[i]) < observationSortKey(obs[j]) })
 		c := OrganizedCandidate{Anchor: CandidateAnchor{Kind: b.kind, Scope: b.scope, Partition: stableAnchorPartition(b.kind, b.partition, obs)}, ReleaseGroupKey: key, Mediums: map[int][]OrganizedTrack{}, MediumTitles: map[int]string{}}
 		if b.kind == CandidateFormatSplit {
+			c.OriginalKind = b.originalKind
 			c.VersionGroup = "format:" + b.scope
 		}
 		folderDecisionScope := b.scope
