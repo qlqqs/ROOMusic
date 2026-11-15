@@ -40,7 +40,7 @@ frontend/src/               # M1a 重建的 Classical 客户端（布局见前�
 frontend/e2e/               # Playwright 冒烟、无障碍与响应式检查
 frontend/DESIGN.md          # Classical 设计依据（第 1–4 节）；标注“M1a 实现”的条目是实际采用的值
 frontend/DESIGN-*.md        # 设计依据的第 5–7 节（components）与第 8–10 节（acceptance）
-frontend-desgin/            # 已入库原型及设计工具资产，保持原样
+docs/design/                # 已入库原型及设计工具资产，内容保持原样
 ```
 
 `backend/internal/*` 是现状（布局见[后端目录结构](../../.trellis/spec/backend/directory-structure.md)）；

@@ -163,4 +163,4 @@ every Track at once may compile but violates ownership, type, security, state,
 and scale contracts.
 
 See [Engineering Principles](../guides/engineering-principles.md) and the
-[Core 0 acceptance criteria](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md).
+Core 0 acceptance criteria（本机归档 `.trellis/tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md`）.

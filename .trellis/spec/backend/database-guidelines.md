@@ -248,7 +248,7 @@ complete and successful.
 - Treating Operation Journal, scan history, and runtime logs as one table.
 
 These rules implement the transaction and authority requirements in the
-[Core 0 PRD](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md).
+Core 0 PRD（本机归档 `.trellis/tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md`）.
 
 ### 并行测试的统计隔离
 

@@ -161,5 +161,5 @@ Subagent 响应当作执行已提交的证据。批准引用、执行状态和�
 - 把高基数 metrics 伪装成逐文件日志。
 - 声称 Redis 或 Meilisearch 健康状态是 Core 0 应用的必需条件。
 
-这些要求来自 [Core 0 可观测性合同](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md)
+这些要求来自 Core 0 可观测性合同（本机归档 `.trellis/tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md`）
 和仓库内的[大型音乐库产品背景](../guides/product-goals.md)。

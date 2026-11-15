@@ -1,6 +1,6 @@
 /*
  * 设计变量。
- * 色板、色阶、圆角与阴影取自设计稿 frontend-desgin/_ds/.../styles.css 的 :root，数值保持原样；
+ * 色板、色阶、圆角与阴影取自设计稿 docs/design/_ds/.../styles.css 的 :root，数值保持原样；
  * 字体、字阶、间距、语义文字色、控件边界、焦点环与布局是落地定义（见 frontend/DESIGN.md 第 3 节）。
  * 组件只引用这些变量，不各自复制近似值。
  */

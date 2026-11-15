@@ -1,4 +1,0 @@
-{"file": ".trellis/spec/backend/library-scan-verification.md", "reason": "扫描规则的案例与必需测试，含需同步修改的封面条目"}
-{"file": ".trellis/spec/backend/library-scan-grouping.md", "reason": "核对分档规则与规范一致"}
-{"file": ".trellis/spec/backend/library-scan-incremental.md", "reason": "核对版本升级与签名覆盖封面候选"}
-{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "检查质量门槛"}

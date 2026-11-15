@@ -25,11 +25,11 @@
 
 | 来源 | 用途与优先级 |
 | --- | --- |
-| [ROOMusic 原型](../frontend-desgin/ROOMusic%20原型.dc.html) | 当前画面组合与交互意图的首要依据；`view` 切换和定时器只是设计工具里的演示 |
-| [ROOMusic 设计探索](../frontend-desgin/ROOMusic%20设计探索.dc.html) | 十类界面的多种布局候选，编号 `1a`–`1u`；不能据此认定每个方向、字段和动作均已批准 |
-| [Sidebar](../frontend-desgin/Sidebar.dc.html)、[PlayerBar](../frontend-desgin/PlayerBar.dc.html) | 独立组件样张；与综合原型存在尺寸和控件差异，见布局表 |
-| [Classical styles.css](../frontend-desgin/_ds/classical-d3de10a0-5b67-4da7-b5b3-8d49f26a63f1/styles.css)、[设计系统说明](../frontend-desgin/_ds/classical-d3de10a0-5b67-4da7-b5b3-8d49f26a63f1/readme.md) | 原始色板、字体、间距、圆角、阴影和基础组件；页面的字体覆盖也必须一起读取 |
-| [原型同步记录](../frontend-desgin/github.md) | 保存设计导入时的历史状态；本文不修改该记录或原始资产 |
+| [ROOMusic 原型](../docs/design/roomusic-prototype.dc.html) | 当前画面组合与交互意图的首要依据；`view` 切换和定时器只是设计工具里的演示 |
+| [ROOMusic 设计探索](../docs/design/roomusic-design-exploration.dc.html) | 十类界面的多种布局候选，编号 `1a`–`1u`；不能据此认定每个方向、字段和动作均已批准 |
+| [Sidebar](../docs/design/Sidebar.dc.html)、[PlayerBar](../docs/design/PlayerBar.dc.html) | 独立组件样张；与综合原型存在尺寸和控件差异，见布局表 |
+| [Classical styles.css](../docs/design/_ds/classical-d3de10a0-5b67-4da7-b5b3-8d49f26a63f1/styles.css)、[设计系统说明](../docs/design/_ds/classical-d3de10a0-5b67-4da7-b5b3-8d49f26a63f1/readme.md) | 原始色板、字体、间距、圆角、阴影和基础组件；页面的字体覆盖也必须一起读取 |
+| [原型同步记录](../docs/design/github.md) | 保存设计导入时的历史状态；本文不修改该记录或原始资产 |
 | [产品目标](../.trellis/spec/guides/product-goals.md)、[前端规范](../.trellis/spec/frontend/index.md) | 后端权威、源文件只读、数据与组件责任；视觉样张不能覆盖这些合同 |
 | [Core 1 路线](../docs/architecture/core-1-roadmap.md) | 批准边界、现有能力及 2026-09-28 已批准的阶段顺序与依赖；不能把路线图当作各阶段的实施授权 |
 | [前端基础 ADR](../docs/architecture/adr/0001-frontend-foundations.md)、[媒体交付 ADR](../docs/architecture/adr/0004-media-delivery.md)（均为部分批准） | Router/Query、样式组织、字体分发及真实播放方案的决策入口；已批准项见各自“决策记录”，其余未批准前不锁定实现 |

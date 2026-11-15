@@ -94,7 +94,7 @@ Core 0 is the smallest useful local-library loop:
    first reversible example.
 
 The authoritative acceptance behavior is in the current
-[Core 0 PRD](../../tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md).
+Core 0 PRD（本机归档 `.trellis/tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md`）.
 
 ## 2026-09-28 当前状态与 Core 1 范围
 

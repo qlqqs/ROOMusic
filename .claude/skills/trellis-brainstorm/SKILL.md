@@ -58,7 +58,21 @@ Use a concise title from the user's request. Both the title and `--description` 
 6. When no user-owned decision remains, create or update `design.md` and `implement.md` for complex tasks.
 7. Run the requirement convergence gate, then the PRD convergence pass.
 8. Present the final planning summary and stop. Do not run `task.py start` or edit product code in the same turn.
-9. Only a subsequent user message that explicitly approves the latest planning summary authorizes `task.py start` and implementation. If the artifacts change materially after approval, repeat the final review.
+9. For the human-selection route, wait for a subsequent user message that explicitly approves the latest planning summary. For the sub-agent-selection route, complete and record the review/recommendation, then still wait for a subsequent explicit implementation approval before `task.py start`. If the artifacts change materially after approval, repeat the final review.
+
+## Final Planning Decision
+
+Every invocation is a planning pass and must end with an explicit decision
+selection record. Use exactly one route:
+
+- **Human selection:** present the final planning summary and wait for explicit
+  approval in a subsequent turn.
+- **Sub-agent selection:** have one or more planning sub-agents review the
+  candidate plan, select the recommendation, and record the sub-agent names and
+  rationale. This review does not authorize implementation by itself.
+
+Record the route, selector, selected outcome, and rationale in the final summary
+and `prd.md` before `task.py start`.
 
 Do not invent a project-specific product/spec hierarchy. If the repository already has product, domain, or spec docs, use them. If it does not, proceed with the evidence that exists.
 
