@@ -3,6 +3,7 @@ import { basename, dirname, join } from "node:path";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { decodeReleaseGroupDetail } from "../../src/features/catalog/api/decoders";
 import { decodeCorrectionState, decodeOperationPage } from "../../src/features/governance/api/decoders";
+import { albumMoreButton, chooseAlbumAction, openMenu } from "../support/album";
 import { admin, body, catalog, decodeID, fixtureRoot, login, origin, post, prepareLibrary, scan, syntheticWav } from "./support";
 
 // 阶段 M3 的真实服务用例：隔离服务、隔离 PostgreSQL、真实 Chromium。素材是本用例自己生成的合成 WAV（带专辑标签），
@@ -72,7 +73,7 @@ async function titleField(request: APIRequestContext, releaseId: string) {
 test("页面上修改标题：重新扫描之后仍是修正值而扫描值随文件更新；在操作记录页撤销后回到现在的扫描值", async ({ page }) => {
   await page.goto(`/albums/${alphaAlbum.groupId}`);
   await expect(level1(page, alpha.album)).toBeVisible();
-  await page.getByRole("button", { name: "编辑发行信息" }).click();
+  await chooseAlbumAction(page, "编辑发行信息");
   const dialog = page.getByRole("dialog", { name: "编辑发行信息" });
   await dialog.getByRole("group", { name: /^标题/ }).getByRole("radio", { name: "自定义" }).check();
   await dialog.getByRole("textbox", { name: "标题（自定义）" }).fill(corrected);
@@ -118,7 +119,7 @@ test("页面上修改标题：重新扫描之后仍是修正值而扫描值随�
 test("把两张合成专辑归到一起：一个组两个版本，重新扫描后仍是一组；在“修改记录”里撤销后分开", async ({ page }) => {
   await page.goto(`/albums/${alphaAlbum.groupId}`);
   await expect(level1(page, remastered)).toBeVisible();
-  await page.getByRole("button", { name: "归入其他专辑…" }).click();
+  await chooseAlbumAction(page, "归入其他专辑…");
   const dialog = page.getByRole("dialog", { name: "把这个版本归入其他专辑" });
   await dialog.getByRole("textbox", { name: "搜索专辑" }).fill(beta.album);
   await dialog.getByRole("textbox", { name: "搜索专辑" }).press("Enter");
@@ -175,8 +176,11 @@ test("普通成员没有任何编辑入口与操作记录，接口也拒绝：40
   await expect(page.getByRole("navigation", { name: "设置", exact: true }).getByRole("link", { name: "操作记录", exact: true })).toHaveCount(0);
   await page.goto(`/albums/${alphaAlbum.groupId}`);
   await expect(level1(page, remastered)).toBeVisible();
-  await expect(page.getByRole("button", { name: "编辑发行信息" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "归入其他专辑…" })).toHaveCount(0);
+  await albumMoreButton(page).click();
+  await expect(openMenu(page)).toBeVisible();
+  await expect(openMenu(page).getByRole("menuitem", { name: "编辑发行信息" })).toHaveCount(0);
+  await expect(openMenu(page).getByRole("menuitem", { name: "归入其他专辑…" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
   await expect(page.locator("summary", { hasText: "修改记录" })).toHaveCount(0);
   // 成员照常浏览专辑：详情与只读的来源与证据都在。
   await expect(page.getByText("来源与证据", { exact: true })).toBeVisible();

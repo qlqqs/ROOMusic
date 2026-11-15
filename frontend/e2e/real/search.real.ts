@@ -53,6 +53,7 @@ test.describe("真实搜索规范化", () => {
       const row = page.getByRole("row").filter({ has: page.getByText(item.title, { exact: true }) });
       const heart = row.getByRole("button", { name: `收藏《${item.title}》`, exact: true });
       await expect(heart).toHaveAttribute("aria-pressed", "false");
+      await row.hover();
       await heart.click();
       await expect(heart).toHaveAttribute("aria-pressed", "true");
       // 等服务端读回落盘结果，不能只把乐观心形当作成功；刷新后仍在搜索页验证。
@@ -60,6 +61,7 @@ test.describe("真实搜索规范化", () => {
       await page.reload();
       await expect(heart).toHaveAttribute("aria-pressed", "true");
       await expect(heart).toBeEnabled();
+      await row.hover();
       await row.getByRole("button", { name: /^播放 / }).click();
       await expect.poll(async () => (await mediaState(page))?.paused).toBe(false);
       await expect.poll(async () => (await mediaState(page))?.time).toBeGreaterThan(0);

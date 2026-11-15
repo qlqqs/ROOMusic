@@ -3,6 +3,7 @@ import { basename, dirname, join } from "node:path";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { decodeReleaseDetail, decodeReleaseGroupDetail } from "../../src/features/catalog/api/decoders";
 import { decodeOperationPage } from "../../src/features/governance/api/decoders";
+import { albumMoreButton, chooseAlbumAction, openMenu } from "../support/album";
 import { body, catalog, decodeID, fixtureRoot, login, origin, post, prepareLibrary, scan, syntheticWav } from "./support";
 
 // M4 默认版本与版本对比的真实服务用例：隔离服务、隔离 PostgreSQL、真实 Chromium。素材是本用例自己生成的两张合成 WAV：
@@ -92,13 +93,15 @@ test("页面上设为默认版本：打开专辑与专辑列表都先显示它�
   await expect(versionNav(page).getByText("默认版本")).toHaveCount(0);
   await versionNav(page).getByRole("link", { name: /^版本 2 / }).click();
   await expect(level1(page, hires.album)).toBeVisible();
-  await page.getByRole("button", { name: "设为默认版本" }).click();
+  await chooseAlbumAction(page, "设为默认版本");
   await expect(page.getByText("已把这个版本设为默认版本。")).toBeVisible();
 
   // 页面停在刚才的版本；它成为代表版本，排在版本导航第一位并带标签。
   await expect(level1(page, hires.album)).toBeVisible();
   await expect(versionNav(page).getByRole("link", { name: /^版本 1 默认版本/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: "改回自动选择" })).toBeVisible();
+  await albumMoreButton(page).click();
+  await expect(openMenu(page).getByRole("menuitem", { name: "改回自动选择", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
   const detail = await group(page.request);
   expect(detail).toMatchObject({ revision: 2, default_release_id: hiresAlbum.releaseId });
   expect(detail.releases.map((release) => release.id)).toEqual([hiresAlbum.releaseId, standardAlbum.releaseId]);
@@ -197,8 +200,11 @@ test("普通成员：看得到标签并能打开对比，没有设定入口，�
   await page.goto(`/albums/${groupId}`);
   await expect(level1(page, hires.album)).toBeVisible();
   await expect(versionNav(page).getByRole("link", { name: /^版本 1 默认版本/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: "设为默认版本" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "改回自动选择" })).toHaveCount(0);
+  await albumMoreButton(page).click();
+  await expect(openMenu(page)).toBeVisible();
+  await expect(openMenu(page).getByRole("menuitem", { name: "设为默认版本" })).toHaveCount(0);
+  await expect(openMenu(page).getByRole("menuitem", { name: "改回自动选择" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
   await expect(page.locator("summary", { hasText: "修改记录" })).toHaveCount(0);
   await page.getByRole("button", { name: "对比版本" }).click();
   await expect(page.getByRole("dialog", { name: "对比版本" }).getByRole("table", { name: "各个版本的对比" })).toBeVisible();
