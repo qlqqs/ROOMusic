@@ -36,13 +36,14 @@ type queryer interface {
 // 已有的规划结果。调用方必须先校验 observation 里的相对路径与 CUE 引用是安全的（路径校验属于 library）。
 func StageObservation(ctx context.Context, database StagingDB, scanID, rootID string, observation SourceObservation) error {
 	scope := OrganizationScope(observation)
-	// 每个逻辑 scope 只暂存一份确定性的 embedded artwork；folder artwork 要等到
-	// Release id 确定后再发现和绑定。
+	observation.ArtworkScope = artworkScope(observation)
+	// 每个目录与专辑只保留一份内嵌封面，碟目录各自保留。
 	if len(observation.Artwork) > 0 || observation.ArtworkDeferred {
 		var alreadyStaged bool
 		if err := database.QueryRowContext(ctx, `SELECT EXISTS (
 			SELECT 1 FROM scan_observations WHERE scan_run_id=$1::uuid AND root_id=$2::uuid
-			AND organization_scope=$3 AND (observation ? 'artwork' OR observation ? 'artwork_deferred'))`, scanID, rootID, scope).Scan(&alreadyStaged); err != nil {
+			AND organization_scope=$3 AND observation->>'artwork_scope'=$4
+			AND (observation ? 'artwork' OR observation ? 'artwork_deferred'))`, scanID, rootID, scope, observation.ArtworkScope).Scan(&alreadyStaged); err != nil {
 			return err
 		}
 		if alreadyStaged {

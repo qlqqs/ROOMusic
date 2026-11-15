@@ -1090,15 +1090,32 @@ func resolveCueCandidateGroups(observations []SourceObservation) []SourceObserva
 				survivors[index] = mergeSingleCueEvidence(survivors[index], group.cues)
 			}
 		}
-		if len(survivors) > 0 && len(survivors[0].Artwork) == 0 && !survivors[0].ArtworkDeferred {
-			for _, member := range members {
-				if len(member.Artwork) > 0 || member.ArtworkDeferred {
-					survivors[0].Artwork = append([]byte(nil), member.Artwork...)
-					survivors[0].ArtworkMIME = member.ArtworkMIME
-					survivors[0].ArtworkDeferred = member.ArtworkDeferred
-					survivors[0].ArtworkRelativePath = member.ArtworkRelativePath
-					break
+		// 按原暂存键保留封面；被 CUE 淘汰的来源迁移到尚无封面的幸存曲目。
+		artworkScopes := map[string]bool{}
+		for _, survivor := range survivors {
+			if len(survivor.Artwork) > 0 || survivor.ArtworkDeferred {
+				artworkScopes[observationArtworkScope(survivor)] = true
+			}
+		}
+		for _, member := range members {
+			if len(member.Artwork) == 0 && !member.ArtworkDeferred {
+				continue
+			}
+			scope := observationArtworkScope(member)
+			if artworkScopes[scope] {
+				continue
+			}
+			for index := range survivors {
+				if len(survivors[index].Artwork) > 0 || survivors[index].ArtworkDeferred {
+					continue
 				}
+				survivors[index].Artwork = append([]byte(nil), member.Artwork...)
+				survivors[index].ArtworkMIME = member.ArtworkMIME
+				survivors[index].ArtworkDeferred = member.ArtworkDeferred
+				survivors[index].ArtworkRelativePath = member.ArtworkRelativePath
+				survivors[index].ArtworkScope = scope
+				artworkScopes[scope] = true
+				break
 			}
 		}
 		for _, survivor := range survivors {
@@ -1308,4 +1325,11 @@ func cueParentPath(observation SourceObservation) string {
 func CandidateIdentity(root string, a CandidateAnchor) string {
 	// Partition 只使用安全的相对来源区分符，不包含展示标题。
 	return fmt.Sprintf("%s:v2:%s:%s:%s", metadata.NormalizeValue(root), a.Kind, NormalizedPath(a.Scope), NormalizedPath(a.Partition))
+}
+
+func observationArtworkScope(observation SourceObservation) string {
+	if observation.ArtworkScope != "" {
+		return observation.ArtworkScope
+	}
+	return artworkScope(observation)
 }

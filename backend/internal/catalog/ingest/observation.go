@@ -22,6 +22,7 @@ type SourceObservation struct {
 	ArtworkDeferred       bool                         `json:"artwork_deferred,omitempty"`
 	ArtworkMIME           string                       `json:"artwork_mime,omitempty"`
 	ArtworkRelativePath   string                       `json:"artwork_relative_path,omitempty"`
+	ArtworkScope          string                       `json:"artwork_scope,omitempty"`
 	Barcode               string                       `json:"barcode,omitempty"`
 	BitDepth              int                          `json:"bit_depth,omitempty"`
 	Bitrate               int                          `json:"bitrate,omitempty"`

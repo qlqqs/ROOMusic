@@ -20,8 +20,8 @@ type ScanFeedback interface {
 }
 
 // SaveWithFeedback 先准备文件，再原子提交关联与扫描记账，最后清理不再引用的旧文件。
-func (s *Store) SaveWithFeedback(ctx context.Context, database TxBeginner, releaseID string, data []byte, mimeType, sourceType string, feedback ScanFeedback) error {
-	prepared, err := s.prepare(data, mimeType)
+func (s *Store) SaveWithFeedback(ctx context.Context, database TxBeginner, releaseID string, data []byte, sourceType string, feedback ScanFeedback) error {
+	prepared, err := s.prepare(data)
 	if err != nil {
 		return err
 	}

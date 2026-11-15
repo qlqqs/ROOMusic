@@ -224,14 +224,24 @@ func (candidate OrganizedCandidate) orderedTracks() []OrganizedTrack {
 	return tracks
 }
 
-// EmbeddedArtwork 返回按碟序、曲序第一首带内嵌封面的曲目观察；没有则 ok 为 false。
-func (candidate OrganizedCandidate) EmbeddedArtwork() (SourceObservation, bool) {
+// EmbeddedArtworks 按碟序、曲序列出所有带内嵌封面字节或延迟来源的曲目观察。
+func (candidate OrganizedCandidate) EmbeddedArtworks() []SourceObservation {
+	var observations []SourceObservation
 	for _, track := range candidate.orderedTracks() {
 		if len(track.Observation.Artwork) > 0 || track.Observation.ArtworkDeferred {
-			return track.Observation, true
+			observations = append(observations, track.Observation)
 		}
 	}
-	return SourceObservation{}, false
+	return observations
+}
+
+// EmbeddedArtwork 返回按碟序、曲序第一首带内嵌封面的曲目观察；没有则 ok 为 false。
+func (candidate OrganizedCandidate) EmbeddedArtwork() (SourceObservation, bool) {
+	observations := candidate.EmbeddedArtworks()
+	if len(observations) == 0 {
+		return SourceObservation{}, false
+	}
+	return observations[0], true
 }
 
 // ArtworkDirectories 返回查找文件夹封面的目录（相对注册根，已规范化并去重，空串表示注册根）：

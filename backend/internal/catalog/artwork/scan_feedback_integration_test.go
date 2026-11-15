@@ -65,7 +65,7 @@ func TestPostgreSQLScanFeedbackArtworkChanges(t *testing.T) {
 			if step.remove {
 				err = store.RemoveWithFeedback(ctx, db, release, f)
 			} else {
-				err = store.SaveWithFeedback(ctx, db, release, data, "image/gif", "embedded", f)
+				err = store.SaveWithFeedback(ctx, db, release, data, "embedded", f)
 			}
 			if err != nil {
 				t.Fatal(err)
@@ -83,7 +83,7 @@ func TestPostgreSQLScanFeedbackArtworkChanges(t *testing.T) {
 		exec(`CREATE FUNCTION reject_artwork_feedback() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'feedback fault'; END $$`)
 		exec(`CREATE TRIGGER reject_artwork_feedback BEFORE INSERT ON scan_catalog_changes FOR EACH ROW EXECUTE FUNCTION reject_artwork_feedback()`)
 		_, f := newScan()
-		if err := store.SaveWithFeedback(ctx, db, release, data, "image/gif", "embedded", f); err != nil {
+		if err := store.SaveWithFeedback(ctx, db, release, data, "embedded", f); err != nil {
 			t.Fatal(err)
 		}
 		if !f.Broken() {
@@ -104,7 +104,7 @@ func TestPostgreSQLScanFeedbackArtworkChanges(t *testing.T) {
 	t.Run("core failure cleans unreferenced file", func(t *testing.T) {
 		_, f := newScan()
 		different := append(append([]byte(nil), data...), byte(99))
-		if err := store.SaveWithFeedback(ctx, db, uuid.New(), different, "image/gif", "embedded", f); err == nil {
+		if err := store.SaveWithFeedback(ctx, db, uuid.New(), different, "embedded", f); err == nil {
 			t.Fatal("missing release accepted")
 		}
 		var count int

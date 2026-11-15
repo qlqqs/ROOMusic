@@ -29,7 +29,7 @@ func seedArtwork(t *testing.T, application *integrationTestApplication) (string,
 		t.Fatalf("encode artwork fixture: %v", err)
 	}
 	data := encoded.Bytes()
-	if err := artwork.NewStore(application.dataDirectory).Save(context.Background(), application.database, releaseID, data, "image/png", "embedded"); err != nil {
+	if err := artwork.NewStore(application.dataDirectory).Save(context.Background(), application.database, releaseID, data, "embedded"); err != nil {
 		t.Fatalf("save artwork fixture: %v", err)
 	}
 	return fmt.Sprintf("%x.png", sha256.Sum256(data)), data

@@ -81,8 +81,8 @@ func safeStorageKey(key string) bool {
 // Save 校验封面字节并保存为 Release 的受管封面：内容寻址写入数据目录，再写 release_artworks 关联，
 // 关联写入失败时清理刚写入的文件，替换旧封面后清理不再被引用的旧文件。
 // sourceType 记录来源（"embedded" 或 "folder"）；调用方负责取得字节。
-func (s *Store) Save(ctx context.Context, executor Executor, releaseID string, data []byte, mimeType, sourceType string) error {
-	prepared, err := s.describe(data, mimeType)
+func (s *Store) Save(ctx context.Context, executor Executor, releaseID string, data []byte, sourceType string) error {
+	prepared, err := s.describe(data)
 	if err != nil {
 		return err
 	}
@@ -134,16 +134,10 @@ func ValidateImage(data []byte) (string, error) {
 }
 
 // describe 只校验字节并确定内容寻址资源，不接触文件或数据库。
-func (s *Store) describe(data []byte, mimeType string) (preparedArtwork, error) {
-	detectedMIME, err := ValidateImage(data)
+func (s *Store) describe(data []byte) (preparedArtwork, error) {
+	mimeType, err := ValidateImage(data)
 	if err != nil {
 		return preparedArtwork{}, err
-	}
-	if mimeType == "" {
-		mimeType = detectedMIME
-	}
-	if mimeType != detectedMIME {
-		return preparedArtwork{}, fmt.Errorf("unsupported artwork")
 	}
 	width, height := dimensions(data, mimeType)
 	hash := fmt.Sprintf("%x", sha256.Sum256(data))
@@ -152,8 +146,8 @@ func (s *Store) describe(data []byte, mimeType string) (preparedArtwork, error) 
 }
 
 // prepare 在取得发行/组锁之前完成校验和受管文件 I/O。
-func (s *Store) prepare(data []byte, mimeType string) (preparedArtwork, error) {
-	prepared, err := s.describe(data, mimeType)
+func (s *Store) prepare(data []byte) (preparedArtwork, error) {
+	prepared, err := s.describe(data)
 	if err != nil {
 		return preparedArtwork{}, err
 	}

@@ -142,10 +142,10 @@ func TestPostgreSQLStrictMultiDiscFallsBackToDiscFolderArtwork(t *testing.T) {
 	assertArtworks(t, fixture, root, "folder:image/png:6")
 }
 
-func TestPostgreSQLBoxLeafDoesNotUseBoxParentArtwork(t *testing.T) {
+func TestPostgreSQLBoxLeafFallsBackToBoxParentArtwork(t *testing.T) {
 	fixture := newLibraryFixture(t)
 	root := insertScannerRoot(t, fixture, "box-leaf-artwork")
-	// 专辑标签冲突使两碟保持独立的 Box 叶子，不按带缺口碟号合并；Box 目录里的封面不属于任何一张碟。
+	// 专辑标签冲突使两碟保持独立的 Box 叶子，不按带缺口碟号合并；Box 目录里的封面作为缺少自身封面的叶子的最后兜底。
 	writeScanFixtureFile(t, root, "Box/Disc 1/01.flac", taggedTrack(t, 1, 1, "Set"))
 	writeScanFixtureFile(t, root, "Box/Disc 3/01.flac", taggedTrack(t, 3, 3, "Other Set"))
 	writeScanFixtureFile(t, root, "Box/cover.png", pngArtworkOfWidth(7))
@@ -153,17 +153,17 @@ func TestPostgreSQLBoxLeafDoesNotUseBoxParentArtwork(t *testing.T) {
 
 	scanFixtureRoot(t, fixture, root)
 	assertDatabaseCount(t, fixture, `SELECT COUNT(*) FROM releases WHERE source_root_id=$1::uuid`, 2, root.ID)
-	assertArtworks(t, fixture, root, "folder:image/png:8")
+	assertArtworks(t, fixture, root, "folder:image/png:7", "folder:image/png:8")
 }
 
-func TestPostgreSQLEmbeddedArtworkOutranksFolderArtwork(t *testing.T) {
+func TestPostgreSQLExactFolderArtworkOutranksEmbeddedArtwork(t *testing.T) {
 	fixture := newLibraryFixture(t)
-	root := insertScannerRoot(t, fixture, "embedded-over-folder")
+	root := insertScannerRoot(t, fixture, "folder-over-embedded")
 	application := scannerTestApplication(fixture)
 	writeScanFixtureFile(t, root, "Album/cover.png", pngArtworkOfWidth(3))
 	observation := ingest.SourceObservation{RelativePath: "Album/01.flac", Directory: "Album", Title: "Track", Album: "Release", Artist: "Artist", TrackNumber: 1, DiscNumber: 1, SourceKind: "flac_vorbis_comment", Artwork: pngArtworkOfWidth(9), ArtworkMIME: "image/png"}
 	if err := persistTestObservations(context.Background(), application, fixture, insertRunningScan(t, fixture), root, observation); err != nil {
 		t.Fatalf("persist embedded artwork: %v", err)
 	}
-	assertArtworks(t, fixture, root, "embedded:image/png:9")
+	assertArtworks(t, fixture, root, "folder:image/png:3")
 }

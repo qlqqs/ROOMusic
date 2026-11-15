@@ -441,7 +441,7 @@ func TestPostgreSQLManagedArtworkIsRevalidatedAndCleanupErrorsPropagate(t *testi
 	if err := os.WriteFile(originalPath, []byte("corrupt"), 0o640); err != nil {
 		t.Fatalf("corrupt managed artwork: %v", err)
 	}
-	if err := application.saveArtworkForRelease(context.Background(), fixture.database, scanID, releaseID, root, singleTrackCandidate(observation)); err != nil {
+	if err := application.saveArtworkForRelease(context.Background(), fixture.database, scanID, releaseID, root, singleTrackCandidate(observation), &incrementalStats{}); err != nil {
 		t.Fatalf("repair managed artwork: %v", err)
 	}
 	repaired, err := os.ReadFile(originalPath)
@@ -460,7 +460,7 @@ func TestPostgreSQLManagedArtworkIsRevalidatedAndCleanupErrorsPropagate(t *testi
 	}
 	replacement := append(append([]byte(nil), artwork...), 0)
 	observation.Artwork = replacement
-	if err := application.saveArtworkForRelease(context.Background(), fixture.database, scanID, releaseID, root, singleTrackCandidate(observation)); err == nil || !strings.Contains(err.Error(), "remove replaced artwork") {
+	if err := application.saveArtworkForRelease(context.Background(), fixture.database, scanID, releaseID, root, singleTrackCandidate(observation), &incrementalStats{}); err == nil || !strings.Contains(err.Error(), "remove replaced artwork") {
 		t.Fatalf("old artwork cleanup error was discarded: %v", err)
 	}
 }
