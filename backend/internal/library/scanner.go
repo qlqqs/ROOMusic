@@ -1171,8 +1171,7 @@ func listFolderArtworkCandidates(root registeredRoot, candidate ingest.Organized
 				return
 			}
 		}
-		if candidate.Anchor.Kind != ingest.CandidateBoxLeaf &&
-			!(candidate.Anchor.Kind == ingest.CandidateFormatSplit && candidate.OriginalKind == ingest.CandidateBoxLeaf) {
+		if !candidate.BoxParentArtwork {
 			return
 		}
 		parent := ingest.NormalizedPath(pathpkg.Dir(candidate.Anchor.Scope))

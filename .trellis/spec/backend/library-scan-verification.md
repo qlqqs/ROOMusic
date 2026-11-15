@@ -21,7 +21,7 @@
 - 正确：已存在的 content-addressed 封面文件被破坏后，完整重扫或候选重写时按期望字节修复；旧 key
   清理失败返回 `artwork_failure`，不报告成功。
 - 正确：CUE 专辑目录里的 `cover.png` 被绑定；严格多碟专辑父目录里的 `Cover.JPG` 被绑定；Box 叶子缺自身封面与内嵌封面时，
-  绑定 Box 父目录精确名封面；发行目录的 `cover.jpg` 优先于内嵌，内嵌优先于 `frontier.jpg`、`scans/front.jpg`；艺人目录封面不向下继承；
+  仅在 Box 父目录独占时绑定其精确名封面（格式拆分叶子同样适用，注册根不兜底）；发行目录的 `cover.jpg` 优先于内嵌，内嵌优先于 `frontier.jpg`、`scans/front.jpg`；艺人目录封面不向下继承；
   同目录两张专辑只用各自内嵌封面，没有内嵌的那张不绑定；封面后来才放进目录，下一次扫描即绑定。
 - 错误：把 root 原始路径放入列表 JSON；unsupported 文件令根不完整，或把它已有的曲目置 missing；把 FIFO 交给 parser；按标题删除 CUE 轨。
 
@@ -62,7 +62,7 @@
   指纹复用与失败）与 Release 成员关系匹配、
   current evidence/track credits 替换、Track artist canonical 展示、受管封面内容重校验、
   旧 key 清理错误传播和绑定失败清理，封面发现（CUE 含重扫、严格多碟父目录、父目录与碟目录都有、回退到碟目录、
-  Box 叶子回退 Box 父目录、精确名优先于内嵌、内嵌优先于 front、上级目录不继承、同目录多专辑只用内嵌、坏图逐档回退、
+  Box 叶子仅回退独占 Box 父目录（普通兄弟目录、父目录直接音频与更深层音频阻止兜底，增量重扫重算独占状态）、精确名优先于内嵌、内嵌优先于 front、上级目录不继承、同目录多专辑只用内嵌、坏图逐档回退、
   声明 MIME 不一致仍按探测保存、版本升级后增量重选），暂存内嵌封面去重（根内散曲逐文件、目录+专辑、严格多碟每碟目录）。
   解析单元另覆盖 FLAC PICTURE、`METADATA_BLOCK_PICTURE`（含 Opus 超 1 MiB）、APIC/PICTURE 正面优先否则首张、M4A 首个 covr、WAV `id3 ` 块与 INFO 补缺。
 

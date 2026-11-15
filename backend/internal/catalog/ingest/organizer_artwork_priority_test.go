@@ -6,6 +6,90 @@ import (
 	"testing"
 )
 
+// 全根独占标记与原始父目录观察都满足时，Box 叶子才允许使用父目录封面。
+func TestArtworkPriorityBox父目录封面要求独占(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		exclusive [2]bool
+		extraPath string
+		want      bool
+	}{
+		{"仅碟目录且均有独占标记", [2]bool{true, true}, "", true},
+		{"普通兄弟目录音频阻止兜底", [2]bool{true, true}, "Box/普通专辑/other.flac", false},
+		{"父目录直接音频阻止兜底", [2]bool{true, true}, "Box/direct.flac", false},
+		{"缺少独占标记", [2]bool{false, false}, "", false},
+		{"部分观察缺少独占标记", [2]bool{true, false}, "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			first := artworkPriorityObservation(t, "Box/Disc 1/first.flac", "专辑甲", 4, false)
+			second := artworkPriorityObservation(t, "Box/Disc 3/second.flac", "专辑乙", 8, false)
+			first.DiscNumber, second.DiscNumber = 1, 3
+			first.TrackNumber, second.TrackNumber = 1, 1
+			first.DiscParentExclusive, second.DiscParentExclusive = tc.exclusive[0], tc.exclusive[1]
+			items := []SourceObservation{first, second}
+			if tc.extraPath != "" {
+				items = append(items, artworkPriorityObservation(t, tc.extraPath, "普通专辑", 12, false))
+			}
+			got := OrganizeObservations(items)
+			if len(got) != len(items) {
+				t.Fatalf("各目录应独立形成候选：实际=%d，期望=%d", len(got), len(items))
+			}
+			leaves := 0
+			for _, candidate := range got {
+				if candidate.Anchor.Scope != first.Directory && candidate.Anchor.Scope != second.Directory {
+					if candidate.BoxParentArtwork {
+						t.Error("普通候选不应开启 Box 父目录封面兜底")
+					}
+					continue
+				}
+				leaves++
+				if candidate.Anchor.Kind != CandidateBoxLeaf || candidate.BoxParentArtwork != tc.want {
+					t.Errorf("%s：候选类型=%s，父目录兜底=%t，期望 box_leaf/%t", candidate.Anchor.Scope, candidate.Anchor.Kind, candidate.BoxParentArtwork, tc.want)
+				}
+			}
+			if leaves != 2 {
+				t.Fatalf("应保留两个 Box 叶子，实际=%d", leaves)
+			}
+		})
+	}
+}
+
+func TestArtworkPriority格式拆分Box叶子保留父目录封面标记(t *testing.T) {
+	flac := artworkPriorityObservation(t, "Box/Disc 1/01.flac", "专辑甲", 4, false)
+	mp3 := artworkPriorityObservation(t, "Box/Disc 1/01.mp3", "专辑甲", 8, false)
+	other := artworkPriorityObservation(t, "Box/Disc 3/other.flac", "专辑乙", 12, false)
+	items := []SourceObservation{flac, mp3, other}
+	for i := range items {
+		items[i].TrackNumber = 1
+		items[i].DiscNumber = 1
+		items[i].DiscParentExclusive = true
+	}
+	items[2].DiscNumber = 3
+	got := OrganizeObservations(items)
+	if len(got) != 3 {
+		t.Fatalf("格式拆分叶子应形成两个版本，并保留另一个叶子，实际候选数=%d", len(got))
+	}
+	formats := map[string]bool{}
+	for _, candidate := range got {
+		if !candidate.BoxParentArtwork {
+			t.Errorf("%s：独占父目录封面标记丢失", candidate.Anchor.Scope)
+		}
+		if candidate.Anchor.Scope == other.Directory {
+			if candidate.Anchor.Kind != CandidateBoxLeaf {
+				t.Errorf("未拆分叶子类型=%s，期望 box_leaf", candidate.Anchor.Kind)
+			}
+			continue
+		}
+		if candidate.Anchor.Scope != flac.Directory || candidate.Anchor.Kind != CandidateFormatSplit || candidate.OriginalKind != CandidateBoxLeaf {
+			t.Errorf("格式拆分叶子锚点或原类型不符：锚点=%+v，原类型=%s", candidate.Anchor, candidate.OriginalKind)
+		}
+		formats[candidate.Anchor.Partition] = true
+	}
+	if !reflect.DeepEqual(formats, map[string]bool{"format:flac": true, "format:mp3": true}) {
+		t.Errorf("格式版本不符：%v", formats)
+	}
+}
+
 // 多轨 CUE 淘汰两个物理父来源后，按原始封面范围迁移，并保留幸存曲目已有的图片。
 func TestArtworkPriorityCUE合并按原封面范围迁移(t *testing.T) {
 	for _, deferred := range []bool{false, true} {

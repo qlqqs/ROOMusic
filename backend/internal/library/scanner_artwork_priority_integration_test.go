@@ -135,6 +135,63 @@ func TestPostgreSQLArtworkPriorityBox叶子各用内嵌封面(t *testing.T) {
 	}
 }
 
+// Box 父目录自身有音频时，即使存在精确名封面，碟目录叶子也不能继承。
+func TestPostgreSQLArtworkPriorityBox父目录直接音频阻止兜底(t *testing.T) {
+	fixture := newLibraryFixture(t)
+	root := insertScannerRoot(t, fixture, "artwork-priority-box-direct")
+	service, logs := newIncrementalTestService(t, fixture)
+	cover := jpegArtworkOfWidth(7)
+	writeArtworkPriorityFLAC(t, root, "Box/Disc 1/first.flac", "专辑甲", 1, 1, nil)
+	writeArtworkPriorityFLAC(t, root, "Box/Disc 3/second.flac", "专辑乙", 3, 2, nil)
+	writeArtworkPriorityFLAC(t, root, "Box/direct.flac", "父目录专辑", 1, 3, nil)
+	writeScanFixtureFile(t, root, "Box/cover.jpg", cover)
+	runIncrementalTestScan(t, service, logs, root)
+	assertArtworkPriorityBinding(t, fixture, service, root, "Box/Disc 1/first.flac", "box_leaf", "", nil)
+	assertArtworkPriorityBinding(t, fixture, service, root, "Box/Disc 3/second.flac", "box_leaf", "", nil)
+	assertArtworkPriorityBinding(t, fixture, service, root, "Box/direct.flac", "ordinary_directory", "folder", cover)
+}
+
+// 碟目录音频缓存命中时仍按本轮全根布局重算独占性，移除或恢复既有父目录封面。
+func TestPostgreSQLArtworkPriorityBox父目录独占变化重选封面(t *testing.T) {
+	fixture := newLibraryFixture(t)
+	root := insertScannerRoot(t, fixture, "artwork-priority-box-exclusive")
+	service, logs := newIncrementalTestService(t, fixture)
+	cover := jpegArtworkOfWidth(7)
+	writeArtworkPriorityFLAC(t, root, "Box/Disc 1/first.flac", "专辑甲", 1, 1, nil)
+	writeArtworkPriorityFLAC(t, root, "Box/Disc 3/second.flac", "专辑乙", 3, 2, nil)
+	writeScanFixtureFile(t, root, "Box/cover.jpg", cover)
+	runIncrementalTestScan(t, service, logs, root)
+	leaves := map[string]string{}
+	for _, relative := range []string{"Box/Disc 1/first.flac", "Box/Disc 3/second.flac"} {
+		leaves[relative] = assertArtworkPriorityBinding(t, fixture, service, root, relative, "box_leaf", "folder", cover)
+	}
+
+	writeArtworkPriorityFLAC(t, root, "Box/普通专辑/other.flac", "普通专辑", 1, 3, nil)
+	_, added := runIncrementalTestScan(t, service, logs, root)
+	if added.FilesParsed != 1 || added.ParseCacheHits != 2 {
+		t.Fatalf("新增兄弟专辑应仅解析新音频，两个叶子命中缓存：%+v", added)
+	}
+	assertArtworkPriorityBinding(t, fixture, service, root, "Box/普通专辑/other.flac", "ordinary_directory", "", nil)
+	for relative, releaseID := range leaves {
+		if got := assertArtworkPriorityBinding(t, fixture, service, root, relative, "box_leaf", "", nil); got != releaseID {
+			t.Errorf("新增兄弟专辑改变叶子发行身份：%s：前=%s，后=%s", relative, releaseID, got)
+		}
+	}
+
+	if err := os.RemoveAll(filepath.Join(root.Path, "Box/普通专辑")); err != nil {
+		t.Fatal(err)
+	}
+	_, removed := runIncrementalTestScan(t, service, logs, root)
+	if removed.FilesParsed != 0 || removed.ParseCacheHits != 2 {
+		t.Fatalf("删除兄弟专辑后两个叶子仍应命中缓存：%+v", removed)
+	}
+	for relative, releaseID := range leaves {
+		if got := assertArtworkPriorityBinding(t, fixture, service, root, relative, "box_leaf", "folder", cover); got != releaseID {
+			t.Errorf("删除兄弟专辑改变叶子发行身份：%s：前=%s，后=%s", relative, releaseID, got)
+		}
+	}
+}
+
 // 同目录同专辑拆成格式版本后，各发行仍使用自己音频里的内嵌封面。
 func TestPostgreSQLArtworkPriority格式版本各用内嵌封面(t *testing.T) {
 	fixture := newLibraryFixture(t)
