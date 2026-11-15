@@ -19,7 +19,7 @@ function stateText({ device, zone }: PlaybackDeviceRow): string {
 
 /**
  * “播放设备”按钮：只有图标，点开设备列表。控制本机时是普通图标；控制别的设备时图标用强调色、右上角一个小圆点，
- * 读屏名与悬停提示写“正在控制：设备名”（不只靠颜色）。窄屏迷你栏只在控制别的设备时显示（由所在位置按 data-remote 决定）。
+ * 读屏名与悬停提示写“正在控制：设备名”（不只靠颜色）。窄屏迷你栏由 PlayerBar 决定入口是否显示。
  */
 export function DeviceButton({ className }: { className?: string | undefined }) {
   const remoteName = usePlayerSelector((snapshot) => (snapshot.isLocal || snapshot.device === null ? null : snapshot.device.name));

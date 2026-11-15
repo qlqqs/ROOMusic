@@ -56,7 +56,10 @@ function ProgressLine() {
  */
 export function PlayerBar({ renderCurrentTrackActions, renderQueueActions }: PlayerBarProps = {}) {
   const track = usePlayerSelector((snapshot) => snapshot.current?.track);
-  return <section aria-label="播放器" className={styles.bar}>
+  // 无当前曲目时没有封面可打开全屏，仍须能选择其他在线设备或接手离线设备的队列。
+  const showDevice = usePlayerSelector((snapshot) => (!snapshot.isLocal && snapshot.device !== null)
+    || (snapshot.current === null && snapshot.devices.some((row) => !row.isLocal && (row.device.online || (row.zone?.current ?? null) !== null))));
+  return <section aria-label="播放器" className={styles.bar} data-device-visible={showDevice ? "" : undefined}>
     <div className={styles.identity}>
       {track === undefined ? <div className={styles.text}><PlayerFaultInline /></div> : <><ExpandArtworkButton track={track} /><div className={styles.text}>
         <div className={styles.titleRow}><p className={styles.title} title={track.title}>{track.title}</p><SignalPathButton /></div>

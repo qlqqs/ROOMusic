@@ -211,6 +211,21 @@ test("纯键盘打开设备列表、跨行移动并转移，Esc 关闭后焦点�
   await expect(deviceButton(page)).toBeFocused();
 });
 
+test("375px 本机空队列仍可从迷你栏选择在线设备", async ({ page, backend }) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  const mock = await backend.start({ signedInAs: "listener" });
+  const track = personalTrack(702, { title: "远端合成曲目" });
+  seedPersonalTracks(mock.personal, [track]);
+  mock.zones.addDevice({ name: "客厅音箱", online: true, track });
+  await page.goto("/settings/playback");
+  await expect(bar(page).getByRole("button", { name: "打开全屏播放器" })).toHaveCount(0);
+  await deviceButton(page).click();
+  await picker(page).getByRole("button", { name: /客厅音箱/ }).click();
+  await expect(bar(page).getByText("远端合成曲目", { exact: true })).toBeVisible();
+  await expect(deviceButton(page)).toHaveAccessibleName("正在控制：客厅音箱");
+  await expectNoHorizontalOverflow(page, "空队列选择远端设备后");
+});
+
 test("375px 迷你栏：控制本机时没有设备按钮，控制别的设备时在播放键左边出现设备图标，标题下没有设备名", async ({ page, backend }) => {
   await page.setViewportSize({ width: 375, height: 800 });
   const mock = await backend.start({ signedInAs: "listener" });
@@ -239,6 +254,7 @@ test("375px 迷你栏：控制本机时没有设备按钮，控制别的设备�
   await expectNoHorizontalOverflow(page, "迷你栏远端设备");
   await device.click();
   await expect(picker(page)).toBeVisible();
+  await picker(page).getByRole("button", { name: /客厅音箱/, pressed: true }).hover();
   await expectNoSeriousViolations(page, "迷你栏打开设备列表");
 });
 

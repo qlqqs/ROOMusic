@@ -113,7 +113,7 @@ features/governance/
   不导入 player：`player` 导入它的上报器，概览页（app 层）组合区块。历史页的播放动作由 app 组合：`HistoryView` 经插槽 `renderPlayAll` 与
   `renderTrackActions(item, requestRemove)` 接收 `app/routes/history-playback.tsx` 里的“播放全部”与行内播放/“更多”菜单，菜单里的“从历史中移除”调用插槽给的
   `requestRemove`（确认对话框仍归 listening）。`HistoryItem → PlayerTrack` 的映射（`playerTrackOfHistoryItem`）也在 app：player 只经 catalog 公开合同读发行，不认识历史条目。
-  “我的音乐”没有共用的页签布局（2026-11-07 起）：侧栏有我喜欢的音乐（`/me/liked`）、我的收藏（`/me/favorites`，专辑 / 艺人）、播放历史、我的歌单四个入口，每页用自己的 `Page` 标题；`/me` 与 `/me/favorites?tab=tracks` 转到 `/me/liked`。
+  “我的音乐”没有共用的页签布局（2026-11-07 起）：侧栏有我喜欢的音乐（`/me/liked`）、我的收藏（`/me/favorites`，专辑 / 艺人）、播放历史、我的歌单四个入口，每页用自己的 `Page` 标题；`/me` 为汇集个人入口的“我的”页；`/me/favorites?tab=tracks` 仍转到 `/me/liked`。
 - `personal`（M5 ② ③）拥有收藏与歌单：API 与解码器、查询键、心形与批量收藏状态范围、收藏页与歌单页的内容、“添加到歌单…”与新建/改名对话框、
   “播放全部”候选的读取与跨标签页刷新；只导入 catalog 的公开合同（封面、卡片网格、曲目安全摘要），不导入 player、listening。
   曲目行的统一动作（`app/routes/track-actions.tsx`：播放、心形、“更多”）、曲目安全摘要到队列曲目的映射（`track-playback.ts`）、收藏与歌单的“播放全部”
@@ -134,7 +134,7 @@ features/governance/
   外壳（app）放置搜索框、处理“/”快捷键，并在目录状态的 epoch 变大时取消旧代次的搜索请求、让目录缓存失效（`app/shell/use-catalog-epoch-sync.ts`）。
 - `artists`（M5 ⑤）拥有艺人列表与艺人页的 API、解码器、查询键（带目录 epoch）、URL 校验与视图；只导入 catalog 的公开合同（艺人摘要、艺人引用、可点的艺人名
   `ArtistNames`、封面与卡片网格），不导入 player、personal、governance、search。艺人页的播放全部/随机播放（`app/routes/artist-playback.tsx`）、心形、曲目行动作与
-  管理员的合并/拆开/改名（governance 的 `ArtistAdminActions`）由 app 经插槽组合（`app/routes/artist-detail-page.tsx`）。详细合同见[艺人约定](./artist-guidelines.md)。
+  管理员的合并/拆开/改名（governance 的 `useArtistAdminActions`）由 app 经插槽组合（`app/routes/artist-detail-page.tsx`）。详细合同见[艺人约定](./artist-guidelines.md)。
 - 通用 `operations` 拥有 Change Set 与审批的状态及受支持的恢复界面，不是通用 toast（尚未建立；M3 的操作记录与撤销界面在 `governance`）。
 - `shared/api` 拥有同源请求、凭据、请求关联、响应体处理、错误信封、重试策略与解码原语；feature 的端点与 DTO 留在 feature。
   `fetch` 只在 `shared/api/request.ts` 中调用，由 ESLint 规则保证。

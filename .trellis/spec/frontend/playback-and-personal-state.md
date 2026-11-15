@@ -80,7 +80,7 @@
   `useReleaseDataRefresh`（app）同样失效这个前缀（标题、归组会改变历史里显示的专辑）。移除成功先用 `setQueriesData` 从已缓存的各页去掉这一行，
   清除成功先把“最近播放”与各页置空，都不等重新读取；失败时保留旧数据、对话框里显示错误，DELETE 幂等可直接重试。
 - “播放全部”每次按下都经 `queryClient.fetchQuery(queue, staleTime: 0)` 读最新候选，不沿用旧缓存；结果只在发起时的会话仍是当前会话时交给调用方。
-- URL：`/me/history?page=N`，`page` 经 `parsePageParam` 解析，只在 2 及以上写进地址；“我的音乐”没有共同的页签布局（2026-11-07 起，四页在侧栏各有入口，见[收藏与歌单的前端约定](./personal-guidelines.md)），`/me` 用替换历史项的方式转到 `/me/liked`。
+- URL：`/me/history?page=N`，`page` 经 `parsePageParam` 解析，只在 2 及以上写进地址；“我的音乐”没有共同的页签布局（2026-11-07 起，四页在侧栏各有入口，见[收藏与歌单的前端约定](./personal-guidelines.md)），`/me` 为汇集个人入口的“我的”页。
   与专辑、扫描记录不同，**页码超出末页时不规范化地址**（不使用 `useClampedPage`）：显示“这一页没有记录。”与“回到第一页”的链接（产品裁决，2026-11-04）。
   点页码链接时把结果区标题滚到视野顶部并聚焦（与专辑列表相同）。
 

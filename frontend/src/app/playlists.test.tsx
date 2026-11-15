@@ -188,8 +188,9 @@ describe("侧栏的歌单导航", () => {
     renderApp({ path: "/me/playlists" });
     expect(await screen.findByText("还没有歌单")).toBeTruthy();
     expect(screen.getByText(/把喜欢的曲目收成一组/)).toBeTruthy();
-    expect(screen.getAllByRole("button", { name: "新建歌单" })).toHaveLength(1);
-    await userEvent.click(screen.getByRole("button", { name: "新建歌单" }));
+    const content = within(screen.getByRole("region", { name: "全部歌单" }));
+    expect(content.getAllByRole("button", { name: "新建歌单" })).toHaveLength(1);
+    await userEvent.click(content.getByRole("button", { name: "新建歌单" }));
     expect(await screen.findByRole("dialog", { name: "新建歌单" })).toBeTruthy();
   });
 
@@ -197,9 +198,10 @@ describe("侧栏的歌单导航", () => {
     setup(0);
     renderApp({ path: "/me/playlists" });
     const heading = await screen.findByRole("heading", { level: 2, name: "全部歌单" });
-    await screen.findByRole("link", { name: new RegExp(base.name) });
+    const content = within(screen.getByRole("region", { name: "全部歌单" }));
+    await content.findByRole("link", { name: new RegExp(base.name) });
     expect(screen.queryByText("还没有歌单")).toBeNull();
-    expect(screen.getAllByRole("button", { name: "新建歌单" })).toHaveLength(1);
+    expect(content.getAllByRole("button", { name: "新建歌单" })).toHaveLength(1);
     expect(heading).toBeTruthy();
   });
 

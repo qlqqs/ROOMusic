@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { MenuButton } from "./menu-button";
@@ -46,6 +46,21 @@ describe("菜单按钮键盘操作", () => {
 });
 
 describe("菜单浮层与图标", () => {
+  it("打开前滚动的迟到事件与菜单内部滚动不关闭菜单，锚点实际移动后关闭", async () => {
+    render(<MenuButton label="更多" actions={[{ id: "download", label: "下载", onSelect: vi.fn() }]} />);
+    const trigger = screen.getByRole("button", { name: "更多" });
+    const bounds = vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue(new DOMRect(16, 400, 44, 44));
+    await userEvent.click(trigger);
+    fireEvent.scroll(document);
+    expect(screen.getByRole("menu")).toBeTruthy();
+    fireEvent.scroll(screen.getByRole("menu"));
+    expect(screen.getByRole("menu")).toBeTruthy();
+    bounds.mockReturnValue(new DOMRect(16, 350, 44, 44));
+    fireEvent.scroll(document);
+    expect(screen.queryByRole("menu")).toBeNull();
+    bounds.mockRestore();
+  });
+
   it("placement=above 时用底边定位到触发器上方，限制高度以免越出视口", async () => {
     render(<MenuButton label="更多" placement="above" actions={[{ id: "settings", label: "设置", onSelect: vi.fn() }]} />);
     const trigger = screen.getByRole("button", { name: "更多" });

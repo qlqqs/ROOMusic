@@ -89,21 +89,29 @@ export function useMenu({ label, actions, placement = "below", matchTriggerWidth
   useEffect(() => {
     if (position === null) return;
     const buttons = items();
-    (first.current === "last" ? buttons.at(-1) : buttons[0])?.focus();
     const rect = menu.current?.getBoundingClientRect();
     if (placement === "below" && rect !== undefined && rect.bottom > window.innerHeight - 8) {
       menu.current?.style.setProperty("top", `${Math.max(8, window.innerHeight - rect.height - 8)}px`);
     }
+    if (menu.current !== null) menu.current.scrollTop = first.current === "last" ? menu.current.scrollHeight : 0;
+    // 先把菜单移入视口，再聚焦；靠底边打开时不触发页面滚动，否则滚动监听会立即把菜单关闭。
+    (first.current === "last" ? buttons.at(-1) : buttons[0])?.focus({ preventScroll: true });
+    const anchor = trigger.current?.getBoundingClientRect();
     const dismiss = (event: PointerEvent) => {
       if (event.target instanceof Node && !menu.current?.contains(event.target) && !trigger.current?.contains(event.target)) setPosition(null);
     };
-    const moved = () => setPosition(null);
+    const resized = () => setPosition(null);
+    const moved = () => {
+      const current = trigger.current?.getBoundingClientRect();
+      // 点按前浏览器把触发器滚入视口的 scroll 事件可能迟到；只有打开后锚点真的移动才关闭，菜单内部滚动也不关闭。
+      if (current?.top !== anchor?.top || current?.left !== anchor?.left) setPosition(null);
+    };
     document.addEventListener("pointerdown", dismiss);
-    window.addEventListener("resize", moved);
+    window.addEventListener("resize", resized);
     document.addEventListener("scroll", moved, true);
     return () => {
       document.removeEventListener("pointerdown", dismiss);
-      window.removeEventListener("resize", moved);
+      window.removeEventListener("resize", resized);
       document.removeEventListener("scroll", moved, true);
     };
   }, [position, placement]);

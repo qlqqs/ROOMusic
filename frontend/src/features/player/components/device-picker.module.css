@@ -17,7 +17,8 @@ dialog.dialog::backdrop { background: transparent; }
 .row[aria-current] { background: var(--color-selected); }
 .select { display: grid; gap: 2px; min-width: 0; padding: var(--space-2) var(--space-1); border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; font: inherit; text-align: left; }
 button.select { cursor: pointer; }
-button.select:hover { background: var(--color-hover); }
+/* 选中行已有底色，不再叠加悬停底色，保证名称和状态小字的对比度。 */
+.row:not([aria-current]) button.select:hover { background: var(--color-hover); }
 .name { display: flex; align-items: center; gap: var(--space-1); min-width: 0; font-size: var(--fs-13); }
 .nameText { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row[aria-current] .nameText { color: var(--text-accent); font-weight: 600; }

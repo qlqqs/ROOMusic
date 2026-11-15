@@ -125,8 +125,8 @@ operation payloads in the URL.
 - 设置页（`/settings/*`）：`settings-layout.tsx` 只放分栏与 `<Outlet />`，不另加 h1（各栏内容组件自带 `Page`）；视口 ≥1024px 左侧分栏，更窄时内容上方一行横向链接。
   管理员栏照旧由路由层 `AdminGate` 把关，分栏只决定显示哪些项。旧地址（`/library`、`/members`、`/operations`、`/system/backups`）在根路由下、登录守卫之前重定向，
   `path` 是 `string`，不进类型化路由树，所以旧 `<Link to>` 会被 tsc 拦下；查询参数值等价保留（`%20` 可能变 `+`，重复键不保证）。
-- 我的音乐（2026-11-07 起）：`/me` 转到 `/me/liked`；`/me/favorites?tab=tracks` 由 `/me/favorites` 路由的 `beforeLoad` 读校验后的 `tab` 转到 `/me/liked`，
-  只带 `page`（2 及以上）；都替换历史项。`/me/favorites` 的 `tab` 只认 `artists`，其他值当作默认的专辑。
+- 我的音乐（2026-11-07 起）：`/me` 渲染“我的”页，汇集个人、设置与管理员入口；`/me/favorites?tab=tracks` 由 `/me/favorites` 路由的 `beforeLoad` 读校验后的 `tab` 转到 `/me/liked`，
+  只带 `page`（2 及以上），该重定向替换历史项。`/me/favorites` 的 `tab` 只认 `artists`，其他值当作默认的专辑。
 
 ## Local And Global State
 

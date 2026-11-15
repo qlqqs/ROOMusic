@@ -27,8 +27,8 @@
 
 ### 阶段 3：收尾
 
-- [ ] 更新 `frontend/DESIGN-components.md`、`frontend/DESIGN.md`、`.trellis/spec/frontend/component-catalog.md`、`player-design-guidelines.md`、`interface-layout-guidelines.md`。
-- [ ] 合并后跑一次全量单元测试与 e2e。
+- [x] 更新 `frontend/DESIGN-components.md`、`frontend/DESIGN.md`、`.trellis/spec/frontend/component-catalog.md`、`player-design-guidelines.md`、`interface-layout-guidelines.md`。
+- [x] 合并后跑一次全量单元测试与 e2e；首次失败修复后仅定向复验，详情见最终验收报告。
 - [x] `npm run build` 更新 `backend/cmd/roomusic/web` 产物并提交。
 - [ ] 清理分区工作目录与分支。
 
@@ -53,3 +53,7 @@ mise exec -- npm run build
 ## 2026-11-15 合并进度
 
 A 区已完成检查并与 B–E 集成，最近新增卡片播放已接通。A 区规范已同步，合并交界的 129 条单测与 16 条浏览器测试通过，生产构建产物更新。完整命令与未完成项见 [A 区合并验证](verification/a-merge.md)；阶段 3 的整体门禁与剩余规范同步尚未完成，任务保持进行中。
+
+## 2026-11-15 最终验收
+
+功能及自动化门禁完成，生产构建与前端规范已同步。单测 4026 通过、1 条条件跳过，模拟后端浏览器 592 通过，相关真实服务 15/15 通过；计数复用全量基线与定向复验。35 项已逐条截图核对，与样机的落地差异明确保留。见 [最终验收汇总](verification/final-acceptance.md)。主分支集成、推送及分区清理尚未执行，任务保持进行中。

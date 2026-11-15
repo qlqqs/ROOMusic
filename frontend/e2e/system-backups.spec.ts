@@ -74,6 +74,23 @@ async function chooseRowAction(page: Page, row: Locator, action: string): Promis
   await page.getByRole("menu", { name: /的备份的更多操作$/ }).getByRole("menuitem", { name: action, exact: true }).click();
 }
 
+test("手机备份行菜单靠近视口底边时保持打开，不因首项聚焦滚动而关闭", async ({ page, backend }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await backend.start({ signedInAs: "curator" });
+  await page.goto("/settings/backups");
+  const trigger = rowMenuButton(backupRows(page).first());
+  await trigger.scrollIntoViewIfNeeded();
+  await trigger.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  await trigger.click();
+  const menu = page.getByRole("menu", { name: /的备份的更多操作$/ });
+  await expect(menu.getByRole("menuitem", { name: "下载", exact: true })).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(menu.getByRole("menuitem", { name: "删除…", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(menu).not.toBeVisible();
+  await expect(trigger).toBeFocused();
+});
+
 /** 不只检查页面滚动宽度：控件必须同排且不互相覆盖，文字必须保持一行。 */
 async function expectSameRow(left: Locator, right: Locator, label: string): Promise<void> {
   const a = await left.boundingBox();

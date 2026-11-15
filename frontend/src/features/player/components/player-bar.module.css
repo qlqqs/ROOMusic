@@ -36,7 +36,8 @@
 }
 
 /*
- * 窄屏：浮起的迷你栏（左右下各留 8px），封面、标题与圆点、设备（只在控制别的设备时）、播放、下一首、队列；底边 2px 进度线。外层的留白由外壳按实际高度计算。
+ * 窄屏：浮起的迷你栏（左右下各留 8px），封面、标题与圆点、设备、播放、下一首、队列；底边 2px 进度线。外层的留白由外壳按实际高度计算。
+ * 设备入口在控制别的设备时显示；本机空队列且有可接管设备时也保留入口。
  * 右段拆开（display: contents）按区域摆放，设备图标排在播放键左边。
  */
 @media (max-width: 767px) {
@@ -46,9 +47,9 @@
   .end { display: contents; }
   .queue { grid-area: queue; }
   .device { grid-area: device; }
-  .device:not([data-remote]) { display: none; }
-  /* 只在控制别的设备时多出设备一列，本机时不留空列（空列两侧的间距仍会算上）。 */
-  .bar:has(.device[data-remote]) { grid-template-columns: minmax(0, 1fr) auto auto auto; grid-template-areas: "identity device center queue"; }
+  .bar:not([data-device-visible]) .device { display: none; }
+  /* 有设备入口时才多出一列；本机有曲目时不留空列。显式属性兼容不支持 :has() 的浏览器。 */
+  .bar[data-device-visible] { grid-template-columns: minmax(0, 1fr) auto auto auto; grid-template-areas: "identity device center queue"; }
   .desktop, .subtitle, .trackActions { display: none; }
   .cover { width: 46px; height: 46px; flex-basis: 46px; }
   .title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
