@@ -1,59 +1,134 @@
 /*
- * 首字母导航（全部、A–Z、假名、#，共 29 项）：列数按导航自己的宽度定，放得下时一行排完；
- * 放不下时选的列数都不会让最后一行只剩一项（29 = 15 + 14 = 10 + 10 + 9 = 6 × 4 + 5）。
- * 每格至少是一个控件大小的命中区（宽屏 36px，窄屏 44px）。
+ * 首字母导航（全部、A–Z、假名、#）：宽屏是一条紧凑的横排索引，滚动时停在主内容区顶部（纸面底色盖住下面滚过的内容，下方紧接结果区的分隔线）；
+ * 放不下一行时换行。当前分组反白（墨色底、纸色字），不只靠颜色。
  */
 .initials {
-  container-type: inline-size;
-  margin-block: var(--space-4);
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 2;
+  margin-block: var(--space-3) 0;
+  padding-block: 6px;
+  background: var(--color-bg);
 }
 
 .initialList {
-  --initial-columns: 6;
-  display: grid;
-  grid-template-columns: repeat(var(--initial-columns), minmax(0, 1fr));
-  gap: var(--space-1);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-@container (min-width: 470px) {
-  .initialList {
-    --initial-columns: 10;
-  }
-}
-
-@container (min-width: 600px) {
-  .initialList {
-    --initial-columns: 15;
-    gap: 4px;
-  }
-}
-
-@container (min-width: 1100px) {
-  .initialList {
-    --initial-columns: 29;
-    gap: 2px;
-  }
-}
-
-/* 当前分组用金色轻底加下划线，不只靠颜色。 */
 .initial {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: var(--control-height);
+  display: grid;
+  place-items: center;
+  min-width: 26px;
+  height: 26px;
   padding: 0 2px;
-  border-radius: var(--radius-sm);
-  font-size: var(--fs-13);
-  white-space: nowrap;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
 }
 
-.initial[aria-current="page"] {
-  background: var(--color-selected);
-  text-decoration: underline;
-  text-underline-offset: 3px;
+.initial[data-wide] {
+  min-width: 40px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .initial:hover {
+    background: var(--color-hover);
+    color: var(--text-primary);
+  }
+}
+
+.initial[aria-current="page"],
+.initial[aria-current="page"]:hover {
+  background: var(--color-text);
+  color: var(--color-bg);
+  font-weight: 600;
+}
+
+.shortLabel {
+  display: none;
+}
+
+/* 触屏（平板）上横排索引的格子大一些。 */
+@media (pointer: coarse) and (min-width: 768px) {
+  .initial {
+    min-width: 36px;
+    height: 36px;
+  }
+}
+
+/*
+ * 手机：贴在右侧的竖排索引，竖直居中，不随页面滚动；字用最小字号（12px）、行很密（拇指一划就到）。列表右侧留出它的宽度。
+ * 显示短写（“全”“あ”），完整写法只给读屏，链接名称不变。
+ */
+@media (max-width: 767px) {
+  .initials {
+    position: fixed;
+    inset-block-start: 50%;
+    inset-inline-end: 2px;
+    margin: 0;
+    padding: 4px 0;
+    border: 0;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-bg) 85%, transparent);
+    transform: translateY(-50%);
+  }
+
+  .initialList {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 0;
+  }
+
+  .initial,
+  .initial[data-wide] {
+    min-width: 0;
+    width: 20px;
+    height: 17px;
+    padding: 0;
+    border-radius: 50%;
+    color: var(--text-accent);
+    font-size: var(--fs-12);
+    font-weight: 600;
+  }
+
+  .initial[aria-current="page"] {
+    height: 20px;
+  }
+
+  /* 与 VisuallyHidden 相同的写法（媒体查询里不能用 composes）。链接是定位祖先。 */
+  .longLabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .initial {
+    position: relative;
+  }
+
+  .shortLabel {
+    display: inline;
+  }
+
+  .resultsArea[data-rail] {
+    padding-inline-end: 18px;
+  }
+}
+
+.resultsArea {
+  min-width: 0;
 }
 
 .results {
@@ -68,43 +143,142 @@
 
 .groups {
   display: grid;
-  gap: var(--space-6);
+  gap: var(--space-4);
 }
 
 .group {
   display: grid;
-  gap: var(--space-2);
   min-width: 0;
 }
 
+/* 分组标题：衬线大字的字母，像唱片目录里的分隔卡；下面一条细线。 */
 .groupHeading {
-  font-size: var(--fs-15);
+  padding-block: var(--space-2);
+  border-block-end: 1px solid var(--color-divider);
+  color: var(--text-accent);
+  font-family: Georgia, "Times New Roman", "Songti SC", serif;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1;
 }
 
+/* 三栏目录（容器宽时），窄时两栏、一栏；每栏的行之间是细线。 */
 .list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: var(--space-2) var(--space-6);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  column-gap: var(--space-6);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .item {
-  display: grid;
-  gap: 2px;
+  position: relative;
   min-width: 0;
-  padding: var(--space-1) 0;
+  border-block-end: 1px solid var(--color-divider);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 54px;
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  color: inherit;
+  text-decoration: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .row:hover {
+    background: var(--color-hover);
+  }
+}
+
+.row:active {
+  background: var(--color-pressed);
+}
+
+.text {
+  display: grid;
+  min-width: 0;
+}
+
+.name,
+.roles {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .name {
-  overflow-wrap: anywhere;
   font-size: var(--fs-14);
+  font-weight: 500;
 }
 
-.meta {
+.roles {
   color: var(--text-secondary);
-  font-size: var(--fs-13);
-  overflow-wrap: anywhere;
+  font-size: var(--fs-12);
+}
+
+.count {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
   font-variant-numeric: tabular-nums;
+}
+
+/*
+ * 行的播放键：盖在圆章上（同样大小的墨色圆），精确指针设备上行悬停或聚焦到它时出现，平时透明且不接收点击；
+ * 触屏与没有悬停的设备不显示（点行进艺人页播放）。播放结果的提示不受显隐影响。
+ */
+.play {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: var(--space-1);
+  display: none;
+  transform: translateY(-50%);
+}
+
+.play button {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  min-height: 36px;
+  border-radius: 50%;
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+.play button:enabled:not([aria-disabled="true"]):hover {
+  background: var(--color-neutral-800);
+  color: var(--color-bg);
+}
+
+.play button > span {
+  margin-inline-start: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .play {
+    display: block;
+  }
+
+  .play button {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s ease;
+  }
+
+  .item:is(:hover, :focus-within) .play button,
+  .play button[aria-busy="true"] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .play button {
+    transition: none;
+  }
 }

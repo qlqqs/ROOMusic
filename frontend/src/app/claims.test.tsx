@@ -17,7 +17,7 @@ const claimList = () => screen.getByRole("heading", { level: 2, name: "留有修
 const listLinks = () => within(claimList()).getAllByRole("link").filter((link) => link.closest("ul") !== null && link.closest("nav") === null);
 
 describe("待认领页：入口与权限", () => {
-  it("管理员在“资料库”下看到“待认领”，点进去是待认领页，不显示数量", async () => {
+  it("管理员在“管理”下看到“待认领”，点进去是待认领页，不显示数量", async () => {
     setup();
     const user = userEvent.setup();
     const { history } = renderApp({ path: "/" });
@@ -73,6 +73,10 @@ describe("待认领页：列表", () => {
     renderApp({ path: "/claims" });
     expect(await screen.findByText("没有待认领的版本。")).toBeTruthy();
     expect(screen.queryByRole("navigation", { name: "待认领列表分页" })).toBeNull();
+    // 读到的总数是 0：侧栏不显示计数徽标，也不补充描述。
+    const link = within(screen.getByRole("navigation", { name: "主导航" })).getByRole("link", { name: "待认领" });
+    expect(link.textContent).toBe("待认领");
+    expect(link.hasAttribute("aria-describedby")).toBe(false);
   });
 
   it("读取失败时显示原因与“重试”，重试成功后列出旧版本", async () => {

@@ -38,16 +38,6 @@
   overflow-wrap: anywhere;
 }
 
-.meta {
-  color: var(--text-secondary);
-  font-size: var(--fs-12);
-}
-
-.requestId {
-  font-family: var(--font-mono);
-  user-select: all;
-}
-
 .action {
   flex: none;
 }

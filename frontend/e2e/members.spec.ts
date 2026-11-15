@@ -1,4 +1,4 @@
-import { changedPassword, memberRow } from "./support/account-password";
+import { changedPassword, chooseMemberAction, memberMenu, memberMenuButton, memberRow } from "./support/account-password";
 import { expect, test } from "./support/fixtures";
 import { heading } from "./support/locators";
 import type { Page } from "@playwright/test";
@@ -46,7 +46,7 @@ test.describe("成员管理", () => {
     await page.goto("/settings/members");
     const row = (name: string) => membersTable(page).getByRole("row", { name: new RegExp(name) });
 
-    await row("listener").getByRole("button", { name: "停用成员 listener" }).click();
+    await chooseMemberAction(page, "listener", "停用…");
     const dialog = page.getByRole("dialog", { name: "停用成员“listener”？" });
     await expect(dialog.getByText("停用后对方会马上退出登录，之后可以重新启用。", { exact: true })).toBeVisible();
     await dialog.getByRole("button", { name: "停用成员" }).click();
@@ -54,12 +54,12 @@ test.describe("成员管理", () => {
     await expect(row("listener")).toContainText("已停用");
     expect(mock.callsTo("PATCH", /\/users\/[^/]+$/)[0]?.body).toEqual({ disabled: true });
 
-    await row("listener").getByRole("button", { name: "重新启用成员 listener" }).click();
+    await chooseMemberAction(page, "listener", "重新启用");
     await expect(page.getByText(/已重新启用成员“listener”/)).toBeVisible();
     await expect(row("listener")).toContainText("启用");
     await expect(page.getByRole("dialog")).toHaveCount(0);
 
-    await row("listener").getByRole("button", { name: "撤销会话 listener" }).click();
+    await chooseMemberAction(page, "listener", "撤销会话…");
     await page.getByRole("dialog", { name: "撤销成员“listener”的全部会话？" }).getByRole("button", { name: "撤销会话" }).click();
     await expect(page.getByText(/已撤销成员“listener”的全部会话/)).toBeVisible();
     expect(mock.callsTo("POST", /\/sessions\/revoke$/)).toHaveLength(1);
@@ -68,7 +68,7 @@ test.describe("成员管理", () => {
   test("对自己的操作：对话框先提示；停用最后一个管理员被拒绝（409）且会话保留", async ({ page, backend }) => {
     await backend.start({ signedInAs: "curator" });
     await page.goto("/settings/members");
-    await membersTable(page).getByRole("button", { name: "停用成员 curator" }).click();
+    await chooseMemberAction(page, "curator", "停用…");
     const dialog = page.getByRole("dialog", { name: "停用成员“curator”？" });
     await expect(dialog).toContainText("这是你自己的账号，确认后你会马上退出登录。");
     await dialog.getByRole("button", { name: "停用成员" }).click();
@@ -80,7 +80,7 @@ test.describe("成员管理", () => {
     const mock = await backend.start({ signedInAs: "curator" });
     mock.users = [...mock.users, { id: "00000000-0000-4000-8000-0000000000aa", username: "second", role: "admin", disabled: false, created_at: "2026-01-01T00:00:00Z" }];
     await page.goto("/settings/members");
-    await membersTable(page).getByRole("button", { name: "停用成员 curator" }).click();
+    await chooseMemberAction(page, "curator", "停用…");
     await page.getByRole("dialog").getByRole("button", { name: "停用成员" }).click();
     await expect(heading(page, "登录")).toBeVisible();
     await expect(page.getByRole("table", { name: "成员列表" })).toHaveCount(0);
@@ -92,10 +92,13 @@ test.describe("账户密码：管理员重置", () => {
     test(`重置${disabled ? "停用" : "启用"}成员密码，自己无入口且请求只有password无幂等键`, async ({ page, backend }) => {
       const mock = await backend.start({ signedInAs: "curator" });
       await page.goto("/settings/members");
-      await expect(memberRow(page, "curator").getByRole("button", { name: /重置/ })).toHaveCount(0);
+      await memberMenuButton(page, "curator").click();
+      await expect(memberMenu(page, "curator").getByRole("menuitem", { name: /重置/ })).toHaveCount(0);
+      await page.keyboard.press("Escape");
       const row = memberRow(page, username);
-      await expect(row.getByRole("button")).toHaveCount(disabled ? 2 : 3);
-      await row.getByRole("button", { name: `重置成员 ${username} 的密码`, exact: true }).click();
+      await memberMenuButton(page, username).click();
+      await expect(memberMenu(page, username).getByRole("menuitem")).toHaveCount(disabled ? 2 : 3);
+      await memberMenu(page, username).getByRole("menuitem", { name: "重置密码…", exact: true }).click();
       const dialog = page.getByRole("dialog", { name: `重置“${username}”的密码`, exact: true });
       await expect(dialog).toContainText(disabled ? "对方仍是停用状态，重新启用后才能登录。" : "对方需要用新密码重新登录。");
       await dialog.getByLabel("新密码", { exact: true }).fill(changedPassword);
@@ -119,8 +122,9 @@ test.describe("账户密码：管理员重置", () => {
   test("重置密码本地校验与取消，不向服务器发送密码", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
     await page.goto("/settings/members");
-    const trigger = memberRow(page, "listener").getByRole("button", { name: "重置成员 listener 的密码", exact: true });
-    await trigger.click();
+    // 对话框关闭后焦点回到行尾的“更多”按钮。
+    const trigger = memberMenuButton(page, "listener");
+    await chooseMemberAction(page, "listener", "重置密码…");
     const dialog = page.getByRole("dialog", { name: "重置“listener”的密码", exact: true });
     for (const { password, confirmation, field, error } of [
       { password: "x".repeat(11), confirmation: "x".repeat(11), field: "新密码", error: "密码至少要 12 位。" },
@@ -138,7 +142,7 @@ test.describe("账户密码：管理员重置", () => {
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
     await expect(trigger).toBeFocused();
-    await trigger.press("Enter");
+    await chooseMemberAction(page, "listener", "重置密码…");
     await expect(dialog.getByLabel("新密码", { exact: true })).toHaveValue("");
     await expect(dialog.getByLabel("确认新密码", { exact: true })).toHaveValue("");
   });

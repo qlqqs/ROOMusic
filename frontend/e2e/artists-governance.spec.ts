@@ -1,5 +1,5 @@
 import { expect, test } from "./support/fixtures";
-import { artistKeyActivate, artistTabTo } from "./support/artists";
+import { artistHeaderMore, artistKeyActivate, artistKeyAdmin, artistTabTo } from "./support/artists";
 import { seedArtistsE2E } from "./support/artist-seed";
 import { expectFocusStaysInDialog } from "./support/keyboard";
 
@@ -11,7 +11,7 @@ test("艺人稳定性：纯键盘合并、I1 一键拆回旧身份，旧链接�
   const seed = seedArtistsE2E(mock);
   await page.goto(`/artists/${seed.artist.id}`);
   await expect(page.getByRole("heading", { name: seed.artist.name, level: 1 })).toBeVisible();
-  await artistKeyActivate(page, page.getByRole("button", { name: "合并艺人…", exact: true }));
+  await artistKeyAdmin(page, "合并艺人…");
   const merge = page.getByRole("dialog", { name: "合并艺人", exact: true });
   const search = merge.getByRole("textbox", { name: "查找艺人" });
   await artistTabTo(page, search);
@@ -27,7 +27,7 @@ test("艺人稳定性：纯键盘合并、I1 一键拆回旧身份，旧链接�
   expect(merged[0]?.body).toEqual({ expected_revision: 1, source_artist_id: seed.source.id, source_expected_revision: 1 });
   expect(merged[0]?.idempotencyKey).toMatch(uuid);
 
-  await artistKeyActivate(page, page.getByRole("button", { name: "拆开…", exact: true }));
+  await artistKeyAdmin(page, "拆开…");
   const split = page.getByRole("dialog", { name: "拆开艺人", exact: true });
   await expect(split.getByRole("heading", { name: "之前并入这里的艺人" })).toBeVisible();
   await artistKeyActivate(page, split.getByRole("button", { name: `拆回 ${seed.source.name}`, exact: true }));
@@ -54,7 +54,7 @@ test("艺人稳定性：I1 手动选别名默认恢复，管理员可改成新�
   const mock = await backend.start({ signedInAs: "curator" });
   const seed = seedArtistsE2E(mock, { merged: true });
   await page.goto(`/artists/${seed.artist.id}`);
-  await artistKeyActivate(page, page.getByRole("button", { name: "拆开…", exact: true }));
+  await artistKeyAdmin(page, "拆开…");
   const dialog = page.getByRole("dialog", { name: "拆开艺人", exact: true });
   await artistKeyActivate(page, dialog.getByRole("checkbox", { name: seed.source.name, exact: true }), "Space");
   await expect(dialog.getByRole("radio", { name: new RegExp(`恢复为“${seed.source.name}”`) })).toBeChecked();
@@ -78,7 +78,7 @@ test("艺人稳定性：I2 纯键盘按专辑拆开，作曲参与、跨页与�
   const last = seed.albums[20];
   if (first === undefined || last === undefined) throw new Error("I2 种子必须跨过 20 条一页");
   await page.goto(`/artists/${seed.artist.id}`);
-  await artistKeyActivate(page, page.getByRole("button", { name: "拆开…", exact: true }));
+  await artistKeyAdmin(page, "拆开…");
   const dialog = page.getByRole("dialog", { name: "拆开艺人", exact: true });
   await artistTabTo(page, dialog.getByRole("radio", { name: "把一些名字拆成另一位艺人", exact: true }));
   await page.keyboard.press("ArrowDown");
@@ -113,15 +113,16 @@ test("艺人稳定性：纯键盘改主名与改回默认，Esc 和焦点陷阱�
   const mock = await backend.start({ signedInAs: "curator" });
   const seed = seedArtistsE2E(mock);
   await page.goto(`/artists/${seed.artist.id}`);
-  const trigger = page.getByRole("button", { name: "修改主名…", exact: true });
-  await artistKeyActivate(page, trigger);
+  // “修改主名…”在页头“更多”的“管理”分组里；对话框关闭后焦点回到“更多”。
+  const trigger = artistHeaderMore(page);
+  await artistKeyAdmin(page, "修改主名…");
   const dialog = page.getByRole("dialog", { name: "修改主名", exact: true });
   await expectFocusStaysInDialog(page, dialog, 6);
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   await expect(trigger).toBeFocused();
   expect(mock.callsTo("PATCH", `/api/v1/artists/${seed.artist.id}/name`)).toHaveLength(0);
-  await page.keyboard.press("Enter");
+  await artistKeyAdmin(page, "修改主名…");
   await artistTabTo(page, dialog.getByRole("textbox", { name: "主名", exact: true }));
   await page.keyboard.press("ControlOrMeta+A");
   await page.keyboard.type("邓丽君 · 珍藏");
@@ -129,7 +130,7 @@ test("艺人稳定性：纯键盘改主名与改回默认，Esc 和焦点陷阱�
   await expect(dialog).toBeHidden();
   await expect(page.getByRole("heading", { name: "邓丽君 · 珍藏", exact: true, level: 1 })).toBeVisible();
   expect(mock.callsTo("PATCH", `/api/v1/artists/${seed.artist.id}/name`)[0]?.body).toEqual({ expected_revision: 1, mode: "set", name: "邓丽君 · 珍藏" });
-  await artistKeyActivate(page, trigger);
+  await artistKeyAdmin(page, "修改主名…");
   await artistTabTo(page, dialog.getByRole("radio", { name: "使用下面的名字" }));
   await page.keyboard.press("ArrowDown");
   await expect(dialog.getByRole("radio", { name: "改回最常见的写法" })).toBeChecked();

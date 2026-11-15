@@ -9,8 +9,8 @@
 | 组件 | 约定 |
 | --- | --- |
 | `Page`、`Panel`、`StatList` | `Page` 渲染唯一的 `h1`（并设置“页面名 · ROOMusic”标题），标题很长时 `compactTitle` 降一级字号（M1b：专辑名超过 80 个字符），完整显示并换行；给 `header` 时它替换默认页头（标题、说明与操作），由它渲染唯一的 `h1`，文字与 `title` 相同（歌单与我喜欢的音乐的封面页头，2026-11-08）；`Panel` 是带标题的区段，给 `headingRef` 时标题可以被程序聚焦（`tabIndex=-1`，不进 Tab 顺序）；`StatList` 显示数值，数据值用 `tabular-nums` |
-| `QueryContent` | 数据区块的首次加载（保留结构的 `Skeleton`，不画成空库）、失败（带请求 ID 的 `FailureNotice` 与重试）、成功，以及“刷新失败但还有旧数据”（旧数据继续显示，错误在其上方）；它只依赖最小的查询形状，不依赖查询库 |
-| `Notice`、`FailureNotice` | 行内状态或错误，由图标与文字表达，不靠颜色；错误 `role="alert"`，其余 `role="status"`；可附请求 ID 与下一步操作；**不使用全局 toast**，结果就近显示在操作区 |
+| `QueryContent` | 数据区块的首次加载（保留结构的 `Skeleton`，不画成空库）、失败（`FailureNotice` 与重试，请求 ID 只记到控制台）、成功，以及“刷新失败但还有旧数据”（旧数据继续显示，错误在其上方）；它只依赖最小的查询形状，不依赖查询库 |
+| `Notice`、`FailureNotice` | 行内状态或错误，由图标与文字表达，不靠颜色；错误 `role="alert"`，其余 `role="status"`；可附下一步操作；请求 ID 只记到控制台，不显示在界面；**不使用全局 toast**，结果就近显示在操作区 |
 | `Button`、`TextField` | `Button` 有主要 / 次要 / 只有图标三种外观（`primary | secondary | icon`），只有图标时必须给 `label`，用作 `aria-label`，也是悬停提示的文字（`tooltip` 可另给提示文字，如心形状态未读到时的说明）；不用原生 `title`（2026-11-08 起）；忙碌态不设 `disabled`（焦点留在按钮上），点击被忽略并设置 `aria-busy`，文案由调用方改成“正在…”；`TextField` 的 label、说明与错误经 `aria-describedby` 关联，错误同时设置 `aria-invalid` |
 | `StatusTag` | 文字加图标，不只靠颜色 |
 | `useTooltip`（2026-11-08） | 图标按钮与图标链接的悬停提示：返回 `triggerProps`（放到触发元素上）与 `tooltip`（渲染在触发元素旁）。只响应鼠标，停留 300ms 显示，移开、按下、Esc、滚动或窗口缩放立即消失，按下后要移出再移入才会再出现；键盘焦点不弹，提示 `aria-hidden`（读屏靠 `aria-label`）。浮层 fixed 定位，渲染到 `trigger.closest("dialog") ?? document.body`，不被表格、播放器栏裁掉，默认在上方、放不下翻到下方。`Button variant="icon"`（含 `MenuButton iconOnly`）、心形、侧栏展开按钮都用它；新加的图标控件也用它，不写 `title` |
@@ -24,22 +24,19 @@
 
 页面级约定：
 
-- 外壳有“跳到主要内容”链接、`nav` 与 `main` 地标；导航用链接，当前页有 `aria-current`；窄屏的“菜单”按钮打开原生 `<dialog>` 模态导航，
-  打开时焦点进入，Esc 关闭并把焦点还给“菜单”按钮，选择链接后关闭。
+- 外壳有“跳到主要内容”链接、`nav` 与 `main` 地标；导航用链接，当前页有 `aria-current`；窄屏使用底部概览、专辑、艺人、我的标签，顶栏提供全局搜索。个人入口汇集到 `/me`，底部占位同时计入标签栏和迷你播放栏。
 - 设置页布局与旧地址重定向见[状态规范](./state-management.md)“URL State”。
-- 外壳底部是用户菜单（`app/shell/user-menu.tsx`）：一整行按钮（`Avatar` 首字头像、用户名、角色），可访问名称显式写 `aria-label="用户名 角色"`（`.who` 是 grid，空白文本节点不可靠）；
-  菜单向上弹出“设置 / 退出登录”；在 `/settings/*` 时这一行有当前样式（`data-current`，不加 `aria-current`）；退出失败的提示在按钮上方同一 section 内。
-  窄屏对话框里用户区贴底（内容区纵向 flex + `margin-top: auto`），选“设置”先关菜单再关对话框。
+- 外壳底部显示头像、用户名与角色，旁边齿轮链接直接进入设置；账号图标向上弹出“账号 / 退出登录”。退出失败就近提示，不假装已退出。手机的账号、设置与退出位于“我的”页。
 - 菜单用 `useMenu`（`shared/ui/menu-button.tsx`）：`placement: "above" | "below"`、`matchTriggerWidth`、菜单项 `icon`（不进可访问名称）；
   浮层渲染到 `trigger.closest("dialog") ?? document.body`——模态 `<dialog>` 打开时 body 之外的内容是惰性的，渲染到 body 的菜单在对话框里点不了。
   `MenuButton` 是它的薄包装。菜单项是按钮，导航类菜单项（“设置”）在 `onSelect` 里 `navigate`，这是“导航用链接”的例外。
 - 管理页由 `AdminGate` 把关：非管理员显示“需要管理员权限”，不渲染页面内容，也就不调用管理接口；后端仍独立鉴权。
 - 停用与撤销类操作先确认并说明影响范围，恢复与重新启用直接执行；目标是自己时对话框额外提示会被退出登录。
 - 失败文案按**错误码**选择（各 feature 的 `*-messages.ts`，`as const` 映射），不比较后端 message；未知错误码显示后端的安全
-  message 与请求 ID（`describeFailure`）。
+  message（`describeFailure`），请求 ID 只记到控制台。
 - 扫描阶段只在变化时经礼貌型 live region 播报一次，轮询得到相同阶段不重复播报。M5 ⑥ 起只有服务端给出的确定进度（`progress.percent_bp`）才显示百分比，
   前端不推算、不补动画；剩余时间（ETA）仍不做。
-- 扫描进度（M5 ⑥，`library/components/scan-progress.tsx`，概览与扫描详情同源）：只读的 `role="progressbar"`，名称“扫描进度”，`aria-valuemin=0`、
+- 扫描进度（M5 ⑥，`library/components/scan-progress.tsx`，扫描详情用此组件，概览状态行复用相同的进度计算函数）：只读的 `role="progressbar"`，名称“扫描进度”，`aria-valuemin=0`、
   `aria-valuemax=100`、`aria-valuenow=floor(percent_bp/100)`（没有成功结束的扫描最多 99），`aria-valuetext` 写出当前目录与阶段、全局文件累计与整体百分比
   （如“第 2 / 共 3 个目录，读取标签，已处理 1,200 / 2,400 个文件，整体进度 42%”；计数时“正在数文件，已检查 1 / 3 个目录”，不把目录单位读成文件）。
   没有进度数据时进度条不给数值：运行中说“正在准备”，旧扫描不显示这一块。文件比计数时多时写“已处理 A 个文件（计数时 T 个）”，不写成 A / T。
@@ -50,11 +47,9 @@
   （或读取时 503 `scan_report_unavailable`）只说“这次的报告没能生成，扫描结果已经保存。”；`legacy`/`pending` 不显示。问题数到上限写“至少 100 条”。
   新增专辑列出扫描时的标题与艺人，现在还看得到就链接到当前所在的专辑，看不到时标“现在看不到了”、不给入口；“可能接替了《…》”的链接沿用
   `/claims?release=<旧版本>&target=<新发行>`，不在报告里创建认领命令。
-- 概览“最近新增”（M5 ⑥，catalog 的 `RecentlyAddedPanel`）：所有成员可见，接口给最多 8 张，卡片复用 `AlbumGrid`/`AlbumCard`，“查看全部”到 `/albums?sort=added_at_desc`；
-  只显示能排满的行：一行能放 3 张及以上时只显示一行（张数等于列数，最多 8），每行 1–2 张时最多两行。列数由 `useGridColumns` 读浏览器解析出的
-  `grid-template-columns`（auto-fill 展开后的列数）并随 ResizeObserver 更新，列宽规则只写在 CSS 里；多出的卡片不渲染（不可 Tab、读屏读不到）；
-  量不到列数（jsdom 没有布局）时全部显示，测试要验证行数时替换 `getComputedStyle`/ResizeObserver；
-  加载与失败照常显示，成功且为空时整块不渲染（概览外层的 `.wide:empty` 不留空行）；接口 404（旧服务）按没有新增处理。
+- 概览“最近新增”（catalog 的 `RecentlyAddedPanel`）：所有成员可见，接口给最多 8 张，卡片复用 `AlbumGrid`/`AlbumCard`，“全部专辑”到 `/albums?sort=added_at_desc`；
+  全部卡片放在 `useShelf` 横向书架中，溢出时在标题行显示翻页按钮，不再按列数截掉卡片。聚焦后卡片滚进可见范围；加载用 8 张占位，失败照常显示，成功且为空时整块不渲染，接口 404 按没有新增处理。
+  app 的概览页通过 `renderPlay(group)` 传入 `AlbumCardPlay`，播放代表版本的可播放曲目；catalog 不导入 player。键盘按每张卡片的链接、播放键依次聚焦，触屏不显示悬停播放键。
 - 用户内容（用户名、目录名、专辑与曲目标题等）允许任意位置换行（`overflow-wrap: anywhere`），超长值不撑破布局。**网格项与弹性项还要 `min-width: 0`**：
   `overflow-wrap: anywhere` 只让文字能折行，网格轨道与弹性项的“自动最小宽度”仍可能取内容的最小宽度（尤其是被 `content-visibility` 跳过、保留着上一次渲染宽度的分段），
   窗口先宽后窄时整页横向溢出；M1b 的 Playwright 有“先宽后窄”的回归用例。
@@ -72,15 +67,15 @@
 
 | 组件 | 约定 |
 | --- | --- |
-| `Cover` | 带裱边的正方形封面，不加滤镜，真实封面 `object-fit: contain` 不裁切；四态（加载中的同尺寸底色、已加载、没有封面的标题文字版面、加载失败加“封面无法加载”）由 `data-state` 表达；`variant="card"` 是装饰（`alt=""`、懒加载、对读屏隐藏），`variant="detail"` 有替代文字（“《标题》封面”“《标题》没有封面”）并在失败后提供“重新加载封面”（换 `key` 重新挂载图片，浏览器重新发请求）。只引用同源的封面接口，不拉外部图片 |
-| `AlbumCard`、`AlbumGrid` | 整张卡片是一个 `Link`（里面没有按钮），可访问名称含标题与艺人，标题最多 3 行（`line-clamp`，完整文字仍在 DOM 里）；网格 `repeat(auto-fill, minmax(160px, 1fr))`；“N 个版本”只在 `release_count > 1` 时出现，单版本组没有版本字样 |
-| `AlbumFilters`、`AlbumListView` | `<form role="search">`：搜索词显式提交，清除后焦点回到输入框，字节超限在字段旁说明现状；“只看需要关注”立即生效。结果数用 `aria-live="polite"`，“正在更新…”只给看得见的人；翻页时旧结果保持可见并标 `aria-busy`；点页码链接时滚到结果标题并聚焦 |
+| `Cover` | 正方形封面：详情保留裱边，网格卡片去掉卡纸边框、仅保留细线与圆角；不加滤镜，真实封面 `object-fit: contain` 不裁切；四态（加载中的同尺寸底色、已加载、没有封面的标题文字版面、加载失败加“封面无法加载”）由 `data-state` 表达；`variant="card"` 是装饰（`alt=""`、懒加载、对读屏隐藏），`variant="detail"` 有替代文字（“《标题》封面”“《标题》没有封面”）并在失败后提供“重新加载封面”（换 `key` 重新挂载图片，浏览器重新发请求）。只引用同源的封面接口，不拉外部图片 |
+| `AlbumCard`、`AlbumGrid` | 卡片主体是一个 `Link`（里面没有按钮），可选 `renderPlay(group)` 在链接之外渲染播放键；精确指针悬停或键盘聚焦时显现，触屏不显示，由 app 组合播放逻辑，catalog 不导入 player；链接的可访问名称含标题与艺人，标题最多 3 行（`line-clamp`，完整文字仍在 DOM 里）；网格 `repeat(auto-fill, minmax(160px, 1fr))`；“N 个版本”只在 `release_count > 1` 时出现，单版本组没有版本字样 |
+| `AlbumFilters`、`AlbumListView` | `FilterField` 即时筛选（250ms，一次输入过程一条历史），清除后焦点回到输入框，字节超限在字段旁说明且不写地址；“需要关注”用 `FilterChip` 立即生效，排序用 `SortMenu`。结果数用 `aria-live="polite"`，“正在更新…”只给看得见的人；翻页时旧结果保持可见并标 `aria-busy`；点页码链接时滚到结果标题并聚焦 |
 | `AlbumDetailView` | 页面标题与 h1 取决于选中的版本，所以详情自己渲染 `Page`（路由组件不包 `Page`）；头部用组详情里的摘要先渲染，曲目区单独显示加载态；选中的版本读详情得到 404 时就地提示并给出办法，不影响页面其余部分 |
 | `AlbumHeader`、`VersionNav` | 头部是封面加概况：一行灰色小字、细竖线分隔、只写值（`ul[aria-label="概况"]`，每项带只给读屏的“年份：”等标签；年份未知不写，介质多于 1 张才写“N 张碟”，流派与总时长有才写，有一首曲目时长未知就不写总时长，总时长用 `formatSpokenDuration` 口语写法；窄屏换行时分隔线不出现在行首，2026-11-08 起）；版本导航是 `<nav aria-label="版本">` 里的链接，不是 ARIA 标签页，各版本标题不同时才附标题；生效中的默认版本带 `DefaultVersionTag`（M4，所有成员可见，自动选择时没有），标题旁的“对比版本”打开对比对话框 |
 | `VersionComparisonDialog`、`ComparisonTable`（M4） | `ModalDialog`，`min(980px, 100vw - 边距)`、最高 90vh，标题行 sticky、内容在对话框内部滚动，初始焦点在标题上；内容只在打开时挂载（打开后才请求）。“字段 × 版本”的真表格（显式 ARIA 角色），以第一列为基准：不同的格加金色下划线并带读屏文字“（与版本 1 不同）”，没有值写“—”加读屏的“没有记录”，有人工修正带 `ManualCorrectionTag`；行的取舍与文字在纯函数 `comparison.ts`（全空的行不出现，标题与专辑艺人只在不同时出现，音频格式写参数不写“最高音质”）；容器窄于 640px 时每个字段堆叠成“版本 N：值”；列头的“查看这个版本”关闭对话框并切换版本 |
 | `ReleaseMedia` | 一张介质时直接是 `<ol role="list">`，多于一张时每张一个 `<section aria-labelledby>` 加“跳到第 N 张”链接（点击把焦点放到分段标题上并滚到视野，不改地址）；分段用 `content-visibility: auto`，占位高度只写块方向的 `contain-intrinsic-block-size`（简写 `contain-intrinsic-size` 带一个值会同时给宽度，窄屏上被跳过的分段有 480px 的固有宽度，整页横向溢出）；古典作品（⑧）：同一张介质里相邻且 `work.index` 相同的曲目由纯函数 `groupTracksByWork` 归成一项，渲染为作品小标题（作品名，右侧是组内总时长，任一首未知即未知）加嵌套的 `ol`（`aria-labelledby` 指向作品名），组内行只写 `work.movement ?? title`，其余照常；`work` 全为 null 时结构不变 |
 | `ReleaseFacts`、`EvidenceSection` | 发行信息里没有值的条目不列出；“来源与证据”是 `Disclosure`（折叠时不渲染内容，换版本用 `key` 回到折叠），有人工修正的字段在证据表里标 `ManualCorrectionTag`（“人工修正”，文字加图标）；管理员的“查看完整证据”按钮在展开后才出现，点击后才请求，按钮留在原处（加载中忙碌、之后可重新加载）使焦点不丢 |
-| `ReleaseMedia` 的 `CreditsLine` | 曲目行署名写成“组名：名字、名字；组名：名字”，不加解释；有 `detail`（乐器或工种）的按细分成组，组名用 `creditDetailLabel`（已知键中文名，歌词或标签原写法原样），否则按角色、组名用 `creditRoleLabel`；组与名字都按接口顺序（后端按作词→作曲→编曲→指挥→演奏→制作人排好） |
+| `ReleaseMedia` 的 `CreditsLine` | `sharedTrackCredits` 将版本内全部曲目共有的署名组上提至页头（至少两首，按细分或角色分组，以排序后的姓名集合比较，展示顺序沿用首曲）；`ownTrackCredits` 只保留未上提的组。曲目行署名写成“组名：名字、名字；组名：名字”，不加解释；有 `detail`（乐器或工种）的按细分成组，组名用 `creditDetailLabel`（已知键中文名，歌词或标签原写法原样），否则按角色、组名用 `creditRoleLabel`；组与名字都按接口顺序（后端按作词→作曲→编曲→指挥→演奏→制作人排好） |
 | `labels.ts` | 署名角色、署名细分、证据字段、来源、可信度、处理方式、原因码与归组方式的中文名；清单按后端当时的取值核对，**未知取值原样显示**，后端新增取值不会让页面出错（样本里出现过的取值都有中文名，由测试保证） |
 
 ## 已实现的受治理操作组件（M3，`features/governance`）

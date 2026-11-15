@@ -1,102 +1,63 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useRef, useState, type FormEvent } from "react";
-import { Button, TextField } from "../../../shared/ui";
+import { FilterChip, FilterField, SortMenu, type SortOption } from "../../../shared/ui";
 import { utf8ByteLength } from "../../auth";
 import { artistFilterRoles, artistRoleLabels, MAX_SEARCH_BYTES, parseSearchText, type ArtistRole } from "../../catalog";
 import type { ArtistsSearch } from "../artist-search";
 import styles from "./artist-filters.module.css";
 
+type ArtistSort = "name" | "album_count";
+
+const sortOptions: readonly SortOption<ArtistSort>[] = [
+  { value: "name", label: "按名字" },
+  { value: "album_count", label: "按专辑数" },
+];
+
+/** 超长的筛选词不静默丢弃：说明现状，不写进地址。 */
+function validate(text: string): string | null {
+  return utf8ByteLength(text.trim()) > MAX_SEARCH_BYTES ? "筛选词太长了，请短一些。" : null;
+}
+
 /**
- * 艺人列表的筛选：搜索词显式提交（按钮或回车），角色与排序立即生效；任何一项改变都回到第 1 页。
+ * 艺人列表的工具条：在艺人中筛选（边输入边出结果，一次输入过程只占一条历史，见 FilterField）、一排角色胶囊（单选，“全部”与各角色）与排序菜单；
+ * 任何一项改变都回到第 1 页。地址里的 release_artist（只匹配发行艺人）没有单独的胶囊，显示在“专辑艺人”下。
  * 换成按专辑数排序时首字母不再适用（列表不分组），一起去掉。
  */
 export function ArtistFilters({ search }: { search: ArtistsSearch }) {
   const navigate = useNavigate();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [draft, setDraft] = useState(search.q ?? "");
-  const [syncedQuery, setSyncedQuery] = useState(search.q);
-  const [error, setError] = useState<string | null>(null);
-  // 地址里的搜索词变了（后退、前进、清除）：输入框回到地址里的值。
-  if (syncedQuery !== search.q) {
-    setSyncedQuery(search.q);
-    setDraft(search.q ?? "");
-    setError(null);
-  }
-  const go = (next: ArtistsSearch) => void navigate({ to: "/artists", search: { ...next, page: undefined } });
-
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (utf8ByteLength(draft.trim()) > MAX_SEARCH_BYTES) {
-      setError("搜索词太长了，请短一些。");
-      return;
-    }
-    setError(null);
-    go({ ...search, q: parseSearchText(draft) });
-  };
-
+  const go = (next: ArtistsSearch, replace = false) => void navigate({ to: "/artists", search: { ...next, page: undefined }, replace });
+  const selected: ArtistRole | undefined = search.role === "release_artist" ? "album_artist" : search.role;
   return (
-    <form role="search" aria-label="查找艺人" className={styles.form} onSubmit={submit}>
-      {/* 工具条一行：查找（输入框、查找、清除）、角色、排序，与专辑列表同一套。 */}
-      <div className={styles.search}>
-        <div className={styles.input}>
-          <TextField
-            ref={inputRef}
-            label="查找艺人"
-            labelHidden
-            placeholder="查找艺人"
-            name="q"
-            type="text"
-            inputMode="search"
-            enterKeyHint="search"
-            autoComplete="off"
-            value={draft}
-            error={error}
-            onChange={(event) => setDraft(event.target.value)}
-          />
-        </div>
-        <Button type="submit" variant="primary">
-          查找
-        </Button>
-        {search.q === undefined ? null : (
-          <Button
-            onClick={() => {
-              setDraft("");
-              setError(null);
-              inputRef.current?.focus();
-              go({ ...search, q: undefined });
-            }}
-          >
-            清除
-          </Button>
-        )}
+    <div role="search" aria-label="筛选艺人" className={styles.toolbar}>
+      <div className={styles.filter}>
+        <FilterField
+          label="筛选艺人"
+          placeholder="在艺人中筛选"
+          value={search.q}
+          normalize={parseSearchText}
+          validate={validate}
+          onCommit={(q, mode) => go({ ...search, q }, mode === "replace")}
+        />
       </div>
-      <div className={styles.actions}>
-        <label className={styles.select}>
-          <span>角色</span>
-          {/* 地址里的 release_artist（只匹配发行艺人）没有单独的选项，显示在“专辑艺人”下。 */}
-          <select value={search.role === "release_artist" ? "album_artist" : (search.role ?? "")} onChange={(event) => go({ ...search, role: artistFilterRoles.find((role) => role === event.target.value) })}>
-            <option value="">全部</option>
-            {artistFilterRoles.map((role: ArtistRole) => (
-              <option key={role} value={role}>
-                {artistRoleLabels[role]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className={styles.select}>
-          <span>排序</span>
-          <select
-            value={search.sort ?? "name"}
-            onChange={(event) => {
-              const sort = event.target.value === "album_count" ? "album_count" : undefined;
-              go({ ...search, sort, initial: sort === undefined ? search.initial : undefined });
-            }}
-          >
-            <option value="name">按名字</option>
-            <option value="album_count">按专辑数</option>
-          </select>
-        </label>
+      <div role="group" aria-label="角色" className={styles.chips}>
+        <FilterChip pressed={selected === undefined} onClick={() => go({ ...search, role: undefined })}>
+          全部
+        </FilterChip>
+        {artistFilterRoles.map((role) => (
+          <FilterChip key={role} pressed={selected === role} onClick={() => go({ ...search, role })}>
+            {artistRoleLabels[role]}
+          </FilterChip>
+        ))}
       </div>
-    </form>
+      <span className={styles.sort}>
+        <SortMenu
+          options={sortOptions}
+          value={search.sort ?? "name"}
+          onChange={(value) => {
+            const sort = value === "album_count" ? value : undefined;
+            go({ ...search, sort, initial: sort === undefined ? search.initial : undefined });
+          }}
+        />
+      </span>
+    </div>
   );
 }

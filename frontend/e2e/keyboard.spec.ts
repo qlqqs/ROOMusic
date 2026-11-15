@@ -4,7 +4,7 @@ import { expectVisibleFocusRing } from "./support/checks";
 import { expect, test } from "./support/fixtures";
 import { expectFocusStaysInDialog, focusedName, tabTo } from "./support/keyboard";
 import { heading } from "./support/locators";
-import { openSettings, userTrigger } from "./support/settings";
+import { openSettings, tabBar } from "./support/settings";
 
 // 只用键盘完成主要路径：登录、跳到主要内容、导航、停用确认对话框（焦点进入、约束、Esc 关闭、焦点恢复）、窄屏菜单。
 
@@ -45,7 +45,7 @@ test.describe("键盘", () => {
     await expect(page.locator("main#main")).toBeFocused();
   });
 
-  test("最近播放：卡片是整张的链接；清除确认对话框约束焦点，Esc 还回焦点，Enter 确认后焦点到区块标题", async ({ page, backend }) => {
+  test("最近播放：卡片是整张的链接；“更多”菜单里的清除确认对话框约束焦点，Esc 还回焦点，Enter 确认后焦点到区块标题", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "listener" });
     mock.seedRecentPlays(3);
     await page.goto("/");
@@ -55,9 +55,13 @@ test.describe("键盘", () => {
     await cards.first().focus();
     await expectVisibleFocusRing(page, "最近播放的卡片");
 
-    const trigger = panel.getByRole("button", { name: "清除播放历史" });
+    const trigger = panel.getByRole("button", { name: "最近播放的更多操作" });
     await trigger.focus();
-    await expectVisibleFocusRing(page, "清除播放历史按钮");
+    await expectVisibleFocusRing(page, "最近播放的更多操作按钮");
+    // Enter 打开菜单，焦点在唯一的“清除播放历史”上，再按 Enter 打开确认。
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("menuitem", { name: "清除播放历史" })).toBeFocused();
+    await expectVisibleFocusRing(page, "清除播放历史菜单项");
     await page.keyboard.press("Enter");
     const dialog = page.getByRole("dialog", { name: "清除播放历史？" });
     await expect(dialog).toBeVisible();
@@ -71,13 +75,15 @@ test.describe("键盘", () => {
     expect(mock.callsTo("DELETE", "/api/v1/me/plays")).toHaveLength(0);
 
     await page.keyboard.press("Enter");
+    await expect(page.getByRole("menuitem", { name: "清除播放历史" })).toBeFocused();
+    await page.keyboard.press("Enter");
     await expect(dialog).toBeVisible();
     await page.keyboard.press("Tab");
     expect(await focusedName(page)).toBe("清除播放历史");
     await page.keyboard.press("Enter");
     await expect(dialog).toBeHidden();
     expect(mock.callsTo("DELETE", "/api/v1/me/plays")).toHaveLength(1);
-    // 打开对话框的按钮已经不存在：焦点到区块标题，读屏用户同时听到“已清除”的状态提示。
+    // 打开对话框的“更多”按钮已经不存在：焦点到区块标题，读屏用户同时听到“已清除”的状态提示。
     await expect(panel.getByRole("heading", { level: 2, name: "最近播放" })).toBeFocused();
     await expect(panel.getByText("已清除你的播放历史。")).toBeVisible();
     await expect(cards).toHaveCount(0);
@@ -140,33 +146,37 @@ test.describe("键盘", () => {
     await expect(heading(page, "扫描详情")).toBeVisible();
   });
 
-  test("窄屏菜单：Enter 打开，焦点进入并被约束，Esc 关闭并把焦点还给“菜单”按钮；选择链接后菜单关闭", async ({ page, backend }) => {
+  test("窄屏：顶栏搜索按钮 Enter 打开搜索对话框，焦点进输入框，Esc 关闭并还给按钮；标签栏“我的”进设置分栏", async ({ page, backend }) => {
     await backend.start({ signedInAs: "curator" });
     await page.setViewportSize({ width: 375, height: 800 });
     await page.goto("/");
-    const menu = page.getByRole("button", { name: "菜单" });
-    await menu.focus();
+    await expect(heading(page, "概览")).toBeVisible();
+    await expect(page.getByRole("button", { name: "菜单" })).toHaveCount(0);
+    const search = page.getByRole("button", { name: "搜索全部音乐", exact: true });
+    await search.focus();
     await page.keyboard.press("Enter");
-
-    const dialog = page.getByRole("dialog", { name: "菜单" });
+    const dialog = page.getByRole("dialog", { name: "搜索全部音乐", exact: true });
     await expect(dialog).toBeVisible();
-    await expectFocusStaysInDialog(page, dialog, 6);
+    await expect(dialog.getByRole("combobox", { name: "搜索" })).toBeFocused();
+    await expectFocusStaysInDialog(page, dialog, 3);
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
-    await expect(menu).toBeFocused();
+    await expect(search).toBeFocused();
 
+    const me = tabBar(page).getByRole("link", { name: "我的", exact: true });
+    await me.focus();
+    await expectVisibleFocusRing(page, "标签栏的“我的”");
     await page.keyboard.press("Enter");
-    await userTrigger(page).focus();
-    await page.keyboard.press("Enter");
-    const accountMenu = dialog.getByRole("menu", { name: "账号", exact: true });
-    await expect(accountMenu.getByRole("menuitem", { name: "设置", exact: true })).toBeFocused();
+    await expect(heading(page, "我的")).toBeVisible();
+    await expect(me).toHaveAttribute("aria-current", "page");
+    await page.getByRole("main").getByRole("link", { name: "设置", exact: true }).focus();
     await page.keyboard.press("Enter");
     await expect(heading(page, "账号")).toBeVisible();
     await page.getByRole("navigation", { name: "设置", exact: true }).getByRole("link", { name: "扫描目录" }).focus();
     await expectVisibleFocusRing(page, "扫描目录分栏链接");
     await page.keyboard.press("Enter");
     await expect(heading(page, "扫描目录")).toBeVisible();
-    await expect(dialog).toBeHidden();
+    await expect(me).toHaveAttribute("aria-current", "page");
   });
 
   test("成员页：键盘完成新建（Tab 顺序与 Enter 提交）与对话框确认", async ({ page, backend }) => {
@@ -187,8 +197,13 @@ test.describe("键盘", () => {
     await page.keyboard.press("Enter");
     await expect(page.getByText(/已创建成员“keyboard-user”/)).toBeVisible();
 
-    const trigger = page.getByRole("button", { name: "撤销会话 keyboard-user" });
+    // 行尾“更多”菜单：回车打开并聚焦第一项（重置密码…），下箭头到“撤销会话…”。
+    const trigger = page.getByRole("button", { name: "成员 keyboard-user 的更多操作" });
     await trigger.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("menuitem", { name: "重置密码…" })).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(page.getByRole("menuitem", { name: "撤销会话…" })).toBeFocused();
     await page.keyboard.press("Enter");
     const dialog = page.getByRole("dialog", { name: "撤销成员“keyboard-user”的全部会话？" });
     await expect(dialog.getByRole("button", { name: "取消" })).toBeFocused();
@@ -197,7 +212,7 @@ test.describe("键盘", () => {
     await expect(trigger).toBeFocused();
   });
 
-  test("专辑主路径只用键盘完成：搜索 → 筛选 → 翻页 → 打开详情 → 切换版本 → 展开证据 → 返回列表，焦点始终可见", async ({ page, backend }) => {
+  test("专辑主路径只用键盘完成：筛选词 → 需要关注 → 翻页 → 打开详情 → 切换版本 → 展开证据 → 返回列表，焦点始终可见", async ({ page, backend }) => {
     const mock = await backend.start({ signedInAs: "curator" });
     // 每个专辑都需要关注，共 120 个：筛选后仍有三页；有三个版本的“Album Choral”是第二页的第一个。
     const choral = albumGroup(200, {
@@ -223,17 +238,17 @@ test.describe("键盘", () => {
     await page.goto("/albums");
     await expect(cards).toHaveCount(48);
 
-    // 搜索：回车提交，地址记录搜索词。
-    const search = page.getByRole("textbox", { name: "搜索专辑" });
+    // 筛选词：输入即写入地址（回车立即写入）。
+    const search = page.getByRole("textbox", { name: "筛选专辑" });
     await search.focus();
-    await expectVisibleFocusRing(page, "搜索框");
+    await expectVisibleFocusRing(page, "筛选框");
     await page.keyboard.type("Album");
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/\/albums\?q=Album$/);
 
-    // 筛选：Tab 到复选框，空格切换，立即生效。
-    await tabTo(page, (name) => name.includes("只看需要关注"));
-    await expectVisibleFocusRing(page, "只看需要关注");
+    // 需要关注：Tab 到胶囊，空格切换，立即生效。
+    await tabTo(page, (name) => name === "需要关注");
+    await expectVisibleFocusRing(page, "需要关注");
     await page.keyboard.press("Space");
     await expect(page).toHaveURL(/\/albums\?q=Album&attention=required$/);
     await expect(page.getByRole("region", { name: "“Album”中需要关注的专辑" })).toBeVisible();

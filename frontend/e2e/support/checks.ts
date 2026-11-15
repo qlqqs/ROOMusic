@@ -37,7 +37,7 @@ const axeTags = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
 export async function expectNoSeriousViolations(page: Page, label: string): Promise<void> {
   const { violations } = await new AxeBuilder({ page }).withTags(axeTags).analyze();
   const serious = violations.filter((violation) => violation.impact === "serious" || violation.impact === "critical");
-  const described = serious.map((violation) => `${violation.id}: ${violation.help}（${violation.nodes.map((node) => node.target.join(" ")).join("；")}）`);
+  const described = serious.map((violation) => `${violation.id}: ${violation.help}（${violation.nodes.map((node) => `${node.target.join(" ")}：${node.failureSummary ?? ""}`).join("；")}）`);
   expect(described, `${label}：axe 发现严重问题`).toEqual([]);
 }
 

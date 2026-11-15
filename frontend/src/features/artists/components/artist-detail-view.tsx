@@ -10,7 +10,6 @@ import {
   AlbumGridLayout,
   AlbumGridSkeleton,
   ArtistNames,
-  ArtistMeta,
   artistRoleLabels,
   Cover,
   trackArtistOf,
@@ -21,6 +20,7 @@ import {
 import { artistTrackRoles, type ArtistAlbumDTO, type ArtistDetailDTO, type ArtistTrackRole } from "../api/decoders";
 import type { ArtistDetailSearch } from "../artist-search";
 import { isArtistCatalogPreparing, useArtist, useArtistAlbums, useArtistNames, useArtistTracks } from "../hooks/use-artists";
+import { ArtistHeader } from "./artist-header";
 import { ArtistPreparing } from "./artist-preparing";
 import styles from "./artist-detail-view.module.css";
 
@@ -30,10 +30,11 @@ type ArtistDetailViewProps = {
   search: ArtistDetailSearch;
   /** 这位艺人已经被合并进别的艺人：由 app 用替换历史的方式带到现在的艺人页。 */
   onRedirect: (artistId: string) => void;
-  /** 头部的动作（播放全部、随机播放、心形）：由 app 组合。 */
+  /**
+   * 头部的操作区（播放全部、随机播放、心形与“更多”，管理员的合并、拆开、改名在“更多”的“管理”分组里，结果提示在操作行下方）：
+   * 由 app 组合；后端仍独立鉴权。
+   */
   renderHeaderActions: (detail: ArtistDetailDTO) => ReactNode;
-  /** 管理员的动作（合并、拆开、改名）：由 app 按角色传入；后端仍独立鉴权。 */
-  renderAdminActions?: ((detail: ArtistDetailDTO) => ReactNode) | undefined;
   /** 曲目一行的动作（播放、心形、“更多”）：由 app 组合；传入稳定的函数引用。 */
   renderTrackActions: (item: TrackSummaryDTO) => ReactNode;
   /** 包住一页曲目行的范围（这一页的收藏状态一次读出）：由 app 提供；传入稳定的函数引用。 */
@@ -61,10 +62,10 @@ function ArtistNotFound() {
 }
 
 /**
- * 艺人页：主名、其他名字、头部的播放与心形、作为专辑艺人的专辑，以及按角色分栏的参与曲目（曲目艺人、作曲、指挥、演奏、制作人）。
+ * 艺人页：页头（圆章、主名、角色、概况与操作区）、其他名字、作为专辑艺人的专辑，以及按角色分栏的参与曲目（曲目艺人、作曲、指挥、演奏、制作人）。
  * 专辑、曲目与名字各自翻页，页码与选中的角色都在地址里。已经合并进别的艺人时跳到现在的艺人页；艺人数据还在整理时只说一句。
  */
-export function ArtistDetailView({ artistId, search, onRedirect, renderHeaderActions, renderAdminActions, renderTrackActions, renderTrackRowsScope }: ArtistDetailViewProps) {
+export function ArtistDetailView({ artistId, search, onRedirect, renderHeaderActions, renderTrackActions, renderTrackRowsScope }: ArtistDetailViewProps) {
   const detail = useArtist(artistId);
   // 正在重新读取时不按缓存里的旧结果跳走（旧的重定向可能已经被拆开撤掉），等读到最新的再决定。
   const redirect = detail.isFetching ? null : (detail.data?.redirect_artist_id ?? null);
@@ -96,15 +97,8 @@ export function ArtistDetailView({ artistId, search, onRedirect, renderHeaderAct
     );
   }
   const { artist } = data;
-  const hasDescription = artist.album_count > 0 || artist.track_count > 0;
   return (
-    <Page
-      title={artist.name}
-      compactTitle={artist.name.length > 80}
-      {...(hasDescription ? { description: <ArtistMeta artist={artist} /> } : {})}
-      actions={<div className={styles.headerActions}>{renderHeaderActions(data)}</div>}
-    >
-      {renderAdminActions === undefined ? null : renderAdminActions(data)}
+    <Page title={artist.name} header={<ArtistHeader artist={artist} compactTitle={artist.name.length > 80} actions={renderHeaderActions(data)} />}>
       <NamesSection detail={data} search={search} />
       <AlbumsSection artistId={artist.id} search={search} />
       <TracksSection detail={data} search={search} renderTrackActions={renderTrackActions} renderTrackRowsScope={renderTrackRowsScope} />

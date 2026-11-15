@@ -213,7 +213,7 @@ describe("搜索结果页", () => {
     api.on("GET", path, (request) => paramsOf(request.path).get("type") === type
       ? jsonResponse(500, { error: { code: "internal_error", message: "读取失败" }, request_id: "search-column-error" }) : respond(request.path));
     renderApp({ path: "/search?q=爱" });
-    expect((await screen.findByRole("alert")).textContent).toContain("search-column-error");
+    expect((await screen.findByRole("alert")).textContent).not.toContain("search-column-error");
     const other = type === "albums" ? "tracks" : "albums";
     expect(within(section(other)).getByText("1,000+ " + (other === "albums" ? "张" : "首"))).toBeTruthy();
     expect(within(section(type)).queryByText(/没有找到/)).toBeNull();
@@ -223,6 +223,26 @@ describe("搜索结果页", () => {
     await loaded();
     expect(requests(type)).toHaveLength(2);
     expect(requests(other)).toHaveLength(otherRequests);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("各栏都失败时只显示一条错误，“重试”重试所有栏", async () => {
+    const { api, respond, requests } = setup();
+    api.on("GET", path, () => jsonResponse(500, { error: { code: "internal_error", message: "读取失败" }, request_id: "search-all-error" }));
+    renderApp({ path: "/search?q=爱" });
+    const alert = await screen.findByRole("alert");
+    await waitFor(() => expect(screen.getAllByRole("alert")).toHaveLength(1));
+    expect(alert.textContent).toContain("暂时搜不到结果");
+    expect(alert.textContent).not.toContain("search-all-error");
+    expect(screen.queryByRole("region", { name: "专辑" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "曲目" })).toBeNull();
+    expect(screen.getAllByRole("button", { name: "重试" })).toHaveLength(1);
+    const before = { albums: requests("albums").length, tracks: requests("tracks").length };
+    api.on("GET", path, (request) => respond(request.path));
+    await userEvent.click(within(alert).getByRole("button", { name: "重试" }));
+    await loaded();
+    expect(requests("albums")).toHaveLength(before.albums + 1);
+    expect(requests("tracks")).toHaveLength(before.tracks + 1);
     expect(screen.queryByRole("alert")).toBeNull();
   });
 

@@ -182,6 +182,29 @@ describe("侧栏的歌单导航", () => {
     for (const playlist of playlists.slice(1)) expect(api.requestsTo("GET", `${playlistsPath}/${playlist.id}`)).toHaveLength(0);
   });
 
+  it("还没有歌单时“新建歌单”只在居中的空状态里，标题行不重复", async () => {
+    const { state } = setup(0);
+    state.deleted = true;
+    renderApp({ path: "/me/playlists" });
+    expect(await screen.findByText("还没有歌单")).toBeTruthy();
+    expect(screen.getByText(/把喜欢的曲目收成一组/)).toBeTruthy();
+    const content = within(screen.getByRole("region", { name: "全部歌单" }));
+    expect(content.getAllByRole("button", { name: "新建歌单" })).toHaveLength(1);
+    await userEvent.click(content.getByRole("button", { name: "新建歌单" }));
+    expect(await screen.findByRole("dialog", { name: "新建歌单" })).toBeTruthy();
+  });
+
+  it("有歌单时“新建歌单”在标题行", async () => {
+    setup(0);
+    renderApp({ path: "/me/playlists" });
+    const heading = await screen.findByRole("heading", { level: 2, name: "全部歌单" });
+    const content = within(screen.getByRole("region", { name: "全部歌单" }));
+    await content.findByRole("link", { name: new RegExp(base.name) });
+    expect(screen.queryByText("还没有歌单")).toBeNull();
+    expect(content.getAllByRole("button", { name: "新建歌单" })).toHaveLength(1);
+    expect(heading).toBeTruthy();
+  });
+
   it("新建歌单成功后侧栏立即出现新歌单，无需刷新或重新展开", async () => {
     const { api, state, playlist } = setup(0);
     const name = "刚建的歌单";
@@ -193,10 +216,10 @@ describe("侧栏的歌单导航", () => {
       return jsonResponse(201, { playlist: playlist(), added_count: 0, existing_count: 0, duplicate_count: 0 });
     });
     const { history } = renderApp({ path: "/me/playlists" });
-    await screen.findByText("还没有歌单。");
+    await screen.findByText("还没有歌单");
     expect(nav().getByRole("button", { name: "歌单列表" }).getAttribute("aria-expanded")).toBe("true");
     expect(nav().queryByRole("link", { name })).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "新建歌单" }));
+    await userEvent.click(within(screen.getByRole("main")).getByRole("button", { name: "新建歌单" }));
     const dialog = await screen.findByRole("dialog", { name: "新建歌单" });
     await userEvent.type(within(dialog).getByRole("textbox", { name: "名字" }), name);
     await userEvent.click(within(dialog).getByRole("button", { name: "新建" }));
@@ -205,9 +228,48 @@ describe("侧栏的歌单导航", () => {
     await screen.findByRole("heading", { name });
     expect(history.location.pathname).toBe(pagePath);
   });
+
+  it("侧栏“我的歌单”一行的＋在任何页面打开同一个新建对话框，建好后打开新歌单", async () => {
+    const { api, state, playlist } = setup(0);
+    const name = "侧栏新建的歌单";
+    state.deleted = true;
+    api.on("POST", playlistsPath, (request) => {
+      expect(request.body).toEqual({ name });
+      state.name = name;
+      state.deleted = false;
+      return jsonResponse(201, { playlist: playlist(), added_count: 0, existing_count: 0, duplicate_count: 0 });
+    });
+    const { history } = renderApp({ path: "/" });
+    await screen.findByRole("heading", { level: 1, name: "概览" });
+    const create = await nav().findByRole("button", { name: "新建歌单" });
+    await userEvent.click(create);
+    const dialog = await screen.findByRole("dialog", { name: "新建歌单" });
+    // 取消后焦点回到＋，不发请求。
+    await userEvent.click(within(dialog).getByRole("button", { name: "取消" }));
+    expect(screen.queryByRole("dialog", { name: "新建歌单" })).toBeNull();
+    expect(document.activeElement).toBe(create);
+    expect(api.requestsTo("POST", playlistsPath)).toHaveLength(0);
+    await userEvent.click(create);
+    const again = await screen.findByRole("dialog", { name: "新建歌单" });
+    await userEvent.type(within(again).getByRole("textbox", { name: "名字" }), name);
+    await userEvent.click(within(again).getByRole("button", { name: "新建" }));
+    await screen.findByRole("heading", { level: 1, name });
+    expect(history.location.pathname).toBe(pagePath);
+    expect((await nav().findByRole("link", { name })).getAttribute("aria-current")).toBe("page");
+    expect(api.requestsTo("POST", playlistsPath)).toHaveLength(1);
+  });
 });
 
 describe("歌单详情的顺序、冲突与稳定重试", () => {
+  it("歌单里还没有曲目时是空状态，给出去专辑里挑选的入口", async () => {
+    setup(0);
+    renderApp({ path: pagePath });
+    expect(await screen.findByText("歌单里还没有曲目")).toBeTruthy();
+    expect(screen.getByText(/选“添加到歌单…”/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "去专辑里挑选" }).getAttribute("href")).toBe("/albums");
+    expect(screen.queryByRole("table", { name: "歌单曲目" })).toBeNull();
+  });
+
   it("曲目表头按统一列顺序显示，歌单多出调整顺序列", async () => {
     setup();
     renderApp({ path: pagePath });
@@ -445,7 +507,7 @@ describe("歌单的容量、删除与表单", () => {
     await userEvent.click(screen.getByRole("menuitem", { name: "删除歌单" }));
     dialog = await screen.findByRole("dialog", { name: "删除歌单？" });
     await userEvent.click(within(dialog).getByRole("button", { name: "删除歌单" }));
-    await screen.findByText("还没有歌单。");
+    await screen.findByText("还没有歌单");
     expect(history.location.pathname).toBe("/me/playlists");
     expect(api.requestsTo("DELETE", playlistPath)).toHaveLength(1);
     expect(api.requestsTo("DELETE", playlistPath)[0]?.body).toEqual({ expected_revision: 4 });
@@ -467,7 +529,7 @@ describe("歌单的容量、删除与表单", () => {
   it("新建的输入校验按码点计数，空白、101 个码点与控制字符均不发请求", async () => {
     const { api } = setup();
     renderApp({ path: "/me/playlists" });
-    await userEvent.click(await screen.findByRole("button", { name: "新建歌单" }));
+    await userEvent.click(await within(await screen.findByRole("main")).findByRole("button", { name: "新建歌单" }));
     const dialog = await screen.findByRole("dialog", { name: "新建歌单" });
     const input = within(dialog).getByRole("textbox", { name: "名字" });
     for (const value of ["   ", "🎵".repeat(101), "含\u0001控制字符"]) {
@@ -484,7 +546,7 @@ describe("歌单的容量、删除与表单", () => {
     const name = "🎵".repeat(100);
     api.on("POST", playlistsPath, () => pending.promise);
     const { history } = renderApp({ path: "/me/playlists" });
-    await userEvent.click(await screen.findByRole("button", { name: "新建歌单" }));
+    await userEvent.click(await within(await screen.findByRole("main")).findByRole("button", { name: "新建歌单" }));
     const dialog = await screen.findByRole("dialog", { name: "新建歌单" });
     fireEvent.change(within(dialog).getByRole("textbox", { name: "名字" }), { target: { value: ` ${name} ` } });
     await userEvent.click(within(dialog).getByRole("button", { name: "新建" }));
@@ -503,7 +565,7 @@ describe("歌单的容量、删除与表单", () => {
     const { api } = setup();
     api.on("POST", playlistsPath, () => jsonResponse(409, { error: { code: "playlist_limit_reached", message: "已到上限" }, request_id: "playlist-capacity" }));
     renderApp({ path: "/me/playlists" });
-    await userEvent.click(await screen.findByRole("button", { name: "新建歌单" }));
+    await userEvent.click(await within(await screen.findByRole("main")).findByRole("button", { name: "新建歌单" }));
     const dialog = await screen.findByRole("dialog", { name: "新建歌单" });
     await userEvent.type(within(dialog).getByRole("textbox", { name: "名字" }), "满额后的新歌单");
     await userEvent.click(within(dialog).getByRole("button", { name: "新建" }));

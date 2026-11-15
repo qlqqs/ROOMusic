@@ -47,6 +47,7 @@ test("真实服务：收藏一首刷新仍在，取消时保留行、刷新后�
   await page.goto(`/albums/${groupId}`);
   const heart = page.getByRole("button", { name: `收藏《${titles[0]}》`, exact: true });
   await expect(heart).toHaveAttribute("aria-pressed", "false");
+  await page.locator("[data-track-row]").filter({ has: heart }).hover();
   await heart.click();
   await expect(heart).toHaveAttribute("aria-pressed", "true");
   await page.goto("/me/liked");
@@ -61,14 +62,14 @@ test("真实服务：收藏一首刷新仍在，取消时保留行、刷新后�
   await expect.poll(async () => decodeFavoriteTracksPage(await body(await page.request.get("/api/v1/me/favorites/tracks"))).items.map((item) => item.track.track_id)).not.toContain(id);
   await expect(table.getByText(titles[0], { exact: true })).toBeVisible();
   await page.reload();
-  await expect(page.getByText("还没有收藏的曲目。", { exact: false })).toBeVisible();
+  await expect(page.getByText("还没有喜欢的曲目", { exact: true })).toBeVisible();
   await expect(table).toHaveCount(0);
 });
 
 test("真实服务：新建歌单、整张加入两首、菜单交换顺序，刷新仍保持", async ({ page }) => {
   const name = "真实服务双曲歌单";
   await page.goto("/me/playlists");
-  await page.getByRole("button", { name: "新建歌单", exact: true }).click();
+  await page.getByRole("main").getByRole("button", { name: "新建歌单", exact: true }).click();
   const create = page.getByRole("dialog", { name: "新建歌单", exact: true });
   await create.getByRole("textbox", { name: "名字", exact: true }).fill(name);
   await create.getByRole("button", { name: "新建", exact: true }).click();
@@ -91,6 +92,7 @@ test("真实服务：新建歌单、整张加入两首、菜单交换顺序，�
   const firstTitle = before.items[0]?.track.title;
   if (firstTitle === undefined) throw new Error("歌单第一首不存在");
   const row = page.getByRole("row").filter({ has: page.getByRole("button", { name: `拖动《${firstTitle}》调整顺序`, exact: true }) });
+  await row.hover();
   await row.getByRole("button", { name: "更多操作", exact: true }).click();
   await page.getByRole("menuitem", { name: "下移", exact: true }).click();
   await expect.poll(async () => decodePlaylistItemsPage(await body(await page.request.get(itemsPath))).items.map((item) => item.track.track_id)).toEqual([...trackIds].reverse());

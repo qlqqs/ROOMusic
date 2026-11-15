@@ -1,4 +1,4 @@
-import { ListEnd, ListStart, Play, Shuffle } from "lucide-react";
+import { ListEnd, ListStart, Pause, Play, Shuffle } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import type { ReleaseDetailDTO } from "../../catalog";
 import { Button, FailureNotice, type MenuAction } from "../../../shared/ui";
@@ -6,7 +6,7 @@ import { playerTracksOf } from "../engine/tracks";
 import { unplayableText } from "../engine/capability";
 import { MAX_QUEUE_ENTRIES, type PlayerTrack } from "../engine/queue";
 import { usePlaybackCapabilities } from "../hooks/use-playback-capabilities";
-import { usePlayerEngine } from "../player-provider";
+import { usePlayerEngine, usePlayerSelector } from "../player-provider";
 import styles from "./album-playback-actions.module.css";
 
 function reasonOf(track: PlayerTrack, table: ReturnType<typeof usePlaybackCapabilities>["data"]): string | null {
@@ -17,7 +17,10 @@ function reasonOf(track: PlayerTrack, table: ReturnType<typeof usePlaybackCapabi
 }
 
 type AlbumPlayback = {
-  /** 墨色圆形的“播放整张专辑”：操作行里唯一的主要操作。 */
+  /**
+   * 墨色圆形的主要操作：当前曲目属于这张专辑（这个版本或同组的其他版本）时是“暂停播放”/“继续播放”，
+   * 否则是“播放整张专辑”（从第一首放起）。
+   */
   play: ReactNode;
   /** “随机播放”：切到随机模式，从随机的一首开始放整张。 */
   shuffle: ReactNode;
@@ -37,6 +40,12 @@ const doneText: Readonly<Record<Kind, string>> = { play: "已选择", shuffle: "
  */
 export function useAlbumPlayback({ release, groupId }: { release: ReleaseDetailDTO; groupId: string }): AlbumPlayback {
   const engine = usePlayerEngine();
+  // 只订阅两个基本值：当前曲目是否属于这张专辑、播放区的意图是不是播放（与播放栏的播放键同一判定）。
+  const ours = usePlayerSelector((snapshot) => {
+    const track = snapshot.current?.track;
+    return track !== undefined && (track.releaseId === release.id || track.groupId === groupId);
+  });
+  const intendsPlay = usePlayerSelector((snapshot) => snapshot.zone?.intent === "play");
   const capability = usePlaybackCapabilities();
   // quiet：只是“已选择 N 首”这类没有新信息的结果，只给读屏播报，不显示。
   const [notice, setNotice] = useState({ text: "", quiet: false });
@@ -65,8 +74,18 @@ export function useAlbumPlayback({ release, groupId }: { release: ReleaseDetailD
   }
   return {
     play: (
-      <span className={styles.play}>
-        <Button variant="icon" icon={<Play size={20} fill="currentColor" />} label="播放整张专辑" disabled={unavailable} onClick={() => perform("play")} />
+      <span className={styles.play} data-paused={ours && intendsPlay ? undefined : ""}>
+        {ours ? (
+          // 正在放这张专辑：按下去暂停或从原处继续，不再从第一首重放。
+          <Button
+            variant="icon"
+            icon={intendsPlay ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
+            label={intendsPlay ? "暂停播放" : "继续播放"}
+            onClick={() => (intendsPlay ? engine.pause() : engine.play())}
+          />
+        ) : (
+          <Button variant="icon" icon={<Play size={20} fill="currentColor" />} label="播放整张专辑" disabled={unavailable} onClick={() => perform("play")} />
+        )}
       </span>
     ),
     shuffle: (

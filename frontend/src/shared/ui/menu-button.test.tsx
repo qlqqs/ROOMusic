@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { MenuButton } from "./menu-button";
@@ -46,6 +46,21 @@ describe("菜单按钮键盘操作", () => {
 });
 
 describe("菜单浮层与图标", () => {
+  it("打开前滚动的迟到事件与菜单内部滚动不关闭菜单，锚点实际移动后关闭", async () => {
+    render(<MenuButton label="更多" actions={[{ id: "download", label: "下载", onSelect: vi.fn() }]} />);
+    const trigger = screen.getByRole("button", { name: "更多" });
+    const bounds = vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue(new DOMRect(16, 400, 44, 44));
+    await userEvent.click(trigger);
+    fireEvent.scroll(document);
+    expect(screen.getByRole("menu")).toBeTruthy();
+    fireEvent.scroll(screen.getByRole("menu"));
+    expect(screen.getByRole("menu")).toBeTruthy();
+    bounds.mockReturnValue(new DOMRect(16, 350, 44, 44));
+    fireEvent.scroll(document);
+    expect(screen.queryByRole("menu")).toBeNull();
+    bounds.mockRestore();
+  });
+
   it("placement=above 时用底边定位到触发器上方，限制高度以免越出视口", async () => {
     render(<MenuButton label="更多" placement="above" actions={[{ id: "settings", label: "设置", onSelect: vi.fn() }]} />);
     const trigger = screen.getByRole("button", { name: "更多" });
@@ -155,5 +170,95 @@ describe("菜单分组", () => {
     await user.click(screen.getByRole("button", { name: "更多" }));
     expect(screen.getAllByRole("group", { name: "管理" })).toHaveLength(2);
     expect(screen.getAllByRole("separator")).toHaveLength(2);
+  });
+
+  it("untitledGroup：这一组只用分隔线分开，没有组标题也不包 role=group；方向键照常经过", async () => {
+    const user = userEvent.setup();
+    const go = vi.fn();
+    render(<MenuButton label="更多" actions={[...actions.slice(0, 2), { id: "artist", group: "go", untitledGroup: true, label: "前往艺人", onSelect: go }, { id: "album", group: "go", untitledGroup: true, label: "前往专辑", onSelect: vi.fn() }, ...actions.slice(2)]} />);
+    const trigger = screen.getByRole("button", { name: "更多" });
+    trigger.focus();
+    await user.keyboard("{ArrowDown}");
+    const menu = screen.getByRole("menu", { name: "更多" });
+    expect(within(menu).getAllByRole("separator")).toHaveLength(2);
+    // 只有“管理”一个带标题的组。
+    expect(within(menu).getAllByRole("group")).toHaveLength(1);
+    expect(within(menu).getByRole("group", { name: "管理" })).toBeTruthy();
+    expect(screen.queryByText("go")).toBeNull();
+    expect([...menu.children].filter((child) => child.getAttribute("role") === "menuitem").map((item) => item.textContent)).toEqual(["下一首播放", "加入队列", "前往艺人", "前往专辑"]);
+    await user.keyboard("{ArrowDown}{ArrowDown}");
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "前往艺人" }));
+    await user.keyboard("{Enter}");
+    expect(go).toHaveBeenCalledTimes(1);
+  });
+
+  it("hint：项右侧的灰色小字是名称的一部分，与名称之间有空格", async () => {
+    const user = userEvent.setup();
+    render(<MenuButton label="更多" actions={[{ id: "artist", label: "前往艺人", hint: "邓丽君", onSelect: vi.fn() }, { id: "plain", label: "加入队列", onSelect: vi.fn() }]} />);
+    await user.click(screen.getByRole("button", { name: "更多" }));
+    const item = screen.getByRole("menuitem", { name: "前往艺人 邓丽君" });
+    expect(item.hasAttribute("data-hint")).toBe(true);
+    expect(screen.getByRole("menuitem", { name: "加入队列" }).hasAttribute("data-hint")).toBe(false);
+  });
+});
+
+describe("破坏性的菜单项", () => {
+  it("danger 的项另起一段（前面一条分隔线），带标记；同名组里的另一段不重复组标题", async () => {
+    const user = userEvent.setup();
+    render(
+      <MenuButton
+        label="更多"
+        actions={[
+          { id: "reset", label: "重置密码…", onSelect: vi.fn() },
+          { id: "revoke", label: "撤销会话…", onSelect: vi.fn() },
+          { id: "disable", label: "停用…", danger: true, onSelect: vi.fn() },
+        ]}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "更多" }));
+    const menu = screen.getByRole("menu", { name: "更多" });
+    const separator = within(menu).getByRole("separator");
+    expect(separator.previousElementSibling?.textContent).toBe("撤销会话…");
+    expect(separator.nextElementSibling?.textContent).toBe("停用…");
+    expect(screen.getByRole("menuitem", { name: "停用…" }).hasAttribute("data-danger")).toBe(true);
+    expect(screen.getByRole("menuitem", { name: "撤销会话…" }).hasAttribute("data-danger")).toBe(false);
+  });
+
+  it("有名字的组里的破坏性项：分隔线隔开，组标题只出现一次", async () => {
+    const user = userEvent.setup();
+    render(
+      <MenuButton
+        label="更多"
+        actions={[
+          { id: "play", label: "播放", onSelect: vi.fn() },
+          { id: "edit", group: "管理", label: "修改主名…", onSelect: vi.fn() },
+          { id: "delete", group: "管理", label: "删除…", danger: true, onSelect: vi.fn() },
+        ]}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "更多" }));
+    const menu = screen.getByRole("menu", { name: "更多" });
+    expect(within(menu).getAllByRole("separator")).toHaveLength(2);
+    expect(within(menu).getAllByRole("group", { name: "管理" })).toHaveLength(1);
+    expect(within(menu).getAllByText("管理", { exact: true })).toHaveLength(1);
+    // 方向键照常走到破坏性项。
+    await user.keyboard("{End}");
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "删除…" }));
+  });
+
+  it("相邻的多个破坏性项在同一段", async () => {
+    const user = userEvent.setup();
+    render(
+      <MenuButton
+        label="更多"
+        actions={[
+          { id: "download", label: "下载", onSelect: vi.fn() },
+          { id: "a", label: "删除…", danger: true, onSelect: vi.fn() },
+          { id: "b", label: "停用…", danger: true, onSelect: vi.fn() },
+        ]}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "更多" }));
+    expect(screen.getAllByRole("separator")).toHaveLength(1);
   });
 });

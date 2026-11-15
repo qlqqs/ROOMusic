@@ -5,18 +5,32 @@ import styles from "./menu-button.module.css";
 
 /**
  * group：相邻且 group 相同的项为一组，组与组之间画分隔线；组名不为空时在组首显示组标题（不可聚焦，方向键跳过）。
- * 不给 group 的项都在同一个无名组里，旧的调用方不受影响。
+ * 不给 group 的项都在同一个无名组里，旧的调用方不受影响。破坏性的项（danger）与前面的项之间也画分隔线，不需要组名。
+ * untitledGroup：这一组只用分隔线与相邻的组分开，不显示组标题（group 只用来区分组）。
+ * hint：项右侧的灰色小字（例如“前往艺人”后面的艺人名），是菜单项名称的一部分。
  */
-export type MenuAction = { id: string; label: string; onSelect: () => void; disabled?: boolean; icon?: ReactNode; group?: string };
+export type MenuAction = {
+  id: string;
+  label: string;
+  onSelect: () => void;
+  disabled?: boolean;
+  icon?: ReactNode;
+  group?: string;
+  untitledGroup?: boolean;
+  hint?: string;
+  /** 破坏性操作（停用、删除）：文字与图标用警示色，放在菜单最后一组。 */
+  danger?: boolean;
+};
 
-/** 把相邻且 group 相同的项归成一段。 */
-function groupActions(actions: readonly MenuAction[]): { name: string; actions: MenuAction[] }[] {
-  const groups: { name: string; actions: MenuAction[] }[] = [];
+/** 把相邻、group 相同且同为（或同不为）破坏性的项归成一段。 */
+function groupActions(actions: readonly MenuAction[]): { name: string; titled: boolean; danger: boolean; actions: MenuAction[] }[] {
+  const groups: { name: string; titled: boolean; danger: boolean; actions: MenuAction[] }[] = [];
   for (const action of actions) {
     const name = action.group ?? "";
+    const danger = action.danger === true;
     const last = groups.at(-1);
-    if (last !== undefined && last.name === name) last.actions.push(action);
-    else groups.push({ name, actions: [action] });
+    if (last !== undefined && last.name === name && last.danger === danger) last.actions.push(action);
+    else groups.push({ name, titled: name !== "" && action.untitledGroup !== true, danger, actions: [action] });
   }
   return groups;
 }
@@ -75,21 +89,29 @@ export function useMenu({ label, actions, placement = "below", matchTriggerWidth
   useEffect(() => {
     if (position === null) return;
     const buttons = items();
-    (first.current === "last" ? buttons.at(-1) : buttons[0])?.focus();
     const rect = menu.current?.getBoundingClientRect();
     if (placement === "below" && rect !== undefined && rect.bottom > window.innerHeight - 8) {
       menu.current?.style.setProperty("top", `${Math.max(8, window.innerHeight - rect.height - 8)}px`);
     }
+    if (menu.current !== null) menu.current.scrollTop = first.current === "last" ? menu.current.scrollHeight : 0;
+    // 先把菜单移入视口，再聚焦；靠底边打开时不触发页面滚动，否则滚动监听会立即把菜单关闭。
+    (first.current === "last" ? buttons.at(-1) : buttons[0])?.focus({ preventScroll: true });
+    const anchor = trigger.current?.getBoundingClientRect();
     const dismiss = (event: PointerEvent) => {
       if (event.target instanceof Node && !menu.current?.contains(event.target) && !trigger.current?.contains(event.target)) setPosition(null);
     };
-    const moved = () => setPosition(null);
+    const resized = () => setPosition(null);
+    const moved = () => {
+      const current = trigger.current?.getBoundingClientRect();
+      // 点按前浏览器把触发器滚入视口的 scroll 事件可能迟到；只有打开后锚点真的移动才关闭，菜单内部滚动也不关闭。
+      if (current?.top !== anchor?.top || current?.left !== anchor?.left) setPosition(null);
+    };
     document.addEventListener("pointerdown", dismiss);
-    window.addEventListener("resize", moved);
+    window.addEventListener("resize", resized);
     document.addEventListener("scroll", moved, true);
     return () => {
       document.removeEventListener("pointerdown", dismiss);
-      window.removeEventListener("resize", moved);
+      window.removeEventListener("resize", resized);
       document.removeEventListener("scroll", moved, true);
     };
   }, [position, placement]);
@@ -117,15 +139,18 @@ export function useMenu({ label, actions, placement = "below", matchTriggerWidth
       if (["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) { event.preventDefault(); open(event.key === "ArrowUp" ? "last" : "first"); }
     },
   };
-  const item = (action: MenuAction) => <button type="button" key={action.id} role="menuitem" tabIndex={-1} disabled={action.disabled} data-icon={action.icon === undefined ? undefined : ""} onClick={() => { close(); action.onSelect(); }}>
+  const item = (action: MenuAction) => <button type="button" key={action.id} role="menuitem" tabIndex={-1} disabled={action.disabled} data-icon={action.icon === undefined ? undefined : ""} data-danger={action.danger ? "" : undefined} data-hint={action.hint === undefined ? undefined : ""} onClick={() => { close(); action.onSelect(); }}>
     {action.icon === undefined ? null : <span className={styles.icon} aria-hidden="true">{action.icon}</span>}
     {action.label}
+    {/* 空格让可访问名称是“前往艺人 某某”而不是连在一起；弹性容器里只有空白的文字不占位。 */}
+    {action.hint === undefined ? null : <>{" "}<span className={styles.hint}>{action.hint}</span></>}
   </button>;
   // 有名字的组用 role="group" 包起来，组标题是它的名称；无名组的项直接放在菜单里，与没有分组时的结构相同。
   const content = position === null ? null : createPortal(<div id={id} ref={menu} role="menu" aria-label={label} className={styles.menu} style={position.style} onKeyDown={onMenuKey}>
-    {groupActions(actions).map((group, index) => <Fragment key={`${index}:${group.name}`}>
+    {groupActions(actions).map((group, index, groups) => <Fragment key={`${index}:${group.name}`}>
       {index === 0 ? null : <div role="separator" className={styles.separator} />}
-      {group.name === "" ? group.actions.map(item) : <div role="group" aria-labelledby={`${id}-group-${index}`} className={styles.group}>
+      {/* 同名组里的破坏性项另起一段，不再重复组标题。 */}
+      {!group.titled || groups[index - 1]?.name === group.name ? group.actions.map(item) : <div role="group" aria-labelledby={`${id}-group-${index}`} className={styles.group}>
         <div aria-hidden="true" id={`${id}-group-${index}`} className={styles.groupTitle}>{group.name}</div>
         {group.actions.map(item)}
       </div>}

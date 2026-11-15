@@ -99,25 +99,54 @@ async function openOutput(page: Page, name: string) {
   return { ...device, name };
 }
 
+/**
+ * 打开设备列表。设备按钮只有图标：控制本机时名为“播放设备”，控制别的设备时名为“正在控制：设备名”。
+ * 窄屏本机有曲目时从全屏底部打开；空队列有其他设备或控制远端时直接使用迷你栏入口。
+ */
+async function openDevicePicker(page: Page) {
+  const button = bar(page).getByRole("button", { name: /^(播放设备|正在控制：)/ });
+  if (await button.isVisible()) {
+    await button.click();
+    return;
+  }
+  await bar(page).getByRole("button", { name: "打开全屏播放器", exact: true }).click();
+  const fullscreen = page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "收起全屏播放器", exact: true }) });
+  await fullscreen.getByRole("button", { name: /^(播放设备|正在控制：)/ }).click();
+}
+
+/** 设备列表关闭后，若是从全屏打开的，收起全屏回到页面。 */
+async function closeFullscreenIfOpen(page: Page) {
+  const collapse = page.getByRole("button", { name: "收起全屏播放器", exact: true });
+  if (await collapse.isVisible()) {
+    await collapse.click();
+    await expect(collapse).toBeHidden();
+  }
+}
+
 async function selectDevice(page: Page, name: string) {
-  await bar(page).getByRole("button", { name: /^播放设备/ }).click();
+  await openDevicePicker(page);
   const picker = page.getByRole("dialog", { name: "播放设备", exact: true });
   await picker.getByRole("button").filter({ has: page.getByText(name, { exact: true }) }).click();
   await expect(picker).toBeHidden();
+  await closeFullscreenIfOpen(page);
 }
 
 async function transferTo(page: Page, name: string, offline = false) {
-  await bar(page).getByRole("button", { name: /^播放设备/ }).click();
+  await openDevicePicker(page);
   const picker = page.getByRole("dialog", { name: "播放设备", exact: true });
   const row = picker.getByRole("listitem").filter({ has: page.getByText(name, { exact: true }) });
   if (offline) await expect(row.getByText("离线", { exact: true })).toBeVisible();
   await row.getByRole("button", { name: offline ? "转到本机" : "转到这台设备", exact: true }).click();
   await expect(picker).toBeHidden();
+  // 转移清空源队列时全屏会自动收起，等待退出完成，不重复点击动画中的按钮。
+  await expect(page.getByRole("button", { name: "收起全屏播放器", exact: true })).toBeHidden();
 }
 
 async function startFromAlbum(page: Page, item: ReturnType<typeof trackNamed>) {
   await page.goto(`/albums/${item.groupId}`);
   const row = page.locator("ol > li").filter({ has: page.getByText(item.track.title, { exact: true }) });
+  // 序号位的播放按钮在悬停或聚焦这一行时才显现，先悬停，不被序号层挡住。
+  await row.hover();
   await row.getByRole("button", { name: "从这首开始播放", exact: true }).click();
 }
 
@@ -184,9 +213,11 @@ test("同一浏览器两个标签页只有一个出声，关闭出声页后另�
     // 两页均有真实用户手势，避免把自动播放策略当作接手协议的一部分。
     await other.getByRole("heading", { name: album.release.title, exact: true }).click();
     const row = page.locator("ol > li").filter({ has: page.getByText(track.title, { exact: true }) });
+    // 序号位的播放键悬停才出现（平时盖着曲目号）：先悬停这一行。
+    await row.hover();
     await row.getByRole("button", { name: "从这首开始播放", exact: true }).click();
     await expect.poll(async () => (await sounding(page))[0]?.seconds ?? 0).toBeGreaterThan(1);
-    await expect(bar(other).getByText("正在播放", { exact: true })).toBeVisible();
+    await expect(bar(other).getByRole("button", { name: "暂停", exact: true })).toBeVisible();
     expect((await sounding(page)).length + (await sounding(other)).length).toBe(1);
     expect(await sounding(other)).toEqual([]);
     const beforeClose = (await sounding(page))[0];
@@ -211,7 +242,7 @@ test("同一浏览器两个标签页只有一个出声，关闭出声页后另�
     expect(zone?.stream?.url).not.toBe(new URL(beforeClose.src).pathname);
     // 接手开的是新流，但曲目内起点保留关闭页回报的位置，不能从头播放。
     expect(zone?.stream?.segments[0]?.track_start_seconds).toBeGreaterThanOrEqual(beforeClose.seconds - 0.5);
-    await expect(bar(other).getByText("正在播放", { exact: true })).toBeVisible();
+    await expect(bar(other).getByRole("button", { name: "暂停", exact: true })).toBeVisible();
   } finally {
     await other.close();
   }
@@ -239,7 +270,7 @@ test("手机远程控制电脑：进度、暂停、切歌与定位生效，转�
       await command(mobile.request, pc.zone_id, { command: "enqueue", track_ids: [alac.track.id, slow.track.id] });
       await expect.poll(async () => (await sounding(computer))[0]?.seconds ?? 0).toBeGreaterThan(1);
       expect(await sounding(phone)).toEqual([]);
-      await expect(bar(phone).getByRole("button", { name: `播放设备：${pc.name}`, exact: true })).toBeVisible();
+      await expect(bar(phone).getByRole("button", { name: `正在控制：${pc.name}`, exact: true })).toBeVisible();
       await bar(phone).getByRole("button", { name: "打开全屏播放器" }).click();
       const fullscreen = phone.getByRole("dialog", { name: slow.track.title, exact: true });
       const progress = fullscreen.getByRole("slider", { name: "播放进度" });
@@ -248,7 +279,7 @@ test("手机远程控制电脑：进度、暂停、切歌与定位生效，转�
       await fullscreen.getByRole("button", { name: "暂停", exact: true }).click();
       await expect.poll(async () => (await sounding(computer)).length).toBe(0);
       await expect.poll(async () => (await zone(mobile.request, pc.zone_id)).intent).toBe("pause");
-      await expect(bar(computer).getByText("已暂停", { exact: true })).toBeVisible();
+      await expect(bar(computer).getByRole("button", { name: "播放", exact: true })).toBeVisible();
       await fullscreen.getByRole("button", { name: "播放", exact: true }).click();
       await expect.poll(async () => (await sounding(computer)).length).toBe(1);
       await fullscreen.getByRole("button", { name: "下一首", exact: true }).click();
@@ -364,7 +395,7 @@ test("真实服务重启保留两个播放区的队列和位置，只让此前�
       expect(await queue(desktop.request, handset.zone_id)).toEqual(phoneQueue);
       expect(await zone(desktop.request, handset.zone_id)).toMatchObject({ intent: "pause", current: pausedBefore.current, position: { seconds: 42 } });
       expect(await sounding(phone)).toEqual([]);
-      await expect(bar(computer).getByText("正在播放", { exact: true })).toBeVisible();
+      await expect(bar(computer).getByRole("button", { name: "暂停", exact: true })).toBeVisible();
       await expect(bar(phone).getByRole("button", { name: "播放", exact: true })).toBeVisible();
       // 继续观察一段真实媒体推进，避免仅在重新认领瞬间检查暂停区。
       const after = (await sounding(computer))[0]?.seconds ?? 0;
@@ -406,7 +437,7 @@ test("成员只看见自己的设备，跨成员读取队列、控制、转移�
         const state = await snapshot(page.request);
         expect(state.devices.map((item) => item.device_id)).toEqual([own.device_id]);
         expect(state.zones.map((item) => item.zone_id)).toEqual([own.zone_id]);
-        await bar(page).getByRole("button", { name: /^播放设备/ }).click();
+        await bar(page).getByRole("button", { name: /^(播放设备|正在控制：)/ }).click();
         const picker = page.getByRole("dialog", { name: "播放设备", exact: true });
         await expect(picker.getByText(own.name, { exact: true })).toBeVisible();
         await expect(picker.getByText(foreign.name, { exact: true })).toHaveCount(0);
@@ -473,7 +504,7 @@ test("升级首次打开导入旧 sessionStorage 队列、当前项、模式与�
   await drawer.getByRole("button", { name: "关闭队列" }).click();
   await page.reload();
   await expect(bar(page).getByText(slow.track.title, { exact: true })).toBeVisible();
-  await expect(bar(page).getByRole("button", { name: "播放模式：列表循环", exact: true })).toBeVisible();
+  await expect(bar(page).getByRole("button", { name: "列表循环", exact: true })).toBeVisible();
   expect(await queue(context.request, device.zone_id)).toEqual(entries);
   expect((await snapshot(context.request)).devices).toHaveLength(1);
   expect(await page.evaluate((key) => sessionStorage.getItem(key), key)).toBeNull();
@@ -555,12 +586,12 @@ test("本机电平化采用真实分析增益，同专辑两首通过同一条�
   expect(Math.abs(gain)).toBeGreaterThan(0.1);
   const device = await openOutput(page, "电平化与无缝输出");
   await page.goto("/settings/playback");
-  const leveling = page.getByRole("group", { name: "音量均衡", exact: true }).getByRole("radio", { name: "按曲目", exact: true });
+  const leveling = page.getByRole("radiogroup", { name: "音量均衡", exact: true }).getByRole("radio", { name: "按曲目", exact: true });
   await leveling.click();
   await expect(leveling).toBeChecked();
   await page.getByRole("switch", { name: "无缝播放", exact: true }).setChecked(true);
   await page.getByRole("switch", { name: "交叉渐变", exact: true }).setChecked(false);
-  await page.getByRole("group", { name: "音质", exact: true }).getByRole("radio", { name: "无损", exact: true }).check();
+  await page.getByRole("radiogroup", { name: "串流音质", exact: true }).getByRole("radio", { name: "无损", exact: true }).check();
   await expect.poll(async () => (await zone(context.request, device.zone_id)).settings).toMatchObject({ leveling: "track", gapless: true, crossfade: false, quality: "lossless" });
   const stream = await test.step("信号路径包含真实非零电平化增益，浏览器解码的是该渲染流", async () => {
     await startFromAlbum(page, first);
@@ -575,7 +606,7 @@ test("本机电平化采用真实分析增益，同专辑两首通过同一条�
     expect(new URL((await sounding(page))[0]?.src ?? "").pathname).toBe(state.stream?.url);
     await bar(page).getByRole("button", { name: /^信号路径：/ }).click();
     const signal = page.getByRole("dialog", { name: /^信号路径：/ });
-    await expect(signal.getByText(/^电平化 /)).toBeVisible();
+    await expect(signal.getByText("电平化", { exact: true })).toBeVisible();
     await signal.getByRole("button", { name: "关闭", exact: true }).click();
     return stream;
   });
@@ -609,17 +640,17 @@ test("不同专辑 5 秒交叉渐变确实缩短流分段间隔，跨边界持�
   // 合同要求两首有效长度都大于 3×渐变时长；12 秒素材不会触发 5 秒渐变。
   const device = await openOutput(page, "跨专辑渐变输出");
   await page.goto("/settings/playback");
-  const leveling = page.getByRole("group", { name: "音量均衡", exact: true }).getByRole("radio", { name: "关", exact: true });
+  const leveling = page.getByRole("radiogroup", { name: "音量均衡", exact: true }).getByRole("radio", { name: "关", exact: true });
   await leveling.click();
   await expect(leveling).toBeChecked();
   const crossfade = page.getByRole("switch", { name: "交叉渐变", exact: true });
   await crossfade.click();
   await expect(crossfade).toBeChecked();
-  const duration = page.getByRole("group", { name: "渐变时长", exact: true }).getByRole("radio", { name: "5 秒", exact: true });
+  const duration = page.getByRole("radiogroup", { name: "渐变时长", exact: true }).getByRole("radio", { name: "5 秒", exact: true });
   await duration.click();
   await expect(duration).toBeChecked();
   await page.getByRole("switch", { name: "无缝播放", exact: true }).setChecked(true);
-  await page.getByRole("group", { name: "音质", exact: true }).getByRole("radio", { name: "无损", exact: true }).check();
+  await page.getByRole("radiogroup", { name: "串流音质", exact: true }).getByRole("radio", { name: "无损", exact: true }).check();
   await expect.poll(async () => (await zone(context.request, device.zone_id)).settings).toMatchObject({ leveling: "off", gapless: true, crossfade: true, crossfade_seconds: 5, quality: "lossless" });
   await expect.poll(async () => (await snapshot(context.request)).devices.find((item) => item.device_id === device.device_id)?.online).toBe(true);
   // 队列建立经公开协议，处理设置由真实设置页提交；不拦截渲染请求、不调用业务内部对象。

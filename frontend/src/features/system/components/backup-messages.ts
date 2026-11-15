@@ -1,4 +1,4 @@
-// 立即备份时另一个进程正在备份（409 backup_busy）：这不是错误，界面用普通提示说这一句，不带请求 ID 与重试。
+// 立即备份时另一个进程正在备份（409 backup_busy）：这不是错误，界面用普通提示说这一句，不带重试。
 
 export const BACKUP_BUSY_MESSAGE = "另一份备份正在进行，稍后再试。";
 
@@ -12,7 +12,7 @@ export const retentionDaysError = "填 1 到 3650 之间的整数。";
 export const retentionCountError = "填 1 到 1000 之间的整数。";
 export const RETENTION_UNREADABLE_MESSAGE = "没能读取当前设置。";
 
-export const deleteSelectedLabel = (count: number) => `删除所选（${count}）`;
+export const selectedCountText = (count: number) => `已选 ${count} 个`;
 export const deleteManyTitle = (count: number) => `删除 ${count} 份备份？`;
 export const deleteManyFailedTitle = (count: number) => `有 ${count} 份没能删除`;
 export const deletedManyAnnouncement = (count: number) => `已删除 ${count} 份。`;

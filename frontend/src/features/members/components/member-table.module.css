@@ -1,12 +1,15 @@
+/* 宽表格里每格垂直居中（窄容器堆叠时，行标题与“更多”按钮同一行也居中）：行尾的“更多”按钮比文字高，用户名与标签要和它对齐。 */
+.table tbody :is(th, td) {
+  vertical-align: middle;
+}
+
+.table tbody tr {
+  align-items: center;
+}
+
 .name {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
-}
-
-.actions {
-  display: inline-flex;
-  flex-wrap: wrap;
   gap: var(--space-2);
 }

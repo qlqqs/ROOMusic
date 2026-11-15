@@ -1,27 +1,28 @@
 import { Link } from "@tanstack/react-router";
+import { FolderOpen } from "lucide-react";
 import { formatCount } from "../../../shared/lib/number";
-import { Panel, QueryContent, Skeleton, StatList } from "../../../shared/ui";
+import { PendingStatusRow, StatusRow } from "../../../shared/ui";
 import { summarizeRoots, useRoots } from "../hooks/use-roots";
 
-/** 概览的目录区块（管理员）：启用与已停用的目录数，并链接到扫描目录页。 */
+const icon = <FolderOpen size={16} />;
+
+/** 概览“资料库状态”里的音乐目录一行（管理员）：右侧是启用的目录数，有停用的另写一句；整行进入扫描目录。 */
 export function RootSummary() {
   const roots = useRoots();
+  if (roots.data === undefined) return <PendingStatusRow icon={icon} label="音乐目录" query={roots} />;
+  const summary = summarizeRoots(roots.data);
+  const detail = roots.data.length === 0 ? "还没有音乐目录" : summary.disabled > 0 ? `${formatCount(summary.disabled)} 个已停用` : undefined;
   return (
-    <Panel title="音乐目录" action={<Link to="/settings/library">管理目录</Link>}>
-      <QueryContent query={roots} loading={<Skeleton label="正在加载目录" lines={2} />}>
-        {(items) => {
-          if (items.length === 0) return <p>还没有音乐目录。</p>;
-          const summary = summarizeRoots(items);
-          return (
-            <StatList
-              items={[
-                { label: "启用", value: formatCount(summary.active) },
-                { label: "已停用", value: formatCount(summary.disabled) },
-              ]}
-            />
-          );
-        }}
-      </QueryContent>
-    </Panel>
+    <StatusRow
+      icon={icon}
+      label="音乐目录"
+      detail={detail}
+      value={formatCount(summary.active)}
+      renderLink={({ className, children }) => (
+        <Link to="/settings/library" className={className}>
+          {children}
+        </Link>
+      )}
+    />
   );
 }

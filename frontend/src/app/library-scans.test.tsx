@@ -84,7 +84,7 @@ describe("扫描目录页：扫描区段", () => {
 
     const alert = await screen.findByRole("alert");
     expect(within(alert).getByText("暂时无法协调扫描任务，请稍后重试。")).toBeTruthy();
-    expect(within(alert).getByText(/请求 ID：/)).toBeTruthy();
+    expect(within(alert).queryByText(/请求 ID/)).toBeNull();
 
     library.startScanFailure = null;
     await userEvent.click(within(alert).getByRole("button", { name: "重试" }));
@@ -288,7 +288,7 @@ describe("扫描目录页：扫描记录", () => {
     expect(history.length).toBe(1);
   });
 
-  it("读取失败（503）：区段内显示带请求 ID 的错误与重试，其他区段不受影响，重试成功后显示记录", async () => {
+  it("读取失败（503）：区段内显示错误（不显示请求 ID）与重试，其他区段不受影响，重试成功后显示记录", async () => {
     const { api, library } = setup();
     seedHistory(library, 2);
     api.on("GET", "/api/v1/scans", () => sampleResponse("errors/database-unavailable"));
@@ -296,7 +296,7 @@ describe("扫描目录页：扫描记录", () => {
     const region = await historyRegion();
     // 503 会被自动重试（最多 2 次，带退避），耗尽后才显示错误。
     const alert = await within(region).findByRole("alert", {}, { timeout: 8000 });
-    expect(within(alert).getByText(/请求 ID：/)).toBeTruthy();
+    expect(within(alert).queryByText(/请求 ID/)).toBeNull();
     expect(within(screen.getByRole("list", { name: "音乐目录列表" })).getByText("classical-a", { exact: true })).toBeTruthy();
 
     api.on("GET", "/api/v1/scans", () => jsonResponse(200, sampleBody("scans/list")));
@@ -486,7 +486,7 @@ describe("扫描详情：取消", () => {
     expect(screen.queryByText("已取消")).toBeNull();
   });
 
-  it("取消失败（503）：显示错误与请求 ID，可以重试", async () => {
+  it("取消失败（503）：显示错误（不显示请求 ID），可以重试", async () => {
     const { api, library } = setup();
     const scan = seedScan(library);
     api.on("POST", `${scanPath(scan)}/cancel`, () => sampleResponse("errors/database-unavailable"));
@@ -623,14 +623,14 @@ describe("扫描详情：访问", () => {
     expect(api.requests.filter((request) => request.path.includes("/api/v1/scans/"))).toHaveLength(0);
   });
 
-  it("读取失败（503）：显示带请求 ID 的错误与重试，重试成功后显示状态", async () => {
+  it("读取失败（503）：显示错误（不显示请求 ID）与重试，重试成功后显示状态", async () => {
     const { api, library } = setup();
     const scan = seedScan(library);
     let failing = true;
     api.on("GET", scanPath(scan), () => (failing ? sampleResponse("errors/database-unavailable") : jsonResponse(200, library.scans.get(scan.id))));
     renderApp({ path: `/settings/library/scans/${scan.id}` });
     const alert = await screen.findByRole("alert", {}, { timeout: 8000 });
-    expect(within(alert).getByText(/请求 ID：/)).toBeTruthy();
+    expect(within(alert).queryByText(/请求 ID/)).toBeNull();
     failing = false;
     await userEvent.click(within(alert).getByRole("button", { name: "重试" }));
     expect(within(await statusPanel()).getByText("运行中")).toBeTruthy();
@@ -642,22 +642,25 @@ describe("概览里的入口", () => {
     const { library } = setup();
     const scan = seedScan(library, {}, true);
     renderApp({ path: "/" });
-    expect(await screen.findByRole("link", { name: "管理目录" })).toBeTruthy();
-    expect(await screen.findByRole("link", { name: "查看扫描详情" })).toBeTruthy();
-    const hrefs = screen.getAllByRole("link").map((link) => `${link.textContent}→${link.getAttribute("href")}`);
-    expect(hrefs).toContain("管理目录→/settings/library");
-    // 配置入口已移出主导航；概览扫描区块仍有一个入口。
-    expect(hrefs.filter((entry) => entry === "扫描目录→/settings/library")).toHaveLength(1);
-    expect(hrefs).toContain(`查看扫描详情→/settings/library/scans/${scan.id}`);
+    const table = await screen.findByRole("region", { name: "资料库状态" });
+    // 状态表里：扫描一行（进行中）进入扫描详情，音乐目录一行进入扫描目录。
+    const scanLink = await within(table).findByRole("link", { name: /^扫描/ });
+    expect(scanLink.getAttribute("href")).toBe(`/settings/library/scans/${scan.id}`);
+    expect((await within(table).findByRole("link", { name: /^音乐目录/ })).getAttribute("href")).toBe("/settings/library");
+    // 配置入口已移出主导航；概览里进入扫描目录的入口只有音乐目录这一行。
+    const hrefs = screen.getAllByRole("link").map((link) => link.getAttribute("href"));
+    expect(hrefs.filter((href) => href === "/settings/library")).toHaveLength(1);
   });
 
   it("成员的概览只看到扫描状态，没有管理链接", async () => {
     const { library } = setup({ role: "user" });
     seedScan(library, {}, true);
     renderApp({ path: "/" });
-    expect(await screen.findByText("运行中")).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "扫描目录" })).toBeNull();
+    const table = await screen.findByRole("region", { name: "资料库状态" });
+    expect(await within(table).findByRole("progressbar", { name: "扫描进度" })).toBeTruthy();
+    expect(within(table).queryByRole("link", { name: /^扫描/ })).toBeNull();
+    expect(within(table).queryByRole("link", { name: /^音乐目录/ })).toBeNull();
     expect(screen.queryByRole("link", { name: "查看扫描详情" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "管理目录" })).toBeNull();
+    expect(screen.queryAllByRole("link").filter((link) => link.getAttribute("href")?.startsWith("/settings/library"))).toHaveLength(0);
   });
 });

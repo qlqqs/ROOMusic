@@ -362,7 +362,7 @@ describe("歌词面板", () => {
     expect(screen.getByRole("heading", { level: 2, name: "歌词" })).toBeTruthy();
   });
 
-  it("读取失败显示带请求 ID 的错误与重试，重试成功后显示歌词", async () => {
+  it("读取失败显示错误（不显示请求 ID）与重试，重试成功后显示歌词", async () => {
     const mounted = await mount({ lyrics: () => sampleResponse("errors/database-unavailable") });
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("服务暂时不可用");

@@ -14,7 +14,7 @@ for (const width of artistWidths) {
   }
 }
 
-test("艺人稳定性：纯键盘从导航浏览首字母分组、查找、排序并进入艺人详情", async ({ page, backend }) => {
+test("艺人稳定性：纯键盘从导航浏览首字母分组、排序、角色、筛选并进入艺人详情", async ({ page, backend }) => {
   const mock = await backend.start({ signedInAs: "listener" });
   const seed = seedArtistsE2E(mock);
   await page.goto("/albums");
@@ -24,16 +24,33 @@ test("艺人稳定性：纯键盘从导航浏览首字母分组、查找、排�
   await artistKeyActivate(page, page.getByRole("navigation", { name: "首字母" }).getByRole("link", { name: "D", exact: true }));
   await expect(page).toHaveURL(/initial=D/);
   await expect(page.getByRole("link", { name: seed.artist.name, exact: true })).toBeVisible();
-  const sort = page.getByRole("combobox", { name: "排序", exact: true });
+  // 排序菜单：Enter 打开，下箭头到“按专辑数”，Enter 选中。
+  const sort = page.getByRole("button", { name: "排序：按名字", exact: true });
   await artistTabTo(page, sort);
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("menu", { name: "排序" })).toBeVisible();
   await page.keyboard.press("ArrowDown");
-  await page.keyboard.press("Tab");
+  await expect(page.getByRole("menuitem", { name: "按专辑数", exact: true })).toBeFocused();
+  await page.keyboard.press("Enter");
   await expect(page).toHaveURL((url) => url.searchParams.get("sort") === "album_count" && !url.searchParams.has("initial"));
   await expect(page.getByRole("navigation", { name: "首字母" })).toHaveCount(0);
-  const search = page.getByRole("textbox", { name: "查找艺人", exact: true });
+  await expect(page.getByRole("button", { name: "排序：按专辑数", exact: true })).toBeFocused();
+  // 角色胶囊：Tab 到“作曲”，空格按下。
+  const composer = page.getByRole("group", { name: "角色" }).getByRole("button", { name: "作曲", exact: true });
+  await artistTabTo(page, composer);
+  await page.keyboard.press("Space");
+  await expect(page).toHaveURL((url) => url.searchParams.get("role") === "composer");
+  await expect(composer).toHaveAttribute("aria-pressed", "true");
+  // 回到“全部”：它在“作曲”前面，Shift+Tab 倒回去。
+  const all = page.getByRole("group", { name: "角色" }).getByRole("button", { name: "全部", exact: true });
+  for (let step = 0; step < 8 && !(await all.evaluate((element) => element === document.activeElement)); step += 1) await page.keyboard.press("Shift+Tab");
+  await expect(all).toBeFocused();
+  await page.keyboard.press("Space");
+  await expect(page).toHaveURL((url) => !url.searchParams.has("role"));
+  // 筛选：边输入边写入地址，没有提交按钮。
+  const search = page.getByRole("textbox", { name: "筛选艺人", exact: true });
   await artistTabTo(page, search);
   await page.keyboard.type(seed.artist.name);
-  await page.keyboard.press("Enter");
   await expect(page).toHaveURL((url) => url.searchParams.get("q") === seed.artist.name);
   await artistKeyActivate(page, page.locator("#main").getByRole("link", { name: seed.artist.name, exact: true }));
   await expect(page.getByRole("heading", { name: seed.artist.name, level: 1, exact: true })).toBeVisible();
@@ -127,7 +144,7 @@ test("艺人稳定性：收藏、别名搜索打开同一艺人，取消收藏�
 });
 
 for (const width of artistWidths) {
-  test(`${width}px 艺人列表布局：概况只在“·”“、”处换行，首字母导航最后一行不只剩一项${width === 1440 ? "，1440 下一行排完" : ""}`, async ({ page, backend }) => {
+  test(`${width}px 艺人列表布局：概况只在“·”“、”处换行，${width < 768 ? "首字母是右侧的竖排索引，不盖住列表" : `首字母导航最后一行不只剩一项${width === 1440 ? "，1440 下一行排完" : ""}`}`, async ({ page, backend }) => {
     await page.setViewportSize({ width, height: 900 });
     const mock = await backend.start({ signedInAs: "listener" });
     const seed = seedArtistsE2E(mock);
@@ -141,8 +158,24 @@ for (const width of artistWidths) {
     expect(segments.length, "列表里应有概况段").toBeGreaterThan(0);
     expect(segments.filter(([, lines]) => lines !== 1), `${width}px 段内换行`).toEqual([]);
 
+    const initials = page.getByRole("navigation", { name: "首字母" }).getByRole("link");
+    if (width < 768) {
+      // 手机：贴在右侧的竖排索引，一列从上到下，整列在窗口里；列表行的右边不伸到索引下面。
+      const boxes = await initials.evaluateAll((links) => links.map((link) => { const rect = link.getBoundingClientRect(); return { left: Math.round(rect.left), top: rect.top, bottom: rect.bottom, right: rect.right }; }));
+      expect(boxes).toHaveLength(29);
+      expect(new Set(boxes.map((box) => box.left)).size, `${width}px 竖排索引是一列`).toBe(1);
+      expect(boxes.every((box, index) => index === 0 || box.top >= (boxes[index - 1]?.bottom ?? 0) - 0.5), `${width}px 竖排索引从上到下不重叠`).toBe(true);
+      expect(boxes[0]?.top ?? -1).toBeGreaterThanOrEqual(0);
+      expect(boxes.at(-1)?.bottom ?? Infinity).toBeLessThanOrEqual(900);
+      expect(boxes[0]?.right ?? Infinity).toBeLessThanOrEqual(width);
+      const railLeft = boxes[0]?.left ?? 0;
+      const rowRights = await page.locator("#main li").filter({ has: page.locator('a[href^="/artists/"]') }).evaluateAll((items) => items.map((item) => item.getBoundingClientRect().right));
+      expect(rowRights.length).toBeGreaterThan(0);
+      expect(rowRights.filter((right) => right > railLeft + 0.5), `${width}px 列表行伸到竖排索引下面`).toEqual([]);
+      return;
+    }
     // 首字母导航：按每项的上沿分行；1440 下只有一行，其他宽度最后一行至少两项。
-    const tops = await page.getByRole("navigation", { name: "首字母" }).getByRole("link").evaluateAll((links) => links.map((link) => Math.round(link.getBoundingClientRect().top)));
+    const tops = await initials.evaluateAll((links) => links.map((link) => Math.round(link.getBoundingClientRect().top)));
     expect(tops).toHaveLength(29);
     const rows = [...new Set(tops)].sort((a, b) => a - b);
     const lastRow = tops.filter((top) => top === rows.at(-1)).length;

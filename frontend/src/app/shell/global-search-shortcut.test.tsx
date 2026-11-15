@@ -35,7 +35,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe("外壳全局搜索快捷键", () => {
-  it("宽屏聚焦可见侧栏搜索框，阻止斜杠输入但不打开菜单", async () => {
+  it("宽屏聚焦可见侧栏搜索框，阻止斜杠输入但不打开搜索对话框", async () => {
     const main = await setup();
     const input = screen.getByRole("combobox", { name: "搜索" });
     visible(input);
@@ -45,7 +45,7 @@ describe("外壳全局搜索快捷键", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("窄屏结果页优先聚焦可见的结果页搜索框，不打开菜单", async () => {
+  it("窄屏结果页优先聚焦可见的结果页搜索框，不打开搜索对话框", async () => {
     const main = await setup("/search");
     const input = within(main).getByRole("combobox", { name: "搜索" });
     visible(input);
@@ -55,12 +55,12 @@ describe("外壳全局搜索快捷键", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("窄屏其他页面无可见搜索框时打开菜单并聚焦菜单里的框", async () => {
+  it("窄屏其他页面无可见搜索框时打开搜索对话框并聚焦其中的框", async () => {
     const main = await setup();
     act(() => main.focus());
     expect(slash(main).defaultPrevented).toBe(true);
-    const menu = screen.getByRole("dialog", { name: "菜单" });
-    expect(document.activeElement).toBe(within(menu).getByRole("combobox", { name: "搜索" }));
+    const sheet = screen.getByRole("dialog", { name: "搜索全部音乐" });
+    expect(document.activeElement).toBe(within(sheet).getByRole("combobox", { name: "搜索" }));
   });
 
   it.each(["input", "textarea", "contenteditable", "contenteditable 子元素", "select"])(
@@ -102,7 +102,7 @@ describe("外壳全局搜索快捷键", () => {
     },
   );
 
-  it("其他对话框打开时不跳到其外的搜索框，也不再打开菜单", async () => {
+  it("其他对话框打开时不跳到其外的搜索框，也不再打开搜索对话框", async () => {
     const main = await setup();
     visible(screen.getByRole("combobox", { name: "搜索" }));
     const dialog = document.createElement("dialog");
@@ -117,7 +117,7 @@ describe("外壳全局搜索快捷键", () => {
       expect(slash(button).defaultPrevented).toBe(false);
       expect(document.activeElement).toBe(button);
       expect(screen.getAllByRole("dialog")).toHaveLength(1);
-      expect(screen.queryByRole("dialog", { name: "菜单" })).toBeNull();
+      expect(screen.queryByRole("dialog", { name: "搜索全部音乐" })).toBeNull();
     } finally {
       dialog.close();
       dialog.remove();

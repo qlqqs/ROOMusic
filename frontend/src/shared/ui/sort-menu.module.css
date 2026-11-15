@@ -1,0 +1,12 @@
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 不是当前项的位置留一个与勾同宽的空白，文字对齐。 */
+.blank {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+}

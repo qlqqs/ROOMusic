@@ -132,8 +132,11 @@ test("真实账户 V2：管理员在成员页重置密码，撤销全部成员�
     const table = page.getByRole("table", { name: "成员列表" });
     const selfRow = table.getByRole("row").filter({ has: page.getByText(admin.username, { exact: true }) });
     await expect(selfRow).toHaveCount(1);
-    await expect(selfRow.getByRole("button", { name: /^重置成员 / })).toHaveCount(0);
-    await table.getByRole("button", { name: `重置成员 ${member.username} 的密码`, exact: true }).click();
+    await selfRow.getByRole("button", { name: `成员 ${admin.username} 的更多操作`, exact: true }).click();
+    await expect(page.getByRole("menu", { name: `成员 ${admin.username} 的更多操作`, exact: true }).getByRole("menuitem", { name: "重置密码…" })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await table.getByRole("button", { name: `成员 ${member.username} 的更多操作`, exact: true }).click();
+    await page.getByRole("menu", { name: `成员 ${member.username} 的更多操作`, exact: true }).getByRole("menuitem", { name: "重置密码…", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: `重置“${member.username}”的密码`, exact: true });
     await dialog.getByLabel("新密码", { exact: true }).fill(resetPassword);
     await dialog.getByLabel("确认新密码", { exact: true }).fill(resetPassword);

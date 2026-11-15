@@ -1,26 +1,32 @@
 .item {
+  position: relative;
   min-width: 0;
 }
 
 .card {
   display: grid;
   align-content: start;
-  gap: var(--space-2);
+  gap: var(--space-1);
   min-width: 0;
   color: inherit;
   text-decoration: none;
 }
 
+/* 封面与文字之间多一点间距，文字三行之间紧凑。 */
+.card > :first-child {
+  margin-bottom: var(--space-1);
+}
+
 .title {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
   /* 超长的标题或没有空格的长串都在卡片内换行，完整文字仍在 DOM 里。 */
   overflow-wrap: anywhere;
   font-family: var(--font-heading);
-  font-size: var(--fs-15);
+  font-size: var(--fs-14);
   font-weight: var(--font-heading-weight);
   line-height: 1.3;
 }
@@ -41,16 +47,51 @@
 .artist {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
   overflow: hidden;
 }
 
 .meta {
+  font-size: var(--fs-12);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-/* 日期与时间不拆开换行：窄卡片里宁可“上次播放”独占一行。 */
-.time {
-  white-space: nowrap;
+/*
+ * 封面右下角的操作：叠在封面那块正方形上（卡片宽度就是封面边长），本身不接收指针，只有里面的按钮接收。
+ * 精确指针设备上悬停或聚焦到这张卡片时出现；触屏不显示（点卡片进专辑页）。
+ */
+.action {
+  position: absolute;
+  inset: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  aspect-ratio: 1;
+  padding: var(--space-2);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.action > * {
+  pointer-events: auto;
+}
+
+.item:hover .action,
+.item:focus-within .action {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .action {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .action {
+    transition: none;
+  }
 }

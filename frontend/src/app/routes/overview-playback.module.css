@@ -1,0 +1,244 @@
+/*
+ * “继续播放”：一张带淡金色底的横条，封面 | 文字 | 墨色圆形播放键。窄于 560px（容器）时封面缩小、文字只留一行。
+ * 文字三行：小字的“正在播放 / 继续播放”（带音柱）、专辑名（链接）、“艺人 · 曲目”，下面是进度或上次播放的时间。
+ */
+.resume {
+  container: resume / inline-size;
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.card {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4) var(--space-3) var(--space-3);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--color-accent) 10%, transparent), color-mix(in srgb, var(--color-accent) 2%, transparent));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+
+.art {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-md);
+}
+
+.art img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-accent);
+  font-size: var(--fs-12);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.album {
+  margin-top: 2px;
+  font-size: var(--fs-20);
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.album a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.album a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.sub,
+.when {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  overflow-wrap: anywhere;
+}
+
+.when {
+  margin-top: var(--space-2);
+  font-size: var(--fs-12);
+}
+
+.progress {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  max-width: 420px;
+  margin-top: var(--space-3);
+}
+
+.track {
+  display: block;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--color-neutral-300);
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
+}
+
+.time {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 墨色实心圆：与专辑页的“播放整张专辑”同一种形状，是这一块唯一的主要操作。 */
+.play button {
+  width: 56px;
+  min-width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--color-text);
+  color: var(--color-bg);
+  box-shadow: var(--shadow-md);
+}
+
+.play button:enabled:not([aria-disabled="true"]):hover,
+.play button:enabled:not([aria-disabled="true"]):active {
+  background: var(--color-neutral-800);
+  color: var(--color-bg);
+}
+
+.status {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+}
+
+/* 三根音柱：只在播放时跳动。 */
+.eq {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+
+.eq i {
+  width: 3px;
+  border-radius: 1px;
+  background: var(--color-accent);
+}
+
+.eq i:nth-child(1) {
+  height: 6px;
+}
+
+.eq i:nth-child(2) {
+  height: 12px;
+}
+
+.eq i:nth-child(3) {
+  height: 5px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .eq[data-playing] i {
+    animation: eq 1s ease-in-out infinite;
+  }
+
+  .eq[data-playing] i:nth-child(2) {
+    animation-delay: -0.4s;
+  }
+
+  .eq[data-playing] i:nth-child(3) {
+    animation-delay: -0.7s;
+  }
+}
+
+@keyframes eq {
+  0%,
+  100% {
+    height: 3px;
+  }
+
+  50% {
+    height: 12px;
+  }
+}
+
+@container resume (max-width: 560px) {
+  .card {
+    grid-template-columns: 72px minmax(0, 1fr) auto;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3) var(--space-2) var(--space-2);
+  }
+
+  .album {
+    font-size: var(--fs-15);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sub {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .progress {
+    margin-top: var(--space-1);
+  }
+
+  .when {
+    margin-top: 0;
+  }
+
+  .play button {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+  }
+}
+
+/* 最近播放卡片封面上的播放键：金色实心圆，白色三角。 */
+.cardPlay button {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: #fff;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 30%);
+}
+
+.cardPlay button:enabled:not([aria-disabled="true"]):hover,
+.cardPlay button:enabled:not([aria-disabled="true"]):active {
+  background: var(--color-accent-700);
+  color: #fff;
+}
+
+/* 三角形的视觉重心偏左，往右挪一点看起来才居中。 */
+.cardPlay button > span {
+  margin-inline-start: 2px;
+}

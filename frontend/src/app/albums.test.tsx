@@ -25,7 +25,8 @@ type Api = ReturnType<typeof setup>["api"];
 
 const heading = (name: string) => screen.findByRole("heading", { level: 1, name });
 const results = (name = "全部专辑") => screen.findByRole("region", { name });
-const searchBox = () => screen.getByRole("textbox", { name: "搜索专辑" });
+const searchBox = () => screen.getByRole("textbox", { name: "筛选专辑" });
+const attentionChip = () => screen.getByRole("button", { name: "需要关注" });
 const pagination = () => screen.findByRole("navigation", { name: "专辑分页" });
 
 /** 卡片就是指向专辑详情的链接（分页与其他链接不指向 /albums/<id>）。 */
@@ -47,6 +48,11 @@ describe("专辑列表：浏览", () => {
     await waitFor(() => expect(albumLinks()).toHaveLength(48));
     expect(titles()[0]).toBe("Album 120");
     expect(titles()[47]).toBe("Album 073");
+    // 每张卡片封面上一个播放键（在链接之外），名称带专辑名。
+    const plays = screen.getAllByRole("button", { name: /^播放《Album \d+》$/ });
+    expect(plays).toHaveLength(48);
+    expect(plays[0]?.getAttribute("aria-label")).toBe("播放《Album 120》");
+    expect(plays.every((button) => button.closest("a") === null)).toBe(true);
     expect(listRequests(api)).toEqual(["/api/v1/release-groups?page=1&page_size=48"]);
     expect(await results()).toBeTruthy();
     expect(screen.getByText("共 120 张专辑")).toBeTruthy();
@@ -111,15 +117,17 @@ describe("专辑列表：浏览", () => {
   });
 });
 
-describe("专辑列表：搜索", () => {
-  it("输入后按回车提交：请求带搜索词，地址记录搜索词，标题与结果数说明这是搜索结果", async () => {
+describe("专辑列表：即时筛选", () => {
+  it("输入即筛选：停止输入后写入地址并请求，没有提交按钮；标题与结果数说明这是筛选结果", async () => {
     const { api } = setup();
     const { history } = renderApp({ path: "/albums" });
     await waitFor(() => expect(albumLinks()).toHaveLength(48));
+    expect(screen.queryByRole("button", { name: "搜索" })).toBeNull();
+    expect(searchBox().getAttribute("placeholder")).toBe("在专辑中筛选");
 
-    await userEvent.type(searchBox(), "Album 07{Enter}");
+    await userEvent.type(searchBox(), "Album 07");
     await waitFor(() => expect(searchOf(history).get("q")).toBe("Album 07"));
-    expect(await results("“Album 07”的搜索结果")).toBeTruthy();
+    expect(await results("“Album 07”的筛选结果")).toBeTruthy();
     await waitFor(() => expect(albumLinks()).toHaveLength(10));
     expect(lastListRequest(api).get("q")).toBe("Album 07");
     expect(lastListRequest(api).get("page")).toBe("1");
@@ -127,62 +135,83 @@ describe("专辑列表：搜索", () => {
     expect(titles()[0]).toBe("Album 070");
   });
 
-  it("按“搜索”按钮同样提交；输入过程中不请求（不做输入即搜）", async () => {
+  it("连续输入不逐字请求：只写入停止输入时的筛选词；回车立即写入", async () => {
     const { api } = setup();
-    renderApp({ path: "/albums" });
+    const { history } = renderApp({ path: "/albums" });
     await waitFor(() => expect(albumLinks()).toHaveLength(48));
-    const before = listRequests(api).length;
     await userEvent.type(searchBox(), "Album 1");
-    expect(listRequests(api)).toHaveLength(before);
-    await userEvent.click(screen.getByRole("button", { name: "搜索" }));
     await waitFor(() => expect(lastListRequest(api).get("q")).toBe("Album 1"));
+    expect(listRequests(api).filter((path) => path.includes("q="))).toHaveLength(1);
+
+    await userEvent.type(searchBox(), "1{Enter}");
+    expect(searchOf(history).get("q")).toBe("Album 11");
   });
 
-  it("“清除”回到没有搜索词的列表，输入框清空并保持焦点", async () => {
+  it("框内的 × 回到没有筛选词的列表，输入框清空并保持焦点", async () => {
     setup();
     const { history } = renderApp({ path: "/albums?q=Album%2007" });
     await waitFor(() => expect(albumLinks()).toHaveLength(10));
     expect((searchBox() as HTMLInputElement).value).toBe("Album 07");
 
-    await userEvent.click(screen.getByRole("button", { name: "清除" }));
+    await userEvent.click(screen.getByRole("button", { name: "清除筛选" }));
     await waitFor(() => expect(history.location.search).toBe(""));
     await waitFor(() => expect(albumLinks()).toHaveLength(48));
     expect((searchBox() as HTMLInputElement).value).toBe("");
     expect(document.activeElement).toBe(searchBox());
-    expect(screen.queryByRole("button", { name: "清除" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "清除筛选" })).toBeNull();
     expect(screen.getByText("共 120 张专辑")).toBeTruthy();
   });
 
-  it("提交新搜索回到第 1 页：地址里不再有页码", async () => {
+  it("Esc 同样清除筛选词", async () => {
+    setup();
+    const { history } = renderApp({ path: "/albums?q=Album%2007" });
+    await waitFor(() => expect(albumLinks()).toHaveLength(10));
+    searchBox().focus();
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(history.location.search).toBe(""));
+    expect((searchBox() as HTMLInputElement).value).toBe("");
+  });
+
+  it("改筛选词回到第 1 页：地址里不再有页码", async () => {
     setup();
     const { history } = renderApp({ path: "/albums?page=2" });
     await waitFor(() => expect(albumLinks()).toHaveLength(48));
-    await userEvent.type(searchBox(), "Album{Enter}");
+    await userEvent.type(searchBox(), "Album");
     await waitFor(() => expect(searchOf(history).get("q")).toBe("Album"));
     expect(searchOf(history).has("page")).toBe(false);
   });
 
-  it("只有空白：当作没有搜索词，不发搜索请求，也不新增历史项", async () => {
+  it("只有空白：当作没有筛选词，不发请求，也不新增历史项", async () => {
     const { api } = setup();
     const { history } = renderApp({ path: "/albums" });
     await waitFor(() => expect(albumLinks()).toHaveLength(48));
+    const length = history.length;
     await userEvent.type(searchBox(), "   {Enter}");
-    await waitFor(() => expect(history.location.search).toBe(""));
+    expect(history.location.search).toBe("");
+    expect(history.length).toBe(length);
     expect(listRequests(api).every((path) => !path.includes("q="))).toBe(true);
   });
 
-  it("超过 200 字节：不发请求，提示搜索词太长，不静默丢弃", async () => {
+  it("超过 200 字节：不写入地址、不发请求，提示筛选词太长，不静默丢弃", async () => {
     const { api } = setup();
-    renderApp({ path: "/albums" });
+    const { history } = renderApp({ path: "/albums" });
     await waitFor(() => expect(albumLinks()).toHaveLength(48));
     const before = listRequests(api).length;
-    await userEvent.type(searchBox(), "长".repeat(70) + "{Enter}"); // 70 个汉字 = 210 字节
-    expect(await screen.findByText("搜索词太长了，请短一些。")).toBeTruthy();
+    await userEvent.type(searchBox(), "长".repeat(70)); // 70 个汉字 = 210 字节
+    const message = await screen.findByText("筛选词太长了，请短一些。");
     expect(searchBox().getAttribute("aria-invalid")).toBe("true");
+    expect(searchBox().getAttribute("aria-describedby")).toBe(message.parentElement?.id);
     expect(listRequests(api)).toHaveLength(before);
+    expect(history.location.search).toBe("");
+    // 删短之后照常写入，说明随之消失。
+    await userEvent.clear(searchBox());
+    await userEvent.type(searchBox(), "Album 07");
+    await waitFor(() => expect(searchOf(history).get("q")).toBe("Album 07"));
+    expect(screen.queryByText("筛选词太长了，请短一些。")).toBeNull();
+    expect(searchBox().hasAttribute("aria-invalid")).toBe(false);
   });
 
-  it("地址里的数字搜索词（?q=1984）按原文本搜索；应用自己提交的数字也能往返", async () => {
+  it("地址里的数字筛选词（?q=1984）按原文本请求；应用自己写入的数字也能往返", async () => {
     const { api } = setup({ groups: [albumGroup(1, { title: "1984" }), albumGroup(2, { title: "Other" })] });
     const { history } = renderApp({ path: "/albums?q=1984" });
     await waitFor(() => expect(albumLinks()).toHaveLength(1));
@@ -198,19 +227,81 @@ describe("专辑列表：搜索", () => {
     expect(history.location.search).toContain("1984");
   });
 
-  it("后退与前进：输入框、结果与地址保持一致", async () => {
+  it("一次输入过程只占一条历史：分几次停顿写入，后退回到输入前的列表，前进回到最后的筛选词", async () => {
     setup();
     const { history } = renderApp({ path: "/albums" });
     await waitFor(() => expect(albumLinks()).toHaveLength(48));
-    await userEvent.type(searchBox(), "Album 07{Enter}");
+    const length = history.length;
+    await userEvent.type(searchBox(), "Album 0");
+    await waitFor(() => expect(searchOf(history).get("q")).toBe("Album 0"));
+    await userEvent.type(searchBox(), "7");
+    await waitFor(() => expect(searchOf(history).get("q")).toBe("Album 07"));
     await waitFor(() => expect(albumLinks()).toHaveLength(10));
+    expect(history.length).toBe(length + 1);
 
     history.back();
     await waitFor(() => expect(albumLinks()).toHaveLength(48));
+    expect(history.location.search).toBe("");
     expect((searchBox() as HTMLInputElement).value).toBe("");
     history.forward();
     await waitFor(() => expect(albumLinks()).toHaveLength(10));
     expect((searchBox() as HTMLInputElement).value).toBe("Album 07");
+  });
+
+  it("离开输入框之后的下一次输入是新的过程：再新增一条历史，后退回到离开前的筛选词", async () => {
+    setup();
+    const { history } = renderApp({ path: "/albums" });
+    await waitFor(() => expect(albumLinks()).toHaveLength(48));
+    await userEvent.type(searchBox(), "Album 0");
+    await waitFor(() => expect(searchOf(history).get("q")).toBe("Album 0"));
+    await userEvent.tab();
+    expect(document.activeElement).not.toBe(searchBox());
+    await userEvent.type(searchBox(), "7");
+    await waitFor(() => expect(searchOf(history).get("q")).toBe("Album 07"));
+
+    history.back();
+    await waitFor(() => expect(searchOf(history).get("q")).toBe("Album 0"));
+    await waitFor(() => expect((searchBox() as HTMLInputElement).value).toBe("Album 0"));
+  });
+
+  it("离开输入框时还没写入的输入立即写入", async () => {
+    setup();
+    const { history } = renderApp({ path: "/albums" });
+    await waitFor(() => expect(albumLinks()).toHaveLength(48));
+    await userEvent.type(searchBox(), "Album 07");
+    await userEvent.tab();
+    expect(searchOf(history).get("q")).toBe("Album 07");
+  });
+
+  it("清除之后的下一次输入是新的过程：后退不会回到清除前的筛选词之后又跳过新的", async () => {
+    setup();
+    const { history } = renderApp({ path: "/albums" });
+    await waitFor(() => expect(albumLinks()).toHaveLength(48));
+    await userEvent.type(searchBox(), "Album 0");
+    await waitFor(() => expect(searchOf(history).get("q")).toBe("Album 0"));
+    await userEvent.click(screen.getByRole("button", { name: "清除筛选" }));
+    await waitFor(() => expect(history.location.search).toBe(""));
+    const length = history.length;
+    await userEvent.type(searchBox(), "Album 07");
+    await waitFor(() => expect(searchOf(history).get("q")).toBe("Album 07"));
+    expect(history.length).toBe(length + 1);
+    history.back();
+    await waitFor(() => expect(history.location.search).toBe(""));
+  });
+
+  it("还没写入就点 ×：这次输入作废，地址、结果与输入框都回到没有筛选词", async () => {
+    const { api } = setup();
+    const { history } = renderApp({ path: "/albums" });
+    await waitFor(() => expect(albumLinks()).toHaveLength(48));
+    const length = history.length;
+    await userEvent.type(searchBox(), "Album 07");
+    await userEvent.click(screen.getByRole("button", { name: "清除筛选" }));
+    expect((searchBox() as HTMLInputElement).value).toBe("");
+    expect(document.activeElement).toBe(searchBox());
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(history.location.search).toBe("");
+    expect(history.length).toBe(length);
+    expect(listRequests(api).every((path) => !path.includes("q="))).toBe(true);
   });
 
   it("没有符合条件的专辑：说明并提供一键清除，结果数为 0", async () => {
@@ -228,30 +319,32 @@ describe("专辑列表：搜索", () => {
     await userEvent.click(clear);
     await waitFor(() => expect(albumLinks()).toHaveLength(48));
     expect(history.location.search).toBe("");
+    expect((searchBox() as HTMLInputElement).value).toBe("");
   });
 });
 
 describe("专辑列表：只看需要关注", () => {
-  it("勾选立即生效：请求带 attention=required，只显示需要关注的专辑，回到第 1 页", async () => {
+  it("按下“需要关注”胶囊立即生效：请求带 attention=required，只显示需要关注的专辑，回到第 1 页", async () => {
     const { api } = setup();
     const { history } = renderApp({ path: "/albums?page=2" });
     await waitFor(() => expect(albumLinks()).toHaveLength(48));
 
-    await userEvent.click(screen.getByRole("checkbox", { name: "只看需要关注" }));
+    expect(attentionChip().getAttribute("aria-pressed")).toBe("false");
+    await userEvent.click(attentionChip());
     await waitFor(() => expect(searchOf(history).get("attention")).toBe("required"));
     expect(searchOf(history).has("page")).toBe(false);
     expect(await results("需要关注的专辑")).toBeTruthy();
     await waitFor(() => expect(albumLinks()).toHaveLength(12));
     expect(lastListRequest(api).get("attention")).toBe("required");
     expect(screen.getByText("找到 12 张专辑")).toBeTruthy();
-    expect((screen.getByRole("checkbox", { name: "只看需要关注" }) as HTMLInputElement).checked).toBe(true);
+    expect(attentionChip().getAttribute("aria-pressed")).toBe("true");
 
-    await userEvent.click(screen.getByRole("checkbox", { name: "只看需要关注" }));
+    await userEvent.click(attentionChip());
     await waitFor(() => expect(history.location.search).toBe(""));
     await waitFor(() => expect(albumLinks()).toHaveLength(48));
   });
 
-  it("与搜索组合：标题说明两个条件，结果同时满足", async () => {
+  it("与筛选词组合：标题说明两个条件，结果同时满足", async () => {
     setup();
     const { history } = renderApp({ path: "/albums?attention=required" });
     await waitFor(() => expect(albumLinks()).toHaveLength(12));
@@ -415,10 +508,10 @@ describe("专辑列表：翻页后的滚动与焦点", () => {
       expect(document.activeElement).toBe(screen.getByRole("heading", { level: 2, name: "全部专辑" }));
       expect(scroll).toHaveBeenCalledTimes(1);
 
-      const checkbox = screen.getByRole("checkbox", { name: "只看需要关注" });
-      await userEvent.click(checkbox);
+      const chip = attentionChip();
+      await userEvent.click(chip);
       await screen.findByRole("region", { name: "需要关注的专辑" });
-      expect(document.activeElement).toBe(checkbox);
+      expect(document.activeElement).toBe(chip);
       expect(scroll).toHaveBeenCalledTimes(1);
     } finally {
       scroll.mockRestore();
@@ -442,13 +535,13 @@ describe("专辑列表：空库与失败", () => {
     expect(screen.queryByRole("link", { name: "前往扫描目录" })).toBeNull();
   });
 
-  it("读取失败（503）：显示带请求 ID 的错误与重试，重试成功后显示专辑", async () => {
+  it("读取失败（503）：显示错误（不显示请求 ID）与重试，重试成功后显示专辑", async () => {
     const { catalog } = setup({ groups: albumGroups(5) });
     catalog.listFailure = sampleResponse("errors/database-unavailable");
     renderApp({ path: "/albums" });
     // 503 会被自动重试（最多 2 次，带退避），耗尽后才显示错误。
     const alert = await screen.findByRole("alert", {}, { timeout: 8000 });
-    expect(within(alert).getByText(/请求 ID：/)).toBeTruthy();
+    expect(within(alert).queryByText(/请求 ID/)).toBeNull();
     expect(albumLinks()).toHaveLength(0);
 
     catalog.listFailure = null;
@@ -474,8 +567,7 @@ describe("导航与概览", () => {
     expect(within(nav).getByRole("link", { name: "概览" }).getAttribute("aria-current")).toBeNull();
     // 配置入口移到设置分栏，仍只对管理员显示。
     expect(within(nav).queryByRole("link", { name: "扫描目录" })).toBeNull();
-    await userEvent.click(within(screen.getByRole("region", { name: "当前用户" })).getByRole("button"));
-    await userEvent.click(screen.getByRole("menuitem", { name: "设置" }));
+    await userEvent.click(within(screen.getByRole("region", { name: "当前用户" })).getByRole("link", { name: "设置" }));
     const settings = await screen.findByRole("navigation", { name: "设置" });
     expect(within(settings).queryByRole("link", { name: "扫描目录" }) !== null).toBe(role === "admin");
   });
@@ -485,10 +577,10 @@ describe("导航与概览", () => {
     api.on("GET", "/api/v1/catalog/stats", () => jsonResponse(200, { albums: 30, tracks: 5, artists: 7, composers: 1 }));
     const { history } = renderApp({ path: "/" });
     const stats = await screen.findByRole("region", { name: "资料库" });
-    const all = await within(stats).findByRole("link", { name: /专辑/ });
-    const attention = await within(await screen.findByRole("region", { name: "需要关注" })).findByRole("link", { name: "4 张专辑需要关注" });
+    const all = await within(stats).findByRole("link", { name: /张专辑/ });
+    const attention = await within(await screen.findByRole("region", { name: "资料库状态" })).findByRole("link", { name: /^需要关注4 张专辑有待核对的问题4/ });
     expect(all.getAttribute("href")).toBe("/albums");
-    expect(within(stats).getByText("5").closest("a")).toBeNull();
+    expect(within(stats).getByText("首曲目").closest("a")).toBeNull();
     expect(attention.getAttribute("href")).toBe("/albums?attention=required");
 
     await userEvent.click(attention);

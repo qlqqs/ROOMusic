@@ -1,6 +1,6 @@
 import { openSettingsScene, settingsScenes } from "./support/settings";
 import AxeBuilder from "@axe-core/playwright";
-import { accountAxeScenes, openAccountScene } from "./support/account-password";
+import { accountAxeScenes, chooseMemberAction, openAccountScene } from "./support/account-password";
 import type { Page } from "@playwright/test";
 import { sampleBody } from "../src/test/api-samples";
 import { albumGroup, albumGroups } from "../src/test/catalog-data";
@@ -91,7 +91,7 @@ const states: State[] = [
     reach: async (page, mock) => {
       mock.seedScan({}, true);
       await page.goto("/");
-      await expect(page.getByRole("link", { name: "查看扫描详情" })).toBeVisible();
+      await expect(page.getByRole("region", { name: "资料库状态" }).getByRole("progressbar", { name: "扫描进度" })).toBeVisible();
     },
   },
   {
@@ -100,7 +100,7 @@ const states: State[] = [
     reach: async (page) => {
       await page.goto("/");
       await expect(heading(page, "概览")).toBeVisible();
-      await expect(page.getByText("没有正在运行的扫描。")).toBeVisible();
+      await expect(page.getByRole("region", { name: "资料库状态" }).getByText("没有正在运行的扫描")).toBeVisible();
     },
   },
   {
@@ -119,7 +119,8 @@ const states: State[] = [
     reach: async (page, mock) => {
       mock.seedRecentPlays(3);
       await page.goto("/");
-      await page.getByRole("button", { name: "清除播放历史" }).click();
+      await page.getByRole("button", { name: "最近播放的更多操作" }).click();
+      await page.getByRole("menuitem", { name: "清除播放历史" }).click();
       await expect(page.getByRole("dialog", { name: "清除播放历史？" })).toBeVisible();
     },
   },
@@ -129,7 +130,8 @@ const states: State[] = [
     reach: async (page, mock) => {
       mock.seedRecentPlays(3);
       await page.goto("/");
-      await page.getByRole("button", { name: "清除播放历史" }).click();
+      await page.getByRole("button", { name: "最近播放的更多操作" }).click();
+      await page.getByRole("menuitem", { name: "清除播放历史" }).click();
       await page.getByRole("dialog", { name: "清除播放历史？" }).getByRole("button", { name: "清除播放历史" }).click();
       await expect(page.getByText("已清除你的播放历史。")).toBeVisible();
     },
@@ -179,13 +181,13 @@ const states: State[] = [
     },
   },
   {
-    name: "专辑列表（搜索词过长的字段错误）",
+    name: "专辑列表（筛选词过长的字段错误）",
     options: { signedInAs: "curator" },
     reach: async (page) => {
       await page.goto("/albums");
-      await page.getByRole("textbox", { name: "搜索专辑" }).fill("长".repeat(70));
-      await page.getByRole("button", { name: "搜索" }).click();
-      await expect(page.getByText("搜索词太长了，请短一些。")).toBeVisible();
+      // 即时筛选：停止输入之后就检查，不需要提交。
+      await page.getByRole("textbox", { name: "筛选专辑" }).fill("长".repeat(70));
+      await expect(page.getByText("筛选词太长了，请短一些。")).toBeVisible();
     },
   },
   {
@@ -432,7 +434,7 @@ const states: State[] = [
     options: { signedInAs: "curator" },
     reach: async (page) => {
       await page.goto("/settings/members");
-      await page.getByRole("button", { name: "停用成员 curator" }).click();
+      await chooseMemberAction(page, "curator", "停用…");
       await expect(page.getByRole("dialog", { name: "停用成员“curator”？" })).toBeVisible();
     },
   },
@@ -500,13 +502,23 @@ test.describe("axe 扫描（手机 375px）", () => {
     });
   }
 
-  test("窄屏菜单（模态导航）", async ({ page, backend }) => {
+  test("窄屏搜索对话框", async ({ page, backend }) => {
     await backend.start({ signedInAs: "curator" });
     await page.goto("/");
-    await page.getByRole("button", { name: "菜单" }).click();
-    await expect(page.getByRole("dialog", { name: "菜单" })).toBeVisible();
-    await expectNoSeriousViolations(page, "窄屏菜单");
-    await expectMinimumFontSize(page, "窄屏菜单");
+    await page.getByRole("button", { name: "搜索全部音乐", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "搜索全部音乐", exact: true })).toBeVisible();
+    await expectNoSeriousViolations(page, "窄屏搜索对话框");
+    await expectMinimumFontSize(page, "窄屏搜索对话框");
+  });
+
+  test("窄屏“我的”页与底部标签栏", async ({ page, backend }) => {
+    await backend.start({ signedInAs: "curator" });
+    await page.goto("/me");
+    await expect(page.getByRole("heading", { level: 1, name: "我的", exact: true })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "主导航", exact: true }).getByRole("link", { name: "我的", exact: true })).toHaveAttribute("aria-current", "page");
+    await page.evaluate(() => document.fonts.ready);
+    await expectNoSeriousViolations(page, "窄屏“我的”页");
+    await expectMinimumFontSize(page, "窄屏“我的”页");
   });
 });
 

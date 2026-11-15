@@ -6,6 +6,8 @@ export type Column<Row> = {
   id: string;
   /** 列标题；窄屏堆叠成逐行卡片时，它是每个值前面的标签。 */
   header: string;
+  /** 表头里显示的内容（例如全选复选框、只给读屏的文字）；不给时显示 header。 */
+  headerContent?: ReactNode;
   cell: (row: Row) => ReactNode;
   /** 这一列是行的名称，渲染为行标题（th scope="row"）；窄屏堆叠时作为该行的标题。 */
   rowHeader?: boolean;
@@ -40,7 +42,7 @@ export function DataTable<Row>({ caption, columns, rows, rowKey }: DataTableProp
           <tr role="row">
             {columns.map((column) => (
               <th key={column.id} scope="col" role="columnheader" className={cx(column.numeric && styles.numeric, column.besideRowHeader && styles.beside)}>
-                {column.header}
+                {column.headerContent ?? column.header}
               </th>
             ))}
           </tr>

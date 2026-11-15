@@ -83,11 +83,11 @@ describe("我的音乐历史页", () => {
     expect(screen.queryByRole("button", { name: "播放全部" })).toBeNull();
   });
 
-  it("读取失败显示请求 ID，手动重试恢复，不把失败当作空历史", async () => {
+  it("读取失败显示错误（不显示请求 ID），手动重试恢复，不把失败当作空历史", async () => {
     const { api } = setup();
     api.on("GET", tracks, () => jsonResponse(500, { error: { code: "internal_error", message: "历史读取失败" }, request_id: "history-error" }));
     renderApp({ path: "/me/history" });
-    expect((await screen.findByRole("alert")).textContent).toContain("history-error");
+    expect((await screen.findByRole("alert")).textContent).not.toContain("history-error");
     expect(screen.queryByText(emptyText)).toBeNull();
     api.on("GET", tracks, () => jsonResponse(200, historyPage([first])));
     await userEvent.click(screen.getByRole("button", { name: "重试" }));
@@ -234,11 +234,10 @@ describe("我的音乐历史页", () => {
     refetch.resolve(jsonResponse(200, historyPage([])));
   });
 
-  it("/me 替换到我喜欢的音乐，侧栏“我的音乐”一组依次是四页，播放历史仍可达", async () => {
+  it("侧栏“我的音乐”一组依次是四页，播放历史仍可达", async () => {
     setup();
-    const { history } = renderApp({ path: "/me" });
+    const { history } = renderApp({ path: "/me/liked" });
     await waitFor(() => expect(history.location.pathname).toBe("/me/liked"));
-    expect(history.length).toBe(1);
     const nav = within(screen.getByRole("navigation", { name: "主导航" }));
     for (const [name, href] of [["我喜欢的音乐", "/me/liked"], ["我的收藏", "/me/favorites"], ["播放历史", "/me/history"], ["我的歌单", "/me/playlists"]] as const) {
       expect(nav.getByRole("link", { name }).getAttribute("href")).toBe(href);

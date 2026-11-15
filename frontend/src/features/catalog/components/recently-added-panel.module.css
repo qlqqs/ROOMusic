@@ -1,0 +1,12 @@
+/* 标题右侧：“全部专辑 ›”与翻页按钮一排，链接与按钮垂直居中。 */
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.all {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}

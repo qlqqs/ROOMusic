@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { ChevronLeft, TriangleAlert } from "lucide-react";
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { formatCount } from "../../../shared/lib/number";
 import { StatusTag, VisuallyHidden } from "../../../shared/ui";
 import type { ReleaseDetailDTO, ReleaseSummaryDTO } from "../api/decoders";
@@ -12,6 +12,7 @@ import styles from "./album-header.module.css";
 import { ArtistNames } from "./artist-names";
 import { Cover } from "./cover";
 import { ManualCorrectionTag } from "./manual-correction-tag";
+import { sharedTrackCredits, type TrackCreditGroup } from "../track-credits";
 
 type AlbumHeaderProps = {
   /** 选中版本的摘要（来自组详情）：先于曲目到达，所以封面、标题与计数不必等详情。 */
@@ -22,6 +23,8 @@ type AlbumHeaderProps = {
   list?: AlbumSearch;
   /** 标题很长时降一级字号，完整显示并换行。 */
   compactTitle?: boolean;
+  /** 这张专辑正在播放：标题旁一个“正在播放”的小标记（跳动的音柱，减少动态效果时静止）。 */
+  playing?: boolean;
   /**
    * 概况下方的操作区（由页面组合：一条操作行，以及它下方的状态与结果提示）；详情到达之前没有。
    * catalog 不知道里面有什么，只负责位置。
@@ -46,15 +49,45 @@ function factsOf(release: ReleaseSummaryDTO, detail: ReleaseDetailDTO | undefine
 }
 
 /**
+ * 全部曲目共有的署名（“全部曲目 作曲 甲 钢琴 乙”）：页头列一次，曲目行不再重复。艺人就绪时名字是链接。
+ * “全部曲目”在窄屏上只给读屏（居中的页头里一行更短）。
+ */
+function SharedCredits({ groups }: { groups: readonly TrackCreditGroup[] }) {
+  return (
+    // 组与组之间只靠留白分开：读屏另有看不见的标点（“全部曲目：作曲：甲；钢琴：乙”），不连成一串。
+    <p className={styles.credits}>
+      <span className={styles.creditsLead}>全部曲目</span>
+      <VisuallyHidden>：</VisuallyHidden>
+      {groups.map((group, groupIndex) => (
+        <span key={group.key} className={styles.credit}>
+          {groupIndex === 0 ? null : <VisuallyHidden>；</VisuallyHidden>}
+          <span className={styles.creditLabel}>{group.label}</span>
+          <VisuallyHidden>：</VisuallyHidden>{" "}
+          {group.entries.map((credit, index) => (
+            <span key={`${credit.name}:${index}`} className={styles.creditName}>
+              {index === 0 ? null : "、"}
+              <ArtistNames text={credit.name} refs={credit.artist_refs} />
+            </span>
+          ))}
+        </span>
+      ))}
+    </p>
+  );
+}
+
+/**
  * 专辑详情的页头（经 Page 的 header 插槽替换默认页头，渲染唯一的 h1，文字与页面标题相同）：
- * 标题上方是“‹ 专辑”（读屏名“返回专辑列表”）；封面在左，右侧依次是专辑名、专辑艺人、一行概况与操作区，整体底对齐封面。
+ * 标题上方是“‹ 专辑”（读屏名“返回专辑列表”）；封面在左，右侧依次是专辑名、专辑艺人、一行概况、全部曲目共有的署名与操作区，整体底对齐封面。
+ * 容器窄（手机）时封面放大居中，文字与操作行一起居中。
  * “需要关注”只是提示核对，这里不把它写成错误，说明在底部的“来源与证据”里。
  */
 const noFilters: AlbumSearch = {};
 
-export function AlbumHeader({ release, detail, list = noFilters, compactTitle = false, actions }: AlbumHeaderProps) {
+export function AlbumHeader({ release, detail, list = noFilters, compactTitle = false, playing = false, actions }: AlbumHeaderProps) {
   const corrected = detail?.corrected_fields ?? [];
   const artist = albumArtistOf(release);
+  const media = detail?.media;
+  const shared = useMemo(() => (media === undefined ? [] : sharedTrackCredits(media).groups), [media]);
   return (
     <header className={styles.container}>
       <Link to="/albums" search={list} className={styles.back} aria-label="返回专辑列表">
@@ -67,7 +100,20 @@ export function AlbumHeader({ release, detail, list = noFilters, compactTitle = 
         </div>
         <div className={styles.info}>
           <div className={styles.heading} data-compact={compactTitle ? "" : undefined}>
-            <h1>{release.title}</h1>
+            <h1>
+              {release.title}
+              {/* 标记只给看得见的人：标题的可访问名称只是专辑名，播放状态由曲目行与播放栏说明。 */}
+              {playing ? (
+                <span className={styles.nowPlaying} aria-hidden="true">
+                  <span className={styles.eq}>
+                    <i />
+                    <i />
+                    <i />
+                  </span>
+                  正在播放
+                </span>
+              ) : null}
+            </h1>
             {artist === "" ? null : (
               <p className={styles.artist}>
                 <ArtistNames text={artist} refs={albumArtistRefsOf(release)} />
@@ -89,6 +135,7 @@ export function AlbumHeader({ release, detail, list = noFilters, compactTitle = 
               ))}
             </ul>
           </div>
+          {shared.length === 0 ? null : <SharedCredits groups={shared} />}
           {actions === undefined ? null : <div className={styles.actions}>{actions}</div>}
           {release.attention_count > 0 ? (
             <p className={styles.attention}>

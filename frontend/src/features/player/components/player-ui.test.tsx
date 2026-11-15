@@ -17,6 +17,7 @@ import type { ReleaseDetailDTO } from "../../catalog";
 import { useAlbumPlayback } from "./album-playback-actions";
 import { FullscreenPlayer } from "./fullscreen-player";
 import { PlayerBar } from "./player-bar";
+import barStyles from "./player-bar.module.css";
 import { PlayerQueue } from "./player-queue";
 import { PlayerAnnouncement } from "./player-feedback";
 import { SignalPathButton } from "./signal-path";
@@ -190,28 +191,79 @@ describe("播放栏、全屏、队列与信号路径", () => {
     expect(within(dialog).getByRole("group", { name: "歌词文本" })).toBeTruthy();
   });
 
-  it("全屏宽屏：收起与队列在顶栏，标题旁有“更多操作”，信号路径、设备、进度、传输键与音量在左栏", async () => {
+  it("全屏宽屏：收起与播放设备在顶栏、没有队列按钮，标题旁有信号路径与“更多操作”，进度、传输键与音量在左栏", async () => {
     await enqueue([playerTrack("1")]);
     fullscreenState.open = true;
     view(<FullscreenPlayer />);
     const dialog = await screen.findByRole("dialog", { name: "曲目 1" });
     const collapse = within(dialog).getByRole("button", { name: "收起全屏播放器" });
-    const queue = within(dialog).getByRole("button", { name: "队列（1）" });
+    const device = within(dialog).getByRole("button", { name: "播放设备" });
     const heading = within(dialog).getByRole("heading", { name: "曲目 1", level: 2 });
-    // 收起与队列同在顶栏：两者最近的共同祖先不包含标题，且在标题之前。
+    // 队列从右栏的“接下来”看，顶栏不再有队列按钮。
+    expect(within(dialog).queryByRole("button", { name: /^队列/ })).toBeNull();
+    // 收起与播放设备同在顶栏：两者最近的共同祖先不包含标题，且在标题之前。
     let topbar: HTMLElement | null = collapse.parentElement;
-    while (topbar !== null && !topbar.contains(queue)) topbar = topbar.parentElement;
+    while (topbar !== null && !topbar.contains(device)) topbar = topbar.parentElement;
     expect(topbar?.contains(heading)).toBe(false);
-    expect(collapse.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(device.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const titleRow = heading.parentElement;
     if (titleRow === null) throw new Error("缺少标题行");
     expect(within(titleRow).getByRole("button", { name: "更多操作" })).toBeTruthy();
+    // 没有信号路径时标题后只有给读屏的格式，没有可点的圆点。
+    expect(within(titleRow).queryByRole("button", { name: /^信号路径：/ })).toBeNull();
+    expect(titleRow.textContent).toContain("曲目 1");
     for (const control of [
       within(dialog).getByRole("slider", { name: "播放进度" }),
       within(dialog).getByRole("button", { name: "随机播放" }),
       within(dialog).getByRole("button", { name: "循环：关" }),
       within(dialog).getByRole("slider", { name: "播放器音量" }),
     ]) expect(heading.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("全屏有信号路径时圆点紧跟标题，在“更多操作”之前", async () => {
+    const event = decodeStreamEvent(signalEvent.event, JSON.stringify(signalEvent.data));
+    if (event?.type !== "zone") throw new Error("信号样本未解码为播放区事件");
+    server.afterNext({ signal: event.zone.signal });
+    act(() => { engine.playTracks([playerTrack("1")]); });
+    await waitFor(() => expect(engine.getSnapshot().zone?.signal).toEqual(event.zone.signal));
+    fullscreenState.open = true;
+    view(<FullscreenPlayer />);
+    const dialog = await screen.findByRole("dialog", { name: "曲目 1" });
+    const heading = within(dialog).getByRole("heading", { name: "曲目 1", level: 2 });
+    const titleRow = heading.parentElement;
+    if (titleRow === null) throw new Error("缺少标题行");
+    const signal = within(titleRow).getByRole("button", { name: /^信号路径：.+，增强，削波$/ });
+    expect(signal.textContent).toBe("");
+    const more = within(titleRow).getByRole("button", { name: "更多操作" });
+    expect(heading.compareDocumentPosition(signal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(signal.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("播放栏：信号路径圆点在标题后；右侧依次是队列、分隔线、播放设备、音量，设备按钮没有文字", async () => {
+    const event = decodeStreamEvent(signalEvent.event, JSON.stringify(signalEvent.data));
+    if (event?.type !== "zone") throw new Error("信号样本未解码为播放区事件");
+    server.afterNext({ signal: event.zone.signal });
+    act(() => { engine.playTracks([playerTrack("1")]); });
+    await waitFor(() => expect(engine.getSnapshot().zone?.signal).toEqual(event.zone.signal));
+    view(<PlayerBar />);
+    const bar = screen.getByRole("region", { name: "播放器" });
+    const title = within(bar).getByText("曲目 1", { selector: "p" });
+    const signal = within(bar).getByRole("button", { name: /^信号路径：/ });
+    expect(title.parentElement?.contains(signal)).toBe(true);
+    expect(title.compareDocumentPosition(signal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const queue = within(bar).getByRole("button", { name: "队列（1）" });
+    const device = within(bar).getByRole("button", { name: "播放设备" });
+    const volume = within(bar).getByRole("slider", { name: "播放器音量" });
+    expect(device.textContent).toBe("");
+    expect(queue.compareDocumentPosition(device) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(device.compareDocumentPosition(volume) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // 分隔线在队列之后、设备之前。
+    const separator = bar.querySelector(`.${barStyles.separator}`);
+    if (separator === null) throw new Error("缺少分隔线");
+    expect(queue.compareDocumentPosition(separator) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(separator.compareDocumentPosition(device) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // 本机时设备按钮所在的位置没有远端标记（迷你栏据此隐藏它）。
+    expect(device.closest("[data-remote]")).toBeNull();
   });
 
   it("全屏窄屏：底部有“歌词”按钮，切到歌词视图后进度与传输键还是同一组元素", async () => {
@@ -430,7 +482,7 @@ describe("播放栏、全屏、队列与信号路径", () => {
     act(() => { engine.playTracks([playerTrack("1", { source: { sourceKind: "m4a", codec: "alac", bitDepth: 24, sampleRate: 48000, channels: 2, bitrate: null } })]); });
     await waitFor(() => expect(engine.getSnapshot().zone?.signal).toEqual(event.zone.signal));
     view(<SignalPathButton />);
-    await user.click(screen.getByRole("button", { name: "ALAC 24/48，信号路径：增强，削波" }));
+    await user.click(screen.getByRole("button", { name: "信号路径：ALAC 24/48，增强，削波" }));
     const dialog = await screen.findByRole("dialog", { name: "信号路径：增强，削波" });
     expect(within(dialog).getAllByRole("listitem").map((row) => row.textContent)).toEqual([
       "来源WAV 48 kHz 16 bit",
@@ -677,6 +729,47 @@ describe("专辑播放入口", () => {
     expect(screen.getByRole("status").textContent).toBe("队列已满，请先移除一些条目。");
     expect(engine.getSnapshot().queue.mode).toBe("sequential");
     expect(engine.playTracks).not.toHaveBeenCalled();
+  });
+  it("正在放别的专辑：大按钮仍是“播放整张专辑”，按下换成这张专辑从第一首放起", async () => {
+    await enqueue([playerTrack("别的", { releaseId: "release-other", groupId: "group-other" })]);
+    act(() => { engine.play(); });
+    await waitFor(() => expect(engine.getSnapshot().zone?.intent).toBe("play"));
+    view(<AlbumPlayback release={release()} groupId="group-1" />);
+    expect(screen.queryByRole("button", { name: "暂停播放" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "播放整张专辑" }));
+    await waitFor(() => expect(engine.getSnapshot().current?.track.trackId).toBe("track-1"));
+  });
+  it("正在放这张专辑：大按钮是“暂停播放”，按下暂停而不是从第一首重放；暂停后是“继续播放”，按下从原处继续", async () => {
+    view(<AlbumPlayback release={release()} groupId="group-1" />);
+    await userEvent.click(screen.getByRole("button", { name: "播放整张专辑" }));
+    await waitFor(() => expect(engine.getSnapshot().current?.track.trackId).toBe("track-1"));
+    // 已经在放第二首（CUE 分轨）：暂停与继续都不能回到第一首。
+    act(() => { engine.next(); });
+    await waitFor(() => expect(engine.getSnapshot().current?.track.trackId).toBe("track-3"));
+    const entries = engine.getSnapshot().queue.entries;
+    const pause = await screen.findByRole("button", { name: "暂停播放" });
+    expect(screen.queryByRole("button", { name: "播放整张专辑" })).toBeNull();
+    await userEvent.click(pause);
+    await waitFor(() => expect(engine.getSnapshot().zone?.intent).toBe("pause"));
+    expect(server.commands.at(-1)).toMatchObject({ command: "pause" });
+    expect(engine.getSnapshot().current?.track.trackId).toBe("track-3");
+    await userEvent.click(await screen.findByRole("button", { name: "继续播放" }));
+    await waitFor(() => expect(engine.getSnapshot().zone?.intent).toBe("play"));
+    expect(server.commands.at(-1)).toMatchObject({ command: "play" });
+    expect(engine.getSnapshot().current?.track.trackId).toBe("track-3");
+    expect(engine.getSnapshot().queue.entries).toBe(entries);
+    expect(await screen.findByRole("button", { name: "暂停播放" })).toBeTruthy();
+  });
+  it("同一个专辑组的其他版本正在播放也算这张专辑：不能播放的版本也给出可用的暂停", async () => {
+    table = { verdictOf: () => ({ playable: false, reason: "format_unsupported" }) };
+    await enqueue([playerTrack("别的版本", { releaseId: "release-other", groupId: "group-1" })]);
+    act(() => { engine.play(); });
+    await waitFor(() => expect(engine.getSnapshot().zone?.intent).toBe("play"));
+    view(<AlbumPlayback release={release()} groupId="group-1" />);
+    const pause = await screen.findByRole("button", { name: "暂停播放" });
+    expect((pause as HTMLButtonElement).disabled).toBe(false);
+    await userEvent.click(pause);
+    await waitFor(() => expect(engine.getSnapshot().zone?.intent).toBe("pause"));
   });
   it("下一首播放：整张能播放的曲目插到当前曲目之后，不打断当前曲目", async () => {
     await enqueue([playerTrack("当前"), playerTrack("原来的下一首")]);

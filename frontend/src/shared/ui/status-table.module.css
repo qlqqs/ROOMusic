@@ -1,0 +1,99 @@
+/* 浅底卡片：标题一行，下面每行之间一条淡分隔线；行高至少 52px，名称与说明在左、状态在右。 */
+.table {
+  min-width: 0;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, white 45%, var(--color-bg));
+}
+
+.title {
+  padding: var(--space-3) var(--space-4) var(--space-2);
+  font-size: var(--fs-13);
+  font-weight: 600;
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  border-top: 1px solid var(--color-divider);
+}
+
+.row {
+  display: grid;
+  /* 图标 | 名称与说明 | 状态 | 箭头：箭头那一列总是留出来，没有去处的行状态值也与其他行右对齐。 */
+  grid-template-columns: 16px minmax(0, 1fr) auto 16px;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 52px;
+  padding: var(--space-2) var(--space-4);
+  color: var(--text-primary);
+  font-size: var(--fs-13);
+  text-decoration: none;
+}
+
+.item:last-child .row {
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+.link {
+  transition: background-color 0.12s ease;
+}
+
+.link:hover {
+  background: var(--color-hover);
+}
+
+.link:focus-visible {
+  outline-offset: -2px;
+}
+
+.icon {
+  display: inline-flex;
+  color: var(--text-secondary);
+}
+
+.body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.label {
+  overflow-wrap: anywhere;
+}
+
+.detail {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.value {
+  grid-column: 3;
+  font-size: var(--fs-14);
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.attention {
+  color: var(--text-accent);
+}
+
+.go {
+  grid-column: 4;
+  color: var(--color-neutral-500);
+}
+
+/* 不是链接时行尾的操作（“重试”）：占状态与箭头两列，靠右。 */
+.end {
+  grid-column: 3 / span 2;
+  justify-self: end;
+}

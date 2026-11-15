@@ -4,6 +4,7 @@ import { formatCount } from "../../shared/lib/number";
 import { Button, FailureNotice } from "../../shared/ui";
 import { PERSONAL_TRACK_LIMIT, usePersonalQueue, type PersonalQueueDTO, type PersonalQueueSource } from "../../features/personal";
 import { usePlaybackCapabilities, usePlayerEngine, type CapabilityTable } from "../../features/player";
+import { useRecordPlaybackOrigin } from "../shell/playback-origin";
 import { QUEUE_FULL_TEXT } from "./track-actions";
 import { playerTrackOfSummary, unplayableReason } from "./track-playback";
 import styles from "./play-all.module.css";
@@ -36,6 +37,7 @@ export function PersonalPlayAll({ source, label = "播放全部", trailing }: { 
   const engine = usePlayerEngine();
   const capability = usePlaybackCapabilities();
   const queue = usePersonalQueue(source);
+  const recordOrigin = useRecordPlaybackOrigin();
   const [notice, setNotice] = useState("");
   // 只是“已选择 N 首”、没有跳过或省略时，结果只给读屏播报，不显示。
   const [quiet, setQuiet] = useState(false);
@@ -56,6 +58,8 @@ export function PersonalPlayAll({ source, label = "播放全部", trailing }: { 
           setNotice(QUEUE_FULL_TEXT);
           return;
         }
+        // 侧栏据此在这个歌单（或“我喜欢的音乐”）旁标出正在播放。
+        recordOrigin({ key: source.kind === "playlist" ? `playlist:${source.playlistId}` : "favorites", trackIds: tracks.map((track) => track.trackId) });
         setNotice(personalQueueNotice(tracks.length, data, unsupported));
         setQuiet(unsupported === 0 && data.missing_count === 0 && data.omitted_count === 0);
       },

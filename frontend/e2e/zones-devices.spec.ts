@@ -9,7 +9,9 @@ const BASE = "/api/v1/me/playback";
 const TARGET_KEY = "roomusic:control-target:v1:00000000-0000-4000-8000-000000000003";
 const bar = (page: Page) => page.getByRole("region", { name: "播放器", exact: true });
 const picker = (page: Page) => page.getByRole("dialog", { name: "播放设备", exact: true });
-const deviceButton = (page: Page) => bar(page).getByRole("button", { name: /^播放设备/ });
+// 设备按钮只有图标：控制本机时名为“播放设备”，控制别的设备时名为“正在控制：设备名”，所在的外层带 data-remote。
+const deviceButton = (page: Page) => bar(page).getByRole("button", { name: /^(播放设备|正在控制：)/ });
+const fullscreenDialog = (page: Page) => page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "收起全屏播放器", exact: true }) });
 const actions = (page: Page, name: string) => picker(page).getByRole("group", { name: `${name}的操作`, exact: true });
 
 async function setup(page: Page, mock: ApiMock, fixed = false) {
@@ -27,14 +29,12 @@ async function setup(page: Page, mock: ApiMock, fixed = false) {
 }
 
 async function openPicker(page: Page) {
-  // 窄屏（小于 768px）浮起的迷你栏里没有设备按钮，设备在全屏播放器底部一排左侧的设备名按钮里。
+  // 窄屏（小于 768px）控制本机时迷你栏里没有设备按钮，设备在全屏播放器底部一排左侧，也只有图标。
   if ((page.viewportSize()?.width ?? 0) < 768) {
     await bar(page).getByRole("button", { name: "打开全屏播放器", exact: true }).click();
-    const fullscreen = page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "收起全屏播放器", exact: true }) });
-    const pill = fullscreen.getByRole("button", { name: /^播放设备/ });
-    await expect(pill).toHaveAccessibleName("播放设备：测试浏览器");
-    await expect(pill).toContainText("测试浏览器");
-    await pill.click();
+    const device = fullscreenDialog(page).getByRole("button", { name: "播放设备", exact: true });
+    await expect(device).toHaveText("");
+    await device.click();
   } else {
     await deviceButton(page).click();
   }
@@ -63,14 +63,22 @@ async function tabTo(page: Page, target: Locator) {
   throw new Error("Tab 无法到达目标控件");
 }
 
-test("转移成功后控制目标跟到目标播放区，播放栏显示设备名", async ({ page, backend }) => {
+test("转移成功后控制目标跟到目标播放区，设备图标变成强调色，名称与悬停提示写出设备名", async ({ page, backend }) => {
   const mock = await backend.start({ signedInAs: "listener" });
   const { remote } = await setup(page, mock);
+  await expect(deviceButton(page).locator("..")).not.toHaveAttribute("data-remote");
+  const localColor = await deviceButton(page).locator("svg").evaluate((icon) => getComputedStyle(icon).color);
   await openPicker(page);
   await actions(page, "客厅音箱").getByRole("button", { name: "转到这台设备", exact: true }).click();
   await expect(picker(page)).not.toBeVisible();
-  await expect(deviceButton(page)).toHaveAccessibleName("播放设备：客厅音箱");
-  await expect(deviceButton(page).getByText("客厅音箱", { exact: true })).toBeVisible();
+  await expect(deviceButton(page)).toHaveAccessibleName("正在控制：客厅音箱");
+  // 设备名不是可见文字：按钮里只有图标，外层带远端标记与右上角的小圆点，图标换成强调色。
+  await expect(deviceButton(page)).toHaveText("");
+  await expect(deviceButton(page).locator("..")).toHaveAttribute("data-remote", "");
+  await expect.poll(() => deviceButton(page).locator("..").evaluate((wrapper) => getComputedStyle(wrapper, "::after").content)).toBe('""');
+  expect(await deviceButton(page).locator("svg").evaluate((icon) => getComputedStyle(icon).color)).not.toBe(localColor);
+  await deviceButton(page).hover();
+  await expect(page.getByText("正在控制：客厅音箱", { exact: true })).toBeVisible();
   await expect(bar(page).getByText("本机合成曲目", { exact: true })).toBeVisible();
   expectCommand(mock, MOCK_ZONE, { command: "transfer", target_zone_id: remote.zoneId });
   expect(await storedTarget(page)).toEqual({ version: 1, zoneId: remote.zoneId, selectedAt: expect.any(Number) });
@@ -83,11 +91,12 @@ test("离线设备的播放转到本机，控制目标回本机", async ({ page,
   const { offline } = await setup(page, mock);
   await openPicker(page);
   await picker(page).getByRole("button", { name: /客厅音箱/ }).click();
-  await expect(deviceButton(page)).toHaveAccessibleName("播放设备：客厅音箱");
+  await expect(deviceButton(page)).toHaveAccessibleName("正在控制：客厅音箱");
   await openPicker(page);
   await actions(page, "旧平板").getByRole("button", { name: "转到本机", exact: true }).click();
   await expect(picker(page)).not.toBeVisible();
   await expect(deviceButton(page)).toHaveAccessibleName("播放设备");
+  await expect(deviceButton(page).locator("..")).not.toHaveAttribute("data-remote");
   await expect(bar(page).getByText("离线合成曲目", { exact: true })).toBeVisible();
   expectCommand(mock, offline.zoneId, { command: "transfer", target_zone_id: MOCK_ZONE });
   expect(await storedTarget(page)).toBeNull();
@@ -192,7 +201,7 @@ test("纯键盘打开设备列表、跨行移动并转移，Esc 关闭后焦点�
   await tabTo(page, actions(page, "客厅音箱").getByRole("button", { name: "转到这台设备", exact: true }));
   await page.keyboard.press("Enter");
   await expect(picker(page)).not.toBeVisible();
-  await expect(deviceButton(page)).toHaveAccessibleName("播放设备：客厅音箱");
+  await expect(deviceButton(page)).toHaveAccessibleName("正在控制：客厅音箱");
   expectCommand(mock, MOCK_ZONE, { command: "transfer", target_zone_id: remote.zoneId });
   await tabTo(page, deviceButton(page));
   await page.keyboard.press("Enter");
@@ -200,4 +209,81 @@ test("纯键盘打开设备列表、跨行移动并转移，Esc 关闭后焦点�
   await page.keyboard.press("Escape");
   await expect(picker(page)).not.toBeVisible();
   await expect(deviceButton(page)).toBeFocused();
+});
+
+test("375px 本机空队列仍可从迷你栏选择在线设备", async ({ page, backend }) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  const mock = await backend.start({ signedInAs: "listener" });
+  const track = personalTrack(702, { title: "远端合成曲目" });
+  seedPersonalTracks(mock.personal, [track]);
+  mock.zones.addDevice({ name: "客厅音箱", online: true, track });
+  await page.goto("/settings/playback");
+  await expect(bar(page).getByRole("button", { name: "打开全屏播放器" })).toHaveCount(0);
+  await deviceButton(page).click();
+  await picker(page).getByRole("button", { name: /客厅音箱/ }).click();
+  await expect(bar(page).getByText("远端合成曲目", { exact: true })).toBeVisible();
+  await expect(deviceButton(page)).toHaveAccessibleName("正在控制：客厅音箱");
+  await expectNoHorizontalOverflow(page, "空队列选择远端设备后");
+});
+
+test("375px 迷你栏：控制本机时没有设备按钮，控制别的设备时在播放键左边出现设备图标，标题下没有设备名", async ({ page, backend }) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  const mock = await backend.start({ signedInAs: "listener" });
+  await setup(page, mock);
+  await expect(deviceButton(page)).toBeHidden();
+  await openPicker(page);
+  await picker(page).getByRole("button", { name: /客厅音箱/ }).click();
+  await expect(picker(page)).not.toBeVisible();
+  // 全屏底部一排的设备按钮也换成远端名称，仍只有图标。
+  const fullDevice = fullscreenDialog(page).getByRole("button", { name: "正在控制：客厅音箱", exact: true });
+  await expect(fullDevice).toBeVisible();
+  await expect(fullDevice).toHaveText("");
+  await page.keyboard.press("Escape");
+  await expect(fullscreenDialog(page)).not.toBeVisible();
+
+  const device = deviceButton(page);
+  await expect(device).toBeVisible();
+  await expect(device).toHaveAccessibleName("正在控制：客厅音箱");
+  await expect(device).toHaveText("");
+  await expect(bar(page).getByText("客厅音箱", { exact: true })).toHaveCount(0);
+  const deviceBox = await device.boundingBox();
+  const playBox = await bar(page).getByRole("button", { name: /^(播放|暂停)$/ }).boundingBox();
+  if (deviceBox === null || playBox === null) throw new Error("缺少设备或播放键");
+  expect(deviceBox.x + deviceBox.width, "设备图标在播放键左边").toBeLessThanOrEqual(playBox.x + 1);
+  expect(Math.abs((deviceBox.y + deviceBox.height / 2) - (playBox.y + playBox.height / 2)), "设备与播放键同一行").toBeLessThanOrEqual(4);
+  await expectNoHorizontalOverflow(page, "迷你栏远端设备");
+  await device.click();
+  await expect(picker(page)).toBeVisible();
+  await picker(page).getByRole("button", { name: /客厅音箱/, pressed: true }).hover();
+  await expectNoSeriousViolations(page, "迷你栏打开设备列表");
+});
+
+test("1440px 全屏：设备图标在右上角，设备列表在它下方展开、不超出窗口", async ({ page, backend }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const mock = await backend.start({ signedInAs: "listener" });
+  await setup(page, mock);
+  await bar(page).getByRole("button", { name: "打开全屏播放器", exact: true }).click();
+  const full = fullscreenDialog(page);
+  await expect(full.locator(":scope > div").first()).toHaveCSS("transform", "none");
+  await expect(full.getByRole("button", { name: /^队列/ })).toHaveCount(0);
+  const device = full.getByRole("button", { name: "播放设备", exact: true });
+  const box = await device.boundingBox();
+  if (box === null) throw new Error("缺少全屏设备按钮");
+  expect(box.x, "设备在右上角").toBeGreaterThanOrEqual(1440 * 0.9);
+  expect(box.y, "设备在右上角").toBeLessThanOrEqual(80);
+  await device.click();
+  await expect(picker(page)).toBeVisible();
+  const list = await picker(page).getByRole("list").boundingBox();
+  const content = await picker(page).locator(":scope > div").evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right };
+  });
+  if (list === null) throw new Error("缺少设备列表");
+  expect(content.top, "列表在按钮下方").toBeGreaterThanOrEqual(box.y + box.height);
+  expect(content.bottom).toBeLessThanOrEqual(900);
+  expect(content.left).toBeGreaterThanOrEqual(0);
+  expect(content.right).toBeLessThanOrEqual(1440);
+  await page.keyboard.press("Escape");
+  await expect(picker(page)).not.toBeVisible();
+  await expect(device).toBeFocused();
 });

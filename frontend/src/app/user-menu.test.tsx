@@ -13,25 +13,26 @@ async function setup(path = "/") {
   const rendered = renderApp({ path });
   await screen.findByRole("heading", { level: 1, name: path.startsWith("/settings") ? "账号" : "概览" });
   const region = screen.getByRole("region", { name: "当前用户" });
-  const trigger = within(region).getByRole("button", { name: "curator 管理员" });
-  return { api, session, region, trigger, ...rendered };
+  const settings = within(region).getByRole("link", { name: "设置" });
+  const trigger = within(region).getByRole("button", { name: "账号" });
+  return { api, session, region, settings, trigger, ...rendered };
 }
 
-describe("侧栏用户菜单 A7", () => {
-  it("头像首字、用户名和角色归为一个按钮，点击向上弹出设置与退出登录", async () => {
-    const { region, trigger } = await setup();
-    expect(within(trigger).getByText("C").getAttribute("aria-hidden")).toBe("true");
-    expect(within(trigger).getByText("curator")).toBeTruthy();
-    expect(within(trigger).getByText("管理员")).toBeTruthy();
+describe("侧栏底部的当前用户 A7", () => {
+  it("头像首字、用户名与角色是文字，右侧是齿轮链接与“账号”菜单，菜单向上弹出账号与退出登录", async () => {
+    const { region, settings, trigger } = await setup();
+    expect(within(region).getByText("C").getAttribute("aria-hidden")).toBe("true");
+    expect(within(region).getByText("curator")).toBeTruthy();
+    expect(within(region).getByText("管理员")).toBeTruthy();
     expect(within(region).getAllByRole("button")).toEqual([trigger]);
     expect(within(region).queryByRole("button", { name: "修改密码" })).toBeNull();
-    expect(trigger.hasAttribute("data-current")).toBe(false);
-    vi.spyOn(trigger, "getBoundingClientRect").mockReturnValueOnce(new DOMRect(16, 600, 220, 44));
+    expect(settings.getAttribute("href")).toBe("/settings");
+    expect(settings.hasAttribute("aria-current")).toBe(false);
+    vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue(new DOMRect(200, 600, 32, 32));
     await userEvent.click(trigger);
     const menu = screen.getByRole("menu", { name: "账号" });
-    expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["设置", "退出登录"]);
+    expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["账号", "退出登录"]);
     expect(menu.style.bottom).toBe(`${window.innerHeight - 600 + 4}px`);
-    expect(menu.style.width).toBe("220px");
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
     expect(trigger.getAttribute("aria-controls")).toBe(menu.id);
     await userEvent.keyboard("{Escape}");
@@ -45,17 +46,17 @@ describe("侧栏用户菜单 A7", () => {
     const { trigger } = await setup();
     trigger.focus();
     await user.keyboard(key);
-    const settings = screen.getByRole("menuitem", { name: "设置" });
+    const account = screen.getByRole("menuitem", { name: "账号" });
     const logout = screen.getByRole("menuitem", { name: "退出登录" });
-    expect(document.activeElement).toBe(settings);
+    expect(document.activeElement).toBe(account);
     await user.keyboard("{ArrowUp}");
     expect(document.activeElement).toBe(logout);
     await user.keyboard("{ArrowDown}");
-    expect(document.activeElement).toBe(settings);
+    expect(document.activeElement).toBe(account);
     await user.keyboard("{End}");
     expect(document.activeElement).toBe(logout);
     await user.keyboard("{Home}");
-    expect(document.activeElement).toBe(settings);
+    expect(document.activeElement).toBe(account);
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("menu")).toBeNull();
     expect(document.activeElement).toBe(trigger);
@@ -72,22 +73,29 @@ describe("侧栏用户菜单 A7", () => {
     expect(document.activeElement).not.toBe(trigger);
   });
 
-  it("键盘选择设置进入账号栏，用户按钮带当前样式但不是当前页链接", async () => {
+  it("键盘按齿轮一步进入账号栏，齿轮随之成为当前页链接", async () => {
     const user = userEvent.setup();
-    const { trigger, history } = await setup();
-    trigger.focus();
-    await user.keyboard("{ArrowDown}{Enter}");
+    const { settings, history } = await setup();
+    settings.focus();
+    await user.keyboard("{Enter}");
     await screen.findByRole("heading", { level: 1, name: "账号" });
     expect(history.location.pathname).toBe("/settings/account");
-    expect(screen.queryByRole("menu")).toBeNull();
-    expect(trigger.hasAttribute("data-current")).toBe(true);
-    expect(trigger.hasAttribute("aria-current")).toBe(false);
+    expect(within(screen.getByRole("region", { name: "当前用户" })).getByRole("link", { name: "设置" }).getAttribute("aria-current")).toBe("page");
     expect(document.activeElement).toBe(screen.getByRole("main"));
   });
 
-  it("直接进入设置页时用户按钮也标记为当前", async () => {
-    const { trigger } = await setup("/settings/account");
-    expect(trigger.hasAttribute("data-current")).toBe(true);
+  it("直接进入设置页时齿轮也标记为当前", async () => {
+    const { settings } = await setup("/settings/account");
+    expect(settings.getAttribute("aria-current")).toBe("page");
+  });
+
+  it("在“账号”菜单里选“账号”进入账号栏", async () => {
+    const { trigger, history } = await setup();
+    await userEvent.click(trigger);
+    await userEvent.click(screen.getByRole("menuitem", { name: "账号" }));
+    await screen.findByRole("heading", { level: 1, name: "账号" });
+    expect(history.location.pathname).toBe("/settings/account");
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 
   it("退出进行中显示忙碌且不提前离开；失败保留会话，重试成功才去登录页", async () => {
@@ -97,10 +105,14 @@ describe("侧栏用户菜单 A7", () => {
     api.on("POST", "/api/v1/auth/logout", () => gate.promise);
     await userEvent.click(trigger);
     await userEvent.click(screen.getByRole("menuitem", { name: "退出登录" }));
-    await waitFor(() => expect(trigger.getAttribute("aria-busy")).toBe("true"));
+    const row = within(region).getByText("curator").closest("[aria-busy]");
+    await waitFor(() => expect(within(region).getByText("正在退出…")).toBeTruthy());
+    expect(row?.getAttribute("aria-busy")).toBe("true");
     expect(screen.queryByRole("menu")).toBeNull();
-    expect(within(trigger).getByText("正在退出…")).toBeTruthy();
-    expect(within(region).getByRole("button", { name: "curator 正在退出…" })).toBe(trigger);
+    // 退出进行中再打开菜单，“退出登录”不可选。
+    await userEvent.click(trigger);
+    expect(screen.getByRole<HTMLButtonElement>("menuitem", { name: "退出登录" }).disabled).toBe(true);
+    await userEvent.keyboard("{Escape}");
     expect(history.location.pathname).toBe("/");
     expect(session.current).toBe("curator");
     gate.resolve(sampleResponse("errors/database-unavailable"));
@@ -112,7 +124,8 @@ describe("侧栏用户菜单 A7", () => {
     expect(session.current).toBe("curator");
     expect(runtime.session.currentGeneration()).toBe(generation);
     expect(api.requestsTo("POST", "/api/v1/auth/logout")).toHaveLength(1);
-    expect(trigger.getAttribute("aria-busy")).not.toBe("true");
+    expect(within(region).getByText("管理员")).toBeTruthy();
+    expect(within(region).getByText("curator").closest("[aria-busy]")).toBeNull();
     api.on("POST", "/api/v1/auth/logout", () => {
       session.current = null;
       return sampleResponse("auth/logout");
@@ -123,28 +136,5 @@ describe("侧栏用户菜单 A7", () => {
     expect(history.location.search).toBe("");
     expect(api.requestsTo("POST", "/api/v1/auth/logout")).toHaveLength(2);
     expect(runtime.queryClient.getQueryCache().getAll()).toHaveLength(0);
-  });
-});
-
-describe("窄屏导航里的用户菜单 A8", () => {
-  it.each(["/", "/settings/account"])("从 %s 选择设置后关闭导航对话框，进入账号栏", async (path) => {
-    vi.stubGlobal("innerWidth", 375);
-    const { history } = await setup(path);
-    await userEvent.click(screen.getByRole("button", { name: "菜单" }));
-    const dialog = screen.getByRole("dialog", { name: "菜单" });
-    const region = within(dialog).getByRole("region", { name: "当前用户" });
-    const trigger = within(region).getByRole("button", { name: "curator 管理员" });
-    expect(within(trigger).getByText("C")).toBeTruthy();
-    expect(within(region).queryByRole("button", { name: "修改密码" })).toBeNull();
-    await userEvent.click(trigger);
-    const menu = within(dialog).getByRole("menu", { name: "账号" });
-    expect(menu.closest("dialog")).toBe(dialog);
-    expect(within(menu).getByRole("menuitem", { name: "退出登录" })).toBeTruthy();
-    await userEvent.click(within(menu).getByRole("menuitem", { name: "设置" }));
-    await screen.findByRole("heading", { level: 1, name: "账号" });
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "菜单" })).toBeNull());
-    expect(history.location.pathname).toBe("/settings/account");
-    expect(screen.queryByRole("menu")).toBeNull();
-    expect(screen.getByRole("link", { name: "账号" }).getAttribute("aria-current")).toBe("page");
   });
 });

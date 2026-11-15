@@ -58,12 +58,13 @@
 
 ## 我的音乐的页面与侧栏（2026-11-07 起）
 
-- 侧栏“我的音乐”一组（在“聆听”之后、“资料库”之前）：我喜欢的音乐 `/me/liked`、我的收藏 `/me/favorites`、播放历史 `/me/history`、我的歌单 `/me/playlists`。
+- 侧栏“我的音乐”一组（在“聆听”之后、“管理”之前）：我喜欢的音乐 `/me/liked`、我的收藏 `/me/favorites`、播放历史 `/me/history`、我的歌单 `/me/playlists`。
   没有共同的页签布局，每页自己的 `Page` 标题与侧栏名字一致；我喜欢的音乐与歌单详情用封面页头（`Page.header`），歌单详情的 `h1` 与浏览器标题是歌单名（2026-11-08 起）。
 - “我的歌单”的名字是去歌单列表页的链接，旁边是无边框的展开收起图标按钮（读屏名“歌单列表”，`aria-expanded`）。展开后列出 `usePlaylists(1)` 的歌单
   （与歌单页第 1 页同一个查询键，新建、改名、删除之后跟着刷新；最多 20 个，按最近修改倒序），当前所在的歌单高亮；总数多于这一页时末尾是“全部歌单”。
-  展开状态存在 `localStorage`（`roomusic.nav.playlists-expanded`），默认展开；收起时不请求歌单。窄屏抽屉里是同一个组件。
-- 旧地址：`/me` 转到 `/me/liked`；`/me/favorites?tab=tracks` 在路由的 `beforeLoad` 里转到 `/me/liked`，页码跟着转；都替换历史项。
+  展开状态存在 `localStorage`（`roomusic.nav.playlists-expanded`），默认展开；收起时不请求歌单。手机在“我的”页列出歌单与新建入口。
+- 侧栏的播放来源标记由 app 的 `PlaybackOriginProvider` 记录本页最近一次喜欢列表或歌单“播放全部”的曲目序列；当前队列前段仍匹配且当前条目在此段才显示，暂停时音柱静止。刷新或换会话清空来源，不从曲目交集猜测歌单；服务端尚未提供跨设备的来源身份。侧栏没有单个专辑项，专辑播放状态在专辑页显示。
+- `/me` 为“我的”入口页；旧地址 `/me/favorites?tab=tracks` 在路由的 `beforeLoad` 里转到 `/me/liked`，页码跟着转并替换历史项。
 
 ## 我喜欢的音乐（`/me/liked`）与我的收藏（`/me/favorites`）
 

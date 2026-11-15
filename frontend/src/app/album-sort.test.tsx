@@ -17,10 +17,16 @@ function setup(path: string) {
 const searchOf = (history: { location: { search: string } }) => new URLSearchParams(history.location.search);
 const lastQuery = (api: ReturnType<typeof setup>["api"]) => new URL(api.requestsTo("GET", "/api/v1/release-groups").at(-1)?.path ?? "", "http://localhost").searchParams;
 const ready = () => screen.findByRole("navigation", { name: "专辑分页" });
-const searchBox = () => screen.getByRole("textbox", { name: "搜索专辑" });
+const searchBox = () => screen.getByRole("textbox", { name: "筛选专辑" });
+const sortButton = () => screen.getByRole("button", { name: /^排序：/ });
+/** 排序菜单：打开后选一项。 */
+async function chooseSort(label: string) {
+  await userEvent.click(sortButton());
+  await userEvent.click(screen.getByRole("menuitem", { name: new RegExp(`^${label}`) }));
+}
 
 describe("专辑排序地址状态", () => {
-  it("搜索保留排序并回第一页，清除搜索仍保留排序", async () => {
+  it("筛选词保留排序并回第一页，清除筛选词仍保留排序", async () => {
     const { api, history } = setup("/albums?sort=added_at_desc&page=2");
     await ready();
     await userEvent.type(searchBox(), "Album{Enter}");
@@ -28,23 +34,23 @@ describe("专辑排序地址状态", () => {
     expect(searchOf(history).get("sort")).toBe("added_at_desc");
     expect(searchOf(history).has("page")).toBe(false);
     expect(lastQuery(api).get("sort")).toBe("added_at_desc");
-    await userEvent.click(screen.getByRole("button", { name: "清除" }));
+    await userEvent.click(screen.getByRole("button", { name: "清除筛选" }));
     await waitFor(() => expect(searchOf(history).has("q")).toBe(false));
     expect(searchOf(history).get("sort")).toBe("added_at_desc");
     expect(document.activeElement).toBe(searchBox());
   });
 
-  it("切换需要关注保留排序和搜索，并回第一页", async () => {
+  it("切换需要关注保留排序和筛选词，并回第一页", async () => {
     const { api, history } = setup("/albums?sort=added_at_desc&q=Album&page=2");
     await ready();
-    await userEvent.click(screen.getByRole("checkbox", { name: "只看需要关注" }));
+    await userEvent.click(screen.getByRole("button", { name: "需要关注" }));
     await waitFor(() => expect(lastQuery(api).get("attention")).toBe("required"));
     expect(Object.fromEntries(searchOf(history))).toEqual({ q: "Album", attention: "required", sort: "added_at_desc" });
     expect(lastQuery(api).get("sort")).toBe("added_at_desc");
     expect(lastQuery(api).get("page")).toBe("1");
   });
 
-  it("翻页保留排序、搜索和筛选，焦点落在结果标题", async () => {
+  it("翻页保留排序、筛选词和需要关注，焦点落在结果标题", async () => {
     const { api, history } = setup("/albums?sort=added_at_desc&q=Album&attention=required");
     const pagination = await ready();
     const next = within(pagination).getByRole("link", { name: "下一页" });
@@ -69,11 +75,20 @@ describe("专辑排序地址状态", () => {
   it("切换排序回第一页，同时保留其他条件；默认标题排序不留 sort 参数", async () => {
     const { api, history } = setup("/albums?q=Album&attention=required&page=2");
     await ready();
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "排序" }), "added_at_desc");
+    expect(sortButton().getAttribute("aria-label")).toBe("排序：按标题");
+    await chooseSort("最近新增");
     await waitFor(() => expect(lastQuery(api).get("sort")).toBe("added_at_desc"));
     expect(Object.fromEntries(searchOf(history))).toEqual({ q: "Album", attention: "required", sort: "added_at_desc" });
     expect(lastQuery(api).get("page")).toBe("1");
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "排序" }), "title");
+    expect(sortButton().getAttribute("aria-label")).toBe("排序：最近新增");
+    // 菜单里当前项带“当前”，再选它不改地址。
+    await userEvent.click(sortButton());
+    expect(screen.getByRole("menu", { name: "排序" })).toBeTruthy();
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["按标题", "最近新增 当前"]);
+    const length = history.length;
+    await userEvent.click(screen.getByRole("menuitem", { name: "最近新增 当前" }));
+    expect(history.length).toBe(length);
+    await chooseSort("按标题");
     await waitFor(() => expect(lastQuery(api).has("sort")).toBe(false));
     expect(Object.fromEntries(searchOf(history))).toEqual({ q: "Album", attention: "required" });
   });
@@ -87,23 +102,23 @@ describe("专辑排序地址状态", () => {
     // 98 是最新一天（11 月 3 日）中 ID 最大的组；不从 fake 排序函数计算期望。
     const recentFirst = "/albums/00000000-0000-4000-8000-a00000000098";
     expect(firstCard()).toBe(titleFirst);
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "排序" }), "added_at_desc");
+    await chooseSort("最近新增");
     await waitFor(() => expect(firstCard()).toBe(recentFirst));
     history.back();
     await waitFor(() => {
       expect(searchOf(history).has("sort")).toBe(false);
       expect(firstCard()).toBe(titleFirst);
-      expect(screen.getByRole<HTMLSelectElement>("combobox", { name: "排序" }).value).toBe("title");
+      expect(sortButton().getAttribute("aria-label")).toBe("排序：按标题");
     });
     history.forward();
     await waitFor(() => {
       expect(searchOf(history).get("sort")).toBe("added_at_desc");
       expect(firstCard()).toBe(recentFirst);
-      expect(screen.getByRole<HTMLSelectElement>("combobox", { name: "排序" }).value).toBe("added_at_desc");
+      expect(sortButton().getAttribute("aria-label")).toBe("排序：最近新增");
     });
   });
 
-  it("详情返回列表恢复排序、筛选、搜索和页码", async () => {
+  it("详情返回列表恢复排序、需要关注、筛选词和页码", async () => {
     const { history } = setup("/albums?sort=added_at_desc&q=Album&attention=required&page=2");
     await ready();
     const region = screen.getByRole("region", { name: "“Album”中需要关注的专辑" });

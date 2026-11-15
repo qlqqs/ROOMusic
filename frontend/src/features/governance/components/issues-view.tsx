@@ -109,6 +109,7 @@ function IssueDetailPane({ releaseId, commands }: { releaseId: string; commands:
  * “元数据”页的内容（管理员）：按版本列出“需要关注”的问题，可以按状态与类别筛选；选中的版本写进地址（release）。
  * 容器足够宽时两栏（列表在左，选中的版本的问题在右）；窄于约 900px 时顺序导航：地址有 release 只显示详情与“返回问题列表”，没有只显示列表。
  * 处理完、离开当前筛选的版本仍保持选中，详情说明“已经没有待处理的问题”，页面不跳走。页码越界时用替换历史项的方式改到末页。
+ * 列表为空且没有选中的版本时只显示列表一栏。
  */
 export function IssuesView({ search, commands }: IssuesViewProps) {
   const status = search.status ?? "open";
@@ -178,9 +179,11 @@ export function IssuesView({ search, commands }: IssuesViewProps) {
       />
     );
 
+  // 没有选中的版本、列表也是空的：右栏没有可选的东西，不显示（也不提示“从列表里选一个版本”）。
+  const nothingToSelect = search.release === undefined && issues.data?.pagination.total === 0;
   return (
-    <div ref={containerRef} className={styles.view} data-layout={wide ? "columns" : "sequential"}>
-      {wide ? (
+    <div ref={containerRef} className={styles.view} data-layout={wide && !nothingToSelect ? "columns" : "sequential"}>
+      {wide && !nothingToSelect ? (
         <>
           {list}
           <div className={styles.detailColumn}>

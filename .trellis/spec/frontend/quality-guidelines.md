@@ -82,6 +82,13 @@ Playwright 在 CI 里重试一次，失败时上传 HTML 报告与 trace（保�
 先对对话框的首个直接子元素断言 `toHaveCSS("transform", "none")`（见 `e2e/player.spec.ts` 的五种宽度长标题用例与 `openFullscreen`）。
 否则 axe 可能将动画不同帧的透明度与背景混合，误报 `color-contrast`；不要用固定睡眠、重试扫描或关闭对比度规则代替等待稳定状态。
 
+### 行尾菜单与隐藏入口的回归边界（2026-11-15）
+
+- 菜单应覆盖手机触发器靠近视口底边的情形：展开后仍可见、首项获得焦点，文档不因初始聚焦而滚动关闭；不能只把触发器滚到屏幕中央验证。
+- 设备入口显隐应分别覆盖有曲目/空队列、本机/远端控制、是否存在其他在线设备，避免隐藏主入口后备用入口也依赖同一缺失条件。
+- 同页多个区域复用同名按钮时，测试先限定到目标页面或区段（例如歌单页与侧栏都可新建歌单），不要把全局按钮计数当作局部布局合同。
+- 行动作仅在悬停出现时，真实服务用例先悬停该行再点击；保留实际媒体状态断言，不以定位器通过代替播放通过。
+
 ## Accessibility And Responsive Gate
 
 Run automated accessibility checks on representative screens and manually verify

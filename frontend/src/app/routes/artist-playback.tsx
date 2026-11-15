@@ -1,5 +1,5 @@
 import { Play, Shuffle } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { formatCount } from "../../shared/lib/number";
 import { newIdempotencyKey } from "../../shared/lib/ids";
 import { Button, FailureNotice } from "../../shared/ui";
@@ -7,7 +7,7 @@ import { ARTIST_QUEUE_LIMIT, useArtistQueue, type ArtistQueueDTO, type ArtistQue
 import { usePlaybackCapabilities, usePlayerEngine } from "../../features/player";
 import { QUEUE_FULL_TEXT } from "./track-actions";
 import { playerTrackOfSummary, unplayableReason } from "./track-playback";
-import styles from "./play-all.module.css";
+import styles from "./artist-playback.module.css";
 
 /**
  * 放进队列的提示：放了几首；跳过了几首（文件缺失的与这个浏览器放不了的分开说）；超过 10,000 首时一句话说明这次只放了前 10,000 首。
@@ -23,11 +23,25 @@ export function artistQueueNotice(queued: number, queue: Pick<ArtistQueueDTO, "m
   return `${head}${skippedText}${truncated}`;
 }
 
+type ArtistPlayback = {
+  /** 读一次候选并替换当前队列开始播放：album 按专辑顺序，random 在全部曲目里打乱。 */
+  start: (kind: ArtistQueueOrder["kind"]) => void;
+  /** 正在读取的是哪一种；没有在读是 null。 */
+  pending: ArtistQueueOrder["kind"] | null;
+  /** 不能开始播放的原因（能力检查失败或还在检查）；能播放时是 null。 */
+  disabledReason: string | null;
+  /** 不能播放的原因、能力检查与读取失败、上一次的结果；放在按钮下方，没有内容时不占位。 */
+  status: ReactNode;
+  /** 同样的结果压成一句话（列表行里放不下完整的失败提示）；quiet 时只给读屏。 */
+  brief: { text: string; quiet: boolean };
+};
+
 /**
- * 艺人页头部的“播放全部”（按专辑顺序）与“随机播放”（在全部曲目里打乱后取前 10,000 首）：每次按下都向服务端读一次，
+ * 艺人的“播放全部”（按专辑顺序）与“随机播放”（在全部曲目里打乱后取前 10,000 首）：每次按下都向服务端读一次，
  * 去掉这个浏览器放不了的，替换当前队列开始播放；不改变播放器的随机与循环设置。一首都不能播放、读取失败或身份变了时当前队列不变。
+ * 艺人页头部与艺人列表每一行的播放键共用它。
  */
-export function ArtistPlayActions({ artistId }: { artistId: string }) {
+export function useArtistPlayback(artistId: string): ArtistPlayback {
   const engine = usePlayerEngine();
   const capability = usePlaybackCapabilities();
   const queue = useArtistQueue(artistId);
@@ -59,20 +73,43 @@ export function ArtistPlayActions({ artistId }: { artistId: string }) {
       setQuiet(unsupported === 0 && data.missing_total === 0 && !data.truncated);
     });
   }
+  return {
+    start,
+    pending: queue.pending,
+    brief: queue.error === null ? { text: notice, quiet } : { text: "没能读取曲目，请重试。", quiet: false },
+    disabledReason,
+    status: (
+      <>
+        {disabledReason === null ? null : <p>{disabledReason}</p>}
+        {capability.isError ? <FailureNotice error={capability.error} action={<Button onClick={() => void capability.refetch()}>重试检查</Button>} /> : null}
+        {queue.error === null ? null : <FailureNotice error={queue.error} title="没能读取曲目" action={<Button onClick={() => start(lastOrder)}>重试</Button>} />}
+        <p role="status" className={quiet ? styles.quiet : undefined}>
+          {notice}
+        </p>
+      </>
+    ),
+  };
+}
+
+/**
+ * 艺人页头部的操作行（与专辑页同一套）：墨色圆形的“播放全部”（唯一的主要操作）、“随机播放”，再接调用方给的心形与“更多”；
+ * 结果与说明在操作行下方。
+ */
+export function ArtistPlayActions({ artistId, extra }: { artistId: string; extra?: ReactNode }) {
+  const playback = useArtistPlayback(artistId);
+  const disabled = playback.disabledReason !== null;
   return (
     <div className={styles.playAll}>
       <div className={styles.actions}>
-        <Button variant="primary" icon={<Play size={16} />} disabled={disabledReason !== null} busy={queue.pending === "album"} onClick={() => start("album")}>
-          {queue.pending === "album" ? "正在读取…" : "播放全部"}
+        <span className={styles.disc}>
+          <Button variant="icon" icon={<Play size={20} fill="currentColor" />} label="播放全部" disabled={disabled} busy={playback.pending === "album"} onClick={() => playback.start("album")} />
+        </span>
+        <Button icon={<Shuffle size={16} />} disabled={disabled} busy={playback.pending === "random"} onClick={() => playback.start("random")}>
+          {playback.pending === "random" ? "正在读取…" : "随机播放"}
         </Button>
-        <Button icon={<Shuffle size={16} />} disabled={disabledReason !== null} busy={queue.pending === "random"} onClick={() => start("random")}>
-          {queue.pending === "random" ? "正在读取…" : "随机播放"}
-        </Button>
+        {extra}
       </div>
-      {disabledReason === null ? null : <p>{disabledReason}</p>}
-      {capability.isError ? <FailureNotice error={capability.error} action={<Button onClick={() => void capability.refetch()}>重试检查</Button>} /> : null}
-      {queue.error === null ? null : <FailureNotice error={queue.error} title="没能读取曲目" action={<Button onClick={() => start(lastOrder)}>重试</Button>} />}
-      <p role="status" className={quiet ? styles.quiet : undefined}>{notice}</p>
+      {playback.status}
     </div>
   );
 }

@@ -1,66 +1,48 @@
-/* 列表页工具条（与专辑列表的 album-filters 同一套）：搜索、筛选、排序在一行，控件都是 --control-height 高；窄时按组换行。 */
-.form {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: var(--space-2) var(--space-4);
-}
-
-/* 输入框与“查找”“清除”一组；输入框下方的错误只撑高这一组，按钮仍与输入框对齐。 */
-.search {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-  flex: 1 1 22rem;
-  min-width: 0;
-  max-width: 36rem;
-}
-
-.input {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-/* 输入框与按钮、下拉框同高：去掉上下内边距，由 --control-height 决定高度。 */
-.input input {
-  padding-block: 0;
-}
-
-.search > button {
-  flex: none;
-}
-
-.actions {
+/*
+ * 列表页工具条（与专辑列表的 album-filters 同一套）：筛选框、角色胶囊、排序一行，排序靠右；窄时换行，筛选框占满一行，
+ * 胶囊一行横向滚动（不换成好几行）。
+ */
+.toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2) var(--space-4);
-  min-height: var(--control-height);
+  gap: var(--space-2);
+  min-width: 0;
 }
 
-.select {
+.filter {
+  flex: 0 1 260px;
+  min-width: 0;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sort {
   display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: var(--control-height);
+  margin-inline-start: auto;
 }
 
-.select select {
-  min-height: var(--control-height);
-  padding: 4px 8px;
-  border: 1px solid var(--color-control-border);
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--text-primary);
-  font: inherit;
-  font-size: var(--fs-13);
-}
+@media (max-width: 767px) {
+  .filter {
+    flex-basis: 100%;
+  }
 
-.select select:hover {
-  border-color: var(--color-neutral-800);
-}
+  /* 胶囊一行，横向滚动到页面两边；里面的按钮都能 Tab 到，滚动区不另加 tabindex。 */
+  .chips {
+    flex: 1 1 100%;
+    flex-wrap: nowrap;
+    margin-inline: calc(-1 * var(--layout-page-inset-x));
+    padding-inline: var(--layout-page-inset-x);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
 
-.select select:focus-visible {
-  border-color: var(--color-accent-700);
-  outline-offset: 0;
+  .chips::-webkit-scrollbar {
+    display: none;
+  }
 }

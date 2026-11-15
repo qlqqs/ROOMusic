@@ -27,3 +27,15 @@ export const scanFailureMessages = {
   scan_coordination_unavailable: "暂时无法协调扫描任务，请稍后重试。",
   not_found: "扫描不存在。",
 } as const;
+
+/** 目录操作记录里失败的那一条：按记下的错误码说明原因，不显示错误码本身；没有列出的写“操作没有完成”。 */
+export const rootOperationErrorMessages: Readonly<Record<string, string>> = {
+  operation_failed: "操作没有完成，目录保持原样。",
+  scan_running: "当时正在扫描，没有执行。",
+  revision_conflict: "目录当时刚有变化，没有执行。",
+  invalid_library_path: "打不开这个文件夹。",
+  path_already_registered: "这个文件夹已经添加过了。",
+  exclusion_limit: "不扫描的文件夹太多了。",
+};
+
+export const rootOperationErrorFallback = "操作没有完成。";
