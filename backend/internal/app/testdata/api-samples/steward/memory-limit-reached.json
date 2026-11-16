@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "memory_limit_reached",
+      "message": "最多保存 50 条记忆"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

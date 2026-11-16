@@ -8,7 +8,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"io"
 	"net/http"
-	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -135,7 +135,12 @@ func (h *Handlers) startRun(w http.ResponseWriter, r *http.Request, user identit
 		h.writeStoreError(w, r, err)
 		return
 	}
-	defer client.CloseIdleConnections()
+	handedOff := false
+	defer func() {
+		if !handedOff {
+			client.CloseIdleConnections()
+		}
+	}()
 	if err := preflight(r.Context(), client, settings.Endpoint); err != nil {
 		writeProblem(w, r, outboundProblem(err))
 		return
@@ -145,150 +150,143 @@ func (h *Handlers) startRun(w http.ResponseWriter, r *http.Request, user identit
 		writeProblem(w, r, outboundProblem(err))
 		return
 	}
-	ctx, cancel := context.WithCancel(r.Context())
-	defer cancel()
-	run := runKey{user.ID, id}
-	if !h.registerRun(run, cancel) {
-		writeProblem(w, r, busyProblem)
-		return
-	}
-	defer h.unregisterRun(run)
 	modelName := detail.Conversation.Model
 	if modelName == "" {
 		modelName = settings.Model
 	}
-	h.streamRun(w, r, ctx, cancel, runtime.RunParams{Caller: tool.Caller{User: user, Source: "chat", RequestID: r.Header.Get("X-Request-ID")},
+	run, err := h.supervisor.Start(r.Context(), runtime.RunParams{
+		Finished: client.CloseIdleConnections,
+		Check:    h.runCredentialCheck(r, user, settings), Caller: tool.Caller{User: user, Source: "chat", RequestID: r.Header.Get("X-Request-ID")},
 		ReviewPlanID: reviewPlanID, ReviewModel: settings.ReviewModel, Decision: decision, ConversationID: id, Text: text, Context: messageContext, Continue: continuation, DisplayName: settings.DisplayName,
 		Provider: model, Model: modelName, Protocol: provider.Protocol(settings.Protocol), Endpoint: settings.Endpoint,
-		NativeSearch: settings.SearchSource == "native" && effectiveNativeSearch(settings, settingsUpdate(settings)) == provider.NativeSearchSupported}, user)
-}
-
-type runResult struct {
-	end *runtime.Event
-	err error
-}
-
-func (h *Handlers) streamRun(w http.ResponseWriter, r *http.Request, ctx context.Context, cancel context.CancelFunc, params runtime.RunParams, user identity.User) {
-	ready := make(chan struct{})
-	events := make(chan runtime.Event, 1)
-	result := make(chan runResult, 1)
-	stopped := make(chan struct{})
-	params.Started = func() { close(ready) }
-	go func() {
-		defer close(stopped)
-		var end *runtime.Event
-		defer func() {
-			if recover() != nil {
-				h.logger.ErrorContext(context.WithoutCancel(ctx), "管家运行异常", "event", "steward.run.panicked", "conversation_id", params.ConversationID, "stack", string(debug.Stack()))
-				result <- runResult{end: &runtime.Event{Type: runtime.EventDone, End: &runtime.RunEnd{Reason: runtime.EndInternalError, Message: "管家运行发生内部错误"}}}
-			}
-		}()
-		err := h.runner.Run(ctx, params, func(event runtime.Event) {
-			if event.Type == runtime.EventDone {
-				end = &event
-				return
-			}
-			select {
-			case events <- event:
-			case <-ctx.Done():
-			}
-		})
-		result <- runResult{end, err}
-	}()
-	defer func() { cancel(); <-stopped }()
-	finish := responseLifetime(w, r)
-	defer finish()
-
-	// 原子占用或继续条件检查失败不会触发 Started，仍可写普通 JSON 错误。
-	var completed *runResult
-	cancelledByCheck := false
-	select {
-	case <-r.Context().Done():
+		NativeSearch: settings.SearchSource == "native" && effectiveNativeSearch(settings, settingsUpdate(settings)) == provider.NativeSearchSupported})
+	if err != nil {
+		h.writeStoreError(w, r, err)
 		return
-	case value := <-result:
-		if value.err != nil && value.end == nil {
-			h.writeStoreError(w, r, value.err)
+	}
+	handedOff = true
+	h.streamSubscription(w, r, run.Subscribe(0))
+}
+
+// runCredentialCheck 只捕获会话标识与设置快照，不保留原始请求。
+func (h *Handlers) runCredentialCheck(request *http.Request, user identity.User, expected runtime.UserSettings) func(context.Context) error {
+	sessionToken := ""
+	if cookie, err := request.Cookie(identity.SessionCookieName); err == nil {
+		sessionToken = strings.Clone(cookie.Value)
+	}
+	return func(ctx context.Context) error {
+		checkRequest := (&http.Request{Header: make(http.Header)}).WithContext(ctx)
+		if sessionToken != "" {
+			checkRequest.AddCookie(&http.Cookie{Name: identity.SessionCookieName, Value: sessionToken})
+		}
+		valid, err := h.checkCredentials(checkRequest, user)
+		if err != nil {
+			return err
+		}
+		if !valid {
+			return runtime.ErrRunInvalidated
+		}
+		if user.Role != "admin" {
+			enabled, err := h.store.GetMembersEnabled(ctx)
+			if err != nil {
+				return err
+			}
+			if !enabled {
+				return runtime.ErrRunInvalidated
+			}
+		}
+		current, err := h.store.GetUserSettings(ctx, user.ID)
+		if err != nil {
+			return err
+		}
+		if current.Endpoint != expected.Endpoint || !sameModelKey(current.Key, expected.Key) {
+			return runtime.ErrRunInvalidated
+		}
+		return nil
+	}
+}
+
+func sameModelKey(a, b *runtime.EncryptedKey) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return bytes.Equal(a.Ciphertext, b.Ciphertext)
+}
+
+func (h *Handlers) conversationEvents(w http.ResponseWriter, r *http.Request, user identity.User) {
+	id, ok := conversationID(w, r)
+	if !ok {
+		return
+	}
+	if _, err := h.store.GetConversation(r.Context(), user.ID, id); err != nil {
+		h.writeStoreError(w, r, err)
+		return
+	}
+	cursor := r.Header.Get("Last-Event-ID")
+	if cursor == "" {
+		cursor = r.URL.Query().Get("after")
+	}
+	var after uint64
+	if cursor != "" {
+		var err error
+		after, err = strconv.ParseUint(cursor, 10, 64)
+		if err != nil {
+			invalidInput(w, r)
 			return
 		}
-		completed = &value
-	case <-ready:
 	}
+	h.streamSubscription(w, r, h.supervisor.Subscribe(id, after))
+}
+
+func (h *Handlers) streamSubscription(w http.ResponseWriter, r *http.Request, subscription *runtime.Subscription) {
+	if subscription == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	defer subscription.Close()
+	finish := responseLifetime(w, r)
+	defer finish()
 	streamingHeaders(w)
 	w.WriteHeader(http.StatusOK)
 	if writeAndFlush(w, []byte(": ping\n\n")) != nil {
 		return
 	}
-	heartbeat := time.NewTicker(eventHeartbeatInterval)
-	// 此定时器复查长连接会话；工具预览与执行另由 app 装配在每次调用前重读角色和停用状态。
-	credentials := time.NewTicker(credentialCheckInterval)
-	defer heartbeat.Stop()
-	defer credentials.Stop()
-	for {
-		// 运行结果使用独立通道；结束前先排空已按序提交的事件，避免 done 超前。
-		if completed != nil {
-			if cancelledByCheck {
-				completed = &runResult{end: &runtime.Event{Type: runtime.EventDone, End: &runtime.RunEnd{Reason: runtime.EndCancelled}}}
-				h.writeRunEnd(w, *completed)
-				return
-			}
-			for {
-				select {
-				case event := <-events:
-					if writeEvent(w, event) != nil {
-						return
-					}
-				default:
-					h.writeRunEnd(w, *completed)
-					return
-				}
-			}
+	for _, event := range subscription.Replay {
+		if h.writeRunEvent(w, event) != nil {
+			return
 		}
+	}
+	heartbeat := time.NewTicker(eventHeartbeatInterval)
+	defer heartbeat.Stop()
+	for {
 		select {
 		case <-r.Context().Done():
 			return
-		case <-credentials.C:
-			valid, err := h.checkCredentials(r, user)
-			if err != nil {
-				continue
-			}
-			if valid && user.Role != "admin" {
-				valid, err = h.store.GetMembersEnabled(r.Context())
-				if err != nil {
-					continue
-				}
-			}
-			if !valid {
-				cancelledByCheck = true
-				credentials.Stop()
-				cancel()
-			}
 		case <-heartbeat.C:
 			if writeAndFlush(w, []byte(": ping\n\n")) != nil {
 				return
 			}
-		case event := <-events:
-			if cancelledByCheck {
-				continue
-			}
-			if writeEvent(w, event) != nil {
+		case event, ok := <-subscription.Events:
+			if !ok {
 				return
 			}
-		case value := <-result:
-			completed = &value
+			if h.writeRunEvent(w, event) != nil {
+				return
+			}
 		}
 	}
 }
 
-func (h *Handlers) writeRunEnd(w http.ResponseWriter, result runResult) {
-	if result.err != nil && (result.end == nil || result.end.End.Reason != runtime.EndInternalError) {
-		p := storeProblem(result.err)
-		// 已开始流后不能再写 JSON 信封；存储错误没有模型结束原因，不附带 reason。
-		_ = writeEvent(w, mapEvent{Type: runtime.EventDone, End: endResponse{Reason: "", ErrorCode: p.code, Message: p.message}})
-		return
+func (h *Handlers) writeRunEvent(w http.ResponseWriter, event runtime.Event) error {
+	if event.Type != runtime.EventDone {
+		return writeEvent(w, event)
 	}
-	if result.end != nil {
-		end := result.end.End
-		response := endResponse{Reason: end.Reason, ErrorKind: string(end.ErrorKind), Message: end.Message, StatusCode: end.StatusCode}
+	response := endResponse{}
+	if event.Failure != nil && (event.End == nil || event.End.Reason != runtime.EndInternalError) {
+		p := storeProblem(event.Failure)
+		response.ErrorCode, response.Message = p.code, p.message
+	} else if end := event.End; end != nil {
+		response = endResponse{Reason: end.Reason, ErrorKind: string(end.ErrorKind), Message: end.Message, StatusCode: end.StatusCode}
 		if end.ErrorKind != "" {
 			p := providerProblem(end.ErrorKind)
 			response.ErrorCode = p.code
@@ -299,8 +297,8 @@ func (h *Handlers) writeRunEnd(w http.ResponseWriter, result runResult) {
 		if end.Reason == runtime.EndInternalError {
 			response.ErrorCode = "internal"
 		}
-		_ = writeEvent(w, mapEvent{Type: runtime.EventDone, Step: result.end.Step, End: response})
 	}
+	return writeEvent(w, mapEvent{Seq: event.Seq, Type: runtime.EventDone, Step: event.Step, End: response})
 }
 
 type endResponse struct {
@@ -317,6 +315,7 @@ type endResponse struct {
 }
 
 type mapEvent struct {
+	Seq uint64 `json:"seq"`
 	// Type 选择当前载荷的类型。
 	Type runtime.EventType `json:"type"`
 	// Step 是从一开始的模型调用序号。
@@ -331,14 +330,19 @@ func writeEvent(w http.ResponseWriter, event any) error {
 		return err
 	}
 	var kind runtime.EventType
+	var seq uint64
 	switch event := event.(type) {
 	case runtime.Event:
 		kind = event.Type
+		seq = event.Seq
 	case mapEvent:
 		kind = event.Type
+		seq = event.Seq
 	}
 	payload := make([]byte, 0, len(raw)+len(kind)+16)
-	payload = append(payload, "event: "...)
+	payload = append(payload, "id: "...)
+	payload = strconv.AppendUint(payload, seq, 10)
+	payload = append(payload, "\nevent: "...)
 	payload = append(payload, kind...)
 	payload = append(payload, "\ndata: "...)
 	payload = append(payload, raw...)

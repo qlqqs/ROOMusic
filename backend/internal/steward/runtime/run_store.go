@@ -40,3 +40,8 @@ func (s *Store) FinishToolCallMessage(ctx context.Context, userID, conversationI
 	}
 	return message, nil
 }
+
+// RunCompletionStore 为持久化未读状态的存储区分已开始运行与前置失败。
+type RunCompletionStore interface {
+	FinishConversation(context.Context, string, string) error
+}

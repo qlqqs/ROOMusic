@@ -45,15 +45,25 @@ type SessionListProps = {
   showNew?: boolean;
 };
 
-/** 会话名下的状态：正在回答（本页正在审查时是“审查中”）、未处理方案里有几项等你确认（C7）；都没有时是 null。 */
+/** 会话是不是在运行：本页有这次运行，或服务端说它在运行。 */
+export function isRunningItem(item: ConversationListItemDTO, local: boolean): boolean {
+  return local || item.status === "running" || item.run_status === "running";
+}
+
+/**
+ * 会话名下的状态（文字，不只靠颜色）：正在回答（本页正在审查时是“审查中”）、未处理方案里有几项等你确认（C7；
+ * C10 的 run_status 是 awaiting_confirmation 而项数缺失时写“等你确认”）、运行结束后还没打开看过（“有新回答”，C10）。都没有时是 null。
+ */
 export function sessionStateOf(item: ConversationListItemDTO, running: boolean, reviews: ReadonlyMap<string, ReviewEntry>): string | null {
   const reviewing = [...reviews.values()].some((entry) => entry.conversationId === item.id && entry.live?.reviewing === true);
-  const parts = [running ? (reviewing ? "审查中" : "正在回答") : null, (item.pending_item_count ?? 0) > 0 ? `${item.pending_item_count} 项等你确认` : null];
+  const pending = item.pending_item_count ?? 0;
+  const awaiting = pending > 0 ? `${pending} 项等你确认` : item.run_status === "awaiting_confirmation" ? "等你确认" : null;
+  const parts = [running ? (reviewing ? "审查中" : "正在回答") : null, awaiting, !running && item.unread === true ? "有新回答" : null];
   const text = parts.filter((part) => part !== null).join("，");
   return text === "" ? null : text;
 }
 
-/** 整页左侧的会话列表：新对话、按时间分组的会话（正在回答、审查中、有项等你确认的有标记），每项可以改名、删除。 */
+/** 整页左侧的会话列表：新对话、按时间分组的会话（正在回答、审查中、有项等你确认、有新回答的有标记），每项可以改名、删除。 */
 export function SessionList({ currentId, onNew, onDeleted, onPicked, showNew = true }: SessionListProps) {
   const query = useConversations();
   const runs = useRuns();
@@ -76,8 +86,9 @@ export function SessionList({ currentId, onNew, onDeleted, onPicked, showNew = t
               <h3 className={styles.groupLabel}>{group.label}</h3>
               <ul className={styles.list}>
                 {group.items.map((item) => {
-                  const running = runs.has(item.id) || item.status === "running";
+                  const running = isRunningItem(item, runs.has(item.id));
                   const state = sessionStateOf(item, running, reviews);
+                  const unread = !running && item.unread === true;
                   return (
                     <li key={item.id} className={styles.row}>
                       <Link
@@ -87,8 +98,11 @@ export function SessionList({ currentId, onNew, onDeleted, onPicked, showNew = t
                         aria-current={item.id === currentId ? "page" : undefined}
                         onClick={onPicked}
                       >
-                        <span className={styles.title}>{titleOf(item)}</span>
-                        {state === null ? null : <small className={styles.state}>{state}</small>}
+                        <span className={styles.title}>
+                          {unread ? <span className={styles.unreadDot} aria-hidden="true" /> : null}
+                          {titleOf(item)}
+                        </span>
+                        {state === null ? null : <small className={styles.state} data-unread={unread ? "" : undefined}>{state}</small>}
                       </Link>
                       <span className={styles.more}>
                         <MenuButton label={`“${titleOf(item)}”的操作`} icon={<MoreHorizontal size={16} />} iconOnly actions={actionsFor(item, running)} />

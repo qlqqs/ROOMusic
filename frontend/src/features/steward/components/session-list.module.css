@@ -77,6 +77,21 @@
   font-weight: 400;
 }
 
+/* 有新回答（C10）：标题前一个强调色圆点，状态文字用强调色；文字本身说明了状态，圆点只是装饰。 */
+.unreadDot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--color-accent-700);
+  vertical-align: 2px;
+}
+
+.state[data-unread] {
+  color: var(--text-accent);
+}
+
 /* 每项的“更多”：悬停、键盘聚焦、当前项与触屏上显示，平时不占视线。 */
 .more {
   position: absolute;

@@ -3,7 +3,7 @@ import { loadApiSample, sampleBody } from "../../src/test/api-samples";
 
 // 管家接口的受控实现（steward.spec.ts、steward-plan.spec.ts、steward-review.spec.ts、steward-web.spec.ts）：设置、会话的增删改查（含模式）、发消息（一次性返回整段 SSE）、取消、
 // 修改方案的确认（C6，同样一次性返回整段 SSE）与方案项的撤销、审查结果与重新审查（C7，一次性返回整段 SSE）、
-// 联网搜索的设置与测试搜索、带模型自带搜索与引用来源的会话（C8）、令牌与管理员接口。
+// 联网搜索的设置与测试搜索、带模型自带搜索与引用来源的会话（C8）、后台运行与接回、已读与记忆列表（C10）、令牌与管理员接口。
 // 用 page.route 注册，优先于 api-mock 在浏览器上下文上的拦截；形状取自后端样本与 C2、C6 的接口合同。不调用任何真实模型。
 
 type Mode = "assistant" | "steward" | "operator";
@@ -25,7 +25,10 @@ type Conversation = {
   title: string;
   mode: Mode;
   model: string;
-  status: "idle";
+  /** running：后台运行（C10）还没结束。 */
+  status: "idle" | "running";
+  /** 最近一次运行结束的时间（C10）：接回时据此划分已落库消息里属于这次运行的部分。 */
+  last_run_finished_at?: string | null;
   created_at: string;
   updated_at: string;
   messages: unknown[];
@@ -35,7 +38,11 @@ type Conversation = {
   history: { plan: Plan; status: "applied" | "declined" | "superseded"; accepted: string[] }[];
 };
 
-export type StewardMock = { conversations: Conversation[]; requests: { method: string; path: string; body: unknown }[] };
+/**
+ * background（C10）：发消息只返回前半段事件就断开（运行在后台继续）；断线后带 Last-Event-ID 的接回一直挂着（模拟连接还在、运行没结束），
+ * 从头接回（刷新页面之后）时回放整次运行并结束。heldEvents 是挂着的接回请求，测试结束前不必处理。
+ */
+export type StewardMock = { conversations: Conversation[]; requests: { method: string; path: string; body: unknown }[]; heldEvents: Route[] };
 
 const BASE = "/api/v1/me/steward";
 const json = (route: Route, status: number, body: unknown) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
@@ -89,6 +96,52 @@ function runEvents(): string {
     ["done", { type: "done", step: 2, end: { reason: "completed" } }],
   ];
   return `: ping\n\n${events.map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join("")}`;
+}
+
+// ---- 后台运行与接回（C10）----
+
+/** SSE 的一个事件，带 id 行（与后端一致：id 与 data.seq 相同）。 */
+const sseWithIds = (events: [string, Record<string, unknown>][]) =>
+  `: ping\n\n${events.map(([event, data]) => `${typeof data["seq"] === "number" ? `id: ${data["seq"]}\n` : ""}event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join("")}`;
+
+const albumsOutput = { items: [], pagination: { page: 1, page_size: 20, total: 2 } };
+
+/**
+ * 后台运行的前半段：用户的问题与第一步（一句话加一次“浏览专辑”）已经落库，会话还在运行；返回同样内容的事件，没有 done。
+ * 第一步的文字分两个增量发出（seq 11、12），接回时服务端会把它们合并成一条（seq 12）。
+ */
+function startBackgroundRun(conversation: Conversation, question: string): string {
+  conversation.last_run_finished_at = "2026-11-01T00:00:00Z";
+  conversation.status = "running";
+  if (conversation.title === "") conversation.title = "后台运行的回答";
+  conversation.messages.push({ ...message(conversation, "user", [{ type: "text", text: question }]), created_at: new Date().toISOString() });
+  conversation.messages.push({
+    ...message(conversation, "assistant", [{ type: "text", text: "我查一下。" }, { type: "tool_call", tool_call: { id: "call-1", name: "list_albums", arguments: { q: "贝九" } } }], [
+      { id: idOf(6900), name: "list_albums", input: { q: "贝九" }, output: albumsOutput, truncated: false, untrusted: true, status: "succeeded", error_code: null, duration_ms: 1_200 },
+    ]),
+    created_at: new Date().toISOString(),
+  });
+  conversation.messages.push({ ...message(conversation, "tool", [{ type: "tool_result", tool_result: { call_id: "call-1", content: "{}", is_error: false } }]), created_at: new Date().toISOString() });
+  return sseWithIds([
+    ["text", { type: "text", seq: 11, step: 1, text: "我查" }],
+    ["text", { type: "text", seq: 12, step: 1, text: "一下。" }],
+    ["tool_started", { type: "tool_started", seq: 13, step: 1, tool_started: { call_id: "call-1", name: "list_albums", input: { q: "贝九" } } }],
+    ["tool_finished", { type: "tool_finished", seq: 14, step: 1, tool_finished: { call_id: "call-1", status: "succeeded", output: albumsOutput, truncated: false, untrusted: true } }],
+  ]);
+}
+
+/** 从头接回：回放整次运行（第一步的文字已合并），第二步给出带表格的回答并结束；落库后会话空闲。 */
+function finishBackgroundRun(conversation: Conversation): string {
+  conversation.messages.push({ ...message(conversation, "assistant", [{ type: "text", text: ANSWER_TABLE }]), created_at: new Date().toISOString() });
+  conversation.status = "idle";
+  conversation.last_run_finished_at = new Date().toISOString();
+  return sseWithIds([
+    ["text", { type: "text", seq: 12, step: 1, text: "我查一下。" }],
+    ["tool_started", { type: "tool_started", seq: 13, step: 1, tool_started: { call_id: "call-1", name: "list_albums", input: { q: "贝九" } } }],
+    ["tool_finished", { type: "tool_finished", seq: 14, step: 1, tool_finished: { call_id: "call-1", status: "succeeded", output: albumsOutput, truncated: false, untrusted: true } }],
+    ["text", { type: "text", seq: 20, step: 2, text: ANSWER_TABLE }],
+    ["done", { type: "done", seq: 21, step: 2, end: { reason: "completed" } }],
+  ]);
 }
 
 /** 预置一个已经有一次回答的会话。 */
@@ -386,12 +439,15 @@ function applyRereview(conversation: Conversation): string {
   return sse(events);
 }
 
-/** reviewModel：设置里的审查模型（C7），空字符串表示与对话同一个模型；省略时沿用样本。settings：覆盖设置里的其他字段（C8 的联网搜索等）。 */
+/**
+ * reviewModel：设置里的审查模型（C7），空字符串表示与对话同一个模型；省略时沿用样本。settings：覆盖设置里的其他字段（C8 的联网搜索等）。
+ * background：发消息走后台运行与接回（C10，见 StewardMock）。
+ */
 export async function installStewardMock(
   page: Page,
-  { displayName = "小蓝", reviewModel, settings: overrides = {} }: { displayName?: string; reviewModel?: string; settings?: Record<string, unknown> } = {},
+  { displayName = "小蓝", reviewModel, settings: overrides = {}, background = false }: { displayName?: string; reviewModel?: string; settings?: Record<string, unknown>; background?: boolean } = {},
 ): Promise<StewardMock> {
-  const mock: StewardMock = { conversations: [], requests: [] };
+  const mock: StewardMock = { conversations: [], requests: [], heldEvents: [] };
   let settings: Record<string, unknown> = {
     ...searchSettingsDefaults,
     ...(sampleBody("steward/probe-supported") as Record<string, unknown>),
@@ -399,7 +455,14 @@ export async function installStewardMock(
     ...(reviewModel === undefined ? {} : { review_model: reviewModel }),
     ...overrides,
   };
-  const summary = ({ messages: _messages, plan: _plan, history: _history, ...rest }: Conversation) => rest;
+  // C10 的字段：运行状态（运行中优先，其次是有未处理方案）、未读与两个时间。
+  const summary = ({ messages: _messages, plan, history: _history, last_run_finished_at: finished, ...rest }: Conversation) => ({
+    ...rest,
+    unread: false,
+    run_status: rest.status === "running" ? "running" : plan === null ? "idle" : "awaiting_confirmation",
+    last_read_at: null,
+    last_run_finished_at: finished ?? null,
+  });
   // 会话列表另带未处理方案里等用户确认的项数（C7）。
   const listItem = (conversation: Conversation) => ({
     ...summary(conversation),
@@ -438,7 +501,7 @@ export async function installStewardMock(
               }),
             },
           ];
-    return { ...rest, pending_plan: pending[0] ?? null, plans: [...settled, ...pending] };
+    return { ...summary({ plan, history, ...rest }), messages: rest.messages, pending_plan: pending[0] ?? null, plans: [...settled, ...pending] };
   };
 
   await page.route(`**${BASE}/**`, async (route) => {
@@ -463,6 +526,7 @@ export async function installStewardMock(
       return json(route, 200, source === "searxng" || source === "tavily" ? { ok: true, result_count: 3 } : { ok: false, code: "search_not_configured" });
     }
     if (path === `${BASE}/tokens` && method === "GET") return sample(route, "steward/tokens/list");
+    if (path === `${BASE}/memories` && method === "GET") return json(route, 200, { items: [], limit: 50, max_length: 500 });
     if (path === `${BASE}/conversations` && method === "GET") {
       const items = [...mock.conversations].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).map(listItem);
       return json(route, 200, { items, pagination: { page: 1, page_size: 100, total: items.length } });
@@ -494,7 +558,7 @@ export async function installStewardMock(
       if (conversation.mode !== "steward") return json(route, 409, { error: { code: "review_not_applicable", message: "当前模式不使用审查" }, request_id: "e2e" });
       return route.fulfill({ status: 200, contentType: "text/event-stream", headers: { "Cache-Control": "no-store" }, body: applyRereview(conversation) });
     }
-    const match = /^\/api\/v1\/me\/steward\/conversations\/([^/]+)(?:\/(messages|continue|cancel))?$/.exec(path);
+    const match = /^\/api\/v1\/me\/steward\/conversations\/([^/]+)(?:\/(messages|continue|cancel|events|read))?$/.exec(path);
     const conversation = mock.conversations.find((item) => item.id === match?.[1]);
     if (match === null || conversation === undefined) return sample(route, "steward/conversation-not-found");
     const action = match[2];
@@ -507,10 +571,21 @@ export async function installStewardMock(
       mock.conversations = mock.conversations.filter((item) => item !== conversation);
       return sample(route, "steward/conversation-deleted");
     }
+    if (action === "read" && method === "POST") return json(route, 200, { read: true });
+    if (action === "events" && method === "GET") {
+      // 接回（C10）：没有在运行时 204；带 Last-Event-ID 的（断线后马上重连）一直挂着；从头接回时回放整次运行并结束。
+      if (conversation.status !== "running") return route.fulfill({ status: 204 });
+      if (Number(request.headers()["last-event-id"] ?? "0") > 0) {
+        mock.heldEvents.push(route);
+        return;
+      }
+      return route.fulfill({ status: 200, contentType: "text/event-stream", headers: { "Cache-Control": "no-store" }, body: finishBackgroundRun(conversation) });
+    }
     if (action === "messages" && method === "POST") {
       // 有未处理的方案时发新消息：方案作废。
       if (conversation.plan !== null) conversation.history.push({ plan: conversation.plan, status: "superseded", accepted: [] });
       conversation.plan = null;
+      if (background) return route.fulfill({ status: 200, contentType: "text/event-stream", headers: { "Cache-Control": "no-store" }, body: startBackgroundRun(conversation, (body as { text: string }).text) });
       persistRun(conversation, (body as { text: string }).text);
       return route.fulfill({ status: 200, contentType: "text/event-stream", headers: { "Cache-Control": "no-store" }, body: runEvents() });
     }

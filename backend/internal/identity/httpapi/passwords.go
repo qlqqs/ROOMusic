@@ -36,6 +36,9 @@ func (handlers *Handlers) changePassword(w http.ResponseWriter, r *http.Request)
 		handlers.writePasswordError(w, r, err, "无法修改密码")
 		return
 	}
+	if handlers.sessionRevoked != nil {
+		handlers.sessionRevoked(user.ID)
+	}
 	httpserver.WriteJSON(w, 200, map[string]bool{"password_changed": true})
 }
 
@@ -64,6 +67,9 @@ func (handlers *Handlers) resetPassword(w http.ResponseWriter, r *http.Request) 
 	if _, err := identity.ResetPassword(r.Context(), handlers.database, id, input.Password); err != nil {
 		handlers.writePasswordError(w, r, err, "无法重置密码")
 		return
+	}
+	if handlers.sessionRevoked != nil {
+		handlers.sessionRevoked(strings.ToLower(id))
 	}
 	httpserver.WriteJSON(w, 200, map[string]bool{"password_reset": true})
 }

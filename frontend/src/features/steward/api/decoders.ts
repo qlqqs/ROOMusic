@@ -63,6 +63,8 @@ const settingsDecoder = d.object({
   search_key_saved: d.boolean(),
   search_key_last_four: d.string({ max: 4 }),
   search_key_needs_reentry: d.boolean(),
+  /** 运行结束后还没打开看过的会话数（C10，入口的提示点）；C10 之前的后端没有这一项，按 0 处理。 */
+  unread_conversation_count: d.optional(d.integer({ min: 0 })),
 });
 
 export const decodeSettings = d.defineDecoder(settingsDecoder);
@@ -101,6 +103,11 @@ export type SearchTestDTO = d.Infer<typeof searchTestDecoder>;
 export const stewardModes = ["assistant", "steward", "operator"] as const;
 export type StewardMode = (typeof stewardModes)[number];
 
+/** 会话的运行状态（C10）：正在运行优先，其次是有未过期的方案项等用户确认，其余是空闲。 */
+export const runStatuses = ["idle", "running", "awaiting_confirmation"] as const;
+export type RunStatus = (typeof runStatuses)[number];
+
+// C10 的四项（未读、运行状态、最后读与最后结束的时间）在 C10 之前的后端里没有，按可缺失处理：缺 unread 当作已读，缺 run_status 时看 status。
 const conversationShape = {
   id: d.uuid(),
   title: d.string(),
@@ -110,6 +117,12 @@ const conversationShape = {
   status: d.oneOf(["idle", "running"] as const),
   created_at: d.timestamp(),
   updated_at: d.timestamp(),
+  /** 最近一次运行结束之后还没打开看过。 */
+  unread: d.optional(d.boolean()),
+  run_status: d.optional(d.oneOf(runStatuses)),
+  last_read_at: d.optional(d.nullable(d.timestamp())),
+  /** 最近一次运行结束的时间：之后落库的消息属于正在进行的这次运行（接回时据此划分已显示与要回放的部分）。 */
+  last_run_finished_at: d.optional(d.nullable(d.timestamp())),
 };
 
 // 会话列表的每一项另带未处理方案里等用户确认的项数（C7，列表标出“N 项等你确认”）；没有时省略或为 0。
@@ -307,6 +320,8 @@ const conversationDetailDecoder = d.object({
   messages: d.array(messageDecoder, { max: d.unbounded }),
   pending_plan: d.optional(d.nullable(planDecoder)),
   plans: d.optional(d.array(planDecoder, { max: d.unbounded })),
+  /** 较早的历史压成摘要后（C10），摘要覆盖到的最后一条消息；界面在它后面标一行，摘要正文不给前端。 */
+  summary_through_message_id: d.optional(d.nullable(d.uuid())),
 });
 export const decodeConversationDetail = d.defineDecoder(conversationDetailDecoder);
 export type ConversationDetailDTO = d.Infer<typeof conversationDetailDecoder>;
@@ -319,6 +334,7 @@ export const decodeDeleted = d.defineDecoder(d.object({ deleted: d.literal(true)
 /** 撤销一条操作的响应（受治理操作合同）：这里只用到新的撤销记录。 */
 export const decodeReverted = d.defineDecoder(d.object({ operation_id: d.uuid() }));
 export const decodeCancelled = d.defineDecoder(d.object({ cancelled: d.boolean() }));
+export const decodeMarkedRead = d.defineDecoder(d.object({ read: d.literal(true) }));
 
 // ---- 运行流的事件（合同第 5 节）----
 
@@ -336,17 +352,24 @@ const runEndDecoder = d.object({
 export type RunEndDTO = d.Infer<typeof runEndDecoder>;
 
 const step = d.integer({ min: 1 });
+/**
+ * 事件序号（C10）：与 SSE 的 id 相同，本进程内跨运行单调递增、不保证连续；接回时带上收到的最后一个，客户端按它去重。
+ * 回放的 text 可能是同一步连续增量合并成的一条，序号是合并范围的末尾。
+ */
+const seq = d.optional(d.integer({ min: 0 }));
 
 const runEventDecoders = {
-  text: d.object({ type: d.literal("text"), step, text: d.string({ max: d.unbounded }) }),
+  text: d.object({ type: d.literal("text"), seq, step, text: d.string({ max: d.unbounded }) }),
   // 确认方案之后执行方案项时发的 tool_started、tool_finished 发生在模型继续之前，没有 step（C6）。
   tool_started: d.object({
     type: d.literal("tool_started"),
+    seq,
     step: d.optional(step),
     tool_started: d.object({ call_id: d.string(), name: d.string(), input: json }),
   }),
   tool_finished: d.object({
     type: d.literal("tool_finished"),
+    seq,
     step: d.optional(step),
     tool_finished: d.object({
       call_id: d.string(),
@@ -359,17 +382,22 @@ const runEventDecoders = {
   }),
   usage: d.object({
     type: d.literal("usage"),
+    seq,
     step,
     usage: d.object({ input_tokens: d.optional(d.integer({ min: 0 })), output_tokens: d.optional(d.integer({ min: 0 })) }),
   }),
-  plan: d.object({ type: d.literal("plan"), step: d.optional(step), plan: planDecoder }),
+  plan: d.object({ type: d.literal("plan"), seq, step: d.optional(step), plan: planDecoder }),
   // 审查（C7）：开始时只有方案与审查模型，结束时是每项的结论；重新审查的流里没有 step。
-  review_started: d.object({ type: d.literal("review_started"), step: d.optional(step), plan_id: d.uuid(), model: d.string() }),
-  review_finished: d.object({ type: d.literal("review_finished"), step: d.optional(step), review: reviewDecoder }),
+  review_started: d.object({ type: d.literal("review_started"), seq, step: d.optional(step), plan_id: d.uuid(), model: d.string() }),
+  review_finished: d.object({ type: d.literal("review_finished"), seq, step: d.optional(step), review: reviewDecoder }),
   // 模型自带搜索（C8）：每次搜索结束发一次；回答引用的来源在该步文字结束后发一次。
-  search: d.object({ type: d.literal("search"), step: d.optional(step), ...searchRecordShape }),
-  citations: d.object({ type: d.literal("citations"), step: d.optional(step), citations: d.array(citationDecoder, { max: d.unbounded }) }),
-  done: d.object({ type: d.literal("done"), step: d.optional(step), end: runEndDecoder }),
+  search: d.object({ type: d.literal("search"), seq, step: d.optional(step), ...searchRecordShape }),
+  citations: d.object({ type: d.literal("citations"), seq, step: d.optional(step), citations: d.array(citationDecoder, { max: d.unbounded }) }),
+  done: d.object({ type: d.literal("done"), seq, step: d.optional(step), end: runEndDecoder }),
+  // 接回时较早的事件已经从内存里的日志省略（C10）：序号是省略部分的末尾。客户端改以落库内容为准，done 后再读一次。
+  history_gap: d.object({ type: d.literal("history_gap"), seq: d.integer({ min: 0 }) }),
+  // 较早的历史压成了摘要（C10）：through_message_id 是摘要覆盖到的最后一条消息。
+  history_compacted: d.object({ type: d.literal("history_compacted"), seq, through_message_id: d.uuid() }),
 };
 
 type RunEventDecoders = typeof runEventDecoders;
@@ -432,3 +460,25 @@ const createdTokenDecoder = d.object({ ...tokenShape, token: d.string({ min: 1 }
 
 export const decodeCreatedToken = d.defineDecoder(createdTokenDecoder);
 export type CreatedTokenDTO = d.Infer<typeof createdTokenDecoder>;
+
+// ---- 记忆（C10）----
+// 管家在对话里用 remember 记下的、或用户在设置里手动添加的内容，只属于本人；按更新时间倒序。
+// limit 与 max_length 是后端的条数与单条字数上限（按 Unicode 字符计），随列表一起给出，界面不另写常量。
+
+const memoryDecoder = d.object({
+  id: d.uuid(),
+  /** 记忆的内容来自用户或模型，只按文字显示。 */
+  content: d.string({ max: d.unbounded }),
+  created_at: d.timestamp(),
+  updated_at: d.timestamp(),
+});
+export const decodeMemory = d.defineDecoder(memoryDecoder);
+export type MemoryDTO = d.Infer<typeof memoryDecoder>;
+
+const memoryListDecoder = d.object({
+  items: d.array(memoryDecoder, { max: d.unbounded }),
+  limit: d.integer({ min: 1 }),
+  max_length: d.integer({ min: 1 }),
+});
+export const decodeMemoryList = d.defineDecoder(memoryListDecoder);
+export type MemoryListDTO = d.Infer<typeof memoryListDecoder>;

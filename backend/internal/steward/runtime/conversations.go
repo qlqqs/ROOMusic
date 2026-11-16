@@ -11,6 +11,9 @@ import (
 
 // Conversation 是会话摘要，不包含消息正文。
 type Conversation struct {
+	LastReadAt        *time.Time
+	LastRunFinishedAt *time.Time
+	Unread            bool
 	AutoApprovedTools []string
 	// PendingItemCount 是会话列表中尚待用户处理的未过期方案项数量。
 	PendingItemCount int
@@ -34,7 +37,8 @@ type Conversation struct {
 
 // ConversationDetail 包含同一快照下的会话、消息与工具调用。
 type ConversationDetail struct {
-	Plans []Plan
+	Summary ConversationSummary `json:"-"`
+	Plans   []Plan
 	// Conversation 是会话摘要。
 	Conversation Conversation
 	// Messages 按会话内序号升序排列，每条消息包含其工具调用。
@@ -49,7 +53,8 @@ type ConversationPage struct {
 	Size int
 }
 
-const conversationColumns = `id::text,user_id::text,title,mode,model,status,created_at,updated_at,array_to_json(auto_approved_tools)`
+const conversationColumns = `id::text,user_id::text,title,mode,model,status,created_at,updated_at,array_to_json(auto_approved_tools),last_read_at,last_run_finished_at,
+ (last_run_finished_at IS NOT NULL AND (last_read_at IS NULL OR last_run_finished_at>last_read_at)) AS unread`
 
 // CreateConversation 创建空会话，未指定模式时使用 assistant。
 func (s *Store) CreateConversation(ctx context.Context, userID, title, model string, modes ...string) (Conversation, error) {
@@ -125,6 +130,10 @@ func (s *Store) GetConversation(ctx context.Context, userID, conversationID stri
 	if err != nil {
 		return ConversationDetail{}, storeError("读取管家会话", err)
 	}
+	var summary ConversationSummary
+	if err := tx.QueryRowContext(ctx, `SELECT summary,summary_through_message_id::text,summary_updated_at FROM steward_conversations WHERE user_id=$1::uuid AND id=$2::uuid`, userID, conversationID).Scan(&summary.Text, &summary.ThroughMessageID, &summary.UpdatedAt); err != nil {
+		return ConversationDetail{}, storeError("读取管家历史摘要", err)
+	}
 	messages, err := readMessages(ctx, tx, userID, conversationID)
 	if err != nil {
 		return ConversationDetail{}, err
@@ -139,7 +148,16 @@ func (s *Store) GetConversation(ctx context.Context, userID, conversationID stri
 	if err := tx.Commit(); err != nil {
 		return ConversationDetail{}, storeError("完成管家会话读取", err)
 	}
-	return ConversationDetail{Conversation: conversation, Messages: messages, Plans: plans}, nil
+	for _, plan := range plans {
+		if plan.Status == "pending" {
+			for _, item := range plan.Items {
+				if item.Decision == "pending" && len(item.Result) == 0 {
+					conversation.PendingItemCount++
+				}
+			}
+		}
+	}
+	return ConversationDetail{Conversation: conversation, Messages: messages, Plans: plans, Summary: summary}, nil
 }
 
 // DeleteConversation 删除当前用户的空闲会话，数据库级联删除消息与工具调用；运行中返回 ErrConversationBusy。
@@ -195,6 +213,15 @@ func (s *Store) AcquireConversation(ctx context.Context, userID, conversationID 
 
 // ReleaseConversation 将当前用户的会话置回 idle，已空闲的会话同样成功。
 func (s *Store) ReleaseConversation(ctx context.Context, userID, conversationID string) error {
+	return s.releaseConversation(ctx, userID, conversationID, false)
+}
+
+// FinishConversation 仅在运行真正开始后记录结束时间，前置失败只释放占用。
+func (s *Store) FinishConversation(ctx context.Context, userID, conversationID string) error {
+	return s.releaseConversation(ctx, userID, conversationID, true)
+}
+
+func (s *Store) releaseConversation(ctx context.Context, userID, conversationID string, finished bool) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return storeError("开始释放管家会话", err)
@@ -208,8 +235,9 @@ func (s *Store) ReleaseConversation(ctx context.Context, userID, conversationID 
  WHERE t.message_id=m.id AND c.user_id=$1::uuid AND c.id=$2::uuid AND t.status='running'`, userID, conversationID); err != nil {
 		return storeError("结束未完成的管家工具调用", err)
 	}
-	if err := requireAffected(tx.ExecContext(ctx, `UPDATE steward_conversations SET status='idle',updated_at=clock_timestamp()
- WHERE user_id=$1::uuid AND id=$2::uuid`, userID, conversationID)); err != nil {
+	if err := requireAffected(tx.ExecContext(ctx, `UPDATE steward_conversations SET status='idle',updated_at=clock_timestamp(),
+ last_run_finished_at=CASE WHEN $3 THEN clock_timestamp() ELSE last_run_finished_at END
+ WHERE user_id=$1::uuid AND id=$2::uuid`, userID, conversationID, finished)); err != nil {
 		return storeError("释放管家会话", err)
 	}
 	return storeError("提交管家会话释放", tx.Commit())
@@ -225,7 +253,7 @@ func (s *Store) ResetRunningConversations(ctx context.Context) (int64, error) {
 	if _, err := tx.ExecContext(ctx, `UPDATE steward_tool_calls SET status='failed',error_code='interrupted' WHERE status='running'`); err != nil {
 		return 0, storeError("恢复管家工具调用", err)
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE steward_conversations SET status='idle',updated_at=clock_timestamp() WHERE status='running'`)
+	result, err := tx.ExecContext(ctx, `UPDATE steward_conversations SET status='idle',updated_at=clock_timestamp(),last_run_finished_at=clock_timestamp() WHERE status='running'`)
 	if err != nil {
 		return 0, storeError("恢复管家会话状态", err)
 	}
@@ -280,7 +308,7 @@ func scanConversation(row scanner, extra ...any) (Conversation, error) {
 	var conversation Conversation
 	var approved []byte
 	fields := []any{&conversation.ID, &conversation.UserID, &conversation.Title, &conversation.Mode,
-		&conversation.Model, &conversation.Status, &conversation.CreatedAt, &conversation.UpdatedAt, &approved}
+		&conversation.Model, &conversation.Status, &conversation.CreatedAt, &conversation.UpdatedAt, &approved, &conversation.LastReadAt, &conversation.LastRunFinishedAt, &conversation.Unread}
 	err := row.Scan(append(fields, extra...)...)
 	if err == nil {
 		err = json.Unmarshal(approved, &conversation.AutoApprovedTools)
@@ -295,4 +323,16 @@ func (s *Store) CountConversations(ctx context.Context, userID string) (int64, e
 	var count int64
 	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM steward_conversations WHERE user_id=$1::uuid`, userID).Scan(&count)
 	return count, storeError("统计管家会话", err)
+}
+
+// MarkConversationRead 只推进本人会话的已读时间，不改变列表排序。
+func (s *Store) MarkConversationRead(ctx context.Context, userID, conversationID string) error {
+	return storeError("标记管家会话已读", requireAffected(s.db.ExecContext(ctx, `UPDATE steward_conversations SET last_read_at=clock_timestamp() WHERE user_id=$1::uuid AND id=$2::uuid`, userID, conversationID)))
+}
+
+// CountUnreadConversations 在数据库侧按运行完成时间统计，不逐会话读取。
+func (s *Store) CountUnreadConversations(ctx context.Context, userID string) (int64, error) {
+	var count int64
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM steward_conversations WHERE user_id=$1::uuid AND last_run_finished_at IS NOT NULL AND (last_read_at IS NULL OR last_run_finished_at>last_read_at)`, userID).Scan(&count)
+	return count, storeError("统计未读管家会话", err)
 }

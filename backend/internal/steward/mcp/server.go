@@ -18,6 +18,10 @@ func allows(scope token.Scope, impact tool.Scope) bool {
 	return impact == tool.ScopeRead || (scope == token.ScopeReadWrite && (impact == tool.ScopePersonal || impact == tool.ScopeShared))
 }
 
+func allowsDefinition(scope token.Scope, definition tool.Definition) bool {
+	return allows(scope, definition.Scope) || (definition.Scope == tool.ScopePersonal && definition.ReadOnly)
+}
+
 func (h *Handler) serverFor(ctx context.Context, principal token.Principal, requestID string) *sdk.Server {
 	version := buildinfo.Current().Version
 	if version == "" {
@@ -32,7 +36,7 @@ func (h *Handler) serverFor(ctx context.Context, principal token.Principal, requ
 	visible := make(map[string]bool)
 	for _, definition := range h.registry.ListContext(ctx, caller) {
 		definitions[definition.Name] = definition
-		if !allows(principal.Scope, definition.Scope) {
+		if !allowsDefinition(principal.Scope, definition) {
 			continue
 		}
 		visible[definition.Name] = true
@@ -45,7 +49,7 @@ func (h *Handler) serverFor(ctx context.Context, principal token.Principal, requ
 		}
 		server.AddTool(&sdk.Tool{Name: definition.Name, Description: description,
 			InputSchema: definition.Input, OutputSchema: definition.Output,
-			Annotations: &sdk.ToolAnnotations{ReadOnlyHint: definition.Scope == tool.ScopeRead}},
+			Annotations: &sdk.ToolAnnotations{ReadOnlyHint: definition.Scope == tool.ScopeRead || definition.ReadOnly}},
 			func(ctx context.Context, req *sdk.CallToolRequest) (*sdk.CallToolResult, error) {
 				return h.callTool(ctx, principal, caller, definitions, req, requestID), nil
 			})
@@ -72,7 +76,7 @@ func (h *Handler) callTool(ctx context.Context, principal token.Principal, calle
 	var output tool.Result
 	var err error
 	var panicStack []byte
-	if known && !allows(principal.Scope, definition.Scope) {
+	if known && !allowsDefinition(principal.Scope, definition) {
 		err = &tool.Error{Code: tool.CodePermissionDenied}
 	} else {
 		input := req.Params.Arguments

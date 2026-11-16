@@ -34,11 +34,13 @@ func (h *Handlers) probe(w http.ResponseWriter, r *http.Request, user identity.U
 	result := provider.ProbeResult{Models: []provider.Model{}, ToolSupport: provider.ToolSupportUnconfirmed, NativeSearch: provider.NativeSearchUnknown}
 	var failure *problem
 	probedAt := time.Now().UTC()
+	cancelRuns := false
 	saved, err := h.store.UpdateUserSettings(r.Context(), user.ID, func(current runtime.UserSettings) (runtime.UserSettingsInput, error) {
 		update, err := h.mergeSettings(user.ID, current, patch)
 		if err != nil {
 			return update, err
 		}
+		cancelRuns = modelSettingsChanged(current, update)
 		if update.Endpoint == "" {
 			failure = &notConfiguredProblem
 			return update, runtime.ErrInvalidInput
@@ -116,5 +118,8 @@ func (h *Handlers) probe(w http.ResponseWriter, r *http.Request, user identity.U
 		h.writeSettingsError(w, r, err)
 		return
 	}
-	httpserver.WriteJSON(w, 200, h.settingsView(user.ID, saved))
+	if cancelRuns {
+		h.supervisor.CancelUser(user.ID)
+	}
+	h.writeSettings(w, r, user.ID, saved)
 }

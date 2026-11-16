@@ -1,4 +1,4 @@
-import type { CitationDTO, MessageDTO, RunEndDTO, RunEvent, SearchRecordDTO } from "../api/decoders";
+import type { CitationDTO, ConversationDetailDTO, MessageDTO, RunEndDTO, RunEvent, SearchRecordDTO } from "../api/decoders";
 
 // 事件 → 回合视图的纯函数。流式显示与刷新后从已落库消息还原用同一种结构，两者显示一致。
 
@@ -42,10 +42,20 @@ export type Turn = { key: string; userText: string | null; items: StepItem[]; te
  * 一次运行收到的事件归并出的样子；texts 的下标是 step - 1。
  * waiting：在等模型的下一段输出（刚开始，或这一步的工具都执行完了），界面显示“正在想…”。
  * citations：回答引用的来源（C8，各步合在一起、按地址去重）。
+ * gap：接回时较早的事件已经省略（C10 的 history_gap），收到的内容不完整，界面改以落库内容为准，结束后再读一次。
+ * compactedThrough：这次运行把较早的历史压成了摘要（C10 的 history_compacted），摘要覆盖到的最后一条消息。
  */
-export type RunView = { items: StepItem[]; texts: string[]; citations: Citation[]; end: RunEndDTO | null; waiting: boolean };
+export type RunView = { items: StepItem[]; texts: string[]; citations: Citation[]; end: RunEndDTO | null; waiting: boolean; gap: boolean; compactedThrough: string | null };
 
-export const emptyRunView: RunView = { items: [], texts: [], citations: [], end: null, waiting: true };
+export const emptyRunView: RunView = { items: [], texts: [], citations: [], end: null, waiting: true, gap: false, compactedThrough: null };
+
+/**
+ * 按事件序号去重（C10）：断线接回时带着收到的最后一个序号，服务端只回放它之后的内容；序号不大于它的事件已经收到过，丢掉。
+ * 回放里合并过的文字序号是合并范围的末尾，服务端按序号给出准确的后缀，这里照常追加。没有序号的事件（旧后端）都收下。
+ */
+export function isNewEvent(lastSeq: number, event: RunEvent): boolean {
+  return event.seq === undefined || event.seq > lastSeq;
+}
 
 /** 一次模型自带搜索的条目：搜索事件到达时已经结束，成功或失败；不计耗时。 */
 function searchItemOf(search: SearchRecordDTO, textsBefore: number): StepItem {
@@ -132,6 +142,10 @@ export function applyRunEvent(view: RunView, event: RunEvent): RunView {
       return { ...view, citations: mergeCitations(view.citations, event.citations) };
     case "usage":
       return view;
+    case "history_gap":
+      return { ...view, gap: true };
+    case "history_compacted":
+      return { ...view, compactedThrough: event.through_message_id };
     case "done":
       return { ...view, end: event.end, waiting: false };
   }
@@ -182,6 +196,42 @@ export function turnsFromMessages(messages: readonly MessageDTO[]): Turn[] {
     }
   }
   return turns;
+}
+
+/** 时间戳的先后：Date.parse 只精确到毫秒，后端的时间到微秒，毫秒相同时再比较小数秒的其余位。 */
+export function compareTimestamps(a: string, b: string): number {
+  const byMs = Date.parse(a) - Date.parse(b);
+  if (byMs !== 0) return byMs;
+  const fraction = (value: string) => (/\.(\d+)/.exec(value)?.[1] ?? "").padEnd(9, "0").slice(3, 9);
+  return fraction(a).localeCompare(fraction(b));
+}
+
+/**
+ * 接回一次不是本页发起的运行（刷新页面、另一个标签页、重新打开会话，C10）：已落库的消息里哪些属于这次运行。
+ * 这次运行的消息都落在上一次运行结束（last_run_finished_at）之后；接回从头回放，会把它们再显示一遍，所以只取之前的部分。
+ * 发消息开始的运行，第一条是用户这次说的话：它留在已落库的部分，回放的内容并进它所在的回合。
+ * 返回的是要保留的最后一条消息的序号。
+ */
+export function runBaseSequenceOf(detail: Pick<ConversationDetailDTO, "messages" | "last_run_finished_at">): number {
+  const finished = detail.last_run_finished_at ?? null;
+  const first = detail.messages.findIndex((message) => finished === null || compareTimestamps(message.created_at, finished) > 0);
+  if (first < 0) return detail.messages.at(-1)?.sequence ?? 0;
+  const head = detail.messages[first];
+  if (head?.role === "user") return head.sequence;
+  return detail.messages[first - 1]?.sequence ?? 0;
+}
+
+/**
+ * 摘要分界（C10）所在的回合：摘要覆盖到的那条消息属于哪个回合，返回回合的 key（与 turnsFromMessages 一致）；
+ * 找不到这条消息时是 null。分界总落在回合的边界上，界面在这个回合之后标一行“更早的内容已压缩”。
+ */
+export function compactedTurnKeyOf(messages: readonly MessageDTO[], throughMessageId: string): string | null {
+  let key: string | null = null;
+  for (const message of messages) {
+    if (message.role === "user" || (key === null && message.role === "assistant")) key = message.id;
+    if (message.id === throughMessageId) return key;
+  }
+  return null;
 }
 
 /** 上一次运行没有给出最终回答：最后一条消息是用户或工具消息（可以用继续接口接着跑）。 */

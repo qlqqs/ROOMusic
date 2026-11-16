@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { decodeConversationDetail, decodeConversationPage, decodeConversationPatch, decodeRunEvent, decodeSearchTest, decodeSettings, effectiveNativeSearch, operationIdOf } from "./decoders";
+import {
+  decodeConversationDetail,
+  decodeConversationPage,
+  decodeConversationPatch,
+  decodeMarkedRead,
+  decodeMemory,
+  decodeMemoryList,
+  decodeRunEvent,
+  decodeSearchTest,
+  decodeSettings,
+  effectiveNativeSearch,
+  operationIdOf,
+} from "./decoders";
 import { searchSettingsDefaults, settingsOf } from "../../../test/fake-steward";
 
 const planItem = {
@@ -205,5 +217,66 @@ describe("联网（C8）", () => {
     expect(decoded.messages[0]?.searches?.[0]?.query).toBe("q");
     expect(decoded.messages[0]?.citations).toEqual([{ url: "https://example.org", title: "" }]);
     expect(decoded.messages[1]?.searches).toBeUndefined();
+  });
+});
+
+// C10 的新字段与新接口：手写的合成数据覆盖边界（缺字段、错类型、越界）；后端样本的完整解码在 src/test/api-contract.test.ts。
+describe("C10：后台运行、未读与记忆", () => {
+  const conversation = {
+    id: "00000000-0000-4000-8000-000000000001",
+    title: "",
+    mode: "assistant",
+    model: "m",
+    status: "running",
+    created_at: "2026-11-16T00:00:00Z",
+    updated_at: "2026-11-16T00:00:00.123456Z",
+    unread: false,
+    run_status: "running",
+    last_read_at: null,
+    last_run_finished_at: "2026-11-15T23:00:00.000001Z",
+  };
+
+  it("会话列表与详情带未读、运行状态与两个时间；详情另带摘要分界；旧后端没有这些字段时照常解码", () => {
+    const page = { items: [{ ...conversation, pending_item_count: 0 }], pagination: { page: 1, page_size: 100, total: 1 } };
+    expect(decodeConversationPage(page)).toEqual(page);
+    const detail = { ...conversation, messages: [], pending_plan: null, plans: [], summary_through_message_id: "00000000-0000-4000-8000-0000000000aa" };
+    expect(decodeConversationDetail(detail)).toEqual(detail);
+    expect(decodeConversationDetail({ ...detail, summary_through_message_id: null }).summary_through_message_id).toBeNull();
+    const { unread: _unread, run_status: _status, last_read_at: _read, last_run_finished_at: _finished, ...old } = conversation;
+    expect(decodeConversationPage({ ...page, items: [old] }).items[0]?.unread).toBeUndefined();
+    expect(() => decodeConversationPage({ ...page, items: [{ ...conversation, run_status: "waiting" }] })).toThrow();
+    expect(() => decodeConversationPage({ ...page, items: [{ ...conversation, unread: "yes" }] })).toThrow();
+  });
+
+  it("设置带未读会话数（非负整数）；C10 之前的后端没有这一项", () => {
+    expect(decodeSettings(settingsOf({ unread_conversation_count: 3 })).unread_conversation_count).toBe(3);
+    const { unread_conversation_count: _count, ...old } = settingsOf();
+    expect(decodeSettings(old).unread_conversation_count).toBeUndefined();
+    expect(() => decodeSettings(settingsOf({ unread_conversation_count: -1 }))).toThrow();
+  });
+
+  it("事件带 seq；history_gap 必须有 seq；history_compacted 带分界消息", () => {
+    expect(decodeRunEvent("text", JSON.stringify({ type: "text", seq: 12, step: 1, text: "合并的文字" }))).toEqual({ type: "text", seq: 12, step: 1, text: "合并的文字" });
+    expect(decodeRunEvent("done", JSON.stringify({ type: "done", seq: 13, end: { reason: "cancelled" } }))).toMatchObject({ seq: 13 });
+    expect(decodeRunEvent("history_gap", JSON.stringify({ type: "history_gap", seq: 40 }))).toEqual({ type: "history_gap", seq: 40 });
+    expect(() => decodeRunEvent("history_gap", JSON.stringify({ type: "history_gap" }))).toThrow();
+    const compacted = { type: "history_compacted", seq: 2, through_message_id: "00000000-0000-4000-8000-0000000000aa" };
+    expect(decodeRunEvent("history_compacted", JSON.stringify(compacted))).toEqual(compacted);
+    expect(() => decodeRunEvent("text", JSON.stringify({ type: "text", seq: -1, step: 1, text: "x" }))).toThrow();
+  });
+
+  it("标记已读的响应", () => {
+    expect(decodeMarkedRead({ read: true })).toEqual({ read: true });
+    expect(() => decodeMarkedRead({ read: false })).toThrow();
+  });
+
+  it("记忆：列表带条数与字数上限；单条按原样解码", () => {
+    const memory = { id: "00000000-0000-4000-8000-000000000801", content: "回答都用繁体", created_at: "2026-11-16T00:00:00Z", updated_at: "2026-11-16T00:00:01Z" };
+    const list = { items: [memory], limit: 50, max_length: 500 };
+    expect(decodeMemoryList(list)).toEqual(list);
+    expect(decodeMemory(memory)).toEqual(memory);
+    expect(decodeMemoryList({ items: [], limit: 50, max_length: 500 }).items).toEqual([]);
+    expect(() => decodeMemoryList({ items: [], limit: 0, max_length: 500 })).toThrow();
+    expect(() => decodeMemory({ ...memory, id: "x" })).toThrow();
   });
 });

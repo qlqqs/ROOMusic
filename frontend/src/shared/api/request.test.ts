@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { jsonResponse, stubFetch } from "../../test/http";
 import { decode as d } from "./index";
 import { ApiError, errorBodyOf, failureOf, type ApiFailure } from "./errors";
-import { apiRequest, setSessionBoundary } from "./request";
+import { apiRequest, apiStream, setSessionBoundary } from "./request";
 
 const decodeOk = d.defineDecoder(d.object({ ok: d.boolean() }));
 
@@ -260,5 +260,22 @@ describe("apiRequest 与会话边界", () => {
     stubFetch(unauthorized);
     const failure = await failureFrom(apiRequest({ method: "GET", path: "/api/v1/users" }, decodeOk));
     expect(failure.kind).toBe("http");
+  });
+});
+
+describe("apiStream（长响应）", () => {
+  it("带 Last-Event-ID 头；204 原样返回给调用方，不当作失败", async () => {
+    const requests = stubFetch(() => new Response(null, { status: 204 }));
+    const response = await apiStream({ path: "/api/v1/me/steward/conversations/x/events", signal: new AbortController().signal, lastEventId: "42" });
+    expect(response.status).toBe(204);
+    expect(requests[0]?.headers.get("Last-Event-ID")).toBe("42");
+    expect(requests[0]?.headers.get("Accept")).toBe("text/event-stream");
+  });
+
+  it("没有 lastEventId 时不带这个头；错误信封照常抛出", async () => {
+    const requests = stubFetch(() => jsonResponse(404, { error: { code: "not_found", message: "不存在" }, request_id: "r" }));
+    const failure = await failureFrom(apiStream({ path: "/api/v1/me/steward/conversations/x/events", signal: new AbortController().signal }));
+    expect(failure).toMatchObject({ kind: "http", status: 404, code: "not_found" });
+    expect(requests[0]?.headers.has("Last-Event-ID")).toBe(false);
   });
 });

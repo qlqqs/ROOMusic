@@ -33,8 +33,13 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
+	stewardapi "github.com/qlqq/roomusic/backend/internal/steward/httpapi"
+	"github.com/qlqq/roomusic/backend/internal/steward/memory"
+	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
+	"github.com/qlqq/roomusic/backend/internal/steward/secret"
 	"github.com/qlqq/roomusic/backend/internal/steward/token"
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
+	"github.com/qlqq/roomusic/backend/internal/steward/web"
 	zonestools "github.com/qlqq/roomusic/backend/internal/zones/stewardtools"
 )
 
@@ -99,6 +104,11 @@ func newC3AppFixture(t *testing.T) *c3AppFixture {
 	definitions = append(definitions, zonestools.StewardTools(nil, catalog.NewStore(db))...)
 	definitions = append(definitions, listeningtools.StewardTools(nil)...)
 	definitions = append(definitions, personaltools.StewardTools(nil)...)
+	definitions = append(definitions, memory.NewStore(db).StewardTools()...)
+	webSettings := runtime.NewStore(db)
+	definitions = append(definitions, web.New(webSettings, secret.New(filepath.Join(dir, "steward", "instance.key")), func(ctx context.Context, user identity.User) (*http.Client, error) {
+		return stewardapi.OutboundClient(ctx, user, webSettings)
+	}, logger).StewardTools()...)
 	for _, definition := range definitions {
 		if err := f.registry.Register(definition); err != nil {
 			t.Fatal(err)
@@ -164,12 +174,12 @@ func TestPostgreSQLMCPRealRegistryProtocolsAndIsolation(t *testing.T) {
 				all := f.registry.List(caller)
 				var want []tool.Definition
 				for _, d := range all {
-					if d.Scope == tool.ScopeRead {
+					if d.Scope == tool.ScopeRead || d.Scope == tool.ScopePersonal && d.ReadOnly {
 						want = append(want, d)
 					}
 				}
-				if role == "admin" && len(all) != 49 {
-					t.Fatalf("实际登记工具数=%d，期望 49", len(all))
+				if role == "admin" && len(all) != 55 {
+					t.Fatalf("实际登记工具数=%d，期望 55", len(all))
 				}
 				names := map[string]bool{}
 				for _, definition := range listed.Tools {

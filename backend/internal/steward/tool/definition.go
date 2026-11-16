@@ -96,6 +96,10 @@ type Basis struct {
 // 两个 schema 都仅支持 type、properties、required、additionalProperties: false、
 // enum、items、minimum、maximum、minLength、maxLength；不支持的关键字在注册时拒绝。
 type Definition struct {
+	// ReadOnly 允许 personal 范围的只读工具供只读 MCP 令牌使用。
+	ReadOnly bool
+	// InvalidInputCode 为空时沿用 validation_failed。
+	InvalidInputCode ErrorCode
 	// Available 按当前调用者设置决定是否可见和可调用；nil 表示始终可用。
 	Available func(context.Context, Caller) bool
 

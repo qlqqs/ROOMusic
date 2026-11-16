@@ -5,7 +5,7 @@ import { setDockOpen } from "../features/steward";
 import { sampleBody } from "../test/api-samples";
 import { installFakeApi, installFakeSession, installOverviewApi } from "../test/fake-api";
 import { installStewardApi, settingsOf, type StewardFake } from "../test/fake-steward";
-import { sampleResponse } from "../test/http";
+import { jsonResponse, sampleResponse } from "../test/http";
 import { renderApp } from "../test/render-app";
 
 const settingsPath = "/api/v1/me/steward/settings";
@@ -202,7 +202,9 @@ describe("设置 › Agent › 模型", () => {
     expect(screen.getByText("模型端点认证失败，请检查密钥。")).toBeTruthy();
     const result = within(screen.getByRole("region", { name: "检测结果" }));
     expect(result.getByText("这次检测的结果（没有保存）")).toBeTruthy();
-    expect(result.getByRole("list", { name: "没有通过的步骤" }).textContent).toBe("试调用工具（OpenAI 兼容接口）：认证失败，请检查密钥，接口返回 401：[已隐藏]");
+    expect(result.getByRole("list", { name: "没有通过的步骤" }).textContent).toBe(
+      "试调用工具（OpenAI 兼容接口）：认证失败，请检查密钥，接口返回 401：[已隐藏]检查 Responses 接口（OpenAI Responses 接口）：认证失败，请检查密钥，接口返回 401：[已隐藏]",
+    );
     expect(result.queryByRole("button", { name: "修改调用工具" })).toBeNull();
     // 原设置不变：地址与已存密钥一行照旧。
     expect((screen.getByLabelText("接口地址") as HTMLInputElement).value).toBe("http://127.0.0.1:12345");
@@ -422,9 +424,111 @@ describe("设置 › Agent › 成员（管理员）", () => {
     expect(screen.getByRole("heading", { level: 2, name: "访问令牌" })).toBeTruthy();
   });
 
-  it("各组依次是名字、模型、联网搜索、访问令牌与管理员的成员段", async () => {
+  it("各组依次是名字、模型、联网搜索、记忆、访问令牌与管理员的成员段", async () => {
     await openAgent();
     await screen.findByLabelText("接口地址");
-    expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["名字", "模型", "联网搜索", "访问令牌", "成员", "成员可以连接的内网地址"]);
+    expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["名字", "模型", "联网搜索", "记忆", "访问令牌", "成员", "成员可以连接的内网地址"]);
+  });
+});
+
+describe("设置 › Agent › 记忆（C10）", () => {
+  const memoriesPath = "/api/v1/me/steward/memories";
+  const memory = (index: number, content: string) => ({
+    id: `00000000-0000-4000-8000-${String(700 + index).padStart(12, "0")}`,
+    content,
+    created_at: "2026-11-15T00:00:00Z",
+    updated_at: `2026-11-15T00:00:0${index}Z`,
+  });
+
+  it("空状态说明记忆的来源、谁能看到与会发给模型；显示条数与字数的上限", async () => {
+    await openAgent();
+    const memories = group("记忆");
+    expect(await memories.findByText("还没有记忆")).toBeTruthy();
+    expect(memories.getByText(/在对话里按你的要求记下的，或你在这里手动添加的偏好.*只有你自己能看到，每次对话都会发给你配置的模型/)).toBeTruthy();
+    expect(memories.getByText(/共 0 条，最多 50 条；每条最多 500 个字/)).toBeTruthy();
+    expect((memories.getByRole("button", { name: "全部清除…" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("添加：提交去掉首尾空白的内容，列表随之更新；超过字数上限不能保存", async () => {
+    const { api } = await openAgent({ memoryMaxLength: 10 });
+    const memories = group("记忆");
+    await userEvent.click(await memories.findByRole("button", { name: "添加记忆" }));
+    const dialog = within(screen.getByRole("dialog", { name: "添加记忆" }));
+    const field = dialog.getByRole("textbox", { name: "内容" });
+    expect(document.activeElement).toBe(field);
+    await userEvent.type(field, "一二三四五六七八九十一");
+    expect(dialog.getByText("11 / 10 字，超出了上限")).toBeTruthy();
+    expect((dialog.getByRole("button", { name: "保存" }) as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.clear(field);
+    await userEvent.type(field, "  回答都用繁体 ");
+    expect(dialog.getByText("6 / 10 字")).toBeTruthy();
+    await userEvent.click(dialog.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(api.requestsTo("POST", memoriesPath).map((request) => request.body)).toEqual([{ content: "回答都用繁体" }]));
+    expect(await memories.findByText("回答都用繁体")).toBeTruthy();
+    expect(screen.queryByRole("dialog", { name: "添加记忆" })).toBeNull();
+    expect(memories.getByText(/共 1 条/)).toBeTruthy();
+  });
+
+  it("修改与删除一条（删除前确认）；全部清除前确认", async () => {
+    const { api, state } = await openAgent({ memories: [memory(1, "不喜欢现场录音版本"), memory(2, "回答都用繁体")] });
+    const memories = group("记忆");
+    const items = within(await memories.findByRole("list", { name: "记忆" }));
+    // 按更新时间倒序。
+    expect(items.getAllByRole("listitem").map((item) => item.querySelector("p")?.textContent)).toEqual(["回答都用繁体", "不喜欢现场录音版本"]);
+
+    const first = within(items.getAllByRole("listitem")[0] as HTMLElement);
+    await userEvent.click(first.getByRole("button", { name: "修改…" }));
+    const dialog = within(screen.getByRole("dialog", { name: "修改记忆" }));
+    const field = dialog.getByRole("textbox", { name: "内容" });
+    expect((field as HTMLTextAreaElement).value).toBe("回答都用繁体");
+    await userEvent.clear(field);
+    await userEvent.type(field, "回答都用简体");
+    await userEvent.click(dialog.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(api.requestsTo("PATCH", `${memoriesPath}/${memory(2, "").id}`).map((request) => request.body)).toEqual([{ content: "回答都用简体" }]));
+    expect(await memories.findByText("回答都用简体")).toBeTruthy();
+
+    const second = within(await memories.findByText("不喜欢现场录音版本").then((text) => text.closest("li") as HTMLElement));
+    await userEvent.click(second.getByRole("button", { name: "删除…" }));
+    await userEvent.click(within(screen.getByRole("dialog", { name: "删除这条记忆？" })).getByRole("button", { name: "删除" }));
+    await waitFor(() => expect(api.requestsTo("DELETE", `${memoriesPath}/${memory(1, "").id}`)).toHaveLength(1));
+    await waitFor(() => expect(memories.queryByText("不喜欢现场录音版本")).toBeNull());
+
+    await userEvent.click(memories.getByRole("button", { name: "全部清除…" }));
+    const confirm = within(screen.getByRole("dialog", { name: "清除全部记忆？" }));
+    expect(confirm.getByText(/1 条记忆都会删除，不能恢复/)).toBeTruthy();
+    await userEvent.click(confirm.getByRole("button", { name: "全部清除" }));
+    await waitFor(() => expect(api.requestsTo("DELETE", memoriesPath)).toHaveLength(1));
+    expect(await memories.findByText("还没有记忆")).toBeTruthy();
+    expect(state.memories).toEqual([]);
+  });
+
+  it("到了条数上限：不能添加，说明要先删掉不用的", async () => {
+    await openAgent({ memories: [memory(1, "甲"), memory(2, "乙")], memoryLimit: 2 });
+    const memories = group("记忆");
+    expect(await memories.findByText("记忆已经到了上限（2 条），删掉不用的才能添加。")).toBeTruthy();
+    expect((memories.getByRole("button", { name: "添加记忆" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("添加时后端说到了上限（别处刚加过）：对话框里说明原因", async () => {
+    const { api } = await openAgent({ memoryLimit: 1 });
+    api.on("POST", memoriesPath, () => jsonResponse(409, { error: { code: "memory_limit_reached", message: "记忆已到上限" }, request_id: "fake-request" }));
+    await userEvent.click(await group("记忆").findByRole("button", { name: "添加记忆" }));
+    const dialog = within(screen.getByRole("dialog", { name: "添加记忆" }));
+    await userEvent.type(dialog.getByRole("textbox", { name: "内容" }), "新的一条");
+    await userEvent.click(dialog.getByRole("button", { name: "保存" }));
+    expect(await dialog.findByText("记忆已经有 1 条了，删掉不用的再添加。")).toBeTruthy();
+  });
+
+  it("成员开关关闭时成员仍能查看与删除，不能添加与修改", async () => {
+    const { api } = await openAgent({ role: "user", disabled: true, memories: [memory(1, "回答都用繁体")] });
+    const memories = group("记忆");
+    expect(await memories.findByText("回答都用繁体")).toBeTruthy();
+    expect(memories.getByText("管理员暂时关闭了成员使用管家，记忆只能查看和删除。")).toBeTruthy();
+    expect((memories.getByRole("button", { name: "添加记忆" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(memories.queryByRole("button", { name: "修改…" })).toBeNull();
+    await userEvent.click(memories.getByRole("button", { name: "删除…" }));
+    await userEvent.click(within(screen.getByRole("dialog", { name: "删除这条记忆？" })).getByRole("button", { name: "删除" }));
+    await waitFor(() => expect(api.requestsTo("DELETE", `${memoriesPath}/${memory(1, "").id}`)).toHaveLength(1));
+    expect(await memories.findByText("还没有记忆")).toBeTruthy();
   });
 });

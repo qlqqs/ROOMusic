@@ -97,6 +97,57 @@ describe("管家的入口与名字", () => {
     expect(screen.queryByRole("complementary", { name: "小蓝" })).toBeNull();
   });
 
+  it("有运行结束后还没看过的会话：入口有提示点（读屏读到数量）；打开会话标记已读后消失", async () => {
+    const { state } = setup({ conversations: [conversationOf(id, { title: "后台跑完的", unread: true, messages: persistedRun("问", "答") })] });
+    const { history } = renderApp({ path: "/" });
+    const entry = await (await findSidebarNav()).findByRole("button", { name: "小蓝" });
+    await waitFor(() => expect(entry.getAttribute("aria-describedby")).not.toBeNull());
+    expect(document.getElementById(entry.getAttribute("aria-describedby") ?? "")?.textContent).toBe("1 个对话有新回答");
+
+    await history.push(`/steward/${id}`);
+    await waitFor(() => expect(state.reads).toEqual([id]));
+    const link = await sidebarNav().findByRole("link", { name: "小蓝" });
+    await waitFor(() => expect(link.getAttribute("aria-describedby")).toBeNull());
+  });
+
+  it("运行在后台结束（面板已收起）：提示点出现，不标记已读；打开会话后消失。停在会话里时结束即标记已读", async () => {
+    const { state } = setup({ conversations: [conversationOf(id)] });
+    setDockOpen(true);
+    renderApp({ path: "/" });
+    const panel = within(await screen.findByRole("complementary", { name: "小蓝" }));
+    await userEvent.type(await panel.findByRole("textbox", { name: "问问小蓝" }), "慢慢查{Enter}");
+    await waitFor(() => expect(state.runs).toHaveLength(1));
+    const created = state.conversations.find((item) => item.id !== id);
+    if (created === undefined) throw new Error("没有创建会话");
+    const entry = sidebarNav().getByRole("button", { name: "小蓝" });
+    await userEvent.click(entry);
+    expect(screen.queryByRole("complementary", { name: "小蓝" })).toBeNull();
+
+    // 打开新会话时标记过一次已读；运行在后台结束时不再标。
+    await waitFor(() => expect(state.reads).toEqual([created.id]));
+    created.messages = persistedRun("慢慢查", "查完了");
+    created.unread = true;
+    state.runs[0]?.stream.send("done", { type: "done", step: 2, end: { reason: "completed" } });
+    state.runs[0]?.stream.close();
+    await waitFor(() => expect(entry.getAttribute("aria-describedby")).not.toBeNull());
+    expect(state.reads).toEqual([created.id]);
+
+    await userEvent.click(entry);
+    expect(await within(await screen.findByRole("complementary", { name: "小蓝" })).findByText("查完了")).toBeTruthy();
+    await waitFor(() => expect(state.reads).toEqual([created.id, created.id]));
+    await waitFor(() => expect(entry.getAttribute("aria-describedby")).toBeNull());
+
+    // 停在会话里：结束时先标记已读，再重读设置，提示点不出现。
+    const before = state.reads.length;
+    const again = within(screen.getByRole("complementary", { name: "小蓝" }));
+    await userEvent.type(again.getByRole("textbox", { name: "回复小蓝" }), "再查一次{Enter}");
+    await waitFor(() => expect(state.runs).toHaveLength(2));
+    state.runs[1]?.stream.send("done", { type: "done", step: 1, end: { reason: "completed" } });
+    state.runs[1]?.stream.close();
+    await waitFor(() => expect(state.reads.length).toBe(before + 1));
+    expect(entry.getAttribute("aria-describedby")).toBeNull();
+  });
+
   it("没起名字时叫“管家”", async () => {
     setup({ settings: settingsOf({ display_name: "" }) });
     renderApp({ path: "/" });
@@ -241,13 +292,55 @@ describe("对话", () => {
     expect(conversation.getByRole("button", { name: "继续" })).toBeTruthy();
   });
 
-  it("正在别处回答的会话：显示说明，不能发送", async () => {
-    setup({ conversations: [conversationOf(id, { status: "running", messages: [storedMessage(1, "user", [{ type: "text", text: "问题" }])] })] });
+  it("打开正在运行的会话（刷新、别的标签页发起）：接回事件流显示进度，可以在这里停止", async () => {
+    const { api, state } = setup({
+      conversations: [conversationOf(id, { status: "running", last_run_finished_at: "2026-11-15T00:00:00Z", messages: [storedMessage(1, "user", [{ type: "text", text: "问题" }])] })],
+    });
+    state.eventLogs.add(id);
     renderApp({ path: `/steward/${id}` });
     const conversation = within(await screen.findByRole("region", { name: "对话" }));
-    expect(await conversation.findByText("正在别处回答，结束后才能继续发消息。")).toBeTruthy();
+    await waitFor(() => expect(state.attaches).toHaveLength(1));
+    expect(state.attaches[0]?.after).toBe(0);
+    state.attaches[0]?.stream.send("text", { type: "text", seq: 4, step: 1, text: "我在查" });
+    expect(await conversation.findByText("我在查")).toBeTruthy();
+    // 用户的问题只出现一次（落库的那条），回放的回答并进它所在的回合。
+    expect(conversation.getAllByText("问题")).toHaveLength(1);
+    await userEvent.click(conversation.getByRole("button", { name: "停止回答" }));
+    expect(await conversation.findByText("已停止")).toBeTruthy();
+    expect(api.requestsTo("POST", `/api/v1/me/steward/conversations/${id}/cancel`)).toHaveLength(1);
+  });
+
+  it("会话在运行但接不回来（服务端没有这次运行的事件）：说明可以刷新查看，不能发送，也不反复请求", async () => {
+    const { api } = setup({ conversations: [conversationOf(id, { status: "running", messages: [storedMessage(1, "user", [{ type: "text", text: "问题" }])] })] });
+    renderApp({ path: `/steward/${id}` });
+    const conversation = within(await screen.findByRole("region", { name: "对话" }));
+    expect(await conversation.findByText("没能接上这次回答的进度，可以刷新页面查看最新的结果。")).toBeTruthy();
     await userEvent.type(conversation.getByRole("textbox", { name: "回复小蓝" }), "插一句");
     expect((conversation.getByRole("button", { name: "发送" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(api.requestsTo("GET", `/api/v1/me/steward/conversations/${id}/events`)).toHaveLength(1);
+  });
+
+  it("同时运行的会话超过上限：发送处显示服务端给的原因，文字回到输入框", async () => {
+    const { state } = setup({ conversations: [conversationOf(id)] });
+    state.nextRunResponse = jsonResponse(409, { error: { code: "steward_run_limit", message: "最多同时运行 3 个会话，请等待或停止一个回答" }, request_id: "fake-request" });
+    renderApp({ path: `/steward/${id}` });
+    const conversation = within(await screen.findByRole("region", { name: "对话" }));
+    await userEvent.type(await conversation.findByRole("textbox", { name: "问问小蓝" }), "再开一个{Enter}");
+    expect(await conversation.findByText("最多同时运行 3 个会话，请等待或停止一个回答")).toBeTruthy();
+    expect((conversation.getByRole("textbox", { name: "问问小蓝" }) as HTMLTextAreaElement).value).toBe("再开一个");
+  });
+
+  it("较早的历史压成了摘要：在分界的回合之后标一行，完整历史照常显示", async () => {
+    const messages = [...persistedRun("第一个问题", "第一个回答"), storedMessage(5, "user", [{ type: "text", text: "第二个问题" }]), storedMessage(6, "assistant", [{ type: "text", text: "第二个回答" }])];
+    setup({ conversations: [conversationOf(id, { messages, summary_through_message_id: "00000000-0000-4000-8000-000000000004" })] });
+    renderApp({ path: `/steward/${id}` });
+    const conversation = within(await screen.findByRole("region", { name: "对话" }));
+    const marker = await conversation.findByText("更早的内容已压缩");
+    expect(conversation.getByText("第一个回答")).toBeTruthy();
+    const first = conversation.getByText("第一个回答");
+    const second = conversation.getByText("第二个问题");
+    expect(first.compareDocumentPosition(marker) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(marker.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("回答里的 HTML 标签按文字显示，javascript: 链接不可点", async () => {
@@ -315,6 +408,24 @@ describe("会话列表", () => {
 
     await userEvent.click(after.getByRole("link", { name: /富特文格勒的贝九/ }));
     await waitFor(() => expect(history.location.pathname).toBe(`/steward/${id}`));
+  });
+
+  it("运行中、等待确认、有新回答的标记都写成文字；打开有新回答的会话后标记已读，标记消失", async () => {
+    const now = new Date().toISOString();
+    const third = "00000000-0000-4000-8000-000000000003";
+    const { state } = setup({
+      conversations: [
+        conversationOf(id, { title: "后台跑完的", updated_at: now, unread: true, messages: persistedRun("问", "答") }),
+        conversationOf(other, { title: "还在跑的", updated_at: now, status: "running" }),
+        conversationOf(third, { title: "正在看的", updated_at: now }),
+      ],
+    });
+    renderApp({ path: `/steward/${third}` });
+    const list = within(await screen.findByRole("navigation", { name: "对话" }));
+    expect(await list.findByRole("link", { name: /还在跑的\s*正在回答/ })).toBeTruthy();
+    await userEvent.click(await list.findByRole("link", { name: /后台跑完的\s*有新回答/ }));
+    await waitFor(() => expect(state.reads).toContain(id));
+    await waitFor(() => expect(list.queryByText("有新回答")).toBeNull());
   });
 
   it("新对话按钮回到空白对话", async () => {
@@ -679,8 +790,9 @@ describe("页面上下文", () => {
     const created = state.conversations[0];
     if (created === undefined) throw new Error("没有创建会话");
     created.messages = [storedMessage(1, "user", [{ type: "text", text: "暂停" }])];
+    // 断开后接回得到 204（服务端没有这次运行的事件）：以落库内容为准，最后一条是用户消息，没有完成。
     state.runs[0]?.stream.fail();
-    expect(await panel.findByText("连接断了，这次回答没有完成")).toBeTruthy();
+    expect(await panel.findByText("这次回答没有完成")).toBeTruthy();
     await userEvent.click(panel.getByRole("button", { name: "继续" }));
     await waitFor(() => expect(state.runs).toHaveLength(2));
     expect(state.runs[1]?.kind).toBe("continue");

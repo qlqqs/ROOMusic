@@ -99,15 +99,19 @@ func (registry *Registry) Invoke(ctx context.Context, caller Caller, name string
 		}
 		return Result{}, &Error{Code: CodeApprovalRequired, Tool: name, Message: "需要用户确认"}
 	}
+	inputCode := definition.InvalidInputCode
+	if inputCode == "" {
+		inputCode = CodeInvalidInput
+	}
 	value, err := decodeJSON(input)
 	if err != nil {
-		return Result{}, &Error{Code: CodeInvalidInput, Tool: name, Message: "工具输入必须是合法 JSON"}
+		return Result{}, &Error{Code: inputCode, Tool: name, Message: "工具输入必须是合法 JSON"}
 	}
 	if err := registered.input.validate(value, "$"); err != nil {
-		return Result{}, &Error{Code: CodeInvalidInput, Tool: name, Message: err.Error()}
+		return Result{}, &Error{Code: inputCode, Tool: name, Message: err.Error()}
 	}
 	if definition.Scope == ScopeShared && containsNUL(value) {
-		return Result{}, &Error{Code: CodeInvalidInput, Tool: name, Message: "工具输入不能包含空字符"}
+		return Result{}, &Error{Code: inputCode, Tool: name, Message: "工具输入不能包含空字符"}
 	}
 	if err := ctx.Err(); err != nil {
 		return Result{}, err

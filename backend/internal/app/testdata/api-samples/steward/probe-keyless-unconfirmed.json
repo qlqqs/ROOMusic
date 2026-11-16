@@ -37,6 +37,7 @@
     "search_key_saved": false,
     "search_source": "none",
     "searxng_url": "http://127.0.0.1:12345",
+    "unread_conversation_count": 1,
     "updated_at": "2026-01-01T00:00:01Z"
   },
   "status": 200

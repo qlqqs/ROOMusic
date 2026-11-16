@@ -25,6 +25,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
+	"github.com/qlqq/roomusic/backend/internal/steward/memory"
 	"github.com/qlqq/roomusic/backend/internal/steward/provider"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 	"github.com/qlqq/roomusic/backend/internal/steward/secret"
@@ -107,7 +108,18 @@ func newAPIFixture(t *testing.T) *apiFixture {
 		t.Fatal(err)
 	}
 	logger := slog.New(slog.NewJSONHandler(f.logs, nil))
-	f.api = New(identity.NewGuard(db, false, "").WithLogger(logger), f.store, secret.New(f.keyPath), runtime.NewRunner(f.store, registry, logger), logger)
+	memories := memory.NewStore(db)
+	for _, definition := range memories.StewardTools() {
+		if err := registry.Register(definition); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f.api = New(identity.NewGuard(db, false, "").WithLogger(logger), f.store, secret.New(f.keyPath), runtime.NewRunner(f.store, registry, logger).WithMemories(memories), logger).WithMemories(memories)
+	t.Cleanup(func() {
+		if err := f.api.supervisor.Shutdown(context.Background()); err != nil {
+			t.Error(err)
+		}
+	})
 	mux := http.NewServeMux()
 	f.api.Register(mux)
 	f.handler = httpserver.Middleware(logger, mux)
@@ -486,3 +498,8 @@ func TestPostgreSQLStewardHTTPCancelEndsRunningRequest(t *testing.T) {
 
 // 编译期确保测试夹具使用标准 handler，不依赖运行中的应用实例。
 var _ http.Handler = (*http.ServeMux)(nil)
+
+func (f *apiFixture) replaceRunner(runner *runtime.Runner) {
+	f.api.runner = runner
+	f.api.WithSupervisor(runtime.NewSupervisor(context.Background(), runner, f.api.logger))
+}

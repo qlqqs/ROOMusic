@@ -127,7 +127,7 @@ func TestPostgreSQLStewardHTTPC6NewMessageReconcilesOnly(t *testing.T) {
 			f, id := newC6API(t, "admin", "assistant")
 			f.calls = append(f.calls, c6Correct(f.releases[2], 1, "不选择"))
 			p := f.plan(t, "admin", id)
-			f.api.runner = runtime.NewRunner(&c6FailPlanResultOnce{Store: f.store, fail: true}, f.registry, f.api.logger)
+			f.replaceRunner(runtime.NewRunner(&c6FailPlanResultOnce{Store: f.store, fail: true}, f.registry, f.api.logger))
 			w := f.decision("admin", id, p, []string{p.Items[0].ID, p.Items[1].ID}, nil)
 			if !strings.Contains(w.Body.String(), "database_unavailable") || f.count(t) != 1 {
 				t.Fatalf("未制造提交后中断：%s", w.Body)
@@ -195,6 +195,9 @@ func TestPostgreSQLStewardHTTPC6NewMessageReconcilesOnly(t *testing.T) {
 				}
 			}
 			want := []string{before.Plans[0].Items[0].IdempotencyKey, before.Plans[0].Items[1].IdempotencyKey}
+			if !lookupFails {
+				want = append(want, before.Plans[0].Items[2].IdempotencyKey)
+			} // C7 在写入未执行结果前也核对未选择项。
 			if !reflect.DeepEqual(keys, want) {
 				t.Fatalf("查询键=%v want=%v", keys, want)
 			}

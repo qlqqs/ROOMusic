@@ -1,29 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { failureOf, isHttpFailure } from "../../../shared/api";
+import { useCallback } from "react";
+import { failureOf, isHttpFailure, type ApiResponse } from "../../../shared/api";
 import { useViewerScope } from "../../auth";
-import { MAX_CONVERSATION_PAGE_SIZE, type ConversationDetailDTO, type StewardMode } from "../api/decoders";
-import { createConversation, deleteConversation, fetchConversation, fetchConversations, patchConversation, type ConversationPatch } from "../api/endpoints";
+import { MAX_CONVERSATION_PAGE_SIZE, type ConversationDetailDTO, type SettingsDTO, type StewardMode } from "../api/decoders";
+import { createConversation, deleteConversation, fetchConversation, fetchConversations, markConversationRead, patchConversation, type ConversationPatch } from "../api/endpoints";
 import { stewardKeys } from "../query-keys";
-import { useRuns } from "./use-run";
 
-/** 另一个标签页正在回答时，每隔这么久重读一次，直到会话变回空闲。 */
-export const BUSY_POLL_MS = 3_000;
-
-/** “正在别处回答”的轮询间隔：有不是本页发起的运行时轮询；上一次读取出错（会话被删、管家被关闭等）时停止。 */
-export function busyPollInterval(lastError: unknown, busyElsewhere: boolean): number | false {
-  return lastError === null && busyElsewhere ? BUSY_POLL_MS : false;
-}
+// 正在运行的会话不再轮询（C10）：对话区打开时接回运行的事件流，运行结束后重读；列表与入口的未读数在运行结束、打开会话、
+// 窗口重新聚焦时重读。
 
 /** 会话列表：最近的 100 个（按最后活动时间倒序）。 */
 export function useConversations() {
   const { generation } = useViewerScope();
-  const runs = useRuns();
   return useQuery({
     queryKey: stewardKeys.conversations(generation),
     queryFn: ({ signal }) => fetchConversations(1, MAX_CONVERSATION_PAGE_SIZE, signal),
     select: (response) => response.data,
-    // 列表里有正在回答、但不是本页发起的会话时轮询，标记随它消失。
-    refetchInterval: (query) => busyPollInterval(query.state.error, query.state.data?.data.items.some((item) => item.status === "running" && !runs.has(item.id)) === true),
   });
 }
 
@@ -33,18 +25,40 @@ export function isMissingConversation(error: unknown): boolean {
   return isHttpFailure(failure, 404) || isHttpFailure(failure, 400, "invalid_id");
 }
 
-/** 一个会话与它的全部消息。会话正在回答、本页又没有这次运行时（别的标签页在跑，或刚刷新），每 3 秒重读直到空闲。 */
+/** 一个会话与它的全部消息。 */
 export function useConversation(id: string | null) {
   const { generation } = useViewerScope();
-  const runs = useRuns();
-  const local = id !== null && runs.has(id);
   return useQuery({
     queryKey: stewardKeys.conversation(generation, id ?? ""),
     queryFn: ({ signal }) => fetchConversation(id ?? "", signal),
     select: (response) => response.data,
     enabled: id !== null,
-    refetchInterval: (query) => busyPollInterval(query.state.error, query.state.data?.data.status === "running" && !local),
   });
+}
+
+/**
+ * 打开会话后标记已读（C10）。这个会话原本是未读的、或入口还有提示点时，再重读列表与设置，让标记与提示点消失。
+ * 标记失败不提示：下次打开时再标。
+ */
+export function useMarkRead() {
+  const queryClient = useQueryClient();
+  const { generation } = useViewerScope();
+  return useCallback(
+    async (id: string, wasUnread: boolean) => {
+      try {
+        await markConversationRead(id);
+      } catch {
+        return;
+      }
+      const settings = queryClient.getQueryData<ApiResponse<SettingsDTO>>(stewardKeys.settings(generation));
+      if (!wasUnread && (settings?.data.unread_conversation_count ?? 0) === 0) return;
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: stewardKeys.conversations(generation) }),
+        queryClient.invalidateQueries({ queryKey: stewardKeys.settings(generation) }),
+      ]);
+    },
+    [queryClient, generation],
+  );
 }
 
 /** 新建会话（带空白新对话里选的模式）；成功后把空会话放进缓存，打开它不用再等一次读取。 */

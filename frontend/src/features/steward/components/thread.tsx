@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, type ReactNode } from "react";
 import type { Turn } from "../run/reduce";
 import type { PlacedPlan } from "../hooks/use-plans";
 import type { ThreadView } from "../hooks/use-run";
@@ -56,7 +56,7 @@ type ThreadProps = {
 const noPlans: readonly PlacedPlan[] = [];
 
 /**
- * 对话内容：回合、最后一次运行的结束说明，以及调用方给的尾部（未配置引导、“正在别处回答”等）。
+ * 对话内容：回合（较早的历史压成摘要时在分界之后标一行）、最后一次运行的结束说明，以及调用方给的尾部（未配置引导等）。
  * 新内容出现时，如果原本就停在底部，跟着滚到底部；用户往上翻看时不打扰。
  */
 export function Thread({ view, busy, onContinue, empty, footer, plans = noPlans, renderPlan = () => null }: ThreadProps) {
@@ -80,14 +80,21 @@ export function Thread({ view, busy, onContinue, empty, footer, plans = noPlans,
       <div className={styles.threadBody}>
         {view.turns.length === 0 && view.end === null ? empty : null}
         {view.turns.map((turn, index) => (
-          <TurnView
-            key={turn.key}
-            turn={turn}
-            live={view.live && index === view.turns.length - 1}
-            waiting={view.waiting}
-            plans={plans.filter((plan) => plan.turnKey === turn.key)}
-            renderPlan={renderPlan}
-          />
+          <Fragment key={turn.key}>
+            <TurnView
+              turn={turn}
+              live={view.live && index === view.turns.length - 1}
+              waiting={view.waiting}
+              plans={plans.filter((plan) => plan.turnKey === turn.key)}
+              renderPlan={renderPlan}
+            />
+            {/* 较早的历史压成了摘要（C10）：之后发给模型的是摘要加这一行之后的回合，界面上的历史照常完整显示。 */}
+            {turn.key === view.compactedAfter ? (
+              <p className={styles.compacted}>
+                <span>更早的内容已压缩</span>
+              </p>
+            ) : null}
+          </Fragment>
         ))}
         {view.end === null ? null : <RunEnded ended={view.end} hasSteps={(last?.items.length ?? 0) > 0} canContinue={view.canContinue && view.unfinishedPlans.size === 0} busy={busy} onContinue={onContinue} />}
         {footer}

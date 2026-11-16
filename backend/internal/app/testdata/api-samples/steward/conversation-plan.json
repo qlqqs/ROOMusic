@@ -2,6 +2,8 @@
   "body": {
     "created_at": "2026-01-01T00:00:00Z",
     "id": "00000000-0000-4000-8000-000000000001",
+    "last_read_at": null,
+    "last_run_finished_at": null,
     "messages": [
       {
         "citations": [],
@@ -91,8 +93,11 @@
         "status": "pending"
       }
     ],
+    "run_status": "awaiting_confirmation",
     "status": "idle",
+    "summary_through_message_id": null,
     "title": "合成审查方案",
+    "unread": false,
     "updated_at": "2026-01-01T00:00:02Z"
   },
   "status": 200

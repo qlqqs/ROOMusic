@@ -1,6 +1,6 @@
 # 管家的前端约定
 
-本文记 M6 C4（对话页）、C5（页面上下文、播放与个人库工具）、C6（修改方案、模式、治理工具）、C7（审查结果、Steward 模式、审查模型）与 C8（联网搜索、读取网页、MusicBrainz、Responses 接口）落地后的前端结构与约定，以代码为准：`frontend/src/features/steward/`、`frontend/src/app/shell/`、
+本文记 M6 C4（对话页）、C5（页面上下文、播放与个人库工具）、C6（修改方案、模式、治理工具）、C7（审查结果、Steward 模式、审查模型）、C8（联网搜索、读取网页、MusicBrainz、Responses 接口）与 C10（后台运行与接回、未读、历史摘要的分界、记忆）落地后的前端结构与约定，以代码为准：`frontend/src/features/steward/`、`frontend/src/app/shell/`、
 `frontend/src/app/routes/steward-page.tsx`、`frontend/src/app/routes/agent-settings-page.tsx`。后端接口、SSE 事件与错误码见
 [管家运行时合同](../backend/steward-runtime-contracts.md) 第 4、5、10 节与“C6 共享写入与确认合同”，审查的提示词、证据摘要与策略见[管家审查合同](../backend/steward-review-contracts.md)；界面与原型的对应见 [DESIGN.md](../../../frontend/DESIGN.md) 第 4 节“管家”。
 
@@ -14,9 +14,11 @@
   C7 起有审查结果（审查中、按项的状态与理由、撤销、转人工的确认、审查不可用后的重新审查与自己确认）、模式菜单里的 Steward、设置里的审查模型、
   模型菜单里标出审查模型、会话列表的“N 项等你确认”与“审查中”，以及操作记录的“管家（审查通过）”（见第 12 节）；
   C8 起有设置里的“联网搜索”一组（来源、SearXNG 地址、Tavily 密钥、测试搜索）、检测结果里的“自带搜索”、接口类型 Responses，
-  联网四个工具与模型自带搜索的过程条目，以及回答下面的来源列表（见第 13 节）。
-- 没有（后端也没有）：审查模型用另一个端点、
-  断线或刷新后接回正在进行的回答、展开工具条目看原始输入输出、在对话里显示历史消息带过的上下文。不做禁用占位。
+  联网四个工具与模型自带搜索的过程条目，以及回答下面的来源列表（见第 13 节）；
+  C10 起运行不随连接停止：断线自动接回、打开或刷新正在运行的会话时接回、任何标签页都能停止，会话列表的运行中、等待确认与有新回答三种标记，
+  入口的提示点，“更早的内容已压缩”一行，设置里的“记忆”一组，以及记忆三个工具的过程条目（见第 14 节）。
+- 没有（后端也没有）：审查模型用另一个端点、跨服务重启接回运行、摘要正文的显示、
+  展开工具条目看原始输入输出、在对话里显示历史消息带过的上下文、浏览器通知。不做禁用占位。
 
 ## 1. 目录与两个公开入口
 
@@ -25,14 +27,14 @@ features/steward/
 ├── index.ts          # 轻量入口：外壳、路由与运行时直接导入
 ├── chat.ts           # 对话界面入口：StewardPanel、StewardPage，按需加载
 ├── api/              # decoders.ts（设置、探测、会话、消息、运行事件、方案、管理员、令牌）、endpoints.ts
-├── run/              # reduce.ts（事件与落库消息 → 回合）、run-store.ts（进行中的运行）、plan-store.ts（方案的界面状态，C6）、review-store.ts（审查的界面状态，C7）、refresh.ts
+├── run/              # reduce.ts（事件与落库消息 → 回合）、run-store.ts（进行中的运行，C10 起含接回）、plan-store.ts（方案的界面状态，C6）、review-store.ts（审查的界面状态，C7）、refresh.ts、viewing.ts（正停在哪些会话里，C10）
 ├── dock-store.ts     # 面板状态、草稿、草稿里点掉的上下文标签、对话区提示、空白新对话预选的模型与模式
 ├── context/          # context.ts（上下文的形状、点掉与截断规则）、host.tsx（app 传进来的页面、播放与刷新）、context-chips.tsx（标签行）
-├── hooks/            # use-steward-settings、use-conversations、use-run、use-plans（C6；C7 加重新审查与审查的快照）、use-agent-settings、use-access-tokens
+├── hooks/            # use-steward-settings、use-conversations、use-run、use-plans（C6；C7 加重新审查与审查的快照）、use-agent-settings、use-access-tokens、use-memories（C10）
 ├── tool-labels.ts    # 工具的中文名、图标、主要参数、结果说明、失败短语与会改动的数据
 ├── plan-text.ts      # 方案卡片的字段名、旧值新值与依据来源的文字（C6）
 ├── components/       # 面板、整页、对话区、回合、过程、回答（Markdown）、来源列表（C8）、结束说明、输入框、模式与模型菜单、方案卡片、审查结果（C7）、会话列表、令牌（C3）
-└── settings/         # Agent 栏目：名字、模型与检测结果、联网搜索（C8）、成员段、文案
+└── settings/         # Agent 栏目：名字、模型与检测结果、联网搜索（C8）、记忆（C10）、成员段、文案
 ```
 
 - `index.ts` 只导出外壳与路由需要的东西：`useStewardEntry`、`DEFAULT_STEWARD_NAME`、`useDockState`、`setDockOpen`、`toggleDock`、
@@ -47,6 +49,8 @@ features/steward/
 
 - 进行中的运行放在模块级 store，不放在组件里：发消息与继续由 store 发起请求并读流，切页面、面板与整页互换都不打断（R6）。
   组件用 `useSyncExternalStore(subscribeRuns, getRunSnapshot)` 订阅（`hooks/use-run.ts` 的 `useRunSnapshot`、`useRuns`）。
+  C10 起 store 由 `createRunStore()` 建出，模块导出其中一个实例的方法（`startRun`、`attachRun`、`stopRun`、`resetRuns`）；测试另建实例模拟两个标签页。
+  接回、断线重连、`lastSeq`、`detached` 与停止的新语义见第 14 节；本节其余描述仍适用。
 - 快照 `{runs, ends}` 按会话 ID 存，每次变化换新的 `Map`：
   - `runs`：`{userText, baseSequence, view, phase}`。`userText` 为 `null` 是继续（不追加用户消息）；`baseSequence` 是开始时
     已落库的最后一条消息序号；`phase` 是 `running`、`stopping`、`settling`。
@@ -60,11 +64,11 @@ features/steward/
 - 确认方案（C6）：`startRun` 的 `decision: {planId, body, seed}` 走确认接口（`openDecision`，响应是 SSE），`text` 为 `null`，并进最后一个回合；
   运行从 `seed`（方案项对应的等待确认条目）开始，确认后执行方案项的 `tool_started`、`tool_finished` 按 `call_id` 落在这些条目上。
   开流前被拒绝时不记 `ends`（`request_failed`），由方案卡片就地说明；仍会重读会话（摘要不一致时卡片随之换成新的内容）。
-- 结束后以落库为准：收到 `done`（或流断开）后 `phase` 变成 `settling`、记下结束信息，调用 `refresh`（`run/refresh.ts`：
-  让该会话与列表的查询失效并等它们重读），完成后从 `runs` 移除。运行期间重读会话时，对话区只取 `sequence <= baseSequence`
+- 结束后以落库为准：收到 `done`（或重新接回也没接上）后 `phase` 变成 `settling`、记下结束信息，调用 `refresh`（`run/refresh.ts` 的 `refreshAfterRun`：
+  用户还停在这个会话里时先标记已读，再让该会话、列表与设置的查询失效并等它们重读），完成后从 `runs` 移除。运行期间重读会话时，对话区只取 `sequence <= baseSequence`
   的消息，之后的部分由运行自己显示，不会重复。
-- 停止：`stopRun` 先调用取消接口，服务端结束运行后照常发 `done`（会话已释放，重读到的是空闲）；取消接口失败或回答
-  `{cancelled: false}` 时中止请求。本页没有这次运行（别的标签页在跑）时只调用取消接口。
+- 停止：`stopRun` 只调用取消接口，服务端结束运行后每条接着的连接都收到同一个 `done`（会话已释放，重读到的是空闲）；取消接口失败或回答
+  `{cancelled: false}`（done 正在路上）时回到 `running`，不断开连接（C10：断开不会停止服务端的运行）。本页没有这次运行时只调用取消接口。
 - 登出与换用户：`app/runtime.ts` 在 `session.onEnded` 与 `dispose` 里调用 `resetStewardState()`，即 `resetRuns()`（中止所有请求、
   清空快照）加 `resetDock()`（清掉会话 ID、草稿、提示、预选模型）。`run-store` 与 `dock-store` 各有一个模块级 `epoch`：`resetRuns`、
   `resetDock` 递增它，异步操作开始时记下，返回后不一致就不再写入。发送（`components/conversation-view.tsx` 的 `send`）在建会话、
@@ -107,8 +111,9 @@ features/steward/
   C6 的形状假设集中在 `decoders.ts`：`plan` 事件是 `{type, step?, plan}`；方案是 `{plan_id, digest, expires_at, status?, items}`，方案项
   `{id, call_id, tool, target, changes:[{field, before, after}], revertible, basis?, decision?, operation_id?}`；会话详情多 `pending_plan`（可空）与 `plans`（全部方案）；
   确认后执行方案项的 `tool_started`、`tool_finished` 没有 `step`；已执行项的操作记录取工具输出的 `operation_id`（`operationIdOf`）。
-- “正在别处回答”（会话 `status: "running"` 但本页没有运行）：输入框不能发送，`useConversation` 与 `useConversations` 每 3 秒重读；
-  上一次读取出错时停止轮询（`busyPollInterval`）。
+- 会话 `status: "running"` 但本页没有运行时不再轮询（C10）：对话区接回这次运行（第 14 节）；接回之前与接不回来时输入框不能发送，
+  接不回来时提示“没能接上这次回答的进度，可以刷新页面查看最新的结果。”。
+- `apiStream` 另接受 `lastEventId`（写 `Last-Event-ID` 头），`204` 原样返回给调用方（接回时没有这次运行的事件）。
 - `ApiError.body`（`shared/api/errors.ts`，取用 `errorBodyOf`）：http 失败时的整个 JSON 响应体。只给知道这个接口合同的调用方，
   用自己的解码器读错误信封旁边的字段；目前只有检测失败用 `decodeProbeFailure` 取本次的探测报告。网络失败、无效响应时没有响应体。
   显示的文字：检测报告里每一步的 `failure.error.message`（后端已脱敏，最多 500 字）原样列出；`provider_unreachable` 用错误信封的 `message`
@@ -155,6 +160,9 @@ features/steward/
   开合面板的按钮（`aria-expanded`、`aria-controls="steward-dock"`，`id="steward-entry"`），在整页对话里是指向 `/steward` 的当前项链接。
   图标是 `nav-items.ts` 的 `StewardIcon`（lucide `Loader`，对应原型的八道光芒），侧栏与标签栏共用。
 - 窄屏标签栏第五项在“艺人”与“我的”之间（`app/shell/tab-bar.tsx`），链接到 `/steward`，名字过长时省略。
+- 提示点（C10）：`useStewardEntry().unread` 取设置的 `unread_conversation_count`（缺省为 0），大于 0 时侧栏入口名字右侧、标签栏图标右上角各有一个强调色圆点（`aria-hidden`），
+  数量经 `aria-describedby` 指向的隐藏文字说明（`stewardUnreadText`：“N 个对话有新回答”），入口的可访问名称不变。
+  不为它轮询：运行结束（`refreshAfterRun`）、打开会话标记已读后（`useMarkRead`）与窗口重新聚焦时随设置查询重读。
 
 ## 8. 面板（`app/shell/app-shell.tsx`、`dock-store.ts`、`components/panel.tsx`）
 
@@ -172,7 +180,7 @@ features/steward/
 ## 9. 整页与 `/steward` 的去向（`components/steward-page.tsx`）
 
 - 路由 `/steward` 与 `/steward/$conversationId`（`app/router.tsx`），两条路由之间切换时页面重新挂载。宽屏左边是会话列表（今天、本周、更早；
-  正在回答的有标记；每项“更多”里改名、删除），右边是对话；<768px 两者分两屏，标题栏左侧“全部对话”切到列表。
+  每项名下的状态文字见第 14 节；每项“更多”里改名、删除），右边是对话；<768px 两者分两屏，标题栏左侧“全部对话”切到列表。
 - `/steward` 依次转到：面板记着的会话 → 列表里最近的会话 → 空白新对话。用户在应用里要的是空白新对话时设 `blankIntent`，不再转到最近的会话：
   “新对话”按钮与展开空白面板调用 `startBlankConversation`，标签栏调用 `preferBlankConversation`（面板记着会话时仍转到它），记着的会话 404 时同样。
   `blankIntent` 在打开某个会话后清掉，刷新后不存在，所以刷新或直接打开 `/steward` 会到最近的会话。
@@ -196,7 +204,8 @@ features/steward/
   需要重新检测。检测失败时显示本次报告（标注没有保存）与每一步失败的原因，原设置不变；保存模型或清除密钥时这份报告一起清掉。
   `egress_denied` 时说明成员只能用公网地址、需要管理员放行。
 - 保存、检测得到 `403 steward_disabled` 时让设置查询失效，栏目随即切到说明。
-- 访问令牌：C3 的 `AccessTokens` 原样放在这一栏。成员开关关闭时成员看到说明，名字与模型不显示，令牌一组保留（C3 合同：仍能查看与吊销，不能新建）。
+- 记忆（C10，`settings/agent-memories.tsx`）排在联网搜索之后、访问令牌之前，见第 14 节。
+- 访问令牌：C3 的 `AccessTokens` 原样放在这一栏。成员开关关闭时成员看到说明，名字与模型不显示，记忆与令牌两组保留（记忆可以查看与删除、不能添加与修改；令牌按 C3 合同仍能查看与吊销，不能新建）。
 - 成员段只对管理员渲染：成员开关（`/admin/steward/settings`）与“成员可以连接的内网地址”（`/admin/steward/egress-allowlist` 的列表、添加、移除）。
 
 ## 11. 修改方案与模式（C6）
@@ -231,7 +240,7 @@ features/steward/
   Operator“不询问，直接执行；外部资料里的内容也可能促成修改”，当前项右侧“当前”，底部“Shift + Tab 在输入框里切换”。
   输入框（`Composer` 的 `onShiftTab`）里按 Shift+Tab 按 Assistant → Steward → Operator 轮换，不移动焦点；其他地方的 Shift+Tab 照常。
   空白新对话选的模式记在 `dock-store` 的 `newMode`，创建会话时带上（`POST {mode}`），之后回到默认；已有会话经 `PATCH {mode}` 切换，失败就地提示“没能切换模式”。
-  正在回答、正在别处回答、有未处理的方案、正在创建或修改会话时按钮停用，Shift+Tab 不拦截。提示行随模式：“修改曲库前会先给你看方案”
+  正在回答、会话在运行而本页还没接上、有未处理的方案、正在创建或修改会话时按钮停用，Shift+Tab 不拦截。提示行随模式：“修改曲库前会先给你看方案”
   “修改曲库前由另一次模型调用审查，拿不准的会回来问你”（没有另选审查模型、或审查模型就是这个会话的对话模型时，后面加“；审查与对话是同一个模型，独立性有限”）
   “修改曲库时不询问，直接执行”。
 - 操作记录页（`features/governance` 的 `OperationList`）在操作者下面显示来源标签：对话且带 `review_id`、审查结论是 `approved`（或没有结论字段）是“管家（审查通过）”（C7），
@@ -298,7 +307,40 @@ features/steward/
   没有可显示的来源时整块不出现。
 - 外部内容的显示：标题、地址、查询词只按文本节点渲染；只有 `http`/`https` 的地址是链接（`safeHref`），新标签页打开，`rel="noopener noreferrer"`；其他地址只显示标题，标题也没有时不列。
 
-## 14. 测试
+## 14. 后台运行、未读与记忆（C10）
+
+后端合同见[管家运行时合同](../backend/steward-runtime-contracts.md)“C10 步骤 1”与第 4、5、10 节。
+
+- 运行与连接（`run/run-store.ts`）：
+  - 每个数据事件带 `seq`（与 SSE 的 `id` 相同），`ActiveRun.lastSeq` 记下收到的最后一个；`isNewEvent(lastSeq, event)` 丢掉序号不大于它的事件，没有 `seq` 的照常收下。
+    回放里同一步连续的 `text` 合成一条，序号是合并范围的末尾；断在中间时服务端按 `Last-Event-ID` 给出准确的后缀，客户端照常追加。
+  - 流没有 `done` 就断了（发消息、继续、确认、重新审查、接回的流都一样）：按 `RECONNECT_DELAYS`（第一次马上，之后 1、2、4、8、15 秒，收到新事件后从头算）
+    用 `openEvents(id, lastSeq)` 重新接回，期间 `reconnecting` 为真。`204` 表示服务端没有这次运行的事件，不记结束信息，以重读的落库内容为准；
+    4xx 不再重试、重试用完时结束信息是 `disconnected`（“连接断了，没能接上这次回答”，说明回答可能还在后台继续、可以刷新页面查看）。
+  - 接回（`attachRun`，`hooks/use-run.ts` 的 `useAttachRun`）：对话区在会话详情 `status` 是 `running` 而本页没有这次运行时调用（刷新、另一个标签页、重新打开），
+    从 0 回放，`userText` 为 `null`、并进最后一个回合。`baseSequence` 取 `runBaseSequenceOf(detail)`：这次运行的消息都落在 `last_run_finished_at` 之后（按微秒比较，
+    `compareTimestamps`）；第一条是用户消息时保留到它，否则保留到它之前一条，之后已经落库的部分由回放重新显示，不重复。
+  - `detached`：`204`、被拒绝或重试用完时记下会话详情的 `updated_at`，同一版本不再自动接回（不反复请求）；开始新的运行时清掉。
+  - `history_gap`：`RunView.gap` 为真并调用 `onGap`（重读会话详情）；`threadOf` 改为显示全部落库内容、运行只给出“正在想…”，`done` 后照常重读。
+  - 登出与换用户：`reset` 中止所有连接（含接回与等待中的重试），沿用 `epoch` 的规则，上一个用户的流内容不会写进下一个用户的界面。
+- 已读：对话区挂载时用 `run/viewing.ts` 登记“正停在这个会话里”，读到会话后 `useMarkRead` 调用 `POST …/read` 一次（会话原本未读或入口有提示点时再重读列表与设置）；
+  运行结束时 `refreshAfterRun` 在用户还停在这里时先标记已读，再重读，提示点不会一闪而过。
+- 会话列表（`components/session-list.tsx` 的 `sessionStateOf`、`isRunningItem`）：名下的状态是文字——“正在回答”（本页审查中时“审查中”，本页的运行、`status` 或
+  `run_status` 是 `running` 都算）、“N 项等你确认”（`run_status` 是 `awaiting_confirmation` 而没有项数时“等你确认”）、“有新回答”（`unread` 且不在运行，标题前另有装饰性的圆点）。
+  C10 之前的后端没有 `unread`、`run_status` 等字段，解码器按可缺失处理。
+- 摘要分界：`summary_through_message_id`（会话详情）或运行里的 `history_compacted` 给出摘要覆盖到的最后一条消息，`compactedTurnKeyOf` 找到它所在的回合，
+  `Thread` 在这个回合之后显示一行“更早的内容已压缩”（两侧细线）；完整历史照常显示，摘要正文前端拿不到。
+- 发送处的新错误：`409 steward_run_limit`、`steward_run_invalidated` 显示服务端给的原因；`503 steward_shutting_down` 写“服务正在关闭，请稍后再试。”。
+- 记忆（`settings/agent-memories.tsx`、`hooks/use-memories.ts`）：
+  - 列表按更新时间倒序，每条内容保留换行、只按文字显示，下面是更新时间与“修改…”“删除…”（按钮经 `aria-describedby` 指向这条内容）；
+    条数与字数的上限取自接口的 `limit`、`max_length`，写在列表上方，并说明只有自己能看到、每次对话都会发给配置的模型。空状态说明记忆的来源（管家在对话里记下的或手动添加的）。
+  - 添加与修改用对话框（`textarea`，字数按 Unicode 字符计、去掉首尾空白，超出上限时说明并停用“保存”）；删除与全部清除先确认。
+    写操作没有幂等键、不自动重试，无论成败都重读列表；`invalid_input`、`memory_limit_reached`、`not_found`、`steward_disabled` 有各自的说明。
+  - 成员开关关闭时成员仍能查看与删除，“添加记忆”停用、没有“修改…”，上方说明原因。
+  - 工具 `remember`（主要参数是内容，结果“已记下”或带 `id` 时“已改写”）、`forget`（“已删除”）是改动类，`changes: "memories"`：结束后 steward 自己让记忆查询失效
+    （`ToolDataScope` 比 app 的 `StewardDataScope` 多这一类）；`list_memories` 只读，单位“条”。
+
+## 15. 测试
 
 | 位置 | 内容 |
 | --- | --- |
@@ -306,8 +348,12 @@ features/steward/
 C7 起方案可带 `review`（`reviewOf` 合成）与 `reviewed`（审查已处理的项：批准执行的 `accepted` 带操作记录，拒绝的 `rejected_by_review`，这些项不能再确认），
 会话列表带 `pending_item_count`；Steward 模式会话的确认带非空 `auto_approve_tools` 是 `400 invalid_input`；
 重新审查接口的校验顺序是会话与方案归属且 pending → 未过期 → 会话是 Steward 模式（否则 `409 review_not_applicable`）→ 会话空闲，`nextReviewResponse` 预置开流前的拒绝，
-带请求体是 400，通过后记下 `reviews[i].stream`）：`installStewardApi` 实现设置的读写（`PUT` 按后端 `mergeSettings` 的规则 1–3 清密钥、清检测结论、降级工具能力）与检测、会话增删改查、可控的运行流（`fakeSse` 逐个推送事件、`fail` 模拟断开，请求被中止时流随之出错）、取消、管理员接口；`nextRunResponse`、`probeResponse` 预置开流前的拒绝与检测失败。运行请求按后端规则检查请求体（发消息只认 `text`、`context`，`kind` 枚举与长度上限；继续带 `context` 也算不合格；不合格时 `400 invalid_request`），`runs[i].context` 记下请求体里的上下文（没有时 `null`） |
-| `src/features/steward/**/*.test.ts(x)` | 解码器（含消息的 `context`、方案、模式、没有 `step` 的工具事件）、方案 store（默认值、过期、摘要变化、gone、作废、历史）、方案文字、归并（含等待确认的条目与确认后的替换）、工具标签（参数、结果说明、失败短语、只读与改动、改动的数据）、过程摘要的措辞、上下文的点掉与截断、Markdown 安全、run-store（发起、发消息请求体里的 `context`、继续没有请求体、`onToolFinished`、`onPlan`、确认的请求体与开流前拒绝、停止、断开、登出中止）、轮询间隔 |
+带请求体是 400，通过后记下 `reviews[i].stream`；C10 起会话带 `unread`、`run_status`、`last_run_finished_at`、`summary_through_message_id`，设置的未读数按会话的 `unread` 数出来；
+`eventLogs` 里的会话接回时打开可控的流（`attaches[i]`，记下 `Last-Event-ID`），其余 204，`nextAttachResponse` 预置拒绝；`fakeSse` 的 `send` 遇到 `seq` 同时写 `id` 行；
+取消让这个会话每条还开着的流收到 `done`（cancelled）并把会话置回空闲；`POST …/read` 记进 `reads`；记忆接口按上限与成员开关回答）：`installStewardApi` 实现设置的读写（`PUT` 按后端 `mergeSettings` 的规则 1–3 清密钥、清检测结论、降级工具能力）与检测、会话增删改查、可控的运行流（`fakeSse` 逐个推送事件、`fail` 模拟断开，请求被中止时流随之出错）、取消、管理员接口；`nextRunResponse`、`probeResponse` 预置开流前的拒绝与检测失败。运行请求按后端规则检查请求体（发消息只认 `text`、`context`，`kind` 枚举与长度上限；继续带 `context` 也算不合格；不合格时 `400 invalid_request`），`runs[i].context` 记下请求体里的上下文（没有时 `null`） |
+| `src/features/steward/**/*.test.ts(x)` | 解码器（含消息的 `context`、方案、模式、没有 `step` 的工具事件）、方案 store（默认值、过期、摘要变化、gone、作废、历史）、方案文字、归并（含等待确认的条目与确认后的替换）、工具标签（参数、结果说明、失败短语、只读与改动、改动的数据）、过程摘要的措辞、上下文的点掉与截断、Markdown 安全、run-store（发起、发消息请求体里的 `context`、继续没有请求体、`onToolFinished`、`onPlan`、确认的请求体与开流前拒绝、停止、登出中止） |
+| `src/features/steward/**` 的 C10 用例 | 解码器（会话与设置的新字段、`seq`、`history_gap`、`history_compacted`、已读与记忆的边界用合成数据；C10 的后端样本在 `src/test/api-contract.test.ts` 登记）；归并（按序号去重、合并文字的后缀、gap 与分界、微秒比较、`runBaseSequenceOf`、`compactedTurnKeyOf`）；`threadOf`（接回不重复、gap 显示落库内容、分界的回合）；run-store（带 `Last-Event-ID` 重连与去重、204 回退、重试用完、4xx 不重试、`history_gap`、接回与 `detached`、两个 store 实例一处停止两处都结束、登出中止接回与等待中的重试、接回的流断开再接）；会话列表的三种标记；记忆工具的标签；`apiStream` 的 `Last-Event-ID` 与 204 |
+| `src/app/steward.test.tsx`、`src/app/agent-settings.test.tsx` 的 C10 用例 | 入口提示点与读屏说明、打开会话后消失、后台结束时出现而停在会话里时结束即标记已读；打开正在运行的会话接回并停止、接不回来的说明与只请求一次、`steward_run_limit` 的原因、“更早的内容已压缩”的位置、列表标记与已读；记忆的空状态与上限说明、添加（去空白、超长停用）、修改、删除与全部清除的确认、到上限、后端说到上限、成员开关关闭时只读可删 |
 | `src/app/steward.test.tsx` 的“修改方案”“模式” | 运行里出现方案与卡片的位置、旧值新值与依据、勾选与提交的请求体、结果与撤销、撤销被拒绝、刷新后恢复（未处理与已处理）、“不修改”、发消息作废、过期、摘要不一致；空白新对话与已有会话的模式切换、Shift+Tab 只在输入框里、运行中与有方案时停用 |
 | `src/app/steward.test.tsx` 的“审查” | 运行中的审查中、结论与批准项的执行、转人工的确认卡片；刷新后的撤销、拒绝理由按文字显示、确认转人工的项；审查不可用后重新审查与“我自己确认”（Steward 模式没有“不再问我”）；不是 Steward 模式时没有“重新审查”与 `review_not_applicable` 的说明；
 审查中被停止后不再显示“审查中”；批准之后内容变了；重新审查开流前被拒绝；同一个模型的说明与模型菜单里的审查模型；会话列表的“N 项等你确认” |
@@ -317,6 +363,7 @@ C7 起方案可带 `review`（`reviewOf` 合成）与 `reviewed`（审查已处�
 | `src/app/agent-settings.test.tsx` 的“联网搜索（C8）”、`src/app/steward.test.tsx` 的“联网（C8）” | SearXNG 保存的请求体与测试搜索、测试失败的原因、Tavily 密钥（请求体、末四位、不进 mutation 缓存、清除、需要重新填写）、模型自带的可选条件与“修改自带搜索”、成员的 `egress_denied`、手动选 Responses；运行里的 search 事件、读取网页的域名与失败原因、citations 的来源列表，刷新后从落库的 `searches`、`citations` 显示一致，模型自带搜索失败 |
 | `src/features/steward/**` 的 C8 用例 | 解码器（设置的搜索字段、测试搜索、search 与 citations 事件、消息上的 `searches`、`citations` 可省略）、归并（搜索条目与来源去重、落库还原）、工具标签（域名、结果条数、读取网页、MusicBrainz、错误码）、过程条目的结果列表与来源列表（只有 http/https 是链接、标题按文字显示） |
 | `src/app/steward.test.tsx`、`src/app/agent-settings.test.tsx`、`src/app/tokens.test.tsx` | 页面级：入口与名字、面板与整页、流式与结束说明、会话列表、`/steward` 去向、焦点与 Esc、Agent 栏目、令牌与旧地址 |
-| `e2e/support/steward.ts`、`e2e/steward.spec.ts`、`e2e/steward-plan.spec.ts`、`e2e/steward-review.spec.ts`、`e2e/steward-web.spec.ts` | 浏览器冒烟（C8 另有设置的 PUT 与测试搜索、`seedWebConversation`（模型自带搜索、读取网页、回答引用两处来源）；联网搜索一组的保存与测试、对话里的搜索条目与来源、390px 无横向溢出；C7 另有 `seedReviewedConversation`（批准已执行、转人工、拒绝各一项）与 `seedUnavailableReviewConversation`，重新审查接口一次性返回整段 SSE；审查结果、撤销与确认、390px 重新审查、三种模式与模型菜单里的审查模型；C6 另有 `seedPlanConversation` 预置停在方案上的会话，确认接口一次性返回整段 SSE，撤销接口只认方案里的那条记录；方案的勾选、应用、结果与撤销，模式菜单与 Shift+Tab）：`installStewardMock(page)` 用 `page.route` 接管管家接口（优先于 `api-mock.ts` 的上下文拦截），发消息一次性返回整段 SSE；桌面面板到整页、390px 标签栏对话与切换会话、旧地址重定向 |
+| `e2e/support/steward.ts`、`e2e/steward.spec.ts`、`e2e/steward-plan.spec.ts`、`e2e/steward-review.spec.ts`、`e2e/steward-web.spec.ts` | 浏览器冒烟（C8 另有设置的 PUT 与测试搜索、`seedWebConversation`（模型自带搜索、读取网页、回答引用两处来源）；联网搜索一组的保存与测试、对话里的搜索条目与来源、390px 无横向溢出；C7 另有 `seedReviewedConversation`（批准已执行、转人工、拒绝各一项）与 `seedUnavailableReviewConversation`，重新审查接口一次性返回整段 SSE；审查结果、撤销与确认、390px 重新审查、三种模式与模型菜单里的审查模型；C6 另有 `seedPlanConversation` 预置停在方案上的会话，确认接口一次性返回整段 SSE，撤销接口只认方案里的那条记录；方案的勾选、应用、结果与撤销，模式菜单与 Shift+Tab）：`installStewardMock(page)` 用 `page.route` 接管管家接口（优先于 `api-mock.ts` 的上下文拦截），发消息一次性返回整段 SSE；桌面面板到整页、390px 标签栏对话与切换会话、旧地址重定向；
+C10 的 `background: true` 让发消息只返回前半段事件就断开，带 `Last-Event-ID` 的接回挂着（`heldEvents`），刷新后从头接回时回放整次运行并结束：运行中刷新后回答接着显示、问题与第一步各出现一次 |
 
 其他页面的测试没有装管家替身时，设置接口得到 404，入口不显示，不影响它们原有的断言。

@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "invalid_input",
+      "message": "请求参数无效"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 400
+}

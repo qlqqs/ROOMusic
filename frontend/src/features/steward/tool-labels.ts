@@ -2,6 +2,9 @@ import {
   Activity,
   ArrowUpDown,
   BookOpen,
+  Bookmark,
+  BookmarkMinus,
+  BookmarkPlus,
   Cast,
   ClipboardCheck,
   Disc3,
@@ -44,7 +47,11 @@ import { NATIVE_SEARCH } from "./run/reduce";
 // C8 加了联网的四个工具（网页搜索、读取网页、MusicBrainz 的搜索与读取）与模型自带搜索的条目（NATIVE_SEARCH）：
 // 只显示查询词与访问的域名，不显示完整地址（查询串可能带别的内容）。
 // C9 加了诊断、应用配置与个人播放设置的工具：配置类的修改不能撤销，确认卡片上会标明。
+// C10 加了记忆的三个工具（只作用于本人）：记下或改写、删除之后让设置页的记忆列表重读。
 // 参数与标题来自曲库、个人数据与外部网页，是不可信文本，只按文本节点渲染。
+
+/** 工具改动的数据：app 负责的几类（StewardDataScope），加上管家自己的记忆（C10，由 steward 自己刷新）。 */
+export type ToolDataScope = StewardDataScope | "memories";
 
 type ToolLabel = {
   label: string;
@@ -56,7 +63,7 @@ type ToolLabel = {
   /** 成功后右侧的结果说明（改动类工具）；取不到时显示数量。 */
   result?: (input: unknown, output: unknown) => string | undefined;
   /** 这个工具会改动的数据：结束后让对应查询失效。有它就是改动类工具。 */
-  changes?: StewardDataScope;
+  changes?: ToolDataScope;
   /** 改动类工具但不用刷新查询（播放控制，分区事件会推到浏览器）。 */
   writes?: true;
 };
@@ -288,6 +295,17 @@ const toolLabels: Readonly<Record<string, ToolLabel>> = {
   set_zone_settings: { label: "修改播放与音效设置", icon: Volume2, result: done("已修改"), writes: true },
   list_peq_presets: { label: "查看 PEQ 预设", icon: Volume2, unit: "个" },
   apply_peq_preset: { label: "应用 PEQ 预设", icon: Volume2, result: done("已应用"), writes: true },
+
+  // ---- 记忆（C10，只作用于本人）：主要参数是记下的内容 ----
+  remember: {
+    label: "记住",
+    icon: BookmarkPlus,
+    argument: (input) => stringField(input, "content"),
+    result: (input) => (stringField(input, "id") === undefined ? "已记下" : "已改写"),
+    changes: "memories",
+  },
+  forget: { label: "忘掉一条记忆", icon: BookmarkMinus, result: done("已删除"), changes: "memories" },
+  list_memories: { label: "查看记忆", icon: Bookmark, unit: "条" },
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -362,7 +380,7 @@ export function toolWritesOf(name: string): boolean {
 }
 
 /** 这个工具会改动哪类数据；只读与播放类工具是 null。 */
-export function toolDataScopeOf(name: string): StewardDataScope | null {
+export function toolDataScopeOf(name: string): ToolDataScope | null {
   return toolLabels[name]?.changes ?? null;
 }
 

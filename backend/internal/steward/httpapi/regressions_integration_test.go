@@ -376,8 +376,13 @@ func TestPostgreSQLStewardHTTPStoredKeyAbsentFromAllColumnsAndLogs(t *testing.T)
 			t.Errorf("密钥明文出现在 %s.%s", c.table, c.name)
 		}
 	}
-	// 实例开关表只有整数和布尔列，其余五表均须被检索。
-	if len(tables) != 5 {
+	// 实例开关表只有整数和布尔列；令牌、方案、审查和记忆也纳入明文检索。
+	for _, name := range []string{"steward_access_tokens", "steward_conversations", "steward_egress_allowlist", "steward_memories", "steward_messages", "steward_plan_items", "steward_plans", "steward_reviews", "steward_tool_calls", "steward_user_settings"} {
+		if !tables[name] {
+			t.Errorf("未检索表 %s", name)
+		}
+	}
+	if len(tables) != 10 {
 		t.Errorf("检索表=%v", tables)
 	}
 	assertPrivateLogs(t, f)
@@ -566,11 +571,13 @@ func TestPostgreSQLStewardHTTPMemberDisabledDuringRunReceivesDone(t *testing.T) 
 	if err != nil || d.Conversation.Status != "idle" {
 		t.Fatalf("会话未释放：%+v %v", d, err)
 	}
-	f.api.mu.Lock()
-	left := len(f.api.running)
-	f.api.mu.Unlock()
-	if left != 0 {
-		t.Errorf("运行登记残留=%d", left)
+	if f.api.supervisor.Cancel(id) {
+		t.Error("完成后仍占用运行名额")
+	}
+	if sub := f.api.supervisor.Subscribe(id, 0); sub == nil {
+		t.Error("结束日志未保留")
+	} else {
+		sub.Close()
 	}
 }
 
@@ -633,8 +640,14 @@ func TestPostgreSQLStewardHTTPCredentialRecheckResults(t *testing.T) {
 		t.Run(fmt.Sprintf("database_error_%v", databaseError), func(t *testing.T) {
 			f := newAPIFixture(t)
 			checked := make(chan struct{})
+			var checks atomic.Int32
 			f.api.WithCredentialCheck(func(*http.Request, identity.User) (bool, error) {
-				close(checked)
+				if checks.Add(1) == 1 {
+					return true, nil
+				}
+				if checks.Load() == 2 {
+					close(checked)
+				}
 				if databaseError {
 					return false, fmt.Errorf("synthetic database unavailable")
 				}

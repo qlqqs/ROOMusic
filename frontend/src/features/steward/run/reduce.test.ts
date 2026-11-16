@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 import type { MessageDTO, RunEvent } from "../api/decoders";
-import { applyRunEvent, emptyRunView, formatElapsed, isIncomplete, NATIVE_SEARCH, summarizeSteps, turnsFromMessages } from "./reduce";
+import {
+  applyRunEvent,
+  compactedTurnKeyOf,
+  compareTimestamps,
+  emptyRunView,
+  formatElapsed,
+  isIncomplete,
+  isNewEvent,
+  NATIVE_SEARCH,
+  runBaseSequenceOf,
+  summarizeSteps,
+  turnsFromMessages,
+  type RunView,
+} from "./reduce";
 
 const at = "2026-11-16T00:00:00Z";
 let sequence = 0;
@@ -271,5 +284,96 @@ describe("模型自带搜索（C8）", () => {
     );
     expect(turns[0]?.citations).toEqual(view.citations);
     expect(turns[1]).toMatchObject({ items: [], citations: [] });
+  });
+});
+
+describe("事件序号与接回（C10）", () => {
+  /** 与 run-store 相同：序号不大于最后一个的事件丢掉，其余归并并记下序号。 */
+  function fold(start: { view: RunView; lastSeq: number }, events: RunEvent[]) {
+    return events.reduce((state, event) => (isNewEvent(state.lastSeq, event) ? { view: applyRunEvent(state.view, event), lastSeq: event.seq ?? state.lastSeq } : state), start);
+  }
+
+  it("按序号去重：重复与更早的事件丢掉；没有序号的照常收下", () => {
+    const state = fold({ view: emptyRunView, lastSeq: 0 }, [
+      { type: "text", seq: 3, step: 1, text: "我查" },
+      { type: "text", seq: 3, step: 1, text: "我查" },
+      { type: "tool_started", seq: 2, step: 1, tool_started: { call_id: "old", name: "list_albums", input: {} } },
+      { type: "text", step: 1, text: "一下" },
+    ]);
+    expect(state.view.texts).toEqual(["我查一下"]);
+    expect(state.view.items).toEqual([]);
+    expect(state.lastSeq).toBe(3);
+  });
+
+  it("回放里合并过的文字：序号是合并范围的末尾；断在中间时服务端给后缀，接上后与原文一致、不重复", () => {
+    // 原来逐个收到的增量：seq 1“贝多芬”，seq 2“第九”，seq 3“交响曲”；收到 seq 2 之后断开。
+    const before = fold({ view: emptyRunView, lastSeq: 0 }, [
+      { type: "text", seq: 1, step: 1, text: "贝多芬" },
+      { type: "text", seq: 2, step: 1, text: "第九" },
+    ]);
+    // 带 after=2 接回：合并的一条只给 seq 2 之后的部分，序号是 3。
+    const resumed = fold(before, [{ type: "text", seq: 3, step: 1, text: "交响曲" }, { type: "done", seq: 4, step: 1, end: { reason: "completed" } }]);
+    expect(resumed.view.texts).toEqual(["贝多芬第九交响曲"]);
+    // 刷新后从头回放：同一步的三个增量合成一条，序号是 3。
+    const replayed = fold({ view: emptyRunView, lastSeq: 0 }, [{ type: "text", seq: 3, step: 1, text: "贝多芬第九交响曲" }]);
+    expect(replayed.view.texts).toEqual(resumed.view.texts);
+  });
+
+  it("history_gap：运行标为不完整，序号记到省略部分的末尾；history_compacted 记下摘要的分界", () => {
+    const gap = fold({ view: emptyRunView, lastSeq: 0 }, [{ type: "history_gap", seq: 40 }]);
+    expect(gap.view.gap).toBe(true);
+    expect(gap.lastSeq).toBe(40);
+    const through = "00000000-0000-4000-8000-0000000000aa";
+    expect(applyRunEvent(emptyRunView, { type: "history_compacted", seq: 1, through_message_id: through }).compactedThrough).toBe(through);
+  });
+
+  it("时间戳按微秒比较：毫秒相同时看其余位，时区不同也按同一时刻比较", () => {
+    expect(compareTimestamps("2026-11-16T00:00:00.123457Z", "2026-11-16T00:00:00.123456Z")).toBeGreaterThan(0);
+    expect(compareTimestamps("2026-11-16T00:00:00.1234Z", "2026-11-16T00:00:00.123456Z")).toBeLessThan(0);
+    expect(compareTimestamps("2026-11-16T08:00:00+08:00", "2026-11-16T00:00:00Z")).toBe(0);
+    expect(compareTimestamps("2026-11-16T00:00:01Z", "2026-11-16T00:00:00.999999Z")).toBeGreaterThan(0);
+  });
+
+  describe("接回时已落库的消息保留到哪一条", () => {
+    const finished = "2026-11-16T00:00:10.000005Z";
+    const before = "2026-11-16T00:00:09Z";
+    const after = "2026-11-16T00:00:10.000006Z";
+    const at = (createdAt: string, overrides: Partial<MessageDTO>) => ({ ...message("assistant", []), created_at: createdAt, ...overrides });
+
+    it("发消息开始的运行：保留到这次的用户消息，之后的由回放显示", () => {
+      const messages = [
+        at(before, { sequence: 1, role: "user" }),
+        at(before, { sequence: 2, role: "assistant" }),
+        at(after, { sequence: 3, role: "user" }),
+        at(after, { sequence: 4, role: "assistant" }),
+        at(after, { sequence: 5, role: "tool" }),
+      ];
+      expect(runBaseSequenceOf({ messages, last_run_finished_at: finished })).toBe(3);
+    });
+
+    it("确认方案或继续开始的运行：保留到上一次运行的最后一条", () => {
+      const messages = [at(before, { sequence: 1, role: "user" }), at(before, { sequence: 2, role: "assistant" }), at(after, { sequence: 3, role: "tool" })];
+      expect(runBaseSequenceOf({ messages, last_run_finished_at: finished })).toBe(2);
+    });
+
+    it("这次运行还没有落库任何消息：保留全部；从没结束过运行（第一次）：保留第一条用户消息", () => {
+      const messages = [at(before, { sequence: 1, role: "user" }), at(before, { sequence: 2, role: "assistant" })];
+      expect(runBaseSequenceOf({ messages, last_run_finished_at: finished })).toBe(2);
+      expect(runBaseSequenceOf({ messages, last_run_finished_at: null })).toBe(1);
+      expect(runBaseSequenceOf({ messages: [], last_run_finished_at: null })).toBe(0);
+    });
+  });
+
+  it("摘要分界所在的回合：按 turnsFromMessages 的 key；找不到消息时是 null", () => {
+    const messages = [
+      message("user", [{ type: "text", text: "一" }]),
+      message("assistant", [{ type: "text", text: "答一" }]),
+      message("user", [{ type: "text", text: "二" }]),
+      message("assistant", [{ type: "text", text: "答二" }]),
+    ];
+    const turns = turnsFromMessages(messages);
+    expect(compactedTurnKeyOf(messages, messages[1]?.id ?? "")).toBe(turns[0]?.key);
+    expect(compactedTurnKeyOf(messages, messages[3]?.id ?? "")).toBe(turns[1]?.key);
+    expect(compactedTurnKeyOf(messages, "00000000-0000-4000-8000-00000000ffff")).toBeNull();
   });
 });

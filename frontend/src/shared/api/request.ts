@@ -178,13 +178,15 @@ export function apiUpload<T>(spec: ApiUploadSpec, decode: (input: unknown, statu
 
 /**
  * 打开一条长响应（播放区事件流、管家的运行流 text/event-stream）：与 apiRequest 同样同源、带 Cookie、不缓存、带请求 ID。
- * 默认 GET；管家发消息与继续运行用 POST（body 省略时不带请求体）。
- * 200 时把响应交给调用方逐块读取；其他状态按错误信封抛出 ApiError，401 unauthorized 同样通知会话边界（带请求发出时的代次）。
+ * 默认 GET；管家发消息与继续运行用 POST（body 省略时不带请求体）。lastEventId 是 SSE 的 Last-Event-ID 头（管家接回运行时带上收到的最后一个事件序号）。
+ * 200 时把响应交给调用方逐块读取；204（管家接回时没有这次运行的事件）同样原样返回，由调用方按状态码处理；
+ * 其他状态按错误信封抛出 ApiError，401 unauthorized 同样通知会话边界（带请求发出时的代次）。
  */
-export async function apiStream(spec: { path: ApiPath; signal: AbortSignal; method?: "GET" | "POST"; body?: unknown }): Promise<Response> {
+export async function apiStream(spec: { path: ApiPath; signal: AbortSignal; method?: "GET" | "POST"; body?: unknown; lastEventId?: string }): Promise<Response> {
   const requestId = newRequestId();
   const generation = sessionBoundary?.currentGeneration() ?? 0;
   const headers = new Headers({ Accept: "text/event-stream", "X-Request-ID": requestId });
+  if (spec.lastEventId !== undefined) headers.set("Last-Event-ID", spec.lastEventId);
   const init: RequestInit = { method: spec.method ?? "GET", headers, credentials: "same-origin", cache: "no-store", signal: spec.signal };
   if (spec.body !== undefined) {
     headers.set("Content-Type", "application/json");
@@ -197,7 +199,7 @@ export async function apiStream(spec: { path: ApiPath; signal: AbortSignal; meth
     if (spec.signal.aborted) throw new ApiError({ kind: "aborted" }, { cause: error });
     throw new ApiError({ kind: "network", requestId }, { cause: error });
   }
-  if (response.ok && response.body !== null) return response;
+  if (response.status === 204 || (response.ok && response.body !== null)) return response;
   const { status } = response;
   let body: JsonBody;
   try {

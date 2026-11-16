@@ -1,0 +1,327 @@
+{
+  "body": {
+    "created_at": "2026-01-01T00:00:00Z",
+    "id": "00000000-0000-4000-8000-000000000001",
+    "last_read_at": null,
+    "last_run_finished_at": "2026-01-01T00:00:19Z",
+    "messages": [
+      {
+        "citations": [],
+        "content": [
+          {
+            "text": "合成历史",
+            "type": "text"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:01Z",
+        "id": "00000000-0000-4000-8000-000000000002",
+        "input_tokens": null,
+        "output_tokens": null,
+        "role": "user",
+        "searches": [],
+        "sequence": 1,
+        "tool_calls": []
+      },
+      {
+        "citations": [],
+        "content": [
+          {
+            "text": "合成历史",
+            "type": "text"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:02Z",
+        "id": "00000000-0000-4000-8000-000000000003",
+        "input_tokens": 120001,
+        "output_tokens": null,
+        "role": "assistant",
+        "searches": [],
+        "sequence": 2,
+        "tool_calls": []
+      },
+      {
+        "citations": [],
+        "content": [
+          {
+            "text": "合成历史",
+            "type": "text"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:03Z",
+        "id": "00000000-0000-4000-8000-000000000004",
+        "input_tokens": null,
+        "output_tokens": null,
+        "role": "user",
+        "searches": [],
+        "sequence": 3,
+        "tool_calls": []
+      },
+      {
+        "citations": [],
+        "content": [
+          {
+            "text": "合成历史",
+            "type": "text"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:04Z",
+        "id": "00000000-0000-4000-8000-000000000005",
+        "input_tokens": 120001,
+        "output_tokens": null,
+        "role": "assistant",
+        "searches": [],
+        "sequence": 4,
+        "tool_calls": []
+      },
+      {
+        "citations": [],
+        "content": [
+          {
+            "text": "合成历史",
+            "type": "text"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:05Z",
+        "id": "00000000-0000-4000-8000-000000000006",
+        "input_tokens": null,
+        "output_tokens": null,
+        "role": "user",
+        "searches": [],
+        "sequence": 5,
+        "tool_calls": []
+      },
+      {
+        "citations": [],
+        "content": [
+          {
+            "text": "合成历史",
+            "type": "text"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:06Z",
+        "id": "00000000-0000-4000-8000-000000000007",
+        "input_tokens": 120001,
+        "output_tokens": null,
+        "role": "assistant",
+        "searches": [],
+        "sequence": 6,
+        "tool_calls": []
+      },
+      {
+        "citations": [],
+        "content": [
+          {
+            "text": "合成历史",
+            "type": "text"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:07Z",
+        "id": "00000000-0000-4000-8000-000000000008",
+        "input_tokens": null,
+        "output_tokens": null,
+        "role": "user",
+        "searches": [],
+        "sequence": 7,
+        "tool_calls": []
+      },
+      {
+        "citations": [],
+        "content": [
+          {
+            "text": "合成历史",
+            "type": "text"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:08Z",
+        "id": "00000000-0000-4000-8000-000000000009",
+        "input_tokens": 120001,
+        "output_tokens": null,
+        "role": "assistant",
+        "searches": [],
+        "sequence": 8,
+        "tool_calls": []
+      },
+      {
+        "citations": [],
+        "content": [
+          {
+            "text": "合成历史",
+            "type": "text"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:09Z",
+        "id": "00000000-0000-4000-8000-000000000010",
+        "input_tokens": null,
+        "output_tokens": null,
+        "role": "user",
+        "searches": [],
+        "sequence": 9,
+        "tool_calls": []
+      },
+      {
+        "citations": [],
+        "content": [
+          {
+            "text": "合成历史",
+            "type": "text"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:10Z",
+        "id": "00000000-0000-4000-8000-000000000011",
+        "input_tokens": 120001,
+        "output_tokens": null,
+        "role": "assistant",
+        "searches": [],
+        "sequence": 10,
+        "tool_calls": []
+      },
+      {
+        "citations": [],
+        "content": [
+          {
+            "text": "合成历史",
+            "type": "text"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:11Z",
+        "id": "00000000-0000-4000-8000-000000000012",
+        "input_tokens": null,
+        "output_tokens": null,
+        "role": "user",
+        "searches": [],
+        "sequence": 11,
+        "tool_calls": []
+      },
+      {
+        "citations": [],
+        "content": [
+          {
+            "text": "合成历史",
+            "type": "text"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:12Z",
+        "id": "00000000-0000-4000-8000-000000000013",
+        "input_tokens": 120001,
+        "output_tokens": null,
+        "role": "assistant",
+        "searches": [],
+        "sequence": 12,
+        "tool_calls": []
+      },
+      {
+        "citations": [],
+        "content": [
+          {
+            "text": "合成历史",
+            "type": "text"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:13Z",
+        "id": "00000000-0000-4000-8000-000000000014",
+        "input_tokens": null,
+        "output_tokens": null,
+        "role": "user",
+        "searches": [],
+        "sequence": 13,
+        "tool_calls": []
+      },
+      {
+        "citations": [],
+        "content": [
+          {
+            "text": "合成历史",
+            "type": "text"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:14Z",
+        "id": "00000000-0000-4000-8000-000000000015",
+        "input_tokens": 120001,
+        "output_tokens": null,
+        "role": "assistant",
+        "searches": [],
+        "sequence": 14,
+        "tool_calls": []
+      },
+      {
+        "citations": [],
+        "content": [
+          {
+            "text": "合成历史",
+            "type": "text"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:15Z",
+        "id": "00000000-0000-4000-8000-000000000016",
+        "input_tokens": null,
+        "output_tokens": null,
+        "role": "user",
+        "searches": [],
+        "sequence": 15,
+        "tool_calls": []
+      },
+      {
+        "citations": [],
+        "content": [
+          {
+            "text": "合成历史",
+            "type": "text"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:16Z",
+        "id": "00000000-0000-4000-8000-000000000017",
+        "input_tokens": 120001,
+        "output_tokens": null,
+        "role": "assistant",
+        "searches": [],
+        "sequence": 16,
+        "tool_calls": []
+      },
+      {
+        "citations": [],
+        "content": [
+          {
+            "text": "继续合成对话",
+            "type": "text"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:17Z",
+        "id": "00000000-0000-4000-8000-000000000018",
+        "input_tokens": null,
+        "output_tokens": null,
+        "role": "user",
+        "searches": [],
+        "sequence": 17,
+        "tool_calls": []
+      },
+      {
+        "citations": [],
+        "content": [
+          {
+            "text": "合成回答",
+            "type": "text"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:18Z",
+        "id": "00000000-0000-4000-8000-000000000019",
+        "input_tokens": null,
+        "output_tokens": null,
+        "role": "assistant",
+        "searches": [],
+        "sequence": 18,
+        "tool_calls": []
+      }
+    ],
+    "mode": "assistant",
+    "model": "synthetic-model",
+    "pending_plan": null,
+    "plans": [],
+    "run_status": "idle",
+    "status": "idle",
+    "summary_through_message_id": "00000000-0000-4000-8000-000000000007",
+    "title": "合成摘要会话",
+    "unread": true,
+    "updated_at": "2026-01-01T00:00:19Z"
+  },
+  "status": 200
+}

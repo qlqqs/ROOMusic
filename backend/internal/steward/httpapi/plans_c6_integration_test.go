@@ -414,7 +414,7 @@ func (s *c6FailPlanResultOnce) FinishPlanItem(ctx context.Context, user, id stri
 func TestPostgreSQLStewardHTTPC6ContinueReusesApprovedItemKey(t *testing.T) {
 	f, id := newC6API(t, "admin", "assistant")
 	p := f.plan(t, "admin", id)
-	f.api.runner = runtime.NewRunner(&c6FailPlanResultOnce{Store: f.store, fail: true}, f.registry, f.api.logger)
+	f.replaceRunner(runtime.NewRunner(&c6FailPlanResultOnce{Store: f.store, fail: true}, f.registry, f.api.logger))
 	w := f.decision("admin", id, p, []string{p.Items[0].ID, p.Items[1].ID}, nil)
 	if f.count(t) != 1 || !strings.Contains(w.Body.String(), "database_unavailable") {
 		t.Fatalf("未制造提交后中断：%s count=%d", w.Body, f.count(t))

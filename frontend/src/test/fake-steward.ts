@@ -5,10 +5,13 @@ import { jsonResponse, sampleResponse, type RecordedRequest } from "./http";
 /** 一条可控的 SSE 响应：测试逐个推送事件，再结束或断开。 */
 export type FakeSse = {
   response: Response;
+  /** 推送一个事件；data 里有 seq 时同时写 SSE 的 id 行（与后端一致）。 */
   send: (event: string, data: unknown) => void;
   close: () => void;
   /** 没有 done 就断开。 */
   fail: () => void;
+  /** 已经结束或断开。 */
+  closed: () => boolean;
 };
 
 export function fakeSse(): FakeSse {
@@ -27,7 +30,8 @@ export function fakeSse(): FakeSse {
   return {
     response: new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream" } }),
     send: (event, data) => {
-      if (!closed) controller?.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+      const seq = isRecord(data) && typeof data["seq"] === "number" ? `id: ${data["seq"]}\n` : "";
+      if (!closed) controller?.enqueue(encoder.encode(`${seq}event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
     },
     close: () => {
       if (closed) return;
@@ -39,6 +43,7 @@ export function fakeSse(): FakeSse {
       closed = true;
       controller?.error(new TypeError("network error"));
     },
+    closed: () => closed,
   };
 }
 
@@ -66,6 +71,12 @@ export type FakeConversation = {
   created_at: string;
   updated_at: string;
   messages: unknown[];
+  /** 运行结束后还没打开看过（C10）；省略时是已读。 */
+  unread?: boolean;
+  /** 最近一次运行结束的时间（C10）；接回时据此划分已落库消息里属于这次运行的部分。 */
+  last_run_finished_at?: string | null;
+  /** 摘要覆盖到的最后一条消息（C10）。 */
+  summary_through_message_id?: string | null;
 };
 
 export function conversationOf(id: string, overrides: Partial<FakeConversation> = {}): FakeConversation {
@@ -206,6 +217,21 @@ export type StewardFake = {
   /** 管理员：成员开关与放行名单。 */
   instance: { members_enabled: boolean };
   allowlist: { host: string; port: number; added_by: string | null; created_at: string }[];
+  /**
+   * 服务端还留着事件的会话（C10）：接回接口为它们打开一条可控的流（记在 attaches 里）；不在这里的会话接回得到 204。
+   * 会话详情的 status 由测试自己设。
+   */
+  eventLogs: Set<string>;
+  /** 接回接口收到的请求、Last-Event-ID（没有时是 0）与对应的流。 */
+  attaches: { request: RecordedRequest; conversationId: string; after: number; stream: FakeSse }[];
+  /** 下一次接回直接返回的响应（拒绝、出错）。 */
+  nextAttachResponse: Response | null;
+  /** 标记已读收到的会话 ID；标记后会话的 unread 变成 false。 */
+  reads: string[];
+  /** 记忆（C10）：按更新时间倒序返回；条数与字数的上限。 */
+  memories: { id: string; content: string; created_at: string; updated_at: string }[];
+  memoryLimit: number;
+  memoryMaxLength: number;
 };
 
 const conversationPath = /^\/api\/v1\/me\/steward\/conversations\/([^/]+)$/;
@@ -216,6 +242,9 @@ const revertPath = /^\/api\/v1\/operations\/([^/]+)\/revert$/;
 const selectableModes = ["assistant", "steward", "operator"];
 const failureOf = (status: number, code: string, message: string) => jsonResponse(status, { error: { code, message }, request_id: "fake-request" });
 const cancelPath = /^\/api\/v1\/me\/steward\/conversations\/([^/]+)\/cancel$/;
+const eventsPath = /^\/api\/v1\/me\/steward\/conversations\/([^/]+)\/events$/;
+const readPath = /^\/api\/v1\/me\/steward\/conversations\/([^/]+)\/read$/;
+const memoryPath = /^\/api\/v1\/me\/steward\/memories\/([^/]+)$/;
 const idOf = (request: RecordedRequest, pattern: RegExp) => pattern.exec(request.path.split("?")[0] ?? "")?.[1] ?? "";
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -278,10 +307,24 @@ export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = 
     nextRevertResponse: null,
     instance: { members_enabled: true },
     allowlist: [],
+    eventLogs: new Set(),
+    attaches: [],
+    nextAttachResponse: null,
+    reads: [],
+    memories: [],
+    memoryLimit: 50,
+    memoryMaxLength: 500,
     ...initial,
   };
   const denied = () => (state.disabled ? sampleResponse("steward/disabled") : null);
-  const summary = ({ messages: _messages, ...rest }: FakeConversation) => rest;
+  // C10 的字段：未读、运行状态（运行中优先，其次是有未处理方案），最后读与最后结束的时间。
+  const summary = ({ messages: _messages, unread, last_run_finished_at: finished, summary_through_message_id: _through, ...rest }: FakeConversation) => ({
+    ...rest,
+    unread: unread === true,
+    run_status: rest.status === "running" ? "running" : pendingPlanOf(rest.id) !== null ? "awaiting_confirmation" : "idle",
+    last_read_at: null,
+    last_run_finished_at: finished ?? null,
+  });
   const listItem = (conversation: FakeConversation) => ({ ...summary(conversation), pending_item_count: pendingItemCount(pendingPlanOf(conversation.id)) });
   const find = (id: string) => state.conversations.find((item) => item.id === id);
   /** 会话的未处理方案；读到时已过期的标为 expired（后端在读取与确认时判定过期）。 */
@@ -297,10 +340,12 @@ export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = 
   const detailOf = (conversation: FakeConversation) => {
     const plan = pendingPlanOf(conversation.id);
     const plans = state.plans.filter((item) => item.conversation_id === conversation.id).map((item) => planPayload(item, conversation.messages));
-    return { ...conversation, pending_plan: plan === null ? null : planPayload(plan), plans };
+    return { ...summary(conversation), messages: conversation.messages, pending_plan: plan === null ? null : planPayload(plan), plans, summary_through_message_id: conversation.summary_through_message_id ?? null };
   };
 
-  api.on("GET", "/api/v1/me/steward/settings", () => denied() ?? jsonResponse(200, state.settings ?? emptySettingsSample()));
+  // 入口提示点的未读数（C10）：按会话的 unread 数出来。
+  const withUnread = (settings: Record<string, unknown>) => ({ ...settings, unread_conversation_count: state.conversations.filter((item) => item.unread === true).length });
+  api.on("GET", "/api/v1/me/steward/settings", () => denied() ?? jsonResponse(200, withUnread(state.settings ?? emptySettingsSample())));
   const current = () => state.settings ?? (emptySettingsSample() as Settings);
   // 部分更新，按后端 mergeSettings（steward/httpapi/settings.go，合同 4.2）的语义：
   // 省略的键保留，overrides 给出时整体替换；key 为 null 清除、为字符串时保存（只留末四位）；
@@ -558,20 +603,98 @@ export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = 
     }
     return jsonResponse(200, { operation_id: "00000000-0000-4000-8000-00000000f0f0", reverts_operation_id: operationId, target_type: "release", target_id: "00000000-0000-4000-8000-00000000e0e0", revision: 3 });
   });
+  // 取消（C10）：服务端结束运行后，这个会话每一条接着的流都收到同一个 done。没有接着的流时说没有运行。
   api.on("POST", cancelPath, (request) => {
-    const conversation = find(idOf(request, cancelPath));
+    const id = idOf(request, cancelPath);
+    const conversation = find(id);
     if (conversation === undefined) return sampleResponse("steward/conversation-not-found");
-    const run = state.runs.at(-1);
-    if (run === undefined) return sampleResponse("steward/cancel-idle");
-    run.stream.send("done", { type: "done", end: { reason: "cancelled" } });
-    run.stream.close();
+    const open = streamsOf(id).filter((stream) => !stream.closed());
+    if (open.length === 0) return sampleResponse("steward/cancel-idle");
+    // 与后端一致：先释放会话，再发 done。
+    conversation.status = "idle";
+    for (const stream of open) {
+      stream.send("done", { type: "done", end: { reason: "cancelled" } });
+      stream.close();
+    }
     return jsonResponse(200, { cancelled: true });
+  });
+  /** 一个会话的全部流：发消息、继续、确认、重新审查与接回。 */
+  const streamsOf = (id: string) => [
+    ...state.runs.filter((run) => idOf(run.request, runPath) === id).map((run) => run.stream),
+    ...state.decisions.filter((decision) => idOf(decision.request, decisionPath) === id).map((decision) => decision.stream),
+    ...state.reviews.filter((review) => idOf(review.request, reviewPath) === id).map((review) => review.stream),
+    ...state.attaches.filter((attach) => attach.conversationId === id).map((attach) => attach.stream),
+  ];
+  // 接回（C10）：Last-Event-ID 或 after 查询参数；服务端没有这个会话的事件时 204。
+  api.on("GET", eventsPath, (request) => {
+    const conversationId = idOf(request, eventsPath);
+    if (find(conversationId) === undefined) return sampleResponse("steward/conversation-not-found");
+    if (state.nextAttachResponse !== null) {
+      const response = state.nextAttachResponse;
+      state.nextAttachResponse = null;
+      return response;
+    }
+    if (!state.eventLogs.has(conversationId)) return new Response(null, { status: 204 });
+    const after = Number(request.headers.get("Last-Event-ID") ?? new URL(request.path, "http://localhost").searchParams.get("after") ?? "0");
+    const stream = fakeSse();
+    request.signal?.addEventListener("abort", () => stream.fail(), { once: true });
+    state.attaches.push({ request, conversationId, after, stream });
+    return stream.response;
+  });
+  api.on("POST", readPath, (request) => {
+    const conversation = find(idOf(request, readPath));
+    if (conversation === undefined) return sampleResponse("steward/conversation-not-found");
+    state.reads.push(conversation.id);
+    conversation.unread = false;
+    return jsonResponse(200, { read: true });
+  });
+  // 记忆（C10）：成员开关关闭时成员可以查看与删除，不能新增与修改（403 steward_disabled）。
+  const memoryList = () => ({ items: [...state.memories].sort((a, b) => b.updated_at.localeCompare(a.updated_at)), limit: state.memoryLimit, max_length: state.memoryMaxLength });
+  /** 去掉首尾空白后的内容；空或超长时是 null。 */
+  const memoryContentOf = (body: unknown) => {
+    const content = isRecord(body) && typeof body["content"] === "string" ? body["content"].trim() : "";
+    return content === "" || Array.from(content).length > state.memoryMaxLength ? null : content;
+  };
+  let memoryCounter = 0;
+  api.on("GET", "/api/v1/me/steward/memories", () => jsonResponse(200, memoryList()));
+  api.on("POST", "/api/v1/me/steward/memories", (request) => {
+    const refused = denied();
+    if (refused !== null) return refused;
+    const content = memoryContentOf(request.body);
+    if (content === null) return failureOf(400, "invalid_input", "内容为空或超长");
+    if (state.memories.length >= state.memoryLimit) return failureOf(409, "memory_limit_reached", "记忆已到上限");
+    memoryCounter += 1;
+    const at = new Date(Date.UTC(2026, 10, 16, 0, 0, memoryCounter)).toISOString();
+    const memory = { id: `00000000-0000-4000-8000-${String(800 + memoryCounter).padStart(12, "0")}`, content, created_at: at, updated_at: at };
+    state.memories.push(memory);
+    return jsonResponse(201, memory);
+  });
+  api.on("DELETE", "/api/v1/me/steward/memories", () => {
+    state.memories = [];
+    return new Response(null, { status: 204 });
+  });
+  api.on("PATCH", memoryPath, (request) => {
+    const refused = denied();
+    if (refused !== null) return refused;
+    const memory = state.memories.find((item) => item.id === idOf(request, memoryPath));
+    if (memory === undefined) return failureOf(404, "not_found", "记忆不存在");
+    const content = memoryContentOf(request.body);
+    if (content === null) return failureOf(400, "invalid_input", "内容为空或超长");
+    memoryCounter += 1;
+    Object.assign(memory, { content, updated_at: new Date(Date.UTC(2026, 10, 16, 0, 0, memoryCounter)).toISOString() });
+    return jsonResponse(200, memory);
+  });
+  api.on("DELETE", memoryPath, (request) => {
+    const id = idOf(request, memoryPath);
+    if (!state.memories.some((item) => item.id === id)) return failureOf(404, "not_found", "记忆不存在");
+    state.memories = state.memories.filter((item) => item.id !== id);
+    return new Response(null, { status: 204 });
   });
   return state;
 }
 
 /** 合成的已落库消息。 */
-export function storedMessage(sequence: number, role: "user" | "assistant" | "tool", content: unknown[], toolCalls: unknown[] = []) {
+export function storedMessage(sequence: number, role: "user" | "assistant" | "tool", content: unknown[], toolCalls: unknown[] = [], createdAt = "2026-11-16T00:00:00Z") {
   return {
     id: `00000000-0000-4000-8000-${String(sequence).padStart(12, "0")}`,
     sequence,
@@ -579,7 +702,7 @@ export function storedMessage(sequence: number, role: "user" | "assistant" | "to
     content,
     input_tokens: null,
     output_tokens: null,
-    created_at: "2026-11-16T00:00:00Z",
+    created_at: createdAt,
     tool_calls: toolCalls,
   };
 }

@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "steward_run_limit",
+      "message": "最多同时运行 3 个会话，请等待或停止一个回答"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

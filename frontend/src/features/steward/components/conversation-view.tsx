@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { FailureNotice, Notice, Skeleton } from "../../../shared/ui";
 import type { SettingsDTO, StewardMode } from "../api/decoders";
 import { noDismissed, pageIdentityOf, playbackIdentityOf, requestContextOf, visibleContextOf } from "../context/context";
@@ -16,13 +17,14 @@ import {
   useDraft,
   useViewNotice,
 } from "../dock-store";
-import { isMissingConversation, useConversation, useCreateConversation, usePatchConversation } from "../hooks/use-conversations";
+import { isMissingConversation, useConversation, useCreateConversation, useMarkRead, usePatchConversation } from "../hooks/use-conversations";
 import { placePlans, useConversationPlans, useReviewSnapshot } from "../hooks/use-plans";
-import { useStartRun, useStewardDisabledCheck, useThread } from "../hooks/use-run";
+import { useAttachRun, useRunSnapshot, useStartRun, useStewardDisabledCheck, useThread } from "../hooks/use-run";
 import { effectiveModelOf, readinessOf } from "../hooks/use-steward-settings";
 import { supersedePlans } from "../run/plan-store";
 import { reviewViewOf } from "../run/review-store";
 import { stopRun } from "../run/run-store";
+import { markViewing } from "../run/viewing";
 import { Composer } from "./composer";
 import { ModeMenu, modeInfo, nextMode } from "./mode-menu";
 import { ModelMenu } from "./model-menu";
@@ -61,10 +63,15 @@ const noticeTitles = {
  * 发消息时带上没被点掉的页面上下文（正在看、正在播放），发出后点掉的标签恢复；继续不带上下文。
  * 有未处理的方案时仍可发消息，发出即作废方案（C6）；模式在空白新对话里随创建会话提交，已有会话经 PATCH 切换，
  * 正在回答或有未处理的方案时不能切换。审查过（或正在审查）的方案显示为审查结果（C7），转给用户确认的项在其中确认。
+ * C10：打开时标记已读；会话正在运行而本页没有这次运行（刷新、另一个标签页、重新打开）时接回它的事件流；
+ * 挂载期间登记“正停在这个会话里”，运行结束时先标记已读再刷新未读数。
  */
 export function ConversationView({ conversationId, settings, name, onCreated }: ConversationViewProps) {
   const detail = useConversation(conversationId);
+  const snapshot = useRunSnapshot();
   const view = useThread(conversationId, detail.data);
+  const attach = useAttachRun();
+  const markRead = useMarkRead();
   const startRun = useStartRun();
   const checkDisabled = useStewardDisabledCheck();
   const create = useCreateConversation();
@@ -87,7 +94,22 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
 
   const readiness = readinessOf(settings);
   const running = view.run !== null;
+  // 会话在运行而本页还没有接上（马上会接回），或接不回来了：不能发送。
   const elsewhere = !running && detail.data?.status === "running";
+  const detached = elsewhere && conversationId !== null && snapshot.detached.get(conversationId) === detail.data?.updated_at;
+
+  useEffect(() => (conversationId === null ? undefined : markViewing(conversationId)), [conversationId]);
+  // 打开时标记已读一次（对话区按会话 ID 重新挂载，每次打开都会标）。
+  const marked = useRef(false);
+  const loaded = detail.data;
+  useEffect(() => {
+    if (conversationId === null || loaded === undefined || marked.current) return;
+    marked.current = true;
+    void markRead(conversationId, loaded.unread === true);
+  }, [conversationId, loaded, markRead]);
+  useEffect(() => {
+    if (conversationId !== null && loaded !== undefined && loaded.status === "running" && !running) attach(conversationId, loaded);
+  }, [conversationId, loaded, running, attach]);
   const creating = create.isPending;
   const plans = useConversationPlans(conversationId, detail.data, running);
   const placedPlans = placePlans(view.turns, plans);
@@ -289,7 +311,7 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
           sendDisabled={elsewhere || creating}
           onSend={() => void send()}
           onStop={() => conversationId !== null && stopRun(conversationId)}
-          note={elsewhere ? "正在别处回答，结束后才能继续发消息。" : undefined}
+          note={detached ? "没能接上这次回答的进度，可以刷新页面查看最新的结果。" : undefined}
           hint={
             planOpen
               ? "发新消息会作废上面的方案"

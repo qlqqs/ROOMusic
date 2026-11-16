@@ -102,6 +102,13 @@ func main() {
 	case serveErr = <-serveErrors:
 		stopApplication()
 	}
+	if application != nil {
+		stewardContext, cancelSteward := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := application.ShutdownSteward(stewardContext); err != nil {
+			logger.Error("管家运行收尾超时", "event", "steward.shutdown_timeout", "module", "steward")
+		}
+		cancelSteward()
+	}
 	shutdownContext, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelShutdown()
 	if err := server.Shutdown(shutdownContext); err != nil {

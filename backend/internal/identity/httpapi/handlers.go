@@ -43,10 +43,11 @@ func userIDFromPath(w http.ResponseWriter, r *http.Request) (string, bool) {
 
 // Handlers 汇集身份相关的 HTTP handler。
 type Handlers struct {
-	database *sql.DB
-	guard    *identity.Guard
-	throttle *identity.LoginThrottle
-	logger   *slog.Logger
+	sessionRevoked func(string)
+	database       *sql.DB
+	guard          *identity.Guard
+	throttle       *identity.LoginThrottle
+	logger         *slog.Logger
 }
 
 // New 返回身份 handler。
@@ -216,7 +217,11 @@ func (handlers *Handlers) logout(responseWriter http.ResponseWriter, request *ht
 		return
 	}
 	if cookie, err := request.Cookie(identity.SessionCookieName); err == nil {
-		_, _ = handlers.database.ExecContext(request.Context(), "UPDATE sessions SET revoked_at=NOW() WHERE token_hash=$1", identity.HashSessionToken(cookie.Value))
+		var userID string
+		err := handlers.database.QueryRowContext(request.Context(), "UPDATE sessions SET revoked_at=NOW() WHERE token_hash=$1 AND revoked_at IS NULL AND expires_at > NOW() RETURNING user_id::text", identity.HashSessionToken(cookie.Value)).Scan(&userID)
+		if err == nil && handlers.sessionRevoked != nil {
+			handlers.sessionRevoked(userID)
+		}
 	}
 	handlers.guard.ClearSessionCookie(responseWriter, request)
 	httpserver.WriteJSON(responseWriter, 200, map[string]bool{"logged_out": true})
@@ -301,7 +306,7 @@ func (handlers *Handlers) updateUser(w http.ResponseWriter, r *http.Request) {
 		httpserver.WriteError(w, r, 400, "invalid_input", "缺少禁用状态")
 		return
 	}
-	if err := identity.SetUserDisabled(r.Context(), handlers.database, id, *in.Disabled); err != nil {
+	if err := identity.SetUserDisabled(r.Context(), handlers.database, id, *in.Disabled, handlers.sessionRevoked); err != nil {
 		writeUserManagementError(w, r, err)
 		return
 	}
@@ -319,7 +324,7 @@ func (handlers *Handlers) revokeUserSessions(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	if err := identity.RevokeUserSessions(r.Context(), handlers.database, id); err != nil {
+	if err := identity.RevokeUserSessions(r.Context(), handlers.database, id, handlers.sessionRevoked); err != nil {
 		writeUserManagementError(w, r, err)
 		return
 	}
@@ -340,4 +345,10 @@ func writeUserManagementError(w http.ResponseWriter, r *http.Request, err error)
 		status = http.StatusConflict
 	}
 	httpserver.WriteError(w, r, status, managementError.Code, managementError.Message)
+}
+
+// WithSessionRevoked 在装配时注入登出、停用与吊销会话后的应用通知。
+func (handlers *Handlers) WithSessionRevoked(callback func(string)) *Handlers {
+	handlers.sessionRevoked = callback
+	return handlers
 }
