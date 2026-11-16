@@ -45,7 +45,10 @@ const (
 // SourceChat 表示由聊天入口发起调用。
 const SourceChat = "chat"
 
-// Caller 携带入口提供的当前已认证用户与调用来源；当前来源为 SourceChat。
+// SourceMCP 表示由 MCP 入口发起调用。
+const SourceMCP = "mcp"
+
+// Caller 携带入口提供的当前已认证用户与调用来源。
 // 入口负责取得当前用户，工具处理器仍须按 User 限定具体资源的可见范围。
 type Caller struct {
 	// User 是本次调用的当前用户。

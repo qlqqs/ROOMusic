@@ -1103,6 +1103,16 @@ func (recorder *apiSampleRecorder) record(name string, response *httptest.Respon
 	if response.Code != wantStatus {
 		t.Fatalf("sample %s: expected HTTP %d, got %d: %s", name, wantStatus, response.Code, response.Body.String())
 	}
+	if response.Code == http.StatusNoContent {
+		if response.Body.Len() != 0 {
+			t.Fatalf("sample %s: 204 response must be empty", name)
+		}
+		if _, exists := recorder.samples[name]; exists {
+			t.Fatalf("sample %s was recorded twice", name)
+		}
+		recorder.samples[name] = encodeAPISample(t, name, response.Code, []byte("null"))
+		return
+	}
 	if contentType := response.Header().Get("Content-Type"); contentType != "application/json" {
 		t.Fatalf("sample %s: expected Content-Type application/json, got %q", name, contentType)
 	}
@@ -1238,6 +1248,9 @@ func (recorder *apiSampleRecorder) finish() {
 
 // ownsSample 同时保留 personal 的目录/错误前缀隔离与扫描反馈的子目录隔离。
 func (recorder *apiSampleRecorder) ownsSample(name string) bool {
+	if strings.HasPrefix(name, "steward/tokens/") {
+		return recorder.scope == "steward/tokens"
+	}
 	if strings.HasPrefix(name, "steward/") {
 		return recorder.scope == "steward"
 	}

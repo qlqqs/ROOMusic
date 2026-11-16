@@ -1,0 +1,69 @@
+/* 新建令牌与显示明文的对话框：标题、字段与按钮行与成员的对话框一致。 */
+.dialog {
+  width: min(520px, calc(100vw - 2 * var(--space-4)));
+}
+
+.content {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.title {
+  font-size: var(--fs-16);
+}
+
+.fields {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.choice {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.choiceLabel {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+}
+
+.hint {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: 1.5;
+}
+
+.secretLabel {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+}
+
+/* 明文与接入命令：等宽、可整段选中，过长时在框内换行，不撑宽对话框。 */
+.secret {
+  width: 100%;
+  padding: var(--space-2);
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-13);
+  line-height: 1.5;
+  resize: none;
+  overflow-wrap: anywhere;
+}
+
+.secretRow {
+  display: grid;
+  gap: var(--space-1);
+  justify-items: start;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}

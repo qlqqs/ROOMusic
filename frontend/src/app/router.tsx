@@ -31,6 +31,7 @@ const ArtistCandidatesPage = lazyRouteComponent(() => import("./routes/artist-ca
 const IssuesPage = lazyRouteComponent(() => import("./routes/issues-page"), "IssuesPage");
 const ClaimsPage = lazyRouteComponent(() => import("./routes/claims-page"), "ClaimsPage");
 const PlaybackSettingsPage = lazyRouteComponent(() => import("./routes/playback-settings-page"), "PlaybackSettingsPage");
+const TokensPage = lazyRouteComponent(() => import("./routes/tokens-page"), "TokensPage");
 const LibraryPage = lazyRouteComponent(() => import("./routes/library-page"), "LibraryPage");
 const ScanDetail = lazyRouteComponent(() => import("../features/library"), "ScanDetail");
 const MembersPage = lazyRouteComponent(() => import("./routes/members-page"), "MembersPage");
@@ -343,6 +344,17 @@ function PlaybackSettingsRoute() {
 
 const playbackSettingsRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/playback", component: PlaybackSettingsRoute });
 
+// 访问令牌（MCP 客户端用）：所有登录用户都能管理自己的令牌。
+function TokensRoute() {
+  return (
+    <LazyPage>
+      <TokensPage />
+    </LazyPage>
+  );
+}
+
+const tokensRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/tokens", component: TokensRoute });
+
 function LibraryRoute() {
   const { scan_page: scanPage } = libraryRoute.useSearch();
   return (
@@ -443,7 +455,7 @@ const routeTree = rootRoute.addChildren([
     issuesRoute,
     claimsRoute,
     artistCandidatesRoute,
-    settingsRoute.addChildren([settingsIndexRoute, accountRoute, playbackSettingsRoute, libraryRoute, scanDetailRoute, membersRoute, operationsRoute, backupsRoute]),
+    settingsRoute.addChildren([settingsIndexRoute, accountRoute, playbackSettingsRoute, tokensRoute, libraryRoute, scanDetailRoute, membersRoute, operationsRoute, backupsRoute]),
     notFoundRoute,
   ]),
 ]);

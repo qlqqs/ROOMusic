@@ -18,8 +18,10 @@ import (
 	operationtools "github.com/qlqq/roomusic/backend/internal/operations/stewardtools"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	stewardapi "github.com/qlqq/roomusic/backend/internal/steward/httpapi"
+	stewardmcp "github.com/qlqq/roomusic/backend/internal/steward/mcp"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 	"github.com/qlqq/roomusic/backend/internal/steward/secret"
+	"github.com/qlqq/roomusic/backend/internal/steward/token"
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
 )
 
@@ -39,6 +41,7 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 				mux.HandleFunc(prefix, unavailable)
 				mux.HandleFunc(prefix+"/", unavailable)
 			}
+			mux.HandleFunc("/api/v1/mcp", unavailable)
 			return
 		}
 		logger.Info("管家会话状态已恢复", "event", "steward.recovery.completed", "message", "管家会话状态已恢复", "module", "steward", "conversations", count)
@@ -55,7 +58,9 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 		}
 	}
 	runner := runtime.NewRunner(store, registry, logger)
-	stewardapi.New(guard, store, secrets, runner, logger).WithCredentialCheck(func(r *http.Request, user identity.User) (bool, error) {
+	tokens := token.NewStore(database, guard)
+	mux.Handle("/api/v1/mcp", stewardmcp.New(guard, tokens, store, registry, logger))
+	stewardapi.New(guard, store, secrets, runner, logger).WithTokens(tokens).WithCredentialCheck(func(r *http.Request, user identity.User) (bool, error) {
 		cookie, err := r.Cookie(identity.SessionCookieName)
 		if err != nil || cookie.Value == "" {
 			return false, nil

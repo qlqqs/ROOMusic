@@ -12,6 +12,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
 	"github.com/qlqq/roomusic/backend/internal/steward/secret"
+	"github.com/qlqq/roomusic/backend/internal/steward/token"
 )
 
 // Handlers 持有管家接口依赖及本进程内按用户隔离的运行取消登记。
@@ -22,6 +23,7 @@ type Handlers struct {
 	secrets          *secret.Store
 	runner           *runtime.Runner
 	logger           *slog.Logger
+	tokens           *token.Store
 	mu               sync.Mutex
 	running          map[runKey]context.CancelFunc
 }
@@ -45,6 +47,9 @@ func (h *Handlers) WithCredentialCheck(check func(*http.Request, identity.User) 
 
 // Register 注册版本化接口，所有写方法均复用身份模块的同源校验。
 func (h *Handlers) Register(mux *http.ServeMux) {
+	if h.tokens != nil {
+		h.registerTokens(mux)
+	}
 	h.route(mux, "GET /api/v1/me/steward/settings", false, h.getSettings)
 	h.route(mux, "PUT /api/v1/me/steward/settings", false, h.putSettings)
 	h.route(mux, "POST /api/v1/me/steward/settings/probe", false, h.probe)
