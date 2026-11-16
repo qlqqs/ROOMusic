@@ -52,6 +52,7 @@ type MessageInput struct {
 
 // ToolCall 是一次工具执行的持久化记录。
 type ToolCall struct {
+	IdempotencyKey string
 	// ID 是存储标识，与 Provider 的协议内调用标识独立。
 	ID string
 	// MessageID 是请求此调用的消息标识。
@@ -111,6 +112,14 @@ func (s *Store) AppendMessage(ctx context.Context, userID, conversationID string
 	if _, err := lockConversation(ctx, tx, userID, conversationID); err != nil {
 		return Message{}, err
 	}
+	if input.Role == "user" {
+		if err := resolvePendingPlans(ctx, tx, userID, conversationID, "superseded", false); err != nil {
+			return Message{}, err
+		}
+		if err := s.resolveDecidedPlans(ctx, tx, userID, conversationID); err != nil {
+			return Message{}, err
+		}
+	}
 	message, err := appendMessage(ctx, tx, userID, conversationID, input)
 	if err != nil {
 		return Message{}, err
@@ -159,7 +168,7 @@ func insertToolCall(ctx context.Context, tx *sql.Tx, userID, conversationID, mes
  SELECT $4::uuid,m.id,$5,$6::json,$7,'running',$8
  FROM steward_messages m JOIN steward_conversations c ON c.id=m.conversation_id
  WHERE c.user_id=$1::uuid AND c.id=$2::uuid AND m.id=$3::uuid
- RETURNING id::text,message_id::text,tool_name,input::text,output::text,truncated,untrusted,status,error_code,duration_ms,position`,
+ RETURNING id::text,message_id::text,tool_name,input::text,output::text,truncated,untrusted,status,error_code,duration_ms,position,idempotency_key::text`,
 		userID, conversationID, messageID, uuid.New(), input.Name, input.Input, input.Untrusted, position))
 	return call, storeError("追加管家工具调用", err)
 }
@@ -223,7 +232,7 @@ func readMessages(ctx context.Context, tx *sql.Tx, userID, conversationID string
 
 func readToolCalls(ctx context.Context, tx *sql.Tx, userID, conversationID string, messages []Message) error {
 	rows, err := tx.QueryContext(ctx, `SELECT t.id::text,t.message_id::text,t.tool_name,t.input::text,t.output::text,
- t.truncated,t.untrusted,t.status,t.error_code,t.duration_ms,t.position FROM steward_tool_calls t
+ t.truncated,t.untrusted,t.status,t.error_code,t.duration_ms,t.position,t.idempotency_key::text FROM steward_tool_calls t
  JOIN steward_messages m ON m.id=t.message_id JOIN steward_conversations c ON c.id=m.conversation_id
  WHERE c.user_id=$1::uuid AND c.id=$2::uuid ORDER BY m.sequence,t.position`, userID, conversationID)
 	if err != nil {
@@ -259,6 +268,6 @@ func scanMessage(row scanner) (Message, error) {
 func scanToolCall(row scanner) (ToolCall, error) {
 	var call ToolCall
 	err := row.Scan(&call.ID, &call.MessageID, &call.Name, (*[]byte)(&call.Input), (*[]byte)(&call.Output),
-		&call.Truncated, &call.Untrusted, &call.Status, &call.ErrorCode, &call.DurationMS, &call.Position)
+		&call.Truncated, &call.Untrusted, &call.Status, &call.ErrorCode, &call.DurationMS, &call.Position, &call.IdempotencyKey)
 	return call, err
 }

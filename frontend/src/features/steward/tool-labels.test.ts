@@ -2,7 +2,7 @@ import { Wrench } from "lucide-react";
 import { describe, expect, it } from "vitest";
 import { toolArgumentOf, toolCountOf, toolDataScopeOf, toolFailureOf, toolLabelOf, toolResultOf, toolWritesOf } from "./tool-labels";
 
-// 后端登记的 16 个只读工具（合同第 3 节）与 C5 的播放、播放历史、收藏与歌单工具。
+// 后端登记的 16 个只读工具（合同第 3 节）、C5 的播放、播放历史、收藏与歌单工具，以及 C6 的曲库与艺人治理工具。
 const tools = [
   "search_library", "list_albums", "get_album", "get_release", "get_track", "list_artists", "get_artist", "list_artist_albums",
   "list_artist_tracks", "get_release_evidence", "list_release_issues", "get_release_issues", "list_scans", "get_scan_report",
@@ -11,6 +11,8 @@ const tools = [
   "list_play_history", "list_recent_releases", "delete_play_history_item",
   "list_favorites", "list_playlists", "get_playlist", "set_favorite", "create_playlist", "rename_playlist", "delete_playlist",
   "add_playlist_tracks", "remove_playlist_track", "move_playlist_track",
+  "correct_release", "change_release_group", "set_default_release", "review_release_issue", "preview_release_claim", "claim_release",
+  "merge_artists", "preview_artist_split", "split_artist", "rename_artist", "ignore_artist_candidate", "revert_operation",
 ];
 
 describe("工具的中文名称", () => {
@@ -61,6 +63,13 @@ describe("主要参数", () => {
     ["set_favorite", { kind: "track", target_id: "t", favorited: true }, "曲目"],
     ["create_playlist", { name: "睡前" }, "睡前"],
     ["rename_playlist", { playlist_id: "p", name: "新名字" }, "新名字"],
+    ["correct_release", { release_id: "r", changes: { title: { mode: "set", value: "x" }, year: { mode: "clear" } } }, "标题、年份"],
+    ["change_release_group", { release_id: "r", action: "detach" }, "移出为独立专辑"],
+    ["set_default_release", { group_id: "g", release_id: null }, "改回自动选择"],
+    ["review_release_issue", { release_id: "r", issue: "grouping", action: "unreview" }, "取消核对"],
+    ["rename_artist", { artist_id: "a", mode: "set", name: "威廉·富特文格勒" }, "威廉·富特文格勒"],
+    ["rename_artist", { artist_id: "a", mode: "auto" }, "改回最常见的写法"],
+    ["ignore_artist_candidate", { artist_id: "a", ignored: false }, "恢复提示"],
   ])("%s 的主要参数取自输入 %j", (name, input, expected) => {
     expect(toolArgumentOf(name, input, { title: "别的" })).toBe(expected);
   });
@@ -103,6 +112,11 @@ describe("结果说明", () => {
     ["list_play_history", {}, { pagination: { total: 42 } }, "42 首"],
     ["list_favorites", { kind: "artist" }, { items: [1, 2] }, "2 位"],
     ["list_playlists", {}, { pagination: { total: 3 } }, "3 个"],
+    ["correct_release", {}, { operation_id: "o" }, "已修改"],
+    ["review_release_issue", { action: "review" }, {}, "已核对"],
+    ["merge_artists", {}, {}, "已合并"],
+    ["ignore_artist_candidate", { ignored: true }, {}, "已忽略"],
+    ["revert_operation", {}, {}, "已撤销"],
   ])("%s %j %j → %s", (name, input, output, expected) => {
     expect(toolResultOf(name, input, output)).toBe(expected);
   });
@@ -122,23 +136,34 @@ describe("工具改动的个人数据", () => {
     ["remove_playlist_track", "playlists"],
     ["move_playlist_track", "playlists"],
     ["delete_play_history_item", "history"],
+    ["correct_release", "catalog"],
+    ["change_release_group", "catalog"],
+    ["set_default_release", "catalog"],
+    ["review_release_issue", "catalog"],
+    ["claim_release", "catalog"],
+    ["revert_operation", "catalog"],
+    ["merge_artists", "artists"],
+    ["split_artist", "artists"],
+    ["rename_artist", "artists"],
+    ["ignore_artist_candidate", "artists"],
   ] as const)("%s → %s", (name, scope) => {
     expect(toolDataScopeOf(name)).toBe(scope);
   });
 
   it("只读与播放类工具不刷新", () => {
-    for (const name of ["list_favorites", "get_playlist", "list_play_history", "control_playback", "play_tracks", "edit_queue", "list_albums", "future_tool"]) {
+    for (const name of ["list_favorites", "get_playlist", "list_play_history", "control_playback", "play_tracks", "edit_queue", "list_albums", "preview_release_claim", "preview_artist_split", "future_tool"]) {
       expect(toolDataScopeOf(name)).toBeNull();
     }
   });
 });
 
 describe("只读与改动", () => {
-  it("播放控制、收藏、歌单与历史的写入是改动类；只读工具与未登记的工具不是", () => {
+  it("播放控制、收藏、歌单与历史的写入、曲库与艺人的治理是改动类；只读工具（含两个预览）与未登记的工具不是", () => {
     for (const name of ["control_playback", "play_tracks", "edit_queue", "set_play_mode", "transfer_playback", "set_device_volume", "set_favorite", "create_playlist", "move_playlist_track", "delete_play_history_item"]) {
       expect(toolWritesOf(name)).toBe(true);
     }
-    for (const name of ["get_playback", "get_queue", "list_play_history", "list_favorites", "get_playlist", "list_albums", "future_tool"]) {
+    for (const name of ["correct_release", "merge_artists", "revert_operation"]) expect(toolWritesOf(name)).toBe(true);
+    for (const name of ["get_playback", "get_queue", "list_play_history", "list_favorites", "get_playlist", "list_albums", "preview_release_claim", "preview_artist_split", "future_tool"]) {
       expect(toolWritesOf(name)).toBe(false);
     }
   });
@@ -153,7 +178,9 @@ describe("失败原因", () => {
     ["token_limit", "没有执行"],
     ["zone_offline", "分区不在线"],
     ["renderer_unavailable", "没有可用的输出"],
-    ["revision_conflict", "内容已变化"],
+    ["revision_conflict", "内容已被改过"],
+    ["declined_by_user", "你没有选这一项"],
+    ["not_executed", "没有执行"],
     ["queue_full", "队列已满"],
     ["volume_fixed", "这个设备的音量不能调"],
     ["playlist_limit_reached", "歌单数量已到上限"],

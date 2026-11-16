@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"io"
 	"net/http"
@@ -76,11 +77,24 @@ func (h *Handlers) continueConversation(w http.ResponseWriter, r *http.Request, 
 	h.startRun(w, r, user, id, "", true, nil)
 }
 
-func (h *Handlers) startRun(w http.ResponseWriter, r *http.Request, user identity.User, id, text string, continuation bool, messageContext json.RawMessage) {
+func (h *Handlers) startRun(w http.ResponseWriter, r *http.Request, user identity.User, id, text string, continuation bool, messageContext json.RawMessage, decisions ...*runtime.PlanDecision) {
+	var decision *runtime.PlanDecision
+	if len(decisions) > 0 {
+		decision = decisions[0]
+	}
 	detail, err := h.store.GetConversation(r.Context(), user.ID, id)
+	if decision != nil && errors.Is(err, runtime.ErrNotFound) {
+		err = runtime.ErrPlanNotFound
+	}
 	if err != nil {
 		h.writeStoreError(w, r, err)
 		return
+	}
+	if decision != nil {
+		if err := runtime.CheckPlanDecision(detail, *decision); err != nil {
+			h.writeStoreError(w, r, err)
+			return
+		}
 	}
 	if detail.Conversation.Status == "running" {
 		writeProblem(w, r, busyProblem)
@@ -117,8 +131,8 @@ func (h *Handlers) startRun(w http.ResponseWriter, r *http.Request, user identit
 	if modelName == "" {
 		modelName = settings.Model
 	}
-	h.streamRun(w, r, ctx, cancel, runtime.RunParams{Caller: tool.Caller{User: user, Source: "chat"},
-		ConversationID: id, Text: text, Context: messageContext, Continue: continuation, DisplayName: settings.DisplayName,
+	h.streamRun(w, r, ctx, cancel, runtime.RunParams{Caller: tool.Caller{User: user, Source: "chat", RequestID: r.Header.Get("X-Request-ID")},
+		Decision: decision, ConversationID: id, Text: text, Context: messageContext, Continue: continuation, DisplayName: settings.DisplayName,
 		Provider: model, Model: modelName}, user)
 }
 

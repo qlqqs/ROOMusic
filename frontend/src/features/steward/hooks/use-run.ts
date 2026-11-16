@@ -7,7 +7,8 @@ import type { ConversationDetailDTO } from "../api/decoders";
 import type { StewardRequestContext } from "../context/context";
 import { useStewardHost } from "../context/host";
 import { isIncomplete, turnsFromMessages, type Turn } from "../run/reduce";
-import { getRunSnapshot, startRun, subscribeRuns, type ActiveRun, type RunEnd, type RunSnapshot, type StartResult } from "../run/run-store";
+import { rememberPlan, unfinishedPlanIdsOf } from "../run/plan-store";
+import { getRunSnapshot, startRun, subscribeRuns, type ActiveRun, type RunEnd, type RunSnapshot, type StartResult, type StartRunParams } from "../run/run-store";
 import { refreshConversation } from "../run/refresh";
 import { toolDataScopeOf } from "../tool-labels";
 import { isStewardDisabled } from "./use-steward-settings";
@@ -34,8 +35,9 @@ export function useStewardDisabledCheck() {
 }
 
 /**
- * 发消息（text）或从现有历史继续（null），context 是随消息发的页面上下文（继续时为 null）。运行结束后重读会话与列表；
- * 改了收藏、歌单或播放历史的工具每结束一次，就让那类个人数据的查询失效（播放类不用，分区事件会推过来）。
+ * 发消息（text）或从现有历史继续（null），context 是随消息发的页面上下文（继续时为 null）；decision 是对一份方案的决定（C6，text 为 null）。
+ * 运行结束后重读会话与列表；改了收藏、歌单、播放历史或曲库的工具每结束一次，就让那类数据的查询失效（播放类不用，分区事件会推过来）。
+ * 运行里出现的修改方案记进方案的 store。
  */
 export function useStartRun() {
   const queryClient = useQueryClient();
@@ -43,7 +45,13 @@ export function useStartRun() {
   const checkDisabled = useStewardDisabledCheck();
   const { refreshData } = useStewardHost();
   return useCallback(
-    async (conversationId: string, text: string | null, baseSequence: number, context: StewardRequestContext | null): Promise<StartResult> => {
+    async (
+      conversationId: string,
+      text: string | null,
+      baseSequence: number,
+      context: StewardRequestContext | null,
+      decision?: StartRunParams["decision"],
+    ): Promise<StartResult> => {
       const result = await startRun({
         conversationId,
         text,
@@ -54,6 +62,8 @@ export function useStartRun() {
           const scope = toolDataScopeOf(name);
           if (scope !== null) refreshData(scope);
         },
+        onPlan: (plan) => rememberPlan(conversationId, plan),
+        ...(decision === undefined ? {} : { decision }),
       });
       if (!result.started && isHttpFailure(result.failure, 403, "steward_disabled")) checkDisabled(null, true);
       return result;
@@ -68,7 +78,9 @@ export function useStartRun() {
  * - live：最后一个回合是否还在进行（过程不收起，显示进行中的条目与光标）；
  * - waiting：运行在等模型的下一段输出；
  * - end：最后一次运行的结束信息；本页没有记录时，最后一条消息是用户或工具消息就是“没有完成”；
- * - canContinue：落库内容确实没有完成（最后一条是用户或工具消息、会话空闲、本页没有运行），继续接口才不会得到 nothing_to_continue。
+ * - canContinue：落库内容确实没有完成（最后一条是用户或工具消息，或有已确认但还没执行完的方案；会话空闲、本页没有运行），
+ *   继续接口才不会得到 nothing_to_continue；
+ * - unfinishedPlans：已确认但还没执行完的方案（C6），由方案卡片给出“继续”，结束说明不再重复这个按钮。
  */
 export type ThreadView = {
   turns: Turn[];
@@ -77,6 +89,7 @@ export type ThreadView = {
   run: ActiveRun | null;
   end: RunEnd | { kind: "incomplete" } | null;
   canContinue: boolean;
+  unfinishedPlans: ReadonlySet<string>;
   lastSequence: number;
 };
 
@@ -90,18 +103,29 @@ export function threadOf(detail: ConversationDetailDTO | undefined, snapshot: Ru
     if (run.userText !== null || last === undefined) {
       turns.push({ key: "live", userText: run.userText, items: run.view.items, texts: run.view.texts });
     } else {
-      turns[turns.length - 1] = { ...last, items: [...last.items, ...run.view.items], texts: [...last.texts, ...run.view.texts] };
+      // 继续或确认方案：并进最后一个回合。同一个调用（确认后执行的方案项）用运行里的状态替换落库的，位置不变；
+      // 新的调用排在后面，它们之前的文字段数加上回合里已有的。
+      const live = new Map(run.view.items.map((item) => [item.callId, item]));
+      const items = last.items.map((item) => {
+        const current = live.get(item.callId);
+        if (current === undefined) return item;
+        live.delete(item.callId);
+        return { ...current, textsBefore: item.textsBefore };
+      });
+      for (const item of live.values()) items.push({ ...item, textsBefore: item.textsBefore + last.texts.length });
+      turns[turns.length - 1] = { ...last, items, texts: [...last.texts, ...run.view.texts] };
     }
   }
   const stored = id === null ? undefined : snapshot.ends.get(id);
-  const canContinue = run === null && detail?.status === "idle" && isIncomplete(messages);
+  const unfinishedPlans = run === null ? unfinishedPlanIdsOf(detail) : new Set<string>();
+  const canContinue = run === null && detail?.status === "idle" && (isIncomplete(messages) || unfinishedPlans.size > 0);
   let end: ThreadView["end"] = null;
   if (run === null || run.phase === "settling") {
     if (stored !== undefined) end = stored;
     else if (canContinue) end = { kind: "incomplete" };
   }
   const live = run !== null && run.phase !== "settling";
-  return { turns, live, waiting: run !== null && live && run.view.waiting, run, end, canContinue, lastSequence: messages.at(-1)?.sequence ?? 0 };
+  return { turns, live, waiting: run !== null && live && run.view.waiting, run, end, canContinue, unfinishedPlans, lastSequence: messages.at(-1)?.sequence ?? 0 };
 }
 
 export function useThread(id: string | null, detail: ConversationDetailDTO | undefined): ThreadView {

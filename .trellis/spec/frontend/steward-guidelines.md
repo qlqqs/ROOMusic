@@ -1,15 +1,17 @@
 # 管家的前端约定
 
-本文记 M6 C4（对话页）与 C5（页面上下文、播放与个人库工具）落地后的前端结构与约定，以代码为准：`frontend/src/features/steward/`、`frontend/src/app/shell/`、
+本文记 M6 C4（对话页）、C5（页面上下文、播放与个人库工具）与 C6（修改方案、模式、治理工具）落地后的前端结构与约定，以代码为准：`frontend/src/features/steward/`、`frontend/src/app/shell/`、
 `frontend/src/app/routes/steward-page.tsx`、`frontend/src/app/routes/agent-settings-page.tsx`。后端接口、SSE 事件与错误码见
-[管家运行时合同](../backend/steward-runtime-contracts.md) 第 4、5、10 节；界面与原型的对应见 [DESIGN.md](../../../frontend/DESIGN.md) 第 4 节“管家”。
+[管家运行时合同](../backend/steward-runtime-contracts.md) 第 4、5、10 节与“C6 共享写入与确认合同”；界面与原型的对应见 [DESIGN.md](../../../frontend/DESIGN.md) 第 4 节“管家”。
 
 ## 0. 范围
 
 - 已有：入口与名字、右侧停靠面板、整页对话（会话列表、改名、删除）、流式回答与过程条目、结束说明（重试、继续）、模型菜单、
   未配置引导、设置页的 Agent 栏目（名字、模型与检测、访问令牌、管理员的成员开关与内网地址放行）；C5 起有输入框上方的“正在看/正在播放”标签
-  与随消息发送的页面上下文，播放、播放历史、收藏与歌单工具的过程条目，以及这些工具结束后的个人数据刷新。
-- 没有（C4 的决定 D1，后端也没有）：模式按钮、方案卡片、审查结果、联网搜索设置、审查模型、
+  与随消息发送的页面上下文，播放、播放历史、收藏与歌单工具的过程条目，以及这些工具结束后的个人数据刷新；
+  C6 起有修改方案卡片（逐项确认、结果与撤销、刷新后恢复、作废与过期）、输入框下的模式按钮与菜单（Assistant、Operator）、
+  曲库与艺人治理工具的过程条目与查询失效，以及操作记录页的来源标签（见第 11 节）。
+- 没有（后端也没有）：Steward 模式与审查结果（C7）、联网搜索设置、审查模型、
   断线或刷新后接回正在进行的回答、展开工具条目看原始输入输出、在对话里显示历史消息带过的上下文。不做禁用占位。
 
 ## 1. 目录与两个公开入口
@@ -18,18 +20,19 @@
 features/steward/
 ├── index.ts          # 轻量入口：外壳、路由与运行时直接导入
 ├── chat.ts           # 对话界面入口：StewardPanel、StewardPage，按需加载
-├── api/              # decoders.ts（设置、探测、会话、消息、运行事件、管理员、令牌）、endpoints.ts
-├── run/              # reduce.ts（事件与落库消息 → 回合）、run-store.ts（进行中的运行）、refresh.ts
-├── dock-store.ts     # 面板状态、草稿、草稿里点掉的上下文标签、对话区提示
+├── api/              # decoders.ts（设置、探测、会话、消息、运行事件、方案、管理员、令牌）、endpoints.ts
+├── run/              # reduce.ts（事件与落库消息 → 回合）、run-store.ts（进行中的运行）、plan-store.ts（方案的界面状态，C6）、refresh.ts
+├── dock-store.ts     # 面板状态、草稿、草稿里点掉的上下文标签、对话区提示、空白新对话预选的模型与模式
 ├── context/          # context.ts（上下文的形状、点掉与截断规则）、host.tsx（app 传进来的页面、播放与刷新）、context-chips.tsx（标签行）
-├── hooks/            # use-steward-settings、use-conversations、use-run、use-agent-settings、use-access-tokens
-├── tool-labels.ts    # 工具的中文名、图标、主要参数、结果说明、失败短语与会改动的个人数据
-├── components/       # 面板、整页、对话区、回合、过程、回答（Markdown）、结束说明、输入框、模型菜单、会话列表、令牌（C3）
+├── hooks/            # use-steward-settings、use-conversations、use-run、use-plans（C6）、use-agent-settings、use-access-tokens
+├── tool-labels.ts    # 工具的中文名、图标、主要参数、结果说明、失败短语与会改动的数据
+├── plan-text.ts      # 方案卡片的字段名、旧值新值与依据来源的文字（C6）
+├── components/       # 面板、整页、对话区、回合、过程、回答（Markdown）、结束说明、输入框、模式与模型菜单、方案卡片、会话列表、令牌（C3）
 └── settings/         # Agent 栏目：名字、模型与检测结果、成员段、文案
 ```
 
 - `index.ts` 只导出外壳与路由需要的东西：`useStewardEntry`、`DEFAULT_STEWARD_NAME`、`useDockState`、`setDockOpen`、`toggleDock`、
-  `preferBlankConversation`、`resetStewardState`、`AgentSettings`，以及 C5 的 `StewardHostProvider` 与上下文类型（见第 5 节）。侧栏、标签栏、外壳与 `app/runtime.ts` 静态导入它；
+  `preferBlankConversation`、`resetStewardState`（`resetRuns`、`resetPlans`、`resetDock`）、`AgentSettings`，以及 C5 的 `StewardHostProvider` 与上下文类型（见第 5 节）。侧栏、标签栏、外壳与 `app/runtime.ts` 静态导入它；
   `package.json` 的 `sideEffects` 让没用到的导出（`AgentSettings`）不进首屏。
 - `chat.ts` 导出 `StewardPanel` 与 `StewardPage`。外壳用 `React.lazy(() => import("../../features/steward/chat"))` 加载面板，
   路由用 `lazyRouteComponent(() => import("./routes/steward-page"))` 加载整页。分成两个入口，是因为同一个模块既被静态导入又被动态导入时
@@ -48,8 +51,11 @@ features/steward/
   （`{started: true}`）或开流前失败（带 `ApiFailure`）时完成，调用方据此把草稿放回输入框；之后的读流在后台继续。
   `context` 是随消息发的页面上下文（`null` 时请求体里没有这个字段）；继续（`text` 为 `null`）没有请求体、不带上下文——后端的继续接口不接受 `context`
   （带了 `400`），原用户消息的上下文保持发送时的样子，所以调用方继续时传 `null`。每收到一个 `tool_finished`，按 `call_id` 找到工具名调用 `onToolFinished`。
-  `useStartRun(conversationId, text, baseSequence, context)` 包了一层：传入重读会话与列表的 `refresh`、按 `toolDataScopeOf` 刷新个人数据的 `onToolFinished`，
-  开流前得到 `403 steward_disabled` 时让设置查询失效。
+  `useStartRun(conversationId, text, baseSequence, context, decision?)` 包了一层：传入重读会话与列表的 `refresh`、按 `toolDataScopeOf` 刷新数据的 `onToolFinished`、
+  把运行里的 `plan` 事件记进方案 store 的 `onPlan`，开流前得到 `403 steward_disabled` 时让设置查询失效。
+- 确认方案（C6）：`startRun` 的 `decision: {planId, body, seed}` 走确认接口（`openDecision`，响应是 SSE），`text` 为 `null`，并进最后一个回合；
+  运行从 `seed`（方案项对应的等待确认条目）开始，确认后执行方案项的 `tool_started`、`tool_finished` 按 `call_id` 落在这些条目上。
+  开流前被拒绝时不记 `ends`（`request_failed`），由方案卡片就地说明；仍会重读会话（摘要不一致时卡片随之换成新的内容）。
 - 结束后以落库为准：收到 `done`（或流断开）后 `phase` 变成 `settling`、记下结束信息，调用 `refresh`（`run/refresh.ts`：
   让该会话与列表的查询失效并等它们重读），完成后从 `runs` 移除。运行期间重读会话时，对话区只取 `sequence <= baseSequence`
   的消息，之后的部分由运行自己显示，不会重复。
@@ -64,29 +70,39 @@ features/steward/
 
 - 流式事件与已落库消息归并成同一种结构：`Turn = {key, userText, items, texts}`，`items` 是所有步骤的工具调用，`texts` 是各步文字。
   `applyRunEvent` 处理事件，`turnsFromMessages` 还原落库消息（助手消息里 `tool_call` 块与 `tool_calls` 按下标对上），两者显示一致。
+- `StepItem.status` 多一种 `awaiting_confirmation`（C6）：后端先为方案里的调用发 `tool_started` 再发 `plan`，`plan` 事件把这些条目原地改成等待确认（`executed` 为假，没有的补上），落库的调用记录也可能是这个状态；
+  过程里写“等你确认”，回合里什么也没执行、只有等确认的修改时摘要写“N 项修改等你确认”。`StepItem.textsBefore` 是回合里排在这次调用之前的文字段数
+  （流式取事件的 `step`，没有 `step` 时取当时的段数；落库取所在助手消息之后的段数），方案卡片据此排在提出它的那段文字之后、确认后的回答之前。
+- 继续或确认并进最后一个回合时（`threadOf`），运行里与落库同一 `callId` 的条目用运行里的状态原地替换（保留落库的 `textsBefore`），新的条目排在后面。
 - `StepItem.executed`：流式收到的都算执行过；落库的以 `duration_ms` 非空为准（因 `token_limit` 或取消没执行的、中断的都没有耗时）。
   摘要“查了 N 处资料，用时 X”只数执行过的；还没有耗时数据（运行刚结束、重读未回来）时只写“查了 N 处资料”。回合里执行过改动类工具
   （`toolWritesOf`：标了 `changes` 的收藏、歌单、历史写入，或标了 `writes` 的播放控制）时改写成“做了 N 步，用时 X”（`components/steps.tsx`）。
 - `RunView.waiting`：刚开始或这一步的工具都执行完时为真，界面显示“正在想…”；收到文字、有工具在执行、`done` 后为假。
 - `hooks/use-run.ts` 的 `threadOf` 组合落库内容与运行：发消息是新回合，继续并进最后一个回合；`canContinue` 只在本页没有运行、
-  会话空闲、最后一条落库消息是 `user` 或 `tool`（`isIncomplete`）时为真，结束说明的“重试”“继续”只在这时出现，避免 `409 nothing_to_continue`。
-- 工具条目（`tool-labels.ts`，后端合同第 3 节的全部工具）：每个工具有中文名与 lucide 图标；未登记的工具名原样显示（扳手图标）。
+  会话空闲、最后一条落库消息是 `user` 或 `tool`（`isIncomplete`），或有已确认但没执行完的方案（`unfinishedPlans`，C6）时为真，
+  结束说明的“重试”“继续”只在这时出现（有没执行完的方案时由方案卡片给“继续”），避免 `409 nothing_to_continue`。
+- 工具条目（`tool-labels.ts`，后端合同第 3 节与 C6 的全部工具）：每个工具有中文名与 lucide 图标；未登记的工具名原样显示（扳手图标）。
   - 主要参数 `toolArgumentOf(name, input, output)`：先用工具自己的规则——`control_playback`、`edit_queue` 的 `action`，`play_tracks` 的 `placement`，
     `set_play_mode` 的 `mode`，`set_device_volume` 的音量（`volume` 0–1 写成百分比，`muted`），`list_favorites`、`set_favorite` 的 `kind`，
-    `create_playlist`、`rename_playlist` 的 `name`；取不到时用通用规则：输入的 `q`，或结果里 `title`、`name`、`representative.title`、
+    `create_playlist`、`rename_playlist` 的 `name`；C6 的 `correct_release` 写改了哪些字段（“标题、年份”），`change_release_group` 的 `action`，
+    `set_default_release` 的 `release_id` 为 null 时“改回自动选择”，`review_release_issue` 的 `action`，`rename_artist` 的新名字或“改回最常见的写法”，
+    `ignore_artist_candidate` 的 `ignored`；取不到时用通用规则：输入的 `q`，或结果里 `title`、`name`、`representative.title`、
     `artist.name`、`playlist.name`、`track.title`。
   - 右侧 `toolResultOf`：改动类工具的结果说明（`set_favorite` 按 `favorited` 写“已收藏/已取消收藏”，`play_tracks`、`add_playlist_tracks` 按 `track_ids`
-    写“N 首”，歌单与历史的其他写入写“已新建”“已改名”“已删除”“已移除”“已移动”），其余是数量（`pagination.total` 或 `items.length`，按工具的单位）。
+    写“N 首”，歌单与历史的其他写入写“已新建”“已改名”“已删除”“已移除”“已移动”，治理工具写“已修改”“已调整”“已设定”“已核对”“已认领”“已合并”“已拆开”“已改名”“已忽略”“已撤销”），其余是数量（`pagination.total` 或 `items.length`，按工具的单位）。
   - 失败按 `error_code`：“没找到”“没有权限”“已停止”“没有完成”“没有执行”（`token_limit`）、“分区不在线”（`zone_offline`）、
-    “没有可用的输出”（`renderer_unavailable`）、“内容已变化”（`revision_conflict`）、“队列已满”（`queue_full`）、“这个设备的音量不能调”（`volume_fixed`）、
+    “没有可用的输出”（`renderer_unavailable`）、“内容已被改过”（`revision_conflict`）、“你没有选这一项”（`declined_by_user`）、“没有执行”（`not_executed`，与 `token_limit` 同一短语）、“队列已满”（`queue_full`）、“这个设备的音量不能调”（`volume_fixed`）、
     “歌单数量已到上限”（`playlist_limit_reached`）、“歌单曲目已到上限”（`playlist_track_limit_reached`）、“没有可播放的曲目”（`no_playable_tracks`），其余“失败”。
   - 曲库与个人数据里的文字只按文本节点渲染。
 
 ## 4. 接口与流
 
 - SSE 的按行解析在 `shared/lib/sse.ts` 的 `SseParser`，播放区事件流（`features/player/zones/event-stream.ts`）与管家共用。
-- `shared/api` 的 `apiStream` 接受 `method: "POST"` 与 `body`：`endpoints.ts` 的 `openRun` 用它发消息与继续；开流前的拒绝按错误信封抛出
+- `shared/api` 的 `apiStream` 接受 `method: "POST"` 与 `body`：`endpoints.ts` 的 `openRun` 用它发消息与继续，`openDecision` 用它确认方案（C6）；开流前的拒绝按错误信封抛出
   `ApiError`，401 照常通知会话边界。运行事件由 `decodeRunEvent(event, data)` 解码，不认识的事件名丢掉，解不了的事件跳过。
+  C6 的形状假设集中在 `decoders.ts`：`plan` 事件是 `{type, step?, plan}`；方案是 `{plan_id, digest, expires_at, status?, items}`，方案项
+  `{id, call_id, tool, target, changes:[{field, before, after}], revertible, basis?, decision?, operation_id?}`；会话详情多 `pending_plan`（可空）与 `plans`（全部方案）；
+  确认后执行方案项的 `tool_started`、`tool_finished` 没有 `step`；已执行项的操作记录取工具输出的 `operation_id`（`operationIdOf`）。
 - “正在别处回答”（会话 `status: "running"` 但本页没有运行）：输入框不能发送，`useConversation` 与 `useConversations` 每 3 秒重读；
   上一次读取出错时停止轮询（`busyPollInterval`）。
 - `ApiError.body`（`shared/api/errors.ts`，取用 `errorBodyOf`）：http 失败时的整个 JSON 响应体。只给知道这个接口合同的调用方，
@@ -112,8 +128,10 @@ features/steward/
   开流前失败、文字放回输入框时，点掉的记录一起放回。继续（“重试”“继续”）不带上下文，也不动点掉的记录。
 - 请求体：`requestContextOf` 只放没被点掉的项，路径截到 512 个字符、标题类截到 300 个字符（后端超出时 400）；两项都没有时不发 `context`。
   消息解码器接受用户消息上可选的 `context`（可以是 `null`），对话里不显示。
-- 个人数据刷新：`tool-labels.ts` 给改动类工具标 `changes`（`set_favorite` → `favorites`；歌单的六个写入 → `playlists`；`delete_play_history_item` → `history`），
-  `toolDataScopeOf` 取出；工具结束（成功或失败都算）时 `refreshData` 让 `personalKeys.favorites`、`personalKeys.playlists` 或 `listeningKeys.all` 失效。
+- 数据刷新：`tool-labels.ts` 给改动类工具标 `changes`（`set_favorite` → `favorites`；歌单的六个写入 → `playlists`；`delete_play_history_item` → `history`；
+  C6 的专辑治理与 `revert_operation` → `catalog`，艺人的合并、拆开、改名、忽略候选 → `artists`），`toolDataScopeOf` 取出；工具结束（成功或失败都算）时
+  `refreshData` 让 `personalKeys.favorites`、`personalKeys.playlists` 或 `listeningKeys.all` 失效；`catalog`、`artists` 让 `governanceKeys.all` 失效，
+  再分别调用 app 的 `useReleaseDataRefresh`、`useArtistDataRefresh`（与管理员在页面上操作之后相同）。方案项的“撤销”成功后按 `catalog` 刷新。
   只读工具与播放类工具不刷新：播放区的变化由分区事件推到浏览器。不通知其他标签页，它们靠窗口重新聚焦时的重新读取对齐。
 
 ## 6. Markdown 回答（`components/answer.tsx`）
@@ -176,14 +194,50 @@ features/steward/
 - 访问令牌：C3 的 `AccessTokens` 原样放在这一栏。成员开关关闭时成员看到说明，名字与模型不显示，令牌一组保留（C3 合同：仍能查看与吊销，不能新建）。
 - 成员段只对管理员渲染：成员开关（`/admin/steward/settings`）与“成员可以连接的内网地址”（`/admin/steward/egress-allowlist` 的列表、添加、移除）。
 
-## 11. 测试
+## 11. 修改方案与模式（C6）
+
+- 方案的界面状态（`run/plan-store.ts`，模块级 store，按方案 ID 存）：`phase`（`pending`、`submitting`、`decided`、`superseded`、`expired`、`gone`）、
+  勾选的项（默认全选）、“不再问我”的工具、提交时接受的项、确认被拒绝的原因、每一项的撤销结果（带幂等键，结果不确定后重试沿用）。面板与整页互换、切页面不丢，
+  登出时 `resetPlans` 清掉。要显示的方案由 `plansOf` 算出：本页记下的，加上会话详情里没记过的未处理方案与已处理的历史（`plans`，按服务端状态显示）；
+  等待决定的方案内容以会话详情为准（摘要变了换成新内容，原来的勾选保留、新出现的项默认勾选），过了 `expires_at` 是 `expired`（`useConversationPlans` 在最早的有效期到时重绘），
+  会话详情已读到、本页没有运行、服务端却不再把它当未处理时，取 `plans` 里的状态，没有时是 `gone`。
+- 方案卡片（`components/plan-card.tsx`，原型的 `section.plan`）：标题“修改方案”与一句话（“N 项，都可以撤销”“其中 M 项不能撤销”、已决定后“应用了 N 项”“没有修改”、
+  “已作废”“已过期”“已失效”）；每项一个勾选框（可访问名称是工具中文名加目标名）、字段名（`planFieldLabel`）、旧值（`<del>`，删除线）与新值（`<ins>`，金色下划线），
+  读屏另有“原来”“改为”；“依据（本地证据/外部资料/本地证据与外部资料）：说明”；不可撤销的项标“不可撤销”。“应用 N 项修改”（没有勾选时停用）、“不修改”（提交空的接受列表）、
+  方案里全部项都可以撤销的工具各一个“这次对话里，<工具中文名>不再问我”（`autoApprovableTools`）；不可撤销的工具（艺人合并、拆开、改名、忽略候选）没有这个勾选，
+  assistant 模式下每次都要确认。提交的 `auto_approve_tools` 只带勾过、可以免确认、并且至少有一项被接受的工具（`autoApproveToolsOf`；后端对其余情况返回 `400 invalid_input`）。
+  目标名、旧值新值与依据都只按文本节点渲染。会话正在回答时两个按钮停用。
+- 提交（`useDecidePlan`）：`phase` 先变 `submitting`，流开起来后 `decided`；开流前被拒绝时就地说明（`plan_digest_mismatch` 提醒内容已换成最新的、`conversation_busy`、
+  网络失败等），`plan_expired` 变 `expired`，`plan_not_found` 变 `gone`。提交后按钮消失，焦点移到卡片标题。
+- 结果列表：每项“已执行”“没有执行：<失败短语>”“未选”（`declined_by_user` 或没有接受）“未执行”（`not_executed` 或作废）、“正在执行”（接受了、还没有结果、会话在回答），
+  “还没执行”（接受了、还没有结果、不在回答中）；已执行且可撤销、能取到操作记录的项有“撤销”，
+  调用受治理操作的撤销接口（`endpoints.ts` 的 `revertOperation`，带新的幂等键），成功写“已撤销”，被拒绝就地说明原因，结果不确定时给“重试撤销”。
+  作废、过期、已失效的方案只列出内容，不能再应用，底部一句说明。
+- 位置：卡片放在方案项对应的调用所在的回合（`placePlans`，按 `call_id` 找；找不到时是最后一个回合），排在那一步的文字之后，确认后的回答接在卡片下面。
+  运行中卡片在“live”回合里，运行结束重读之后落到已保存的回合（重新挂载，状态在 store 里不丢）。
+- 没执行完的方案：已确认、但有接受的项在 `plans` 里还没有 `result`（运行被停止或服务重启之后，`unfinishedPlanIdsOf`）时，`canContinue` 为真，
+  卡片底部写“回答停在了这里，有确认过的修改还没执行。点“继续”接着执行；发新消息不会执行它们，会记为未执行。”并给出“继续”（走继续接口，后端先执行剩下的项）；
+  结束说明不再重复“继续”按钮，输入框提示行写“发新消息不会执行方案里剩下的项”。只有“继续”恢复执行，新消息让剩下的项记为未执行（或对账出已执行的结果）。
+- 发消息：有未处理的方案时输入框照常可用，提示行写“发新消息会作废上面的方案”；流开起来后 `supersedePlans` 把它标为作废（后端同时以 `not_executed` 回给模型）。
+  运行以 `awaiting_confirmation` 结束时没有结束说明。
+- 模式（`components/mode-menu.tsx`，原型的 `.mode` 与菜单）：输入框下模型按钮左边，主色字，图标与名字（Assistant `CircleAlert`、Operator `Zap`），可访问名称“模式：<名字>”。
+  菜单（`useMenu` 的 `description` 与 `footer`）两项：Assistant“修改曲库前先给你看方案，你确认后执行”，Operator“不询问，直接执行；外部资料里的内容也可能促成修改”，
+  当前项右侧“当前”，底部“Shift + Tab 在输入框里切换”。输入框（`Composer` 的 `onShiftTab`）里按 Shift+Tab 在两者之间轮换，不移动焦点；其他地方的 Shift+Tab 照常。
+  空白新对话选的模式记在 `dock-store` 的 `newMode`，创建会话时带上（`POST {mode}`），之后回到默认；已有会话经 `PATCH {mode}` 切换，失败就地提示“没能切换模式”。
+  正在回答、正在别处回答、有未处理的方案、正在创建或修改会话时按钮停用，Shift+Tab 不拦截。提示行随模式：“修改曲库前会先给你看方案”“修改曲库时不询问，直接执行”。
+- 操作记录页（`features/governance` 的 `OperationList`）在操作者下面显示来源标签：对话且带 `plan_id` 是“管家（确认）”，对话不带 `plan_id` 是“管家（直接执行）”，`mcp` 是“MCP”；
+  没有 `origin` 的不显示。
+
+## 12. 测试
 
 | 位置 | 内容 |
 | --- | --- |
-| `src/test/fake-steward.ts` | Vitest 的管家替身：`installStewardApi` 实现设置的读写（`PUT` 按后端 `mergeSettings` 的规则 1–3 清密钥、清检测结论、降级工具能力）与检测、会话增删改查、可控的运行流（`fakeSse` 逐个推送事件、`fail` 模拟断开，请求被中止时流随之出错）、取消、管理员接口；`nextRunResponse`、`probeResponse` 预置开流前的拒绝与检测失败。运行请求按后端规则检查请求体（发消息只认 `text`、`context`，`kind` 枚举与长度上限；继续带 `context` 也算不合格；不合格时 `400 invalid_request`），`runs[i].context` 记下请求体里的上下文（没有时 `null`） |
-| `src/features/steward/**/*.test.ts(x)` | 解码器（含消息的 `context`）、归并、工具标签（参数、结果说明、失败短语、只读与改动、改动的数据）、过程摘要的措辞、上下文的点掉与截断、Markdown 安全、run-store（发起、发消息请求体里的 `context`、继续没有请求体、`onToolFinished`、停止、断开、登出中止）、轮询间隔 |
+| `src/test/fake-steward.ts` | Vitest 的管家替身（C6 起另有方案：会话详情带 `pending_plan` 与 `plans`（调用已有结果的项带 `result`），读取时判定过期；发新消息作废未处理的方案；确认接口按设计的校验顺序——会话与方案归属且 pending → 未过期 → 摘要 → 会话空闲 → 选择的项与工具（免确认的工具须全部可撤销且至少有一项被接受）——返回 `plan_not_found`、`plan_expired`、`plan_digest_mismatch`、`conversation_busy`、`invalid_input`，通过后记下 `decisions[i].stream`；新建与 `PATCH` 接受 `assistant`、`operator`，有运行或未处理方案时改模式 409；撤销接口记下操作 ID 与幂等键，`nextRevertResponse` 预置拒绝）：`installStewardApi` 实现设置的读写（`PUT` 按后端 `mergeSettings` 的规则 1–3 清密钥、清检测结论、降级工具能力）与检测、会话增删改查、可控的运行流（`fakeSse` 逐个推送事件、`fail` 模拟断开，请求被中止时流随之出错）、取消、管理员接口；`nextRunResponse`、`probeResponse` 预置开流前的拒绝与检测失败。运行请求按后端规则检查请求体（发消息只认 `text`、`context`，`kind` 枚举与长度上限；继续带 `context` 也算不合格；不合格时 `400 invalid_request`），`runs[i].context` 记下请求体里的上下文（没有时 `null`） |
+| `src/features/steward/**/*.test.ts(x)` | 解码器（含消息的 `context`、方案、模式、没有 `step` 的工具事件）、方案 store（默认值、过期、摘要变化、gone、作废、历史）、方案文字、归并（含等待确认的条目与确认后的替换）、工具标签（参数、结果说明、失败短语、只读与改动、改动的数据）、过程摘要的措辞、上下文的点掉与截断、Markdown 安全、run-store（发起、发消息请求体里的 `context`、继续没有请求体、`onToolFinished`、`onPlan`、确认的请求体与开流前拒绝、停止、断开、登出中止）、轮询间隔 |
+| `src/app/steward.test.tsx` 的“修改方案”“模式” | 运行里出现方案与卡片的位置、旧值新值与依据、勾选与提交的请求体、结果与撤销、撤销被拒绝、刷新后恢复（未处理与已处理）、“不修改”、发消息作废、过期、摘要不一致；空白新对话与已有会话的模式切换、Shift+Tab 只在输入框里、运行中与有方案时停用 |
+| `src/app/operations.test.tsx` 的来源标签 | 管家（确认）、管家（直接执行）、MCP，没有来源的不显示 |
 | `src/app/steward.test.tsx` 的“页面上下文”“工具结束后刷新个人数据” | 用 `vi.mock` 换掉 `features/player/zones/api` 的 `browserZoneApi`：设了 `fakeZoneServer` 的用例有分区与曲目，其余用例照旧（没有播放区）；专辑页的标签与请求体、点掉后发送、点掉后中断再继续（继续没有请求体）、整页里没有“正在看”、`invalidateQueries` 的键 |
 | `src/app/steward.test.tsx`、`src/app/agent-settings.test.tsx`、`src/app/tokens.test.tsx` | 页面级：入口与名字、面板与整页、流式与结束说明、会话列表、`/steward` 去向、焦点与 Esc、Agent 栏目、令牌与旧地址 |
-| `e2e/support/steward.ts`、`e2e/steward.spec.ts` | 浏览器冒烟：`installStewardMock(page)` 用 `page.route` 接管管家接口（优先于 `api-mock.ts` 的上下文拦截），发消息一次性返回整段 SSE；桌面面板到整页、390px 标签栏对话与切换会话、旧地址重定向 |
+| `e2e/support/steward.ts`、`e2e/steward.spec.ts`、`e2e/steward-plan.spec.ts` | 浏览器冒烟（C6 另有 `seedPlanConversation` 预置停在方案上的会话，确认接口一次性返回整段 SSE，撤销接口只认方案里的那条记录；方案的勾选、应用、结果与撤销，模式菜单与 Shift+Tab）：`installStewardMock(page)` 用 `page.route` 接管管家接口（优先于 `api-mock.ts` 的上下文拦截），发消息一次性返回整段 SSE；桌面面板到整页、390px 标签栏对话与切换会话、旧地址重定向 |
 
 其他页面的测试没有装管家替身时，设置接口得到 404，入口不显示，不影响它们原有的断言。

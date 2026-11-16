@@ -16,3 +16,13 @@
 .separator { height: 1px; margin: var(--space-1); background: var(--color-divider); }
 .group { display: grid; }
 .groupTitle { padding: var(--space-1) var(--space-2) 2px; color: var(--text-secondary); font-size: var(--fs-12); }
+
+/* 项名下面一行说明：与项名同列，灰色小字，可以换行。 */
+.text { display: grid; flex: 1 1 auto; gap: 2px; min-width: 0; }
+/* 有说明的项：右侧的小字（“当前”）不被说明挤窄。 */
+.text ~ .hint { flex: none; }
+.description { color: var(--text-secondary); font-size: var(--fs-12); }
+
+/* 菜单底部的提示行（快捷键）。 */
+.footer { margin-top: 2px; padding: 6px var(--space-2) 4px; border-top: 1px solid var(--color-divider); color: var(--text-secondary); font-size: var(--fs-12); }
+.footer kbd { padding: 0 4px; border: 1px solid var(--color-neutral-400); border-radius: 3px; font-family: inherit; font-size: var(--fs-12); }

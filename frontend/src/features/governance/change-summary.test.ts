@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { sampleBody } from "../../test/api-samples";
 import { decodeOperationPage, type OperationItemDTO } from "./api/decoders";
-import { changeLines, defaultVersionText, notRevertibleReason, operationTypeLabel, revertLines } from "./change-summary";
+import { changeLines, defaultVersionText, notRevertibleReason, operationOriginLabel, operationTypeLabel, revertLines } from "./change-summary";
 
 const items = decodeOperationPage(sampleBody("operations/list")).items;
 const itemOf = (type: OperationItemDTO["type"], index = 0): OperationItemDTO => {
@@ -168,5 +168,16 @@ describe("核对问题记录", () => {
   it("“之后又有修改”与“已完成”的原因与其他记录相同", () => {
     expect(notRevertibleReason(issueRecord(2))).toBe("之后又有修改");
     expect(notRevertibleReason(issueRecord(0))).toBe("已完成");
+  });
+});
+
+describe("操作的来源（M6 C6）", () => {
+  it("确认方案后执行、直接执行、MCP；没有来源时不显示", () => {
+    expect(operationOriginLabel({ source: "chat", plan_id: "00000000-0000-4000-8000-0000000000c1", mode: "assistant" })).toBe("管家（确认）");
+    expect(operationOriginLabel({ source: "chat", plan_id: null, mode: "operator" })).toBe("管家（直接执行）");
+    expect(operationOriginLabel({ source: "chat", mode: "assistant" })).toBe("管家（直接执行）");
+    expect(operationOriginLabel({ source: "mcp" })).toBe("MCP");
+    expect(operationOriginLabel(null)).toBeNull();
+    expect(operationOriginLabel(undefined)).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 import { FailureNotice, Notice, Skeleton } from "../../../shared/ui";
-import type { SettingsDTO } from "../api/decoders";
+import type { SettingsDTO, StewardMode } from "../api/decoders";
 import { noDismissed, pageIdentityOf, playbackIdentityOf, requestContextOf, visibleContextOf } from "../context/context";
 import { ContextChips } from "../context/context-chips";
 import { usePageContext, usePlaybackContext } from "../context/host";
@@ -8,6 +8,7 @@ import {
   draftOf,
   saveDraft,
   setDismissedContext,
+  setNewConversationMode,
   setNewConversationModel,
   setViewNotice,
   useDismissedContext,
@@ -16,11 +17,15 @@ import {
   useViewNotice,
 } from "../dock-store";
 import { isMissingConversation, useConversation, useCreateConversation, usePatchConversation } from "../hooks/use-conversations";
+import { placePlans, useConversationPlans } from "../hooks/use-plans";
 import { useStartRun, useStewardDisabledCheck, useThread } from "../hooks/use-run";
 import { effectiveModelOf, readinessOf } from "../hooks/use-steward-settings";
+import { supersedePlans } from "../run/plan-store";
 import { stopRun } from "../run/run-store";
 import { Composer } from "./composer";
+import { ModeMenu, modeInfo, nextMode } from "./mode-menu";
 import { ModelMenu } from "./model-menu";
+import { PlanCard } from "./plan-card";
 import { SetupGuide } from "./setup-guide";
 import { Thread } from "./thread";
 import styles from "./thread.module.css";
@@ -38,18 +43,22 @@ const createMessages: Readonly<Record<string, string>> = {
   steward_not_configured: "还没有配置好模型，请先到设置里检查。",
   provider_no_tool_support: "当前模型不支持调用工具，请换一个模型。",
   steward_disabled: "管理员暂时关闭了成员使用管家。",
+  conversation_busy: "这个对话正在回答或有等你确认的方案，现在不能切换模式。",
 };
 
 const noticeTitles = {
   create: "没能开始新对话",
   model: "没能切换模型",
+  mode: "没能切换模式",
   new_model: "对话已经建好，但模型没有切换成功，消息还没有发出",
 } as const;
 
 /**
- * 一个会话的对话区（面板与整页共用）：对话内容、结束说明与输入框。未配置时没有输入框，换成配置引导。
+ * 一个会话的对话区（面板与整页共用）：对话内容、修改方案、结束说明与输入框。未配置时没有输入框，换成配置引导。
  * 调用方以会话 ID 为 key 渲染；草稿、草稿里点掉的上下文标签与提示按会话存在内存里，切回来还在。
  * 发消息时带上没被点掉的页面上下文（正在看、正在播放），发出后点掉的标签恢复；继续不带上下文。
+ * 有未处理的方案时仍可发消息，发出即作废方案（C6）；模式在空白新对话里随创建会话提交，已有会话经 PATCH 切换，
+ * 正在回答或有未处理的方案时不能切换。
  */
 export function ConversationView({ conversationId, settings, name, onCreated }: ConversationViewProps) {
   const detail = useConversation(conversationId);
@@ -78,6 +87,11 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
   const running = view.run !== null;
   const elsewhere = !running && detail.data?.status === "running";
   const creating = create.isPending;
+  const plans = useConversationPlans(conversationId, detail.data, running);
+  const placedPlans = placePlans(view.turns, plans);
+  const planOpen = plans.some((entry) => entry.phase === "pending" || entry.phase === "submitting");
+  const mode: StewardMode = conversationId === null ? (dock.newMode ?? "assistant") : (detail.data?.mode ?? "assistant");
+  const modeLocked = running || elsewhere || planOpen || creating || patch.isPending;
 
   async function send() {
     const text = draft.trim();
@@ -97,12 +111,15 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
     const stale = () => dockEpoch() !== started;
     if (conversationId !== null) {
       const result = await startRun(conversationId, text, view.lastSequence, context);
-      if (!stale() && !result.started && result.failure !== null) restore(draftKey);
+      if (stale()) return;
+      // 后端收下新消息时把未处理的方案标为作废。
+      if (result.started && planOpen) supersedePlans(conversationId, detail.data);
+      if (!result.started && result.failure !== null) restore(draftKey);
       return;
     }
     let id: string;
     try {
-      id = (await create.mutateAsync()).id;
+      id = (await create.mutateAsync(dock.newMode ?? "assistant")).id;
     } catch (error) {
       if (stale()) return;
       restore(draftKey);
@@ -111,6 +128,8 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
       return;
     }
     if (stale()) return;
+    // 新会话默认回到 assistant：选过的模式已经写进这个会话。
+    setNewConversationMode(null);
     const model = dock.newModel;
     setNewConversationModel(null);
     if (model !== null) {
@@ -156,6 +175,24 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
     );
   }
 
+  function selectMode(next: StewardMode) {
+    if (modeLocked || next === mode) return;
+    setViewNotice(draftKey, null);
+    if (conversationId === null) {
+      setNewConversationMode(next === "assistant" ? null : next);
+      return;
+    }
+    const started = dockEpoch();
+    patch.mutate(
+      { id: conversationId, patch: { mode: next } },
+      {
+        onError: (error) => {
+          if (dockEpoch() === started) setViewNotice(draftKey, { action: "mode", error });
+        },
+      },
+    );
+  }
+
   if (conversationId !== null && detail.isPending) return <div className={styles.loading}><Skeleton label="正在读取对话" /></div>;
   if (conversationId !== null && detail.isError && detail.data === undefined) {
     const missing = isMissingConversation(detail.error);
@@ -175,6 +212,22 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
         view={view}
         busy={running}
         onContinue={continueRun}
+        plans={placedPlans}
+        renderPlan={(placed, turn) =>
+          conversationId === null ? null : (
+            <PlanCard
+              key={placed.entry.plan.plan_id}
+              conversationId={conversationId}
+              entry={placed.entry}
+              items={turn.items}
+              baseSequence={view.lastSequence}
+              busy={running || elsewhere}
+              resumable={view.canContinue && view.unfinishedPlans.has(placed.entry.plan.plan_id)}
+              onContinue={continueRun}
+              name={name}
+            />
+          )
+        }
         empty={ready ? <p className={styles.empty}>{`可以问${name}曲库里有什么、哪些专辑信息不全、最近扫描的情况。`}</p> : null}
         footer={
           <>
@@ -201,8 +254,14 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
           onSend={() => void send()}
           onStop={() => conversationId !== null && stopRun(conversationId)}
           note={elsewhere ? "正在别处回答，结束后才能继续发消息。" : undefined}
+          hint={
+            planOpen ? "发新消息会作废上面的方案" : view.unfinishedPlans.size > 0 && view.canContinue ? "发新消息不会执行方案里剩下的项" : modeInfo[mode].hint
+          }
+          onShiftTab={modeLocked ? undefined : () => selectMode(nextMode(mode))}
           context={<ContextChips page={shownContext.page} playback={shownContext.playback} onDismiss={dismissContext} />}
           tools={
+            <>
+            <ModeMenu current={mode} disabled={modeLocked} onSelect={selectMode} />
             <ModelMenu
               current={currentModel}
               defaultModel={effectiveModelOf(settings)}
@@ -210,6 +269,7 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
               disabled={patch.isPending}
               onSelect={selectModel}
             />
+            </>
           }
         />
       ) : view.turns.length === 0 ? null : (

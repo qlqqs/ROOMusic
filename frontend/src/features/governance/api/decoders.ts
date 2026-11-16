@@ -291,8 +291,16 @@ const operationChangesDecoder: d.Decoder<OperationChanges> = (input, path) => {
   throw new d.DecodeError(`${path}.kind`, "不是已知的操作类型");
 };
 
+// 操作的来源（M6 C6）：经管家对话（确认方案后执行时带 plan_id，直接执行时没有）或 MCP 令牌；页面上的操作没有来源（null 或省略）。
+const operationOriginDecoder = d.object({
+  source: d.oneOf(["chat", "mcp"] as const),
+  plan_id: d.optional(d.nullable(d.uuid())),
+  mode: d.optional(d.nullable(d.string())),
+});
+
 const operationItemDecoder = d.object({
   id: d.uuid(),
+  origin: d.optional(d.nullable(operationOriginDecoder)),
   type: d.oneOf(OPERATION_TYPES),
   created_at: d.timestamp(),
   actor: operationActorDecoder,
@@ -599,6 +607,7 @@ export type MissingTracksIssueDTO = d.Infer<typeof missingTracksIssueDecoder>;
 export type ReleaseIssuesDTO = d.Infer<typeof releaseIssuesDecoder>;
 export type DefaultVersionDTO = d.Infer<typeof defaultVersionDecoder>;
 export type OperationItemDTO = d.Infer<typeof operationItemDecoder>;
+export type OperationOriginDTO = d.Infer<typeof operationOriginDecoder>;
 export type OperationPageDTO = d.Infer<typeof operationPageDecoder>;
 export type OperationChangesDTO = OperationChanges;
 export type RevertResultDTO = d.Infer<typeof revertResultDecoder>;

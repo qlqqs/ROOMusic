@@ -61,13 +61,14 @@ func (registry *Registry) Register(definition Definition) error {
 }
 
 // List 按名称排序返回当前用户有权调用的工具合同副本，不返回处理器。
-// 此列表按身份过滤；非 read 工具仍由 Invoke 的范围门禁拒绝执行。
+// 此列表按身份过滤；共享写入仍由 Invoke 的审批门禁决定是否执行。
 func (registry *Registry) List(caller Caller) []Definition {
 	definitions := make([]Definition, 0, len(registry.tools))
 	for _, registered := range registry.tools {
 		if registered.definition.MinRole.Allows(caller.User) {
 			definition := cloneDefinition(registered.definition)
 			definition.Handler = nil
+			definition.Preview = nil
 			definitions = append(definitions, definition)
 		}
 	}
@@ -86,9 +87,11 @@ func (registry *Registry) Invoke(ctx context.Context, caller Caller, name string
 	if !definition.MinRole.Allows(caller.User) {
 		return Result{}, &Error{Code: CodePermissionDenied, Tool: name, Message: "无权调用此工具"}
 	}
-	// C6 在此处接入共享写工具的确认路径；任何执行都必须先经过上面的鉴权。
-	if definition.Scope != ScopeRead && definition.Scope != ScopePersonal {
-		return Result{}, &Error{Code: CodeUnsupportedScope, Tool: name, Message: "此入口不支持该工具的影响范围"}
+	if definition.Scope == ScopeShared && !caller.SharedExecution {
+		if definition.Preview == nil {
+			return Result{}, &Error{Code: CodeUnsupportedScope, Tool: name, Message: "工具不支持确认预览"}
+		}
+		return Result{}, &Error{Code: CodeApprovalRequired, Tool: name, Message: "需要用户确认"}
 	}
 	value, err := decodeJSON(input)
 	if err != nil {
@@ -96,6 +99,9 @@ func (registry *Registry) Invoke(ctx context.Context, caller Caller, name string
 	}
 	if err := registered.input.validate(value, "$"); err != nil {
 		return Result{}, &Error{Code: CodeInvalidInput, Tool: name, Message: err.Error()}
+	}
+	if definition.Scope == ScopeShared && containsNUL(value) {
+		return Result{}, &Error{Code: CodeInvalidInput, Tool: name, Message: "工具输入不能包含空字符"}
 	}
 	if err := ctx.Err(); err != nil {
 		return Result{}, err
@@ -107,8 +113,13 @@ func (registry *Registry) Invoke(ctx context.Context, caller Caller, name string
 	if !json.Valid(output) {
 		return Result{}, fmt.Errorf("tool %q returned invalid JSON", name)
 	}
+	return BoundResult(output, definition.Untrusted), nil
+}
+
+// BoundResult 为执行结果与已提交操作的对账结果应用同一输出上限。
+func BoundResult(output json.RawMessage, untrusted bool) Result {
 	bounded, truncated := boundOutput(output)
-	return Result{Output: bounded, Truncated: truncated, Untrusted: definition.Untrusted}, nil
+	return Result{Output: bounded, Truncated: truncated, Untrusted: untrusted}
 }
 
 func cloneDefinition(definition Definition) Definition {
@@ -139,4 +150,50 @@ func boundOutput(output json.RawMessage) (json.RawMessage, bool) {
 		}
 	}
 	return bounded, true
+}
+
+// PreviewCall 在生成方案前逐次鉴权、校验输入并读取展示快照。
+func (registry *Registry) PreviewCall(ctx context.Context, caller Caller, name string, input json.RawMessage) (Preview, error) {
+	registered, exists := registry.tools[name]
+	if !exists {
+		return Preview{}, &Error{Code: CodeNotFound, Tool: name, Message: "工具不存在"}
+	}
+	if !registered.definition.MinRole.Allows(caller.User) {
+		return Preview{}, &Error{Code: CodePermissionDenied, Tool: name, Message: "无权调用此工具"}
+	}
+	value, err := decodeJSON(input)
+	if err != nil {
+		return Preview{}, &Error{Code: CodeInvalidInput, Tool: name, Message: "工具输入必须是合法 JSON"}
+	}
+	if err := registered.input.validate(value, "$"); err != nil {
+		return Preview{}, &Error{Code: CodeInvalidInput, Tool: name, Message: err.Error()}
+	}
+	if containsNUL(value) {
+		return Preview{}, &Error{Code: CodeInvalidInput, Tool: name, Message: "工具输入不能包含空字符"}
+	}
+	if registered.definition.Preview == nil {
+		return Preview{}, &Error{Code: CodeUnsupportedScope, Tool: name, Message: "工具不支持预览"}
+	}
+	return registered.definition.Preview(ctx, caller, input)
+}
+
+// 方案输入存为 jsonb；检查解码后的键和值，保留字面量反斜杠加 u0000 的合法文本。
+func containsNUL(value any) bool {
+	switch value := value.(type) {
+	case string:
+		return strings.ContainsRune(value, '\x00')
+	case []any:
+		for _, item := range value {
+			if containsNUL(item) {
+				return true
+			}
+		}
+	case map[string]any:
+		for key, item := range value {
+			if strings.ContainsRune(key, '\x00') || containsNUL(item) {
+				return true
+			}
+		}
+	}
+	return false
 }

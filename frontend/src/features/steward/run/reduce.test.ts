@@ -132,7 +132,7 @@ describe("已落库消息还原成回合", () => {
 });
 
 describe("过程摘要", () => {
-  const item = (durationMs: number | null, executed = durationMs !== null) => ({ callId: "a", name: "x", input: {}, status: "succeeded" as const, output: null, errorCode: null, durationMs, executed });
+  const item = (durationMs: number | null, executed = durationMs !== null) => ({ callId: "a", name: "x", input: {}, status: "succeeded" as const, output: null, errorCode: null, durationMs, executed, textsBefore: 0 });
 
   it("只统计实际执行过的条目，用时是它们的耗时之和", () => {
     expect(summarizeSteps([item(20_000), item(null), item(1_400)])).toEqual({ count: 2, durationMs: 21_400 });
@@ -163,5 +163,56 @@ describe("过程摘要", () => {
     [125_000, "2 分 5 秒"],
   ])("%d 毫秒写作“%s”", (ms, text) => {
     expect(formatElapsed(ms)).toBe(text);
+  });
+});
+
+describe("修改方案的条目（C6）", () => {
+  const planEvent: RunEvent = {
+    type: "plan",
+    step: 1,
+    plan: {
+      plan_id: "00000000-0000-4000-8000-0000000000c1",
+      digest: "abc",
+      expires_at: "2026-11-17T00:00:00Z",
+      items: [{ id: "00000000-0000-4000-8000-0000000000b1", call_id: "call-2", tool: "correct_release", target: "Bayreuth 1951", changes: [], revertible: true }],
+    },
+  };
+
+  it("方案里的调用作为等待确认的条目放进过程，没有执行；它之前的文字段数是方案那一步", () => {
+    const view = [
+      { type: "text", step: 1, text: "我整理一下。" },
+      { type: "tool_started", step: 1, tool_started: { call_id: "call-1", name: "get_release", input: {} } },
+      { type: "tool_finished", step: 1, tool_finished: { call_id: "call-1", status: "succeeded", output: {}, truncated: false, untrusted: true } },
+      // 后端先为方案里的调用发 tool_started，再发 plan。
+      { type: "tool_started", step: 1, tool_started: { call_id: "call-2", name: "correct_release", input: {} } },
+      planEvent,
+      { type: "done", step: 1, end: { reason: "awaiting_confirmation" } },
+    ].reduce<ReturnType<typeof applyRunEvent>>((current, event) => applyRunEvent(current, event as RunEvent), emptyRunView);
+    expect(view.items.map((item) => [item.callId, item.name, item.status, item.executed, item.textsBefore])).toEqual([
+      ["call-1", "get_release", "succeeded", true, 1],
+      ["call-2", "correct_release", "awaiting_confirmation", false, 1],
+    ]);
+    expect(view.end).toEqual({ reason: "awaiting_confirmation" });
+  });
+
+  it("确认之后：等待确认的条目原地变成执行中，再按结果更新；没选的项按 declined_by_user 失败", () => {
+    const seeded = applyRunEvent(emptyRunView, planEvent);
+    const started = applyRunEvent(seeded, { type: "tool_started", step: 1, tool_started: { call_id: "call-2", name: "correct_release", input: { release_id: "r" } } });
+    expect(started.items).toHaveLength(1);
+    expect(started.items[0]).toMatchObject({ status: "running", input: { release_id: "r" }, executed: true });
+    const done = applyRunEvent(started, { type: "tool_finished", step: 1, tool_finished: { call_id: "call-2", status: "succeeded", output: { operation_id: "o" }, truncated: false, untrusted: false } });
+    expect(done.items[0]).toMatchObject({ status: "succeeded", output: { operation_id: "o" } });
+    const declined = applyRunEvent(seeded, { type: "tool_finished", step: 1, tool_finished: { call_id: "call-2", status: "failed", output: null, truncated: false, untrusted: false, error_code: "declined_by_user" } });
+    expect(declined.items[0]).toMatchObject({ status: "failed", errorCode: "declined_by_user", executed: false });
+  });
+
+  it("落库的等待确认调用没有耗时，不算执行过；文字段数取它所在的助手消息", () => {
+    const turns = turnsFromMessages([
+      message("user", [{ type: "text", text: "整理这张" }]),
+      message("assistant", [{ type: "text", text: "建议改标题。" }, { type: "tool_call", tool_call: { id: "call-2", name: "correct_release", arguments: {} } }], [
+        record("correct_release", { status: "awaiting_confirmation", output: null, duration_ms: null }),
+      ]),
+    ]);
+    expect(turns[0]?.items.map((item) => [item.status, item.executed, item.textsBefore])).toEqual([["awaiting_confirmation", false, 1]]);
   });
 });

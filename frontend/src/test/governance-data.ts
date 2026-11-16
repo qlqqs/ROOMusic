@@ -16,6 +16,7 @@ import {
   type IssueListItemDTO,
   type OperationChangesDTO,
   type OperationItemDTO,
+  type OperationOriginDTO,
   type ReleaseIssuesDTO,
   type ReviewableIssue,
 } from "../features/governance/api/decoders";
@@ -57,6 +58,8 @@ type OperationRecord = {
   changes: OperationChangesDTO;
   /** 撤销时把发行恢复成这条操作之前的状态。 */
   restore: () => void;
+  /** 经管家或 MCP 做的操作的来源（M6 C6）；测试直接写上，没有时列表里不带这个字段。 */
+  origin?: OperationOriginDTO;
 };
 
 /** 专辑自己的状态：人工修改版本号（设定、清除默认版本与撤销递增；修正与归组不改它）与已存的默认版本（可能是失效中的，即不是这个专辑的成员）。 */
@@ -535,7 +538,16 @@ function invertChanges(changes: OperationChangesDTO): OperationChangesDTO {
 }
 
 function itemOf(data: GovernanceData, record: OperationRecord): OperationItemDTO {
-  const common = { id: record.id, type: record.type, created_at: record.createdAt, actor: data.actor, changes: record.changes, reverts: record.reverts, reverted_by: record.revertedBy };
+  const common = {
+    id: record.id,
+    type: record.type,
+    created_at: record.createdAt,
+    actor: data.actor,
+    changes: record.changes,
+    reverts: record.reverts,
+    reverted_by: record.revertedBy,
+    ...(record.origin === undefined ? {} : { origin: record.origin }),
+  };
   const notReverted = record.type !== "revert" && record.revertedBy === null;
   if (record.target.type === "release_group") {
     const groupId = record.target.id;

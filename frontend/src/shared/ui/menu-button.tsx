@@ -8,6 +8,7 @@ import styles from "./menu-button.module.css";
  * 不给 group 的项都在同一个无名组里，旧的调用方不受影响。破坏性的项（danger）与前面的项之间也画分隔线，不需要组名。
  * untitledGroup：这一组只用分隔线与相邻的组分开，不显示组标题（group 只用来区分组）。
  * hint：项右侧的灰色小字（例如“前往艺人”后面的艺人名），是菜单项名称的一部分。
+ * description：项名下面一行灰色的说明（例如管家的模式说明），也是菜单项名称的一部分。
  */
 export type MenuAction = {
   id: string;
@@ -18,6 +19,7 @@ export type MenuAction = {
   group?: string;
   untitledGroup?: boolean;
   hint?: string;
+  description?: string;
   /** 破坏性操作（停用、删除）：文字与图标用警示色，放在菜单最后一组。 */
   danger?: boolean;
 };
@@ -43,6 +45,8 @@ type MenuOptions = {
   placement?: "below" | "above";
   /** 菜单与触发器同宽（至少 200px）；默认固定宽度。 */
   matchTriggerWidth?: boolean;
+  /** 菜单底部一行不可聚焦的小字（例如快捷键提示）；只是视觉提示，读屏不读。 */
+  footer?: ReactNode;
 };
 
 type MenuTriggerProps = {
@@ -64,7 +68,7 @@ export type OpenMenuAt = (point: { x: number; y: number }, anchor: HTMLElement) 
  * 浮层渲染到触发器所在的模态 <dialog> 里（没有时是 body）：模态对话框之外的内容是惰性的，放在 body 上就点不到。
  * 浮在文档层也避免被曲目分段的 content-visibility 裁切。
  */
-export function useMenu({ label, actions, placement = "below", matchTriggerWidth = false }: MenuOptions): { triggerProps: MenuTriggerProps; menu: ReactNode; open: boolean; openAt: OpenMenuAt } {
+export function useMenu({ label, actions, placement = "below", matchTriggerWidth = false, footer }: MenuOptions): { triggerProps: MenuTriggerProps; menu: ReactNode; open: boolean; openAt: OpenMenuAt } {
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
   // 按坐标打开时：菜单锚在哪个元素上（滚动移动它就关闭），关闭后焦点回到哪里。按触发器打开时两者都是空的。
@@ -160,7 +164,7 @@ export function useMenu({ label, actions, placement = "below", matchTriggerWidth
   };
   const item = (action: MenuAction) => <button type="button" key={action.id} role="menuitem" tabIndex={-1} disabled={action.disabled} data-icon={action.icon === undefined ? undefined : ""} data-danger={action.danger ? "" : undefined} data-hint={action.hint === undefined ? undefined : ""} onClick={() => { close(); action.onSelect(); }}>
     {action.icon === undefined ? null : <span className={styles.icon} aria-hidden="true">{action.icon}</span>}
-    {action.label}
+    {action.description === undefined ? action.label : <span className={styles.text}><span>{action.label}</span>{" "}<span className={styles.description}>{action.description}</span></span>}
     {/* 空格让可访问名称是“前往艺人 某某”而不是连在一起；弹性容器里只有空白的文字不占位。 */}
     {action.hint === undefined ? null : <>{" "}<span className={styles.hint}>{action.hint}</span></>}
   </button>;
@@ -174,6 +178,7 @@ export function useMenu({ label, actions, placement = "below", matchTriggerWidth
         {group.actions.map(item)}
       </div>}
     </Fragment>)}
+    {footer === undefined ? null : <div aria-hidden="true" className={styles.footer}>{footer}</div>}
   </div>, position.container);
   return { triggerProps, menu: content, open: position !== null, openAt };
 }

@@ -31,6 +31,8 @@
   浮层渲染到 `trigger.closest("dialog") ?? document.body`——模态 `<dialog>` 打开时 body 之外的内容是惰性的，渲染到 body 的菜单在对话框里点不了。
   `MenuButton` 是它的薄包装。菜单项是按钮，导航类菜单项（“设置”）在 `onSelect` 里 `navigate`，这是“导航用链接”的例外。
   `useMenu` 另返回 `openAt(point, anchor)`：按视口坐标打开（右键菜单），滚动移动 anchor 时关闭，关闭后焦点回到打开前的元素。
+  M6 C6 起菜单项可带 `description`（项名下一行灰色说明，是可访问名称的一部分，管家的模式菜单用它写各模式的含义），
+  `useMenu` 可带 `footer`（菜单底部一行不可聚焦的小字，`aria-hidden`，模式菜单的“Shift + Tab 在输入框里切换”）。
   `useRowContextMenu({ label, actions, inside })`（`shared/ui/context-menu.tsx`）把它挂到 `inside` 最近的 `[data-context-row]` 祖先上，处理右键、菜单键与 Shift+F10。
 - 管理页由 `AdminGate` 把关：非管理员显示“需要管理员权限”，不渲染页面内容，也就不调用管理接口；后端仍独立鉴权。
 - 停用与撤销类操作先确认并说明影响范围，恢复与重新启用直接执行；目标是自己时对话框额外提示会被退出登录。

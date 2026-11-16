@@ -1,4 +1,4 @@
-# 受治理操作与修正覆盖层合同（阶段 M3）
+# 受治理操作合同
 
 ## 1. 范围与触发
 
@@ -11,9 +11,7 @@ M4 的第一项（2026-10）在同一流程上增加以专辑为目标的“设�
 M4 的第二项（2026-10）增加以发行为目标的“核对问题”（与修正、归组共用发行的版本号），规则在[元数据问题与核对合同](./issue-review-contracts.md)。
 M4 的第三项（2026-10）增加“认领”：把不可见旧发行上的修正、归组、默认版本与核对迁给新发行，规则在[认领合同](./claim-contracts.md)。
 
-决策依据：[ADR 0002](../../../docs/architecture/adr/0002-metadata-overlays.md)、
-[ADR 0003](../../../docs/architecture/adr/0003-governed-operations.md) 与任务
-M3 修正覆盖层与受治理操作（本机归档 `.trellis/tasks/archive/2026-10/10-11-classical-m3-governed-corrections/prd.md`）。
+决策依据：[ADR 0002](../../../docs/architecture/adr/0002-metadata-overlays.md)、[ADR 0003](../../../docs/architecture/adr/0003-governed-operations.md)。
 
 ## 2. 数据模型（迁移 0017）
 
@@ -21,7 +19,7 @@ M3 修正覆盖层与受治理操作（本机归档 `.trellis/tasks/archive/2026
   （`release_correction | release_group_change | release_group_default | release_issue_review | release_claim | revert`，`release_group_default` 由迁移 0018、`release_issue_review` 由 0019、`release_claim` 由 0020 加入）、`target_type`（`release`；0018 加入 `release_group`，即专辑）、
   `target_id`（不设外键：记录可能比目标活得久）、
   `idempotency_key`、`fingerprint`、`expected_revision`、`result_revision`、`before_state`/`after_state`（执行器定义的类型化前后状态，撤销的依据）、
-  `response`（原样返回客户端，也是同键重放的响应）、`reverts_operation_id`、`request_id`、`created_at`。
+  `response`（原样返回客户端，也是同键重放的响应）、`reverts_operation_id`、`request_id`、`created_at`、`origin`（0054，可空 JSONB）。
   约束都有名字：`operations_revision_ck`（`result = expected + 1`）、`operations_reverts_ck`（只有撤销记录指向原操作）、
   `operations_actor_key_uq`（`(actor_id, idempotency_key)`）、`operations_reverts_uq`（一条操作至多被撤销一次）。
 - **`releases.edit_revision`**（`BIGINT NOT NULL DEFAULT 1`，`> 0`）：发行的人工修改版本号。**只有受控操作（修正、归组、核对、撤销）递增，扫描从不改它。**
@@ -62,7 +60,11 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
   `Describe(ctx, db, records)`（批量补充列表展示：目标当前状态——发行目标给 `Release`、专辑目标给 `Album`——、改动摘要、`Revertible`）。`RevertExecutor(kind, originalID)` 负责通用部分：
   先**单独一条语句** `SELECT … FOR UPDATE` 锁住原记录，再读取它（READ COMMITTED 下带连接的 `FOR UPDATE` 只重检被锁的行，连接来的行仍取自语句快照，
   读不到刚提交的撤销记录），所以对同一条记录的并发撤销串行，后到的得到 `already_reverted`。
-- 不记录执行模式（`assistant`/`steward`/`operator`）：人类管理员直接提交不是 Agent 的 operator 模式，模式字段在 M6 引入。
+- C6 的 `Spec.Origin *Origin` 可选，形状为 `{source:chat|mcp,conversation_id?,plan_id?,mode?,token_id?}`。
+  只由后端入口构造，不参与指纹；旧 HTTP 调用不传时列为 SQL NULL，行为不变。对话确认写含 plan_id；直接执行不含 plan_id；MCP 含 token_id。
+  `operations.Record.Origin`、列表接口和 list_operations 输出 origin（旧记录为 null）。同键重放仍返回原操作，不覆盖原来源。
+- 方案项独立进入 Run；幂等键由后端生成并保存，同项恢复执行复用原键。展示依据 basis 不进入指纹。
+  方案、审批、模式与新增错误码见[管家运行时合同](./steward-runtime-contracts.md#c6-共享写入与确认合同)。
 
 ## 4. 接口
 
@@ -102,7 +104,7 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
 - `GET /api/v1/operations?page=&page_size=&release_id=&group_id=`：按时间倒序（再按 ID 倒序）分页，默认 50、最大 100（`400 invalid_pagination`），
   可按发行（`release_id`）或专辑（`group_id`，M4）筛选，非 UUID 都是 `400 invalid_id`；**两个都给时取并集**（这个版本的记录加上这张专辑的记录，
   分页与 `total` 针对并集），`operations.List` 的参数相应是目标列表 `Targets []Target`。每条：`{id, type, created_at, actor:{id, username},
-  release:{id, title, group_id, visible}|null, album:{id, title, visible}|null, changes:{kind, …}|null, reverts, reverted_by, revertible}`。
+  release:{id, title, group_id, visible}|null, album:{id, title, visible}|null, changes:{kind, …}|null, reverts, reverted_by, revertible, origin}`。
   发行目标的记录 `release` 是目标**当前**的有效标题、所在组与可见性、`album` 为 `null`；专辑目标的记录反过来（目标已不存在时两者都是 `null`）。
   `changes` 是改动摘要（`release_correction`：每个字段的前后修正意图与当时的有效值；`release_group_change`：前后组 ID 与当时的组标题；
   `release_group_default`：前后的默认版本快照，见[默认版本合同](./default-version-contracts.md)；`release_issue_review`：问题与前后是否有核对，
@@ -116,7 +118,7 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
 
 - 所有 catalog 读取（列表、详情、搜索、排序、分页、按组读取、代表版本规则、最近播放的曲目位置）的发行来源是常量
   `releasesql.ReleaseSource = "release_effective releases"`（别名仍叫 `releases`），所以展示、排序与搜索用的都是有效值。扫描与身份规划读写 `releases` 本表。
-- **无修正时与旧行为逐项一致**（`TestPostgreSQLEffectiveViewEqualsTheTableWithoutCorrections` 与既有按组/列表样本测试守住）。
+- **无修正时与旧行为逐项一致**（既有视图与列表样本测试守住）。
 - **需要关注**：`uncertain_apply` 的字段决定如果该字段有修正（`set` 或 `null`）就不计数，`artist` 由专辑艺人的修正覆盖；分组原因与缺失曲目照旧计数；
   清除修正后扫描的不确定重新计入。M4 第二项起被仍然有效的核对压下的问题也不计数（[核对合同](./issue-review-contracts.md)第 3 节）。
 - **制作人员**：详情的专辑级署名里，专辑艺人有修正时用修正值替换扫描写入的 `album_artist` 署名。
@@ -160,7 +162,7 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
 | 数据库不可用（结果不确定） | `503 database_unavailable` |
 | 业务变化或记录没能写入，已整体回滚 | `500 operation_failed` |
 
-默认版本新增的 `409 not_in_group` 等见[默认版本合同](./default-version-contracts.md)第 8 节。
+默认版本错误见[默认版本合同](./default-version-contracts.md)。
 
 ## 9. 必需测试与断言点
 
@@ -180,10 +182,9 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
 
 ## 10. 真实服务用例
 
-`frontend/e2e/real/governance.real.ts`（隔离服务、隔离 PostgreSQL、真实 Chromium，经 `scripts/playback-e2e.sh` 运行，与播放用例同一服务）：
-素材是用例自己生成的合成 WAV（INFO 标签带专辑），放在 `library/governance` 下，结束后删除并重扫，不依赖其他用例文件的先后顺序。覆盖：页面修改标题 →
-改文件标签并重扫 → 扫描值更新而修正不动且仍是同一个发行 → 操作记录页撤销后回到现在的扫描值；把两张专辑归到一起（一个组两个版本、重扫后保持）→ 在“修改记录”里撤销后分开；
-普通成员没有任何入口且读写接口都是 `403`。
+`frontend/e2e/real/governance.real.ts` 经 `scripts/playback-e2e.sh` 使用隔离服务、数据库与合成 WAV。
+断言：重扫不覆盖人工修正；撤销后回到当前扫描值；归组重扫后保留且可撤销；成员读写均 403。
+不依赖其他用例素材，结束只清理本用例文件。来源与确认另由 C6 的隔离测试覆盖；未执行的用例不得计为通过。
 
 ## 11. 边界与后续
 
@@ -191,7 +192,7 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
 - 成员写操作（创建、停用/启用、撤销会话）**不在 M3**：暂不要求幂等键、不写操作记录；原计划的接入任务已于 2026-11-03 撤销（R4），
   见[身份与成员合同](./identity-contracts.md)。
 - M4：默认版本已作为第一项实施（[默认版本合同](./default-version-contracts.md)），问题处理作为第二项实施（[核对合同](./issue-review-contracts.md)），认领作为第三项实施（[认领合同](./claim-contracts.md)）；
-  2026-11-03 起整组合并/拆分搁置、扫描反馈移到 M5 之后；M6：执行模式字段。
+  2026-11-03 起整组合并/拆分搁置、扫描反馈移到 M5 之后；M6 C6：来源与执行模式已在可空 origin 中记录。
 - **新写操作的轻量标准**（2026-11-03，R4，只有一个管理员）：接入 `Run`（记录与幂等是现成的）；有反向操作可以恢复的类型不提供撤销——`Kind.Revert` 返回
   `409 not_revertible`，`Describe` 的 `Revertible` 恒为假；预览令牌只在预览依赖版本号覆盖不到的状态时才加。已实施的五种类型不变。见[路线调整](../../../docs/architecture/core-1-roadmap.md#2026-11-03-路线调整)。
 - 前端合同见[状态规范](../frontend/state-management.md)、[组件规范](../frontend/component-guidelines.md)与[前端目录](../frontend/directory-structure.md)。
@@ -206,4 +207,4 @@ handler：同源 → 管理员 → 校验 ID、Idempotency-Key（UUID）、请�
 
 app注入 `RefreshArtistResolution(ctx,tx,mapping)`；治理不得直接访问personal表。艺人新写未ready为409 artist_catalog_not_ready，既有成功幂等重放仍返回原结果。修正/清除/撤销、claim双方、归组在原CATP事务中刷新艺人有效署名与搜索，扫描不改四张人工意图表或edit_revision。新HTTP与schema验证必须覆盖准备态、revision/幂等、scope冲突、部分写失败回滚和不可撤销。
 
-I1管理员恢复来源读取及历史证据规则见[艺人合同](./artist-contracts.md#8-实施裁决-i1--i4管理员恢复来源与成员批量摘要)；读取不改变治理记录或revision。
+I1 来源读取仍遵循[艺人合同](./artist-contracts.md)，不改治理记录或 revision。

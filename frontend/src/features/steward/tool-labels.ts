@@ -4,22 +4,30 @@ import {
   Cast,
   ClipboardCheck,
   Disc3,
+  EyeOff,
+  FileInput,
   FileSearch,
   FileText,
   Heart,
   History,
+  Layers,
   ListMinus,
   ListMusic,
   ListOrdered,
   ListPlus,
+  Merge,
   MicVocal,
   Pencil,
+  PenLine,
+  Pin,
   Play,
   Radio,
   Repeat,
   ScanLine,
   Search,
+  Split,
   Trash2,
+  Undo2,
   Volume2,
   Wrench,
   type LucideIcon,
@@ -27,7 +35,8 @@ import {
 import type { StewardDataScope } from "./context/host";
 
 // 过程条目的显示：工具的中文名称、图标，以及从输入与输出里取“主要参数”和“结果”的规则（工具清单见后端合同第 3 节）。
-// 只读工具 16 个（C2）；C5 加了播放、队列、播放历史、收藏与歌单的工具。参数与标题来自曲库与个人数据，是不可信文本，只按文本节点渲染。
+// 只读工具 16 个（C2）；C5 加了播放、队列、播放历史、收藏与歌单的工具；C6 加了曲库与艺人的治理工具（管理员，修改前要确认）。
+// 参数与标题来自曲库与个人数据，是不可信文本，只按文本节点渲染。
 
 type ToolLabel = {
   label: string;
@@ -38,7 +47,7 @@ type ToolLabel = {
   argument?: (input: unknown) => string | undefined;
   /** 成功后右侧的结果说明（改动类工具）；取不到时显示数量。 */
   result?: (input: unknown, output: unknown) => string | undefined;
-  /** 这个工具会改动的个人数据：结束后让对应查询失效。有它就是改动类工具。 */
+  /** 这个工具会改动的数据：结束后让对应查询失效。有它就是改动类工具。 */
   changes?: StewardDataScope;
   /** 改动类工具但不用刷新查询（播放控制，分区事件会推到浏览器）。 */
   writes?: true;
@@ -76,6 +85,46 @@ function favoritedOf(input: unknown, output: unknown): string | undefined {
 }
 
 const done = (phrase: string) => () => phrase;
+
+/** 修正专辑字段的字段名（与发行信息的编辑对话框一致）。 */
+export const releaseFieldLabels: Readonly<Record<string, string>> = {
+  title: "标题",
+  album_artist: "专辑艺人",
+  year: "年份",
+  genre: "流派",
+  label: "厂牌",
+  catalog_number: "编号",
+  edition: "版本说明",
+  barcode: "条码",
+};
+
+/** correct_release 改了哪些字段：“标题、年份”。 */
+function correctedFieldsOf(input: unknown): string | undefined {
+  const changes = isRecord(input) ? input["changes"] : undefined;
+  if (!isRecord(changes)) return undefined;
+  const names = Object.keys(changes).map((key) => releaseFieldLabels[key] ?? key);
+  return names.length === 0 ? undefined : names.join("、");
+}
+
+const groupActions: Readonly<Record<string, string>> = { join: "归入其他专辑", detach: "移出为独立专辑" };
+const reviewActions: Readonly<Record<string, string>> = { review: "核对", unreview: "取消核对" };
+const reviewResults: Readonly<Record<string, string>> = { review: "已核对", unreview: "已取消核对" };
+
+/** set_default_release：release_id 为 null 是改回自动选择。 */
+function defaultReleaseOf(input: unknown): string | undefined {
+  return isRecord(input) && input["release_id"] === null ? "改回自动选择" : undefined;
+}
+
+/** rename_artist：mode=auto 是改回最常见的写法，否则是新名字。 */
+function renameOf(input: unknown): string | undefined {
+  return stringField(input, "mode") === "auto" ? "改回最常见的写法" : stringField(input, "name");
+}
+
+/** ignore_artist_candidate：ignored 为 false 是恢复提示。 */
+function ignoredOf(input: unknown, phrases: readonly [string, string]): string | undefined {
+  if (!isRecord(input) || typeof input["ignored"] !== "boolean") return undefined;
+  return input["ignored"] ? phrases[0] : phrases[1];
+}
 
 const toolLabels: Readonly<Record<string, ToolLabel>> = {
   // ---- 曲库（只读，C2）----
@@ -127,6 +176,32 @@ const toolLabels: Readonly<Record<string, ToolLabel>> = {
   add_playlist_tracks: { label: "加到歌单", icon: ListPlus, result: trackCountOf, changes: "playlists" },
   remove_playlist_track: { label: "从歌单移除曲目", icon: ListMinus, result: done("已移除"), changes: "playlists" },
   move_playlist_track: { label: "调整歌单曲序", icon: ArrowUpDown, result: done("已移动"), changes: "playlists" },
+
+  // ---- 曲库与艺人的治理（C6，管理员）：assistant 模式下先合成方案给用户确认 ----
+  correct_release: { label: "修正专辑信息", icon: PenLine, argument: correctedFieldsOf, result: done("已修改"), changes: "catalog" },
+  change_release_group: { label: "调整归组", icon: Layers, argument: pick("action", groupActions), result: done("已调整"), changes: "catalog" },
+  set_default_release: { label: "设定默认版本", icon: Pin, argument: defaultReleaseOf, result: done("已设定"), changes: "catalog" },
+  review_release_issue: {
+    label: "核对问题",
+    icon: ClipboardCheck,
+    argument: pick("action", reviewActions),
+    result: (input) => reviewResults[stringField(input, "action") ?? ""] ?? "已完成",
+    changes: "catalog",
+  },
+  preview_release_claim: { label: "预览认领", icon: FileSearch },
+  claim_release: { label: "认领修改", icon: FileInput, result: done("已认领"), changes: "catalog" },
+  merge_artists: { label: "合并艺人", icon: Merge, result: done("已合并"), changes: "artists" },
+  preview_artist_split: { label: "预览拆开艺人", icon: FileSearch },
+  split_artist: { label: "拆开艺人", icon: Split, result: done("已拆开"), changes: "artists" },
+  rename_artist: { label: "修改艺人主名", icon: Pencil, argument: renameOf, result: done("已改名"), changes: "artists" },
+  ignore_artist_candidate: {
+    label: "忽略重复艺人提示",
+    icon: EyeOff,
+    argument: (input) => ignoredOf(input, ["忽略", "恢复提示"]),
+    result: (input) => ignoredOf(input, ["已忽略", "已恢复"]),
+    changes: "artists",
+  },
+  revert_operation: { label: "撤销一条修改", icon: Undo2, result: done("已撤销"), changes: "catalog" },
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -183,13 +258,13 @@ export function toolResultOf(name: string, input: unknown, output: unknown): str
   return toolLabels[name]?.result?.(input, output) ?? toolCountOf(name, input, output);
 }
 
-/** 改动类工具（播放控制、收藏、歌单与历史的写入）；只读工具与未登记的工具不算。 */
+/** 改动类工具（播放控制、收藏、歌单与历史的写入、曲库与艺人的治理）；只读工具与未登记的工具不算。 */
 export function toolWritesOf(name: string): boolean {
   const known = toolLabels[name];
   return known?.writes === true || known?.changes !== undefined;
 }
 
-/** 这个工具会改动哪类个人数据；只读与播放类工具是 null。 */
+/** 这个工具会改动哪类数据；只读与播放类工具是 null。 */
 export function toolDataScopeOf(name: string): StewardDataScope | null {
   return toolLabels[name]?.changes ?? null;
 }
@@ -203,8 +278,11 @@ const failurePhrases: Readonly<Record<string, string>> = {
   token_limit: "没有执行",
   zone_offline: "分区不在线",
   renderer_unavailable: "没有可用的输出",
-  // 歌单在读取之后被改过（版本号对不上），需要重新读取。
-  revision_conflict: "内容已变化",
+  // 目标在读取之后被改过（版本号对不上），需要重新读取。
+  revision_conflict: "内容已被改过",
+  // C6：方案里用户没有勾选的项；用户发了新消息、方案作废时没有执行的项。
+  declined_by_user: "你没有选这一项",
+  not_executed: "没有执行",
   queue_full: "队列已满",
   volume_fixed: "这个设备的音量不能调",
   playlist_limit_reached: "歌单数量已到上限",

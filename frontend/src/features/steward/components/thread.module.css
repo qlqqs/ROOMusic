@@ -296,6 +296,43 @@
   cursor: not-allowed;
 }
 
+/* 模式按钮（C6，原型的 .mode）：主色字，比模型按钮醒目。 */
+.modeButton {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--text-accent);
+  font: inherit;
+  font-size: var(--fs-13);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.modeChevron {
+  color: var(--text-secondary);
+}
+
+.modeButton:enabled:hover,
+.modeButton[aria-expanded="true"] {
+  background: var(--color-selected);
+}
+
+.modeButton:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+
+.modeButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 /* 改名对话框。 */
 .dialog {
   width: min(440px, calc(100vw - 2 * var(--space-4)));

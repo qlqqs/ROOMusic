@@ -21,7 +21,7 @@ func TestRunSystemPromptDisplayName(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			store := &memoryRunStore{}
 			p := &fakeProvider{next: func(_ context.Context, step int, request provider.Request) ([]provider.Event, error) {
-				if want := systemPrompt + tc.suffix; request.System != want {
+				if want := systemPrompt + tc.suffix + "曲库修改先生成方案，等待用户确认；本会话已获用户免确认的工具可以直接执行。"; request.System != want {
 					t.Errorf("第 %d 步系统提示词=%q，期望=%q", step, request.System, want)
 				}
 				if step == 1 {

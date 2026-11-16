@@ -225,3 +225,25 @@ A–E 集成后完成全量基线、定向复验与逐项视觉核对，修复�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 61: 管家 C6：写操作确认、整理工具、operator 模式
+<!-- trellis-session: v=2 fp=e0eaf9229179d109 -->
+
+**Date**: 2026-11-16
+**Task**: 管家 C6：写操作确认、整理工具、operator 模式
+**Branch**: `steward-c6-writes`
+
+### Summary
+
+方案确认接口、12 个治理与撤销工具、operator 模式、方案卡片；两轮隔离数据库测试与只读审查后修复
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ec131357` | feat(steward): 写操作确认方案、目录整理工具、operator 模式（C6） |
+
+### Status
+
+[OK] **Completed**

@@ -60,10 +60,14 @@ export type ProbeFailureResponseDTO = ReturnType<typeof decodeProbeFailure>;
 
 // ---- 会话与消息（合同 4.4）----
 
+/** 会话的模式（C6）：assistant 修改曲库前给用户确认，operator 直接执行；steward 随 C7 出现，这里先认得。 */
+export const stewardModes = ["assistant", "steward", "operator"] as const;
+export type StewardMode = (typeof stewardModes)[number];
+
 const conversationShape = {
   id: d.uuid(),
   title: d.string(),
-  mode: d.literal("assistant"),
+  mode: d.oneOf(stewardModes),
   /** 会话自己的模型；空字符串表示发消息时用设置里当时的模型。 */
   model: d.string(),
   status: d.oneOf(["idle", "running"] as const),
@@ -116,7 +120,8 @@ const blockDecoder: d.Decoder<BlockDTO> = (input, path) => {
   }
 };
 
-const toolCallStatuses = ["running", "succeeded", "failed"] as const;
+// awaiting_confirmation（C6）：方案里等用户确认、还没执行的调用。
+const toolCallStatuses = ["running", "succeeded", "failed", "awaiting_confirmation"] as const;
 
 const toolCallRecordDecoder = d.object({
   id: d.uuid(),
@@ -155,21 +160,76 @@ const messageDecoder = d.object({
 export type MessageDTO = d.Infer<typeof messageDecoder>;
 export type ToolCallDTO = d.Infer<typeof toolCallRecordDecoder>;
 
-// 会话的消息没有后端上限（历史长度控制另行安排）。
-const conversationDetailDecoder = d.object({ ...conversationShape, messages: d.array(messageDecoder, { max: d.unbounded }) });
+// ---- 修改方案（C6）----
+// 与后端形状有关的假设集中在这里：SSE 的 plan 事件是 {type, step, plan}；会话详情的未处理方案在 pending_plan，
+// 全部方案（含已处理的）在 plans；方案项带模型给的调用标识 call_id，界面据此把方案放进对应的回合、把执行结果对到每一项。
+
+const planBasisDecoder = d.object({
+  source: d.oneOf(["local", "external", "mixed"] as const),
+  note: d.string({ max: d.unbounded }),
+});
+
+const planChangeDecoder = d.object({ field: d.string(), before: json, after: json });
+
+const planItemDecoder = d.object({
+  id: d.uuid(),
+  call_id: d.string({ min: 1 }),
+  tool: d.string({ min: 1 }),
+  /** 目标的显示名（专辑标题、艺人名），来自曲库，只按文字显示。 */
+  target: d.string({ max: d.unbounded }),
+  changes: d.array(planChangeDecoder, { max: d.unbounded }),
+  revertible: d.boolean(),
+  basis: d.optional(d.nullable(planBasisDecoder)),
+  /** 用户的取舍；已处理的方案才有 accepted、declined。 */
+  decision: d.optional(d.oneOf(["pending", "accepted", "declined"] as const)),
+  /** 执行结果（会话详情的 plans 里，有结果才有）；这里只看有没有，不解释内容。 */
+  result: d.optional(json),
+  /** 执行留下的操作记录（会话详情的 plans 里）。 */
+  operation_id: d.optional(d.nullable(d.uuid())),
+});
+
+const planDecoder = d.object({
+  plan_id: d.uuid(),
+  status: d.optional(d.oneOf(["pending", "applied", "declined", "expired", "superseded"] as const)),
+  digest: d.string({ min: 1 }),
+  expires_at: d.timestamp(),
+  items: d.array(planItemDecoder, { min: 1, max: d.unbounded }),
+});
+export type PlanDTO = d.Infer<typeof planDecoder>;
+export type PlanItemDTO = d.Infer<typeof planItemDecoder>;
+export type PlanBasisDTO = d.Infer<typeof planBasisDecoder>;
+
+/** 已执行的方案项留下的操作记录：取自工具输出的 operation_id（与对应 HTTP 写接口的响应一致）；没有时是 null。 */
+export function operationIdOf(output: unknown): string | null {
+  if (typeof output !== "object" || output === null || !("operation_id" in output)) return null;
+  const id = output.operation_id;
+  return typeof id === "string" && id !== "" ? id : null;
+}
+
+// 会话的消息没有后端上限（历史长度控制另行安排）。pending_plan 是还没处理的方案，plans 是全部方案（按创建顺序，含已处理的）；
+// 刷新后据此恢复方案卡片与结果。
+const conversationDetailDecoder = d.object({
+  ...conversationShape,
+  messages: d.array(messageDecoder, { max: d.unbounded }),
+  pending_plan: d.optional(d.nullable(planDecoder)),
+  plans: d.optional(d.array(planDecoder, { max: d.unbounded })),
+});
 export const decodeConversationDetail = d.defineDecoder(conversationDetailDecoder);
 export type ConversationDetailDTO = d.Infer<typeof conversationDetailDecoder>;
 
-const conversationPatchDecoder = d.object({ title: d.string(), model: d.string() });
+const conversationPatchDecoder = d.object({ title: d.string(), model: d.string(), mode: d.optional(d.oneOf(stewardModes)) });
 export const decodeConversationPatch = d.defineDecoder(conversationPatchDecoder);
 export type ConversationPatchDTO = d.Infer<typeof conversationPatchDecoder>;
 
 export const decodeDeleted = d.defineDecoder(d.object({ deleted: d.literal(true) }));
+/** 撤销一条操作的响应（受治理操作合同）：这里只用到新的撤销记录。 */
+export const decodeReverted = d.defineDecoder(d.object({ operation_id: d.uuid() }));
 export const decodeCancelled = d.defineDecoder(d.object({ cancelled: d.boolean() }));
 
 // ---- 运行流的事件（合同第 5 节）----
 
-export const endReasons = ["completed", "step_limit", "token_limit", "cancelled", "provider_error", "internal_error"] as const;
+// awaiting_confirmation（C6）：这一步有等用户确认的方案，运行停在这里。
+export const endReasons = ["completed", "awaiting_confirmation", "step_limit", "token_limit", "cancelled", "provider_error", "internal_error"] as const;
 export type EndReason = (typeof endReasons)[number];
 
 const runEndDecoder = d.object({
@@ -185,14 +245,15 @@ const step = d.integer({ min: 1 });
 
 const runEventDecoders = {
   text: d.object({ type: d.literal("text"), step, text: d.string({ max: d.unbounded }) }),
+  // 确认方案之后执行方案项时发的 tool_started、tool_finished 发生在模型继续之前，没有 step（C6）。
   tool_started: d.object({
     type: d.literal("tool_started"),
-    step,
+    step: d.optional(step),
     tool_started: d.object({ call_id: d.string(), name: d.string(), input: json }),
   }),
   tool_finished: d.object({
     type: d.literal("tool_finished"),
-    step,
+    step: d.optional(step),
     tool_finished: d.object({
       call_id: d.string(),
       status: d.oneOf(["succeeded", "failed"] as const),
@@ -207,6 +268,7 @@ const runEventDecoders = {
     step,
     usage: d.object({ input_tokens: d.optional(d.integer({ min: 0 })), output_tokens: d.optional(d.integer({ min: 0 })) }),
   }),
+  plan: d.object({ type: d.literal("plan"), step: d.optional(step), plan: planDecoder }),
   done: d.object({ type: d.literal("done"), step: d.optional(step), end: runEndDecoder }),
 };
 

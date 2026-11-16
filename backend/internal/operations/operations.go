@@ -127,8 +127,19 @@ func NormalizeKey(header string) (key string, ok bool) {
 	return strings.ToLower(header), true
 }
 
-// Spec 是一次操作的请求侧信息，由传输层在鉴权与校验之后构造。
+// Origin 记录后端入口提供的来源，不参与操作指纹。
+type Origin struct {
+	Source         string `json:"source"`
+	ConversationID string `json:"conversation_id,omitempty"`
+	PlanID         string `json:"plan_id,omitempty"`
+	Mode           string `json:"mode,omitempty"`
+	TokenID        string `json:"token_id,omitempty"`
+}
+
+// Spec 是一次操作的请求侧信息，由入口在鉴权与校验之后构造。
 type Spec struct {
+	Origin *Origin
+
 	ActorID     string // 操作者（会话中的用户）
 	Type        string // Type* 常量之一
 	Key         string // Idempotency-Key（UUID）
@@ -222,15 +233,23 @@ func Run(ctx context.Context, database *sql.DB, spec Spec, execute Executor) (Re
 	if err != nil {
 		return Result{}, fmt.Errorf("%w: encode after state: %w", ErrOperationFailed, err)
 	}
+	var origin any
+	if spec.Origin != nil {
+		encoded, err := json.Marshal(spec.Origin)
+		if err != nil {
+			return Result{}, err
+		}
+		origin = string(encoded)
+	}
 	var reverts any
 	if outcome.RevertsID != "" {
 		reverts = strings.ToLower(outcome.RevertsID)
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO operations(id, actor_id, operation_type, target_type, target_id, idempotency_key, fingerprint,
-			expected_revision, result_revision, before_state, after_state, response, reverts_operation_id, request_id)
-		VALUES($1::uuid, $2::uuid, $3, $4, $5::uuid, $6::uuid, $7, $8, $9, $10::jsonb, $11::jsonb, $12::jsonb, $13::uuid, $14)`,
+			expected_revision, result_revision, before_state, after_state, response, reverts_operation_id, request_id, origin)
+		VALUES($1::uuid, $2::uuid, $3, $4, $5::uuid, $6::uuid, $7, $8, $9, $10::jsonb, $11::jsonb, $12::jsonb, $13::uuid, $14, $15::jsonb)`,
 		operationID, actorID, spec.Type, outcome.TargetType, strings.ToLower(outcome.TargetID), key, spec.Fingerprint,
-		outcome.ExpectedRevision, outcome.ResultRevision, string(before), string(after), string(response), reverts, spec.RequestID)
+		outcome.ExpectedRevision, outcome.ResultRevision, string(before), string(after), string(response), reverts, spec.RequestID, origin)
 	if err != nil {
 		var postgresError *pgconn.PgError
 		if errors.As(err, &postgresError) && postgresError.Code == "23505" && postgresError.ConstraintName == "operations_actor_key_uq" {

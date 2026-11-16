@@ -7,7 +7,8 @@ export type StepItem = {
   callId: string;
   name: string;
   input: unknown;
-  status: "running" | "succeeded" | "failed";
+  /** awaiting_confirmation：在方案里等用户确认，还没执行（C6）。 */
+  status: "running" | "succeeded" | "failed" | "awaiting_confirmation";
   /** 未加来源标记的工具输出；失败时是 {code, message}，没有结果时是 null。 */
   output: unknown;
   errorCode: string | null;
@@ -18,6 +19,8 @@ export type StepItem = {
    * （因上限或取消没有执行的、中断的都没有耗时）。
    */
   executed: boolean;
+  /** 回合里排在这次调用之前的文字段数（它所在那一步的文字也算）：方案卡片据此放在这一步的文字之后、后面的回答之前。 */
+  textsBefore: number;
 };
 
 /**
@@ -44,16 +47,35 @@ export function applyRunEvent(view: RunView, event: RunEvent): RunView {
     }
     case "tool_started": {
       const { call_id: callId, name, input } = event.tool_started;
-      return { ...view, waiting: false, items: [...view.items, { callId, name, input, status: "running", output: null, errorCode: null, durationMs: null, executed: true }] };
+      // 确认后执行的方案项：已经作为等待确认的条目在列表里，原地换成执行中。
+      if (view.items.some((item) => item.callId === callId && item.status === "awaiting_confirmation")) {
+        const items = view.items.map((item) => (item.callId === callId ? { ...item, input, status: "running" as const, executed: true } : item));
+        return { ...view, waiting: false, items };
+      }
+      return { ...view, waiting: false, items: [...view.items, { callId, name, input, status: "running", output: null, errorCode: null, durationMs: null, executed: true, textsBefore: event.step ?? view.texts.length }] };
     }
     case "tool_finished": {
       const finished = event.tool_finished;
       const items = view.items.map((item) =>
-        item.callId === finished.call_id && item.status === "running"
-          ? { ...item, status: finished.status, output: finished.output, errorCode: finished.error_code ?? null }
+        item.callId === finished.call_id && (item.status === "running" || item.status === "awaiting_confirmation")
+          ? { ...item, status: finished.status, output: finished.output, errorCode: finished.error_code ?? null, executed: item.executed || finished.status === "succeeded" }
           : item,
       );
       return { ...view, items, waiting: !items.some((item) => item.status === "running") };
+    }
+    case "plan": {
+      // 方案里的调用没有执行，作为等待确认的条目放进过程；方案本身由 run-store 交给方案的 store。
+      const textsBefore = event.step ?? view.texts.length;
+      const known = new Set(view.items.map((item) => item.callId));
+      // 后端先为这些调用发过 tool_started：原地改成等待确认、没有执行。
+      const items = view.items.map((item) =>
+        event.plan.items.some((entry) => entry.call_id === item.callId) ? { ...item, status: "awaiting_confirmation" as const, executed: false } : item,
+      );
+      for (const entry of event.plan.items) {
+        if (known.has(entry.call_id)) continue;
+        items.push({ callId: entry.call_id, name: entry.tool, input: null, status: "awaiting_confirmation", output: null, errorCode: null, durationMs: null, executed: false, textsBefore });
+      }
+      return { ...view, items, waiting: false };
     }
     case "usage":
       return view;
@@ -98,6 +120,7 @@ export function turnsFromMessages(messages: readonly MessageDTO[]): Turn[] {
         errorCode: record?.error_code ?? null,
         durationMs: record?.duration_ms ?? null,
         executed: (record?.duration_ms ?? null) !== null,
+        textsBefore: turn.texts.length,
       });
     }
   }

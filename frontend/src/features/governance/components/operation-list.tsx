@@ -1,9 +1,9 @@
 import { Link } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { formatDateTime } from "../../../shared/lib/time";
-import { Button, DataTable, VisuallyHidden, type Column } from "../../../shared/ui";
+import { Button, DataTable, StatusTag, VisuallyHidden, type Column } from "../../../shared/ui";
 import type { OperationItemDTO } from "../api/decoders";
-import { changeLines, notRevertibleReason, operationTypeLabel } from "../change-summary";
+import { changeLines, notRevertibleReason, operationOriginLabel, operationTypeLabel } from "../change-summary";
 import styles from "./operation-list.module.css";
 
 type OperationListProps = {
@@ -69,6 +69,21 @@ function TimeCell({ value }: { value: string }) {
   );
 }
 
+/** 操作者，下面是来源标签（管家或 MCP）；页面上的操作没有标签。 */
+function ActorCell({ item }: { item: OperationItemDTO }) {
+  const origin = operationOriginLabel(item.origin);
+  return (
+    <div className={styles.actorCell}>
+      <span className={styles.actor}>{item.actor.username}</span>
+      {origin === null ? null : (
+        <span>
+          <StatusTag>{origin}</StatusTag>
+        </span>
+      )}
+    </div>
+  );
+}
+
 function ChangeCell({ item }: { item: OperationItemDTO }) {
   return (
     <div className={styles.change}>
@@ -83,7 +98,7 @@ function ChangeCell({ item }: { item: OperationItemDTO }) {
 }
 
 /**
- * 操作记录表：时间（行标题）、操作者、专辑、改动与操作。可以撤销的有“撤销”按钮，其余在按钮的位置写出原因
+ * 操作记录表：时间（行标题）、操作者（带管家或 MCP 的来源标签）、专辑、改动与操作。可以撤销的有“撤销”按钮，其余在按钮的位置写出原因
  * （已撤销、之后又有修改……），不让用户猜。每行的按钮文字相同，时间与类型放进可访问名称，读屏的按钮列表里能分辨是哪一条。
  */
 export function OperationList({ caption, items, showRelease, onRevert }: OperationListProps) {
@@ -91,7 +106,7 @@ export function OperationList({ caption, items, showRelease, onRevert }: Operati
     const release: Column<OperationItemDTO>[] = showRelease ? [{ id: "release", header: "对象", cell: (item) => <TargetCell item={item} /> }] : [];
     return [
       { id: "time", header: "时间", rowHeader: true, cell: (item) => <TimeCell value={item.created_at} /> },
-      { id: "actor", header: "操作者", cell: (item) => <span className={styles.actor}>{item.actor.username}</span> },
+      { id: "actor", header: "操作者", cell: (item) => <ActorCell item={item} /> },
       ...release,
       { id: "change", header: "改动", cell: (item) => <ChangeCell item={item} /> },
       {
