@@ -1,0 +1,31 @@
+{
+  "body": {
+    "error": {
+      "code": "provider_timeout",
+      "message": "模型端点请求超时"
+    },
+    "probe_result": {
+      "failures": [
+        {
+          "error": {
+            "kind": "timeout",
+            "message": "synthetic timeout",
+            "status_code": 504
+          },
+          "protocol": "openai",
+          "step": "tools"
+        }
+      ],
+      "models": [
+        {
+          "id": "synthetic-model"
+        }
+      ],
+      "protocol": "openai",
+      "tool_support": "unconfirmed"
+    },
+    "probed_at": "2026-01-01T00:00:00Z",
+    "request_id": "sample-request"
+  },
+  "status": 503
+}

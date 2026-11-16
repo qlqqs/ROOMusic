@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "steward_not_configured",
+      "message": "请先配置模型端点、协议与对话模型，或重新填写无法解密的密钥"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

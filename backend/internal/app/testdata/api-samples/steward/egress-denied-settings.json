@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "egress_denied",
+      "message": "出站地址不允许"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 403
+}

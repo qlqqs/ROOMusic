@@ -1,0 +1,12 @@
+{
+  "body": {
+    "created_at": "2026-01-01T00:00:00Z",
+    "id": "00000000-0000-4000-8000-000000000001",
+    "mode": "assistant",
+    "model": "synthetic-model",
+    "status": "idle",
+    "title": "合成对话",
+    "updated_at": "2026-01-01T00:00:00Z"
+  },
+  "status": 201
+}

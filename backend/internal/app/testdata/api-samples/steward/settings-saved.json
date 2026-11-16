@@ -1,0 +1,16 @@
+{
+  "body": {
+    "display_name": "合成管家",
+    "endpoint": "http://127.0.0.1:12345",
+    "key_last_four": "-key",
+    "key_needs_reentry": false,
+    "key_saved": true,
+    "model": "synthetic-model",
+    "overrides": {},
+    "probe_result": null,
+    "probed_at": null,
+    "protocol": "openai",
+    "updated_at": "2026-01-01T00:00:00Z"
+  },
+  "status": 200
+}
