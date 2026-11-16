@@ -22,7 +22,13 @@
     "11-15-steward-c1-adr",
     "11-15-steward-c2-runtime",
     "11-16-steward-c3-mcp",
-    "11-16-steward-c4-chat"
+    "11-16-steward-c4-chat",
+    "11-16-steward-c5-personal",
+    "11-16-steward-c6-writes",
+    "11-16-steward-c7-review",
+    "11-16-steward-c8-web",
+    "11-16-steward-c9-config",
+    "11-16-steward-c10-memory"
   ],
   "parent": null,
   "relatedFiles": [],

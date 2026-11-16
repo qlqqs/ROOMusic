@@ -1,0 +1,6 @@
+{"file":".trellis/spec/backend/steward-runtime-contracts.md","reason":"循环、SSE、会话占用与取消"}
+{"file":"docs/architecture/adr/0005-steward-data-and-egress.md","reason":"对话与记忆的隔离和保留"}
+{"file":".trellis/spec/backend/core0-runtime-contracts.md","reason":"应用生命周期与后台 goroutine 的收尾"}
+{"file":".trellis/spec/backend/identity-contracts.md","reason":"登出与成员停用的钩子"}
+{"file":".trellis/spec/frontend/steward-guidelines.md","reason":"运行 store 与对话界面"}
+{"file":".trellis/spec/frontend/session-lifecycle.md","reason":"登出时的清理"}
