@@ -335,3 +335,25 @@ steward 模式下由独立模型调用逐项审查修改方案；审查不可用
 ### Status
 
 [OK] **Completed**
+
+
+## Session 66: 管家 C11：验收对照与文档同步
+<!-- trellis-session: v=2 fp=16d341490e49c2e9 -->
+
+**Date**: 2026-11-16
+**Task**: 管家 C11：验收对照与文档同步
+**Branch**: `steward-c11-acceptance`
+
+### Summary
+
+A1–A13 证据对照写入父任务 acceptance.md；路线图、决定索引、产品合同、MCP 文档同步；真实环境试用未做
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ae7b1ba5` | docs(steward): M6 验收对照与文档同步（C11） |
+
+### Status
+
+[OK] **Completed**
