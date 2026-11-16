@@ -25,6 +25,15 @@ type packageRule struct {
 // 各 httpapi 包只依赖本能力、identity 与 platform，且彼此不导入；只有 app 可以装配全部。
 // 新增包必须先在这里声明规则，测试才会通过。
 var packageRules = map[string]packageRule{
+	"catalog/stewardtools":           {imports: []string{"catalog", "catalog/governance", "platform/uuid", "steward/tool"}},
+	"library/stewardtools":           {imports: []string{"library", "platform/uuid", "steward/tool"}},
+	"operations/stewardtools":        {imports: []string{"operations", "platform/uuid", "steward/tool"}},
+	"steward/provider":               {imports: []string{"steward/egress"}, http: true},
+	"steward/httpapi":                {imports: []string{"identity", "platform/httpserver", "platform/uuid", "steward/egress", "steward/provider", "steward/runtime", "steward/secret", "steward/tool"}, http: true},
+	"steward/runtime":                {imports: []string{"platform/uuid", "steward/provider", "steward/tool"}},
+	"steward/secret":                 {},
+	"steward/egress":                 {http: true},
+	"steward/tool":                   {imports: []string{"identity"}},
 	"backup":                         {imports: []string{"platform/config", "platform/postgres"}},
 	"backup/httpapi":                 {imports: []string{"backup", "identity", "platform/buildinfo", "platform/httpserver"}, http: true},
 	"platform/buildinfo":             {},
@@ -91,6 +100,8 @@ var packageRules = map[string]packageRule{
 	"playback/httpapi":               {imports: []string{"identity", "platform/httpserver", "platform/uuid", "playback"}, http: true},
 	"listening/httpapi":              {imports: []string{"identity", "listening", "platform/httpserver", "platform/uuid"}, http: true},
 	"app": {imports: []string{
+		"catalog/stewardtools", "library/stewardtools", "operations", "operations/stewardtools",
+		"steward/httpapi", "steward/runtime", "steward/secret", "steward/tool",
 		"dspsettings", "dspsettings/httpapi", "dspsettings/irload", "dsp/chain", "backup", "backup/httpapi", "zones", "zones/queue", "zones/httpapi",
 		"catalog", "catalog/governance", "catalog/httpapi", "catalog/maintenance", "identity", "identity/httpapi", "library", "library/httpapi", "listening", "listening/httpapi",
 		"personal", "personal/httpapi", "operations/httpapi", "platform/config", "platform/httpserver", "playback", "playback/analysis", "playback/httpapi", "playback/render", "playback/render/ffmpeg",

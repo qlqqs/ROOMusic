@@ -86,6 +86,7 @@ Before writing or reviewing backend code:
 | [认领合同](./claim-contracts.md) | M4 第三项：迁移 0020、待认领的判定与推荐、预览与令牌、认领的执行器与撤销、读取接口、测试 |
 | [备份管理合同](./backup-management-contracts.md) | 删除与批量删除备份、保留规则（天数 / 份数上限、备份目录里的规则文件、未确认不删的保存语义）、测试 |
 | [Music Steward And Operation Guidelines](./agent-and-operation-guidelines.md) | Agent modes, Review Subagent, tools, Change Sets, and recovery |
+| [管家运行时合同](./steward-runtime-contracts.md) | M6 C2：迁移 0051、工具合同与 16 个只读工具、设置与探测、会话接口与 SSE 事件、循环上限、两种模型协议、出站与密钥的落地数值、错误码、日志、测试 |
 | [Quality Guidelines](./quality-guidelines.md) | Focused code, forbidden coupling, tests, and gates |
 
 ## Quality Check

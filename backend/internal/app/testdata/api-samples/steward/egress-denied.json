@@ -1,0 +1,24 @@
+{
+  "body": {
+    "error": {
+      "code": "egress_denied",
+      "message": "出站地址不允许"
+    },
+    "probe_result": {
+      "failures": [
+        {
+          "error": {
+            "kind": "egress_denied",
+            "message": "出站地址不允许"
+          },
+          "step": "endpoint"
+        }
+      ],
+      "models": [],
+      "tool_support": "unconfirmed"
+    },
+    "probed_at": "2026-01-01T00:00:00Z",
+    "request_id": "sample-request"
+  },
+  "status": 403
+}

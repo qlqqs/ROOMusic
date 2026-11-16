@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "provider_no_tool_support",
+      "message": "模型不支持工具调用"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 422
+}

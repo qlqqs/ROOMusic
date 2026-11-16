@@ -24,6 +24,7 @@ import (
 	libraryapi "github.com/qlqq/roomusic/backend/internal/library/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/listening"
 	listeningapi "github.com/qlqq/roomusic/backend/internal/listening/httpapi"
+	"github.com/qlqq/roomusic/backend/internal/operations"
 	operationsapi "github.com/qlqq/roomusic/backend/internal/operations/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/personal"
 	personalapi "github.com/qlqq/roomusic/backend/internal/personal/httpapi"
@@ -134,14 +135,16 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", httpserver.HealthHandler)
+	operationKinds := []operations.Kind{governance.CorrectionOperations(), governance.GroupChangeOperations(), governance.GroupDefaultOperations(),
+		governance.IssueReviewOperations(), governance.ClaimOperations(), governance.ArtistMergeKind{}, governance.ArtistSplitKind{}, governance.ArtistRenameKind{}, governance.ArtistCandidateIgnoreKind{}}
+	registerSteward(lifecycle, mux, database, guard, settings.DataDirectory, logger, libraryService, operationKinds)
 	mux.HandleFunc("GET /readyz", httpserver.ReadyHandler(func() bool { return database != nil }))
 	identityapi.New(database, guard, assembly.loginThrottle, logger).Register(mux)
 	libraryapi.New(database, guard, libraryService, settings.AllowedLibraryRoots, logger).Register(mux)
 	catalogapi.New(database, guard, settings.DataDirectory, logger, catalogapi.WithAnalysisVersion(analysis.Version)).Register(mux)
 	catalogapi.NewArtistGovernance(database, guard, logger, artistResolutionAdapter{}).Register(mux)
 	// 受治理操作的撤销与展示：每种操作类型的能力由拥有对应业务表的包提供，operations/httpapi 不导入业务包。
-	operationsapi.New(database, guard, logger, governance.CorrectionOperations(), governance.GroupChangeOperations(), governance.GroupDefaultOperations(),
-		governance.IssueReviewOperations(), governance.ClaimOperations(), governance.ArtistMergeKind{}, governance.ArtistSplitKind{}, governance.ArtistRenameKind{}, governance.ArtistCandidateIgnoreKind{}).Register(mux)
+	operationsapi.New(database, guard, logger, operationKinds...).Register(mux)
 	var analysisWorker *playback.AnalysisWorker
 	analysisDone := make(chan struct{})
 	if database != nil && assembly.analysis != nil {

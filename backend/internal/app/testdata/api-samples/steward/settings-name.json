@@ -1,0 +1,16 @@
+{
+  "body": {
+    "display_name": "合成管家",
+    "endpoint": "",
+    "key_last_four": "",
+    "key_needs_reentry": false,
+    "key_saved": false,
+    "model": "",
+    "overrides": {},
+    "probe_result": null,
+    "probed_at": null,
+    "protocol": "",
+    "updated_at": "2026-01-01T00:00:00Z"
+  },
+  "status": 200
+}

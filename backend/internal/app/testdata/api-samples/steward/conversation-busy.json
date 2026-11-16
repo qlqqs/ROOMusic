@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "conversation_busy",
+      "message": "这个会话正在运行"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 409
+}

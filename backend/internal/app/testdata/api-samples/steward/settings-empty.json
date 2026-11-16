@@ -1,0 +1,16 @@
+{
+  "body": {
+    "display_name": "",
+    "endpoint": "",
+    "key_last_four": "",
+    "key_needs_reentry": false,
+    "key_saved": false,
+    "model": "",
+    "overrides": {},
+    "probe_result": null,
+    "probed_at": null,
+    "protocol": "",
+    "updated_at": null
+  },
+  "status": 200
+}

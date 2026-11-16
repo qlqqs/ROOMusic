@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": {
+      "code": "steward_disabled",
+      "message": "管理员已关闭成员使用管家"
+    },
+    "request_id": "sample-request"
+  },
+  "status": 403
+}
