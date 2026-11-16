@@ -1,4 +1,0 @@
-{"file":".trellis/spec/backend/quality-guidelines.md","reason":"后端测试质量要求"}
-{"file":".trellis/spec/backend/agent-and-operation-guidelines.md","reason":"核对没有越过后端权威的入口"}
-{"file":".trellis/spec/backend/logging-guidelines.md","reason":"核对密钥与正文不进日志"}
-{"file":"docs/architecture/adr/0005-steward-data-and-egress.md","reason":"核对实现与 ADR 的规则一致"}
