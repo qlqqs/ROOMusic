@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 58
+- **Total Sessions**: 59
 - **Last Active**: 2026-11-16
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~183 | Active |
+| `journal-2.md` | ~205 | Active |
 | `journal-1.md` | ~1972 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 59 | 2026-11-16 | 管家 C4：对话页与 Agent 设置栏目 | `8e9bb3b8` | `steward-c4-chat` |
 | 58 | 2026-11-16 | 管家 C3：MCP 服务与个人访问令牌 | `7242322d` | `steward-c3-mcp` |
 | 57 | 2026-11-16 | 管家 C2：运行时与只读工具 | `e5253127` | `main` |
 | 56 | 2026-11-15 | 界面交互合入主分支并推送 | `f0b8c0fe`, `78985c25` | `main` |

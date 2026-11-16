@@ -181,3 +181,25 @@ A–E 集成后完成全量基线、定向复验与逐项视觉核对，修复�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 59: 管家 C4：对话页与 Agent 设置栏目
+<!-- trellis-session: v=2 fp=f0e0b7b12b9ae93d -->
+
+**Date**: 2026-11-16
+**Task**: 管家 C4：对话页与 Agent 设置栏目
+**Branch**: `steward-c4-chat`
+
+### Summary
+
+实现对话面板与整页、流式显示、会话管理、Agent 设置栏目；后端加名字提示词与继续接口；两轮独立审查共 24 项已修。未做全量测试、竞态检测与真实模型试用。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8e9bb3b8` | feat(steward): 对话页与 Agent 设置栏目（C4） |
+
+### Status
+
+[OK] **Completed**
