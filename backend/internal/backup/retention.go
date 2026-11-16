@@ -120,6 +120,7 @@ func retentionPlan(files []File, rule Retention, now time.Time) []File {
 }
 
 // SaveRetention 在同一临界区内预览、持久化与清理；未确认且需要删除时没有任何写入。
+// 管家固定使用 confirm=false，把 ConfirmationRequired 映射为拒绝；只有设置页可确认删除。
 func (s *Service) SaveRetention(ctx context.Context, rule Retention, confirm bool, actorID string) (RetentionResult, error) {
 	if err := ctx.Err(); err != nil {
 		return RetentionResult{}, err
@@ -209,4 +210,24 @@ func (s *Service) applyRetention(ctx context.Context, plan []File, trigger strin
 		}
 	}
 	return deleted, failed, nil
+}
+
+// PreviewRetention 只读计算保存规则时将清理的份数，不写规则或删除文件。
+func (s *Service) PreviewRetention(ctx context.Context, rule Retention) (int, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	if !validRetention(rule) {
+		return 0, failure("retention", "invalid_input")
+	}
+	s.retentionMu.Lock()
+	defer s.retentionMu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	files, err := s.listFiles()
+	if err != nil {
+		return 0, ErrNotWritable
+	}
+	return len(retentionPlan(files, rule, s.now())), nil
 }

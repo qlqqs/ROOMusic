@@ -163,3 +163,44 @@ Subagent 响应当作执行已提交的证据。批准引用、执行状态和�
 
 这些要求来自 Core 0 可观测性合同（本机归档 `.trellis/tasks/archive/2026-09/08-31-roomusic-core-0-rebuild/prd.md`）
 和仓库内的[大型音乐库产品背景](../guides/product-goals.md)。
+
+## 管家诊断日志环与配置事件（C9）
+
+`cmd/roomusic/main.go` 用 `diagnostics.NewHandler` 包装原 JSON Handler，并通过
+`app.WithDiagnostics` 将同一个进程内环交给管理员诊断工具。容量固定 1000，重启清空；
+原 Handler 先输出，环使用 TryLock，竞争时丢弃本次环记录，不等待、不建立队列。
+旁路脱敏或入环出错不得改变原 Handler 的输出、返回值和业务行为。
+
+环只保留 `{time,level,fields}`，不保留自由消息正文。
+
+白名单按产品 slog 调用点整理（实现为 `diagnostics/logs.go:safeLogKey`）：
+
+- 字符串键：`event`、`module`、`level`、`msg`、`kind`、`status`、`reason`、`tool`、`mode`、`source_kind`、`outcome`、`error_code`、`error_kind`、`route_template`、`method`、`mime_type`、`category`、`stage`、`trigger`、`direction`、`capability`、`phase`、`yield_status`、`operation`。
+- 标识键：`request_id` 以及所有以 `_id` 结尾的键；标识必须是后端记录 ID，不是凭据明文。
+- 仅数值键：`count`、`total`、`bytes`、`duration_ms`、`response_bytes`、`status_code`、`exit_code`、`keep_days`、`keep_count`、`conversations`、`analyzed`、`completed`、`written`、`batch_size`、`skipped_current`、`batch_ms`、`yield_ms`、`elapsed_ms`、`eta_ms`、`live_updated`、`target_generation`、`from_version`、`to_version`、`version`、`textnorm_version`、`search_projection_version`、`artist_projection_version`、`track_budget`、`name_budget`、`estimated_tracks`、`estimated_input_names`、`files_parsed`、`parse_cache_hits`、`parse_cache_writes`、`candidates_written`、`candidates_skipped`、`artwork_deferred_loads`、`matched`、`rebound`、`ambiguous_keys`、`content_replaced`、`deferred_scopes`、`fingerprints_borrowed`、`fingerprints_computed`、`fingerprints_reused`、`fingerprint_failures`、`scope_failures`、`step`、`steps`、`input_tokens`、`output_tokens`、`usage_known_steps`、`search_count`、`failed_count`、`result_count`、`approved`、`rejected`、`needs_human_confirmation`。`status` 同时接受数值状态码。
+- 数值键只接收 int/uint/float/duration，以及现有模型用量的 `*int`/`*int64`；不接受字符串或任意容器，duration 转毫秒。
+- 所有其它键整项丢弃，包括 `err`、`error`、`detail`、`path`、`username`、`source`、`host`、`sql`、`env`、`message`、`key`、`model`、`domain`。
+  不根据数值类型自动放行未知键。命名组与容器整项丢弃；匿名组只展开白名单子属性。键名使用上述小写精确匹配。
+
+清单覆盖 HTTP 完成、身份拒绝、扫描/身份规划/增量统计、备份、目录投影批次、管家用量/审查/工具以及播放失败分类。
+`msg` 只保留 `diagnostics/messages.go` 中从产品调用点核对的固定文本，仍经过值脱敏；动态 `slog.Record.Message` 不入环，
+显式 `msg` 属性先值脱敏，非固定文本统一为 `[omitted]`，防止普通正文通过此键进入模型。
+
+保留字符串统一做值脱敏：URI、带下划线前缀的 key/token/secret/password 等赋值（含查询参数）、JSON/冒号赋值、
+Authorization Basic/Token/Bearer、Cookie、裸 sk-/sk-ant- 密钥和无协议 user:pass@host；检测到凭据形态时整串替为 `[redacted]`。
+文本中的 Unix/Windows 绝对路径整体替换，空格属于路径直到引号/分隔符，不残留中间目录名；
+`route_template` 只保留已登记 API/健康路由形状或 `<unmatched>`，MIME 值中的斜杠不作为绝对路径。
+不执行未知 Any/LogValuer/Stringer；每条最多 64 个属性、匿名组深度 8、字段名 128 字节、字符串 4096 字节，
+过长字符串替为 `[omitted]`；脱敏后字段超过 16 KiB 则丢弃整条。脱敏与大小校验全部在取得环锁之前完成，锁内只写入。
+
+成功的管家配置写入（含分区设置和套用 PEQ）记一条 INFO：
+
+```json
+{"event":"steward.config.changed","message":"管家配置已更新","module":"steward","tool":"set_scan_schedule","actor_id":"用户 UUID","source":"chat","target_id":"scan_schedule","conversation_id":"对话 UUID","token_id":"","request_id":"请求 ID"}
+```
+
+MCP 的 source=mcp、token_id 为令牌记录 UUID，conversation_id 为空；绝不记录令牌明文。
+目标只用后端稳定 ID 或固定用途名。事件不记输入、配置值、成员用户名、目录路径或提示词。
+对话/令牌记录 ID 作为 `_id` 白名单字段保留；`source` 整项丢弃。登录失败/节流/来源拒绝的进程日志字段不变，
+其 username/source/host 不进入日志环。
+日志仅表示实际变更或已发起动作（started=false 或 requested=false 不记配置变更；启动不表示后台任务已完成），不替代目录操作收据或统一幂等对账。

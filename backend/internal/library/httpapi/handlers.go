@@ -1,8 +1,8 @@
 // Package httpapi 是目录与扫描能力的 REST 传输层：允许根的登记、停用、恢复、改路径与操作历史，
 // 以及扫描的启动、查询、取消和诊断。
 //
-// 扫描 handler 只做解析、鉴权和响应映射，用例在 library.Service。目录与目录操作的 handler
-// 仍直接执行 SQL（含幂等流程），这是 B0 有意保留的技术债，M3 按受治理操作合同重做时一并抽出。
+// 目录列表、写操作与扫描用例在 library.Service；handler 负责解析、鉴权和响应映射。
+// 目录操作历史查询仍在传输层。
 package httpapi
 
 import (

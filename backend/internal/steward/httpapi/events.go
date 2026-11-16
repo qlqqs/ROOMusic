@@ -219,6 +219,7 @@ func (h *Handlers) streamRun(w http.ResponseWriter, r *http.Request, ctx context
 		return
 	}
 	heartbeat := time.NewTicker(eventHeartbeatInterval)
+	// 此定时器复查长连接会话；工具预览与执行另由 app 装配在每次调用前重读角色和停用状态。
 	credentials := time.NewTicker(credentialCheckInterval)
 	defer heartbeat.Stop()
 	defer credentials.Stop()

@@ -10,11 +10,16 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/qlqq/roomusic/backend/internal/backup"
+	backuptools "github.com/qlqq/roomusic/backend/internal/backup/stewardtools"
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
 	governancetools "github.com/qlqq/roomusic/backend/internal/catalog/governance/stewardtools"
 	catalogtools "github.com/qlqq/roomusic/backend/internal/catalog/stewardtools"
+	"github.com/qlqq/roomusic/backend/internal/dspsettings"
+	dsptools "github.com/qlqq/roomusic/backend/internal/dspsettings/stewardtools"
 	"github.com/qlqq/roomusic/backend/internal/identity"
+	identitytools "github.com/qlqq/roomusic/backend/internal/identity/stewardtools"
 	"github.com/qlqq/roomusic/backend/internal/library"
 	librarytools "github.com/qlqq/roomusic/backend/internal/library/stewardtools"
 	"github.com/qlqq/roomusic/backend/internal/listening"
@@ -23,7 +28,11 @@ import (
 	operationtools "github.com/qlqq/roomusic/backend/internal/operations/stewardtools"
 	"github.com/qlqq/roomusic/backend/internal/personal"
 	personaltools "github.com/qlqq/roomusic/backend/internal/personal/stewardtools"
+	"github.com/qlqq/roomusic/backend/internal/platform/diagnostics"
+	diagnostictools "github.com/qlqq/roomusic/backend/internal/platform/diagnostics/stewardtools"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
+	"github.com/qlqq/roomusic/backend/internal/playback"
+	playbacktools "github.com/qlqq/roomusic/backend/internal/playback/stewardtools"
 	stewardapi "github.com/qlqq/roomusic/backend/internal/steward/httpapi"
 	stewardmcp "github.com/qlqq/roomusic/backend/internal/steward/mcp"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
@@ -35,8 +44,17 @@ import (
 	zonestools "github.com/qlqq/roomusic/backend/internal/zones/stewardtools"
 )
 
+type stewardConfig struct {
+	diagnostics  *diagnostics.Service
+	backups      *backup.Service
+	allowedRoots []string
+	audio        *playback.Service
+	progress     playback.AnalysisProgressProvider
+	dsp          *dspsettings.Service
+}
+
 // registerSteward 在接受请求前恢复会话状态；失败时记录日志并让管家接口返回 503。
-func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sql.DB, guard *identity.Guard, dataDirectory string, logger *slog.Logger, scans *library.Service, kinds []operations.Kind, playback *zones.Service, history *listening.Service, personalLibrary *personal.Service) {
+func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sql.DB, guard *identity.Guard, dataDirectory string, logger *slog.Logger, scans *library.Service, kinds []operations.Kind, playback *zones.Service, history *listening.Service, personalLibrary *personal.Service, configurations ...stewardConfig) {
 	store := runtime.NewStore(database).WithOperationLookup(func(ctx context.Context, tx *sql.Tx, userID, key string) (runtime.RecordedOperation, error) {
 		result, err := operations.LookupResult(ctx, tx, userID, key)
 		if errors.Is(err, operations.ErrNotFound) {
@@ -71,12 +89,23 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 	definitions = append(definitions, governancetools.StewardTools(database, artistResolutionAdapter{})...)
 	definitions = append(definitions, operationtools.RevertTools(database, kinds...)...)
 	definitions = append(definitions, librarytools.StewardTools(scans)...)
+	if len(configurations) > 0 {
+		configuration := configurations[0]
+		definitions = append(definitions, librarytools.ConfigTools(scans, configuration.allowedRoots, logger)...)
+		definitions = append(definitions, diagnostictools.StewardTools(configuration.diagnostics)...)
+		definitions = append(definitions, backuptools.StewardTools(configuration.backups, database, logger)...)
+		definitions = append(definitions, identitytools.StewardTools(database, logger)...)
+		definitions = append(definitions, playbacktools.StewardTools(configuration.audio, catalog.NewStore(database), configuration.progress)...)
+		definitions = append(definitions, zonestools.SettingsTools(playback, logger)...)
+		definitions = append(definitions, dsptools.StewardTools(configuration.dsp, playback, logger)...)
+	}
 	definitions = append(definitions, operationtools.StewardTools(database, kinds...)...)
 	definitions = append(definitions, zonestools.StewardTools(playback, catalog.NewStore(database))...)
 	definitions = append(definitions, listeningtools.StewardTools(history)...)
 	definitions = append(definitions, personaltools.StewardTools(personalLibrary)...)
 	definitions = append(definitions, webService.StewardTools()...)
 	for _, definition := range definitions {
+		definition = withCurrentStewardUser(definition, guard, store)
 		if definition.Scope == tool.ScopeShared {
 			handler := definition.Handler
 			definition.Handler = func(ctx context.Context, caller tool.Caller, input json.RawMessage) (json.RawMessage, error) {
@@ -129,4 +158,56 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
  AND u.disabled_at IS NULL AND u.id=$2::uuid AND u.role=$3)`, identity.HashSessionToken(cookie.Value), user.ID, user.Role).Scan(&valid)
 		return valid, err
 	}).Register(mux)
+}
+
+// withCurrentStewardUser 在预览及实际调用前重读身份，覆盖长对话、确认后执行与 MCP。
+// 注册表先做入口快照检查，此处再按最新角色检查并把新身份传给业务工具。
+func withCurrentStewardUser(definition tool.Definition, guard *identity.Guard, store *runtime.Store) tool.Definition {
+	refresh := func(ctx context.Context, caller tool.Caller) (tool.Caller, error) {
+		user, err := guard.EnabledUser(ctx, caller.User.ID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return caller, &tool.Error{Code: tool.CodePermissionDenied, Message: "成员已停用或不存在"}
+		}
+		if err != nil {
+			if ctx.Err() != nil {
+				return caller, ctx.Err()
+			}
+			return caller, &tool.Error{Code: "database_unavailable", Message: "暂时无法核对成员身份"}
+		}
+		caller.User = user
+		if !definition.MinRole.Allows(user) {
+			return caller, &tool.Error{Code: tool.CodePermissionDenied, Message: "无权调用此工具"}
+		}
+		if user.Role != "admin" {
+			enabled, err := store.GetMembersEnabled(ctx)
+			if err != nil {
+				return caller, &tool.Error{Code: "database_unavailable", Message: "暂时无法核对管家权限"}
+			}
+			if !enabled {
+				return caller, &tool.Error{Code: tool.CodePermissionDenied, Message: "成员管家功能已关闭"}
+			}
+		}
+		if definition.Available != nil && !definition.Available(ctx, caller) {
+			return caller, &tool.Error{Code: tool.CodePermissionDenied, Message: "此工具当前不可用"}
+		}
+		return caller, nil
+	}
+	handler := definition.Handler
+	definition.Handler = func(ctx context.Context, caller tool.Caller, input json.RawMessage) (json.RawMessage, error) {
+		current, err := refresh(ctx, caller)
+		if err != nil {
+			return nil, err
+		}
+		return handler(ctx, current, input)
+	}
+	if preview := definition.Preview; preview != nil {
+		definition.Preview = func(ctx context.Context, caller tool.Caller, input json.RawMessage) (tool.Preview, error) {
+			current, err := refresh(ctx, caller)
+			if err != nil {
+				return tool.Preview{}, err
+			}
+			return preview(ctx, current, input)
+		}
+	}
+	return definition
 }

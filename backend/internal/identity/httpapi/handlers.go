@@ -1,6 +1,6 @@
 // Package httpapi 是身份能力的 REST 传输层：初始化管理员、登录登出、当前用户与成员管理。
 // 权限判断由 identity.Guard 完成；这里的 handler 只解码请求、调用守卫和映射响应。
-// 已有的成员写入 SQL 暂留在 handler 中（B0 技术债）；改密码与重置的 SQL 在 identity/passwords.go。
+// 成员列表、状态与会话管理在 identity/users.go；改密码与重置在 identity/passwords.go。
 package httpapi
 
 import (
@@ -235,26 +235,14 @@ func (handlers *Handlers) listUsers(w http.ResponseWriter, r *http.Request) {
 	if _, ok := handlers.guard.RequireAdmin(w, r); !ok {
 		return
 	}
-	rows, err := handlers.database.QueryContext(r.Context(), "SELECT id::text,username,role,disabled_at,created_at FROM users ORDER BY username")
+	users, err := identity.ListUsers(r.Context(), handlers.database)
 	if err != nil {
-		httpserver.WriteError(w, r, 503, "database_unavailable", "服务暂不可用")
+		writeUserManagementError(w, r, err)
 		return
 	}
-	defer rows.Close()
-	items := []map[string]any{}
-	for rows.Next() {
-		var id, username, role string
-		var disabled sql.NullTime
-		var created time.Time
-		if rows.Scan(&id, &username, &role, &disabled, &created) != nil {
-			httpserver.WriteError(w, r, 503, "database_unavailable", "服务暂不可用")
-			return
-		}
-		items = append(items, map[string]any{"id": id, "username": username, "role": role, "disabled": disabled.Valid, "created_at": created})
-	}
-	if rows.Err() != nil {
-		httpserver.WriteError(w, r, 503, "database_unavailable", "服务暂不可用")
-		return
+	items := make([]map[string]any, 0, len(users))
+	for _, user := range users {
+		items = append(items, map[string]any{"id": user.ID, "username": user.Username, "role": user.Role, "disabled": user.Disabled, "created_at": user.CreatedAt})
 	}
 	httpserver.WriteJSON(w, 200, map[string]any{"items": items})
 }
@@ -313,82 +301,8 @@ func (handlers *Handlers) updateUser(w http.ResponseWriter, r *http.Request) {
 		httpserver.WriteError(w, r, 400, "invalid_input", "缺少禁用状态")
 		return
 	}
-	tx, err := handlers.database.BeginTx(r.Context(), nil)
-	if err != nil {
-		httpserver.WriteError(w, r, 503, "database_unavailable", "服务暂不可用")
-		return
-	}
-	defer tx.Rollback()
-	// Lock administrator rows first so concurrent last-admin checks share one order.
-	adminRows, queryErr := tx.QueryContext(r.Context(), "SELECT id FROM users WHERE role='admin' AND disabled_at IS NULL FOR UPDATE")
-	if queryErr != nil {
-		httpserver.WriteError(w, r, 503, "database_unavailable", "服务暂不可用")
-		return
-	}
-	admins := 0
-	for adminRows.Next() {
-		admins++
-	}
-	rowsErr := adminRows.Err()
-	adminRows.Close()
-	if rowsErr != nil {
-		httpserver.WriteError(w, r, 503, "database_unavailable", "服务暂不可用")
-		return
-	}
-	var role string
-	var currentlyDisabled bool
-	err = tx.QueryRowContext(r.Context(), "SELECT role, disabled_at IS NOT NULL FROM users WHERE id=$1::uuid FOR UPDATE", id).Scan(&role, &currentlyDisabled)
-	if err == sql.ErrNoRows {
-		httpserver.WriteError(w, r, 404, "not_found", "用户不存在")
-		return
-	}
-	if err != nil {
-		httpserver.WriteError(w, r, 503, "database_unavailable", "服务暂不可用")
-		return
-	}
-	if *in.Disabled && !currentlyDisabled && role == "admin" {
-		if admins <= 1 {
-			httpserver.WriteError(w, r, 409, "last_admin", "不能禁用最后一个管理员")
-			return
-		}
-	}
-	if *in.Disabled {
-		var result sql.Result
-		result, err = tx.ExecContext(r.Context(), "UPDATE users SET disabled_at=NOW() WHERE id=$1::uuid", id)
-		if err == nil {
-			if affected, affectedErr := result.RowsAffected(); affectedErr != nil {
-				err = affectedErr
-			} else if affected != 1 {
-				err = sql.ErrNoRows
-			}
-		}
-	} else {
-		var result sql.Result
-		result, err = tx.ExecContext(r.Context(), "UPDATE users SET disabled_at=NULL WHERE id=$1::uuid", id)
-		if err == nil {
-			if affected, affectedErr := result.RowsAffected(); affectedErr != nil {
-				err = affectedErr
-			} else if affected != 1 {
-				err = sql.ErrNoRows
-			}
-		}
-	}
-	if err != nil {
-		if err == sql.ErrNoRows {
-			httpserver.WriteError(w, r, 404, "not_found", "用户不存在")
-			return
-		}
-		httpserver.WriteError(w, r, 503, "database_unavailable", "无法更新用户")
-		return
-	}
-	if *in.Disabled {
-		if _, err = tx.ExecContext(r.Context(), "UPDATE sessions SET revoked_at=NOW() WHERE user_id=$1::uuid AND revoked_at IS NULL", id); err != nil {
-			httpserver.WriteError(w, r, 503, "database_unavailable", "无法撤销会话")
-			return
-		}
-	}
-	if err = tx.Commit(); err != nil {
-		httpserver.WriteError(w, r, 503, "database_unavailable", "无法更新用户")
+	if err := identity.SetUserDisabled(r.Context(), handlers.database, id, *in.Disabled); err != nil {
+		writeUserManagementError(w, r, err)
 		return
 	}
 	httpserver.WriteJSON(w, 200, map[string]bool{"disabled": *in.Disabled})
@@ -405,20 +319,25 @@ func (handlers *Handlers) revokeUserSessions(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	// 没有删除用户的接口，存在性检查与撤销之间用户不会消失，所以不需要把两步放进同一个事务。
-	var exists bool
-	if err := handlers.database.QueryRowContext(r.Context(), "SELECT EXISTS (SELECT 1 FROM users WHERE id=$1::uuid)", id).Scan(&exists); err != nil {
-		httpserver.WriteError(w, r, 503, "database_unavailable", "无法撤销会话")
-		return
-	}
-	if !exists {
-		httpserver.WriteError(w, r, 404, "not_found", "用户不存在")
-		return
-	}
-	_, err := handlers.database.ExecContext(r.Context(), "UPDATE sessions SET revoked_at=NOW() WHERE user_id=$1::uuid AND revoked_at IS NULL", id)
-	if err != nil {
-		httpserver.WriteError(w, r, 503, "database_unavailable", "无法撤销会话")
+	if err := identity.RevokeUserSessions(r.Context(), handlers.database, id); err != nil {
+		writeUserManagementError(w, r, err)
 		return
 	}
 	httpserver.WriteJSON(w, 200, map[string]bool{"revoked": true})
+}
+
+func writeUserManagementError(w http.ResponseWriter, r *http.Request, err error) {
+	var managementError *identity.UserManagementError
+	if !errors.As(err, &managementError) {
+		httpserver.WriteError(w, r, 503, "database_unavailable", "服务暂不可用")
+		return
+	}
+	status := http.StatusServiceUnavailable
+	switch managementError.Code {
+	case "not_found":
+		status = http.StatusNotFound
+	case "last_admin":
+		status = http.StatusConflict
+	}
+	httpserver.WriteError(w, r, status, managementError.Code, managementError.Message)
 }
