@@ -247,3 +247,25 @@ A–E 集成后完成全量基线、定向复验与逐项视觉核对，修复�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 62: 管家 C7：审查子代理与 steward 模式
+<!-- trellis-session: v=2 fp=88682d8b12d3bd65 -->
+
+**Date**: 2026-11-16
+**Task**: 管家 C7：审查子代理与 steward 模式
+**Branch**: `steward-c7-review`
+
+### Summary
+
+steward 模式下由独立模型调用逐项审查修改方案；审查不可用时不执行。后端两轮测试 106+33 通过，前端 e2e 5 通过；全量测试与真实模型未执行。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `11da0b64` | feat(steward): 审查子代理与 steward 模式（C7） |
+
+### Status
+
+[OK] **Completed**
