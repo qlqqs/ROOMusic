@@ -343,7 +343,7 @@ test.describe("侧栏底部的当前用户", () => {
     await expect(trigger).toHaveAttribute("aria-expanded", "false");
     await openSettings(page);
     await expect(settingsLink(page)).toHaveAttribute("aria-current", "page");
-    await expect(page.getByRole("navigation", { name: "设置", exact: true }).getByRole("link")).toHaveText(["账号", "播放", "访问令牌", "扫描目录", "成员", "操作记录", "备份"]);
+    await expect(page.getByRole("navigation", { name: "设置", exact: true }).getByRole("link")).toHaveText(["账号", "播放", "Agent", "扫描目录", "成员", "操作记录", "备份"]);
   });
 
   test("退出失败留在当前页面，菜单关闭且提示重试后才真正退出", async ({ page, backend }) => {

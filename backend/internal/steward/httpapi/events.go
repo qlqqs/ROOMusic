@@ -34,6 +34,18 @@ func (h *Handlers) sendMessage(w http.ResponseWriter, r *http.Request, user iden
 		invalidInput(w, r)
 		return
 	}
+	h.startRun(w, r, user, id, input.Text, false)
+}
+
+func (h *Handlers) continueConversation(w http.ResponseWriter, r *http.Request, user identity.User) {
+	id, ok := conversationID(w, r)
+	if !ok {
+		return
+	}
+	h.startRun(w, r, user, id, "", true)
+}
+
+func (h *Handlers) startRun(w http.ResponseWriter, r *http.Request, user identity.User, id, text string, continuation bool) {
 	detail, err := h.store.GetConversation(r.Context(), user.ID, id)
 	if err != nil {
 		h.writeStoreError(w, r, err)
@@ -75,7 +87,8 @@ func (h *Handlers) sendMessage(w http.ResponseWriter, r *http.Request, user iden
 		modelName = settings.Model
 	}
 	h.streamRun(w, r, ctx, cancel, runtime.RunParams{Caller: tool.Caller{User: user, Source: "chat"},
-		ConversationID: id, Text: input.Text, Provider: model, Model: modelName}, user)
+		ConversationID: id, Text: text, Continue: continuation, DisplayName: settings.DisplayName,
+		Provider: model, Model: modelName}, user)
 }
 
 type runResult struct {
@@ -114,7 +127,7 @@ func (h *Handlers) streamRun(w http.ResponseWriter, r *http.Request, ctx context
 	finish := responseLifetime(w, r)
 	defer finish()
 
-	// 原子占用失败不会触发 Started，仍可写普通 JSON 错误。
+	// 原子占用或继续条件检查失败不会触发 Started，仍可写普通 JSON 错误。
 	var completed *runResult
 	cancelledByCheck := false
 	select {

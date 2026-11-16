@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { jsonResponse, stubFetch } from "../../test/http";
 import { decode as d } from "./index";
-import { ApiError, failureOf, type ApiFailure } from "./errors";
+import { ApiError, errorBodyOf, failureOf, type ApiFailure } from "./errors";
 import { apiRequest, setSessionBoundary } from "./request";
 
 const decodeOk = d.defineDecoder(d.object({ ok: d.boolean() }));
@@ -120,6 +120,17 @@ describe("apiRequest 后端错误", () => {
       message: "目录已变化",
       requestId: "web-server-echo",
     });
+  });
+
+  it("http 失败带着整个 JSON 响应体：错误信封旁边的字段（探测报告）交给调用方自己解码", async () => {
+    const body = { error: { code: "egress_denied", message: "出站地址不允许" }, request_id: "r", probe_result: { models: [] }, probed_at: "2026-01-01T00:00:00Z" };
+    stubFetch(() => jsonResponse(403, body));
+    const error = await apiRequest({ method: "POST", path: "/api/v1/me/steward/settings/probe" }, decodeOk).then(
+      () => null,
+      (caught: unknown) => caught,
+    );
+    expect(errorBodyOf(error)).toEqual(body);
+    expect(errorBodyOf(new Error("x"))).toBeUndefined();
   });
 
   it("信封的 request_id 为空时回退到客户端请求 ID", async () => {

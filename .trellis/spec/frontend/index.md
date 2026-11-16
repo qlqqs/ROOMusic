@@ -26,6 +26,9 @@ M4 的第一项增加默认版本（管理员在专辑详情设定、可撤销�
 M1a 技术设计（本机归档 `.trellis/tasks/archive/2026-10/09-28-classical-m1a-shell-admin/design.md`）。各规范文件区分“已实现的合同”与尚未实现的目标
 （播放器、搜索、受治理操作与 Agent 界面）；后者不是当前前端已通过验收的声明。
 
+2026-11-16：M6 C4 增加管家的对话界面（`features/steward`：侧栏入口与右侧停靠面板、`/steward` 整页对话、窄屏标签栏第五项）与设置页的
+Agent 栏目（`/settings/agent`，取代 `/settings/tokens`），见[管家的前端约定](./steward-guidelines.md)；模式、上下文标签、方案卡片与审查等仍未实现。
+
 ## Pre-Development Checklist
 
 Before writing or reviewing frontend code:
@@ -62,6 +65,7 @@ Before writing or reviewing frontend code:
 | [受治理操作的组件约定](./governance-components.md) | 编辑发行信息、归组、默认版本、元数据页、待认领页与操作记录的组件约定 |
 | [艺人与别名的前端约定](./artist-guidelines.md) | M5 ⑤：`features/artists` 的归属、可点的艺人名（`ArtistNames` 与就绪判断）、艺人列表与艺人页的地址与查询键、艺人收藏的分开读取、整理中的处理、合并/拆开/改名与候选的界面 |
 | [收藏与歌单的前端约定](./personal-guidelines.md) | M5 ② ③：`features/personal` 的归属、查询键与跨标签页刷新、心形与批量状态、收藏页的保留行、歌单的幂等命令、拖动与菜单排序、撤销、“添加到歌单…”与统一曲目行动作 |
+| [管家的前端约定](./steward-guidelines.md) | M6 C4：`features/steward` 的两个公开入口、运行 store 与登出清理、事件与落库共用的归并、SSE 解析、Markdown 安全与 `markdown` 分包、`ApiError.body`、入口可见性、面板断点与焦点、`/steward` 的去向、Agent 设置栏目、测试替身 |
 | [播放器设计规范](./player-design-guidelines.md) | 工作台视觉层级、响应式布局、播放交互与可访问性 |
 | [界面布局与交互约定](./interface-layout-guidelines.md) | 2026-11-15 整理：即时筛选、共用菜单、专辑状态与署名、信号圆点与设备图标、手机标签栏与我的、概览书架及状态表、设置即改即存与空状态 |
 | [Core 0 当前运行合同](../backend/core0-runtime-contracts.md) | 平台层 REST 通则、HTTP 缓存、环境、CI 与专题合同索引 |

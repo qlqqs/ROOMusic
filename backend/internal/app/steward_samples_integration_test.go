@@ -132,6 +132,7 @@ func TestPostgreSQLStewardAPIResponseSamples(t *testing.T) {
 	path := "me/steward/conversations/" + c.ID
 	record("conversations", call("admin", "GET", "me/steward/conversations", nil), 200)
 	record("conversation", call("admin", "GET", path, nil), 200)
+	record("continue-nothing", call("admin", "POST", path+"/continue", nil), 409)
 	record("conversation-renamed", call("admin", "PATCH", path, map[string]string{"title": "新标题"}), 200)
 	record("conversation-model-updated", call("admin", "PATCH", path, map[string]string{"model": "synthetic-other-model"}), 200)
 	record("conversation-model-default", call("admin", "PATCH", path, map[string]string{"model": ""}), 200)
@@ -156,7 +157,7 @@ func TestPostgreSQLStewardAPIResponseSamples(t *testing.T) {
 	record("settings-cleared-key", call("admin", "PUT", "me/steward/settings", map[string]any{"key": nil}), 200)
 	mode.Store(3)
 	record("probe-keyless-unconfirmed", call("admin", "POST", "me/steward/settings/probe", map[string]any{"key": nil}), 200)
-	if len(samples.samples) != 30 {
+	if len(samples.samples) != 31 {
 		t.Fatalf("管家样本覆盖清单发生变化：%d", len(samples.samples))
 	}
 	samples.finish()

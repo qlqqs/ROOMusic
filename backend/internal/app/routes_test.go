@@ -77,6 +77,7 @@ func TestRoutesResolveToRegisteredPatterns(t *testing.T) {
 		{http.MethodDelete, "/api/v1/me/steward/conversations/" + id, "DELETE /api/v1/me/steward/conversations/{id}"},
 		{http.MethodPatch, "/api/v1/me/steward/conversations/" + id, "PATCH /api/v1/me/steward/conversations/{id}"},
 		{http.MethodPost, "/api/v1/me/steward/conversations/" + id + "/messages", "POST /api/v1/me/steward/conversations/{id}/messages"},
+		{http.MethodPost, "/api/v1/me/steward/conversations/" + id + "/continue", "POST /api/v1/me/steward/conversations/{id}/continue"},
 		{http.MethodPost, "/api/v1/me/steward/conversations/" + id + "/cancel", "POST /api/v1/me/steward/conversations/{id}/cancel"},
 		{http.MethodGet, "/api/v1/admin/steward/settings", "GET /api/v1/admin/steward/settings"},
 		{http.MethodPut, "/api/v1/admin/steward/settings", "PUT /api/v1/admin/steward/settings"},

@@ -149,11 +149,38 @@
  * 窄屏：标签栏固定在底部（自己包含底部安全区），迷你播放栏浮在它上方；主内容的底部留白是两者按实际测量的高度之和，最后一行不被遮住。
  * 迷你栏是浮起的卡片，外层透明、不挡下面的点击。桌面播放器参与网格，没有标签栏。
  */
+/* --shell-bottom-inset：窄屏底部被标签栏与迷你播放栏占去的高度，页面里需要占满窗口的内容（整页对话）据此计算；宽屏为 0。 */
+.frame { --shell-bottom-inset: var(--tabbar-measured-height, calc(57px + env(safe-area-inset-bottom, 0px))); }
+.frame[data-player] { --shell-bottom-inset: calc(var(--tabbar-measured-height, calc(57px + env(safe-area-inset-bottom, 0px))) + var(--player-measured-height, 72px)); }
 .player { position: fixed; bottom: var(--tabbar-measured-height, calc(57px + env(safe-area-inset-bottom, 0px))); left: 0; right: 0; z-index: 15; min-width: 0; pointer-events: none; }
-.main { padding-bottom: var(--tabbar-measured-height, calc(57px + env(safe-area-inset-bottom, 0px))); }
-.frame[data-player] .main { padding-bottom: calc(var(--tabbar-measured-height, calc(57px + env(safe-area-inset-bottom, 0px))) + var(--player-measured-height, 72px)); }
+.main { padding-bottom: var(--shell-bottom-inset); }
 @media (min-width: 768px) {
-  .main, .frame[data-player] .main { padding-bottom: 0; }
+  .frame, .frame[data-player] { --shell-bottom-inset: 0px; }
   .frame[data-player] { grid-template-rows: minmax(0, 1fr) 68px; }
   .player { position: relative; bottom: auto; grid-column: 1 / -1; grid-row: 2; z-index: 15; background: var(--color-bg); pointer-events: auto; }
+}
+
+/*
+ * 管家的停靠面板：768–1099px 浮在主内容上（右侧，带阴影，不盖住播放栏）；≥1100px 外壳多一列，面板挤占内容。
+ * 窄屏不渲染（外壳按同一断点决定）。
+ */
+.dock { display: none; }
+@media (min-width: 768px) {
+  .dock {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 14;
+    display: block;
+    width: min(var(--layout-steward-width), 100%);
+    min-height: 0;
+    box-shadow: var(--shadow-lg);
+  }
+  .frame[data-player] .dock { bottom: 68px; }
+}
+@media (min-width: 1100px) {
+  .frame[data-steward] { grid-template-columns: var(--layout-sidebar-width) minmax(0, 1fr) var(--layout-steward-width); }
+  .dock { position: relative; top: auto; right: auto; bottom: auto; grid-column: 3; grid-row: 1; width: auto; box-shadow: none; }
+  .frame[data-player] .dock { bottom: auto; }
 }

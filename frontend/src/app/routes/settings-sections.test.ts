@@ -6,7 +6,7 @@ describe("设置分栏", () => {
     expect(visibleSettingsSections("admin").map(({ label, to }) => ({ label, to }))).toEqual([
       { label: "账号", to: "/settings/account" },
       { label: "播放", to: "/settings/playback" },
-      { label: "访问令牌", to: "/settings/tokens" },
+      { label: "Agent", to: "/settings/agent" },
       { label: "扫描目录", to: "/settings/library" },
       { label: "成员", to: "/settings/members" },
       { label: "操作记录", to: "/settings/operations" },
@@ -14,11 +14,11 @@ describe("设置分栏", () => {
     ]);
   });
 
-  it("成员看到账号、播放与访问令牌栏，重复读取不会改变管理员分栏", () => {
+  it("成员看到账号、播放与 Agent 栏，重复读取不会改变管理员分栏", () => {
     expect(visibleSettingsSections("user").map(({ label, to }) => ({ label, to }))).toEqual([
       { label: "账号", to: "/settings/account" },
       { label: "播放", to: "/settings/playback" },
-      { label: "访问令牌", to: "/settings/tokens" },
+      { label: "Agent", to: "/settings/agent" },
     ]);
     expect(visibleSettingsSections("admin")).toHaveLength(7);
   });

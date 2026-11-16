@@ -14,6 +14,9 @@ var ErrNotFound = errors.New("管家资源不存在")
 // ErrConversationBusy 表示会话已有运行占用。
 var ErrConversationBusy = errors.New("管家会话忙")
 
+// ErrNothingToContinue 表示会话没有待继续的用户消息或工具结果。
+var ErrNothingToContinue = errors.New("这个会话没有需要继续的回答")
+
 // ErrInvalidInput 表示分页参数或工具调用结束状态不合法。
 var ErrInvalidInput = errors.New("管家存储参数无效")
 

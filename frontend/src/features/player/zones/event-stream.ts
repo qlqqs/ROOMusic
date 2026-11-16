@@ -2,46 +2,13 @@
 // 断开按 1、2、5、10 秒退避重连，之后每 10 秒；页面重新可见时立即重连。控制端标签页隐藏 30 秒后断开（HTTP/1.1 每个主机只有 6 条连接），
 // 输出端标签页始终保持（流连着即视为输出端在线）。重连后服务端先发快照，状态靠它对齐，不补发。
 import { failureOf } from "../../../shared/api";
+import { SseParser } from "../../../shared/lib/sse";
 import { decodeStreamEvent, type StreamEvent } from "./decoders";
+
+export { SseParser, type SseMessage } from "../../../shared/lib/sse";
 
 const RECONNECT_DELAYS_MS = [1_000, 2_000, 5_000, 10_000] as const;
 const HIDDEN_DISCONNECT_MS = 30_000;
-
-/** SSE 的一条消息：事件类型与 data（多行 data 以换行连接）。 */
-export type SseMessage = { event: string; data: string };
-
-/** 按行解析 SSE：注释行（以“:”开头，如心跳）忽略，空行结束一条消息；没有 event 字段的消息类型是 message。 */
-export class SseParser {
-  private buffer = "";
-  private event = "";
-  private data: string[] = [];
-
-  push(chunk: string): SseMessage[] {
-    this.buffer += chunk;
-    const messages: SseMessage[] = [];
-    for (;;) {
-      const newline = this.buffer.search(/\r\n|\r|\n/);
-      if (newline < 0) break;
-      const line = this.buffer.slice(0, newline);
-      const width = this.buffer.startsWith("\r\n", newline) ? 2 : 1;
-      this.buffer = this.buffer.slice(newline + width);
-      if (line === "") {
-        if (this.data.length > 0) messages.push({ event: this.event === "" ? "message" : this.event, data: this.data.join("\n") });
-        this.event = "";
-        this.data = [];
-        continue;
-      }
-      if (line.startsWith(":")) continue;
-      const colon = line.indexOf(":");
-      const field = colon < 0 ? line : line.slice(0, colon);
-      let value = colon < 0 ? "" : line.slice(colon + 1);
-      if (value.startsWith(" ")) value = value.slice(1);
-      if (field === "event") this.event = value;
-      else if (field === "data") this.data.push(value);
-    }
-    return messages;
-  }
-}
 
 export type EventStreamDeps = {
   open: (outputSessionId: string | null, signal: AbortSignal) => Promise<Response>;

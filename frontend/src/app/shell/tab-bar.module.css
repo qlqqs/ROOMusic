@@ -32,6 +32,14 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* 管家的名字最长 20 个字：一行放不下时省略，不撑宽标签。 */
+.label {
+  max-width: calc(100% - 8px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .tab:active {
   background: var(--color-pressed);
 }

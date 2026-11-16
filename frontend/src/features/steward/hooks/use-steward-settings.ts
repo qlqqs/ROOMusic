@@ -1,0 +1,60 @@
+import { queryOptions, useQuery } from "@tanstack/react-query";
+import { failureOf, isHttpFailure } from "../../../shared/api";
+import { useViewerScope } from "../../auth";
+import type { SettingsDTO } from "../api/decoders";
+import { fetchSettings } from "../api/endpoints";
+import { stewardKeys } from "../query-keys";
+
+/** 没起名字时的名字。 */
+export const DEFAULT_STEWARD_NAME = "管家";
+
+export function settingsQueryOptions(generation: number) {
+  return queryOptions({
+    queryKey: stewardKeys.settings(generation),
+    queryFn: ({ signal }) => fetchSettings(signal),
+    select: (response) => response.data,
+  });
+}
+
+/** 自己的管家设置。成员开关关闭时成员得到 403 steward_disabled。 */
+export function useStewardSettings() {
+  const { generation } = useViewerScope();
+  return useQuery(settingsQueryOptions(generation));
+}
+
+/**
+ * 能不能对话（合同 4.2 的“已配置”与工具能力）：
+ * ready 可以发消息；not_configured 缺端点、协议或模型；needs_key 已存密钥解不开；no_tool_support 模型不支持调用工具。
+ */
+export type StewardReadiness = "ready" | "not_configured" | "needs_key" | "no_tool_support";
+
+export function readinessOf(settings: SettingsDTO): StewardReadiness {
+  if (settings.key_needs_reentry) return "needs_key";
+  const protocol = settings.overrides.protocol ?? settings.protocol;
+  if (settings.endpoint === "" || protocol === "" || effectiveModelOf(settings) === "") return "not_configured";
+  const toolSupport = settings.overrides.tool_support ?? settings.probe_result?.tool_support ?? "unconfirmed";
+  return toolSupport === "unsupported" ? "no_tool_support" : "ready";
+}
+
+/** 设置里生效的对话模型（覆盖项优先）。 */
+export function effectiveModelOf(settings: SettingsDTO): string {
+  return settings.overrides.model ?? settings.model;
+}
+
+/**
+ * 入口与名字：设置读到了才显示入口（成员开关关闭时是 403，读取失败或还没读到时也不显示），
+ * 名字没起时是“管家”。侧栏、标签栏、面板标题与输入框提示都取这里，改名后随设置查询一起变化。
+ */
+export function useStewardEntry(): { available: boolean; name: string } {
+  const query = useStewardSettings();
+  const settings = query.data;
+  return {
+    available: settings !== undefined && !isStewardDisabled(query.error),
+    name: settings === undefined || settings.display_name === "" ? DEFAULT_STEWARD_NAME : settings.display_name,
+  };
+}
+
+/** 管理员关闭了成员使用管家（之前读到过设置、之后重读时被拒绝也算）。 */
+export function isStewardDisabled(error: unknown): boolean {
+  return isHttpFailure(failureOf(error), 403, "steward_disabled");
+}

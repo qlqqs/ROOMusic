@@ -109,6 +109,9 @@
   --layout-issue-list-width: 380px;
   /* 设置页的左侧分栏（视口 ≥1024px 时）。 */
   --layout-settings-nav-width: 176px;
+  /* 管家：右侧停靠面板（视口 ≥1100px 时挤占内容，768–1099px 浮在内容上）与整页的会话列表。 */
+  --layout-steward-width: 390px;
+  --layout-session-width: 248px;
 
   /* 控件最小高度：桌面 32px，触屏与窄屏 44px（见下方媒体查询）。 */
   --control-height: 32px;

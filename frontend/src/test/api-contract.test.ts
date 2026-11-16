@@ -1,4 +1,18 @@
-import { decodeCreatedToken, decodeTokenList } from "../features/steward/api/decoders";
+import {
+  decodeAllowlist,
+  decodeAllowlistEntry,
+  decodeCancelled,
+  decodeConversation,
+  decodeConversationDetail,
+  decodeConversationPage,
+  decodeConversationPatch,
+  decodeCreatedToken,
+  decodeDeleted,
+  decodeInstanceSettings,
+  decodeProbeFailure,
+  decodeSettings,
+  decodeTokenList,
+} from "../features/steward/api/decoders";
 import { decodeBackupOverview, decodeBackupCommand, decodeBackupDeletions, decodeRetentionSave, decodeBuildInfo } from "../features/system/api/decoders";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -387,6 +401,30 @@ const successContracts: Record<string, Contract> = {
   "users/list": { status: 200, decode: decodeMemberList },
   "steward/tokens/list": { status: 200, decode: decodeTokenList },
   "steward/tokens/issued": { status: 201, decode: decodeCreatedToken },
+  "steward/settings-empty": { status: 200, decode: decodeSettings },
+  "steward/settings-name": { status: 200, decode: decodeSettings },
+  "steward/settings-saved": { status: 200, decode: decodeSettings },
+  "steward/settings-cleared-key": { status: 200, decode: decodeSettings },
+  "steward/probe-supported": { status: 200, decode: decodeSettings },
+  "steward/probe-unsupported": { status: 200, decode: decodeSettings },
+  "steward/probe-keyless-unconfirmed": { status: 200, decode: decodeSettings },
+  // 探测失败：错误信封旁边带本次的探测报告。
+  "steward/egress-denied": { status: 403, decode: decodeProbeFailure },
+  "steward/provider-timeout": { status: 503, decode: decodeProbeFailure },
+  "steward/provider-unreachable": { status: 503, decode: decodeProbeFailure },
+  "steward/conversations": { status: 200, decode: decodeConversationPage },
+  "steward/conversation": { status: 200, decode: decodeConversationDetail },
+  "steward/conversation-created": { status: 201, decode: decodeConversation },
+  "steward/conversation-renamed": { status: 200, decode: decodeConversationPatch },
+  "steward/conversation-model-updated": { status: 200, decode: decodeConversationPatch },
+  "steward/conversation-model-default": { status: 200, decode: decodeConversationPatch },
+  "steward/conversation-deleted": { status: 200, decode: decodeDeleted },
+  "steward/cancel-idle": { status: 200, decode: decodeCancelled },
+  "steward/instance-settings": { status: 200, decode: decodeInstanceSettings },
+  "steward/instance-members-disabled": { status: 200, decode: decodeInstanceSettings },
+  "steward/allowlist": { status: 200, decode: decodeAllowlist },
+  "steward/allowlist-added": { status: 200, decode: decodeAllowlistEntry },
+  "steward/allowlist-deleted": { status: 200, decode: decodeDeleted },
   "users/create": { status: 201, decode: decodeCreatedMember },
   "users/disable": { status: 200, decode: decodeMemberDisabledState },
   "users/enable": { status: 200, decode: decodeMemberDisabledState },
@@ -539,6 +577,7 @@ const successContracts: Record<string, Contract> = {
 // 错误样本都用统一信封；这里同时记录界面要处理的错误码与状态码。
 const errorContracts: Record<string, { status: number; code: string }> = {
   "steward/conversation-busy": { status: 409, code: "conversation_busy" },
+  "steward/continue-nothing": { status: 409, code: "nothing_to_continue" },
   "steward/conversation-not-found": { status: 404, code: "not_found" },
   "steward/disabled": { status: 403, code: "steward_disabled" },
   "steward/egress-denied-settings": { status: 403, code: "egress_denied" },
@@ -740,33 +779,8 @@ const mediaResponseContracts: Record<string, { reason: string }> = {
   "playback-zones/responses/stream-headers": { reason: "渲染流响应头由媒体元素消费，不是 JSON 响应体" },
 };
 
-// 后端已有接口、前端还没有页面的样本：管家的设置与对话页在后续任务里做，届时换成 decoder 契约并从这里移走。
-// 其中三个探测失败的样本是错误信封外加 probe_result、probed_at，通用的错误信封 decoder 不保留这两个字段。
-const unconsumedContracts: readonly string[] = [
-  "steward/egress-denied",
-  "steward/provider-timeout",
-  "steward/provider-unreachable",
-  "steward/allowlist",
-  "steward/allowlist-added",
-  "steward/allowlist-deleted",
-  "steward/cancel-idle",
-  "steward/conversation",
-  "steward/conversation-created",
-  "steward/conversation-deleted",
-  "steward/conversation-model-default",
-  "steward/conversation-model-updated",
-  "steward/conversation-renamed",
-  "steward/conversations",
-  "steward/instance-members-disabled",
-  "steward/instance-settings",
-  "steward/probe-keyless-unconfirmed",
-  "steward/probe-supported",
-  "steward/probe-unsupported",
-  "steward/settings-cleared-key",
-  "steward/settings-empty",
-  "steward/settings-name",
-  "steward/settings-saved",
-];
+// 后端已有接口、前端还没有消费的样本。
+const unconsumedContracts: readonly string[] = [];
 
 const eventContracts: Record<string, { event: string; preservesWireShape: boolean }> = {
   "playback-zones/events/device-removed": { event: "device_removed", preservesWireShape: false },
