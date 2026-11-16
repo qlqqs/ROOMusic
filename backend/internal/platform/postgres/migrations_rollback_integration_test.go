@@ -14,6 +14,12 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	56: `UPDATE steward_user_settings SET protocol='responses',
+ overrides='{"protocol":"responses","native_search":true}',
+ probe_result='{"protocol":"responses","native_search":"supported","responses_available":true,"failures":[{"protocol":"openai","code":"synthetic"},{"protocol":"responses","code":"synthetic"}]}',
+ search_source='tavily',search_key_ciphertext='synthetic',search_key_last_four='test'
+ WHERE user_id='f5600000-0000-4000-8000-000000000000';
+ UPDATE steward_messages SET provider_blocks='{"protocol":"responses","blocks":[]}' WHERE id='f5600000-0000-4000-8000-000000000002';`,
 	55: `UPDATE steward_plan_items SET decision='rejected_by_review' WHERE id='f5500000-0000-4000-8000-000000000006';
  UPDATE steward_user_settings SET review_model='synthetic-review-model';
  INSERT INTO steward_reviews(id,plan_id,plan_digest,evidence_digest,policy_version,model,status,items,usage,expires_at) VALUES('f5500000-0000-4000-8000-000000000007','f5500000-0000-4000-8000-000000000005','c7','evidence',1,'synthetic-review-model','completed','[{"item_id":"f5500000-0000-4000-8000-000000000006","decision":"rejected","risk":"low","reasons":["合成理由"],"source":"model"}]','{}',now()+interval '15 minutes');`,
@@ -209,6 +215,15 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
  INSERT INTO steward_plans(id,conversation_id,user_id,digest,expires_at) VALUES('f5500000-0000-4000-8000-000000000005','f5500000-0000-4000-8000-000000000001','f5500000-0000-4000-8000-000000000000','c7',now()+interval '1 day');
  INSERT INTO steward_plan_items(id,plan_id,tool_call_id,position,tool_name,input,preview,revertible,idempotency_key,decision) SELECT 'f5500000-0000-4000-8000-000000000006','f5500000-0000-4000-8000-000000000005',id,0,'correct_release','{}','{}',true,idempotency_key,'declined' FROM steward_tool_calls WHERE id='f5500000-0000-4000-8000-000000000003';`)
 			}
+			if m.Version == 56 {
+				// C8 回退恢复旧协议与探测值，保留用户设置和消息，删除新增搜索与供应商块字段。
+				rollbackExec(t, db, `INSERT INTO users(id,username,password_hash,role) VALUES('f5600000-0000-4000-8000-000000000000','c8-rollback','synthetic','admin');
+ INSERT INTO steward_user_settings(user_id,protocol,model,overrides,probe_result,probed_at)
+ VALUES('f5600000-0000-4000-8000-000000000000','openai','synthetic-model','{"protocol":"openai"}',
+ '{"protocol":"openai","failures":[{"protocol":"openai","code":"synthetic"}]}',now());
+ INSERT INTO steward_conversations(id,user_id,title,model) VALUES('f5600000-0000-4000-8000-000000000001','f5600000-0000-4000-8000-000000000000','C8 旧会话','synthetic-model');
+ INSERT INTO steward_messages(id,conversation_id,sequence,role,content) VALUES('f5600000-0000-4000-8000-000000000002','f5600000-0000-4000-8000-000000000001',1,'assistant','{}');`)
+			}
 			s0 := rollbackSnapshot(t, db)
 			rollbackApply(t, db, migrationPrefix(available, m.Version))
 			s1 := rollbackSnapshot(t, db)
@@ -218,6 +233,13 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
 			}
 			if fixture != "" {
 				rollbackExec(t, db, fixture)
+			}
+			if m.Version == 56 {
+				var valid bool
+				if err := db.QueryRow(`SELECT protocol='responses' AND overrides->>'protocol'='responses' AND probe_result->>'protocol'='responses'
+ AND search_source='tavily' AND search_key_ciphertext IS NOT NULL FROM steward_user_settings WHERE user_id='f5600000-0000-4000-8000-000000000000'`).Scan(&valid); err != nil || !valid {
+					t.Fatalf("0056 新协议与搜索夹具未生效：valid=%v err=%v", valid, err)
+				}
 			}
 			if m.Version == 50 {
 				var valid bool

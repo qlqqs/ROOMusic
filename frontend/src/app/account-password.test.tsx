@@ -93,9 +93,11 @@ describe("V1/V5：设置账号栏修改密码", () => {
     const { runtime, api, session, channel, history } = context;
     const generation = runtime.session.currentGeneration();
     const sessionState = runtime.session.getSnapshot();
-    const cache = runtime.queryClient.getQueryCache().getAll().map((query) => ({ query, data: query.state.data }));
+    // 外壳里读取失败的查询可能已经失效；改密码应保留原状态，而不是让所有查询变新鲜。
+    const cache = runtime.queryClient.getQueryCache().getAll().map((query) => ({ query, data: query.state.data, isInvalidated: query.state.isInvalidated }));
     const reads = api.requests.filter((request) => request.method === "GET").map((request) => request.path);
     const invalidation = vi.spyOn(runtime.router, "invalidate");
+    const invalidateQueries = vi.spyOn(runtime.queryClient, "invalidateQueries");
     const clear = vi.spyOn(runtime.queryClient, "clear");
     const broadcasts = channel.notifyChanged.mock.calls.length;
     await fill(context);
@@ -109,13 +111,14 @@ describe("V1/V5：设置账号栏修改密码", () => {
     expect(session.current).toBe("listener");
     expect(session.accounts.listener?.password).toBe(newPassword);
     expect(api.requests.filter((request) => request.method === "GET").map((request) => request.path)).toEqual(reads);
-    for (const { query, data } of cache) {
+    for (const { query, data, isInvalidated } of cache) {
       expect(runtime.queryClient.getQueryCache().get(query.queryHash)).toBe(query);
       expect(query.state.data).toBe(data);
-      expect(query.state.isInvalidated).toBe(false);
+      expect(query.state.isInvalidated, query.queryHash).toBe(isInvalidated);
     }
     expect(clear).not.toHaveBeenCalled();
     expect(invalidation).not.toHaveBeenCalled();
+    expect(invalidateQueries).not.toHaveBeenCalled();
     expect(channel.notifyChanged).toHaveBeenCalledTimes(broadcasts);
     expect(api.requestsTo("POST", passwordPath)).toHaveLength(1);
     const request = api.requestsTo("POST", passwordPath)[0];
@@ -127,13 +130,14 @@ describe("V1/V5：设置账号栏修改密码", () => {
     await expectClosedAndReopenEmpty(context);
     expect(runtime.session.currentGeneration()).toBe(generation);
     expect(runtime.session.getSnapshot()).toBe(sessionState);
-    for (const { query, data } of cache) {
+    for (const { query, data, isInvalidated } of cache) {
       expect(runtime.queryClient.getQueryCache().get(query.queryHash)).toBe(query);
       expect(query.state.data).toBe(data);
-      expect(query.state.isInvalidated).toBe(false);
+      expect(query.state.isInvalidated, query.queryHash).toBe(isInvalidated);
     }
     expect(clear).not.toHaveBeenCalled();
     expect(invalidation).not.toHaveBeenCalled();
+    expect(invalidateQueries).not.toHaveBeenCalled();
     expect(channel.notifyChanged).toHaveBeenCalledTimes(broadcasts);
     expect(api.requestsTo("POST", passwordPath)).toHaveLength(1);
   });

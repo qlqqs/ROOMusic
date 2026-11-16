@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
@@ -469,7 +470,7 @@ func TestPostgreSQLStewardC6BusinessInputRejections(t *testing.T) {
 		{"claim_release", map[string]any{"release_id": r, "expected_revision": 1, "source_release_id": r, "source_revision": 1, "preview": "forged"}, tool.CodeInvalidInput},
 		{"merge_artists", map[string]any{"artist_id": id, "expected_revision": 1, "source_artist_id": id, "source_expected_revision": 0}, tool.CodeInvalidInput},
 		{"preview_artist_split", map[string]any{"artist_id": id, "mode": "aliases", "name_key_ids": []string{}}, "invalid_artist_scope"},
-		{"split_artist", map[string]any{"artist_id": id, "expected_revision": 1, "mode": "aliases", "name_key_ids": []string{id}, "basis_token": string(make([]byte, 64)), "target": map[string]string{"kind": "new"}}, "invalid_artist_scope"},
+		{"split_artist", map[string]any{"artist_id": id, "expected_revision": 1, "mode": "aliases", "name_key_ids": []string{id}, "basis_token": strings.Repeat("z", 64), "target": map[string]string{"kind": "new"}}, "invalid_artist_scope"},
 		{"rename_artist", map[string]any{"artist_id": id, "expected_revision": 1, "mode": "set", "name": "  "}, "invalid_artist_name"},
 		{"ignore_artist_candidate", map[string]any{"artist_id": id, "expected_revision": 1, "other_artist_id": uuid.New(), "other_expected_revision": 1, "ignored": true, "key_pairs": []any{}}, "invalid_artist_scope"},
 	} {
