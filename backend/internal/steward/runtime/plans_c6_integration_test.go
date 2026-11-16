@@ -58,6 +58,10 @@ func TestPostgreSQLStewardC6Migration54RoundTrip(t *testing.T) {
 		}
 	}
 	checkIndex(true)
+	down55, err := migrations.Files.ReadFile("0055_steward_reviews.down.sql")
+	mustStore(t, err)
+	_, err = db.Exec(string(down55))
+	mustStore(t, err)
 	// 用旧版结构作为基线；上、下、再上并核对旧会话、旧调用保持。
 	_, err = db.Exec(string(down))
 	mustStore(t, err)
@@ -93,6 +97,10 @@ func TestPostgreSQLStewardC6Migration54RoundTrip(t *testing.T) {
 	_, err = db.Exec(string(up))
 	mustStore(t, err)
 	checkIndex(true)
+	up55, err := migrations.Files.ReadFile("0055_steward_reviews.sql")
+	mustStore(t, err)
+	_, err = db.Exec(string(up55))
+	mustStore(t, err)
 	detail, err := s.GetConversation(ctx, user, c.ID)
 	mustStore(t, err)
 	if detail.Conversation.Title != "C6 旧会话" || len(detail.Messages) != 1 || !reflect.DeepEqual(detail.Conversation.AutoApprovedTools, []string{}) {

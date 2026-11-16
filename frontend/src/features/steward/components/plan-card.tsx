@@ -23,6 +23,12 @@ type PlanCardProps = {
   onContinue: () => void;
   /** 管家的名字。 */
   name: string;
+  /** 卡片标题；审查结果里转给用户确认的部分用“等你确认的修改”（C7）。 */
+  title?: string;
+  /** 出现时把焦点移到标题（审查不可用后用户选了“我自己确认”）。 */
+  focusOnMount?: boolean;
+  /** 显示“这次对话里不再问我”：只有 assistant 模式；steward 模式的确认不接受免确认工具（C7）。 */
+  autoApprove?: boolean;
 };
 
 // 确认请求在开流前被拒绝（设计“方案与挂起”第 4 步的校验顺序）。
@@ -34,7 +40,7 @@ const decisionMessages: Readonly<Record<string, string>> = {
   steward_disabled: "管理员暂时关闭了成员使用管家。",
 };
 
-const revertMessages: Readonly<Record<string, string>> = {
+export const revertMessages: Readonly<Record<string, string>> = {
   revert_conflict: "之后又有修改，不能撤销这一项。",
   already_reverted: "这一项已经撤销过了。",
   not_revertible: "这一项不能撤销。",
@@ -110,7 +116,7 @@ function Changes({ item }: { item: PlanItemDTO }) {
   );
 }
 
-function ItemBody({ item, labelFor }: { item: PlanItemDTO; labelFor?: string }) {
+export function ItemBody({ item, labelFor }: { item: PlanItemDTO; labelFor?: string }) {
   const { label } = toolLabelOf(item.tool);
   const what = (
     <>
@@ -157,7 +163,7 @@ function PendingItem({ conversationId, entry, item, disabled }: { conversationId
   );
 }
 
-function RevertControl({ label, state, onRevert }: { label: string; state: RevertState | undefined; onRevert: (key: string | null) => void }) {
+export function RevertControl({ label, state, onRevert }: { label: string; state: RevertState | undefined; onRevert: (key: string | null) => void }) {
   if (state?.status === "done") return <span>已撤销</span>;
   if (state?.status === "pending") {
     return (
@@ -219,8 +225,8 @@ function DecisionFailure({ failure }: { failure: ApiFailure }) {
   );
 }
 
-/** 方案项对应的过程条目（等待确认的），作为确认运行的初始条目；过程里没有时按方案项补上。 */
-function seedOf(entry: PlanEntry, items: readonly StepItem[]): StepItem[] {
+/** 方案项对应的过程条目（等待确认的），作为确认或重新审查的运行的初始条目；过程里没有时按方案项补上。 */
+export function seedOf(entry: PlanEntry, items: readonly StepItem[]): StepItem[] {
   return entry.plan.items.map(
     (item) =>
       items.find((step) => step.callId === item.call_id) ?? {
@@ -243,7 +249,7 @@ function seedOf(entry: PlanEntry, items: readonly StepItem[]): StepItem[] {
  * 有接受的项还没执行完（停止或服务重启之后）时给出“继续”，发新消息不会执行它们。作废、过期与已失效的方案只列出内容，不能再应用。
  * 目标名、旧值新值与依据都来自曲库或模型，只按文本节点渲染。
  */
-export function PlanCard({ conversationId, entry, items, baseSequence, busy, resumable, onContinue, name }: PlanCardProps) {
+export function PlanCard({ conversationId, entry, items, baseSequence, busy, resumable, onContinue, name, title = "修改方案", focusOnMount = false, autoApprove = true }: PlanCardProps) {
   const headingId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
   const decide = useDecidePlan(conversationId);
@@ -252,9 +258,12 @@ export function PlanCard({ conversationId, entry, items, baseSequence, busy, res
   const editable = phase === "pending" || phase === "submitting";
   const submitting = phase === "submitting";
   const count = plan.items.filter((item) => entry.selected.has(item.id)).length;
-  const tools = autoApprovableTools(plan);
+  const tools = autoApprove ? autoApprovableTools(plan) : [];
 
   // 提交后按钮消失：焦点移到卡片标题，读屏从结果开始读。
+  useEffect(() => {
+    if (focusOnMount) heading.current?.focus();
+  }, [focusOnMount]);
   const previous = useRef(phase);
   useEffect(() => {
     if (previous.current === "submitting" && phase === "decided") heading.current?.focus();
@@ -263,14 +272,14 @@ export function PlanCard({ conversationId, entry, items, baseSequence, busy, res
 
   const submit = (accepted: readonly string[]) => {
     if (busy || submitting) return;
-    void decide(entry, accepted, seedOf(entry, items), baseSequence);
+    void decide(entry, accepted, seedOf(entry, items), baseSequence, autoApprove);
   };
 
   return (
     <section className={styles.plan} aria-labelledby={headingId}>
       <header className={styles.head}>
         <h3 id={headingId} ref={heading} tabIndex={-1}>
-          修改方案
+          {title}
         </h3>
         <span className={styles.meta}>{metaOf(entry)}</span>
       </header>

@@ -55,7 +55,8 @@ function requestIdOf(error: unknown): string | null {
 }
 
 /**
- * 模型：接口地址、密钥与“检测”（探测接口，成功即保存；失败时显示每一步的原因，原设置不变），检测结果与手动修改，对话模型。
+ * 模型：接口地址、密钥与“检测”（探测接口，成功即保存；失败时显示每一步的原因，原设置不变），检测结果与手动修改，对话模型，
+ * 审查模型（C7，Steward 模式审查修改方案用；留空表示与对话模型相同）。
  * 密钥只在这个组件的 state 里，不写进任何存储；检测成功或保存后清空输入框。已存的密钥只显示末四位。
  */
 export function AgentModel({ settings }: { settings: SettingsDTO }) {
@@ -64,16 +65,18 @@ export function AgentModel({ settings }: { settings: SettingsDTO }) {
   const probe = useProbeSettings(secret);
   const probing = useProbePending();
   const update = useUpdateSettings();
+  const updateReview = useUpdateSettings();
   const modelListId = useId();
   const [endpoint, setEndpoint] = useState(settings.endpoint);
   const [key, setKey] = useState("");
   const [replacingKey, setReplacingKey] = useState(false);
   const [model, setModel] = useState(settings.model);
+  const [reviewModel, setReviewModel] = useState(settings.review_model ?? "");
   const [failed, setFailed] = useState<FailedProbe | null>(null);
   // 已存的密钥只发给原来的主机与端口：地址换了主机或端口，后端会清掉它（合同 4.2 规则 1），所以要重新填写或留空。
   const hostChanged = settings.key_saved && authorityOf(endpoint.trim()) !== authorityOf(settings.endpoint);
   const keyInput = !settings.key_saved || settings.key_needs_reentry || replacingKey || hostChanged;
-  const busy = probing || update.isPending;
+  const busy = probing || update.isPending || updateReview.isPending;
 
   const runProbe = (event: FormEvent) => {
     event.preventDefault();
@@ -97,6 +100,10 @@ export function AgentModel({ settings }: { settings: SettingsDTO }) {
     probe.reset();
     setFailed(null);
     update.mutate({ model: model.trim() }, { onSuccess: (response) => setModel(response.data.model) });
+  };
+  const saveReviewModel = (event: FormEvent) => {
+    event.preventDefault();
+    updateReview.mutate({ review_model: reviewModel.trim() }, { onSuccess: (response) => setReviewModel(response.data.review_model ?? "") });
   };
   const clearKey = () => {
     probe.reset();
@@ -230,6 +237,30 @@ export function AgentModel({ settings }: { settings: SettingsDTO }) {
         )}
       </SettingRow>
       {update.isError ? <FailureNotice error={update.error} context="write" messages={settingsFailureMessages} title="没有保存" /> : null}
+      <SettingRow
+        label="审查模型"
+        description="Steward 模式下用它独立审查修改方案。留空表示与对话模型相同；两者相同时审查的独立性有限，选另一个模型更稳妥。"
+      >
+        {({ controlId, descriptionId }) => (
+          <form className={styles.inline} onSubmit={saveReviewModel}>
+            <input
+              id={controlId}
+              className={styles.input}
+              list={modelListId}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="与对话模型相同"
+              value={reviewModel}
+              aria-describedby={descriptionId}
+              onChange={(event) => setReviewModel(event.target.value)}
+            />
+            <Button type="submit" variant="primary" busy={updateReview.isPending} disabled={reviewModel.trim() === (settings.review_model ?? "") || probing}>
+              保存
+            </Button>
+          </form>
+        )}
+      </SettingRow>
+      {updateReview.isError ? <FailureNotice error={updateReview.error} context="write" messages={settingsFailureMessages} title="审查模型没有保存" /> : null}
     </SettingsGroup>
   );
 }

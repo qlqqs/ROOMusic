@@ -35,7 +35,8 @@ type UserSettings struct {
 	// Protocol 是 openai 或 messages，空字符串表示未配置。
 	Protocol string
 	// Model 是对话模型，空字符串表示未配置。
-	Model string
+	ReviewModel string
+	Model       string
 	// DisplayName 为空时使用默认显示名字。
 	DisplayName string
 	// Probe 是最近一次探测；尚未探测时为 nil。
@@ -65,7 +66,8 @@ type UserSettingsInput struct {
 	// Protocol 是 openai 或 messages，空字符串表示未配置。
 	Protocol string
 	// Model 是对话模型，空字符串表示未配置。
-	Model string
+	ReviewModel string
+	Model       string
 	// DisplayName 为空时恢复默认显示名字。
 	DisplayName string
 	// Probe 为 nil 时保留上次探测结果与时间。
@@ -75,7 +77,7 @@ type UserSettingsInput struct {
 }
 
 const settingsColumns = `user_id::text,endpoint,key_ciphertext,key_last_four,protocol,model,
- display_name,probe_result,probed_at,overrides,updated_at`
+ display_name,probe_result,probed_at,overrides,updated_at,review_model`
 
 // GetUserSettings 读取当前用户的设置，尚未保存时返回零值设置与 nil 错误。
 func (s *Store) GetUserSettings(ctx context.Context, userID string) (UserSettings, error) {
@@ -131,17 +133,17 @@ func saveUserSettings(ctx context.Context, tx *sql.Tx, userID string, input User
 		probe, probedAt = input.Probe.Result, &input.Probe.ProbedAt
 	}
 	settings, err := scanSettings(tx.QueryRowContext(ctx, `INSERT INTO steward_user_settings
- (user_id,endpoint,key_ciphertext,key_last_four,protocol,model,display_name,probe_result,probed_at,overrides)
- VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,COALESCE($10::jsonb,'{}'::jsonb))
+ (user_id,endpoint,key_ciphertext,key_last_four,protocol,model,display_name,probe_result,probed_at,overrides,review_model)
+ VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,COALESCE($10::jsonb,'{}'::jsonb),$13)
  ON CONFLICT (user_id) DO UPDATE SET endpoint=EXCLUDED.endpoint,
  key_ciphertext=CASE WHEN $11 THEN EXCLUDED.key_ciphertext ELSE steward_user_settings.key_ciphertext END,
  key_last_four=CASE WHEN $11 THEN EXCLUDED.key_last_four ELSE steward_user_settings.key_last_four END,
- protocol=EXCLUDED.protocol,model=EXCLUDED.model,display_name=EXCLUDED.display_name,
+ review_model=EXCLUDED.review_model,protocol=EXCLUDED.protocol,model=EXCLUDED.model,display_name=EXCLUDED.display_name,
  probe_result=CASE WHEN $12 THEN EXCLUDED.probe_result ELSE steward_user_settings.probe_result END,
  probed_at=CASE WHEN $12 THEN EXCLUDED.probed_at ELSE steward_user_settings.probed_at END,
  overrides=COALESCE($10::jsonb,steward_user_settings.overrides),updated_at=clock_timestamp()
  RETURNING `+settingsColumns, userID, input.Endpoint, ciphertext, lastFour, input.Protocol,
-		input.Model, input.DisplayName, probe, probedAt, input.Overrides, input.Key != nil || input.ClearKey, input.Probe != nil || input.ClearProbe))
+		input.Model, input.DisplayName, probe, probedAt, input.Overrides, input.Key != nil || input.ClearKey, input.Probe != nil || input.ClearProbe, input.ReviewModel))
 	return settings, storeError("保存管家设置", err)
 }
 
@@ -152,7 +154,7 @@ func scanSettings(row scanner) (UserSettings, error) {
 	var probedAt *time.Time
 	err := row.Scan(&settings.UserID, &settings.Endpoint, &key.Ciphertext, &key.LastFour,
 		&settings.Protocol, &settings.Model, &settings.DisplayName, (*[]byte)(&probe), &probedAt,
-		(*[]byte)(&settings.Overrides), &settings.UpdatedAt)
+		(*[]byte)(&settings.Overrides), &settings.UpdatedAt, &settings.ReviewModel)
 	if err != nil {
 		return UserSettings{}, err
 	}

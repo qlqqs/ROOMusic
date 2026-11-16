@@ -1,7 +1,7 @@
 import { waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { installFakeApi } from "../../../test/fake-api";
-import { conversationOf, installStewardApi, planOf, planPayload } from "../../../test/fake-steward";
+import { conversationOf, installStewardApi, planOf, planPayload, reviewOf } from "../../../test/fake-steward";
 import { sampleResponse } from "../../../test/http";
 import { getRunSnapshot, resetRuns, startRun, stopRun } from "./run-store";
 
@@ -149,5 +149,83 @@ describe("对方案的决定（C6）", () => {
     expect(result).toMatchObject({ started: false, failure: { kind: "http", status: 409, code: "plan_digest_mismatch" } });
     expect(getRunSnapshot().ends.has(id)).toBe(false);
     expect(steward.plans[0]?.status).toBe("pending");
+  });
+});
+
+describe("重新审查（C7）", () => {
+  const planId = "00000000-0000-4000-8000-0000000000c1";
+  const item = { id: "00000000-0000-4000-8000-0000000000b1", call_id: "c1", tool: "correct_release", target: "x", changes: [], revertible: true };
+  /** 重新审查只用于 Steward 模式的会话。 */
+  const stewardMode = (steward: ReturnType<typeof setup>["steward"]) => {
+    const conversation = steward.conversations[0];
+    if (conversation !== undefined) conversation.mode = "steward";
+  };
+  const seed = [{ callId: "c1", name: "correct_release", input: {}, status: "awaiting_confirmation" as const, output: null, errorCode: null, durationMs: null, executed: false, textsBefore: 1 }];
+
+  it("走审查接口的流（没有请求体）；审查的开始与结论交给调用方，批准的项落在方案的条目上", async () => {
+    const { api, steward, options } = setup();
+    stewardMode(steward);
+    steward.plans.push(planOf(planId, id, [item]));
+    const onReview = vi.fn();
+    await expect(startRun({ conversationId: id, text: null, baseSequence: 2, ...options, onReview, review: { planId, seed } })).resolves.toEqual({ started: true });
+    expect(api.requestsTo("POST", `/api/v1/me/steward/conversations/${id}/plans/${planId}/review`).map((request) => request.body)).toEqual([undefined]);
+    const stream = steward.reviews[0]?.stream;
+    const review = reviewOf(planId, [{ item_id: item.id, decision: "approved", risk: "low", reasons: ["可以撤销"], source: "model" }]);
+    stream?.send("review_started", { type: "review_started", plan_id: planId, model: "m" });
+    stream?.send("review_finished", { type: "review_finished", review });
+    stream?.send("tool_started", { type: "tool_started", tool_started: { call_id: "c1", name: "correct_release", input: {} } });
+    stream?.send("tool_finished", { type: "tool_finished", tool_finished: { call_id: "c1", status: "succeeded", output: { operation_id: "o" }, truncated: false, untrusted: false } });
+    await waitFor(() => expect(getRunSnapshot().runs.get(id)?.view.items).toEqual([expect.objectContaining({ callId: "c1", status: "succeeded" })]));
+    expect(onReview.mock.calls.map(([event]) => (event as { type: string }).type)).toEqual(["review_started", "review_finished"]);
+  });
+
+  it("流结束时通知调用方（done 不论原因、没有 done 就断开），在重读会话之前：审查中被取消或保存失败时据此清掉“审查中”", async () => {
+    const { steward, refresh, options } = setup();
+    stewardMode(steward);
+    steward.plans.push(planOf(planId, id, [item]));
+    const order: string[] = [];
+    refresh.mockImplementation(() => {
+      order.push("refresh");
+      return Promise.resolve();
+    });
+    const onEnd = () => order.push("end");
+    await startRun({ conversationId: id, text: null, baseSequence: 2, ...options, onEnd, review: { planId, seed } });
+    steward.reviews[0]?.stream.send("review_started", { type: "review_started", plan_id: planId, model: "m" });
+    steward.reviews[0]?.stream.send("done", { type: "done", end: { reason: "cancelled" } });
+    steward.reviews[0]?.stream.close();
+    await waitFor(() => expect(getRunSnapshot().runs.has(id)).toBe(false));
+    expect(order).toEqual(["end", "refresh"]);
+
+    order.length = 0;
+    await startRun({ conversationId: id, text: null, baseSequence: 2, ...options, onEnd, review: { planId, seed } });
+    steward.reviews[1]?.stream.send("review_started", { type: "review_started", plan_id: planId, model: "m" });
+    steward.reviews[1]?.stream.fail();
+    await waitFor(() => expect(getRunSnapshot().ends.get(id)).toEqual({ kind: "disconnected" }));
+    expect(order[0]).toBe("end");
+  });
+
+  it("会话不是 Steward 模式：409 review_not_applicable", async () => {
+    const { steward, options } = setup();
+    steward.plans.push(planOf(planId, id, [item]));
+    const result = await startRun({ conversationId: id, text: null, baseSequence: 2, ...options, review: { planId, seed } });
+    expect(result).toMatchObject({ started: false, failure: { kind: "http", status: 409, code: "review_not_applicable" } });
+  });
+
+  it("Steward 模式的确认带免确认工具：400 invalid_input，方案仍在等待", async () => {
+    const { steward, options } = setup();
+    stewardMode(steward);
+    steward.plans.push(planOf(planId, id, [item]));
+    const body = { digest: steward.plans[0]?.digest ?? "", accepted_item_ids: [item.id], auto_approve_tools: ["correct_release"] };
+    const result = await startRun({ conversationId: id, text: null, baseSequence: 2, ...options, decision: { planId, body, seed } });
+    expect(result).toMatchObject({ started: false, failure: { kind: "http", status: 400, code: "invalid_input" } });
+    expect(steward.plans[0]?.status).toBe("pending");
+  });
+
+  it("开流前被拒绝：返回原因，不记结束信息", async () => {
+    const { steward, options } = setup();
+    steward.plans.push(planOf(planId, id, [item], { expires_at: "2026-01-01T00:00:00Z" }));
+    const result = await startRun({ conversationId: id, text: null, baseSequence: 2, ...options, review: { planId, seed } });
+    expect(result).toMatchObject({ started: false, failure: { kind: "http", status: 409, code: "plan_expired" } });
+    expect(getRunSnapshot().ends.has(id)).toBe(false);
   });
 });

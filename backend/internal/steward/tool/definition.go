@@ -51,6 +51,8 @@ const SourceMCP = "mcp"
 // Caller 携带入口提供的当前已认证用户与调用来源。
 // 入口负责取得当前用户，工具处理器仍须按 User 限定具体资源的可见范围。
 type Caller struct {
+	ReviewID       string
+	ReviewDecision string
 	// 以下字段只由已认证的后端入口与运行时设置，不从工具参数读取。
 	SharedExecution bool
 	ConversationID  string

@@ -46,6 +46,8 @@ export type SettingsPatch = {
   key?: string | null;
   protocol?: "" | Protocol;
   model?: string;
+  /** 审查模型（C7）；空字符串表示与对话用同一个模型。 */
+  review_model?: string;
   display_name?: string;
   overrides?: { protocol?: Protocol; model?: string; tool_support?: ToolSupport };
 };
@@ -111,6 +113,14 @@ export type PlanDecisionBody = { digest: string; accepted_item_ids: string[]; au
  */
 export function openDecision(id: string, planId: string, body: PlanDecisionBody, signal: AbortSignal): Promise<Response> {
   return apiStream({ path: `${conversationsPath}/${id}/plans/${planId}/decision`, method: "POST", body, signal });
+}
+
+/**
+ * 重新审查一份方案（C7，上一次审查不可用时），响应是 SSE：审查的开始与结论、批准项的执行，之后模型接着回答。
+ * 开始流之前的拒绝（plan_not_found、plan_expired、conversation_busy）按错误信封抛出 ApiError。
+ */
+export function openReview(id: string, planId: string, signal: AbortSignal): Promise<Response> {
+  return apiStream({ path: `${conversationsPath}/${id}/plans/${planId}/review`, method: "POST", signal });
 }
 
 /** 撤销一条操作（受治理操作的撤销接口，管理员）：方案里已执行的可撤销项用它。 */

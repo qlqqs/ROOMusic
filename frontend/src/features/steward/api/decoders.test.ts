@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { decodeConversationDetail, decodeConversationPatch, decodeRunEvent, operationIdOf } from "./decoders";
+import { decodeConversationDetail, decodeConversationPage, decodeConversationPatch, decodeRunEvent, decodeSettings, operationIdOf } from "./decoders";
+import { sampleBody } from "../../../test/api-samples";
 
 const planItem = {
   id: "00000000-0000-4000-8000-0000000000b1",
@@ -120,5 +121,43 @@ describe("会话的模式与未处理的方案（C6）", () => {
   it("改会话的响应可以带模式，也可以不带", () => {
     expect(decodeConversationPatch({ title: "t", model: "", mode: "operator" }).mode).toBe("operator");
     expect(decodeConversationPatch({ title: "t", model: "" }).mode).toBeUndefined();
+  });
+});
+
+describe("审查（C7）", () => {
+  const review = {
+    review_id: "00000000-0000-4000-8000-0000000000e1",
+    plan_id: plan.plan_id,
+    model: "review-model",
+    status: "completed",
+    policy_version: 1,
+    expires_at: "2026-11-16T00:15:00Z",
+    items: [{ item_id: planItem.id, decision: "needs_human_confirmation", risk: "high", reasons: ["不可撤销的修改"], source: "policy" }],
+  };
+
+  it("review_started 与 review_finished：step 可以省略；不可用的审查没有项；未知的结论被拒绝", () => {
+    expect(decodeRunEvent("review_started", JSON.stringify({ type: "review_started", step: 1, plan_id: plan.plan_id, model: "review-model" }))).toMatchObject({ plan_id: plan.plan_id, model: "review-model" });
+    expect(decodeRunEvent("review_finished", JSON.stringify({ type: "review_finished", review }))).toMatchObject({ review: { status: "completed" } });
+    expect(decodeRunEvent("review_finished", JSON.stringify({ type: "review_finished", review: { ...review, status: "unavailable", items: [] } }))).toMatchObject({ review: { items: [] } });
+    expect(() => decodeRunEvent("review_finished", JSON.stringify({ type: "review_finished", review: { ...review, items: [{ ...review.items[0], decision: "approve" }] } }))).toThrow();
+    expect(decodeRunEvent("done", JSON.stringify({ type: "done", end: { reason: "review_unavailable" } }))).toMatchObject({ end: { reason: "review_unavailable" } });
+  });
+
+  it("方案带最近一次审查，方案项可以是 rejected_by_review", () => {
+    const detail = { id: "00000000-0000-4000-8000-000000000001", title: "", mode: "steward", model: "m", status: "idle", created_at: "2026-11-16T00:00:00Z", updated_at: "2026-11-16T00:00:00Z", messages: [] };
+    const decoded = decodeConversationDetail({ ...detail, pending_plan: { ...plan, review, items: [{ ...planItem, decision: "rejected_by_review" }] }, plans: [{ ...plan, review: null }] });
+    expect(decoded.pending_plan?.review?.items[0]?.source).toBe("policy");
+    expect(decoded.pending_plan?.items[0]?.decision).toBe("rejected_by_review");
+    expect(decoded.plans?.[0]?.review).toBeNull();
+  });
+
+  it("设置的审查模型与会话列表的等确认项数可以省略", () => {
+    const settings = sampleBody("steward/probe-supported") as Record<string, unknown>;
+    expect(decodeSettings({ ...settings, review_model: "review-model" }).review_model).toBe("review-model");
+    const { review_model: _omitted, ...withoutReviewModel } = settings;
+    expect(decodeSettings(withoutReviewModel).review_model).toBeUndefined();
+    const item = { id: "00000000-0000-4000-8000-000000000001", title: "", mode: "steward", model: "", status: "idle", created_at: "2026-11-16T00:00:00Z", updated_at: "2026-11-16T00:00:00Z" };
+    const page = decodeConversationPage({ items: [{ ...item, pending_item_count: 2 }, item], pagination: { page: 1, page_size: 100, total: 2 } });
+    expect(page.items.map((entry) => entry.pending_item_count)).toEqual([2, undefined]);
   });
 });

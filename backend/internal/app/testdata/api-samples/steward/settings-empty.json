@@ -10,6 +10,7 @@
     "probe_result": null,
     "probed_at": null,
     "protocol": "",
+    "review_model": "",
     "updated_at": null
   },
   "status": 200

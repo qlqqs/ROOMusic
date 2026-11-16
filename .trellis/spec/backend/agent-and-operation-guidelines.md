@@ -5,7 +5,7 @@
 This document records the long-term product contract for ROOMusic's Music
 Steward and its durable operation model. Core 0 defines the contracts and the
 directory-management example.
-当前 C6 已实现模型调用、用户确认与 operator 直接执行；独立审查和文件修改仍待后续任务。
+当前 C6 已实现模型调用、用户确认与 operator 直接执行；C7 已实现独立审查与 steward 模式（见[审查合同](./steward-review-contracts.md)），文件修改仍待后续任务。
 
 The system has one product Agent, **Music Steward**, with three execution modes:
 `assistant`, `steward`, and `operator`. These are approval modes, not separate
@@ -60,8 +60,11 @@ bytes, or unrestricted paths. It returns a strict result such as:
 }
 ```
 
-The exact wire schema is selected when the Agent runtime is implemented. The
-stable rules are:
+C7 的实际线上 schema、完整提示词、证据摘要和策略版本 1 见[独立审查合同](./steward-review-contracts.md)。
+上面的单项示例只表达概念，实际调用是 `submit_review({items:[{item_id,decision,risk,reasons}]})`，
+来源由后端生成；审查模型使用用户自己的端点与密钥，且请求不含主对话历史。
+
+稳定规则如下：
 
 - The main Agent cannot approve its own proposal by setting an approval field.
 - Approval is bound to the proposal, target, evidence summary, policy version,
@@ -133,7 +136,7 @@ bounded arguments and an explicit recovery contract.
 | 方案已过 24 小时 | 409 plan_expired，项记 not_executed |
 | 用户发新消息 | pending 方案 superseded，项记 not_executed |
 | 用户未选择某项 | declined_by_user，其他已选项独立执行 |
-| 新建或切换到 steward | C7 前 400 invalid_request |
+| 新建或切换到 steward | C7 已支持；切换仍要求会话空闲且无 pending 方案 |
 | Same idempotency key and same canonical request | Return the recorded result without repeating side effects |
 | Same idempotency key and different request | Reject with `idempotency_conflict` |
 | Executor fails before commit/stage completion | Record failure and recover according to tool contract |
@@ -202,3 +205,13 @@ MCP 读写令牌直接执行 shared，仍受管理员权限限制；只读令牌
 正确：成员切到 operator 后继续操作本人播放，但仍不能修改共享曲库。基线：管理员 assistant 提案等待本人勾选。
 错误：因 operator 模式给成员额外权限，或将工具参数中的批准字段传入执行许可。测试须覆盖这两类越权、逐项失败、摘要篡改与过期。
 具体表、事件与字段见[运行时合同](./steward-runtime-contracts.md#c6-共享写入与确认合同)。
+
+## C7 已实现的审查权威
+
+- steward 模式不使用 assistant 的 auto_approved_tools。不可撤销项和超过 20 项的整份方案先转人工，不送审；
+  high 风险批准在返回后降为人工确认。`ReviewPolicyVersion = 1`。
+- 独立调用只提供 submit_review 并强制调用，60 秒超时，不重试；任何错误或结论集合不一致均失败关闭。
+- 审查落库后，执行前重读方案和证据并校验摘要、当前审查与期限；审批不豁免工具鉴权、revision 或业务约束。
+- 审查来源从后端 Caller 注入 operations origin，不从模型参数读取，不改变操作幂等指纹；同键重放保留原来源。
+- 转人工只展示 pending 项；拒绝、已执行项不被人工确认或失效处理覆盖；审查批准不作为普通 continue 的恢复授权。
+- 日志只记录标识、模型、耗时、用量、状态和结论计数，不记录消息、工具输入输出或理由正文。

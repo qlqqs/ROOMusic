@@ -1,8 +1,8 @@
 # 管家的前端约定
 
-本文记 M6 C4（对话页）、C5（页面上下文、播放与个人库工具）与 C6（修改方案、模式、治理工具）落地后的前端结构与约定，以代码为准：`frontend/src/features/steward/`、`frontend/src/app/shell/`、
+本文记 M6 C4（对话页）、C5（页面上下文、播放与个人库工具）、C6（修改方案、模式、治理工具）与 C7（审查结果、Steward 模式、审查模型）落地后的前端结构与约定，以代码为准：`frontend/src/features/steward/`、`frontend/src/app/shell/`、
 `frontend/src/app/routes/steward-page.tsx`、`frontend/src/app/routes/agent-settings-page.tsx`。后端接口、SSE 事件与错误码见
-[管家运行时合同](../backend/steward-runtime-contracts.md) 第 4、5、10 节与“C6 共享写入与确认合同”；界面与原型的对应见 [DESIGN.md](../../../frontend/DESIGN.md) 第 4 节“管家”。
+[管家运行时合同](../backend/steward-runtime-contracts.md) 第 4、5、10 节与“C6 共享写入与确认合同”，审查的提示词、证据摘要与策略见[管家审查合同](../backend/steward-review-contracts.md)；界面与原型的对应见 [DESIGN.md](../../../frontend/DESIGN.md) 第 4 节“管家”。
 
 ## 0. 范围
 
@@ -10,8 +10,10 @@
   未配置引导、设置页的 Agent 栏目（名字、模型与检测、访问令牌、管理员的成员开关与内网地址放行）；C5 起有输入框上方的“正在看/正在播放”标签
   与随消息发送的页面上下文，播放、播放历史、收藏与歌单工具的过程条目，以及这些工具结束后的个人数据刷新；
   C6 起有修改方案卡片（逐项确认、结果与撤销、刷新后恢复、作废与过期）、输入框下的模式按钮与菜单（Assistant、Operator）、
-  曲库与艺人治理工具的过程条目与查询失效，以及操作记录页的来源标签（见第 11 节）。
-- 没有（后端也没有）：Steward 模式与审查结果（C7）、联网搜索设置、审查模型、
+  曲库与艺人治理工具的过程条目与查询失效，以及操作记录页的来源标签（见第 11 节）；
+  C7 起有审查结果（审查中、按项的状态与理由、撤销、转人工的确认、审查不可用后的重新审查与自己确认）、模式菜单里的 Steward、设置里的审查模型、
+  模型菜单里标出审查模型、会话列表的“N 项等你确认”与“审查中”，以及操作记录的“管家（审查通过）”（见第 12 节）。
+- 没有（后端也没有）：联网搜索设置、审查模型用另一个端点、
   断线或刷新后接回正在进行的回答、展开工具条目看原始输入输出、在对话里显示历史消息带过的上下文。不做禁用占位。
 
 ## 1. 目录与两个公开入口
@@ -21,18 +23,18 @@ features/steward/
 ├── index.ts          # 轻量入口：外壳、路由与运行时直接导入
 ├── chat.ts           # 对话界面入口：StewardPanel、StewardPage，按需加载
 ├── api/              # decoders.ts（设置、探测、会话、消息、运行事件、方案、管理员、令牌）、endpoints.ts
-├── run/              # reduce.ts（事件与落库消息 → 回合）、run-store.ts（进行中的运行）、plan-store.ts（方案的界面状态，C6）、refresh.ts
+├── run/              # reduce.ts（事件与落库消息 → 回合）、run-store.ts（进行中的运行）、plan-store.ts（方案的界面状态，C6）、review-store.ts（审查的界面状态，C7）、refresh.ts
 ├── dock-store.ts     # 面板状态、草稿、草稿里点掉的上下文标签、对话区提示、空白新对话预选的模型与模式
 ├── context/          # context.ts（上下文的形状、点掉与截断规则）、host.tsx（app 传进来的页面、播放与刷新）、context-chips.tsx（标签行）
-├── hooks/            # use-steward-settings、use-conversations、use-run、use-plans（C6）、use-agent-settings、use-access-tokens
+├── hooks/            # use-steward-settings、use-conversations、use-run、use-plans（C6；C7 加重新审查与审查的快照）、use-agent-settings、use-access-tokens
 ├── tool-labels.ts    # 工具的中文名、图标、主要参数、结果说明、失败短语与会改动的数据
 ├── plan-text.ts      # 方案卡片的字段名、旧值新值与依据来源的文字（C6）
-├── components/       # 面板、整页、对话区、回合、过程、回答（Markdown）、结束说明、输入框、模式与模型菜单、方案卡片、会话列表、令牌（C3）
+├── components/       # 面板、整页、对话区、回合、过程、回答（Markdown）、结束说明、输入框、模式与模型菜单、方案卡片、审查结果（C7）、会话列表、令牌（C3）
 └── settings/         # Agent 栏目：名字、模型与检测结果、成员段、文案
 ```
 
 - `index.ts` 只导出外壳与路由需要的东西：`useStewardEntry`、`DEFAULT_STEWARD_NAME`、`useDockState`、`setDockOpen`、`toggleDock`、
-  `preferBlankConversation`、`resetStewardState`（`resetRuns`、`resetPlans`、`resetDock`）、`AgentSettings`，以及 C5 的 `StewardHostProvider` 与上下文类型（见第 5 节）。侧栏、标签栏、外壳与 `app/runtime.ts` 静态导入它；
+  `preferBlankConversation`、`resetStewardState`（`resetRuns`、`resetPlans`、`resetReviews`、`resetDock`）、`AgentSettings`，以及 C5 的 `StewardHostProvider` 与上下文类型（见第 5 节）。侧栏、标签栏、外壳与 `app/runtime.ts` 静态导入它；
   `package.json` 的 `sideEffects` 让没用到的导出（`AgentSettings`）不进首屏。
 - `chat.ts` 导出 `StewardPanel` 与 `StewardPage`。外壳用 `React.lazy(() => import("../../features/steward/chat"))` 加载面板，
   路由用 `lazyRouteComponent(() => import("./routes/steward-page"))` 加载整页。分成两个入口，是因为同一个模块既被静态导入又被动态导入时
@@ -180,7 +182,8 @@ features/steward/
 
 - `/settings/agent`，所有登录用户都有；`/settings/tokens` 经根路由的旧地址重定向到它（`settings-sections.ts` 的栏目名是“Agent”）。
 - 名字：保存只提交 `{display_name}`，“恢复为‘管家’”提交空字符串，最多 20 个 Unicode 字符。
-- 模型：地址与密钥只经“检测”保存（探测接口成功即保存），对话模型另有“保存”（只提交 `{model}`）。检测进行中（`useProbePending`，按 mutation key 判断）
+- 模型：地址与密钥只经“检测”保存（探测接口成功即保存），对话模型另有“保存”（只提交 `{model}`）。审查模型（C7）在对话模型下面，同样可选检测到的模型或直接填写，
+  “保存”只提交 `{review_model}`；留空（占位“与对话模型相同”）提交空字符串，说明写明两者相同时审查的独立性有限。检测进行中（`useProbePending`，按 mutation key 判断）
   同一栏的改名保存、模型保存、清除、更换与“修改”都停用。
 - 密钥：输入值只在 `AgentModel` 的组件 state 里；提交检测时放进一个 ref，由 `useProbeSettings` 的 `mutationFn` 取用，检测结束（成功或失败）就清掉，
   不进 mutation 的 `variables` 与任何浏览器存储；检测成功后清空输入框。已存密钥只显示末四位，带“更换”“清除”（`{key: null}`）；`key_needs_reentry` 时
@@ -204,7 +207,8 @@ features/steward/
 - 方案卡片（`components/plan-card.tsx`，原型的 `section.plan`）：标题“修改方案”与一句话（“N 项，都可以撤销”“其中 M 项不能撤销”、已决定后“应用了 N 项”“没有修改”、
   “已作废”“已过期”“已失效”）；每项一个勾选框（可访问名称是工具中文名加目标名）、字段名（`planFieldLabel`）、旧值（`<del>`，删除线）与新值（`<ins>`，金色下划线），
   读屏另有“原来”“改为”；“依据（本地证据/外部资料/本地证据与外部资料）：说明”；不可撤销的项标“不可撤销”。“应用 N 项修改”（没有勾选时停用）、“不修改”（提交空的接受列表）、
-  方案里全部项都可以撤销的工具各一个“这次对话里，<工具中文名>不再问我”（`autoApprovableTools`）；不可撤销的工具（艺人合并、拆开、改名、忽略候选）没有这个勾选，
+  方案里全部项都可以撤销的工具各一个“这次对话里，<工具中文名>不再问我”（`autoApprovableTools`，只在 assistant 模式；Steward 模式的确认不接受免确认工具，
+  卡片不显示这个勾选，提交的 `auto_approve_tools` 是空数组，后端对非空值返回 `400 invalid_input`）；不可撤销的工具（艺人合并、拆开、改名、忽略候选）没有这个勾选，
   assistant 模式下每次都要确认。提交的 `auto_approve_tools` 只带勾过、可以免确认、并且至少有一项被接受的工具（`autoApproveToolsOf`；后端对其余情况返回 `400 invalid_input`）。
   目标名、旧值新值与依据都只按文本节点渲染。会话正在回答时两个按钮停用。
 - 提交（`useDecidePlan`）：`phase` 先变 `submitting`，流开起来后 `decided`；开流前被拒绝时就地说明（`plan_digest_mismatch` 提醒内容已换成最新的、`conversation_busy`、
@@ -220,24 +224,67 @@ features/steward/
   结束说明不再重复“继续”按钮，输入框提示行写“发新消息不会执行方案里剩下的项”。只有“继续”恢复执行，新消息让剩下的项记为未执行（或对账出已执行的结果）。
 - 发消息：有未处理的方案时输入框照常可用，提示行写“发新消息会作废上面的方案”；流开起来后 `supersedePlans` 把它标为作废（后端同时以 `not_executed` 回给模型）。
   运行以 `awaiting_confirmation` 结束时没有结束说明。
-- 模式（`components/mode-menu.tsx`，原型的 `.mode` 与菜单）：输入框下模型按钮左边，主色字，图标与名字（Assistant `CircleAlert`、Operator `Zap`），可访问名称“模式：<名字>”。
-  菜单（`useMenu` 的 `description` 与 `footer`）两项：Assistant“修改曲库前先给你看方案，你确认后执行”，Operator“不询问，直接执行；外部资料里的内容也可能促成修改”，
-  当前项右侧“当前”，底部“Shift + Tab 在输入框里切换”。输入框（`Composer` 的 `onShiftTab`）里按 Shift+Tab 在两者之间轮换，不移动焦点；其他地方的 Shift+Tab 照常。
+- 模式（`components/mode-menu.tsx`，原型的 `.mode` 与菜单）：输入框下模型按钮左边，主色字，图标与名字（Assistant `CircleAlert`、Steward `ShieldCheck`、Operator `Zap`），可访问名称“模式：<名字>”。
+  菜单（`useMenu` 的 `description` 与 `footer`）三项：Assistant“修改曲库前先给你看方案，你确认后执行”，Steward“由另一次模型调用审查，通过的自动执行；拿不准的回来问你”（C7），
+  Operator“不询问，直接执行；外部资料里的内容也可能促成修改”，当前项右侧“当前”，底部“Shift + Tab 在输入框里切换”。
+  输入框（`Composer` 的 `onShiftTab`）里按 Shift+Tab 按 Assistant → Steward → Operator 轮换，不移动焦点；其他地方的 Shift+Tab 照常。
   空白新对话选的模式记在 `dock-store` 的 `newMode`，创建会话时带上（`POST {mode}`），之后回到默认；已有会话经 `PATCH {mode}` 切换，失败就地提示“没能切换模式”。
-  正在回答、正在别处回答、有未处理的方案、正在创建或修改会话时按钮停用，Shift+Tab 不拦截。提示行随模式：“修改曲库前会先给你看方案”“修改曲库时不询问，直接执行”。
-- 操作记录页（`features/governance` 的 `OperationList`）在操作者下面显示来源标签：对话且带 `plan_id` 是“管家（确认）”，对话不带 `plan_id` 是“管家（直接执行）”，`mcp` 是“MCP”；
-  没有 `origin` 的不显示。
+  正在回答、正在别处回答、有未处理的方案、正在创建或修改会话时按钮停用，Shift+Tab 不拦截。提示行随模式：“修改曲库前会先给你看方案”
+  “修改曲库前由另一次模型调用审查，拿不准的会回来问你”（没有另选审查模型、或审查模型就是这个会话的对话模型时，后面加“；审查与对话是同一个模型，独立性有限”）
+  “修改曲库时不询问，直接执行”。
+- 操作记录页（`features/governance` 的 `OperationList`）在操作者下面显示来源标签：对话且带 `review_id`、审查结论是 `approved`（或没有结论字段）是“管家（审查通过）”（C7），
+  对话且带 `plan_id` 是“管家（确认）”（审查转给用户、由用户确认执行的也是这个），对话不带 `plan_id` 是“管家（直接执行）”，`mcp` 是“MCP”；没有 `origin` 的不显示。
 
-## 12. 测试
+## 12. 审查（C7）
+
+- 线上形状（`api/decoders.ts`）：设置多 `review_model`（可省略，空字符串表示与对话同一个模型）；会话的 `mode` 可以是 `steward`；会话列表每项可带
+  `pending_item_count`（未处理方案里等用户决定的项数，后端返回整数、没有未处理方案时为 0；解码时可省略）；方案带 `review`（最近一次审查，可空），方案项的 `decision` 多 `rejected_by_review`；
+  运行事件多 `review_started {plan_id, model}` 与 `review_finished {review}`（`step` 可省略），`done.reason` 多 `review_unavailable`。审查是
+  `{review_id, plan_id, model, status: completed|unavailable, policy_version, expires_at, items: [{item_id, decision: approved|rejected|needs_human_confirmation, risk, reasons, source: model|policy}]}`，
+  不可用时 `items` 为空。重新审查是 `POST …/plans/{plan_id}/review`（没有请求体，响应是 SSE，`endpoints.ts` 的 `openReview`）。
+- 流程（后端）：方案落库 → `review_started` → `review_finished` → 批准的项逐个 `tool_started`/`tool_finished`（审查前已为送审的调用发过一次 `tool_started`，
+  归并时同一 `call_id` 原地更新，不重复）→ 有转人工的项时发只含这些项的 `plan` 并以 `awaiting_confirmation` 结束；审查不可用、或批准之后执行之前内容变了时
+  以 `review_unavailable` 结束，方案保持未处理。两种结束都没有结束说明（`run-ended.tsx`）。被拒绝的项以失败的 `tool_finished`（`rejected_by_review`）落库，失败短语“审查没有通过”。
+- 状态（`run/review-store.ts`，模块级，按方案 ID 存，登出时 `resetReviews`）：运行里收到的审查（`reviewStarted` 记“审查中”，`reviewFinished` 记结论）、
+  用户选了“我自己确认”（`manual`）、重新审查的请求状态与开流前被拒绝的原因。`useStartRun` 的 `onReview` 写入它；收到 `review_started` 时重读会话
+  （审查事件里只有方案 ID，送审的各项要从会话详情取）。流一结束（`run-store` 的 `onEnd`：任何原因的 `done`、没有 `done` 就断开、读流出错，在重读会话之前）
+  就 `settleReviews`，把没等到结论的“审查中”去掉：审查中被停止（`done.reason = cancelled`）或保存失败时不会有 `review_finished`，也不落审查记录。
+  要显示的审查 `reviewViewOf`：本页运行中以运行里收到的为准，否则以会话详情里方案的 `review` 为准，没有时用运行里收到的。
+- 渲染（`conversation-view.tsx`）：方案有审查（或正在审查）时用 `components/review-result.tsx` 代替修改方案卡片，位置规则不变（`placePlans`）；
+  各项的内容取会话详情里的完整方案（运行里的 `plan` 事件只有等确认的项）。
+- 审查结果（原型的 `section.review`）：标题“审查结果”，右侧“由 <模型> 独立审查，不带这次对话的内容”；审查模型与这个会话的对话模型相同时另起一行
+  “审查与对话用的是同一个模型，独立性有限；可以在设置里另选审查模型。”。审查中写“审查中…”（`role="status"`），各项状态“审查中”。
+  审查完成后按审查的项逐行：状态（已执行 `Check`、等你确认 `Hand`、没有执行 `Ban`、正在执行/还没执行 `Clock`）、修改摘要（与方案卡片相同的工具名、目标、旧值新值、依据）、
+  没有执行的原因（审查没有通过、你没有选这一项、方案已作废/已过期/已失效、批准之后内容变了需要重新审查等）、理由（`reasons` 用“；”连接）、
+  策略转人工的项写“按规则交给你确认，不是审查模型的判断。”，风险中等与高另标出来。已执行且可撤销的项有“撤销”（与方案卡片相同的 `RevertControl`）。
+  理由、目标名与值都只按文本节点渲染，不走 Markdown。
+- 转人工的项：方案还在等待决定时，审查结果里面嵌入修改方案卡片（`PlanCard`，标题“等你确认的修改”，只含审查转给用户、方案里还没处理的项），规则与 C6 相同：
+  不可撤销的修改没有“不再问我”，确认走确认接口。提交后卡片收起，各行显示结果，焦点移到“审查结果”标题。确认过但没执行完时审查结果底部给“继续”。
+- 需要重新审查（审查 `unavailable`，或审查完成但有批准的项没有执行、本页也不在回答）：写“审查不可用，这份方案什么都没有执行。”或“批准之后内容有变化……”，
+  给“重新审查”（只在 Steward 模式的会话；`useRereviewPlan`：走审查接口，运行从方案项对应的条目开始，开流前被拒绝就地说明，
+  其中 `409 review_not_applicable` 写“当前模式不使用审查，可以自己确认。”，`plan_expired`、`plan_not_found` 改变方案的状态）与
+  “我自己确认”（显示标题为“修改方案”的卡片，包含全部还没处理的项，焦点只在点了这个按钮之后移到卡片标题）。重新审查的 `review_started` 清掉“我自己确认”。
+  嵌入的确认卡片只在 assistant 模式有“不再问我”。
+- 模型菜单（`model-menu.tsx`）：Steward 模式下标出审查模型：另选了的写“正用作审查模型”，没有另选时当前模型写“当前，也用作审查模型”。其他模式不标。
+- 会话列表（`session-list.tsx` 的 `sessionStateOf`）：名字下面写“正在回答”（本页正在审查时是“审查中”），`pending_item_count` 大于 0 时写“N 项等你确认”，两者用“，”连接。
+
+## 13. 测试
 
 | 位置 | 内容 |
 | --- | --- |
-| `src/test/fake-steward.ts` | Vitest 的管家替身（C6 起另有方案：会话详情带 `pending_plan` 与 `plans`（调用已有结果的项带 `result`），读取时判定过期；发新消息作废未处理的方案；确认接口按设计的校验顺序——会话与方案归属且 pending → 未过期 → 摘要 → 会话空闲 → 选择的项与工具（免确认的工具须全部可撤销且至少有一项被接受）——返回 `plan_not_found`、`plan_expired`、`plan_digest_mismatch`、`conversation_busy`、`invalid_input`，通过后记下 `decisions[i].stream`；新建与 `PATCH` 接受 `assistant`、`operator`，有运行或未处理方案时改模式 409；撤销接口记下操作 ID 与幂等键，`nextRevertResponse` 预置拒绝）：`installStewardApi` 实现设置的读写（`PUT` 按后端 `mergeSettings` 的规则 1–3 清密钥、清检测结论、降级工具能力）与检测、会话增删改查、可控的运行流（`fakeSse` 逐个推送事件、`fail` 模拟断开，请求被中止时流随之出错）、取消、管理员接口；`nextRunResponse`、`probeResponse` 预置开流前的拒绝与检测失败。运行请求按后端规则检查请求体（发消息只认 `text`、`context`，`kind` 枚举与长度上限；继续带 `context` 也算不合格；不合格时 `400 invalid_request`），`runs[i].context` 记下请求体里的上下文（没有时 `null`） |
+| `src/test/fake-steward.ts` | Vitest 的管家替身（C6 起另有方案：会话详情带 `pending_plan` 与 `plans`（调用已有结果的项带 `result`），读取时判定过期；发新消息作废未处理的方案；确认接口按设计的校验顺序——会话与方案归属且 pending → 未过期 → 摘要 → 会话空闲 → 选择的项与工具（免确认的工具须全部可撤销且至少有一项被接受）——返回 `plan_not_found`、`plan_expired`、`plan_digest_mismatch`、`conversation_busy`、`invalid_input`，通过后记下 `decisions[i].stream`；新建与 `PATCH` 接受 `assistant`、`steward`、`operator`，有运行或未处理方案时改模式 409；撤销接口记下操作 ID 与幂等键，`nextRevertResponse` 预置拒绝；
+C7 起方案可带 `review`（`reviewOf` 合成）与 `reviewed`（审查已处理的项：批准执行的 `accepted` 带操作记录，拒绝的 `rejected_by_review`，这些项不能再确认），
+会话列表带 `pending_item_count`；Steward 模式会话的确认带非空 `auto_approve_tools` 是 `400 invalid_input`；
+重新审查接口的校验顺序是会话与方案归属且 pending → 未过期 → 会话是 Steward 模式（否则 `409 review_not_applicable`）→ 会话空闲，`nextReviewResponse` 预置开流前的拒绝，
+带请求体是 400，通过后记下 `reviews[i].stream`）：`installStewardApi` 实现设置的读写（`PUT` 按后端 `mergeSettings` 的规则 1–3 清密钥、清检测结论、降级工具能力）与检测、会话增删改查、可控的运行流（`fakeSse` 逐个推送事件、`fail` 模拟断开，请求被中止时流随之出错）、取消、管理员接口；`nextRunResponse`、`probeResponse` 预置开流前的拒绝与检测失败。运行请求按后端规则检查请求体（发消息只认 `text`、`context`，`kind` 枚举与长度上限；继续带 `context` 也算不合格；不合格时 `400 invalid_request`），`runs[i].context` 记下请求体里的上下文（没有时 `null`） |
 | `src/features/steward/**/*.test.ts(x)` | 解码器（含消息的 `context`、方案、模式、没有 `step` 的工具事件）、方案 store（默认值、过期、摘要变化、gone、作废、历史）、方案文字、归并（含等待确认的条目与确认后的替换）、工具标签（参数、结果说明、失败短语、只读与改动、改动的数据）、过程摘要的措辞、上下文的点掉与截断、Markdown 安全、run-store（发起、发消息请求体里的 `context`、继续没有请求体、`onToolFinished`、`onPlan`、确认的请求体与开流前拒绝、停止、断开、登出中止）、轮询间隔 |
 | `src/app/steward.test.tsx` 的“修改方案”“模式” | 运行里出现方案与卡片的位置、旧值新值与依据、勾选与提交的请求体、结果与撤销、撤销被拒绝、刷新后恢复（未处理与已处理）、“不修改”、发消息作废、过期、摘要不一致；空白新对话与已有会话的模式切换、Shift+Tab 只在输入框里、运行中与有方案时停用 |
-| `src/app/operations.test.tsx` 的来源标签 | 管家（确认）、管家（直接执行）、MCP，没有来源的不显示 |
+| `src/app/steward.test.tsx` 的“审查” | 运行中的审查中、结论与批准项的执行、转人工的确认卡片；刷新后的撤销、拒绝理由按文字显示、确认转人工的项；审查不可用后重新审查与“我自己确认”（Steward 模式没有“不再问我”）；不是 Steward 模式时没有“重新审查”与 `review_not_applicable` 的说明；
+审查中被停止后不再显示“审查中”；批准之后内容变了；重新审查开流前被拒绝；同一个模型的说明与模型菜单里的审查模型；会话列表的“N 项等你确认” |
+| `src/features/steward/run/review-store.test.ts`、`components/session-list.test.ts` | 审查的界面状态（审查中、结论、运行中与刷新后的取舍、运行结束去掉审查中）、会话名下的状态 |
+| `src/app/operations.test.tsx` 的来源标签 | 管家（确认）、管家（直接执行）、MCP、管家（审查通过），没有来源的不显示 |
 | `src/app/steward.test.tsx` 的“页面上下文”“工具结束后刷新个人数据” | 用 `vi.mock` 换掉 `features/player/zones/api` 的 `browserZoneApi`：设了 `fakeZoneServer` 的用例有分区与曲目，其余用例照旧（没有播放区）；专辑页的标签与请求体、点掉后发送、点掉后中断再继续（继续没有请求体）、整页里没有“正在看”、`invalidateQueries` 的键 |
 | `src/app/steward.test.tsx`、`src/app/agent-settings.test.tsx`、`src/app/tokens.test.tsx` | 页面级：入口与名字、面板与整页、流式与结束说明、会话列表、`/steward` 去向、焦点与 Esc、Agent 栏目、令牌与旧地址 |
-| `e2e/support/steward.ts`、`e2e/steward.spec.ts`、`e2e/steward-plan.spec.ts` | 浏览器冒烟（C6 另有 `seedPlanConversation` 预置停在方案上的会话，确认接口一次性返回整段 SSE，撤销接口只认方案里的那条记录；方案的勾选、应用、结果与撤销，模式菜单与 Shift+Tab）：`installStewardMock(page)` 用 `page.route` 接管管家接口（优先于 `api-mock.ts` 的上下文拦截），发消息一次性返回整段 SSE；桌面面板到整页、390px 标签栏对话与切换会话、旧地址重定向 |
+| `e2e/support/steward.ts`、`e2e/steward.spec.ts`、`e2e/steward-plan.spec.ts`、`e2e/steward-review.spec.ts` | 浏览器冒烟（C7 另有 `seedReviewedConversation`（批准已执行、转人工、拒绝各一项）与 `seedUnavailableReviewConversation`，重新审查接口一次性返回整段 SSE；审查结果、撤销与确认、390px 重新审查、三种模式与模型菜单里的审查模型；C6 另有 `seedPlanConversation` 预置停在方案上的会话，确认接口一次性返回整段 SSE，撤销接口只认方案里的那条记录；方案的勾选、应用、结果与撤销，模式菜单与 Shift+Tab）：`installStewardMock(page)` 用 `page.route` 接管管家接口（优先于 `api-mock.ts` 的上下文拦截），发消息一次性返回整段 SSE；桌面面板到整页、390px 标签栏对话与切换会话、旧地址重定向 |
 
 其他页面的测试没有装管家替身时，设置接口得到 404，入口不显示，不影响它们原有的断言。

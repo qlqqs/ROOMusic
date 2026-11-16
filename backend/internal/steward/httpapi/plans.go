@@ -33,3 +33,15 @@ func (h *Handlers) decidePlan(w http.ResponseWriter, r *http.Request, user ident
 	}
 	h.startRun(w, r, user, id, "", true, nil, &decision)
 }
+
+func (h *Handlers) reviewPlan(w http.ResponseWriter, r *http.Request, user identity.User) {
+	id, ok := conversationID(w, r)
+	if !ok {
+		return
+	}
+	if !uuid.Valid(r.PathValue("plan_id")) {
+		h.writeStoreError(w, r, runtime.ErrPlanNotFound)
+		return
+	}
+	h.startRun(w, r, user, id, "", true, nil)
+}

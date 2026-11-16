@@ -104,6 +104,8 @@ type ToolDefinition struct {
 
 // Request 是一次模型请求，不包含端点密钥或采样参数。
 type Request struct {
+	// ForceTool 指定唯一必须调用的工具；空值保留普通对话行为。
+	ForceTool string `json:"force_tool,omitempty"`
 	// Model 是调用方选择的模型。
 	Model string `json:"model"`
 	// System 是系统提示词。

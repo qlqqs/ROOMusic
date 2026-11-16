@@ -1,0 +1,133 @@
+{
+  "body": {
+    "created_at": "2026-01-01T00:00:00Z",
+    "id": "00000000-0000-4000-8000-000000000001",
+    "messages": [
+      {
+        "content": [
+          {
+            "tool_call": {
+              "arguments": {},
+              "id": "sample-review-call",
+              "name": "correct_release"
+            },
+            "type": "tool_call"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:01Z",
+        "id": "00000000-0000-4000-8000-000000000002",
+        "input_tokens": null,
+        "output_tokens": null,
+        "role": "assistant",
+        "sequence": 1,
+        "tool_calls": [
+          {
+            "duration_ms": null,
+            "error_code": null,
+            "id": "00000000-0000-4000-8000-000000000003",
+            "input": {},
+            "name": "correct_release",
+            "output": null,
+            "status": "awaiting_confirmation",
+            "truncated": false,
+            "untrusted": false
+          }
+        ]
+      }
+    ],
+    "mode": "assistant",
+    "model": "synthetic-model",
+    "pending_plan": {
+      "digest": "0000000000000000000000000000000000000000000000000000000000000001",
+      "expires_at": "2026-01-01T00:00:04Z",
+      "items": [
+        {
+          "basis": null,
+          "call_id": "sample-review-call",
+          "changes": [
+            {
+              "after": "新标题",
+              "before": "旧标题",
+              "field": "title"
+            }
+          ],
+          "decision": "pending",
+          "id": "00000000-0000-4000-8000-000000000004",
+          "revertible": true,
+          "target": "合成专辑",
+          "tool": "correct_release"
+        }
+      ],
+      "plan_id": "00000000-0000-4000-8000-000000000005",
+      "review": {
+        "expires_at": "2026-01-01T00:00:03Z",
+        "items": [
+          {
+            "decision": "needs_human_confirmation",
+            "item_id": "00000000-0000-4000-8000-000000000004",
+            "reasons": [
+              "证据不足，需要人工确认"
+            ],
+            "risk": "medium",
+            "source": "model"
+          }
+        ],
+        "model": "synthetic-review-model",
+        "plan_id": "00000000-0000-4000-8000-000000000005",
+        "policy_version": 1,
+        "review_id": "00000000-0000-4000-8000-000000000006",
+        "status": "completed"
+      },
+      "status": "pending"
+    },
+    "plans": [
+      {
+        "digest": "0000000000000000000000000000000000000000000000000000000000000001",
+        "expires_at": "2026-01-01T00:00:04Z",
+        "items": [
+          {
+            "basis": null,
+            "call_id": "sample-review-call",
+            "changes": [
+              {
+                "after": "新标题",
+                "before": "旧标题",
+                "field": "title"
+              }
+            ],
+            "decision": "pending",
+            "id": "00000000-0000-4000-8000-000000000004",
+            "revertible": true,
+            "target": "合成专辑",
+            "tool": "correct_release"
+          }
+        ],
+        "plan_id": "00000000-0000-4000-8000-000000000005",
+        "review": {
+          "expires_at": "2026-01-01T00:00:03Z",
+          "items": [
+            {
+              "decision": "needs_human_confirmation",
+              "item_id": "00000000-0000-4000-8000-000000000004",
+              "reasons": [
+                "证据不足，需要人工确认"
+              ],
+              "risk": "medium",
+              "source": "model"
+            }
+          ],
+          "model": "synthetic-review-model",
+          "plan_id": "00000000-0000-4000-8000-000000000005",
+          "policy_version": 1,
+          "review_id": "00000000-0000-4000-8000-000000000006",
+          "status": "completed"
+        },
+        "status": "pending"
+      }
+    ],
+    "status": "idle",
+    "title": "合成审查方案",
+    "updated_at": "2026-01-01T00:00:02Z"
+  },
+  "status": 200
+}

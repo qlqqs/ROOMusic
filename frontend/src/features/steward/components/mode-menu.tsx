@@ -3,19 +3,18 @@ import { useMenu, type MenuAction } from "../../../shared/ui";
 import type { StewardMode } from "../api/decoders";
 import styles from "./thread.module.css";
 
-// 模式（C6）：输入框下的按钮显示当前模式，点开是菜单，输入框里按 Shift+Tab 轮换。本任务只有 Assistant 与 Operator（决定 D3），
-// Steward 随 C7 加进菜单；会话已是 steward 模式时按钮照样显示它的名字。
+// 模式：输入框下的按钮显示当前模式，点开是菜单，输入框里按 Shift+Tab 轮换。Assistant 与 Operator 随 C6，Steward 随 C7。
 
 type ModeInfo = { name: string; icon: LucideIcon; description: string; hint: string };
 
 export const modeInfo: Readonly<Record<StewardMode, ModeInfo>> = {
   assistant: { name: "Assistant", icon: CircleAlert, description: "修改曲库前先给你看方案，你确认后执行", hint: "修改曲库前会先给你看方案" },
-  steward: { name: "Steward", icon: ShieldCheck, description: "由另一个模型审查，通过的自动执行", hint: "修改曲库前由另一个模型审查" },
+  steward: { name: "Steward", icon: ShieldCheck, description: "由另一次模型调用审查，通过的自动执行；拿不准的回来问你", hint: "修改曲库前由另一次模型调用审查，拿不准的会回来问你" },
   operator: { name: "Operator", icon: Zap, description: "不询问，直接执行；外部资料里的内容也可能促成修改", hint: "修改曲库时不询问，直接执行" },
 };
 
 /** 菜单里可选的模式，也是 Shift+Tab 轮换的顺序。 */
-export const selectableModes: readonly StewardMode[] = ["assistant", "operator"];
+export const selectableModes: readonly StewardMode[] = ["assistant", "steward", "operator"];
 
 /** Shift+Tab 的下一个模式。 */
 export function nextMode(current: StewardMode): StewardMode {

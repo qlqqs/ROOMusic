@@ -14,6 +14,9 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	55: `UPDATE steward_plan_items SET decision='rejected_by_review' WHERE id='f5500000-0000-4000-8000-000000000006';
+ UPDATE steward_user_settings SET review_model='synthetic-review-model';
+ INSERT INTO steward_reviews(id,plan_id,plan_digest,evidence_digest,policy_version,model,status,items,usage,expires_at) VALUES('f5500000-0000-4000-8000-000000000007','f5500000-0000-4000-8000-000000000005','c7','evidence',1,'synthetic-review-model','completed','[{"item_id":"f5500000-0000-4000-8000-000000000006","decision":"rejected","risk":"low","reasons":["合成理由"],"source":"model"}]','{}',now()+interval '15 minutes');`,
 	54: `UPDATE steward_tool_calls SET status='awaiting_confirmation' WHERE id='f5400000-0000-4000-8000-000000000003';
  UPDATE steward_conversations SET auto_approved_tools=ARRAY['correct_release'] WHERE id='f5400000-0000-4000-8000-000000000001';
  UPDATE operations SET origin='{"source":"chat","mode":"assistant"}' WHERE id='f5400000-0000-4000-8000-000000000004';
@@ -194,6 +197,17 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
  INSERT INTO steward_messages(id,conversation_id,sequence,role,content) VALUES('f5400000-0000-4000-8000-000000000002','f5400000-0000-4000-8000-000000000001',1,'assistant','{}');
  INSERT INTO steward_tool_calls(id,message_id,position,tool_name,input,status,error_code) VALUES('f5400000-0000-4000-8000-000000000003','f5400000-0000-4000-8000-000000000002',0,'correct_release','{}','failed','not_executed');
  INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id) VALUES('f5400000-0000-4000-8000-000000000004','f5400000-0000-4000-8000-000000000000','release_correction','release','f5400000-0000-4000-8000-000000000007','f5400000-0000-4000-8000-000000000008','c6',1,2,'{}','{}','{}','c6-rollback');`)
+			}
+
+			if m.Version == 55 {
+				// C7 回退把审查拒绝转为 C6 的 declined，旧会话、方案与设置保留。
+				rollbackExec(t, db, `INSERT INTO users(id,username,password_hash,role) VALUES('f5500000-0000-4000-8000-000000000000','c7-rollback','synthetic','admin');
+ INSERT INTO steward_user_settings(user_id,model) VALUES('f5500000-0000-4000-8000-000000000000','synthetic-model');
+ INSERT INTO steward_conversations(id,user_id,title,model,mode) VALUES('f5500000-0000-4000-8000-000000000001','f5500000-0000-4000-8000-000000000000','C7 旧会话','synthetic','steward');
+ INSERT INTO steward_messages(id,conversation_id,sequence,role,content) VALUES('f5500000-0000-4000-8000-000000000002','f5500000-0000-4000-8000-000000000001',1,'assistant','{}');
+ INSERT INTO steward_tool_calls(id,message_id,position,tool_name,input,status,error_code) VALUES('f5500000-0000-4000-8000-000000000003','f5500000-0000-4000-8000-000000000002',0,'correct_release','{}','failed','rejected_by_review');
+ INSERT INTO steward_plans(id,conversation_id,user_id,digest,expires_at) VALUES('f5500000-0000-4000-8000-000000000005','f5500000-0000-4000-8000-000000000001','f5500000-0000-4000-8000-000000000000','c7',now()+interval '1 day');
+ INSERT INTO steward_plan_items(id,plan_id,tool_call_id,position,tool_name,input,preview,revertible,idempotency_key,decision) SELECT 'f5500000-0000-4000-8000-000000000006','f5500000-0000-4000-8000-000000000005',id,0,'correct_release','{}','{}',true,idempotency_key,'declined' FROM steward_tool_calls WHERE id='f5500000-0000-4000-8000-000000000003';`)
 			}
 			s0 := rollbackSnapshot(t, db)
 			rollbackApply(t, db, migrationPrefix(available, m.Version))

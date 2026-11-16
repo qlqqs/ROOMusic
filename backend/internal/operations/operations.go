@@ -129,6 +129,8 @@ func NormalizeKey(header string) (key string, ok bool) {
 
 // Origin 记录后端入口提供的来源，不参与操作指纹。
 type Origin struct {
+	ReviewID       string `json:"review_id,omitempty"`
+	ReviewDecision string `json:"review_decision,omitempty"`
 	Source         string `json:"source"`
 	ConversationID string `json:"conversation_id,omitempty"`
 	PlanID         string `json:"plan_id,omitempty"`
@@ -235,7 +237,11 @@ func Run(ctx context.Context, database *sql.DB, spec Spec, execute Executor) (Re
 	}
 	var origin any
 	if spec.Origin != nil {
-		encoded, err := json.Marshal(spec.Origin)
+		originValue := *spec.Origin
+		if review, ok := ctx.Value(reviewOriginKey{}).(reviewOrigin); ok {
+			originValue.ReviewID, originValue.ReviewDecision = review.ID, review.Decision
+		}
+		encoded, err := json.Marshal(originValue)
 		if err != nil {
 			return Result{}, err
 		}

@@ -153,6 +153,9 @@ func escapeSource(value string) string {
 }
 
 func systemPromptWithMode(name, mode string) string {
+	if mode == "steward" {
+		return systemPromptWithName(name) + "曲库修改先生成方案，由独立审查调用判断；批准项自动执行，拒绝项不执行，其余等待用户确认。免确认名单不跳过审查。"
+	}
 	if mode == "operator" {
 		return systemPromptWithName(name) + "曲库修改在鉴权后直接执行，不询问用户。"
 	}

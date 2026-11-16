@@ -135,6 +135,22 @@ describe("操作记录页：列表", () => {
     expect(within(revertRow).queryByText(/管家|MCP/)).toBeNull();
   });
 
+  it("审查批准后自动执行的操作标“管家（审查通过）”；审查转给用户、由用户确认的仍是“管家（确认）”（M6 C7）", async () => {
+    const { governance } = setup();
+    seedMixed(governance);
+    const [, joined, , genre] = governance.operations;
+    if (joined === undefined || genre === undefined) throw new Error("种子操作不全");
+    const plan = "00000000-0000-4000-8000-0000000000c1";
+    const review = "00000000-0000-4000-8000-0000000000e1";
+    genre.origin = { source: "chat", plan_id: plan, mode: "steward", review_id: review, review_decision: "approved" };
+    joined.origin = { source: "chat", plan_id: plan, mode: "steward", review_id: review, review_decision: "needs_human_confirmation" };
+    renderApp({ path: "/settings/operations" });
+    const table = await screen.findByRole("table", { name: "操作记录" });
+    const [genreRow, , joinedRow] = within(table).getAllByRole("row").slice(1) as [HTMLElement, HTMLElement, HTMLElement];
+    expect(within(genreRow).getByText("管家（审查通过）")).toBeTruthy();
+    expect(within(joinedRow).getByText("管家（确认）")).toBeTruthy();
+  });
+
   it("每页 20 条：请求带页码与页大小，分页导航写明页数，下一页进入第 2 页", async () => {
     const { api, governance } = setup();
     for (let revision = 1; revision <= 25; revision += 1) correct(governance, releaseOf(albumC()), revision, "label", `Label ${revision}`);

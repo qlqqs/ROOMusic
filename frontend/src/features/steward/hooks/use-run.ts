@@ -8,6 +8,7 @@ import type { StewardRequestContext } from "../context/context";
 import { useStewardHost } from "../context/host";
 import { isIncomplete, turnsFromMessages, type Turn } from "../run/reduce";
 import { rememberPlan, unfinishedPlanIdsOf } from "../run/plan-store";
+import { reviewFinished, reviewStarted, settleReviews } from "../run/review-store";
 import { getRunSnapshot, startRun, subscribeRuns, type ActiveRun, type RunEnd, type RunSnapshot, type StartResult, type StartRunParams } from "../run/run-store";
 import { refreshConversation } from "../run/refresh";
 import { toolDataScopeOf } from "../tool-labels";
@@ -35,9 +36,10 @@ export function useStewardDisabledCheck() {
 }
 
 /**
- * 发消息（text）或从现有历史继续（null），context 是随消息发的页面上下文（继续时为 null）；decision 是对一份方案的决定（C6，text 为 null）。
+ * 发消息（text）或从现有历史继续（null），context 是随消息发的页面上下文（继续时为 null）；action 是对一份方案的决定（C6）
+ * 或重新审查（C7），text 为 null。
  * 运行结束后重读会话与列表；改了收藏、歌单、播放历史或曲库的工具每结束一次，就让那类数据的查询失效（播放类不用，分区事件会推过来）。
- * 运行里出现的修改方案记进方案的 store。
+ * 运行里出现的修改方案记进方案的 store；审查的开始与结论记进审查的 store，开始审查时重读会话，取得送审方案的各项（审查事件里只有方案 ID）。
  */
 export function useStartRun() {
   const queryClient = useQueryClient();
@@ -50,7 +52,7 @@ export function useStartRun() {
       text: string | null,
       baseSequence: number,
       context: StewardRequestContext | null,
-      decision?: StartRunParams["decision"],
+      action: Pick<StartRunParams, "decision" | "review"> = {},
     ): Promise<StartResult> => {
       const result = await startRun({
         conversationId,
@@ -63,7 +65,17 @@ export function useStartRun() {
           if (scope !== null) refreshData(scope);
         },
         onPlan: (plan) => rememberPlan(conversationId, plan),
-        ...(decision === undefined ? {} : { decision }),
+        // 审查中被取消或保存失败时流以 done 或断开结束、没有 review_finished：不再显示“审查中”，以重读的落库内容为准。
+        onEnd: () => settleReviews(conversationId),
+        onReview: (event) => {
+          if (event.type === "review_finished") {
+            reviewFinished(conversationId, event.review);
+            return;
+          }
+          reviewStarted(conversationId, event.plan_id, event.model);
+          void refreshConversation(queryClient, generation, conversationId).catch(() => undefined);
+        },
+        ...action,
       });
       if (!result.started && isHttpFailure(result.failure, 403, "steward_disabled")) checkDisabled(null, true);
       return result;

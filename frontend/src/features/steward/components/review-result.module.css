@@ -1,0 +1,142 @@
+/* 审查结果（C7，原型的 section.review）：细框，每项是状态、修改摘要与理由，右侧是撤销；窄容器里各项上下排列。 */
+.review {
+  container-type: inline-size;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-2);
+  padding: var(--space-3) var(--space-3) var(--space-2);
+}
+
+.head h3 {
+  font-size: var(--fs-14);
+}
+
+.head h3:focus {
+  outline: none;
+}
+
+.meta {
+  display: grid;
+  gap: 2px;
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  overflow-wrap: anywhere;
+}
+
+.same {
+  color: var(--color-warning);
+}
+
+.state {
+  padding: 0 var(--space-3) var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr) auto;
+  gap: var(--space-1) var(--space-3);
+  align-items: baseline;
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--color-divider);
+  font-size: var(--fs-13);
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status[data-tone="done"] {
+  color: var(--color-neutral-800);
+}
+
+.status[data-tone="ask"] {
+  color: var(--text-accent);
+}
+
+.status[data-tone="no"],
+.status[data-tone="pending"] {
+  color: var(--text-secondary);
+}
+
+.main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.detail,
+.reason {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  overflow-wrap: anywhere;
+}
+
+.reason {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--space-2);
+}
+
+.policy {
+  color: var(--color-neutral-800);
+}
+
+.risk {
+  color: var(--color-warning);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  font-size: var(--fs-12);
+}
+
+.confirm {
+  padding: var(--space-3);
+  border-top: 1px solid var(--color-divider);
+}
+
+.foot {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-top: 1px solid var(--color-divider);
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.note {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+}
+
+@container (max-width: 480px) {
+  .row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

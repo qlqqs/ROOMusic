@@ -23,16 +23,17 @@ const (
 
 type runState struct {
 	*Runner
-	params       RunParams
-	sink         EventSink
-	logger       *slog.Logger
-	step         int
-	inputTokens  int64
-	outputTokens int64
-	countedSteps int
-	definitions  map[string]tool.Definition
-	history      []Message
-	conversation Conversation
+	params        RunParams
+	sink          EventSink
+	logger        *slog.Logger
+	step          int
+	inputTokens   int64
+	outputTokens  int64
+	countedSteps  int
+	definitions   map[string]tool.Definition
+	history       []Message
+	conversation  Conversation
+	reviewStarted bool
 }
 
 // Run 原子占用会话后同步执行多步对话；会话忙时返回 ErrConversationBusy 且不发送事件。
@@ -85,7 +86,7 @@ func (r *Runner) Run(ctx context.Context, params RunParams, sink EventSink) (err
 			slog.Int64("duration_ms", time.Since(started).Milliseconds()),
 			slog.Int64("input_tokens", state.inputTokens), slog.Int64("output_tokens", state.outputTokens),
 			slog.Int("usage_known_steps", state.countedSteps))
-		if end.Reason != "" {
+		if end.Reason != "" || (state.reviewStarted && err != nil) {
 			sink(Event{Type: EventDone, Step: state.step, End: &end})
 		}
 	}()
@@ -101,13 +102,55 @@ func (r *Runner) Run(ctx context.Context, params RunParams, sink EventSink) (err
 	state.params.Caller.ConversationID = params.ConversationID
 	state.params.Caller.SharedExecution = false
 	state.params.Caller.PlanID = ""
+	state.params.Caller.ReviewID = ""
+	state.params.Caller.ReviewDecision = ""
+	if params.ReviewPlanID != "" {
+		if state.conversation.Mode != "steward" {
+			return ErrReviewNotApplicable
+		}
+		var selected *Plan
+		for i := range detail.Plans {
+			if detail.Plans[i].ID == params.ReviewPlanID {
+				selected = &detail.Plans[i]
+				break
+			}
+		}
+		if selected == nil {
+			return ErrPlanNotFound
+		}
+		if err := CheckPlanDecision(detail, PlanDecision{PlanID: selected.ID, Digest: selected.Digest}); err != nil && !errors.Is(err, ErrConversationBusy) {
+			return err
+		}
+		if params.Started != nil {
+			params.Started()
+			state.params.Started = nil
+		}
+		state.step = 1
+		_, stop, reviewErr := state.reviewPlan(ctx, *selected)
+		if reviewErr != nil {
+			return reviewErr
+		}
+		if stop != "" {
+			end = RunEnd{Reason: stop}
+			return nil
+		}
+		detail, err = r.store.GetConversation(ctx, userID, params.ConversationID)
+		if err != nil {
+			return err
+		}
+		state.history = detail.Messages
+		state.params.Continue = true
+		end, err = state.run(ctx)
+		return err
+	}
 	if params.Continue {
 		for _, plan := range detail.Plans {
 			if plan.Status == "pending" {
 				if params.Started != nil {
 					params.Started()
 				}
-				sink(Event{Type: EventPlan, Plan: &plan})
+				pending := pendingPlan(plan)
+				sink(Event{Type: EventPlan, Plan: &pending})
 				end = RunEnd{Reason: EndAwaitingConfirmation}
 				return nil
 			}
@@ -236,7 +279,18 @@ func (s *runState) run(ctx context.Context) (RunEnd, error) {
 		if err != nil {
 			return RunEnd{Reason: stop}, err
 		}
-		messages = append(messages, toolMessages...)
+		if s.conversation.Mode == "steward" && stop == "" {
+			detail, readErr := s.store.GetConversation(ctx, s.params.Caller.User.ID, s.params.ConversationID)
+			if readErr != nil {
+				return RunEnd{}, readErr
+			}
+			messages, err = replayMessages(detail.Messages)
+			if err != nil {
+				return RunEnd{}, err
+			}
+		} else {
+			messages = append(messages, toolMessages...)
+		}
 		if ctx.Err() != nil {
 			return RunEnd{Reason: EndCancelled}, nil
 		}
@@ -328,5 +382,5 @@ func modelFailure(ctx context.Context, err error) RunEnd {
 }
 
 func (s *runState) sharedDirect(name string) bool {
-	return s.conversation.Mode == "operator" || (s.definitions[name].Revertible && slices.Contains(s.conversation.AutoApprovedTools, name))
+	return s.conversation.Mode == "operator" || (s.conversation.Mode == "assistant" && s.definitions[name].Revertible && slices.Contains(s.conversation.AutoApprovedTools, name))
 }

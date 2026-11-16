@@ -413,7 +413,12 @@ const successContracts: Record<string, Contract> = {
   "steward/provider-timeout": { status: 503, decode: decodeProbeFailure },
   "steward/provider-unreachable": { status: 503, decode: decodeProbeFailure },
   "steward/conversations": { status: 200, decode: decodeConversationPage },
+  "steward/conversations-review-pending": { status: 200, decode: decodeConversationPage },
   "steward/conversation": { status: 200, decode: decodeConversationDetail },
+  // 会话详情里的方案与最近一次审查（C6、C7）。
+  "steward/conversation-plan": { status: 200, decode: decodeConversationDetail },
+  "steward/conversation-review-pending": { status: 200, decode: decodeConversationDetail },
+  "steward/conversation-review-unavailable": { status: 200, decode: decodeConversationDetail },
   "steward/conversation-created": { status: 201, decode: decodeConversation },
   "steward/conversation-renamed": { status: 200, decode: decodeConversationPatch },
   "steward/conversation-model-updated": { status: 200, decode: decodeConversationPatch },

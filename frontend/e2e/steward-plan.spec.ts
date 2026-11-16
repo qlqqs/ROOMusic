@@ -2,7 +2,7 @@ import { expectNoHorizontalOverflow } from "./support/checks";
 import { expect, test } from "./support/fixtures";
 import { installStewardMock, PLAN_OPERATION_ID, seedPlanConversation } from "./support/steward";
 
-// 管家修改方案与模式的冒烟（C6）：真实浏览器里的方案卡片（勾选、应用、结果、撤销）、模式菜单与 Shift+Tab。
+// 管家修改方案与模式的冒烟（C6；C7 起模式有三种，Steward 的冒烟在 steward-review.spec.ts）：真实浏览器里的方案卡片（勾选、应用、结果、撤销）、模式菜单与 Shift+Tab。
 // 管家接口由 support/steward.ts 受控响应，确认接口一次性返回整段 SSE；校验顺序、作废、过期与摘要不一致由 Vitest 的页面级测试覆盖。
 
 test.describe("管家的修改方案", () => {
@@ -60,6 +60,8 @@ test.describe("管家的修改方案", () => {
     await expect(menu).toBeHidden();
 
     await input.focus();
+    await page.keyboard.press("Shift+Tab");
+    await expect(mode).toHaveAccessibleName("模式：Steward");
     await page.keyboard.press("Shift+Tab");
     await expect(mode).toHaveAccessibleName("模式：Operator");
     await expect(page.getByText("修改曲库时不询问，直接执行")).toBeVisible();

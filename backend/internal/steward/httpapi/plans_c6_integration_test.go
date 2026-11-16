@@ -344,8 +344,9 @@ func TestPostgreSQLStewardHTTPC6ModesAndMember(t *testing.T) {
 		for _, mode := range []string{"assistant", "operator"} {
 			t.Run(role+"/"+mode, func(t *testing.T) {
 				f, id := newC6API(t, role, mode)
-				apiStatus(t, f.request(role, "POST", "me/steward/conversations", map[string]string{"mode": "steward"}), 400, "invalid_request")
-				apiStatus(t, f.request(role, "PATCH", c6Path(id), map[string]string{"mode": "steward"}), 400, "invalid_request")
+				apiStatus(t, f.request(role, "POST", "me/steward/conversations", map[string]string{"mode": "steward"}), 201, "")
+				apiStatus(t, f.request(role, "PATCH", c6Path(id), map[string]string{"mode": "steward"}), 200, "")
+				apiStatus(t, f.request(role, "PATCH", c6Path(id), map[string]string{"mode": mode}), 200, "")
 				if role == "admin" && mode == "assistant" {
 					return
 				}

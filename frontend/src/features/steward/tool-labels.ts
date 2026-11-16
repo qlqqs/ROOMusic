@@ -283,6 +283,9 @@ const failurePhrases: Readonly<Record<string, string>> = {
   // C6：方案里用户没有勾选的项；用户发了新消息、方案作废时没有执行的项。
   declined_by_user: "你没有选这一项",
   not_executed: "没有执行",
+  // C7：被审查拒绝的项；审查不可用时没有执行的项。
+  rejected_by_review:"审查没有通过",
+  review_unavailable: "审查不可用",
   queue_full: "队列已满",
   volume_fixed: "这个设备的音量不能调",
   playlist_limit_reached: "歌单数量已到上限",

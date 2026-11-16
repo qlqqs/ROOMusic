@@ -13,6 +13,7 @@ type Runner struct {
 	store    RunStore
 	registry *tool.Registry
 	logger   *slog.Logger
+	evidence ReviewEvidenceReader
 }
 
 // NewRunner 注入存储、已完成注册的工具表和日志器，不执行任何 I/O。
@@ -22,7 +23,9 @@ func NewRunner(store RunStore, registry *tool.Registry, logger *slog.Logger) *Ru
 
 // RunParams 是入口已取得的调用者身份、会话及模型配置，不包含端点密钥。
 type RunParams struct {
-	Decision *PlanDecision
+	ReviewPlanID string
+	ReviewModel  string
+	Decision     *PlanDecision
 	// Caller 来自已认证入口。
 	Caller tool.Caller
 	// ConversationID 是当前用户的会话标识。
@@ -47,7 +50,9 @@ type RunParams struct {
 type EventType string
 
 const (
-	EventPlan EventType = "plan"
+	EventReviewStarted  EventType = "review_started"
+	EventReviewFinished EventType = "review_finished"
+	EventPlan           EventType = "plan"
 	// EventText 表示助手文本增量。
 	EventText EventType = "text"
 	// EventToolStarted 表示开始执行工具。
@@ -64,6 +69,7 @@ const (
 type EndReason string
 
 const (
+	EndReviewUnavailable    EndReason = "review_unavailable"
 	EndAwaitingConfirmation EndReason = "awaiting_confirmation"
 	// EndInternalError 表示运行发生内部异常。
 	EndInternalError EndReason = "internal_error"
@@ -119,7 +125,10 @@ type ToolFinished struct {
 
 // Event 由 Type 选择载荷；不向接收方暴露助手的不透明块。
 type Event struct {
-	Plan *Plan `json:"plan,omitempty"`
+	PlanID string  `json:"plan_id,omitempty"`
+	Model  string  `json:"model,omitempty"`
+	Review *Review `json:"review,omitempty"`
+	Plan   *Plan   `json:"plan,omitempty"`
 	// Type 是事件类型。
 	Type EventType `json:"type"`
 	// Step 是从一开始的模型调用序号。

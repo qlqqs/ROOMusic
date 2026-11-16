@@ -60,6 +60,7 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	h.route(mux, "PATCH /api/v1/me/steward/conversations/{id}", false, h.renameConversation)
 	h.route(mux, "POST /api/v1/me/steward/conversations/{id}/messages", false, h.sendMessage)
 	h.route(mux, "POST /api/v1/me/steward/conversations/{id}/plans/{plan_id}/decision", false, h.decidePlan)
+	h.route(mux, "POST /api/v1/me/steward/conversations/{id}/plans/{plan_id}/review", false, h.reviewPlan)
 	h.route(mux, "POST /api/v1/me/steward/conversations/{id}/continue", false, h.continueConversation)
 	h.route(mux, "POST /api/v1/me/steward/conversations/{id}/cancel", false, h.cancelConversation)
 	h.route(mux, "GET /api/v1/admin/steward/settings", true, h.getInstanceSettings)

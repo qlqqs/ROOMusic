@@ -35,6 +35,8 @@ const settingsDecoder = d.object({
   key_needs_reentry: d.boolean(),
   protocol: d.oneOf(["", ...protocols] as const),
   model: d.string(),
+  /** 审查模型（C7）；空字符串表示与对话用同一个模型。 */
+  review_model: d.optional(d.string()),
   display_name: d.string({ max: MAX_DISPLAY_NAME }),
   probe_result: d.nullable(probeResultDecoder),
   probed_at: d.nullable(d.timestamp()),
@@ -60,7 +62,7 @@ export type ProbeFailureResponseDTO = ReturnType<typeof decodeProbeFailure>;
 
 // ---- 会话与消息（合同 4.4）----
 
-/** 会话的模式（C6）：assistant 修改曲库前给用户确认，operator 直接执行；steward 随 C7 出现，这里先认得。 */
+/** 会话的模式：assistant 修改曲库前给用户确认（C6），steward 交给独立的审查调用、通过的自动执行（C7），operator 直接执行（C6）。 */
 export const stewardModes = ["assistant", "steward", "operator"] as const;
 export type StewardMode = (typeof stewardModes)[number];
 
@@ -75,15 +77,18 @@ const conversationShape = {
   updated_at: d.timestamp(),
 };
 
+// 会话列表的每一项另带未处理方案里等用户确认的项数（C7，列表标出“N 项等你确认”）；没有时省略或为 0。
 const conversationDecoder = d.object(conversationShape);
+const conversationListItemDecoder = d.object({ ...conversationShape, pending_item_count: d.optional(d.integer({ min: 0 })) });
 export const decodeConversation = d.defineDecoder(conversationDecoder);
 export type ConversationDTO = d.Infer<typeof conversationDecoder>;
+export type ConversationListItemDTO = d.Infer<typeof conversationListItemDecoder>;
 
 /** 会话列表一页最多这么多个（后端的上限）。 */
 export const MAX_CONVERSATION_PAGE_SIZE = 100;
 
 const conversationPageDecoder = d.object({
-  items: d.array(conversationDecoder, { max: MAX_CONVERSATION_PAGE_SIZE }),
+  items: d.array(conversationListItemDecoder, { max: MAX_CONVERSATION_PAGE_SIZE }),
   pagination: d.object({
     page: d.integer({ min: 1 }),
     page_size: d.integer({ min: 1, max: MAX_CONVERSATION_PAGE_SIZE }),
@@ -171,6 +176,35 @@ const planBasisDecoder = d.object({
 
 const planChangeDecoder = d.object({ field: d.string(), before: json, after: json });
 
+// ---- 审查（C7）----
+// steward 模式下方案交给一次独立的模型调用审查，按项给结论：approved 自动执行，rejected 不执行，needs_human_confirmation 转给用户确认。
+// source 是结论的来源：policy 是后端的策略规则（不可撤销的修改、一次超过 20 项、高风险），不是审查模型的判断。
+// status 为 unavailable 时审查调用失败或返回不合格，items 为空，整份方案没有执行。
+
+export const reviewDecisions = ["approved", "rejected", "needs_human_confirmation"] as const;
+export type ReviewDecision = (typeof reviewDecisions)[number];
+
+const reviewItemDecoder = d.object({
+  item_id: d.uuid(),
+  decision: d.oneOf(reviewDecisions),
+  risk: d.oneOf(["low", "medium", "high"] as const),
+  /** 理由来自审查模型或策略，只按文字显示，不走 Markdown。 */
+  reasons: d.array(d.string({ max: d.unbounded }), { max: d.unbounded }),
+  source: d.oneOf(["model", "policy"] as const),
+});
+
+const reviewDecoder = d.object({
+  review_id: d.uuid(),
+  plan_id: d.uuid(),
+  model: d.string(),
+  status: d.oneOf(["completed", "unavailable"] as const),
+  policy_version: d.integer({ min: 1 }),
+  expires_at: d.timestamp(),
+  items: d.array(reviewItemDecoder, { max: d.unbounded }),
+});
+export type ReviewDTO = d.Infer<typeof reviewDecoder>;
+export type ReviewItemDTO = d.Infer<typeof reviewItemDecoder>;
+
 const planItemDecoder = d.object({
   id: d.uuid(),
   call_id: d.string({ min: 1 }),
@@ -180,8 +214,8 @@ const planItemDecoder = d.object({
   changes: d.array(planChangeDecoder, { max: d.unbounded }),
   revertible: d.boolean(),
   basis: d.optional(d.nullable(planBasisDecoder)),
-  /** 用户的取舍；已处理的方案才有 accepted、declined。 */
-  decision: d.optional(d.oneOf(["pending", "accepted", "declined"] as const)),
+  /** 这一项的取舍：用户确认（accepted、declined），或被审查拒绝（rejected_by_review，C7）；审查批准并执行的项也是 accepted。 */
+  decision: d.optional(d.oneOf(["pending", "accepted", "declined", "rejected_by_review"] as const)),
   /** 执行结果（会话详情的 plans 里，有结果才有）；这里只看有没有，不解释内容。 */
   result: d.optional(json),
   /** 执行留下的操作记录（会话详情的 plans 里）。 */
@@ -194,6 +228,8 @@ const planDecoder = d.object({
   digest: d.string({ min: 1 }),
   expires_at: d.timestamp(),
   items: d.array(planItemDecoder, { min: 1, max: d.unbounded }),
+  /** 最近一次审查（C7，会话详情里）；没有审查过时是 null 或省略。 */
+  review: d.optional(d.nullable(reviewDecoder)),
 });
 export type PlanDTO = d.Infer<typeof planDecoder>;
 export type PlanItemDTO = d.Infer<typeof planItemDecoder>;
@@ -228,8 +264,8 @@ export const decodeCancelled = d.defineDecoder(d.object({ cancelled: d.boolean()
 
 // ---- 运行流的事件（合同第 5 节）----
 
-// awaiting_confirmation（C6）：这一步有等用户确认的方案，运行停在这里。
-export const endReasons = ["completed", "awaiting_confirmation", "step_limit", "token_limit", "cancelled", "provider_error", "internal_error"] as const;
+// awaiting_confirmation（C6）：这一步有等用户确认的方案，运行停在这里；review_unavailable（C7）：审查不可用，方案没有执行、仍在等待。
+export const endReasons = ["completed", "awaiting_confirmation", "review_unavailable", "step_limit", "token_limit", "cancelled", "provider_error", "internal_error"] as const;
 export type EndReason = (typeof endReasons)[number];
 
 const runEndDecoder = d.object({
@@ -269,6 +305,9 @@ const runEventDecoders = {
     usage: d.object({ input_tokens: d.optional(d.integer({ min: 0 })), output_tokens: d.optional(d.integer({ min: 0 })) }),
   }),
   plan: d.object({ type: d.literal("plan"), step: d.optional(step), plan: planDecoder }),
+  // 审查（C7）：开始时只有方案与审查模型，结束时是每项的结论；重新审查的流里没有 step。
+  review_started: d.object({ type: d.literal("review_started"), step: d.optional(step), plan_id: d.uuid(), model: d.string() }),
+  review_finished: d.object({ type: d.literal("review_finished"), step: d.optional(step), review: reviewDecoder }),
   done: d.object({ type: d.literal("done"), step: d.optional(step), end: runEndDecoder }),
 };
 

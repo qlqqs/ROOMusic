@@ -52,7 +52,8 @@ function noteOf(ended: Ended, hasSteps: boolean): Note | null {
       switch (end.reason) {
         case "completed":
         case "awaiting_confirmation":
-          // 等用户确认方案：方案卡片就是下一步，不另加说明。
+        case "review_unavailable":
+          // 等用户确认方案，或审查不可用（C7）：方案与审查的区块写明了下一步，不另加说明。
           return null;
         case "cancelled":
           return { tone: "calm", title: "已停止" };

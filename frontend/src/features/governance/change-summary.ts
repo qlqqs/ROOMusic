@@ -1,10 +1,15 @@
 import type { ClaimSummaryDTO, DefaultVersionDTO, OperationChangesDTO, OperationItemDTO, OperationOriginDTO } from "./api/decoders";
 import { correctionFieldLabels, displayValue, reviewableIssueLabels } from "./labels";
 
-/** 操作的来源标签：管家确认方案后执行的写“管家（确认）”，管家直接执行的写“管家（直接执行）”，MCP 令牌写“MCP”；没有来源（页面上的操作）是 null。 */
+/**
+ * 操作的来源标签：审查批准后自动执行的写“管家（审查通过）”（C7），管家确认方案后执行的写“管家（确认）”，管家直接执行的写“管家（直接执行）”，
+ * MCP 令牌写“MCP”；没有来源（页面上的操作）是 null。审查转给用户、由用户确认执行的项仍是“管家（确认）”。
+ */
 export function operationOriginLabel(origin: OperationOriginDTO | null | undefined): string | null {
   if (origin === null || origin === undefined) return null;
   if (origin.source === "mcp") return "MCP";
+  const reviewed = origin.review_id !== null && origin.review_id !== undefined && (origin.review_decision ?? "approved") === "approved";
+  if (reviewed) return "管家（审查通过）";
   return origin.plan_id === null || origin.plan_id === undefined ? "管家（直接执行）" : "管家（确认）";
 }
 

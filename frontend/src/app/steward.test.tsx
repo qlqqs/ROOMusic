@@ -8,7 +8,19 @@ import { albumGroup, catalogDataOf } from "../test/catalog-data";
 import { installFakeApi, installFakeSession, installOverviewApi } from "../test/fake-api";
 import { FakeAudio } from "../test/fake-audio";
 import { installCatalogApi } from "../test/fake-catalog";
-import { conversationOf, installStewardApi, planOf, planPayload, settingsOf, storedMessage, type FakePlan, type FakePlanItem, type StewardFake } from "../test/fake-steward";
+import {
+  conversationOf,
+  installStewardApi,
+  planOf,
+  planPayload,
+  reviewOf,
+  settingsOf,
+  storedMessage,
+  type FakePlan,
+  type FakePlanItem,
+  type FakeReviewItem,
+  type StewardFake,
+} from "../test/fake-steward";
 import { fakeZoneServer, type FakeZoneServer } from "../test/fake-zones";
 import { playerTrack } from "../test/player-data";
 import { renderApp } from "../test/render-app";
@@ -1022,8 +1034,8 @@ describe("修改方案", () => {
 describe("模式", () => {
   const modeButton = (scope: ReturnType<typeof within>) => scope.getByRole("button", { name: /^模式：/ });
 
-  it("空白新对话：输入框里 Shift+Tab 在 Assistant 与 Operator 之间轮换，提示行随之变化；发第一条消息时带上选的模式", async () => {
-    const { api } = setup();
+  it("空白新对话：输入框里 Shift+Tab 在 Assistant、Steward、Operator 之间轮换，提示行随之变化；发第一条消息时带上选的模式", async () => {
+    const { api } = setup({ settings: settingsOf({ display_name: "小蓝", review_model: "" }) });
     renderApp({ path: "/" });
     const panel = await openPanel();
     const input = await panel.findByRole("textbox", { name: "问问小蓝" });
@@ -1031,25 +1043,30 @@ describe("模式", () => {
     expect(panel.getByText("修改曲库前会先给你看方案")).toBeTruthy();
     await userEvent.click(input);
     await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(modeButton(panel).getAttribute("aria-label")).toBe("模式：Steward");
+    // 没有另选审查模型：提示审查与对话是同一个模型（C7 的 A8）。
+    expect(panel.getByText("修改曲库前由另一次模型调用审查，拿不准的会回来问你；审查与对话是同一个模型，独立性有限")).toBeTruthy();
+    await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
     expect(modeButton(panel).getAttribute("aria-label")).toBe("模式：Operator");
     expect(panel.getByText("修改曲库时不询问，直接执行")).toBeTruthy();
     // 轮换不移动焦点。
     expect(document.activeElement).toBe(input);
     await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
     expect(modeButton(panel).getAttribute("aria-label")).toBe("模式：Assistant");
-    await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+    await userEvent.keyboard("{Shift>}{Tab}{/Shift}{Shift>}{Tab}{/Shift}");
     await userEvent.type(input, "把标题都改成中文{Enter}");
     await waitFor(() => expect(api.requestsTo("POST", "/api/v1/me/steward/conversations")).toHaveLength(1));
     expect(api.requestsTo("POST", "/api/v1/me/steward/conversations")[0]?.body).toEqual({ mode: "operator" });
   });
 
-  it("已有会话：菜单写明两种模式，选 Operator 经 PATCH 切换；Shift+Tab 只在输入框里轮换", async () => {
+  it("已有会话：菜单写明三种模式，选 Operator 经 PATCH 切换；Shift+Tab 只在输入框里轮换", async () => {
     const { api } = setup({ conversations: [conversationOf(id, { messages: persistedRun("上一个问题", "上一个回答") })] });
     const conversation = await openConversation();
     const input = await conversation.findByRole("textbox", { name: "回复小蓝" });
     await userEvent.click(modeButton(conversation));
     const menu = within(await screen.findByRole("menu", { name: "模式" }));
     expect(menu.getByRole("menuitem", { name: /^Assistant 修改曲库前先给你看方案，你确认后执行/ })).toBeTruthy();
+    expect(menu.getByRole("menuitem", { name: /^Steward 由另一次模型调用审查，通过的自动执行/ })).toBeTruthy();
     await userEvent.click(menu.getByRole("menuitem", { name: /^Operator 不询问，直接执行；外部资料里的内容也可能促成修改/ }));
     await waitFor(() => expect(api.requestsTo("PATCH", `/api/v1/me/steward/conversations/${id}`)).toHaveLength(1));
     expect(api.requestsTo("PATCH", `/api/v1/me/steward/conversations/${id}`)[0]?.body).toEqual({ mode: "operator" });
@@ -1085,5 +1102,315 @@ describe("模式", () => {
     await userEvent.type(await conversation.findByRole("textbox", { name: "问问小蓝" }), "你好{Enter}");
     await waitFor(() => expect(state.runs).toHaveLength(1));
     expect((modeButton(conversation) as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+// ---- C7：审查与 Steward 模式 ----
+
+const rejectItem: FakePlanItem = {
+  id: "00000000-0000-4000-8000-0000000000b3",
+  call_id: "call-4",
+  tool: "correct_release",
+  target: "Karl Richter 1958",
+  changes: [{ field: "label", before: null, after: "Archiv" }],
+  revertible: true,
+  basis: { source: "external", note: "来自 MusicBrainz" },
+};
+
+const approved = (item: FakePlanItem, reasons = ["目标明确，有 CUE 文件佐证，可以单独撤销"]): FakeReviewItem => ({ item_id: item.id, decision: "approved", risk: "low", reasons, source: "model" });
+const rejected = (item: FakePlanItem, reasons: string[]): FakeReviewItem => ({ item_id: item.id, decision: "rejected", risk: "medium", reasons, source: "model" });
+const toHuman = (item: FakePlanItem): FakeReviewItem => ({ item_id: item.id, decision: "needs_human_confirmation", risk: "high", reasons: ["不可撤销的修改"], source: "policy" });
+
+/** 审查之后落库的样子：标题那项批准并执行了，艺人那项转给用户确认，厂牌那项被审查拒绝。 */
+function reviewedMessages() {
+  return [
+    storedMessage(1, "user", [{ type: "text", text: "把待关注的问题过一遍" }]),
+    storedMessage(
+      2,
+      "assistant",
+      [
+        { type: "text", text: "我把能处理的交给了审查。" },
+        { type: "tool_call", tool_call: { id: "call-2", name: "correct_release", arguments: { release_id: "r" } } },
+        { type: "tool_call", tool_call: { id: "call-3", name: "merge_artists", arguments: { artist_id: "a" } } },
+        { type: "tool_call", tool_call: { id: "call-4", name: "correct_release", arguments: { release_id: "k" } } },
+      ],
+      [
+        callRecord(1, "correct_release", { status: "succeeded", output: { operation_id: operationId, revision: 3 }, duration_ms: 300 }),
+        callRecord(2, "merge_artists"),
+        callRecord(3, "correct_release", { status: "failed", output: { code: "rejected_by_review" }, error_code: "rejected_by_review" }),
+      ],
+    ),
+  ];
+}
+
+/** 一个 Steward 模式、停在审查结果上的会话（刷新后的样子）。 */
+function setupReviewed(overrides: Partial<FakePlan> = {}, steward: Partial<StewardFake> = {}) {
+  const context = setup({ conversations: [conversationOf(id, { mode: "steward", messages: reviewedMessages() })], ...steward });
+  context.state.plans.push(
+    planOf(planId, id, [titleItem, mergeItem, rejectItem], {
+      review: reviewOf(planId, [approved(titleItem), toHuman(mergeItem), rejected(rejectItem, ["曲库里有两位同名的人，证据不足以判断是哪一位", "<b>不要</b> **执行**"])]),
+      reviewed: { [titleItem.id]: { decision: "accepted", operation_id: operationId }, [rejectItem.id]: { decision: "rejected_by_review" } },
+      ...overrides,
+    }),
+  );
+  return context;
+}
+
+/** 审查结果里某个目标的那一行（目标名第一次出现的地方；同名的新值与下面确认卡片里的不算）。 */
+const rowOf = (card: ReturnType<typeof within>, target: string) => within(card.getAllByText(target)[0]?.closest("li") as HTMLElement);
+
+describe("审查", () => {
+  it("运行中：开始审查时显示“审查中”；结论到达后批准的项执行，转人工的项出现在确认卡片里，结束后没有结束说明", async () => {
+    const { state } = setup({ conversations: [conversationOf(id, { mode: "steward" })] });
+    const conversation = await openConversation();
+    await userEvent.type(await conversation.findByRole("textbox", { name: "问问小蓝" }), "把这张专辑整理好{Enter}");
+    await waitFor(() => expect(state.runs).toHaveLength(1));
+    const stream = state.runs[0]?.stream;
+    stream?.send("text", { type: "text", step: 1, text: "建议改下面两处。" });
+    stream?.send("tool_started", { type: "tool_started", step: 1, tool_started: { call_id: "call-2", name: "correct_release", input: { release_id: "r" } } });
+    stream?.send("tool_started", { type: "tool_started", step: 1, tool_started: { call_id: "call-3", name: "merge_artists", input: { artist_id: "a" } } });
+    // 方案已经落库，审查开始：页面重读会话，取得送审的各项。
+    const plan = planOf(planId, id, [titleItem, mergeItem]);
+    state.plans.push(plan);
+    stream?.send("review_started", { type: "review_started", step: 1, plan_id: planId, model: "review-model" });
+    const card = within(await conversation.findByRole("region", { name: "审查结果" }));
+    expect(card.getByText("由 review-model 独立审查，不带这次对话的内容")).toBeTruthy();
+    expect(card.getByRole("status").textContent).toBe("审查中…");
+    expect(await card.findByText("Bayreuth 1951")).toBeTruthy();
+    expect(card.getAllByText("审查中")).toHaveLength(2);
+
+    const review = reviewOf(planId, [approved(titleItem), toHuman(mergeItem)], { model: "review-model" });
+    stream?.send("review_finished", { type: "review_finished", step: 1, review });
+    stream?.send("tool_started", { type: "tool_started", tool_started: { call_id: "call-2", name: "correct_release", input: { release_id: "r" } } });
+    expect(await rowOf(card, "Bayreuth 1951").findByText("正在执行")).toBeTruthy();
+    stream?.send("tool_finished", { type: "tool_finished", tool_finished: { call_id: "call-2", status: "succeeded", output: { operation_id: operationId }, truncated: false, untrusted: false } });
+    expect(await rowOf(card, "Bayreuth 1951").findByText("已执行")).toBeTruthy();
+    expect(rowOf(card, "威廉·富特文格勒").getByText("等你确认")).toBeTruthy();
+    expect(rowOf(card, "威廉·富特文格勒").getByText("按规则交给你确认，不是审查模型的判断。")).toBeTruthy();
+    expect(rowOf(card, "Bayreuth 1951").getByText("目标明确，有 CUE 文件佐证，可以单独撤销")).toBeTruthy();
+    // 过程里同一个调用没有重复的条目。
+    expect(conversation.getAllByText("修正专辑信息").length).toBeGreaterThan(0);
+
+    stream?.send("plan", { type: "plan", step: 1, plan: { ...planPayload(plan), items: planPayload(plan).items.filter((item) => item.id === mergeItem.id) } });
+    plan.review = review;
+    plan.reviewed = { [titleItem.id]: { decision: "accepted", operation_id: operationId } };
+    const stored = state.conversations[0];
+    if (stored !== undefined) {
+      const messages = reviewedMessages();
+      const assistant = messages[1] as { content: unknown[]; tool_calls: unknown[] };
+      assistant.content = assistant.content.slice(0, 3);
+      assistant.tool_calls = assistant.tool_calls.slice(0, 2);
+      stored.messages = messages;
+    }
+    stream?.send("done", { type: "done", step: 1, end: { reason: "awaiting_confirmation" } });
+    stream?.close();
+
+    // 运行结束、重读之后审查结果落到已保存的回合里（重新挂载）。
+    await waitFor(() => expect((conversation.getByRole("button", { name: "应用 1 项修改" }) as HTMLButtonElement).disabled).toBe(false));
+    const confirm = within(conversation.getByRole("region", { name: "等你确认的修改" }));
+    expect(confirm.getByRole("checkbox", { name: "合并艺人 威廉·富特文格勒" })).toBeTruthy();
+    expect(confirm.queryByRole("checkbox", { name: "修正专辑信息 Bayreuth 1951" })).toBeNull();
+    // 不可撤销的修改没有“不再问我”。
+    expect(confirm.queryByRole("checkbox", { name: /不再问我/ })).toBeNull();
+    expect(conversation.queryByText("这次回答没有完成")).toBeNull();
+    // 审查结果里只有一个“修改方案”区块（确认卡片在审查结果里面）。
+    expect(conversation.queryByRole("region", { name: "修改方案" })).toBeNull();
+  });
+
+  it("刷新后：已执行的项可以撤销，被拒绝的项写明没有执行与理由（按文字显示），转人工的项确认后执行", async () => {
+    const { api, state } = setupReviewed();
+    const conversation = await openConversation();
+    const card = within(await conversation.findByRole("region", { name: "审查结果" }));
+    expect(card.getByText("由 synthetic-review-model 独立审查，不带这次对话的内容")).toBeTruthy();
+    // 审查模型与对话模型不同：没有“独立性有限”的说明。
+    expect(card.queryByText(/独立性有限/)).toBeNull();
+
+    const reject = rowOf(card, "Karl Richter 1958");
+    expect(reject.getByText("没有执行")).toBeTruthy();
+    expect(reject.getByText("审查没有通过")).toBeTruthy();
+    expect(reject.getByText("曲库里有两位同名的人，证据不足以判断是哪一位；<b>不要</b> **执行**")).toBeTruthy();
+    expect(reject.queryByRole("button", { name: /^撤销/ })).toBeNull();
+    expect(conversation.getByRole("region", { name: "审查结果" }).querySelector("b, strong")).toBeNull();
+
+    const done = rowOf(card, "Bayreuth 1951");
+    expect(done.getByText("已执行")).toBeTruthy();
+    await userEvent.click(done.getByRole("button", { name: /^撤销/ }));
+    expect(await done.findByText("已撤销")).toBeTruthy();
+    expect(state.reverts[0]?.operationId).toBe(operationId);
+
+    const confirm = within(card.getByRole("region", { name: "等你确认的修改" }));
+    await userEvent.click(confirm.getByRole("button", { name: "应用 1 项修改" }));
+    await waitFor(() => expect(state.decisions).toHaveLength(1));
+    expect(api.requestsTo("POST", decisionPath)[0]?.body).toEqual({ digest: state.plans[0]?.digest, accepted_item_ids: [mergeItem.id], auto_approve_tools: [] });
+    const stream = state.decisions[0]?.stream;
+    stream?.send("tool_started", { type: "tool_started", tool_started: { call_id: "call-3", name: "merge_artists", input: { artist_id: "a" } } });
+    stream?.send("tool_finished", { type: "tool_finished", tool_finished: { call_id: "call-3", status: "succeeded", output: { operation_id: "00000000-0000-4000-8000-0000000000d2" }, truncated: false, untrusted: false } });
+    expect(await rowOf(card, "威廉·富特文格勒").findByText("已执行")).toBeTruthy();
+    expect(card.queryByRole("region", { name: "等你确认的修改" })).toBeNull();
+    // 不可撤销的项没有“撤销”。
+    expect(rowOf(card, "威廉·富特文格勒").queryByRole("button", { name: /^撤销/ })).toBeNull();
+    // 提交后焦点在审查结果的标题上。
+    await waitFor(() => expect(document.activeElement).toBe(card.getByRole("heading", { name: "审查结果" })));
+  });
+
+  it("审查不可用：什么都没执行；重新审查走审查接口（没有请求体），流里显示审查中与新的结论", async () => {
+    const { api, state } = setupReviewed({ review: reviewOf(planId, [], { status: "unavailable" }), reviewed: {} });
+    const stored = state.conversations[0];
+    if (stored !== undefined) stored.messages = planMessages();
+    state.plans[0] = { ...(state.plans[0] as FakePlan), items: [titleItem, mergeItem] };
+    const conversation = await openConversation();
+    const card = within(await conversation.findByRole("region", { name: "审查结果" }));
+    expect(card.getByText("审查不可用，这份方案什么都没有执行。")).toBeTruthy();
+    expect(card.getAllByText("等你确认")).toHaveLength(2);
+    expect(card.queryByRole("region", { name: "修改方案" })).toBeNull();
+
+    await userEvent.click(card.getByRole("button", { name: "重新审查" }));
+    await waitFor(() => expect(state.reviews).toHaveLength(1));
+    expect(api.requestsTo("POST", `/api/v1/me/steward/conversations/${id}/plans/${planId}/review`)[0]?.body).toBeUndefined();
+    const stream = state.reviews[0]?.stream;
+    stream?.send("review_started", { type: "review_started", plan_id: planId, model: "synthetic-review-model" });
+    expect(await card.findByText("审查中…")).toBeTruthy();
+    expect(card.queryByRole("button", { name: "重新审查" })).toBeNull();
+    stream?.send("review_finished", { type: "review_finished", review: reviewOf(planId, [approved(titleItem), rejected(mergeItem, ["证据不足"])]) });
+    stream?.send("tool_started", { type: "tool_started", tool_started: { call_id: "call-2", name: "correct_release", input: {} } });
+    stream?.send("tool_finished", { type: "tool_finished", tool_finished: { call_id: "call-2", status: "succeeded", output: { operation_id: operationId }, truncated: false, untrusted: false } });
+    stream?.send("tool_finished", { type: "tool_finished", tool_finished: { call_id: "call-3", status: "failed", output: null, truncated: false, untrusted: false, error_code: "rejected_by_review" } });
+    expect(await rowOf(card, "Bayreuth 1951").findByText("已执行")).toBeTruthy();
+    expect(rowOf(card, "威廉·富特文格勒").getByText("审查没有通过")).toBeTruthy();
+    expect(rowOf(card, "威廉·富特文格勒").getByText("证据不足")).toBeTruthy();
+  });
+
+  it("审查不可用后“我自己确认”：出现修改方案卡片（Steward 模式没有“不再问我”），确认走 C6 的确认接口，免确认工具是空数组", async () => {
+    const { api, state } = setupReviewed({ review: reviewOf(planId, [], { status: "unavailable" }), reviewed: {} });
+    const stored = state.conversations[0];
+    if (stored !== undefined) stored.messages = planMessages();
+    state.plans[0] = { ...(state.plans[0] as FakePlan), items: [titleItem, mergeItem] };
+    const conversation = await openConversation();
+    const card = within(await conversation.findByRole("region", { name: "审查结果" }));
+    await userEvent.click(card.getByRole("button", { name: "我自己确认" }));
+    const confirm = within(card.getByRole("region", { name: "修改方案" }));
+    expect(document.activeElement).toBe(confirm.getByRole("heading", { name: "修改方案" }));
+    // Steward 模式的确认不接受免确认工具（C7）：没有“不再问我”。
+    expect(confirm.queryByRole("checkbox", { name: /不再问我/ })).toBeNull();
+    await userEvent.click(confirm.getByRole("button", { name: "应用 2 项修改" }));
+    await waitFor(() => expect(state.decisions).toHaveLength(1));
+    expect(api.requestsTo("POST", decisionPath)[0]?.body).toEqual({ digest: state.plans[0]?.digest, accepted_item_ids: [titleItem.id, mergeItem.id], auto_approve_tools: [] });
+    expect(state.reviews).toHaveLength(0);
+  });
+
+  it("批准之后内容变了（运行以 review_unavailable 结束）：批准的项没有执行，可以重新审查或自己确认全部未处理的项", async () => {
+    const { state } = setupReviewed({ reviewed: { [rejectItem.id]: { decision: "rejected_by_review" } } });
+    const stored = state.conversations[0];
+    const assistant = stored?.messages[1] as { tool_calls: unknown[] } | undefined;
+    if (assistant !== undefined) assistant.tool_calls[0] = callRecord(1, "correct_release");
+    const conversation = await openConversation();
+    const card = within(await conversation.findByRole("region", { name: "审查结果" }));
+    expect(rowOf(card, "Bayreuth 1951").getByText("没有执行")).toBeTruthy();
+    expect(rowOf(card, "Bayreuth 1951").getByText("批准之后内容变了，需要重新审查")).toBeTruthy();
+    expect(card.getByText("批准之后内容有变化，批准的项没有执行。可以重新审查，或者自己逐项确认。")).toBeTruthy();
+    expect(card.queryByRole("region", { name: "等你确认的修改" })).toBeNull();
+    await userEvent.click(card.getByRole("button", { name: "我自己确认" }));
+    const confirm = within(card.getByRole("region", { name: "修改方案" }));
+    expect(confirm.getByRole("checkbox", { name: "修正专辑信息 Bayreuth 1951" })).toBeTruthy();
+    expect(confirm.getByRole("checkbox", { name: "合并艺人 威廉·富特文格勒" })).toBeTruthy();
+    expect(confirm.queryByRole("checkbox", { name: "修正专辑信息 Karl Richter 1958" })).toBeNull();
+  });
+
+  it("不是 Steward 模式的会话：审查不可用时没有“重新审查”，只能自己确认（这时有“不再问我”）", async () => {
+    const { state } = setupReviewed({ review: reviewOf(planId, [], { status: "unavailable" }), reviewed: {} });
+    const stored = state.conversations[0];
+    if (stored !== undefined) {
+      stored.mode = "assistant";
+      stored.messages = planMessages();
+    }
+    state.plans[0] = { ...(state.plans[0] as FakePlan), items: [titleItem, mergeItem] };
+    const conversation = await openConversation();
+    const card = within(await conversation.findByRole("region", { name: "审查结果" }));
+    expect(card.queryByRole("button", { name: "重新审查" })).toBeNull();
+    expect(card.getByText("可以自己逐项确认。")).toBeTruthy();
+    await userEvent.click(card.getByRole("button", { name: "我自己确认" }));
+    const confirm = within(card.getByRole("region", { name: "修改方案" }));
+    expect(confirm.getByRole("checkbox", { name: "这次对话里，修正专辑信息不再问我" })).toBeTruthy();
+    expect(confirm.queryByRole("checkbox", { name: "这次对话里，合并艺人不再问我" })).toBeNull();
+  });
+
+  it("重新审查时会话已经不是 Steward 模式（409 review_not_applicable）：就地说明", async () => {
+    const { state } = setupReviewed({ review: reviewOf(planId, [], { status: "unavailable" }), reviewed: {} });
+    state.plans[0] = { ...(state.plans[0] as FakePlan), items: [titleItem, mergeItem] };
+    const conversation = await openConversation();
+    const card = within(await conversation.findByRole("region", { name: "审查结果" }));
+    // 页面读到的还是 Steward 模式，服务端已经换了。
+    const stored = state.conversations[0];
+    if (stored !== undefined) stored.mode = "assistant";
+    await userEvent.click(card.getByRole("button", { name: "重新审查" }));
+    expect(await card.findByText("当前模式不使用审查，可以自己确认。")).toBeTruthy();
+    expect(state.reviews).toHaveLength(0);
+  });
+
+  it("审查中被停止（done 是 cancelled，没有 review_finished）：不再显示“审查中”", async () => {
+    const { state } = setup({ conversations: [conversationOf(id, { mode: "steward" })] });
+    const conversation = await openConversation();
+    await userEvent.type(await conversation.findByRole("textbox", { name: "问问小蓝" }), "把这张专辑整理好{Enter}");
+    await waitFor(() => expect(state.runs).toHaveLength(1));
+    const stream = state.runs[0]?.stream;
+    stream?.send("tool_started", { type: "tool_started", step: 1, tool_started: { call_id: "call-2", name: "correct_release", input: {} } });
+    state.plans.push(planOf(planId, id, [titleItem]));
+    stream?.send("review_started", { type: "review_started", step: 1, plan_id: planId, model: "review-model" });
+    const card = within(await conversation.findByRole("region", { name: "审查结果" }));
+    expect(await card.findByText("审查中…")).toBeTruthy();
+    stream?.send("done", { type: "done", step: 1, end: { reason: "cancelled" } });
+    stream?.close();
+    // 没有审查记录：方案按没有审查的样子显示（修改方案卡片），不再转圈。
+    expect(await conversation.findByRole("region", { name: "修改方案" })).toBeTruthy();
+    expect(conversation.queryByText("审查中…")).toBeNull();
+    expect(conversation.queryByRole("region", { name: "审查结果" })).toBeNull();
+  });
+
+  it("重新审查在开流前被拒绝：对话正忙时就地说明，方案过期时显示已过期", async () => {
+    const { state } = setupReviewed({ review: reviewOf(planId, [], { status: "unavailable" }), reviewed: {} });
+    state.plans[0] = { ...(state.plans[0] as FakePlan), items: [titleItem, mergeItem] };
+    const conversation = await openConversation();
+    const card = within(await conversation.findByRole("region", { name: "审查结果" }));
+    state.nextReviewResponse = sampleResponse("steward/conversation-busy");
+    await userEvent.click(card.getByRole("button", { name: "重新审查" }));
+    expect(await card.findByText("这个对话正在回答，等它结束再重新审查。")).toBeTruthy();
+    const plan = state.plans[0];
+    if (plan !== undefined) plan.expires_at = "2026-01-01T00:00:00Z";
+    await userEvent.click(card.getByRole("button", { name: "重新审查" }));
+    expect(await card.findByText("这份方案已经过期，不能应用。需要的话请小蓝重新整理一份。")).toBeTruthy();
+    expect(card.queryByRole("button", { name: "重新审查" })).toBeNull();
+    expect(state.reviews).toHaveLength(0);
+  });
+
+  it("没有另选审查模型：审查结果与模型菜单都标明审查用的是对话模型", async () => {
+    setupReviewed(
+      { review: reviewOf(planId, [approved(titleItem), toHuman(mergeItem), rejected(rejectItem, ["证据不足"])], { model: "synthetic-model" }) },
+      { settings: settingsOf({ display_name: "小蓝", review_model: "" }) },
+    );
+    const conversation = await openConversation();
+    const card = within(await conversation.findByRole("region", { name: "审查结果" }));
+    expect(card.getByText("审查与对话用的是同一个模型，独立性有限；可以在设置里另选审查模型。")).toBeTruthy();
+    await userEvent.click(conversation.getByRole("button", { name: /^对话模型：/ }));
+    const menu = within(await screen.findByRole("menu", { name: "对话模型" }));
+    expect(menu.getByRole("menuitem", { name: /synthetic-model 当前，也用作审查模型/ })).toBeTruthy();
+  });
+
+  it("另选了审查模型：模型菜单在 Steward 模式下标出它", async () => {
+    const models = [{ id: "synthetic-model" }, { id: "review-model" }];
+    const probe = settingsOf().probe_result as Record<string, unknown>;
+    setup({ conversations: [conversationOf(id, { mode: "steward", messages: persistedRun("问题", "回答") })], settings: settingsOf({ display_name: "小蓝", review_model: "review-model", probe_result: { ...probe, models } }) });
+    const conversation = await openConversation();
+    expect(await conversation.findByText("修改曲库前由另一次模型调用审查，拿不准的会回来问你")).toBeTruthy();
+    await userEvent.click(conversation.getByRole("button", { name: /^对话模型：/ }));
+    const menu = within(await screen.findByRole("menu", { name: "对话模型" }));
+    expect(menu.getByRole("menuitem", { name: /review-model 正用作审查模型/ })).toBeTruthy();
+    expect(menu.getByRole("menuitem", { name: /^synthetic-model 当前$/ })).toBeTruthy();
+  });
+
+  it("会话列表标出有几项等你确认", async () => {
+    setupReviewed();
+    renderApp({ path: `/steward/${id}` });
+    const list = within(await screen.findByRole("navigation", { name: "对话" }));
+    expect(await list.findByText("1 项等你确认")).toBeTruthy();
   });
 });

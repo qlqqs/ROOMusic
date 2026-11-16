@@ -83,6 +83,10 @@ func (a *adapter) openAIRequest(request Request) (map[string]any, error) {
 		}
 		body["tools"] = tools
 	}
+	if request.ForceTool != "" {
+		body["tool_choice"] = map[string]any{"type": "function", "function": map[string]string{"name": request.ForceTool}}
+		body["parallel_tool_calls"] = false
+	}
 	return body, nil
 }
 

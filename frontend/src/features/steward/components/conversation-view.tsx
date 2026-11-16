@@ -17,15 +17,17 @@ import {
   useViewNotice,
 } from "../dock-store";
 import { isMissingConversation, useConversation, useCreateConversation, usePatchConversation } from "../hooks/use-conversations";
-import { placePlans, useConversationPlans } from "../hooks/use-plans";
+import { placePlans, useConversationPlans, useReviewSnapshot } from "../hooks/use-plans";
 import { useStartRun, useStewardDisabledCheck, useThread } from "../hooks/use-run";
 import { effectiveModelOf, readinessOf } from "../hooks/use-steward-settings";
 import { supersedePlans } from "../run/plan-store";
+import { reviewViewOf } from "../run/review-store";
 import { stopRun } from "../run/run-store";
 import { Composer } from "./composer";
 import { ModeMenu, modeInfo, nextMode } from "./mode-menu";
 import { ModelMenu } from "./model-menu";
 import { PlanCard } from "./plan-card";
+import { ReviewResult } from "./review-result";
 import { SetupGuide } from "./setup-guide";
 import { Thread } from "./thread";
 import styles from "./thread.module.css";
@@ -58,7 +60,7 @@ const noticeTitles = {
  * 调用方以会话 ID 为 key 渲染；草稿、草稿里点掉的上下文标签与提示按会话存在内存里，切回来还在。
  * 发消息时带上没被点掉的页面上下文（正在看、正在播放），发出后点掉的标签恢复；继续不带上下文。
  * 有未处理的方案时仍可发消息，发出即作废方案（C6）；模式在空白新对话里随创建会话提交，已有会话经 PATCH 切换，
- * 正在回答或有未处理的方案时不能切换。
+ * 正在回答或有未处理的方案时不能切换。审查过（或正在审查）的方案显示为审查结果（C7），转给用户确认的项在其中确认。
  */
 export function ConversationView({ conversationId, settings, name, onCreated }: ConversationViewProps) {
   const detail = useConversation(conversationId);
@@ -89,6 +91,7 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
   const creating = create.isPending;
   const plans = useConversationPlans(conversationId, detail.data, running);
   const placedPlans = placePlans(view.turns, plans);
+  const reviews = useReviewSnapshot();
   const planOpen = plans.some((entry) => entry.phase === "pending" || entry.phase === "submitting");
   const mode: StewardMode = conversationId === null ? (dock.newMode ?? "assistant") : (detail.data?.mode ?? "assistant");
   const modeLocked = running || elsewhere || planOpen || creating || patch.isPending;
@@ -205,6 +208,13 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
 
   const ready = readiness === "ready";
   const currentModel = conversationId === null ? (dock.newModel ?? "") : (detail.data?.model ?? "");
+  const conversationModel = currentModel === "" ? effectiveModelOf(settings) : currentModel;
+  // 审查模型（C7）：空字符串表示与对话同一个模型，这时说明独立性有限（A8）。
+  const reviewModel = settings.review_model ?? "";
+  const sameReviewModel = reviewModel === "" || reviewModel === conversationModel;
+  /** 会话详情里这份方案的完整内容（含审查已处理的项）。 */
+  const storedPlanOf = (planId: string) =>
+    detail.data?.pending_plan?.plan_id === planId ? detail.data.pending_plan : detail.data?.plans?.find((plan) => plan.plan_id === planId);
   const placeholder = view.turns.length === 0 ? `问问${name}` : `回复${name}`;
   return (
     <>
@@ -213,8 +223,33 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
         busy={running}
         onContinue={continueRun}
         plans={placedPlans}
-        renderPlan={(placed, turn) =>
-          conversationId === null ? null : (
+        renderPlan={(placed, turn) => {
+          if (conversationId === null) return null;
+          const planId = placed.entry.plan.plan_id;
+          const stored = storedPlanOf(planId) ?? placed.entry.plan;
+          const reviewState = reviews.get(planId);
+          const review = reviewViewOf(reviewState, stored, running);
+          if (review !== null) {
+            return (
+              <ReviewResult
+                key={planId}
+                conversationId={conversationId}
+                entry={placed.entry}
+                plan={stored}
+                view={review}
+                reviewState={reviewState}
+                items={turn.items}
+                baseSequence={view.lastSequence}
+                busy={running || elsewhere}
+                resumable={view.canContinue && view.unfinishedPlans.has(planId)}
+                onContinue={continueRun}
+                name={name}
+                conversationModel={conversationModel}
+                mode={mode}
+              />
+            );
+          }
+          return (
             <PlanCard
               key={placed.entry.plan.plan_id}
               conversationId={conversationId}
@@ -225,9 +260,10 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
               resumable={view.canContinue && view.unfinishedPlans.has(placed.entry.plan.plan_id)}
               onContinue={continueRun}
               name={name}
+              autoApprove={mode === "assistant"}
             />
-          )
-        }
+          );
+        }}
         empty={ready ? <p className={styles.empty}>{`可以问${name}曲库里有什么、哪些专辑信息不全、最近扫描的情况。`}</p> : null}
         footer={
           <>
@@ -255,7 +291,13 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
           onStop={() => conversationId !== null && stopRun(conversationId)}
           note={elsewhere ? "正在别处回答，结束后才能继续发消息。" : undefined}
           hint={
-            planOpen ? "发新消息会作废上面的方案" : view.unfinishedPlans.size > 0 && view.canContinue ? "发新消息不会执行方案里剩下的项" : modeInfo[mode].hint
+            planOpen
+              ? "发新消息会作废上面的方案"
+              : view.unfinishedPlans.size > 0 && view.canContinue
+                ? "发新消息不会执行方案里剩下的项"
+                : mode === "steward" && sameReviewModel
+                  ? `${modeInfo.steward.hint}；审查与对话是同一个模型，独立性有限`
+                  : modeInfo[mode].hint
           }
           onShiftTab={modeLocked ? undefined : () => selectMode(nextMode(mode))}
           context={<ContextChips page={shownContext.page} playback={shownContext.playback} onDismiss={dismissContext} />}
@@ -266,6 +308,7 @@ export function ConversationView({ conversationId, settings, name, onCreated }: 
               current={currentModel}
               defaultModel={effectiveModelOf(settings)}
               models={settings.probe_result?.models ?? []}
+              reviewModel={mode === "steward" ? reviewModel : null}
               disabled={patch.isPending}
               onSelect={selectModel}
             />

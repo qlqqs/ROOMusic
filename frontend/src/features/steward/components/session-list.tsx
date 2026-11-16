@@ -1,13 +1,15 @@
 import { Link } from "@tanstack/react-router";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { Button, FailureNotice, MenuButton, Skeleton } from "../../../shared/ui";
-import type { ConversationDTO } from "../api/decoders";
+import type { ConversationListItemDTO } from "../api/decoders";
 import { useConversations } from "../hooks/use-conversations";
+import { useReviewSnapshot } from "../hooks/use-plans";
 import { useRuns } from "../hooks/use-run";
+import type { ReviewEntry } from "../run/review-store";
 import { titleOf, useConversationActions } from "./conversation-actions";
 import styles from "./session-list.module.css";
 
-type Group = { label: string; items: ConversationDTO[] };
+type Group = { label: string; items: ConversationListItemDTO[] };
 
 /** 当天零点与本周一零点（浏览器所在时区）。 */
 function boundaries(now: Date): { today: number; week: number } {
@@ -17,7 +19,7 @@ function boundaries(now: Date): { today: number; week: number } {
 }
 
 /** 按最后活动时间分成今天、本周、更早；空的组不出现。列表本身已按时间倒序。 */
-export function groupConversations(items: readonly ConversationDTO[], now: Date = new Date()): Group[] {
+export function groupConversations(items: readonly ConversationListItemDTO[], now: Date = new Date()): Group[] {
   const { today, week } = boundaries(now);
   const groups: Group[] = [
     { label: "今天", items: [] },
@@ -43,10 +45,19 @@ type SessionListProps = {
   showNew?: boolean;
 };
 
-/** 整页左侧的会话列表：新对话、按时间分组的会话（正在回答的有标记），每项可以改名、删除。 */
+/** 会话名下的状态：正在回答（本页正在审查时是“审查中”）、未处理方案里有几项等你确认（C7）；都没有时是 null。 */
+export function sessionStateOf(item: ConversationListItemDTO, running: boolean, reviews: ReadonlyMap<string, ReviewEntry>): string | null {
+  const reviewing = [...reviews.values()].some((entry) => entry.conversationId === item.id && entry.live?.reviewing === true);
+  const parts = [running ? (reviewing ? "审查中" : "正在回答") : null, (item.pending_item_count ?? 0) > 0 ? `${item.pending_item_count} 项等你确认` : null];
+  const text = parts.filter((part) => part !== null).join("，");
+  return text === "" ? null : text;
+}
+
+/** 整页左侧的会话列表：新对话、按时间分组的会话（正在回答、审查中、有项等你确认的有标记），每项可以改名、删除。 */
 export function SessionList({ currentId, onNew, onDeleted, onPicked, showNew = true }: SessionListProps) {
   const query = useConversations();
   const runs = useRuns();
+  const reviews = useReviewSnapshot();
   const { actionsFor, dialogs } = useConversationActions({ onDeleted });
   return (
     <nav className={styles.sessions} aria-label="对话">
@@ -66,6 +77,7 @@ export function SessionList({ currentId, onNew, onDeleted, onPicked, showNew = t
               <ul className={styles.list}>
                 {group.items.map((item) => {
                   const running = runs.has(item.id) || item.status === "running";
+                  const state = sessionStateOf(item, running, reviews);
                   return (
                     <li key={item.id} className={styles.row}>
                       <Link
@@ -76,7 +88,7 @@ export function SessionList({ currentId, onNew, onDeleted, onPicked, showNew = t
                         onClick={onPicked}
                       >
                         <span className={styles.title}>{titleOf(item)}</span>
-                        {running ? <small className={styles.state}>正在回答</small> : null}
+                        {state === null ? null : <small className={styles.state}>{state}</small>}
                       </Link>
                       <span className={styles.more}>
                         <MenuButton label={`“${titleOf(item)}”的操作`} icon={<MoreHorizontal size={16} />} iconOnly actions={actionsFor(item, running)} />
