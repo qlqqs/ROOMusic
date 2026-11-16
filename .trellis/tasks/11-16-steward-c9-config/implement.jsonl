@@ -1,8 +1,0 @@
-{"file":".trellis/spec/backend/steward-runtime-contracts.md","reason":"工具合同与确认流程"}
-{"file":".trellis/spec/backend/library-folder-contracts.md","reason":"目录与排除规则的写入合同"}
-{"file":".trellis/spec/backend/scan-coordination-contracts.md","reason":"扫描启动、取消与计划"}
-{"file":".trellis/spec/backend/identity-contracts.md","reason":"成员管理与最后一个管理员的保护"}
-{"file":".trellis/spec/backend/backup-management-contracts.md","reason":"备份与保留策略"}
-{"file":".trellis/spec/backend/logging-guidelines.md","reason":"日志字段与脱敏规则"}
-{"file":".trellis/spec/backend/agent-and-operation-guidelines.md","reason":"不提供 SQL、shell、任意路径入口"}
-{"file":"docs/architecture/adr/0005-steward-data-and-egress.md","reason":"诊断内容发给模型前的处理"}

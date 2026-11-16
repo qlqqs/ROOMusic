@@ -43,6 +43,7 @@ import { NATIVE_SEARCH } from "./run/reduce";
 // 只读工具 16 个（C2）；C5 加了播放、队列、播放历史、收藏与歌单的工具；C6 加了曲库与艺人的治理工具（管理员，修改前要确认）。
 // C8 加了联网的四个工具（网页搜索、读取网页、MusicBrainz 的搜索与读取）与模型自带搜索的条目（NATIVE_SEARCH）：
 // 只显示查询词与访问的域名，不显示完整地址（查询串可能带别的内容）。
+// C9 加了诊断、应用配置与个人播放设置的工具：配置类的修改不能撤销，确认卡片上会标明。
 // 参数与标题来自曲库、个人数据与外部网页，是不可信文本，只按文本节点渲染。
 
 type ToolLabel = {
@@ -263,6 +264,30 @@ const toolLabels: Readonly<Record<string, ToolLabel>> = {
   fetch_page: { label: "读取网页", icon: Newspaper, argument: fetchedDomainOf, result: fetchedOf },
   search_music_metadata: { label: "查 MusicBrainz", icon: Library, argument: musicQueryOf, result: (_input, output) => resultCountOf(output, "条") },
   get_music_metadata: { label: "读取 MusicBrainz 条目", icon: BookOpen, argument: musicEntryOf },
+  get_system_status: { label: "查看系统状态", icon: Activity },
+  get_disk_usage: { label: "查看磁盘占用", icon: Activity },
+  list_recent_logs: { label: "查看最近日志", icon: FileText, unit: "条" },
+  get_backup_overview: { label: "查看备份", icon: FileSearch },
+  start_backup: { label: "发起备份", icon: Wrench, result: done("已发起"), writes: true },
+  set_backup_retention: { label: "修改备份保留策略", icon: Wrench, result: done("已保存"), writes: true },
+  list_library_roots: { label: "查看音乐目录", icon: Library },
+  get_scan_schedule: { label: "查看扫描计划", icon: ScanLine },
+  add_library_root: { label: "添加音乐目录", icon: Library, result: done("已添加"), writes: true },
+  set_library_root_enabled: { label: "停用或恢复音乐目录", icon: Library, result: done("已修改"), writes: true },
+  add_root_exclusion: { label: "添加排除规则", icon: EyeOff, result: done("已添加"), writes: true },
+  remove_root_exclusion: { label: "移除排除规则", icon: EyeOff, result: done("已移除"), writes: true },
+  start_scan: { label: "启动扫描", icon: ScanLine, result: done("已启动"), writes: true },
+  cancel_scan: { label: "取消扫描", icon: ScanLine, result: done("已取消"), writes: true },
+  set_scan_schedule: { label: "修改扫描计划", icon: ScanLine, result: done("已保存"), writes: true },
+  list_members: { label: "查看成员", icon: FileSearch, unit: "位" },
+  set_member_disabled: { label: "停用或启用成员", icon: Wrench, result: done("已修改"), writes: true },
+  revoke_member_sessions: { label: "吊销成员的登录", icon: Wrench, result: done("已吊销"), writes: true },
+  get_track_audio: { label: "查看音频信息", icon: Activity },
+  get_analysis_progress: { label: "查看音频分析进度", icon: Activity },
+  get_zone_settings: { label: "查看播放与音效设置", icon: Volume2 },
+  set_zone_settings: { label: "修改播放与音效设置", icon: Volume2, result: done("已修改"), writes: true },
+  list_peq_presets: { label: "查看 PEQ 预设", icon: Volume2, unit: "个" },
+  apply_peq_preset: { label: "应用 PEQ 预设", icon: Volume2, result: done("已应用"), writes: true },
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {

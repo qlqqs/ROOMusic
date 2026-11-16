@@ -91,7 +91,7 @@ func presentScan(scan library.Scan, admin bool) any {
 		if admin {
 			value["id"] = r.ID
 		}
-		// Name 是音乐根目录本身的 basename，仍属于挂载位置；工具只保留进度和允许的身份。
+		// 不透传 RootProgress.Name（可能包含目录位置）；只返回进度与管理员可见的根 ID。
 		root = value
 	}
 	return struct {

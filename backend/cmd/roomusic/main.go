@@ -21,6 +21,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/library"
 	"github.com/qlqq/roomusic/backend/internal/platform/buildinfo"
 	"github.com/qlqq/roomusic/backend/internal/platform/config"
+	"github.com/qlqq/roomusic/backend/internal/platform/diagnostics"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
 	"github.com/qlqq/roomusic/backend/internal/playback/analysis"
 )
@@ -35,7 +36,9 @@ func main() {
 	if len(os.Args) > 1 {
 		os.Exit(runCLICommand(os.Args[1:]))
 	}
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	startedAt := time.Now()
+	diagnosticLogs := diagnostics.NewLogRing()
+	logger := slog.New(diagnostics.NewHandler(slog.NewJSONHandler(os.Stdout, nil), diagnosticLogs))
 	build := buildinfo.Current()
 	version := build.Version
 	if version == "" {
@@ -49,6 +52,7 @@ func main() {
 		logger.Error("roomusic configuration invalid", "event", "platform.config.invalid", "error", configErr)
 		os.Exit(1)
 	}
+	diagnosticLogs.SetRoots(append([]string{settings.DataDirectory, settings.Backup.Directory}, settings.AllowedLibraryRoots...)...)
 	if err := app.RemoveLegacyMediaCache(settings, logger); err != nil {
 		logger.Error("旧音频缓存清理失败", "event", "platform.config.invalid", "error", err)
 		os.Exit(1)
@@ -63,7 +67,7 @@ func main() {
 	var application *app.App
 	var analyzer *analysis.Analyzer
 	if database != nil {
-		var appOptions []app.Option
+		appOptions := []app.Option{app.WithDiagnostics(diagnosticLogs, startedAt)}
 		renderTool, renderErr := app.OpenRenderer(applicationContext, settings, logger)
 		if renderErr != nil {
 			logger.Warn("渲染器启动中止", "event", "playback.render.unavailable", "module", "playback", "reason", "startup_canceled")

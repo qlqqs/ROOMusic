@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/backup"
 	backupapi "github.com/qlqq/roomusic/backend/internal/backup/httpapi"
@@ -29,6 +30,7 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/personal"
 	personalapi "github.com/qlqq/roomusic/backend/internal/personal/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/platform/config"
+	"github.com/qlqq/roomusic/backend/internal/platform/diagnostics"
 	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
 	"github.com/qlqq/roomusic/backend/internal/playback"
 	"github.com/qlqq/roomusic/backend/internal/playback/analysis"
@@ -53,6 +55,8 @@ type App struct {
 type Option func(*options)
 
 type options struct {
+	diagnosticLogs     *diagnostics.LogRing
+	startedAt          time.Time
 	backups            *backup.Service
 	loginThrottle      *identity.LoginThrottle
 	analysis           *analysis.Analyzer
@@ -137,7 +141,6 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	mux.HandleFunc("GET /healthz", httpserver.HealthHandler)
 	operationKinds := []operations.Kind{governance.CorrectionOperations(), governance.GroupChangeOperations(), governance.GroupDefaultOperations(),
 		governance.IssueReviewOperations(), governance.ClaimOperations(), governance.ArtistMergeKind{}, governance.ArtistSplitKind{}, governance.ArtistRenameKind{}, governance.ArtistCandidateIgnoreKind{}}
-	registerSteward(lifecycle, mux, database, guard, settings.DataDirectory, logger, libraryService, operationKinds, zonesService, listeningService, personalService)
 	mux.HandleFunc("GET /readyz", httpserver.ReadyHandler(func() bool { return database != nil }))
 	identityapi.New(database, guard, assembly.loginThrottle, logger).Register(mux)
 	libraryapi.New(database, guard, libraryService, settings.AllowedLibraryRoots, logger).Register(mux)
@@ -157,6 +160,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 		close(analysisDone)
 	}
 	progress := playback.NewAnalysisProgressProvider(database, analysis.Version, analysisWorker)
+	registerSteward(lifecycle, mux, database, guard, settings.DataDirectory, logger, libraryService, operationKinds, zonesService, listeningService, personalService, stewardConfig{diagnostics: newDiagnostics(database, settings, libraryService, assembly), backups: assembly.backups, allowedRoots: settings.AllowedLibraryRoots, audio: playbackService, progress: progress, dsp: dspSettingsService})
 	playbackapi.New(guard, playbackService, lifecycle, logger, playbackapi.Options{
 		AnalysisProgress: progress,
 	}).Register(mux)

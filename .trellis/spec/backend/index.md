@@ -87,6 +87,7 @@ Before writing or reviewing backend code:
 | [备份管理合同](./backup-management-contracts.md) | 删除与批量删除备份、保留规则（天数 / 份数上限、备份目录里的规则文件、未确认不删的保存语义）、测试 |
 | [Music Steward And Operation Guidelines](./agent-and-operation-guidelines.md) | Agent modes, Review Subagent, tools, Change Sets, and recovery |
 | [管家运行时合同](./steward-runtime-contracts.md) | M6 C2：迁移 0051、工具合同与 16 个只读工具、设置与探测、会话接口与 SSE 事件、循环上限、三种模型协议、出站与密钥的落地数值、错误码、日志、测试 |
+| [管家配置与诊断合同](./steward-config-contracts.md) | C9：24 个工具、身份与确认、日志环脱敏、磁盘/系统状态、配置事件和测试交接 |
 | [管家联网合同](./steward-web-contracts.md) | C8：迁移 0056、搜索设置、Available、外部资料工具、Responses 与原生搜索、原始块重放、search/citations、探测及测试交接 |
 | [管家独立审查合同](./steward-review-contracts.md) | C7：steward 模式、迁移 0055、提示词与证据全文、策略版本 1、强制工具调用、摘要绑定、重审和来源 |
 | [Quality Guidelines](./quality-guidelines.md) | Focused code, forbidden coupling, tests, and gates |
