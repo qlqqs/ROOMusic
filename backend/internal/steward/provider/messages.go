@@ -98,6 +98,9 @@ func messagesRequest(request Request) (map[string]any, error) {
 		}
 		body["tools"] = tools
 	}
+	if request.ForceTool != "" {
+		body["tool_choice"] = map[string]any{"type": "tool", "name": request.ForceTool, "disable_parallel_tool_use": true}
+	}
 	return body, nil
 }
 

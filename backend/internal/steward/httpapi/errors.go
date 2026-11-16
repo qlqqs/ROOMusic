@@ -32,6 +32,8 @@ func writeProblem(w http.ResponseWriter, r *http.Request, p problem) {
 
 func storeProblem(err error) problem {
 	switch {
+	case errors.Is(err, runtime.ErrReviewNotApplicable):
+		return problem{409, "review_not_applicable", "当前会话模式不适用独立审查"}
 	case errors.Is(err, runtime.ErrPlanNotFound):
 		return problem{404, "plan_not_found", "方案不存在或已处理"}
 	case errors.Is(err, runtime.ErrPlanExpired):

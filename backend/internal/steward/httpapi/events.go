@@ -82,8 +82,12 @@ func (h *Handlers) startRun(w http.ResponseWriter, r *http.Request, user identit
 	if len(decisions) > 0 {
 		decision = decisions[0]
 	}
+	reviewPlanID := ""
+	if strings.HasSuffix(r.URL.Path, "/review") {
+		reviewPlanID = strings.ToLower(r.PathValue("plan_id"))
+	}
 	detail, err := h.store.GetConversation(r.Context(), user.ID, id)
-	if decision != nil && errors.Is(err, runtime.ErrNotFound) {
+	if (decision != nil || reviewPlanID != "") && errors.Is(err, runtime.ErrNotFound) {
 		err = runtime.ErrPlanNotFound
 	}
 	if err != nil {
@@ -92,6 +96,27 @@ func (h *Handlers) startRun(w http.ResponseWriter, r *http.Request, user identit
 	}
 	if decision != nil {
 		if err := runtime.CheckPlanDecision(detail, *decision); err != nil {
+			h.writeStoreError(w, r, err)
+			return
+		}
+	}
+	if reviewPlanID != "" {
+		if detail.Conversation.Mode != "steward" {
+			h.writeStoreError(w, r, runtime.ErrReviewNotApplicable)
+			return
+		}
+		found := false
+		for _, plan := range detail.Plans {
+			if plan.ID == reviewPlanID {
+				found = true
+				err = runtime.CheckPlanDecision(detail, runtime.PlanDecision{PlanID: plan.ID, Digest: plan.Digest})
+				break
+			}
+		}
+		if !found {
+			err = runtime.ErrPlanNotFound
+		}
+		if err != nil {
 			h.writeStoreError(w, r, err)
 			return
 		}
@@ -132,7 +157,7 @@ func (h *Handlers) startRun(w http.ResponseWriter, r *http.Request, user identit
 		modelName = settings.Model
 	}
 	h.streamRun(w, r, ctx, cancel, runtime.RunParams{Caller: tool.Caller{User: user, Source: "chat", RequestID: r.Header.Get("X-Request-ID")},
-		Decision: decision, ConversationID: id, Text: text, Context: messageContext, Continue: continuation, DisplayName: settings.DisplayName,
+		ReviewPlanID: reviewPlanID, ReviewModel: settings.ReviewModel, Decision: decision, ConversationID: id, Text: text, Context: messageContext, Continue: continuation, DisplayName: settings.DisplayName,
 		Provider: model, Model: modelName}, user)
 }
 

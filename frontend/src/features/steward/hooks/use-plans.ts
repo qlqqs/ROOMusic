@@ -5,6 +5,7 @@ import type { ConversationDetailDTO, PlanDTO } from "../api/decoders";
 import { revertOperation } from "../api/endpoints";
 import { useStewardHost } from "../context/host";
 import { autoApproveToolsOf, getPlanSnapshot, planEpoch, plansOf, subscribePlans, updatePlan, type PlanEntry, type RevertState } from "../run/plan-store";
+import { getReviewSnapshot, reviewEpoch, subscribeReviews, updateReview, type ReviewEntry } from "../run/review-store";
 import type { StepItem, Turn } from "../run/reduce";
 import { useStartRun } from "./use-run";
 
@@ -65,15 +66,14 @@ function phaseAfterRefusal(failure: ReturnType<typeof failureOf>): PlanEntry["ph
 export function useDecidePlan(conversationId: string) {
   const start = useStartRun();
   return useCallback(
-    async (entry: PlanEntry, accepted: readonly string[], seed: readonly StepItem[], baseSequence: number) => {
+    async (entry: PlanEntry, accepted: readonly string[], seed: readonly StepItem[], baseSequence: number, autoApprove: boolean) => {
       const { plan } = entry;
       const started = planEpoch();
       updatePlan(conversationId, plan, () => ({ phase: "submitting", failure: null }));
-      const tools = autoApproveToolsOf(entry, accepted);
+      // steward 模式的确认不接受免确认工具（后端带非空值返回 400 invalid_input），发空数组。
+      const tools = autoApprove ? autoApproveToolsOf(entry, accepted) : [];
       const result = await start(conversationId, null, baseSequence, null, {
-        planId: plan.plan_id,
-        body: { digest: plan.digest, accepted_item_ids: [...accepted], auto_approve_tools: tools },
-        seed,
+        decision: { planId: plan.plan_id, body: { digest: plan.digest, accepted_item_ids: [...accepted], auto_approve_tools: tools }, seed },
       });
       if (planEpoch() !== started) return;
       if (result.started) {
@@ -82,6 +82,33 @@ export function useDecidePlan(conversationId: string) {
       }
       const failure = result.failure;
       updatePlan(conversationId, plan, () => ({ phase: phaseAfterRefusal(failure), failure }));
+    },
+    [conversationId, start],
+  );
+}
+
+export function useReviewSnapshot(): ReadonlyMap<string, ReviewEntry> {
+  return useSyncExternalStore(subscribeReviews, getReviewSnapshot);
+}
+
+/**
+ * 重新审查（C7，上一次审查不可用时）：走审查接口的流，审查的开始与结论、批准项的执行都在这次运行里。
+ * 开流前被拒绝时就地说明；过期、方案不在了改变方案的状态。返回流是否开起来了。
+ */
+export function useRereviewPlan(conversationId: string) {
+  const start = useStartRun();
+  return useCallback(
+    async (entry: PlanEntry, seed: readonly StepItem[], baseSequence: number): Promise<boolean> => {
+      const { plan } = entry;
+      const started = reviewEpoch();
+      updateReview(conversationId, plan.plan_id, () => ({ submitting: true, failure: null }));
+      const result = await start(conversationId, null, baseSequence, null, { review: { planId: plan.plan_id, seed } });
+      if (reviewEpoch() !== started) return false;
+      updateReview(conversationId, plan.plan_id, () => ({ submitting: false, failure: result.started ? null : result.failure }));
+      if (result.started) return true;
+      const phase = phaseAfterRefusal(result.failure);
+      if (phase !== "pending") updatePlan(conversationId, plan, () => ({ phase }));
+      return false;
     },
     [conversationId, start],
   );

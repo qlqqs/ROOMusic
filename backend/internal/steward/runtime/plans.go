@@ -20,6 +20,7 @@ var (
 
 // Plan 是前端确认卡片与持久化方案的共同投影。
 type Plan struct {
+	Review    *Review    `json:"review"`
 	ID        string     `json:"plan_id"`
 	Digest    string     `json:"digest"`
 	ExpiresAt time.Time  `json:"expires_at"`
@@ -29,6 +30,9 @@ type Plan struct {
 
 // PlanItem 中执行输入与幂等键只保留在后端。
 type PlanItem struct {
+	ReviewID       string          `json:"-"`
+	ReviewDecision string          `json:"-"`
+	ReviewReasons  []string        `json:"-"`
 	ID             string          `json:"id"`
 	Tool           string          `json:"tool"`
 	Target         string          `json:"target"`
@@ -104,6 +108,9 @@ func projectItem(item *PlanItem) {
 
 // CheckPlanDecision 在模型配置准备之前检查方案快照；取舍事务会在锁内再次检查。
 func CheckPlanDecision(detail ConversationDetail, decision PlanDecision) error {
+	if detail.Conversation.Mode == "steward" && len(decision.AutoApproveTools) > 0 {
+		return ErrInvalidInput
+	}
 	for _, plan := range detail.Plans {
 		if plan.ID != decision.PlanID {
 			continue

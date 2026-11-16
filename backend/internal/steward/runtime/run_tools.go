@@ -117,6 +117,9 @@ func (s *runState) executeCalls(ctx context.Context, calls []provider.ToolCall, 
 			}
 			return messages, stop, err
 		}
+		if s.conversation.Mode == "steward" {
+			return s.reviewPlan(ctx, plan)
+		}
 		s.sink(Event{Type: EventPlan, Step: s.step, Plan: &plan})
 		stop = EndAwaitingConfirmation
 	}
@@ -188,7 +191,7 @@ func errorOutput(code, message string) json.RawMessage {
 	return output
 }
 
-// executePlanItems 只执行已由确认事务记录为 accepted 的项；每项沿用自己的幂等键。
+// executePlanItems 执行批准项并收尾拒绝项；每项沿用自己的幂等键，拒绝前先只读对账。
 func (s *runState) executePlanItems(ctx context.Context, plans PlanStore, items []PlanItem) error {
 	var unsettled error
 	for _, item := range items {
@@ -203,6 +206,7 @@ func (s *runState) executePlanItems(ctx context.Context, plans PlanStore, items 
 			caller := s.params.Caller
 			caller.SharedExecution = true
 			caller.PlanID = item.PlanID
+			caller.ReviewID, caller.ReviewDecision = item.ReviewID, item.ReviewDecision
 			caller.IdempotencyKey = item.IdempotencyKey
 			var err error
 			output, err = s.registry.Invoke(ctx, caller, item.Tool, item.Input)
@@ -218,8 +222,24 @@ func (s *runState) executePlanItems(ctx context.Context, plans PlanStore, items 
 				}
 			}
 		} else {
-			code = "declined_by_user"
-			output.Output = errorOutput(code, "用户未选择这项修改")
+			reader, ok := s.store.(OperationResultReader)
+			if !ok {
+				return ErrInvalidInput
+			}
+			recorded, err := reader.LookupOperationResult(ctx, s.params.Caller.User.ID, item.IdempotencyKey)
+			if err != nil {
+				return err
+			}
+			if recorded.Output != nil {
+				output = tool.BoundResult(recorded.Output, item.Untrusted)
+				item.Decision, item.OperationID = "accepted", &recorded.ID
+			} else if item.Decision == "rejected_by_review" {
+				code = "rejected_by_review"
+				output.Output, _ = json.Marshal(map[string]any{"code": code, "reasons": item.ReviewReasons, "review_id": item.ReviewID})
+			} else {
+				code = "declined_by_user"
+				output.Output = errorOutput(code, "用户未选择这项修改")
+			}
 		}
 		status := "succeeded"
 		var errorCode *string

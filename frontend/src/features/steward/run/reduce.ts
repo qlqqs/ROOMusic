@@ -47,8 +47,8 @@ export function applyRunEvent(view: RunView, event: RunEvent): RunView {
     }
     case "tool_started": {
       const { call_id: callId, name, input } = event.tool_started;
-      // 确认后执行的方案项：已经作为等待确认的条目在列表里，原地换成执行中。
-      if (view.items.some((item) => item.callId === callId && item.status === "awaiting_confirmation")) {
+      // 确认后执行的方案项（C6），或审查批准后执行的项（C7，审查前已经为它发过 tool_started）：已经在列表里，原地换成执行中。
+      if (view.items.some((item) => item.callId === callId && (item.status === "awaiting_confirmation" || item.status === "running"))) {
         const items = view.items.map((item) => (item.callId === callId ? { ...item, input, status: "running" as const, executed: true } : item));
         return { ...view, waiting: false, items };
       }
@@ -77,6 +77,12 @@ export function applyRunEvent(view: RunView, event: RunEvent): RunView {
       }
       return { ...view, items, waiting: false };
     }
+    case "review_started":
+      // 审查由方案或审查的区块显示“审查中”，这里不再显示“正在想…”。
+      return { ...view, waiting: false };
+    case "review_finished":
+      // 审查之后：批准的项接着执行，或模型接着回答。
+      return { ...view, waiting: !view.items.some((item) => item.status === "running") };
     case "usage":
       return view;
     case "done":

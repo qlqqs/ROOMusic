@@ -292,10 +292,13 @@ const operationChangesDecoder: d.Decoder<OperationChanges> = (input, path) => {
 };
 
 // 操作的来源（M6 C6）：经管家对话（确认方案后执行时带 plan_id，直接执行时没有）或 MCP 令牌；页面上的操作没有来源（null 或省略）。
+// C7：Steward 模式下审查批准后执行的项另带 review_id 与该项的审查结论 review_decision。
 const operationOriginDecoder = d.object({
   source: d.oneOf(["chat", "mcp"] as const),
   plan_id: d.optional(d.nullable(d.uuid())),
   mode: d.optional(d.nullable(d.string())),
+  review_id: d.optional(d.nullable(d.uuid())),
+  review_decision: d.optional(d.nullable(d.string())),
 });
 
 const operationItemDecoder = d.object({

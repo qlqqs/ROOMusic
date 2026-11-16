@@ -12,13 +12,15 @@ import (
 // Conversation 是会话摘要，不包含消息正文。
 type Conversation struct {
 	AutoApprovedTools []string
+	// PendingItemCount 是会话列表中尚待用户处理的未过期方案项数量。
+	PendingItemCount int
 	// ID 是会话标识。
 	ID string
 	// UserID 是会话所属用户。
 	UserID string
 	// Title 是用户可修改的标题。
 	Title string
-	// Mode 是会话模式，目前支持 assistant 与 operator。
+	// Mode 是会话模式，目前支持 assistant、operator 与 steward。
 	Mode string
 	// Model 是该会话使用的模型。
 	Model string
@@ -55,7 +57,7 @@ func (s *Store) CreateConversation(ctx context.Context, userID, title, model str
 	if len(modes) > 0 && modes[0] != "" {
 		mode = modes[0]
 	}
-	if mode != "assistant" && mode != "operator" {
+	if mode != "assistant" && mode != "operator" && mode != "steward" {
 		return Conversation{}, ErrInvalidInput
 	}
 	conversation, err := scanConversation(s.db.QueryRowContext(ctx, `INSERT INTO steward_conversations
@@ -70,18 +72,32 @@ func (s *Store) ListConversations(ctx context.Context, userID string, page Conve
 		return nil, ErrInvalidInput
 	}
 	offset := int64(page.Number-1) * int64(page.Size)
-	rows, err := s.db.QueryContext(ctx, `SELECT `+conversationColumns+` FROM steward_conversations
- WHERE user_id=$1::uuid ORDER BY updated_at DESC,id ASC LIMIT $2 OFFSET $3`, userID, page.Size, offset)
+	rows, err := s.db.QueryContext(ctx, `WITH page AS (
+ SELECT `+conversationColumns+` FROM steward_conversations
+ WHERE user_id=$1::uuid ORDER BY updated_at DESC,id ASC LIMIT $2 OFFSET $3
+), pending AS (
+ SELECT p.conversation_id,COUNT(*) AS item_count
+ FROM steward_plans p JOIN steward_plan_items i ON i.plan_id=p.id
+ JOIN page c ON c.id::uuid=p.conversation_id
+ WHERE p.user_id=$1::uuid AND p.status='pending' AND p.expires_at>NOW()
+ AND i.decision='pending' AND i.result IS NULL
+ GROUP BY p.conversation_id
+)
+ SELECT c.*,COALESCE(p.item_count,0) FROM page c
+ LEFT JOIN pending p ON p.conversation_id=c.id::uuid
+ ORDER BY c.updated_at DESC,c.id ASC`, userID, page.Size, offset)
 	if err != nil {
 		return nil, storeError("列出管家会话", err)
 	}
 	defer rows.Close()
 	conversations := []Conversation{}
 	for rows.Next() {
-		conversation, err := scanConversation(rows)
+		var pendingCount int
+		conversation, err := scanConversation(rows, &pendingCount)
 		if err != nil {
 			return nil, storeError("读取管家会话摘要", err)
 		}
+		conversation.PendingItemCount = pendingCount
 		conversations = append(conversations, conversation)
 	}
 	if err := rows.Err(); err != nil {
@@ -101,7 +117,7 @@ func (s *Store) GetConversation(ctx context.Context, userID, conversationID stri
 	if _, err := lockConversation(ctx, tx, userID, conversationID); err != nil {
 		return ConversationDetail{}, err
 	}
-	if err := resolvePendingPlans(ctx, tx, userID, conversationID, "expired", true); err != nil {
+	if err := s.resolvePendingPlans(ctx, tx, userID, conversationID, "expired", true); err != nil {
 		return ConversationDetail{}, err
 	}
 	conversation, err := scanConversation(tx.QueryRowContext(ctx, `SELECT `+conversationColumns+`
@@ -226,7 +242,7 @@ func (s *Store) UpdateConversation(ctx context.Context, userID, conversationID s
 	if len(modes) > 0 {
 		mode = modes[0]
 	}
-	if mode != nil && *mode != "assistant" && *mode != "operator" {
+	if mode != nil && *mode != "assistant" && *mode != "operator" && *mode != "steward" {
 		return Conversation{}, ErrInvalidInput
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -242,7 +258,7 @@ func (s *Store) UpdateConversation(ctx context.Context, userID, conversationID s
 		if status == "running" {
 			return Conversation{}, ErrConversationBusy
 		}
-		if err := resolvePendingPlans(ctx, tx, userID, conversationID, "expired", true); err != nil {
+		if err := s.resolvePendingPlans(ctx, tx, userID, conversationID, "expired", true); err != nil {
 			return Conversation{}, err
 		}
 		var pending bool
@@ -260,11 +276,12 @@ func (s *Store) UpdateConversation(ctx context.Context, userID, conversationID s
 	return conversation, tx.Commit()
 }
 
-func scanConversation(row scanner) (Conversation, error) {
+func scanConversation(row scanner, extra ...any) (Conversation, error) {
 	var conversation Conversation
 	var approved []byte
-	err := row.Scan(&conversation.ID, &conversation.UserID, &conversation.Title, &conversation.Mode,
-		&conversation.Model, &conversation.Status, &conversation.CreatedAt, &conversation.UpdatedAt, &approved)
+	fields := []any{&conversation.ID, &conversation.UserID, &conversation.Title, &conversation.Mode,
+		&conversation.Model, &conversation.Status, &conversation.CreatedAt, &conversation.UpdatedAt, &approved}
+	err := row.Scan(append(fields, extra...)...)
 	if err == nil {
 		err = json.Unmarshal(approved, &conversation.AutoApprovedTools)
 	}

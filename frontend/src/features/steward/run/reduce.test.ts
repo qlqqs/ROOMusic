@@ -216,3 +216,21 @@ describe("修改方案的条目（C6）", () => {
     expect(turns[0]?.items.map((item) => [item.status, item.executed, item.textsBefore])).toEqual([["awaiting_confirmation", false, 1]]);
   });
 });
+
+describe("审查的事件（C7）", () => {
+  it("送审的调用审查前已开始：批准后再次开始时原地更新，不重复；审查期间不显示“正在想…”", () => {
+    const started = applyRunEvent(emptyRunView, { type: "tool_started", step: 1, tool_started: { call_id: "call-2", name: "correct_release", input: {} } });
+    const reviewing = applyRunEvent(started, { type: "review_started", step: 1, plan_id: "00000000-0000-4000-8000-0000000000c1", model: "m" });
+    expect(reviewing.waiting).toBe(false);
+    const again = applyRunEvent(reviewing, { type: "tool_started", tool_started: { call_id: "call-2", name: "correct_release", input: { release_id: "r" } } });
+    expect(again.items).toHaveLength(1);
+    expect(again.items[0]).toMatchObject({ status: "running", input: { release_id: "r" }, textsBefore: 1 });
+    const done = applyRunEvent(again, { type: "tool_finished", tool_finished: { call_id: "call-2", status: "succeeded", output: {}, truncated: false, untrusted: false } });
+    expect(done.waiting).toBe(true);
+  });
+
+  it("审查结论之后：没有进行中的调用时等模型接着回答", () => {
+    const review = { review_id: "00000000-0000-4000-8000-0000000000e1", plan_id: "00000000-0000-4000-8000-0000000000c1", model: "m", status: "completed" as const, policy_version: 1, expires_at: at, items: [] };
+    expect(applyRunEvent({ ...emptyRunView, waiting: false }, { type: "review_finished", review }).waiting).toBe(true);
+  });
+});

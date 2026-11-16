@@ -17,7 +17,7 @@ type conversationResponse struct {
 	ID string `json:"id"`
 	// Title 是会话标题。
 	Title string `json:"title"`
-	// Mode 是会话模式，支持 assistant 与 operator。
+	// Mode 是会话模式，支持 assistant、operator 与 steward。
 	Mode string `json:"mode"`
 	// Model 是对话模型名称。
 	Model string `json:"model"`
@@ -49,9 +49,13 @@ func (h *Handlers) listConversations(w http.ResponseWriter, r *http.Request, use
 		h.writeStoreError(w, r, err)
 		return
 	}
-	items := make([]conversationResponse, 0, len(conversations))
+	type listItem struct {
+		conversationResponse
+		PendingItemCount int `json:"pending_item_count"`
+	}
+	items := make([]listItem, 0, len(conversations))
 	for _, c := range conversations {
-		items = append(items, conversationView(c))
+		items = append(items, listItem{conversationView(c), c.PendingItemCount})
 	}
 	httpserver.WriteJSON(w, 200, map[string]any{"items": items, "pagination": map[string]any{"page": page, "page_size": size, "total": total}})
 }
@@ -60,13 +64,13 @@ func (h *Handlers) createConversation(w http.ResponseWriter, r *http.Request, us
 	var input struct {
 		// Title 是会话标题。
 		Title string `json:"title"`
-		// Mode 是会话模式，支持 assistant 与 operator。
+		// Mode 是会话模式，支持 assistant、operator 与 steward。
 		Mode string `json:"mode"`
 	}
 	if !decodeInput(w, r, &input) {
 		return
 	}
-	if input.Mode != "" && input.Mode != "assistant" && input.Mode != "operator" {
+	if input.Mode != "" && input.Mode != "assistant" && input.Mode != "operator" && input.Mode != "steward" {
 		httpserver.WriteError(w, r, 400, "invalid_request", "会话模式无效")
 		return
 	}
@@ -216,7 +220,7 @@ func (h *Handlers) renameConversation(w http.ResponseWriter, r *http.Request, us
 	if !decodeInput(w, r, &input) {
 		return
 	}
-	if input.Mode != nil && *input.Mode != "assistant" && *input.Mode != "operator" {
+	if input.Mode != nil && *input.Mode != "assistant" && *input.Mode != "operator" && *input.Mode != "steward" {
 		httpserver.WriteError(w, r, 400, "invalid_request", "会话模式无效")
 		return
 	}

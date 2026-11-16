@@ -35,7 +35,8 @@ type settingsInput struct {
 	// Protocol 是 openai 或 messages 协议。
 	Protocol *string `json:"protocol"`
 	// Model 是对话模型名称。
-	Model *string `json:"model"`
+	Model       *string `json:"model"`
+	ReviewModel *string `json:"review_model"`
 	// DisplayName 是去掉首尾空白后的管家名字，空值表示默认。
 	DisplayName *string `json:"display_name"`
 	// Overrides 保存用户显式填写的覆盖项。
@@ -54,7 +55,8 @@ type settingsResponse struct {
 	// Protocol 是 openai 或 messages 协议。
 	Protocol string `json:"protocol"`
 	// Model 是对话模型名称。
-	Model string `json:"model"`
+	Model       string `json:"model"`
+	ReviewModel string `json:"review_model"`
 	// DisplayName 是去掉首尾空白后的管家名字，空值表示默认。
 	DisplayName string `json:"display_name"`
 	// ProbeResult 是最近一次探测报告。
@@ -68,7 +70,7 @@ type settingsResponse struct {
 }
 
 func (h *Handlers) settingsView(userID string, settings runtime.UserSettings) settingsResponse {
-	result := settingsResponse{Endpoint: settings.Endpoint, Protocol: settings.Protocol, Model: settings.Model,
+	result := settingsResponse{Endpoint: settings.Endpoint, Protocol: settings.Protocol, Model: settings.Model, ReviewModel: settings.ReviewModel,
 		DisplayName: settings.DisplayName, Overrides: settings.Overrides}
 	if result.Overrides == nil {
 		result.Overrides = json.RawMessage(`{}`)
@@ -139,6 +141,12 @@ func validSettingsInput(input *settingsInput) bool {
 	if input.Protocol != nil && *input.Protocol != "" && !validProtocol(*input.Protocol) {
 		return false
 	}
+	if input.ReviewModel != nil {
+		*input.ReviewModel = strings.TrimSpace(*input.ReviewModel)
+		if !validText(*input.ReviewModel) {
+			return false
+		}
+	}
 	if input.Model != nil {
 		*input.Model = strings.TrimSpace(*input.Model)
 		if !validText(*input.Model) {
@@ -194,7 +202,7 @@ func (h *Handlers) encryptKey(userID, key string) (*runtime.EncryptedKey, error)
 }
 
 func settingsUpdate(settings runtime.UserSettings) runtime.UserSettingsInput {
-	return runtime.UserSettingsInput{Endpoint: settings.Endpoint, Protocol: settings.Protocol, Model: settings.Model,
+	return runtime.UserSettingsInput{Endpoint: settings.Endpoint, Protocol: settings.Protocol, Model: settings.Model, ReviewModel: settings.ReviewModel,
 		DisplayName: settings.DisplayName}
 }
 
@@ -287,6 +295,9 @@ func endpointAuthority(endpoint string) string {
 
 func (h *Handlers) mergeSettings(userID string, current runtime.UserSettings, input settingsInput) (runtime.UserSettingsInput, error) {
 	update := settingsUpdate(current)
+	if input.ReviewModel != nil {
+		update.ReviewModel = *input.ReviewModel
+	}
 	if input.Endpoint != nil {
 		update.Endpoint = *input.Endpoint
 	}

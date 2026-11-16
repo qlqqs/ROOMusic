@@ -145,6 +145,24 @@ describe("设置 › Agent › 模型", () => {
     await waitFor(() => expect(api.requestsTo("PUT", settingsPath).map((request) => request.body)).toEqual([{ model: "bigger-model" }]));
   });
 
+  it("审查模型（C7）：留空表示与对话模型相同；从检测到的模型里选，保存只提交 review_model，清空后保存空字符串", async () => {
+    const { api } = await openAgent({ settings: settingsOf({ review_model: "", probe_result: { models: [{ id: "synthetic-model" }, { id: "bigger-model" }], protocol: "openai", tool_support: "supported" } }) });
+    const input = await screen.findByLabelText("审查模型");
+    expect((input as HTMLInputElement).value).toBe("");
+    expect(input.getAttribute("placeholder")).toBe("与对话模型相同");
+    expect(screen.getByText(/留空表示与对话模型相同；两者相同时审查的独立性有限/)).toBeTruthy();
+    expect(Array.from(document.querySelectorAll(`#${CSS.escape(input.getAttribute("list") ?? "")} option`)).map((option) => (option as HTMLOptionElement).value)).toEqual(["synthetic-model", "bigger-model"]);
+    const save = within(input.closest("form") as HTMLElement).getByRole("button", { name: "保存" }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    await userEvent.type(input, "bigger-model");
+    await userEvent.click(save);
+    await waitFor(() => expect(api.requestsTo("PUT", settingsPath).map((request) => request.body)).toEqual([{ review_model: "bigger-model" }]));
+    await waitFor(() => expect(save.disabled).toBe(true));
+    await userEvent.clear(input);
+    await userEvent.click(save);
+    await waitFor(() => expect(api.requestsTo("PUT", settingsPath).map((request) => request.body)).toEqual([{ review_model: "bigger-model" }, { review_model: "" }]));
+  });
+
   it("已存密钥只显示末四位，可以清除；清除后换成输入框，检测结论作废并提示重新检测", async () => {
     const { api } = await openAgent();
     expect(await screen.findByText("已保存，末四位 -key")).toBeTruthy();

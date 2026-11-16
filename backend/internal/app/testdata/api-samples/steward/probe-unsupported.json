@@ -29,6 +29,7 @@
     },
     "probed_at": "2026-01-01T00:00:00Z",
     "protocol": "openai",
+    "review_model": "synthetic-review-model",
     "updated_at": "2026-01-01T00:00:01Z"
   },
   "status": 200

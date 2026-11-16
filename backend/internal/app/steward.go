@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -71,12 +72,43 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 	definitions = append(definitions, listeningtools.StewardTools(history)...)
 	definitions = append(definitions, personaltools.StewardTools(personalLibrary)...)
 	for _, definition := range definitions {
+		if definition.Scope == tool.ScopeShared {
+			handler := definition.Handler
+			definition.Handler = func(ctx context.Context, caller tool.Caller, input json.RawMessage) (json.RawMessage, error) {
+				if caller.ReviewID != "" {
+					ctx = operations.WithReviewOrigin(ctx, caller.ReviewID, caller.ReviewDecision)
+				}
+				return handler(ctx, caller, input)
+			}
+		}
 		if err := registry.Register(definition); err != nil {
 			// 工具合同是编译期装配；重复名称或非法 schema 属于程序错误。
 			panic(err)
 		}
 	}
-	runner := runtime.NewRunner(store, registry, logger)
+	runner := runtime.NewRunner(store, registry, logger).WithReviewEvidence(func(ctx context.Context, caller tool.Caller, item runtime.PlanItem) (runtime.ReviewEvidenceFacts, error) {
+		if !catalogtools.SupportsReviewEvidence(item.Tool) {
+			return runtime.ReviewEvidenceFacts{}, runtime.ErrReviewEvidenceUnsupported
+		}
+		targets, err := catalogtools.ReadReviewTargets(ctx, catalog.NewStore(database), governance.NewStore(database), item.Input)
+		if err != nil {
+			return runtime.ReviewEvidenceFacts{}, err
+		}
+		filters := make([]operations.Target, 0, len(targets))
+		for _, target := range targets {
+			filters = append(filters, operations.Target{Type: target.Type, ID: target.ID})
+		}
+		if len(filters) == 0 {
+			return runtime.ReviewEvidenceFacts{}, runtime.ErrReviewUnavailable
+		}
+		// 最近操作限定为公开列表第一页的 20 条；不外发操作正文或操作者。
+		page, err := operations.List(ctx, database, operations.ListParams{Targets: filters, Page: 1, PageSize: 20})
+		if err != nil {
+			return runtime.ReviewEvidenceFacts{}, err
+		}
+		raw, err := json.Marshal(targets)
+		return runtime.ReviewEvidenceFacts{Targets: raw, RecentOperationCount: len(page.Items)}, err
+	})
 	tokens := token.NewStore(database, guard)
 	mux.Handle("/api/v1/mcp", stewardmcp.New(guard, tokens, store, registry, logger))
 	stewardapi.New(guard, store, secrets, runner, logger).WithTokens(tokens).WithCredentialCheck(func(r *http.Request, user identity.User) (bool, error) {

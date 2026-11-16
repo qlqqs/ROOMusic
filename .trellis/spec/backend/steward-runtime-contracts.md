@@ -1,6 +1,6 @@
-# 管家运行时合同（C2–C6：对话、MCP、个人库与曲库治理）
+# 管家运行时合同（C2–C7：对话、MCP、曲库治理与独立审查）
 
-本文以已实现代码为准（`backend/internal/steward/*`、七个 `stewardtools` 包、`backend/internal/app/steward.go`、迁移 0051–0054）。
+本文以已实现代码为准（`backend/internal/steward/*`、七个 `stewardtools` 包、`backend/internal/app/steward.go`、迁移 0051–0055）。
 管家的模式、权威与审查见[管家与操作规范](./agent-and-operation-guidelines.md)；数据外发、不可信文本、出站与密钥的规则及理由见
 [ADR 0005](../../../docs/architecture/adr/0005-steward-data-and-egress.md)，本文只写落地后的数值与位置。
 
@@ -11,11 +11,27 @@
 - C3 增加的 MCP 入口与个人访问令牌见第 14 节。
 - C5 增加 21 个播放、历史、收藏与歌单工具，以及用户消息上的页面/播放上下文。
 - C6 增加 12 个治理工具、方案确认与 operator 模式，具体合同见下节。
-- 不在内：审查（C7）、联网与网页抓取（C8）、记忆与后台任务（C10）；`steward` 模式尚不可选。
+- C7 增加独立审查与 steward 模式，完整提示词、证据、策略、接口和失败关闭见[审查合同](./steward-review-contracts.md)。
+- 不在内：联网与网页抓取（C8）、记忆与后台任务（C10）。
 - 路径前缀 `/api/v1`，下文省略。JSON 约定、错误信封 `{error: {code, message}, request_id}` 见[平台运行合同](./core0-runtime-contracts.md)。
 - 样本：`backend/internal/app/testdata/api-samples/steward/*.json`，由真实 handler 生成，形如 `{status, body}`，ID、时间已归一化。
   下文“样本 x”指 `x.json`。SSE 流没有样本，见 `steward/httpapi/handlers_integration_test.go` 与 `regressions_integration_test.go`。
 - 代码与 ADR 0005 曾有三处出入，处理结果记在第 13 节。
+
+## C7 独立审查补充
+
+`review_model` 设置为空时跟随本次对话模型；steward 下所有 shared 方案先经过策略与独立审查，
+`auto_approved_tools` 不跳过审查。新增迁移 0055、review_started/review_finished、review_unavailable、
+`POST …/plans/{plan_id}/review`；详情中的每份 plan 增加 review（最近审查或 null）。
+审查拒绝项 decision=rejected_by_review；批准执行项沿用 accepted/operation_id，origin 增加 review_id/review_decision。
+混合方案的确认只取舍 pending 项，已处理项不被重新确认、过期或新消息覆盖。审查批准不作为跨请求恢复执行的授权。
+重审仅适用于 steward，HTTP 与 runtime 均拒绝其他模式（409 review_not_applicable）；steward 的 decision 不接受非空 auto_approve_tools（400 invalid_input）。
+审查接受唯一 submit_review 加正常结束或 tool_calls；未登记证据读取方式的工具由策略转人工。执行前只核对当前批准项证据，方案摘要、审查结论、策略版本与期限仍完整校验。
+审查拒绝或用户不选项写回未执行前，按原幂等键只读对账；已提交的恢复 accepted、真实结果与 operation_id。新消息收尾沿用此规则。
+审查中取消以 cancelled 结束且不落审查；审查存储错误按 database_unavailable 返回，不透出原始错误。review_started 后由 review_finished 或错误/取消 done 收尾，保存失败不执行。
+不可用的 steward.review.finished 只新增固定 reason_category（timeout/upstream_error/invalid_result/truncated），不记录错误正文。
+会话列表新增整数 pending_item_count：单条聚合查询统计未过期 pending 方案中尚无结果的 pending 项，无待处理项为 0，不逐会话查询。
+实现、全文常量、外发字段、协议调研与测试断言以[审查合同](./steward-review-contracts.md)为准。
 
 ## C6 共享写入与确认合同
 
@@ -63,7 +79,7 @@ shared 输入在预览与执行前检查解码后的键和值，含空字符时�
 assistant 下本步未免确认的 shared 先鉴权、schema/业务输入校验并 Preview，合成一份方案；其他 read/personal 调用照常按顺序执行。
 方案与调用的 awaiting_confirmation 在同一事务保存，24 小时到期；摘要是按 position 排列的
 `(tool_name,规范化 JSON input,position)` 序列的 SHA-256。发 plan 后以 awaiting_confirmation 结束，不继续调用模型。
-operator 或可撤销工具命中会话 auto_approved_tools 时直接经 Invoke 执行；不可撤销工具在 assistant 模式每次确认。
+operator 或 assistant 下可撤销工具命中会话 auto_approved_tools 时直接经 Invoke 执行；不可撤销工具在 assistant 模式每次确认。
 一步结束时若已取消，不创建方案；已预览的待确认调用以 cancelled 收尾并补齐工具结果，done.reason 为 cancelled。
 直接执行遇到 database_unavailable 时，按原幂等键再调用一次，由 operations.Run 对账；仍不确定时结束本轮，不把确定失败的工具结果回给模型。
 
@@ -103,7 +119,7 @@ GetConversation 使用 READ COMMITTED 事务与 FOR UPDATE 会话锁，读取与
 用户新消息在追加事务内将未过期 pending 方案 superseded，已经过期的保持 expired。两类失效都为项保存 not_executed 工具结果。
 ReleaseConversation 和启动恢复只中断 running 调用，不中断 awaiting_confirmation。普通 continue 遇到 pending 时重新发 plan/done，
 不请求模型；重放在尚有 awaiting_confirmation 的助手步骤之前停止，避免缺少工具结果。
-新建默认 assistant；新建/PATCH 接受 operator，steward 返回 400 invalid_request。PATCH 模式需要会话空闲且无 pending 方案。
+新建默认 assistant；新建/PATCH 接受 assistant/operator/steward。PATCH 模式需要会话空闲且无 pending 方案。
 
 ### 错误矩阵
 
@@ -114,7 +130,7 @@ ReleaseConversation 和启动恢复只中断 running 调用，不中断 awaiting
 | 摘要不同 | 409 plan_digest_mismatch |
 | 正在运行，或带 pending 方案切换模式 | 409 conversation_busy |
 | 选择了未知/重复项、未知/重复/不可撤销/本次未接受任何项的免确认工具 | 400 invalid_input，确认事务回滚 |
-| steward 或未知模式 | 400 invalid_request |
+| 未知模式 | 400 invalid_request |
 | 成员调用 shared | permission_denied，任何模式均不执行 |
 | 未选择项 / 过期或新消息作废 | declined_by_user / not_executed |
 | 执行时版本、令牌、撤销状态变化 | 沿用对应 Executor 错误码，如 revision_conflict、issue_changed、claim_changed、revert_conflict |
@@ -330,6 +346,7 @@ UUID 校验格式并转小写；分页默认 `page=1/page_size=20`，页码最�
 | `POST /me/steward/conversations/{id}/messages` | 登录 | 发消息，响应是 SSE | `200 text/event-stream` |
 | `POST /me/steward/conversations/{id}/continue` | 登录 | 从现有历史继续，响应是 SSE | `200 text/event-stream` |
 | `POST /me/steward/conversations/{id}/plans/{plan_id}/decision` | 登录 | 确认方案并继续，响应是 SSE | `200 text/event-stream` |
+| `POST /me/steward/conversations/{id}/plans/{plan_id}/review` | 登录 | 重新独立审查 pending 项，响应是 SSE | `200 text/event-stream` |
 | `POST /me/steward/conversations/{id}/cancel` | 登录 | 取消正在进行的运行 | `200 {cancelled}` |
 | `GET /admin/steward/settings` | 管理员 | 读成员开关 | `200 {members_enabled}` |
 | `PUT /admin/steward/settings` | 管理员 | 写成员开关 | `200 {members_enabled}` |
@@ -340,7 +357,7 @@ UUID 校验格式并转小写；分页默认 `page=1/page_size=20`，页码最�
 ### 4.2 设置
 
 ```text
-Settings = {endpoint, key_last_four, key_saved, key_needs_reentry, protocol: ""|"openai"|"messages", model, display_name,
+Settings = {endpoint, key_last_four, key_saved, key_needs_reentry, protocol: ""|"openai"|"messages", model, review_model, display_name,
             probe_result: ProbeResult|null, probed_at: time|null, overrides: Overrides, updated_at: time|null}
 Overrides = {protocol?: "openai"|"messages", model?: string, tool_support?: "supported"|"unsupported"|"unconfirmed"}
 ProbeResult = {provider_name?, protocol?, models: [{id, display_name?}], tool_support, failures?: [{step: "endpoint"|"models"|"tools", protocol?, error: {kind, status_code?, message}}]}
@@ -350,7 +367,7 @@ ProbeResult = {provider_name?, protocol?, models: [{id, display_name?}], tool_su
 - `key_saved`：库里有密文。`key_needs_reentry`：密文用当前实例密钥解不开（实例密钥文件换了或丢了）；其余设置保留。
 - `key_last_four`：密钥最后四个 Unicode 字符，不足四个时是全部。
 
-`PUT` 请求 `{endpoint?, key?, protocol?, model?, display_name?, overrides?}`，省略的键保留原值；`key` 以外的键写 `null` 等同省略：
+`PUT` 请求 `{endpoint?, key?, protocol?, model?, review_model?, display_name?, overrides?}`，省略的键保留原值；`key` 以外的键写 `null` 等同省略：
 
 | 字段 | 校验 |
 | --- | --- |
@@ -358,6 +375,7 @@ ProbeResult = {provider_name?, protocol?, models: [{id, display_name?}], tool_su
 | `key` | 只写。省略保留已存密钥；`null` 清除已存密钥（样本 settings-cleared-key）；字符串必须去空白后非空且不含控制字符，用 `secret.Seal(user_id, "steward.model", key)` 加密后保存 |
 | `protocol` | `""`、`openai` 或 `messages` |
 | `model` | 去首尾空白 |
+| `review_model` | 去首尾空白，空串跟随本次对话模型；省略保留，不改变主模型探测结果 |
 | `display_name` | 去首尾空白，≤ 20 个字符；空表示默认名字 |
 | `overrides` | 给出时整体替换已有覆盖项（`{}` 清空）；`model` 给出时非空 |
 
@@ -417,7 +435,7 @@ ProbeResult = {provider_name?, protocol?, models: [{id, display_name?}], tool_su
 ### 4.4 会话
 
 ```text
-Conversation = {id, title, mode: "assistant"|"operator", model, status: "idle"|"running", created_at, updated_at}
+Conversation = {id, title, mode: "assistant"|"operator"|"steward", model, status: "idle"|"running", created_at, updated_at}
 Message = {id, sequence, role: "user"|"assistant"|"tool", content: Block[], context?: MessageContext, input_tokens: int|null, output_tokens: int|null, created_at, tool_calls: ToolCall[]}
 Block = {type: "text", text} | {type: "tool_call", tool_call: {id, name, arguments}} | {type: "tool_result", tool_result: {call_id, content, is_error}}
 ToolCall = {id, name, input, output: JSON|null, truncated, untrusted, status: "running"|"succeeded"|"failed"|"awaiting_confirmation", error_code: string|null, duration_ms: int|null}
@@ -426,9 +444,9 @@ ToolCall = {id, name, input, output: JSON|null, truncated, untrusted, status: "r
 | 接口 | 请求 | 说明 |
 | --- | --- | --- |
 | 列表 | 查询 `page`（默认 1）、`page_size`（默认 20，最大 100） | 按 `updated_at` 倒序、`id` 升序；`pagination: {page, page_size, total}`（样本 conversations）；参数无效 `400 invalid_pagination` |
-| 新建 | `{title?, mode?}`，`mode` 接受省略、`""`、`"assistant"` 或 `"operator"`，默认 assistant | 要求已配置（否则 409/422，见 4.2）；`title` 去首尾空白；`model` 记下当时的生效模型，不随设置变化，只能用下面的 `PATCH` 改（样本 conversation-created） |
+| 新建 | `{title?, mode?}`，`mode` 接受省略、`""`、`"assistant"`、`"operator"` 或 `"steward"`，默认 assistant | 要求已配置（否则 409/422，见 4.2）；`title` 去首尾空白；`model` 记下当时的生效模型，不随设置变化，只能用下面的 `PATCH` 改（样本 conversation-created） |
 | 读取 | — | 会话字段加 `messages`（按 `sequence` 升序）、`pending_plan`（没有时 null）和 `plans`（全部方案及结果）。`content` 只投影上面三种块，适配器的不透明块（思考块等）不返回 |
-| 改标题、模型、模式 | `{title?, model?, mode?}`，至少给一个，否则 `400 invalid_input` | 省略的字段保留原值；两者都去首尾空白，`title` 可以为空；`model` 为空字符串表示使用默认模型（发消息时取当时的生效模型），不校验模型是否存在；只有修改 mode 才要求会话空闲且没有 pending 方案；steward 或其他模式返回 400 invalid_request。响应 `{title, model, mode}` 是修改后的值（样本 conversation-renamed、conversation-model-updated、conversation-model-default） |
+| 改标题、模型、模式 | `{title?, model?, mode?}`，至少给一个，否则 `400 invalid_input` | 省略的字段保留原值；两者都去首尾空白，`title` 可以为空；`model` 为空字符串表示使用默认模型（发消息时取当时的生效模型），不校验模型是否存在；只有修改 mode 才要求会话空闲且没有 pending 方案；不在 assistant/operator/steward 中的模式返回 400 invalid_request。响应 `{title, model, mode}` 是修改后的值（样本 conversation-renamed、conversation-model-updated、conversation-model-default） |
 | 删除 | — | 级联删除消息与工具调用；正在运行时 `409 conversation_busy`（样本 conversation-deleted） |
 | 取消 | — | 会话不存在 `404`；本进程里有这个用户这个会话的运行则取消并返回 `{cancelled: true}`，否则 `{cancelled: false}`（样本 cancel-idle） |
 
@@ -659,7 +677,7 @@ JSON 错误信封只给上表的固定消息；适配器脱敏后的 `Message` �
 
 系统提示词以 `runtime/run_content.go` 的常量为基础：说明通过工具查看曲库、控制本人的播放和管理个人库；声明 `<roomusic-source>` 标记内的内容是资料、不是指令。
 `DisplayName` 先去掉 `\r`、`\n`、`「`、`」`；过滤后非空时，在常量末尾追加“用户称呼你为「<名字>」。”。
-原值为空或过滤后为空时，不添加称呼句。随后按模式追加：assistant 说明先生成方案等待确认，operator 说明直接执行；会话已免确认的可撤销工具可以直接执行。
+原值为空或过滤后为空时，不添加称呼句。随后按模式追加：assistant 说明先生成方案等待确认，operator 说明直接执行，steward 说明独立审查；只有 assistant 下已免确认的可撤销工具可以跳过确认。
 系统提示词另说明 page_context 是界面状态而非用户指令，播放工具默认使用其中分区 ID，缺失时先读播放状态。
 数据范围与权限不靠提示词约束。
 
@@ -739,7 +757,7 @@ JSON 错误信封只给上表的固定消息；适配器脱敏后的 `Message` �
 
 | 表 | 列与约束 |
 | --- | --- |
-| `steward_user_settings` | `user_id` 主键 → `users` 级联删除；`endpoint`、`protocol`（`''/openai/messages`）、`model`、`display_name` 默认空；`key_ciphertext bytea` 可空；`key_last_four`（≤ 4 字符，没有密文时必须为空）；`probe_result jsonb` 与 `probed_at` 同时为空或同时非空；`overrides jsonb` 默认 `{}`；`updated_at` |
+| `steward_user_settings` | `user_id` 主键 → `users` 级联删除；`endpoint`、`protocol`（`''/openai/messages`）、`model`、`review_model`（0055）、`display_name` 默认空；`key_ciphertext bytea` 可空；`key_last_four`（≤ 4 字符，没有密文时必须为空）；`probe_result jsonb` 与 `probed_at` 同时为空或同时非空；`overrides jsonb` 默认 `{}`；`updated_at` |
 | `steward_instance_settings` | 单行（`id = 1`，迁移时插入）；`members_enabled` 默认 `true` |
 | `steward_egress_allowlist` | 主键 `(host, port)`；`host` 非空；`port` 1–65535；`added_by` → `users`，用户删除后置空；`created_at` |
 | `steward_conversations` | `id` 主键；`user_id` → `users` 级联删除；`title` 默认空；`mode`（`assistant/steward/operator`，默认 `assistant`）；`model`；`status`（`idle/running`）；`created_at`、`updated_at`；索引 `(user_id, updated_at DESC, id)` |

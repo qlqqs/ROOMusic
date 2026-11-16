@@ -1,13 +1,24 @@
 import type { Page, Route } from "@playwright/test";
 import { loadApiSample, sampleBody } from "../../src/test/api-samples";
 
-// 管家接口的受控实现（steward.spec.ts、steward-plan.spec.ts）：设置、会话的增删改查（含模式）、发消息（一次性返回整段 SSE）、取消、
-// 修改方案的确认（C6，同样一次性返回整段 SSE）与方案项的撤销、令牌与管理员接口。
+// 管家接口的受控实现（steward.spec.ts、steward-plan.spec.ts、steward-review.spec.ts）：设置、会话的增删改查（含模式）、发消息（一次性返回整段 SSE）、取消、
+// 修改方案的确认（C6，同样一次性返回整段 SSE）与方案项的撤销、审查结果与重新审查（C7，一次性返回整段 SSE）、令牌与管理员接口。
 // 用 page.route 注册，优先于 api-mock 在浏览器上下文上的拦截；形状取自后端样本与 C2、C6 的接口合同。不调用任何真实模型。
 
-type Mode = "assistant" | "operator";
+type Mode = "assistant" | "steward" | "operator";
 type PlanItem = { id: string; call_id: string; tool: string; target: string; changes: { field: string; before: unknown; after: unknown }[]; revertible: boolean; basis: { source: string; note: string } | null };
-type Plan = { plan_id: string; digest: string; expires_at: string; items: PlanItem[] };
+type ReviewItem = { item_id: string; decision: "approved" | "rejected" | "needs_human_confirmation"; risk: "low" | "medium" | "high"; reasons: string[]; source: "model" | "policy" };
+type Review = { review_id: string; plan_id: string; model: string; status: "completed" | "unavailable"; policy_version: number; expires_at: string; items: ReviewItem[] };
+type Plan = {
+  plan_id: string;
+  digest: string;
+  expires_at: string;
+  items: PlanItem[];
+  /** 最近一次审查（C7）。 */
+  review?: Review | null;
+  /** 审查已经处理的项（C7）：批准并执行的是 accepted，被拒绝的是 rejected_by_review；这些项不再等用户确认。 */
+  reviewed?: Record<string, "accepted" | "rejected_by_review">;
+};
 type Conversation = {
   id: string;
   title: string;
@@ -167,6 +178,8 @@ function applyDecision(conversation: Conversation, accepted: readonly string[]):
   const assistant = conversation.messages[1] as { tool_calls: unknown[] };
   const events: [string, unknown][] = [];
   assistant.tool_calls = plan.items.map((item, index) => {
+    // 审查已经处理的项（C7）不在这次确认里，保持原来的调用记录。
+    if (plan.reviewed?.[item.id] !== undefined) return assistant.tool_calls[index];
     const ok = accepted.includes(item.id);
     const output = ok ? { operation_id: PLAN_OPERATION_ID } : { code: "declined_by_user" };
     events.push([
@@ -177,29 +190,201 @@ function applyDecision(conversation: Conversation, accepted: readonly string[]):
   });
   const answer = accepted.length === 0 ? "好的，这次不改。" : "标题和厂牌改好了，艺人没有动。";
   conversation.messages.push(
-    message(conversation, "tool", plan.items.map((item) => ({ type: "tool_result", tool_result: { call_id: item.call_id, content: "{}", is_error: !accepted.includes(item.id) } }))),
+    message(
+      conversation,
+      "tool",
+      plan.items.filter((item) => plan.reviewed?.[item.id] === undefined).map((item) => ({ type: "tool_result", tool_result: { call_id: item.call_id, content: "{}", is_error: !accepted.includes(item.id) } })),
+    ),
   );
   conversation.messages.push(message(conversation, "assistant", [{ type: "text", text: answer }]));
   events.push(["text", { type: "text", step: 2, text: answer }], ["done", { type: "done", step: 2, end: { reason: "completed" } }]);
   return `: ping\n\n${events.map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join("")}`;
 }
 
-export async function installStewardMock(page: Page, { displayName = "小蓝" }: { displayName?: string } = {}): Promise<StewardMock> {
+// ---- 审查（C7）----
+
+/** 审查模型的名字（与对话模型 synthetic-model 不同）。 */
+export const REVIEW_MODEL = "review-model";
+
+const sse = (events: [string, unknown][]) => `: ping\n\n${events.map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join("")}`;
+
+/** Steward 模式下送审的三项：修正专辑信息（可撤销）、合并艺人（不可撤销，策略转人工）、另一张专辑的厂牌（可撤销）。 */
+function reviewPlanItems(): PlanItem[] {
+  return [
+    {
+      id: idOf(7401),
+      call_id: "call-2",
+      tool: "correct_release",
+      target: "Beethoven Symphony No.9 (Bayreuth 1951)",
+      changes: [{ field: "year", before: 1955, after: 1951 }],
+      revertible: true,
+      basis: { source: "local", note: "同目录的 CUE 文件写的是 1951" },
+    },
+    {
+      id: idOf(7402),
+      call_id: "call-3",
+      tool: "merge_artists",
+      target: "格伦·古尔德",
+      changes: [{ field: "artist", before: "Glenn Gould", after: "格伦·古尔德" }],
+      revertible: false,
+      basis: { source: "local", note: "两个名字下的专辑曲目一致" },
+    },
+    {
+      id: idOf(7403),
+      call_id: "call-4",
+      tool: "correct_release",
+      target: "Karl Richter 1958",
+      changes: [{ field: "label", before: null, after: "Archiv" }],
+      revertible: true,
+      basis: { source: "external", note: "来自 MusicBrainz" },
+    },
+  ];
+}
+
+const reviewAt = () => new Date(Date.now() + 15 * 60_000).toISOString();
+
+/** 预置 Steward 模式下一个送审的会话（刷新后的样子）：用户的话与一条带三个调用的助手消息，调用记录由 calls 给出。 */
+function seedSteward(mock: StewardMock, title: string, calls: Record<string, unknown>[]): Conversation {
+  counter += 1;
+  const at = "2026-11-16T00:00:00Z";
+  const conversation: Conversation = { id: idOf(4000 + counter), title, mode: "steward", model: "synthetic-model", status: "idle", created_at: at, updated_at: at, messages: [], plan: null, history: [] };
+  const items = reviewPlanItems();
+  conversation.messages.push(message(conversation, "user", [{ type: "text", text: "把待关注的问题过一遍，证据充分的直接处理" }]));
+  conversation.messages.push(
+    message(
+      conversation,
+      "assistant",
+      [{ type: "text", text: "我把能处理的 3 项交给了审查，结果在下面。" }, ...items.map((item) => ({ type: "tool_call", tool_call: { id: item.call_id, name: item.tool, arguments: {} } }))],
+      calls,
+    ),
+  );
+  conversation.plan = { plan_id: idOf(7400), digest: "synthetic-review-digest", expires_at: new Date(Date.now() + 24 * 3600_000).toISOString(), items };
+  mock.conversations.push(conversation);
+  return conversation;
+}
+
+/**
+ * 审查完成：修正专辑信息批准并执行了（留下 PLAN_OPERATION_ID），合并艺人按规则转给用户确认，另一张专辑的厂牌被审查拒绝。
+ * 确认合并后它执行成功。
+ */
+export function seedReviewedConversation(mock: StewardMock): Conversation {
+  const conversation = seedSteward(mock, "清理待关注的问题", [
+    awaitingRecord(1, "correct_release", { status: "succeeded", output: { operation_id: PLAN_OPERATION_ID }, duration_ms: 300 }),
+    awaitingRecord(2, "merge_artists"),
+    awaitingRecord(3, "correct_release", { status: "failed", output: { code: "rejected_by_review" }, error_code: "rejected_by_review" }),
+  ]);
+  const plan = conversation.plan;
+  if (plan === null) return conversation;
+  const [title, merge, reject] = plan.items;
+  plan.review = {
+    review_id: idOf(7500),
+    plan_id: plan.plan_id,
+    model: REVIEW_MODEL,
+    status: "completed",
+    policy_version: 1,
+    expires_at: reviewAt(),
+    items: [
+      { item_id: title?.id ?? "", decision: "approved", risk: "low", reasons: ["目标明确，有 CUE 文件佐证，可以单独撤销"], source: "model" },
+      { item_id: merge?.id ?? "", decision: "needs_human_confirmation", risk: "high", reasons: ["不可撤销的修改"], source: "policy" },
+      { item_id: reject?.id ?? "", decision: "rejected", risk: "medium", reasons: ["曲库里有两位同名的人，证据不足以判断是哪一位"], source: "model" },
+    ],
+  };
+  plan.reviewed = { [title?.id ?? ""]: "accepted", [reject?.id ?? ""]: "rejected_by_review" };
+  return conversation;
+}
+
+/** 审查不可用：三项都没有执行，等用户重新审查或自己确认。 */
+export function seedUnavailableReviewConversation(mock: StewardMock): Conversation {
+  const conversation = seedSteward(mock, "审查没能完成的方案", [awaitingRecord(1, "correct_release"), awaitingRecord(2, "merge_artists"), awaitingRecord(3, "correct_release")]);
+  const plan = conversation.plan;
+  if (plan !== null) plan.review = { review_id: idOf(7501), plan_id: plan.plan_id, model: REVIEW_MODEL, status: "unavailable", policy_version: 1, expires_at: reviewAt(), items: [] };
+  return conversation;
+}
+
+/**
+ * 重新审查：可撤销的项批准并执行，不可撤销的按规则转给用户确认；落库后返回整段事件流（审查开始与结论、批准项的执行、只含待确认项的方案）。
+ */
+function applyRereview(conversation: Conversation): string {
+  const plan = conversation.plan;
+  if (plan === null) return "";
+  const review: Review = {
+    review_id: idOf(7502),
+    plan_id: plan.plan_id,
+    model: REVIEW_MODEL,
+    status: "completed",
+    policy_version: 1,
+    expires_at: reviewAt(),
+    items: plan.items.map((item) =>
+      item.revertible
+        ? { item_id: item.id, decision: "approved", risk: "low", reasons: ["可以单独撤销"], source: "model" }
+        : { item_id: item.id, decision: "needs_human_confirmation", risk: "high", reasons: ["不可撤销的修改"], source: "policy" },
+    ),
+  };
+  plan.review = review;
+  plan.reviewed = Object.fromEntries(plan.items.filter((item) => item.revertible).map((item) => [item.id, "accepted" as const]));
+  const assistant = conversation.messages[1] as { tool_calls: Record<string, unknown>[] };
+  const events: [string, unknown][] = [
+    ["review_started", { type: "review_started", plan_id: plan.plan_id, model: REVIEW_MODEL }],
+    ["review_finished", { type: "review_finished", review }],
+  ];
+  plan.items.forEach((item, index) => {
+    if (!item.revertible) return;
+    const output = { operation_id: PLAN_OPERATION_ID };
+    assistant.tool_calls[index] = awaitingRecord(index + 1, item.tool, { status: "succeeded", output, duration_ms: 200 });
+    events.push(
+      ["tool_started", { type: "tool_started", tool_started: { call_id: item.call_id, name: item.tool, input: {} } }],
+      ["tool_finished", { type: "tool_finished", tool_finished: { call_id: item.call_id, status: "succeeded", output, truncated: false, untrusted: false } }],
+    );
+  });
+  const waiting = plan.items.filter((item) => !item.revertible).map((item) => ({ ...item, decision: "pending" }));
+  events.push(["plan", { type: "plan", plan: { plan_id: plan.plan_id, digest: plan.digest, expires_at: plan.expires_at, status: "pending", items: waiting } }]);
+  events.push(["done", { type: "done", end: { reason: "awaiting_confirmation" } }]);
+  return sse(events);
+}
+
+/** reviewModel：设置里的审查模型（C7），空字符串表示与对话同一个模型；省略时沿用样本。 */
+export async function installStewardMock(page: Page, { displayName = "小蓝", reviewModel }: { displayName?: string; reviewModel?: string } = {}): Promise<StewardMock> {
   const mock: StewardMock = { conversations: [], requests: [] };
-  const settings = { ...(sampleBody("steward/probe-supported") as Record<string, unknown>), display_name: displayName };
+  const settings = { ...(sampleBody("steward/probe-supported") as Record<string, unknown>), display_name: displayName, ...(reviewModel === undefined ? {} : { review_model: reviewModel }) };
   const summary = ({ messages: _messages, plan: _plan, history: _history, ...rest }: Conversation) => rest;
+  // 会话列表另带未处理方案里等用户确认的项数（C7）。
+  const listItem = (conversation: Conversation) => ({
+    ...summary(conversation),
+    pending_item_count: conversation.plan === null ? 0 : conversation.plan.items.filter((item) => conversation.plan?.reviewed?.[item.id] === undefined).length,
+  });
   // 与后端一致：pending_plan 是未处理的方案，plans 是全部方案（按创建顺序），已处理的每项带取舍、结果与操作记录。
+  // 审查已经处理的项在两处都按审查的结果写（C7）。
+  const reviewedItem = (item: PlanItem, decision: "accepted" | "rejected_by_review") =>
+    decision === "accepted"
+      ? { ...item, decision, result: { operation_id: PLAN_OPERATION_ID }, operation_id: PLAN_OPERATION_ID }
+      : { ...item, decision, result: { code: "rejected_by_review" } };
   const detail = ({ plan, history, ...rest }: Conversation) => {
     const settled = history.map(({ plan: entry, status, accepted }) => ({
       ...entry,
+      review: entry.review ?? null,
       status,
       items: entry.items.map((item) => {
+        const reviewed = entry.reviewed?.[item.id];
+        if (reviewed !== undefined) return reviewedItem(item, reviewed);
         const ok = accepted.includes(item.id);
         if (status === "superseded") return { ...item, decision: "pending", result: { code: "not_executed" } };
         return { ...item, decision: ok ? "accepted" : "declined", result: ok ? { operation_id: PLAN_OPERATION_ID } : { code: "declined_by_user" }, ...(ok ? { operation_id: PLAN_OPERATION_ID } : {}) };
       }),
     }));
-    const pending = plan === null ? [] : [{ ...plan, status: "pending", items: plan.items.map((item) => ({ ...item, decision: "pending" })) }];
+    const pending =
+      plan === null
+        ? []
+        : [
+            {
+              ...plan,
+              review: plan.review ?? null,
+              status: "pending",
+              items: plan.items.map((item) => {
+                const reviewed = plan.reviewed?.[item.id];
+                return reviewed === undefined ? { ...item, decision: "pending" } : reviewedItem(item, reviewed);
+              }),
+            },
+          ];
     return { ...rest, pending_plan: pending[0] ?? null, plans: [...settled, ...pending] };
   };
 
@@ -214,7 +399,7 @@ export async function installStewardMock(page: Page, { displayName = "小蓝" }:
     if (path === `${BASE}/settings` && method === "GET") return json(route, 200, settings);
     if (path === `${BASE}/tokens` && method === "GET") return sample(route, "steward/tokens/list");
     if (path === `${BASE}/conversations` && method === "GET") {
-      const items = [...mock.conversations].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).map(summary);
+      const items = [...mock.conversations].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).map(listItem);
       return json(route, 200, { items, pagination: { page: 1, page_size: 100, total: items.length } });
     }
     if (path === `${BASE}/conversations` && method === "POST") {
@@ -230,9 +415,19 @@ export async function installStewardMock(page: Page, { displayName = "小蓝" }:
       const conversation = mock.conversations.find((item) => item.id === decision[1]);
       if (conversation === undefined) return sample(route, "steward/conversation-not-found");
       if (conversation.plan === null || conversation.plan.plan_id !== decision[2]) return json(route, 404, { error: { code: "plan_not_found", message: "方案不存在或已处理" }, request_id: "e2e" });
-      const { digest, accepted_item_ids: accepted } = body as { digest: string; accepted_item_ids: string[] };
+      const { digest, accepted_item_ids: accepted, auto_approve_tools: autoApprove } = body as { digest: string; accepted_item_ids: string[]; auto_approve_tools: string[] };
+      // steward 模式的确认不接受免确认工具（C7）。
+      if (conversation.mode === "steward" && autoApprove.length > 0) return json(route, 400, { error: { code: "invalid_input", message: "steward 模式不接受免确认工具" }, request_id: "e2e" });
       if (digest !== conversation.plan.digest) return json(route, 409, { error: { code: "plan_digest_mismatch", message: "方案内容已变化" }, request_id: "e2e" });
       return route.fulfill({ status: 200, contentType: "text/event-stream", headers: { "Cache-Control": "no-store" }, body: applyDecision(conversation, accepted) });
+    }
+    const rereview = /^\/api\/v1\/me\/steward\/conversations\/([^/]+)\/plans\/([^/]+)\/review$/.exec(path);
+    if (rereview !== null && method === "POST") {
+      const conversation = mock.conversations.find((item) => item.id === rereview[1]);
+      if (conversation === undefined) return sample(route, "steward/conversation-not-found");
+      if (conversation.plan === null || conversation.plan.plan_id !== rereview[2]) return json(route, 404, { error: { code: "plan_not_found", message: "方案不存在或已处理" }, request_id: "e2e" });
+      if (conversation.mode !== "steward") return json(route, 409, { error: { code: "review_not_applicable", message: "当前模式不使用审查" }, request_id: "e2e" });
+      return route.fulfill({ status: 200, contentType: "text/event-stream", headers: { "Cache-Control": "no-store" }, body: applyRereview(conversation) });
     }
     const match = /^\/api\/v1\/me\/steward\/conversations\/([^/]+)(?:\/(messages|continue|cancel))?$/.exec(path);
     const conversation = mock.conversations.find((item) => item.id === match?.[1]);

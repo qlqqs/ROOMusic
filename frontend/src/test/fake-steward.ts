@@ -75,6 +75,39 @@ export type FakePlanItem = {
   basis?: { source: "local" | "external" | "mixed"; note: string } | null;
 };
 
+/** 审查（C7）：形状与运行事件 review_finished、会话详情里方案的 review 一致。 */
+export type FakeReviewItem = {
+  item_id: string;
+  decision: "approved" | "rejected" | "needs_human_confirmation";
+  risk: "low" | "medium" | "high";
+  reasons: string[];
+  source: "model" | "policy";
+};
+
+export type FakeReview = {
+  review_id: string;
+  plan_id: string;
+  model: string;
+  status: "completed" | "unavailable";
+  policy_version: number;
+  expires_at: string;
+  items: FakeReviewItem[];
+};
+
+/** 合成的审查：默认 15 分钟后过期；不可用时没有项。 */
+export function reviewOf(planId: string, items: FakeReviewItem[], overrides: Partial<FakeReview> = {}): FakeReview {
+  return {
+    review_id: `00000000-0000-4000-8000-${planId.slice(-4).padStart(12, "e")}`,
+    plan_id: planId,
+    model: "synthetic-review-model",
+    status: "completed",
+    policy_version: 1,
+    expires_at: new Date(Date.now() + 15 * 60_000).toISOString(),
+    items,
+    ...overrides,
+  };
+}
+
 export type FakePlan = {
   plan_id: string;
   conversation_id: string;
@@ -84,6 +117,10 @@ export type FakePlan = {
   items: FakePlanItem[];
   /** 确认时接受的项；会话详情的 plans 里据此写每项的 decision。 */
   accepted?: string[];
+  /** 最近一次审查（C7）。 */
+  review?: FakeReview | null;
+  /** 审查已经处理的项（C7）：批准并执行的是 accepted（带 operation_id），被拒绝的是 rejected_by_review；这些项不能再确认。 */
+  reviewed?: Record<string, { decision: "accepted" | "rejected_by_review"; operation_id?: string }>;
 };
 
 /** 合成的方案：默认 24 小时后过期。 */
@@ -118,9 +155,21 @@ export function planPayload(plan: FakePlan, messages: readonly unknown[] = []) {
   const items = plan.items.map((item) => {
     const stored = storedCallOf(messages, item.call_id);
     const finished = stored?.status === "succeeded" || stored?.status === "failed";
-    return { ...item, decision: decided ? (plan.accepted?.includes(item.id) === true ? "accepted" : "declined") : "pending", ...(finished ? { result: stored?.output ?? null } : {}) };
+    const reviewed = plan.reviewed?.[item.id];
+    const decision = reviewed?.decision ?? (decided ? (plan.accepted?.includes(item.id) === true ? "accepted" : "declined") : "pending");
+    return {
+      ...item,
+      decision,
+      ...(reviewed?.operation_id === undefined ? {} : { operation_id: reviewed.operation_id }),
+      ...(finished ? { result: stored?.output ?? null } : {}),
+    };
   });
-  return { plan_id: plan.plan_id, digest: plan.digest, expires_at: plan.expires_at, status: plan.status, items };
+  return { plan_id: plan.plan_id, digest: plan.digest, expires_at: plan.expires_at, status: plan.status, items, review: plan.review ?? null };
+}
+
+/** 未处理方案里还等用户决定的项数（会话列表的 pending_item_count）。 */
+function pendingItemCount(plan: FakePlan | null): number {
+  return plan === null ? 0 : plan.items.filter((item) => plan.reviewed?.[item.id] === undefined).length;
 }
 
 export type StewardFake = {
@@ -138,6 +187,9 @@ export type StewardFake = {
   plans: FakePlan[];
   /** 确认接口收到的请求与对应的流。 */
   decisions: { request: RecordedRequest; planId: string; body: unknown; stream: FakeSse }[];
+  /** 重新审查接口（C7）收到的请求与对应的流；nextReviewResponse 预置下一次开流前的拒绝。 */
+  reviews: { request: RecordedRequest; planId: string; stream: FakeSse }[];
+  nextReviewResponse: Response | null;
   /** 撤销接口收到的操作 ID 与幂等键；nextRevertResponse 预置下一次的响应。 */
   reverts: { operationId: string; key: string | null }[];
   nextRevertResponse: Response | null;
@@ -149,8 +201,9 @@ export type StewardFake = {
 const conversationPath = /^\/api\/v1\/me\/steward\/conversations\/([^/]+)$/;
 const runPath = /^\/api\/v1\/me\/steward\/conversations\/([^/]+)\/(messages|continue)$/;
 const decisionPath = /^\/api\/v1\/me\/steward\/conversations\/([^/]+)\/plans\/([^/]+)\/decision$/;
+const reviewPath = /^\/api\/v1\/me\/steward\/conversations\/([^/]+)\/plans\/([^/]+)\/review$/;
 const revertPath = /^\/api\/v1\/operations\/([^/]+)\/revert$/;
-const selectableModes = ["assistant", "operator"];
+const selectableModes = ["assistant", "steward", "operator"];
 const failureOf = (status: number, code: string, message: string) => jsonResponse(status, { error: { code, message }, request_id: "fake-request" });
 const cancelPath = /^\/api\/v1\/me\/steward\/conversations\/([^/]+)\/cancel$/;
 const idOf = (request: RecordedRequest, pattern: RegExp) => pattern.exec(request.path.split("?")[0] ?? "")?.[1] ?? "";
@@ -196,7 +249,7 @@ function authorityOf(endpoint: string): string {
 
 /**
  * 管家接口的替身：设置、会话的增删改查（含模式）、运行流（可控，记下请求体里的页面上下文）与取消、
- * 方案的确认接口与作废（C6）、方案项的撤销。形状按 C2、C5、C6 的接口合同与样本。
+ * 方案的确认接口与作废（C6）、方案项的撤销、审查结果与重新审查（C7）。形状按 C2、C5、C6、C7 的接口合同与样本。
  */
 export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = {}): StewardFake {
   const state: StewardFake = {
@@ -208,6 +261,8 @@ export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = 
     probeResponse: null,
     plans: [],
     decisions: [],
+    reviews: [],
+    nextReviewResponse: null,
     reverts: [],
     nextRevertResponse: null,
     instance: { members_enabled: true },
@@ -216,6 +271,7 @@ export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = 
   };
   const denied = () => (state.disabled ? sampleResponse("steward/disabled") : null);
   const summary = ({ messages: _messages, ...rest }: FakeConversation) => rest;
+  const listItem = (conversation: FakeConversation) => ({ ...summary(conversation), pending_item_count: pendingItemCount(pendingPlanOf(conversation.id)) });
   const find = (id: string) => state.conversations.find((item) => item.id === id);
   /** 会话的未处理方案；读到时已过期的标为 expired（后端在读取与确认时判定过期）。 */
   const pendingPlanOf = (conversationId: string) => {
@@ -246,7 +302,7 @@ export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = 
     const patch = request.body as Record<string, unknown>;
     const before = current() as Record<string, unknown> & { overrides: Record<string, unknown> };
     const next: Record<string, unknown> & { overrides: Record<string, unknown> } = { ...before, updated_at: "2026-11-16T00:00:01Z" };
-    for (const field of ["endpoint", "protocol", "model", "display_name", "overrides"]) if (patch[field] !== undefined) next[field] = patch[field];
+    for (const field of ["endpoint", "protocol", "model", "review_model", "display_name", "overrides"]) if (patch[field] !== undefined) next[field] = patch[field];
     let keyChanged = false;
     if (patch["key"] === null) {
       keyChanged = before["key_saved"] === true;
@@ -319,14 +375,14 @@ export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = 
   api.on("GET", "/api/v1/me/steward/conversations", () =>
     denied() ??
     jsonResponse(200, {
-      items: [...state.conversations].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).map(summary),
+      items: [...state.conversations].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).map(listItem),
       pagination: { page: 1, page_size: 100, total: state.conversations.length },
     }),
   );
   api.on("POST", "/api/v1/me/steward/conversations", (request) => {
     const refused = denied();
     if (refused !== null) return refused;
-    // 新建只认 mode（C6，可省略，默认 assistant）；steward 在 C7 之前不接受。
+    // 新建只认 mode（可省略，默认 assistant）：assistant、steward（C7）、operator。
     const body = isRecord(request.body) ? request.body : {};
     const mode = body["mode"] ?? "assistant";
     if (Object.keys(body).some((key) => key !== "mode") || !selectableModes.includes(String(mode))) return failureOf(400, "invalid_request", "mode 不合格");
@@ -404,7 +460,8 @@ export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = 
     if (!isRecord(body) || Object.keys(body).some((key) => !["digest", "accepted_item_ids", "auto_approve_tools"].includes(key))) return failureOf(400, "invalid_request", "请求体不合格");
     if (body["digest"] !== plan.digest) return failureOf(409, "plan_digest_mismatch", "方案内容已变化");
     if (conversation.status === "running") return sampleResponse("steward/conversation-busy");
-    const itemIds = plan.items.map((item) => item.id);
+    // 审查已经处理（批准执行或拒绝）的项不能再确认（C7）。
+    const itemIds = plan.items.filter((item) => plan.reviewed?.[item.id] === undefined).map((item) => item.id);
     const tools = plan.items.map((item) => item.tool);
     const accepted = body["accepted_item_ids"];
     const autoApprove = body["auto_approve_tools"];
@@ -415,6 +472,8 @@ export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = 
       plan.items.every((item) => item.tool !== tool || item.revertible) &&
       Array.isArray(accepted) &&
       plan.items.some((item) => item.tool === tool && accepted.includes(item.id));
+    // steward 模式的确认不接受免确认工具（C7）：带非空值是 400 invalid_input。
+    if (conversation.mode === "steward" && Array.isArray(autoApprove) && autoApprove.length > 0) return failureOf(400, "invalid_input", "steward 模式不接受免确认工具");
     if (
       !Array.isArray(accepted) ||
       !accepted.every((id) => itemIds.includes(String(id))) ||
@@ -430,6 +489,32 @@ export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = 
     const stream = fakeSse();
     request.signal?.addEventListener("abort", () => stream.fail(), { once: true });
     state.decisions.push({ request, planId, body, stream });
+    return stream.response;
+  });
+  // 重新审查（C7）：校验顺序与确认接口相同——会话与方案归属且 pending、未过期，再是会话模式（不是 steward 时 409 review_not_applicable）、
+  // 会话空闲；通过后记下 reviews[i].stream，
+  // 审查的开始、结论与批准项的执行由测试推送。
+  api.on("POST", reviewPath, (request) => {
+    const match = reviewPath.exec(request.path);
+    const conversation = find(match?.[1] ?? "");
+    const planId = match?.[2] ?? "";
+    const plan = state.plans.find((item) => item.plan_id === planId && item.conversation_id === conversation?.id);
+    if (conversation === undefined || plan === undefined || plan.status !== "pending") return failureOf(404, "plan_not_found", "方案不存在或已处理");
+    if (Date.parse(plan.expires_at) <= Date.now()) {
+      plan.status = "expired";
+      return failureOf(409, "plan_expired", "方案已过期");
+    }
+    if (conversation.mode !== "steward") return failureOf(409, "review_not_applicable", "当前模式不使用审查");
+    if (conversation.status === "running") return sampleResponse("steward/conversation-busy");
+    if (state.nextReviewResponse !== null) {
+      const response = state.nextReviewResponse;
+      state.nextReviewResponse = null;
+      return response;
+    }
+    if (request.body !== undefined && request.body !== null) return failureOf(400, "invalid_request", "重新审查没有请求体");
+    const stream = fakeSse();
+    request.signal?.addEventListener("abort", () => stream.fail(), { once: true });
+    state.reviews.push({ request, planId, stream });
     return stream.response;
   });
   // 受治理操作的撤销接口（方案卡片里的“撤销”）：需要幂等键。

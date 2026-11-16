@@ -20,7 +20,9 @@ import (
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
+	"github.com/qlqq/roomusic/backend/internal/steward/provider"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
+	"github.com/qlqq/roomusic/backend/internal/steward/tool"
 )
 
 // 管家样本直接装配当前功能，不启动扫描、后台维护或任何现有实例。
@@ -106,7 +108,7 @@ func TestPostgreSQLStewardAPIResponseSamples(t *testing.T) {
 	record("settings-empty", call("admin", "GET", "me/steward/settings", nil), 200)
 	record("not-configured", call("admin", "POST", "me/steward/conversations", map[string]string{}), 409)
 	record("settings-name", call("admin", "PUT", "me/steward/settings", map[string]string{"display_name": "合成管家"}), 200)
-	record("settings-saved", call("admin", "PUT", "me/steward/settings", map[string]string{"endpoint": server.URL, "key": "synthetic-sample-model-key", "model": "synthetic-model", "protocol": "openai"}), 200)
+	record("settings-saved", call("admin", "PUT", "me/steward/settings", map[string]string{"endpoint": server.URL, "key": "synthetic-sample-model-key", "model": "synthetic-model", "protocol": "openai", "review_model": "synthetic-review-model"}), 200)
 	record("probe-supported", call("admin", "POST", "me/steward/settings/probe", map[string]string{}), 200)
 	mode.Store(1)
 	record("probe-unsupported", call("admin", "POST", "me/steward/settings/probe", map[string]string{}), 200)
@@ -141,6 +143,36 @@ func TestPostgreSQLStewardAPIResponseSamples(t *testing.T) {
 		t.Fatal(err)
 	}
 	record("conversation", call("admin", "GET", path, nil), 200)
+
+	// C7：方案与最近审查使用真实持久化及 handler 生成样本。
+	reviewConversation, err := store.CreateConversation(ctx, users["admin"], "合成审查方案", "synthetic-model")
+	if err != nil {
+		t.Fatal(err)
+	}
+	content, _ := json.Marshal(provider.Message{Role: provider.RoleAssistant, Content: []provider.ContentBlock{{Type: provider.BlockToolCall, ToolCall: &provider.ToolCall{ID: "sample-review-call", Name: "correct_release", Arguments: json.RawMessage(`{}`)}}}})
+	message, err := store.AppendMessage(ctx, users["admin"], reviewConversation.ID, runtime.MessageInput{Role: "assistant", Content: content, ToolCalls: []runtime.ToolCallInput{{Name: "correct_release", Input: json.RawMessage(`{}`)}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := store.CreatePlan(ctx, users["admin"], reviewConversation.ID, []runtime.PlanItem{{Tool: "correct_release", CallID: "sample-review-call", ToolCallID: message.ToolCalls[0].ID, Input: json.RawMessage(`{}`), Revertible: true, Preview: tool.Preview{Summary: "修正专辑标题", Target: "合成专辑", Changes: []tool.Change{{Field: "title", Before: "旧标题", After: "新标题"}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reviewPath := "me/steward/conversations/" + reviewConversation.ID
+	record("conversation-plan", call("admin", "GET", reviewPath, nil), 200)
+	review := runtime.Review{ID: uuid.New(), PlanID: plan.ID, PlanDigest: plan.Digest, EvidenceDigest: "synthetic-evidence-digest", PolicyVersion: 1, Model: "synthetic-review-model", Status: "completed", ExpiresAt: time.Now().UTC().Add(15 * time.Minute), Items: []runtime.ReviewItem{{ItemID: plan.Items[0].ID, Decision: "needs_human_confirmation", Risk: "medium", Reasons: []string{"证据不足，需要人工确认"}, Source: "model"}}}
+	if err := store.SaveReview(ctx, users["admin"], reviewConversation.ID, review); err != nil {
+		t.Fatal(err)
+	}
+	record("conversation-review-pending", call("admin", "GET", reviewPath, nil), 200)
+	record("conversations-review-pending", call("admin", "GET", "me/steward/conversations", nil), 200)
+	review.ID = uuid.New()
+	review.Status = "unavailable"
+	review.Items = []runtime.ReviewItem{}
+	if err := store.SaveReview(ctx, users["admin"], reviewConversation.ID, review); err != nil {
+		t.Fatal(err)
+	}
+	record("conversation-review-unavailable", call("admin", "GET", reviewPath, nil), 200)
 	record("invalid-context", call("admin", "POST", path+"/messages", map[string]any{"text": "合成问题", "context": map[string]any{"page": map[string]any{"kind": "invalid"}}}), 400)
 
 	record("conversation-renamed", call("admin", "PATCH", path, map[string]string{"title": "新标题"}), 200)
@@ -166,7 +198,7 @@ func TestPostgreSQLStewardAPIResponseSamples(t *testing.T) {
 	record("settings-cleared-key", call("admin", "PUT", "me/steward/settings", map[string]any{"key": nil}), 200)
 	mode.Store(3)
 	record("probe-keyless-unconfirmed", call("admin", "POST", "me/steward/settings/probe", map[string]any{"key": nil}), 200)
-	if len(samples.samples) != 32 {
+	if len(samples.samples) != 36 {
 		t.Fatalf("管家样本覆盖清单发生变化：%d", len(samples.samples))
 	}
 	samples.finish()

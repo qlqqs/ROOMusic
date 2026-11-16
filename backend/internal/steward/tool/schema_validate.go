@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"unicode/utf8"
@@ -132,4 +133,17 @@ func equalJSON(left, right any) bool {
 	default:
 		return false
 	}
+}
+
+// ValidateInput 对独立审查工具使用与注册工具相同的 schema 校验边界。
+func ValidateInput(rawSchema, input json.RawMessage) error {
+	compiled, err := compileSchema(rawSchema)
+	if err != nil {
+		return err
+	}
+	value, err := decodeJSON(input)
+	if err != nil {
+		return err
+	}
+	return compiled.validate(value, "$")
 }

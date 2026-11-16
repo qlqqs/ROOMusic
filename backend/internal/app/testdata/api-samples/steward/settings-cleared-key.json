@@ -10,6 +10,7 @@
     "probe_result": null,
     "probed_at": null,
     "protocol": "openai",
+    "review_model": "synthetic-review-model",
     "updated_at": "2026-01-01T00:00:00Z"
   },
   "status": 200

@@ -113,7 +113,7 @@ func (s *Store) AppendMessage(ctx context.Context, userID, conversationID string
 		return Message{}, err
 	}
 	if input.Role == "user" {
-		if err := resolvePendingPlans(ctx, tx, userID, conversationID, "superseded", false); err != nil {
+		if err := s.resolvePendingPlans(ctx, tx, userID, conversationID, "superseded", false); err != nil {
 			return Message{}, err
 		}
 		if err := s.resolveDecidedPlans(ctx, tx, userID, conversationID); err != nil {
