@@ -5,7 +5,7 @@
 This document records the long-term product contract for ROOMusic's Music
 Steward and its durable operation model. Core 0 defines the contracts and the
 directory-management example.
-当前 C6 已实现模型调用、用户确认与 operator 直接执行；C7 已实现独立审查与 steward 模式（见[审查合同](./steward-review-contracts.md)），文件修改仍待后续任务。
+当前 C6 已实现模型调用、用户确认与 operator 直接执行；C7 已实现独立审查与 steward 模式（见[审查合同](./steward-review-contracts.md)）；C8 联网、C9 应用配置与诊断、C10 记忆与后台运行已实现。物理文件整理、部署层操作与应用容器内 shell 不做（父任务 S5–S7）。
 
 The system has one product Agent, **Music Steward**, with three execution modes:
 `assistant`, `steward`, and `operator`. These are approval modes, not separate
