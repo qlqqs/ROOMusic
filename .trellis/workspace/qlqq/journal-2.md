@@ -269,3 +269,25 @@ steward 模式下由独立模型调用逐项审查修改方案；审查不可用
 ### Status
 
 [OK] **Completed**
+
+
+## Session 63: 管家 C8：联网
+<!-- trellis-session: v=2 fp=3fef6aee0a0280ca -->
+
+**Date**: 2026-11-16
+**Task**: 管家 C8：联网
+**Branch**: `steward-c8-web`
+
+### Summary
+
+搜索来源（SearXNG、Tavily、模型自带）、fetch_page、MusicBrainz 工具、Responses 协议；审查后修复 F1–F10，后端第二轮 152 用例通过；真实端点试用未执行
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5efebb05` | feat(steward): 联网搜索、网页读取与音乐资料查询（C8） |
+
+### Status
+
+[OK] **Completed**
