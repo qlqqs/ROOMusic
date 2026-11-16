@@ -291,3 +291,25 @@ steward 模式下由独立模型调用逐项审查修改方案；审查不可用
 ### Status
 
 [OK] **Completed**
+
+
+## Session 64: 管家 C9：应用配置与诊断工具
+<!-- trellis-session: v=2 fp=c3d004588382eb56 -->
+
+**Date**: 2026-11-16
+**Task**: 管家 C9：应用配置与诊断工具
+**Branch**: `steward-c9-config`
+
+### Summary
+
+24 个配置与诊断工具；library/identity 服务层抽取；日志环白名单脱敏；审查与测试发现的问题已修复，收窄重跑 87 个叶子用例通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bd53d8d2` | feat(steward): 应用配置与诊断工具（C9） |
+
+### Status
+
+[OK] **Completed**
