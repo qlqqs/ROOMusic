@@ -1,7 +1,0 @@
-{"file":".trellis/spec/backend/steward-runtime-contracts.md","reason":"工具合同、调用入口、接口与循环"}
-{"file":".trellis/spec/backend/playback-zone-service-contracts.md","reason":"分区命令与错误"}
-{"file":".trellis/spec/backend/personal-contracts.md","reason":"收藏与歌单的写入合同"}
-{"file":".trellis/spec/backend/listening-contracts.md","reason":"播放历史"}
-{"file":"docs/architecture/adr/0005-steward-data-and-egress.md","reason":"个人数据与不可信文本的规则"}
-{"file":".trellis/spec/frontend/steward-guidelines.md","reason":"对话界面的结构与约定"}
-{"file":".trellis/spec/frontend/playback-and-personal-state.md","reason":"播放状态与个人库查询"}
