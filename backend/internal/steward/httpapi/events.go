@@ -1,12 +1,16 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/qlqq/roomusic/backend/internal/platform/httpserver"
+	"io"
 	"net/http"
 	"runtime/debug"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/steward/runtime"
@@ -25,7 +29,8 @@ func (h *Handlers) sendMessage(w http.ResponseWriter, r *http.Request, user iden
 	}
 	var input struct {
 		// Text 是消息文本。
-		Text string `json:"text"`
+		Text    string          `json:"text"`
+		Context json.RawMessage `json:"context"`
 	}
 	if !decodeInput(w, r, &input) {
 		return
@@ -34,7 +39,12 @@ func (h *Handlers) sendMessage(w http.ResponseWriter, r *http.Request, user iden
 		invalidInput(w, r)
 		return
 	}
-	h.startRun(w, r, user, id, input.Text, false)
+	normalized, err := runtime.NormalizeContext(input.Context)
+	if err != nil {
+		httpserver.WriteError(w, r, 400, "invalid_request", "页面上下文无效")
+		return
+	}
+	h.startRun(w, r, user, id, input.Text, false, normalized)
 }
 
 func (h *Handlers) continueConversation(w http.ResponseWriter, r *http.Request, user identity.User) {
@@ -42,10 +52,31 @@ func (h *Handlers) continueConversation(w http.ResponseWriter, r *http.Request, 
 	if !ok {
 		return
 	}
-	h.startRun(w, r, user, id, "", true)
+	// 保留旧客户端无请求体的继续调用。
+	if r.Body != nil && r.Body != http.NoBody {
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
+		if err != nil {
+			httpserver.WriteError(w, r, 400, "invalid_json", "请求格式无效")
+			return
+		}
+		if len(strings.TrimSpace(string(body))) != 0 {
+			if !utf8.Valid(body) || !json.Valid(body) {
+				httpserver.WriteError(w, r, 400, "invalid_json", "请求格式无效")
+				return
+			}
+			var input struct{}
+			decoder := json.NewDecoder(bytes.NewReader(body))
+			decoder.DisallowUnknownFields()
+			if bytes.TrimSpace(body)[0] != '{' || decoder.Decode(&input) != nil {
+				httpserver.WriteError(w, r, 400, "invalid_request", "继续请求不接受任何字段")
+				return
+			}
+		}
+	}
+	h.startRun(w, r, user, id, "", true, nil)
 }
 
-func (h *Handlers) startRun(w http.ResponseWriter, r *http.Request, user identity.User, id, text string, continuation bool) {
+func (h *Handlers) startRun(w http.ResponseWriter, r *http.Request, user identity.User, id, text string, continuation bool, messageContext json.RawMessage) {
 	detail, err := h.store.GetConversation(r.Context(), user.ID, id)
 	if err != nil {
 		h.writeStoreError(w, r, err)
@@ -87,7 +118,7 @@ func (h *Handlers) startRun(w http.ResponseWriter, r *http.Request, user identit
 		modelName = settings.Model
 	}
 	h.streamRun(w, r, ctx, cancel, runtime.RunParams{Caller: tool.Caller{User: user, Source: "chat"},
-		ConversationID: id, Text: text, Continue: continuation, DisplayName: settings.DisplayName,
+		ConversationID: id, Text: text, Context: messageContext, Continue: continuation, DisplayName: settings.DisplayName,
 		Provider: model, Model: modelName}, user)
 }
 

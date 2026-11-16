@@ -79,6 +79,19 @@ func (s *Service) commandLocked(ctx context.Context, userID string, z *zoneRunti
 		z.offlinePaused = false
 		return CommandResult{ServerTime: timestamp(s.options.Now()), Zone: s.zoneOf(z, tracks), Imported: plan.imported}, nil
 	}
+	affected := 0
+	if plan.change != nil {
+		switch plan.change.Kind {
+		case "insert":
+			affected = len(plan.change.Entries)
+		case "replace", "reload":
+			affected = len(plan.persisted.Queue.Entries)
+		case "remove", "move":
+			affected = 1
+		case "clear":
+			affected = len(z.persisted.Queue.Entries)
+		}
+	}
 	now := s.options.Now()
 	plan.persisted.Revision++
 	if plan.change != nil {
@@ -166,7 +179,7 @@ func (s *Service) commandLocked(ctx context.Context, userID string, z *zoneRunti
 			z.nextSession.NextChanged()
 		}
 	}
-	result := CommandResult{ServerTime: timestamp(now), Zone: s.zoneOf(z, tracks), QueueChange: plan.change, Imported: plan.imported}
+	result := CommandResult{ServerTime: timestamp(now), Zone: s.zoneOf(z, tracks), QueueChange: plan.change, Imported: plan.imported, AffectedEntries: affected}
 	return result, nil
 }
 func (s *Service) startAllowed(z *zoneRuntime) error {

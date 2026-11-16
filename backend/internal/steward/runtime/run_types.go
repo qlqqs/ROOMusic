@@ -28,6 +28,8 @@ type RunParams struct {
 	ConversationID string
 	// Text 是本次新发的用户消息。
 	Text string
+	// Context 是本次提供的界面状态。
+	Context json.RawMessage
 	// Continue 表示从已有历史继续，不追加用户消息或修改标题。
 	Continue bool
 	// DisplayName 是调用者当前设置中的管家名字。

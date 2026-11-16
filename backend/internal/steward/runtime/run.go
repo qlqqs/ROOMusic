@@ -37,6 +37,10 @@ type runState struct {
 // 正常结束、限额、取消与模型错误通过 done 表达，返回 nil；存储错误返回调用方，
 // 不冒充模型错误。所有退出路径均尝试释放已占用的会话，释放失败也通过返回值报告。
 func (r *Runner) Run(ctx context.Context, params RunParams, sink EventSink) (err error) {
+	params.Context, err = NormalizeContext(params.Context)
+	if err != nil {
+		return err
+	}
 	userID := params.Caller.User.ID
 	if err := r.store.AcquireConversation(ctx, userID, params.ConversationID); err != nil {
 		return err
@@ -105,6 +109,7 @@ func (s *runState) prepare(ctx context.Context) ([]provider.Message, error) {
 	if err != nil {
 		return nil, err
 	}
+	input.Context = s.params.Context
 	if _, err := s.store.AppendMessage(ctx, s.params.Caller.User.ID, s.params.ConversationID, input); err != nil {
 		return nil, err
 	}
@@ -138,7 +143,7 @@ func (s *runState) run(ctx context.Context) (RunEnd, error) {
 	var definitions []provider.ToolDefinition
 	for _, definition := range s.registry.List(s.params.Caller) {
 		s.definitions[definition.Name] = definition
-		if definition.Scope == tool.ScopeRead {
+		if definition.Scope == tool.ScopeRead || definition.Scope == tool.ScopePersonal {
 			definitions = append(definitions, provider.ToolDefinition{Name: definition.Name,
 				Description: definition.Description, InputSchema: definition.Input})
 		}

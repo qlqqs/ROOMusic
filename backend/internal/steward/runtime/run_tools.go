@@ -92,7 +92,7 @@ func toolFailure(err error) (string, json.RawMessage) {
 	code, message := "tool_execution_failed", "工具执行失败"
 	var failure *tool.Error
 	if errors.As(err, &failure) {
-		// 入口校验使用固定说明；处理器的类型化错误按工具合同提供可展示的简短说明。
+		// 输入校验与业务类型化错误保留工具提供的说明；鉴权等入口错误使用固定说明。
 		switch failure.Code {
 		case tool.CodeTargetNotFound:
 			code, message = string(failure.Code), "目标不存在"
@@ -101,9 +101,9 @@ func toolFailure(err error) (string, json.RawMessage) {
 		case tool.CodePermissionDenied:
 			code, message = string(failure.Code), "无权调用此工具"
 		case tool.CodeUnsupportedScope:
-			code, message = string(failure.Code), "此入口只支持只读工具"
+			code, message = string(failure.Code), "此入口不支持该工具的影响范围"
 		case tool.CodeInvalidInput:
-			code, message = string(failure.Code), "工具输入不符合要求"
+			code, message = string(failure.Code), failure.Message
 		default:
 			code, message = string(failure.Code), failure.Message
 		}

@@ -69,7 +69,7 @@ func TestRegistryInvocationErrorsAreDistinct(t *testing.T) {
 	for _, tc := range []struct {
 		name, input string
 		code        ErrorCode
-	}{{"missing", "{}", CodeNotFound}, {"admin", "{}", CodePermissionDenied}, {"personal", "{}", CodeUnsupportedScope}, {"shared", "{}", CodeUnsupportedScope}, {"read", "{", CodeInvalidInput}, {"read", `{"extra":1}`, CodeInvalidInput}} {
+	}{{"missing", "{}", CodeNotFound}, {"admin", "{}", CodePermissionDenied}, {"shared", "{}", CodeUnsupportedScope}, {"read", "{", CodeInvalidInput}, {"read", `{"extra":1}`, CodeInvalidInput}} {
 		t.Run(tc.name+tc.input, func(t *testing.T) {
 			_, err := r.Invoke(context.Background(), Caller{User: identity.User{Role: "user"}}, tc.name, json.RawMessage(tc.input))
 			var typed *Error
@@ -166,5 +166,33 @@ func TestRegistryOutputTruncationPreservesJSON(t *testing.T) {
 				t.Fatal("truncated JSON is not an original prefix")
 			}
 		}
+	}
+}
+
+func TestRegistryC5ScopesExecuteAndBoundOutput(t *testing.T) {
+	for _, scope := range []Scope{ScopeRead, ScopePersonal, ScopeShared} {
+		t.Run(string(scope), func(t *testing.T) {
+			r := NewRegistry()
+			d := testDefinition("scoped")
+			d.Scope = scope
+			called := false
+			raw, _ := json.Marshal(map[string]string{"text": strings.Repeat("曲", 30000)})
+			d.Handler = func(context.Context, Caller, json.RawMessage) (json.RawMessage, error) {
+				called = true
+				return raw, nil
+			}
+			registerTest(t, r, d)
+			result, err := r.Invoke(context.Background(), Caller{User: identity.User{Role: "user"}}, d.Name, json.RawMessage(`{}`))
+			if scope == ScopeShared {
+				var failure *Error
+				if !errors.As(err, &failure) || failure.Code != CodeUnsupportedScope || called {
+					t.Fatalf("shared: called=%v err=%v", called, err)
+				}
+				return
+			}
+			if err != nil || !called || !result.Truncated || len(result.Output) > 64*1024 || !json.Valid(result.Output) {
+				t.Fatalf("scope=%s result=%+v called=%v err=%v", scope, result, called, err)
+			}
+		})
 	}
 }

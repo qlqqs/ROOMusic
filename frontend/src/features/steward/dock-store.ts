@@ -1,7 +1,8 @@
 import { useSyncExternalStore } from "react";
+import { noDismissed, type DismissedContext } from "./context/context";
 
 // 面板的状态（应用级）：开没开、显示哪个会话、空白新对话预先选的模型。开关记在这个浏览器里；
-// 会话 ID、草稿与对话区的提示只在内存里，登出或换用户时由应用调用 resetDock 清掉。
+// 会话 ID、草稿、草稿里点掉的上下文标签与对话区的提示只在内存里，登出或换用户时由应用调用 resetDock 清掉。
 
 export type DockState = {
   open: boolean;
@@ -84,6 +85,7 @@ export type ViewNotice = { action: "create" | "model" | "new_model"; error: unkn
 
 const drafts = new Map<string, string>();
 const notices = new Map<string, ViewNotice>();
+const dismissals = new Map<string, DismissedContext>();
 const entryListeners = new Set<() => void>();
 
 function notifyEntries() {
@@ -121,6 +123,22 @@ export function useViewNotice(key: string): ViewNotice | null {
   return useSyncExternalStore(subscribeEntries, () => notices.get(key) ?? null);
 }
 
+/** 这份草稿里点掉的上下文标签（面板与整页共用）；发出后清掉，开流前失败、文字放回输入框时一起放回。 */
+export function dismissedContextOf(key: string): DismissedContext {
+  return dismissals.get(key) ?? noDismissed;
+}
+
+export function setDismissedContext(key: string, dismissed: DismissedContext): void {
+  if (dismissed === dismissedContextOf(key)) return;
+  if (dismissed.page === null && dismissed.playback === null) dismissals.delete(key);
+  else dismissals.set(key, dismissed);
+  notifyEntries();
+}
+
+export function useDismissedContext(key: string): DismissedContext {
+  return useSyncExternalStore(subscribeEntries, () => dismissedContextOf(key));
+}
+
 /**
  * resetDock 之后递增。异步操作（发送、建会话）开始时记下，返回后不一致就不再写草稿与提示：
  * 请求得到 401 时会话边界先清空这里，之后才轮到请求的失败处理，旧用户的文字不能留给下一个登录的人。
@@ -136,6 +154,7 @@ export function resetDock(): void {
   epoch += 1;
   drafts.clear();
   notices.clear();
+  dismissals.clear();
   notifyEntries();
   update({ conversationId: null, newModel: null, blankIntent: false, focusPending: false });
 }

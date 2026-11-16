@@ -1,5 +1,6 @@
 import type { ApiResponse } from "../../../shared/api";
 import { apiRequest, apiStream } from "../../../shared/api";
+import type { StewardRequestContext } from "../context/context";
 import {
   decodeAllowlist,
   decodeAllowlistEntry,
@@ -87,14 +88,14 @@ export function cancelConversation(id: string): Promise<ApiResponse<{ cancelled:
 }
 
 /**
- * 开始一次运行，响应是 SSE（合同第 5 节）。text 不为 null 时是发消息（追加用户消息）；
- * 为 null 时是从现有历史继续（不追加用户消息，最后一条不是 user/tool 时 409 nothing_to_continue）。
- * 开始流之前的检查失败时按错误信封抛出 ApiError。
+ * 开始一次运行，响应是 SSE（合同第 5 节）。message 不为 null 时是发消息（追加用户消息），context 是页面上下文（C5），
+ * 为 null 时请求体里没有这个字段；message 为 null 时是从现有历史继续：没有请求体（不追加用户消息，原用户消息的上下文保持发送时的样子；
+ * 最后一条不是 user/tool 时 409 nothing_to_continue）。开始流之前的检查失败时按错误信封抛出 ApiError。
  */
-export function openRun(id: string, text: string | null, signal: AbortSignal): Promise<Response> {
-  return text === null
-    ? apiStream({ path: `${conversationsPath}/${id}/continue`, method: "POST", signal })
-    : apiStream({ path: `${conversationsPath}/${id}/messages`, method: "POST", body: { text }, signal });
+export function openRun(id: string, message: { text: string; context: StewardRequestContext | null } | null, signal: AbortSignal): Promise<Response> {
+  if (message === null) return apiStream({ path: `${conversationsPath}/${id}/continue`, method: "POST", signal });
+  const { text, context } = message;
+  return apiStream({ path: `${conversationsPath}/${id}/messages`, method: "POST", body: context === null ? { text } : { text, context }, signal });
 }
 
 // ---- 管理员 ----

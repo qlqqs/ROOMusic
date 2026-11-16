@@ -93,5 +93,5 @@ func (s *Service) transferLocked(ctx context.Context, userID string, source, tar
 	targetChange := replaceChange(tp.Queue.Entries, tracks)
 	targetChange.QueueRevision = tp.QueueRevision
 	tz := s.zoneOf(target, tracks)
-	return CommandResult{ServerTime: timestamp(s.options.Now()), Zone: s.zoneOf(source, nil), QueueChange: sourceChange, TargetZone: &tz}, sourceChange, targetChange, nil
+	return CommandResult{ServerTime: timestamp(s.options.Now()), Zone: s.zoneOf(source, nil), QueueChange: sourceChange, TargetZone: &tz, AffectedEntries: len(tp.Queue.Entries)}, sourceChange, targetChange, nil
 }

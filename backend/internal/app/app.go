@@ -137,7 +137,7 @@ func New(lifecycle context.Context, settings config.Server, database *sql.DB, fr
 	mux.HandleFunc("GET /healthz", httpserver.HealthHandler)
 	operationKinds := []operations.Kind{governance.CorrectionOperations(), governance.GroupChangeOperations(), governance.GroupDefaultOperations(),
 		governance.IssueReviewOperations(), governance.ClaimOperations(), governance.ArtistMergeKind{}, governance.ArtistSplitKind{}, governance.ArtistRenameKind{}, governance.ArtistCandidateIgnoreKind{}}
-	registerSteward(lifecycle, mux, database, guard, settings.DataDirectory, logger, libraryService, operationKinds)
+	registerSteward(lifecycle, mux, database, guard, settings.DataDirectory, logger, libraryService, operationKinds, zonesService, listeningService, personalService)
 	mux.HandleFunc("GET /readyz", httpserver.ReadyHandler(func() bool { return database != nil }))
 	identityapi.New(database, guard, assembly.loginThrottle, logger).Register(mux)
 	libraryapi.New(database, guard, libraryService, settings.AllowedLibraryRoots, logger).Register(mux)

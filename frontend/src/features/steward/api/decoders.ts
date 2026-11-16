@@ -130,6 +130,17 @@ const toolCallRecordDecoder = d.object({
   duration_ms: d.nullable(d.integer({ min: 0 })),
 });
 
+// 用户消息上存的页面上下文（C5）：只为保持形状，对话里不显示；字段都按可缺失处理，没有时后端给 null 或省略。
+const optionalText = d.optional(d.string());
+const messageContextDecoder = d.object({
+  page: d.optional(d.nullable(d.object({ path: d.string(), kind: d.string(), id: optionalText, title: optionalText }))),
+  playback: d.optional(
+    d.nullable(
+      d.object({ zone_id: d.string(), zone_name: optionalText, track_id: optionalText, title: optionalText, artist: optionalText, status: optionalText }),
+    ),
+  ),
+});
+
 const messageDecoder = d.object({
   id: d.uuid(),
   sequence: d.integer({ min: 1 }),
@@ -139,6 +150,7 @@ const messageDecoder = d.object({
   output_tokens: d.nullable(d.integer({ min: 0 })),
   created_at: d.timestamp(),
   tool_calls: d.array(toolCallRecordDecoder, { max: d.unbounded }),
+  context: d.optional(d.nullable(messageContextDecoder)),
 });
 export type MessageDTO = d.Infer<typeof messageDecoder>;
 export type ToolCallDTO = d.Infer<typeof toolCallRecordDecoder>;

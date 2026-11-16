@@ -38,6 +38,11 @@ const navItems: readonly NavItem[] = [
   { to: "/artist-candidates", label: "重复艺人", icon: Combine, adminOnly: true, group: "管理", artists: true },
 ];
 
+/** 侧栏里这个地址的名字；不是侧栏入口时是 undefined（管家的页面上下文用它给列表页起名）。 */
+export function navLabelOf(path: string): string | undefined {
+  return navItems.find((item) => item.to === path)?.label;
+}
+
 export type NavGroup = { label: string | null; items: readonly NavItem[] };
 
 /**
