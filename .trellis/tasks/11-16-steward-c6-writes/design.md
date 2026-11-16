@@ -35,11 +35,12 @@
 
 流程（`assistant` 模式）：
 
-1. 一步里模型要求的调用按顺序处理：`read`、`personal` 照常执行；`shared` 且不在 `auto_approved_tools` 里的，
+1. 一步里模型要求的调用按顺序处理：`read`、`personal` 照常执行；`shared` 且不可撤销或不在 `auto_approved_tools` 里的，
    先做鉴权与输入校验、调用 `Preview`，然后记为 `awaiting_confirmation`，不执行。
 2. 这一步里只要有等待确认的调用，就把它们合成一份方案落库，发 SSE 事件 `plan`，运行以
    `done.reason = awaiting_confirmation` 结束。`ReleaseConversation` 与重放都不再把 `awaiting_confirmation` 当成中断；
    会话有未处理方案时，重放到这一步为止，不向模型发送缺结果的调用。
+   循环结束时若用户已取消，不创建方案；待确认调用以 `cancelled` 补齐工具结果，运行以取消结束。
 3. 摘要：对方案项的 `(tool_name, input 的规范化 JSON, position)` 序列做 SHA-256。
 4. `POST /api/v1/me/steward/conversations/{id}/plans/{plan_id}/decision`，请求体
    `{"digest":"…","accepted_item_ids":[…],"auto_approve_tools":[…]}`，响应是 SSE（与继续接口相同）。
@@ -48,11 +49,17 @@
    通过后在一个事务里记下每项的取舍，然后逐项执行已接受的项（每项各自的事务，沿用它保存的幂等键），
    把结果写成工具结果；未接受的项结果是 `declined_by_user`。接着按继续接口的方式让循环往下走。
    `accepted_item_ids` 为空等于“不修改”。
+   `auto_approve_tools` 只能包含可撤销、且至少有一项在本次被接受的方案工具；否则返回 `400 invalid_input`，整个确认事务回滚。
 5. 用户在有未处理方案时发新消息：方案标为 `superseded`，各项以 `not_executed` 写成工具结果，再追加用户消息。
-   过期在读取与确认时判定。
+   已过期方案保持 `expired`。已应用方案中尚无结果的 accepted 项只按原幂等键读取操作记录：有记录则写回结果与 operation_id，无记录则记 `not_executed`；未选项补 `declined_by_user`。这些收尾与用户消息在同一事务提交，不重新执行。只有确认接口与显式 continue 恢复已批准项。
+   过期在读取与确认时判定；会话读取在 `FOR UPDATE` 锁内收尾过期方案。
 6. `GET` 会话详情带上未处理的方案（供刷新后显示）。
 
-`operator` 模式与 `auto_approved_tools` 命中时：第 1 步直接执行，幂等键存在工具调用上。
+`operator` 模式与可撤销工具命中 `auto_approved_tools` 时：第 1 步直接执行，幂等键存在工具调用上。
+不可撤销工具在 assistant 模式每次确认，在 operator 模式仍直接执行。
+直接执行返回 `database_unavailable` 时用原幂等键再调用一次，由 operations.Run 对账；仍无法确定时结束本轮，不给模型确定失败的结果。
+方案输入与结果使用 jsonb，预览前检查解码后的输入键和值，含空字符时返回工具输入错误；字面量 `\\u0000` 不受影响。
+`steward_plans(conversation_id)` 另有普通索引，覆盖历史方案查询与级联删除。
 
 确认接口不接受模型输出里的任何字段；能让方案执行的只有这个接口上已登录用户的请求。
 
@@ -70,12 +77,13 @@
 
 - 新事件 `plan`：`{plan_id, digest, expires_at, items:[{id, tool, target, changes:[{field, before, after}], revertible, basis}]}`。
 - `done.reason` 增加 `awaiting_confirmation`。
+- 待确认调用在生成方案时先发一次 `tool_started`，无 `tool_finished`；确认后同一 call_id 再发 `tool_started/tool_finished`。应用方案的工具事件和 continue 重发的 plan 事件不带 step。
 - 新错误码：`plan_not_found`（404）、`plan_expired`（409）、`plan_digest_mismatch`（409）。
 
 ## 前端
 
 - `components/plan-card.tsx`：按原型；每项一个勾选框、字段名、旧值（删除线）、新值、依据说明、不可撤销的标注；
-  “应用 N 项修改”“不修改”；每种工具一个“这次对话里，<工具的中文名>不再问我”的复选框。旧值新值按文本节点渲染。
+  “应用 N 项修改”“不修改”；每种可撤销工具一个“这次对话里，<工具的中文名>不再问我”的复选框，提交时该工具须至少有一项被接受。旧值新值按文本节点渲染。
 - 应用后卡片变成结果列表：每项已执行、失败原因、未选；已执行的可撤销项有“撤销”（调用现有撤销接口）。
 - 模式按钮与菜单按原型（本任务两项）；Shift+Tab 只在输入框聚焦时轮换；Operator 的说明写明
   “不询问，直接执行；外部资料里的内容也可能促成修改”。

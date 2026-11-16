@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import type { StewardMode } from "./api/decoders";
 import { noDismissed, type DismissedContext } from "./context/context";
 
 // 面板的状态（应用级）：开没开、显示哪个会话、空白新对话预先选的模型。开关记在这个浏览器里；
@@ -10,6 +11,8 @@ export type DockState = {
   conversationId: string | null;
   /** 空白新对话在模型菜单里选的模型；创建会话后写进会话。null 表示用设置里的模型。 */
   newModel: string | null;
+  /** 空白新对话在模式菜单里选的模式（C6）；创建会话时带上。null 是默认的 assistant。 */
+  newMode: StewardMode | null;
   /**
    * 用户在应用里要的是空白新对话（“新对话”、标签栏、展开空白面板、记着的会话已不存在）：/steward 不再转到列表里最近的会话。
    * 打开某个会话后清掉；只在内存里，刷新页面后进 /steward 会转到最近的会话。
@@ -21,7 +24,7 @@ export type DockState = {
 
 const OPEN_KEY = "roomusic.steward.dock-open";
 
-let state: DockState = { open: window.localStorage.getItem(OPEN_KEY) === "1", conversationId: null, newModel: null, blankIntent: false, focusPending: false };
+let state: DockState = { open: window.localStorage.getItem(OPEN_KEY) === "1", conversationId: null, newModel: null, newMode: null, blankIntent: false, focusPending: false };
 const listeners = new Set<() => void>();
 
 function update(next: Partial<DockState>) {
@@ -60,7 +63,12 @@ export function clearDockFocus(): void {
 
 export function setDockConversation(conversationId: string | null): void {
   if (conversationId === state.conversationId && (conversationId === null || !state.blankIntent)) return;
-  update({ conversationId, newModel: conversationId === null ? state.newModel : null, blankIntent: conversationId === null ? state.blankIntent : false });
+  update({
+    conversationId,
+    newModel: conversationId === null ? state.newModel : null,
+    newMode: conversationId === null ? state.newMode : null,
+    blankIntent: conversationId === null ? state.blankIntent : false,
+  });
 }
 
 /** 要空白新对话：清掉当前会话，/steward 不转到最近的会话。 */
@@ -77,11 +85,15 @@ export function setNewConversationModel(model: string | null): void {
   update({ newModel: model });
 }
 
+export function setNewConversationMode(mode: StewardMode | null): void {
+  update({ newMode: mode });
+}
+
 // ---- 草稿与对话区的提示：按会话 ID 存（空白新对话用 "new"），面板与整页共用；可订阅，
 // 新对话创建后对话区按新会话重新挂载，之前的请求失败时写回的文字与提示也能显示出来。----
 
-/** 对话区里就近显示的失败：新建会话失败；切换模型失败；新对话建好了但预选的模型没有写进去（消息还没发）。 */
-export type ViewNotice = { action: "create" | "model" | "new_model"; error: unknown };
+/** 对话区里就近显示的失败：新建会话失败；切换模型或模式失败；新对话建好了但预选的模型没有写进去（消息还没发）。 */
+export type ViewNotice = { action: "create" | "model" | "mode" | "new_model"; error: unknown };
 
 const drafts = new Map<string, string>();
 const notices = new Map<string, ViewNotice>();
@@ -156,5 +168,5 @@ export function resetDock(): void {
   notices.clear();
   dismissals.clear();
   notifyEntries();
-  update({ conversationId: null, newModel: null, blankIntent: false, focusPending: false });
+  update({ conversationId: null, newModel: null, newMode: null, blankIntent: false, focusPending: false });
 }

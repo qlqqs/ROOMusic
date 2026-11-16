@@ -17,7 +17,7 @@ type conversationResponse struct {
 	ID string `json:"id"`
 	// Title 是会话标题。
 	Title string `json:"title"`
-	// Mode 是会话模式，本步只接受 assistant。
+	// Mode 是会话模式，支持 assistant 与 operator。
 	Mode string `json:"mode"`
 	// Model 是对话模型名称。
 	Model string `json:"model"`
@@ -60,13 +60,17 @@ func (h *Handlers) createConversation(w http.ResponseWriter, r *http.Request, us
 	var input struct {
 		// Title 是会话标题。
 		Title string `json:"title"`
-		// Mode 是会话模式，本步只接受 assistant。
+		// Mode 是会话模式，支持 assistant 与 operator。
 		Mode string `json:"mode"`
 	}
 	if !decodeInput(w, r, &input) {
 		return
 	}
-	if !validText(input.Title) || (input.Mode != "" && input.Mode != "assistant") {
+	if input.Mode != "" && input.Mode != "assistant" && input.Mode != "operator" {
+		httpserver.WriteError(w, r, 400, "invalid_request", "会话模式无效")
+		return
+	}
+	if !validText(input.Title) {
 		invalidInput(w, r)
 		return
 	}
@@ -74,7 +78,7 @@ func (h *Handlers) createConversation(w http.ResponseWriter, r *http.Request, us
 	if !ok {
 		return
 	}
-	conversation, err := h.store.CreateConversation(r.Context(), user.ID, strings.TrimSpace(input.Title), settings.Model)
+	conversation, err := h.store.CreateConversation(r.Context(), user.ID, strings.TrimSpace(input.Title), settings.Model, input.Mode)
 	if err != nil {
 		h.writeStoreError(w, r, err)
 		return
@@ -181,11 +185,20 @@ func (h *Handlers) getConversation(w http.ResponseWriter, r *http.Request, user 
 		}
 		messages = append(messages, message)
 	}
+	var pending *runtime.Plan
+	for i := range detail.Plans {
+		if detail.Plans[i].Status == "pending" {
+			pending = &detail.Plans[i]
+			break
+		}
+	}
 	httpserver.WriteJSON(w, 200, struct {
 		conversationResponse
 		// Messages 按会话内序号排列消息。
-		Messages []messageResponse `json:"messages"`
-	}{conversationView(detail.Conversation), messages})
+		Messages    []messageResponse `json:"messages"`
+		Plans       []runtime.Plan    `json:"plans"`
+		PendingPlan *runtime.Plan     `json:"pending_plan"`
+	}{conversationView(detail.Conversation), messages, detail.Plans, pending})
 }
 
 func (h *Handlers) renameConversation(w http.ResponseWriter, r *http.Request, user identity.User) {
@@ -198,11 +211,16 @@ func (h *Handlers) renameConversation(w http.ResponseWriter, r *http.Request, us
 		Title *string `json:"title"`
 		// Model 是会话模型，空字符串表示使用默认模型。
 		Model *string `json:"model"`
+		Mode  *string `json:"mode"`
 	}
 	if !decodeInput(w, r, &input) {
 		return
 	}
-	if (input.Title == nil && input.Model == nil) || (input.Title != nil && !validText(*input.Title)) || (input.Model != nil && !validText(*input.Model)) {
+	if input.Mode != nil && *input.Mode != "assistant" && *input.Mode != "operator" {
+		httpserver.WriteError(w, r, 400, "invalid_request", "会话模式无效")
+		return
+	}
+	if (input.Title == nil && input.Model == nil && input.Mode == nil) || (input.Title != nil && !validText(*input.Title)) || (input.Model != nil && !validText(*input.Model)) {
 		invalidInput(w, r)
 		return
 	}
@@ -212,12 +230,12 @@ func (h *Handlers) renameConversation(w http.ResponseWriter, r *http.Request, us
 	if input.Model != nil {
 		*input.Model = strings.TrimSpace(*input.Model)
 	}
-	conversation, err := h.store.UpdateConversation(r.Context(), user.ID, id, input.Title, input.Model)
+	conversation, err := h.store.UpdateConversation(r.Context(), user.ID, id, input.Title, input.Model, input.Mode)
 	if err != nil {
 		h.writeStoreError(w, r, err)
 		return
 	}
-	httpserver.WriteJSON(w, 200, map[string]string{"title": conversation.Title, "model": conversation.Model})
+	httpserver.WriteJSON(w, 200, map[string]string{"title": conversation.Title, "model": conversation.Model, "mode": conversation.Mode})
 }
 
 func (h *Handlers) deleteConversation(w http.ResponseWriter, r *http.Request, user identity.User) {

@@ -1,9 +1,9 @@
 import { failureOf, type ApiFailure } from "../../../shared/api";
 import { SseParser } from "../../../shared/lib/sse";
-import { decodeRunEvent, type RunEndDTO } from "../api/decoders";
-import { cancelConversation, openRun } from "../api/endpoints";
+import { decodeRunEvent, type PlanDTO, type RunEndDTO } from "../api/decoders";
+import { cancelConversation, openDecision, openRun, type PlanDecisionBody } from "../api/endpoints";
 import type { StewardRequestContext } from "../context/context";
-import { applyRunEvent, emptyRunView, type RunView } from "./reduce";
+import { applyRunEvent, emptyRunView, type RunView, type StepItem } from "./reduce";
 
 // 进行中的运行（应用级）：发消息或继续时由这里发起请求并读流，与组件的生命周期无关，
 // 切页面、面板与整页之间切换都不打断（R6）。按会话 ID 存；登出或换用户时由应用调用 resetRuns 中止并清空。
@@ -41,6 +41,13 @@ export type StartRunParams = {
   refresh: () => Promise<unknown>;
   /** 一次工具调用结束（成功或失败）时，带上工具名：调用方据此刷新被改动的个人数据。 */
   onToolFinished: (name: string) => void;
+  /** 收到修改方案（C6）：调用方把它记进方案的 store。 */
+  onPlan?: (plan: PlanDTO) => void;
+  /**
+   * 对一份方案的决定（C6）：走确认接口，text 为 null，并进最后一个回合。seed 是方案里等待确认的条目，
+   * 执行结果按调用标识落在它们身上。开流前被拒绝时不记结束信息，由方案卡片就地说明。
+   */
+  decision?: { planId: string; body: PlanDecisionBody; seed: readonly StepItem[] };
 };
 
 /** 流是否开起来了：没开起来时带失败原因（调用方据此把草稿放回输入框）；同一会话已有运行时 failure 为 null。 */
@@ -82,12 +89,13 @@ export function getRunSnapshot(): RunSnapshot {
   return snapshot;
 }
 
-export function startRun({ conversationId, text, baseSequence, context, refresh, onToolFinished }: StartRunParams): Promise<StartResult> {
+export function startRun({ conversationId, text, baseSequence, context, refresh, onToolFinished, onPlan, decision }: StartRunParams): Promise<StartResult> {
   if (snapshot.runs.has(conversationId)) return Promise.resolve({ started: false, failure: null });
   const controller = new AbortController();
   controllers.set(conversationId, controller);
   const runs = new Map(snapshot.runs);
-  runs.set(conversationId, { conversationId, userText: text, baseSequence, view: emptyRunView, phase: "running" });
+  const view = decision === undefined ? emptyRunView : { ...emptyRunView, items: [...decision.seed] };
+  runs.set(conversationId, { conversationId, userText: text, baseSequence, view, phase: "running" });
   const ends = new Map(snapshot.ends);
   ends.delete(conversationId);
   publish({ runs, ends });
@@ -98,19 +106,22 @@ export function startRun({ conversationId, text, baseSequence, context, refresh,
     void (async () => {
       let response: Response;
       try {
-        response = await openRun(conversationId, text === null ? null : { text, context }, controller.signal);
+        response =
+          decision === undefined
+            ? await openRun(conversationId, text === null ? null : { text, context }, controller.signal)
+            : await openDecision(conversationId, decision.planId, decision.body, controller.signal);
       } catch (error) {
         if (!live()) return resolve({ started: false, failure: null });
         controllers.delete(conversationId);
         const failure = failureOf(error) ?? { kind: "network" as const, requestId: "" };
         setRun(conversationId, null);
-        if (failure.kind !== "aborted") setEnd(conversationId, { kind: "request_failed", failure });
+        if (failure.kind !== "aborted" && decision === undefined) setEnd(conversationId, { kind: "request_failed", failure });
         resolve({ started: false, failure });
         void refresh().catch(() => undefined);
         return;
       }
       resolve({ started: true });
-      const end = await readStream(conversationId, response, controller.signal, live, onToolFinished);
+      const end = await readStream(conversationId, response, controller.signal, live, onToolFinished, onPlan);
       if (!live()) return;
       controllers.delete(conversationId);
       setRun(conversationId, (run) => ({ ...run, phase: "settling" }));
@@ -127,6 +138,7 @@ async function readStream(
   signal: AbortSignal,
   live: () => boolean,
   onToolFinished: (name: string) => void,
+  onPlan: ((plan: PlanDTO) => void) | undefined,
 ): Promise<RunEnd> {
   const body = response.body;
   if (body === null) return { kind: "disconnected" };
@@ -150,6 +162,7 @@ async function readStream(
         if (event.type === "done") end = { kind: "done", end: event.end };
         const applied = event;
         setRun(conversationId, (run) => ({ ...run, view: applyRunEvent(run.view, applied) }));
+        if (event.type === "plan") onPlan?.(event.plan);
         if (event.type === "tool_finished") {
           const callId = event.tool_finished.call_id;
           const name = snapshot.runs.get(conversationId)?.view.items.find((item) => item.callId === callId)?.name;

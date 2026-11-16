@@ -8,7 +8,7 @@ import { albumGroup, catalogDataOf } from "../test/catalog-data";
 import { installFakeApi, installFakeSession, installOverviewApi } from "../test/fake-api";
 import { FakeAudio } from "../test/fake-audio";
 import { installCatalogApi } from "../test/fake-catalog";
-import { conversationOf, installStewardApi, settingsOf, storedMessage, type StewardFake } from "../test/fake-steward";
+import { conversationOf, installStewardApi, planOf, planPayload, settingsOf, storedMessage, type FakePlan, type FakePlanItem, type StewardFake } from "../test/fake-steward";
 import { fakeZoneServer, type FakeZoneServer } from "../test/fake-zones";
 import { playerTrack } from "../test/player-data";
 import { renderApp } from "../test/render-app";
@@ -730,5 +730,360 @@ describe("工具结束后刷新个人数据", () => {
     await waitFor(() => expect(scopes()).toContain("listening"));
     expect(panel.getByText("加到歌单")).toBeTruthy();
     expect(panel.getByText("删除一条播放历史")).toBeTruthy();
+  });
+});
+
+// ---- C6：修改方案与模式 ----
+
+const planId = "00000000-0000-4000-8000-0000000000c1";
+const titleItem: FakePlanItem = {
+  id: "00000000-0000-4000-8000-0000000000b1",
+  call_id: "call-2",
+  tool: "correct_release",
+  target: "Bayreuth 1951",
+  changes: [
+    { field: "title", before: "Beethoven Symphony No.9", after: "贝多芬：第九交响曲" },
+    { field: "label", before: null, after: "EMI" },
+  ],
+  revertible: true,
+  basis: { source: "external", note: "来自 MusicBrainz，本地没有可核对的证据" },
+};
+const mergeItem: FakePlanItem = {
+  id: "00000000-0000-4000-8000-0000000000b2",
+  call_id: "call-3",
+  tool: "merge_artists",
+  target: "威廉·富特文格勒",
+  changes: [{ field: "artist", before: "Furtwangler", after: "威廉·富特文格勒" }],
+  revertible: false,
+  basis: { source: "local", note: "曲库里已有这位艺人" },
+};
+const operationId = "00000000-0000-4000-8000-0000000000d1";
+
+const callRecord = (index: number, name: string, overrides: Record<string, unknown> = {}) => ({
+  id: `00000000-0000-4000-8000-0000000000a${index}`,
+  name,
+  input: {},
+  output: null,
+  truncated: false,
+  untrusted: true,
+  status: "awaiting_confirmation",
+  error_code: null,
+  duration_ms: null,
+  ...overrides,
+});
+
+/** 提出方案后落库的样子：用户的话，一条说明加两个等待确认的调用。 */
+function planMessages() {
+  return [
+    storedMessage(1, "user", [{ type: "text", text: "把这张专辑整理好" }]),
+    storedMessage(
+      2,
+      "assistant",
+      [
+        { type: "text", text: "建议改下面两处。" },
+        { type: "tool_call", tool_call: { id: "call-2", name: "correct_release", arguments: { release_id: "r" } } },
+        { type: "tool_call", tool_call: { id: "call-3", name: "merge_artists", arguments: { artist_id: "a" } } },
+      ],
+      [callRecord(1, "correct_release"), callRecord(2, "merge_artists")],
+    ),
+  ];
+}
+
+/** 确认之后落库的样子：标题那项执行了，艺人那项没有选，然后是回答。 */
+function decidedMessages() {
+  const [user, assistant] = planMessages();
+  const executed = { ...(assistant as ReturnType<typeof storedMessage>), tool_calls: [
+    callRecord(1, "correct_release", { status: "succeeded", output: { operation_id: operationId, revision: 3 }, duration_ms: 300 }),
+    callRecord(2, "merge_artists", { status: "failed", output: { code: "declined_by_user" }, error_code: "declined_by_user" }),
+  ] };
+  return [
+    user,
+    executed,
+    storedMessage(3, "tool", [{ type: "tool_result", tool_result: { call_id: "call-2", content: "{}", is_error: false } }, { type: "tool_result", tool_result: { call_id: "call-3", content: "{}", is_error: true } }]),
+    storedMessage(4, "assistant", [{ type: "text", text: "标题改好了，艺人没有动。" }]),
+  ];
+}
+
+/** 一个停在方案上的会话（刷新后的样子）。 */
+function setupWithPlan(plan: Partial<FakePlan> = {}) {
+  const context = setup({ conversations: [conversationOf(id, { messages: planMessages() })] });
+  context.state.plans.push(planOf(planId, id, [titleItem, mergeItem], plan));
+  return context;
+}
+
+async function openConversation() {
+  renderApp({ path: `/steward/${id}` });
+  return within(await screen.findByRole("region", { name: "对话" }));
+}
+
+const decisionPath = `/api/v1/me/steward/conversations/${id}/plans/${planId}/decision`;
+
+describe("修改方案", () => {
+  it("运行里出现方案：逐项列出旧值、新值、依据与不可撤销；排在提出它的那段文字之后", async () => {
+    const { state } = setup({ conversations: [conversationOf(id)] });
+    const conversation = await openConversation();
+    await userEvent.type(await conversation.findByRole("textbox", { name: "问问小蓝" }), "把这张专辑整理好{Enter}");
+    await waitFor(() => expect(state.runs).toHaveLength(1));
+    const stream = state.runs[0]?.stream;
+    stream?.send("text", { type: "text", step: 1, text: "建议改下面两处。" });
+    const plan = planOf(planId, id, [titleItem, mergeItem]);
+    stream?.send("plan", { type: "plan", step: 1, plan: planPayload(plan) });
+    const live = within(await conversation.findByRole("region", { name: "修改方案" }));
+    // 运行还没结束：不能提交。
+    expect((live.getByRole("button", { name: "应用 2 项修改" }) as HTMLButtonElement).disabled).toBe(true);
+
+    state.plans.push(plan);
+    const stored = state.conversations[0];
+    if (stored !== undefined) stored.messages = planMessages();
+    stream?.send("done", { type: "done", step: 1, end: { reason: "awaiting_confirmation" } });
+    stream?.close();
+    // 运行结束、重读之后卡片落到已保存的回合里。
+    await waitFor(() => expect((conversation.getByRole("button", { name: "应用 2 项修改" }) as HTMLButtonElement).disabled).toBe(false));
+    const card = within(conversation.getByRole("region", { name: "修改方案" }));
+    // 等确认不是“没有完成”：没有结束说明。
+    expect(conversation.queryByText("这次回答没有完成")).toBeNull();
+    expect(conversation.getByText("2 项修改等你确认")).toBeTruthy();
+
+    expect(card.getByText("2 项，其中 1 项不能撤销")).toBeTruthy();
+    expect((card.getByRole("checkbox", { name: "修正专辑信息 Bayreuth 1951" }) as HTMLInputElement).checked).toBe(true);
+    expect((card.getByRole("checkbox", { name: "合并艺人 威廉·富特文格勒" }) as HTMLInputElement).checked).toBe(true);
+    expect(card.getByText("Beethoven Symphony No.9").closest("del")).not.toBeNull();
+    expect(card.getByText("贝多芬：第九交响曲").closest("ins")).not.toBeNull();
+    expect(card.getByText("（空）").closest("del")).not.toBeNull();
+    expect(card.getByText("厂牌")).toBeTruthy();
+    expect(card.getByText("依据（外部资料）：来自 MusicBrainz，本地没有可核对的证据")).toBeTruthy();
+    expect(card.getByText("依据（本地证据）：曲库里已有这位艺人")).toBeTruthy();
+    expect(card.getAllByText("不可撤销")).toHaveLength(1);
+    expect(card.getByRole("checkbox", { name: "这次对话里，修正专辑信息不再问我" })).toBeTruthy();
+    // 不可撤销的修改每次都要确认，没有“不再问我”。
+    expect(card.queryByRole("checkbox", { name: "这次对话里，合并艺人不再问我" })).toBeNull();
+    // 卡片在“建议改下面两处。”之后。
+    const intro = conversation.getByText("建议改下面两处。");
+    const region = conversation.getByRole("region", { name: "修改方案" });
+    expect(intro.compareDocumentPosition(region) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("逐项取舍后应用：请求体是摘要、勾选的项与不再询问的工具；之后变成结果列表，已执行的可以撤销", async () => {
+    const { api, state } = setupWithPlan();
+    const conversation = await openConversation();
+    const card = within(await conversation.findByRole("region", { name: "修改方案" }));
+    await userEvent.click(card.getByRole("checkbox", { name: "合并艺人 威廉·富特文格勒" }));
+    expect(card.getByRole("button", { name: "应用 1 项修改" })).toBeTruthy();
+    await userEvent.click(card.getByRole("checkbox", { name: "修正专辑信息 Bayreuth 1951" }));
+    expect((card.getByRole("button", { name: "应用 0 项修改" }) as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(card.getByRole("checkbox", { name: "修正专辑信息 Bayreuth 1951" }));
+    await userEvent.click(card.getByRole("checkbox", { name: "这次对话里，修正专辑信息不再问我" }));
+    await userEvent.click(card.getByRole("button", { name: "应用 1 项修改" }));
+
+    await waitFor(() => expect(state.decisions).toHaveLength(1));
+    expect(api.requestsTo("POST", decisionPath)[0]?.body).toEqual({ digest: state.plans[0]?.digest, accepted_item_ids: [titleItem.id], auto_approve_tools: ["correct_release"] });
+    const stream = state.decisions[0]?.stream;
+    stream?.send("tool_started", { type: "tool_started", step: 1, tool_started: { call_id: "call-2", name: "correct_release", input: { release_id: "r" } } });
+    expect(await card.findByText("正在执行")).toBeTruthy();
+    stream?.send("tool_finished", { type: "tool_finished", step: 1, tool_finished: { call_id: "call-2", status: "succeeded", output: { operation_id: operationId }, truncated: false, untrusted: false } });
+    stream?.send("tool_finished", { type: "tool_finished", step: 1, tool_finished: { call_id: "call-3", status: "failed", output: null, truncated: false, untrusted: false, error_code: "declined_by_user" } });
+    stream?.send("text", { type: "text", step: 1, text: "标题改好了，艺人没有动。" });
+    const stored = state.conversations[0];
+    if (stored !== undefined) stored.messages = decidedMessages();
+    stream?.send("done", { type: "done", step: 1, end: { reason: "completed" } });
+    stream?.close();
+
+    expect(await card.findByText("已执行")).toBeTruthy();
+    expect(card.getByText("未选")).toBeTruthy();
+    expect(card.getByText("应用了 1 项")).toBeTruthy();
+    expect(card.queryByRole("checkbox")).toBeNull();
+    // 回答接在卡片后面。
+    const answer = await conversation.findByText("标题改好了，艺人没有动。");
+    expect(conversation.getByRole("region", { name: "修改方案" }).compareDocumentPosition(answer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await userEvent.click(card.getByRole("button", { name: /^撤销/ }));
+    expect(await card.findByText("已撤销")).toBeTruthy();
+    expect(state.reverts).toHaveLength(1);
+    expect(state.reverts[0]?.operationId).toBe(operationId);
+    expect(state.reverts[0]?.key).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it("“不再问我”只带上至少有一项被接受的工具", async () => {
+    const { api, state } = setupWithPlan();
+    const conversation = await openConversation();
+    const card = within(await conversation.findByRole("region", { name: "修改方案" }));
+    await userEvent.click(card.getByRole("checkbox", { name: "这次对话里，修正专辑信息不再问我" }));
+    await userEvent.click(card.getByRole("checkbox", { name: "修正专辑信息 Bayreuth 1951" }));
+    await userEvent.click(card.getByRole("button", { name: "应用 1 项修改" }));
+    await waitFor(() => expect(state.decisions).toHaveLength(1));
+    expect(api.requestsTo("POST", decisionPath)[0]?.body).toEqual({ digest: state.plans[0]?.digest, accepted_item_ids: [mergeItem.id], auto_approve_tools: [] });
+  });
+
+  it("已确认但没执行完（停止或服务重启之后）：写“还没执行”，卡片给出“继续”，提示发新消息不会执行剩下的项", async () => {
+    const { state } = setupWithPlan({ status: "applied", accepted: [titleItem.id, mergeItem.id] });
+    const conversation = await openConversation();
+    const card = within(await conversation.findByRole("region", { name: "修改方案" }));
+    expect(card.getAllByText("还没执行")).toHaveLength(2);
+    expect(card.getByText("回答停在了这里，有确认过的修改还没执行。点“继续”接着执行；发新消息不会执行它们，会记为未执行。")).toBeTruthy();
+    expect(conversation.getByText("发新消息不会执行方案里剩下的项")).toBeTruthy();
+    // 只有卡片里一个“继续”。
+    expect(conversation.getAllByRole("button", { name: "继续" })).toHaveLength(1);
+    await userEvent.click(card.getByRole("button", { name: "继续" }));
+    await waitFor(() => expect(state.runs).toHaveLength(1));
+    expect(state.runs[0]?.kind).toBe("continue");
+  });
+
+  it("撤销被拒绝时就地说明原因，不可撤销的项没有“撤销”", async () => {
+    const { state } = setupWithPlan();
+    const conversation = await openConversation();
+    const card = within(await conversation.findByRole("region", { name: "修改方案" }));
+    await userEvent.click(card.getByRole("button", { name: "应用 2 项修改" }));
+    await waitFor(() => expect(state.decisions).toHaveLength(1));
+    const stream = state.decisions[0]?.stream;
+    stream?.send("tool_finished", { type: "tool_finished", step: 1, tool_finished: { call_id: "call-2", status: "succeeded", output: { operation_id: operationId }, truncated: false, untrusted: false } });
+    stream?.send("tool_finished", { type: "tool_finished", step: 1, tool_finished: { call_id: "call-3", status: "failed", output: null, truncated: false, untrusted: false, error_code: "revision_conflict" } });
+    expect(await card.findByText("没有执行：内容已被改过")).toBeTruthy();
+    expect(card.getAllByRole("button", { name: /^撤销/ })).toHaveLength(1);
+    state.nextRevertResponse = jsonResponse(409, { error: { code: "revert_conflict", message: "之后又有修改" }, request_id: "fake-request" });
+    await userEvent.click(card.getByRole("button", { name: /^撤销/ }));
+    expect(await card.findByText("之后又有修改，不能撤销这一项。")).toBeTruthy();
+  });
+
+  it("刷新后从会话详情恢复未处理的方案；“不修改”提交空的接受列表，各项是未选", async () => {
+    const { api, state } = setupWithPlan();
+    const conversation = await openConversation();
+    const card = within(await conversation.findByRole("region", { name: "修改方案" }));
+    expect(card.getByText("2 项，其中 1 项不能撤销")).toBeTruthy();
+    await userEvent.click(card.getByRole("button", { name: "不修改" }));
+    await waitFor(() => expect(state.decisions).toHaveLength(1));
+    expect(api.requestsTo("POST", decisionPath)[0]?.body).toEqual({ digest: state.plans[0]?.digest, accepted_item_ids: [], auto_approve_tools: [] });
+    expect(await card.findByText("没有修改")).toBeTruthy();
+    expect(card.getAllByText("未选")).toHaveLength(2);
+    // 提交后按钮没了，焦点在卡片标题上。
+    expect(document.activeElement).toBe(card.getByRole("heading", { name: "修改方案" }));
+  });
+
+  it("刷新后已处理的方案从会话详情的 plans 恢复成结果列表，可以撤销；作废的写明没有执行", async () => {
+    const { state } = setup({ conversations: [conversationOf(id, { messages: decidedMessages() })] });
+    state.plans.push(planOf(planId, id, [titleItem, mergeItem], { status: "applied", accepted: [titleItem.id] }));
+    const conversation = await openConversation();
+    const card = within(await conversation.findByRole("region", { name: "修改方案" }));
+    expect(card.getByText("应用了 1 项")).toBeTruthy();
+    expect(card.getByText("已执行")).toBeTruthy();
+    expect(card.getByText("未选")).toBeTruthy();
+    await userEvent.click(card.getByRole("button", { name: /^撤销/ }));
+    expect(await card.findByText("已撤销")).toBeTruthy();
+    expect(state.reverts[0]?.operationId).toBe(operationId);
+  });
+
+  it("有未处理的方案时仍可发消息：发出后方案作废，卡片写明没有执行", async () => {
+    const { state } = setupWithPlan();
+    const conversation = await openConversation();
+    await conversation.findByRole("region", { name: "修改方案" });
+    expect(conversation.getByText("发新消息会作废上面的方案")).toBeTruthy();
+    await userEvent.type(conversation.getByRole("textbox", { name: "回复小蓝" }), "先别改，帮我查查别的版本{Enter}");
+    await waitFor(() => expect(state.runs).toHaveLength(1));
+    expect(state.plans[0]?.status).toBe("superseded");
+    const card = within(conversation.getByRole("region", { name: "修改方案" }));
+    expect(await card.findByText("已作废")).toBeTruthy();
+    expect(card.getByText("你发了新消息，这份方案没有执行。")).toBeTruthy();
+    expect(card.getAllByText("未执行")).toHaveLength(2);
+    expect(card.queryByRole("button", { name: /应用/ })).toBeNull();
+  });
+
+  it("确认时方案已经过期：显示已过期，不能再应用", async () => {
+    const { api, state } = setupWithPlan();
+    const conversation = await openConversation();
+    const card = within(await conversation.findByRole("region", { name: "修改方案" }));
+    const plan = state.plans[0];
+    if (plan !== undefined) plan.expires_at = "2026-01-01T00:00:00Z";
+    await userEvent.click(card.getByRole("button", { name: "应用 2 项修改" }));
+    expect(await card.findByText("已过期")).toBeTruthy();
+    expect(card.getByText("这份方案已经过期，不能应用。需要的话请小蓝重新整理一份。")).toBeTruthy();
+    expect(card.queryByRole("button", { name: /应用/ })).toBeNull();
+    expect(card.queryByRole("checkbox")).toBeNull();
+    expect(api.requestsTo("POST", decisionPath)).toHaveLength(1);
+    expect(state.decisions).toHaveLength(0);
+  });
+
+  it("摘要不一致：提示方案变了并换成最新的内容，再次应用用新的摘要", async () => {
+    const { api, state } = setupWithPlan();
+    const conversation = await openConversation();
+    const card = within(await conversation.findByRole("region", { name: "修改方案" }));
+    const plan = state.plans[0];
+    if (plan === undefined) throw new Error("没有方案");
+    plan.digest = "digest-new";
+    plan.items = [{ ...titleItem, changes: [{ field: "title", before: "Beethoven Symphony No.9", after: "第九交响曲（拜罗伊特）" }] }, mergeItem];
+    await userEvent.click(card.getByRole("button", { name: "应用 2 项修改" }));
+    expect(await card.findByText("方案的内容变了，已换成最新的内容，请看过再确认。")).toBeTruthy();
+    expect(await card.findByText("第九交响曲（拜罗伊特）")).toBeTruthy();
+    expect(state.decisions).toHaveLength(0);
+    await userEvent.click(card.getByRole("button", { name: "应用 2 项修改" }));
+    await waitFor(() => expect(state.decisions).toHaveLength(1));
+    expect(api.requestsTo("POST", decisionPath).map((request) => (request.body as { digest: string }).digest)).toEqual([expect.stringMatching(/^digest-/), "digest-new"]);
+  });
+});
+
+describe("模式", () => {
+  const modeButton = (scope: ReturnType<typeof within>) => scope.getByRole("button", { name: /^模式：/ });
+
+  it("空白新对话：输入框里 Shift+Tab 在 Assistant 与 Operator 之间轮换，提示行随之变化；发第一条消息时带上选的模式", async () => {
+    const { api } = setup();
+    renderApp({ path: "/" });
+    const panel = await openPanel();
+    const input = await panel.findByRole("textbox", { name: "问问小蓝" });
+    expect(modeButton(panel).getAttribute("aria-label")).toBe("模式：Assistant");
+    expect(panel.getByText("修改曲库前会先给你看方案")).toBeTruthy();
+    await userEvent.click(input);
+    await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(modeButton(panel).getAttribute("aria-label")).toBe("模式：Operator");
+    expect(panel.getByText("修改曲库时不询问，直接执行")).toBeTruthy();
+    // 轮换不移动焦点。
+    expect(document.activeElement).toBe(input);
+    await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(modeButton(panel).getAttribute("aria-label")).toBe("模式：Assistant");
+    await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+    await userEvent.type(input, "把标题都改成中文{Enter}");
+    await waitFor(() => expect(api.requestsTo("POST", "/api/v1/me/steward/conversations")).toHaveLength(1));
+    expect(api.requestsTo("POST", "/api/v1/me/steward/conversations")[0]?.body).toEqual({ mode: "operator" });
+  });
+
+  it("已有会话：菜单写明两种模式，选 Operator 经 PATCH 切换；Shift+Tab 只在输入框里轮换", async () => {
+    const { api } = setup({ conversations: [conversationOf(id, { messages: persistedRun("上一个问题", "上一个回答") })] });
+    const conversation = await openConversation();
+    const input = await conversation.findByRole("textbox", { name: "回复小蓝" });
+    await userEvent.click(modeButton(conversation));
+    const menu = within(await screen.findByRole("menu", { name: "模式" }));
+    expect(menu.getByRole("menuitem", { name: /^Assistant 修改曲库前先给你看方案，你确认后执行/ })).toBeTruthy();
+    await userEvent.click(menu.getByRole("menuitem", { name: /^Operator 不询问，直接执行；外部资料里的内容也可能促成修改/ }));
+    await waitFor(() => expect(api.requestsTo("PATCH", `/api/v1/me/steward/conversations/${id}`)).toHaveLength(1));
+    expect(api.requestsTo("PATCH", `/api/v1/me/steward/conversations/${id}`)[0]?.body).toEqual({ mode: "operator" });
+    await waitFor(() => expect(modeButton(conversation).getAttribute("aria-label")).toBe("模式：Operator"));
+
+    // 焦点在发送按钮上时 Shift+Tab 是普通的反向移动焦点。
+    conversation.getByRole("button", { name: "发送" }).focus();
+    await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(api.requestsTo("PATCH", `/api/v1/me/steward/conversations/${id}`)).toHaveLength(1);
+    expect(modeButton(conversation).getAttribute("aria-label")).toBe("模式：Operator");
+
+    await userEvent.click(input);
+    await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+    await waitFor(() => expect(api.requestsTo("PATCH", `/api/v1/me/steward/conversations/${id}`)).toHaveLength(2));
+    expect(api.requestsTo("PATCH", `/api/v1/me/steward/conversations/${id}`)[1]?.body).toEqual({ mode: "assistant" });
+  });
+
+  it("有未处理的方案或正在回答时不能切换：按钮停用，Shift+Tab 照常移动焦点", async () => {
+    const { api } = setupWithPlan();
+    const conversation = await openConversation();
+    await conversation.findByRole("region", { name: "修改方案" });
+    expect((modeButton(conversation) as HTMLButtonElement).disabled).toBe(true);
+    const input = conversation.getByRole("textbox", { name: "回复小蓝" });
+    await userEvent.click(input);
+    await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(document.activeElement).not.toBe(input);
+    expect(api.requestsTo("PATCH", `/api/v1/me/steward/conversations/${id}`)).toHaveLength(0);
+  });
+
+  it("正在回答时模式按钮停用", async () => {
+    const { state } = setup({ conversations: [conversationOf(id)] });
+    const conversation = await openConversation();
+    await userEvent.type(await conversation.findByRole("textbox", { name: "问问小蓝" }), "你好{Enter}");
+    await waitFor(() => expect(state.runs).toHaveLength(1));
+    expect((modeButton(conversation) as HTMLButtonElement).disabled).toBe(true);
   });
 });

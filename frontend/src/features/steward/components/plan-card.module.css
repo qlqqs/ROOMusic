@@ -1,0 +1,174 @@
+/* 修改方案卡片（C6，原型的 section.plan）：细框浅底，逐项是勾选框、工具与目标、字段的旧值（删除线）与新值（金色下划线）、依据。 */
+.plan {
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-neutral-100);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-2);
+  padding: var(--space-3) var(--space-3) var(--space-2);
+}
+
+.head h3 {
+  font-size: var(--fs-14);
+}
+
+.head h3:focus {
+  outline: none;
+}
+
+.meta {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+}
+
+.items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 0 var(--space-2);
+  padding: 6px var(--space-3);
+  border-top: 1px solid var(--color-divider);
+  font-size: var(--fs-13);
+}
+
+/* 结果列表与不能再应用的方案：没有勾选框。 */
+.item[data-static] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.item input {
+  margin: 3px 0 0;
+  accent-color: var(--color-accent-700);
+}
+
+.body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.what {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px var(--space-2);
+  min-width: 0;
+}
+
+.tool {
+  font-weight: 500;
+}
+
+.target {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.irreversible {
+  color: var(--color-warning);
+  font-size: var(--fs-12);
+}
+
+.changes {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+
+.change {
+  display: grid;
+  grid-template-columns: 5em minmax(0, 1fr);
+  gap: 0 var(--space-2);
+  align-items: baseline;
+}
+
+.change dt {
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.change dd {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.change del {
+  color: var(--text-secondary);
+  text-decoration-thickness: 1px;
+}
+
+.change ins {
+  text-decoration: underline;
+  text-decoration-color: var(--color-accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
+.why {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  overflow-wrap: anywhere;
+}
+
+/* 结果：右侧的状态与撤销。 */
+.outcome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  font-size: var(--fs-12);
+  color: var(--text-secondary);
+}
+
+.outcome[data-tone="done"] {
+  color: var(--text-primary);
+}
+
+.outcome[data-tone="failed"] {
+  color: var(--color-warning);
+}
+
+.foot {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-top: 1px solid var(--color-divider);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.auto {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-neutral-800);
+  font-size: var(--fs-12);
+}
+
+.auto input {
+  margin: 0;
+  accent-color: var(--color-accent-700);
+}
+
+.note {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+}

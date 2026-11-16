@@ -1,5 +1,6 @@
 {
   "body": {
+    "mode": "assistant",
     "model": "",
     "title": "新标题"
   },

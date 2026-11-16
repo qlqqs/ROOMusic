@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
@@ -10,13 +11,14 @@ import (
 
 // Conversation 是会话摘要，不包含消息正文。
 type Conversation struct {
+	AutoApprovedTools []string
 	// ID 是会话标识。
 	ID string
 	// UserID 是会话所属用户。
 	UserID string
 	// Title 是用户可修改的标题。
 	Title string
-	// Mode 是会话模式，当前只创建 assistant 会话。
+	// Mode 是会话模式，目前支持 assistant 与 operator。
 	Mode string
 	// Model 是该会话使用的模型。
 	Model string
@@ -30,6 +32,7 @@ type Conversation struct {
 
 // ConversationDetail 包含同一快照下的会话、消息与工具调用。
 type ConversationDetail struct {
+	Plans []Plan
 	// Conversation 是会话摘要。
 	Conversation Conversation
 	// Messages 按会话内序号升序排列，每条消息包含其工具调用。
@@ -44,13 +47,20 @@ type ConversationPage struct {
 	Size int
 }
 
-const conversationColumns = `id::text,user_id::text,title,mode,model,status,created_at,updated_at`
+const conversationColumns = `id::text,user_id::text,title,mode,model,status,created_at,updated_at,array_to_json(auto_approved_tools)`
 
-// CreateConversation 为当前用户新建 assistant 模式的空会话。
-func (s *Store) CreateConversation(ctx context.Context, userID, title, model string) (Conversation, error) {
+// CreateConversation 创建空会话，未指定模式时使用 assistant。
+func (s *Store) CreateConversation(ctx context.Context, userID, title, model string, modes ...string) (Conversation, error) {
+	mode := "assistant"
+	if len(modes) > 0 && modes[0] != "" {
+		mode = modes[0]
+	}
+	if mode != "assistant" && mode != "operator" {
+		return Conversation{}, ErrInvalidInput
+	}
 	conversation, err := scanConversation(s.db.QueryRowContext(ctx, `INSERT INTO steward_conversations
- (id,user_id,title,mode,model) VALUES ($1::uuid,$2::uuid,$3,'assistant',$4)
- RETURNING `+conversationColumns, uuid.New(), userID, title, model))
+ (id,user_id,title,mode,model) VALUES ($1::uuid,$2::uuid,$3,$5,$4)
+ RETURNING `+conversationColumns, uuid.New(), userID, title, model, mode))
 	return conversation, storeError("新建管家会话", err)
 }
 
@@ -80,13 +90,20 @@ func (s *Store) ListConversations(ctx context.Context, userID string, page Conve
 	return conversations, storeError("关闭管家会话列表读取", rows.Close())
 }
 
-// GetConversation 读取当前用户的完整会话，不存在与属于他人都返回 ErrNotFound。
+// GetConversation 在 READ COMMITTED 事务内用 FOR UPDATE 锁定会话，收尾过期方案后读取完整历史。
+// 事务会写入过期状态及工具结果；不存在与属于他人都返回 ErrNotFound。
 func (s *Store) GetConversation(ctx context.Context, userID, conversationID string) (ConversationDetail, error) {
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return ConversationDetail{}, storeError("开始读取管家会话", err)
 	}
 	defer tx.Rollback()
+	if _, err := lockConversation(ctx, tx, userID, conversationID); err != nil {
+		return ConversationDetail{}, err
+	}
+	if err := resolvePendingPlans(ctx, tx, userID, conversationID, "expired", true); err != nil {
+		return ConversationDetail{}, err
+	}
 	conversation, err := scanConversation(tx.QueryRowContext(ctx, `SELECT `+conversationColumns+`
  FROM steward_conversations WHERE user_id=$1::uuid AND id=$2::uuid`, userID, conversationID))
 	if err != nil {
@@ -99,10 +116,14 @@ func (s *Store) GetConversation(ctx context.Context, userID, conversationID stri
 	if err := readToolCalls(ctx, tx, userID, conversationID, messages); err != nil {
 		return ConversationDetail{}, err
 	}
+	plans, err := readPlans(ctx, tx, userID, conversationID, false)
+	if err != nil {
+		return ConversationDetail{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return ConversationDetail{}, storeError("完成管家会话读取", err)
 	}
-	return ConversationDetail{Conversation: conversation, Messages: messages}, nil
+	return ConversationDetail{Conversation: conversation, Messages: messages, Plans: plans}, nil
 }
 
 // DeleteConversation 删除当前用户的空闲会话，数据库级联删除消息与工具调用；运行中返回 ErrConversationBusy。
@@ -200,17 +221,53 @@ func (s *Store) ResetRunningConversations(ctx context.Context) (int64, error) {
 }
 
 // UpdateConversation 原子修改当前用户会话的标题和模型，省略字段保留原值。
-func (s *Store) UpdateConversation(ctx context.Context, userID, conversationID string, title, model *string) (Conversation, error) {
-	conversation, err := scanConversation(s.db.QueryRowContext(ctx, `UPDATE steward_conversations
- SET title=COALESCE($3,title),model=COALESCE($4,model),updated_at=clock_timestamp()
- WHERE user_id=$1::uuid AND id=$2::uuid RETURNING `+conversationColumns, userID, conversationID, title, model))
-	return conversation, storeError("修改管家会话", err)
+func (s *Store) UpdateConversation(ctx context.Context, userID, conversationID string, title, model *string, modes ...*string) (Conversation, error) {
+	var mode *string
+	if len(modes) > 0 {
+		mode = modes[0]
+	}
+	if mode != nil && *mode != "assistant" && *mode != "operator" {
+		return Conversation{}, ErrInvalidInput
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Conversation{}, err
+	}
+	defer tx.Rollback()
+	status, err := lockConversation(ctx, tx, userID, conversationID)
+	if err != nil {
+		return Conversation{}, err
+	}
+	if mode != nil {
+		if status == "running" {
+			return Conversation{}, ErrConversationBusy
+		}
+		if err := resolvePendingPlans(ctx, tx, userID, conversationID, "expired", true); err != nil {
+			return Conversation{}, err
+		}
+		var pending bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM steward_plans WHERE conversation_id=$1::uuid AND status='pending')`, conversationID).Scan(&pending); err != nil {
+			return Conversation{}, err
+		}
+		if pending {
+			return Conversation{}, ErrConversationBusy
+		}
+	}
+	conversation, err := scanConversation(tx.QueryRowContext(ctx, `UPDATE steward_conversations SET title=COALESCE($3,title),model=COALESCE($4,model),mode=COALESCE($5,mode),updated_at=clock_timestamp() WHERE user_id=$1::uuid AND id=$2::uuid RETURNING `+conversationColumns, userID, conversationID, title, model, mode))
+	if err != nil {
+		return Conversation{}, storeError("修改管家会话", err)
+	}
+	return conversation, tx.Commit()
 }
 
 func scanConversation(row scanner) (Conversation, error) {
 	var conversation Conversation
+	var approved []byte
 	err := row.Scan(&conversation.ID, &conversation.UserID, &conversation.Title, &conversation.Mode,
-		&conversation.Model, &conversation.Status, &conversation.CreatedAt, &conversation.UpdatedAt)
+		&conversation.Model, &conversation.Status, &conversation.CreatedAt, &conversation.UpdatedAt, &approved)
+	if err == nil {
+		err = json.Unmarshal(approved, &conversation.AutoApprovedTools)
+	}
 	conversation.CreatedAt = conversation.CreatedAt.UTC()
 	conversation.UpdatedAt = conversation.UpdatedAt.UTC()
 	return conversation, err

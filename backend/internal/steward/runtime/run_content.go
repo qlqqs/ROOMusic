@@ -68,6 +68,12 @@ func replayMessages(messages []Message) ([]provider.Message, error) {
 		}
 	}
 	for i, stored := range messages {
+		for _, call := range stored.ToolCalls {
+			if call.Status == "awaiting_confirmation" {
+				flush()
+				return result, nil
+			}
+		}
 		var content messageContent
 		if err := json.Unmarshal(stored.Content, &content); err != nil {
 			return nil, fmt.Errorf("读取管家历史消息: %w", err)
@@ -144,4 +150,11 @@ func firstTitle(messages []Message) (string, error) {
 
 func escapeSource(value string) string {
 	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace(value)
+}
+
+func systemPromptWithMode(name, mode string) string {
+	if mode == "operator" {
+		return systemPromptWithName(name) + "曲库修改在鉴权后直接执行，不询问用户。"
+	}
+	return systemPromptWithName(name) + "曲库修改先生成方案，等待用户确认；本会话已获用户免确认的工具可以直接执行。"
 }

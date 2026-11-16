@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { failureOf, isHttpFailure } from "../../../shared/api";
 import { useViewerScope } from "../../auth";
-import { MAX_CONVERSATION_PAGE_SIZE, type ConversationDetailDTO } from "../api/decoders";
-import { createConversation, deleteConversation, fetchConversation, fetchConversations, patchConversation } from "../api/endpoints";
+import { MAX_CONVERSATION_PAGE_SIZE, type ConversationDetailDTO, type StewardMode } from "../api/decoders";
+import { createConversation, deleteConversation, fetchConversation, fetchConversations, patchConversation, type ConversationPatch } from "../api/endpoints";
 import { stewardKeys } from "../query-keys";
 import { useRuns } from "./use-run";
 
@@ -47,30 +47,32 @@ export function useConversation(id: string | null) {
   });
 }
 
-/** 新建会话；成功后把空会话放进缓存，打开它不用再等一次读取。 */
+/** 新建会话（带空白新对话里选的模式）；成功后把空会话放进缓存，打开它不用再等一次读取。 */
 export function useCreateConversation() {
   const queryClient = useQueryClient();
   const { generation } = useViewerScope();
   return useMutation({
-    mutationFn: async () => (await createConversation()).data,
+    mutationFn: async (mode: StewardMode) => (await createConversation(mode)).data,
     onSuccess: (conversation) => {
-      const detail: ConversationDetailDTO = { ...conversation, messages: [] };
+      const detail: ConversationDetailDTO = { ...conversation, messages: [], pending_plan: null };
       queryClient.setQueryData(stewardKeys.conversation(generation, conversation.id), { status: 200, data: detail });
       void queryClient.invalidateQueries({ queryKey: stewardKeys.conversations(generation) });
     },
   });
 }
 
-/** 改标题或模型：成功后直接更新会话缓存里的这两项，再刷新列表。 */
+/** 改标题、模型或模式：成功后直接更新会话缓存里的这几项（响应里没有模式时取提交的值），再刷新列表。 */
 export function usePatchConversation() {
   const queryClient = useQueryClient();
   const { generation } = useViewerScope();
   return useMutation({
-    mutationFn: async ({ id, patch }: { id: string; patch: { title?: string; model?: string } }) => ({ id, result: (await patchConversation(id, patch)).data }),
-    onSuccess: ({ id, result }) => {
-      queryClient.setQueryData<{ status: number; data: ConversationDetailDTO }>(stewardKeys.conversation(generation, id), (current) =>
-        current === undefined ? current : { ...current, data: { ...current.data, title: result.title, model: result.model } },
-      );
+    mutationFn: async ({ id, patch }: { id: string; patch: ConversationPatch }) => ({ id, patch, result: (await patchConversation(id, patch)).data }),
+    onSuccess: ({ id, patch, result }) => {
+      queryClient.setQueryData<{ status: number; data: ConversationDetailDTO }>(stewardKeys.conversation(generation, id), (current) => {
+        if (current === undefined) return current;
+        const mode = result.mode ?? patch.mode ?? current.data.mode;
+        return { ...current, data: { ...current.data, title: result.title, model: result.model, mode } };
+      });
       void queryClient.invalidateQueries({ queryKey: stewardKeys.conversations(generation) });
     },
   });

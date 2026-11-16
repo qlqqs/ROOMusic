@@ -118,6 +118,23 @@ describe("操作记录页：列表", () => {
     expect(within(genre).getByRole("button", { name: /^撤销（\d{4}-\d{2}-\d{2} \d{2}:\d{2} 的修改发行信息）$/ })).toBeTruthy();
   });
 
+  it("经管家或 MCP 做的操作在操作者下面标出来源；页面上的操作没有标签（M6 C6）", async () => {
+    const { governance } = setup();
+    seedMixed(governance);
+    const [title, joined, revert, genre] = governance.operations;
+    if (title === undefined || joined === undefined || revert === undefined || genre === undefined) throw new Error("种子操作不全");
+    genre.origin = { source: "chat", plan_id: "00000000-0000-4000-8000-0000000000c1", mode: "assistant" };
+    joined.origin = { source: "chat", plan_id: null, mode: "operator" };
+    title.origin = { source: "mcp" };
+    renderApp({ path: "/settings/operations" });
+    const table = await screen.findByRole("table", { name: "操作记录" });
+    const [genreRow, revertRow, joinedRow, titleRow] = within(table).getAllByRole("row").slice(1) as [HTMLElement, HTMLElement, HTMLElement, HTMLElement];
+    expect(within(genreRow).getByText("管家（确认）")).toBeTruthy();
+    expect(within(joinedRow).getByText("管家（直接执行）")).toBeTruthy();
+    expect(within(titleRow).getByText("MCP")).toBeTruthy();
+    expect(within(revertRow).queryByText(/管家|MCP/)).toBeNull();
+  });
+
   it("每页 20 条：请求带页码与页大小，分页导航写明页数，下一页进入第 2 页", async () => {
     const { api, governance } = setup();
     for (let revision = 1; revision <= 25; revision += 1) correct(governance, releaseOf(albumC()), revision, "label", `Label ${revision}`);

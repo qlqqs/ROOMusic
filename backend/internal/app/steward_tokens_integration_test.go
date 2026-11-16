@@ -21,17 +21,21 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
+	governancetools "github.com/qlqq/roomusic/backend/internal/catalog/governance/stewardtools"
 	catalogtools "github.com/qlqq/roomusic/backend/internal/catalog/stewardtools"
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	identityapi "github.com/qlqq/roomusic/backend/internal/identity/httpapi"
 	"github.com/qlqq/roomusic/backend/internal/library"
 	librarytools "github.com/qlqq/roomusic/backend/internal/library/stewardtools"
+	listeningtools "github.com/qlqq/roomusic/backend/internal/listening/stewardtools"
 	operationtools "github.com/qlqq/roomusic/backend/internal/operations/stewardtools"
+	personaltools "github.com/qlqq/roomusic/backend/internal/personal/stewardtools"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres"
 	"github.com/qlqq/roomusic/backend/internal/platform/postgres/postgrestest"
 	"github.com/qlqq/roomusic/backend/internal/platform/uuid"
 	"github.com/qlqq/roomusic/backend/internal/steward/token"
 	"github.com/qlqq/roomusic/backend/internal/steward/tool"
+	zonestools "github.com/qlqq/roomusic/backend/internal/zones/stewardtools"
 )
 
 type c3AppFixture struct {
@@ -90,6 +94,11 @@ func newC3AppFixture(t *testing.T) *c3AppFixture {
 	definitions := catalogtools.StewardTools(catalog.NewStore(db), governance.NewStore(db))
 	definitions = append(definitions, librarytools.StewardTools(scans)...)
 	definitions = append(definitions, operationtools.StewardTools(db)...)
+	definitions = append(definitions, governancetools.StewardTools(db, nil)...)
+	definitions = append(definitions, operationtools.RevertTools(db)...)
+	definitions = append(definitions, zonestools.StewardTools(nil, catalog.NewStore(db))...)
+	definitions = append(definitions, listeningtools.StewardTools(nil)...)
+	definitions = append(definitions, personaltools.StewardTools(nil)...)
 	for _, definition := range definitions {
 		if err := f.registry.Register(definition); err != nil {
 			t.Fatal(err)
@@ -152,9 +161,15 @@ func TestPostgreSQLMCPRealRegistryProtocolsAndIsolation(t *testing.T) {
 					t.Fatal(err)
 				}
 				caller := tool.Caller{User: f.users[role], Source: tool.SourceChat}
-				want := f.registry.List(caller)
-				if role == "admin" && len(want) != 16 {
-					t.Fatalf("实际登记工具数=%d，期望 16", len(want))
+				all := f.registry.List(caller)
+				var want []tool.Definition
+				for _, d := range all {
+					if d.Scope == tool.ScopeRead {
+						want = append(want, d)
+					}
+				}
+				if role == "admin" && len(all) != 49 {
+					t.Fatalf("实际登记工具数=%d，期望 49", len(all))
 				}
 				names := map[string]bool{}
 				for _, definition := range listed.Tools {

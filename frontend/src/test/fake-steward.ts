@@ -52,7 +52,7 @@ export function settingsOf(overrides: Record<string, unknown> = {}) {
 export type FakeConversation = {
   id: string;
   title: string;
-  mode: "assistant";
+  mode: "assistant" | "steward" | "operator";
   model: string;
   status: "idle" | "running";
   created_at: string;
@@ -62,6 +62,65 @@ export type FakeConversation = {
 
 export function conversationOf(id: string, overrides: Partial<FakeConversation> = {}): FakeConversation {
   return { id, title: "合成对话", mode: "assistant", model: "synthetic-model", status: "idle", created_at: "2026-11-16T00:00:00Z", updated_at: "2026-11-16T00:00:00Z", messages: [], ...overrides };
+}
+
+/** 方案项（C6）：形状与运行事件 plan、会话详情的 pending_plan 一致。 */
+export type FakePlanItem = {
+  id: string;
+  call_id: string;
+  tool: string;
+  target: string;
+  changes: { field: string; before: unknown; after: unknown }[];
+  revertible: boolean;
+  basis?: { source: "local" | "external" | "mixed"; note: string } | null;
+};
+
+export type FakePlan = {
+  plan_id: string;
+  conversation_id: string;
+  status: "pending" | "applied" | "declined" | "expired" | "superseded";
+  digest: string;
+  expires_at: string;
+  items: FakePlanItem[];
+  /** 确认时接受的项；会话详情的 plans 里据此写每项的 decision。 */
+  accepted?: string[];
+};
+
+/** 合成的方案：默认 24 小时后过期。 */
+export function planOf(planId: string, conversationId: string, items: FakePlanItem[], overrides: Partial<FakePlan> = {}): FakePlan {
+  return {
+    plan_id: planId,
+    conversation_id: conversationId,
+    status: "pending",
+    digest: `digest-${planId.slice(-4)}`,
+    expires_at: new Date(Date.now() + 24 * 3600_000).toISOString(),
+    items,
+    ...overrides,
+  };
+}
+
+/** 落库的消息里这次调用的记录（助手消息的 tool_call 块与 tool_calls 按下标对上）。 */
+function storedCallOf(messages: readonly unknown[], callId: string): { status?: unknown; output?: unknown } | undefined {
+  for (const message of messages as { content?: { type: string; tool_call?: { id: string } }[]; tool_calls?: { status?: unknown; output?: unknown }[] }[]) {
+    const calls = (message.content ?? []).filter((block) => block.type === "tool_call");
+    const index = calls.findIndex((block) => block.tool_call?.id === callId);
+    if (index >= 0) return message.tool_calls?.[index];
+  }
+  return undefined;
+}
+
+/**
+ * 方案在运行事件与会话详情里的样子：带状态，已处理的方案每项带取舍；会话详情里，调用已有结果（成功或失败）的项带 result，
+ * 与后端一样把结果写在方案项上。
+ */
+export function planPayload(plan: FakePlan, messages: readonly unknown[] = []) {
+  const decided = plan.status === "applied" || plan.status === "declined";
+  const items = plan.items.map((item) => {
+    const stored = storedCallOf(messages, item.call_id);
+    const finished = stored?.status === "succeeded" || stored?.status === "failed";
+    return { ...item, decision: decided ? (plan.accepted?.includes(item.id) === true ? "accepted" : "declined") : "pending", ...(finished ? { result: stored?.output ?? null } : {}) };
+  });
+  return { plan_id: plan.plan_id, digest: plan.digest, expires_at: plan.expires_at, status: plan.status, items };
 }
 
 export type StewardFake = {
@@ -75,6 +134,13 @@ export type StewardFake = {
   nextRunResponse: Response | null;
   /** 检测的响应；null 时按提交的地址、模型与密钥合成一次通过的检测并保存。 */
   probeResponse: Response | null;
+  /** 方案（C6）：会话详情带上其中 pending 且没过期的那份；发新消息时作废，确认接口按设计的校验顺序检查。 */
+  plans: FakePlan[];
+  /** 确认接口收到的请求与对应的流。 */
+  decisions: { request: RecordedRequest; planId: string; body: unknown; stream: FakeSse }[];
+  /** 撤销接口收到的操作 ID 与幂等键；nextRevertResponse 预置下一次的响应。 */
+  reverts: { operationId: string; key: string | null }[];
+  nextRevertResponse: Response | null;
   /** 管理员：成员开关与放行名单。 */
   instance: { members_enabled: boolean };
   allowlist: { host: string; port: number; added_by: string | null; created_at: string }[];
@@ -82,6 +148,10 @@ export type StewardFake = {
 
 const conversationPath = /^\/api\/v1\/me\/steward\/conversations\/([^/]+)$/;
 const runPath = /^\/api\/v1\/me\/steward\/conversations\/([^/]+)\/(messages|continue)$/;
+const decisionPath = /^\/api\/v1\/me\/steward\/conversations\/([^/]+)\/plans\/([^/]+)\/decision$/;
+const revertPath = /^\/api\/v1\/operations\/([^/]+)\/revert$/;
+const selectableModes = ["assistant", "operator"];
+const failureOf = (status: number, code: string, message: string) => jsonResponse(status, { error: { code, message }, request_id: "fake-request" });
 const cancelPath = /^\/api\/v1\/me\/steward\/conversations\/([^/]+)\/cancel$/;
 const idOf = (request: RecordedRequest, pattern: RegExp) => pattern.exec(request.path.split("?")[0] ?? "")?.[1] ?? "";
 
@@ -124,7 +194,10 @@ function authorityOf(endpoint: string): string {
   }
 }
 
-/** 管家接口的替身：设置、会话的增删改查、运行流（可控，记下请求体里的页面上下文）与取消。形状按 C2、C5 的接口合同与样本。 */
+/**
+ * 管家接口的替身：设置、会话的增删改查（含模式）、运行流（可控，记下请求体里的页面上下文）与取消、
+ * 方案的确认接口与作废（C6）、方案项的撤销。形状按 C2、C5、C6 的接口合同与样本。
+ */
 export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = {}): StewardFake {
   const state: StewardFake = {
     settings: settingsOf(),
@@ -133,6 +206,10 @@ export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = 
     runs: [],
     nextRunResponse: null,
     probeResponse: null,
+    plans: [],
+    decisions: [],
+    reverts: [],
+    nextRevertResponse: null,
     instance: { members_enabled: true },
     allowlist: [],
     ...initial,
@@ -140,6 +217,21 @@ export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = 
   const denied = () => (state.disabled ? sampleResponse("steward/disabled") : null);
   const summary = ({ messages: _messages, ...rest }: FakeConversation) => rest;
   const find = (id: string) => state.conversations.find((item) => item.id === id);
+  /** 会话的未处理方案；读到时已过期的标为 expired（后端在读取与确认时判定过期）。 */
+  const pendingPlanOf = (conversationId: string) => {
+    const plan = state.plans.find((item) => item.conversation_id === conversationId && item.status === "pending");
+    if (plan === undefined) return null;
+    if (Date.parse(plan.expires_at) <= Date.now()) {
+      plan.status = "expired";
+      return null;
+    }
+    return plan;
+  };
+  const detailOf = (conversation: FakeConversation) => {
+    const plan = pendingPlanOf(conversation.id);
+    const plans = state.plans.filter((item) => item.conversation_id === conversation.id).map((item) => planPayload(item, conversation.messages));
+    return { ...conversation, pending_plan: plan === null ? null : planPayload(plan), plans };
+  };
 
   api.on("GET", "/api/v1/me/steward/settings", () => denied() ?? (state.settings === null ? sampleResponse("steward/settings-empty") : jsonResponse(200, state.settings)));
   const current = () => state.settings ?? (sampleBody("steward/settings-empty") as Settings);
@@ -231,25 +323,40 @@ export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = 
       pagination: { page: 1, page_size: 100, total: state.conversations.length },
     }),
   );
-  api.on("POST", "/api/v1/me/steward/conversations", () => {
+  api.on("POST", "/api/v1/me/steward/conversations", (request) => {
     const refused = denied();
     if (refused !== null) return refused;
+    // 新建只认 mode（C6，可省略，默认 assistant）；steward 在 C7 之前不接受。
+    const body = isRecord(request.body) ? request.body : {};
+    const mode = body["mode"] ?? "assistant";
+    if (Object.keys(body).some((key) => key !== "mode") || !selectableModes.includes(String(mode))) return failureOf(400, "invalid_request", "mode 不合格");
     created += 1;
-    const conversation = conversationOf(`00000000-0000-4000-8000-${String(900 + created).padStart(12, "0")}`, { title: "", updated_at: new Date().toISOString(), created_at: new Date().toISOString() });
+    const conversation = conversationOf(`00000000-0000-4000-8000-${String(900 + created).padStart(12, "0")}`, {
+      title: "",
+      mode: mode as FakeConversation["mode"],
+      updated_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+    });
     state.conversations.push(conversation);
     return jsonResponse(201, summary(conversation));
   });
   api.on("GET", conversationPath, (request) => {
     const conversation = find(idOf(request, conversationPath));
-    return denied() ?? (conversation === undefined ? sampleResponse("steward/conversation-not-found") : jsonResponse(200, conversation));
+    return denied() ?? (conversation === undefined ? sampleResponse("steward/conversation-not-found") : jsonResponse(200, detailOf(conversation)));
   });
   api.on("PATCH", conversationPath, (request) => {
     const conversation = find(idOf(request, conversationPath));
     if (conversation === undefined) return sampleResponse("steward/conversation-not-found");
-    const patch = request.body as { title?: string; model?: string };
+    const patch = request.body as { title?: string; model?: string; mode?: string };
+    if (patch.mode !== undefined) {
+      if (!selectableModes.includes(patch.mode)) return failureOf(400, "invalid_request", "mode 不合格");
+      // 改模式要求会话空闲且没有未处理的方案。
+      if (conversation.status === "running" || pendingPlanOf(conversation.id) !== null) return sampleResponse("steward/conversation-busy");
+      conversation.mode = patch.mode as FakeConversation["mode"];
+    }
     if (patch.title !== undefined) conversation.title = patch.title;
     if (patch.model !== undefined) conversation.model = patch.model;
-    return jsonResponse(200, { title: conversation.title, model: conversation.model });
+    return jsonResponse(200, { title: conversation.title, model: conversation.model, mode: conversation.mode });
   });
   api.on("DELETE", conversationPath, (request) => {
     const conversation = find(idOf(request, conversationPath));
@@ -270,11 +377,72 @@ export function installStewardApi(api: FakeApi, initial: Partial<StewardFake> = 
     const kind = match?.[2] === "continue" ? "continue" : "messages";
     const problem = contextProblemOf(request.body, kind);
     if (problem !== null) return jsonResponse(400, { error: { code: "invalid_request", message: problem }, request_id: "fake-request" });
+    // 有未处理的方案时发新消息：方案作废（各项按“未执行”回给模型），再追加用户消息。
+    if (kind === "messages") {
+      const pending = pendingPlanOf(conversation.id);
+      if (pending !== null) pending.status = "superseded";
+    }
     const stream = fakeSse();
     // 与浏览器一致：请求被中止时，正在读的响应体随之出错。
     request.signal?.addEventListener("abort", () => stream.fail(), { once: true });
     state.runs.push({ request, kind, context: isRecord(request.body) ? (request.body["context"] ?? null) : null, stream });
     return stream.response;
+  });
+  // 确认接口（C6）：校验顺序按设计——会话归属、方案属于该会话且 pending、未过期、摘要一致、会话空闲；任何一项不满足都不执行。
+  // 会话或方案不属于本人、不在此会话或已处理都是 404 plan_not_found；之后才检查选择的项（400 invalid_input）。
+  api.on("POST", decisionPath, (request) => {
+    const match = decisionPath.exec(request.path);
+    const conversation = find(match?.[1] ?? "");
+    const planId = match?.[2] ?? "";
+    const plan = state.plans.find((item) => item.plan_id === planId && item.conversation_id === conversation?.id);
+    if (conversation === undefined || plan === undefined || plan.status !== "pending") return failureOf(404, "plan_not_found", "方案不存在或已处理");
+    if (Date.parse(plan.expires_at) <= Date.now()) {
+      plan.status = "expired";
+      return failureOf(409, "plan_expired", "方案已过期");
+    }
+    const body = request.body;
+    if (!isRecord(body) || Object.keys(body).some((key) => !["digest", "accepted_item_ids", "auto_approve_tools"].includes(key))) return failureOf(400, "invalid_request", "请求体不合格");
+    if (body["digest"] !== plan.digest) return failureOf(409, "plan_digest_mismatch", "方案内容已变化");
+    if (conversation.status === "running") return sampleResponse("steward/conversation-busy");
+    const itemIds = plan.items.map((item) => item.id);
+    const tools = plan.items.map((item) => item.tool);
+    const accepted = body["accepted_item_ids"];
+    const autoApprove = body["auto_approve_tools"];
+    const distinct = (values: unknown[]) => new Set(values).size === values.length;
+    // 免确认的工具：属于方案、方案里这个工具的项全部可以撤销，并且至少有一项被接受。
+    const approvable = (tool: unknown) =>
+      tools.includes(String(tool)) &&
+      plan.items.every((item) => item.tool !== tool || item.revertible) &&
+      Array.isArray(accepted) &&
+      plan.items.some((item) => item.tool === tool && accepted.includes(item.id));
+    if (
+      !Array.isArray(accepted) ||
+      !accepted.every((id) => itemIds.includes(String(id))) ||
+      !distinct(accepted) ||
+      !Array.isArray(autoApprove) ||
+      !autoApprove.every(approvable) ||
+      !distinct(autoApprove)
+    ) {
+      return failureOf(400, "invalid_input", "选择的项或工具不合格");
+    }
+    plan.status = accepted.length === 0 ? "declined" : "applied";
+    plan.accepted = accepted.map(String);
+    const stream = fakeSse();
+    request.signal?.addEventListener("abort", () => stream.fail(), { once: true });
+    state.decisions.push({ request, planId, body, stream });
+    return stream.response;
+  });
+  // 受治理操作的撤销接口（方案卡片里的“撤销”）：需要幂等键。
+  api.on("POST", revertPath, (request) => {
+    const operationId = revertPath.exec(request.path)?.[1] ?? "";
+    const key = request.headers.get("Idempotency-Key");
+    state.reverts.push({ operationId, key });
+    if (state.nextRevertResponse !== null) {
+      const response = state.nextRevertResponse;
+      state.nextRevertResponse = null;
+      return response;
+    }
+    return jsonResponse(200, { operation_id: "00000000-0000-4000-8000-00000000f0f0", reverts_operation_id: operationId, target_type: "release", target_id: "00000000-0000-4000-8000-00000000e0e0", revision: 3 });
   });
   api.on("POST", cancelPath, (request) => {
     const conversation = find(idOf(request, cancelPath));

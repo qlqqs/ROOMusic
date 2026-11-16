@@ -4,16 +4,19 @@ import { useCallback, useMemo, useSyncExternalStore, type ReactNode } from "reac
 import { type ArtistDetailDTO, artistsKeys } from "../../features/artists";
 import { useViewerScope } from "../../features/auth";
 import { catalogKeys, type ReleaseGroupSummaryDTO } from "../../features/catalog";
+import { governanceKeys } from "../../features/governance";
 import { listeningKeys } from "../../features/listening";
 import { personalKeys, type PlaylistSummaryDTO } from "../../features/personal";
 import { usePlayerSelector } from "../../features/player";
 import { StewardHostProvider, type PageKind, type StewardDataScope, type StewardPageContext, type StewardPlaybackContext } from "../../features/steward";
 import type { ApiResponse } from "../../shared/api";
 import { isUuid } from "../../shared/lib/ids";
+import { useArtistDataRefresh } from "../routes/use-artist-refresh";
+import { useReleaseDataRefresh } from "../routes/use-release-refresh";
 import { navLabelOf } from "./nav-items";
 
-// 管家的页面上下文与个人数据刷新的接线（C5）：steward 不导入其他 feature，“正在看”“正在播放”由这里从路由、查询缓存与播放器组合，
-// 管家的工具改了收藏、歌单或播放历史之后，按这里给的查询键让缓存失效。
+// 管家的页面上下文与数据刷新的接线（C5、C6）：steward 不导入其他 feature，“正在看”“正在播放”由这里从路由、查询缓存与播放器组合，
+// 管家的工具改了收藏、歌单、播放历史或曲库之后，按这里给的查询键让缓存失效。
 
 /** 列表页等没有对象的页面：侧栏里没有的几个页面的名字。 */
 const extraPageNames: Readonly<Record<string, string>> = { "/me": "我的", "/search": "搜索结果" };
@@ -92,19 +95,32 @@ function usePlaybackSource(): StewardPlaybackContext | null {
   }, [zoneId, zoneName, trackId, title, artist, status]);
 }
 
-const dataKeys: Readonly<Record<StewardDataScope, (generation: number) => readonly unknown[]>> = {
+const personalDataKeys: Readonly<Record<"favorites" | "playlists" | "history", (generation: number) => readonly unknown[]>> = {
   favorites: personalKeys.favorites,
   playlists: personalKeys.playlists,
   history: listeningKeys.all,
 };
 
-/** 已登录外壳里挂一次：把页面上下文、播放上下文与个人数据的刷新交给管家（面板与整页对话）。 */
+/** 已登录外壳里挂一次：把页面上下文、播放上下文与数据的刷新交给管家（面板与整页对话）。 */
 export function StewardHostScope({ children }: { children: ReactNode }) {
   const client = useQueryClient();
   const { generation } = useViewerScope();
   const page = usePageSource();
   const playback = usePlaybackSource();
-  const refreshData = useCallback((scope: StewardDataScope) => void client.invalidateQueries({ queryKey: dataKeys[scope](generation) }), [client, generation]);
+  // 曲库与艺人的治理之后与管理员在页面上操作之后一样：操作记录、问题与待认领随 governance 一起失效，再按专辑或艺人的范围刷新。
+  const refreshRelease = useReleaseDataRefresh();
+  const refreshArtists = useArtistDataRefresh();
+  const refreshData = useCallback(
+    (scope: StewardDataScope) => {
+      if (scope === "catalog" || scope === "artists") {
+        void client.invalidateQueries({ queryKey: governanceKeys.all(generation) });
+        void (scope === "catalog" ? refreshRelease() : refreshArtists());
+        return;
+      }
+      void client.invalidateQueries({ queryKey: personalDataKeys[scope](generation) });
+    },
+    [client, generation, refreshRelease, refreshArtists],
+  );
   const host = useMemo(() => ({ page, playback, refreshData }), [page, playback, refreshData]);
   return <StewardHostProvider value={host}>{children}</StewardHostProvider>;
 }

@@ -512,6 +512,7 @@ func TestPostgreSQLStewardHTTPPatchConversationTitleAndModel(t *testing.T) {
 	path := "me/steward/conversations/" + f.conversation(t, "admin")
 	apiStatus(t, f.request("admin", "PATCH", path, map[string]string{}), 400, "invalid_input")
 	for _, tc := range []struct{ patch, want map[string]string }{{map[string]string{"title": "新标题"}, map[string]string{"title": "新标题", "model": "synthetic-model"}}, {map[string]string{"model": "override"}, map[string]string{"title": "新标题", "model": "override"}}, {map[string]string{"title": "最终标题", "model": ""}, map[string]string{"title": "最终标题", "model": ""}}} {
+		tc.want["mode"] = "assistant"
 		w := f.request("admin", "PATCH", path, tc.patch)
 		apiStatus(t, w, 200, "")
 		var got map[string]string

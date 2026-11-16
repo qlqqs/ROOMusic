@@ -28,3 +28,6 @@ type Error struct {
 
 // Error 返回调用失败的说明。
 func (err *Error) Error() string { return err.Message }
+
+// CodeApprovalRequired 表示共享修改等待用户确认。
+const CodeApprovalRequired ErrorCode = "approval_required"

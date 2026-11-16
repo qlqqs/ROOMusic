@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"runtime/debug"
+	"slices"
 	"time"
 
 	"github.com/qlqq/roomusic/backend/internal/steward/provider"
@@ -31,6 +32,7 @@ type runState struct {
 	countedSteps int
 	definitions  map[string]tool.Definition
 	history      []Message
+	conversation Conversation
 }
 
 // Run 原子占用会话后同步执行多步对话；会话忙时返回 ErrConversationBusy 且不发送事件。
@@ -42,7 +44,15 @@ func (r *Runner) Run(ctx context.Context, params RunParams, sink EventSink) (err
 		return err
 	}
 	userID := params.Caller.User.ID
-	if err := r.store.AcquireConversation(ctx, userID, params.ConversationID); err != nil {
+	if params.Decision != nil {
+		plans, ok := r.store.(PlanStore)
+		if !ok {
+			return ErrInvalidInput
+		}
+		if err := plans.DecidePlan(ctx, userID, params.ConversationID, *params.Decision); err != nil {
+			return err
+		}
+	} else if err := r.store.AcquireConversation(ctx, userID, params.ConversationID); err != nil {
 		return err
 	}
 	started := time.Now()
@@ -79,6 +89,49 @@ func (r *Runner) Run(ctx context.Context, params RunParams, sink EventSink) (err
 			sink(Event{Type: EventDone, Step: state.step, End: &end})
 		}
 	}()
+	detail, err := r.store.GetConversation(ctx, userID, params.ConversationID)
+	if err != nil {
+		return err
+	}
+	state.conversation = detail.Conversation
+	if state.conversation.Mode == "" {
+		state.conversation.Mode = "assistant"
+	}
+	state.params.Caller.Mode = state.conversation.Mode
+	state.params.Caller.ConversationID = params.ConversationID
+	state.params.Caller.SharedExecution = false
+	state.params.Caller.PlanID = ""
+	if params.Continue {
+		for _, plan := range detail.Plans {
+			if plan.Status == "pending" {
+				if params.Started != nil {
+					params.Started()
+				}
+				sink(Event{Type: EventPlan, Plan: &plan})
+				end = RunEnd{Reason: EndAwaitingConfirmation}
+				return nil
+			}
+		}
+	}
+	if plans, ok := r.store.(PlanStore); ok && (params.Continue || params.Decision != nil) {
+		items, err := plans.PendingExecutions(ctx, userID, params.ConversationID)
+		if err != nil {
+			return err
+		}
+		if len(items) > 0 {
+			if params.Started != nil {
+				params.Started()
+				params.Started = nil
+			}
+			if err := state.executePlanItems(ctx, plans, items); err != nil {
+				if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
+					end = RunEnd{Reason: EndCancelled}
+					return nil
+				}
+				return err
+			}
+		}
+	}
 	if params.Continue {
 		detail, err := r.store.GetConversation(ctx, userID, params.ConversationID)
 		if err != nil {
@@ -143,7 +196,7 @@ func (s *runState) run(ctx context.Context) (RunEnd, error) {
 	var definitions []provider.ToolDefinition
 	for _, definition := range s.registry.List(s.params.Caller) {
 		s.definitions[definition.Name] = definition
-		if definition.Scope == tool.ScopeRead || definition.Scope == tool.ScopePersonal {
+		if definition.Scope == tool.ScopeRead || definition.Scope == tool.ScopePersonal || definition.Scope == tool.ScopeShared {
 			definitions = append(definitions, provider.ToolDefinition{Name: definition.Name,
 				Description: definition.Description, InputSchema: definition.Input})
 		}
@@ -153,7 +206,7 @@ func (s *runState) run(ctx context.Context) (RunEnd, error) {
 			return RunEnd{Reason: EndCancelled}, nil
 		}
 		s.step++
-		step, err := s.readModel(ctx, provider.Request{Model: s.params.Model, System: systemPromptWithName(s.params.DisplayName),
+		step, err := s.readModel(ctx, provider.Request{Model: s.params.Model, System: systemPromptWithMode(s.params.DisplayName, s.conversation.Mode),
 			Messages: messages, Tools: definitions, MaxOutputTokens: maxOutputTokens})
 		s.recordUsage(ctx, step.usage)
 		if err != nil {
@@ -272,4 +325,8 @@ func modelFailure(ctx context.Context, err error) RunEnd {
 		return RunEnd{Reason: EndProviderError, ErrorKind: failure.Kind, Message: failure.Message, StatusCode: failure.StatusCode}
 	}
 	return RunEnd{Reason: EndProviderError, ErrorKind: provider.ErrorOther, Message: "模型调用失败"}
+}
+
+func (s *runState) sharedDirect(name string) bool {
+	return s.conversation.Mode == "operator" || (s.definitions[name].Revertible && slices.Contains(s.conversation.AutoApprovedTools, name))
 }

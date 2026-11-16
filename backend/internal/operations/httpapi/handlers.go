@@ -4,6 +4,7 @@ package httpapi
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -57,6 +58,7 @@ type actorItem struct {
 // operationItem 是列表里的一条记录：谁、何时、哪个目标（当前的状态）、改了什么、撤销关系，以及现在能不能撤销。
 // 目标是发行的记录给 release、album 为 null；目标是专辑的记录反过来。不含请求体、前后状态原文、路径与密钥。
 type operationItem struct {
+	Origin     json.RawMessage         `json:"origin"`
 	ID         string                  `json:"id"`
 	Type       string                  `json:"type"`
 	CreatedAt  time.Time               `json:"created_at"`
@@ -150,7 +152,7 @@ func (handlers *Handlers) listOperations(responseWriter http.ResponseWriter, req
 	for _, record := range listed.Items {
 		description := descriptions[record.ID]
 		items = append(items, operationItem{
-			ID: record.ID, Type: record.Type, CreatedAt: record.CreatedAt,
+			ID: record.ID, Type: record.Type, CreatedAt: record.CreatedAt, Origin: record.Origin,
 			Actor:   actorItem{ID: record.ActorID, Username: names[record.ActorID]},
 			Release: description.Release, Album: description.Album, Artist: description.Artist, Changes: description.Changes,
 			Reverts: optionalID(record.RevertsID), RevertedBy: optionalID(record.RevertedByID),

@@ -28,6 +28,7 @@ type Queryer interface {
 // Record 是一条已提交的操作记录。Before 与 After 是执行器写入的类型化状态，只有对应的执行器知道怎么解释；
 // 记录里没有请求体、路径或密钥。
 type Record struct {
+	Origin           json.RawMessage
 	ID               string
 	ActorID          string
 	Type             string
@@ -54,7 +55,7 @@ func (record Record) ChangeType() string {
 const (
 	recordProjection = `o.id::text, o.actor_id::text, o.operation_type, o.target_type, o.target_id::text,
 		o.expected_revision, o.result_revision, o.before_state, o.after_state,
-		COALESCE(o.reverts_operation_id::text, ''), COALESCE(original.operation_type, ''), COALESCE(reverted.id::text, ''), o.created_at`
+		COALESCE(o.reverts_operation_id::text, ''), COALESCE(original.operation_type, ''), COALESCE(reverted.id::text, ''), o.created_at, o.origin`
 	recordSource = ` FROM operations o LEFT JOIN operations reverted ON reverted.reverts_operation_id = o.id
 		LEFT JOIN operations original ON original.id = o.reverts_operation_id`
 )
@@ -63,7 +64,7 @@ func scanRecord(row interface{ Scan(...any) error }) (Record, error) {
 	var record Record
 	var before, after []byte
 	if err := row.Scan(&record.ID, &record.ActorID, &record.Type, &record.TargetType, &record.TargetID,
-		&record.ExpectedRevision, &record.ResultRevision, &before, &after, &record.RevertsID, &record.OriginalType, &record.RevertedByID, &record.CreatedAt); err != nil {
+		&record.ExpectedRevision, &record.ResultRevision, &before, &after, &record.RevertsID, &record.OriginalType, &record.RevertedByID, &record.CreatedAt, (*[]byte)(&record.Origin)); err != nil {
 		return Record{}, err
 	}
 	record.Before, record.After = before, after

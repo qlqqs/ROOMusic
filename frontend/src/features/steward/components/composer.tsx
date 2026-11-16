@@ -13,11 +13,16 @@ type ComposerProps = {
   onSend: () => void;
   onStop: () => void;
   stopping: boolean;
-  /** 输入框下方左侧的工具（模型菜单）。 */
+  /** 输入框下方左侧的工具（模式与模型菜单）。 */
   tools: ReactNode;
   /** 输入框上方的上下文标签行；没有时不渲染。 */
   context?: ReactNode;
+  /** 输入框下方的说明（“正在别处回答”等），有它时代替 hint。 */
   note?: ReactNode;
+  /** 输入框下方的提示行（随模式变化）；变化时读屏播报。 */
+  hint?: ReactNode;
+  /** 输入框里按 Shift+Tab：轮换模式（C6）。没有时（不能切换）Shift+Tab 照常移动焦点。 */
+  onShiftTab?: (() => void) | undefined;
 };
 
 /** 文本框随内容长高，最多这么高，再多就在框里滚动。 */
@@ -25,8 +30,9 @@ const MAX_HEIGHT = 200;
 
 /**
  * 输入框：Enter 发送，Shift+Enter 换行，输入法组合期间（选字的回车）不发送；运行中发送按钮变成停止按钮。
+ * 焦点在输入框里时 Shift+Tab 轮换模式（只在这里拦截，页面其余地方的 Shift+Tab 照常是反向移动焦点）。
  */
-export function Composer({ value, onChange, placeholder, running, sendDisabled, onSend, onStop, stopping, tools, context, note }: ComposerProps) {
+export function Composer({ value, onChange, placeholder, running, sendDisabled, onSend, onStop, stopping, tools, context, note, hint, onShiftTab }: ComposerProps) {
   const textarea = useRef<HTMLTextAreaElement>(null);
   useLayoutEffect(() => {
     const element = textarea.current;
@@ -36,6 +42,11 @@ export function Composer({ value, onChange, placeholder, running, sendDisabled, 
   }, [value]);
   const canSend = !running && !sendDisabled && value.trim() !== "";
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Tab" && event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey && onShiftTab !== undefined) {
+      event.preventDefault();
+      onShiftTab();
+      return;
+    }
     if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing || event.keyCode === 229) return;
     event.preventDefault();
     if (canSend) onSend();
@@ -67,7 +78,13 @@ export function Composer({ value, onChange, placeholder, running, sendDisabled, 
           )}
         </div>
       </div>
-      {note === undefined ? null : <p className={styles.note}>{note}</p>}
+      {note !== undefined ? (
+        <p className={styles.note}>{note}</p>
+      ) : hint === undefined ? null : (
+        <p className={styles.note} aria-live="polite">
+          {hint}
+        </p>
+      )}
     </div>
   );
 }

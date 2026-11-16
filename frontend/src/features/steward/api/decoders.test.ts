@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { decodeConversationDetail, decodeRunEvent } from "./decoders";
+import { decodeConversationDetail, decodeConversationPatch, decodeRunEvent, operationIdOf } from "./decoders";
+
+const planItem = {
+  id: "00000000-0000-4000-8000-0000000000b1",
+  call_id: "call-1",
+  tool: "correct_release",
+  target: "Bayreuth 1951",
+  changes: [{ field: "title", before: "Beethoven Symphony No.9", after: "贝多芬：第九交响曲" }, { field: "year", before: null, after: 1951 }],
+  revertible: true,
+  basis: { source: "external", note: "来自 MusicBrainz" },
+};
+const plan = { plan_id: "00000000-0000-4000-8000-0000000000c1", digest: "abc", expires_at: "2026-11-17T00:00:00Z", items: [planItem] };
 
 describe("运行流的事件", () => {
   it("按事件名解码五种事件", () => {
@@ -16,6 +27,35 @@ describe("运行流的事件", () => {
     expect(decodeRunEvent("done", JSON.stringify({ type: "done", step: 3, end: { reason: "provider_error", error_kind: "other", error_code: "provider_unreachable", status_code: 529, message: "Overloaded" } }))).toMatchObject({
       end: { reason: "provider_error", status_code: 529 },
     });
+  });
+
+  it("修改方案（C6）：plan 事件带方案与各项；没有依据的项可以省略 basis；没有项的方案被拒绝", () => {
+    expect(decodeRunEvent("plan", JSON.stringify({ type: "plan", step: 2, plan }))).toEqual({ type: "plan", step: 2, plan });
+    const { basis: _basis, ...bare } = planItem;
+    expect(decodeRunEvent("plan", JSON.stringify({ type: "plan", step: 1, plan: { ...plan, items: [bare] } }))).toMatchObject({ plan: { items: [{ id: planItem.id }] } });
+    expect(() => decodeRunEvent("plan", JSON.stringify({ type: "plan", step: 1, plan: { ...plan, items: [] } }))).toThrow();
+    expect(() => decodeRunEvent("plan", JSON.stringify({ type: "plan", step: 1, plan: { ...plan, items: [{ ...planItem, basis: { source: "web", note: "" } }] } }))).toThrow();
+    expect(decodeRunEvent("done", JSON.stringify({ type: "done", step: 2, end: { reason: "awaiting_confirmation" } }))).toEqual({ type: "done", step: 2, end: { reason: "awaiting_confirmation" } });
+  });
+
+  it("确认后执行方案项的 tool_started、tool_finished 没有 step", () => {
+    expect(decodeRunEvent("tool_finished", JSON.stringify({ type: "tool_finished", tool_finished: { call_id: "call-1", status: "succeeded", output: { operation_id: "o" }, truncated: false, untrusted: false } }))).toMatchObject({
+      type: "tool_finished",
+      tool_finished: { call_id: "call-1" },
+    });
+  });
+
+  it("会话详情的 plans 带已处理方案的状态、每项的取舍与操作记录", () => {
+    const base = { id: "00000000-0000-4000-8000-000000000001", title: "", mode: "assistant", model: "m", status: "idle", created_at: "2026-11-16T00:00:00Z", updated_at: "2026-11-16T00:00:00Z", messages: [], pending_plan: null };
+    const applied = { ...plan, status: "applied", items: [{ ...planItem, decision: "accepted", operation_id: "00000000-0000-4000-8000-0000000000d1", result: { ok: true } }] };
+    expect(decodeConversationDetail({ ...base, plans: [applied] }).plans?.[0]).toMatchObject({ status: "applied", items: [{ decision: "accepted", operation_id: "00000000-0000-4000-8000-0000000000d1" }] });
+    expect(() => decodeConversationDetail({ ...base, plans: [{ ...applied, status: "done" }] })).toThrow();
+  });
+
+  it("已执行的方案项从工具输出取 operation_id；没有时是 null", () => {
+    expect(operationIdOf({ operation_id: "00000000-0000-4000-8000-0000000000d1", revision: 3 })).toBe("00000000-0000-4000-8000-0000000000d1");
+    expect(operationIdOf({ revision: 3 })).toBeNull();
+    expect(operationIdOf("{\"operation_id\":")).toBeNull();
   });
 
   it("不认识的事件名丢掉；data 与事件名不符时抛出", () => {
@@ -57,5 +97,28 @@ describe("会话消息", () => {
     });
     expect(detail.messages.map((message) => message.context)).toEqual([context, null, undefined]);
     expect(() => decodeConversationDetail({ ...base, messages: [{ ...messageBase, id: "00000000-0000-4000-8000-000000000002", context: { page: { kind: "album" } } }] })).toThrow();
+  });
+});
+
+describe("会话的模式与未处理的方案（C6）", () => {
+  const base = { id: "00000000-0000-4000-8000-000000000001", title: "", model: "m", status: "idle", created_at: "2026-11-16T00:00:00Z", updated_at: "2026-11-16T00:00:00Z", messages: [] };
+
+  it("模式是 assistant、steward、operator 之一，其余被拒绝", () => {
+    expect(decodeConversationDetail({ ...base, mode: "operator" }).mode).toBe("operator");
+    expect(() => decodeConversationDetail({ ...base, mode: "autopilot" })).toThrow();
+  });
+
+  it("pending_plan 可以是方案、null 或省略；工具调用可以在等确认", () => {
+    expect(decodeConversationDetail({ ...base, mode: "assistant", pending_plan: plan }).pending_plan).toEqual(plan);
+    expect(decodeConversationDetail({ ...base, mode: "assistant", pending_plan: null }).pending_plan).toBeNull();
+    expect(decodeConversationDetail({ ...base, mode: "assistant" }).pending_plan).toBeUndefined();
+    const record = { id: "00000000-0000-4000-8000-0000000000aa", name: "correct_release", input: {}, output: null, truncated: false, untrusted: true, status: "awaiting_confirmation", error_code: null, duration_ms: null };
+    const message = { id: "00000000-0000-4000-8000-000000000002", sequence: 1, role: "assistant", content: [], input_tokens: null, output_tokens: null, created_at: "2026-11-16T00:00:00Z", tool_calls: [record] };
+    expect(decodeConversationDetail({ ...base, mode: "assistant", messages: [message] }).messages[0]?.tool_calls[0]?.status).toBe("awaiting_confirmation");
+  });
+
+  it("改会话的响应可以带模式，也可以不带", () => {
+    expect(decodeConversationPatch({ title: "t", model: "", mode: "operator" }).mode).toBe("operator");
+    expect(decodeConversationPatch({ title: "t", model: "" }).mode).toBeUndefined();
   });
 });

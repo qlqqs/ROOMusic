@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"log/slog"
 	"net/http"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/qlqq/roomusic/backend/internal/catalog"
 	"github.com/qlqq/roomusic/backend/internal/catalog/governance"
+	governancetools "github.com/qlqq/roomusic/backend/internal/catalog/governance/stewardtools"
 	catalogtools "github.com/qlqq/roomusic/backend/internal/catalog/stewardtools"
 	"github.com/qlqq/roomusic/backend/internal/identity"
 	"github.com/qlqq/roomusic/backend/internal/library"
@@ -33,7 +35,13 @@ import (
 
 // registerSteward 在接受请求前恢复会话状态；失败时记录日志并让管家接口返回 503。
 func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sql.DB, guard *identity.Guard, dataDirectory string, logger *slog.Logger, scans *library.Service, kinds []operations.Kind, playback *zones.Service, history *listening.Service, personalLibrary *personal.Service) {
-	store := runtime.NewStore(database)
+	store := runtime.NewStore(database).WithOperationLookup(func(ctx context.Context, tx *sql.Tx, userID, key string) (runtime.RecordedOperation, error) {
+		result, err := operations.LookupResult(ctx, tx, userID, key)
+		if errors.Is(err, operations.ErrNotFound) {
+			return runtime.RecordedOperation{}, nil
+		}
+		return runtime.RecordedOperation{ID: result.OperationID, Output: result.Response}, err
+	})
 	if database != nil {
 		ctx, cancel := context.WithTimeout(lifecycle, 10*time.Second)
 		count, err := store.ResetRunningConversations(ctx)
@@ -55,6 +63,8 @@ func registerSteward(lifecycle context.Context, mux *http.ServeMux, database *sq
 	secrets := secret.New(filepath.Join(dataDirectory, "steward", "instance.key"))
 	registry := tool.NewRegistry()
 	definitions := catalogtools.StewardTools(catalog.NewStore(database), governance.NewStore(database))
+	definitions = append(definitions, governancetools.StewardTools(database, artistResolutionAdapter{})...)
+	definitions = append(definitions, operationtools.RevertTools(database, kinds...)...)
 	definitions = append(definitions, librarytools.StewardTools(scans)...)
 	definitions = append(definitions, operationtools.StewardTools(database, kinds...)...)
 	definitions = append(definitions, zonestools.StewardTools(playback, catalog.NewStore(database))...)

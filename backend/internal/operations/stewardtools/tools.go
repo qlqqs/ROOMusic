@@ -21,6 +21,7 @@ type input struct {
 }
 
 type operationItem struct {
+	Origin     json.RawMessage         `json:"origin"`
 	ID         string                  `json:"id"`
 	Type       string                  `json:"type"`
 	CreatedAt  time.Time               `json:"created_at"`
@@ -82,7 +83,7 @@ func StewardTools(database operations.Queryer, kinds ...operations.Kind) []tool.
 			for _, record := range listed.Items {
 				d := descriptions[record.ID]
 				items = append(items, operationItem{
-					ID: record.ID, Type: record.Type, CreatedAt: record.CreatedAt,
+					ID: record.ID, Type: record.Type, CreatedAt: record.CreatedAt, Origin: record.Origin,
 					Release: d.Release, Album: d.Album, Artist: d.Artist, Changes: d.Changes,
 					Reverts: optionalID(record.RevertsID), RevertedBy: optionalID(record.RevertedByID),
 					Revertible: d.Revertible && record.Type != operations.TypeRevert && record.RevertedByID == "",

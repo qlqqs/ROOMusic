@@ -4,15 +4,15 @@ import type { StewardPageContext, StewardPlaybackContext } from "./context";
 // 管家从外面拿到的东西：当前页面、正在播放，以及个人数据变了之后怎么刷新。steward 不导入其他 feature，
 // 这些由 app 组合（路由、查询缓存、播放器与各 feature 的查询键），经这里传进来。
 
-/** 管家的工具改了哪类个人数据：收藏、歌单、播放历史。 */
-export type StewardDataScope = "favorites" | "playlists" | "history";
+/** 管家的工具改了哪类数据：收藏、歌单、播放历史；C6 起还有曲库（专辑的修正、归组、默认版本、核对、认领与撤销）与艺人（合并、拆开、改名、忽略候选）。 */
+export type StewardDataScope = "favorites" | "playlists" | "history" | "catalog" | "artists";
 
 export type StewardHost = {
   /** 正在看的页面；整页对话里是 null。 */
   page: StewardPageContext | null;
   /** 正在控制的分区与正在放的曲目；还没读到分区时是 null。 */
   playback: StewardPlaybackContext | null;
-  /** 让这类个人数据的查询失效。 */
+  /** 让这类数据的查询失效。 */
   refreshData: (scope: StewardDataScope) => void;
 };
 

@@ -4,8 +4,8 @@
 
 This document records the long-term product contract for ROOMusic's Music
 Steward and its durable operation model. Core 0 defines the contracts and the
-directory-management example; it does not implement model calls, a Review
-Subagent, file mutation, or an Operator runtime.
+directory-management example.
+当前 C6 已实现模型调用、用户确认与 operator 直接执行；独立审查和文件修改仍待后续任务。
 
 The system has one product Agent, **Music Steward**, with three execution modes:
 `assistant`, `steward`, and `operator`. These are approval modes, not separate
@@ -17,9 +17,9 @@ logic, not Agents.
 All modes eventually submit a typed operation command to the backend authority:
 
 ```text
-mode-specific decision
-  -> typed Change Set
-  -> backend authorization and tool lookup
+后端身份、工具查找与鉴权
+  -> 按模式取得审批（assistant 的模型不能批准自身）
+  -> 类型化方案与命令
   -> target, scope, revision, and physical-safety validation
   -> transactional or staged executor
   -> Operation Journal + structured log
@@ -35,8 +35,9 @@ path, or execute an unregistered tool.
 | --- | --- | --- |
 | `assistant` | Current user explicitly approves a dangerous Change Set | Prepare plans, explain evidence, and execute approved operations |
 | `steward` | Independent Review Subagent returns structured approval and policy allows it | Execute bounded autonomous operations after review |
-| `operator` | No user confirmation or AI review step | Administrator-selected direct execution of registered tools |
+| `operator` | No user confirmation or AI review step | 所有用户可选的直接执行；权限仍由各工具决定 |
 
+operator 对所有用户开放，模式只决定审批路径；鉴权必须先于审批，各模式共用相同工具权限。
 Operator direct execution skips approval only. It does not skip backend
 authorization, allowlists, argument validation, target checks, revision or
 idempotency checks, journaling, logging, or an explicit irreversible marker.
@@ -123,11 +124,16 @@ bounded arguments and an explicit recovery contract.
 
 | Condition | Required behavior |
 | --- | --- |
-| Assistant dangerous operation without current approval | Reject with `approval_required`; no executor call |
+| assistant 未批准的 shared | 生成 pending 方案并挂起 awaiting_confirmation；不调用 Executor |
 | Steward without independent review approval | Reject with `review_required` or `review_unavailable`; no downgrade |
-| Operator non-admin principal | Reject with `permission_denied` |
+| 非管理员选择 operator | 允许；shared 工具仍不可见，直接调用 permission_denied |
 | Unknown tool or unsupported mode/tool pair | Reject with `capability_denied` |
-| Stale target revision or changed proposal digest | Reject with `revision_conflict` or `precondition_failed` |
+| 目标版本过期 / 方案摘要改变 | revision_conflict / 409 plan_digest_mismatch |
+| 方案不存在、他人方案或已处理 | 404 plan_not_found |
+| 方案已过 24 小时 | 409 plan_expired，项记 not_executed |
+| 用户发新消息 | pending 方案 superseded，项记 not_executed |
+| 用户未选择某项 | declined_by_user，其他已选项独立执行 |
+| 新建或切换到 steward | C7 前 400 invalid_request |
 | Same idempotency key and same canonical request | Return the recorded result without repeating side effects |
 | Same idempotency key and different request | Reject with `idempotency_conflict` |
 | Executor fails before commit/stage completion | Record failure and recover according to tool contract |
@@ -184,3 +190,15 @@ Steward -> Review Subagent -> typed Change Set
 The implementation may use a sidecar or another model adapter later, but the
 authority and recovery contract does not move out of the Go backend.
 
+
+## C6 的用户确认边界
+
+确认只来自已登录用户的 `POST /api/v1/me/steward/conversations/{id}/plans/{plan_id}/decision`：
+`{digest,accepted_item_ids,auto_approve_tools}`。工具输入中的展示依据、模型文本或 `approved` 字段均无执行权。
+后端绑定规范化内容摘要与 24 小时有效期，在确认事务中记录每项取舍；随后逐项经 `operations.Run` 校验 revision、幂等并记录来源。
+会话免确认工具名也只在该事务保存。每项业务失败不影响其他项，中断恢复复用保存的幂等键。
+MCP 读写令牌直接执行 shared，仍受管理员权限限制；只读令牌不可见且不可调用 personal/shared。
+
+正确：成员切到 operator 后继续操作本人播放，但仍不能修改共享曲库。基线：管理员 assistant 提案等待本人勾选。
+错误：因 operator 模式给成员额外权限，或将工具参数中的批准字段传入执行许可。测试须覆盖这两类越权、逐项失败、摘要篡改与过期。
+具体表、事件与字段见[运行时合同](./steward-runtime-contracts.md#c6-共享写入与确认合同)。

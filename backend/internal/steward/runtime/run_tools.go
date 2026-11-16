@@ -12,6 +12,7 @@ import (
 
 func (s *runState) executeCalls(ctx context.Context, calls []provider.ToolCall, stored []ToolCall, stop EndReason) ([]provider.Message, EndReason, error) {
 	messages := make([]provider.Message, 0, len(calls))
+	pending := []PlanItem{}
 	for i, call := range calls {
 		if ctx.Err() != nil {
 			stop = EndCancelled
@@ -26,7 +27,23 @@ func (s *runState) executeCalls(ctx context.Context, calls []provider.ToolCall, 
 			begin := time.Now()
 			if ctx.Err() == nil {
 				var err error
-				output, err = s.registry.Invoke(ctx, s.params.Caller, call.Name, call.Arguments)
+				caller := s.params.Caller
+				caller.IdempotencyKey = stored[i].IdempotencyKey
+				caller.SharedExecution = s.sharedDirect(call.Name)
+				if definition, ok := s.definitions[call.Name]; ok && definition.Scope == tool.ScopeShared && !caller.SharedExecution {
+					var preview tool.Preview
+					preview, err = s.registry.PreviewCall(ctx, caller, call.Name, call.Arguments)
+					if err == nil {
+						pending = append(pending, PlanItem{Tool: call.Name, CallID: call.ID, ToolCallID: stored[i].ID, Position: stored[i].Position, Input: call.Arguments, Preview: preview, Revertible: definition.Revertible, IdempotencyKey: stored[i].IdempotencyKey, Untrusted: stored[i].Untrusted})
+						continue
+					}
+				} else {
+					output, err = s.invokeWithReconciliation(ctx, caller, call.Name, call.Arguments)
+					if s.definitions[call.Name].Scope == tool.ScopeShared && databaseUnavailable(err) && ctx.Err() == nil {
+						// 原键对账后仍不确定，停止模型续跑，不保存确定失败的工具结果。
+						return messages, stop, err
+					}
+				}
 				if err != nil {
 					code, output.Output = toolFailure(err)
 				}
@@ -85,7 +102,59 @@ func (s *runState) executeCalls(ctx context.Context, calls []provider.ToolCall, 
 				Status: status, Output: output.Output, Truncated: output.Truncated, Untrusted: output.Untrusted, ErrorCode: code}})
 		}
 	}
+	if len(pending) > 0 {
+		if ctx.Err() != nil {
+			return messages, EndCancelled, s.cancelPendingCalls(ctx, pending)
+		}
+		plans, ok := s.store.(PlanStore)
+		if !ok {
+			return messages, stop, ErrInvalidInput
+		}
+		plan, err := plans.CreatePlan(ctx, s.params.Caller.User.ID, s.params.ConversationID, pending)
+		if err != nil {
+			if ctx.Err() != nil {
+				return messages, EndCancelled, s.cancelPendingCalls(ctx, pending)
+			}
+			return messages, stop, err
+		}
+		s.sink(Event{Type: EventPlan, Step: s.step, Plan: &plan})
+		stop = EndAwaitingConfirmation
+	}
 	return messages, stop, nil
+}
+
+func (s *runState) cancelPendingCalls(ctx context.Context, items []PlanItem) error {
+	for _, item := range items {
+		code := "cancelled"
+		output := errorOutput(code, "工具调用已取消")
+		input, err := planResultMessage(item, tool.Result{Output: output}, code)
+		if err != nil {
+			return err
+		}
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), finalizeTimeout)
+		_, err = s.store.FinishToolCallMessage(cleanup, s.params.Caller.User.ID, s.params.ConversationID, item.ToolCallID,
+			ToolCallResult{Output: output, Status: "failed", ErrorCode: &code}, input)
+		cancel()
+		if err != nil {
+			return err
+		}
+		s.sink(Event{Type: EventToolFinished, Step: s.step, ToolFinished: &ToolFinished{CallID: item.CallID, Status: "failed", Output: output, Untrusted: item.Untrusted, ErrorCode: code}})
+	}
+	return nil
+}
+
+func databaseUnavailable(err error) bool {
+	var failure *tool.Error
+	return errors.As(err, &failure) && failure.Code == "database_unavailable"
+}
+
+// 提交结果不确定时只用原幂等键再调用一次；operations.Run 会优先返回已提交记录。
+func (s *runState) invokeWithReconciliation(ctx context.Context, caller tool.Caller, name string, input json.RawMessage) (tool.Result, error) {
+	output, err := s.registry.Invoke(ctx, caller, name, input)
+	if definition, ok := s.definitions[name]; ok && definition.Scope == tool.ScopeShared && databaseUnavailable(err) && ctx.Err() == nil {
+		return s.registry.Invoke(ctx, caller, name, input)
+	}
+	return output, err
 }
 
 func toolFailure(err error) (string, json.RawMessage) {
@@ -117,4 +186,60 @@ func errorOutput(code, message string) json.RawMessage {
 		Message string `json:"message"`
 	}{Code: code, Message: message}) // 字符串结构编码不会失败。
 	return output
+}
+
+// executePlanItems 只执行已由确认事务记录为 accepted 的项；每项沿用自己的幂等键。
+func (s *runState) executePlanItems(ctx context.Context, plans PlanStore, items []PlanItem) error {
+	var unsettled error
+	for _, item := range items {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		output := tool.Result{}
+		code := ""
+		started := time.Now()
+		s.sink(Event{Type: EventToolStarted, ToolStarted: &ToolStarted{CallID: item.CallID, Name: item.Tool, Input: item.Input}})
+		if item.Decision == "accepted" {
+			caller := s.params.Caller
+			caller.SharedExecution = true
+			caller.PlanID = item.PlanID
+			caller.IdempotencyKey = item.IdempotencyKey
+			var err error
+			output, err = s.registry.Invoke(ctx, caller, item.Tool, item.Input)
+			if err != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				code, output.Output = toolFailure(err)
+				if code == "database_unavailable" {
+					// 提交结果不确定时保留未完成项，下次继续用原键向 operations 对账。
+					unsettled = errors.Join(unsettled, err)
+					continue
+				}
+			}
+		} else {
+			code = "declined_by_user"
+			output.Output = errorOutput(code, "用户未选择这项修改")
+		}
+		status := "succeeded"
+		var errorCode *string
+		if code != "" {
+			status = "failed"
+			errorCode = &code
+		}
+		input, err := planResultMessage(item, output, code)
+		if err != nil {
+			return err
+		}
+		duration := time.Since(started).Milliseconds()
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), finalizeTimeout)
+		err = plans.FinishPlanItem(cleanup, s.params.Caller.User.ID, s.params.ConversationID, item, ToolCallResult{Output: output.Output, Truncated: output.Truncated, Status: status, ErrorCode: errorCode, DurationMS: &duration}, input)
+		cancel()
+		if err != nil {
+			return err
+		}
+		s.logger.InfoContext(context.WithoutCancel(ctx), "管家工具结束", "event", "steward.tool.finished", "message", "管家工具结束", "tool", item.Tool, "status", status, "error_code", code, "duration_ms", duration)
+		s.sink(Event{Type: EventToolFinished, ToolFinished: &ToolFinished{CallID: item.CallID, Status: status, Output: output.Output, Truncated: output.Truncated, Untrusted: item.Untrusted, ErrorCode: code}})
+	}
+	return unsettled
 }

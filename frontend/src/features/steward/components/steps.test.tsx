@@ -4,7 +4,7 @@ import type { StepItem } from "../run/reduce";
 import { Steps } from "./steps";
 
 function item(callId: string, name: string, overrides: Partial<StepItem> = {}): StepItem {
-  return { callId, name, input: {}, status: "succeeded", output: {}, errorCode: null, durationMs: 1_000, executed: true, ...overrides };
+  return { callId, name, input: {}, status: "succeeded", output: {}, errorCode: null, durationMs: 1_000, executed: true, textsBefore: 0, ...overrides };
 }
 
 describe("过程摘要", () => {

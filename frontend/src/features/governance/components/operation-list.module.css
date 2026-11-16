@@ -10,6 +10,12 @@
   overflow-wrap: break-word;
 }
 
+.actorCell {
+  display: grid;
+  gap: 2px;
+  justify-items: start;
+}
+
 .change {
   display: grid;
   gap: 2px;

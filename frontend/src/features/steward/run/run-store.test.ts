@@ -1,7 +1,7 @@
 import { waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { installFakeApi } from "../../../test/fake-api";
-import { conversationOf, installStewardApi } from "../../../test/fake-steward";
+import { conversationOf, installStewardApi, planOf, planPayload } from "../../../test/fake-steward";
 import { sampleResponse } from "../../../test/http";
 import { getRunSnapshot, resetRuns, startRun, stopRun } from "./run-store";
 
@@ -111,5 +111,43 @@ describe("进行中的运行", () => {
     expect(getRunSnapshot().runs.size).toBe(0);
     expect(getRunSnapshot().ends.size).toBe(0);
     expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("收到方案时交给调用方；以 awaiting_confirmation 结束", async () => {
+    const { steward, options } = setup();
+    const onPlan = vi.fn();
+    await startRun({ conversationId: id, text: "整理这张", baseSequence: 0, ...options, onPlan });
+    const plan = planPayload(planOf("00000000-0000-4000-8000-0000000000c1", id, [{ id: "00000000-0000-4000-8000-0000000000b1", call_id: "c1", tool: "correct_release", target: "x", changes: [], revertible: true }]));
+    steward.runs[0]?.stream.send("plan", { type: "plan", step: 1, plan });
+    steward.runs[0]?.stream.send("done", { type: "done", step: 1, end: { reason: "awaiting_confirmation" } });
+    steward.runs[0]?.stream.close();
+    await waitFor(() => expect(getRunSnapshot().ends.get(id)).toEqual({ kind: "done", end: { reason: "awaiting_confirmation" } }));
+    expect(onPlan).toHaveBeenCalledWith(plan);
+  });
+});
+
+describe("对方案的决定（C6）", () => {
+  const planId = "00000000-0000-4000-8000-0000000000c1";
+  const item = { id: "00000000-0000-4000-8000-0000000000b1", call_id: "c1", tool: "correct_release", target: "x", changes: [], revertible: true };
+  const seed = [{ callId: "c1", name: "correct_release", input: {}, status: "awaiting_confirmation" as const, output: null, errorCode: null, durationMs: null, executed: false, textsBefore: 1 }];
+
+  it("走确认接口的流，请求体是摘要、接受的项与不再询问的工具；运行从方案的条目开始", async () => {
+    const { api, steward, options } = setup();
+    steward.plans.push(planOf(planId, id, [item]));
+    const body = { digest: steward.plans[0]?.digest ?? "", accepted_item_ids: [item.id], auto_approve_tools: ["correct_release"] };
+    await expect(startRun({ conversationId: id, text: null, baseSequence: 2, ...options, decision: { planId, body, seed } })).resolves.toEqual({ started: true });
+    expect(api.requestsTo("POST", `/api/v1/me/steward/conversations/${id}/plans/${planId}/decision`).map((request) => request.body)).toEqual([body]);
+    expect(getRunSnapshot().runs.get(id)).toMatchObject({ userText: null, view: { items: [{ callId: "c1", status: "awaiting_confirmation" }] } });
+    steward.decisions[0]?.stream.send("tool_finished", { type: "tool_finished", step: 1, tool_finished: { call_id: "c1", status: "succeeded", output: { operation_id: "o" }, truncated: false, untrusted: false } });
+    await waitFor(() => expect(getRunSnapshot().runs.get(id)?.view.items[0]?.status).toBe("succeeded"));
+  });
+
+  it("开流前被拒绝：返回原因，不记结束信息（由方案卡片就地说明）", async () => {
+    const { steward, options } = setup();
+    steward.plans.push(planOf(planId, id, [item]));
+    const result = await startRun({ conversationId: id, text: null, baseSequence: 2, ...options, decision: { planId, body: { digest: "旧的", accepted_item_ids: [], auto_approve_tools: [] }, seed } });
+    expect(result).toMatchObject({ started: false, failure: { kind: "http", status: 409, code: "plan_digest_mismatch" } });
+    expect(getRunSnapshot().ends.has(id)).toBe(false);
+    expect(steward.plans[0]?.status).toBe("pending");
   });
 });

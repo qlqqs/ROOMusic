@@ -23,7 +23,8 @@ var ErrInvalidInput = errors.New("管家存储参数无效")
 // Store 使用调用方提供的数据库连接池保存管家数据，不负责连接或迁移。
 // 所有 userID 必须来自入口取得的当前用户，不能采用请求正文中的用户标识。
 type Store struct {
-	db *sql.DB
+	db              *sql.DB
+	operationLookup OperationLookup
 }
 
 // NewStore 构造存储，不执行数据库操作。

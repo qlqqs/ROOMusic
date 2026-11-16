@@ -1,5 +1,12 @@
-import type { ClaimSummaryDTO, DefaultVersionDTO, OperationChangesDTO, OperationItemDTO } from "./api/decoders";
+import type { ClaimSummaryDTO, DefaultVersionDTO, OperationChangesDTO, OperationItemDTO, OperationOriginDTO } from "./api/decoders";
 import { correctionFieldLabels, displayValue, reviewableIssueLabels } from "./labels";
+
+/** 操作的来源标签：管家确认方案后执行的写“管家（确认）”，管家直接执行的写“管家（直接执行）”，MCP 令牌写“MCP”；没有来源（页面上的操作）是 null。 */
+export function operationOriginLabel(origin: OperationOriginDTO | null | undefined): string | null {
+  if (origin === null || origin === undefined) return null;
+  if (origin.source === "mcp") return "MCP";
+  return origin.plan_id === null || origin.plan_id === undefined ? "管家（直接执行）" : "管家（确认）";
+}
 
 /** 记录自己的类型：修正、归组、默认版本、核对与认领按它改的东西命名；撤销记录写“撤销”，并说明撤销的是哪一类（记录坏了读不出改动时只写“撤销”）。 */
 export function operationTypeLabel(item: Pick<OperationItemDTO, "type" | "changes">): string {

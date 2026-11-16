@@ -51,6 +51,8 @@ function noteOf(ended: Ended, hasSteps: boolean): Note | null {
       const end = ended.end;
       switch (end.reason) {
         case "completed":
+        case "awaiting_confirmation":
+          // 等用户确认方案：方案卡片就是下一步，不另加说明。
           return null;
         case "cancelled":
           return { tone: "calm", title: "已停止" };

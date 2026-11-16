@@ -12,6 +12,7 @@ import {
   decodeCreatedToken,
   decodeDeleted,
   decodeInstanceSettings,
+  decodeReverted,
   decodeSettings,
   decodeTokenList,
   type AllowlistEntryDTO,
@@ -23,6 +24,7 @@ import {
   type InstanceSettingsDTO,
   type Protocol,
   type SettingsDTO,
+  type StewardMode,
   type TokenListDTO,
   type TokenScope,
   type ToolSupport,
@@ -63,17 +65,19 @@ export function fetchConversations(page: number, pageSize: number, signal?: Abor
   return apiRequest({ method: "GET", path: `${conversationsPath}?page=${page}&page_size=${pageSize}`, signal }, decodeConversationPage);
 }
 
-/** 新建会话（201）：要求已配置；没有幂等键，不自动重试。 */
-export function createConversation(): Promise<ApiResponse<ConversationDTO>> {
-  return apiRequest({ method: "POST", path: conversationsPath, body: {} }, decodeConversation);
+/** 新建会话（201），带空白新对话里选的模式：要求已配置；没有幂等键，不自动重试。 */
+export function createConversation(mode: StewardMode): Promise<ApiResponse<ConversationDTO>> {
+  return apiRequest({ method: "POST", path: conversationsPath, body: { mode } }, decodeConversation);
 }
 
 export function fetchConversation(id: string, signal?: AbortSignal): Promise<ApiResponse<ConversationDetailDTO>> {
   return apiRequest({ method: "GET", path: `${conversationsPath}/${id}`, signal }, decodeConversationDetail);
 }
 
-/** 改标题或模型；model 为空字符串表示用设置里的模型。 */
-export function patchConversation(id: string, patch: { title?: string; model?: string }): Promise<ApiResponse<ConversationPatchDTO>> {
+export type ConversationPatch = { title?: string; model?: string; mode?: StewardMode };
+
+/** 改标题、模型或模式；model 为空字符串表示用设置里的模型；改模式要求会话空闲且没有未处理的方案。 */
+export function patchConversation(id: string, patch: ConversationPatch): Promise<ApiResponse<ConversationPatchDTO>> {
   return apiRequest({ method: "PATCH", path: `${conversationsPath}/${id}`, body: patch }, decodeConversationPatch);
 }
 
@@ -96,6 +100,22 @@ export function openRun(id: string, message: { text: string; context: StewardReq
   if (message === null) return apiStream({ path: `${conversationsPath}/${id}/continue`, method: "POST", signal });
   const { text, context } = message;
   return apiStream({ path: `${conversationsPath}/${id}/messages`, method: "POST", body: context === null ? { text } : { text, context }, signal });
+}
+
+/** 对一份方案的决定：接受的方案项（空数组是“不修改”）与这次对话里不再询问的工具。 */
+export type PlanDecisionBody = { digest: string; accepted_item_ids: string[]; auto_approve_tools: string[] };
+
+/**
+ * 确认或拒绝一份方案（C6），响应是 SSE，与继续接口相同：先执行接受的项，再让模型接着回答。
+ * 开始流之前的拒绝（plan_not_found、plan_expired、plan_digest_mismatch、conversation_busy）按错误信封抛出 ApiError。
+ */
+export function openDecision(id: string, planId: string, body: PlanDecisionBody, signal: AbortSignal): Promise<Response> {
+  return apiStream({ path: `${conversationsPath}/${id}/plans/${planId}/decision`, method: "POST", body, signal });
+}
+
+/** 撤销一条操作（受治理操作的撤销接口，管理员）：方案里已执行的可撤销项用它。 */
+export function revertOperation(operationId: string, idempotencyKey: string): Promise<ApiResponse<{ operation_id: string }>> {
+  return apiRequest({ method: "POST", path: `/api/v1/operations/${operationId}/revert`, idempotencyKey }, decodeReverted);
 }
 
 // ---- 管理员 ----

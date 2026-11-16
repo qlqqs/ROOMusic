@@ -14,6 +14,12 @@ import (
 
 // 新迁移若改变旧约束或枚举，必须提供新版数据，证明回退后不留新表数据。
 var rollbackFixtures = map[int64]string{
+	54: `UPDATE steward_tool_calls SET status='awaiting_confirmation' WHERE id='f5400000-0000-4000-8000-000000000003';
+ UPDATE steward_conversations SET auto_approved_tools=ARRAY['correct_release'] WHERE id='f5400000-0000-4000-8000-000000000001';
+ UPDATE operations SET origin='{"source":"chat","mode":"assistant"}' WHERE id='f5400000-0000-4000-8000-000000000004';
+ INSERT INTO steward_plans(id,conversation_id,user_id,digest,expires_at) VALUES('f5400000-0000-4000-8000-000000000005','f5400000-0000-4000-8000-000000000001','f5400000-0000-4000-8000-000000000000','c6',now()+interval '1 day');
+ INSERT INTO steward_plan_items(id,plan_id,tool_call_id,position,tool_name,input,preview,revertible,idempotency_key)
+ SELECT 'f5400000-0000-4000-8000-000000000006','f5400000-0000-4000-8000-000000000005',id,0,'correct_release','{}','{}',true,idempotency_key FROM steward_tool_calls WHERE id='f5400000-0000-4000-8000-000000000003';`,
 	50: `UPDATE tracks SET lyrics='外置歌词',lyrics_source='lrc_file' WHERE id='c3000000-0000-4000-8000-000000000050';`,
 	42: `UPDATE scan_runs SET trigger_kind='scheduled' WHERE id='f2000000-0000-4000-8000-000000000001';
  UPDATE scan_schedule SET enabled=FALSE,hour=5 WHERE id=1;`,
@@ -180,6 +186,14 @@ func TestPostgreSQLMigrationRollbackRoundTrip(t *testing.T) {
  INSERT INTO tracks(id,medium_id,position,title,artist,source_root_id,relative_path,observed_at,lyrics,lyrics_source) VALUES
  ('c3000000-0000-4000-8000-000000000050','c2000000-0000-4000-8000-000000000050',1,'外置曲目','测试艺人','c6000000-0000-4000-8000-000000000050','external.flac',NOW(),NULL,NULL),
  ('c3000000-0000-4000-8000-000000000051','c2000000-0000-4000-8000-000000000050',2,'内嵌曲目','测试艺人','c6000000-0000-4000-8000-000000000050','embedded.flac',NOW(),'保留内嵌歌词','vorbis_lyrics');`)
+			}
+			if m.Version == 54 {
+				// C6 等待确认回退为未执行，旧会话与操作记录必须留下。
+				rollbackExec(t, db, `INSERT INTO users(id,username,password_hash,role) VALUES('f5400000-0000-4000-8000-000000000000','c6-rollback','synthetic','admin');
+ INSERT INTO steward_conversations(id,user_id,title,model) VALUES('f5400000-0000-4000-8000-000000000001','f5400000-0000-4000-8000-000000000000','C6 旧会话','synthetic');
+ INSERT INTO steward_messages(id,conversation_id,sequence,role,content) VALUES('f5400000-0000-4000-8000-000000000002','f5400000-0000-4000-8000-000000000001',1,'assistant','{}');
+ INSERT INTO steward_tool_calls(id,message_id,position,tool_name,input,status,error_code) VALUES('f5400000-0000-4000-8000-000000000003','f5400000-0000-4000-8000-000000000002',0,'correct_release','{}','failed','not_executed');
+ INSERT INTO operations(id,actor_id,operation_type,target_type,target_id,idempotency_key,fingerprint,expected_revision,result_revision,before_state,after_state,response,request_id) VALUES('f5400000-0000-4000-8000-000000000004','f5400000-0000-4000-8000-000000000000','release_correction','release','f5400000-0000-4000-8000-000000000007','f5400000-0000-4000-8000-000000000008','c6',1,2,'{}','{}','{}','c6-rollback');`)
 			}
 			s0 := rollbackSnapshot(t, db)
 			rollbackApply(t, db, migrationPrefix(available, m.Version))

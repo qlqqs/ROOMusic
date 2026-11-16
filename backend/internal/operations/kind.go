@@ -93,3 +93,14 @@ func RevertExecutor(kind Kind, originalID string) Executor {
 		return outcome, nil
 	}
 }
+
+// PreviewChange 是业务能力提供的撤销预览，不携带内部操作引用。
+type PreviewChange struct {
+	Field         string
+	Before, After any
+}
+
+// RevertPreviewer 为需要当前扫描值或多目标状态的类型提供只读撤销预览。
+type RevertPreviewer interface {
+	PreviewRevert(context.Context, Queryer, Record) ([]PreviewChange, error)
+}
