@@ -1,5 +1,0 @@
-{"file":".trellis/spec/backend/steward-runtime-contracts.md","reason":"模型协议、探测、出站与密钥、工具合同"}
-{"file":"docs/architecture/adr/0005-steward-data-and-egress.md","reason":"出站地址规则、抓取限制、搜索密钥"}
-{"file":".trellis/tasks/11-16-steward-c8-web/research/web-sources.md","reason":"第三方接口的调研结果与文档地址"}
-{"file":".trellis/spec/backend/logging-guidelines.md","reason":"日志不记录搜索词与内容"}
-{"file":".trellis/spec/frontend/steward-guidelines.md","reason":"设置页与对话界面"}
